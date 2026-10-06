@@ -8589,16 +8589,6 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
             "hash": "HA",
             "urls": ["u1", "u2"]
         }),
-        (
-            "/api/torrents/HA/trackers/edit", {
-                "orig_url": "a",
-                "new_url": "b"
-            }, "edit_tracker", {
-                "hash": "HA",
-                "orig_url": "a",
-                "new_url": "b"
-            }
-        ),
         ("/api/torrents/HA/trackers/remove", {
             "url": "a"
         }, "remove_tracker", {
@@ -8977,24 +8967,16 @@ def test_drain_web_commands_torrent_write_actions():
                 "urls": ["https://a/announce", "https://b/announce"],
                 "cmd_id": "c9"
             }),
-            (
-                "edit_tracker", {
-                    "hash": "HA",
-                    "orig_url": "https://a/announce",
-                    "new_url": "https://c/announce",
-                    "cmd_id": "c10"
-                }
-            ),
             ("remove_tracker", {
                 "hash": "HA",
                 "url": "https://c/announce",
-                "cmd_id": "c11"
+                "cmd_id": "c10"
             }),
             ("set_file_priority", {
                 "hash": "HA",
                 "indices": [0, 1],
                 "priority": 6,
-                "cmd_id": "c12"
+                "cmd_id": "c11"
             }),
             (
                 "rename_fs", {
@@ -9002,7 +8984,7 @@ def test_drain_web_commands_torrent_write_actions():
                     "old_path": "old/file.mkv",
                     "new_path": "new/file.mkv",
                     "is_folder": False,
-                    "cmd_id": "c13"
+                    "cmd_id": "c12"
                 }
             ),
         ]
@@ -9019,10 +9001,9 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[7] == ("rename", ("HA", "NewName")), "rename 参数形态(torrent_hash, new_torrent_name)"
         assert client.calls[8] == ("set_auto_tmm", True)
         assert client.calls[9] == ("add_trackers", ("HA", ["https://a/announce", "https://b/announce"]))
-        assert client.calls[10] == ("edit_tracker", ("HA", "https://a/announce", "https://c/announce"))
-        assert client.calls[11] == ("remove_trackers", ("HA", ["https://c/announce"]))
-        assert client.calls[12] == ("file_priority", ("HA", [0, 1], 6))
-        assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
+        assert client.calls[10] == ("remove_trackers", ("HA", ["https://c/announce"]))
+        assert client.calls[11] == ("file_priority", ("HA", [0, 1], 6))
+        assert client.calls[12] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
         # !D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
         #   扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。回执只表示"命令已执行"。
         assert mgr.web.results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
@@ -9036,8 +9017,8 @@ def test_drain_web_commands_torrent_write_actions():
         assert "c2" in mgr.web.truth_pending, "RESYNC 命令应登记待推真值"
         mgr.web.flush_truths()
         assert mgr.web.flush_truths() is None, "重复 flush 必须是安全的空操作"
-        # 全部命令回执 ok
-        assert all(mgr.web.results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr.web.results
+        # 全部命令回执 ok(c10=edit_tracker 已随编辑功能下线移除, 现为 c1..c12)
+        assert all(mgr.web.results[f"c{i}"]["status"] == "ok" for i in range(1, 13)), mgr.web.results
         # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
         rec = mgr.store.get("HA")
         assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"
@@ -9091,11 +9072,6 @@ def test_drain_web_commands_torrent_write_unknown_hash_skips():
             ("add_trackers", {
                 "hash": "GONE",
                 "urls": ["u"]
-            }),
-            ("edit_tracker", {
-                "hash": "GONE",
-                "orig_url": "a",
-                "new_url": "b"
             }),
             ("remove_tracker", {
                 "hash": "GONE",
@@ -9160,11 +9136,6 @@ def test_drain_web_commands_torrent_write_param_errors():
                 "hash": "HA",
                 "urls": []
             }, "e3"),
-            ("edit_tracker", {
-                "hash": "HA",
-                "orig_url": "a",
-                "new_url": ""
-            }, "e4"),
             ("remove_tracker", {
                 "hash": "HA",
                 "url": ""
@@ -9456,19 +9427,6 @@ def test_cmd_trackers_write_invalidates_lazy_cache():
         mgr.web.consume_commands()
         assert rec._trackers_info is None, "add_trackers 应失效惰性缓存"
         assert rec.trackers_info(mgr.client) == [{"url": "https://new.example.com/announce"}]
-        # edit: 再次失效
-        rec.trackers_info(mgr.client)  # 重新预热
-        mgr.web.commands.put(
-            (
-                "edit_tracker", {
-                    "hash": "HA",
-                    "orig_url": "https://new.example.com/announce",
-                    "new_url": "https://edited.example.com/announce"
-                }
-            )
-        )
-        mgr.web.consume_commands()
-        assert rec._trackers_info is None, "edit_tracker 应失效惰性缓存"
         # remove: 再次失效
         rec.trackers_info(mgr.client)  # 重新预热
         mgr.web.commands.put(("remove_tracker", {"hash": "HA", "url": "https://new.example.com/announce"}))
@@ -11896,7 +11854,7 @@ def test_truth_hold_matches_truth_push_cap():
 
 
 def test_cmd_trackers_log_sanitized(caplog):
-    """tracker 编辑/移除的日志只写脱敏主地址, 不含凭据全文(issue 26-09-21-1408)
+    """tracker 移除的日志只写脱敏主地址, 不含凭据全文(issue 26-09-21-1408; 编辑功能已下线)
 
     断言口径刻意**不写死参数名**: 私站凭据参数名是任意的(passkey 只是最常见的一种),
     所以只钉死"密钥全文一行都进不了日志 + 主地址仍在(够排查是哪个站)"。
@@ -11914,13 +11872,11 @@ def test_cmd_trackers_log_sanitized(caplog):
     secret = "https://pt.example.com/announce?passkey=SUPERSECRET123"
     caplog.set_level(logging.INFO, logger="auto_qb.webui.commands")
     caplog.clear()
-    m._cmd_edit_tracker(hash="HA", orig_url=secret, new_url="https://other.example.com/announce?authkey=XYZ")
     m._cmd_remove_tracker(hash="HA", url=secret)
     text = "\n".join(r.getMessage() for r in caplog.records if r.name == "auto_qb.webui.commands")
     assert "SUPERSECRET123" not in text, "passkey 全文进了日志"
-    assert "XYZ" not in text, "换名的凭据(authkey)同样不能进日志"
-    assert "passkey" not in text and "authkey" not in text, "query 整段都应丢弃, 不该残留参数名"
-    assert "pt.example.com" in text and "other.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
+    assert "passkey" not in text, "query 整段都应丢弃, 不该残留参数名"
+    assert "pt.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
 
 
 # ---- W0 结构守阵(plan 26-09-22-1857: web.py create_app 拆分 web/ 包, 先行落阵再动刀) ----
@@ -11997,7 +11953,6 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),
-    ("POST", "/api/torrents/{hash}/trackers/edit"),
     ("POST", "/api/torrents/{hash}/trackers/remove"),
     ("GET", "/api/traffic/history"),
     ("GET", "/api/traffic/qb/global"),  # qB 口径流量图三端点(plan 26-10-03-0946 §08 P4; 同域对照 history)
@@ -12030,7 +11985,9 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 77 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 76 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+
+    (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

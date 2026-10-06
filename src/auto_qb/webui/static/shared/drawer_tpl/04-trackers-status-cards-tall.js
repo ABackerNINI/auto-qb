@@ -8,7 +8,7 @@
  * (** / [DHT] / [PeX] / [LSD])沿用 drawerTrackerVirtual 判定, 合并一张弱化卡。
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 卡片语义按设计稿提到失败档。
- * 动作: 添加/编辑/删除(trackerAdd/Edit/Remove)、强制汇报(drawerCmd("reannounce")), 回执/toast
+ * 动作: 添加/删除(trackerAdd/Remove)、强制汇报(drawerCmd("reannounce")), 回执/toast
  * 全走现有方法链; 设计稿 foot 的「已失败/上次成功」无 per-tracker 数据源, 按渐进纪律整块省略。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 trackers 序列化比对)跳过重建, 滚动位置/筛选/排序态自保。
@@ -171,7 +171,6 @@
     const lan = !virtual && LAN_RE.test(String(t.url || "")) ? T`<span class="dt04-tag" title="局域网 tracker, 不经过公网">内网</span>` : "";
     const acts = virtual ? "" : T`<span class="dt04-acts">
       <button type="button" class="dt04-act" data-act="report" data-url="${t.url}" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
-      <button type="button" class="dt04-act" data-act="edit" data-url="${t.url}" title="编辑 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg></button>
       <button type="button" class="dt04-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
     </span>`;
     /* 统计行(渐进: num_peers / num_downloaded 缺失省略); 0 值着弱色, 走分支而非插值(插值会转义) */
@@ -329,7 +328,6 @@
     const url = btn.getAttribute("data-url") || "";
     if (act === "add") { ctx.trackerAdd(); return; }
     if (act === "report") { ctx.drawerCmd("reannounce", null, "强制汇报"); return; }
-    if (act === "edit") { ctx.trackerEdit(url); return; }
     if (act === "del") { ctx.trackerRemove(url); }
   }
 

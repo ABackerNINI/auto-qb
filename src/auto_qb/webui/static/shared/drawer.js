@@ -522,7 +522,7 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "rename", { name: res.name }, "已重命名");
     },
-    /* ---------------- 抽屉 Tracker 页签编辑(D 轮): 添加/编辑/删除 ---------------- */
+    /* ---------------- 抽屉 Tracker 页签编辑(D 轮): 添加/删除 ---------------- */
     async trackerAdd() {
       const hash = this.drawer.hash;
       if (!hash) return;
@@ -536,22 +536,6 @@ window.AQB_DRAWER = {
         return;
       }
       await this._editPost(hash, "trackers/add", { urls }, urls.length > 1 ? `已添加 ${urls.length} 条 tracker` : "tracker 已添加");
-    },
-    async trackerEdit(url) {
-      const hash = this.drawer.hash;
-      if (!hash) return;
-      const nu = await this.promptDialog("编辑 Tracker", url, { placeholder: "新的 announce URL", okText: "保存" });
-      if (nu === null) return;
-      const newUrl = String(nu || "").trim();
-      if (!newUrl) {
-        this.toast("URL 不能为空", "warn");
-        return;
-      }
-      if (newUrl === url) {
-        this.toast("未作修改", "ok", 2000);
-        return;
-      }
-      await this._editPost(hash, "trackers/edit", { orig_url: url, new_url: newUrl }, "tracker 已更新");
     },
     async trackerRemove(url) {
       const hash = this.drawer.hash;

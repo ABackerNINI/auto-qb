@@ -204,7 +204,6 @@ class WebCommandsMixin:
             "queue_torrent": self._cmd_queue_torrent,
             "set_auto_tmm": self._cmd_set_auto_tmm,
             "add_trackers": self._cmd_add_trackers,
-            "edit_tracker": self._cmd_edit_tracker,
             "remove_tracker": self._cmd_remove_tracker,
             "set_file_priority": self._cmd_set_file_priority,
             "rename_fs": self._cmd_rename_fs,
@@ -618,18 +617,6 @@ class WebCommandsMixin:
             raise ValueError("urls 不能为空")
         self.api.torrents_add_trackers(torrent_hash=hash, urls=url_list)
         logger.info(f"WEB UI | 种子 {hash[:8]} 添加 {len(url_list)} 个 tracker")
-
-    def _cmd_edit_tracker(self, hash: str, orig_url: str = "", new_url: str = ""):
-        if self.store.get(hash) is None:
-            return
-        if not orig_url or not new_url:
-            raise ValueError("orig_url/new_url 均不能为空")
-        self.api.torrents_edit_tracker(torrent_hash=hash, original_url=orig_url, new_url=new_url)
-        # 只用脱敏后的主地址: announce URL 的 query 里常内嵌 passkey 等凭据, 落盘日志即泄露面
-        logger.info(
-            f"WEB UI | 种子 {hash[:8]} 编辑 tracker: "
-            f"{sanitize_tracker_url(orig_url)} -> {sanitize_tracker_url(new_url)}"
-        )
 
     def _cmd_remove_tracker(self, hash: str, url: str = ""):
         if self.store.get(hash) is None:

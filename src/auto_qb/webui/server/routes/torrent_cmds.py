@@ -143,12 +143,6 @@ def build_router(ctx: WebContext) -> APIRouter:
         urls = [str(u) for u in ((body or {}).get("urls") or []) if u]
         return _enqueue("add_trackers", {"hash": hash, "urls": urls})
 
-    @router.post("/api/torrents/{hash}/trackers/edit")
-    def api_t_trackers_edit(hash: str, body: dict = None):
-        b = body or {}
-        payload = {"hash": hash, "orig_url": str(b.get("orig_url") or ""), "new_url": str(b.get("new_url") or "")}
-        return _enqueue("edit_tracker", payload)
-
     @router.post("/api/torrents/{hash}/trackers/remove")
     def api_t_trackers_remove(hash: str, body: dict = None):
         url = str((body or {}).get("url") or "")

@@ -9,7 +9,7 @@
  * msg 行内点击展开全文; 「仅看异常」过滤聚焦 警告/更新中/失败 行。
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 行语义按设计稿提到失败档。
- * 动作: 添加/编辑/删除(trackerAdd/Edit/Remove)、强制汇报(drawerCmd("reannounce")), 虚拟行无动作。
+ * 动作: 添加/删除(trackerAdd/Remove)、强制汇报(drawerCmd("reannounce")), 虚拟行无动作。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 trackers + 汇报倒计时序列化比对)跳过重建, 滚动位置/过滤/msg 展开态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -197,7 +197,6 @@
       ? T`<span class="dt06-ops dim">—</span>`
       : T`<span class="dt06-ops">
           <button type="button" class="dt06-act" data-act="report" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
-          <button type="button" class="dt06-act" data-act="edit" data-url="${t.url}" title="编辑 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg></button>
           <button type="button" class="dt06-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
         </span>`;
     return T`<div class="dt06-r ${b}" data-benign="${benign}" data-idx="${order}" title="${t.url}">
@@ -338,7 +337,6 @@
     const url = btn.getAttribute("data-url") || "";
     if (act === "add") { ctx.trackerAdd(); return; }
     if (act === "report") { ctx.drawerCmd("reannounce", null, "强制汇报"); return; }
-    if (act === "edit") { ctx.trackerEdit(url); return; }
     if (act === "del") { ctx.trackerRemove(url); }
   }
 

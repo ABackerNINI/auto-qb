@@ -8,7 +8,7 @@
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 分组语义按设计稿提到失败档。
  * 动作: 失败区重报钮 drawerCmd("reannounce")(torrent 级 = 全 tracker 重报, 经典链同源);
- * 编辑/删除(trackerEdit/Remove)。设计稿的「已失败时长/上次成功/逐行汇报倒计时」无 per-tracker
+ * 删除(trackerRemove)。设计稿的「已失败时长/上次成功/逐行汇报倒计时」无 per-tracker
  * 数据源, 按渐进纪律省略(P-02 只授权 06 变体以 detail.reannounce_in 近似)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 trackers 序列化比对)跳过重建, 滚动位置/分区折叠/msg 展开态自保。
@@ -203,13 +203,12 @@
       ${stats.length ? R(T`<span class="dt05-stats">${R(stats.join(""))}</span>`) : ""}
       <span class="dt05-acts">
         <button type="button" class="dt05-act" data-act="report" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
-        <button type="button" class="dt05-act" data-act="edit" data-url="${t.url}" title="编辑 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg></button>
         <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
       </span>
     </div>`;
   }
 
-  /* 失败块: msg 全文 + 处置建议 + 重报/编辑/删除 */
+  /* 失败块: msg 全文 + 处置建议 + 重报/删除 */
   function failHtml(ctx, t) {
     const m = String(t.msg || "").trim() || "tracker 未返回消息(not working)";
     return T`<div class="dt05-fail" title="${t.url}">
@@ -219,7 +218,6 @@
         ${num(t.tier) ? R(T`<span class="dt05-tier" title="tier: 汇报层级, 数值越小越优先">T${t.tier}</span>`) : ""}
         <button type="button" class="dt05-rbtn" data-act="report"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报</button>
         <span class="dt05-acts">
-          <button type="button" class="dt05-act" data-act="edit" data-url="${t.url}" title="编辑 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg></button>
           <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除失效 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
         </span>
       </div>
@@ -347,7 +345,6 @@
     const act = btn.getAttribute("data-act");
     const url = btn.getAttribute("data-url") || "";
     if (act === "report") { ctx.drawerCmd("reannounce", null, "强制汇报"); return; }
-    if (act === "edit") { ctx.trackerEdit(url); return; }
     if (act === "del") { ctx.trackerRemove(url); }
   }
 

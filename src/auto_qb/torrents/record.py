@@ -267,7 +267,7 @@ class TorrentRecord:
     def invalidate_trackers(self) -> None:
         """tracker 写操作后失效本记录的 tracker 惰性缓存(下轮 trackers_info 重新拉取)
 
-        由 QbApi 的 tracker 写操作(add/edit/remove_trackers)在主循环线程调用,
+        由 QbApi 的 tracker 写操作(add/remove_trackers)在主循环线程调用,
         保证同 tick 内后续读取(如强制汇报基线)拿到写后新值。
         """
         self._trackers_info = None

@@ -252,18 +252,6 @@ class QbApi:
         self._client.torrents_add_trackers(torrent_hash=torrent_hash, urls=urls, **kwargs)
         self._invalidate_torrent_trackers(torrent_hash)
 
-    def torrents_edit_tracker(
-        self,
-        torrent_hash: Optional[str] = None,
-        original_url: Optional[str] = None,
-        new_url: Optional[str] = None,
-        **kwargs: Any
-    ):
-        self._client.torrents_edit_tracker(
-            torrent_hash=torrent_hash, original_url=original_url, new_url=new_url, **kwargs
-        )
-        self._invalidate_torrent_trackers(torrent_hash)
-
     def torrents_remove_trackers(self, torrent_hash: Optional[str] = None, urls=None, **kwargs: Any):
         self._client.torrents_remove_trackers(torrent_hash=torrent_hash, urls=urls, **kwargs)
         self._invalidate_torrent_trackers(torrent_hash)

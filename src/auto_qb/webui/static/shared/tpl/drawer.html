@@ -239,9 +239,6 @@
                     <td class="wrap">{{ t.msg || "—" }}</td>
                     <td class="cell-act">
                       <template v-if="!drawerTrackerVirtual(t.url)">
-                        <button class="row-btn" @click="trackerEdit(t.url)">
-                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>
-                        </button>
                         <button class="row-btn danger" @click="trackerRemove(t.url)">
                           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
                         </button>

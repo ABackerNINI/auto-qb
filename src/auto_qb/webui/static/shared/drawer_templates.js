@@ -19,7 +19,7 @@
  *   调(格式化): fmtSpeed / fmtSpeedOrDash / fmtSize / fmtSizeOrDash / fmtDuration / fmtEta /
  *             fmtTs / fmtPeersQb / drawerFileRows / drawerPeerRows / drawerTrackerStatus /
  *             drawerTrackerVirtual / drawerGeneralSections / drawerTitle。
- *   调(动作):   drawerCmd(action[, body, okText]) / trackerAdd / trackerEdit / trackerRemove /
+ *   调(动作):   drawerCmd(action[, body, okText]) / trackerAdd / trackerRemove /
  *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow;
  *             需要详情原始字段(如 magnet_uri)时走 _editDetail(hash)(按需单发, 不进轮询载荷)。
  *   禁: 不触碰面板几何(dock/动画/高度/drawerPanelStyle)、轮询生命周期(_startDrawerPoll 族)、

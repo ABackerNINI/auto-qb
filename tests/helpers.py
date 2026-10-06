@@ -379,9 +379,6 @@ class FakeClient:
     def torrents_add_trackers(self, torrent_hash=None, urls=None):
         self.calls.append(("add_trackers", (torrent_hash, list(urls or []))))
 
-    def torrents_edit_tracker(self, torrent_hash=None, original_url=None, new_url=None):
-        self.calls.append(("edit_tracker", (torrent_hash, original_url, new_url)))
-
     def torrents_remove_trackers(self, torrent_hash=None, urls=None):
         self.calls.append(("remove_trackers", (torrent_hash, list(urls or []))))
 
