@@ -422,7 +422,7 @@
   const _render = render;
   reg.register({
     id: "08", tab: "peers",
-    label: "语义分区(矮)",
+    label: "五区分组",
     css: CSS,
     render(host, ctx) {
       wire(host);

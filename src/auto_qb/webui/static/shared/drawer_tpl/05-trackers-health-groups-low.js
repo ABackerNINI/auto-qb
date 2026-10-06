@@ -351,7 +351,7 @@
   const _render = render;
   reg.register({
     id: "05", tab: "trackers",
-    label: "健康分组(矮)",
+    label: "健康分组",
     css: CSS,
     render(host, ctx) {
       wire(host);

@@ -176,7 +176,7 @@
 
   reg.register({
     id: "14", tab: "traffic", slot: "post",
-    label: "图注双栏(矮)",
+    label: "图注双栏",
     css: CSS,
     render,
     destroy(host) {

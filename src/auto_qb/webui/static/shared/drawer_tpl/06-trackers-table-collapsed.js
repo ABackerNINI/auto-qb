@@ -343,7 +343,7 @@
   const _render = render;
   reg.register({
     id: "06", tab: "trackers",
-    label: "增强表格(收起)",
+    label: "增强表格",
     css: CSS,
     render(host, ctx) {
       wire(host);

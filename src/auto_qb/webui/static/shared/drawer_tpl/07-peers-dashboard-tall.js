@@ -538,7 +538,7 @@
   const _render = render;
   reg.register({
     id: "07", tab: "peers",
-    label: "四卡仪表(高)",
+    label: "四卡仪表",
     css: CSS,
     render(host, ctx) {
       wire(host);

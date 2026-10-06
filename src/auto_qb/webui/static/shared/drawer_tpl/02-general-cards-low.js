@@ -304,7 +304,7 @@
   const _render = render;
   reg.register({
     id: "02", tab: "general",
-    label: "六卡聚类(矮)",
+    label: "六卡聚类",
     css: CSS,
     render(host, ctx) {
       wire(host);

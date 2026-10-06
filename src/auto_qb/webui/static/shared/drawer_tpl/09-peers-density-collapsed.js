@@ -395,7 +395,7 @@
   const _render = render;
   reg.register({
     id: "09", tab: "peers",
-    label: "密度雷达(收起)",
+    label: "密度雷达",
     css: CSS,
     render(host, ctx) {
       wire(host);

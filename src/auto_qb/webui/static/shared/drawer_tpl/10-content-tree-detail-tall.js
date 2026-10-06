@@ -478,7 +478,7 @@
   const _render = render;
   reg.register({
     id: "10", tab: "content",
-    label: "树 + 详情(高)",
+    label: "树 + 详情",
     css: CSS,
     render(host, ctx) {
       wire(host);

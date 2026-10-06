@@ -306,7 +306,7 @@
   const _render = render;
   reg.register({
     id: "01", tab: "general",
-    label: "英雄行·键值栅格(高)",
+    label: "英雄行·键值栅格",
     css: CSS,
     render(host, ctx) {
       wire(host);

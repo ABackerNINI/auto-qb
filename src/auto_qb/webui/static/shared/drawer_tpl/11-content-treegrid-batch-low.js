@@ -505,7 +505,7 @@
   const _render = render;
   reg.register({
     id: "11", tab: "content",
-    label: "树表批量(矮)",
+    label: "树表批量",
     css: CSS,
     render(host, ctx) {
       wire(host);

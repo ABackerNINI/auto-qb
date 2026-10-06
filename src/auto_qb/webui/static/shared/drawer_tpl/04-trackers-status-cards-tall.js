@@ -334,7 +334,7 @@
   const _render = render;
   reg.register({
     id: "04", tab: "trackers",
-    label: "状态卡片栅格(高)",
+    label: "状态卡片栅格",
     css: CSS,
     render(host, ctx) {
       wire(host);

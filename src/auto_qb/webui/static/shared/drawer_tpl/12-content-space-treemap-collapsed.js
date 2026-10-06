@@ -538,7 +538,7 @@
   const _render = render;
   reg.register({
     id: "12", tab: "content",
-    label: "空间树图(收起)",
+    label: "空间树图",
     css: CSS,
     render(host, ctx) {
       wire(host);

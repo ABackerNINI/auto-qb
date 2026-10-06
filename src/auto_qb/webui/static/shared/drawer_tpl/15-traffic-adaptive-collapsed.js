@@ -193,7 +193,7 @@
 
   reg.register({
     id: "15", tab: "traffic", slot: "pre",
-    label: "紧凑自适应(收起)",
+    label: "自适应 KPI 行",
     css: CSS,
     render,
     summary,

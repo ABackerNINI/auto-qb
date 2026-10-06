@@ -125,7 +125,7 @@
 
   reg.register({
     id: "13", tab: "traffic", slot: "pre",
-    label: "KPI 头行(高)",
+    label: "KPI 头行",
     css: CSS,
     render,
     destroy(host) {

@@ -390,7 +390,7 @@
   const _render = render;
   reg.register({
     id: "03", tab: "general",
-    label: "紧凑档案(收起)",
+    label: "双栏档案",
     css: CSS,
     render(host, ctx) {
       wire(host);
