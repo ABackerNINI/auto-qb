@@ -28,7 +28,15 @@ export const INST = "document.querySelector('#app')._vnode.component.proxy";
  * @returns {Promise<*>} 表达式求值结果; vm 不存在时为 null。
  */
 export async function readInst(page, expr) {
-  return page.evaluate(`(() => { const vm = ${INST}; return vm ? (${expr}) : null; })()`);
+  return page.evaluate(`(() => {
+    /* null-safe(S3 批小修, 计划 26-10-06-0708): Vue mount 前 #app._vnode 是 undefined,
+     * 旧写法直接 ._vnode.component 会抛 TypeError 而不是返回 null —— 调用方(尤其
+     * expect.poll)被迫"先等挂载再起跑轮询"(multiselect-shows.spec BUG-8 踩过)。这里降级
+     * 为 null, 挂载前的读数语义与"取不到 vm"一致。 */
+    const el = document.querySelector('#app');
+    const vm = el && el._vnode && el._vnode.component ? el._vnode.component.proxy : null;
+    return vm ? (${expr}) : null;
+  })()`);
 }
 
 /**
