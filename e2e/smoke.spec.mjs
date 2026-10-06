@@ -74,5 +74,46 @@ for (const skin of SKINS) {
       expect(body.status.torrents).toBe(TORRENTS);
       expect(body.status.groups).toBeGreaterThan(0);
     });
+
+    /* 几何守卫(2026-10-06, 计划 26-10-06-1009): 右对齐列表头文字与值文字必须落在同一竖线上。
+     * 为什么需要它: 本轮缺陷的成因是「盒子模型」—— 表头 .h-cell 为容纳拖拽把手多出的 10px
+     * 右内边距, 让右对齐表头比数值左偏 11px(明细 10px), 排序时箭头再顶 11px; 而 tests/test_web.py
+     * 的近 300 条守阵全是**读文件文本**的静态断言, 原理上看不见盒子模型。故在真浏览器 + 桩服务这层
+     * 加一条几何断言(桩服务由 playwright.config.mjs 的 webServer 自动拉起)。
+     * 口径: 量**内容盒**右缘之差(盒右缘 − 右内边距), 不量墨迹(值溢出被省略号截断会抖动);
+     * 数据行有 1px 侧边框 ⇒ 允许 ±1px。详见 pitfalls/web-ui/header-cell-gutter.md。 */
+    test('几何: 右对齐列表头与值右缘对齐(±1px), 且值格不居中', async ({ page }) => {
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.group-row', { timeout: 30_000 });
+      await page.waitForTimeout(300); /* 等列对齐规则注入 + 首帧布局稳定 */
+
+      const bad = await page.evaluate(() => {
+        /* 内容盒右缘 = 盒右缘 − 右内边距 */
+        const cRight = (el) => el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight);
+        const out = [];
+        /* 表头网格表 = .group-head(分组/种子/追剧) + .detail-head(组内明细/集明细) */
+        for (const head of document.querySelectorAll('.group-head[data-table], .detail-head[data-table]')) {
+          const page_ = head.getAttribute('data-table');
+          const cells = [...head.children].filter((c) => c.classList.contains('h-cell'));
+          if (!cells.length) continue;
+          const row = document.querySelector(page_ === 'detail'
+            ? '.member-row[data-table="detail"]'
+            : `.group-row[data-table="${page_}"]`);
+          if (!row) continue;
+          const rcells = [...row.children];
+          cells.forEach((hc, i) => {
+            if (getComputedStyle(hc).textAlign !== 'right') return; /* 只看右对齐列(左/中列无此缺陷) */
+            const rc = rcells[i];
+            if (!rc) return;
+            const d = cRight(rc) - cRight(hc);
+            if (Math.abs(d) > 1) out.push({ page: page_, delta: Math.round(d * 100) / 100 });
+            if (getComputedStyle(rc).textAlign === 'center') out.push({ page: page_, zeroCentered: true });
+          });
+        }
+        return out;
+      });
+
+      expect(bad, `右对齐列错位 / 0 值居中: ${JSON.stringify(bad)}`).toEqual([]);
+    });
   });
 }

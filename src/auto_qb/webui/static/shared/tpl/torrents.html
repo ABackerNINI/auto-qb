@@ -5,7 +5,7 @@
                  @click="col.sortable && setSort(col.key)"
                  @mousedown="startColDrag($event, 'torrent', col.key)"
                  @contextmenu.prevent="openHeadMenu($event, 'torrent', col)">
-              <span>{{ col.label }}</span>
+              <span class="h-label">{{ col.label }}</span>
               <span v-if="col.sortable" class="arrow">
                 <svg v-if="torrentSortKey === col.key" class="ico" viewBox="0 0 16 16">
                   <use :href="torrentSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>

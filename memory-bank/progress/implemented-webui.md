@@ -7,6 +7,24 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEBUI 列对齐几何缺陷修复: 把手槽与列头文字排版解耦**(2026-10-06, 计划
+  [plans/26-10-06-1009](../plans/26-10-06-1009-plan-webui-column-alignment.html) PHASE 0-7 全落地; 专题档案
+  [tasks/26-09-29-webui-column-alignment](../tasks/26-09-29-webui-column-alignment.md) Done): 用户报「右对齐列
+  没有真正对齐标题文字」—— 取证报告 [reports/26-10-06-0945](../reports/26-10-06-0945-report-webui-column-alignment.html)
+  实测主视图 4 表右对齐列偏 11px(明细 10px), 根因 `.h-cell{padding-right:10px}`(给拖拽把手留的命中区, 因
+  `.h-cell` 有 `overflow:hidden` 不能外伸), 值格 `padding-right:0`。修法取「彻底方案」(报告 §5 P0/C1):
+  省略号下移到内层 `<span class="h-label">` → `.h-cell` 改 `display:flex; overflow:visible; padding-right:0`
+  → 把手 `.resizer` 以 `right:-5px` 跨进 grid 的 10px 列间距(半进半出, 不新增宽度开销); 右对齐列箭头
+  由 `columns.js::colAlignCss()` 追加 `.arrow{order:-1}` 排到标签左侧(消排序时标题跳动 +11px); 三主题同步
+  (atlas 新增规则落 `views.css` 避 components.css 700 行 cap)。一并归正「0 值居中」旧口径(第九轮 D4 已裁决
+  取消、代码却留): 删三主题 `.g-stat.zero,.m-stat.zero{text-align:center}`。新增常驻守卫
+  `e2e/smoke.spec.mjs`「右对齐列表头↔值盒模型差 ≤1px 且值格不居中」(红绿双验)。实测盒模型差
+  group/torrent 1px、detail 0px(改前 11/10), 排序后 ≤1(改前 21~22), 三主题一致; `dev.e2e` 6 passed;
+  test.full 2676 passed + 4 skipped / 99%(基线
+  [26-10-06-1037](../testing/baselines/26-10-06-1037-webui-column-alignment-fix.md))。坑档
+  [pitfalls/web-ui/header-cell-gutter](../pitfalls/web-ui/header-cell-gutter.md); 范围外: 设置页 HR 表① 的
+  14px(机制不同, `<table>`+`hrsCols()` 无列模型, 待单独排期)。
+
 - **WEB UI 错误信息历史: toast 环形缓冲 + 后端错误环 + 状态栏入口面板**(2026-10-05~06, 计划
   [plans/26-10-05-2026](../plans/26-10-05-2026-plan-webui-toast-error-history.html) S1-S8 全落地, 分支
   feat/webui-error-history 六笔提交 `9e70b0bd`…`ae94311e` 待并回; 认领 issue

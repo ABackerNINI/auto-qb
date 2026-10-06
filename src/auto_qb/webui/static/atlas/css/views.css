@@ -15,6 +15,10 @@
 /* 排序箭头: 出现/切换时轻微淡入 + 下移, 避免换列时"跳一下" */
 .h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
 @keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
+/* 表头列名标签(2026-10-06): 省略号从 .h-cell 下移到内层标签 —— .h-cell 因此可 overflow:visible,
+ * 拖拽把手(.resizer)得以伸出格子右缘落进 grid 的 10px 列间距(见 components.css 的 .h-cell)。
+ * 落 views.css 是遵「components.css 顶 700 行 cap, 新增规则入 views.css」的约定。 */
+.h-cell > .h-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 展开态的左侧强调已移除(第七轮分家: 左侧 accent 色条是选中态的专属语言);
  * 仅保留"已展开的行不再抬升"(视觉上保持"已定位") */
 .group-row.expanded:hover { transform: none; }  /* 已展开的行不再抬升(视觉上保持"已定位") */

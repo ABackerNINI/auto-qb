@@ -238,7 +238,8 @@
   background: var(--bg); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
-.h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+.h-cell { position: relative; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  overflow: visible; padding-right: 0; }   /* 2026-10-06: 解耦把手槽, 省略号移到 .h-label(见 views.css) */
 /* R10-08: 列对齐不再在这里硬编码名单 —— 口径唯一来源是 app.js 的列模型 `align`,
  * 由 colAlignCss 按**当前可见列**生成 :nth-child 规则注入 <head>(表头与单元格同源),
  * 加/删/换序列都只改列模型一处。旧规则(.hc-* 右对齐/居中名单)已删。 */
@@ -247,9 +248,9 @@
 /* 排序箭头已图标化(i-arrow-up/down sprite, 第七轮替换文本字形): 尺寸 11px, 颜色仍取 accent */
 .h-cell .arrow { color: var(--accent); }
 .h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-/* 拖拽把手: 必须完全落在 .h-cell 之内 —— .h-cell 有 overflow:hidden, 用 right:-5px 时
- * 右半会被裁掉(既不可见也不可点), 实际命中区只剩 5px。这里放在 padding-right(10px) 内。 */
-.h-cell .resizer { position: absolute; right: 0; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+/* 拖拽把手: right:-5px = 跨在列边界上(一半在格子内、一半落进 grid 的 10px 列间距); .h-cell 已
+ * overflow:visible(省略号下移到 .h-label), 伸出的半边不再被裁。 */
+.h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
 .h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%;
   background: transparent; border-radius: 2px; }
 .h-cell:hover .resizer::after { background: var(--accent); }  /* hover 列头时显示可拖拽提示线 */
@@ -297,12 +298,10 @@
  * 中间调图标色 —— 与做种/下载/错误三个有色底并列时, "有色/无色"的层次反而更清楚。 */
 .g-status.k-paused, .g-status.k-other { background: var(--paused-soft); color: var(--paused);
   box-shadow: inset 0 0 0 1px var(--paused-line); }
-/* 数值列右对齐; 0 值"—"在右对齐列中居中。
- * R06 复核: 该规则自第六轮起生效(运行时实测 textAlign=center 且字形左右留白相等);
- * 用户反馈不一致时先按真实数据复现, 不盲改 */
+/* 数值列右对齐。2026-10-06: 删除"0 值居中"(第九轮 D4 已裁决取消、代码却留着; 与"右对齐列表头
+ * 要对齐"冲突)。0 值格回落 colAlignCss 注入的 right, 与同列表头同缘。 */
 .g-stat, .member-row span { white-space: nowrap; }
 .g-stat, .m-stat { text-align: right; }
-.g-stat.zero, .m-stat.zero { text-align: center; }
 /* 0 值只留极淡占位符(满屏 "0 B/s" 是噪声), 但仍占位保持列对齐 */
 .zero { color: var(--fg-dim); opacity: .35; }
 /* ---- TBL-03: 行状态**文字色** + 数值色阶(文字色) ----

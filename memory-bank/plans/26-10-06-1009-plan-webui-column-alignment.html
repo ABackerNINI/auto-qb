@@ -6,9 +6,9 @@
 <title>WEBUI 列对齐彻底修复 · 分步实施计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-column-alignment">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-06-1009">
-<meta name="doc-updated" content="26-10-06-1009">
+<meta name="doc-updated" content="26-10-06-1037">
 <meta name="doc-refs" content="memory-bank/reports/26-10-06-0945-report-webui-column-alignment.html,memory-bank/tasks/26-09-29-webui-column-alignment.md">
 <style>
   *{box-sizing:border-box}
@@ -96,7 +96,7 @@
   <h1>WEBUI 列对齐彻底修复 — 把手槽与文字排版解耦</h1>
   <p class="lede">按取证报告 <a href="../reports/26-10-06-0945-report-webui-column-alignment.html">26-10-06-0945</a> 的<b>彻底方案(报告 §5 · P0/C1)</b>实施: 把「拖拽把手槽」与「列头文字排版」解耦 —— 让那 10px 右内边距<b>只存在于把手真正需要的地方</b>(既有的 10px grid 列间距里), 列头文字与数值文字因此同时落在列右缘。一并归正<b>「0 值居中」</b>这一已被第九轮裁决取消、却仍留在三套 CSS 与知识库里的旧口径(文档漂移)。改完: 主视图 4 张表右对齐列的表头/值右缘差由 <b>11px(明细 10px)</b> 归到 <b>≤1px</b>; 排序时标题不再左右跳(消除 +11px); 数值列<b>不再损失 10px 宽</b>。</p>
   <p class="meta">
-    <b>Status</b> Open(待拍板) · <b>Added</b> 26-10-06-1009 · <b>依据</b> reports/26-10-06-0945(取证快照) · <b>基线</b> develop@c2e43cf9<br>
+    <b>Status</b> Done(已实施) · <b>Added</b> 26-10-06-1009 · <b>更新</b> 26-10-06-1037 · <b>依据</b> reports/26-10-06-0945(取证快照) · <b>基线</b> develop@c2e43cf9(计划轮) → 实施开工 sync <b>2836e522</b><br>
     <b>方案</b> 报告 §5「彻底方案」C1(非最小方案 A1) + 0 值口径归正(用户指定, 修文档漂移)<br>
     <b>触及</b> 5 个表头块 / 3 个模板 + 3 主题 CSS + columns.js 的箭头顺序 + 1 条 0 值规则 ×3 主题 · 共 3 张表/4 视图<br>
     <b>范围外</b> 设置页 HR 在线核实表①(14px, 报告 §5-B1, 机制不同, 见 <a href="#out">§7</a>) · 左对齐列(≤1px, 无缺陷) · 居中列(无真实缺陷)
@@ -347,9 +347,10 @@ test('右对齐列: 表头与值右缘对齐(±1px), 且值格不居中', async 
 <h2><span class="no">§9</span>变更记录</h2>
 <ul>
   <li><b>26-10-06-1009 · 初版</b>: 依报告 26-10-06-0945 的彻底方案(P0/C1)拆 8 个阶段(PHASE 0-7); 0 值口径归正按用户指定并入(第九轮 D4 已裁决取消、代码与知识库仍留旧口径); HR 表①(P2)划出范围外并给推荐处置。</li>
+  <li><b>26-10-06-1037 · 实施完成(doc-status Open → Done)</b>: PHASE 1-7 全落地 —— ①模板 5 处列名加 <code>h-label</code>; ②三主题 <code>.h-cell</code> 改 <code>display:flex</code> + <code>overflow:visible</code> + <code>padding-right:0</code>、新增 <code>.h-cell &gt; .h-label</code> 省略号三件套、<code>.resizer</code> 挪进 10px 列间距(<code>right:-5px</code>); ③<code>columns.js::colAlignCss()</code> 对 right 列追加 <code>.arrow{order:-1}</code> + 注释改写; ④三主题删 <code>.g-stat.zero,.m-stat.zero{text-align:center}</code>; ⑤<code>e2e/smoke.spec.mjs</code> 加几何守卫(红绿双验: 注入缺陷复现 delta=11 红, 修后绿); ⑥验证 + 回写知识库。<b>实测</b>: 盒模型差 group/torrent <b>1px</b>(数据行 1px 侧边框)、detail <b>0px</b>(改前 11/10), 排序后 ≤1(改前 21~22), 三主题 atlas/console/prism 一致; <code>dev.e2e</code> 6 passed; <code>test.full</code> 2676 passed + 4 skipped / 99%。<b>落地偏差</b>: atlas <code>components.css</code> 触 700 行 cap, 新增 <code>.h-label</code> 规则按约定改放 <code>atlas/css/views.css</code>; 计划把 0 值注释落点记作 <code>shared/app.js:646</code>, 实际在 <code>shared/columns.js:646</code>(已按实际位置改写)。</li>
 </ul>
 
-<p class="foot">auto-qb · memory-bank/plans · 26-10-06-1009 · 实施计划(待拍板) · 专题 webui-column-alignment · 依据 reports/26-10-06-0945</p>
+<p class="foot">auto-qb · memory-bank/plans · 26-10-06-1009 · 实施计划(已实施 · Done) · 专题 webui-column-alignment · 依据 reports/26-10-06-0945</p>
 </div>
 </body>
 </html>

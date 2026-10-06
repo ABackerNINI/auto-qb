@@ -14,7 +14,7 @@
                @click="col.sortable && setSort(col.key)"
                @mousedown="startColDrag($event, 'group', col.key)"
                @contextmenu.prevent="openHeadMenu($event, 'group', col)">
-            <span>{{ col.label }}</span>
+            <span class="h-label">{{ col.label }}</span>
             <span v-if="col.sortable" class="arrow">
               <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
                 <use :href="sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
@@ -124,7 +124,7 @@
                      @click="col.sortable && setSort(col.key, 'detail')"
                      @mousedown="startColDrag($event, 'detail', col.key)"
                      @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
-                  <span>{{ col.label }}</span>
+                  <span class="h-label">{{ col.label }}</span>
                   <span v-if="col.sortable" class="arrow">
                     <svg v-if="detailSortKey === col.key" class="ico" viewBox="0 0 16 16">
                       <use :href="detailSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>

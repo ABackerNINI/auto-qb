@@ -163,7 +163,12 @@
   background: var(--bg); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
-.h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+.h-cell { position: relative; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  overflow: visible; padding-right: 0; }
+/* 2026-10-06: 省略号随列名标签下移到 .h-label —— .h-cell 自身 overflow:visible 后, 把手才能
+ * 伸出格子右缘落进 grid 的 10px 列间距(不再用 padding-right 给它让位, 右对齐列的表头文字因此
+ * 与值同缘)。gap:4px 复刻原先标签与箭头之间的一个空格, 防止箭头贴住文字。 */
+.h-cell > .h-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* R10-08: 列对齐不再在这里硬编码名单 —— 口径唯一来源是 app.js 的列模型 `align`,
  * 由 colAlignCss 按**当前可见列**生成 :nth-child 规则注入 <head>(表头与单元格同源)。
  * 这样加/删/换序列都只改列模型一处, 不会再出现"表头左、值右"的错位。
@@ -172,7 +177,9 @@
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { color: var(--accent); display: inline-block; animation: arrow-in .14s var(--ease-out); }
 .h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-.h-cell .resizer { position: absolute; right: 0; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+/* 拖拽把手: right:-5px = 跨在列边界上(一半在格子内、一半落进 grid 的 10px 列间距); .h-cell 已
+ * overflow:visible(省略号下移到 .h-label), 伸出的半边不再被裁(2026-10-06 解耦把手槽与文字排版)。 */
+.h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
 .h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%;
   background: transparent; border-radius: 2px; }
 .h-cell:hover .resizer::after { background: var(--accent); }
@@ -211,7 +218,6 @@
   box-shadow: inset 0 0 0 1px var(--paused-line); }
 .g-stat, .member-row span { white-space: nowrap; }
 .g-stat, .m-stat { text-align: right; }
-.g-stat.zero, .m-stat.zero { text-align: center; }
 .zero { color: var(--fg-dim); opacity: .35; }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }

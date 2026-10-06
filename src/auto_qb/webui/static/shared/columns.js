@@ -643,9 +643,13 @@ window.AQB_COLUMNS = {
      *
      * 选择器用 :where() 把特异性压到 0,1,0(只剩 :nth-child 那一位), 于是:
      *   - 胜过 .g-stat/.m-stat(0,1,0, 同权重靠源顺序: 注入的 <style> 在样式表之后) -> 非默认对齐生效;
-     *   - 输给 .g-stat.zero/.m-stat.zero(0,2,0) -> 保留既有"0 值居中"口径。
+     *   - 与 .h-cell .arrow(0,2,0) 同权, 靠同一套源顺序胜出(见下方箭头 order 规则)。
      * 同时写 text-align 与 justify-content: 值单元格有的是块级文本, 有的是 flex(进度条/
      * 分享率对/芯片组), 只写 text-align 会漏掉后者。
+     * 右对齐列的排序箭头取 order:-1 排到标签**左侧**(表头 .h-cell 已是 flex): 否则箭头作为标签的
+     * 同行兄弟会把标题整块左顶 11px —— 用户看到的就是"点一下排序, 标题跳一下"。值格没有 .arrow,
+     * 不受此规则影响。2026-10-06 起 "0 值居中"(.g-stat.zero/.m-stat.zero) 已删, 0 值格回落本规则注入
+     * 的 right, 与同列表头同缘。
      * WARN: **left 也必须生成**: 数值列的值格子带 .g-stat/.m-stat(right), 若因为"left 是默认值"就跳过,
      *    左对齐的口径会被这两条通用规则盖掉(实测: 添加于列表头左、值右)。
      */
@@ -657,6 +661,7 @@ window.AQB_COLUMNS = {
           const align = cols[i].align || "left";
           const just = align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start";
           out.push(`:where([data-table="${page}"]) > :nth-child(${i + 1}) { text-align: ${align}; justify-content: ${just}; }`);
+          if (align === "right") out.push(`:where([data-table="${page}"]) > :nth-child(${i + 1}) .arrow { order: -1; }`);
         }
       }
       return out.join("\n");

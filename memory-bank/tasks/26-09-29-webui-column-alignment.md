@@ -1,11 +1,11 @@
 # 26-09-29-webui-column-alignment — WEBUI 表格列对齐口径实施
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-09-29
-**Updated:** 2026-10-06 09:58
-**Summary:** 【26-09-29 口径实施 · 已完成】按 reports/26-09-28-2345 审计报告推荐实施列对齐口径: P1 明细/种子两表 completion_on + time_active 共 4 处 align right→left(时间/时长族 R4 统一左, 默认隐藏列低风险); P2 抽屉 3 表数值列 9 字段(Tracker 做种/用户, 用户 进度/下行/上行/已下载/已上传/关联度, 内容 大小/进度)th/td 挂 .num 类 + 三主题 CSS 各补一条右对齐规则。test.full 1831 passed / 3 skipped(91%), 见基线 26-09-29-0240。 【26-10-06 几何错位取证 · 待拍板】用户报「右对齐列没有真正对齐标题文字」—— 实测属实(只读轮次, 零代码改动): 主视图 4 表全部右对齐列偏 11px(明细表 10px, 根因 `.h-cell` 的把手槽 `padding-right: 10px`), 设置页 HR 表① 4 个 num 列偏 14px(排序箭头缺内层 `v-if`, `opacity:0` 仍占位), 三主题一致; 抽屉 3 表 / HR 表②③ 不受影响。报告 reports/26-10-06-0945, 见基线 26-10-06-0958。**Status 由 Done 重开为 Open: 修法选型与「0 值居中」口径待用户拍板。**
+**Updated:** 2026-10-06 10:37
+**Summary:** 【26-09-29 口径实施 · 已完成】按 reports/26-09-28-2345 审计报告推荐实施列对齐口径: P1 明细/种子两表 completion_on + time_active 共 4 处 align right→left(时间/时长族 R4 统一左, 默认隐藏列低风险); P2 抽屉 3 表数值列 9 字段(Tracker 做种/用户, 用户 进度/下行/上行/已下载/已上传/关联度, 内容 大小/进度)th/td 挂 .num 类 + 三主题 CSS 各补一条右对齐规则。test.full 1831 passed / 3 skipped(91%), 见基线 26-09-29-0240。 【26-10-06 几何错位取证 · 待拍板】用户报「右对齐列没有真正对齐标题文字」—— 实测属实(只读轮次, 零代码改动): 主视图 4 表全部右对齐列偏 11px(明细表 10px, 根因 `.h-cell` 的把手槽 `padding-right: 10px`), 设置页 HR 表① 4 个 num 列偏 14px(排序箭头缺内层 `v-if`, `opacity:0` 仍占位), 三主题一致; 抽屉 3 表 / HR 表②③ 不受影响。报告 reports/26-10-06-0945, 见基线 26-10-06-0958。**Status 由 Done 重开为 Open: 修法选型与「0 值居中」口径待用户拍板。** 【26-10-06 10:37 实施完成 · Status Open → Done】按计划 plans/26-10-06-1009 落地「彻底方案」(报告 §5 P0/C1): ①模板 5 处列名加 `h-label`; ②三主题 `.h-cell` 改 flex + `overflow:visible` + `padding-right:0` + 新增 `.h-cell > .h-label` 省略号 + `.resizer` 挪进 10px 列间距(`right:-5px`); ③`columns.js::colAlignCss()` right 列追加 `.arrow{order:-1}`; ④三主题删 0 值居中规则; ⑤`e2e/smoke.spec.mjs` 加几何守卫(红绿双验); ⑥回写知识库。实测盒模型差 group/torrent 1px、detail 0px(改前 11/10), 排序后 ≤1(改前 21~22), 三主题一致; `dev.e2e` 6 passed; `test.full` 2676 passed + 4 skipped / 99%。
 **Topics:** webui-column-alignment
-**Refs:** memory-bank/testing/baselines/26-10-06-0958-webui-column-alignment-header-offset.md, memory-bank/activeContext/26-10-06-0958-webui-column-alignment.md, memory-bank/plans/26-10-06-1009-plan-webui-column-alignment.html, memory-bank/testing/baselines/26-10-06-1022-webui-column-alignment-plan.md
+**Refs:** memory-bank/testing/baselines/26-10-06-0958-webui-column-alignment-header-offset.md, memory-bank/activeContext/26-10-06-0958-webui-column-alignment.md, memory-bank/plans/26-10-06-1009-plan-webui-column-alignment.html, memory-bank/testing/baselines/26-10-06-1022-webui-column-alignment-plan.md, memory-bank/testing/baselines/26-10-06-1037-webui-column-alignment-fix.md
 
 ## 原始请求
 
@@ -68,7 +68,7 @@
 | 6 | 全表右对齐几何实测(3 主视图 + 明细 + HR 表① + 抽屉, 3 主题) | 完成 | 实测 11 / 10 / 14px, 抽屉 0; 桩服务 + headless Chromium |
 | 7 | 出取证报告 + 坑档 + 回写知识库 | 完成 | reports/26-10-06-0945 · pitfalls/web-ui/header-cell-gutter.md · 基线 26-10-06-0958 |
 | 8 | **拍板修法选型**(A 值格补同宽右槽 vs 彻底解耦把手槽) | 完成 | 2026-10-06 用户裁决: 取**彻底方案**(报告 §5 P0/C1); `0 值居中` 判为旧口径/文档漂移, 一并归正 |
-| 9 | 实施修法 + 复量至 0(允许 ±1) + 补守阵 | 未开始 | 计划已出: plans/26-10-06-1009-plan-webui-column-alignment.html(Open, PHASE 0-7); 等用户显式「开工」 |
+| 9 | 实施修法 + 复量至 0(允许 ±1) + 补守阵 | 完成 | 计划 plans/26-10-06-1009(PHASE 0-7) 全落地; 实测 group/torrent 1px、detail 0px; e2e 几何守卫红绿双验; test.full 2676+4/99% |
 
 ## 进度日志
 
@@ -85,4 +85,20 @@
   认领链闭环: 报告 doc-refs ↔ 本计划(仅 meta 机械面); kb.index 重建绿; docmap --check 绿;
   `tests/test_docs_forms.py` 11 passed。**test.full 2676 passed + 4 skipped / 99%**
   (16021 语句 / 163 未覆盖 / 5472 分支 / 143 partial, 两次采样 62.92s / 51.69s), 与上一条纯文档基线
-  0958 逐位持平 ⇒ 基线切片 `26-10-06-1022-webui-column-alignment-plan.md`。**未提交, 等用户指令。**
+  0958 逐位持平 ⇒ 基线切片 `26-10-06-1022-webui-column-alignment-plan.md`。**随计划轮提交入库(提交 `2836e522`)。**
+- **2026-10-06 10:37**: **实施完成(Status Open → Done)**。用户指令「实施计划: 26-10-06-1009」⇒ 执行任务轮。
+  开工 `my-commit-flow.sync` 到 **2836e522**(计划基线 c2e43cf9 之后)。按 PHASE 1-7 落地:
+  ①模板 5 处(groups ×2 · torrents · shows ×2)列名 `<span>` 加 `class="h-label"`;
+  ②三主题 CSS: `.h-cell` 改 `display:flex; align-items:center; gap:4px; overflow:visible; padding-right:0`,
+  新增 `.h-cell > .h-label` 省略号三件套, `.resizer` 改 `right:-5px`(跨进 10px 列间距);
+  ③`shared/columns.js::colAlignCss()` 对 `align==="right"` 列追加 `.arrow{order:-1}` + 注释块改写;
+  ④三主题删 `.g-stat.zero,.m-stat.zero{text-align:center}`(0 值口径归正);
+  ⑤`e2e/smoke.spec.mjs` 新增几何守卫(盒模型右缘差 ≤1px + 值格不居中; 覆盖 `.group-head` 与 `.detail-head`);
+  ⑥知识库回写(本档 · 坑档 · 契约文档 · 计划 doc-status)。
+  **实测**(桩服务 8099 + headless Chromium, 三主题): 右对齐列盒模型差 group/torrent **1px**、detail **0px**
+  (改前 11/10); 点「大小」排序后 ≤1(改前 21~22); 三主题一致。红绿双验: 注入缺陷(prism `.h-cell` 复加
+  `padding-right:10px`)时 e2e 守卫报 `delta:11` 红, 复原后绿。`dev.e2e` **6 passed**;
+  `test.full` **2676 passed + 4 skipped / 99%**(16021/163/5472/143, 53.7s wall)。
+  **落地偏差两处**: ①atlas `components.css` 原 699 行触 700 行 cap, 新增 `.h-label` 规则按约定改放
+  `atlas/css/views.css`(改后 components 698 行); ②计划把 0 值注释落点记作 `shared/app.js:646`, 实际在
+  `shared/columns.js:646`(已按实际位置改写)。**本轮改动随实施提交入库(2026-10-06 提交轮)。**
