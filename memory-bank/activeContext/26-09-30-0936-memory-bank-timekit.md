@@ -1,7 +1,7 @@
 # 26-09-30-0936-memory-bank-timekit — memory-bank 取时间标准化
 
-> 摘要: 用户提出文档日期不准/体例漂移/文件名出现未来时间, 要求 UTC+8 脚本单点取时 + 守卫 + 守卫脚本随 skill 移植。**实施完成 (2026-10-06)**: `timekit.py` (date/time/stamp/check, UTC+8 naive 墙钟) + 三层日期守卫 (文件名/元数据/正文) + `commands run kb.time` 流程接入 (挂 kb.check 与提交闸门) + SKILL.md 时间口径节 + create-issue 钉 +08 + 存量清洗 + `gen_active_recent` 收口静默回退 + `check_doc_links.py` 迁入 skill + `references/PORTING.md`。**未提交 (等用户指令)**。
-> 最后活动: 2026-10-06 19:55
+> 摘要: 用户提出文档日期不准/体例漂移/文件名出现未来时间, 要求 UTC+8 脚本单点取时 + 守卫 + 守卫脚本随 skill 移植。**实施完成 (2026-10-06)**: `timekit.py` (date/time/stamp/check, UTC+8 naive 墙钟) + 三层日期守卫 (文件名/元数据/正文) + `commands run kb.time` 流程接入 (挂 kb.check 与提交闸门) + SKILL.md 时间口径节 + create-issue 钉 +08 + 存量清洗 + `gen_active_recent` 收口静默回退 + `check_doc_links.py` 迁入 skill + `references/PORTING.md`。**已入库 `c612082a`**。
+> 最后活动: 2026-10-06 20:14
 
 **Refs:** memory-bank/testing/baselines/26-10-06-1955-memory-bank-timekit.md
 
@@ -19,4 +19,4 @@
 
 ## 待办
 
-- (无 —— 实施闭环, 等用户显式说「提交」)
+- (无 —— 实施闭环并已入库 `c612082a`)
