@@ -16,6 +16,9 @@
  * 刻意不走几何换算; 数据面若将来加悬停必须改用逐像素映射(见坑档)。
  * 渲染纪律: dtHtml 全量转义(SVG 内层为纯数字点串, 经 dtRaw 拼接), replaceChildren 原子换帧,
  * 数据未变(qbCurData 引用 + 限速字段浅比较)跳过重建; 无监听无定时器, destroy 只作重置。
+ * KPI 图标(Q2, 报告 26-10-07-0542): KPI 行每格标签前置 sprite 图标, 图形/着色与变体 13 同族
+ * (sprite 既有 symbol + 值色随格); 收起摘要条不加 —— 44px 头部已有迷你走势 SVG 作视觉锚点,
+ * ↑/↓ 单字符是摘要条的紧凑既有记法(与变体 03 摘要同语言), 12px 图标不增信息密度。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -52,6 +55,12 @@
     ".drawer .dt15-kpi .v.is-dl { color:var(--today-down); }",
     ".drawer .dt15-kpi .s { font-size:10.5px; color:var(--fg-dim); white-space:nowrap; overflow:hidden;",
     "  text-overflow:ellipsis; }",
+    /* Q2(报告 26-10-07-0542): KPI 标签图标(与变体 13 同族) —— 内联在 .k 文本流里(保住
+     * ellipsis), 矮档 flex 化后 margin 仍成立; 着色随本格值色 */
+    ".drawer .dt15-kpi .k .ico { width:12px; height:12px; margin-right:5px; vertical-align:-1.5px;",
+    "  color:var(--fg-dim); }",
+    ".drawer .dt15-kpi .k .ico.is-up { color:var(--today-up); }",
+    ".drawer .dt15-kpi .k .ico.is-dl { color:var(--today-down); }",
     /* 收起摘要条内联件(44px 头部, 核心以 v-html 消费) */
     ".drawer .dt15-spark { width:118px; height:22px; flex:none; vertical-align:middle; }",
     ".drawer .dt15-spark .base { stroke:var(--border-soft); stroke-width:1; fill:none; }",
@@ -94,9 +103,14 @@
     };
   }
 
-  function kpiCell(k, v, s, cls, title) {
+  /* KPI 格(Q2 补图标, 与变体 13 同族): icon = sprite 既有 symbol id; tone = "is-up"/"is-dl"
+   * 随本格值色, 缺省中性 --fg-dim */
+  function kpiCell(k, v, s, cls, title, icon, tone) {
+    const ico = icon
+      ? T`<svg class="ico${tone ? " " + tone : ""}" viewBox="0 0 16 16"><use href="${icon}"></use></svg>`
+      : "";
     return T`<div class="dt15-kpi" title="${title}">
-      <span class="k">${k}</span><span class="v${cls ? " " + cls : ""}">${v}</span><span class="s">${s}</span>
+      <span class="k">${icon ? R(ico) : ""}${k}</span><span class="v${cls ? " " + cls : ""}">${v}</span><span class="s">${s}</span>
     </div>`;
   }
 
@@ -108,7 +122,7 @@
     const known = (v) => v !== undefined && v !== null && v >= 0;
     if (!known(up) && !known(dl)) return "";
     const fmt = (v) => (v === 0 ? "不限" : known(v) ? ctx.fmtSpeed(v) : "—");
-    return kpiCell("上行限速", fmt(up), "下行 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)");
+    return kpiCell("上行限速", fmt(up), "下行 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)", "#i-turtle");
   }
 
   function render(host, ctx) {
@@ -128,17 +142,17 @@
     const cells = [
       kpiCell("窗口累计上传", ctx.fmtSize(s.up || 0),
         s.down > 0 ? "相对下载 ×" + ((s.up || 0) / s.down).toFixed(1) : "窗口内无下载",
-        "is-up", "窗口内上传字节累计(响应 totals 求和)"),
+        "is-up", "窗口内上传字节累计(响应 totals 求和)", "#i-upload", "is-up"),
       kpiCell("窗口累计下载", ctx.fmtSize(s.down || 0),
         c.avgDl > 0 ? "下载均速 " + ctx.fmtSpeed(c.avgDl) : "做种窗口, 下行为 0",
-        "is-dl", "窗口内下载字节累计(响应 totals 求和)"),
+        "is-dl", "窗口内下载字节累计(响应 totals 求和)", "#i-download", "is-dl"),
       kpiCell("峰值上行", ctx.fmtSpeed(c.peak), c.peak > 0 ? "有采样桶最大值" : "—", "",
-        "窗口内上行速率峰值(单桶最大值)"),
+        "窗口内上行速率峰值(单桶最大值)", "#i-pulse"),
       kpiCell("平均上行", ctx.fmtSpeed(c.avgUp), "按有采样 " + c.cnt + " 桶计", "",
-        "有采样桶的上行均值"),
+        "有采样桶的上行均值", "#i-gauge"),
       kpiCell("采样健康", c.cnt + " 桶",
         "间隔 " + fmtIv(c.iv) + (c.miss ? " · 缺口 " + c.miss : "") + (c.idle ? " · 空闲 " + c.idle : ""),
-        "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶"),
+        "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶", "#i-check-circle"),
       limitCell(ctx),
     ].join("");
     const html = T`<div class="dt15-kpis" title="窗口 ${ctx.qbCurWindow} · 前端派生自 points/totals">${R(cells)}</div>`;

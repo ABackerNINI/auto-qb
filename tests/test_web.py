@@ -48,6 +48,7 @@
 - test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
+- test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3199,6 +3200,59 @@ def test_drawer_tpl_variant_width_discipline():
             f"drawer_tpl/{name}: justify-content:space-between 复活(Q1 label/value 两端推开病根; 非 kv 场景确需请改本守阵并注明)"
     assert "justify-content:space-between" not in core.replace(" ", ""), \
         "核心注入 CSS 不得用 justify-content:space-between(同上)"
+
+
+def test_drawer_tpl_variant_field_icons():
+    """详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)
+    字段行必须消费 drawerGeneralSections() 自带的行级 icon 数据(sprite `<use href>` 静态引用,
+    字符串拼 HTML 不走 Vue 绑定)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典选择器
+    .f-row .ico-t-* 在变体行不命中, 变体必须自带重定作用域的色表); traffic 三变体(13/14/15)
+    KPI/解读行必须含 sprite 图标引用; 全部六变体的 #i-* 引用都不得超出三皮肤 index.html
+    sprite 的既有 symbol 集合(三皮肤集合还必须两两相等, 防单边加图标), 且不得引入外部图标库
+    (<img / iconfont / fontawesome / material-icons)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. sprite 单点: 三皮肤 index.html 的 symbol id 集合两两相等(变体引用的前提交底)
+    sprite_ids = None
+    for ui in _UI_ALL:
+        html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        ids = set(re.findall(r'id="(i-[a-z0-9-]+)"', html))
+        assert ids, f"{ui}: index.html 未找到 sprite symbol(图标引用的解析基点缺失)"
+        if sprite_ids is None:
+            sprite_ids = ids
+        else:
+            assert ids == sprite_ids, f"{ui}: sprite symbol 集合与其它皮肤不一致(单边加图标)"
+
+    # 2. general 三变体: 消费 r.icon + icoTone 同表 + 自带 .ico-t-* 着色 CSS
+    for name in ("01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js"):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert 'href="${r.icon}"' in text or 'href="${icon}"' in text, \
+            f"drawer_tpl/{name}: 字段行未消费行级 icon 数据(Q2: 变体丢弃 drawerGeneralSections 图标字段复发)"
+        assert '"#i-download": "ico-t-io"' in text, \
+            f"drawer_tpl/{name}: 缺 icoTone 同表派生(着色机制与经典链漂移)"
+        for tone in ("ico-t-io", "ico-t-cap", "ico-t-time", "ico-t-site", "ico-t-sw", "ico-t-id", "ico-t-path", "ico-t-state"):
+            assert f".{tone} {{" in text, \
+                f"drawer_tpl/{name}: 缺 .{tone} 着色 CSS(经典 .f-row .ico-t-* 作用域在变体行不命中, 必须自带色表)"
+
+    # 3. traffic 三变体: KPI/解读行含 sprite 图标引用(上下行累计为基线, 任一变体缺即退化为纯文字)
+    for name in ("13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js", "15-traffic-adaptive-collapsed.js"):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        for icon in ("#i-upload", "#i-download"):
+            assert icon in text, \
+                f"drawer_tpl/{name}: KPI 行缺 sprite 图标 {icon}(Q2: traffic 变体零图标复发)"
+
+    # 4. 引用不越界 + 不引入外部图标库(全变体扫描, 含未来新增文件)
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        unknown = {r for r in re.findall(r"#(i-[a-z0-9-]+)", text) if r not in sprite_ids}
+        assert not unknown, f"drawer_tpl/{name}: 引用了 sprite 不存在的图标 {sorted(unknown)}(不得凭空造 id)"
+        low = text.lower()
+        for bad in ("<img", "iconfont", "fontawesome", "material-icons"):
+            assert bad not in low, \
+                f"drawer_tpl/{name}: 引入外部图标形态 {bad}(图标只许用站内 SVG sprite)"
 
 
 def test_drawer_tpl_classic_default():

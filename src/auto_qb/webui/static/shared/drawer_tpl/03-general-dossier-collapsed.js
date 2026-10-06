@@ -6,6 +6,9 @@
  * (报告 §5 口径的基准实现: 做种中 · 进度 · 上速 · 比率 · HR 剩余 · 站点), 矮/高 = 双栏自适应滚动)。
  * 数据: 左主区 = 状态行(state/progress/availability)+ 基础/传输/时间/路径分组
  * (drawerGeneralSections() 预格式化结果); 右栏 = 归属徽章/标识(复制)/出处备注/限速配额/更多字段。
+ * 字段行消费行级 icon 数据(sprite `<use href>` 静态引用, 着色复用经典链 icoTone 派生表,
+ * 色值在变体 CSS 里按行类重定作用域 —— 经典的 .f-row .ico-t-* 选择器在变体行不命中;
+ * 仅消费分组行自带的 icon, 右栏自建的限速/扩展/磁力行无该数据不补; Q2, 报告 26-10-07-0542)。
  * 动作: 打开目录/复制/磁力复制(_editDetail 按需取, BUG-9 先例口径)。渐进字段: 有则渲染、
  * 无则整行/整徽章省略。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
@@ -87,6 +90,17 @@
     "  padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-dim); cursor:pointer;",
     "  transition:color var(--dur) var(--ease), background var(--dur) var(--ease); }",
     ".drawer .dt03-act:hover { color:var(--fg); background:var(--bg-hover); }",
+    /* Q2(报告 26-10-07-0542): 字段行图标 + 语义着色 —— 与经典链 .f-row .ico-t-* 同色表,
+     * 色值同令牌; teal/indigo/cyan/violet/pink 未入变体令牌白名单, 按契约写字面 fallback */
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) > .ico { flex:none; align-self:center; color:var(--fg-dim); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-io { color:var(--blue); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-cap { color:var(--teal, #2dd4bf); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-time { color:var(--indigo, #818cf8); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-site { color:var(--cyan, #22d3ee); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-sw { color:var(--green); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-id { color:var(--violet, #a78bfa); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-path { color:var(--accent-hi); }",
+    ".drawer :is(.dt03-item, .dt03-crow, .dt03-kv) .ico-t-state { color:var(--pink, #f472b6); }",
     /* 右栏 */
     ".drawer .dt03-side-h { display:flex; align-items:center; gap:6px; height:28px; font-size:12.5px; font-weight:600; color:var(--fg-soft); }",
     ".drawer .dt03-side-sub { margin:10px 0 4px; font-size:11px; color:var(--fg-dim); }",
@@ -129,6 +143,34 @@
   const size = (ctx, v) => ctx.fmtSizeOrDash(v) || "—";
   const yn = (v) => (v ? "是" : "否");
 
+  /* Q2(报告 26-10-07-0542): 字段行图标着色 —— 派生表自经典链 icoTone(drawer.js FX-22)自包含
+   * 复制(变体不经 Vue, ctx 白名单无 icoTone); 图标名 -> 色调类, 行内 svg 挂类, 色值在上方
+   * 变体 CSS 的 .ico-t-* 规则里走主题令牌。 */
+  const ICO_TONE = {
+    "#i-download": "ico-t-io", "#i-upload": "ico-t-io", "#i-arrow-up": "ico-t-io", "#i-arrow-down": "ico-t-io",
+    "#i-hdd": "ico-t-cap", "#i-layers": "ico-t-cap", "#i-columns": "ico-t-cap",
+    "#i-calendar": "ico-t-time", "#i-clock": "ico-t-time", "#i-timer": "ico-t-time",
+    "#i-hourglass": "ico-t-time", "#i-eye": "ico-t-time",
+    "#i-globe": "ico-t-site", "#i-link": "ico-t-site",
+    "#i-lock": "ico-t-sw", "#i-sliders": "ico-t-sw", "#i-play": "ico-t-sw", "#i-sort": "ico-t-sw",
+    "#i-bolt": "ico-t-sw", "#i-settings": "ico-t-sw", "#i-refresh": "ico-t-sw",
+    "#i-hash": "ico-t-id", "#i-info": "ico-t-id", "#i-tag": "ico-t-id", "#i-list": "ico-t-id",
+    "#i-folder": "ico-t-path", "#i-folder-open": "ico-t-path",
+    "#i-percent": "ico-t-state", "#i-pulse": "ico-t-state", "#i-check-circle": "ico-t-state",
+    "#i-x-circle": "ico-t-state", "#i-warn": "ico-t-state",
+  };
+  const icoTone = (icon) => ICO_TONE[icon] || "";
+
+  /* 字段行图标(sprite `<use href>` 静态引用 —— 变体是字符串拼 HTML 不走 Vue 绑定,
+   * href 直接写 icon 同经典链 drawer.html 的静态引用形态, 三皮肤 index.html 的
+   * sprite symbol 集合一致, 同文档引用恒可解析)。
+   * 返回 R(dtHtml(...)): 本函数产出的是本变体 dtHtml 已转义好的片段, 调用处在外层
+   * dtHtml 模板里直接插值, 必须 dtRaw 豁免 —— 否则整个 svg 片段被再次转义成可见文本。 */
+  function icoSvg(icon) {
+    const tone = icoTone(icon);
+    return R(T`<svg class="ico ico-sm${tone ? " " + tone : ""}" viewBox="0 0 16 16"><use href="${icon}"></use></svg>`);
+  }
+
   /* 经典分组行 -> 网格键值项(保留行级 open/copy 动作钮); keep 过滤列(值原样) */
   function gridRows(sec, keep) {
     return (sec ? sec.rows : []).filter((r) => !keep || keep.indexOf(r.label) >= 0).map((r) => {
@@ -137,7 +179,7 @@
         : (r.act === "copy"
           ? T`<button type="button" class="dt03-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>`
           : "");
-      return T`<div class="dt03-item" title="${r.label}"><span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+      return T`<div class="dt03-item" title="${r.label}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
 
@@ -193,15 +235,15 @@
   }
 
   /* 右栏标识行(带复制) */
-  function crow(label, text, act, extra) {
+  function crow(label, text, act, extra, icon) {
     return T`<div class="dt03-crow" title="${label}">
-      <span class="k">${label}</span><span class="v">${text}</span>
+      ${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v">${text}</span>
       <button type="button" class="dt03-act" data-act="${act}" title="复制${extra || label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>
     </div>`;
   }
 
-  function sideKv(label, text, cls) {
-    return T`<div class="dt03-kv" title="${label}"><span class="k">${label}</span><span class="v${cls ? " " + cls : ""}">${text}</span></div>`;
+  function sideKv(label, text, cls, icon) {
+    return T`<div class="dt03-kv" title="${label}">${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v${cls ? " " + cls : ""}">${text}</span></div>`;
   }
 
   function render(host, ctx) {
@@ -247,11 +289,11 @@
     /* 标识: 哈希 v1/v2 + magnet(按需取) + 分块 */
     const idRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.act === "copy") idRows.push(crow(r.label, r.text, "copy"));
+      if (r.act === "copy") idRows.push(crow(r.label, r.text, "copy", "", r.icon));
     }
     idRows.push(crow("magnet", "点击按钮按需获取", "magnet", "magnet 链接"));
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.label === "分块") idRows.push(sideKv(r.label, r.text));
+      if (r.label === "分块") idRows.push(sideKv(r.label, r.text, "", r.icon));
     }
     const idHtml = T`<div class="dt03-side-sub">标识(点击按钮复制)</div>${R(idRows.join(""))}`;
 
@@ -259,9 +301,9 @@
     const srcRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.label === "创建于" || r.label === "创建工具" || r.label === "已含元数据") {
-        srcRows.push(sideKv(r.label, r.text));
+        srcRows.push(sideKv(r.label, r.text, "", r.icon));
       }
-      if (r.label === "备注") srcRows.push(sideKv("备注", r.text, "is-clamp2"));
+      if (r.label === "备注") srcRows.push(sideKv("备注", r.text, "is-clamp2", r.icon));
     }
     const srcHtml = srcRows.length ? T`<div class="dt03-side-sub">出处与备注</div>${R(srcRows.join(""))}` : "";
 

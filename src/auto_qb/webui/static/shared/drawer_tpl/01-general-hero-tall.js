@@ -3,7 +3,10 @@
  * 设计稿: resources/detail-panel-templates/01-general-hero-tall.html(tall 档; 收起/矮/高三档
  * 语义全部收进本变体 —— 收起 = 核心摘要条(summary 走核心内置默认), 矮/高 = 正文自适应滚动)。
  * 数据: 英雄行五数字 = progress / ratio / upspeed / num_seeds / reannounce_in; 下方分组键值
- * 栅格直接吃 drawerGeneralSections() 预格式化结果(qB 哨兵翻译单点在经典链, 不复刻)。
+ * 栅格直接吃 drawerGeneralSections() 预格式化结果(qB 哨兵翻译单点在经典链, 不复刻),
+ * 字段行消费行级 icon 数据(sprite `<use href>` 静态引用, 着色复用经典链 icoTone 派生表,
+ * 色值在变体 CSS 里按行类重定作用域 —— 经典的 .f-row .ico-t-* 选择器在变体行不命中;
+ * Q2, 报告 26-10-07-0542)。
  * 动作: 打开目录(openTargetPath)/复制(copyText), 经典行级 act 平移; 分组折叠为纯前端态。
  * 渐进字段(state/site/category/tags/private 徽章): detail 有则渲染、无则整枚省略。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
@@ -94,6 +97,17 @@
     "  width:22px; height:22px; padding:0; border:0; border-radius:var(--radius-sm); background:transparent;",
     "  color:var(--fg-dim); cursor:pointer; transition:color var(--dur) var(--ease), background var(--dur) var(--ease); }",
     ".drawer .dt01-act:hover { color:var(--fg); background:var(--bg-hover); }",
+    /* Q2(报告 26-10-07-0542): 字段行图标 + 语义着色 —— 与经典链 .f-row .ico-t-* 同色表,
+     * 色值同令牌; teal/indigo/cyan/violet/pink 未入变体令牌白名单, 按契约写字面 fallback */
+    ".drawer .dt01-cell > .ico { flex:none; align-self:center; color:var(--fg-dim); }",
+    ".drawer .dt01-cell .ico-t-io { color:var(--blue); }",
+    ".drawer .dt01-cell .ico-t-cap { color:var(--teal, #2dd4bf); }",
+    ".drawer .dt01-cell .ico-t-time { color:var(--indigo, #818cf8); }",
+    ".drawer .dt01-cell .ico-t-site { color:var(--cyan, #22d3ee); }",
+    ".drawer .dt01-cell .ico-t-sw { color:var(--green); }",
+    ".drawer .dt01-cell .ico-t-id { color:var(--violet, #a78bfa); }",
+    ".drawer .dt01-cell .ico-t-path { color:var(--accent-hi); }",
+    ".drawer .dt01-cell .ico-t-state { color:var(--pink, #f472b6); }",
     /* 原始键值折叠 */
     ".drawer .dt01-raw { border:1px solid var(--hairline); border-radius:var(--radius); }",
     ".drawer .dt01-raw summary { cursor:pointer; padding:8px 12px; font-size:12px; color:var(--fg-muted);",
@@ -108,6 +122,34 @@
   const dur = (ctx, v, dash) => (v === null || v === undefined || v < 0) ? (dash || "未设") : ctx.fmtDuration(v);
   const size = (ctx, v) => ctx.fmtSizeOrDash(v) || "—";
   const present = (v) => v !== undefined && v !== null && v !== "";
+
+  /* Q2(报告 26-10-07-0542): 字段行图标着色 —— 派生表自经典链 icoTone(drawer.js FX-22)自包含
+   * 复制(变体不经 Vue, ctx 白名单无 icoTone); 图标名 -> 色调类, 行内 svg 挂类, 色值在上方
+   * 变体 CSS 的 .dt01-cell .ico-t-* 里走主题令牌。 */
+  const ICO_TONE = {
+    "#i-download": "ico-t-io", "#i-upload": "ico-t-io", "#i-arrow-up": "ico-t-io", "#i-arrow-down": "ico-t-io",
+    "#i-hdd": "ico-t-cap", "#i-layers": "ico-t-cap", "#i-columns": "ico-t-cap",
+    "#i-calendar": "ico-t-time", "#i-clock": "ico-t-time", "#i-timer": "ico-t-time",
+    "#i-hourglass": "ico-t-time", "#i-eye": "ico-t-time",
+    "#i-globe": "ico-t-site", "#i-link": "ico-t-site",
+    "#i-lock": "ico-t-sw", "#i-sliders": "ico-t-sw", "#i-play": "ico-t-sw", "#i-sort": "ico-t-sw",
+    "#i-bolt": "ico-t-sw", "#i-settings": "ico-t-sw", "#i-refresh": "ico-t-sw",
+    "#i-hash": "ico-t-id", "#i-info": "ico-t-id", "#i-tag": "ico-t-id", "#i-list": "ico-t-id",
+    "#i-folder": "ico-t-path", "#i-folder-open": "ico-t-path",
+    "#i-percent": "ico-t-state", "#i-pulse": "ico-t-state", "#i-check-circle": "ico-t-state",
+    "#i-x-circle": "ico-t-state", "#i-warn": "ico-t-state",
+  };
+  const icoTone = (icon) => ICO_TONE[icon] || "";
+
+  /* 字段行图标(sprite `<use href>` 静态引用 —— 变体是字符串拼 HTML 不走 Vue 绑定,
+   * href 直接写 r.icon 同经典链 drawer.html 的静态引用形态, 三皮肤 index.html 的
+   * sprite symbol 集合一致, 同文档引用恒可解析)。
+   * 返回 R(dtHtml(...)): 本函数产出的是本变体 dtHtml 已转义好的片段, 调用处在外层
+   * dtHtml 模板里直接插值, 必须 dtRaw 豁免 —— 否则整个 svg 片段被再次转义成可见文本。 */
+  function icoSvg(r) {
+    const tone = icoTone(r.icon);
+    return R(T`<svg class="ico ico-sm${tone ? " " + tone : ""}" viewBox="0 0 16 16"><use href="${r.icon}"></use></svg>`);
+  }
 
   /* HR 摘要条(渐进: detail 无 HR 字段整条省略); 色调 未达标=pending / 达标=done / 其它=info */
   function hrStrip(ctx, d) {
@@ -203,7 +245,7 @@
   function cell(r) {
     const cls = "dt01-cell" + (r.wide ? " is-wide" : "");
     const btn = actBtn(r);
-    return T`<div class="${cls}" title="${r.label}"><span class="dt01-k">${r.label}</span><span class="dt01-v-cell"><span class="dt01-vv">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+    return T`<div class="${cls}" title="${r.label}">${r.icon ? icoSvg(r) : ""}<span class="dt01-k">${r.label}</span><span class="dt01-v-cell"><span class="dt01-vv">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
   }
 
   function secHtml(sec) {

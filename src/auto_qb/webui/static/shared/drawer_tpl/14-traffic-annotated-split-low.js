@@ -11,6 +11,9 @@
  *   - 峰值 Top3(有采样桶按上行速率排序, 时段 + 数值 + 相对条);
  *   - 缺口事件列表(连续 null 桶游程, 起止取邻桶真值 t, 边缘游程按 interval 反推)。
  * 悬停看数值沿用图上既有 tooltip(不变)。
+ * KPI 行图标(Q2, 报告 26-10-07-0542): 段一(窗口合计)三行标签前置 sprite 图标(`<use href>`
+ * 静态引用, 全用 sprite 既有 symbol); 段二/段三不加 —— 峰值行已有 #N 排位标记、缺口行已有
+ * 「缺口」徽章, 再叠图标属重复编码; 着色随本行值色(上/下行 -> today 令牌, 其余中性)。
  * 渲染纪律: dtHtml 全量转义, replaceChildren 原子换帧, 数据未变(qbCurData 引用浅比较)跳过重建;
  * 无监听无定时器, destroy 只作重置。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -47,6 +50,11 @@
     ".drawer .dt14-row .v { font-family:var(--font-mono, ui-monospace, monospace); color:var(--fg); }",
     ".drawer .dt14-row .v.is-up { color:var(--today-up); }",
     ".drawer .dt14-row .v.is-dl { color:var(--today-down); }",
+    /* Q2(报告 26-10-07-0542): 段一 KPI 行标签图标(同变体 13 口径; 内联文本流保住 ellipsis) */
+    ".drawer .dt14-row .k .ico { width:12px; height:12px; margin-right:5px; vertical-align:-1.5px;",
+    "  color:var(--fg-dim); }",
+    ".drawer .dt14-row .k .ico.is-up { color:var(--today-up); }",
+    ".drawer .dt14-row .k .ico.is-dl { color:var(--today-down); }",
     ".drawer .dt14-ratio { display:flex; height:6px; border-radius:999px; overflow:hidden;",
     "  background:var(--bg-sunken); border:1px solid var(--border-soft); margin-top:4px; }",
     ".drawer .dt14-ratio i { display:block; height:100%; }",
@@ -111,6 +119,11 @@
     return runs;
   }
 
+  /* 段一 KPI 行标签图标(Q2, 与变体 13 同口径): sprite 既有 symbol + 值色随行 */
+  function rowIco(icon, tone) {
+    return T`<svg class="ico${tone ? " " + tone : ""}" viewBox="0 0 16 16"><use href="${icon}"></use></svg>`;
+  }
+
   function render(host, ctx) {
     const d = ctx.qbCurData;
     const pts = ctx.qbCurPoints || [];
@@ -129,9 +142,9 @@
     /* 段一: 窗口合计与占比 */
     const sec1 = T`<section class="dt14-sec">
       <h4>窗口合计(${ctx.qbCurWindow})</h4>
-      <div class="dt14-row" title="窗口内上传字节累计"><span class="k">上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
-      <div class="dt14-row" title="窗口内下载字节累计"><span class="k">下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
-      <div class="dt14-row" title="上下行字节占比"><span class="k">上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
+      <div class="dt14-row" title="窗口内上传字节累计"><span class="k">${R(rowIco("#i-upload", "is-up"))}上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
+      <div class="dt14-row" title="窗口内下载字节累计"><span class="k">${R(rowIco("#i-download", "is-dl"))}下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
+      <div class="dt14-row" title="上下行字节占比"><span class="k">${R(rowIco("#i-percent"))}上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
       <div class="dt14-ratio" title="上行 / 下行 字节占比"><i class="r-up" style="width:${upPct.toFixed(1)}%"></i><i class="r-dl" style="width:${(100 - upPct).toFixed(1)}%"></i></div>
     </section>`;
 
