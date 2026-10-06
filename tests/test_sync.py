@@ -26,6 +26,10 @@
 - test_store_apply_sync_delta_only_changed: 增量轮只应用变化记录(其余对象身份保留)
 - test_store_apply_sync_no_change_is_noop: 无变化轮零成本(不重建 by_hash)
 - test_store_apply_sync_delta_add_and_remove: 增量新增/删除
+- test_store_last_added_removed_full_first_round: S1 首轮全量后 last_added=全体
+- test_store_last_added_removed_match_return_on_delta: S1 增量轮属性与返回值一致
+- test_store_last_added_removed_empty_on_zero_change: S1 零变化轮属性为空(不留上一轮残值)
+- test_store_last_added_removed_cleared_by_reset_sync: S1 reset_sync 后属性为空
 - test_store_apply_sync_full_prunes_context_missing: rid 失效全量 -> 未出现者视为删除
 - test_store_remove_then_restore_pending: remove_torrent 登记待报删除 / restore_torrent 撤销
 - test_store_apply_sync_fallback_when_endpoint_unavailable: 无 sync 端点 -> 降级 + 告警一次
@@ -307,6 +311,67 @@ def test_store_apply_sync_delta_add_and_remove():
     added, removed = store.apply_sync(api)
     assert added == [] and removed == ["H1"]
     assert store.get("H1") is None and store.get("H2") is not None
+
+
+def test_store_last_added_removed_full_first_round():
+    """S1(plan 26-10-07-0414): 首轮全量后 last_added=全体种子, last_removed 为空(与返回值一致)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    store = TorrentStore(client)
+
+    added, removed = store.apply_sync(_api(client, store))
+
+    assert store.last_added == added and set(store.last_added) == {"H1", "H2"}
+    assert store.last_removed == removed == []
+
+
+def test_store_last_added_removed_match_return_on_delta():
+    """S1(plan 26-10-07-0414): 增量轮 last_added/last_removed 与 _apply 返回值一致"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    added, removed = store.apply_sync(api)
+    assert store.last_added == added == ["H2"]
+    assert store.last_removed == removed == []
+
+    del client.torrents["H1"]
+    added, removed = store.apply_sync(api)
+    assert store.last_added == added == []
+    assert store.last_removed == removed == ["H1"]
+
+
+def test_store_last_added_removed_empty_on_zero_change():
+    """S1(plan 26-10-07-0414): 零变化轮属性为空, 不留上一轮残值(赋值点在零变化早退之前的公共路径)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    store.apply_sync(api)
+    assert store.last_added == ["H2"]  # 前置: 属性确为上一轮残值
+    added, removed = store.apply_sync(api)  # 零变化轮(零成本早退)
+
+    assert (added, removed) == ([], [])
+    assert store.last_added == [] and store.last_removed == []
+
+
+def test_store_last_added_removed_cleared_by_reset_sync():
+    """S1(plan 26-10-07-0414): reset_sync 同步清空 last_added/last_removed(重连/热重载不残留旧清单)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    store.apply_sync(_api(client, store))
+    assert store.last_added == ["H1"]
+
+    store.reset_sync()
+    assert store.last_added == [] and store.last_removed == []
 
 
 def test_store_apply_sync_full_prunes_context_missing():

@@ -35,6 +35,8 @@ class TorrentStore:
       - delta_fields:  {hash: 变化字段名集合} 本轮发生变化的种子
       - state_changed: [(hash, fetch 时 state_enum)] state 字段变化的种子
       - dirty_groups:  需重算下载冲突的组 key(字段变化/成员增删/归组变化时登记)
+      - last_added/last_removed: 本轮新增/删除种子清单快照(「最近一轮」语义, 供
+        WebUI flush_views 脏行推导; 只读不排空, 每轮 _apply 覆盖)
     参考种子集合(仅内存): verified_references
     全局缓存: all_tags() / all_categories()(写操作后 invalidate)
     """
@@ -75,6 +77,10 @@ class TorrentStore:
         self.watch_fields: FrozenSet[str] = frozenset()
         self.field_snapshots: Dict[str, Dict[str, Any]] = {}
         self.field_changed: List[Tuple[str, FrozenSet[str]]] = []
+        # 本轮新增/删除种子清单快照(plan 26-10-07-0414 S1): _apply 每轮覆盖(「最近一轮」语义),
+        # 供 WebUI flush_views 做脏行推导; 消费方只读不排空, 下轮 _apply 直接覆盖
+        self.last_added: List[str] = []
+        self.last_removed: List[str] = []
         self.external_tag_changes: Set[str] = set()
         self.self_caused_fields: Dict[str, Dict[str, Any]] = {}
         # 需重算下载冲突的组 key: 变化字段/成员增删/归组/自有停种打标时登记,
@@ -178,6 +184,8 @@ class TorrentStore:
         self.delta_fields = {}
         self.state_changed = []
         self.dirty_groups = set()
+        self.last_added = []
+        self.last_removed = []
 
     # 影响下载冲突判定的字段(分组 n_dl/n_done 的判定依据)
     _CONFLICT_FIELDS = frozenset(("state", "amount_left", "tags"))
@@ -191,6 +199,10 @@ class TorrentStore:
         """
         pending = self._pending_removed
         self.rounds_applied += 1
+        # 本轮新增/删除清单快照(plan 26-10-07-0414 S1): 先清空再走公共路径, 零变化早退轮
+        # 保持为空、不留上一轮残值; 正常路径在下方赋回区覆盖为本轮清单
+        self.last_added = []
+        self.last_removed = []
         # 增量轮无变化且无待报删除 -> 零成本早退; 全量轮即使 patches 为空也必须走完(需检测删除)
         if not full and not patches and not removed and not pending:
             self.delta_fields = {}
@@ -259,6 +271,8 @@ class TorrentStore:
         self.delta_fields = delta_fields
         self.state_changed = state_changed
         self.field_changed = field_changed
+        self.last_added = added
+        self.last_removed = changes
         if view_changed or added or changes:
             self.view_changed = True
         return added, changes
