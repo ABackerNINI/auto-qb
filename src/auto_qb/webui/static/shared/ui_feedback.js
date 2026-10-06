@@ -282,6 +282,9 @@ window.AQB_FEEDBACK = {
  * 离开 / 失焦 / 点击 / 滚动 / 窗口失焦立即收起; 文案 show() 时现读最新值(轮询变值即显新值)。
  * 定位(2026-10-04 修): 上方优先 / 上方放不下转下方 / 两侧都放不下才允许溢出视口 —— **任何
  * 分支都不越过锚点**(旧版末尾无条件夹回视口内, 状态栏这类底缘锚点会被浮层压在身下)。
+ * 让位(2026-10-07 修): 已开的错误历史面板(.err-panel)占着状态栏右段上方, 提示落点与它
+ * 相交时直接收起不弹(浮层 z 90 < 面板 121, 弹了只露半截); 面板挂载也经 MutationObserver
+ * 收起现显浮层(键盘 Enter 开面板不经过 mousedown)。
  * 另: 锚点在 350ms 窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标
  * elementFromPoint 重解析当前锚点, 解析不到就收起 —— 否则浮层会落到视口左上角。
  * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
@@ -360,6 +363,15 @@ window.AQB_FEEDBACK = {
     if (above >= EDGE) y = above;                                    // 上方放得下
     else if (below + h <= vh - EDGE) y = below;                      // 上方放不下, 下方放得下
     else y = r.top - EDGE >= vh - EDGE - r.bottom ? above : below;   // 两侧都放不下: 贴空间大的一侧
+    // 已开的错误历史面板(.err-panel, z 121)正占着状态栏右段上方 —— 状态栏一排锚点的提示
+    // 落点几乎都撞进面板区域, 而浮层 z(90) 低于面板, 弹了只会从面板边缘露出半截
+    // (用户报「错误历史 tooltip 与弹窗重叠」)。按本函数「宁可不弹」口径直接收起, 面板
+    // 收起后同一悬浮自然恢复。
+    const panel = document.querySelector(".err-panel");
+    if (panel) {
+      const p = panel.getBoundingClientRect();
+      if (x < p.right && x + w > p.left && y < p.bottom && y + h > p.top) { hide(); return; }
+    }
     t.style.left = Math.round(x) + "px";
     t.style.top = Math.round(y) + "px";
   }
@@ -394,7 +406,13 @@ window.AQB_FEEDBACK = {
   new MutationObserver((muts) => {
     for (const m of muts) {
       if (m.type === "attributes") capture(m.target);
-      else for (const n of m.addedNodes) sweep(n);
+      else for (const n of m.addedNodes) {
+        sweep(n);
+        // 错误历史面板挂载即收起现显浮层: 键盘路径(Tab 聚焦入口钮出提示后按 Enter)开面板
+        // 不经过 mousedown, 浮层会滞留在面板底下(z 90 < 121)从边缘露半截; 鼠标路径
+        // mousedown 已收过, 此处幂等。
+        if (n.nodeType === 1 && (n.classList.contains("err-panel") || n.querySelector(".err-panel"))) hide();
+      }
     }
   }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["title"] });
 })();
