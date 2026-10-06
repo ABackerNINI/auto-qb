@@ -1,20 +1,18 @@
 # 浏览器自动化环境(两条轨道)
 
-> 摘要: 冒烟用哪个浏览器、装在哪、版本怎么对齐、换机器怎么一条命令自检 —— 环境侧的全部事实。
-> 触发: 浏览器, 冒烟环境, agent-browser, Playwright, chromium, NODE_PATH, 浏览器版本, 换机器自检
+> 摘要: 浏览器断言走哪条轨道、浏览器装在哪、版本怎么对齐、换机器怎么一条命令自检 —— 环境侧的全部事实。
+> 触发: 浏览器, 冒烟环境, agent-browser, Playwright, e2e, chromium, npm ci, 浏览器版本, 换机器自检
 
-> **选用政策: 优先 `agent-browser`; 它不可用才回退 Playwright 冒烟。**
-> 判"不可用"的硬判据(任一命中即回退): ①`agent-browser` 不在 PATH, 且 `npm install -g agent-browser` 装不上;
-> ②`agent-browser open` 起不来 daemon(超 60s 无返回, 且已用 `node -e` 排除 Node 本身崩);
-> ③要跑的是 `scripts/ui_smoke.cjs` 那批**数值断言**(只有 Playwright 轨道有)。
-> 两条轨道的浏览器**各自独立**(agent-browser 用自己下的 Chrome 153, Playwright 用 ms-playwright 的
+> **轨道政策: WEB UI 浏览器断言只有一条轨道 —— `e2e/`(@playwright/test), 见「轨道二」;**
+> `agent-browser` 降级为**人工开页 / 快速看渲染**的辅助工具, 不承载断言。
+> 两条轨道的浏览器**各自独立**(agent-browser 用自己下的 Chrome 153, e2e 轨道用 ms-playwright 的
 > `chromium-1243` = **Chrome 153.0.8010.12**, 2026-10-06 实测), 互不干扰。
-> ⚠ **2026-10-06 复核: 本会话轨道一不可用** —— `which agent-browser` 无输出, 且下面记的 npm 全局
+> ⚠ **2026-10-06 复核: 轨道一本机不可用** —— `which agent-browser` 无输出, 且下面记的 npm 全局
 > prefix 目录已从 `...\versions\22.22.2-2` 变为 `22.22.2-3`(该目录下没有 agent-browser),
-> `npm prefix -g` 现为 `C:\Users\11059\AppData\Roaming\npm` 其中也没有 ⇒ 按判据①走轨道二。
-> 「冒烟共多少项 / 读数时机坑」见 [smoke.md](smoke.md)。
+> `npm prefix -g` 现为 `C:\Users\11059\AppData\Roaming\npm` 其中也没有 ⇒ 要用得先重装。
+> 「断言怎么跑 / 断言设计坑」见 [smoke.md](smoke.md)。
 
-## 轨道一(首选): `agent-browser` 1.3.0 —— 已实测可用
+## 轨道一(辅助, 非断言): `agent-browser` —— 本机要先重装才可用
 
 - **状态**: 插件已更新到 **1.3.0**(`installed_plugins.json` 的 `installPath` 指向 1.3.0), CLI 与 Chromium 已装并跑通(2026-09-20)。
   历史: 1.0.0 的 `SessionStart` hook 判到 `WINDIR` 就打印「不支持 Windows」并 `exit 0` ——
@@ -44,34 +42,34 @@
 3. 若 daemon 静默崩(无任何输出), 先查头号嫌疑: PATH 上的 node 是否真能执行
    (本机 `where node` 两个都通过实测 ⇒ 排除; SIGILL / Exit 133 那条不适用)。
 
-## 轨道二(回退): Playwright 冒烟 `scripts/ui_smoke.cjs`
+## 轨道二(断言单点): Playwright e2e `e2e/`(@playwright/test)
 
-- **何时用**: agent-browser 命中上面任一回退判据(2026-10-06 起本会话即命中判据①); 或需要那批**数值断言**(双 UI × ok/error/hang 三模式)。
-- **命令**(依赖从哪来, 按优先级 —— 2026-10-06 起本仓库已有 `package.json`, 列了 `@playwright/test@1.63`):
+- **何时用**: 一切 WEB UI 浏览器断言 —— 旧单页冒烟脚本已于 2026-10-06 随迁移计划
+  26-10-06-0708 退役, `e2e/` 是唯一轨道(七个 spec 按断言块拆分, 双皮肤, 模式矩阵 env 参数化)。
+- **命令**: 桩服务(`scripts/ui_harness.py`)由 `playwright.config.mjs` 的 `webServer` **自动起停**
+  (端口 8137, `reuseExistingServer: false`), 不需要人工先起、也不需要人工关:
   ```bash
-  # ① 本 clone 有 node_modules(仓库根已 npm i)⇒ 什么都不用设, require 向上解析先命中它
-  node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
-  # ② 没有 node_modules 的 clone(node_modules 已 gitignore)⇒ 挂仓库外一份
-  NODE_PATH=$HOME/.aqb-smoke-deps/node_modules node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
+  commands run dev.e2e      # 全量集(七个 spec × prism/atlas 双皮肤)
+  npm run test:e2e:fast     # @fast 门禁子集(分钟级) —— 「每次改前端」的日常口径
+  npm run test:e2e:headed   # 有头模式(人工看动作)
   ```
-- **环境(2026-10-06 实测更新)**: ①**首选** = 仓库内 `node_modules/playwright-core`;
-  ②**回退** = 仓库外一次性 `npm i playwright-core@1.63`(如 `~/.aqb-smoke-deps`), 走 `NODE_PATH`;
-  ③旧线索「WorkBuddy 托管目录 `C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules`」:
-  **2026-10-02 曾实测 `Cannot find module`, 但 2026-10-06 复核该目录下 `playwright-core@1.63.0` 在且
-  `chromium.launch()` 成功** —— 该结论随托管目录被清 / 被恢复而反复, **用时现验, 别照抄任一侧**。
-  浏览器在 `C:/Users/11059/AppData/Local/ms-playwright/`, 现存 **`chromium-1243` / `chromium_headless_shell-1243`**
-  (`chromium-1234` 及其 headless shell 已不在)。
-- **版本对齐**: 用 `playwright-core`(脚本里就是 `try require("playwright-core") catch require("playwright")`)——
-  **playwright-core@1.63.x ↔ `chromium-1243`(= Chrome 153.0.8010.12)实测可用**(2026-10-02 桩服务走查 104 项 0 失败;
-  2026-10-06 复核 `chromium.launch()` 打出 `153.0.8010.12`); 历史配对: core 1.62 ↔ `chromium-1234`;
-  装了新包却没下对应浏览器会报 `Executable doesn't exist`。
+  模式矩阵轮(`E2E_CMD_RESULT / E2E_SKIP_CHECK / E2E_HR_SCENE / E2E_TORRENTS`)是**串行人跑**,
+  六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note。
+- **环境(2026-10-06 实测)**: 依赖 = `package.json` devDependency `@playwright/test@^1.63.0`,
+  clone 后 `npm ci`(有 lock)或 `npm i` 一次即可; 旧轨的「仓库外 `npm i playwright-core` +
+  `NODE_PATH` 挂载」方案随脚本退役**作废**(ESM `import` 本就不认 `NODE_PATH`)。
+  浏览器在 `C:/Users/11059/AppData/Local/ms-playwright/`, 现存 **`chromium-1243` /
+  `chromium_headless_shell-1243`**(`chromium-1234` 及其 headless shell 已不在)。
+- **版本对齐**: **`@playwright/test 1.63` ↔ `chromium-1243`(= Chrome 153.0.8010.12)实测可用**
+  (2026-10-06); 历史配对: core 1.62 ↔ `chromium-1234`。装了新包却没下对应浏览器会报
+  `Executable doesn't exist` —— `npx playwright install chromium` 补浏览器(只装 chromium)。
 - **Python 版没装**: `.venv` / `uv.lock` 里都没有。要在 pytest 里直接驱动浏览器才需要
   `uv add --dev playwright` + `uv run playwright install chromium`
   (**会改 `pyproject.toml` / `uv.lock`, 动之前先问**)。
 - **自检(换机器后一条命令)**:
   ```bash
   node -e "require('playwright-core').chromium.launch().then(b=>{console.log(b.version());return b.close()})"
-  # 没有 node_modules 的 clone 在 node 前加: NODE_PATH=<仓库外 node_modules>
+  # 没有 node_modules 的 clone 在 node 前加: NODE_PATH=<装了 playwright-core 的 node_modules>
   ```
   输出判定: 打出 Chromium 版本号(本机现为 `153.0.8010.12`)⇒ 可用; `Cannot find module 'playwright-core'`
   ⇒ 包没了(本 clone 没 `npm i`, 或 NODE_PATH 指向的目录被清 / 路径变了);

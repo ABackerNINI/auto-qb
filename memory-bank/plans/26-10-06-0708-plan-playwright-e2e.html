@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="playwright-e2e">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-06-0708">
-<meta name="doc-updated" content="26-10-06-0708">
+<meta name="doc-updated" content="26-10-06-1425">
 <meta name="doc-refs" content="memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html,memory-bank/tasks/26-10-06-test-playwright-e2e.md">
 <title>实施计划 · ui_smoke.cjs 分批迁移到 @playwright/test · auto-qb</title>
 <style>
@@ -99,7 +99,7 @@
     <p class="lede">把 <code>scripts/ui_smoke.cjs</code>(1992 行, 105 项断言, 手写 CJS+CDP 风格)按断言块分批迁入 <code>e2e/</code> 的 <code>@playwright/test</code> 轨道, 每批与旧脚本对跑对数后删旧块, 终态旧脚本退役 —— 白拿自动等待 / getByRole 语义定位 / trace viewer / HTML 报告, 并为存量 flaky(追剧集行 Ctrl+click 超时)第一次拿到时序证据链。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0708-plan-playwright-e2e</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done · 已实施</span></div></div>
       <div class="item"><div class="k">批次</div><div class="v">S0–S7 (8 步)</div></div>
       <div class="item"><div class="k">静态断言块</div><div class="v">8 块 ≈105 处</div></div>
       <div class="item"><div class="k">新增依赖</div><div class="v">0 (框架链路 2026-10-06 已就位)</div></div>
@@ -379,6 +379,7 @@ export const HARNESS_CMD = [
     <h2><span class="no">08</span>变更记录</h2>
     <ul>
       <li><span class="stamp">26-10-06-0708</span> — 初版, 状态 <strong>Open · 待拍板</strong>。依据 issue 26-10-06-0458; 代码取证时点 2026-10-06 07:08(块分布行号/断言计数以该时点 grep 为准, 执行时复核)。</li>
+      <li><span class="stamp">26-10-06-1425</span> — <strong>S0–S7 已全部实施完成, 终态达成, 状态改 Done</strong>(分支 <code>playwright-e2e-migration</code>; 四个拍板点均按推荐方案落定; S7a 删 <code>scripts/ui_smoke.cjs</code> = <code>d2dc3ba1</code>)。S7b 收尾: §5.2 全量矩阵验收六行串行人跑 —— 默认轮 <strong>78 passed + 10 skipped / 164s</strong>, error / skip-off / hr-empty / hr-off / torrents-3000 五轮全绿, hang 轮 <strong>0 failed / 64 passed + 24 skipped / 156s</strong>(窗口三连双皮肤绿); 矩阵轮暴露的两处计划外发现已同批处置: W3 确认链补 <code>requireMode</code> ok|error 门控(hang 下预检不回执、确认钮不解锁)、<code>dev.e2e</code> timeout 180→360s, 复跑经 commands 引擎 rc=0; 每轮端口零残留; 知识库回写(browser-env / smoke / pitfalls / modules / systemPatterns / progress / activeContext)+ 验收 grep 冻结档案外零残留 + <code>kb.index</code> 重建; 基线切片 <a href="../testing/baselines/26-10-06-1425-playwright-e2e-s7-matrix.md">26-10-06-1425</a>; <code>test.full</code> 2676 passed + 4 skipped / 99% / 29.62s 零波动。</li>
     </ul>
   </section>
 

@@ -1,7 +1,7 @@
-# 浏览器冒烟
+# WEB UI 浏览器断言 (e2e)
 
-> 摘要: 前端渲染逻辑只能靠真浏览器验 —— 桩服务 + 双 UI 断言脚本的用法、断言清单、以及断言设计的全部已知坑。
-> 触发: 冒烟, 浏览器, 前端改动, ui_harness, ui_smoke, Playwright, agent-browser, 双 UI, 乐观 UI 断言, 红绿双验
+> 摘要: 前端渲染逻辑只能靠真浏览器验 —— `e2e/`(@playwright/test, 全量单点)的用法、断言清单、以及断言设计的全部已知坑。
+> 触发: 冒烟, 浏览器, 前端改动, ui_harness, e2e, Playwright, agent-browser, 双 UI, 乐观 UI 断言, 红绿双验
 
 ## 为什么必须做
 
@@ -12,30 +12,35 @@
   **模板 / 表达式层面的错误仍只能靠真机页面看**。
 - ✅ **2026-09-19 起已脚本化**, 不再"只能人工点"。
 
-## 两条轨道(环境与安装见 [browser-env.md](browser-env.md))
+## 断言轨道(环境与安装见 [browser-env.md](browser-env.md))
 
-> **选用政策: 优先 `agent-browser`; 它不可用才回退 Playwright 冒烟。**
-> 判"不可用"的硬判据(任一命中即回退): ①`agent-browser` 不在 PATH 且装不上;
-> ②`agent-browser open` 起不来 daemon(超 60s 无返回, 且已用 `node -e` 排除 Node 本身崩);
-> ③要跑的是 `scripts/ui_smoke.cjs` 那批**数值断言**(只有 Playwright 轨道有)。
+> **断言轨道只有一条**: `e2e/`(@playwright/test)是 WEB UI 浏览器断言的**全量单点**(2026-10-06 起,
+> 旧单页冒烟脚本已退役)。`agent-browser` 只作人工开页 / 快速看渲染的辅助, 不承载断言。
 
 ## 怎么跑
 
 - `scripts/ui_harness.py` —— 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
-  (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N --skip-check-menu on|off`)。
-- `scripts/ui_smoke.cjs` —— Playwright 跑 **prism / atlas 双 UI** 断言。当前规模:
-  **10 项**(`--skip-check off` 精简轮, 验跳检菜单 fail-closed 门控; 单 UI 各 5, 0 失败)/
-  **8 项**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。on 模式(ok/error)断言已随 W2-W4/W5
-  扩到单 UI 中断前 55 项(上一口径 46 + 多选菜单与 W5 汇总断言), ⚠ 存量 flaky「冒烟整体执行 —
-  elementHandle.click 超时」(追剧集行 Ctrl+click 块, HEAD stash 对照可复现)拦在完整计数之前 ——
-  中断点之前全部 PASS 即与本轮改动无关, 判别法见
-  [pitfalls/testing/smoke.md](../pitfalls/testing/smoke.md)。
-- 典型用法: 起桩服务 → 跑 `ui_smoke.cjs` → 关服务(**完整命令与 `NODE_PATH` 见 [browser-env.md](browser-env.md)**)。
+  (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N --skip-check-menu on|off
+  --hr-scene on|empty|off`)。e2e 轨道下由 `playwright.config.mjs` 的 `webServer` **自动起停**
+  (端口 8137, `reuseExistingServer: false`), 不需要人工先起。
+- `commands run dev.e2e` —— 跑 `e2e/` **全量集**(@playwright/test, chromium, prism/atlas 双皮肤循环)。
+  spec 按旧断言块拆分: `views.spec`(渲染健康/视图/筛选器/轮询分档) ·
+  `multiselect-shows.spec`(追剧 + 多选右键, 存量 flaky 所在块) · `optimistic.spec`(乐观 UI 全家) ·
+  `menus.spec`(菜单族 + W5-off fail-closed) · `perf.spec`(性能埋点, 阈值逐字保留) ·
+  `hr-history.spec`(HR 表③) · `column-prefs.spec`(列设置守阵 ×5)。
+- **「每次改前端」门禁**(2026-10-06 口径平移, 取代旧"跑冒烟脚本 ok+error 两模式"):
+  **`npm run test:e2e:fast`(`--grep @fast`)绿**; 触碰乐观 UI / 菜单 / 列设置时**加跑对应 spec**
+  (`npx playwright test e2e/optimistic.spec.mjs` 等); 全量矩阵轮(ok|error|hang × skip-check on|off ×
+  hr-scene on|empty|off × torrents 规模, 六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note)
+  在收尾 / 排障时**串行人跑, 每轮独立起桩**(env 组合决定桩形态, 参数名与 ui_harness.py CLI 一一对应)。
 - 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、滚动总高与末行可达、
-  主线程长任务、**批量动作是否真的合成一条请求**(靠 `page.on("request")` 数 `/api/torrents/bulk` 与逐目标端点的次数 ——
-  这类"发了几次请求"的断言单测根本写不出来)。**改前端任何一处渲染/交互逻辑后应当跑它。**
+  主线程长任务、**批量动作是否真的合成一条请求**(靠请求计数断言 `/api/torrents/bulk` 与逐目标端点的次数 ——
+  这类"发了几次请求"的断言单测根本写不出来)。**改前端任何一处渲染/交互逻辑后应当跑门禁。**
 
 ## 断言清单要点
+
+> 以下断言语义现由 `e2e/` 各 spec 承载(逐条红绿双验过的历史记录, 判据对新轨同样成立);
+> 旧断言名 → 新 test 名的对账映射表在各 spec 文件头注释。
 
 - "轮询间隔按种子量分档"、"滚动到底不塌陷"。
 - **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 见下方"读数时机"坑)。
@@ -130,7 +135,9 @@
   而本机沙箱的删除拦截层会拉起回收站助手进程, 被 `tests/sidefx.py` 记成越界 `POPEN` ⇒
   全绿也会在某个用例的 teardown 报 ERROR(实测复用旧目录得 `1052 passed + 1 error`, 换全新路径即干净)。
 - ⚠ `COVERAGE_FILE` 同理要指到仓外(仓内 `.coverage` 会让覆盖率在启动时删仓内文件而中止)。
-- **写冒烟脚本的三条硬约束**: ①**必须 CJS**(不能 ESM); ②Vue 根实例走 `#app._vnode.component.proxy`
-  (`__vue_app__._instance` 恒空); ③`playwright-core` 版本须与本机 chromium 对齐
+- **写 e2e 用例的硬约束**: ①依赖走 `package.json` devDependency(`@playwright/test`), spec 用 ESM `.mjs`
+  显式扩展名(根 `type: commonjs` 不改 —— 会连带把 `extensions/*.js` 按 ESM 解析, 见任务档案
+  26-10-06-test-playwright-e2e 的决策表); ②Vue 根实例走 `#app._vnode.component.proxy`
+  (`__vue_app__._instance` 恒空); ③`@playwright/test` 版本须与本机 chromium 缓存对齐
   (环境侧细节见 [browser-env.md](browser-env.md), 取实例与读数时机的坑另见
   [../pitfalls/testing/smoke.md](../pitfalls/testing/smoke.md))。

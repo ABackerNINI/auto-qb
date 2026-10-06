@@ -1,14 +1,19 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
-> 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法。
-> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, elementHandle.click 超时, 冒烟整体执行, stash 对照, 归因
+> 摘要: `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法
+> (部分条目源自旧单页冒烟脚本时代 —— 该脚本 2026-10-06 已退役, 判据对 e2e 新轨同样成立)。
+> 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 用例超时, 冒烟整体执行, stash 对照, 归因
 
 ### 能力与定位
 
 - **触发**: 改任何前端渲染逻辑。
-- **判别**: 能力 = `ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵)
-  + `ui_smoke.cjs`(Playwright, 双 UI 断言 + 内置 A/B)。前端渲染**pytest 覆盖不到** ⇒ **改前端必做冒烟**。
-- **处置**: `ok`(看正向)与 `--expect-cmd error`(看回滚)两种模式都要跑。
+- **判别**: 能力 = `scripts/ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵,
+  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 七个 spec(@playwright/test, 双皮肤,
+  按断言块拆分)。前端渲染**pytest 覆盖不到** ⇒ **改前端必跑 `npm run test:e2e:fast`(@fast 门禁);
+  触碰乐观 UI/菜单/列设置加跑对应 spec; 全量矩阵轮收尾/排障串行人跑**。
+- **处置**: 模式矩阵 env 参数化(计划 26-10-06-0708 §3.2)—— `E2E_CMD_RESULT=ok|error|hang` /
+  `E2E_SKIP_CHECK=on|off` / `E2E_HR_SCENE=on|empty|off` / `E2E_TORRENTS=N`, 每轮独立起桩
+  (六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note)。
 
 ### Playwright 从哪来: 优先仓库内 `node_modules`, 没有才挂 `NODE_PATH`
 
@@ -16,9 +21,11 @@
 - **判别**: 按优先级找包 —— ①**仓库内** `node_modules/playwright-core`(`require` 从 `scripts/` 向上解析先命中);
   ②没有 `node_modules` 的 clone(`node_modules/` **已 gitignore**, 不会跟着 clone 走)⇒ `NODE_PATH` 指仓库外一份;
   ③npx 缓存 `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules`(可能已空)。
-- **处置**: ①优先 `node scripts/ui_smoke.cjs --base …`, 什么都不用设(2026-10-06 起本仓库有 `package.json`,
-  列了 `@playwright/test@1.63` 作 devDependency); ②③才加 `NODE_PATH=…`
-  (❗ESM 的 `import` 不认 `NODE_PATH`, 冒烟脚本必须 CJS); 版本对齐 `playwright-core@1.63` ↔ `chromium-1243`;
+- **处置**: ①仓库内 `node_modules` 在(clone 后 `npm ci` / `npm i` 一次)⇒ `commands run dev.e2e` 直接可用,
+  什么都不用设(`package.json` 列了 `@playwright/test@1.63` 作 devDependency, npm 解析不认 `NODE_PATH`);
+  ②没有 node_modules 的 clone ⇒ `npm ci`(有 lock)或 `npm i`, **别走旧轨的 `NODE_PATH` 挂载**
+  (❗ESM 的 `import` 不认 `NODE_PATH` —— 旧单页脚本是 CJS 才用得了它, e2e 轨道一律走 npm 解析);
+  版本对齐 `@playwright/test@1.63` ↔ `chromium-1243`;
   换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
   复发: 1 —— 2026-10-02 npx 缓存已空(只剩空 hash 目录; 浏览器二进制 chromium-1243 仍在
   `%LOCALAPPDATA%\ms-playwright`) ⇒ 当时改用**仓库外**一次性 `npm i playwright-core@1.63`
@@ -26,7 +33,7 @@
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 
-- **触发**: 起 `scripts/ui_harness.py` 后跑 `ui_smoke.cjs`, 报
+- **触发**: 跑 `commands run dev.e2e`(webServer 起 `scripts/ui_harness.py`)或手工起桩后跑 e2e, 报
   `冒烟整体执行 — page.waitForFunction: Timeout 30000ms exceeded`(或 `ERR_CONNECTION_REFUSED`)。
 - **判别**: 冒烟第一条断言是"`.group-row` 出现", 桩没服务到当前代码它就超时, 症状与
   "前端模板写错导致白屏"**完全同形**, 极易误判成自己改炸了。两种成因都实测到过:
@@ -129,7 +136,7 @@
 
 - **触发**: 冒烟用例对行做 Ctrl+click 多选(或任何要点到"行本体"的动作), 落点用行几何中心(2026-10-01 实测, issue 26-09-30-0602 清偿)。
 - **判别**: 行中部被行内可交互后代占据 —— 追剧集/辅种组行都有 `.site-chip`(`@click.stop="filterFromChip(...)"`, tpl/shows.html / tpl/groups.html), 点击落在芯片上时事件被 `.stop` 吞掉, 行 handler(selection.js `_toggleUnit`/`toggleGroupSel`)**根本不触发**, 症状是"修饰键点击不生效/选中 0 项", 极易误判成轮询重渲染竞态或真实 UI 缺陷。定案用仪器化探针: document **捕获级**记录 mousedown/mouseup/click 落点 + 覆写行 vm 方法看是否被调 + 行 DOM expando 查脱挂 —— 落点全在芯片、行 handler 未被调、节点未脱挂 ⇒ 是落点被吞, 不是竞态也不是产品缺陷。**间歇性**的来源: 芯片布局随前序冒烟步骤(状态文案/筛选态)漂移, 行几何中心有时被盖住有时不被 ⇒ 同一用例忽红忽绿。
-- **处置**: 修饰键点击落点避开交互后代 —— `position: { x: 8, y: 8 }` 落**行左缘名称列**(`.g-name`/`.g-name-text` 无任何 `.stop` 后代); 右键不受影响(chip 无 `contextmenu.stop`, 事件冒泡到行)。修法已随 0602 清偿落 `ui_smoke.cjs`(59725443); 新写冒烟用例点行时照此选落点, 别默认几何中心安全。
+- **处置**: 修饰键点击落点避开交互后代 —— `position: { x: 8, y: 8 }` 落**行左缘名称列**(`.g-name`/`.g-name-text` 无任何 `.stop` 后代); 右键不受影响(chip 无 `contextmenu.stop`, 事件冒泡到行)。修法已随 0602 清偿落码(旧冒烟脚本 commit `59725443`, 现由 `e2e/multiselect-shows.spec.mjs` 承载); 新写用例点行时照此选落点, 别默认几何中心安全。
 
 ### 整页白屏 = **包级失败**; 骨架在但某块空 = **模板表达式错误**
 

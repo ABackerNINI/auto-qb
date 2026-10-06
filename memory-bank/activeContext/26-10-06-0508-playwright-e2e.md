@@ -13,8 +13,16 @@
 > **已提交并推送 `2be3fe79`**(9 文件 +180 −35; `git ls-remote` 核实远端 == 本地 HEAD)⇒ 合并态补验
 > `test.full` **2676 + 4 / 99% / 75.06s**(基线 `26-10-06-0619`)。
 > **07:0x 追加(独立会话)**: 方案 B 分步实施计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html)
-> 已出(S0–S7 八批对账迁移, **Open · 待拍板**, 4 个拍板点留用户); 认领链 plan↔issue↔档案已闭合。
-> 最后活动: 2026-10-06 07:31
+> 已出(S0–S7 八批对账迁移, 4 个拍板点已按推荐方案落定); 认领链 plan↔issue↔档案已闭合。
+> **13:5x 追加(S7b 收尾会话, 分支 `playwright-e2e-migration`)**: S0–S7 **已全部实施完成**
+> (S7a 删旧脚本 = `d2dc3ba1`), **终态达成** —— `e2e/` 是 WEB UI 浏览器断言的唯一单点,
+> 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast), 旧"ok+error 两模式冒烟"口径退役。
+> 本轮(S7b) = 全量矩阵验收六轮 + 知识库回写(browser-env / smoke / pitfalls 收尾指向) +
+> 基线切片(矩阵实测数字) + 计划 doc-status → Done。
+> **14:3x 收口追加**: 矩阵 hang 轮暴露的两处计划外发现已同批修掉 —— W3 确认链补
+> `requireMode` ok|error 门控(hang 下预检不回执、确认钮永不解锁) + `dev.e2e` timeout 180→360s;
+> 复跑 hang 轮经 commands 引擎 **0 failed / 64 passed + 24 skipped / 156s / rc=0 / 端口零残留**。
+> 最后活动: 2026-10-06 14:3x
 
 **Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md, memory-bank/testing/baselines/26-10-06-0619-playwright-e2e-teardown-fix-merged.md
 
@@ -38,7 +46,8 @@
 - **根 `package.json` 的 `type` 保持 `commonjs`**, 改走显式扩展名(`.mjs` / `.cjs`)。改成 `module` 会连带把
   `extensions/*.js` 按 ESM 解析, 而 `tests/test_extension_proxy.py` 对它们跑 `node --check`。
 - **e2e 只跑最小集**(渲染健康 + 数据契约), 交互时序/几何/数值四类深水区仍走 `scripts/ui_smoke.cjs`
-  (105 项)。两条链路分工, 不互相替代。
+  (105 项)。两条链路分工, 不互相替代。 —— **已被方案 B 迁移取代**(2026-10-06 S0–S7 实施完成):
+  e2e 是全量单点, 旧脚本退役。
 - **端口 8137 + `reuseExistingServer: false`**: 故意不复用 —— 多 clone 下复用会连上别的 clone 的残留
   harness, "全 PASS"验的是旧代码(`pitfalls/testing/smoke.md` 已记该假信心事故)。
 - **只留 chromium**: 内部工具, scaffold 的 firefox+webkit 三浏览器矩阵纯浪费 CI 时间。

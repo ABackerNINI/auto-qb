@@ -11,7 +11,8 @@
   这个坑的隐蔽点在于**症状看着像"持久化没生效"**, 而 `page` 的值其实完全正确 ⇒ 只断言 `page` 的守阵会漏掉它。
 - **处置**: 启动路径补一次加载, 落点选**两条登录路径的唯一汇合点**(`startPolling()` 尾部) —— 那里鉴权已放行,
   请求必定带得上凭证。守阵必须**同时**断言"page 对"与"数据已加载"(`cfg.schema` 非空 / 分区标题已渲染)。
-- **守阵**: `ui_smoke.cjs`「设置页刷新保持位置」把 `page`+`hub`+`schema`+`crumb` 四项一起断言(已红绿双验);
+- **守阵**: `e2e/views.spec.mjs`「设置页刷新保持位置(顶层页 + 分区 + 配置已加载)」把 `page`+`hub`+`schema`+`crumb`
+  四项一起断言(旧冒烟脚本时代已红绿双验, 2026-10-06 起由 e2e 轨道承载);
   `tests/test_web.py::test_frontend_page_location_persisted` 静态钉住 `startPolling` 里那一次 `cfgLoad`。
 
 ### 恢复的值必须**对 schema 校验**, 不能无条件采用
