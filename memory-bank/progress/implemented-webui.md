@@ -7,6 +7,19 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **tracker URL 源头脱敏 方案 B: 拉取即脱敏 + mask 形态 + 编辑下线**(2026-10-07, 计划
+  [plans/26-10-07-0055](../plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html) S1–S4 全落地, 分支
+  feat/tracker-url-sanitize-planb 六提交 `589c91ff`…`ff97e7cf` 待并回; 档案
+  [tasks/26-10-07-webui-tracker-url-sanitize](../tasks/26-10-07-webui-tracker-url-sanitize.md) Done): 把凭据脱敏从
+  「日志出口」上提到 **qbapi 拉取即脱敏**—— S1 源头归一化(`mask_tracker_url`/entry 按 R1–R9 规格: 保形状 +
+  值全 hash 不按参数名挑 + 不加盐 + path 末段高熵 ≥16 位才整段 hash; 槽/Facade 归一拉取即 mask, 单轨边界 =
+  仅删除路径瞬时取原文)+ 6 组单测; S2 编辑下线(前端/路由/命令表/处理器/QbApi 包装/测试全链路删除, 端点清单
+  77→76); S3 收口切换原子批(详情 API mask 前置于缓存 + `_cmd_remove_tracker` 改道 mask 比对/原文传 qB/
+  0·2+ 命中报错); S4 守阵 5 组(详情 mask/删除 roundtrip/编辑端点 404/405/汇报基线原文/缓存源头 canary)
+  逐组红验全过(全红→还原复绿); code-style「凭据脱敏」条升级越界即脱敏。test.full 2698 passed + 4 skipped /
+  98.54%(基线 [26-10-07-0337](../testing/baselines/26-10-07-0337-tracker-url-sanitize-planb-s4b.md));
+  真机走查未做(无 qB 环境待用户验证), 计划外发现(commands.py:257 虚拟前缀第三处 / static_ui.py:46 POST
+  恒 405)未修, 明细见档案进度日志。
 - **WEBUI 列对齐几何缺陷修复: 把手槽与列头文字排版解耦**(2026-10-06, 计划
   [plans/26-10-06-1009](../plans/26-10-06-1009-plan-webui-column-alignment.html) PHASE 0-7 全落地; 专题档案
   [tasks/26-09-29-webui-column-alignment](../tasks/26-09-29-webui-column-alignment.md) Done): 用户报「右对齐列

@@ -7,7 +7,7 @@
 > develop 侧最新一条 [26-10-07-0138](26-10-07-0138-ship-autoresolve-stale-config.md)。
 > 基线时间: 2026-10-07 03:37
 
-**Refs:** memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html(§04 S4 / §06 验收)
+**Refs:** memory-bank/tasks/26-10-07-webui-tracker-url-sanitize.md,memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html(§04 S4 / §06 验收)
 
 - 分支: feat/tracker-url-sanitize-planb @ **a46c1df7**(S4a 守阵落码; 本轮会话开工 sync 因离线
   拿不到远端, 按本地 a46c1df7 实测; 测量时工作树仅含 conventions 回写与本切片两处 memory-bank 改动)

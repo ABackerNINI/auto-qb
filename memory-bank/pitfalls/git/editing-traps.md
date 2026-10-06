@@ -93,6 +93,11 @@
   `warning: … CRLF will be replaced by LF` 露了马脚**。为什么没命中: 本条旧文案把 Edit 写成
   "保留原行尾"的安全选项, 于是改完没做按字节复核 —— 判据必须落在**改完必查**上, 不能落在"用哪个工具"上。
   定式(已并入处置): 改完 md / 交付件后跑一次 `git status`, 见到 CRLF 警告就按字节归一。
+- **复发 +1 (2026-10-07, 第二次)**: 这次落在 KB 交付面 —— S4b 用 Edit 工具改
+  `memory-bank/conventions/code-style.md`, 整份 `LF=… / CRLF=0` 写成全 CRLF(git diff 依旧只显示
+  改动行)。为什么没命中: 委派实施时未把本坑档列入子智能体必读清单, 编辑前没读、改完也没跑
+  「git status 看 CRLF 警告」定式。处置照旧: 按字节归一回 LF
+  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
 
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 

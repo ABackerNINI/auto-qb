@@ -1,12 +1,12 @@
 # 26-10-07-webui-tracker-url-sanitize — tracker URL 源头脱敏（方案 B 实施）
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-07
-**Updated:** 2026-10-07 00:55
+**Updated:** 2026-10-07 03:50
 **Topics:** tracker-url-source-sanitize
-**Summary:** 方案 B（单轨 + 瞬时原文 + mask 形态）已转成 S1–S4 分步实施计划（26-10-07-0055，基树 20bd2157 重取证），未开工；编排修正：详情 API 收口与删除改道必须同批（拆开会打断移除）。
+**Summary:** 方案 B（单轨 + 瞬时原文 + mask 形态）S1–S4 已全部落码（分支 feat/tracker-url-sanitize-planb 六提交 589c91ff…ff97e7cf），守阵 5 组逐组红验全过、源码零残留，test.full 2698 passed + 4 skipped + 2 failed（存量 KB 守卫，收尾已修复回绿）/ 覆盖率 98.54%；真机走查待做。
 
-**Refs:** memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html,memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html,memory-bank/activeContext/26-09-23-1915-tracker-url-source-sanitize.md
+**Refs:** memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html,memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html,memory-bank/activeContext/26-10-07-0350-tracker-url-sanitize-planb.md,memory-bank/testing/baselines/26-10-07-0337-tracker-url-sanitize-planb-s4b.md
 
 ## 原始请求
 
@@ -27,11 +27,12 @@
 
 | # | 批次 | 状态 | 验证门 |
 |---|------|------|--------|
-| S1 | 源头归一化（mask fn + 槽/Facade 归一 + 单测） | 未开工 | test.quick |
-| S2 | 编辑下线（前端 + 路由 + 命令表 + 处理器 + 测试） | 未开工 | test.quick |
-| S3 | 收口切换（详情 API mask + 删除改道，原子批） | 未开工 | test.quick + 定向 |
-| S4 | 守阵 5 组 + 红验 + conventions 回写 | 未开工 | test.full |
+| S1 | 源头归一化（mask fn + 槽/Facade 归一 + 单测） | 已完成（589c91ff） | 6 组 mask 单测随批落码，终局 test.full 绿 |
+| S2 | 编辑下线（前端 + 路由 + 命令表 + 处理器 + 测试） | 已完成（e229c658） | 编辑全链路删除，端点清单 77→76，终局 test.full 绿 |
+| S3 | 收口切换（详情 API mask + 删除改道，原子批） | 已完成（88a21ca4） | mask 前置缓存 + 删除改道 mask 比对/原文传 qB，终局 test.full 绿 |
+| S4 | 守阵 5 组 + 红验 + conventions 回写 | 已完成（a46c1df7 + ff97e7cf） | 守阵 5 组逐组红验全过（全红→还原复绿）；test.full 2698 passed + 4 skipped + 2 failed（存量，收尾已修）/ 98.54% / 39~41s（基线 26-10-07-0337） |
 
 ## 进度日志
 
 - 2026-10-07 00:55: 立档。方案 B 分步实施计划产出（`26-10-07-0055-plan-tracker-url-sanitize-planb.html`）：现状取证（含报告行号漂移表与 D1–D5 重构影响）、mask 规格化（R1–R9）、四批文件级改动清单、守阵与红验设计。未开工改码。
+- 2026-10-07 03:50: **实施完成**。分支 feat/tracker-url-sanitize-planb 六提交：589c91ff（S1 源头归一化：`mask_tracker_url`/entry R1–R9 + 槽/Facade 归一 + 6 组单测）→ e229c658（S2 编辑下线：前端/路由/命令表/处理器/QbApi 包装/测试全链路删除，端点清单 77→76）→ 88a21ca4（S3 收口切换：详情 API mask 前置于缓存 + `_cmd_remove_tracker` 改道 mask 比对/原文传 qB/0·2+ 命中报错）→ a46c1df7（S4a 守阵 5 组）→ ff97e7cf（S4b code-style「凭据脱敏」条升级越界即脱敏 + 基线切片 26-10-07-0337）。守阵 5 组逐组红验全过（临时改源码→守阵红→还原复绿，`git status` 零残留）。test.full 实测（ff97e7cf 树）：**2698 passed + 4 skipped + 2 failed / 覆盖率 98.54% / 39~41s**，新增测试 +14（test_utils mask 组 6 + test_web 守阵与契约用例 8）；2 failed 为存量 KB 守卫（切片坏时间戳，与本计划无关），收尾已修复回绿（test_memory_bank.py 37 passed）。遗留：真机走查未做（无 qB 环境）；计划外发现两处未修（commands.py:257 虚拟前缀第三处、static_ui.py:46 StaticFiles 挂根 POST 未匹配恒 405，守阵③按 404/405 双断言适配），明细见 activeContext 切片与基线切片。
