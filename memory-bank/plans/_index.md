@@ -14,7 +14,6 @@
 ## Open
 
 - [26-10-07-0055] [tracker URL 源头脱敏 · 方案B 分步实施计划](26-10-07-0055-plan-tracker-url-sanitize-planb.html) — `tracker-url-source-sanitize`
-- [26-10-06-0838] [种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划](26-10-06-0838-plan-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
 - [26-10-04-1957] [实施计划 · qB 流量历史 dat v3 · 块化稀疏 delta + 批量落盘 + 按天文件 + 聚合分层 · auto-qb](26-10-04-1957-plan-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
@@ -22,6 +21,7 @@
 ## Done
 
 - [26-10-06-1009] [WEBUI 列对齐彻底修复 · 分步实施计划](26-10-06-1009-plan-webui-column-alignment.html) — `webui-column-alignment`
+- [26-10-06-0838] [种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划](26-10-06-0838-plan-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
 - [26-10-06-0708] [实施计划 · ui_smoke.cjs 分批迁移到 @playwright/test · auto-qb](26-10-06-0708-plan-playwright-e2e.html) — `playwright-e2e`
 - [26-10-06-0103] [实施计划 · 全项目 Code Review 发现分批修复(六批 28 issue) · auto-qb](26-10-06-0103-plan-full-code-review-remediation.html) — `full-code-review-remediation`
 - [26-10-05-2200] [实施计划 · qB 流量 v4 · 块头基线 delta + 按落盘切块(空闲块不关) + 自然推算结算 · auto-qb](26-10-05-2200-plan-qb-traffic-v4-delta.html) — `qb-traffic-v4-delta`

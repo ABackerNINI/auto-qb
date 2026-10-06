@@ -6,7 +6,7 @@
 <title>种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-detail-panel-redesign">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-06-0838">
 <meta name="doc-updated" content="26-10-06-0838">
 <meta name="doc-refs" content="memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html,memory-bank/tasks/26-10-06-webui-detail-panel.md">
@@ -112,7 +112,7 @@
       <strong>拍板前不动代码。</strong>
     </p>
     <div class="head-meta">
-      <span>doc-type plan</span><span>doc-topic webui-detail-panel-redesign</span><span>doc-status Open</span>
+      <span>doc-type plan</span><span>doc-topic webui-detail-panel-redesign</span><span>doc-status Done</span>
       <span>变体 15 + 经典兜底</span><span>阶段 S0-S7</span><span>拍板点 6 处</span>
     </div>
 
@@ -481,6 +481,7 @@
       <table>
         <tbody>
           <tr><td style="width:150px"><code>26-10-06-0838</code></td><td>v1 初稿: 拍板①②③转写为注册表 + 宿主 + 经典兜底架构; 挂载点总账与 S0-S7 分步; P-01…P-06 拍板点带推荐案; doc-status Open, 待拍板后转 In Progress。</td></tr>
+          <tr><td><code>26-10-06-0838</code></td><td>v2 实施完成(doc-status Done): S0-S7 七笔提交落地(分支 feature/webui-drawer-templates, S1-S6 hash 见任务档案); P-01…P-06 全按推荐案执行; S7 收口实测 —— 全矩阵巡检 283 断言全过(prism 16 选择 × 5 页签 × 3 档 + 两皮肤抽查 + 刷新恢复 + 脏 id 回落 + 监听不叠加, 零 pageerror), 删变体演示(守阵红 → 页面回落 classic → 恢复转绿), test.full 基线 2678 passed + 4 skipped / 99% / 45.37s(切片 26-10-06-1620); 持久化 e2e 以 python playwright 等价断言落地(@playwright/test 迁移计划 26-10-06-0708 落地后补挂); S4 遗留项(peers 落袋通知先于 peersLoading=false)裁量不动(≤5s 自愈, FX-29 纪律), 详见任务档案。</td></tr>
         </tbody>
       </table>
     </div>
@@ -489,7 +490,7 @@
   <footer>
     <b>文件</b> memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html<br>
     <b>生成</b> 2026-10-06 08:38 · ZCode · 单文件自包含, 双击即开<br>
-    <b>状态</b> Open(待拍板 P-01…P-06; 拍板前不动代码) · 代码事实快照以 26-10-06 HEAD b0767903 为准<br>
+    <b>状态</b> Done(S0-S7 实施完成, 2026-10-06; v2 见变更记录) · 实施分支 feature/webui-drawer-templates, 代码事实以分支 HEAD 为准<br>
     <b>相关</b> <a href="../reports/26-10-06-0723-report-webui-detail-panel-redesign.html">报告 26-10-06-0723</a> · <a href="../../resources/detail-panel-templates/_brief.md">_brief.md</a> · <a href="../tasks/26-10-06-webui-detail-panel.md">任务档案 26-10-06-webui-detail-panel</a> · 同目录 15 份模板
   </footer>
 
