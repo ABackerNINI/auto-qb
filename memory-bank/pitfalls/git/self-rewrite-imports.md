@@ -1,6 +1,6 @@
 # 包脚本被自己改写后的延迟 import
 
-> 摘要: 本包脚本住在**仓库里**, 而 `ship.commit` 的内部同步会把远端新版包脚本 rebase 进工作区 —— Python 的模块缓存让延迟 import 的**新**脚本撞上进程启动时的**旧**依赖模块, 症状是 `ImportError: cannot import name …`, 而提交其实已经落稳; 修法 = 延迟 import 前按磁盘现版本热刷新本包模块(内容摘要门控 + `importlib.reload` 保身份)。
+> 摘要: 本包脚本住在**仓库里**, 而 `ship.commit` 的内部同步会把远端新版包脚本 rebase 进工作区 —— Python 的模块缓存让延迟 import 的**新**脚本撞上进程启动时的**旧**依赖模块, 症状是 `ImportError: cannot import name …`, 而提交其实已经落稳; 旧修法 = 延迟 import 前按磁盘现版本热刷新本包模块(内容摘要门控 + `importlib.reload` 保身份)。⚠ **该修法已于 2026-10-07 被「快照自举」取代 —— 见文末「收口」节**。
 > 触发: ImportError, cannot import name, ship.commit 退出码 1, 提交成功却报错, 延迟 import, 延后 import, 内部同步, rebase 之后崩, sys.modules, 模块缓存, importlib.reload, 热刷新, 包脚本自我改写, refresh_package_modules
 
 **Refs:** memory-bank/tasks/26-10-06-ship-self-rewrite-imports.md
@@ -26,3 +26,19 @@
   (接线顺序 = 同步 → 刷新 → 推送)。
 - **延伸**: 凡是"**脚本住在被它自己操作的仓库里**"的工具链都有这一形态 —— 判据是问一句
   「我这个进程运行期, 磁盘上我自己那份源码会不会变?」。
+
+### 收口: 已被快照自举取代（2026-10-07）
+
+- **触发**: 读到本条时想按上面的修法（`refresh_package_modules` 热刷新）处置 —— 该机制已**退役**。
+- **判别**: 逐点热刷新覆盖不全 —— 入口脚本（`commit.py` / `verify_ref.py`）作为 `__main__` **无法热刷新**、
+  `importlib.reload` 不重绑调用方已导入的名字、"旧代码 × 新树"的组合空间无法穷举 ⇒ 这类 bug 靠打补丁
+  **无法闭环**，只会不断复发（同族已修两轮：模块缓存 → 配置快照）。
+- **处置**: 根治 = **版本快照隔离**。入口启动时把整包复制到**仓库之外**的临时目录再从副本重入
+  （`scripts/_snapshot.py`）⇒ **一次调用 = 一个版本**：中途 rebase 写进工作区的新版本对本进程不可见，
+  从**下一次调用**生效。判据不变（仍问「我这个进程运行期，磁盘上我自己那份源码会不会变？」），
+  但处置从"变了就重载"变成"**根本不看那棵树**"。上游若改动了本包，`ship.commit` 登记一行
+  `快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本`（不静默）。
+  报告 `memory-bank/reports/26-10-07-0208-report-my-commit-flow-self-snapshot.html`；守阵
+  `scripts/test_snapshot.py`（重入 / 免疫 / 采纳 / 根注入 / `import` 不重入 / 治标机制已退役的静态守卫）。
+- **延伸**: 遗留症状若再现（延迟 import 的 `ImportError`），先确认是不是**绕过了入口**（如 `import commit`
+  后直接调 `main()`）—— 守卫只在 `__main__` 分支下生效。

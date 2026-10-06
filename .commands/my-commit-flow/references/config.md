@@ -60,7 +60,7 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 
 | 项 | 怎么探测 | 覆盖办法 |
 |---|---|---|
-| 仓库根 | 从脚本目录向上找 `.git`（目录或 worktree 的 `.git` 文件） | — |
+| 仓库根 | 从脚本目录向上找 `.git`（目录或 worktree 的 `.git` 文件）；快照自举下副本在仓库外，改认 `COMMAND_FLOW_REPO_ROOT` 注入的真根 | — |
 | 分支 | 跟当前分支 | 配 `branch` |
 | 主线远端 | 候选名（`main_candidates`）里第一个 **URL 含 `main_host_mark`** 的（按 URL 特征而非名字）；都不匹配则回退到候选里第一个存在的 | 配 `main_host_mark` / `main_candidates` |
 | 镜像远端 | 按 URL 含 `mirror_host_mark` 找并**排除主线自己**；没有镜像也正常 | 配 `mirror_host_mark` |
@@ -72,12 +72,13 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 
 | 时机 | 读法 | 为什么 |
 |---|---|---|
-| `sync.py` / `push.py` / `commit.py` **启动** | `load_config()` | 进程开始时读一次；之后按这份快照跑 |
-| `commit.py` **合流后复跑闸门前** | `_pipeline.reload_config(cfg)` | 内部同步的 rebase 可能已把远端新版 `.my-commit-flow.toml` 换进工作区（本包目录就在仓库里）—— 拿启动那份复跑 = **用旧规则验合并后的新树**，输出却与"全过"一字不差 |
-| `sync.py` **生成物自动化解里，树被推到上游 tip 后** | `sync._reload_cfg(cfg)`（内部即 `_pipeline.reload_config`） | 同一根因：白名单来源 / 重跑命令 / `auto_resolve_generated` 都可能被上游那笔换掉 —— 继续用启动那份 = **拿旧政策丢本地内容**（白名单放宽 = 静默丢内容，收窄 = 该保的没保，重跑命令换了 = 重跑的是旧生成器）。快进路径在 `merge --ff-only` 之后取一次；分叉路径在**每轮 rebase 循环开头**与收尾各取一次 |
+| `sync.py` / `push.py` / `commit.py` / `verify_ref.py` **启动** | `load_config()` | 进程开始时读一次，之后按这份快照跑到底 —— **一次调用 = 一个版本** |
 
-`reload_config` 交出**磁盘现版本**并**复检 STOP 级问题**；配置变了才登记一行步骤行（没变静默），
-读不到 / 新配置有错则**停下**。两侧的"停"不同：commit 侧按「推送未完成」（提交已落稳）；
-sync 侧**放弃自动化解、回滚后退回现状失败行**（自动化解是优化，不为它新增失败模板）。
-与「包内模块热刷新」（`refresh_package_modules`）是同一根因的两半 —— 判据与守阵见
-`memory-bank/pitfalls/git/self-rewrite-config.md`。
+**只有这一次**：入口脚本启动时先把整包复制到**仓库之外**的临时目录再从副本重入（快照自举，见
+`pipeline.md`「快照自举」节），副本里的 `.my-commit-flow.toml` 就是这一次调用认的规则。中途 rebase 把
+上游新版配置写进工作区**也不换规则** —— 那正是"同一次调用混两个版本"的来源。据此，
+`_pipeline.reload_config` / `sync._reload_cfg`（以及同源的 `refresh_package_modules`）已**退役**：
+它们只能在选定的几个点上打补丁，覆盖不全（入口脚本自身无法热刷新、配置重取只覆盖两个点）。
+若上游改动了本包，`ship.commit` 会登记一行 `快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本`
+（不静默）。判据与守阵见 `memory-bank/pitfalls/git/self-rewrite-config.md`；快照机制的守阵是
+`scripts/test_snapshot.py`。

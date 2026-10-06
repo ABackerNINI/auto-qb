@@ -106,4 +106,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from _snapshot import maybe_respawn  # noqa: E402  (快照自举: 一次调用 = 一个版本)
+
+    _rc = maybe_respawn(__file__)  # 未在快照里 → 复制整包到仓库之外并重入
+    if _rc is not None:
+        raise SystemExit(_rc)  # 已由子进程(副本)接管
     raise SystemExit(main())

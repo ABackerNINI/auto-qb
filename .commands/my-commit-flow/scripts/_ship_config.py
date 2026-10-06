@@ -32,6 +32,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPTS_DIR.parent
 CONFIG_NAME = ".my-commit-flow.toml"
 PACK_ENV = "COMMAND_FLOW_PACK_DIR"  # 由调用方(命令引擎)注入; 手工跑时退回脚本所在目录的上一级
+# 快照自举(`_snapshot.py`)注入的真仓库根: 副本在**仓库之外**, 向上找不到 `.git`, 必须显式告知。
+# 常量写在这里而不是 import `_snapshot`: 本模块要能独立 import(同 CONFIG_GIT_TIMEOUT 的处置)。
+REPO_ROOT_ENV = "COMMAND_FLOW_REPO_ROOT"
 
 
 def pack_dir() -> Path:
@@ -132,7 +135,14 @@ def git(*args: str) -> str:
 
 
 def find_root(start: Path | None = None) -> Path:
-    """仓库根: 从 start(默认脚本目录)向上找 `.git`(目录或 worktree 的 .git 文件)。"""
+    """仓库根: 从 start(默认脚本目录)向上找 `.git`(目录或 worktree 的 .git 文件)。
+
+    快照自举(`_snapshot.py`)把本包复制到**仓库之外**再运行 —— 副本向上找不到 `.git`, 必须由
+    `COMMAND_FLOW_REPO_ROOT` 显式注入真根; 没有它, "向上找 .git" 会落到错误位置(甚至临时目录)。
+    """
+    env = os.environ.get(REPO_ROOT_ENV, "").strip()
+    if env:
+        return Path(env).resolve()
     cur = (start or SCRIPTS_DIR).resolve()
     for parent in (cur, *cur.parents):
         if (parent / ".git").exists():

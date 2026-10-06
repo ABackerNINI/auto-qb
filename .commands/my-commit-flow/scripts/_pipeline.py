@@ -6,11 +6,9 @@ v3.1(2026-10-06)在本模块加了唯一的**输出机制**例外: 「步骤登�
 结果行仍是上面那句话, 只是**真改写 HEAD 的步骤**由它登记成一行证据, 见该段注释。
 2026-10-06 另加: **git 命令统一走 `run_git`** —— 单次 20s 超时 + 有界重试(默认 3 次, 全部失败才判失败),
 动机(Gitee 间歇性卡住)与三档重试判据见「git 命令: 单次超时 + 有界重试」段。
-2026-10-06 另加: **包内模块热刷新** (`refresh_package_modules`) —— 内部同步会把远端新版**包脚本** rebase 进
-工作区(本目录就在仓库里), 延迟 import 前必须按磁盘现版本重载, 否则新脚本撞上进程启动时缓存的旧模块,
-见「包内模块热刷新」段。
-2026-10-06 另加: **配置重取** (`reload_config`) —— 同一场景的另一半: rebase 也可能换掉**配置**
-(`.my-commit-flow.toml`), 而闸门复跑若还用启动时那份快照, 就是"照跑但规则不对"(见「自我改写后的配置重取」段)。
+2026-10-07 改: 上述"热刷新 / 重取"两条治标机制已**退役** —— 根治方案是**快照自举**(`_snapshot.py`):
+入口把整包复制到**仓库之外**再从副本重入, **一次调用 = 一个版本**, 中途的自我改写对本进程不可见。
+本模块只留 `pack_touched()` 回答"上游改没改本包"(供调用方提示重跑), 见「快照语义: 本包被上游改动」段。
 人工排障口: `_pipeline.py --show-config` 看生效配置, `--init` 生成新仓库的配置初稿。
 
 前身是 preflight.py(检查表式预检, v2 计划 26-09-26-2345); v3 把"检查"下沉进 ship 编排,
@@ -21,8 +19,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import hashlib
-import importlib
 import os
 import re
 import subprocess
@@ -260,56 +256,38 @@ def git_run(*args: str, attempts: int = GIT_ATTEMPTS) -> subprocess.CompletedPro
     return run_git(["git", *args], attempts=attempts)
 
 
-# ------------------------------------------------------------------ 包内模块热刷新
-# 场景: 本包脚本就住在**仓库里**, 而内部同步(`sync.run_sync`)会把远端新版包脚本 rebase 进工作区 ——
-#   于是「进程启动时缓存的模块」与「磁盘上的现版本」不再一致, 而 `from X import y` 只认缓存。
-# 后果(2026-10-06 实测): 远端 `aaff8b3a` 给 `_pipeline` 加了 `retry_note`, 而 commit.py 启动时已缓存
-#   旧 `_pipeline`; 末尾 `from push import run_push` 导入的**新** push.py 执行
-#   `from _pipeline import … retry_note` → ImportError ⇒ 推送步崩、退出码被置 1
-#   (与 v3「推送未完成不改退出码」的契约相悖: 提交明明已落稳, 看起来却像硬失败)。
-# 修法: 在**延迟 import 之前**把「源码真的被改写」的本包模块按磁盘现版本重载(commit.py 推送步前调用)。
-# 两条判据不动摇:
-#   ① 用 `importlib.reload` 而不是「删 sys.modules 再 import」—— 后者会造出**第二个**模块对象,
-#      已绑定旧名的调用方与新导入的名字从此分属两份(常量 / 函数可能不一致), 是更难查的雷。
-#   ② **按"源码变了"门控**(内容摘要, 不是 mtime: 切分支 / checkout 可能保留 mtime) —— 测试用
-#      monkeypatch 把 `run_sync` / `run_push` 换成替身, 而源码没变; 无条件 reload 会把替身冲掉,
-#      让守阵自己失灵(同族见 `memory-bank/pitfalls/testing/patching.md`)。
-_PACKAGE_MODULES = ("_ship_config", "_pipeline", "sync", "push")  # 依赖在前, 按序重载
-_PACKAGE_DIR = Path(__file__).resolve().parent
+# ------------------------------------------------------------------ 快照语义: 本包被上游改动
+# 快照自举(见 `_snapshot.py`)让**本进程**对"自己脚下的仓库被改写"免疫 —— 一次调用只认启动时那份副本,
+# 中途 rebase 写进工作区的新版本对本进程不可见。但"上游改动了本包"这件事对用户是有价值的信号:
+# 新版本要**重跑**才生效, 静默会让人以为已经用上了。这里只回答"改没改"(纯查询), 提示文案由调用方登记。
+ORIG_PACK_ENV = "COMMAND_FLOW_ORIGINAL_PACK"  # 快照自举注入的原包路径(见 `_snapshot.py`)
+PACK_REL_FALLBACK = ".commands/my-commit-flow"  # 本包不在仓库内(测试 / 手工跑)时的引擎约定位置
 
 
-def _source_digest(path: Path) -> str | None:
-    """源文件内容摘要 —— 取不到(不存在 / 读不了)返回 None, 调用方按「无从判断」跳过。"""
-    try:
-        return hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
-    except OSError:
-        return None
+def pack_rel_path() -> str:
+    """本包相对仓库根的路径(posix) —— 供 `git diff -- <path>` 判「上游是否改动了本包」。
 
-
-_PACKAGE_DIGESTS = {name: _source_digest(_PACKAGE_DIR / f"{name}.py") for name in _PACKAGE_MODULES}
-
-
-def refresh_package_modules() -> list[str]:
-    """把**源码已被改写**的本包模块按磁盘现版本重载, 返回真重载了的模块名(诊断用)。
-
-    只重载已在 `sys.modules` 里的 —— 尚未导入的模块下次 `import` 天然就是新版, 无需处理。
-    待重载名单**先算齐再动手**: `_pipeline` 自己也在名单里, 重载它会重算 `_PACKAGE_DIGESTS`;
-    边算边改会让排在它后面的 `sync` / `push` 被这次重算"洗白"而漏掉重载(它们仍在缓存里是旧版)。
-    调用点: 内部同步之后、任何延迟 import 之前(目前唯一一处 = commit.py 的推送步)。
+    快照里 `COMMAND_FLOW_ORIGINAL_PACK` 指向**原包**(副本在仓库外); 不在快照里时退回脚本目录的上一级。
+    两者都可能不在仓库内, 那时退回引擎约定位置(`.commands/<包>`)。
     """
-    stale: list[tuple[str, str]] = []
-    for name in _PACKAGE_MODULES:
-        digest = _source_digest(_PACKAGE_DIR / f"{name}.py")
-        if digest is not None and digest != _PACKAGE_DIGESTS.get(name):
-            stale.append((name, digest))
-    reloaded: list[str] = []
-    for name, digest in stale:
-        _PACKAGE_DIGESTS[name] = digest
-        module = sys.modules.get(name)
-        if module is not None:
-            importlib.reload(module)
-            reloaded.append(name)
-    return reloaded
+    orig = os.environ.get(ORIG_PACK_ENV, "").strip()
+    pack = Path(orig).resolve() if orig else Path(__file__).resolve().parent.parent
+    try:
+        return pack.relative_to(find_root()).as_posix()
+    except ValueError:
+        return PACK_REL_FALLBACK
+
+
+def pack_touched(old_sha: str, new_sha: str) -> bool:
+    """`old_sha` → `new_sha`(内部同步的 rebase)之间, 本包目录是否被改动过。
+
+    只回答"改没改": 快照语义下本进程仍按启动版本运行, 改动**从下一次调用生效** —— 调用方据此登记
+    一行提示, 而不是去追赶新版本(那正是撕裂的来源)。
+    """
+    if not old_sha or not new_sha or old_sha == new_sha:
+        return False
+    out = git("diff", "--name-only", old_sha, new_sha, "--", pack_rel_path(), check=False)
+    return bool(out.strip())
 
 
 def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
@@ -559,40 +537,6 @@ def config_stops(cfg: dict, src: Path) -> list[str]:
     WARN 级(初稿未确认等)不进常规路径: v3 沉默契约下, 它们只在排障(--show-config)时看。
     """
     return [msg for lvl, msg in config_problems(cfg, src) if lvl == "STOP"]
-
-
-# ------------------------------------------------------------------ 自我改写后的配置重取
-# 与 `refresh_package_modules` 同源: 本包目录就在仓库里, 内部同步的 rebase 可能已把远端新版
-# **配置**(`.my-commit-flow.toml`)或**包脚本**换进工作区, 而进程手里的快照还是启动时那份。
-# 前者(配置)的后果比后者(模块)更隐蔽 —— 模块错配会 ImportError 报出来, 配置过期则是
-# **闸门照跑、规则不对**: 旧闸门集 / 旧 each_limit / 旧红线 / 旧生成物白名单, 全都对不上
-# 合并后的仓库, 而输出与"全过"一字不差。撞"配置迁移窗口"(远端那笔同时改了配置与闸门)必现。
-
-
-def reload_config(cfg: dict) -> tuple[dict, str | None]:
-    """按**磁盘现版本**重取外置配置 —— 「自我改写后复跑」前必须调; 返回 (配置, 停止原因)。
-
-    两个调用点(都是"树刚被推到上游 tip, 而本包配置就在仓库里"的场合):
-    - `commit.py` 第 6 步(内部同步真改写 HEAD)复跑闸门**之前** —— 复跑要验的是合并后的树, 规则也必须
-      是合并后的规则。调用前先 `refresh_package_modules()`, 让 `_ship_config.KEY_DEFAULTS` 跟着现版本
-      (否则远端新加的配置键会被按「顶层未知键」误判 STOP)。
-    - `sync.py` 的生成物自动化解(`_resolve_behind_overlap` / `_resolve_rebase`)—— 它先把树推到上游 tip,
-      再按白名单丢本地那份并重跑生成器; 白名单来源与重跑命令必须来自**合并后**的配置。
-
-    **保守默认**: 读不到配置 / 新配置有 STOP 级问题 → 返回原因, 调用方必须停下 —— **绝不拿旧规则硬跑**
-    (那正是本缺陷的形态)。commit 侧按「推送未完成」停(提交已落稳); sync 侧放弃自动化解、回滚后退回
-    现状失败行。此时返回值是**传入的旧配置**, 仅供占位, 不可使用。
-
-    配置没变时 `fresh == cfg` 为真, 调用方据此决定要不要登记步骤行(登记纪律②: 没发生的不报)。
-    """
-    try:
-        fresh, src = load_config()
-    except ConfigMissing as exc:
-        return cfg, str(exc)
-    stops = config_stops(fresh, src)
-    if stops:
-        return cfg, f"合流后的新配置未通过体检({stops[0]})"
-    return fresh, None
 
 
 # ------------------------------------------------------------------ 步骤登记(v3.1「改写留痕」)

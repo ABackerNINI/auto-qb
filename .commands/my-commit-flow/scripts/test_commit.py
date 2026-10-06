@@ -16,12 +16,9 @@
 - test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一清单)
 - test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送
 - test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
-- test_post_rebase_rerun_uses_reloaded_config 真仓: 合流换掉 .my-commit-flow.toml → 复跑用重取的新配置(非启动时旧配置)
-- test_post_rebase_unchanged_config_stays_silent 真仓: 配置没变 → 不留步骤行(没发生的不报)
-- test_post_rebase_broken_new_config_blocks_push 真仓: 合流后新配置有 STOP → 不拿旧规则硬跑, 按「推送未完成」停
+- test_post_rebase_pack_changed_leaves_hint 真仓: 合流改动了本包 → 登记一行「仍按启动版本运行, 重跑以采用新版本」
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
-- test_push_path_refreshes_package_modules 推送前刷新本包模块, 顺序 = 同步 → 刷新 → 推送(--no-push 不刷新)
 - test_no_push_skips_sync_and_push        --no-push 不同步不推送(离线可用), 一行注明未推送
 - test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 ⚠(唯一例外, D5)
 - test_message_kept_on_commit_fail        git commit 失败 → 消息文件保留
@@ -43,9 +40,7 @@ import commit as commit_mod  # noqa: E402
 import push as push_mod  # noqa: E402
 import sync as sync_mod  # noqa: E402
 import verify_ref as verify_ref_mod  # noqa: E402
-import _pipeline as pipeline_mod  # noqa: E402
 from _pipeline import run_capture  # noqa: E402
-from _ship_config import KEY_DEFAULTS  # noqa: E402
 
 PKG = Path(__file__).resolve().parent.parent
 RED = ["config.yml", "auto-qb-data/"]
@@ -92,7 +87,9 @@ def _push_remote_commit(repo: Path, tmp: Path, name: str, content: str, msg: str
         _git(tmp, "clone", "-b", "develop", "origin.git", "b")
         _git(b, "config", "user.email", "t@t")
         _git(b, "config", "user.name", "t")
-    (b / name).write_text(content, encoding="utf-8")
+    target = b / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
     _git(b, "add", "-A")
     _git(b, "commit", "-m", msg)
     _git(b, "push", "origin", "develop")
@@ -114,24 +111,6 @@ def _write_msg(repo: Path, text: str = "✨ test") -> Path:
     msg = repo / ".git" / "COMMIT_MSG_AI.txt"
     msg.write_text(text, encoding="utf-8")
     return msg
-
-
-def _cfg_with_gate(note: str) -> dict:
-    """一份最小可用配置(以真实默认值为底) —— 唯一闸门只命中 `x.txt`, 供复跑用例判"用的是哪份配置"。"""
-    cfg = dict(KEY_DEFAULTS)
-    cfg.update(
-        {
-            "red_lines": RED,
-            "warn_lines": [],
-            "gates": [{
-                "match": ["x.txt"],
-                "run": ["true"],
-                "note": note,
-                "auto": True
-            }],
-        }
-    )
-    return cfg
 
 
 # ------------------------------------------------------------------ 暂存计划(纯函数)
@@ -282,6 +261,7 @@ def test_remote_moved_rebases_before_push(repo, tmp_path, monkeypatch, capsys):
     assert _git(repo, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"  # 本地提交重放在远端 tip 上
     assert _git(repo, "rev-list", "--merges", "--count", "HEAD") == "0"  # 历史保持线性
     assert (repo / "b.txt").exists() and (repo / "x.txt").exists()  # 两边内容都在
+    assert "本次仍按启动版本运行" not in out  # 上游没动本包 → 不留「重跑以采用新版本」那行
     assert pushed == [1]
 
 
@@ -348,74 +328,6 @@ def test_post_rebase_gate_red_blocks_push(repo, tmp_path, monkeypatch, capsys):
     assert runs["n"] == 2
 
 
-def test_post_rebase_rerun_uses_reloaded_config(repo, tmp_path, monkeypatch, capsys):
-    """合流后复跑必须用**磁盘上的新配置** —— 启动时那份 cfg 在 rebase 换掉 `.my-commit-flow.toml`
-    后就过期了: 拿旧规则验合并后的新树 = 闸门照跑但规则不对(输出与"全过"一字不差), 撞配置迁移窗口必现。
-
-    两个加载点是**故意分开**的, 所以这里钉两处: 进程启动读 `commit.load_config`, 复跑前重取走
-    `_pipeline.load_config`(即 `reload_config` 内部那次)。若复跑仍读启动那份, 第二轮闸门名会是"旧闸门"。
-    """
-    old_cfg, new_cfg = _cfg_with_gate("旧闸门"), _cfg_with_gate("新闸门")
-    cfg_path = tmp_path / "cfg.toml"  # 不存在也无妨: 没有它 = 无"顶层未知键"可查
-    monkeypatch.setattr(commit_mod, "load_config", lambda: (old_cfg, cfg_path))
-    monkeypatch.setattr(pipeline_mod, "load_config", lambda: (new_cfg, cfg_path))
-    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: [])
-    seen: list[list[str]] = []
-
-    def _gates(hits, ctx):
-        seen.append([g["note"] for g in hits])
-        return [], [], 0
-
-    monkeypatch.setattr(commit_mod, "run_gates", _gates)
-    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
-    _write_msg(repo)
-    (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")  # 会话中途远端推进 → 内部 rebase 真改写 HEAD
-    assert commit_mod.main([]) == 0
-    out = capsys.readouterr().out
-    assert seen == [["旧闸门"], ["新闸门"]], f"复跑用的不是重取后的配置: {seen}"
-    assert "闸门复跑: 合流后 .my-commit-flow.toml 已更新 → 按新配置复跑" in out  # 配置变过必须留痕
-
-
-def test_post_rebase_unchanged_config_stays_silent(repo, tmp_path, monkeypatch, capsys):
-    """配置没变就不登记步骤行(登记纪律②: 没发生的不报)—— 常规分叉提交的输出不该多一行。"""
-    cfg = _cfg_with_gate("闸门")
-    cfg_path = tmp_path / "cfg.toml"
-    monkeypatch.setattr(commit_mod, "load_config", lambda: (cfg, cfg_path))
-    monkeypatch.setattr(pipeline_mod, "load_config", lambda: (dict(cfg), cfg_path))  # 等值, 不同对象
-    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: [])
-    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
-    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
-    _write_msg(repo)
-    (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
-    assert commit_mod.main([]) == 0
-    out = capsys.readouterr().out
-    assert "已更新 → 按新配置复跑" not in out  # 没变就不该出现那行步骤
-
-
-def test_post_rebase_broken_new_config_blocks_push(repo, tmp_path, monkeypatch, capsys):
-    """合流后的新配置带 STOP 级问题 → **不拿旧规则硬跑**, 按「推送未完成」停下(提交已落稳, 退出码 0)。"""
-    broken = _cfg_with_gate("新闸门")
-    broken["generated_list_cmd"] = 5  # 类型非法 → config_problems 判 STOP
-    cfg_path = tmp_path / "cfg.toml"
-    monkeypatch.setattr(commit_mod, "load_config", lambda: (_cfg_with_gate("旧闸门"), cfg_path))
-    monkeypatch.setattr(pipeline_mod, "load_config", lambda: (broken, cfg_path))
-    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: [])
-    rounds: list[int] = []
-    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: rounds.append(1) or ([], [], 0))
-    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
-    _write_msg(repo)
-    (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
-    rc = commit_mod.main([])
-    out = capsys.readouterr().out
-    assert rc == 0  # 提交已落稳 —— 别重新提交
-    assert "提交成功" in out and "未推送" in out
-    assert "推送未完成: 合流后的新配置未通过体检" in out and "commands run ship.push" in out
-    assert rounds == [1]  # 只跑了提交前那一轮; 复跑被拦下(没有拿旧规则糊弄过去)
-
-
 def test_post_rebase_gate_dirty_amends(repo, tmp_path, monkeypatch, capsys):
     """复跑的 fmt 类闸门又改了文件 → 逐路径 add + amend 折进未推送 tip(不产生第二个提交)。"""
     runs = {"n": 0}
@@ -439,6 +351,23 @@ def test_post_rebase_gate_dirty_amends(repo, tmp_path, monkeypatch, capsys):
     assert "formatted" in _git(repo, "show", "HEAD:x.txt")  # 闸门改动折进了 tip
     # amend 又挪了一次 tip —— 结果行的 hash 与 rebase 那行末端不同, 必须有一条步骤行接上
     assert re.search(r"闸门复跑: 合流后闸门改了 1 个文件 → amend [0-9a-f]{8}→[0-9a-f]{8}", out), out
+
+
+def test_post_rebase_pack_changed_leaves_hint(repo, tmp_path, monkeypatch, capsys):
+    """合流改动了**本包目录** → 登记一行「仍按启动版本运行, 重跑以采用新版本」。
+
+    快照语义(一次调用 = 一个版本)下本进程对自我改写免疫, 但"上游换了本包"对用户是有价值的信号:
+    静默会让人以为已经用上新版本。判据 = `git diff <旧> HEAD -- <本包路径>` 非空。
+    """
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    # 远端那笔改本包目录(测试里本包不在仓内, 走 pack_rel_path 的引擎约定位置 .commands/my-commit-flow)
+    _push_remote_commit(repo, tmp_path, ".commands/my-commit-flow/new_tool.py", "upstream\n")
+    assert commit_mod.main([]) == 0
+    out = capsys.readouterr().out
+    assert "快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本" in out, out
 
 
 def test_head_rewrite_trace_ends_at_result_hash(repo, tmp_path, monkeypatch, capsys):
@@ -494,36 +423,6 @@ def test_push_failure_is_partial(repo, monkeypatch, capsys):
     assert "提交成功" in out and "未推送" in out
     assert "推送未完成: 主线推送未通过" in out and "commands run ship.push" in out
     assert not msg.exists()  # 提交已落稳(ref 通过), 消息照常消费
-
-
-def test_push_path_refreshes_package_modules(repo, monkeypatch, capsys):
-    """推送步前刷新本包模块, 且顺序必须是「同步 → 刷新 → 推送」。
-
-    为什么: 内部同步可能已把远端新版**包脚本** rebase 进工作区(本目录就在仓库里), 不刷新则新 push.py
-    在 `from _pipeline import … retry_note` 处撞进程启动时缓存的旧 _pipeline(2026-10-06 实测 ImportError,
-    提交明明已落稳却退出 1)。刷新本身静默、没有行为出口 —— 只能钉住"它被调用过、且在同步之后"这个事实。
-    """
-    order: list[str] = []
-    monkeypatch.setattr(sync_mod, "run_sync", lambda steps=None: order.append("sync") or (True, "已同步 abcdef01"))
-    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: order.append("push") or (True, "推送成功 abcdef01"))
-    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: order.append("refresh") or [])
-    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
-    monkeypatch.setattr(commit_mod, "check_refs", lambda expect="": (True, []))
-    _write_msg(repo)
-    (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    assert commit_mod.main([]) == 0
-    assert order == ["sync", "refresh", "push"]
-
-
-def test_no_push_never_refreshes(repo, monkeypatch, capsys):
-    """--no-push 不碰推送, 也就不必刷新(刷新只为延迟 import push)—— 省一次无关动作。"""
-    calls: list[int] = []
-    _patch_ok_flow(monkeypatch)
-    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: calls.append(1) or [])
-    _write_msg(repo)
-    (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    assert commit_mod.main(["--no-push"]) == 0
-    assert calls == []
 
 
 def test_no_push_skips_sync_and_push(repo, monkeypatch, capsys):
