@@ -49,6 +49,7 @@
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
+- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四变体整帧重建路径纵横滚动位成对自保(scroller=host.parentElement 上既有 scrollTop 保存旁补 scrollLeft 读取 + 整帧 replaceChildren(html) 后成对恢复, 恢复次序 scrollLeft 先 scrollTop 后), 任一变体只存不还或整体缺失即红
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3253,6 +3254,34 @@ def test_drawer_tpl_variant_field_icons():
         for bad in ("<img", "iconfont", "fontawesome", "material-icons"):
             assert bad not in low, \
                 f"drawer_tpl/{name}: 引入外部图标形态 {bad}(图标只许用站内 SVG sprite)"
+
+
+def test_drawer_tpl_table_variants_scrollleft_restore():
+    """表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四个定宽 grid
+    表格变体最小宽约 990-1000px, 窄窗口(含 <=900px 固定全屏态)下 drawer-body overflow:auto
+    必然横向滚动; 整帧重建(sig 变)只还 scrollTop 会把用户的横向滚动位打回最左。守阵钉住:
+    每个变体重渲染路径在既有 scrollTop 保存旁有 scrollLeft 读取, 且整帧 replaceChildren(html)
+    之后两轴成对恢复(恢复次序 scrollLeft 先 scrollTop 后, 照抄既有同步恢复时序)。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    for name in (
+        "06-trackers-table-collapsed.js", "07-peers-dashboard-tall.js", "08-peers-groups-low.js",
+        "09-peers-density-collapsed.js"
+    ):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        save = "const scrollLeft = scroller ? scroller.scrollLeft : 0;"
+        assert save in text, \
+            f"drawer_tpl/{name}: 重渲染路径缺横向滚动位保存(P2-2: 5s 轮询整帧重建把用户横向滚动位打回最左)"
+        restore = "scroller.scrollLeft = scrollLeft;"
+        assert restore in text, \
+            f"drawer_tpl/{name}: 横向滚动位保存了但没恢复(纵横滚动位成对自保纪律)"
+        rebuild = "host.replaceChildren(document.createRange().createContextualFragment(html));"
+        assert text.count(rebuild) == 1, \
+            f"drawer_tpl/{name}: 整帧重建调用点形态漂移(守阵按单点定位恢复时序, 同步本守阵)"
+        assert text.index(rebuild) < text.index(restore), \
+            f"drawer_tpl/{name}: scrollLeft 恢复必须落在整帧重建之后(照抄 scrollTop 恢复时序)"
+        st = "scroller.scrollTop = scroll;"
+        assert text.index(restore) < text.index(st), \
+            f"drawer_tpl/{name}: 恢复次序漂移(成对恢复应 scrollLeft 先 scrollTop 后, 同步本守阵)"
 
 
 def test_drawer_tpl_classic_default():

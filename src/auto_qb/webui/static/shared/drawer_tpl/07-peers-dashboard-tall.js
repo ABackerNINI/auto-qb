@@ -468,7 +468,10 @@
     ui.maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
     ui.maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
     const scroller = host.parentElement;
+    /* 纵横滚动位成对自保: 表格定宽 grid 窄窗口下必有横向滚动(drawer-body overflow:auto),
+     * 整帧重建只还 scrollTop 会把用户的横向滚动位打回最左 */
     const scroll = scroller ? scroller.scrollTop : 0;
+    const scrollLeft = scroller ? scroller.scrollLeft : 0;
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -489,6 +492,7 @@
       <div class="dt07-list">${R(headHtml(hasFiles))}${R(rows)}</div>
     </div>`;
     host.replaceChildren(document.createRange().createContextualFragment(html));
+    if (scroller) scroller.scrollLeft = scrollLeft;
     if (scroller) scroller.scrollTop = scroll;
   }
 
