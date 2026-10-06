@@ -86,8 +86,15 @@
 - test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
 - test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
 - test_sanitize_tracker_url_unparseable: 空/非字符串/解析不出 host -> 占位串且不抛异常(日志路径不得打断业务)
+- test_mask_tracker_url_virtual_passthrough: mask R1 虚拟条目("**"/"[DHT]"/"[PeX]"/"[LSD]" 含裸形态)原样透传
+- test_mask_tracker_url_unparseable: mask R2 空/非字符串/解析不出 host -> 占位串且不抛异常
+- test_mask_tracker_url_structure: mask R3/R4 scheme 小写保留/userinfo 去除/host 小写/端口保留/缺 scheme 兜底
+- test_mask_tracker_url_path_and_query: mask R5/R6 path 末段高熵判定(边界 15/16 位)/端点名保留/fragment 丢/query 全值 hash 含未知参数名/裸名原样/段序不变/值不百分号解码
+- test_mask_tracker_url_deterministic_and_unique: mask R7/R8 确定性(两次逐字节一致)与唯一性三例
+- test_mask_tracker_entry: mask R9 只改 url 其余字段保全/原条目不被就地改/缺 url 与虚拟条目原样返回
 - test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
 """
+import hashlib
 import ntpath
 import os
 import pytest
@@ -1150,6 +1157,124 @@ def test_sanitize_tracker_url_unparseable():
     # urlparse 自身抛异常(畸形输入)也不能冒泡出去 —— 脱敏在日志路径上, 炸了就打断 qB 写操作
     with mock.patch("auto_qb.infra.utils.urlparse", side_effect=ValueError("boom")):
         assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc") == SANITIZE_FALLBACK
+
+
+def _mask_h16(value: str) -> str:
+    """mask R7 的参考实现: sha256 前 16 位 hex —— 测试侧独立重算, 不 import 被测 helper(防同源抄错)"""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def test_mask_tracker_url_virtual_passthrough():
+    """mask_tracker_url R1: 虚拟条目("**"/"[DHT]"/"[PeX]"/"[LSD]" 前缀, 含裸形态)原样透传
+
+    必须在函数内挡掉, 不依赖调用方过滤 —— sanitize 会把裸 "[DHT]" 小写化破坏前缀识别,
+    mask 若走同一路径就会把虚拟条目误判成"解析不出 host"(计划 26-10-07-0055 R1)。
+    """
+    from auto_qb.infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url
+
+    # 全部前缀 + 裸形态(无 "**" 包裹)都逐字节原样
+    for raw in ("** [DHT] **", "[DHT]", "** [PeX] **", "[PeX]", "** [LSD] **", "[LSD]", "**"):
+        assert mask_tracker_url(raw) == raw, f"{raw!r} 应原样透传"
+    # 前缀集合是单点常量(webui/views.py 引用同一份), 防双源漂移
+    assert VIRTUAL_TRACKER_PREFIXES == ("**", "[DHT]", "[PeX]", "[LSD]")
+
+
+def test_mask_tracker_url_unparseable():
+    """mask_tracker_url R2: 非字符串/空/解析不出 host -> 占位串, 绝不抛异常(与 sanitize 同口径)"""
+    from auto_qb.infra.utils import SANITIZE_FALLBACK, mask_tracker_url
+
+    for bad in ("", "   ", None, 123, "/announce?passkey=abc", object()):
+        assert mask_tracker_url(bad) == SANITIZE_FALLBACK, f"{bad!r} 应降级为占位串"
+
+    # urlparse 自身抛异常也不能冒泡出去
+    with mock.patch("auto_qb.infra.utils.urlparse", side_effect=ValueError("boom")):
+        assert mask_tracker_url("https://pt.example.com/announce?passkey=abc") == SANITIZE_FALLBACK
+
+
+def test_mask_tracker_url_structure():
+    """mask_tracker_url R3/R4: scheme 保留并小写 / userinfo 去除 / host 小写 / 端口保留 / 缺 scheme 兜底"""
+    from auto_qb.infra.utils import mask_tracker_url
+
+    # userinfo 去(@ 之后), host 小写, 端口保留, scheme 小写
+    assert mask_tracker_url("HTTP://User:Sec@PT.Example.COM:8443/announce?passkey=abc") == \
+        "http://pt.example.com:8443/announce?passkey=" + _mask_h16("abc")
+    # 缺 scheme: host 从 path 首段兜底(镜像 sanitize), 且首段不再重复进 path
+    assert mask_tracker_url("pt.example.com/announce?passkey=abc") == \
+        "pt.example.com/announce?passkey=" + _mask_h16("abc")
+    # 无 path 无 query 的裸主地址只做小写归一
+    assert mask_tracker_url("udp://Tracker.OpenTrackr.ORG:1337") == "udp://tracker.opentrackr.org:1337"
+
+
+def test_mask_tracker_url_path_and_query():
+    """mask_tracker_url R5/R6: path 末段高熵才换 hash / fragment 丢 / query 全值 hash 不按名挑"""
+    from auto_qb.infra.utils import mask_tracker_url
+
+    # 端点名(announce / announce.php)不命中高熵, 保留诊断价值; 无凭据的 udp 条目整条原样
+    assert mask_tracker_url(
+        "udp://tracker.opentrackr.org:1337/announce"
+    ) == "udp://tracker.opentrackr.org:1337/announce"
+    assert mask_tracker_url("https://pt.example.com/announce.php?passkey=abc") == \
+        "https://pt.example.com/announce.php?passkey=" + _mask_h16("abc")
+    # path 末段 24 位高熵整段替换, fragment 丢弃
+    assert mask_tracker_url("https://pt.example.com/announce/1a2b3c4d5e6f7a8b9c0d1e2f#frag") == \
+        "https://pt.example.com/announce/" + _mask_h16("1a2b3c4d5e6f7a8b9c0d1e2f")
+    # 高熵边界: 15 位保留 / 16 位替换(首字符须为字母数字)
+    assert mask_tracker_url("https://pt.example.com/abcdefghijklmno") == "https://pt.example.com/abcdefghijklmno"
+    assert mask_tracker_url("https://pt.example.com/abcdefghijklmnop") == \
+        "https://pt.example.com/" + _mask_h16("abcdefghijklmnop")
+    # query: 有 = 的段全 hash(含未知参数名, 铁律不按名挑), 裸名参数原样, 段序不变
+    assert mask_tracker_url("https://pt.example.com/announce?passkey=abc&flag&zzz_unknown=sec&uid=7") == (
+        "https://pt.example.com/announce?passkey=" + _mask_h16("abc") + "&flag&zzz_unknown=" + _mask_h16("sec") +
+        "&uid=" + _mask_h16("7")
+    )
+    # 值取原文子串, 不做百分号解码(%20 原样作为 hash 输入)
+    assert mask_tracker_url("https://pt.example.com/announce?k=a%20b") == \
+        "https://pt.example.com/announce?k=" + _mask_h16("a%20b")
+    # 空值段(=后无值)同样走 hash 改写, 不抛异常
+    assert mask_tracker_url("https://pt.example.com/announce?k=") == \
+        "https://pt.example.com/announce?k=" + _mask_h16("")
+
+
+def test_mask_tracker_url_deterministic_and_unique():
+    """mask_tracker_url R7/R8: 确定性(不加盐, 两次调用逐字节一致)与唯一性(hash 保值差异)
+
+    R8 是"mask 可当内容标识用于删除定位"的前提: 三例互异 + 完全相同 url 相同 mask。
+    """
+    from auto_qb.infra.utils import mask_tracker_url
+
+    # 确定性: 同一输入两次调用逐字节一致
+    u1 = "https://pt.example.com/announce?passkey=abc123def456"
+    assert mask_tracker_url(u1) == mask_tracker_url(u1)
+    # 唯一性一: 同 host 不同 path 互异
+    a = mask_tracker_url("https://pt.example.com/aaaaaaaaaaaaaaaa?k=v")
+    b = mask_tracker_url("https://pt.example.com/bbbbbbbbbbbbbbbb?k=v")
+    assert a != b
+    # 唯一性二: 同 path 不同凭据值互异
+    c = mask_tracker_url("https://pt.example.com/announce?passkey=one")
+    d = mask_tracker_url("https://pt.example.com/announce?passkey=two")
+    assert c != d
+    # 唯一性三: 完全相同 url -> 相同 mask
+    assert c == mask_tracker_url("https://pt.example.com/announce?passkey=one")
+
+
+def test_mask_tracker_entry():
+    """mask_tracker_entry R9: 只改 url 字段, 其余字段保全; 缺 url / 虚拟条目原样返回"""
+    from auto_qb.infra.utils import mask_tracker_entry
+
+    entry = {"url": "https://pt.example.com/announce?passkey=abc", "status": 2, "msg": "working", "num_peers": 5}
+    masked = mask_tracker_entry(entry)
+    assert masked["url"] == "https://pt.example.com/announce?passkey=" + _mask_h16("abc")
+    assert masked["status"] == 2
+    assert masked["msg"] == "working"
+    assert masked["num_peers"] == 5
+    # 原条目不被就地修改(返回新 dict)
+    assert entry["url"] == "https://pt.example.com/announce?passkey=abc"
+    # 缺 url: 原样返回(同一对象, 不做无谓拷贝)
+    no_url = {"status": 4, "msg": "err"}
+    assert mask_tracker_entry(no_url) is no_url
+    # 命中 R1(虚拟条目): 原样返回
+    virt = {"url": "** [DHT] **", "status": 0}
+    assert mask_tracker_entry(virt) is virt
 
 
 def test_display_host():

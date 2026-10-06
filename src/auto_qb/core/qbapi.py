@@ -22,6 +22,7 @@ from typing import Any, List, Optional, Union
 
 from qbittorrentapi import Client
 
+from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 
 logger = logging.getLogger(__name__)
@@ -331,7 +332,8 @@ class QbApi:
         torrent = self.store.get(torrent_hash)
         if torrent is not None:
             return torrent.trackers_info(self._client)
-        return self._client.torrents_trackers(torrent_hash, **kwargs)
+        # store 未命中直连同样过 mask(计划 26-10-07-0055 S1): 两条读路径口径一致, 原文不出 Facade
+        return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
     def torrents_files(self, torrent_hash, **kwargs):
         torrent = self.store.get(torrent_hash)

@@ -9,6 +9,7 @@ import math
 import os
 import shutil
 import tempfile
+import hashlib
 from functools import lru_cache
 import re
 import subprocess
@@ -320,6 +321,89 @@ def sanitize_tracker_url(url) -> str:
         return SANITIZE_FALLBACK
     scheme = parts.scheme.lower()
     return f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
+
+
+# 虚拟 tracker 条目前缀(DHT/PeX/LSD 与 qB 内部 "**" 标记): 非真实站点, 没有可脱敏的凭据,
+# mask 原样透传。单点定义(计划 26-10-07-0055 S1): webui/views.py 引用本常量, 消双源字面量。
+VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
+
+# path 末段高熵判定(R5): >=16 位连续字母数字/下划线/连字符(首字符须为字母数字)视为可能藏凭据
+_HIGH_ENTROPY_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{15,}$")
+
+
+def _hash16(value: str) -> str:
+    """R7 的 hash16: sha256 前 16 位 hex, 确定性不加盐(加盐则两次拉取值不同, 唯一性失效)"""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def mask_tracker_url(url) -> str:
+    """tracker URL 展示脱敏(方案 B, R1-R8): 保留结构与参数名, 所有"值"一律 hash
+
+    与 sanitize_tracker_url(只留主地址, 排查用)不同, mask 的目标是**把 url 当内容标识用**:
+    参数名/path 端点名可见(诊断价值), 凭据值不可见; 同 host 不同 path、同 path 不同凭据值
+    的 mask 互异(R8, hash 保值差异) —— 删除定位才能拿 mask 比对原文(计划 26-10-07-0055)。
+
+    - R1 虚拟条目("**"/"[DHT]"/"[PeX]"/"[LSD]" 开头, 含裸形态)原样透传: 在函数内挡掉,
+      不依赖调用方过滤(sanitize 会把裸 "[DHT]" 小写破坏前缀识别, mask 不能踩同一个坑)。
+    - R2 非字符串/空/解析不出 host -> SANITIZE_FALLBACK, 绝不抛异常(同 sanitize 口径:
+      两侧同函数 => 比对一致; 多条不可解析 => 命中多条 => error 不猜)。
+    - R3 scheme 保留并小写; 缺 scheme 时从 path 首段兜底取 host(镜像 sanitize 的处理)。
+    - R4 netloc 去 userinfo(@ 之后), host 小写, 端口保留。
+    - R5 path 保留; 末段 >=16 位高熵(可能藏 path 凭据)整段替换为 hash16, 其余原样; fragment 丢弃。
+    - R6 query 按 & 拆段, 有 = 的段改写为 名=hash16(原值)——值取原文子串, 不做百分号解码;
+      裸名参数原样; 段序不变。铁律: **不按参数名挑**, 所有值一律 hash(同 sanitize 的动机:
+      passkey/authkey/token/uid/secret 任意私站命名同权, 黑名单必漏)。
+    """
+    if not isinstance(url, str):
+        return SANITIZE_FALLBACK
+    # R1: 原样透传(在 strip 之前判, 裸 "[DHT]" 才不会被后续路径破坏)
+    if url.startswith(VIRTUAL_TRACKER_PREFIXES):
+        return url
+    raw = url.strip()
+    if not raw:
+        return SANITIZE_FALLBACK
+    try:
+        parts = urlparse(raw)
+    except Exception:
+        return SANITIZE_FALLBACK
+    # R3/R4: netloc 取 @ 之后(去 userinfo); 缺 scheme 时 urlparse 把 host 落进 path,
+    # 取首段兜底, 且首段已被当作 host 消费掉, 不再重复进 path
+    netloc = (parts.netloc or "").rsplit("@", 1)[-1]
+    path = parts.path or ""
+    if not netloc and path:
+        first, _, rest = path.partition("/")
+        netloc = first.rsplit("@", 1)[-1].split("?")[0]
+        # 首段已被当作 host 消费掉, 不再重复进 path; 分隔符 "/" 由 rest 补回
+        path = f"/{rest}" if rest else ""
+    if not netloc:
+        return SANITIZE_FALLBACK
+    # R5: 末段高熵整段换 hash(端点名 announce/announce.php 不命中, 保留诊断价值)
+    if path:
+        head, _, last = path.rpartition("/")
+        if _HIGH_ENTROPY_SEGMENT_RE.match(last):
+            path = f"{head}/{_hash16(last)}"
+    # R6: query 全值 hash(不按参数名挑), 裸名参数原样, 段序不变
+    query = parts.query or ""
+    if query:
+        segments = []
+        for seg in query.split("&"):
+            name, eq, value = seg.partition("=")
+            segments.append(f"{name}={_hash16(value)}" if eq else seg)
+        query = "&".join(segments)
+    scheme = parts.scheme.lower()
+    host_part = f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
+    return host_part + path + (f"?{query}" if query else "")
+
+
+def mask_tracker_entry(entry: dict) -> dict:
+    """tracker 条目脱敏(R9): 只改 url 字段, 其余字段(status/msg/num_peers 等)原样不动
+
+    条目缺 url 或命中 R1(虚拟条目)原样返回(同一对象, 不做无谓拷贝)。
+    """
+    url = entry.get("url") if isinstance(entry, dict) else None
+    if not isinstance(url, str) or not url or url.startswith(VIRTUAL_TRACKER_PREFIXES):
+        return entry
+    return {**entry, "url": mask_tracker_url(url)}
 
 
 # 展示口径的回环地址集合(IPv4 / IPv6 / IPv4-mapped / IPv6 全写法), 命中即统一显示成 localhost

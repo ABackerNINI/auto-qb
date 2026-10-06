@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple
 from qbittorrentapi import TorrentState, TrackerStatus
 
 from ..hr.resolve import safety_display
+from ..infra.utils import VIRTUAL_TRACKER_PREFIXES
 from ..torrents import TorrentRecord, view_field_value
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,8 @@ _TRACKER_ERROR_STATUSES = frozenset(
     int(s) for s in (TrackerStatus.NOT_WORKING, TrackerStatus.TRACKER_ERROR, TrackerStatus.UNREACHABLE)
 )
 # 虚拟 tracker 条目(DHT/PeX/LSD, 非真实站点): 与强制汇报确认同一口径, 不参与报错文本提取
-_VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
+# 单点定义在 infra/utils(与 mask 的 R1 透传共用, 消双源, 计划 26-10-07-0055 S1)
+_VIRTUAL_TRACKER_PREFIXES = VIRTUAL_TRACKER_PREFIXES
 
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
 # !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),

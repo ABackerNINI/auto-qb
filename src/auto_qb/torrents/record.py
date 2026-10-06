@@ -8,7 +8,7 @@ from qbittorrentapi import TorrentState
 
 from ..config import TrackerConfig
 from ..hr.resolve import HrAnchor, HrIdentity, HrJudgement
-from ..infra.utils import match_tag_patterns
+from ..infra.utils import mask_tracker_entry, match_tag_patterns
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
@@ -256,7 +256,8 @@ class TorrentRecord:
         if self._trackers_info is None:
             if client is None:
                 raise RuntimeError("TorrentStore 未绑定 client")
-            self._trackers_info = list(client.torrents_trackers(self.hash) or [])
+            # 槽内只存脱敏(mask)条目(计划 26-10-07-0055 S1): 缓存可能进响应体/比对, 原文不出缓存
+            self._trackers_info = [mask_tracker_entry(t) for t in (client.torrents_trackers(self.hash) or [])]
         return self._trackers_info
 
     def tracker_urls(self, client: Any) -> List[str]:
