@@ -139,7 +139,9 @@
  */
 /* TBL-07 页面全宽: 不再 2560px 居中限宽, 两侧只留最小 12px 内边距
  * (原先 2560px + auto 外边距在宽屏下把内容挤成中间一条, 且横向滚动时内容会被两侧页底色裁切) */
+/* min-height 撑满首屏(--head-h 顶栏实测高): 列表被搜索/筛短后文档变矮, 停靠面板(.drawer-dock)的 sticky 吸底会脱锚跟着内容末尾上下跳, 内容列恒撑满则面板锚点稳定 */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
+  min-height: calc(100vh - var(--head-h, 0px));
   padding: 16px 12px calc(28px + var(--statusbar-h)); }
 /* 页面切换入场动效(v-if 重建元素触发): 轻微上浮 + 淡入, 不抢注意力 */
 .layout, .ce-page { animation: page-in .2s var(--ease-out); }

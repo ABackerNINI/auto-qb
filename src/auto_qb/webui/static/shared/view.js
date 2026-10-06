@@ -9,6 +9,9 @@ window.AQB_VIEW = {
         this.resetSearch();
         return;
       }
+      // 待响应期从武装防抖这一刻起算(不是 doSearch 才算): 否则首词的防抖窗 400ms 里
+      // 空命中集照样把列表接管成 0 行(整页塌高, 见 filters.js::_searchGateActive)
+      this.searchPending = true;
       this.searchTimer = setTimeout(() => this.doSearch(), 400);
     },
     resetSearch() {
@@ -18,6 +21,7 @@ window.AQB_VIEW = {
       this.searchBuilding = false;
       this.searchNegativeOnly = false;
       this.searchError = "";
+      this.searchPending = false;
       this.expandedKey = null;
     },
     async doSearch() {
@@ -26,18 +30,20 @@ window.AQB_VIEW = {
         this.resetSearch();
         return;
       }
+      this.searchPending = true;  // 直达入口(searchHelpFill)不经 onSearchInput, 在此补武装
       try {
         const data = await this.api(`/api/search?q=${encodeURIComponent(q)}`);
         // 请求代际守卫(query 戳, 同 drawer.js _drawerStale 收口式): 落袋前比对当前搜索框
         // 词 —— a→b 连续输入时 a 的慢响应后到不得把命中集覆写成 a 的(搜索框显示 b、高亮
         // 集却是 a, 且无轮询自动纠正; issue 26-10-06-0028 F2-03)。清空搜索也随 searchQuery
         // 复位自动失配, 在途旧响应同样丢弃
-        if ((this.searchQuery || "").trim() !== q) return;
+        if ((this.searchQuery || "").trim() !== q) return;  // 失配弃单不动 pending(新词的 doSearch 已接管)
         const results = data.results || [];
         this.searchHits = new Set(results.map((r) => r.hash));
         // 实际归组的种子由分组筛选展示; 未归组的命中(分组未启用/文件列表不可读)单独兜底
         const grouped = new Set();
         for (const g of this.groups) for (const m of g.members) grouped.add(m.hash);
+        this.searchPending = false;  // 本词落袋: 待响应期结束(之后空命中集 = 服务端真判 0 命中)
         this.searchUncovered = results.filter((r) => !grouped.has(r.hash));
         this.searchBuilding = !!data.building;
         this.searchNegativeOnly = !!data.negative_only;

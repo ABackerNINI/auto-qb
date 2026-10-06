@@ -157,6 +157,7 @@ window.AQB_STATE = {
       searchBuilding: false,  // 文件索引构建中(增量限流可能多轮, 需稍后重查)
       searchNegativeOnly: false,  // 查询只含排除词(无正判据, 服务端返回空, 前端据此提示)
       searchError: "",        // 搜索请求失败提示(不再静默)
+      searchPending: false,   // 搜索待响应(防抖武装起/请求在途, 落袋或复位即翻回): 待响应期空命中集不得接管列表
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
       searchHelpOpen: false,  // 搜索语法浮卡开合(计划 26-09-28-0201 方案A; 临时浮层, 点空白/Esc/导航收起)
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)

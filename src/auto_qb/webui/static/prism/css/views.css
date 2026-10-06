@@ -43,7 +43,11 @@
 /* ---------------- 辅种页布局 ---------------- */
 /* TBL-08: 左栏"舵台"信息栏退役 -> 底部状态栏(.statusbar); 布局改单列全宽。
  * TBL-07: 不再 2560px 居中限宽, 两侧只留最小 12px 内边距(横向滚动内容不再被两侧页底色裁切) */
+/* min-height 撑满首屏: 停靠面板(.drawer-dock)的 sticky 吸底只在"自然落点低于视口下界"时生效,
+ * 列表被搜索/筛短后文档变矮, 面板脱锚跟着内容末尾上下跳。内容列恒撑满(顶栏实测高 --head-h
+ * 由 columns.js::_syncHeadHeight 维护, 不写死)后自然落点恒在视口底, 面板锚点与列表长短无关。 */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
+  min-height: calc(100vh - var(--head-h, 0px));
   padding: 16px 12px calc(28px + var(--statusbar-h, 34px)); }
 .layout, .ce-page { animation: page-in .2s var(--ease-out); }
 /* overflow-x: clip(2026-09-17): 表头 .group-head 脱离 .group-table 滚动容器做纵向 sticky,

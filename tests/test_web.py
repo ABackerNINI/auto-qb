@@ -120,6 +120,7 @@
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
+- test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
 - test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
 - test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
@@ -2137,6 +2138,64 @@ def test_frontend_search_syntax_wiring():
     assert "hits.has(r.hash)" in filters_js, "filteredTorrents 未消费 searchHits(种子页搜索断线)"
     assert "(s.name || \"\").toLowerCase().includes(q)" not in shows_js, \
         "shows.js 复活了剧名整句 includes 旧匹配(剧名命中应来自服务端名字行)"
+
+
+def test_frontend_search_pending_no_collapse():
+    """搜索待响应期空命中集不得接管列表守阵(2026-10-07 修详情面板/流量图搜索/筛选时跳动)
+
+    两层缺陷各钉一处, 都是"首词待响应窗把整个列表塌成 0 行"的上下游:
+    1. view.js/filters.js: 首词的 searchHits 还是空集(没有"上一查询"可沿用), filteredTorrents/
+      filteredGroups 的命中门照常生效 => 防抖 400ms + 请求往返的整个待响应窗里列表塌成 0 行:
+      文档高塌掉 -> 滚动位置被钳回 0(列表中部搜一次整页跳顶), 底部停靠面板失去 sticky 锚点
+      跟着弹(实测 docH 18582→800→1141、面板 top 430↔416 反复横跳)。
+      钉住 searchPending 生命周期(输入武装防抖即置位 / doSearch 直达入口补武装 / resetSearch
+      清除 / 落袋且过代际守卫后清除)与 _searchGateActive 单点(两个派生都走它, 任何一个绕开
+      单点现写命中门即红; 渐进输入命中集非空时仍按旧集过滤, 标准 search-as-you-type 不变)。
+    2. 三皮肤 .layout min-height 撑满首屏: 停靠面板(.drawer-dock)的 sticky 吸底只在"自然落点
+      低于视口下界"时生效, 列表被筛短(真 0 命中/筛选到短列表)后文档变矮, 面板脱锚跟着内容
+      末尾上浮(视口越高跳得越多)。内容列恒撑满(顶栏实测高走既有单点 --head-h)后锚点稳定。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    view_js = open(os.path.join(shared, "view.js"), encoding="utf-8").read()
+    filters_js = open(os.path.join(shared, "filters.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+
+    # 1a. searchPending 声明与生命周期(缺任何一环 = 待响应窗判定失真, 空集照样接管或永挂 pending)
+    assert "searchPending: false" in state_js, "state.js 缺 searchPending 声明(待响应期判定无载体)"
+    assert view_js.count("this.searchPending = true") == 2, \
+        "view.js 武装点应恰两处(onSearchInput 防抖武装 + doSearch 直达入口补武装)"
+    on_input = view_js[view_js.index("onSearchInput(event)"):]
+    assert on_input.index("this.searchPending = true") < on_input.index("setTimeout(() => this.doSearch()"), \
+        "onSearchInput 必须在武装防抖前置位 pending(否则首词防抖窗 400ms 里空集照样接管列表)"
+    assert "this.searchPending = false;" in view_js[view_js.index("resetSearch()"):view_js.index("async doSearch")], \
+        "resetSearch 必须清除 pending(清空搜索立即恢复全列表, 不得挂死在待响应态)"
+    landing = view_js[view_js.index("this.searchHits = new Set(results.map"):]
+    assert "this.searchPending = false" in landing[:landing.index("this.searchUncovered")], \
+        "doSearch 落袋必须在写命中集后、派生消费前清除 pending(迟清一帧 = 真结果被当待响应态跳过)"
+    # 落袋清除必须排在代际守卫**之后**(失配弃单不得清掉新词在途的 pending)
+    do_search = view_js[view_js.index("async doSearch"):]
+    assert do_search.index("(this.searchQuery || \"\").trim() !== q") < do_search.index("this.searchPending = false;"), \
+        "doSearch 落袋清除 pending 必须在请求代际守卫之后(失配弃单不得清新词的待响应态)"
+
+    # 1b. 命中门收单点: 两个派生都走 _searchGateActive, 不得绕开单点现写命中门
+    assert "_searchGateActive(q)" in filters_js, "filters.js 缺 _searchGateActive 单点"
+    assert filters_js.count("_searchGateActive(") >= 3, \
+        "_searchGateActive 定义 + 两个派生(filteredTorrents/filteredGroups)都要消费"
+    assert "if (!q) return base;" not in filters_js, \
+        "filteredGroups 残留旧门 `if (!q) return base;`(未走 _searchGateActive, 待响应空集照样塌列表)"
+    assert re.search(r"if \(!this\._searchGateActive\(q\)\) return base;", filters_js), \
+        "filteredGroups 的文本段必须整段走 _searchGateActive 门"
+    assert re.search(r"const gate = this\._searchGateActive\(q\);", filters_js) and "if (gate && !hits.has(r.hash)) continue;", \
+        "filteredTorrents 的命中门必须走 _searchGateActive(绕开单点现写 = 待响应塌列表回归)"
+
+    # 2. 三皮肤 .layout min-height 撑满首屏(dock sticky 锚点与列表长短无关)
+    for theme in _UI_ALL:
+        css_path = os.path.join(STATIC_ROOT, theme, "css", "views.css" if theme == "prism" else "components.css")
+        css = open(css_path, encoding="utf-8").read()
+        m = re.search(r"\.layout \{[^}]*\}", css, re.S)
+        assert m, f"{theme} 找不到 .layout 规则"
+        assert "min-height: calc(100vh - var(--head-h" in m.group(0), \
+            f"{theme} .layout 缺 min-height 撑满首屏(列表筛短后停靠面板脱锚跳)"
 
 
 def test_frontend_hr_safety_wiring():

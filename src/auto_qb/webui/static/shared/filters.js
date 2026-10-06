@@ -95,6 +95,15 @@ window.AQB_FILTERS = {
      * 三页(辅种/种子/追剧)统一消费 searchHits。此前客户端自持 _searchNorm/_parseSearchQuery/
      * _torrentTextMatch 与服务端平行演化, 同一语义(恶女 10 / 季包"cat 12")前后端修了三遍;
      * 语法升级只改服务端一处, 前端删了旧实现防其复活。 */
+    /* 文本命中门是否生效: 待响应期且命中集尚未落袋(空集)时**不生效** —— 此刻的空集是
+     * "还没有裁决", 不是"服务端判了 0 命中"; 若照常按命中集过滤, 首词的整个待响应窗
+     * (防抖 400ms + 请求往返)里列表被塌成 0 行: 文档高塌掉 -> 滚动位置被钳回 0
+     * (列表中部搜一次整页跳顶), 底部停靠面板失去 sticky 锚点跟着弹。待响应期沿用输入前的
+     * 列表(命中集非空时仍按旧命中集过滤, 渐进输入不跳), 响应落袋(_searchPending 翻回)
+     * 后一次性换成真结果。 */
+    _searchGateActive(q) {
+      return !!(q && !(this.searchPending && !this.searchHits.size));
+    },
   },
   computed: {
     /* 筛选器选项的取数面(**单点**): 必须与当前视图真正在筛的那一行集合一致 ——
@@ -178,7 +187,7 @@ window.AQB_FILTERS = {
       if (this.siteFilter.length) {
         base = base.filter((g) => g.members.some((m) => this.siteFilter.includes(m.site)));
       }
-      if (!q) return base;
+      if (!this._searchGateActive(q)) return base;
       const hits = this.searchHits;
       const kept = [];
       for (const g of base) {
@@ -221,16 +230,18 @@ window.AQB_FILTERS = {
      * 每个种子独立过同一套筛选(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定);
      * 搜索命中 = 服务端裁决 searchHits(与辅种/追剧页同一套, 见 views.py::search_torrents 的
      * 匹配口径), 前端不持有文本匹配实现 —— 输入新词到响应返回之间沿用上一查询的命中集
-     * (标准 search-as-you-type, 与 filteredGroups 同节奏); 仅负词/无命中服务端返回空 ⇒ 空列表。
+     * (标准 search-as-you-type, 与 filteredGroups 同节奏); 待响应且命中集未落袋时命中门不生效
+     * (_searchGateActive: 首词待响应窗不得把列表塌成 0 行); 仅负词/无命中服务端返回空 ⇒ 空列表。
      * facets(状态/标签/分类/站点/路径下拉)仍是纯客户端即时过滤(_memberPass), 与文本搜索叠加。
      * 排序独立(三态同分组表)。 */
     filteredTorrents() {
       const q = (this.searchQuery || "").trim();
       const hits = this.searchHits;
+      const gate = this._searchGateActive(q);
       const out = [];
       for (const r of this.torrents) {
         if (!this._memberPass(r)) continue;
-        if (q && !hits.has(r.hash)) continue;
+        if (gate && !hits.has(r.hash)) continue;
         /* !刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
          * (3000 条 = 22 万次), 实测**仅这一句就 68ms** —— 比整个窗口渲染还贵。
          * 命中高亮改由模板问 searchHits(见 isHit), 语义不变; 顺带每轮少建 3000 个临时对象。 */
