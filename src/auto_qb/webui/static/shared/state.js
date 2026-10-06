@@ -114,6 +114,9 @@ window.AQB_STATE = {
       // 面板高度记忆(W3 方案A): 用户拖拽调高后的 px; null = 未拖拽过, 走 CSS 默认上限 42vh。
       // D1 拍板: 首屏默认收起(drawer.open 初值 false 不回读 drawerOpen 键), 高度记忆仍生效
       drawerHeightPx: initialDrawerHeight(),
+      // 详情面板模板选择(plan 26-10-06-0838 S1, P-01 初装全 classic): 按页签记模板 id;
+      // 读侧白名单在核心层 readSel, 脏值/缺失/写失败一律回落 classic —— 字段必须显式建(vue-reactivity 坑)
+      drawerTplSel: initialDrawerTpl(),
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开

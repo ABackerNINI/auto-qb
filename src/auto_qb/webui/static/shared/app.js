@@ -445,6 +445,17 @@ function initialDrawerHeight() {
   }
 }
 
+/* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记 id)。
+ * 白名单校验在核心层 readSel(变体名单只有注册表加载后才齐, 装载序见 drawer_templates.js 头注释);
+ * 这里薄封装 —— 核心未载入(清单序错)时也要返回全 classic 映射, 不能返回空对象/undefined:
+ * drawer.html 经典包裹层的 v-show 直接读 drawerTplSel.<tab>, 缺键会把经典正文藏掉。 */
+function initialDrawerTpl() {
+  const out = { general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
+  const reg = window.AQB_DRAWER_TPL_REG;
+  if (!reg) return out;
+  return Object.assign(out, reg.readSel());
+}
+
 /* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
  *
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态
@@ -487,6 +498,7 @@ app.mixin(window.AQB_SELECTION);
 app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);
+app.mixin(window.AQB_DRAWER_TPL);  // 详情面板模板核心层(计划 26-10-06-0838 S1): 钩子方法域 + 切换器/摘要
 app.mixin(window.AQB_DIALOGS);
 app.mixin(window.AQB_QB_TRAFFIC);  // qB 口径流量图(P5a, plan 26-10-03-0946 §07): uPlot 双系列组件 + 弹层方法域
 app.mixin(window.AQB_HR_STATUS);

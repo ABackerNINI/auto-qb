@@ -28,6 +28,13 @@
             </span>
             <strong>{{ qbTrafficTitle }}</strong>
           </div>
+          <!-- S1(计划 26-10-06-0838): 收起态摘要(P-06 压缩进 44px 头部) + 模板切换器;
+               摘要内容由核心/活动变体 summary 供给(v-html 消费已转义 HTML, 见 drawer_templates.js) -->
+          <span v-if="drawer.collapsed" class="dt-summary" v-html="dtSummaryHtml()"></span>
+          <select class="dt-select" title="流量模板" aria-label="流量模板"
+                  :value="dtTplCurrent" @change="dtPick($event)">
+            <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
           <button class="drawer-fold" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
@@ -45,6 +52,9 @@
                  中间一帧显示成 40 字符 hash 再跳回种子名, 那是"切换闪烁"里最刺眼的一跳 -->
             <strong :title="drawerTitle()">{{ drawerTitle() }}</strong>
           </div>
+          <!-- S1(计划 26-10-06-0838): 收起态摘要(P-06 压缩进 44px 头部, 标题截断让位);
+               摘要内容由核心/活动变体 summary 供给(v-html 消费已转义 HTML, 见 drawer_templates.js) -->
+          <span v-if="drawer.collapsed" class="dt-summary" v-html="dtSummaryHtml()"></span>
           <nav class="drawer-tabs" role="tablist">
             <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
             <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
@@ -54,6 +64,12 @@
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
+          <!-- S1(计划 26-10-06-0838): 详情模板切换器(经典恒在首位; 选择按页签记忆
+               autoqb.ui.drawerTpl, 见 drawer_templates.js) -->
+          <select class="dt-select" title="详情模板" aria-label="详情模板"
+                  :value="dtTplCurrent" @change="dtPick($event)">
+            <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
           <button class="drawer-fold" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
@@ -103,7 +119,13 @@
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
               <span>{{ qbCurEmptyText }}</span>
             </div>
-            <template v-else>
+            <!-- S1(计划 26-10-06-0838): template v-else 转 div(唯一非加挂改动)带布局类
+                 dt-traffic-main —— 核心注入的规则使其与原 fragment 直挂 .drawer-body.is-traffic
+                 的 flex 纵列几何等价(FX-29 遮罩对 wrapper 生效, display:contents 会废掉 opacity);
+                 图前/图后各加一个变体宿主(uPlot 图与其宿主 ref 保持 Vue 所有, qb_traffic_chart.js 零改动) -->
+            <div v-else class="dt-traffic-main">
+              <!-- S1: 图前宿主(变体 13 的 KPI 头行落点) -->
+              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-pre"></div>
               <p v-if="qbCurData.meta && qbCurData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
               <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽高, tooltip 为其兄弟绝对定位;
                    悬停 idx/px 由 uPlot setCursor 钩子写回(scope 化 hoverIdx/hoverLeft) -->
@@ -134,7 +156,9 @@
                 <span>下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
                 <span class="hist-hint">{{ qbCurSummaryHint }}</span>
               </div>
-            </template>
+              <!-- S1: 图后宿主(变体 14 解读栏 / 15 自适应条落点) -->
+              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>
+            </div>
           </template>
           <!-- ==================== 种子详情形态正文(五页签) ==================== -->
           <template v-else>
@@ -148,8 +172,10 @@
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
               <span>{{ drawer.error }}</span>
             </div>
-            <!-- 常规: HR 块 + 分组字段(预格式化见 drawerGeneralSections) + 全部字段折叠区 -->
-            <template v-else-if="drawer.tab === 'general' && drawer.detail">
+            <!-- 常规: HR 块 + 分组字段(预格式化见 drawerGeneralSections) + 全部字段折叠区
+                 S1(计划 26-10-06-0838): template 转 div 作经典包裹层(v-show 只受模板选择控制,
+                 链条件照旧决定渲染) —— 选中变体时此层隐藏、dt-host 显示, 二者互斥 -->
+            <div v-else-if="drawer.tab === 'general' && drawer.detail" v-show="drawerTplSel.general === 'classic'">
               <div v-if="drawer.detail.hr_triggered || drawer.detail.hr_state || drawer.detail.hr_excluded" class="drawer-hr"
                    :class="drawer.detail.hr_triggered ? (drawer.detail.hr_satisfied ? 'done' : 'pending') : 'info'">
                 <b v-if="drawer.detail.hr_excluded">已排除出 HR 管理</b>
@@ -190,9 +216,10 @@
                   </template>
                 </div>
               </details>
-            </template>
-            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示; 顶部添加 + 行内编辑/删除(D 轮) -->
-            <template v-else-if="drawer.tab === 'trackers'">
+            </div>
+            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示; 顶部添加 + 行内编辑/删除(D 轮)
+                 S1: template 转 div 经典包裹层(同上) -->
+            <div v-else-if="drawer.tab === 'trackers'" v-show="drawerTplSel.trackers === 'classic'">
               <div class="drawer-toolbar">
                 <button class="bt ghost sm" @click="trackerAdd()">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker
@@ -224,9 +251,9 @@
                 </tbody>
               </table>
               <div v-else class="empty"><span>暂无 tracker</span></div>
-            </template>
-            <!-- 用户: qB peers 响应 dict/array 双形态归一(drawerPeerRows) -->
-            <template v-else-if="drawer.tab === 'peers'">
+            </div>
+            <!-- 用户: qB peers 响应 dict/array 双形态归一(drawerPeerRows); S1: 经典包裹层 -->
+            <div v-else-if="drawer.tab === 'peers'" v-show="drawerTplSel.peers === 'classic'">
               <div v-if="drawer.peersLoading && !drawerPeerRows().length" class="empty"><span>正在加载…</span></div>
               <table v-else-if="drawerPeerRows().length" class="drawer-table">
                 <thead>
@@ -247,9 +274,10 @@
                 </tbody>
               </table>
               <div v-else class="empty"><span>暂无已连接用户</span></div>
-            </template>
-            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级); 行点选供重命名, 优先级点改(D 轮) -->
-            <template v-else-if="drawer.tab === 'content'">
+            </div>
+            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级); 行点选供重命名, 优先级点改(D 轮)
+                 S1: 经典包裹层 -->
+            <div v-else-if="drawer.tab === 'content'" v-show="drawerTplSel.content === 'classic'">
               <div class="drawer-toolbar">
                 <button class="bt ghost sm" @click="renameFileRow()">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
@@ -279,7 +307,14 @@
                 </tbody>
               </table>
               <div v-else class="empty"><span>无文件列表</span></div>
-            </template>
+            </div>
+            <!-- S1(计划 26-10-06-0838): 变体宿主 x4 —— Vue 只渲染空 host 元素, 子树归变体自管
+                 (变体与 Vue 争 DOM 红线); 显隐只走 host 自身 v-show(dtHostOn), 经典包裹层与之互斥。
+                 宿主恒渲染(v-show 不卸载), 核心经 data-dt-host 定位挂载。 -->
+            <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>
+            <div v-show="dtHostOn('trackers')" class="dt-host" data-dt-host="trackers"></div>
+            <div v-show="dtHostOn('peers')" class="dt-host" data-dt-host="peers"></div>
+            <div v-show="dtHostOn('content')" class="dt-host" data-dt-host="content"></div>
           </template>
         </div>
       </aside>

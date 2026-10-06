@@ -702,6 +702,7 @@ window.AQB_DRAWER = {
       this._stopDrawerFollow();
       this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
       this._qbTeardown();       // 流量形态(全局/分组/单种)轮询与图一并收(2026-10-04 三挂点并入抽屉)
+      this._dtUnmountAll();     // 模板核心层(计划 26-10-06-0838 S1): 逐变体 destroy + 清空宿主子树
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
     },
     _stopDrawerPoll() {
@@ -744,6 +745,7 @@ window.AQB_DRAWER = {
         if (this._drawerStale(hash, seq)) return;  // 旧响应丢弃(W2 代际纪律)
         this.drawer.detail = (r && r.torrent) || null;
         if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
+        this._dtNotify("detail");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知活动变体重渲染
       } catch (e) {
         if (this._drawerStale(hash, seq)) return;
         if (!e.auth) this.drawer.error = e.message || "详情获取失败";
@@ -760,6 +762,7 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/trackers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.trackers = Array.isArray(r) ? r : [];
+        this._dtNotify("trackers");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
       } finally {
@@ -774,6 +777,7 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/files`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.files = Array.isArray(r) ? r : [];
+        this._dtNotify("files");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
       } finally {
@@ -788,6 +792,7 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.peers = r || { peers: [] };
+        this._dtNotify("peers");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
       } finally {
@@ -798,6 +803,8 @@ window.AQB_DRAWER = {
     /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
      * 切换即记住该 tab(drawerLastTab + localStorage), 使下一个种子默认停在相同页签。 */
     drawerTab(tab) {
+      // 补强二(计划 26-10-06-0838 S1, 报告 §5): 收起态点页签 = 先展开再切, 消灭"点了没反应"
+      if (this.drawer.collapsed) this.toggleDrawerCollapse();
       if (this.drawer.tab === tab) return;
       this.drawer.tab = tab;
       this.drawerLastTab = tab;
@@ -827,6 +834,7 @@ window.AQB_DRAWER = {
         this._qbLoad("torrent");
         this._qbPollStart("torrent");
       }
+      this._dtSync();  // 模板核心层(计划 26-10-06-0838 S1): 换页签即卸旧变体、按选择挂当前页签变体
     },
     /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
      * 触发入口: shortcuts.js::_kbApplyCursor 尾部(鼠标路径将来接同一入口, §1.3 相邻预留)。
@@ -995,6 +1003,7 @@ window.AQB_DRAWER = {
     toggleDrawerCollapse() {
       this.drawer.collapsed = !this.drawer.collapsed;
       this.persistDrawerOpen();
+      this._dtNotify("collapse");  // 模板核心层(计划 26-10-06-0838 S1): 摘要条走模板响应式, 通知留给变体自身状态
       if (!this.drawer.collapsed) {
         this._kbFollowDrawer();
         // 流量形态: 收起期 body 不可见(图不重建), 展开后宿主重新有尺寸 -> 补一发建图
