@@ -182,6 +182,25 @@
 | `test_loader_probe_table_covers_named_leaf_surface` | loader 消费探针表恰好覆盖键面命名叶键(扣动态段与 `_LOADER_PROBE_EXCLUDED` 豁免) —— 新增配置键不配「YAML 显式值」探针当场红, 键在面上但 loader 漏读(D-01 形态, issue 26-10-06-0027)被结构性堵住 | 删表里任一键条目 |
 | `test_named_leaf_keys_round_trip_through_load_config` | 每个命名叶键的 YAML 显式值(≠字段默认, 空转自断言)经 load_config 真链路回读 == 期望解析值; 还原 D-01 缺陷实测红在 `grouping.cross_group_conflict_check: 期望 True, 实得 False` | 还原 loaders.py 漏读 fix |
 
+## 提交流水线包 (`.commands/my-commit-flow`, 走 `commands run test.pkg`)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_pipeline.py::PackageRefreshTest` | 包内模块热刷新: 源码变才 `importlib.reload`(保身份) / 源码没变**零动作**(不冲替身) / 摘要取不到则跳过 | 去掉摘要门控(改成"有摘要就重载") ⇒ `test_unchanged_source_never_touches_module` FAIL(替身 `VALUE 999` 被冲回 `1`) |
+| `test_commit.py::test_push_path_refreshes_package_modules` + `test_no_push_never_refreshes` | 推送步前刷新本包模块, 顺序 = 同步 → 刷新 → 推送; `--no-push` 不刷新 | 注掉 `commit.py` 的 `refresh_package_modules()` ⇒ 顺序实收 `['sync','push']`, 缺 `refresh` |
+| `test_pipeline.py::ReloadConfigTest` | 自我改写后重取配置: 交出**磁盘现版本** / 读不到即停 / 新配置有 STOP 级问题即停(不拿旧规则硬跑) | 去掉 STOP 复检(改成无条件交出 fresh) ⇒ `test_broken_new_config_reports_problem` FAIL |
+| `test_commit.py::test_post_rebase_rerun_uses_reloaded_config` | 合流后闸门复跑用**重取的新配置**, 不是进程启动那份 —— 配置迁移窗口里的静默失效(闸门照跑、规则不对) | 把 `reload_config(cfg)` 换成 `cfg, None` ⇒ FAIL(第二轮闸门名仍是"旧闸门") |
+| `test_commit.py::test_post_rebase_unchanged_config_stays_silent` | 配置没变 → 不留步骤行(没发生的不报) | — |
+| `test_commit.py::test_post_rebase_broken_new_config_blocks_push` | 合流后新配置有 STOP 级问题 → 不拿旧规则硬跑, 按「推送未完成」停下(提交已落稳, 退出码 0) | 同上一格的红验①(该条一并 FAIL: `不该走到推送`) |
+| `test_sync.py::test_reload_cfg_honours_disk_and_policy` | `sync._reload_cfg`: 交出磁盘现版本 / 读不到 / 有 STOP 级问题 / 新配置关掉 `auto_resolve_generated` → 放弃自动化解 | 去掉"关掉开关"那一档 ⇒ FAIL |
+| `test_sync.py::test_behind_overlap_new_config_disables_autoresolve` | 快进合流后配置关掉自动化解 → 放弃并回滚(不拿旧政策丢本地内容) | 快进路径不重取(`fresh = cfg`) ⇒ FAIL |
+| `test_sync.py::test_behind_overlap_new_regen_cmd_is_used` | 合流后配置换了重跑命令 → 重跑用**新**生成器(内容来自新生成器, 不是旧生成器自证自过) | 同上红验① ⇒ FAIL(内容停在旧生成器的 `generated:gen/a.md`) |
+| `test_sync.py::test_diverged_conflict_new_config_narrowing_rolls_back` | 分叉: 新白名单不含冲突路径 → 放弃自动化解并回滚(新政策下这不算生成物冲突) | 分叉路径两处不重取 ⇒ FAIL(拿旧白名单把它"化解"掉了) |
+
+> 同族根因 = **本包脚本住在被它自己操作的仓库里**, 进程启动时的快照在内部同步 rebase 之后过期。
+> 两半: 模块缓存 → [../pitfalls/git/self-rewrite-imports.md](../pitfalls/git/self-rewrite-imports.md);
+> 配置快照 → [../pitfalls/git/self-rewrite-config.md](../pitfalls/git/self-rewrite-config.md)。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。

@@ -20,6 +20,12 @@ v3「成功一行, 失败一行(原因 + 下一步)」保留, **结果行逐字�
   只要有一个手写文件参与, 或白名单 / 重跑 / 自证任一步取不到, 一律**退回上面的失败行**(不猜、不部分解决)。
   为什么敢默认开: 生成器是纯函数(内容只由工作树里的手写文件决定), 重跑后自证通过 = 文件确实等于
   生成结果 ⇒ 证明没有手写内容被丢弃。白名单是唯一权威来源(生成器自己的 --list), 不在这里再抄一份。
+  ⚠ **配置自身也会被换掉**: 本包配置就在仓库里, 而这一步的头一件事就是把树推到上游 tip —— 上游那笔
+  若改了 `.my-commit-flow.toml`(白名单来源 / 重跑命令 / 开关), 必须按**磁盘现版本**重取后再用
+  (`_reload_cfg`), 否则就是"拿旧政策处置合并后的树": 旧白名单放宽 = **静默丢内容**, 旧重跑命令 =
+  重跑的是旧生成器(自证也自证的是旧规则)。重取不成立(读不到 / 有 STOP 级问题 / 新配置把
+  `auto_resolve_generated` 关掉了)→ **放弃自动化解**, 回滚后退回上面的现状失败行(自动化解是优化,
+  不是必须; 不为它新增失败模板)。
 
 注: 树脏类失败行为什么必须自带出路(2026-10-03 定, 2026-10-04 更新): 只说「先提交或移出后重跑」会让执行者
   原地打转 —— 单独重跑 sync 树还是脏的, 必再撞同一处。出路两条: ① stash 移出 → 同步 → pop 弹回(两处改动
@@ -52,7 +58,18 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pipeline import changed_files, emit_steps, expand_run, git, git_run, retry_note, run_git, staged_overflow, step  # noqa: E402
+from _pipeline import (  # noqa: E402
+    changed_files,
+    emit_steps,
+    expand_run,
+    git,
+    git_run,
+    reload_config,
+    retry_note,
+    run_git,
+    staged_overflow,
+    step,
+)
 from _ship_config import CONFIG_NAME, ConfigMissing, load_config, resolve_branch, resolve_main_remote  # noqa: E402
 
 
@@ -158,6 +175,26 @@ def _self_check(cfg: dict, root: str) -> bool:
     return proc is not None and proc.returncode == 0
 
 
+def _reload_cfg(cfg: dict) -> dict | None:
+    """树被自我改写后按**磁盘现版本**重取配置, 并确认新配置仍允许自动化解; 任一不成立 → None。
+
+    为什么必须重取: 自动化解的第一步就是把树推到上游 tip(`git rebase` / `merge --ff-only`), 而**本包
+    配置就在仓库里**(`.my-commit-flow.toml` 随包走) —— 上游那笔若换了白名单来源 / 重跑命令 / 开关,
+    继续用启动那份就是**拿旧政策处置合并后的树**: 白名单**放宽** = 静默丢内容(把新政策不再认作生成物
+    的路径当生成物丢掉), **收窄** = 该保的没保; `generated_regen_cmd` 换了则重跑的是旧生成器(自证也
+    自证的是旧规则)。与 `_pipeline.reload_config` 同一判据(磁盘现版本 + STOP 级复检)。
+
+    三档判据(任一不成立即放弃自动化解, 退回现状失败行 —— 自动化解是**优化**, 不是必须, 所以这里的
+    "停"是回滚 + 现状失败行, 不是新增失败模板):
+      ① 读不到配置 / 新配置有 STOP 级问题(`reload_config` 的停止原因);
+      ② 新配置把 `auto_resolve_generated` 关掉了 —— 合并后的政策就是"不要自动丢生成物"。
+    """
+    fresh, problem = reload_config(cfg)
+    if problem or not fresh.get("auto_resolve_generated", True):
+        return None
+    return fresh
+
+
 def _modified_paths() -> set[str]:
     """本地**被修改**(不含新增 / 删除 / 改名 / 未跟踪)的路径 —— 生成物自动化解只碰这一类。"""
     out: set[str] = set()
@@ -236,7 +273,14 @@ def _resolve_behind_overlap(rsha: str, cfg: dict, head: str) -> int | None:
     if git_run("merge", "--ff-only", rsha).returncode != 0:
         _restore(head, snap)
         return None
-    if not _regen(cfg, root) or not _self_check(cfg, root):
+    # 树已换成上游版本 —— 配置(白名单来源 / 重跑命令 / 开关)可能也跟着换了: 拿启动那份继续跑, 就是
+    # "用旧政策丢本地内容"。**丢了的那几处也要按新白名单复核**: 新政策若不再认它们是生成物, 就得回滚。
+    fresh = _reload_cfg(cfg)
+    fresh_whitelist = _whitelist(fresh) if fresh else None
+    if not fresh_whitelist or not overlap <= fresh_whitelist:
+        _restore(head, snap)
+        return None
+    if not _regen(fresh, root) or not _self_check(fresh, root):
         _restore(head, snap)
         return None
     return len(overlap)
@@ -263,6 +307,10 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
 
     单次 rebase 一旦停下就取冲突集: 全在生成物白名单 → 取一侧 + 重跑 + 自证 + continue;
     出现任何手写冲突 / 白名单取不到 / 超限 → abort。循环上限 = 本地独有提交数 + 1(防死循环)。
+
+    ❗**每轮开头按磁盘现版本重取配置**(见 `_reload_cfg`): 树被 rebase 往上游推的同时, 本包配置
+    (白名单来源 / 重跑命令 / 开关)也可能被上游那笔换掉 —— 拿启动那份判「冲突 ⊆ 白名单」是**静默丢内容**
+    (旧白名单放宽时把新政策不认的路径当生成物丢掉); 重取不成立即 abort 回滚。
     """
     root = _repo_root()
     limit = ahead + 1
@@ -270,13 +318,17 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
     proc = git_run("rebase", rsha)
     if proc.returncode == 0:
         return True, 0, git("rev-parse", "HEAD", check=False), ""  # 无冲突 —— 与现状逐字一致, 不做任何重跑
-    whitelist = _whitelist(cfg)
-    if not whitelist:
-        git("rebase", "--abort", check=False)
-        return False, 0, "", ""
     steps_done = 0
     while proc.returncode != 0 and steps_done < limit:
         steps_done += 1
+        # 每轮开头重取配置: 上一轮(rebase 本身 / `--continue`)已把树往上游推, 而本包配置就在仓库里 ——
+        # 上游那笔若换了白名单来源 / 重跑命令 / 开关, 继续用旧政策判「冲突 ⊆ 白名单」会**静默丢内容**。
+        fresh = _reload_cfg(cfg)
+        whitelist = _whitelist(fresh) if fresh else None
+        if not whitelist:
+            git("rebase", "--abort", check=False)
+            return False, 0, "", ""
+        cfg = fresh
         conflicts = {
             line.strip()
             for line in git("diff", "--name-only", "--diff-filter=U", check=False).splitlines() if line.strip()
@@ -296,6 +348,13 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
         git("rebase", "--abort", check=False)
         return False, 0, "", ""
     landed = git("rev-parse", "HEAD", check=False)  # rebase 刚落地的 tip; 之后还可能被 amend 挪走
+    # 收尾再取一次: 最后一笔重放的是**本地**提交, 它也可能改了配置 —— 终值才算数(白名单同样复核)
+    fresh = _reload_cfg(cfg)
+    whitelist = _whitelist(fresh) if fresh else None
+    if not whitelist:
+        git("reset", "--hard", head, check=False)
+        return False, 0, "", ""
+    cfg = fresh
     amended = ""
     # 收尾再自证: 多提交重放时, 中间那次重跑基于「部分重放」的树 → tip 上可能仍是中间态。
     if not _regen(cfg, root):

@@ -1,0 +1,58 @@
+# 包配置被自己改写后的复跑
+
+> 摘要: 本包目录就在**仓库里**, 而流水线自己会把远端新版 `.my-commit-flow.toml` rebase 进工作区(内部同步 / 生成物自动化解的第一步都是"把树推到上游 tip")—— 而进程手里那份 `cfg` 还是**启动时**读的。两处受害: ①`ship.commit` 的闸门**复跑**照跑, 只是规则不对(旧闸门集 / 旧 `each_limit` / 旧红线), 输出与"全过"一字不差; ②`sync.py` 的生成物自动化解用旧白名单 / 旧重跑命令**丢本地内容**(旧白名单放宽 = 静默丢内容, 重跑命令换了 = 重跑的是旧生成器)。都比同族的模块缓存问题隐蔽得多(那族会 ImportError 报出来)。修法 = 树被改写后按**磁盘现版本**重取配置(`_pipeline.reload_config`, 含 STOP 级复检): commit 侧复跑前先 `refresh_package_modules()` 再重取, 变了才登记步骤行; sync 侧在快进后 / rebase 每轮开头与收尾各重取一次, 取不到或新配置关掉自动化解就**放弃自动化解并回滚**。
+> 触发: ship.commit, sync, 复跑, 旧配置, 配置过期, 启动时快照, 配置迁移窗口, .my-commit-flow.toml, reload_config, 闸门规则不对, 白名单, 生成物自动化解, 静默丢内容, 内部同步之后, rebase 之后, 闸门照跑但没生效
+
+**Refs:** memory-bank/tasks/26-10-06-ship-rerun-stale-config.md
+
+### 合流后闸门复跑, 用的还是启动时那份配置
+
+- **触发**: `commands run ship.commit` 的那一次**内部同步真的 rebase 了远端提交**(HEAD 改写), 且远端那笔
+  动过 `.commands/my-commit-flow/.my-commit-flow.toml`。表现是**没有报错**: 复跑那一轮的闸门按旧规则跑完,
+  输出与"全过"一字不差 —— 远端新加的闸门 / 改过的 `each_limit` / 新加的红线**一条都没生效**。
+  平时(配置没动)完全不可见, 所以只会在"配置迁移窗口"里被抓到一次。
+- **判别**: 问一句「这个进程运行期, 我脚下这个仓库里的**配置**会不会被换掉?」。本包是"脚本住在被它自己
+  操作的仓库里"的工具链 —— 内部同步 rebase 会同时换掉**包脚本**(模块缓存族, 见
+  [self-rewrite-imports.md](self-rewrite-imports.md)) 与**包配置**(本档)。`commit.py` 启动时
+  `cfg, _src = load_config()` 读一次, 第 6 步复跑闸门时直接复用那个 `cfg` ⇒ 旧规则。
+  与模块缓存族的**关键差别**: 模块错配会 `ImportError` **报出来**; 配置过期是**静默**的, 只能靠
+  "复跑前重取"这条纪律兜住。
+- **处置**: 复跑前调 `_pipeline.reload_config(cfg)`(返回 `(配置, 停止原因)`), 调用**顺序**不能反:
+  ① 先 `refresh_package_modules()` —— 远端新配置若同时加了新键, 旧的 `_ship_config.KEY_DEFAULTS`
+  会把它当「顶层未知键」误判 STOP; ② 再重取配置。三条判据: 配置**没变就不登记步骤行**(登记纪律②);
+  变了登记 `闸门复跑: 合流后 .my-commit-flow.toml 已更新 → 按新配置复跑`; **读不到 / 新配置有 STOP 级问题
+  → 停下**(按「推送未完成」, 提交已落稳) —— **绝不拿旧规则硬跑**, 那正是本缺陷的形态。
+  `each_limit` 会跟着新配置走, 但复跑的改动清单仍是**本次提交的那批**(设计如此, 不变)。
+  守阵: `test_pipeline.py::ReloadConfigTest`(机制: 交出磁盘现版本 / 读不到即停 / 新配置 STOP 即停) +
+  `test_commit.py::test_post_rebase_rerun_uses_reloaded_config`(接线: 复跑用重取那份, 非启动那份) +
+  `test_post_rebase_unchanged_config_stays_silent`(没变不留痕) +
+  `test_post_rebase_broken_new_config_blocks_push`(新配置坏 → 停下不硬跑)。
+- **延伸**: 同族判据只有一句话 —— 「我这个进程运行期, 磁盘上**我自己那份源码 / 配置**会不会变?」。
+  会变 ⇒ 凡是"启动时读一次、之后一直用"的快照(模块 / 配置 / 生成物白名单 / 分支名)都得在**自我改写之后**
+  重新取一次。
+
+### 生成物自动化解: 白名单与重跑命令来自旧配置
+
+- **触发**: `sync.py`(或 `ship.commit` 第 6 步内部那一次同步)走进生成物冲突自动化解, 而**上游那笔改了
+  `.my-commit-flow.toml`**。表现同样是**不报错**: 结果行照旧 `同步成功 <hash> 自动重跑生成物 N 处`。
+- **判别**: 自动化解的头一件事就是把树推到上游 tip(`merge --ff-only` / `git rebase`)—— 本包配置就在
+  仓库里, 所以**那一刻磁盘上的配置已经是上游那份**, 而 `cfg` 变量还是启动那份。三种走偏:
+  ① 旧白名单**放宽**(新政策不再把某些路径当生成物)→ 本地那份被**静默丢弃**, 正是白名单注释里警告的
+  "列错 = 静默丢内容"; ② 旧白名单**收窄** → 该保的没保(该自动化解的变成要人工合流, 只是体验差);
+  ③ `generated_regen_cmd` 换了 → 重跑的是**旧生成器**, 而 `--check` 自证的也是旧规则 ⇒ 自证通过但内容
+  停在旧生成器的版本(2026-10-07 实测: 内容 `generated:gen/a.md` 而非新生成器的 `generated:v2:gen/a.md`)。
+  还有一档**政策**问题: 上游把 `auto_resolve_generated` 关掉了, 而我们还照着旧配置继续自动丢。
+- **处置**: `sync._reload_cfg(cfg)` = `_pipeline.reload_config` + "新配置仍允许自动化解" 两档判据, 三个
+  取用点: ①快进路径 `merge --ff-only` **之后**(再按**新**白名单复核"已丢弃的那几处"仍属生成物, 新政策
+  不认就回滚); ②分叉路径**每轮 rebase 循环开头**(上一轮 `--continue` 又把树往上推了一笔);
+  ③分叉路径**收尾**(最后一笔重放的是本地提交, 它也可能改了配置 —— 终值才算数, `dirty` 的白名单同样换新)。
+  任一档不成立 → **放弃自动化解、回滚**, 退回**现状失败行**(`树脏挡路 …` / `需解决冲突 …`)——
+  自动化解是**优化**, 不为它新增失败模板, 所以这一步对调用方是静默的(结果行模板逐字不变)。
+  守阵: `test_sync.py` 4 条 —— `test_reload_cfg_honours_disk_and_policy`(机制三档) ·
+  `test_behind_overlap_new_config_disables_autoresolve`(新配置关掉 → 回滚) ·
+  `test_behind_overlap_new_regen_cmd_is_used`(重跑用新生成器) ·
+  `test_diverged_conflict_new_config_narrowing_rolls_back`(新白名单收窄 → 回滚)。
+  ⚠ 守阵的夹具必须把配置放进**仓库里**(`<repo>/pack/.my-commit-flow.toml`) —— 临时包目录在仓库外,
+  rebase 换不掉它, 那样的用例测不到本缺陷。
+- **延伸**: 与上一节的差别值得记住 —— 那边(闸门复跑)失败是**报出来**的, 这边(自动化解)失败是**静默**的
+  (退回现状失败行), 所以只能靠守阵, 靠"结果行看起来正常"是发现不了的。

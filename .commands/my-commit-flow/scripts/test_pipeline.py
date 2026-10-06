@@ -20,6 +20,7 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
                                不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
 - MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
 - PackageRefreshTest           包内模块热刷新: 源码变了才 reload(保身份) / 源码没变零动作(替身不被冲掉)
+- ReloadConfigTest             自我改写后重取配置: 交出磁盘现版本 / 读不到即停 / 新配置有 STOP 即停(不拿旧规则硬跑)
 - SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
                                <each:> 接受该后缀; 探针摘掉「无参即真动作」脚本(超时按不安全)
 - ShortTest                    失败明细里的根路径压缩
@@ -42,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _pipeline  # noqa: E402
-from _ship_config import config_problems, find_root, load_config  # noqa: E402
+from _ship_config import ConfigMissing, config_problems, find_root, load_config  # noqa: E402
 
 PY = sys.executable
 
@@ -625,6 +626,68 @@ class ConfigProblemsTest(unittest.TestCase):
     def test_unconfirmed_draft_is_warn(self) -> None:
         problems = self._problems('confirmed = false\nred_lines = ["a"]\n')
         self.assertTrue(any(lvl == "WARN" and "初稿" in msg for lvl, msg in problems))
+
+
+class ReloadConfigTest(unittest.TestCase):
+    """自我改写后的配置重取 —— 与 PackageRefreshTest 同源(进程对"自己脚下这个仓库"的看法过期)。
+
+    宿主 bug(2026-10-06 另一会话报出): `ship.commit` 的启动时配置在**内部同步 rebase 之后**仍是旧版,
+    而第 6 步的闸门复跑还在用它 —— 撞"配置迁移窗口"(远端那笔同时改了 `.my-commit-flow.toml` 与闸门)
+    必现, 平时不可见。症状比 ImportError 隐蔽: 闸门**照跑**, 但旧闸门集 / 旧 each_limit / 旧红线全都
+    对不上合并后的仓库, 输出与"全过"一字不差。契约两条:
+    ① 正常 → 交出**磁盘现版本**的配置(调用方据此判"变没变", 没变就不登记步骤行);
+    ② 读不到 / 新配置有 STOP 级问题 → 交出原因, 调用方停下 —— **绝不拿旧规则硬跑**(那正是本缺陷的形态)。
+    """
+
+    BASE = 'confirmed = true\nred_lines = ["a"]\n[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nauto = true\n'
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / ".my-commit-flow.toml"
+        orig = _pipeline.load_config
+        self.addCleanup(lambda: setattr(_pipeline, "load_config", orig))
+
+    def _pin(self, result) -> None:
+        """把 `_pipeline` 的加载器钉成替身: 异常 → 抛; 二元组 → 原样返回。"""
+        if isinstance(result, Exception):
+
+            def _raise():
+                raise result
+
+            _pipeline.load_config = _raise
+        else:
+            _pipeline.load_config = lambda: result
+
+    def _real(self, text: str) -> dict:
+        self.path.write_text(text, encoding="utf-8")
+        cfg, _ = load_config(explicit=str(self.path))
+        return cfg
+
+    def test_returns_fresh_config_from_disk(self) -> None:
+        fresh = self._real(self.BASE)
+        self._pin((fresh, self.path))
+        old = {"gates": []}
+        cfg, problem = _pipeline.reload_config(old)
+        self.assertIsNone(problem)
+        self.assertEqual(cfg, fresh)
+        self.assertIsNot(cfg, old)  # 真的换成了新对象 —— 否则调用方判不出"配置变过"
+
+    def test_missing_config_reports_problem(self) -> None:
+        self._pin(ConfigMissing(self.path.parent))
+        old = {"gates": []}
+        cfg, problem = _pipeline.reload_config(old)
+        self.assertIs(cfg, old)  # 占位返回值: 调用方必须停下, 不得使用
+        self.assertTrue(problem and problem.startswith("[STOP]"), problem)
+
+    def test_broken_new_config_reports_problem(self) -> None:
+        """远端新配置带 STOP 级问题 → 停下, 不拿旧规则硬跑(闸门静默失效比报错坏得多)。"""
+        fresh = self._real(self.BASE + "generated_list_cmd = 5\n")
+        self._pin((fresh, self.path))
+        old = {"gates": []}
+        cfg, problem = _pipeline.reload_config(old)
+        self.assertIs(cfg, old)
+        self.assertTrue(problem and "体检" in problem, problem)
 
 
 if __name__ == "__main__":

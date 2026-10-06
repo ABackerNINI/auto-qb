@@ -4,6 +4,7 @@
   步骤行(上面) → 本次"真发生了"的 HEAD 改写, 相邻两步首尾相接 **旧hash→新hash**:
                 同步: 远端领先 1 笔 · 本地领先 1 笔(分叉) → rebase 重放本地 1 笔 aa11bb22→bb22cc33
                 闸门复跑: 合流后闸门改了 2 个文件 → amend bb22cc33→cc33dd44
+                (非改写类: 合流后 `.my-commit-flow.toml` 被换掉时留一行「配置已更新 → 按新配置复跑」)
   推送未完成  → 提交成功 <hash>(未推送) ＋ 推送未完成: <原因> —— 补推: commands run ship.push
                  (提交这个主目标已达成, 别重新提交; 退出码仍 0)
   失败        → 提交失败: <原因> —— <下一步>(闸门红附失败闸门名 + 输出末 20 行)
@@ -24,8 +25,10 @@
      同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交) → 落稳即消费消息文件
   6. 内部同步(run_sync): 齐平即 no-op; 分叉自动 rebase 保线性 —— 冲突 / 断网自动回滚后按
      「推送未完成」停下要人
-  7. rebase 真合入了远端提交(HEAD 改写) → 闸门按同一份清单复跑一轮(合并后的树才算数); fmt 类闸门
-     若又改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)
+  7. rebase 真合入了远端提交(HEAD 改写) → 先按磁盘现版本重取配置(rebase 可能把远端新版
+     `.my-commit-flow.toml` 换了进来 —— 用启动时那份复跑就是"照跑但规则不对"), 再按同一份清单
+     复跑一轮(合并后的树才算数); fmt 类闸门若又改了文件 → 逐路径 add + commit --amend 折进未推送
+     的 tip(与 sync.py 生成物收尾同款)
   8. 内联推送(run_push): **先 `_pipeline.refresh_package_modules()`**(上面第 6 步的 rebase 可能已把远端新版
      **包脚本**换进工作区 —— 本目录就在仓库里; 不刷新则新 push.py 撞缓存的旧 `_pipeline`, 2026-10-06
      实测 ImportError) / 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
@@ -54,6 +57,7 @@ from _pipeline import (  # noqa: E402
     git_run,
     hit,
     refresh_package_modules,
+    reload_config,
     run_gates,
     staged_overflow,
     step,
@@ -241,6 +245,25 @@ def main(argv: list[str] | None = None) -> int:
     #   fmt 类闸门若又改了文件, 逐路径 add 后折进未推送的 tip(rebase 后 tip 未推送, amend 安全)
     head_now = git_run("rev-parse", "HEAD").stdout.strip()
     if head_now != sha_full:
+        # 6a 复跑前按**磁盘现版本**重取配置: 内部同步的 rebase 可能已把远端新版 `.my-commit-flow.toml`
+        #    rebase 进工作区(本包目录就在仓库里) —— 启动时那份 cfg 是**旧规则**, 拿它复跑 = 用旧规则
+        #    验合并后的新树(旧闸门集 / 旧 each_limit / 旧红线全都对不上), 输出却与"全过"一字不差。
+        #    撞配置迁移窗口(远端那笔同时改了配置与闸门)必现, 平时不可见。
+        #    先刷新本包模块(源码变了才动)让 `_ship_config.KEY_DEFAULTS` 跟着现版本, 再重取配置 ——
+        #    否则远端新加的配置键会被按「顶层未知键」误判 STOP。
+        refresh_package_modules()
+        fresh_cfg, cfg_problem = reload_config(cfg)
+        if cfg_problem:  # 读不到 / 新配置有错: 不拿旧规则硬跑, 按「推送未完成」停下(提交已落稳)
+            emit(steps, f"提交成功 {head_now[:8]}(未推送)")
+            print(f"推送未完成: {cfg_problem} —— 补推: commands run ship.push")
+            if warn_files:
+                print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+            return 0
+        if fresh_cfg != cfg:
+            step(steps, "闸门复跑: 合流后 .my-commit-flow.toml 已更新 → 按新配置复跑")
+            cfg = fresh_cfg
+        # 配置可能换了 each_limit, 展开上限得跟着走(changed 清单不变 —— 仍是本次提交的那批)
+        ctx = {"root": root, "changed": present, "each_limit": cfg.get("each_limit", 99)}
         failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
         if failures_r:
             note, cmd, rc, secs, tail = failures_r[0]

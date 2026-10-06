@@ -83,9 +83,16 @@
   在 CRLF 上**每行多算 1** ⇒ 角色 `pitfall` / `slice` 等的 cap 检查可能凭空多出一笔"债务",
   `b.count(b"\n") == b.count(b"\r\n")` 那类自查断言也会响。**与本轮新记的「拿 KB 比字符数」是同一族**:
   口径不一致 ⇒ 报出根本不存在的债。
-- **处置**: ①机械替换优先用 Edit 工具(保留原行尾); ②非用 sed 不可时, 改完**立刻按字节归一**
+- **处置**: ①机械替换优先用 Edit 工具(**但这不是保证** —— 见下方复发条: Edit 同样能把整份写成 CRLF);
+  ②非用 sed 不可时, 改完**立刻按字节归一**
   (`p.write_bytes(p.read_bytes().replace(b"\r\n", b"\n"))`), 并核对 `git diff --stat` 的变更行数
   确实等于你真正改的行数; ③复核别用 `grep -c $'\r'`(会给假结果), 用 `b.count(b"\r\n")`。
+- **复发 +1 (2026-10-07)**: 触发换成 **Edit 工具** —— 一次普通插入把
+  `.commands/my-commit-flow/references/config.md` 整份从 `LF=69 / CRLF=0` 写成 `CRLF=81 / LF=0`,
+  而 `git diff --numstat` 仍是干净的 `12 0`(clean filter 归一了), **只有 `git status` 末尾那行
+  `warning: … CRLF will be replaced by LF` 露了马脚**。为什么没命中: 本条旧文案把 Edit 写成
+  "保留原行尾"的安全选项, 于是改完没做按字节复核 —— 判据必须落在**改完必查**上, 不能落在"用哪个工具"上。
+  定式(已并入处置): 改完 md / 交付件后跑一次 `git status`, 见到 CRLF 警告就按字节归一。
 
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 

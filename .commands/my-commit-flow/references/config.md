@@ -67,3 +67,17 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 | 禁用代理的 `-c` | 从 `git config` 读 per-URL 代理 key，没配就不加参数 | — |
 
 上面这些只是**探测规则**，取值来源仍是外置配置 —— 也就是说：流程内置、项目事实外置，两边不混。
+
+## 配置在流水线里什么时候被读
+
+| 时机 | 读法 | 为什么 |
+|---|---|---|
+| `sync.py` / `push.py` / `commit.py` **启动** | `load_config()` | 进程开始时读一次；之后按这份快照跑 |
+| `commit.py` **合流后复跑闸门前** | `_pipeline.reload_config(cfg)` | 内部同步的 rebase 可能已把远端新版 `.my-commit-flow.toml` 换进工作区（本包目录就在仓库里）—— 拿启动那份复跑 = **用旧规则验合并后的新树**，输出却与"全过"一字不差 |
+| `sync.py` **生成物自动化解里，树被推到上游 tip 后** | `sync._reload_cfg(cfg)`（内部即 `_pipeline.reload_config`） | 同一根因：白名单来源 / 重跑命令 / `auto_resolve_generated` 都可能被上游那笔换掉 —— 继续用启动那份 = **拿旧政策丢本地内容**（白名单放宽 = 静默丢内容，收窄 = 该保的没保，重跑命令换了 = 重跑的是旧生成器）。快进路径在 `merge --ff-only` 之后取一次；分叉路径在**每轮 rebase 循环开头**与收尾各取一次 |
+
+`reload_config` 交出**磁盘现版本**并**复检 STOP 级问题**；配置变了才登记一行步骤行（没变静默），
+读不到 / 新配置有错则**停下**。两侧的"停"不同：commit 侧按「推送未完成」（提交已落稳）；
+sync 侧**放弃自动化解、回滚后退回现状失败行**（自动化解是优化，不为它新增失败模板）。
+与「包内模块热刷新」（`refresh_package_modules`）是同一根因的两半 —— 判据与守阵见
+`memory-bank/pitfalls/git/self-rewrite-config.md`。

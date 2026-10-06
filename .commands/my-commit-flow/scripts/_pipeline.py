@@ -9,6 +9,8 @@ v3.1(2026-10-06)在本模块加了唯一的**输出机制**例外: 「步骤登�
 2026-10-06 另加: **包内模块热刷新** (`refresh_package_modules`) —— 内部同步会把远端新版**包脚本** rebase 进
 工作区(本目录就在仓库里), 延迟 import 前必须按磁盘现版本重载, 否则新脚本撞上进程启动时缓存的旧模块,
 见「包内模块热刷新」段。
+2026-10-06 另加: **配置重取** (`reload_config`) —— 同一场景的另一半: rebase 也可能换掉**配置**
+(`.my-commit-flow.toml`), 而闸门复跑若还用启动时那份快照, 就是"照跑但规则不对"(见「自我改写后的配置重取」段)。
 人工排障口: `_pipeline.py --show-config` 看生效配置, `--init` 生成新仓库的配置初稿。
 
 前身是 preflight.py(检查表式预检, v2 计划 26-09-26-2345); v3 把"检查"下沉进 ship 编排,
@@ -557,6 +559,40 @@ def config_stops(cfg: dict, src: Path) -> list[str]:
     WARN 级(初稿未确认等)不进常规路径: v3 沉默契约下, 它们只在排障(--show-config)时看。
     """
     return [msg for lvl, msg in config_problems(cfg, src) if lvl == "STOP"]
+
+
+# ------------------------------------------------------------------ 自我改写后的配置重取
+# 与 `refresh_package_modules` 同源: 本包目录就在仓库里, 内部同步的 rebase 可能已把远端新版
+# **配置**(`.my-commit-flow.toml`)或**包脚本**换进工作区, 而进程手里的快照还是启动时那份。
+# 前者(配置)的后果比后者(模块)更隐蔽 —— 模块错配会 ImportError 报出来, 配置过期则是
+# **闸门照跑、规则不对**: 旧闸门集 / 旧 each_limit / 旧红线 / 旧生成物白名单, 全都对不上
+# 合并后的仓库, 而输出与"全过"一字不差。撞"配置迁移窗口"(远端那笔同时改了配置与闸门)必现。
+
+
+def reload_config(cfg: dict) -> tuple[dict, str | None]:
+    """按**磁盘现版本**重取外置配置 —— 「自我改写后复跑」前必须调; 返回 (配置, 停止原因)。
+
+    两个调用点(都是"树刚被推到上游 tip, 而本包配置就在仓库里"的场合):
+    - `commit.py` 第 6 步(内部同步真改写 HEAD)复跑闸门**之前** —— 复跑要验的是合并后的树, 规则也必须
+      是合并后的规则。调用前先 `refresh_package_modules()`, 让 `_ship_config.KEY_DEFAULTS` 跟着现版本
+      (否则远端新加的配置键会被按「顶层未知键」误判 STOP)。
+    - `sync.py` 的生成物自动化解(`_resolve_behind_overlap` / `_resolve_rebase`)—— 它先把树推到上游 tip,
+      再按白名单丢本地那份并重跑生成器; 白名单来源与重跑命令必须来自**合并后**的配置。
+
+    **保守默认**: 读不到配置 / 新配置有 STOP 级问题 → 返回原因, 调用方必须停下 —— **绝不拿旧规则硬跑**
+    (那正是本缺陷的形态)。commit 侧按「推送未完成」停(提交已落稳); sync 侧放弃自动化解、回滚后退回
+    现状失败行。此时返回值是**传入的旧配置**, 仅供占位, 不可使用。
+
+    配置没变时 `fresh == cfg` 为真, 调用方据此决定要不要登记步骤行(登记纪律②: 没发生的不报)。
+    """
+    try:
+        fresh, src = load_config()
+    except ConfigMissing as exc:
+        return cfg, str(exc)
+    stops = config_stops(fresh, src)
+    if stops:
+        return cfg, f"合流后的新配置未通过体检({stops[0]})"
+    return fresh, None
 
 
 # ------------------------------------------------------------------ 步骤登记(v3.1「改写留痕」)
