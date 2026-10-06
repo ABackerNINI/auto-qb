@@ -1,12 +1,18 @@
-"""同步本地分支到主线 —— fetch + 快进 / rebase。输出契约 v3(计划 26-09-28-0157): 成功一行, 失败一行(原因 + 下一步)。
+"""同步本地分支到主线 —— fetch + 快进 / rebase。输出契约 v3.1(承接 v3 计划 26-09-28-0157)。
 
-行为(D1 已拍板 2026-09-28: 必要时用 rebase 保持提交历史线性):
-  齐平            → 已同步 <hash>
+v3「成功一行, 失败一行(原因 + 下一步)」保留, **结果行逐字不动**; v3.1 只补一件事 ——
+**步骤**: 真发生了的、尤其改写了 HEAD 的步骤, 在结果行**上面**按发生顺序各吐一行, 改写必带
+`旧hash→新hash`, 相邻两步首尾相接(详细说明与三条登记纪律见 `_pipeline.py`「步骤登记」段)。
+
+  齐平 / 本地领先  → 无步骤, 已同步 <hash>(两者都没改写 HEAD)
   纯落后          → git merge --ff-only <远端tip>; 树脏交 git 裁决 —— 无重叠自然成功, 重叠被拒 → 同步成功 <hash>
   分叉(树净)      → git rebase <远端tip>: 只改写按定义未推送的本地独有提交, 历史保持线性;
                     中途冲突 → --abort 全量自动回滚 → 同步成功 <新hash>
   树脏挡路(上两类的脏分支) → 失败, 失败行自带**两条出路**: stash 解锁配方 UNLOCK_STEPS(脚本仍不代做
                     清理)或提交先行(ship.commit 已改先提交后同步, 2026-10-04)
+
+为什么要补: 一次同步内部 HEAD 会被改写多次(rebase 重放、生成物重跑后 amend), 而结果行只给终值 ——
+执行者看到 hash 与印象不符就会去查原因(2026-10-06 用户指出), 这一行忧虑比噪音贵。
 
 生成物冲突自动化解(计划 26-10-03-1544, 默认开; 键 auto_resolve_generated / generated_*_cmd):
   快进被拒 / rebase 冲突时, 若重叠 / 冲突**全部**落在生成物白名单(`generated_list_cmd` 的 --list)上,
@@ -42,7 +48,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pipeline import changed_files, expand_run, git, git_run, staged_overflow  # noqa: E402
+from _pipeline import changed_files, emit_steps, expand_run, git, git_run, staged_overflow, step  # noqa: E402
 from _ship_config import CONFIG_NAME, ConfigMissing, load_config, resolve_branch, resolve_main_remote  # noqa: E402
 
 
@@ -241,8 +247,14 @@ def _git_run_editor(*args: str) -> subprocess.CompletedProcess:
     )
 
 
-def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, int]:
-    """分叉 rebase 的**有界冲突循环**。返回 (ok, 重跑处数); 失败时已 --abort / 回滚, 状态与跑之前一致。
+def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, int, str, str]:
+    """分叉 rebase 的**有界冲突循环**。返回 (ok, 重跑处数, rebase 刚落地的 hash, amend 后的 hash);
+    末位空串 = 收尾没 amend; 失败时已 --abort / 回滚, 状态与跑之前一致。
+
+    后两个返回值是给调用方写步骤行用的 —— 本函数**不登记步骤**: 两行痕迹必须按发生顺序
+    (先「rebase 重放」再「重跑后 amend」)排在结果行上面, 而 rebase 那一行只有拿到本函数的返回值
+    才拼得出来。谁登记谁就会把顺序写反(amend 先于 rebase 记录 ⇒ 打印出的链子是倒的), 所以
+    干脆把「怎么排」交给唯一知道全局顺序的调用方。
 
     单次 rebase 一旦停下就取冲突集: 全在生成物白名单 → 取一侧 + 重跑 + 自证 + continue;
     出现任何手写冲突 / 白名单取不到 / 超限 → abort。循环上限 = 本地独有提交数 + 1(防死循环)。
@@ -252,54 +264,67 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
     resolved = 0
     proc = git_run("rebase", rsha)
     if proc.returncode == 0:
-        return True, 0  # 无冲突 —— 与现状逐字一致, 不做任何重跑
+        return True, 0, git("rev-parse", "HEAD", check=False), ""  # 无冲突 —— 与现状逐字一致, 不做任何重跑
     whitelist = _whitelist(cfg)
     if not whitelist:
         git("rebase", "--abort", check=False)
-        return False, 0
-    steps = 0
-    while proc.returncode != 0 and steps < limit:
-        steps += 1
+        return False, 0, "", ""
+    steps_done = 0
+    while proc.returncode != 0 and steps_done < limit:
+        steps_done += 1
         conflicts = {
             line.strip()
             for line in git("diff", "--name-only", "--diff-filter=U", check=False).splitlines() if line.strip()
         }
         if not conflicts or not conflicts <= whitelist:
             git("rebase", "--abort", check=False)
-            return False, 0
+            return False, 0, "", ""
         for path in sorted(conflicts):
             git_run("checkout", "--ours", "--", path)  # rebase 里 --ours = 上游侧; 取哪侧无所谓, 马上被重写
         if not _regen(cfg, root) or not _self_check(cfg, root):
             git("rebase", "--abort", check=False)
-            return False, 0
+            return False, 0, "", ""
         resolved += len(conflicts)
         git_run("add", "--", *sorted(conflicts))
         proc = _git_run_editor("rebase", "--continue")
     if proc.returncode != 0:
         git("rebase", "--abort", check=False)
-        return False, 0
+        return False, 0, "", ""
+    landed = git("rev-parse", "HEAD", check=False)  # rebase 刚落地的 tip; 之后还可能被 amend 挪走
+    amended = ""
     # 收尾再自证: 多提交重放时, 中间那次重跑基于「部分重放」的树 → tip 上可能仍是中间态。
     if not _regen(cfg, root):
         git("reset", "--hard", head, check=False)
-        return False, 0
+        return False, 0, "", ""
     dirty = _modified_paths() & whitelist
     if dirty:
         git_run("add", "--", *sorted(dirty))
         if git_run("commit", "--amend", "--no-edit").returncode != 0:
             git("reset", "--hard", head, check=False)
-            return False, 0
+            return False, 0, "", ""
         resolved += len(dirty)
+        amended = git("rev-parse", "HEAD", check=False)
     if not _self_check(cfg, root):
         git("reset", "--hard", head, check=False)
-        return False, 0
-    return True, resolved
+        return False, 0, "", ""
+    return True, resolved, landed, amended
 
 
-def run_sync() -> tuple[bool, str]:
-    """核心动作。返回 (ok, line): 成功时 line 是完整成功行(已同步/同步成功 <hash>);
+def _step_rebase(steps: list[str] | None, behind: int, ahead: int, head: str, new: str) -> None:
+    """分叉 rebase 的步骤行 —— 这一步是 hash 变化的头号疑惑源: 本地提交内容没变, 但重放到远端
+    tip 上必然重写 hash, 不写明就会有人去查「我的提交哪去了」。"""
+    step(steps, f"同步: 远端领先 {behind} 笔 · 本地领先 {ahead} 笔(分叉) → "
+         f"rebase 重放本地 {ahead} 笔 {head[:8]}→{new[:8]}")
+
+
+def run_sync(steps: list[str] | None = None) -> tuple[bool, str]:
+    """核心动作。返回 (ok, line): 成功时 line 是完整结果行(已同步/同步成功 <hash>);
     失败时 line 是「同步失败」的**后缀** —— 冲突场景以「需解决冲突 本地<x> 远端<y> …」开头,
     main 拼上「同步失败」后正好是约定模板「同步失败需解决冲突 本地<x> 远端<y> <步骤>」。
     缺配置等停止类问题 line 以「[STOP]」开头, main 原样打印。
+
+    `steps` 是 v3.1 的步骤登记簿(见 `_pipeline.step` 的三条纪律): 由入口持有并打印,
+    传 None = 不要痕迹(现状行为)。改写 HEAD 的每一步都在这里登记 `旧hash→新hash`。
     """
     try:
         cfg, _src = load_config()
@@ -332,17 +357,25 @@ def run_sync() -> tuple[bool, str]:
     except ValueError:
         return False, "本地没有远端 tip 的对象 (fetch 未落稳?) —— 重跑"
     if behind == 0:
-        # 本地领先(未推送) —— 推送即快进, 同步无事可做
+        # 本地领先(未推送) —— 推送即快进, 同步无事可做。**不登记步骤**: 登记纪律②只认
+        # 改写了 HEAD 的步骤, 这里一个都没改写; 「跑了但什么都没做」本身就是噪音。
         return True, f"已同步 {head[:8]}"
 
     if ahead == 0:  # 纯落后 → 快进; 树脏与否交 git 裁决(无重叠自然成功)
         proc = git_run("merge", "--ff-only", rsha)
         if proc.returncode == 0:
+            step(
+                steps, f"同步: 远端领先 {behind} 笔 → 快进 {head[:8]}→{git('rev-parse', 'HEAD')[:8]}" +
+                (" · 本地未提交改动原样保留" if (staged or unstaged) else "")
+            )
             return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}"
         if cfg.get("auto_resolve_generated", True):  # 重叠全在生成物上 → 自动化解
             count = _resolve_behind_overlap(rsha, cfg, head)
             if count is not None:
-                return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]} {GENERATED_MARK} {count} 处"
+                new = git("rev-parse", "HEAD")[:8]
+                step(steps, f"同步: 远端领先 {behind} 笔 · 重叠 {count} 处全在生成物 → "
+                     f"丢弃本地那份后快进 {head[:8]}→{new}")
+                return True, f"同步成功 {new} {GENERATED_MARK} {count} 处"
         reason = ("本地改动与远端新提交重叠" if "would be overwritten" in (proc.stderr or "") else _git_reason(proc))
         return False, (
             f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— {reason}; 出路二选一: "
@@ -360,15 +393,20 @@ def run_sync() -> tuple[bool, str]:
     conflict_line = (f"需解决冲突 本地{head[:8]} 远端{rsha[:8]} —— rebase 已自动回滚, "
                      "手动合流(解冲突)后重跑")
     if cfg.get("auto_resolve_generated", True):  # 冲突全在生成物上 → 有界循环自动化解
-        ok, count = _resolve_rebase(rsha, cfg, ahead, head)
+        ok, count, landed, amended = _resolve_rebase(rsha, cfg, ahead, head)
         if ok:
             tail = f" {GENERATED_MARK} {count} 处" if count else ""
+            # 两行痕迹按发生顺序登记: 先 rebase 重放, 再收尾重跑导致的 amend —— 顺序反了链子就倒了
+            _step_rebase(steps, behind, ahead, head, landed)
+            if amended:
+                step(steps, f"同步: 生成物自动重跑后 amend {landed[:8]}→{amended[:8]}")
             return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}{tail}"
         return False, conflict_line
     proc = git_run("rebase", rsha)
     if proc.returncode != 0:
         git("rebase", "--abort", check=False)  # 全量自动回滚: 失败后仓库与跑之前一致
         return False, conflict_line
+    _step_rebase(steps, behind, ahead, head, git("rev-parse", "HEAD"))
     return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}"
 
 
@@ -387,16 +425,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.safety:  # 冒烟安全过滤的探针: 只答常量, 不碰 git
         print("sync.py: action-without-args")
         return 0
-    ok, line = run_sync()
+    steps: list[str] = []  # 步骤登记簿由入口持有(见 _pipeline 的「步骤登记」段纪律)
+    ok, line = run_sync(steps)
     if ok:
+        emit_steps(steps)
         print(line)
         return 0
     if line.startswith("[STOP]"):
+        emit_steps(steps)
         print(line)
     else:
         # 冲突场景 line 以「需解决冲突 本地<x> 远端<y> …」开头 —— 无缝拼接后正好是
         # 约定模板「同步失败需解决冲突 本地<x> 远端<y> <步骤>」; 其余失败用冒号分隔。
+        # 失败行前的步骤行照旧吐: 失败虽已自动回滚, 但结果行里的 hash 指的是回滚后的 HEAD,
+        # 把「期间 tip 到过哪」摆出来, 才不会让人怀疑回滚漏了东西。
         sep = "" if line.startswith("需解决") else ": "
+        emit_steps(steps)
         print(f"同步失败{sep}{line}")
     return 1
 

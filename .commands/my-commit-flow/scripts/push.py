@@ -1,6 +1,7 @@
 """补推 / 单独推送 —— 顺序固定: 先同步核对 → 推主线 → 核对远端 → 镜像(全程静默)。
 
-输出契约 v3(计划 26-09-28-0157): 成功一行「推送成功 <hash>」; 失败一行「推送失败: <原因> —— <下一步>」。
+输出契约 v3.1(承接 v3 计划 26-09-28-0157): 结果行仍是「推送成功 <hash>」/「推送失败: <原因> —— <下一步>」,
+逐个**步骤**行打在它上面(见 `_pipeline.py`「步骤登记」段)。本任务的步骤来自内部 run_sync 的快进 / rebase。
 ship.commit 成功后默认**同进程内联续推**(run_push, 输出由 commit 统一编排), 本任务是补推 / 重验入口。
 
 - 先跑一次 sync(run_sync): 齐平则无事发生; 落后自动快进; 分叉自动 rebase(树净才动) ——
@@ -28,7 +29,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pipeline import git, git_run  # noqa: E402
+from _pipeline import emit_steps, git, git_run  # noqa: E402
 from _ship_config import ConfigMissing, load_config, proxy_disable_args, resolve_branch, resolve_main_remote, resolve_mirror_remote  # noqa: E402
 from sync import remote_sha_with_retry, run_sync  # noqa: E402
 
@@ -38,10 +39,14 @@ def _git_reason(proc) -> str:
     return lines[-1] if lines else "git 非 0"
 
 
-def run_push() -> tuple[bool, str]:
+def run_push(steps: list[str] | None = None) -> tuple[bool, str]:
     """核心动作。返回 (ok, line): 成功时 line = 「推送成功 <hash>」;
-    失败时 line 是「推送失败」的**后缀**(同步类失败沿用 sync 的后缀, 含冲突模板)。"""
-    ok, line = run_sync()
+    失败时 line 是「推送失败」的**后缀**(同步类失败沿用 sync 的后缀, 含冲突模板)。
+
+    `steps` 由入口持有并在结果行前打印(见 `_pipeline.step` 的三条纪律); 内部的 run_sync
+    可能 rebase 改写 HEAD —— 那一行在这里登记, 推送结果行的 hash 才追得上源头。
+    """
+    ok, line = run_sync(steps)
     if not ok:
         return False, line
 
@@ -96,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.safety:  # 冒烟安全过滤的探针: 只答常量, 不碰 git / 网络
         print("push.py: action-without-args")
         return 0
-    ok, line = run_push()
+    steps: list[str] = []
+    ok, line = run_push(steps)
+    emit_steps(steps)  # 步骤行永远在结果行**上面**(结果行才是要贴进回复 / 档案的那个值)
     print(line if ok or line.startswith("[STOP]") else f"推送失败: {line}")
     return 0 if ok else 1
 

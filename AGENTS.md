@@ -15,7 +15,7 @@
 
 完整规程(会话开始/收尾DoD 5步/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**:①**先同步**(问答/只读轮次跳过;**首个执行动作——改文件/跑测试/任何git写操作——之前必须完成**)——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),成功一行「已同步 <hash>」贴进回复;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后分支上改代码**。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**:①**先同步**(问答/只读轮次跳过;**首个执行动作——改文件/跑测试/任何git写操作——之前必须完成**)——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后分支上改代码**。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**:按skill的5步DoD——更新activeContext切片(已完成条目**迁出**到progress)/达阈值则立档+`commands run kb.index`重建索引/代码事实变更回写`memory-bank/`与根README/跑`commands run test.full`并新建基线切片记实测数字(`testing/baselines/`,体例见`testing/baseline.md`口径段)/**新坑按动作写进`pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
 
@@ -82,7 +82,7 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## 提交/PR
 
-**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:闸门+暂存+提交+内部同步(**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),成功一行「提交成功 <hash>」,推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
+**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:闸门+暂存+提交+内部同步(**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),结果行「提交成功 <hash>」(上面各留本次真改写HEAD的步骤行,带 旧hash→新hash),推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
 
 - **协作主线**:日常在`develop`,以**Gitee的`develop`**为准;**交付与否只看Gitee**。GitHub只作镜像、**允许滞后**——别用GitHub状态判断进度。
 - **用户说"提交"=commit+push**,一次走完;**触发词只认"提交/入库/推上去"这类显式指令**,"继续/接着做/ok/你看着办"一律不算。**本条是提交口径的单点定义**,优先于`memory-bank/`里的历史表述。

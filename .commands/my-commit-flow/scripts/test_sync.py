@@ -5,7 +5,15 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 
 ## 测试计划
 - test_in_sync_reports_same_hash        齐平 → 已同步 <hash>(HEAD 不变)
-- test_ahead_only_is_noop               本地领先(未推送) → 已同步, 推送即快进
+
+v3.1 步骤行(「改写留痕」; 纪律见 `_pipeline.py`「步骤登记」段 —— 真发生了才报, 改写必带 旧→新):
+- test_no_steps_when_nothing_happened   齐平 → 零步骤行(没发生的不报, 沉默即成功不倒退)
+- test_step_line_traces_head_rewrite    快进 → 一行 旧hash→新hash, 链尾 == 结果行 hash
+- test_dirty_fast_forward_step_says_kept  落后+树脏快进 → 写明本地未提交改动原样保留
+- test_rebase_step_explains_hash_change 分叉 rebase → 写明「重放 N 笔 旧→新」(hash 变化头号疑惑源)
+- test_rebase_then_amend_steps_are_in_order 一次同步连改两次 HEAD → 两行按发生顺序排(链子不倒)
+- test_main_prints_steps_above_result   main(): 步骤行在上面, 结果行压尾
+- test_ahead_only_is_noop               本地领先(未推送) → 已同步, 零步骤行, 推送即快进
 - test_behind_clean_fast_forwards       纯落后+树净 → 同步成功, HEAD == 远端 tip
 - test_behind_dirty_without_overlap_ok  落后+树脏无重叠 → 同步成功, 本地改动原样保留
 - test_behind_dirty_overlap_refuses     落后+脏重叠 → 失败(重叠), HEAD 与脏文件原样; 失败行自带解锁配方
@@ -16,7 +24,7 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 - test_dirty_block_flag_recognized      脏类失败行被 is_dirty_block 认出; 冲突/离线类不被认成脏类
 - test_offline_reports_unreachable      远端不可达 → 拿不到远端
 - test_staged_overflow_refuses          staged 暴增 → 拒绝(ref 回退信号)
-- test_main_prints_one_line_contract    main() 输出形态: 成功一行 / 冲突行恰为约定模板
+- test_main_prints_one_line_contract    main() 输出形态: 无步骤时成功一行 / 冲突行恰为约定模板
 - test_cli_flag_reaches_main_without_running_sync  裸调 main() 时 sys.argv 的参数必须到达
                                         (旧 `argv or []` 把 --help/--safety 丢掉 → 真同步一次)
 - test_cli_unknown_flag_exits_without_action        陌生参数 Exit(2), 不下沉到 run_sync()
@@ -31,6 +39,7 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 - test_autoresolve_regen_failure_rolls_back         重跑 rc≠0 → 失败; 仓库状态与跑之前一致
 - test_autoresolve_check_red_refuses                自证红 → 失败; 仓库状态与跑之前一致
 - test_autoresolve_is_idempotent                    化解成功后重跑 sync → 已同步
+- test_autoresolve_step_says_discarded              自动化解 → 步骤行写明「重叠 N 处全在生成物 → 丢弃本地那份」
 """
 
 from __future__ import annotations
@@ -203,9 +212,76 @@ def test_ahead_only_is_noop(env, monkeypatch):
     monkeypatch.chdir(env.a)
     _commit_file(env.a, "local.txt", "local\n", "local work")
     before = _git(env.a, "rev-parse", "HEAD")
-    ok, line = sync_mod.run_sync()
+    steps: list[str] = []
+    ok, line = sync_mod.run_sync(steps)
     assert ok and line.startswith("已同步 ")
     assert _git(env.a, "rev-parse", "HEAD") == before
+    assert steps == [], f"本地领先也没改写 HEAD, 不该有步骤行: {steps}"
+
+
+def test_no_steps_when_nothing_happened(env, monkeypatch):
+    """登记纪律②: 没发生的步骤一律不报 —— 齐平时零步骤行(run_sync 直接 return, 出口还差一圈麻烦)。"""
+    monkeypatch.chdir(env.a)
+    steps: list[str] = []
+    ok, line = sync_mod.run_sync(steps)
+    assert ok and re.match(r"^已同步 [0-9a-f]{8}$", line)
+    assert steps == [], f"齐平不该留任何步骤行: {steps}"
+
+
+def test_step_line_traces_head_rewrite(env, monkeypatch):
+    """登记纪律① + ③: 改写 HEAD 的步骤必带 旧hash→新hash, 链尾 == 结果行 hash, 完事儿。"""
+    monkeypatch.chdir(env.a)
+    _push_remote_commit(env, "b.txt", "b\n")
+    old = _git(env.a, "rev-parse", "HEAD")[:8]
+    steps: list[str] = []
+    ok, line = sync_mod.run_sync(steps)
+    assert ok and re.match(r"^同步成功 ([0-9a-f]{8})$", line)
+    new = re.match(r"^同步成功 ([0-9a-f]{8})$", line).group(1)
+    assert len(steps) == 1 and steps[0].startswith("同步: 远端领先 1 笔 → 快进 ")
+    assert steps[0].endswith(f"{old}→{new}")  # 链尾(箭头右侧) == 结果行的 hash
+
+
+def test_dirty_fast_forward_step_says_kept(env, monkeypatch):
+    """落后 + 树脏无重叠: 快进保住了本地未提交改动 —— 不写这句, 读的人会去怀疑自己的改动被冲了。"""
+    monkeypatch.chdir(env.a)
+    (env.a / "local.txt").write_text("dirty\n", encoding="utf-8")  # 未跟踪 = 树脏
+    _push_remote_commit(env, "b.txt", "b\n")
+    steps: list[str] = []
+    ok, _line = sync_mod.run_sync(steps)
+    assert ok and len(steps) == 1 and "本地未提交改动原样保留" in steps[0]
+
+
+def test_rebase_step_explains_hash_change(env, monkeypatch):
+    """分叉 rebase 是 hash 变化的头号疑惑源: 步骤行必须把「重放 N 笔 旧→新」摆出来。"""
+    monkeypatch.chdir(env.a)
+    _commit_file(env.a, "a-only.txt", "a\n", "local work")
+    _push_remote_commit(env, "b.txt", "b\n")
+    old = _git(env.a, "rev-parse", "HEAD")[:8]
+    steps: list[str] = []
+    ok, line = sync_mod.run_sync(steps)
+    new = re.match(r"^同步成功 ([0-9a-f]{8})$", line).group(1)
+    assert ok and new != old
+    assert steps == [f"同步: 远端领先 1 笔 · 本地领先 1 笔(分叉) → rebase 重放本地 1 笔 {old}→{new}"]
+
+
+def test_rebase_then_amend_steps_are_in_order(env, monkeypatch):
+    """一次同步里连改两次 HEAD(先 rebase 重放, 再收尾重跑后 amend): 两行必须**按发生顺序**排,
+    否则箭头链读起来是倒的(上一步的终点对不上下一步的起点)。
+
+    用替身钉住编排顺序 —— 真实场景要求「重放完 tip 上仍是中间态」, 用假生成器构造不出来
+    (它写的是与树无关的固定内容), 而顺序这件事本身是纯编排, 正好是替身能覆盖的。
+    """
+    monkeypatch.chdir(env.a)
+    _commit_file(env.a, "a-only.txt", "a\n", "local work")
+    _push_remote_commit(env, "b.txt", "b\n")
+    old = _git(env.a, "rev-parse", "HEAD")
+    monkeypatch.setattr(sync_mod, "_resolve_rebase", lambda rsha, cfg, ahead, head: (True, 1, "a" * 40, "b" * 40))
+    steps: list[str] = []
+    ok, _line = sync_mod.run_sync(steps)
+    assert ok and steps == [
+        f"同步: 远端领先 1 笔 · 本地领先 1 笔(分叉) → rebase 重放本地 1 笔 {old[:8]}→{'a' * 8}",
+        f"同步: 生成物自动重跑后 amend {'a' * 8}→{'b' * 8}",
+    ], steps
 
 
 def test_behind_clean_fast_forwards(env, monkeypatch):
@@ -462,6 +538,27 @@ def test_autoresolve_check_red_refuses(env, monkeypatch):
     assert not ok and "重叠" in line
     assert _git(env.a, "rev-parse", "HEAD") == before
     assert (env.a / "gen" / "a.md").read_bytes() == before_bytes
+
+
+def test_autoresolve_step_says_discarded(env, monkeypatch):
+    """生成物自动化解: 本地那份是**被丢弃后重跑**的 —— 步骤行必须说明, 否则读的人以为改动还在。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch)
+    old = _git(env.a, "rev-parse", "HEAD")[:8]
+    steps: list[str] = []
+    ok, line = sync_mod.run_sync(steps)
+    new = re.match(r"^同步成功 ([0-9a-f]{8}) 自动重跑生成物 1 处$", line).group(1)
+    assert ok and steps == [f"同步: 远端领先 1 笔 · 重叠 1 处全在生成物 → 丢弃本地那份后快进 {old}→{new}"]
+
+
+def test_main_prints_steps_above_result(env, monkeypatch, capsys):
+    """入口的顺序: 步骤行在上面, 结果行压尾(结果行才是要贴进回复 / 档案的那个值)。"""
+    monkeypatch.chdir(env.a)
+    _commit_file(env.a, "a-only.txt", "a\n", "local work")
+    _push_remote_commit(env, "b.txt", "b\n")
+    assert sync_mod.main([]) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert len(lines) == 2 and lines[0].startswith("同步: ") and lines[1].startswith("同步成功 ")
 
 
 def test_autoresolve_is_idempotent(env, monkeypatch):

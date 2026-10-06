@@ -1,9 +1,17 @@
-"""零参数全量提交 + 闸门 + 同步 + 推送 —— 编排合一, 输出契约 v3(计划 26-09-28-0157)「沉默即成功」。
+"""零参数全量提交 + 闸门 + 同步 + 推送 —— 编排合一, 承接 v3(计划 26-09-28-0157)「沉默即成功」并升级到 v3.1。
 
-  成功           → 提交成功 <hash>
-  推送未完成     → 提交成功 <hash> ＋ 推送未完成: <原因> —— 补推: commands run ship.push
-                   (提交这个主目标已达成, 别重新提交; 退出码仍 0)
-  失败           → 提交失败: <原因> —— <下一步>(闸门红附失败闸门名 + 输出末 20 行)
+  结果行      → 提交成功 <hash>
+  步骤行(上面) → 本次"真发生了"的 HEAD 改写, 相邻两步首尾相接 **旧hash→新hash**:
+                同步: 远端领先 1 笔 · 本地领先 1 笔(分叉) → rebase 重放本地 1 笔 aa11bb22→bb22cc33
+                闸门复跑: 合流后闸门改了 2 个文件 → amend bb22cc33→cc33dd44
+  推送未完成  → 提交成功 <hash>(未推送) ＋ 推送未完成: <原因> —— 补推: commands run ship.push
+                 (提交这个主目标已达成, 别重新提交; 退出码仍 0)
+  失败        → 提交失败: <原因> —— <下一步>(闸门红附失败闸门名 + 输出末 20 行)
+
+一次 ship.commit 里 HEAD 最多被改写三次 —— 提交自身、内部同步的 rebase、闸门复跑后的 amend
+(补推前 run_push 内部还可能再同步一次)。结果行只给终值, 前两段若不登记就成了黑箱 —— 这正是 v3.1
+要补的漏洞(2026-10-06 用户指出「输出过于精简, rebase 后 hash 变了会让人去查原因」)。
+登记纪律见 `_pipeline.py`「步骤登记」段; 结果行的唯一出口是 `emit()`。
 
 流程(2026-10-04 起**提交先行** —— 提交后树必然干净, 分叉 rebase 恒可自动, stash 解锁舞蹈自提交路径退役;
 全部静默, 检查项一个不删 —— 保全清单见计划 §04):
@@ -39,17 +47,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _pipeline import (  # noqa: E402
     changed_files,
     config_stops,
+    emit_steps,
     gates_for,
     git_run,
     hit,
     run_gates,
     staged_overflow,
+    step,
 )
 from _ship_config import ConfigMissing, find_root as _find_root, load_config  # noqa: E402
 from verify_ref import check_refs  # noqa: E402
 
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
 DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
+
+
+def emit(steps: list[str], line: str) -> None:
+    """打结果行 —— 步骤行永远排在它上面。**所有**结果行都从这里出(别处 print 结果行会让步骤行掉队)。
+
+    为什么必须集中: 一次提交里 HEAD 最多被改写三次(自身 → 内部 rebase → 闸门改后 amend);
+    只要有一个出口绕开这里, 那个 hash 变化就成了无人解释的黑箱 —— 正是 v3.1 要补的洞。
+    """
+    emit_steps(steps)
+    print(line)
 
 
 def find_root() -> Path:  # noqa: F811  — 包一层, 测试替身钉这里
@@ -108,33 +128,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--message-file", default=None, help=f"提交消息文件(缺省 <root>/{DEFAULT_MESSAGE_REL}; 约定路径落稳后自动删除)")
     parser.add_argument("--no-push", action="store_true", help="只提交不推送(不同步, 离线可用; 补推: commands run ship.push)")
     args = parser.parse_args(argv)
+    steps: list[str] = []  # 步骤登记簿由入口持有(见 _pipeline.py「步骤登记」段的三条纪律)
 
     try:  # 外置配置缺失 → 停手引导, 不猜默认值
         cfg, _src = load_config()
     except ConfigMissing as exc:
-        print(exc)
+        emit(steps, str(exc))
         return 1
     stops = config_stops(cfg, _src)
     if stops:  # 未知键 / timeout 非法 → 闸门可能静默失效, 必须停(不降级)
-        print(f"提交失败: 配置错误 —— {stops[0]}")
+        emit(steps, f"提交失败: 配置错误 —— {stops[0]}")
         return 1
     root = find_root()
 
     staged, unstaged = changed_files()
     overflow = staged_overflow(staged, cfg["staged_panic"])
     if overflow:
-        print(f"提交失败: {overflow}")
+        emit(steps, f"提交失败: {overflow}")
         return 1
     to_stage, omitted, refuse = resolve_stage_plan(args.paths, cfg["red_lines"], staged, unstaged)
     if refuse:
-        print(f"提交失败: {refuse}")
+        emit(steps, f"提交失败: {refuse}")
         return 1
     warn_files = hit(staged + unstaged, cfg["warn_lines"])
 
     msg_file = Path(args.message_file).expanduser() if args.message_file else default_message_path(root)
     if not msg_file.exists():
-        print(f"提交失败: 提交消息文件不存在 {msg_file} —— 把消息(中文首行 + 空行 + 动机/取舍/影响面/实测数字)"
-              f"写入后重跑; 约定文件消费即删, 每次提交前都要重写")
+        emit(steps, f"提交失败: 提交消息文件不存在 {msg_file} —— 把消息(中文首行 + 空行 + 动机/取舍/影响面/实测数字)"
+             f"写入后重跑; 约定文件消费即删, 每次提交前都要重写")
         return 1
 
     # 1 闸门(在暂存前: fmt 类闸门会改文件)。按本地改动清单跑; 合流后的树在步骤 6 复跑。
@@ -144,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     failures, manual, _ran = run_gates(gates_for(present, cfg["gates"]), ctx)
     if failures:
         note, cmd, rc, secs, tail = failures[0]
-        print(f"提交失败: 闸门「{note}」未过 (rc={rc}, {secs:.1f}s) —— 处理后重跑 commands run ship.commit")
+        emit(steps, f"提交失败: 闸门「{note}」未过 (rc={rc}, {secs:.1f}s) —— 处理后重跑 commands run ship.commit")
         print(f"  $ {cmd}")
         for line in tail.splitlines():
             print(f"    {line}")
@@ -165,8 +186,10 @@ def main(argv: list[str] | None = None) -> int:
             proc = git_run("add", "--", path)
         if proc.returncode != 0:
             err = (proc.stderr or "").strip().splitlines()
-            print(f"提交失败: git {'add' if exists else 'rm --cached'} 失败 {path} —— "
-                  f"{err[-1] if err else 'git 非 0'}")
+            emit(
+                steps, f"提交失败: git {'add' if exists else 'rm --cached'} 失败 {path} —— "
+                f"{err[-1] if err else 'git 非 0'}"
+            )
             return 1
     if omitted:
         shown = "、".join(omitted[:3]) + ("…" if len(omitted) > 3 else "")
@@ -176,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     proc = git_run("commit", "-F", str(msg_file))
     if proc.returncode != 0:
         detail = [l.strip() for l in ((proc.stdout or "") + (proc.stderr or "")).splitlines() if l.strip()]
-        print(f"提交失败: git commit 未通过 —— {detail[-1] if detail else 'git 非 0(明细: git status)'}")
+        emit(steps, f"提交失败: git commit 未通过 —— {detail[-1] if detail else 'git 非 0(明细: git status)'}")
         return 1  # 消息文件保留: 修好重跑还能用同一份
     sha_full = git_run("rev-parse", "HEAD").stdout.strip()
     sha = sha_full[:8]  # 8 位, 与 sync.py 的 <hash> 口径一致
@@ -185,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     #   同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交推出去
     ok, detail = check_refs()
     if not ok:
-        print("提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
+        emit(steps, "提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
         for line in detail:
             print(line)
         return 1  # 消息文件保留: 现场未定, 别急着消费
@@ -193,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     consume_message_file(msg_file, root)
 
     if args.no_push:  # 纯本地提交: 不同步不推送(离线可用), 合流留给补推时的 ship.push
-        print(f"提交成功 {sha}(未推送 —— 补推: commands run ship.push)")
+        emit(steps, f"提交成功 {sha}(未推送 —— 补推: commands run ship.push)")
         if warn_files:
             print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
         return 0
@@ -202,10 +225,10 @@ def main(argv: list[str] | None = None) -> int:
     #   冲突 / 断网自动回滚后停下要人 —— 提交已落稳, 按「推送未完成」处理, 别重新提交
     from sync import run_sync  # noqa: E402  (延后 import: 测试替身要能覆盖)
 
-    ok, sync_line = run_sync()
+    ok, sync_line = run_sync(steps)
     if not ok:
         sep = "" if sync_line.startswith("需解决") else ": "
-        print(f"提交成功 {sha}(未推送)")
+        emit(steps, f"提交成功 {sha}(未推送)")
         print(f"推送未完成: 同步失败{sep}{sync_line} —— 补推: commands run ship.push")
         if warn_files:
             print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
@@ -218,9 +241,11 @@ def main(argv: list[str] | None = None) -> int:
         failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
         if failures_r:
             note, cmd, rc, secs, tail = failures_r[0]
-            print(f"提交成功 {head_now[:8]}(未推送)")
-            print(f"推送未完成: 闸门「{note}」未过(合并远端后复跑, rc={rc}, {secs:.1f}s) —— "
-                  f"修复后重跑 commands run ship.commit(修复将作为新提交入库)")
+            emit(steps, f"提交成功 {head_now[:8]}(未推送)")
+            print(
+                f"推送未完成: 闸门「{note}」未过(合并远端后复跑, rc={rc}, {secs:.1f}s) —— "
+                f"修复后重跑 commands run ship.commit(修复将作为新提交入库)"
+            )
             print(f"  $ {cmd}")
             for line in tail.splitlines():
                 print(f"    {line}")
@@ -233,24 +258,27 @@ def main(argv: list[str] | None = None) -> int:
             proc = git_run("add", "--", path)
             if proc.returncode != 0:
                 err = (proc.stderr or "").strip().splitlines()
-                print(f"提交成功 {head_now[:8]}(未推送)")
+                emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: git add 失败 {path} —— {err[-1] if err else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
                     print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
                 return 0
         if dirty_r:
+            before = head_now
             amend = git_run("commit", "--amend", "--no-edit")
             if amend.returncode != 0:
                 detail = [l.strip() for l in ((amend.stdout or "") + (amend.stderr or "")).splitlines() if l.strip()]
-                print(f"提交成功 {head_now[:8]}(未推送)")
+                emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: 闸门改动 amend 失败 —— {detail[-1] if detail else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
                     print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
                 return 0
             head_now = git_run("rev-parse", "HEAD").stdout.strip()
+            # 闸门复跑改了文件 → amend 又挪了一次 tip: 不登记的话, 成功行的 hash 第三次失真
+            step(steps, f"闸门复跑: 合流后闸门改了 {len(dirty_r)} 个文件 → amend {before[:8]}→{head_now[:8]}")
             ok, detail = check_refs()  # amend 又是一次 ref 写入 —— 复核
             if not ok:
-                print("提交失败: ref 三处不一致(amend 后) —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
+                emit(steps, "提交失败: ref 三处不一致(amend 后) —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
                 for line in detail:
                     print(line)
                 return 1
@@ -259,13 +287,14 @@ def main(argv: list[str] | None = None) -> int:
     # 7 内联推送(run_push 内含同步核对 / 瞬时重试 / 静默镜像); 推送未完成 ≠ 提交失败
     from push import run_push  # noqa: E402
 
-    pushed, push_line = run_push()
+    pushed, push_line = run_push(steps)
     if not pushed:
-        print(f"提交成功 {sha}(未推送)")
+        emit(steps, f"提交成功 {sha}(未推送)")
         print(f"推送未完成: {push_line} —— 补推: commands run ship.push")
     else:
-        sha = git_run("rev-parse", "HEAD").stdout.strip()[:8]  # run_push 内部同步可能又 rebase(竞态) → 以终值为准
-        print(f"提交成功 {sha}")
+        # run_push 内部同步可能又 rebase(竞态) → 以终值为准; 中间那次改写由它自己登记在步骤行里
+        sha = git_run("rev-parse", "HEAD").stdout.strip()[:8]
+        emit(steps, f"提交成功 {sha}")
     if warn_files:
         print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
     return 0

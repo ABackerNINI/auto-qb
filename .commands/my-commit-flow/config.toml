@@ -13,13 +13,14 @@ scripts_dir = "scripts"
 enabled = true
 
 # v3 输出契约(计划 26-09-28-0157): 成功一行, 失败一行(原因 + 下一步); 检查项内联进 ship 编排。
+# v3.1(2026-10-06): 结果行逐字不变, 真改写 HEAD 的步骤在其上面各留一行「旧hash→新hash」。
 # v2 的独立 preflight 任务已移除(闸门引擎收编进 _pipeline.py, 由 ship.commit 内部调用)。
 
 [tasks."my-commit-flow.sync"]
 script = "sync.py"
 pin    = true
 when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前。自动 fetch + 快进/rebase(分叉保线性)。提交路径已不需要它(2026-10-04 起 ship.commit 提交先行); 想在提交前手工合流仍可单独跑"
-note   = "成功一行: 已同步/同步成功 <hash>(生成物冲突自动化解时附「自动重跑生成物 N 处」); 失败一行含原因与步骤(冲突已自动回滚); 结果贴进回复"
+note   = "结果行: 已同步/同步成功 <hash>(生成物自动化解附「自动重跑生成物 N 处」); 真改写 HEAD 的步骤在其上各留一行「旧hash→新hash」(齐平/本地领先无步骤); 失败一行含原因与步骤(冲突已自动回滚); 结果行贴进回复"
 doc    = "references/pipeline.md"
 
 [tasks."my-commit-flow.verify-ref"]

@@ -5,12 +5,13 @@
 - test_stage_plan_*                       暂存计划: 全量 / 子集(omitted 可见) / 拒批量 / 红线 / 空改动
 - test_message_default_path               约定消息路径 = <root>/.git/COMMIT_MSG_AI.txt
 - test_message_missing_fails_early        消息缺失 → 提交失败一行, 不碰 git 写操作
-- test_full_commit_push_one_line          全流程成功 → 恰好一行「提交成功 <hash>」; 消息文件消费即删
+- test_full_commit_push_one_line          全流程无合流 → 零步骤行, 结果独占一行「提交成功 <hash>」; 消息文件消费即删
 - test_staged_delete_skips_add            已暂存的删除: 逐路径 add 不再撞 pathspec 落空(issue 26-09-28-0128)
 - test_unstaged_delete_uses_rm_cached     未暂存的删除: 工作区无而索引有 → rm --cached 登记删除(issue 26-09-28-0128)
 - test_sync_offline_after_commit_partial  提交先行: 同步失败(离线)在提交落稳之后 → 推送未完成, 退出码 0
 - test_sync_conflict_line_passthrough     冲突类失败行原样透传(约定模板无缝拼接), 不再附死锁护栏
-- test_remote_moved_rebases_before_push   真仓: 远端前移 → 提交后 rebase 保线性, 成功行报改写后的新 hash
+- test_remote_moved_rebases_before_push   真仓: 远端前移 → 提交后 rebase 保线性, 结果行报改写后的新 hash(上方留 rebase 步骤行)
+- test_head_rewrite_trace_ends_at_result_hash  步骤链不变量: 链尾 == 结果行 hash · 相邻两步首尾相接 · 顺序在结果行上面
 - test_remote_conflict_reports_partial    真仓: 同文件冲突 → rebase 自动回滚 → 提交成功(未推送) + 冲突模板
 - test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一清单)
 - test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送
@@ -91,16 +92,16 @@ def _push_remote_commit(repo: Path, tmp: Path, name: str, content: str, msg: str
     _git(b, "push", "origin", "develop")
 
 
-def _must_not_push() -> None:
+def _must_not_push(steps=None) -> None:
     raise AssertionError("不该走到推送")
 
 
 def _patch_ok_flow(monkeypatch):
     """成功路径的外部替身: 同步齐平 / 闸门全过 / ref 一致 / 推送成功(镜像静默在 push 内)。"""
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (True, "已同步 abcdef01"))
+    monkeypatch.setattr(sync_mod, "run_sync", lambda steps=None: (True, "已同步 abcdef01"))
     monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
     monkeypatch.setattr(commit_mod, "check_refs", lambda expect="": (True, []))
-    monkeypatch.setattr(push_mod, "run_push", lambda: (True, "推送成功 abcdef01"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
 
 
 def _write_msg(repo: Path, text: str = "✨ test") -> Path:
@@ -153,6 +154,13 @@ def test_message_missing_fails_early(repo, capsys):
     assert "提交失败: 提交消息文件不存在" in out and ".git" in out and "COMMIT_MSG_AI.txt" in out
 
 
+def _result(out: str) -> str:
+    """成功/失败的结果行 —— 步骤行在它上面, 断言只看这最后一行(步骤守卫另有专测)。"""
+    lines = out.strip().splitlines()
+    assert lines, f"没有任何输出: {out!r}"
+    return lines[-1]
+
+
 def test_full_commit_push_one_line(repo, monkeypatch, capsys):
     _patch_ok_flow(monkeypatch)
     msg = _write_msg(repo)
@@ -160,7 +168,8 @@ def test_full_commit_push_one_line(repo, monkeypatch, capsys):
     rc = commit_mod.main([])
     out = capsys.readouterr().out
     assert rc == 0
-    assert re.fullmatch(r"提交成功 [0-9a-f]{8}\n", out), f"成功必须恰好一行, 实际: {out!r}"
+    # 一路无合流 = 没有任何 HEAD 改写 = 零步骤行, 结果独占一行(v3.1 的「没发生的不报」)
+    assert re.fullmatch(r"提交成功 [0-9a-f]{8}\n", out), f"无步骤时必须仍是一行, 实际: {out!r}"
     assert not msg.exists()  # 消费即删: 提交落稳后不残留旧消息
 
 
@@ -195,7 +204,7 @@ def test_unstaged_delete_uses_rm_cached(repo, monkeypatch, capsys):
 
 def test_sync_offline_after_commit_partial(repo, monkeypatch, capsys):
     """提交先行(2026-10-04): 同步失败发生在提交落稳之后 —— 按「推送未完成」处理, 不回滚提交。"""
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, "拿不到远端 origin/develop (离线?) —— 联网后重跑"))
+    monkeypatch.setattr(sync_mod, "run_sync", lambda steps=None: (False, "拿不到远端 origin/develop (离线?) —— 联网后重跑"))
     monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
     monkeypatch.setattr(push_mod, "run_push", _must_not_push)
     msg = _write_msg(repo)
@@ -213,7 +222,7 @@ def test_sync_offline_after_commit_partial(repo, monkeypatch, capsys):
 def test_sync_conflict_line_passthrough(repo, monkeypatch, capsys):
     """冲突类失败行原样透传, 与 sync.py main() 同一条拼接缝(「同步失败需解决冲突 …」无分隔冒号)。"""
     conflict_line = "需解决冲突 本地12345678 远端87654321 —— rebase 已自动回滚, 手动合流(解冲突)后重跑"
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, conflict_line))
+    monkeypatch.setattr(sync_mod, "run_sync", lambda steps=None: (False, conflict_line))
     monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
     monkeypatch.setattr(push_mod, "run_push", _must_not_push)
     _write_msg(repo)
@@ -233,15 +242,17 @@ def test_remote_moved_rebases_before_push(repo, tmp_path, monkeypatch, capsys):
     """提交先行主路径: 远端前移 → 提交后 rebase 保线性, 成功行报改写后的新 hash。"""
     pushed = []
     monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
-    monkeypatch.setattr(push_mod, "run_push", lambda: pushed.append(1) or (True, "推送成功 abcdef01"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: pushed.append(1) or (True, "推送成功 abcdef01"))
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     _push_remote_commit(repo, tmp_path, "b.txt", "b\n")  # 会话中途远端推进
     rc = commit_mod.main([])  # run_sync 不替身 —— 真跑(fetch + 提交后 rebase)
     out = capsys.readouterr().out
     assert rc == 0
-    m = re.fullmatch(r"提交成功 ([0-9a-f]{8})\n", out)
-    assert m, f"成功必须恰好一行, 实际: {out!r}"
+    m = re.fullmatch(r"提交成功 ([0-9a-f]{8})", _result(out))
+    assert m, f"结果行必须是「提交成功 <hash>」, 实际: {out!r}"
+    # rebase 改写了 HEAD: 上面必须有一行把旧 hash 接到新 hash 的痕迹 —— 否则结果行就是黑箱
+    assert re.search(rf"→ rebase 重放本地 1 笔 [0-9a-f]{{8}}→{m.group(1)}", out), out
     assert _git(repo, "rev-parse", "HEAD").startswith(m.group(1))  # 成功行报的是 rebase 后的真值
     remote_tip = _git(repo, "ls-remote", "origin", "develop").split()[0]
     assert _git(repo, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"  # 本地提交重放在远端 tip 上
@@ -278,13 +289,13 @@ def test_post_rebase_gates_rerun_on_diverge(repo, tmp_path, monkeypatch, capsys)
         return [], [], 0
 
     monkeypatch.setattr(commit_mod, "run_gates", _gates)
-    monkeypatch.setattr(push_mod, "run_push", lambda: (True, "推送成功 abcdef01"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
     rc = commit_mod.main([])
     out = capsys.readouterr().out
-    assert rc == 0 and out.startswith("提交成功 ")
+    assert rc == 0 and _result(out).startswith("提交成功 ")
     assert len(calls) == 2  # 提交前一轮 + 合流后复跑一轮
     assert calls[0] == calls[1] == ["x.txt"]
 
@@ -324,16 +335,43 @@ def test_post_rebase_gate_dirty_amends(repo, tmp_path, monkeypatch, capsys):
         return [], [], 0
 
     monkeypatch.setattr(commit_mod, "run_gates", _gates)
-    monkeypatch.setattr(push_mod, "run_push", lambda: (True, "推送成功 abcdef01"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
     rc = commit_mod.main([])
     out = capsys.readouterr().out
-    assert rc == 0 and out.startswith("提交成功 ")
+    assert rc == 0 and _result(out).startswith("提交成功 ")
     remote_tip = _git(repo, "ls-remote", "origin", "develop").split()[0]
     assert _git(repo, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"  # 仍只有一个本地提交
     assert "formatted" in _git(repo, "show", "HEAD:x.txt")  # 闸门改动折进了 tip
+    # amend 又挪了一次 tip —— 结果行的 hash 与 rebase 那行末端不同, 必须有一条步骤行接上
+    assert re.search(r"闸门复跑: 合流后闸门改了 1 个文件 → amend [0-9a-f]{8}→[0-9a-f]{8}", out), out
+
+
+def test_head_rewrite_trace_ends_at_result_hash(repo, tmp_path, monkeypatch, capsys):
+    """步骤链不变量: 每一步的箭头右侧 == 下一步箭头左侧, 链尾 == 结果行的 hash(三者必须自洽)。"""
+    calls = {"n": 0}
+
+    def _gates(hits, ctx):
+        calls["n"] += 1
+        if calls["n"] == 2:  # 合流后复跑: fmt 改文件 → 走 amend
+            (repo / "x.txt").write_text("x\nformatted\n", encoding="utf-8")
+        return [], [], 0
+
+    monkeypatch.setattr(commit_mod, "run_gates", _gates)
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
+    assert commit_mod.main([]) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    res = lines[-1]
+    pairs = re.findall(r"([0-9a-f]{8})→([0-9a-f]{8})", "\n".join(lines[:-1]))  # 每个步骤行的「旧hash→新hash」
+    assert pairs, f"没有任何 HEAD 改写步骤, 实际: {lines}"
+    assert pairs[-1][1] in res, f"结果行的 hash 必须与最后一步箭头右侧一致: {lines}"
+    assert [p[1] for p in pairs[:-1]] == [p[0] for p in pairs[1:]], f"步骤链必须首尾相接: {lines}"
+    assert lines[0].startswith("同步: ")  # 步骤行按发生顺序排在结果行上面
 
 
 # ------------------------------------------------------------------ 失败与例外路径
@@ -355,7 +393,7 @@ def test_gate_failure_blocks_commit(repo, monkeypatch, capsys):
 
 def test_push_failure_is_partial(repo, monkeypatch, capsys):
     _patch_ok_flow(monkeypatch)
-    monkeypatch.setattr(push_mod, "run_push", lambda: (False, "主线推送未通过 —— rejected"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (False, "主线推送未通过 —— rejected"))
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     rc = commit_mod.main([])
@@ -369,7 +407,7 @@ def test_push_failure_is_partial(repo, monkeypatch, capsys):
 def test_no_push_skips_sync_and_push(repo, monkeypatch, capsys):
     _patch_ok_flow(monkeypatch)
 
-    def _must_not_run():
+    def _must_not_run(steps=None):
         raise AssertionError("--no-push 不该碰同步 / 推送")
 
     monkeypatch.setattr(sync_mod, "run_sync", _must_not_run)
