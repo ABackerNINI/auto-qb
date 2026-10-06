@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>my-commit-flow 自我改写版本撕裂 · 临时目录快照自举可行性分析 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="my-commit-flow-self-snapshot">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-07-0208">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-ship-self-snapshot.md">
+<meta name="doc-updated" content="26-10-07-0208">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --bad: #e08585;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.ok { background: #17251a; color: var(--ok); border-color: #2f4a33; }
+  .badge.bad { background: #2a1a1a; color: var(--bad); border-color: #4a2c2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 82ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 82ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 82ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.bad { border-left-color: var(--bad); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>任务与验证方式</a>
+    <a href="#s2"><span class="no">02</span>结论速览</a>
+    <a href="#s3"><span class="no">03</span>问题定性: 自我改写 → 版本撕裂</a>
+    <a href="#s4"><span class="no">04</span>为什么现有修复只是治标</a>
+    <a href="#s5"><span class="no">05</span>方案空间与选型</a>
+    <a href="#s6"><span class="no">06</span>推荐方案: 快照自举</a>
+    <a href="#s7"><span class="no">07</span>可行性验证(原型实测)</a>
+    <a href="#s8"><span class="no">08</span>迁移与实施计划</a>
+    <a href="#s9"><span class="no">09</span>风险与边界</a>
+    <a href="#s10"><span class="no">10</span>建议后续</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 可行性分析报告</div>
+    <h1>my-commit-flow 自我改写版本撕裂 · 临时目录快照自举</h1>
+    <p class="lede">本包脚本与配置住在它自己中途改写的仓库里: 一次 <code>ship.commit</code> 内部的同步 rebase 会把远端新版包脚本 / 配置换进工作区, 于是同一次调用里"提交前"与"提交后"跑的可能不是同一版代码 / 同一份规则。既有修复(<code>reload_config</code> + <code>refresh_package_modules</code>)是逐点打补丁, 治标不治本 —— 本报告用原型实测确认「把整包复制到仓库外临时目录再运行」彻底可行, 并给出更完整的方案空间与实施计划。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-07-0208-my-commit-flow-self-snapshot</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 02:08</div></div>
+      <div class="item"><div class="k">取证基线</div><div class="v">develop @ 58f7bb0a</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>任务与验证方式</h2>
+    <p>用户报告: <code>my-commit-flow</code> 在 pull 时会自我更新; 若它本身也被更新, 一次运行可能"一部分按更新前、一部分按更新后"跑 —— 之前的修复只是治标。提出的候选方案是「<code>my-commit-flow</code> 把自己复制到临时目录运行」, 要求验证可行性、或给出更好的方案, 并出报告。</p>
+    <p>验证方式分两步: <b>①代码事实核对</b> —— 通读 <code>.commands/my-commit-flow/scripts/</code> 全部脚本与 <code>references/</code>, 逐点确认"启动时快照、之后一直用"的位置, 并核对既有修复的覆盖边界; <b>②原型实测</b> —— 在真 git 仓里对<b>真实包</b>注入快照机制, 端到端跑 <code>commit.py --no-push</code>, 并用"改写原包后跑旧副本"证明快照语义成立(§07)。原型脚本在 <code>tmp-analysis/mcf-snapshot-proto/</code>(临时区, 不入库), 核心模块全文见 §06 附录。</p>
+    <p>本报告只做<b>分析与验证</b>, 不改动生产脚本 —— 实施授权与批次由用户拍板。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>结论速览</h2>
+    <table>
+      <tr><th>问题</th><th>判定</th><th>依据</th></tr>
+      <tr>
+        <td>临时目录快照自举是否可行?</td>
+        <td><span class="badge ok">可行 · 原型 10/10 通过</span></td>
+        <td>真仓真包端到端提交成功; 副本在仓库外、含包脚本; <b>改写原包后旧副本输出不变</b>(免疫), 新调用则采用新版本; <code>import</code> 不触发重入; 退出码 / argv 透传。代价: 16 文件复制 ~26ms。</td>
+      </tr>
+      <tr>
+        <td>是否有更好的方案?</td>
+        <td><span class="badge">无 —— 快照自举即最优解</span></td>
+        <td>「移出仓库」「git worktree」「两段进程」「继续打补丁」均有结构性缺陷(§05); 快照自举是唯一同时满足「不改复用模型 / 免疫一切自我改写 / 一次调用一个版本」的方案。</td>
+      </tr>
+      <tr>
+        <td>现有修复的性质</td>
+        <td><span class="badge bad">治标 · 有 5 处已知漏洞</span></td>
+        <td>入口脚本无法热刷新; <code>importlib.reload</code> 不重绑调用方已导入的名字; 配置重取只两个点; 逐点接线无不变量; 门控 / 依赖序本身脆弱(§04)。</td>
+      </tr>
+    </table>
+    <div class="callout ok"><b>核心结论</b>: 采纳「快照语义」—— 一次调用只认一个版本。用临时目录复制 + 重入实现: 副本在仓库之外, <code>git rebase</code> 永远碰不到它, 中途的一切自我改写对本进程不可见。这同时把 §04 的五处漏洞<b>一次性</b>关掉(它们全部是"进程手里的快照过期"这一根因的表现)。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>问题定性: 自我改写 → 版本撕裂</h2>
+    <p>这是一类<b>自指(self-reference)</b>缺陷: 工具的源码与配置<b>就住在被它自己操作的仓库里</b>, 而工具在运行中途会改写这棵树。</p>
+    <h3>机制链</h3>
+    <pre><code>commands run ship.commit
+  └─ 引擎调 <root>/.commands/my-commit-flow/scripts/commit.py   (COMMAND_FLOW_PACK_DIR=<原包>)
+       ├─ ① 启动时 load_config() 读 .my-commit-flow.toml         ← 快照 A(规则)
+       ├─ ② import _pipeline / sync / push / _ship_config          ← 快照 B(代码)
+       ├─ ③ 闸门 → 暂存 → commit → 核 ref
+       ├─ ④ 内部同步 run_sync: fetch + merge --ff-only / git rebase
+       │       ★ 远端若改过 .commands/my-commit-flow/**, rebase 会把新脚本 / 新配置
+       │         写进工作区 —— 而进程手里的 A / B 还是启动时那份
+       ├─ ⑤ rebase 后复跑闸门 / 收尾 amend
+       └─ ⑥ 内联推送 run_push(内部还可能再同步一次)</code></pre>
+    <p>撕裂发生在 ④ 之后: 进程继续用<b>旧代码 + 旧规则</b>处理<b>已被换成新版的工作树</b>。危害分两族(既有坑档已记):</p>
+    <table>
+      <tr><th>族</th><th>症状</th><th>可见性</th></tr>
+      <tr><td>模块缓存族(<code>self-rewrite-imports.md</code>)</td><td>延迟 import 的新脚本撞上进程缓存的旧依赖 ⇒ <code>ImportError</code>, 退出码被误置 1</td><td><b>报出来</b></td></tr>
+      <tr><td>配置快照族(<code>self-rewrite-config.md</code>)</td><td>闸门照跑, 只是规则不对(旧闸门集 / 旧 <code>each_limit</code> / 旧红线 / 旧生成物白名单); 输出与"全过"一字不差</td><td><b>静默</b></td></tr>
+    </table>
+    <div class="callout warn">用户说的"一部分按更新前、一部分按更新后"正是这个撕裂: ③ 之前是旧版, ⑤/⑥ 因为打了补丁而部分跟随新版 —— <b>同一次调用里混了两个版本</b>, 且混合边界取决于补丁打在哪几个点, 不可预测。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>为什么现有修复只是治标</h2>
+    <p>既有修复(<code>commit 58f7bb0a</code>)加了两件机制: <code>_pipeline.refresh_package_modules()</code>(热刷新包模块)与 <code>_pipeline.reload_config()</code> / <code>sync._reload_cfg()</code>(自我改写后重取配置)。它们各自解决了<b>被发现的那一处</b>, 但没有、也无法建立"一次调用一个版本"的不变量。逐点核对如下:</p>
+    <table>
+      <tr><th>#</th><th>漏洞</th><th>代码事实</th><th>后果</th></tr>
+      <tr>
+        <td>1</td>
+        <td>入口脚本自身<b>永远无法热刷新</b></td>
+        <td><code>_pipeline._PACKAGE_MODULES = ("_ship_config", "_pipeline", "sync", "push")</code> —— <b>不含</b> <code>commit.py</code> / <code>verify_ref.py</code>; 它们作为 <code>__main__</code> 运行, 字节码在进程启动即固定</td>
+        <td>远端若改了编排逻辑(步骤顺序 / 输出契约 / 暂存分流), 本进程仍按旧编排跑新树</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>importlib.reload</code> 只换模块对象, <b>不重绑调用方已导入的名字</b></td>
+        <td><code>commit.py:52</code> <code>from _pipeline import (changed_files, run_gates, reload_config, …)</code> 是 import 期绑定; reload 后这些名字仍指向<b>旧函数对象</b> ⇒ 第 6 步复跑(<code>commit.py:267</code> <code>run_gates(...)</code>)调的还是旧闸门引擎</td>
+        <td>真正受益的只有 reload <b>之后</b>才 import 的 <code>sync</code> / <code>push</code>; <code>commit.py</code> 自己的调用全部停在旧版</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>配置重取只覆盖两个点</td>
+        <td>仅 <code>commit.py:255</code>(复跑前)与 <code>sync._reload_cfg</code>(<code>sync.py:178</code>); <code>verify_ref.py:27</code> 的 <code>REPO</code> / <code>BRANCH</code> 是 import 期定死; <code>commit.py</code> 手里的 <code>cfg</code> dict 之后仍被用于红线 / warn / <code>each_limit</code></td>
+        <td>其它读配置的路径照旧吃启动快照; 覆盖是"点"不是"面"</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>逐点接线, <b>没有全局不变量</b></td>
+        <td>同类缺陷已修两轮(模块缓存 → 配置快照), 每发现一处新组合就补一处</td>
+        <td>"旧代码 × 新树"的组合空间无法穷举 ⇒ 这类 bug 靠打补丁<b>无法闭环</b>, 只会不断复发</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>门控与依赖序本身脆弱</td>
+        <td><code>refresh_package_modules</code> 按"源码变了"的内容摘要门控, 且注释自承 <code>_pipeline</code> reload 会重算 <code>_PACKAGE_DIGESTS</code> 的排序陷阱; 它看不见 <code>commit.py</code> / <code>verify_ref.py</code></td>
+        <td>机制越修越复杂, 而覆盖仍不完整</td>
+      </tr>
+    </table>
+    <div class="callout bad"><b>定性</b>: 现有修复把"混合两个版本"的边界从"随机"收窄到"补丁点", 但没有消除混合本身。用户的判断成立 —— 需要一个<b>治本</b>方案。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>方案空间与选型</h2>
+    <table>
+      <tr><th>方案</th><th>机制</th><th>优点</th><th>缺点</th><th>判定</th></tr>
+      <tr>
+        <td><b>A. 临时目录快照 + 重入</b><br>(用户提议)</td>
+        <td>入口启动时把整包复制到<b>仓库之外</b>的临时目录, 从副本重入</td>
+        <td>一次调用 = 一个版本; 免疫一切自我改写; 心智模型简单; 副本含<b>工作区未提交改动</b>(所见即所跑)</td>
+        <td>需重入管道 + 真根注入; 失去"复跑用新规则"(见 §06 语义); 会留临时目录</td>
+        <td><span class="badge ok">推荐</span></td>
+      </tr>
+      <tr>
+        <td>B. 把包移出仓库<br>(独立安装 / 子模块)</td>
+        <td>包不再住在 <code>.commands/</code> 里</td>
+        <td>从根上无自我改写</td>
+        <td>破坏"整包复制即可带走"的设计; 引擎要求包在 <code>.commands/</code> 下; 包与仓库版本同步变手工</td>
+        <td><span class="badge bad">否</span></td>
+      </tr>
+      <tr>
+        <td>C. <code>git worktree</code> 快照</td>
+        <td>在临时 worktree 里跑 HEAD 版</td>
+        <td>用 git 原生快照</td>
+        <td>只含<b>已提交</b>版(丢工作区改动 —— 正在改流水线自己时反而跑旧版); worktree 的 <code>.git</code> 文件让"根"歧义更复杂; 重</td>
+        <td><span class="badge bad">否</span></td>
+      </tr>
+      <tr>
+        <td>D. 拒绝自我改写<br>(检测到本包被改 → 停下要求重跑)</td>
+        <td>rebase 后检测本包是否被换, 若是则停</td>
+        <td>无需复制; 显式</td>
+        <td>不能自动续推, 要人重跑; 仍是"半程"</td>
+        <td><span class="badge">可作补充</span></td>
+      </tr>
+      <tr>
+        <td>E. 两段进程<br>(提交 / 同步+推送 拆两次调用)</td>
+        <td>每阶段独立进程</td>
+        <td>每段内部一致</td>
+        <td>段间仍撕裂(旧提交 + 新推送); 输出契约跨进程拼接复杂</td>
+        <td><span class="badge bad">否</span></td>
+      </tr>
+      <tr>
+        <td>F. 维持现状继续打补丁</td>
+        <td>逐点 <code>reload</code></td>
+        <td>无迁移成本</td>
+        <td>治标; 已知 5 处漏洞; 无法闭环(§04)</td>
+        <td><span class="badge bad">否</span></td>
+      </tr>
+    </table>
+    <p><b>选型结论</b>: 采纳 <b>A</b>, 并把 <b>D</b> 降级为"提示"并入 A —— 快照让本进程免疫, 但"上游改动了本包"这件事对用户是有价值的信号, 应登记一行步骤行提示"重跑以采用新版本", 而不是静默。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>推荐方案: 快照自举(临时目录 + 重入)</h2>
+    <h3>6.1 语义: 一次调用 = 一个版本(快照语义)</h3>
+    <p>启动时复制、从副本重入, 于是<b>整个调用</b>跑的是同一份代码与同一份配置。中途 rebase 把新版本写进工作区, 对本进程<b>不可见</b> —— 新版本从<b>下一次调用</b>生效。这与"引擎不能中途换零件"同构, 简单、可预测, 一次性消灭整类撕裂。</p>
+    <div class="callout">关键取舍: <b>放弃</b>"复跑用新规则"。既有补丁试图让复跑采纳合并后的新配置, 但那正是撕裂的来源, 且永远补不全(§04)。快照语义下改为: rebase 后若发现本包被上游改动 → 登记一行提示「本次仍按启动版本运行, 重跑以采用新版本」, 不静默。</div>
+    <h3>6.2 契约(由 <code>_snapshot.py</code> 注入)</h3>
+    <table>
+      <tr><th>环境变量</th><th>值</th><th>作用</th></tr>
+      <tr><td><code>COMMAND_FLOW_SNAPSHOT</code></td><td><code>1</code></td><td>标记"已在快照里" —— 防止无限重入</td></tr>
+      <tr><td><code>COMMAND_FLOW_PACK_DIR</code></td><td><code>&lt;副本&gt;</code></td><td>覆盖引擎注入的原包路径 ⇒ 配置 / 模块一律从副本读</td></tr>
+      <tr><td><code>COMMAND_FLOW_REPO_ROOT</code></td><td><code>&lt;真根&gt;</code></td><td>副本在仓库外, 向上找不到 <code>.git</code> ⇒ 显式告知真根</td></tr>
+      <tr><td><code>COMMAND_FLOW_ORIGINAL_PACK</code></td><td><code>&lt;原包&gt;</code></td><td>诊断 / 排障</td></tr>
+      <tr><td><code>COMMAND_FLOW_SNAPSHOT_KEEP</code></td><td><code>1</code></td><td>保留临时目录(排障 / 测试)</td></tr>
+    </table>
+    <h3>6.3 入口用法(每个入口脚本 <code>__main__</code> 分支, 3 行)</h3>
+    <pre><code>if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _snapshot import maybe_respawn
+    _rc = maybe_respawn(__file__)      # 未在快照里 → 复制 + 重入, 返回子进程退出码
+    if _rc is not None:
+        raise SystemExit(_rc)          # 已由子进程接管</code></pre>
+    <ul>
+      <li>放在 <code>if __name__ == "__main__"</code> 下 ⇒ <b>测试 <code>import commit</code> 不受影响</b>(<code>__name__</code> 非 <code>__main__</code>)。</li>
+      <li>重入用 <code>subprocess.call</code>(非 <code>os.execv</code>) —— Windows 上 exec 语义不可靠, 多一层进程换稳定。</li>
+      <li><b>纯信息入口</b>(<code>--help</code> / <code>-h</code> / <code>--safety</code> / <code>--show-config</code> / <code>--init</code>)<b>不复制</b>, 直接作用于原包 —— 尤其 <code>--init</code> 要把配置写进真包, 不能写进临时副本。</li>
+    </ul>
+    <h3>6.4 需要同步改的两处</h3>
+    <ul>
+      <li><code>_ship_config.find_root()</code>: 顶部加一行 —— 有 <code>COMMAND_FLOW_REPO_ROOT</code> 就用它(副本在仓库外, 原有的"向上找 <code>.git</code>"会落到错误位置)。</li>
+      <li>退役 <code>refresh_package_modules</code> / <code>reload_config</code> 及其调用点 —— 快照语义下它们不再有意义, 留着是死代码。</li>
+    </ul>
+    <h3>6.5 附录: 原型模块全文(已验证)</h3>
+    <pre><code>"""包快照自举: 把本包复制到仓库之外的临时目录后再运行 —— 让一次调用只认一个版本。"""
+from __future__ import annotations
+import os, shutil, subprocess, sys, tempfile, time
+from pathlib import Path
+
+SNAPSHOT_ENV = "COMMAND_FLOW_SNAPSHOT"
+REPO_ROOT_ENV = "COMMAND_FLOW_REPO_ROOT"
+ORIG_PACK_ENV = "COMMAND_FLOW_ORIGINAL_PACK"
+PACK_DIR_ENV = "COMMAND_FLOW_PACK_DIR"
+KEEP_ENV = "COMMAND_FLOW_SNAPSHOT_KEEP"
+SNAPSHOT_PREFIX = "my-commit-flow-"
+SWEEP_AGE = 24 * 3600                      # 超过一天的旧快照清掉(强杀时 atexit 不跑)
+INFO_FLAGS = ("--help", "-h", "--safety", "--show-config", "--init")
+
+def _pack_dir(entry_file):
+    return Path(entry_file).resolve().parent.parent
+
+def _find_repo_root(start):
+    for parent in (start, *start.parents):
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+def _sweep_old():
+    base, now = Path(tempfile.gettempdir()), time.time()
+    for entry in base.glob(SNAPSHOT_PREFIX + "*"):
+        try:
+            if entry.is_dir() and now - entry.stat().st_mtime > SWEEP_AGE:
+                shutil.rmtree(entry, ignore_errors=True)
+        except OSError:
+            pass
+
+def make_snapshot(src_pack):
+    _sweep_old()
+    dest = Path(tempfile.mkdtemp(prefix=SNAPSHOT_PREFIX))
+    shutil.copytree(src_pack, dest / "pack",
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    return dest / "pack"
+
+def maybe_respawn(entry_file, argv=None):
+    if os.environ.get(SNAPSHOT_ENV) == "1":
+        return None
+    args = list(sys.argv[1:] if argv is None else argv)
+    if any(f in args for f in INFO_FLAGS):
+        return None
+    src_pack = _pack_dir(entry_file)
+    repo_root = _find_repo_root(src_pack)
+    snap_pack = make_snapshot(src_pack)
+    child = snap_pack / "scripts" / Path(entry_file).name
+    env = {**os.environ, SNAPSHOT_ENV: "1", PACK_DIR_ENV: str(snap_pack),
+           ORIG_PACK_ENV: str(src_pack)}
+    if repo_root is not None:
+        env[REPO_ROOT_ENV] = str(repo_root)
+    try:
+        rc = subprocess.call([sys.executable, str(child), *args], env=env, cwd=os.getcwd())
+    finally:
+        if os.environ.get(KEEP_ENV) != "1":
+            shutil.rmtree(snap_pack.parent, ignore_errors=True)
+    return rc</code></pre>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>可行性验证(原型实测)</h2>
+    <p>原型对<b>真实包</b>注入快照机制: 建真 git 仓 → 把真包复制进 <code>&lt;repo&gt;/.commands/my-commit-flow/</code> → 注入 <code>_snapshot.py</code> + 入口守卫 + <code>find_root</code> 的 env 覆盖 + 最小配置(无闸门, 隔离快照机制本身) → 跑真 <code>commit.py</code>。全部 10 项断言通过(可重复):</p>
+    <table>
+      <tr><th>#</th><th>用例</th><th>断言</th><th>实测</th></tr>
+      <tr><td>T1</td><td>端到端提交</td><td><code>commit.py --no-push</code> 经快照重入后提交成功</td><td><span class="badge ok">PASS</span> <code>提交成功 &lt;hash&gt;(未推送 —— 补推: …)</code></td></tr>
+      <tr><td>T2</td><td>副本位置</td><td>生成仓库之外的临时副本, 且含包脚本</td><td><span class="badge ok">PASS</span> <code>H:/Temp/my-commit-flow-xxxxxxxx</code></td></tr>
+      <tr><td>T3a</td><td><b>免疫</b>(核心)</td><td>改写原包后, 跑<b>旧副本</b> → 无新版哨兵</td><td><span class="badge ok">PASS</span> 输出不含 <code>SENTINEL_V2</code></td></tr>
+      <tr><td>T3b</td><td><b>采纳</b></td><td>改写原包后, <b>新调用</b> → 采用新版(有哨兵)</td><td><span class="badge ok">PASS</span> 输出含 <code>SENTINEL_V2</code></td></tr>
+      <tr><td>T4</td><td>测试不受影响</td><td><code>import commit</code> 不触发重入(副本数不变)</td><td><span class="badge ok">PASS</span></td></tr>
+      <tr><td>T5</td><td>信息入口</td><td><code>_pipeline.py --show-config</code> 不复制且读<b>原包</b>配置</td><td><span class="badge ok">PASS</span></td></tr>
+      <tr><td>T6</td><td>根解析</td><td><code>find_root()</code> 经 env 指向真仓库根</td><td><span class="badge ok">PASS</span></td></tr>
+      <tr><td>T7</td><td>退出码透传</td><td>失败场景 rc=1 透传给调用方</td><td><span class="badge ok">PASS</span> rc=1</td></tr>
+    </table>
+    <p><b>开销</b>: 包共 16 个文件; <code>make_snapshot</code> 实测 min 22.5ms / max 38.2ms / avg 26.2ms(5 次)。加上一次额外 Python 启动, 单次调用总开销约百毫秒级 —— 对提交流水线可忽略。</p>
+    <div class="callout ok">T3a / T3b 是快照语义的直接证据: 同一个副本在"原包已被改写"之后仍产出旧行为(免疫), 而原包的新调用产出新行为(采纳)。这正是"一次调用 = 一个版本"的定义。</div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>迁移与实施计划</h2>
+    <table>
+      <tr><th>#</th><th>文件</th><th>改动</th></tr>
+      <tr><td>1</td><td><code>scripts/_snapshot.py</code>(新)</td><td>快照自举核心(§06.5)</td></tr>
+      <tr><td>2</td><td><code>commit.py</code> / <code>sync.py</code> / <code>push.py</code> / <code>verify_ref.py</code></td><td>各自 <code>__main__</code> 分支加 3 行守卫(§06.3)</td></tr>
+      <tr><td>3</td><td><code>_ship_config.py</code></td><td><code>find_root()</code> 认 <code>COMMAND_FLOW_REPO_ROOT</code></td></tr>
+      <tr><td>4</td><td><code>_pipeline.py</code></td><td>退役 <code>refresh_package_modules</code> / <code>reload_config</code>; 新增「本包被上游改动」步骤行(基于 <code>git diff --name-only &lt;旧&gt; HEAD -- .commands/my-commit-flow/</code>)</td></tr>
+      <tr><td>5</td><td><code>sync.py</code></td><td>退役 <code>_reload_cfg</code> 及三个取用点; 生成物自动化解改回用<b>本进程快照配置</b></td></tr>
+      <tr><td>6</td><td><code>test_*.py</code></td><td>迁移 5 条 reload 接线测试(<code>test_post_rebase_rerun_uses_reloaded_config</code> / <code>..._unchanged_config_stays_silent</code> / <code>..._broken_new_config_blocks_push</code> / <code>test_push_path_refreshes_package_modules</code> / <code>test_no_push_never_refreshes</code>) + <code>ReloadConfigTest</code> + <code>test_sync.py</code> 4 条 → 改为快照守阵(重入 / 免疫 / 根注入 / import 不重入)</td></tr>
+      <tr><td>7</td><td><code>references/pipeline.md</code> · <code>config.md</code></td><td>更新「配置在流水线里什么时候被读」表; 退役 <code>reload_config</code> / 热刷新段, 换成快照语义</td></tr>
+      <tr><td>8</td><td><code>memory-bank/</code></td><td>两条 pitfall(<code>self-rewrite-imports.md</code> / <code>self-rewrite-config.md</code>)补"已被快照语义取代"的收口注记 + 本报告 + 任务档案</td></tr>
+    </table>
+    <div class="callout warn">测试迁移是本方案<b>唯一</b>的非平凡成本: 既有 9 条守阵专测"重取配置 / 热刷新", 快照语义下它们失去意义 —— 必须<b>成对</b>删除(机制 + 接线), 否则留下测不到现实的死守阵。建议实施时单独一批, 附红验。</div>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>风险与边界</h2>
+    <table>
+      <tr><th>项</th><th>风险</th><th>处置</th></tr>
+      <tr><td>Windows 进程</td><td><code>os.execv</code> 不真正替换进程 / stdio 继承有坑</td><td>用 <code>subprocess.call</code> + <code>sys.exit(rc)</code>(原型已验证)</td></tr>
+      <tr><td>临时目录泄漏</td><td>强杀 / 崩溃时 <code>finally</code> 不跑</td><td>启动时清扫 &gt;1 天的旧快照; 正常路径 <code>finally</code> 删除</td></tr>
+      <tr><td><code>--init</code> 写错位置</td><td>从副本跑会把配置写进临时目录而丢失</td><td><code>INFO_FLAGS</code> 让纯信息入口不复制, 作用于原包</td></tr>
+      <tr><td>不在 git 仓里</td><td>找不到 <code>.git</code>, 注入错误根</td><td>找不到就不注入, 让脚本走自己的兜底</td></tr>
+      <tr><td>调试栈指向临时路径</td><td>报错里 <code>__file__</code> 是副本路径, 排障时困惑</td><td>注入 <code>COMMAND_FLOW_ORIGINAL_PACK</code>; 可选: 失败时保留副本并打印其路径</td></tr>
+      <tr><td>冒烟闸门扫到新脚本</td><td><code>&lt;each:.commands/**/scripts/*.py&gt; --help</code> 会带上 <code>_snapshot.py</code></td><td>无 <code>main</code> ⇒ 跑 <code>--help</code> 无副作用, rc=0, 无害</td></tr>
+      <tr><td>闸门(外部工具)仍跟仓库走</td><td><code>&lt;skill-dir:commands&gt;</code> 等被 rebase 换掉</td><td><b>这是对的</b>: 闸门要测<b>被测的树</b>, 每次都是新进程、内部一致; 必须固定的只有流水线自身</td></tr>
+      <tr><td>语义变化</td><td>失去"复跑用新规则"</td><td>用「本包被上游改动」步骤行提示重跑; 这是刻意的取舍(§06.1)</td></tr>
+    </table>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>建议后续</h2>
+    <ol>
+      <li><b>采纳方案 A</b>(临时目录快照 + 重入): 可行性与开销均已实测, 是治本方案。按 §08 计划分批实施; 测试迁移单独一批并附红验。</li>
+      <li><b>并入 D 作提示</b>: rebase 后检测本包是否被上游改动, 若改则登记一行步骤行(不静默), 引导用户重跑以采用新版本。</li>
+      <li><b>收口既有补丁</b>: <code>refresh_package_modules</code> / <code>reload_config</code> / <code>_reload_cfg</code> 及对应 9 条守阵随实施一并退役, 避免死代码与"测不到现实"的守阵并存。</li>
+      <li><b>更新两条坑档</b>: <code>self-rewrite-imports.md</code> / <code>self-rewrite-config.md</code> 的"延伸"段补一句 —— 这类自指缺陷的根治方向是<b>版本快照隔离</b>, 而非继续在"读一次用到底"的快照上打补丁。</li>
+    </ol>
+  </section>
+
+  <footer>
+    memory-bank/reports/26-10-07-0208-report-my-commit-flow-self-snapshot.html · 取证基线 develop @ 58f7bb0a · 证据快照, 出厂即冻结; 后续推进在任务档案 26-10-07-ship-self-snapshot 里留痕
+  </footer>
+
+</div>
+</body>
+</html>
