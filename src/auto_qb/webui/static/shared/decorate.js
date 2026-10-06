@@ -161,9 +161,8 @@ window.AQB_DECORATE = {
         const m = this.memberByHash.get(h);
         if (!m) continue;
         if (!this._memberPass(m)) continue;
-        const hit = hits.has(h);
-        if (q && !hit) continue;
-        out.push({ ...m, hit: q ? hit : false });
+        if (q && !hits.has(h)) continue;
+        out.push(m);
       }
       out.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       return out;

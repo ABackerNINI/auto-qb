@@ -137,8 +137,8 @@ window.AQB_SHOWS = {
      * 保留整集) + 排序。搜索命中一律来自服务端 searchHits(与辅种/种子页同一套匹配裁决,
      * 见 views.py::search_torrents), 前端不持有文本匹配实现 —— 旧版此处还有一个剧名整句
      * includes 快捷命中, 已删: 剧名本就是成员种子名解析出的标题(tvshows.parse_release),
-     * 服务端名字行命中天然覆盖。剧行高亮 hit = 搜索中该剧**全部集**都保留(≈ 整剧命中,
-     * 集级部分命中只亮集行)。 */
+     * 服务端名字行命中天然覆盖。剧行高亮 hit = 搜索中该剧**全部集**都保留(≈ 整剧命中);
+     * !26-10-07: 集行不再做行级高亮(集被保留即命中, 全亮无区分), 明细成员行仍只亮命中成员。 */
     decoratedShows() {
       const q = (this.searchQuery || "").trim();
       const hits = this.searchHits;
@@ -162,7 +162,7 @@ window.AQB_SHOWS = {
             if (q && !epHit) continue;
             keptEps += 1;
             keptMembers += members.length;
-            eps.push({ ...e, members, hit: epHit, epKeyStr: e.key.join("-") });
+            eps.push({ ...e, members, epKeyStr: e.key.join("-") });
           }
           if (eps.length) seasons.push({ ...sn, episodes: eps });
         }

@@ -21,7 +21,7 @@
             <!-- P1-2 行窗口: 3000 行里只渲染视口附近那几十行; 上下占位撑住总高 -->
             <div v-if="torrentPadTop" class="row-pad" :style="{ height: torrentPadTop + 'px' }" aria-hidden="true"></div>
             <div v-for="m in visibleTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent" :data-hash="m.hash"
-                 :class="['s-' + m.kind, { 'search-hit': isHit(m), selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
+                 :class="['s-' + m.kind, { selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
                  @dblclick="openTorrentDrawer(m.hash)"

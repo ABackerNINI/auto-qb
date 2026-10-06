@@ -9,6 +9,7 @@
 <meta name="doc-topic" content="webui-search-query-syntax">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-search-highlight.md">
 <meta name="issue-title" content="搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)">
 <meta name="issue-summary" content="搜索结果需标出命中来源域与命中片段, 无匹配时给出「匹配到文件名/标签/站点」类提示">
 <title>搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识) · feat · 计划外问题</title>
@@ -154,6 +155,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-07 03:58 — 关联任务档案 <code>26-10-07-webui-search-highlight</code>：用户报「搜索后所有种子都命中 ⇒ 行级高亮恒亮, 失去意义」, <strong>已移除"保留即命中"的冗余行级 search-hit 高亮</strong>(种子页种子行 / 辅种页组行 / 追剧页集行 / 未识别行), 保留明细成员行与站点挂件"仅命中成员才亮"的高亮。本 issue 的诉求(命中域标识 / 命中片段高亮 / 无命中提示)<strong>仍未实现</strong>, 状态 Open 维持。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>

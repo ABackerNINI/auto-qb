@@ -57,7 +57,7 @@
                     </span>
                   </div>
                   <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
-                    <div class="group-row ep-row" data-table="show" :data-key="showEpRowId(s.key, sn.season, e.epKeyStr)" :class="['s-' + epState(e), { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial, 'is-pending': isEpPending(e), 'kb-cursor': isKbCursor('ep', showEpRowId(s.key, sn.season, e.epKeyStr)) }]"
+                    <div class="group-row ep-row" data-table="show" :data-key="showEpRowId(s.key, sn.season, e.epKeyStr)" :class="['s-' + epState(e), { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), selected: epSelState(e).selected, partial: epSelState(e).partial, 'is-pending': isEpPending(e), 'kb-cursor': isKbCursor('ep', showEpRowId(s.key, sn.season, e.epKeyStr)) }]"
                          :style="gridStyle('show')"
                          @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">
@@ -212,7 +212,7 @@
               </button>
               <div v-show="unrecognizedOpen" class="unrecognized-body">
                 <div v-for="m in unrecognizedTorrents" :key="m.hash" class="member-row unrecognized-row"
-                     :class="[m.kind, { 'search-hit': m.hit }]"
+                     :class="m.kind"
                      @contextmenu.prevent="openMemberMenu($event, m)">
                   <span class="m-site"><i class="dot"></i>{{ m.site }}</span>
                   <span class="m-name" :title="m.name">{{ m.name }}</span>

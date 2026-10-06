@@ -295,10 +295,6 @@ window.AQB_COLUMNS = {
       this._winViewH = window.innerHeight;
       this._winScrollY = window.scrollY;
     },
-    /* 搜索命中高亮: 种子页不再逐条复制出 hit 字段(见 filteredTorrents), 高亮由模板现问现用 */
-    isHit(row) {
-      return !!row && this.searchHits.has(row.hash);
-    },
     /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价 */
     winMembers(list) {
       const rows = this.sortedMembers(list);

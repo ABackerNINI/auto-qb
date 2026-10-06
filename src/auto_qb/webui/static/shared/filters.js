@@ -162,6 +162,8 @@ window.AQB_FILTERS = {
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
     // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
+    // !26-10-07: 行级高亮只保留"仅命中成员才亮"的明细成员行 —— 组行/集行/种子页行/未识别行
+    //   都是"保留即命中"(显示了就必命中), 全亮反而无区分, 已移除(组对象不再带 hit 字段)。
     // 状态筛选(kindFilter)与之叠加: 先按成员状态筛组(组内任一成员为该状态即保留), 再做搜索匹配。
     filteredGroups() {
       const q = (this.searchQuery || "").trim();
@@ -197,7 +199,7 @@ window.AQB_FILTERS = {
           if (isHit) hit = true;
           return { ...m, hit: isHit };
         });
-        if (hit) kept.push({ ...g, members: members, virtual: false, hit: true });
+        if (hit) kept.push({ ...g, members: members, virtual: false });
       }
       for (const r of this.searchUncovered) {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
@@ -244,7 +246,7 @@ window.AQB_FILTERS = {
         if (gate && !hits.has(r.hash)) continue;
         /* !刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
          * (3000 条 = 22 万次), 实测**仅这一句就 68ms** —— 比整个窗口渲染还贵。
-         * 命中高亮改由模板问 searchHits(见 isHit), 语义不变; 顺带每轮少建 3000 个临时对象。 */
+         * 顺带每轮少建 3000 个临时对象(种子页行已不做命中高亮, 见 26-10-07)。 */
         out.push(r);
       }
       const key = this.torrentSortKey;
