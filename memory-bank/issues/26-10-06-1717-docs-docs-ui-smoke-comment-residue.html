@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-06-1717">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="playwright-e2e">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="产品与桩脚本注释残留对已退役 scripts/ui_smoke.cjs 的引用">
 <meta name="issue-summary" content="app.js:241 / polling.js:113 / ui_harness.py 6 处注释仍指向已删除的 ui_smoke.cjs, 指路失效">
 <title>产品与桩脚本注释残留对已退役 scripts/ui_smoke.cjs 的引用 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-1717-docs-docs-ui-smoke-comment-residue</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 17:17</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-06 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-06 18:5x — 用户指派「认领并修复」，状态 <strong>In Progress</strong>。<b>复验</b>（防过期原则第 5 条）：<code>git grep -n ui_smoke</code> 重跑，<code>app.js:241</code> / <code>polling.js:113</code> 与 <code>ui_harness.py</code> 的 L23/L35/L38/L519/L527/L563 <b>逐处仍在</b>（行号零漂移，现象未消失）。</li>
+      <li>2026-10-06 19:0x — 修复完成，状态 <strong>Done</strong>。<b>实际修法</b>（与建议同向；落点按三处语义各自指定，不是一律抹除）：<code>app.js</code> / <code>polling.js</code> 的注释是实测数字的出处 ⇒ 出处改指 <code>e2e/perf.spec.mjs</code>（块B A/B 埋点），<code>polling.js</code> 的轮询分档另补断言落点 <code>e2e/views.spec.mjs</code>；<code>ui_harness.py</code> 6 处是桩参数与断言组的配套说明，模式矩阵 S0 已 env 化 ⇒ 改指 <code>E2E_SKIP_CHECK</code> / <code>E2E_HR_SCENE</code> 与 <code>e2e/menus.spec.mjs</code> / <code>e2e/hr-history.spec.mjs</code>；「用法」段第二行（原「另开一个终端跑旧脚本」）改写为「断言已迁 e2e 轨（<code>commands run dev.e2e</code>）+ 手看页面直接开 <code>http://127.0.0.1:8099/prism/</code>」。<b>验证方式</b>：<code>git grep -n ui_smoke</code> 全量复核 —— 受版本控制的代码 / 配置 / 脚本 <b>0 处</b>，余下命中全在 <code>memory-bank/</code> 的冻结件（档案 / 计划 / 报告 / 本条 / activeContext 切片 / 一次性基线快照，按约定不回改）与 gitignore 的 agent 草稿（<code>.workbuddy*/</code>）；<code>node --check</code> + <code>ast.parse</code> 均过。<b>测试数字</b>：<code>test.full</code> <b>2678 passed + 4 skipped / 99%</b>（覆盖率语句 / 未覆盖 / 分支 / partial 四项与上一轮 1840 基线逐位相同，passed +1 全来自并行会话入库的 <code>9e0b35fc</code>；纯注释改动，零行为波动）；档案 <code>memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md</code>，基线 26-10-06-1902。<b>漏因</b>（已记入坑档 <code>pitfalls/docs/drift.md</code>「退役件的引用清理」）：S7 的验收 grep 只扫 <code>--include="*.md"</code> 且限 <code>memory-bank/</code> ⇒ 产品 js / py 的注释根本不在扫描面内，判绿是假绿。<b>顺带更正</b>：01 节的 commit <code>d2dc3ba1</code> 是迁移分支上的原始 hash（合入 develop 时重写，本 clone 查不到），本 clone 的 S7a = <code>68f6e033</code>。</li>
     </ul>
   </section>
 

@@ -110,9 +110,9 @@ window.AQB_POLL = {
       this.pollTimer = setTimeout(() => this.refresh(), this.currentPollMs());
     },
     /* P1 落地后按种子量分档(2026-09-19)。档位是**实测**定的, 不是拍的 —— 用
-     * scripts/ui_harness.py + ui_smoke.cjs 的 A/B 量出"窗口化后单轮 refresh 的真实耗时":
+     * scripts/ui_harness.py + e2e/perf.spec.mjs 的 A/B 量出"窗口化后单轮 refresh 的真实耗时":
      *   1000 种子 143ms | 3000 种子 309ms | 5000 种子 396~501ms
-     * 再把每档的**主线程占用率**压到 ~15% 上下(单轮耗时 / 间隔), 于是:
+     * 再把每档的**主线程占用率**压到 ~15% 上下(单轮耗时 / 间隔; 分档断言见 e2e/views.spec.mjs), 于是:
      *   ≤1000 → 1.5s(≈10%)  1000~3000 → 2s(≈15%)  >3000 → 3s(≈17%)
      * 两个边界条件: 1.**下界 1.5s = 服务端 sync_interval** —— 后端每 1.5s 才刷一次数据,
      *   再快也只是多拿一次"版本未变"的空响应(此时响应体趋近于零, 但不产生新数据);

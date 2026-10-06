@@ -22,9 +22,11 @@
 > **14:3x 收口追加**: 矩阵 hang 轮暴露的两处计划外发现已同批修掉 —— W3 确认链补
 > `requireMode` ok|error 门控(hang 下预检不回执、确认钮永不解锁) + `dev.e2e` timeout 180→360s;
 > 复跑 hang 轮经 commands 引擎 **0 failed / 64 passed + 24 skipped / 156s / rc=0 / 端口零残留**。
-> 最后活动: 2026-10-06 14:3x
+> **19:0x 追加**: S7 的验收 grep 口径有盲区(只扫 `*.md` + `memory-bank/`), 产品 js 与 `scripts/` 的
+> 注释残留到 19:0x 才清完(issue 26-10-06-1717) —— 见文末「注释残留清理」。
+> 最后活动: 2026-10-06 19:0x
 
-**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md, memory-bank/testing/baselines/26-10-06-0619-playwright-e2e-teardown-fix-merged.md
+**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md, memory-bank/testing/baselines/26-10-06-0619-playwright-e2e-teardown-fix-merged.md, memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md
 
 ## 现状
 
@@ -71,3 +73,17 @@
 - 顺带修正的漂移: `browser-env.md` 的 chromium 版本(151 → **153.0.8010.12**)、WorkBuddy 路径"已失效"
   结论(2026-10-06 复核可用)、轨道一 `agent-browser` 当前不在 PATH; `baseline.md` 常驻警告的包内脚本
   测试条数(47 → **103**)。
+
+## 注释残留清理 (19:0x, 独立会话)
+
+- 认领并修 issue `memory-bank/issues/26-10-06-1717-docs-docs-ui-smoke-comment-residue.html`: 受版本控制的
+  文件里仍有 **8 处注释**指向已退役的 `scripts/ui_smoke.cjs`(`app.js:241` / `polling.js:113`
+  + `scripts/ui_harness.py` 6 处), 全部改指 e2e 轨 —— 出处 → `e2e/perf.spec.mjs`, 分档断言 →
+  `e2e/views.spec.mjs`, 桩参数配套 → `E2E_SKIP_CHECK` / `E2E_HR_SCENE` + `menus.spec.mjs` /
+  `hr-history.spec.mjs`; `ui_harness.py` 的「用法」段改写为「断言已迁 e2e 轨 + 手看页面开 `/prism/`」。
+- **漏因**(已进 `pitfalls/docs/drift.md`「退役件的引用清理」): S7 的验收 grep 只扫
+  `--include="*.md"` 且限 `memory-bank/` ⇒ 产品 js / py 的注释根本不在面内, 判绿是假绿。
+- 复验: `git grep -n ui_smoke -- . ':!memory-bank'` = **0**; `test.full` **2678 + 4 / 99%** 零行为波动
+  (覆盖率四项与 1840 基线逐位相同)。
+- 档案 `memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md` · 基线
+  `memory-bank/testing/baselines/26-10-06-1902-docs-ui-smoke-comment-residue.md`。

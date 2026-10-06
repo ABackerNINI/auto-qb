@@ -19,8 +19,8 @@
 用法
 ----
     uv run python scripts/ui_harness.py --torrents 3000 --port 8099
-    # 另开一个终端:
-    node scripts/ui_smoke.cjs --base http://127.0.0.1:8099
+    # 浏览器侧断言已迁 e2e 轨: 桩服务由它自动起(8137), 模式走 E2E_* env(见 e2e/harness.mjs),
+    # 命令 `commands run dev.e2e`; 手看页面直接开 http://127.0.0.1:8099/prism/
 
 参数
 ----
@@ -32,10 +32,10 @@
                    error 用于验证 P0-3 乐观 UI 的**失败回滚**, hang 用于验证 3s 回落真值
     --skip-check-menu on|off(默认 on): web.skip_check_menu 桩值两态 ——
                    on 走「跳检…」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
-                   off 验 fail-closed 门控(菜单两处都不渲染; 配套 ui_smoke.cjs --skip-check off)
+                   off 验 fail-closed 门控(菜单两处都不渲染; 配套 e2e 轮 E2E_SKIP_CHECK=off)
     --hr-scene on|empty|off(默认 on): HR 在线核实桩场景(计划 26-10-04-0312 S5) ——
                    on 灌五形态拉取历史(表③, HHan/HDSky 跨站时间轴), empty 验空态,
-                   off 验未启用态; 配套 ui_smoke.cjs --hr-scene(仅 on 跑表③断言组)
+                   off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表③断言组, e2e/hr-history.spec.mjs)
 
 注意
 ----
@@ -516,7 +516,7 @@ def main() -> int:
         default="on",
         help="HR 在线核实桩场景(默认 on, 见 _inject_hr_history): on = 启用 + 五形态拉取历史"
         "(表③); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
-        "配套 ui_smoke.cjs --hr-scene —— 仅 on 跑表③断言组",
+        "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表③断言组(e2e/hr-history.spec.mjs)",
     )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
@@ -524,7 +524,7 @@ def main() -> int:
         choices=["on", "off"],
         default="on",
         help="web.skip_check_menu 桩值(默认 on): off 起盘验 fail-closed 门控 —— "
-        "「跳检…」在多选与单选菜单都不渲染(配套 ui_smoke.cjs --skip-check off)",
+        "「跳检…」在多选与单选菜单都不渲染(配套 e2e 轮 E2E_SKIP_CHECK=off, e2e/menus.spec.mjs)",
     )
     ap.add_argument(
         "--state-revert-ms",
@@ -560,7 +560,7 @@ def main() -> int:
     mgr = make_manager(state_file)
     mgr.client = FakeClient()
     # skip_check_menu 两态可参数化(W5 汇总): 默认 on —— 既有断言依赖「跳检…」菜单项与确认链
-    # (计划 26-10-02-1955 W3); off 复刻生产默认(fail-closed), 供 ui_smoke.cjs --skip-check off
+    # (计划 26-10-02-1955 W3); off 复刻生产默认(fail-closed), 供 e2e 轮 E2E_SKIP_CHECK=off
     # 验证门控(菜单两处都不渲染)。走真实 /api/webui/flags 端点渲染菜单, 桩只决定旗标值。
     mgr.config.web = WebConfig(
         enabled=True,

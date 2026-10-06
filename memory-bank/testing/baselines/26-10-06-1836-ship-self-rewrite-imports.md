@@ -10,7 +10,7 @@
 
 **Refs:** memory-bank/tasks/26-10-06-ship-self-rewrite-imports.md, memory-bank/activeContext/26-10-06-1836-ship-self-rewrite-imports.md
 
-- 分支: develop @ **9e0b35fc**(工作树含本轮改动未提交)
+- 分支: develop @ **9e0b35fc**(测量时工作树含本轮改动未提交)
 - 命令: `commands run test.full`(Windows —— 耗时口径见 [../baseline.md](../baseline.md)「必须带区间」)
 - **实测 (Windows)**: **2678 passed + 4 skipped, 覆盖率 TOTAL 99%**
   - 语句 **16021** / 未覆盖 **163** / 分支 **5472** / partial **143**。
@@ -40,4 +40,5 @@
   - `memory-bank/` —— 新任务档案 · `pitfalls/git/self-rewrite-imports.md` 新条目 · 本切片 · activeContext 切片。
   - 生成物 `_index.md` / `_doc-map.md` 族(20 个重建)。
 - 行尾: 本切片与改动面全为 **LF**(仓库 2026-10-02 起 `text=auto eol=lf`)。
-- **未入库**: 等用户显式「提交」。
+- **已入库**: **c31f6351**(「提交」后 `ship.commit` 落盘; 内部同步把远端领先 1 笔 rebase 进来,
+  本地 1 笔重放 `6bca5d10→c31f6351` —— **内联推送步零报错**, 修法在真实流水线里自证生效)。
