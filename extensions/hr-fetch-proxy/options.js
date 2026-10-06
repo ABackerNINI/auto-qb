@@ -279,7 +279,8 @@ function shortTime(t) {
   const d = new Date(t);
   if (isNaN(d.getTime())) return '—';
   const p = (n) => String(n).padStart(2, '0');
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  // 事件环最近 50 条会跨天, 只有时分秒分不清是哪天 —— 补上月-日
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 const KIND_TEXT = { page: 'HR 页', torrent: '.torrent' };
