@@ -2,7 +2,6 @@
 
 > 摘要: 本机没有 node 时 Playwright e2e 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。
 > 触发: 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态
-> 最后活动: 2026-09-27
 
 ### 本机无 node ⇒ Playwright 冒烟链路整体不可用, 用 IAB 浏览器替代
 

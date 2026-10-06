@@ -39,7 +39,14 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
 - test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
 - test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
-- test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
+- test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 memory-bank skill 的 `scripts/check_doc_links.py`, 2026-10-06 从根 `scripts/` 迁入)
+
+时间守卫 (检查器 memory-bank skill 的 `scripts/timekit.py`, 2026-10-06 加):
+
+- test_timekit_now_is_utc_plus_8_naive: 取时是 UTC+8 naive 墙钟 (与本地时区无关, 无 tzinfo)
+- test_timekit_guards_catch_three_layers: 文件名未来 / 坏「最后活动」/ 斜杠日期三种种子全逮住
+- test_timekit_body_ignores_code_and_paths: 正文层跳过代码上下文与路径标识符 (不误报)
+- test_timekit_check_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 - test_kb_scripts_import_cleanly: skill 的脚本都能 import
@@ -553,12 +560,13 @@ def test_doc_links_are_not_broken() -> None:
 
     知识库目录化重构一次新增/改写了 400+ 处相对链接; 这条守卫把"改文件名后必须查全仓引用"
     从人工扫变成可自动跑的判据(实测首跑就抓出 73 处坏链, 全是搬家导致的相对深度错位)。
-    检查器在 `scripts/check_doc_links.py`, **进程内 import**(本项目测试禁止起子进程)。
+    检查器在 memory-bank skill 的 `scripts/check_doc_links.py`(2026-10-06 从根 `scripts/` 迁入,
+    随 skill 移植), **进程内 import**(本项目测试禁止起子进程)。
     """
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("check_doc_links", ROOT / "scripts" / "check_doc_links.py")
-    assert spec and spec.loader, "缺少 scripts/check_doc_links.py"
+    spec = importlib.util.spec_from_file_location("check_doc_links", SKILL_SCRIPTS / "check_doc_links.py")
+    assert spec and spec.loader, "缺少 memory-bank skill 的 scripts/check_doc_links.py"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -572,7 +580,7 @@ def test_kb_scripts_import_cleanly() -> None:
         sys.path.insert(0, str(SKILL_SCRIPTS))
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
-        "gen_active_recent", "gen_baseline_recent"
+        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -693,3 +701,76 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
             )
         elif task_id == "kb.check":
             assert f"{script} --check" in body, (f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表里没有 `{script} --check`")
+
+
+# ---------------------------------------------------------------------------
+# 日期守卫 (2026-10-06, 计划 plans/26-09-30-0931): 时间单点 + 三层守卫
+#
+# 检查器在 memory-bank skill 的 `scripts/timekit.py`, **进程内 import** (本项目测试禁止起子进程)。
+# TZ 无关性**不**用 `TZ=... 子进程` 验 (那要起进程) —— 改为钉住"取值 == UTC 瞬时 + 8h 的 naive
+# 墙钟": 该等式在构造上就与本地时区无关 (本地时区一变, 等式立刻不成立)。
+# ---------------------------------------------------------------------------
+
+
+def _timekit():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import timekit
+
+    return timekit
+
+
+def test_timekit_now_is_utc_plus_8_naive() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    timekit = _timekit()
+    before = (datetime.now(timezone.utc) + timedelta(hours=8)).replace(tzinfo=None)
+    got = timekit.now()
+    after = (datetime.now(timezone.utc) + timedelta(hours=8)).replace(tzinfo=None)
+
+    assert got.tzinfo is None, "取时必须是 naive 墙钟 (与全库 naive 解析一致, 不混 aware)"
+    assert before <= got <= after, f"取时不是 UTC+8 墙钟: {got} (期望 {before} ~ {after})"
+
+
+def test_timekit_guards_catch_three_layers(tmp_path: Path) -> None:
+    """三种种子经 `--mb-dir` 指向的 tmp 夹具, 三层 (文件名 / 元数据 / 正文) 全部逮住。"""
+    timekit = _timekit()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "activeContext").mkdir(parents=True)
+
+    (mb / "tasks" / "99-01-01-future-slug.md").write_text("# t\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
+    (mb / "activeContext" /
+     "26-01-01-0000-bad.md").write_text("# t\n> 摘要: x\n> 最后活动: 2026-01-01 00:0x\n", encoding="utf-8")
+    (mb / "tasks" / "26-01-01-slash.md").write_text("# t\n> 摘要: x\n> 触发: y\n正文 2026/01/01\n", encoding="utf-8")
+
+    joined = "\n".join(timekit.collect_violations(tmp_path, mb))
+
+    assert "文件名日期在未来" in joined, joined
+    assert "最后活动" in joined, joined
+    assert "斜杠日期" in joined, joined
+
+
+def test_timekit_body_ignores_code_and_paths(tmp_path: Path) -> None:
+    """正文层跳过围栏代码 / 行内代码与路径里的紧凑 8 位数字 —— 不误报 (2026-10-06 存量清洗口径)。"""
+    timekit = _timekit()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+    (mb / "doc.md").write_text(
+        "# t\n> 摘要: x\n> 触发: y\n"
+        "行内 `2026/01/01` 与围栏:\n"
+        "```\n2026/01/02\n```\n"
+        "路径 .cluster/audit-20260921/ 与备份 git-backup-20260922-2343 不是日期 token\n",
+        encoding="utf-8",
+    )
+
+    problems = timekit.collect_violations(tmp_path, mb)
+
+    assert not problems, f"代码上下文/路径标识符被误报: {problems}"
+
+
+def test_timekit_check_is_green_on_current_kb() -> None:
+    """存量 KB 零违规 (清洗完成后) —— 未来日期 / 坏体例都必须已清干净。"""
+    problems = _timekit().collect_violations(ROOT, MB)
+
+    assert not problems, "日期守卫违规 (取时走 `commands run kb.time`):\n" + "\n".join(problems)

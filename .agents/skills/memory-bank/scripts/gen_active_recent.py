@@ -6,7 +6,7 @@
     <mb>/activeContext/YY-MM-DD-HHMM-<slug>.md
         # <标题>
         > 摘要: 一句话说清这个会话在做什么
-        > 最后活动: YYYY-MM-DD HH:MM      ← 排序键; 缺失则回退文件名时间戳 (= 创建时间)
+        > 最后活动: YYYY-MM-DD HH:MM      ← 排序键; 缺失则回退文件名时间戳 (= 创建时间); 存在但格式坏 → --check 报红
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/gen_active_recent.py                   默认按字节预算取最近 K 条
@@ -89,15 +89,20 @@ def parse_created(name: str) -> datetime | None:
         return None
 
 
-def parse_last_active(text: str) -> datetime | None:
-    """文件内 `> 最后活动:` 字段 → 时间; 缺失返回 None (调用方回退创建时间)。"""
+def parse_last_active(text: str) -> tuple[datetime | None, bool]:
+    """文件内 `> 最后活动:` 字段 → `(时间, 是否「存在但格式坏」)`。
+
+    - 行缺失 → `(None, False)` —— 按设计回退创建时间, 不算问题。
+    - 行存在但格式坏 → `(None, True)` —— 2026-10-06 起在 `--check` **报红**(不再静默回退成创建时间):
+      坏值被吞掉, 排序与「待归档」标记就跟着漂, 而守卫永远不响(旧实现在这里静默 `return None`)。
+    """
     m = LAST_ACTIVE_RE.search(text)
     if not m:
-        return None
+        return None, False
     try:
-        return datetime.strptime(m.group(1).strip(), _ACTIVE_FMT)
+        return datetime.strptime(m.group(1).strip(), _ACTIVE_FMT), False
     except ValueError:
-        return None
+        return None, True
 
 
 def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[str]]:
@@ -144,7 +149,10 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[st
                 "转告用户另开会话清理(清理口径: 蒸馏进 progress/ 或任务档案, 不是调 cap)"
             )
 
-        last = parse_last_active(text) or created
+        last, bad_last = parse_last_active(text)
+        if bad_last:
+            problems.append(f"{rel}: 「最后活动」存在但格式坏 (须严格 `YYYY-MM-DD HH:MM`) —— 取时走 `commands run kb.time time`")
+        last = last or created
         slug = path.name[len(_CREATED_RE.match(path.name).group(0)) + 1:-len(".md")]
         rows.append(
             {

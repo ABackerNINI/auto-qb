@@ -24,7 +24,7 @@
 > 复跑 hang 轮经 commands 引擎 **0 failed / 64 passed + 24 skipped / 156s / rc=0 / 端口零残留**。
 > **19:0x 追加**: S7 的验收 grep 口径有盲区(只扫 `*.md` + `memory-bank/`), 产品 js 与 `scripts/` 的
 > 注释残留到 19:0x 才清完(issue 26-10-06-1717) —— 见文末「注释残留清理」。
-> 最后活动: 2026-10-06 19:0x
+> 最后活动: 2026-10-06 19:17
 
 **Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md, memory-bank/testing/baselines/26-10-06-0619-playwright-e2e-teardown-fix-merged.md, memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md
 

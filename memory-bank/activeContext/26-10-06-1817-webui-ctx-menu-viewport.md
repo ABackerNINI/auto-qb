@@ -17,7 +17,7 @@
 > 未采用建议修法的第二方案(无脑 `max-height + overflow-y`)作常态解: `overflow` 非 visible 的盒子会裁掉
 > `position:absolute` 的 flyout 次级面板(「更多操作」) —— 只作极矮视口的退化兜底, 且每次开层先复位。
 > **未 commit**(用户未说「提交」)。
-> 最后活动: 2026-10-06 18:2x
+> 最后活动: 2026-10-06 18:25
 
 **Refs:** memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md, memory-bank/testing/baselines/26-10-06-1830-webui-ctx-menu-viewport.md
 

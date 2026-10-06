@@ -28,14 +28,21 @@ timeout = 60
 when    = "看测试基线 / 最新数字 / 历史基线排障（默认列最近 3 条）"
 note    = "只打印不写文件；<args> 可传 --all 或 -n N 看全量/改条数、--check 只校验（--check 已同时挂进 kb.check）"
 
+[tasks."kb.time"]
+run     = ["python <skill-dir:memory-bank>/scripts/timekit.py <args>"]
+timeout = 30
+when    = "取当前时间戳 (UTC+8 钉死, 与机器时区无关): 无参三行全打; 子命令 date / time / stamp; check 走日期守卫"
+note    = "KB 内任何日期 (文件名前缀 / Added / Updated / 最后活动 / doc-added / doc-updated / 正文) 一律取自它的输出, 禁用模型上下文里的日期与手工推算 —— 这是「时间戳用命令取当前值」那条约定的落地点。生成器/脚本内部取时**不**调它 (各自钉 UTC+8, 见 skill 的 references/PORTING.md)。"
+
 [tasks."kb.check"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check"]
+           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
+           "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加)"
 
 [tasks."kb.nav"]
 run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]

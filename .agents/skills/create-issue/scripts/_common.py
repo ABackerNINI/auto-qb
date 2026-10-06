@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -51,13 +51,22 @@ FILE_RE = re.compile(r"^(?P<stamp>\d{2}-\d{2}-\d{2}-\d{4})-(?P<type>[a-z]+)-(?P<
 # issues 目录探测顺序: 命中第一个已存在的; 都不存在则要求显式 --dir
 CANDIDATE_DIRS = ("memory-bank/issues", "issues", "docs/issues")
 
+# UTC+8 固定偏移 —— create-issue 是**唯一**往 KB 文件名写时间戳的脚本; 不钉时区则换一台非 +08
+# 的机器跑, issue 名与封面日期就会是错值。**本地内联常量, 不跨 skill import**(本 skill 独立可移植)。
+_TZ = timezone(timedelta(hours=8))
+
+
+def now_local() -> datetime:
+    """当前 UTC+8 **naive** 墙钟 (无 tzinfo) —— 与 memory-bank skill 的 timekit 同口径。"""
+    return datetime.now(_TZ).replace(tzinfo=None)
+
 
 def stamp(dt: datetime | None = None) -> str:
-    return (dt or datetime.now()).strftime("%y-%m-%d-%H%M")
+    return (dt or now_local()).strftime("%y-%m-%d-%H%M")
 
 
-def long_date(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M")
+def long_date(dt: datetime | None = None) -> str:
+    return (dt or now_local()).strftime("%Y-%m-%d %H:%M")
 
 
 def find_root(start: Path | None = None) -> Path:

@@ -4,10 +4,10 @@ when      = "文档机检：坏链 / 注入上限 / 命令漂移"
 confirmed = true
 
 [tasks."doc.links"]
-run     = ["python scripts/check_doc_links.py --quiet"]
+run     = ["python <skill-dir:memory-bank>/scripts/check_doc_links.py --quiet"]
 timeout = 180
 when    = "改名 / 搬家后查相对链接坏没坏"
-note    = "坏链不会让任何用例失败，只能机检；--quiet 只报问题"
+note    = "坏链不会让任何用例失败，只能机检；--quiet 只报问题。脚本 2026-10-06 从根 scripts/ 迁入 memory-bank skill（随 skill 移植）"
 
 [tasks."doc.caps"]
 run     = ["python scripts/check_context_caps.py <args>"]

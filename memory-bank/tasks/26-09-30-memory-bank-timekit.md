@@ -1,10 +1,10 @@
 # 26-09-30-memory-bank-timekit — memory-bank 取时间标准化 (UTC+8 单点 + 守卫 + 移植)
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-09-30
-**Updated:** 2026-09-30
+**Updated:** 2026-10-06
 **Topics:** memory-bank-timekit
-**Refs:** memory-bank/plans/26-09-30-0931-plan-memory-bank-timekit.html
+**Refs:** memory-bank/plans/26-09-30-0931-plan-memory-bank-timekit.html, memory-bank/pitfalls/kb/date-authoring.md
 **Summary:** KB 日期全凭 agent 手写: 约定要求「时间戳用命令取当前值」但那条命令不存在, 守卫只查形状不查值 (gen_active_recent 静默回退), 唯一脚本化取时点 (create-issue stamp) 未钉时区。方案: timekit.py UTC+8 单点 + commands run kb.time 流程接入 + 三层日期守卫 (文件名/元数据/正文) 接 kb.check 与提交闸门 + 守卫脚本随 skill 移植。
 
 ## 原始请求
@@ -32,17 +32,20 @@
 
 | # | 子任务 | 状态 |
 |---|---|---|
-| 1 | `timekit.py` (date/time/stamp/check) + 单测 (三层守卫种子 + TZ 无关性) | ⬜ |
+| 1 | `timekit.py` (date/time/stamp/check) + 单测 (三层守卫种子 + TZ 无关性) | ✅ |
 | 2 | 立档 + 计划 HTML 落盘 (2026-09-30 09:31 已完成首版入档) | ✅ |
-| 3 | SKILL.md「时间口径与取时」节 + doc-forms/webui 指针 + doc.caps | ⬜ |
-| 4 | `.commands/kb/config.toml` (kb.time / kb.check) + 提交闸门 | ⬜ |
-| 5 | create-issue `stamp()`/`long_date()` 钉 UTC+8 | ⬜ |
-| 6 | 存量清洗 (8 坏最后活动 + 1 缺行 + 10 紧凑 + 1 ISO-T) → 收口静默回退 | ⬜ |
-| 7 | `check_doc_links.py` 迁入 skill scripts + 改闸门/pytest 引用 | ⬜ |
-| 8 | `references/PORTING.md` 移植清单 | ⬜ |
-| 9 | dev.fmt → test.full → 收尾 DoD + pitfalls 记坑 | ⬜ |
+| 3 | SKILL.md「时间口径与取时」节 + doc-forms/webui 指针 + doc.caps | ✅ |
+| 4 | `.commands/kb/config.toml` (kb.time / kb.check) + 提交闸门 | ✅ |
+| 5 | create-issue `stamp()`/`long_date()` 钉 UTC+8 | ✅ |
+| 6 | 存量清洗 (坏最后活动 / 缺行 / 紧凑 8 位) → 收口静默回退 | ✅ |
+| 7 | `check_doc_links.py` 迁入 skill scripts + 改闸门/pytest 引用 | ✅ |
+| 8 | `references/PORTING.md` 移植清单 | ✅ |
+| 9 | dev.fmt → test.full → 收尾 DoD + pitfalls 记坑 | ✅ |
 
 ## 进度日志
 
 - **2026-09-30 09:36**: 计划定稿并入档。两轮探索确认根因 (约定命令不存在 / 守卫只查形状 / 唯一脚本化取时点裸本地时区) 与存量数字 (未来日期 0, 坏「最后活动」8+1, 紧凑 8 位 10, ISO-T 1)。计划文档 `plans/26-09-30-0931` (dark 单文件, doc-status Open); 本档案立档 (查重通过: 本 clone 与全部跨工作区 clone 无同名 slug)。**用户指令「暂不实施」** —— 子任务 1/3-9 待用户显式启动后按实现计划推进。
 - **2026-09-30 09:41**: 收尾机检首跑红一次 —— `test_docs_forms::test_claim_chain_is_bidirectional`: 计划 doc-refs 首版写成 memory-bank 相对 + 本档案漏 `**Refs:**` 反向声明。踩的是**已记坑** `pitfalls/kb/refs-rename.md` 第 3 条, 已复发 +1 (→2); **为什么没命中**: 产出前只读了 `doc-forms.md`(「相对路径」未写解析基准), 没路由到 pitfalls —— 与 09-27 首次复发同一模式。双向补齐后 test.full 复跑全绿 1831 passed / 90%, 基线切片 `baselines/26-09-30-0941`。
+- **2026-10-06 19:55 实施完成**: 按计划 05 步骤推进 (计划写于 09-30、实施在 10-06, 现状多处已变, 见下「偏差与处置」)。①`timekit.py`(date/time/stamp/check, UTC+8 naive 墙钟) + 三层守卫; ②`commands run kb.time` 新 task, `timekit --check` 挂 `kb.check` 与提交闸门; ③SKILL.md「时间口径与取时」节 + 会话开始第 5 步 / 收尾切片 / 档案规范三处挂钩; ④`doc-forms.md` / `webui.md` 指针落到 `commands run kb.time stamp`; ⑤create-issue 钉 +08(真源是 `new_issue.py` 的 `datetime.now()`, 计划只写了 `_common`, 一并修); ⑥存量清洗(7 处坏「最后活动」+ 2 处坏 `Updated` + 2 处缺行补齐 + 紧凑 8 位按边界豁免) → `gen_active_recent` 收口静默回退; ⑦`check_doc_links.py` 迁入 skill(`git mv`)+ 改闸门 / `doc.links` / pytest 引用; ⑧`references/PORTING.md` 新件; ⑨测试 +4(TZ 无关 / 三层种子 / 代码与路径不误报 / 存量零违规)。
+- **偏差与处置**: ⓐ`kb.check` / `kb.index` 已收成 `gen_all.py` 单点(10-03), 追加 `timekit --check` 不受影响; ⓑ闸门冒烟自 10-03 起带 `|--with-safety`, 无 `--safety` 的脚本会被**摘掉不冒烟** —— 计划说"新脚本自动被冒烟覆盖"已不成立, 故给 timekit 补 `--safety` 探针让它真被冒烟; ⓒ`webui.md` 指针行号从 59 漂到 67; ⓓ存量数字全变(坏最后活动 7 非 8、缺行 2 非 1、紧凑 8 位 10 处里 8 处在代码块 / 路径, 按边界豁免而非加豁免标记); ⓔ`doc.links` task 与提交闸门都指向旧的 `scripts/check_doc_links.py`, 迁移时一并改。
+- **实测**: test.full **2682 passed + 4 skipped / 99%**; test.pkg **131 passed**; `commands run kb.check` 绿(日期守卫无违规); `commands run doc.drift` / `doc.links` 绿; `commands run doc.caps` 无债务(SKILL.md 8,507/15,000)。基线切片 `baselines/26-10-06-1955-memory-bank-timekit.md`。**未提交(等用户指令)**。

@@ -6,8 +6,8 @@
         [--status Open] [--reporter "worktree 名/agent"] [--dir memory-bank/issues] \
         [--project 项目名] [--root <仓库根>] [--at 'YY-MM-DD-HHMM']
 
-产出: `<issues dir>/<YY-MM-DD-HHMM>-<type>-<slug>.html`(时间由脚本取系统当前时间, 不靠记忆),
-然后自动重建索引并打印路径。文件已存在则报错退出(不覆盖)。
+产出: `<issues dir>/<YY-MM-DD-HHMM>-<type>-<slug>.html`(时间由脚本取 **UTC+8** 当前墙钟, 与机器
+时区无关, 不靠记忆), 然后自动重建索引并打印路径。文件已存在则报错退出(不覆盖)。
 
 脚本只填封面与 meta; 正文 TODO 由 agent 按档位补齐 —— 便签档(light)三段、标准档(standard)
 五段, 根因与建议修法一律可选(见 SKILL.md「防过期原则」)。
@@ -35,6 +35,7 @@ from _common import (  # noqa: E402
     dir_of,
     find_root,
     long_date,
+    now_local,
     resolve_issues_dir,
     stamp,
 )
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     tier = args.tier or TIER_BY_TYPE[args.type]
-    now = datetime.strptime(args.at, "%y-%m-%d-%H%M") if args.at else datetime.now()
+    now = datetime.strptime(args.at, "%y-%m-%d-%H%M") if args.at else now_local()
     root = (args.root or find_root()).resolve()
     issues_dir = resolve_issues_dir(root, args.dir)
     dir_arg = args.dir

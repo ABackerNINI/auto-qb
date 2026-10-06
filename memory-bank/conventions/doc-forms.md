@@ -28,7 +28,7 @@
 
 ## 命名 (新件强制; 存量 51 份豁免)
 
-- 新件: `YY-MM-DD-HHMM-<type>-<topic>.html`(时间戳用命令取当前值), `<type>` ∈ `plan` / `report`。
+- 新件: `YY-MM-DD-HHMM-<type>-<topic>.html`(时间戳用 `commands run kb.time stamp` 取当前值), `<type>` ∈ `plan` / `report`。
 - 存量计划与报告(2026-09-23 前)**不改名** —— 类型由所在目录 + `doc-type` meta 判定。
 - 一篇一件事; **计划改版 = 同文件内 `## 变更记录` + 抬 `doc-updated`**, 禁止再堆 `-v2` / `-v3` / `-roundN` 新文件。
 

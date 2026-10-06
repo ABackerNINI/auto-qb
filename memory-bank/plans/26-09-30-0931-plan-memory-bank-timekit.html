@@ -6,9 +6,9 @@
 <title>memory-bank 取时间标准化 · 工程计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="memory-bank-timekit">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-30-0931">
-<meta name="doc-updated" content="26-09-30-0931">
+<meta name="doc-updated" content="26-10-06-1955">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-30-memory-bank-timekit.md">
 <style>
   :root {
@@ -168,7 +168,7 @@
     <h1>memory-bank 取时间标准化</h1>
     <p class="sub">UTC+8 单点取时脚本 + 三层日期守卫 + 守卫脚本随 skill 移植 —— 让「时间戳用命令取当前值」这条早已写进约定的规则第一次变得可执行、可机检。</p>
     <div class="cover-meta">
-      <div><span class="k">状态</span><span class="v open">Open · 计划就绪待实施</span></div>
+      <div><span class="k">状态</span><span class="v open">Done · 已实施 (2026-10-06)</span></div>
       <div><span class="k">专题主键</span><span class="v">memory-bank-timekit</span></div>
       <div><span class="k">入库</span><span class="v">2026-09-30 09:31 (UTC+8)</span></div>
       <div><span class="k">关联档案</span><span class="v">tasks/26-09-30-memory-bank-timekit.md</span></div>
@@ -426,6 +426,10 @@ stamp: 26-09-30-0931</code></pre>
           <td><code>2026-09-30 09:31</code></td>
           <td>首版：计划定稿并入档（探索两轮确认根因与现状数字；方案含 timekit 单点 / 三层守卫 / 守卫脚本随 skill 移植 / 存量清洗 / 收口静默回退）。<strong>用户指令：暂不实施</strong> —— 实施待用户显式启动，届时按 05 执行步骤走。</td>
         </tr>
+        <tr>
+          <td><code>2026-10-06 19:55</code></td>
+          <td>实施完成（计划写于 09-30、实施在 10-06，现状有偏差，处置见下）：<code>timekit.py</code> UTC+8 单点 + 三层守卫；<code>commands run kb.time</code> 接入 <code>kb.check</code> 与提交闸门；SKILL.md 时间口径节 + conventions 两处指针；create-issue 钉 +08；存量清洗 + 收口 <code>gen_active_recent</code> 静默回退；<code>check_doc_links.py</code> 迁入 skill；<code>references/PORTING.md</code>。实测 test.full <strong>2682 passed + 4 skipped / 99%</strong>。<strong>偏差</strong>：①闸门冒烟自 10-03 起带 <code>|--with-safety</code>，无 <code>--safety</code> 的脚本被摘掉不冒烟 → 给 timekit 补探针；②<code>kb.check</code>/<code>kb.index</code> 已收成 <code>gen_all.py</code> 单点；③存量数字全变（坏最后活动 7、缺行 2、紧凑 8 位 10 处多在代码块/路径，按边界豁免而非加标记）。doc-status → Done。</td>
+        </tr>
       </table>
     </section>
 
@@ -433,7 +437,7 @@ stamp: 26-09-30-0931</code></pre>
 </div>
 
 <footer>
-  <div class="frame">memory-bank-timekit · plan · 2026-09-30 09:31 (UTC+8) · 状态 Open</div>
+  <div class="frame">memory-bank-timekit · plan · 2026-10-06 19:55 (UTC+8) · 状态 Done</div>
 </footer>
 
 </body>

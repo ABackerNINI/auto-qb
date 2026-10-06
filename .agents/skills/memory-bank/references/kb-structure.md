@@ -46,7 +46,9 @@ cap 的机器单点是 `_common.CAP_POLICY`, 人读镜像在 [SKILL.md](../SKILL
 | `gen_kb_index.py` | **通用**: 任意目录 → `_index.md`(有子目录出类指针, 无则出文件指针; pitfalls 两级与 testing 一级同一实现) |
 | `gen_docs_index.py` / `gen_doc_map.py` | `docs/` 的制品索引与专题视图 |
 | `check_kb_structure.py` | 结构检查: cap 策略 / 元数据 / 双向一致 / 无孤儿 / 存根 / 条目三字段 |
-| `gen_active_recent.py` | 读 `activeContext/` 切片: 按「最后活动」倒序输出一行摘要 + 陈旧标记; **不写任何文件**; `--check` 校验命名 / 元数据 / cap |
+| `gen_active_recent.py` | 读 `activeContext/` 切片: 按「最后活动」倒序输出一行摘要 + 陈旧标记; **不写任何文件**; `--check` 校验命名 / 元数据 / cap(「最后活动」存在但格式坏也判红) |
+| `timekit.py` | 时间单点 (UTC+8 钉死, 与机器时区无关): `date` / `time` / `stamp` / 无参三行; `check` 是三层日期守卫(文件名 / 元数据 / 正文) |
+| `check_doc_links.py` | 相对链接存在性扫描 —— 改名 / 搬家后的坏链不会让任何测试失败, 只能机检(2026-10-06 从根 `scripts/` 迁入) |
 
 **「索引目录」是自发现的**: 含 `_about.md` 的目录即纳入(`tasks/` `issues/` 有自己的生成器, 天然不在结果里)。
 生成器都有 `--check`(只比对, 闸门用); 守卫**在进程内 import 检查器**(本项目测试禁止起子进程, `tests/sidefx.py` 会记账越界)。

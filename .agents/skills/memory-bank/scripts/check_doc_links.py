@@ -4,10 +4,13 @@
 背景: 知识库目录化重构(W1–W7)一次新增/改写了 **400+ 处**相对链接。KB 里"改文件名后必须查全仓引用"
 这条坑记了很久, 但一直只靠人工扫 —— 本脚本把它变成一条可自动跑的判据。
 
-用法:
-    python scripts/check_doc_links.py            # 扫 memory-bank/ 与根级 md; 有坏链则退出码 1
-    python scripts/check_doc_links.py --all      # 再扫 docs/ 与根 README
-    python scripts/check_doc_links.py --quiet
+**随 memory-bank skill 走**(2026-10-06 从根 `scripts/` 迁入): 根探测改用 `_common.find_root()`,
+不假定安装深度, 整目录拷走即可移植。
+
+用法(从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
+    python <skill-dir>/scripts/check_doc_links.py            # 扫 memory-bank/ 与根级 md; 有坏链则退出码 1
+    python <skill-dir>/scripts/check_doc_links.py --all      # 再扫 docs/ 与根 README
+    python <skill-dir>/scripts/check_doc_links.py --quiet
 
 判据:
 - 只查**相对**链接(跳过 `http(s)://` / `mailto:` / 纯锚点 `#x`)。
@@ -25,7 +28,9 @@ import pathlib
 import re
 import sys
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from _common import find_root  # noqa: E402
 
 # markdown 链接: [文本](目标)
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
@@ -84,12 +89,12 @@ def scan_all(root: pathlib.Path, all_dirs: bool = False) -> list[tuple[str, int,
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", default=str(REPO_ROOT), help="仓库根")
+    ap.add_argument("--root", help="仓库根 (默认向上找 .git)")
     ap.add_argument("--all", action="store_true", help="连 docs/ 与根级 md 一起扫")
     ap.add_argument("--quiet", action="store_true", help="只打印坏链")
     args = ap.parse_args()
 
-    root = pathlib.Path(args.root).resolve()
+    root = pathlib.Path(args.root).resolve() if args.root else find_root()
     files = collect_files(root, args.all)
     broken = scan_all(root, args.all)
 

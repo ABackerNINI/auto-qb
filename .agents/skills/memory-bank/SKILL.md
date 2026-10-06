@@ -9,7 +9,7 @@ user-invocable: true
 本仓库用 Memory Bank 模式维护跨会话上下文: 知识库在 `memory-bank/`, 统一入口是根 `AGENTS.md`。
 本 skill 只管**会话的两个端点**(开始/收尾)与**任务立档**; 领域知识(架构/规则/配置/约定…)由 `memory-bank/` 主题文档承担, 不要写进本 skill。
 
-## 会话开始 (4 步)
+## 会话开始 (5 步)
 
 1. **先同步分支(硬性; 问答/只读轮次跳过, 首个执行动作前必须完成)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上改代码** —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。
    - 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。
@@ -17,6 +17,26 @@ user-invocable: true
    - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看 `AGENTS.md`/`conventions/`/`pitfalls/` —— 走 `memory-bank/README.md` 细路由。
 3. 按任务深入主题文档 —— **读哪份看根 `AGENTS.md`「知识库路由」表(路由单点)**; 动代码前必读 `pitfalls.md` 与 `conventions.md`。
 4. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。
+5. **建件前先取时**: 任何带日期的文件 (切片 / 档案 / 计划 / 报告 / issue) 的时间戳一律取自 `commands run kb.time`, **禁用上下文里的日期与手工推算** —— 见下方「时间口径与取时」。
+
+## 时间口径与取时 (2026-10-06)
+
+KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 钉死, 与机器时区无关。
+**禁用模型上下文里的日期与手工推算** (那正是未来日期与错体例的来源); 过去日期的错值守卫也兜不住
+(无真值可比), 只能靠这条流程规避。
+
+| 字段 | 形态 | 取法 |
+|---|---|---|
+| 文件名前缀 (切片 / 计划 / 报告 / issue) | `YY-MM-DD-HHMM` | `commands run kb.time stamp` |
+| 文件名前缀 (任务档案) | `YY-MM-DD` | `commands run kb.time date` |
+| `**Added:**` / `**Updated:**` | `YYYY-MM-DD` | `commands run kb.time date` |
+| `> 最后活动:` | `YYYY-MM-DD HH:MM` | `commands run kb.time time` |
+| HTML `doc-added` / `doc-updated` | `YY-MM-DD-HHMM` | `commands run kb.time stamp` |
+| 正文日期 | `YYYY-MM-DD` / `YYYY-MM-DD HH:MM` | `commands run kb.time date` / `time` |
+
+- **守卫**: `commands run kb.time -- check` (已挂 `kb.check` 与提交闸门) —— 拦未来日期 + 坏体例
+  (斜杠 / 不补零 / 中文 / 紧凑 8 位 / ISO-T); 正文规范 token **不查未来** (可合法引用未来日程);
+  确有需要的机器数据用行内 `<!-- time:allow -->` 豁免。
 
 ## 立档阈值 (可判定: 满足任一条**必须**立档)
 
@@ -36,7 +56,7 @@ user-invocable: true
 
 > **由「提交」触发时**：直接按下面各步回写 —— 与远端的合流由 `ship.commit` **提交后 rebase** 完成（2026-10-04 起提交先行：各 `_index` 撞车由生成物自动化解兜底，手写件冲突才停下要人; 单点: my-commit-flow [pipeline.md](../../../.commands/my-commit-flow/references/pipeline.md)）。回写件仍是全体 clone 的最热写点, **随主提交一并暂存**, 不推完再补一笔。
 
-1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
+1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。文件名与「最后活动」的时刻一律取 `commands run kb.time`。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
 2. **tasks/**: 命中阈值 → 按下方「任务档案规范」定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。
 4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论; 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
@@ -48,7 +68,7 @@ user-invocable: true
 
 ## 任务档案规范
 
-- 路径 `memory-bank/tasks/YY-MM-DD-<slug>.md` —— **日期到天, 不带时分**; 日期取 `Added:`/`Started:`(创建日), 不是修改日。
+- 路径 `memory-bank/tasks/YY-MM-DD-<slug>.md` —— **日期到天, 不带时分**; 日期取 `Added:`/`Started:`(创建日), 不是修改日; 日期本身取 `commands run kb.time date`。
 - `<slug>` 由**专题**决定, 不由序号决定: `<领域>-<专题>`; 领域用固定枚举(不够用先扩枚举再建档): `webui`/`backend`/`rule`/`memory-bank`/`docs`/`test`/`deps`/`config`。
 - **立档第一步是查重, 不是取号**: 本 clone `ls memory-bank/tasks/` **且**跨工作区 `ls ../auto-qb-*/memory-bank/tasks/`(2026-09-20 起多 clone 模式: 各工作区平级、各有独立 `.git`), 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
 - **slug 禁止出现**: 轮次(`round9`/`r10`/`第十轮`)、日期(已在文件名前缀)、会话序号、编号、分支名 —— 轮次属于档案内"子任务状态表"的一行, 不属于文件名。不带时分是**特性**: 同一天同一专题必然撞到同一路径, 重复才能当场暴露(显式 add/add 冲突), 而不是静默变成两份。
@@ -95,7 +115,8 @@ user-invocable: true
 ## 结构 / 索引 / 脚本 → 见 references
 
 拆超标文档的**五步配方**、三行头元数据、cap 与流水轮转、脚本清单、activeContext 切片四条约定、
-检索纪律(先索引后 grep 禁止整读)、扩类扩目录三处同步 —— 全在 **[references/kb-structure.md](references/kb-structure.md)**, 要动知识库结构时才读。
+检索纪律(先索引后 grep 禁止整读)、扩类扩目录三处同步 —— 全在 **[references/kb-structure.md](references/kb-structure.md)**, 要动知识库结构时才读;
+换项目怎么把整套 skill 搬走见 **[references/PORTING.md](references/PORTING.md)**。
 
 ## 反模式
 

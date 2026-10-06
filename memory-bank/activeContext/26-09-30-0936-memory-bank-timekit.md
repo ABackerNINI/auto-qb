@@ -1,17 +1,22 @@
 # 26-09-30-0936-memory-bank-timekit — memory-bank 取时间标准化
 
-> 摘要: 用户提出文档日期不准/体例漂移/文件名出现未来时间, 要求 UTC+8 脚本单点取时 + 守卫 + 守卫脚本随 skill 移植。两轮探索定稿计划: timekit.py 单点 (date/time/stamp/check) + commands run kb.time 流程接入 + 三层日期守卫 (文件名/元数据严格, 正文只查体例) + check_doc_links 迁入 skill + 收口 gen_active_recent 静默回退 + create-issue 钉 +08。**计划已入档 (plans/26-09-30-0931), 用户指令暂不实施**。
-> 最后活动: 2026-09-30 09:36
+> 摘要: 用户提出文档日期不准/体例漂移/文件名出现未来时间, 要求 UTC+8 脚本单点取时 + 守卫 + 守卫脚本随 skill 移植。**实施完成 (2026-10-06)**: `timekit.py` (date/time/stamp/check, UTC+8 naive 墙钟) + 三层日期守卫 (文件名/元数据/正文) + `commands run kb.time` 流程接入 (挂 kb.check 与提交闸门) + SKILL.md 时间口径节 + create-issue 钉 +08 + 存量清洗 + `gen_active_recent` 收口静默回退 + `check_doc_links.py` 迁入 skill + `references/PORTING.md`。**未提交 (等用户指令)**。
+> 最后活动: 2026-10-06 19:55
 
-## 状态
+**Refs:** memory-bank/testing/baselines/26-10-06-1955-memory-bank-timekit.md
 
-- 计划文档: `plans/26-09-30-0931-plan-memory-bank-timekit.html` (doc-status Open); 档案: `tasks/26-09-30-memory-bank-timekit.md` (Status Open, 子任务表 2/9 完成 —— 仅入档轮)。
-- 根因已钉死: 约定要求「时间戳用命令取当前值」但 `.commands/` 里该命令 0 命中; 守卫只查形状不查值; 唯一脚本化取时点 (create-issue stamp) 裸本地时区。存量未来日期 0 (防再生为主), 体例噪音约 20 处待清洗。
+## 已完成(本轮)
 
-## 正在进行
+- 计划 `plans/26-09-30-0931-plan-memory-bank-timekit.html` (实施后置 doc-status Done); 档案 `tasks/26-09-30-memory-bank-timekit.md` (Done, 子任务 9/9)。
+- **时间单点**: `.agents/skills/memory-bank/scripts/timekit.py` —— `datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)` (naive UTC+8 墙钟, 与机器时区无关, TZ 无关性由测试钉住); 子命令 `date` / `time` / `stamp` / 无参三行 / `check`。
+- **三层守卫** (`timekit.py check`, 挂 `kb.check` 与提交闸门): 文件名 (tasks `YY-MM-DD` / 切片与 HTML 制品 `YY-MM-DD-HHMM`) / 元数据 (`Added` / `Updated` / `最后活动` / `doc-added` / `doc-updated`) / 正文 (斜杠 / 不补零 / 中文 / 紧凑 8 位 / ISO-T; 规范 token 不查未来)。md 跳过围栏与行内代码, html 跳过 code/pre/script/style 与 URL 串, 行内 `<!-- time:allow -->` 豁免整行。
+- **流程接入**: 新 task `commands run kb.time` (取时入口); `timekit.py --check` 挂进 `kb.check` 与提交闸门 (改 `memory-bank/` 即触发)。
+- **约定落地**: SKILL.md 新增「时间口径与取时」节 + 会话开始第 5 步 / 收尾切片 / 档案规范三处挂钩; `conventions/doc-forms.md` / `webui.md` 的「用命令取」落到 `commands run kb.time stamp`。
+- **钉时区**: create-issue 真源 `new_issue.py` 的 `datetime.now()` → `now_local()` (UTC+8 naive); `_common.stamp()` / `long_date()` 同口径 (本地内联常量, 不跨 skill import)。
+- **存量清洗**: 7 处坏「最后活动」+ 2 处坏 `Updated` 规范化, 2 处缺行补齐; 紧凑 8 位 10 处按边界豁免 (8 处在代码块/路径, 非日期 token)。
+- **收口静默回退**: `gen_active_recent.parse_last_active` 区分「缺失」与「存在但格式坏」, 后者 `--check` 报红。
+- **守卫脚本随 skill**: `check_doc_links.py` 从根 `scripts/` 迁入 skill (`git mv`, 根探测改 `_common.find_root()`); 同步改提交闸门 / `doc.links` task / pytest 引用; 新件 `references/PORTING.md`。
 
-- 无 —— 等待用户显式启动实施 (「暂不实施」是本轮收尾指令)。
+## 待办
 
-## 下一步
-
-- 用户说「实施」→ 按计划 05 执行步骤推进: 步骤 1 = `timekit.py` + 单测 (先有单点, 后续一切时间戳取自它); 步骤 6 存量清洗必须在收口静默回退**之前**; 收尾 pitfalls/kb/ 记坑「约定命令不存在 → 凭记忆写日期; 日期值无机检」。
+- (无 —— 实施闭环, 等用户显式说「提交」)

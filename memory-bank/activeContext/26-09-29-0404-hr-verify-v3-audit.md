@@ -2,7 +2,8 @@
 
 > 摘要: 应用户要求对 v3 波次模型(05a8415)做重写后彻底复审: hr/ 全部 20 文件(约 6000 行)+ record.py 桥 + WebUI 路由/前端 + 配置五层 + qbmanager 接线逐文件通读, 按 security-review 方法论 + 黄金法则对审。**总评通过, 附 1 高危**: H1 站点 Retry-After 不跨波生效(service `_do_wave` 失败分支写 `retry_after_until` 后不 commit, `hold()` 每波重读盘 ⇒ 指令丢失 + mark() 不执行 ⇒ 60s 节奏重试到日额 240 烧尽; .torrent 路径的 Retry-After 还被计成种子失败); M1 登录失效路径不记间隔基准(烧日额 + 登录恢复后当日核实可能停摆到零点); M2 站点文件 schema 比程序新时空数据照常取数并覆写新版文件。L1–L4: judge_record tie-break 文档未实现 / 完整 URL 进日志无脱敏钩子(当前 preset 无 passkey) / skip_local_verify=true 时 confirm-empty 可 CSRF(非默认) / 排序方向仅波内校验(纵深防御可兜底)。I1–I5: 死代码簇(_prune_index 重复/HrStoreCorrupted 未用等) / 两处 time.time() 绕过注入时钟 / parse 递归无上限 / CLI confirm-empty 不校验站点名 / 0600 Windows 不生效。安全面核验全绿: 零 cookie 边界、端点四道防线(token 常数时间/origin/URL 白名单/127.0.0.1 独占)、回传防伪、bencode 深度上限、WebUI 无 v-html、配置三层未知键拦截。递归修复(05a8415)复核无环语义等价。实测 1736 passed + 3 skipped(90%)。
 > 触发: HR 在线核实, 审计, Retry-After, 登录失效, 站点文件覆写, 认领链, test_docs_forms, hr_check, 安全复审
-> 最后活动: 2026-09-29 (报告出厂: reports/26-09-29-0404-report-hr-verify-v3-audit.html; 同日 0512
+> 最后活动: 2026-09-29 06:13
+> (报告出厂: reports/26-09-29-0404-report-hr-verify-v3-audit.html; 同日 0512
 > 增补第 9–12 章: 端到端流程/情况处置/配置字段/默认画像, 扩展侧双闸与 POLL_MINUTES=1 均从扩展代码核实;
 > 0506 **设计裁决追记 §13**: ①轻量波已否决(撤销「未实现」结论, test_light_wave 名不符实降级观察项)
 > ②「remain==0×档位A」矛盾检测无口径(同撤) ③**流转守恒是骤降保护的升级版, A 只流向 B/C/D, 骤降

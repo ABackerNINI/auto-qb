@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-02
-**Updated:** 2026-10-02 06:0x
+**Updated:** 2026-10-02 06:19
 **Topics:** webui-settings-unsaved-changes
 **Refs:** memory-bank/issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html, memory-bank/reports/26-10-02-0508-report-webui-unsaved-changes-guard.html
 **Summary:** issue 26-09-25-1702 的实施档 —— 键盘刷新(F5/Ctrl+R)弹自绘三选一框(保存并刷新/放弃并刷新/留在此页), 其余真实导航靠原生 beforeunload 兜底(随 cfgDirty 挂摘), 刷新即清零不做草稿恢复; 静态守阵 +1, test.full 2289 passed / 99%

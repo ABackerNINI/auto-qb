@@ -88,10 +88,11 @@ match = ["memory-bank/"]
 run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
-         "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check"]
+         "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
+         "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 auto  = true
 timeout = 60
-note  = "知识库索引 + 制品索引与专题视图: 生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"
+note  = "知识库索引 + 制品索引与专题视图 + 日期守卫: 生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加)"
 
 [[gates]]
 match = ["memory-bank/activeContext/"]
@@ -102,10 +103,10 @@ note  = "会话切片: 命名定宽前缀 / 三行头 / cap —— 该脚本只�
 
 [[gates]]
 match = ["memory-bank/", "docs/", "AGENTS.md"]
-run   = ["python scripts/check_doc_links.py --quiet"]
+run   = ["python <skill-dir:memory-bank>/scripts/check_doc_links.py --quiet"]
 auto  = true
 timeout = 60
-note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试失败, 只能机检"
+note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试失败, 只能机检 (2026-10-06 从根 scripts/ 迁入 memory-bank skill, 随 skill 移植)"
 
 [[gates]]
 # 两处都扫: `.agents/skills/`(仍是通用 skill 的家) 与 `.commands/`(包内脚本 ——
