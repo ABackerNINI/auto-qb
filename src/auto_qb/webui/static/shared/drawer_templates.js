@@ -44,8 +44,13 @@
  *         --shadow-1 --shadow-2 --shadow-3 --font-mono
  * (atlas 的 --font-ui / --font-display 不存在, 变体要写字体时用字面栈或 var(--font-ui, <字面>))。
  *
- * S1 边界说明: kind === "traffic" 形态(状态栏/组右键打开)不走 _loadDrawerTab, 其变体挂载
- * 由 S6 接入(挂 _qbLoad 落袋通知或打开路径补钩); 本阶段流量页签(种子详情内)已可挂载。
+ * S6 接入说明(计划 26-10-06-0838): traffic 形态(三挂点)不走 _loadDrawerTab, 流量取数单点
+ * _qbLoad 在 qb_traffic_chart.js(本计划零改动面, 不能像四 fetcher 那样在落袋处插一行通知)
+ * —— 落袋通知改由根实例 mounted 后 $watch(qbCurData) 覆盖同一时机(不写成 watch 选项: 全局
+ * mixin 会波及 <transition> 的 BaseTransition 假实例, 实测 getter 求值即抛, 见 methods 前注);
+ * 数据落袋 = qbCurData 引用替换(过期响应不落袋不触发, 与四 fetcher 的 stale 纪律天然同构);
+ * _dtNotify 对「宿主已被拆」的情况卸旧重挂(流量正文块的 v-if 加载/错误/空态分支会拆装宿主,
+ * 与四页签恒在宿主不同)。
  */
 (function () {
   "use strict";
@@ -204,6 +209,24 @@
         return (this.drawerTplSel || {})[tab] || "classic";
       },
     },
+    /* traffic 数据落袋通知(S6, 见文件头「S6 接入说明」)不写成 watch 选项: 本 mixin 走
+     * app.mixin 全局注入, Vue 的 <transition> 内置假实例(BaseTransition)也会吃进全局 mixin
+     * 的 watch —— 其上没有 data 面(drawer 未定义), getter 求值即抛 TypeError(实测 13 个
+     * transition = 13 条报错)。改为根实例 mounted 后 $watch 单发注册(下方守卫保证只落在
+     * 有数据面的真实例上), 卸载时摘除。 */
+    mounted() {
+      if (!this.drawer) return; /* BaseTransition 等假实例无数据面: 跳过(真根实例恒有 drawer) */
+      this._dtUnwatchTraffic = this.$watch("qbCurData", () => {
+        if (!this.qbTrafficActive) return; /* 非流量形态(含关面板的数据 null 化)不通知 */
+        this.$nextTick(() => this._dtNotify("traffic"));
+      });
+    },
+    beforeUnmount() {
+      if (this._dtUnwatchTraffic) {
+        this._dtUnwatchTraffic();
+        this._dtUnwatchTraffic = null;
+      }
+    },
     methods: {
       /* 当前模板归属页签: 流量形态(三挂点)归 traffic, 其余随 drawer.tab */
       _dtCurTab() {
@@ -246,17 +269,14 @@
         this._dtUnmountAll();
         this._dtMountActive(this._dtCurTab());
       },
-      /* 数据落袋/收起展开(drawer.js 四 fetcher + toggleDrawerCollapse): 活动变体重渲染。
-       * 未挂载时懒挂载兜底 —— 打开抽屉走 general 初值路径时 _loadDrawerTab 不执行
-       * (openTorrentDrawer 只拉详情), 变体挂载靠 detail 落袋的第一发通知补齐。 */
+      /* 数据落袋/收起展开(drawer.js 四 fetcher + _qbLoad + toggleDrawerCollapse): 活动变体重渲染。
+       * 未挂载/宿主已被拆时懒挂载兜底 —— 打开抽屉走 general 初值路径时 _loadDrawerTab 不执行
+       * (openTorrentDrawer 只拉详情), 变体挂载靠 detail 落袋的第一发通知补齐; 流量正文块的
+       * 加载/错误/空态分支会拆装宿主(v-if), 拆过就卸旧重挂(四页签宿主恒在, isConnected 恒真)。 */
       _dtNotify(type) {
         var tab = this._dtCurTab();
         var st = this._dtMounted;
-        if (!st) {
-          this._dtMountActive(tab);
-          return;
-        }
-        if (st.tab !== tab) {
+        if (!st || st.tab !== tab || !st.host.isConnected) {
           this._dtUnmountAll();
           this._dtMountActive(tab);
           return;

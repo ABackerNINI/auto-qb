@@ -21,7 +21,7 @@
 - test_ui_root_and_legacy_newui_redirect: / -> 307 上次使用的 UI(autoqb_ui 皮肤 cookie, 未记录/失效回落星图); 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_ui_skin_cookie_persisted: boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(307 在服务端裁决, cookie 是唯一读得到的载体)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤200 行/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤206 行(S1 定 200, 计划 26-10-06-0838 S5/S6 各 +3)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_template_no_reserved_prefix_identifiers: 模板表达式(插值+指令)禁止 `_`/`$` 前缀裸标识符 —— Vue 内部保留域解析不到, 抛 ReferenceError 且整块渲染失败(issue 26-10-03-1412 复制钮 `_copyText`); `$event` 白名单, 成员访问不拦
@@ -1941,7 +1941,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤203 行(S1 定 200, 计划 26-10-06-0838 S5 起 +3)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤206 行(S1 定 200, 计划 26-10-06-0838 S5 起 +3, S6 起再 +3)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -1951,10 +1951,10 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 203:
+        if n_shell > 206:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 203"
-                "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5 起 content/traffic 各批 +3 行)"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 206"
+                "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5 起 content +3, S6 起 traffic 再 +3)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []
