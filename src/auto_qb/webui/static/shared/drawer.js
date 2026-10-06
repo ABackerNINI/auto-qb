@@ -288,9 +288,13 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       return hash || "";
     },
-    /* 编辑类对话框取当前值: 抽屉已开且同一 hash 直接用 drawer.detail, 否则现拉一次详情 */
+    /* 编辑类对话框取当前值: 抽屉已开且同一 hash 直接用 drawer.detail —— **__peek 行快照除外**
+     * (收起态鼠标换目标的快照只有摘要字段, 见 _drawerPeekApply; 拿它预填限速/重命名会把
+     * "已设限制"错显成"未设", 必须绕开现拉真值) */
     async _editDetail(hash) {
-      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail) return this.drawer.detail;
+      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail && !this.drawer.detail.__peek) {
+        return this.drawer.detail;
+      }
       try {
         const r = await this.api(`/api/torrents/${hash}`);
         return (r && r.torrent) || null;
@@ -865,6 +869,47 @@ window.AQB_DRAWER = {
         this._followDrawerTimer = null;
       }
     },
+    /* ---------------- 收起态鼠标换目标(Q3 + P2-3, 报告 26-10-07-0542) ----------------
+     * 触发入口: selection.js::onTorrentClick 普通单击且面板收起时分流至此 —— 键盘路径照旧走
+     * _kbFollowDrawer(首行「收起即返回」对键盘是有意设计: 收起态跟随暂停, 防连发键拉详情),
+     * 鼠标单击不再复用该守卫: 收起态点行只换目标**不展开**(面板保持 44px, 头部标题 + 摘要条
+     * 立即反映新种子) —— body 不可见, 拉全量详情是浪费; 摘要条可见, 必须换新。
+     * 纪律与 _kbFollowDrawer 同构: 防抖 200ms(共用 _followDrawerTimer —— 两路按收起态互斥,
+     * 后到的显式动作清掉前一路在途定时器, 天然"最后动作优先")+ hash 未变短路(同行重复点击
+     * 零副作用)。 */
+    _drawerPeekTarget(hash) {
+      if (!this.drawer.open || !this.drawer.collapsed) return;
+      if (this.drawer.kind !== "seed") return;  // 流量形态(全局/分组)不是种子目标, 不 peek
+      if (this.page !== "groups" || this.viewMode !== "torrents") return;  // 种子页守卫(面板停靠落点)
+      if (this.drawer.hash === hash) return;   // 纪律: hash 未变短路(同行重复点击)
+      if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
+      this._followDrawerTimer = setTimeout(() => {
+        this._followDrawerTimer = null;
+        // 停稳复核: 面板已关/已展开(展开态归 _kbFollowDrawer 管辖)/切页走了 -> 放弃本次 peek
+        if (!this.drawer.open || !this.drawer.collapsed || this.page !== "groups" || this.viewMode !== "torrents") return;
+        this._drawerPeekApply(hash);
+      }, 200);
+    },
+    /* peek 落地: 换 hash + 摘要换新(零请求优先)。
+     * 常规页签摘要(核心 _dtDefaultSummary 与各变体 summary)同读 drawer.detail —— 旧种子数据
+     * 就是 P2-3 的危害面。行数据(SEED_ITEM)已含摘要消费的全部字段(状态/进度/速度/比率/HR/
+     * 站点), 整份行快照写进 drawer.detail 并打 __peek 戳: ① 变体摘要不逐个配合即换新;
+     * ② __peek 戳表示"detail 是行快照非全量详情" —— 展开时 toggleDrawerCollapse 据此经
+     * _switchDrawerTarget 补拉全量, _editDetail 据此绕开快照预填, 两个消费点缺一即串数据。
+     * 非常规页签的摘要数据源(trackers/peers/files/traffic)行里没有 -> 按当前页签**静默**拉一发
+     * (与 5s 轮询同链路同 hash 戳守卫; 静默 = 不动 loading 态, 收起态 body 不可见无加载观感;
+     * 流量只拉数据, 图不重建 —— torrent 挂点 active 挡收起态, 展开补建走既有钩子)。 */
+    _drawerPeekApply(hash) {
+      this.drawer.hash = hash;
+      this.drawer.error = "";  // error 属于上一个目标(如「种子不存在或已被删除」), 换目标即作废
+      const m = this.memberByHash.get(hash);
+      this.drawer.detail = m ? { ...m, __peek: true } : null;
+      const tab = this.drawer.tab;
+      if (tab === "trackers") this._fetchDrawerTrackers(true);
+      else if (tab === "peers") this._fetchDrawerPeers(true);
+      else if (tab === "content") this._fetchDrawerFiles(true);
+      else if (tab === "traffic" && this.qbTrafficOn) this._qbLoad("torrent");
+    },
     /* ---------------- FX-29 换目标: 软切换(治「上下键切换种子时抽屉闪烁」, 26-10-03) ----------------
      * 旧实现把 detail / trackers / files / peers 一把清空再重拉, 面板每一次光标移动都走一遍
      * 「整幅内容消失 -> 落到加载空态 -> 数据回来重建」, 连按上下键时就是持续闪烁; 且未拖过高的
@@ -998,12 +1043,18 @@ window.AQB_DRAWER = {
       this._drawerDrag = null;
       document.body.classList.remove("drawer-resizing");
     },
-    /* 收起/展开: 收起 = 只留头部(body 隐藏); 展开即向当前光标补跟(收起期跟随暂停, 见 _kbFollowDrawer) */
+    /* 收起/展开: 收起 = 只留头部(body 隐藏); 展开即向当前光标补跟(收起期键盘跟随暂停, 见
+     * _kbFollowDrawer; 鼠标单击在收起态已实时换目标 —— peek, 数据侧快照由下方补拉兜底) */
     toggleDrawerCollapse() {
       this.drawer.collapsed = !this.drawer.collapsed;
       this.persistDrawerOpen();
       this._dtNotify("collapse");  // 模板核心层(计划 26-10-06-0838 S1): 摘要条走模板响应式, 通知留给变体自身状态
       if (!this.drawer.collapsed) {
+        // 收起期鼠标换过目标(peek, 见 _drawerPeekApply): detail 还是行快照 -> 展开即补拉全量
+        // (_switchDrawerTarget 自带 loading/遮罩/页签数据全链)。此时目标已实时切到光标行,
+        // _kbFollowDrawer 的 hash 短路不会再触发, 数据侧由这里兜住 —— 不会"展开后还是旧行的详情";
+        // 补拉在前、补跟在后: 后者的 200ms 定时器不被 _switchDrawerTarget 的 _stopDrawerFollow 清掉
+        if (this.drawer.detail && this.drawer.detail.__peek) this._switchDrawerTarget(this.drawer.hash);
         this._kbFollowDrawer();
         // 流量形态: 收起期 body 不可见(图不重建), 展开后宿主重新有尺寸 -> 补一发建图
         const s = this.qbCurScope;

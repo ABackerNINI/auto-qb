@@ -45,6 +45,7 @@
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
 - test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/切换器 x2/摘要条 x2 + 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
+- test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3254,6 +3255,97 @@ def test_frontend_qb_traffic_drawer_page_guard():
     assert "this._qbLoad(scope);" in rb, "_qbReloadOnEnter 必须走 _qbLoad 单点(内含建图, 不另写请求)"
     assert 'this[def.loading]' in rb, \
         "_qbReloadOnEnter 缺在途不叠加守卫(打开路径已先发一发, 进场 watcher 会把首次请求翻倍)"
+
+
+def test_frontend_drawer_collapsed_click_peek_target():
+    """详情面板收起态鼠标换目标守阵(Q3 + P2-3, 报告 26-10-07-0542) —— 收起(44px 摘要条态)时
+    鼠标单击列表行必须「只换目标不展开」: 头部标题 + 摘要条立即反映新种子, 面板保持收起。
+    根因是 onTorrentClick 把鼠标单击交给了 _kbFollowDrawer, 其首行「收起即返回」守卫(对键盘
+    ↑↓ 是有意设计: 收起态跟随暂停, 防连发键拉详情)挡在换目标逻辑之前。钉住五件事:
+    1. 鼠标/键盘分流在调用点(selection.js): 收起态走 _drawerPeekTarget, 展开态照旧
+       _kbFollowDrawer —— 键盘路径的收起守卫一字不动(守卫若挪进挂点内部, 收起态键盘会误跟随);
+    2. peek 自带纪律: 只服务收起态 + 流量形态不 peek + 种子页守卫 + hash 未变短路(同行重复
+       点击零副作用)+ 防抖 200ms(共用 _followDrawerTimer, 与键盘跟随互斥后到优先)+ 停稳复核;
+    3. peek 落地: 换 hash + 行快照写 drawer.detail 打 __peek 戳(摘要条数据源, P2-3 危害面;
+       常规页签零请求)+ 非常规页签按当前页签静默拉一发 —— **不得**调 _fetchDrawerDetail /
+       _loadDrawerTab / _switchDrawerTarget(收起态 body 不可见, 拉全量详情/走软切换链是浪费);
+    4. __peek 戳的两个消费点成对(缺一即串数据): _editDetail 绕开快照预填(否则限速/重命名
+       对话框拿行快照把已设限制错显成未设)+ toggleDrawerCollapse 展开时先补拉全量
+       (_switchDrawerTarget)再补跟(否则展开后还是旧行的详情);
+    5. 仅换目标不展开: peek 两方法体内不得出现 collapsed 翻转 / toggleDrawerCollapse /
+       openTorrentDrawer(展开仍归双击 / Enter / 右键「详情」, 收起态点页签先展开的补强二不变)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    sel_js = open(os.path.join(shared, "selection.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+
+    # 1. 鼠标/键盘分流在调用点(onTorrentClick), 键盘挂点 _kbFollowDrawer 的收起守卫原样保留
+    m = re.search(r"onTorrentClick\(m, event\) \{\n(.*?)\n    \},", sel_js, re.S)
+    assert m, "selection.js 缺 onTorrentClick(守阵正则失配, 同步本守阵)"
+    oc = m.group(1)
+    assert "if (this.drawer.collapsed) this._drawerPeekTarget(m.hash);" in oc, \
+        "onTorrentClick 收起态必须分流 _drawerPeekTarget(Q3: 收起态点行「点了没反应」)"
+    assert "this._kbFollowDrawer();" in oc, "onTorrentClick 展开态照旧走 _kbFollowDrawer(展开跟随不回退)"
+    assert oc.index("_drawerPeekTarget") > oc.index("this.shiftTorrentSel(m);"), \
+        "peek 分流必须落在 Ctrl/Shift 分支之后(修饰键选择手势不跟随, 边界②)"
+    kb = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert kb, "drawer.js 缺 _kbFollowDrawer(键盘跟随单点被移走? 同步本守阵)"
+    kbbody = kb.group(1)
+    assert "if (this.drawer.collapsed) return;" in kbbody, \
+        "键盘路径收起守卫不得移除(W3 有意设计: 收起态跟随暂停, 防连发键拉详情)"
+    assert kbbody.index("if (this.drawer.collapsed) return;") < kbbody.index("const c = this.kbCursor;"), \
+        "收起守卫必须保持在光标读取之前(收起态键盘跟随零开销返回)"
+
+    # 2. peek 纪律: 收起态单点 / 流量形态排除 / 种子页守卫 / hash 短路 / 防抖 / 停稳复核
+    m = re.search(r"_drawerPeekTarget\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert m, "drawer.js 缺 _drawerPeekTarget(收起态鼠标换目标入口, Q3 修复被拆?)"
+    pt = m.group(1)
+    assert "if (!this.drawer.open || !this.drawer.collapsed) return;" in pt, \
+        "peek 必须只服务收起态(展开态归 _kbFollowDrawer 管辖, 两路不得重入)"
+    assert 'if (this.drawer.kind !== "seed") return;' in pt, \
+        "peek 必须排除流量形态(全局/分组流量图没有种子目标, 点行不得改写其状态)"
+    assert 'this.page !== "groups" || this.viewMode !== "torrents"' in pt, \
+        "peek 缺种子页守卫(面板停靠落点只存在于种子页)"
+    assert "if (this.drawer.hash === hash) return;" in pt, \
+        "peek 缺 hash 未变短路(同行重复点击零副作用, 与 _kbFollowDrawer 纪律4 同构)"
+    assert "this._followDrawerTimer = setTimeout" in pt and ", 200);" in pt, \
+        "peek 缺防抖 200ms(连点逐行拉摘要 = 请求风暴; 与键盘跟随共用 _followDrawerTimer)"
+    assert pt.count("!this.drawer.collapsed") >= 2, \
+        "peek 停稳复核缺收起态复核(定时器在途面板被展开/关闭, 不得再落地)"
+
+    # 3. peek 落地: 换 hash + 行快照摘要(P2-3)+ 页签静默拉; 不碰全量详情链
+    m = re.search(r"_drawerPeekApply\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert m, "drawer.js 缺 _drawerPeekApply(peek 落地单点)"
+    pa = m.group(1)
+    assert "this.drawer.hash = hash;" in pa, "peek 落地必须先换 hash(头部标题/状态图标由此实时反映新种子)"
+    assert 'this.drawer.detail = m ? { ...m, __peek: true } : null;' in pa, \
+        "peek 必须把行快照写进 drawer.detail 并打 __peek 戳(P2-3: 摘要条读 detail, 旧种子数据即危害面)"
+    assert 'this.drawer.error = "";' in pa, "peek 换目标必须作废上一个目标的 error(如「种子不存在或已被删除」)"
+    for frag in (
+        'this._fetchDrawerTrackers(true)', 'this._fetchDrawerPeers(true)', 'this._fetchDrawerFiles(true)',
+        'this._qbLoad("torrent")'
+    ):
+        assert frag in pa, f"peek 缺非常规页签静默拉取 {frag}(收起态摘要条在 tracker/用户/内容/流量页签也要换新)"
+    assert "_fetchDrawerDetail" not in pa and "_loadDrawerTab" not in pa and "_switchDrawerTarget" not in pa, \
+        "peek 不得拉全量详情/走软切换链(收起态 body 不可见, 口径 = 仅换目标不展开)"
+
+    # 4. __peek 戳两个消费点成对: _editDetail 绕开快照预填 + 展开先补拉再补跟
+    ed = re.search(r"async _editDetail\(hash\) \{\n(.*?)\n      try \{", drawer_js, re.S)
+    assert ed, "drawer.js 缺 _editDetail(守阵正则失配, 同步本守阵)"
+    assert "!this.drawer.detail.__peek" in ed.group(1), \
+        "_editDetail 必须绕开 __peek 行快照(拿快照预填限速/重命名会把已设限制错显成未设)"
+    tc = re.search(r"toggleDrawerCollapse\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert tc, "drawer.js 缺 toggleDrawerCollapse(守阵正则失配, 同步本守阵)"
+    tb = tc.group(1)
+    assert "this.drawer.detail.__peek" in tb and "this._switchDrawerTarget(this.drawer.hash);" in tb, \
+        "展开必须识别 __peek 快照并补拉全量(否则展开后还是旧行的详情)"
+    assert tb.index("__peek") < tb.index("this._kbFollowDrawer();"), \
+        "展开补拉必须先于补跟(补跟的定时器不被 _switchDrawerTarget 的 _stopDrawerFollow 清掉)"
+
+    # 5. 仅换目标不展开: peek 路径不得翻转 collapsed / 不得走显式开面板
+    for name, body in (("_drawerPeekTarget", pt), ("_drawerPeekApply", pa)):
+        assert "collapsed = " not in body and "toggleDrawerCollapse" not in body \
+            and "openTorrentDrawer" not in body, \
+            f"{name} 不得展开面板(Q3 口径: 收起态点行只换目标, 展开仍归双击/Enter/右键「详情」)"
 
 
 def test_frontend_hr_diag_view_wiring():
