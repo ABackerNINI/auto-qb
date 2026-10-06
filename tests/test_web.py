@@ -237,7 +237,7 @@
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
-- test_api_torrent_trackers_masked_response: S3 详情 API 收口 —— trackers 响应 url 一律 mask(凭据原文不外发), 虚拟条目透传, 两次请求逐字节一致
+- test_api_torrent_trackers_masked_response: 守阵① API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
@@ -256,6 +256,10 @@
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在(S3 后入参为 mask 值)
 - test_cmd_remove_tracker_mask_roundtrip: S3 删除改道 —— remove_tracker 收 mask 值当场重取原文比对, 恰 1 命中 qB 收原文; 0/多命中报「未找到该 tracker」且零写调用
+- test_cmd_remove_tracker_same_host_distinct_passkeys: 守阵② 写路径同 host 区分(plan 26-10-07-0055 S4) —— 同 host 两条不同 passkey mask 互异(R8), 传 A 的 mask qB 恰收一次 remove 且 urls==A 原文(B 不受影响); 红验: 删除临时改回直传
+- test_tracker_edit_offline_route_and_static: 守阵③ 编辑下线(plan 26-10-07-0055 S2/S4) —— POST trackers/edit 不落到处理器(404/405; 根挂 StaticFiles 兜 405) + 路由表白名单复核 + static/ 遍历 grep "trackers/edit" 零命中(金清单行由 test_web_route_manifest_frozen 钉); 红验: 临时加回路由/写回字样
+- test_trackers_baseline_keys_are_raw_urls: 守阵④ 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
+- test_torrent_detail_trackers_route_mask_canary: 守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵① 改回透传
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog): 78 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
@@ -11564,9 +11568,14 @@ def test_api_torrent_subresources(web_env):
 
 
 def test_api_torrent_trackers_masked_response(web_env):
-    """S3 详情 API 收口(plan 26-10-07-0055): trackers 响应 url 一律 mask
+    """守阵① API 外发(plan 26-10-07-0055 S4): trackers 响应 url 一律 mask
 
-    - 含凭据的原文不出现在响应体(整值, 连 hash 后形态也不同);
+    红验方式(S4b 照做): 把 torrent_detail.py 的 api_torrent_trackers 路由临时改回
+    裸透传(去掉 mask_tracker_entry) -> 本组必红。
+
+    - 含凭据的原文不出现在响应体(整值缺席断言, **不写死参数名**——私站参数名任意,
+      只用原值字符串断言缺席);
+    - mask 保留 scheme://host + path 端点名 + query 参数名(只换"值"), 站点/端点仍可辨;
     - 虚拟条目(**/[DHT]/[PeX]/[LSD])原样透传;
     - 两次请求逐字节一致(mask 确定性, hash16 不加盐);
     - mask 先于缓存写入: 缓存里只有 mask 条目。
@@ -11607,7 +11616,11 @@ def test_api_torrent_trackers_masked_response(web_env):
     r1 = client.get("/api/torrents/HA/trackers", headers=auth)
     body1 = r1.content
     entries = r1.json()
-    assert entries[0]["url"] == mask_tracker_url(original), "url 应为 mask 值"
+    masked = entries[0]["url"]
+    assert masked == mask_tracker_url(original), "url 应为 mask 值"
+    assert masked != original, "mask 不得与原文相同(等于没脱敏)"
+    assert masked.startswith("https://pt.example.com/announce?passkey="), \
+        "mask 必须保留 scheme://host + path 端点名 + 参数名(只换值), 否则站点/端点不可辨"
     assert "SUPERSECRET123" not in body1.decode("utf-8"), "凭据原文不得出现在响应体"
     assert entries[0]["status"] == 2 and entries[0]["msg"] == "Working", "其余字段原样不动(R9)"
     assert [e["url"] for e in entries[1:]] == ["** [DHT] 3", "[PeX] 1", "[LSD] 2"], \
@@ -11983,6 +11996,141 @@ def test_cmd_remove_tracker_mask_roundtrip():
     with pytest.raises(ValueError, match=r"未找到该 tracker"):
         m._cmd_remove_tracker(hash="HA", url=masked)
     assert not [c for c in m.api.calls if c[0] == "remove_trackers"]
+
+
+def test_cmd_remove_tracker_same_host_distinct_passkeys():
+    """守阵② 写路径同 host 区分(plan 26-10-07-0055 S4): 同 host 两条 tracker(不同 passkey)
+    mask 互异, 传 A 的 mask 删除 -> qB 收到且仅收到 A 的**原文**, B 不受影响
+
+    红验方式(S4b 照做): _cmd_remove_tracker 临时改回直传(把入参 mask 值原样传给
+    torrents_remove_trackers, 不再重取比对) -> qB 收到 mask 值而非原文, 本组必红。
+
+    这是报告 §02「脱敏后同值」在 mask 形态下的失效证明(R8: hash 保值差异 => 唯一性恢复):
+    若 mask 退化成"只留主地址", 两条 mask 撞值 => 比对命中 2 条 => 报错不猜(不误删但删不掉)。
+    """
+    from auto_qb.webui.commands import WebCommandsMixin
+    from helpers import FakeClient
+
+    url_a = "https://pt.example.com/announce?passkey=AAAAAAAAAAAAAAAA"
+    url_b = "https://pt.example.com/announce?passkey=BBBBBBBBBBBBBBBB"
+    mask_a, mask_b = mask_tracker_url(url_a), mask_tracker_url(url_b)
+    assert mask_a != mask_b, "同 host 不同凭据值的 mask 必须互异(R8), 否则删除定位会撞值"
+
+    class _Cmds(WebCommandsMixin):
+        def __init__(self, trackers):
+            self.api = FakeClient()
+            self.client = self.api
+            self.store = {"HA": object()}
+            self.api.trackers_map["HA"] = trackers
+
+    m = _Cmds([{"url": url_a, "status": 2}, {"url": url_b, "status": 2}])
+    m._cmd_remove_tracker(hash="HA", url=mask_a)
+    removes = [c for c in m.api.calls if c[0] == "remove_trackers"]
+    assert removes == [("remove_trackers", ("HA", [url_a]))], \
+        "qB 必须恰收到一次 remove 且 urls == A 的原文(不含 B 的原文, 不含任何 mask 值)"
+    assert mask_a not in str(removes) and mask_b not in str(removes), "mask 值不得透传给 qB"
+
+
+def test_tracker_edit_offline_route_and_static(web_env):
+    """守阵③ 编辑下线(plan 26-10-07-0055 S2/S4): tracker 编辑功能三层全无
+
+    红验方式(S4b 照做): 临时加回 POST /api/torrents/{hash}/trackers/edit 路由(或把
+    "trackers/edit" 字样写回 static/ 任意文件) -> 本组必红。
+
+    - 路由金清单无 trackers/edit 行: test_web_route_manifest_frozen 已钉(S2 改过的清单即守阵);
+    - POST /api/torrents/{hash}/trackers/edit 不落到任何处理器(路由不存在; 本应用根挂了
+      StaticFiles(static_ui.py), 未匹配路径由挂载兜住 -> POST 回 405, 纯 404 反而说明挂载没了);
+    - 静态目录 grep "trackers/edit" 零命中(测试内 Python 遍历, 不调 shell; 前端残留调用
+      一个已消失的端点 = 按钮点了静默失败)。
+    """
+    from fastapi.routing import APIRoute
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.post("/api/torrents/HA/trackers/edit", headers=auth, json={"hash": "HA", "url": "x"})
+    assert r.status_code in (404, 405), \
+        f"trackers/edit 必须不落到任何处理器(404/405), 实际 {r.status_code} —— 路由被加回来了?"
+    # 路由表白名单式复核(不依赖静态挂载的行为): 不得存在 trackers/edit 的 API 路由
+    app = client.app
+    edit_routes = [
+        r.path for r in _iter_api_routes(app.routes) if isinstance(r, APIRoute) and "trackers/edit" in r.path
+    ]
+    assert edit_routes == [], f"路由表里存在 trackers/edit: {edit_routes}"
+
+    hits = []
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for fn in files:
+            p = os.path.join(dirpath, fn)
+            try:
+                text = Path(p).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue  # 二进制/不可读文件跳过(图片等)
+            if "trackers/edit" in text:
+                hits.append(os.path.relpath(p, STATIC_ROOT))
+    assert hits == [], f"static/ 里残留 trackers/edit 引用: {hits}(前端还在调已下线的端点)"
+
+
+def test_trackers_baseline_keys_are_raw_urls():
+    """守阵④ 基线 key 为原文(plan 26-10-07-0055 S4): _trackers_baseline 的 dict key
+    必须是 fake client 的**原文** url, 不是 mask
+
+    红验方式(S4b 照做): _trackers_baseline 临时切到 mask_tracker_url 做 key ->
+    同 host 撞 key 静默漏判, 本组必红(报告 §04 自伤警告: mask 化基线反而破坏确认判定)。
+
+    防的是后人"顺手统一脱敏"把汇报确认基线也 mask 掉 —— 同 host 不同 passkey 的两条
+    tracker mask 后仍互异(R8), 但原文 key 与 mask key 全然不同, 判定域(status>=2 且
+    b_next 非空的行)会整体错位, 前跳证据静默丢。既有 test_trackers_baseline_shape_and_
+    epoch_mode 用的是无凭据 url(mask == 原文), 切 mask 不会红 —— 钉不住, 本用例补位。
+    """
+    from auto_qb.core.qbmanager import QbManager
+    from helpers import FakeClient
+
+    url_a = "https://pt.example.com/announce?passkey=AAAAAAAAAAAAAAAA"
+    url_b = "https://pt.example.com/announce?passkey=BBBBBBBBBBBBBBBB"
+    client = FakeClient()
+    client.trackers_map = {
+        "HA":
+            [
+                {
+                    "url": url_a,
+                    "status": 2,
+                    "next_announce": 1000,
+                    "min_announce": 900
+                },
+                {
+                    "url": url_b,
+                    "status": 2,
+                    "next_announce": 2000,
+                    "min_announce": 1900
+                },
+                {
+                    "url": "** [DHT] 3",
+                    "status": 0
+                },
+            ],
+    }
+    baseline, _epoch = QbManager._trackers_baseline(SimpleNamespace(client=client), ["HA"])
+    assert set(baseline["HA"]) == {url_a, url_b}, \
+        "基线 key 必须等于 fake client 的原文 url(同 host 两条不同 passkey 的 key 互异), 虚拟行排除"
+    assert mask_tracker_url(url_a) not in baseline["HA"], "基线 key 不得是 mask 值(切 mask 即红)"
+    assert baseline["HA"][url_a]["next"] == 1000 and baseline["HA"][url_b]["next"] == 2000, \
+        "原文 key 下各行的 epoch 字段逐条对号(撞 key 会互相覆盖丢行)"
+
+
+def test_torrent_detail_trackers_route_mask_canary():
+    """守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4): torrent_detail.py 的 trackers 路由
+    源码必须引用 mask_tracker_entry —— 有人改回裸透传即红(延续 issue 26-09-21-1408 守阵做法)
+
+    红验方式(S4b 照做): 同守阵① —— 路由临时改回透传(删掉 mask_tracker_entry 引用) ->
+    本组必红。运行时守阵①兜运行行为, 本 canary 兜源码形态(连缓存 lambda 一起钉)。
+    """
+    src_path = os.path.join(os.path.dirname(STATIC_ROOT), "server", "routes", "torrent_detail.py")
+    src = Path(src_path).read_text(encoding="utf-8")
+    assert "mask_tracker_entry" in src, \
+        "torrent_detail.py 不再引用 mask_tracker_entry —— trackers 路由被改回裸透传? 同步守阵①"
+    # 钉在 trackers 端点的取数 lambda 上(不是仅在文件里 import 一下): 缓存写入必须已 mask
+    assert re.search(r"_cached_read\(\s*\n?\s*f?\"trackers:\{hash\}\".*mask_tracker_entry", src, re.S), \
+        "trackers 端点的 _cached_read 取数 lambda 里没有 mask_tracker_entry —— mask 必须先于缓存写入"
 
 
 # ---- W0 结构守阵(plan 26-09-22-1857: web.py create_app 拆分 web/ 包, 先行落阵再动刀) ----
