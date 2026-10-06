@@ -83,7 +83,7 @@ window.AQB_LIFECYCLE = {
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
     });
-    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
+    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层 → 历史弹层 → 抽屉 → 筛选器下拉/其余弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
     document.addEventListener("keydown", (e) => {
@@ -98,11 +98,14 @@ window.AQB_LIFECYCLE = {
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
+      // 历史流量弹层: 遮罩层(z-index 130)盖在停靠抽屉(80)之上, 与 qB 口径流量图(drawerVisible)
+      // 同时存在时它才是视觉上的**最上层** —— 必须先关它, 否则 Esc 会穿过遮罩去关底下被盖住的抽屉
+      // (退栈顺序 = 视觉层叠顺序: 弹层 → 抽屉; 2026-10-06 报障: 两图同开时 Esc 先关错了抽屉)
+      else if (this.historyOpen) this.historyOpen = false;
       // 详情抽屉(种子详情 / qB 口径流量图): 确认框优先, 其后于其它浮层。判据用 drawerVisible
       // 而非 drawer.open —— 面板 DOM 随 drawerVisible 退场(非主内容页), 看不见的面板不吃 Esc:
       // 在设置页第一次 Esc 应该做的事是退回设置首页, 而不是关掉一张不在屏幕上的面板
       else if (this.drawerVisible) this.closeDrawer();
-      else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
       else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
