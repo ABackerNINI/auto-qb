@@ -691,8 +691,12 @@ window.AQB_SHORTCUTS = {
       // openTorrentDrawer 即换目标打开(不走 close), 关面板只走 Esc 与关闭钮
       this.openTorrentDrawer(c.id);
     },
-    /* Alt+1~4 双态(方案A W2, §2.2): 面板关 = 开面板并定位该页签; 面板开 = 切页签(现行为)。
+    /* Alt+1~5 双态(方案A W2, §2.2): 面板关 = 开面板并定位该页签; 面板开 = 切页签(现行为)。
      * W3 收起态(半开)视同开态先展开再切页签 —— 页签在收起态不可见, 切了等于没切。
+     * "开态"只对种子形态(kind=seed)成立: 流量形态(全局/分组流量图, 26-10-05 三挂点并入抽屉)
+     * 的抽屉 hash 恒空 —— 直接走切页签会把空 hash 打进 /api/torrents//trackers 等端点(404,
+     * toast "tracker/peer 列表获取失败"), Alt+1 又因流量形态 tab 恒为 general 早退(按了没反应)。
+     * 流量形态视同关态: 解析目标后 openTorrentDrawer 整体重建为种子形态并落在该页签。
      * 目标解析: 光标行(kind=torrent)优先, 其次单选种子(_kbSingleHash, 选中恰一个 hash);
      * 非种子页(停靠落点 .drawer-dock 只在种子视图)或解析不出目标时 toast 提示后忽略 —— 不猜目标。
      * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
@@ -707,11 +711,12 @@ window.AQB_SHORTCUTS = {
         this.toast("qB 口径流量图未启用", "info", 2500);
         return;
       }
-      if (this.drawer.open) {
+      if (this.drawer.open && this.drawer.kind === "seed") {
         if (this.drawer.collapsed) this.toggleDrawerCollapse();  // W3: 收起态先展开(Alt+N 本就要看该页签)
         this.drawerTab(tab);  // 开态: 切页签(现行为)
         return;
       }
+      // 面板关着或开着流量形态: 都走"开面板并定位该页签"(流量形态由 openTorrentDrawer 换形)
       const c = this.kbCursor;
       const hash = c && c.kind === "torrent" ? c.id : this._kbSingleHash();
       if (!hash) {

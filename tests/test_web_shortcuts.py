@@ -44,7 +44,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_drawer_dock_keyboard_w2: 方案A W2(计划 26-10-03-0917 §2.2/§2.3/§3.2/§3.4) ——
   _kbOverlayBusy 摘 drawer.open 而 escBusy 保留(两名单职责分叉: 面板≠浮层 vs Esc 关面板);
   drawer-tab 四条 group=详情面板 / scope=list / run=_kbDrawerTab 双态(非种子页 toast 忽略 /
-  开态切页 / 关态开面板定位该页签, 目标解析 kbCursor(torrent) 优先 + 单选种子兜底);
+  开态切页只对种子形态 kind=seed 成立, 流量形态开态视同关态走 openTorrentDrawer 换形打开 ——
+  流量形态 hash 恒空, 切页签会打出 /api/torrents//trackers 空 hash 404 / 关态开面板定位该页签,
+  目标解析 kbCursor(torrent) 优先 + 单选种子兜底);
   跟随单点 _kbFollowDrawer 挂 _kbApplyCursor 尾部, page+kind 守卫 + 200ms 防抖 + hash 短路 +
   停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃;
   _switchDrawerTarget 换目标走 FX-29 软切换(不清空旧数据, switching 遮罩防串显 + 按 tab 的
@@ -515,7 +517,12 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert tb.index('this.page !== "groups" || this.viewMode !== "torrents"'
                    ) < tb.index("this.drawerTab(tab)"), "非种子页守卫必须先于双态分流(停靠落点只在种子视图)"
     assert "this.toast(" in tb, "非种子页必须 toast 提示后忽略, 不许静默"
-    assert tb.index("if (this.drawer.open)") < tb.index("openTorrentDrawer(hash)"), "双态序: 开态切页 / 关态开面板"
+    assert tb.index('if (this.drawer.open && this.drawer.kind === "seed")'
+                   ) < tb.index("this.drawerTab(tab)"), "开态切页签只对种子形态成立(流量形态页签按钮不渲染, 切不得)"
+    # 流量形态开态(全局/分组流量图, hash 恒空)必须视同关态换目标打开: 直接切页签会把空 hash
+    # 打进 /api/torrents//trackers 等端点(404 toast), Alt+1 因流量形态 tab 恒 general 早退(按了没反应)
+    assert tb.index('this.drawer.kind === "seed"') < tb.index("openTorrentDrawer(hash)"), \
+        "流量形态开态必须落到 openTorrentDrawer 换形打开, 不许走 drawerTab(空 hash 404)"
     assert "this.drawerLastTab = tab;" in tb and "this.persistDrawerTab()" in tb, "关态开面板必须经 drawerLastTab 定位该页签(openTorrentDrawer 的初始页签口径)"
     # 目标解析: kbCursor(kind=torrent) 优先, 单选种子兜底, 无目标 _kbHint
     assert 'c.kind === "torrent" ? c.id : this._kbSingleHash()' in tb, "目标解析须 kbCursor(torrent) 优先 + _kbSingleHash 兜底"
@@ -740,7 +747,7 @@ def test_qb_traffic_shortcuts() -> None:
     tb = dtab.group(1)
     gate = tb.index('tab === "traffic" && !this.qbTrafficOn')
     assert gate > tb.index('this.page !== "groups"'), "流量门控必须在页面守卫之后(守卫序: 页面 -> 功能门 -> 双态)"
-    assert gate < tb.index("if (this.drawer.open)"), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
+    assert gate < tb.index('if (this.drawer.open && this.drawer.kind === "seed")'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
     assert "qB 口径流量图未启用" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
 
     # ③ 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_web 的持久化守阵)
