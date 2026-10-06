@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tracker URL 源头脱敏 · 方案B 分步实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="tracker-url-source-sanitize">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-07-0055">
+<meta name="doc-updated" content="26-10-07-0055">
+<meta name="doc-refs" content="memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html,memory-bank/tasks/26-10-07-webui-tracker-url-sanitize.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #10151a;
+    --paper: #141b21;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --stop: #d98a86;
+    --ok: #7fb69a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI Semibold", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 64px 40px 96px; display: grid; grid-template-columns: 208px 1fr; gap: 56px; }
+
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 40px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.12; margin-bottom: 16px; }
+  .lede { font-size: 16.5px; color: var(--dim); max-width: 64ch; margin-bottom: 26px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 30px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+
+  section { grid-column: 2; margin-top: 48px; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 26px 0 8px; }
+  p { margin-bottom: 13px; max-width: 68ch; }
+  ul, ol { margin: 0 0 13px 22px; max-width: 68ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 2px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 3px; overflow-x: auto; margin-bottom: 14px; max-width: 100%; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 18px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--hair); }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  .verdict { font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; white-space: nowrap; }
+  .v-ok { color: var(--ok); }
+  .v-warn { color: var(--warn); }
+  .v-stop { color: var(--stop); }
+  .v-acc { color: var(--accent-ink); }
+
+  .callout { border-left: 1px solid var(--accent); padding: 2px 0 2px 18px; margin: 0 0 18px; max-width: 68ch; }
+  .callout .cl { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 5px; }
+  .callout.stop { border-left-color: var(--stop); }
+  .callout.warn { border-left-color: var(--warn); }
+
+  .step { border-left: 1px solid var(--hair); padding: 0 0 0 18px; margin-bottom: 30px; }
+  .step .sn { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); }
+  .step .st { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 2px 0 4px; }
+  .step .sgoal { color: var(--dim); margin-bottom: 10px; }
+
+  footer { grid-column: 2; margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+  .q { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 22px 0 6px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>任务与转计划裁定</a>
+    <a href="#s2"><span class="no">02</span>现状取证（20bd2157）</a>
+    <a href="#s3"><span class="no">03</span>方案 B 执行口径</a>
+    <a href="#s4"><span class="no">04</span>分步实施 S1 → S4</a>
+    <a href="#s5"><span class="no">05</span>风险与边界</a>
+    <a href="#s6"><span class="no">06</span>验收标准</a>
+    <div class="toc-foot">
+      计划 · Open · 未开工<br>
+      派生自 26-09-22-1801（方案 B）<br>
+      取证 2026-10-07 00:55 (20bd2157)
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · Open（未开工）</div>
+    <h1>tracker URL 源头脱敏：<br>方案 B 分步实施计划</h1>
+    <p class="lede">本文把可行性报告 <a href="26-09-22-1801-tracker-url-source-sanitize-plan.html">26-09-22-1801</a> 中已拍板的方案 B（单轨 + 瞬时原文 + mask 形态）转成可直接开工的分步计划：4 个批次（S1→S4），每批附文件级改动清单、测试与独立验证门。全部行号按当前树 <strong>20bd2157</strong> 重新取证——报告（基树 fda13cd）之后汇报确认机制经历了 D1–D5 重构，行号已漂移，不能照抄。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-07-0055</div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-10-07 00:55</div></div>
+      <div class="item"><div class="k">基树</div><div class="v">20bd2157</div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">infra / core / torrents / webui</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Open · 四波次均未落码</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>任务与转计划裁定</h2>
+
+    <div class="callout">
+      <span class="cl">现状核验（本计划的第一手结论）</span>
+      <p>报告档 meta 标「已实施(2026-10-04 复核)」指的是<strong>前置工程</strong>——日志端脱敏（issue 26-09-21-1408：<code>infra/utils.py:294 sanitize_tracker_url</code>，只留主地址形态，用于 <code>webui/commands.py:631/:640</code> 的编辑/移除日志行）已落码。<strong>方案 B 的四个波次本体按 20bd2157 取证均未落码</strong>：Facade <code>torrents_trackers</code> 纯透传、详情 API 仍把原文发给浏览器、编辑功能全链路在、仓里没有 mask 函数。本计划即从零开工。</p>
+    </div>
+
+    <div class="callout warn">
+      <span class="cl">批次结构修正（转计划时发现的编排问题）</span>
+      <p>报告 §07-4 建议「先批 W1 + W2 止血」——<strong>这条不可执行</strong>。W2 让 <code>/api/torrents/{hash}/trackers</code> 只回 mask 值后，前端移除按钮提交的也是 mask 值（<code>drawer.js:556 trackerRemove</code> 提交的就是行上显示的 <code>url</code>），而旧后端 <code>_cmd_remove_tracker</code>（<code>commands.py:634</code>）把它原样直传 qB 的 <code>torrents_remove_trackers(original_url=…)</code>——qB 按原文精确匹配，必然找不到。<strong>移除功能会在 W2 与 W3 之间被打断。</strong>同理，编辑弹窗在 W2 后预填的是 mask 值，等于已废。所以：详情 API 收口、删除改道、编辑下线三件事必须收敛成原子批次（本计划 S2/S3），不能按报告的波次跨批拆开。</p>
+    </div>
+
+    <h3>转计划裁定（三个实现口径，开工前可否决）</h3>
+    <ol>
+      <li><strong>mask 函数 = 新增 <code>mask_tracker_url()</code></strong>，不动既有的 <code>sanitize_tracker_url()</code>。报告在两个选项里留了口子（§05-W1）：选新增的理由是日志路径（只留主地址）的行为与 <code>test_utils.py:1115</code> 既有测试一行不动，符合保守默认；日志不需要 path 与参数名，两个形态不冲突。</li>
+      <li><strong>批次重排为 S1→S4</strong>（见 §04）：S1 源头归一化（零行为）→ S2 编辑下线（纯删除，先杀掉「弹窗预填原文」这个最敏感点）→ S3 收口切换（详情 API + 删除改道，原子批）→ S4 守阵 + 红验 + 回写。报告 W1 的「补一个脱敏字段、保留原文不下线」是双轨期的残留表述，单轨定案（报告 §01-⑧）后 S1 直接归一到位，同样零行为。</li>
+      <li><strong>path 末段处置规则</strong>：报告示例 <code>https://site/announce?passkey=9f2c…</code> 保留 path 可见，而 §04 又提到「path 末段是可能藏凭据的位置」。合成规则：<em>path 末段若为高熵形态（≥16 位连续 <code>[A-Za-z0-9_-]</code>）则整段替换成 hash，否则原样保留</em>——<code>announce</code>/<code>announce.php</code> 等端点名保留诊断价值，<code>/announce/&lt;32位hex&gt;</code> 这类 path 凭据被覆盖。规则是纯字符串判定，确定性不受影响。</li>
+    </ol>
+
+    <h3>批次总览</h3>
+    <table>
+      <tr><th>批次</th><th>内容</th><th>行为影响</th><th class="mono">独立验证门</th></tr>
+      <tr><td class="mono">S1</td><td>源头归一化：mask 函数 + 槽/Facade 归一 + 单测</td><td class="verdict v-ok">零行为</td><td class="mono">test.quick</td></tr>
+      <tr><td class="mono">S2</td><td>编辑下线：前端入口 + 路由 + 命令表 + 处理器 + 测试</td><td class="verdict v-warn">编辑不可用（已拍板）</td><td class="mono">test.quick</td></tr>
+      <tr><td class="mono">S3</td><td>收口切换：详情 API 只回 mask + 删除改道（当场重取、用完即弃）</td><td class="verdict v-warn">外发面收口 + 删除多一次读</td><td class="mono">test.quick + 定向</td></tr>
+      <tr><td class="mono">S4</td><td>守阵 5 组 + 红验 + conventions 回写 + 全量</td><td class="verdict v-ok">无</td><td class="mono">test.full</td></tr>
+    </table>
+    <p>每批独立提交；S1→S2、S2→S3 之间不存在坏中间态（S3 的原子性是修正后的编排保证）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证（基树 20bd2157）</h2>
+
+    <pre><code>qB ──► client.torrents_trackers(hash)
+  │
+  ├─ 槽路径  torrents/record.py:259  填 trackers_info 惰性槽              ← S1 mask 进槽
+  │    ├─ Facade core/qbapi.py:330 (store 命中走槽; 否则直连, :334)        ← S1 两分支同 mask
+  │    │    └─ core/exporter.py:32  导出器扫站点域名     只要 host        ✅
+  │    ├─ core/qbmanager.py:835  未匹配域名告警          只要 host        ✅
+  │    ├─ core/modules/tracker_mod.py:87 · rules/expr/env.py:170 匹配     ✅ 只要 host
+  │    └─ record.tracker_urls() 派生（state.json 不落盘, to_dict 排除槽）  ✅
+  ├─ torrent_detail.py:51  详情 API(_cached_read 2s TTL) ─► 浏览器        ❌ 裸奔 → S3
+  ├─ webui/commands.py:253  汇报基线 _trackers_baseline（进程内 dict）      ⚠ 豁免 → 守阵
+  ├─ webui/runtime.py:420   前台确认 tick（进程内差分）                    ⚠ 豁免
+  ├─ webui/runtime.py:474   后台核实 tick（进程内差分, D1 新路径）          ⚠ 豁免
+  └─ webui/views.py:188     报错提示（只取 status/msg, 虚拟条目跳过）       ✅ 不改
+
+写路径: torrent_cmds.py:141/146/152 三路由 ─► commands.py:207-208 命令表
+        ─► :622 _cmd_edit_tracker（S2 下线） / :634 _cmd_remove_tracker（S3 改道）</code></pre>
+
+    <h3>与报告的行号漂移（fda13cd → 20bd2157）</h3>
+    <table>
+      <tr><th>消费点</th><th class="mono">报告行号</th><th class="mono">现行号</th><th>备注</th></tr>
+      <tr><td>汇报基线取数</td><td class="mono">commands.py:161</td><td class="mono">commands.py:253</td><td><code>_trackers_baseline</code> 定义在 :237；基线结构 <code>{hash: {url: {status, updating, next, min}}}</code> 不变</td></tr>
+      <tr><td>每 tick 复核</td><td class="mono">runtime.py:269</td><td class="mono">runtime.py:420 <strong>+</strong> :474</td><td><strong>D1–D5 重构</strong>（bf12a487）：确认机制拆出 <code>_verdict_reannounce</code>、epoch/next_announce 判据，并新增「推迟登记后台核实」路径（<code>reannounce_background</code>）——报告不知道的第二消费点</td></tr>
+      <tr><td>报错提示</td><td class="mono">views.py:119</td><td class="mono">views.py:188</td><td>虚拟前缀常量 <code>_VIRTUAL_TRACKER_PREFIXES</code> 在 views.py:84</td></tr>
+      <tr><td>记录惰性槽</td><td class="mono">record.py:250</td><td class="mono">record.py:259</td><td><code>invalidate_trackers()</code> 由 QbApi 三个写包装调用</td></tr>
+      <tr><td>域名告警</td><td class="mono">qbmanager.py:689</td><td class="mono">qbmanager.py:835</td><td>经槽 <code>trackers_info(self.client)</code> 读取</td></tr>
+      <tr><td>详情 API</td><td class="mono">torrent_detail.py:37</td><td class="mono">torrent_detail.py:51</td><td>直读原始 client（非 Facade），<code>_require_client</code> 断连 503 语义必须保留</td></tr>
+    </table>
+
+    <h3>写路径现状（S2/S3 的作业面）</h3>
+    <table>
+      <tr><th>层</th><th class="mono">位置</th><th>现状</th><th class="mono">处置</th></tr>
+      <tr><td>前端按钮</td><td class="mono">drawer.html:197 / :215 / :218</td><td>添加 / 编辑 / 删除三按钮</td><td class="verdict v-warn">:215 删（S2）</td></tr>
+      <tr><td>前端方法</td><td class="mono">drawer.js:526 / :540 / :556</td><td>trackerAdd / trackerEdit（promptDialog <strong>预填原文</strong>）/ trackerRemove（confirmDialog 显示 url）</td><td class="verdict v-warn">trackerEdit 删（S2）；trackerRemove S3 零改动</td></tr>
+      <tr><td>路由</td><td class="mono">torrent_cmds.py:141 / :146 / :152</td><td>add / edit / remove 三端点；remove 载荷 <code>{hash, url}</code></td><td class="verdict v-warn">edit 删（S2）；remove 载荷形状不变（S3）</td></tr>
+      <tr><td>命令表</td><td class="mono">commands.py:207-208</td><td><code>edit_tracker</code> / <code>remove_tracker</code></td><td class="verdict v-warn">edit_tracker 删（S2）</td></tr>
+      <tr><td>处理器</td><td class="mono">commands.py:622 / :634</td><td>edit 直传 qB；remove 直传 qB（日志已脱敏 :631/:640）</td><td class="verdict v-stop">edit 删（S2）；remove 重写（S3）</td></tr>
+      <tr><td>QbApi 包装</td><td class="mono">qbapi.py:250 / :254 / :266</td><td>add/edit/remove，各自 <code>_invalidate_torrent_trackers</code></td><td class="verdict v-warn">edit 包装删（S2）</td></tr>
+    </table>
+
+    <h3>虚拟条目前缀的三处双源（S1 顺手归一，其余不动）</h3>
+    <p><code>views.py:84 _VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")</code>、<code>commands.py:264</code> 内联同款 tuple、<code>drawer.js:1321 drawerTrackerVirtual</code> 前端同判。S1 把常量提到 <code>infra/utils.py</code> 供 mask 函数与 views 共用（commands 内联与前端判断不动——范围守恒，只消除会进 mask 函数的那处双源）。</p>
+
+    <h3>测试布局</h3>
+    <ul>
+      <li><code>tests/test_utils.py:1115</code> —— sanitize 单测组（mask 单测放同文件旁，头 docstring「## 测试计划」同步）。</li>
+      <li><code>tests/test_web.py</code> —— 路由→enqueue 用例（:8334 段）、命令执行用例（:8722/:8763/:8836/:8904 段）、失效断言（:9204-9212）、日志脱敏用例（:11658）、<strong>端点清单测试（:11741，<code>("POST", "/api/torrents/{hash}/trackers/edit")</code> 一行，删路由必同步——改完即编辑下线守阵）</strong>。</li>
+      <li><code>tests/helpers.py:382</code> —— fake client 的 <code>torrents_edit_tracker</code> 记录器（S2 删）。</li>
+      <li><code>e2e/*.spec.mjs</code>（仓库根）—— Playwright 层；本计划守阵落 pytest 层，e2e 仅真机走查配合。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>方案 B 执行口径</h2>
+
+    <h3><code>mask_tracker_url(url) -&gt; str</code> 规格（infra/utils.py，R1–R9）</h3>
+    <table>
+      <tr><th class="mono">#</th><th>规则</th></tr>
+      <tr><td class="mono">R1</td><td><strong>虚拟条目原样透传</strong>：url 以 <code>"**"</code> / <code>"[DHT]"</code> / <code>"[PeX]"</code> / <code>"[LSD]"</code> 开头 → 原样返回，不进任何改写（裸 <code>[DHT]</code> 形态也覆盖；报告 §02 实测 sanitize 会把裸形态小写破坏前缀识别——mask 必须在函数内挡掉，不依赖调用方过滤）。</td></tr>
+      <tr><td class="mono">R2</td><td>非字符串 / 空 / 解析不出 host → 返回 <code>SANITIZE_FALLBACK</code>（<code>"&lt;invalid-url&gt;"</code>），<strong>绝不抛异常</strong>。后果可控：两侧同函数 ⇒ 比对一致；多条不可解析 → 命中多条 → error 不猜。</td></tr>
+      <tr><td class="mono">R3</td><td>scheme 保留并小写；缺 scheme 时从 path 首段兜底取 host（镜像 sanitize 的处理）。</td></tr>
+      <tr><td class="mono">R4</td><td>netloc 去 userinfo（取 <code>@</code> 之后），host 小写，<strong>端口保留</strong>。</td></tr>
+      <tr><td class="mono">R5</td><td>path 保留；<strong>末段</strong>匹配 <code>^[A-Za-z0-9][A-Za-z0-9_-]{15,}$</code>（≥16 位高熵）→ 整段替换为 hash16；fragment 丢弃。</td></tr>
+      <tr><td class="mono">R6</td><td>query 按 <code>&amp;</code> 拆段，有 <code>=</code> 的段改写为 <code>名=hash16(原值)</code>（<strong>值取原文子串，不做百分号解码</strong>），裸名参数原样；段序不变。<strong>铁律：不按参数名挑</strong>——所有值一律 hash，<code>passkey</code>/<code>authkey</code>/<code>token</code>/<code>uid</code>/<code>secret</code>/任意私站命名同权。</td></tr>
+      <tr><td class="mono">R7</td><td><code>hash16(v) = sha256(v.encode("utf-8")).hexdigest()[:16]</code>。<strong>确定性、不加盐</strong>（加盐则两次拉取值不同，唯一性与基线差分一起失效）。</td></tr>
+      <tr><td class="mono">R8</td><td><strong>唯一性</strong>：同 host 不同 path、同 path 不同凭据值 ⇒ mask 互异（hash 保值差异）；完全相同 url ⇒ mask 相同。⇒ mask 可当<strong>内容标识</strong>直接用于删除定位（W3 方案的前提）。</td></tr>
+      <tr><td class="mono">R9</td><td>配套 <code>mask_tracker_entry(entry: dict) -&gt; dict</code>：条目缺 <code>url</code> 或命中 R1 → 原样返回；否则 <code>{**entry, "url": mask_tracker_url(entry["url"])}</code>，status/msg/num_peers 等其余字段不动。</td></tr>
+    </table>
+
+    <p>形态示例：</p>
+    <pre><code>https://pt.example.com/announce?passkey=abc123def456&amp;uid=7
+  → https://pt.example.com/announce?passkey=&lt;h16&gt;&amp;uid=&lt;h16&gt;      (path/参数名可见, 值全 hash)
+
+udp://tracker.opentrackr.org:1337/announce
+  → 原样 (无凭据可藏; path 末段 "announce" 不命中 R5)
+
+https://pt.example.com/announce/1a2b3c4d5e6f7a8b9c0d1e2f
+  → https://pt.example.com/announce/&lt;h16&gt;                        (path 末段 24 位高熵 → hash)
+
+** [DHT] **   →   ** [DHT] **                                     (R1 透传)</code></pre>
+
+    <h3>单轨边界：原文允许出现的位置（全仓清单）</h3>
+    <table>
+      <tr><th>位置</th><th>性质</th><th class="mono">判定</th></tr>
+      <tr><td class="mono">_cmd_remove_tracker 执行瞬间（S3 改道后）</td><td>当场重取 → 逐条 mask 比对 → 命中那条原文传 qB → <strong>局部变量出作用域即弃</strong>。不进缓存、不落盘、不进响应</td><td class="verdict v-acc">允许（瞬时）</td></tr>
+      <tr><td class="mono">_trackers_baseline (commands.py:253) · runtime.py:420 / :474</td><td>汇报确认基线以<strong>原文 url 为 dict key</strong>，全程进程内：不落盘、不进响应体、不进日志。切到 mask 反而制造同 host 撞 key 静默漏判（报告 §04 结论，D1–D5 重构不改变该判定）</td><td class="verdict v-warn">豁免 · S4 守阵钉住</td></tr>
+      <tr><td class="mono">/api/torrents/{hash}/export（torrent_detail.py:158 附近）</td><td>原始 .torrent 字节透传，announce 自带凭据——用户主动下载自己的种子，qB 原生亦然</td><td class="verdict v-stop">本次不堵（报告 §04 明示取舍）</td></tr>
+      <tr><td>其余一切越界面：日志 / 详情 API 响应体 / 前端 DOM / 通知 / 导出 / 落盘</td><td>——</td><td class="verdict v-stop">禁止（只有 mask）</td></tr>
+    </table>
+
+    <h3>缓存一致性</h3>
+    <p>两层缓存（<code>record.py:259</code> 惰性槽、<code>torrent_detail.py:51</code> 的 <code>_cached_read</code>）都在<strong>写入前</strong>过 <code>mask_tracker_entry</code>——缓存里永远只有 mask 后条目，不存在「有的缓存脱敏有的没脱」的时序窗口。报告「归一化单点放在 QbApi」的理想形态需要把 5 个直读点全部收敛回 Facade（它自己标注改动面更大）；本计划取<strong>逐点归一化 + 共享纯函数</strong>：单点是 <code>mask_tracker_url/entry</code> 函数本身，落点 4 处（槽填充 / Facade else 分支 / 详情路由 / 删除比对），每处一行调用。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>分步实施 S1 → S4</h2>
+
+    <div class="step">
+      <div class="sn">S1 · 源头归一化</div>
+      <div class="st">mask 函数落码 + 槽/Facade 归一（零行为变更）</div>
+      <div class="sgoal">目标：脱敏能力就位并覆盖全部「进程内可能外流」的读路径；所有现消费点只取 host，mask 保 host ⇒ 行为零变化，可单独验证不回归。</div>
+      <table>
+        <tr><th class="mono">文件:位置</th><th>改动</th></tr>
+        <tr><td class="mono">infra/utils.py（sanitize_tracker_url 旁）</td><td>新增 <code>VIRTUAL_TRACKER_PREFIXES</code> 常量 + <code>mask_tracker_url()</code>（R1–R8）+ <code>mask_tracker_entry()</code>（R9）；复用 <code>SANITIZE_FALLBACK</code>。不改动 <code>sanitize_tracker_url</code> 本体。</td></tr>
+        <tr><td class="mono">webui/views.py:84</td><td><code>_VIRTUAL_TRACKER_PREFIXES</code> 改为引用 utils 常量（一行，消双源）。</td></tr>
+        <tr><td class="mono">torrents/record.py:259</td><td>槽填充改 <code>[mask_tracker_entry(t) for t in (client.torrents_trackers(self.hash) or [])]</code>——槽内只存 mask 条目。</td></tr>
+        <tr><td class="mono">core/qbapi.py:334</td><td>Facade else 分支（store 未命中直连）同样过 <code>mask_tracker_entry</code>；store 命中分支经槽已 mask。exporter.py:32 等调用方拿到的一律是 mask 条目（host 不变，无感）。</td></tr>
+        <tr><td class="mono">tests/test_utils.py</td><td>mask 单测组（R1–R9 逐条：虚拟透传含裸 <code>[DHT]</code>、FALLBACK 兜底、userinfo/端口、path 高熵判定、query 全值含未知参数名、确定性两次一致、唯一性三例、entry 其余字段保全）；头 docstring「## 测试计划」同步登记。</td></tr>
+      </table>
+      <p><strong>验证门</strong>：<code>commands run test.quick</code> 绿；手查域名告警 / 导出 / 站点匹配 / 站点导入照旧。<strong>行为影响</strong>：无。</p>
+    </div>
+
+    <div class="step">
+      <div class="sn">S2 · 编辑下线</div>
+      <div class="st">编辑功能整个移除（纯删除，先杀最敏感的「弹窗预填原文」）</div>
+      <div class="sgoal">目标：改 passkey 退化为「移除旧的 + 添加新的」两步（用户 2026-09-23 拍板）；连带把编辑弹窗预填原文这个最敏感泄露点整个消灭。</div>
+      <table>
+        <tr><th class="mono">文件:位置</th><th>改动</th></tr>
+        <tr><td class="mono">webui/static/shared/tpl/drawer.html:215</td><td>删「编辑」按钮（:197 添加、:218 删除保留）。</td></tr>
+        <tr><td class="mono">webui/static/shared/drawer.js:540-554</td><td>删 <code>trackerEdit()</code>；<code>_editPost</code> 保留（add/remove 仍用）。</td></tr>
+        <tr><td class="mono">webui/server/routes/torrent_cmds.py:146-149</td><td>删 <code>/api/torrents/{hash}/trackers/edit</code> 端点。</td></tr>
+        <tr><td class="mono">webui/commands.py:207 与 :622-632</td><td>删命令表 <code>"edit_tracker"</code> 项与 <code>_cmd_edit_tracker</code>（<code>sanitize_tracker_url</code> import 保留——:640 移除日志仍用）。</td></tr>
+        <tr><td class="mono">core/qbapi.py:254-264</td><td>删 <code>torrents_edit_tracker</code> 包装（<code>_invalidate_torrent_trackers</code> 保留）。</td></tr>
+        <tr><td class="mono">torrents/record.py invalidate_trackers docstring</td><td>「(add/edit/remove_trackers)」→「(add/remove_trackers)」。</td></tr>
+        <tr><td class="mono">tests/（helpers.py:382 + test_web.py 各段）</td><td>删 fake client 记录器与 edit 用例（路由→enqueue、命令执行、日志脱敏段）；:9204 的失效断言由 add/remove 用例承接同类覆盖；<strong>:11741 端点清单删 <code>trackers/edit</code> 行</strong>。执行时以 <code>grep -rn "edit_tracker\|trackers/edit" tests/</code> 现查为准。</td></tr>
+        <tr><td class="mono">活文档扫尾</td><td>grep 活文档（README / conventions / webui 文档）里描述「编辑 tracker」的现存表述并清掉；历史 plans/issues 档案不动。</td></tr>
+      </table>
+      <p><strong>验证门</strong>：<code>test.quick</code> 绿（端点清单守阵先红后改绿即证明链路通）；手查抽屉无编辑入口。<strong>行为影响</strong>：编辑不可用（已拍板），其余无。</p>
+    </div>
+
+    <div class="step">
+      <div class="sn">S3 · 收口切换</div>
+      <div class="st">详情 API 只回 mask + 删除改道（原子批，两件事必须同批）</div>
+      <div class="sgoal">目标：堵掉当前唯一外发原文的口子（详情 API）；写路径切到「传 hash + mask URL，当场重取、用完即弃」。拆开任何一件都会打断移除（§01 修正），故本批原子。</div>
+      <table>
+        <tr><th class="mono">文件:位置</th><th>改动</th></tr>
+        <tr><td class="mono">webui/server/routes/torrent_detail.py:51</td><td><code>_cached_read(f"trackers:{hash}", lambda: [mask_tracker_entry(t) for t in (client.torrents_trackers(hash) or [])])</code>——mask 先于缓存；<code>_require_client</code> 的断连 503 语义不动；docstring 补「url 已 mask、虚拟条目原样透传」。</td></tr>
+        <tr><td class="mono">webui/commands.py:634 _cmd_remove_tracker 重写</td><td>① 当场 <code>self.client.torrents_trackers(hash)</code> 重取完整列表（主循环线程内，单一写线程假设不破）；② 跳虚拟条目后逐条 <code>mask_tracker_url</code> 与入参比对；③ 恰 1 命中 → 取该条原文调 <code>self.api.torrents_remove_trackers(torrent_hash=hash, urls=[原文])</code>，<strong>原文是局部变量，出作用域即弃</strong>（槽失效由 QbApi 包装照旧触发）；④ 命中 0 或 ≥2 → <code>raise ValueError("未找到该 tracker，请刷新后重试")</code>（走既有命令分发 error 回执，<strong>绝不猜</strong>）。日志行 <code>sanitize_tracker_url</code> 照旧。</td></tr>
+        <tr><td class="mono">webui/server/routes/torrent_cmds.py:152</td><td>载荷形状不变 <code>{hash, url}</code>，注释改为「url = 前端所持 mask 值」。</td></tr>
+        <tr><td class="mono">webui/static/shared/drawer.js:556</td><td><strong>代码零改动</strong>（提交的就是行上显示的 mask 值）；确认框文本自动变 mask；补一行契约注释。</td></tr>
+      </table>
+      <p><strong>验证门</strong>：<code>test.quick</code> + 定向 <code>test_web.py</code> trackers 段；手查抽屉 tracker 页签显示 mask URL、移除/添加可用。<strong>行为影响</strong>：响应体不再含原文（泄露面收口）；删除多一次 qB 读（可忽略）；新旧前端不做兼容（同仓发布）。</p>
+    </div>
+
+    <div class="step">
+      <div class="sn">S4 · 守阵 + 红验 + 回写</div>
+      <div class="st">5 组守阵、逐组红验、conventions 升级</div>
+      <div class="sgoal">目标：把「越界即脱敏」钉进测试——下次任何人加新出口或改回旧实现，CI 立刻红。</div>
+      <table>
+        <tr><th class="mono">守阵</th><th>断言</th><th class="mono">红验方式</th></tr>
+        <tr><td class="mono">① API 外发（test_web.py）</td><td>fake client 塞已知 passkey 种子 → GET <code>/api/torrents/{hash}/trackers</code> → body 含 scheme://host + path + 参数名、<strong>不含原值</strong>（不写死参数名）；两次请求逐字节一致（确定性）；虚拟条目原样在。</td><td class="mono">路由临时改回透传 → 红</td></tr>
+        <tr><td class="mono">② 写路径（test_web.py）</td><td>同 host 两条 tracker（不同 passkey ⇒ mask 互异）→ 传 A 的 mask 删除 → fake client 收到的 <code>original_url</code> == A 的<strong>原文</strong>；传已不存在的 mask → error 回执「未找到该 tracker，请刷新后重试」且 fake client <strong>无</strong> remove 调用。</td><td class="mono">删除临时改回直传 → 红</td></tr>
+        <tr><td class="mono">③ 编辑下线（test_web.py）</td><td>端点清单无 <code>trackers/edit</code>（S2 改过的清单即守阵）；POST <code>/trackers/edit</code> → 404；<code>grep "trackers/edit" src/auto_qb/webui/static/</code> 零命中。</td><td class="mono">临时加回路由 → 红</td></tr>
+        <tr><td class="mono">④ 基线 key（test_web.py）</td><td><code>_trackers_baseline</code> 的 dict key == fake client 的<strong>原文</strong> url——防后人把基线切到 mask（同 host 撞 key 静默漏判，报告 §04 的自伤警告）。</td><td class="mono">基线临时改 mask → 红</td></tr>
+        <tr><td class="mono">⑤ 静态扫（canary）</td><td>torrent_detail.py 的 trackers 路由源码含 <code>mask_tracker_entry</code> 引用——有人改回裸透传即红（延续 issue 26-09-21-1408 守阵的做法）。</td><td class="mono">同①</td></tr>
+      </table>
+      <p><strong>回写</strong>：<code>conventions/code-style.md</code>「凭据脱敏」条从「日志前脱敏」升级为「<strong>越界即脱敏</strong>」+ mask 规格与 R1 铁律指针；新测试同步各文件头「## 测试计划」；全量 <code>commands run test.full</code> 不退化并新建基线切片。</p>
+      <p><strong>真机走查</strong>：详情面板看 tracker（显示 mask）、移除一条、添加一条、确认编辑入口消失。</p>
+    </div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>风险与边界</h2>
+    <table>
+      <tr><th>风险</th><th>说明</th><th>处置</th></tr>
+      <tr>
+        <td>W2~W3 之间移除被打断</td>
+        <td>报告原波次编排的隐藏断点（§01 修正的由来）</td>
+        <td>已消除：详情 API 收口 + 删除改道同批（S3），S1→S2→S3 每个中间态都功能完整</td>
+      </tr>
+      <tr>
+        <td>mask 前后端漂移</td>
+        <td>前端显示/提交与后端比对若各自实现会分叉</td>
+        <td>同一纯函数 <code>mask_tracker_url</code> 两侧使用；确定性不加盐 ⇒ 逐字节可比</td>
+      </tr>
+      <tr>
+        <td>两层缓存不一致</td>
+        <td>槽与 <code>_cached_read</code> 若一处脱敏一处没有</td>
+        <td>mask 前置于两处写入（S1/S3 落点表）；守阵①兜底</td>
+      </tr>
+      <tr>
+        <td>同 host 多 tracker 撞值</td>
+        <td>报告 §02 细节②（「脱敏后同值」）——<strong>在 mask 形态下已失效</strong>：hash 保值差异 ⇒ 唯一性恢复。该条只对旧「只留主地址」形态成立</td>
+        <td>无需处置；守阵②正向覆盖「同 host 两条仍可区分」</td>
+      </tr>
+      <tr>
+        <td>原文瞬时进内存（删除那一刻）</td>
+        <td>qB <code>original_url</code> 绕不开；崩溃转储 / 诊断打包若恰落该毫秒窗口仍可能带出</td>
+        <td>报告 §04 明示取舍：窗口从进程生命周期缩到一次调用；归零只能连移除一起砍（方案 A，已否）</td>
+      </tr>
+      <tr>
+        <td>.torrent 导出带凭据</td>
+        <td><code>/api/torrents/{hash}/export</code> 原始字节透传</td>
+        <td>本次不堵（用户主动下载自己的种子，qB 原生行为）；边界已写进 §03 单轨表</td>
+      </tr>
+      <tr>
+        <td>行号漂移</td>
+        <td>确认机制 9 月底刚经历 D1–D5 重构（runtime 出现第二直读点 :474），本计划行号 = 20bd2157 实测</td>
+        <td>执行时以函数名 / 测试名锚点定位；开工前 <code>commands run my-commit-flow.sync</code></td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>验收标准</h2>
+    <ul>
+      <li>全量 <code>commands run test.full</code> 不退化；新增守阵 ≥ 4 组（①②③④⑤），<strong>每组过红验</strong>（打回旧实现必须立刻红）。</li>
+      <li>抓包级：GET <code>/api/torrents/{hash}/trackers</code> 响应体 grep 不到已知 passkey 原值（用已知凭据构造种子，<strong>不写死参数名</strong>——私站参数名任意）。</li>
+      <li>确定性：同一种子两次拉取，mask 逐字节一致。</li>
+      <li>真机三件事 + 一消失：看 tracker（mask 显示，站点/端点/状态可辨）、移除一条、添加一条均正常；「编辑」入口消失且路由 404。</li>
+      <li>删除健壮性：传已不存在的 mask URL → error 回执、不调 qB、不误删其它条目。</li>
+      <li><code>conventions/code-style.md</code>「凭据脱敏」条升级落档（越界即脱敏 + mask 规格）。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-07-0055-plan-tracker-url-sanitize-planb.html · 派生自 26-09-22-1801（方案 B）· 取证基树 20bd2157，行号与结论均来自当前树实测 · 未开工改码
+  </footer>
+
+</div>
+</body>
+</html>

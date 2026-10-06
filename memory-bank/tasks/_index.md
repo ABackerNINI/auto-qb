@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-10-07-webui-tracker-url-sanitize] tracker URL 源头脱敏（方案 B 实施） - 方案 B（单轨 + 瞬时原文 + mask 形态）已转成 S1–S4 分步实施计划（26-10-07-0055，基树 20bd2157 重取证），未开工；编排修…
 - [26-10-04-webui-qb-traffic-line-breaks] WEBUI qB 流量图折线断裂取证与修复 - 用户报 qB 流量图三症状(折线约 10s 一断不连接 / 更新频率固定不对齐采样设置 3s / 改 1.5s 后只剩端点)。取证报告 [26-10-04-16…
 
 ## Done
