@@ -11,7 +11,7 @@ confirmed = true
 script = "commit.py"
 pin    = true
 when   = "用户显式说「提交」：闸门 + 暂存 + 提交 + 内部同步(提交先行, 树净 rebase 恒可自动) + 核 ref + 内联推送，全程静默"
-note   = "零参数 = 全量提交本次改动(红线照拦); 结果行「提交成功 <hash>」, 上面是本次真发生的 HEAD 改写步骤行(同步 rebase / 闸门 amend, 带 旧hash→新hash); 推送未完成(含提交后同步冲突/断网)不改退出码, 补跑 ship.push; 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt(消费即删); 拒 -A / . / *"
+note   = "零参数 = 全量提交本次改动(红线照拦); 结果行「提交成功 <hash>」, 上面是本次真发生的 HEAD 改写步骤行(同步 rebase / 闸门 amend, 带 旧hash→新hash); 推送未完成(含提交后同步冲突/断网)不改退出码, 补跑 ship.push; 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt(消费即删; 与 HEAD 消息一致的残留入口即删并拒跑); 拒 -A / . / *"
 doc    = "references/pipeline.md"
 
 [tasks."ship.push"]

@@ -22,7 +22,15 @@
 - test_no_push_skips_sync_and_push        --no-push 不同步不推送(离线可用), 一行注明未推送
 - test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 ⚠(唯一例外, D5)
 - test_message_kept_on_commit_fail        git commit 失败 → 消息文件保留
-- test_message_kept_on_verify_fail        ref 核对失败 → 消息文件保留
+- test_message_kept_on_verify_fail        ref 核对失败且 HEAD 消息与文件不匹配(ref 真丢) → 消息文件保留
+- test_message_consumed_on_verify_fail_when_head_matches
+                                          ref 核对失败但 HEAD 消息与文件一致( packed-refs 滞后类误报,
+                                          2026-10-07 实证) → 提交已落稳, 照常消费不留残骸
+- test_stale_message_residue_swept_at_entry
+                                          入口残留扫描: 约定消息文件内容 == HEAD 消息(已落库漏删残骸,
+                                          树净形态) → 删除 + 拒跑, 不产生新提交
+- test_message_kept_when_nothing_to_commit
+                                          树净且消息与 HEAD 不匹配(正常待提交消息) → 照旧拒绝, 文件保留
 - test_check_refs_pass_on_fresh_repo      ref 三处核对在干净仓库通过
 """
 
@@ -470,6 +478,8 @@ def test_message_kept_on_verify_fail(repo, monkeypatch, capsys):
     monkeypatch.setattr(
         commit_mod, "check_refs", lambda expect="": (False, ["  HEAD         deadbeef", "[STOP] ref 不一致"])
     )
+    # ref 真丢的形态: HEAD 仍指旧 tip, 其消息与待提交消息不匹配 —— 钉住判定替身
+    monkeypatch.setattr(commit_mod, "message_matches_head", lambda p: False)
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     rc = commit_mod.main([])
@@ -477,6 +487,46 @@ def test_message_kept_on_verify_fail(repo, monkeypatch, capsys):
     assert rc == 1
     assert "ref 三处不一致" in out
     assert msg.exists()  # 提交可能没落稳: 保留现场不消费
+
+
+def test_message_consumed_on_verify_fail_when_head_matches(repo, monkeypatch, capsys):
+    """2026-10-07 实证的残留形态: 提交已落稳(HEAD 消息 == 文件内容), 核对红只是 packed-refs
+    滞后一类误报 —— 此时照常消费, 不把「已入库的消息」留在 .git 里当残骸。"""
+    _patch_ok_flow(monkeypatch)
+    monkeypatch.setattr(
+        commit_mod, "check_refs", lambda expect="": (False, ["  HEAD         deadbeef", "[STOP] ref 不一致"])
+    )
+    msg = _write_msg(repo)  # 不钉判定替身: commit 成功后 HEAD 消息真实等于文件内容
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "ref 三处不一致" in out  # 失败行照发(ref 处置指引不变)
+    assert "消息文件已消费" in out and "已落稳" in out
+    assert not msg.exists()  # 提交已落稳 → 不留残骸
+
+
+def test_stale_message_residue_swept_at_entry(repo, capsys):
+    """入口残留扫描: 约定消息文件内容 == HEAD 消息 = 上次已落库提交漏删的残骸(树净形态,
+    2026-10-07 实证) → 删除 + 拒跑; 必须在「没有可提交的改动」之前拦, 否则树净时永不可达。"""
+    msg = _write_msg(repo, "base")  # fixture 的 HEAD 提交消息就是 "base"
+    before = _git(repo, "rev-list", "--count", "HEAD")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "已落库提交的残留" in out and "已删除" in out
+    assert not msg.exists()  # 残骸自愈
+    assert _git(repo, "rev-list", "--count", "HEAD") == before  # 未产生新提交
+
+
+def test_message_kept_when_nothing_to_commit(repo, capsys):
+    """树净且消息与 HEAD 不匹配 = 正常待提交消息(不是残骸) → 照旧拒绝, 文件保留等改动就绪。"""
+    msg = _write_msg(repo)  # "✨ test" != HEAD 消息 "base"
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "没有可提交的改动" in out
+    assert msg.exists()
 
 
 def test_check_refs_pass_on_fresh_repo(repo, monkeypatch):

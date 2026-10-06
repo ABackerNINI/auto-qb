@@ -25,6 +25,10 @@
   先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— **一致即落稳**。
 - **处置**: 备份 `.git` 后 `git pack-refs --all`。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
+- **复发: 1** —— 2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
+  自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
+  靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
+  直接送本条。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 

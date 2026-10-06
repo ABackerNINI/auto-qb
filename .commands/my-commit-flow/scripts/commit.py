@@ -29,7 +29,10 @@
      改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)。规则仍是
      **启动版本那份** —— 快照语义下不重取配置(那正是撕裂的来源); 合流若改动了本包, 登记一行提示重跑
   8. 内联推送(run_push): 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
-消息文件不删的时机: commit 或 ref 核对失败 —— 修好重跑还能用同一份消息。
+消息文件不删的时机: commit 失败, 或 ref 核对失败**且** HEAD 消息与文件不一致(提交真没落到
+ref, 修好重跑还能用同一份)。核对失败但 HEAD 消息与文件一致 = 提交已落稳(packed-refs 滞后类
+误报, 2026-10-07 实证), 照常消费; 入口另有一道残留扫描(文件内容 == HEAD 消息即删并拒跑),
+任何路径漏删的残骸在下一次 ship.commit 自愈。
 
 用法: python <包>/scripts/commit.py [路径...] [--message-file <文件>] [--no-push]
 退出码: 0 成功(含推送未完成) · 1 失败(输出自带原因, 不存在需要查的码表)
@@ -38,6 +41,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 # Windows GBK 控制台兑底(与包内其它脚本同根): gitmoji 首行含 emoji, GBK 编不出来会让 print 崩掉。
@@ -89,13 +93,45 @@ def consume_message_file(msg_file: Path, root: Path) -> None:
 
     只删约定路径: 显式 --message-file 指向别处的文件归调用方管。删除失败只提示
     不影响退出码 —— 提交已成功, 别让收尾环节的失败骗执行者重跑。
+    Windows 上文件可能被刚写完它的编辑器 / 杀软短暂占着(共享冲突是瞬时的): 小步重试
+    几次再放弃, 别把瞬时锁当成永久删除失败。
     """
     if msg_file != default_message_path(root):
         return
+    last: OSError | None = None
+    for attempt in range(3):
+        try:
+            msg_file.unlink()
+            return
+        except OSError as exc:
+            last = exc
+            time.sleep(0.2 * (attempt + 1))
+    print(f"⚠ 消息文件删除失败({last}); 请手动删除 {msg_file}, 避免下次提交误读旧消息")
+
+
+def head_message() -> str:
+    """HEAD 提交消息原文(%B); 仓库无提交 / git 异常返回空串(调用方按不匹配处理)。"""
+    proc = git_run("log", "-1", "--format=%B")
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def message_matches_head(msg_file: Path) -> bool:
+    """消息文件内容 == HEAD 提交消息 → 这条消息已经随一次提交落库(残留判定单点)。
+
+    两个消费点: ①ref 核对失败出口 —— HEAD 消息与本文件一致说明分支 ref 已指向本次提交,
+    核对红是其它两处滞后(packed-refs 落后, 2026-10-07 实证)的误报, 提交已落稳就该消费,
+    不留「已入库消息」的残骸(修复 26-10-07: 残留会一直躺到下次提交覆盖, 期间可被当现状误读);
+    ②入口残留扫描 —— 上次落库后消息文件因任何路径漏删时, 下次 ship.commit 自愈, 并拦住
+    「旧消息被当新提交的消息复用」。判不匹配时宁可保留不误删(修好重跑还能用同一份消息)。
+    """
+    head = head_message()
+    if not head:
+        return False
     try:
-        msg_file.unlink()
-    except OSError as exc:
-        print(f"⚠ 消息文件删除失败({exc}); 请手动删除 {msg_file}, 避免下次提交误读旧消息")
+        content = msg_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return content.strip() == head
 
 
 def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str],
@@ -143,6 +179,18 @@ def main(argv: list[str] | None = None) -> int:
         emit(steps, f"提交失败: 配置错误 —— {stops[0]}")
         return 1
     root = find_root()
+
+    # 入口残留扫描: 约定消息文件的内容与 HEAD 消息一致 = 上次已落库提交漏删的残骸 ——
+    # 删掉并拒跑(拦住旧消息被当本次提交消息复用)。必须在暂存计划之前: 落库后恢复路径
+    # (手工修 ref + sync/push)结束时树是净的, 放在「没有可提交的改动」之后这扫永远够不着
+    # (2026-10-07 实证的残留形态)。显式 --message-file 时约定文件归调用方管, 不扫。
+    if args.message_file is None:
+        default_msg = default_message_path(root)
+        if default_msg.exists() and message_matches_head(default_msg):
+            consume_message_file(default_msg, root)
+            emit(steps, "提交失败: 消息文件是已落库提交的残留(内容与 HEAD 消息一致, 已删除) —— "
+                 "有新改动就重写消息再跑, 没有则无需提交")
+            return 1
 
     staged, unstaged = changed_files()
     overflow = staged_overflow(staged, cfg["staged_panic"])
@@ -211,10 +259,16 @@ def main(argv: list[str] | None = None) -> int:
     #   同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交推出去
     ok, detail = check_refs()
     if not ok:
+        if message_matches_head(msg_file):
+            # HEAD 消息与文件一致 → 分支 ref 已指向本次提交, 核对红只是 packed-refs 滞后一类
+            # 的误报(2026-10-07 实证: 当时提交已落稳, 消息文件按「保留现场」滞留成了残骸)。
+            # 提交已落稳 → 照常消费; ref 处置后没有「重跑同一份消息」的需求了。
+            consume_message_file(msg_file, root)
+            print("消息文件已消费: HEAD 消息与之一致, 本次提交已落稳 —— 处置 ref 后直接补同步/推送即可")
         emit(steps, "提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
         for line in detail:
             print(line)
-        return 1  # 消息文件保留: 现场未定, 别急着消费
+        return 1  # 消息文件保留(仅当判不匹配 = 提交真没落到 ref): 现场未定, 别急着消费
 
     consume_message_file(msg_file, root)
 
