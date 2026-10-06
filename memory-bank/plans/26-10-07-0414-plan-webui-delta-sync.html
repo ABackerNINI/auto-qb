@@ -69,7 +69,8 @@
   li ul, li ol { margin: 6px 0 2px; }
   strong { font-weight: 600; }
   a { color: var(--accent-ink); }
-  code { font-family: var(--mono); font-size: 0.92em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--hair-soft); }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--hair-soft); overflow-wrap: anywhere; }
+  .main { min-width: 0; }
   table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
   table th { text-align: left; font-family: var(--display); font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; }
   table td { padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
@@ -118,6 +119,7 @@
   <a href="#sapp"><span class="no">附</span>起草人自查记录</a>
 </nav>
 
+<div class="main">
 <header class="cover">
   <div class="kicker">Plan · webui-delta-sync · 11 步 / 5 拍板点 / 12 设计规则</div>
   <h1>WebUI rid 式增量同步 · 分步实施计划</h1>
@@ -500,6 +502,8 @@
     <li>01 笔记避坑清单 7 条 + 出入 4 条: 避坑#1→R4/M1; #2→R2/M2; #3→R3; #4→R9/M3; #5→R6/R7; #6→R8; #7→R5/M4; 出入1(rid 表述)→R3 + 风险7; 出入2(full 触发面)→R10; 出入3(内存模型)→R1 + 非目标10; 出入4(full 无 removed 键)→R10 + S3 DoD; wiki 滞后(补⑦)→风险7。无未落项。</li>
   </ol>
 </section>
+
+</div>
 
 </div>
 </body>
