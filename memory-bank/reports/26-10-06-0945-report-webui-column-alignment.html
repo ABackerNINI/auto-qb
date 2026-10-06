@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 表头 / 数值列对齐缺陷取证 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-column-alignment">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-06-0945">
+<meta name="doc-updated" content="26-10-06-0945">
+<meta name="doc-refs" content="">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 6px;border-radius:4px}
+
+  .mast{padding:56px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:30px;line-height:1.25;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:80ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  h2{font-size:20px;font-weight:600;margin:56px 0 6px;letter-spacing:-.01em}
+  h2 .no{color:var(--accent);font-family:var(--mono);font-size:13px;margin-right:10px}
+  h3{font-size:15.5px;font-weight:600;margin:28px 0 8px}
+  p{color:var(--ink-2);max-width:84ch;margin:8px 0}
+  .sec-lede{color:var(--ink-3);font-size:13px;margin:0 0 16px}
+  ul{color:var(--ink-2);max-width:84ch}
+  li{margin:5px 0}
+
+  table.audit{width:100%;border-collapse:collapse;font-size:13px;margin:14px 0 8px}
+  table.audit th{position:sticky;top:0;background:var(--surface);text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);padding:9px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+  table.audit td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  table.audit td.f{color:var(--ink);font-weight:500}
+  table.audit td.n{font-family:var(--mono);font-size:12px;white-space:nowrap}
+  table.audit tr.hl td{background:rgba(200,164,92,.055)}
+  table.audit tr.ok td{background:rgba(47,168,116,.045)}
+  .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 8px;border-radius:10px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .chip.bad{color:var(--bad);border-color:rgba(208,92,78,.45);background:rgba(208,92,78,.07)}
+  .chip.good{color:var(--good);border-color:rgba(47,168,116,.4)}
+  .chip.warn{color:var(--warn);border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.08)}
+  .chip.info{color:var(--blue);border-color:rgba(77,159,214,.4)}
+  .opt{font-size:10.5px;color:var(--ink-3);font-weight:400}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin:16px 0}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card h4{margin:0 0 8px;font-size:14px;font-weight:600}
+  .card p{margin:0;font-size:13px}
+  .card .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;display:block}
+  .tag.p1{color:var(--bad)} .tag.p2{color:var(--warn)} .tag.ok{color:var(--good)} .tag.info{color:var(--blue)}
+
+  .ev{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:14px 0}
+  .ev p{margin:6px 0;font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+  .ev p b{color:var(--ink);font-weight:500}
+
+  .rule{display:flex;gap:14px;padding:11px 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .rule:last-child{border-bottom:none}
+  .rule .rn{font-family:var(--mono);font-size:12px;color:var(--accent);flex:0 0 34px}
+  .rule .rt{color:var(--ink);font-weight:500}
+  .rule .rd{color:var(--ink-2);font-size:13.5px}
+
+  figure{margin:18px 0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+  figcaption{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:10px}
+  .foot{margin:70px 0 40px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Report · 缺陷取证</p>
+  <h1>WEBUI 表头 / 数值列对齐缺陷取证</h1>
+  <p class="lede">用户反馈「右对齐列没有真正对齐标题文字」属实。逐表实测结论: <b>主视图 4 张表(分组 / 种子 / 追剧 / 组内明细)全部右对齐列的表头文字比数值左偏 11px(明细表 10px)</b>, 根因是表头格子为容纳「拖拽调宽把手」而多出的 <code>padding-right: 10px</code>; <b>设置页 HR 在线核实表①的 4 个数值列左偏 14px</b>, 根因是「恒在 DOM、只用 opacity:0 隐藏」的排序箭头仍在占位。<b>三套主题(atlas / console / prism)数值完全一致</b>; 抽屉 3 张表与 HR 表②/③不受影响。本件只取证与划范围, 不改代码。</p>
+  <p class="meta">
+    <b>Status</b> Done(快照即终态) · <b>Added</b> 26-10-06-0945 · <b>基线</b> develop@295bb226<br>
+    <b>实测环境</b> scripts/ui_harness.py(真 create_app + 合成种子, 300 种 / 40 组) + headless Chromium(Playwright)<br>
+    <b>证据</b> shared/columns.js · shared/tpl/{groups,torrents,shows,settings-detail,drawer}.html · 三主题 components.css / views.css / dialogs.css<br>
+    <b>范围</b> 3 主视图 + 明细表 + 抽屉 3 表 + 设置页 HR 4 表 + 全站 <code>&lt;table&gt;</code> 清点 —— 共 11 张表 · 3 套主题
+  </p>
+</header>
+
+<h2><span class="no">§1</span>结论先讲</h2>
+<p class="sec-lede">两个互相独立的机制, 都让「表头文字」与「值文字」的右缘差一截。三套主题同源(共用同一份列模型与同一套盒子规格), 所以三套一起错、错得一样多。</p>
+<div class="cards">
+  <div class="card">
+    <span class="tag p1">P1 · 主视图 4 表 · 全站可见</span>
+    <h4>表头多 10px 右内边距</h4>
+    <p><code>.h-cell</code> 为给「拖拽调宽把手」留命中区写了 <code>padding-right: 10px</code>, 值单元格没有。表头右对齐文字于是落在「列右缘 − 10px」, 值落在「列右缘」。<b>实测 11px</b>(多出的 1px 来自数据行有 1px 边框、表头行没有; 明细行无侧边框 ⇒ 恰好 10px)。</p>
+  </div>
+  <div class="card">
+    <span class="tag p2">P2 · 设置页 HR 表① · 4 列</span>
+    <h4>隐形排序箭头仍占位</h4>
+    <p>HR 明细表①的 <code>th</code> 里排序箭头<b>没有 <code>v-if</code></b>, 只用 <code>opacity: 0</code> 隐藏 ⇒ 布局上仍占 11px + <code>margin-left: 3px</code>。右对齐的 <code>num</code> 列文字被它往左顶。<b>实测 14px</b>。</p>
+  </div>
+  <div class="card">
+    <span class="tag p2">P3 · 排序中的列 · +11px</span>
+    <h4>箭头一出现, 右对齐表头再左移</h4>
+    <p>主表箭头是文字标签的<b>同行内联兄弟</b>。左对齐列箭头长在文字右侧(不影响起读位置), 右对齐列则把文字整块往左顶。实测: 种子页「大小」未排序偏移 11px, 点一次排序后变成 <b>22px</b>。</p>
+  </div>
+  <div class="card">
+    <span class="tag ok">不受影响 · 无需动作</span>
+    <h4>抽屉 3 表 + HR 表②/③</h4>
+    <p>抽屉 Tracker / 用户 / 内容三表与 HR 波次表②、拉取历史表③: <code>th</code>/<code>td</code> 内边距同值、表头无箭头 ⇒ 右对齐<b>实测偏移 0</b>。左对齐列全站 ≤1px。</p>
+  </div>
+</div>
+
+<h2><span class="no">§2</span>实测证据</h2>
+<p class="sec-lede">量的是<b>盒模型</b>(内容盒右缘之差), 不是「肉眼取点」—— 文字末字的字形边距会让墨迹量有 ±2px 抖动, 盒模型量无抖动。全部分组视图 / 种子视图 / 追剧视图 / 展开明细 / 三主题一致。</p>
+
+<figure>
+  <svg viewBox="0 0 660 150" width="100%" role="img" aria-label="表头格子与值格子的盒子模型对比">
+    <rect x="0" y="0" width="660" height="150" fill="none"/>
+    <!-- head cell -->
+    <text x="14" y="26" fill="#a8b0b9" font-family="Consolas,monospace" font-size="12">表头 .h-cell</text>
+    <rect x="14" y="36" width="250" height="40" fill="rgba(200,164,92,.10)" stroke="rgba(200,164,92,.55)"/>
+    <rect x="214" y="36" width="50" height="40" fill="rgba(208,92,78,.16)" stroke="rgba(208,92,78,.6)"/>
+    <text x="176" y="61" fill="#e3e5e8" font-family="Consolas,monospace" font-size="12">已下载</text>
+    <text x="222" y="61" fill="#d05c4e" font-family="Consolas,monospace" font-size="10">10px</text>
+    <text x="272" y="61" fill="#727c86" font-family="Consolas,monospace" font-size="11">← 把手命中区</text>
+    <!-- row cell -->
+    <text x="14" y="106" fill="#a8b0b9" font-family="Consolas,monospace" font-size="12">值 .g-stat (padding-right: 0)</text>
+    <rect x="14" y="116" width="250" height="30" fill="rgba(77,159,214,.10)" stroke="rgba(77,159,214,.5)"/>
+    <text x="176" y="136" fill="#e3e5e8" font-family="Consolas,monospace" font-size="12">4.16 MiB</text>
+    <line x1="264" y1="10" x2="264" y2="150" stroke="rgba(208,92,78,.75)" stroke-dasharray="4 3"/>
+    <line x1="214" y1="10" x2="214" y2="150" stroke="rgba(255,255,255,.28)" stroke-dasharray="4 3"/>
+    <text x="330" y="40" fill="#d05c4e" font-family="Consolas,monospace" font-size="12">表头文字右缘 214</text>
+    <text x="330" y="60" fill="#4d9fd6" font-family="Consolas,monospace" font-size="12">值文字右缘   264</text>
+    <text x="330" y="84" fill="#c8a45c" font-family="Consolas,monospace" font-size="13">→ 差 50 = 10px 槽 + 40px 示意比例</text>
+  </svg>
+  <figcaption>示意(非等比): 表头格子自带 10px 右槽(红色), 值格子没有 —— 两处文字因此不在同一竖线上。</figcaption>
+</figure>
+
+<table class="audit">
+<thead><tr><th>表</th><th>列族</th><th>实测偏移</th><th>机制</th></tr></thead>
+<tbody>
+<tr class="hl"><td class="f">分组表 · 种子表 · 追剧表</td><td>全部 <code>align:"right"</code> 列</td><td class="n">11px</td><td>表头 <code>padding-right:10px</code> + 行 1px 边框</td></tr>
+<tr class="hl"><td class="f">组内明细表 / 追剧集明细</td><td>全部 <code>align:"right"</code> 列</td><td class="n">10px</td><td>同上(明细行无侧边框 ⇒ 恰好 10px)</td></tr>
+<tr class="hl"><td class="f">同上 · 当前排序列</td><td>该列(仅 1 列)</td><td class="n">21px / 22px</td><td>叠加排序箭头 11px(内联占位)</td></tr>
+<tr class="hl"><td class="f">设置页 · HR 在线核实表①</td><td>上传量 / 下载量 / 分享率 / 还需做种</td><td class="n">14px</td><td>隐形箭头 11px + <code>margin-left:3px</code></td></tr>
+<tr class="ok"><td class="f">抽屉 · Tracker / 用户 / 内容</td><td>数值列(<code>th.num</code>)</td><td class="n">0px</td><td>无箭头、内边距同值</td></tr>
+<tr class="ok"><td class="f">设置页 · HR 波次表② / 拉取历史表③</td><td>数值列(<code>th.num</code>)</td><td class="n">0px</td><td>表头为纯文本、无箭头</td></tr>
+<tr class="ok"><td class="f">全部 11 张表</td><td>左对齐列</td><td class="n">≤1px</td><td>1px 来自数据行侧边框, 视觉不可辨</td></tr>
+</tbody>
+</table>
+
+<div class="ev">
+  <p><b>实测原话(prism · 种子视图 · 未排序)</b></p>
+  <p>hc-size 表头 内容盒右缘 <b>338.0</b> / 值 内容盒右缘 <b>349.0</b> → 差 <b>11.0</b> · 值文本 "60.00 GiB"</p>
+  <p>hc-uploaded 表头 <b>1340.0</b> / 值 <b>1351.0</b> → 差 <b>11.0</b> · hc-downloaded 同 11.0</p>
+  <p>明细表 hc-size 表头 <b>X</b> / 值 <b>X+10.0</b> → 差 <b>10.0</b>(`.detail-head` 与 `.member-row` 内边距同为 <code>7px 4px</code>)</p>
+  <p>点「大小」排序后: 表头文字右缘再左移 11px(箭头宽度) → 累计 <b>22.0</b></p>
+  <p>HR 表① DOM 复现: 含箭头 上传列 textDelta <b>14.0</b> · 去掉箭头后 <b>0.0</b>(其余列不变 ⇒ 单一变量确证)</p>
+  <p>atlas / console 逐列复量: 与 prism <b>完全一致</b>(11 / 10 / 14)</p>
+</div>
+
+<h2><span class="no">§3</span>根因</h2>
+<p class="sec-lede">两处都是「为另一个功能预留的空间」泄漏进了文字排版 —— 不是对齐口径(哪列该左/该右)错, 口径是健康的、单点的。</p>
+
+<h3>根因 ①: 拖拽把手需要 10px 命中区, 于是整个表头格子被加了 10px 右内边距</h3>
+<p>表头把手 <code>.h-cell .resizer</code> 必须完全落在 <code>.h-cell</code> 之内 —— 因为 <code>.h-cell</code> 有 <code>overflow: hidden</code>(给列名省略号用), 把手伸到格子外会被裁掉、点不到(星图主题里有一条注释专门记着这个坑)。于是三条规则串成了一个必然结果:</p>
+<ul>
+  <li><code>.group-head { padding: 7px 14px }</code> 与 <code>.group-row { padding: 10px 14px }</code> <b>同值</b> ⇒ 表头与数据行的「列盒子」位置一致(这一层是对的);</li>
+  <li><code>.h-cell { padding-right: 10px }</code> <b>只有表头有</b> ⇒ 表头格子的内容盒右缘比列右缘缩进 10px;</li>
+  <li>值格子(<code>.g-stat</code> / <code>.m-stat</code>)的 <code>padding-right</code> 是 <b>0</b> ⇒ 值文字正好落在列右缘。</li>
+</ul>
+<p>右对齐时两者都贴着「各自内容盒的右缘」, 于是差出 10px。左对齐时都贴着左缘(表头左内边距为 0) ⇒ 看不出来。<b>这就是为什么只有右对齐列被反馈。</b></p>
+
+<h3>根因 ②: 排序箭头用 <code>opacity: 0</code> 藏, 而不是从布局里移除</h3>
+<p>主表的箭头写法是 <code>&lt;span v-if="col.sortable" class="arrow"&gt;&lt;svg v-if="已排序"…&gt;</code> —— 未排序时 <code>&lt;span&gt;</code> 为空、宽度 0, 只在真正排到该列时才占 11px。HR 表①<b>少写了内层 <code>v-if</code></b>(箭头 SVG 恒在 DOM), 靠 CSS <code>opacity: 0</code> 隐藏; 透明度不影响布局 ⇒ 表头标签右缘恒被左顶 11px + 3px。</p>
+<p>同一机制在主表上表现为 P3: 右对齐列一旦成为当前排序列, 箭头现身, 标签再左移 11px —— 用户会看到「点一下排序, 标题跳一下」。</p>
+
+<h2><span class="no">§4</span>全表盘点(全站 11 张表)</h2>
+<table class="audit">
+<thead><tr><th>#</th><th>表</th><th>载体</th><th>右对齐列数</th><th>现状</th></tr></thead>
+<tbody>
+<tr class="hl"><td class="n">1</td><td class="f">分组表</td><td><code>tpl/groups.html:11</code> · grid + <code>data-table="group"</code></td><td class="n">9 (7 默认可见)</td><td><span class="chip bad">偏移 11px</span></td></tr>
+<tr class="hl"><td class="n">2</td><td class="f">组内明细表(成员行)</td><td><code>tpl/groups.html:121</code> · <code>data-table="detail"</code></td><td class="n">13</td><td><span class="chip bad">偏移 10px</span></td></tr>
+<tr class="hl"><td class="n">3</td><td class="f">种子表</td><td><code>tpl/torrents.html:2</code> · <code>data-table="torrent"</code></td><td class="n">12</td><td><span class="chip bad">偏移 11px</span></td></tr>
+<tr class="hl"><td class="n">4</td><td class="f">追剧表(剧行/季头/集行)</td><td><code>tpl/shows.html:2</code> · <code>data-table="show"</code></td><td class="n">4</td><td><span class="chip bad">偏移 11px</span></td></tr>
+<tr class="hl"><td class="n">5</td><td class="f">追剧集明细(复用明细列)</td><td><code>tpl/shows.html:108</code> · <code>data-table="detail"</code></td><td class="n">13</td><td><span class="chip bad">偏移 10px</span></td></tr>
+<tr class="hl"><td class="n">6</td><td class="f">设置页 · HR 在线核实表①</td><td><code>tpl/settings-detail.html:318</code></td><td class="n">4</td><td><span class="chip bad">偏移 14px</span></td></tr>
+<tr class="ok"><td class="n">7</td><td class="f">设置页 · HR 波次表②</td><td><code>tpl/settings-detail.html:366</code></td><td class="n">5</td><td><span class="chip good">对齐</span></td></tr>
+<tr class="ok"><td class="n">8</td><td class="f">设置页 · HR 拉取历史表③</td><td><code>tpl/settings-detail.html:417</code></td><td class="n">5</td><td><span class="chip good">对齐</span></td></tr>
+<tr class="ok"><td class="n">9</td><td class="f">抽屉 · Tracker</td><td><code>tpl/drawer.html:202</code></td><td class="n">2</td><td><span class="chip good">对齐</span></td></tr>
+<tr class="ok"><td class="n">10</td><td class="f">抽屉 · 用户</td><td><code>tpl/drawer.html:231</code></td><td class="n">6</td><td><span class="chip good">对齐</span></td></tr>
+<tr class="ok"><td class="n">11</td><td class="f">抽屉 · 内容</td><td><code>tpl/drawer.html:260</code></td><td class="n">2</td><td><span class="chip good">对齐</span></td></tr>
+</tbody>
+</table>
+<p class="sec-lede">口径: 右对齐列定义数取自 <code>app.js</code> 四份列模型(GROUP 9 / DETAIL 13 / TORRENT 12 / SHOW 4, 合计 38 列 × 3 主题); 抽屉与 HR 的 <code>num</code> 列取自各自模板。全站 <code>&lt;table&gt;</code> 只有 <code>drawer.html</code> 与 <code>settings-detail.html</code> 两处, 已全部覆盖; 表头网格表只有 groups / torrents / shows 三份模板。</p>
+
+<h2><span class="no">§5</span>修改范围</h2>
+<p class="sec-lede">按「改哪几个文件、各几处」给两套方案。P1/P3 与 P2 是两件独立的事, 可以分开做。</p>
+
+<h3>P1 + P3(主视图 4 表 × 3 主题)</h3>
+<div>
+  <div class="rule"><span class="rn">A1</span><span><span class="rt">最小方案 —— 只改 1 个文件。</span><span class="rd"><code>shared/columns.js</code> 的 <code>colAlignCss()</code>(约 :652-663) 已经按列生成 <code>:where([data-table="X"]) &gt; :nth-child(N)</code> 规则、且<b>同时命中表头与值格</b>。对 <code>align==="right"</code> 的列追加 <code>padding-right: 10px</code> 即可 —— 表头格子本来就有 10px(无变化), 值格子由此获得同一右槽, 两边文字同缘。残余 ≤1px(数据行的 1px 侧边框)。<b>三主题共用一份列模型 ⇒ 一处改、三套全好。</b></span></span></div>
+  <div class="rule"><span class="rn">A2</span><span><span class="rt">代价与取舍(必须知情)。</span><span class="rd">右对齐列的内容宽各少 10px; 数值与右邻列文字的间距 +10px。换来的是把手命中区依旧不压文字(若反过来把表头 <code>padding-right</code> 归 0, 右对齐表头最后 10px 会变成拖拽区 —— 点标题会被判成拖宽)。</span></span></div>
+  <div class="rule"><span class="rn">A3</span><span><span class="rt">P3 单独修: 右对齐列的箭头排到文字左侧。</span><span class="rd">同一处生成逻辑追加「右对齐列的 <code>.arrow</code> 取 <code>order:-1</code>」, 并把 <code>.h-cell</code> 变成 flex 容器(三主题各 1 行)。这样排序时标题不再左右跳。</span></span></div>
+</div>
+
+<h3>P2(设置页 HR 表①)</h3>
+<div>
+  <div class="rule"><span class="rn">B1</span><span><span class="rt">模板 + 主题 CSS 各 1 处。</span><span class="rd"><code>tpl/settings-detail.html:321-324</code> 给箭头补 <code>v-if</code>(仅当前排序列渲染)—— 最省事, 但排序列切换时标题会左右跳(与主表 P3 同形); 更稳的做法是让箭头<b>绝对定位不占流</b>(<code>th</code> 补 <code>position:relative</code>), 触点是三主题 <code>.hr-detail-table th .arrow</code> 各 1 条: <code>atlas/css/dialogs.css:172</code> · <code>console/css/dialogs.css:165</code> · <code>prism/css/views.css:664</code>。</span></span></div>
+</div>
+
+<h3>P0(可选 · 彻底方案, 建议单独立计划)</h3>
+<div>
+  <div class="rule"><span class="rn">C1</span><span><span class="rt">把「把手槽」与「文字排版」解耦。</span><span class="rd">让 10px 只存在于把手需要的地方: <code>.h-cell</code> 的省略号下移到内层标签 <code>&lt;span&gt;</code>, <code>.h-cell</code> 自身 <code>overflow: visible; padding-right: 0</code>, 把手挪进 grid 的 10px 列间距里(半进半出)。需动 <b>5 个表头块 / 3 个模板</b> + 3 主题 CSS + columns.js 的箭头顺序; 好处是数值列不再损失 10px 宽、语义上也更正确。风险与工作量都明显更高, 不建议与本次混做。</span></span></div>
+</div>
+
+<h2><span class="no">§6</span>验证方法(可复跑)</h2>
+<p>本轮取证用的是仓库自带桩服务 + 真浏览器, 不连真机 qB, 可原样复跑:</p>
+<div class="ev">
+  <p><b>1.</b> <code>commands run dev.harness -- --port 8099 --torrents 300 --groups 40</code></p>
+  <p><b>2.</b> <code>NODE_PATH=&lt;workspace&gt;/node_modules node .workbuddy-ai/tmp/measure2.cjs</code>(分组/明细/种子/抽屉) · <code>…measure_shows.cjs</code>(追剧) · <code>…measure_hr.cjs</code>(HR 表①, DOM 复现)</p>
+  <p><b>3.</b> 判据: 右对齐列的 <code>contentDelta</code> 必须为 <b>0(允许 ±1)</b>。改前 11 / 10 / 14, 改后应全 0。</p>
+  <p><b>注:</b> HR 表① 在桩服务里<b>不渲染</b>(桩只灌历史、不灌 HR 条目), 故用「真实主题 CSS + 逐字抄模板 DOM」在真页面里量; 主表与抽屉是<b>真页面实测</b>。抽屉「用户 / 内容」两页在桩里无数据, 仅静态判定(同内边距、无箭头)。</p>
+</div>
+
+<h2><span class="no">§7</span>附带发现与边界</h2>
+<ul>
+  <li><b>与上一份审计的关系</b>: <a href="26-09-28-2345-report-webui-column-alignment.html">26-09-28-2345 列对齐审计</a> 判定主表「机制健康」指的是<b>对齐口径单点化</b>(哪列该左/右只写在列模型里, 表头与值同源注入)—— 那一层确实健康。本件补的是它没验的那一层: <b>口径一致 ≠ 几何对齐</b>。该报告结论不推翻, 但「表头与值同源 ⇒ 不会错位」的推论需要修正。</li>
+  <li><b>0 值居中(既有口径)</b>: <code>.g-stat.zero { text-align:center }</code> 让「值为 0」的格子居中, 而表头仍是右对齐 —— 用户截图里的「可用性 0.00」正是这一条。这是 2026-09-17 拍板的既有口径(0 值只留极淡占位、居中避免满屏噪声), <b>但它与「右对齐列标题要对齐」的诉求直接冲突</b>, 需要一次明确的取舍(要么 0 值也右对齐, 要么接受 0 值列看起来没对齐)。本件不擅自改。</li>
+  <li><b>中心列的量法</b>: <code>H&amp;R / 站数 / 版本</code> 三个居中列用「左缘差」量会得到 −7 ~ −14px 的假错位(居中时左缘随内容宽度变化), 正确量法是比中线。本轮未发现居中列的真实缺陷。</li>
+  <li><b>数值溢出是另一回事</b>: 个别值(如 <code>299.00 KiB/s</code>)宽于列宽时会被省略号截断, 墨迹右缘量值会偏出 10px —— 那是列宽/省略号问题, 与本次对齐缺陷无关, 本件不并入。</li>
+  <li><b>未做</b>: 未改任何代码、未入池 issue、未提交。修法需要先拍板 A2 的代价与 0 值口径。</li>
+</ul>
+
+<h2><span class="no">§8</span>证据出处</h2>
+<div class="ev">
+  <p><b>prism/css/views.css:166 · atlas/css/components.css:241 · console/css/components.css:208</b> —— <code>.h-cell { … padding-right: 10px }</code>(三主题同值, 唯一主因)</p>
+  <p><b>atlas/css/components.css:250-252</b> —— 注释原文: 把手「必须完全落在 .h-cell 之内 —— .h-cell 有 overflow:hidden… 这里放在 padding-right(10px) 内」(主因的动机)</p>
+  <p><b>prism/css/views.css:159,187 · atlas:235,274 · console:201,228</b> —— <code>.group-head{padding:7px 14px}</code> / <code>.group-row{padding:10px 14px; border:1px solid}</code>(1px 残余的来源)</p>
+  <p><b>prism/css/views.css:281,284 · atlas:420,424 · console:352,356</b> —— <code>.detail{padding:4px 14px}</code> / <code>.detail-head,.member-row{padding:7px 4px}</code>(明细表恰好 10px)</p>
+  <p><b>shared/columns.js:652-663</b> —— <code>colAlignCss()</code>: 按可见列生成 <code>:where([data-table]) &gt; :nth-child(n){text-align;justify-content}</code>, 同时命中表头与值格(方案 A1 的落点)</p>
+  <p><b>shared/app.js:34-39</b> —— <code>align</code> 字段即对齐单点; :42-185 四份列模型(38 个 right 列)</p>
+  <p><b>tpl/torrents.html:9-13 · tpl/groups.html:128-132</b> —— 主表箭头 <code>&lt;span v-if="col.sortable" class="arrow"&gt;&lt;svg v-if="已排序"&gt;</code>(空 span 宽 0 ⇒ P3 只在排序后 +11px)</p>
+  <p><b>tpl/settings-detail.html:321-324</b> —— HR 表① <code>th</code> 的箭头<b>无 v-if</b>(P2 单点)</p>
+  <p><b>atlas/css/dialogs.css:172-173 · console/css/dialogs.css:165-166 · prism/css/views.css:664-665</b> —— <code>.hr-detail-table th .arrow{display:inline-block;margin-left:3px;opacity:0}</code>(14px = 11 + 3)</p>
+  <p><b>tpl/settings-detail.html:366-382, 417-435</b> —— HR 表②/③ 表头为纯文本无箭头(对齐, 无需改)</p>
+  <p><b>tpl/drawer.html:202-213, 231-245, 260-273</b> —— 抽屉三表 <code>th.num</code> 无箭头; 三主题 <code>.drawer-table th.num,td.num{text-align:right}</code> 内边距同值(对齐)</p>
+  <p><b>scripts/ui_harness.py</b> —— 真 <code>create_app</code> + 合成种子桩服务(实测环境)</p>
+</div>
+
+<p class="foot">auto-qb · memory-bank/reports · 26-10-06-0945 · 缺陷取证快照(出厂即冻结) · 专题 webui-column-alignment</p>
+</div>
+</body>
+</html>

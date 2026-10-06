@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-06-0945] [WEBUI 表头 / 数值列对齐缺陷取证 · auto-qb](26-10-06-0945-report-webui-column-alignment.html) — `webui-column-alignment`
 - [26-10-06-0723] [种子详情面板重构 · 设计模板轮 — 汇总报告](26-10-06-0723-report-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
 - [26-10-06-0620] [修复汇总报告 · 全项目 Code Review 分批修复(六批 28 issue) · auto-qb](26-10-06-0620-report-full-code-review-remediation.html) — `full-code-review-remediation`
 - [26-10-05-1946] [块头基线 + Delta 行编码与按落盘切块 · 可行性分析](26-10-05-1946-report-qb-traffic-v4-delta.html) — `qb-traffic-v4-delta`
