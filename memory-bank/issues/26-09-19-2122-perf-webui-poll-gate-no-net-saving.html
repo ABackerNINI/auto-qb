@@ -10,6 +10,7 @@
 <meta name="doc-topic" content="webui-polling">
 <meta name="issue-tier" content="standard">
 <meta name="issue-title" content="节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html">
 <meta name="issue-summary" content="节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档">
 <title>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径 · auto-qb 计划外问题</title>
 <style>
@@ -236,6 +237,7 @@ def run(mgr, gate):
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-19 21:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-07 00:54 — 复验（重构后锚点核对, develop @ 20bd2157）: <strong>仍成立, Open 维持</strong>。门控双生产者结构逐字迁至 <code>webui/runtime.py</code>（<code>flush_views</code>:488 / <code>ensure_state</code>:811 / <code>ensure_view</code>:801 仍未清账）, 上面 §02 的旧代码引用是入池时证据快照, 文件已随内核化重构迁走（qbmanager.py / mixins/ 不复存在）。新变量: SSE ver 推送（0c18fcda, 2026-09-21）改写消费动态——SSE 主路径上门控等效失效（客户端每版必拉, 欠账恒即刻清）、请求侧 +48.7ms 伤害基本消失、方案 A 的 -51% 蒸发（消费率=生产率, 每个被消费版本必须建一次, 降级为线程归属交易）; 轮询兜底路径（SSE 断线/不支持）原动态原样回归。修法建议按复验报告 §04 重排: 方案 B（口径修正）+ 顺带小修仍值得做, 方案 C 降级。详见 <code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code> §03-04。</li>
     </ul>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>

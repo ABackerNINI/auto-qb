@@ -10,6 +10,7 @@
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html">
 <meta name="issue-summary" content="P2: 5000 种子单轮 ~550ms(项目实测); 轮询分档已缓解, 剩余痛点在 shows 全量聚合与前端全量重算">
 <title>大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重 · perf · 计划外问题</title>
 <style>
@@ -136,8 +137,9 @@
     <h2><span class="no">04</span>定位锚点</h2>
     <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
     <ul>
-      <li><code>src/auto_qb/mixins/web_view.py:412</code>（取证 2026-09-21）· <code>_build_shows_view</code> · grep <code>_build_shows_view</code></li>
-      <li>重建唯一入口：<code>src/auto_qb/web_runtime.py</code> · <code>_publish_locked</code> · grep <code>def _publish_locked</code></li>
+      <li><code>src/auto_qb/webui/views.py:637</code>（取证 2026-10-07; 旧锚 <code>mixins/web_view.py:412</code> 已随内核化重构失效）· <code>_build_shows_view</code>（约 141 行, 仍全库 by_hash 聚合）· grep <code>_build_shows_view</code></li>
+      <li>重建唯一入口：<code>src/auto_qb/webui/runtime.py:775</code> · <code>_publish_locked</code>（四视图 + speed_totals 无条件全量, runtime.py:783-788, 无逐视图脏检查/指纹去重）· grep <code>def _publish_locked</code></li>
+      <li>前端全量重算：<code>src/auto_qb/webui/static/shared/decorate.js:115</code>（取证 2026-10-07）· <code>decoratedGroups</code> Vue computed 对 groups 全量 map</li>
     </ul>
   </section>
 
@@ -159,7 +161,7 @@
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-07 00:54 — 复验（develop @ 20bd2157）: <strong>仍复现</strong>。四视图无条件全量重建、<code>_build_shows_view</code> 全库聚合、前端 <code>decoratedGroups</code> 全量重算三点全在（锚点已刷新见 §04）。入池后变化: ①建议修法的前置「P1 拆 create_app」已 Done（<code>server/factory.py</code> 薄工厂 + 13 个 routes 模块）, <strong>本 issue 可认领</strong>; ②P1-1 按视图回传（VIEW_ARRAYS）把 decoratedGroups 重算触发面缩小到分组页——面上的缓解, 单轮成本未变; ③SSE ver 推送（0c18fcda）使活跃库下大库有效刷新节奏达 1.5s（分档设计 3s 的 2 倍频）, 本条痛点变重非缓解, 认领时应一并复测量化。详见 <code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code> §05。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

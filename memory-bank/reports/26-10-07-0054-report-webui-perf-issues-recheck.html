@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>复验报告 · 两条 WebUI perf issue 在内核化重构后是否仍成立 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-perf-issues-recheck">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-07-0054">
+<meta name="doc-refs" content="memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md">
+<meta name="doc-updated" content="26-10-07-0115">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.open { background: var(--warn-bg); color: var(--warn); border-color: #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>任务与复验方式</a>
+    <a href="#s2"><span class="no">02</span>结论速览</a>
+    <a href="#s3"><span class="no">03</span>Issue 1 复验: 双生产者结构逐点核对</a>
+    <a href="#s4"><span class="no">04</span>Issue 1 新变量: SSE 推送改写消费动态</a>
+    <a href="#s5"><span class="no">05</span>Issue 2 复验: 四视图全量重建逐点核对</a>
+    <a href="#s6"><span class="no">06</span>顺带发现（不入池, 留决策）</a>
+    <a href="#s7"><span class="no">07</span>建议后续</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 复验报告</div>
+    <h1>两条 WebUI perf issue 在内核化重构后是否仍成立</h1>
+    <p class="lede">对 26-09-19-2122（节拍门控双生产者）与 26-09-21-1408（四视图全量重建）逐锚点复验: 两个问题的结构性事实全部原样保留, 均维持 Open; 但 SSE ver 推送（入池后两天引入）改写了 issue 1 的消费动态与方案收益, issue 2 的前置条件（拆 create_app）已就绪。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-07-0054-webui-perf-issues-recheck</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 00:54</div></div>
+      <div class="item"><div class="k">复验基线</div><div class="v">develop @ 20bd2157</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>任务与复验方式</h2>
+    <p>两条 issue 入池后, 代码经历了大重构: <code>web/ + web_ui/ + web_runtime.py</code> 归拢为 <code>webui/</code> 包（37d33bc5）、表现层 mixin 迁出（9a428b1a）、qbmanager 兼容层删除（84473206）——两份 issue 里的文件路径与行号锚点已全部失效。本轮任务: 逐锚点核对问题是否仍存在; 仍在 → 出本报告; 不在 → 更新 issue 状态。</p>
+    <p>复验方式: 纯代码事实核对（grep 锚点符号 → 读现实现 → 与 issue 论断逐条比对）, 不做实测压测——issue 1 的原始数字（41→40、+48.7ms）来自已入池的实测记录, 本轮只判定「产生这些数字的代码结构是否原样」。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>结论速览</h2>
+    <table>
+      <tr><th>Issue</th><th>判定</th><th>一句话依据</th></tr>
+      <tr>
+        <td>26-09-19-2122<br>节拍门控双生产者</td>
+        <td><span class="badge open">仍成立 · Open 维持</span></td>
+        <td>门控结构逐字原样迁到 <code>webui/runtime.py</code>; 但 SSE ver 推送（0c18fcda, 入池两天后）改写消费动态——主路径上伤害形态变了, 轮询兜底路径上原样回归</td>
+      </tr>
+      <tr>
+        <td>26-09-21-1408<br>四视图全量重建</td>
+        <td><span class="badge open">仍成立 · Open 维持</span></td>
+        <td>四视图无条件全量重建、<code>_build_shows_view</code> 全库聚合、前端 <code>decoratedGroups</code> 全量重算三点全在; 建议修法的前置条件（拆 create_app）已 Done, 可认领</td>
+      </tr>
+    </table>
+    <div class="callout">两条都不关。issue 1 需要把「过时的实测口径」与「SSE 后的新动态」补进档案（本轮已补复验行）; issue 2 锚点已刷新到新路径, 前置已满足, 处于可认领状态。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>Issue 1 复验: 双生产者结构逐点核对</h2>
+    <h3>锚点迁移映射（旧 → 现, 取证 2026-10-07 @ 20bd2157）</h3>
+    <table>
+      <tr><th>入池时锚点（2026-09-19）</th><th>现锚点</th><th>现状</th></tr>
+      <tr><td><code>qbmanager.py:526-535</code> <code>_flush_views</code> 门控</td><td><code>webui/runtime.py:488-508</code> <code>flush_views</code></td><td>逻辑逐字等价: <code>unconsumed = pending_ver is not None</code>, 脏 + 活跃 + (force 或无欠账) 才重建</td></tr>
+      <tr><td><code>mixins/web_view.py:601-609</code> <code>ensure_group_state</code> 请求路径脏就建</td><td><code>webui/runtime.py:811-840</code> <code>ensure_state</code></td><td>仍在: 持锁内 <code>if group_view_dirty: _publish_locked()</code>, 随后 <code>pending_ver = None</code>（消费即清）——<b>不受门控</b>, 与入池时一致</td></tr>
+      <tr><td><code>web.py:269</code> <code>ensure_group_view</code> 发布不清账</td><td><code>webui/runtime.py:801-809</code> <code>ensure_view</code>（<code>/api/groups</code> 在 <code>server/routes/state.py:92</code>）</td><td><b>仍未清账</b>——issue 的「顺带小修」原样有效</td></tr>
+      <tr><td><code>_publish_views_locked</code></td><td><code>webui/runtime.py:775-799</code> <code>_publish_locked</code></td><td>仍在: 重建后 <code>pending_ver = group_view_ver</code>（登记欠账）</td></tr>
+      <tr><td><code>_web_pending_ver</code> / <code>_group_view_dirty</code></td><td><code>pending_ver</code> / <code>group_view_dirty</code>（runtime.py:140,150）</td><td>改名去掉下划线前缀, 语义未变</td></tr>
+      <tr><td><code>tests/test_qbmanager.py</code> <code>test_view_rebuild_waits_for_client_consume</code></td><td><code>tests/test_qbmanager.py:898-940</code></td><td>仍钉同一口径: 未取走不重建、脏标记保留、force 绕过</td></tr>
+    </table>
+    <p><b>判定: 三个结构性论断全部原样成立</b>——①视图版本有两个生产者; ②门控只掐主循环一个; ③<code>ensure_view</code> 与 <code>ensure_state</code> 的清账语义不一致。重构（37d33bc5/9a428b1a 均标注零行为变更）忠实保留了这套结构, issue 的根因分析不需要改写。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>Issue 1 新变量: SSE 推送改写消费动态</h2>
+    <p>issue 入池两天后（2026-09-21, 0c18fcda）, <code>_publish_locked</code> 增加了事件推送: 重建完成后 <code>notify("ver", {ver})</code>（runtime.py:793-795）; 前端收到 ver 事件后 60ms 去抖即拉 <code>/api/state</code>（<code>static/shared/polling.js:50-55</code>）, 轮询保留为兜底（polling.js:106-111, 分档 1.5/2/3s）。<code>notify</code> 是 per-subscriber <code>put_nowait</code>（runtime.py:264-279）, 事件毫秒级可达。这改写了 issue 的两个组成部分:</p>
+    <h3>① 「总账不省」的论断仍真, 但机理变了</h3>
+    <p>SSE 在线 + 活跃库时: 每个 sync tick（默认 1.5s）置脏 → 无欠账 → 主循环重建 → 推 ver → 客户端 ~100ms 内拉走清账 → 下一 tick 再重建。<b>总重建次数 ≈ 服务端 tick 数（60s 约 40 次）, 与无门控基线（41 次）相比依旧 ≈0% 净省</b>——issue 的标题论断在 SSE 世界同样成立。但机理不同: 入池时是「主循环省下的版本被请求路径补回来」（20/20 分摊）; SSE 下客户端每版必拉, <code>unconsumed</code> 在下一拍几乎恒为假, <b>门控在主路径上等效失效</b>, 主循环承担几乎全部重建。</p>
+    <h3>② 「每次 /api/state +48.7ms」的伤害在主路径基本消失</h3>
+    <p>入池时的实测伤害是「一半重建搬到请求线程, 每次请求可能撞上脏视图多付 ~49ms」。SSE 下请求到达时视图通常是净的（ver 推送紧随发布之后）, 请求路径重建频次趋近于零。该伤害只<b>在轮询兜底路径回归</b>: SSE 断线 / 浏览器不支持 / 反代缓冲时, 客户端退回 3s 定档轮询, 原动态（20/20 分摊 + 请求侧延迟双峰）原样复现。</p>
+    <h3>③ 方案 A 的 -51% 收益蒸发, 降级为「线程归属」交易</h3>
+    <p>方案 A（全惰性, 主循环不再重建）的卖点是把总账从 41 压到 20（-51%, 按 3s 消费档）。SSE 下消费率 = 生产率（客户端每版必拉）, <b>每个被消费的版本都需要恰好一次重建, 40 次/60s 是任何方案都降不破的下界</b>——方案 A 只能把这 40 次从主循环挪到请求线程, 省不了总量。它对「主循环解耦」（P0-5 命令响应）仍有交易价值, 但不再是「省 CPU」的优化。</p>
+    <h3>④ 方案 B 与顺带小修仍有效</h3>
+    <ul>
+      <li><b>方案 B（修正口径）</b>: 门控注释/提交结论里的「省 50%」仍是主循环单列口径, 且门控在 SSE 主路径上等效失效这一点（<code>flush_views</code> docstring 与「节拍对齐」注释, runtime.py:504-507）没有写明——文档修正的范围比入池时更大了, 仍建议做。</li>
+      <li><b>顺带小修（<code>ensure_view</code> 清账）</b>: 原样有效。且入池时说「当前 UI 只走 /api/state」, 现在可以加一句: 前端 <code>shared/</code> 下对 <code>/api/groups</code> 的调用已清零（grep 取证 2026-10-07）, 影响面仍限「只打 /api/groups 的外部脚本」。</li>
+      <li><b>方案 C（请求侧最短间隔）</b>: 在 SSE 世界基本失去意义（请求侧已很少重建）, 仅轮询兜底路径还沾边, 优先级进一步下调。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>Issue 2 复验: 四视图全量重建逐点核对</h2>
+    <h3>锚点迁移与现状</h3>
+    <table>
+      <tr><th>入池时锚点（2026-09-21）</th><th>现锚点（取证 2026-10-07）</th><th>现状</th></tr>
+      <tr><td><code>mixins/web_view.py:412</code> <code>_build_shows_view</code>（140 行）</td><td><code>webui/views.py:637-777</code>（约 141 行）</td><td>仍全量: 遍历 <code>store.by_hash</code> 全库逐种子 <code>parse_release</code> + （季包/未知时）文件兑底, 三层聚合 + 排序一次性算完——单轮成本大头未动</td></tr>
+      <tr><td><code>web_runtime.py</code> <code>_publish_locked</code></td><td><code>webui/runtime.py:775-799</code></td><td>四视图 + <code>speed_totals</code> 仍<b>无条件全量重建</b>（runtime.py:783-788）, 无逐视图脏检查、无内容指纹去重</td></tr>
+      <tr><td>前端 <code>decoratedGroups</code> 每轮全量重算</td><td><code>static/shared/decorate.js:115</code></td><td>仍是 Vue computed 对 <code>groups</code> 全量 <code>map</code>（每成员算 status/commonTags/commonCategory/sizeMismatch）; <code>groups</code> 引用一换就全量重算</td></tr>
+    </table>
+    <h3>入池后发生的三件相关事</h3>
+    <ul>
+      <li><b>前置条件已满足</b>: 建议修法写明「排在 P1（拆 create_app）之后做」。<code>26-09-21-1408-refactor-web-create-app-monolith</code> 已 Done——<code>create_app</code> 现为 <code>server/factory.py</code> 薄工厂 + 13 个 routes 模块, 同文件叠加两场大改的顾虑解除, <b>本 issue 现在可以认领</b>。</li>
+      <li><b>P1-1 按视图回传缩小了前端重算触发面</b>: 非当前视图的数组不回传（<code>VIEW_ARRAYS</code>）, 种子页/追剧页上 <code>this.groups</code> 引用不变 ⇒ <code>decoratedGroups</code> 不重算。触发面缩小到分组页（默认页）——<b>是面上的缓解, 单轮重算成本未变</b>。</li>
+      <li><b>SSE 把大库有效刷新节奏顶到了分档设计之上（痛点变重, 非缓解）</b>: 分档（polling.js:112-127）是按「3s 档主线程占用 ~17%」定的; SSE 在线 + 活跃库时, ver 推送使有效刷新节奏 = 服务端 sync tick（1.5s）, 对 &gt;3000 种子库是设计档位的 2 倍频。单轮成本因 P1-1 有变化、未复测, 旧数字（396~501ms/轮）不能直接外推, 但「分档定档时的占用口径已被 SSE 打破」是结构上成立的——认领时应把这条一起量化。</li>
+    </ul>
+    <p><b>判定: 问题仍成立, Open 维持。</b>根因栏的「待查」（增量聚合的正确性边界: dirty 集合与剧键派生）依旧待论证, 入池时「不为填单做分析」的纪律继续适用。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>顺带发现（不入池, 留决策）</h2>
+    <p><code>webui/runtime.py:499</code> 注释称「发布侧按内容指纹去重, 不会周期空转」——grep 全 <code>src/auto_qb/</code>（取证 2026-10-07）, 内容指纹去重只存在于 <code>hr/worker.py:57-81</code>（HR 判定视图的事件推送去重）, <b>四视图发布路径没有任何指纹去重</b>: <code>_publish_locked</code> 每次调用必增版本号、必推 ver。该注释与 HR 模块的机制张冠李戴, 容易让后来者误以为「视图内容没变就不推不建」（实际是: 活跃库下每 tick 必推）——与本轮两个 issue「误导优化决策」的教训同型。按范围守恒未动代码、未入池, 处置权留给用户: 一行注释修正, 或并入 issue 1 的方案 B 一并做。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>建议后续</h2>
+    <ol>
+      <li><b>issue 1（26-09-19-2122）</b>: 维持 Open; 修法建议按本报告 §04 重新排序——方案 B（口径修正, 范围扩大到 SSE 语义）+ 顺带小修（<code>ensure_view</code> 清账）仍值得做; 方案 A 重述为「主循环解耦手段」而非省 CPU; 方案 C 降级。若要动门控, 先回答「SSE 主路径下门控还保护什么」——目前答案只有轮询兜底路径。</li>
+      <li><b>issue 2（26-09-21-1408）</b>: 维持 Open, 可认领。认领时先做根因栏要求的正确性论证（dirty 集合 × 剧键派生）, 并把「SSE 下大库前端有效节奏 1.5s vs 分档设计 3s」一并复测量化。</li>
+      <li><b>两份 issue 的复验行与锚点已由本轮补进档案</b>（状态变更日志各加一行, issue 2 的定位锚点表刷新到新路径）, 下一个读者不再追死锚。</li>
+    </ol>
+  </section>
+
+  <footer>
+    memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html · 复验基线 develop @ 20bd2157 · 证据快照, 出厂即冻结; 后续推进在两条 issue 的状态变更日志里留痕
+  </footer>
+
+</div>
+</body>
+</html>
