@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> 所有AI编码代理的统一入口(Copilot/Codex/Cursor/Gemini CLI/Claude Code/ZCode/Trae通用)。完整知识库在`memory-bank/`(Memory Bank模式)—本文件只放**路由与硬约束**;不要凭印象回答项目问题,按路由深入后再动代码。
+> 所有AI编码代理的统一入口。完整知识库在`memory-bank/`(Memory Bank模式)—本文件只放**路由与硬约束**;不要凭印象回答项目问题,按路由深入后再动代码。
 > ⚠本文件有**8000字符硬上限**——超出部分IDE注入时被静默截断,尾部内容模型看不到。改完用`commands run doc.caps`自查。
 
 ## 知识库路由(两层:本文件粗路由→`memory-bank/README.md`细路由)
@@ -8,14 +8,14 @@
 「按任务读哪份文档」的单点在`memory-bank/README.md`的细路由表——本文件不复述,免得两处各自演化。三条动作级提示:
 
 - **改代码前**:读`memory-bank/pitfalls/_index.md`——7类(git·web-ui·backend·testing·ops·kb·docs),按动作选类再进类索引。
-- **跑git命令前**:必读`memory-bank/pitfalls/git/_index.md`——ref静默丢弃等本机硬约束单点在里面(同步/推送核验已内联进ship脚本;旧rebase/merge/stash毁库禁令已随拦截层修复于2026-09-25解除)。
+- **跑git命令前**:必读`memory-bank/pitfalls/git/_index.md`——ref静默丢弃等本机硬约束单点在里面(同步/推送核验已内联进ship脚本;旧rebase/merge/stash毁库禁令已随拦截层修复解除)。
 - **检索纪律**:先索引、后grep、**禁止整读**任一目录;不确定关键词时`grep -rn "<词>" memory-bank/`兜底。
 
 ## 会话协议
 
 完整规程(会话开始/收尾DoD 5步/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**:①**先同步**(问答/只读轮次跳过;**首个执行动作——改文件/跑测试/任何git写操作——之前必须完成**)——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性,拍板2026-09-28),成功一行「已同步 <hash>」贴进回复;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后分支上改代码**。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴跨仓库操作」节)。
+- **开始**:①**先同步**(问答/只读轮次跳过;**首个执行动作——改文件/跑测试/任何git写操作——之前必须完成**)——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),成功一行「已同步 <hash>」贴进回复;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后分支上改代码**。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**:按skill的5步DoD——更新activeContext切片(已完成条目**迁出**到progress)/达阈值则立档+`commands run kb.index`重建索引/代码事实变更回写`memory-bank/`与根README/跑`commands run test.full`并新建基线切片记实测数字(`testing/baselines/`,体例见`testing/baseline.md`口径段)/**新坑按动作写进`pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
 
@@ -23,7 +23,7 @@
 
 - **计划文档**:用`delivery-artifact` skill,放`memory-bank/plans/`;**一律单文件HTML**(出现`.md`即违规)。
 - **报告**:审计/故障取证/可行性分析→`memory-bank/reports/`;四工位决策树与`doc-*`协议单点见`memory-bank/conventions/doc-forms.md`。
-- **HTML一律dark主题**:深色底+浅色字+样式里写`color-scheme:dark`,**禁止浅底黑字**;配色规格与文件命名见`memory-bank/conventions/webui.md`「HTML文档一律dark主题」。
+- **HTML一律dark主题**:深色底+浅色字,样式里写`color-scheme:dark`;配色规格与文件命名见`memory-bank/conventions/webui.md`「HTML 文档一律 dark 主题」。
 
 ## 编码约束:非ASCII图形符号
 
@@ -65,15 +65,15 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## ⚠环境硬约束:Git操作(AI工具shell特有)
 
-**工作区模式:多clone并行**(2026-09-20起):每个AI实例用**一份独立克隆**,跨clone同步一律走Gitee `develop`。细则见`memory-bank/conventions/collaboration.md`「协作约定」;完整判据与事故档案单点在`memory-bank/pitfalls/git/_index.md`。本节只留最容易致命的几条:
+**工作区模式:多clone并行**:每个AI实例用**一份独立克隆**,跨clone同步一律走Gitee `develop`。细则见`memory-bank/conventions/collaboration.md`「协作约定」;完整判据与事故档案单点在`memory-bank/pitfalls/git/_index.md`。本节只留最容易致命的几条:
 
-- **rebase/merge/stash禁令已解除**(2026-09-25):历史上删除拦截层会在这几类操作写入`.git`时批量删对象(3次事故),已修复、恢复可用——高风险历史整合前仍建议先`cp -a .git <备份>`。落后/分叉一律`commands run my-commit-flow.sync`(自动快进/rebase保线性;树脏会给失败行,行内自带stash解锁配方)。
+- **rebase/merge/stash禁令已解除**:历史上删除拦截层会在这几类操作写入`.git`时批量删对象(3次事故),已修复、恢复可用——高风险历史整合前仍建议先`cp -a .git <备份>`。落后/分叉一律`commands run my-commit-flow.sync`(自动快进/rebase保线性;树脏会给失败行,行内自带stash解锁配方)。
 - **ref三处核对与推送核验已内联进ship脚本**:`HEAD`==`refs/heads/<branch>`==loose/packed、推完`ls-remote`现查远端真值,全部由`ship.commit`/`ship.push`/`my-commit-flow.sync`自动做——**不要手工核验**;不一致/「无法核实」会出现在失败行里,排障用`commands run my-commit-flow.verify-ref`。(本shell里`refs/remotes/*`写入被静默丢弃、`git push --dry-run`永远"成功",都不可信——详单点`memory-bank/pitfalls/git/refs.md`。)
 - 机检与停手点一律走**task id**:`commands run ship.commit`/`ship.push`/`my-commit-flow.sync`/`my-commit-flow.verify-ref`(排障)(`list my-commit-flow/ship`看全流程,`show <task>`看展开的命令与深读指针)。**包内README与`references/`只在排障/迁移时读**——日常整读它,等于把"读整份文档找命令"的成本又搬回来。
 
-## 🔴跨仓库操作:绝对禁止(需显式强授权)
+## 🔴 跨仓库操作:绝对禁止(需显式强授权)
 
-完整定义(含事故实证与止损纪律)见`memory-bank/conventions/collaboration.md`「🔴跨仓库操作」节;本节只留红线。
+完整定义(含事故实证与止损纪律)见`memory-bank/conventions/collaboration.md`「🔴 跨仓库操作」节;本节只留红线。
 
 - **除当前工作clone外,对其它clone的任何写操作一律绝对禁止**——改文件/`git apply`/复制覆盖/跑git命令。
 - **授权指令只认`授权`**,须用户**显式**说出;**「提交」不算**——它只授权commit+push到远端。
@@ -82,11 +82,11 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## 提交/PR
 
-**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:闸门+暂存+提交+内部同步(2026-10-04起**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),成功一行「提交成功 <hash>」,推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
+**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:闸门+暂存+提交+内部同步(**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),成功一行「提交成功 <hash>」,推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
 
 - **协作主线**:日常在`develop`,以**Gitee的`develop`**为准;**交付与否只看Gitee**。GitHub只作镜像、**允许滞后**——别用GitHub状态判断进度。
 - **用户说"提交"=commit+push**,一次走完;**触发词只认"提交/入库/推上去"这类显式指令**,"继续/接着做/ok/你看着办"一律不算。**本条是提交口径的单点定义**,优先于`memory-bank/`里的历史表述。
-- **推送顺序固定**:先推Gitee(必须成功)→核远端ref==本地→再**尝试一次**GitHub镜像——**全程静默**(2026-09-28定调:允许滞后,成败都不提;不重试/不换代理/不改走SSH/不回滚Gitee已完成的推送)。
+- **推送顺序固定**:先推Gitee(必须成功)→核远端ref==本地→再**尝试一次**GitHub镜像——**全程静默**(允许滞后,成败都不提;不重试/不换代理/不改走SSH/不回滚Gitee已完成的推送)。
 - **提交信息=gitmoji+中文**:首行`<gitmoji> <中文一句话概述>`,空一行后写动机/取舍/影响面/实测数字;小改只写首行。**数字必须是提交那一刻实测的**。选哪个emoji走gitmoji skill `.agents/skills/gitmoji/SKILL.md`。
-- **回写合流交脚本**(2026-10-04起,取代2026-09-26「先合并远端再收尾」):收尾回写直接写在本地基线上,与远端的合流由`ship.commit`提交后rebase完成——各`_index`撞车由生成物自动化解兜底(取一侧+重跑生成器+自证),手写件冲突才停下要人;回写文件仍**随主提交一并暂存**,不推完再补一笔(已推送的提交不能amend+强推)。
+- **回写合流交脚本**:收尾回写直接写在本地基线上,与远端的合流由`ship.commit`提交后rebase完成——各`_index`撞车由生成物自动化解兜底(取一侧+重跑生成器+自证),手写件冲突才停下要人;回写文件仍**随主提交一并暂存**,不推完再补一笔(已推送的提交不能amend+强推)。
 - **红线与闸门清单外置在`.commands/my-commit-flow/.my-commit-flow.toml`**(包脚本强制读取,缺了就停手引导生成)。
