@@ -27,7 +27,7 @@
 
 - 每轮 skipped 数与门控组清点一致(基础 10 + 各模式专属组), 无静默少跑(计划 §6 R2 判据)。
 - ⚠ hang 轮执行口径(收口前): `commands run dev.e2e` 的任务 timeout=180s 撑不住 hang 轮墙钟
-  (引擎到点强杀 rc=1), 曾改跑任务展开命令 `E2E_CMD_RESULT=hang npx playwright test` 验证。
+  (引擎到点强杀 rc=1), 曾以该 task 的展开命令直跑绕过引擎超时做验证(不另立口径)。
   **已处置**(S7b 收口, 见「计划外发现」#2): timeout 放宽 360s 后经 commands 引擎复跑正常
   (rc=0 / 156s), 六行命令口径恢复全部走 `commands run dev.e2e`。
 

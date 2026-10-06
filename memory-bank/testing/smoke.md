@@ -29,8 +29,8 @@
   `menus.spec`(菜单族 + W5-off fail-closed) · `perf.spec`(性能埋点, 阈值逐字保留) ·
   `hr-history.spec`(HR 表③) · `column-prefs.spec`(列设置守阵 ×5)。
 - **「每次改前端」门禁**(2026-10-06 口径平移, 取代旧"跑冒烟脚本 ok+error 两模式"):
-  **`npm run test:e2e:fast`(`--grep @fast`)绿**; 触碰乐观 UI / 菜单 / 列设置时**加跑对应 spec**
-  (`npx playwright test e2e/optimistic.spec.mjs` 等); 全量矩阵轮(ok|error|hang × skip-check on|off ×
+  **`npm run test:e2e:fast`(`--grep @fast`)绿**; 触碰乐观 UI / 菜单 / 列设置时**加跑对应 spec 文件**
+  (dev.e2e 支持传 spec 路径过滤); 全量矩阵轮(ok|error|hang × skip-check on|off ×
   hr-scene on|empty|off × torrents 规模, 六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note)
   在收尾 / 排障时**串行人跑, 每轮独立起桩**(env 组合决定桩形态, 参数名与 ui_harness.py CLI 一一对应)。
 - 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、滚动总高与末行可达、

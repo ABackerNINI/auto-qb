@@ -16,16 +16,19 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 4 |
+| bug | 5 |
 | perf | 5 |
-| docs | 1 |
+| docs | 2 |
 | refactor | 5 |
 | feat | 17 |
 | chore | 2 |
-| question | 4 |
+| question | 5 |
 
 ## Open
 
+- [bug] [批量菜单 _menuPos 常量钳位致视口溢出, 真实点击不可达](26-10-06-1717-bug-webui-batch-menu-viewport-overflow.html) — ui_feedback.js _menuPos…
+- [docs] [产品与桩脚本注释残留对已退役 scripts/ui_smoke.cjs 的引用](26-10-06-1717-docs-docs-ui-smoke-comment-residue.html) — app.js:241 / polling.js:…
+- [question] [宽行横向滚动致点击落点被拦截: 产品侧落点自愈修不修(待拍板)](26-10-06-1717-question-webui-wide-row-click-landing.html) — 行宽 2038px > 容器 1416px 时…
 - [refactor] [把 ui_smoke.cjs 分批迁移到 @playwright/test 框架](26-10-06-0458-refactor-e2e-migrate-ui-smoke.html) — 1978 行自研冒烟脚本是手写 CJS+CDP…
 - [feat] [agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺](26-10-05-1015-feat-qb-traffic-agg-live-buckets.html) — agg 段窗(3d/7d/30d/6mo/1y/…
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=f…
