@@ -505,8 +505,9 @@ def _make_web_manager(tmp_path, config_text):
     # 视图替身方法: routes 现调 web.ensure_view / web.ensure_state, 这里把门面方法指到替身数据上
     mgr.web.ensure_view = lambda: mgr.web.group_view
 
-    def _ensure_group_state(rid, view=None):
-        # 与真实实现同形: 默认回全部; P1-1 带 view 时只回该视图的数组
+    def _ensure_group_state(rid, view=None, delta=False):
+        # 与真实实现同形(plan 26-10-07-0414 S3 起 ensure_state 增 delta 协商参; 替身不模拟
+        # 归约, 现有端点用例均不带 delta=1, 行为与历史全量形状一致)
         from auto_qb.webui.views import VIEW_ARRAYS
 
         updated = rid != mgr.web.group_view_ver

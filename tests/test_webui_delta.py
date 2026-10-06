@@ -1,8 +1,9 @@
-"""test_webui_delta 测试计划: WebUI 增量时间线(plan 26-10-07-0414 S2, 服务端内部状态)
+"""test_webui_delta 测试计划: WebUI 增量时间线(plan 26-10-07-0414 S2/S3)
 
 被测面: WebUIRuntime 的时间线落代(_fold_delta_pending_locked)/store 增量排空与脏行键推导
-(_drain_delta_locked)/full 降级理由集合(R11 五源)与 views._build_group_view 的构建期交叉键
-回传。不接端点(S3)、不动前端(S4); show 桶本步恒空。
+(_drain_delta_locked)/full 降级理由集合(R11 五源)/views._build_group_view 的构建期交叉键
+回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议字段(S3)。
+show 桶 S8/S9 才接(S3 期 view=show 恒全量)。
 
 ## 测试计划(每个测试函数一条)
 - test_timeline_appends_per_publish_and_truncates: 时间线落代/截断 —— 每次发布恰追加一条目(ver 与 group_view_ver 对齐, 本仓 ver 单调), 条目形状 = ver/full/upsert/removed 四键分 torrent/group/show 三桶; 45 次发布后 maxlen=40 截断(最旧 5 条被挤掉)
@@ -11,11 +12,19 @@
 - test_full_downgrade_sources_matrix: 五个降级源矩阵(R11) —— config_reload(mark_dirty full=True)/hr_revision(flush 判定点)/shows_pending(归位转换拍)/cross_group(构建期键集增删, 走真 _build_group_view 回传)各自触发 full 代(full 条目键集清空 + 累积器与理由一并清空; hr/cross 均有"下一拍不再 full"的对照); 进程重启 = ver 时间播种 + 时间线/累积器为空, 旧客户端 rid 必然窗外或 rid>ver 全量(R10, 无需显式标记)
 - test_group_removed_key_unresolvable_full: 组行 removed 键推导(R11) —— removed hash 组键查得到且组仍在 -> 组键进 upsert; 组已解散 -> 组键进 removed; 查不到(与"从未归组"不可区分) -> 本代 full 且键集清空
 - test_error_reason_refresh_row_level_upsert: 错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh") —— 走真 refresh_error_reasons 改写 tracker_error_msg, 仅原因刷新、store 零增量 -> 受影响行进 torrent/group 桶 upsert 且该代不 full; 门控跳拍键集暂存不丢(R4); 无变化轮不登记
+- test_ensure_state_no_negotiation_byte_compatible: S3 硬验收 —— 未带 delta=1 协商参数的响应与历史逐字节等价: 键集恰为 rid/updated(+VIEW_ARRAYS 裁剪的数组), 无 full/delta/removed 键; 数组内容 = 当前已发布视图
+- test_reduce_delta_full_branch_matrix: 归约判定全分支(S3, R3/R10) —— rid==ver 零回传(带不带 delta 都只回 rid/updated); rid 缺省/0/-1、rid>ver、窗外(maxlen 截断挤掉客户端所在代)、窗内任一代 full -> 全量且协商客户端标 full=true(不含 delta/removed); 启用矩阵: view=show/缺省/未知值恒全量
+- test_reduce_delta_upsert_removed_normal: 正常归约(S3) —— torrent 视图 delta.torrents 回平铺整行/removed 回 hash; group 视图 delta.groups 回组行(键 = encode_group_key 字符串)/delta.singles 只收未归组行/removed.groups 回 encode 后字符串; 行内容 = 当前已发布视图的原行(R1, 引用恒等)
+- test_reduce_delta_cross_gen_removed_yields_to_upsert: R5 跨代版 —— 先删后加: removed 让位于 upsert, 回 delta 不回 removed; 先加后删: 抵消后 upsert 行已不在当前视图 -> 防御性转 full
+- test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD) —— 增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
 """
+import json
 import time
+from collections import deque
 from types import SimpleNamespace
 
 from auto_qb.core.qbapi import QbApi
+from auto_qb.infra.utils import encode_group_key
 from auto_qb.torrents import TorrentStore
 from auto_qb.webui import WebUIRuntime
 from auto_qb.webui.views import WebviewMixin
@@ -290,3 +299,252 @@ def test_error_reason_refresh_row_level_upsert():
     entry = _publish(rt)
     assert entry["full"] is False
     assert entry["upsert"]["torrent"] == set() and entry["upsert"]["group"] == set()
+
+
+# ---------- ⑦ S3: ensure_state 协商门控 + _reduce_delta 归约 ----------
+
+
+def _baseline_rid(store_hashes=("H1", )) -> tuple:
+    """装库 + 基线代发布, 回 (store, runtime, 客户端所持 rid)"""
+    store = _make_store(*store_hashes)
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代(空键集条目): 客户端在此版本上持全量
+    return store, rt, rt.group_view_ver
+
+
+def _advance_gen(store, rt) -> dict:
+    """驱动一个带键集的增量代(H1 速度字段变化), 回本代条目"""
+    store.delta_fields = {"H1": frozenset({"dlspeed"})}
+    rt.mark_dirty()
+    return _publish(rt)
+
+
+def test_ensure_state_no_negotiation_byte_compatible():
+    """S3 硬验收: 未带 delta=1 的响应与历史逐字节等价 —— 无 full/delta/removed 键, 数组原样"""
+    store, rt, rid = _baseline_rid(("H1", "H2"))
+    _advance_gen(store, rt)  # 窗口完美匹配也必须全量: 归约只对协商客户端开放
+    # 单视图请求(view=torrent): 键集恰为 rid/updated/torrents
+    state = rt.ensure_state(rid, "torrent")
+    assert set(state.keys()) == {"rid", "updated", "torrents"}
+    assert state["updated"] is True and state["rid"] == rt.group_view_ver
+    assert state["torrents"] == rt.flat_view
+    for absent in ("full", "delta", "removed"):
+        assert absent not in state
+    # view=group: groups + singles 连带裁剪
+    state = rt.ensure_state(rid, "group")
+    assert set(state.keys()) == {"rid", "updated", "groups", "singles"}
+    assert state["groups"] == rt.group_view and state["singles"] == rt.singles_view
+    # view 缺省: 四数组全回(保守默认)
+    state = rt.ensure_state(rid)
+    assert set(state.keys()) == {"rid", "updated", "groups", "singles", "shows", "torrents"}
+    # rid==ver 零回传形状不变
+    assert rt.ensure_state(rt.group_view_ver, "torrent") == {"rid": rt.group_view_ver, "updated": False}
+
+
+def test_reduce_delta_full_branch_matrix():
+    """归约判定全分支(S3, R3/R10): 该 full 的分支一个不少, 零回传语义保留"""
+    # a) rid==ver 零回传: 带不带 delta 都只回 rid/updated(plan S3 保留 :828 语义)
+    store, rt, rid = _baseline_rid()
+    assert rt.ensure_state(rid, "torrent", True) == {"rid": rid, "updated": False}
+    assert rt.ensure_state(rid, "torrent") == {"rid": rid, "updated": False}
+
+    # b) rid 缺省/0/-1 -> 全量(协商客户端标 full=true, 不含 delta/removed)
+    store, rt, _ = _baseline_rid()
+    _advance_gen(store, rt)
+    for bad in (None, 0, -1):
+        state = rt.ensure_state(bad, "torrent", True)
+        assert state["full"] is True and "torrents" in state
+        assert "delta" not in state and "removed" not in state
+
+    # c) rid > ver(时钟倒挂) -> 全量
+    state = rt.ensure_state(rt.group_view_ver + 1, "torrent", True)
+    assert state["full"] is True and "torrents" in state
+
+    # d) rid 窗外: 时间线 maxlen=40 把客户端所在代挤出 -> 全量(R10 窗口滑出)
+    store, rt, first = _baseline_rid()
+    for _ in range(40):  # 再落 40 代: 首代(客户端所持)被 maxlen 挤出
+        rt.mark_dirty()
+        _publish(rt)
+    assert rt._delta_timeline[0]["ver"] > first  # 前置: 客户端 rid 确已窗外
+    state = rt.ensure_state(first, "torrent", True)
+    assert state["full"] is True and "torrents" in state
+
+    # e) 窗内任一代 full -> 全量(full 代键集已清空, 键集链断裂, R10/R11)
+    store, rt, rid = _baseline_rid()
+    rt.mark_dirty(full=True, reason="config_reload")
+    _publish(rt)  # 中间代 full
+    _advance_gen(store, rt)  # 后续代键集正常也救不回来
+    state = rt.ensure_state(rid, "torrent", True)
+    assert state["full"] is True and "torrents" in state
+
+    # f) 启用矩阵: view=show / 缺省(四数组)/未知值恒全量(show 桶 S8/S9 才接, S3)
+    store, rt, rid = _baseline_rid()
+    _advance_gen(store, rt)
+    for view in ("show", None, "nope"):
+        state = rt.ensure_state(rid, view, True)
+        assert state["full"] is True
+        assert "delta" not in state and "removed" not in state
+
+
+def test_reduce_delta_upsert_removed_normal():
+    """正常归约(S3): 行内容取自当前已发布视图(R1), 桶按视图裁剪, removed 回标识符列表"""
+    # torrent 视图: delta.torrents 回平铺整行(引用恒等), 无删除时 removed 为空列表
+    store, rt, rid = _baseline_rid(("H1", "H2"))
+    _advance_gen(store, rt)  # H1 速度变化 -> torrent 桶 upsert {H1}
+    state = rt.ensure_state(rid, "torrent", True)
+    assert state["full"] is False and state["rid"] == rt.group_view_ver
+    assert state["delta"] == {"torrents": [rt.flat_view[0]]}  # 行 = 当前视图原行(R1)
+    assert state["delta"]["torrents"][0]["hash"] == "H1"
+    assert state["removed"] == {"torrents": []}
+
+    # group 视图: 组行 upsert 回整行(键 = encode_group_key), singles 桶只收未归组行
+    store = _make_store("H1", "H2")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]  # H1 归组, H2 未归组
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    rid = _publish(rt)["ver"]
+    store.delta_fields = {"H1": frozenset({"dlspeed"}), "H2": frozenset({"upspeed"})}
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    state = rt.ensure_state(rid, "group", True)
+    assert state["full"] is False
+    gv = {r["key"]: r for r in rt.group_view}
+    enc = encode_group_key(("R:\\D", ))
+    assert [r["key"] for r in state["delta"]["groups"]] == [enc]
+    assert state["delta"]["groups"][0] is gv[enc]  # R1: 行内容 = 当前已发布视图原行
+    assert [r["hash"] for r in state["delta"]["singles"]] == ["H2"]  # 归组行不进 singles 桶
+    assert state["removed"] == {"groups": [], "singles": []}
+
+    # 组解散代(组内唯一成员被删, 组随之消失): removed.groups 回 encode 后字符串
+    # (与视图行键同标识), removed.singles 回 hash
+    store = _make_store("H1")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    rid = _publish(rt)["ver"]
+    store.groups.pop(("R:\\D", ))  # 解散: 组键查得到但 groups 无 -> 组行 removed(S2 同款分流)
+    store.by_hash.pop("H1")  # 成员删除是解散的因: 行从 store 与全部视图消失
+    store.last_removed = ["H1"]
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["removed"]["group"] == {("R:\\D", )}
+    state = rt.ensure_state(rid, "group", True)
+    assert state["full"] is False
+    assert state["delta"] == {"groups": [], "singles": []}
+    assert state["removed"] == {"groups": [encode_group_key(("R:\\D", ))], "singles": ["H1"]}
+
+    # 空键集代(纯 mark_dirty 的命令驱动重建, 视图内容未变): 归约命中但桶全空 ——
+    # delta/removed 恒在、可为空(协议定案)
+    store, rt, rid = _baseline_rid(("H1", ))
+    rt.mark_dirty()
+    _publish(rt)
+    state = rt.ensure_state(rid, "torrent", True)
+    assert state["full"] is False
+    assert state["delta"] == {"torrents": []} and state["removed"] == {"torrents": []}
+
+
+def test_reduce_delta_cross_gen_removed_yields_to_upsert():
+    """R5 跨代版(S3): 后改回的行让位回 upsert; 抵消后 upsert 行已不在当前视图 -> 防御性 full
+
+    删除代必须键可解析(member_to_key 查得到)否则按 R11 本代 full, 走不到归约(S2 用例 ⑤ 专测)。
+    """
+    # 先删后加: removed 让位于后续 upsert -> 回 delta 行, 不回 removed
+    store, rt, rid = _baseline_rid(("H1", "H2"))
+    store.member_to_key["H2"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H2"]  # H2 归组: 删除代组键可解析, 不触发 R11 full
+    store.by_hash.pop("H2")
+    store.last_added, store.last_removed = [], ["H2"]  # S1「最近一轮」: 每代显式双写防残值
+    rt.mark_dirty()
+    e1 = _publish(rt)  # 代+1: removed {H2}
+    assert e1["full"] is False
+    store.by_hash["H2"] = FakeTorrent(hash="H2", name="Show.H2.S01E01.720p.x264-GRP", state="stalledUP")
+    store.last_added, store.last_removed = ["H2"], []
+    rt.mark_dirty()
+    e2 = _publish(rt)  # 代+2: upsert {H2}
+    assert e2["full"] is False
+    state = rt.ensure_state(rid, "torrent", True)
+    assert state["full"] is False
+    assert [r["hash"] for r in state["delta"]["torrents"]] == ["H2"]
+    assert state["removed"] == {"torrents": []}
+
+    # 先加后删(反向): 跨代抵消后 upsert 残留, 但行已不在当前视图 -> 防御性转 full
+    store, rt, rid = _baseline_rid(("H1", ))
+    store.member_to_key["H2"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H2"]
+    store.by_hash["H2"] = FakeTorrent(hash="H2", name="Show.H2.S01E01.720p.x264-GRP", state="stalledUP")
+    store.last_added, store.last_removed = ["H2"], []
+    rt.mark_dirty()
+    e1 = _publish(rt)  # 代+1: upsert {H2}
+    assert e1["full"] is False
+    store.by_hash.pop("H2")
+    store.last_added, store.last_removed = [], ["H2"]
+    rt.mark_dirty()
+    e2 = _publish(rt)  # 代+2: removed {H2}(组仍在 -> 键可解析, 非 full)
+    assert e2["full"] is False
+    state = rt.ensure_state(rid, "torrent", True)  # 窗内两代均非 full: full 只能来自防御检查
+    assert state["full"] is True and "torrents" in state
+    assert "delta" not in state and "removed" not in state
+
+
+def _assert_json_native(obj, path="root"):
+    """递归断言 JSON 原生类型(str/int/float/bool/None/dict/list) —— 端点 JSONResponse
+    直出跳过 jsonable_encoder(state.py fail-fast), 非原生类型会直接 500"""
+    if obj is None or isinstance(obj, (str, bool, int, float)):
+        return
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            assert isinstance(k, str), f"{path}: 键非 str: {k!r}"
+            _assert_json_native(v, f"{path}.{k}")
+        return
+    if isinstance(obj, list):
+        for i, v in enumerate(obj):
+            _assert_json_native(v, f"{path}[{i}]")
+        return
+    raise AssertionError(f"{path}: 非 JSON 原生类型 {type(obj).__name__}")
+
+
+def test_reduce_payload_json_native_and_key_exclusivity():
+    """JSON 原生守阵 + 键互斥(S3 DoD): 增量载荷全字段可 json.dumps; 增量不含四数组键,
+    全量不含 delta/removed 键(逐一断言, R10)"""
+    store = _make_store("H1", "H2")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    rid = _publish(rt)["ver"]
+    # 增量代: 组行 + 未归组行 + 新增行, 载荷覆盖 groups/singles/torrents 三桶
+    store.by_hash["H3"] = FakeTorrent(hash="H3", name="Show.H3.S01E01.720p.x264-GRP", state="stalledUP")
+    store.last_added = ["H3"]
+    store.delta_fields = {"H1": frozenset({"dlspeed"}), "H2": frozenset({"upspeed"})}
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    for view in ("torrent", "group"):
+        state = rt.ensure_state(rid, view, True)
+        assert state["full"] is False
+        for k in ("groups", "singles", "shows", "torrents"):  # 增量响应不含全量四数组键
+            assert k not in state, f"增量响应混入全量数组键 {k}"
+        _assert_json_native(state)
+        json.dumps(state, ensure_ascii=False)  # 端点 JSONResponse 直出同款序列化, 不得抛
+    # 桶内容 sanity: torrent 桶 = H1/H2/H3 全量并集, group 桶 = 组行, singles 桶 = 未归组 H2/H3
+    state = rt.ensure_state(rid, "group", True)
+    assert {r["hash"] for r in state["delta"]["singles"]} == {"H2", "H3"}
+    assert [r["key"] for r in state["delta"]["groups"]] == [encode_group_key(("R:\\D", ))]
+    tstate = rt.ensure_state(rid, "torrent", True)
+    assert {r["hash"] for r in tstate["delta"]["torrents"]} == {"H1", "H2", "H3"}
+    # 全量分支(协商): full=true 且不含 delta/removed(R10)
+    for view in ("torrent", "group", "show", None):
+        full_state = rt.ensure_state(0, view, True)
+        assert full_state["full"] is True
+        for k in ("delta", "removed"):
+            assert k not in full_state, f"全量响应混入 {k} 键"
+        _assert_json_native(full_state)
+        json.dumps(full_state, ensure_ascii=False)
+    # 未协商全量同样不含 delta/removed(历史形状)
+    legacy = rt.ensure_state(0, "torrent")
+    for k in ("delta", "removed", "full"):
+        assert k not in legacy

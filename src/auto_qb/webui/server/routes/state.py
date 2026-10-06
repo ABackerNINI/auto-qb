@@ -32,7 +32,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         }
 
     @router.get("/api/state")
-    def api_state(rid: int = -1, view: str = ""):
+    def api_state(rid: int = -1, view: str = "", delta: int = 0):
         """合并端点: status + groups 一次返回(前端单请求轮询, 请求数减半)
 
         rid 为前端已持有的分组视图版本: 版本一致时只回 status(体积极小), 数组不回传,
@@ -41,13 +41,18 @@ def build_router(ctx: WebContext) -> APIRouter:
         view(P1-1): 当前视图名(group/torrent/show), 只回传该视图需要的数组 —— 大库下
         响应体降到约 1/4(序列化/网络/JSON.parse 与重渲染成本同步下降)。
         缺省或未知值 ⇒ 回传四份(保守默认, 老客户端不受影响)。
+
+        delta(plan 26-10-07-0414 S3 协商参数, P-01 定案): 请求带 delta=1 声明客户端懂
+        增量协议 —— rid 落在服务端时间线窗口内时回增量载荷(full=false + delta/removed),
+        否则回全量并标 full=true; **不带或非 1 恒回历史形状的全量**(无 full 键), 未升级
+        前端逐字节兼容, S3/S4 各自独立提交/回滚。启用矩阵 group/torrent, show 恒全量。
         """
         manager.web.touch()
         snap = manager.status_snapshot()
         # !**先**取分组状态再拼 status: ensure_state 才是真正触发"视图发布"的地方
         # (脏则重建四视图 + 速度合计)。若把它写在 status 字典之后(作为 `**` 展开项),
         # 字典字面量会**先**求值 ⇒ 读到的是上一轮的旧值: 首次请求拿到全 0, 之后每轮慢一拍。
-        group_state = manager.web.ensure_state(rid, view or None)
+        group_state = manager.web.ensure_state(rid, view or None, delta == 1)
         payload = {
             "status":
                 {

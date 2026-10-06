@@ -82,6 +82,9 @@ WEB_ERR_MSG_MAX = 500
 # 值回放时从当前已发布视图现取, 内存 O(代数 x 脏行键) 与库大小无关 ----
 # 容量写常量(零新配置键): 40 代 ~= 60s @1.5s tick, 环满挤最旧(窗外客户端退化全量, R10)
 _DELTA_TIMELINE_MAX = 40
+# S3 启用矩阵(plan 26-10-07-0414): 仅 group/torrent 视图启用增量归约; show 桶 S8/S9 才接,
+# view=show 与缺省(四数组)一律 full —— shows 数组无行键可归约, 强行回增量会漏 shows 变化(R10)
+_DELTA_VIEWS = frozenset({"group", "torrent"})
 
 
 def _new_delta_buckets() -> dict:
@@ -983,7 +986,7 @@ class WebUIRuntime:
                 self._publish_locked()
             return self.group_view
 
-    def ensure_state(self, rid: Optional[int], view: Optional[str] = None) -> dict:
+    def ensure_state(self, rid: Optional[int], view: Optional[str] = None, delta: bool = False) -> dict:
         """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
 
         rid 与服务端视图版本一致时**不回传任何数组**(响应体趋近于零)。status 体积极小,
@@ -991,6 +994,14 @@ class WebUIRuntime:
 
         **按视图回传**: view 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS), 响应体
         降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次全量。
+
+        **增量归约**(plan 26-10-07-0414 S3): 双重门控后才走归约分支 ——
+        ①协商: 请求带 delta=1(路由层解析)才允许归约, 未带协商参数的请求**不进归约**,
+        响应与历史版本逐字节等价(无 full 键)—— S3 与 S4 各自独立提交/回滚的兼容闸
+        (P-01 定案: 未升级前端把增量载荷当全量吃会四数组 undefined 白屏);
+        ②启用矩阵: view ∈ _DELTA_VIEWS(group/torrent); view=show 与缺省一律 full(shows
+        桶 S8/S9 才接, 无行键可归约)。归约判定详见 _reduce_delta; 窗外/窗内含 full 代/
+        防御检查不过时(R10)回落全量并标 full: true。
         """
         from .views import VIEW_ARRAYS
 
@@ -1002,17 +1013,114 @@ class WebUIRuntime:
             self.pending_ver = None
             updated = rid != ver
             state: dict = {"rid": ver, "updated": updated}
-            if updated:
-                arrays = {
-                    "groups": self.group_view,
-                    "singles": self.singles_view,
-                    "shows": self.shows_view,
-                    "torrents": self.flat_view,
-                }
-                keys = VIEW_ARRAYS.get(view) if view else None
-                for k in keys or arrays:
-                    state[k] = arrays[k]
+            if not updated:
+                # 「零回传」: 版本一致只回 rid, 增量协商也不改变本分支(plan S3 保留 :828 语义)
+                return state
+            if delta and view in _DELTA_VIEWS:
+                reduced = self._reduce_delta(rid, view)
+                if not reduced.get("full"):
+                    # 归约命中: rid(== ver)/full=False/delta/removed 四键并入(键名对齐 qB 命名法)
+                    state.update(reduced)
+                    return state
+            # 全量分支(原路径): 协商客户端按协议标 full=true(不含 delta/removed 键, R10);
+            # 未协商客户端**不加** full 键 —— 与 S3 之前的历史响应逐字节等价(独立提交安全)
+            if delta:
+                state["full"] = True
+            arrays = {
+                "groups": self.group_view,
+                "singles": self.singles_view,
+                "shows": self.shows_view,
+                "torrents": self.flat_view,
+            }
+            keys = VIEW_ARRAYS.get(view) if view else None
+            for k in keys or arrays:
+                state[k] = arrays[k]
         return state
+
+    def _reduce_delta(self, rid: int, view: str) -> dict:
+        """把 (rid, ver] 窗口内的时间线归约为该视图的增量载荷(**调用方必须持有 view_lock**)
+
+        判定顺序(plan 26-10-07-0414 S3, R3/R10; 协商与启用矩阵已在 ensure_state 门控):
+          1. rid 缺省/0 / rid > ver(时钟倒挂) / rid < 时间线最旧代次(窗口滑出或尚未落代)
+             -> 全量(R3: 数值区间比较, 不做 qB 式等值 ack/回绕);
+          2. 窗口内任一代 full -> 全量(R11: full 代键集已清空, 键集链断裂);
+          3. rid == ver(「零回传」)不进本函数(ensure_state 先行短路);
+          4. 否则归约: upsert = 窗口内各代该视图 upsert 并集; removed = removed 并集 -
+             最终 upsert(R5 跨代版: 后又改回的行让位, 回 upsert 不回 removed); 行内容现取
+             自当前已发布视图(R1 时间线只存键不存值)。upsert 行必须存在于当前视图 ——
+             不存在(跨代先增后删被 R5 抵消后的残留 upsert 等)即防御性转全量。
+
+        返回 {"full": True} 或 {"rid": ver, "full": False, "delta": {...}, "removed": {...}}。
+        delta/removed 的内层桶按该视图实际数组构成裁剪(与全量分支同款 VIEW_ARRAYS 裁剪),
+        恒在、可为空。应急语义回退(不 revert): 本方法首行加 `return {"full": True}` 即回
+        今天的行为(full 语义常驻)。
+        """
+        ver = self.group_view_ver
+        # R3: rid 数值区间比较。缺省/0 与 >ver 都不可归约(后者含进程重启后旧客户端持未来 rid)
+        if not rid or rid > ver:
+            return {"full": True}
+        timeline = self._delta_timeline
+        # 时间线为空(尚未落代/重启归零)或最旧代次已越过 rid(环满滑出) -> 窗外全量(R10)
+        if not timeline or rid < timeline[0]["ver"]:
+            return {"full": True}
+        window = [e for e in timeline if e["ver"] > rid]
+        if any(e["full"] for e in window):
+            return {"full": True}  # 窗内任一代 full: 键集链断裂, 只能全量(R10/R11)
+        up_t: set = set()
+        up_g: set = set()
+        rm_t: set = set()
+        rm_g: set = set()
+        for e in window:
+            up_t |= e["upsert"]["torrent"]
+            up_g |= e["upsert"]["group"]
+            rm_t |= e["removed"]["torrent"]
+            rm_g |= e["removed"]["group"]
+        # R5 跨代版: removed 让位于后续 upsert(同键先删后改 = 行还在, 回 upsert)
+        rm_t -= up_t
+        rm_g -= up_g
+        from ..infra import utils as _utils
+        from .views import VIEW_ARRAYS
+
+        # 行内容现取自当前已发布视图(R1); upsert 行必须存在, 缺行即防御性转全量(见 docstring)。
+        # 平铺视图含 store 全量 -> torrent 桶 upsert 的每一行都必须在 flat_view 里(两个视图通用)
+        flat_rows = [r for r in self.flat_view if r["hash"] in up_t]
+        if len(flat_rows) != len(up_t):
+            return {"full": True}
+        group_rows: list = []
+        if up_g:
+            enc_up = {_utils.encode_group_key(k) for k in up_g}
+            group_rows = [r for r in self.group_view if r["key"] in enc_up]
+            if len(group_rows) != len(up_g):
+                return {"full": True}  # 组行已不在当前视图(跨代先改后解散的残留 upsert)
+        # delta/removed 内层桶按该视图实际数组构成裁剪(与全量分支同款 VIEW_ARRAYS; S3 期
+        # view ∈ {group, torrent}, shows 桶留 S8/S9 接线, 此处恒空兜底)
+        keys = VIEW_ARRAYS.get(view) or ()
+        delta: dict = {}
+        removed: dict = {}
+        if "torrents" in keys:
+            delta["torrents"] = flat_rows
+            removed["torrents"] = sorted(rm_t)
+        if "groups" in keys:
+            delta["groups"] = group_rows
+            # 组行键回 encode 后的字符串(与视图行 r["key"] 同标识, 前端按它删行)
+            removed["groups"] = sorted(_utils.encode_group_key(k) for k in rm_g)
+        if "singles" in keys:
+            # singles 行 = torrent 桶 upsert 中未归组的行(归组行的变更只落在 groups 桶);
+            # 未归组行必须存在于当前 singles 视图, 缺行即防御性转全量
+            member_to_key = self._host.store.member_to_key
+            ungrouped = {h for h in up_t if h not in member_to_key}
+            if ungrouped:
+                singles_hashes = {r["hash"] for r in self.singles_view}
+                if not ungrouped <= singles_hashes:
+                    return {"full": True}
+            delta["singles"] = [r for r in self.singles_view if r["hash"] in up_t]
+            # removed.singles 回全部已删 hash(保守多删: 客户端删不存在的行是幂等 no-op,
+            # 漏删才会留幽灵行 —— 已删行归没归过组在删除点之后已不可靠)
+            removed["singles"] = sorted(rm_t)
+        if "shows" in keys:  # S3 期不可达(view=show 恒全量); S8/S9 接线前显式空桶
+            delta["shows"] = []
+            removed["shows"] = []
+        return {"rid": ver, "full": False, "delta": delta, "removed": removed}
 
     def mark_shows_pending(self, pending: bool) -> None:
         """追剧视图文件兑底标记: 索引推进后由构建器据此置脏重建
