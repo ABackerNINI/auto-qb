@@ -608,7 +608,7 @@
         <table>
           <thead><tr>
             <th class="num" style="width:34px">#</th><th style="width:96px">时间戳</th><th style="width:46px">形态</th>
-            <th style="width:84px">状态</th><th>标题</th><th style="width:200px">专题</th><th style="width:54px; text-align:right">链</th>
+            <th style="width:84px">状态</th><th style="width:72px">类型</th><th>标题</th><th style="width:200px">专题</th><th style="width:54px; text-align:right">链</th>
           </tr></thead>
           <tbody id="aRows"></tbody>
         </table>
@@ -961,7 +961,7 @@ function aFiltered() {
 /* 台账行单元格: 主表与置顶专区共用同一份栏序/栏宽单点 —— 2026-10-05 用户要求「专区与主区同栏,
    只置顶展示 + 强调」, 两处共用本函数, 从结构上排除栏漂移。pinMark=true 时 # 栏显示实心图钉标记
    (置顶专区用), 否则显示行号。hidMark=true 时为隐藏区行: # 栏换成「恢复」按钮, 标题栏不放图钉
-   (隐藏中的件不进置顶专区)。栏序 # 时间戳 形态 状态 标题 专题 链 由守阵
+   (隐藏中的件不进置顶专区)。栏序 # 时间戳 形态 状态 类型 标题 专题 链 由守阵
    test_ledger_status_column_between_form_and_title 钉死。 */
 function ledgerCells(i, n, pinMark, hidMark) {
   const idx = hidMark
@@ -975,6 +975,7 @@ function ledgerCells(i, n, pinMark, hidMark) {
       <td class="stamp">${esc(i.stamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
       <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
+      <td class="typec">${i.form === "issue" && i["issue-type"] ? '<span class="chip">' + esc(i["issue-type"]) + "</span>" : "·"}</td>
       <td class="title-cell">${pinBtn}<b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
       <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
       <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>`;

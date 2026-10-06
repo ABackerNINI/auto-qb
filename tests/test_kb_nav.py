@@ -44,7 +44,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_has_three_views_and_switcher: 壳含三视图容器 (v-ledger / v-console / v-cards) 与 data-view 切换控件
 - test_shell_is_dark: 壳含 color-scheme: dark
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
-- test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与共用行模板 ledgerCells 同步)
+- test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 类型 标题 专题 链 (表头与共用行模板 ledgerCells 同步)
 - test_status_badge_colors_distinguishable: 状态徽章文字色写在 .chip.st-* 上 (不被同特异性的 .chip --dim 盖掉) + Open/Done 底色 alpha 必须不同 (同亮度令牌只能靠明度拉开) + 控制台 .rs 与台账同口径 + 出局态无底
 - test_topbar_surface_is_left_at_paper: 顶栏底色必须留在 --paper (2026-10-05 用户撤销了顶栏配色改动; 改了即越界, 先问用户)
 - test_ledger_thead_surface_distinguishable: 列标题行底色不得借回 --bg / --paper / --paper-2 + 与数据行 (--bg) 和工具栏 (--paper) 两面最大通道差均 >= 24 + 表头文字对比度 >= 4.5:1 + 置顶专区表头与主表表头同一枚令牌 + 专区表头与置顶行**合成色**最大通道差 >= 24
@@ -307,7 +307,7 @@ def test_ledger_status_column_between_form_and_title() -> None:
     row = re.search(r"function ledgerCells\(.*?\) \{(.*?)\n\}", text, re.S)
     assert row, "行模板 (ledgerCells) 不见了? 渲染方式变了要同步本守阵"
     cells = re.findall(r'<td class="([a-z-]+)"', row.group(1))
-    assert cells == ["idx", "stamp", "formc", "statc", "title-cell", "topic", "refs"], f"行模板列序漂移: {cells}"
+    assert cells == ["idx", "stamp", "formc", "statc", "typec", "title-cell", "topic", "refs"], f"行模板列序漂移: {cells}"
 
 
 def test_status_badge_colors_distinguishable() -> None:
