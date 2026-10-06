@@ -8,10 +8,12 @@
  *
  * 模式矩阵走 env 参数化(计划 26-10-06-0708 §3.2 D1): E2E_CMD_RESULT / E2E_SKIP_CHECK /
  * E2E_HR_SCENE / E2E_TORRENTS, 参数名与 ui_harness.py 的 CLI(--cmd-result / --skip-check-menu /
- * --hr-scene / --torrents)一一对应。默认档 = 旧脚本 ui_smoke.cjs 的默认轮(ok/on/on/300);
+ * --hr-scene / --torrents)一一对应。默认档 = ok/on/on/300(旧冒烟轨默认轮口径, 沿用不改);
  * 模式轮是**串行人跑**(env 组合决定桩形态, 每轮独立起桩), 不是并行实例。
  *
- * 人工深挖(105 项断言)仍走 scripts/ui_smoke.cjs; 这里只放"每次改前端都该过一遍"的那几条。
+ * S7 终态(2026-10-06): 旧单页冒烟脚本已退役, e2e/ 是 WEB UI 浏览器断言的**全量单点**;
+ * 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast 子集), 全量矩阵轮的六行命令见
+ * .commands/dev/config.toml 的 dev.e2e note(串行人跑, 每轮独立起桩)。
  */
 
 /**
@@ -66,7 +68,7 @@ export function assertModesValid() {
 
 assertModesValid();
 
-/** 参与冒烟的皮肤。`console` 不在其中: 人工冒烟脚本 ui_smoke.cjs 的 `--ui` 也只认 prism|atlas。 */
+/** 参与冒烟的皮肤(双皮肤都跑是旧冒烟轨以来的既定口径), `console` 不在其中, 只认 prism|atlas。 */
 export const SKINS = ['prism', 'atlas'];
 
 /**

@@ -7,8 +7,8 @@ import { INST, readInst, withVm } from './lib/vm.mjs';
 import { armClick, armPending, readPending } from './lib/probes.mjs';
 
 /**
- * 乐观 UI 全家(S3 批, 计划 26-10-06-0708 §3.3/§04 S3) —— 承接旧脚本 scripts/ui_smoke.cjs
- * 的**块C + 块E + hang 探针**三段。行号为取证时点值(计划 §2.2), 已按 grep 锚点复核
+ * 乐观 UI 全家(S3 批, 计划 26-10-06-0708 §3.3/§04 S3) —— 承接旧单页冒烟脚本(S7 退役,
+ * git 历史可查)的**块C + 块E + hang 探针**三段。行号为取证时点值(计划 §2.2), 已按 grep 锚点复核
  * (2026-10-06, 删块前; S1/S2 已删块A/F/CTX-03, 行号较计划漂移):
  *
  * 块C grep 锚点: `P0-3 乐观 UI: 右键 → 暂停 → 立刻出现 pending` 起, 至 P0-4 批量合单块止

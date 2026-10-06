@@ -6,7 +6,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 
 /**
  * HR 拉取历史表③(S5 批, 计划 26-10-06-0708 §3.3/§04 S5; 源头计划 26-10-04-0312 S5) ——
- * 承接旧脚本 scripts/ui_smoke.cjs 的**块G**。行号为取证时点值(计划 §2.2), 已按 grep 锚点复核
+ * 承接旧单页冒烟脚本(S7 退役, git 历史可查)的**块G**。行号为取证时点值(计划 §2.2), 已按 grep 锚点复核
  * (2026-10-06, 删块前; S1–S4 已删块A/F/C/E/D, 行号较计划漂移):
  *
  * 块G grep 锚点: `HR 拉取历史表③(计划 26-10-04-0312 S5): 桩 --hr-scene on(默认)起盘` 起,
@@ -37,13 +37,13 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * ── 对账实跑数字(五步对账 §5.1, 2026-10-06 S5 批实测回填) ──
  *  · 步骤1 新 spec: commands run dev.e2e 全量 66 passed / 10 skipped / 0 failed(2.4m)。
- *  · 步骤2 旧脚本同参数轮: 桩 8235(--torrents 300, --hr-scene on 默认) + `node scripts/ui_smoke.cjs
- *    --base http://127.0.0.1:8235 --torrents 300 --ui both` = 32 项 0 FAIL(1m26s), 无存量失败;
+ *  · 步骤2 旧脚本同参数轮: 桩 8235(--torrents 300, --hr-scene on 默认), 旧脚本
+ *    --base http://127.0.0.1:8235 --torrents 300 --ui both = 32 项 0 FAIL(1m26s), 无存量失败;
  *    对账范围内块G 4 断言名 × 2 皮肤全 PASS(实测: 5 行 / 五档徽章各 1 / 仅看异常后 2 行 /
  *    明细子行文案「A 考察中 · 有效 · 3 页 / 96 行 · 全深度翻完…」逐字命中)。
  *  · 步骤3 对账映射: 见上表 —— 块G 4 旧名/皮肤 → 2 test/皮肤, 1:N(合并)成立, 每个旧名有
  *    去向下落; catch 兜底 add 不迁移(新轨断言失败即红, 语义等价)。
- *  · 步骤4 删旧块(与本 spec 同 commit): ui_smoke.cjs 删块G 段 + `--hr-scene` 参数与头注释两处
+ *  · 步骤4 删旧块(与本 spec 同 commit): 旧脚本删块G 段 + `--hr-scene` 参数与头注释两处
  *    (与块B 段同批, 见 perf.spec.mjs 头的删段数字)。
  *  · 步骤5 双复跑: 旧脚本(删段后, 同桩 8235)14 项 0 FAIL(37.9s) —— 32−(块B 5 + 块G 4)×2 皮肤
  *    = 14, 项数下降恰对应两块, 零残余失败; 新 spec 复跑绿(66 passed / 10 skipped / 0 failed,

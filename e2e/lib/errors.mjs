@@ -38,7 +38,7 @@ export function collectRuntimeErrors(page) {
 }
 
 /**
- * afterEach 公共检查: 「无 console.error / pageerror」(旧脚本 ui_smoke.cjs 收尾总检的框架化,
+ * afterEach 公共检查: 「无 console.error / pageerror」(旧单页冒烟脚本收尾总检的框架化,
  * 语义更强 —— 从"整轮最后一眼"变成"每条 test 各自把关")。在 describe/文件顶层调一次:
  *
  *   installRuntimeErrorGuard(test);   // 组内每条 test 结束时自动断言本页零运行期错误

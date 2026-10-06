@@ -6,7 +6,7 @@ import { readInst } from './lib/vm.mjs';
 
 /**
  * 列设置守阵(S6 批, 计划 26-10-06-0708 §3.3/§04 S6; 源头计划 26-09-21-1551 §7.2 双轨模型守阵
- * 与 issue 26-09-20-1800 多标签同步) —— 承接旧脚本 scripts/ui_smoke.cjs 的**块H**。
+ * 与 issue 26-09-20-1800 多标签同步) —— 承接旧单页冒烟脚本(S7 退役, git 历史可查)的**块H**。
  * 行号为取证时点值(计划 §2.2), 已按 grep 锚点复核(2026-10-06, 删块前; S1–S5 已删块A/F/C/E/D/B/G,
  * 行号较计划漂移: 计划取证 L1795–1985 → 删块前现 L235–399):
  *
@@ -41,13 +41,13 @@ import { readInst } from './lib/vm.mjs';
  *    (2.7m; S5 收口基线 66 passed / 2.4m —— 增量即本批 10 test, 时长 +0.3m 远低于旧脚本同口径
  *    1.5× 阈值, 计划 §6 R3 只记不优化)。
  *  · 步骤2 旧脚本同参数轮(删块前): 桩 8236(`--torrents 300`, 其余默认; READY 判据 = harness
- *    日志首行 + curl 页面 200) + `node scripts/ui_smoke.cjs --base http://127.0.0.1:8236
- *    --torrents 300 --ui both` = 14 项 0 FAIL(36.5s), 无存量失败; 对账范围内块H 5 断言名 ×
+ *    日志首行 + curl 页面 200), 旧脚本 --base http://127.0.0.1:8236
+ *    --torrents 300 --ui both = 14 项 0 FAIL(36.5s), 无存量失败; 对账范围内块H 5 断言名 ×
  *    2 皮肤全 PASS(实测: 多标签 hidden.group 含 uploaded+total_size; 守阵3 key=upspeed
  *    前=88px 后=88px; 守阵4 load wg.uploaded=300px / hg=[category] / wt=null)。
  *  · 步骤3 对账映射: 见上表 —— 块H 5 旧名/皮肤 → 5 test/皮肤, 每个旧名有去向下落; catch 兜底
  *    5 处不迁移(新轨断言失败即红)。两处判据升级(多标签 hidden 集合 / F3 采纳键)与理由见映射表注。
- *  · 步骤4 删旧块(与本 spec 同 commit): ui_smoke.cjs 删块H 段(删块前 L235–399)+ 专属脚手架
+ *  · 步骤4 删旧块(与本 spec 同 commit): 旧脚本删块H 段(删块前 L235–399)+ 专属脚手架
  *    colHide/dragCol/colState/clearCols, 原位留指路注释; `node --check` 过。
  *  · 步骤5 双复跑: 旧脚本 4 项 0 FAIL(14→4, 恰降 10 = 5 名 × 2 皮肤); dev.e2e 全量复跑
  *    76 passed / 10 skipped / 0 failed(2.7m)。`npm run test:e2e:fast` 4 passed(7.7s)与本批前一致。

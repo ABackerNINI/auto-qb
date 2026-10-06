@@ -5,15 +5,16 @@ import { BASE_URL, HARNESS_CMD, READY_URL } from './e2e/harness.mjs';
 /**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。
  *
- * 定位(2026-10-06 定, 方案 A):
- *   · 本文件 + e2e/ 只跑"每次改前端都该过一遍"的最小集(渲染健康 + 数据契约), 目标是**快**;
- *   · 人工深挖(105 项断言 / 双皮肤 × ok|error|hang 三模式)仍走 `scripts/ui_smoke.cjs`,
- *     那条链路的完整环境坑见 memory-bank/pitfalls/testing/smoke.md;
+ * 定位(S7 终态, 2026-10-06): 旧单页冒烟脚本已退役, 本文件 + e2e/ 是 WEB UI 浏览器断言的
+ * **全量单点** —— 全部 ≈105 处断言由 e2e/ 下按块拆分的 spec 承接(各文件头有对账映射表)。
+ *   · 模式矩阵(双皮肤 × ok|error|hang × skip-check on|off × hr-scene on|empty|off)走 env
+ *     参数化(见 e2e/harness.mjs); 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast 子集,
+ *     分钟级), 全量矩阵轮在收尾/排障时跑(六行命令见 .commands/dev/config.toml 的 dev.e2e note);
  *   · 桩服务由本配置的 webServer 自动拉起, 不需要人工先起 `scripts/ui_harness.py`。
  *
  * 为什么是 `.mjs` 而不是 `.js`: 根 `package.json` 是 `"type": "commonjs"`(不能改成 module ——
  * tests/test_extension_proxy.py 会对 extensions 下的 .js 跑 `node --check`, 改 type 会让它们被按
- * ESM 解析)。仓库既有约定就是**显式扩展名**: `scripts/ui_smoke.cjs` 用 `.cjs` 正是同一原因。
+ * ESM 解析)。仓库既有约定就是**显式扩展名**: ESM 用 `.mjs`、确需 CJS 的脚本用 `.cjs`, 同一原因。
  */
 export default defineConfig({
   testDir: './e2e',
@@ -40,7 +41,7 @@ export default defineConfig({
   },
 
   /* 只配 chromium: 本项目 UI 是内部工具, scaffold 默认的 firefox+webkit 三浏览器矩阵纯属浪费。
-   * 视口对齐 ui_smoke.cjs 的 1440x900 —— 行窗口化 / 版式类断言对宽度敏感, 两处不一致会得出不同结论。 */
+   * 视口 1440x900 沿用旧冒烟轨的既定口径 —— 行窗口化 / 版式类断言对宽度敏感, 改了会得出不同结论。 */
   projects: [
     {
       name: 'chromium',

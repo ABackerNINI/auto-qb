@@ -1,12 +1,12 @@
 // @ts-check
 /**
- * 乐观态时序探针(armPending / armClick / readPending) —— 从 scripts/ui_smoke.cjs L83–117
+ * 乐观态时序探针(armPending / armClick / readPending) —— 从旧单页冒烟脚本(S7 退役) L83–117
  * **照搬移植**(计划 26-10-06-0708 §3.4 D3), 包装成 page 级 install/read 两段式:
  *   ① install: 点击前 `armPending(page, sel?)` 装记录器(+ 可选 `armClick(page, handle)` 定时刻基准)
  *   ② act:     真实手势触发(Playwright click / 右键)
  *   ③ read:    事后 `readPending(page)` 问"它**曾经**出现过吗 / 什么时候消失的"
  *
- * 为什么必须"记录器"而不是"事后再数 .is-pending"(照搬 ui_smoke.cjs 原注释, 2026-09-19 定):
+ * 为什么必须"记录器"而不是"事后再数 .is-pending"(照搬旧脚本原注释, 2026-09-19 定):
  * 真值对齐修好之前, pending 要挂满 3s 兜底 ⇒ "等 120ms 再数一次 .is-pending"这种采样稳过;
  * 修好之后 pending 只活 100~300ms, 事后再采样恒为 0 ⇒ 那些断言会**集体恒红**(不是回归, 是度量方式失效)。
  *

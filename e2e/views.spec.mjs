@@ -5,9 +5,10 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 import { readInst } from './lib/vm.mjs';
 
 /**
- * 视图与渲染健康(S1 批, 计划 26-10-06-0708 §3.3/§3.5 D3) —— 承接旧脚本 scripts/ui_smoke.cjs
- * 的**块A**(L288–470, 取证时点值; grep 锚点: `smokeUi(browser, ui)` 起到 "轮询间隔按种子量分档"
- * 断言止), 并入原 smoke.spec.mjs 的 2 条 @fast(壳文件退役, P4 拍板: 渲染健康断言从此单点)。
+ * 视图与渲染健康(S1 批, 计划 26-10-06-0708 §3.3/§3.5 D3) —— 承接旧单页冒烟脚本(2026-10-06
+ * S7 退役, git 历史可查)的**块A**(L288–470, 取证时点值; grep 锚点: `smokeUi(browser, ui)` 起到
+ * "轮询间隔按种子量分档"断言止), 并入原 smoke.spec.mjs 的 2 条 @fast(壳文件退役, P4 拍板:
+ * 渲染健康断言从此单点)。
  *
  * 块A grep 锚点: `展开态跨视图记忆` / `导航焦点不变式` / `三视图切换(P1-1` /
  * `种子页筛选器必须有数据` / `轮询分档(P1 之后的收尾一步)`。
@@ -29,11 +30,16 @@ import { readInst } from './lib/vm.mjs';
  *  L414   状态栏速度 = 服务端 totals(种子页不回 groups 也要对)     → 状态栏速度 = 服务端 totals
  *  L448   种子页筛选器有数据(计数=种子数)                         → 种子页筛选器有数据(计数=种子数)
  *  L464   轮询间隔按种子量分档(EXPECT_N 给定时)                   → 轮询间隔按种子量分档(e2e 轨道恒验)
+ *  L214(删块前终态; 计划块表取证 L1710)                                  → 设置页刷新保持位置(顶层页 +
+ *         设置页刷新保持位置(顶层页 + 分区 + 配置已加载)               分区 + 配置已加载)(S7a 补迁:
+ *         计划块表遗漏该孤儿断言, S6 报告确认仍留旧脚本收尾段, 块体删块前 L198–225; 收尾清
+ *         localStorage / 回辅种页不再需要 —— 每 test 独立 context)
  *  另: 旧收尾总检 L1988「无 console.error / pageerror」(全文件 1 处, 非块A专有) →
  *      installRuntimeErrorGuard afterEach(每条 test 各自把关, e2e/lib/errors.mjs)。
- *  计数口径: 旧块A add() 调用点 13 处(主路径, --torrents 300; 2026-10-06 删块前全量轮实测
- *  每皮肤 13 项全 PASS × 2 皮肤) → 新 7 test/皮肤 × 2 皮肤 + 数据契约 2 条,
- *  其中断言 expect 约 20 处 + afterEach 守卫 —— 1:N(合并)成立, 每个旧名都有去向下落。
+ *  计数口径: 旧块A add() 调用点 13 处 + 孤儿断言 1 处(设置页刷新保持位置, S7a 补迁, 见上表)
+ *  (主路径, --torrents 300; 2026-10-06 删块前全量轮实测每皮肤 13 项全 PASS × 2 皮肤) →
+ *  新 8 test/皮肤 × 2 皮肤 + 数据契约 2 条, 其中断言 expect 约 25 处 + afterEach 守卫 ——
+ *  1:N(合并)成立, 每个旧名都有去向下落。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互全部真实手势: 页签/行/筛选按钮走 locator.click; 旧 vm.toggleExpand 复原、vm.selMembers
@@ -207,6 +213,46 @@ for (const skin of SKINS) {
       expect(emptyTip, '弹层无「暂无数据」空提示').toBe(0);
       await page.keyboard.press('Escape'); // 收起弹层
       await expect(page.locator('.pop-menu')).toHaveCount(0);
+    });
+
+    test('设置页刷新保持位置(顶层页 + 分区 + 配置已加载)', async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+
+      /* 2026-09-25 用户报「设置页刷新会回到种子页」: 顶层 page 与设置分区(hub.view)原本都是
+       * **纯内存态** ⇒ F5 必掉回辅种页 + 设置首页, 编辑到一半的位置全丢。走真实手势
+       * (点设置 → 进分区 → 刷新)复现用户路径。
+       * !断言里必须含 `cfg.schema` 非空 —— 只改初值不改启动路径的写法会让刷新停在
+       * 「配置加载失败 + 重试」(设置页配置树是**按需加载**的), 而 page 值看着是对的。 */
+      await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-grid .hb-card').first().click(); // 进第一个分区(真实手势)
+
+      /* vm 内部字段读数(evaluate 第②类): page/hub.view/cfg.schema 是纯内存态, 无 DOM 之外的
+       * 取径; 面包屑分区名走 DOM。 */
+      const READ = `({ page: vm.page, hub: vm.hub.view, schema: !!vm.cfg.schema,
+        crumb: (document.querySelector('.hb-crumb .cb-now') || {}).textContent || '' })`;
+      let s1;
+      await expect.poll(async () => {
+        s1 = await readInst(page, READ);
+        return s1 && s1.schema && s1.hub !== 'hub' && s1.crumb ? 1 : 0;
+      }, { message: '进入设置: cfg.schema 已加载且 hub.view 离开设置首页', timeout: 15_000 }).toBe(1);
+      expect(s1.page, `进入: 顶层页 = settings(hub=${s1.hub} crumb=${s1.crumb})`).toBe('settings');
+
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      /* 刷新后要等鉴权 + 首轮轮询 + 补的那次 cfgLoad(旧脚本 sleep 3500ms), 换 poll 等同一稳定态:
+       * 分区与面包屑都还原 + 配置树非空, 三者齐才算位置真的保住。 */
+      let s2;
+      await expect.poll(async () => {
+        s2 = await readInst(page, READ);
+        return s2 && s2.schema && s2.hub === s1.hub && s2.crumb === s1.crumb ? 1 : 0;
+      }, {
+        message: `刷新后: 分区/面包屑还原(hub=${s1.hub} crumb=${s1.crumb})且 cfg.schema 已加载`,
+        timeout: 15_000,
+      }).toBe(1);
+      expect(s2.page, '刷新后: 顶层页仍是 settings').toBe('settings');
+      /* 旧脚本收尾的「清位置偏好 + 回辅种页」不再需要 —— 每 test 独立 context(D4), 天然隔离。 */
     });
 
     test('轮询间隔按种子量分档(≤1000→1500 / 1000~3000→2000 / >3000→3000)', async ({ page }) => {

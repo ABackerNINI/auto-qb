@@ -7,8 +7,8 @@ import { readInst } from './lib/vm.mjs';
 import { armClick, armPending, readPending } from './lib/probes.mjs';
 
 /**
- * 菜单族 + W5-off fail-closed(S4 批, 计划 26-10-06-0708 §3.3/§04 S4) —— 承接旧脚本
- * scripts/ui_smoke.cjs 的**块D 其余**(CTX-03 段已随 S2 迁走)+ **W5-off 精简轮**。
+ * 菜单族 + W5-off fail-closed(S4 批, 计划 26-10-06-0708 §3.3/§04 S4) —— 承接旧单页冒烟脚本
+ * (S7 退役, git 历史可查)的**块D 其余**(CTX-03 段已随 S2 迁走)+ **W5-off 精简轮**。
  * 行号为取证时点值(计划 §2.2), 已按 grep 锚点复核(2026-10-06, 删块前):
  *
  * W2 限速 grep 锚点: `W2 批量限速/移动(计划 26-10-02-1955)` 起, 至收尾清选择止
@@ -86,7 +86,7 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *      (修掉旧假红), 导出 toast 不门控(与旧存量行为一致)。
  *  · 步骤3 对账映射: 见上表 —— on 16 旧名/皮肤 → 7 test/皮肤(1:N 合并, 每个旧名有去向下落),
  *    off 4 旧名/皮肤 → 3 test/皮肤 + installRuntimeErrorGuard; 悬空 add 不迁移(删除)。
- *  · 步骤4 删旧块(与本 spec 同 commit): ui_smoke.cjs 删块D 其余段 + W5-off 轮
+ *  · 步骤4 删旧块(与本 spec 同 commit): 旧脚本删块D 其余段 + W5-off 轮
  *    (skipCheckOffChecks + 早退分支 + SKIP_CHECK 参数/头注释)+ 探针三件退役
  *    (armPending/armClick/readPending, 零调用方)+ 悬空 add 一行, 净 28+/504-, node --check 过。
  *  · 步骤5 双复跑: 旧脚本(删段后, 同桩 8233)on 轮 32 项 0 FAIL —— 失败不增反清零: 任务书

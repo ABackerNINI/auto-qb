@@ -5,7 +5,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 import { INST, readInst } from './lib/vm.mjs';
 
 /**
- * 性能埋点(S5 批, 计划 26-10-06-0708 §3.3/§04 S5) —— 承接旧脚本 scripts/ui_smoke.cjs 的**块B**
+ * 性能埋点(S5 批, 计划 26-10-06-0708 §3.3/§04 S5) —— 承接旧单页冒烟脚本(S7 退役,
+ * git 历史可查)的**块B**
  * (性能埋点 P1-2/P1-3 + 行窗口化 + 占位总高 + 滚动不塌陷)。行号为取证时点值(计划 §2.2),
  * 已按 grep 锚点复核(2026-10-06, 删块前; S1–S4 已删块A/F/C/E/D, 行号较计划漂移):
  *
@@ -35,14 +36,14 @@ import { INST, readInst } from './lib/vm.mjs';
  *  · 步骤1 新 spec: commands run dev.e2e 全量 66 passed / 10 skipped / 0 failed(2.4m;
  *    10 skipped = 本 spec 行窗口化 ×2(TORRENTS=300 门控, 旧脚本同条件跳过)+ optimistic hang 组
  *    ×2 + menus off 组 ×6)。本批首跑 2.1m 时曾因 hr-history 漏调 arrange 红 2 条, 修复后全绿。
- *  · 步骤2 旧脚本同参数轮: 桩 8235(--torrents 300 --hr-scene on 默认) + `node scripts/ui_smoke.cjs
- *    --base http://127.0.0.1:8235 --torrents 300 --ui both` = 32 项 0 FAIL(1m26s), 无存量失败;
+ *  · 步骤2 旧脚本同参数轮: 桩 8235(--torrents 300 --hr-scene on 默认), 旧脚本
+ *    --base http://127.0.0.1:8235 --torrents 300 --ui both = 32 项 0 FAIL(1m26s), 无存量失败;
  *    对账范围内块B 5 断言名 × 2 皮肤全 PASS(实测: prism 长任务 167→0 ms/轮, refresh 145→33ms,
  *    gbr 82 次(窗口 20 行/轮, 预算 120); atlas 161→0, 145→34ms, gbr 82; 占位总高 prism 18215
  *    /atlas 18520, Δ 均 0, 行间距 5/6px; 滚动前后高度均不变)。
  *  · 步骤3 对账映射: 见上表 —— 块B 5 旧名/皮肤 → 3 test/皮肤(+1 门控 test), 1:N(合并)成立,
  *    每个旧名有去向下落。
- *  · 步骤4 删旧块(与本 spec 同 commit): ui_smoke.cjs 删块B 段(含仅供块B 的 nav 页签/种子视图/
+ *  · 步骤4 删旧块(与本 spec 同 commit): 旧脚本删块B 段(含仅供块B 的 nav 页签/种子视图/
  *    tRows/tTotal 脚手架)+ 随块失去最后调用方的 readInst helper(单点在 e2e/lib/vm.mjs)与
  *    EXPECT_N 常量(块B 行窗口化门控是它最后一个调用方; 单点在 e2e/harness.mjs TORRENTS),
  *    与块G 段同批, 净 73+/251-; `--torrents` CLI 参数降为不再消费(头注释注明)。
