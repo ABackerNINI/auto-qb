@@ -1,22 +1,24 @@
-# WebUI 增量同步(qB rid 式)可行性分析
+# WebUI 增量同步(qB rid 式): 可行性 → 实施计划
 
-> 摘要: 用户命题「结合 26-10-07-0054 复验报告, 分析 auto-qb ↔ auto-qb.webui 能否像 qB
-> /sync/maindata?rid 那样用增量更新, 成本收益与当前方案对比, 出可行性报告」。判定
-> **可行且地基厚**: 当前 /api/state 已是 qB rid 的「跳过」半套(rid 命中零回传), 缺「变化
-> 回增量」半套; 摄入侧 store.apply_sync 今天就在跑同款协议客户端(full_update 兜底/rid 归零/
-> 逐种子变化字段集), 而 delta_fields 每拍算出后在视图层门口被 consume_view_changed 塌缩成
-> 布尔丢弃 —— 方案落点是把这份信息接住。报告
-> [26-10-07-0204](../reports/26-10-07-0204-report-webui-delta-sync-feasibility.html):
-> 收益集中在「大库+活跃子集+命令突发」(四段成本从 O(全库) 降 O(脏行)); 静态库收益趋零
-> (rid 跳过已覆盖)。成本主体与风险同源 = 增量聚合正确性(恰是 issue 2 根因栏「dirty×剧键
-> 派生」待查), 以镜子测试(逐轮吃 delta ≡ 全量快照)兜底。与 issue 1 方案 A/B/C 正交; 路线
-> S1 传输→S2 组增量→S3 追剧增量(建议与 issue 2 认领并轨)→S4 口径/门控裁决, 拍板点 D1-D5。
-> 最后活动: 2026-10-07 02:04
+> 摘要: 专题两轮。①可行性轮(02:04): 判定**可行且地基厚** —— /api/state 已是 qB rid 的
+> 「跳过」半套(rid 命中零回传), 缺「变化回增量」半套; 摄入侧 store.apply_sync 今天就在跑
+> 同款协议客户端, 而 delta_fields 每拍算出后在视图层门口被塌缩成布尔丢弃, 方案落点是把
+> 这份信息接住。报告
+> [26-10-07-0204](../reports/26-10-07-0204-report-webui-delta-sync-feasibility.html)。
+> ②计划轮(04:38): 先源码级调研 qB rid 实现 —— **双指针 ack 协议**(lastSentID/acceptedID +
+> 快照与待确认值缓冲)、变化种子只发改动字段、`*_removed` 累积到确认为止、客户端从不清
+> rid 全靠服务端 full_update 兜底, 提炼避坑 5 条; 发现**报告 4 处与 qB 源码出入**(deque
+> 窗口只存键系自创改进而非「qB 同款」等)。盘点报告方案到仓库触点: 服务端 4 件全收
+> WebUIRuntime / 前端 3 件 / 拍板点 5 个, 另新发现两缺口(store 不持久化 added/removed、
+> 剧侧无 member_to_key 等价映射)。实施计划
+> [26-10-07-0414](../plans/26-10-07-0414-plan-webui-delta-sync.html) 已出(doc-status **Open
+> 待拍板**): S0-S10 四里程碑(地基与协议→前端与守阵→增量重聚合→收尾), 拍板点 P-01..P-05
+> 全带推荐案, 设计规则 R1-R12, 每步独立提交/回滚。认领链双向闭环, kb.check 全绿。
+> 最后活动: 2026-10-07 04:38
 
-**Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html, memory-bank/testing/baselines/26-10-07-0204-webui-delta-sync-feasibility.md
+**Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html, memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, memory-bank/testing/baselines/26-10-07-0204-webui-delta-sync-feasibility.md, memory-bank/testing/baselines/26-10-07-0438-webui-delta-sync-plan.md
 
 ## 未闭环
 
-- 本轮只读取证零改码; 报告 §08 为「若立项」的路线与拍板点, **未出实施计划**(等用户拍板)。
-- 若立项: 从 S1 出 plan; 若不立项: issue 2 认领时把报告 §06 正确性边界清单作为其增量聚合
-  论证的输入清单, 两档案互为引用。
+- 计划 Open 待拍板: P-01..P-05 待用户逐项拍板后按 S0-S10 分步派工实施(每步一个独立工作单元, 独立提交/回滚)。
+- 实施开工 S0 重立 test.full 基线(计划 26-10-07-0414 实施纪律段); 中间调研笔记在仓库外 `_planwork-webui-delta/`(01 调研 / 02 对表 / 03 内容稿), 供各步实施子智能体取用。

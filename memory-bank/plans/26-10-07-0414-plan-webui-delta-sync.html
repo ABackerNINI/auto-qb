@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>实施计划 · WebUI rid 式增量同步 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-delta-sync">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-07-0414">
+<meta name="doc-updated" content="26-10-07-0430">
+<meta name="doc-refs" content="memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html,memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html,memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html,memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html,memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
+<style>
+  :root {
+    --bg: #13161c;
+    --paper: #191d24;
+    --paper-2: #1e232b;
+    --ink: #e5e8ec;
+    --dim: #a7afb8;
+    --faint: #737c86;
+    --hair: #2a3038;
+    --hair-soft: #21262d;
+    --accent: #d3a35c;
+    --accent-ink: #e2ba79;
+    --accent-line: #6b5533;
+    --code-bg: #1b2027;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #3a3223; color: var(--ink); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2d343d; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a424c; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14.5px; line-height: 1.65; }
+  .sheet { max-width: 1200px; margin: 0 auto; padding: 52px 40px 96px; display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 52px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 12px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 4px 0 4px 13px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 7px; color: var(--faint); }
+  nav.toc .sub a { padding-left: 30px; font-size: 12px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 37px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 15.5px; color: var(--dim); max-width: 66ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 30px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 12px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #241e14; color: var(--accent-ink); border: 1px solid var(--accent-line); }
+  .refs-line { font-size: 12.5px; color: var(--faint); line-height: 1.8; }
+  .refs-line a { color: var(--dim); }
+  .refs-line a:hover { color: var(--accent-ink); }
+  .refs-line code { font-size: 11.5px; }
+  section { margin-top: 46px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15.5px; font-weight: 600; margin: 30px 0 10px; }
+  h3 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); margin-right: 9px; }
+  h4 { font-size: 13.5px; font-weight: 600; margin: 18px 0 6px; color: var(--ink); }
+  p { margin-bottom: 11px; max-width: 82ch; }
+  p, li { overflow-wrap: break-word; }
+  ul, ol { margin: 0 0 12px 0; padding-left: 22px; max-width: 82ch; }
+  li { margin-bottom: 6px; }
+  li ul, li ol { margin: 6px 0 2px; }
+  strong { font-weight: 600; }
+  a { color: var(--accent-ink); }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--hair-soft); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  table th { text-align: left; font-family: var(--display); font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+  table td { padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  table.fields th { width: 108px; text-transform: none; letter-spacing: 0.02em; font-size: 12px; color: var(--faint); vertical-align: top; white-space: nowrap; }
+  table.fields td ul { padding-left: 18px; margin-bottom: 0; }
+  table.fields td p:last-child { margin-bottom: 0; }
+  .note { border-left: 1px solid var(--hair); padding: 2px 0 2px 16px; color: var(--dim); margin: 0 0 16px; max-width: 82ch; }
+  .note p { margin-bottom: 6px; }
+  .mi { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  .stepnav { font-size: 12px; color: var(--faint); margin: -4px 0 0; }
+  .stepnav a { color: var(--dim); text-decoration: none; font-family: var(--mono); font-size: 11.5px; margin-right: 10px; }
+  .stepnav a:hover { color: var(--accent-ink); }
+  .rec { display: inline-block; font-family: var(--display); font-size: 10.5px; letter-spacing: 0.06em; padding: 0 7px; border: 1px solid var(--accent-line); color: var(--accent-ink); border-radius: 2px; margin-right: 6px; }
+  .divider { border: 0; border-top: 1px solid var(--hair-soft); margin: 34px 0 0; }
+  @media (max-width: 940px) {
+    .sheet { grid-template-columns: 1fr; padding: 36px 22px 72px; gap: 24px; }
+    nav.toc { display: none; }
+    h1 { font-size: 29px; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+<nav class="toc">
+  <div class="toc-label">目录</div>
+  <a href="#s00"><span class="no">00</span>元信息与锚点口径</a>
+  <a href="#s01"><span class="no">01</span>一句话背景与非目标</a>
+  <a href="#s02"><span class="no">02</span>全局设计规则 R1-R12</a>
+  <a href="#s03"><span class="no">03</span>分步实施 S0..S10</a>
+  <div class="sub">
+    <a href="#s0">S0 基线</a>
+    <a href="#s1">S1 store 持久化</a>
+    <a href="#s2">S2 脏行推导+时间线</a>
+    <a href="#s3">S3 端点归约+协议</a>
+    <a href="#s4">S4 前端合并</a>
+    <a href="#s5">S5 镜子测试</a>
+    <a href="#s6">S6 组/单种子重聚合</a>
+    <a href="#s7">S7 装饰记忆化</a>
+    <a href="#s8">S8 剧键映射</a>
+    <a href="#s9">S9 追剧重聚合</a>
+    <a href="#s10">S10 裁决收尾</a>
+  </div>
+  <a href="#s04"><span class="no">04</span>拍板点 P-01..P-05</a>
+  <a href="#s05"><span class="no">05</span>风险与对策 / 收益边界</a>
+  <a href="#s06"><span class="no">06</span>实施纪律(分步派工)</a>
+  <a href="#sapp"><span class="no">附</span>起草人自查记录</a>
+</nav>
+
+<header class="cover">
+  <div class="kicker">Plan · webui-delta-sync · 11 步 / 5 拍板点 / 12 设计规则</div>
+  <h1>WebUI rid 式增量同步 · 分步实施计划</h1>
+  <p class="lede">把 <code>/api/state</code> 缺的「变化时回增量」半套补上:<strong>qB 启发的窗口式自研协议 —— deque 时间线只存键、值回放时从当前已发布视图现取</strong>(不照抄 qB 的单 accepted 点 + 值驻留缓冲, 见 R1/R3)。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+    <div class="item"><div class="k">类型</div><div class="v">plan</div></div>
+    <div class="item"><div class="k">专题</div><div class="v">webui-delta-sync</div></div>
+    <div class="item"><div class="k">Added / Updated</div><div class="v">26-10-07-0414 / 26-10-07-0430</div></div>
+    <div class="item"><div class="k">基树</div><div class="v">f4430f32</div></div>
+  </div>
+  <p class="refs-line">关联链 (doc-refs):
+    <a href="../reports/26-10-07-0204-report-webui-delta-sync-feasibility.html"><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code></a> ·
+    <a href="../reports/26-10-07-0054-report-webui-perf-issues-recheck.html"><code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code></a> ·
+    <a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html"><code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code></a> ·
+    <a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html"><code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code></a> ·
+    <a href="../tasks/26-10-07-webui-delta-sync-feasibility.md"><code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></a>
+  </p>
+</header>
+
+<section id="s00">
+  <h2><span class="no">00</span>元信息与锚点口径</h2>
+
+  <h3>doc-* meta</h3>
+  <table>
+    <tr><th>meta</th><th>值</th></tr>
+    <tr><td><code>doc-type</code></td><td><code>plan</code></td></tr>
+    <tr><td><code>doc-topic</code></td><td><code>webui-delta-sync</code></td></tr>
+    <tr><td><code>doc-status</code></td><td><code>Open</code>(待拍板)</td></tr>
+    <tr><td><code>doc-added</code> / <code>doc-updated</code></td><td>Added 26-10-07-0414(渲染当日 stamp) / Updated 26-10-07-0430(认领链收口: web-runtime.md 移出 doc-refs, 改由正文提及)</td></tr>
+    <tr><td><code>doc-refs</code></td><td><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code>,<code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code>,<code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code>,<code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code>,<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></td></tr>
+  </table>
+
+  <h3>基树与行号锚口径</h3>
+  <ul>
+    <li>基树: <strong>f4430f32</strong>(02 笔记 <code>02-report-codebase-map.md</code> 在该 HEAD 逐条核实的基线; 渲染当日可重跑 <code>git rev-parse --short HEAD</code> 复核, 只记录、不重锚)。</li>
+    <li>本计划所有 <code>文件:行号</code> 锚默认基于 f4430f32, §03 各步不再逐处重复标注。</li>
+    <li>已知漂移唯一一处: 报告与 web-runtime.md 写「webui/module.py:60-63 显式 mark_dirty」, 实际为 <strong>module.py:56-57</strong>(apply() :52 起, mark_dirty 调用在 :57)。本计划一律用 56-57。</li>
+    <li>标注「<strong>起草人补核</strong>」的锚是起草人在同基树现场核实、02 笔记未含的, 全文共 4 处(客户端排序点位, 见 S4)。</li>
+    <li>执行期若 HEAD 已前进: 每步开工先按 02 笔记「附: 行号核对备注」同款流程重核该步涉及的锚, 漂移记入当步提交说明, 不回头改 02 笔记。</li>
+  </ul>
+
+  <h3>拍板点索引</h3>
+  <p>P-01 协议形状 · P-02 组行成员粒度 · P-03 门控去留 · P-04 范围与复杂度税 · P-05 开关 —— 详见 <a href="#s04">§04</a>, 每个都有推荐案与默认路径(不拍板时按推荐走)。</p>
+</section>
+
+<section id="s01">
+  <h2><span class="no">01</span>一句话背景与非目标</h2>
+  <p><strong>背景</strong>(报告 §00/§04, 源报告 <a href="../reports/26-10-07-0204-report-webui-delta-sync-feasibility.html"><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code></a>): <code>/api/state</code> 已实现 qB rid 语义的「跳过」半套(版本一致零回传, <code>runtime.py:828</code>), 摄入侧 <code>store.apply_sync</code>(<code>store.py:112-158</code>)今天就在跑同款协议的完整客户端, 每 1.5s 一轮的逐种子变化字段集(<code>delta_fields</code>)已算出、只是在视图层门口被塌缩成布尔。本计划把缺的「变化时回增量」半套补上: <strong>qB 启发的窗口式自研协议 —— deque 时间线只存键、值回放时从当前已发布视图现取</strong>(不照抄 qB 的单 accepted 点 + 值驻留缓冲, 见 R1/R3)。主要工程量与风险集中在服务端增量聚合正确性(恰是 issue 2 根因栏挂着的「dirty 集合 × 剧键派生」待查)。</p>
+  <p><strong>非目标</strong>(报告「收益不覆盖的面」+ 02 笔记盘点明确不做的):</p>
+  <ol>
+    <li>不改善 qB → auto-qb 摄入链(那条链已是增量, store.apply_sync)。</li>
+    <li>不动 <code>/api/torrents/{hash}</code> 详情、流量图、错误历史等端点。</li>
+    <li>不减少每轮请求数(SSE ver 每版必推, 轮数不变; 降的是每轮成本)。</li>
+    <li>不取消 issue 1 的「每版必须建一次」下界(复验报告 §04③), 增量是对该下界<strong>降价</strong>, 不是取消。</li>
+    <li>静态做种库不是收益目标(rid 跳过已覆盖, 增量收益趋零; 收益主体是活跃传输库)。</li>
+    <li>组行改 hash 引用式(响应体二次演进)单独立项, 一期不做(P-02, 见 §04)。</li>
+    <li>pending_ver 门控一期不动(P-03), S10 再裁决。</li>
+    <li><code>hr_view_fields</code> 取值路径不动(02 笔记 2.5.3: 不构成新缺口; 仅镜子测试覆盖 HR revision 波次的 full 降级路径)。</li>
+    <li>不做字段级 patch 协议(设计规则 R8; 除非 P-02 二期演进再评估)。</li>
+    <li>不照搬 qB 的「全量值快照 + 待确认值缓冲」内存模型与等值 ack 清缓冲协议(自创窗口只存键; 窗口滑出清理由 deque maxlen 兜底, 见 R1/R3)。</li>
+  </ol>
+</section>
+
+<section id="s02">
+  <h2><span class="no">02</span>全局设计规则(从 01 笔记避坑清单逐条提炼)</h2>
+  <p>每条一句话, 全计划(服务端/前端/测试/文档)不得违背:</p>
+  <ul>
+    <li><strong>R1</strong> 时间线只存键不存值, 值回放时从当前已发布视图现取, 内存 O(代数×脏行键) 与库大小无关 —— 这是「qB 启发的自创改进: deque 窗口只存键」, 全计划文档<strong>禁写「qB 同款」</strong>(01 笔记五.3, 最重要的一处修订)。</li>
+    <li><strong>R2</strong> 时间线全局一份、每客户端只持自己的 rid; 禁止 per-session 状态 —— 窗口式天然容纳多标签页/多客户端, 免 qB 单 accepted 点互踩退化全量(避坑#2)。</li>
+    <li><strong>R3</strong> ver 沿用 <code>group_view_ver</code> 单调代次(<code>runtime.py:789</code>, 重启用时间播种 <code>runtime.py:137-138</code> 不回落); 窗口命中判据 =「客户端 rid ≥ 时间线最旧代次且窗口内无 full 代」; <strong>不模仿</strong> qB 的 %1000000 回绕与等值 ack, rid 比较用数值区间不用等值(避坑#3); 文档表述统一「本仓 ver 单调; qB 为循环」, 不写「单调递增是 qB 语义」。</li>
+    <li><strong>R4</strong> 时间线每代键集<strong>并集合并、键级幂等</strong>, 禁止整代/整行覆盖(避坑#1 #24845→#24875 的键级等价物); 门控跳过的轮次其增量键集累积进下一代, 不丢。</li>
+    <li><strong>R5</strong> 时间线每代 upsert/removed 先双向交叉抵消再追加(<code>upsert -= removed; removed -= upsert</code>); 跨代归约时 removed 让位于后续 upsert(避坑#7)。</li>
+    <li><strong>R6</strong> 全量分支与增量<strong>共用同一合并函数</strong>: 全量=清空重放(语义等价于对每行 upsert + 清空 removed), 选中/展开/多选/乐观值保留路径复用现有机制(避坑#5 + qB client.js「clear 后重放再恢复选中」模式)。</li>
+    <li><strong>R7</strong> 前端出错路径(请求失败/超时)<strong>禁止手动清四数组与 lastRid</strong>, 只退避; 重置责任在服务端(full 标志 + ver 播种)(避坑#5)。</li>
+    <li><strong>R8</strong> 增量一律<strong>行级 upsert 整行替换, 不做字段级 patch</strong>; 行内字段集由 <code>_member_view</code>/<code>_seed_view</code>(<code>views.py:353</code>/:500)固定结构产出, 无「字段消失」形态(避坑#6)。</li>
+    <li><strong>R9</strong> 抖动字段防线: 凡新增进视图的派生时间/速度类字段必须先过 <code>_VIEW_QUANTUM</code> 量化口径(<code>torrents/view.py:83-88</code>, <code>view_field_value</code> :90-100 是重建判定与展示共用的单点取整入口)或加滞后阈值, 否则 dirty 集永不清空、增量退化全量(避坑#4; dlspeed/upspeed 不量化属活跃库真脏, 是预期)。</li>
+    <li><strong>R10</strong> full 响应不含 delta/removed 键; 触发面 = 窗口滑出 / rid&gt;ver / 窗口内任一代标 full / 进程重启 —— 与 qB 的 lastSentID/acceptedID 等值判定式<strong>不同</strong>, 维护者勿拿 qB 源码硬对(出入2/出入4)。</li>
+    <li><strong>R11</strong> 无法归约为行级脏的源(HR revision、配置热重载、shows_pending 归位、跨组交叉标记、行键不可推导)一律<strong>本代标 full</strong>, 保守正确优先(降级阶梯; 避坑#7)。</li>
+    <li><strong>R12</strong> 时间线写入只在主循环线程(flush_views/_publish_locked 持 view_lock 临界区), Web 线程只在 ensure_state 持<strong>同一把</strong> view_lock 读 —— 与 group_view 读写模式同构, 不引入新锁(黄金法则 5; qB 同为主线程事件循环串行, 01 笔记 1.7)。</li>
+  </ul>
+  <p><strong>镜子测试总纲</strong>: 01 笔记要求的「连续两拍未确认」等用例全部落在 S5 的 M1..M9 清单(M1 即避坑#1 的回归用例), S6/S9 扩 M10..M12; 镜子不变量 =「从 rid0 逐轮吃 delta 合并」≡「每轮全量快照」。</p>
+</section>
+
+<section id="s03">
+  <h2><span class="no">03</span>分步实施 S0..S10</h2>
+
+  <h3>总览与里程碑</h3>
+  <table>
+    <tr><th>步</th><th>一句话</th><th>依赖</th><th>体量</th></tr>
+    <tr><td><a href="#s0">S0</a></td><td>开工重立 test.full 基线</td><td>—</td><td>S</td></tr>
+    <tr><td><a href="#s1">S1</a></td><td>store 侧 added/removed 持久化(缺口①)</td><td>S0</td><td>S</td></tr>
+    <tr><td><a href="#s2">S2</a></td><td>服务端脏行推导 + 增量时间线 + 降级源接线</td><td>S1</td><td>M</td></tr>
+    <tr><td><a href="#s3">S3</a></td><td>端点 delta 归约分支 + 协议字段(delta=1 协商)</td><td>S2</td><td>M</td></tr>
+    <tr><td><a href="#s4">S4</a></td><td>前端 delta 合并(<strong>全量切换步</strong>)</td><td>S3</td><td>M</td></tr>
+    <tr><td><a href="#s5">S5</a></td><td>镜子测试主体(M1..M9 + fuzz)</td><td>S3,S4</td><td>M-L</td></tr>
+    <tr><td><a href="#s6">S6</a></td><td>组/单种子增量重聚合(引用稳定)</td><td>S2,S5</td><td>M</td></tr>
+    <tr><td><a href="#s7">S7</a></td><td>装饰记忆化(WeakMap)</td><td>S6</td><td>S</td></tr>
+    <tr><td><a href="#s8">S8</a></td><td>剧键等价映射基础件(缺口②)</td><td>S2</td><td>S-M</td></tr>
+    <tr><td><a href="#s9">S9</a></td><td>追剧增量重聚合 + show 视图解锁</td><td>S6,S8,S5</td><td>L</td></tr>
+    <tr><td><a href="#s10">S10</a></td><td>门控裁决 + 口径回写 + e2e 复测归档 + 收尾</td><td>S1-S9</td><td>M</td></tr>
+  </table>
+  <p>里程碑: <strong>A 地基与协议</strong>(S0-S3) → <strong>B 前端与守阵</strong>(S4-S5) → <strong>C 增量重聚合</strong>(S6-S9) → <strong>D 收尾</strong>(S10)。</p>
+  <p>排布说明: 「数据结构与服务端增量推导(S1-S2) → 端点门控(S3) → 前端合并(S4) → 镜子测试(S5) → 重聚合(S6-S9) → 真机验证/收尾(S10)」。镜子测试主体刻意放在重聚合<strong>之前</strong>, 让 S6/S9 带守阵动刀(S6/S9 各自重跑镜子); 真机验证与收尾在最后, 与总排布一致。每步独立提交、独立回滚; 每步完成后 <code>commands run test.quick</code>, 关键步(S0/S4/S9/S10)跑 <code>commands run test.full</code> 并记基线。</p>
+  <p>报告路线 §08 的 S1→S4 与本计划步的对应: 报告 S1 ≈ 本计划 S1-S5, 报告 S2 ≈ S6+S7, 报告 S3 ≈ S8+S9, 报告 S4 ≈ S10。</p>
+
+  <hr class="divider">
+
+  <h3 id="s0"><span class="no">S0</span>开工重立 test.full 基线</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>固化实施前实测基线, 后续每段收益对比与回归判据都有 before 数字。</td></tr>
+    <tr><th>前置依赖</th><td>无(会话开工先 <code>commands run my-commit-flow.sync</code>, 结果行「已同步 &lt;hash&gt;」贴进回复)。</td></tr>
+    <tr><th>改动文件与插入点</th><td>无代码改动; 产出基线切片 <code>memory-bank/testing/baselines/</code>(体例按 <code>memory-bank/testing/baseline.md</code> 口径段)。</td></tr>
+    <tr><th>做法要点</th><td><code>commands run test.full</code> 全量跑一遍并新建基线切片记实测数字; <code>commands run kb.baseline</code> 确认入册; 顺带记录报告在账的量级口径作为收益对比 before —— 3000 种子全量回包 6.3 MiB / json.dumps 26.4ms / 一轮「序列化+网络+解析」≈63ms(<code>runtime.py:793-794</code> 注释), 前端 refresh 单轮 143/309/396~501ms(1000/3000/5000 种子, <code>polling.js:112-115</code> 注释)。若与最近 3 条基线(<code>commands run kb.baseline</code>)有异常漂移, 先停下排查、不动代码。</td></tr>
+    <tr><th>验收 DoD</th><td>基线切片入册; 数字与在账口径无异常漂移。</td></tr>
+    <tr><th>测试要求</th><td>无新增(本步就是测试)。</td></tr>
+    <tr><th>回滚方式</th><td>无(纯测试 + 文档切片)。</td></tr>
+    <tr><th>体量估计</th><td>S。</td></tr>
+  </table>
+
+  <h3 id="s1"><span class="no">S1</span>store 侧 added/removed 持久化(02 笔记 2.5.1 缺口落位)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>让 flush_views 能从 store 拿到「本轮新增/删除种子清单」—— 报告 S-1 脏行推导的数据源补全(报告原话「从 store 排空 delta_fields + added/removed」, 但 store 现状 added/removed 只是 <code>_apply</code> 的返回值 <code>store.py:202-203</code>/:264, 不持久化)。</td></tr>
+    <tr><th>前置依赖</th><td>S0。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>src/auto_qb/torrents/store.py</code> —— <code>_apply</code>(:185-264)的属性赋回区(:259-261 delta_fields/state_changed/field_changed 同款先例); 零变化早退段(:194-199); <code>reset_sync</code>(:172-180)清空区。<code>src/auto_qb/core/qbmanager.py:778</code> 的解构消费<strong>保持不动</strong>。</td></tr>
+    <tr><th>做法要点</th><td>选型, <strong>起草人建议</strong>: <strong>属性快照式</strong>, 不选「qbmanager 转投 WebUIRuntime」——
+      <ul>
+        <li><code>_apply</code> 在赋回 delta_fields 的同一处, 把局部 added(:202-203)与 removed 清单赋回为 <code>self.last_added</code> / <code>self.last_removed</code>(命名对齐 delta_fields 先例; 消费方 flush_views 只读不排空, 下轮 <code>_apply</code> 直接覆盖, 天然「最近一轮」语义)。</li>
+        <li><strong>赋值点必须放在零变化早退(:194-199)之前的公共路径</strong>, 保证零变化轮属性为空、不留上一轮残值(否则镜子测试 M4 的抵消前提被污染)。</li>
+        <li><code>reset_sync</code>(:172-180)同步清空两个新属性(重连/热重载不残留旧清单, 对齐「重置责任在服务端」先例)。</li>
+        <li>取舍理由: 转投方案需要 qbmanager 持 web 引用跨对象搬运, 加一条隐式耦合; 属性式改动集中 store 单文件, 单一写线程语义不变(主循环线程写, flush_views 同在主循环线程读, 黄金法则 5 无新压力)。</li>
+      </ul></td></tr>
+    <tr><th>验收 DoD</th><td>每轮 <code>_apply</code> 后 <code>last_added</code>/<code>last_removed</code> 与返回值一致; 零变化轮为空; reset_sync 后为空; qbmanager.py:778/:789(search_index/事件分派)下游零感知。</td></tr>
+    <tr><th>测试要求</th><td><code>tests/test_sync.py</code> 增 4 用例(FakeClient/FakeTorrent 增量序列, 范式先例 :62 导入、首轮全量 :220): ①首轮全量后 last_added=全体; ②增量轮属性与返回值一致; ③零变化轮属性为空; ④reset_sync 后为空。文件头 docstring「## 测试计划」清单同步(AGENTS.md 硬约束)。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交(纯内部属性, 无协议/前端变化面)。</td></tr>
+    <tr><th>体量估计</th><td>S。</td></tr>
+  </table>
+
+  <h3 id="s2"><span class="no">S2</span>服务端脏行推导 + 增量时间线 + 降级源接线(报告 S-1/S-2/S-3)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>报告 S-1(脏行推导)+ S-2(增量时间线)+ S-3(full 降级标记)三件落地, 收在 WebUIRuntime 单点; 本步不接端点、不动前端, 纯服务端内部状态。show 视图的行键推导本步不做(S8/S9)。</td></tr>
+    <tr><th>前置依赖</th><td>S1。</td></tr>
+    <tr><th>改动文件与插入点</th><td>
+      <ul>
+        <li><code>src/auto_qb/webui/runtime.py</code> <code>flush_views</code>(:488-508): 在消费 <code>store.consume_view_changed()</code>(:496)的同一拍排空 S1 属性与 <code>store.delta_fields</code>(:259), 做 hash → 行键映射。</li>
+        <li><code>runtime.py</code> WebUIRuntime 新字段(:148-155 邻域, 与 pending_ver/search_index 并列): <code>_delta_timeline</code>(deque)与 <code>_delta_pending</code>(跨拍累积器); 常量 <code>_DELTA_TIMELINE_MAX = 40</code> 放 :77 邻域(err_ring 常量 :77 同款; 40 代 ≈ 60s @1.5s tick)。</li>
+        <li><code>runtime.py</code> <code>_publish_locked</code>(:775-799): 在 <code>group_view_ver += 1</code>(:789)的同一 view_lock 临界区内把 <code>_delta_pending</code> 折叠成本代条目追加进时间线并清空累积器。</li>
+        <li>降级源接线: HR revision(<code>runtime.py:500-502</code>)、配置热重载(<code>module.py:56-57</code>)、shows_pending 归位(<code>runtime.py:842-844</code>)、跨组交叉标记(<code>views.py:489-493</code>)、进程重启(<code>runtime.py:137-138</code>, ver 播种使旧 rid 必然窗外, 无需显式标记)。</li>
+        <li>数据源与映射: flat/singles 行键 = hash 直用; 组行键 = <code>store.member_to_key</code>(<code>store.py:89</code>/:208); 剧行键 = S8/S9 再接。</li>
+      </ul></td></tr>
+    <tr><th>做法要点</th><td>
+      <ul>
+        <li>条目数据结构(<strong>起草人建议</strong>: 轻量 dict, 与 runtime 现风格一致): <code>{"ver": int, "full": bool, "upsert": {"torrent": set, "group": set, "show": set}, "removed": {"torrent": set, "group": set, "show": set}}</code>; S2 期 show 桶恒空。</li>
+        <li>推导时序(R4/R12): flush_views <strong>每拍</strong>(无论门控是否放行)先排空 store 增量 → 映射行键 → 并入 <code>_delta_pending</code>; 门控放行 → <code>_publish_locked</code> 落代时一次性并入时间线。这样「上一版没被取走不重建」(:506-507)原样保留, 增量下门控的成本只是一次键集追加(P-03 的前提)。</li>
+        <li>组行 removed 键推导: 排空顺序<strong>先查 member_to_key 后消费 removed 清单</strong>; hash 查不到键 → 该组行键不可归约 → 本代 full(R11 保守)。</li>
+        <li>归组变化: <code>views.py:489-493</code> 的交叉标记路径本就显式置脏, 接成「本代 full」旗标 —— 不试图归约旧组键(R11)。</li>
+        <li>降级源的三处具体接线(<strong>起草人建议</strong>): ① <code>mark_dirty()</code>(<code>runtime.py:298</code>)加可选参数 <code>full=True</code>, WebUIRuntime 记 <code>_pending_full_reason</code> 集合, <code>module.py:57</code> 的调用处传真; ② HR(:500-502)与 shows_pending(:842-844)在 flush_views 判定点直接置 reason; ③ 交叉标记在 <code>_build_group_view</code> 构建期发现, 经 WebUIRuntime 属性旗标回传 <code>_publish_locked</code> 消费。</li>
+        <li>交叉抵消(R5): 每代落代前分视图 <code>upsert -= removed; removed -= upsert</code>。</li>
+        <li>full 代判定: 本代任一降级源活跃 → 条目 <code>full=true</code> 且键集清空、<code>_delta_pending</code> 与 reason 旗标一并清空(full 响应覆盖到当前 ver, 累积键已无意义)。</li>
+      </ul></td></tr>
+    <tr><th>验收 DoD</th><td>每次发布恰追加一条目且 maxlen 截断; 交叉抵消成立; 门控跳拍键集不丢(R4); show 桶恒空; 五个降级源各自触发 full 代; 全程主循环线程写(R12, 无新锁)。</td></tr>
+    <tr><th>测试要求</th><td>新增 <code>tests/test_webui_delta.py</code>(<strong>起草人建议</strong>命名): 时间线落代/截断、抵消、门控累积、五个降级源矩阵、组行 removed 键不可推导转 full, 共 5 组用例; docstring「## 测试计划」清单同步。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交(纯服务端内部状态, 未接端点, 对外行为零变化)。</td></tr>
+    <tr><th>体量估计</th><td>M。</td></tr>
+  </table>
+
+  <h3 id="s3"><span class="no">S3</span>端点 delta 归约分支 + 协议字段(报告 S-3 续/S-4)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td><code>ensure_state</code> 增量归约 + 路由 delta 载荷组装 + 协议字段定型; 此后 group/torrent 视图具备增量<strong>供给</strong>能力(前端 S4 才消费; 未带协商参数的客户端恒收全量, 保证本步独立提交安全)。</td></tr>
+    <tr><th>前置依赖</th><td>S2。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>runtime.py</code> <code>ensure_state</code>(:811-840)—— :828 <code>updated = rid != ver</code> 的「零回传」快捷分支保留; :831-839 现全量路径保留为窗外/full 分支。<code>views.py</code> VIEW_ARRAYS(:95-107)只读引用(show 连带成员索引约束 :100-105 不碰)。<code>src/auto_qb/webui/server/routes/state.py:34-86</code> —— 载荷组装(:51-76)加 delta 段; JSONResponse 短路(:77-86)与 fail-fast 注释(:84-85)不动。</td></tr>
+    <tr><th>做法要点</th><td>
+      <ul>
+        <li>归约函数(<strong>起草人建议</strong>签名): <code>runtime._reduce_delta(rid: int, view: str) -&gt; dict</code>, 返回 <code>{"full": True}</code> 或 <code>{"rid": ver, "full": False, "delta": {...}, "removed": {...}}</code>。</li>
+        <li>判定顺序(R3/R10): 请求未带 <code>delta=1</code> 协商参数 → 恒全量(见下); rid 缺省/0 / rid&gt;ver / rid&lt;时间线最旧代次 / 窗口内任一代 full → 全量(现路径 :831-839); rid==ver → 仅回 rid(现「零回传」语义, :828); 否则归约 —— <code>upsert</code> = 窗口内各代该视图 upsert <strong>并集</strong>, <code>removed</code> = removed 并集 − 最终 upsert(R5 跨代版); 行内容现取自当前已发布视图(R1), upsert 行必须存在于当前视图, 不存在即防御性转 full。</li>
+        <li><strong>协议协商参数(起草人建议)</strong>: 请求带 <code>delta=1</code> 才允许归约, 否则恒全量。理由: 前端今天就在请求里带 rid(端点形态 <code>/api/state?rid=&amp;view=</code>, 02 笔记 2.2), 若 S3 单独发布就返回 delta 载荷, 未升级的前端会把 payload 当全量吃 → 四数组 undefined 白屏; 协商参数让 S3 与 S4 各自独立提交独立回滚(见各步回滚节), 也天然兼容旧缓存页面。这是「同端点 + 请求参数声明能力」的实现细节, 属 P-01 推荐案的一部分(报告未提, 由「每步独立提交」约束推导)。</li>
+        <li>启用矩阵: <code>view ∈ {group, torrent}</code> 启用归约; <code>view=show</code> 一律 full(S9 解锁)。</li>
+        <li>协议字段(<strong>起草人建议</strong>键名, 对齐 qB 命名法): 全量分支 = 现有四数组原样 + <code>rid</code> + <code>full: true</code>, <strong>不含</strong> delta/removed(R10); 增量分支 = <code>rid</code> + <code>full: false</code> + <code>delta: {torrents:[行...], groups:[行...], singles:[行...], shows:[]}</code> + <code>removed: {torrents:[hash...], groups:[key...], singles:[hash...], shows:[]}</code>(delta/removed 恒在、可为空); <code>status</code> 恒回传段(:51-76)口径不变, traffic/totals 等不做增量。</li>
+        <li>JSON 原生约束: 行内容直接取自视图 dict(views.py 产出即 JSON 原生), state.py:84-85 fail-fast 不破。</li>
+      </ul></td></tr>
+    <tr><th>验收 DoD</th><td>判定顺序全分支单测(未带 delta=1 / 缺省 / 0 / ==ver / 窗外 / &gt;ver / 窗内含 full 代 / 正常归约); 全量响应不含 delta/removed、增量响应不含全量数组; 未带协商参数的响应与今天行为等价(独立提交安全); 归约载荷可被 json.dumps 无错序列化(全字段遍历断言)。</td></tr>
+    <tr><th>测试要求</th><td><code>tests/test_webui_delta.py</code> 扩归约判定矩阵 + JSON 原生守阵用例。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交; 应急语义回退(不 revert): <code>_reduce_delta</code> 首行恒返 <code>{"full": True}</code> 单行改动即回今天行为(full 语义常驻)。</td></tr>
+    <tr><th>体量估计</th><td>M。</td></tr>
+  </table>
+
+  <h3 id="s4"><span class="no">S4</span>前端 delta 合并(报告 F-1; 全量切换步)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>前端消费 delta, 全量/增量共用合并入口(R6); 本步完成后增量成为默认路径(P-05 默认开的前提落地)。</td></tr>
+    <tr><th>前置依赖</th><td>S3。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>src/auto_qb/webui/static/shared/polling.js</code> <code>refresh()</code>(:137-196)—— 在 <code>state.updated</code> 分支(:154)内按 <code>payload.full</code> 分叉; delta 分支在整表替换(:161-164)之前接管; lastRid 更新(:165)不变; <code>state.js</code> 四数组(:41-44)/lastRid(:153)。零改动区: 多选交集修正(<code>polling.js:169-176</code>)/乐观值(<code>commands.js:339</code> reapplyPending、:366 _snapshotTruth、时序约束 :166)/memberByHash(<code>decorate.js:148-154</code>)/展开态回验(<code>view.js:101-133</code>)/切视图(<code>view.js:149</code> lastRid 置空 → 强制全量)/模板(<code>tpl/groups.html:33</code> keyed v-for)。</td></tr>
+    <tr><th>做法要点</th><td>
+      <ul>
+        <li>单一合并入口(<strong>起草人建议</strong>): polling.js 内新增 <code>applyStateRows(payload)</code> —— delta 分支对四数组按行键做「upsert 替换/追加 + removed 剔除」: torrents/singles 行键=hash, groups/shows 行键=key; 未脏行对象引用原样保留(:159-160 既有纪律); 数组以新实例赋回(Vue 数据流不变)。full 分支 = 现整表替换路径(:161-164)原样 = 清空重放(R6); 两分支共用行级 apply 子函数。</li>
+        <li>顺序安全(<strong>起草人补核</strong>, f4430f32): 三视图渲染入口各自客户端排序 —— sort.js <code>sortedGroups</code>(:70)、filters.js <code>filteredTorrents</code>(:227 内排序)、shows.js <code>decoratedShows</code>(:142 内排序), 服务端数组顺序不承载语义, delta 追加行<strong>不需保序</strong>; 明细表 <code>sortedMembers</code>(<code>sort.js:50</code>)空键=后端原序, 但 members 随整行 upsert 原样携带(R8), 不受影响。镜子测试因此按「行键集合 + 行内容」比较, 不比数组顺序。</li>
+        <li>保留机制复用(R6): 两个分支之后都走既有 polling.js:169-176(多选交集)/view.js:101-133(展开态)/commands.js:339(乐观值重贴)。</li>
+        <li>出错路径(:185-194 失败退避)不动(R7); lastRid 始终等于最后收到的 rid。</li>
+      </ul></td></tr>
+    <tr><th>验收 DoD</th><td>增量轮后四数组内容与同操作全量轮一致; 未脏行引用恒等(<code>===</code> 断言); <code>full: true</code> 时行为与今天逐字节等价; 出错不清状态; 切视图天然走 full。</td></tr>
+    <tr><th>测试要求</th><td>e2e 冒烟(<code>e2e/perf.spec.mjs</code> + <code>scripts/ui_harness.py</code> 场景)覆盖「增量轮渲染正确」; 内容等价由 S5 镜子兜底。<strong>本步是全量切换步: <code>commands run test.full</code> + 新建基线切片。</strong></td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交 —— 前端不再带 <code>delta=1</code>, 服务端按 S3 协商恒回全量, 自动回到 S3 态; 再 revert S3 回基线。应急语义回退同 S3 单行方案。</td></tr>
+    <tr><th>体量估计</th><td>M。</td></tr>
+  </table>
+
+  <h3 id="s5"><span class="no">S5</span>镜子测试主体(报告风险 1 的对策落地)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>镜子不变量成型: 任意操作序列下「从 rid0 逐轮吃 delta 合并」≡「每轮全量快照」; 01 笔记避坑清单要求的全部用例入册; 成为 S6/S9 的守阵。</td></tr>
+    <tr><th>前置依赖</th><td>S3(服务端镜子只需 S2/S3)、S4(e2e 层前端镜子)。</td></tr>
+    <tr><th>改动文件与插入点</th><td>新增 <code>tests/test_webui_delta_mirror.py</code>(<strong>起草人建议</strong>命名与文件拆分); 范式镜像 <code>tests/test_sync.py</code>(FakeClient/FakeTorrent :62 导入, 首轮全量用例 :220); e2e 冒烟扩展挂 <code>e2e/perf.spec.mjs</code> + <code>scripts/ui_harness.py</code>(前端合并的镜子放 e2e 层, 报告口径)。</td></tr>
+    <tr><th>做法要点</th><td>双通道断言器 —— 同一操作序列喂两条消费路径: A = 每轮 <code>ensure_state(rid=0)</code> 拿全量快照; B = 从 rid0 起逐轮按 S4 语义合并(服务端镜子用 Python 复刻行级合并, 前端镜子走真实合并); 每轮断言 B ≡ A(按行键集合 + 行内容, 不比数组顺序, 见 S4 顺序安全事实)。用例清单:
+      <ul>
+        <li><strong>M1</strong> 同一种子连续两拍变化、中间响应未被确认(避坑#1, #24845 形态的键级回归): 两代都进窗口, B 合并后 ≡ A。</li>
+        <li><strong>M2</strong> 两个不同 rid 的客户端各自拿增量(避坑#2): rid1 与 rid5 各自归约, 各自合并结果都 ≡ A。</li>
+        <li><strong>M3</strong> 量化边界值不产生增量(避坑#4): last_activity/eta 类字段在 <code>_VIEW_QUANTUM</code>(<code>torrents/view.py:83-88</code>)边界内跳动 → 不产生新代或键集为空。</li>
+        <li><strong>M4</strong> 同一 hash 同拍一增一删 + 待报删除与增量 removed 重叠(避坑#7; <code>store.py:192</code> <code>_pending_removed</code>、:243-247 对齐时序): 抵消后响应不含该 hash 的 upsert。</li>
+        <li><strong>M5</strong> HR revision 波次 → full(02 笔记 2.5.3): 全量分支且响应无 removed 键(R10)。</li>
+        <li><strong>M6</strong> 重启 ver 播种(<code>runtime.py:137-138</code>): 旧 rid 窗外 → full。</li>
+        <li><strong>M7</strong> 窗口滑出 rid&lt;最旧代次 → full; rid&gt;ver → full。</li>
+        <li><strong>M8</strong> show 视图请求恒 full(S9 前的启用矩阵)。</li>
+        <li><strong>M9</strong> 门控跳拍累积(R4): 中间轮未被消费, 键集并入下一代不丢。</li>
+        <li><strong>fuzz</strong>: 固定种子的随机操作序列 N≥200 轮, 每轮断言 B ≡ A。</li>
+      </ul></td></tr>
+    <tr><th>验收 DoD</th><td>M1..M9 + fuzz 全绿; 测试文件 docstring「## 测试计划」清单同步; 本组用例在 S6/S9 改动时必须保持全绿(守阵生效的判据)。</td></tr>
+    <tr><th>测试要求</th><td>本步即测试; 跑 <code>commands run test.quick</code> 确认无回归。</td></tr>
+    <tr><th>回滚方式</th><td>纯测试提交, revert 即可。</td></tr>
+    <tr><th>体量估计</th><td>M-L。</td></tr>
+  </table>
+
+  <h3 id="s6"><span class="no">S6</span>组/单种子增量重聚合(报告路线 S2)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>服务端重建降 O(脏行): 按脏组键局部重跑 <code>_build_group_view</code> 的单组循环, 未脏行对象引用原样保留 —— 前端 S7 引用稳定的前提。</td></tr>
+    <tr><th>前置依赖</th><td>S2(时间线脏行键)、S5(镜子守阵)。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>src/auto_qb/webui/views.py</code> —— 把组视图全量循环拆出「单组可调用」(函数名以现码为准; <strong>02 笔记未给 <code>_build_group_view</code> 行号锚, 开工重核</strong>), 单行构建对齐 <code>_member_view</code>(:353)/<code>_seed_view</code>(:500)既有口径; <code>runtime.py</code> <code>_publish_locked</code>(:775-799)分叉: 时间线该视图本代无脏行且无降级源 → 局部重聚合, 否则走现全量路径。</td></tr>
+    <tr><th>做法要点</th><td>局部重聚合仅对本代 upsert 的行键重跑构建, 新 dict 只为脏行新建, 未脏行<strong>对象引用原样保留</strong>(同一 dict); 「四视图同轮发布」硬约束(<code>runtime.py</code> 模块 docstring :21-30)不破 —— 数组整体仍一次性替换, 行对象复用; 组行内嵌 members 数组随组行整行走(P-02 一期口径, <code>views.py:494-495</code>); singles/flat 脏行按 hash 逐行重建(便宜)。</td></tr>
+    <tr><th>验收 DoD</th><td>未脏行 <code>id()</code> 引用稳定断言(单测); S5 镜子全绿; 降级源触发时正确回退全量路径; 引用稳定只对未脏行承诺, 脏行必然新对象(前端 WeakMap 语义依赖这一点)。</td></tr>
+    <tr><th>测试要求</th><td>引用稳定用例 + S5 镜子全量重跑; <code>commands run test.quick</code>。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交; 应急回退 = <code>_publish_locked</code> 分叉判定恒走全量(单行)。</td></tr>
+    <tr><th>体量估计</th><td>M。</td></tr>
+  </table>
+
+  <h3 id="s7"><span class="no">S7</span>装饰记忆化(报告 F-2)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td><code>decoratedGroups</code> 按行对象身份的 WeakMap 缓存, 重算面 = 脏行(前端渲染段收益兑现)。</td></tr>
+    <tr><th>前置依赖</th><td>S6(S1 期引用每版全换则缓存必失效 —— 报告 §05 明示, 故排在 S6 后)。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>src/auto_qb/webui/static/shared/decorate.js</code> <code>decoratedGroups</code>(:115-125)外加 WeakMap 层。</td></tr>
+    <tr><th>做法要点</th><td><code>WeakMap&lt;组行对象, 装饰结果&gt;</code>; 引用没变的行直接复用已装饰结果, 脏行(新对象)自然 miss 重算; 消费方 sort.js <code>sortedGroups</code>(:70)不感知; 注意 pitfalls/web-ui/vue-reactivity.md 的 computed 静默白屏坑 —— 记忆化不得改变返回结构形状(键集/字段逐一不变)。</td></tr>
+    <tr><th>验收 DoD</th><td>重算面断言(计数器或 spy 验证未脏行未重算); 装饰结果与无记忆化逐字段一致。</td></tr>
+    <tr><th>测试要求</th><td>e2e 冒烟 + 手动核对; 若项目届时已有前端单测设施则补用例(以现状设施为准, 不为本步新建框架)。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交(纯性能优化, 不影响正确性语义)。</td></tr>
+    <tr><th>体量估计</th><td>S。</td></tr>
+  </table>
+
+  <h3 id="s8"><span class="no">S8</span>剧键等价映射基础件(02 笔记 2.5.2 缺口落位)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>剧侧「上一版键」记忆 —— 正确性边界 1(成员迁移: name/save_path 变化移动剧键)的实现前提, S9 的前置数据结构。</td></tr>
+    <tr><th>前置依赖</th><td>S2(推导临界区与时间线骨架; 时间线 show 桶在本步仍不启用)。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>runtime.py</code> 新字段(:148-155 邻域): <code>_show_member_keys: Dict[hash, 剧键]</code>; 更新点 = flush_views 推导同一 view_lock 临界区(:488-508)。</td></tr>
+    <tr><th>做法要点</th><td>(<strong>起草人建议</strong>: 收 WebUIRuntime 而非 store —— 剧键是 <code>parse_release(rec.name)</code> 派生的表现层概念(<code>views.py:667</code> 现算口径), store 只懂 hash/组; 读写模式与时间线同构, 单一写线程不变): 每拍对 S1 added 与 delta_fields 涉及的 hash 现算新剧键(复用 <code>_build_shows_view</code> 的 parse_release 同款口径; 具体函数入口以 tvshows 现码为准, <strong>02 笔记未给该入口行号锚, 开工重核</strong>); 旧映射存在且键不同 → 记「旧剧行 removed + 新剧行 upsert」候选(S9 消费); 映射随种子删除清理; name 未变则键稳定零成本; 重启后映射空, 首拍全量时回填(重启后客户端本就窗外 full, 无正确性风险)。</td></tr>
+    <tr><th>验收 DoD</th><td>映射与 store 状态同步(改名迁移/增删/重连 reset); 单测 4 用例: 改名迁移产出旧键 removed+新键 upsert 候选、删除清理、新增登记、重启回填。</td></tr>
+    <tr><th>测试要求</th><td><code>tests/test_webui_delta.py</code> 扩上述 4 用例。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交(纯内部状态, S9 前无行为面)。</td></tr>
+    <tr><th>体量估计</th><td>S-M。</td></tr>
+  </table>
+
+  <h3 id="s9"><span class="no">S9</span>追剧增量重聚合 + show 视图解锁(报告路线 S3; 与 issue 2 认领并轨)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>issue 2 最大单点 <code>_build_shows_view</code> 全库 parse_release 落地为按脏剧键局部重算; show 视图 delta 解锁(报告 §09: 与 issue 2 认领并轨, 一份论证喂两处)。</td></tr>
+    <tr><th>前置依赖</th><td>S6(单组重聚合基建范式)、S8(剧键映射)、S5(镜子守阵)。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>views.py</code> <code>_build_shows_view</code>(:667 parse_release 现算点)拆「单剧可调用」—— 季级 gaps/covered 整季重算(:741-752)、剧名频次重扫(:705-708)、集行 state 按 <code>_SHOW_STATE_RANK</code> 归并(:725)、集行 members 数组整体(:734); <code>runtime.py</code> <code>_publish_locked</code>(:775-799)show 分支 + S3 启用矩阵翻开 show; 时间线 show 桶启用(S2 预留)。</td></tr>
+    <tr><th>做法要点</th><td>脏剧键集 = S8 映射推得(成员迁移含旧键 removed); 单剧重算覆盖报告正确性边界 1-4: ①成员迁移(S8 映射, 从旧键行移除、进新键行); ②季级聚合 —— 任一集变化, 该 (剧,季) 的 covered 与 gaps 整季重算(:741-752, 集行本身便宜); ③剧名频次 —— 同剧任一成员标题变化重扫该剧成员标题(:705-708, 局部); ④状态归并 —— 集行 state 取 min 本就局部、无跨行传播(:725); 集行 members 是数组整体(:734, R8); HR 派生字段取值路径不动(非目标 8, hr_view_fields 纯读判定视图)。</td></tr>
+    <tr><th>验收 DoD</th><td>镜子扩 show 视图等价; 边界 1-4 各有用例(见下); show 视图 delta 响应过 JSON 原生守阵; issue 2 认领链回写(档案 <code>**Refs:**</code> 与 issue doc-refs 双向, doc-forms 认领链协议)。</td></tr>
+    <tr><th>测试要求</th><td>镜子新增 <strong>M10</strong> 成员迁移端到端(改名 → 旧剧行 removed + 新剧行 upsert, B≡A)、<strong>M11</strong> 季级 gaps 整季重算、<strong>M12</strong> 剧名频次局部重扫; <code>commands run test.full</code> + 新建基线切片(<strong>关键步</strong>)。</td></tr>
+    <tr><th>回滚方式</th><td>revert 单提交; 应急回退 = 启用矩阵 show 行翻回恒 full(单行)。</td></tr>
+    <tr><th>体量估计</th><td>L。</td></tr>
+  </table>
+
+  <h3 id="s10"><span class="no">S10</span>门控裁决 + 口径回写 + e2e 复测归档 + 收尾(报告路线 S4)</h3>
+  <table class="fields">
+    <tr><th>目标</th><td>报告路线 S4 全项: 门控语义裁决落地(P-03)+ 口径文档回写 + 复验报告指纹注释修正 + e2e 复测归档 + 收尾 DoD。</td></tr>
+    <tr><th>前置依赖</th><td>S1-S9。</td></tr>
+    <tr><th>改动文件与插入点</th><td><code>runtime.py</code> 注释与 <code>flush_views</code> docstring(:488-508 口径回写); <code>memory-bank/systemPatterns/web-runtime.md</code>(时间线单点机制文档回写; 其内容基线 2026-10-01@38604d07 行号已漂移, 本步顺带回写新锚); <code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code> §06 指纹注释修正(报告 §07 注明属便宜修正, 可提前做, 不强绑本步); <code>e2e/perf.spec.mjs</code> + <code>scripts/ui_harness.py</code> 复测归档。</td></tr>
+    <tr><th>做法要点</th><td>P-03 裁决落地(默认路径: pending_ver 保留 —— 增量下其成本已是一次键集追加, 保留无害且保守); e2e 复测对照 S0 基线数字分档实测(全量回包/dumps/一轮耗时/前端 refresh 各档); 收尾按 memory-bank skill 5 步 DoD(activeContext 迁出/立档阈值/代码事实回写/test.full 基线/pitfalls 新坑入档 + <code>commands run kb.index</code>)。</td></tr>
+    <tr><th>验收 DoD</th><td>e2e 数字入基线切片(before/after 对比); 文档口径与实现一致(四视图同轮发布/单一写线程表述不破); <code>commands run test.full</code> 全绿 + 基线切片; 收尾 DoD 5 步完成。</td></tr>
+    <tr><th>测试要求</th><td>全量复测(本步); e2e 复测数字归档。</td></tr>
+    <tr><th>回滚方式</th><td>文档/测试提交各自 revert。</td></tr>
+    <tr><th>体量估计</th><td>M。</td></tr>
+  </table>
+</section>
+
+<section id="s04">
+  <h2><span class="no">04</span>拍板点 P-01..P-05</h2>
+  <div class="note">
+    <p>报告遗留的「正确性边界清单」(§06 五项)处置: 边界 1-4(成员迁移/季级聚合/剧名频次/状态归并)已随报告论证给出方向, 并入 S8/S9 的做法要点与 DoD(M10-M12); 边界 5(HR 派生字段)已定案走 full 降级, 并入 S2 DoD 与镜子 M5。无未定案项需要新增拍板点。</p>
+  </div>
+
+  <h3 id="p1"><span class="no">P-01</span>协议形状(原报告 D1)</h3>
+  <table class="fields">
+    <tr><th>问题背景</th><td>delta 载荷怎么到前端 —— 改现有 <code>/api/state</code> 还是开新端点。</td></tr>
+    <tr><th>选项</th><td>A. 同端点 <code>/api/state</code> 加 delta/full 字段 + 请求参数 <code>delta=1</code> 声明能力(协商参数为<strong>起草人建议</strong>, 见 S3); B. 新端点 <code>/api/state/delta</code>。</td></tr>
+    <tr><th>推荐案与理由</th><td><span class="rec">A</span>。前端单请求轮询契约不变(status + 行数据一次回, 02 笔记 2.2), SSE 推 ver → 拉取链路零改动; B 要双请求切换、两响应拼合竞态、status 一致性两难, 老客户端零感知的卖点用「不带 delta=1 恒全量」同样拿到。</td></tr>
+    <tr><th>默认路径</th><td>不拍板按 A 走(S3/S4 实现即 A)。</td></tr>
+  </table>
+
+  <h3 id="p2"><span class="no">P-02</span>组行成员粒度(原报告 D2)</h3>
+  <table class="fields">
+    <tr><th>问题背景</th><td>组行内嵌完整 members 数组(<code>views.py:494-495</code>, 6.3 MiB 主体), 任意成员速度抖动脏整条组行 —— 组视图增量粒度天然是「组行」而非「成员」。</td></tr>
+    <tr><th>选项</th><td>A. 一期组行级增量(整行携带 members); B. hash 引用式(组行 members 只放 hash, 响应体二次演进)。</td></tr>
+    <tr><th>推荐案与理由</th><td><span class="rec">A</span>。B 波及筛选器计数(前端从 <code>groups[].members</code> 聚合)与列模型数据源, 是独立立项级改动(报告 §04 粒度事实), 不阻塞一期收益; 追剧视图已是 hash 引用式(<code>views.py:645-647</code>)不受此限。</td></tr>
+    <tr><th>默认路径</th><td>按 A; B 挂非目标 6(单独立项评估)。</td></tr>
+  </table>
+
+  <h3 id="p3"><span class="no">P-03</span>门控去留(原报告 D3)</h3>
+  <table class="fields">
+    <tr><th>问题背景</th><td>pending_ver(:148-150)发布未消费门控与增量的相互作用 —— 增量下其保护对象从「重建成本」缩水成「键集追加成本」。</td></tr>
+    <tr><th>选项</th><td>A. 一期不动, S10 裁决; B. 本期一并移除门控。</td></tr>
+    <tr><th>推荐案与理由</th><td><span class="rec">A</span>。行为保守(黄金法则 2); R4 的跨拍键集累积已让门控成本趋零, 移除只剩简化收益、没有正确性收益; 且移除会同时改变现有节拍行为, 混入本计划违反范围守恒(黄金法则 6)。</td></tr>
+    <tr><th>默认路径</th><td>保留 pending_ver 不动; S10 若实测确认纯冗余, 另立独立小步移除(届时单独拍板)。</td></tr>
+  </table>
+
+  <h3 id="p4"><span class="no">P-04</span>范围与复杂度税(原报告 D4)</h3>
+  <table class="fields">
+    <tr><th>问题背景</th><td>全仓多一条「键集时间线」状态是本方案最大隐性成本(收 WebUIRuntime 单点 + 文档进 web-runtime.md); 备选是先只做种子页最小可见收益。</td></tr>
+    <tr><th>选项</th><td>A. 全量推进 S0-S10(group/torrent 先行、show 视图 S9 解锁); B. 只做种子页(torrent 视图)最小步。</td></tr>
+    <tr><th>推荐案与理由</th><td><span class="rec">A</span>。时间线/协议/合并函数是全视图共用基建, 只做 torrent 视图省不下基建成本(省的只是 S6/S9 重聚合), 半套收益付全套复杂度; 三视图共用时间线让镜子测试一次成型。</td></tr>
+    <tr><th>默认路径</th><td>按 A; 若拍 B, 则 S6-S9 转入池 issue 缓做(S0-S5 不受影响, S7 因依赖 S6 一并缓做)。</td></tr>
+  </table>
+
+  <h3 id="p5"><span class="no">P-05</span>开关(原报告 D5)</h3>
+  <table class="fields">
+    <tr><th>问题背景</th><td>是否加配置键控制增量启用。</td></tr>
+    <tr><th>选项</th><td>A. 默认开、不加配置键(full 回退路径常驻); B. 加配置键。</td></tr>
+    <tr><th>推荐案与理由</th><td><span class="rec">A</span>。协议自带兼容协商(不带 <code>delta=1</code> 即全量), full 降级阶梯就是常驻回退, 应急回退另有单行方案(S3/S6/S9 回滚节); 加键必须进 <code>config.validate_config</code> + <code>config/schema.py</code>(黄金法则 4)并添守阵面(<code>tests/test_config_key_surface.py</code> / <code>test_config_schema.py</code>), 徒增表面积。</td></tr>
+    <tr><th>默认路径</th><td>不加键; 若拍 B: 键进 validate_config + schema.py, 两守阵测试同步, 并在 S3 增「配置关闭 → 恒全量」用例。</td></tr>
+  </table>
+</section>
+
+<section id="s05">
+  <h2><span class="no">05</span>风险与对策 / 收益边界</h2>
+
+  <h3>风险与对策(报告 §06 六条, 按 01/02 笔记修正)</h3>
+  <ol>
+    <li><strong>增量链路「拼不全/拼错行」陈旧视图缺陷</strong>(2026-09-18 四视图漏建事故同型) → 镜子测试兜底(S5: M1-M12 + fuzz; S6/S9 各自重跑); full 语义常驻回退(S3/S6/S9 各自单行应急回退)。</li>
+    <li><strong>时间线无界增长/内存</strong> → deque maxlen=40 + 只存键不存值(R1); 与 err_log_ring(<code>runtime.py:181</code>, maxlen=200)/EVENT_QUEUE_MAX(<code>runtime.py:65</code>, =200)/WEB_RESULT_MAX(:58, =64)同款卫生纪律。(修正: 不是 qB 语义搬运 —— qB 靠 ack 清<strong>值</strong>缓冲, 本方案是自创窗口, 窗口滑出靠 maxlen 兜底)</li>
+    <li><strong>多客户端/慢客户端语义</strong> → 窗口式全局一份时间线 + 每客户端独立 rid(R2), 天然免疫 qB 单 accepted 点的多标签页互踩退化全量(01 笔记避坑#2, 本计划应写成卖点); 慢客户端窗外一律 full, 无累积风险。(修正: 报告「qB 已验证的同构语义」表述有出入, 应为「qB 启发的自创改进」, 01 笔记五.3)</li>
+    <li><strong>与门控(pending_ver)相互作用</strong> → 一期保留门控不动(P-03); R4 键集累积使门控跳拍不丢增量, 门控成本降为一次键集追加。</li>
+    <li><strong>JSONResponse 契约</strong>(delta 载荷必须 JSON 原生类型, state.py:84-85 fail-fast) → 行内容直接取自现有视图 dict, 无新增类型面; S3 守阵断言归约载荷全字段 json.dumps 可序列化。</li>
+    <li><strong>复杂度税</strong> → 收 WebUIRuntime 单点(与 pending_ver/search_index/err_ring 并列)+ web-runtime.md 回写(S10); P-04 交用户权衡。</li>
+    <li><strong>表述漂移风险</strong>(<strong>起草人建议</strong>新增, 01 笔记五) → 全计划与后续文档一律写「本仓 ver 单调; qB 为循环」「qB 启发的自创窗口」; 协议对齐以 01 笔记的 qB 源码行号为准, 不引官方 wiki(#20153 文档滞后/缺参仍 open)。</li>
+  </ol>
+
+  <h3>收益边界(报告 §06/§07, 按 01/02 笔记修正)</h3>
+  <ul>
+    <li><strong>收益主体 = 活跃传输库</strong>(下载/上传中每拍速度必变, dlspeed/upspeed 不在量化表内); 静态做种库已被 rid 跳过覆盖、增量收益趋零; 命令突发(批量改标签/限速)的传导成本从全库压到突发面。</li>
+    <li><strong>四段成本同时压低</strong>: 服务端重建(S6/S9)、传输(S3)、前端赋值(S4)、渲染(S7) —— 唯一同时覆盖四段的选项(报告 §07); issue 1 的「每版必须建一次」下界被<strong>降价</strong>而非取消。</li>
+    <li><strong>与既有方案关系</strong>: 与 issue 1 方案 A(全惰性)/B(口径修正)/C(请求侧限速)正交可叠加; 是 issue 2 的自然完成形态(共享同一套脏集合推导, S8/S9 并轨认领)。</li>
+    <li><strong>轮数不变</strong>(SSE ver 每版必推), 降的是每轮成本。</li>
+  </ul>
+</section>
+
+<section id="s06">
+  <h2><span class="no">06</span>实施纪律(分步派工)</h2>
+  <ul>
+    <li><strong>本计划未来由分步派工执行, 每步 = 一个独立工作单元</strong>: 开工 <code>commands run my-commit-flow.sync</code>(结果行「已同步 &lt;hash&gt;」贴进回复)→ 重核该步行号锚(HEAD 若前进, 见 §00 口径)→ 步内实现 + 自验 → <code>commands run test.quick</code>(关键步 S0/S4/S9/S10 跑 <code>commands run test.full</code> 并新建基线切片)→ 独立提交。防止长会话返工: 不跨步携带未验证状态。</li>
+    <li><strong>请求边界(黄金法则 7)</strong>: 派工执行中「提交/入库/推上去」才走 <code>commands run ship.commit</code>; 「继续/接着做」只表示做完手上这一步; 新建文件/入池 issue/认领 issue/commit push 四类动作逐项显式确认。</li>
+    <li><strong>范围守恒(黄金法则 6)</strong>: 步内撞见计划外代码/文档缺陷, 一行不改、入池 <code>memory-bank/issues/</code>(create-issue skill); 本计划内缺陷直接修。</li>
+    <li><strong>步间锚漂移</strong>: 记入当步提交说明与执行档案, 不回头改 02 笔记(漂移以代码为准并回写, 回写动作归该步的文档面)。</li>
+    <li><strong>进度留痕</strong>: 每步完成后把步号 + 一行要点记进 activeContext 切片; 全部步完成走 memory-bank skill 收尾 DoD 5 步。</li>
+    <li><strong>提交信息</strong>: gitmoji + 中文口径(首行 <code>&lt;gitmoji&gt; &lt;一句话&gt;</code>, 动机/取舍/影响面/实测数字), 引用本计划步号(如「S3: ...」)。</li>
+    <li><strong>渲染与入库</strong>: 本稿经确认后渲染单文件 HTML 入 <code>memory-bank/plans/</code> + <code>commands run kb.index</code>; 渲染本身不做内容决策。</li>
+  </ul>
+</section>
+
+<section id="sapp">
+  <h2><span class="no">附</span>起草人自查记录(交付时核对用)</h2>
+  <ol>
+    <li>行号锚: 全部出自 02 笔记并标基树 f4430f32(§00 统一标注); 唯一漂移 module.py:56-57 已修正引用; 另有 4 处「起草人补核」锚(sort.js:70/:50、filters.js:227、shows.js:142)已单独标注; 2 处 02 笔记未给锚的函数(<code>_build_group_view</code>、tvshows parse_release 入口)显式写「开工重核」, 未编造行号。</li>
+    <li>两处新缺口: store added/removed 持久化 → S1 显式步骤(含选型推荐); 剧侧 member_to_key 等价映射 → S8 显式步骤(收 WebUIRuntime 推荐), 并入 S9 消费。</li>
+    <li>拍板点 P-01..P-05 全部有推荐案 + 默认路径; 正确性边界 1-4 并入 S8/S9 DoD(M10-M12), 边界 5 并入 S2 DoD(M5), 无遗留未定案。</li>
+    <li>每步有独立回滚方式(含应急单行回退); S3 与 S4 间的兼容风险用 <code>delta=1</code> 协商参数化解, 保证两步各自独立提交安全。</li>
+    <li>01 笔记避坑清单 7 条 + 出入 4 条: 避坑#1→R4/M1; #2→R2/M2; #3→R3; #4→R9/M3; #5→R6/R7; #6→R8; #7→R5/M4; 出入1(rid 表述)→R3 + 风险7; 出入2(full 触发面)→R10; 出入3(内存模型)→R1 + 非目标10; 出入4(full 无 removed 键)→R10 + S3 DoD; wiki 滞后(补⑦)→风险7。无未落项。</li>
+  </ol>
+</section>
+
+</div>
+</body>
+</html>
