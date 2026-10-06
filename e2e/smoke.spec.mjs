@@ -1,6 +1,7 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
 import { BASE_URL, SKINS, TORRENTS } from './harness.mjs';
+import { collectRuntimeErrors } from './lib/errors.mjs';
 
 /**
  * WEB UI 冒烟(最小集) —— 每次改前端都该过一遍的那几条。
@@ -17,30 +18,7 @@ import { BASE_URL, SKINS, TORRENTS } from './harness.mjs';
  * 本文件只钉住"页面到底活没活 + 数据对不对"; 交互时序 / 几何 / 数值那四类深水区走 ui_smoke.cjs。
  *
  * 桩服务由 playwright.config.mjs 的 webServer 自动拉起(真 create_app + 合成种子), 无需手工起。
- */
-
-/**
- * 采集本页的运行时错误。
- * Dark Reader 这类**企业策略强装**的扩展即使 `--disable-extensions` + 全新 profile 也会注入并报错
- * (pitfalls/testing/smoke.md), 故按来源过滤 chrome-extension —— 否则本断言在本机会恒红。
- *
- * @param {import('@playwright/test').Page} page —— 必须显式标注: 本文件开了 `// @ts-check` 且仓库
- *   没有 tsconfig/jsconfig, TS 走默认严格档, 裸写 `page` 就是 ts(7006) 隐式 any。
- * @returns {string[]} 错误文本列表(空数组 = 本页无运行期错误)。
- */
-function collectRuntimeErrors(page) {
-  /** @type {string[]} —— 不标注会被当成"演化中的 any[]"(ts(7005)), 与上面的 7006 成对出现。 */
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => {
-    if (m.type() !== 'error') return;
-    if ((m.location()?.url || '').startsWith('chrome-extension://')) return;
-    const text = m.text();
-    if (text.includes('chrome-extension://')) return;
-    errors.push(`console.error: ${text}`);
-  });
-  return errors;
-}
+ * (错误采集器已提为 e2e/lib/errors.mjs 单点 —— S0 基建, 计划 26-10-06-0708; 断言逻辑零变化。) */
 
 for (const skin of SKINS) {
   test.describe(`皮肤 ${skin}`, () => {

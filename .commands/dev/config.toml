@@ -37,5 +37,5 @@ note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi"
 run     = ["npx playwright test <args>"]
 timeout = 180
 when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 最小集: 渲染健康 + 数据契约; 桩服务由 webServer 自动起）"
-note    = "收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用"
+note    = "收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
 doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"
