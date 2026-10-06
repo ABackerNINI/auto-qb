@@ -26,7 +26,7 @@
      「推送未完成」停下要人
   7. rebase 真合入了远端提交(HEAD 改写) → 闸门按同一份清单复跑一轮(合并后的树才算数); fmt 类闸门
      若又改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)
-  8. 内联推送(run_push): 自带同步核对(竞态窗口兜底) / 瞬时失败重试一次 / 镜像全程静默
+  8. 内联推送(run_push): 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
 消息文件不删的时机: commit 或 ref 核对失败 —— 修好重跑还能用同一份消息。
 
 用法: python <包>/scripts/commit.py [路径...] [--message-file <文件>] [--no-push]
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
     sha = head_now[:8]
 
-    # 7 内联推送(run_push 内含同步核对 / 瞬时重试 / 静默镜像); 推送未完成 ≠ 提交失败
+    # 7 内联推送(run_push 内含同步核对 / 推主线 20s×3 重试 / attempts=1 静默镜像); 推送未完成 ≠ 提交失败
     from push import run_push  # noqa: E402
 
     pushed, push_line = run_push(steps)

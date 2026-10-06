@@ -102,13 +102,32 @@ class ConfigMissing(RuntimeError):
         )
 
 
+# 本加载器只跑**本地**的只读查询(`remote -v` / `rev-parse` / `config --get-regexp`), 秒级返回 ——
+# 给一个宽裕超时只为「不挂死」, **不重试**(重试策略在 `_pipeline.run_git`, 那边管的是网络命令)。
+# 常量写在这里而不是 import `_pipeline`: 后者 import 本模块, 反向依赖会成环。
+CONFIG_GIT_TIMEOUT = float(os.environ.get("COMMAND_FLOW_GIT_TIMEOUT", "20"))
+
+
 def git(*args: str) -> str:
-    """跑 git 命令, 失败返回空串(调用方按"取不到"处理, 不要假装成功)。
+    """跑 git 命令, 失败 / 超时返回空串(调用方按"取不到"处理, 不要假装成功)。
 
     **只去掉末尾换行, 不能整段 strip()** —— 否则 `git status --porcelain` 首行的首列空格
     (表示"无暂存改动")会被吃掉, 进而把路径首字符也带歪, 红线匹配会静默放行。
+
+    ⚠ 与 `_pipeline.run_git` 的分工: 这里查的是本地 ref / config, 重试没有意义, 超时只为兜住
+    "挂死"这一种意外; 网络命令(push / fetch / ls-remote)一律走 `_pipeline.run_git`(20s × 3 次)。
     """
-    proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=CONFIG_GIT_TIMEOUT
+        )
+    except (OSError, subprocess.SubprocessError):  # 起不来 / 超时 —— 一律按"取不到"
+        return ""
     return proc.stdout.rstrip("\n") if proc.returncode == 0 else ""
 
 

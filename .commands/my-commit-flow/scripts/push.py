@@ -6,12 +6,12 @@ ship.commit 成功后默认**同进程内联续推**(run_push, 输出由 commit 
 
 - 先跑一次 sync(run_sync): 齐平则无事发生; 落后自动快进; 分叉自动 rebase(树净才动) ——
   刚提交完的树通常干净, 不给「先手动同步」这道手工步骤。
-- 推主线瞬时连接失败(Recv failure / Connection was reset)自动重试**一次**;
-  不重试第二次 / 不换代理 / 不改走 SSH。
+- 推主线**单次超时 20s + 有界重试 3 次**(`_pipeline.run_git` 统一提供, 全部失败才判失败) ——
+  Gitee 会间歇性卡住, 重试层就是为它加的; 不换代理 / 不改走 SSH。
 - 推送核对只用 ls-remote 现查远端真值(refs/remotes 快照在本环境不可信); 取不到 ≠ 推送失败,
   如实说「无法核实」, 别把网络抖动报成不一致。
-- 镜像(github)仍自动尝试一次, 但**成功失败都不提**(26-09-28 用户定调: 允许滞后, 提了纯属噪音);
-  失败不重试 / 不回滚主线上已完成的推送。
+- 镜像(github)**只给超时, 不给重试**(attempts=1)且**成功失败都不提**(26-09-28 用户定调: 允许滞后,
+  提了纯属噪音); 失败不回滚主线上已完成的推送。
 
 用法: python <包>/scripts/push.py   (无旗标)
 退出码: 0 推送成功 · 1 失败(输出自带原因)
@@ -20,7 +20,6 @@ ship.commit 成功后默认**同进程内联续推**(run_push, 输出由 commit 
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 # Windows GBK 控制台兑底(与包内其它脚本同根)
@@ -29,9 +28,9 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pipeline import emit_steps, git, git_run  # noqa: E402
+from _pipeline import emit_steps, git, git_run, retry_note  # noqa: E402
 from _ship_config import ConfigMissing, load_config, proxy_disable_args, resolve_branch, resolve_main_remote, resolve_mirror_remote  # noqa: E402
-from sync import remote_sha_with_retry, run_sync  # noqa: E402
+from sync import remote_sha, run_sync  # noqa: E402
 
 
 def _git_reason(proc) -> str:
@@ -60,30 +59,24 @@ def run_push(steps: list[str] | None = None) -> tuple[bool, str]:
         return False, "找不到主线远端 —— git remote -v 核对后改配置"
 
     head = git("rev-parse", "HEAD")
-    proc = None
-    for attempt in range(2):
-        proc = git_run("push", main, branch)
-        if proc.returncode == 0:
-            break
-        err = proc.stderr or ""
-        if attempt == 0 and ("Recv failure" in err or "Connection was reset" in err):
-            time.sleep(1)  # 主线瞬时连接失败, 重试一次
-            continue
+    # 主线推送: 单次超时 20s + 有界重试 3 次全在 run_git 层 —— 这里**不再自己重试**
+    # (两层各重试 = 最多 6 次尝试, 且「重试了几次」会拆成两处口径, 失败行说不清)。
+    proc = git_run("push", main, branch)
     if proc.returncode != 0:
-        return False, f"主线推送未通过 —— {_git_reason(proc)}; 联网后重跑"
+        return False, f"主线推送未通过{retry_note(proc)} —— {_git_reason(proc)}; 联网后重跑"
 
-    remote_sha = remote_sha_with_retry(main, branch)
-    if not remote_sha:
+    remote_sha_now = remote_sha(main, branch)
+    if not remote_sha_now:
         # 取不到 ≠ 推送失败: 别把网络抖动报成「不一致」, 那会让执行者重复推
         return False, (f"推送命令已执行但取不到远端 ref, 无法核实 —— 稍后手工核对 "
                        f"git ls-remote {main} {branch} (期望 {head[:8]})")
-    if remote_sha != head:
-        return False, f"远端 ref 与本地不一致 (远端{remote_sha[:8]} 本地{head[:8]}) —— 核对链路后重跑"
+    if remote_sha_now != head:
+        return False, f"远端 ref 与本地不一致 (远端{remote_sha_now[:8]} 本地{head[:8]}) —— 核对链路后重跑"
 
-    # 镜像: 只尝试一次, 全程静默(D2) —— 成功失败都不提, 允许滞后
+    # 镜像: **只给超时, 不给重试**(attempts=1), 全程静默(D2) —— 成功失败都不提, 允许滞后
     mirror, mirror_url = resolve_mirror_remote(cfg)
     if mirror:
-        git_run(*proxy_disable_args(mirror_url), "push", mirror, branch)
+        git_run(*proxy_disable_args(mirror_url), "push", mirror, branch, attempts=1)
     return True, f"推送成功 {head[:8]}"
 
 

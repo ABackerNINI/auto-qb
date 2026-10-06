@@ -17,5 +17,5 @@ doc    = "references/pipeline.md"
 [tasks."ship.push"]
 script = "push.py"
 when   = "补推 / 单独推送（ship.commit 已默认内联续推）→ 同步核对 + 推主线 + 核对远端 + 镜像(全程静默)"
-note   = "结果行「推送成功 <hash>」, 上面可能带内部同步的步骤行(快进 / rebase 重放); 镜像允许滞后, 成败都不提; 瞬时连接失败自动重试一次"
+note   = "结果行「推送成功 <hash>」, 上面可能带内部同步的步骤行(快进 / rebase 重放); 推主线 20s×3 次重试(全部失败才判失败), 失败行缀「已重试 N 次」; 镜像只给超时(attempts=1)且允许滞后, 成败都不提"
 doc    = "references/pipeline.md"

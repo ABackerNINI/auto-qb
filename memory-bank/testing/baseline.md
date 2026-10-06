@@ -19,9 +19,10 @@
 
 ## 常驻警告 (看数字前先读)
 
-⚠ 另有 **103 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
-`testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
-(2026-10-06 实测 103 passed / 134.05s; 此前的 47 已过期。)
+⚠ 另有包内脚本测试(`.commands/my-commit-flow/scripts/test_pipeline.py` —— 即旧的 `test_preflight.py`,
+随 v3 预检下沉改名)—— 它们在 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`,
+已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
+**具体条数不在这里手抄**(本文件口径: 数字只写 `baselines/` 切片), 看最新一条基线的「包内脚本测试」段。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 > ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。

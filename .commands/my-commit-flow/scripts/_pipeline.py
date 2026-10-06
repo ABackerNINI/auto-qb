@@ -4,6 +4,8 @@ v3 输出契约(计划 26-09-28-0157)「沉默即成功」: 本模块只提供�
 常规路径成功即静默, 失败由调用方(sync / commit / push)给一行「原因 + 下一步」。
 v3.1(2026-10-06)在本模块加了唯一的**输出机制**例外: 「步骤登记」段(`step` / `emit_steps`)——
 结果行仍是上面那句话, 只是**真改写 HEAD 的步骤**由它登记成一行证据, 见该段注释。
+2026-10-06 另加: **git 命令统一走 `run_git`** —— 单次 20s 超时 + 有界重试(默认 3 次, 全部失败才判失败),
+动机(Gitee 间歇性卡住)与三档重试判据见「git 命令: 单次超时 + 有界重试」段。
 人工排障口: `_pipeline.py --show-config` 看生效配置, `--init` 生成新仓库的配置初稿。
 
 前身是 preflight.py(检查表式预检, v2 计划 26-09-26-2345); v3 把"检查"下沉进 ship 编排,
@@ -43,7 +45,41 @@ from _ship_config import CONFIG_NAME, ConfigMissing, config_problems, find_root,
 #   处置: 全程跑在**看门狗线程**里, 硬截止到点就 `taskkill /F /T` 整棵进程树 + 关掉我们这端
 #   的管道(不 join), 然后返回一个可判定的失败 —— 让调用方**快速失败**而不是冻住整条 ship。
 #   代价: 极少数卡死会泄漏一个幽灵线程(无法从外部杀), 相对于"提交无声中止"可接受。
-GIT_TIMEOUT = float(os.environ.get("COMMAND_FLOW_GIT_TIMEOUT", "120"))
+# 单次 git 命令的超时(秒) —— 到点看门狗杀整棵进程树, 再由下面的重试层决定要不要再来一次。
+# 2026-10-06 由 120s 收紧到 20s: Gitee **间歇性卡住**时 120s 只够等出一次失败(提交被拆成
+# 「未推送 + 手工补推」两步), 20s + 重试才能在**同一条命令里**自愈。环境变量可覆盖。
+GIT_TIMEOUT = float(os.environ.get("COMMAND_FLOW_GIT_TIMEOUT", "20"))
+
+# ------------------------------------------------------------------ git 命令: 单次超时 + 有界重试
+# 动机(2026-10-06 用户指出): Gitee 会间歇性卡住(不报错, 就是不返回) —— 旧行为要等满 120s 才被杀,
+# 于是「提交成功(未推送)」+ 手工 `ship.push` 成了常态。修法两件: ①单次超时 20s;
+# ②失败后**有界重试**, 全部尝试都失败才判失败(重试层对 push / pull / fetch 等所有 git 命令生效)。
+#
+# 为什么不是「任何非 0 都重试」: 有些调用的**非 0 是正常答案**(`cat-file -e` 判路径在不在 HEAD、
+# `merge-tree` 判能否干净合流), 盲重试会把正常答案拖成 3 倍耗时; 而网络子命令的失败签名五花八门
+# (网关 502 / 代理重置 / TLS 抖动), 靠签名白名单必然漏。所以分三档(判据单点: `_retryable`):
+#   ① 网络子命令(推 / 拉 / 取) —— **失败即重试**: 签名靠不住, 而它们**幂等**(fetch / ls-remote 只读;
+#      push 同 ref 重推是 no-op 或 "up-to-date") ⇒ 重试永远安全, 还能顺手救回「推成功但被判失败」。
+#   ② 非幂等的本地写(commit / rebase / merge / reset …) —— **只给超时, 不给重试**:
+#      超时被杀 ≠ 没执行完; 再跑一次轻则把 "nothing to commit" 当成失败, 重则 amend 又挪一次 hash
+#      把步骤链写坏(v3.1 的 旧hash→新hash 就对不上了)。
+#   ③ 其余(只读查询 + 幂等写) —— 只在**可能自愈**的失败上重试: 超时(rc=-1)或命中瞬时签名。
+GIT_ATTEMPTS = int(os.environ.get("COMMAND_FLOW_GIT_ATTEMPTS", "3"))
+GIT_RETRY_BACKOFF = float(os.environ.get("COMMAND_FLOW_GIT_RETRY_BACKOFF", "1"))
+
+NETWORK_SUBCOMMANDS = frozenset({"push", "fetch", "pull", "ls-remote", "clone", "remote"})
+NON_IDEMPOTENT_SUBCOMMANDS = frozenset(
+    {
+        "commit", "rebase", "merge", "reset", "checkout", "switch", "restore", "rm", "mv", "am", "apply", "cherry-pick",
+        "revert", "stash", "tag", "update-ref", "branch", "worktree", "clean"
+    }
+)
+# 瞬时网络失败的已知签名 —— 只作第③档的补充判据(网络子命令不靠它, 见上)。
+TRANSIENT_MARKS = (
+    "Recv failure", "Connection was reset", "Could not resolve host", "Failed to connect", "Connection timed out",
+    "Operation timed out", "The remote end hung up", "remote end hung up", "early EOF", "RPC failed",
+    "unable to access", "unexpected disconnect", "Temporary failure", "SSL", "TLS", "timed out", "502", "503", "504"
+)
 
 
 def _kill_tree(pid: int) -> None:
@@ -54,7 +90,13 @@ def _kill_tree(pid: int) -> None:
         pass
 
 
-def run_capture(args, cwd=None, timeout: float = GIT_TIMEOUT, shell: bool = False) -> subprocess.CompletedProcess:
+def run_capture(
+    args,
+    cwd=None,
+    timeout: float = GIT_TIMEOUT,
+    shell: bool = False,
+    env: dict | None = None
+) -> subprocess.CompletedProcess:
     """跑一条命令并抓输出, **保证不永久挂住**(见上面的根因注释)。
 
     返回 CompletedProcess; 超时/卡死时 rc 记 `-1`(与真实 git 码不冲突), 输出带一句原因。
@@ -63,6 +105,8 @@ def run_capture(args, cwd=None, timeout: float = GIT_TIMEOUT, shell: bool = Fals
 
     `shell=True` 供闸门(`run_gates`)这类**命令串**用 —— 与 git 的 argv 直调不同, 但同样
     走本看门狗(裸 subprocess.run 在 Windows 上同款挂死)。
+    `env` 传 None = 继承当前进程环境; 传 dict = **整份替换**(调用方自己拼 `{**os.environ, …}`) ——
+    供 `rebase --continue` 这类需要 `GIT_EDITOR=true` 的调用用。
     """
     box: dict = {}
     argv = args if shell else list(args)
@@ -74,6 +118,7 @@ def run_capture(args, cwd=None, timeout: float = GIT_TIMEOUT, shell: bool = Fals
                 argv,
                 shell=shell,
                 cwd=str(cwd) if cwd else None,
+                env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
@@ -115,24 +160,97 @@ def run_capture(args, cwd=None, timeout: float = GIT_TIMEOUT, shell: bool = Fals
     return subprocess.CompletedProcess(label, box.get("rc", -1), box.get("out", "") or "", box.get("err", "") or "")
 
 
-def git(*args: str, check: bool = True) -> str:
+def _subcommand(args) -> str:
+    """从 git argv 里取子命令 —— 跳过开头的可执行名与 `-c k=v` / 其余前缀旗标。
+
+    ❗必须吃掉开头的 `git`: `run_git` 拿到的是**完整 argv**(首元素是可执行名), 不跳它就会永远
+    把子命令读成 "git" ⇒ 三档判据全部失效 —— `push` 被当成本地只读命令, 非 0 不再重试,
+    恰好把本功能**静默修没**(2026-10-06 实写时踩到, 由 GitRetryTest 的 push / commit 两条守住)。
+    """
+    tokens = list(args)
+    if tokens and not tokens[0].startswith("-") and Path(tokens[0]).stem.lower() == "git":
+        tokens = tokens[1:]
+    i = 0
+    while i < len(tokens):
+        a = tokens[i]
+        if a == "-c":  # `-c key=value` 是**两个** argv 元素, 值不能被子命令判定吃到
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a
+    return ""
+
+
+def _retryable(args, proc: subprocess.CompletedProcess) -> bool:
+    """这次失败**重试有没有意义** —— 判据单点(三档理由见模块顶「git 命令: 单次超时 + 有界重试」段)。
+
+    非 0 一律重试是错的: `cat-file -e` / `merge-tree` 这类**非 0 就是正常答案**, 盲重试既慢又把
+    语义搅浑; 而网络子命令反过来 —— 失败签名靠不住, 只能按「失败即重试」兜(它们幂等, 重试安全)。
+    """
+    if proc.returncode == 0:
+        return False
+    sub = _subcommand(args)
+    if sub in NETWORK_SUBCOMMANDS:
+        return True
+    if sub in NON_IDEMPOTENT_SUBCOMMANDS:
+        return False
+    if proc.returncode == -1:  # 看门狗杀树(超时 / 卡死) —— 只读命令重试一次大概率能过
+        return True
+    err = proc.stderr or ""
+    return any(mark in err for mark in TRANSIENT_MARKS)
+
+
+def retry_note(proc: subprocess.CompletedProcess) -> str:
+    """失败行里的重试备注 —— 只有真重试过才出现(1 次尝试 = 没重试, 不啰嗦)。"""
+    used = getattr(proc, "attempts_used", 1)
+    return f"(已重试 {used - 1} 次)" if used > 1 else ""
+
+
+def run_git(
+    args,
+    cwd=None,
+    timeout: float = GIT_TIMEOUT,
+    attempts: int = GIT_ATTEMPTS,
+    shell: bool = False,
+    env: dict | None = None
+) -> subprocess.CompletedProcess:
+    """跑一条 git 命令: **单次超时 + 有界重试**, 全部尝试都失败才把最后一次的结果交出去。
+
+    `attempts` 是本层唯一的重试旋钮: 1 = 不重试(GitHub 镜像用 —— 允许滞后, 成败都不提),
+    默认 3(含首次)。重试与否由 `_retryable` 判; 实际尝试次数挂在返回值的 `attempts_used` 上,
+    调用方用 `retry_note(proc)` 在**失败行**里写明「已重试 N 次」; 成功则照旧沉默(v3 契约)。
+    """
+    cmd = args if shell else list(args)
+    proc = run_capture(cmd, cwd=cwd, timeout=timeout, shell=shell, env=env)
+    used = 1
+    while used < attempts and _retryable(cmd, proc):
+        time.sleep(GIT_RETRY_BACKOFF)
+        proc = run_capture(cmd, cwd=cwd, timeout=timeout, shell=shell, env=env)
+        used += 1
+    proc.attempts_used = used  # 给 retry_note 用; CompletedProcess 是普通类, 挂属性安全
+    return proc
+
+
+def git(*args: str, check: bool = True, attempts: int = GIT_ATTEMPTS) -> str:
     # **不能整段 strip()**: `git status --porcelain` 的首列空格表示"无暂存改动",
     # 整段 strip 会把首行的这个空格吃掉 → ' M a/b' 变成 'M  a/b', 首列被误判成已暂存,
     # 且 line[3:] 丢掉路径首字符, 红线匹配会**静默放行**。
-    proc = run_capture(["git", *args])
+    proc = run_git(["git", *args], attempts=attempts)
     if check and proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
+        raise RuntimeError(f"git {' '.join(args)} 失败{retry_note(proc)}: {proc.stderr.strip()}")
     return proc.stdout.rstrip("\n")
 
 
-def git_rc(*args: str) -> int:
+def git_rc(*args: str, attempts: int = GIT_ATTEMPTS) -> int:
     """只关心**退出码**的 git 调用(如 `merge-tree --write-tree`: 0 = 可干净合流, 非 0 = 有冲突)。"""
-    return run_capture(["git", *args]).returncode
+    return run_git(["git", *args], attempts=attempts).returncode
 
 
-def git_run(*args: str) -> subprocess.CompletedProcess:
+def git_run(*args: str, attempts: int = GIT_ATTEMPTS) -> subprocess.CompletedProcess:
     """要 rc + stderr 的 git 调用(merge --ff-only / rebase / push 的失败原因都在 stderr)。"""
-    return run_capture(["git", *args])
+    return run_git(["git", *args], attempts=attempts)
 
 
 def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:

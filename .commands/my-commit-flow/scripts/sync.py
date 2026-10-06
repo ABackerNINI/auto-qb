@@ -30,6 +30,11 @@ v3「成功一行, 失败一行(原因 + 下一步)」保留, **结果行逐字�
 会被静默丢弃, `status -sb` 的 ahead/behind 是快照, 都不可信(单点: memory-bank/pitfalls/git/refs.md)。
 合并/变基失败一律自动回滚现场, sync 失败后仓库状态与跑之前一致 —— 写状态的命令必须比只读的更干净地失败。
 
+网络容错(2026-10-06): 本脚本每条 git 命令都走 `_pipeline.run_git` —— **单次超时 20s + 有界重试**
+(push / fetch / ls-remote 这类网络子命令**失败即重试**, 默认 3 次, 全部失败才判失败; 非幂等的本地写
+只给超时、不给重试)。Gitee 间歇性卡住时旧行为要等满 120s 才失败一次 ⇒ 提交被拆成「未推送 + 手工补推」,
+现在在同一条命令里自愈。三档判据单点在 `_pipeline._retryable`。
+
 用法: python <包>/scripts/sync.py   (无旗标; 引擎任务 my-commit-flow.sync)
 退出码: 0 已同步 / 同步成功 · 1 失败(输出自带原因, 不存在需要查的码表)
 """
@@ -39,7 +44,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 # Windows GBK 控制台兑底(与包内其它脚本同根): 输出含非常用字符时编不出来会 UnicodeEncodeError。
@@ -48,20 +52,21 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pipeline import changed_files, emit_steps, expand_run, git, git_run, staged_overflow, step  # noqa: E402
+from _pipeline import changed_files, emit_steps, expand_run, git, git_run, retry_note, run_git, staged_overflow, step  # noqa: E402
 from _ship_config import CONFIG_NAME, ConfigMissing, load_config, resolve_branch, resolve_main_remote  # noqa: E402
 
 
-def remote_sha_with_retry(name: str, branch: str, attempts: int = 2) -> str:
-    """取远端 ref 真值 —— 主线瞬时失败可重试一次(网络抖动常见)。取不到(空)≠ 不一致。"""
-    for attempt in range(attempts):
-        out = git("ls-remote", name, branch, check=False)
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) == 2 and parts[1] == f"refs/heads/{branch}":
-                return parts[0]
-        if attempt == 0:
-            time.sleep(1)
+def remote_sha(name: str, branch: str) -> str:
+    """取远端 ref 真值(空串 = 取不到)。**取不到 ≠ 不一致** —— 调用方按「无法核实」如实说。
+
+    「重试」已下沉到 git 层(`_pipeline.run_git`: 网络子命令失败即重试, 单次超时 20s) ——
+    这里**不再套第二层**, 否则 ls-remote 会被重试 9 次, 离线时白等三个退避周期(2026-10-06)。
+    """
+    out = git("ls-remote", name, branch, check=False)
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1] == f"refs/heads/{branch}":
+            return parts[0]
     return ""
 
 
@@ -84,9 +89,13 @@ def is_dirty_block(line: str) -> bool:
 
 
 def _git_reason(proc) -> str:
-    """git 失败 stderr 里最后一行人话(hint 行滤掉) —— 失败行的「原因」段。"""
+    """git 失败 stderr 里最后一行人话(hint 行滤掉) —— 失败行的「原因」段。
+
+    真重试过(网络子命令)就在后面缀上次数: 否则读的人只看到一次失败原因, 不知道命令其实
+    已经自己重试过 3 次 —— 那会让人以为是「没重试就报错」而去手工补跑。
+    """
     lines = [l.strip() for l in (proc.stderr or "").splitlines() if l.strip() and not l.startswith("hint:")]
-    return lines[-1] if lines else "git 非 0"
+    return f"{lines[-1] if lines else 'git 非 0'}{retry_note(proc)}"
 
 
 # ------------------------------------------------------------------ 生成物冲突自动化解
@@ -234,17 +243,13 @@ def _resolve_behind_overlap(rsha: str, cfg: dict, head: str) -> int | None:
 
 
 def _git_run_editor(*args: str) -> subprocess.CompletedProcess:
-    """带 GIT_EDITOR=true 的 git 调用 —— `rebase --continue` 不带它会在编辑器上挂住。"""
-    return subprocess.run(
-        ["git", *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env={
-            **os.environ, "GIT_EDITOR": "true"
-        }
-    )
+    """带 GIT_EDITOR=true 的 git 调用 —— `rebase --continue` 不带它会在编辑器上挂住。
+
+    同样走 `run_git`(单次超时 20s): 裸 `subprocess.run` 在 Windows 上会无限挂住(根因见
+    `_pipeline.run_capture` 的注释)。`rebase` 属**非幂等**子命令 ⇒ 只给超时、不重试 ——
+    超时被杀时 rebase 可能已经落地, 再来一次会把 "no rebase in progress" 当成失败。
+    """
+    return run_git(["git", *args], env={**os.environ, "GIT_EDITOR": "true"})
 
 
 def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, int, str, str]:
@@ -342,7 +347,7 @@ def run_sync(steps: list[str] | None = None) -> tuple[bool, str]:
         return False, f"找不到主线远端 —— git remote -v 核对后改 {CONFIG_NAME} 的 main_candidates"
 
     git("fetch", main, branch, check=False)  # 只为把远端 tip 的对象拉进对象库; 判据不读 refs/remotes
-    rsha = remote_sha_with_retry(main, branch)
+    rsha = remote_sha(main, branch)
     if not rsha:
         return False, f"拿不到远端 {main}/{branch} (离线?) —— 联网后重跑"
     head = git("rev-parse", "HEAD", check=False)

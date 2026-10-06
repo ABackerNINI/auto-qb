@@ -16,6 +16,9 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
                                展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废)
+- GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
+                               不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
+- MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
 - SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
                                <each:> 接受该后缀; 探针摘掉「无参即真动作」脚本(超时按不安全)
 - ShortTest                    失败明细里的根路径压缩
@@ -28,6 +31,8 @@ from __future__ import annotations
 
 import ast
 import builtins
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -175,6 +180,143 @@ class RunGatesTest(unittest.TestCase):
         gates = [{"match": [""], "run": ["x"], "auto": True}]
         self.assertEqual(len(_pipeline.gates_for(["src/a.py"], gates)), 1)
         self.assertEqual(_pipeline.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+
+class GitRetryTest(unittest.TestCase):
+    """git 命令的**单次超时 + 有界重试**(2026-10-06 用户口径: Gitee 间歇性卡住 → 提交常被拆成
+    「未推送 + 手工补推」)。判据单点在 `_pipeline._retryable`, 机制在 `run_git`。
+
+    run_capture 用替身: 真起进程测不出「重试了几次」, 也没必要为一条用例真等 20s 超时。
+    退避改成 0 —— 否则每条用例白等三个 1s。
+    """
+    def setUp(self) -> None:
+        self.calls: list[list[str]] = []
+        self.timeouts: list[float] = []
+        self.script: list[tuple[int, str]] = []  # 第 N 次调用的 (rc, stderr); 用尽后沿用最后一个
+        orig_capture, orig_backoff = _pipeline.run_capture, _pipeline.GIT_RETRY_BACKOFF
+
+        def _fake(args, cwd=None, timeout=None, shell=False, env=None):
+            self.calls.append(list(args))
+            self.timeouts.append(timeout)
+            rc, err = self.script[min(len(self.calls), len(self.script)) - 1]
+            return subprocess.CompletedProcess(args, rc, "", err)
+
+        _pipeline.run_capture = _fake
+        _pipeline.GIT_RETRY_BACKOFF = 0.0
+        self.addCleanup(lambda: setattr(_pipeline, "run_capture", orig_capture))
+        self.addCleanup(lambda: setattr(_pipeline, "GIT_RETRY_BACKOFF", orig_backoff))
+
+    def _run(self, *args, **kwargs):
+        return _pipeline.run_git(["git", *args], **kwargs)
+
+    def test_network_subcommand_retries_until_success(self) -> None:
+        """网络子命令失败即重试 —— Gitee 的失败签名靠不住(网关 502 / 代理重置 / TLS 抖动), 白名单必漏。"""
+        self.script = [(128, "Recv failure"), (128, "Recv failure"), (0, "")]
+        proc = self._run("push", "gitee", "develop")
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.attempts_used, 3)
+        self.assertEqual(len(self.calls), 3)
+
+    def test_all_attempts_failed_is_failure(self) -> None:
+        """全部尝试都失败才判失败 —— 3 次用尽后把最后一次的结果交出去。"""
+        self.script = [(128, "Recv failure")]
+        proc = self._run("push", "gitee", "develop")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual((proc.attempts_used, len(self.calls)), (3, 3))
+
+    def test_attempts_one_disables_retry(self) -> None:
+        """GitHub 镜像: 只给超时, 不给重试 —— attempts=1 时连网络子命令也只跑一次。"""
+        self.script = [(128, "Recv failure")]
+        proc = self._run("push", "github", "develop", attempts=1)
+        self.assertEqual((proc.attempts_used, len(self.calls)), (1, 1))
+
+    def test_timeout_is_passed_through(self) -> None:
+        self.script = [(0, "")]
+        self._run("fetch", "gitee", "develop")
+        self.assertEqual(self.timeouts, [_pipeline.GIT_TIMEOUT])
+
+    def test_non_idempotent_local_command_is_not_retried(self) -> None:
+        """非幂等本地写只给超时、不给重试: 超时被杀 ≠ 没执行完 —— 再跑一次轻则把
+        "nothing to commit" 当成失败, 重则 amend 又挪一次 hash 把步骤链写坏。"""
+        for sub in ("commit", "rebase", "merge", "reset", "checkout", "rm"):
+            self.calls.clear()
+            self.script = [(-1, "卡死")]
+            proc = self._run(sub, "x")
+            self.assertEqual(len(self.calls), 1, f"{sub} 不该被重试")
+            self.assertEqual(proc.attempts_used, 1, sub)
+
+    def test_readonly_command_retries_on_timeout(self) -> None:
+        self.script = [(-1, "卡死 (20s, 进程树已杀)"), (0, "")]
+        proc = self._run("status", "--porcelain")
+        self.assertEqual((proc.returncode, proc.attempts_used), (0, 2))
+
+    def test_nonzero_is_a_normal_answer_and_is_not_retried(self) -> None:
+        """`cat-file -e` 判路径在不在 HEAD —— 非 0 是**正常答案**, 盲重试会把每次查询拖成 3 倍耗时。"""
+        self.script = [(1, "")]
+        proc = self._run("cat-file", "-e", "HEAD:x")
+        self.assertEqual((proc.returncode, proc.attempts_used, len(self.calls)), (1, 1, 1))
+
+    def test_readonly_command_retries_on_transient_signature(self) -> None:
+        self.script = [(1, "fatal: unable to access 'https://…': SSL_ERROR_SYSCALL"), (0, "")]
+        proc = self._run("config", "--get-regexp", r"^http")
+        self.assertEqual((proc.returncode, proc.attempts_used), (0, 2))
+
+    def test_subcommand_skips_dash_c_prefix(self) -> None:
+        """`-c k=v` 是**两个** argv 元素 —— 镜像推送带 `-c http.x.proxy=` 前缀, 判错就漏掉重试档位。"""
+        self.assertEqual(_pipeline._subcommand(["-c", "http.x.proxy=", "push", "gitee", "develop"]), "push")
+        self.assertEqual(_pipeline._subcommand(["-c", "a=b", "-c", "c=d", "ls-remote", "o", "dev"]), "ls-remote")
+        self.assertEqual(_pipeline._subcommand(["--no-pager", "status"]), "status")
+        self.assertEqual(_pipeline._subcommand(["-c", "a=b"]), "")
+
+    def test_subcommand_skips_git_executable(self) -> None:
+        """❗`run_git` 传的是**完整 argv**(首元素是 `git`) —— 不跳它就把子命令读成 "git",
+        三档判据全部失效、重试静默失效(2026-10-06 实写时踩到)。"""
+        self.assertEqual(_pipeline._subcommand(["git", "push", "gitee", "develop"]), "push")
+        self.assertEqual(_pipeline._subcommand(["git.exe", "commit", "-F", "m"]), "commit")
+        self.assertEqual(_pipeline._subcommand([r"C:\Program Files\Git\bin\git.exe", "fetch", "o"]), "fetch")
+
+    def test_retry_note_only_when_retried(self) -> None:
+        """失败行里的备注: 没重试就不啰嗦, 重试了才写次数(否则读的人以为命令没试过就报错)。"""
+        self.script = [(0, "")]
+        self.assertEqual(_pipeline.retry_note(self._run("fetch", "gitee", "develop")), "")
+        self.script = [(128, "Recv failure")]
+        self.assertEqual(_pipeline.retry_note(self._run("fetch", "gitee", "develop")), "(已重试 2 次)")
+
+    def test_git_check_raises_with_retry_note(self) -> None:
+        """`git(check=True)` 的 RuntimeError 也要带重试次数 —— 排障时看得出命令自己试过几次。"""
+        self.script = [(128, "Recv failure")]
+        with self.assertRaises(RuntimeError) as raised:
+            _pipeline.git("push", "gitee", "develop")
+        self.assertIn("已重试 2 次", str(raised.exception))
+
+    def test_defaults_are_20s_and_3_attempts(self) -> None:
+        """用户口径的默认值: 单次 20s, 重试 3 次(可用环境变量覆盖, 覆盖时不判)。"""
+        if "COMMAND_FLOW_GIT_TIMEOUT" not in os.environ:
+            self.assertEqual(_pipeline.GIT_TIMEOUT, 20)
+        if "COMMAND_FLOW_GIT_ATTEMPTS" not in os.environ:
+            self.assertEqual(_pipeline.GIT_ATTEMPTS, 3)
+
+
+class MirrorNoRetryTest(unittest.TestCase):
+    """GitHub 镜像**只给超时, 不给重试**(用户口径 2026-10-06) —— 静态守住 push.py 那一行。
+
+    为什么静态守: 这条口径没有行为出口(镜像成功失败都不提), 只能靠源码形态守 —— 删掉
+    `attempts=1` 会让镜像也跟着重试 3 次, 而输出里**一点痕迹都没有**。
+    """
+
+    PUSH = Path(__file__).resolve().parent / "push.py"
+
+    def test_mirror_push_passes_attempts_1(self) -> None:
+        code = [l for l in self.PUSH.read_text(encoding="utf-8").splitlines() if l.lstrip().startswith("git_run(")]
+        mirror = [l for l in code if "mirror" in l]
+        self.assertEqual(len(mirror), 1, f"镜像推送的调用行数变了(应恰 1 条): {mirror}")
+        self.assertIn("attempts=1", mirror[0], "镜像必须 attempts=1(只给超时不给重试): " + mirror[0])
+
+    def test_main_push_keeps_default_retry(self) -> None:
+        """主线推送走默认重试 —— 别在 push.py 里又套一层(两层各重试 = 最多 6 次尝试)。"""
+        text = self.PUSH.read_text(encoding="utf-8")
+        self.assertIn('git_run("push", main, branch)', text)
+        self.assertNotIn('git_run("push", main, branch, attempts=1)', text)
 
 
 class SmokeSafetyTest(unittest.TestCase):
