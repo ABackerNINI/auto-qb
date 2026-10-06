@@ -301,8 +301,6 @@ async function smokeUi(browser, ui) {
     await ctx.close();
     return;
   }
-  const groupRows = await page.$$eval(".group-row", (n) => n.length);
-  add(ui, "分组视图渲染", groupRows > 0, `${groupRows} 行`);
   await page.screenshot({ path: path.join(SHOTS, `${ui}-1-groups.png`) });
 
   /* 跳检旗标「关」态精简轮(W5): 只验 fail-closed 门控 —— 主轮那些断言(四项齐/确认链等)都
@@ -314,155 +312,20 @@ async function smokeUi(browser, ui) {
     return;
   }
 
-  /*
-   * 展开态跨视图记忆(2026-09-25 用户报「辅种页切到种子页再切回, 展开的组收起来了」):
-   * 展开 = "我正盯着这一组"这种临时意图, 切走再切回必须还是那一组。三层断言缺一层都会放过一档:
-   * 1.切走后实时字段清空(展开态**不串台**到种子视图 —— 修法是分桶暂存, 不是把字段留在原处不管);
-   * 2.切回后 `expandedKey` 还原成**同一个组 key**(不是"随便展开了一个");
-   * 3.DOM 里 `.detail` 真渲染出来(只判字段会放过"值还原了、面板没画"这一档)。
-   * 走**真实点击**(onGroupClick -> toggleExpand)而不是直接改 vm 字段 —— 值对而面板没画正是要抓的形态。
-   */
-  {
-    const navX = await page.$$("nav.tabs button");
-    const gRow = await page.$('.group-row[data-table="group"]');
-    const gKey = gRow ? await gRow.evaluate((n) => n.getAttribute("data-key")) : null;
-    add(ui, "展开态跨视图: 取到组行", !!gKey, `key=${gKey}`);
-    if (gRow && gKey) {
-      // force:true —— 页面每 2s 整表重渲染会抢走点击(见本文件「页面每 2s 整表重渲染」条);
-      // click 失败不让整轮崩, 让下面那条断言如实报 FAIL(值没展开), 而不是抛异常中断后面 90 项。
-      await gRow.click({ force: true }).catch(() => {});
-      await page.waitForSelector(".detail", { timeout: 5000 }).catch(() => null);
-      const opened = await readInst(page, "vm.expandedKey");
-      add(ui, "展开分组: 明细面板出现", opened === gKey, `expandedKey=${opened} / 行 key=${gKey}`);
-      if (navX.length >= 3) {
-        await navX[1].click();   // 切种子页
-        await page.waitForTimeout(400);
-        const away = await readInst(page, "vm.expandedKey");
-        add(ui, "切到种子视图: 展开态不串台(实时字段清空)", away === null, `expandedKey=${away}`);
-        await navX[0].click();   // 切回辅种页
-        await page.waitForTimeout(700);
-        const back = await readInst(page, "vm.expandedKey");
-        const detailN = await page.$$eval(".detail", (n) => n.length);
-        add(ui, "切回辅种视图: 展开的组还在(跨视图记忆)",
-          back === gKey && detailN > 0, `expandedKey=${back} / .detail ${detailN} 个`);
-      }
-      // 收起还原现场(后面的断言按收起态的行集合写); 用真实方法 toggleExpand 而不是直接赋 null
-      await page.evaluate(`(() => { const vm = ${INST}; if (vm.expandedKey) vm.toggleExpand(vm.expandedKey, null); })()`);
-      await page.waitForTimeout(200);
-    }
-  }
 
   /*
-   * 导航焦点不变式(2026-10-02 用户报「键盘切页后, 鼠标点选过的页签残留高亮框」):
-   * 鼠标点过的页签持有 DOM 焦点, 键盘切页(1/2/3)不动焦点, 而 Chromium 在 keydown 分发时把
-   * 焦点元素重估为 :focus-visible ⇒ 旧页签画出残留 outline。修法 = goView 后同步导航焦点
-   * (view.js::syncNavFocus): 焦点在非目标页签上就 blur 归还 body; 恰在目标页签上(点击/
-   * Tab+Enter 路径)则保留, 不打断键盘 Tab 序。断言两层: matches(":focus-visible") 是机制
-   * 读数, 框是否真画出以 focused(焦点位置)为准 —— 焦点不在旧页签上就不可能画框。
+   * 块A(渲染健康/分组视图/展开态跨视图/导航焦点/种子视图数据与总数/renderMs/状态栏速度/
+   * 筛选器计数/轮询分档, 原 L288–470)已于 2026-10-06 迁入 e2e/views.spec.mjs(S1 批,
+   * 计划 26-10-06-0708 §3.3; 对账映射表见该文件头)。此处只保留后续块(性能埋点/乐观 UI/
+   * 菜单族/HR/列设置)依赖的脚手架: nav 页签引用 + 种子视图就位 + tRows/tTotal 读数
+   * (块B 的 gbrBudget 与"行窗口化生效"断言要拿它们当输入)。
    */
-  {
-    const navV = await page.$$("nav.tabs [data-view]");
-    if (navV.length >= 3) {
-      await navV[2].click();  // 鼠标点「追剧」—— 页签持焦但鼠标模态不画 :focus-visible
-      await page.waitForTimeout(100);
-      const base = await page.evaluate(() => {
-        const b = document.querySelectorAll("nav.tabs [data-view]")[2];
-        return { focused: document.activeElement === b, fv: b.matches(":focus-visible") };
-      });
-      add(ui, "导航焦点: 鼠标点页签持焦且无焦点框", base.focused && !base.fv, JSON.stringify(base));
-      await page.keyboard.press("2");  // 键盘切到种子页 —— 复现残留框的关键一步
-      await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
-      const after = await page.evaluate(() => {
-        const btns = [...document.querySelectorAll("nav.tabs [data-view]")];
-        return {
-          stale: btns.filter((b) => document.activeElement === b || b.matches(":focus-visible")).length,
-        };
-      });
-      const mode = await readInst(page, "vm.viewMode");
-      add(ui, "导航焦点: 键盘切页后旧页签不残留焦点框", mode === "torrents" && after.stale === 0,
-        `mode=${mode} / 残留 ${after.stale} 个`);
-      await navV[0].click();  // 还原到辅种页(后续用例按 groups 态写)
-      await page.waitForTimeout(300);
-    } else {
-      add(ui, "导航焦点: 键盘切页后旧页签不残留焦点框", false, "nav.tabs [data-view] 不足 3 个");
-    }
-  }
-
-  // 三视图切换(P1-1: 只回传当前视图数组 ⇒ 切过去必须仍有数据, 不能被上一轮抹空)
   const nav = await page.$$("nav.tabs button");
   if (nav.length >= 3) {
     await nav[1].click();  // 种子
     await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
     const tRows = await page.$$eval(".torrent-row", (n) => n.length);
     const tTotal = await readInst(page, "vm.filteredTorrents.length");
-    add(ui, "切到种子视图有数据", tRows > 0 && (!tTotal || tRows <= tTotal), `DOM ${tRows} 行 / 数据 ${tTotal} 条`);
-    if (EXPECT_N) add(ui, "种子总数与桩服务一致", tTotal === EXPECT_N, `${tTotal} vs ${EXPECT_N}`);
-    const renderMs = await readInst(page, "vm.renderMs");
-    add(ui, "单轮 renderMs 埋点可读", typeof renderMs === "number", `${renderMs}ms`);
-    /*
-     * 状态栏速度(issue 26-09-20-1646): 状态栏是**跨视图**的常驻显示, 旧实现在前端对
-     * `groups` 求和, 而 groups 按视图回传 —— 种子页根本不回它 ⇒ 恒显示 0(首屏即种子页)
-     * 或停在**冻结的旧值**(先开过辅种页再切过来, 这个形态比 0 更隐蔽)。
-     * !所以断言写成「等于服务端 status.totals 真值」而不是「≠ 0」: 只断言非 0 会被
-     * 冻结值蒙过去, 而这正是 pytest 侧看不见的那一段(数值显示在 DOM 里, 单测看不到)。
-     */
-    const wantDl = await readInst(page, "vm.status && vm.status.totals ? vm.status.totals.dlspeed : null");
-    const sbDl = await readInst(page, "vm.totalDl");
-    const sbText = await page.evaluate("(() => { const e = document.querySelector('.sb-speed .val'); return e ? e.textContent.trim() : null; })()");
-    add(
-      ui,
-      "状态栏速度 = 服务端 totals(种子页不回 groups 也要对)",
-      wantDl !== null && wantDl > 0 && sbDl === wantDl && !!sbText && sbText !== "0 B/s",
-      `totalDl=${sbDl} / status.totals.dlspeed=${wantDl} / DOM="${sbText}"`
-    );
-    /*
-     * 种子页筛选器必须有数据(2026-09-21 用户报「种子页筛选器无数据」):
-     * 筛选弹层的选项原先一律遍历 `groups` 计算, 而种子页按视图分片**不回 groups**
-     * (`VIEW_ARRAYS["torrent"]` 只有 torrents) ⇒ 标签/分类/站点/路径四个恒空, 弹层只剩
-     * "暂无数据"(H&R 是固定两档, 会显示成 0/0)。与状态栏速度(上一条)同一类成因:
-     * 跨视图的消费者去依赖按视图裁剪的阵列。
-     * 判据两层, 缺一不可: 1.选项非空 + 弹层 DOM 真渲染出项 2.计数 = **种子数**(该视图的行口径)。
-     * 只判非空会放过"仍按组算"的错误口径 —— 先开过辅种页再切过来时 groups 还在, 按组也能算出非零。
-     */
-    {
-      const f = await page.evaluate(`(() => {
-        const vm = ${INST};
-        const tag = vm.tagOptions[0];
-        return {
-          groups: vm.groups.length, torrents: vm.torrents.length,
-          empty: vm.filterDefs.filter((x) => !x.options.length).map((x) => x.kind).join(","),
-          first: tag ? tag.value : null,
-          count: tag ? tag.count : -1,
-          truth: tag ? vm.torrents.filter((r) => (r.tags || []).includes(tag.value)).length : -1,
-        };
-      })()`);
-      const btns = await page.$$(".filter-btn");
-      await btns[0].click();  // 标签筛选弹层: 用户看到"暂无数据"的地方
-      await page.waitForTimeout(300);
-      const dom = await page.evaluate(`(() => ({
-        items: document.querySelectorAll(".pop-menu .pop-item").length,
-        empty: !!document.querySelector(".pop-menu .pop-empty"),
-      }))()`);
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(150);
-      add(ui, "种子页筛选器有数据(计数=种子数)",
-        f.empty === "" && f.count === f.truth && dom.items > 0 && !dom.empty,
-        `取数面 groups=${f.groups}/torrents=${f.torrents} 空筛选器=[${f.empty}] ` +
-        `首个标签 ${f.first}=${f.count}(实际 ${f.truth}) 弹层项=${dom.items} 空提示=${dom.empty}`);
-    }
-
-    /*
-     * 轮询分档(P1 之后的收尾一步): 间隔必须**按种子量**落在实测档位上 ——
-     *   ≤1000 → 1.5s | 1000~3000 → 2s | >3000 → 3s
-     * 档位来自实测单轮 refresh 耗时(1000:143ms / 3000:309ms / 5000:~400ms),
-     * 目的是把主线程占用率压在 ~15%。断言它, 免得"改了半天的渲染优化"被一个
-     * 写死的 1s 轮询重新拖垮。
-     */
-    if (EXPECT_N) {
-      const want = EXPECT_N > 3000 ? 3000 : EXPECT_N > 1000 ? 2000 : 1500;
-      const got = await readInst(page, "vm.currentPollMs()");
-      add(ui, "轮询间隔按种子量分档", got === want, `${EXPECT_N} 种子 → ${got}ms(期望 ${want}ms)`);
-    }
 
     /*
      * 强制全量重渲染 N 轮, 用 PerformanceObserver(longtask) 量"主线程被占住多久" ——
