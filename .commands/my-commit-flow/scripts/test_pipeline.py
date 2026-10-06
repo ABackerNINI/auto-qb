@@ -19,6 +19,7 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
                                不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
 - MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
+- PackageRefreshTest           包内模块热刷新: 源码变了才 reload(保身份) / 源码没变零动作(替身不被冲掉)
 - SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
                                <each:> 接受该后缀; 探针摘掉「无参即真动作」脚本(超时按不安全)
 - ShortTest                    失败明细里的根路径压缩
@@ -317,6 +318,64 @@ class MirrorNoRetryTest(unittest.TestCase):
         text = self.PUSH.read_text(encoding="utf-8")
         self.assertIn('git_run("push", main, branch)', text)
         self.assertNotIn('git_run("push", main, branch, attempts=1)', text)
+
+
+class PackageRefreshTest(unittest.TestCase):
+    """包内模块热刷新 —— 内部同步会把远端新版**包脚本** rebase 进工作区, 延迟 import 前必须重载。
+
+    2026-10-06 实测的宿主 bug: 远端给 `_pipeline` 加了 `retry_note`, 而 commit.py 启动时已缓存旧
+    `_pipeline`; 末尾 `from push import run_push` 导进来的新 push.py 撞上缓存旧模块 → ImportError,
+    提交明明成功了却退出 1。两条判据必须**同时**成立:
+    ① 源码变 → 重载(否则 bug 复发); ② 源码没变 → **零动作**(替身挂在模块属性上, 无条件 reload 会
+    把替身冲掉, 让所有用替身的守阵静默失灵)。
+    """
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(lambda: sys.modules.pop("_probe_fresh", None))
+        orig = (_pipeline._PACKAGE_MODULES, _pipeline._PACKAGE_DIR, _pipeline._PACKAGE_DIGESTS)
+        self.addCleanup(
+            lambda: (
+                setattr(_pipeline, "_PACKAGE_MODULES", orig[0]),
+                setattr(_pipeline, "_PACKAGE_DIR", orig[1]),
+                setattr(_pipeline, "_PACKAGE_DIGESTS", orig[2]),
+            )
+        )
+
+    def _install_probe(self, value: int) -> Path:
+        """把刷新器指向临时目录里的探针模块 —— 不碰真包, 也不与真模块名撞车。"""
+        path = self.dir / "_probe_fresh.py"
+        path.write_text(f"VALUE = {value}\n", encoding="utf-8")
+        sys.path.insert(0, str(self.dir))
+        self.addCleanup(lambda: sys.path.remove(str(self.dir)) if str(self.dir) in sys.path else None)
+        _pipeline._PACKAGE_MODULES = ("_probe_fresh", )
+        _pipeline._PACKAGE_DIR = self.dir
+        _pipeline._PACKAGE_DIGESTS = {"_probe_fresh": _pipeline._source_digest(path)}
+        return path
+
+    def test_changed_source_is_reloaded(self) -> None:
+        path = self._install_probe(1)
+        import _probe_fresh
+        self.assertEqual(_probe_fresh.VALUE, 1)
+        path.write_text("VALUE = 2\n", encoding="utf-8")  # 模拟 rebase 改写包脚本
+        self.assertEqual(_pipeline.refresh_package_modules(), ["_probe_fresh"])
+        self.assertEqual(_probe_fresh.VALUE, 2)  # 直接改模块对象本身(保身份), 不是造第二份
+        self.assertEqual(_pipeline.refresh_package_modules(), [])  # 摘要已对齐 → 不反复重载
+
+    def test_unchanged_source_never_touches_module(self) -> None:
+        self._install_probe(1)
+        import _probe_fresh
+        _probe_fresh.VALUE = 999  # 模拟测试替身(挂在模块属性上, 源码没动)
+        self.assertEqual(_pipeline.refresh_package_modules(), [])
+        self.assertEqual(_probe_fresh.VALUE, 999)  # 替身没被冲掉
+
+    def test_missing_source_is_skipped(self) -> None:
+        """取不到摘要(文件不在)时跳过, 不把"无从判断"当"变了"。"""
+        _pipeline._PACKAGE_MODULES = ("_probe_fresh", )
+        _pipeline._PACKAGE_DIR = self.dir
+        _pipeline._PACKAGE_DIGESTS = {"_probe_fresh": "stale-but-irrelevant"}
+        self.assertEqual(_pipeline.refresh_package_modules(), [])
 
 
 class SmokeSafetyTest(unittest.TestCase):

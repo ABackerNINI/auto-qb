@@ -26,7 +26,9 @@
      「推送未完成」停下要人
   7. rebase 真合入了远端提交(HEAD 改写) → 闸门按同一份清单复跑一轮(合并后的树才算数); fmt 类闸门
      若又改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)
-  8. 内联推送(run_push): 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
+  8. 内联推送(run_push): **先 `_pipeline.refresh_package_modules()`**(上面第 6 步的 rebase 可能已把远端新版
+     **包脚本**换进工作区 —— 本目录就在仓库里; 不刷新则新 push.py 撞缓存的旧 `_pipeline`, 2026-10-06
+     实测 ImportError) / 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
 消息文件不删的时机: commit 或 ref 核对失败 —— 修好重跑还能用同一份消息。
 
 用法: python <包>/scripts/commit.py [路径...] [--message-file <文件>] [--no-push]
@@ -51,6 +53,7 @@ from _pipeline import (  # noqa: E402
     gates_for,
     git_run,
     hit,
+    refresh_package_modules,
     run_gates,
     staged_overflow,
     step,
@@ -285,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     sha = head_now[:8]
 
     # 7 内联推送(run_push 内含同步核对 / 推主线 20s×3 重试 / attempts=1 静默镜像); 推送未完成 ≠ 提交失败
+    # ❗先刷新本包模块: 上面的内部同步可能已把远端新版**包脚本** rebase 进工作区(本目录就在仓库里),
+    #   否则下面 `from push import run_push` 导进来的新 push.py 会在 `from _pipeline import … retry_note`
+    #   处撞上进程启动时缓存的旧 _pipeline → ImportError(2026-10-06 实测: 提交明明已落稳, 退出码却被误置 1)。
+    #   刷新按「源码变了」门控, 平时零动作(见 `_pipeline.refresh_package_modules`)。
+    refresh_package_modules()
     from push import run_push  # noqa: E402
 
     pushed, push_line = run_push(steps)

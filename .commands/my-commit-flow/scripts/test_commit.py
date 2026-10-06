@@ -18,6 +18,7 @@
 - test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
+- test_push_path_refreshes_package_modules 推送前刷新本包模块, 顺序 = 同步 → 刷新 → 推送(--no-push 不刷新)
 - test_no_push_skips_sync_and_push        --no-push 不同步不推送(离线可用), 一行注明未推送
 - test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 ⚠(唯一例外, D5)
 - test_message_kept_on_commit_fail        git commit 失败 → 消息文件保留
@@ -402,6 +403,36 @@ def test_push_failure_is_partial(repo, monkeypatch, capsys):
     assert "提交成功" in out and "未推送" in out
     assert "推送未完成: 主线推送未通过" in out and "commands run ship.push" in out
     assert not msg.exists()  # 提交已落稳(ref 通过), 消息照常消费
+
+
+def test_push_path_refreshes_package_modules(repo, monkeypatch, capsys):
+    """推送步前刷新本包模块, 且顺序必须是「同步 → 刷新 → 推送」。
+
+    为什么: 内部同步可能已把远端新版**包脚本** rebase 进工作区(本目录就在仓库里), 不刷新则新 push.py
+    在 `from _pipeline import … retry_note` 处撞进程启动时缓存的旧 _pipeline(2026-10-06 实测 ImportError,
+    提交明明已落稳却退出 1)。刷新本身静默、没有行为出口 —— 只能钉住"它被调用过、且在同步之后"这个事实。
+    """
+    order: list[str] = []
+    monkeypatch.setattr(sync_mod, "run_sync", lambda steps=None: order.append("sync") or (True, "已同步 abcdef01"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: order.append("push") or (True, "推送成功 abcdef01"))
+    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: order.append("refresh") or [])
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(commit_mod, "check_refs", lambda expect="": (True, []))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    assert commit_mod.main([]) == 0
+    assert order == ["sync", "refresh", "push"]
+
+
+def test_no_push_never_refreshes(repo, monkeypatch, capsys):
+    """--no-push 不碰推送, 也就不必刷新(刷新只为延迟 import push)—— 省一次无关动作。"""
+    calls: list[int] = []
+    _patch_ok_flow(monkeypatch)
+    monkeypatch.setattr(commit_mod, "refresh_package_modules", lambda: calls.append(1) or [])
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    assert commit_mod.main(["--no-push"]) == 0
+    assert calls == []
 
 
 def test_no_push_skips_sync_and_push(repo, monkeypatch, capsys):

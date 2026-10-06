@@ -136,6 +136,12 @@ v3 的其余部分（模板 / 退出码 / 沉默即成功）一字未改。
 - **`--no-push` 不同步**：纯本地提交（离线可用），合流留给补推时的 `ship.push`（其内部 run_sync 树净同理）。
 - **ref 核对在同步前（#1，快失败）**：提交的 ref 写入若被环境静默丢弃，同步会拿旧 HEAD 当真值 —— 必须先拦下；
   amend 又是一次 ref 写入，之后复核。推送侧真值仍由 run_push 的 ls-remote 兜底。
+- **推送前刷新本包模块**（2026-10-06）：本包脚本**住在仓库里**，而第 6 步的内部同步可能已把远端新版包脚本
+  rebase 进工作区；Python 的 `from X import y` 只认 `sys.modules` 缓存，于是 `commit.py` 启动时缓存的旧
+  `_pipeline` 会让延迟导入的**新** `push.py` 在 `from _pipeline import … retry_note` 处抛 `ImportError`
+  （提交明明已落稳，退出码却被误置 1，与 v3 契约相悖）。故推送步前调 `_pipeline.refresh_package_modules()`：
+  按**内容摘要**判定源码是否被改写，`importlib.reload`（**保模块身份**）重载本包模块；源码没变则零动作
+  （测试替身挂在模块属性上，无条件 reload 会把它们冲掉）。判据与守阵见 `pitfalls/git/self-rewrite-imports.md`。
 - **逐路径 add 的分流**（修 issue 26-09-28-0128）：工作区存在 → `git add -- <path>`；
   不存在但索引里有 → `git rm --cached -- <path>`；都不在（已暂存的删除）→ 无事可做。
 - **消息文件** `<root>/.git/COMMIT_MSG_AI.txt` **消费即删**：ref 核对通过即删（提交落稳的单点判据）——

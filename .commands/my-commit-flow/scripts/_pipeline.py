@@ -6,6 +6,9 @@ v3.1(2026-10-06)在本模块加了唯一的**输出机制**例外: 「步骤登�
 结果行仍是上面那句话, 只是**真改写 HEAD 的步骤**由它登记成一行证据, 见该段注释。
 2026-10-06 另加: **git 命令统一走 `run_git`** —— 单次 20s 超时 + 有界重试(默认 3 次, 全部失败才判失败),
 动机(Gitee 间歇性卡住)与三档重试判据见「git 命令: 单次超时 + 有界重试」段。
+2026-10-06 另加: **包内模块热刷新** (`refresh_package_modules`) —— 内部同步会把远端新版**包脚本** rebase 进
+工作区(本目录就在仓库里), 延迟 import 前必须按磁盘现版本重载, 否则新脚本撞上进程启动时缓存的旧模块,
+见「包内模块热刷新」段。
 人工排障口: `_pipeline.py --show-config` 看生效配置, `--init` 生成新仓库的配置初稿。
 
 前身是 preflight.py(检查表式预检, v2 计划 26-09-26-2345); v3 把"检查"下沉进 ship 编排,
@@ -16,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
+import importlib
 import os
 import re
 import subprocess
@@ -251,6 +256,58 @@ def git_rc(*args: str, attempts: int = GIT_ATTEMPTS) -> int:
 def git_run(*args: str, attempts: int = GIT_ATTEMPTS) -> subprocess.CompletedProcess:
     """要 rc + stderr 的 git 调用(merge --ff-only / rebase / push 的失败原因都在 stderr)。"""
     return run_git(["git", *args], attempts=attempts)
+
+
+# ------------------------------------------------------------------ 包内模块热刷新
+# 场景: 本包脚本就住在**仓库里**, 而内部同步(`sync.run_sync`)会把远端新版包脚本 rebase 进工作区 ——
+#   于是「进程启动时缓存的模块」与「磁盘上的现版本」不再一致, 而 `from X import y` 只认缓存。
+# 后果(2026-10-06 实测): 远端 `aaff8b3a` 给 `_pipeline` 加了 `retry_note`, 而 commit.py 启动时已缓存
+#   旧 `_pipeline`; 末尾 `from push import run_push` 导入的**新** push.py 执行
+#   `from _pipeline import … retry_note` → ImportError ⇒ 推送步崩、退出码被置 1
+#   (与 v3「推送未完成不改退出码」的契约相悖: 提交明明已落稳, 看起来却像硬失败)。
+# 修法: 在**延迟 import 之前**把「源码真的被改写」的本包模块按磁盘现版本重载(commit.py 推送步前调用)。
+# 两条判据不动摇:
+#   ① 用 `importlib.reload` 而不是「删 sys.modules 再 import」—— 后者会造出**第二个**模块对象,
+#      已绑定旧名的调用方与新导入的名字从此分属两份(常量 / 函数可能不一致), 是更难查的雷。
+#   ② **按"源码变了"门控**(内容摘要, 不是 mtime: 切分支 / checkout 可能保留 mtime) —— 测试用
+#      monkeypatch 把 `run_sync` / `run_push` 换成替身, 而源码没变; 无条件 reload 会把替身冲掉,
+#      让守阵自己失灵(同族见 `memory-bank/pitfalls/testing/patching.md`)。
+_PACKAGE_MODULES = ("_ship_config", "_pipeline", "sync", "push")  # 依赖在前, 按序重载
+_PACKAGE_DIR = Path(__file__).resolve().parent
+
+
+def _source_digest(path: Path) -> str | None:
+    """源文件内容摘要 —— 取不到(不存在 / 读不了)返回 None, 调用方按「无从判断」跳过。"""
+    try:
+        return hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
+    except OSError:
+        return None
+
+
+_PACKAGE_DIGESTS = {name: _source_digest(_PACKAGE_DIR / f"{name}.py") for name in _PACKAGE_MODULES}
+
+
+def refresh_package_modules() -> list[str]:
+    """把**源码已被改写**的本包模块按磁盘现版本重载, 返回真重载了的模块名(诊断用)。
+
+    只重载已在 `sys.modules` 里的 —— 尚未导入的模块下次 `import` 天然就是新版, 无需处理。
+    待重载名单**先算齐再动手**: `_pipeline` 自己也在名单里, 重载它会重算 `_PACKAGE_DIGESTS`;
+    边算边改会让排在它后面的 `sync` / `push` 被这次重算"洗白"而漏掉重载(它们仍在缓存里是旧版)。
+    调用点: 内部同步之后、任何延迟 import 之前(目前唯一一处 = commit.py 的推送步)。
+    """
+    stale: list[tuple[str, str]] = []
+    for name in _PACKAGE_MODULES:
+        digest = _source_digest(_PACKAGE_DIR / f"{name}.py")
+        if digest is not None and digest != _PACKAGE_DIGESTS.get(name):
+            stale.append((name, digest))
+    reloaded: list[str] = []
+    for name, digest in stale:
+        _PACKAGE_DIGESTS[name] = digest
+        module = sys.modules.get(name)
+        if module is not None:
+            importlib.reload(module)
+            reloaded.append(name)
+    return reloaded
 
 
 def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
