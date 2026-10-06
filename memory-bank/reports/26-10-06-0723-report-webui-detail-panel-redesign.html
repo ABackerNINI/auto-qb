@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>种子详情面板重构 · 设计模板轮 — 汇总报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-detail-panel-redesign">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-06-0723">
+<meta name="doc-updated" content="26-10-06-0723">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-webui-detail-panel.md">
+<style>
+  :root{
+    color-scheme: dark;
+    /* prism ocean 令牌 (resources/detail-panel-templates/_brief.md §5 逐值) */
+    --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050; --bg-elev:#1b2d4b;
+    --ink:#e9eff7; --ink-muted:#9cadc6; --ink-dim:#6e84a3;
+    --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15); --accent-line:rgba(58,166,166,.45);
+    --border:#23395a; --border-strong:#34507c; --hairline:rgba(255,255,255,.07);
+    --green:#3fd699; --warn:#f5bb42; --error:#f3766f;
+    --font-body:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+    --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); font-size:14.5px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:52px 36px 72px}
+  p{margin:0 0 12px; max-width:76ch}
+  strong{font-weight:600; color:var(--ink)}
+  a{color:var(--accent-hi); text-decoration:none; border-bottom:1px solid rgba(92,195,195,.35); padding-bottom:1px}
+  a:hover{color:var(--accent-hi); border-bottom-color:var(--accent-hi)}
+  code{
+    font-family:var(--font-mono); font-size:.86em; color:var(--ink);
+    background:var(--bg-row); border:1px solid var(--hairline); border-radius:3px; padding:1px 6px; white-space:nowrap;
+  }
+  /* ---------- 头部 ---------- */
+  .kick-row{display:flex; align-items:baseline; gap:18px; border-top:2px solid var(--accent); padding-top:14px; flex-wrap:wrap}
+  .kick{font-family:var(--font-mono); font-size:11.5px; letter-spacing:.09em; color:var(--accent); text-transform:uppercase}
+  .kick-meta{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim); letter-spacing:.02em}
+  .kick-meta .st{color:var(--green)}
+  h1{
+    font-family:var(--font-display); font-size:40px; font-weight:600; line-height:1.12;
+    letter-spacing:-.02em; margin:22px 0 14px; max-width:22ch;
+  }
+  h1 .thin{color:var(--ink-muted); font-weight:400}
+  .lede{font-size:16.5px; line-height:1.65; color:var(--ink-muted); max-width:64ch}
+  .lede strong{color:var(--ink)}
+  .head-meta{
+    margin-top:20px; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim);
+    display:flex; gap:8px 22px; flex-wrap:wrap; border-top:1px solid var(--hairline); padding-top:12px;
+  }
+  /* ---------- 目录 ---------- */
+  .toc{margin:34px 0 0; border:1px solid var(--border); background:var(--bg-card); padding:4px 0}
+  .toc-row{display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:baseline;
+    padding:9px 18px; border-bottom:1px solid var(--hairline); text-decoration:none}
+  .toc-row:last-child{border-bottom:none}
+  .toc-row:hover{background:var(--bg-hover)}
+  .toc-no{font-family:var(--font-mono); font-size:12px; color:var(--accent)}
+  .toc-t{color:var(--ink); font-size:14px}
+  .toc-sub{font-family:var(--font-mono); font-size:11px; color:var(--ink-dim)}
+  a.toc-row{border-bottom:none}
+  a.toc-row:last-of-type{border-bottom:none}
+  /* ---------- 章节骨架 ---------- */
+  section{margin-top:64px}
+  .sec-head{border-top:1px solid var(--border-strong); padding-top:16px; display:grid; grid-template-columns:96px 1fr; gap:0 18px}
+  .sec-no{font-family:var(--font-display); font-size:44px; font-weight:600; color:var(--border-strong); line-height:1; letter-spacing:-.02em}
+  h2{font-family:var(--font-display); font-size:27px; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; line-height:1.2}
+  .sec-sub{color:var(--ink-dim); font-size:13.5px; margin:0; max-width:70ch}
+  .sec-body{grid-column:2; margin-top:22px}
+  h3{font-family:var(--font-display); font-size:17.5px; font-weight:600; margin:34px 0 10px; letter-spacing:0}
+  h3 .h3-mono{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-dim); font-weight:400; margin-left:10px; letter-spacing:.03em}
+  /* ---------- 表格 ---------- */
+  table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.2px}
+  th{
+    font-family:var(--font-mono); font-size:10.5px; font-weight:400; text-transform:uppercase;
+    letter-spacing:.07em; color:var(--ink-dim); text-align:left;
+    border-bottom:1px solid var(--border-strong); padding:7px 12px; white-space:nowrap;
+  }
+  td{border-bottom:1px solid var(--hairline); padding:10px 12px; vertical-align:top; line-height:1.55}
+  tr:hover td{background:rgba(255,255,255,.018)}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .grp td{
+    background:var(--bg-row); font-family:var(--font-mono); font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted); border-bottom:1px solid var(--border); padding:6px 12px;
+  }
+  /* ---------- 徽章 / 标记 ---------- */
+  .tier{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid var(--border-strong); color:var(--ink-muted); border-radius:2px; padding:1px 6px; white-space:nowrap;
+  }
+  .tier.collapsed{border-color:var(--accent-line); color:var(--accent-hi); background:var(--accent-soft)}
+  .ok-dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:7px; vertical-align:1px}
+  .qbar{border:1px solid var(--border); background:var(--bg-card); padding:12px 16px; margin:14px 0}
+  .qbar p{margin:0; max-width:none}
+  /* ---------- §2 证据块 ---------- */
+  .ev{border:1px solid var(--border); margin:16px 0}
+  .ev-head{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-muted); padding:8px 16px; border-bottom:1px solid var(--hairline); background:var(--bg-row)}
+  .ev-body{padding:14px 16px}
+  .ev-body p{margin-bottom:10px}
+  .ev-body p:last-child{margin-bottom:0}
+  .ev-list{margin:0; padding-left:0; list-style:none}
+  .ev-list li{padding:10px 0 10px 34px; border-bottom:1px solid var(--hairline); position:relative}
+  .ev-list li:last-child{border-bottom:none}
+  .ev-list .no{position:absolute; left:0; top:10px; font-family:var(--font-mono); font-size:12px; color:var(--warn)}
+  .ev-list.pro .no{color:var(--green)}
+  .verdict{
+    border:1px solid var(--accent-line); background:var(--accent-soft);
+    padding:16px 18px; margin:20px 0;
+  }
+  .verdict .vt{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--accent-hi); text-transform:uppercase; margin-bottom:6px}
+  .verdict p{margin-bottom:8px}
+  .verdict p:last-child{margin-bottom:0}
+  figure{margin:20px 0}
+  figcaption{font-size:12.5px; color:var(--ink-dim); line-height:1.5; margin-top:8px; max-width:80ch}
+  .svg-mono{font-family:var(--font-mono)}
+  /* ---------- 推荐 ---------- */
+  .rec{border:1px solid var(--border-strong); background:var(--bg-card); padding:14px 18px; margin:12px 0 8px}
+  .rec-tag{font-family:var(--font-mono); font-size:11px; letter-spacing:.09em; color:var(--accent-hi); text-transform:uppercase; margin-bottom:6px}
+  .rec p{margin-bottom:8px}
+  .rec p:last-child{margin-bottom:0}
+  /* ---------- §5 补强块 ---------- */
+  .fix{border-top:1px solid var(--border); padding:18px 0 6px; margin-top:18px}
+  .fix-head{display:flex; align-items:baseline; gap:14px}
+  .fix-no{font-family:var(--font-mono); font-size:11px; letter-spacing:.09em; color:var(--accent); text-transform:uppercase; white-space:nowrap}
+  .fix h3{margin:0}
+  .fix .lbl{color:var(--ink-muted); font-weight:600}
+  /* ---------- 页脚 ---------- */
+  footer{margin-top:72px; border-top:1px solid var(--border-strong); padding-top:18px;
+    font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim); line-height:2}
+  footer b{color:var(--ink-muted); font-weight:400}
+  @media (max-width:860px){
+    .wrap{padding:36px 20px 56px}
+    h1{font-size:31px}
+    .sec-head{grid-template-columns:1fr}
+    .sec-no{font-size:32px; margin-bottom:8px}
+    .toc-row{grid-template-columns:48px 1fr}
+    .toc-sub{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ 头部 ============ -->
+  <header>
+    <div class="kick-row">
+      <span class="kick">Report · 汇总报告</span>
+      <span class="kick-meta">webui-detail-panel-redesign · 26-10-06-0723 · <span class="st">Done</span></span>
+    </div>
+    <h1>种子详情面板重构<br><span class="thin">设计模板轮 · 汇总报告</span></h1>
+    <p class="lede">
+      本轮以 15 份可交互单文件模板(<strong>5 页签 × 3 方向</strong>)完成了详情面板逐页重设计的选型素材:
+      统一采用 prism ocean 令牌, 内置收起/矮/高三档切换与五页签语境框, 经真实浏览器逐份质检全过。
+      报告给出<strong>收起状态的代码级论证</strong>(结论: 机制有真实作用, 但反馈弱、持久化是死数据, 值得保留并补强三件事)、
+      模板族总览与质检口径、逐页推荐(<strong>供拍板</strong>)与下一步路径。<strong>本轮只做设计选型, 未动任何产品代码。</strong>
+    </p>
+    <div class="head-meta">
+      <span>doc-type report</span><span>doc-topic webui-detail-panel-redesign</span><span>doc-status Done</span>
+      <span>模板 15 份</span><span>页签 5 × 方向 3</span><span>令牌 prism ocean</span>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+      <a class="toc-row" href="#s1"><span class="toc-no">01</span><span class="toc-t">背景与问题</span><span class="toc-sub">现状地图 · 三点不满</span></a>
+      <a class="toc-row" href="#s2"><span class="toc-no">02</span><span class="toc-t">收起状态论证</span><span class="toc-sub">证据 → 分析 → 结论</span></a>
+      <a class="toc-row" href="#s3"><span class="toc-no">03</span><span class="toc-t">模板族总览</span><span class="toc-sub">15 份 · 统一口径 · 质检</span></a>
+      <a class="toc-row" href="#s4"><span class="toc-no">04</span><span class="toc-t">逐页对比与推荐</span><span class="toc-sub">5 页签 · 供拍板</span></a>
+      <a class="toc-row" href="#s5"><span class="toc-no">05</span><span class="toc-t">收起状态的三条补强建议</span><span class="toc-sub">呼应 §2 · 模板已演示</span></a>
+      <a class="toc-row" href="#s6"><span class="toc-no">06</span><span class="toc-t">下一步</span><span class="toc-sub">选型 → 实施计划 → 三皮肤锁步</span></a>
+    </nav>
+  </header>
+
+  <!-- ============ 01 背景与问题 ============ -->
+  <section id="s1">
+    <div class="sec-head">
+      <span class="sec-no">01</span>
+      <div>
+        <h2>背景与问题</h2>
+        <p class="sec-sub">面板已从右侧抽屉改为下方面板; 三点不满定义了这轮设计的问题空间。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>
+        种子详情面板已从「右侧抽屉」改为「<strong>底部停靠面板</strong>」(sticky 吸底、占文档流、无遮罩), 头部带页签,
+        取值 <code>general / trackers / peers / content / traffic</code>。三皮肤共用同一 DOM 与 JS, 差异只在各皮肤 CSS。
+        现状实现地图:
+      </p>
+      <table>
+        <thead><tr><th>文件</th><th>职责</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/auto_qb/webui/static/shared/tpl/drawer.html</code></td><td>面板 DOM 单点: 头部(标题 + 页签 + 收起/关闭钮) + 五页签正文, 三皮肤共用</td></tr>
+          <tr><td><code>src/auto_qb/webui/static/shared/drawer.js</code></td><td>开合 / 页签切换 / 收起 / 拖拽调高 / 5s 轮询 / 各页数据组装</td></tr>
+          <tr><td><code>atlas/css/dialogs.css</code> · <code>console/css/dialogs.css</code> · <code>prism/css/views.css</code></td><td>三皮肤抽屉 CSS, 历来逐提交三处锁步同改</td></tr>
+          <tr><td><code>src/auto_qb/webui/server/routes/torrent_detail.py</code></td><td>数据端点: <code>/api/torrents/{hash}</code> 全字段详情 + <code>/trackers</code> <code>/files</code> <code>/peers</code> 与流量端点</td></tr>
+        </tbody>
+      </table>
+      <h3>用户三点不满</h3>
+      <table>
+        <thead><tr><th style="width:56px">#</th><th>不满</th><th>现状成因</th></tr></thead>
+        <tbody>
+          <tr><td class="num">①</td><td><strong>常规页右边空一大块</strong></td><td>常规页沿用旧竖向排版(<code>.drawer-sec</code> 卡片 + <code>.f-row</code> 单列 label/value 行), 面板改到下方后宽度拉满整幅列表宽, 行高堆叠导致右侧大量留白, 信息密度极低</td></tr>
+          <tr><td class="num">②</td><td><strong>Tracker / 用户 / 内容页没有设计感</strong></td><td>几乎是裸 <code>.drawer-table</code>(朴素 <code>border-collapse</code> 表)平铺, 无分组、无层级、无状态可视化, 与主列表的设计水准脱节</td></tr>
+          <tr><td class="num">③</td><td><strong>收起状态疑似没有实际作用</strong></td><td>需要代码级论证 —— 见 §2, 结论: 有真实作用但视觉反馈极弱, 且持久化是死数据</td></tr>
+        </tbody>
+      </table>
+      <p>
+        设计目标: 按页签逐页出可交互 HTML 模板, 解决「宽面板下的横向空间利用 + 表格设计感 + 收起态价值」。
+        唯一输入简报与全部模板见 <a href="../../resources/detail-panel-templates/_brief.md">resources/detail-panel-templates/_brief.md</a> 及同目录 15 份模板。
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 02 收起状态论证 ============ -->
+  <section id="s2">
+    <div class="sec-head">
+      <span class="sec-no">02</span>
+      <div>
+        <h2>收起状态论证</h2>
+        <p class="sec-sub">本轮重头: 代码级证据 → 分析 → 结论。回答「收起到底有没有用」。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3>正面证据: 收起改变了什么<span class="h3-mono">机制真实存在</span></h3>
+      <div class="ev">
+        <div class="ev-head">证据链 · 收起的空间回收是真实的</div>
+        <div class="ev-body">
+          <ul class="ev-list pro">
+            <li><span class="no">E1</span><code>toggleDrawerCollapse</code>(<code>shared/drawer.js:989</code>)翻转 <code>drawer.collapsed</code> → <code>aside.drawer</code> 挂 <code>collapsed</code> 类, 生效规则是各皮肤一条 <code>.drawer.collapsed .drawer-body { display:none }</code>(prism <code>css/views.css:552</code>; atlas <code>dialogs.css:23</code>; console <code>dialogs.css:17</code>)。</li>
+            <li><span class="no">E2</span>收起后高度回落到头部一行(头部 min-height 44px, atlas <code>dialogs.css:52</code>); <code>drawerPanelStyle()</code> 收起态返回 <code>{}</code> 丢弃内联 height(<code>drawer.js:953-958</code>)。</li>
+            <li><span class="no">E3</span>面板在文档流(sticky dock)里 —— 收起后<strong>列表区真实回收整段正文高度</strong>, 不是浮层遮挡关系的改变。</li>
+            <li><span class="no">E4</span>收起期副作用同样真实: 键盘跟随暂停(<code>drawer.js:834</code>)、流量图不重建/展开补建(<code>drawer.js:994-996</code>)、页签 5s 轮询可见性门跳过拉取(<code>drawer.js:718-723</code>)—— 三处行为都感知 collapsed 状态。</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure>
+        <svg viewBox="0 0 960 340" role="img" aria-label="收起前后面板几何对比示意" style="width:100%;height:auto;display:block">
+          <!-- 左帧: 展开态 -->
+          <text x="10" y="24" fill="#e9eff7" font-size="11.5" class="svg-mono">展开态 · collapsed=false</text>
+          <rect x="10" y="34" width="430" height="280" fill="#101d30" stroke="#34507c"/>
+          <rect x="10" y="34" width="430" height="20" fill="#17273c"/>
+          <text x="428" y="47" fill="#6e84a3" font-size="9" text-anchor="end" class="svg-mono">顶栏</text>
+          <text x="18" y="54" fill="#6e84a3" font-size="9" class="svg-mono">列表视口 · 5 行(被压缩)</text>
+          <rect x="18" y="58" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="18" y="76" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="18" y="94" width="414" height="17" fill="#112034" stroke="rgba(92,195,195,.6)"/>
+          <rect x="18" y="112" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="18" y="130" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="10" y="152" width="430" height="16" fill="#1b2d4b" stroke="rgba(58,166,166,.45)"/>
+          <text x="18" y="163" fill="#9cadc6" font-size="9" class="svg-mono">头部 44px(标题+页签+收起/关闭)</text>
+          <rect x="10" y="168" width="430" height="126" fill="rgba(58,166,166,.08)" stroke="#23395a"/>
+          <rect x="22" y="182" width="380" height="6" fill="rgba(255,255,255,.08)"/>
+          <rect x="22" y="198" width="330" height="6" fill="rgba(255,255,255,.08)"/>
+          <rect x="22" y="214" width="352" height="6" fill="rgba(255,255,255,.08)"/>
+          <text x="225" y="252" fill="#9cadc6" font-size="10" text-anchor="middle" class="svg-mono">正文(五页签数据) — 收起即 display:none</text>
+          <text x="225" y="270" fill="#6e84a3" font-size="9" text-anchor="middle" class="svg-mono">拖拽夹取 240px – 70vh · 默认 max-height 42vh</text>
+          <rect x="10" y="294" width="430" height="20" fill="#17273c"/>
+          <text x="428" y="307" fill="#6e84a3" font-size="9" text-anchor="end" class="svg-mono">状态栏</text>
+          <!-- 中缝箭头 -->
+          <text x="480" y="164" fill="#3aa6a6" font-size="10" text-anchor="middle" class="svg-mono">收起</text>
+          <line x1="450" y1="174" x2="506" y2="174" stroke="#3aa6a6" stroke-width="1.5"/>
+          <polygon points="506,170 514,174 506,178" fill="#3aa6a6"/>
+          <!-- 右帧: 收起态 -->
+          <text x="520" y="24" fill="#e9eff7" font-size="11.5" class="svg-mono">收起态 · collapsed=true</text>
+          <rect x="520" y="34" width="430" height="280" fill="#101d30" stroke="#34507c"/>
+          <rect x="520" y="34" width="430" height="20" fill="#17273c"/>
+          <text x="938" y="47" fill="#6e84a3" font-size="9" text-anchor="end" class="svg-mono">顶栏</text>
+          <text x="528" y="54" fill="#6e84a3" font-size="9" class="svg-mono">列表视口 · 11 行(回收正文高度)</text>
+          <rect x="528" y="58" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="76" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="94" width="414" height="17" fill="#112034" stroke="rgba(92,195,195,.6)"/>
+          <rect x="528" y="112" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="130" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="148" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="166" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="184" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="202" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="220" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <rect x="528" y="238" width="414" height="17" fill="#112034" stroke="rgba(255,255,255,.06)"/>
+          <text x="528" y="272" fill="#6e84a3" font-size="10" class="svg-mono">…</text>
+          <rect x="520" y="278" width="430" height="16" fill="#1b2d4b" stroke="rgba(58,166,166,.45)"/>
+          <text x="528" y="289" fill="#9cadc6" font-size="9" class="svg-mono">仅头部 44px</text>
+          <rect x="520" y="294" width="430" height="20" fill="#17273c"/>
+          <text x="938" y="307" fill="#6e84a3" font-size="9" text-anchor="end" class="svg-mono">状态栏</text>
+        </svg>
+        <figcaption>
+          收起 = 正文 <code>display:none</code>, 面板在文档流中把整段正文高度让回列表区 —— 空间回收真实存在
+          (prism <code>css/views.css:552</code> 等三皮肤各一条规则)。示意为 1280×800 视口的等比简化。
+        </figcaption>
+      </figure>
+
+      <h3>反面证据: 为什么「感觉没用」<span class="h3-mono">反馈弱 + 持久化死数据</span></h3>
+      <div class="ev">
+        <div class="ev-head">三条代码级反面证据</div>
+        <div class="ev-body">
+          <ul class="ev-list">
+            <li><span class="no">C1</span><strong>持久化是单向死数据。</strong><code>persistDrawerOpen()</code> 写 <code>localStorage["autoqb.ui.drawerOpen"]</code>(<code>drawer.js:1005</code>), 但<strong>全库无任何读取</strong>(注释自认「只作记录(写入不回读)」, <code>drawer.js:940</code>); <code>state.js:115</code> 初值恒 <code>open:false</code>。→ 收起状态从不被恢复, 写下去的是死数据。</li>
+            <li><span class="no">C2</span><strong>每次重开面板, collapsed 被重置。</strong><code>drawer.js:659</code> 打开面板即重置 <code>collapsed:false</code>; 而 Esc / 关闭钮是整个收起面板。收起相对「关闭」仅多保住页签/数据/滚动位置, 没有独立的视觉身份。</li>
+            <li><span class="no">C3</span><strong>收起态点页签不清 collapsed。</strong><code>drawerTab()</code>(<code>drawer.js:794-803</code>)切换页签时不展开, 数据被拉进 <code>display:none</code> 的正文里 —— 点了像「没反应」。</li>
+          </ul>
+          <p style="margin-top:10px;color:var(--ink-muted)">
+            补充观察: <code>tpl/drawer.html:19</code> 注释声称 grip「收起态隐藏」, 但三皮肤均无 <code>.drawer.collapsed .drawer-grip</code> 规则, 8px 拖拽热区仍叠在头部上 —— 注释漂移, 佐证收起态从未被当成一个「被设计的形态」。
+          </p>
+        </div>
+      </div>
+
+      <div class="verdict">
+        <div class="vt">结论</div>
+        <p><strong>收起机制值得保留</strong> —— E1-E4 证明空间回收与行为副作用真实存在; 但「感觉没用」的根因在反馈层: C1 不恢复、C2 不驻留、C3 无响应。方向不是删掉收起, 而是补三件事: <strong>①持久化回读 ②收起态点页签自动展开 ③收起态头部摘要化</strong>(具体建议见 §5)。</p>
+        <p>15 份模板中的 <strong>03 / 06 / 09 / 12 / 15 五份默认收起档</strong>, 且都在 44px 头部内嵌了各自页签的摘要条 —— 已把「收起态从空白条变成信息条」作为设计方向演示, 可直接作为实施基准。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 03 模板族总览 ============ -->
+  <section id="s3">
+    <div class="sec-head">
+      <span class="sec-no">03</span>
+      <div>
+        <h2>模板族总览</h2>
+        <p class="sec-sub">15 份单文件模板 = 5 页签 × 3 方向, 每页签覆盖 tall / low / collapsed 三个高度档。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <h3>统一口径<span class="h3-mono">15 份一致</span></h3>
+      <table>
+        <tbody>
+          <tr><td style="width:190px"><strong>视觉令牌</strong></td><td>prism ocean 全表逐值内联(简报 §5), <code>color-scheme: dark</code>, 零 backdrop-filter</td></tr>
+          <tr><td><strong>工程形态</strong></td><td>单文件自包含, 零外链(无 CDN / 字体 / 图片 / 网络请求); 界面文案中文, 数字/路径/哈希走 mono</td></tr>
+          <tr><td><strong>样例数据</strong></td><td>硬编码 PT 语境真实感数据, 全族同一「主角」种子, 保证跨模板评审一致</td></tr>
+          <tr><td><strong>语境框</strong></td><td>每份内置 1280×800 假想主窗口(顶栏 + 简化种子列表 + 面板 + 状态栏), 列表区随面板高度<strong>真实让位</strong></td></tr>
+          <tr><td><strong>高度档</strong></td><td><span class="tier">collapsed</span> 收起条(仅头部 ~44px) · <span class="tier">low</span> 矮档 240px · <span class="tier">tall</span> 高档 ~560px(≈70vh), 每份内置三档切换</td></tr>
+          <tr><td><strong>交互与类名</strong></td><td>悬浮提示一律原生 <code>title</code>; 类名沿用 <code>.drawer-*</code> 语义, 便于映射回真实 DOM 平移实施</td></tr>
+        </tbody>
+      </table>
+
+      <h3>质检结论<span class="h3-mono">真实浏览器逐份验证</span></h3>
+      <div class="qbar">
+        <p><span class="ok-dot"></span>Playwright Chromium 真实浏览器逐份验证: <strong>三档切换 + 页面内交互全过, 控制台零报错</strong>; 令牌与简报 §5 逐值一致。质检中发现并已修复: 01-12 缺 <code>[hidden]</code> 全局规则(共 12 行; 13-15 原有)。</p>
+      </div>
+
+      <h3>逐份清单<span class="h3-mono">文件名可点击, 直达模板</span></h3>
+      <table>
+        <thead><tr><th style="width:44px">#</th><th style="width:300px">模板</th><th style="width:104px">默认档</th><th>一句话</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4">general · 常规</td></tr>
+          <tr><td class="num">01</td><td><a href="../../resources/detail-panel-templates/01-general-hero-tall.html">01-general-hero-tall</a></td><td><span class="tier">tall</span></td><td>HR 条 + 大数字英雄行(进度/比率/上行/做种/汇报) + 4 列键值栅格, 分组可折叠 —— 解决高档位右侧留白</td></tr>
+          <tr><td class="num">02</td><td><a href="../../resources/detail-panel-templates/02-general-cards-low.html">02-general-cards-low</a></td><td><span class="tier">low</span></td><td>HR/传输/元信息/时间/标识/存储六卡按三列聚类, 矮档 240px 信息仍可达, 卡片可折叠</td></tr>
+          <tr><td class="num">03</td><td><a href="../../resources/detail-panel-templates/03-general-dossier-collapsed.html">03-general-dossier-collapsed</a></td><td><span class="tier collapsed">collapsed</span></td><td>左紧凑三列条带 + 右 252px 固定元信息栏; 收起态 44px 头部内嵌「做种中 · 99.8% · ↑2.11 · 比率 · HR 剩 41h12m · 站点」摘要条</td></tr>
+          <tr class="grp"><td colspan="4">trackers · Tracker</td></tr>
+          <tr><td class="num">04</td><td><a href="../../resources/detail-panel-templates/04-trackers-status-cards-tall.html">04-trackers-status-cards-tall</a></td><td><span class="tier">tall</span></td><td>健康总览计数即筛选(正常/警告/更新中/失败/未启用), 每 tracker 一张色轨状态卡(回收 tier 徽章 + num_peers + num_downloaded + msg 染色块), 异常优先排序可切按 tier</td></tr>
+          <tr><td class="num">05</td><td><a href="../../resources/detail-panel-templates/05-trackers-health-groups-low.html">05-trackers-health-groups-low</a></td><td><span class="tier">low</span></td><td>失败→警告→更新中→正常→未启用问题前置, 失败区铺开 msg 全文 + 处置建议 + 显眼重报钮, 矮档免滚动即可见</td></tr>
+          <tr><td class="num">06</td><td><a href="../../resources/detail-panel-templates/06-trackers-table-collapsed.html">06-trackers-table-collapsed</a></td><td><span class="tier collapsed">collapsed</span></td><td>状态色点 + msg 行内展开 + 下次汇报逐秒倒计时 + 「仅看异常」过滤; 收起态头部内嵌 tracker 健康比例条</td></tr>
+          <tr class="grp"><td colspan="4">peers · 用户</td></tr>
+          <tr><td class="num">07</td><td><a href="../../resources/detail-panel-templates/07-peers-dashboard-tall.html">07-peers-dashboard-tall</a></td><td><span class="tier">tall</span></td><td>四卡仪表条(实时上下行+会话累计 / 连接方向构成 / 客户端 Top / 链路健康+吸血警戒), 上行去向分段与行速度微条同色联动</td></tr>
+          <tr><td class="num">08</td><td><a href="../../resources/detail-panel-templates/08-peers-groups-low.html">08-peers-groups-low</a></td><td><span class="tier">low</span></td><td>按「这条连接此刻在干什么」分五区(取流/供流/闲置/限流/握手), 组头聚合+折叠, 「只看在传数据」一键聚焦</td></tr>
+          <tr><td class="num">09</td><td><a href="../../resources/detail-panel-templates/09-peers-density-collapsed.html">09-peers-density-collapsed</a></td><td><span class="tier collapsed">collapsed</span></td><td>收起态头部即雷达摘要(构成比例条+上下行+吸血计数), 30px 密度表按上行占用降序, 迅雷行红标+悬停封禁钮</td></tr>
+          <tr class="grp"><td colspan="4">content · 内容</td></tr>
+          <tr><td class="num">10</td><td><a href="../../resources/detail-panel-templates/10-content-tree-detail-tall.html">10-content-tree-detail-tall</a></td><td><span class="tier">tall</span></td><td>左折叠树(引导线+类型图标+内嵌进度+优先级徽章) + 右 324px 选中详情(大小/已完成/缺口/可用性/优先级分段), 目录点选给子树聚合与整目录批量优先级</td></tr>
+          <tr><td class="num">11</td><td><a href="../../resources/detail-panel-templates/11-content-treegrid-batch-low.html">11-content-treegrid-batch-low</a></td><td><span class="tier">low</span></td><td>增强树表, 目录行聚合(子树大小/加权进度/文件数/最低可用性, 新增可用性列回收既有未展示的 availability 字段), 勾选行批量改优先级(勾目录=整棵子树三态框), 27px 行距矮档仍可读</td></tr>
+          <tr><td class="num">12</td><td><a href="../../resources/detail-panel-templates/12-content-space-treemap-collapsed.html">12-content-space-treemap-collapsed</a></td><td><span class="tier collapsed">collapsed</span></td><td>空间树图(块面积=体积占比, 绿色水位=完成度, 琥珀虚水位=缺块)与体积榜悬停互联; 收起态头部给体积构成条+未完成数</td></tr>
+          <tr class="grp"><td colspan="4">traffic · 流量</td></tr>
+          <tr><td class="num">13</td><td><a href="../../resources/detail-panel-templates/13-traffic-chart-led-tall.html">13-traffic-chart-led-tall</a></td><td><span class="tier">tall</span></td><td>窗口 KPI 头行(累计上下行/峰值/均值/采样健康) + 大幅手绘 SVG 双系列图, 13 档窗口全可切, 限速虚线与缺口斜纹标注</td></tr>
+          <tr><td class="num">14</td><td><a href="../../resources/detail-panel-templates/14-traffic-annotated-split-low.html">14-traffic-annotated-split-low</a></td><td><span class="tier">low</span></td><td>左图作参照 + 右 372px 解读栏(窗口合计与上下行占比条 / 峰值时段 Top 3 / 事件时间线, 悬停与图联动)</td></tr>
+          <tr><td class="num">15</td><td><a href="../../resources/detail-panel-templates/15-traffic-adaptive-collapsed.html">15-traffic-adaptive-collapsed</a></td><td><span class="tier collapsed">collapsed</span></td><td>同一页面随高度档优雅降级 —— 收起态头部内嵌近 30 分钟迷你走势, 矮档单行 KPI + 108px 迷你图, 高档 5 格 KPI + 大图</td></tr>
+        </tbody>
+      </table>
+
+      <h3>信息增量<span class="h3-mono">回收「有数据但未展示」的字段</span></h3>
+      <p>模板族普遍把接口已返回、现面板未展示的字段纳入设计, 是「不加端点就能白拿」的信息增量:</p>
+      <table>
+        <thead><tr><th style="width:120px">页签</th><th>回收字段</th></tr></thead>
+        <tbody>
+          <tr><td>常规</td><td>约 14 个: <code>site</code> / <code>category</code> / <code>tags</code> / 限速(<code>dl_limit</code>·<code>up_limit</code>) / <code>magnet_uri</code> / <code>priority</code> / <code>popularity</code> / <code>completed</code> / <code>state</code> / <code>hash</code> / <code>tracker</code> / HR 安全档位可视化 等</td></tr>
+          <tr><td>Tracker</td><td><code>tier</code>(排序/分组依据) / <code>num_peers</code> / <code>num_downloaded</code>(该 tracker 累计下载)</td></tr>
+          <tr><td>用户</td><td><code>country</code> / <code>connection</code>(加密/协议) / <code>files</code>(对端正在取的文件)</td></tr>
+          <tr><td>内容</td><td><code>availability</code>(每文件可用性, 现状完全未展示)</td></tr>
+          <tr><td>流量</td><td>增量在维度而非字段: 13 档窗口全可切、峰值/均值 KPI、采样健康可视化</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 04 逐页对比与推荐 ============ -->
+  <section id="s4">
+    <div class="sec-head">
+      <span class="sec-no">04</span>
+      <div>
+        <h2>逐页对比与推荐</h2>
+        <p class="sec-sub">每页: 三个方向各自适合的使用偏好 + 一条推荐及理由。推荐由本报告论证, 供拍板。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3 id="p-general">常规 general</h3>
+      <table>
+        <thead><tr><th style="width:320px">方向</th><th>适合的使用偏好</th></tr></thead>
+        <tbody>
+          <tr><td><a href="../../resources/detail-panel-templates/01-general-hero-tall.html">01-general-hero-tall</a> <span class="tier">tall</span></td><td>常开面板、大屏挂机 —— 英雄行把进度/比率/上行/做种/汇报五个高频数字放大到「不用找」; 代价是占高档位, 列表让位多</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/02-general-cards-low.html">02-general-cards-low</a> <span class="tier">low</span></td><td>面板常驻矮档、以列表为主 —— 六卡三列把横向宽度用满, 240px 内信息仍可达, 卡片可折叠微调密度</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/03-general-dossier-collapsed.html">03-general-dossier-collapsed</a> <span class="tier collapsed">collapsed</span></td><td>即查即收、面板多数时间收着 —— 收起态头部摘要条让「收着也有信息」; 展开后左条带 + 右元信息栏偏档案式审视</td></tr>
+        </tbody>
+      </table>
+      <div class="rec">
+        <div class="rec-tag">推荐 · 供拍板</div>
+        <p><strong>02 作基线。</strong>理由: 用户第一不满就是「宽板右边空一大块」, 02 用三列聚类正面解决, 且矮档让位最少, 与现有默认 max-height 42vh 的几何衔接最顺。</p>
+        <p>吸收建议: 01 的英雄行手法吸收为 02 展开后的首行(矮档藏、高档显); 03 的收起态摘要条不绑定常规页, 应作为面板头部全局能力落地(见 §5)。</p>
+      </div>
+
+      <h3 id="p-trackers">Tracker trackers</h3>
+      <table>
+        <thead><tr><th style="width:320px">方向</th><th>适合的使用偏好</th></tr></thead>
+        <tbody>
+          <tr><td><a href="../../resources/detail-panel-templates/04-trackers-status-cards-tall.html">04-trackers-status-cards-tall</a> <span class="tier">tall</span></td><td>tracker 偏多、想一眼看健康分布 —— 总览计数即筛选, 色轨状态卡把「状态只有一行字」变成可扫读的视觉单元</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/05-trackers-health-groups-low.html">05-trackers-health-groups-low</a> <span class="tier">low</span></td><td>故障处置场景 —— 失败区前置并铺开 msg 全文 + 处置建议 + 显眼重报钮, 矮档免滚动直接到达问题</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/06-trackers-table-collapsed.html">06-trackers-table-collapsed</a> <span class="tier collapsed">collapsed</span></td><td>保持逐行扫描效率、接受表格形态 —— msg 行内展开 + 下次汇报逐秒倒计时 + 「仅看异常」过滤, 收起态头部给健康比例条</td></tr>
+        </tbody>
+      </table>
+      <div class="rec">
+        <div class="rec-tag">推荐 · 供拍板</div>
+        <p><strong>04 作基线。</strong>理由: PT 语境单种子 tracker 普遍个位数, 卡片化的高度代价可承受; 状态可视化 + 计数筛选同时命中「没设计感」与「状态无色义」两个痛点。</p>
+        <p>吸收建议: 05 的失败 msg 全文与处置建议吸收为 04 异常卡的展开态; 06 的汇报倒计时与「仅看异常」作为交互平移进 04。</p>
+      </div>
+
+      <h3 id="p-peers">用户 peers</h3>
+      <table>
+        <thead><tr><th style="width:320px">方向</th><th>适合的使用偏好</th></tr></thead>
+        <tbody>
+          <tr><td><a href="../../resources/detail-panel-templates/07-peers-dashboard-tall.html">07-peers-dashboard-tall</a> <span class="tier">tall</span></td><td>观察型使用 —— 四卡仪表条回答「这条种子的 swarm 现在怎么样」, 上行去向分段与行速度微条同色联动, 分析带宽给谁</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/08-peers-groups-low.html">08-peers-groups-low</a> <span class="tier">low</span></td><td>处置型使用 —— 按「这条连接此刻在干什么」五区分组, 组头聚合 + 折叠, 「只看在传数据」一键聚焦, 100+ 连接可扫读</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/09-peers-density-collapsed.html">09-peers-density-collapsed</a> <span class="tier collapsed">collapsed</span></td><td>反吸血执法 —— 收起态头部即雷达摘要, 30px 密度表按上行占用降序, 迅雷行红标 + 悬停封禁钮, 极致密度</td></tr>
+        </tbody>
+      </table>
+      <div class="rec">
+        <div class="rec-tag">推荐 · 供拍板</div>
+        <p><strong>08 作基线。</strong>理由: 用户页高频问题是「谁在拿我的数据 / 谁卡住了」, 行为五区直答该问题, 分组聚合天然消化长列表, 矮档免滚动保列表空间。</p>
+        <p>吸收建议: 07 的四卡聚合吸收为区头统计(或高档位顶部仪表条); 09 的吸血红标 + 封禁钮平移进取流/限流区行 —— 反吸血是「动作」不是「布局」, 不必整页绑定密度表形态。</p>
+      </div>
+
+      <h3 id="p-content">内容 content</h3>
+      <table>
+        <thead><tr><th style="width:320px">方向</th><th>适合的使用偏好</th></tr></thead>
+        <tbody>
+          <tr><td><a href="../../resources/detail-panel-templates/10-content-tree-detail-tall.html">10-content-tree-detail-tall</a> <span class="tier">tall</span></td><td>多文件合集逐文件管理 —— 左折叠树(引导线+类型图标+内嵌进度) + 右 324px 选中详情, 目录点选给子树聚合与整目录批量优先级</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/11-content-treegrid-batch-low.html">11-content-treegrid-batch-low</a> <span class="tier">low</span></td><td>高频改优先级 —— 增强树表内嵌目录聚合(子树大小/加权进度/最低可用性), 勾选行批量改优先级, 27px 行距矮档仍可读</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/12-content-space-treemap-collapsed.html">12-content-space-treemap-collapsed</a> <span class="tier collapsed">collapsed</span></td><td>空间视角审视大种子 —— 块面积=体积占比、绿色水位=完成度、琥珀虚水位=缺块, 与体积榜悬停互联</td></tr>
+        </tbody>
+      </table>
+      <div class="rec">
+        <div class="rec-tag">推荐 · 供拍板</div>
+        <p><strong>11 作基线。</strong>理由: 内容页的核心操作是「看结构 + 改优先级」, 11 把两件事都做进行内, 不需要为详情留常驻右栏(324px 右栏在矮档放不下, tall 档又太占)。</p>
+        <p>吸收建议: 10 的选中详情吸收为行点选后的浮出/展开区; 12 的空间树图是低频的空间审视特化视角, 建议作为后续增强、不进基线。</p>
+      </div>
+
+      <h3 id="p-traffic">流量 traffic</h3>
+      <table>
+        <thead><tr><th style="width:320px">方向</th><th>适合的使用偏好</th></tr></thead>
+        <tbody>
+          <tr><td><a href="../../resources/detail-panel-templates/13-traffic-chart-led-tall.html">13-traffic-chart-led-tall</a> <span class="tier">tall</span></td><td>深度回看 —— 13 档窗口全可切 + 大幅双系列图, 限速虚线与缺口斜纹把「图之外的事实」画进图里</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/14-traffic-annotated-split-low.html">14-traffic-annotated-split-low</a> <span class="tier">low</span></td><td>要结论、不想自己解图 —— 左图作参照, 右 372px 解读栏给合计/占比/峰值 Top 3/事件时间线, 悬停与图联动</td></tr>
+          <tr><td><a href="../../resources/detail-panel-templates/15-traffic-adaptive-collapsed.html">15-traffic-adaptive-collapsed</a> <span class="tier collapsed">collapsed</span></td><td>面板高度多变 —— 同一页面随高度档优雅降级, 任何档位都不破相</td></tr>
+        </tbody>
+      </table>
+      <div class="rec">
+        <div class="rec-tag">推荐 · 供拍板</div>
+        <p><strong>15 作基线。</strong>理由: 本面板是可拖拽调高的停靠面板(240px – 70vh), 高度天然多变, 「单页自适应降级」与 dock 几何语义最契合 —— 收起态头部迷你走势还顺手演示了 §5 的收起态摘要化。</p>
+        <p>吸收建议: 13 的限速虚线/缺口斜纹与 14 的解读栏作为高档位增强层并入, 不必三选一。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 05 收起状态补强建议 ============ -->
+  <section id="s5">
+    <div class="sec-head">
+      <span class="sec-no">05</span>
+      <div>
+        <h2>收起状态的三条补强建议</h2>
+        <p class="sec-sub">呼应 §2 结论, 每条落到模板已演示的做法上, 实施期可直接对照。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <div class="fix">
+        <div class="fix-head"><span class="fix-no">补强 一</span><h3>持久化回读</h3></div>
+        <p><span class="lbl">现状 —</span> <code>persistDrawerOpen()</code> 写 <code>autoqb.ui.drawerOpen</code> 但全库无读取(<code>drawer.js:1005</code> 写 / <code>drawer.js:940</code> 注释自认不回读), <code>state.js:115</code> 初值恒收起 —— 收起状态从不被恢复, 是死数据。</p>
+        <p><span class="lbl">建议 —</span> 打开/收起状态进回读链: 与 <code>drawerTab</code> / <code>drawerHeight</code> 走同一条 localStorage 恢复通道(app.js 已有该模式), 让收起态成为「被记住的驻留形态」而非一次性动作。</p>
+        <p><span class="lbl">模板演示 —</span> 03 / 06 / 09 / 12 / 15 五份以收起档为<strong>默认档</strong>, 即把「收起」当作合法驻留形态来设计; 头部摘要条保证恢复到收起态时不损失关键信息。</p>
+      </div>
+
+      <div class="fix">
+        <div class="fix-head"><span class="fix-no">补强 二</span><h3>收起态点页签自动展开</h3></div>
+        <p><span class="lbl">现状 —</span> <code>drawerTab()</code>(<code>drawer.js:794-803</code>)不清 collapsed, 数据拉进 <code>display:none</code> 的正文 —— 点了像「没反应」。</p>
+        <p><span class="lbl">建议 —</span> 收起态点页签 = <strong>展开 + 切页签</strong>(一个动作两段反馈, 键盘与鼠标同路径); 若拍板不做自动展开, 至少给页签一个「收起中」的禁用/提示态, 消灭「无响应」观感。</p>
+        <p><span class="lbl">模板演示 —</span> 五份 collapsed 模板的收起态头部都保留了完整页签条 + 摘要条, 即「收起态是可操作的头部」而非空白条; 自动展开的反馈按简报 §3 要求(展开或提示)在实施期落为前者。</p>
+      </div>
+
+      <div class="fix">
+        <div class="fix-head"><span class="fix-no">补强 三</span><h3>收起态头部摘要化</h3></div>
+        <p><span class="lbl">现状 —</span> 收起后只剩 44px 标题 + 页签, 视觉上「什么都没发生」—— 这是「感觉没用」的直接观感来源。</p>
+        <p><span class="lbl">建议 —</span> 按当前页签在头部内嵌一行摘要: 常规 = 状态·进度·速度·比率·HR 剩余; Tracker = 健康比例; 用户 = 构成比例 + 吸血计数; 内容 = 体积构成 + 未完成数; 流量 = 近 30 分钟迷你走势。</p>
+        <p><span class="lbl">模板演示 —</span> 已逐一演示, 可直接作实施基准: <a href="../../resources/detail-panel-templates/03-general-dossier-collapsed.html">03</a>(做种中 · 99.8% · ↑2.11 · 比率 · HR 剩 41h12m · 站点) / <a href="../../resources/detail-panel-templates/06-trackers-table-collapsed.html">06</a>(tracker 健康比例条) / <a href="../../resources/detail-panel-templates/09-peers-density-collapsed.html">09</a>(雷达摘要) / <a href="../../resources/detail-panel-templates/12-content-space-treemap-collapsed.html">12</a>(体积构成条) / <a href="../../resources/detail-panel-templates/15-traffic-adaptive-collapsed.html">15</a>(迷你走势)。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 06 下一步 ============ -->
+  <section id="s6">
+    <div class="sec-head">
+      <span class="sec-no">06</span>
+      <div>
+        <h2>下一步</h2>
+        <p class="sec-sub">设计选型 → 实施计划 → 实施面。本报告只做设计选型, 不动代码。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <thead><tr><th style="width:56px">步</th><th style="width:220px">动作</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td><strong>用户逐页选型</strong></td><td>按 §4 五个「供拍板」逐页定夺: 可整页采纳推荐, 也可指定吸收组合(如 general = 02 基线 + 01 英雄行)</td></tr>
+          <tr><td class="num">2</td><td><strong>另立实施计划</strong></td><td>出 <code>memory-bank/plans/&lt;stamp&gt;-plan-webui-detail-panel-redesign.html</code>(doc-type=plan, doc-topic=<code>webui-detail-panel-redesign</code> 与本报告串联), 载方案与取舍; 拍板前不动代码</td></tr>
+          <tr><td class="num">3</td><td><strong>实施面</strong></td><td><code>shared/tpl/drawer.html</code> + <code>shared/drawer.js</code> + 三皮肤 CSS(<code>atlas/css/dialogs.css</code> / <code>console/css/dialogs.css</code> / <code>prism/css/views.css</code>)。<strong>面板三皮肤锁步</strong> —— 历来逐提交三处同改, 本轮改动必须同步落三处, 模板已用 <code>.drawer-*</code> 类名预留平移路径</td></tr>
+        </tbody>
+      </table>
+      <div class="verdict" style="border-color:var(--border); background:var(--bg-card)">
+        <div class="vt" style="color:var(--ink-muted)">范围声明</div>
+        <p style="margin-bottom:0">本报告只做<strong>设计选型</strong>: 未改 <code>src/</code> 任何文件, 未提交; 15 份模板仅存于 <code>resources/detail-panel-templates/</code> 供评审, 实施时的取舍与删改以实施计划为准。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <b>文件</b> memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html<br>
+    <b>生成</b> 2026-10-06 07:23 · ZCode · 单文件自包含, 双击即开<br>
+    <b>状态</b> Done(报告出厂即冻结) · 证据快照以 26-10-06 代码为准<br>
+    <b>相关</b> <a href="../../resources/detail-panel-templates/_brief.md">resources/detail-panel-templates/_brief.md</a>(设计简报) · 同目录 15 份模板(见 §3 清单)
+  </footer>
+
+</div>
+</body>
+</html>

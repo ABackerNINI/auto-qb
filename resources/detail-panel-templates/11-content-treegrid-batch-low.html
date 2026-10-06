@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 · 内容页 · 方向 B:增强树表 + 批量优先级 · low</title>
+<style>
+/* ===== prism / ocean 令牌: 逐值照抄 _brief.md §5, 未自造色值 ===== */
+:root{
+  color-scheme:dark;
+  --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050;
+  --bg-sunken:rgba(5,12,24,.5); --bg-elev:#1b2d4b; --glass:#111e31; --statusbar-bg:#17273c;
+  --fg:#e9eff7; --fg-muted:#9cadc6; --fg-dim:#6e84a3; --fg-soft:#bccadd;
+  --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15);
+  --accent-line:rgba(58,166,166,.45); --ring:rgba(92,195,195,.5);
+  --on-accent:#04282a; --on-accent-ink:#032325; --on-error:#2b0c0c;
+  --green:#3fd699; --green-soft:rgba(63,214,153,.15); --green-line:rgba(63,214,153,.42);
+  --blue:#4cc3f7;  --blue-soft:rgba(76,195,247,.15);  --blue-line:rgba(76,195,247,.42);
+  --warn:#f5bb42;  --warn-soft:rgba(245,187,66,.15);  --warn-line:rgba(245,187,66,.45);
+  --error:#f3766f; --error-soft:rgba(243,118,111,.15);--error-line:rgba(243,118,111,.45);
+  --paused:var(--fg-muted); --paused-soft:transparent; --paused-line:var(--border-strong);
+  --sel-bg:rgba(139,147,248,.16); --sel-line:rgba(139,147,248,.45); --sel-bar:#8b93f8;
+  --today-up:var(--indigo); --today-down:var(--teal); --today-ico:var(--lime);
+  --violet:#ab8ffa; --pink:#f477b3; --teal:#2fd4bf; --indigo:#8b93f8; --cyan:#2ad0e8; --lime:#a8e63c;
+  --violet-soft:rgba(171,143,250,.16); --pink-soft:rgba(244,119,179,.16);
+  --teal-soft:rgba(47,212,191,.16);   --indigo-soft:rgba(139,147,248,.16);
+  --cyan-soft:rgba(42,208,232,.16);   --lime-soft:rgba(168,230,60,.16);
+  --hr-pending:#ff8f45; --hr-pending-soft:rgba(255,143,69,.18); --hr-pending-line:rgba(255,143,69,.5);
+  --hr-done:#5eead4; --hr-done-soft:rgba(94,234,212,.14); --hr-done-line:rgba(94,234,212,.38);
+  --hr-hit:#ff8f45;
+  --limit-hit:var(--violet); --limit-actual:var(--blue);
+  --border:#23395a; --border-strong:#34507c; --border-soft:rgba(255,255,255,.07);
+  --surface-1:rgba(255,255,255,.03); --surface-2:rgba(255,255,255,.06); --hairline:rgba(255,255,255,.055);
+  --font-ui:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+  --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  --radius-lg:8px; --radius:6px; --radius-sm:4px;
+  --statusbar-h:34px;
+  --shadow-1:0 1px 2px rgba(0,0,0,.16); --shadow-2:0 6px 18px rgba(0,0,0,.22); --shadow-3:0 14px 40px rgba(0,0,0,.3);
+  --ease:cubic-bezier(.2,.8,.3,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --dur-fast:100ms; --dur:160ms; --dur-slow:280ms;
+  /* 模板增补令牌(高度档, 不与既有族重名) */
+  --panel-low:240px; --panel-tall:560px; --head-h:44px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:#050c18; /* 画布衬底 = --bg-sunken 不透明化, 非产品表面 */
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:22px 0 30px; font-family:var(--font-ui); color:var(--fg); font-size:13px;
+}
+.canvas-note{color:var(--fg-dim); font-size:12px; letter-spacing:.02em; line-height:1.7; max-width:1280px; text-align:center}
+.canvas-note b{color:var(--fg-muted); font-weight:600}
+.stage{
+  width:1280px; height:800px; flex:none; position:relative; overflow:hidden;
+  background:var(--bg); border:1px solid var(--border-strong); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-3); display:flex; flex-direction:column;
+}
+
+/* ===== 语境框: 顶栏占位 ===== */
+.win-topbar{
+  flex:none; height:48px; background:var(--glass); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 14px;
+}
+.tb-logo{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:15px; color:var(--fg-soft)}
+.tb-logo i{width:10px; height:10px; border-radius:3px; background:var(--accent)}
+.tb-search{
+  width:250px; height:28px; display:flex; align-items:center; padding:0 10px; gap:6px;
+  background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius);
+  color:var(--fg-dim); font-size:12px;
+}
+.tb-spacer{flex:1}
+.tb-fake{display:flex; gap:8px}
+.tb-fake i{width:26px; height:26px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-1)}
+
+/* ===== 语境框: 列表占位区(随面板高度真实让位) ===== */
+.win-list{flex:1 1 0; min-height:0; overflow-y:auto; background:var(--bg)}
+.list-head,.list-row{
+  display:grid; grid-template-columns:22px minmax(0,1fr) 88px 158px 178px 68px;
+  gap:12px; align-items:center; padding:0 16px;
+}
+.list-head{
+  position:sticky; top:0; z-index:2; height:32px; background:var(--bg);
+  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:12px;
+}
+.list-row{height:38px; border-bottom:1px solid var(--hairline); font-size:12.5px; cursor:default}
+.list-row:hover{background:var(--bg-hover)}
+.list-row.is-current{background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.l-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.l-num{font-family:var(--font-mono); font-size:12px; color:var(--fg-soft); text-align:right}
+.l-prog{display:flex; align-items:center; gap:8px}
+.l-prog .bar{flex:1}
+.l-prog em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); width:44px; text-align:right}
+.l-spd{display:flex; flex-direction:column; gap:1px; font-family:var(--font-mono); font-size:11.5px}
+.l-spd .u{color:var(--today-up)} .l-spd .d{color:var(--today-down)} .l-spd .z{color:var(--fg-dim)}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+.st-seed{background:var(--green)} .st-dl{background:var(--blue)}
+.st-pause{background:var(--fg-muted)} .st-hr{background:var(--hr-pending)}
+.bar{position:relative; height:5px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; display:block}
+.bar b{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--green)}
+.bar.b-dl b{background:var(--blue)} .bar.b-pause b{background:var(--fg-dim)}
+
+/* ===== 底部停靠面板(文档流, 非浮层) ===== */
+.drawer-dock{flex:none; padding:0 12px; margin-top:8px}
+.drawer{
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
+  height:var(--panel-low); transition:height var(--dur-slow) var(--ease-out);
+  background:var(--bg-card); border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-2);
+}
+.drawer[data-h="tall"]{height:var(--panel-tall)}
+.drawer.collapsed{height:var(--head-h)}
+.drawer.collapsed .drawer-body{display:none}
+.drawer-grip{
+  position:absolute; top:3px; left:50%; transform:translateX(-50%); z-index:3;
+  width:42px; height:4px; border-radius:999px; background:var(--border-strong); cursor:ns-resize;
+}
+.drawer-grip:hover{background:var(--accent-line)}
+.drawer-head{
+  flex:none; min-height:var(--head-h); display:flex; align-items:center; gap:10px;
+  padding:0 8px 0 14px; border-bottom:1px solid var(--border);
+}
+.drawer-title{min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:600; color:var(--fg)}
+.drawer-title .dot{margin-right:7px; vertical-align:1px}
+.drawer-spacer{flex:1}
+.drawer-tabs{display:flex; align-self:stretch; align-items:stretch}
+.drawer-tab{
+  appearance:none; background:none; border:0; border-bottom:2px solid transparent; margin-bottom:-1px;
+  padding:0 11px; font-family:var(--font-ui); font-size:13px; color:var(--fg-muted); cursor:pointer;
+}
+.drawer-tab:hover{color:var(--fg)}
+.drawer-tab.active{color:var(--fg); border-bottom-color:var(--accent)}
+.drawer-tab:focus-visible{outline:none; box-shadow:inset 0 0 0 2px var(--ring)}
+.hctl{display:flex; align-items:center; gap:2px; padding:2px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius)}
+.hctl .seg{
+  appearance:none; border:0; background:none; padding:3px 9px; border-radius:var(--radius-sm);
+  font-family:var(--font-ui); font-size:12px; color:var(--fg-dim); cursor:pointer;
+}
+.hctl .seg:hover{color:var(--fg)}
+.hctl .seg.active{background:var(--bg-hover); color:var(--fg)}
+
+/* 收起态改良: 头部内嵌「勾选批次 + 未完成」摘要 */
+.drawer-csum{display:none; align-items:center; gap:10px; min-width:0; overflow:hidden; font-size:11.5px}
+.drawer.collapsed .drawer-csum{display:flex}
+.drawer.collapsed .drawer-title{flex:0 1 190px}
+.cs{white-space:nowrap; color:var(--fg-muted)}
+.cs b{font-family:var(--font-mono); font-weight:600; color:var(--fg)}
+.cs.wn{color:var(--warn)} .cs.wn b{color:var(--warn)}
+.cs.sl{color:var(--sel-bar)} .cs.sl b{color:var(--sel-bar)}
+.cs.dimcs{color:var(--fg-dim)}
+
+/* ===== 按钮体系 .bt(棱镜配方) ===== */
+.bt{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:34px; padding:0 14px; border-radius:5px; border:1px solid var(--border-strong);
+  background:var(--surface-1); color:var(--fg); font-family:var(--font-ui); font-size:13px; cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.bt:hover{border-color:var(--accent-line)}
+.bt:active{transform:scale(.98)}
+.bt:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.bt.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent)}
+.bt.primary:hover{background:var(--accent-hi); border-color:var(--accent-hi)}
+.bt.sm{height:28px; padding:0 10px; font-size:12px}
+.bt.icon{width:28px; height:28px; padding:0}
+.bt.ghost{background:transparent; border-color:transparent}
+.bt.ghost:hover{border-color:var(--accent-line)}
+.ic{width:14px; height:14px; display:block}
+
+/* ===== 面板正文: 增强树表 ===== */
+.drawer-body{flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; padding:8px 14px 10px}
+::-webkit-scrollbar{width:10px; height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:5px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+.tg-tools{flex:none; display:flex; align-items:center; gap:6px; margin-bottom:6px}
+.chip{
+  appearance:none; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px;
+  border-radius:999px; border:1px solid var(--border-soft); background:var(--surface-1);
+  font-family:var(--font-ui); font-size:11.5px; color:var(--fg-muted); cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.chip b{font-family:var(--font-mono); font-weight:600}
+.chip:hover{border-color:var(--border-strong); color:var(--fg)}
+.chip.active{background:var(--accent-soft); border-color:var(--accent-line); color:var(--fg)}
+.chip.c-warn.active{background:var(--warn-soft); border-color:var(--warn-line)}
+.chip:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.tg-tools .sp{flex:1}
+.tg-tools .hint{font-size:11px; color:var(--fg-dim)}
+.tg-scroll{flex:1; min-height:0; overflow-y:auto}
+.tg-head,.tg-row{
+  display:grid; grid-template-columns:22px 18px minmax(0,1fr) 76px 122px 68px 56px;
+  gap:8px; align-items:center; padding:0 6px 0 2px;
+}
+.tg-head{
+  position:sticky; top:0; z-index:2; height:24px; background:var(--bg-card);
+  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap;
+}
+.tg-head .num{text-align:right}
+.tg-row{height:27px; border-bottom:1px solid var(--hairline); font-size:12px; cursor:default}
+.tg-row:hover{background:var(--bg-hover)}
+.tg-row.is-dir{background:var(--surface-1); border-bottom-color:var(--border-soft)}
+.tg-row.is-dir:hover{background:var(--bg-hover)}
+.tg-row.is-dir .g-name .nm{font-weight:600; color:var(--fg-soft)}
+.tg-row.is-chk{background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.tg-row.is-chk:hover{background:var(--sel-bg)}
+.g-chk{display:flex; align-items:center; justify-content:center}
+.ckbox{
+  appearance:none; width:13px; height:13px; margin:0; padding:0; cursor:pointer;
+  border:1px solid var(--border-strong); border-radius:3px; background:var(--bg-sunken);
+  display:block; position:relative;
+}
+.ckbox:hover{border-color:var(--accent-line)}
+.ckbox:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.ckbox:checked{background:var(--accent); border-color:var(--accent)}
+.ckbox:checked::after{
+  content:""; position:absolute; left:3.5px; top:.5px; width:4px; height:8px;
+  border:solid var(--on-accent); border-width:0 1.5px 1.5px 0; transform:rotate(45deg);
+}
+.ckbox.ind{background:var(--accent-soft); border-color:var(--accent-line)}
+.ckbox.ind::after{
+  content:""; position:absolute; left:2.5px; top:5px; width:6px; height:1.5px; background:var(--accent);
+}
+.g-tgl{
+  appearance:none; width:18px; height:18px; padding:0; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; color:var(--fg-dim); cursor:pointer;
+}
+.g-tgl:hover{color:var(--fg)}
+.g-tgl .ic{width:11px; height:11px; transition:transform var(--dur) var(--ease)}
+.g-tgl .ic.closed{transform:rotate(-90deg)}
+.g-tgl-n{width:18px; height:18px}
+.g-name{display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden}
+.g-name .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.g-ic{width:13px; height:13px; color:var(--fg-dim); flex:none}
+.tg-row.is-dir .g-ic{color:var(--accent)}
+.d-meta{
+  flex:none; font-size:10.5px; color:var(--fg-dim); border:1px solid var(--border-soft);
+  border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap;
+}
+.d-meta.w{color:var(--warn); background:var(--warn-soft); border-color:var(--warn-line)}
+.miss-chip{
+  flex:none; font-size:10.5px; color:var(--warn); background:var(--warn-soft);
+  border:1px solid var(--warn-line); border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap;
+}
+.g-size{font-family:var(--font-mono); font-size:11.5px; color:var(--fg-soft); text-align:right; white-space:nowrap}
+.g-prog{display:flex; align-items:center; gap:7px; min-width:0}
+.g-prog .bar{flex:1}
+.g-prog em{font-style:normal; font-family:var(--font-mono); font-size:11px; color:var(--fg-muted); width:44px; text-align:right; flex:none}
+.bar.b-warn b{background:var(--warn)}
+.g-av{font-family:var(--font-mono); font-size:11.5px; color:var(--fg-soft); text-align:right; white-space:nowrap}
+.g-av.low{color:var(--warn)}
+.pbadge{
+  display:inline-flex; align-items:center; justify-content:center; height:17px; width:100%; padding:0 4px;
+  border-radius:999px; font-size:10.5px; white-space:nowrap; border:1px solid transparent;
+  appearance:none; font-family:var(--font-ui); cursor:pointer;
+}
+.pbadge.p-skip{background:transparent; border-style:dashed; border-color:var(--border-strong); color:var(--fg-dim)}
+.pbadge.p-norm{background:var(--surface-2); color:var(--fg-muted)}
+.pbadge.p-high{background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn)}
+.pbadge.p-max{background:var(--error-soft); border-color:var(--error-line); color:var(--error)}
+.pbadge:hover{border-color:var(--border-strong)}
+.pbadge:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.pnone{font-family:var(--font-mono); font-size:11px; color:var(--fg-dim)}
+.tg-empty{padding:20px 0; text-align:center; color:var(--fg-dim); font-size:12px}
+
+/* 底部汇总条 / 批量条(同一位置二选一) */
+.tg-foot{flex:none; margin-top:6px; min-height:30px; display:flex; align-items:center; gap:8px}
+.tg-sum{display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--fg-dim); flex:1; min-width:0; overflow:hidden; white-space:nowrap}
+.tg-sum b{font-family:var(--font-mono); color:var(--fg-muted); font-weight:600}
+.tg-sum b.w{color:var(--warn)}
+.tg-batch{
+  display:flex; align-items:center; gap:8px; flex:1; min-width:0;
+  background:var(--sel-bg); border:1px solid var(--sel-line); border-radius:var(--radius);
+  padding:5px 10px; animation:none;
+}
+.bt-info{font-size:12px; color:var(--fg-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.bt-info b{font-family:var(--font-mono); font-weight:600; color:var(--fg)}
+.bt-info .w{color:var(--warn)}
+.bt-spacer{flex:1}
+.bt.prio{height:24px; padding:0 10px; font-size:11.5px; gap:5px}
+.bt.prio i{width:7px; height:7px; border-radius:50%; display:inline-block; flex:none}
+.bt.prio.p-skip i{background:var(--fg-dim)} .bt.prio.p-norm i{background:var(--fg-muted)}
+.bt.prio.p-high i{background:var(--warn)} .bt.prio.p-max i{background:var(--error)}
+
+/* 其它页签占位 */
+[hidden]{display:none !important}
+.tab-mock{height:100%; min-height:220px; display:flex; align-items:center; justify-content:center}
+.tab-mock-inner{max-width:520px; text-align:center; color:var(--fg-muted); display:flex; flex-direction:column; align-items:center; gap:10px}
+.tab-mock-inner b{font-size:15px; color:var(--fg)}
+.tab-mock-inner p{margin:0; font-size:12.5px; line-height:1.7; color:var(--fg-muted)}
+.tab-mock .ic{width:28px; height:28px; color:var(--fg-dim)}
+
+/* Toast */
+.toast{
+  position:absolute; left:50%; bottom:46px; transform:translate(-50%,6px); z-index:50;
+  background:var(--bg-elev); border:1px solid var(--accent-line); border-radius:var(--radius);
+  color:var(--fg); font-size:12.5px; padding:8px 14px; box-shadow:var(--shadow-2);
+  opacity:0; pointer-events:none; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+
+/* ===== 语境框: 底部状态栏 ===== */
+.win-statusbar{
+  flex:none; height:var(--statusbar-h); background:var(--statusbar-bg); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:16px; padding:0 14px; font-size:12px; color:var(--fg-muted);
+}
+.sb-live{display:flex; align-items:center; gap:6px}
+.sb-live i{width:7px; height:7px; border-radius:50%; background:var(--green)}
+.sb-spd{display:flex; align-items:center; gap:5px}
+.sb-spd .ic{width:12px; height:12px}
+.sb-spd .u{color:var(--today-up)} .sb-spd .d{color:var(--today-down)}
+.sb-spd .val{font-family:var(--font-mono)}
+.sb-dim{color:var(--fg-dim)}
+.sb-spacer{flex:1}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important; animation:none !important}
+}
+</style>
+</head>
+<body>
+<div class="canvas-note">视口 <b>1280 × 800</b> · 内容页方向 B:<b>增强树表 + 批量优先级</b> —— 单表承层级:目录行聚合(子树大小 / 加权进度 / 文件数 / 最低可用性), 文件行内嵌进度条 + 优先级徽章(点击循环);<b>勾选行批量改优先级</b>(勾目录 = 整棵子树, 底部浮出批量条:跳过 / 普通 / 高 / 最高 一次生效), 新增<b>可用性列</b>回收弃用字段 · 默认<b>矮档 240px</b>:27px 行距下目录聚合仍一眼可读 · 高度档 收起 / 矮(240px)/ 高(560px), 收起态头部内嵌勾选批次摘要</div>
+
+<div class="stage">
+
+  <!-- 顶栏占位 -->
+  <header class="win-topbar" aria-hidden="true">
+    <div class="tb-logo"><i></i>auto-qb</div>
+    <div class="tb-search">搜索种子、站点、标签…</div>
+    <div class="tb-spacer"></div>
+    <div class="tb-fake"><i></i><i></i><i></i></div>
+  </header>
+
+  <!-- 简化种子列表占位区 -->
+  <div class="win-list">
+    <div class="list-head">
+      <span></span><span>名称</span><span style="text-align:right">大小</span><span>进度</span><span>速度</span><span style="text-align:right">比率</span>
+    </div>
+    <div class="list-row is-current" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.38 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:99.8%"></b></span><em>99.8%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 2.11 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">3.412</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Stellar Odyssey 2025 2160p BluRay REMUX HEVC TrueHD 7.1">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Stellar.Odyssey.2025.2160p.BluRay.REMUX.HEVC.TrueHD.7.1</span>
+      <span class="l-num">38.2 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 5.40 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.872</span>
+    </div>
+    <div class="list-row" title="[SubHD] Harbor Light S01 E01-12 720p AVC">
+      <span class="dot st-dl" title="下载中"></span>
+      <span class="l-name">[SubHD] Harbor.Light.S01.E01-12.720p.AVC</span>
+      <span class="l-num">12.9 GiB</span>
+      <span class="l-prog"><span class="bar b-dl"><b style="width:67.4%"></b></span><em>67.4%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 320 KiB/s</span><span class="d"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 8.21 MiB/s</span></span>
+      <span class="l-num">0.083</span>
+    </div>
+    <div class="list-row" title="[PTGroup] Silent Valley 2024 1080p WEB-DL H264 — HR 做种中未达标">
+      <span class="dot st-hr" title="做种中 · HR 未达标"></span>
+      <span class="l-name">[PTGroup] Silent.Valley.2024.1080p.WEB-DL.H264</span>
+      <span class="l-num">6.10 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 1.20 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.102</span>
+    </div>
+    <div class="list-row" title="[Classic] Midnight Run 1988 BluRay REMUX — 暂停">
+      <span class="dot st-pause" title="已暂停"></span>
+      <span class="l-name">[Classic] Midnight.Run.1988.BluRay.REMUX</span>
+      <span class="l-num">21.5 GiB</span>
+      <span class="l-prog"><span class="bar b-pause"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="z">—</span><span class="z">—</span></span>
+      <span class="l-num">2.350</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.41 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 3.02 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">2.940</span>
+    </div>
+  </div>
+
+  <!-- 详情面板 -->
+  <div class="drawer-dock">
+    <aside class="drawer" id="drawer" data-h="low">
+      <div class="drawer-grip" id="grip" title="拖拽 / 点击调高: 收起 - 矮(240px) - 高(560px) 循环"></div>
+      <header class="drawer-head">
+        <span class="drawer-title" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv"><span class="dot st-seed"></span>[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+        <!-- 收起态摘要: 勾选批次 + 未完成计数 -->
+        <div class="drawer-csum" id="csum" title="收起态摘要: 当前勾选批次 + 文件总数 / 未完成文件数"></div>
+        <span class="drawer-spacer"></span>
+        <nav class="drawer-tabs">
+          <button class="drawer-tab" data-tab="general">常规</button>
+          <button class="drawer-tab" data-tab="trackers">Tracker</button>
+          <button class="drawer-tab" data-tab="peers">用户</button>
+          <button class="drawer-tab active" data-tab="content">内容</button>
+          <button class="drawer-tab" data-tab="traffic">流量</button>
+        </nav>
+        <div class="hctl" role="group" aria-label="面板高度档">
+          <button class="seg" data-h="collapsed">收起</button>
+          <button class="seg active" data-h="low">矮</button>
+          <button class="seg" data-h="tall">高</button>
+        </div>
+        <button class="bt icon ghost" data-h="collapsed" title="收起面板(保留页签与数据)"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+
+      <div class="drawer-body">
+        <!-- ===== 内容页(方向 B: 增强树表 + 批量优先级) ===== -->
+        <div id="paneContent" style="flex:1; min-height:0; display:flex; flex-direction:column">
+          <div class="tg-tools">
+            <label class="g-chk" style="margin-right:2px" title="全选 / 全不选(仅文件; 目录勾选=整棵子树)"><input type="checkbox" class="ckbox" id="ckMaster"></label>
+            <button class="chip active" data-f="all">全部 <b>16</b></button>
+            <button class="chip c-warn" data-f="miss" title="只显示存在校验缺口的文件">未完成 <b>2</b></button>
+            <button class="chip" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>7</b></button>
+            <span class="sp"></span>
+            <span class="hint">勾选后底部批量设优先级 · 点徽章循环单个</span>
+            <button class="bt sm ghost" id="expAll" title="展开全部目录"><svg class="ic"><use href="#i-chev"/></svg>展开</button>
+            <button class="bt sm ghost" id="colAll" title="折叠全部目录"><svg class="ic closed"><use href="#i-chev"/></svg>折叠</button>
+          </div>
+          <div class="tg-scroll">
+            <div class="tg-head">
+              <span></span><span></span><span>名称</span><span class="num">大小</span><span>进度</span><span class="num" title="qB availability: 全 swarm 中该数据的份数; 目录取子树最低值">可用性</span><span title="点击徽章循环: 跳过 → 普通 → 高 → 最高">优先级</span>
+            </div>
+            <div id="tbody"></div>
+          </div>
+          <div class="tg-foot" id="foot"></div>
+        </div>
+
+        <!-- 其它页签占位 -->
+        <div class="tab-mock" id="paneMock" hidden>
+          <div class="tab-mock-inner">
+            <svg class="ic"><use href="#i-warn"/></svg>
+            <b id="mockTitle">「常规」页</b>
+            <p id="mockNote"></p>
+            <button class="bt sm" id="mockBack">返回内容页</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部状态栏占位 -->
+  <footer class="win-statusbar">
+    <span class="sb-live"><i></i>qBittorrent 5.1.2 已连接</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">12.02 MiB/s</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">8.21 MiB/s</span></span>
+    <span class="sb-spd sb-dim">今日</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">9.4 GiB</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">14.2 GiB</span></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-dim">做种 4 · 下载 1 · prism / ocean 样例语境 · 内容页方向 B</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6.2 8 10.2 12 6.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.6 13.4H1.4Z" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M8 6.6v3.2" stroke="currentColor" stroke-linecap="round"/><circle cx="8" cy="11.9" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 3.5v9M4.5 9 8 12.5 11.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.5 4c0-.8.7-1.5 1.5-1.5h3.2c.5 0 .9.2 1.2.6l.9 1.2H13c.8 0 1.5.7 1.5 1.5v6c0 .8-.7 1.5-1.5 1.5H3c-.8 0-1.5-.7-1.5-1.5V4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-video" viewBox="0 0 16 16"><rect x="1.8" y="3.5" width="12.4" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 6.1v3.8L10.3 8 7 6.1Z" fill="currentColor"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 16 16"><path d="M6.2 12.3V4.2l6-1.6v7.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="4.4" cy="12.4" r="1.8" fill="currentColor"/><circle cx="10.4" cy="10.6" r="1.8" fill="currentColor"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 1.8h5.5L13 5.3v8.9c0 .6-.5 1-1 1H4c-.6 0-1-.4-1-1V2.8c0-.6.4-1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 1.8v3.5H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-img" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="7" r="1.2" fill="currentColor"/><path d="M3.5 12.5 7 9l2.2 2.2 2.3-2.2 2 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 16 16"><rect x="1.8" y="3.5" width="12.4" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.3 9.7h4.2M10.2 9.7h1.5M4.3 7.2h2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.8h5.5L13 5.3v8.9c0 .6-.5 1-1 1H4c-.6 0-1-.4-1-1V2.8c0-.6.4-1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/* ---- 面板高度档: 收起(仅头部 44px) / 矮 240px / 高 560px, 文档流让位 ---- */
+const drawer = $("#drawer");
+function setH(mode){
+  drawer.classList.toggle("collapsed", mode === "collapsed");
+  drawer.dataset.h = mode;
+  $$(".hctl .seg").forEach(b => b.classList.toggle("active", b.dataset.h === mode));
+}
+$$(".hctl .seg").forEach(b => b.addEventListener("click", () => setH(b.dataset.h)));
+$$('.drawer-head [data-h="collapsed"].bt').forEach(b => b.addEventListener("click", () => setH("collapsed")));
+$("#grip").addEventListener("click", () => {
+  const cur = drawer.classList.contains("collapsed") ? "collapsed" : drawer.dataset.h;
+  setH(cur === "collapsed" ? "low" : cur === "low" ? "tall" : "collapsed");
+});
+
+/* ---- 页签切换: 内容页之外给占位说明; 收起态点击页签先展开(给明确反馈) ---- */
+const MOCKS = {
+  general: "常规页已按 01-03 号模板交付:英雄行 / 双列卡片 / 收起态摘要条三个方向。",
+  trackers:"Tracker 页已按 04-06 号模板交付:状态卡片 / 健康分组 / 增强表格三个方向。",
+  peers:   "用户页已按 07-09 号模板交付:仪表盘 / 分组 / 密度雷达表三个方向。",
+  traffic: "流量页将按 13-15 号模板交付:uPlot 双系列图、窗口切换器与令牌化配色。"
+};
+$$(".drawer-tab").forEach(t => t.addEventListener("click", () => {
+  if (drawer.classList.contains("collapsed")) setH("low");
+  $$(".drawer-tab").forEach(x => x.classList.toggle("active", x === t));
+  const mine = t.dataset.tab === "content";
+  $("#paneContent").hidden = !mine;
+  $("#paneMock").hidden = mine;
+  if (!mine){
+    $("#mockTitle").textContent = "「" + t.textContent.trim() + "」页";
+    $("#mockNote").textContent = MOCKS[t.dataset.tab] || "";
+  }
+}));
+$("#mockBack").addEventListener("click", () => $('.drawer-tab[data-tab="content"]').click());
+
+/* ---- Toast ---- */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+/* ---- 文件树数据(与 01-10 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 跳过 / 1 普通 / 4 高 / 7 最高, avail 可用性 ---- */
+const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", dir:true, children:[
+  { name:"Season 02", dir:true, children:[
+    { name:"[Nekomoe] Some Anime S02 - 05 [1080p][AVC][JPN].mkv", size:1228.8, prog:100, prio:4, avail:21.37 },
+    { name:"[Nekomoe] Some Anime S02 - 05 [720p][AVC][JPN].mkv", size:358.4, prog:100, prio:0, avail:21.37 },
+    { name:"NCOP&ED", dir:true, children:[
+      { name:"Creditless NCOP&ED [1080p].mp4", size:180.0, prog:100, prio:0, avail:21.37 }
+    ]},
+    { name:"Extras", dir:true, children:[
+      { name:"Live Event [1080p].mp4", size:866.0, prog:100, prio:1, avail:21.37 },
+      { name:"Menu & Chara Intro [1080p].mp4", size:612.0, prog:100, prio:1, avail:21.37 },
+      { name:"PV & CM Collection [1080p].mp4", size:216.0, prog:99.1, prio:1, avail:20.9 },
+      { name:"Web 预告集.mp4", size:128.0, prog:100, prio:0, avail:21.37 }
+    ]},
+    { name:"Sound", dir:true, children:[
+      { name:"Drama CD Track1.flac", size:386.0, prog:100, prio:1, avail:21.37 },
+      { name:"Drama CD Track2.flac", size:340.0, prog:100, prio:1, avail:21.37 },
+      { name:"导演评论音轨.mp3", size:96.0, prog:100, prio:0, avail:21.37 }
+    ]}
+  ]},
+  { name:"Scans", dir:true, children:[
+    { name:"Some Anime S02 扫图集.pdf", size:42.0, prog:86.0, prio:7, avail:17.9 },
+    { name:"特典小卡扫描.jpg", size:8.0, prog:100, prio:0, avail:21.37 }
+  ]},
+  { name:"Subs", dir:true, children:[
+    { name:"Some Anime S02 - 05.chs.ass", size:0.28, prog:100, prio:1, avail:21.37 },
+    { name:"Some Anime S02 - 05.cht.ass", size:0.28, prog:100, prio:1, avail:21.37 },
+    { name:"Some Anime S02 - 05.chs&jpn.ass", size:0.24, prog:100, prio:0, avail:21.37 }
+  ]},
+  { name:"sample", dir:true, children:[
+    { name:"[Nekomoe] sample_05.mkv", size:24.0, prog:100, prio:0, avail:21.37 }
+  ]}
+]};
+const PRIO = { 0:{t:"跳过", c:"p-skip"}, 1:{t:"普通", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
+const PRIO_ORDER = [0, 1, 4, 7];
+const EXT_ICON = { mkv:"i-video", mp4:"i-video", flac:"i-audio", mp3:"i-audio", pdf:"i-doc", jpg:"i-img", ass:"i-sub" };
+const extOf = n => { const m = /\.([a-z0-9]+)$/i.exec(n.name); return m ? m[1].toLowerCase() : ""; };
+const fmtSize = m => m >= 1024 ? (m / 1024).toFixed(2) + " GiB" : m >= 1 ? (m >= 100 ? m.toFixed(0) : m.toFixed(1)) + " MiB" : Math.round(m * 1024) + " KiB";
+
+/* ---- 派生量: id / 深度 / 相对路径 / 子树聚合 ---- */
+let seq = 0;
+function walk(n, parent, depth, rel){
+  n.id = "n" + (seq++); n.parent = parent; n.depth = depth;
+  n.rel = rel ? (rel + " / " + n.name) : n.name;
+  if (n.dir){
+    n.dirCount = 0;
+    n.children.forEach(c => { walk(c, n, depth + 1, n.rel); n.dirCount += (c.dir ? c.dirCount + 1 : 0); });
+    n.size = 0; n.files = 0; n.miss = 0; n.minAv = Infinity;
+    n.children.forEach(c => {
+      n.size += c.size; n.files += c.files; n.miss += c.miss;
+      const av = c.dir ? c.minAv : c.avail;
+      if (av !== undefined && av < n.minAv) n.minAv = av;
+    });
+    n.prog = n.size ? (n.size - n.miss) / n.size * 100 : 100;
+  } else {
+    n.files = 1; n.miss = n.size * (1 - n.prog / 100);
+  }
+}
+walk(ROOT, null, 0, "");
+ROOT.avail = 21.37;
+const byId = {};
+(function idx(n){ byId[n.id] = n; if (n.dir) n.children.forEach(idx); })(ROOT);
+const fileIdsOf = n => {
+  const out = [];
+  (function scan(x){ if (!x.dir) out.push(x.id); else x.children.forEach(scan); })(n);
+  return out;
+};
+
+/* ---- 状态 ---- */
+const state = { filter:"all", open:{}, checked:new Set() };
+(function initOpen(n){ if (n.dir){ state.open[n.id] = true; n.children.forEach(initOpen); } })(ROOT);
+/* 预置一个示范批次: 选中 Extras 整棵子树, 展示批量条 */
+const seedDir = ROOT.children[0].children.find(c => c.dir && c.name === "Extras");
+fileIdsOf(byId[seedDir.id]).forEach(id => state.checked.add(id));
+
+/* ---- 过滤 ---- */
+function hasMatch(n){
+  if (state.filter === "all") return true;
+  if (!n.dir) return state.filter === "miss" ? n.miss > 0.005 : state.filter === "skip" ? n.prio === 0 : n.prio !== 0;
+  return n.children.some(hasMatch);
+}
+
+/* ---- 行渲染 ---- */
+function iconOf(n){
+  const id = n.dir ? "i-folder" : (EXT_ICON[extOf(n)] || "i-file");
+  return `<svg class="ic g-ic"><use href="#${id}"/></svg>`;
+}
+function chkState(ids){
+  const inC = ids.filter(id => state.checked.has(id)).length;
+  return inC === 0 ? 0 : inC === ids.length ? 2 : 1; /* 0 无 / 1 部分 / 2 全选 */
+}
+function rowHtml(n){
+  const depth = n.depth;
+  const ids = n.dir ? fileIdsOf(n) : [n.id];
+  const cs = chkState(ids);
+  const miss = !n.dir && n.miss > 0.005;
+  const meta = n.dir
+    ? `<span class="d-meta" title="目录内共 ${n.files} 个文件${n.dirCount ? " · " + n.dirCount + " 个子目录" : ""}${n.miss > 0.005 ? " · " + ids.filter(id => byId[id].miss > 0.005).length + " 个未完成" : ""}">${n.files} 文件</span>` +
+      (n.miss > 0.005 ? `<span class="d-meta w" title="子树内有文件存在校验缺口">缺 ${fmtSize(n.miss)}</span>` : "")
+    : (miss ? `<span class="miss-chip" title="按块校验缺口约 ${n.miss.toFixed(1)} MiB">缺 ${fmtSize(n.miss)}</span>` : "");
+  const prog = `<span class="g-prog" title="${n.dir ? "子树加权平均进度" : "文件进度"} ${n.prog.toFixed(1)}%"><span class="bar${n.prog < 100 ? " b-warn" : ""}"><b style="width:${n.prog}%"></b></span><em>${n.prog.toFixed(1)}%</em></span>`;
+  const av = n.dir ? n.minAv : n.avail;
+  const avCell = `<span class="g-av${av < 19 ? " low" : ""}" title="${n.dir ? "子树内最低可用性(最稀缺文件): " : "qB availability: "}${av.toFixed(2)}">${av.toFixed(2)}</span>`;
+  const pc = n.dir
+    ? `<span class="pnone" title="目录本身无优先级; 勾选目录后可整棵子树批量设置">—</span>`
+    : `<button class="pbadge ${PRIO[n.prio].c}" data-cyc="${n.id}" title="优先级: ${PRIO[n.prio].t} — 点击循环切换(模拟)">${PRIO[n.prio].t}</button>`;
+  const tgl = n.dir
+    ? `<button class="g-tgl" data-tgl="${n.id}" title="${state.open[n.id] ? "折叠" : "展开"} ${esc(n.name)}"><svg class="ic${state.open[n.id] ? "" : " closed"}"><use href="#i-chev"/></svg></button>`
+    : `<span class="g-tgl-n"></span>`;
+  return `<div class="tg-row${n.dir ? " is-dir" : " is-file"}${cs === 2 || (!n.dir && cs) ? " is-chk" : ""}" data-id="${n.id}" data-dir="${n.dir ? 1 : 0}">
+    <span class="g-chk"><input type="checkbox" class="ckbox${cs === 1 ? " ind" : ""}" data-ck="${n.id}" ${cs === 2 ? "checked" : ""} title="${n.dir ? "勾选 = 整棵子树(" + n.files + " 个文件)" : "勾选该文件"}"></span>
+    ${tgl}
+    <span class="g-name" style="padding-left:${depth * 14}px">${iconOf(n)}<span class="nm" title="${esc(n.rel)}">${esc(n.name)}</span>${meta}</span>
+    <span class="g-size" title="${n.dir ? "子树合计大小" : "文件大小"}">${fmtSize(n.size)}</span>
+    ${prog}
+    ${avCell}
+    ${pc}
+  </div>`;
+}
+function renderTree(){
+  const frag = [];
+  (function emit(n){
+    if (!hasMatch(n)) return;
+    frag.push(rowHtml(n));
+    if (n.dir && (state.filter !== "all" || state.open[n.id])) n.children.forEach(emit);
+  })(ROOT);
+  $("#tbody").innerHTML = frag.length ? frag.join("") : `<div class="tg-empty">该筛选下没有文件</div>`;
+  renderFoot();
+  renderCsum();
+  renderMaster();
+}
+
+/* ---- 底部: 汇总条 / 批量条 ---- */
+function batchStats(){
+  let size = 0, miss = 0, cnt = 0, missCnt = 0;
+  state.checked.forEach(id => {
+    const n = byId[id];
+    cnt++; size += n.size;
+    if (n.miss > 0.005){ miss += n.miss; missCnt++; }
+  });
+  return { cnt, size, miss, missCnt };
+}
+function renderFoot(){
+  const foot = $("#foot");
+  if (state.checked.size){
+    const s = batchStats();
+    foot.innerHTML = `<div class="tg-batch" role="toolbar" aria-label="批量设置优先级">
+      <span class="bt-info">已选 <b>${s.cnt}</b> 个文件 · <b>${fmtSize(s.size)}</b>${s.missCnt ? ` · <span class="w">未完成 ${s.missCnt} 个(缺 ${fmtSize(s.miss)})</span>` : ""}</span>
+      <span class="bt-spacer"></span>
+      ${PRIO_ORDER.map(p => `<button class="bt sm prio ${PRIO[p].c}" data-bp="${p}" title="将已选 ${s.cnt} 个文件设为${PRIO[p].t}(模拟)"><i></i>${PRIO[p].t}</button>`).join("")}
+      <button class="bt sm ghost" id="btClear" title="清除全部勾选">清除</button>
+    </div>`;
+  } else {
+    let skipSize = 0, skipCnt = 0;
+    (function scan(n){ if (!n.dir){ if (n.prio === 0){ skipCnt++; skipSize += n.size; } } else n.children.forEach(scan); })(ROOT);
+    foot.innerHTML = `<div class="tg-sum">
+      <span>${ROOT.files} 个文件 · ${ROOT.dirCount} 个目录</span>
+      <span>合计 <b>${fmtSize(ROOT.size)}</b></span>
+      <span>总进度 <b>${ROOT.prog.toFixed(1)}%</b></span>
+      <span>未完成 <b class="w">2</b>(缺 ${fmtSize(ROOT.miss)})</span>
+      <span>跳过 <b>${skipCnt}</b> · 占 <b>${fmtSize(skipSize)}</b></span>
+    </div>`;
+  }
+}
+
+/* ---- 收起态摘要 ---- */
+function renderCsum(){
+  const s = batchStats();
+  $("#csum").innerHTML =
+    (state.checked.size
+      ? `<span class="cs sl">已勾 <b>${s.cnt}</b> 项 · <b>${fmtSize(s.size)}</b></span>`
+      : `<span class="cs dimcs">未勾选 — 勾选行可批量设优先级</span>`) +
+    `<span class="cs dimcs">文件 <b>${ROOT.files}</b></span>
+     <span class="cs wn">未完成 <b>2</b> · 缺 ${fmtSize(ROOT.miss)}</span>`;
+}
+
+/* ---- 主勾选框三态 ---- */
+function allFileIds(){
+  const out = [];
+  (function scan(n){ if (!n.dir) out.push(n.id); else n.children.forEach(scan); })(ROOT);
+  return out;
+}
+function renderMaster(){
+  const all = allFileIds(), cs = chkState(all);
+  const m = $("#ckMaster");
+  m.checked = cs === 2;
+  m.classList.toggle("ind", cs === 1);
+  m.title = cs === 2 ? "全不选" : "全选(16 个文件)";
+}
+
+/* ---- 优先级改动(模拟) ---- */
+function setBatch(p){
+  const ids = [...state.checked];
+  ids.forEach(id => { byId[id].prio = p; });
+  toast(`已将 ${ids.length} 个文件设为${PRIO[p].t}(模拟, 刷新恢复)`);
+  renderTree();
+}
+function cyclePrio(id){
+  const n = byId[id];
+  n.prio = PRIO_ORDER[(PRIO_ORDER.indexOf(n.prio) + 1) % PRIO_ORDER.length];
+  toast(`${n.name} 优先级 → ${PRIO[n.prio].t}(模拟)`);
+  renderTree();
+}
+function toggleChecked(id){
+  const n = byId[id];
+  const ids = n.dir ? fileIdsOf(n) : [id];
+  const cs = chkState(ids);
+  ids.forEach(x => cs === 2 ? state.checked.delete(x) : state.checked.add(x));
+  renderTree();
+}
+
+/* ---- 事件委托 ---- */
+$("#tbody").addEventListener("click", e => {
+  const cyc = e.target.closest("[data-cyc]");
+  if (cyc){ e.stopPropagation(); cyclePrio(cyc.dataset.cyc); return; }
+  if (e.target.closest(".ckbox")) return; /* 勾选走 change 事件 */
+  const tg = e.target.closest("[data-tgl]");
+  if (tg){ e.stopPropagation(); state.open[tg.dataset.tgl] = !state.open[tg.dataset.tgl]; renderTree(); return; }
+  const row = e.target.closest(".tg-row");
+  if (row) toggleChecked(row.dataset.id); /* 点行 = 勾选(目录 = 子树) */
+});
+$("#tbody").addEventListener("change", e => {
+  const ck = e.target.closest("[data-ck]");
+  if (ck) toggleChecked(ck.dataset.ck);
+});
+$("#foot").addEventListener("click", e => {
+  const bp = e.target.closest("[data-bp]");
+  if (bp){ setBatch(+bp.dataset.bp); return; }
+  if (e.target.closest("#btClear")){ state.checked.clear(); renderTree(); toast("已清除勾选"); }
+});
+$("#ckMaster").addEventListener("change", () => {
+  const all = allFileIds();
+  const cs = chkState(all);
+  all.forEach(id => cs === 2 ? state.checked.delete(id) : state.checked.add(id));
+  renderTree();
+});
+$$(".tg-tools .chip").forEach(c => c.addEventListener("click", () => {
+  state.filter = c.dataset.f;
+  $$(".tg-tools .chip").forEach(x => x.classList.toggle("active", x === c));
+  renderTree();
+}));
+$("#expAll").addEventListener("click", () => {
+  Object.keys(state.open).forEach(k => state.open[k] = true);
+  renderTree();
+});
+$("#colAll").addEventListener("click", () => {
+  Object.keys(state.open).forEach(k => state.open[k] = false);
+  renderTree();
+});
+
+renderTree();
+</script>
+</body>
+</html>

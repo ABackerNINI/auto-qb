@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 · 常规页 · 方向 C:紧凑多列 + 右侧元信息栏 · collapsed</title>
+<style>
+/* ===== prism / ocean 令牌: 逐值照抄 _brief.md §5, 未自造色值 ===== */
+:root{
+  color-scheme:dark;
+  --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050;
+  --bg-sunken:rgba(5,12,24,.5); --bg-elev:#1b2d4b; --glass:#111e31; --statusbar-bg:#17273c;
+  --fg:#e9eff7; --fg-muted:#9cadc6; --fg-dim:#6e84a3; --fg-soft:#bccadd;
+  --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15);
+  --accent-line:rgba(58,166,166,.45); --ring:rgba(92,195,195,.5);
+  --on-accent:#04282a; --on-accent-ink:#032325; --on-error:#2b0c0c;
+  --green:#3fd699; --green-soft:rgba(63,214,153,.15); --green-line:rgba(63,214,153,.42);
+  --blue:#4cc3f7;  --blue-soft:rgba(76,195,247,.15);  --blue-line:rgba(76,195,247,.42);
+  --warn:#f5bb42;  --warn-soft:rgba(245,187,66,.15);  --warn-line:rgba(245,187,66,.45);
+  --error:#f3766f; --error-soft:rgba(243,118,111,.15);--error-line:rgba(243,118,111,.45);
+  --paused:var(--fg-muted); --paused-soft:transparent; --paused-line:var(--border-strong);
+  --sel-bg:rgba(139,147,248,.16); --sel-line:rgba(139,147,248,.45); --sel-bar:#8b93f8;
+  --today-up:var(--indigo); --today-down:var(--teal); --today-ico:var(--lime);
+  --violet:#ab8ffa; --pink:#f477b3; --teal:#2fd4bf; --indigo:#8b93f8; --cyan:#2ad0e8; --lime:#a8e63c;
+  --violet-soft:rgba(171,143,250,.16); --pink-soft:rgba(244,119,179,.16);
+  --teal-soft:rgba(47,212,191,.16);   --indigo-soft:rgba(139,147,248,.16);
+  --cyan-soft:rgba(42,208,232,.16);   --lime-soft:rgba(168,230,60,.16);
+  --hr-pending:#ff8f45; --hr-pending-soft:rgba(255,143,69,.18); --hr-pending-line:rgba(255,143,69,.5);
+  --hr-done:#5eead4; --hr-done-soft:rgba(94,234,212,.14); --hr-done-line:rgba(94,234,212,.38);
+  --hr-hit:#ff8f45;
+  --limit-hit:var(--violet); --limit-actual:var(--blue);
+  --border:#23395a; --border-strong:#34507c; --border-soft:rgba(255,255,255,.07);
+  --surface-1:rgba(255,255,255,.03); --surface-2:rgba(255,255,255,.06); --hairline:rgba(255,255,255,.055);
+  --font-ui:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+  --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  --radius-lg:8px; --radius:6px; --radius-sm:4px;
+  --statusbar-h:34px;
+  --shadow-1:0 1px 2px rgba(0,0,0,.16); --shadow-2:0 6px 18px rgba(0,0,0,.22); --shadow-3:0 14px 40px rgba(0,0,0,.3);
+  --ease:cubic-bezier(.2,.8,.3,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --dur-fast:100ms; --dur:160ms; --dur-slow:280ms;
+  /* 模板增补令牌(高度档与右栏宽, 不与既有族重名) */
+  --panel-low:240px; --panel-tall:560px; --head-h:44px; --side-w:252px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:#050c18; /* 画布衬底 = --bg-sunken 不透明化, 非产品表面 */
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:22px 0 30px; font-family:var(--font-ui); color:var(--fg); font-size:13px;
+}
+.canvas-note{color:var(--fg-dim); font-size:12px; letter-spacing:.02em; text-align:center; max-width:1280px; line-height:1.7}
+.canvas-note b{color:var(--fg-muted); font-weight:600}
+.stage{
+  width:1280px; height:800px; flex:none; position:relative; overflow:hidden;
+  background:var(--bg); border:1px solid var(--border-strong); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-3); display:flex; flex-direction:column;
+}
+
+/* ===== 语境框: 顶栏占位 ===== */
+.win-topbar{
+  flex:none; height:48px; background:var(--glass); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 14px;
+}
+.tb-logo{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:15px; color:var(--fg-soft)}
+.tb-logo i{width:10px; height:10px; border-radius:3px; background:var(--accent)}
+.tb-search{
+  width:250px; height:28px; display:flex; align-items:center; padding:0 10px; gap:6px;
+  background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius);
+  color:var(--fg-dim); font-size:12px;
+}
+.tb-spacer{flex:1}
+.tb-fake{display:flex; gap:8px}
+.tb-fake i{width:26px; height:26px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-1)}
+
+/* ===== 语境框: 列表占位区(随面板高度真实让位) ===== */
+.win-list{flex:1 1 0; min-height:0; overflow-y:auto; background:var(--bg)}
+.list-head,.list-row{
+  display:grid; grid-template-columns:22px minmax(0,1fr) 88px 158px 178px 68px;
+  gap:12px; align-items:center; padding:0 16px;
+}
+.list-head{
+  position:sticky; top:0; z-index:2; height:32px; background:var(--bg);
+  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:12px;
+}
+.list-row{height:38px; border-bottom:1px solid var(--hairline); font-size:12.5px; cursor:default}
+.list-row:hover{background:var(--bg-hover)}
+.list-row.is-current{background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.l-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.l-num{font-family:var(--font-mono); font-size:12px; color:var(--fg-soft); text-align:right}
+.l-prog{display:flex; align-items:center; gap:8px}
+.l-prog .bar{flex:1}
+.l-prog em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); width:44px; text-align:right}
+.l-spd{display:flex; flex-direction:column; gap:1px; font-family:var(--font-mono); font-size:11.5px}
+.l-spd .u{color:var(--today-up)} .l-spd .d{color:var(--today-down)} .l-spd .z{color:var(--fg-dim)}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+.st-seed{background:var(--green)} .st-dl{background:var(--blue)}
+.st-pause{background:var(--fg-muted)} .st-hr{background:var(--hr-pending)}
+.bar{position:relative; height:5px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; display:block}
+.bar b{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--green)}
+.bar.b-dl b{background:var(--blue)} .bar.b-pause b{background:var(--fg-dim)}
+
+/* ===== 底部停靠面板(文档流, 非浮层) ===== */
+.drawer-dock{flex:none; padding:0 12px; margin-top:8px}
+.drawer{
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
+  height:var(--panel-low); transition:height var(--dur-slow) var(--ease-out);
+  background:var(--bg-card); border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-2);
+}
+.drawer[data-h="tall"]{height:var(--panel-tall)}
+.drawer.collapsed{height:var(--head-h)}
+.drawer.collapsed .drawer-body{display:none}
+.drawer-grip{
+  position:absolute; top:3px; left:50%; transform:translateX(-50%); z-index:3;
+  width:42px; height:4px; border-radius:999px; background:var(--border-strong); cursor:ns-resize;
+}
+.drawer-grip:hover{background:var(--accent-line)}
+.drawer-head{
+  flex:none; min-height:var(--head-h); display:flex; align-items:center; gap:10px;
+  padding:0 8px 0 14px; border-bottom:1px solid var(--border);
+}
+.drawer-title{min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:600; color:var(--fg)}
+.drawer-title .dot{margin-right:7px; vertical-align:1px}
+/* 收起态改良: 头部内嵌关键指标摘要条(替代"一条空头部") */
+.drawer-csum{display:none; align-items:center; gap:10px; min-width:0; overflow:hidden; font-size:11.5px}
+.drawer.collapsed .drawer-csum{display:flex}
+.drawer.collapsed .drawer-title{flex:0 1 236px}
+.cs{white-space:nowrap; color:var(--fg-muted)}
+.cs.st{color:var(--green); font-weight:600}
+.cs.pct{font-family:var(--font-mono); color:var(--fg)}
+.cs.up{font-family:var(--font-mono); color:var(--today-up)}
+.cs.hr{color:var(--hr-pending)}
+.cs.site{font-family:var(--font-mono); color:var(--violet); padding:1px 7px; background:var(--violet-soft); border-radius:var(--radius-sm); font-size:11px}
+.bar-mini{position:relative; flex:none; width:70px; height:4px; border-radius:999px; background:var(--bg-sunken); overflow:hidden}
+.bar-mini i{position:absolute; inset:0 auto 0 0; width:99.8%; border-radius:999px; background:var(--green)}
+.drawer-spacer{flex:1}
+.drawer-tabs{display:flex; align-self:stretch; align-items:stretch}
+.drawer-tab{
+  appearance:none; background:none; border:0; border-bottom:2px solid transparent; margin-bottom:-1px;
+  padding:0 11px; font-family:var(--font-ui); font-size:13px; color:var(--fg-muted); cursor:pointer;
+}
+.drawer-tab:hover{color:var(--fg)}
+.drawer-tab.active{color:var(--fg); border-bottom-color:var(--accent)}
+.drawer-tab:focus-visible{outline:none; box-shadow:inset 0 0 0 2px var(--ring)}
+.hctl{display:flex; align-items:center; gap:2px; padding:2px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius)}
+.hctl .seg{
+  appearance:none; border:0; background:none; padding:3px 9px; border-radius:var(--radius-sm);
+  font-family:var(--font-ui); font-size:12px; color:var(--fg-dim); cursor:pointer;
+}
+.hctl .seg:hover{color:var(--fg)}
+.hctl .seg.active{background:var(--bg-hover); color:var(--fg)}
+
+/* ===== 按钮体系 .bt(棱镜配方) ===== */
+.bt{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:34px; padding:0 14px; border-radius:5px; border:1px solid var(--border-strong);
+  background:var(--surface-1); color:var(--fg); font-family:var(--font-ui); font-size:13px; cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.bt:hover{border-color:var(--accent-line)}
+.bt:active{transform:scale(.98)}
+.bt:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.bt.sm{height:28px; padding:0 10px; font-size:12px}
+.bt.icon{width:28px; height:28px; padding:0}
+.bt.icon.xs{width:22px; height:22px}
+.bt.ghost{background:transparent; border-color:transparent}
+.bt.ghost:hover{border-color:var(--accent-line)}
+.ic{width:14px; height:14px; display:block}
+
+/* ===== 面板正文 ===== */
+.drawer-body{flex:1; min-height:0; overflow-y:auto; padding:12px 18px 16px}
+::-webkit-scrollbar{width:10px; height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:5px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ===== 方向 C: 左主区(紧凑多列) + 右固定元信息栏 ===== */
+.dossier{display:flex; align-items:flex-start; min-height:100%}
+.g-main{flex:1; min-width:0; padding-right:16px}
+.g-side{flex:none; width:var(--side-w); border-left:1px solid var(--hairline); padding-left:16px}
+
+/* 主区顶部状态线(替代大数字英雄行: 单行紧凑) */
+.g-status{display:flex; align-items:center; gap:12px; padding:2px 0 4px}
+.st-badge{
+  display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 10px;
+  border-radius:var(--radius-sm); background:var(--green-soft); border:1px solid var(--green-line);
+  color:var(--green); font-size:12px; font-weight:600; white-space:nowrap;
+}
+.st-badge .dot{width:6px; height:6px}
+.g-progress{flex:1}
+.g-progress .bar{height:7px}
+.g-pct{font-family:var(--font-mono); font-size:13px; color:var(--fg); width:52px; text-align:right}
+.g-remain{font-size:11.5px; color:var(--fg-dim); white-space:nowrap}
+
+/* 主区 HR 行(单行, hr-pending) */
+.g-hrline{
+  display:flex; align-items:center; gap:8px; margin:6px 0 2px; padding:5px 10px;
+  border-radius:var(--radius-sm); background:var(--hr-pending-soft); border:1px solid var(--hr-pending-line);
+  font-size:11.5px; color:var(--fg-muted);
+}
+.g-hrline .ic{color:var(--hr-pending); width:13px; height:13px}
+.g-hrline b{font-family:var(--font-mono); color:var(--hr-pending); font-weight:600}
+.g-hrline .safety{margin-left:auto; color:var(--warn); white-space:nowrap}
+
+/* 主区分区: 标题 + 延伸细线, 无卡片框 */
+.g-sec{margin-top:8px}
+.g-sec-h{display:flex; align-items:center; gap:8px; height:28px; cursor:pointer; user-select:none}
+.g-sec-h b{font-size:12.5px; font-weight:600; color:var(--fg-soft)}
+.g-sec-h .cnt{font-size:11px; color:var(--fg-dim)}
+.g-sec-h .chev{color:var(--fg-dim); transition:transform var(--dur) var(--ease)}
+.g-sec-h::after{content:""; flex:1; height:1px; background:var(--hairline)}
+.g-sec.folded .chev{transform:rotate(-90deg)}
+.g-sec.folded .g-grid, .g-sec.folded .g-wide{display:none}
+.g-grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); column-gap:16px}
+.g-item{
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:4px 6px; margin:0 -6px; border-radius:var(--radius-sm); min-width:0;
+}
+.g-item:hover{background:var(--bg-hover)}
+.g-item .k{flex:none; font-size:11.5px; color:var(--fg-dim)}
+.g-item .v{min-width:0; font-family:var(--font-mono); font-size:12px; color:var(--fg); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.g-item .v.dim{color:var(--fg-dim)}
+.g-item .v.up{color:var(--today-up)} .g-item .v.dl{color:var(--today-down)}
+.g-item .v .ic{display:inline-block; width:11px; height:11px; vertical-align:-1px}
+
+/* 整行项(路径) */
+.g-wide{display:flex; flex-direction:column; gap:2px}
+.g-item.wide{margin:0; padding:4px 6px}
+.g-item.wide .v{display:inline-flex; align-items:center; gap:4px; max-width:100%}
+.flag-row{display:flex; flex-wrap:wrap; gap:6px; padding:6px 0 2px}
+.flag{display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:var(--radius-sm); font-size:11px; border:1px solid var(--border-soft); color:var(--fg-dim); background:var(--surface-1)}
+.flag.on{color:var(--accent); border-color:var(--accent-line); background:var(--accent-soft)}
+.flag i{width:5px; height:5px; border-radius:50%; background:currentColor}
+
+/* 右侧元信息栏 */
+.side-h{display:flex; align-items:center; gap:6px; height:28px; font-size:12.5px; font-weight:600; color:var(--fg-soft)}
+.side-h .ic{color:var(--fg-dim)}
+.side-sub{margin:10px 0 4px; font-size:11px; color:var(--fg-dim)}
+.side-chips{display:flex; flex-wrap:wrap; gap:5px}
+.chip{
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px;
+  border-radius:var(--radius-sm); border:1px solid var(--border-soft); font-size:11px; color:var(--fg-soft);
+}
+.chip .ic{width:11px; height:11px}
+.chip.c-violet{color:var(--violet); background:var(--violet-soft)}
+.chip.c-cyan{color:var(--cyan); background:var(--cyan-soft)}
+.chip.c-teal{color:var(--teal); background:var(--teal-soft)}
+.chip.c-hr{color:var(--hr-pending); background:var(--hr-pending-soft)}
+.chip.c-neutral{color:var(--fg-muted); background:var(--surface-1)}
+.crow{display:flex; align-items:center; gap:6px; padding:3px 0}
+.crow .k{flex:none; width:52px; font-size:11.5px; color:var(--fg-muted)}
+.crow .v{flex:1; min-width:0; font-family:var(--font-mono); font-size:11px; color:var(--fg-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.crow .bt{flex:none}
+.side-kv{display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:3px 6px; margin:0 -6px; border-radius:var(--radius-sm)}
+.side-kv:hover{background:var(--bg-hover)}
+.side-kv .k{flex:none; font-size:11.5px; color:var(--fg-muted)}
+.side-kv .v{min-width:0; font-family:var(--font-mono); font-size:11.5px; color:var(--fg); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.side-kv .v.dim{color:var(--fg-dim)} .side-kv .v.lim{color:var(--limit-hit)}
+.side-kv .v.clamp2{white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.5; font-family:var(--font-ui); font-size:11.5px; color:var(--fg-soft); text-align:left}
+details.side-ext{margin-top:10px; border-top:1px solid var(--hairline); padding-top:6px}
+details.side-ext summary{cursor:pointer; font-size:11.5px; color:var(--fg-dim); list-style:none; display:flex; align-items:center; gap:6px}
+details.side-ext summary::-webkit-details-marker{display:none}
+details.side-ext summary:hover{color:var(--fg)}
+details.side-ext[open] summary .chev{transform:rotate(180deg)}
+details.side-ext summary .chev{transition:transform var(--dur) var(--ease)}
+
+/* 其它页签占位 */
+[hidden]{display:none !important}
+.tab-mock{height:100%; min-height:220px; display:flex; align-items:center; justify-content:center}
+.tab-mock-inner{max-width:520px; text-align:center; color:var(--fg-muted); display:flex; flex-direction:column; align-items:center; gap:10px}
+.tab-mock-inner b{font-size:15px; color:var(--fg)}
+.tab-mock-inner p{margin:0; font-size:12.5px; line-height:1.7; color:var(--fg-muted)}
+.tab-mock .ic{width:28px; height:28px; color:var(--fg-dim)}
+
+/* Toast */
+.toast{
+  position:absolute; left:50%; bottom:46px; transform:translate(-50%,6px); z-index:50;
+  background:var(--bg-elev); border:1px solid var(--accent-line); border-radius:var(--radius);
+  color:var(--fg); font-size:12.5px; padding:8px 14px; box-shadow:var(--shadow-2);
+  opacity:0; pointer-events:none; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+
+/* ===== 语境框: 底部状态栏 ===== */
+.win-statusbar{
+  flex:none; height:var(--statusbar-h); background:var(--statusbar-bg); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:16px; padding:0 14px; font-size:12px; color:var(--fg-muted);
+}
+.sb-live{display:flex; align-items:center; gap:6px}
+.sb-live i{width:7px; height:7px; border-radius:50%; background:var(--green)}
+.sb-spd{display:flex; align-items:center; gap:5px}
+.sb-spd .ic{width:12px; height:12px}
+.sb-spd .u{color:var(--today-up)} .sb-spd .d{color:var(--today-down)}
+.sb-spd .val{font-family:var(--font-mono)}
+.sb-dim{color:var(--fg-dim)}
+.sb-spacer{flex:1}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important}
+}
+</style>
+</head>
+<body>
+<div class="canvas-note">
+  视口 <b>1280 × 800</b> · 方向 C:紧凑多列信息架构 + 右侧固定元信息栏(把宽面板用满)· 默认 <b>收起态(改良形态)</b> ——
+  头部 44px 内嵌关键指标摘要条, 点任意页签或「矮 / 高」展开查看正文布局 · 点顶缘握条循环切换 收起 / 矮(240px) / 高(560px)
+</div>
+
+<div class="stage">
+
+  <!-- 顶栏占位 -->
+  <header class="win-topbar" aria-hidden="true">
+    <div class="tb-logo"><i></i>auto-qb</div>
+    <div class="tb-search">搜索种子、站点、标签…</div>
+    <div class="tb-spacer"></div>
+    <div class="tb-fake"><i></i><i></i><i></i></div>
+  </header>
+
+  <!-- 简化种子列表占位区 -->
+  <div class="win-list">
+    <div class="list-head">
+      <span></span><span>名称</span><span style="text-align:right">大小</span><span>进度</span><span>速度</span><span style="text-align:right">比率</span>
+    </div>
+    <div class="list-row is-current" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.38 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:99.8%"></b></span><em>99.8%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 2.11 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">3.412</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Stellar Odyssey 2025 2160p BluRay REMUX HEVC TrueHD 7.1">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Stellar.Odyssey.2025.2160p.BluRay.REMUX.HEVC.TrueHD.7.1</span>
+      <span class="l-num">38.2 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 5.40 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.872</span>
+    </div>
+    <div class="list-row" title="[SubHD] Harbor Light S01 E01-12 720p AVC">
+      <span class="dot st-dl" title="下载中"></span>
+      <span class="l-name">[SubHD] Harbor.Light.S01.E01-12.720p.AVC</span>
+      <span class="l-num">12.9 GiB</span>
+      <span class="l-prog"><span class="bar b-dl"><b style="width:67.4%"></b></span><em>67.4%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 320 KiB/s</span><span class="d"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 8.21 MiB/s</span></span>
+      <span class="l-num">0.083</span>
+    </div>
+    <div class="list-row" title="[PTGroup] Silent Valley 2024 1080p WEB-DL H264 — HR 做种中未达标">
+      <span class="dot st-hr" title="做种中 · HR 未达标"></span>
+      <span class="l-name">[PTGroup] Silent.Valley.2024.1080p.WEB-DL.H264</span>
+      <span class="l-num">6.10 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 1.20 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.102</span>
+    </div>
+    <div class="list-row" title="[Classic] Midnight Run 1988 BluRay REMUX — 暂停">
+      <span class="dot st-pause" title="已暂停"></span>
+      <span class="l-name">[Classic] Midnight.Run.1988.BluRay.REMUX</span>
+      <span class="l-num">21.5 GiB</span>
+      <span class="l-prog"><span class="bar b-pause"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="z">—</span><span class="z">—</span></span>
+      <span class="l-num">2.350</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.41 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 3.02 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">2.940</span>
+    </div>
+  </div>
+
+  <!-- 详情面板 -->
+  <div class="drawer-dock">
+    <aside class="drawer collapsed" id="drawer" data-h="collapsed">
+      <div class="drawer-grip" id="grip" title="拖拽 / 点击调高: 收起 - 矮(240px) - 高(560px) 循环"></div>
+      <header class="drawer-head">
+        <span class="drawer-title" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv"><span class="dot st-seed"></span>[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+        <!-- 收起态摘要条: 收起不再"什么都没有" -->
+        <div class="drawer-csum" title="收起态摘要: state / progress / upspeed / ratio / hr_site_remain / site">
+          <span class="cs st">做种中</span>
+          <span class="bar-mini"><i></i></span>
+          <span class="cs pct">99.8%</span>
+          <span class="cs up">2.11 MiB/s</span>
+          <span class="cs">比率 3.412</span>
+          <span class="cs hr" title="hr_site_remain">HR 剩 41h12m</span>
+          <span class="cs site" title="site">tracker.example.org</span>
+        </div>
+        <span class="drawer-spacer"></span>
+        <nav class="drawer-tabs">
+          <button class="drawer-tab active" data-tab="general">常规</button>
+          <button class="drawer-tab" data-tab="trackers">Tracker</button>
+          <button class="drawer-tab" data-tab="peers">用户</button>
+          <button class="drawer-tab" data-tab="content">内容</button>
+          <button class="drawer-tab" data-tab="traffic">流量</button>
+        </nav>
+        <div class="hctl" role="group" aria-label="面板高度档">
+          <button class="seg active" data-h="collapsed">收起</button>
+          <button class="seg" data-h="low">矮</button>
+          <button class="seg" data-h="tall">高</button>
+        </div>
+        <button class="bt icon ghost" data-h="collapsed" title="收起面板(保留页签与数据)"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+
+      <div class="drawer-body">
+        <!-- ===== 常规页(方向 C) ===== -->
+        <div id="paneGeneral">
+          <div class="dossier">
+
+            <!-- 左主区 -->
+            <div class="g-main">
+              <div class="g-status" title="state / progress / amount_left">
+                <span class="st-badge"><span class="dot st-seed"></span>做种中</span>
+                <span class="g-progress"><span class="bar"><b style="width:99.8%"></b></span></span>
+                <span class="g-pct">99.8%</span>
+                <span class="g-remain">剩余 6.1 MiB · 可用性 21.37</span>
+              </div>
+
+              <div class="g-hrline" title="hr_state=已触发未达标 · hr_safety=warning(删除安全档位)">
+                <svg class="ic"><use href="#i-warn"/></svg>
+                <span>HR 已触发未达标</span>
+                <span>要求分享率 <b>2.00</b> · 要求做种 <b>96h</b></span>
+                <span>站点侧还需做种 <b>41h12m</b></span>
+                <span class="safety">安全档 warning</span>
+              </div>
+
+              <section class="g-sec" id="secXfer">
+                <div class="g-sec-h" data-fold title="点击折叠 / 展开">
+                  <svg class="ic chev" style="width:12px;height:12px"><use href="#i-chev"/></svg>
+                  <b>传输</b><span class="cnt">20 项</span>
+                </div>
+                <div class="g-grid">
+                  <div class="g-item" title="dlspeed"><span class="k">下行速度</span><span class="v dim">0</span></div>
+                  <div class="g-item" title="upspeed"><span class="k">上行速度</span><span class="v up"><svg class="ic"><use href="#i-up"/></svg> 2.11 MiB/s</span></div>
+                  <div class="g-item" title="eta"><span class="k">预计剩余</span><span class="v dim">—</span></div>
+                  <div class="g-item" title="downloaded"><span class="k">已下载</span><span class="v">4.38 GiB</span></div>
+                  <div class="g-item" title="uploaded"><span class="k">已上传</span><span class="v">14.9 GiB</span></div>
+                  <div class="g-item" title="total_wasted"><span class="k">浪费</span><span class="v">128.4 MiB</span></div>
+                  <div class="g-item" title="downloaded_session"><span class="k">本次下载</span><span class="v dl">6.1 MiB</span></div>
+                  <div class="g-item" title="uploaded_session"><span class="k">本次上传</span><span class="v up">1.02 GiB</span></div>
+                  <div class="g-item" title="num_seeds(num_complete)"><span class="k">做种</span><span class="v">12 (38)</span></div>
+                  <div class="g-item" title="num_leechs(num_incomplete)"><span class="k">用户</span><span class="v">0 (3)</span></div>
+                  <div class="g-item" title="connections_count / connections_limit"><span class="k">连接</span><span class="v">12 / ∞</span></div>
+                  <div class="g-item" title="trackers_count"><span class="k">tracker 数</span><span class="v">2</span></div>
+                  <div class="g-item" title="reannounce_in"><span class="k">下次汇报</span><span class="v">21m</span></div>
+                  <div class="g-item" title="has_tracker_error"><span class="k">tracker 错误</span><span class="v dim">无</span></div>
+                  <div class="g-item" title="has_tracker_warning"><span class="k">tracker 警告</span><span class="v dim">无</span></div>
+                  <div class="g-item" title="max_ratio"><span class="k">分享率限制</span><span class="v">5.00</span></div>
+                  <div class="g-item" title="max_seeding_time"><span class="k">做种时限</span><span class="v dim">—</span></div>
+                  <div class="g-item" title="max_inactive_seeding_time"><span class="k">不活跃做种时限</span><span class="v dim">—</span></div>
+                  <div class="g-item" title="share_limit_action"><span class="k">达标动作</span><span class="v">停止种子</span></div>
+                  <div class="g-item" title="size / total_size"><span class="k">大小 / 总大小</span><span class="v">4.38 / 4.41 GiB</span></div>
+                </div>
+              </section>
+
+              <section class="g-sec" id="secTime">
+                <div class="g-sec-h" data-fold title="点击折叠 / 展开">
+                  <svg class="ic chev" style="width:12px;height:12px"><use href="#i-chev"/></svg>
+                  <b>时间</b><span class="cnt">6 项</span>
+                </div>
+                <div class="g-grid">
+                  <div class="g-item" title="added_on"><span class="k">添加时间</span><span class="v">2026-09-28 12:31</span></div>
+                  <div class="g-item" title="completion_on"><span class="k">完成时间</span><span class="v">2026-09-28 19:02</span></div>
+                  <div class="g-item" title="seen_complete"><span class="k">最近完整可见</span><span class="v">2026-10-05 03:12</span></div>
+                  <div class="g-item" title="last_activity"><span class="k">最近活动</span><span class="v">2026-10-06 08:47</span></div>
+                  <div class="g-item" title="time_active"><span class="k">活跃时长</span><span class="v">6d 4h</span></div>
+                  <div class="g-item" title="seeding_time"><span class="k">做种时长</span><span class="v">6d 18h</span></div>
+                </div>
+              </section>
+
+              <section class="g-sec" id="secPath">
+                <div class="g-sec-h" data-fold title="点击折叠 / 展开">
+                  <svg class="ic chev" style="width:12px;height:12px"><use href="#i-chev"/></svg>
+                  <b>路径与开关</b><span class="cnt">9 项</span>
+                </div>
+                <div class="g-wide">
+                  <div class="g-item wide" title="save_path">
+                    <span class="k">保存路径</span>
+                    <span class="v"><span style="overflow:hidden;text-overflow:ellipsis">D:/pt/_inbox/[Nekomoe] Some Anime S02</span>
+                    <button class="bt icon ghost xs" title="打开目录(save_path)"><svg class="ic" style="width:12px;height:12px"><use href="#i-folder"/></svg></button></span>
+                  </div>
+                  <div class="g-grid">
+                    <div class="g-item" title="content_path"><span class="k">内容路径</span><span class="v" title="D:/pt/_inbox/[Nekomoe] Some Anime S02/Season 02">…/Season 02</span></div>
+                    <div class="g-item" title="download_path"><span class="k">下载路径</span><span class="v">同保存路径</span></div>
+                    <div class="g-item" title="root_path"><span class="k">根路径</span><span class="v">同保存路径</span></div>
+                  </div>
+                  <div class="flag-row" title="auto_tmm / force_start / super_seeding / seq_dl / f_l_piece_prio">
+                    <span class="flag on"><i></i>自动管理</span>
+                    <span class="flag"><i></i>强制开始</span>
+                    <span class="flag"><i></i>超级做种</span>
+                    <span class="flag"><i></i>顺序下载</span>
+                    <span class="flag"><i></i>首尾块优先</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- 右侧固定元信息栏 -->
+            <aside class="g-side" title="元信息栏: site / category / tags / 标识 / 限速 / 扩展字段">
+              <div class="side-h"><svg class="ic"><use href="#i-info"/></svg>元信息</div>
+
+              <div class="side-sub">归属(简介报「有但未展示」字段)</div>
+              <div class="side-chips">
+                <span class="chip c-violet" title="site"><svg class="ic"><use href="#i-link"/></svg>tracker.example.org</span>
+                <span class="chip c-cyan" title="category">分类: 动漫</span>
+                <span class="chip c-hr" title="tags">标签: HR候选</span>
+                <span class="chip c-teal" title="tags">标签: 首页推荐</span>
+                <span class="chip c-neutral" title="private">私有站点</span>
+              </div>
+
+              <div class="side-sub">标识(点击按钮复制)</div>
+              <div class="crow" title="infohash_v1">
+                <span class="k">哈希 v1</span>
+                <span class="v">9f1c3a7d2e5b8a04c6d1e9f2a3b4c5d6e7f80912</span>
+                <button class="bt icon ghost xs" data-copy="9f1c3a7d2e5b8a04c6d1e9f2a3b4c5d6e7f80912" data-label="哈希 v1" title="复制 infohash_v1"><svg class="ic" style="width:12px;height:12px"><use href="#i-copy"/></svg></button>
+              </div>
+              <div class="crow" title="infohash_v2">
+                <span class="k">哈希 v2</span>
+                <span class="v">2b6c9f4e1d7a83b05ce4f29a6d81c357e0f4a92b6c8d1e73f5a09b4c26de81f3</span>
+                <button class="bt icon ghost xs" data-copy="2b6c9f4e1d7a83b05ce4f29a6d81c357e0f4a92b6c8d1e73f5a09b4c26de81f3" data-label="哈希 v2" title="复制 infohash_v2"><svg class="ic" style="width:12px;height:12px"><use href="#i-copy"/></svg></button>
+              </div>
+              <div class="crow" title="magnet_uri">
+                <span class="k">magnet</span>
+                <span class="v">magnet:?xt=urn:btih:9f1c3a7d2e5b8a04…</span>
+                <button class="bt icon ghost xs" data-copy="magnet:?xt=urn:btih:9f1c3a7d2e5b8a04c6d1e9f2a3b4c5d6e7f80912" data-label="magnet 链接" title="复制 magnet_uri"><svg class="ic" style="width:12px;height:12px"><use href="#i-copy"/></svg></button>
+              </div>
+              <div class="side-kv" title="piece_size / pieces_num / pieces_have"><span class="k">分块</span><span class="v">4 MiB × 1130(有 1129)</span></div>
+
+              <div class="side-sub">出处与备注</div>
+              <div class="side-kv" title="creation_date"><span class="k">创建时间</span><span class="v">2026-09-27 21:05</span></div>
+              <div class="side-kv" title="created_by"><span class="k">制作程序</span><span class="v">qBittorrent 5.1.2</span></div>
+              <div class="side-kv" title="has_metadata"><span class="k">元数据</span><span class="v">已获取</span></div>
+              <div class="side-kv" title="comment"><span class="k">备注</span><span class="v clamp2">Nekomoe Kissaten | Season 02 Batch | 仅供交流学习, 请在 24 小时内删除</span></div>
+
+              <div class="side-sub">限速与配额</div>
+              <div class="side-kv" title="up_limit(站点规则注入)"><span class="k">上行限速</span><span class="v lim">8 MiB/s · 站点规则</span></div>
+              <div class="side-kv" title="dl_limit"><span class="k">下行限速</span><span class="v dim">不限</span></div>
+              <div class="side-kv" title="max_ratio + share_limit_action"><span class="k">分享率限制</span><span class="v">5.00 · 达标停止</span></div>
+
+              <details class="side-ext">
+                <summary><svg class="ic chev" style="width:11px;height:11px"><use href="#i-chev"/></svg>更多字段(扩展)</summary>
+                <div class="side-kv" title="state" style="margin-top:4px"><span class="k">状态</span><span class="v">做种中</span></div>
+                <div class="side-kv" title="priority"><span class="k">队列优先级</span><span class="v">标准</span></div>
+                <div class="side-kv" title="popularity(qB 热度分)"><span class="k">热度</span><span class="v">0.42</span></div>
+                <div class="side-kv" title="completed"><span class="k">已完成量</span><span class="v">4.38 GiB</span></div>
+                <div class="side-kv" title="has_other_announce_error"><span class="k">其它汇报错误</span><span class="v dim">无</span></div>
+                <div class="side-kv" title="tracker(首个可用 tracker)"><span class="k">首选 tracker</span><span class="v">tracker.example.org</span></div>
+              </details>
+            </aside>
+
+          </div>
+        </div>
+
+        <!-- 其它页签占位 -->
+        <div class="tab-mock" id="paneMock" hidden>
+          <div class="tab-mock-inner">
+            <svg class="ic"><use href="#i-warn"/></svg>
+            <b id="mockTitle">「Tracker」页</b>
+            <p id="mockNote"></p>
+            <button class="bt sm" id="mockBack">返回常规页</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部状态栏占位 -->
+  <footer class="win-statusbar">
+    <span class="sb-live"><i></i>qBittorrent 5.1.2 已连接</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">12.02 MiB/s</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">8.21 MiB/s</span></span>
+    <span class="sb-spd sb-dim">今日</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">9.4 GiB</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">14.2 GiB</span></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-dim">做种 4 · 下载 1 · prism / ocean 样例语境 · 常规页方向 C</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6.2 8 10.2 12 6.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.6 13.4H1.4Z" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M8 6.6v3.2" stroke="currentColor" stroke-linecap="round"/><circle cx="8" cy="11.9" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.7.5-1.2 1.2-1.2h3l1.5 1.7h5.5c.7 0 1.2.5 1.2 1.2v6.2c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2Z" fill="none" stroke="currentColor" stroke-linejoin="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 3.5v9M4.5 9 8 12.5 11.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-link" viewBox="0 0 16 16"><path d="M6.5 9.5a3 3 0 0 0 4.2.3l2.1-2.1a3 3 0 1 0-4.2-4.2l-1 1" fill="none" stroke="currentColor" stroke-linecap="round"/><path d="M9.5 6.5a3 3 0 0 0-4.2-.3L3.2 8.3a3 3 0 1 0 4.2 4.2l1-1" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor"/><path d="M8 7.2v4" stroke="currentColor" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+
+/* ---- 面板高度档: 收起(仅头部 44px, 内嵌摘要条) / 矮 240px / 高 560px, 文档流让位 ---- */
+const drawer = $("#drawer");
+function setH(mode){
+  drawer.classList.toggle("collapsed", mode === "collapsed");
+  drawer.dataset.h = mode;
+  $$(".hctl .seg").forEach(b => b.classList.toggle("active", b.dataset.h === mode));
+}
+$$(".hctl .seg").forEach(b => b.addEventListener("click", () => setH(b.dataset.h)));
+$$('[data-h="collapsed"].bt').forEach(b => b.addEventListener("click", () => setH("collapsed")));
+$("#grip").addEventListener("click", () => {
+  const cur = drawer.classList.contains("collapsed") ? "collapsed" : drawer.dataset.h;
+  setH(cur === "collapsed" ? "low" : cur === "low" ? "tall" : "collapsed");
+});
+
+/* ---- 页签切换: 收起态点击页签先展开(明确反馈), 常规之外给占位说明 ---- */
+const MOCKS = {
+  trackers: "本轮只设计常规页 —— Tracker 页将按 04-06 号模板交付: 状态徽章、tier 分组、虚拟条目弱化与行内动作。",
+  peers:    "用户页将按 07-09 号模板交付: 方向 / 加密可视化、对端进度条与 flags 筛选。",
+  content:  "内容页将按 10-12 号模板交付: 折叠文件树、内嵌进度条与优先级菜单。",
+  traffic:  "流量页将按 13-15 号模板交付: uPlot 双系列图、窗口切换器与令牌化配色。"
+};
+$$(".drawer-tab").forEach(t => t.addEventListener("click", () => {
+  if (drawer.classList.contains("collapsed")) setH("low");
+  $$(".drawer-tab").forEach(x => x.classList.toggle("active", x === t));
+  const gen = t.dataset.tab === "general";
+  $("#paneGeneral").hidden = !gen;
+  $("#paneMock").hidden = gen;
+  if (!gen){
+    $("#mockTitle").textContent = "「" + t.textContent.trim() + "」页";
+    $("#mockNote").textContent = MOCKS[t.dataset.tab] || "";
+  }
+}));
+$("#mockBack").addEventListener("click", () => $(".drawer-tab[data-tab='general']").click());
+
+/* ---- 分区折叠 ---- */
+$$("[data-fold]").forEach(h => h.addEventListener("click", () => h.closest(".g-sec").classList.toggle("folded")));
+
+/* ---- 复制(模拟反馈 + 尽力真实写剪贴板) ---- */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+$$("[data-copy]").forEach(b => b.addEventListener("click", () => {
+  try { if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy); } catch (e) { /* 演示环境忽略 */ }
+  toast("已复制 " + b.dataset.label + "(演示反馈)");
+}));
+</script>
+</body>
+</html>

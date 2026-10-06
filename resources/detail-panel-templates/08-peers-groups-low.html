@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · 用户页 · 方向 B:语义分区 + 可折叠分组 · low</title>
+<style>
+/* ===== prism / ocean 令牌: 逐值照抄 _brief.md §5, 未自造色值 ===== */
+:root{
+  color-scheme:dark;
+  --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050;
+  --bg-sunken:rgba(5,12,24,.5); --bg-elev:#1b2d4b; --glass:#111e31; --statusbar-bg:#17273c;
+  --fg:#e9eff7; --fg-muted:#9cadc6; --fg-dim:#6e84a3; --fg-soft:#bccadd;
+  --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15);
+  --accent-line:rgba(58,166,166,.45); --ring:rgba(92,195,195,.5);
+  --on-accent:#04282a; --on-accent-ink:#032325; --on-error:#2b0c0c;
+  --green:#3fd699; --green-soft:rgba(63,214,153,.15); --green-line:rgba(63,214,153,.42);
+  --blue:#4cc3f7;  --blue-soft:rgba(76,195,247,.15);  --blue-line:rgba(76,195,247,.42);
+  --warn:#f5bb42;  --warn-soft:rgba(245,187,66,.15);  --warn-line:rgba(245,187,66,.45);
+  --error:#f3766f; --error-soft:rgba(243,118,111,.15);--error-line:rgba(243,118,111,.45);
+  --paused:var(--fg-muted); --paused-soft:transparent; --paused-line:var(--border-strong);
+  --sel-bg:rgba(139,147,248,.16); --sel-line:rgba(139,147,248,.45); --sel-bar:#8b93f8;
+  --today-up:var(--indigo); --today-down:var(--teal); --today-ico:var(--lime);
+  --violet:#ab8ffa; --pink:#f477b3; --teal:#2fd4bf; --indigo:#8b93f8; --cyan:#2ad0e8; --lime:#a8e63c;
+  --violet-soft:rgba(171,143,250,.16); --pink-soft:rgba(244,119,179,.16);
+  --teal-soft:rgba(47,212,191,.16);   --indigo-soft:rgba(139,147,248,.16);
+  --cyan-soft:rgba(42,208,232,.16);   --lime-soft:rgba(168,230,60,.16);
+  --hr-pending:#ff8f45; --hr-pending-soft:rgba(255,143,69,.18); --hr-pending-line:rgba(255,143,69,.5);
+  --hr-done:#5eead4; --hr-done-soft:rgba(94,234,212,.14); --hr-done-line:rgba(94,234,212,.38);
+  --hr-hit:#ff8f45;
+  --limit-hit:var(--violet); --limit-actual:var(--blue);
+  --border:#23395a; --border-strong:#34507c; --border-soft:rgba(255,255,255,.07);
+  --surface-1:rgba(255,255,255,.03); --surface-2:rgba(255,255,255,.06); --hairline:rgba(255,255,255,.055);
+  --font-ui:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+  --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  --radius-lg:8px; --radius:6px; --radius-sm:4px;
+  --statusbar-h:34px;
+  --shadow-1:0 1px 2px rgba(0,0,0,.16); --shadow-2:0 6px 18px rgba(0,0,0,.22); --shadow-3:0 14px 40px rgba(0,0,0,.3);
+  --ease:cubic-bezier(.2,.8,.3,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --dur-fast:100ms; --dur:160ms; --dur-slow:280ms;
+  /* 模板增补令牌(高度档, 不与既有族重名) */
+  --panel-low:240px; --panel-tall:560px; --head-h:44px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:#050c18; /* 画布衬底 = --bg-sunken 不透明化, 非产品表面 */
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:22px 0 30px; font-family:var(--font-ui); color:var(--fg); font-size:13px;
+}
+.canvas-note{color:var(--fg-dim); font-size:12px; letter-spacing:.02em; line-height:1.7; max-width:1280px; text-align:center}
+.canvas-note b{color:var(--fg-muted); font-weight:600}
+.stage{
+  width:1280px; height:800px; flex:none; position:relative; overflow:hidden;
+  background:var(--bg); border:1px solid var(--border-strong); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-3); display:flex; flex-direction:column;
+}
+
+/* ===== 语境框: 顶栏占位 ===== */
+.win-topbar{
+  flex:none; height:48px; background:var(--glass); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 14px;
+}
+.tb-logo{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:15px; color:var(--fg-soft)}
+.tb-logo i{width:10px; height:10px; border-radius:3px; background:var(--accent)}
+.tb-search{
+  width:250px; height:28px; display:flex; align-items:center; padding:0 10px; gap:6px;
+  background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius);
+  color:var(--fg-dim); font-size:12px;
+}
+.tb-spacer{flex:1}
+.tb-fake{display:flex; gap:8px}
+.tb-fake i{width:26px; height:26px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-1)}
+
+/* ===== 语境框: 列表占位区(随面板高度真实让位) ===== */
+.win-list{flex:1 1 0; min-height:0; overflow-y:auto; background:var(--bg)}
+.list-head,.list-row{
+  display:grid; grid-template-columns:22px minmax(0,1fr) 88px 158px 178px 68px;
+  gap:12px; align-items:center; padding:0 16px;
+}
+.list-head{
+  position:sticky; top:0; z-index:2; height:32px; background:var(--bg);
+  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:12px;
+}
+.list-row{height:38px; border-bottom:1px solid var(--hairline); font-size:12.5px; cursor:default}
+.list-row:hover{background:var(--bg-hover)}
+.list-row.is-current{background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.l-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.l-num{font-family:var(--font-mono); font-size:12px; color:var(--fg-soft); text-align:right}
+.l-prog{display:flex; align-items:center; gap:8px}
+.l-prog .bar{flex:1}
+.l-prog em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); width:44px; text-align:right}
+.l-spd{display:flex; flex-direction:column; gap:1px; font-family:var(--font-mono); font-size:11.5px}
+.l-spd .u{color:var(--today-up)} .l-spd .d{color:var(--today-down)} .l-spd .z{color:var(--fg-dim)}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+.st-seed{background:var(--green)} .st-dl{background:var(--blue)}
+.st-pause{background:var(--fg-muted)} .st-hr{background:var(--hr-pending)}
+.bar{position:relative; height:5px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; display:block}
+.bar b{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--green)}
+.bar.b-dl b{background:var(--blue)} .bar.b-pause b{background:var(--fg-dim)}
+
+/* ===== 底部停靠面板(文档流, 非浮层) ===== */
+.drawer-dock{flex:none; padding:0 12px; margin-top:8px}
+.drawer{
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
+  height:var(--panel-low); transition:height var(--dur-slow) var(--ease-out);
+  background:var(--bg-card); border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-2);
+}
+.drawer[data-h="tall"]{height:var(--panel-tall)}
+.drawer.collapsed{height:var(--head-h)}
+.drawer.collapsed .drawer-body{display:none}
+.drawer-grip{
+  position:absolute; top:3px; left:50%; transform:translateX(-50%); z-index:3;
+  width:42px; height:4px; border-radius:999px; background:var(--border-strong); cursor:ns-resize;
+}
+.drawer-grip:hover{background:var(--accent-line)}
+.drawer-head{
+  flex:none; min-height:var(--head-h); display:flex; align-items:center; gap:10px;
+  padding:0 8px 0 14px; border-bottom:1px solid var(--border);
+}
+.drawer-title{min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:600; color:var(--fg)}
+.drawer-title .dot{margin-right:7px; vertical-align:1px}
+.drawer-spacer{flex:1}
+.drawer-tabs{display:flex; align-self:stretch; align-items:stretch}
+.drawer-tab{
+  appearance:none; background:none; border:0; border-bottom:2px solid transparent; margin-bottom:-1px;
+  padding:0 11px; font-family:var(--font-ui); font-size:13px; color:var(--fg-muted); cursor:pointer;
+}
+.drawer-tab:hover{color:var(--fg)}
+.drawer-tab.active{color:var(--fg); border-bottom-color:var(--accent)}
+.drawer-tab:focus-visible{outline:none; box-shadow:inset 0 0 0 2px var(--ring)}
+.hctl{display:flex; align-items:center; gap:2px; padding:2px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius)}
+.hctl .seg{
+  appearance:none; border:0; background:none; padding:3px 9px; border-radius:var(--radius-sm);
+  font-family:var(--font-ui); font-size:12px; color:var(--fg-dim); cursor:pointer;
+}
+.hctl .seg:hover{color:var(--fg)}
+.hctl .seg.active{background:var(--bg-hover); color:var(--fg)}
+
+/* 收起态改良: 头部内嵌 peers 分区摘要 */
+.drawer-csum{display:none; align-items:center; gap:10px; min-width:0; overflow:hidden; font-size:11.5px}
+.drawer.collapsed .drawer-csum{display:flex}
+.drawer.collapsed .drawer-title{flex:0 1 190px}
+.cs{white-space:nowrap; color:var(--fg-muted)}
+.cs b{font-family:var(--font-mono); font-weight:600; color:var(--fg)}
+.cs.up{color:var(--today-up)} .cs.up b{color:var(--today-up)}
+.cs.dn{color:var(--today-down)} .cs.dn b{color:var(--today-down)}
+.cs.wn{color:var(--warn)} .cs.wn b{color:var(--warn)}
+.cs.er{color:var(--error)} .cs.er b{color:var(--error)}
+.cs.dimcs{color:var(--fg-dim)}
+
+/* ===== 按钮体系 .bt(棱镜配方) ===== */
+.bt{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:34px; padding:0 14px; border-radius:5px; border:1px solid var(--border-strong);
+  background:var(--surface-1); color:var(--fg); font-family:var(--font-ui); font-size:13px; cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.bt:hover{border-color:var(--accent-line)}
+.bt:active{transform:scale(.98)}
+.bt:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.bt.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent)}
+.bt.primary:hover{background:var(--accent-hi); border-color:var(--accent-hi)}
+.bt.sm{height:28px; padding:0 10px; font-size:12px}
+.bt.icon{width:28px; height:28px; padding:0}
+.bt.icon.xs{width:22px; height:22px}
+.bt.ghost{background:transparent; border-color:transparent}
+.bt.ghost:hover{border-color:var(--accent-line)}
+.ic{width:14px; height:14px; display:block}
+
+/* ===== 面板正文 ===== */
+.drawer-body{flex:1; min-height:0; overflow-y:auto; padding:12px 18px 16px}
+::-webkit-scrollbar{width:10px; height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:5px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ===== 用户页(方向 B): 工具行 ===== */
+.pf-bar{display:flex; align-items:center; gap:10px; margin-bottom:9px}
+.pf-note{font-size:11.5px; color:var(--fg-dim)}
+.tb-toggle{
+  appearance:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px;
+  border-radius:var(--radius-sm); border:1px solid var(--border-soft); background:var(--surface-1);
+  font-family:var(--font-ui); font-size:11.5px; color:var(--fg-muted); cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.tb-toggle:hover{border-color:var(--border-strong); color:var(--fg)}
+.tb-toggle.active{background:var(--bg-hover); border-color:var(--accent-line); color:var(--fg)}
+.tb-toggle i{width:6px; height:6px; border-radius:50%; background:var(--fg-dim)}
+.tb-toggle.active i{background:var(--accent)}
+.tb-toggle:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+
+/* ===== 用户页(方向 B): 语义分区 ===== */
+.pgrp{
+  margin-bottom:10px; background:var(--bg-row); border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden;
+}
+.pgrp[data-acc="take"]{box-shadow:inset 2px 0 0 var(--indigo)}
+.pgrp[data-acc="feed"]{box-shadow:inset 2px 0 0 var(--teal)}
+.pgrp[data-acc="idle"]{box-shadow:inset 2px 0 0 var(--border-strong)}
+.pgrp[data-acc="choke"]{box-shadow:inset 2px 0 0 var(--warn)}
+.pgrp[data-acc="hand"]{box-shadow:inset 2px 0 0 var(--fg-dim)}
+.pgrp.hide{display:none}
+.pgrp-head{display:flex; align-items:center; gap:8px; min-height:36px; padding:0 12px; cursor:pointer; user-select:none}
+.pgrp-head:hover{background:var(--surface-1)}
+.pgrp-head .chev{width:13px; height:13px; flex:none; color:var(--fg-dim); transition:transform var(--dur) var(--ease)}
+.pgrp.folded .pgrp-head .chev{transform:rotate(-90deg)}
+.pgrp-head .gico{width:13px; height:13px; flex:none}
+.pgrp[data-acc="take"] .gico{color:var(--indigo)}
+.pgrp[data-acc="feed"] .gico{color:var(--teal)}
+.pgrp[data-acc="choke"] .gico{color:var(--warn)}
+.pgrp-head .gname{font-size:12.5px; font-weight:600; color:var(--fg); white-space:nowrap}
+.pgrp-head .gcnt{flex:none; font-family:var(--font-mono); font-size:11px; color:var(--fg-muted); background:var(--surface-2); border-radius:999px; padding:1px 7px}
+.pgrp-head .gagg{margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted)}
+.pgrp-head .gagg b{color:var(--fg); font-weight:600}
+.pgrp[data-acc="take"] .gagg b:first-of-type{color:var(--today-up)}
+.pgrp[data-acc="feed"] .gagg b:first-of-type{color:var(--today-down)}
+.pgrp-rows{display:none; flex-direction:column; border-top:1px solid var(--hairline)}
+.pgrp:not(.folded) .pgrp-rows{display:flex}
+
+.g-row{
+  display:grid;
+  grid-template-columns:190px 150px 104px minmax(110px,1fr) 118px 104px 92px 78px 78px;
+  gap:8px; align-items:center; padding:0 12px; min-height:33px;
+}
+.g-row.gcols{min-height:26px; background:var(--surface-1); color:var(--fg-dim); font-size:11.5px; white-space:nowrap}
+.pgrp-rows .g-row:not(.gcols){border-bottom:1px solid var(--hairline); border-radius:var(--radius-sm)}
+.pgrp-rows .g-row:not(.gcols):hover{background:var(--bg-hover)}
+.g-row .num{text-align:right}
+.sortable{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:3px; justify-content:flex-end; width:100%}
+.sortable:hover{color:var(--fg)}
+.sortable .ic{width:10px; height:10px; opacity:0; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease)}
+.sortable.on{color:var(--accent)}
+.sortable.on .ic{opacity:1}
+.sortable.asc .ic{transform:rotate(180deg)}
+
+/* 单元格(与 07 号模板同款) */
+.pc-addr{display:flex; align-items:center; gap:7px; min-width:0}
+.cc{
+  flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);
+  background:var(--surface-1); border:1px solid var(--border-soft);
+  font-family:var(--font-mono); font-size:10px; color:var(--fg-dim);
+}
+.cc.lan{color:var(--cyan); background:var(--cyan-soft); border-color:transparent}
+.pc-ip{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:12px; color:var(--fg)}
+.pc-client{display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; color:var(--fg-soft)}
+.pc-client .cname{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.bad-b{
+  flex:none; display:inline-flex; align-items:center; height:15px; padding:0 5px;
+  border-radius:999px; background:var(--error-soft); border:1px solid var(--error-line);
+  color:var(--error); font-size:10px; cursor:help;
+}
+.mute-b{
+  flex:none; display:inline-flex; align-items:center; height:15px; padding:0 5px;
+  border-radius:999px; background:var(--warn-soft); border:1px solid var(--warn-line);
+  color:var(--warn); font-size:10px; cursor:help;
+}
+.pc-flags{display:flex; gap:3px; flex-wrap:wrap}
+.fl{
+  min-width:16px; height:16px; padding:0 3px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:var(--radius-sm); font-family:var(--font-mono); font-size:10.5px; font-weight:600; cursor:help;
+}
+.fl-d{background:var(--teal-soft); color:var(--teal)}
+.fl-u{background:var(--indigo-soft); color:var(--indigo)}
+.fl-uo{background:var(--warn-soft); color:var(--warn)}
+.fl-k{background:transparent; border:1px solid var(--border-strong); color:var(--fg-muted)}
+.fl-e{background:var(--accent-soft); color:var(--accent)}
+.fl-p{background:var(--cyan-soft); color:var(--cyan)}
+.fl-x{background:var(--violet-soft); color:var(--violet)}
+.fl-h{background:var(--surface-2); color:var(--fg-dim)}
+.fl-i{background:var(--surface-2); color:var(--fg-muted)}
+.fl-q{background:transparent; border:1px dashed var(--border-strong); color:var(--fg-dim)}
+.pc-files{display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; color:var(--fg-muted)}
+.pc-files.ann{color:var(--teal)}
+.pc-files.dimc{color:var(--fg-dim)}
+.pc-prog{display:flex; align-items:center; gap:7px}
+.pc-prog .bar{flex:1}
+.pc-prog em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); width:40px; text-align:right}
+.pc-prog.zero em{color:var(--fg-dim)}
+.pc-none{font-family:var(--font-mono); font-size:12px; color:var(--fg-dim)}
+.pc-spd{display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0}
+.pc-spd b{font-family:var(--font-mono); font-weight:600; font-size:12px; line-height:1; white-space:nowrap}
+.pc-spd.u b{color:var(--today-up)}
+.pc-spd.d b{color:var(--today-down)}
+.pc-spd b.z{color:var(--fg-dim); font-weight:400}
+.pc-spd .track{width:100%; height:3px; border-radius:999px; background:var(--bg-sunken); overflow:hidden}
+.pc-spd .track i{display:block; height:100%; border-radius:999px}
+.prow-bad .pc-spd.u b{color:var(--error)}
+.pc-amt{display:block; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-soft); text-align:right; white-space:nowrap}
+.pc-amt.z{color:var(--fg-dim)}
+.prow-bad{background:var(--error-soft)}
+.prow-bad:hover{box-shadow:inset 0 0 0 1px var(--error-line)}
+.prow-lan{box-shadow:inset 2px 0 0 var(--cyan)}
+.prow-hand{opacity:.55}
+.p-empty{padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px}
+
+/* 其它页签占位 */
+[hidden]{display:none !important}
+.tab-mock{height:100%; min-height:220px; display:flex; align-items:center; justify-content:center}
+.tab-mock-inner{max-width:520px; text-align:center; color:var(--fg-muted); display:flex; flex-direction:column; align-items:center; gap:10px}
+.tab-mock-inner b{font-size:15px; color:var(--fg)}
+.tab-mock-inner p{margin:0; font-size:12.5px; line-height:1.7; color:var(--fg-muted)}
+.tab-mock .ic{width:28px; height:28px; color:var(--fg-dim)}
+
+/* Toast */
+.toast{
+  position:absolute; left:50%; bottom:46px; transform:translate(-50%,6px); z-index:50;
+  background:var(--bg-elev); border:1px solid var(--accent-line); border-radius:var(--radius);
+  color:var(--fg); font-size:12.5px; padding:8px 14px; box-shadow:var(--shadow-2);
+  opacity:0; pointer-events:none; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+
+/* ===== 语境框: 底部状态栏 ===== */
+.win-statusbar{
+  flex:none; height:var(--statusbar-h); background:var(--statusbar-bg); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:16px; padding:0 14px; font-size:12px; color:var(--fg-muted);
+}
+.sb-live{display:flex; align-items:center; gap:6px}
+.sb-live i{width:7px; height:7px; border-radius:50%; background:var(--green)}
+.sb-spd{display:flex; align-items:center; gap:5px}
+.sb-spd .ic{width:12px; height:12px}
+.sb-spd .u{color:var(--today-up)} .sb-spd .d{color:var(--today-down)}
+.sb-spd .val{font-family:var(--font-mono)}
+.sb-dim{color:var(--fg-dim)}
+.sb-spacer{flex:1}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important; animation:none !important}
+}
+</style>
+</head>
+<body>
+<div class="canvas-note">视口 <b>1280 × 800</b> · 方向 B:<b>语义分区</b> —— 按「这条连接此刻在干什么」分五区:正在从我这下载 / 正在给我上传 / 闲置同伴 / 被我方限流 / 握手中;组头带聚合数字(方向速度 + 会话累计), 点击组头折叠, 「只看在传数据」一键收起安静分区;迅雷「吸血」样例与内网 NAS peer 各归其位 · 默认<b>矮档(240px)</b>, 高度档「收起(44px, 头部内嵌分区摘要)/ 矮 / 高」循环, 列表区随档位真实让位 · 组内列头可排序 / flags 悬停逐项解释 / 行悬停高亮</div>
+
+<div class="stage">
+
+  <!-- 顶栏占位 -->
+  <header class="win-topbar" aria-hidden="true">
+    <div class="tb-logo"><i></i>auto-qb</div>
+    <div class="tb-search">搜索种子、站点、标签…</div>
+    <div class="tb-spacer"></div>
+    <div class="tb-fake"><i></i><i></i><i></i></div>
+  </header>
+
+  <!-- 简化种子列表占位区 -->
+  <div class="win-list">
+    <div class="list-head">
+      <span></span><span>名称</span><span style="text-align:right">大小</span><span>进度</span><span>速度</span><span style="text-align:right">比率</span>
+    </div>
+    <div class="list-row is-current" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.38 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:99.8%"></b></span><em>99.8%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 2.11 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">3.412</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Stellar Odyssey 2025 2160p BluRay REMUX HEVC TrueHD 7.1">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Stellar.Odyssey.2025.2160p.BluRay.REMUX.HEVC.TrueHD.7.1</span>
+      <span class="l-num">38.2 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 5.40 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.872</span>
+    </div>
+    <div class="list-row" title="[SubHD] Harbor Light S01 E01-12 720p AVC">
+      <span class="dot st-dl" title="下载中"></span>
+      <span class="l-name">[SubHD] Harbor.Light.S01.E01-12.720p.AVC</span>
+      <span class="l-num">12.9 GiB</span>
+      <span class="l-prog"><span class="bar b-dl"><b style="width:67.4%"></b></span><em>67.4%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 320 KiB/s</span><span class="d"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 8.21 MiB/s</span></span>
+      <span class="l-num">0.083</span>
+    </div>
+    <div class="list-row" title="[PTGroup] Silent Valley 2024 1080p WEB-DL H264 — HR 做种中未达标">
+      <span class="dot st-hr" title="做种中 · HR 未达标"></span>
+      <span class="l-name">[PTGroup] Silent.Valley.2024.1080p.WEB-DL.H264</span>
+      <span class="l-num">6.10 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 1.20 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.102</span>
+    </div>
+    <div class="list-row" title="[Classic] Midnight Run 1988 BluRay REMUX — 暂停">
+      <span class="dot st-pause" title="已暂停"></span>
+      <span class="l-name">[Classic] Midnight.Run.1988.BluRay.REMUX</span>
+      <span class="l-num">21.5 GiB</span>
+      <span class="l-prog"><span class="bar b-pause"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="z">—</span><span class="z">—</span></span>
+      <span class="l-num">2.350</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.41 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 3.02 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">2.940</span>
+    </div>
+  </div>
+
+  <!-- 详情面板 -->
+  <div class="drawer-dock">
+    <aside class="drawer" id="drawer" data-h="low">
+      <div class="drawer-grip" id="grip" title="拖拽 / 点击调高: 收起 - 矮(240px) - 高(560px) 循环"></div>
+      <header class="drawer-head">
+        <span class="drawer-title" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv"><span class="dot st-seed"></span>[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+        <!-- 收起态摘要条: 分区构成 + 上行合计 -->
+        <div class="drawer-csum" title="收起态摘要: 五个语义分区计数 + 上行合计">
+          <span class="cs up">取流 <b>5</b></span>
+          <span class="cs dn">供流 <b>2</b></span>
+          <span class="cs dimcs">闲置 <b>4</b></span>
+          <span class="cs wn">限流 <b>1</b></span>
+          <span class="cs dimcs">握手 <b>1</b></span>
+          <span class="cs up">↑ <b>2.11 MiB/s</b></span>
+        </div>
+        <span class="drawer-spacer"></span>
+        <nav class="drawer-tabs">
+          <button class="drawer-tab" data-tab="general">常规</button>
+          <button class="drawer-tab" data-tab="trackers">Tracker</button>
+          <button class="drawer-tab active" data-tab="peers">用户</button>
+          <button class="drawer-tab" data-tab="content">内容</button>
+          <button class="drawer-tab" data-tab="traffic">流量</button>
+        </nav>
+        <div class="hctl" role="group" aria-label="面板高度档">
+          <button class="seg" data-h="collapsed">收起</button>
+          <button class="seg active" data-h="low">矮</button>
+          <button class="seg" data-h="tall">高</button>
+        </div>
+        <button class="bt icon ghost" data-h="collapsed" title="收起面板(保留页签与数据)"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+
+      <div class="drawer-body">
+        <!-- ===== 用户页(方向 B: 语义分区 + 可折叠分组) ===== -->
+        <div id="panePeers">
+          <div class="pf-bar">
+            <span class="pf-note">按「这条连接此刻在干什么」分五区 · 点击组头折叠 / 展开 · 组内列头可排序</span>
+            <span style="flex:1"></span>
+            <button class="tb-toggle" id="onlyMoving" title="收起「闲置同伴 / 握手中」等无流量分区, 只看正在传输数据的连接"><i></i>只看在传数据</button>
+          </div>
+          <div id="gwrap"></div>
+        </div>
+
+        <!-- 其它页签占位 -->
+        <div class="tab-mock" id="paneMock" hidden>
+          <div class="tab-mock-inner">
+            <svg class="ic"><use href="#i-warn"/></svg>
+            <b id="mockTitle">「常规」页</b>
+            <p id="mockNote"></p>
+            <button class="bt sm" id="mockBack">返回用户页</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部状态栏占位 -->
+  <footer class="win-statusbar">
+    <span class="sb-live"><i></i>qBittorrent 5.1.2 已连接</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">12.02 MiB/s</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">8.21 MiB/s</span></span>
+    <span class="sb-spd sb-dim">今日</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">9.4 GiB</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">14.2 GiB</span></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-dim">做种 4 · 下载 1 · prism / ocean 样例语境 · 用户页方向 B</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6.2 8 10.2 12 6.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.6 13.4H1.4Z" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M8 6.6v3.2" stroke="currentColor" stroke-linecap="round"/><circle cx="8" cy="11.9" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 3.5v9M4.5 9 8 12.5 11.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="5.2" r="2.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.8 13.5c.7-2.6 2.8-3.9 5.2-3.9s4.5 1.3 5.2 3.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.4 4.4l7.2 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+
+/* ---- 面板高度档: 收起(仅头部 44px) / 矮 240px / 高 560px, 文档流让位 ---- */
+const drawer = $("#drawer");
+function setH(mode){
+  drawer.classList.toggle("collapsed", mode === "collapsed");
+  drawer.dataset.h = mode;
+  $$(".hctl .seg").forEach(b => b.classList.toggle("active", b.dataset.h === mode));
+}
+$$(".hctl .seg").forEach(b => b.addEventListener("click", () => setH(b.dataset.h)));
+$$('[data-h="collapsed"].bt').forEach(b => b.addEventListener("click", () => setH("collapsed")));
+$("#grip").addEventListener("click", () => {
+  const cur = drawer.classList.contains("collapsed") ? "collapsed" : drawer.dataset.h;
+  setH(cur === "collapsed" ? "low" : cur === "low" ? "tall" : "collapsed");
+});
+
+/* ---- 页签切换: 用户页之外给占位说明; 收起态点击页签先展开(给明确反馈) ---- */
+const MOCKS = {
+  general: "常规页已按 01-03 号模板交付:英雄行 / 双列卡片 / 收起态摘要条三个方向。",
+  trackers:"Tracker 页已按 04-06 号模板交付:状态卡片 / 健康分组 / 增强表格三个方向。",
+  content: "内容页将按 10-12 号模板交付:折叠文件树、内嵌进度条与优先级菜单。",
+  traffic: "流量页将按 13-15 号模板交付:uPlot 双系列图、窗口切换器与令牌化配色。"
+};
+$$(".drawer-tab").forEach(t => t.addEventListener("click", () => {
+  if (drawer.classList.contains("collapsed")) setH("low");
+  $$(".drawer-tab").forEach(x => x.classList.toggle("active", x === t));
+  const mine = t.dataset.tab === "peers";
+  $("#panePeers").hidden = !mine;
+  $("#paneMock").hidden = mine;
+  if (!mine){
+    $("#mockTitle").textContent = "「" + t.textContent.trim() + "」页";
+    $("#mockNote").textContent = MOCKS[t.dataset.tab] || "";
+  }
+}));
+$("#mockBack").addEventListener("click", () => $(".drawer-tab[data-tab='peers']").click());
+
+/* ---- Toast ---- */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+/* ---- 用户页数据(硬编码快照, 与 07 / 09 号模板同一份, 口径互相咬合) ---- */
+const PEERS = [
+  { ip:"223.104.63.208", port:18642, cc:"CN", region:"中国大陆", client:"迅雷 3.2.4", flags:"U E",
+    prog:0, up:720, down:0, sent:612, recv:0, rel:0, conn:"TCP", files:"第 05 集 mkv",
+    role:"take", bad:true },
+  { ip:"118.24.66.101", port:6881, cc:"CN", region:"中国大陆", client:"aria2 1.37.0", flags:"U E",
+    prog:87.4, up:464, down:0, sent:1946, recv:30, rel:0.1, conn:"TCP", files:"第 05 集 mkv · NCOP&ED mp4",
+    role:"take" },
+  { ip:"153.126.38.72", port:51413, cc:"JP", region:"日本", client:"qBittorrent 5.1.2", flags:"U E X",
+    prog:68.2, up:358, down:0, sent:1434, recv:8, rel:0.1, conn:"TCP", files:"第 05 集 mkv",
+    role:"take" },
+  { ip:"128.199.94.211", port:51415, cc:"SG", region:"新加坡", client:"μTorrent 3.6.0", flags:"U E P",
+    prog:23.9, up:352, down:0, sent:420, recv:0, rel:0, conn:"uTP", files:"第 03 集 mkv",
+    role:"take" },
+  { ip:"103.135.33.87", port:6889, cc:"HK", region:"中国香港", client:"Transmission 4.0.6", flags:"U E H",
+    prog:41.7, up:266, down:0, sent:580, recv:12, rel:0, conn:"TCP", files:"扫图 pdf",
+    role:"take" },
+  { ip:"192.168.31.24", port:51413, cc:"LAN", region:"局域网 · NAS", client:"qBittorrent 5.1.2", flags:"D K E I P",
+    prog:100, up:0, down:1392, sent:0, recv:2672, rel:100, conn:"uTP", files:"",
+    role:"feed", lan:true, fnote:"内网直连 · 补我缺失的最后 1 块(4 MiB)" },
+  { ip:"175.223.44.19", port:51413, cc:"KR", region:"韩国", client:"qBittorrent 4.6.5", flags:"D K E",
+    prog:100, up:0, down:64, sent:0, recv:963, rel:100, conn:"TCP", files:"",
+    role:"feed", fnote:"缺失块备选源(慢速)" },
+  { ip:"51.158.102.33", port:6969, cc:"FR", region:"法国", client:"Deluge 2.1.1", flags:"K E",
+    prog:100, up:0, down:0, sent:210, recv:266, rel:100, conn:"TCP", files:"", role:"idle" },
+  { ip:"2a01:4f8:141:34d2::9", port:51413, cc:"DE", region:"德国", client:"Transmission 4.0.6", flags:"K X P",
+    prog:100, up:0, down:0, sent:330, recv:317, rel:100, conn:"uTP", files:"", role:"idle", ipv6:true },
+  { ip:"2603:8080:1f04:aa31::7e", port:6881, cc:"US", region:"美国", client:"qBittorrent 5.0.4", flags:"K H P E",
+    prog:100, up:0, down:0, sent:150, recv:287, rel:100, conn:"uTP", files:"", role:"idle", ipv6:true },
+  { ip:"111.249.188.76", port:6881, cc:"TW", region:"中国台湾", client:"aria2 1.37.0", flags:"K E",
+    prog:100, up:0, down:0, sent:96, recv:145, rel:100, conn:"TCP", files:"", role:"idle" },
+  { ip:"27.115.49.132", port:8080, cc:"CN", region:"中国大陆", client:"BiglyBT 3.6.0", flags:"u E P",
+    prog:12.4, up:0, down:0, sent:96, recv:0, rel:0, conn:"uTP", files:"第 01 集 mkv(等待解除限流)",
+    role:"choke" },
+  { ip:"198.51.100.47", port:51416, cc:"US", region:"美国", client:"未知", flags:"?",
+    prog:null, up:0, down:0, sent:0, recv:0, rel:null, conn:"", files:"", role:"hand" }
+];
+const FLAG_META = {
+  "D": { c:"fl-d",  t:"D — 我方正在从该 peer 下载数据" },
+  "U": { c:"fl-u",  t:"U — 我方正在向该 peer 上传数据" },
+  "u": { c:"fl-uo", t:"u — 对方有意向我下载, 但我方已将其限流(choked)" },
+  "K": { c:"fl-k",  t:"K — 完整副本(对方是做种者)" },
+  "E": { c:"fl-e",  t:"E — 加密连接" },
+  "H": { c:"fl-h",  t:"H — 该 peer 经 DHT 引入" },
+  "X": { c:"fl-x",  t:"X — 该 peer 经 PEX(对端交换)引入" },
+  "I": { c:"fl-i",  t:"I — 对方主动连入(incoming)" },
+  "P": { c:"fl-p",  t:"P — uTP 传输" },
+  "?": { c:"fl-q",  t:"? — 握手未完成, 状态未知" }
+};
+const fmtSpd = k => k >= 1024 ? (k / 1024).toFixed(2) + " MiB/s" : Math.round(k) + " KiB/s";
+const fmtAmt = m => m >= 1024 ? (m / 1024).toFixed(2) + " GiB" : Math.round(m) + " MiB";
+const MAX_UP = Math.max(...PEERS.map(p => p.up));
+const MAX_DOWN = Math.max(...PEERS.map(p => p.down));
+const sum = (ms, k) => ms.reduce((s, p) => s + p[k], 0);
+
+/* ---- 分区定义 ---- */
+const GROUPS = [
+  { key:"take", acc:"take", name:"正在从我这下载", ico:"i-up", tip:"该分区 = 对端正在从我方下载数据(U flag 且有流量);这是 HR 做种时长的来源, 也是吸血样例所在" },
+  { key:"feed", acc:"feed", name:"正在给我上传",   ico:"i-down", tip:"该分区 = 对端正在向我方供数(D flag 有流量), 用于补齐我缺失的最后一块(共 4 MiB)" },
+  { key:"idle", acc:"idle", name:"闲置同伴",       ico:"",       tip:"该分区 = 拥有完整副本但当前无任何流量的做种同伴", quiet:true },
+  { key:"choke", acc:"choke", name:"被我方限流",   ico:"i-ban",  tip:"该分区 = 对方有意下载, 但我方已将其限流(u flag)" },
+  { key:"hand", acc:"hand", name:"握手中",         ico:"",       tip:"该分区 = 握手未完成, 客户端与进度未知", quiet:true }
+];
+const FOLDED = { take:false, feed:false, idle:true, choke:false, hand:true };
+
+function aggHtml(key, ms){
+  if (key === "take")  return `↑ <b>${fmtSpd(sum(ms, "up"))}</b> · 会话已发 <b>${fmtAmt(sum(ms, "sent"))}</b>`;
+  if (key === "feed")  return `↓ <b>${fmtSpd(sum(ms, "down"))}</b> · 会话已收 <b>${fmtAmt(sum(ms, "recv"))}</b>`;
+  if (key === "idle")  return `完整副本 × <b>${ms.length}</b> · 当前无流量`;
+  if (key === "choke") return `对方有意 · 我方已限流`;
+  return `握手未完成`;
+}
+
+/* ---- 单元格构造(与 07 号模板同款, 少一列关联度: 分区本身已隐含) ---- */
+function flagBadges(flags){
+  return flags.split(" ").map(f => {
+    const m = FLAG_META[f];
+    return `<span class="fl ${m.c}" title="${m.t}">${f}</span>`;
+  }).join("");
+}
+function addrCell(p){
+  const cc = p.lan
+    ? `<span class="cc lan" title="局域网直连 · 走内网交换, 不占公网带宽">内网</span>`
+    : `<span class="cc" title="地区: ${p.region}(qB country / country_code 字段)">${p.cc}</span>`;
+  return `<span class="pc-addr">${cc}<span class="pc-ip" title="${p.ip}:${p.port}${p.ipv6 ? " · IPv6" : ""}">${p.ip}:${p.port}</span></span>`;
+}
+function clientCell(p){
+  const badge = p.bad
+    ? `<span class="bad-b" title="吸血嫌疑: 会话内第 5 次连入, 累计拿走 612 MiB, 回传 0 B; 进度始终归零是迅雷断点重连的典型特征">吸血</span>`
+    : "";
+  return `<span class="pc-client"><span class="cname" title="${p.client}">${p.client}</span>${badge}</span>`;
+}
+function filesCell(p){
+  if (p.role === "feed") return `<span class="pc-files ann" title="设计增量注释: 该对端正在供给我缺失的最后一块(qB 无此字段)">→ ${p.fnote}</span>`;
+  if (p.role === "hand" || !p.files) return `<span class="pc-files dimc">—</span>`;
+  return `<span class="pc-files" title="对端正在获取: ${p.files}(qB files 字段)">${p.files}</span>`;
+}
+function progCell(p){
+  if (p.prog === null) return `<span class="pc-none">—</span>`;
+  const cls = p.prog >= 100 ? "bar" : "bar b-dl";
+  return `<span class="pc-prog${p.prog === 0 ? " zero" : ""}" title="对端自身进度 ${p.prog.toFixed(1)}%">
+    <span class="${cls}"><b style="width:${p.prog}%"></b></span><em>${p.prog.toFixed(1)}%</em></span>`;
+}
+function speedCell(dir, p){
+  const v = dir === "u" ? p.up : p.down;
+  if (p.role === "hand") return `<span class="pc-spd ${dir}"><b class="z">—</b></span>`;
+  const num = v > 0 ? `<b>${fmtSpd(v)}</b>` : `<b class="z">0</b>`;
+  const bar = v > 0
+    ? `<span class="track"><i style="width:${(v / (dir === "u" ? MAX_UP : MAX_DOWN) * 100).toFixed(1)}%;background:var(${dir === "u" ? "--today-up" : "--today-down"})"></i></span>`
+    : "";
+  return `<span class="pc-spd ${dir}">${num}${bar}</span>`;
+}
+function amtCell(v){
+  return `<span class="pc-amt${v ? "" : " z"}" title="${v ? "会话累计 " + fmtAmt(v) : "会话累计 0"}">${v ? fmtAmt(v) : "0"}</span>`;
+}
+function rowHtml(p){
+  const cls = ["g-row", p.bad ? "prow-bad" : "", p.lan ? "prow-lan" : "", p.role === "hand" ? "prow-hand" : ""].filter(Boolean).join(" ");
+  return `<div class="${cls}">
+    ${addrCell(p)}
+    ${clientCell(p)}
+    <span class="pc-flags">${flagBadges(p.flags)}</span>
+    ${filesCell(p)}
+    ${progCell(p)}
+    ${speedCell("u", p)}
+    ${speedCell("d", p)}
+    ${amtCell(p.sent)}
+    ${amtCell(p.recv)}
+  </div>`;
+}
+function colHeadHtml(){
+  return `<div class="g-row gcols">
+    <span>对端</span>
+    <span>客户端</span>
+    <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
+    <span title="对端正在获取的文件(qB files 字段)">正在取</span>
+    <span class="num sortable${sortKey === "prog" ? " on" : ""}${sortKey === "prog" && sortDir === 1 ? " asc" : ""}" data-k="prog" title="对端自身进度">进度<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "up" ? " on" : ""}${sortKey === "up" && sortDir === 1 ? " asc" : ""}" data-k="up" title="我方发给该对端的即时速度(qB upspeed)">上行<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "down" ? " on" : ""}${sortKey === "down" && sortDir === 1 ? " asc" : ""}" data-k="down" title="我方从该对端收到的即时速度(qB dlspeed)">下行<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "sent" ? " on" : ""}${sortKey === "sent" && sortDir === 1 ? " asc" : ""}" data-k="sent" title="本次会话我方已发给该对端的累计(qB uploaded)">已发<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "recv" ? " on" : ""}${sortKey === "recv" && sortDir === 1 ? " asc" : ""}" data-k="recv" title="本次会话我方已从该对端收到的累计(qB downloaded)">已收<svg class="ic"><use href="#i-chev"/></svg></span>
+  </div>`;
+}
+
+/* ---- 渲染: 排序全局生效于每个分区内部 ---- */
+let sortKey = "up", sortDir = -1;
+function cmp(a, b){
+  const va = a[sortKey], vb = b[sortKey];
+  if (va === null && vb === null) return 0;
+  if (va === null) return 1;
+  if (vb === null) return -1;
+  return (va - vb) * sortDir;
+}
+function render(){
+  const html = GROUPS.map(g => {
+    const ms = PEERS.filter(p => p.role === g.key).sort(cmp);
+    if (!ms.length) return "";
+    return `<section class="pgrp${FOLDED[g.key] ? " folded" : ""}" data-acc="${g.acc}"${g.quiet ? ' data-quiet="1"' : ""}>
+      <header class="pgrp-head" data-g="${g.key}" title="${g.tip}">
+        <svg class="ic chev"><use href="#i-chev"/></svg>
+        ${g.ico ? `<svg class="ic gico"><use href="#${g.ico}"/></svg>` : ""}
+        <b class="gname">${g.name}</b>
+        <span class="gcnt">${ms.length}</span>
+        <span class="gagg">${aggHtml(g.key, ms)}</span>
+      </header>
+      <div class="pgrp-rows">
+        ${colHeadHtml()}
+        ${ms.map(rowHtml).join("")}
+      </div>
+    </section>`;
+  }).join("");
+  $("#gwrap").innerHTML = html || `<div class="p-empty">没有对端连接</div>`;
+}
+render();
+
+/* 分区折叠 / 展开(直接翻类, 不重渲染, 保滚动位置) */
+$("#gwrap").addEventListener("click", e => {
+  const head = e.target.closest(".pgrp-head");
+  if (!head) return;
+  const sec = head.closest(".pgrp");
+  FOLDED[head.dataset.g] = !FOLDED[head.dataset.g];
+  sec.classList.toggle("folded", FOLDED[head.dataset.g]);
+});
+
+/* 组内列头排序 */
+$("#gwrap").addEventListener("click", e => {
+  const h = e.target.closest(".sortable");
+  if (!h) return;
+  const k = h.dataset.k;
+  if (sortKey === k) sortDir = -sortDir;
+  else { sortKey = k; sortDir = -1; }
+  render();
+});
+
+/* 只看在传数据: 收起无流量的安静分区 */
+$("#onlyMoving").addEventListener("click", () => {
+  const on = $("#onlyMoving").classList.toggle("active");
+  $$("#gwrap .pgrp[data-quiet]").forEach(s => s.classList.toggle("hide", on));
+  toast(on ? "已收起 闲置同伴 / 握手中 两个安静分区(模拟)" : "已恢复显示全部分区(模拟)");
+});
+</script>
+</body>
+</html>

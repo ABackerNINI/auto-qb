@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 · 内容页 · 方向 A:主从双栏(折叠树 + 选中详情)· tall</title>
+<style>
+/* ===== prism / ocean 令牌: 逐值照抄 _brief.md §5, 未自造色值 ===== */
+:root{
+  color-scheme:dark;
+  --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050;
+  --bg-sunken:rgba(5,12,24,.5); --bg-elev:#1b2d4b; --glass:#111e31; --statusbar-bg:#17273c;
+  --fg:#e9eff7; --fg-muted:#9cadc6; --fg-dim:#6e84a3; --fg-soft:#bccadd;
+  --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15);
+  --accent-line:rgba(58,166,166,.45); --ring:rgba(92,195,195,.5);
+  --on-accent:#04282a; --on-accent-ink:#032325; --on-error:#2b0c0c;
+  --green:#3fd699; --green-soft:rgba(63,214,153,.15); --green-line:rgba(63,214,153,.42);
+  --blue:#4cc3f7;  --blue-soft:rgba(76,195,247,.15);  --blue-line:rgba(76,195,247,.42);
+  --warn:#f5bb42;  --warn-soft:rgba(245,187,66,.15);  --warn-line:rgba(245,187,66,.45);
+  --error:#f3766f; --error-soft:rgba(243,118,111,.15);--error-line:rgba(243,118,111,.45);
+  --paused:var(--fg-muted); --paused-soft:transparent; --paused-line:var(--border-strong);
+  --sel-bg:rgba(139,147,248,.16); --sel-line:rgba(139,147,248,.45); --sel-bar:#8b93f8;
+  --today-up:var(--indigo); --today-down:var(--teal); --today-ico:var(--lime);
+  --violet:#ab8ffa; --pink:#f477b3; --teal:#2fd4bf; --indigo:#8b93f8; --cyan:#2ad0e8; --lime:#a8e63c;
+  --violet-soft:rgba(171,143,250,.16); --pink-soft:rgba(244,119,179,.16);
+  --teal-soft:rgba(47,212,191,.16);   --indigo-soft:rgba(139,147,248,.16);
+  --cyan-soft:rgba(42,208,232,.16);   --lime-soft:rgba(168,230,60,.16);
+  --hr-pending:#ff8f45; --hr-pending-soft:rgba(255,143,69,.18); --hr-pending-line:rgba(255,143,69,.5);
+  --hr-done:#5eead4; --hr-done-soft:rgba(94,234,212,.14); --hr-done-line:rgba(94,234,212,.38);
+  --hr-hit:#ff8f45;
+  --limit-hit:var(--violet); --limit-actual:var(--blue);
+  --border:#23395a; --border-strong:#34507c; --border-soft:rgba(255,255,255,.07);
+  --surface-1:rgba(255,255,255,.03); --surface-2:rgba(255,255,255,.06); --hairline:rgba(255,255,255,.055);
+  --font-ui:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+  --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  --radius-lg:8px; --radius:6px; --radius-sm:4px;
+  --statusbar-h:34px;
+  --shadow-1:0 1px 2px rgba(0,0,0,.16); --shadow-2:0 6px 18px rgba(0,0,0,.22); --shadow-3:0 14px 40px rgba(0,0,0,.3);
+  --ease:cubic-bezier(.2,.8,.3,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --dur-fast:100ms; --dur:160ms; --dur-slow:280ms;
+  /* 模板增补令牌(高度档, 不与既有族重名) */
+  --panel-low:240px; --panel-tall:560px; --head-h:44px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:#050c18; /* 画布衬底 = --bg-sunken 不透明化, 非产品表面 */
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:22px 0 30px; font-family:var(--font-ui); color:var(--fg); font-size:13px;
+}
+.canvas-note{color:var(--fg-dim); font-size:12px; letter-spacing:.02em; line-height:1.7; max-width:1280px; text-align:center}
+.canvas-note b{color:var(--fg-muted); font-weight:600}
+.stage{
+  width:1280px; height:800px; flex:none; position:relative; overflow:hidden;
+  background:var(--bg); border:1px solid var(--border-strong); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-3); display:flex; flex-direction:column;
+}
+
+/* ===== 语境框: 顶栏占位 ===== */
+.win-topbar{
+  flex:none; height:48px; background:var(--glass); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 14px;
+}
+.tb-logo{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:15px; color:var(--fg-soft)}
+.tb-logo i{width:10px; height:10px; border-radius:3px; background:var(--accent)}
+.tb-search{
+  width:250px; height:28px; display:flex; align-items:center; padding:0 10px; gap:6px;
+  background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius);
+  color:var(--fg-dim); font-size:12px;
+}
+.tb-spacer{flex:1}
+.tb-fake{display:flex; gap:8px}
+.tb-fake i{width:26px; height:26px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-1)}
+
+/* ===== 语境框: 列表占位区(随面板高度真实让位) ===== */
+.win-list{flex:1 1 0; min-height:0; overflow-y:auto; background:var(--bg)}
+.list-head,.list-row{
+  display:grid; grid-template-columns:22px minmax(0,1fr) 88px 158px 178px 68px;
+  gap:12px; align-items:center; padding:0 16px;
+}
+.list-head{
+  position:sticky; top:0; z-index:2; height:32px; background:var(--bg);
+  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:12px;
+}
+.list-row{height:38px; border-bottom:1px solid var(--hairline); font-size:12.5px; cursor:default}
+.list-row:hover{background:var(--bg-hover)}
+.list-row.is-current{background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.l-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.l-num{font-family:var(--font-mono); font-size:12px; color:var(--fg-soft); text-align:right}
+.l-prog{display:flex; align-items:center; gap:8px}
+.l-prog .bar{flex:1}
+.l-prog em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); width:44px; text-align:right}
+.l-spd{display:flex; flex-direction:column; gap:1px; font-family:var(--font-mono); font-size:11.5px}
+.l-spd .u{color:var(--today-up)} .l-spd .d{color:var(--today-down)} .l-spd .z{color:var(--fg-dim)}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+.st-seed{background:var(--green)} .st-dl{background:var(--blue)}
+.st-pause{background:var(--fg-muted)} .st-hr{background:var(--hr-pending)}
+.bar{position:relative; height:5px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; display:block}
+.bar b{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--green)}
+.bar.b-dl b{background:var(--blue)} .bar.b-pause b{background:var(--fg-dim)}
+
+/* ===== 底部停靠面板(文档流, 非浮层) ===== */
+.drawer-dock{flex:none; padding:0 12px; margin-top:8px}
+.drawer{
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
+  height:var(--panel-low); transition:height var(--dur-slow) var(--ease-out);
+  background:var(--bg-card); border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-2);
+}
+.drawer[data-h="tall"]{height:var(--panel-tall)}
+.drawer.collapsed{height:var(--head-h)}
+.drawer.collapsed .drawer-body{display:none}
+.drawer-grip{
+  position:absolute; top:3px; left:50%; transform:translateX(-50%); z-index:3;
+  width:42px; height:4px; border-radius:999px; background:var(--border-strong); cursor:ns-resize;
+}
+.drawer-grip:hover{background:var(--accent-line)}
+.drawer-head{
+  flex:none; min-height:var(--head-h); display:flex; align-items:center; gap:10px;
+  padding:0 8px 0 14px; border-bottom:1px solid var(--border);
+}
+.drawer-title{min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:600; color:var(--fg)}
+.drawer-title .dot{margin-right:7px; vertical-align:1px}
+.drawer-spacer{flex:1}
+.drawer-tabs{display:flex; align-self:stretch; align-items:stretch}
+.drawer-tab{
+  appearance:none; background:none; border:0; border-bottom:2px solid transparent; margin-bottom:-1px;
+  padding:0 11px; font-family:var(--font-ui); font-size:13px; color:var(--fg-muted); cursor:pointer;
+}
+.drawer-tab:hover{color:var(--fg)}
+.drawer-tab.active{color:var(--fg); border-bottom-color:var(--accent)}
+.drawer-tab:focus-visible{outline:none; box-shadow:inset 0 0 0 2px var(--ring)}
+.hctl{display:flex; align-items:center; gap:2px; padding:2px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--radius)}
+.hctl .seg{
+  appearance:none; border:0; background:none; padding:3px 9px; border-radius:var(--radius-sm);
+  font-family:var(--font-ui); font-size:12px; color:var(--fg-dim); cursor:pointer;
+}
+.hctl .seg:hover{color:var(--fg)}
+.hctl .seg.active{background:var(--bg-hover); color:var(--fg)}
+
+/* 收起态改良: 头部内嵌「已选节点 + 文件计数」摘要, 不展开也知道面板停在什么上 */
+.drawer-csum{display:none; align-items:center; gap:10px; min-width:0; overflow:hidden; font-size:11.5px}
+.drawer.collapsed .drawer-csum{display:flex}
+.drawer.collapsed .drawer-title{flex:0 1 190px}
+.cs{white-space:nowrap; color:var(--fg-muted)}
+.cs b{font-family:var(--font-mono); font-weight:600; color:var(--fg)}
+.cs .selname{color:var(--fg-soft); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:-1px; display:inline-block}
+.cs.wn{color:var(--warn)} .cs.wn b{color:var(--warn)}
+.cs.dimcs{color:var(--fg-dim)}
+.csum-sel{display:inline-flex; align-items:center; gap:6px; min-width:0; color:var(--fg-muted); white-space:nowrap}
+.csum-sel .ic{width:13px; height:13px; color:var(--fg-dim); flex:none}
+.csum-sel b{font-family:var(--font-mono); color:var(--fg)}
+
+/* ===== 按钮体系 .bt(棱镜配方) ===== */
+.bt{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:34px; padding:0 14px; border-radius:5px; border:1px solid var(--border-strong);
+  background:var(--surface-1); color:var(--fg); font-family:var(--font-ui); font-size:13px; cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.bt:hover{border-color:var(--accent-line)}
+.bt:active{transform:scale(.98)}
+.bt:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.bt.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent)}
+.bt.primary:hover{background:var(--accent-hi); border-color:var(--accent-hi)}
+.bt.sm{height:28px; padding:0 10px; font-size:12px}
+.bt.icon{width:28px; height:28px; padding:0}
+.bt.ghost{background:transparent; border-color:transparent}
+.bt.ghost:hover{border-color:var(--accent-line)}
+.ic{width:14px; height:14px; display:block}
+
+/* ===== 面板正文: 主从双栏骨架 ===== */
+.drawer-body{flex:1; min-height:0; overflow:hidden; padding:10px 16px 12px}
+::-webkit-scrollbar{width:10px; height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:5px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+.ct-wrap{height:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 324px}
+.ct-left{min-width:0; min-height:0; display:flex; flex-direction:column; padding-right:14px}
+.ct-right{min-height:0; overflow-y:auto; border-left:1px solid var(--border); padding-left:14px}
+
+/* 工具条: 筛选 chips + 展开/折叠 */
+.ct-tools{flex:none; display:flex; align-items:center; gap:6px; margin-bottom:8px}
+.chip{
+  appearance:none; display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px;
+  border-radius:999px; border:1px solid var(--border-soft); background:var(--surface-1);
+  font-family:var(--font-ui); font-size:11.5px; color:var(--fg-muted); cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.chip b{font-family:var(--font-mono); font-weight:600}
+.chip:hover{border-color:var(--border-strong); color:var(--fg)}
+.chip.active{background:var(--accent-soft); border-color:var(--accent-line); color:var(--fg)}
+.chip.c-warn.active{background:var(--warn-soft); border-color:var(--warn-line)}
+.chip:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.ct-tools .sp{flex:1}
+.ct-tools .hint{font-size:11px; color:var(--fg-dim)}
+
+/* 左栏: 折叠文件树(引导线 + 类型图标 + 内嵌进度) */
+.ftree{flex:1; min-height:0; overflow-y:auto}
+.ft-row{
+  display:grid; grid-template-columns:18px minmax(0,1fr) 78px 120px 56px;
+  gap:8px; align-items:center; height:29px; padding-right:6px;
+  border-bottom:1px solid var(--hairline); font-size:12px; cursor:default; background-repeat:no-repeat;
+}
+.ft-row:hover{background-color:var(--bg-hover)}
+.ft-row.is-sel{background-color:var(--sel-bg); box-shadow:inset 2px 0 0 var(--sel-bar)}
+.ft-row.is-sel:hover{background-color:var(--sel-bg)}
+.tgl{
+  appearance:none; width:18px; height:18px; padding:0; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; color:var(--fg-dim); cursor:pointer;
+}
+.tgl:hover{color:var(--fg)}
+.tgl .ic{width:11px; height:11px; transition:transform var(--dur) var(--ease)}
+.tgl .ic.closed{transform:rotate(-90deg)}
+.tgl-n{width:18px; height:18px}
+.f-name{display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden}
+.f-name .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.ft-row.is-dir .f-name .nm{font-weight:600; color:var(--fg-soft)}
+.f-ic{width:13px; height:13px; color:var(--fg-dim); flex:none}
+.ft-row.is-dir .f-ic{color:var(--accent)}
+.d-meta{
+  flex:none; font-size:10.5px; color:var(--fg-dim); border:1px solid var(--border-soft);
+  border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap;
+}
+.miss-chip{
+  flex:none; font-size:10.5px; color:var(--warn); background:var(--warn-soft);
+  border:1px solid var(--warn-line); border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap;
+}
+.f-size{font-family:var(--font-mono); font-size:11.5px; color:var(--fg-soft); text-align:right; white-space:nowrap}
+.pcell{display:flex; align-items:center; gap:7px; min-width:0}
+.pcell .bar{flex:1}
+.pcell em{font-style:normal; font-family:var(--font-mono); font-size:11px; color:var(--fg-muted); width:44px; text-align:right; flex:none}
+.bar.b-warn b{background:var(--warn)}
+.pbadge{
+  display:inline-flex; align-items:center; justify-content:center; height:17px; padding:0 7px;
+  border-radius:999px; font-size:10.5px; white-space:nowrap; border:1px solid transparent;
+  appearance:none; font-family:var(--font-ui); cursor:pointer;
+}
+.pbadge.p-skip{background:transparent; border-style:dashed; border-color:var(--border-strong); color:var(--fg-dim)}
+.pbadge.p-norm{background:var(--surface-2); color:var(--fg-muted)}
+.pbadge.p-high{background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn)}
+.pbadge.p-max{background:var(--error-soft); border-color:var(--error-line); color:var(--error)}
+.pbadge:hover{border-color:var(--border-strong)}
+.pbadge:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.pnone{font-family:var(--font-mono); font-size:11px; color:var(--fg-dim)}
+.ft-empty{padding:24px 0; text-align:center; color:var(--fg-dim); font-size:12px}
+.ft-foot{flex:none; margin-top:8px; font-size:11.5px; color:var(--fg-dim)}
+.ft-foot b{font-family:var(--font-mono); color:var(--fg-muted); font-weight:600}
+.ft-foot b.w{color:var(--warn)}
+
+/* 右栏: 选中节点详情 */
+.dt-empty{padding:40px 8px; text-align:center; color:var(--fg-dim); font-size:12px; line-height:1.8}
+.dt-kicker{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--fg-dim)}
+.dt-kicker .ic{width:13px; height:13px}
+.dt-name{margin:6px 0 4px; font-size:13.5px; font-weight:600; line-height:1.5; color:var(--fg); word-break:break-all}
+.dt-path{font-family:var(--font-mono); font-size:11px; color:var(--fg-dim); line-height:1.6; word-break:break-all}
+.dt-chips{display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 2px}
+.stchip{display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:999px; font-size:11px; border:1px solid transparent}
+.stchip.s-ok{background:var(--green-soft); border-color:var(--green-line); color:var(--green)}
+.stchip.s-warn{background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn)}
+.stchip.s-skip{background:transparent; border-style:dashed; border-color:var(--border-strong); color:var(--fg-dim)}
+.dt-prog{display:flex; align-items:center; gap:10px; margin:8px 0 12px}
+.dt-prog>b{font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--fg); line-height:1; white-space:nowrap}
+.dt-prog>b i{font-style:normal; font-size:13px; color:var(--fg-muted); margin-left:1px}
+.dt-prog .bar{flex:1; height:6px}
+.dt-grid{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--hairline); border:1px solid var(--hairline)}
+.dt-cell{background:var(--bg-card); padding:8px 10px}
+.dt-cell i{display:block; font-style:normal; font-size:10.5px; color:var(--fg-dim); margin-bottom:3px}
+.dt-cell b{font-family:var(--font-mono); font-size:13px; font-weight:600; color:var(--fg)}
+.dt-cell.warn b{color:var(--warn)}
+.dt-sec{margin:14px 0 6px; font-size:12px; font-weight:600; color:var(--fg-muted)}
+.prio-seg{display:grid; grid-template-columns:repeat(4,1fr); gap:4px}
+.pseg{
+  height:26px; appearance:none; border:1px solid var(--border); border-radius:var(--radius-sm);
+  background:var(--surface-1); color:var(--fg-muted); font-family:var(--font-ui); font-size:11.5px; cursor:pointer;
+  transition:border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.pseg:hover{border-color:var(--border-strong); color:var(--fg)}
+.pseg:focus-visible{outline:none; box-shadow:0 0 0 2px var(--ring)}
+.pseg.p-skip.on{background:transparent; border-style:dashed; border-color:var(--border-strong); color:var(--fg-dim)}
+.pseg.p-norm.on{background:var(--surface-2); border-color:var(--border-strong); color:var(--fg)}
+.pseg.p-high.on{background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn)}
+.pseg.p-max.on{background:var(--error-soft); border-color:var(--error-line); color:var(--error)}
+.dt-note{margin:10px 0 0; font-size:11px; color:var(--fg-dim); line-height:1.7}
+.dt-note b{color:var(--fg-muted); font-weight:600}
+
+/* 其它页签占位 */
+[hidden]{display:none !important}
+.tab-mock{height:100%; min-height:220px; display:flex; align-items:center; justify-content:center}
+.tab-mock-inner{max-width:520px; text-align:center; color:var(--fg-muted); display:flex; flex-direction:column; align-items:center; gap:10px}
+.tab-mock-inner b{font-size:15px; color:var(--fg)}
+.tab-mock-inner p{margin:0; font-size:12.5px; line-height:1.7; color:var(--fg-muted)}
+.tab-mock .ic{width:28px; height:28px; color:var(--fg-dim)}
+
+/* Toast */
+.toast{
+  position:absolute; left:50%; bottom:46px; transform:translate(-50%,6px); z-index:50;
+  background:var(--bg-elev); border:1px solid var(--accent-line); border-radius:var(--radius);
+  color:var(--fg); font-size:12.5px; padding:8px 14px; box-shadow:var(--shadow-2);
+  opacity:0; pointer-events:none; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+
+/* ===== 语境框: 底部状态栏 ===== */
+.win-statusbar{
+  flex:none; height:var(--statusbar-h); background:var(--statusbar-bg); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:16px; padding:0 14px; font-size:12px; color:var(--fg-muted);
+}
+.sb-live{display:flex; align-items:center; gap:6px}
+.sb-live i{width:7px; height:7px; border-radius:50%; background:var(--green)}
+.sb-spd{display:flex; align-items:center; gap:5px}
+.sb-spd .ic{width:12px; height:12px}
+.sb-spd .u{color:var(--today-up)} .sb-spd .d{color:var(--today-down)}
+.sb-spd .val{font-family:var(--font-mono)}
+.sb-dim{color:var(--fg-dim)}
+.sb-spacer{flex:1}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important; animation:none !important}
+}
+</style>
+</head>
+<body>
+<div class="canvas-note">视口 <b>1280 × 800</b> · 内容页方向 A:<b>主从双栏</b> —— 左侧折叠文件树(缩进引导线 + 类型图标 + 内嵌进度条 + 优先级徽章), 右侧 <b>324px 选中详情</b>(大小 / 已完成 / 缺口 / 可用性 / 优先级分段切换;目录点选给子树聚合与整目录批量优先级)。默认选中缺口最大的<b>「扫图集.pdf · 86%」</b>, 回答「哪个文件还没下完」;顶部 chips 可「仅看未完成」。高度档 <b>收起 / 矮(240px)/ 高(560px)</b> 切换, 列表区随档位真实让位;收起态头部内嵌已选节点摘要。</div>
+
+<div class="stage">
+
+  <!-- 顶栏占位 -->
+  <header class="win-topbar" aria-hidden="true">
+    <div class="tb-logo"><i></i>auto-qb</div>
+    <div class="tb-search">搜索种子、站点、标签…</div>
+    <div class="tb-spacer"></div>
+    <div class="tb-fake"><i></i><i></i><i></i></div>
+  </header>
+
+  <!-- 简化种子列表占位区 -->
+  <div class="win-list">
+    <div class="list-head">
+      <span></span><span>名称</span><span style="text-align:right">大小</span><span>进度</span><span>速度</span><span style="text-align:right">比率</span>
+    </div>
+    <div class="list-row is-current" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.38 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:99.8%"></b></span><em>99.8%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 2.11 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">3.412</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Stellar Odyssey 2025 2160p BluRay REMUX HEVC TrueHD 7.1">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Stellar.Odyssey.2025.2160p.BluRay.REMUX.HEVC.TrueHD.7.1</span>
+      <span class="l-num">38.2 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 5.40 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.872</span>
+    </div>
+    <div class="list-row" title="[SubHD] Harbor Light S01 E01-12 720p AVC">
+      <span class="dot st-dl" title="下载中"></span>
+      <span class="l-name">[SubHD] Harbor.Light.S01.E01-12.720p.AVC</span>
+      <span class="l-num">12.9 GiB</span>
+      <span class="l-prog"><span class="bar b-dl"><b style="width:67.4%"></b></span><em>67.4%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 320 KiB/s</span><span class="d"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 8.21 MiB/s</span></span>
+      <span class="l-num">0.083</span>
+    </div>
+    <div class="list-row" title="[PTGroup] Silent Valley 2024 1080p WEB-DL H264 — HR 做种中未达标">
+      <span class="dot st-hr" title="做种中 · HR 未达标"></span>
+      <span class="l-name">[PTGroup] Silent.Valley.2024.1080p.WEB-DL.H264</span>
+      <span class="l-num">6.10 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 1.20 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">1.102</span>
+    </div>
+    <div class="list-row" title="[Classic] Midnight Run 1988 BluRay REMUX — 暂停">
+      <span class="dot st-pause" title="已暂停"></span>
+      <span class="l-name">[Classic] Midnight.Run.1988.BluRay.REMUX</span>
+      <span class="l-num">21.5 GiB</span>
+      <span class="l-prog"><span class="bar b-pause"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="z">—</span><span class="z">—</span></span>
+      <span class="l-num">2.350</span>
+    </div>
+    <div class="list-row" title="[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv">
+      <span class="dot st-seed" title="做种中"></span>
+      <span class="l-name">[Nekomoe] Some Anime S02 - 06 [1080p][AVC][JPN].mkv</span>
+      <span class="l-num">4.41 GiB</span>
+      <span class="l-prog"><span class="bar"><b style="width:100%"></b></span><em>100%</em></span>
+      <span class="l-spd"><span class="u"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-up"/></svg> 3.02 MiB/s</span><span class="z"><svg class="ic" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"><use href="#i-down"/></svg> 0</span></span>
+      <span class="l-num">2.940</span>
+    </div>
+  </div>
+
+  <!-- 详情面板 -->
+  <div class="drawer-dock">
+    <aside class="drawer" id="drawer" data-h="tall">
+      <div class="drawer-grip" id="grip" title="拖拽 / 点击调高: 收起 - 矮(240px) - 高(560px) 循环"></div>
+      <header class="drawer-head">
+        <span class="drawer-title" title="[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv"><span class="dot st-seed"></span>[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN].mkv</span>
+        <!-- 收起态摘要: 已选节点 + 文件 / 未完成计数 -->
+        <div class="drawer-csum" id="csum" title="收起态摘要: 当前选中节点 + 文件总数 / 未完成文件数"></div>
+        <span class="drawer-spacer"></span>
+        <nav class="drawer-tabs">
+          <button class="drawer-tab" data-tab="general">常规</button>
+          <button class="drawer-tab" data-tab="trackers">Tracker</button>
+          <button class="drawer-tab" data-tab="peers">用户</button>
+          <button class="drawer-tab active" data-tab="content">内容</button>
+          <button class="drawer-tab" data-tab="traffic">流量</button>
+        </nav>
+        <div class="hctl" role="group" aria-label="面板高度档">
+          <button class="seg" data-h="collapsed">收起</button>
+          <button class="seg" data-h="low">矮</button>
+          <button class="seg active" data-h="tall">高</button>
+        </div>
+        <button class="bt icon ghost" data-h="collapsed" title="收起面板(保留页签与数据)"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+
+      <div class="drawer-body">
+        <!-- ===== 内容页(方向 A: 主从双栏) ===== -->
+        <div class="ct-wrap" id="paneContent">
+          <section class="ct-left">
+            <div class="ct-tools">
+              <button class="chip active" data-f="all">全部 <b>16</b></button>
+              <button class="chip c-warn" data-f="miss" title="只显示存在校验缺口的文件">未完成 <b>2</b></button>
+              <button class="chip" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>7</b></button>
+              <span class="sp"></span>
+              <span class="hint">点行查看详情 · 点箭头折叠目录</span>
+              <button class="bt sm ghost" id="expAll" title="展开全部目录"><svg class="ic"><use href="#i-chev"/></svg>展开</button>
+              <button class="bt sm ghost" id="colAll" title="折叠全部目录"><svg class="ic closed"><use href="#i-chev"/></svg>折叠</button>
+            </div>
+            <div class="ftree" id="ftree"></div>
+            <div class="ft-foot" id="ftFoot"></div>
+          </section>
+          <aside class="ct-right" id="detail"></aside>
+        </div>
+
+        <!-- 其它页签占位 -->
+        <div class="tab-mock" id="paneMock" hidden>
+          <div class="tab-mock-inner">
+            <svg class="ic"><use href="#i-warn"/></svg>
+            <b id="mockTitle">「常规」页</b>
+            <p id="mockNote"></p>
+            <button class="bt sm" id="mockBack">返回内容页</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部状态栏占位 -->
+  <footer class="win-statusbar">
+    <span class="sb-live"><i></i>qBittorrent 5.1.2 已连接</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">12.02 MiB/s</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">8.21 MiB/s</span></span>
+    <span class="sb-spd sb-dim">今日</span>
+    <span class="sb-spd"><svg class="ic u"><use href="#i-up"/></svg><span class="val u">9.4 GiB</span></span>
+    <span class="sb-spd"><svg class="ic d"><use href="#i-down"/></svg><span class="val d">14.2 GiB</span></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-dim">做种 4 · 下载 1 · prism / ocean 样例语境 · 内容页方向 A</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6.2 8 10.2 12 6.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.6 13.4H1.4Z" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M8 6.6v3.2" stroke="currentColor" stroke-linecap="round"/><circle cx="8" cy="11.9" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 3.5v9M4.5 9 8 12.5 11.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.5 4c0-.8.7-1.5 1.5-1.5h3.2c.5 0 .9.2 1.2.6l.9 1.2H13c.8 0 1.5.7 1.5 1.5v6c0 .8-.7 1.5-1.5 1.5H3c-.8 0-1.5-.7-1.5-1.5V4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-video" viewBox="0 0 16 16"><rect x="1.8" y="3.5" width="12.4" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 6.1v3.8L10.3 8 7 6.1Z" fill="currentColor"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 16 16"><path d="M6.2 12.3V4.2l6-1.6v7.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="4.4" cy="12.4" r="1.8" fill="currentColor"/><circle cx="10.4" cy="10.6" r="1.8" fill="currentColor"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 1.8h5.5L13 5.3v8.9c0 .6-.5 1-1 1H4c-.6 0-1-.4-1-1V2.8c0-.6.4-1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 1.8v3.5H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-img" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="7" r="1.2" fill="currentColor"/><path d="M3.5 12.5 7 9l2.2 2.2 2.3-2.2 2 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 16 16"><rect x="1.8" y="3.5" width="12.4" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.3 9.7h4.2M10.2 9.7h1.5M4.3 7.2h2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.8h5.5L13 5.3v8.9c0 .6-.5 1-1 1H4c-.6 0-1-.4-1-1V2.8c0-.6.4-1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/* ---- 面板高度档: 收起(仅头部 44px) / 矮 240px / 高 560px, 文档流让位 ---- */
+const drawer = $("#drawer");
+function setH(mode){
+  drawer.classList.toggle("collapsed", mode === "collapsed");
+  drawer.dataset.h = mode;
+  $$(".hctl .seg").forEach(b => b.classList.toggle("active", b.dataset.h === mode));
+}
+$$(".hctl .seg").forEach(b => b.addEventListener("click", () => setH(b.dataset.h)));
+$$('.drawer-head [data-h="collapsed"].bt').forEach(b => b.addEventListener("click", () => setH("collapsed")));
+$("#grip").addEventListener("click", () => {
+  const cur = drawer.classList.contains("collapsed") ? "collapsed" : drawer.dataset.h;
+  setH(cur === "collapsed" ? "low" : cur === "low" ? "tall" : "collapsed");
+});
+
+/* ---- 页签切换: 内容页之外给占位说明; 收起态点击页签先展开(给明确反馈) ---- */
+const MOCKS = {
+  general: "常规页已按 01-03 号模板交付:英雄行 / 双列卡片 / 收起态摘要条三个方向。",
+  trackers:"Tracker 页已按 04-06 号模板交付:状态卡片 / 健康分组 / 增强表格三个方向。",
+  peers:   "用户页已按 07-09 号模板交付:仪表盘 / 分组 / 密度雷达表三个方向。",
+  traffic: "流量页将按 13-15 号模板交付:uPlot 双系列图、窗口切换器与令牌化配色。"
+};
+$$(".drawer-tab").forEach(t => t.addEventListener("click", () => {
+  if (drawer.classList.contains("collapsed")) setH("low");
+  $$(".drawer-tab").forEach(x => x.classList.toggle("active", x === t));
+  const mine = t.dataset.tab === "content";
+  $("#paneContent").hidden = !mine;
+  $("#paneMock").hidden = mine;
+  if (!mine){
+    $("#mockTitle").textContent = "「" + t.textContent.trim() + "」页";
+    $("#mockNote").textContent = MOCKS[t.dataset.tab] || "";
+  }
+}));
+$("#mockBack").addEventListener("click", () => $('.drawer-tab[data-tab="content"]').click());
+
+/* ---- Toast ---- */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+/* ---- 文件树数据(与 01-09 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 跳过 / 1 普通 / 4 高 / 7 最高, avail 可用性 ---- */
+const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", dir:true, children:[
+  { name:"Season 02", dir:true, children:[
+    { name:"[Nekomoe] Some Anime S02 - 05 [1080p][AVC][JPN].mkv", size:1228.8, prog:100, prio:4, avail:21.37 },
+    { name:"[Nekomoe] Some Anime S02 - 05 [720p][AVC][JPN].mkv", size:358.4, prog:100, prio:0, avail:21.37 },
+    { name:"NCOP&ED", dir:true, children:[
+      { name:"Creditless NCOP&ED [1080p].mp4", size:180.0, prog:100, prio:0, avail:21.37 }
+    ]},
+    { name:"Extras", dir:true, children:[
+      { name:"Live Event [1080p].mp4", size:866.0, prog:100, prio:1, avail:21.37 },
+      { name:"Menu & Chara Intro [1080p].mp4", size:612.0, prog:100, prio:1, avail:21.37 },
+      { name:"PV & CM Collection [1080p].mp4", size:216.0, prog:99.1, prio:1, avail:20.9 },
+      { name:"Web 预告集.mp4", size:128.0, prog:100, prio:0, avail:21.37 }
+    ]},
+    { name:"Sound", dir:true, children:[
+      { name:"Drama CD Track1.flac", size:386.0, prog:100, prio:1, avail:21.37 },
+      { name:"Drama CD Track2.flac", size:340.0, prog:100, prio:1, avail:21.37 },
+      { name:"导演评论音轨.mp3", size:96.0, prog:100, prio:0, avail:21.37 }
+    ]}
+  ]},
+  { name:"Scans", dir:true, children:[
+    { name:"Some Anime S02 扫图集.pdf", size:42.0, prog:86.0, prio:7, avail:17.9 },
+    { name:"特典小卡扫描.jpg", size:8.0, prog:100, prio:0, avail:21.37 }
+  ]},
+  { name:"Subs", dir:true, children:[
+    { name:"Some Anime S02 - 05.chs.ass", size:0.28, prog:100, prio:1, avail:21.37 },
+    { name:"Some Anime S02 - 05.cht.ass", size:0.28, prog:100, prio:1, avail:21.37 },
+    { name:"Some Anime S02 - 05.chs&jpn.ass", size:0.24, prog:100, prio:0, avail:21.37 }
+  ]},
+  { name:"sample", dir:true, children:[
+    { name:"[Nekomoe] sample_05.mkv", size:24.0, prog:100, prio:0, avail:21.37 }
+  ]}
+]};
+const PRIO = { 0:{t:"跳过", c:"p-skip"}, 1:{t:"普通", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
+const PRIO_ORDER = [0, 1, 4, 7];
+const EXT_ICON = { mkv:"i-video", mp4:"i-video", flac:"i-audio", mp3:"i-audio", pdf:"i-doc", jpg:"i-img", ass:"i-sub" };
+const EXT_TYPE = { mkv:"视频 · Matroska", mp4:"视频 · MP4", flac:"音频 · FLAC", mp3:"音频 · MP3", pdf:"文档 · PDF", jpg:"图片 · JPEG", ass:"字幕 · ASS" };
+const extOf = n => { const m = /\.([a-z0-9]+)$/i.exec(n.name); return m ? m[1].toLowerCase() : ""; };
+const fmtSize = m => m >= 1024 ? (m / 1024).toFixed(2) + " GiB" : m >= 1 ? (m >= 100 ? m.toFixed(0) : m.toFixed(1)) + " MiB" : Math.round(m * 1024) + " KiB";
+
+/* ---- 派生量: id / 深度 / 相对路径 / 子树聚合 ---- */
+let seq = 0;
+function walk(n, parent, depth, rel){
+  n.id = "n" + (seq++); n.parent = parent; n.depth = depth;
+  n.rel = rel ? (rel + " / " + n.name) : n.name;
+  if (n.dir){
+    n.dirCount = 0;
+    n.children.forEach(c => { walk(c, n, depth + 1, n.rel); n.dirCount += (c.dir ? c.dirCount + 1 : 0); });
+    n.size = 0; n.files = 0; n.miss = 0; n.minAv = Infinity;
+    n.children.forEach(c => {
+      n.size += c.size; n.files += c.files; n.miss += c.miss;
+      const av = c.dir ? c.minAv : c.avail;
+      if (av !== undefined && av < n.minAv) n.minAv = av;
+    });
+    n.prog = n.size ? (n.size - n.miss) / n.size * 100 : 100;
+  } else {
+    n.files = 1; n.miss = n.size * (1 - n.prog / 100);
+  }
+}
+walk(ROOT, null, 0, "");
+ROOT.avail = 21.37; /* 整体可用性(qB availability), 覆盖子树最小值口径 */
+const byId = {};
+(function idx(n){ byId[n.id] = n; if (n.dir) n.children.forEach(idx); })(ROOT);
+
+/* ---- 状态 ---- */
+const state = { sel:"", filter:"all", open:{} };
+(function initOpen(n){ if (n.dir){ state.open[n.id] = true; n.children.forEach(initOpen); } })(ROOT);
+/* 默认选中: 缺口最大的文件(扫图集.pdf), 直接回答「哪个文件还没下完」 */
+let selDef = null;
+(function findMiss(n){
+  if (!n.dir){ if (!selDef || n.miss > selDef.miss) selDef = n; }
+  else n.children.forEach(findMiss);
+})(ROOT);
+state.sel = selDef ? selDef.id : ROOT.id;
+
+/* ---- 图标 / 引导线 ---- */
+function iconOf(n, big){
+  const id = n.dir ? "i-folder" : (EXT_ICON[extOf(n)] || "i-file");
+  return `<svg class="ic f-ic"${big ? ' style="width:15px;height:15px"' : ""}><use href="#${id}"/></svg>`;
+}
+function guideStyle(depth){
+  if (depth <= 0) return "";
+  const img = [], pos = [], sz = [];
+  for (let i = 0; i < depth; i++){
+    img.push("linear-gradient(var(--hairline),var(--hairline))");
+    pos.push((26 + i * 16) + "px 0");
+    sz.push("1px 100%");
+  }
+  return `background-image:${img.join(",")};background-position:${pos.join(",")};background-size:${sz.join(",")};`;
+}
+
+/* ---- 过滤 ---- */
+function hasMatch(n){
+  if (state.filter === "all") return true;
+  if (!n.dir) return state.filter === "miss" ? n.miss > 0.005 : state.filter === "skip" ? n.prio === 0 : n.prio !== 0;
+  return n.children.some(hasMatch);
+}
+
+/* ---- 左树渲染 ---- */
+function rowHtml(n, depth){
+  const sel = state.sel === n.id;
+  const miss = !n.dir && n.miss > 0.005;
+  const meta = n.dir
+    ? `<span class="d-meta" title="目录内共 ${n.files} 个文件${n.dirCount ? " · " + n.dirCount + " 个子目录" : ""}">${n.files} 文件</span>`
+    : (miss ? `<span class="miss-chip" title="按块校验缺口约 ${n.miss.toFixed(1)} MiB">缺 ${fmtSize(n.miss)}</span>` : "");
+  const prog = `<span class="pcell" title="${n.dir ? "子树加权平均进度" : "文件进度"} ${n.prog.toFixed(1)}%"><span class="bar${n.prog < 100 ? " b-warn" : ""}"><b style="width:${n.prog}%"></b></span><em>${n.prog.toFixed(1)}%</em></span>`;
+  const pc = n.dir
+    ? `<span class="pnone" title="目录本身无优先级; 选中后可在右侧整目录批量设置">—</span>`
+    : `<button class="pbadge ${PRIO[n.prio].c}" data-cyc="${n.id}" title="优先级: ${PRIO[n.prio].t} — 点击循环切换(模拟)">${PRIO[n.prio].t}</button>`;
+  const tgl = n.dir
+    ? `<button class="tgl" data-tgl="${n.id}" title="${state.open[n.id] ? "折叠" : "展开"} ${esc(n.name)}"><svg class="ic${state.open[n.id] ? "" : " closed"}"><use href="#i-chev"/></svg></button>`
+    : `<span class="tgl-n"></span>`;
+  return `<div class="ft-row${n.dir ? " is-dir" : " is-file"}${sel ? " is-sel" : ""}" data-id="${n.id}" style="${guideStyle(depth)}">
+    ${tgl}
+    <span class="f-name" style="padding-left:${depth * 16}px">${iconOf(n)}<span class="nm">${esc(n.name)}</span>${meta}</span>
+    <span class="f-size" title="${n.dir ? "子树合计大小" : "文件大小"}">${fmtSize(n.size)}</span>
+    ${prog}
+    ${pc}
+  </div>`;
+}
+function renderTree(){
+  const frag = [];
+  (function emit(n, depth){
+    if (!hasMatch(n)) return;
+    frag.push(rowHtml(n, depth));
+    if (n.dir && (state.filter !== "all" || state.open[n.id])) n.children.forEach(c => emit(c, depth + 1));
+  })(ROOT, 0);
+  $("#ftree").innerHTML = frag.length ? frag.join("") : `<div class="ft-empty">该筛选下没有文件</div>`;
+}
+function renderFoot(){
+  const inc = [];
+  (function scan(n){ if (!n.dir){ if (n.miss > 0.005) inc.push(n); } else n.children.forEach(scan); })(ROOT);
+  $("#ftFoot").innerHTML = `${ROOT.files} 个文件 · ${ROOT.dirCount} 个目录 · <b>${fmtSize(ROOT.size)}</b> · 总进度 <b>${ROOT.prog.toFixed(1)}%</b> · 未完成 <b class="w">${inc.length}</b>(缺 ${fmtSize(ROOT.miss)})`;
+}
+
+/* ---- 右侧详情 ---- */
+function progCellStat(n){
+  return `<div class="dt-prog"><b>${n.prog.toFixed(1)}<i>%</i></b><span class="bar${n.prog < 100 ? " b-warn" : ""}"><b style="width:${n.prog}%"></b></span></div>`;
+}
+function segHtml(n, scopeLabel){
+  return PRIO_ORDER.map(p =>
+    `<button class="pseg ${PRIO[p].c}${n.prio === p ? " on" : ""}" data-setp="${p}" title="设为${PRIO[p].t}(模拟)${scopeLabel ? " — 作用于" + scopeLabel : ""}">${PRIO[p].t}</button>`
+  ).join("");
+}
+function detailFile(n){
+  const done = n.size - n.miss;
+  const chips =
+    (n.miss > 0.005
+      ? `<span class="stchip s-warn" title="按块校验存在缺口; swarm 可用性 ${n.avail.toFixed(2)}, 有源可补, 可等待或手动强制重新校验">缺块 ${fmtSize(n.miss)}</span>`
+      : `<span class="stchip s-ok" title="该文件全部块均已完整">已完成</span>`) +
+    (n.prio === 0 ? `<span class="stchip s-skip" title="优先级为跳过: 不参与下载, 已有数据保留">已跳过</span>` : "");
+  const avTitle = n.dir ? "子树内最低可用性" : "qB availability: 全 swarm 中该文件数据的份数";
+  return `
+  <div class="dt-kicker">${iconOf(n, true)}文件 · ${EXT_TYPE[extOf(n)] || "其他"}</div>
+  <h3 class="dt-name" title="${esc(n.name)}">${esc(n.name)}</h3>
+  <div class="dt-path" title="${esc(n.rel)}">${esc(n.rel)}</div>
+  <div class="dt-chips">${chips}</div>
+  ${progCellStat(n)}
+  <div class="dt-grid">
+    <div class="dt-cell"><i>大小</i><b>${fmtSize(n.size)}</b></div>
+    <div class="dt-cell"><i>已完成</i><b>${fmtSize(done)}</b></div>
+    <div class="dt-cell${n.miss > 0.005 ? " warn" : ""}"><i>缺口</i><b>${n.miss > 0.005 ? fmtSize(n.miss) : "0"}</b></div>
+    <div class="dt-cell"><i title="${avTitle}">可用性</i><b>${n.avail.toFixed(2)}</b></div>
+  </div>
+  <div class="dt-sec">优先级</div>
+  <div class="prio-seg" role="group" aria-label="优先级">${segHtml(n, "")}</div>
+  <p class="dt-note">优先级改动仅在本模板内模拟, 刷新后恢复。缺口文件被设为跳过后将停止补块。</p>`;
+}
+function detailDir(n){
+  const isRoot = !n.parent;
+  const incCnt = [];
+  (function scan(c){ if (!c.dir){ if (c.miss > 0.005) incCnt.push(c); } else c.children.forEach(scan); })(n);
+  const avTitle = isRoot ? "整体可用性(qB availability)" : "子树内最低可用性(最稀缺的文件)";
+  const chips =
+    (incCnt.length
+      ? `<span class="stchip s-warn" title="${incCnt.map(c => c.name).join("、")} 仍有缺口">未完成 ${incCnt.length} 个 · 缺 ${fmtSize(n.miss)}</span>`
+      : `<span class="stchip s-ok" title="子树内全部文件均已完整">全部完整</span>`);
+  return `
+  <div class="dt-kicker">${iconOf(n, true)}${isRoot ? "种子根目录" : "目录"}</div>
+  <h3 class="dt-name" title="${esc(n.name)}">${esc(n.name)}</h3>
+  <div class="dt-path" title="${esc(n.rel)}">${esc(n.rel)}</div>
+  <div class="dt-chips">${chips}</div>
+  ${progCellStat(n)}
+  <div class="dt-grid">
+    <div class="dt-cell"><i>子树大小</i><b>${fmtSize(n.size)}</b></div>
+    <div class="dt-cell"><i>文件 / 子目录</i><b>${n.files} / ${n.dirCount}</b></div>
+    <div class="dt-cell${incCnt.length ? " warn" : ""}"><i>缺口</i><b>${n.miss > 0.005 ? fmtSize(n.miss) : "0"}</b></div>
+    <div class="dt-cell"><i title="${avTitle}">可用性</i><b>${(isRoot ? n.avail : n.minAv).toFixed(2)}</b></div>
+  </div>
+  <div class="dt-sec">目录批量优先级</div>
+  <div class="prio-seg" role="group" aria-label="目录批量优先级">${segHtml({ prio:-1 }, "目录内全部 " + n.files + " 个文件")}</div>
+  <p class="dt-note">作用于目录内全部 <b>${n.files}</b> 个文件(含子目录), 等同 qB 中对目录右键设置优先级。</p>`;
+}
+function renderDetail(){
+  const n = byId[state.sel];
+  $("#detail").innerHTML = !n
+    ? `<div class="dt-empty">未选中节点<br>点选左侧任意文件或目录查看详情</div>`
+    : (n.dir ? detailDir(n) : detailFile(n));
+}
+
+/* ---- 收起态摘要 ---- */
+function renderCsum(){
+  const n = byId[state.sel];
+  const inc = [];
+  (function scan(c){ if (!c.dir){ if (c.miss > 0.005) inc.push(c); } else c.children.forEach(scan); })(ROOT);
+  $("#csum").innerHTML =
+    `<span class="csum-sel" title="当前选中: ${esc(n ? n.rel : "")}">${iconOf(n || ROOT)}已选 <span class="selname">${esc(n ? n.name : "—")}</span>${n && !n.dir ? `<b>${n.prog.toFixed(0)}%</b>` : ""}</span>
+     <span class="cs dimcs">文件 <b>${ROOT.files}</b></span>
+     <span class="cs wn">未完成 <b>${inc.length}</b></span>`;
+}
+
+/* ---- 优先级改动(模拟) ---- */
+function applyPrio(n, p){
+  if (!n.dir){ n.prio = p; return 1; }
+  let c = 0;
+  (function walk2(x){ if (!x.dir){ x.prio = p; c++; } else x.children.forEach(walk2); })(n);
+  return c;
+}
+function setPrio(id, p, via){
+  const n = byId[id];
+  if (!n) return;
+  const cnt = applyPrio(n, p);
+  const scope = n.dir ? `目录 ${n.name} 下 ${cnt} 个文件` : n.name;
+  toast(`已将 ${scope} 设为${PRIO[p].t}(模拟, 刷新恢复)`);
+  renderTree(); renderDetail(); renderCsum();
+}
+function cyclePrio(id){
+  const n = byId[id];
+  const i = PRIO_ORDER.indexOf(n.prio);
+  const p = PRIO_ORDER[(i + 1) % PRIO_ORDER.length];
+  n.prio = p;
+  toast(`${n.name} 优先级 → ${PRIO[p].t}(模拟)`);
+  renderTree(); if (state.sel === id) renderDetail(); renderCsum();
+}
+
+/* ---- 事件委托 ---- */
+$("#ftree").addEventListener("click", e => {
+  const cyc = e.target.closest("[data-cyc]");
+  if (cyc){ e.stopPropagation(); cyclePrio(cyc.dataset.cyc); return; }
+  const tg = e.target.closest("[data-tgl]");
+  if (tg){ e.stopPropagation(); state.open[tg.dataset.tgl] = !state.open[tg.dataset.tgl]; renderTree(); return; }
+  const row = e.target.closest(".ft-row");
+  if (row && row.dataset.id !== state.sel){ state.sel = row.dataset.id; renderTree(); renderDetail(); renderCsum(); }
+});
+$("#detail").addEventListener("click", e => {
+  const b = e.target.closest("[data-setp]");
+  if (b) setPrio(state.sel, +b.dataset.setp, "seg");
+});
+$$(".ct-tools .chip").forEach(c => c.addEventListener("click", () => {
+  state.filter = c.dataset.f;
+  $$(".ct-tools .chip").forEach(x => x.classList.toggle("active", x === c));
+  renderTree();
+}));
+$("#expAll").addEventListener("click", () => {
+  Object.keys(state.open).forEach(k => state.open[k] = true);
+  renderTree();
+});
+$("#colAll").addEventListener("click", () => {
+  Object.keys(state.open).forEach(k => state.open[k] = false);
+  renderTree();
+});
+
+renderTree();
+renderFoot();
+renderDetail();
+renderCsum();
+</script>
+</body>
+</html>
