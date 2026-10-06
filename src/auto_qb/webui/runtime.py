@@ -195,6 +195,12 @@ class WebUIRuntime:
         # 键集, 落代时与上一已发布代比较, 增删即本代 full(R11, 不归约旧组键)
         self._cross_keys_seen: frozenset = frozenset()
         self._cross_keys_prev: Optional[frozenset] = None  # None = 尚未发布过(首代只立基线)
+        # 错误原因预取的行级脏暂存(plan S2 补, 源标签 "tracker_error_refresh"):
+        # refresh_error_reasons 改写 tracker_error_msg 的受影响 hash 在改写点可得 -> 按
+        # 行级归约(不走 full 降级), _publish_locked 落代前在 view_lock 内并入 _delta_pending。
+        # 主循环线程写(任务线预取先于 flush_views), 竞争最坏是键集晚一代并入 —— 与
+        # _pending_full_reasons 同一「无正确性风险」口径。
+        self._pending_error_hashes: set = set()
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
         self.handle = None
@@ -362,6 +368,15 @@ class WebUIRuntime:
         派生自去重集合, 旧组键不归约。
         """
         self._cross_keys_seen = frozenset(keys)
+
+    def note_error_reason_hashes(self, hashes) -> None:
+        """错误原因预取的行级脏登记(plan S2 补, 源标签 "tracker_error_refresh")
+
+        refresh_error_reasons 改写 tracker_error_msg 的受影响行键在改写点可得 -> 按**行级
+        归约**(R11 不降级): _publish_locked 落代前并入 torrent/group 桶 upsert, delta 客户端
+        本代即拿到这些行的新内容。主循环线程调用(任务线预取先于视图发布)。
+        """
+        self._pending_error_hashes.update(hashes)
 
     def set_traffic_view(self, view: dict) -> None:
         """限速/流量只读快照发布口(plan kernel-module-refactor P3)
@@ -595,9 +610,25 @@ class WebUIRuntime:
           同一行净变化为零, 不给客户端又删又发同一行。
         - full 代判定(R11): 本代任一降级源活跃 -> full=true 且键集清空, 累积器与理由
           一并清空(full 响应覆盖到当前 ver, 累积键已无意义)。
+        - 错误原因预取的行级脏(note_error_reason_hashes 暂存)在此并入: fold 是发布前
+          最后一次 view_lock 内合并点, Web 线程 ensure_state 触发的重建也必然先合并键集
+          再落代 —— 该源比 store 增量键集(排空在 flush_views 开头)更及时。
         """
         ver = self.group_view_ver
         reasons = self._pending_full_reasons
+        # 错误原因预取的行级归约(plan S2 补): 改写 tracker_error_msg 的行进 torrent 桶;
+        # 组行 members 的 error_reason 随成员变化 -> 组键经 member_to_key 一并 upsert
+        # (与 store 增量推导同口径)。full 代则随键集清空一并丢弃(覆盖到当前 ver, 无意义)。
+        error_hashes = self._pending_error_hashes
+        if error_hashes:
+            member_to_key = self._host.store.member_to_key
+            error_upsert = self._delta_pending["upsert"]
+            for h in error_hashes:
+                error_upsert["torrent"].add(h)
+                key = member_to_key.get(h)
+                if key is not None:
+                    error_upsert["group"].add(key)
+            error_hashes.clear()
         # 跨组交叉标记增删: 本代构建期发现的键集与上一已发布代不同 -> 本代 full
         # (首代只立基线: 时间线此前为空, 任何客户端本就窗外)
         if self._cross_keys_prev is not None and self._cross_keys_seen != self._cross_keys_prev:

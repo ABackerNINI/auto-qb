@@ -208,19 +208,23 @@ class WebviewMixin:
 
         原因不是快照字段, `store.view_changed` 覆盖不到它, 故变化时显式置
         `web.group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变)。
+
+        plan S2 补(源标签 "tracker_error_refresh"): 改写的行(hash)在改写点精确可得 ->
+        按**行级归约**接线增量时间线(note_error_reason_hashes 登记, 落代前并入 torrent/
+        group 桶 upsert), 不走 full 降级 —— delta 客户端本代即拿到这些行的 error_reason 新值。
         """
         client = self.client
         if client is None:
             return  # qB 断开: 无 API 可用, 保持现值待连接恢复后刷新
         now = time.time()
         budget = ERROR_REASON_BUDGET
-        changed = False
+        changed: set = set()  # 本轮改写了 error_reason 的行(行级脏, plan S2 补)
         for rec in self.store.by_hash.values():
             if self.state_kind(rec) != "error" or rec.state_enum is TorrentState.MISSING_FILES:
                 if rec.tracker_error_msg:
                     rec.tracker_error_msg = ""
                     rec.tracker_error_ts = 0.0
-                    changed = True
+                    changed.add(rec.hash)
                 continue
             if rec.tracker_error_ts and now - rec.tracker_error_ts < ERROR_REASON_TTL:
                 continue  # 未过期: 直接复用现值
@@ -231,9 +235,10 @@ class WebviewMixin:
             msg = self._fetch_tracker_error(rec, client)
             if msg != rec.tracker_error_msg:
                 rec.tracker_error_msg = msg
-                changed = True
+                changed.add(rec.hash)
         if changed:
             self.web.mark_dirty()
+            self.web.note_error_reason_hashes(changed)
 
     @staticmethod
     def hr_view_fields(rec: TorrentRecord) -> dict:

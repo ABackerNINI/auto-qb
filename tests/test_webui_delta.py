@@ -10,6 +10,7 @@
 - test_gate_skipped_round_keys_survive_to_next_gen: 门控跳拍累积(R4) —— 上一版未被取走时 flush 只排空累积不落代, 键集(含组键)并入下一代条目不丢
 - test_full_downgrade_sources_matrix: 五个降级源矩阵(R11) —— config_reload(mark_dirty full=True)/hr_revision(flush 判定点)/shows_pending(归位转换拍)/cross_group(构建期键集增删, 走真 _build_group_view 回传)各自触发 full 代(full 条目键集清空 + 累积器与理由一并清空; hr/cross 均有"下一拍不再 full"的对照); 进程重启 = ver 时间播种 + 时间线/累积器为空, 旧客户端 rid 必然窗外或 rid>ver 全量(R10, 无需显式标记)
 - test_group_removed_key_unresolvable_full: 组行 removed 键推导(R11) —— removed hash 组键查得到且组仍在 -> 组键进 upsert; 组已解散 -> 组键进 removed; 查不到(与"从未归组"不可区分) -> 本代 full 且键集清空
+- test_error_reason_refresh_row_level_upsert: 错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh") —— 走真 refresh_error_reasons 改写 tracker_error_msg, 仅原因刷新、store 零增量 -> 受影响行进 torrent/group 桶 upsert 且该代不 full; 门控跳拍键集暂存不丢(R4); 无变化轮不登记
 """
 import time
 from types import SimpleNamespace
@@ -36,7 +37,7 @@ class _ViewHost(WebviewMixin):
         pass
 
 
-def _make_store(*hashes) -> TorrentStore:
+def _make_store(*hashes, state: str = "stalledUP") -> TorrentStore:
     """真实 TorrentStore 装库(首轮全量, FakeClient/FakeTorrent 范式同 test_sync);
     随后清掉装库轮的 S1 快照与 view_changed —— 基线不进被测时间线窗口, 各用例从干净基线驱动"""
     client = FakeClient()
@@ -44,7 +45,7 @@ def _make_store(*hashes) -> TorrentStore:
         # 剧集形命名: parse_release 解析为 episode(带 key)—— 不触发 _build_shows_view 的
         # 文件兑底 pending 标记(名称解析不出剧键时构建器会 mark_shows_pending(True),
         # 与 c) 场景的转换拍断言互相干扰)
-        client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP")
+        client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP", state=state)
     store = TorrentStore(client)
     store.apply_sync(QbApi(client, store))
     store.last_added = []
@@ -242,3 +243,50 @@ def test_group_removed_key_unresolvable_full():
     assert entry["removed"]["torrent"] == set() and entry["upsert"]["torrent"] == set()
     assert rt._pending_full_reasons == set()  # 理由随落代清空
     assert rt._delta_pending["upsert"]["torrent"] == set()
+
+
+# ---------- ⑥ 错误原因预取的行级归约(S2 补丁) ----------
+
+
+def test_error_reason_refresh_row_level_upsert():
+    """错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh"): 改写的行(hash)在
+    改写点可得 -> 不走 full 降级, delta 客户端本代即拿到 error_reason 新值
+
+    走真 refresh_error_reasons(错误态种子 + FakeClient.trackers_map 报错条目);
+    任务线真实时序 = 预取 -> flush_views(排空) -> 发布(落代)。
+    """
+    store = _make_store("H1", state="error")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    host = rt._host
+    host.client = store.client
+    host.client.trackers_map["H1"] = [
+        {
+            "url": "https://tracker.example.net/announce.php",
+            "status": 4,
+            "msg": "torrent not registered"
+        },
+    ]
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: 先发布一版, 之后仅错误原因变化
+    # 仅错误原因刷新的一拍: store 零增量(无 added/removed/delta_fields)
+    host.refresh_error_reasons()
+    assert store.by_hash["H1"].tracker_error_msg == "torrent not registered"
+    assert not store.last_added and not store.last_removed and not store.delta_fields
+    assert rt._pending_error_hashes == {"H1"}  # 行键已在改写点登记, 等落代消费
+    # 门控跳拍: 暂存键集不丢(R4, fold 是唯一消费点)
+    rt.pending_ver = 999
+    rt.flush_views()
+    assert rt._pending_error_hashes == {"H1"}
+    # 门控放行 -> 落代: 受影响行进 torrent 桶, 组行 members 的 error_reason 随成员变化 -> 组键一并 upsert
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["torrent"] == {"H1"}
+    assert entry["upsert"]["group"] == {("R:\\D", )}
+    assert rt._pending_error_hashes == set()  # 暂存随落代清空
+    # 无变化轮不登记(TTL 内不重取): 下一条目键集为空
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["torrent"] == set() and entry["upsert"]["group"] == set()
