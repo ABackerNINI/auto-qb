@@ -1,7 +1,7 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
 > 摘要: 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工、token 成本巨大 —— 要求改为「只提示 WARNING、不当场修改, 知识库清理单独开会话」。**守卫改造已实施完成 (2026-09-30 22:xx)**: 除 AGENTS.md 外的尺寸全部降级为**债务** (提交不拦、提交时派生输出并转告用户、清理另开会话), AGENTS.md 保持**硬规定** (超 8,000 且本次改动命中仍 STOP, 不入债务体系、不套 50%); 严重度单点在 skill 的 `HARD_CAP_ROLES`, `doc.caps` 为派生可见单一入口。**实测 cap 债务 0 项** (`doc.caps -- --strict` 绿), 全量 1874 passed + 3 skipped / 91%。剩余 = **AGENTS.md 削薄 (独立清理项, 余量 25)**, 待用户另开清理会话。
-> 最后活动: 2026-10-05 18:40
+> 最后活动: 2026-10-06 10:55
 
 ## 状态
 
@@ -39,3 +39,24 @@
 - **② `issues/_index.md` 26,260 → 20,620**: 走**渲染口径**而非外迁条目 —— 给 `gen_issues_index.py` 补 `SUMMARY_MAX = 40`(摘要截断, 与 `gen_tasks_index.SUMMARY_MAX` 同款), 正是切片 [26-10-01-2125-memory-bank-dir-refactor](26-10-01-2125-memory-bank-dir-refactor.md) 记的待拍板项。判据: 133 条**无摘要**也才 14,790 字符 < cap ⇒ 是摘要(11,470 字符)把索引顶爆的, 条目数本身没撑爆 cap ⇒ 按坑档「先查渲染口径」不搬条目(外迁会打坏外部引用)。未达 50% 线(12,600)属该文件性质(index-auto 无可行收缩路径, 见 `CAP_POLICY` 注释), 现余量 4,580。
 - **③ `progress/implemented-webui.md` 21,172 → 9,407**: 按 `log` 轮转口径把最老 13 条(2026-10-02~10-04)原文外迁 → `implemented-webui-history.md`(44,494/48,000), 原位留一行指针; 顺带把历史文件**混合行尾归一 LF**(`.gitattributes` = `eol=lf`, 消掉 git 的「CRLF will be replaced」警告)。
 - 收口: `doc.caps` 债务 0 项 / `kb.check` / `doc.links` / `test.full` 全绿。**未提交**(等用户显式「提交」指令)。
+
+## 追加(2026-10-06): 清理轮 —— 切片 92 → 68 · issues 索引 25,598 → 23,170 · 第三项系口径误报
+
+- 用户开清理会话报三项债务; 用守卫口径现算后实为**两项真债务 + 一项误报**, `commands run doc.caps` 债务清零。
+- **① 切片 92 → 68**: 按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」删 24 片。判据 = ①**无入链**(逐片用 `git grep` 精确文件名核外部引用, 删前复检 0 处命中) 且 ②**非开放决策片**(无「待拍板/待指派/待决策」) 且 ③内容已被 `tasks/` 档案 · `reports/` 报告 · 坑档 · `progress/` 全量覆盖。**未抬 `SLICE_COUNT_LIMIT`、未删活跃片**。14 天规则**零命中**(最老片 26-09-23, 仅 13 天) —— 与坑档「可能一个都没有」的预判一致, 合法对象只能取「已完结波次片」。
+  - **删 24 片 = full-code-review 族 13**(S0-S1 + 批 A/B1/B2/C/D/E/F1/F2/G/H + S5 + S6; 内容全在报告 `reports/26-10-05-1036` §2/§3 与计划 `plans/26-10-05-0951`, 该族 S6 切片**自述**「事实源已全部沉淀, 到期蒸馏后删除」)**+ 实施/取证完结片 11**(`test-throttle-timing-flaky` · `settings-help-rewrite` · `open-path-foreground-round2` · `backend-issues-clearance` · `ops-recheck-false-success` · `hr-fetch-verify-forensics` · `webui-danger-guards` · `hr-steady-throttle-impl` · `backend-reannounce-confirm` · `reannounce-confirm-rework-impl` · `webui-qb-traffic-drawer-page-guard`)。
+  - **断链处置**: 保留片 `26-10-05-0555-hr-steady-throttle-plan` 原指向被删实施片的链接**改指任务档案**(原文保留「原实施切片已蒸馏」注记); 其余被删片**外部入链 0 处**(逐片核过)。删后 `doc.links` 绿。
+- **② `issues/_index.md` 25,598 → 23,170(余量 2,030)**: 仍走**渲染口径** —— `gen_issues_index.SUMMARY_MAX` 40 → 24。判据同 10-05 轮且仍成立: 163 条**无摘要**口径才 18,744 字符 < cap(25,200) ⇒ 是**摘要**(6,854 字符)顶爆的, 条目数本身没撑爆 ⇒ **不搬条目**(外迁会打坏 `**Refs:**` 外部引用)。未达 50% 线(12,600)属 index-auto 性质(见 `CAP_POLICY` 注释), 不强行凑数。
+  - **⚠ 新增长期信号**: 无摘要口径占 cap 的比例 10-05 是 59%(14,790/25,200), **本轮已 74%**(18,744/25,200), 而 Done 条目只增不减 ⇒ 条目数本身正逼近病根; 下一两轮大入池后应改走坑档记的后备出口(按状态归档老条目), 别条件反射抬 cap。
+- **③ `pitfalls/web-ui/layout-css.md` —— 误报, 未动**: 用户报「17.6KB 超 12KB cap」用的是**字节数**, 而 cap 口径是**字符数**。实测 17,661 字节 = **9,717 字符** < 12,000(角色 `pitfall`), `doc.caps` 与 `check_kb_structure` 均判 PASS ⇒ **本该一行都不改**(范围守恒)。已把该形态记为坑档新条目「量 cap 的第三种形态: 拿「KB / 字节」去比「字符数」的 cap」。
+- 收口: `doc.caps` 债务 **0 项** / `kb.check` 绿(459 文档 · 250 专题, 认领链闭环) / `doc.links` 绿 / `kb.active --check` 绿 / `tests/test_memory_bank.py` 32 passed / `test.full` 数字见基线切片。**未提交**(等用户显式「提交」指令)。
+- **构造性提示(与 10-03 轮同源)**: 68 片距上限仅余 2 —— 多 clone 并行实测 ~5–15 片/日, 而上限按 5 片/日校准 ⇒ 仍会反复触顶。本轮**未自行调数**(治理议题不在清理会话范围)。
+- **同源缺陷: CLI 汇总行把「债务」与「下限提示」混作一堆 —— 已修 (用户点名「修 check_kb_structure.py」)**:
+  `check_kb_structure.py` 的汇总行原用 `len(warns)` 计「cap 债务 N 项」, 而 `warns` 里混着 `CAP_MIN_WARN` 的
+  「过小」提示(不带 `DEBT_MARK`)⇒ 该行**恒报 ~40 项、永远清不了零**(实测 40 项 vs 真实 0), 与
+  [cap-debt 坑档](../pitfalls/kb/cap-debt.md)第 1 条「债务数必须能清零」相悖。修法 = 把分类收成**单点**
+  `split_warns(warns) -> (债务, 提示)`, CLI 只数债务侧 + 两类**分开贴标签**(`[WARN]` / `[提示]`); 顺带订正两处
+  把 warns 当「债务清单」的注释(`check_caps` docstring · `run_all` 内注释)。守卫
+  `test_kb_debt_count_excludes_min_size_hints`(造「只有过小文件」的 tmp 库 → 必须报 `cap 债务 0 项`;
+  再加一个超限文件 → 报 `1 项`), **红验已过**(退回 `len(warns)` 即红, 实测报 `1 项` 并断言失败)。
+  **注**: 提交闸门从来不受影响(`check_context_caps.py` 一直按 `DEBT_MARK` 过滤)。

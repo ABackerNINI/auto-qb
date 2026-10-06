@@ -43,7 +43,11 @@ EMPTY_HINT = {
 # 2026-10-05 实测: 133 条 × 平均 86 字符摘要 ⇒ 索引 26,260 撞 `index-auto` cap (25,200),
 # 而条目数本身远没到上限; 摘要截断后 ≈20,500, 摘要全文点开报告就有, 无信息损失。
 # 该修法即切片 26-10-01-2125-memory-bank-dir-refactor 记的「issues 索引补 SUMMARY_MAX 截断」。
-SUMMARY_MAX = 40
+# 2026-10-06 二次校准 40 → 24: 条数涨到 163(Done 116 恒增)复撞 (25,598); 判据同前 ——
+# **无摘要**口径才 18,744 < cap ⇒ 仍是摘要顶爆, 继续压截断而不外迁条目(外迁打坏 `**Refs:**` 引用)。
+# ⚠ 长期: 无摘要口径已占 cap 74%, 条目数本身迟早成为病根, 届时走 `pitfalls/kb/cap-counting.md`
+# 记的后备出口(按状态归档老条目), 别条件反射抬 cap。
+SUMMARY_MAX = 24
 
 
 def header(issues_dir: Path, root: Path) -> str:

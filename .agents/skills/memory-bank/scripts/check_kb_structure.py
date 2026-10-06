@@ -66,6 +66,18 @@ HARD_CAP_ROLES = ("agents", )
 # 挑出来累计进"cap 债务 N 项" —— 否则"文件过小"这类建议会被当成欠债, 债务数字永远清零不了。
 DEBT_MARK = "cap 债务: "
 
+
+def split_warns(warns: list[str]) -> tuple[list[str], list[str]]:
+    """把 `warns` 拆成 (**债务**, **非债务提示**) —— 分类的**单点**, 别让各消费者各判一次。
+
+    两类混在一个 `warns` 里(见上方 `DEBT_MARK` 注释), 判据是「有没有对应的动作」:
+    尺寸超限 ⇒ **债务**(动作 = 精简 / 外迁); 下限 `CAP_MIN_WARN` 的「过小」⇒ **建议**
+    (「文件过小」没有这样的动作, 把它往外迁是错的动作)。混着计数, 债务数字就会变成常数、
+    **永远清不了零** —— 2026-10-06 实测: CLI 汇总行恒报 ~40 项而真实债务 **0**。
+    """
+    return ([w for w in warns if w.startswith(DEBT_MARK)], [w for w in warns if not w.startswith(DEBT_MARK)])
+
+
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
@@ -178,12 +190,13 @@ def trim_hint(role: str, cap: int) -> str:
 
 
 def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> tuple[list[str], list[str]]:
-    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告=债务)。
+    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告) —— ⚠ 警告里**混装两类**, 用 `split_warns` 分。
 
     严重度**在源码单点决定**, 两个消费者 (pytest / `doc.caps`) 都不再各判一次 (2026-09-30):
     - 角色 ∈ `HARD_CAP_ROLES`(只有 `agents` = AGENTS.md)→ **problems**(硬规定, 超了仍拦提交);
-    - 其余角色的尺寸超限 → **warns**(债务: 不拦提交, 提交时派生输出 + 转告用户, 清理另开会话);
-    - 下限 `CAP_MIN_WARN` 本来就只 WARN —— 不动。
+    - 其余角色的尺寸超限 → **warns 里的债务行**(带 `DEBT_MARK`: 不拦提交, 提交时派生输出 + 转告用户);
+    - 下限 `CAP_MIN_WARN` 的「过小」→ **warns 里的提示行**(不带标记, 只是建议)。
+    ❗返回的是 (问题, 警告) 而不是 (问题, 债务) —— 别拿 `len(warns)` 当债务数。
     """
     problems: list[str] = []
     warns: list[str] = []
@@ -331,7 +344,8 @@ def check_pitfall_entries(root: Path, mb: Path) -> list[str]:
 def run_all(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> dict[str, list[str]]:
     """跑全部检查, 返回 {检查名: 问题清单}。"""
     cap_problems, _warns = check_caps(root, mb, roles)
-    # `check_caps` 的 warns 就是 cap 债务清单; 易变层同口径, 也只贡献 warns
+    # `check_caps` 的 warns 里混装债务与「过小」提示(见 `DEBT_MARK`), 这里只取 problems 侧;
+    # 易变层同口径, 也只贡献 warns
     ac_problems, _ac_warns = check_active_context_cap(root, mb) if "volatile" in roles else ([], [])
     return {
         "索引是生成物": check_index_regenerated(root, mb),
@@ -379,12 +393,20 @@ def main() -> int:
                 print(f"         · {line}")
         elif not args.quiet:
             print(f"  [ OK ] {name}")
+    debts, hints = split_warns(warns)
     for line in warns:
         if not args.quiet:
-            print(f"  [WARN] {line}")
+            # 债务与「过小」提示**分开贴标签** —— 都打 [WARN] 会让几十条建议看起来像几十笔欠债
+            print(f"  [{'WARN' if line.startswith(DEBT_MARK) else '提示'}] {line}")
     print(f"\n共 {total} 项不通过。" if total else "\n全部通过。")
-    if warns:
-        print(f"cap 债务 {len(warns)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。")
+    # ❗债务数**只数带 `DEBT_MARK` 的行**(分类走 `split_warns` 单点) —— 拿 `len(warns)` 会把
+    # 「文件过小」的建议一起算成欠债, 于是这一行恒报常数、永不清零(2026-10-06 实测 ~40 项 vs 真实 0)。
+    if debts:
+        print(f"cap 债务 {len(debts)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。")
+    else:
+        print("cap 债务 0 项 —— 无欠债 (尺寸预算全部在限内)。")
+    if hints:
+        print(f"另有 {len(hints)} 条「文件过小」提示 —— 是建议不是欠债, 不计入上数 (见 CAP_MIN_WARN)。")
     return 1 if total else 0
 
 

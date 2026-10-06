@@ -34,6 +34,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_active_context_within_cap: `activeContext.md` 是 ≤2 KB 合法存根 (2026-09-23 起滚动状态已迁 `activeContext/`)
 - test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 (结构); 尺寸与条数是**债务**, 不判红
 - test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
+- test_kb_debt_count_excludes_min_size_hints: CLI 汇总行的「cap 债务 N 项」只数带 `DEBT_MARK` 的行, 「文件过小」提示不计入
 - test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
 - test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
@@ -376,6 +377,34 @@ def test_kb_cap_debt_is_discoverable_not_blocking(tmp_path: Path) -> None:
     assert not problems, f"尺寸超限不该再进 problems(它已是债务): {problems}"
     assert any("big.md" in w and "超 cap" in w for w in warns), f"超限文件没被报成债务: {warns}"
     assert any("债务" in w for w in warns), f"债务行必须自带处置口径(转告用户另开会话清理): {warns}"
+
+
+def test_kb_debt_count_excludes_min_size_hints(tmp_path: Path, monkeypatch, capsys) -> None:
+    """CLI 汇总行的「cap 债务 N 项」**只数带 `DEBT_MARK` 的行**, 「文件过小」提示不进这个数。
+
+    判据出自 `pitfalls/kb/cap-debt.md` 第 1 条: **债务数必须能清零** —— 一件债务对应一个动作
+    (精简 / 外迁), 而「文件过小」没有这样的动作(把它往外迁是错的动作)。旧实现直接 `len(warns)`,
+    于是这行恒报常数(2026-10-06 实测 ~40 项)而真实债务 0 ⇒ 清理会话按它收口必然徒劳。
+    """
+    checker = _kb_checker()
+    evergreen = tmp_path / "memory-bank" / "evergreen"
+    evergreen.mkdir(parents=True)
+    (evergreen / "_about.md").write_text("# t\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
+    (evergreen / "small.md").write_text("# 小\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
+
+    def run() -> str:
+        monkeypatch.setattr(sys, "argv", ["check_kb_structure.py", "--root", str(tmp_path)])
+        checker.main()
+        return capsys.readouterr().out
+
+    only_hint = run()
+    assert "cap 债务 0 项" in only_hint, f"「文件过小」不得计入债务数: {only_hint}"
+    assert "cap 债务 1 项" not in only_hint, f"债务数被「过小」提示撑大了: {only_hint}"
+    assert "过小" in only_hint, "提示本身仍要打印(只是不计入债务数)"
+
+    (evergreen / "big.md").write_text("# 大\n> 摘要: x\n> 触发: y\n" + "x" * 30_000, encoding="utf-8")
+    with_debt = run()
+    assert "cap 债务 1 项" in with_debt, f"真实超限必须计成 1 项债务: {with_debt}"
 
 
 def test_agents_md_cap_is_hard_not_debt(tmp_path: Path) -> None:

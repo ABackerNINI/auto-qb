@@ -8,7 +8,7 @@
 
 ## 正在进行
 
-- (已收口) 拍板点 D1/D2 已随实施轮回写计划 §05「结果」列; 计划 S1-S6 六阶段实施完成, 状态 Done —— 实施记录与遗留见 [实施切片](26-10-05-0855-hr-steady-throttle-impl.md) 与任务档案 [26-10-05-backend-hr-steady-throttle](../tasks/26-10-05-backend-hr-steady-throttle.md), 本切片不再续写。
+- (已收口) 拍板点 D1/D2 已随实施轮回写计划 §05「结果」列; 计划 S1-S6 六阶段实施完成, 状态 Done —— 实施记录与遗留见任务档案 [26-10-05-backend-hr-steady-throttle](../tasks/26-10-05-backend-hr-steady-throttle.md)(原实施切片已蒸馏, 内容全在该档案), 本切片不再续写。
 
 ## 本轮完成
 

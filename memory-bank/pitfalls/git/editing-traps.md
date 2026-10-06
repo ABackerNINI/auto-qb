@@ -1,7 +1,7 @@
 # 编辑与工具陷阱 (git / 文本)
 
-> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄(见首节)。
-> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠, 幽灵 M, stat 缓存
+> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一(`sed -i` 把 LF 写成 CRLF, git 侧看不见、cap 侧多算)、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄(见首节)。
+> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠, 幽灵 M, stat 缓存, sed -i, 机械替换, 凭空多出的债务
 
 ### 2026-10-02 起仓库统一 LF: 行尾类条目适用范围收窄
 
@@ -71,6 +71,21 @@
 - **处置**: 写回一律 `Path(p).write_bytes(text.encode("utf-8"))`; 复核
   `b.count(b"\r\n")` 与 `b.count(b"\r") - b.count(b"\r\n")`(后者必须 0); 已写坏的用
   `text.replace("\r\r\n", "\r\n")` 修回。
+
+### Git Bash 里 `sed -i` 会把整份文件的行尾改成 CRLF
+
+- **触发**: 在工具 shell(Git Bash / MSYS)里用 `sed -i` 做机械替换。本仓库 2026-10-02 起统一 **LF**
+  (`.gitattributes` `* text=auto eol=lf`), 而 HEAD 里是 LF 的文件经 `sed -i` 会被整份写成 **CRLF**。
+- **判别**: `git diff` / `git status` **完全看不出**(clean filter 把两侧都归一成 LF ⇒ 行尾变化不进 diff),
+  只有按字节量才现形 —— 实测 2026-10-06 一遍 `sed -i` 把 `check_kb_structure.py` 从
+  `LF=392 / CRLF=0` 变成 `LF=414 / CRLF=414`, 而 `git diff --stat` 只显示改的那几行。
+  危害不在 git(blob 被归一, 提交不受影响), 而在**任何按原始字符数算的东西**: `_common.char_count()`
+  在 CRLF 上**每行多算 1** ⇒ 角色 `pitfall` / `slice` 等的 cap 检查可能凭空多出一笔"债务",
+  `b.count(b"\n") == b.count(b"\r\n")` 那类自查断言也会响。**与本轮新记的「拿 KB 比字符数」是同一族**:
+  口径不一致 ⇒ 报出根本不存在的债。
+- **处置**: ①机械替换优先用 Edit 工具(保留原行尾); ②非用 sed 不可时, 改完**立刻按字节归一**
+  (`p.write_bytes(p.read_bytes().replace(b"\r\n", b"\n"))`), 并核对 `git diff --stat` 的变更行数
+  确实等于你真正改的行数; ③复核别用 `grep -c $'\r'`(会给假结果), 用 `b.count(b"\r\n")`。
 
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 
