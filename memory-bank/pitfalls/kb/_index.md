@@ -12,6 +12,7 @@
 |---|---|---|
 | [cap-counting.md](cap-counting.md) | 守卫的字符数比编辑器统计**每行多 1**(CRLF); cap 是**字符数**而外部常报**字节数**(中文一字 3 字节 ⇒ 可差 3 倍, 误报出根本不存在的债务); append-only 流水撞 `log` cap 的正解是**轮转**; 而生成式索引撞 cap 时先查**渲染口径**而不是先搬条目。 | 判断文件是否超 cap, 字符数对不上, KB 超 cap, 字节 vs 字符, 债务误报, 单位换算, baseline-history 超 cap, 追加流水, log 档, 轮转, attachments, tasks/_index 超 cap, 索引膨胀, 新增主题放哪个类, 类索引贴顶, 切片计数超限, SLICE_COUNT_LIMIT, 蒸馏切片 |
 | [cap-debt.md](cap-debt.md) | 尺寸 cap 从「提交前置条件」降级为**债务**(2026-09-30) 时, 有三处会静默把债务重新变成阻塞 —— warns 里混入非债务提示、检查器不可用被判 STOP、以及删除尺寸断言后守卫退化成恒绿。 | cap 债务, doc.caps, --strict, warns 混装, DEBT_MARK, 检查器找不到, 降级守卫, 恒绿守卫, 可发现性断言, 债务清零, 清理会话 |
+| [commit-hash-refs.md](commit-hash-refs.md) | KB(backtick / `<code>` / `commit <hash>` 语境)里记 feature 分支提交, 分支 rebase 并入 develop 后旧 hash 对象不可解析; 守卫(kb.check / test_docs_forms)不查可解析性, 静默累积。另: `git cat-file --batch-check` 只报存在性不报类型, 旧 commit 被 GC 后同前缀 blob/tree 会顶占前缀, 核对结果「时好时坏」。 | KB 里写 commit hash, rebase 合流, 悬空 hash, cat-file missing, 按图索骥找不到提交, hash 时好时坏 |
 | [date-authoring.md](date-authoring.md) | 「时间戳用命令取当前值」这条约定写了两处, 但那条命令**根本不存在** —— 日期实际全是 agent 按会话上下文手敲的(未来时间与错体例由此而来); 而守卫只查文件名的**形状**, 不查**值**。 | 日期不准, 未来日期, 时间戳, 文件名日期, 最后活动, doc-added, 时间体例, 取时命令 |
 | [discipline.md](discipline.md) | 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、测试写在没人跑的地方等于没写。 | 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红 |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径。 | 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs |

@@ -42,7 +42,7 @@
 
 ## 未闭环
 
-- **同日实证(本轮动机)**: 09:1x 那次 `ship.commit` 报「提交成功 `aac3dcc5`(未推送)」, 补 `ship.push` 后
+- **同日实证(本轮动机)**: 09:1x 那次 `ship.commit` 报「提交成功 aac3dcc5(未推送)」, 补 `ship.push` 后
   最终 hash 变 `295bb226` —— 当时只能在日志里写「以 verify-ref 的 hash 为准」把疑惑兜住;
   v3.1 之后这条路径会自己在 `推送成功 295bb226` 上面留一行 `rebase 重放本地 1 笔 aac3dcc5→295bb226`。
 - `memory-bank/issues/_index.md` **cap 债务**(25,598 > 25,200)与 `activeContext/` **切片数债务**(92 > 70)都是

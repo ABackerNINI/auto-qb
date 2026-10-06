@@ -146,7 +146,7 @@
   <ol>
     <li><b>波次三主干已落地，合并靶状态干净且质量口径稳定</b>：<code>agentAutoClaw/develop</code> = <code>e7093b7</code>，工作区干净，全量测试 <b>988 passed / 0 skipped / 92% 分支覆盖率</b>（实测 30.5s）。按工作项计：<b>完全完成 16 项、仅差棱镜镜像 15 项、完全未做 3 项</b>（详见 §3 矩阵）。</li>
     <li><b>剩余工作 87% 集中在同一件事上：棱镜（prism）镜像欠账</b>。W1 表格层、W4 导航、W5 详情/设置的全部改动<b>只落在星图（atlas）+ 共享层（shared）</b>，棱镜模板与样式基本没跟。计划的 <b>W1d「移植到棱镜」从未执行</b>。</li>
-    <li><b>另有 4 项与 UI 无关的独立欠账</b>：TBL-07（两 UI 都没做，只有一份未提交的星图草稿）、CTX-01/CTX-02（两 UI 都没做，无任何提交）、RFB-02 件4 视觉打磨（有孤儿提交 <code>48836d7</code> 未入库）。</li>
+    <li><b>另有 4 项与 UI 无关的独立欠账</b>：TBL-07（两 UI 都没做，只有一份未提交的星图草稿）、CTX-01/CTX-02（两 UI 都没做，无任何提交）、RFB-02 件4 视觉打磨（有孤儿提交未入库，收口已重放）。</li>
     <li><b>文档层完全滞后</b>：<code>testing.md</code>/<code>README.md</code> 仍写 949 用例（实际 988）；<code>memory-bank/activeContext.md</code> 停在 2026-09-15，波次三实施过程零记录；<code>想法.md</code> 勾选未回写。</li>
     <li><b>未回流主线</b>：波次三的 76 个提交全部只在 <code>agentAutoClaw/develop</code>，生产 <code>develop</code> 停在波次二后的分叉点（<code>merge-base = b9066c7</code>），需要一次 merge 收口。</li>
   </ol>
@@ -164,7 +164,7 @@
     <tr><td>TBL-07 全宽（两 UI）</td><td><span class="y">✓</span> 星图清 3 处 <code>max-width:2560px</code> + 两侧 12px；棱镜同改</td></tr>
     <tr><td>CTX-01 彩色图标集（两 UI）</td><td><span class="y">✓</span> 星图 12 个操作族语义色类 + <code>.ico-chart</code>/<code>.ico-log</code>；棱镜同套（主题令牌驱动）</td></tr>
     <tr><td>CTX-02 触发源强调（两 UI）</td><td><span class="y">✓</span> <b>共享层</b> <code>_markCtxSource</code>/<code>_clearCtxSource</code>（DOM 标记 + <code>watch(menu.visible / filePrio.visible)</code> 清理），模板零改动即双 UI 生效；<code>box-shadow</code> 内描边强调，刻意不改背景（避免与 TBL-03 状态底色打架）</td></tr>
-    <tr><td>RFB-02 件4 视觉打磨</td><td><span class="y">✓</span> 从孤儿提交 <code>48836d7</code> 逐块重放（段距/折叠头 8px、标题分级 13.5、subcard 行高 7px、段内奇偶区隔）</td></tr>
+    <tr><td>RFB-02 件4 视觉打磨</td><td><span class="y">✓</span> 从孤儿提交逐块重放（段距/折叠头 8px、标题分级 13.5、subcard 行高 7px、段内奇偶区隔；重放入库 <code>21044ac7</code>）</td></tr>
     <tr><td>RFB-02 件2 收尾（盘点时新发现）</td><td><span class="y">✓</span> 设置页风险标识切到 <code>.ce-note</code>（4 处说明 + 3 处徽标退役 + <code>cfg.notice</code> 死横幅清除 + 新增 <code>.ico-risk</code> 紧凑图标）——此前 <code>.ce-note</code> CSS 已入库但模板从未切换</td></tr>
     <tr><td>残留清理</td><td><span class="y">✓</span> 删除 <code>backend/tests/test_zz_probe_scratch.py</code>、<code>zcode/w1b1_punct_scan.py</code></td></tr>
     <tr><td>文档回写</td><td><span class="y">✓</span> <code>testing.md</code>（949→988 单点）/<code>README.md</code>（两套界面 + 新导航拓扑 + 988）/<code>想法.md</code>（30 条勾选 + 定位更正）/<code>activeContext</code>/<code>progress</code>/<code>pitfalls</code>（新增波次三双 UI 镜像 6 条坑）</td></tr>
@@ -294,7 +294,7 @@
     <tr><td>NAV-02 切换图标</td><td class="y">✓</td><td class="y">✓</td><td class="d">—</td><td>完成</td><td><code>i-prism</code> / <code>i-orbit</code> 双端</td></tr>
     <tr><td>NAV-03 动态 logo</td><td class="y">✓</td><td class="n">✗</td><td class="d">—</td><td>半完成</td><td>atlas <code>.brand-orbit</code> 12s 旋转 + <code>prefers-reduced-motion</code>；prism 仍 <code>icon.png</code> 静态图</td></tr>
     <tr><td>RFB-01 详情抽屉纯展示</td><td class="y">✓</td><td class="n">✗</td><td class="d">—</td><td>半完成</td><td>atlas 移除 9 按钮 + <code>.f-row</code> 图标字段行 + 860px；prism <code>index.html:1503-1511</code> 9 按钮仍在</td></tr>
-    <tr><td>RFB-02 设置页重构</td><td class="w">~</td><td class="n">✗</td><td class="d">—</td><td>半完成</td><td>件1（<code>5179092</code>）/件2（<code>f781985</code>）仅 atlas；件3（<code>1371bdb</code>）共享层已双 UI；<b>件4 视觉打磨 <code>48836d7</code> 未入库</b></td></tr>
+    <tr><td>RFB-02 设置页重构</td><td class="w">~</td><td class="n">✗</td><td class="d">—</td><td>半完成</td><td>件1（<code>5179092</code>）/件2（<code>f781985</code>）仅 atlas；件3（<code>1371bdb</code>）共享层已双 UI；<b>件4 视觉打磨（孤儿提交）未入库</b></td></tr>
     <tr><td>PRS-01 棱镜追剧视图</td><td class="d">—</td><td class="y">✓</td><td class="d">—</td><td>完成</td><td><code>225977d</code></td></tr>
   </table>
   <p><b>统计</b>（矩阵共 34 行 = 32 项 + NAV-01a/01b 两个子项）：<b>完全完成 16 行 / 部分完成 15 行 / 完全未做 3 行（TBL-07、CTX-01、CTX-02）</b>，另有 RFB-02 件4 未入库。<br>
@@ -371,9 +371,9 @@ tests/{helpers,test_config,test_speed_curve,test_sync,test_web}.py  +438/-9</pre
 
   <h3>5.4 P1 · RFB-02 件4（设置页视觉打磨）未入库</h3>
   <ul>
-    <li>孤儿提交 <code>48836d7</code>（"设置页视觉打磨(件4)：折叠头内边距统一 8px、段间距 8px、标题分级 group 13.5/section 13/subcard 12、subcard 行高 7px、段内奇偶区隔、hover 提亮统一"）在 <code>agentZCode</code> 旧线上，<b>不在 <code>HEAD</code> 历史中，且没有重放版</b>。</li>
-    <li>同批被裁决重放的兄弟提交：<code>66f4111</code>/<code>f38eb32</code>/<code>3da9f1a</code>/<code>ab9a863</code> → 已由 <code>82c5d16</code>/<code>78672fa</code>/<code>9c9d1de</code>/<code>2b4ad3b</code> 重放；<code>f359390</code>/<code>f396972</code> → 已由 <code>1371bdb</code> 按字节核验入库。<b>唯独 <code>48836d7</code> 遗漏</b>。</li>
-    <li>处置建议：<code>git show 48836d7 -- src/auto_qb/web_ui/static/atlas/style.css</code> 逐块核验后重放（不要直接 cherry-pick，旧基线行号会冲突）；核验后回写该提交已有内容是否被后续 <code>beb8642</code>/<code>f781985</code> 部分覆盖。</li>
+    <li>孤儿提交（"设置页视觉打磨(件4)：折叠头内边距统一 8px、段间距 8px、标题分级 group 13.5/section 13/subcard 12、subcard 行高 7px、段内奇偶区隔、hover 提亮统一"）在 <code>agentZCode</code> 旧线上，<b>不在 <code>HEAD</code> 历史中，且没有重放版</b>（收口时已逐块重放，见 §0.1）。</li>
+    <li>同批被裁决重放的兄弟提交：4 笔已由 <code>82c5d16</code>/<code>78672fa</code>/<code>9c9d1de</code>/<code>2b4ad3b</code> 重放；另 2 笔已由 <code>1371bdb</code> 按字节核验入库。<b>唯独件4孤儿提交遗漏</b>（收口时已补重放，见 §0.1）。</li>
+    <li>处置建议：按上文消息描述逐块核验后重放（不要直接 cherry-pick，旧基线行号会冲突）；核验后回写该提交已有内容是否被后续 <code>beb8642</code>/<code>f781985</code> 部分覆盖。</li>
   </ul>
 
   <h3>5.5 P1 · 终验与文档回写（全部未做）</h3>
@@ -467,7 +467,7 @@ tests/{helpers,test_config,test_speed_curve,test_sync,test_web}.py  +438/-9</pre
   <ul>
     <li><b>B1</b> CTX-01 彩色图标集（双 UI，含统计 / 日志 / 主题 / HR 筛选器图标；五主题对比度自查）。</li>
     <li><b>B2</b> CTX-02 触发源强调（需在 <code>shared/app.js</code> 新增 <code>menu.src</code> 字段）。</li>
-    <li><b>B3</b> RFB-02 件4 重放（核验 <code>48836d7</code> 后补入库）。</li>
+    <li><b>B3</b> RFB-02 件4 重放（核验孤儿提交后补入库）。</li>
     <li><b>B4</b> 新需求 <code>"0分钟"做种时长且无 HR 要求不显示</code>（小单，星图 + 棱镜同步）。</li>
   </ul>
 

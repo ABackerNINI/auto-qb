@@ -42,12 +42,12 @@
 
 - **WEB UI 强制汇报确认机制重构: epoch 前跳证据门控 + warn 第三态**(2026-10-05, 计划
   [plans/26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html) S0-S5 全落地, 提交链
-  `f251e301`(S0 真机探针三点实证: 前跳 +5466s / TOL=3.0 维持 / 推迟路径 min_e+1 冻结)→`8873c889`
+  `bf12a487`(S0 真机探针三点实证: 前跳 +5466s / TOL=3.0 维持 / 推迟路径 min_e+1 冻结)→`89840a3c`
   (S1+S2 webui/commands.py 判定提为纯函数 `_verdict_reannounce` 五分支: ②updating 直证 / ③
   `next > b_next+TOL` 前跳主判据 —— 方向反转, 旧判据 `na < b_na-60` 把 epoch 绝对秒当倒计时恒不触发是
   失效根因, 限基线 status≥2 行 + min 窗口假瞬态守卫 / ④status4+msg 判败先于②③防重试排程假前跳误判 /
   legacy 回退; runtime.py check_pending 三桶聚合 + item 级窗口 + `reannounce_background` 后台核实上限 500)
-  →`04b5899f`(S3 static/shared/commands.js: `_pollCmd` 终结纳入 warn 第三态 / SSE 与轮询共用 status 透传 /
+  →`554bf03e`(S3 static/shared/commands.js: `_pollCmd` 终结纳入 warn 第三态 / SSE 与轮询共用 status 透传 /
   三桶按 r.status 分流 / sticky 文案补推迟子句 / delete_flow 保守口径 warn 不放行删除), 分支
   feat/reannounce-confirm-rework 待并回): 推迟路径(min_interval 未过期)早回执「已受理: 推迟至 HH:MM」+
   后台日志核实, 停止种子直判「未确认」, 超时落 warn 诚实标签不再恒误报「失败」; 机器分流依据从「前缀」
@@ -59,12 +59,12 @@
 
 - **WEB UI 危险动作防护: 重新校验确认框 + 跳检前置条件三分流预检**(2026-10-05, 计划
   [plans/26-10-05-0314](../plans/26-10-05-0314-plan-webui-danger-guards.html) S0-S5 全落地, 提交链
-  `bcc2bce2`(S1a store 组级判定上移单点, grouping_mod 委托保签名)→`09683720`(S1b-1 ops
+  `ae2982d9`(S1a store 组级判定上移单点, grouping_mod 委托保签名)→`372f197c`(S1b-1 ops
   `_skip_gates_detail` 三分流判定单点只读变体 + G3-G6 新闸门 + force 语义 + precheck dry-run +
-  filelist 并入执行链, R2 live 复核前移到闸门之前)→`7d9595a7`(S1b-2 G7/G8 组内镜像闸门: 校验在途
-  =force 可豁越 / 校验失败推断=blocked 硬拒)→`0ff19787`(S2 预检端点
-  `POST /api/torrents/skip-check/precheck` + 单发/批量 force 透传)→`51e30393`(S3
-  `_recheckConfirm` 共用确认框接入全部鼠标入口, 与键盘路径同文案)→`bd532d26`(S4 跳检预检对话框
+  filelist 并入执行链, R2 live 复核前移到闸门之前)→`64479a28`(S1b-2 G7/G8 组内镜像闸门: 校验在途
+  =force 可豁越 / 校验失败推断=blocked 硬拒)→`0d2ff943`(S2 预检端点
+  `POST /api/torrents/skip-check/precheck` + 单发/批量 force 透传)→`005dd20a`(S3
+  `_recheckConfirm` 共用确认框接入全部鼠标入口, 与键盘路径同文案)→`b87ed2e1`(S4 跳检预检对话框
   三分流状态机: 进框禁用→预检→按态渲染, force 钮必须先见赌注), 分支 webui-danger-guards 待并回):
   跳检「该不该允许」判定下沉 ops 单点与规则侧同谓词(规则侧零变化, test_checking 69 条全程绿),
   WEB 确认框升级「进框禁用→预检→按态渲染」三分流(case 1 禁止无逃生 / case 2 可显式强制 /

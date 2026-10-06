@@ -21,7 +21,7 @@
 - **知识库只留指针, 不复述全文** (本次确立并沿用了两次的心法): `conventions.md` 与 `activeContext.md` 只写「判据 + 回指 `AGENTS.md` + 共几处入口」。理由: 规则的第五、第六份副本必然各自演化 —— 本次撞见的 push 口径漂移就是活例子(2026-09-19 改了 `AGENTS.md`, `conventions.md` 自 2026-09-10 起没动过)。
 - **撞见的 push 口径漂移为什么先入池而不是当场改**: 它是计划外缺陷, 按 scope-guard 只记录不改码; 且该条带 🔴 属用户 2026-09-10 亲自立下的强约束, 覆盖它需要用户授权。⇒ 走 create-issue skill 入池(含 5 处原文证据/行号、根因、A/B 两案), 用户拍板 A 后才动。
 - **根因值得单记**: `AGENTS.md` 的冲突裁决链是 `代码 > memory-bank > README > 想法.md`, 它只对"代码事实漂移"有效; 本次冲突两边**都是文档**, 裁决链给不出方向 ⇒ 谁先被读到谁生效。⇒ 修的时候额外在 `AGENTS.md:126` 补一句"本条是提交/push 口径的**单点定义**, 优先于 memory-bank 里的历史表述", 把优先级写死。
-- **提交流程全程守 git 红线**: 每次提交前 `git fetch origin develop` 核对落后; 需要 rebase 时一律**先 commit 让工作区干净再 `git pull --rebase`**(脏工作区 + rebase 触发 stash 会顺着本环境的文件删除拦截层批量删掉 `.git/objects`, 2026-09-19 事故已丢过 318 个对象)。6 次 push 里有 1 次撞上并发会话(落后 2) ⇒ 先 commit 后 rebase, 无冲突, sha `0811ac5` → `67b3828`。
+- **提交流程全程守 git 红线**: 每次提交前 `git fetch origin develop` 核对落后; 需要 rebase 时一律**先 commit 让工作区干净再 `git pull --rebase`**(脏工作区 + rebase 触发 stash 会顺着本环境的文件删除拦截层批量删掉 `.git/objects`, 2026-09-19 事故已丢过 318 个对象)。6 次 push 里有 1 次撞上并发会话(落后 2) ⇒ 先 commit 后 rebase, 无冲突(0811ac5 重写为 `67b3828`)。
 - **GitHub 镜像**: 今天 6 次尝试, 3 成功 3 失败(连接重置 / 21s 超时 / `send-pack: unexpected disconnect`)。按规矩**失败只报告一次、不重试**, 交付以 Gitee 为准。
 
 ## 实现计划
@@ -54,7 +54,7 @@
 - **23:39** 收到"记录进 AGENTS.md: 开工前先拉取远程分支"。确认 `origin` = Gitee (协作主线), `git fetch` 左右各 0 不落后。
 - **23:43** `72a45f9`: `AGENTS.md`「开始」改为 ①先拉取(`git remote -v` 确认远端 → `git pull --rebase <remote> develop`, 分支名必须写 → `git status -sb` 不落后) ②再读 activeContext; 「提交 / PR」的"开工先同步主线"标为硬要求并注明与 ① 同源。同步 `.github/copilot-instructions.md`(守卫用例把两者当一对校验)。守阵 8 passed。推 Gitee `81f5a47..72a45f9` ✅; GitHub 连接重置, 不重试。
 - **23:50** `738fe0d`: 发现 SKILL.md 的「会话开始 (3 步)」仍是旧口径 ⇒ 扩为 4 步。核对 `HEAD` == `refs/heads/develop`; Gitee ✅, GitHub ✅(`fed62a8..738fe0d`)。
-- **23:55** `67b3828`: `.github/instructions/ai-lib.md` 是第 4 份入口, 同步。提交时主线被并发会话推进 2 个 ⇒ 先 commit(`0811ac5`)再 `git pull --rebase` 无冲突 → `67b3828`。Gitee ✅ GitHub ✅。
+- **23:55** `67b3828`: `.github/instructions/ai-lib.md` 是第 4 份入口, 同步。提交时主线被并发会话推进 2 个 ⇒ 先 commit 再 `git pull --rebase` 无冲突(0811ac5 重写为 `67b3828`)。Gitee ✅ GitHub ✅。
 - **23:58** `dc9a854`: `conventions.md`「Git 约定」补指针(不复述)。Gitee ✅ GitHub ✅。
 - **23:59** 同一节紧邻的「🔴 绝对不要 push (2026-09-10)」与新规则矛盾被暴露 ⇒ 入池 `memory-bank/issues/26-09-19-2359-docs-memory-bank-push-rule-drift.html`(Open, 5 处证据 + 根因 + A/B 两案 + 验收方式), `363458e`; Gitee ✅, GitHub 超时, 不重试。
 - **00:05** 用户拍板方案 A ⇒ `a786a1f`: `conventions.md` 五处改为「以 `AGENTS.md` 为单点定义」+ 历史沿革(09-10 越界事故与"推送须经授权"的教训**保留**, 标"已被上面取代, 别照抄"); `AGENTS.md:126` 补"本条为单点定义, 优先于 memory-bank 历史表述"直击根因。验证: 全文搜四个关键词, 残留命中只剩 `conventions.md:9` 沿革句与 `:137`「已作废」句; 两入口答案一致; 1054 passed。issue 转 **Fixed**(meta + 封面徽标两处一起改), `_index.md` 由 `gen_issues_index.py` 重建。Gitee ✅; GitHub `send-pack: unexpected disconnect`, 不重试。

@@ -157,12 +157,12 @@
       <li>2026-10-03 — 调研报告登记: 抽屉重设计调研与 3 选型模板已出（<a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">reports/26-10-03-0759</a>），本 issue 保持 Open，实施未排期</li>
       <li>2026-10-03 — 已修复并验证，状态 <strong>Done</strong>。由方案A实施计划
         <a href="../plans/26-10-03-0917-plan-webui-drawer-redesign.html">26-10-03-0917</a> 四波落地：
-        W1 停靠骨架（<code>f994ce20</code>：浮层 → 底部停靠面板 <code>.drawer-dock</code> sticky 吸底，
+        W1 停靠骨架（<code>dadc97a6</code>：浮层 → 底部停靠面板 <code>.drawer-dock</code> sticky 吸底，
         遮罩与 <code>backdrop-filter</code> 结构性消除 —— PERF-01 全站归零收尾；boot.js "into" 支持选择器落点；
-        三皮肤 drawer 族 CSS 重写 + 下滑淡入动画）/ W2 键盘跟随流（<code>9c594e1e</code>）/
-        W3 高度治理（<code>b81a1ee4</code>：拖拽调高夹取 [240px, 70vh] + 收起/展开钮 + 高度持久化
+        三皮肤 drawer 族 CSS 重写 + 下滑淡入动画）/ W2 键盘跟随流（<code>7d38e2ea</code>）/
+        W3 高度治理（<code>14a4d0e2</code>：拖拽调高夹取 [240px, 70vh] + 收起/展开钮 + 高度持久化
         <code>autoqb.ui.drawerHeight</code>；首屏默认收起 = 拍板 D1；tracker/peers 宽表全宽利用 ~97%）/
-        W4 回归（<code>a0b5d73f</code>：≤900px 转全屏覆盖 = 拍板 D3；停靠面板遮蔽列表底部光标行的几何缺陷修复 ——
+        W4 回归（<code>54d8b6fc</code>：≤900px 转全屏覆盖 = 拍板 D3；停靠面板遮蔽列表底部光标行的几何缺陷修复 ——
         <code>_kbViewBottom</code> 单点下界；隐藏面板轮询可见性守卫）。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>

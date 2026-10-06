@@ -207,7 +207,7 @@
       <section id="s1">
         <div class="sec-head"><span class="sec-no">01</span><h2>依赖声明现状</h2></div>
         <hr class="sec-rule">
-        <p class="body">全项目只有一处 Python 依赖声明：CI 工作流旁边的 <code>requirements-dev.txt</code>，12 个依赖全部裸写包名、不带版本号——每次 CI 运行和每次本地重装 venv 都会拉到当时的最新版，构建不可复现。<code>apm.yml</code> / <code>apm.lock.yaml</code> 管的是 agent 技能包（gem-team 1.125.0，commit 026742a），那部分已经锁定，不在本次范围内。项目没有 <code>pyproject.toml</code>、<code>requirements.txt</code> 或任何 pip lock 文件。</p>
+        <p class="body">全项目只有一处 Python 依赖声明：CI 工作流旁边的 <code>requirements-dev.txt</code>，12 个依赖全部裸写包名、不带版本号——每次 CI 运行和每次本地重装 venv 都会拉到当时的最新版，构建不可复现。<code>apm.yml</code> / <code>apm.lock.yaml</code> 管的是 agent 技能包（gem-team 1.125.0，技能包仓库 @ 026742a），那部分已经锁定，不在本次范围内。项目没有 <code>pyproject.toml</code>、<code>requirements.txt</code> 或任何 pip lock 文件。</p>
         <table>
           <tr><th>声明位置</th><th>内容</th><th>锁定状态</th></tr>
           <tr><td class="mono">.github/workflows/requirements-dev.txt</td><td>10 个运行依赖 + 2 个测试依赖</td><td class="mono st lag">全部未锁</td></tr>

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-06-1904">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="kb-dangling-hash-refs">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-memory-bank-dangling-hash-refs.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="KB 内 40 条悬空提交 hash: feature 分支 rebase 并入 develop 后不可解析">
 <meta name="issue-summary" content="memory-bank 的 backtick/code/commit 语境提交引用中, 40 条在 feature 分支 rebase 并入 develop 后失效(git cat-file 不可解析); 集中在 progress/tasks/baselines/plans">
 <title>KB 内 40 条悬空提交 hash: feature 分支 rebase 并入 develop 后不可解析 · docs · 计划外问题（便签）</title>
@@ -69,14 +69,14 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-1904-docs-kb-dangling-hash-refs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 19:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
-    <p><code>memory-bank/</code> 的提交引用里有一批 hash 已<strong>不可解析</strong>（<code>git cat-file -e &lt;hash&gt;^{commit}</code> 失败）：它们记的是 feature 分支上的提交，该分支 rebase 并入 <code>develop</code> 后 hash 被重写，而这些历史记录类文档仍留着旧 hash，读者按图索骥找不到提交。<strong>取证 2026-10-06 19:04 实测 40 条</strong>。守卫不查 hash 可解析性（<code>kb.check</code> / <code>test_docs_forms</code> 均绿），故静默累积。其中一部分有确定替换（可按 commit message 映射，如 <code>0227f25c</code>「S1 HrHistoryEvent」→ <code>13df6a80</code>），另一部分在合流中被重写/抹掉、无等价 commit（如 <code>c9ae4853</code>）。</p>
+    <p><code>memory-bank/</code> 的提交引用里有一批 hash 已<strong>不可解析</strong>（<code>git cat-file -e &lt;hash&gt;^{commit}</code> 失败）：它们记的是 feature 分支上的提交，该分支 rebase 并入 <code>develop</code> 后 hash 被重写，而这些历史记录类文档仍留着旧 hash，读者按图索骥找不到提交。<strong>取证 2026-10-06 19:04 实测 40 条</strong>。守卫不查 hash 可解析性（<code>kb.check</code> / <code>test_docs_forms</code> 均绿），故静默累积。其中一部分有确定替换（可按 commit message 映射，如 0227f25c「S1 HrHistoryEvent」→ <code>13df6a80</code>），另一部分在合流中被重写/抹掉、无等价 commit（如 c9ae4853）。</p>
   </section>
 
   <section id="s2">
@@ -93,13 +93,22 @@
 
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
-    <p>逐条按 commit message 考古映射到 develop 现存 hash（<code>git log --all --oneline --grep=&lt;关键词&gt;</code> 定位，核对 message 与改动面后再改）；无等价 commit（合流被重写/抹掉）的<strong>去掉死 hash、保留叙述</strong>。改动面约 15 份历史记录文件，宜独立一轮做、避免与并行会话撞车。同类先例：<code>26-10-06-0458</code> 的 S7a hash <code>d2dc3ba1</code> 已在本轮修为 <code>68f6e033</code>。</p>
+    <p>逐条按 commit message 考古映射到 develop 现存 hash（<code>git log --all --oneline --grep=&lt;关键词&gt;</code> 定位，核对 message 与改动面后再改）；无等价 commit（合流被重写/抹掉）的<strong>去掉死 hash、保留叙述</strong>。改动面约 15 份历史记录文件，宜独立一轮做、避免与并行会话撞车。同类先例：<code>26-10-06-0458</code> 的 S7a hash d2dc3ba1 已在本轮修为 <code>68f6e033</code>。</p>
+  </section>
+
+  <section id="s3b">
+    <h2><span class="no">03b</span>实际修法与验证（2026-10-06）</h2>
+    <p>按 §03 建议执行：①<strong>message 考古映射</strong> —— 5 条 feature 分支提交链（hr-fetch-history S0-S5 / hr-steady-throttle S1-S5 / drawer-redesign W1-W4 / reannounce-confirm S0-S3 / webui-danger-guards S1a-S4）与散件共 39 条旧 hash 全部映射到 <code>develop</code> 现存等价 commit，逐条核对 message 与 KB 叙述一致；②重写事件叙事（0811ac5 / f3cfe91 / aac3dcc5 等）旧 hash 转平文、新 hash 作活引用；③孤儿提交 48836d7 无等价 → 去 hash 保留叙述，收口重放产物 21044ac7 登记进其 §0.1；④<strong>026742a 查明为误报</strong> —— apm.lock.yaml 的技能包（gem-team）外部仓库 pin，非本仓库引用，叙述改写为「技能包仓库 @ 026742a」；⑤本报告与认领档案正文的自引用死 hash 平文化。改动 20 份文件。</p>
+    <p>验证：提取管线复扫（backtick / <code>&lt;code&gt;</code> / <code>commit </code> 语境 → <code>git cat-file --batch-check</code> 过滤）悬空 <strong>0 条</strong>；全部替换目标 <code>git cat-file -t</code> = commit；全量测试与基线数字见 <code>testing/baselines/</code> 最新切片（<code>commands run kb.baseline</code>）；实施档案 <code>tasks/26-10-06-memory-bank-dangling-hash-refs.md</code>。</p>
+    <p>附带发现（已入坑档 <code>pitfalls/kb/commit-hash-refs.md</code>）：<code>git cat-file --batch-check</code> 只报存在性不报类型，旧 commit 被 GC 后同前缀 blob/tree 顶占前缀造成「时好时坏」假象 —— 批量核对须过滤 <code>type != commit</code>（09683720 实测）。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-06 19:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-06 19:28 — 用户指派认领（认领档案 <code>tasks/26-10-06-memory-bank-dangling-hash-refs.md</code>，doc-refs 已填），状态 <strong>Open → In Progress</strong>。复验：重跑提取管线，9e70b0bd / ae94311e 已随远端 b6d0a608 一轮修复；另查明本报告正文自引用 2 条（收尾时随状态更新处理）；实修 38 条 / 19 份文件。</li>
+      <li>2026-10-06 20:09 — 实施完成，状态 <strong>In Progress → Done</strong>。39 条（复验 38 + 批量检查漏报 09683720）全部映射/处置；026742a 查明为 apm.lock.yaml 技能包外部仓库 pin（误报，改写消源）；提取管线复扫悬空 0 条（候选 361）；全量测试数字见 testing/baselines/ 最新切片。详见上方「实际修法与验证」。</li>
     </ul>
   </section>
 

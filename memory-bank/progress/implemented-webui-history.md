@@ -156,10 +156,10 @@
 
 - **WEB UI HR 拉取历史详情表**(2026-10-04, 计划
   [plans/26-10-04-0312](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html) S1-S6 全落地, 提交链
-  `49da6d06`(拍板落定: ⑤=2000条/站点+6个月, 余推荐A)→`0227f25c`(S1 `HrHistoryEvent` +
-  `HrSiteData.history` 环形留痕, 不抬 hr_site 版本链)→`4c88e8e2`(S2 波次/拦截(含 force-defer)/对账三类
-  事件写入点, poll 跳过零写盘)→`2923ffa4`(S3 `history_rows()` 只读口径 + `GET /api/hr/history`)→
-  `85a22f8a`(S4 全屏弹层表③: 懒加载/站点chips/仅看异常/行展开档位明细)→`ec697a08`(S5 ui_harness 桩
+  `70d70e3f`(拍板落定: ⑤=2000条/站点+6个月, 余推荐A)→`13df6a80`(S1 `HrHistoryEvent` +
+  `HrSiteData.history` 环形留痕, 不抬 hr_site 版本链)→`805da878`(S2 波次/拦截(含 force-defer)/对账三类
+  事件写入点, poll 跳过零写盘)→`e8edae01`(S3 `history_rows()` 只读口径 + `GET /api/hr/history`)→
+  `d8c4cb8c`(S4 全屏弹层表③: 懒加载/站点chips/仅看异常/行展开档位明细)→`3acc3914`(S5 ui_harness 桩
   五形态 + 表③断言与三皮肤目检), 分支 webui-hr-fetch-history 待并回): 「什么时间拉取了什么站点/解析
   结果」可考 —— 参照扩展选项页取数明细表且更细; 已知限制: 新旧版本混跑窗口期旧程序写盘丢 history 键
   (业务字段无损, 不做双写兼容)。test.full 2442 passed + 3 skipped / 30.93s / 99%(基线
@@ -235,7 +235,7 @@
   (2391 passed + 3 skipped / 99%); 三皮肤真机走查 12/12 × 3。**未提交(等用户指令)**。
 
 - **WEB UI 种子详情抽屉重设计: 浮层 → 底部停靠属性面板 (方案A)**(2026-10-03, 计划
-  [plans/26-10-03-0917](../plans/26-10-03-0917-plan-webui-drawer-redesign.html) 五波, 提交链 `f994ce20`/`9c594e1e`/`b81a1ee4`/`a0b5d73f`,
+  [plans/26-10-03-0917](../plans/26-10-03-0917-plan-webui-drawer-redesign.html) 五波, 提交链 `dadc97a6`/`7d38e2ea`/`14a4d0e2`/`54d8b6fc`,
   清偿 issue [26-10-01-2119-feat-webui-drawer-redesign](../issues/26-10-01-2119-feat-webui-drawer-redesign.html) +
   [26-10-01-2108-feat-webui-shortcuts-drawer-nav](../issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) +
   [26-10-01-2108-feat-webui-shortcuts-drawer-open](../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html)):

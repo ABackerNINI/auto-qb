@@ -56,7 +56,7 @@
 
 - **12:40** 收到"分析版本迭代时间表"; 用 `git log -S` 逐键追溯, 确认 4 次升版本与 R10-09 反转点, 输出时间表(可视化两张: 升迁轴 + v4 后事件轴)。
 - **12:46** 用户「改」: 回写 `pitfalls.md:115`(整条反转, 补"只有旧缓存结构无法被 `loadColState()` 解释才升版本"判据 + 4 次未升版本的实证)、`pitfalls.md:227`(去掉 R08 时期"重排列集必须升版本")、`systemPatterns.md:123`(结构补齐 `order` 并删掉错误因果)、`activeContext.md`(口径统一说明)。`tests/test_memory_bank.py` 8 passed。
-- **13:10** 用户「提交」: `git fetch` 发现落后 6 个提交(`7391b63` 等, 其中含 `memory-bank/pitfalls.md` 与 `testing.md` 的改动) ⇒ 先 commit(`f3cfe91`)再 `git pull --rebase` 无冲突(rebase 后 `ccedce8`) ⇒ 推 Gitee `7391b63..ccedce8` ✅; 补 `github` 远端后禁用 per-URL 代理直连推 GitHub `b646759..ccedce8` ✅。
+- **13:10** 用户「提交」: `git fetch` 发现落后 6 个提交(`7391b63` 等, 其中含 `memory-bank/pitfalls.md` 与 `testing.md` 的改动) ⇒ 先 commit 再 `git pull --rebase` 无冲突(f3cfe91 重写为 `ccedce8`) ⇒ 推 Gitee `7391b63..ccedce8` ✅; 补 `github` 远端后禁用 per-URL 代理直连推 GitHub `b646759..ccedce8` ✅。
 - **13:20** 首跑全量的 2 条失败经复跑证伪(1041 全绿), 扩展 `pitfalls.md` 既有条目 ⇒ `8d68300`; Gitee 推送首次 `Recv failure` 重试成功(`ccedce8..8d68300`); **GitHub 本次不可用**(直连超时 21s, 代理 127.0.0.1:10808 亦连不上), 按规矩不重试, 镜像滞后 `8d68300`。
 - **13:25** 立档本档案并重建 `tasks/_index.md`。
 
