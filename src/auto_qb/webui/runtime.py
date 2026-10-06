@@ -78,6 +78,27 @@ WEB_ERR_RING_MAX = 200
 # 单条消息截断上限: traceback 等长文案收集时压掉, 展示层不再处理
 WEB_ERR_MSG_MAX = 500
 
+# ---- 增量时间线(plan 26-10-07-0414 S2): qB 启发的自创窗口 —— deque 只存脏行键不存值(R1),
+# 值回放时从当前已发布视图现取, 内存 O(代数 x 脏行键) 与库大小无关 ----
+# 容量写常量(零新配置键): 40 代 ~= 60s @1.5s tick, 环满挤最旧(窗外客户端退化全量, R10)
+_DELTA_TIMELINE_MAX = 40
+
+
+def _new_delta_buckets() -> dict:
+    """增量键集桶结构(plan S2): 分视图 upsert/removed 键集; show 桶本步恒空(S8/S9 启用)"""
+    return {
+        "upsert": {
+            "torrent": set(),
+            "group": set(),
+            "show": set()
+        },
+        "removed": {
+            "torrent": set(),
+            "group": set(),
+            "show": set()
+        },
+    }
+
 
 class WebErrLogHandler(logging.Handler):
     """auto_qb logger -> WEB 错误历史内存环(WARNING+; tray/app.py UiLogHandler 同款范式)
@@ -153,6 +174,27 @@ class WebUIRuntime:
         # 搜索索引(hash -> {name, files[文件名]}): 主循环按需构建并原子替换, Web 线程只读
         self.search_index: Optional[dict] = None
         self.search_index_dirty: bool = True
+        # ---- 增量时间线(plan 26-10-07-0414 S2; qB 启发的自创窗口, R1/R2/R12) ----
+        # 已发布各代的脏行键时间线: 每次发布恰追加一条目(maxlen 截断), 条目形状 =
+        # {"ver": int, "full": bool, "upsert": 分视图键集, "removed": 分视图键集}。
+        # 只存键不存值, 值回放时从当前已发布视图现取(R1)。写入只在 view_lock 临界区
+        # (flush_views 排空 / _publish_locked 落代, 主循环线程; Web 线程的 ensure_state
+        # 触发重建时也在同一把锁内), S3 的 ensure_state 归约读同一把锁 —— 不引入新锁(R12)。
+        self._delta_timeline: deque = deque(maxlen=_DELTA_TIMELINE_MAX)
+        # 跨拍累积器: flush_views 每拍(无论门控是否放行)排空 store 增量并入此, 落代时一次性
+        # 折叠进时间线并清空 —— 门控跳拍的键集累积进下一代不丢(R4)
+        self._delta_pending: dict = _new_delta_buckets()
+        # full 降级理由集合(R11): 降级源在触发点登记("config_reload"/"hr_revision"/
+        # "shows_pending"/"cross_group"/"row_key_unresolvable"), 落代时任一非空 -> 本代 full
+        # 且累积键集清空(full 响应覆盖到当前 ver, 累积键已无意义)。mark_dirty/mark_shows_pending
+        # 的登记点可能落在 Web 线程(_build_shows_view 经 ensure_state 触发路径)且不持锁:
+        # 集合 add/clear 在 GIL 下原子, 竞争最坏结果是多退化一次 full, 无正确性风险
+        # (与 group_view_dirty 的既有跨线程语义同一口径)。
+        self._pending_full_reasons: set = set()
+        # 跨组交叉键集的构建期发现(plan S2): _build_group_view 经 note_cross_keys 回传本代
+        # 键集, 落代时与上一已发布代比较, 增删即本代 full(R11, 不归约旧组键)
+        self._cross_keys_seen: frozenset = frozenset()
+        self._cross_keys_prev: Optional[frozenset] = None  # None = 尚未发布过(首代只立基线)
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
         self.handle = None
@@ -295,17 +337,31 @@ class WebUIRuntime:
         """WEB 请求心跳: 刷新 last_seen, 让主循环在活跃窗口内持续组装视图"""
         self.last_seen = time.time()
 
-    def mark_dirty(self) -> None:
+    def mark_dirty(self, full: bool = False, reason: str = "") -> None:
         """核心域 → 表现层: 视图内容已变, 下次组装前必须重建
 
         覆盖四份视图(groups/singles/shows/flat): 它们共享同一个版本号, 置脏必须一致 ——
         曾因只在"分组启用"分支内置脏, 导致分组关闭时另三份视图被饿死(2026-09-18 事故)。
+
+        full=True(plan S2 R11 降级源): 本次置脏**无法归约为行级脏**(如配置热重载改写的
+        配置派生展示值) —— reason 登记进 _pending_full_reasons, 落代时该代标 full 且
+        累积键集清空。缺省 False: store 增量等可归约源照常推导行键。
         """
         self.group_view_dirty = True
+        if full:
+            self._pending_full_reasons.add(reason or "unspecified")
 
     def mark_search_index_dirty(self) -> None:
         """核心域 → 表现层: 种子集变化, 搜索索引需重建"""
         self.search_index_dirty = True
+
+    def note_cross_keys(self, keys) -> None:
+        """视图构建期回传跨组交叉键集(plan S2; _build_group_view 在 view_lock 临界区内调用)
+
+        落代时与上一已发布代的键集比较, 增删即本代 full(R11): cross_group_conflict 标记
+        派生自去重集合, 旧组键不归约。
+        """
+        self._cross_keys_seen = frozenset(keys)
 
     def set_traffic_view(self, view: dict) -> None:
         """限速/流量只读快照发布口(plan kernel-module-refactor P3)
@@ -485,6 +541,83 @@ class WebUIRuntime:
                 del self.reannounce_background[h]
                 logger.warning(f"WEB UI | 推迟汇报后台核实失败 {h[:8]}: {reason}")
 
+    def _drain_delta_locked(self, store) -> None:
+        """把 store 本轮增量推导成脏行键并入 _delta_pending(**持 view_lock**, 主循环线程)
+
+        映射口径(plan S2): flat/singles 行键 = hash 直用 -> torrent 桶; 组行键 =
+        store.member_to_key -> group 桶(成员字段变化会改组行聚合值); show 桶本步恒空
+        (S8/S9 接)。数据源 = S1 属性快照(last_added/last_removed) + delta_fields(变化
+        字段集, added 不在其中)。
+
+        组行 removed 键推导: 先查 member_to_key 后消费 removed 清单 —— 查得到: 组仍在 ->
+        组行内容变了(upsert), 组已解散 -> 组行消失(removed); 查不到(组键已随
+        _leave_group/解散清除, 且与「从未归组」不可区分) -> 该组行键不可归约 -> 本代
+        full(R11 保守正确优先)。
+        """
+        added = store.last_added
+        removed = store.last_removed
+        delta_fields = store.delta_fields
+        if not added and not removed and not delta_fields:
+            return
+        upsert = self._delta_pending["upsert"]
+        rem = self._delta_pending["removed"]
+        t_up, g_up = upsert["torrent"], upsert["group"]
+        t_rm, g_rm = rem["torrent"], rem["group"]
+        member_to_key = store.member_to_key
+        groups = store.groups
+        unresolvable = False
+        for h in added:
+            t_up.add(h)
+            key = member_to_key.get(h)
+            if key is not None:
+                g_up.add(key)
+        for h in delta_fields:
+            t_up.add(h)
+            key = member_to_key.get(h)
+            if key is not None:
+                g_up.add(key)
+        for h in removed:
+            t_rm.add(h)
+            key = member_to_key.get(h)
+            if key is not None:
+                # 组仍在 -> 行内容变了(upsert); 组已解散 -> 行已消失(removed)
+                (g_up if key in groups else g_rm).add(key)
+            else:
+                unresolvable = True
+        if unresolvable:
+            self._pending_full_reasons.add("row_key_unresolvable")
+
+    def _fold_delta_pending_locked(self) -> None:
+        """把跨拍累积的脏行键折叠成本代时间线条目并清空累积器(**持 view_lock**)
+
+        - 每次发布恰追加一条目(maxlen 截断兜底窗口滑出; 时间线全局一份, R2)。
+        - 交叉抵消(R5): 落代前分视图 upsert -= removed; removed -= upsert —— 同拍增删
+          同一行净变化为零, 不给客户端又删又发同一行。
+        - full 代判定(R11): 本代任一降级源活跃 -> full=true 且键集清空, 累积器与理由
+          一并清空(full 响应覆盖到当前 ver, 累积键已无意义)。
+        """
+        ver = self.group_view_ver
+        reasons = self._pending_full_reasons
+        # 跨组交叉标记增删: 本代构建期发现的键集与上一已发布代不同 -> 本代 full
+        # (首代只立基线: 时间线此前为空, 任何客户端本就窗外)
+        if self._cross_keys_prev is not None and self._cross_keys_seen != self._cross_keys_prev:
+            reasons.add("cross_group")
+        self._cross_keys_prev = self._cross_keys_seen
+        if reasons:
+            entry = {"ver": ver, "full": True, **_new_delta_buckets()}
+            reasons.clear()
+            self._delta_pending = _new_delta_buckets()
+        else:
+            upsert = self._delta_pending["upsert"]
+            removed = self._delta_pending["removed"]
+            for view in ("torrent", "group", "show"):
+                both = upsert[view] & removed[view]
+                upsert[view] -= both
+                removed[view] -= both
+            entry = {"ver": ver, "full": False, "upsert": upsert, "removed": removed}
+            self._delta_pending = _new_delta_buckets()
+        self._delta_timeline.append(entry)
+
     def flush_views(self, force: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)
 
@@ -492,14 +625,22 @@ class WebUIRuntime:
         用户操作后真值要在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
         """
         host = self._host
+        # 增量排空(plan S2): 每拍(无论门控是否放行)先把 store 本轮增量推导成脏行键并入
+        # _delta_pending —— 门控跳拍的键集累积进下一代不丢(R4)。排空段持 view_lock: 落代
+        # 折叠在 _publish_locked(可能经 Web 线程 ensure_state 触发)的同一临界区, 同锁才无
+        # 并发折叠/累积竞态(R12, 不引入新锁)。last_added/last_removed 只读不排空(下轮
+        # _apply 覆盖, S1「最近一轮」语义), 同拍两次 flush 重复并入同键集 —— 集合语义幂等。
+        with self.view_lock:
+            self._drain_delta_locked(host.store)
         # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
         if host.store.consume_view_changed():
             self.mark_dirty()
         # HR 判定新鲜度: revision 与重建基线不等即置脏(基线在 _publish_locked 随重建前移,
         # 故只在 revision 真变的那一拍置一次, 无循环置脏)。发布侧按内容指纹去重, 不会周期空转。
+        # HR 派生字段无法归约为行级脏 -> 兼登记 full 降级理由(R11)。
         hr = getattr(host, "hr", None)
         if hr is not None and self._hr_rev_at_build != hr.revision:
-            self.mark_dirty()
+            self.mark_dirty(full=True, reason="hr_revision")
         web_active = self.is_active()
         # 「上一版有没有人取走」门控: 服务端节拍与客户端节拍各自独立定档, 大库下服务端
         # 生产的中间版本可能无人消费。让"生产"等一等"消费"。
@@ -790,6 +931,9 @@ class WebUIRuntime:
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
         self.pending_ver = self.group_view_ver
+        # 增量时间线落代(plan S2): 跨拍累积的 _delta_pending 与本代 full 理由折叠成条目
+        # 追加进时间线 —— 每次发布恰一条(R4 累积/R5 抵消/R11 降级/R12 临界区)
+        self._fold_delta_pending_locked()
         # 事件驱动(P2): 新版本**主动推**信号(只推版本号, 绝不推数据 —— 3000 种子一轮
         # 全量要 63ms 序列化+网络+解析, 频繁推会把主线程打满)。前端据此触发一次 refresh。
         self.notify("ver", {"ver": self.group_view_ver})
@@ -840,5 +984,12 @@ class WebUIRuntime:
         return state
 
     def mark_shows_pending(self, pending: bool) -> None:
-        """追剧视图文件兑底标记: 索引推进后由构建器据此置脏重建"""
+        """追剧视图文件兑底标记: 索引推进后由构建器据此置脏重建
+
+        True->False 归位拍登记 full 降级理由(plan S2 R11): 集行此前按名称解析展示,
+        文件兑底后剧/季/集结构可能整体重组, 无法归约为行级脏 -> 本代 full。
+        """
+        was = self.shows_pending
         self.shows_pending = pending
+        if was and not pending:
+            self._pending_full_reasons.add("shows_pending")

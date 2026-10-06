@@ -416,6 +416,9 @@ class WebviewMixin:
         # 会抛 "dictionary changed size during iteration"(请求 500)。口径同 build_search_index
         # 的原子交换契约: 一律取快照引用(tuple/list)后再遍历, 单写线程的写路径一行不动。
         cross_keys = {k for pair in tuple(self.store.cross_group_conflict_warned) for k in pair}
+        # 跨组交叉标记增删的构建期发现(plan 26-10-07-0414 S2): 键集回传门面, _publish_locked
+        # 落代时与上一已发布代比较, 增删即本代 full(R11 —— 标记派生自去重集合, 旧组键不归约)
+        self.web.note_cross_keys(cross_keys)
         for key, members in tuple(self.store.groups.items()):
             recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if not recs:
