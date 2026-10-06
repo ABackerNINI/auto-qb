@@ -29,7 +29,8 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *
  * 模式门控(计划 §3.2 D1): 与旧脚本同构 —— 主路径组只在 skip-check **on** 跑(那些断言假定
  * flags 开, 关态下 W3「菜单含跳检项」会假红, 旧脚本 off 轮同款早退互斥); W5-off 精简组只在
- * **off** 跑, requireMode 按当前 env 整组跳过, skip 消息带当前值。
+ * **off** 跑, requireMode 按当前 env 整组跳过, skip 消息带当前值。另: W3 确认链限 ok|error
+ * (确认钮靠预检回执解锁, hang 下预检不回执永不解锁, 见映射表 L572 行注)。
  *
  * ── 对账映射表(旧断言名 → 新 test 名) ──
  *  on 轮(块D 其余, 旧 add() 16 处/皮肤 → 新 7 test/皮肤):
@@ -43,7 +44,9 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  L494  W3 单选菜单含跳检项(flags 开)                              → W3 跳检菜单项: 单选 + 批量
  *  L507  W3 批量菜单含跳检项(flags 开)                              → 同上(1:N 合并)
  *  L535  W3 跳检确认框取消不提交                                    → W3 跳检确认链: 取消 / 确认提交
- *  L572  W3 跳检确认后提交 bulk(action=skip_check)                  → 同上(1:N 合并)
+ *  L572  W3 跳检确认后提交 bulk(action=skip_check)                  → 同上(1:N 合并) —— S7 矩阵
+ *          hang 轮实测该 test 需限 ok|error(确认钮靠预检回执解锁, hang 下
+ *          永不解锁 ⇒ click 超时), 已补 requireMode 门控(2026-10-06)
  *  L615  W4 批量菜单含导出项                                        → W4 多选导出(arrange 步菜单断言)
  *  L632  W4 多选导出逐个请求(数 == 选中展开数)                      → 同上(升级为 poll 到 N)
  *  L645  W5 导出成功回执 toast                                      → 同上 test 尾段 —— exportMulti 走
@@ -316,7 +319,12 @@ for (const skin of SKINS) {
         await page.keyboard.press('Escape');
       });
 
-      test('W3 跳检确认链: 取消不提交 / 确认恰好 1 条 bulk(action=skip_check)', async ({ page }) => {
+      test('W3 跳检确认链: 取消不提交 / 确认恰好 1 条 bulk(action=skip_check)(ok|error 模式)', async ({ page }) => {
+        // hang 模式整条跳过(S7 矩阵轮 2026-10-06 实测补, 基线 26-10-06-1425): 确认按钮由
+        // S4 跳检预检回执解锁(:disabled="modal.okDisabled", tpl/popovers.html), hang 下预检
+        // 永不回执 ⇒ 按钮恒 disabled ⇒ click 必 30s 超时; error 模式预检有回执照常解锁
+        // (矩阵 error 轮实测 0 failed), 故按 W2 toast「仅 ok 模式」同款口径限 ok|error。
+        requireMode(test, { cmdResult: ['ok', 'error'] });
         await openApp(page, skin);
         await tab(page, 'torrents').click();
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
