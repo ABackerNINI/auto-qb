@@ -220,11 +220,49 @@ window.AQB_FEEDBACK = {
       if (!anchor || !anchor.getBoundingClientRect) return false;
       return anchor.getBoundingClientRect().left + menuW > window.innerWidth - 8;
     },
-    /* 右键菜单定位: 视口边界吸附(菜单尺寸取常量估算, 避免先渲染再测量造成的抖动) */
+    /* 右键菜单定位**初值**: 视口边界吸附(菜单尺寸取常量估算, 避免先渲染再测量的抖动)。
+     * ⚠ 常量只是初值 —— 菜单真实高度随分支差一倍以上(批量菜单实测 393px, 此处按 222 估算),
+     *   开层后必须再走一跳 _menuFitRefit 按**实测**尺寸重钳位, 否则锚点落在视口下部时菜单底
+     *   会越过下缘, 底部菜单项真实点击不可达(issue 26-10-06-1717: Playwright 报
+     *   "element is outside of the viewport" 重试到超时)。 */
     _menuPos(event, w = 214, h = 222) {
       const x = Math.min(event.clientX, Math.max(8, window.innerWidth - w - 8));
       const y = Math.min(event.clientY, Math.max(8, window.innerHeight - h - 8));
       return { x: Math.max(8, x), y: Math.max(8, y) };
+    },
+    /* 开层后按**实测**尺寸把菜单盒整体收进视口(issue 26-10-06-1717 的修法主体)。
+     * 只认 offsetWidth/offsetHeight —— 菜单内容随分支(单种子/批量/整集/表头/文件优先级)
+     * 与 flags(跳检项)变化, 常量估算拦不住。极矮视口下菜单比视口还高时(top 顶到 8 仍放不下)
+     * 兜底限高 + 可滚, 保证底部项仍够得着; 限高每次开层先复位, 否则本次量到的是上次压过的高度。 */
+    _menuFit(el, x, y) {
+      if (!el) return { x, y };
+      const EDGE = 8;                // 视口边缘留白(与 _menuOverflowsRight 同口径)
+      el.style.maxHeight = "";
+      el.style.overflowY = "";
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const nx = Math.max(EDGE, Math.min(x, Math.max(EDGE, vw - w - EDGE)));
+      let ny = Math.max(EDGE, Math.min(y, Math.max(EDGE, vh - h - EDGE)));
+      if (h > vh - EDGE * 2) {
+        /* 菜单高过视口: 顶到上缘并限高可滚(宁可滚动也要让底部项可达)。注: 此分支下
+         * .ctx-sub 次级面板会随本盒一起被裁 —— 但菜单已占满视口, 子面板本也无处可展。 */
+        el.style.maxHeight = (vh - EDGE * 2) + "px";
+        el.style.overflowY = "auto";
+        ny = EDGE;
+      }
+      return { x: nx, y: ny };
+    },
+    /* 开层 watcher 的单点出口(state.js 的 menu/headMenu/filePrio 三处调它)。
+     * 现读 this[stateKey] 而不是闭包捕获: 量测在 $nextTick, 期间若又开了一次(换对象),
+     * 这里拿到的已是新对象、新对象自己的 watcher 也已排队, 不会把旧位置写回新菜单。
+     * $nextTick 回调在 Vue 补丁之后、浏览器绘制之前跑, 回写 x/y 触发的重渲染同帧完成 ——
+     * 不产生"先弹错位置再跳一下"的可见抖动。 */
+    _menuFitRefit(stateKey, refName) {
+      const s = this[stateKey];
+      if (!s || !s.visible) return;
+      const p = this._menuFit(this.$refs[refName], s.x, s.y);
+      s.x = p.x;
+      s.y = p.y;
     },
   },
 };

@@ -66,6 +66,8 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  L164  W5 off: 单选菜单不渲染跳检项(限速仍在)                     → W5 off: 单选菜单
  *  L184  W5 off: 多选菜单不渲染跳检项(限速/移动/导出照常)           → W5 off: 多选菜单
  *  L220  无 console.error / pageerror(off 轮收尾总检)               → installRuntimeErrorGuard
+ *  · CTX-fit(**非旧脚本迁入**, 本 spec 新增): 视口下部行开批量菜单 → 菜单盒整体落在视口内 +
+ *    底部项真实可点 —— issue 26-10-06-1717 的回归断言(计划外发现的正式修复轮补)。
  *  旧多选注入(vm.selMembers = …)在旧块里是取"已知选中集合"的手段; 新轨一律真实 Ctrl+click
  *  (D4 守则: 有真实 UI 路径的交互不借道 vm), 选中集合用 readInst 读数自证(第②类)。
  *
@@ -103,6 +105,10 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    (Playwright "outside of the viewport" 108 次重试耗尽; stub 150 组行占满文档时下部行
  *    滚不上来, 无 arrange 可解)。旧脚本 W4-组选中块的存量 elementHandle.click 超时使该
  *    问题从未暴露。本 spec 用「挑视口上部行」的 arrange 对冲(W4 组选中用例)。
+ *    → **2026-10-06 已修**(issue 26-10-06-1717): _menuPos 只留"光标处初值", 新增
+ *    ui_feedback.js::_menuFit 在开层 watcher 里按**实测** offsetWidth/Height 重钳位
+ *    (state.js 的 menu/headMenu/filePrio 三个 watcher 单点)。本 spec 的 CTX-fit test
+ *    是它的回归断言(挑**下部行**, 与 W4 的对冲方向相反)。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互真实手势: 页签/菜单项/对话框按钮走 locator.click; 行点击(左键/修饰键/右键)走
@@ -385,12 +391,11 @@ for (const skin of SKINS) {
         await expect(gRows.first()).toBeVisible({ timeout: 30_000 });
         // 反挑两个**已渲染且在视口上部**的实体组(行窗口化, 不假设排序; 只选 1 组时
         // _ctxMulti 的"范围一致"判定会降级单目标菜单 —— 旧注释同款, 必须选 2 组)。
-        // 上部带的理由: 批量菜单 ~10 项(实测 361px)高于 _menuPos 定位用的 h=222 常量估算
-        // (ui_feedback.js), 行在视口下部时菜单底部溢出视口、下方菜单项(移动/标签分类/导出/
-        // 批量删除)真实点击不可达 —— 首轮实测 "outside of the viewport" 108 次重试耗尽;
-        // 且 stub 数据 150 组行占满文档, 下部行滚不上来(文档到底)。该产品侧钳位问题走
-        // issue 流程, 这里用"挑上部行"的 arrange 对冲(与 clickRow 内部滚动同类,
-        // multiselect-shows 头注口径), 右键点 ~y150 处菜单整份在屏内。
+        // 上部带的由来: 取证时批量菜单 ~10 项实测 393px 高于 _menuPos 定位用的 h=222 常量估算,
+        // 行在视口下部时菜单底部溢出视口、下方菜单项真实点击不可达("outside of the viewport"
+        // 108 次重试耗尽), 且 stub 150 组行占满文档、下部行滚不上来。该产品侧钳位问题已于
+        // 2026-10-06 修复(issue 26-10-06-1717: ui_feedback.js::_menuFit 按实测高度重钳位,
+        // 回归断言 = 本 spec 的 CTX-fit test); 这里保留"挑上部行"只是让本用例少一层依赖。
         const keys = await readInst(page, `(() => {
           const ok = new Set(vm.decoratedGroups
             .filter((g) => !g.virtual && (g.members || []).length).map((g) => g.key));
@@ -429,6 +434,54 @@ for (const skin of SKINS) {
         }).toBe(ginfo.expanded);
         off();
         expect(hits.n, `2 组 ${ginfo.members} 成员 → 导出请求 ${hits.n} 个`).toBe(ginfo.expanded);
+      });
+
+      test('CTX-fit 视口下部行的批量菜单整份落在视口内(底部项可点)', async ({ page }) => {
+        /* 回归(issue 26-10-06-1717): 钳位用常量 h=222 估算菜单高度, 批量菜单实测 ~361px ⇒
+         * 锚点落在视口下部时菜单底越过下缘, 底部项(标签分类/导出/批量删除)真实点击不可达
+         * (Playwright "element is outside of the viewport" 重试到超时)。修后按**实测高度**
+         * 重钳位; 这里故意挑视口最下 220px 带内的行 —— 锚点 y 越低越容易溢出, 修复前必红。
+         * 判据 = 几何(菜单盒整体在视口内) + 真实手势(点底部最后一项, 走 locator.click 不绕 vm)。 */
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        // 反挑**最靠下的两个**完整可见行: clickRow 对界内行不做居中滚动, 故锚点 y 可控
+        // (与 W4 组选中导出那段"挑上部行"的对冲方向相反, 正是本回归的触发几何)。
+        // 从末行倒着取, 行高不齐(带 H&R 的行多一行, 三皮肤 ~44/65px)也能稳定拿到底部行。
+        const band = await readInst(page, `(() => {
+          const out = [];
+          const rows = [...document.querySelectorAll('.torrent-row')];
+          for (let i = rows.length - 1; i >= 0; i--) {
+            const r = rows[i].getBoundingClientRect();
+            if (r.top >= window.innerHeight * 0.5 && r.bottom <= window.innerHeight - 8) {
+              out.push(i);
+              if (out.length >= 2) break;
+            }
+          }
+          return out;
+        })()`);
+        expect(band, '视口下半带内找到两个完整可见的可右键行').toHaveLength(2);
+        const picked = band.map((/** @type {number} */ i) => page.locator('.torrent-row').nth(i));
+        for (const r of picked) {
+          await clickRow(page, r, { modifiers: ['Control'] });
+        }
+        expect(await readInst(page, 'vm.selMembers.length'), 'Ctrl+click 两行后选中集合').toBe(2);
+        await clickRow(page, picked[0], { button: 'right' });
+        const menu = page.locator('.ctx-menu');
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());
+        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await menu.boundingBox());
+        expect(b, '菜单盒量不到').toBeTruthy();
+        expect(Math.round(b.y + b.height),
+          `菜单底 ${Math.round(b.y + b.height)} 应 ≤ 视口高 - 8(${vp.height - 8}) —— 溢出即底部项点不到`)
+          .toBeLessThanOrEqual(vp.height - 8 + 1);
+        expect(Math.round(b.x + b.width), `菜单右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8`)
+          .toBeLessThanOrEqual(vp.width - 8 + 1);
+        // 底部最后一项走真实点击: 溢出时这里报 "outside of the viewport" 直到超时(修复前的签名)
+        await ctxItem(page, '批量删除…').click();
+        await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
+        await page.keyboard.press('Escape'); // 收掉确认框(本用例只验可达性, 不提交)
+        await expect(page.locator('.modal')).toHaveCount(0);
       });
 
       test('CTX-04/05/06 次级菜单: 唯一入口(更多操作) / 复制族并入 / 悬停语义色不变灰 / 移出收起', async ({ page }) => {

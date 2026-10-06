@@ -1,5 +1,5 @@
         <transition name="pop">
-        <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
+        <div v-if="menu.visible" ref="ctxMenu" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
                (与批量动作同一套链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
                收录口径(plan 26-10-02-1955 W2/W3/W4 改写): 放"对整批同一语义"的动作(开始/暂停/汇报/
@@ -201,7 +201,7 @@
         </transition>
         <!-- 表头右键菜单(TBL-05): 针对**该列**的操作 —— "隐藏xxx"即隐藏这一列; 另给排序直达与完整列选择器入口 -->
         <transition name="pop">
-        <div v-if="headMenu.visible" class="ctx-menu" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
+        <div v-if="headMenu.visible" ref="headMenuEl" class="ctx-menu" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
              @click.stop @contextmenu.prevent>
           <div class="ctx-item" :class="{ muted: headMenu.locked }" @click="headMenuHide()">
             <svg class="ico ico-sm ico-hide" viewBox="0 0 16 16"><use href="#i-eye-off"></use></svg>
@@ -236,7 +236,7 @@
         </transition>
         <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->
         <transition name="pop">
-        <div v-if="filePrio.visible" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
+        <div v-if="filePrio.visible" ref="filePrioEl" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
           <div class="ctx-item" @click="setFilePriority(0)">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>跳过
           </div>

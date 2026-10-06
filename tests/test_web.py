@@ -205,6 +205,7 @@
 - test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
@@ -4523,6 +4524,59 @@ def test_frontend_add_combo_blur_close_and_fit():
         assert body and f'closeAddPopsExcept("{kind}")' in body.group(1), \
             (f"{fnname} 必须调 closeAddPopsExcept(\"{kind}\") —— 开本浮层时收掉其余两个, "
              f"互斥漏一侧 = 双浮层同悬且盖住相邻字段 label 的点击")
+
+
+def test_frontend_ctx_menu_refit_by_measured_size():
+    """浮层菜单开层后按**实测**尺寸重钳位(issue 26-10-06-1717 的接线守阵, 静态防回潮)
+
+    症状: 批量菜单(约 10 项, 实测 393px)由 `_menuPos` 的常量 h=222 估算做视口钳位 ——
+    锚点落在视口下部时菜单底越过下缘, 底部项(标签分类/导出/批量删除)真实点击不可达
+    (Playwright 报 "element is outside of the viewport" 重试到超时)。这类几何缺陷 pytest
+    跑不出来, 故这里只钉**接线**; 行为面由 e2e/menus.spec.mjs 的 CTX-fit test 兜底:
+      ①_menuFit 必须按 offsetWidth/offsetHeight 实测算(把常量改大一号那种"修法"再犯即红);
+      ②三个菜单容器(行右键/表头右键/文件优先级)各有 ref, 且与三个 state 对象各自的
+        开层 watcher 里的 (stateKey, refName) 一一对上 —— 漏一处 = 那个菜单静默不钳位;
+      ③watcher 必须在 $nextTick 里量(同步量到的是开层前的 DOM)。
+    """
+    import re
+
+    static = STATIC_ROOT
+    fb = open(os.path.join(static, "shared", "ui_feedback.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(static, "shared", "state.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(static, "shared", "tpl", "ctx-menus.html"), encoding="utf-8").read()
+
+    # 1. 量测必须是**实测**: 两个 offset* 都要出现, 且以视口为界
+    fit = re.search(r"_menuFit\(el, x, y\) \{(.*?)\n    \},", fb, re.S)
+    assert fit, "ui_feedback.js 找不到 _menuFit(开层实测钳位单点, 改名或挪走了? 同步本守阵)"
+    fit_body = fit.group(1)
+    assert "el.offsetWidth" in fit_body and "el.offsetHeight" in fit_body, \
+        "_menuFit 必须按 offsetWidth/offsetHeight 实测(退回常量估算 = issue 26-10-06-1717 复现)"
+    assert "window.innerWidth" in fit_body and "window.innerHeight" in fit_body, \
+        "_menuFit 必须以视口为界(innerWidth/innerHeight)"
+    assert 'el.style.maxHeight = ""' in fit_body, \
+        "_menuFit 必须每次先复位兜底限高(否则本次量到的是上一次压过的高度)"
+
+    # 2. 三容器 ref + 三开层 watcher 成对
+    for key, ref in (("menu", "ctxMenu"), ("headMenu", "headMenuEl"), ("filePrio", "filePrioEl")):
+        assert f'ref="{ref}"' in tpl, \
+            f"ctx-menus.html 缺 ref=\"{ref}\"({key} 菜单量测拿不到容器对象)"
+        m = re.search(rf"\n    {key}\(\) \{{\n(.*?)\n    \}},", state_js, re.S)
+        assert m, (
+            f"state.js 缺 {key} 开层 watcher —— 开层入口有五六处(menu.js/shows.js/drawer.js), "
+            f"直挂方法必漏, 与 _fitAddPop 同范式走 watcher 单点"
+        )
+        assert f'_menuFitRefit("{key}", "{ref}")' in m.group(1), \
+            f"{key} watcher 必须调 _menuFitRefit(\"{key}\", \"{ref}\")(stateKey/ref 对不上就量不到)"
+        assert "$nextTick" in m.group(1), \
+            f"{key} watcher 必须在 $nextTick 里量(同步量到的是开层前的 DOM, 高度恒 0)"
+
+    # 3. 出口现读现取: 闭包捕获旧对象/旧元素会在"开着又换一行"时把旧位置写回新菜单
+    refit = re.search(r"_menuFitRefit\(stateKey, refName\) \{(.*?)\n    \},", fb, re.S)
+    assert refit, "ui_feedback.js 找不到 _menuFitRefit(watcher 出口单点, 改名或挪走了? 同步本守阵)"
+    refit_body = refit.group(1)
+    assert "this[stateKey]" in refit_body and "this.$refs[refName]" in refit_body, \
+        "_menuFitRefit 必须现读 this[stateKey] / this.$refs[refName](闭包捕获会在重开时写错位置)"
+    assert ".visible" in refit_body, "_menuFitRefit 必须守 visible(菜单已关就别再回写位置)"
 
 
 def test_frontend_add_combo_label_clear_mask_and_refit():

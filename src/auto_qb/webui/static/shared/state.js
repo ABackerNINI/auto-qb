@@ -420,6 +420,23 @@ window.AQB_STATE = {
     "filePrio.visible"(v) {
       if (!v) this._clearCtxSource();
     },
+    /* 开层后按实测尺寸重钳位(issue 26-10-06-1717): 三个浮层菜单的开层初值都来自 _menuPos 的
+     * 常量估算, 而菜单真实高度随分支差一倍以上(批量菜单实测 393px vs 估算 222)—— 锚点落在
+     * 视口下部时菜单底越过下缘, 底部项(导出/批量删除)真实点击不可达。
+     * 判据用**对象替换**而不是 visible 翻转: 三个菜单的开层入口一律写 `this.X = {…}`
+     * (menu.js 的 openMenu/openMemberMenu/openHeadMenu · shows.js 的整集/整剧两入口 ·
+     * drawer.js 的 openFilePrio), 关层与执行动作只改字段(X.visible = false) ⇒ 每次开层恰好
+     * 触发一次, 连"菜单还开着又右键另一行"(visible 不变、只是换了对象)也覆盖; 钳位回写的是
+     * x/y 字段而非整个对象, 不会自触发。量测在 $nextTick(见 ui_feedback.js::_menuFitRefit)。 */
+    menu() {
+      this.$nextTick(() => this._menuFitRefit("menu", "ctxMenu"));
+    },
+    headMenu() {
+      this.$nextTick(() => this._menuFitRefit("headMenu", "headMenuEl"));
+    },
+    filePrio() {
+      this.$nextTick(() => this._menuFitRefit("filePrio", "filePrioEl"));
+    },
     // 错误历史(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
     // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项
     // 而非 AQB_FEEDBACK mixin —— 见文件顶部 WARN(watch 进全局 mixin 会波及子组件实例)。

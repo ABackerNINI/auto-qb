@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-06-1717">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-row-menu-click">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="批量菜单 _menuPos 常量钳位致视口溢出, 真实点击不可达">
 <meta name="issue-summary" content="ui_feedback.js _menuPos 以常量 h=222 估算菜单高度, 批量菜单实测 361px, 行在视口下部时菜单底部溢出视口, elementFromPoint/click 全部不可达">
 <title>批量菜单 _menuPos 常量钳位致视口溢出, 真实点击不可达 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-1717-bug-webui-batch-menu-viewport-overflow</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 17:17</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -157,11 +157,22 @@ Playwright 重试日志: element is outside of the viewport 持续 108 次重试
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-06 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-06 18:0x — 用户指派认领，状态 <strong>In Progress</strong>；开工先复验（见下「复验」）。</li>
+      <li>2026-10-06 18:2x — 修复并验证完毕，状态 <strong>Done</strong>。认领方 = <code>memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md</code>（本件 <code>doc-refs</code> 已回填，认领链双向闭合）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-10-06 18:2x（桩 300 种子 / 视口 1440×900 / <strong>双皮肤</strong>）：先把回归断言写成红再动手 —— 新增 e2e 用例挑「视口下半带」的行开批量菜单，量得菜单盒 <code>y + height = 1063</code>，限值 <code>900 - 8 = 892</code> ⇒ 底部溢出 <strong>171px</strong>；两套皮肤同值。现象 <strong>仍复现</strong>。（原报告写的 361px 是入池时点的估算；本轮实测批量菜单为 <strong>393px</strong>，双皮肤一致 —— 估值差从 139px 变成 171px，结论方向不变。）</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（走的是建议修法的第一条：钳位前按真实内容测高；第二条 <code>max-height + overflow-y</code> 只留作极矮视口的退化兜底，理由见下）：</p>
+    <ul>
+      <li><code>shared/ui_feedback.js</code> 新增 <code>_menuFit(el, x, y)</code>：按 <code>offsetWidth/offsetHeight</code> <strong>实测</strong>尺寸把菜单盒整体收进视口（边缘留 8px）；每次先复位兜底限高（否则量到的是上次压过的高度）；菜单比视口还高时顶到上缘 + <code>max-height</code> 可滚，保证底部项仍够得着。<code>_menuPos</code> 降级为「光标处初值」，注释写明常量只是初值。</li>
+      <li>新增 <code>_menuFitRefit(stateKey, refName)</code> 作为 watcher 出口：现读 <code>this[stateKey]</code> / <code>this.$refs[refName]</code>（不闭包捕获旧对象），并守 <code>visible</code>。</li>
+      <li><code>shared/state.js</code> 新增 <code>menu</code> / <code>headMenu</code> / <code>filePrio</code> 三个<strong>开层 watcher</strong>，在 <code>$nextTick</code> 里调出口。判据用<strong>对象替换</strong>而非 <code>visible</code> 翻转：三个菜单的开层入口一律写 <code>this.X = {…}</code>（menu.js 组/成员/表头三个、shows.js 整集/整剧两个、drawer.js 文件优先级一个），关层与执行动作只改字段 ⇒ 每次开层恰好触发一次，连「菜单还开着又右键另一行」（右键不触发 window 的 <code>click</code> 收层）也覆盖；量测在 Vue 补丁后、浏览器绘制前完成，无可见跳位。</li>
+      <li><code>shared/tpl/ctx-menus.html</code>：三个 <code>.ctx-menu</code> 各补 <code>ref</code>（<code>ctxMenu</code> / <code>headMenuEl</code> / <code>filePrioEl</code>）。</li>
+      <li><strong>为什么第二方案不作常态解</strong>：<code>.ctx-menu</code> 内嵌 <code>position:absolute</code> 的 flyout 次级面板（<code>.ctx-sub</code>，「更多操作」），给菜单盒加 <code>overflow</code> 非 <code>visible</code> 会把它裁掉 ⇒ 只在 <code>h &gt; innerHeight - 16</code> 的退化分支挂限高与可滚。</li>
+    </ul>
+    <p><strong>验证方式</strong>：① 新增静态守阵 <code>tests/test_web.py::test_frontend_ctx_menu_refit_by_measured_size</code>（钉「三个 ref ↔ 三个 watcher ↔ <code>_menuFit</code> 实测算」三向对齐；<strong>红验</strong>：摘掉 <code>ref="ctxMenu"</code> 立刻 FAIL）；② 新增 e2e 回归 <code>e2e/menus.spec.mjs</code>「CTX-fit 视口下部行的批量菜单整份落在视口内(底部项可点)」—— 故意挑视口下半带的行（与 W4 那段「挑上部行」的对冲方向相反），断言菜单盒整体在视口内 + 真实点击底部最后一项「批量删除…」；<strong>修复前双皮肤红 / 修复后双皮肤绿</strong>；③ 全量 e2e <code>commands run dev.e2e</code> <strong>82 passed + 10 skipped / 0 failed</strong>（2.9m，含新增 2 条）；④ <code>commands run test.full</code> <strong>2678 passed + 4 skipped / TOTAL 99%</strong>（基线切片 <code>memory-bank/testing/baselines/26-10-06-1830-webui-ctx-menu-viewport.md</code>）。</p>
+    <p><strong>测试数字</strong>：e2e 单文件 <code>--grep CTX-fit</code> 修复前 2 failed → 修复后 2 passed；全量 e2e 0 failed；<code>test.full</code> 2678 passed + 4 skipped / 99%（相对上一条基线 passed +1 = 本轮新增守阵，语句/分支/partial 逐位相同 —— 零 Python 生产代码改动）。知识库守卫：<code>kb.check</code> 绿（463 文档 · 251 专题）· <code>doc.links</code> 绿 · <code>kb.active --check</code> 绿 · <code>doc.caps</code> 无债务。</p>
   </section>
 
   <footer>

@@ -30,5 +30,5 @@
   - `memory-bank/pitfalls/kb/cap-counting.md` —— 新条目「量 cap 的第三种形态: 拿「KB / 字节」去比「字符数」的 cap」+ 头部摘要/触发词同步。
   - `memory-bank/activeContext/26-10-05-0555-hr-steady-throttle-plan.md` —— 指向被删实施片的断链改指任务档案。
   - `memory-bank/activeContext/26-09-30-2112-memory-bank-cap-debt.md` —— 本轮清理记录(cap 治理线单点)。
-  - 生成物 `_index.md` 族(20 个重建)。
-- **未提交**(等用户显式「提交」指令)。
+  - 生成物 `_index.md` 族(20 个重建; 另含四处 `pitfalls/*/_index.md` 头部元数据同步)。
+- **已入库**: `4236975c`(与修 check_kb_structure 债务计数口径的 `26-10-06-1102` 同笔)。

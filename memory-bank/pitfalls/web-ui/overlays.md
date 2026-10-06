@@ -1,7 +1,7 @@
 # 浮层与交互
 
-> 摘要: 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序。
-> 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor
+> 摘要: 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序; 含浮层几何(视口钳位 / 尺寸估算)。
+> 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport
 
 ### 浮层"点了没反应"首先查**定位祖先**
 
@@ -23,6 +23,27 @@
 - **判别**: 视口不够宽 ⇒ 菜单右半截在屏幕外。
 - **处置**: 打开弹层的**同一同步调用栈**里测 `anchor.left + 菜单宽 > innerWidth - 8` 并加 `flip-x`。
   ⚠ 注意 `ev.currentTarget` **只在 handler 同步代码内有效**。
+
+### 浮层钳位不能用**常量**估算高度 —— 菜单高度随分支差一倍, 下部锚点的底部项点不到
+
+- **触发**: 给弹层/菜单做视口边界吸附; 加菜单项 / 加一条菜单分支 / 改菜单项内边距与字号。
+- **判别**: "常量估算 + 光标处初值"的钳位只对**尺寸可预测**的浮层成立。右键菜单真实高度随分支变
+  (单种子 14 项 / 批量 10 项 / 整集整剧 6 项 / 表头 5 项 / 文件优先级 4 项, 还受
+  `flags.skip_check_menu` 加减项): 实测批量菜单 **393px**, 而 `_menuPos` 的常量写的是 `h=222`
+  ⇒ 低估 171px, 判定"放得下"的锚点实际放不下, 菜单底越过视口下缘, 底部项**真实点击不可达**
+  (e2e 报 `element is outside of the viewport` 重试到超时, 用户侧就是"点了没反应")。
+  ⚠ 症状**与数据量无关**、纯几何: 锚点落在视口下部约 40% 区域即触发, 靠上时菜单向上弹则不触发。
+  也**不会**被"页面能滚"救 —— 菜单是 `position:fixed`, 滚页面不会把它露出来。
+- **处置**: ①钳位拆两跳: `_menuPos` 只出**初值**, 开层后按 `offsetWidth/offsetHeight` **实测**
+  重钳位(`ui_feedback.js::_menuFit`), 量测放 `$nextTick` —— Vue 补丁后、浏览器绘制前, 故不产生
+  可见跳位; ②watcher 单点收口(开层入口有六处, 直挂方法必漏), 且判据要用**对象替换**
+  (`this.X = {…}`)而非 `visible` 翻转 —— 否则"菜单还开着又右键另一行"漏钳位(右键不触发 window
+  的 click 收层); ③菜单比视口还高(极矮视口)才顶到上缘 + `max-height` 可滚: 常态挂 `overflow`
+  会把 `position:absolute` 的 flyout 次级面板一起裁掉, 且每次开层要先复位 `maxHeight`;
+  ④测试侧钉 **e2e**: 这类几何缺陷 pytest 跑不出来, 而 arrange **挑上部行**只是对冲、会把缺陷藏住
+  —— 判据 = 挑**下部**锚点, 断言菜单盒 `y+height <= innerHeight - 8` **且**真实点击底部那一项。
+  守阵: `test_web.py::test_frontend_ctx_menu_refit_by_measured_size`(接线) +
+  `e2e/menus.spec.mjs` 的 CTX-fit 用例(几何 + 真实手势; issue 26-10-06-1717)。
 
 ### 无遮罩浮层的三个细节
 
@@ -130,4 +151,4 @@
   前提是**替身 trackers 带 `status` / `next_announce`** —— FakeClient 默认只返回 url ⇒ **永远无结论**。
 - **处置**: 改这条链路时先补齐替身字段, 否则测的是空壳。
 
-**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html
+**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md

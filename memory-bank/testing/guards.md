@@ -48,6 +48,7 @@
 | `test_frontend_persist_page_takes_intent_only` | 派生值(自适应 px)进不了持久化路径 | 把 `colWidths` 落盘 |
 | `test_frontend_col_manual_flag_not_revived` | 已删的 `colManual` 标志不得复活 | 写回 `colManual` |
 | `test_frontend_toast_duration_floor_by_kind` | toast 停留下限单点 `TOAST_MS_FLOOR` 对 error / timeout ≥8s 生效 + `toast()` / `_finishToast()` 两条排期路径都走 `toastMs(kind, ms)` 且 `ms` 缺省为 `null` | 下限降到 4s / 排期改回裸 `ms` / `ms = null` 写死 4000(三例实测全红) |
+| `test_frontend_ctx_menu_refit_by_measured_size` | 浮层菜单开层**实测**钳位接线(issue 26-10-06-1717): `_menuFit` 按 `offsetWidth/offsetHeight` 算(常量估算回潮即红)且以视口为界 + 先复位兜底限高; 三个菜单容器 ref(`ctxMenu`/`headMenuEl`/`filePrioEl`)与三个开层 watcher 的 `(stateKey, refName)` 一一对上且都在 `$nextTick` 里量; `_menuFitRefit` 现读 `this[stateKey]`/`this.$refs[refName]` 并守 `visible` | 摘 `ref="ctxMenu"`(实测红在「ctx-menus.html 缺 ref」) |
 | `test_api_state_skips_jsonable_encoder` | 热路径不得走 `jsonable_encoder`(计数替身; 清单排除 `/api/config/schema`) | `return payload` |
 | `test_api_state_view_scoped_payload` | 按视图回传 + 未知 `view` 全回(保守默认) | 改 `VIEW_ARRAYS` |
 | `test_ensure_group_state_show_view_carries_member_index` | 追剧页回传必须**连带成员索引**(groups+singles, 不回 torrents) | 只回 shows |
