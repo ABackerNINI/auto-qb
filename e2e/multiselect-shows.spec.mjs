@@ -57,6 +57,11 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    新 spec 复跑 dev.e2e 28 passed / 0 failed(46.7s); npm run test:e2e:fast 4 passed(8.7s)。
  *  · 步骤3 映射自检: 旧 12 add() → 新 6 test/皮肤; 其中 3 个旧名按模式分流进同 test 的
  *    CMD_RESULT 分支(e2e 轨道模式由 env 决定, 一次运行只有一种回执形态, 不设恒红/恒真分支)。
+ *  · 追记(2026-10-06 S3 批): error 分支「补丁先贴上」原用 expect.poll 轮 pendingOps>0 ——
+ *    error 模式补丁+回滚窗口可短于首个采样, 窗口错过即恒红(S3 对账实测 3 轮 error 2 红,
+ *    各红前行/集行共 3 条)。改用 armPending 记录器判"曾经出现过"(前行/集行的记录器本就在
+ *    点击前装好, appear 非空即证补丁贴上)+ 保留"pendingOps 归零"终态轮(轮终态无竞态);
+ *    ok 分支语义不动。修复后 E2E_CMD_RESULT=error 连跑 3 轮全绿 + 默认轮全绿。
  *
  * ── 存量 flaky 的 trace 归因(S2 交底, 修不修走 issue 流程) ──
  *  迁移首轮本 spec 曾在同一签名上红过(atlas 辅种组行右键, prism 追剧集行同族):
@@ -265,11 +270,14 @@ for (const skin of SKINS) {
       await item.click();
 
       if (CMD_RESULT === 'error') {
-        // 失败路径: 补丁同步贴上(pendingOps > 0)→ 等回执回来归零(旧 waitForFunction 同语义),
-        // 再断言类上不留 is-pending。若先断言 class 会"还没贴上就通过", 是假绿。
-        await expect.poll(() => readInst(page, 'Object.keys(vm.pendingOps || {}).length'), {
-          message: 'error 模式: 前行乐观补丁先贴上', timeout: 4_000,
-        }).toBeGreaterThan(0);
+        // 失败路径: 先证补丁真贴上 → 等回执回来归零(终态) → 再断言类上不留 is-pending。
+        // 若先断言 class 会"还没贴上就通过", 是假绿。补丁贴上的证明用记录器(armPending 已在
+        // 点击**之前**装好)判"曾经出现过" —— error 模式补丁+回滚窗口可短于 expect.poll 的
+        // 首个采样(S3 批实测 3 轮 error 2 红), 轮 pendingOps>0 会整段错过(optimistic.spec
+        // error 分支同口径); "归零"是终态, 轮它没有竞态。
+        const pErr = await readPending(page);
+        expect(pErr.appear, `error 模式: 前行乐观补丁先贴上(${pErr.appear === null ? '从未出现' : pErr.appear + 'ms'})`)
+          .not.toBeNull();
         await expect.poll(() => readInst(page, 'Object.keys(vm.pendingOps || {}).length'), {
           message: 'error 模式: pendingOps 归零(回滚)', timeout: 4_000,
         }).toBe(0);
@@ -310,10 +318,11 @@ for (const skin of SKINS) {
       await item.first().click();
 
       if (CMD_RESULT === 'error') {
-        // 两段式(同前行 error 分支): 先证补丁真贴上, 再等回滚归零, 最后对 class —— 免得假绿
-        await expect.poll(() => readInst(page, 'Object.keys(vm.pendingOps || {}).length'), {
-          message: 'error 模式: 集行乐观补丁先贴上', timeout: 4_000,
-        }).toBeGreaterThan(0);
+        // 两段式(同前行 error 分支): 记录器证补丁真贴上("曾经出现过", 轮 pendingOps>0 会
+        // 错过短窗口) → 轮回滚归零(终态) → 最后对 class —— 免得假绿
+        const pErr = await readPending(page);
+        expect(pErr.appear, `error 模式: 集行乐观补丁先贴上(${pErr.appear === null ? '从未出现' : pErr.appear + 'ms'})`)
+          .not.toBeNull();
         await expect.poll(() => readInst(page, 'Object.keys(vm.pendingOps || {}).length'), {
           message: 'error 模式: pendingOps 归零(回滚)', timeout: 4_000,
         }).toBe(0);
