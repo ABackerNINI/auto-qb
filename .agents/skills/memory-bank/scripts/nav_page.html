@@ -975,7 +975,7 @@ function ledgerCells(i, n, pinMark, hidMark) {
       <td class="stamp">${esc(i.stamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
       <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
-      <td class="typec">${i.form === "issue" && i["issue-type"] ? '<span class="chip">' + esc(i["issue-type"]) + "</span>" : "·"}</td>
+      <td class="typec">${i.form === "issue" && i["issue-type"] ? '<span class="chip">' + esc(i["issue-type"]) + "</span>" : ""}</td>
       <td class="title-cell">${pinBtn}<b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
       <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
       <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>`;
