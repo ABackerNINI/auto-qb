@@ -5,7 +5,7 @@
 **Updated:** 2026-10-06 09:58
 **Summary:** 【26-09-29 口径实施 · 已完成】按 reports/26-09-28-2345 审计报告推荐实施列对齐口径: P1 明细/种子两表 completion_on + time_active 共 4 处 align right→left(时间/时长族 R4 统一左, 默认隐藏列低风险); P2 抽屉 3 表数值列 9 字段(Tracker 做种/用户, 用户 进度/下行/上行/已下载/已上传/关联度, 内容 大小/进度)th/td 挂 .num 类 + 三主题 CSS 各补一条右对齐规则。test.full 1831 passed / 3 skipped(91%), 见基线 26-09-29-0240。 【26-10-06 几何错位取证 · 待拍板】用户报「右对齐列没有真正对齐标题文字」—— 实测属实(只读轮次, 零代码改动): 主视图 4 表全部右对齐列偏 11px(明细表 10px, 根因 `.h-cell` 的把手槽 `padding-right: 10px`), 设置页 HR 表① 4 个 num 列偏 14px(排序箭头缺内层 `v-if`, `opacity:0` 仍占位), 三主题一致; 抽屉 3 表 / HR 表②③ 不受影响。报告 reports/26-10-06-0945, 见基线 26-10-06-0958。**Status 由 Done 重开为 Open: 修法选型与「0 值居中」口径待用户拍板。**
 **Topics:** webui-column-alignment
-**Refs:** memory-bank/testing/baselines/26-10-06-0958-webui-column-alignment-header-offset.md, memory-bank/activeContext/26-10-06-0958-webui-column-alignment.md
+**Refs:** memory-bank/testing/baselines/26-10-06-0958-webui-column-alignment-header-offset.md, memory-bank/activeContext/26-10-06-0958-webui-column-alignment.md, memory-bank/plans/26-10-06-1009-plan-webui-column-alignment.html, memory-bank/testing/baselines/26-10-06-1022-webui-column-alignment-plan.md
 
 ## 原始请求
 
@@ -67,8 +67,8 @@
 | 5 | kb.index 重建 + 入库 | 完成 | 随主提交 ship.commit |
 | 6 | 全表右对齐几何实测(3 主视图 + 明细 + HR 表① + 抽屉, 3 主题) | 完成 | 实测 11 / 10 / 14px, 抽屉 0; 桩服务 + headless Chromium |
 | 7 | 出取证报告 + 坑档 + 回写知识库 | 完成 | reports/26-10-06-0945 · pitfalls/web-ui/header-cell-gutter.md · 基线 26-10-06-0958 |
-| 8 | **拍板修法选型**(A 值格补同宽右槽 vs 彻底解耦把手槽) | 待拍板 | 阻塞 #9; 另需拍板 `0 值居中` 口径 |
-| 9 | 实施修法 + 复量至 0(允许 ±1) + 补守阵 | 未开始 | 依赖 #8 |
+| 8 | **拍板修法选型**(A 值格补同宽右槽 vs 彻底解耦把手槽) | 完成 | 2026-10-06 用户裁决: 取**彻底方案**(报告 §5 P0/C1); `0 值居中` 判为旧口径/文档漂移, 一并归正 |
+| 9 | 实施修法 + 复量至 0(允许 ±1) + 补守阵 | 未开始 | 计划已出: plans/26-10-06-1009-plan-webui-column-alignment.html(Open, PHASE 0-7); 等用户显式「开工」 |
 
 ## 进度日志
 
@@ -77,3 +77,12 @@
   (表头把手槽 10px + 数据行 1px 边框 ⇒ 11px; HR 表① 隐形箭头 ⇒ 14px), 三主题一致, 抽屉与 HR 表②③ 不受影响。
   报告 `reports/26-10-06-0945-report-webui-column-alignment.html`, 坑档 `pitfalls/web-ui/header-cell-gutter.md`,
   基线 `26-10-06-0958`。**Status Done → Open**: 修法选型与 `0 值居中` 口径待用户拍板, 未动代码、未入池 issue。
+- **2026-10-06 10:09**: 用户拍板 —— ①修法取**彻底方案**(报告 §5 P0/C1: 把手槽与文字排版解耦, 非最小方案 A);
+  ②`0 值居中` 判为**旧口径/文档漂移**(第九轮 D4 已裁决取消、代码与三主题 CSS 及知识库仍留), 正式实施时一并修复。
+  出分步实施计划 `plans/26-10-06-1009-plan-webui-column-alignment.html`(doc-status **Open**, PHASE 0-7:
+  模板标签内层化 → 三主题 CSS 解耦 → columns.js 箭头顺序 → 0 值口径归正 → e2e 几何守卫 → 验证 → 回写)。
+  计划轮**未改任何代码**; 范围外已记 HR 表① 的 14px(报告 §5-B1, 机制不同, 计划 §7 给推荐处置)。
+  认领链闭环: 报告 doc-refs ↔ 本计划(仅 meta 机械面); kb.index 重建绿; docmap --check 绿;
+  `tests/test_docs_forms.py` 11 passed。**test.full 2676 passed + 4 skipped / 99%**
+  (16021 语句 / 163 未覆盖 / 5472 分支 / 143 partial, 两次采样 62.92s / 51.69s), 与上一条纯文档基线
+  0958 逐位持平 ⇒ 基线切片 `26-10-06-1022-webui-column-alignment-plan.md`。**未提交, 等用户指令。**

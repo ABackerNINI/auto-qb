@@ -13,6 +13,7 @@
 
 ## Open
 
+- [26-10-06-1009] [WEBUI 列对齐彻底修复 · 分步实施计划](26-10-06-1009-plan-webui-column-alignment.html) — `webui-column-alignment`
 - [26-10-06-0838] [种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划](26-10-06-0838-plan-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
 - [26-10-06-0708] [实施计划 · ui_smoke.cjs 分批迁移到 @playwright/test · auto-qb](26-10-06-0708-plan-playwright-e2e.html) — `playwright-e2e`
 - [26-10-04-1957] [实施计划 · qB 流量历史 dat v3 · 块化稀疏 delta + 批量落盘 + 按天文件 + 聚合分层 · auto-qb](26-10-04-1957-plan-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`

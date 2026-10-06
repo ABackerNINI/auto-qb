@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 列对齐彻底修复 · 分步实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-column-alignment">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-06-1009">
+<meta name="doc-updated" content="26-10-06-1009">
+<meta name="doc-refs" content="memory-bank/reports/26-10-06-0945-report-webui-column-alignment.html,memory-bank/tasks/26-09-29-webui-column-alignment.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 6px;border-radius:4px}
+  pre{margin:10px 0;background:#101216;border:1px solid var(--line);border-left:3px solid var(--line-2);
+      border-radius:8px;padding:12px 14px;overflow-x:auto}
+  pre code{background:none;padding:0;font-size:12.5px;line-height:1.65;color:#cfd6dd;display:block;white-space:pre}
+  pre .cm{color:var(--ink-3)}
+  pre .del{color:#d98b82}
+  pre .add{color:#7fc9a3}
+
+  .mast{padding:56px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:29px;line-height:1.25;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:84ch;margin:0 0 20px}
+  .lede b{color:var(--ink);font-weight:600}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  h2{font-size:20px;font-weight:600;margin:54px 0 6px;letter-spacing:-.01em}
+  h2 .no{color:var(--accent);font-family:var(--mono);font-size:13px;margin-right:10px}
+  h3{font-size:15.5px;font-weight:600;margin:26px 0 8px}
+  p{color:var(--ink-2);max-width:84ch;margin:8px 0}
+  .sec-lede{color:var(--ink-3);font-size:13px;margin:0 0 16px}
+  ul,ol{color:var(--ink-2);max-width:84ch;padding-left:22px}
+  li{margin:5px 0}
+  li>b,li strong{color:var(--ink);font-weight:600}
+
+  table.audit{width:100%;border-collapse:collapse;font-size:13px;margin:14px 0 8px}
+  table.audit th{background:var(--surface);text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);padding:9px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+  table.audit td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  table.audit td.f{color:var(--ink);font-weight:500}
+  table.audit td.n{font-family:var(--mono);font-size:12px;white-space:nowrap}
+  table.audit tr.hl td{background:rgba(200,164,92,.055)}
+  .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 8px;border-radius:10px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .chip.bad{color:var(--bad);border-color:rgba(208,92,78,.45);background:rgba(208,92,78,.07)}
+  .chip.good{color:var(--good);border-color:rgba(47,168,116,.4)}
+  .chip.warn{color:var(--warn);border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.08)}
+  .chip.info{color:var(--blue);border-color:rgba(77,159,214,.4)}
+
+  .ph{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px 20px 16px;margin:16px 0}
+  .ph > h3{margin-top:16px}
+  .ph .hd{display:flex;align-items:baseline;gap:12px;margin:16px 0 2px}
+  .ph .hd .pn{font-family:var(--mono);font-size:12px;color:var(--accent);flex:0 0 auto}
+  .ph .hd .pt{font-size:15.5px;font-weight:600;color:var(--ink)}
+  .ph .hd .pv{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-left:auto}
+  .ph p{max-width:88ch}
+  .ph ul{max-width:88ch}
+
+  .ev{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 20px;margin:14px 0}
+  .ev p{margin:6px 0;font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+  .ev p b{color:var(--ink);font-weight:500}
+  .callout{border-left:3px solid var(--warn);background:rgba(200,164,92,.05);padding:10px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .callout.bad{border-left-color:var(--bad);background:rgba(208,92,78,.055)}
+  .callout.ok{border-left-color:var(--good);background:rgba(47,168,116,.05)}
+  .callout p{margin:4px 0;font-size:13.5px}
+
+  .rule{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .rule:last-child{border-bottom:none}
+  .rule .rn{font-family:var(--mono);font-size:12px;color:var(--accent);flex:0 0 42px}
+  .rule .rt{color:var(--ink);font-weight:500}
+  .rule .rd{color:var(--ink-2);font-size:13.5px}
+
+  .foot{margin:70px 0 40px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Plan · 分步实施计划</p>
+  <h1>WEBUI 列对齐彻底修复 — 把手槽与文字排版解耦</h1>
+  <p class="lede">按取证报告 <a href="../reports/26-10-06-0945-report-webui-column-alignment.html">26-10-06-0945</a> 的<b>彻底方案(报告 §5 · P0/C1)</b>实施: 把「拖拽把手槽」与「列头文字排版」解耦 —— 让那 10px 右内边距<b>只存在于把手真正需要的地方</b>(既有的 10px grid 列间距里), 列头文字与数值文字因此同时落在列右缘。一并归正<b>「0 值居中」</b>这一已被第九轮裁决取消、却仍留在三套 CSS 与知识库里的旧口径(文档漂移)。改完: 主视图 4 张表右对齐列的表头/值右缘差由 <b>11px(明细 10px)</b> 归到 <b>≤1px</b>; 排序时标题不再左右跳(消除 +11px); 数值列<b>不再损失 10px 宽</b>。</p>
+  <p class="meta">
+    <b>Status</b> Open(待拍板) · <b>Added</b> 26-10-06-1009 · <b>依据</b> reports/26-10-06-0945(取证快照) · <b>基线</b> develop@c2e43cf9<br>
+    <b>方案</b> 报告 §5「彻底方案」C1(非最小方案 A1) + 0 值口径归正(用户指定, 修文档漂移)<br>
+    <b>触及</b> 5 个表头块 / 3 个模板 + 3 主题 CSS + columns.js 的箭头顺序 + 1 条 0 值规则 ×3 主题 · 共 3 张表/4 视图<br>
+    <b>范围外</b> 设置页 HR 在线核实表①(14px, 报告 §5-B1, 机制不同, 见 <a href="#out">§7</a>) · 左对齐列(≤1px, 无缺陷) · 居中列(无真实缺陷)
+  </p>
+</header>
+
+<h2><span class="no">§1</span>目标与范围</h2>
+<p class="sec-lede">本件只定方案与步骤, <b>不改任何代码</b>。拍板后按 §4 分步落地, 每步可独立验证、可回滚。</p>
+
+<h3>目标(三条, 缺一不算完成)</h3>
+<ol>
+  <li><b>几何对齐</b>: 主视图 4 张表(分组 / 种子 / 追剧 / 组内明细)全部 <code>align:"right"</code> 列, 表头文字与值文字的<b>盒模型右缘差 ≤ 1px</b>(现 11px / 明细 10px)。</li>
+  <li><b>排序不跳</b>: 右对齐列一旦成为当前排序列, 表头文字<b>不再左移 11px</b>(现: 点一次排序标题跳一下)。</li>
+  <li><b>0 值口径归正</b>: 「值为 0」的数值格<b>不再居中</b>, 与同列右对齐表头同缘 —— 消除第九轮已裁决取消、代码却仍保留的旧口径。</li>
+</ol>
+
+<h3>在范围内</h3>
+<ul>
+  <li>报告 §1 的 <b>P1</b>(表头多 10px 右内边距)与 <b>P3</b>(排序箭头把右对齐标题左顶) —— 用「彻底方案」一次解决, 不走最小方案 A1。</li>
+  <li>报告 §7 的 <b>「0 值居中」</b>旧口径: <code>.g-stat.zero / .m-stat.zero { text-align: center }</code>(三主题各 1 条)删除, 及其在知识库/注释里的漂移表述回写。</li>
+  <li>三套主题(atlas 星图 / console 控制台 / prism 棱镜)同步 —— 共用同一份列模型与同一套盒子规格, 必须同改。</li>
+</ul>
+
+<h3>范围外(明确不做, 避免范围蔓延)</h3>
+<ul>
+  <li><b>设置页 HR 在线核实表①(14px)</b>: 报告 §1 的 P2 / §5 的 B1 —— 它是 <code>&lt;table&gt;</code> + <code>hrsCols()</code>, <b>没有列模型</b>, 机制与主表无关(隐形箭头占位), 报告已判「可分开做」。本计划不含, 见 §7 给推荐处置。</li>
+  <li><b>左对齐列</b>(全站 ≤1px, 视觉不可辨)与<b>居中列</b>(H&amp;R / 站数 / 版本, 无真实缺陷) —— 报告 §2 已判无需动作。</li>
+  <li><b>数值溢出截断</b>(个别值宽于列宽被省略号截断, 墨迹右缘偏出 10px)—— 属列宽/省略号问题, 报告 §7 已划出。</li>
+</ul>
+
+<h2><span class="no">§2</span>缺陷速览(取证结论)</h2>
+<p class="sec-lede">量的是<b>盒模型</b>(内容盒右缘之差), 不是肉眼取点。三套主题同源同错、错得一样多。</p>
+<table class="audit">
+<thead><tr><th>表 / 列族</th><th>实测偏移</th><th>机制(代码事实)</th><th>本计划处置</th></tr></thead>
+<tbody>
+<tr class="hl"><td class="f">分组表 · 种子表 · 追剧表<br><span class="opt">全部 align:right 列</span></td><td class="n">11px</td><td>表头 <code>.h-cell{padding-right:10px}</code> + 数据行 1px 侧边框</td><td><span class="chip good">P1 → ≤1px</span></td></tr>
+<tr class="hl"><td class="f">组内明细表 / 追剧集明细<br><span class="opt">全部 align:right 列</span></td><td class="n">10px</td><td>同上(明细行无侧边框 ⇒ 恰好 10px)</td><td><span class="chip good">P1 → 0px</span></td></tr>
+<tr class="hl"><td class="f">同上 · 当前排序列</td><td class="n">21px / 22px</td><td>叠加排序箭头 11px(同行内联兄弟, 右对齐时把标题整块左顶)</td><td><span class="chip good">P3 → ≤1px</span></td></tr>
+<tr class="hl"><td class="f">数值列 · 值为 0 的格子</td><td class="n">居中 vs 右对齐</td><td><code>.g-stat.zero / .m-stat.zero{text-align:center}</code> 覆盖列模型 align</td><td><span class="chip good">0 值口径 → 右对齐</span></td></tr>
+<tr><td class="f">设置页 HR 表① · 4 列</td><td class="n">14px</td><td>隐形箭头 11px + margin-left 3px(恒在 DOM, 只用 opacity:0 藏)</td><td><span class="chip warn">范围外(§7)</span></td></tr>
+<tr><td class="f">抽屉 3 表 · HR 表②/③</td><td class="n">0px</td><td>无箭头、内边距同值</td><td><span class="chip info">无需动作</span></td></tr>
+</tbody>
+</table>
+
+<h3>决定方案的三条几何事实(改前已逐条核对代码)</h3>
+<div class="ev">
+  <p><b>①</b> <code>.group-head</code> / <code>.group-row</code> / <code>.detail-head</code> / <code>.member-row</code> <b>本来就是 <code>display:grid; gap:10px</code></b> —— 列与列之间已存在一条 <b>10px 的列间距</b>。彻底方案把把手挪进这条<b>既有</b>间距, <b>不新增任何宽度开销</b>。</p>
+  <p><b>②</b> 表头格子 <code>.h-cell{padding-right:10px}</code> <b>只有表头有</b>; 值格子 <code>.g-stat / .m-stat</code> 的 <code>padding-right</code> 是 <b>0</b>。右对齐时两边各贴「自己内容盒的右缘」⇒ 差 10px(行有 1px 边框则 11px)。</p>
+  <p><b>③</b> 把手 <code>.h-cell .resizer</code> 之所以塞进 padding-right, 是因为 <code>.h-cell</code> 自身 <code>overflow:hidden</code>(给列名省略号用)—— 把手伸出格子右缘会被裁掉、点不到(星图 <code>components.css:250-251</code> 有注释记着这个动机)。<b>解耦的关键: 把省略号下移到内层标签, <code>.h-cell</code> 自己就能 <code>overflow:visible</code></b>, 把手便能自由落到列间距里。</p>
+</div>
+
+<h2><span class="no">§3</span>方案总览</h2>
+<p class="sec-lede">一处列模型 + 一处模板结构 + 三主题 CSS 各 3 行; 三主题共用同一份列模型, 故逻辑层改一处三套全好, 版式层需三套成对改。</p>
+<table class="audit">
+<thead><tr><th>#</th><th>文件</th><th>改动</th><th>处数</th></tr></thead>
+<tbody>
+<tr class="hl"><td class="n">1</td><td class="f"><code>shared/tpl/groups.html</code> · <code>torrents.html</code> · <code>shows.html</code></td><td>5 个表头块的列名 <code>&lt;span&gt;</code> 加类 <code>h-label</code>(省略号的新载体)</td><td class="n">5</td></tr>
+<tr class="hl"><td class="n">2</td><td class="f"><code>atlas/css/components.css</code> · <code>console/css/components.css</code> · <code>prism/css/views.css</code></td><td><code>.h-cell</code> 改 flex + <code>overflow:visible</code> + <code>padding-right:0</code>; 新增 <code>.h-cell &gt; .h-label</code> 省略号规则; <code>.resizer</code> 移进列间距</td><td class="n">3 主题 × 3 行</td></tr>
+<tr class="hl"><td class="n">3</td><td class="f"><code>shared/columns.js</code></td><td><code>colAlignCss()</code> 对 <code>align==="right"</code> 的列追加 <code>.arrow{order:-1}</code> 规则</td><td class="n">1</td></tr>
+<tr class="hl"><td class="n">4</td><td class="f"><code>atlas/css/components.css</code> · <code>console/css/components.css</code> · <code>prism/css/views.css</code></td><td>删 <code>.g-stat.zero, .m-stat.zero { text-align: center }</code>(0 值口径归正)</td><td class="n">3</td></tr>
+<tr class="hl"><td class="n">5</td><td class="f"><code>e2e/smoke.spec.mjs</code>(新增用例)</td><td>右对齐列「表头↔值」盒模型差 ≤1px 的常驻回归守卫</td><td class="n">1</td></tr>
+<tr><td class="n">6</td><td class="f"><code>shared/app.js</code> 注释 · <code>memory-bank/modules/webui-static-contract.md</code> · <code>memory-bank/pitfalls/web-ui/header-cell-gutter.md</code></td><td>回写漂移表述(0 值口径 + 新几何口径)</td><td class="n">3</td></tr>
+</tbody>
+</table>
+
+<h2><span class="no">§4</span>分步实施</h2>
+<p class="sec-lede">按依赖排序: 先取证基线 → 模板(结构) → CSS(版式) → JS(对齐规则) → 0 值口径 → 守卫 → 验证 → 回写。每步末尾给「本步判据」, 不达标不进入下一步。</p>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 0</span><span class="pt">准备与基线取证</span><span class="pv">无代码改动</span></div>
+  <p>先把「改前数字」钉死, 否则改后无法自证。用仓库自带桩服务 + 真浏览器, 不连真机 qB。</p>
+  <pre><code><span class="cm"># 会话开工同步(本会话已做: 已同步 c2e43cf9)</span>
+commands run my-commit-flow.sync
+
+<span class="cm"># 起桩服务(真 create_app + 合成种子, 300 种 / 40 组), 保持前台运行</span>
+commands run dev.harness -- --port 8099 --torrents 300 --groups 40
+
+<span class="cm"># 另开终端: 逐主题量盒模型右缘差(脚本已在 .workbuddy-ai/tmp/, 属 dev 期临时件)</span>
+NODE_PATH=&lt;workspace&gt;/node_modules node .workbuddy-ai/tmp/measure-align.cjs
+NODE_PATH=&lt;workspace&gt;/node_modules node .workbuddy-ai/tmp/measure_shows.cjs</code></pre>
+  <p><b>本步判据</b>: 记录三主题(atlas / console / prism)分组表 / 种子表 / 明细表的 <code>delta</code> —— 应复现 <b>11 / 11 / 10</b>; 点一次「大小」排序后该列应复现 <b>21~22</b>。这组数字是 §6 的对照基准。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 1</span><span class="pt">模板: 列名标签内层化(省略号下移)</span><span class="pv">3 模板 / 5 处</span></div>
+  <p>把「列名省略号」从 <code>.h-cell</code> 移到内层标签 —— 这是让 <code>.h-cell</code> 得以 <code>overflow:visible</code> 的前提(把手才能伸出格子)。5 个表头块同改, 结构完全一致:</p>
+  <pre><code><span class="cm">&lt;!-- 改前(5 处: groups.html 组头 :17 / 明细头 :127 · torrents.html 种子头 :8 · shows.html 剧头 :8 / 集明细头 :114)--&gt;</span>
+&lt;span&gt;{{ col.label }}&lt;/span&gt;
+
+<span class="cm">&lt;!-- 改后 --&gt;</span>
+<span class="add">&lt;span class="h-label"&gt;{{ col.label }}&lt;/span&gt;</span></code></pre>
+  <ul>
+    <li>只加一个类, <b>不动其它结构</b>(<code>.arrow</code> / <code>.resizer</code> 原位不动)。</li>
+    <li>标签仍是 <code>.h-cell</code> 的<b>第一个 <code>&lt;span&gt;</code></b> —— 既有量测脚本按 <code>:scope &gt; span</code> 取标签, 不受影响。</li>
+  </ul>
+  <p><b>本步判据</b>: <code>commands run dev.e2e</code> 仍全绿(此时只是加类, 无版式变化)。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 2</span><span class="pt">三主题 CSS: 把手槽与文字排版解耦</span><span class="pv">3 主题 × 3 行</span></div>
+  <p>每套主题改 <code>.h-cell</code> 与 <code>.h-cell .resizer</code> 两条规则、新增一条 <code>.h-cell &gt; .h-label</code>。三套同改(落点: <code>atlas/css/components.css:241,252</code> · <code>console/css/components.css:208,213</code> · <code>prism/css/views.css:166,175</code>)。</p>
+  <pre><code><span class="cm">/* 改前 */</span>
+<span class="del">.h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }</span>
+<span class="del">.h-cell .resizer { position: absolute; right: 0; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }</span>
+
+<span class="cm">/* 改后 */</span>
+<span class="add">.h-cell { position: relative; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+          overflow: visible; padding-right: 0; }
+.h-cell &gt; .h-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }</span>
+<span class="add">.h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }</span></code></pre>
+  <ul>
+    <li><code>gap:4px</code> <b>不是新间距</b>: 模板里标签与箭头之间的换行原本渲染成一个空格(≈3.5px), 改成 flex 后该空白不再渲染, 用 gap 等值复刻 —— 防止箭头贴住文字。</li>
+    <li><code>right:-5px</code> = 把手跨在列边界上, 一半在格子内、一半落进 <b>既有的 10px 列间距</b>(报告口径「半进半出」)。把手仍 <code>z-index:2</code>、仍可点可拖。</li>
+    <li>省略号三件套(<code>overflow/text-overflow/white-space</code>)随之下移到 <code>.h-label</code>; <code>.h-cell</code> 自身不再裁切 ⇒ 把手伸出右缘不再被裁。</li>
+  </ul>
+  <div class="callout">
+    <p><b>一个已知取舍(知情即可, 不必现在决定)</b>: <code>right:-5px</code> 时, 右对齐标签的最后 5px 与把手命中区重叠。实测代码行为: 在把手区<b>纯点击仍会触发排序</b>(<code>startResize</code> 位移未过阈值时不吞 click), 只有「从这 5px 起手拖拽」语义由「重排列」变成「调宽」。若连这一点也不接受, 可把 <code>right</code> 改 <code>-10px</code>(把手整体落在列间距内, 与标签零重叠); 代价是 hover 指示线整体右移 5px。建议先按 <code>-5px</code> 实施, 走查后再定。</p>
+  </div>
+  <p><b>本步判据</b>: 桩服务下重跑 PHASE 0 的量测 —— 右对齐列 <code>delta</code> 应全为 <b>0 或 ±1</b>(明细表应恰 0); 左对齐列不变; 表头与行不出现横向滚动条、不出现把手被裁。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 3</span><span class="pt">columns.js: 右对齐列的箭头排到标签左侧</span><span class="pv">1 处 · 生成逻辑</span></div>
+  <p>主表排序箭头是标签的<b>同行内联兄弟</b>: 左对齐列箭头长在文字右侧(不影响起读位), 右对齐列则把文字整块左顶。修法 = 右对齐列的箭头取 <code>order:-1</code> 排到标签<b>左侧</b>, 标题右缘就稳在列右缘。落点: <code>shared/columns.js</code> 的 <code>colAlignCss()</code>(约 :652-663)。</p>
+  <pre><code><span class="cm">// 现状(按当前可见列生成, 同时命中表头与值格)</span>
+out.push(`:where([data-table="${page}"]) &gt; :nth-child(${i + 1}) { text-align: ${align}; justify-content: ${just}; }`);
+
+<span class="cm">// 追加一行: 右对齐列的箭头排到标签左侧(只对表头生效 —— 值格没有 .arrow)</span>
+<span class="add">if (align === "right") out.push(`:where([data-table="${page}"]) &gt; :nth-child(${i + 1}) .arrow { order: -1; }`);</span></code></pre>
+  <ul>
+    <li>选择器特异性 <code>(0,2,0)</code>, 与既有 <code>.h-cell .arrow</code> 同权 —— 靠源顺序胜出(注入的 <code>&lt;style id="col-align-css"&gt;</code> 在主题样式表之后), 与现有对齐规则的胜出方式一致。</li>
+    <li>居中列(H&amp;R / 站数 / 版本)<b>不动</b>: 报告未发现其真实缺陷, 箭头仍在标签右侧, 排序时整组居中不跳。</li>
+    <li>同时更新 <code>colAlignCss</code> 上方注释块(约 :639-651): 删去「输给 <code>.g-stat.zero/.m-stat.zero</code> ⇒ 保留 0 值居中」这句(该口径已废, 见 PHASE 4), 补一句箭头顺序口径。</li>
+  </ul>
+  <p><b>本步判据</b>: 桩服务下点「大小」排序 —— 该列 <code>delta</code> 应仍为 0/±1(<b>不再是 21~22</b>); 未排序列不变; 箭头视觉仍在表头内、不越出列右缘。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 4</span><span class="pt">0 值口径归正(修复文档漂移)</span><span class="pv">3 主题 × 1 行</span></div>
+  <p>「0 值居中」是 <b>2026-09-15 第六轮</b>引入、<b>2026-09-17 第九轮 D4 已裁决取消</b>的旧口径 —— 但代码里那条覆盖规则一直没删, 知识库也还写着「保留 0 值居中」。这就是本件要一并修掉的文档漂移: 让它与「右对齐列标题要对齐」不再冲突。</p>
+  <pre><code><span class="cm">/* 删这一行(落点: atlas/components.css:305 · console/components.css:251 · prism/views.css:214) */</span>
+<span class="del">.g-stat.zero, .m-stat.zero { text-align: center; }</span>
+
+<span class="cm">/* 保留这一行 —— "0 值只留极淡占位符" 的视觉口径不变 */</span>
+.zero { color: var(--fg-dim); opacity: .35; }</code></pre>
+  <ul>
+    <li>删除后, 0 值格子的 <code>text-align</code> 回落由 <code>colAlignCss</code> 按列模型注入的 <code>right</code> ⇒ 与同列表头同缘。<b>只改对齐, 不改 0 值的淡化配色。</b></li>
+    <li>副作用面已核: 受影响的是真正渲染出「0 / 0.00」文本的数值格(如「可用性 0.00」); <code>fmtSpeedOrDash / fmtSizeOrDash</code> 对 0 值本就输出空串(空占位), 这些格子无视觉变化。</li>
+    <li>顺带订正相邻注释: <code>atlas/css/components.css:300-302</code>(「0 值"—"在右对齐列中居中」)与 <code>shared/app.js:646</code>(「输给 .zero ⇒ 保留 0 值居中」)同步改写。</li>
+  </ul>
+  <p><b>本步判据</b>: 桩服务下, 右对齐列的 0 值格 <code>text-align</code> 计算值应为 <code>right</code>(非 <code>center</code>); 其内容盒右缘与表头差 ≤1px。冒烟无新增运行期错误。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 5</span><span class="pt">常驻回归守卫(防复发)</span><span class="pv">1 用例</span></div>
+  <p>本轮缺陷的成因是「几何」, 而 <code>tests/test_web.py</code> 的近 300 条守阵全是<b>读文件文本</b>的静态断言 —— 原理上看不见盒子模型。故在 <code>e2e/smoke.spec.mjs</code>(真浏览器 + 桩服务, 三皮肤已循环)加一条几何断言, 让「表头↔值错位」与「0 值又居中」今后由 CI 拦住。</p>
+  <pre><code><span class="cm">// 在 for (const skin of SKINS) 内追加: 逐列比对「表头↔值」内容盒右缘, 并对右对齐列钉住值格 text-align</span>
+test('右对齐列: 表头与值右缘对齐(±1px), 且值格不居中', async ({ page }) =&gt; {
+  await page.goto(`${BASE_URL}/${skin}/`);
+  await page.waitForSelector('.group-row');
+  const bad = await page.evaluate(() =&gt; {
+    const cRight = (el) =&gt; el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight);
+    const out = [];
+    for (const head of document.querySelectorAll('.group-head[data-table]')) {
+      const page_ = head.dataset.table;
+      const cells = [...head.children].filter((c) =&gt; c.classList.contains('h-cell'));
+      const row = document.querySelector(page_ === 'detail'
+        ? '.member-row[data-table="detail"]' : `.group-row[data-table="${page_}"]`);
+      if (!row) continue;
+      const rcells = [...row.children];
+      cells.forEach((hc, i) =&gt; {
+        if (getComputedStyle(hc).textAlign !== 'right') return;   <span class="cm">// 只看右对齐列</span>
+        const rc = rcells[i]; if (!rc) return;
+        const d = cRight(rc) - cRight(hc);
+        if (Math.abs(d) &gt; 1) out.push({ page: page_, delta: Math.round(d * 100) / 100 });
+        if (getComputedStyle(rc).textAlign === 'center') out.push({ page: page_, zeroCentered: true });
+      });
+    }
+    return out;
+  });
+  expect(bad).toEqual([]);
+});</code></pre>
+  <p><b>本步判据(红绿双验)</b>: 先在改前的树上跑一遍 —— <b>必须红</b>(否则说明断言量错了对象); PHASE 2/4 落地后再跑 —— <b>必须绿</b>。红验记录写进任务档案。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 6</span><span class="pt">验证与实测数字</span><span class="pv">冒烟 + 全量 + 量测</span></div>
+  <ol>
+    <li><b>真浏览器冒烟</b>: <code>commands run dev.e2e</code>(三皮肤: 渲染健康 + 数据契约 + 新几何守卫)。</li>
+    <li><b>几何复量</b>: 桩服务下按 PHASE 0 的脚本逐主题复量 —— 右对齐列 <code>delta</code> 全 0/±1; 排序后仍 0/±1。</li>
+    <li><b>全量测试</b>: <code>commands run test.full</code>, 并新建基线切片记录<b>实测</b>数字(体例见 <code>memory-bank/testing/baseline.md</code>)。</li>
+    <li><b>人工走查(真机 <code>--dry-run</code> 或桩服务)</b>: 三皮肤下各看一遍 —— ① 分组/种子/追剧右对齐列标题与数值同缘; ② 点排序标题不跳; ③ 拖列宽把手仍好点(尤其<b>最后一列</b>与<b>窄列</b>); ④ 列名过长仍省略号; ⑤ 值为 0 的格子与标题同缘。</li>
+  </ol>
+  <p><b>本步判据</b>: 上述四项全过 + 无新增运行期错误。数字(改前 11/10/21, 改后 0/±1)是「提交信息里的实测数字」来源。</p>
+</div>
+
+<div class="ph">
+  <div class="hd"><span class="pn">PHASE 7</span><span class="pt">回写知识库(收尾 DoD)</span><span class="pv">按 AGENTS.md 收尾 5 步</span></div>
+  <ul>
+    <li><b>坑档</b>: <code>memory-bank/pitfalls/web-ui/header-cell-gutter.md</code> —— 第 17 行的「0 值居中」条目标记已处置, 并把「彻底方案」从建议改为已采用; 本轮若复发则 <code>复发</code> +1 并写明为何没命中。</li>
+    <li><b>契约文档</b>: <code>memory-bank/modules/webui-static-contract.md:16</code> —— 删「但保留 <code>.g-stat.zero</code> 的"0 值居中"」, 补「表头标签为 <code>.h-label</code>, 省略号挂它; <code>.h-cell</code> 为 flex 且 <code>padding-right:0</code>, 把手落进 10px 列间距」。</li>
+    <li><b>代码注释</b>: <code>shared/app.js:646</code> · <code>atlas/css/components.css:300-302</code>(PHASE 3/4 内已一并改)。</li>
+    <li><b>索引重建</b>: <code>commands run kb.index</code>(本计划入 <code>plans/_index.md</code>)。</li>
+    <li><b>状态流转</b>: 拍板后把本件 <code>doc-status</code> 由 <code>Open</code> → <code>In Progress</code>; 落地完成后 → <code>Done</code>, 并在同文件内补 <code>## 变更记录</code>(计划改版 = 同文件内追加, 禁堆 <code>-v2</code>)。</li>
+  </ul>
+</div>
+
+<h2><span class="no">§5</span>验证方法(可复跑)</h2>
+<div class="ev">
+  <p><b>1.</b> <code>commands run dev.harness -- --port 8099 --torrents 300 --groups 40</code>(真 <code>create_app</code> + 合成种子, 不连真机 qB)</p>
+  <p><b>2.</b> <code>NODE_PATH=&lt;workspace&gt;/node_modules node .workbuddy-ai/tmp/measure-align.cjs</code>(分组 / 种子 / 明细) · <code>…measure_shows.cjs</code>(追剧) · <code>…measure2.cjs</code>(抽屉)</p>
+  <p><b>3.</b> 判据: 右对齐列的 <code>delta</code> 必须为 <b>0(允许 ±1)</b>; 改前 11 / 11 / 10, 改后应全 0(分组/种子表允许 1px, 来自数据行 1px 侧边框)。</p>
+  <p><b>4.</b> 排序态复量: 点一次「大小」表头, 该列 <code>delta</code> 仍须 0/±1(改前 21~22)。</p>
+  <p><b>注:</b> 量测脚本现居 <code>.workbuddy-ai/tmp/</code>(dev 期临时件, 不入库)。若希望长期可复跑, PHASE 5 的 e2e 守卫即是它的常驻替身 —— 二者判据同源。</p>
+</div>
+
+<h2><span class="no">§6</span>风险与回滚</h2>
+<table class="audit">
+<thead><tr><th>风险点</th><th>判据 / 处置</th></tr></thead>
+<tbody>
+<tr><td class="f">改 <code>.h-cell</code> 为 flex 后垂直居中 / 省略号 / 箭头动画变形</td><td>补 <code>align-items:center</code> 与 <code>.h-label</code> 省略号三件套; PHASE 6 走查逐条覆盖(尤其<b>窄列</b>与<b>超长列名</b>)。</td></tr>
+<tr><td class="f"><code>overflow:visible</code> 后把手被祖先裁掉</td><td>已核: 把手只伸出右缘 5px, 仍在 <code>.group-head</code> 右内边距(14px)内; <code>.content</code> 的 <code>overflow-x:clip</code> 只裁横向溢出且不裁 head 内边距区。</td></tr>
+<tr><td class="f">把手命中区右移 5px 与相邻列重叠 / 末列越界</td><td>列间距本就 10px, 5px 重叠不会跨到邻列内容; 末列把手落在 head 内边距内。PHASE 6 走查专门验「拖列宽仍好点」。</td></tr>
+<tr><td class="f">删 0 值居中规则引静态守阵红</td><td>已核: 全仓守阵无一条依赖 <code>.g-stat.zero</code> 居中(grep <code>tests/</code> 零命中); <code>_scan_progress_val_parity</code> 只管 <code>.m-progress .val</code>, 不受影响。</td></tr>
+<tr><td class="f">1px 残余(数据行 1px 侧边框)</td><td>报告口径允许 ±1(视觉不可辨)。若要绝对 0, 可另给表头补 1px 透明侧边框 —— <b>本轮不做</b>(会动盒宽, 收益不抵风险)。</td></tr>
+<tr><td class="f">回滚</td><td>全部改动是「模板加 1 类 + CSS 改 3 行 + JS 加 1 行」的局部改动, 无状态/无数据迁移; <code>git revert</code> 单提交即可, 无残留。</td></tr>
+</tbody>
+</table>
+
+<h2 id="out"><span class="no">§7</span>范围外: 设置页 HR 在线核实表①</h2>
+<p class="sec-lede">报告 §1 的 P2 / §5 的 B1 —— 与本计划<b>同族但不同机制</b>, 报告已判「可以分开做」, 故不入本轮。</p>
+<div class="ev">
+  <p><b>现状</b>: 表① 的 4 个数值列(上传量 / 下载量 / 分享率 / 还需做种)表头右缘左偏 <b>14px</b> —— 成因是排序箭头<b>缺内层 <code>v-if</code></b>(箭头 SVG 恒在 DOM), 只靠 <code>opacity:0</code> 隐藏, 而透明度不影响布局 ⇒ 恒占 11px + <code>margin-left:3px</code>。</p>
+  <p><b>与主表的关键差异</b>: 它是 <code>&lt;table&gt;</code> + <code>hrsCols()</code>, <b>没有列模型</b>, 不经过 <code>colAlignCss</code>; 单点在模板 <code>tpl/settings-detail.html:321-324</code> + 三主题 <code>.hr-detail-table th .arrow</code>(<code>atlas/css/dialogs.css:172</code> · <code>console/css/dialogs.css:165</code> · <code>prism/css/views.css:664</code>)。</p>
+  <p><b>推荐处置(供单独排期)</b>: 让箭头<b>绝对定位不占流</b>(<code>th</code> 补 <code>position:relative</code>), 三主题各 1 条 —— 比「补 <code>v-if</code>」稳(补 <code>v-if</code> 会在切换排序列时标题左右跳, 与主表 P3 同形)。</p>
+</div>
+
+<h2><span class="no">§8</span>回写清单(一图速查)</h2>
+<div>
+  <div class="rule"><span class="rn">R1</span><span><span class="rt">模板</span><span class="rd">3 文件 / 5 处 —— <code>groups.html</code>(×2) · <code>torrents.html</code> · <code>shows.html</code>(×2)</span></span></div>
+  <div class="rule"><span class="rn">R2</span><span><span class="rt">CSS</span><span class="rd">3 主题 × (改 2 行 + 加 1 行) + 删 1 行(0 值居中)</span></span></div>
+  <div class="rule"><span class="rn">R3</span><span><span class="rt">JS</span><span class="rd"><code>shared/columns.js</code> <code>colAlignCss()</code> 加 1 行 + 注释块改写</span></span></div>
+  <div class="rule"><span class="rn">R4</span><span><span class="rt">测试</span><span class="rd"><code>e2e/smoke.spec.mjs</code> 加 1 条几何守卫(红绿双验)</span></span></div>
+  <div class="rule"><span class="rn">R5</span><span><span class="rt">知识库</span><span class="rd"><code>pitfalls/web-ui/header-cell-gutter.md</code> · <code>modules/webui-static-contract.md</code> · <code>shared/app.js</code> 注释 · <code>commands run kb.index</code></span></span></div>
+  <div class="rule"><span class="rn">R6</span><span><span class="rt">不做</span><span class="rd"><code>config.yml</code> · <code>auto-qb-data/</code>(红线) · 已冻结的第九轮计划/档案 · 抽屉与 HR 表②/③</span></span></div>
+</div>
+
+<h2><span class="no">§9</span>变更记录</h2>
+<ul>
+  <li><b>26-10-06-1009 · 初版</b>: 依报告 26-10-06-0945 的彻底方案(P0/C1)拆 8 个阶段(PHASE 0-7); 0 值口径归正按用户指定并入(第九轮 D4 已裁决取消、代码与知识库仍留旧口径); HR 表①(P2)划出范围外并给推荐处置。</li>
+</ul>
+
+<p class="foot">auto-qb · memory-bank/plans · 26-10-06-1009 · 实施计划(待拍板) · 专题 webui-column-alignment · 依据 reports/26-10-06-0945</p>
+</div>
+</body>
+</html>
