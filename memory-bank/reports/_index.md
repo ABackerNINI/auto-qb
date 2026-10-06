@@ -18,6 +18,7 @@
 ## Done
 
 - [26-10-07-0208] [my-commit-flow 自我改写版本撕裂 · 临时目录快照自举可行性分析 · auto-qb](26-10-07-0208-report-my-commit-flow-self-snapshot.html) — `my-commit-flow-self-snapshot`
+- [26-10-07-0204] [可行性报告 · auto-qb ↔ auto-qb.webui 采用 qB rid 式增量同步 · auto-qb](26-10-07-0204-report-webui-delta-sync-feasibility.html) — `webui-delta-sync`
 - [26-10-07-0054] [复验报告 · 两条 WebUI perf issue 在内核化重构后是否仍成立 · auto-qb](26-10-07-0054-report-webui-perf-issues-recheck.html) — `webui-perf-issues-recheck`
 - [26-10-06-0945] [WEBUI 表头 / 数值列对齐缺陷取证 · auto-qb](26-10-06-0945-report-webui-column-alignment.html) — `webui-column-alignment`
 - [26-10-06-0723] [种子详情面板重构 · 设计模板轮 — 汇总报告](26-10-06-0723-report-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`

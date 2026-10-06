@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>可行性报告 · auto-qb ↔ auto-qb.webui 采用 qB rid 式增量同步 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-delta-sync">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-07-0204">
+<meta name="doc-updated" content="26-10-07-0204">
+<meta name="doc-refs" content="memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>任务与判定速览</a>
+    <a href="#s2"><span class="no">02</span>现状解剖: 已是「半套 rid」</a>
+    <a href="#s3"><span class="no">03</span>qB rid 语义与一个关键事实</a>
+    <a href="#s4"><span class="no">04</span>方案映射: /api/state 升级成 maindata 语义</a>
+    <a href="#s5"><span class="no">05</span>收益分析(分层 + 工作负载相关性)</a>
+    <a href="#s6"><span class="no">06</span>成本与风险</a>
+    <a href="#s7"><span class="no">07</span>与现状及既有方案(A/B/C)对比</a>
+    <a href="#s8"><span class="no">08</span>分步路线与立项拍板点</a>
+    <a href="#s9"><span class="no">09</span>结论与建议</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 可行性报告</div>
+    <h1>auto-qb ↔ auto-qb.webui 采用 qB rid 式增量同步</h1>
+    <p class="lede">回答用户命题: 能否像 qBittorrent 的 <code>/api/v2/sync/maindata?rid=</code> 那样, 在 auto-qb 后端与自带 WebUI 之间改用「增量更新」(只回传变化部分)。基于 26-10-07-0054 复验报告与两条 perf issue 的在账数字逐层分析成本与收益, 并与当前方案对比。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-07-0204-webui-delta-sync-feasibility</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 02:04</div></div>
+      <div class="item"><div class="k">取证基线</div><div class="v">develop @ b736f1a3</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>任务与判定速览</h2>
+    <p>输入材料: 复验报告 <a href="../reports/26-10-07-0054-report-webui-perf-issues-recheck.html">26-10-07-0054</a>(两条 perf issue 重构后仍成立)与两条 issue 原文(<a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html">26-09-19-2122</a> 节拍门控双生产者 / <a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html">26-09-21-1408</a> 四视图全量重建)。本轮为只读取证 + 可行性分析, 不改代码、不出实施计划(计划另走 <code>plans/</code>)。代码事实全部在本会话逐文件核对(2026-10-07 @ b736f1a3), 在账数字标注原取证时间。</p>
+    <div class="callout ok"><b>判定: 可行, 且地基比预期厚</b> —— ①当前 <code>/api/state</code> 已经是 qB rid 语义的「跳过」半套(版本一致零回传, runtime.py:811-840), 缺的只是「变化时回增量」半套; ②auto-qb 的<b>摄入侧</b>(qB → store)今天就在跑同款协议的客户端(<code>store.apply_sync</code>, store.py:112-158, 含 full_update 兜底 / rid 失效归零 / 逐种子变化字段集), 协议形态在仓内有已验证先例; ③每 1.5s 一轮的逐种子变化字段集(<code>delta_fields</code>, store.py:259)已经算出来了, 只是进视图层时被塌缩成一个布尔(<code>consume_view_changed</code>, store.py:266-270)后丢弃。主要工程量与主要风险都集中在同一处: 服务端<b>增量聚合</b>的正确性(恰是 issue 2 根因栏挂着的「dirty 集合 × 剧键派生」待查)。</div>
+    <table>
+      <tr><th>问题</th><th>一句话答案</th></tr>
+      <tr><td>能不能做?</td><td>能。协议、降级路径、单写线程约束都有现成落位; 无架构性障碍。</td></tr>
+      <tr><td>收益多大?</td><td>集中在「大库 + 有活跃子集」: 传输与前端每轮成本从 O(全库) 降到 O(脏行); 静态库收益趋零(现在的 rid 跳过已覆盖)。服务端重建成本同比例受益(若配套增量重建)。</td></tr>
+      <tr><td>成本多大?</td><td>中型工程: 服务端时间线 + 增量聚合 + 前端合并。正确性论证与测试是主体, 传输协议本身很薄。</td></tr>
+      <tr><td>和 issue 1/2 什么关系?</td><td>增量传输是 issue 2「增量聚合」的传输侧配套, 两者共享同一套脏集合推导; 与 issue 1 的方案 A/B/C 正交可叠加, 且不受方案 A「SSE 下收益蒸发」结论影响(它降的是<b>每轮成本</b>, 不是<b>轮数</b>)。</td></tr>
+    </table>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状解剖: 已是「半套 rid」</h2>
+    <p>当前 auto-qb ↔ webui 每一轮数据更新走五段, 各段成本口径如下(全部为在账数字, 标注取证时间):</p>
+    <table>
+      <tr><th>段</th><th>现状</th><th>在账成本</th></tr>
+      <tr>
+        <td>① 生产</td>
+        <td>主循环每 tick(1.5s)经 <code>flush_views</code>(runtime.py:488-508)判脏 → <code>_publish_locked</code>(runtime.py:775-799)<b>无条件全量重建</b>四视图 + speed_totals(无逐视图脏检查, 无指纹去重)。</td>
+        <td>重建 p50 50.8ms(group 16.7 / shows 9.8 / flat 22.0), 3000 种子/400 组实测(2026-09-19, issue 1 §02③); 活跃库 ~40 版/60s(issue 1 §02②)。</td>
+      </tr>
+      <tr>
+        <td>② 门控</td>
+        <td>「上一版没被取走不重建」(<code>pending_ver</code>)+ 活跃窗口(TTL 10s)。</td>
+        <td>SSE 主路径下门控等效失效(客户端每版必拉), 3s 档总账 41→40 ≈0% 净省(issue 1 §02②); 只有慢消费(6s 档)才省 51%。</td>
+      </tr>
+      <tr>
+        <td>③ 传输</td>
+        <td>SSE 推 <code>ver</code>(只推版本号) → 前端 60ms 去抖拉 <code>/api/state?rid=&view=</code>; rid 命中→只回 status; 未命中→回<b>当前视图的全量数组</b>(VIEW_ARRAYS 裁到约 1/4, views.py:95-107)。</td>
+        <td>全量回包 6.3 MiB / json.dumps 26.4ms(3000 种子, 2026-09-19, P1-1 之前口径, issue 1 §02④); 序列化是大头 —— 曾因裸 dict 触发 jsonable_encoder 多付 161/189ms, 已用 JSONResponse 短路(state.py:77-86 注释); 3000 种子一轮全量「序列化+网络+解析」≈63ms(runtime.py:793 注释口径)。</td>
+      </tr>
+      <tr>
+        <td>④ 前端合并</td>
+        <td>整表替换: <code>this.groups = state.groups</code> 等四个数组赋值(polling.js:161-164), 无行级合并; 随后多选交集修正 + 乐观值重贴(均按 key/hash, polling.js:169-182)。</td>
+        <td>赋值段 >50ms 会打 <code>[perf]</code> 警告(单轮视图赋值埋点, polling.js:177-179)。</td>
+      </tr>
+      <tr>
+        <td>⑤ 渲染</td>
+        <td>Vue 3 keyed v-for(<code>:key="g.key"</code>, tpl/groups.html:33)但<b>行对象引用每版全换</b>(服务端全量重建产生全新 dict), computed <code>decoratedGroups</code> 对全量组行重算(decorate.js:115-125); 行窗口化(P1-2)已落地。</td>
+        <td>单轮 refresh 主线程 143/309/396~501ms(1000/3000/5000 种子, 窗口化后实测 2026-09-19, polling.js:112-115), 分档 1.5/2/3s 后占用 ≈10-17%。</td>
+      </tr>
+    </table>
+    <div class="callout"><b>关键观察: 「跳过」半套已经吃到了。</b>rid 版本一致时响应体趋近于零(runtime.py:828-829), 前端不做整表替换不触发重渲染 —— <b>静态种子库的每轮成本在当前方案下已经解决了</b>(配合 <code>_VIEW_QUANTUM</code> 把 seeding_time/eta 等秒级抖动量化掉, torrents/view.py:83-88, 静止库甚至不置脏)。增量方案的全部增量收益都在「版本真的变了」的那些轮次里, 即<b>活跃库</b>。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>qB rid 语义与一个关键事实</h2>
+    <h3>qB 的 /api/v2/sync/maindata 做了什么</h3>
+    <ul>
+      <li>客户端持 <code>rid</code>(单调递增代次)轮询; 服务端 <code>full_update=true</code> 表示「你落后到只能拿全量」(首轮 / rid 失效); 否则返回<b>增量</b>: 只含变化种子的<b>变化字段</b>字典 + <code>torrents_removed</code> 删除清单。</li>
+      <li>服务端维护「代次 → 该代内哪些种子哪些字段变了」的时间线(键集合, 不存值快照 —— 值在回增量时从当前状态现取); 客户端 rid 落在时间窗之外就重给全量。</li>
+      <li>客户端按 hash 把增量<b>逐字段合并</b>进持久化的行对象, 删除行走 removed 清单。</li>
+    </ul>
+    <h3>关键事实: 摄入侧已经有一个该协议的完整客户端</h3>
+    <p><code>TorrentStore.apply_sync</code>(store.py:112-158)每 1.5s 就是按这套语义消费 qB: rid 传递、<code>full_update</code> 检测、降级兜底(端点不可用回退全量 torrents_info)、未知异常 rid 归零强制全量、<code>torrents_removed</code> 对齐删除。更关键的是 <code>_apply</code>(store.py:185-264)在增量轮里<b>已经逐种子算出了变化字段集</b>:</p>
+<pre><code>delta_fields: Dict[str, FrozenSet[str]]   # {hash: 本轮变化的字段集}   (store.py:205, 259)
+added / changes                            # 新增/删除 hash 清单        (store.py:202-203, 261)
+state_changed / field_changed              # 状态变化 / 监听字段变化    (store.py:206-207, 260)</code></pre>
+    <p>这些信息支撑了规则引擎、冲突检测(<code>dirty_groups</code>, store.py:229-232)、外部变化登记等下游; 但流到 Web 视图层时, <code>flush_views</code> 只调 <code>consume_view_changed()</code> 读一个全局布尔(store.py:266-270) —— <b>「哪些种子、哪些字段变了」在视图层门口被扔掉了</b>。这正是 qB rid 式方案在 auto-qb 的落点: 把这份已在生产的信息接住, 而不是从零造增量机制。</p>
+    <p>仓内另有两个增量读端点的先例: 错误历史 <code>err_log_since(seq)</code>(runtime.py:243-251, 游标式增量拉取)与搜索索引的增量维护(runtime 按 hash 建增量、限流续建)。前端对增量语义并不陌生(<code>rid</code>、<code>seq</code> 都在用)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>方案映射: /api/state 升级成 maindata 语义</h2>
+    <p>保持端点 URL 与「status 恒回传」口径不变, 把「未命中 → 全量数组」扩成「未命中 → 时间窗内回增量, 窗外回全量」:</p>
+<pre><code>GET /api/state?rid=4183&amp;view=group
+→ {
+    "rid": 4187, "updated": true,
+    "status": {…与今日完全一致: connected/paused/traffic/server/totals…},
+    "full": true,                        // rid 失效/重启/全局置脏源触发 → 与今日同形的全量
+    "groups": [ …全量数组… ], "singles": [ … ]
+  }
+  // 或 rid 在时间窗内:
+  → {
+    "rid": 4187, "updated": true, "full": false,
+    "status": {…},
+    "delta": {
+      "groups":  {"upsert": [&lt;脏组整行, 服务端重聚合后&gt;], "removed": ["&lt;组key&gt;"]},
+      "singles": {"upsert": [&lt;脏成员行&gt;], "removed": ["&lt;hash&gt;"]},
+      "torrents": {"upsert": […], "removed": […]},   // 只在 view=torrent / 无 view 时回
+      "shows":   {"upsert": [&lt;剧级 patch&gt;], "removed": ["&lt;剧key&gt;"]}
+    }
+  }</code></pre>
+    <h3>服务端新增件(全部收在 WebUIRuntime, 单写线程不破)</h3>
+    <ul>
+      <li><b>脏行推导</b>: <code>flush_views</code> 在消费 <code>consume_view_changed</code> 的同一拍, 从 store 排空 <code>delta_fields</code> + added/removed, 映射到各视图的行键 —— flat/singles 行 = hash 本身; 组行 = <code>member_to_key</code>(store 现成映射, store.py:208); 剧行 = <code>parse_release(rec.name)</code>(该推导本来就是增量聚合要付的成本, 见 §08 S3)。推导全程主循环线程、<code>_publish_locked</code> 同一 <code>view_lock</code> 临界区 —— 黄金法则 5(单一写线程)与「四视图同轮发布」硬约束(runtime.py 模块 docstring)原样保持。</li>
+      <li><b>增量时间线</b>: <code>deque(maxlen≈40)</code>(≈60s 的 tick 量), 每代存「视图 → 行键 upsert/removed 集合」—— <b>只存键不存值</b>(qB 同款): 回增量时从当前已发布视图现取行内容, 时间线内存 O(代数 × 脏行键数), 与库大小无关。</li>
+      <li><b>降级阶梯(与 qB full_update 同构)</b>: 触发任一「无法归约为行级脏」的源 → 本代标记 full, 客户端重置本地状态整体替换。这类源今天就有明确清单: HR 判定 revision 变化(runtime.py:500-502)、配置热重载(webui/module.py:60-63 显式 mark_dirty)、<code>shows_pending</code> 文件兑底归位(runtime.py:842-844)、跨组交叉标记增删(views.py:489-493, 可精确到组键)、进程重启(版本号播种重启不回落, runtime.py:137-138)。</li>
+      <li><b>缓存兼容</b>: 时间线只存键意味着「值从当前视图现取」, 客户端拿到的永远是最新值 —— 中间代次被跳过(慢消费/多客户端不同 rid)也不会吃到中间态, 语义与 qB 一致。</li>
+    </ul>
+    <h3>前端新增件</h3>
+    <ul>
+      <li><b>合并</b>: <code>refresh()</code> 对 <code>delta</code> 分支按 key/hash 做「按行替换 + removed 删除」; 四个数组本身仍是整体引用替换(Vue 层数据流不变), 但<b>未脏行的对象引用原样保留</b> —— 这是增量重建的天然副产品(§05④)。</li>
+      <li><b>装饰记忆化</b>: <code>decoratedGroups</code>(decorate.js:115)加一层按行对象身份的 WeakMap 缓存 —— 引用没变的行直接复用已装饰结果, 重算面 = 脏行。乐观值补丁(<code>reapplyPending</code>)、多选交集修正、<code>memberByHash</code> 都已按 hash/key 键控(polling.js:169-182, decorate.js:148-154), 与增量天然兼容, 零改动。</li>
+      <li>切视图强制全量、SSE 断线退轮询兜底、失败退避 —— 语义全部不变(协议升级对「兜底路径」是透明的: 轮询同一端点, rid 窗内拿增量, 窗外拿全量)。</li>
+    </ul>
+    <div class="callout"><b>一个必须当面说的粒度事实</b>: 组行内嵌<b>完整成员数组</b>(<code>members: members_view</code>, views.py:494-495; 6.3 MiB 的主体就是它) —— 任意一个成员的速度抖动都会脏整条组行(含全部成员)。组视图的增量粒度天然是「组行」而非「成员」; 追剧视图已是 hash 引用式(members 只放 hash, views.py:645-647)不受此限。要不要把组行也改成 hash 引用式(成员数据由前端从 <code>torrents</code> 平铺数组解析)是响应体契约的二次演进, 单列为拍板点 D2(§08), 不阻塞一期。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>收益分析(分层 + 工作负载相关性)</h2>
+    <p><b>先立诚实前提</b>: 以下「增量后的数字」均为按在账成本口径的<b>结构性推演, 非实测</b>; 在账数字仅 ①-⑤ 各段现状。收益与工作负载强相关, 分两种典型库讨论。</p>
+    <table>
+      <tr><th>段</th><th>现状(活跃库)</th><th>增量后</th><th>受益条件</th></tr>
+      <tr>
+        <td>① 服务端重建</td>
+        <td>每版 O(全库): 全库 by_hash 遍历 + 逐种子 <code>parse_release</code> + 三层聚合(~50.8ms@3000, 40 版/60s)</td>
+        <td>每版 O(脏行): 只重聚合脏组/剧的成员(成员数远小于全库)</td>
+        <td>需配套增量重建(§08 S2/S3); 只做传输(S1)则此段不变</td>
+      </tr>
+      <tr>
+        <td>③ 传输+序列化</td>
+        <td>每版当前视图全量数组(≈1/4 × 6.3 MiB; json.dumps 26.4ms; 63ms 序列化+网络+解析@3000)</td>
+        <td>O(脏行): 脏组行/成员行 + status。传输量 ≈ (脏行数/全库行数) × 现量</td>
+        <td>活跃库: 脏行 ≈ 传输中的种子数(速度/进度每拍变); 5000 种子库 100 个活跃 ⇒ 约 2% 现量</td>
+      </tr>
+      <tr>
+        <td>④+⑤ 前端</td>
+        <td>每版全量赋值 + decoratedGroups 全量重算 + 全行 vdom diff(396~501ms@5000, 10-17% 主线程)</td>
+        <td>O(脏行): 只有脏行进 vdom diff(keyed), 装饰复用未脏行</td>
+        <td>依赖服务端保留未脏行对象引用(增量重建天然满足; S1 期可用「全量重建但按 hash 摘行」近似, 引用稳定性弱一档)</td>
+      </tr>
+    </table>
+    <h3>工作负载相关性(收益的边界)</h3>
+    <ul>
+      <li><b>静态做种库(辅种场景的常态)</b>: 现方案 rid 命中零回传, 每轮成本已趋零 → <b>增量方案在这里几乎不增加任何收益</b>。这不是浪费 —— 它只是不动这块。</li>
+      <li><b>活跃传输库</b>: 下载/上传中的种子每拍速度必变(dlspeed/upspeed 不在量化表内), 每版都全量 → 增量后每轮只传/只算/只渲染活跃子集。<b>这是收益主体</b>。</li>
+      <li><b>命令突发</b>: 批量改标签/分类/限速会瞬时置脏大面, 增量把「一次突发 = 一批脏行」的传导成本从全库压到突发面 —— 用户可感知的「点了之后卡一下」的来源之一。</li>
+      <li><b>轮数不变</b>: SSE ver 每版必推、客户端每版必拉(复验报告 §04 的结论)在增量方案下原样成立 —— 它<b>不减少轮次</b>, 降的是每轮成本。40 版/60s 的节拍保留, 但每版从「全库一遍」变「脏行一遍」。</li>
+    </ul>
+    <h3>一个当前方案结构上拿不到的收益: 引用稳定</h3>
+    <p>全量重建每版产生<b>全新行对象</b>, 前端即使内容没变也要付出: 全量赋值、decoratedGroups 全量 map、全部已渲染行的 vdom diff。增量重建天然保留未脏行引用, 上面三笔按「脏行占比」等比例消失 —— 这是「全量重建 + 前端记忆化」组合做不到的(引用每版全换, 记忆化必失效)。</p>
+    <h3>收益不覆盖的面(说清楚它不是什么)</h3>
+    <ul>
+      <li>不改善 qB → auto-qb 摄入(那条链已是增量); 不影响 /api/torrents/{hash} 详情、流量图、错误历史等端点; 不减少每轮请求数(仍 1 条/轮)。</li>
+      <li>issue 1 的「每版必须建一次」下界(复验报告 §04③)原样成立 —— 增量方案是对该下界<b>降价</b>, 不是取消。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>成本与风险</h2>
+    <h3>工程成本(按件, T 恤口径, 工程直觉非实测)</h3>
+    <table>
+      <tr><th>件</th><th>量级</th><th>说明</th></tr>
+      <tr><td>时间线 + 协议字段(服务端)</td><td>小</td><td>键集合 deque + ensure_state 分支; 模式照抄 store.apply_sync 的对偶面与 err_log_since 先例</td></tr>
+      <tr><td>脏行推导(hash → 各视图行键)</td><td>小-中</td><td>flat/singles O(1); 组行查 member_to_key; 剧行需 parse_release(与 S3 共享)</td></tr>
+      <tr><td>组/单种子增量重聚合</td><td>中</td><td>按脏组键重跑 <code>_build_group_view</code> 的单组循环即可, 聚合逻辑现成、纯局部</td></tr>
+      <tr><td>追剧增量重聚合</td><td>大</td><td><b>issue 2 根因栏「待查」的本体</b>: 成员迁移/季级 gaps/剧名频次三处正确性边界(细化见下)</td></tr>
+      <tr><td>前端合并 + 装饰记忆化</td><td>中</td><td>polling.js/decorate.js 各一段; 模板零改动(keyed v-for 已就位)</td></tr>
+      <tr><td>测试</td><td>中-大</td><td>镜子测试为主体(下述), 另加 e2e 复测(issue 1/2 认领本就要求复测量化, 可并轨)</td></tr>
+    </table>
+    <h3>正确性边界清单(issue 2 待查的细化 —— 本轮只列论证项, 不下结论)</h3>
+    <ul>
+      <li><b>成员迁移</b>: <code>name</code>/<code>save_path</code> 变化会移动成员的剧键/组键 —— 必须从旧键行移除、进新键行; store 有组侧 <code>member_to_key</code> 现映射, 剧侧需要等价的「上一版键」记忆或从旧快照反查。</li>
+      <li><b>季级聚合</b>: <code>gaps</code>(缺集)与整包覆盖标记是<b>季级</b>派生(views.py:741-752) —— 任一集变化, 该 (剧, 季) 的 covered 集与 gaps 要整季重算(集行本身便宜, 可接受)。</li>
+      <li><b>剧名频次</b>: 展示名 = titles 频次最大(views.py:705-708) —— 同剧任一成员标题变化影响剧名, 需重扫该剧成员的标题(局部)。</li>
+      <li><b>状态归并</b>: 集行 state = 成员 kinds 按 rank 取 min —— 集行重算本来就局部, 无跨行传播。</li>
+      <li><b>HR 派生字段</b>: hr revision 变化使全库 HR 展示字段可能变化(<code>hr_view_fields</code> 读判定视图) —— 无法归约成行级脏, 走 full 降级(波次频率低, 可接受; 这正是「降级阶梯」存在的理由)。</li>
+    </ul>
+    <h3>风险与对策</h3>
+    <table>
+      <tr><th>风险</th><th>对策</th></tr>
+      <tr><td>增量链路出「拼不全/拼错行」的陈旧视图缺陷(2026-09-18 四视图漏建事故同型)</td><td><b>镜子测试</b>兜底: 任意操作序列下「从 rid0 逐轮吃 delta 合并」≡「每轮全量快照」—— store.apply_sync 的测试范式(tests 里 FakeTorrent 增量序列)直接镜像; 不变量不成立即红。另保留 full 语义为默认回退(开关或异常路径), 可随时退回现行为。</td></tr>
+      <tr><td>时间线无界增长 / 内存</td><td>deque maxlen + 只存键不存值; 与 <code>WEB_RESULT_MAX</code>/<code>EVENT_QUEUE_MAX</code> 同款卫生纪律。</td></tr>
+      <tr><td>多客户端/慢客户端语义</td><td>时间线服务所有客户端独立 rid; 窗外一律 full —— qB 已验证的同构语义, 无需自创。</td></tr>
+      <tr><td>与门控(pending_ver)的相互作用</td><td>一期保留门控不动(行为保守); 增量下「未被消费的版本」成本变成一次便宜的键集追加, 门控的剩余价值与去留在 S4 单独裁决(拍板点 D3)。</td></tr>
+      <tr><td>JSONResponse 契约(delta 载荷必须 JSON 原生类型, state.py:84-86 fail-fast 注释)</td><td>行内容直接取自现有视图 dict(已是 JSON 原生), 无新增类型面。</td></tr>
+      <tr><td>复杂度税: 全仓多了一条「键集时间线」状态</td><td>收在 WebUIRuntime 单点(与 pending_ver/search_index/err_ring 并列), 文档进 web-runtime.md; 这是本方案最大的隐性成本, 列入 D4 让用户权衡。</td></tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>与现状及既有方案(A/B/C)对比</h2>
+    <p>issue 1 档案里的方案 A(全惰性)/B(口径修正)/C(请求侧限速)与 issue 2 的「增量聚合」建议, 加上本报告的增量协议, 放在同一张表里(均按 SSE 主路径口径):</p>
+    <table>
+      <tr><th>维度</th><th>现状(rid 跳过 + VIEW_ARRAYS)</th><th>方案 A 全惰性</th><th>增量协议(qB rid 式)</th></tr>
+      <tr><td>重建轮数(活跃库)</td><td>~40 版/60s(门控近失效)</td><td>不变(挪到请求线程, 复验报告 §04③)</td><td>不变(~40 版/60s)</td></tr>
+      <tr><td>单轮服务端成本</td><td>O(全库), 50.8ms@3000</td><td>O(全库), 不变</td><td><b>O(脏行)</b>(S2/S3 配套后)</td></tr>
+      <tr><td>每轮传输量</td><td>当前视图全量(≈1/4×6.3MiB)</td><td>不变</td><td><b>O(脏行)</b></td></tr>
+      <tr><td>前端每轮成本</td><td>396~501ms@5000(10-17% 主线程)</td><td>不变</td><td><b>O(脏行)</b>(引用稳定 + 装饰记忆化)</td></tr>
+      <tr><td>主循环解耦(P0-5 命令响应)</td><td>门控(SSE 下保护面仅剩轮询兜底路径)</td><td>最佳(重建全离场)</td><td>间接改善(重建变便宜); 门控去留另议(D3)</td></tr>
+      <tr><td>新增正确性风险面</td><td>零</td><td>零(纯归属搬家)</td><td>delta 合并与增量聚合(镜子测试兜底)</td></tr>
+      <tr><td>解决 issue 2 的全量重建?</td><td>否</td><td>否(只是搬家)</td><td><b>是(S2/S3 即其本体)</b></td></tr>
+      <tr><td>工程量</td><td>—</td><td>小(单点改判据)</td><td>中(分四步, 每步独立可交付)</td></tr>
+    </table>
+    <div class="callout"><b>正交性结论</b>: ①增量协议与方案 A 不冲突 —— A 改「谁建」, 增量改「建多少、传多少」, 可组合; 但 A 的卖点(-51%)在 SSE 下已蒸发, 单做它性价比低。②方案 B(口径修正)+ 顺带小修(ensure_view 清账)+ 复验 §06 的指纹注释修正, 是独立便宜的文档/一行级修正, 与是否上增量无关, 任何时候做都成立。③增量协议是<b>唯一同时压低 ①③④⑤ 四段成本</b>的选项, 也是 issue 2 的自然完成形态 —— issue 2 的「增量聚合」做了服务端一半, 本协议补上传输与前端另一半, 共享同一套脏集合推导。</div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>分步路线与立项拍板点</h2>
+    <p>若立项, 按依赖与收益密度分四步, 每步独立交付、可回退(full 语义全程保留为回退路径):</p>
+    <table>
+      <tr><th>步</th><th>内容</th><th>交付即可兑现的收益</th><th>依赖</th></tr>
+      <tr>
+        <td>S1</td>
+        <td>传输协议(delta 字段 + 时间线 + full 降级) + flat/singles/组行(粗粒度)增量 + 前端合并</td>
+        <td>传输/序列化/前端赋值降到 O(脏行); 种子页(平铺, 纯 hash 键控)收益最直接</td>
+        <td>无(服务端仍全量重建, 脏行键从 store.delta_fields 现成取)</td>
+      </tr>
+      <tr>
+        <td>S2</td>
+        <td>组/单种子增量重聚合(按脏组键局部重跑, 保留未脏行引用)</td>
+        <td>服务端重建降 O(脏行); 前端引用稳定兑现</td>
+        <td>S1 的时间线与协议</td>
+      </tr>
+      <tr>
+        <td>S3</td>
+        <td>追剧增量重聚合</td>
+        <td>issue 2 的最大单点(<code>_build_shows_view</code> 全库 parse_release)落地</td>
+        <td>S2; 并需先完成 §06 正确性边界论证 —— <b>建议与 issue 2 认领并轨做, 一份论证喂两处</b></td>
+      </tr>
+      <tr>
+        <td>S4</td>
+        <td>门控语义裁决 + 口径文档(runtime 注释/flush_views docstring)+ 复验 §06 指纹注释修正 + e2e 复测归档</td>
+        <td>文档与实际机制对齐(方案 B 的增量版)</td>
+        <td>S1-S3 定型后</td>
+      </tr>
+    </table>
+    <h3>若立项, 实施计划需拍板的点(本轮只列, 不替拍)</h3>
+    <ul>
+      <li><b>D1 协议形状</b>: 推荐「同一端点加 delta/full 字段」(前端单请求轮询契约不变); 备选「新端点 /api/state/delta」(老客户端零感知, 但前端要双请求切换)。</li>
+      <li><b>D2 组行成员粒度</b>: 一期接受「组行级增量」(内嵌成员随组行整行走); 是否演进成 hash 引用式(响应体契约二次变更, 波及筛选器/列模型数据源)单独立项评估。</li>
+      <li><b>D3 门控去留</b>: 增量下 pending_ver 的保护对象从「重建成本」缩水成「键集追加成本」, 建议一期不动、S4 裁决。</li>
+      <li><b>D4 范围</b>: 是否接受「时间线状态」进 WebUIRuntime 的复杂度税; 以及 S1 是否先只覆盖种子页(最小可见收益)。</li>
+      <li><b>D5 开关</b>: delta 语义默认开(镜像测试过关后)还是配置开关灰度 —— 倾向默认开 + full 回退路径常在, 不新增配置键(黄金法则 4 口径: 若加开关必须进 validate_config 与 config/schema.py)。</li>
+    </ul>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>结论与建议</h2>
+    <ol>
+      <li><b>可行性</b>: 成立。无架构障碍; 单写线程/四视图同轮/SSE 兜底三条硬约束都有干净落位; 仓内摄入侧(store.apply_sync)与两个增量读端点(err_log_since/搜索索引)构成完整先例组。</li>
+      <li><b>收益定位(诚实口径)</b>: 集中在「大库 + 活跃子集 + 命令突发」; 静态库已被现有 rid 跳过覆盖, 增量方案对其近乎零增量。四段成本(服务端重建/传输/前端赋值/渲染)中, 传输与前端两段只靠 S1 就兑现, 服务端两段依赖 S2/S3。</li>
+      <li><b>成本定位</b>: 协议与时间线是薄件; 主体工程量与风险都在增量聚合正确性(§06 清单)与镜子测试 —— 而这恰好就是 issue 2 根因栏挂着的同一笔「待查」, <b>建议把本方案 S3 与 issue 2 的认领并轨</b>, 一份正确性论证同时服务两处。</li>
+      <li><b>与既有方案的关系</b>: 方案 B + 顺带小修 + 指纹注释修正(合计文档/一行级)独立且便宜, 不必等增量; 方案 A 在 SSE 世界性价比低(复验报告已裁定), 增量协议部分吸收其动机(让主循环的重建变便宜)而不需要动重建归属。</li>
+      <li><b>下一步</b>: 本报告为证据快照, 不自动转实施。若决定立项: 从 S1 出实施计划(<code>plans/</code>, 带 §08 拍板点); 若暂不立项: issue 2 认领时把本报告 §06 的正确性边界清单作为其「增量聚合论证」的输入清单, 两份档案互为引用。</li>
+    </ol>
+  </section>
+
+  <footer>
+    memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html · 取证基线 develop @ b736f1a3 · 证据快照, 出厂即冻结; 推进步骤见 §09, 数字均标注原取证时间, 增量后的数字为结构性推演非实测
+  </footer>
+
+</div>
+</body>
+</html>
