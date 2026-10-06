@@ -251,45 +251,55 @@
 
   /* 收起态摘要: 走核心内置默认实现(状态·进度·速度·比率·HR), 本变体不覆写 */
 
-  function destroy() {
+  function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
+    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
+     * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
+    if (host && host.__dt01Click) {
+      host.removeEventListener("click", host.__dt01Click);
+      host.__dt01Click = null;
+      host.__dt01Wired = false;
+    }
+  }
+
+  function onClick(ev) {
+    const h = ev.currentTarget;
+    const foldHead = ev.target.closest("[data-fold]");
+    if (foldHead) {
+      const sec = foldHead.closest("[data-sec]");
+      if (sec) {
+        const title = sec.getAttribute("data-sec");
+        ui.folded[title] = !ui.folded[title];
+        sec.classList.toggle("folded");
+      }
+      return;
+    }
+    const rawsum = ev.target.closest(".dt01-rawsum");
+    if (rawsum) {
+      const det = rawsum.closest("details");
+      /* 点击后 details 才翻转 open, 宏任务里回读 */
+      setTimeout(() => { ui.rawOpen = !!(det && det.open); }, 0);
+      return;
+    }
+    const btn = ev.target.closest("[data-act]");
+    if (!btn) return;
+    const ctx = h.__dtCtx;
+    const cellEl = btn.closest(".dt01-cell");
+    if (btn.getAttribute("data-act") === "open") {
+      ctx.openTargetPath("torrent", ctx.drawer.hash);
+      return;
+    }
+    const text = cellEl ? cellEl.querySelector(".dt01-vv") : null;
+    const label = cellEl ? cellEl.querySelector(".dt01-k") : null;
+    if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
   }
 
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
   function wire(host) {
     if (host.__dt01Wired) return;
     host.__dt01Wired = true;
-    host.addEventListener("click", (ev) => {
-      const host_ = ev.currentTarget;
-      const foldHead = ev.target.closest("[data-fold]");
-      if (foldHead) {
-        const sec = foldHead.closest("[data-sec]");
-        if (sec) {
-          const title = sec.getAttribute("data-sec");
-          ui.folded[title] = !ui.folded[title];
-          sec.classList.toggle("folded");
-        }
-        return;
-      }
-      const rawsum = ev.target.closest(".dt01-rawsum");
-      if (rawsum) {
-        const det = rawsum.closest("details");
-        /* 点击后 details 才翻转 open, 宏任务里回读 */
-        setTimeout(() => { ui.rawOpen = !!(det && det.open); }, 0);
-        return;
-      }
-      const btn = ev.target.closest("[data-act]");
-      if (!btn) return;
-      const ctx = host_.__dtCtx;
-      const cellEl = btn.closest(".dt01-cell");
-      if (btn.getAttribute("data-act") === "open") {
-        ctx.openTargetPath("torrent", ctx.drawer.hash);
-        return;
-      }
-      const text = cellEl ? cellEl.querySelector(".dt01-vv") : null;
-      const label = cellEl ? cellEl.querySelector(".dt01-k") : null;
-      if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
-    });
+    host.__dt01Click = onClick;
+    host.addEventListener("click", onClick);
   }
 
   const _render = render;

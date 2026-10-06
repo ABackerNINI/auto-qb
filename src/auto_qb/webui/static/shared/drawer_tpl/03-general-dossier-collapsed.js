@@ -328,52 +328,62 @@
     return parts.join(' <span style="color:var(--fg-dim)">·</span> ');
   }
 
-  function destroy() {
+  function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
+    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
+     * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
+    if (host && host.__dt03Click) {
+      host.removeEventListener("click", host.__dt03Click);
+      host.__dt03Click = null;
+      host.__dt03Wired = false;
+    }
+  }
+
+  function onClick(ev) {
+    const h = ev.currentTarget;
+    const foldHead = ev.target.closest("[data-fold]");
+    if (foldHead) {
+      const sec = foldHead.closest("[data-sec]");
+      if (sec) {
+        const id = sec.getAttribute("data-sec");
+        ui.folded[id] = !ui.folded[id];
+        sec.classList.toggle("folded");
+      }
+      return;
+    }
+    const extSum = ev.target.closest(".dt03-ext summary");
+    if (extSum) {
+      const det = extSum.closest("details");
+      setTimeout(() => { ui.extOpen = !!(det && det.open); }, 0);
+      return;
+    }
+    const btn = ev.target.closest("[data-act]");
+    if (!btn) return;
+    const ctx = h.__dtCtx;
+    const act = btn.getAttribute("data-act");
+    if (act === "open") {
+      ctx.openTargetPath("torrent", ctx.drawer.hash);
+      return;
+    }
+    if (act === "magnet") {
+      /* 磁力按需取(BUG-9 先例口径): _editDetail 在抽屉已开时直接复用 detail, 连请求都不发 */
+      ctx._editDetail(ctx.drawer.hash).then((dd) => {
+        if (dd && dd.magnet_uri) ctx.copyText(dd.magnet_uri, " magnet 链接");
+      });
+      return;
+    }
+    const row = btn.closest(".dt03-crow, .dt03-item");
+    const text = row ? row.querySelector(".v") : null;
+    const label = row ? row.querySelector(".k") : null;
+    if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
   }
 
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
   function wire(host) {
     if (host.__dt03Wired) return;
     host.__dt03Wired = true;
-    host.addEventListener("click", (ev) => {
-      const h = ev.currentTarget;
-      const foldHead = ev.target.closest("[data-fold]");
-      if (foldHead) {
-        const sec = foldHead.closest("[data-sec]");
-        if (sec) {
-          const id = sec.getAttribute("data-sec");
-          ui.folded[id] = !ui.folded[id];
-          sec.classList.toggle("folded");
-        }
-        return;
-      }
-      const extSum = ev.target.closest(".dt03-ext summary");
-      if (extSum) {
-        const det = extSum.closest("details");
-        setTimeout(() => { ui.extOpen = !!(det && det.open); }, 0);
-        return;
-      }
-      const btn = ev.target.closest("[data-act]");
-      if (!btn) return;
-      const ctx = h.__dtCtx;
-      const act = btn.getAttribute("data-act");
-      if (act === "open") {
-        ctx.openTargetPath("torrent", ctx.drawer.hash);
-        return;
-      }
-      if (act === "magnet") {
-        /* 磁力按需取(BUG-9 先例口径): _editDetail 在抽屉已开时直接复用 detail, 连请求都不发 */
-        ctx._editDetail(ctx.drawer.hash).then((dd) => {
-          if (dd && dd.magnet_uri) ctx.copyText(dd.magnet_uri, " magnet 链接");
-        });
-        return;
-      }
-      const row = btn.closest(".dt03-crow, .dt03-item");
-      const text = row ? row.querySelector(".v") : null;
-      const label = row ? row.querySelector(".k") : null;
-      if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
-    });
+    host.__dt03Click = onClick;
+    host.addEventListener("click", onClick);
   }
 
   const _render = render;
