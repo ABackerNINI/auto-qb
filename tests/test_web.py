@@ -3105,7 +3105,7 @@ def test_drawer_tpl_classic_default():
 
 
 def test_frontend_qb_traffic_drawer_page_guard():
-    """流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图错误地出现在设置页」)
+    r"""流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图错误地出现在设置页」)
 
     抽屉是 app 级 sticky 吸底的停靠面板(.drawer-dock), 而 drawerVisible 原先对流量形态无条件为真
     (口径「任意页可开」) —— 在设置页(整幅配置工作台, 自己的滚动容器铺满)面板会压住页面底部内容,
@@ -3118,7 +3118,10 @@ def test_frontend_qb_traffic_drawer_page_guard():
        切回主内容页, 否则「点了没反应」(状态翻了、面板不在 DOM);
     4. 图的生命周期(state.js watch drawerVisible): Vue 的 v-if 拆装会**换掉建图宿主**, uPlot 的
        root/canvas 挂在被拆走的旧 .qb-chart-host 上且不自愈(要等下一拍轮询, 而间隔可能夹到 600s)
-       ⇒ 症状「回主内容页后面板里有文字没图」—— 退场销毁图、进场补拉一发(_qbLoad 内含建图)。"""
+       ⇒ 症状「回主内容页后面板里有文字没图」—— 退场销毁图、进场补拉一发(_qbLoad 内含建图)。
+    5. 同目标幂等短路(2026-10-07 修「再按 Ctrl+\ 闪烁」): 抽屉已开着同一形态同一目标时重按入口
+       (快捷键/状态栏钮)必须短路返回 —— 全量路径会把收图销毁 + 抽屉重建 + 首拉 loading 各闪一遍
+       (pitfalls/web-ui/drawer-switch-flicker「快中间态本身就是闪」); 收起态重按 = 展开。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -3154,6 +3157,13 @@ def test_frontend_qb_traffic_drawer_page_guard():
         "openDrawerTraffic 缺页面归一: 在设置页点状态栏入口/按 Ctrl+Backslash 会「点了没反应」"
     assert ob.index('this.page !== "groups"') < ob.index("this._stopDrawerPoll()"), \
         "页面归一必须在重置抽屉状态之前(切页会引发重排, 先于所有副作用)"
+
+    # 5. 同目标幂等短路: 已开着同一形态同一目标(分组再比 key)时重按入口不重建(否则收图销毁+
+    #    抽屉重建+首拉各闪一遍); 短路必须落在 _stopDrawerPoll 等副作用之前才算短路
+    assert 'this.drawer.kind === "traffic"' in ob and "this.qbGroupKey === key" in ob, \
+        "openDrawerTraffic 缺同目标幂等短路: 再按 Ctrl+\\ 会把收图+重建+首拉各闪一遍"
+    assert ob.index('this.drawer.kind === "traffic"') < ob.index("this._stopDrawerPoll()"), \
+        "同目标短路必须在收图/重建副作用之前(落在后面 = 短路失效, 闪烁回归)"
 
     # 4. watch(drawerVisible): 退场销毁图 / 进场补拉重建(uPlot 宿主随 v-if 拆装被换掉)
     wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)

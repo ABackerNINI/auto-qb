@@ -283,7 +283,8 @@ window.AQB_QB_TRAFFIC = {
   },
   methods: {
     /* ---------------- 流量形态开关(三挂点并入抽屉; 打开 = 把抽屉切到流量形态) ----------------
-     * 全局/分组: openDrawerTraffic(scope, key) 整体重置抽屉状态并拉数 + 起低频轮询;
+     * 全局/分组: openDrawerTraffic(scope, key) 整体重置抽屉状态并拉数 + 起低频轮询
+     * (同目标重入短路: 已开着同一目标时幂等返回, 不收图不重拉 —— 重复按键不闪);
      * 单种: 走 drawer.js openTorrentDrawer + drawerTab('traffic')(页签本体, 不在本模块)。
      * 关闭统一走 drawer.js closeDrawer()(Esc/关闭钮/切页三路同口), 收轮询与图见 _qbTeardown。 */
     async openQbHistory() {
@@ -310,6 +311,15 @@ window.AQB_QB_TRAFFIC = {
       // 而面板只在主内容页渲染 —— 不先回主内容页就是「点了没反应」(状态翻了、面板不在 DOM)。
       // 显式触发权 > 停留位置: 用户点图就是想看图, 与 goView 同款切页(抽屉状态不清)
       if (this.page !== "groups") this.page = "groups";
+      // 同目标幂等短路: 已开着同一形态同一目标(分组再比 key)时重按入口(Ctrl+\ / 状态栏钮)不重建
+      // —— 走下方全量路径等于把收图销毁+抽屉重建+首拉各闪一遍(pitfalls drawer-switch-flicker:
+      // 快中间态本身就是闪); 收起态重按 = 展开, 右键菜单入口仍收菜单
+      if (this.drawer.open && this.drawer.kind === "traffic" && this.drawer.scope === scope
+          && (scope !== "group" || this.qbGroupKey === key)) {
+        this.menu.visible = false;
+        this.drawer.collapsed = false;
+        return;
+      }
       if (scope === "group") {
         if (!key) return;
         const g = this._findGroup(key);
