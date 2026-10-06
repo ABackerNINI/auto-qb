@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 详情面板 15 变体摸排 · 问题清单汇总报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-detail-panel-redesign">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-07-0542">
+<meta name="doc-updated" content="26-10-07-0542">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-webui-detail-panel.md">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f141c; --bg-card:#161d29; --bg-row:#131a25; --bg-hover:#1c2637; --bg-elev:#182130;
+    --ink:#dde5f0; --ink-muted:#9aa8bd; --ink-dim:#6c7d95;
+    --accent:#4aa3a8; --accent-hi:#63c2c8; --accent-soft:rgba(74,163,168,.13); --accent-line:rgba(74,163,168,.45);
+    --border:#26344a; --border-strong:#37506f; --hairline:rgba(255,255,255,.07);
+    --green:#3fd699; --warn:#f0b83f; --error:#f3766f;
+    --font-body:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+    --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); font-size:14.5px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:52px 36px 72px}
+  p{margin:0 0 12px; max-width:78ch}
+  strong{font-weight:600; color:var(--ink)}
+  a{color:var(--accent-hi); text-decoration:none; border-bottom:1px solid rgba(99,194,200,.35); padding-bottom:1px}
+  a:hover{border-bottom-color:var(--accent-hi)}
+  code{
+    font-family:var(--font-mono); font-size:.86em; color:var(--ink);
+    background:var(--bg-row); border:1px solid var(--hairline); border-radius:3px; padding:1px 6px; white-space:nowrap;
+  }
+  /* ---------- 头部 ---------- */
+  .kick-row{display:flex; align-items:baseline; gap:18px; border-top:2px solid var(--accent); padding-top:14px; flex-wrap:wrap}
+  .kick{font-family:var(--font-mono); font-size:11.5px; letter-spacing:.09em; color:var(--accent); text-transform:uppercase}
+  .kick-meta{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim); letter-spacing:.02em}
+  .kick-meta .st{color:var(--green)}
+  h1{
+    font-family:var(--font-display); font-size:38px; font-weight:600; line-height:1.14;
+    letter-spacing:-.02em; margin:22px 0 14px; max-width:26ch;
+  }
+  h1 .thin{color:var(--ink-muted); font-weight:400}
+  .lede{font-size:16px; line-height:1.66; color:var(--ink-muted); max-width:66ch}
+  .lede strong{color:var(--ink)}
+  .head-meta{
+    margin-top:20px; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim);
+    display:flex; gap:8px 22px; flex-wrap:wrap; border-top:1px solid var(--hairline); padding-top:12px;
+  }
+  /* ---------- 目录 ---------- */
+  .toc{margin:34px 0 0; border:1px solid var(--border); background:var(--bg-card); padding:4px 0}
+  .toc-row{display:grid; grid-template-columns:64px 1fr; gap:12px; align-items:baseline;
+    padding:9px 18px; border-bottom:1px solid var(--hairline)}
+  .toc-row:last-child{border-bottom:none}
+  a.toc-row:hover{background:var(--bg-hover)}
+  .toc-no{font-family:var(--font-mono); font-size:12px; color:var(--accent)}
+  .toc-t{color:var(--ink); font-size:14px}
+  /* ---------- 章节 ---------- */
+  section{margin-top:58px}
+  .sec-head{border-top:1px solid var(--border-strong); padding-top:16px; display:grid; grid-template-columns:96px 1fr; gap:0 18px}
+  .sec-no{font-family:var(--font-display); font-size:42px; font-weight:600; color:var(--border-strong); line-height:1; letter-spacing:-.02em}
+  h2{font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; line-height:1.2}
+  .sec-sub{color:var(--ink-dim); font-size:13.5px; margin:0; max-width:70ch}
+  .sec-body{grid-column:2; margin-top:20px}
+  h3{font-family:var(--font-display); font-size:17.5px; font-weight:600; margin:30px 0 10px}
+  h3 .h3-mono{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-dim); font-weight:400; margin-left:10px; letter-spacing:.03em}
+  /* ---------- 表格 ---------- */
+  table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.2px}
+  th{
+    font-family:var(--font-mono); font-size:10.5px; font-weight:400; text-transform:uppercase;
+    letter-spacing:.07em; color:var(--ink-dim); text-align:left;
+    border-bottom:1px solid var(--border-strong); padding:7px 12px; white-space:nowrap;
+  }
+  td{border-bottom:1px solid var(--hairline); padding:10px 12px; vertical-align:top; line-height:1.55}
+  tr:hover td{background:rgba(255,255,255,.018)}
+  code{white-space:normal}
+  /* ---------- 徽章 ---------- */
+  .tier{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid var(--border-strong); color:var(--ink-muted); border-radius:2px; padding:1px 6px; white-space:nowrap;
+  }
+  .tier.p2{border-color:var(--warn); color:var(--warn); background:rgba(240,184,63,.08)}
+  .tier.p3{border-color:var(--border-strong); color:var(--ink-dim)}
+  .tier.confirmed{border-color:var(--error); color:var(--error); background:rgba(243,118,111,.08)}
+  .tier.ok{border-color:var(--green); color:var(--green); background:rgba(63,214,153,.08)}
+  .tier.legacy{border-color:var(--accent-line); color:var(--accent-hi); background:var(--accent-soft)}
+  /* ---------- 判定框 / 条目卡 ---------- */
+  .verdict{border:1px solid var(--accent-line); background:var(--accent-soft); padding:14px 18px; margin:16px 0}
+  .verdict .vt{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--accent-hi); text-transform:uppercase; margin-bottom:6px}
+  .verdict p{margin-bottom:8px}
+  .verdict p:last-child{margin-bottom:0}
+  .issue{border:1px solid var(--border); background:var(--bg-card); margin:18px 0}
+  .issue-head{display:flex; gap:12px; align-items:baseline; padding:11px 16px; border-bottom:1px solid var(--hairline); background:var(--bg-row); flex-wrap:wrap}
+  .issue-head .id{font-family:var(--font-mono); font-size:12px; color:var(--accent)}
+  .issue-head .t{font-weight:600; color:var(--ink)}
+  .issue-body{padding:12px 16px}
+  .issue-body p:last-child{margin-bottom:0}
+  .kv{margin:8px 0}
+  .kv b{display:inline-block; font-family:var(--font-mono); font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-dim); width:76px; font-weight:400; vertical-align:top}
+  .kv span{display:inline-block; max-width:calc(100% - 84px)}
+  .ev-list{margin:6px 0 0; padding-left:0; list-style:none}
+  .ev-list li{padding:7px 0 7px 22px; border-top:1px solid var(--hairline); position:relative}
+  .ev-list li::before{content:"›"; position:absolute; left:4px; color:var(--warn); font-family:var(--font-mono)}
+  .okbox{border:1px solid rgba(63,214,153,.4); background:rgba(63,214,153,.06); padding:14px 18px; margin:16px 0}
+  .okbox .vt{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--green); text-transform:uppercase; margin-bottom:6px}
+  .okbox p{margin-bottom:8px}
+  .okbox p:last-child{margin-bottom:0}
+  ol.steps{margin:8px 0; padding-left:22px}
+  ol.steps li{margin-bottom:10px}
+  .note{font-size:12.5px; color:var(--ink-dim)}
+  .foot{margin-top:64px; border-top:1px solid var(--border-strong); padding-top:14px; font-family:var(--font-mono); font-size:11px; color:var(--ink-dim); letter-spacing:.04em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kick-row">
+    <span class="kick">report · webui-detail-panel-redesign</span>
+    <span class="kick-meta">doc-type report · <span class="st">doc-status Done</span> · 26-10-07-0542</span>
+  </div>
+  <h1>WEBUI 详情面板 15 变体<span class="thin"> 摸排问题清单</span> 汇总报告</h1>
+  <p class="lede">
+    对 <strong>详情面板 15 个设计变体</strong>(general / trackers / peers / content / traffic 五组)做一轮专项摸排:
+    核实用户点名的 4 个问题, 并静态走查新发现问题。结论: <strong>4 个点名问题全部确认成立</strong>,
+    另发现 <strong>P2 级 3 条、P3 级 5 条</strong>, 2 项复核确认无问题; 已入池遗留 5 条单独列出, 不与本轮新发现混写。
+  </p>
+  <div class="head-meta">
+    <span>摸排方式: 静态代码走查(未真机渲染验证)</span>
+    <span>基线 commit: 332c1587</span>
+    <span>计划档案: memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html</span>
+    <span>证据路径缩写: STATIC/ = src/auto_qb/webui/static/</span>
+  </div>
+  <nav class="toc">
+    <div class="toc-row"><span class="toc-no">§1</span><span class="toc-t">摸排范围与方法</span></div>
+    <a class="toc-row" href="#s2"><span class="toc-no">§2</span><span class="toc-t">用户点名 4 问题核实结论(Q1-Q4, 全部确认)</span></a>
+    <a class="toc-row" href="#s3"><span class="toc-no">§3</span><span class="toc-t">新发现问题(P2 ×3 · P3 ×5)</span></a>
+    <a class="toc-row" href="#s4"><span class="toc-no">§4</span><span class="toc-t">确认无问题项(复核闭环)</span></a>
+    <a class="toc-row" href="#s5"><span class="toc-no">§5</span><span class="toc-t">已入池遗留项(提交 296d5223, 与新发现区分)</span></a>
+    <a class="toc-row" href="#s6"><span class="toc-no">§6</span><span class="toc-t">建议修复顺序(分阶段)</span></a>
+  </nav>
+</header>
+
+<!-- ================= §1 ================= -->
+<section id="s1">
+  <div class="sec-head">
+    <div class="sec-no">01</div>
+    <div>
+      <h2>摸排范围与方法</h2>
+      <p class="sec-sub">对象 / 方法 / 时间三要素, 以及结论的可信边界。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th style="width:120px">要素</th><th>说明</th></tr>
+      <tr><td><strong>对象</strong></td><td>
+        <code>src/auto_qb/webui/static/</code> 下 15 个详情面板变体文件(<code>01-general-hero-tall.js</code> ~ <code>15-traffic-adaptive-collapsed.js</code>),
+        及其消费的核心层: <code>shared/drawer.js</code>、<code>shared/drawer_templates.js</code>、<code>shared/selection.js</code>、
+        <code>shared/tpl/drawer.html</code>、<code>atlas/css/dialogs.css</code>; 对照经典渲染链(<code>drawerGeneralSections()</code> + <code>.f-row</code>)。
+      </td></tr>
+      <tr><td><strong>方法</strong></td><td>
+        静态代码走查: 逐变体读注册块 / 渲染函数 / 样式定义, 交叉核对核心层调用点与守卫分支;
+        用户点名问题逐条对照代码给「确认 / 不成立」结论; 兼做两项遗留修复的复核闭环(§4)。
+        <strong>未真机渲染验证</strong> —— 视觉类结论(比例失调 / 截断 / 空白)以代码推演为准, 修复时建议真机复核。
+      </td></tr>
+      <tr><td><strong>时间</strong></td><td>2026-10-07, 基线 commit <code>332c1587</code>。</td></tr>
+      <tr><td><strong>背景</strong></td><td>变体体系由计划档案 <a href="../plans/26-10-06-0838-plan-webui-detail-panel-redesign.html">26-10-06-0838-plan-webui-detail-panel-redesign.html</a> 立项实施(S0-S7 七笔提交); 本报告是该轮实施后的第一轮专项质量摸排。</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= §2 ================= -->
+<section id="s2">
+  <div class="sec-head">
+    <div class="sec-no">02</div>
+    <div>
+      <h2>用户点名 4 问题核实结论</h2>
+      <p class="sec-sub">四条全部确认成立。每条给现象 / 根因 / 证据 / 影响面。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+
+    <h3>Q1 模板尺寸小、4K 下横向比例失调 <span class="tier confirmed" style="margin-left:8px">确认</span><span class="h3-mono">根因三层叠加</span></h3>
+    <div class="issue">
+      <div class="issue-body">
+        <div class="kv"><b>根因①</b><span><strong>抽屉本体无最大宽度</strong>: <code>STATIC/atlas/css/dialogs.css:13-15</code> —— <code>.drawer-dock</code> 只有 <code>padding: 0 12px</code>, <code>.drawer</code> 无 <code>max-width</code>, 4K 下面板宽 ≈ 视口 − 24px。</span></div>
+        <div class="kv"><b>根因②</b><span><strong>变体栅格全部等分拉伸</strong>: 所有变体 label/value 容器用 <code>repeat(N, minmax(0,1fr))</code> 或 <code>flex:1 1 0</code> 铺满面板宽, 无宽度上限 ——
+          <code>01-general-hero-tall.js:81</code>(4列键值栅格)、<code>:39</code>(英雄行5格 flex:1 1 0)、<code>02-general-cards-low.js:36</code>(3列卡)、
+          <code>03-general-dossier-collapsed.js:72</code>(3列)、<code>04-…-tall.js:81</code>、<code>07-peers-dashboard-tall.js:64</code>(4卡)。</span></div>
+        <div class="kv"><b>根因③</b><span><strong>label/value 用 <code>justify-content:space-between</code></strong>: 单元格一拉伸, 标签推最左、值推最右 —— 「进度 … 100.0%」相距半屏。证据:
+          <code>01-general-hero-tall.js:83</code>(<code>.dt01-cell</code>)、<code>02-general-cards-low.js:51</code>(<code>.dt02-kv</code>)、
+          <code>03-general-dossier-collapsed.js:73</code>(<code>.dt03-item</code>)、<code>:103</code>(<code>.dt03-kv</code>)、<code>14-traffic-annotated-split-low.js:43</code>(<code>.dt14-row</code>)。</span></div>
+        <div class="kv"><b>对照</b><span>经典链 <code>.f-row</code> 固定标签列 + 值紧随其后(<code>atlas/css/dialogs.css:96</code> <code>grid-template-columns: 16px 112px minmax(0,1fr) auto</code>), 大屏不散架 ——
+          变体放弃该口径且<strong>零宽度断点</strong>(15 个文件无宽度类媒体查询; 仅 dt15 有高度类 <code>@container</code>, <code>15-….js:33,38</code>)。</span></div>
+        <div class="kv"><b>影响面</b><span>全部 15 变体 × 3 皮肤在宽视口(≥2K)下的可读性; 窄视口不受影响, 故用户感知为「4K 下才坏」。</span></div>
+      </div>
+    </div>
+
+    <h3>Q2 缺乏图标 <span class="tier confirmed" style="margin-left:8px">确认</span><span class="h3-mono">数据在、经典链在用、变体全丢</span></h3>
+    <div class="issue">
+      <div class="issue-body">
+        <div class="kv"><b>事实①</b><span>经典链字段行图标<strong>数据本来就存在</strong>: <code>drawerGeneralSections()</code> 每行带 <code>icon</code> 字段(<code>STATIC/shared/drawer.js:1178-1247</code>),
+          经典渲染消费它(<code>shared/tpl/drawer.html</code> 的 <code>&lt;use :href="r.icon"&gt;</code> + <code>icoTone</code> 着色, <code>drawer.js:1255-1270</code>)。</span></div>
+        <div class="kv"><b>事实②</b><span>general 三变体<strong>全部丢弃</strong>该字段: grep <code>r.icon</code> 在 dt01/02/03 零命中; dt01 的 <code>cell()</code> 只渲染 label+value(<code>01-general-hero-tall.js:205</code>)。
+          变体里 svg 仅限 chevron / 动作钮 / 空态图标(如 <code>01:197-198,212</code>)。</span></div>
+        <div class="kv"><b>事实③</b><span>traffic 两变体<strong>完全无 svg</strong>: <code>13-traffic-chart-led-tall.js</code>、<code>14-traffic-annotated-split-low.js</code> grep <code>&lt;svg</code> 均为 0
+          (仅 dt15 摘要条有一个非交互迷你走势SVG)。未引入图标库; 状态 / 速度 / 大小等字段行在变体里均纯文字。</span></div>
+        <div class="kv"><b>影响面</b><span>变体行扫读效率与视觉层次整体低于经典渲染; 修复成本低 —— 数据源无需改动, 变体侧消费即可。</span></div>
+      </div>
+    </div>
+
+    <h3>Q3 收起状态不随鼠标点击切换种子 <span class="tier confirmed" style="margin-left:8px">确认</span><span class="h3-mono">守卫复用错位</span></h3>
+    <div class="issue">
+      <div class="issue-body">
+        <div class="kv"><b>根因</b><span>鼠标单击行 → <code>onTorrentClick</code> → <code>_kbFollowDrawer()</code>(<code>STATIC/shared/selection.js:154-171</code>), 这是唯一「面板开着点哪行换哪行」通道。
+          但 <code>_kbFollowDrawer</code> 首行守卫<strong>收起即返回, 且在换目标逻辑之前</strong>: <code>STATIC/shared/drawer.js:848</code> <code>if (this.drawer.collapsed) return;</code>。
+          收起态点任何行, <code>_switchDrawerTarget</code> 永不执行, <code>drawer.hash</code> 不变 → 头部标题与收起摘要条继续显示旧种子, 观感「点了没反应」。</span></div>
+        <div class="kv"><b>旁证</b><span>不一致三处: ① 双击 / 右键详情 / Enter 走 <code>openTorrentDrawer</code>, 重置 <code>collapsed: false</code>(<code>drawer.js:658</code>) —— 同是「点种子」, 单击不动、双击强制展开;
+          ② 收起态点页签会先展开再切(<code>drawer.js:806-807</code>), 设计者知道此问题但只修了页签;
+          ③ 收起态点行还会把 <code>kbCursor</code> 落到新行(<code>selection.js:156</code>), 用户随后点展开钮时面板突然跳到之前点过的行(<code>drawer.js:1007</code> 展开补跟), 行为延迟不可预期。</span></div>
+        <div class="kv"><b>设计意图</b><span>该守卫对键盘 ↑↓ 是<strong>有意设计</strong>(<code>drawer.js:847</code> 注释「收起态跟随暂停」), 但鼠标路径复用同一守卫未区分。</span></div>
+        <div class="kv"><b>影响面</b><span>收起态下的全部鼠标单击跟随; 衍生危害见 P2-3。</span></div>
+      </div>
+    </div>
+
+    <h3>Q4 「高 / 矮 / 收起」被当成模板名 <span class="tier confirmed" style="margin-left:8px">确认</span><span class="h3-mono">档位后缀混入展示名</span></h3>
+    <div class="issue">
+      <div class="issue-body">
+        <div class="kv"><b>根因</b><span>15 个变体注册 <code>label</code> 全部把档位后缀写进展示名, 如 <code>01-general-hero-tall.js:308</code> <code>"英雄行·键值栅格(高)"</code>、
+          <code>06-trackers-table-collapsed.js:346</code> <code>"增强表格(收起)"</code>、<code>15-traffic-adaptive-collapsed.js:196</code> <code>"紧凑自适应(收起)"</code>(共 15 处, 见各文件 register 块)。</span></div>
+        <div class="kv"><b>传导链</b><span>该 label 直接进变体切换器下拉: <code>drawer_templates.js:153-154</code>(<code>options()</code> 透传 label) → <code>drawer_templates.js:205</code>(dtTplOptions) →
+          <code>shared/tpl/drawer.html</code> 两个 <code>&lt;select class="dt-select"&gt;</code> 的 <code>&lt;option&gt;</code>。用户在 UI 看到的选择项就是「……(高)/(矮)/(收起)」。</span></div>
+        <div class="kv"><b>判定</b><span>档位(tall/low/collapsed)只是物理形态描述, 同一变体三档语义都收进去了(各文件头注声明「收起/矮/高三档语义全部收进本变体」), 把档位写进名字<strong>冗余且误导</strong>, 应改描述性命名。</span></div>
+        <div class="kv"><b>影响面</b><span>全部 15 个下拉项的文案; 与 P3-7(160px 截断)叠加后长名更难辨认。</span></div>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div class="vt">§2 小结</div>
+      <p>Q1 / Q2 / Q3 / Q4 —— <strong>四条全部确认成立</strong>, 无一误报。Q1 与 Q4 相互独立; Q3 另有衍生危害(P2-3)。</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= §3 ================= -->
+<section id="s3">
+  <div class="sec-head">
+    <div class="sec-no">03</div>
+    <div>
+      <h2>新发现问题</h2>
+      <p class="sec-sub">本轮摸排新发现, 按严重度分档: P2(应修, 有用户可见危害) ×3 · P3(随增强批次) ×5。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+
+    <h3>P2 档<span class="h3-mono">3 条 · 用户可见的功能危害</span></h3>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P2-1</span><span class="t">变体渲染抛错后该页签整幅空白, 无用户可见降级</span><span class="tier p2">P2</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>变体渲染函数抛错时用户看到<strong>纯空白页签</strong>, 须手动切回「经典」。</span></div>
+        <div class="kv"><b>根因</b><span><code>drawer_templates.js:291-299</code> <code>_dtRender</code> catch 里只 <code>replaceChildren()</code> 清宿主 + console.error;
+          此时经典包裹层因 <code>drawerTplSel.&lt;tab&gt; !== 'classic'</code> 仍隐藏(<code>drawer.html</code> 经典层 v-show)、<code>.dt-host:empty</code> 又 <code>display:none</code>(<code>drawer_templates.js:189</code>) —— 两条退路同时断掉。</span></div>
+        <div class="kv"><b>证据</b><span><code>drawer_templates.js:291-299</code> / <code>:189</code> / <code>shared/tpl/drawer.html</code>(经典层 v-show)。</span></div>
+        <div class="kv"><b>影响面</b><span>全部 15 变体 × 3 皮肤; 任何一次渲染期运行时错误即触发。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P2-2</span><span class="t">宽表格变体横向滚动位置每轮重渲染可能归零</span><span class="tier p2">P2</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>窄窗口下使用宽表格变体时, 5s peers 轮询数据一变, 用户的横向滚动位置丢失(跳回最左)。</span></div>
+        <div class="kv"><b>根因</b><span>dt07/08/09 固定列宽 grid, 最小宽 ≈ 990-1000px(<code>09-peers-density-collapsed.js:72-74</code> 列合计 988px; <code>08:95,99</code>; <code>07:129,133</code>),
+          窄窗口 / ≤900px 固定全屏态(<code>atlas/css/dialogs.css:37-41</code>)必然横向滚动;
+          但重渲染只保 <code>scrollTop</code> 不保 <code>scrollLeft</code>(<code>09:303-304,325</code>、<code>08:334-335,366</code>、<code>07:470-471,492</code>), sig 变即整帧重建。dt06 同理(<code>06:226-227,268</code>)。</span></div>
+        <div class="kv"><b>影响面</b><span>dt06 / dt07 / dt08 / dt09 四个表格型变体, 触发条件 = 数据轮询刷新 + 用户停在非最左横向滚动位。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P2-3</span><span class="t">收起态摘要条展示陈旧种子数据</span><span class="tier p2">P2</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>收起态点 N 个行均不换目标, 44px 摘要条的「状态·进度·速度·比率」持续描述旧种子, <strong>误导性强于「没反应」本身</strong>。</span></div>
+        <div class="kv"><b>根因</b><span>Q3 的衍生危害面: 守卫(<code>drawer.js:848</code>)挡住换目标 + <code>drawer.js:347-360</code> 默认摘要读 <code>drawer.detail</code>(旧数据)。</span></div>
+        <div class="kv"><b>影响面</b><span>收起态摘要条; 与 Q3 同一改动点可一并修。</span></div>
+      </div>
+    </div>
+
+    <h3>P3 档<span class="h3-mono">5 条 · 体验 / 一致性 / 可维护性</span></h3>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P3-4</span><span class="t">可访问性: 变体可交互元素不可键盘达</span><span class="tier p3">P3</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>折叠组头纯 div + click 委托(<code>01:210-215</code> data-fold; <code>02</code> card-h 同构);
+          排序表头 <code>cursor:pointer</code> 的 span/按钮无 tabindex/role/aria(<code>09:81-84</code> <code>.dt09-sortable</code>);
+          核心层注入的折叠/关闭钮无 aria-label/title 仅 svg(<code>shared/tpl/drawer.html</code> 两个 <code>&lt;button class="drawer-fold/drawer-close"&gt;</code>; <code>.dt-select</code> 反而有 aria-label)。</span></div>
+        <div class="kv"><b>影响面</b><span>变体子树对键盘 / 读屏用户不可操作。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P3-5</span><span class="t">fetch 失败与空列表在变体里同形态</span><span class="tier p3">P3</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>首拉失败只 toast(<code>drawer.js:755-756,792-793</code>), 变体仅按 loading + 列表长度分支(<code>04:236-246</code>、<code>06:219-230</code>、<code>07:462-474</code>), 失败后显示「暂无 tracker / 暂无已连接用户」式空态而非错误态。</span></div>
+        <div class="kv"><b>影响面</b><span>fetch 型数据组(trackers / peers)的变体展示; 用户误以为「真的没有」。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P3-6</span><span class="t">变体间折叠态「换种子是否重置」口径不一致</span><span class="tier p3">P3</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>content 组 dt10/11/12 明确「按 path 记账, 换种子重置」(提交 1fece608 与文件注); general 组 dt01/02 折叠态是模块级 <code>ui.folded</code> 跨种子保持(<code>01:32</code> + <code>render()</code> 无 hash 重置) —— 换种子后上一部的折叠选择延续, 与 content 组相悖。</span></div>
+        <div class="kv"><b>影响面</b><span>跨变体行为一致性; 需先拍板统一口径再改。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P3-7</span><span class="t">变体头选择器 160px 上限截断长名</span><span class="tier p3">P3</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span><code>drawer_templates.js:180</code> <code>.dt-select { max-width:160px }</code>, 长 label 下拉收起态被截断。</span></div>
+        <div class="kv"><b>影响面</b><span>变体切换器; Q4 改短命名后可一并缓解。</span></div>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="issue-head"><span class="id">P3-8</span><span class="t">变体重复代码: 16 份文件各自复刻同一套骨架</span><span class="tier p3">P3</span></div>
+      <div class="issue-body">
+        <div class="kv"><b>现象</b><span>16 份文件各自复刻 <code>size/dur/present</code> 工具、滚动自保、sig 比对、<code>wire/destroy</code> 骨架(如 <code>01:107-109</code> vs <code>03</code> vs <code>02</code>), 且 dt02:135 / dt03:139 用行内 style 拼布局。</span></div>
+        <div class="kv"><b>影响面</b><span>可维护性: 核心层可再抽公共 helper, 否则后续改动 15 处锁步。</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= §4 ================= -->
+<section id="s4">
+  <div class="sec-head">
+    <div class="sec-no">04</div>
+    <div>
+      <h2>确认无问题项<span class="h3-mono" style="font-weight:400">复核闭环</span></h2>
+      <p class="sec-sub">两项历史修复复核通过, 供闭环 —— 不计入待修清单。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="okbox">
+      <div class="vt">复核通过 ①</div>
+      <p><strong>监听摘除已修干净</strong>(S2 复核通过): 全部有监听的 12 个变体 destroy 均 <code>removeEventListener</code> + 复位 <code>__dtNNWired</code>(12/12 命中; dt13/14/15 无监听无定时器; dt12 的 ResizeObserver destroy 里 disconnect, <code>12:496-499</code>), 提交 32a8683e 修复无残留。</p>
+      <div class="vt" style="margin-top:14px">复核通过 ②</div>
+      <p><strong>三皮肤接入一致性无缺口</strong>: atlas/console/prism 三份 index.html 的 <code>drawer.html</code> 注入行 + <code>drawer.js</code>/<code>drawer_templates.js</code> + 15 变体 manifest 逐行相同
+        (<code>atlas:142,168-184</code> / <code>console:146,172-188</code> / <code>prism:149,175-191</code>), 装载序 drawer.js → drawer_templates.js → state.js(<code>atlas:168→187</code>)满足核心层头注硬约束(<code>drawer_templates.js:7-11</code>);
+        <code>state.js:119</code> <code>drawerTplSel: initialDrawerTpl()</code> 与 <code>app.js:452</code> 白名单校验闭环。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §5 ================= -->
+<section id="s5">
+  <div class="sec-head">
+    <div class="sec-no">05</div>
+    <div>
+      <h2>已入池遗留项<span class="h3-mono" style="font-weight:400">提交 296d5223 · 与新发现严格区分</span></h2>
+      <p class="sec-sub">以下 5 条在 <code>memory-bank/issues/_index.md:29-33</code> 已入池(feat · 标准档), 非本轮新发现, 仅汇总列示。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th style="width:56px">序</th><th>遗留项</th><th>备注</th></tr>
+      <tr><td>1</td><td>抽屉开合态持久化回读</td><td>补强一, 与 D1 拍板冲突待翻案。</td></tr>
+      <tr><td>2</td><td>09 变体 peer 悬停封禁钮</td><td>需后端端点, P-04 备选。</td></tr>
+      <tr><td>3</td><td>per-tracker 汇报倒计时端点</td><td>P-02 备选; 06 变体现以 <code>detail.reannounce_in</code> 全局近似, dt05 的「强制汇报」也是 torrent 级全局重报(<code>05:10,347</code>)。</td></tr>
+      <tr><td>4</td><td>13 变体限速虚线 / 缺口斜纹注解层</td><td>uPlot 插件, P-03 备选。</td></tr>
+      <tr><td>5</td><td>14 变体解读栏与图悬停联动</td><td>P-05 备选。</td></tr>
+    </table>
+    <p class="note">另: 计划档案自记拍板点 P-01(默认全 classic)~ P-06(收起摘要 44px)均已按推荐案执行(plan HTML v2 版本记录, plan:484)。</p>
+  </div>
+</section>
+
+<!-- ================= §6 ================= -->
+<section id="s6">
+  <div class="sec-head">
+    <div class="sec-no">06</div>
+    <div>
+      <h2>建议修复顺序<span class="h3-mono" style="font-weight:400">分阶段 · 一句话级</span></h2>
+      <p class="sec-sub">按「用户可感知危害 → 视觉口径 → 命名 → 增强」排序, 供排期参考。</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <ol class="steps">
+      <li><strong>第一批(一处改动)</strong>: 修 P2-1 / P2-3 / Q3 —— 收起态鼠标跟随策略(展开并切换, 或至少换目标不展开)+ <code>_dtRender</code> 失败回落经典层。</li>
+      <li><strong>第二批(Q1)</strong>: 变体内容层加最大可读宽度(如 <code>max-width:1400px; margin:auto</code>)或 label 列改经典 <code>.f-row</code> 固定宽口径, 废弃 space-between。</li>
+      <li><strong>第三批(Q4)</strong>: 15 个 <code>label</code> 去「(高/矮/收起)」后缀改描述性命名 —— 纯字符串改, 守阵注意 grep 锚点。</li>
+      <li><strong>第四批(Q2)</strong>: 变体字段行消费 <code>drawerGeneralSections()</code> 已有 <code>icon</code> 数据 + 复用 <code>icoTone</code> 着色, traffic 变体 KPI 行补图标。</li>
+      <li><strong>第五批(增强)</strong>: P2-2(保 scrollLeft)、P3-4/5/6/7 随下一轮增强批次; P2-2 修复时同步评估 dt09/08 窄屏列压缩断点。</li>
+    </ol>
+  </div>
+</section>
+
+<div class="foot">
+  report · webui-detail-panel-redesign · added 26-10-07-0542 · 静态走查 @ 332c1587 · 本件出厂即冻结(证据快照), 修复进展看任务档案
+</div>
+
+</div>
+</body>
+</html>

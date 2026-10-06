@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-07-0542] [WEBUI 详情面板 15 变体摸排 · 问题清单汇总报告](26-10-07-0542-report-webui-detail-panel-variants-audit.html) — `webui-detail-panel-redesign`
 - [26-10-07-0208] [my-commit-flow 自我改写版本撕裂 · 临时目录快照自举可行性分析 · auto-qb](26-10-07-0208-report-my-commit-flow-self-snapshot.html) — `my-commit-flow-self-snapshot`
 - [26-10-07-0204] [可行性报告 · auto-qb ↔ auto-qb.webui 采用 qB rid 式增量同步 · auto-qb](26-10-07-0204-report-webui-delta-sync-feasibility.html) — `webui-delta-sync`
 - [26-10-07-0054] [复验报告 · 两条 WebUI perf issue 在内核化重构后是否仍成立 · auto-qb](26-10-07-0054-report-webui-perf-issues-recheck.html) — `webui-perf-issues-recheck`
