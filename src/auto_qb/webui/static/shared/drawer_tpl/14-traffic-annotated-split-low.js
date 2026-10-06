@@ -40,7 +40,8 @@
     "  background:var(--bg-card); padding:7px 10px 8px; }",
     ".drawer .dt14-sec h4 { margin:0 0 5px; font-size:11.5px; font-weight:600; color:var(--fg-dim);",
     "  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
-    ".drawer .dt14-row { display:flex; justify-content:space-between; align-items:baseline; gap:8px;",
+    /* Q1(报告 26-10-07-0542): 解读栏键值行标签在前、值紧随, 不再用 space-between 两端推开 */
+    ".drawer .dt14-row { display:flex; align-items:baseline; gap:8px;",
     "  padding:1px 0; font-size:12px; }",
     ".drawer .dt14-row .k { color:var(--fg-muted); }",
     ".drawer .dt14-row .v { font-family:var(--font-mono, ui-monospace, monospace); color:var(--fg); }",

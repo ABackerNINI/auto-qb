@@ -47,8 +47,8 @@
     ".drawer .dt02-card.folded .dt02-chev { transform:rotate(-90deg); }",
     ".drawer .dt02-card.folded .dt02-card-b { display:none; }",
     ".drawer .dt02-card-b { padding:7px 12px 10px; }",
-    /* 键值行(悬浮高亮) */
-    ".drawer .dt02-kv { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:4px 6px;",
+    /* 键值行(悬浮高亮; Q1 报告 26-10-07-0542: 标签在前值紧随, 不再 space-between 两端推开) */
+    ".drawer .dt02-kv { display:flex; align-items:baseline; gap:10px; padding:4px 6px;",
     "  margin:0 -6px; border-radius:var(--radius-sm); }",
     ".drawer .dt02-kv:hover { background:var(--bg-hover); }",
     ".drawer .dt02-kv .k { flex:none; font-size:12px; color:var(--fg-muted); }",

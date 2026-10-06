@@ -187,6 +187,13 @@
     "  text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.5;",
     "  color: var(--fg-muted); }",
     ".drawer .dt-host:empty { display: none; }",
+    /* Q1(报告 26-10-07-0542 §2): 变体内容层最大可读宽度 —— 四页签宿主统一限宽居中, 4K 下
+     * 键值栅格/英雄行/多列卡片不再等分拉伸到视口宽(单点收口, 15 个变体文件零复刻); 窄视口
+     * (内容宽 <= 1400px)零变化。traffic 双宿主不限宽: 图本体/工具条/图例归经典链恒满宽,
+     * 13/15 的 KPI 头行限宽会与下方图缘错位, 14 的解读栏自带 288px 固定右栏无拉伸问题。 */
+    ".drawer .dt-host[data-dt-host=\"general\"], .drawer .dt-host[data-dt-host=\"trackers\"],",
+    "  .drawer .dt-host[data-dt-host=\"peers\"], .drawer .dt-host[data-dt-host=\"content\"]",
+    "  { max-width: 1400px; margin-left:auto; margin-right:auto; }",
     /* 流量块 template 转 div 的布局等价层: 顶替原 fragment 直挂 .drawer-body.is-traffic(flex 纵列)
      * 的几何 —— wrapper 自身成为唯一 flex item 撑满, 内部仍是纵列(qb-chart 的 flex:1 规则
      * `.drawer-body.is-traffic .qb-chart` 是后代选择器, 在 wrapper 内照常命中)。FX-29 遮罩

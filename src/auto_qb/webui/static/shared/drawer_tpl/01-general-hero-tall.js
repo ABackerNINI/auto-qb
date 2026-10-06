@@ -80,7 +80,8 @@
     "  text-overflow:ellipsis; white-space:nowrap; }",
     ".drawer .dt01-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px;",
     "  background:var(--hairline); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden; }",
-    ".drawer .dt01-cell { min-width:0; display:flex; align-items:baseline; justify-content:space-between; gap:8px;",
+    /* Q1(报告 26-10-07-0542): 键值格标签在前、值紧随, 不再用 space-between 两端推开 */
+    ".drawer .dt01-cell { min-width:0; display:flex; align-items:baseline; gap:8px;",
     "  padding:7px 10px; background:var(--bg-card); }",
     ".drawer .dt01-cell:hover { background:var(--bg-hover); }",
     ".drawer .dt01-cell.is-wide { grid-column:span 2; }",

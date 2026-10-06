@@ -47,6 +47,7 @@
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
 - test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
+- test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3153,6 +3154,42 @@ def test_drawer_tpl_registry_wiring():
             assert not re.search(rf"^      (?:async )?{name}\s*[(:]", other, re.M) \
                 and not re.search(rf"^    (?:async )?{name}\s*[(:]", other, re.M), \
                 f"{rel} 与核心层成员重名 {name}(mixin 合并后者覆盖前者, 静默不报错)"
+
+
+def test_drawer_tpl_variant_width_discipline():
+    """详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 必须含四页签宿主的
+    max-width 居中收口(15 个变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条
+    归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏无拉伸);
+    全部变体与核心注入 CSS 禁 justify-content:space-between(4K 下 label/value 两端推开病根,
+    改为标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明场景)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    # 注入的 CSS 字符串在 JS 源里是双引号转义形态(\"), 先还原再对选择器做子串断言
+    core_css = core.replace('\\"', '"')
+
+    # 1. 共享 max-width 收口单点: 四页签宿主各出现在限宽规则里, 值与居中写法一起钉住
+    for tab in ("general", "trackers", "peers", "content"):
+        assert f'.dt-host[data-dt-host="{tab}"]' in core_css, \
+            f"核心缺 {tab} 宿主限宽收口(变体内容层 4K 等分拉伸复发)"
+    assert "max-width: 1400px; margin-left:auto; margin-right:auto" in core_css, \
+        "核心宿主收口缺 max-width/margin 居中(规则形态漂移, 同步本守阵)"
+
+    # 2. traffic 双宿主不得进限宽收口(与经典链图缘对齐, 判据见核心注入处注释)
+    for slot in ("traffic-pre", "traffic-post"):
+        hit = [l for l in core_css.splitlines() if f'data-dt-host="{slot}"' in l]
+        assert not hit, \
+            f"traffic 宿主 {slot} 不得进限宽收口(图本体归经典链恒满宽, 限宽与图缘错位)"
+
+    # 3. label/value 两端推开零容忍: 15 个变体 + 核心注入 CSS(比较前去空格, 兼容空格写法)
+    vdir = os.path.join(shared, "drawer_tpl")
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "justify-content:space-between" not in text.replace(" ", ""), \
+            f"drawer_tpl/{name}: justify-content:space-between 复活(Q1 label/value 两端推开病根; 非 kv 场景确需请改本守阵并注明)"
+    assert "justify-content:space-between" not in core.replace(" ", ""), \
+        "核心注入 CSS 不得用 justify-content:space-between(同上)"
 
 
 def test_drawer_tpl_classic_default():

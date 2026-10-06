@@ -70,7 +70,8 @@
     ".drawer .dt03-sec.folded .dt03-chev { transform:rotate(-90deg); }",
     ".drawer .dt03-sec.folded .dt03-grid, .drawer .dt03-sec.folded .dt03-wide { display:none; }",
     ".drawer .dt03-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); column-gap:16px; }",
-    ".drawer .dt03-item { display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding:4px 6px;",
+    /* Q1(报告 26-10-07-0542): 键值项标签在前、值紧随, 不再用 space-between 两端推开(dt03-item/dt03-kv 同批) */
+    ".drawer .dt03-item { display:flex; align-items:baseline; gap:8px; padding:4px 6px;",
     "  margin:0 -6px; border-radius:var(--radius-sm); min-width:0; }",
     ".drawer .dt03-item:hover { background:var(--bg-hover); }",
     ".drawer .dt03-item .k { flex:none; font-size:11.5px; color:var(--fg-dim); }",
@@ -100,7 +101,7 @@
     ".drawer .dt03-crow .k { flex:none; width:52px; font-size:11.5px; color:var(--fg-muted); }",
     ".drawer .dt03-crow .v { flex:1; min-width:0; font-family:var(--font-mono, ui-monospace, monospace); font-size:11px;",
     "  color:var(--fg-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
-    ".drawer .dt03-kv { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:3px 6px;",
+    ".drawer .dt03-kv { display:flex; align-items:baseline; gap:10px; padding:3px 6px;",
     "  margin:0 -6px; border-radius:var(--radius-sm); }",
     ".drawer .dt03-kv:hover { background:var(--bg-hover); }",
     ".drawer .dt03-kv .k { flex:none; font-size:11.5px; color:var(--fg-muted); }",
