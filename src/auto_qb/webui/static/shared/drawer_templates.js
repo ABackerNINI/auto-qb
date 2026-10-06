@@ -292,9 +292,27 @@
         try {
           st.entry.render(st.host, this);
         } catch (e) {
-          /* 变体渲染抛错: 清空宿主降级为空白(面板本体/经典链不受影响), 不静默吞栈 */
+          /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落经典渲染层, 不再降级为整幅空白
+           * —— 只清宿主时经典包裹层因 drawerTplSel.<tab> !== 'classic' 仍被 v-show 藏住,
+           * .dt-host:empty 又把空宿主藏住, 两条退路同时断掉。复位 drawerTplSel.<tab> 让经典层
+           * v-show 自然接管、dtHostOn 随之隐藏宿主(状态单点仍是 drawerTplSel, 不新增并行标志);
+           * 并按 classic 语义卸载本变体(destroy + 清宿主 + 摘挂载态), 后续通知/换页签/重开面板
+           * 都按 classic 续走。复位随 dtPersistSel 落盘: 持续抛错的变体不跨会话钉死坏选择;
+           * 一次性瞬时错误的代价是用户在切换器重选一次 —— 两权取其轻取前者。从回落到 Vue 重渲染
+           * 之间的一拍, 空宿主由既有 .dt-host:empty 兜住不闪空白(主路径靠 v-show 切走, 不依赖
+           * :empty)。不静默吞栈, 报错带页签与变体 id。 */
+          this._dtMounted = null;
+          if (st.entry.destroy) {
+            try { st.entry.destroy(st.host); } catch (e2) { /* destroy 失败不阻断回落 */ }
+          }
           try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
-          if (typeof console !== "undefined" && console.error) console.error("[dt] render failed:", e);
+          if (this.drawerTplSel && this.drawerTplSel[st.tab] !== "classic") {
+            this.drawerTplSel[st.tab] = "classic";
+            this.dtPersistSel();
+          }
+          if (typeof console !== "undefined" && console.error) {
+            console.error("[dt] render failed, fallback to classic (tab=" + st.tab + ", variant=" + st.entry.id + "):", e);
+          }
         }
       },
       _dtMountActive(tab) {

@@ -45,6 +45,7 @@
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
 - test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/切换器 x2/摘要条 x2 + 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
+- test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -3178,6 +3179,106 @@ def test_drawer_tpl_classic_default():
     assert proc.returncode == 0, f"drawer_templates node 电池跑挂: {proc.stderr.strip()}"
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], f"classic 默认电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_DT_FALLBACK_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩(dtPersistSel 落盘走它); document 保持 undefined —— dtInjectCss 有守卫跳过注入 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const M = window.AQB_DRAWER_TPL.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+/* 假 ctx: 只带回落路径触碰的面(drawerTplSel + 挂载态 + 持久化方法, 与真根实例的字段面对齐) */
+function makeCtx(sel) {
+  const ctx = { drawerTplSel: Object.assign({}, sel), _dtMounted: null };
+  ctx.dtPersistSel = M.dtPersistSel;
+  return ctx;
+}
+function makeHost() {
+  const host = { children: [], cleared: false, destroyed: false,
+    replaceChildren() { host.children.length = 0; host.cleared = true; } };
+  return host;
+}
+const errors = [];
+const realErr = console.error;
+console.error = (...a) => errors.push(a.map(String).join(" "));
+
+window.AQB_DRAWER_TPL_REG.register({ id: "boom", tab: "general", label: "B",
+  render() { throw new Error("boom-render"); },
+  destroy(h) { h.destroyed = true; } });
+
+/* 主场景: 变体渲染抛错 -> 该页签复位 classic + 落盘 + 摘挂载 + 清宿主 + destroy + 不吞栈 */
+const sel = { general: "boom", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
+const ctx = makeCtx(sel);
+const host = makeHost();
+const st = { tab: "general", entry: window.AQB_DRAWER_TPL_REG.get("general", "boom"), host: host };
+ctx._dtMounted = st;
+M._dtRender.call(ctx, st);
+
+ok("渲染抛错后该页签复位 classic(经典层 v-show 接管)", ctx.drawerTplSel.general === "classic");
+ok("复位随 dtPersistSel 落盘(autoqb.ui.drawerTpl)",
+  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).general === "classic"; } catch (e) { return false; } })());
+ok("其它页签选择不受牵连",
+  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).trackers === "classic"; } catch (e) { return false; } })());
+ok("挂载态已摘除(后续 _dtNotify 按 classic 路径续走)", ctx._dtMounted === null);
+ok("宿主子树已清空", host.cleared === true && host.children.length === 0);
+ok("变体 destroy 已回调(定时器/监听清理不丢)", host.destroyed === true);
+ok("console.error 未吞栈且带页签与变体 id",
+  errors.length === 1 && errors[0].indexOf("boom") >= 0 && errors[0].indexOf("general") >= 0);
+
+/* 稳态: sel 已 classic(重复回落/经典渲染自身抛错路径不触及本函数, 但要稳) */
+errors.length = 0;
+delete store["autoqb.ui.drawerTpl"];
+const ctx2 = makeCtx({ general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" });
+M._dtRender.call(ctx2, { tab: "general", entry: st.entry, host: makeHost() });
+ok("sel 已 classic 时稳态不重复复位不落盘", ctx2.drawerTplSel.general === "classic" && !("autoqb.ui.drawerTpl" in store));
+
+console.error = realErr;
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed }));
+if (failed.length) process.exit(1);
+"""
+
+
+def test_drawer_tpl_render_error_fallback_classic():
+    """变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 旧实现 catch 里只清宿主:
+    经典包裹层因 drawerTplSel.<tab> !== 'classic' 仍被 v-show 藏住 + .dt-host:empty 把空宿主
+    藏住, 两条退路同时断掉 = 该页签整幅空白。有 node 时真跑 _dtRender 抛错电池钉住回落五件
+    (复位 classic + 落盘 / 不牵连其它页签 / 摘挂载态 / 清宿主 + destroy 回调 / console.error
+    带页签与变体 id); 无 node 静态兜底: catch 块四要素缺一即红(只清宿主的空白降级不得回潮)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    m = re.search(r"_dtRender\(st\) \{\n(.*?)\n      \},", core, re.S)
+    assert m, "_dtRender 形态漂移(守阵正则失配, 同步本守阵)"
+    catch = m.group(1)
+    assert "this._dtMounted = null" in catch, "回落必须摘挂载态(否则后续通知拿旧 st 重渲染已弃变体)"
+    assert "this.drawerTplSel[st.tab] = \"classic\"" in catch and "this.dtPersistSel()" in catch, \
+        "回落必须复位该页签 drawerTplSel 并落盘(状态单点仍是 drawerTplSel, 经典层 v-show 才接管)"
+    assert 'st.entry.id' in catch and "console.error" in catch, \
+        "回落必须 console.error 且带变体 id(不静默吞栈)"
+    assert "st.entry.destroy" in catch and "replaceChildren" in catch, \
+        "回落必须按 classic 语义卸载变体(destroy + 清宿主)"
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _DT_FALLBACK_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"回落 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"回落电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 def test_frontend_qb_traffic_drawer_page_guard():
