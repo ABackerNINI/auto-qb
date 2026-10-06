@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="kb-dangling-hash-refs">
+<meta name="issue-stamp" content="26-10-06-1904">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="kb-dangling-hash-refs">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="KB 内 40 条悬空提交 hash: feature 分支 rebase 并入 develop 后不可解析">
+<meta name="issue-summary" content="memory-bank 的 backtick/code/commit 语境提交引用中, 40 条在 feature 分支 rebase 并入 develop 后失效(git cat-file 不可解析); 集中在 progress/tasks/baselines/plans">
+<title>KB 内 40 条悬空提交 hash: feature 分支 rebase 并入 develop 后不可解析 · docs · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· docs</div>
+    <h1>KB 内 40 条悬空提交 hash: feature 分支 rebase 并入 develop 后不可解析</h1>
+    <p class="lede">memory-bank 的 backtick/code/commit 语境提交引用中, 40 条在 feature 分支 rebase 并入 develop 后失效(git cat-file 不可解析); 集中在 progress/tasks/baselines/plans</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-06-1904-docs-kb-dangling-hash-refs</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 19:04</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><code>memory-bank/</code> 的提交引用里有一批 hash 已<strong>不可解析</strong>（<code>git cat-file -e &lt;hash&gt;^{commit}</code> 失败）：它们记的是 feature 分支上的提交，该分支 rebase 并入 <code>develop</code> 后 hash 被重写，而这些历史记录类文档仍留着旧 hash，读者按图索骥找不到提交。<strong>取证 2026-10-06 19:04 实测 40 条</strong>。守卫不查 hash 可解析性（<code>kb.check</code> / <code>test_docs_forms</code> 均绿），故静默累积。其中一部分有确定替换（可按 commit message 映射，如 <code>0227f25c</code>「S1 HrHistoryEvent」→ <code>13df6a80</code>），另一部分在合流中被重写/抹掉、无等价 commit（如 <code>c9ae4853</code>）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <p>复现（取证 2026-10-06 19:04）：提取 backtick / <code>&lt;code&gt;</code> / <code>commit </code> 语境的 hash，过滤 <code>git cat-file</code> 报 <code>missing</code> 的：</p>
+    <p><code>{ grep -rhoE '`[0-9a-f]{7,40}`' memory-bank/ --include='*.md'; grep -rhoE '&lt;code&gt;[0-9a-f]{7,40}&lt;/code&gt;' memory-bank/ --include='*.html'; grep -rhoE 'commit [0-9a-f]{7,40}' memory-bank/ --include='*.md' --include='*.html'; } | sed -E 's/`//g; s#&lt;/?code&gt;##g; s/^commit //' | sort -u | grep -vE '^[0-9]+$' | git cat-file --batch-check | awk '$2=="missing"{print $1}'</code></p>
+    <ul>
+      <li>40 条 hash（取证 19:04）：<code>0227f25c 026742a 04b5899f 0811ac5 0ff19787 2094a36 22625b49 2923ffa4 3da9f1a 3e4745c2 48836d7 49da6d06 4c88e8e2 51e30393 633d58cd 66696eac 66f4111 7d9595a7 7e45063c 85a22f8a 8873c889 9c594e1e 9e70b0bd 9f096c09 a0b5d73f aac3dcc5 ab82d6c ab9a863 ae94311e b81a1ee4 bcc2bce2 bd532d26 e087aa57 ec697a08 f251e301 f359390 f38eb32 f396972 f3cfe91 f994ce20</code></li>
+      <li>主要落点（按命中数，取证 19:04）：<code>progress/implemented-webui.md</code>(10) · <code>progress/implemented-webui-history.md</code>(10) · <code>tasks/attachments/webui-qb-replacement-sessions.md</code>(7) · <code>plans/26-09-17-0346-webui-qb-replace-wave3-handover.html</code>(7) · <code>tasks/26-10-04-webui-hr-fetch-history.md</code>(6) · <code>testing/baselines/26-10-05-0905-hr-steady-throttle.md</code>(5) · <code>testing/baselines/26-10-05-0737-webui-danger-guards.md</code>(5) · <code>testing/baselines/26-10-04-0632-webui-hr-fetch-history.md</code>(5) · <code>tasks/26-10-05-webui-danger-guards.md</code>(5) · <code>tasks/26-10-05-backend-hr-steady-throttle.md</code>(5) · <code>plans/26-10-05-0555-plan-hr-steady-throttle.html</code>(5) · <code>plans/26-10-05-0314-plan-webui-danger-guards.html</code>(5) · 其余散见 drawer-redesign / reannounce-confirm 等专题。</li>
+      <li>定位单条：<code>grep -rn "&lt;hash&gt;" memory-bank/</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>逐条按 commit message 考古映射到 develop 现存 hash（<code>git log --all --oneline --grep=&lt;关键词&gt;</code> 定位，核对 message 与改动面后再改）；无等价 commit（合流被重写/抹掉）的<strong>去掉死 hash、保留叙述</strong>。改动面约 15 份历史记录文件，宜独立一轮做、避免与并行会话撞车。同类先例：<code>26-10-06-0458</code> 的 S7a hash <code>d2dc3ba1</code> 已在本轮修为 <code>68f6e033</code>。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-06 19:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-06-1904-docs-kb-dangling-hash-refs.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,14 +1,14 @@
 # 78 —— Playwright e2e 全量矩阵验收轮(S7 收尾: 旧冒烟脚本退役, e2e 单点终态)
 
 > 摘要: 迁移计划 [26-10-06-0708](../../plans/26-10-06-0708-plan-playwright-e2e.html) S7 批收尾基线。
-> S0–S7a 已实施完成(删旧脚本 = `d2dc3ba1`), 本轮 = S7b 全量矩阵验收(§5.2 六行, 串行人跑,
+> S0–S7a 已实施完成(删旧脚本 = `68f6e033`), 本轮 = S7b 全量矩阵验收(§5.2 六行, 串行人跑,
 > 每轮独立起桩) + 知识库回写 + 计划收口。默认轮 collected **88 = 78 passed + 10 skipped**(skip 全部为
 > 模式门控组, 消息带当前 env 值, 见 `e2e/lib/mode.mjs` requireMode)。
 > 基线时间: 2026-10-06 14:25
 
 **Refs:** memory-bank/plans/26-10-06-0708-plan-playwright-e2e.html, memory-bank/activeContext/26-10-06-0508-playwright-e2e.md, memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html
 
-- 分支: **playwright-e2e-migration** @ **d2dc3ba1**(S7a; 工作树含 S7b 文档回写未提交)
+- 分支: **playwright-e2e-migration** @ **68f6e033**(S7a; 已 rebase 并入 develop; 工作树含 S7b 文档回写未提交)
 - 命令: `commands run dev.e2e` + env(hang 轮例外见下); 桩服务由 webServer 托管(8137,
   `reuseExistingServer: false`), 每轮收尾后 netstat 复核**端口零残留**(7/7 轮干净,
   `e2e/global-teardown.mjs` 兜底每轮都打出「强制结束监听 8137 的进程树」)。

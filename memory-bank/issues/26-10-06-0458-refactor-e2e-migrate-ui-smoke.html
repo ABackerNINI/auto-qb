@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="playwright-e2e">
 <meta name="doc-refs" content="memory-bank/plans/26-10-06-0708-plan-playwright-e2e.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="把 ui_smoke.cjs 分批迁移到 @playwright/test 框架">
 <meta name="issue-summary" content="1978 行自研冒烟脚本是手写 CJS+CDP 风格; 迁移后白拿自动等待 / getByRole 语义定位 / trace / shard 并行 / HTML 报告">
 <title>把 ui_smoke.cjs 分批迁移到 @playwright/test 框架 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0458-refactor-e2e-migrate-ui-smoke</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 04:58</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <ul>
       <li>2026-10-06 04:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-06 07:1x — 分步实施计划 <a href="../plans/26-10-06-0708-plan-playwright-e2e.html">26-10-06-0708</a> 已出（S0–S7 八批对账迁移，待拍板），状态保持 <strong>Open</strong></li>
+      <li>2026-10-06 18:53 — 状态改 <strong>Done</strong>（补记：实施已于 14:2x 完成，本行仅补状态回填，未再动代码）。<strong>实际修法</strong>：按计划 26-10-06-0708 的 S0–S7 八批对账迁移执行，四个拍板点均按推荐方案落定（批次顺序：flaky 块提前到 S2；模式矩阵走 env 参数化单 config；旧脚本终态删除；<code>@fast</code> tag 作门禁）；每批「新 spec 绿 → 旧脚本同参轮绿 → 映射表 → 同 commit 删旧块 → 双复跑」五步收口，同一断言始终单点定义。<strong>终态</strong>：<code>scripts/ui_smoke.cjs</code> 已退役（<code>68f6e033</code>），<code>e2e/</code> 成为浏览器断言唯一单点，「每次改前端」门禁 = <code>npm run test:e2e:fast</code>（@fast）。<strong>验证</strong>：全量矩阵六轮串行人跑全绿 —— 默认轮 <strong>78 passed + 10 skipped / 164s</strong>、hang 轮 <strong>0 failed / 64 passed + 24 skipped / 156s</strong>（2500~6000ms 窗口三连双皮肤绿）、error / skip-off / hr-empty / hr-off / torrents-3000 五轮全绿，每轮端口零残留；pytest 层 <code>test.full</code> <strong>2676 passed + 4 skipped / 99% / 29.62s</strong> 零波动；基线切片 <a href="../testing/baselines/26-10-06-1425-playwright-e2e-s7-matrix.md">26-10-06-1425</a>；认领链 plan↔issue 双向闭合。<strong>与原建议的差异</strong>：原建议「flaky 块按 issue 原序排 S4」改为提前到 S2（拍板点 P1），使 trace viewer 对存量 flaky 早两批生效。</li>
     </ul>
   </section>
 

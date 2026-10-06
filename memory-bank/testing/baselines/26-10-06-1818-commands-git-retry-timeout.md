@@ -19,7 +19,7 @@
   ⚠ **差值归因**: 本轮改动面(`.commands/` 下的包脚本与文档)**不进 `--cov=src` 统计, 也不在 `testpaths(tests/)` 里**
   ⇒ 数字全同是**预期而非漏测**; 那 +1 passed 来自开工同步快进的 12 笔远端提交。
 - ⚠ 时间上更近的 [26-10-06-1425](26-10-06-1425-playwright-e2e-s7-matrix.md) **不可直接比**: 它落在
-  `playwright-e2e-migration` 分支(@ `d2dc3ba1`), 语句数 15823 与本 develop 线不同源。
+  `playwright-e2e-migration` 分支(S7a 提交 `68f6e033`, 该分支已 rebase 并入 develop), 语句数 15823 与本 develop 线不同源。
 - **包内脚本测试(本轮真正受影响的一侧)**: `commands run test.pkg` = **126 passed / 154.49s**(`-n 4`;
   收集面 `.commands` + `.agents/skills/commands`); 其中 `my-commit-flow` 单独 **106 条**
   (`test_pipeline` 51 / `test_sync` 30 / `test_commit` 25)。

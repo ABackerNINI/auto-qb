@@ -15,7 +15,7 @@
 > **07:0x 追加(独立会话)**: 方案 B 分步实施计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html)
 > 已出(S0–S7 八批对账迁移, 4 个拍板点已按推荐方案落定); 认领链 plan↔issue↔档案已闭合。
 > **13:5x 追加(S7b 收尾会话, 分支 `playwright-e2e-migration`)**: S0–S7 **已全部实施完成**
-> (S7a 删旧脚本 = `d2dc3ba1`), **终态达成** —— `e2e/` 是 WEB UI 浏览器断言的唯一单点,
+> (S7a 删旧脚本 = `68f6e033`), **终态达成** —— `e2e/` 是 WEB UI 浏览器断言的唯一单点,
 > 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast), 旧"ok+error 两模式冒烟"口径退役。
 > 本轮(S7b) = 全量矩阵验收六轮 + 知识库回写(browser-env / smoke / pitfalls 收尾指向) +
 > 基线切片(矩阵实测数字) + 计划 doc-status → Done。
@@ -38,7 +38,7 @@
 - **已入库**: 上述改动随提交 `e6db1fab` 一并落盘(含 `package.json` / `package-lock.json` /
   `playwright.config.mjs` / `e2e/` / `.github/workflows/playwright.yml` —— CI 的 `npm ci` 依赖**已提交**的
   lock 文件, 这下才真正生效), 并已推 Gitee `develop`(远端 ref 经 `git ls-remote` 核实)。
-- `TODO.md` 已被**并行会话**作为 `c9ae4853 更新TODO` 提交入库(原"用户要求不提交"的约束已失效);
+- `TODO.md` 已被**并行会话**作为一次「更新TODO」提交入库(该提交 hash 已随 rebase 重写、不可解析; 原"用户要求不提交"的约束已失效);
   本次 `2be3fe79` 因此是**全量提交**, 不需要子集提交 + stash 舞蹈。
 
 ## 关键决策
@@ -64,9 +64,10 @@
   `spawnSync('taskkill …', {shell:true})` 正是默认管道 ⇒ 失败被静默吞掉 ⇒ `'close'` 不触发。
   新增 `e2e/global-teardown.mjs` 用**异步** taskkill 抢在 Playwright 之前杀进程树; 实测 **14.8s / exit 0**。
   根因与实测数据见 [pitfalls/testing/playwright-teardown.md](../pitfalls/testing/playwright-teardown.md)。
-- 方案 B 已入池 `memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html`(未认领)。
-  **07:3x 更新**: 其分步实施计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html) 已出
-  (S0–S7, 待拍板; 拍板点: 批次顺序 / 模式矩阵 env 化 / 旧脚本终态删除 / `@fast` tag 门禁) —— 拍板后按批实施。
+- ~~方案 B 已入池 `memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html`(未认领)。~~
+  **已闭环**: 计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html) 已出并实施完成
+  (S0–S7; 四个拍板点均按推荐方案落定), **2026-10-06 18:53 本 issue 置 Done**(补状态回填, 未再动代码;
+  验证数字见其状态日志与基线切片 `26-10-06-1425`)。
 - 顺带修正的漂移: `browser-env.md` 的 chromium 版本(151 → **153.0.8010.12**)、WorkBuddy 路径"已失效"
   结论(2026-10-06 复核可用)、轨道一 `agent-browser` 当前不在 PATH; `baseline.md` 常驻警告的包内脚本
   测试条数(47 → **103**)。

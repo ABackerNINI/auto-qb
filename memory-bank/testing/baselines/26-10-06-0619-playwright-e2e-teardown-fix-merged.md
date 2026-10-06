@@ -20,7 +20,7 @@
   回 None + freespace OSError 改抛 ExprError + `sys.torrent_count` 消灭全库拷贝)与 `2119931d`(S5)
   都是别的会话的批次, 本次改动(`e2e/*.mjs` / `playwright.config.mjs` / `.commands/dev/config.toml` /
   文档)**零 Python 改动**。
-- **提交链**: `94139d0f`(提交成功) → 推送时 `ship.push` fetch+rebase 到当时远端 tip `825e5221`
+- **提交链**: 本地提交成功(hash 已随 rebase 重写、不可解析) → 推送时 `ship.push` fetch+rebase 到当时远端 tip `825e5221`
   ⇒ 重写为 **`2be3fe79`** 并推成功; `git ls-remote gitee refs/heads/develop` == 本地 HEAD。
 - 旁证(同批核过): `dev.e2e` **14.8s / exit 0 / 4 passed (12.3s)**(合并态后未再单跑, 但该链路只碰
   `e2e/` 与配置, 不受并入的 Python 改动影响); `kb.check` 全绿; 命令漂移闸门 0 处。
