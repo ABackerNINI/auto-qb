@@ -261,7 +261,7 @@
      原先用 --paper-3 是想"与主表表头的 bg 区分", 但那让两个**同款表头**长得不一样; 现在两处一致,
      纵向由 .pinzone 的 border-bottom 分隔。顺带把专区表头从 --paper-2 的专区底上抬起来
      (--paper-3 叠 --paper-2 只差 10, 与置顶行的淡 cyan 底更是只差 2 —— 等于没有表头)。 */
-  #v-ledger .pinzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--chrome); }
+  #v-ledger .pinzone thead th, #v-ledger .hidzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--chrome); }
   /* 置顶行强调: 淡 cyan 底 + 悬停加深; 列序/列宽与主表完全一致 (守阵 test_pin_zone_reuses_ledger_columns) */
   #v-ledger tbody tr.pin-row { background: rgba(86,200,215,.05); }
   #v-ledger tbody tr.pin-row:hover { background: var(--cyan-soft); }
@@ -280,6 +280,59 @@
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
   .pinbtn.on svg { fill: currentColor; }
+
+  /* ============ 视图 A: 隐藏 (hide) 专区 + 工具栏开关 ============ */
+  /* 隐藏区与置顶专区同构 (克隆主表 thead + 复用 ledgerCells), 但三处刻意不同:
+     ①默认折叠 —— 点工具栏「隐藏区」按钮才展开 (需求: 点击按钮才能查看);
+     ②停在主表**下方** (管理区不与内容区抢位置), 分隔用上缘 border-top;
+     ③强调色走 amber (隐藏 = 暂离视野), 与 pin 的 cyan 区分。 */
+  .hidzone {
+    flex: none; background: var(--paper-2); border-top: 1px solid var(--hair-2);
+    max-height: 42vh; overflow-y: auto; scrollbar-gutter: stable;
+    box-shadow: inset 3px 0 0 var(--amber);
+  }
+  .hidzone[hidden] { display: none; }
+  .hzhead {
+    position: sticky; top: 0; z-index: 3; height: 28px;
+    display: flex; align-items: center; gap: 8px; padding: 0 20px;
+    background: var(--paper-2); border-bottom: 1px solid var(--hair);
+    font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber);
+  }
+  .hzhead b { font-weight: 600; }
+  .hzhead .hzhint {
+    margin-left: auto; font-family: var(--sans); font-size: 11px;
+    letter-spacing: 0; text-transform: none; color: var(--faint);
+  }
+  .hzrestore {
+    border: 1px solid var(--hair-2); background: none; color: var(--dim);
+    border-radius: 4px; padding: 2px 9px; font: 11px var(--sans); cursor: pointer; flex: none;
+  }
+  .hzrestore:hover { color: var(--amber); border-color: rgba(226,165,90,.45); }
+  /* 隐藏行淡 amber 底 (思路同置顶行); # 栏里的恢复按钮是可点交互, 不是 pin-mark 那种静态标记 */
+  #v-ledger tbody tr.hid-row { background: rgba(226,165,90,.05); }
+  #v-ledger tbody tr.hid-row:hover { background: rgba(226,165,90,.12); }
+  .unhidebtn {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px;
+    width: 18px; height: 18px; padding: 0; flex: none;
+    border: none; background: none; cursor: pointer; color: var(--faint); border-radius: 3px;
+  }
+  .unhidebtn:hover { color: var(--amber); background: var(--amber-soft); }
+  .unhidebtn svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* 工具栏「隐藏区」开关: 有隐藏条目才出现 (renderHiddenZone 控制), on = 专区展开中。
+     [hidden] 兜底必写 (同 .pullbtn): 本规则的 display 会盖掉 UA 的 [hidden]{display:none} */
+  .hidebtn[hidden] { display: none; }
+  .hidebtn {
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    background: var(--paper-2); color: var(--dim); border: 1px solid var(--hair-2);
+    border-radius: 6px; padding: 5px 12px; font: 12px var(--sans); cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .hidebtn:hover { color: var(--ink); border-color: var(--amber); }
+  .hidebtn.on { color: var(--amber); border-color: rgba(226,165,90,.45); }
   .ctxmenu {
     position: fixed; z-index: 40; min-width: 168px; padding: 5px;
     background: var(--paper-3); border: 1px solid var(--hair-2); border-radius: 6px;
@@ -545,6 +598,8 @@
         </div>
         <div class="count" id="aCount"></div>
         <div class="hint">点击行看关联 · 链 = doc-refs 声明数</div>
+        <!-- 隐藏区开关: 有隐藏条目才出现 (renderHiddenZone 控制 hidden 属性), 点击展开 / 收起底部隐藏区 -->
+        <button class="hidebtn" id="hidBtn" hidden title="展开 / 收起隐藏区 (隐藏的条目只在这里可见)">隐藏区</button>
       </div>
       <div class="pinzone" id="pinZone" hidden></div>
       <div class="ledgerwrap">
@@ -558,6 +613,8 @@
           <tbody id="aRows"></tbody>
         </table>
       </div>
+      <!-- 隐藏区: 默认折叠, 点 #hidBtn 展开; 列定义克隆主表 thead + 行复用 ledgerCells (同 pin 专区口径) -->
+      <div class="hidzone" id="hidZone" hidden></div>
     </main>
   </section>
 
@@ -644,11 +701,14 @@ const TYPES = ["bug", "perf", "docs", "test", "refactor", "feat", "chore", "ques
 const ACTIVE_ST = new Set(["Open", "In Progress"]);
 const VIEW_KEY = "mb-nav-view";
 const PINS_KEY = "mb-nav-pins";
+const HIDDEN_KEY = "mb-nav-hidden";   // 隐藏条目 (纯前端偏好, 同 pin): 隐藏区数据落点
 const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
 const SORT_KEYS = ["stamp", "form", "status", "topic"];
 const PULL_HEADER = "X-Nav-Action";   // 拉取的 CSRF 自定义头: 跨站 fetch 带它会先发 OPTIONS 预检, 服务不答即被浏览器拦下
 /* 图钉图标 (内联 SVG, 无外链图标库): 空心 = 未 pin; 实心由 .pinbtn.on 的 CSS fill 控制 */
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+/* 恢复 (unhide) 图标 = 逆时针回转, 内联 SVG 同图钉口径 */
+const UNHIDE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
 
 let DATA = null;
 let byLink = new Map();      // link -> item
@@ -667,6 +727,10 @@ const S = {
   /* 置顶 (pin): 纯前端偏好, 数组顺序即置顶序 (最近 pin 的在前)。只在 boot() 装载一次,
      derive() 永不触碰 —— 否则 30s 轮询会把 pin 洗掉 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。 */
   pins: [],
+  /* 隐藏 (hide): 纯前端偏好, 同 pin —— 只在 boot() 装载一次, derive() 只读 (把隐藏条目挡在
+     各视图之外) 绝不写, 否则 30s 轮询会洗掉用户的隐藏 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。
+     showHidden = 隐藏区展开开关, 会话态不落盘 (需求口径: 点按钮才能查看)。 */
+  hidden: [], showHidden: false,
   /* B 控制台 */
   selTopic: null, cq: "", openRows: new Set(),
   /* C 卡片墙 */
@@ -700,10 +764,37 @@ function togglePin(link) {
   savePins();
   renderLedger();
 }
-/* 专区条目: 按置顶序取 DATA 中仍存在者, 过滤失效 link (件被删 / 改名) 与重复 */
+/* 专区条目: 按置顶序取 DATA 中仍存在者, 过滤失效 link (件被删 / 改名) 与重复;
+   隐藏中的件不进置顶专区 —— 「隐藏」= 从所有内容视图退场, 恢复后 pin 关系原样回来 */
 function pinZoneItems() {
   const seen = new Set();
   return S.pins.map(l => byLink.get(l)).filter(x => {
+    if (!x || seen.has(x.link) || isHidden(x.link)) return false;
+    seen.add(x.link);
+    return true;
+  });
+}
+
+/* ---- 隐藏 (hide): 纯前端偏好, 落 localStorage (与 PINS_KEY 同款); 读写一律 try/catch 兜底。
+   隐藏条目从三视图全部退场, 只进台账底部的隐藏区 (点工具栏按钮展开), 可随时恢复。 ---- */
+function loadHidden() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]");
+    return Array.isArray(arr) ? arr.filter(x => typeof x === "string") : [];
+  } catch (e) { return []; }
+}
+function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(S.hidden)); } catch (e) { /* file:// 下静默降级为会话内存态 */ } }
+const isHidden = link => S.hidden.includes(link);
+function toggleHide(link) {
+  const at = S.hidden.indexOf(link);
+  if (at >= 0) S.hidden.splice(at, 1); else S.hidden.push(link);
+  saveHidden();
+  renderLedger();
+}
+/* 隐藏区条目: 按隐藏先后取 DATA 中仍存在者, 过滤失效 link 与重复 (口径同 pinZoneItems) */
+function hiddenZoneItems() {
+  const seen = new Set();
+  return S.hidden.map(l => byLink.get(l)).filter(x => {
     if (!x || seen.has(x.link)) return false;
     seen.add(x.link);
     return true;
@@ -765,6 +856,8 @@ function derive() {
   byLink = new Map(DATA.items.map(i => [i.link, i]));
   groups = new Map();
   for (const i of DATA.items) {
+    /* 隐藏条目不进分组 → 控制台频道 / 卡片墙 / 同专题列表自动退场 (只读 S.hidden, 绝不写) */
+    if (isHidden(i.link)) continue;
     const k = i.topic || NO_KEY;
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(i);
@@ -807,9 +900,11 @@ function renderCurrent() {
 }
 function updateTopbar() {
   const live = DATA.topics.filter(t => t.live).length;
+  const nHid = hiddenZoneItems().length;
   $("readout").innerHTML =
-    esc(DATA.stamp || "--") + " · <b>" + DATA.items.length + "</b> 件 · <b>" +
-    groups.size + "</b> 专题 · <b>" + live + "</b> 活跃";
+    esc(DATA.stamp || "--") + " · <b>" + (DATA.items.length - nHid) + "</b> 件 · <b>" +
+    groups.size + "</b> 专题 · <b>" + live + "</b> 活跃" +
+    (nHid ? ' · 隐藏 <b>' + nHid + "</b>" : "");
 }
 
 /* ---- 错误浮层 ---- */
@@ -844,6 +939,7 @@ const ST_ORD_N = { "In Progress": 0, "Open": 1, "Done": 2, "Dropped": 3, "Supers
 
 function aFiltered() {
   let list = DATA.items.filter(i =>
+    !isHidden(i.link) &&
     S.aForms.has(i.form) && S.aStatuses.has(stOf(i)) &&
     (!(i["issue-type"]) || S.aTypes.has(i["issue-type"])) &&
     (!S.aLive || liveOf(i.topic || NO_KEY)) &&
@@ -864,17 +960,22 @@ function aFiltered() {
 
 /* 台账行单元格: 主表与置顶专区共用同一份栏序/栏宽单点 —— 2026-10-05 用户要求「专区与主区同栏,
    只置顶展示 + 强调」, 两处共用本函数, 从结构上排除栏漂移。pinMark=true 时 # 栏显示实心图钉标记
-   (置顶专区用), 否则显示行号。栏序 # 时间戳 形态 状态 标题 专题 链 由守阵
+   (置顶专区用), 否则显示行号。hidMark=true 时为隐藏区行: # 栏换成「恢复」按钮, 标题栏不放图钉
+   (隐藏中的件不进置顶专区)。栏序 # 时间戳 形态 状态 标题 专题 链 由守阵
    test_ledger_status_column_between_form_and_title 钉死。 */
-function ledgerCells(i, n, pinMark) {
-  const idx = pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1;
+function ledgerCells(i, n, pinMark, hidMark) {
+  const idx = hidMark
+    ? '<button class="unhidebtn" data-unhide="' + esc(i.link) + '" title="恢复到列表 (取消隐藏)">' + UNHIDE_SVG + "</button>"
+    : (pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1);
   const pinned = isPinned(i.link);
+  const pinBtn = hidMark ? "" :
+    '<button class="pinbtn' + (pinned ? " on" : "") + '" data-pin="' + esc(i.link) + '" title="' + (pinned ? "取消置顶" : "置顶到专区") + '">' + PIN_SVG + "</button>";
   return `
       <td class="idx">${idx}</td>
       <td class="stamp">${esc(i.stamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
       <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
-      <td class="title-cell"><button class="pinbtn${pinned ? " on" : ""}" data-pin="${esc(i.link)}" title="${pinned ? "取消置顶" : "置顶到专区"}">${PIN_SVG}</button><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
+      <td class="title-cell">${pinBtn}<b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
       <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
       <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>`;
 }
@@ -901,9 +1002,12 @@ function renderLedger() {
     v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; saveFilters(); renderLedger(); });
 
   renderPinZone();
+  renderHiddenZone();
 
   const list = aFiltered();
-  $("aCount").innerHTML = "<b>" + list.length + "</b> / " + DATA.items.length + " 件";
+  const nHid = hiddenZoneItems().length;
+  $("aCount").innerHTML = "<b>" + list.length + "</b> / " + (DATA.items.length - nHid) + " 件" +
+    (nHid ? " · 已隐藏 " + nHid : "");
   $("aRows").innerHTML = list.map((i, n) => `
     <tr data-link="${esc(i.link)}"${S.sel === i.link ? ' class="sel"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
 
@@ -925,6 +1029,28 @@ function renderPinZone() {
     '<span class="pzhint">点图钉取消 · 点行打开原文</span></div>' +
     '<table class="pztable">' + head + "<tbody>" +
     items.map(i => `<tr class="pin-row" data-link="${esc(i.link)}">${ledgerCells(i, 0, true)}</tr>`).join("") +
+    "</tbody></table>";
+}
+
+/* 隐藏区: 与置顶专区同构 (克隆主表 thead + 行复用 ledgerCells hidMark 路径), 但默认折叠 ——
+   点工具栏「隐藏区」按钮 (有隐藏条目才出现) 才展开; 停在主表下方, 不与内容区抢位置 */
+function renderHiddenZone() {
+  const zone = $("hidZone"), btn = $("hidBtn");
+  const items = hiddenZoneItems();
+  btn.hidden = !items.length;
+  btn.textContent = "隐藏区 · " + items.length;
+  btn.classList.toggle("on", S.showHidden);
+  if (!items.length || !S.showHidden) { zone.hidden = true; zone.innerHTML = ""; return; }
+  zone.hidden = false;
+  /* 列头/列宽单点 = 主表 thead: 直接克隆, 两表逐栏对齐由结构保证 (别在别处再写一份列定义) */
+  const thead = document.querySelector("#v-ledger .ledgerwrap thead");
+  const head = thead ? thead.outerHTML : "";
+  zone.innerHTML =
+    '<div class="hzhead">隐藏 · HIDDEN <b>(' + items.length + ")</b>" +
+    '<span class="hzhint">点 [恢复] 取消隐藏 · 点行打开原文 · 右键同主表</span>' +
+    '<button class="hzrestore" data-restore-all="1">全部恢复</button></div>' +
+    '<table class="hztable">' + head + "<tbody>" +
+    items.map(i => `<tr class="hid-row" data-link="${esc(i.link)}">${ledgerCells(i, 0, false, true)}</tr>`).join("") +
     "</tbody></table>";
 }
 
@@ -981,6 +1107,7 @@ function openCtx(x, y, link) {
   const pinned = isPinned(link);
   m.innerHTML =
     '<button class="ctxitem" data-act="pin">' + (pinned ? "取消置顶" : "置顶到专区") + "</button>" +
+    '<button class="ctxitem" data-act="hide">' + (isHidden(link) ? "取消隐藏" : "隐藏条目") + "</button>" +
     '<button class="ctxitem" data-act="open">打开原文</button>' +
     '<button class="ctxitem" data-act="copy">复制仓库路径</button>';
   m.dataset.link = link;
@@ -1016,9 +1143,17 @@ function copyPath(link) {
 function renderConsole() {
   if (!DATA) return;
   /* 四工位统计带 */
+  /* 四工位统计带: DATA.counts 是服务端全量真值, 隐藏是纯前端偏好 —— 在此按可见条目现算,
+     让统计带与下方视图同口径 (隐藏条目不进任何统计) */
+  const visCounts = {};
+  for (const i of DATA.items) {
+    if (isHidden(i.link)) continue;
+    const s = stOf(i);
+    (visCounts[i.form] = visCounts[i.form] || {})[s] = (visCounts[i.form][s] || 0) + 1;
+  }
   const strip = $("strip");
   strip.innerHTML = FORM_ORD.map(form => {
-    const byS = DATA.counts[form] || {};
+    const byS = visCounts[form] || {};
     const total = Object.values(byS).reduce((a, b) => a + b, 0);
     const segs = statusList.filter(s => byS[s]).map(s =>
       '<i class="' + stBar(s) + '" style="flex:' + byS[s] + '" title="' + esc(s) + ": " + byS[s] + '"></i>').join("");
@@ -1215,12 +1350,29 @@ function wire() {
     e.preventDefault();
     openCtx(e.clientX, e.clientY, row.dataset.link);
   });
+  /* 隐藏区开关: 展开 / 收起底部隐藏区 (会话态, 不落盘 —— 需求口径: 点按钮才能查看) */
+  $("hidBtn").addEventListener("click", () => { S.showHidden = !S.showHidden; renderLedger(); });
+  /* 隐藏区: 委托点击 (恢复单条 / 全部恢复 / 条目打开) 与右键 —— 交互口径同置顶专区 */
+  $("hidZone").addEventListener("click", e => {
+    const ub = e.target.closest(".unhidebtn");
+    if (ub) { toggleHide(ub.dataset.unhide); return; }   /* 早退: 恢复 = 取消隐藏, 免得冒泡又开原文 */
+    if (e.target.closest("[data-restore-all]")) { S.hidden = []; saveHidden(); renderLedger(); return; }
+    const row = e.target.closest("tr.hid-row");
+    if (row) window.open(MB + row.dataset.link, "_blank");
+  });
+  $("hidZone").addEventListener("contextmenu", e => {
+    const row = e.target.closest("tr.hid-row");
+    if (!row) return;
+    e.preventDefault();
+    openCtx(e.clientX, e.clientY, row.dataset.link);
+  });
   /* 右键菜单: 选动作 + 点空白 / Esc / 滚动即收 */
   $("ctxMenu").addEventListener("click", e => {
     const it = e.target.closest(".ctxitem");
     if (!it) return;
     const link = $("ctxMenu").dataset.link;
     if (it.dataset.act === "pin") togglePin(link);
+    else if (it.dataset.act === "hide") toggleHide(link);
     else if (it.dataset.act === "open") window.open(MB + link, "_blank");
     else if (it.dataset.act === "copy") copyPath(link);
     closeCtx();
@@ -1348,6 +1500,7 @@ function boot() {
   wire();
   if (STATIC_MODE || location.protocol === "file:") $("pullBtn").hidden = true;   /* 静态 / file 模式无服务端可拉 */
   S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
+  S.hidden = loadHidden();   /* 隐藏同款: 全壳唯一装载点 (derive 只读不写), 守阵 test_hidden_state_not_reseeded_by_derive */
   S.view = loadView();
   restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */
   /* 受控控件回填初值: 状态还原了但输入框 / 下拉还显示默认值, 用户会当成"没生效" */

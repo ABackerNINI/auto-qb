@@ -58,6 +58,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与共用行模板 (isPinned) 双处消费
 - test_pin_zone_reuses_ledger_columns: 置顶专区与主表**同栏** —— 列定义单点 (全壳仅一处表头) + 克隆主表 thead + 共用 ledgerCells
 - test_pin_icon_is_inline_svg_no_emoji: 图钉为内联 SVG (无外链图标库), 且壳内无 emoji 图钉字符 (code-style)
+- test_shell_has_hidden_zone_and_toggle: 隐藏骨架在位 (HIDDEN_KEY / #hidZone / #hidBtn / boot 装载一次 / 右键「隐藏条目」入口 / 全部恢复 / 开关切 S.showHidden)
+- test_hidden_state_not_reseeded_by_derive: derive() 对隐藏状态只读不写; S.hidden = loadHidden() 全壳唯一
+- test_hidden_items_excluded_from_views: 隐藏条目从主表筛选 (aFiltered)、分组 (derive)、统计带 (renderConsole) 与置顶专区 (pinZoneItems) 退场, 只进隐藏区 (hiddenZoneItems)
+- test_hidden_zone_reuses_ledger_columns_and_inline_svg: 隐藏区克隆主表 thead + 复用 ledgerCells (hidMark); 恢复按钮为内联 SVG
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
 - test_log_filters_polling: 精简 log —— /api/data 轮询与壳加载成功不上屏; 错误与静态映射请求留痕
@@ -557,6 +561,83 @@ def test_pin_icon_is_inline_svg_no_emoji() -> None:
     assert m and "<svg" in m.group(1), "图钉必须是内联 SVG (PIN_SVG 常量)"
     for ch in ("\U0001F4CC", "\U0001F4CD"):  # 图钉 / 圆图钉 emoji
         assert ch not in text, f"壳里出现 emoji 图钉字符 (code-style 禁图形符号): {ch!r}"
+
+
+# --------------------------------------------------------------------------- 隐藏 (hide)
+
+
+def test_shell_has_hidden_zone_and_toggle() -> None:
+    """隐藏 (hide) 交互骨架: 存储键 / 专区容器 / 工具栏开关 / 右键入口 / 恢复入口 / boot 装载一次
+    —— 缺任一即回归。需求口径 (2026-10-06): 可选隐藏条目、专门隐藏区、点按钮才能查看、可移除、
+    持久化落 localStorage。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'const HIDDEN_KEY = "mb-nav-hidden"' in text, "缺隐藏存储键常量 (localStorage 落点)"
+    assert 'id="hidZone"' in text, "缺隐藏区容器 #hidZone"
+    assert 'id="hidBtn"' in text, "缺工具栏隐藏区开关 #hidBtn"
+    assert "data-restore-all" in text, "缺「全部恢复」入口"
+    assert "isHidden(" in text and "toggleHide(" in text and "saveHidden(" in text, "缺隐藏判定 / 切换 / 落盘函数"
+
+    boot = re.search(r"function boot\(\) \{(.*?)\n\}", text, re.S)
+    assert boot and "S.hidden = loadHidden();" in boot.group(1), "boot() 必须装载一次隐藏状态 (否则刷新即丢)"
+
+    ctx = re.search(r"function openCtx\(.*?\{(.*?)\n\}", text, re.S)
+    assert ctx and 'data-act="hide"' in ctx.group(1), "右键菜单缺「隐藏条目」入口 (隐藏的主入口)"
+
+    wire = re.search(r'\$\("hidBtn"\)\.addEventListener\("click"(.*?)\);', text, re.S)
+    assert wire and "S.showHidden" in wire.group(1), "隐藏区开关必须切换 S.showHidden (点按钮才能查看)"
+
+
+def test_hidden_state_not_reseeded_by_derive() -> None:
+    """与 pin 同源 (坑 pitfalls/web-ui/poll-reseed-filter.md): derive() 每 30s 跑一次, 对隐藏状态
+    只许**读** (isHidden 挡视图), 绝不许写 (saveHidden / 重播 loadHidden) —— 否则轮询会洗掉用户隐藏。
+    装载点必须全壳唯一, 且只在 boot() 发生。"""
+    text = SHELL.read_text(encoding="utf-8")
+    block = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert block, "derive() 不见了? 数据派生逻辑搬家要同步本守阵"
+    body = block.group(1)
+    for forbidden in ("saveHidden", "loadHidden", "S.hidden =", "S.showHidden"):
+        assert forbidden not in body, f"derive() 里出现 {forbidden}: 30s 轮询会与用户隐藏打架"
+    assert text.count("S.hidden = loadHidden()") == 1, "隐藏装载点必须全壳唯一 (只在 boot 装载一次)"
+
+
+def test_hidden_items_excluded_from_views() -> None:
+    """「隐藏」= 从所有内容视图退场, 只进隐藏区: 主表筛选 (aFiltered) / 数据分组 (derive,
+    → 控制台频道与卡片墙) / 统计带 (renderConsole, DATA.counts 是服务端全量必须现算) /
+    置顶专区 (pinZoneItems) 四处都要挡 —— 少挡一处 = 条目「藏了还在」。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    af = re.search(r"function aFiltered\(\) \{(.*?)\n\}", text, re.S)
+    assert af and "!isHidden(i.link)" in af.group(1), "主表筛选未挡隐藏条目"
+
+    dv = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert dv and "isHidden(" in dv.group(1), "derive 分组未挡隐藏条目 (控制台 / 卡片墙会漏)"
+
+    rc = re.search(r"function renderConsole\(\) \{(.*?)\n\}", text, re.S)
+    assert rc and "isHidden(" in rc.group(1), "统计带未挡隐藏条目 (DATA.counts 是全量, 必须按可见条目现算)"
+
+    pz = re.search(r"function pinZoneItems\(\) \{(.*?)\n\}", text, re.S)
+    assert pz and "isHidden(" in pz.group(1), "置顶专区未挡隐藏条目 (隐藏中不该再出现在专区)"
+
+    hz = re.search(r"function hiddenZoneItems\(\) \{(.*?)\n\}", text, re.S)
+    assert hz and "byLink" in hz.group(1), "隐藏区渲染必须消费同一份隐藏状态"
+
+
+def test_hidden_zone_reuses_ledger_columns_and_inline_svg() -> None:
+    """隐藏区 = 置顶专区同构: 克隆主表 thead + 复用 ledgerCells (hidMark 路径), 不另写列定义
+    (否则两表逐栏错位, 同 test_pin_zone_reuses_ledger_columns); 恢复按钮为内联 SVG (无外链图标库)。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    assert text.count("<thead><tr>") == 1, "隐藏区另写了一份列定义 (表头不止一处), 两表会逐栏错位"
+    zone = re.search(r"function renderHiddenZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone, "renderHiddenZone() 不见了"
+    body = zone.group(1)
+    assert "ledgerwrap thead" in body, "隐藏区必须克隆主表 thead (列宽同源), 而非另写一份列头"
+    assert "ledgerCells(" in body and "hid-row" in body, "隐藏区行必须复用 ledgerCells (同栏)"
+
+    m = re.search(r"const UNHIDE_SVG = '(.*?)';", text, re.S)
+    assert m and "<svg" in m.group(1), "恢复按钮必须是内联 SVG (UNHIDE_SVG 常量)"
+    for ch in ("\U0001F504", "\u27F2", "\u21B6"):  # 循环箭头 / 逆时针箭头类图形字符
+        assert ch not in text, f"壳里出现图形字符充当恢复按钮 (code-style 禁图形符号): {ch!r}"
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)
