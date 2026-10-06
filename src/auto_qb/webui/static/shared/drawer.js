@@ -538,6 +538,7 @@ window.AQB_DRAWER = {
       await this._editPost(hash, "trackers/add", { urls }, urls.length > 1 ? `已添加 ${urls.length} 条 tracker` : "tracker 已添加");
     },
     async trackerRemove(url) {
+      // url 为 mask 值(详情 API 只回 mask), 后端当场重取原文比对后再删
       const hash = this.drawer.hash;
       if (!hash) return;
       const ok = await this.confirmDialog("删除 Tracker", `将删除该 tracker: ${url}`, { okText: "删除", danger: true });

@@ -9,7 +9,7 @@ import logging
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 
-from ....infra.utils import auto_managed_tag_rules, is_auto_managed_tag
+from ....infra.utils import auto_managed_tag_rules, is_auto_managed_tag, mask_tracker_entry
 from ..common import content_disposition
 from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
@@ -43,12 +43,16 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/torrents/{hash}/trackers")
     def api_torrent_trackers(hash: str):
-        """单种子 tracker 列表(qB 透传; 含 **/[DHT]/[PeX]/[LSD] 虚拟条目, 前端自行弱化)"""
+        """单种子 tracker 列表(qB 透传; 含 **/[DHT]/[PeX]/[LSD] 虚拟条目, 前端自行弱化);
+        url 已 mask(虚拟条目原样透传), 原文不再外发"""
         manager.web.touch()
         _require_torrent(hash)
         client = _require_client()  # 断开即 503: 绝不能拿缓存里的旧值冒充"还连着"
+        # mask 先于缓存写入: 缓存里永远只有 mask 条目(plan 26-10-07-0055 S3)
         return JSONResponse(
-            content=_cached_read(f"trackers:{hash}", lambda: list(client.torrents_trackers(hash) or []))
+            content=_cached_read(
+                f"trackers:{hash}", lambda: [mask_tracker_entry(t) for t in (client.torrents_trackers(hash) or [])]
+            )
         )
 
     @router.get("/api/torrents/{hash}/files")

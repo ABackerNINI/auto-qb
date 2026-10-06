@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from typing import List, Optional, Tuple
 
 from ..config import Config
-from ..infra.utils import sanitize_tracker_url
+from ..infra.utils import mask_tracker_url, sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
 
@@ -623,7 +623,20 @@ class WebCommandsMixin:
             return
         if not url:
             raise ValueError("url 不能为空")
-        self.api.torrents_remove_trackers(torrent_hash=hash, urls=[url])
+        # S3 删除改道(plan 26-10-07-0055): 入参 url 是前端所持 mask 值(详情 API 只回 mask),
+        # 而 qB 按原文精确匹配 —— 当场重取完整条目列表(运行在主循环线程内, 不破单一写线程假设),
+        # 跳虚拟条目后逐条 mask 比对, 恰 1 命中才取该条原文传 qB; 原文是局部变量, 出作用域即弃,
+        # 不进缓存/不落盘/不进响应/不进日志。命中 0 或 >=2 一律报错, 绝不猜。
+        hits = []
+        for t in (self.client.torrents_trackers(hash) or []):
+            original = str(t.get("url") or "")
+            if original.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+                continue
+            if mask_tracker_url(original) == url:
+                hits.append(original)
+        if len(hits) != 1:
+            raise ValueError("未找到该 tracker，请刷新后重试")
+        self.api.torrents_remove_trackers(torrent_hash=hash, urls=[hits[0]])
         logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {sanitize_tracker_url(url)}")
 
     # qB 文件优先级合法值(0=不下载, 1=普通, 6=高, 7=最大)

@@ -236,7 +236,8 @@
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
-- test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
+- test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
+- test_api_torrent_trackers_masked_response: S3 详情 API 收口 —— trackers 响应 url 一律 mask(凭据原文不外发), 虚拟条目透传, 两次请求逐字节一致
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
@@ -253,7 +254,8 @@
 - test_web_loop_exception_handler_delegates_real_bug: 反向守阵 —— 非波动异常交回 asyncio 默认处理器, 不吞
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
-- test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
+- test_cmd_trackers_log_sanitized: tracker 移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在(S3 后入参为 mask 值)
+- test_cmd_remove_tracker_mask_roundtrip: S3 删除改道 —— remove_tracker 收 mask 值当场重取原文比对, 恰 1 命中 qB 收原文; 0/多命中报「未找到该 tracker」且零写调用
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog): 78 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
@@ -322,7 +324,7 @@ import pytest
 from auto_qb import __version__
 from auto_qb.config.models import HrCheckConfig
 from auto_qb.infra import file_access
-from auto_qb.infra.utils import decode_group_key, encode_group_key
+from auto_qb.infra.utils import decode_group_key, encode_group_key, mask_tracker_url
 from auto_qb.webui import create_app
 from auto_qb.webui.runtime import (
     CMD_SLOW_MS,
@@ -8917,6 +8919,8 @@ def test_drain_web_commands_torrent_write_actions():
     """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
+        # S3 删除改道(plan 26-10-07-0055): remove_tracker 收 mask 值, 后端重取原文比对
+        client.trackers_map["HA"] = [{"url": "https://c.example/announce?passkey=SUPERSECRET123", "status": 2}]
         cmds = [
             ("recheck_torrent", {
                 "hash": "HA",
@@ -8967,11 +8971,13 @@ def test_drain_web_commands_torrent_write_actions():
                 "urls": ["https://a/announce", "https://b/announce"],
                 "cmd_id": "c9"
             }),
-            ("remove_tracker", {
-                "hash": "HA",
-                "url": "https://c/announce",
-                "cmd_id": "c10"
-            }),
+            (
+                "remove_tracker", {
+                    "hash": "HA",
+                    "url": mask_tracker_url("https://c.example/announce?passkey=SUPERSECRET123"),
+                    "cmd_id": "c10"
+                }
+            ),
             ("set_file_priority", {
                 "hash": "HA",
                 "indices": [0, 1],
@@ -9001,7 +9007,8 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[7] == ("rename", ("HA", "NewName")), "rename 参数形态(torrent_hash, new_torrent_name)"
         assert client.calls[8] == ("set_auto_tmm", True)
         assert client.calls[9] == ("add_trackers", ("HA", ["https://a/announce", "https://b/announce"]))
-        assert client.calls[10] == ("remove_trackers", ("HA", ["https://c/announce"]))
+        assert client.calls[10] == ("remove_trackers", ("HA", ["https://c.example/announce?passkey=SUPERSECRET123"])), \
+            "mask 入参须换回原文传 qB(qB 按原文精确匹配)"
         assert client.calls[11] == ("file_priority", ("HA", [0, 1], 6))
         assert client.calls[12] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
         # !D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
@@ -11528,7 +11535,8 @@ def test_api_torrent_detail_endpoint(web_env):
 
 
 def test_api_torrent_subresources(web_env):
-    """GET /api/torrents/{hash}/trackers|files|peers: qB 透传; 未知 hash 404, qB 断连 503"""
+    """GET /api/torrents/{hash}/trackers|files|peers: qB 透传(trackers 例外: url 已 mask);
+    未知 hash 404, qB 断连 503"""
     from helpers import FakeClient
 
     from auto_qb.torrents import TorrentRecord
@@ -11537,7 +11545,7 @@ def test_api_torrent_subresources(web_env):
     rec = TorrentRecord(hash="HA", name="X")
     mgr.store.get = lambda h: {"HA": rec}.get(h)
     fake = FakeClient()
-    fake.trackers_map["HA"] = [{"url": "https://t.example/announce", "status": 2}]
+    fake.trackers_map["HA"] = [{"url": "https://t.example/announce", "status": 2}]  # 无凭据, mask 后不变
     fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
     fake.peers_map["HA"] = {"peers": [{"ip": "1.2.3.4", "client": "qB"}]}
     mgr.client = fake
@@ -11553,6 +11561,59 @@ def test_api_torrent_subresources(web_env):
     mgr.client = None
     assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
     assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
+
+
+def test_api_torrent_trackers_masked_response(web_env):
+    """S3 详情 API 收口(plan 26-10-07-0055): trackers 响应 url 一律 mask
+
+    - 含凭据的原文不出现在响应体(整值, 连 hash 后形态也不同);
+    - 虚拟条目(**/[DHT]/[PeX]/[LSD])原样透传;
+    - 两次请求逐字节一致(mask 确定性, hash16 不加盐);
+    - mask 先于缓存写入: 缓存里只有 mask 条目。
+    """
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name="X")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    original = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    fake.trackers_map["HA"] = [
+        {
+            "url": original,
+            "status": 2,
+            "msg": "Working"
+        },
+        {
+            "url": "** [DHT] 3",
+            "status": 0,
+            "msg": ""
+        },
+        {
+            "url": "[PeX] 1",
+            "status": 0,
+            "msg": ""
+        },
+        {
+            "url": "[LSD] 2",
+            "status": 0,
+            "msg": ""
+        },
+    ]
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r1 = client.get("/api/torrents/HA/trackers", headers=auth)
+    body1 = r1.content
+    entries = r1.json()
+    assert entries[0]["url"] == mask_tracker_url(original), "url 应为 mask 值"
+    assert "SUPERSECRET123" not in body1.decode("utf-8"), "凭据原文不得出现在响应体"
+    assert entries[0]["status"] == 2 and entries[0]["msg"] == "Working", "其余字段原样不动(R9)"
+    assert [e["url"] for e in entries[1:]] == ["** [DHT] 3", "[PeX] 1", "[LSD] 2"], \
+        "虚拟条目原样透传"
+    body2 = client.get("/api/torrents/HA/trackers", headers=auth).content
+    assert body1 == body2, "两次请求必须逐字节一致(mask 确定性)"
 
 
 def test_api_readonly_endpoints_short_cache(web_env):
@@ -11856,6 +11917,9 @@ def test_truth_hold_matches_truth_push_cap():
 def test_cmd_trackers_log_sanitized(caplog):
     """tracker 移除的日志只写脱敏主地址, 不含凭据全文(issue 26-09-21-1408; 编辑功能已下线)
 
+    S3(plan 26-10-07-0055)后入参是 mask 值: 日志行 sanitize_tracker_url(mask) 仍是主地址
+    (mask 的 query 值本就是 hash, sanitize 再把整段 query 丢掉)。
+
     断言口径刻意**不写死参数名**: 私站凭据参数名是任意的(passkey 只是最常见的一种),
     所以只钉死"密钥全文一行都进不了日志 + 主地址仍在(够排查是哪个站)"。
     日志会落盘(含轮转备份)且能经 /api/log 读回, 泄露面比"读一次"大得多。
@@ -11866,17 +11930,59 @@ def test_cmd_trackers_log_sanitized(caplog):
     class _Cmds(WebCommandsMixin):
         def __init__(self):
             self.api = FakeClient()
+            self.client = self.api
             self.store = {"HA": object()}
 
     m = _Cmds()
     secret = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    m.api.trackers_map["HA"] = [{"url": secret, "status": 2}]
     caplog.set_level(logging.INFO, logger="auto_qb.webui.commands")
     caplog.clear()
-    m._cmd_remove_tracker(hash="HA", url=secret)
+    m._cmd_remove_tracker(hash="HA", url=mask_tracker_url(secret))
     text = "\n".join(r.getMessage() for r in caplog.records if r.name == "auto_qb.webui.commands")
     assert "SUPERSECRET123" not in text, "passkey 全文进了日志"
     assert "passkey" not in text, "query 整段都应丢弃, 不该残留参数名"
     assert "pt.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
+
+
+def test_cmd_remove_tracker_mask_roundtrip():
+    """S3 删除改道(plan 26-10-07-0055): remove_tracker 收 mask 值, 当场重取原文比对
+
+    - 恰 1 命中: qB 收到的是该条**原文**(mask 值绝不透传给 qB), 原文不进任何输出;
+    - 命中 0 条: ValueError「未找到该 tracker，请刷新后重试」且 qB 零写调用;
+    - 命中 >=2 条(同 mask 的重复条目): 同样报错, 绝不猜;
+    - 虚拟条目(**/[DHT]/[PeX]/[LSD])不参与比对。
+    """
+    from auto_qb.webui.commands import WebCommandsMixin
+    from helpers import FakeClient
+
+    original = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    masked = mask_tracker_url(original)
+
+    class _Cmds(WebCommandsMixin):
+        def __init__(self, trackers):
+            self.api = FakeClient()
+            self.client = self.api
+            self.store = {"HA": object()}
+            self.api.trackers_map["HA"] = trackers
+
+    # 恰 1 命中: 传 mask, qB 收原文
+    m = _Cmds([{"url": original, "status": 2}, {"url": "** [DHT] 0", "status": 0}])
+    m._cmd_remove_tracker(hash="HA", url=masked)
+    assert m.api.calls[-1] == ("remove_trackers", ("HA", [original])), "qB 必须收到原文"
+    assert m.api.calls[-1] != ("remove_trackers", ("HA", [masked])), "mask 值不得透传给 qB"
+
+    # 命中 0 条: 报错且零 remove 调用(其它条目不被误删)
+    m = _Cmds([{"url": original, "status": 2}])
+    with pytest.raises(ValueError, match=r"未找到该 tracker"):
+        m._cmd_remove_tracker(hash="HA", url=mask_tracker_url("https://other.example.com/announce?passkey=X"))
+    assert not [c for c in m.api.calls if c[0] == "remove_trackers"], "未命中不得触发任何 remove 调用"
+
+    # 命中 >=2 条: 同 URL 重复出现 -> 报错不猜
+    m = _Cmds([{"url": original, "status": 2}, {"url": original, "status": 1}])
+    with pytest.raises(ValueError, match=r"未找到该 tracker"):
+        m._cmd_remove_tracker(hash="HA", url=masked)
+    assert not [c for c in m.api.calls if c[0] == "remove_trackers"]
 
 
 # ---- W0 结构守阵(plan 26-09-22-1857: web.py create_app 拆分 web/ 包, 先行落阵再动刀) ----

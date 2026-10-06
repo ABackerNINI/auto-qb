@@ -145,6 +145,7 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/trackers/remove")
     def api_t_trackers_remove(hash: str, body: dict = None):
+        # url = 前端所持 mask 值(详情 API 只回 mask); 后端 _cmd_remove_tracker 当场重取原文比对
         url = str((body or {}).get("url") or "")
         return _enqueue("remove_tracker", {"hash": hash, "url": url})
 
