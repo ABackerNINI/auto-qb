@@ -576,14 +576,19 @@ window.AQB_DRAWER = {
         y: Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - h - 8)),
       };
     },
-    /* 优先级 4 档(0=跳过 1=普通 6=高 7=最高) → POST files/priority(单文件) */
-    async setFilePriority(p) {
+    /* 优先级 4 档(0=跳过 1=普通 6=高 7=最高) → POST files/priority。
+     * indices 可选(计划 26-10-06-0838 S5 内容变体批量通道): 传文件下标数组时一次提交整批
+     * (后端 files/priority 本就收 indices 数组, 见 torrent_cmds.py); 缺省沿用 filePrio.index
+     * 单文件语义 —— 经典小菜单(ctx-menus.html)与变体 10 的锚定小菜单(openFilePrio)零变化。 */
+    async setFilePriority(p, indices = null) {
       this.filePrio.visible = false;
-      const index = this.filePrio.index;
       const hash = this.drawer.hash;
-      if (!hash || index < 0) return;
+      const idx = Array.isArray(indices) ? indices.slice() : [this.filePrio.index];
+      if (!hash || !idx.length || idx.some((i) => !Number.isInteger(i) || i < 0)) return;
       const label = { 0: "跳过", 1: "普通", 6: "高", 7: "最高" }[p] || String(p);
-      await this._editPost(hash, "files/priority", { indices: [index], priority: p }, `优先级已设为「${label}」`);
+      const okText = Array.isArray(indices)
+        ? `已将 ${idx.length} 个文件设为「${label}」` : `优先级已设为「${label}」`;
+      await this._editPost(hash, "files/priority", { indices: idx, priority: p }, okText);
     },
     /* 文件/目录重命名(选中行; 单文件种子免选): POST rename-fs, new_path = 原目录前缀 + 新名 */
     async renameFileRow() {
