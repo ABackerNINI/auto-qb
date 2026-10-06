@@ -142,7 +142,10 @@ window.AQB_SELECTION = {
     syncTorrentHeadScroll(ev) {
       const head = this.$refs.torrentHead;
       if (!head) return;
-      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
+      const x = ev.target.scrollLeft;
+      head.style.transform = `translateX(${-x}px)`;
+      // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
+      head.style.setProperty("--head-pin-x", `${x}px`);
     },
     /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中。
      * 另接详情面板跟随(计划 26-10-03-0917 §1.3 相邻预留的鼠标路径): 普通单击与键盘共用

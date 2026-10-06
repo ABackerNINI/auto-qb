@@ -87,7 +87,11 @@ window.AQB_MENU = {
     syncGroupHeadScroll(ev) {
       const head = this.$refs.groupHead;
       if (!head) return;
-      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
+      const x = ev.target.scrollLeft;
+      head.style.transform = `translateX(${-x}px)`;
+      // 首列吸左(issue 26-10-06-1717): 表头首格反向位移抵消容器滚动, 与行内 sticky 同形
+      // (规则见该皮肤 CSS 的 .group-head > .h-cell:first-child)
+      head.style.setProperty("--head-pin-x", `${x}px`);
     },
     toggleExpand(key, event) {
       // 仅左键触发展开: 右键菜单不应连带展开明细(旧实现在 openMenu 里主动展开, 已移除)

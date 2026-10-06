@@ -13,7 +13,10 @@ window.AQB_SHOWS = {
     syncShowHeadScroll(ev) {
       const head = this.$refs.showHead;
       if (!head) return;
-      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
+      const x = ev.target.scrollLeft;
+      head.style.transform = `translateX(${-x}px)`;
+      // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
+      head.style.setProperty("--head-pin-x", `${x}px`);
     },
     toggleShow(key) {
       const i = this.expandedShows.indexOf(key);

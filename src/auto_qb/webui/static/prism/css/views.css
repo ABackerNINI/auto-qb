@@ -149,6 +149,29 @@
  * 明细与外层共用**同一条**横向滚动(原先 .detail 自带 overflow-x: auto 会形成第二条, 见下方)。 */
 .group-row, .detail, .detail-head, .member-row { width: fit-content; min-width: 100%; }
 .group-row > *, .group-head > *, .detail-head > *, .member-row > * { min-width: 0; }
+/* 首列吸左固定(issue 26-10-06-1717, 2026-10-06): 行宽 > 容器时横向滚动, 首列常驻滚动容器左缘 ——
+ * 行左缘既是点击/多选落点(冒烟落点纪律 {8,8}), 也是行的身份(名称列), 横滚后不该被推出视野。
+ * 单元格必须**不透明**才挡得住滚过来的兄弟列: 基础态直接取行底色; 半透明状态(下沉/选中)用
+ * "同色 linear-gradient 叠在不透明 --bg-row 上" 做合成 —— 与行自身(该色叠在页底上)逐通道差
+ * < 10(远低于可辨阈 20), 不会读成"两截色"。状态序与行一致: selected/partial 排在 expanded 之后。
+ * ! 表头 .group-head 在滚动容器**之外**(纵向 sticky 的前提), 首格改用反向 translateX 抵消容器
+ *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 14px = 表头 padding-left(见 .group-head),
+ *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
+.group-row > :first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--bg-row);
+}
+.group-row:hover > :first-child { background: var(--bg-hover); }
+.group-row.expanded > :first-child {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row);
+}
+.group-row.selected > :first-child,
+.group-row.partial > :first-child {
+  background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
+}
+.group-head > .h-cell:first-child {
+  z-index: 2; background: var(--bg);
+  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - 14px)));
+}
 .g-stat, .g-count, .g-hr, .m-stat { overflow: hidden; text-overflow: ellipsis; }
 /* 表头: 脱离滚动容器做纵向 sticky; 横向位移由 app.js 写 transform 跟随。
  * FIX-03 配色: 底色从 --bg-card 改为 --bg 页底色 —— 之前与顶栏 --glass 玻璃底明度相近,

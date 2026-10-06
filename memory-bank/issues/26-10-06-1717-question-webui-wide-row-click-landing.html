@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-06-1717">
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="webui-row-menu-click">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-06-webui-frozen-first-column.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="宽行横向滚动致点击落点被拦截: 产品侧落点自愈修不修(待拍板)">
 <meta name="issue-summary" content="行宽 2038px &gt; 容器 1416px 时 scrollIntoViewIfNeeded 居中滚动把 {8,8} 落点滚出裁剪面, 与 2s 整表重渲染相撞即触发拦截; 测试侧已对冲, 产品侧修不修待拍板">
 <title>宽行横向滚动致点击落点被拦截: 产品侧落点自愈修不修(待拍板) · question · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-1717-question-webui-wide-row-click-landing</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 17:17</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -78,6 +78,7 @@
     <h2><span class="no">01</span>现象</h2>
     <p>表格行宽超过容器时(取证 2038px &gt; 1416px), 自动滚动定位对宽元素做<b>居中滚动</b>, scrollLeft 被顶到 ~311px, 行左缘落点纪律 <code>position:{x:8,y:8}</code> 所指的点击面被滚出裁剪面; 若动作恰与 2s 整表重渲染相撞, 每次重试重新居中 → 点击被 sticky-head/header.topbar/html 交替拦截 30s 耗尽。「间歇性」只在相撞时触发。</p>
     <p>证据链: plan 26-10-06-0708 S2 批 <code>--trace on</code> 首次拿到时序归因(trace.zip 47 entries 已逐帧读), 旧脚本同位置失败(smoke.md 存量条目)与 e2e 新轨失败逐字同签名 —— 同一机理。测试侧已对冲(e2e/multiselect-shows.spec.mjs 的 <code>clickRow()</code>: 容器横向回零 + 行让位滚到视口中部 + elementFromPoint 验落点), 本单要拍板的是<b>产品侧</b>修不修: 宽行居中滚动行为或落点自愈。</p>
+    <p><b>复验(2026-10-06 18:33, HEAD aaff8b3a)</b>: <code>grep -rn scrollIntoViewIfNeeded</code> 全仓仅命中本件与 <code>e2e/multiselect-shows.spec.mjs</code> 的注释 —— 产品代码<b>零调用</b>; 产品自身的滚动跟随(<code>shortcuts.js</code> 的 <code>_kbScrollRowIntoView</code> / <code>config_hub.js</code> 的 <code>hubTrackerScrollActIntoView</code>)只做纵向 <code>scrollBy</code>, 且文件头明写「禁 scrollIntoView」。即居中滚动是 Chromium 在 Playwright 点击「宽于滚动容器的元素」时的<b>内部行为</b>, 真实用户鼠标点击不触发 —— 产品侧没有现成改动点, 故拍板改走<b>首列吸左固定</b>(见 04 状态日志)。</p>
   </section>
 
   <section id="s2">
@@ -98,6 +99,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-06 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-06 18:33 — 用户指派「认领并修复」，拍板方向 ②（首列吸左固定），状态 <strong>In Progress</strong>（复验结论见 01 节）。</li>
+      <li>2026-10-06 18:40 — 修复完成，状态 <strong>Done</strong>。<b>实际修法</b>（拍板方向 ②，与建议 ① 不同：复验证明产品侧无 <code>scrollIntoView</code> 调用，① 无现成改动点）：三皮肤 <code>css/views.css</code> 加 <code>.group-row &gt; :first-child { position: sticky; left: 0 }</code>，首格给不透明底（基础态取 <code>--bg-row</code>；半透明状态用同色 <code>linear-gradient</code> 叠 <code>--bg-row</code> 做合成）；表头 <code>.group-head</code> 在滚动容器之外，首格用 <code>translateX(max(0px, calc(var(--head-pin-x) - 14px)))</code> 反向抵消，位移量由三处 <code>sync*HeadScroll</code> 写进 <code>--head-pin-x</code>。<b>验证方式</b>：桩服务（8137）真浏览器 —— 容器左缘 12／宽 1416、行宽 2038，横滚 400 后首格 <code>left</code> 12 == 容器左缘、表头首格同值、首格底不透明；双皮肤（prism 默认主题 frost 为浅色）+ 种子视图均通过；选中态首格 <code>#252c48</code> vs 行 <code>#232840</code>（逐通道差 ≤8，可辨阈 20）。<b>测试数字</b>：<code>test.full</code> <b>2677 passed + 4 skipped / 99%</b>（基线 <a href="../testing/baselines/26-10-06-1840-webui-frozen-first-column.md">26-10-06-1840</a>）。<b>范围边界</b>：展开明细表（<code>.member-row</code>/<code>.detail-head</code>）不冻结；选中态左色条横滚后仍随行滚出 —— 均记入档案 <a href="../tasks/26-10-06-webui-frozen-first-column.md">26-10-06-webui-frozen-first-column</a> 与坑档 <code>pitfalls/web-ui/frozen-column.md</code>。</li>
     </ul>
   </section>
 
