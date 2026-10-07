@@ -17,7 +17,7 @@
 
 - **计划口径冻结, 但实测数字须重算**: 计划 §2.1 的行号/函数数是规划时点(基线 `0ae3212e`, 14,367 行)的实测; 当前 HEAD `34356f49` 已前进 5 笔, test_web.py 在流量图速率口径 S2/S3 中 +216/−27 行 → **14,556 行**。故 S1 的 AST 扫描一律以**当前文件**为真值, 不沿用计划数字。
 - **S0 基线复测(计划要求「HEAD 显著前进则重跑 test.full」)**: 在 `feat/test-web-split`(从 `34356f49`)上 `commands run test.full` = **2771 passed + 4 skipped / 0 failed / TOTAL 16476/165/5694/149 / 99%**, 与最新切片 [26-10-08-0223](../testing/baselines/26-10-08-0223-test-webui-peers-harness.md)(测于含未提交改动的树)**逐位持平**。收尾 DoD 按「提交时落基线切片」新建 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md)(committed HEAD 复测, 同值), 作为本专题开工基线。
-- **分支**: 按计划 S0 开 `feat/test-web-split`(仓库既有先例: 实施专题走 feature 分支, 如 `feat/webui-detail-panel-audit-fixes`)。
+- **分支(落地改道)**: 按计划 S0 开了 `feat/test-web-split`, 但提交时发现**新分支流水线推不动** —— `run_sync` 假定远端分支已存在(先 `fetch <远端> <分支>` 再比 left-right), 取不到远端 ref 就报「拿不到远端」; `ship.push` 同样先走同步, 会卡在同一处。实测 Gitee 只有 `develop`/`master`/`feature_rules`, **无任何 `feat/*`**, 且 `gitee/develop` 已被另一 clone 推进(1a5f0262) —— 与 AGENTS.md「日常在 develop」「跨工作区同步一律走 Gitee develop」一致。经用户拍板**改落 `develop`**: develop 快进到远端 tip 后 cherry-pick 本次提交, 临时分支删除; S2–S7 亦在 develop 上做。
 - **档案落名**: 计划 S0 写 `tasks/26-10-07-backend-test-web-split.md`, 但按 memory-bank skill 硬口径「档案日期取**创建日**(`commands run kb.time date`)」, 实际建档日为 **2026-10-08** ⇒ 落 `26-10-08-backend-test-web-split.md`(slug `backend-test-web-split` 不变, 已查本 clone 与跨工作区无同名)。
 - **S1 关键纠偏(见 §S1 表)**: ①被收集测试函数 **329**(327 `test_*` + 2 `testhr_*`), 非计划说的 323; ②docstring 计划条目 **312**(0 幽灵 / 17 函数无条目), 非 306; ③计划「节 3 → test_web_traffic_qb.py」名不副实 —— 节 3(标记 5892→7884)实为 **18 个流量 fn + 37 个杂项 fn**(config/token/sites/group-view/error-reason/hr-status), 须 P-01 定夺拆分或改名; ④上收 conftest 的共享件远多于计划 §3.2 的 3 个(实测 **16 个辅助函数 + 3 个常量**, 含 164 行的 `_make_web_manager`)。
 - **S2 校验器口径据此更新**: 校验①(集合恒等)面 = **329 个被收集函数**; 校验③(反幽灵+守恒)= 每文件条目指向本文件存在函数 + 15 文件条目总数 == **312**。
@@ -31,7 +31,7 @@
 
 | # | 子任务 | 状态 | 产出/说明 |
 |---|---|---|---|
-| S0 | 开工前置 | ✅ | 同步 `34356f49`; 分支 `feat/test-web-split`; 基线复测 2771+4(见切片 26-10-08-0223); 本档; 忆坑四篇(bulk-rename/parallel-run/single-file-coverage-gate/tmpdir) |
+| S0 | 开工前置 | ✅ | 同步 `34356f49`; 分支 `feat/test-web-split`(提交时改落 `develop`, 见决策节); 基线复测 2771+4(见切片 26-10-08-0258); 本档; 忆坑四篇(bulk-rename/parallel-run/single-file-coverage-gate/tmpdir) |
 | S1 | 勘察与映射表(只读轮) | ✅ | AST 扫描 + 映射表 329 fn 全覆盖(§S1); 节 1/节 2 聚类定界与命名; 常量/辅助归属矩阵 |
 | — | **门: P-01/P-02 拍板** | ✅ | 2026-10-08 用户裁决(§P-01): 节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py` |
 | S2 | 拆分工具与红验 | ⬜ | `scripts/split_test_web.py` + 校验 4 条(①集合 = **329** / ③条目 = **312**)+ 红验 3 条 |
@@ -478,4 +478,5 @@
 - **2026-10-08 02:5x** S1: AST 扫描(脚本落 `tmp-analysis/`)—— 382 顶层函数 = 327 `test_*` + 2 `testhr_*` + 53 辅助; `pytest --collect-only` = **337 项 / 329 函数**; docstring 条目 312(0 幽灵, 17 缺口); 节结构 15 标记; 辅助/常量「定义→使用」传递闭包 → 16 辅助 + 3 常量上收 conftest。
 - **2026-10-08 02:5x** S1 门: 映射表 329 fn 全覆盖零遗漏, 与 AST 逐名对账通过; 四处分歧(节 3 命名 / 节 2 对半 / conftest 增量 / 计数漂移)记入 §P-01, 待用户拍板。
 - **2026-10-08 02:5x** **P-01/P-02 拍板(用户裁决)**: ①节 3 拆两份 —— 18 流量 → `test_web_traffic_qb.py`, 37 杂项 → `test_web_backend_misc.py`(HR 系 6 条未并入 hr); ②节 2 按内容分 `panel`(28)/`page`(27); ③节 1 维持 14/7; ④共享件 —— 仅 `web_env` fixture 进 conftest, 16 个非 fixture 跨文件辅助 + 3 常量进新建 `tests/webui_helpers.py` 显式导入。据此目标文件数 15→**16**; 映射表与归属表按拍板重算并回写本档。
-- **2026-10-08 02:58** 收尾(用户「提交」): DoD —— 复测 `test.full` **2771 passed + 4 skipped / 16476-165-5694-149 / 99% / 56.3s**(与上基线逐位持平), 新建开工基线切片 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md); 本档补 `**Refs:**` 认领链(挂基线切片); 切片「最后活动」刷新; `kb.index` 重建。S0–S1 随本专题入库。
+- **2026-10-08 02:58** 收尾(用户「提交」): DoD —— 复测 `test.full` **2771 passed + 4 skipped / 16476-165-5694-149 / 99% / 56.3s**(与上基线逐位持平), 新建开工基线切片 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md); 本档补 `**Refs:**` 认领链(挂基线切片); 切片「最后活动」刷新; `kb.index` 重建。
+- **2026-10-08 03:05** 推送落地(用户拍板): `ship.commit` 提交成功(`e9f82d66`)但推送失败 —— 新分支 `feat/test-web-split` 在 Gitee 不存在, `run_sync` 取不到远端 ref 即报「拿不到远端」(新分支无法自举)。用户拍板**改落 `develop`**: `develop` 快进到远端 tip `1a5f0262` → cherry-pick 本次提交(`136a42bf`)→ `ship.push`; 临时分支删除, S2–S7 亦在 develop 上做。
