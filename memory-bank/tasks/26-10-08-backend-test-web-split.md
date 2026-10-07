@@ -3,7 +3,7 @@
 **Status:** In Progress  
 **Added:** 2026-10-08  
 **Updated:** 2026-10-08  
-**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。**S4 已完成**: 批 2 webui 静态守阵(节 2 → `test_webui_static_skins.py` 8 fn + `test_webui_static_dom_panel.py` 28 fn + `test_webui_static_dom_page.py` 27 fn, 全计划最大批)在 `develop` 落地 —— 新文件 1,449/2,232/1,131 行、余量源 8,809 行(余 245 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **316 项 / 308 名 == 源**; 演练(整 `tests/` 副本 + `src` junction 保 `STATIC_ROOT`)三新文件 **63 passed**; `test.one` **63**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。**批模式再暴露并修复工具第 5 处缺陷**(共享模块被后续批清空, 见 §S4)。**S5 已完成**: 批 3 端点域(节 3 + 4 → `test_web_traffic_qb.py` 18 fn + `test_web_backend_misc.py` 37 + `test_web_hr.py` 51, 共 106 fn)在 `develop` 落地 —— 新文件 703/1,304/1,576 行、余量源 5,271 行(余 139 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **253 项 / 245 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)三新文件 **105 passed + 1 skipped**; `test.one` **105+1s**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**(5 处已在 S3/S4 修完)。  
+**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。**S4 已完成**: 批 2 webui 静态守阵(节 2 → `test_webui_static_skins.py` 8 fn + `test_webui_static_dom_panel.py` 28 fn + `test_webui_static_dom_page.py` 27 fn, 全计划最大批)在 `develop` 落地 —— 新文件 1,449/2,232/1,131 行、余量源 8,809 行(余 245 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **316 项 / 308 名 == 源**; 演练(整 `tests/` 副本 + `src` junction 保 `STATIC_ROOT`)三新文件 **63 passed**; `test.one` **63**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。**批模式再暴露并修复工具第 5 处缺陷**(共享模块被后续批清空, 见 §S4)。**S5 已完成**: 批 3 端点域(节 3 + 4 → `test_web_traffic_qb.py` 18 fn + `test_web_backend_misc.py` 37 + `test_web_hr.py` 51, 共 106 fn)在 `develop` 落地 —— 新文件 702/1,000/1,876 行(终值, 含 HR 并入 + 闸门 yapf 去尾空行)、余量源 5,270 行(余 139 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **253 项 / 245 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)三新文件 **105 passed + 1 skipped**; `test.one` **105+1s**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**(5 处已在 S3/S4 修完)。**HR 并入**: 6 个 HR 系测试随后按用户拍板并入 `test_web_hr.py`(`test_web_backend_misc.py` 37→**31** / `test_web_hr.py` 51→**57**, 合计 106 不变), 见 §S5。  
 **Topics:** test-web-split  
 **Refs:** memory-bank/testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md
 
@@ -192,7 +192,7 @@
 - test_api_traffic_qb_group_never_transferred_empty_state
 - test_api_traffic_qb_group_member_only_zruns_not_empty
 
-#### test_web_backend_misc.py  (37 fn, 节 3 杂项半 —— P-01 拍板拆分)
+#### test_web_backend_misc.py  (31 fn, 节 3 杂项半 —— P-01 拍板拆分; 原 37, 6 个 HR 系测试 2026-10-08 并入 hr)
 
 - test_config_schema_endpoint
 - test_config_tree_roundtrip
@@ -225,14 +225,8 @@
 - test_refresh_error_reasons_budget_and_ttl
 - test_refresh_error_reasons_clears_when_recovered
 - test_refresh_error_reasons_skips_when_disconnected
-- test_build_group_view_hr_tags
-- testhr_view_fields_three_state
-- testhr_view_fields_excluded
-- test_api_hr_status_disabled_returns_empty_state
-- test_api_hr_status_reports_site_state
-- test_api_hr_status_names_the_blocking_step
 
-#### test_web_hr.py  (51 fn, ~1394 行测试体)
+#### test_web_hr.py  (57 fn, ~1394 行测试体; 原 51, 2026-10-08 并入 6 个 HR 系测试)
 
 - test_api_hr_refresh_accepts_and_returns_requested
 - test_api_hr_refresh_requires_enabled_hr
@@ -285,6 +279,12 @@
 - test_fs_endpoints_route_fs_calls_through_long_path_prefix
 - test_fs_endpoints_unmapped_root_semantic_404
 - test_fs_path_helpers_strip_long_path_prefix_before_compare
+- test_build_group_view_hr_tags
+- testhr_view_fields_three_state
+- testhr_view_fields_excluded
+- test_api_hr_status_disabled_returns_empty_state
+- test_api_hr_status_reports_site_state
+- test_api_hr_status_names_the_blocking_step
 
 #### test_web_commands.py  (31 fn, ~1282 行测试体)  ← 节 5 + 节 6
 
@@ -484,7 +484,7 @@
 | P-01c | 节 1 切分   | auth + api_core(共 21)                                                    | 14 + 7                                   | **维持 14/7**(`test_api_t_skip_check_gated_by_config` 归 api_core)                                              |
 | P-02  | 共享件归宿    | web_env + \_make_web_manager + \_ensure_group_state → conftest(增量 ~40 行) | 17 跨文件辅助 + 3 常量; 非 fixture 不能只放 conftest | **fixture → conftest**(仅 `web_env`); **非 fixture 辅助 + 常量 → 新建 `tests/webui_helpers.py`**(16 辅助 + 3 常量), 显式导入 |
 
-**可选未采纳项**: 节 3 杂项里的 6 个 HR 系测试(`test_api_hr_status_*` ×3 / `testhr_view_fields_*` ×2 / `test_build_group_view_hr_tags`)按「拆两份」留在 `test_web_backend_misc.py`(未并入 hr, 以保 `test_web_hr.py` = 51 与计划 §3.1 一致); 如需并入 hr, 说一声即可。
+**可选未采纳项(2026-10-08 后已采纳)**: 节 3 杂项里的 6 个 HR 系测试(`test_api_hr_status_*` ×3 / `testhr_view_fields_*` ×2 / `test_build_group_view_hr_tags`)初版按「拆两份」留在 `test_web_backend_misc.py`; 用户随后要求并入 hr ⇒ 已迁(见 §S5), 现 `test_web_hr.py` = 57 / `test_web_backend_misc.py` = 31。
 
 **收口口径**: 目标文件 **16** 个(计划 15); 校验① 面 = **329** 函数; 校验③ 条目守恒 = **312**。
 
@@ -594,12 +594,14 @@
 
 | 文件                                  | 行      | fn  | 条目 | 说明                            |
 | ----------------------------------- | ------ | --- | -- | ----------------------------- |
-| `tests/test_web_traffic_qb.py`      | 703    | 18  | 18 | 节 3 流量半(本地件 2: `_qb_open_spy`/`_v4_opens`) |
-| `tests/test_web_backend_misc.py`    | 1,304  | 37  | 36 | 节 3 杂项半(本地件 3: `_site_scan_env`/`_tracker_calls`/`_WEB_MGR_CFG`) |
-| `tests/test_web_hr.py`              | 1,576  | 51  | 45 | 节 4 HR web 端点 + 搜索/文件系统端点     |
-| `tests/test_web.py`(余量)             | 5,271  | 139 | 130 | 改写后剩 139 fn                   |
+| `tests/test_web_traffic_qb.py`      | 702    | 18  | 18 | 节 3 流量半(本地件 2: `_qb_open_spy`/`_v4_opens`) |
+| `tests/test_web_backend_misc.py`    | 1,000  | 31  | 31 | 节 3 杂项半(本地件 3); 原 37 fn/1,304 行, 6 个 HR 系测试 2026-10-08 并入 hr |
+| `tests/test_web_hr.py`              | 1,876  | 57  | 50 | 节 4 HR web 端点 + 搜索/文件系统端点; 原 51 fn/1,576 行, 并入 6 个 HR 系测试 |
+| `tests/test_web.py`(余量)             | 5,270  | 139 | 130 | 改写后剩 139 fn                   |
 | `tests/webui_helpers.py`            | 436    | —   | —   | **本批未动**(无新共享块, 幂等跳过)         |
 | `tests/conftest.py`                 | 217    | —   | —   | **本批未动**(`web_env` 已存在, 幂等跳过)   |
+
+> **行数口径(2026-10-08 实测纠偏)**: 上表行数为**当前实测**(`wc -l`, 经提交闸门 + HR 并入后的终值)。**提交闸门会跑 `dev.fmt`(yapf)去尾空行** —— 本档各批表格里记的「工具输出值」与提交后 blob **恒差 1–2 行**(S5: 工具报 703/1,304/1,576 → blob 702/1,303/1,574; S3/S4 同族)。收口行数一律以 `wc -l` 实测为准, 不再用工具 `行=` 报告值。
 
 **校验**: 校验 1–4 + 内容/行守恒**全绿**; `--collect` collect-only **253 项 / 245 函数名 == 源**; 块体行 8,521 逐行搬移。三新文件均 ≤2,500 行硬上限(最大 hr 1,576)。
 
@@ -610,7 +612,7 @@
 **S5 对 S1/计划的纠偏**:
 
 - **本批工具零新缺陷**: S3/S4 已把批模式 5 处「仅全量模式验证过」的缺陷修完(S3 四 + S4 一); 本批 S5 与 S4 同形(`--files` 子集), 演练 + 生产两次全绿, 无新缺陷 —— 与计划 S3「管线缺陷在本批暴露完毕」的预期一致。
-- **HR 系 6 测试仍在 `test_web_backend_misc.py`**: 按 P-01a「节 3 拆两份」的拍板, 6 个 HR 系测试(`test_api_hr_status_*` ×3 / `testhr_view_fields_*` ×2 / `test_build_group_view_hr_tags`)未并入 `test_web_hr.py`(保 `test_web_hr.py` = 51 与计划 §3.1 一致)。**若需并入, 说一声即可**(并入后 `test_web_hr.py` 57 / `test_web_backend_misc.py` 31)。
+- **HR 系 6 测试已于 2026-10-08 并入 `test_web_hr.py`**(用户拍板): P-01a「节 3 拆两份」初版把 6 个 HR 系测试(`test_api_hr_status_*` ×3 / `testhr_view_fields_*` ×2 / `test_build_group_view_hr_tags`)留在 `test_web_backend_misc.py`; 用户随后要求并入 hr —— 一次性脚本 `tmp-analysis/move_hr_tests.py`(机械移动: 函数体逐行搬移 + docstring 条目随行 + 两侧 import 按 used-names 重算)完成。**并入后 `test_web_hr.py` = 57 fn / `test_web_backend_misc.py` = 31 fn**(合计 106 不变); bm 标题去掉「/ HR 状态」、丢掉已无用的 `from unittest import mock` 与 `_hr_status_env`; 5 条 docstring 条目随行(`test_build_group_view_hr_tags` 属存量 17 条无条目缺口, 不补写)。校验: 拆分集 collect-only **337 项 / 329 名 == 源**、`test.one` 两文件 **87 passed + 1 skipped**、`test.quick`/`test.full` **2771+4 / 99%** 逐位持平。
 - **`--expect-fn/--expect-entries` 沿 S4 口径**: 按「当前源」填 **245 / 229**(= 全量 329/312 − 已迁 S3 21 − 已迁 S4 63); 迁后余量 139 fn / 130 条目。
 
 ## 进度日志
@@ -643,3 +645,6 @@
 - **2026-10-08 04:2x** S5 演练(不触生产): 整 `tests/` 副本 → `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction → 校验 1–4 + 内容/行守恒**全绿**, collect-only **253 项 / 245 名 == 源**, 三新文件 **105 passed + 1 skipped**。副本 + junction 已清理。
 - **2026-10-08 04:2x** S5 生产落批: `--out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_web_traffic_qb.py,test_web_backend_misc.py,test_web_hr.py --expect-fn 245 --expect-entries 229 --collect` → 全绿; 产出 703/1,304/1,576 行三新文件 + 余量源 5,271 行(余 139 fn); `webui_helpers.py`(436)与 `conftest.py`(217)未动。**本批工具零新缺陷**。
 - **2026-10-08 04:2x** S5 验证: `test.one` 三新文件 **105 passed + 1 skipped**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平) ⇒ 纯移动。**不新建基线切片**(同值噪声; 计划 §S8 落终版)。
+- **2026-10-08 04:33** S5 提交(用户「提交」): `ship.commit` → **提交成功 `dec66223`**(🚚 S5; 6 文件 +3620/−3547); 提交那一刻 `test.full` 复测 **2771+4 / 99%**; 4 个提交 blob 与工作区 md5 逐一相同。
+- **2026-10-08 04:3x** HR 并入(用户拍板): `tmp-analysis/move_hr_tests.py` 把 6 个 HR 系测试从 `test_web_backend_misc.py` 机械迁入 `test_web_hr.py`(37→**31** / 51→**57**; 5 条 docstring 条目随行, `test_build_group_view_hr_tags` 属存量缺口不补写; bm 去掉 `/ HR 状态` 标题后缀与已无用的 `mock`/`_hr_status_env` import)。校验: 拆分集 collect-only **337 项 / 329 名 == 源**、`test.one` 两文件 **87 passed + 1 skipped**、`test.quick`/`test.full` **2771+4 / 99%** 逐位持平。
+- **2026-10-08 04:4x** 行数口径纠偏: 发现**提交闸门(commit.py)在暂存前跑 `dev.fmt`(yapf)**, yapf 去尾空行 ⇒ 各批表格的「工具输出值」与提交后 blob **恒差 1–2 行**(S5 实测: 工具报 703/1,304/1,576 → blob 702/1,303/1,574; S3/S4 同族)。已对并入后的 bm/hr 跑 `dev.fmt`(yapf-clean); 终值 `traffic_qb` **702** / `backend_misc` **1,000** / `hr` **1,876** 行(§S5 表已按 `wc -l` 实测更正)。
