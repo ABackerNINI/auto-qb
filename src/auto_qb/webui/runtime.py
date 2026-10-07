@@ -82,13 +82,14 @@ WEB_ERR_MSG_MAX = 500
 # 值回放时从当前已发布视图现取, 内存 O(代数 x 脏行键) 与库大小无关 ----
 # 容量写常量(零新配置键): 40 代 ~= 60s @1.5s tick, 环满挤最旧(窗外客户端退化全量, R10)
 _DELTA_TIMELINE_MAX = 40
-# S3 启用矩阵(plan 26-10-07-0414): 仅 group/torrent 视图启用增量归约; show 桶 S8/S9 才接,
-# view=show 与缺省(四数组)一律 full —— shows 数组无行键可归约, 强行回增量会漏 shows 变化(R10)
-_DELTA_VIEWS = frozenset({"group", "torrent"})
+# S3 启用矩阵(plan 26-10-07-0414): group/torrent 视图 S3 起启用; show 视图 S9b 解锁 ——
+# 剧行键 = S8 剧键映射(_show_member_keys)派生, 局部重聚合按脏剧键整行重建(R8); 缺省
+# (四数组)与未知 view 值仍一律 full(无视图上下文可裁剪, 保守默认)
+_DELTA_VIEWS = frozenset({"group", "torrent", "show"})
 
 
 def _new_delta_buckets() -> dict:
-    """增量键集桶结构(plan S2): 分视图 upsert/removed 键集; show 桶本步恒空(S8/S9 启用)"""
+    """增量键集桶结构(plan S2): 分视图 upsert/removed 键集; show 桶 S9b 起随剧键推导填充"""
     return {
         "upsert": {
             "torrent": set(),
@@ -219,11 +220,13 @@ class WebUIRuntime:
         # 全量代全库回填(_backfill_show_member_keys_locked) —— 重启后客户端本就窗外 full
         # (R10: ver 时间播种 + 时间线归零), 回填无正确性风险。
         self._show_member_keys: Dict[str, str] = {}
-        # 迁移候选暂存(S8, S9 消费): 成员迁移时「旧剧行 removed + 新剧行 upsert」的剧键集,
-        # 桶结构与时间线条目的分视图桶对齐 —— S9 在 _publish_locked 键集定型段并入 show 桶
-        # (与 _pending_error_hashes 同款生命周期: 并入后清空)。本步不并入: 时间线 show 桶
-        # 仍恒空(S5 镜子 M8), S9 前无行为面。集语义幂等: 排空段残值重跑/同键反复迁移不产生
-        # 重复候选; 现算命中同键零成本(parse_release 按 name lru 缓存, name 未变不产生候选)。
+        # 迁移候选暂存(S8, S9b 消费): 成员迁移时「旧剧行 removed + 新剧行 upsert」的剧键集,
+        # 桶结构与时间线条目的分视图桶对齐 —— S9b 在 _publish_locked 键集定型段并入 show 桶
+        # (与 _pending_error_hashes 同款生命周期: 并入后清空)。两侧候选都并入 **upsert**(重建
+        # 候选): 旧剧键行可能仍有其余成员(应重建为减员后的内容, 直剔会漏行), 只有重算后成员
+        # 为空(_build_show_row 回 None)才转 removed。集语义幂等: 排空段残值重跑/同键反复迁移
+        # 不产生重复候选; 现算命中同键零成本(parse_release 按 name lru 缓存, name 未变不产生
+        # 候选)。
         self._pending_show_migrations: dict = {"upsert": set(), "removed": set()}
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
@@ -583,18 +586,25 @@ class WebUIRuntime:
     def _drain_delta_locked(self, store) -> None:
         """把 store 本轮增量推导成脏行键并入 _delta_pending(**持 view_lock**, 主循环线程)
 
-        映射口径(plan S2): flat/singles 行键 = hash 直用 -> torrent 桶; 组行键 =
-        store.member_to_key -> group 桶(成员字段变化会改组行聚合值); show 桶本步恒空
-        (S9 接)。数据源 = S1 属性快照(last_added/last_removed) + delta_fields(变化
-        字段集, added 不在其中)。
+        映射口径(plan S2/S9b): flat/singles 行键 = hash 直用 -> torrent 桶; 组行键 =
+        store.member_to_key -> group 桶(成员字段变化会改组行聚合值); 剧行键 =
+        _show_member_keys(S8 剧键映射)-> show 桶。数据源 = S1 属性快照
+        (last_added/last_removed) + delta_fields(变化字段集, added 不在其中)。
 
         组行 removed 键推导: 先查 member_to_key 后消费 removed 清单 —— 查得到: 组仍在 ->
         组行内容变了(upsert), 组已解散 -> 组行消失(removed); 查不到(组键已随
         _leave_group/解散清除, 且与「从未归组」不可区分) -> 该组行键不可归约 -> 本代
         full(R11 保守正确优先)。
 
+        show 桶推导(plan S9b): 成员离开/成员字段变化都会改剧行聚合值(频次/季级 gaps/
+        状态归并全是剧内聚合) -> 该剧键整行重建。removed 成员的**旧**剧键须在映射清理
+        **前**捕获(S8 清理在后); added/delta_fields 涉及 hash 的**新**剧键在 S8 映射更新
+        **后**现算 —— 两个方向都进 upsert(重建候选), 全删剧转 removed 由局部重聚合
+        _build_show_row 回 None 定行止(S8 口径「候选允许过宽, 重聚合按当前库态定行止」)。
+        名称解析不出剧键的 hash 不在映射 -> 无剧行, 不推导。
+
         同一临界区顺带更新剧键等价映射(plan S8): S1 added/delta_fields 涉及的 hash 现算
-        新剧键, 键变化记迁移候选, removed 清条目 —— 详见 _update_show_member_keys_locked。
+        新剧键, 键变化记迁移候选 —— 详见 _update_show_member_keys_locked。
         """
         added = store.last_added
         removed = store.last_removed
@@ -605,8 +615,10 @@ class WebUIRuntime:
         rem = self._delta_pending["removed"]
         t_up, g_up = upsert["torrent"], upsert["group"]
         t_rm, g_rm = rem["torrent"], rem["group"]
+        s_up = upsert["show"]
         member_to_key = store.member_to_key
         groups = store.groups
+        show_keys = self._show_member_keys
         unresolvable = False
         for h in added:
             t_up.add(h)
@@ -626,9 +638,22 @@ class WebUIRuntime:
                 (g_up if key in groups else g_rm).add(key)
             else:
                 unresolvable = True
+            # 旧剧键在映射清理前捕获: 成员离开 -> 该剧行内容必然变化(重建候选)
+            sk = show_keys.get(h)
+            if sk is not None:
+                s_up.add(sk)
         if unresolvable:
             self._pending_full_reasons.add("row_key_unresolvable")
         self._update_show_member_keys_locked(store, added, delta_fields, removed)
+        # 新剧键现算(S8 映射更新后): added/delta_fields 涉及 hash 的落点剧键
+        for h in added:
+            sk = show_keys.get(h)
+            if sk is not None:
+                s_up.add(sk)
+        for h in delta_fields:
+            sk = show_keys.get(h)
+            if sk is not None:
+                s_up.add(sk)
 
     def _update_show_member_keys_locked(self, store, added, delta_fields, removed) -> None:
         """剧键等价映射更新(plan S8, **持 view_lock**): S1 added/delta_fields 涉及的 hash
@@ -714,6 +739,25 @@ class WebUIRuntime:
             if key is not None:
                 error_upsert["group"].add(key)
         error_hashes.clear()
+
+    def _merge_pending_show_migrations_locked(self) -> None:
+        """剧键迁移候选并入累积器(plan S8/S9b, **持 view_lock**)
+
+        S8 暂存的迁移候选在键集定型段并入 show 桶(与 _merge_pending_error_hashes_locked
+        同款生命周期: 并入后清空, 调用点在 _publish_locked 的分叉判定前 —— 分叉判定需要
+        完整键集)。并入目标两侧统一为 **upsert**(重建候选): 暂存口径「候选允许过宽,
+        重聚合按当前库态定行止」—— 旧剧键行可能仍有其余成员(须重建为减员后的内容),
+        全删剧由局部重聚合 _build_show_row 回 None 转 removed; 由此「决不允许过窄」
+        (凡剧键变化的成员迁移必被重算)由两侧候选都参与重建保证。
+        """
+        staged = self._pending_show_migrations
+        if not staged["upsert"] and not staged["removed"]:
+            return
+        show_up = self._delta_pending["upsert"]["show"]
+        show_up |= staged["upsert"]
+        show_up |= staged["removed"]
+        staged["upsert"].clear()
+        staged["removed"].clear()
 
     def _fold_delta_pending_locked(self) -> None:
         """把跨拍累积的脏行键折叠成本代时间线条目并清空累积器(**持 view_lock**)
@@ -1066,16 +1110,19 @@ class WebUIRuntime:
         (见 ensure_view); 若拆成"加锁重建 / 释放 / 再加锁读", 中间仍可能被另一线程插入
         一次重建, 读到的四份视图依旧不属于同一轮。
 
-        S6 分叉(plan 26-10-07-0414): 本代无 full 降级理由且有净键可归约 -> 局部重聚合
-        (_publish_partial_locked, 未脏行对象引用原样保留); full 理由/HR 波次/无键 ->
-        走原全量路径(四视图整体重建, 行为与 S6 之前逐字段一致)。应急回退(不 revert):
-        分叉判定恒为假(把下面的 if 条件整个换成 False)即回纯全量 —— 单行改动。
+        S6/S9b 分叉(plan 26-10-07-0414): 本代无 full 降级理由且有净键可归约 -> 局部重聚合
+        (_publish_partial_locked, 未脏行对象引用原样保留; S9b 起 show 视图按脏剧键整行
+        重建); full 理由/HR 波次/无键 -> 走原全量路径(四视图整体重建, 行为与 S6 之前逐字段
+        一致)。应急回退(不 revert): 分叉判定恒为假(把下面的 if 条件整个换成 False)即回
+        纯全量 —— 单行改动。
         """
         host = self._host
         # ---- 本代键集定型(原属 _fold_delta_pending_locked 的前置段前移到构建前, S6) ----
         # 错误原因暂存并入: 分叉判定需要完整键集, 该源比 store 增量键集(排空在 flush_views
         # 开头)更及时, 并入点仍在 view_lock 临界区内(R12 不变)。
         self._merge_pending_error_hashes_locked()
+        # 剧键迁移候选并入(plan S9b): S8 暂存的旧/新剧键统一作重建候选, 生命周期同上
+        self._merge_pending_show_migrations_locked()
         # 交叉键集基线检查前移: 直接从 store 现算(与构建期 note_cross_keys 同源同值),
         # 增删即本代 full(R11) —— 局部重聚合无法修正未脏组行的 cross 标记, 必须先判定。
         cross_keys = host._cross_keys_snapshot()
@@ -1089,15 +1136,44 @@ class WebUIRuntime:
             both = upsert[bucket] & removed[bucket]
             upsert[bucket] -= both
             removed[bucket] -= both
+        # 未识别折叠面变化检测(plan S9b, R11): 增量协议没有未识别桶(S4 前端 delta 轮对
+        # unrecognized「不动」, 只在 full 轮整表替换) -> 折叠成员增删不可归约为行级脏,
+        # 本代标 full(保守正确优先)。判定用全量分类同款口径(_parse_show_member 解析+
+        # 兑底): 「现分类未识别」≠「原居折叠区」即折叠面变化 —— 精确不放大, 静止未识别
+        # 种子(如下载中的电影)速度抖动不触发。parse_release 按 name lru 缓存, 排空段已
+        # 现算过同一批名字 -> 此处缓存命中, 增量成本可忽略(远廉于 S9b 前每拍全量重扫)。
+        if upsert["torrent"] or removed["torrent"]:
+            from ..core import tvshows as _tvshows
+
+            _store = host.store
+            index = self.search_index or {}
+            old_unrec = set(self.shows_view["unrecognized"])
+            unrec_changed = False
+            for h in upsert["torrent"]:
+                rec = _store.by_hash.get(h)
+                if rec is None:
+                    continue  # 已删 hash: 折叠面归 removed 分支判定
+                _, parsed, _ = host._parse_show_member(rec, (index.get(h) or {}).get("files"))
+                if (parsed.kind == _tvshows.KIND_UNKNOWN or not parsed.key) != (h in old_unrec):
+                    unrec_changed = True  # 新进/离开折叠区(含改名与兑底归位两侧)
+                    break
+            if not unrec_changed:
+                unrec_changed = any(h in old_unrec for h in removed["torrent"])
+            if unrec_changed:
+                self._pending_full_reasons.add("show_unrecognized")
         # HR 波次判定(flush_views 同款): ensure_state 触发的发布不经 flush 的判定点,
         # 局部重聚合只刷新脏行的 HR 派生字段, 波次未捕获会让未脏行的 HR 字段永久陈旧
         hr = getattr(host, "hr", None)
         hr_wave = hr is not None and hr.revision != self._hr_rev_at_build
-        has_keys = bool(upsert["torrent"] or upsert["group"] or removed["torrent"] or removed["group"])
+        has_keys = bool(
+            upsert["torrent"] or upsert["group"] or upsert["show"] or removed["torrent"] or removed["group"] or
+            removed["show"]
+        )
         partial = not self._pending_full_reasons and not hr_wave and has_keys
         if partial:
             self._publish_partial_locked(upsert, removed, cross_keys)
         else:
+            old_show_keys = {r["key"] for r in self.shows_view["list"]}
             self.group_view = host._build_group_view()
             self.singles_view = host._build_singles_view()
             self.shows_view = host._build_shows_view()
@@ -1106,6 +1182,13 @@ class WebUIRuntime:
             self.speed_totals = host._build_speed_totals()
             # 剧键映射回填(plan S8): 重启后首个全量代全库登记(映射非空即跳过, 幂等)
             self._backfill_show_member_keys_locked(host.store)
+            # show 桶时间线按现视图行止校准(plan S9b): 重建候选中已无剧行的键(迁移旧键
+            # 成员迁空等)—— 原居旧视图的转 removed(客户端按它删行), 从未有过行的纯未识别
+            # 键只撤候选不产生 removed 噪音; 免得后续归约对缺失行防御性 full
+            gone = upsert["show"] - {r["key"] for r in self.shows_view["list"]}
+            if gone:
+                upsert["show"] -= gone
+                removed["show"] |= gone & old_show_keys
         self.group_view_ver += 1
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
@@ -1128,16 +1211,20 @@ class WebUIRuntime:
             self._hr_rev_at_build = hr.revision
 
     def _publish_partial_locked(self, upsert: dict, removed: dict, cross_keys: set) -> None:
-        """局部重聚合(plan S6): 仅对本代 upsert/removed 行键重跑构建 —— **调用方必须持有 view_lock**
+        """局部重聚合(plan S6/S9b): 仅对本代 upsert/removed 行键重跑构建 —— **调用方必须持有 view_lock**
 
-        不变量(plan S6 核心):
+        不变量(plan S6/S9b 核心):
         - 未脏行**对象引用原样保留**(同一 dict), 脏行必然新对象 —— 引用稳定只对未脏行承诺,
           前端 S7 按行对象身份的 WeakMap 记忆化依赖这一点;
         - 「四视图同轮发布」硬约束(模块 docstring)不破: 数组仍整体一次性替换, 行对象按
           未脏/脏区别复用/新建, 不在调用点分批建;
         - 组行内嵌 members 数组随组行整行走(P-02 一期口径); singles/flat 脏行按 hash 逐行
           重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐);
-        - 脏行重算必须与全量重跑该行逐字段一致(S6 单测钉住; S5 镜子兜整体等价)。
+        - show 行(S9b): 脏剧键经 _show_member_keys 反查成员集 -> 逐成员 _parse_show_member
+          重解析 -> _build_show_row 重调出**整行** upsert(R8; 剧名频次/季级 gaps/集行状态
+          归并全随整行重算, 正确性边界 2-4 落位); 重算成员为空(全删/迁移旧键清空)-> 行
+          消失转 removed(对齐 _build_group_row 空组口径);
+        - 脏行重算必须与全量重跑该行逐字段一致(S6/S9b 单测钉住; S5 镜子兜整体等价)。
         """
         host = self._host
         store = host.store
@@ -1195,11 +1282,77 @@ class WebUIRuntime:
             flat_view.append(new_flat.pop(h) if h in new_flat else old)
         flat_view.extend(new_flat.values())  # 新增种子行追加在尾部(全量构建同按入库序在尾)
 
-        # ---- 发布: 数组整体一次性替换(硬约束); shows/speed_totals 无行键可归约, 仍全量现算 ----
+        # ---- shows: 脏剧键整行重建(plan S9b), 未脏剧行复用, 全删剧转 removed 剔除 ----
+        show_up = upsert["show"]
+        show_rm = removed["show"]
+        new_shows: dict = {}
+        old_show_keys = {r["key"] for r in self.shows_view["list"]}
+        if show_up:
+            from ..core import tvshows
+
+            index = self.search_index or {}
+            by_hash = store.by_hash
+            # 成员集反查(plan S9: 脏剧键经 _show_member_keys 取该剧成员 hash 集): 单次扫描
+            # 只收脏剧键的成员 —— 映射规模 = 名称可解析的种子数, dict 扫描远廉于全库
+            # parse_release(S9 的收益点)。映射口径比全量分类「宽一档」(S8: 名称可解析但
+            # 暂居未识别区/待兑底的 hash 也登记) -> 成员逐个过 _parse_show_member 重分类,
+            # 现分类未识别的(KIND_UNKNOWN, 如电影)剔除出剧行 —— 与全量分类产物对齐。
+            want = set(show_up)
+            members_by_key: dict = {}
+            for h, k in self._show_member_keys.items():
+                if k in want and h in by_hash:
+                    members_by_key.setdefault(k, []).append(h)
+            parse_member = host._parse_show_member
+            build_row = host._build_show_row
+            pending: List[str] = []
+            for k in list(show_up):  # 快照迭代: 行止转换要写回原集合(fold 读同一对象)
+                members = []
+                for h in members_by_key.get(k) or ():
+                    rec = by_hash.get(h)
+                    if rec is None:  # 映射残值防御(理论不可达: 映射随删除清理)
+                        continue
+                    rec, parsed, is_pending = parse_member(rec, (index.get(h) or {}).get("files"))
+                    if is_pending:
+                        pending.append(h)  # 可兑底而索引未覆盖(全量同款: 未识别形态也计)
+                    if parsed.kind == tvshows.KIND_UNKNOWN or not parsed.key:
+                        continue  # 未识别折叠区不进剧行(全量分类同口径, 折叠面由检测器兜)
+                    members.append((rec, parsed))
+                row = build_row(k, members)
+                if row is not None:
+                    new_shows[k] = row
+                elif k in old_show_keys:
+                    # 剧已无(可分类)成员(全删/迁移旧键清空): 行消失 -> 转 removed
+                    # (对齐 _build_group_row 空组口径; 改动进本代时间线条目)
+                    show_up.discard(k)
+                    show_rm.add(k)
+                else:
+                    # 从未有过剧行(纯未识别键等): 仅撤重建候选, 不产生 removed 噪音
+                    show_up.discard(k)
+            # 文件兑底接线(与 _build_shows_view 同款): 脏成员中可被兑底而索引未覆盖 -> 登记
+            # pending 并按需投递构建命令。False 归位转换刻意不在局部路径判定: 非脏成员的
+            # pending 状态此处不可见, 误归位会丢「索引建成 -> 整季重解析」的重建触发
+            # (归位拍由索引推进的 _trigger_shows_rebuild_if_pending 或下一个全量代兜住)
+            pending = [h for h in pending if h not in index]
+            if pending:
+                self.mark_shows_pending(True)
+                if self.search_index_dirty or self.search_index is None:
+                    self.post_command("build_search_index")
+        shows_list = []
+        for old in self.shows_view["list"]:
+            k = old["key"]
+            if k in show_rm:
+                continue
+            shows_list.append(new_shows.pop(k) if k in new_shows else old)
+        shows_list.extend(new_shows.values())  # 新剧行追加在尾部(前端排序不依赖数组顺序)
+        # 未识别折叠面原样保留: 折叠面变化已被 _publish_locked 的 show_unrecognized 检测
+        # 拦为 full 代(R11, 协议无未识别桶), 走到这里的局部代折叠成员必与上一代一致
+        shows_view = {"list": shows_list, "unrecognized": self.shows_view["unrecognized"]}
+
+        # ---- 发布: 数组整体一次性替换(硬约束); speed_totals 无行键可归约, 仍现算 ----
         self.group_view = group_view
         self.singles_view = singles_view
         self.flat_view = flat_view
-        self.shows_view = host._build_shows_view()
+        self.shows_view = shows_view
         self.speed_totals = host._build_speed_totals()
 
     def ensure_view(self) -> List[dict]:
@@ -1221,13 +1374,13 @@ class WebUIRuntime:
         **按视图回传**: view 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS), 响应体
         降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次全量。
 
-        **增量归约**(plan 26-10-07-0414 S3): 双重门控后才走归约分支 ——
+        **增量归约**(plan 26-10-07-0414 S3/S9b): 双重门控后才走归约分支 ——
         ①协商: 请求带 delta=1(路由层解析)才允许归约, 未带协商参数的请求**不进归约**,
         响应与历史版本逐字节等价(无 full 键)—— S3 与 S4 各自独立提交/回滚的兼容闸
         (P-01 定案: 未升级前端把增量载荷当全量吃会四数组 undefined 白屏);
-        ②启用矩阵: view ∈ _DELTA_VIEWS(group/torrent); view=show 与缺省一律 full(shows
-        桶 S8/S9 才接, 无行键可归约)。归约判定详见 _reduce_delta; 窗外/窗内含 full 代/
-        防御检查不过时(R10)回落全量并标 full: true。
+        ②启用矩阵: view ∈ _DELTA_VIEWS(group/torrent/show); 缺省与未知值一律 full(无视图
+        上下文可裁剪)。归约判定详见 _reduce_delta; 窗外/窗内含 full 代/防御检查不过时
+        (R10)回落全量并标 full: true。
         """
         from .views import VIEW_ARRAYS
 
@@ -1294,21 +1447,26 @@ class WebUIRuntime:
             return {"full": True}  # 窗内任一代 full: 键集链断裂, 只能全量(R10/R11)
         up_t: set = set()
         up_g: set = set()
+        up_s: set = set()
         rm_t: set = set()
         rm_g: set = set()
+        rm_s: set = set()
         for e in window:
             up_t |= e["upsert"]["torrent"]
             up_g |= e["upsert"]["group"]
+            up_s |= e["upsert"]["show"]
             rm_t |= e["removed"]["torrent"]
             rm_g |= e["removed"]["group"]
+            rm_s |= e["removed"]["show"]
         # R5 跨代版: removed 让位于后续 upsert(同键先删后改 = 行还在, 回 upsert)
         rm_t -= up_t
         rm_g -= up_g
+        rm_s -= up_s
         from ..infra import utils as _utils
         from .views import VIEW_ARRAYS
 
         # 行内容现取自当前已发布视图(R1); upsert 行必须存在, 缺行即防御性转全量(见 docstring)。
-        # 平铺视图含 store 全量 -> torrent 桶 upsert 的每一行都必须在 flat_view 里(两个视图通用)
+        # 平铺视图含 store 全量 -> torrent 桶 upsert 的每一行都必须在 flat_view 里(三个视图通用)
         flat_rows = [r for r in self.flat_view if r["hash"] in up_t]
         if len(flat_rows) != len(up_t):
             return {"full": True}
@@ -1318,8 +1476,13 @@ class WebUIRuntime:
             group_rows = [r for r in self.group_view if r["key"] in enc_up]
             if len(group_rows) != len(up_g):
                 return {"full": True}  # 组行已不在当前视图(跨代先改后解散的残留 upsert)
-        # delta/removed 内层桶按该视图实际数组构成裁剪(与全量分支同款 VIEW_ARRAYS; S3 期
-        # view ∈ {group, torrent}, shows 桶留 S8/S9 接线, 此处恒空兜底)
+        show_rows: list = []
+        if up_s:
+            show_rows = [r for r in self.shows_view["list"] if r["key"] in up_s]
+            if len(show_rows) != len(up_s):
+                return {"full": True}  # 剧行已不在当前视图(全删转 removed 的跨代残留 upsert)
+        # delta/removed 内层桶按该视图实际数组构成裁剪(与全量分支同款 VIEW_ARRAYS;
+        # S9b 起 view=show 启用, delta.shows 回剧行/removed.shows 回剧键)
         keys = VIEW_ARRAYS.get(view) or ()
         delta: dict = {}
         removed: dict = {}
@@ -1343,9 +1506,10 @@ class WebUIRuntime:
             # removed.singles 回全部已删 hash(保守多删: 客户端删不存在的行是幂等 no-op,
             # 漏删才会留幽灵行 —— 已删行归没归过组在删除点之后已不可靠)
             removed["singles"] = sorted(rm_t)
-        if "shows" in keys:  # S3 期不可达(view=show 恒全量); S8/S9 接线前显式空桶
-            delta["shows"] = []
-            removed["shows"] = []
+        if "shows" in keys:
+            delta["shows"] = show_rows
+            # 剧行键 = parse_release 派生的剧键字符串(与视图行 r["key"] 同标识, 前端按它删行)
+            removed["shows"] = sorted(rm_s)
         return {"rid": ver, "full": False, "delta": delta, "removed": removed}
 
     def mark_shows_pending(self, pending: bool) -> None:

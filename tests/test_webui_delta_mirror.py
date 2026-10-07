@@ -28,13 +28,22 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
   不回落): 时间线/累积器归零, 旧客户端 rid 窗外 -> 全量(R10); 对照: 重启后新一轮增量照常
 - test_m7_window_slide_out_and_rid_ahead_full: M7 —— 窗口滑出(41 代未消费, maxlen=40 把客户端
   所在代挤出)与 rid>ver(时钟倒挂)都退化全量(R3/R10), 全量重放补齐后 ≡ A
-- test_m8_show_view_always_full: M8 —— view=show / 缺省(四数组)/ 未知值恒全量且响应无
-  delta/removed 键(S9 前的启用矩阵; 增量镜像客户端只覆盖 torrent/group 两个已启用视图)
+- test_m8_show_view_delta_enabled_matrix: M8(S9b 改写) —— show 视图已启用增量(S9 前恒 full 的
+  启用矩阵翻开): 归约命中(delta.shows 回剧行整行 + 连带 groups/singles 成员索引桶), B ≡ A;
+  缺省(四数组)/未知 view 值仍恒全量(无视图上下文可裁剪, 保守默认)
 - test_m9_gate_skipped_rounds_end_to_end: M9 —— 门控跳拍累积(R4)端到端镜子版: 三拍中后两拍
   未被消费, 键集并入下一代不丢; 恢复消费后一轮增量拿齐全部三拍变化, B ≡ A
+- test_m10_member_migration_rows_follow_key_change: M10(S9b 边界1) —— 成员 name 改名 -> 剧键迁移:
+  多成员剧的旧剧行**重建**为减员内容(直剔会漏行)+ 新剧行 upsert; 单成员剧旧剧行 removed +
+  新剧行 upsert; 每轮 B ≡ A
+- test_m11_season_gaps_recomputed_whole_season: M11(S9b 边界2) —— 同剧某集变化 -> 该 (剧,季)
+  covered/gaps 整季重算: 补齐缺集清空 gaps, 成员删除(组键可解析, 行级 removed -> 剧行重建)
+  缺集重现; 每轮 B ≡ A
+- test_m12_show_name_mode_rescanned_locally: M12(S9b 边界3) —— 同剧成员标题变化 -> 展示名(众数)
+  按当前成员集局部重扫: 新成员加入使频次反超时展示名翻转, 整行 upsert 携带新 name; B ≡ A
 - test_fuzz_random_operation_sequence: fuzz —— 固定种子(random.Random(20261007))随机操作序列
   N=220 轮, 操作池覆盖 增/删/改(量化边界+真脏字段)/同拍增删/门控跳拍/命令无键源/HR 波次,
-  每轮断言 B ≡ A
+  torrent/group/show 三客户端每轮断言 B ≡ A
 """
 import itertools
 import json
@@ -81,6 +90,21 @@ def _make_store(*hashes, state: str = "stalledUP") -> TorrentStore:
     return store
 
 
+def _make_named_store(spec: dict, state: str = "stalledUP") -> TorrentStore:
+    """真实 TorrentStore 装库(自定义命名版, M10-M12 同剧多成员/异写标题用), 清快照口径同
+    _make_store"""
+    client = FakeClient()
+    for h, name in spec.items():
+        client.torrents[h] = FakeTorrent(hash=h, name=name, state=state)
+    store = TorrentStore(client)
+    store.apply_sync(QbApi(client, store))
+    store.last_added = []
+    store.last_removed = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+    return store
+
+
 def _delta_runtime(store) -> WebUIRuntime:
     host = _ViewHost(store)
     rt = WebUIRuntime(host)
@@ -99,7 +123,14 @@ def _beat(store, hash_: str, **fields):
 
 # ---------- 双通道断言器 ----------
 
-_ROW_KEYS = {"torrents": "hash", "singles": "hash", "groups": "key"}
+_ROW_KEYS = {"torrents": "hash", "singles": "hash", "groups": "key", "shows": "key"}
+
+# 每个视图的增量/全量响应实际携带的数组键(与服务端 VIEW_ARRAYS 同款裁剪)
+_VIEW_ARRAYS = {
+    "torrent": ("torrents", ),
+    "group": ("groups", "singles"),
+    "show": ("shows", "groups", "singles"),
+}
 
 
 def _json_copy(row):
@@ -110,29 +141,38 @@ class DeltaClient:
     """B 通道消费端: S4 前端合并(polling.js applyStateRows)的 Python 复刻
 
     - full 轮(payload.full 非 False, 含未协商旧形状): 清空重放(R6), 只吃载荷里存在的
-      数组键(前端「键不存在必须保留原引用」纪律 -> 镜子侧不动对应桶);
-    - delta 轮(full===False): 行级 upsert(整行替换/追加, R8)+ removed 剔除;
+      数组键(前端「键不存在必须保留原引用」纪律 -> 镜子侧不动对应桶); shows 桶是
+      {list, unrecognized} 形状 —— list 行级重放, unrecognized 整体替换(S4 同款);
+    - delta 轮(full===False): 行级 upsert(整行替换/追加, R8)+ removed 剔除; shows 桶
+      行键 = 剧键字符串; unrecognized 增量轮**不动**(S9b: 折叠面变化走 full 代, R11);
     - 行内容 JSON 深拷贝(前端持有自有副本, 不与服务端行对象别名), rid 随响应推进。
     """
     def __init__(self, view: str):
-        self.view = view  # "torrent" | "group"(S3 期增量启用矩阵仅此两视图)
+        self.view = view  # "torrent" | "group" | "show"(S9b 起 show 已启用)
         self.rid = 0
-        self.rows = {"torrents": {}, "singles": {}, "groups": {}}
+        self.rows = {"torrents": {}, "singles": {}, "groups": {}, "shows": {}}
+        self.unrecognized: list = []
 
     def apply(self, payload: dict) -> dict:
         if payload.get("full") is not False:
-            for bucket, keyf in _ROW_KEYS.items():
-                if bucket in payload:
-                    self.rows[bucket] = {r[keyf]: _json_copy(r) for r in payload[bucket]}
+            for bucket in _ROW_KEYS:
+                if bucket not in payload:
+                    continue
+                if bucket == "shows":  # {list, unrecognized} 形状: 全量整表替换(R6)
+                    self.rows["shows"] = {r["key"]: _json_copy(r) for r in payload["shows"]["list"]}
+                    self.unrecognized = list(payload["shows"]["unrecognized"])
+                    continue
+                self.rows[bucket] = {r[_ROW_KEYS[bucket]]: _json_copy(r) for r in payload[bucket]}
             self.rid = payload["rid"]
             return payload
         d = payload.get("delta") or {}
         r = payload.get("removed") or {}
-        for bucket, keyf in _ROW_KEYS.items():
+        for bucket in _ROW_KEYS:
             ups = d.get(bucket) or []
             rms = r.get(bucket) or []
             if not ups and not rms:
                 continue
+            keyf = _ROW_KEYS[bucket]
             for row in ups:
                 self.rows[bucket][row[keyf]] = _json_copy(row)
             for k in rms:
@@ -171,16 +211,21 @@ class Mirror:
         """一轮完整断言: A 快照 + B 逐客户端按自身 rid 拿增量合并 + B ≡ A
 
         clients 为空时只做 A 快照(维持生产节拍、不步进任何 B 客户端)。
+        比较面按客户端视图裁剪(_VIEW_ARRAYS); show 客户端连带比较 unrecognized
+        (S9b: 折叠面变化走 full 代, 增量轮不动 -> 与 A 恒等)。
         """
         a = self.snapshot()
         resps = []
         for c in clients:
             resps.append(c.apply(self.rt.ensure_state(c.rid, c.view, True)))
-            if c.view == "torrent":
-                _assert_rows(c.rows["torrents"], a["torrents"], "hash", "torrent视图")
-            else:
-                _assert_rows(c.rows["groups"], a["groups"], "key", "group视图/groups")
-                _assert_rows(c.rows["singles"], a["singles"], "hash", "group视图/singles")
+            for arr in _VIEW_ARRAYS[c.view]:
+                if arr == "shows":
+                    _assert_rows(c.rows["shows"], a["shows"]["list"], "key", "show视图/shows")
+                    assert c.unrecognized == a["shows"]["unrecognized"], (
+                        f"show视图/unrecognized 不等\n  B = {c.unrecognized}\n  A = {a['shows']['unrecognized']}"
+                    )
+                else:
+                    _assert_rows(c.rows[arr], a[arr], _ROW_KEYS[arr], f"{c.view}视图/{arr}")
         return {"full": a, "resps": resps}
 
 
@@ -459,25 +504,30 @@ def test_m7_window_slide_out_and_rid_ahead_full():
     assert "delta" not in ahead and "removed" not in ahead
 
 
-# ---------- M8: show 视图请求恒 full(S9 前的启用矩阵) ----------
+# ---------- M8: show 视图增量启用(S9b 翻开启用矩阵; S5 期本用例断言恒 full) ----------
 
 
-def test_m8_show_view_always_full():
+def test_m8_show_view_delta_enabled_matrix():
+    """M8(S9b 改写) —— show 视图已启用增量: 归约命中(delta.shows 回剧行整行 + 连带
+    groups/singles 成员索引桶), B ≡ A 由 sync 断言; 缺省(四数组)/未知值恒全量(保守默认)"""
     store, rt, m, ct, cg = _mirror(("H1", "H2"))
+    cs = DeltaClient("show")
+    m.sync(cs)  # show 客户端基线全量(带成员索引)
     _beat(store, "H1", dlspeed=100)
-    m.publish()  # 窗口内有带键集的代: 若启用矩阵放行本可归约
+    m.publish()  # 窗口内有带键集的代
+    out = m.sync(ct, cg, cs)
+    resp = out["resps"][2]
+    assert resp["full"] is False
+    assert len(resp["delta"]["shows"]) == 1
+    assert resp["delta"]["shows"][0]["member_count"] == 1  # 剧行整行 upsert(R8)
+    assert resp["delta"]["shows"][0]["seasons"][0]["episodes"][0]["members"] == ["H1"]
+    assert resp["removed"]["shows"] == []
+    # 启用矩阵保守面: 缺省(四数组)与未知 view 值不归约(无视图上下文可裁剪)
     rid = rt.group_view_ver - 1
-    for view, arrays in (
-        ("show", {"shows", "groups", "singles"}),
-        (None, {"groups", "singles", "shows", "torrents"}),
-        ("nope", {"groups", "singles", "shows", "torrents"}),
-    ):
+    for view in (None, "nope"):
         state = rt.ensure_state(rid, view, True)
         assert state["full"] is True
-        assert {k for k in state if k in ("shows", "groups", "singles", "torrents")} == arrays
         assert "delta" not in state and "removed" not in state
-        assert state["rid"] == rt.group_view_ver
-        assert state["updated"] is True
 
 
 # ---------- M9: 门控跳拍累积(端到端镜子版, R4) ----------
@@ -507,6 +557,122 @@ def test_m9_gate_skipped_rounds_end_to_end():
     assert row2["state"] == "pausedUP"
 
 
+# ---------- M10: 成员迁移端到端(S9b 正确性边界 1) ----------
+
+
+def test_m10_member_migration_rows_follow_key_change():
+    """M10 —— 成员 name 改名 -> 剧键迁移: 多成员剧的旧剧行**重建**为减员内容(S8 暂存候选
+    两侧都作重建候选, 直剔会漏行)+ 新剧行 upsert; 单成员剧旧剧行 removed + 新剧行 upsert;
+    迁移暂存随落代消费清空(S8 -> S9b 交接); 每轮 B ≡ A(shows/groups/singles/unrecognized)"""
+    store = _make_named_store(
+        {
+            "H1": "Show.Alpha.S01E01.1080p-GRP",
+            "H2": "Show.Alpha.S02E01.1080p-GRP",
+            "H3": "Show.Beta.S01E01.1080p-GRP",
+        }
+    )
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    cs = DeltaClient("show")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(cs)
+    # a) 多成员剧的成员迁走(alpha 余 H2): 旧剧行重建为减员内容, 不整行消失
+    _beat(store, "H1", name="Show.Gamma.S01E01.1080p-GRP")
+    m.publish()
+    out = m.sync(cs)
+    resp = out["resps"][0]
+    assert resp["full"] is False
+    assert {r["key"] for r in resp["delta"]["shows"]} == {"show alpha", "show gamma"}
+    assert resp["removed"]["shows"] == []
+    alpha = next(r for r in resp["delta"]["shows"] if r["key"] == "show alpha")
+    assert alpha["member_count"] == 1  # 减员后重建(直剔实现此处已漏行)
+    # b) 单成员剧的成员迁走(beta 清空): 旧剧行 removed + 新剧行 upsert(行止由重算定)
+    _beat(store, "H3", name="Show.Delta.S01E01.1080p-GRP")
+    m.publish()
+    out = m.sync(cs)
+    resp = out["resps"][0]
+    assert resp["full"] is False
+    assert {r["key"] for r in resp["delta"]["shows"]} == {"show delta"}
+    assert resp["removed"]["shows"] == ["show beta"]
+    # c) 迁移暂存随落代消费清空, 不留残值(S8 暂存 -> S9b 并入 show 桶的生命周期)
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+
+
+# ---------- M11: 季级 gaps 整季重算(S9b 正确性边界 2) ----------
+
+
+def test_m11_season_gaps_recomputed_whole_season():
+    """M11 —— 同剧某集变化 -> 该 (剧,季) covered/gaps 整季重算: 补齐缺集清空 gaps;
+    成员删除(组键预置可解析 -> 行级 removed -> 剧行重建)缺集重现; 每轮 B ≡ A"""
+    store = _make_named_store({
+        "H1": "Show.Gap.S01E01.1080p",
+        "H2": "Show.Gap.S01E03.1080p",
+    })
+    # H1/H2 预归组: 删除拍组键可解析(组仍有 H1/H2 余员), 行级 removed 走局部重聚合
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.member_to_key["H2"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1", "H2"]
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    cs = DeltaClient("show")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(cs)
+    (row, ) = m.snapshot()["shows"]["list"]
+    assert row["seasons"][0]["gaps"] == [2]  # covered={1,3} -> 缺 E2
+    # 补齐 E2(入库即归组): 剧行整行重建, 整季重算 gaps 清空
+    store.client.torrents["H3"] = FakeTorrent(hash="H3", name="Show.Gap.S01E02.1080p", state="stalledUP")
+    store.member_to_key["H3"] = ("R:\\D", )
+    store.groups[("R:\\D", )].append("H3")
+    store.apply_sync(QbApi(store.client, store))
+    m.publish()
+    out = m.sync(cs)
+    (row, ) = out["full"]["shows"]["list"]
+    assert row["seasons"][0]["gaps"] == []  # covered={1,2,3} 整季重算
+    # 删掉 E2(组键可解析): 行级 removed -> 剧行重建, 缺集重现
+    store.client.torrents.pop("H3")
+    store.apply_sync(QbApi(store.client, store))
+    m.publish()
+    out = m.sync(cs)
+    (row, ) = out["full"]["shows"]["list"]
+    assert row["seasons"][0]["gaps"] == [2]
+
+
+# ---------- M12: 剧名频次局部重扫(S9b 正确性边界 3) ----------
+
+
+def test_m12_show_name_mode_rescanned_locally():
+    """M12 —— 同剧成员标题变化 -> 展示名(众数)按**当前成员集**局部重扫: 新成员加入使
+    频次反超时展示名翻转, 行级 upsert 整行携带新 name(R8); 每轮 B ≡ A"""
+    store = _make_named_store(
+        {
+            "H1": "Show.Name.S01E01.1080p-GRP",  # title "Show Name" x2
+            "H2": "Show.Name.S01E02.1080p-GRP",
+            "H3": "SHOW NAME S01E03.1080p-GRP",  # title "SHOW NAME" x1(同剧异写)
+        }
+    )
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    cs = DeltaClient("show")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(cs)
+    (row, ) = m.snapshot()["shows"]["list"]
+    assert row["name"] == "Show Name"  # 频次 2:1
+    # 加入两颗 "SHOW NAME" 成员: 频次 3:2 -> 展示名翻转(局部重扫 = 该剧行整行重建)
+    for h, ep in (("H4", "4"), ("H5", "5")):
+        store.client.torrents[h] = FakeTorrent(hash=h, name=f"SHOW NAME S01E{ep}.1080p-GRP", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    m.publish()
+    out = m.sync(cs)
+    (row, ) = out["full"]["shows"]["list"]
+    assert row["name"] == "SHOW NAME"  # 众数重扫: 3:2 反超
+    resp = out["resps"][0]
+    assert {r["key"] for r in resp["delta"]["shows"]} == {"show name"}
+    assert resp["delta"]["shows"][0]["name"] == "SHOW NAME"
+
+
 # ---------- fuzz: 固定种子随机操作序列 ----------
 
 
@@ -515,13 +681,15 @@ def test_fuzz_random_operation_sequence():
 
     操作池覆盖 M1-M9 全部形态: 真脏字段/量化字段(含桶内不可见跳动)、增/删(含待报删除
     重叠)/同拍一增一删、命令无键源(R11 full)、HR 波次、门控跳拍(随机 1-3 拍不消费)。
+    S9b 起 show 客户端入阵: 增/删/改都推导剧键 -> 局部重聚合产物与全量快照等价被随机
+    序列持续验证(成员增删 -> 剧行重建/全删转 removed 均在操作池射程内)。
     跑一次全绿为准, 不追求极限压测。
     """
     rng = random.Random(20261007)
     store = _make_store("H1", "H2", "H3")
     rt = _delta_runtime(store)
     m = Mirror(store, rt)
-    ct, cg = DeltaClient("torrent"), DeltaClient("group")
+    ct, cg, cs = DeltaClient("torrent"), DeltaClient("group"), DeltaClient("show")
     rt.mark_dirty()
     m.publish()
     m.sync(ct, cg)
@@ -602,6 +770,6 @@ def test_fuzz_random_operation_sequence():
         for _ in range(rng.randint(0, 2)):  # 门控跳拍: 未消费的发布(无变化轮则不落代)
             m.publish()
         m.publish()
-        m.sync(ct, cg)  # 每轮断言 B ≡ A
+        m.sync(ct, cg, cs)  # 每轮断言 B ≡ A(三视图客户端)
     assert len(rt._delta_timeline) <= 40  # 时间线上限守卫
     assert store.client.torrents  # 增删随机游走后库非空(操作池自检)

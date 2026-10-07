@@ -1,30 +1,33 @@
 """test_webui_delta 测试计划: WebUI 增量时间线(plan 26-10-07-0414 S2/S3)
 
 被测面: WebUIRuntime 的时间线落代(_fold_delta_pending_locked)/store 增量排空与脏行键推导
-(_drain_delta_locked)/full 降级理由集合(R11 五源)/views._build_group_view 的构建期交叉键
-回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议字段(S3);
-剧键等价映射与迁移候选暂存(S8, 时间线 show 桶仍恒空, S9 才接); S9a 单剧可调用等价
-(views._build_show_row 纯重构守阵; show 视图 delta 解锁与增量接线归 S9b)。
+(_drain_delta_locked)/full 降级理由集合(R11 五源 + S9b show_unrecognized)/views._build_group_view
+的构建期交叉键回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议
+字段(S3); 剧键等价映射与迁移候选暂存(S8, S9b 起暂存在落代段并入 show 桶); S9a 单剧可调用等价
+(views._build_show_row 纯重构守阵); S9b show 视图解锁(时间线 show 桶推导/局部重聚合/show 归约)。
 
 ## 测试计划(每个测试函数一条)
 - test_timeline_appends_per_publish_and_truncates: 时间线落代/截断 —— 每次发布恰追加一条目(ver 与 group_view_ver 对齐, 本仓 ver 单调), 条目形状 = ver/full/upsert/removed 四键分 torrent/group/show 三桶; 45 次发布后 maxlen=40 截断(最旧 5 条被挤掉)
-- test_same_tick_upsert_removed_cancel: 交叉抵消(R5) —— 同拍同视图 upsert/removed 同键落代前两清(H3 同拍增删净零), 异键照常保留; show 桶恒空
+- test_same_tick_upsert_removed_cancel: 交叉抵消(R5) —— 同拍同视图 upsert/removed 同键落代前两清(H3 同拍增删净零), 异键照常保留; show 桶在本用例键源(不在剧键映射)下恒空
 - test_gate_skipped_round_keys_survive_to_next_gen: 门控跳拍累积(R4) —— 上一版未被取走时 flush 只排空累积不落代, 键集(含组键)并入下一代条目不丢
 - test_full_downgrade_sources_matrix: 五个降级源矩阵(R11) —— config_reload(mark_dirty full=True)/hr_revision(flush 判定点)/shows_pending(归位转换拍)/cross_group(构建期键集增删, 走真 _build_group_view 回传)各自触发 full 代(full 条目键集清空 + 累积器与理由一并清空; hr/cross 均有"下一拍不再 full"的对照); 进程重启 = ver 时间播种 + 时间线/累积器为空, 旧客户端 rid 必然窗外或 rid>ver 全量(R10, 无需显式标记)
 - test_group_removed_key_unresolvable_full: 组行 removed 键推导(R11) —— removed hash 组键查得到且组仍在 -> 组键进 upsert; 组已解散 -> 组键进 removed; 查不到(与"从未归组"不可区分) -> 本代 full 且键集清空
 - test_error_reason_refresh_row_level_upsert: 错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh") —— 走真 refresh_error_reasons 改写 tracker_error_msg, 仅原因刷新、store 零增量 -> 受影响行进 torrent/group 桶 upsert 且该代不 full; 门控跳拍键集暂存不丢(R4); 无变化轮不登记
 - test_ensure_state_no_negotiation_byte_compatible: S3 硬验收 —— 未带 delta=1 协商参数的响应与历史逐字节等价: 键集恰为 rid/updated(+VIEW_ARRAYS 裁剪的数组), 无 full/delta/removed 键; 数组内容 = 当前已发布视图
-- test_reduce_delta_full_branch_matrix: 归约判定全分支(S3, R3/R10) —— rid==ver 零回传(带不带 delta 都只回 rid/updated); rid 缺省/0/-1、rid>ver、窗外(maxlen 截断挤掉客户端所在代)、窗内任一代 full -> 全量且协商客户端标 full=true(不含 delta/removed); 启用矩阵: view=show/缺省/未知值恒全量
+- test_reduce_delta_full_branch_matrix: 归约判定全分支(S3, R3/R10) —— rid==ver 零回传(带不带 delta 都只回 rid/updated); rid 缺省/0/-1、rid>ver、窗外(maxlen 截断挤掉客户端所在代)、窗内任一代 full -> 全量且协商客户端标 full=true(不含 delta/removed); 启用矩阵: 缺省/未知值恒全量, view=show 已启用(S9b)走正常归约
 - test_reduce_delta_upsert_removed_normal: 正常归约(S3) —— torrent 视图 delta.torrents 回平铺整行/removed 回 hash; group 视图 delta.groups 回组行(键 = encode_group_key 字符串)/delta.singles 只收未归组行/removed.groups 回 encode 后字符串; 行内容 = 当前已发布视图的原行(R1, 引用恒等)
 - test_reduce_delta_cross_gen_removed_yields_to_upsert: R5 跨代版 —— 先删后加: removed 让位于 upsert, 回 delta 不回 removed; 先加后删: 抵消后 upsert 行已不在当前视图 -> 防御性转 full
-- test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD) —— 增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
+- test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD + S9b 扩 show) —— 三个已启用视图的增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
 - test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且内嵌 members 随行重建(P-02 一期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
 - test_s6_partial_rows_equal_full_rebuild: S6 逐字段一致性 —— 混合序列(未归组变化/组员变化/新增归组/组员删除)逐代局部重聚合后, 发布视图与全量重跑逐行逐字段相等(含脏组行 == 全量重跑该行); 每代走局部路径的判据(条目 full=False 且键集非空)随行断言
-- test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; 变体: 改名进未识别区(解析不出剧键) -> 仅旧键 removed 一侧且映射条目清除
+- test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; S9b 落代段暂存两侧并入 show 桶重建候选后清空, 旧键重算无成员转 removed/新键 upsert; 变体: 改名进未识别区 -> 折叠面变化检测(R11)本代 full
 - test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
 - test_s8_added_hash_registered_without_candidates: S8 新增登记 —— added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选
-- test_s8_restart_backfill_without_candidates: S8 重启回填 —— 新 runtime 映射为空, 首拍全量(空键集代走全量路径)全库回填且不产生迁移候选, 时间线 show 桶仍恒空(M8); 映射非空的后继全量代不重置既有映射(回填幂等)
+- test_s8_restart_backfill_without_candidates: S8 重启回填 —— 新 runtime 映射为空, 首拍全量(空键集代走全量路径)全库回填且不产生迁移候选; 映射非空的后继全量代不重置既有映射(回填幂等)
 - test_s9a_show_row_callable_matches_full_view: S9a 单剧可调用等价(纯重构守阵) —— 库态覆盖四边界落位(季级 gaps/covered 含索引兑底 range 与整包 has_pack、剧名频次众数、集行状态 _SHOW_STATE_RANK 归并、unrecognized 折叠)+ 日期型 None 季桶/pending 接线; _build_show_row(剧键, 独立重放分类的成员集) == 全量 _build_shows_view 同剧行递归逐字段; 空成员 -> None(_build_group_row 空组口径)
+- test_s9b_show_partial_rebuild_equal_and_reference_stable: S9b 局部重聚合(正确性边界 1-4 落位) —— 脏剧键整行重建与全量重跑逐行逐字段相等(频次众数/季级 gaps/状态归并/members), 未脏剧行引用原样、脏剧行必然新对象; 成员增/删(组键可解析)/迁移旧键清空转 removed/新剧追加尾部; 静止未识别种子(电影)速度抖动不触发折叠面 full
+- test_s9b_reduce_show_view_normal: S9b show 视图归约 —— delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 纯 show 键代照常归约不退化 full
+- test_s9b_show_unrecognized_downgrade_full: S9b 折叠面降级(R11) —— 未识别种子新增/改名进未识别区/删除 -> 本代 full 且下一拍恢复行级增量; 对照: 未识别种子字段抖动(分类不变)不触发 full
 """
 import json
 import time
@@ -137,7 +140,7 @@ def test_same_tick_upsert_removed_cancel():
     assert entry["removed"]["torrent"] == {"H4"}
     assert entry["upsert"]["group"] == {("R:\\D", ), ("R:\\E", )}
     assert entry["removed"]["group"] == set()
-    # show 桶本步恒空(S8/S9 再接)
+    # show 桶在本用例恒空: H2/H3/H4 不在库内也不在剧键映射, 无剧键可推导(S9b 口径)
     assert entry["upsert"]["show"] == set() and entry["removed"]["show"] == set()
 
 
@@ -387,10 +390,14 @@ def test_reduce_delta_full_branch_matrix():
     state = rt.ensure_state(rid, "torrent", True)
     assert state["full"] is True and "torrents" in state
 
-    # f) 启用矩阵: view=show / 缺省(四数组)/未知值恒全量(show 桶 S8/S9 才接, S3)
+    # f) 启用矩阵(S9b 翻开): view=show 已启用走正常归约(delta.shows + 连带 groups/singles);
+    #    缺省(四数组)/未知值仍恒全量(无视图上下文可裁剪, 保守默认)
     store, rt, rid = _baseline_rid()
     _advance_gen(store, rt)
-    for view in ("show", None, "nope"):
+    state = rt.ensure_state(rid, "show", True)
+    assert state["full"] is False and "delta" in state
+    assert {r["hash"] for r in state["delta"]["singles"]} == {"H1"}  # 连带成员索引桶
+    for view in (None, "nope"):
         state = rt.ensure_state(rid, view, True)
         assert state["full"] is True
         assert "delta" not in state and "removed" not in state
@@ -532,19 +539,27 @@ def test_reduce_payload_json_native_and_key_exclusivity():
     rt.mark_dirty()
     entry = _publish(rt)
     assert entry["full"] is False
-    for view in ("torrent", "group"):
+    # S9b: 三个已启用视图(torrent/group/show)的增量载荷全部过守阵
+    for view in ("torrent", "group", "show"):
         state = rt.ensure_state(rid, view, True)
         assert state["full"] is False
         for k in ("groups", "singles", "shows", "torrents"):  # 增量响应不含全量四数组键
             assert k not in state, f"增量响应混入全量数组键 {k}"
         _assert_json_native(state)
         json.dumps(state, ensure_ascii=False)  # 端点 JSONResponse 直出同款序列化, 不得抛
-    # 桶内容 sanity: torrent 桶 = H1/H2/H3 全量并集, group 桶 = 组行, singles 桶 = 未归组 H2/H3
+    # 桶内容 sanity: torrent 桶 = H1/H2/H3 全量并集, group 桶 = 组行, singles 桶 = 未归组 H2/H3,
+    # show 桶 = 三部剧各行(S9b 解锁面, 每颗种子独立成剧)
     state = rt.ensure_state(rid, "group", True)
     assert {r["hash"] for r in state["delta"]["singles"]} == {"H2", "H3"}
     assert [r["key"] for r in state["delta"]["groups"]] == [encode_group_key(("R:\\D", ))]
     tstate = rt.ensure_state(rid, "torrent", True)
     assert {r["hash"] for r in tstate["delta"]["torrents"]} == {"H1", "H2", "H3"}
+    sstate = rt.ensure_state(rid, "show", True)
+    assert {r["key"]
+            for r in sstate["delta"]["shows"]} == {
+                tvshows.parse_release(_S8_NAME.format(h)).key
+                for h in ("H1", "H2", "H3")
+            }
     # 全量分支(协商): full=true 且不含 delta/removed(R10)
     for view in ("torrent", "group", "show", None):
         full_state = rt.ensure_state(0, view, True)
@@ -702,10 +717,12 @@ def _s8_baseline(*hashes) -> tuple:
 
 
 def test_s8_rename_migration_stages_candidates():
-    """S8 改名迁移: hash 剧键变化 -> 暂存产出旧键 removed + 新键 upsert 候选, 映射随新键更新
+    """S8 改名迁移: hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert
+    候选, 映射随新键更新; S9b 落代段两侧并入 show 桶重建候选后清空 —— 旧键重算无成员转
+    removed、新键 upsert(「重聚合按当前库态定行止」)。
 
     走真增量轮(_beat 改 name -> delta_fields 带 name -> 排空段现算新剧键, 与 _build_shows_view
-    同款 parse_release 口径); 暂存由 S9 消费清空, 本步只在读取点断言, 子场景间显式隔离。
+    同款 parse_release 口径); 暂存只在门控跳拍(不落代)的排空后观察, 落代即被 S9b 消费清空。
     """
     store, rt, keys = _s8_baseline("H1")
     assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
@@ -715,17 +732,34 @@ def test_s8_rename_migration_stages_candidates():
     assert new_key != keys["H1"]
     _beat(store, "H1", name=new_name)
     rt.mark_dirty()
-    _publish(rt)
+    rt.pending_ver = 999  # 门控跳拍: 只排空累积不落代, 暂存停在可观察态
+    rt.flush_views()
     assert rt._show_member_keys == {"H1": new_key}
     assert rt._pending_show_migrations == {"upsert": {new_key}, "removed": {keys["H1"]}}
-    # 变体: 改名进未识别区(解析不出剧键) -> 仅旧键 removed 一侧, 映射条目清除
+    assert rt._delta_pending["upsert"]["show"] == {new_key}  # 排空段已按新剧键推导
+    # 落代: 暂存两侧并入 show 桶重建候选后清空; 旧键重算无成员(H1 已迁走)-> 行消失转
+    # removed, 新键 upsert —— 部分路径走通(S9b 「旧剧行 removed + 新剧行 upsert」端到端)
+    entry = _publish(rt)
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+    assert entry["full"] is False
+    assert entry["upsert"]["show"] == {new_key}
+    assert entry["removed"]["show"] == {keys["H1"]}
+    assert [r["key"] for r in rt.shows_view["list"]] == [new_key]  # 旧剧行已从视图剔除
+
+    # 变体: 改名进未识别区(解析不出剧键) -> 折叠面变化检测(R11)本代 full, 全量重建
+    # 后 H1 落未识别折叠区、旧剧键行消失; 暂存仅旧键一侧(新剧行不存在)且随落代清空
     rt._pending_show_migrations = {"upsert": set(), "removed": set()}  # 子场景隔离
     _beat(store, "H1", name="1080p.x264")
     assert tvshows.parse_release("1080p.x264").key == ""  # 前置: 新名解析不出剧键
     rt.mark_dirty()
-    _publish(rt)
-    assert rt._show_member_keys == {}
+    rt.pending_ver = 999
+    rt.flush_views()
+    assert rt._show_member_keys == {}  # 映射条目清除
     assert rt._pending_show_migrations == {"upsert": set(), "removed": {new_key}}
+    entry = _publish(rt)
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+    assert entry["full"] is True  # 折叠面变化(新进未识别区)-> 本代 full(show_unrecognized)
+    assert rt.shows_view == {"list": [], "unrecognized": ["H1"]}
 
 
 def test_s8_removed_hash_cleans_mapping():
@@ -843,3 +877,192 @@ def test_s9a_show_row_callable_matches_full_view():
         assert host._build_show_row(key, members) == rows[key], f"单剧可调用应复现全量该行: {key}"
     # 空成员 -> None(与 _build_group_row 空组口径对齐, S9b 旧行剔除依据)
     assert host._build_show_row("no-such-key", []) is None
+
+
+# ---------- S9b: show 视图解锁(时间线 show 桶 + 局部重聚合 + show 归约 + 折叠面降级) ----------
+
+
+def _s9b_baseline() -> tuple:
+    """S9b 等价断言基线: 同剧多成员(S01/S02)+ 独立剧 + 未识别种子, 其中两成员预归组
+    (删除拍组键可解析), 回 (store, runtime, host, 剧行键表)"""
+    store = _make_store()  # 空库起步, 逐颗装异形命名种子
+    client = store.client
+    for h, kw in {
+        "HA": dict(name="Show.Alpha.S01E01.1080p-GRP", state="downloading"),
+        "HB": dict(name="Show.Alpha.S01E02.1080p-GRP", state="stalledUP"),
+        "HC": dict(name="Show.Alpha.S02E01.1080p-GRP", state="stalledUP"),
+        "HD": dict(name="Show.Beta.S01E01.1080p-GRP", state="stalledUP"),
+        "HE": dict(name="Some.Movie.2023.1080p", state="stalledUP"),  # kind UNKNOWN -> 折叠区
+    }.items():
+        client.torrents[h] = FakeTorrent(hash=h, **kw)
+    store.apply_sync(QbApi(client, store))
+    # HB/HD 预归组: HB 删除拍组仍有 HD 余员 -> 组键可解析(行级 removed, 不降 full)
+    store.member_to_key["HB"] = ("R:\\D", )
+    store.member_to_key["HD"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["HB", "HD"]
+    store.last_added = []
+    store.last_removed = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+    rt = _delta_runtime(store)
+    host = rt._host
+    rt.mark_dirty()
+    _publish(rt)  # 基线代(空键集 -> 全量路径, 映射回填)
+    keys = {h: tvshows.parse_release(r.name).key for h, r in store.by_hash.items()}
+    assert rt._show_member_keys == keys  # 前置: 映射含未识别种子(S8 过宽口径, key 非空)
+    assert rt.shows_view["unrecognized"] == ["HE"]
+    assert {r["key"] for r in rt.shows_view["list"]} == {"show alpha", "show beta"}
+    return store, rt, host, keys
+
+
+def test_s9b_show_partial_rebuild_equal_and_reference_stable():
+    """S9b 局部重聚合: 脏剧键整行重建与全量重跑逐行逐字段相等(任务 D 等价断言), 未脏
+    剧行引用原样、脏剧行必然新对象(S6 同款不变量); 覆盖正确性边界 1-4 落位 —— 成员
+    增/删/迁移(边界1)、季级 gaps 整季重算(边界2)、剧名频次(边界3, 随整行)、集行状态
+    归并(边界4, 随整行); 静止未识别种子的字段抖动不触发折叠面 full、不产幻影剧行"""
+    store, rt, host, keys = _s9b_baseline()
+    shows0 = {r["key"]: r for r in rt.shows_view["list"]}
+
+    # a) 剧内成员字段变化(HA 速度) -> alpha 整行新对象且与全量重跑相等, beta 行引用原样
+    _beat(store, "HA", dlspeed=500)
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["upsert"]["show"] == {"show alpha"}
+    assert entry["removed"]["show"] == set()
+    shows1 = {r["key"]: r for r in rt.shows_view["list"]}
+    assert shows1["show alpha"] is not shows0["show alpha"]  # 脏行必然新对象
+    assert shows1["show beta"] is shows0["show beta"]  # 未脏行引用原样
+    assert shows1["show alpha"]["seasons"][0]["episodes"][0]["dlspeed"] == 500  # 整行携带
+    assert rt.shows_view["list"] == host._build_shows_view()["list"]  # 逐行逐字段相等
+    assert rt.shows_view["unrecognized"] == ["HE"]
+
+    # b) 新成员入库(HF 同剧 S01E03) -> alpha 行重建(边界2: covered/gaps 整季重算)
+    store.client.torrents["HF"] = FakeTorrent(hash="HF", name="Show.Alpha.S01E03.1080p-GRP", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["upsert"]["show"] == {"show alpha"}
+    shows2 = {r["key"]: r for r in rt.shows_view["list"]}
+    assert shows2["show alpha"]["member_count"] == 4
+    s1 = next(s for s in shows2["show alpha"]["seasons"] if s["season"] == 1)
+    assert s1["gaps"] == [] and {tuple(e["key"]) for e in s1["episodes"]} == {("ep", 1), ("ep", 2), ("ep", 3)}
+    assert rt.shows_view["list"] == host._build_shows_view()["list"]
+    assert shows2["show beta"] is shows1["show beta"]
+
+    # c) 成员删除(HB, 组键可解析 -> 行级 removed) -> alpha 行重建减员, 边界1 删除侧
+    store.client.torrents.pop("HB")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["removed"]["torrent"] == {"HB"} and entry["upsert"]["show"] == {"show alpha"}
+    shows3 = {r["key"]: r for r in rt.shows_view["list"]}
+    assert shows3["show alpha"]["member_count"] == 3
+    assert all("HB" not in e["members"] for s in shows3["show alpha"]["seasons"] for e in s["episodes"])
+    assert rt.shows_view["list"] == host._build_shows_view()["list"]
+
+    # d) 单成员剧迁移(HD 改名 beta -> gamma): 旧键重算无成员 -> 行消失转 removed,
+    # 新键 upsert(S8 暂存两侧并入重建候选, 「按当前库态定行止」)
+    _beat(store, "HD", name="Show.Gamma.S01E01.1080p-GRP")
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["show"] == {"show gamma"} and entry["removed"]["show"] == {"show beta"}
+    shows4 = {r["key"]: r for r in rt.shows_view["list"]}
+    assert set(shows4) == {"show alpha", "show gamma"}
+    assert rt.shows_view["list"] == host._build_shows_view()["list"]
+
+    # e) 静止未识别种子(HE 电影)字段抖动: 分类不变 -> 不触发折叠面 full, 且不产幻影
+    #    剧行(S8 映射过宽登记的 "some movie 2023" 键重算无成员、原不在视图 -> 仅撤候选)
+    _beat(store, "HE", dlspeed=777)
+    entry = _publish(rt)
+    assert entry["full"] is False  # 折叠面检测精确: 分类未变不降级
+    assert entry["upsert"]["show"] == set() and entry["removed"]["show"] == set()
+    shows5 = {r["key"]: r for r in rt.shows_view["list"]}
+    assert set(shows5) == {"show alpha", "show gamma"}  # 无幻影行
+    assert shows5["show alpha"] is shows4["show alpha"] and shows5["show gamma"] is shows4["show gamma"]
+    assert rt.shows_view["unrecognized"] == ["HE"]
+    assert rt.shows_view == host._build_shows_view()
+
+
+def test_s9b_reduce_show_view_normal():
+    """S9b show 视图归约: delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/
+    removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 剧行消失
+    (单成员剧解散)回 removed.shows"""
+    # a) 正常归约: 剧行 + 连带 singles 桶, 行内容 = 当前视图原行(R1)
+    store, rt, rid = _baseline_rid(("H1", "H2"))
+    _advance_gen(store, rt)  # H1 速度变化 -> torrent {H1} + show {show h1}
+    state = rt.ensure_state(rid, "show", True)
+    assert state["full"] is False and state["rid"] == rt.group_view_ver
+    key_h1 = tvshows.parse_release("Show.H1.S01E01.720p.x264-GRP").key
+    assert [r["key"] for r in state["delta"]["shows"]] == [key_h1]
+    assert state["delta"]["shows"][0] is next(r for r in rt.shows_view["list"] if r["key"] == key_h1)  # R1
+    assert {r["hash"] for r in state["delta"]["singles"]} == {"H1"}  # 成员索引桶连带
+    assert state["delta"]["groups"] == [] and state["removed"] == {"shows": [], "groups": [], "singles": []}
+    # b) 跨代窗口并集: 第二拍 H2 变化 -> 两代 show 键一轮拿齐
+    rid2 = state["rid"]
+    store.delta_fields = {"H2": frozenset({"dlspeed"})}
+    rt.mark_dirty()
+    _publish(rt)
+    state = rt.ensure_state(rid, "show", True)
+    assert state["full"] is False
+    assert {r["key"]
+            for r in state["delta"]["shows"]} == {key_h1,
+                                                  tvshows.parse_release("Show.H2.S01E01.720p.x264-GRP").key}
+    # c) 剧行消失: 单成员剧成员删除(组键预置可解析) -> removed.shows 回剧键
+    store = _make_store("H1")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    rid = _publish(rt)["ver"]
+    store.groups.pop(("R:\\D", ))  # 解散: 组键查得到但 groups 无 -> 组行 removed(S2 同款分流)
+    store.by_hash.pop("H1")
+    store.last_removed = ["H1"]
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["removed"]["show"] == {key_h1}  # 重算无成员 -> 行消失转 removed
+    state = rt.ensure_state(rid, "show", True)
+    assert state["full"] is False
+    assert state["delta"]["shows"] == [] and state["removed"]["shows"] == [key_h1]
+    assert state["removed"]["groups"] == [encode_group_key(("R:\\D", ))]  # 连带桶照常
+    assert state["removed"]["singles"] == ["H1"]
+
+
+def test_s9b_show_unrecognized_downgrade_full():
+    """S9b 折叠面降级(R11): 未识别成员增/删/分类变化不可归约为行级脏(协议无未识别桶)
+    -> 本代 full; 分类不变的未识别种子抖动不触发(精确不放大); full 后下一拍恢复行级增量"""
+    # a) 新增未识别种子 -> full; 下一拍常规变化恢复行级增量(对照)
+    store = _make_store("H1")
+    store.client.torrents["HM"] = FakeTorrent(hash="HM", name="Some.Movie.2023.1080p", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    rid = _publish(rt)["ver"]  # 基线: unrec [HM]
+    assert rt.shows_view["unrecognized"] == ["HM"]
+    store.client.torrents["H2"] = FakeTorrent(hash="H2", name="Another.Movie.2020.720p", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is True and rt._delta_pending["upsert"]["show"] == set()  # full 代键集清空
+    assert rt.shows_view["unrecognized"] == ["H2", "HM"]
+    _beat(store, "H1", dlspeed=100)
+    entry = _publish(rt)
+    assert entry["full"] is False  # 下一拍恢复行级增量
+    # b) 未识别种子字段抖动(分类不变) -> 不触发(静止电影下载不退化全量)
+    _beat(store, "HM", dlspeed=888)
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["show"] == set()  # 幻影键已撤(重算无成员、原不在视图)
+    # c) 未识别种子改名进剧(分类离开折叠区) -> full, 折叠面随全量重建收敛
+    _beat(store, "HM", name="Show.Movie.S01E01.1080p-GRP")
+    entry = _publish(rt)
+    assert entry["full"] is True
+    assert rt.shows_view["unrecognized"] == ["H2"]
+    assert {r["key"] for r in rt.shows_view["list"]} == {"show h1", "show movie"}
+    # d) 未识别种子删除(组键预置可解析, 隔离 row_key_unresolvable) -> full(折叠面收缩)
+    store.member_to_key["H2"] = ("R:\\E", )
+    store.member_to_key["H1"] = ("R:\\E", )
+    store.groups[("R:\\E", )] = ["H2", "H1"]
+    store.client.torrents.pop("H2")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is True and rt.shows_view["unrecognized"] == []
+    _beat(store, "H1", dlspeed=200)
+    assert _publish(rt)["full"] is False  # 恢复行级增量
