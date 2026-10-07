@@ -9,8 +9,9 @@
 <meta name="doc-topic" content="sim-client-5000">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
-<meta name="issue-title" content="渐进灌入期主循环掉拍: max_tasks_per_tick 自适应">
-<meta name="issue-summary" content="--ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)">
+<meta name="issue-title" content="渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移 1.22→0.801s; 原「max_tasks_per_tick 自适应」经查非有效旋钮)">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md">
+<meta name="issue-summary" content="2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s(原 2.87 / 1.22), 已进 1.0s 稳态门限内; 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效, 待拍板是否 Dropped">
 <title>渐进灌入期主循环掉拍: max_tasks_per_tick 自适应 · perf · 计划外问题</title>
 <style>
   :root {
@@ -95,8 +96,8 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（未修）· perf</div>
-    <h1>渐进灌入期主循环掉拍: max_tasks_per_tick 自适应</h1>
-    <p class="lede">--ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)</p>
+    <h1>渐进灌入期主循环掉拍: 每拍新增种子管线请求预算（复测漂移 1.22→0.801s；原「max_tasks_per_tick 自适应」经查非有效旋钮）</h1>
+    <p class="lede">2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s（原 2.87 / 1.22），已进 1.0s 稳态门限内; 成本在 <code>_refresh_torrents</code> 的逐种子内联请求而非任务队列 ⇒ 原方案理论上无效，待拍板是否 Dropped</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2218-perf-mainloop-max-tasks-adaptive</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:18</div></div>
@@ -111,7 +112,9 @@
     <h2><span class="no">01</span>现象与发现场景</h2>
     <p>2026-09-19 做 sim-client 压测取数时发现: <code>--ramp</code> 渐进灌入场景(P2, 200/拍)下主循环掉拍 —— 稳态间隔 2.87 s, 超过 <code>main_tick</code> 2.0 s, 最大漂移 1.22 s; 灌入期每拍都在还债。</p>
     <p>原文出处: <code>TODO.md</code>「## 性能发现」PERF-02(TODO L264-L272)。</p>
-    <p class="hint">数据取证 2026-09-19(压测观测, 未动代码); 2026-10-01 自 TODO.md 性能发现节入池。</p>
+    <p><strong>2026-10-08 复测（同一 P2 场景，develop @ 0a46b58d）：掉拍大幅收敛</strong> —— 稳态平均间隔 <strong>2.139 s</strong>（原 2.87 s）、最大漂移 <strong>0.801 s</strong>（原 1.22 s），已落进项目固化给纯主循环的稳态门限 <code>SYNC.drift_max_s ≤ 1.0</code> 之内；verdict OK，无 traceback / critical。详见 §02 与 §07。</p>
+    <p><strong>同时认定原方案无效</strong>：本条原建议「给 <code>max_tasks_per_tick</code> 做自适应」指向的旋钮<strong>不承载这部分成本</strong> —— 项目实测已认定灌入期每新种子的 2 次内联请求（<code>torrents/trackers</code> + <code>torrents/files</code>）跑在同步线 <code>_refresh_torrents</code> 里，不受 <code>max_tasks_per_tick</code> 约束（<code>memory-bank/testing/sim-5000.md</code>「关键实测数字」）。故本条口径已从「自适应任务线配额」改道为「灌入期每拍请求预算」（见 §06）。</p>
+    <p class="hint">数据取证 2026-09-19(压测观测, 未动代码); 2026-10-01 自 TODO.md 性能发现节入池; 2026-10-08 复测并重归因(未动代码)。</p>
   </section>
 
   <section id="s2">
@@ -119,6 +122,29 @@
     <p>TODO.md L266-L267 实测(原文逐字搬运, 取证 2026-09-19): P2 场景稳态间隔 <strong>2.87 s</strong> vs <code>main_tick</code> 2.0 s, 最大漂移 <strong>1.22 s</strong>; 对比一次性灌入的 P1 稳态 <strong>2.23 s</strong> / 漂移 <strong>0.31 s</strong>。</p>
     <p>TODO.md L268-L270 原文解读: 每拍 200 个新种子 ⇒ 每拍约 200 次 <code>torrents/trackers</code> + 200 次 <code>torrents/files</code>, 首轮成本被打散后<strong>每拍都在还债</strong>, 直到灌完才回到稳态。属可接受的"灌入期代价", 但值得给 <code>max_tasks_per_tick</code> 做自适应(候选已列入 W5)。</p>
     <p>TODO.md L271-L272 已按观测项处理: 灌入期的漂移记为 <code>P2.drift_max_s</code>(BASELINE), 不用稳态阈值判红 —— 否则会把"灌入期跟不上"这个结论埋掉。</p>
+    <p><strong>2026-10-08 04:19 复测原文</strong>（取证 2026-10-08，develop @ 0a46b58d，同场景同参数重跑；<code>uv run python scripts/sim_run.py --scenario P2 --n 5000 --duration 50 --ramp 200 --web-port 18201</code>，生成的 config 里 <code>main_tick: 2S</code> / <code>max_tasks_per_tick: 20</code>，与原取证同口径）：</p>
+<pre><code>verdict: OK
+scenario: P2 n=5000 beat=1.5 active=0.1 mode=churn seed=7
+elapsed: 51.0s  autoqb_rc: 0
+
+checks:
+  BASELINE SYNC.avg_interval_s          value=2.139 <= —
+  BASELINE P2.drift_max_s               value=0.801 <= —
+  PASS     P1.first_round_s             value=2.174 <= 22.68
+  PASS     S3.write_rate_per_min        value=4299.6 <= 6210.49
+  PASS     D1.snapshot_final_match      value=True == True
+
+sync: rounds=24 full=1 avg_interval=2.139s drift_max=0.801s avg_bytes=487202
+writes: total=3583 per_min=4299.6
+log: lines=5027 tracebacks=0 critical=0 error=0</code></pre>
+    <p>新旧对照（同为 P2：5000 种子 / <code>--ramp</code> 200 每拍 / main_tick 2 s）：</p>
+    <table>
+      <tr><th>指标</th><th>2026-09-19 取证</th><th>2026-10-08 复测</th><th>变化</th></tr>
+      <tr><td>稳态平均间隔</td><td>2.87 s</td><td><strong>2.139 s</strong></td><td>超出 main_tick 的量 0.87 s → 0.14 s</td></tr>
+      <tr><td>最大漂移 <code>P2.drift_max_s</code></td><td>1.22 s</td><td><strong>0.801 s</strong></td><td>-34%，且已进 <code>SYNC.drift_max_s ≤ 1.0</code> 门限内</td></tr>
+      <tr><td>一次性灌入(P1)对照</td><td>2.23 s / 0.31 s</td><td>—</td><td>（本轮未重跑 P1，暂缺对照）</td></tr>
+    </table>
+    <p class="hint">单次采样，同树区间未取（<code>testing/baseline.md</code>「必须带区间」口径）；本机 R 盘 / 回环，与 2026-09-19 同机器口径。</p>
   </section>
 
   <section id="s3">
@@ -126,8 +152,8 @@
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td><code>--ramp</code> 渐进灌入(200/拍)期间; 一次性灌入(P1)亦有轻度掉拍(漂移 0.31 s)</td></tr>
-      <tr><td>影响范围</td><td>主循环节拍(灌入期稳态间隔 2.87 s vs <code>main_tick</code> 2.0 s), 灌入期全部任务线的执行节奏</td></tr>
-      <tr><td>严重度</td><td>中(灌入期可接受的代价, 已按观测项单独记 <code>P2.drift_max_s</code> BASELINE 不判红; 灌完回到稳态 2.23 s / 0.31 s 水平)</td></tr>
+      <tr><td>影响范围</td><td>主循环节拍(灌入期稳态间隔 2.139 s vs <code>main_tick</code> 2.0 s, 2026-10-08 复测), 灌入期全部任务线的执行节奏</td></tr>
+      <tr><td>严重度</td><td><strong>低</strong>(2026-10-08 复测后下调: 漂移 1.22 s → <strong>0.801 s</strong>, 已进 <code>SYNC.drift_max_s ≤ 1.0</code> 稳态门限内; 稳态间隔只超 main_tick 0.14 s。仍按观测项记 <code>P2.drift_max_s</code> BASELINE 不判红 —— 该口径意在别把"灌入期跟不上"这个结论埋掉)</td></tr>
     </table>
   </section>
 
@@ -136,17 +162,22 @@
     <ul>
       <li><code>max_tasks_per_tick</code> · <code>src/auto_qb/config/impact.py:34</code>(KERNEL_SECTIONS, 注释「任务线速率语义(任务线现读)」, 取证 2026-10-01)· 任务线现读该配置 · grep <code>max_tasks_per_tick</code>(config/models.py、core/qbmanager.py 等多处引用)</li>
       <li>数据出处: P2/P1 场景 sim-client 压测(取证 2026-09-19); 观测原文在 <code>TODO.md</code> 性能发现节 PERF-02(L264-L272, 2026-10-01 入池时逐字搬运)</li>
+      <li><strong>成本真正的落点(重归因, 取证 2026-10-08)</strong>: 同步线 <code>_refresh_torrents</code> · <code>src/auto_qb/core/qbmanager.py:761</code> · grep <code>def _refresh_torrents</code> —— 逐新增种子管线在 <code>torrents_added</code> 相位逐个 emit(<code>qbmanager.py:854</code>), 每个新种子的 <code>trackers_info</code> / 文件列表是<strong>内联</strong>请求(<code>qbmanager.py:835</code> 及 grouping 模块认领面), <strong>不经任务队列</strong></li>
+      <li>任务线配额(原方案指向处, 未改): <code>_task_line</code> · <code>src/auto_qb/core/qbmanager.py:700</code>(<code>run_due(max_tasks=self.config.max_tasks_per_tick)</code> 在 712)· grep <code>max_tasks_per_tick</code> —— 配置项定义 <code>src/auto_qb/config/models.py:346</code>(默认 20), 校验 <code>src/auto_qb/config/validation/core.py:253-263</code>(1..500), <strong>无自适应逻辑</strong></li>
+      <li>两条独立时间线(分层节拍, 与掉拍口径相关): <code>qbmanager.py:477-537</code> · grep <code>next_sync_at</code> —— 同步线 <code>sync_interval</code>(默认 1.5s, 被 <code>min(sync_interval, main_tick)</code> 钳制)与任务线 <code>main_tick</code> 分别调度; 灌入期的增量同步与逐种子管线都在<strong>同步线</strong>上</li>
     </ul>
   </section>
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <div class="callout">待查(掉拍与灌入期每拍 200 新种子的认领成本之间的相关性已有压测数据; 代码侧每拍认领量为何顶满未查 —— 不为填单做分析)。</div>
+    <div class="callout"><strong>已排除（2026-10-08 取证）：掉拍主体不在任务队列，因此原方案「<code>max_tasks_per_tick</code> 自适应」不会改善它</strong> —— <code>memory-bank/testing/sim-5000.md</code>「关键实测数字」原文：「首轮灌入: 5000 种子 14.4 s(回环)≈ 15 754 次请求 ≈ 0.96 ms/次 —— 每新种子约 2 次内联请求(<code>torrents/trackers</code> + <code>torrents/files</code>), <strong>在 <code>_refresh_torrents</code> 里逐个内联跑, 不受 <code>max_tasks_per_tick</code> 约束</strong>」。任务线配额只管 <code>run_due</code> 的到期任务条数（速率语义 20/2s = 10 任务/s），管不到同步线上这 2N 次内联请求。<br><br><strong>也排除了「靠同期重构被顺手修好」这一说法的确定性</strong>：分层节拍(<code>10e06a84</code>) / 节拍对齐(<code>95fb6734</code>) / 解耦(<code>5691c6f4</code>) 均在 2026-09-19 当天或更早，与原取证同日，<strong>无法据此断言是它们带来了这次收敛</strong>；同期还可能相关的有视图局部重聚合(S6/S9)与发布门控(客户端活跃窗口 / pending_ver)。<br><br><strong>仍待查</strong>：复测后残留的 0.801 s 漂移具体由哪一段构成（同步线增量同步 / 逐种子内联请求 / 分组归组 / 事件分派）—— 认领后先做这段拆分，别凭猜选旋钮。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
-    <p>给 <code>max_tasks_per_tick</code> 做自适应(候选已列入 W5)。「W5」指 sim-client-5000 计划的 W5 归因候选 —— 该计划已 Done, 自适应项<strong>未实施</strong>。</p>
+    <p><del>给 <code>max_tasks_per_tick</code> 做自适应</del>（<strong>2026-10-08 改道：经查该旋钮不承载这部分成本，见 §05 已排除项</strong>。原方案列为 sim-client-5000 计划 W5 归因候选，该计划已 Done，自适应项<strong>未实施且建议不再实施</strong>）。</p>
+    <p><strong>改道后的方向：灌入期每拍请求预算 / 限批</strong> —— 在同步线 <code>_refresh_torrents</code> 的 <code>torrents_added</code> 相位给「本拍最多处理多少个新种子的内联取数（trackers + files）」设上限，超额留到下一拍，把每拍的 2N 次内联请求摊平。代价：新增配置键（须同步 <code>config.validate_config</code> 与 <code>config/schema.py</code>，黄金法则 4）+ 灌入期完成时间变长。</p>
+    <p><strong>值不值得做（2026-10-08 复测后的判断，供拍板）</strong>：倾向<strong>不做</strong> —— ①症状已收敛到稳态门限内（漂移 0.801 s &lt; 1.0 s，稳态间隔只超 0.14 s），投入产出比低；②它换来的是"灌入完成更快"，而灌入期本来就是一次性代价（首轮 <code>P1.first_round_s</code> 2.174 s 远低于 22.68 s 门限）；③每加一个速率类旋钮就多一处语义耦合（见 <code>qbmanager.py:402</code> 关于 <code>max_tasks_per_tick</code> 速率语义的注释）。<strong>若拍板不做，本条走 Dropped</strong>（理由：复测已进稳态门限 + 原方案无效 + 症状为一次性代价）。若拍板做，先把 §05「仍待查」的漂移构成拆分做完再动码。</p>
     <p>注意: <code>max_tasks_per_tick</code> 是内核认领段(任务线现读), 改其语义需同步 P6 段认领守阵 —— 观测基线已按灌入期口径记录(<code>P2.drift_max_s</code> BASELINE), 认领后先出方案再动码。</p>
   </section>
 
@@ -154,9 +185,11 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 04:19 — <strong>重归因 + 复测</strong>（未动代码，状态仍 <strong>Open</strong>）：同场景重跑 P2 取到新数字（稳态 2.139 s / 漂移 0.801 s，原 2.87 / 1.22，已进 1.0 s 稳态门限内）；同时认定原建议「<code>max_tasks_per_tick</code> 自适应」指向的旋钮不承载该成本（灌入期每新种子的 2 次内联请求跑在同步线 <code>_refresh_torrents</code>，不受任务线配额约束），故本条标题 / 摘要 / 建议修法一并改道为「灌入期每拍请求预算」。是否走 <strong>Dropped</strong> 待用户拍板（理由与判断见 §06）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-08 04:19 — 复验（develop @ 0a46b58d，P2 场景同参数重跑，未动代码）：现象<strong>仍存在但已大幅收敛</strong> —— 稳态间隔 2.87→<strong>2.139 s</strong>、最大漂移 1.22→<strong>0.801 s</strong>（已进 <code>SYNC.drift_max_s ≤ 1.0</code> 门限内）；<code>max_tasks_per_tick</code> 仍为静态配置、无自适应逻辑（<strong>未实施</strong>，且经查不是有效旋钮，见 §05）。产物目录 <code>R:\auto-qb-sim\runs\20261008-041959-P2</code>。</p>
+    <p class="todo">待拍板：按 §06 的判断，倾向走 <strong>Dropped</strong>（复测已进稳态门限 + 原方案无效 + 症状为一次性代价）。状态变更需用户显式拍板后由 agent 执行（改徽标 + meta + 追加本日志 + <code>commands run kb.index</code>）。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

@@ -8,7 +8,8 @@
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-shows-view">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/testing/baselines/26-10-07-1336-webui-delta-sync-s10-baseline.md, memory-bank/issues/26-10-01-2218-perf-webui-api-state-full-scan.html, memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html">
 <meta name="issue-title" content="大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
 <meta name="issue-summary" content="P2: 5000 种子单轮 ~550ms(项目实测); 轮询分档已缓解, 剩余痛点在 shows 全量聚合与前端全量重算">
@@ -102,7 +103,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-perf-webui-shows-view-full-rebuild</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -160,11 +161,15 @@
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-07 — 认领并轨落地：与 <code>memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html</code>（doc-refs 双向在册）S9 并轨实施完成——追剧视图改为按脏剧键局部重算（剧键等价映射推导，全量 parse_release 扫描退役）且 show 视图 delta 解锁，正确性边界 1-4 以镜子用例 M10-M12 落位；至此服务端四视图重建面全部收敛到脏行（组/种子 S6、追剧 S9b），前端 decoratedGroups 记忆化为该计划 S7。状态保持 <strong>Open</strong>，待计划 S10 门控裁决与 e2e 复测归档后定案。</li>
+      <li>2026-10-08 04:15 — 定案 <strong>Done</strong>：定案前置的两件事都已落地 —— S10 门控裁决（P-03：pending_ver 发布未消费门控<strong>保留</strong>，裁决口径写进 runtime.py 三处注释，冗余性另立 <a href="26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html">26-10-07-1420-refactor-webui-pending-ver-gate-redundancy</a> 跟踪）+ e2e 复测归档（<code>24ab7c31</code>）；本次补跑全量 <code>dev.e2e</code> 确认 6 条存量失败已清零（94 passed / 10 skipped / 0 failed），三点现象复验均为「已消失」（见下方复验与修复后补充）。</li>
     </ul>
     <h3>复验</h3>
     <p>2026-10-07 00:54 — 复验（develop @ 20bd2157）: <strong>仍复现</strong>。四视图无条件全量重建、<code>_build_shows_view</code> 全库聚合、前端 <code>decoratedGroups</code> 全量重算三点全在（锚点已刷新见 §04）。入池后变化: ①建议修法的前置「P1 拆 create_app」已 Done（<code>server/factory.py</code> 薄工厂 + 13 个 routes 模块）, <strong>本 issue 可认领</strong>; ②P1-1 按视图回传（VIEW_ARRAYS）把 decoratedGroups 重算触发面缩小到分组页——面上的缓解, 单轮成本未变; ③SSE ver 推送（0c18fcda）使活跃库下大库有效刷新节奏达 1.5s（分档设计 3s 的 2 倍频）, 本条痛点变重非缓解, 认领时应一并复测量化。详见 <code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code> §05。</p>
+    <p>2026-10-08 04:15 — 复验（develop @ 0a46b58d）: <strong>已消失</strong>。三处锚点逐项核对: ①<code>_publish_locked</code>（runtime.py:1124）不再无条件全量 —— 有净键且无 full 理由时走 <code>_publish_partial_locked</code>（runtime.py:1238），未脏行对象引用原样保留; ②<code>_build_shows_view</code>（views.py:800）的全库循环只作 full 兜底，S9b 起脏剧键经 <code>_show_member_keys</code> 反查成员 → <code>_build_show_row</code> 整行重建; ③前端 <code>decoratedGroups</code>（decorate.js:158）已按行对象 WeakMap 记忆化 + 输入指纹（<code>_decoCache</code>, decorate.js:30）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：与「建议修法」同向（追剧增量 + 前端分片重算），但落点是<strong>双端并轨</strong>而非只改追剧 —— 服务端先建「只存键不存值」的增量时间线（S2），<code>_publish_locked</code> 按本代净键集分叉：组/单种子按脏行局部重聚合（S6），追剧按脏剧键整行重建并解锁 show 视图 delta（S9/S9b，剧键等价映射由 S8 提供）；前端 <code>decoratedGroups</code> 用 WeakMap 按行对象身份记忆化（S7），重算面收敛到脏行 —— 依赖的正是服务端「未脏行引用稳定」这条不变量。<b>改道说明</b>：建议里"需先论证 dirty 集合与剧键派生的正确性边界"这一步没有停留在纸面，而是以镜子测试 M1-M12（逐轮吃 delta ≡ 全量快照）+ 220 轮 fuzz 落位，故实现与建议一致，未改道。</p>
+    <p><b>验证方式</b>：①镜子测试 + fuzz（S5a/S5b）钉住"增量产物 ≡ 全量产物"; ②e2e 分档复测（桩口径）量化传输与前端四段; ③全量 <code>dev.e2e</code> 复跑确认无回归。</p>
+    <p><b>测试数字</b>（2026-10-08 04:15 实测，develop @ 0a46b58d）：<strong>dev.e2e 94 passed / 10 skipped / 0 failed</strong>（3.5m）—— S10 归档时记录的 <strong>6 条存量失败已清零</strong>：根因 A（桩 <code>FakeTorrent.to_dict</code> 未跳过 <code>hr_link</code> ⇒ 详情端点恒 500，×4）已由 <code>312165f8</code> 修复、根因 B（S7 WeakMap 令 <code>applyOptimistic</code> 原地变更不传导 ⇒ ×2）已由 <code>17dc0fc7</code> 修复，两条修复都发生在 S10 归档（<code>24ab7c31</code>）之后，本轮是首次全量复跑验证（S10 基线的口径还是"修复后应回 92"，实测 <strong>94</strong>）。增量收益数字见同期定案的 <a href="26-10-01-2218-perf-webui-api-state-full-scan.html">26-10-01-2218-perf-webui-api-state-full-scan</a> 修复后补充段（同一计划产出）。</p>
   </section>
 
   <footer>

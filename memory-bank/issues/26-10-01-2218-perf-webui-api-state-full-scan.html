@@ -8,7 +8,8 @@
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-polling">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html">
 <meta name="issue-title" content="/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)">
 <meta name="issue-summary" content="5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪">
 <title>/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测) · perf · 计划外问题</title>
@@ -102,7 +103,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2218-perf-webui-api-state-full-scan</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:18</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -153,6 +154,7 @@
       <li><code>api_state(rid: int = -1, view: str = "")</code> · <code>src/auto_qb/webui/server/routes/state.py:33</code>(取证 2026-10-01)· grep <code>api_state</code> / <code>rid</code> —— rid 门控与全量回传口径就在此处</li>
       <li>视图锁: 原文(取证 2026-09-19)记作 <code>_view_lock</code>, 现符号为 <code>view_lock</code> · <code>src/auto_qb/webui/runtime.py:103</code>(取证 2026-10-01)· grep <code>view_lock</code> —— 四视图 + 版本号一次性发布(<code>_publish_locked</code>)</li>
       <li>数据出处: P6 场景 sim-client 压测(取证 2026-09-19); 观测原文在 <code>TODO.md</code> 性能发现节 PERF-01(L244-L263, 2026-10-01 入池时逐字搬运)</li>
+      <li><strong>锚点重锚(取证 2026-10-08, develop @ 0a46b58d)</strong>: <code>api_state(rid=-1, view="", delta=0)</code> · <code>routes/state.py:35</code>(原 33)· grep <code>def api_state</code>; 版本门控与归约 · <code>runtime.py:1410 ensure_state</code> / <code>runtime.py:1461 _reduce_delta</code> / <code>runtime.py:88 _DELTA_VIEWS</code> · grep <code>def ensure_state</code>; 前端协商点 · <code>static/shared/polling.js:211,215</code> · grep <code>delta=1</code>; 视图锁现址 · <code>runtime.py:1124 _publish_locked</code>(原 775, 随内核化重构漂移)· grep <code>def _publish_locked</code></li>
     </ul>
   </section>
 
@@ -175,11 +177,14 @@
     <h2><span class="no">08</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 04:11 — 定案 <strong>Done</strong>。修法不是本条单独实施，而是由增量同步计划 <code>memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html</code>（S1-S10 全部落地）兑现：<strong>方向①</strong>（rid 增量用满）交付为 <code>/api/state</code> 的 <code>delta=1</code> 协商协议 + 服务端增量时间线归约（<code>ensure_state</code> / <code>_reduce_delta</code>），前端 <code>polling.js</code> 默认带 <code>rid</code> + <code>delta=1</code>；<strong>方向②</strong>（全量视图构建收敛）随 issue <a href="26-09-21-1408-perf-webui-shows-view-full-rebuild.html">26-09-21-1408-perf-webui-shows-view-full-rebuild</a> 一并落地为脏行局部重聚合。本条「保留意见」要求的"按真实前端节奏复测"已完成且优于该口径 —— 压测式高频轮询不再是每轮全量。<strong>方向③（分页 / 按需字段）未实施</strong>，按范围守恒转新件 <a href="26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411-perf-webui-api-state-pagination</a> 继续跟踪：全量轮（首屏 / 多标签冷启动 / 时间线窗外 / 防御降级）无裁剪的峰值仍在，只是从「每轮」降为「低频」。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-08 04:11 — 复验（develop @ 0a46b58d，只读复核未动码）：方向①②<strong>已消失</strong>（稳态走 delta 载荷、视图按脏行局部重聚合，锚点全部漂移，见 §05 现址）；方向③<strong>仍复现</strong>（全量分支原样回整表四数组），已转新件跟踪。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：<code>/api/state</code> 在保留「rid 命中即零回传」的基础上补上 qB rid 式的<strong>增量回传半套</strong> —— <code>store.apply_sync</code> 每轮已产出的 <code>delta_fields</code> / added / removed 不再在视图层门口被 <code>consume_view_changed</code> 塌缩成布尔丢弃，而是落成只存键不存值的增量时间线（<code>_delta_timeline</code>），请求带 <code>delta=1</code> 且视图在启用矩阵内时归约 <code>(rid, ver]</code> 窗口为 <code>delta/removed</code>；窗外 / 窗内含 full 代 / 缺行防御回落全量并标 <code>full=true</code>。<b>改道说明</b>：与本条原「建议修法」同向（方向①），但载体从"让前端用满 rid"变成"服务端真的回增量"，是原方向的超集；方向③按范围守恒未做，改由新件跟踪。</p>
+    <p><b>验证方式</b>：增量同步计划 S10 收尾的 e2e 分档复测（桩口径）+ 镜像测试 M1-M12 与 220 轮 fuzz（逐轮吃 delta ≡ 全量快照）+ test.full 终态基线。</p>
+    <p><b>测试数字</b>（引自 <code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code> 进度日志 2026-10-07 13:36，原文）：delta 载荷 <strong>1,809 B ≈ 同数据全量回包 1/4800</strong>（不随档位增长）；HTTP delta 轮 <strong>~4 ms</strong> / 零回传 <strong>~2 ms</strong>（全量 <strong>93.8 ms @3000</strong>）；前端 delta 轮 <strong>29-43 ms</strong> 与档位无关（全量整表替换 <strong>562-816 ms @3000</strong>）；test.full <strong>2745 passed + 4 skipped / 99%</strong>（35.4s）。</p>
   </section>
 
   <footer>

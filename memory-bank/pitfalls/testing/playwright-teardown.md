@@ -1,8 +1,17 @@
 # Playwright webServer 收尾挂死: **带管道 stdio** 的 `spawnSync` 必 EBUSY => 杀不掉子进程, 端口不释放
 
 > 摘要: 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe 自己都一样), 也**不是**文件句柄/杀软占用(重试 5 次 + 延迟全 EBUSY, 是确定性的, 不是竞态)。而 Playwright 1.63 停 webServer 用的正是 `spawnSync('taskkill /pid <pid> /T /F', {shell:true})`(**默认管道 stdio**) —— 失败被它 try/catch 静默吞掉, 子进程没死、stdio 管道关不掉, `waitForCleanup` 永不 resolve => 用例全 PASS 但命令永不退出、桩服务残留占着端口。
-> 触发: dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死
+> 触发: dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死, @playwright/test 缺失, node_modules, npm install, ERR_MODULE_NOT_FOUND
 **Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md
+
+### `dev.e2e` 一起跑就 `ERR_MODULE_NOT_FOUND: @playwright/test`: 前端依赖没装(不是收尾问题)
+
+- **触发**: 新 clone / 换机器 / `node_modules` 被清过之后跑 `commands run dev.e2e` —— 命令 4 秒 `[FAIL]` 退出, 栈里是
+  `Cannot find package '@playwright/test' imported from …\playwright.config.mjs`(加载配置阶段就炸, **不是**上面那条"用例跑完不退出")。
+- **判别**: 报错栈里出现 `_npx\<hash>\node_modules\playwright\...` ⇒ 走的是 npx 下载的 playwright 壳, 项目自己的
+  `node_modules/@playwright/test` 不存在。一秒核对: `ls node_modules/@playwright` 报 No such file。
+- **处置**: 仓库根 `npm install`(2026-10-08 实测: 补 5 包 / 948ms, 之后 dev.e2e 正常跑完 94 passed)。
+  前端侧的依赖**不在** `commands run env.sync` 的覆盖范围里, 换机器时 e2e/`test:e2e:fast` 都要先过这一步。
 
 ### 用例全 PASS 但不打印汇总行、命令永不退出 [已修: `e2e/global-teardown.mjs`]
 
