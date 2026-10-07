@@ -25,7 +25,7 @@
   先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— **一致即落稳**。
 - **处置**: 备份 `.git` 后 `git pack-refs --all`。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
-- **复发: 3** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
+- **复发: 4** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
   自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
   靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
   直接送本条(指引属 verify_ref.py 代码, 尚未改)。②同日第二笔 ship.commit 照报(同形态
@@ -35,6 +35,10 @@
   ③同日第三笔(本轮): 同形态 HEAD==loose、packed 落后 —— **为什么没命中**: 停手指引仍指向
   「分支 ref 被回退」(verify_ref.py 未改), 执行者按开工硬规先读 git/_index 才路由到本条;
   照本条备份 .git 后 `git pack-refs --all` 处置一步过, 未照停手指引跑 update-ref。
+  ④同日第四笔: 同形态 HEAD==loose、packed 落后 —— **为什么没命中**: 停手指引仍未改,
+  本轮靠任务档案 20:57 先例行直接路由; 处置 = `format-patch -1 <sha> --stdout` 留底(43KB,
+  未整份拷 .git —— pack-refs 只重写 packed-refs 一个文件, 对象零风险) + `git pack-refs --all`
+  + verify-ref 一致 + ship.push 一步过。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 
