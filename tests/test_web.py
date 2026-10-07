@@ -1,27 +1,36 @@
-"""test_web 测试计划: WEB UI 后端(FastAPI 鉴权/API/命令投递/设置读写)
+"""test_web 测试计划: WEB UI 后端(拆分进行中, 余 308 fn)
 
 ## 测试计划(每个测试函数一条)
-- test_api_requires_token: 无/错密钥访问 /api/* -> 401
-- test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密); **仅限 loopback**(远端 403, issue 26-09-21-1408 B-02)
-- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志 **INFO 级**、**每进程只记一次**), 对外/远端仍强制鉴权
-- test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
-- test_skip_local_verify_cross_site_guard_host_whitelist: skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408) —— 外部域名 403(API+静态), loopback 全形态与自配 host 放行
-- test_skip_local_verify_cross_site_guard_write_origin: skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护) —— 跨站 Origin 403 且不入队, 同源/无 Origin 放行, GET 不校验(跨站读拿不到响应体, 危害面在写)
-- test_skip_local_verify_cross_site_guard_all_write_endpoints: 全部写端点穷举(迭代路由表) —— 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
-- test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
-- test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
-- test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性)
-- test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签
-- test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除(密钥正确也不再是凭证)
-- test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
-- test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token= 通道不得回潮
-- test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
-- test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
-- test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
-- test_ui_root_and_legacy_newui_redirect: / -> 307 上次使用的 UI(autoqb_ui 皮肤 cookie, 未记录/失效回落星图); 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_ui_skin_cookie_persisted: boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(307 在服务端裁决, cookie 是唯一读得到的载体)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤206 行(S1 定 200, 计划 26-10-06-0838 S5/S6 各 +3)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
+- test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
+- test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
+- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
+- test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
+- test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 变体 label 展示名禁档位后缀(Q4, 报告 26-10-07-0542 —— 档位是物理形态非信息组织, 三档语义全收进本变体, 写进下拉名冗余误导); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/切换器 x2/摘要条 x2 + 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
+- test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
+- test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
+- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
+- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
+- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽 width:240px 且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住), 与 .dt-select 同柱单点在核心 00-core 注入层(三皮肤共享)
+- test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
+- test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
+- test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
+  state.js watch(drawerVisible) 的种子详情支路(!s 分支)进场(v 为真)必须补一发重挂
+  `$nextTick(() => this._dtSync())`($nextTick 等 Vue 把重建的 aside 补进 DOM 再定位宿主);
+  两支路互不越界(重挂只归种子支路, 流量支路退场 _qbChartDestroy / 进场 _qbReloadOnEnter 原样)
+- test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
+- test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
+- test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
+- test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
+- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
+- test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_template_no_reserved_prefix_identifiers: 模板表达式(插值+指令)禁止 `_`/`$` 前缀裸标识符 —— Vue 内部保留域解析不到, 抛 ReferenceError 且整块渲染失败(issue 26-10-03-1412 复制钮 `_copyText`); `$event` 白名单, 成员访问不拦
@@ -41,26 +50,21 @@
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
-- test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
-- test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 变体 label 展示名禁档位后缀(Q4, 报告 26-10-07-0542 —— 档位是物理形态非信息组织, 三档语义全收进本变体, 写进下拉名冗余误导); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/切换器 x2/摘要条 x2 + 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
-- test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
-- test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
-- test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
-- test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
-- test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
-- test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
-- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
-- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
-- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
-- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽 width:240px 且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住), 与 .dt-select 同柱单点在核心 00-core 注入层(三皮肤共享)
-- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
-- test_aq_tip_anchor_watch_and_reacquire_wired: aq-tip 锚定保活守阵(2026-10-07 用户报「详情面板 tooltip 位置不正确」, 变体 5s 轮询整帧重建三条错位路径) —— ui_feedback.js 定位抽 place() 单点(show 初显与显示期重定位共用, 夹取/err-panel 避让同口径) + reacquire() 语义重解析(data-aq-tip 同文案节点按视口中心距旧矩形最近者, 语义扫描先于指针坐标 elementFromPoint 回退, 回退有 Number.isFinite(curX) 门护键盘 NaN 路径) + watch/tick rAF 帧环(浮层可见期才运转, 每帧只 1 次 getBoundingClientRect 零 DOM 查询: 断链走语义重解析 / 四轴 rect 漂移超 1px 重定位) + enter 记 curRect 基准 / hide 作废成对, 任一环被重构摘除即红
+- test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
+- test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
+- test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
+- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
+- test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
+- test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
+- test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
+- test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
+- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
+- test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
-- test_api_enqueue_wakes_main_loop: 投递用户命令唤醒主循环; 反向守卫——自投递命令须登记进 SELF_POSTED_COMMANDS(防自激)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
 - test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
@@ -78,17 +82,13 @@
 - test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open
 - test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员区间平均/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
-- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点(桶值 = 区间平均, 计划 26-10-07-2127 S2);
-  磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
-- test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空(单记录窗首基线缺失 D4 0 线, S2);
-  单种端点同享活尾
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
 - test_api_traffic_qb_group_member_only_zruns_not_empty: 组空态判据观测面 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
-- test_config_tree_restart_field_fallback: R 级字段(data_dir)提交后被回退为磁盘旧值
 - test_config_tree_requires_config_root: 缺少 config 根段 -> 400
+- test_config_tree_restart_field_fallback: R 级字段(data_dir)提交后被回退为磁盘旧值
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_web_token_not_printed_in_logs: 生成的访问密钥不进任何日志(WARNING 会被 notify 推送, 且 /api/log 可读回)
 - test_web_token_generated_atomic_and_readable: 首次生成密钥落盘 web.token 且读回一致, 无临时文件残留(走 atomic_write, issue 26-09-21-1347)
@@ -106,64 +106,62 @@
 - test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
-- test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
-- test_flush_views_marks_dirty_on_hr_revision_change: HR 判定新鲜度置脏(plan 26-10-03-0436 Step 2) —— hr.revision 变化后 flush_views 置脏, 重建后基线前移、再次 flush 不再置脏(无循环置脏)
-- test_flush_views_hr_facade_missing_null_defense: hr 门面缺失(None)时判空防御 —— 重建记基线与 flush 比对都跳过, 不炸不置脏
+- test_build_group_view_cross_group_conflict_flag: 组视图跨组文件交叉标记(26-10-04-0107 S4/D4) —— 去重集合展平为组 key 集合后端查好, warned 注入组对两侧 true、组外组 false; warned 空全 false; 未归组单种子视图(singles)为成员级投影不携带组级标记
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
-- test_build_group_view_cross_group_conflict_flag: 组视图跨组文件交叉标记(26-10-04-0107 S4/D4) —— 去重集合展平为组 key 集合后端查好, warned 注入组对两侧 true、组外组 false; warned 空全 false; 未归组单种子视图(singles)为成员级投影不携带组级标记
 - test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
 - test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
 - test_refresh_error_reasons_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
 - test_refresh_error_reasons_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
+- testhr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
+- testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
+- test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
+- test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
+  「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径) + 波次明细 lane_text 徽章人话逐档正确(LANE_TEXTS 单点)
+- test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
+- test_api_hr_site_entries_full_fields: 种子明细端点(计划 26-10-01-2216 §7 阶段1)200 全字段 —— 行键面 = §3 P0+P1 全集
+- test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点③a) ——
+  v1 命中/仅 v2 命中/大小写差异命中 -> True, 本地不存在 -> False(未做种)
+- test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
+- test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
+- test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
+- test_api_hr_site_entries_409_worker_absent: hr 门面在但取数服务缺席(service=None) -> 409 不假装有数据
+- test_api_hr_history_rows_from_real_wave: 拉取历史端点(计划 26-10-04-0312 §3.4)200 —— 行键面 = §3.4 全集,
+  真实波次(S2 记录器)落表; 完成徽章/触发人话/档位 lane_text/写者短标识全由后端算好
+- test_api_hr_history_site_filter: site 过滤只回该站; 未接入 404 点名已接入清单(与 entries 同款话术)
+- test_api_hr_history_guards: HR 未启用 400 / 取数服务缺席 409(与 entries 同款校验)
+- test_api_hr_history_limit_clamped: limit 截最新 N 条; 0 钳到 1(不回全量也不回空页)
+- test_api_hr_history_read_error_reported_not_raised: 站点文件读坏不抛 —— read_errors{site: err} 带出, rows 剔掉坏站
+- test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
+- test_hr_user_visible_texts_no_graduation_wording: 否定守阵 —— 用户可见文案来源(hr status/resolve/events 字符串常量)「毕业」零残留
+  (注释保留域术语, 决策点②); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
+- test_api_hr_refresh_single_site_and_no_runtime: refresh 指定单站受理 + hr 门面缺席回 409
+- test_api_hr_confirm_empty: 人工对账戳端点(缺 site/未启用/未接入 400, 成功 ok, 写入失败 409)
+- test_api_events_sse_stream_lifecycle: SSE 生成器整块(hello 帧/事件帧/keepalive 心跳/终结退订;
+  TestClient 会挂死无限流, 直调端点驱动 body_iterator)
+- test_api_events_sse_generator_error_still_unsubscribes: 生成器异常死亡也走 finally 退订
+- test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
+- test_flush_views_marks_dirty_on_hr_revision_change: HR 判定新鲜度置脏(plan 26-10-03-0436 Step 2) —— hr.revision 变化后 flush_views 置脏, 重建后基线前移、再次 flush 不再置脏(无循环置脏)
+- test_flush_views_hr_facade_missing_null_defense: hr 门面缺失(None)时判空防御 —— 重建记基线与 flush 比对都跳过, 不炸不置脏
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
 - test_build_search_index_aborts_when_disconnected: qB 断连时中止构建且不写空索引
 - test_search_torrents_name_match: 种子名匹配(即时/大小写不敏感)
-- test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
 - test_parse_query_tokens: 查询解析词法 —— 正/负词/短语 + 宽容边界(孤立-/未闭合引号/纯标点/--dv/web-dl)
 - test_search_torrents_cross_row_and: 正词逐词跨行 AND(拍板 26-09-27 二次定案, 推翻 26-09-26 文件行隔离)—— 每个正词命中任一候选行(全称行/文件行)即可: 「minions mteam」名字×标签、「delta 03」名字×集文件跨行命中; 负词种子级不变
 - test_search_torrents_negative_term: 负词种子级(26-09-27 定案)—— 任一候选行含负词 ⇒ 该种子整体排除: 单种子内季包文件统一计算(任一文件带负词整包排除), 多种子集合逐个算
 - test_search_torrents_negative_torrent_veto: 负词种子级回归 —— 名字/保存路径/站点行含负词 ⇒ 整种子排除, 优先于一切正词命中(「cat and -11」+「-mteam」两轮报障回归)
+- test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
 - test_search_torrents_phrase: 短语 "…" 整段归一为连续子串, 词序敏感(terms-AND 命中而短语不命中的区分用例)
 - test_search_torrents_regression_envnv10: 回归(26-09-26 报障)——「恶女 10」命中单文件发布物, -ubweb 可排除
 - test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
+- test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
-- test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
-- test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
-- test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
-### P1 覆盖率提升轮: webui 运行时与命令长尾
-- test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
-- test_web_runtime_check_pending_paths: 在途汇报确认全路径(item 级 deadline 超时 warn(epoch/legacy 文案)/停止直判/断连/读异常 error/判定聚合三桶与前 3 条原因截断)
-- test_web_runtime_resync_elapsed_ms_logs_by_threshold: 补刷新计时按阈值分级(慢 WARNING / 正常 DEBUG)
-- test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
-- test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
-- test_web_runtime_affected_truth_queries_live_api: 真值直查 qB, 失败回 None 不回落快照
-- test_web_commands_delete_with_files_and_reannounce_gone_receipt: 删除透传 delete_files; 汇报缺失显式回执
-- test_reannounce_group_empty_snapshot_error_receipt: 组命令空组回执(E-03) —— 组内成员执行时刻全不在快照时显式 error 回执, 不发指令不登记跟踪(对齐单发口径, 前端不再挂到超时)
-- test_web_commands_recheck_and_skip_check_receipts: recheck/skip-check 拒绝回执带文案
-- test_web_commands_limits_partial_directions: 限速只下发提供的方向; 分享限制缺省 -2 补齐
-- test_web_commands_rename_fs_folder_branch: 重命名文件夹分支
-- test_web_commands_bulk_argument_errors: 批量参数四类错误回执
-- test_web_commands_bulk_missing_targets_reported: 批量缺失种子/组分列计数
-- test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
-- test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
-- test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
-- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401; qb_traffic_enabled 旗标(P5a)段缺省/关 = False, 开 = True
-- test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
-- test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
-- test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
-- test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
-- test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
-- test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
-- test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
-- test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败/部分成功整组回 None(DEBUG 留摘要)
-- test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)/回退 save_path(缺失或下载中未落盘)/组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
@@ -177,6 +175,8 @@
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
 - test_api_t_bulk_group_keys_enqueue: bulk 组键模式(DLG-02): keys 编码组键入队解码回 tuple, 可与 hashes 混合; 纯 hash 载荷不带 keys 键; 无密钥 401
 - test_api_t_bulk_tags_category_enqueue: bulk 标签/分类动作入队 —— tags 过滤空串非空才透传、category 按键存在性透传(空串=清除分类要保留)、未提供时载荷不带键(历史形态不变); 无密钥 401
+- test_api_t_bulk_limits_location_enqueue: bulk 限速/移动动作入队(计划 26-10-02-1955 W2) —— up/dl/location 提供才透传(0=不限合法), 负数/limits 全空/location 空路径 400 不入队; 历史载荷形态不变; 无密钥 401
+- test_api_t_bulk_skip_check_enqueue: bulk 跳检动作入队(计划 26-10-02-1955 W3) —— 无额外参数(载荷只有 hashes/action/delete_files); 无密钥 401; gate 在 drain 分派处, 路由层开关关时仍 200 入队
 - test_drain_web_commands_torrent_write_actions: 二轮写命令正常执行(参数透传/cmd_id 回执 ok/限速位置同步快照)
 - test_drain_web_commands_torrent_write_unknown_hash_skips: 二轮写命令未知 hash 静默跳过不调 API
 - test_drain_web_commands_share_limits_and_queue_mapping: share-limits 缺省维度 -2 补齐; queue 动作映射; 未知动作 error 回执
@@ -184,8 +184,6 @@
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
 - test_drain_web_commands_bulk_torrents_tags_category: bulk 标签/分类命令执行 —— add_tags/remove_tags/set_category 单次调用带全部 hash; 缺 tags / 缺 category 键 error 回执; 空串分类(清除)合法; 标签非空校验
-- test_api_t_bulk_limits_location_enqueue: bulk 限速/移动动作入队(计划 26-10-02-1955 W2) —— up/dl/location 提供才透传(0=不限合法), 负数/limits 全空/location 空路径 400 不入队; 历史载荷形态不变; 无密钥 401
-- test_api_t_bulk_skip_check_enqueue: bulk 跳检动作入队(计划 26-10-02-1955 W3) —— 无额外参数(载荷只有 hashes/action/delete_files); 无密钥 401; gate 在 drain 分派处, 路由层开关关时仍 200 入队
 - test_drain_web_commands_bulk_torrents_limits_location: bulk 限速/移动分派 —— 只调有值方向、每方向一次调用传全 hashes; 写后快照同步(up_limit/dl_limit/save_path); 缺值 error 回执不调 API
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
@@ -211,22 +209,18 @@
 - test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
-- test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
-- test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
-- test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
-- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
-- test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
-- test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
-- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
-- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
-- test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
-- test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
-- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
-- test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
-- test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
-- test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
-- test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
+- test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
+- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L1 只剩重连(web 重启/logging/notify/HR 全部改经模块 apply, P1-P2); L0 下 hr.apply 也必须被调到(HR 路由守阵)
+- test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
+- test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
+- test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
+- test_webui_module_apply_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥(经 WebUIModule.apply 驱动, P2)
+- test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
+- test_web_loop_exception_handler_downgrades_connection_reset: 网络波动(WinError 10054 对端强迫关闭)降级为一行 INFO, 不再 ERROR + traceback
+- test_web_loop_noise_log_throttled_in_window: 断连日志按窗口节流(窗口内只记首条, 出窗口附抑制条数)
+- test_web_loop_exception_handler_delegates_real_bug: 反向守阵 —— 非波动异常交回 asyncio 默认处理器, 不吞
+- test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
+- test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
@@ -235,40 +229,26 @@
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
-- test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
-- test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
-- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
-- test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
+- test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
+- test_api_tags_exclude_auto: /api/tags?exclude_auto=1 剔除程序自动维护标签(站点/HR 精确集 + 集数模板形状; 事件标记保留, 不带参全量)
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
 - test_api_log_level_filter_follows_config_format: 等级过滤按 config.logging.format 定位等级名(生产格式无方括号, 按字面量 `[WARNING` 捞会恒空 —— 2026-09-25 真机 bug)
 - test_api_log_level_filter_keeps_multiline_record: 多行日志(整段 traceback)折行后跟随其记录的等级, 筛 ERROR 不丢栈
 - test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
-- test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
-- test_api_tags_exclude_auto: /api/tags?exclude_auto=1 剔除程序自动维护标签(站点/HR 精确集 + 集数模板形状; 事件标记保留, 不带参全量)
+- test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
+- test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
 - test_api_torrent_trackers_masked_response: 守阵① API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
-- test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
-- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L1 只剩重连(web 重启/logging/notify/HR 全部改经模块 apply, P1-P2); L0 下 hr.apply 也必须被调到(HR 路由守阵)
-- test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
-- test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
-- test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
-- test_webui_module_apply_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥(经 WebUIModule.apply 驱动, P2)
-- test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
-- test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
-- test_web_loop_exception_handler_downgrades_connection_reset: 网络波动(WinError 10054 对端强迫关闭)降级为一行 INFO, 不再 ERROR + traceback
-- test_web_loop_noise_log_throttled_in_window: 断连日志按窗口节流(窗口内只记首条, 出窗口附抑制条数)
-- test_web_loop_exception_handler_delegates_real_bug: 反向守阵 —— 非波动异常交回 asyncio 默认处理器, 不吞
-- test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
-- test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
+- test_api_enqueue_wakes_main_loop: 投递用户命令唤醒主循环; 反向守卫——自投递命令须登记进 SELF_POSTED_COMMANDS(防自激)
 - test_cmd_trackers_log_sanitized: tracker 移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在(S3 后入参为 mask 值)
 - test_cmd_remove_tracker_mask_roundtrip: S3 删除改道 —— remove_tracker 收 mask 值当场重取原文比对, 恰 1 命中 qB 收原文; 0/多命中报「未找到该 tracker」且零写调用
 - test_cmd_remove_tracker_same_host_distinct_passkeys: 守阵② 写路径同 host 区分(plan 26-10-07-0055 S4) —— 同 host 两条不同 passkey mask 互异(R8), 传 A 的 mask qB 恰收一次 remove 且 urls==A 原文(B 不受影响); 红验: 删除临时改回直传
@@ -276,6 +256,12 @@
 - test_trackers_baseline_keys_are_raw_urls: 守阵④ 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
 - test_torrent_detail_trackers_route_mask_canary: 守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵① 改回透传
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog): 78 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
+- test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
+- test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
+- test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
+- test_api_keys_read_corrupt_fallback: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(读时兜底链)
+- test_api_keys_unknown_schema_version_fallback: schema_version 不识别 -> 回默认表 + WARN(升级链口径: 宁可回默认不带病生效)
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_bulk_skip_check_aggregated: bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3) —— 混合结果聚合回执分段计数(成功 / 同日去重 skip / 部分下载禁+执行失败 fail); 成功批 ok 回执且记录同日去重(skip_check_day 跨来源共享)
@@ -286,46 +272,39 @@
 - test_web_precheck_endpoint: T21(26-10-05-0314 S2) —— 预检端点 POST /api/torrents/skip-check/precheck: 路由级 403 门控同单发(fail-closed 零入队)/空 hashes 400 不入队/入队载荷 {hashes}; drain 级回执 truth={results, summary} 结构、混合 {ok, force, blocked} 计数、未知 hash → cls=blocked 文案「已不在客户端」
 - test_web_force_passthrough: T22(26-10-05-0314 S2) —— 单发 body.force → ops.skip_check 收到 force=True(mock kwarg 断言)/缺省 force=False; 批量 body.force → _bulk_skip_check_via_ops 逐 hash 透传; 路由级提供才透传(缺省载荷形态不变); force=true 时 case 1 闸门(G3)照常硬拒进回执
 - test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
-- test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
-- testhr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
-- testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
-- test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
-- test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
-  「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径) + 波次明细 lane_text 徽章人话逐档正确(LANE_TEXTS 单点)
-- test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
-- test_api_hr_site_entries_full_fields: 种子明细端点(计划 26-10-01-2216 §7 阶段1)200 全字段 —— 行键面 = §3 P0+P1 全集
-- test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
-- test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
-- test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
-- test_api_hr_site_entries_409_worker_absent: hr 门面在但取数服务缺席(service=None) -> 409 不假装有数据
-- test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
-- test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点③a) ——
-  v1 命中/仅 v2 命中/大小写差异命中 -> True, 本地不存在 -> False(未做种)
-- test_api_hr_history_rows_from_real_wave: 拉取历史端点(计划 26-10-04-0312 §3.4)200 —— 行键面 = §3.4 全集,
-  真实波次(S2 记录器)落表; 完成徽章/触发人话/档位 lane_text/写者短标识全由后端算好
-- test_api_hr_history_site_filter: site 过滤只回该站; 未接入 404 点名已接入清单(与 entries 同款话术)
-- test_api_hr_history_guards: HR 未启用 400 / 取数服务缺席 409(与 entries 同款校验)
-- test_api_hr_history_limit_clamped: limit 截最新 N 条; 0 钳到 1(不回全量也不回空页)
-- test_api_hr_history_read_error_reported_not_raised: 站点文件读坏不抛 —— read_errors{site: err} 带出, rows 剔掉坏站
-- test_hr_user_visible_texts_no_graduation_wording: 否定守阵 —— 用户可见文案来源(hr status/resolve/events 字符串常量)「毕业」零残留
-  (注释保留域术语, 决策点②); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
-- test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
-- test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
-- test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
-- test_api_keys_read_corrupt_fallback: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(读时兜底链)
-- test_api_keys_unknown_schema_version_fallback: schema_version 不识别 -> 回默认表 + WARN(升级链口径: 宁可回默认不带病生效)
-- test_api_events_sse_stream_lifecycle: SSE 生成器整块(hello 帧/事件帧/keepalive 心跳/终结退订;
-  TestClient 会挂死无限流, 直调端点驱动 body_iterator)
-- test_api_events_sse_generator_error_still_unsubscribes: 生成器异常死亡也走 finally 退订
-- test_api_hr_confirm_empty: 人工对账戳端点(缺 site/未启用/未接入 400, 成功 ok, 写入失败 409)
-- test_api_hr_refresh_single_site_and_no_runtime: refresh 指定单站受理 + hr 门面缺席回 409
+### P1 覆盖率提升轮: webui 运行时与命令长尾
+- test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
+- test_web_runtime_check_pending_paths: 在途汇报确认全路径(item 级 deadline 超时 warn(epoch/legacy 文案)/停止直判/断连/读异常 error/判定聚合三桶与前 3 条原因截断)
+- test_web_runtime_resync_elapsed_ms_logs_by_threshold: 补刷新计时按阈值分级(慢 WARNING / 正常 DEBUG)
+- test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
+- test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
+- test_web_runtime_affected_truth_queries_live_api: 真值直查 qB, 失败回 None 不回落快照
+- test_web_commands_delete_with_files_and_reannounce_gone_receipt: 删除透传 delete_files; 汇报缺失显式回执
+- test_reannounce_group_empty_snapshot_error_receipt: 组命令空组回执(E-03) —— 组内成员执行时刻全不在快照时显式 error 回执, 不发指令不登记跟踪(对齐单发口径, 前端不再挂到超时)
+- test_web_commands_recheck_and_skip_check_receipts: recheck/skip-check 拒绝回执带文案
+- test_web_commands_limits_partial_directions: 限速只下发提供的方向; 分享限制缺省 -2 补齐
+- test_web_commands_rename_fs_folder_branch: 重命名文件夹分支
+- test_web_commands_bulk_argument_errors: 批量参数四类错误回执
+- test_web_commands_bulk_missing_targets_reported: 批量缺失种子/组分列计数
+- test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
+- test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
+- test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
+- test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
+- test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
+- test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
+- test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
+- test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
+- test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
+- test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败/部分成功整组回 None(DEBUG 留摘要)
+- test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
+- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点(桶值 = 区间平均, 计划 26-10-07-2127 S2);
+  磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
+- test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空(单记录窗首基线缺失 D4 0 线, S2);
+  单种端点同享活尾
 - test_frontend_toast_duration_floor_by_kind: 错误/超时类 toast 停留下限守阵(2026-10-05 用户报「右下角错误信息停留太短」) ——
   ui_feedback.js 头部 `TOAST_MS_FLOOR` 给 error/timeout 设 ≥8s 下限, `toast()` 与 `_finishToast()`
   两条排期路径都经 `toastMs(kind, ms)` 解析且 ms 缺省为 null(绕过即回到裸 ms, 下限形同虚设)
-- test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
-  state.js watch(drawerVisible) 的种子详情支路(!s 分支)进场(v 为真)必须补一发重挂
-  `$nextTick(() => this._dtSync())`($nextTick 等 Vue 把重建的 aside 补进 DOM 再定位宿主);
-  两支路互不越界(重挂只归种子支路, 流量支路退场 _qbChartDestroy / 进场 _qbReloadOnEnter 原样)
+- test_aq_tip_anchor_watch_and_reacquire_wired: aq-tip 锚定保活守阵(2026-10-07 用户报「详情面板 tooltip 位置不正确」, 变体 5s 轮询整帧重建三条错位路径) —— ui_feedback.js 定位抽 place() 单点(show 初显与显示期重定位共用, 夹取/err-panel 避让同口径) + reacquire() 语义重解析(data-aq-tip 同文案节点按视口中心距旧矩形最近者, 语义扫描先于指针坐标 elementFromPoint 回退, 回退有 Number.isFinite(curX) 门护键盘 NaN 路径) + watch/tick rAF 帧环(浮层可见期才运转, 每帧只 1 次 getBoundingClientRect 零 DOM 查询: 断链走语义重解析 / 四轴 rect 漂移超 1px 重定位) + enter 记 curRect 基准 / hide 作废成对, 任一环被重构摘除即红
 """
 import base64
 import errno
@@ -358,12 +337,28 @@ from auto_qb.webui.runtime import (
     WebUIRuntime,
 )
 
-KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
-
-
-def _web_stub(enabled=True, host="127.0.0.1", port=8080, token="t"):
-    """WEB 段替身(仅 _apply_web_config 关心的字段)"""
-    return SimpleNamespace(enabled=enabled, host=host, port=port, token=token)
+from webui_helpers import (
+    KEY,
+    _web_stub,
+    _make_web_manager,
+    STATIC_ROOT,
+    _UI_ALL,
+    _ui_manifest,
+    _ui_shell_inline,
+    _ui_aggregate,
+    _ui_css_files,
+    _ui_css_aggregate,
+    _app_bundle_files,
+    _app_bundle_text,
+    _tpl_path,
+    _enable_qb_traffic,
+    _qb_v4,
+    _hr_status_env,
+    _make_grouped_manager,
+    _iter_api_routes,
+    module_log,
+    _attach_live_tail_host,
+)
 
 
 def _free_port() -> int:
@@ -373,806 +368,6 @@ def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-def _make_web_manager(tmp_path, config_text):
-    """构造 WEB API 所需的 manager 替身(轻量 namespace, 不连 qB)"""
-    from types import SimpleNamespace
-
-    wake_calls = []  # 记录 manager.wake() 调用: 投递用户命令应唤醒, 自投递命令不应唤醒
-    state_file = os.path.join(tmp_path, "state.json")
-    config_file = os.path.join(tmp_path, "config.yml")
-    with open(config_file, "w", encoding="utf-8") as f:
-        f.write(config_text)
-    web_cfg = SimpleNamespace(
-        enabled=True,
-        host="127.0.0.1",
-        port=8080,
-        token="",
-        skip_local_verify=False,
-        # R2(计划 26-10-02-1955 W1): 测试侧默认开 —— gate 用例按需实例级置 False
-        skip_check_menu=True
-    )
-    config = SimpleNamespace(
-        web=web_cfg,
-        trackers={
-            "HHan":
-                SimpleNamespace(
-                    tags=["HHan"],
-                    remove_tags=[],
-                    remove_similar_tags=False,
-                    upload_speed_limit=0,
-                    download_speed_limit=0,
-                    hr=None,
-                    domains=["d.com"],
-                    rules=[]
-                )
-        },
-        state_file=state_file,
-        data_dir=str(tmp_path),
-        grouping=SimpleNamespace(enabled=True, check_missing_files=True, missing_tag="MISSING"),
-        add_episode_tags=SimpleNamespace(enabled=False, add_tag_single="", add_tag_multi=""),
-        delete_tags=[],
-        delete_tags_if_has_no_torrents=[],
-        global_speed_limit_curve=None,
-        qb_traffic=None,  # qB 口径流量(plan 26-10-03-0946 §06): None = 未启用; 用例按需置 QbTraffic(enabled=True)
-        notify=SimpleNamespace(enabled=False),
-        qbittorrent=SimpleNamespace(host="127.0.0.1", port=1, username="u", password="p"),
-        logging=SimpleNamespace(level="WARNING", file="", max_bytes=1048576, format="%(message)s"),
-        main_tick=2.0,
-        sync_interval=1.5,
-        max_tasks_per_tick=20,
-        interval=60.0,
-        remove_similar_tags=False,
-        skip_checking_tag="zSkipChecked",
-        rules_config={},
-    )
-    groups = {KEY: ["HA", "HB"]}
-    view = [
-        {
-            "key":
-                encode_group_key(KEY),
-            "name":
-                "Show",
-            "count":
-                2,
-            "dlspeed":
-                0,
-            "upspeed":
-                2048,
-            "uploaded":
-                4096,
-            "size":
-                1024**3,
-            "members":
-                [
-                    {
-                        "hash": "HA",
-                        "site": "HHan",
-                        "state": "stalledUP",
-                        "kind": "seeding",
-                        "dlspeed": 0,
-                        "upspeed": 1024,
-                        "uploaded": 2048,
-                        "size": 512**2,
-                        "progress": 1.0,
-                        "seeding_time": 3600,
-                        "ratio": 1.2
-                    },
-                    {
-                        "hash": "HB",
-                        "site": "M-Team",
-                        "state": "pausedUP",
-                        "kind": "paused",
-                        "dlspeed": 0,
-                        "upspeed": 1024,
-                        "uploaded": 2048,
-                        "size": 512**2,
-                        "progress": 1.0,
-                        "seeding_time": 3600,
-                        "ratio": 1.2
-                    },
-                ],
-        }
-    ]
-    mgr = SimpleNamespace(
-        status_snapshot=lambda: {
-            "connected": True,
-            "paused": False,
-            "torrents": 2
-        },
-        state_file=state_file,
-        data_dir=str(tmp_path),
-        config=config,
-        config_path=config_file,
-        store=SimpleNamespace(groups=groups, by_hash={}, get=lambda h: None, server_state=None),
-        client=None,
-        # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
-        wake=lambda: wake_calls.append(1),
-    )
-    # 模块宿主替身(schema 端点的段认领由模块 sections() 派生, W4 级别表退役)
-    mgr.host = SimpleNamespace(
-        modules=lambda: [
-            SimpleNamespace(name="webui", sections=lambda: ("web", )),
-            SimpleNamespace(name="tracker", sections=lambda: ("trackers", )),
-            SimpleNamespace(name="rules", sections=lambda: ("rules_config", "interval")),
-        ]
-    )
-    # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
-    from auto_qb.core.qbmanager import QbManager
-
-    # 命令投递经表现层门面(WebUIRuntime.post_command): post_command 与 consume_commands
-    # 共用 runtime 自带的 commands 队列 —— 端点测试直投 mgr.web.commands, 断言仍然成立
-    from auto_qb.webui import WebUIRuntime
-
-    mgr.web = WebUIRuntime(mgr)
-    # routes 走 web.* 新名口(plan 别名层处置 W1/W2): 替身数据挂门面命名空间,
-    # 门面方法覆盖为读替身数据
-    mgr.web.group_view = view
-    mgr.web.flat_view = []
-    mgr.web.traffic_view = {"state": "disabled", "periods": [], "history": [], "limit": {}}
-    mgr.hr_view_fields = QbManager.hr_view_fields
-    mgr._wake_calls = wake_calls  # 供端点测试断言"投递命令是否唤醒主循环"
-    # 视图替身方法: routes 现调 web.ensure_view / web.ensure_state, 这里把门面方法指到替身数据上
-    mgr.web.ensure_view = lambda: mgr.web.group_view
-
-    def _ensure_group_state(rid, view=None, delta=False):
-        # 与真实实现同形(plan 26-10-07-0414 S3 起 ensure_state 增 delta 协商参; 替身不模拟
-        # 归约, 现有端点用例均不带 delta=1, 行为与历史全量形状一致)
-        from auto_qb.webui.views import VIEW_ARRAYS
-
-        updated = rid != mgr.web.group_view_ver
-        state = {"rid": mgr.web.group_view_ver, "updated": updated}
-        if updated:
-            arrays = {
-                "groups": mgr.web.group_view,
-                "singles": [],  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
-                "shows": {
-                    "list": [],
-                    "unrecognized": []
-                },
-                "torrents": mgr.web.flat_view,  # 种子平铺视图同门控(与真实实现同形)
-            }
-            for k in (VIEW_ARRAYS.get(view) if view else None) or arrays:
-                state[k] = arrays[k]
-        return state
-
-    mgr.web.ensure_state = _ensure_group_state
-    return mgr
-
-
-@pytest.fixture()
-def web_env(tmp_path):
-    """带 TestClient 的 WEB 环境(manager 替身 + 密钥已生成)"""
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app, ensure_web_token
-
-    mgr = _make_web_manager(
-        tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
-    )
-    mgr.web.token = ensure_web_token(mgr)
-    app = create_app(mgr)
-    client = TestClient(app)
-    return mgr, client
-
-
-def test_api_requires_token(web_env, caplog):
-    """无/畸形/错密钥访问 /api/* -> 401
-
-    缺省/畸形凭证(无头、裸 Bearer、错 scheme)静默 401 不记 WARNING(历史误报: 前端空 token
-    发出 "Bearer " 被 HTTP 层裁成裸 "Bearer", 每次空提交都刷 WARNING 并触发系统通知);
-    仅"携带了但错误"的密钥记恰好一条 WARNING, 且文本不含任何密钥片段。
-    """
-    mgr, client = web_env
-    web_logger = "auto_qb.web"
-    malformed = (
-        None,  # 完全无头
-        "Bearer",  # 有 scheme 无 token(等价于前端空 token 经 OWS 裁剪后的值)
-        "Bearer ",  # scheme 后仅空白(未经 OWS 裁剪的原始形态)
-        "Token xyz",  # 错 scheme
-    )
-    caplog.set_level(logging.WARNING, logger=web_logger)
-    for header in malformed:
-        caplog.clear()
-        kwargs = {} if header is None else {"headers": {"Authorization": header}}
-        assert client.get("/api/status", **kwargs).status_code == 401
-        assert not [r for r in caplog.records if r.name == web_logger and r.levelno >= logging.WARNING
-                   ], (f"畸形凭证 {header!r} 不应记 WARNING")
-    # 携带了但错误的密钥: 401 + 恰好一条不含密钥内容的 WARNING
-    caplog.clear()
-    assert client.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 401
-    warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
-    assert len(warns) == 1
-    assert mgr.web.token not in warns[0].getMessage()
-    assert mgr.web.token[:8] not in warns[0].getMessage()
-    # 正确密钥放行
-    assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).status_code == 200
-
-
-def test_config_public_endpoint_no_auth(web_env):
-    """公开只读端点 /api/config/public: 免 token 可读但**仅限 loopback**, 只暴露本机免鉴权标志
-
-    该标志只对本机浏览器有用(免鉴权本就只对 loopback 生效); 远端可读等于向攻击者
-    广播「CSRF 面开关」状态(issue 26-09-21-1408 B-02) —— 403 明确拒绝, 前端读取失败
-    自然回落密钥表单(TestClient 缺省对端 testclient 非 loopback, 正好充当远端)。
-    """
-    from fastapi.testclient import TestClient
-
-    mgr, client = web_env
-    # 远端(非 loopback): 403, 不广播开关状态
-    assert client.get("/api/config/public").status_code == 403
-    # loopback: 免密钥可读, 默认关闭值 false
-    loopback = TestClient(client.app, client=("127.0.0.1", 50000))
-    resp = loopback.get("/api/config/public")
-    assert resp.status_code == 200
-    assert resp.json() == {"web": {"skip_local_verify": False}}
-    # 不泄露访问密钥
-    assert str(mgr.web.token) not in resp.text
-
-
-def test_api_webui_flags_endpoint(web_env):
-    """R2 功能旗标端点(计划 26-10-02-1955 W1): 开/关读**实时配置** + 未鉴权 401
-
-    FakeConfig 测试侧默认 skip_check_menu=True(helpers, 供既有 skip-check 用例直通);
-    关闭用例实例级置 False(深拷贝, 不跨测试泄漏) —— 端点必须现取 manager.config 引用,
-    不按值持有旧 Config(hot-reload-held-config 坑)。
-    qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): 段缺省 None / enabled=false 均 False,
-    _enable_qb_traffic 置段 enabled=True 后即时翻真(读实时配置口径)。
-    """
-    mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    assert client.get("/api/webui/flags", headers=auth).json() == {
-        "skip_check_menu": True,
-        "qb_traffic_enabled": False,  # FakeConfig 默认 qb_traffic=None(未启用)
-    }
-    mgr.config.web.skip_check_menu = False
-    assert client.get("/api/webui/flags", headers=auth).json() == {
-        "skip_check_menu": False,
-        "qb_traffic_enabled": False,
-    }
-    _enable_qb_traffic(mgr, enabled=True)
-    assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is True
-    _enable_qb_traffic(mgr, enabled=False)
-    assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is False
-    assert client.get("/api/webui/flags").status_code == 401
-
-
-def test_api_t_skip_check_gated_by_config(web_env):
-    """R2 skip-check 端点 gate(D2=是 · fail-closed): 配置关 403(detail 注明键名) / 配置开 200 入队
-
-    gate 读实时配置 —— 同一 client 内翻转配置键即时生效; 403 时不得投递命令。
-    rule 源跳检回归哨: test_ops.py 全部零改动全绿。
-    """
-    mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    mgr.config.web.skip_check_menu = False
-    resp = client.post("/api/torrents/HA/skip-check", headers=auth)
-    assert resp.status_code == 403, resp.text
-    assert "web.skip_check_menu" in resp.json()["detail"], "403 detail 必须注明配置键名"
-    assert mgr.web.commands.empty(), "配置关时不得投递命令"
-    mgr.config.web.skip_check_menu = True
-    resp = client.post("/api/torrents/HA/skip-check", headers=auth)
-    assert resp.status_code == 200, resp.text
-    cmd, payload = mgr.web.commands.get_nowait()
-    assert cmd == "skip_check_torrent" and payload["hash"] == "HA"
-
-
-def test_skip_local_verify_loopback_bypass(web_env, caplog):
-    """web.skip_local_verify=true 时: 本机(loopback)连接免密钥放行, 直接进入
-
-    默认 false(保守): 本机连接仍强制鉴权; 开启后仅 loopback 放行 —— 对外/远端连接
-    (request.client.host 非 127.0.0.1/::1)即使带对密钥以外的任何请求也须密钥(仍强制)。
-    提示日志**每进程只记一次**(R10-01)且为 **INFO**: 免鉴权模式下前端按设计不发 Authorization
-    头, 每请求都记会把轮询日志刷满; 首次记一条足以说明该实例不校验密钥。级别用 INFO 而非
-    WARNING —— 免鉴权是用户显式开启的配置(非异常), WARNING 会经 notify 推送扰民。
-    跨站防护(issue 26-09-21-1408)开启后 Host 白名单生效: 请求须带合法 Host 头(TestClient
-    缺省 Host=testserver 不在白名单, 真实浏览器请求必然携带 loopback/自配 host 形态)。
-    """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    # 用独立 loopback 客户端 + 开启开关
-    mgr.config.web.skip_local_verify = True
-    app = create_app(mgr)
-    host_hdr = {"Host": "127.0.0.1:8080"}
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
-    remote = TestClient(app, client=("192.168.1.50", 50000))
-
-    caplog.set_level(logging.INFO, logger="auto_qb.web")
-    caplog.clear()
-    # 本机: 无密钥/错密钥均放行(直接进入)
-    assert loopback.get("/api/status", headers=host_hdr).status_code == 200
-    infos = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.INFO]
-    assert infos and "skip_local_verify" in infos[-1].getMessage()
-    assert not [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno >= logging.WARNING], \
-        "免鉴权是显式配置而非异常: 不得记 WARNING 及以上(否则经 notify 推送扰民)"
-    # 只记一次: 其余免密钥请求不再刷日志
-    caplog.clear()
-    assert loopback.get("/api/status", headers=host_hdr).status_code == 200
-    assert loopback.get("/api/status", headers={**host_hdr, "Authorization": "Bearer wrong"}).status_code == 200
-    assert not [r for r in caplog.records if r.name == "auto_qb.web" and "skip_local_verify" in r.getMessage()]
-    # 对外/远端连接: 仍强制鉴权(Host 头合法 —— 白名单不关心对端地址; 凭证面语义不变)
-    assert remote.get("/api/status", headers=host_hdr).status_code == 401
-    assert remote.get(
-        "/api/status", headers={
-            **host_hdr, "Authorization": f"Bearer {mgr.web.token}"
-        }
-    ).status_code == 200
-
-
-def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
-    """skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408)
-
-    attacker.com 指向本机时浏览器带来的 Host 头是外部域名 —— 不在白名单一律 **403 明确
-    拒绝**(API 与静态路径同闸: rebinding 下攻击页从本源加载页面是同源读的前提);
-    合法变体(loopback 全形态 + 自配 host)照常放行, 不破坏正常本机使用。
-    """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
-    caplog.set_level(logging.WARNING, logger="auto_qb.web")
-    # 外部域名(rebinding 面): API 与静态页一律 403, 不静默(WARNING 留痕)
-    assert client.get("/api/status", headers={"Host": "attacker.com"}).status_code == 403
-    assert client.get("/", headers={"Host": "attacker.com:8080"}).status_code == 403
-    warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
-    assert warns and "Host" in warns[0].getMessage()
-    assert mgr.web.token not in warns[0].getMessage(), "拒绝日志不得含密钥内容"
-    # 合法变体放行: host:port / 裸 host / [::1]:port 全形态
-    for host in ("127.0.0.1:8080", "localhost:8080", "[::1]:8080", "127.0.0.1", "localhost"):
-        assert client.get("/api/status", headers={"Host": host}).status_code == 200, host
-
-
-def test_skip_local_verify_cross_site_guard_write_origin(web_env):
-    """skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护, issue 26-09-21-1408)
-
-    本机网页对 /api/* 发跨站简单请求(不触发 CORS 预检)即可驱动写命令 —— 写方法上
-    Origin 非空时必须是白名单同源, 否则 403 且**命令不入队**; 同源 Origin(浏览器对同源
-    POST 也会带)与无 Origin(curl/脚本)照常放行; GET 不校验(跨站读拿不到响应体,
-    危害面在写, 与 issue 修法一致)。
-    """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
-    host_hdr = {"Host": "127.0.0.1:8080"}
-    body = {"text": "(tor.size >= 1GiB)"}
-    # 读方法不校验 Origin(跨站 GET 响应不可读, 无危害面)
-    assert client.get("/api/status", headers={**host_hdr, "Origin": "http://evil.com"}).status_code == 200
-    # 写方法 + 跨站 Origin: 403 且不入队
-    assert client.post(
-        "/api/expr/eval", headers={
-            **host_hdr, "Origin": "http://evil.com"
-        }, json=body
-    ).status_code == 403
-    # 同源 Origin(host:port 与端口一致)放行
-    assert client.post(
-        "/api/expr/eval", headers={
-            **host_hdr, "Origin": "http://127.0.0.1:8080"
-        }, json=body
-    ).status_code == 200
-    # 无 Origin(非浏览器客户端)放行
-    assert client.post("/api/expr/eval", headers=host_hdr, json=body).status_code == 200
-
-
-def test_skip_local_verify_cross_site_guard_all_write_endpoints(web_env):
-    """全部写端点穷举: 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
-
-    覆盖面以**路由表实际清点**为准(不手工点名) —— 每条 POST/PUT/DELETE/PATCH 路由
-    (路径参数填占位值)带 evil Origin 打一遍, 403 即闸门先于处理器生效; 新写端点自动
-    进入本测试的覆盖面。
-    """
-    import re
-
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
-    headers = {"Host": "127.0.0.1:8080", "Origin": "http://evil.com"}
-    write_methods = {"POST", "PUT", "DELETE", "PATCH"}
-    write_routes = [r for r in _iter_api_routes(client.app.routes) if r.methods & write_methods]
-    assert len(write_routes) >= 30, f"写路由清点异常({len(write_routes)} 条), 穷举失去意义"
-    checked = []
-    for route in write_routes:
-        method = next(iter(route.methods & write_methods))
-        path = re.sub(r"\{[^}]+\}", "x", route.path)
-        resp = getattr(client, method.lower())(path, headers=headers, json={})
-        assert resp.status_code == 403, f"{method} {route.path} 跨站 Origin 未被拒绝(实际 {resp.status_code})"
-        checked.append((method, route.path))
-    assert ("POST", "/api/torrents/{hash}/delete") in checked, "高危写端点必须在覆盖面内"
-
-
-def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
-    """携带凭证的请求绕过跨站闸: 持密即可信方(浏览器跨站伪造不了凭证), 既有语义照旧裁决
-
-    带凭证 + 外部 Host -> 不进跨站闸, 落到既有分支: loopback 对端走免鉴权放行(错密钥也
-    放行, 与 bypass 测试同一语义); 远端对端对密钥 200 / 错密钥 **401**(token 路径的
-    语义)而非 403 —— 跨站闸只拦**无凭证**请求, 不改变既有鉴权行为。
-    """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    mgr.config.web.skip_local_verify = True
-    app = create_app(mgr)
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
-    remote = TestClient(app, client=("192.168.1.50", 50000))
-    ok = {"Host": "attacker.com", "Authorization": f"Bearer {mgr.web.token}"}
-    bad = {"Host": "attacker.com", "Authorization": "Bearer wrong"}
-    assert loopback.get("/api/status", headers=ok).status_code == 200
-    assert loopback.get("/api/status", headers=bad).status_code == 200  # 免鉴权分支既有语义
-    assert remote.get("/api/status", headers=ok).status_code == 200
-    assert remote.get("/api/status", headers=bad).status_code == 401
-
-
-def test_skip_local_verify_default_off_no_cross_site_guard(web_env):
-    """默认关闭零变化: 外部 Host/Origin 不触发 403, 仍走既有 401 路径(安全纪律)"""
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    assert mgr.config.web.skip_local_verify is False
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
-    assert client.get("/api/status", headers={"Host": "attacker.com"}).status_code == 401
-    assert client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)"}).status_code == 401
-
-
-def test_auth_host_origin_parsing_helpers():
-    """Host 头解析与 Origin 判定纯函数单测: 形态 / fail-closed / 端口一致性"""
-    from auto_qb.webui.server.auth import _allowed_hostnames, _host_header_parts, _origin_allowed
-
-    assert _host_header_parts("127.0.0.1:8080") == ("127.0.0.1", 8080)
-    assert _host_header_parts("127.0.0.1") == ("127.0.0.1", None)
-    assert _host_header_parts("[::1]:8787") == ("::1", 8787)
-    assert _host_header_parts("attacker.com") == ("attacker.com", None)
-    assert _host_header_parts("") == ("", None)  # 空 Host -> fail-closed(调用方拒绝)
-    allowed = _allowed_hostnames("127.0.0.1")
-    assert {"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"} <= allowed
-    assert _origin_allowed("http://127.0.0.1:8080", allowed, 8080)
-    assert _origin_allowed("http://localhost:8080", allowed, 8080)
-    assert not _origin_allowed("http://evil.com", allowed, 8080)  # 跨站 host
-    assert not _origin_allowed("http://127.0.0.1:9999", allowed, 8080)  # 端口不一致
-    assert not _origin_allowed("ftp://127.0.0.1", allowed, None)  # 非 http(s)
-    assert not _origin_allowed("not a url", allowed, None)  # 无 host
-
-
-def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):
-    """构造 require_token 直调用的 Request(绕开 TestClient 的流式端点阻塞)"""
-    from starlette.requests import Request as StarletteRequest
-
-    scope = {
-        "type": "http",
-        "asgi": {
-            "version": "3.0"
-        },
-        "http_version": "1.1",
-        "method": method,
-        "scheme": "http",
-        "path": path,
-        "raw_path": path.encode(),
-        "query_string": query.encode(),
-        "root_path": "",
-        "headers": [(b"host", host.encode())],
-        "client": client,
-        "server": ("127.0.0.1", 8080),
-    }
-    return StarletteRequest(scope)
-
-
-def test_sse_ticket_flow(web_env):
-    """SSE 一次性票据(B-01): 带鉴权 POST 换票 -> 单次消费 / 过期无效 / 重放无效 / 无凭证 401
-
-    EventSource 发不出 Authorization 头; 换票端点让长期密钥彻底退出查询串 —— 票据
-    30s TTL + 取即删, 泄漏面收敛为"用完即弃"。
-    """
-    from auto_qb.webui.runtime import EVENT_TICKET_TTL_S
-
-    mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    resp = client.post("/api/events/ticket", headers=auth)
-    assert resp.status_code == 200
-    body = resp.json()
-    ticket = body["ticket"]
-    assert ticket and ticket != mgr.web.token, "票据不得是密钥复用"
-    assert body["ttl"] == EVENT_TICKET_TTL_S
-    # 单次消费: 首次 True, 重放 False; 未知票据 False
-    assert mgr.web.consume_event_ticket(ticket) is True
-    assert mgr.web.consume_event_ticket(ticket) is False
-    assert mgr.web.consume_event_ticket("unknown-ticket") is False
-    # 过期票据无效(签发时刻拨回 TTL 之外)
-    stale = mgr.web.issue_event_ticket()
-    mgr.web._event_tickets[stale] = time.time() - (EVENT_TICKET_TTL_S + 1)
-    assert mgr.web.consume_event_ticket(stale) is False
-    # 无凭证换票 -> 401(默认 skip 关闭); 满额拒签回 ""(签发方法层语义)
-    assert client.post("/api/events/ticket").status_code == 401
-    from auto_qb.webui.runtime import EVENT_TICKET_MAX
-
-    tickets = [mgr.web.issue_event_ticket() for _ in range(EVENT_TICKET_MAX)]
-    assert all(tickets) and len(set(tickets)) == EVENT_TICKET_MAX, "满额前每次签发必须唯一非空"
-    assert mgr.web.issue_event_ticket() == "", "满额必须拒签(回空串, 端点转 503)"
-
-
-def test_sse_ticket_in_require_token_and_query_token_removed(web_env):
-    """require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除
-
-    查询串放长期密钥的通道必须保持关闭: 即使密钥正确, ?token= 也不再是有效凭证
-    (B-01 的核心语义 —— 防反代访问日志留下密钥)。
-    """
-    from fastapi import HTTPException
-
-    from auto_qb.webui.server.auth import make_require_token
-
-    mgr, _client = web_env
-    require_token = make_require_token(mgr)
-    # 有效票据放行(消费即删)
-    ticket = mgr.web.issue_event_ticket()
-    assert require_token(_auth_request(query=f"ticket={ticket}"), authorization="") is None
-    assert mgr.web.consume_event_ticket(ticket) is False, "require_token 必须已消费该票据"
-    # 票据只认 /api/events 路径: 挂到别的端点不生效(401)且不被误消费
-    ticket2 = mgr.web.issue_event_ticket()
-    with pytest.raises(HTTPException) as ei:
-        require_token(_auth_request(path="/api/state", query=f"ticket={ticket2}"), authorization="")
-    assert ei.value.status_code == 401
-    assert mgr.web.consume_event_ticket(ticket2) is True, "非 SSE 路径不得误消费票据"
-    # ?token= 已删: 密钥正确的查询串也不再是有效凭证
-    with pytest.raises(HTTPException) as ei:
-        require_token(_auth_request(query=f"token={mgr.web.token}"), authorization="")
-    assert ei.value.status_code == 401
-
-
-def test_start_web_server_config_disables_proxy_headers(web_env, monkeypatch):
-    """uvicorn Config 显式 proxy_headers=False(B-03): 不信任反代 XFF/Forwarded 头
-
-    uvicorn 默认 proxy_headers=True 会把本机反代转发的 X-Forwarded-For 写回
-    request.client.host —— XFF 伪造成 loopback 可造成 skip_local_verify 免鉴权误判。
-    装配点断言(lifecycle 的 _QuietLoopConfig 直传)。
-    """
-    from auto_qb.webui.server import lifecycle
-
-    captured = {}
-
-    class _FakeServer:
-        def __init__(self, config):
-            captured["config"] = config
-            self.started = True
-            self.should_exit = False
-
-        def run(self):
-            pass
-
-    monkeypatch.setattr(lifecycle.uvicorn, "Server", _FakeServer)
-    handle = lifecycle.start_web_server(web_env[0])
-    assert handle.started
-    assert captured["config"].proxy_headers is False
-
-
-def test_frontend_sse_ticket_wiring():
-    """SSE 换票前端接线守阵(B-01): polling.js 必须走 POST /api/events/ticket + ?ticket=
-    并带重连换票路径; ?token= 查询串(长期密钥进查询串的通道)不得回潮。"""
-    src = Path(os.path.join(STATIC_ROOT, "shared", "polling.js")).read_text(encoding="utf-8")
-    assert "/api/events/ticket" in src, "startEvents 必须先换票"
-    assert "encodeURIComponent(ticket)" in src, "EventSource 必须以 ?ticket= 连流"
-    assert "?token=" not in src, "查询串放长期密钥的旧通道不得回潮"
-    assert "_esRetry" in src, "一次性票据重连必失效: 必须有关连接换新票重开的重试路径"
-
-
-def test_skip_local_verify_default_off(web_env):
-    """默认关闭(保守): 本机连接也不免鉴权, 无密钥仍 401"""
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    assert mgr.config.web.skip_local_verify is False  # 默认 false
-    app = create_app(mgr)
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
-    assert loopback.get("/api/status").status_code == 401
-
-
-def test_api_status_and_groups(web_env):
-    """状态与分组快照读取: 徽章数据/组名/站点明细齐全; status 携带版本号(顶栏展示)"""
-    mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    status = client.get("/api/status", headers=auth).json()
-    assert status["connected"] is True and status["torrents"] == 2
-    assert status["version"] == __version__, "status 应透出包版本号"
-    data = client.get("/api/groups", headers=auth).json()
-    assert len(data["groups"]) == 1
-    g = data["groups"][0]
-    assert g["name"] == "Show" and g["count"] == 2 and g["upspeed"] == 2048
-    assert [m["site"] for m in g["members"]] == ["HHan", "M-Team"]
-
-
-def test_api_expr_eval_endpoint(web_env):
-    """表达式试算端点 /api/expr/eval: 校验-only 与"按种子求值 + 中间值"两条路径
-
-    前端「试算」按钮靠它: 写错表达式不用等到保存才知道; 填了种子 hash 还能看到
-    每个取值到底取到了什么(中间值), 这是排查"条件为什么不匹配"最有用的一条信息。
-    """
-    mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    # 替身 store 默认 get() 恒 None: 塞一条合成种子进去(试算要读它的字段)
-    from auto_qb.torrents import TorrentRecord
-
-    rec = TorrentRecord(hash="h1", name="Show 1", size=5 * 1024**3, state="uploading")
-    mgr.store.get = lambda h: rec if h == "h1" else None
-    h = "h1"
-
-    ok = client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)"}, headers=auth).json()
-    assert ok["ok"] is True and ok["used"] == ["tor.size"] and ok["value"] is None
-
-    bad = client.post("/api/expr/eval", json={"text": "tor.nope > 1"}, headers=auth).json()
-    assert bad["ok"] is False and "未知取值" in bad["error"]
-
-    val = client.post(
-        "/api/expr/eval", json={
-            "text": "(tor.size >= 1GiB) and (tor.name ~ \"Show\")",
-            "hash": h
-        }, headers=auth
-    ).json()
-    assert val["ok"] is True and isinstance(val["value"], bool)
-    assert [t["name"] for t in val["trace"]] == ["tor.size", "tor.name"]
-
-    missing = client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)", "hash": "nope"}, headers=auth).json()
-    assert missing["ok"] is False and "找不到种子" in missing["error"]
-
-
-def test_static_assets_disable_heuristic_cache(web_env):
-    """静态资源带 no-cache: 不加 Cache-Control 时浏览器会启发式缓存数小时
-
-    症状: 升级程序后仍加载旧前端("改了但没变"), 开发中实际撞到。
-    no-cache 仍允许存储, 但每次必须带 ETag 重新校验(未变走 304); /api 响应不受影响。
-    路径随 UI 目录化更新: atlas=星图(旧) / prism=棱镜(新) / shared=公共逻辑层。
-    """
-    mgr, client = web_env
-    for path in (
-        "/atlas/", "/atlas/style.css", "/shared/tpl/topbar.html", "/prism/", "/shared/app.js", "/shared/boot.js",
-        "/shared/vendor/vue.global.prod.js", "/console/", "/console/css/components.css"
-    ):
-        resp = client.get(path)
-        assert resp.status_code == 200, f"{path} 应可访问"
-        assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
-    api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
-    assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
-
-
-def test_ui_root_and_legacy_newui_redirect(web_env):
-    """根路径与旧 /newui/* 重定向: / -> 上次使用的 UI(autoqb_ui 皮肤 cookie); /newui/* -> 307 /prism/*
-
-    UI 目录化后 StaticFiles 根下无 index.html, 根路径由显式路由兜底; 默认星图, 但带皮肤 cookie
-    (shared/boot.js 在每套 UI 加载时写入)时直达该 UI —— 修复「关窗口重开总回星图」(2026-09-29 用户报)。
-    cookie 值双重校验: 形状合法 + static/<名>/index.html 真实存在 —— UI 改名/删除后的旧 cookie
-    与路径逃逸形状一律回落星图。/newui 兼容路由保住升级前书签(子路径原样映射到 /prism/*)。
-    """
-    _, client = web_env
-    for cookie, expect in (
-        ({}, "/atlas/"),  # 未记录(首次访问/清过站点数据) -> 默认星图
-        ({
-            "autoqb_ui": "prism"
-        }, "/prism/"),  # 上次用棱镜 -> 直达棱镜
-        ({
-            "autoqb_ui": "console"
-        }, "/console/"),  # 上次用控制台 -> 直达控制台
-        ({
-            "autoqb_ui": "atlas"
-        }, "/atlas/"),  # 上次用星图(显式记录)
-        ({
-            "autoqb_ui": "ghost"
-        }, "/atlas/"),  # 目录已不存在(UI 改名/删除后的旧 cookie)
-        ({
-            "autoqb_ui": "../prism"
-        }, "/atlas/"),  # 形状不合法(路径逃逸形状不得进重定向目标)
-    ):
-        # starlette 1.6 弃用逐请求 cookies=<...>(审计 L8, b 类: 测试代码用了弃用 API), 按官方迁移路径
-        # 改设到 client 实例; 每档先清空再写入, 保持"该次请求只带本档 cookie"的独立语义
-        # (307 应答不带 Set-Cookie, 不存在串档; 清空是防未来路由加 Set-Cookie 后跨档污染)。
-        client.cookies.clear()
-        client.cookies.update(cookie)
-        root = client.get("/", follow_redirects=False)
-        assert root.status_code == 307, f"cookie={cookie} 根路径应 307 重定向"
-        assert root.headers["location"] == expect, f"cookie={cookie} 应重定向到 {expect}"
-    for old, new in (
-        ("/newui", "/prism/"), ("/newui/", "/prism/"), ("/newui/css/tokens.css", "/prism/css/tokens.css"),
-        ("/newui/js/theme.js", "/prism/js/theme.js")
-    ):
-        resp = client.get(old, follow_redirects=False)
-        assert resp.status_code == 307, f"{old} 应 307 重定向"
-        assert resp.headers["location"] == new, f"{old} 应映射到 {new}"
-
-
-def test_frontend_ui_skin_cookie_persisted():
-    """boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(2026-09-29 用户报)
-
-    根路径 307 由服务端在收到请求那一刻裁决, localStorage 服务端读不到, cookie 是唯一可行载体;
-    三套 UI 共用 boot.js = 唯一写入口(打开即记录, 切换菜单无需单独埋点)。服务端取值校验
-    (形状 + 目录存在性)见 test_ui_root_and_legacy_newui_redirect。
-    """
-    boot = open(os.path.join(STATIC_ROOT, "shared", "boot.js"), encoding="utf-8").read()
-    assert '"autoqb_ui="' in boot, "boot.js 未写 autoqb_ui cookie —— 关窗重开根路径会回到默认星图"
-    assert "location.pathname.split" in boot, "boot.js 未从 URL 路径段判定当前 UI"
-    assert "Max-Age=" in boot, "皮肤 cookie 必须带有效期(会话 cookie 关窗即丢, 等于没修)"
-    assert "Path=/" in boot, "皮肤 cookie 必须 Path=/(根路径 / 要能读到)"
-
-
-STATIC_ROOT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static"
-)
-
-# 全部 UI(皮肤)清单: 目录即 UI(static/<名>/index.html, 后端零注册表)。
-# 新增皮肤 = 加一档, 全文件"成对改"守阵随本常量自动扩档; 单独点名的守阵(令牌对账/CSS 链接序)另行核对。
-_UI_ALL = ("atlas", "prism", "console")
-
-
-def _ui_manifest(ui):
-    """解析 ui/index.html shell 里 <script type="application/json" id="tpl-manifest"> 清单
-
-    清单是 boot.js 与守阵共用的单一来源(plans/26-09-26-2233 §5): parts = 模板分片(into: app|body,
-    其余值为 #app 内自定义选择器落点, 方案A 停靠面板 26-10-03-0917 W1 起支持),
-    scripts = 逻辑脚本加载顺序。缺清单/坏 JSON 直接断言红 —— shell 半残比假绿好。
-    """
-    shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
-    m = re.search(r'<script type="application/json" id="tpl-manifest">(.*?)</script>', shell, re.S)
-    assert m, f"{ui}/index.html 缺 tpl-manifest 清单(拆分半途? 同步本守阵)"
-    return json.loads(m.group(1))
-
-
-def _ui_shell_inline(ui):
-    """shell index.html 里 #app 的内联残余(登录遮罩区): `<div id="app" v-cloak>` 到 2 空格 `  </div>`"""
-    lines = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read().split("\n")
-    try:
-        open_i = lines.index('  <div id="app" v-cloak>')
-    except ValueError:
-        raise AssertionError(f"{ui}/index.html 缺 #app 容器(拆分半途? 同步本守阵)")
-    closes = [i for i, ln in enumerate(lines) if ln == "  </div>"]
-    assert len(closes) == 1, f"{ui}/index.html 的 #app 收口锚点(2 空格 `  </div>`)应恰有一处, 实测 {len(closes)}"
-    return "\n".join(lines[open_i + 1:closes[0]])
-
-
-def _ui_aggregate(ui):
-    """拆分后模板聚合 = shell 内联段 + 分片按清单序拼接 —— 拆分后守阵只认聚合, 不认单分片
-
-    26-09-26 模板分片(plans/26-09-26-2233 W1)后, 原 2555/2613 行 index.html 变成 ≤200 行 shell
-    + tpl/*.html; 旧守阵继续读 index.html 会整体假绿(内容都搬去了分片)。顺序 = boot 注入序
-    (app 桶在 shell 内联段之后按清单序进 #app, body 桶进 body), 与运行时 Vue 编译输入一致。
-    单看任何一个分片都会漏跨分片的结构(如批量菜单的 template 链), 所以一律走这里。
-    """
-    chunks = [_ui_shell_inline(ui)]
-    for part in _ui_manifest(ui)["parts"]:
-        text = open(_tpl_path(part["src"], ui), encoding="utf-8").read()
-        chunks.append(text.rstrip("\n"))
-    return "\n".join(chunks)
-
-
-def _ui_css_files(ui):
-    """ui shell <head> 里声明的本 UI CSS 链接顺序(link 顺序即级联序) —— CSS 拆分后的加载序单一来源"""
-    shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
-    hrefs = re.findall(r'<link rel="stylesheet" href="(/%s/[^"]+\.css)"' % ui, shell)
-    assert hrefs, f"{ui} shell head 缺本 UI 的 CSS 链接"
-    return [os.path.join(STATIC_ROOT, *h.lstrip("/").split("/")) for h in hrefs]
-
-
-def _ui_css_aggregate(ui):
-    """UI CSS 聚合(按 shell link 序拼接) —— CSS 分层拆分后守阵只认聚合, 级联序 = link 序
-
-    26-09-27 atlas/style.css 分层拆分(W2)后, 旧守阵继续单读 style.css 会假绿(规则搬进了 css/)。
-    切分是连续字节切片(级联序不变), 聚合与拆分前逐字节等价。
-    """
-    return "\n".join(open(p, encoding="utf-8").read() for p in _ui_css_files(ui))
 
 
 def _assert_tags_balanced(text, label):
@@ -1357,29 +552,6 @@ def _scan_js_syntax_with_node(js_files, problems):
         name, _, message = line.partition("\t")
         rel = rel_of.get(os.path.normcase(name.strip()), name.strip())
         problems.append(f"{rel} node 语法校验报错: {message.strip() or 'unknown'}")
-
-
-def _app_bundle_files():
-    """app.js 及它按域拆分出的片段文件, 按 prism shell 的 tpl-manifest **加载顺序**返回 [(path, rel)]
-
-    (2026-09-20 app.js 拆分: 片段以 window.AQB_* 全局 mixin 注入 **同一个** Vue 实例, 逻辑上仍是一份
-     代码 —— 故"跨文件的不变量"必须按整包看: 只扫 app.js 会把搬走的那半漏掉。实测拆完当场报
-     「找不到 _optimisticSettled 调用点」, 而它只是挪到了 commands.js, 功能没丢。)
-     顺序取自清单而非文件名排序 —— 片段必须排在 app.js **之前**(app.js 末尾要读 window.AQB_*);
-     26-09-26 模板分片后 <script> 标签从 HTML 搬进了 tpl-manifest 的 scripts 数组, 由 boot.js 依序放行。
-    """
-    out = []
-    for src in _ui_manifest("prism")["scripts"]:
-        if "/vendor/" in src:
-            continue
-        rel = src.lstrip("/")
-        out.append((os.path.join(STATIC_ROOT, rel), rel))
-    return out
-
-
-def _app_bundle_text():
-    """app.js + 内核片段(清单序)聚合文本 —— W2b 拆分后成员按域存放, 守阵找成员一律读聚合"""
-    return "\n".join(open(p, encoding="utf-8").read() for p, _rel in _app_bundle_files())
 
 
 def _bundle_iter():
@@ -1922,13 +1094,6 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
-
-
-def _tpl_path(src, ui):
-    """清单分片 src -> 盘上路径: /shared/... = 单一语义源(收敛后唯一形态); 相对路径按 <ui>/ 解析(兼容)"""
-    if src.startswith("/"):
-        return os.path.join(STATIC_ROOT, *src.lstrip("/").split("/"))
-    return os.path.join(STATIC_ROOT, ui, *src.split("/"))
 
 
 def _scan_ui_diff_registry(problems):
@@ -5889,24 +5054,6 @@ def test_api_traffic_history_endpoint(web_env):
     assert data["state"] == "ok" and data["history"][0]["date"] == "2026-09-14"
 
 
-# ---- qB 口径流量图三 GET 端点(plan 26-10-03-0946 §08 P4; 装配单点 server/traffic_qb.py, 纯函数口径 core/traffic_grid.py) ----
-
-
-def _enable_qb_traffic(mgr, **kw):
-    """用例侧启用 qb_traffic(真实 QbTraffic 段, 缺省键取设计缺省; kw 可覆盖任意键)"""
-    from auto_qb.config import QbTraffic
-
-    mgr.config.qb_traffic = QbTraffic(**{"enabled": True, **kw})
-    return mgr.config.qb_traffic
-
-
-def _qb_v4(mgr):
-    """指向替身 data_dir(tmp_path)的 v4 存储层: 用例经真实写路径造 qb-traffic-v4/ 天文件与 agg.dat"""
-    from auto_qb.core.traffic_store import TrafficV4Store
-
-    return TrafficV4Store(mgr.config.data_dir)
-
-
 def _qb_open_spy(monkeypatch):
     """open 计数探针: 记录打开路径(正斜杠归一)并放行 —— 端点面文件读取数验收(§05.2/§05.4)用"""
     import builtins
@@ -7778,56 +6925,6 @@ def testhr_view_fields_excluded(tmp_path):
     assert empty["hr_excluded"] is False and empty["hr_excluded_by"] == ""
 
 
-def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
-    """给 web 替身挂上一个**真** HR 服务(跑过一轮), 返回它 —— 站点文件与视图都是真的
-
-    替身 manager 的 config 是 SimpleNamespace(没有 hr_check 段), 所以这里显式补上, 并挂一个
-    `hr` 门面替身(真门面需要端点/线程, 与本端点的只读口径无关)。
-    pages 可整组替换三档页面(种子明细端点的空站点用例用全零行页)。
-    """
-    from types import SimpleNamespace
-    import time
-
-    from auto_qb.hr.runtime import HrRuntimeStatus, HrRefreshService
-    from auto_qb.config.models import SiteHrCheckConfig
-    from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
-
-    # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
-    # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
-    clock = Clock(start=time.time())
-    if pages is None:
-        pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
-        if not complete:
-            pages["C"] = "<html><body>没有表格</body></html>"
-    svc = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(),
-        site_confs={"HHan": site_conf()},
-        fetcher=FakeFetcher(pages, {101: torrent_blob("t101.bin")}),
-        owner="tester",
-        now_fn=clock,
-    )
-    svc.refresh_site("HHan")
-    mgr.config.hr_check = HrCheckConfig(enabled=True)
-    # 写类路由(confirm-empty / refresh)按 trackers.*.hr_check 判「站点已接入」——替身条目补真模型
-    mgr.config.trackers["HHan"].hr_check = SiteHrCheckConfig(enabled=True, tracker="HHan")
-    mgr.hr = SimpleNamespace(
-        service=svc,
-        status=lambda: HrRuntimeStatus(
-            enabled=True,
-            sites=("HHan", ),
-            fetch_enabled=True,
-            worker_running=True,
-            poll_interval=300.0,
-            sites_dir=str(tmp_path / "hr"),
-            writer="tester",
-            channel=None,
-            note="",
-        ),
-    )
-    return svc
-
-
 def test_api_hr_status_disabled_returns_empty_state(web_env):
     """未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端据此显示空态, 而不是报错)"""
     mgr, client = web_env
@@ -9385,33 +8482,6 @@ def test_fs_path_helpers_strip_long_path_prefix_before_compare():
     fa = file_access.LocalFileAccess()
     assert fa._pref(fa._pref(bare)) == fa._pref(bare)
     assert file_access._norm_logical(file_access._norm_logical("\\\\?\\" + bare)) == file_access._norm_logical(bare)
-
-
-# ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------
-
-
-def _make_grouped_manager(td):
-    """构造两个同文件列表的种子并归组(供 Web 命令执行测试); 返回 (mgr, client, key)"""
-    from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
-
-    mgr = make_manager(os.path.join(td, "state.json"))
-    client = FakeClient()
-    mgr.client = client
-    files = [_fake_file("movie.mkv", 100)]
-    client.files_map["HA"] = files
-    client.files_map["HB"] = files
-    tors = [
-        FakeTorrent(hash="HA", name="Show", save_path=r"R:\Downloads"),
-        FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads"),
-    ]
-    # !**同时**灌进 FakeClient: 真值改走 `torrents/info` 直查(不再读同步快照),
-    #   直查查的是 qB 客户端里的种子 —— 只 seed store 的话桩里查不到, 与真机不符。
-    for t in tors:
-        client.torrents[t.hash] = t
-    seed_store(mgr, tors)
-    mgr.host.get("grouping")._assign_new_torrent("HA")
-    mgr.host.get("grouping")._assign_new_torrent("HB")
-    return mgr, client, mgr.store.member_to_key["HA"]
 
 
 def test_drain_web_commands_group_actions():
@@ -13153,22 +12223,6 @@ _GOLDEN_ROUTES = {
 }
 
 
-def _iter_api_routes(routes):
-    """展平 include_router 的注册结果: 本环境 FastAPI 把路由包在 _IncludedRouter 里,
-    不再展开为平铺 APIRoute —— 按域 Router 拆分后必须递归下钻才能清点到全部路由。"""
-    from fastapi.routing import APIRoute
-
-    for r in routes:
-        if isinstance(r, APIRoute):
-            yield r
-            continue
-        for attr in ("original_router", "router"):
-            sub = getattr(r, attr, None)
-            if sub is not None and hasattr(sub, "routes"):
-                yield from _iter_api_routes(sub.routes)
-                break
-
-
 def test_web_route_manifest_frozen(web_env):
     """路由金清单守阵: 76 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
@@ -13754,39 +12808,6 @@ def test_webui_no_rules_import():
                             f"{violations}")
 
 
-# ==================== P1 覆盖率提升轮: webui 运行时与命令长尾 ====================
-
-
-class _ListLogHandler(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-class module_log:
-    """挂在指定模块 logger 上的自足采集(pitfalls/testing/log-capture: 禁 caplog)"""
-    def __init__(self, name, level=logging.DEBUG):
-        self._handler = _ListLogHandler()
-        self._logger = logging.getLogger(name)
-        self._level = level
-
-    def __enter__(self):
-        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
-        self._logger.addHandler(self._handler)
-        self._logger.setLevel(self._level)
-        self._logger.propagate = False
-        return self._handler.messages
-
-    def __exit__(self, *exc):
-        self._logger.removeHandler(self._handler)
-        self._logger.setLevel(self._old_level)
-        self._logger.propagate = self._old_propagate
-        return False
-
-
 def test_web_runtime_notify_drops_are_counted():
     """SSE 广播非阻塞: 慢消费者(队列满)与坏消费者(异常)各计一次丢弃, 不影响其它订阅者"""
     from auto_qb.webui.runtime import EVENT_QUEUE_MAX
@@ -14365,17 +13386,6 @@ def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):
     encoded = encode_group_key((norm(root), ("a.mkv", )))
     resp = client.post("/api/open-path", json={"kind": "group", "key": encoded}, headers=auth)
     assert resp.status_code == 501 and "复制路径" in resp.json()["detail"]
-
-
-# ---------- v3 活尾合流(S6 验收追加, 2026-10-05) ----------
-
-
-def _attach_live_tail_host(mgr, tails):
-    """manager 替身挂模块宿主最小桩: host.get("qb_traffic") -> 带 live_tail 的模块桩
-    (真 manager 经 QbManager.host 持 ModuleHost, 端点 getattr 防御取用)"""
-    from types import SimpleNamespace
-
-    mgr.host = SimpleNamespace(get=lambda name: SimpleNamespace(live_tail=tails))
 
 
 def test_api_traffic_qb_global_live_tail_realtime(web_env):

@@ -36,7 +36,7 @@ from helpers import make_manager
 
 
 def _web_stub(enabled=True, host="127.0.0.1", port=8080, token="t"):
-    """WEB 段替身(仅监听身份与 token 判定关心的字段, 与 test_web 同款)"""
+    """WEB 段替身(仅监听身份与 token 判定关心的字段, 与 webui_helpers 同款)"""
     return SimpleNamespace(enabled=enabled, host=host, port=port, token=token)
 
 

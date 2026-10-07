@@ -420,7 +420,12 @@ def build(args):
         )
 
     if args.rewrite_source:
-        remain = [b for b in model.blocks if model.owner.get(top_name(b[0])) not in selected]
+        # 余量 = 未被本次「搬走」的块。搬走面 = 选中文件 + 共享模块(总是写) + conftest(仅当上收)。
+        # 否则共享件/夹具会同时留在余量与独立文件里 → 行守恒「多出行」。
+        moved = set(selected) | {BUCKET_HELPERS}
+        if args.emit_conftest:
+            moved |= {BUCKET_CONFTEST}
+        remain = [b for b in model.blocks if model.owner.get(top_name(b[0])) not in moved]
         remain_tests = [top_name(b[0]) for b in remain if top_name(b[0]) in model.test_to_file]
         if not remain_tests:
             outputs[DELETE_SOURCE] = ""
@@ -495,10 +500,8 @@ def validate(
     dup = {n: ps for n, ps in seen.items() if len(ps) > 1}
     if dup:
         problems.append(f"[校验2] 测试函数重迁(同名多处): {dup}")
-    if rewritten_source is not None:
-        expect = {n for n, f in model.test_to_file.items() if f not in selected}
-    else:
-        expect = set(model.test_to_file)
+    # 批内(rewrite): 迁走的函数落 selected 文件, 余量留在改写后的源文件 —— 并集仍是全量, 故恒比全量。
+    expect = set(model.test_to_file)
     got = set(seen)
     if expect - got:
         problems.append(f"[校验1] 漏迁(应迁未迁) {len(expect - got)} 个: {sorted(expect - got)[:8]}")
@@ -523,10 +526,13 @@ def validate(
         problems.append(f"[校验3] 条目总数不守恒: 实 {total_entries} != 应 {expect_entries}")
     stats["entries"] = total_entries
 
-    # 内容守恒: 所有块必须落到某个被写出的 bucket(conftest 桶在演练时可延后)
+    # 内容守恒: 所有块必须落到某个被写出的 bucket(conftest 桶在演练/未上收时可延后)
+    # 批内: 选中文件 + 余量(源文件) + 共享模块; conftest 未上收时随余量留在源文件里。
     written = set(selected) | {BUCKET_HELPERS}
     if rewritten_source is not None:
-        written |= {BUCKET_REMAINDER}
+        written |= set(model.file_order)
+        if not emit_conftest:
+            written |= {BUCKET_CONFTEST}
     if emit_conftest:
         written |= {BUCKET_CONFTEST}
     deferred = []
@@ -544,10 +550,14 @@ def validate(
     stats["deferred_conftest"] = deferred
 
     # 行守恒: 被写出文件的「块体」逐行 == 源里这些块的源行(逐行搬移, 零改写/零丢失)
+    # conftest 夹具由 _append_conftest 直接写、不进 bodies, 故从比对面排除。
     if bodies is not None:
+        # conftest 夹具若已上收则由 _append_conftest 直接写、不进 bodies ⇒ 从比对面排除;
+        # 未上收时它留在源文件余量里, 属 bodies, 故保留。
+        body_written = written - ({BUCKET_CONFTEST} if emit_conftest else set())
         exp_counter = Counter()
         for node, s, e in model.blocks:
-            if model.owner.get(top_name(node)) in written:
+            if model.owner.get(top_name(node)) in body_written:
                 exp_counter.update(source_lines[s - 1:e])
         got_counter = Counter()
         for fname in list(selected) + [HELPERS_MODULE]:
@@ -571,15 +581,15 @@ def validate(
     return problems, stats
 
 
-def collect_only(path: Path, expected_fns: "set[str]") -> bool:
+def collect_only(paths, expected_fns: "set[str]") -> bool:
     """校验 4 的收集面: pytest --collect-only 计数恒等(项数 + 函数名集合)。
 
     走 -o addopts= 清掉 -n 4/覆盖率, 只做收集(不跑用例, 故 fixture 缺失无妨)。
+    paths 为**显式文件列表** —— 演练给输出目录, 批内给「选中文件 + 共享模块 + 改写后源文件」,
+    避免在批内收集整个 tests/ 目录(那会把仓里其余测试一并算进来)。
     """
-    cmd = [
-        sys.executable, "-m", "pytest", "--collect-only", "-q", "-o", "addopts=", "-p", "no:cacheprovider",
-        str(path)
-    ]
+    cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-o", "addopts=", "-p", "no:cacheprovider"
+          ] + [str(p) for p in paths]
     try:
         proc = subprocess.run(cmd, cwd=str(REPO), capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
@@ -663,11 +673,12 @@ def main(argv=None) -> int:
     if stats.get("deferred_conftest"):
         print(f"  [defer] conftest 桶(演练未写出): {stats['deferred_conftest']}")
     if args.collect:
-        expect = (
-            {n
-             for n, f in model.test_to_file.items() if f not in selected} if rewritten else set(model.test_to_file)
-        )
-        if not collect_only(out_dir if not rewritten else REPO / "tests", expect):
+        # 收集面 = 本次被写出的全部文件(批内: 选中 + 共享模块 + 改写后源文件); 恒比全量函数名集。
+        if rewritten:
+            targets = [out_dir / f for f in selected] + [out_dir / HELPERS_MODULE, Path(args.source)]
+        else:
+            targets = [out_dir]
+        if not collect_only(targets, set(model.test_to_file)):
             problems.append("[校验4] collect-only 计数不恒等")
     if problems:
         for p in problems:

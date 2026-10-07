@@ -274,7 +274,7 @@ class FakeClient:
         # WARN: 只模拟 **Web API < 2.14.0** 的文本形态("Ok."/"Fails."); 真机 qB 5.2+(API 2.14.0 起)
         #   回的是 JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`,
         #   本替身**回不出**该形态 —— 这正是"添加成功却报失败"能溜到线上的口子(2026-09-24)。
-        #   新形态的守阵由 test_web.py::test_add_torrent_receipt_and_optional_flags 直接用
+        #   新形态的守阵由 test_web_admin.py::test_add_torrent_receipt_and_optional_flags 直接用
         #   库内 TorrentsAddedMetadata 顶替返回值来钉(见 memory-bank/pitfalls/testing/stubs-sim.md)。
         return "Ok."
 

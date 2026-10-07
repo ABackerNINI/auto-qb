@@ -195,3 +195,23 @@ def _no_real_aumid_registry_write():
     finally:
         winreg.CreateKeyEx = real_create_key_ex
         winreg.SetValueEx = real_set_value_ex
+
+
+from webui_helpers import _make_web_manager
+
+
+@pytest.fixture()
+def web_env(tmp_path):
+    """带 TestClient 的 WEB 环境(manager 替身 + 密钥已生成)"""
+    from fastapi.testclient import TestClient
+
+    from auto_qb.webui import create_app, ensure_web_token
+
+    mgr = _make_web_manager(
+        tmp_path,
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+    )
+    mgr.web.token = ensure_web_token(mgr)
+    app = create_app(mgr)
+    client = TestClient(app)
+    return mgr, client
