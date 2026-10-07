@@ -42,8 +42,8 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 - test_m12_show_name_mode_rescanned_locally: M12(S9b 边界3) —— 同剧成员标题变化 -> 展示名(众数)
   按当前成员集局部重扫: 新成员加入使频次反超时展示名翻转, 整行 upsert 携带新 name; B ≡ A
 - test_fuzz_random_operation_sequence: fuzz —— 固定种子(random.Random(20261007))随机操作序列
-  N=220 轮, 操作池覆盖 增/删/改(量化边界+真脏字段)/同拍增删/门控跳拍/命令无键源/HR 波次,
-  torrent/group/show 三客户端每轮断言 B ≡ A
+  N=220 轮, 操作池覆盖 增/删/改(量化边界+真脏字段)/同拍增删/独成员组删除(S6 补: 组行重建
+  为空转 removed)/门控跳拍/命令无键源/HR 波次, torrent/group/show 三客户端每轮断言 B ≡ A
 """
 import itertools
 import json
@@ -680,7 +680,8 @@ def test_fuzz_random_operation_sequence():
     """固定种子(random.Random(20261007))随机操作序列 N=220 轮, 每轮断言 B ≡ A
 
     操作池覆盖 M1-M9 全部形态: 真脏字段/量化字段(含桶内不可见跳动)、增/删(含待报删除
-    重叠)/同拍一增一删、命令无键源(R11 full)、HR 波次、门控跳拍(随机 1-3 拍不消费)。
+    重叠)/同拍一增一删、独成员组删除(S6 补: 组条目未清理 -> 组行重建为空转 removed)、
+    命令无键源(R11 full)、HR 波次、门控跳拍(随机 1-3 拍不消费)。
     S9b 起 show 客户端入阵: 增/删/改都推导剧键 -> 局部重聚合产物与全量快照等价被随机
     序列持续验证(成员增删 -> 剧行重建/全删转 removed 均在操作池射程内)。
     跑一次全绿为准, 不追求极限压测。
@@ -737,6 +738,14 @@ def test_fuzz_random_operation_sequence():
             store.remove_torrent(h)
         store.apply_sync(QbApi(store.client, store))
 
+    def op_solo_group_remove():  # 独成员组删除(组条目未清理桩态): 组行重建为空 -> 转 removed
+        solo = sorted(h for h, k in store.member_to_key.items() if store.groups.get(k) == [h] and h in store.by_hash)
+        if not solo:
+            return
+        h = rng.choice(solo)
+        store.client.torrents.pop(h)
+        store.apply_sync(QbApi(store.client, store))
+
     def op_same_tick():  # 同拍一增一删(M4b 形态; 组键解析与否随机 -> 归约/防御 full 两路都过)
         h = f"H{next(add_counter)}"
         if rng.random() < 0.5:
@@ -764,7 +773,9 @@ def test_fuzz_random_operation_sequence():
         else:
             hr.revision += 1
 
-    ops = [op_field] * 3 + [op_jitter] * 2 + [op_add] * 2 + [op_remove, op_same_tick, op_unkeyed, op_hr]
+    ops = [op_field] * 3 + [op_jitter] * 2 + [op_add] * 2 + [
+        op_remove, op_solo_group_remove, op_same_tick, op_unkeyed, op_hr
+    ]
     for _ in range(220):
         rng.choice(ops)()
         for _ in range(rng.randint(0, 2)):  # 门控跳拍: 未消费的发布(无变化轮则不落代)

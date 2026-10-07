@@ -20,6 +20,7 @@
 - test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD + S9b 扩 show) —— 三个已启用视图的增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
 - test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且内嵌 members 随行重建(P-02 一期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
 - test_s6_partial_rows_equal_full_rebuild: S6 逐字段一致性 —— 混合序列(未归组变化/组员变化/新增归组/组员删除)逐代局部重聚合后, 发布视图与全量重跑逐行逐字段相等(含脏组行 == 全量重跑该行); 每代走局部路径的判据(条目 full=False 且键集非空)随行断言
+- test_s6_solo_member_group_removal_no_stale_row: S6 补 —— 独成员组且组条目未清理的桩态下删除成员(组键仍可解析路由 g_up): 组行重建为空(_build_group_row 回 None)-> 组键转 removed 剔除旧行, 局部产物 == 全量重建(修复前旧行残留); 子场景: 重建候选旧行本不在视图 -> 键原样保留 upsert(S2 排空契约, 缺行防御 full 兜底); 对照: 多成员组删单员照常重建(test_s6_partial_rebuild_reference_stability c 钉住)
 - test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; S9b 落代段暂存两侧并入 show 桶重建候选后清空, 旧键重算无成员转 removed/新键 upsert; 变体: 改名进未识别区 -> 折叠面变化检测(R11)本代 full
 - test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
 - test_s8_added_hash_registered_without_candidates: S8 新增登记 —— added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选
@@ -698,6 +699,49 @@ def test_s6_partial_rows_equal_full_rebuild():
     assert row == host._build_group_row(("R:\\D", ), [store.by_hash["H2"]], set())
     assert _rows_by(rt.group_view, "key")[gkey_e] == host._build_group_row(("R:\\E", ), [store.by_hash["H4"]], set())
     assert row["cross_group_conflict"] is False and row["count"] == 1
+
+
+def test_s6_solo_member_group_removal_no_stale_row():
+    """S6 补: 独成员组且组条目未清理的桩态下删除成员 —— 组键仍可解析路由 g_up, 组行重建
+    为空(_build_group_row 回 None)-> 组键转 removed 剔除旧行, 局部产物 == 全量重建
+
+    修复前: None 行被静默跳过, 时间线记 upsert(行内容取自残留在视图的旧行), 局部 != 全量
+    (全量构建不产空组行), 增量客户端永远持有幽灵组行。子场景: 重建候选旧行本不在任何已
+    发布代 -> 键**原样保留**在 upsert(S2 排空契约: 组键推导结果逐字进时间线; 行不存在由
+    归约缺行防御性 full 兜住)。对照: 多成员组删单员照常重建非 removed —— 由
+    test_s6_partial_rebuild_reference_stability c) 钉住(row 非 None 分支不挪键)。
+    """
+    store = _make_store("H1", "H2")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线: 组行在视图
+    gkey = encode_group_key(("R:\\D", ))
+    assert [r["key"] for r in rt.group_view] == [gkey]
+
+    # a) 本体: 独成员删除(组条目仍列 H1 的桩态, 未经 _leave_group 清理)-> 组行消失转 removed
+    store.client.torrents.pop("H1")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is False  # 组键可解析: 非 R11 降级, 走局部路径
+    assert entry["removed"]["torrent"] == {"H1"}
+    assert entry["upsert"]["group"] == set()  # 重建为空: 候选撤下
+    assert entry["removed"]["group"] == {("R:\\D", )}  # 旧行剔除进时间线(修复前残留在视图)
+    assert rt.group_view == []  # 局部产物无残留
+    assert rt.group_view == rt._host._build_group_view()  # == 全量重建(逐行逐字段)
+
+    # b) 重建候选旧行本不在视图(组条目只列已灭 hash, 从未入任何已发布代)-> 键原样保留
+    # 在 upsert(S2 排空契约), 行不存在由归约缺行防御性 full 兜住(无残留面: 行退出视图
+    # 必有 removed 记录, 客户端不可能持有)
+    store.member_to_key["HX"] = ("R:\\Z", )
+    store.groups[("R:\\Z", )] = ["HX"]  # HX 不在 by_hash
+    store.last_removed = ["HX"]
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["group"] == {("R:\\Z", )} and entry["removed"]["group"] == set()
+    assert rt.group_view == rt._host._build_group_view()
 
 
 # ---------- ⑩ S8: 剧键等价映射(正确性边界 1 成员迁移的前置数据结构) ----------

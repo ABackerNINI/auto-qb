@@ -1219,7 +1219,9 @@ class WebUIRuntime:
         - 「四视图同轮发布」硬约束(模块 docstring)不破: 数组仍整体一次性替换, 行对象按
           未脏/脏区别复用/新建, 不在调用点分批建;
         - 组行内嵌 members 数组随组行整行走(P-02 一期口径); singles/flat 脏行按 hash 逐行
-          重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐);
+          重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐); 组行
+          重建为空且旧行在视图 -> 组键转 removed 剔除(S6 补, 与 show 分支同口径), 旧行本
+          不在视图则仅撤候选不产噪音;
         - show 行(S9b): 脏剧键经 _show_member_keys 反查成员集 -> 逐成员 _parse_show_member
           重解析 -> _build_show_row 重调出**整行** upsert(R8; 剧名频次/季级 gaps/集行状态
           归并全随整行重算, 正确性边界 2-4 落位); 重算成员为空(全删/迁移旧键清空)-> 行
@@ -1231,14 +1233,26 @@ class WebUIRuntime:
         from ..infra import utils as _utils
 
         # ---- groups: 脏组键整行重建(members 随行), 未脏组行复用, removed 组键剔除 ----
-        enc_rm = {_utils.encode_group_key(k) for k in removed["group"]}
         rebuilt: dict = {}
-        for k in upsert["group"]:
+        old_group_keys = {r["key"] for r in self.group_view}
+        for k in list(upsert["group"]):  # 快照迭代: 重建为空的行止转换写回原集合(fold 读同一对象)
             members = store.groups.get(k) or ()
             recs = [store.by_hash[h] for h in members if h in store.by_hash]
             row = host._build_group_row(k, recs, cross_keys)
-            if row is not None:  # 组已空/已解散 -> 行消失(全量构建跳过空组, 产物对齐)
-                rebuilt[_utils.encode_group_key(k)] = row
+            enc = _utils.encode_group_key(k)
+            if row is not None:
+                rebuilt[enc] = row
+            elif enc in old_group_keys:
+                # 重建为空且旧行在视图(组条目未清理且成员全灭的桩态等)-> 旧行消失: 键转
+                # removed 剔除, 与全量构建「不产空组行」产物对齐(show 分支同款口径, S6 补)。
+                # !R5 抵消发生在 _publish_locked 键集定型段(本函数之前), fold 落代段对不
+                # 交集幂等重跑 —— 此处 upsert -> removed 的挪动不会被回抵消。
+                upsert["group"].discard(k)
+                removed["group"].add(k)
+            # else: 旧行本不在视图 -> 键**原样保留**在 upsert(S2 排空契约: 组键推导结果
+            # 逐字进时间线, 桩态下首代即此形态); 行不存在由归约的缺行防御性 full 兜住,
+            # 客户端不可能持有该行(行退出视图必有 removed 记录), 无残留面。
+        enc_rm = {_utils.encode_group_key(k) for k in removed["group"]}  # 含上面转入的键
         group_view = []
         for old in self.group_view:
             k = old["key"]
@@ -1326,7 +1340,10 @@ class WebUIRuntime:
                     show_up.discard(k)
                     show_rm.add(k)
                 else:
-                    # 从未有过剧行(纯未识别键等): 仅撤重建候选, 不产生 removed 噪音
+                    # 从未有过剧行(纯未识别键等): 仅撤重建候选, 不产生 removed 噪音。
+                    # !与 group 分支的「键保留 upsert」不同(S2 排空契约钉住): 剧键推导
+                    # 源自 S8 过宽映射, 幻影键是常态形态(未识别种子每次抖动都推导出键),
+                    # 留在 upsert 会令 show 视图归约频繁缺行防御 full —— 撤下才保增量率。
                     show_up.discard(k)
             # 文件兑底接线(与 _build_shows_view 同款): 脏成员中可被兑底而索引未覆盖 -> 登记
             # pending 并按需投递构建命令。False 归位转换刻意不在局部路径判定: 非脏成员的
