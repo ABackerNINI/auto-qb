@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-testing-feasibility">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-08-0231">
-<meta name="doc-updated" content="26-10-08-0231">
+<meta name="doc-updated" content="26-10-08-0316">
 <style>
   :root {
     --bg: #10151a;
@@ -86,24 +86,26 @@
     <a href="#s3"><span class="no">03</span>候选框架: Python</a>
     <a href="#s4"><span class="no">04</span>候选框架: JS / TS</a>
     <a href="#s5"><span class="no">05</span>本项目现状（测算基数）</a>
-    <a href="#s6"><span class="no">06</span>实测: 三个样本</a>
-    <a href="#s7"><span class="no">07</span>成本模型与全项目外推</a>
-    <a href="#s8"><span class="no">08</span>收益: 找到了什么</a>
-    <a href="#s9"><span class="no">09</span>坑与流程摩擦</a>
-    <a href="#s10"><span class="no">10</span>建议落地方案</a>
-    <a href="#s11"><span class="no">11</span>前端专项结论</a>
-    <a href="#s12"><span class="no">12</span>附录: 复现命令</a>
+    <a href="#s6"><span class="no">06</span>实测: 三个样本（gremlins / Windows）</a>
+    <a href="#s7"><span class="no">07</span>追加实测: mutmut 在 WSL 下重测</a>
+    <a href="#s8"><span class="no">08</span>成本模型与全项目外推</a>
+    <a href="#s9"><span class="no">09</span>收益: 找到了什么</a>
+    <a href="#s10"><span class="no">10</span>坑与流程摩擦</a>
+    <a href="#s11"><span class="no">11</span>建议落地方案</a>
+    <a href="#s12"><span class="no">12</span>前端专项结论</a>
+    <a href="#s13"><span class="no">13</span>附录: 复现命令</a>
+    <a href="#s14"><span class="no">14</span>变更记录</a>
   </nav>
 
   <header class="cover">
     <div class="kicker">auto-qb · 可行性调研报告</div>
     <h1>变异测试框架调研与适配性: Python 与 WEB UI 语言面</h1>
-    <p class="lede">把 Python 端的 four 个活跃/半活跃变异框架与 JS 端的 StrykerJS 逐个摆出来比对后, 在本仓库<b>真跑了一遍</b>（三个样本模块、两轮换池)。结论: <b>Python 端值得做、且便宜得超出常识</b>（32 核本机全项目一轮约 25–100 分钟); <b>前端现在不具备做变异测试的结构前提</b>——不是工具不合适, 是没有可执行单元层。</p>
+    <p class="lede">把 Python 端的四个活跃/半活跃变异框架与 JS 端的 StrykerJS 逐个摆出来比对后, 在本仓库<b>真跑了两轮</b>: 第一轮在 Windows 上跑 pytest-gremlins（三个样本模块、两轮换池); 第二轮（本次追加)在 <b>WSL</b> 里把 <b>mutmut 与 gremlins 同环境对着跑</b>, 并跑完了整个 <code>rules/</code> 包。<b>结论修正</b>: Python 端值得做、且便宜; <b>框架选型由 gremlins 改为 mutmut</b>（WSL 下 58% 的墙时打 3.8 倍的变异, 且打得到字符串/语句类); <b>全项目变异总数实测 34,702</b>（初版外推低估 3–7 倍), 但一把跑会把 WSL 打挂, <b>按包跑是硬要求</b>。前端结论不变: 现在不具备做变异测试的结构前提。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0231-report-mutation-testing-feasibility</div></div>
-      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 02:31</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 02:31（本次更新 03:16)</div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop @ 7baeaf10</div></div>
-      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 同文件内追加实测 + 变更记录</span></div></div>
     </div>
   </header>
 
@@ -118,8 +120,9 @@
     <h3>方法</h3>
     <ul>
       <li><b>外部调研</b>: 框架官网 / PyPI / README / 第三方对比表交叉核对（单一来源的数字一律不采信)。</li>
-      <li><b>本机实测</b>: 全部在本机 Windows 上真跑。为避免污染主仓库与环境, 另建沙箱副本 <code>R:/Temp/auto-qb/mut-exp</code>（<code>uv sync</code> 独立 venv, 主仓库 <code>.venv</code>、<code>pyproject.toml</code>、<code>uv.lock</code> 一律未改动)。</li>
-      <li><b>工具选择</b>: 实测对象为 pytest-gremlins（唯一在本机原生可跑的 pytest 插件型)。mutmut 也装了并试跑, 结论是本机被明确拒绝（见 §09)。</li>
+      <li><b>本机实测（第一轮)</b>: 在本机 <b>Windows</b> 上真跑。为避免污染主仓库与环境, 另建沙箱副本 <code>R:/Temp/auto-qb/mut-exp</code>（<code>uv sync</code> 独立 venv, 主仓库 <code>.venv</code>、<code>pyproject.toml</code>、<code>uv.lock</code> 一律未改动)。</li>
+      <li><b>本机实测（第二轮, 本次追加)</b>: 本机已装 WSL（Ubuntu-26.04), 且变异测试定位是<b>定期审计</b>而非每 PR 闸门 —— 两条前提变化后, mutmut 的「WSL-only」不再是排除理由。故把仓库副本搬进 WSL 原生文件系统, 在<b>同一环境</b>里把 mutmut 与 pytest-gremlins 对着跑（§07)。</li>
+      <li><b>工具选择</b>: 第一轮实测对象是 pytest-gremlins（唯一在 Windows 原生可跑的 pytest 插件型); mutmut 在 Windows 上被明确拒绝（见 §10)。第二轮两者都在 WSL 下实测并直接对比。</li>
     </ul>
     <div class="callout warn">本报告里的<b>被测框架版本与存活数</b>是 2026-10-08 这一刻的快照: pytest-gremlins 迭代很快（几个月内 1.8 → 1.11), 换版本重跑数字会变, 特别是<b>变异算子覆盖面与存活数</b>。结论层面的判断（量级、节奏、值不值得做)不随之变化。</div>
   </section>
@@ -131,12 +134,17 @@
       <tr>
         <td><b>Python 端做不做</b></td>
         <td><span class="badge go">做 · 但只在定期审计</span></td>
-        <td>本机实测每变异 CPU 成本 2.6–6.2s; 全项目点估 ~7,000 个变异 ⇒ ~10 CPU-小时 ⇒ 32 核机器上 25–100 分钟一轮。<b>便宜</b>, 但仍是全量测试的 25–100 倍, 进合并闸门会拖队</td>
+        <td>同环境实测每变异墙时 0.015–0.16s; 全项目变异总数<b>实测 34,702</b>（初版按 gremlins 密度外推的 4,900–10,400 <b>低估了 3–7 倍</b>)。<b>便宜</b>, 但仍是全量测试的几十倍, 进合并闸门会拖队</td>
       </tr>
       <tr>
-        <td><b>选哪个框架</b></td>
-        <td><span class="badge go">pytest-gremlins</span></td>
-        <td>本机唯一原生可跑: mutmut 依赖 <code>fork()</code> 被明确拒绝 WSL-only; cosmic-ray 可跑但需 init/exec/dump 三步 + 会话库; gremlins 是 pytest 原生插件, 零配置起步</td>
+        <td><b>选哪个框架<br>（本次修正)</b></td>
+        <td><span class="badge go">mutmut（WSL）</span><br><span class="badge">gremlins 作 Windows 侧兜底</span></td>
+        <td>两条前提变了: 本机<b>已装 WSL</b>、变异测试<b>只做定期审计</b>（不是每 PR) —— mutmut 的「WSL-only」从「排除理由」降为「每月付一次的成本」。<b>同环境同一目标实测</b>: mutmut 1,314 变异 / 19.5s vs gremlins 349 变异 / 33.9s（§07)。选它的真正理由是<b>算子面</b>: 它打得到字符串与语句, gremlins 只有比较/边界/布尔/算术/返回值五类</td>
+      </tr>
+      <tr>
+        <td><b>全项目一把跑行不行</b></td>
+        <td><span class="badge no">不行 · 必须按包</span></td>
+        <td>实测全 src 一轮跑到 <b>12,957 / 34,702（37%）时把 WSL 打挂</b>（<code>.wslconfig</code>: 8 核 / 8GB / <code>swap=0</code>)。按包切是硬要求, 不是偏好: 单包 2.7k–9.3k 变异, 一轮数分钟到十几分钟</td>
       </tr>
       <tr>
         <td><b>要不要进提交闸门</b></td>
@@ -163,10 +171,10 @@
       <tr>
         <td><b>mutmut</b><br>3.8.0 (2026-09-12)</td>
         <td>最主流、1.4k star、月下载百万级; 个人维护但活跃（近一年 113 提交)</td>
-        <td>fork 型变异模式: 源加载进主进程后 <code>fork()</code> 跑每个变异</td>
+        <td><b>trampoline 预生成</b>: 把每个函数的变异体一次性写进 <code>mutants/</code> 副本（<code>x_f__mutmut_1..N</code>), 运行时按环境变量分派; 跑测试用 fork / forkserver 隔离</td>
         <td><b>Unix / WSL 独占</b></td>
-        <td>较全（含语句删除、返回值、常量)</td>
-        <td><span class="badge no">否</span></td>
+        <td>较全（含语句删除、返回值、常量、<b>字符串</b>)</td>
+        <td><span class="badge go">WSL 已实测</span><br>（Windows 原生仍拒绝)</td>
       </tr>
       <tr>
         <td><b>cosmic-ray</b><br>8.7.0 (2026-08-09)</td>
@@ -201,15 +209,16 @@
         <td>否</td>
       </tr>
     </table>
-    <h3>为什么排除了 mutmut（本机实证, 不是推断)</h3>
-    <p>装完后在本机直接试跑, 工具第一句就拒绝:</p>
+    <h3>mutmut 的平台门槛: 只认 WSL（本机实证, 不是推断)</h3>
+    <p>装完后在 Windows 上直接试跑, 工具第一句就拒绝（3.8.0 里这句仍在, 源码 <code>mutmut/__main__.py:16</code>):</p>
     <pre><code>$ uv run mutmut run --paths-to-mutate=src/auto_qb/infra/versioning.py --tests-dir=tests/test_versioning.py
 To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue .../issues/397</code></pre>
-    <p>本项目<b>开发主平台是 Windows</b>（Linux 只在 CI 与 <code>commands run test.linux</code> 的容器里), 所以「要跑 mutmut」等价于「所有本地迭代都要跳进 Linux 容器」。成本不是不能付, 而是没必要付 —— pytest-gremlins 在同样机器上是原生的。若日后需要 mutmut 的算子面, 第二条可用路径是 cosmic-ray。</p>
+    <p>初版据此把 mutmut 排除了, 理由是「开发主平台是 Windows, 要跑 mutmut 等价于所有本地迭代都跳进 Linux」。<b>本次重估推翻了这个理由</b>: 前提有两条变化 —— ①<b>本机已装 WSL</b>（Ubuntu-26.04); ②变异测试的定位是<b>定期审计</b>, 不是每 PR 闸门, 所以「跳进 Linux」的成本是<b>每月一次</b>而不是「每次迭代」。<b>门槛是真的, 但代价被高估了一个数量级</b>。</p>
+    <p>代价里唯一残留的一条是算力: <code>C:\Users\11059\.wslconfig</code> 把 WSL 限成 <code>processors=8</code> / <code>memory=8GB</code>, 而 Windows 侧是 32 逻辑核 —— 也就是说 mutmut 只能用 1/4 的核。即便如此, 实测它仍比 Windows 侧满核跑的 gremlins 快（§07)。若愿意改 <code>.wslconfig</code>, 还有一倍以上的余地。</p>
     <h3>三者成本/性能的机制差异（决定第一眼的时间量级)</h3>
     <ul>
       <li><b>重写源码 vs 不改源码</b>: cosmic-ray 用 import hook、gremlins 用一次性插桩 + 环境变量切换 —— 都不落盘改文件。mutmut v3 只变异函数体内的代码（模块级常量、装饰器不在范围内)。</li>
-      <li><b>覆盖引导</b>: 三者都有; 实测是最大的时间杠杆（见 §07)。</li>
+      <li><b>覆盖引导</b>: 三者都有; 实测是最大的时间杠杆（见 §08)。</li>
       <li><b>增量</b>: gremlins 按内容 hash 缓存; cosmic-ray 靠会话库; mutmut 的缓存在同期评为「有限」。</li>
       <li><b>集成形式</b>: gremlins 是 <code>pytest</code> 插件（一条命令、吃现有 fixtures/markers); 另两个是独立 CLI, 要单独配测试命令。</li>
     </ul>
@@ -256,7 +265,7 @@ To run mutmut on Windows, please use the WSL. Native windows support is tracked 
 
   <section id="s6">
     <h2><span class="no">06</span>实测: 三个样本</h2>
-    <p>沙箱里对三个「大家都觉得覆盖得还不错」的模块真跑, 全部 <code>--gremlin-workers=8</code>, 命令见 §12。</p>
+    <p>沙箱里对三个「大家都觉得覆盖得还不错」的模块真跑, 全部 <code>--gremlin-workers=8</code>, 命令见 §13。</p>
     <table>
       <tr><th>样本</th><th class="num">行数</th><th class="num">变异数</th><th class="num">密度<br>(变异/行)</th><th class="num">杀死率</th><th class="num">会话总墙时<br>(含基线)</th><th>测试选择池</th></tr>
       <tr><td><code>infra/versioning.py</code></td><td class="num">185</td><td class="num">25</td><td class="num">0.135</td><td class="num">100%</td><td class="num">15.62s</td><td><code>test_versioning.py</code>（20 用例)</td></tr>
@@ -275,35 +284,97 @@ To run mutmut on Windows, please use the WSL. Native windows support is tracked 
   </section>
 
   <section id="s7">
-    <h2><span class="no">07</span>成本模型与全项目外推</h2>
-    <h3>第一步: 变异总数</h3>
-    <p>实测密度带宽 0.135 – 0.300 变异/行（差异来自「逻辑密度」: 格式化/决策型代码高, 声明/dataclass/CLI 型低)。取中值 0.20 做点估, 取两端做区间:</p>
+    <h2><span class="no">07</span>追加实测: mutmut 在 WSL 下重测</h2>
+    <p>触发: 用户指出<b>本机已装 WSL</b>, 且变异测试只做<b>定期审计</b>、不占开发主线的迭代节奏 —— 初版排除 mutmut 的那条理由因此不成立。本轮把仓库副本搬进 WSL 原生文件系统, 在<b>同一个环境、同一个目标、同一个测试池</b>下把两个工具对着跑。</p>
+    <h3>环境</h3>
+    <ul>
+      <li>WSL2 <code>Ubuntu-26.04</code>; <code>.wslconfig</code> 限 <code>processors=8</code> / <code>memory=8GB</code> / <code>swap=0</code>（Windows 侧 32 逻辑核)。</li>
+      <li>mutmut <b>3.8.0</b> 与 pytest-gremlins <b>1.11.2</b> 装在<b>同一个 venv</b>（<code>uv sync</code> + <code>uv pip install</code>), 排除环境差。</li>
+      <li>mutmut 配置: <code>process_isolation="forkserver"</code>、<code>--max-children</code> 默认 8（全项目那轮调到 6)、必带 <code>-n 0 --no-cov</code>、两条文本层守阵 <code>--deselect</code>（§10 #9/#10)。</li>
+      <li>仓库副本放 WSL 原生 ext4（<code>/home/abacker/mut-wsl</code>), 不经 <code>/mnt/*</code> —— 实测从 Windows 盘拷 116MB 进来要 <b>52s</b>, 真要做建议直接 <code>git clone</code>。</li>
+    </ul>
+    <h3>对照一: 同一目标、同一池（<code>infra/utils.py</code> + <code>test_utils.py</code>)</h3>
     <table>
-      <tr><th>口径</th><th class="num">密度</th><th class="num">变异总数</th></tr>
-      <tr><td>下界（全仓库都像 versioning/file_access)</td><td class="num">0.14</td><td class="num">≈ 4,900</td></tr>
-      <tr><td><b>点估</b></td><td class="num">0.20</td><td class="num"><b>≈ 6,900</b></td></tr>
-      <tr><td>上界（全仓库都像 utils)</td><td class="num">0.30</td><td class="num">≈ 10,400</td></tr>
+      <tr><th>工具</th><th class="num">变异数</th><th class="num">墙时</th><th class="num">CPU</th><th class="num">每变异墙时</th><th class="num">杀死率</th><th>未覆盖判定</th></tr>
+      <tr>
+        <td>pytest-gremlins<br>（<code>--gremlin-workers=8</code>)</td>
+        <td class="num">349</td><td class="num">33.9s</td><td class="num">217s</td><td class="num">0.097s</td><td class="num"><b>72%</b>（存活 97)</td>
+        <td>无此分类 —— 覆盖率过滤后未覆盖的行<b>根本不生成变异</b></td>
+      </tr>
+      <tr>
+        <td><b>mutmut</b>（forkserver)</td>
+        <td class="num"><b>1,314</b></td><td class="num"><b>19.5s</b></td><td class="num">47s</td><td class="num">0.015s</td><td class="num"><b>72.5%</b>（杀 897 / 存活 341)</td>
+        <td>单独记 <code>no tests</code> 76 个 —— 与「覆盖了但没杀掉」<b>分开计数</b></td>
+      </tr>
     </table>
-    <h3>第二步: 单轮时长</h3>
+    <div class="callout ok"><b>两个工具给出的杀死率几乎一样</b>（72% vs 72.5%), 但 mutmut 用 <b>58% 的墙时</b>打了 <b>3.8 倍</b>的变异, CPU 只用了 <b>1/5</b>。这一条同时做了两件事: ①证明「杀死率」这个指标跨工具稳健; ②说明 gremlins 真正的短板不是速度而是<b>算子面</b> —— 它生成不出来, 自然也就杀不掉。</div>
+    <h3>对照二: 变异密度（同一份代码, 两个工具看到的世界不一样大)</h3>
     <table>
-      <tr><th>口径</th><th class="num">每变异 CPU</th><th class="num">总 CPU</th><th class="num">8 worker 墙时</th><th class="num">32 worker 墙时</th></tr>
-      <tr><td>乐观（都像窄池)</td><td class="num">2.6s</td><td class="num">≈ 5 CPU-h</td><td class="num">≈ 37 min</td><td class="num">≈ 9 min</td></tr>
-      <tr><td><b>现实（混宽调用面, 5.0s)</b></td><td class="num">5.0s</td><td class="num">≈ 9.6 CPU-h</td><td class="num">≈ 72 min</td><td class="num">≈ 18 min</td></tr>
-      <tr><td>悲观（下游喇叭式选中全池)</td><td class="num">10s</td><td class="num">≈ 19 CPU-h</td><td class="num">≈ 2.4 h</td><td class="num">≈ 36 min</td></tr>
+      <tr><th>样本</th><th class="num">行数</th><th class="num">gremlins 变异</th><th class="num">gremlins 密度</th><th class="num">mutmut 变异</th><th class="num">mutmut 密度</th></tr>
+      <tr><td><code>infra/versioning.py</code></td><td class="num">185</td><td class="num">25</td><td class="num">0.135</td><td class="num">155</td><td class="num">0.84</td></tr>
+      <tr><td><code>infra/utils.py</code></td><td class="num">1,163</td><td class="num">349</td><td class="num">0.300</td><td class="num">1,314</td><td class="num">1.13</td></tr>
+      <tr><td><b>全 <code>src</code>（128 文件)</b></td><td class="num">34,629</td><td class="num">—（外推 4.9k–10.4k)</td><td class="num">0.14–0.30</td><td class="num"><b>34,702（实测)</b></td><td class="num"><b>1.00</b></td></tr>
     </table>
-    <p>对照: 当前全量测试 56.24s。<b>一轮全项目变异 ≈ 全量测试的 20–150 倍</b> —— 与业界常说「10–30×」同数量级但偏上限, 因为本机单个 pytest 子进程起步成本高（~2.5s), 而每个测试用例本身极快（Fake 数据、无 IO), 摊不掉。</p>
-    <div class="callout ok">这条数字是<b>本报告的正面结论</b>: 业界对变异测试的普遍恐惧（「小时级、烧 CI」)在本仓库不成立 —— 测试套件无 IO 等待、本机 32 核, 全项目一轮只是「一顿饭」量级。<b>按包切开后是「一杯咖啡」量级</b>（单个包约 5–20 分钟)。</div>
-    <h3>第三步: 不同节奏下的成本</h3>
+    <p>mutmut 全项目生成 <b>34,702</b> 个变异 —— 恰好 <b>1.00 变异/行</b>, 三个样本（0.84 / 1.13 / 1.00)互相印证, 密度带比 gremlins 窄得多, 外推可信。<b>初版按 gremlins 密度外推的 4,900–10,400 低估了 3–7 倍</b> —— 低估的原因是拿 gremlins 的算子面当成了「变异测试算子面」的一般水平。</p>
+    <h3>对照三: 同一个 gremlins, Windows 原生 vs WSL</h3>
     <table>
-      <tr><th>节奏</th><th>单次成本</th><th>评价</th></tr>
-      <tr><td>每 PR / 合并闸门</td><td class="num">25–100 min（还要基线全绿才能开跑)</td><td><span class="badge no">否决</span> — 反馈太慢、且会与xdist/覆盖率闸门冲突</td></tr>
-      <tr><td>按包、每周/每 Release 前</td><td class="num">5–20 min</td><td><span class="badge go">推荐</span> — 也是避开 §09 那条 Windows 命令行长度限制的唯一可行粒度</td></tr>
-      <tr><td>全项目季度扫描</td><td class="num">0.5–2.5 h（建议后台跑)</td><td><span class="badge">可接受</span> — 作为趋势快照留存</td></tr>
+      <tr><th>平台</th><th class="num">utils.py 窄池墙时</th><th class="num">每变异墙时</th><th>说明</th></tr>
+      <tr><td>Windows 原生（32 逻辑核, 8 worker)</td><td class="num">121.5s</td><td class="num">0.35s</td><td>初版 §06 数字</td></tr>
+      <tr><td><b>WSL（8 核, 8 worker)</b></td><td class="num"><b>33.9s</b></td><td class="num">0.097s</td><td><b>快 3.6 倍</b>, 而且核数只有 1/4</td></tr>
     </table>
+    <p>这条是意外收获, 也修正了初版的一处归因: 初版把「每个变异 ~2.5s」记成 gremlins 的机制成本（一次子进程 + pytest 集合), 现在看<b>大部分要记在 Windows 的进程创建成本上</b> —— 同样的工具、同样的代码, 换个内核就剩 1/3.6。所以「本机慢」有一半是平台账, 不是工具账。</p>
+    <h3>对照四: 全项目一轮（mutmut, 实测打到 37% 中断)</h3>
+    <pre><code>12,957/34,702  🎉 8,550  🫥 613  ⏰ 14  🙁 3,780</code></pre>
+    <ul>
+      <li><b>生成</b>: 128 文件全部插桩, 18.9s 完成 → 34,702 变异。</li>
+      <li><b>跑到 37% 时 WSL 整体失去响应</b>（需 <code>wsl --shutdown</code> 才恢复)。已跑完的部分: 杀死 8,550 / 存活 3,780 / 超时 14 ⇒ 已判定 12,344 个里杀掉 <b>69.3%</b>; 另有 613 个判为 <code>no tests</code>。</li>
+      <li><b>吞吐不是常数</b>: 起步 38 变异/秒, 中段降到 6–10 变异/秒 —— 前期是那些「一个测试文件就能打死」的小目标, 后期轮到宽调用面模块（与 gremlins 那条成本尾巴同源)。按实测区间外推 40–90 分钟; §08 用下面这个跑完的包做锚点, 把全项目收敛到 <b>≈ 77 分钟</b>。</li>
+    </ul>
+    <div class="callout stop"><b>结论: 全项目一把跑不可行, 按包切是硬要求。</b>在 8GB + <code>swap=0</code> 的 WSL 里, mutmut 的 forkserver + N 个子进程会把整个 WSL 拖死（同一现象复现两次: 全 <code>src</code> 那轮 37% 处、<code>rules/</code> 单包那轮 74% 处), 而且它是<b>硬崩</b> —— 不报错、不退出, 整个 WSL 失去响应, 要 <code>wsl --shutdown</code> 才救回来。按包跑既避开这条, 也是 §08 推荐节奏本来就有的粒度。</div>
+    <h3>对照五: 一个包跑完是什么样（<code>rules/</code>, 定向池, <code>--max-children 4</code>)</h3>
+    <pre><code>3,270/3,270  🎉 1,813  🫥 1  ⏰ 10  🙁 1,446      7.48 mutations/second
+墙时 7m31s（含插桩与基线)   CPU 7m25s</code></pre>
+    <ul>
+      <li><b>规模</b>: <code>rules/</code> 2,662 行 → 3,270 变异（1.23/行), 是全项目的 9.4%。</li>
+      <li><b>杀死率 55.5%</b>（1,813 / 3,269 已判定) —— 比 <code>infra/utils.py</code> 的 72.5% <b>低 17 个点</b>。<b>优先级最高的包, 分数反而最差</b>: 规则引擎的判据密度最高、出错代价最大, 而它的测试更偏「跑通」而不是「钉死边界」。这一条本身就是本报告最实在的产出: 覆盖率的 98% 在这两处是同样的 98%, 变异分数却差了 17 个点。</li>
+      <li><b>池的影响没想象中大</b>: 同一包用全 <code>tests</code> 作池时, 跑到同一进度点（2,42x)的杀死率是 53.6%, 定向池是 52.4% —— 差 1 个点。宽池的代价落在内存（打挂 WSL)而不是结论上。</li>
+      <li><b>存活 1,446 个不等于 1,446 个洞</b>: 其中相当比例是等价变异与「判据换种写法仍然成立」的变异。这正是 §09 那条方法论的用武之地 —— 机器提名, 手工确认。</li>
+    </ul>
+    <h3>那 gremlins 还有没有位置</h3>
+    <p>有, 两条: ①<b>Windows 侧兜底</b> —— mutmut 在 Windows 上仍然被硬拒, 不想开 WSL 的那天就用 gremlins; ②<b>交叉验证</b> —— 两个工具在 utils.py 上给出同一个杀死率（72% / 72.5%), 这个一致性本身就是「数字可信」的证据; 哪天两者分歧变大, 说明其中一个的算子/选池出了偏差。反过来, mutmut 有一条 gremlins 补不上的:<b>字符串变异</b> —— <code>mutants/</code> 树里能直接看到 <code>XXbuild_search_indexXX</code> 这类变异体, 而 gremlins 的算子面明确不含字符串。</p>
   </section>
 
   <section id="s8">
-    <h2><span class="no">08</span>收益: 找到了什么</h2>
+    <h2><span class="no">08</span>成本模型与全项目外推</h2>
+    <h3>第一步: 变异总数（本次修正)</h3>
+    <p>初版按 gremlins 的密度外推得 4,900–10,400; 本次 mutmut 实测<b>生成了 34,702 个</b> —— <b>低估 3–7 倍</b>。低估的根源是拿 gremlins 的算子面（比较/边界/布尔/算术/返回值 五类)当成了「变异测试」的一般水平, 而它漏掉了字符串、语句删除、异常这几类大项。</p>
+    <table>
+      <tr><th>口径</th><th class="num">密度</th><th class="num">变异总数</th><th>来源</th></tr>
+      <tr><td>gremlins 外推（下界)</td><td class="num">0.14</td><td class="num">≈ 4,900</td><td>初版 §06 样本外推</td></tr>
+      <tr><td>gremlins 外推（上界)</td><td class="num">0.30</td><td class="num">≈ 10,400</td><td>初版 §06 样本外推</td></tr>
+      <tr><td><b>mutmut 实测（全 <code>src</code>)</b></td><td class="num"><b>1.00</b></td><td class="num"><b>34,702</b></td><td>本次实跑生成阶段, 128 文件 / 18.9s</td></tr>
+    </table>
+    <p>按包拆开（按 1.00 变异/行估, 实测 <code>rules/</code> 为 1.23): <code>core/</code> 9.3k · <code>hr/</code> 7.6k · <code>webui/</code> 6.5k · <code>config/</code> 5.0k · <code>rules/</code> 3.3k · <code>infra/</code> 2.4k · <code>torrents/</code> 1.3k · <code>tray/</code> 0.6k。</p>
+    <h3>第二步: 单轮时长（mutmut, WSL 8 核, <code>--max-children 4</code>)</h3>
+    <table>
+      <tr><th>口径</th><th class="num">每变异墙时</th><th>适用</th><th class="num">全项目 34.7k</th><th class="num"><code>rules/</code> 3.3k</th></tr>
+      <tr><td>定向窄池（<code>utils.py</code> + <code>test_utils.py</code>)</td><td class="num">0.015s</td><td>单模块深挖</td><td class="num">≈ 9 min</td><td class="num">≈ 1 min</td></tr>
+      <tr><td><b>包级（实测锚点: <code>rules/</code>)</b></td><td class="num"><b>0.134s</b></td><td>包级审计</td><td class="num"><b>≈ 77 min</b></td><td class="num"><b>7m31s（实测)</b></td></tr>
+    </table>
+    <p>用这个锚点按变异数线性外推各包（同机器、同 <code>--max-children</code>): <code>core/</code> ≈ 21 min · <code>hr/</code> ≈ 17 min · <code>webui/</code> ≈ 14 min · <code>config/</code> ≈ 11 min · <code>rules/</code> ≈ 7 min（实测吻合) · <code>infra/</code> ≈ 5 min · <code>torrents/</code> ≈ 3 min · <code>tray/</code> ≈ 1 min。<b>全包累加 ≈ 79 min</b>, 与「一次跑完 34.7k」的 77 min 一致 —— 说明线性外推在这台机器上是可用的。</p>
+    <p>对照: 当前全量测试 56.24s（Windows) / 57.80s（WSL 串行)。<b>一轮全项目变异 ≈ 全量测试的 80 倍</b>; 变异数比初版估的多 3–7 倍、每变异却便宜一个数量级, 两相抵消后总时长仍落在初版估计的 25–100 min 区间 —— 初版「便宜」的结论站得住, 但它的算术是两处偏差互相抵消出来的, 别拿它当模型用。</p>
+    <div class="callout stop"><b>「全项目一把跑」实测不成立</b>: 用全 <code>tests</code> 作池、<code>--max-children</code> 6/8 时, 两次都把 WSL 打到整体失去响应（分别在 37% 与 74% 处), 必须 <code>wsl --shutdown</code> 才能恢复。按包切因此不是偏好而是<b>硬要求</b>（§07 对照四)。</div>
+    <h3>第三步: 不同节奏下的成本（本次修正)</h3>
+    <table>
+      <tr><th>节奏</th><th>单次成本</th><th>评价</th></tr>
+      <tr><td>每 PR / 合并闸门</td><td class="num">数十分钟（还要基线全绿才能开跑)</td><td><span class="badge no">否决</span> — 反馈太慢、会与 xdist/覆盖率闸门冲突, 且 mutmut 还要先造一份 227MB 的 <code>mutants/</code> 副本; 本项目是<b>单人 + 定期审计</b>的节奏, 不按 PR 流走</td></tr>
+      <tr><td><b>按包 + 定向测试池、每周/每 Release 前</b></td><td class="num"><b>1–21 min</b>（实测 <code>rules/</code> 7.5 min)</td><td><span class="badge go">推荐</span> — 唯一实测跑得完的粒度; 池用<b>定向的几个测试文件</b>, 别用全 <code>tests</code>（会打挂 WSL)</td></tr>
+      <tr><td>全项目季度扫描</td><td class="num">≈ 79 min（逐包累加)</td><td><span class="badge">可行, 但要拆着跑</span> — 一次跑完会在 74% 处崩; 逐包累加同一个数, 而且每包都能留下独立的分数与切片</td></tr>
+    </table>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>收益: 找到了什么</h2>
     <h3>收益一: 它把这个阶段「覆盖率看不出」的洞具体标出来了</h3>
     <p>在 99% 分支覆盖、<code>--cov-fail-under=98</code> 的前提下, 单次抽样命中:</p>
     <ul>
@@ -319,17 +390,20 @@ To run mutmut on Windows, please use the WSL. Native windows support is tracked 
     <div class="callout warn"><b>方法论结论（本报告最该被记住的一条)</b>: 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的假存活。<b>判断一个存活变异是不是真洞, 唯一标准是拿全套件手工改一次验证</b> —— 也就是本项目已经在做的「变异红验」, 只是现在由机器批量提名研究对象。<b>机器提名 + 手工确认</b>才是这里的正确组合。</div>
     <h3>收益三: 与现有手工红验是替换关系吗</h3>
     <p>不是, 是分工: 手工红验回答「我刚写的这个守阵是不是空转」(成本极低、与行为同构, 是必要的收尾动作); 机器变异回答「哪些地方我<b>从没想过要写守阵</b>」(这件事人做不了 —— 人不会去改自己没动过的那 34,000 行)。</p>
+    <h3>收益四（本次追加): 它给「哪块最该补」提供了一个覆盖率给不出的刻度</h3>
+    <p><code>rules/</code> 与 <code>infra/utils.py</code> 在覆盖率上是同一个 98%, 变异分数却差 17 个点（<b>55.5%</b> vs <b>72.5%</b>)。方向也值得注意: <code>rules/</code> 是按「判据密度 × 出错代价」排在<b>第一位</b>的包, 恰恰是分数最低的那个 —— 判据多的地方, 测试更容易只写「跑通」而不写「边界」。<b>「先跑哪个包」因此可以不再靠直觉排</b>: 先各跑一轮拿分数, 分数最低的先补。</p>
+    <p>附带一个读法提醒: mutmut 把「<code>no tests</code>（没有任何测试覆盖)」与「<code>survived</code>（有测试覆盖但没杀掉)」<b>分成两类</b>, gremlins 因为做覆盖率过滤, 前者根本不生成变异。所以两个工具的<b>分母不同</b>, 分数只能各自纵向比, 不要横向混着看。</p>
   </section>
 
-  <section id="s9">
-    <h2><span class="no">09</span>坑与流程摩擦（本机实证)</h2>
+  <section id="s10">
+    <h2><span class="no">10</span>坑与流程摩擦（本机实证)</h2>
     <table>
       <tr><th>#</th><th>现象</th><th>后果</th><th>处置</th></tr>
       <tr>
         <td class="num">1</td>
-        <td><b>mutmut 本机直接拒绝</b>: <code>To run mutmut on Windows, please use the WSL</code></td>
-        <td>本机用不了最主流的那个</td>
-        <td>改选 pytest-gremlins; 需要它算子面时走 Linux 容器</td>
+        <td><b>mutmut 拒绝 Windows 原生</b>: <code>To run mutmut on Windows, please use the WSL</code></td>
+        <td>只能在 WSL 里跑（本机已装, 门槛成立但可付)</td>
+        <td>WSL 里另备一份仓库副本（<code>git clone</code> 优于从 <code>/mnt</code> 拷, 实测拷 116MB 要 52s); Windows 侧的兜底选项仍是 pytest-gremlins</td>
       </tr>
       <tr>
         <td class="num">2</td>
@@ -373,20 +447,74 @@ To run mutmut on Windows, please use the WSL. Native windows support is tracked 
         <td>结果随时会变</td>
         <td>按本项目惯例 <code>==</code> 精确钉 + <code>uv lock</code>; 每轮在切片里记下版本号</td>
       </tr>
+      <tr>
+        <td class="num">9</td>
+        <td><b>mutmut 把变异体写进同一份文件, 文本层守阵在基线就红</b>: <code>mutants/</code> 里 <code>versioning.py</code> 由 185 行 / 9.4KB 变成 <b>4,890 行 / 254KB</b>, 正文里出现 <code>XXbuild_search_indexXX</code> 这类字符串变异体</td>
+        <td>凡「读源码文本做断言」的守阵会误报, 而 mutmut 与 gremlins 一样要求基线全绿才开跑 ⇒ <b>整轮直接中断</b>。实测命中 <code>test_web.py::test_api_enqueue_wakes_main_loop</code>（自投递命令登记)与 <code>test_sim_corpus.py::test_fs_mock_coverage_static_guard</code>（FS 探测点计数)</td>
+        <td>这类守阵必须显式 <code>--deselect</code>; 代价是它们覆盖的那部分代码变成 no-tests。这是 mutmut 相对 gremlins 的<b>结构性劣势</b> —— gremlins 不落盘改文件, 文本层守阵不受影响</td>
+      </tr>
+      <tr>
+        <td class="num">10</td>
+        <td><b>fork 隔离下注册表类守阵假红</b>: 默认 <code>process_isolation=fork</code> 时, <code>test_actions_registry_complete</code>(多出 <code>noop</code>)、<code>test_condition_plugins_cover_registry</code> 在 mutmut 的 clean test 里红; 但<b>同一份 <code>mutants/</code> 树手跑全套件是绿的</b></td>
+        <td>同一条基线, 手跑绿、工具跑红 —— 极难归因, 每发现一条要付一轮 3 分钟</td>
+        <td>配 <code>process_isolation = "forkserver"</code>(实测改用后基线立刻变绿)。根因未定位, 只确认与 fork 继承的调用形态相关</td>
+      </tr>
+      <tr>
+        <td class="num">11</td>
+        <td><b>mutmut 的配置面在 <code>pyproject.toml</code> 且键名已换</b>: 老键 <code>paths_to_mutate</code> / <code>tests_dir</code> 已废弃 → 现为 <code>source_paths</code> / <code>pytest_add_cli_args_test_selection</code>; 跑测试的命令靠 <code>pytest_add_cli_args</code> 追加</td>
+        <td>照网上教程写会告警甚至跑空</td>
+        <td>①<code>source_paths</code> 必须写<b>整个 <code>src</code></b>(写单文件会因包内相对 import 失败), 目标用 <code>only_mutate = ["**/infra/utils.py"]</code> 收窄; ②必带 <code>-n 0 --no-cov</code> 抵消 <code>pytest.ini</code> 的 addopts; ③别忘 <code>use_git_change_detection</code></td>
+      </tr>
+      <tr>
+        <td class="num">12</td>
+        <td><b><code>mutants/</code> 是一整份仓库副本, 且要自己补料</b>: mutmut 只自动带 <code>tests/</code> + 锁文件, 其余靠 <code>also_copy</code></td>
+        <td>漏一个就基线红。本项目实测补了 <code>.agents</code>(<code>gen_doc_map.py</code> 在那儿)、<code>docker/config.example.yml</code>、<code>AGENTS.md</code>、<code>memory-bank</code>、<code>.commands</code>、<code>.github</code> 等十来项才绿</td>
+        <td>补齐全后 <code>mutants/</code> 实测 <b>227MB</b>; 别落在主仓库里（同类于 gremlins 报告落仓内那条), 也别放在 <code>/mnt/*</code> 上</td>
+      </tr>
+      <tr>
+        <td class="num">13</td>
+        <td><b>WSL 里没有 <code>python</code> 只有 <code>python3</code></b>: <code>tests/test_commands_engine.py</code> 的 wrapper 端到端用例 <code>exec python</code> 直接 127</td>
+        <td>WSL 侧基线红, 与变异无关</td>
+        <td><code>ln -s $(which python3) ~/.local/bin/python</code> 补一个; 这类「平台差异导致的既有用例红」是 WSL 路线的固定税</td>
+      </tr>
+      <tr>
+        <td class="num">14</td>
+        <td><b>WSL 只有 8 核</b>: <code>.wslconfig</code> 里 <code>processors=8</code>(Windows 侧 32 逻辑核); mutmut 的 <code>--max-children</code> 默认取 <code>os.cpu_count()</code></td>
+        <td>mutmut 只能用 1/4 的核 —— 即便如此仍比 Windows 侧满核的 gremlins 快</td>
+        <td>想再快一倍以上就改 <code>.wslconfig</code>; 不建议为了变异测试去动它（会影响 WSL 其它用途)</td>
+      </tr>
     </table>
   </section>
 
-  <section id="s10">
-    <h2><span class="no">10</span>建议落地方案</h2>
-    <h3>建议一: 定 pytest-gremlins, 但只做「定期审计」, 不进闸门</h3>
+  <section id="s11">
+    <h2><span class="no">11</span>建议落地方案</h2>
+    <h3>建议一（本次修正): 定 mutmut, 在 WSL 里按包做「定期审计」, 不进闸门</h3>
     <ul>
-      <li><b>对象优先级</b>（按「判据密度 × 出错代价」而不是按行数): ①<code>rules/</code>（规则引擎判据) ②<code>hr/</code>（HR 判定与做种要求链路) ③<code>config/</code>（fail-fast 校验) ④<code>core/</code>（主循环/限速) —— <code>infra/</code> 与 <code>webui/server/</code> 估值最低（IO 胶水层, 变异多为等价或平凡杀死)。</li>
-      <li><b>入场练手</b>: 先用已实测的 <code>infra/utils.py</code>（349 变异 / 约 5–10 min)把整条流程跑通一轮, 先建立「真洞 / 等价变异 / 假存活」三分类的习惯。</li>
-      <li><b>记录</b>: 每轮一个基线切片 <code>testing/baselines/YY-MM-DD-HHMM-mutants-&lt;包&gt;.md</code>, 内容 = 目标/变异数/杀死率/耗时/工具版本/<b>手工确认后的真洞数</b>。目标不是「分数增长」, 是「包内不再有不知道为什么活着的变异」。</li>
+      <li><b>为什么改</b>: 本机已装 WSL + 只做定期审计 ⇒ 「WSL-only」这条门槛从每迭代付一次降为每月付一次; 而 mutmut 用 58% 的墙时打了 3.8 倍的变异, 且打得到 gremlins 打不到的字符串/语句类（§07)。</li>
+      <li><b>对象优先级</b>（按「判据密度 × 出错代价」而不是按行数): ①<code>rules/</code>（规则引擎判据, 实测 3,270 变异) ②<code>hr/</code>（HR 判定与做种要求链路) ③<code>config/</code>（fail-fast 校验) ④<code>core/</code>（主循环/限速) —— <code>infra/</code> 与 <code>webui/server/</code> 估值最低（IO 胶水层, 变异多为等价或平凡杀死)。</li>
+      <li><b>入场练手</b>: 先用已实测的 <code>infra/utils.py</code>（1,314 变异 / 19.5s)把整条流程跑通一轮, 先建立「真洞 / 等价变异 / 假存活」三分类的习惯 —— 这一轮的成本已经低到「跑错了再跑一次」无所谓。</li>
+      <li><b>硬性约束</b>: ①<b>按包跑</b>, 别按全 <code>src</code>; ②选择池用<b>定向的几个测试文件</b>, 别用全 <code>tests</code>（实测把 WSL 打挂两次); ③<code>process_isolation = "forkserver"</code>; ④文本层守阵要 <code>--deselect</code>。</li>
+      <li><b>记录</b>: 每轮一个基线切片 <code>testing/baselines/YY-MM-DD-HHMM-mutants-&lt;包&gt;.md</code>, 内容 = 目标/变异数/杀死率/耗时/<b>工具版本</b>/<b>选择池</b>/<b>手工确认后的真洞数</b>。目标不是「分数增长」, 是「包内不再有不知道为什么活着的变异」。<b>选择池必须写进切片</b> —— 同一个 <code>utils.py</code>, 换池能让存活数从 97 掉到 70（§09); 不记池的数字无法跨轮比较。<b>包级反而是例外</b>: <code>rules/</code> 用「6 个定向文件」与「全 <code>tests</code>」两池跑到同一进度点时杀死率只差 1 个点（52.4% vs 53.6%) —— 覆盖引导已经把相关用例挑出来了, 池宽的代价只体现在<b>内存</b>（打挂 WSL)上, 不体现在结论上。</li>
       <li><b>不做</b>: 不设 <code>break</code> 阈值挂 CI、不给 <code>thresholds</code>、不做「必须杀死 100%」的追逐 —— 等价变异（<code>@dataclass(frozen=True)</code> → <code>False</code> 这类)杀不掉是数学事实。</li>
     </ul>
-    <h3>建议二: 命令接入 —— 新增 <code>test.mutants</code>（建议写法, 本次未改动任何命令包)</h3>
-    <p>四条必带的要素缺一不可（每一条都对应 §09 一个坑):</p>
+    <h3>建议二: 命令接入 —— 两条路线（建议写法, 本次未改动任何命令包)</h3>
+    <p><b>A. mutmut（推荐, 走 WSL)</b> —— 三条必带要素各对应 §10 一个坑:</p>
+    <pre><code># 1) 仓库镜像: 在 WSL 原生文件系统里放一份（git clone, 不要 cp, 更不要放 /mnt/*）
+wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/auto-qb-mut &amp;&amp; git pull &amp;&amp; uv sync'
+
+# 2) pyproject.toml 的 [tool.mutmut]（source_paths 必须是整个 src, 目标用 only_mutate 收窄）
+source_paths = ["src"]
+only_mutate = ["**/rules/*.py"]
+pytest_add_cli_args = ["-x", "-q", "-n", "0", "--no-cov",
+                       "--deselect", "tests/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
+                       "--deselect", "tests/test_web.py::test_api_enqueue_wakes_main_loop"]
+pytest_add_cli_args_test_selection = ["tests/test_conditions.py", "tests/test_actions.py"]
+process_isolation = "forkserver"          # fork 会让注册表类守阵假红
+also_copy = ["pytest.ini", ".agents", "docker", "memory-bank", "AGENTS.md", ...]  # 漏一个基线就红
+
+# 3) 跑（--max-children 别拉满; 池必须是定向的几个文件, 不是 tests）
+wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/auto-qb-mut &amp;&amp; uv run mutmut run --max-children 4'</code></pre>
+    <p><b>B. pytest-gremlins（Windows 侧兜底)</b> —— 四条必带要素缺一不可（每一条都对应 §10 一个坑):</p>
     <pre><code>[tasks."test.mutants"]
 run = ['set "TMPDIR=R:/Temp/auto-qb/tests" &amp;&amp; set "COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov" &amp;&amp; '
        'uv run pytest &lt;args&gt; --gremlins -n 0 --no-cov --gremlin-workers=16 '
@@ -394,13 +522,13 @@ run = ['set "TMPDIR=R:/Temp/auto-qb/tests" &amp;&amp; set "COVERAGE_FILE=R:/Temp
 when = "定期审计: 对某个包跑一轮变异测试（不要放进提交闸门）"
 note = "cmd.exe 写法 + 引号不能省（见本文件顶部）; -n 0 必带（与 xdist 互斥, addopts 里有 -n 4）; "
        "--no-cov 必带（子集跑必然不满足 98% 闸）; 报告落 R 盘（仓内写入会撞删除拦截层）"</code></pre>
-    <p>依赖按项目惯例加: <code>uv add --dev pytest-gremlins==&lt;精确版本&gt;</code>（本项目直接依赖一律 <code>==</code> 钉死, 见 <code>techContext.md</code>), 随后 <code>commands run env.sync</code>。</p>
+    <p>依赖按项目惯例加: <code>uv add --dev pytest-gremlins==&lt;精确版本&gt;</code> / <code>mutmut==&lt;精确版本&gt;</code>（本项目直接依赖一律 <code>==</code> 钉死, 见 <code>techContext.md</code>), 随后 <code>commands run env.sync</code>。两个工具可以并存: mutmut 做主力审计, gremlins 做 Windows 侧抽查与交叉验证。</p>
     <h3>建议三: 沉淀一条 pitfall（本轮未落, 待你点头)</h3>
     <p>「<b>变异分数与存活数是选择池的函数</b>: 窄池下 <code>utils.py</code> 存活 97, 换 5 文件池降到 70; 一个被判成存活的变异, 拿全套件手工验证后其实是被杀死的」。建议入 <code>memory-bank/pitfalls/testing/mutation-pool-artifact.md</code> —— 不先定这条规矩就投产, 第一份存活清单会被当成缺口单来处理, 从而把人力浪费在伪洞上。</p>
   </section>
 
-  <section id="s11">
-    <h2><span class="no">11</span>前端专项结论</h2>
+  <section id="s12">
+    <h2><span class="no">12</span>前端专项结论</h2>
     <div class="callout stop"><b>结论: 现在不具备做变异测试的结构前提, 建议不做。</b>不是「Stryker 不适合这个项目」, 是「变异测试需要一个能快速执行被测代码的单元层, 而本项目前端没有」。</div>
     <h3>三个逐层卡点</h3>
     <ol>
@@ -416,8 +544,8 @@ note = "cmd.exe 写法 + 引号不能省（见本文件顶部）; -n 0 必带（
     </ol>
   </section>
 
-  <section id="s12">
-    <h2><span class="no">12</span>附录: 复现命令</h2>
+  <section id="s13">
+    <h2><span class="no">13</span>附录: 复现命令</h2>
     <p>沙箱位于 <code>R:/Temp/auto-qb/mut-exp</code>（仓库副本 + 独立 venv; 主仓库环境未被修改)。下列命令可在其中复現本报告全部数字。</p>
     <pre><code># 0) 准备（一次性）
 cp -r src tests extensions pyproject.toml uv.lock pytest.ini README.md resources scripts \ docker memory-bank .commands .agents .github docs assets config.yml minimal.yml test_yamls \ 想法.md resources TOOLS.md HEARTBEAT.md CLAUDE.md .style.yapf package.json R:/Temp/auto-qb/mut-exp/
@@ -441,12 +569,61 @@ uv pip install mutmut &amp;&amp; uv run mutmut run --paths-to-mutate=src/auto_qb
 uv run pytest --gremlins --gremlin-targets=src/auto_qb/infra/file_access.py --gremlin-workers=8 -n 0 --no-cov
 #   → FileNotFoundError: [WinError 206] 文件名或扩展名太长。   （在 coverage pre-scan 子进程）
 
-# 说明: 每次都要 TMPDIR / COVERAGE_FILE 前缀, 见 §09。</code></pre>
+# 说明: 每次都要 TMPDIR / COVERAGE_FILE 前缀, 见 §10。
+
+# ===== 第二轮: WSL 沙箱（本次追加) =====
+# 5) 准备: 仓库副本进 WSL 原生文件系统（git clone 优于 cp; 实测 cp 116MB 要 52s)
+cp -a /mnt/r/Temp/auto-qb/mut-exp /home/abacker/mut-wsl     # 或 git clone
+cd /home/abacker/mut-wsl &amp;&amp; git init -q   # 沙箱无 .git 时, 依赖「向上找 .git」的用例会红
+ln -s $(which python3) ~/.local/bin/python  # WSL 无 `python`: commands wrapper 端到端用例会 127
+uv sync &amp;&amp; uv pip install mutmut pytest-gremlins            # 实测 mutmut 3.8.0 / gremlins 1.11.2
+
+# 6) 同环境对照: 两个工具打同一目标 + 同一池
+uv run mutmut run                                            # 配 [tool.mutmut] 见 §11 建议二 A
+uv run pytest --gremlins --gremlin-targets=src/auto_qb/infra/utils.py \
+              --gremlin-workers=8 -n 0 --no-cov tests/test_utils.py
+#   → mutmut 1,314 变异 / 19.5s ; gremlins 349 变异 / 33.9s（§07 对照一)
+
+# 7) 包级完整一轮（本次唯一跑完的粒度)
+uv run python set_mutmut_conf.py pyproject.toml "**/rules/*.py" \
+    tests/test_conditions.py tests/test_actions.py tests/test_expr_parse.py \
+    tests/test_expr_eval.py tests/test_checking.py tests/test_grouping.py
+uv run mutmut run --max-children 4
+#   → 3,270/3,270  🎉 1,813  🫥 1  ⏰ 10  🙁 1,446   7.48 mut/s   墙时 7m31s
+
+# 8) 复现「全项目一把跑会挂」（不要常试, 要 wsl --shutdown 才能恢复)
+uv run python set_mutmut_conf.py pyproject.toml "**/*.py" tests
+uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% / ~74% 时 WSL 整体失去响应</code></pre>
+    <p><code>set_mutmut_conf.py</code> 不是 mutmut 的组成部分, 只是本次为「反复换目标与池」写的一个十几行小脚本: 删掉 <code>pyproject.toml</code> 里已有的 <code>[tool.mutmut]</code> 段, 再按 <code>&lt;target-glob&gt; &lt;池文件...&gt;</code> 参数重写。产物与「本次写到哪一步」在 <code>R:/Temp/auto-qb/</code>（脚本 + WSL 侧日志 + 沙箱副本), 均在本机临时盘、未进仓库。</p>
+    <div class="callout warn"><b>数字可复现性的边界</b>: 本轮跑得最全的一次（<code>rules/</code> 完整一轮 + 全项目 37%/74% 两个断点)是<b>单次观测</b> —— <code>rules/</code> 的 7m31s 与 55.5% 杀死率、以及两个断点位置, 都只测了一次。变异执行本身是确定性的（同一版本同一池应可复现), 但 WSL 的崩溃点与墙时会随宿主负载浮动。要拿来做跨轮比较的基线, 建议先跑两遍确认可复现再记。</div>
+  </section>
+
+  <section id="s14">
+    <h2><span class="no">14</span>变更记录</h2>
+    <table>
+      <tr><th>时间</th><th>变更</th><th>触发</th></tr>
+      <tr>
+        <td class="num">26-10-08-0231</td>
+        <td>初版: 四框架比对 + Windows 侧 gremlins 三样本实测 + 成本外推 + 前端专项结论</td>
+        <td>用户「调研变异测试框架, Python 与 WEB UI 涉及语言各自的现状与可落地性」</td>
+      </tr>
+      <tr>
+        <td class="num">26-10-08-0316</td>
+        <td><b>新增 §07 追加实测</b>（mutmut 在 WSL 下与 gremlins 同环境对比 + 全项目 34,702 变异 + 全项目跑挂 + <code>rules/</code> 完整一轮 + gremlins 跨平台 3.6× 差异)·
+        <b>修正 §02 框架选型</b>: pytest-gremlins → <b>mutmut</b>（WSL), gremlins 降为 Windows 侧兜底 ·
+        <b>修正 §08 成本模型</b>: 变异总数 4.9k–10.4k 外推 → <b>34,702 实测</b>; 新增包级锚点（<code>rules/</code> 7m31s)与各包外推; 「全项目季度扫描」由可行改为<b>必须拆包累加</b> ·
+        <b>§03 改写</b>「为什么排除 mutmut」→「mutmut 只认 WSL, 但门槛代价被高估一个数量级」 ·
+        <b>§10 坑表</b> 1 条改写 + 新增 6 条（mutants 树撑爆文本层守阵 / fork 隔离假红 / 配置键名变更 / mutants 补料与 227MB / WSL 无 python / WSL 8 核) ·
+        <b>§11 建议</b> 改为双路线（mutmut 主力 + gremlins 兜底)并加四条硬性约束 ·
+        <b>§09 新增收益四</b>（<code>rules/</code> 55.5% vs <code>utils</code> 72.5%, 给「先补哪个包」一个客观刻度) · 新增 §14; 抬 <code>doc-updated</code></td>
+        <td>用户「本机已安装 WSL, 且变异测试只是定期审查, 不会拖开发进度, 所以重新考虑对比 mutmut 的方案」</td>
+      </tr>
+    </table>
   </section>
 
   <footer>
-    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照, 出厂即冻结。<br>
-    数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 本次实验数字（变异数 / 耗时 / 杀死率)均取自本机实测的沙箱环境。
+    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照 · 更新至 26-10-08-0316（变更记录见 §14)。<br>
+    数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 实验数字（变异数 / 耗时 / 杀死率)分两组 —— 第一轮取自 Windows 沙箱, 第二轮取自 WSL 沙箱（同一台机器、同一份代码基线)。
   </footer>
 
 </div>
