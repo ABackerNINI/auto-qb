@@ -21,8 +21,9 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
-  const num = (v) => Number(v) || 0;
+  const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
@@ -271,8 +272,7 @@
     }
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
+    if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     if (loading && !files.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
@@ -475,28 +475,13 @@
   }
 
   function wire(host) {
-    if (host.__dt11Wired) return;
-    host.__dt11Wired = true;
-    host.__dt11Click = onClick;
-    host.addEventListener("click", onClick);
-    host.__dt11Change = onChange;
-    host.addEventListener("change", onChange);
+    H.wireEvents(host, { click: onClick, change: onChange });
   }
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听 */
-    if (host) {
-      if (host.__dt11Click) {
-        host.removeEventListener("click", host.__dt11Click);
-        host.__dt11Click = null;
-      }
-      if (host.__dt11Change) {
-        host.removeEventListener("change", host.__dt11Change);
-        host.__dt11Change = null;
-      }
-      host.__dt11Wired = false;
-    }
+    H.unwireEvents(host);
   }
 
   /* 收起态摘要: 勾选批次 + 文件 / 未完成计数(设计稿 11 的 drawer-csum 口径) */

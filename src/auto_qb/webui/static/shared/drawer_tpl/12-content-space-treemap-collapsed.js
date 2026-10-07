@@ -19,8 +19,9 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
-  const num = (v) => Number(v) || 0;
+  const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
 
   /* 视图偏好(跨重渲染保持): 选中 path / 折叠目录组 / 仅看未完成; lastSig 供跳过重建 */
@@ -374,8 +375,7 @@
     }
     /* 数据未变跳过重建 */
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
+    if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     if (loading && !files.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
@@ -485,14 +485,7 @@
 
   /* 视图偏好变化走 lastSig 置空整帧重建; 数据通知由核心直调 _render */
   function wire(host) {
-    if (host.__dt12Wired) return;
-    host.__dt12Wired = true;
-    host.__dt12Click = onClick;
-    host.addEventListener("click", onClick);
-    host.__dt12Over = onOver;
-    host.addEventListener("mouseover", onOver);
-    host.__dt12Out = onOut;
-    host.addEventListener("mouseout", onOut);
+    H.wireEvents(host, { click: onClick, mouseover: onOver, mouseout: onOut });
   }
 
   function destroy(host) {
@@ -503,21 +496,7 @@
     ui.mapEl = null;
     ui.host = null;
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听 */
-    if (host) {
-      if (host.__dt12Click) {
-        host.removeEventListener("click", host.__dt12Click);
-        host.__dt12Click = null;
-      }
-      if (host.__dt12Over) {
-        host.removeEventListener("mouseover", host.__dt12Over);
-        host.__dt12Over = null;
-      }
-      if (host.__dt12Out) {
-        host.removeEventListener("mouseout", host.__dt12Out);
-        host.__dt12Out = null;
-      }
-      host.__dt12Wired = false;
-    }
+    H.unwireEvents(host);
   }
 
   /* 收起态摘要: 体积构成条(顶层目录/文件按体积占比) + 未完成数(设计稿 12 口径) */

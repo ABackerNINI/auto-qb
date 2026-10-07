@@ -20,6 +20,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
 
   /* 状态分桶 -> 展示文案与排序权值(异常优先 = 权值升序; 虚拟恒排最后) */
   const BUCKET = {
@@ -238,11 +239,7 @@
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
     /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 序列化比对比浅比较更强, 开销可忽略 */
     const sig = JSON.stringify(ts) + "|" + String(!!loading) + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
-    /* 滚动位置自保: 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 只读写 scrollTop 不碰结构 */
-    const scroller = host.parentElement;
-    const scroll = scroller ? scroller.scrollTop : 0;
+    if (H.skipUnchanged(host, ui, sig)) return;
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -292,27 +289,22 @@
       </div>
       ${R(body)}
     </div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    if (scroller) scroller.scrollTop = scroll;
+    /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+    });
   }
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
      * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
-    if (host && host.__dt04Click) {
-      host.removeEventListener("click", host.__dt04Click);
-      host.__dt04Click = null;
-      host.__dt04Wired = false;
-    }
+    H.unwireEvents(host);
   }
 
-  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
+  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    if (host.__dt04Wired) return;
-    host.__dt04Wired = true;
-    host.__dt04Click = onClick;
-    host.addEventListener("click", onClick);
+    H.wireEvents(host, { click: onClick });
   }
 
   function onClick(ev) {

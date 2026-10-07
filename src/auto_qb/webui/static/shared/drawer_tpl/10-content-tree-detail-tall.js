@@ -19,8 +19,9 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
-  const num = (v) => Number(v) || 0;
+  const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
   const PRIO_ORDER = [0, 1, 6, 7];
 
@@ -331,8 +332,7 @@
     }
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
+    if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     const hasAv = files.some((f) => f && f.availability !== undefined && f.availability !== null);
     if (loading && !files.length) {
@@ -458,20 +458,13 @@
   }
 
   function wire(host) {
-    if (host.__dt10Wired) return;
-    host.__dt10Wired = true;
-    host.__dt10Click = onClick;
-    host.addEventListener("click", onClick);
+    H.wireEvents(host, { click: onClick });
   }
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听 */
-    if (host && host.__dt10Click) {
-      host.removeEventListener("click", host.__dt10Click);
-      host.__dt10Click = null;
-      host.__dt10Wired = false;
-    }
+    H.unwireEvents(host);
   }
 
   /* 收起态摘要: 当前选中节点 + 文件 / 未完成计数(设计稿 10 的 drawer-csum 口径) */

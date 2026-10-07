@@ -49,8 +49,8 @@
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
-- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四变体整帧重建路径纵横滚动位成对自保(scroller=host.parentElement 上既有 scrollTop 保存旁补 scrollLeft 读取 + 整帧 replaceChildren(html) 后成对恢复, 恢复次序 scrollLeft 先 scrollTop 后), 任一变体只存不还或整体缺失即红
-- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select max-width 160->240(min-width:0; 160px 截断长 label 收起态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -3263,31 +3263,37 @@ def test_drawer_tpl_variant_field_icons():
 
 
 def test_drawer_tpl_table_variants_scrollleft_restore():
-    """表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四个定宽 grid
-    表格变体最小宽约 990-1000px, 窄窗口(含 <=900px 固定全屏态)下 drawer-body overflow:auto
-    必然横向滚动; 整帧重建(sig 变)只还 scrollTop 会把用户的横向滚动位打回最左。守阵钉住:
-    每个变体重渲染路径在既有 scrollTop 保存旁有 scrollLeft 读取, 且整帧 replaceChildren(html)
-    之后两轴成对恢复(恢复次序 scrollLeft 先 scrollTop 后, 照抄既有同步恢复时序)。"""
+    """表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) ——
+    dt06/07/08/09 四个定宽 grid 表格变体最小宽约 990-1000px, 窄窗口(含 <=900px 固定全屏态)下
+    drawer-body overflow:auto 必然横向滚动; 整帧重建(sig 变)只还 scrollTop 会把用户的横向滚动位
+    打回最左。骨架收口后单点在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先
+    scrollTop 后), 守阵钉住: 核心实现两轴成对且恢复次序正确 + 四变体整帧重建都包在 withScroll
+    回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮。"""
+    core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
+    for axis in ("scrollTop", "scrollLeft"):
+        assert f"sc ? sc.{axis} : 0" in core, \
+            f"核心 withScroll 缺 {axis} 读取(纵横成对自保)"
+    restore_l = "sc.scrollLeft = left;"
+    restore_t = "sc.scrollTop = top;"
+    assert restore_l in core and restore_t in core, \
+        "核心 withScroll 缺滚动位恢复(纵横成对自保纪律)"
+    assert core.index(restore_l) < core.index(restore_t), \
+        "核心 withScroll 恢复次序漂移(应 scrollLeft 先 scrollTop 后)"
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     for name in (
         "06-trackers-table-collapsed.js", "07-peers-dashboard-tall.js", "08-peers-groups-low.js",
         "09-peers-density-collapsed.js"
     ):
         text = open(os.path.join(vdir, name), encoding="utf-8").read()
-        save = "const scrollLeft = scroller ? scroller.scrollLeft : 0;"
-        assert save in text, \
-            f"drawer_tpl/{name}: 重渲染路径缺横向滚动位保存(P2-2: 5s 轮询整帧重建把用户横向滚动位打回最左)"
-        restore = "scroller.scrollLeft = scrollLeft;"
-        assert restore in text, \
-            f"drawer_tpl/{name}: 横向滚动位保存了但没恢复(纵横滚动位成对自保纪律)"
+        assert "H.withScroll(host, () => {" in text, \
+            f"drawer_tpl/{name}: 整帧重建未走核心 withScroll(滚动自保单点回潮/漂移)"
         rebuild = "host.replaceChildren(document.createRange().createContextualFragment(html));"
         assert text.count(rebuild) == 1, \
-            f"drawer_tpl/{name}: 整帧重建调用点形态漂移(守阵按单点定位恢复时序, 同步本守阵)"
-        assert text.index(rebuild) < text.index(restore), \
-            f"drawer_tpl/{name}: scrollLeft 恢复必须落在整帧重建之后(照抄 scrollTop 恢复时序)"
-        st = "scroller.scrollTop = scroll;"
-        assert text.index(restore) < text.index(st), \
-            f"drawer_tpl/{name}: 恢复次序漂移(成对恢复应 scrollLeft 先 scrollTop 后, 同步本守阵)"
+            f"drawer_tpl/{name}: 整帧重建调用点形态漂移(守阵按单点定位, 同步本守阵)"
+        assert text.index("H.withScroll(host") < text.index(rebuild), \
+            f"drawer_tpl/{name}: 整帧重建必须落在 withScroll 回调内(滚动位自保失效)"
+        assert "host.parentElement" not in text and "scroller" not in text, \
+            f"drawer_tpl/{name}: 变体内再现分散滚动自保(收口后单点在核心 withScroll, 报告 26-10-07-0845)"
 
 
 def test_drawer_tpl_a11y_and_fetch_error_states():
@@ -3310,6 +3316,13 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         "drawer.html: drawer-fold 两钮缺 aria-label(种子/流量两头部成对)"
     assert drawer_tpl.count('<button class="drawer-close" aria-label="关闭详情面板"') == 2, \
         "drawer.html: drawer-close 两钮缺 aria-label(种子/流量两头部成对)"
+
+    # 1.5 挂摘纪律单点(骨架收口 26-10-07-0845): 核心 wireEvents/unwireEvents 挂摘必须成对
+    # (同一张 host.__dtEvents 记账表), 变体不再各自维护 __dtNNWired 标志
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert "for (var k in map) host.addEventListener(k, map[k]);" in core \
+        and "for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);" in core, \
+        "核心 wireEvents/unwireEvents 挂摘不成对(换变体监听叠加回潮)"
 
     # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
     fold_variants = (
@@ -3335,11 +3348,12 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
             assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', text.replace("\n", " ")), \
                 f"drawer_tpl/{name}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
         assert 'tabindex="0"' in text, f"drawer_tpl/{name}: 模拟控件缺 tabindex=0(键盘不可聚焦)"
-        # keydown 委托与 click 委托成对挂宿主(纯 div 模拟无原生 click, Enter/Space 手动转发)
-        assert 'addEventListener("keydown", onKeyDown)' in text, \
-            f"drawer_tpl/{name}: 缺 keydown 委托(模拟控件键盘不触发)"
-        assert 'removeEventListener("keydown"' in text, \
-            f"drawer_tpl/{name}: destroy 未摘 keydown 监听(换变体监听叠加)"
+        # keydown 委托与 click 委托成对挂宿主(纯 div 模拟无原生 click, Enter/Space 手动转发):
+        # 挂摘纪律收口在核心 wireEvents/unwireEvents 单点(26-10-07-0845), 变体只声明事件表
+        assert "click: onClick" in text and "keydown: onKeyDown" in text, \
+            f"drawer_tpl/{name}: keydown 委托与 click 委托未成对挂宿主(模拟控件键盘不触发)"
+        assert "H.wireEvents(host" in text and "H.unwireEvents(host)" in text, \
+            f"drawer_tpl/{name}: 挂摘未走核心成对 helper(监听叠加回潮)"
         # 双重触发去重: 焦点在原生交互元素上时不转发(原生 Enter 本来就发 click)
         assert 'closest("button, input, select, textarea, a[href], summary")' in text, \
             f"drawer_tpl/{name}: keydown 转发未排除原生交互元素(Enter 会 click+keydown 双重触发)"

@@ -21,6 +21,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
 
   /* 方向五桶(与 08/09 同判据, 纯 flags 派生): U=我方向其上传 D=对端向我供数
    * u=被我方限流 ?/空=握手未完成, 其余(含 K 完整副本)=闲置 */
@@ -208,7 +209,7 @@
     const p = (ctx.drawer && ctx.drawer.peers) || {};
     return Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
   }
-  const num = (v) => Number(v) || 0;
+  const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   function flagTokens(p) {
     return String(p.flags || "").split(/\s+/).filter(Boolean);
   }
@@ -468,16 +469,10 @@
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
     /* 数据未变跳过重建(5s 通知频度下不闪不丢态) */
     const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
+    if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     ui.maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
     ui.maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
-    const scroller = host.parentElement;
-    /* 纵横滚动位成对自保: 表格定宽 grid 窄窗口下必有横向滚动(drawer-body overflow:auto),
-     * 整帧重建只还 scrollTop 会把用户的横向滚动位打回最左 */
-    const scroll = scroller ? scroller.scrollTop : 0;
-    const scrollLeft = scroller ? scroller.scrollLeft : 0;
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -503,9 +498,11 @@
       <div class="dt07-bar">${R(chips)}<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上行」降序</span></div>
       <div class="dt07-list">${R(headHtml(hasFiles))}${R(rows)}</div>
     </div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    if (scroller) scroller.scrollLeft = scrollLeft;
-    if (scroller) scroller.scrollTop = scroll;
+    /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
+     * 用户的横向滚动位打回最左) —— 单点 helper */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+    });
   }
 
   function onClick(ev) {
@@ -542,29 +539,16 @@
     onClick(ev);
   }
 
-  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
+  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    if (host.__dt07Wired) return;
-    host.__dt07Wired = true;
-    host.__dt07Click = onClick;
-    host.addEventListener("click", onClick);
-    host.__dt07Key = onKeyDown;
-    host.addEventListener("keydown", onKeyDown);
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
   }
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
      * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
-    if (host && host.__dt07Click) {
-      host.removeEventListener("click", host.__dt07Click);
-      host.__dt07Click = null;
-      host.__dt07Wired = false;
-    }
-    if (host && host.__dt07Key) {
-      host.removeEventListener("keydown", host.__dt07Key);
-      host.__dt07Key = null;
-    }
+    H.unwireEvents(host);
   }
 
   const _render = render;

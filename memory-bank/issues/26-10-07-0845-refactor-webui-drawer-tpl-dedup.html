@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-detail-panel-redesign">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="详情面板 15 变体骨架重复: 工具/滚动自保/sig/wire-destroy 各自复刻">
 <meta name="issue-summary" content="16 份 drawer_tpl 文件各自复刻同一套 size/dur/present 工具与滚动自保/sig 比对/wire-destroy 骨架, 后续改动 15 处锁步">
 <title>详情面板 15 变体骨架重复: 工具/滚动自保/sig/wire-destroy 各自复刻 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-0845-refactor-webui-drawer-tpl-dedup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 08:45</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 08:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-07 — 认领并修复，状态 <strong>Done</strong>。实际修法: 核心层 drawer_templates.js 增设 reg.helpers 单点(dur/size/present/num 工具 + skipUnchanged sig 比对 + withScroll 滚动自保(纵横成对, scrollLeft 先 scrollTop 后) + wireEvents/unwireEvents 挂摘成对(host.__dtEvents 记账表)), 变体 01-12 全部改为消费 helpers, 删除各文件自复刻的 __dtNNWired/scroller 直读写骨架; 04/05/06 的同名 num 是非负谓词语义, 属另一函数未并入。守阵同步: test_drawer_tpl_table_variants_scrollleft_restore 改钉核心单点+变体不得回潮, test_drawer_tpl_a11y_and_fetch_error_states 挂摘断言改走 helper 口径。验证: commands run test.full — 2712 passed, 4 skipped, 覆盖率 99%; test.one -k drawer_tpl 8 passed</li>
     </ul>
   </section>
 

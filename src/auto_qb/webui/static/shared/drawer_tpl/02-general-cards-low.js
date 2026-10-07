@@ -19,6 +19,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
 
   /* qB 原始 state -> 展示文案(徽章用; 与经典链 stateText 的成员视图口径独立, 只覆盖常见值) */
   const STATE_TEXT = {
@@ -111,8 +112,7 @@
     ".drawer :is(.dt02-kv, .dt02-crow) .ico-t-state { color:var(--pink, #f472b6); }",
   ].join("\n");
 
-  const present = (v) => v !== undefined && v !== null && v !== "";
-  const size = (ctx, v) => ctx.fmtSizeOrDash(v) || "—";
+  const { present, size } = H; /* 公共格式化小工具(核心层单点) */
 
   /* Q2(报告 26-10-07-0542): 字段行图标着色 —— 派生表自经典链 icoTone(drawer.js FX-22)自包含
    * 复制(变体不经 Vue, ctx 白名单无 icoTone); 图标名 -> 色调类, 行内 svg 挂类, 色值在上方
@@ -217,10 +217,7 @@
     }
     /* 数据未变跳过重建(序列化比对比浅比较更强, 开销可忽略) */
     const sig = JSON.stringify(d);
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
-    const scroller = host.parentElement;
-    const scroll = scroller ? scroller.scrollTop : 0;
+    if (H.skipUnchanged(host, ui, sig)) return;
     const secs = {};
     for (const sec of ctx.drawerGeneralSections()) secs[sec.title] = sec;
 
@@ -287,8 +284,10 @@
       ],
     ];
     const html = T`<div class="dt02-wrap"><div class="dt02-cards">${R(cols.map((col) => T`<div class="dt02-col">${R(col.join(""))}</div>`).join(""))}</div></div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    if (scroller) scroller.scrollTop = scroll;
+    /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+    });
   }
 
   /* 收起态摘要: 走核心内置默认实现(状态·进度·速度·比率·HR), 本变体不覆写 */
@@ -297,15 +296,7 @@
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
      * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
-    if (host && host.__dt02Click) {
-      host.removeEventListener("click", host.__dt02Click);
-      host.__dt02Click = null;
-      host.__dt02Wired = false;
-    }
-    if (host && host.__dt02Key) {
-      host.removeEventListener("keydown", host.__dt02Key);
-      host.__dt02Key = null;
-    }
+    H.unwireEvents(host);
   }
 
   /* P3-4: 折叠卡头纯 div 模拟控件(data-fold)的键盘触发 —— Enter/Space 转发 click 委托;
@@ -351,14 +342,9 @@
     if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
   }
 
-  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
+  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    if (host.__dt02Wired) return;
-    host.__dt02Wired = true;
-    host.__dt02Click = onClick;
-    host.addEventListener("click", onClick);
-    host.__dt02Key = onKeyDown;
-    host.addEventListener("keydown", onKeyDown);
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
   }
 
   const _render = render;

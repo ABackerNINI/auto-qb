@@ -1,6 +1,7 @@
 /* auto-qb WEB UI · 种子详情面板模板核心层(计划 26-10-06-0838 S1)
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
+ * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845)
  * + 收起态摘要默认实现。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
@@ -103,6 +104,50 @@
     return out;
   }
 
+  /* ---------------- 变体公共骨架 helpers(reg.helpers, 报告 26-10-07-0845) ----------------
+   * 01-12 十二份变体各自复刻的四类骨架代码收口成单点, 变体经 reg.helpers 消费:
+   *   - dur/size/present/num: 格式化小工具(dur 缺失/负值回退文案; size 空值补 —;
+   *     num = Number(v)||0 —— 注意 04/05/06 里的同名 num 是「非负谓词」语义, 属另一函数不共用);
+   *   - skipUnchanged: sig 比对跳过重建(序列化比对, 宿主非空才跳; 变了先记账再放行);
+   *   - withScroll: 滚动位置自保(滚动容器是宿主父级 .drawer-body, Vue 所有 —— 原子换帧前后
+   *     纵横两轴成对恢复, 恢复次序 scrollLeft 先 scrollTop 后);
+   *   - wireEvents/unwireEvents: 事件委托挂摘成对(宿主元素跨变体复用, 换变体必须摘掉旧监听,
+   *     否则新旧变体监听叠加、同一次点击被多个 handler 重复处理)。挂摘都记账在同一张
+   *     host.__dtEvents 事件表上, 成对纪律由实现保证, 变体不再各自维护 __dtNNWired 标志。 */
+  var HELPERS = {
+    dur: function (ctx, v, dash) {
+      return (v === null || v === undefined || v < 0) ? (dash || "未设") : ctx.fmtDuration(v);
+    },
+    size: function (ctx, v) { return ctx.fmtSizeOrDash(v) || "—"; },
+    present: function (v) { return v !== undefined && v !== null && v !== ""; },
+    num: function (v) { return Number(v) || 0; },
+    skipUnchanged: function (host, ui, sig) {
+      if (sig === ui.lastSig && host.firstChild) return true;
+      ui.lastSig = sig;
+      return false;
+    },
+    withScroll: function (host, swap) {
+      var sc = host ? host.parentElement : null;
+      var top = sc ? sc.scrollTop : 0;
+      var left = sc ? sc.scrollLeft : 0;
+      swap();
+      if (sc) {
+        sc.scrollLeft = left;
+        sc.scrollTop = top;
+      }
+    },
+    wireEvents: function (host, map) {
+      if (!host || host.__dtEvents) return;
+      host.__dtEvents = map;
+      for (var k in map) host.addEventListener(k, map[k]);
+    },
+    unwireEvents: function (host) {
+      if (!host || !host.__dtEvents) return;
+      for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);
+      host.__dtEvents = null;
+    },
+  };
+
   /* ---------------- 注册表(变体文件直接消费的单例, 不走 app.mixin) ----------------
    * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
    * 否则接线守阵会把它当漏注入的 mixin。 */
@@ -115,6 +160,7 @@
     tabs: TABS.slice(),
     dtHtml: dtHtml,
     dtRaw: dtRaw,
+    helpers: HELPERS,
     /* 变体自注册入口: (id, tab) 唯一, tab 必须是五页签之一; id 只收 [A-Za-z0-9_-]
      * (要进 data-dt 属性与 CSS 选择器)。非法/重复 fail-fast 抛错 —— 变体半残比静默好。 */
     register: function (entry) {

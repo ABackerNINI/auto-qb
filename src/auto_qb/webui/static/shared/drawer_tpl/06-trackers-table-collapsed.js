@@ -20,6 +20,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
 
   /* 状态分桶 -> 文案与排序权值(异常置顶; 虚拟恒排最后) */
   const BUCKET = {
@@ -226,13 +227,7 @@
     const sig = JSON.stringify(ts) + "|" + String(!!loading)
       + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "")
       + "|" + err;
-    if (sig === ui.lastSig && host.firstChild) return;
-    ui.lastSig = sig;
-    const scroller = host.parentElement;
-    /* 纵横滚动位成对自保: 表格定宽 grid 窄窗口下必有横向滚动(drawer-body overflow:auto),
-     * 整帧重建只还 scrollTop 会把用户的横向滚动位打回最左 */
-    const scroll = scroller ? scroller.scrollTop : 0;
-    const scrollLeft = scroller ? scroller.scrollLeft : 0;
+    if (H.skipUnchanged(host, ui, sig)) return;
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -278,9 +273,11 @@
         ${R(rowsHtml)}
       </div>
     </div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    if (scroller) scroller.scrollLeft = scrollLeft;
-    if (scroller) scroller.scrollTop = scroll;
+    /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
+     * 用户的横向滚动位打回最左) —— 单点 helper */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+    });
   }
 
   /* ---------------- 收起态摘要: 健康比例条(实体计数为权值) ----------------
@@ -316,15 +313,7 @@
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
      * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
-    if (host && host.__dt06Click) {
-      host.removeEventListener("click", host.__dt06Click);
-      host.__dt06Click = null;
-      host.__dt06Wired = false;
-    }
-    if (host && host.__dt06Key) {
-      host.removeEventListener("keydown", host.__dt06Key);
-      host.__dt06Key = null;
-    }
+    H.unwireEvents(host);
   }
 
   /* P3-4: 纯 span 模拟控件(msg 展开行 data-msg)的键盘触发 —— Enter/Space 转发 click 委托;
@@ -337,14 +326,9 @@
     onClick(ev);
   }
 
-  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
+  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    if (host.__dt06Wired) return;
-    host.__dt06Wired = true;
-    host.__dt06Click = onClick;
-    host.addEventListener("click", onClick);
-    host.__dt06Key = onKeyDown;
-    host.addEventListener("keydown", onKeyDown);
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
   }
 
   function onClick(ev) {
