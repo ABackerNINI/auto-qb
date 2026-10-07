@@ -12,13 +12,17 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
 - 读盘 v4(plan 26-10-04-1957 R2 换代立, 只读 qb-traffic-v4/ 新目录): raw 段窗(1m-24h)经
-  V4DayCache.read_window 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), 块序列 ->
-  traffic_grid.v4_series_points 桶点 -> v4_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/
-  all)经 V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶
-  (3d+ 组图由 M×31 -> M×1 次文件读取)。
+  V4DayCache.read_window 按窗口日期集合只读涉及天文件(窗首种子外扩一个桶宽, 24h 窗常态
+  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid.v4_series_points 桶点 ->
+  v4_rate_from_totals 速率口径变换(计划 26-10-07-2127 方案 B: rate = 计数器差分区间平均
+  delta/w; D3 窗首种子 = t0 外扩 grid.interval 取前驱桶点作差分基线, 种子点被 v4_grid_obs
+  窗外覆盖过滤天然不外发) -> v4_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/all)经
+  V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶(3d+ 组图由
+  M×31 -> M×1 次文件读取; dl_avg 已是真均值, 不做差分变换)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
-  不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏。
+  不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏;
+  活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续, 图尾桶同为区间平均(计划 26-10-07-2127 S2)。
   agg 段窗(3d+)仍纯磁盘(未完结小时/日/月桶缺口的合流留待后续切片)。
 - 读取失败(Windows 竞态等瞬态 OSError)不以空态冒充「无数据」: 回退上一份成功响应并标
   meta.stale=true(§08「最坏返回上一秒快照 + stale」), 无历史快照才回本次现算结果。
@@ -165,7 +169,8 @@ class QbTrafficChartApi:
 
         key 与成员集解析同 /api/groups/{key} 通道(decode -> store.groups 查表); 聚合口径
         (成员求和 / 逐成员差分 / 桶 null 由成员观测面裁决)全部在 core.traffic_grid 纯函数层;
-        不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
+        raw 段成员链与单系列同口径(窗首种子外扩 + v4_rate_from_totals 区间平均, 计划
+        26-10-07-2127 S2); 不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
         """
         parse_window(window)
         key = group_key_param(key_text)  # 畸形 key -> 400(同 /api/groups/{key} 通道, 不 500)
@@ -178,18 +183,24 @@ class QbTrafficChartApi:
         degraded = False
         if seg == "raw":
             grid = self._grid(window)
+            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 外扩一个响应桶宽取前驱桶点作差分基线
             member_obs = []
             member_blocks = []
             member_has_tail = []
             for h in members:
                 tail_slots = ()
                 try:
-                    days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, grid.t0, grid.t1)
+                    days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, seed_t0, grid.t1)
                     blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                     tail = self._live_tail(TORRENT_KEY_PREFIX + h)
                     tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
                     member_obs.append(
-                        tg.v4_grid_obs(tg.v4_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
+                        tg.v4_grid_obs(
+                            tg.v4_rate_from_totals(
+                                tg.v4_series_points(blocks, seed_t0, grid.t1, tail_slots=tail_slots)
+                            ),
+                            grid,
+                        )
                     )
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
@@ -236,18 +247,21 @@ class QbTrafficChartApi:
     # ---------- 单系列装配(raw / agg 两段合流, §05.3) ----------
 
     def _payload_series(self, key: str, window: str) -> dict:
-        """global/torrent 共用单系列装配: raw 段窗 = 天文件桶点 -> 栅格展开; agg 段窗 =
-        agg 行直映栅格(all 的栅格由月行数据面定)。OSError(读取竞态)-> degraded,
-        回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
+        """global/torrent 共用单系列装配: raw 段窗 = 天文件桶点(窗首外扩一个桶宽取差分种子,
+        D3)-> v4_rate_from_totals 区间平均变换(计划 26-10-07-2127) -> 栅格展开; agg 段窗 =
+        agg 行直映栅格(all 的栅格由月行数据面定; dl_avg 已是真均值, 不做差分变换)。
+        OSError(读取竞态)-> degraded, 回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
         seg = tg.WINDOW_SPECS[window][1]
         if seg == "raw":
             grid = self._grid(window)
+            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 外扩一个响应桶宽取前驱桶点作差分基线
             try:
-                days = self.v4cache.read_window(key, grid.t0, grid.t1)
+                days = self.v4cache.read_window(key, seed_t0, grid.t1)
                 blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                 tail = self._live_tail(key)
                 tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
-                obs = tg.v4_grid_obs(tg.v4_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
+                points = tg.v4_rate_from_totals(tg.v4_series_points(blocks, seed_t0, grid.t1, tail_slots=tail_slots))
+                obs = tg.v4_grid_obs(points, grid)
                 degraded = False
             except OSError:
                 obs, degraded = {}, True

@@ -65,18 +65,21 @@
 - test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
 - test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
-- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 栅格展开(points 对齐桶/空桶 null=断连真空) + totals 差分(重置/断链) + 读取竞态降级回上一份快照标 stale
+- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale
+- test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w —— 已知 totals 序列逐桶断言 + 瞬时直采值零上图 + totals 通道逐字节不变(窗首基线缺失/相邻差分照旧) + 活尾桶跨盘/尾接缝差分(图尾同为区间平均)
+- test_api_traffic_qb_raw_seed_extension_window_start_baseline: (S2/D3)窗首种子: read_window/v4_series_points t0 外扩一个响应桶宽取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(非 0 线非瞬时值), 种子点被 v4_grid_obs 窗外过滤不外发
+- test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (S2/D3)种子跨真空: 真空 null 点断链 —— 恢复首桶 rate 派不出(D4 0 线)且离线期字节不进速率与 totals, 次桶基线恢复 delta/w
 - test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分
 - test_api_traffic_qb_global_6mo_1y_day_segment: (S3b D4 沿用)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
 - test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
 - test_api_traffic_qb_torrent_1y_single_agg_cold_read: (S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
-- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(恰 2 个), 窗外日期/agg.dat 零 open
-- test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员均值/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
+- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open
+- test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员区间平均/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
-- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点;
+- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点(桶值 = 区间平均, 计划 26-10-07-2127 S2);
   磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
-- test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空;
+- test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空(单记录窗首基线缺失 D4 0 线, S2);
   单种端点同享活尾
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
 - test_api_traffic_qb_group_member_only_zruns_not_empty: 组空态判据观测面 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
@@ -5972,9 +5975,10 @@ def test_api_traffic_qb_window_validation(web_env):
 
 
 def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch):
-    """global 24h 窗(raw 段): 天文件块 -> 桶点 -> 栅格展开(points 对齐桶 1:1 / 空桶 null
-    = 断连真空) + totals 相邻桶快照差分(重置 null / 断连断链) + 读取竞态降级: 回上一份成功
-    快照标 stale=true, 不以空态冒充无数据(§08)"""
+    """global 24h 窗(raw 段): 天文件块 -> 桶点 -> 速率口径变换(区间平均 delta/w, 计划
+    26-10-07-2127 S2) -> 栅格展开(points 对齐桶 / 空桶 null = 断连真空 / 窗首无种子基线
+    缺失 D4 豁免 0 线) + totals 相邻桶快照差分(重置 null / 断连断链, 口径不受速率变换
+    影响) + 读取竞态降级: 回上一份成功快照标 stale=true, 不以空态冒充无数据(§08)"""
     from auto_qb.core.traffic_store import V4Block, V4DayCache, V4NullRun, V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
@@ -6021,12 +6025,13 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     body = r.json()
     assert body["meta"] == {"window": "24h", "interval_s": 30, "source": "qb", "stale": False}
     assert 2880 <= len(body["points"]) <= 2881  # 满窗栅格(窗首对齐时恰 2880)
-    assert point_at(body, base) == {"t": base, "dl": 100, "up": 50}  # r1 桶(对齐 1:1)
-    assert point_at(body, base + 30) == {"t": base + 30, "dl": 200, "up": 70}
+    assert point_at(body, base) == {"t": base, "dl": 0, "up": 0}  # 窗内首点无基线: D4 豁免 0 线(非 null)
+    assert point_at(body, base + 30) == {"t": base + 30, "dl": 33, "up": 10}  # 区间平均: delta(1000,300)/30
+    assert point_at(body, base + 120) == {"t": base + 120, "dl": 0, "up": 3}  # dl 重置派不出 0 线 + up delta(100)/30
     assert point_at(body, base + 150) is None  # 断连段: 连续空桶 = null(不连线)
     assert point_at(body, base + 180) is None
     assert point_at(body, base + 210) is None
-    assert point_at(body, base + 240) == {"t": base + 240, "dl": 12, "up": 22}
+    assert point_at(body, base + 240) == {"t": base + 240, "dl": 0, "up": 0}  # 断链后基线缺失: D4 0 线
     # totals: 桶 base 窗内首个有观测桶 -> 基线缺失 null; 相邻桶差分; 重置逐向独立; 断链后基线缺失
     assert total_at(body, base) == {"t": base, "dl": None, "up": None}
     assert total_at(body, base + 30) == {"t": base + 30, "dl": 1000, "up": 300}
@@ -6054,6 +6059,139 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     assert fresh["points"] == [] and fresh["totals"] == [] and fresh["meta"]["stale"] is True
     monkeypatch.undo()
     assert client.get("/api/traffic/qb/global", headers=auth).json()["meta"]["stale"] is False  # 恢复后照常
+
+
+def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
+    """(计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w: 已知 totals 序列
+    逐桶断言(20/10 与 40/20), 瞬时直采值(5xxx-9xxx 垃圾字段)零上图; totals 通道逐字节不变
+    (窗首基线缺失 null + 相邻差分照旧); 活尾槽带绝对 totals —— 图尾桶跨盘/尾接缝差分,
+    同为区间平均(head_pending=False 非块首活尾从写侧游标倒推槽位)"""
+    from auto_qb.core.traffic_store import LiveTail, V4Sample, v4_epoch_date_str
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_v4(mgr)
+    now = int(time.time())
+    b0 = ((now - 240) // 30) * 30  # 5m 窗内, 远离窗首/窗尾栅格边缘(种子外扩区无数据)
+    store.append_records(
+        "global",
+        v4_epoch_date_str(b0 + 30),
+        (b0 + 30, 30),
+        (
+            V4Sample(7777, 7777, 1000, 500),  # 桶 b0: 窗内首点无基线 -> D4 0 线
+            V4Sample(9999, 9999, 1600, 800),  # 桶 b0+30: delta(600,300)/30 -> 20/10
+            V4Sample(5555, 5555, 2800, 1400),  # 桶 b0+60: delta(1200,600)/30 -> 40/20
+        ),
+        (1000, 500),
+    )
+    _attach_live_tail_host(
+        mgr,
+        {
+            "global":
+                LiveTail(
+                    block_open=True,
+                    head_pending=False,  # 块首已落盘: 活尾记录为非块首, 槽位从游标 projected_ts 倒推
+                    start_epoch=b0 + 30,
+                    interval_s=30,
+                    projected_ts=float(b0 + 120),
+                    records=(V4Sample(8888, 8888, 3400, 1700), ),  # 桶 b0+90: delta(600,300)/30 -> 20/10
+                    open_run=None,
+                )
+        },
+    )
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
+    assert pt("points", b0) == {"t": b0, "dl": 0, "up": 0}  # 窗内首点基线缺失 D4 0 线
+    assert pt("points", b0 + 30) == {"t": b0 + 30, "dl": 20, "up": 10}
+    assert pt("points", b0 + 60) == {"t": b0 + 60, "dl": 40, "up": 20}
+    assert pt("points", b0 + 90) == {"t": b0 + 90, "dl": 20, "up": 10}  # 活尾桶: 跨盘/尾接缝差分
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 瞬时垃圾值零上图
+    # totals 通道逐字节不变(速率变换不动快照链): 窗首基线缺失 + 相邻差分(含活尾桶)
+    assert pt("totals", b0) == {"t": b0, "dl": None, "up": None}
+    assert pt("totals", b0 + 30) == {"t": b0 + 30, "dl": 600, "up": 300}
+    assert pt("totals", b0 + 60) == {"t": b0 + 60, "dl": 1200, "up": 600}
+    assert pt("totals", b0 + 90) == {"t": b0 + 90, "dl": 600, "up": 300}
+
+
+def test_api_traffic_qb_raw_seed_extension_window_start_baseline(web_env):
+    """(计划 26-10-07-2127 S2/D3)窗首种子: read_window/v4_series_points 的 t0 外扩一个响应
+    桶宽(grid.t0 - grid.interval)取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(旧口径下
+    是瞬时直采值; 无种子时是 D4 0 线), 瞬时垃圾值零上图; 种子点自身基线缺失且被 v4_grid_obs
+    窗外过滤天然不外发。数据跨窗首等距等差铺放(逐桶 delta 恒 600/300), 对窗首 floor 对齐
+    位置与端点取 now 的 ±1s 秒漂不敏感(断言值恒定)"""
+    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_v4(mgr)
+    now = int(time.time())
+    first = (now - 300) - ((now - 300) % 30)  # 5m 窗栅格首桶(floor 对齐)
+    totals = ((1000, 500), (1600, 800), (2200, 1100), (2800, 1400), (3400, 1700))
+    store.append_records(
+        "global",
+        v4_epoch_date_str(first),
+        (first, 30),
+        tuple(V4Sample(9999, 9999, dl, up) for dl, up in totals),  # 瞬时字段全垃圾, 只看差分
+        (1000, 500),
+    )
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+    pts = [p for p in body["points"] if p is not None]
+    assert len(pts) >= 2 and body["meta"]["stale"] is False
+    p0 = pts[0]
+    assert p0["t"] in (first, first + 30)  # 端点取 now 与用例 ±1s: 窗首桶至多移一格
+    assert all(p["dl"] == 20 and p["up"] == 10 for p in pts)  # 逐桶 delta(600,300)/30 —— 种子给窗首桶基线
+    tots = [p for p in body["totals"] if p is not None]
+    assert tots[0] == {"t": p0["t"], "dl": None, "up": None}  # totals 口径不变: 窗首桶基线缺失
+    assert tots[1] == {"t": pts[1]["t"], "dl": 600, "up": 300}  # 相邻桶差分照旧
+
+
+def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
+    """(计划 26-10-07-2127 S2/D3)种子跨真空: 窗首前种子块与窗内恢复块之间程序停机 ——
+    v4_series_points 既有真空判定出 null 点断链, 恢复首桶 rate 派不出(D4 豁免 0 线, 非
+    null 非尖峰), 离线期 qB 自行传输的字节既不进速率也不进 totals(恢复首桶 totals 基线
+    缺失 null), 次桶起基线恢复 delta/w"""
+    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_v4(mgr)
+    now = int(time.time())
+    first = (now - 300) - ((now - 300) % 30)
+    store.append_records(  # 窗首前种子块: 单记录, 桶 first-30(被 v4_grid_obs 窗外过滤不外发)
+        "global", v4_epoch_date_str(first), (first, 30), (V4Sample(1111, 1111, 1000, 500), ), (1000, 500)
+    )
+    store.append_records(  # 停机后恢复块(真空 [first, first+60)): 首记录 totals 已含离线期字节 9000/4500
+        "global",
+        v4_epoch_date_str(first + 90),
+        (first + 90, 30),
+        (
+            V4Sample(9999, 9999, 10600, 5300),  # 桶 first+60: 恢复首点基线缺失 -> D4 0 线(离线字节不进速率)
+            V4Sample(7777, 7777, 11200, 5600),  # 桶 first+90: delta(600,300)/30 -> 20/10(基线恢复)
+            V4Sample(5555, 5555, 11800, 5900),  # 桶 first+120: delta(600,300)/30 -> 20/10
+        ),
+        (10600, 5300),
+    )
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert body["meta"]["stale"] is False
+    assert pt("points", first) is None and pt("points", first + 30) is None  # 真空段断线(不连线)
+    assert pt("points", first + 60) == {"t": first + 60, "dl": 0, "up": 0}  # 恢复首桶 D4 0 线(非 null 非尖峰)
+    assert pt("points", first + 90) == {"t": first + 90, "dl": 20, "up": 10}  # 基线恢复
+    assert pt("points", first + 120) == {"t": first + 120, "dl": 20, "up": 10}
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 瞬时垃圾值零上图
+    assert pt("totals", first + 60) == {"t": first + 60, "dl": None, "up": None}  # 离线字节不进 totals(基线缺失)
+    assert pt("totals", first + 90) == {"t": first + 90, "dl": 600, "up": 300}
+    assert all(p is None or (p["dl"] in (None, 600) and p["up"] in (None, 300)) for p in body["totals"])
 
 
 def test_api_traffic_qb_global_30d_hour_segment(web_env):
@@ -6181,7 +6319,7 @@ def test_api_traffic_qb_torrent_endpoint(web_env):
     body = client.get("/api/traffic/qb/torrent/HA", headers=auth).json()
     assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
     p = next(p for p in body["points"] if p and p["t"] == base)
-    assert p == {"t": base, "dl": 500, "up": 100}
+    assert p == {"t": base, "dl": 0, "up": 0}  # 区间平均口径: 单记录窗首无基线, D4 豁免 0 线(瞬时值不上图)
     # 非法哈希(路径不安全字符, 存储层 fail-fast) -> 400; 未知哈希(合法字符, 无文件) -> 空态
     assert client.get("/api/traffic/qb/torrent/HA.X", headers=auth).status_code == 400
     assert client.get("/api/traffic/qb/torrent/ZZ", headers=auth).json()["points"] == []
@@ -6240,22 +6378,23 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
     store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 600) // 30) * 30  # 窗内 10 分钟前的对齐桶
-    involved = sorted(v4_window_dates(now - 86400, now))
+    involved = sorted(v4_window_dates(now - 86400 - 30, now))  # 镜像端点窗首种子外扩(S2/D3: t0 - 一个桶宽)
     older_date = (datetime.strptime(involved[0], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-    # 造数: 现行记录落 base 所在日期; 其余涉及日期与窗外更早日期各放一块(读侧按窗过滤)
+    # 造数: 现行记录落 base 所在日期; 其余涉及日期与窗外更早日期各放一块(读侧按窗过滤)。
+    # 块料 totals 与 base 块一致(100, 50): 窗首恰跨午夜被链进差分链时 delta=0, 窗首桶值恒 (0,0) 不随对齐漂移
     for d in involved + [older_date]:
         if d == v4_epoch_date_str(base + 30):
             store.append_records("global", d, (base + 30, 30), (V4Sample(7, 7, 100, 50), ), (100, 50))
         else:
             ts = int(datetime.strptime(d, "%Y-%m-%d").timestamp()) + 30
-            store.append_records("global", d, (ts, 30), (V4Sample(1, 1, 1, 1), ), (1, 1))
+            store.append_records("global", d, (ts, 30), (V4Sample(1, 1, 100, 50), ), (100, 50))
     opened = _qb_open_spy(monkeypatch)
     body = client.get("/api/traffic/qb/global", headers=auth).json()
     monkeypatch.undo()
     dat_opens = sorted(os.path.basename(p) for p in _v4_opens(opened))
-    assert dat_opens == sorted(d + ".dat" for d in involved)  # 只开涉及日期(至多 2 个), 更早日期/agg.dat 不触
-    assert len(involved) == 2
-    assert next(p for p in body["points"] if p and p["t"] == base) == {"t": base, "dl": 7, "up": 7}
+    assert dat_opens == sorted(d + ".dat" for d in involved)  # 只开涉及日期(含种子外扩), 更早日期/agg.dat 不触
+    assert 2 <= len(involved) <= 3  # 常态恰 2; 窗首种子外扩跨本地午夜边界时至多 3(S2/D3)
+    assert next(p for p in body["points"] if p and p["t"] == base) == {"t": base, "dl": 0, "up": 0}  # D4 0 线
 
 
 def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):
@@ -6318,10 +6457,10 @@ def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
     assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
-    assert pt("points", b0) == {"t": b0, "dl": 300, "up": 30}  # Σ 成员均值(HA 100 + HB 200, 回溯可见)
-    assert pt("points", b1) == {"t": b1, "dl": 0, "up": 0}  # HA 速率 0 行 + HB 速率 0 行
-    assert pt("points", b2) == {"t": b2, "dl": 40, "up": 8}  # HA 10 + HB 30
-    assert pt("points", b3) == {"t": b3, "dl": 10, "up": 5}  # HB 无行按 0 计
+    assert pt("points", b0) == {"t": b0, "dl": 0, "up": 0}  # 双成员窗首点基线缺失 D4 0 线(回溯可见性不变: 桶非 null)
+    assert pt("points", b1) == {"t": b1, "dl": 40, "up": 0}  # 区间平均: HA delta(1000)/30=33 + HB delta(200)/30=7
+    assert pt("points", b2) == {"t": b2, "dl": 3, "up": 0}  # HA 重置派不出 0 线 + HB delta(100)/30=3
+    assert pt("points", b3) == {"t": b3, "dl": 3, "up": 0}  # HA delta(100)/30=3, HB 无行按 0 计
     assert pt("points", b4) == {"t": b4, "dl": 0, "up": 0}  # HA z 覆盖空闲观测 -> 0 线(非 null)
     assert pt("points", b5) is None  # 全员无观测(停机)整桶断线 —— 成员观测面裁决, 不借 global
     assert pt("totals", b0) == {"t": b0, "dl": 0, "up": 0}  # 双成员窗内基线缺失 -> 0(不出洞)
@@ -14220,8 +14359,8 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
     assert body["meta"]["stale"] is False
-    assert pt("points", b0) == {"t": b0, "dl": 100, "up": 50}
-    assert pt("points", b1) == {"t": b1, "dl": 200, "up": 70}
+    assert pt("points", b0) == {"t": b0, "dl": 0, "up": 0}  # 区间平均口径: 首点基线缺失 D4 0 线
+    assert pt("points", b1) == {"t": b1, "dl": 33, "up": 10}  # delta(1000, 300)/30
     assert pt("points", b2) is None  # 活尾之外无观测
     assert pt("totals", b1) == {"t": b1, "dl": 1000, "up": 300}
     live_body = body
@@ -14261,12 +14400,12 @@ def test_api_traffic_qb_group_live_tail_member_only(web_env):
     def pt(seg, t):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
-    assert pt("points", b0) == {"t": b0, "dl": 300, "up": 30}  # HB 活尾观测(HA 无数据按 0 计)
+    assert pt("points", b0) == {"t": b0, "dl": 0, "up": 0}  # HB 活尾观测(HA 无数据按 0 计); 单记录窗首基线缺失 D4 0 线
     assert pt("totals", b0) == {"t": b0, "dl": 0, "up": 0}  # 窗首基线缺失
     assert pt("points", b1) is None  # 单记录覆盖桶 [b0, b0+30) 恰一格, b1 无观测
-    # 单种端点同享活尾
+    # 单种端点同享活尾(区间平均口径: 单记录无基线, D4 豁免 0 线 —— 桶在即合流生效)
     body = client.get("/api/traffic/qb/torrent/HB", headers=auth, params={"window": "5m"}).json()
-    assert any(p and p["t"] == b0 and p["dl"] == 300 for p in body["points"])
+    assert next((p for p in body["points"] if p and p["t"] == b0), None) == {"t": b0, "dl": 0, "up": 0}
 
 
 def test_frontend_toast_duration_floor_by_kind() -> None:
