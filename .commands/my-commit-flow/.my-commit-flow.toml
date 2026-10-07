@@ -4,6 +4,8 @@
 confirmed = true
 
 branch = ""                       # 留空 = 跟当前分支
+# 2026-10-08 起: origin 存在即主线, 镜像由主线主机决定(主机 ≠ 主线主机的第一个远端) ——
+# 下面四个键只在**没有 origin** 的仓库里兜底(旧逻辑, 行为不变); 判据单点在 _ship_config.py。
 main_candidates = ["gitee", "origin", "github"]
 main_host_mark  = "gitee.com"     # 按 URL 特征挑主线(历史 clone 的 origin 可能是 GitHub 镜像)
 mirror          = "github"

@@ -62,8 +62,8 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 |---|---|---|
 | 仓库根 | 从脚本目录向上找 `.git`（目录或 worktree 的 `.git` 文件）；快照自举下副本在仓库外，改认 `COMMAND_FLOW_REPO_ROOT` 注入的真根 | — |
 | 分支 | 跟当前分支 | 配 `branch` |
-| 主线远端 | 候选名（`main_candidates`）里第一个 **URL 含 `main_host_mark`** 的（按 URL 特征而非名字）；都不匹配则回退到候选里第一个存在的 | 配 `main_host_mark` / `main_candidates` |
-| 镜像远端 | 按 URL 含 `mirror_host_mark` 找并**排除主线自己**；没有镜像也正常 | 配 `mirror_host_mark` |
+| 主线远端 | **`origin` 存在即主线**（2026-10-08 起主推 origin，镜像由 origin 主机决定）；无 origin 的仓库回退：候选名（`main_candidates`）里第一个 **URL 含 `main_host_mark`** 的（按 URL 特征而非名字），都不匹配则回退到候选里第一个存在的 | 无 origin 时配 `main_host_mark` / `main_candidates` |
+| 镜像远端 | **由主线主机决定**：主机 ≠ 主线主机的第一个远端（origin 是 gitee 则镜像命中 github，反之亦然；**只配 origin 时没有镜像**）；按主机找不到再退回 `mirror_host_mark` / `mirror` 名字 | 一般不用配；旧键 `mirror_host_mark` 只在按主机找不到时兜底 |
 | 禁用代理的 `-c` | 从 `git config` 读 per-URL 代理 key，没配就不加参数 | — |
 
 上面这些只是**探测规则**，取值来源仍是外置配置 —— 也就是说：流程内置、项目事实外置，两边不混。

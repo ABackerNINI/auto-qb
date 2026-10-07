@@ -201,9 +201,12 @@ def resolve_branch(cfg: dict) -> str:
 
 
 def resolve_main_remote(cfg: dict) -> tuple[str, str]:
-    """主线远端 (名字, URL): 候选名里第一个 URL 含 `main_host_mark` 的; 都不匹配则回退到候选里
-    第一个存在的(单远端项目里那个远端就是主线)。按 **URL 特征** 而不是按名字。"""
+    """主线远端 (名字, URL): `origin` 存在即主线(2026-10-08 用户口径: 主推 origin, 镜像由 origin
+    主机决定 —— 不再按 host_mark 从候选里挑); 没有 origin 的仓库回退旧逻辑 —— 候选名里第一个
+    URL 含 `main_host_mark` 的, 都不匹配则回退到候选里第一个存在的。按 **URL 特征** 而不是按名字。"""
     urls = push_urls()
+    if "origin" in urls:
+        return "origin", urls["origin"]
     mark = cfg.get("main_host_mark", "")
     if mark:
         for name in cfg.get("main_candidates", []):
@@ -223,9 +226,16 @@ def main_matches_mark(cfg: dict, url: str) -> bool:
 
 
 def resolve_mirror_remote(cfg: dict) -> tuple[str, str]:
-    """镜像远端 (名字, URL): 按 `mirror_host_mark` 找并**排除主线自己**; 再退回 `mirror` 这个名字。"""
+    """镜像远端 (名字, URL): **由主线主机决定** —— 取主机 ≠ 主线主机的第一个远端(origin 是
+    gitee 则镜像命中 github, origin 是 github 则命中 gitee; 只配 origin 时没有镜像)。按主机
+    找不到再退回旧逻辑 —— 按 `mirror_host_mark` 找(排除主线自己), 再退回 `mirror` 这个名字。"""
     urls = push_urls()
-    main_name, _ = resolve_main_remote(cfg)
+    main_name, main_url = resolve_main_remote(cfg)
+    main_host = _host(main_url)
+    if main_host:
+        for name, url in urls.items():
+            if name != main_name and _host(url) != main_host:
+                return name, url
     mark = cfg.get("mirror_host_mark", "")
     if mark:
         for name, url in urls.items():
@@ -235,6 +245,10 @@ def resolve_mirror_remote(cfg: dict) -> tuple[str, str]:
     if name and name in urls and name != main_name:
         return name, urls[name]
     return "", ""
+
+
+def _host(url: str) -> str:
+    return urlparse(url).netloc if url else ""
 
 
 def proxy_disable_args(target_url: str) -> tuple[str, ...]:
@@ -257,10 +271,6 @@ BUILD_NOISE = (
     "__pycache__", ".venv", "venv", "node_modules", "dist", "build", "coverage", "htmlcov", ".pytest_cache",
     ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", "site"
 )
-
-
-def _host(url: str) -> str:
-    return urlparse(url).netloc if url else ""
 
 
 def _ignored_dirs(root: Path) -> list[str]:

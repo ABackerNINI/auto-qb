@@ -19,6 +19,8 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
                                不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
 - MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
+- ResolveRemoteTest            远端解析: origin 存在即主线 / 镜像由主线主机决定 / 只配 origin 无镜像 /
+                               无 origin 走旧逻辑(host_mark / 候选名)逐字不变
 - PackageRefreshTest / ReloadConfigTest  (已退役: 快照自举取代了「热刷新 / 配置重取」两条治标机制,
                               守阵迁到 test_snapshot.py —— 机制没了, 测机制的用例留着就是测不到现实的死守阵)
 - SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
@@ -43,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _pipeline  # noqa: E402
+import _ship_config  # noqa: E402
 from _ship_config import config_problems, find_root, load_config  # noqa: E402
 
 PY = sys.executable
@@ -319,6 +322,78 @@ class MirrorNoRetryTest(unittest.TestCase):
         text = self.PUSH.read_text(encoding="utf-8")
         self.assertIn('git_run("push", main, branch)', text)
         self.assertNotIn('git_run("push", main, branch, attempts=1)', text)
+
+
+class ResolveRemoteTest(unittest.TestCase):
+    """远端解析(2026-10-08 用户口径: **主推 origin, 镜像由 origin 主机决定**):
+    - `origin` 存在即主线 —— 哪怕 host_mark 匹配别的候选也轮不到它(钉住优先级);
+    - 镜像 = 主机 ≠ 主线主机的第一个远端 —— origin 是 gitee 则镜像命中 github, 反之亦然;
+    - 只配 origin → 没有镜像(单远端兼容, 不报错);
+    - 没有 origin 的仓库走旧逻辑(host_mark / 候选名 / mirror 名字), 行为逐字不变。
+    push_urls 用替身钉死远端表 —— 真跑 `git remote -v` 会被本机 clone 的远端名牵着走。
+    """
+
+    CFG = {
+        "main_candidates": ["gitee", "origin", "github"],
+        "main_host_mark": "gitee.com",
+        "mirror": "github",
+        "mirror_host_mark": "github.com",
+    }
+
+    def setUp(self) -> None:
+        self.urls: dict[str, str] = {}
+        orig = _ship_config.push_urls
+        _ship_config.push_urls = lambda: self.urls
+        self.addCleanup(setattr, _ship_config, "push_urls", orig)
+
+    def test_origin_is_main_even_when_mark_matches_other(self) -> None:
+        """origin 是 gitee 的 URL、host_mark 也指向 gitee —— 主线仍必须是 origin(名字上钉死)。"""
+        self.urls = {
+            "gitee": "https://gitee.com/x/y.git",
+            "origin": "https://gitee.com/x/y.git",
+            "github": "https://github.com/x/y.git",
+        }
+        self.assertEqual(_ship_config.resolve_main_remote(self.CFG)[0], "origin")
+
+    def test_origin_wins_even_when_url_differs_from_mark(self) -> None:
+        """origin 指向 github 而 host_mark 指向 gitee —— 主线照样 origin(存在即主线, 与 URL 无关)。"""
+        self.urls = {
+            "gitee": "https://gitee.com/x/y.git",
+            "origin": "https://github.com/x/y.git",
+            "github": "https://github.com/x/y.git",
+        }
+        self.assertEqual(_ship_config.resolve_main_remote(self.CFG)[0], "origin")
+
+    def test_mirror_follows_origin_host_gitee_to_github(self) -> None:
+        self.urls = {
+            "gitee": "https://gitee.com/x/y.git",
+            "origin": "https://gitee.com/x/y.git",
+            "github": "https://github.com/x/y.git",
+        }
+        self.assertEqual(_ship_config.resolve_mirror_remote(self.CFG)[0], "github")
+
+    def test_mirror_follows_origin_host_github_to_gitee(self) -> None:
+        self.urls = {
+            "gitee": "https://gitee.com/x/y.git",
+            "origin": "https://github.com/x/y.git",
+            "github": "https://github.com/x/y.git",
+        }
+        self.assertEqual(_ship_config.resolve_mirror_remote(self.CFG)[0], "gitee")
+
+    def test_origin_only_has_no_mirror(self) -> None:
+        """单远端兼容: 只配 origin → 镜像为空(不报错、不把主线自己当镜像)。"""
+        self.urls = {"origin": "https://gitee.com/x/y.git"}
+        self.assertEqual(_ship_config.resolve_main_remote(self.CFG)[0], "origin")
+        self.assertEqual(_ship_config.resolve_mirror_remote(self.CFG), ("", ""))
+
+    def test_no_origin_keeps_old_logic(self) -> None:
+        """没有 origin 的仓库: host_mark 挑主线 + mirror_host_mark 挑镜像 —— 旧行为逐字不变。"""
+        self.urls = {
+            "gitee": "https://gitee.com/x/y.git",
+            "github": "https://github.com/x/y.git",
+        }
+        self.assertEqual(_ship_config.resolve_main_remote(self.CFG)[0], "gitee")
+        self.assertEqual(_ship_config.resolve_mirror_remote(self.CFG)[0], "github")
 
 
 class SmokeSafetyTest(unittest.TestCase):
