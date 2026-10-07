@@ -179,7 +179,7 @@
         : (r.act === "copy"
           ? T`<button type="button" class="dt03-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>`
           : "");
-      return T`<div class="dt03-item" title="${r.label}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+      return T`<div class="dt03-item">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
 

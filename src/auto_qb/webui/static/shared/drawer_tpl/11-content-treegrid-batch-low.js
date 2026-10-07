@@ -198,7 +198,7 @@
       : T`<span></span>`;
     const s = r.dir ? d.stats.get(r.path) : null;
     const meta = r.dir
-      ? T`<span class="dt11-meta" title="目录内共 ${s ? s.files : 0} 个文件">${s ? s.files : 0} 文件</span>`
+      ? T`<span class="dt11-meta">${s ? s.files : 0} 文件</span>`
       : (item.prog < 1
         ? T`<span class="dt11-meta" title="按进度估算缺口约 ${ctxOf().fmtSize(item.size * (1 - item.prog))}" style="color:var(--warn); border-color:var(--warn-line)">缺 ${ctxOf().fmtSize(item.size * (1 - item.prog))}</span>`
         : "");
@@ -358,10 +358,10 @@
         </div>`;
     const html = T`<div class="dt11-wrap">
       <div class="dt11-tools">
-        <input type="checkbox" class="dt11-ck" data-ckmaster title="全选 / 全不选(文件)">
+        <input type="checkbox" class="dt11-ck" data-ckmaster>
         ${R(chips)}
-        <button type="button" class="dt11-ghost" data-fold="open" title="展开全部目录">展开</button>
-        <button type="button" class="dt11-ghost" data-fold="close" title="折叠全部目录">折叠</button>
+        <button type="button" class="dt11-ghost" data-fold="open">展开</button>
+        <button type="button" class="dt11-ghost" data-fold="close">折叠</button>
         <span class="dt11-hint">勾选目录 = 整棵子树 · 批量条吸底</span>
       </div>
       <div class="dt11-head${d.hasAv ? " hasav" : " noav"}">

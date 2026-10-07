@@ -244,7 +244,7 @@
   function cell(r) {
     const cls = "dt01-cell" + (r.wide ? " is-wide" : "");
     const btn = actBtn(r);
-    return T`<div class="${cls}" title="${r.label}">${r.icon ? icoSvg(r) : ""}<span class="dt01-k">${r.label}</span><span class="dt01-v-cell"><span class="dt01-vv">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+    return T`<div class="${cls}">${r.icon ? icoSvg(r) : ""}<span class="dt01-k">${r.label}</span><span class="dt01-v-cell"><span class="dt01-vv">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
   }
 
   function secHtml(sec) {

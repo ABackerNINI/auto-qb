@@ -232,7 +232,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
-                    <td class="wrap mono-cell" :title="t.url">{{ t.url }}</td>
+                    <td class="wrap mono-cell">{{ t.url }}</td>
                     <td>{{ drawerTrackerStatus(t.status) }}</td>
                     <td class="num">{{ fmtPeersQb(t.num_seeds, t.num_complete) }}</td>
                     <td class="num">{{ fmtPeersQb(t.num_leeches, t.num_incomplete) }}</td>

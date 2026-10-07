@@ -263,11 +263,11 @@
     }
     const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
     /* 计数条: 正常 / 警告 / 更新中 / 失败 / 未启用(虚拟 m) */
-    const strip = T`<span class="dt05-c" title="正常"><i style="background:var(--green)"></i>正常 <b>${n.ok}</b></span>
-      <span class="dt05-c" title="警告"><i style="background:var(--warn)"></i>警告 <b>${n.warn}</b></span>
-      <span class="dt05-c" title="更新中"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
-      <span class="dt05-c" title="失败"><i style="background:var(--error)"></i>失败 <b>${n.err}</b></span>
-      <span class="dt05-c" title="未启用(含虚拟条目)"><i style="background:var(--border-strong)"></i>未启用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
+    const strip = T`<span class="dt05-c"><i style="background:var(--green)"></i>正常 <b>${n.ok}</b></span>
+      <span class="dt05-c"><i style="background:var(--warn)"></i>警告 <b>${n.warn}</b></span>
+      <span class="dt05-c"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
+      <span class="dt05-c"><i style="background:var(--error)"></i>失败 <b>${n.err}</b></span>
+      <span class="dt05-c"><i style="background:var(--border-strong)"></i>未启用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
       <span class="dt05-note">5s 自动刷新</span>
       <span class="dt05-spacer"></span>`;
     /* 分区: 空分区整节隐藏; 正常区按 tier 升序(设计稿口径) */
@@ -303,7 +303,7 @@
       </section>`;
     }).join("");
     const html = T`<div class="dt05-wrap">
-      <div class="dt05-strip" title="分区顺序即处理顺序: 失败 -> 警告 -> 更新中 -> 正常 -> 未启用">${R(strip)}</div>
+      <div class="dt05-strip">${R(strip)}</div>
       ${R(secs)}
     </div>`;
     /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */

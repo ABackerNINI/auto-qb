@@ -155,7 +155,7 @@
         "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶", "#i-check-circle"),
       limitCell(ctx),
     ].join("");
-    const html = T`<div class="dt15-kpis" title="窗口 ${ctx.qbCurWindow} · 前端派生自 points/totals">${R(cells)}</div>`;
+    const html = T`<div class="dt15-kpis">${R(cells)}</div>`;
     host.replaceChildren(document.createRange().createContextualFragment(html));
   }
 
@@ -198,9 +198,9 @@
     const inner = sparkInner(ctx);
     const spark = T`<svg class="dt15-spark" viewBox="0 0 118 22" preserveAspectRatio="none" aria-hidden="true">${R(inner)}</svg>`;
     const parts = [spark,
-      T`<span class="dt15-cs-up" title="当前窗口累计上传">↑ ${ctx.fmtSize(s.up || 0)}</span>`,
-      T`<span class="dt15-cs-dl" title="当前窗口累计下载">↓ ${ctx.fmtSize(s.down || 0)}</span>`,
-      T`<span class="dt15-cs-pk" title="当前窗口上行峰值">峰值 ${ctx.fmtSpeed(c.peak)}</span>`,
+      T`<span class="dt15-cs-up">↑ ${ctx.fmtSize(s.up || 0)}</span>`,
+      T`<span class="dt15-cs-dl">↓ ${ctx.fmtSize(s.down || 0)}</span>`,
+      T`<span class="dt15-cs-pk">峰值 ${ctx.fmtSpeed(c.peak)}</span>`,
       T`<span class="dt15-cs-win">窗口 ${ctx.qbCurWindow}</span>`];
     return parts.join(' <span style="color:var(--fg-dim)">·</span> ');
   }

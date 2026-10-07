@@ -194,7 +194,7 @@
     /* benign = 「仅看异常」过滤的目标外行(正常 + 未启用) */
     const benign = b === "ok" || b === "off" ? "1" : "0";
     const next = b === "upd"
-      ? T`<span class="dt06-next-upd" title="正在等待 tracker 响应"><i class="pulse"></i>正在汇报</span>`
+      ? T`<span class="dt06-next-upd"><i class="pulse"></i>正在汇报</span>`
       : (b === "off" ? T`<span class="dt06-none">—</span>` : nextHtml(ctx));
     const ops = virtual
       ? T`<span class="dt06-ops dim">—</span>`
@@ -255,7 +255,7 @@
       <div class="dt06-toolbar">
         <span class="dt06-note">${note}</span>
         <button type="button" class="dt06-toggle${ui.onlyBad ? " active" : ""}" data-toggle
-          title="只显示 警告 / 更新中 / 失败 行, 聚焦正在拖后腿的条目"><i></i>仅看异常</button>
+          ><i></i>仅看异常</button>
         <span class="dt06-spacer"></span>
         <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker</button>
       </div>

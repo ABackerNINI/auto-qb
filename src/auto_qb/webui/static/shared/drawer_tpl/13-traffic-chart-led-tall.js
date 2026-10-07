@@ -133,7 +133,7 @@
         "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶", "#i-check-circle"),
       limitCell(ctx),
     ].join("");
-    const html = T`<div class="dt13-kpis" title="窗口 ${ctx.qbCurWindow} · 前端派生自 points/totals">${R(cells)}</div>`;
+    const html = T`<div class="dt13-kpis">${R(cells)}</div>`;
     host.replaceChildren(document.createRange().createContextualFragment(html));
   }
 

@@ -376,8 +376,8 @@
     const html = T`<div class="dt10-wrap">
       <section class="dt10-left">
         <div class="dt10-tools">${R(chips)}
-          <button type="button" class="dt10-ghost" data-fold="open" title="展开全部目录">展开</button>
-          <button type="button" class="dt10-ghost" data-fold="close" title="折叠全部目录">折叠</button>
+          <button type="button" class="dt10-ghost" data-fold="open">展开</button>
+          <button type="button" class="dt10-ghost" data-fold="close">折叠</button>
           <span class="dt10-hint">点行查看详情 · 点箭头折叠目录</span>
         </div>
         <div class="dt10-tree">${R(rows.join(""))}</div>

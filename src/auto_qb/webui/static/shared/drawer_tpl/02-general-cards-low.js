@@ -150,7 +150,7 @@
   }
 
   function kv(label, text, dim, icon) {
-    return T`<div class="dt02-kv" title="${label}">${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v${dim ? " is-dim" : ""}">${text}</span></div>`;
+    return T`<div class="dt02-kv">${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v${dim ? " is-dim" : ""}">${text}</span></div>`;
   }
 
   /* 卡片头(折叠态由 ui.folded 恢复) */
@@ -176,7 +176,7 @@
         : (r.act === "copy"
           ? T`<button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>`
           : "");
-      return T`<div class="dt02-kv" title="${r.label}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v" style="text-align:right;">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+      return T`<div class="dt02-kv">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v" style="text-align:right;">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
 
@@ -240,7 +240,7 @@
     /* 标识卡: 哈希 v1/v2(带复制)+ 分块 + magnet(点击按需取, BUG-9 口径) */
     const idRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.act === "copy") idRows.push(T`<div class="dt02-crow" title="${r.label}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span class="v">${r.text}</span><button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
+      if (r.act === "copy") idRows.push(T`<div class="dt02-crow">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span class="v">${r.text}</span><button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
     }
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.label === "分块") idRows.push(kv(r.label, r.text, false, r.icon));

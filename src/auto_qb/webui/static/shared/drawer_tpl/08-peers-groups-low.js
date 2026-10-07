@@ -222,7 +222,7 @@
       const m = FLAG_META[x];
       return m
         ? T`<span class="dt08-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt08-fl fl-h" title="qB flags: ${x}">${x}</span>`;
+        : T`<span class="dt08-fl fl-h">${x}</span>`;
     }).join(""))}`;
   }
   function addrHtml(p) {
@@ -255,8 +255,8 @@
     return T`<span class="dt08-spd ${dir}">${R(b)}${R(bar)}</span>`;
   }
   const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt08-amt" title="会话累计">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt08-amt z" title="会话累计 0">0</span>`);
+    ? T`<span class="dt08-amt">${fmtSizeOf(v)}</span>`
+    : T`<span class="dt08-amt z">0</span>`);
   const relHtml = (p) =>
     T`<span class="dt08-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
 
@@ -268,7 +268,7 @@
         ? T`<span class="dt08-files" title="对端正在获取的文件(qB files 字段)">${p.files}</span>`
         : T`<span class="dt08-files dimc">—</span>`)
       : "";
-    return T`<div class="${cls}" title="${p.ip || "?"}:${p.port || ""} · ${p.client || "未知"}">
+    return T`<div class="${cls}">
       ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt08-flags">${R(flagsHtml(p))}</span>${R(files)}${R(progHtml(p))}
       ${R(spdHtml(p, "u", ui.maxUp))}${R(spdHtml(p, "d", ui.maxDown))}
       ${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}

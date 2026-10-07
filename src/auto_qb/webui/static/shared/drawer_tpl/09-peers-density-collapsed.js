@@ -224,7 +224,7 @@
       const m = FLAG_META[x];
       return m
         ? T`<span class="dt09-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt09-fl fl-h" title="qB flags: ${x}">${x}</span>`;
+        : T`<span class="dt09-fl fl-h">${x}</span>`;
     }).join(""))}`;
   }
   function addrHtml(p) {
@@ -260,15 +260,15 @@
     ? T`<span class="dt09-dn" title="我方从该对端收到的即时速度(qB dlspeed)">${fmtSpeedOf(num(p.dlspeed))}</span>`
     : T`<span class="dt09-dn z" title="我方从该对端收到的即时速度(qB dlspeed)">0</span>`);
   const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt09-amt" title="会话累计">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt09-amt z" title="会话累计 0">0</span>`);
+    ? T`<span class="dt09-amt">${fmtSizeOf(v)}</span>`
+    : T`<span class="dt09-amt z">0</span>`);
   const relHtml = (p) =>
     T`<span class="dt09-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
 
   function rowHtml(p) {
     const cls = ["dt09-r", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "",
       bucketOf(p) === "hand" ? "handrow" : ""].filter(Boolean).join(" ");
-    return T`<div class="${cls}" title="${p.ip || "?"}:${p.port || ""} · ${p.client || "未知"}">
+    return T`<div class="${cls}">
       ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt09-flags">${R(flagsHtml(p))}</span>${R(progHtml(p))}${R(occHtml(p))}
       ${R(dnHtml(p))}${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}
     </div>`;

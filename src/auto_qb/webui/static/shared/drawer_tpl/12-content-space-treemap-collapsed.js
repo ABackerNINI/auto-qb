@@ -262,7 +262,7 @@
   function blkInner(n, w, h) {
     if (w < 34 || h < 20) return ""; /* 太小不放标签, 悬停看 title */
     const skip = n.dir === false && n.prio === 0 && w > 70
-      ? T`<span class="dt12-skip" title="优先级: 跳过">跳过</span>` : "";
+      ? T`<span class="dt12-skip">跳过</span>` : "";
     const sz = h >= 34 ? T`<span class="dt12-sz">${ctxOf().fmtSize(n.size)}</span>` : "";
     const nm = n.name.length > 42 ? n.name.slice(0, 41) + "…" : n.name;
     return T`<span class="dt12-lb">${nm}</span>${R(sz)}${R(skip)}`;
@@ -337,7 +337,7 @@
         title="${n.path}&#10;占 ${(n.size / total * 100).toFixed(1)}% · 进度 ${n.prog.toFixed(1)}%${n.av !== undefined ? " · 可用性 " + num(n.av).toFixed(2) : ""}">
         <svg class="ico" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
         <span class="nm">${n.name}</span>
-        <span class="trk" title="占总体积 ${(n.size / total * 100).toFixed(1)}%"><i style="width:${share}%"></i></span>
+        <span class="trk"><i style="width:${share}%"></i></span>
         <span class="sz">${ctxOf().fmtSize(n.size)}</span>
         <span class="pg">${n.prog.toFixed(1)}%</span>
       </div>`;

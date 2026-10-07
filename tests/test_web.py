@@ -31,7 +31,7 @@
 - test_frontend_col_manual_flag_not_revived: 反向守阵 —— manual 标志位(colManual)不得复活(v5 下 w 非空即固化页)
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
-- test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
+- test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815 + 详情面板二轮清理) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」/ drawer_tpl 二轮: 05 图例五色与条级顺序说明·06 等待响应与仅看异常说明·07-09 求和口径/客户端 Top 复述/qB flags 前缀/会话累计/对端整行复述·10-11 展开折叠全部目录与全选与目录文件数·12 优先级跳过与占比细条·13-15 kpis 容器派生口径与窗口累计复述)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
 - test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
 - test_skip_check_dialog_verdict_render: 跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4) —— _skipPrecheck 状态机分支(预检失败降级=启用普通确认且无强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认钮文案「跳检 N 个可跳检的」+ 强制钮「强制跳检全部」/ force-only=确认保持禁用 / 全 ok=只启用确认)+ ok 子集派生(cls==="ok" 过滤)+ 确认路径送 ok 子集而强制路径送全量+force(_skipExec 单发 body 仅 force 时带 force 键, 批量确认只走 hashes 通道)+ 降级文案「后端闸门仍会在执行时拦截」+ _skipVerdictRows 计数行与分组上限截断(slice(0,5)+等 X 个), 任一分支被改写即红
@@ -4506,6 +4506,8 @@ def test_removed_redundant_tooltips_stay_removed():
     全站悬浮提示统一由 shared/ui_feedback.js 拦截层渲染。本守阵读模板/JS 源码钉住
     代表性文案, 哪个文件把已删文案写回去即红。判定为保留的 tooltip(操作说明/后果预告、
     drawer.js 等的 _openModal 弹窗标题字段、config_hub.js 设置节标题、独立图表部件)不在列。
+    二轮(I 组): 详情面板 drawer_tpl 冗余 tooltip 清理(与可见文本复述 / 开发者口径 /
+    图例按钮自明), IP 地址列 / 对端自身进度 / 按进度估算缺口等有增量 tooltip 保留不在列。
     """
     checks = (
         # A 组 · 底部状态栏: 数值逐字复述 + 「点击修改」增量提示 + 数据状态实现细节
@@ -4523,6 +4525,79 @@ def test_removed_redundant_tooltips_stay_removed():
         ("shared/tpl/xtpl.html", ("点击收起", )),
         # H1 · columns.js 列偏好提示横幅: 横幅整体可点 + 手型光标 + 15s 自毁
         ("shared/columns.js", ("点击关闭", )),
+        # I 组 · 详情面板冗余 tooltip 二轮(drawer_tpl A/B 清单): 同屏可见文本的复述 +
+        #     开发者口径(求和/前端派生) + 图例/按钮自明文案, 同屏信息已足够不再悬浮重复
+        ("shared/tpl/drawer.html", (':title="t.url"', )),
+        ("shared/drawer_tpl/01-general-hero-tall.js", ('title="${r.label}"', )),
+        ("shared/drawer_tpl/02-general-cards-low.js", ('title="${r.label}"', )),
+        ("shared/drawer_tpl/03-general-dossier-collapsed.js", ('title="${r.label}"', )),
+        (
+            "shared/drawer_tpl/05-trackers-health-groups-low.js", (
+                'title="正常"',
+                'title="警告"',
+                'title="更新中"',
+                'title="失败"',
+                "未启用(含虚拟条目)",
+                'title="分区顺序即处理顺序',
+            )
+        ),
+        ("shared/drawer_tpl/06-trackers-table-collapsed.js", (
+            "正在等待 tracker 响应",
+            "只显示 警告 / 更新中 / 失败 行",
+        )),
+        (
+            "shared/drawer_tpl/07-peers-dashboard-tall.js", (
+                "对端 upspeed 求和",
+                "对端 dlspeed 求和",
+                'title="${k} × ${byClient[k]}"',
+                'title="其它 ${keys.length - 3}',
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        (
+            "shared/drawer_tpl/08-peers-groups-low.js", (
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        (
+            "shared/drawer_tpl/09-peers-density-collapsed.js", (
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        ("shared/drawer_tpl/10-content-tree-detail-tall.js", ("展开全部目录", "折叠全部目录")),
+        ("shared/drawer_tpl/11-content-treegrid-batch-low.js", (
+            "全选 / 全不选(文件)",
+            "目录内共",
+            "展开全部目录",
+            "折叠全部目录",
+        )),
+        ("shared/drawer_tpl/12-content-space-treemap-collapsed.js", (
+            'title="优先级: 跳过"',
+            'title="占总体积 ',
+        )),
+        ("shared/drawer_tpl/13-traffic-chart-led-tall.js", ("前端派生自 points/totals", )),
+        ("shared/drawer_tpl/14-traffic-annotated-split-low.js", (
+            "窗口内上传字节累计",
+            "窗口内下载字节累计",
+            "上下行字节占比",
+        )),
+        (
+            "shared/drawer_tpl/15-traffic-adaptive-collapsed.js", (
+                "当前窗口累计上传",
+                "当前窗口累计下载",
+                "当前窗口上行峰值",
+                "前端派生自 points/totals",
+            )
+        ),
     )
     for rel, needles in checks:
         text = open(os.path.join(STATIC_ROOT, *rel.split("/")), encoding="utf-8").read()

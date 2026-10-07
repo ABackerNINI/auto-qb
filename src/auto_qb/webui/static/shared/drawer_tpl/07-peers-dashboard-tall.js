@@ -285,8 +285,8 @@
     return T`<div class="dt07-card">
       <div class="dt07-label"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pulse"></use></svg>实时流量</div>
       <div class="dt07-flow">
-        <div class="dt07-big u" title="对端 upspeed 求和"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-upload"></use></svg><b>${ctx.fmtSpeed(upTotal)}</b><em>发给 ${upN} 个对端</em></div>
-        <div class="dt07-big d" title="对端 dlspeed 求和"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg><b>${ctx.fmtSpeed(dnTotal)}</b><em>收自 ${dnN} 个对端</em></div>
+        <div class="dt07-big u"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-upload"></use></svg><b>${ctx.fmtSpeed(upTotal)}</b><em>发给 ${upN} 个对端</em></div>
+        <div class="dt07-big d"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg><b>${ctx.fmtSpeed(dnTotal)}</b><em>收自 ${dnN} 个对端</em></div>
         <div class="dt07-flowbar" title="${tip}">${R(segs)}</div>
         <div class="dt07-foot">会话累计 发 ${ctx.fmtSize(sent)} · 收 ${ctx.fmtSize(recv)}</div>
       </div>
@@ -319,9 +319,9 @@
     const restN = keys.length > 3 ? keys.slice(3).reduce((s, k) => s + byClient[k], 0) : 0;
     const total = list.length || 1;
     const rows = top.map((k) =>
-      T`<div class="dt07-cl" title="${k} × ${byClient[k]}"><span class="n">${k}</span><span class="track"><b style="width:${(byClient[k] / total * 100).toFixed(1)}%"></b></span><b class="ct">${byClient[k]}</b></div>`).join("");
+      T`<div class="dt07-cl"><span class="n">${k}</span><span class="track"><b style="width:${(byClient[k] / total * 100).toFixed(1)}%"></b></span><b class="ct">${byClient[k]}</b></div>`).join("");
     const rest = restN
-      ? T`<div class="dt07-cl" title="其它 ${keys.length - 3} 种客户端 × ${restN}"><span class="n">其它</span><span class="track"><b style="width:${(restN / total * 100).toFixed(1)}%"></b></span><b class="ct">${restN}</b></div>`
+      ? T`<div class="dt07-cl"><span class="n">其它</span><span class="track"><b style="width:${(restN / total * 100).toFixed(1)}%"></b></span><b class="ct">${restN}</b></div>`
       : "";
     return T`<div class="dt07-card">
       <div class="dt07-label"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-monitor"></use></svg>客户端分布<em>${list.length} 连接</em></div>
@@ -385,7 +385,7 @@
       const m = FLAG_META[x];
       return m
         ? T`<span class="dt07-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt07-fl fl-h" title="qB flags: ${x}">${x}</span>`;
+        : T`<span class="dt07-fl fl-h">${x}</span>`;
     }).join(""))}`;
   }
   function addrHtml(p) {
@@ -418,8 +418,8 @@
     return T`<span class="dt07-spd ${dir}">${R(b)}${R(bar)}</span>`;
   }
   const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt07-amt" title="会话累计">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt07-amt z" title="会话累计 0">0</span>`);
+    ? T`<span class="dt07-amt">${fmtSizeOf(v)}</span>`
+    : T`<span class="dt07-amt z">0</span>`);
   const relHtml = (p) =>
     T`<span class="dt07-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
 
@@ -432,7 +432,7 @@
         ? T`<span class="dt07-files" title="对端正在获取的文件(qB files 字段)">${p.files}</span>`
         : T`<span class="dt07-files dimc">—</span>`)
       : "";
-    return T`<div class="${cls}" title="${p.ip || "?"}:${p.port || ""} · ${p.client || "未知"}">
+    return T`<div class="${cls}">
       ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt07-flags">${R(flagsHtml(p))}</span>${R(files)}${R(progHtml(p))}
       ${R(spdHtml(p, "u", ui.maxUp))}${R(spdHtml(p, "d", ui.maxDown))}
       ${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}

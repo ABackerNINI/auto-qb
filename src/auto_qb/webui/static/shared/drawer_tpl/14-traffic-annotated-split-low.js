@@ -142,9 +142,9 @@
     /* 段一: 窗口合计与占比 */
     const sec1 = T`<section class="dt14-sec">
       <h4>窗口合计(${ctx.qbCurWindow})</h4>
-      <div class="dt14-row" title="窗口内上传字节累计"><span class="k">${R(rowIco("#i-upload", "is-up"))}上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
-      <div class="dt14-row" title="窗口内下载字节累计"><span class="k">${R(rowIco("#i-download", "is-dl"))}下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
-      <div class="dt14-row" title="上下行字节占比"><span class="k">${R(rowIco("#i-percent"))}上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-upload", "is-up"))}上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-download", "is-dl"))}下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-percent"))}上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
       <div class="dt14-ratio" title="上行 / 下行 字节占比"><i class="r-up" style="width:${upPct.toFixed(1)}%"></i><i class="r-dl" style="width:${(100 - upPct).toFixed(1)}%"></i></div>
     </section>`;
 
