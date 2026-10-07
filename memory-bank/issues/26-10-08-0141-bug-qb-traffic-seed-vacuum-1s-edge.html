@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-08-0141">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="qb-traffic-rate-basis">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-qb-traffic-seed-vacuum.md,memory-bank/testing/baselines/26-10-08-0157-webui-qb-traffic-seed-vacuum.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="流量图窗首种子 1 秒边界带真空断链失效">
 <meta name="issue-summary" content="D3 窗首种子外扩下停机时刻落在 (seed_t0-1, seed_t0) 且恢复在窗内时, 真空 null 点被 t0 过滤丢弃, 离线字节误归恢复首桶">
 <title>流量图窗首种子 1 秒边界带真空断链失效 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0141-bug-qb-traffic-seed-vacuum-1s-edge</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 01:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -166,11 +166,20 @@ traffic_grid.py:441   if t0 <= t < t1:                    # null 点最终窗过
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 01:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 01:51 — 用户指派认领（「认领并修复」），状态 <strong>In Progress</strong>；开工先复验（见下「复验」，现象仍复现）。</li>
+      <li>2026-10-08 01:57 — 修复并验证完毕，状态 <strong>Done</strong>。认领方 = <code>memory-bank/tasks/26-10-08-webui-qb-traffic-seed-vacuum.md</code>（本件 <code>doc-refs</code> 已回填，认领链双向闭合）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-10-08 01:5x（基线 7baeaf10）：按锚点重跑并构造 1s 几何 —— 纯函数脚本实测，种子块末槽 <code>@999.5</code>（<code>∈ (t0-1, t0)</code>，<code>t0 = seed_t0 = 1000</code>）、恢复块首点 <code>@1030</code> 时，<code>v4_series_points</code> 返回流<strong>无 null 点</strong>（种子点 @970 保留），<code>v4_rate_from_totals</code> 恢复首桶 <code>rate = (10600-1600)/30 = 300</code>（假尖峰）。现象 <strong>仍复现</strong>；根因与「待查」推断一致（本轮已证实，非推断）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与「建议修法」不同，改道原因见下）：<code>core/traffic_grid.py</code> 新增模块常量 <code>_V4_NULL_FLOOR_S = 1</code>（null 点标记时间取整的最大下偏，秒）；<code>v4_series_points</code> 内 <code>null_lo = t0 - _V4_NULL_FLOOR_S</code>，把真空 null（<code>int(prev_chain_end)</code>）与断连 n 槽 null（<code>floor(ts)</code>）两处窗过滤下界由 <code>t0</code> 放宽为 <code>null_lo</code>。区头「窗口」注释同步。</p>
+    <ul>
+      <li><strong>为什么 1 秒即完整</strong>：种子点保留 ⟺ <code>ceil(prev_chain_end) &gt;= t0</code> ⟺ <code>prev_chain_end &gt; t0-1</code>；标记被丢 ⟺ <code>int(prev_chain_end) &lt; t0</code> ⟺ <code>prev_chain_end &lt; t0</code>。两条件交集恰为 <code>prev_chain_end ∈ (t0-1, t0)</code>，取整后标记恒 = <code>t0-1</code>。带外（<code>prev_chain_end &lt;= t0-1</code>）种子点亦被滤，恢复首点本就无基线，无假尖峰路径 —— 故下界放宽 1 秒不多留也不少留。</li>
+      <li><strong>无输出面副作用</strong>：null 点恒不外发（<code>v4_grid_obs</code> 跳过），多留的标记只影响链断位置；真空与断连两处过滤点同款取整下偏一并覆盖。</li>
+      <li><strong>改道原因</strong>：原「建议修法」① 「按原始窗 t0 判保留」方向相反（原始窗 <code>t0 &gt; seed_t0</code>，会更严而非放宽）；② 「种子只喂差分基线、不参与 null 过滤」语义不清。实际采「取整下偏容差」—— 与种子点保留带精确对齐，纯读侧一行语义改动。</li>
+    </ul>
+    <p><strong>验证方式</strong>：① 复现脚本（纯函数）先红后绿；② 新增守阵 <code>tests/test_traffic_grid.py::test_v4_seed_vacuum_null_t0_edge_band_chain_break</code>（纯函数 1s 几何 + 带外对照）与 <code>tests/test_web.py::test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band</code>（端点面，时钟钉死使 1s 几何确定），两条<strong>逐条红验</strong>：临时置 <code>_V4_NULL_FLOOR_S = 0</code> 复现红（端点实测恢复首桶 <code>dl=300/up=150</code>、totals 9000），还原复绿。</p>
+    <p><strong>测试数字</strong>：<code>commands run test.full</code> <strong>2771 passed + 4 skipped, 0 failed, 42.3s / TOTAL 99%</strong>（相对上基线 26-10-08-0142 的 2769+4：passed +2 = 本轮新增守阵）；基线切片 <code>memory-bank/testing/baselines/26-10-08-0157-webui-qb-traffic-seed-vacuum.md</code>。修复面：无 API / 响应形状 / 存储 / 配置 / 前端改动；三端点共享同一 <code>v4_series_points</code>，一处修复全覆盖；回滚 = revert 读侧提交，无数据迁移。</p>
   </section>
 
   <footer>

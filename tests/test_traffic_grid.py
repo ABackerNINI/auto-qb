@@ -35,6 +35,8 @@
   —— 重置桶的后继对其快照差分仍有基线(链永不被 rate 缺失打断)
 - test_v4_rate_from_totals_zchain_vacuum_null_passthrough: z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点原样透传且断链;
   断链后基线缺失 rate=None 而 totals 保留(观测面缺口不吞快照)
+- test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141)窗首种子 1 秒边界带 —— 停机落在 (t0-1, t0) 时真空 null 点取整后 = t0-1 落窗外,
+  窗过滤下界放宽 _V4_NULL_FLOOR_S 后保留并正确断链(恢复首桶 rate 派不出, 非跨停机假尖峰); 带外(种子点亦被滤)无假尖峰路径
 - test_v4_rate_from_totals_wide_bucket_byte_conservation: 宽桶 rate = delta/w —— 逐桶 rate×w = delta 且 Σ(rate×w) = Σ delta 字节守恒(整除构造)
 - test_v4_grid_obs_rate_null_totals_valid_exemption: (D4 豁免)rate=None 但 totals 有效的桶点只更新覆盖末端与快照链(rate 权重记 0, 逐向独立)
   —— 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线不断); 混合覆盖按速率覆盖秒加权; 真 null 点仍不参与
@@ -825,6 +827,38 @@ def test_v4_rate_from_totals_zchain_vacuum_null_passthrough():
     ]
     assert out[2] == pts[2]  # null 点原样透传(恒等)
     assert (out[3].dl_total, out[3].up_total) == (1100, 600)  # 断链不吞快照(totals 保留)
+
+
+def test_v4_seed_vacuum_null_t0_edge_band_chain_break():
+    """(issue 26-10-08-0141)窗首种子 1 秒边界带: 停机时刻落在 (t0-1, t0) 时, 真空 null 点
+    t = int(prev_chain_end) 取整后 = t0-1 恰落窗外 —— 窗过滤下界放宽 _V4_NULL_FLOOR_S 后
+    标记保留(修复前被丢), 种子点(key = t0-w, 覆盖桶触及 t0 照收)与恢复首点之间差分链正确
+    断开: 恢复首桶 rate 派不出(None)且离线期字节不被误归(修复前链误接 -> 恢复首桶 delta 跨
+    停机 = 假尖峰), 次桶基线恢复 delta/w。带外(停机再早 1 秒)种子点亦不满足覆盖被滤,
+    恢复首点本就无基线 —— 无假尖峰路径, 钉住边界带恰为 (t0-1, t0)"""
+    # 种子块末槽 @999.5 ∈ (t0-1, t0)(t0 = seed_t0 = 1000); 恢复块首点 @1030 -> 桶 1000
+    seed = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=29500)))
+    recover = V4Block(1030, 30, 10600, 5300, (V4Sample(9, 9, 10600, 5300), V4Sample(8, 8, 11200, 5600)))
+    pts = v4_series_points((seed, recover), 1000, 1200)
+    assert [(p.t, p.dl_rate, p.dl_total) for p in pts] == [
+        (970, 2, 1600),  # 种子点: key = ceil(999.5)-30 = 970, 覆盖桶触及 t0 照收(不外发, 供差分基线)
+        (999, None, None),  # 真空 null 点: t = int(999.5) = t0-1, 下界放宽后保留(修复前被丢)
+        (1000, 9, 10600),  # 恢复首点: 断链后基线缺失
+        (1030, 8, 11200),
+    ]
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (970, None, None),  # 种子自身基线缺失(不外发)
+        (999, None, None),
+        (1000, None, None),  # 恢复首桶: 断链 -> 派不出(修复前 = (10600-1600)/30 = 300 假尖峰)
+        (1030, 20, 10),  # 次桶基线恢复 delta(600,300)/30
+    ]
+    # 带外对照: 停机再早 1 秒(末槽 @998.5 -> 取整 998 < t0-1)时种子点亦不满足覆盖
+    # (ceil(998.5)-30 = 969, 覆盖桶 [969,999) 不触及 t0=1000) -> 被滤, 恢复首点本就无基线
+    seed2 = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=28500)))
+    pts2 = v4_series_points((seed2, recover), 1000, 1200)
+    assert [(p.t, p.dl_rate) for p in pts2] == [(1000, 9), (1030, 8)]  # 种子/null 均在窗外: 无标记无种子点
+    assert [(p.t, p.dl_rate) for p in v4_rate_from_totals(pts2)] == [(1000, None), (1030, 20)]  # 无假尖峰
 
 
 def test_v4_rate_from_totals_wide_bucket_byte_conservation():

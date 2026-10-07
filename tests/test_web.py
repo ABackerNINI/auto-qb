@@ -69,6 +69,7 @@
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w —— 已知 totals 序列逐桶断言 + 瞬时直采值零上图 + totals 通道逐字节不变(窗首基线缺失/相邻差分照旧) + 活尾桶跨盘/尾接缝差分(图尾同为区间平均)
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (S2/D3)窗首种子: read_window/v4_series_points t0 外扩一个响应桶宽取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(非 0 线非瞬时值), 种子点被 v4_grid_obs 窗外过滤不外发
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (S2/D3)种子跨真空: 真空 null 点断链 —— 恢复首桶 rate 派不出(D4 0 线)且离线期字节不进速率与 totals, 次桶基线恢复 delta/w
+- test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band: (issue 26-10-08-0141)窗首种子 1 秒边界带: 停机落 (seed_t0-1, seed_t0) 时真空 null 点取整后落窗外 —— 修复后标记保留断链, 恢复首桶 D4 0 线且离线字节不进速率/totals(修复前链误接出假尖峰)
 - test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分
 - test_api_traffic_qb_global_6mo_1y_day_segment: (S3b D4 沿用)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
@@ -6192,6 +6193,55 @@ def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
     assert pt("totals", first + 60) == {"t": first + 60, "dl": None, "up": None}  # 离线字节不进 totals(基线缺失)
     assert pt("totals", first + 90) == {"t": first + 90, "dl": 600, "up": 300}
     assert all(p is None or (p["dl"] in (None, 600) and p["up"] in (None, 300)) for p in body["totals"])
+
+
+def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
+    """(issue 26-10-08-0141)窗首种子 1 秒边界带: 停机时刻落在 (seed_t0-1, seed_t0) 时真空
+    null 点 t = int(prev_chain_end) 取整后 = seed_t0-1 恰落窗外 —— 修复前被丢弃, 种子点
+    (覆盖桶触及窗首照收)与恢复首点之间差分链误接, 离线期 qB 自行传输的字节被误归恢复首桶
+    出假尖峰(rate 300 / totals 9000); 修复后标记保留并断链, 恢复首桶 rate 派不出(D4 0 线)
+    且离线字节不进速率与 totals。时钟钉死(1 秒带需确定性 now; 端点 _grid 走 traffic_qb.time.time)"""
+    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
+    from auto_qb.webui.server import traffic_qb as tq
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_v4(mgr)
+    fixed = 1_800_000_000.0  # 30 的整倍 -> 5m 窗栅格对齐(确定性几何)
+
+    class _FixedClock:
+        def time(self):
+            return fixed
+
+    monkeypatch.setattr(tq, "time", _FixedClock())
+    g_t0 = int(fixed) - 300  # 5m 窗栅格首桶
+    seed_t0 = g_t0 - 30  # D3 窗首种子外扩 = grid.t0 - grid.interval
+    store.append_records(  # 种子块: 末槽恰落 (seed_t0-1, seed_t0) 的 1 秒带(首记录 @seed_t0-30, 次记录 +29.5s)
+        "global",
+        v4_epoch_date_str(seed_t0 - 30),
+        (seed_t0 - 30, 30),
+        (V4Sample(1111, 1111, 1000, 500), V4Sample(2222, 2222, 1600, 800, dt_ms=29500)),
+        (1000, 500),
+    )
+    store.append_records(  # 停机后恢复块(真空): 首记录 totals 已含离线期字节 9000/4500
+        "global",
+        v4_epoch_date_str(g_t0 + 30),
+        (g_t0 + 30, 30),
+        (V4Sample(9999, 9999, 10600, 5300), V4Sample(8888, 8888, 11200, 5600)),
+        (10600, 5300),
+    )
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
+    assert pt("points", g_t0) == {"t": g_t0, "dl": 0, "up": 0}  # 恢复首桶 D4 0 线(修复前 = 假尖峰 300)
+    assert pt("points", g_t0 + 30) == {"t": g_t0 + 30, "dl": 20, "up": 10}  # 次桶基线恢复 delta/w
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 离线字节零上图
+    assert pt("totals", g_t0) == {"t": g_t0, "dl": None, "up": None}  # 离线字节不进 totals(修复前 = 9000)
+    assert pt("totals", g_t0 + 30) == {"t": g_t0 + 30, "dl": 600, "up": 300}
 
 
 def test_api_traffic_qb_global_30d_hour_segment(web_env):

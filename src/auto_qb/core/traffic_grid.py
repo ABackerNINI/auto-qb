@@ -318,7 +318,9 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 #   断连(程序活着)= n 槽 -> 连续 null 槽折叠为一个 null 点(首槽位置取整)。两者都是
 #   null 点, 但来源不同: 真空无任何观测, n 槽是显式 null 观测。
 # - 窗口 [t0, t1): 槽 ts >= t1 不消费; 覆盖桶触及窗口左界(ceil(ts) >= t0)才保留 ——
-#   桶首允许略早于 t0(上界一个桶宽, 行照收, 对齐 v2 窗首口径); null 点按 t 过滤。
+#   桶首允许略早于 t0(上界一个桶宽, 行照收, 对齐 v2 窗首口径); null 点按 t 过滤, 下界放宽
+#   _V4_NULL_FLOOR_S 秒(取整下偏容差: 停机/断连恰落 (t0-1, t0) 时标记 t 取整后 = t0-1,
+#   见该常量注释)。
 # - 活尾合流(S6 验收追加, 2026-10-05): tail_slots(采样模块活尾快照续链产物)追加在磁盘
 #   链之后 —— 同链延续不做块间真空判定(磁盘链末槽与活尾首槽之间是一次标称采样间隔,
 #   非块界), 且按槽 ts 与磁盘链精确去重(镜像保证: 同一记录写侧游标推进与落盘重算的
@@ -327,6 +329,13 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 
 #: 真空判定浮点容差(秒): 块间 gap 与首记录覆盖桶的比较 ε
 _V4_VACUUM_EPS_S = 1e-6
+
+#: null 点标记时间取整的最大下偏(秒): 真空 null t = int(prev_chain_end) 与断连 null t =
+#: floor(ts) 均为向下取整 —— 窗过滤下界放宽该值, 使停机/断连恰落在 (t0-1, t0) 的标记不被
+#: 丢弃(该带内窗首种子点仍因覆盖桶触及 t0 而保留, 丢标记会使种子与恢复首点之间差分链误接、
+#: 离线字节误归恢复首桶; issue 26-10-08-0141)。null 点恒不外发(v4_grid_obs 跳过), 多留的
+#: 标记只影响链断位置, 无输出面副作用。
+_V4_NULL_FLOOR_S = 1
 
 
 @dataclass(frozen=True)
@@ -381,6 +390,7 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
     prev_chain_end: Optional[float] = None
     last_was_null = False
+    null_lo = t0 - _V4_NULL_FLOOR_S  # null 点窗过滤下界(取整下偏容差, 见 _V4_NULL_FLOOR_S)
     groups = [(v4_block_slots(blk), False) for blk in sorted(blocks, key=lambda blk: blk.start_epoch)]
     if tail_slots:
         groups.append((tuple(tail_slots), True))
@@ -401,7 +411,7 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
             if s.obs is None:
                 # n 槽: 连续 null 槽折叠为一个 null 点(首槽位置取整; 断连语义)
                 t = int(math.floor(s.ts))
-                if t0 <= t < t1 and not last_was_null:
+                if null_lo <= t < t1 and not last_was_null:
                     marks.append(t)
                 last_was_null = True
                 continue
@@ -438,7 +448,7 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
         n = e[3]
         entries.append((key, 1, V4PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6], w=e[7])))
     for t in marks:
-        if t0 <= t < t1:
+        if null_lo <= t < t1:
             entries.append((t, 0, V4PointEntry(t)))
     # null 点排同刻观测点之前(null 在先 = 该时刻断线、其后才是观测覆盖; 稳定保插入序)
     entries.sort(key=lambda x: (x[0], x[1]))
