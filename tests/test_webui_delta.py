@@ -2,8 +2,8 @@
 
 被测面: WebUIRuntime 的时间线落代(_fold_delta_pending_locked)/store 增量排空与脏行键推导
 (_drain_delta_locked)/full 降级理由集合(R11 五源)/views._build_group_view 的构建期交叉键
-回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议字段(S3)。
-show 桶 S8/S9 才接(S3 期 view=show 恒全量)。
+回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议字段(S3);
+剧键等价映射与迁移候选暂存(S8, 时间线 show 桶仍恒空, S9 才接)。
 
 ## 测试计划(每个测试函数一条)
 - test_timeline_appends_per_publish_and_truncates: 时间线落代/截断 —— 每次发布恰追加一条目(ver 与 group_view_ver 对齐, 本仓 ver 单调), 条目形状 = ver/full/upsert/removed 四键分 torrent/group/show 三桶; 45 次发布后 maxlen=40 截断(最旧 5 条被挤掉)
@@ -19,12 +19,17 @@ show 桶 S8/S9 才接(S3 期 view=show 恒全量)。
 - test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD) —— 增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
 - test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且内嵌 members 随行重建(P-02 一期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
 - test_s6_partial_rows_equal_full_rebuild: S6 逐字段一致性 —— 混合序列(未归组变化/组员变化/新增归组/组员删除)逐代局部重聚合后, 发布视图与全量重跑逐行逐字段相等(含脏组行 == 全量重跑该行); 每代走局部路径的判据(条目 full=False 且键集非空)随行断言
+- test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; 变体: 改名进未识别区(解析不出剧键) -> 仅旧键 removed 一侧且映射条目清除
+- test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
+- test_s8_added_hash_registered_without_candidates: S8 新增登记 —— added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选
+- test_s8_restart_backfill_without_candidates: S8 重启回填 —— 新 runtime 映射为空, 首拍全量(空键集代走全量路径)全库回填且不产生迁移候选, 时间线 show 桶仍恒空(M8); 映射非空的后继全量代不重置既有映射(回填幂等)
 """
 import json
 import time
 from collections import deque
 from types import SimpleNamespace
 
+from auto_qb.core import tvshows
 from auto_qb.core.qbapi import QbApi
 from auto_qb.infra.utils import encode_group_key
 from auto_qb.torrents import TorrentStore
@@ -676,3 +681,88 @@ def test_s6_partial_rows_equal_full_rebuild():
     assert row == host._build_group_row(("R:\\D", ), [store.by_hash["H2"]], set())
     assert _rows_by(rt.group_view, "key")[gkey_e] == host._build_group_row(("R:\\E", ), [store.by_hash["H4"]], set())
     assert row["cross_group_conflict"] is False and row["count"] == 1
+
+
+# ---------- ⑩ S8: 剧键等价映射(正确性边界 1 成员迁移的前置数据结构) ----------
+
+_S8_NAME = "Show.{}.S01E01.720p.x264-GRP"  # 与 _make_store 的装库命名同款
+
+
+def _s8_baseline(*hashes) -> tuple:
+    """装库 + 基线代发布(空键集 -> 全量路径): 映射随首个全量代回填, 回 (store, runtime, 键表)"""
+    store = _make_store(*hashes)
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)
+    keys = {h: tvshows.parse_release(_S8_NAME.format(h)).key for h in hashes}
+    assert rt._show_member_keys == keys  # 前置: 基线代全量路径已回填映射
+    return store, rt, keys
+
+
+def test_s8_rename_migration_stages_candidates():
+    """S8 改名迁移: hash 剧键变化 -> 暂存产出旧键 removed + 新键 upsert 候选, 映射随新键更新
+
+    走真增量轮(_beat 改 name -> delta_fields 带 name -> 排空段现算新剧键, 与 _build_shows_view
+    同款 parse_release 口径); 暂存由 S9 消费清空, 本步只在读取点断言, 子场景间显式隔离。
+    """
+    store, rt, keys = _s8_baseline("H1")
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+    # name 改写 -> 剧键变化: 旧剧行 removed + 新剧行 upsert 候选(暂存可读), 映射更新为新键
+    new_name = "Renamed.Show.S02E03.1080p.x264-GRP"
+    new_key = tvshows.parse_release(new_name).key
+    assert new_key != keys["H1"]
+    _beat(store, "H1", name=new_name)
+    rt.mark_dirty()
+    _publish(rt)
+    assert rt._show_member_keys == {"H1": new_key}
+    assert rt._pending_show_migrations == {"upsert": {new_key}, "removed": {keys["H1"]}}
+    # 变体: 改名进未识别区(解析不出剧键) -> 仅旧键 removed 一侧, 映射条目清除
+    rt._pending_show_migrations = {"upsert": set(), "removed": set()}  # 子场景隔离
+    _beat(store, "H1", name="1080p.x264")
+    assert tvshows.parse_release("1080p.x264").key == ""  # 前置: 新名解析不出剧键
+    rt.mark_dirty()
+    _publish(rt)
+    assert rt._show_member_keys == {}
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": {new_key}}
+
+
+def test_s8_removed_hash_cleans_mapping():
+    """S8 删除清理: 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径)"""
+    store, rt, keys = _s8_baseline("H1", "H2")
+    store.client.torrents.pop("H2")
+    store.apply_sync(QbApi(store.client, store))
+    rt.mark_dirty()
+    entry = _publish(rt)
+    # 未归组删除组键不可归约 -> 本代 full(R11 既有口径, 与本步断言无关, 记录防误读)
+    assert entry["full"] is True
+    assert rt._show_member_keys == {"H1": keys["H1"]}
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+
+
+def test_s8_added_hash_registered_without_candidates():
+    """S8 新增登记: added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选"""
+    store, rt, keys = _s8_baseline("H1")
+    store.client.torrents["H2"] = FakeTorrent(hash="H2", name=_S8_NAME.format("H2"))
+    store.apply_sync(QbApi(store.client, store))
+    rt.mark_dirty()
+    _publish(rt)
+    assert rt._show_member_keys == {"H1": keys["H1"], "H2": tvshows.parse_release(_S8_NAME.format("H2")).key}
+    assert rt._pending_show_migrations == {"upsert": set(), "removed": set()}
+
+
+def test_s8_restart_backfill_without_candidates():
+    """S8 重启回填: 新 runtime 映射空, 首拍全量(空键集代走全量路径)全库回填且不产生迁移候选"""
+    store, rt, keys = _s8_baseline("H1", "H2")
+    rt2 = WebUIRuntime(rt._host)  # 进程内重启观察面(同 test_full_downgrade_sources_matrix e 口径)
+    rt2.touch()
+    assert rt2._show_member_keys == {}  # 重启后映射空
+    rt._host.web = rt2  # 发布路径 _build_shows_view/note_cross_keys 经 host.web 接线
+    rt2.mark_dirty()
+    entry = _publish(rt2)  # 首拍: 无键集 -> 全量路径 -> 回填
+    assert entry["upsert"]["show"] == set() and entry["removed"]["show"] == set()  # show 桶恒空(M8)
+    assert rt2._show_member_keys == {"H1": keys["H1"], "H2": keys["H2"]}
+    assert rt2._pending_show_migrations == {"upsert": set(), "removed": set()}  # 回填纯登记无候选
+    # 回填幂等: 映射非空的后继全量代(config_reload 降级)不重置既有映射
+    rt2.mark_dirty(full=True, reason="config_reload")
+    _publish(rt2)
+    assert rt2._show_member_keys == {"H1": keys["H1"], "H2": keys["H2"]}

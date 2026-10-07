@@ -35,7 +35,7 @@ import secrets
 import threading
 import time
 from collections import deque
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .commands import (
     CMD_SLOW_MS,
@@ -208,6 +208,23 @@ class WebUIRuntime:
         # 主循环线程写(任务线预取先于 flush_views), 竞争最坏是键集晚一代并入 —— 与
         # _pending_full_reasons 同一「无正确性风险」口径。
         self._pending_error_hashes: set = set()
+        # ---- 剧键等价映射(plan 26-10-07-0414 S8): hash -> 剧键, 「上一版键」记忆 ----
+        # 正确性边界 1(成员迁移: name 变化移动剧键)的实现前提, S9 按脏剧键局部重算的数据源。
+        # 剧键口径 = tvshows.parse_release(rec.name).key(views._build_shows_view 现算点同款;
+        # refine_with_files 的 replace 只动 kind/season/ep 不改 key, 文件兑底不影响剧键)。
+        # 剧键是 parse_release 派生的表现层概念, store 只懂 hash/组 -> 收本对象而非 store;
+        # 读写模式与时间线同构: 写只在 view_lock 临界区(排空段更新/清理 + 全量路径回填,
+        # 主循环线程; Web 线程 ensure_state 触发的发布也在同一把锁内), R12 单一写线程不变。
+        # 解析不出剧键(name 全噪音)的 hash 不登记; 映射随种子删除清理; 重启后为空, 首个
+        # 全量代全库回填(_backfill_show_member_keys_locked) —— 重启后客户端本就窗外 full
+        # (R10: ver 时间播种 + 时间线归零), 回填无正确性风险。
+        self._show_member_keys: Dict[str, str] = {}
+        # 迁移候选暂存(S8, S9 消费): 成员迁移时「旧剧行 removed + 新剧行 upsert」的剧键集,
+        # 桶结构与时间线条目的分视图桶对齐 —— S9 在 _publish_locked 键集定型段并入 show 桶
+        # (与 _pending_error_hashes 同款生命周期: 并入后清空)。本步不并入: 时间线 show 桶
+        # 仍恒空(S5 镜子 M8), S9 前无行为面。集语义幂等: 排空段残值重跑/同键反复迁移不产生
+        # 重复候选; 现算命中同键零成本(parse_release 按 name lru 缓存, name 未变不产生候选)。
+        self._pending_show_migrations: dict = {"upsert": set(), "removed": set()}
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
         self.handle = None
@@ -568,13 +585,16 @@ class WebUIRuntime:
 
         映射口径(plan S2): flat/singles 行键 = hash 直用 -> torrent 桶; 组行键 =
         store.member_to_key -> group 桶(成员字段变化会改组行聚合值); show 桶本步恒空
-        (S8/S9 接)。数据源 = S1 属性快照(last_added/last_removed) + delta_fields(变化
+        (S9 接)。数据源 = S1 属性快照(last_added/last_removed) + delta_fields(变化
         字段集, added 不在其中)。
 
         组行 removed 键推导: 先查 member_to_key 后消费 removed 清单 —— 查得到: 组仍在 ->
         组行内容变了(upsert), 组已解散 -> 组行消失(removed); 查不到(组键已随
         _leave_group/解散清除, 且与「从未归组」不可区分) -> 该组行键不可归约 -> 本代
         full(R11 保守正确优先)。
+
+        同一临界区顺带更新剧键等价映射(plan S8): S1 added/delta_fields 涉及的 hash 现算
+        新剧键, 键变化记迁移候选, removed 清条目 —— 详见 _update_show_member_keys_locked。
         """
         added = store.last_added
         removed = store.last_removed
@@ -608,6 +628,72 @@ class WebUIRuntime:
                 unresolvable = True
         if unresolvable:
             self._pending_full_reasons.add("row_key_unresolvable")
+        self._update_show_member_keys_locked(store, added, delta_fields, removed)
+
+    def _update_show_member_keys_locked(self, store, added, delta_fields, removed) -> None:
+        """剧键等价映射更新(plan S8, **持 view_lock**): S1 added/delta_fields 涉及的 hash
+        现算新剧键并登记; 旧键存在且不同 -> 记「旧剧行 removed + 新剧行 upsert」迁移候选
+        (S9 消费的暂存, 本步不进时间线 show 桶); removed 清理映射条目 —— 映射与 store
+        状态同步。
+
+        剧键口径 = tvshows.parse_release(rec.name).key, 出处 views._build_shows_view 现算
+        点(views.py, 「parsed = tvshows.parse_release(rec.name)」行)—— 口径以现码为准;
+        refine_with_files 不改 key(tvshows.py replace 字段集仅 kind/season/ep), 故文件
+        兑底不影响剧键, 无需复刻索引兑底。局部导入同 views 同款(核心域入口按需取)。
+
+        解析不出剧键的 hash 不登记; 已登记 hash 改名进未识别区 -> 清条目, 候选只记旧键
+        一侧(新剧行不存在)。暂存只供 S9 推导脏剧键: 候选允许「过宽」—— 名称可解析但暂居
+        未识别区(如季包待文件兑底)的 hash 也按 parse 键登记, 其迁移候选的旧键行可能实际
+        未含该成员, S9 重聚合按当前库态定行止; 决不允许「过窄」—— 凡剧键变化的成员迁移必
+        产出旧+新两侧候选。同拍增删同 hash 以删除为准(登记在先、清理在后, 与 store.by_hash
+        终态一致)。
+        """
+        from ..core import tvshows  # 局部导入同 views._build_shows_view 同款
+
+        mapping = self._show_member_keys
+        staged = self._pending_show_migrations
+        by_hash = store.by_hash
+
+        def _register(h: str) -> None:
+            rec = by_hash.get(h)  # 已删 hash(同拍增删/删除残值)现算不出键: 走清除分支
+            new_key = tvshows.parse_release(rec.name).key if rec is not None else ""
+            old_key = mapping.get(h)
+            if old_key is not None and new_key != old_key:
+                # 成员迁移(正确性边界 1): 旧剧行失去该成员 -> 旧键 removed 候选; 新名解析
+                # 出剧键 -> 新剧行获得该成员 -> 新键 upsert 候选
+                staged["removed"].add(old_key)
+                if new_key:
+                    staged["upsert"].add(new_key)
+            if new_key:
+                mapping[h] = new_key
+            else:
+                mapping.pop(h, None)
+
+        for h in added:
+            _register(h)
+        for h in delta_fields:
+            _register(h)
+        for h in removed:
+            mapping.pop(h, None)
+
+    def _backfill_show_member_keys_locked(self, store) -> None:
+        """剧键映射重启回填(plan S8, **持 view_lock**): 映射为空时全库现算登记, 全量路径
+        调用(「首拍全量时回填」)。
+
+        重启后映射空且客户端本就窗外 full(R10) —— 回填无旧键可比, 纯登记不产生迁移候选。
+        非空即跳过: 运行期映射由排空段增量维护, 全库扫描只在重启后首代发生一次(全量路径
+        可能因降级源反复走, 幂等)。by_hash 快照迭代同 _build_shows_view 读侧口径(发布可能
+        经 Web 线程 ensure_state 触发, 主循环侧 apply 并发改库的窗口内不裸迭代)。
+        """
+        if self._show_member_keys:
+            return
+        from ..core import tvshows
+
+        parse = tvshows.parse_release
+        for h, rec in tuple(store.by_hash.items()):
+            key = parse(rec.name).key
+            if key:
+                self._show_member_keys[h] = key
 
     def _merge_pending_error_hashes_locked(self) -> None:
         """错误原因预取的行级脏并入累积器(**持 view_lock**, plan S2 补)
@@ -1018,6 +1104,8 @@ class WebUIRuntime:
             self.flat_view = host._build_flat_view()
             # 速度合计与四视图同一快照、同一临界区发布(状态栏据此与行数据同源同轮)
             self.speed_totals = host._build_speed_totals()
+            # 剧键映射回填(plan S8): 重启后首个全量代全库登记(映射非空即跳过, 幂等)
+            self._backfill_show_member_keys_locked(host.store)
         self.group_view_ver += 1
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
