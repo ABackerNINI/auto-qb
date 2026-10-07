@@ -7,19 +7,48 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DECORATE);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
-/* S7 装饰记忆化(plan 26-10-07-0414): WeakMap<组行对象, 装饰结果>。
+/* S7 装饰记忆化(plan 26-10-07-0414; S10 收尾回归修复 2026-10-07): WeakMap<组行对象, {fp, deco}>。
  *
- * 缓存键边界(纯函数性已核): decoratedGroups 的输出**只**依赖行对象自身 ——
- *   save_path/status/commonTags/commonCategory/sizeMismatch 全部由 g / g.members 派生,
- *   _rank/kindText/_filterSiteTags 是纯方法(只读 STATE_RANK 等模块常量), 不读任何全局
- *   筛选/多选态(筛选走 filters.js 独立 computed, 多选/乐观补丁走 state.js 的
- *   pendingGroupOps 覆盖表, 都不在本输入面内)。故行对象引用即完整缓存键:
- *   未脏行(S6 后服务端承诺跨版本引用稳定, delta 合并原样保留)直接命中复用, 重算面收敛
- *   到脏行; 脏行(服务端新 dict / 注入新对象)自然 miss 重算。行对象从不在原地变
- *   (服务端脏行恒新建 dict, 前端不改装饰行 —— 见 state.js pendingGroupOps 注),
- *   无"内容变了缓存还命中"的失效漏标风险。弱引用不延长废弃行对象寿命。
+ * 缓存键 = 行对象引用 + 缓存值带「输入指纹」(纯函数缓存的标准失效法)。输出**只**依赖:
+ *   ①组行自身字段 —— 服务端承诺脏行恒新建 dict、跨版本引用稳定(S6 后 delta 合并原样保留),
+ *     行对象引用不变 ⇒ 内容不变, 这一半由 WeakMap 键覆盖;
+ *   ②g.members 的**成员字段值** —— 成员行会被**原地改**: P0-3 乐观补丁链(applyOptimistic /
+ *     resolveOptimistic 回滚 / reapplyPending / onTruthEvent)沿 _forEachRow 对成员直接
+ *     Object.assign kind, 成员对象引用不变。S7 初版"行对象引用即完整缓存键"漏了这一面:
+ *     组行身份不变 => WeakMap 恒命中 => 装饰结果陈旧 => 乐观值不再传导到组行状态色
+ *     (踩 S4/S7 零改动区与"装饰结果与无记忆化逐字段一致"的 S7 验收)。
+ * 指纹 fp 记装饰实际消费的源值(members 引用 + 逐成员 kind/size/category/site/tags 引用 +
+ * 首成员 save_path —— 恰好 = save_path/status/commonTags/commonCategory/sizeMismatch
+ * 5 个派生字段的完整输入面; _rank/kindText/_filterSiteTags 是纯方法, 不在输入面内,
+ * 筛选/多选态走 filters.js/state.js 独立 computed 同样不在): 命中前逐槽比对, 任一失配
+ * 即重算并回填 —— 原地变更指纹失配自然失效, 引用稳定的未脏行指纹一致命中复用(S7 的
+ * "未脏行装饰结果引用恒等"断言保住), 重算面仍收敛到脏行。弱引用不延长废弃行对象寿命。
+ * 返回结构形状不变(键集/字段与无记忆化完全一致), 消费方 sort.js sortedGroups /
+ * filters.js / selection.js 不感知 —— 记忆化若改形状即踩 computed 静默白屏坑
+ * (pitfalls/web-ui/vue-reactivity.md)。
  */
 const _decoCache = new WeakMap();
+
+/* 指纹槽位(与 _decoFpBuild 逐字对应): [members 引用, (kind, size, category, site, tags 引用)*n, 首成员 save_path] */
+function _decoFpBuild(g) {
+  const ms = g.members || [];
+  const fp = [ms];
+  for (const m of ms) fp.push(m.kind, m.size, m.category, m.site, m.tags);
+  fp.push(ms.length ? ms[0].save_path : undefined);
+  return fp;
+}
+
+function _decoFpHit(g, fp) {
+  const ms = g.members || [];
+  if (fp[0] !== ms || fp.length !== ms.length * 5 + 2) return false;
+  let i = 1;
+  for (const m of ms) {
+    if (fp[i++] !== m.kind || fp[i++] !== m.size || fp[i++] !== m.category || fp[i++] !== m.site || fp[i++] !== m.tags) {
+      return false;
+    }
+  }
+  return fp[i] === (ms.length ? ms[0].save_path : undefined);
+}
 
 window.AQB_DECORATE = {
   methods: {
@@ -128,12 +157,13 @@ window.AQB_DECORATE = {
      */
     decoratedGroups() {
       return this.groups.map((g) => {
-        // S7: 引用未变的行直接复用已装饰结果(键=行对象, 见文件头 _decoCache 注)。
-        // 返回结构形状逐一不变(键集/字段与无记忆化完全一致), 消费方 sort.js sortedGroups /
-        // filters.js / selection.js 不感知 —— 记忆化若改形状即踩 computed 静默白屏坑
+        // S7: 未脏行(引用稳定 + 指纹一致)复用已装饰结果; 脏行/原地变更(指纹失配)重算
+        // (键=行对象, 失效=输入指纹, 见文件头 _decoCache 注)。返回结构形状逐一不变
+        // (键集/字段与无记忆化完全一致), 消费方 sort.js sortedGroups / filters.js /
+        // selection.js 不感知 —— 记忆化若改形状即踩 computed 静默白屏坑
         // (pitfalls/web-ui/vue-reactivity.md)。
         const hit = _decoCache.get(g);
-        if (hit) return hit;
+        if (hit && _decoFpHit(g, hit.fp)) return hit.deco;
         const deco = {
           ...g,
           save_path: (g.members[0] && g.members[0].save_path) || "",
@@ -142,7 +172,7 @@ window.AQB_DECORATE = {
           commonCategory: this._commonCategory(g.members),
           sizeMismatch: new Set(g.members.map((m) => m.size)).size > 1,
         };
-        _decoCache.set(g, deco);
+        _decoCache.set(g, { fp: _decoFpBuild(g), deco });
         return deco;
       });
     },
