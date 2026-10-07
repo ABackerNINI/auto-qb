@@ -51,7 +51,8 @@
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
-- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select max-width 160->240(min-width:0; 160px 截断长 label 收起态)
+- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
+- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽 width:240px 且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住), 与 .dt-select 同柱单点在核心 00-core 注入层(三皮肤共享)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -3458,7 +3459,8 @@ def test_drawer_tpl_cross_seed_fold_and_select_width():
     是 path 不含 hash, 新种子 path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择;
     dt11 勾选集必须继续重置 —— 批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与
     种子无关或无折叠的变体(01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash
-    重置机制; 核心 .dt-select max-width 放宽到 240px(160px 硬上限截断长 label 收起态)。"""
+    重置机制; 核心 .dt-select 宽度 240px(P3-7 160px 硬上限截断长 label 收起态; 定宽化见
+    test_drawer_tpl_select_fixed_width_tab_independent)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     vdir = os.path.join(shared, "drawer_tpl")
 
@@ -3498,12 +3500,37 @@ def test_drawer_tpl_cross_seed_fold_and_select_width():
         assert "lastHash" not in text, \
             f"drawer_tpl/{name}: 出现 lastHash 换种子重置机制(该变体折叠/展开 key 与种子无关或无折叠, 不应有此机制)"
 
-    # 4. P3-7: .dt-select max-width 240(头部 .drawer-title/.dt-summary 均 min-width:0 先行
-    #    让位, 放宽不挤压 tabs/双钮); 160px 旧上限不得回潮
+    # 4. P3-7: .dt-select 上限 240(160px 旧上限不得回潮); 定宽化后 26-10-07 用户报的
+    #    「切页签选择器宽度变」归新守阵 test_drawer_tpl_select_fixed_width_tab_independent
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
-    assert "min-width: 0; max-width: 240px" in core, \
-        "核心 .dt-select 缺 min-width:0 + max-width:240px(P3-7: 160px 硬上限截断长 label 收起态)"
+    assert "width: 240px" in core, \
+        "核心 .dt-select 缺 240px 宽度(P3-7: 160px 硬上限截断长 label 收起态)"
     assert "max-width: 160px" not in core, "核心仍残留 .dt-select 160px 旧上限(P3-7 回潮)"
+
+
+def test_drawer_tpl_select_fixed_width_tab_independent():
+    """详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报: 切页签时切换模板的元素宽度
+    变化导致其它元素跟着变化) —— 病根: 原生 select 的自动最小宽 = 最宽 option 的宽, 而
+    dtTplOptions 按当前页签变化, max-width 上限挡不住内容驱动宽, 选择器占位宽随页签变, 同排
+    .drawer-title(flex:1 1 auto)与收起摘要 .dt-summary 跟着让位回弹。修法单点在核心 00-core
+    注入层(三皮肤共享): .dt-select 定宽 width:240px 且不再依赖 max-width; text-overflow:
+    ellipsis 是定宽后长 label 的截断保险丝; 收起摘要 .dt-summary 的 flex-basis 同步定宽
+    240px(速度/进度逐轮询周期变化, 内容驱动宽在收起态逐秒抖, 一并稳住)。"""
+    core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
+    m = re.search(r'"\.drawer \.dt-select \{([^"]*)"', core)
+    assert m, "核心 .dt-select 规则形态漂移(守阵正则失配, 同步本守阵)"
+    decls = m.group(1)
+    assert "width: 240px" in decls, \
+        "核心 .dt-select 未定宽 240px(占位宽仍由最宽 option 决定, 切页签即抖)"
+    assert "max-width" not in decls, \
+        "核心 .dt-select 仍带 max-width(上限不改变内容驱动宽的病根, 26-10-07 用户报回归)"
+    assert "text-overflow: ellipsis" in decls, \
+        "核心 .dt-select 缺长 label 截断保险丝(定宽后超宽 option 文本无省略号语义)"
+    ms = re.search(r'"\.drawer \.dt-summary \{([^"]*)"', core)
+    assert ms, "核心 .dt-summary 规则形态漂移(守阵正则失配, 同步本守阵)"
+    sdecls = ms.group(1)
+    assert "flex: 0 1 240px" in sdecls, \
+        "收起摘要 .dt-summary 仍内容驱动宽(flex-basis auto: 速度/进度逐轮询变化 => 收起态头部跟着抖)"
 
 
 def test_drawer_tpl_classic_default():
