@@ -27,7 +27,13 @@ from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
-from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, _VIEW_QUANTUM, view_field_value  # noqa: E402
+from auto_qb.torrents import (  # noqa: E402
+    _SNAPSHOT_FIELDS,
+    REQUIRED_TORRENT_FIELDS,
+    _VIEW_FIELDS,
+    _VIEW_QUANTUM,
+    view_field_value,
+)
 
 try:
     from qbittorrentapi import TorrentState  # noqa: E402
@@ -663,10 +669,14 @@ class FakeTorrent:
         链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框、以及"复制磁力"
         (magnet_uri 只在详情里 —— 轮询载荷按需取详情口径已不含它, issue E-04 P-06;
         见 drawer.js copyTorrentInfo)。
-        与真实现一致: 惰性缓存槽(下划线开头)与 tracker_conf 不进导出(后者是配置对象, 不可 JSON 化)。
+        与真实现同口径(快照/非快照分则, pitfalls/testing/stub-bypass-apply.md): 导出单点 =
+        compat._SNAPSHOT_FIELDS(桩构造器恒全量赋值, 含扩展快照字段 magnet_uri 等);
+        **非快照字段不进导出** —— 桩改走真 store._apply 后, _apply 会给记录补挂
+        `hr_link`(HrRuntime 对象, 不可 JSON 化), 旧的 vars() 全导出口径让详情端点
+        恒 500(S10 e2e 复测实爆, 2026-10-07)。tracker_error_msg/ts 同为非快照字段,
+        真记录 to_dict 一并不含(详情层的 HR 展示字段由端点另行附加, 与桩无关)。
         """
-        skip = {"tor", "tracker_conf"}
-        return {k: v for k, v in vars(self).items() if not k.startswith("_") and k not in skip and not callable(v)}
+        return {f: getattr(self, f) for f in _SNAPSHOT_FIELDS}
 
     @property
     def state_enum(self):
