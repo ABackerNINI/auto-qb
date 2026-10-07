@@ -287,10 +287,12 @@ window.AQB_QB_TRAFFIC = {
     qbTrafficActive() {
       return !!this.qbCurScope;
     },
-    /* 流量形态头部标题(kind === "traffic" 时用; 单种走种子详情头部, 不消费本值) */
+    /* 流量形态头部标题(kind === "traffic" 时用; 单种走种子详情头部, 不消费本值)。
+     * 2026-10-08 用户要求标题缩短为「qB流量图」—— 头部同排要容纳 13 档窗口档位与纵轴控件,
+     * 长标题会把档位挤出去。分组/种子保留各自名称(它们本就短, 且要区分对象)。 */
     qbTrafficTitle() {
       const s = this.qbCurScope;
-      if (s === "global") return "qB 口径流量图";
+      if (s === "global") return "qB流量图";
       if (s === "group") return "分组流量图 · " + (this.qbGroupName || "未命名分组");
       if (s === "torrent") return "种子流量图 · " + this.drawerTitle();
       return "";
@@ -815,7 +817,7 @@ window.AQB_QB_TRAFFIC = {
       const opts = {
         width: W,
         height: H,
-        legend: { show: false },  // 图例由模板渲染(.hist-legend 复用, 色义同源)
+        legend: { show: false },  // 图例由模板渲染(2026-10-08 版式改后并入统计栏 .hs-leg, 色义同源)
         cursor: { x: true, y: false, drag: { x: false, y: false } },  // 观察用途: 只留十字线, 不做框选缩放
         scales: {
           x: { time: true },

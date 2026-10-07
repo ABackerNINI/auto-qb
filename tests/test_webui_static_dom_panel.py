@@ -139,8 +139,10 @@ def test_frontend_qb_traffic_chart_wiring():
       页), 面板本体由 drawerVisible 限主内容页 —— 见 test_frontend_qb_traffic_drawer_page_guard。
     6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 悬停 0 桶状态行(空闲段 z 派生 (0,0)
       真实观测点, 与 null 缺口可辨)/ 悬停缺口合并文案「无采样 · 程序未运行或 qB 断连」/
-      图例 hint 两处同步「缺口 = 无采样(停机/断连)」/ 单种空态收窄为「从未有传输记录」;
-      三皮肤共用 shared 分片与 mixin(tpl-manifest 登记链见上面第 3 点), 文案单点钉住即可。"""
+      单种空态收窄为「从未有传输记录」; 三皮肤共用 shared 分片与 mixin(tpl-manifest 登记链见上面
+      第 3 点), 文案单点钉住即可。2026-10-08 版式改(用户动议)推翻「图例 hint 两处」旧口径:
+      窗口档位/纵轴控件上提流量形态头部标题栏, 图例(上行/下行)并入统计栏, 两处 hint 与独立
+      图例行全退场 —— 这里改为钉上提/并入/退场三条新结构口径。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -350,9 +352,26 @@ def test_frontend_qb_traffic_chart_wiring():
     assert "无采样 · 程序未运行或 qB 断连" in drawer_tpl, \
         "悬停缺口文案未更新(plan §05 首版合并文案: 两态区分依赖可选 API 形状增强, 拍板不做)"
     assert "断线 · 无数据" not in drawer_tpl, "旧缺口文案「断线 · 无数据」必须退场"
-    assert drawer_tpl.count("缺口 = 无采样, 停机/断连") == 2, \
-        "图例 hint 两处(工具条 + 图例)必须同步为「缺口 = 无采样(停机/断连)」"
+    # 2026-10-08 版式改(用户动议): 两处 hint 全移除 —— 图下那行独立图例(含口径注释)并入统计栏,
+    # 口径说明不再以常驻文案出现(信息在悬停 tooltip 里给)。原「两处 hint 同步」的守阵随之退役,
+    # 改为钉「文案已退场」+「图例已入统计栏」+「档位/纵轴控件已上提头部」三条新口径。
+    assert "缺口 = 无采样" not in drawer_tpl and "悬停查看详情" not in drawer_tpl, \
+        "图例 hint 两处(工具条 + 图例)已按用户要求全部移除(2026-10-08 版式改), 不得复现"
     assert "断线处不连线" not in drawer_tpl, "旧图例 hint「断线处不连线」必须退场"
+    # 版式改结构钉住: ①时间档位与纵轴控件在流量形态头部(标题栏)内, 不在正文; ②图例(上行/下行)
+    # 在统计栏 .hist-summary 内, 不再是独立的 .hist-legend 行
+    head_blk = re.search(
+        r'<header v-if="drawer\.kind === .traffic." class="drawer-head">(.*?)</header>', drawer_tpl, re.S
+    )
+    assert head_blk and 'class="qb-tabs"' in head_blk.group(1) and 'class="qb-tools"' in head_blk.group(1), \
+        "时间档位(.qb-tabs)与纵轴控件(.qb-tools)必须落在流量形态头部标题栏内(2026-10-08 版式改: 自正文上提, 把高度还给图)"
+    assert 'class="hist-legend"' not in drawer_tpl, \
+        "独立的图例行(.hist-legend)必须退场: 上行/下行图例已并入统计栏 .hist-summary"
+    sum_blk = re.search(r'class="hist-summary">(.*?)</div>', drawer_tpl, re.S)
+    assert sum_blk and 'hs-leg' in sum_blk.group(1) and '上行' in sum_blk.group(1) and '下行' in sum_blk.group(1), \
+        "统计栏(.hist-summary)必须含上行/下行图例(.hs-leg), 且排在「窗口 N 桶」之前"
+    assert sum_blk.group(1).index("hs-leg") < sum_blk.group(1).index("窗口"), \
+        "图例必须排在统计栏首位(窗口 N 桶 之前), 与用户「窗口 900桶后」的表述同向"
     assert '暂无该种子的 qB 口径流量数据(从未有传输记录)' in js, \
         "单种空态文案未收窄为「从未有传输记录」(plan §03.3 拍板: 空闲不再产生空态)"
     assert "仅活跃传输期间有采样" not in js, \
@@ -573,14 +592,16 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     for comp in ("qbCurYAxis()", "qbYAxisMode()", "qbYAxisManual()", "qbYAxisCapText()"):
         assert comp in js, f"缺纵轴 computed {comp}"
 
-    # 9. 模板控件(三挂点共用正文块内) + 生效上限读数
-    assert 'class="qb-tools"' in drawer_tpl and 'class="qb-seg"' in drawer_tpl, \
-        "drawer.html 缺纵轴控件(.qb-tools/.qb-seg)"
+    # 9. 模板控件(2026-10-08 版式改: 自正文上提到流量形态头部标题栏) + 生效上限读数
+    hdr = re.search(r'<header v-if="drawer\.kind === .traffic." class="drawer-head">(.*?)</header>', drawer_tpl, re.S)
+    assert hdr, "drawer.html 缺流量形态头部(标题栏)"
+    assert 'class="qb-tools"' in hdr.group(1) and 'class="qb-seg"' in hdr.group(1), \
+        "drawer.html 纵轴控件(.qb-tools/.qb-seg)必须落在流量形态头部内(2026-10-08 版式改上提)"
     assert drawer_tpl.count("qbSetYAxisMode(") == 3, "纵轴三态各一个按钮(自动/限速+20%/手动)"
-    assert "v-if=\"qbYAxisMode === 'manual'\"" in drawer_tpl \
-        and "qbSetYAxisManual($event.target.value)" in drawer_tpl, \
+    assert "v-if=\"qbYAxisMode === 'manual'\"" in hdr.group(1) \
+        and "qbSetYAxisManual($event.target.value)" in hdr.group(1), \
         "手动模式必须给输入框且 @change 走 qbSetYAxisManual"
-    assert "{{ qbYAxisCapText }}" in drawer_tpl, "缺生效上限读数(qbYAxisCapText)"
+    assert "{{ qbYAxisCapText }}" in hdr.group(1), "缺生效上限读数(qbYAxisCapText)"
 
     # 10. CSS 三皮肤成对(纵轴控件)
     for css, name in (

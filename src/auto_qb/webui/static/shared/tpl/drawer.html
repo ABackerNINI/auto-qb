@@ -19,14 +19,38 @@
         <div class="drawer-grip" title="拖拽调高" @pointerdown="drawerGripDown($event)"
              @pointermove="drawerGripMove($event)" @pointerup="drawerGripUp($event)"
              @pointercancel="drawerGripUp($event)"></div>
-        <!-- 流量形态头部(全局/分组): 图标 + 标题 + 收起/关闭; 窗口切换与种子详情流量页签同处
-             正文工具条(qbTrafficActive 块), 三挂点正文完全一致 -->
+        <!-- 流量形态头部(全局/分组/单种): 图标 + 标题 + **时间档位 + 纵轴设置** + 收起/关闭。
+             2026-10-08 版式改(用户动议): 窗口档位与纵轴控件自正文上提到本栏 —— 正文工具条
+             占的是图的高度, 图被压扁; 两者本就是「图怎么看」的设置, 归设置栏才合理。
+             三挂点(全局/分组/单种)共用同一段控件块。 -->
         <header v-if="drawer.kind === 'traffic'" class="drawer-head">
           <div class="drawer-title">
             <span class="g-status k-other">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
             </span>
             <strong>{{ qbTrafficTitle }}</strong>
+          </div>
+          <!-- 窗口档位(13 档) + 纵轴控件: 与种子详情「流量」页签共用正文/头部, 三挂点一致。
+               窗口清单单点在 qb_traffic_chart.js QB_WINDOW_NAMES(展示/切换/持久化同源) -->
+          <div class="qb-tabs">
+            <button v-for="w in qbWindowNames" :key="w"
+                    :class="{ active: qbCurWindow === w }"
+                    @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
+          </div>
+          <div class="qb-tools">
+            <span class="qb-tools-label">纵轴</span>
+            <div class="qb-seg">
+              <button :class="{ active: qbYAxisMode === 'auto' }"
+                      @click="qbSetYAxisMode('auto')">自动</button>
+              <button :class="{ active: qbYAxisMode === 'limit' }"
+                      @click="qbSetYAxisMode('limit')">限速+20%</button>
+              <button :class="{ active: qbYAxisMode === 'manual' }"
+                      @click="qbSetYAxisMode('manual')">手动</button>
+            </div>
+            <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
+                   min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
+                   @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
+            <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
           </div>
           <!-- S1(计划 26-10-06-0838): 收起态摘要(P-06 压缩进 44px 头部) + 模板切换器;
                摘要内容由核心/活动变体 summary 供给(v-html 消费已转义 HTML, 见 drawer_templates.js) -->
@@ -88,38 +112,8 @@
                建图落点 ref="qbChartHost" 三挂点共用(同一时刻只渲染一个流量形态), 图高跟随
                抽屉高度(qb_traffic_chart.js _qbChartBuild 量 clientHeight + ResizeObserver 宽高双观察) -->
           <template v-if="qbTrafficActive">
-            <div class="drawer-toolbar">
-              <div class="qb-tabs">
-                <!-- 窗口序(2026-10-04 v3 十三档, D4): 1m/5m/30m/3h/6h/12h/24h 与 qB 速度图
-                     对齐 + 3d/7d/30d(agg hour 行) + 6mo/1y/all(agg day/month 行; 90d 拍板
-                     延后不上), 顺序即展示序(短窗在前); 标签紧凑两字格, 13 档不挤工具条。
-                     清单单点在 qb_traffic_chart.js QB_WINDOW_NAMES(展示/切换/持久化同源) -->
-                <button v-for="w in qbWindowNames" :key="w"
-                        :class="{ active: qbCurWindow === w }"
-                        @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
-              </div>
-              <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连)</span>
-            </div>
-            <!-- 纵轴固定模式(2026-10-08, 三挂点通用): 自动 / 限速+20% / 手动 MiB/s 三态。
-                 限速取 qB 全局限速上下行较大者; 峰值超出固定上限时按峰值显示(上限只保底)。
-                 三作用域各自独立持久化(autoqb.ui.qbYAxis{Global,Torrent,Group}); 判据/绘制/
-                 落盘单点在 shared/qb_traffic_chart.js(qbSetYAxisMode/qbSetYAxisManual/_qbYRange)。
-                 右端读数 qbYAxisCapText 报当前生效上限(缺值/自动给回退说明) -->
-            <div class="qb-tools">
-              <span class="qb-tools-label">纵轴</span>
-              <div class="qb-seg">
-                <button :class="{ active: qbYAxisMode === 'auto' }"
-                        @click="qbSetYAxisMode('auto')">自动</button>
-                <button :class="{ active: qbYAxisMode === 'limit' }"
-                        @click="qbSetYAxisMode('limit')">限速+20%</button>
-                <button :class="{ active: qbYAxisMode === 'manual' }"
-                        @click="qbSetYAxisMode('manual')">手动</button>
-              </div>
-              <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
-                     min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
-                     @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
-              <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
-            </div>
+            <!-- 2026-10-08 版式改: 窗口档位(.qb-tabs)与纵轴控件(.qb-tools)已上提到头部标题栏,
+                 正文不再有工具条行 —— 图直接吃满抽屉可用高。 -->
             <!-- 静默续拉(2026-10-04 修「每隔几秒闪一次」+ 2026-10-05 修「空态也闪」): 已有结果时
                  loading 不接管正文 —— 整块 v-if 换成加载空态 = 每个轮询周期正文 DOM 被拆装一次
                  (闪的根源, 同 drawer-switch-flicker 的「快中间态本身就是闪」)。判据 qbCurPending
@@ -165,12 +159,11 @@
                   <span v-else>无采样 · 程序未运行或 qB 断连</span>
                 </div>
               </div>
-              <div class="hist-legend">
-                <span><i class="sw up"></i>上行</span>
-                <span><i class="sw down"></i>下行</span>
-                <span class="hist-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连) · 悬停查看详情</span>
-              </div>
+              <!-- 2026-10-08 版式改: 上行/下行图例自图下独立一行并入统计栏(省一行高度 = 图更高);
+                   原图下那行的说明文字(口径 + 悬停提示)已按用户要求移除, 信息在悬停 tooltip 里给。 -->
               <div v-if="qbCurSummary" class="hist-summary">
+                <span class="hs-leg"><i class="sw up"></i>上行</span>
+                <span class="hs-leg"><i class="sw down"></i>下行</span>
                 <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
                 <span>上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
                 <span>下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
