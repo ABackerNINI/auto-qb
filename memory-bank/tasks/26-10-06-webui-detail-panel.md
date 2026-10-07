@@ -4,8 +4,8 @@
 **Added:** 2026-10-06
 **Updated:** 2026-10-07
 **Topics:** webui-detail-panel-redesign
-**Summary:** 设计模板轮 + 实施轮 + 摸排轮。设计轮产出 15 份可交互单页模板 + `_brief.md` + 汇总报告 26-10-06-0723; 用户拍板 15 套全量实施可切换(试用期取代逐页选型)、挂载点尽量少、选择存 localStorage。实施轮按计划 26-10-06-0838 七阶段完成: S1 核心层(drawer_templates.js 注册表/宿主生命周期/dtHtml 转义/CSS 注入单点/摘要)+ 骨架挂载 + classic 兜底, S2-S6 五页签 × 3 变体 = 15 个自注册文件, S7 收口(全矩阵巡检 283 断言全过 / 删变体演示 / test.full 新基线 / 坑档两篇)。**试用期使用: 面板头部下拉切换器(详情模板/流量模板)按页签选择并记 localStorage(`autoqb.ui.drawerTpl`), 经典版恒在首位可随时回退; 增删一套变体 = 1 个 `shared/drawer_tpl/NN-*.js` 文件 + 三份皮肤 index.html manifest 各 1 行。**〔摸排轮 26-10-07〕对实施产物做静态走查摸排, 汇总报告 26-10-07-0542: 用户点名 4 问题全部确认(4K 横向比例失调 / 变体缺图标 / 收起态不随点击切换种子 / 变体 label 混档位后缀), 新发现 P2×3 + P3×5, 两项复核通过; 修复轮将按报告修复顺序拆小任务派子智能体串行执行。**
-**Refs:** memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html,memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html,memory-bank/reports/26-10-07-0542-report-webui-detail-panel-variants-audit.html
+**Summary:** 设计模板轮 + 实施轮 + 摸排轮。设计轮产出 15 份可交互单页模板 + `_brief.md` + 汇总报告 26-10-06-0723; 用户拍板 15 套全量实施可切换(试用期取代逐页选型)、挂载点尽量少、选择存 localStorage。实施轮按计划 26-10-06-0838 七阶段完成: S1 核心层(drawer_templates.js 注册表/宿主生命周期/dtHtml 转义/CSS 注入单点/摘要)+ 骨架挂载 + classic 兜底, S2-S6 五页签 × 3 变体 = 15 个自注册文件, S7 收口(全矩阵巡检 283 断言全过 / 删变体演示 / test.full 新基线 / 坑档两篇)。**试用期使用: 面板头部下拉切换器(详情模板/流量模板)按页签选择并记 localStorage(`autoqb.ui.drawerTpl`), 经典版恒在首位可随时回退; 增删一套变体 = 1 个 `shared/drawer_tpl/NN-*.js` 文件 + 三份皮肤 index.html manifest 各 1 行。**〔摸排轮 26-10-07〕对实施产物做静态走查摸排, 汇总报告 26-10-07-0542: 用户点名 4 问题全部确认(4K 横向比例失调 / 变体缺图标 / 收起态不随点击切换种子 / 变体 label 混档位后缀), 新发现 P2×3 + P3×5, 两项复核通过; 修复轮将按报告修复顺序拆小任务派子智能体串行执行。**〔修复轮 26-10-07〕已完成, 按用户拍板独立立档见 [26-10-07-webui-detail-panel-audit-fixes](26-10-07-webui-detail-panel-audit-fixes.md): 8 笔提交修复 Q1-Q4 + P2×3 + P3-4..P3-7(P3-8 属重构批次未做)。**
+**Refs:** memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html,memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html,memory-bank/reports/26-10-07-0542-report-webui-detail-panel-variants-audit.html,memory-bank/tasks/26-10-07-webui-detail-panel-audit-fixes.md
 
 ## 原始请求
 
@@ -47,6 +47,7 @@
 
 ## 进度日志
 
+- **2026-10-07 08:36 修复轮独立立档(用户拍板)**: 报告 26-10-07-0542 的修复轮完成, 按用户裁决独立立档不并入本档案 —— 8 笔提交(`9726b12f..2367555d`)修复 Q1-Q4 + P2×3 + P3-4..P3-7, 收口 test.full 2712 passed + 4 skipped / 99%(基线 26-10-07-0836), 详见 [26-10-07-webui-detail-panel-audit-fixes](26-10-07-webui-detail-panel-audit-fixes.md)。
 - **2026-10-06 07:23 设计轮完成**: 15 份模板 + `_brief.md` + 报告 26-10-06-0723 全部就位, 报告登记进 `reports/_index.md`(kb.index 已重建)。零代码改动(未动 `src/` / `config`), 未 commit 等用户指令。
 - **2026-10-06 07:5x 收尾 DoD**: 新建 activeContext 切片 `26-10-06-0751-webui-detail-panel-design.md` + 本档案; 报告补 `doc-refs` 反向声明闭环认领链; `kb.docmap --check` 绿(456 份 / 250 专题, 双向闭环; `--topic webui-detail-panel-redesign` 归组报告 Done + 档案 In Progress); test.full **豁免**(零代码改动, 现役基线 `26-10-06-0713` 不变), 改跑 `test.one tests/test_memory_bank.py` 验 KB 守卫 **32 passed**。
 - **2026-10-06 08:38 拍板 + 实施计划出稿**: 用户拍板 15 套全量实施可切换、挂载点尽量少、选择存 localStorage(取代报告 §6「逐页选型」路径)。通读报告 + 抽读 drawer.js(1326 行)/drawer.html(286 行)/三皮肤 manifest/app.js 恢复通道/qb_traffic_chart.js 宿主解析后, 出实施计划 [26-10-06-0838](../plans/26-10-06-0838-plan-webui-detail-panel-redesign.html): 注册表 + 宿主 + 经典版兜底架构, 常驻挂载 5 文件约 25 行 + 每变体 1 文件 + 3 行 manifest, S0-S7 分步, 拍板点 P-01…P-06 各带推荐案(含: 初装默认 classic / 06 倒计时全局近似 / 13 注解层省略 / 09 封禁钮省略(已核实后端无 peer 封禁端点) / 14 联动静态 / 摘要条压 44px)。报告 meta 补计划反向声明(仅机械面), 本档案登记拍板与计划。计划 doc-status **Open 待拍板**, 未动任何产品代码, 未 commit。
