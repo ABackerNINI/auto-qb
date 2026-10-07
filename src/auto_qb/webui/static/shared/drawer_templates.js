@@ -178,7 +178,13 @@
   /* ---------------- 核心基础样式(切换器/摘要条/宿主/流量布局类) ----------------
    * 只用上面白名单内的令牌; 类名 dt-* 供守阵与变体复用。 */
   dtInjectCss("00-core", [
-    ".drawer .dt-select { align-self: center; max-width: 160px; padding: 2px 4px;",
+    /* P3-7(报告 26-10-07-0542): max-width 160 -> 240 —— 160px 硬上限截断长 label 的收起态。
+     * 240px 依据: 头部同排 .drawer-title(flex:1 1 auto + min-width:0)与收起摘要 .dt-summary
+     * (min-width:0)都先行截断让位, tabs/双钮是定宽内容, 放宽上限只消耗标题/摘要的让位空间,
+     * 不挤压其它头部控件; 240px 在 12px 字号下容约 19 个全角字符, 现有 15 个 label 最长
+     * 8 全角符(自然宽约 130px 含内边距与下拉箭头), 上限只是防未来长 label 的保险丝。
+     * min-width:0 允许极窄窗口下随标题按比例收缩(原生 select 的自动最小宽是最宽 option)。 */
+    ".drawer .dt-select { align-self: center; min-width: 0; max-width: 240px; padding: 2px 4px;",
     "  font: 12px/1.6 system-ui, sans-serif; color: var(--fg-muted); background: var(--bg-hover);",
     "  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); cursor: pointer;",
     "  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease); }",

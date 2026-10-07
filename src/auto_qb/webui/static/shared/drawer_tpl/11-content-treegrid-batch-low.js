@@ -10,8 +10,9 @@
  * 点击循环 跳过→普通→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
  * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账,
- * 换种子重置); 批量条/汇总条 sticky 吸底不随行滚动。
+ * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
+ * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
+ * 上一种子的勾选落到新种子文件上是真实的优先级误操作面); 批量条/汇总条 sticky 吸底不随行滚动。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -258,11 +259,14 @@
     const hash = (ctx.drawer && ctx.drawer.hash) || "";
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.filesError) || "";
-    /* 换种子: 勾选集/折叠/筛选随目标失效(与 classic drawerSelPath 同口径) */
+    /* 换种子: 勾选集/筛选随目标失效(与 classic drawerSelPath 同口径); 折叠集不清(P3-6, 报告
+     * 26-10-07-0542: 折叠态口径统一为跨种子保持, 与 general 组 dt01/02 一致) —— 记账 key 是
+     * path, 新种子的 path 空间完全不同, 旧条目自然不命中(= 新种子从默认展开态起但容器不清空);
+     * 同名目录则延续上一部的折叠选择。勾选集必须重置: 批量优先级会真提交, 旧勾选落到新种子
+     * 文件上是误操作面, 与折叠的纯视图语义不同 */
     if (hash !== ui.lastHash) {
       ui.lastHash = hash;
       ui.checked = new Set();
-      ui.folded = new Set();
       ui.filter = "all";
     }
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */

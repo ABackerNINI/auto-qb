@@ -9,7 +9,8 @@
  * 单文件 = [index], 目录 = 整棵子树收集)。重命名不在本变体设计内 → 回 classic 用(试用期对照)。
  * 渐进字段: 每文件 availability(qB 版本浮动)有则渲染可用性格与详情格, 无则整格省略不占位。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 滚动/折叠/筛选/选中态自保(换种子重置)。
+ * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
+ * 选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -319,11 +320,13 @@
     const hash = (ctx.drawer && ctx.drawer.hash) || "";
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.filesError) || "";
-    /* 换种子: 选中/折叠/筛选随目标失效(与 classic drawerSelPath 同口径) */
+    /* 换种子: 选中/筛选随目标失效(与 classic drawerSelPath 同口径); 折叠集不清(P3-6, 报告
+     * 26-10-07-0542: 折叠态口径统一为跨种子保持, 与 general 组 dt01/02 一致) —— 记账 key 是
+     * path, 新种子的 path 空间完全不同, 旧条目自然不命中(= 新种子从默认展开态起但容器不清空);
+     * 同名目录(剧集/专辑系列)则延续上一部的折叠选择。容器随「展开全部」按钮与重折叠自然回收 */
     if (hash !== ui.lastHash) {
       ui.lastHash = hash;
       ui.selPath = "";
-      ui.folded = new Set();
       ui.filter = "all";
     }
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */

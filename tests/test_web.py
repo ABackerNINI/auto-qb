@@ -51,6 +51,7 @@
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四变体整帧重建路径纵横滚动位成对自保(scroller=host.parentElement 上既有 scrollTop 保存旁补 scrollLeft 读取 + 整帧 replaceChildren(html) 后成对恢复, 恢复次序 scrollLeft 先 scrollTop 后), 任一变体只存不还或整体缺失即红
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select max-width 160->240(min-width:0; 160px 截断长 label 收起态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3383,6 +3384,61 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
             # trackers/peers 组 5s 轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
             assert "下次自动刷新时重试" in text, \
                 f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(5s 轮询真实)"
+
+
+def test_drawer_tpl_cross_seed_fold_and_select_width():
+    """详情面板折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) ——
+    content 组 dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选, 不得清折叠
+    记账(ui.folded/ui.colG; 用户拍板统一为跨种子保持, 以 general 组 dt01/02 口径为准; 记账 key
+    是 path 不含 hash, 新种子 path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择;
+    dt11 勾选集必须继续重置 —— 批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与
+    种子无关或无折叠的变体(01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash
+    重置机制; 核心 .dt-select max-width 放宽到 240px(160px 硬上限截断长 label 收起态)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. P3-6: dt10/11/12 的换种子重置块不再清折叠记账, 且按 path 记账的容器仍在
+    fold_accounts = {
+        "10-content-tree-detail-tall.js": ("folded", 'data-tgl="${n.path}"'),
+        "11-content-treegrid-batch-low.js": ("folded", 'data-tgl="${r.path}"'),
+        "12-content-space-treemap-collapsed.js": ("colG", 'data-gh="${dir.path}"'),
+    }
+    for name, (fold_key, path_attr) in fold_accounts.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        m = re.search(r"if \(hash !== ui\.lastHash\) \{(.*?)\n    \}", text, re.S)
+        assert m, f"drawer_tpl/{name}: 换种子重置块形态漂移(守阵正则失配, 同步本守阵)"
+        block = m.group(1)
+        assert "ui.lastHash = hash" in block, \
+            f"drawer_tpl/{name}: lastHash 更新丢失(选中/筛选的重置锚点没了)"
+        assert fold_key not in block, \
+            f"drawer_tpl/{name}: 换种子重置块清了折叠记账 {fold_key}(P3-6: 口径已统一为跨种子保持, 不得回潮)"
+        assert f"{fold_key}: new Set()" in text, \
+            f"drawer_tpl/{name}: 折叠记账容器 {fold_key} 消失(跨种子保持的载体)"
+        assert path_attr in text, \
+            f"drawer_tpl/{name}: 折叠交互未按 path 落账({path_attr} 形态漂移, 记账 key 不再是 path)"
+
+    # 2. dt11 勾选集仍随换种子重置(批量优先级真提交, 不许跨种子残留; 折叠是纯视图语义, 不同)
+    text11 = open(os.path.join(vdir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
+    block11 = re.search(r"if \(hash !== ui\.lastHash\) \{(.*?)\n    \}", text11, re.S).group(1)
+    assert "ui.checked = new Set()" in block11, \
+        "drawer_tpl/11: 换种子重置块丢了勾选集清空(批量优先级会落到新种子文件上)"
+
+    # 3. 其余变体(01-09/13-15)不得出现换种子重置机制 —— 它们没有折叠态或记账 key 与种子
+    #    无关(dt01/02/03 节名·卡片id / 05 组键·tracker url / 06 tracker url / 08 组键;
+    #    04/07/09 仅筛选, 13/14/15 traffic 无折叠), lastHash 机制进它们即口径漂移
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js") or name[:2] in ("10", "11", "12"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "lastHash" not in text, \
+            f"drawer_tpl/{name}: 出现 lastHash 换种子重置机制(该变体折叠/展开 key 与种子无关或无折叠, 不应有此机制)"
+
+    # 4. P3-7: .dt-select max-width 240(头部 .drawer-title/.dt-summary 均 min-width:0 先行
+    #    让位, 放宽不挤压 tabs/双钮); 160px 旧上限不得回潮
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert "min-width: 0; max-width: 240px" in core, \
+        "核心 .dt-select 缺 min-width:0 + max-width:240px(P3-7: 160px 硬上限截断长 label 收起态)"
+    assert "max-width: 160px" not in core, "核心仍残留 .dt-select 160px 旧上限(P3-7 回潮)"
 
 
 def test_drawer_tpl_classic_default():
