@@ -3,7 +3,8 @@
 被测面: WebUIRuntime 的时间线落代(_fold_delta_pending_locked)/store 增量排空与脏行键推导
 (_drain_delta_locked)/full 降级理由集合(R11 五源)/views._build_group_view 的构建期交叉键
 回传(S2); ensure_state 的 delta 协商门控与 _reduce_delta 归约判定矩阵 + 增量协议字段(S3);
-剧键等价映射与迁移候选暂存(S8, 时间线 show 桶仍恒空, S9 才接)。
+剧键等价映射与迁移候选暂存(S8, 时间线 show 桶仍恒空, S9 才接); S9a 单剧可调用等价
+(views._build_show_row 纯重构守阵; show 视图 delta 解锁与增量接线归 S9b)。
 
 ## 测试计划(每个测试函数一条)
 - test_timeline_appends_per_publish_and_truncates: 时间线落代/截断 —— 每次发布恰追加一条目(ver 与 group_view_ver 对齐, 本仓 ver 单调), 条目形状 = ver/full/upsert/removed 四键分 torrent/group/show 三桶; 45 次发布后 maxlen=40 截断(最旧 5 条被挤掉)
@@ -23,6 +24,7 @@
 - test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
 - test_s8_added_hash_registered_without_candidates: S8 新增登记 —— added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选
 - test_s8_restart_backfill_without_candidates: S8 重启回填 —— 新 runtime 映射为空, 首拍全量(空键集代走全量路径)全库回填且不产生迁移候选, 时间线 show 桶仍恒空(M8); 映射非空的后继全量代不重置既有映射(回填幂等)
+- test_s9a_show_row_callable_matches_full_view: S9a 单剧可调用等价(纯重构守阵) —— 库态覆盖四边界落位(季级 gaps/covered 含索引兑底 range 与整包 has_pack、剧名频次众数、集行状态 _SHOW_STATE_RANK 归并、unrecognized 折叠)+ 日期型 None 季桶/pending 接线; _build_show_row(剧键, 独立重放分类的成员集) == 全量 _build_shows_view 同剧行递归逐字段; 空成员 -> None(_build_group_row 空组口径)
 """
 import json
 import time
@@ -766,3 +768,78 @@ def test_s8_restart_backfill_without_candidates():
     rt2.mark_dirty(full=True, reason="config_reload")
     _publish(rt2)
     assert rt2._show_member_keys == {"H1": keys["H1"], "H2": keys["H2"]}
+
+
+# ---------- S9a 单剧可调用等价(纯重构守阵) ----------
+
+
+def test_s9a_show_row_callable_matches_full_view():
+    """S9a 单剧可调用等价: _build_show_row(剧键, 成员集) == 全量 _build_shows_view 同剧行逐字段
+
+    全量路径已改为「分类分桶 -> 逐剧调用」(plan 26-10-07-0414 S9a), 本用例两头钉:
+    ①边界语义不因搬动走样 —— 季级 gaps/covered(索引兑底 range + 整包 has_pack)、
+    剧名频次众数、集行状态 _SHOW_STATE_RANK 归并、unrecognized 折叠、日期型 None 季桶、
+    pending 接线; ②单剧可调用只凭 (剧键, 成员集) 即复现全量该行(无隐式上下文依赖,
+    S9b 局部重算的衔接面)。成员集按 tvshows 直算独立重放分类(不走 _parse_show_member),
+    防同源互证。
+    """
+    store = _make_store()  # 空库起步, 逐颗装异形命名种子(覆盖各解析分支)
+    client = store.client
+    spec = {
+        # 同剧异写("Show.Name"/"SHOW NAME" 同键异题): 频次 2:1 -> 展示名取众数
+        "HA": dict(name="Show.Name.S01E05.1080p.WEB-DL", state="downloading", added_on=1700000123),
+        "HB": dict(name="SHOW NAME S01E05.720p.HDTV", state="pausedUP"),  # 与 HA 同集行: 状态归并
+        "HC": dict(name="Show.Name.S01E07.1080p", state="stalledUP"),
+        "HP": dict(name="Show.Name.S01.Complete.1080p", state="stalledUP"),  # 索引兑底 -> range 1-4
+        "HQ": dict(name="Show.Name.S02.Complete.1080p", state="stalledUP"),  # 索引未覆盖 -> pack(pending)
+        "HD": dict(name="Show.Name.2026.09.15.1080p.WEB.h264", state="stalledUP"),  # 日期型 -> None 季桶
+        "HE": dict(name="Another.Show.S01E01.1080p", state="stalledUP"),  # 另一部剧: 分桶不串
+        "HF": dict(name="Some.Movie.2023.1080p.BluRay.x265", state="stalledUP"),  # 未识别折叠
+    }
+    for h, kw in spec.items():
+        client.torrents[h] = FakeTorrent(hash=h, **kw)
+    store.apply_sync(QbApi(client, store))
+    store.last_added = []
+    store.last_removed = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+
+    rt = _delta_runtime(store)
+    rt.search_index = {  # HP 有文件(兑底展开集数), HQ 刻意不覆盖(pending 接线)
+        "HP": {"name": spec["HP"]["name"], "files": [f"Show.S01E0{i}.mkv" for i in range(1, 5)], "files_q": []},
+    }
+
+    host = rt._host
+    view = host._build_shows_view()
+    rows = {row["key"]: row for row in view["list"]}
+    show = rows["show name"]
+    # ---- 边界语义钉(全量产物本身) ----
+    assert view["unrecognized"] == ["HF"], "无剧键种子进未识别折叠, 不进任何剧行"
+    assert show["name"] == "Show Name" and rows["another show"]["name"] == "Another Show"
+    seasons = {s["season"]: s for s in show["seasons"]}
+    assert set(seasons) == {1, 2, None}, "日期型归 None 季桶, 编号季独立"
+    assert seasons[1]["gaps"] == [6], "covered={1..4,5,7} -> 缺 E6(季级整季重算)"
+    assert seasons[2]["gaps"] == [], "整包覆盖全季: 不提示缺集"
+    eps1 = {tuple(e["key"]): e for e in seasons[1]["episodes"]}
+    assert set(eps1) == {("ep", 5), ("ep", 7), ("range", 1, 4)}, "季包经文件兑底展开为 range"
+    assert eps1[("ep", 5)]["count"] == 2 and eps1[("ep", 5)]["members"] == ["HA", "HB"], "members 数组整体(R8)"
+    assert eps1[("ep", 5)]["state"] == "downloading", "集行状态按 _SHOW_STATE_RANK 取 min(downloading<paused)"
+    assert seasons[None]["episodes"][0]["key"] == ["date", "2026-09-15"]
+    assert show["member_count"] == 6 and show["episode_count"] == 5
+    assert show["latest"] == 1700000123, "剧级 latest = 成员最新 added_on"
+    assert rt.shows_pending is True, "HQ 索引未覆盖: 分类层 pending 接线保持"
+    # ---- 等价主断言: dict 相等 = 递归逐字段一致 ----
+    by_show: dict = {}
+    for h, kw in spec.items():
+        rec = store.by_hash[h]
+        parsed = tvshows.parse_release(rec.name)
+        files = (rt.search_index.get(h) or {}).get("files")
+        if parsed.kind in (tvshows.KIND_SEASON_PACK, tvshows.KIND_UNKNOWN) and parsed.key and files:
+            parsed = tvshows.refine_with_files(parsed, files)
+        if parsed.kind == tvshows.KIND_UNKNOWN or not parsed.key:
+            continue
+        by_show.setdefault(parsed.key, []).append((rec, parsed))
+    for key, members in by_show.items():
+        assert host._build_show_row(key, members) == rows[key], f"单剧可调用应复现全量该行: {key}"
+    # 空成员 -> None(与 _build_group_row 空组口径对齐, S9b 旧行剔除依据)
+    assert host._build_show_row("no-such-key", []) is None
