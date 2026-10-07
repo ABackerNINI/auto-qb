@@ -407,10 +407,14 @@ def build(args):
     outputs = {}
     bodies = {}
 
+    # 共享模块「全量一次性写出」(S3 口径): 共享件在**首个**持有它们的批次随源一起搬出, 之后各批的源里
+    # 已无这些块 ⇒ 闭包为空。若此时仍按空 nodes 渲染并写盘, 会把既有 webui_helpers.py 清成只剩头(实测
+    # 437→3 行, 直接打爆 conftest 与已迁文件的 import)。故仅当本批确有共享块时才产出该文件, 否则沿用既有。
     helper_nodes = model.nodes_of(BUCKET_HELPERS)
-    outputs[HELPERS_MODULE], _h, bodies[HELPERS_MODULE] = render_file(
-        model, "webui_helpers 共享件: test_web 拆分后的跨文件辅助与常量(原 tests/test_web.py)", helper_nodes, [], lines
-    )
+    if helper_nodes:
+        outputs[HELPERS_MODULE], _h, bodies[HELPERS_MODULE] = render_file(
+            model, "webui_helpers 共享件: test_web 拆分后的跨文件辅助与常量(原 tests/test_web.py)", helper_nodes, [], lines
+        )
 
     for fname in selected:
         nodes = model.nodes_of(fname)
@@ -725,7 +729,10 @@ def _report(model: Model, selected, outputs):
             f"行={outputs[fname].count(chr(10))}"
         )
     helpers = model.nodes_of(BUCKET_HELPERS)
-    print(f"  {HELPERS_MODULE:34s} 件={len(helpers)} 行={outputs[HELPERS_MODULE].count(chr(10))}")
+    if HELPERS_MODULE in outputs:
+        print(f"  {HELPERS_MODULE:34s} 件={len(helpers)} 行={outputs[HELPERS_MODULE].count(chr(10))}")
+    else:
+        print(f"  {HELPERS_MODULE:34s} 件=0 (本批无共享块, 沿用既有文件)")
     conftest = [n for n, b in model.owner.items() if b == BUCKET_CONFTEST]
     print(f"  conftest 件={len(conftest)}: {conftest}")
     print(f"  共享辅助/常量({len(model.shared_set())}): " + ", ".join(sorted(model.shared_set())))

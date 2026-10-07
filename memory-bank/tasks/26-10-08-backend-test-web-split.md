@@ -3,7 +3,7 @@
 **Status:** In Progress  
 **Added:** 2026-10-08  
 **Updated:** 2026-10-08  
-**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。  
+**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。**S4 已完成**: 批 2 webui 静态守阵(节 2 → `test_webui_static_skins.py` 8 fn + `test_webui_static_dom_panel.py` 28 fn + `test_webui_static_dom_page.py` 27 fn, 全计划最大批)在 `develop` 落地 —— 新文件 1,449/2,232/1,131 行、余量源 8,809 行(余 245 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **316 项 / 308 名 == 源**; 演练(整 `tests/` 副本 + `src` junction 保 `STATIC_ROOT`)三新文件 **63 passed**; `test.one` **63**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。**批模式再暴露并修复工具第 5 处缺陷**(共享模块被后续批清空, 见 §S4)。  
 **Topics:** test-web-split  
 **Refs:** memory-bank/testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md
 
@@ -36,7 +36,7 @@
 | —  | **门: P-01/P-02 拍板**                               | ✅  | 2026-10-08 用户裁决(§P-01): 节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`                                                    |
 | S2 | 拆分工具与红验                                           | ✅  | `scripts/split_test_web.py`(AST 切块 + 映射表 + 归属闭包 + import 裁剪 + docstring 逐条重分布); 校验 4 条内建(+内容/行守恒); 演练 collect-only **337 项 / 329 名 == 源**; 红验 3 条 6/6(§S2)          |
 | S3 | 批 1 试切(节 1 → auth + api_core)                     | ✅  | 14 + 7 fn; 校验全绿; test.one 14+7 / test.quick 2771+4 / test.full 2771+4·99%; 2 处活注释已改; 批模式修工具 4 缺陷(§S3)                                                               |
-| S4 | 批 2 webui 静态守阵(节 2 → 3 份)                         | ⬜  | skins(8) + panel(28) + page(27); + test.full 里程碑                                                                                                                    |
+| S4 | 批 2 webui 静态守阵(节 2 → 3 份)                         | ✅  | skins(8) + panel(28) + page(27); 校验 1–4 + 守恒全绿; test.one 63 / test.quick 2771+4 / test.full 2771+4·99%; 修工具第 5 缺陷(§S4)                                                    |
 | S5 | 批 3 端点域(节 3 + 4 → traffic_qb + backend_misc + hr) | ⬜  | 18 + 37 + 51                                                                                                                                                        |
 | S6 | 批 4 命令与视图域(节 5–9)                                 | ⬜  | commands(31) + views_reload(25) + admin(17) + seed_center(21); + test.full 里程碑                                                                                      |
 | S7 | 批 5 结构守阵与长尾(节 10–15)                              | ⬜  | route_manifest(2) + keys(10) + skip_check(5) + longtail(28); 删原文件 + 一次性脚本                                                                                           |
@@ -559,6 +559,33 @@
 - **活引用远多于 S1 声称的 2 处**: 全仓 grep(`test_web` 后非 `_`)发现 ~18 处活注释/文档串散布 `src/auto_qb/webui/**`(auth.py/server/**init**.py/commands.py/views.py/fs.py 等)、`static/shared/*.js`、`e2e/*.mjs`、`scripts/ui_harness.py`, 以及 **kb 活文档** `memory-bank/modules/rules-and-deps.md`(列测试文件)、`modules/webui-static-contract.md`(点名守阵)、`conventions/code-style.md`。S1 的「仅 2 处」只扫了 `tests/`。按**范围守恒**本批只改计划点名的 2 处, 其余留 **S8 全仓验收 grep** 统一处置 —— 且这些引用**多数指向后续批才迁的函数/守阵**(如 `test_frontend_page_location_persisted` 归批 2 `test_webui_static_dom_page.py`), 现在改反而会指向尚不存在的文件。
 - **不新建基线切片**: `test.full` 数字与开工基线逐位持平; 计划 §S8 才落「新基线切片」, 中间批新建同值切片是噪声(沿用 S2 口径)。
 
+## S4 批 2 webui 静态守阵(2026-10-08)
+
+**命令**: `uv run python scripts/split_test_web.py --out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_webui_static_skins.py,test_webui_static_dom_panel.py,test_webui_static_dom_page.py --expect-fn 308 --expect-entries 291 --collect`
+
+**产出**(实测):
+
+| 文件                                  | 行      | fn  | 说明                                              |
+| ----------------------------------- | ------ | --- | ----------------------------------------------- |
+| `tests/test_webui_static_skins.py`  | 1,449  | 8   | 本地件 26(静态扫描器群 + 皮肤清单/挂件白名单常量)                  |
+| `tests/test_webui_static_dom_panel.py` | 2,232  | 28  | 本地件 3                                          |
+| `tests/test_webui_static_dom_page.py`  | 1,131  | 27  | 本地件 2                                          |
+| `tests/test_web.py`(余量)             | 8,809  | 245 | 改写后剩 245 fn                                     |
+| `tests/webui_helpers.py`            | 436    | —   | **本批未动**(无新共享块, 沿用 S3 产物)                       |
+| `tests/conftest.py`                 | 217    | —   | **本批未动**(`web_env` 已存在, 幂等跳过)                    |
+
+**校验**: 校验 1–4 + 内容/行守恒**全绿**; `--collect` collect-only **316 项 / 308 函数名 == 源**; 块体行 13,205 逐行搬移。三新文件均 ≤2,500 行硬上限(最大 panel 2,232)。
+
+**演练(不触生产)**: 整 `tests/` 副本落 gitignore 的 `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction(使 `webui_helpers.STATIC_ROOT` 的 `dirname(dirname(__file__))/src/...` 指向真 `src/`)⇒ 校验全绿、collect-only == 源、**三新文件 63 passed**(faithful, 含依赖 `STATIC_ROOT` 的静态守阵)。副本与 junction 已清理(`rmdir` 摘 junction, 不 `rm -rf` —— 防跟入删 `src/`)。
+
+**批模式暴露并修复的第 5 处工具缺陷**: `build()` **无条件**渲染并写出 `webui_helpers.py`; 而共享件在**首个**持有它们的批次(S3)已随源搬出, 之后各批源里已无这些块 ⇒ 闭包为空 ⇒ 批 2 会把 `tests/webui_helpers.py` 由 437 行清成只剩 3 行头(直接打爆 conftest 与已迁文件的 import)。**演练拦下**(rehearsal 里 conftest 报 `ImportError: cannot import name '_make_web_manager'`)。修法 = 仅当本批确有共享块(`helper_nodes` 非空)时才产出该文件, 否则沿用既有; `_report` 相应分支。与 S3 口径「webui_helpers.py 全量一次性写出」一致。
+
+**S4 对 S1/计划的纠偏**:
+
+- **校验器 `--expect-fn` / `--expect-entries` 是「当前源」口径, 非计划全量**: S2 把源侧计数钉死在全量 329/312, 但 S3 落地后源只剩 308/291, 直接跑会 `[校验1] 源被收集测试函数 308 != 应 329` + `[校验3] 291 != 312`(演练首跑实测)。按「当前源 = 全量 − 已迁」独立推得 **308 = 329−21 / 291 = 312−21**, 显式传入即全绿。S5–S7 同法(每批按已迁函数数递减)。
+- **节 2 的常量/辅助归属经本批受检无异常**: 计划 S4 点名「皮肤清单 / 挂件白名单常量随唯一使用域走」—— 实测 26 个本地件(静态扫描器群 + `_NODE_HRS_SORT_PROBE`/`_NODE_SYNTAX_CHECK`/`_CSS_CONTAINER_AT`/`_EP_MEMBERS_RE`/`_PAGE_HOOK_CLASSES`/`_PERF_BACKDROP_BANNED` 等)全部落 `skins`, panel 3 件 / page 2 件, 本批**零新共享块**(跨文件者已在 S3 进 `webui_helpers.py`)。
+- **本批新测试文件对 `webui_helpers` 的 import 来自源余量既有的 `from webui_helpers import (...)` 块** 经 used-names 裁剪(非 `shared_names_used_by` 生成)—— 故 `_report` 里「共享件=0」是当前源闭包口径的显示值, 不表示新文件不依赖共享件。
+
 ## 进度日志
 
 - **2026-10-08 02:40** 会话开工: `commands run my-commit-flow.sync` → `已同步 34356f49`。读计划全文 + memory-bank README/skill + 忆坑四篇(bulk-rename / parallel-run / single-file-coverage-gate / tmpdir)。
@@ -580,3 +607,8 @@
 - **2026-10-08 03:5x** S3 生产落批: `--out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_web_auth.py,test_web_api_core.py --collect` → 全绿; 产出 409/189/437 行新文件 + 余量源 13,567 行 + conftest +`web_env`。
 - **2026-10-08 03:5x** S3 活注释: 改 `tests/helpers.py`(指向 `test_web_admin.py::…`)与 `tests/test_facade_modules.py`(`与 webui_helpers 同款`); 全仓 grep 另见 ~18 处活引用(S1 只扫 tests/ 漏报), 按范围守恒留 S8。
 - **2026-10-08 03:5x** S3 验证: `test.one` 两新文件 **14 + 7 passed**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平) ⇒ 纯移动。**不新建基线切片**(同值噪声; 计划 §S8 落终版)。
+- **2026-10-08 04:04** S4 会话开工: `commands run my-commit-flow.sync` → `已同步 0a46b58d`(已在 tip); 读计划全文 + 本档 + 忆坑(bulk-rename / ast-migration-fidelity)。工作区净。
+- **2026-10-08 04:0x** S4 演练(不触生产): 整 `tests/` 副本 → `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction(修 `STATIC_ROOT` 解析)。**首跑暴露批模式第 5 缺陷** —— 无条件写出 `webui_helpers.py` 把 437 行清成 3 行(conftest `ImportError: cannot import name '_make_web_manager'`); 另暴露 `--expect-fn/--expect-entries` 需按当前源(308/291)而非全量(329/312)。逐条修复。
+- **2026-10-08 04:0x** S4 修复后演练: 校验 1–4 + 内容/行守恒**全绿**, collect-only **316 项 / 308 名 == 源**, 三新文件 **63 passed**(faithful, 含静态守阵)。副本 + junction 已清理(`rmdir` 摘 junction)。
+- **2026-10-08 04:0x** S4 生产落批: `--out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_webui_static_skins.py,test_webui_static_dom_panel.py,test_webui_static_dom_page.py --expect-fn 308 --expect-entries 291 --collect` → 全绿; 产出 1,449/2,232/1,131 行三新文件 + 余量源 8,809 行(余 245 fn); `webui_helpers.py`(436)与 `conftest.py`(217)未动。
+- **2026-10-08 04:0x** S4 验证: `test.one` 三新文件 **63 passed**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平) ⇒ 纯移动。**不新建基线切片**(同值噪声; 计划 §S8 落终版)。
