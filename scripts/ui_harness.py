@@ -382,15 +382,34 @@ def _restore_state(mgr, hashes):
     "上一次", 回弹会把它们还原成暂停态。
     """
     orig = getattr(mgr, "_harness_orig_state", None) or {}
-    touched = False
+    touched = []
     for h in hashes:
         tor = mgr.store.by_hash.get(h)
         if tor is None or h not in orig:
             continue
         tor.state = orig[h]
-        touched = True
+        touched.append(h)
     if touched:
-        mgr.web.rebuild_views()
+        _publish_with_delta(mgr, touched)
+
+
+def _publish_with_delta(mgr, hashes):
+    """发布"状态已变"的新版视图, 并**按增量协议保真**把脏行喂进增量时间线(plan 26-10-07-0414 S4)
+
+    真机上状态变化经主循环 sync 增量推导: store._apply 写 delta_fields(变化字段集)/
+    view_changed, flush_views 每拍排空(_drain_delta_locked)并入 _delta_pending,
+    _publish_locked 落代时折叠成时间线条目。桩这里直改 FakeTorrent.state, 两条推导都不经过
+    —— 若只 rebuild_views, 新代的 delta 桶恒空: 前端(S4 起默认带 delta=1)每轮都收
+    "full=false + 空 delta", 真值永远到不了行上, 增量合并链在冒烟里完全测不到
+    (2026-10-07 S4 冒烟实测: 暂停后 delta.torrents=[] 而非真值行)。
+    所以这里补上同一推导(变化字段 = state), 走生产 flush_views(force=True) 排空+发布。
+
+    !回弹(_restore_state)同样走这里 —— 否则回弹版同样推不出脏行, 前端行会永久停在
+    "已暂停"的陈旧增量上(旧全量前端每轮整表替换, 天然掩盖了这一失真)。
+    """
+    mgr.store.delta_fields = {h: frozenset({"state"}) for h in hashes}
+    mgr.store.view_changed = True
+    mgr.web.flush_views(force=True)
 
 
 def _revert_after_consume(mgr, hashes, wait_ms: int):
@@ -435,7 +454,7 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
             tor.state = _PAUSED_STATE
         else:
             tor.state = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
-    mgr.web.rebuild_views()  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+    _publish_with_delta(mgr, hashes)  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
     if revert_ms > 0 and hashes:
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
@@ -591,6 +610,11 @@ def main() -> int:
             b.name = a.name  # 同组同名(真机: 同文件不同站)
             groups[(a.name, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
+        # member_to_key 同步重建(增量协议保真, plan 26-10-07-0414 S4 冒烟): 真机上组键索引
+        # 由 store 的归组路径维护, 桩直写 groups 绕过了它 —— 索引为空时 _drain_delta_locked
+        # 推不出组行键(组桶恒空), 且"归组成员被判未归组"会触发 singles 防御检查整代转 full,
+        # 分组视图的增量链路在冒烟里完全测不到。
+        mgr.store.member_to_key = {h: k for k, hs in groups.items() for h in hs}
     mgr.web.rebuild_views()
     _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 

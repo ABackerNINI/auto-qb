@@ -134,17 +134,86 @@ window.AQB_POLL = {
       // 退避省不下什么, 却直接牺牲行数据新鲜度 —— 收益与代价不对等, 故只保留失败退避。
       return this.basePollMs();
     },
+    /* 单一合并入口(plan 26-10-07-0414 S4, R6): 全量/增量两分支共用, 供 refresh() 调用。
+     * 顺序安全事实(起草人已核): 三视图渲染入口各自客户端排序(sort.js sortedGroups /
+     * filters.js filteredTorrents / shows.js decoratedShows), 服务端数组顺序不承载语义,
+     * delta 追加行不需保序; 明细表 sortedMembers 空键=后端原序, 但 members 随整行 upsert
+     * 原样携带(R8), 不受影响 —— 镜子测试因此按「行键集合 + 行内容」比较, 不比数组顺序。 */
+    applyStateRows(payload) {
+      /* delta 分支(payload.full === false, S3 协商): 行级 upsert(整行替换/追加, R8)
+       * + removed 剔除。行键: torrents/singles=hash, groups/shows=key; 未脏行对象引用
+       * 原样保留(不新建, :159-160 既有纪律); 数组以新实例赋回(Vue 数据流不变)。
+       * 桶键不存在 = 该视图不回传这份(同全量分支「键不存在必须保留原引用」的纪律)。
+       * 服务端 R5 已保证 removed 与 upsert 不交; 万一同时出现以 upsert 为准(行仍在,
+       * 行内容=服务端当前真值), 删不存在的行本就是幂等 no-op(见 S3 removed.singles 注)。 */
+      if (payload.full === false) {
+        const d = payload.delta || {};
+        const r = payload.removed || {};
+        // 行级 apply 子函数(两分支共用的落点: full 分支的整表替换在 R6 语义上等价于
+        // 「清空重放」, 无需行级 apply; 此处只服务 delta 的 upsert/剔除):
+        const applyRows = (cur, keyField, ups, rms) => {
+          if (!ups.length && !rms.length) return cur;  // 恒在但本轮无变化: 原引用不动
+          const upMap = new Map();
+          for (const row of ups) upMap.set(row[keyField], row);
+          const rmSet = new Set(rms);
+          const out = [];
+          const seen = new Set();
+          for (const row of cur) {
+            const k = row[keyField];
+            seen.add(k);
+            const up = upMap.get(k);
+            if (up !== undefined) { out.push(up); continue; }  // 脏行: 整行替换为新实例
+            if (rmSet.has(k)) continue;                        // 已删行: 剔除
+            out.push(row);                                     // 未脏行: 引用原样保留
+          }
+          for (const row of ups) if (!seen.has(row[keyField])) out.push(row);  // 新行追加(顺序不承载语义, 见上)
+          return out;
+        };
+        if (d.torrents || r.torrents) this.torrents = applyRows(this.torrents, "hash", d.torrents || [], r.torrents || []);
+        if (d.singles || r.singles) this.singles = applyRows(this.singles, "hash", d.singles || [], r.singles || []);
+        if (d.groups || r.groups) this.groups = applyRows(this.groups, "key", d.groups || [], r.groups || []);
+        // shows 桶(S3 期 view=show 恒全量, 此处不可达; S8/S9 接线前的通用合并):
+        // shows 是 {list, unrecognized} —— list 按剧键行级合并, unrecognized 不动。
+        if (d.shows || r.shows) {
+          this.shows = {
+            list: applyRows(this.shows.list || [], "key", d.shows || [], r.shows || []),
+            unrecognized: this.shows.unrecognized,
+          };
+        }
+        // 真值快照行源: 把 delta 桶按 _snapshotTruth 迭代的**同名键**挂回本响应对象 ——
+        // 快照的「只认这一轮 payload 真的带来的行」口径原样成立(增量轮只比脏行), 调用点
+        // `this._snapshotTruth(state)` 字面量不动(tests/test_web.py::_scan_pending_settle 钉住)。
+        // WARN: 此后本函数作用域内的 state.torrents/singles/groups 只代表**增量行**, 不代表
+        // 全量 —— 下游不得再当全量读(现调用点之后无人读它们)。
+        if (d.torrents) payload.torrents = d.torrents;
+        if (d.singles) payload.singles = d.singles;
+        if (d.groups) payload.groups = d.groups;
+        return payload;
+      }
+      // full 分支(含未协商的旧服务端响应: 无 full 键 ⇒ 走这里, 行为与 S3 之前逐字节等价)
+      // = 清空重放(R6)。P1-1: 服务端只回当前视图的数组 —— **键不存在时必须保留原引用**,
+      // 绝不能 `|| []` 清空(否则每次轮询都把另外两个视图抹成空, 切回去要等一轮全量)。
+      if (payload.groups !== undefined) this.groups = payload.groups;
+      if (payload.singles !== undefined) this.singles = payload.singles;  // 未归组种子(搜索兜底/总数回退)
+      if (payload.torrents !== undefined) this.torrents = payload.torrents;  // 种子页平铺数组(SEED_ITEM)
+      if (payload.shows !== undefined) this.shows = payload.shows;  // 追剧视图(R10)
+      return payload;
+    },
     async refresh() {
       try {
         // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
         // P1-1: 同时带上当前视图名, 服务端只回该视图需要的数组(响应体 ≈1/4)。
         // 切视图时 goView 会把 lastRid 置空 ⇒ 强制取一次全量, 别的视图不会停在旧数据上。
+        // delta=1(plan S4, P-05 定案: 默认开、不加配置键): 声明客户端懂增量协议 ——
+        //   服务端 rid 落在时间线窗口内时回增量载荷(full=false), 本地由 applyStateRows
+        //   行级合并; 窗外/降级/切视图后 lastRid 已置空 ⇒ 服务端恒回全量(full=true), 天然兼容。
         const qs = [];
         if (this.lastRid !== null) qs.push(`rid=${this.lastRid}`);
         if (this.viewMode === "torrents") qs.push("view=torrent");
         else if (this.viewMode === "shows") qs.push("view=show");
         else qs.push("view=group");
-        const query = qs.length ? `?${qs.join("&")}` : "";
+        qs.push("delta=1");
+        const query = `?${qs.join("&")}`;
         const state = await this.api("/api/state" + query);
         this.status = state.status;
         // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
@@ -155,15 +224,16 @@ window.AQB_POLL = {
           // P0-0 埋点: 这段赋值 + 多选交集是"点了没反应"里唯一发生在前端的部分,
           // 超过 50ms 就在控制台留痕 —— 大库下这是 P1(行窗口化)要不要做的直接判据。
           const _t0 = performance.now();
-          // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染。
-          // P1-1: 服务端只回当前视图的数组 —— **键不存在时必须保留原引用**, 绝不能 `|| []` 清空
-          // (否则每次轮询都把另外两个视图抹成空, 切回去要等一轮全量)。
-          if (state.groups !== undefined) this.groups = state.groups;
-          if (state.singles !== undefined) this.singles = state.singles;  // 未归组种子(搜索兜底/总数回退)
-          if (state.torrents !== undefined) this.torrents = state.torrents;  // 种子页平铺数组(SEED_ITEM)
-          if (state.shows !== undefined) this.shows = state.shows;  // 追剧视图(R10)
-          if (typeof state.rid === "number") this.lastRid = state.rid;
-          this._snapshotTruth(state);  // !必须在 reapplyPending **之前**: 快照要的是服务端原始值
+          // 视图有变化: 记录新版本; 无变化时保留原数组, 不触发重渲染。
+          // S4(R6): 数组合并收敛进单一入口 applyStateRows —— full 分支整表替换(清空重放,
+          // 与历史行为逐字节等价) / delta 分支行级 upsert+removed 剔除; 之后的多选交集/
+          // 展开态回验/乐观值重贴等保留机制两条路共用, 时序约束不变。
+          this.applyStateRows(state);
+          if (typeof state.rid === "number") this.lastRid = state.rid;  // lastRid 恒 = 最后收到的 rid
+          // !必须在 reapplyPending **之前**: 快照要的是服务端原始值(delta 轮 state 的
+          // torrents/singles/groups 已被 applyStateRows 换成 delta 桶 —— 快照同样只比
+          // 这一轮 payload 真的带来的行, 见 _snapshotTruth 注)。
+          this._snapshotTruth(state);
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
           // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
           if (this.selectedCount) {
