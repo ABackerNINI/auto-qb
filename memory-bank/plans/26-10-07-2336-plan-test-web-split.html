@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="test-web-split">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-07-2336">
+<meta name="doc-updated" content="26-10-07-2336">
+<title>tests/test_web.py 拆分实施计划</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419;
+    --bg-raise: #151b22;
+    --ink: #d9dee3;
+    --ink-strong: #f0f3f5;
+    --mut: #8b949c;
+    --accent: #59b3a2;
+    --accent-dim: rgba(89, 179, 162, .14);
+    --line: rgba(255, 255, 255, .09);
+    --line-soft: rgba(255, 255, 255, .05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding: 0 24px;
+  }
+  code, .mono, td.num {
+    font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  code {
+    font-size: .88em;
+    background: var(--bg-raise);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: .08em .35em;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.1; }
+  nav.toc .toc-head {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 10px;
+  }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  main { min-width: 0; max-width: 860px; }
+
+  .kicker {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 40px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px;
+  }
+  .lede { font-size: 17px; color: var(--mut); max-width: 62ch; margin-bottom: 26px; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px 28px;
+    font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 12px 0; margin-bottom: 52px;
+  }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+
+  section { margin-bottom: 64px; }
+  h2 {
+    font-size: 23px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px;
+  }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 30px 0 10px; }
+  p { margin-bottom: 14px; max-width: 72ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 72ch; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 18px 0 20px; }
+  th {
+    text-align: left; font-weight: 510; font-size: 11.5px;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--line-soft); padding: 8px 12px 8px 0; vertical-align: top; }
+  td.num { text-align: right; white-space: nowrap; color: var(--ink); }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+
+  .gate {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 8px 14px; margin: 12px 0 6px; font-size: 13.5px;
+  }
+  .gate b { color: var(--accent); font-weight: 590; }
+  .step { margin-bottom: 40px; }
+  .step > h3 { margin-top: 0; }
+  .step h3 .sid { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-weight: 400; margin-right: 10px; font-size: 15px; }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    padding: 14px 18px; margin: 18px 0; max-width: 76ch;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .decision { color: var(--accent); font-weight: 590; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px;
+    font-size: 12.5px; color: var(--mut);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; display: none; }
+    h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <a href="#s1"><b>01</b>&nbsp; 背景与动机</a>
+      <a href="#s2"><b>02</b>&nbsp; 现状勘察</a>
+      <a href="#s3"><b>03</b>&nbsp; 目标架构</a>
+      <a href="#s4"><b>04</b>&nbsp; 分步实施 S0–S8</a>
+      <a href="#s5"><b>05</b>&nbsp; 拆分机制与机检</a>
+      <a href="#s6"><b>06</b>&nbsp; 风险与对冲</a>
+      <a href="#s7"><b>07</b>&nbsp; 拍板点</a>
+      <a href="#s8"><b>08</b>&nbsp; 非目标</a>
+      <a href="#s9"><b>09</b>&nbsp; 完成判据</a>
+      <a href="#s10"><b>10</b>&nbsp; 变更记录</a>
+    </nav>
+    <main>
+      <div class="kicker">实施计划 · memory-bank/plans</div>
+      <h1>tests/test_web.py 拆分实施计划</h1>
+      <p class="lede">14,367 行、323 个测试函数的单一测试文件, 按既有 15 个域分节机械拆分为 15 个平铺测试模块——零逻辑改动、集合恒等、守阵全绿。用户指令 (2026-10-07): 部分测试代码体积巨大, 急需拆分, 先出分步实施计划。</p>
+      <div class="meta-row">
+        <span>状态 <b class="mono">Open</b></span>
+        <span>立项 <b class="mono">26-10-07-2336</b></span>
+        <span>范围 <b class="mono">tests/test_web.py → tests/ 平铺 15 模块</b></span>
+        <span>规划基线 <b class="mono">0ae3212e</b></span>
+        <span>测试基线 <b class="mono">2757 passed + 4 skipped / 99%</b></span>
+      </div>
+
+      <section id="s1">
+        <h2><span class="secno">01</span>背景与动机</h2>
+        <hr class="sec-rule">
+        <p><code>tests/test_web.py</code> 承载 WEB UI 后端全部测试 (FastAPI 鉴权 / API / 命令投递 / 设置读写 / 前端资产静态守阵), 随半年功能堆叠长成全仓最大单一文件。实测 (2026-10-07, <span class="mono">0ae3212e</span>):</p>
+        <table>
+          <tr><th>指标</th><th class="num">数值</th><th>说明</th></tr>
+          <tr><td>tests/ 全目录 .py 总行数</td><td class="num">66,691</td><td>93 个 test_*.py + conftest / helpers / hr_helpers / sidefx</td></tr>
+          <tr><td>test_web.py 行数</td><td class="num">14,367</td><td>占全套 <b>21.5%</b>, 是第二名的 <b>5.8 倍</b></td></tr>
+          <tr><td>第二名 test_hr_service.py</td><td class="num">2,464</td><td>仅 test_web 的 17% —— 断层式 outlier</td></tr>
+          <tr><td>test_web.py 测试函数</td><td class="num">323</td><td>头部 docstring 测试计划 325 行 · 306 条条目 (差 17 条为存量缺口, 见 §3.3)</td></tr>
+          <tr><td>唯一共享 fixture</td><td class="num">web_env</td><td>文件内 251 处使用, 横跨全部域</td></tr>
+          <tr><td>文件内辅助类</td><td class="num">2</td><td>_ListLogHandler / module_log (仅 P1 长尾节使用, 外部零引用)</td></tr>
+        </table>
+        <p>体量的直接代价: 会话内读改成本高 (任何 AI 会话都要为定位一个函数扫全文件)、xdist 分发粒度粗 (单文件整体派给 worker)、git 冲突面集中 (webui 相关任何批次都撞同一文件)、头部 290 行测试计划清单与函数体的对应靠人肉维护。</p>
+      </section>
+
+      <section id="s2">
+        <h2><span class="secno">02</span>现状勘察</h2>
+        <hr class="sec-rule">
+        <h3>2.1 域分节结构 (实测行号与函数数)</h3>
+        <p>文件本体几乎无类结构 (仅 2 个日志辅助类), 323 个函数按注释分节聚成 15 个自然域:</p>
+        <table>
+          <tr><th class="num">#</th><th>行范围</th><th class="num">fn</th><th class="num">≈行</th><th>域</th></tr>
+          <tr><td class="num">1</td><td class="mono">326–1111</td><td class="num">21</td><td class="num">786</td><td>鉴权 / token / SSE 票据 / 跨站闸 + 核心 API 读写 (S1 聚类定界)</td></tr>
+          <tr><td class="num">2</td><td class="mono">1112–5887</td><td class="num">63</td><td class="num">4,776</td><td>webui 前端资产静态守阵: 皮肤清单 / CSS / 挂件类名 (7) + node 排序探针 (1) + JS 行为守阵 (55)</td></tr>
+          <tr><td class="num">3</td><td class="mono">5888–7694</td><td class="num">49</td><td class="num">1,807</td><td>qB 口径流量图三 GET 端点 (plan 26-10-03-0946)</td></tr>
+          <tr><td class="num">4</td><td class="mono">7695–9200</td><td class="num">51</td><td class="num">1,506</td><td>HR web 端点: refresh (3) / sites entries (6) / history (42)</td></tr>
+          <tr><td class="num">5</td><td class="mono">9201–10209</td><td class="num">19</td><td class="num">1,009</td><td>Web 命令执行 (_drain_web_commands)</td></tr>
+          <tr><td class="num">6</td><td class="mono">10210–10586</td><td class="num">12</td><td class="num">377</td><td>强制汇报确认重构 (plan 26-10-05-0923)</td></tr>
+          <tr><td class="num">7</td><td class="mono">10587–11434</td><td class="num">25</td><td class="num">848</td><td>Web 视图与配置热重载</td></tr>
+          <tr><td class="num">8</td><td class="mono">11435–12039</td><td class="num">17</td><td class="num">605</td><td>管理端点 R2B (分类/标签/限速/添加/导出/日志)</td></tr>
+          <tr><td class="num">9</td><td class="mono">12040–12877</td><td class="num">21</td><td class="num">838</td><td>种子中心视图 (种子页 / 详情抽屉 / 全局统计)</td></tr>
+          <tr><td class="num">10</td><td class="mono">12878–13019</td><td class="num">2</td><td class="num">142</td><td>W0 结构守阵 + 路由金清单 (plan 26-09-22-1857)</td></tr>
+          <tr><td class="num">11</td><td class="mono">13020–13322</td><td class="num">10</td><td class="num">303</td><td>键盘快捷键 /api/keys (W6)</td></tr>
+          <tr><td class="num">12</td><td class="mono">13323–13567</td><td class="num">5</td><td class="num">245</td><td>跳检三分流预检 + force 透传 (plan 26-10-05-0314 S2)</td></tr>
+          <tr><td class="num">13</td><td class="mono">13568–13936</td><td class="num">15</td><td class="num">369</td><td>P1 覆盖率提升轮: webui 运行时与命令长尾</td></tr>
+          <tr><td class="num">14</td><td class="mono">13937–14180</td><td class="num">9</td><td class="num">244</td><td>P1 覆盖率提升轮: webui 路由长尾</td></tr>
+          <tr><td class="num">15</td><td class="mono">14181–14367</td><td class="num">4</td><td class="num">187</td><td>v3 活尾合流 (S6 验收追加, 2026-10-05)</td></tr>
+        </table>
+        <p class="small">fn 合计 323; 行合计 ≈14,042 + 头部 docstring 325 行 = 14,367, 与实测吻合。</p>
+
+        <h3>2.2 拆分条件核查 (结论: 干净)</h3>
+        <ul>
+          <li><b>零跨文件导入</b>——全仓 grep 无任何 <code>import test_web</code> / <code>from test_web import</code>; module_log 与 _ListLogHandler 在 test_hr_service / test_hr_worker / test_tray 各有<b>自己的同名副本</b>, 不是引用。</li>
+          <li><b>外部引用仅 2 处注释</b>——<code>tests/helpers.py:277</code> (提到 test_web.py 的一个守阵函数名) 与 <code>tests/test_facade_modules.py:39</code> (「与 test_web 同款」), 迁移时同步改注释即可。</li>
+          <li><b>pytest 配置零障碍</b>——pytest.ini 为 <code>pythonpath = src</code> + <code>testpaths = tests</code> + <code>-n 4 --cov=src --cov-fail-under=98</code>; 平铺新增 test_*.py 自动收集, 无需改配置。</li>
+          <li><b>共享件仅一个 fixture</b>——web_env (251 处) 及其私有依赖 _make_web_manager / _ensure_group_state; 拆分后横跨全部目标文件, 必须上收 (见 §3.2)。</li>
+        </ul>
+
+        <h3>2.3 牵连的机械守卫面</h3>
+        <table>
+          <tr><th>守卫</th><th>约束</th><th>对本计划的影响</th></tr>
+          <tr><td class="mono">test_no_duplicate_test_names</td><td>测试函数名全仓唯一</td><td>迁移不改名即天然满足; 红验 (§5.3) 借它钉「重迁」形态</td></tr>
+          <tr><td class="mono">test_docs_forms</td><td>四形态 meta / 命名 / dark / doc-topic</td><td>本计划文档自身已按协议落 meta; 拆分不产生新 HTML</td></tr>
+          <tr><td class="mono">gen_doc_map --check</td><td>声明了 doc-refs 的件双向成链</td><td>本计划不声明 doc-refs (无认领链), 豁免</td></tr>
+          <tr><td class="mono">kb.check / check_wording</td><td>知识库口径与措辞</td><td>收口回写后必跑</td></tr>
+          <tr><td>覆盖率门槛</td><td class="mono">--cov-fail-under=98</td><td>纯移动不改覆盖面; 单文件跑用 <code>test.one</code> (自带 --no-cov), 不被收尾 FAIL 迷惑</td></tr>
+        </table>
+      </section>
+
+      <section id="s3">
+        <h2><span class="secno">03</span>目标架构</h2>
+        <hr class="sec-rule">
+        <h3>3.1 拆分总账 (15 节 → 15 个平铺模块)</h3>
+        <p>沿用仓库既有命名血统 (<code>test_web_shortcuts.py</code> / <code>test_webui_delta.py</code> 已是先例), 全部落在 <code>tests/</code> 平铺, <code>test_web.py</code> 本体删除:</p>
+        <table>
+          <tr><th>目标文件</th><th>来源节</th><th class="num">fn</th><th class="num">≈行</th></tr>
+          <tr><td class="mono">test_web_auth.py</td><td>节 1 鉴权半 (S1 聚类定界)</td><td class="num">S1 定</td><td class="num" rowspan="2">820</td></tr>
+          <tr><td class="mono">test_web_api_core.py</td><td>节 1 核心 API 半 (S1 聚类定界)</td><td class="num">S1 定</td></tr>
+          <tr><td class="mono">test_webui_static_skins.py</td><td>节 2 皮肤清单 / CSS / 挂件 / node 探针</td><td class="num">8</td><td class="num">1,340</td></tr>
+          <tr><td class="mono">test_webui_static_dom_*.py ×2</td><td>节 2 JS 行为守阵 55 fn, 按函数名前缀聚类对半 (S1 定稿并按内容命名)</td><td class="num">55</td><td class="num">3,256</td></tr>
+          <tr><td class="mono">test_web_traffic_qb.py</td><td>节 3</td><td class="num">49</td><td class="num">1,807</td></tr>
+          <tr><td class="mono">test_web_hr.py</td><td>节 4</td><td class="num">51</td><td class="num">1,506</td></tr>
+          <tr><td class="mono">test_web_commands.py</td><td>节 5 + 6 (同为 drain 命令侧)</td><td class="num">31</td><td class="num">1,386</td></tr>
+          <tr><td class="mono">test_web_views_reload.py</td><td>节 7</td><td class="num">25</td><td class="num">848</td></tr>
+          <tr><td class="mono">test_web_admin.py</td><td>节 8</td><td class="num">17</td><td class="num">605</td></tr>
+          <tr><td class="mono">test_web_seed_center.py</td><td>节 9</td><td class="num">21</td><td class="num">838</td></tr>
+          <tr><td class="mono">test_web_route_manifest.py</td><td>节 10 (路由金清单守阵)</td><td class="num">2</td><td class="num">142</td></tr>
+          <tr><td class="mono">test_web_keys.py</td><td>节 11</td><td class="num">10</td><td class="num">303</td></tr>
+          <tr><td class="mono">test_web_skip_check.py</td><td>节 12</td><td class="num">5</td><td class="num">245</td></tr>
+          <tr><td class="mono">test_web_longtail.py</td><td>节 13 + 14 + 15 (P1 长尾两轮 + v3 活尾, 含 module_log / _ListLogHandler)</td><td class="num">28</td><td class="num">800</td></tr>
+        </table>
+        <p>行数水位: 最大单文件 ≈1,900 行 (JS 行为守阵对半后), 全部 ≤2,500 行硬上限——超限簇在 S1 按函数名前缀续拆。估算行含各自新建的 docstring 测试计划头。</p>
+
+        <h3>3.2 共享件归宿</h3>
+        <ul>
+          <li><b>web_env + _make_web_manager + _ensure_group_state</b> → 上收 <code>tests/conftest.py</code> (现 197 行, 增量约 40 行)。pytest 原生: 拆分后 15 个文件全部免 import 直用 fixture; 不选「各文件复制一份」(251 处使用的夹具复制即三处漂移源), 也不选 helper 模块再显式导入 (fixture 注册面变绕)。</li>
+          <li><b>module_log / _ListLogHandler</b> → 随节 13 走进 test_web_longtail.py, 外部本就零引用, 文件内聚。</li>
+          <li><b>顶层常量</b> (皮肤清单、挂件类名白名单等) → 跟随唯一使用域; S1 的「定义→使用」矩阵发现多域共用的, 上收 conftest.py。</li>
+        </ul>
+
+        <h3>3.3 docstring 测试计划随函数走</h3>
+        <p>头部 325 行「## 测试计划」现有 <b>306 条条目</b> (对 323 个函数, 缺 17 条为存量缺口——26-10-05 幽灵清理轮 [26-10-05-0945] 档案遗留段的已知口径)。拆分时<b>存量条目按函数名逐条重分布</b>到各新文件 docstring, 一行不改写; 17 条缺口不补写——补登是新内容创作, 不是机械移动, 维持该档案的遗留口径不混入本计划。硬约束「新增测试必须同步 docstring 清单」在拆分后继续成立, 且每份清单缩短到单文件尺度。</p>
+      </section>
+
+      <section id="s4">
+        <h2><span class="secno">04</span>分步实施 S0–S8</h2>
+        <hr class="sec-rule">
+        <p>总原则: <b>纯机械迁移</b>——不动任何断言 / 夹具 / 逻辑, diff 审查口径是「行只在文件间移动」。每批一个 commit, 批内先红验后迁移后验证; 批间独立可停, 任何一批后中止仓库都处于全绿状态。</p>
+        <p><b>批通用门 (每批相同, 下文不再重复)</b>: <code>my-commit-flow.sync</code> → 工具跑批 → 校验器 4 条全绿 → <code>test.one</code> 新文件 → <code>test.quick</code> 全绿 → (批 2/4/5 后加跑 <code>test.full</code>) → 用户显式「提交」→ <code>ship.commit</code> (commit 信息 gitmoji + 中文, 数字用当批实测)。</p>
+
+        <div class="step">
+          <h3><span class="sid">S0</span>开工前置</h3>
+          <ul>
+            <li><code>commands run my-commit-flow.sync</code>, 结果行入任务档案; 核对基线: 最新为 26-10-07-2222 (2757 passed + 4 skipped / 99%), 若 HEAD 已显著前进或基线超过 3 天, 重跑 <code>test.full</code> 重立基线切片。</li>
+            <li>开分支 <code>feat/test-web-split</code>; 立任务档案 <code>tasks/26-10-07-backend-test-web-split.md</code> (跨会话专题, 本计划 S0–S8 为其子任务骨架)。</li>
+            <li>忆坑档四篇: <code>pitfalls/testing/bulk-rename.md</code> (机械分批迁移的漏迁/回填教训)、<code>parallel-run.md</code> (-n 4 口径)、<code>single-file-coverage-gate.md</code>、<code>tmpdir.md</code>。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 同步行「同步成功 &lt;hash&gt;」落档案; 分支与档案在位。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S1</span>勘察与映射表 (只读轮)</h3>
+          <ul>
+            <li>AST 扫描 test_web.py: 323 个函数 + 1 fixture + 2 类 + 全部顶层常量的「定义→使用」矩阵。</li>
+            <li>产出<b>映射表</b> (函数名 → 目标文件, 全覆盖零遗漏) 嵌入任务档案; 节 1 与节 2 的 JS 行为块按函数名前缀聚类定出文件边界与最终命名。</li>
+            <li>常量归属裁决: 唯一使用域随行; 多域共用上收 conftest。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 映射表函数计数 == 323, 与 AST 清单逐名对账; <b>拍板点 P-01</b> 请用户过目边界与命名后开工。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S2</span>拆分工具与红验 (不触生产)</h3>
+          <ul>
+            <li>一次性脚本 <code>scripts/split_test_web.py</code>: AST 解析原文件 + 读映射表 → 产出新文件 (import 头按 used-names 收集裁剪; 每文件 docstring = 该文件函数的计划行子集) + 删除原文件。见 §5。</li>
+            <li>校验器 4 条 (§5.2) 内建于脚本; 另跑 3 条红验 (§5.3), 证据截图 / 输出入档案。</li>
+            <li>演练: 输出到 testpaths 之外的临时目录 (防误收集), <code>pytest --collect-only</code> 计数恒等 323。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 演练全绿 + 3 条红验「先红后修」证据落档案。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S3</span>批 1 · 试切 (节 1 → auth + api_core, ~21 fn)</h3>
+          <ul>
+            <li>用最小真实批次打通全管线: 迁移 → web_env 上收 conftest → <code>test.one</code> 两新文件 → <code>test.quick</code>。</li>
+            <li>同步改 2 处活注释: <code>tests/helpers.py:277</code>、<code>tests/test_facade_modules.py:39</code>。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 全绿 + 收集数恒等; 首个 commit 落地, 管线缺陷在本批暴露完毕。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S4</span>批 2 · webui 静态守阵 (节 2 → 3 份, 63 fn, 全计划最大批)</h3>
+          <ul>
+            <li>重点回归面: 这批守阵大量读 <code>static/</code> 源码与路径常量, S1 的常量归属在此受检; 皮肤清单 / 挂件白名单常量随唯一使用域走。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 批通用门 + <code>test.full</code> 里程碑。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S5</span>批 3 · 端点域 (节 3 + 4 → traffic_qb + hr, 100 fn)</h3>
+          <div class="gate"><b>门</b> — 批通用门。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S6</span>批 4 · 命令与视图域 (节 5–9 → commands + views_reload + admin + seed_center, 94 fn)</h3>
+          <div class="gate"><b>门</b> — 批通用门 + <code>test.full</code> 里程碑。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S7</span>批 5 · 结构守阵与长尾 (节 10–15 → route_manifest + keys + skip_check + longtail, 45 fn)</h3>
+          <ul>
+            <li>本批迁完原文件为空壳: 删除 <code>tests/test_web.py</code> 与一次性脚本 <code>scripts/split_test_web.py</code> (脚本去留若用户想留作以后复用, 在批 commit 前提出)。</li>
+          </ul>
+          <div class="gate"><b>门</b> — 批通用门 + <code>test.full</code> 里程碑; test_web.py 不再存在。</div>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S8</span>收口验收</h3>
+          <ul>
+            <li>全仓验收 grep: 活代码与活文档中 <code>test_web</code> 引用只剩合法形态 (test_web_* 新文件名 / 历史档案不改)。</li>
+            <li>守阵全绿: no_duplicate / docs_forms / doc_map check / kb.check。</li>
+            <li><code>test.full</code> 新基线切片 (数字不许手抄, 按 testing/baseline.md 口径)。</li>
+            <li>kb 回写: activeContext 切片迁出、本计划 doc-status → Done (doc-updated 抬戳)、kb.index 重建; 若踩到新坑按动作写入 pitfalls 并重跑索引。</li>
+          </ul>
+          <div class="gate"><b>门</b> — §9 完成判据逐条核对, 全部满足即收口。</div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <h2><span class="secno">05</span>拆分机制与机检</h2>
+        <hr class="sec-rule">
+        <h3>5.1 为什么用脚本而不是手搬</h3>
+        <p>14,367 行手工搬移必然产生漏迁 / 重迁 / 夹具落错文件, 且<b>测试照样全绿</b>——这正是 bulk-rename 坑档记过的「静默漏迁, 全绿假象」。脚本化后「漏迁」从靠人眼变成靠校验器, 每批迁移的机械面零判断。</p>
+        <h3>5.2 校验器 4 条 (内建于脚本, 每批必跑)</h3>
+        <table>
+          <tr><th class="num">#</th><th>校验</th><th>钉住的失败形态</th></tr>
+          <tr><td class="num">①</td><td>函数名集合恒等: 拆前 AST 清单 == 拆后 15 文件清单并集, 按名 diff 为空</td><td>漏迁 / 丢函数</td></tr>
+          <tr><td class="num">②</td><td>总数恒等: 拆后函数计数 == 323, 且每名恰出现一次</td><td>重迁 (同名两处)</td></tr>
+          <tr><td class="num">③</td><td>docstring 计划反幽灵 + 条目守恒: 每文件清单条目必须指向本文件存在的函数; 15 文件条目总数 == 306</td><td>计划清单漂移 (26-10-05-0945 切片的教训)</td></tr>
+          <tr><td class="num">④</td><td>可收集: 全部新文件 py_compile 通过 + pytest --collect-only 计数恒等</td><td>import 裁剪错 / 常量落错文件</td></tr>
+        </table>
+        <h3>5.3 红验 3 条 (S2 一次性做, 先红后修)</h3>
+        <ul>
+          <li>映射表故意划走 1 个函数不迁 → 校验 ① 必须红;</li>
+          <li>映射表把同一函数指给两个文件 → 校验 ② / no_duplicate 守卫必须红;</li>
+          <li>某文件 docstring 一条计划行的函数名改成不存在的 → 校验 ③ (反幽灵) 必须红; 整行删掉 → 条目总数 306 恒等必须红。</li>
+        </ul>
+        <p class="small">红验与被测失败形态必须同构 (assertions 坑档纪律): 只验「整批漏迁」等于没验过。</p>
+      </section>
+
+      <section id="s6">
+        <h2><span class="secno">06</span>风险与对冲</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th>风险</th><th>对冲</th></tr>
+          <tr><td>隐藏的测试间耦合被拆分显形 (共享全局状态 / 顺序依赖), 换文件分组后 flaky</td><td>xdist -n 4 本就打散执行顺序, 分组变化不改变并行语义; 若显形, 属既有缺陷——当批最小修复并入档案, 修复面超出即入池 issue, 不顺手扩修 (范围守恒)。</td></tr>
+          <tr><td>docstring 测试计划漂移</td><td>校验 ③ 机检 + 拆分本身把 300 余行大清单缩成单文件尺度, 漂移面变小。</td></tr>
+          <tr><td>机械迁移漏迁 / 重迁且全绿假象</td><td>校验 ①② + 红验 3 条 + no_duplicate 守卫三重兜底。</td></tr>
+          <tr><td>静态守阵的路径常量 / 白名单常量落错文件</td><td>S1「定义→使用」矩阵先裁决归属; 校验 ④ 的 --collect-only 在导入期即暴露 NameError。</td></tr>
+          <tr><td>覆盖率口径漂移 (并行与串行差 1, 坑档在案)</td><td>全程沿用 -n 4 口径对比基线, 不跨口径比较; 单文件验证用 test.one (自带 --no-cov)。</td></tr>
+          <tr><td>实施跨会话, 其他会话同批改 test_web.py 撞车</td><td>每批开工先 sync; 批粒度小且每批独立 commit, 冲突面收敛在单批内。</td></tr>
+          <tr><td>「顺手修」蠕变 (迁移中看到相邻缺陷想改)</td><td>纯移动纪律 + diff 审查口径「行只在文件间移动」; 相邻缺陷一律入池 issues/。</td></tr>
+        </table>
+      </section>
+
+      <section id="s7">
+        <h2><span class="secno">07</span>拍板点</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th class="num">#</th><th>决策</th><th>推荐案</th></tr>
+          <tr><td class="num">P-01</td><td>目标文件边界与命名 (S1 映射表)</td><td class="decision">按 §3.1 总账表执行, JS 行为块对半的两份文件名由 S1 按内容定稿</td></tr>
+          <tr><td class="num">P-02</td><td>web_env (251 处) 归宿</td><td class="decision">上收 tests/conftest.py (pytest 原生共享, 增量 ~40 行)</td></tr>
+          <tr><td class="num">P-03</td><td>次大文件是否续拆 (test_hr_service 2,464 / test_traffic_sample 2,125 / test_grouping 1,859)</td><td class="decision">本计划验收后按同套机制另立计划, 不混入本批</td></tr>
+        </table>
+      </section>
+
+      <section id="s8">
+        <h2><span class="secno">08</span>非目标</h2>
+        <hr class="sec-rule">
+        <ul>
+          <li>不拆 test_hr_service / test_traffic_sample / test_grouping 等次大文件 (P-03, 另立)。</li>
+          <li>不改任何测试逻辑: 断言 / 夹具 / 参数化 / skip 语义原样移动。</li>
+          <li>不改 pytest.ini 与 conftest 既有逻辑 (conftest 仅增量上收 web_env)。</li>
+          <li>生产代码 (src/) 零触碰。</li>
+          <li>历史档案 (plans / reports / 旧 activeContext / 旧基线切片) 中对 test_web.py 的引用一律不改——它们是当时快照。</li>
+          <li>不做「顺手」的测试去重或 helper 抽取 (各文件自带的 _ListLogHandler 副本维持现状)。</li>
+        </ul>
+      </section>
+
+      <section id="s9">
+        <h2><span class="secno">09</span>完成判据</h2>
+        <hr class="sec-rule">
+        <ul>
+          <li><code>tests/test_web.py</code> 不存在; 15 个新模块在位, 323 个函数按名集合恒等且各恰存活一次 (校验 ①② 证据在档案)。</li>
+          <li>每新文件头部 docstring「## 测试计划」反幽灵且 306 条条目守恒 (校验 ③)。</li>
+          <li>单文件 ≤2,500 行 (实测最大值记入档案)。</li>
+          <li><code>test.full</code> ≥ 开工基线 (2757 passed + 4 skipped), 覆盖率 ≥98%, 口径 -n 4; 新基线切片落 <code>testing/baselines/</code>。</li>
+          <li>活引用更新完毕 (helpers.py:277、test_facade_modules.py:39), 全仓验收 grep 干净。</li>
+          <li>kb 回写闭环: 任务档案 Done、计划 doc-status → Done、activeContext 迁出、kb.index 重建。</li>
+        </ul>
+      </section>
+
+      <section id="s10">
+        <h2><span class="secno">10</span>变更记录</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th class="num">戳</th><th>变更</th></tr>
+          <tr><td class="num mono">26-10-07-2336</td><td>初版。规划时点基线: 同步 0ae3212e (快进 a0511e1c→0ae3212e), 测试基线 26-10-07-2222 (2757 passed + 4 skipped / 99%); 现状数字均为当轮实测 (wc -l / grep / awk 分节统计)。</td></tr>
+        </table>
+        <footer>
+          <p>计划 · doc-topic <span class="mono">test-web-split</span> · 状态 Open · 拍板后冻结, 实际执行进度记任务档案。</p>
+        </footer>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>
