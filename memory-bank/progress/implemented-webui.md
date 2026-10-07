@@ -7,6 +7,20 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEBUI 详情面板 followups 四修: 模板选择器定宽 / 切页返回变体重挂 / 换种子软切换 / tooltip 锚定保活**(2026-10-07, 分支
+  fix/webui-detail-panel-followups 四提交 `039ea285`…`8677a415`; 档案
+  [tasks/26-10-07-webui-detail-panel-followups](../tasks/26-10-07-webui-detail-panel-followups.md) Done): 用户点名 4 缺陷
+  —— ①`.dt-select` 定宽 240px(`.dt-summary` flex-basis 同步): 原生 select 自动最小宽=最宽 option, `dtTplOptions` 按页签
+  变化导致宽度跳动带动同排元素; ②切设置页返回详情面板空白: aside 被 v-if 拆建后变体宿主换节点而 `_dtMounted` 持旧宿主,
+  watch(drawerVisible) 种子支路进场补 `$nextTick(_dtSync)` 重挂; ③显式换种子闪"空态→加载态→数据"三连: 已开换目标改交棒
+  `_switchDrawerTarget` 软切换单点(旧数据撑几何+160ms 延迟遮罩), 同目标重入短路零副作用, 冷启动 loading 按 initialTab
+  同帧置位; ④tooltip 锚定保活: place() 定位单点 + reacquire() 语义重解析 + watch()/tick() rAF 帧环(漂移>1px 重定位,
+  可见期每帧仅 1 次 getBoundingClientRect), 键盘 NaN 坐标由矩形基准兜住。每项红验守阵 1 个测试函数; 真机 qB 116 种子
+  浏览器实测四项全 PASS、零 console 错误; test.full 2717 passed + 4 skipped / 99%(基线
+  [26-10-07-1142](../testing/baselines/26-10-07-1142-webui-detail-panel-followups.md))。坑档
+  [drawer-switch-flicker](../pitfalls/web-ui/drawer-switch-flicker.md) /
+  [aq-tip-position-clamp](../pitfalls/web-ui/aq-tip-position-clamp.md) /
+  [vif-host-node-stale](../pitfalls/web-ui/vif-host-node-stale.md)。
 - **tracker URL 源头脱敏 方案 B: 拉取即脱敏 + mask 形态 + 编辑下线**(2026-10-07, 计划
   [plans/26-10-07-0055](../plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html) S1–S4 全落地, 分支
   feat/tracker-url-sanitize-planb 六提交 `589c91ff`…`ff97e7cf` 待并回; 档案

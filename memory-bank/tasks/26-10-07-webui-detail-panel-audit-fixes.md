@@ -5,7 +5,7 @@
 **Updated:** 2026-10-07 08:36
 **Topics:** webui-detail-panel-audit-fixes
 **Summary:** 摸排报告 26-10-07-0542 的修复轮: 8 个子任务串行完成 8 笔提交(`9726b12f..2367555d`, 分支 feat/webui-detail-panel-audit-fixes), 修复 Q1-Q4 + P2×3 + P3-4..P3-7; 未做 P3-8(重复代码重构, 属重构批次)。每步 test.quick 全绿(2706→2712), 收口 test.full **2712 passed + 4 skipped / TOTAL 99% / 52.13s**(基线 26-10-07-0836), 新增守阵 7 个测试函数。
-**Refs:** memory-bank/tasks/26-10-06-webui-detail-panel.md,memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md,memory-bank/testing/baselines/26-10-07-0836-webui-detail-panel-audit-fixes.md
+**Refs:** memory-bank/tasks/26-10-06-webui-detail-panel.md,memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md,memory-bank/testing/baselines/26-10-07-0836-webui-detail-panel-audit-fixes.md,memory-bank/tasks/26-10-07-webui-detail-panel-followups.md
 
 ## 原始请求
 
