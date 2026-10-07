@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qb-traffic-seed-vacuum-1s-edge">
+<meta name="issue-stamp" content="26-10-08-0141">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="qb-traffic-rate-basis">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="流量图窗首种子 1 秒边界带真空断链失效">
+<meta name="issue-summary" content="D3 窗首种子外扩下停机时刻落在 (seed_t0-1, seed_t0) 且恢复在窗内时, 真空 null 点被 t0 过滤丢弃, 离线字节误归恢复首桶">
+<title>流量图窗首种子 1 秒边界带真空断链失效 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>流量图窗首种子 1 秒边界带真空断链失效</h1>
+    <p class="lede">D3 窗首种子外扩下停机时刻落在 (seed_t0-1, seed_t0) 且恢复在窗内时, 真空 null 点被 t0 过滤丢弃, 离线字节误归恢复首桶</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-0141-bug-qb-traffic-seed-vacuum-1s-edge</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 01:41</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在实施计划 <a href="../plans/26-10-07-2127-plan-qb-traffic-rate-basis.html">26-10-07-2127</a> 的 <strong>S2(三端点接线+窗首种子)</strong> 中发现: 设计决定 D3 的「窗首种子跨真空(程序停机)时由 <code>v4_series_points</code> 既有真空判定自动断链」在一条 <strong>1 秒宽边界带</strong>上不成立。</p>
+    <p>场景(raw 段窗 1m-24h): S2 把 <code>read_window</code>/<code>v4_series_points</code> 的 t0 外扩一个响应桶宽 <code>seed_t0 = grid.t0 - grid.interval</code> 取前驱桶点作差分基线。若停机时刻恰落在 <code>(seed_t0-1, seed_t0)</code> 这 1 秒带、且恢复块落在窗内: 真空 null 点的时间戳 <code>int(prev_chain_end)</code> 取整后 = <code>seed_t0 - 1 &lt; t0</code>, 被返回流的窗过滤(<code>if t0 &lt;= t &lt; t1</code>)丢弃 —— 于是返回流里种子点与恢复首点之间<strong>看不到 null 断链标记</strong>, 差分链被误接, 离线期 qB 自行传输的字节被误归到恢复首桶, 出一个假尖峰。</p>
+    <p class="hint">发现方式: S2 实施期读码推断(非测试撞见); S2 未写复现用例, 复验时需构造该 1s 几何。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">代码取证 2026-10-08 01:40(基线 b49b645e), 由 S2 实施记录转述:</p>
+<pre><code>traffic_qb.py:186  seed_t0 = grid.t0 - grid.interval   # D3 窗首种子(外扩一个响应桶宽)
+traffic_qb.py:257  seed_t0 = grid.t0 - grid.interval   # payload_group 逐成员同款
+
+traffic_grid.py:399   marks.append(int(prev_chain_end))   # 真空 null 点: t = 停机前链末实测时刻取整
+traffic_grid.py:441   if t0 <= t < t1:                    # null 点最终窗过滤(t0 即 seed_t0)
+
+# 触发带: prev_chain_end ∈ (seed_t0-1, seed_t0)  ->  int(prev_chain_end) == seed_t0-1 < t0
+#          => 真空 null 点被 :441 丢弃, 种子点(亦 t<t0 被滤)与恢复首点之间无断链标记</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>停机时刻恰落在 seed_t0 前 1 秒带 <code>(seed_t0-1, seed_t0)</code>, 且恢复块落在窗内 —— 需 1s 级几何巧合</td></tr>
+      <tr><td>影响范围</td><td>raw 段窗(1m-24h) 的 global / torrent / group 三端点速率曲线; 表现为恢复首桶一个假尖峰(离线期字节), totals 通道同桶亦可能多计</td></tr>
+      <tr><td>严重度</td><td>低(窄边界带, 常见几何安全; 单桶视觉假峰, 不丢数据不崩; 非 S1/S2/S3 引入, 系 D3 设计未覆盖的边界)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号名 + grep 关键词 + 当时行号(取证 2026-10-08 01:40, 基线 b49b645e)—— 代码会漂移, 靠符号与 grep 重新定位。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/server/traffic_qb.py:186</code> · <code>seed_t0 = grid.t0 - grid.interval</code> · grep <code>seed_t0</code>(<code>_payload_series</code>)</li>
+      <li><code>src/auto_qb/webui/server/traffic_qb.py:257</code> · 同上 · grep <code>seed_t0</code>(<code>payload_group</code> 逐成员)</li>
+      <li><code>src/auto_qb/core/traffic_grid.py:399</code> · <code>marks.append(int(prev_chain_end))</code>(真空 null 点) · grep <code>marks.append</code></li>
+      <li><code>src/auto_qb/core/traffic_grid.py:441</code> · <code>if t0 &lt;= t &lt; t1:</code>(null 点最终窗过滤) · grep <code>if t0 &lt;= t &lt; t1</code></li>
+      <li>相关: <code>src/auto_qb/core/traffic_grid.py:329</code> <code>_V4_VACUUM_EPS_S</code>(真空判定浮点容差) · grep <code>_V4_VACUUM_EPS_S</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查(S2 实施期读码推断, 未经复现验证): 真空 null 点 t = <code>int(prev_chain_end)</code>; 当 <code>prev_chain_end ∈ (seed_t0-1, seed_t0)</code> 时取整后 = <code>seed_t0-1 &lt; t0</code>, 被窗过滤丢弃, 种子与恢复首点之间差分链误接。<br>已排除: ①不是 D3 外扩量不足(外扩 = 一个响应桶宽, 常规几何充分); ②不是种子点本身外发(窗外过滤正常工作)。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>待定。候选方向(需先复现确认): ①种子外扩段的 null 点按「原始窗 t0」而非 seed_t0 判保留(只放宽 seed 区间的断链标记透传, 不影响窗内过滤口径); ②种子链与窗内链分段, 种子只喂差分基线、不参与 null 过滤。两者都属读侧纯函数改动, 无数据迁移。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-08 01:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-08-0141-bug-qb-traffic-seed-vacuum-1s-edge.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

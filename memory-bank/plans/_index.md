@@ -14,12 +14,12 @@
 ## Open
 
 - [26-10-07-2336] [tests/test_web.py 拆分实施计划](26-10-07-2336-plan-test-web-split.html) — `test-web-split`
-- [26-10-07-2127] [实施计划 · qB 流量图区间平均口径 + 万桶级治理 · auto-qb](26-10-07-2127-plan-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`
 - [26-10-07-0414] [实施计划 · WebUI rid 式增量同步 · auto-qb](26-10-07-0414-plan-webui-delta-sync.html) — `webui-delta-sync`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
 
+- [26-10-07-2127] [实施计划 · qB 流量图区间平均口径 + 万桶级治理 · auto-qb](26-10-07-2127-plan-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`
 - [26-10-07-0055] [tracker URL 源头脱敏 · 方案B 分步实施计划](26-10-07-0055-plan-tracker-url-sanitize-planb.html) — `tracker-url-source-sanitize`
 - [26-10-06-1009] [WEBUI 列对齐彻底修复 · 分步实施计划](26-10-06-1009-plan-webui-column-alignment.html) — `webui-column-alignment`
 - [26-10-06-0838] [种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划](26-10-06-0838-plan-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`

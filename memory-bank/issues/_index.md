@@ -16,7 +16,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 4 |
+| bug | 5 |
 | perf | 6 |
 | docs | 1 |
 | test | 1 |
@@ -27,6 +27,7 @@
 
 ## Open
 
+- [bug] [流量图窗首种子 1 秒边界带真空断链失效](26-10-08-0141-bug-qb-traffic-seed-vacuum-1s-edge.html) — D3 窗首种子外扩下停机时刻落在 (seed_t…
 - [test] [ui_harness 无 peers 数据: e2e 零覆盖 peers 页签内容渲染](26-10-07-2309-test-webui-peers-harness.html) — FakeClient.peers_map 恒空,…
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种…
 - [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保…

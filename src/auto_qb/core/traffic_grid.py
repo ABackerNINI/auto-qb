@@ -5,7 +5,8 @@ S4 API 读侧的取数口径, 全部纯函数(输入 v4 天文件块序列 / agg
 raw 归桶 / z 行程覆盖展开 / 最早观测行)已随 S5 退役删除, 本模块即现行唯一读侧:
 
 窗口与栅格(§05.1/§05.3, WINDOW_SPECS 13 档):
-- raw 段窗(1m-24h): 桶宽 = 采样间隔(向上取整防伪断线), 桶 = floor 对齐; 数据经
+- raw 段窗(1m-24h): 桶宽 = max(采样间隔, span/MAX_RAW_BUCKETS)(向上取整防伪断线; 上限
+  兜住高频采样下的万桶级, 计划 26-10-07-2127 S3), 桶 = floor 对齐; 数据经
   traffic_store.V4DayCache 按天加载 -> 块序列 -> v4_series_points 桶点 -> v4_grid_obs
   按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null); 另合流采样模块
   活尾快照(S6: 未落盘记录 + 开放游程续链, 图面尾部随采样节拍实时, 不等 flush)。
@@ -77,6 +78,14 @@ MONTH_NOMINAL_S = 30 * DAY_SECONDS
 #: 24h 窗栅格宽的兜底值(qb_traffic 缺省 = 未启用时的空态 meta; 与配置缺省 30S 同值)
 DEFAULT_SAMPLE_INTERVAL_S = 30.0
 
+#: raw 段窗桶数上限(计划 26-10-07-2127 S3, §03 万桶级治理裁决): raw 桶宽 = max(ceil(采样间隔),
+#: ceil(span/上限)) —— 高频采样(如生产现况 1.5s)下 24h 窗本可达数万桶(JSON 传输 MB 级 +
+#: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880。上限取 2880 = 30s
+#: 采样下 24h 视图桶数(默认配置数学恒等, 零回归面); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
+#: 通道字节守恒 —— 方案 B 的「附带收益」不因加宽丢失。业界同型先例: RRDtool CF=AVERAGE ·
+#: qB GUI SpeedPlotView Averager(1s->144s 分桶)· Deluge stats 多级桶 · Grafana $__rate_interval。
+MAX_RAW_BUCKETS = 2880
+
 
 @dataclass(frozen=True)
 class WindowGrid:
@@ -91,7 +100,7 @@ class WindowGrid:
     name: str  # WINDOW_SPECS 键(1m-all)
     t0: int  # 窗口起点(含), epoch 秒
     t1: int  # 窗口终点(不含), epoch 秒
-    interval: int  # 桶宽秒(24h = 采样间隔, 30d = 3600, 6mo/1y = 86400, all = 标称月长)
+    interval: int  # 桶宽秒(raw = max(采样间隔, span/上限), 30d = 3600, 6mo/1y = 86400, all = 标称月长)
     segment: str  # 消费段: "raw" | "hour" | "day" | "month"
     buckets: tuple  # Tuple[int, ...] 桶起点序列(升序)
 
@@ -118,9 +127,10 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
     if segment == "month":
         raise ValueError("all 窗栅格由 agg month 行数据面定: 用 build_month_grid(...)")
     # 桶宽对采样间隔向上取整(floor 在小数间隔如 1.5s 下取 1s 桶宽, 采样行 1.5s 一条 -> 隔桶为空 = 伪断线;
-    # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条)
+    # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条); 再受 MAX_RAW_BUCKETS 上限约束(S3 万桶级
+    # 治理: 高频采样下按 span/上限 加宽, 桶数恒 <= 上限; 30s 默认采样下 max 取到采样间隔, 数学恒等)
     if segment == "raw":
-        interval = max(1, math.ceil(sample_interval))
+        interval = max(1, math.ceil(sample_interval), math.ceil(span / MAX_RAW_BUCKETS))
         t1 = int(now)
         t0 = t1 - span
         first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)

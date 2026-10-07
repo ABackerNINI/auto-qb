@@ -1,14 +1,12 @@
-# qb-traffic-rate-basis — 流量图速率口径调研
+# qb-traffic-rate-basis — 流量图速率口径调研 + 实施
 
-> 摘要: 用户反馈「流量图太陡」, 命题调研 qB 与业界方案裁决口径 —— 结论: 数据口径采用**区间平均速度**(计数器差分 Δbytes/Δt), 否决移动平均(平滑归展示层, 按观感再议); 瞬时速度继续落盘(r 行)供 agg 峰值与原始信号留存, 仅不再上图。调研全程 5 子代理串行, 全部一次成功; 报告 [26-10-07-2031](../reports/26-10-07-2031-report-qb-traffic-rate-basis.html)。报告已转化为实施计划 [26-10-07-2127](../plans/26-10-07-2127-plan-qb-traffic-rate-basis.html)。
-> 最后活动: 2026-10-07 23:45
+> 摘要: 用户反馈「流量图太陡」, 命题调研 qB 与业界方案裁决口径 —— 结论: 数据口径采用**区间平均速度**(计数器差分 Δbytes/Δt), 否决移动平均(平滑归展示层, 按观感再议); 瞬时速度继续落盘(r 行)供 agg 峰值与原始信号留存, 仅不再上图。调研(5 子代理串行)与实施计划 S1-S4 均已收口; 报告 [26-10-07-2031](../reports/26-10-07-2031-report-qb-traffic-rate-basis.html), 计划 [26-10-07-2127](../plans/26-10-07-2127-plan-qb-traffic-rate-basis.html)(Status: Done)。
+> 最后活动: 2026-10-08 01:42
 
 **Refs:** memory-bank/tasks/26-10-07-webui-qb-traffic-rate-basis.md,memory-bank/plans/26-10-07-2127-plan-qb-traffic-rate-basis.html
 
-- 陡因(代码事实): 1m~24h 窗走 raw 段, 1 桶=1 个 30s 采样, 采样器直采 qB 瞬时字段(libtorrent 1Hz×5s EWMA 快照), 前端零平滑; 3d+ 窗消费 dt 加权 hour 聚合, 天然平缓。
-- 落地面(未决项, 实施与否由用户拍板): 纯读侧 —— r 行累计字节早已逐采样落盘, `v4_totals_points` 差分边界全套现成, 仅 `traffic_grid.py` 加桶点变换 + `traffic_qb.py` 三端点接线; 采样器/存储/state_file/前端/配置零改动, 旧数据即刻按新口径出图。
+- 任务档案: [26-10-07-webui-qb-traffic-rate-basis](../tasks/26-10-07-webui-qb-traffic-rate-basis.md) —— 调研(P0-P6)与实施(S1-S4)全程、子任务状态表与实测数字都在档案, 本切片只留指针。
+- 落地(已完成, 纯读侧): `traffic_grid.v4_rate_from_totals`(桶点级区间平均变换)+ `v4_grid_obs` D4 豁免 + `webui/server/traffic_qb.py` 两处 raw 段接线(窗首种子 D3)+ `MAX_RAW_BUCKETS=2880`(万桶级治理, raw 桶宽 = `max(ceil(采样间隔), ceil(span/2880))`); 采样器 / 存储 / state_file / 前端 / 配置零改动, 旧数据即刻按新口径出图(回滚 = revert 读侧提交, 无数据迁移)。
+- 实测: test.full **2769 passed + 4 skipped / 99%** —— 基线切片 [26-10-08-0142](../testing/baselines/26-10-08-0142-webui-qb-traffic-rate-basis-impl.md)。
+- 未决项(已迁出 [progress/roadmap.md](../progress/roadmap.md)): ①**D6 采样间隔演进**(默认 30s 改 1× main_tick + 设置仅能按 main_tick 倍数设置; 独立后续切片, 前置依赖桶数上限已具备); ②**D3 窗首种子 1s 边界带缺口**(停机落在 `(seed_t0-1, seed_t0)` 带且恢复在窗内时离线字节误归恢复首桶; Open issue [26-10-08-0141](../issues/26-10-08-0141-bug-qb-traffic-seed-vacuum-1s-edge.html), 待认领)。
 - 调研资产(仓库外, 长期留用): `D:\Projects\Else\qBittorrent`(master@8182ae071) 与 `D:\Projects\Else\libtorrent`(RC_2_1@53acefea9) 完整克隆; `D:\Projects\Else\auto-qb-speed-research\` 四份阶段笔记(01 现状 / 02 上游 / 03 业界 / 04 对比)。
-- 任务档案: [26-10-07-webui-qb-traffic-rate-basis](../tasks/26-10-07-webui-qb-traffic-rate-basis.md)。
-- **实施计划已立(26-10-07 21:51 回写)**: [26-10-07-2127](../plans/26-10-07-2127-plan-qb-traffic-rate-basis.html) —— 实施步骤 S1 读侧差分变换核心 `v4_rate_from_totals`+grid_obs 豁免 → S2 三端点接线+窗首种子 → S3 raw 窗桶数上限 MAX_RAW_BUCKETS=2880 → S4 收口。万桶级根因=生产 config 1.5S 采样(24h 窗 57600 桶), 成熟方案对比采用时间桶加宽(RRDtool AVERAGE/qB Averager 同型, 字节守恒)。采样间隔两项(默认 1× main_tick、仅能按倍数设置)按用户拍板**仅写入计划**(D6 留后续切片, 依赖桶数上限先行; 对方案影响的分析在案: 不改 B 选型)。拆解失误(括注适用范围漏读致误派实施子代理, 用户当场纠正)入坑档 [scope-qualifier-parenthetical](../pitfalls/kb/scope-qualifier-parenthetical.md)。
-- **S1 已实施(26-10-07, 用户指令「实施计划S1」)**: `core/traffic_grid.py` 新增纯函数 `v4_rate_from_totals`(桶点级逐点重写 rate = delta/w, 差分边界全套复用 `v4_totals_points`; totals/w 原样保留; null 点透传; totals 链推进独立于 rate 可派) + `v4_grid_obs` D4 豁免(rate=None 但 totals 有效的点只更新覆盖末端与快照链, rate 权重逐向记 0; 桶无速率覆盖出 0 线+快照照记; 覆盖秒累加器改逐向独立)。测试 6 个新函数(test_traffic_grid.py, 先红后绿; 「## 测试计划」已同步)。接线点(traffic_qb.py 两处)未动 —— S1 后调用面行为零变化(rate=None ⟺ 全 None null 点)。test.quick **2763 passed + 4 skipped** 全绿。待办: S2 接线+窗首种子 → S3 桶数上限 → S4 收口(test.full+基线切片+立档+回写)。
-- **S2 已实施(26-10-07 23:45, 用户指令「实施计划S2」)**: `webui/server/traffic_qb.py` 两处 raw 段接线(`_payload_series` 与 `payload_group` 逐成员): `read_window`/`v4_series_points` 的 t0 外扩 `grid.t0 - grid.interval`(D3 窗首种子)→ `v4_rate_from_totals` → `v4_grid_obs`; agg 段不动; 活尾照旧(槽带绝对 totals, 差分跨盘/尾接缝自然延续)。模块 docstring 读侧口径行同步(raw 段速率 = 区间平均; 24h 窗天文件数常态 2/跨午夜边界至多 3)。测试(test_web.py): 既有 6 用例瞬时值锚定断言按新口径改形(语义逐个核对: 窗首无种子 D4 0 线 / 逐桶 delta/w / 逐向豁免形) + 新增 3 用例(已知 totals 逐桶 delta/w+totals 逐字节不变+活尾接缝差分 / 窗首种子生效 / 种子跨真空断链且离线字节不进速率与totals), 先红后绿(红验 9 红/10 绿), 「## 测试计划」已同步。窗口日期集合断言镜像外扩(常态 2 个/边界至多 3)。**发现一处 D3 边界缺口(未修, 待入池)**: 停机时刻落在 seed_t0 前 1 秒带 (seed_t0-1, seed_t0) 且恢复在窗内时, 真空 null 点被 t0 过滤丢弃而两侧点在链, 离线字节仍可误归恢复首桶(计划 D3「既有真空判定自动断链」在此带不成立; 常见几何安全, 仅 1s/窗 边界带)。test.quick **2766 passed + 4 skipped** 全绿(+3 新用例)。待办: S3 桶数上限 → S4 收口(test.full+基线切片+立档+回写) → D3 边界缺口入池 issue。
