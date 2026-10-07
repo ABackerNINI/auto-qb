@@ -287,6 +287,15 @@ window.AQB_FEEDBACK = {
  * 收起现显浮层(键盘 Enter 开面板不经过 mousedown)。
  * 另: 锚点在 350ms 窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标
  * elementFromPoint 重解析当前锚点, 解析不到就收起 —— 否则浮层会落到视口左上角。
+ * 锚定保活(2026-10-07 修): 详情面板 15 变体由轮询数据驱动整帧重建(replaceChildren), tooltip
+ * 三条错位路径 —— ①350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位时
+ * 旧坐标下的元素已不是原锚点), 键盘 focusin 路径更是无坐标可依; ②浮层已显示后锚点被 5s 轮询
+ * 换成新节点(mouseover 不再触发), 浮层停在旧坐标不跟随; ③重建引发布局移位, 浮层不挪窝。
+ * 修法: 定位抽 place() 单点(show 与显示期重定位共用, 夹取/避让同口径) + reacquire() 语义
+ * 重解析(data-aq-tip 同文案的新节点里取视口位置离旧矩形最近者 —— 整帧重建的后继与原锚点
+ * 同位, 距离≈0; 键盘路径无指针坐标也覆盖) + 浮层可见期间 rAF 帧环(watch/tick)做廉价体检:
+ * 每帧只 1 次 getBoundingClientRect, 断链即语义重解析、rect 漂移超 1px 即重定位; 非断链
+ * 不查询全文档, hide 后帧环自停零常驻成本。
  * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
  * 样式单点在 shared/console_hub.css 的 .aq-tip 段(三套皮肤同载, 颜色走皮肤令牌)。
  * 本块是纯 DOM 行为层, 不进 Vue mixin(不占 methods 命名空间, 也无重名风险)。
@@ -299,7 +308,9 @@ window.AQB_FEEDBACK = {
   let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
   let cur = null;            // 当前悬浮的 [data-aq-tip] 元素(嵌套组取最内层)
   let curX = NaN, curY = NaN; // 最近一次鼠标命中的视口坐标(锚点被换掉时按它重解析, 见 show)
+  let curRect = null;        // 锚点最近一次视口矩形快照(enter 记 / place 刷新): 语义重解析与漂移检测的基准
   let timer = 0;
+  let raf = 0;               // 显示期锚点监测帧句柄(见 watch/tick, 浮层可见期间每帧一次廉价体检)
 
   function tipEl() {
     if (!tip) {
@@ -331,26 +342,49 @@ window.AQB_FEEDBACK = {
   function hide() {
     if (timer) { clearTimeout(timer); timer = 0; }
     cur = null;
-    if (tip) tip.classList.remove("on");
+    curRect = null;          // 基准随锚点一并作废(下次 enter 重记), 悬空基准会污染重解析
+    if (tip) tip.classList.remove("on"); // 监测帧(tick)见 cur 为空自会停, 无需显式 cancel
   }
 
-  function show(anchor) {
-    // 锚点在 350ms 延时窗口内被整个换掉时(Vue 轮询重渲染, 见 pitfalls/web-ui/aq-tip-nested-title-double),
-    // 它已脱离文档 —— getBoundingClientRect() 返回全 0, 浮层会落到视口左上角(表现为"位置错误")。
-    // 按指针位置重新解析当前真正的锚点; 解析不到就收起(宁可不弹, 也不弹到错误位置)。
-    if (anchor && !anchor.isConnected) {
-      const hit = Number.isFinite(curX) && document.elementFromPoint(curX, curY);
-      const el = hit && hit.closest ? hit.closest("[data-aq-tip]") : null;
-      if (!el) { hide(); return; }
-      anchor = el;
-      cur = el;
+  /* 锚点重解析(语义优先, 2026-10-07): 锚点被整帧重建换掉后, 旧指针坐标可能落在别的元素上
+   * (变体重建引发布局移位), 键盘路径(focusin)更是根本没有坐标 —— 两条路都靠**语义线索**
+   * 先行: 在 data-aq-tip 文案相同的新节点里挑「视口中心离旧矩形中心最近」的一个(整帧重建的
+   * 后继节点与原锚点同位, 距离≈0; 同文案的远亲行/钮距离大, 不会误中; 嵌套同位组按中心距
+   * 自然取回最内层)。语义解析不到(文案已变等)才退回指针坐标 elementFromPoint —— 仅鼠标
+   * 路径参与(Number.isFinite 门, 键盘 NaN 不参与), 兼容 2026-10-04 的收口口径。只在断链
+   * 瞬间调用一次(至多每轮询周期一次), 不在每帧路径上 —— 全文档查询只发生在这里。 */
+  function reacquire() {
+    const text = cur.getAttribute("data-aq-tip");
+    if (text && curRect) {
+      let best = null, bestD = Infinity;
+      for (const el of document.querySelectorAll("[data-aq-tip]")) {
+        if (el.getAttribute("data-aq-tip") !== text) continue;
+        const r = el.getBoundingClientRect();
+        const dx = r.left + r.width / 2 - (curRect.left + curRect.width / 2);
+        const dy = r.top + r.height / 2 - (curRect.top + curRect.height / 2);
+        const d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = el; }
+      }
+      if (best) return best;
     }
-    const text = anchor.getAttribute("data-aq-tip"); // show 时现读: 轮询变值即显最新文案
+    if (Number.isFinite(curX)) {
+      const hit = document.elementFromPoint(curX, curY);
+      const el = hit && hit.closest ? hit.closest("[data-aq-tip]") : null;
+      if (el) return el;
+    }
+    return null;
+  }
+
+  /* 定位单点(量测/夹取/err-panel 避让): show 初显与显示期重定位(watch)共用, 两条路径的
+   * 夹取规则、面板避让、文案现读完全同口径。定位成功即刷新 curRect 基准(漂移检测用)。 */
+  function place(anchor) {
+    const text = anchor.getAttribute("data-aq-tip"); // 现读: 轮询变值即显最新文案
     if (!text || !text.trim()) { hide(); return; }
     const t = tipEl();
     t.textContent = text;      // title 一律按纯文本渲染, 不吃 HTML 注入
     t.classList.add("on");     // 先 display 再量测(display: none 量不到尺寸)
     const r = anchor.getBoundingClientRect();
+    curRect = { left: r.left, top: r.top, width: r.width, height: r.height };
     const w = t.offsetWidth, h = t.offsetHeight;
     const vw = window.innerWidth, vh = window.innerHeight;
     // 水平: 锚点居中, 夹取到视口内(留 EDGE); 浮层宽过视口时贴左(右段裁掉, 好过整块出屏)
@@ -376,12 +410,55 @@ window.AQB_FEEDBACK = {
     t.style.top = Math.round(y) + "px";
   }
 
+  function show(anchor) {
+    // 锚点在 350ms 延时窗口内被整个换掉时(Vue 轮询重渲染, 见 pitfalls/web-ui/aq-tip-nested-title-double),
+    // 它已脱离文档 —— getBoundingClientRect() 返回全 0, 浮层会落到视口左上角(表现为"位置错误")。
+    // 语义优先重解析当前真正的锚点(键盘路径靠 enter 记下的矩形基准也有依凭);
+    // 解析不到就收起(宁可不弹, 也不弹到错误位置)。
+    if (anchor && !anchor.isConnected) {
+      const el = reacquire();
+      if (!el) { hide(); return; }
+      anchor = el;
+      cur = el;
+    }
+    place(anchor);
+    watch();
+  }
+
+  /* 显示期锚点监测(2026-10-07): 详情面板 5s 轮询整帧重建, 浮层已显示后锚点被换成新节点
+   * (指针不动就没有 mouseover, 浮层停在旧坐标不跟随)或重建引发布局移位。浮层可见期间挂
+   * rAF 帧环, 每帧只做两项廉价检查(1 次 getBoundingClientRect + 4 次数值比对, 零 DOM 查询):
+   * ①锚点断链 → reacquire 语义重解析后原位续显; ②rect 漂移超 1px(重建移位/锚点自身内容
+   * 变宽) → 走 place 按新矩形重定位(夹取/避让同口径)。hide 后帧环见 cur 为空自停, 零常驻。 */
+  function watch() {
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+  function tick() {
+    raf = 0;
+    if (!cur || !tip || !tip.classList.contains("on")) return;
+    if (!cur.isConnected) {
+      const el = reacquire();
+      if (!el) { hide(); return; }
+      cur = el;
+      place(el);
+    } else {
+      const r = cur.getBoundingClientRect();
+      if (!curRect ||
+          Math.abs(r.left - curRect.left) > 1 || Math.abs(r.top - curRect.top) > 1 ||
+          Math.abs(r.width - curRect.width) > 1 || Math.abs(r.height - curRect.height) > 1) {
+        place(cur); // 漂移超阈值: 按新矩形重定位(place 内刷新基准)
+      }
+    }
+    if (cur) raf = requestAnimationFrame(tick);
+  }
+
   function enter(target, x, y) {
     if (target === cur) return; // 锚点内部子元素间移动: 不重置延迟
     hide();
     if (!target) return;
     cur = target;
     curX = x; curY = y;        // 记住指针位置: 锚点被换掉时按它重解析(见 show)
+    curRect = target.getBoundingClientRect(); // 锚点矩形基准: 键盘路径(无坐标)与语义重解析全靠它(见 reacquire/watch)
     timer = setTimeout(() => show(cur), SHOW_DELAY_MS);
   }
 

@@ -24,9 +24,10 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
 - test_frontend_error_history_boot_merge_wired: lifecycle 含 errlog boot 拉取 (本机免鉴权 + auth.js
   密钥路径两处各调一次 _pullErrlogBoot, boot 全量不计未读) + 60s 补拉定时器 (setInterval 60000) +
   unmounted 撤定时器 (clearInterval _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
-- test_frontend_tooltip_yields_to_err_panel: ui_feedback.js 的 show() 对已开 .err-panel 做落点相交
-  检测 (命中即 hide 不弹, 防「tooltip 与弹窗重叠」露半截) + MutationObserver addedNodes 分支在面板
-  挂载时收起现显浮层 (键盘 Enter 开面板不经过 mousedown) 两处接线
+- test_frontend_tooltip_yields_to_err_panel: ui_feedback.js 的 place() (show 初显与显示期重定位
+  共用的定位单点, 2026-10-07 锚定保活重构) 对已开 .err-panel 做落点相交检测 (命中即 hide 不弹,
+  防「tooltip 与弹窗重叠」露半截) + MutationObserver addedNodes 分支在面板挂载时收起现显浮层
+  (键盘 Enter 开面板不经过 mousedown) 两处接线
 """
 
 import re
@@ -168,12 +169,15 @@ def test_frontend_error_history_boot_merge_wired() -> None:
 def test_frontend_tooltip_yields_to_err_panel() -> None:
     """tooltip 让位于错误历史面板的两处接线(26-10-07 用户报「错误历史 tooltip 与弹窗重叠」):
     面板(z 121)开在状态栏右段正上方, tooltip(z 90)落点与它相交时弹了只会被压住露半截 ——
-    show() 相交即 hide 不弹; 键盘 Enter 开面板不经过 mousedown, 面板挂载时再由观察器收起
+    place() 相交即 hide 不弹(show 初显与显示期重定位共用该单点); 键盘 Enter 开面板不经过
+    mousedown, 面板挂载时再由观察器收起
     现显浮层。接线存在性断言, 不锁几何值(z-index/落点走真机走查口径)。"""
     fb = _read("ui_feedback.js")
     # show() 内的相交检测: 必须在定位算完后判交, 命中走 hide() 收起(不是挪锚点/抬高 z 盖回去)
-    show = fb[fb.find("function show(anchor)"):fb.find("function enter(")]
-    assert 'querySelector(".err-panel")' in show, "show() 缺错误历史面板重叠检测(面板开着时 tooltip 弹进面板区域只露半截)"
+    # place() = show 初显与显示期重定位(watch/tick)共用的定位单点(2026-10-07 锚定保活重构),
+    # 相交检测随定位逻辑一并收进单点 —— 初显与重定位两条路径的避让口径天然一致
+    show = fb[fb.find("function place(anchor)"):fb.find("function enter(")]
+    assert 'querySelector(".err-panel")' in show, "place() 缺错误历史面板重叠检测(面板开着时 tooltip 弹进面板区域只露半截)"
     assert "hide(); return;" in show, "tooltip 与已开面板相交时必须 hide() 收起(宁可不弹口径, 同锚点脱离分支)"
     # 观察器挂载分支: addedNodes 出现 .err-panel(自身或子树)即 hide —— 键盘开面板路径的浮层滞留
     obs = fb[fb.find("new MutationObserver"):fb.find(".observe(document")]

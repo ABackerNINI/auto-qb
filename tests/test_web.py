@@ -55,6 +55,7 @@
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
 - test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽 width:240px 且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住), 与 .dt-select 同柱单点在核心 00-core 注入层(三皮肤共享)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
+- test_aq_tip_anchor_watch_and_reacquire_wired: aq-tip 锚定保活守阵(2026-10-07 用户报「详情面板 tooltip 位置不正确」, 变体 5s 轮询整帧重建三条错位路径) —— ui_feedback.js 定位抽 place() 单点(show 初显与显示期重定位共用, 夹取/err-panel 避让同口径) + reacquire() 语义重解析(data-aq-tip 同文案节点按视口中心距旧矩形最近者, 语义扫描先于指针坐标 elementFromPoint 回退, 回退有 Number.isFinite(curX) 门护键盘 NaN 路径) + watch/tick rAF 帧环(浮层可见期才运转, 每帧只 1 次 getBoundingClientRect 零 DOM 查询: 断链走语义重解析 / 四轴 rect 漂移超 1px 重定位) + enter 记 curRect 基准 / hide 作废成对, 任一环被重构摘除即红
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -14217,3 +14218,75 @@ def test_frontend_toast_duration_floor_by_kind() -> None:
         "toast() 的 ms 缺省必须是 null(写死 4000 会让 kind 下限在缺省路径不生效)"
     assert re.search(r"_finishToast\(id, kind, text, ms = null\)", fb), \
         "_finishToast() 的 ms 缺省必须是 null(同上)"
+
+
+def test_aq_tip_anchor_watch_and_reacquire_wired():
+    """aq-tip 锚定保活守阵(2026-10-07 用户报「详情面板 tooltip 位置不正确」)
+
+    详情面板 15 变体由轮询数据驱动整帧重建(replaceChildren), tooltip 三条错位路径:
+    ①350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位), 键盘 focusin
+    路径无坐标; ②浮层已显示后锚点被 5s 轮询换成新节点(mouseover 不再触发), 浮层停旧坐标;
+    ③重建引发布局移位, 浮层不跟随。修法单点在 shared/ui_feedback.js: 定位抽 place() 单点 +
+    reacquire() 语义重解析(先于指针坐标回退) + watch/tick rAF 帧环廉价体检。本守阵读 JS
+    源码钉住结构与次序(剥行注释后锚定, 注释改写不红、代码突变必红), 任一环被重构摘除即红:
+    1. enter 记录锚点矩形基准 curRect, hide 作废(键盘路径无坐标, 全靠矩形基准重解析);
+    2. reacquire 语义优先: 全文档 [data-aq-tip] 同文案节点按矩形中心距取最近, 之后才是指针
+       坐标 elementFromPoint 回退(次序倒了 = 布局移位路径复发), 回退有 Number.isFinite 门;
+    3. show 断链走 reacquire, 定位统一走 place 并挂 watch(两路径夹取/避让同口径);
+    4. tick 帧环: 只在浮层可见期运转, 每帧仅 1 次 getBoundingClientRect 零 DOM 查询,
+       断链分支与四轴漂移分支齐备(非断链路径出现 querySelectorAll = 性能红线)。
+    """
+    ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
+
+    # ① 矩形基准的记/废成对
+    assert re.search(r"^  let curRect = null;", ui, re.M), \
+        "ui_feedback.js 缺 curRect 矩形基准状态(语义重解析/漂移检测失锚, 同步本守阵)"
+    assert re.search(r"curRect = target\.getBoundingClientRect\(\);", ui), \
+        "enter 未记录锚点矩形基准 —— 键盘路径(focusin 无坐标)的锚点重解析退化为直接收起"
+    m = re.search(r"function hide\(\)\s*\{(.*?)\n  \}", ui, re.S)
+    assert m and "curRect = null" in m.group(1), \
+        "hide 未作废 curRect 基准(悬空基准会污染下一次悬浮的重解析)"
+
+    # ② reacquire: 语义扫描先于指针回退, 回退有 NaN 门
+    m = re.search(r"function reacquire\(\)\s*\{(.*?)\n  \}", ui, re.S)
+    assert m, "ui_feedback.js 找不到 reacquire(锚点被重建换掉后的语义重解析单点被摘? 同步本守阵)"
+    acq = re.sub(r"//[^\n]*", "", m.group(1))
+    assert 'querySelectorAll("[data-aq-tip]")' in acq, \
+        "reacquire 缺语义候选扫描(同 data-aq-tip 文案的新节点) —— 断链后无处重解析"
+    i_sem = acq.index('querySelectorAll("[data-aq-tip]")')
+    i_ptr = acq.find("elementFromPoint")
+    assert i_ptr != -1, \
+        "reacquire 缺指针坐标回退(2026-10-04 收口口径: 语义解析不到才按指针重解析)"
+    assert i_sem < i_ptr, \
+        "reacquire 指针回退先于语义解析 —— 布局移位时旧坐标下的元素已不是原锚点(路径③复发)"
+    assert re.search(r"Number\.isFinite\(curX\)", acq), \
+        "指针回退缺 Number.isFinite(curX) 门 —— 键盘路径 NaN 坐标会传给 elementFromPoint"
+
+    # ③ show 断链走 reacquire; 定位单点 place + 显示期监测 watch 成对
+    m = re.search(r"function show\(anchor\)\s*\{(.*?)\n  \}", ui, re.S)
+    assert m, "ui_feedback.js 找不到 show(改名或挪走了? 同步本守阵)"
+    sh = re.sub(r"//[^\n]*", "", m.group(1))
+    assert "reacquire()" in sh, \
+        "show 的断链分支未走 reacquire(键盘路径无指针坐标, 只能靠语义重解析兜住)"
+    assert re.search(r"function place\(anchor\)", ui), \
+        "定位未抽 place() 单点 —— show 初显与显示期重定位两套夹取/避让口径必然漂移"
+    assert re.search(r"place\(anchor\);", sh) and "watch();" in sh, \
+        "show 未统一走 place + watch(定位单点/显示期监测被绕开)"
+    assert re.search(r"curRect = \{ left: r\.left, top: r\.top", ui), \
+        "place 未在定位时刷新 curRect 基准(漂移检测失准)"
+
+    # ④ tick 帧环: 可见期才运转, 断链/漂移两分支齐备, 每帧路径零全文档查询
+    m = re.search(r"function tick\(\)\s*\{(.*?)\n  \}", ui, re.S)
+    assert m, "ui_feedback.js 找不到 tick(rAF 帧环主体被摘? 同步本守阵)"
+    tick = re.sub(r"//[^\n]*", "", m.group(1))
+    assert 'classList.contains("on")' in tick and "cur" in tick, \
+        "tick 缺可见性守卫(cur + .on) —— 浮层收起后帧环空转烧帧"
+    assert "isConnected" in tick, \
+        "tick 缺锚点存活检查 —— 浮层显示后锚点被重建换掉不再跟随(路径②复发)"
+    assert "reacquire()" in tick, "tick 断链分支未走语义重解析"
+    for axis in ("left", "top", "width", "height"):
+        assert f"curRect.{axis}" in tick, f"tick 漂移检测缺 {axis} 轴比对(重建移位/内容变宽不重定位)"
+    assert "querySelectorAll" not in tick, \
+        "tick 每帧路径出现全文档查询 —— 体检必须只做 1 次 rect 比对(5s 轮询场景的性能红线)"
+    assert re.search(r"requestAnimationFrame\(tick\)", ui), \
+        "帧环未用 requestAnimationFrame(定时器轮询会与绘制解耦空转)"
