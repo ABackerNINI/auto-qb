@@ -176,6 +176,12 @@ class WebUIRuntime:
         self.last_seen: float = 0.0
         # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
         # 用于把"服务端重建节拍"对齐到"客户端实际取数据的节拍": 上一版没人看就不生产下一版
+        #
+        # 门控去留裁决(plan 26-10-07-0414 P-03, S10 定案): **保留不动**。增量落地后其保护
+        # 对象从「全量重建成本」缩水为「一次键集追加」—— 门控跳拍的脏键由 _delta_pending
+        # 累积进下一代不丢(R4), 跳拍轮在时间线上不留空洞; 保留无害且保守(黄金法则 2),
+        # 移除只剩简化收益、没有正确性收益, 且会同时改变现有节拍行为。若实测确认纯冗余,
+        # 另立独立小步移除, 届时单独拍板。
         self.pending_ver: Optional[int] = None
         # 发布锁: 四份视图 + 版本号必须**同一临界区内**发布
         self.view_lock = threading.Lock()
@@ -795,6 +801,15 @@ class WebUIRuntime:
     def flush_views(self, force: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)
 
+        每拍次序(plan 26-10-07-0414 S2): ①先排空 store 增量为脏行键并入 `_delta_pending`
+        —— **先于**"已取走"门控, 门控跳拍的键集累积进下一代不丢(R4); ②消费 view_changed
+        置脏(keyed 判定须联合 `rounds_applied` 前进, 防「最近一轮」快照残值误判, 见下);
+        ③HR 判定新鲜度波次置脏; ④门控通过才 `rebuild_views()`。落代在 `_publish_locked`:
+        跨拍累积折叠进 `_delta_timeline` —— **只存键不存值**, 行内容回放时从当前已发布视图
+        现取(R1); 四视图 + 版本号在同一 `view_lock` 临界区内发布(「四视图同轮发布」硬约束,
+        模块 docstring), 主循环与 Web 线程的 ensure_* 兜底都只经这一条发布路径 —— 单一写
+        线程假设不破, 也不引入第二把锁(R12)。
+
         `force=True` 表示"本轮有命令改了种子状态", 必须**绕过**下面的"已取走"门控 ——
         用户操作后真值要在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
         """
@@ -826,14 +841,17 @@ class WebUIRuntime:
                 # store 驱动的常规轮不受影响: _apply 置 view_changed 必伴随三者之一的键。
                 self.mark_dirty(full=True, reason="unkeyed_command_source")
         # HR 判定新鲜度: revision 与重建基线不等即置脏(基线在 _publish_locked 随重建前移,
-        # 故只在 revision 真变的那一拍置一次, 无循环置脏)。发布侧按内容指纹去重, 不会周期空转。
+        # 故只在 revision 真变的那一拍置一次, 无循环置脏 —— 收口靠基线前移, 发布侧**没有**
+        # 内容指纹去重, 每次重建必增版本号必推 ver; 旧注释「按内容指纹去重」系与
+        # hr/worker.py 的事件推送去重张冠李戴, 报告 26-10-07-0054 §06 指出, S10 修正)。
         # HR 派生字段无法归约为行级脏 -> 兼登记 full 降级理由(R11)。
         hr = getattr(host, "hr", None)
         if hr is not None and self._hr_rev_at_build != hr.revision:
             self.mark_dirty(full=True, reason="hr_revision")
         web_active = self.is_active()
-        # 「上一版有没有人取走」门控: 服务端节拍与客户端节拍各自独立定档, 大库下服务端
-        # 生产的中间版本可能无人消费。让"生产"等一等"消费"。
+        # 「上一版有没有人取走」门控(P-03 S10 裁决: 保留, 全口径见 pending_ver 字段声明):
+        # 服务端节拍与客户端节拍各自独立定档, 大库下服务端生产的中间版本可能无人消费。
+        # 让"生产"等一等"消费" —— 增量下跳拍的成本已降为一次键集追加(R4), 保留无害。
         unconsumed = self.pending_ver is not None
         if self.group_view_dirty and web_active and (force or not unconsumed):
             self.rebuild_views()
@@ -1115,6 +1133,12 @@ class WebUIRuntime:
         重建); full 理由/HR 波次/无键 -> 走原全量路径(四视图整体重建, 行为与 S6 之前逐字段
         一致)。应急回退(不 revert): 分叉判定恒为假(把下面的 if 条件整个换成 False)即回
         纯全量 —— 单行改动。
+
+        发布口径(S10 回写, 与实现一致): 时间线只在本方法末尾落代(_fold_delta_pending_locked)
+        —— 条目**只存脏行键不存值**(R1), 归约回放时行内容从当前已发布视图现取; 局部重聚合
+        分支同样在本临界区内把四份数组**整体一次性替换**(「四视图同轮发布」硬约束不破,
+        模块 docstring), 发布唯一入口就是本方法(主循环 / Web 线程 ensure_* 兜底共用同一把
+        view_lock) —— 单一写线程假设不破, 无第二把锁(R12)。
         """
         host = self._host
         # ---- 本代键集定型(原属 _fold_delta_pending_locked 的前置段前移到构建前, S6) ----
@@ -1191,7 +1215,8 @@ class WebUIRuntime:
                 removed["show"] |= gone & old_show_keys
         self.group_view_ver += 1
         self.group_view_dirty = False
-        # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
+        # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐;
+        # P-03 S10 裁决: 门控保留, 全口径见 pending_ver 字段声明处)
         self.pending_ver = self.group_view_ver
         # 增量时间线落代(plan S2): 跨拍累积的 _delta_pending 与本代 full 理由折叠成条目
         # 追加进时间线 —— 每次发布恰一条(R4 累积/R5 抵消/R11 降级/R12 临界区)
