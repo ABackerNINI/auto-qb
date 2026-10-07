@@ -17,6 +17,8 @@ show 桶 S8/S9 才接(S3 期 view=show 恒全量)。
 - test_reduce_delta_upsert_removed_normal: 正常归约(S3) —— torrent 视图 delta.torrents 回平铺整行/removed 回 hash; group 视图 delta.groups 回组行(键 = encode_group_key 字符串)/delta.singles 只收未归组行/removed.groups 回 encode 后字符串; 行内容 = 当前已发布视图的原行(R1, 引用恒等)
 - test_reduce_delta_cross_gen_removed_yields_to_upsert: R5 跨代版 —— 先删后加: removed 让位于 upsert, 回 delta 不回 removed; 先加后删: 抵消后 upsert 行已不在当前视图 -> 防御性转 full
 - test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD) —— 增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
+- test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且内嵌 members 随行重建(P-02 一期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
+- test_s6_partial_rows_equal_full_rebuild: S6 逐字段一致性 —— 混合序列(未归组变化/组员变化/新增归组/组员删除)逐代局部重聚合后, 发布视图与全量重跑逐行逐字段相等(含脏组行 == 全量重跑该行); 每代走局部路径的判据(条目 full=False 且键集非空)随行断言
 """
 import json
 import time
@@ -548,3 +550,129 @@ def test_reduce_payload_json_native_and_key_exclusivity():
     legacy = rt.ensure_state(0, "torrent")
     for k in ("delta", "removed", "full"):
         assert k not in legacy
+
+
+# ---------- ⑨ S6: 局部重聚合(引用稳定 + 局部/全量逐字段一致) ----------
+
+
+def _beat(store, hash_, **fields):
+    """真机节拍的一拍: 改 qB 侧种子字段 -> 增量 sync 一轮(范式同 test_webui_delta_mirror)"""
+    tor = store.client.torrents[hash_]
+    for k, v in fields.items():
+        setattr(tor, k, v)
+    return store.apply_sync(QbApi(store.client, store))
+
+
+def _rows_by(view, keyf):
+    return {r[keyf]: r for r in view}
+
+
+def test_s6_partial_rebuild_reference_stability():
+    """S6 引用稳定不变量: 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象
+
+    前端 S7 按行对象身份的 WeakMap 记忆化依赖: 引用稳定**只对未脏行**承诺, 脏行新对象
+    自然 miss 重算。组行内嵌 members 数组随组行整行走(P-02 一期口径, R8)。
+    """
+    store = _make_store("H1", "H2", "H3", "H4")
+    # H3/H4 归组, H1/H2 未归组(归组登记须在基线发布前, 同镜子 M4 前置口径)
+    store.member_to_key["H3"] = ("R:\\D", )
+    store.member_to_key["H4"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H3", "H4"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    entry = _publish(rt)  # 基线代: 空键集 -> 全量路径
+    assert entry["full"] is False and entry["upsert"]["torrent"] == set()
+    flat0 = _rows_by(rt.flat_view, "hash")
+    singles0 = _rows_by(rt.singles_view, "hash")
+    groups0 = _rows_by(rt.group_view, "key")
+    gkey = encode_group_key(("R:\\D", ))
+    assert set(singles0) == {"H1", "H2"} and set(groups0) == {gkey}
+
+    # a) 未归组脏行: H1 变速 -> singles/flat 的 H1 行新对象且内容更新, H2 行引用原样;
+    #    组行未脏 -> 引用原样
+    _beat(store, "H1", dlspeed=1024)
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["upsert"]["torrent"] == {"H1"}  # 走了局部路径
+    flat1, singles1 = _rows_by(rt.flat_view, "hash"), _rows_by(rt.singles_view, "hash")
+    assert flat1["H1"] is not flat0["H1"] and flat1["H1"]["dlspeed"] == 1024  # 脏行必然新对象
+    assert singles1["H1"] is not singles0["H1"] and singles1["H1"]["dlspeed"] == 1024
+    assert flat1["H2"] is flat0["H2"] and singles1["H2"] is singles0["H2"]  # 未脏行引用原样
+    assert flat1["H3"] is flat0["H3"] and flat1["H4"] is flat0["H4"]
+    assert _rows_by(rt.group_view, "key")[gkey] is groups0[gkey]
+
+    # b) 组内成员脏 -> 组行整行新对象(members 随行整体重建), 组外平铺行引用不动:
+    #    H4 平铺行未脏仍旧对象, 组行内 H4 成员视图是新 dict(只活在组行内, P-02 口径)
+    _beat(store, "H3", dlspeed=2048)
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["upsert"]["torrent"] == {"H3"}
+    flat2, groups2 = _rows_by(rt.flat_view, "hash"), _rows_by(rt.group_view, "key")
+    assert groups2[gkey] is not groups0[gkey]  # 脏组行必然新对象
+    assert [m["dlspeed"] for m in groups2[gkey]["members"]] == [2048, 0]
+    assert flat2["H3"] is not flat1["H3"] and flat2["H3"]["dlspeed"] == 2048
+    assert flat2["H4"] is flat1["H4"] and flat2["H1"] is flat1["H1"] and flat2["H2"] is flat1["H2"]
+    assert _rows_by(rt.singles_view, "hash")["H1"] is singles1["H1"]
+
+    # c) removed 键剔除: 组员 H4 删除(组仍在)-> 平铺行消失, 组行重建, 其余行引用原样
+    store.client.torrents.pop("H4")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is False  # 组键可解析: 非降级源, 走局部路径
+    assert entry["removed"]["torrent"] == {"H4"} and entry["upsert"]["group"] == {("R:\\D", )}
+    flat3, groups3 = _rows_by(rt.flat_view, "hash"), _rows_by(rt.group_view, "key")
+    assert "H4" not in flat3
+    assert flat3["H1"] is flat2["H1"] and flat3["H2"] is flat2["H2"] and flat3["H3"] is flat2["H3"]
+    assert groups3[gkey] is not groups2[gkey]
+    assert groups3[gkey]["count"] == 1 and [m["hash"] for m in groups3[gkey]["members"]] == ["H3"]
+
+    # d) 组解散: 末位成员删除 -> 组键进 removed, 组行从视图剔除(全量构建不产空组行, 产物对齐)
+    store.groups.pop(("R:\\D", ))  # 模拟 grouping_mod._leave_group 的解散清除(成员键保留可解析)
+    store.client.torrents.pop("H3")
+    store.apply_sync(QbApi(store.client, store))
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["removed"]["torrent"] == {"H3"} and entry["removed"]["group"] == {("R:\\D", )}
+    assert _rows_by(rt.group_view, "key") == {}
+    flat4 = _rows_by(rt.flat_view, "hash")
+    assert set(flat4) == {"H1", "H2"} and flat4["H1"] is flat3["H1"] and flat4["H2"] is flat3["H2"]
+
+
+def test_s6_partial_rows_equal_full_rebuild():
+    """S6 逐字段一致性: 局部重聚合的构建产物与全量重跑逐行逐字段相等(plan S6 核心不变量)
+
+    混合序列逐代局部重聚合后, 发布视图(未脏行复用旧对象)与全量重跑对照 —— 行键集合 +
+    行内容逐字段(不比数组顺序); 另断言脏组行 == 单组可调用全量重跑该行。
+    """
+    store = _make_store("H1", "H2", "H3")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.member_to_key["H2"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1", "H2"]
+    rt = _delta_runtime(store)
+    host = rt._host
+    rt.mark_dirty()
+    _publish(rt)  # 基线代(全量路径)
+    gkey_d, gkey_e = encode_group_key(("R:\\D", )), encode_group_key(("R:\\E", ))
+    for gen in range(4):
+        if gen == 0:
+            _beat(store, "H3", dlspeed=11)  # 未归组行
+        elif gen == 1:
+            _beat(store, "H2", dlspeed=22, state="pausedUP")  # 组员(组行 + 平铺行双脏)
+        elif gen == 2:  # 新增种子入库即归新组(新组行 + 新平铺行)
+            store.client.torrents["H4"] = FakeTorrent(hash="H4", name="Show.H4.S01E01.720p.x264-GRP")
+            store.member_to_key["H4"] = ("R:\\E", )
+            store.groups[("R:\\E", )] = ["H4"]
+            store.apply_sync(QbApi(store.client, store))
+        else:  # 组员删除(组仍在 -> 组行重建, 平铺行剔除)
+            store.client.torrents.pop("H1")
+            store.apply_sync(QbApi(store.client, store))
+        entry = _publish(rt)
+        assert entry["full"] is False  # 每代都走局部路径(无降级源且键集非空)
+        assert entry["upsert"]["torrent"] or entry["removed"]["torrent"]
+        # 局部重聚合产物 vs 全量重跑: 三视图逐行逐字段相等(不比数组顺序)
+        assert _rows_by(rt.flat_view, "hash") == _rows_by(host._build_flat_view(), "hash")
+        assert _rows_by(rt.singles_view, "hash") == _rows_by(host._build_singles_view(), "hash")
+        assert _rows_by(rt.group_view, "key") == _rows_by(host._build_group_view(), "key")
+    # 脏组行 == 单组可调用全量重跑该行(「同一组键局部重算结果 == 全量重算结果」直测)
+    row = _rows_by(rt.group_view, "key")[gkey_d]
+    assert row == host._build_group_row(("R:\\D", ), [store.by_hash["H2"]], set())
+    assert _rows_by(rt.group_view, "key")[gkey_e] == host._build_group_row(("R:\\E", ), [store.by_hash["H4"]], set())
+    assert row["cross_group_conflict"] is False and row["count"] == 1

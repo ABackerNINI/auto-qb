@@ -609,6 +609,26 @@ class WebUIRuntime:
         if unresolvable:
             self._pending_full_reasons.add("row_key_unresolvable")
 
+    def _merge_pending_error_hashes_locked(self) -> None:
+        """错误原因预取的行级脏并入累积器(**持 view_lock**, plan S2 补)
+
+        refresh_error_reasons 改写 tracker_error_msg 的受影响 hash 进 torrent 桶; 组行
+        members 的 error_reason 随成员变化 -> 组键经 member_to_key 一并进 group 桶(与
+        store 增量推导同口径)。S6 起调用点在 _publish_locked 的分叉判定前(键集须在
+        构建**前**定型) —— 分叉判定需要完整键集, fold 落代段不再重跑。
+        """
+        error_hashes = self._pending_error_hashes
+        if not error_hashes:
+            return
+        member_to_key = self._host.store.member_to_key
+        error_upsert = self._delta_pending["upsert"]
+        for h in error_hashes:
+            error_upsert["torrent"].add(h)
+            key = member_to_key.get(h)
+            if key is not None:
+                error_upsert["group"].add(key)
+        error_hashes.clear()
+
     def _fold_delta_pending_locked(self) -> None:
         """把跨拍累积的脏行键折叠成本代时间线条目并清空累积器(**持 view_lock**)
 
@@ -617,25 +637,11 @@ class WebUIRuntime:
           同一行净变化为零, 不给客户端又删又发同一行。
         - full 代判定(R11): 本代任一降级源活跃 -> full=true 且键集清空, 累积器与理由
           一并清空(full 响应覆盖到当前 ver, 累积键已无意义)。
-        - 错误原因预取的行级脏(note_error_reason_hashes 暂存)在此并入: fold 是发布前
-          最后一次 view_lock 内合并点, Web 线程 ensure_state 触发的重建也必然先合并键集
-          再落代 —— 该源比 store 增量键集(排空在 flush_views 开头)更及时。
+        - 错误原因预取暂存已前移到 _publish_locked 的 S6 分叉判定段(构建前定型本代键集);
+          交叉键集基线检查在此保留(与分叉判定段同条件幂等, 兜构建期键集竞态)。
         """
         ver = self.group_view_ver
         reasons = self._pending_full_reasons
-        # 错误原因预取的行级归约(plan S2 补): 改写 tracker_error_msg 的行进 torrent 桶;
-        # 组行 members 的 error_reason 随成员变化 -> 组键经 member_to_key 一并 upsert
-        # (与 store 增量推导同口径)。full 代则随键集清空一并丢弃(覆盖到当前 ver, 无意义)。
-        error_hashes = self._pending_error_hashes
-        if error_hashes:
-            member_to_key = self._host.store.member_to_key
-            error_upsert = self._delta_pending["upsert"]
-            for h in error_hashes:
-                error_upsert["torrent"].add(h)
-                key = member_to_key.get(h)
-                if key is not None:
-                    error_upsert["group"].add(key)
-            error_hashes.clear()
         # 跨组交叉标记增删: 本代构建期发现的键集与上一已发布代不同 -> 本代 full
         # (首代只立基线: 时间线此前为空, 任何客户端本就窗外)
         if self._cross_keys_prev is not None and self._cross_keys_seen != self._cross_keys_prev:
@@ -973,14 +979,45 @@ class WebUIRuntime:
         与 rebuild_views 分离, 使"判脏 → 重建 → 读取"能在**同一个临界区**内一次完成
         (见 ensure_view); 若拆成"加锁重建 / 释放 / 再加锁读", 中间仍可能被另一线程插入
         一次重建, 读到的四份视图依旧不属于同一轮。
+
+        S6 分叉(plan 26-10-07-0414): 本代无 full 降级理由且有净键可归约 -> 局部重聚合
+        (_publish_partial_locked, 未脏行对象引用原样保留); full 理由/HR 波次/无键 ->
+        走原全量路径(四视图整体重建, 行为与 S6 之前逐字段一致)。应急回退(不 revert):
+        分叉判定恒为假(把下面的 if 条件整个换成 False)即回纯全量 —— 单行改动。
         """
         host = self._host
-        self.group_view = host._build_group_view()
-        self.singles_view = host._build_singles_view()
-        self.shows_view = host._build_shows_view()
-        self.flat_view = host._build_flat_view()
-        # 速度合计与四视图同一快照、同一临界区发布(状态栏据此与行数据同源同轮)
-        self.speed_totals = host._build_speed_totals()
+        # ---- 本代键集定型(原属 _fold_delta_pending_locked 的前置段前移到构建前, S6) ----
+        # 错误原因暂存并入: 分叉判定需要完整键集, 该源比 store 增量键集(排空在 flush_views
+        # 开头)更及时, 并入点仍在 view_lock 临界区内(R12 不变)。
+        self._merge_pending_error_hashes_locked()
+        # 交叉键集基线检查前移: 直接从 store 现算(与构建期 note_cross_keys 同源同值),
+        # 增删即本代 full(R11) —— 局部重聚合无法修正未脏组行的 cross 标记, 必须先判定。
+        cross_keys = host._cross_keys_snapshot()
+        if self._cross_keys_prev is not None and cross_keys != self._cross_keys_prev:
+            self._pending_full_reasons.add("cross_group")
+        self.note_cross_keys(cross_keys)  # 局部路径不经 _build_group_view, 基线在此统一前移
+        # R5 交叉抵消前移: 分叉判据是抵消后的净键集(fold 落代段重跑一遍, 幂等)
+        upsert = self._delta_pending["upsert"]
+        removed = self._delta_pending["removed"]
+        for bucket in ("torrent", "group", "show"):
+            both = upsert[bucket] & removed[bucket]
+            upsert[bucket] -= both
+            removed[bucket] -= both
+        # HR 波次判定(flush_views 同款): ensure_state 触发的发布不经 flush 的判定点,
+        # 局部重聚合只刷新脏行的 HR 派生字段, 波次未捕获会让未脏行的 HR 字段永久陈旧
+        hr = getattr(host, "hr", None)
+        hr_wave = hr is not None and hr.revision != self._hr_rev_at_build
+        has_keys = bool(upsert["torrent"] or upsert["group"] or removed["torrent"] or removed["group"])
+        partial = not self._pending_full_reasons and not hr_wave and has_keys
+        if partial:
+            self._publish_partial_locked(upsert, removed, cross_keys)
+        else:
+            self.group_view = host._build_group_view()
+            self.singles_view = host._build_singles_view()
+            self.shows_view = host._build_shows_view()
+            self.flat_view = host._build_flat_view()
+            # 速度合计与四视图同一快照、同一临界区发布(状态栏据此与行数据同源同轮)
+            self.speed_totals = host._build_speed_totals()
         self.group_view_ver += 1
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
@@ -993,8 +1030,89 @@ class WebUIRuntime:
         self.notify("ver", {"ver": self.group_view_ver})
         # 重建完成记 HR 判定新鲜度基线: 经 manager 现取 + 判空 —— 无 HR 运行时(测试桩/
         # 未装配)记 None, 比对端同样跳过, 不得在重建路径抛 AttributeError。
-        hr = getattr(host, "hr", None)
-        self._hr_rev_at_build = hr.revision if hr is not None else None
+        # 全量路径基线恒前移(revision 已随全量重建落地, 不前移会让 flush 的波次判定
+        # 每拍置脏 -> 无限 full 循环); 局部重聚合路径基线**只在 revision 仍等于旧基线时**
+        # 前移(值不变即无操作): 若构建期间波次又动了(跨线程登记竞态), 保留旧基线让下一拍
+        # flush 的波次判定补一次 full —— 否则基线前移会吞掉波次, 未脏行的 HR 字段永久陈旧。
+        if hr is None:
+            self._hr_rev_at_build = None
+        elif not partial or hr.revision == self._hr_rev_at_build:
+            self._hr_rev_at_build = hr.revision
+
+    def _publish_partial_locked(self, upsert: dict, removed: dict, cross_keys: set) -> None:
+        """局部重聚合(plan S6): 仅对本代 upsert/removed 行键重跑构建 —— **调用方必须持有 view_lock**
+
+        不变量(plan S6 核心):
+        - 未脏行**对象引用原样保留**(同一 dict), 脏行必然新对象 —— 引用稳定只对未脏行承诺,
+          前端 S7 按行对象身份的 WeakMap 记忆化依赖这一点;
+        - 「四视图同轮发布」硬约束(模块 docstring)不破: 数组仍整体一次性替换, 行对象按
+          未脏/脏区别复用/新建, 不在调用点分批建;
+        - 组行内嵌 members 数组随组行整行走(P-02 一期口径); singles/flat 脏行按 hash 逐行
+          重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐);
+        - 脏行重算必须与全量重跑该行逐字段一致(S6 单测钉住; S5 镜子兜整体等价)。
+        """
+        host = self._host
+        store = host.store
+        from ..infra import utils as _utils
+
+        # ---- groups: 脏组键整行重建(members 随行), 未脏组行复用, removed 组键剔除 ----
+        enc_rm = {_utils.encode_group_key(k) for k in removed["group"]}
+        rebuilt: dict = {}
+        for k in upsert["group"]:
+            members = store.groups.get(k) or ()
+            recs = [store.by_hash[h] for h in members if h in store.by_hash]
+            row = host._build_group_row(k, recs, cross_keys)
+            if row is not None:  # 组已空/已解散 -> 行消失(全量构建跳过空组, 产物对齐)
+                rebuilt[_utils.encode_group_key(k)] = row
+        group_view = []
+        for old in self.group_view:
+            k = old["key"]
+            if k in enc_rm:
+                continue
+            # 脏行换新对象(rebuilt.pop 顺带把替换过的键清出, 残余即新增组行)
+            group_view.append(rebuilt.pop(k) if k in rebuilt else old)
+        group_view.extend(rebuilt.values())  # 新组行追加在尾部(前端排序不依赖数组顺序)
+
+        # ---- singles: torrent 桶脏行中未归组的按 hash 逐行重建(_member_view 口径) ----
+        # 归组判定与 _build_singles_view 同款(groups 值并集, 不用 member_to_key —— 与
+        # 全量构建的分类口径严格一致)
+        grouped = set()
+        for members in tuple(store.groups.values()):
+            grouped.update(members)
+        new_singles: dict = {}
+        for h in upsert["torrent"]:
+            if h not in grouped:
+                rec = store.by_hash.get(h)
+                if rec is not None:
+                    new_singles[h] = host._member_view(rec)
+        singles_view = []
+        for old in self.singles_view:
+            h = old["hash"]
+            if h in removed["torrent"]:
+                continue
+            singles_view.append(new_singles.pop(h) if h in new_singles else old)
+        singles_view.extend(new_singles.values())  # 新落地 singles(如成员脱离组)追加在尾部
+
+        # ---- flat: torrent 桶脏行按 hash 逐行重建(_seed_view 口径) ----
+        new_flat: dict = {}
+        for h in upsert["torrent"]:
+            rec = store.by_hash.get(h)
+            if rec is not None:
+                new_flat[h] = host._seed_view(rec)
+        flat_view = []
+        for old in self.flat_view:
+            h = old["hash"]
+            if h in removed["torrent"]:
+                continue
+            flat_view.append(new_flat.pop(h) if h in new_flat else old)
+        flat_view.extend(new_flat.values())  # 新增种子行追加在尾部(全量构建同按入库序在尾)
+
+        # ---- 发布: 数组整体一次性替换(硬约束); shows/speed_totals 无行键可归约, 仍全量现算 ----
+        self.group_view = group_view
+        self.singles_view = singles_view
+        self.flat_view = flat_view
+        self.shows_view = host._build_shows_view()
+        self.speed_totals = host._build_speed_totals()
 
     def ensure_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则返回当前引用
