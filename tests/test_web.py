@@ -47,6 +47,7 @@
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
 - test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
+- test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
@@ -3870,6 +3871,55 @@ def test_frontend_drawer_collapsed_click_peek_target():
         assert "collapsed = " not in body and "toggleDrawerCollapse" not in body \
             and "openTorrentDrawer" not in body, \
             f"{name} 不得展开面板(Q3 口径: 收起态点行只换目标, 展开仍归双击/Enter/右键「详情」)"
+
+
+def test_frontend_drawer_open_switch_no_empty_flash():
+    """详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」)
+
+    显式入口(双击/Enter/右键「详情」)与键盘跟随不同: openTorrentDrawer 走整体重建, 把
+    peers/trackers/files 清成空列表且 loading=false, 详情在途的整个等待期被渲染成一帧空态
+    (空态 -> 加载态 -> 数据三连闪, 高度自适应面板还会塌一下; 经典链与变体两路都中)。
+    两半修法钉住(pitfalls/web-ui/drawer-switch-flicker):
+    1. 面板已开(种子形态)不得重建: 换目标交棒 _switchDrawerTarget 软切换(保留旧数据 + 160ms
+       延迟遮罩, 与键盘跟随同链路), 同目标重入短路零副作用(与 openDrawerTraffic 同口径,
+       「打开入口的重入语义」), 收起态重按先展开 —— 分支必须落在 _stopDrawerPoll 等重建
+       副作用之前才算短路(同 test_frontend_qb_traffic_drawer_page_guard 第 5 锚口径);
+    2. 冷启动重建(面板关着/流量形态换形, 无旧数据可保留): 初值页签的 loading 必须与空列表
+       同帧置位, 详情在途窗口渲染加载态而非空态; 翻转仍归 fetcher 落袋单点(loading 清掉后才
+       _dtNotify), 这里只保证等待期不落空态。"""
+    drawer_js = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+
+    m = re.search(r"async openTorrentDrawer\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert m, "drawer.js 缺 openTorrentDrawer(守阵正则失配, 同步本守阵)"
+    ob = m.group(1)
+
+    # 1. 已开(种子形态)重入分支: 收起先展开 + 同目标短路 + 换目标软切换, 先于重建副作用
+    assert 'if (this.drawer.open && this.drawer.kind === "seed") {' in ob, \
+        "openTorrentDrawer 缺已开重入分支: 面板开着换种子仍走整体重建 = 空态->加载态->数据三连闪"
+    assert ob.index('this.drawer.open && this.drawer.kind === "seed"') < ob.index("this._stopDrawerPoll()"), \
+        "重入分支必须落在重建副作用(_stopDrawerPoll)之前(落在后面 = 短路失效, 闪烁回归)"
+    assert "if (this.drawer.collapsed) this.toggleDrawerCollapse();" in ob, \
+        "收起态重按入口 = 先展开(重入/换目标共用; 展开仍归双击/Enter/右键, peek 口径不回退)"
+    assert "if (this.drawer.hash === hash) return;" in ob, \
+        "缺同目标幂等短路: 面板开着重按同一目标, 整体重建把旧数据连 loading 各闪一遍"
+    assert "this._switchDrawerTarget(hash);" in ob, \
+        "已开换目标必须交棒软切换单点(保留旧数据 + 160ms 延迟遮罩), 不得自写清空/重建"
+    i_arm = ob.index("if (this.drawer.collapsed)")
+    i_short = ob.index("if (this.drawer.hash === hash)")
+    i_switch = ob.index("this._switchDrawerTarget(hash);")
+    assert i_arm < i_short < i_switch, \
+        "重入分支次序必须为 展开 -> 同目标短路 -> 换目标交棒(延迟遮罩只在展开态点亮, 展开须在前)"
+
+    # 2. 冷启动重建: 初值页签 loading 与空列表同帧置位(等待期渲染加载态, 不落空态)
+    dm = re.search(r"this\.drawer = \{\n(.*?)\n      \};", ob, re.S)
+    assert dm, "openTorrentDrawer 缺 drawer 重建字面量(守阵正则失配, 同步本守阵)"
+    db = dm.group(1)
+    assert 'trackersLoading: initialTab === "trackers"' in db, \
+        "重建初值 trackersLoading 恒 false: 初值页签=trackers 时详情在途窗口闪一帧「暂无 tracker」"
+    assert 'filesLoading: initialTab === "content"' in db, \
+        "重建初值 filesLoading 恒 false: 初值页签=content 时详情在途窗口闪一帧「无文件列表」"
+    assert 'peersLoading: initialTab === "peers"' in db, \
+        "重建初值 peersLoading 恒 false: 初值页签=peers 时详情在途窗口闪一帧「暂无已连接用户」"
 
 
 def test_frontend_hr_diag_view_wiring():

@@ -647,6 +647,21 @@ window.AQB_DRAWER = {
       // 入口(双击/右键/Enter)本就只在种子页, 这里兜底防跨页调用把面板状态挂在不可见容器上
       if (this.page !== "groups" || this.viewMode !== "torrents") return;
       this.menu.visible = false;
+      /* FX-29 家族纪律(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」): 面板已开着(种子
+       * 形态)不得再走下面的整体重建 —— 重建把 peers/trackers/files 清成空列表且 loading=false,
+       * 详情在途的整个等待期被渲染成一帧空态(空态 -> 加载态 -> 数据三连闪, 高度自适应面板还会
+       * 塌一下; pitfalls/web-ui/drawer-switch-flicker「拉新数据前先清空旧数据」)。已开 = 有旧
+       * 数据可保留, 归软切换语义: 换目标交棒 _switchDrawerTarget(保留旧数据 + 160ms 延迟遮罩,
+       * 与键盘跟随同链路); 同目标重入零副作用(重建把旧数据连 loading 各闪一遍 —— 同坑档
+       * 「打开入口的重入语义」, 与 openDrawerTraffic 同目标短路同口径)。收起态重按 = 先展开
+       * (peek 行快照的全量补拉由 __peek 链兜住), 展开在前、换目标在后: _switchDrawerTarget 的
+       * 延迟遮罩只在展开态点亮, 且其 _stopDrawerFollow 要能清掉展开补跟的在途定时器。 */
+      if (this.drawer.open && this.drawer.kind === "seed") {
+        if (this.drawer.collapsed) this.toggleDrawerCollapse();  // 收起态重按 = 展开(重入/换目标共用)
+        if (this.drawer.hash === hash) return;  // 同目标重入: 短路(重建 = 对同一目标再闪一遍)
+        this._switchDrawerTarget(hash);
+        return;
+      }
       this._stopDrawerPoll();
       this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
       this._drawerSwitchEnd();   // FX-29: 面板整体重建 -> 无"旧内容可保留", 待到集合与遮罩一并作废
@@ -658,7 +673,13 @@ window.AQB_DRAWER = {
       this.drawer = {
         open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
-        trackersLoading: false, filesLoading: false, peersLoading: false,
+        // 初值页签的 loading 与空列表同帧置位(26-10-07 报障的冷启动半边): 面板关着/流量形态换形
+        // 才走重建, 无旧数据可保留 —— 详情在途窗口期非常规页签的空列表若以 loading=false 裸奔,
+        // 经典链与变体会各渲染一帧空态(暂无已连接用户/暂无 tracker/无文件列表), 详情落袋后
+        // _loadDrawerTab 才翻成加载态 -> 三连闪。翻转仍归 fetcher 落袋单点(loading 清掉后才
+        // _dtNotify, 见三 fetcher finally), 这里只保证等待期不落空态。
+        trackersLoading: initialTab === "trackers", filesLoading: initialTab === "content",
+        peersLoading: initialTab === "peers",
         // P3-5(报告 26-10-07-0542): 三个列表 fetcher 的失败标记 —— 变体据此区分「失败」与
         // 「真没有」(失败只 toast 时变体把空列表当空态显示, 用户误以为数据真的为空)
         trackersError: "", filesError: "", peersError: "",
