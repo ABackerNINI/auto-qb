@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>变异测试框架调研与适配性报告 · Python + WEB UI 语言面 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="mutation-testing-feasibility">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-08-0231">
+<meta name="doc-updated" content="26-10-08-0231">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  .badge.no { background: #2a1a1a; color: var(--no); border-color: #4d2f2f; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 82ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 82ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 82ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.stop { border-left-color: var(--no); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>问题、口径与调研方法</a>
+    <a href="#s2"><span class="no">02</span>结论速览</a>
+    <a href="#s3"><span class="no">03</span>候选框架: Python</a>
+    <a href="#s4"><span class="no">04</span>候选框架: JS / TS</a>
+    <a href="#s5"><span class="no">05</span>本项目现状（测算基数）</a>
+    <a href="#s6"><span class="no">06</span>实测: 三个样本</a>
+    <a href="#s7"><span class="no">07</span>成本模型与全项目外推</a>
+    <a href="#s8"><span class="no">08</span>收益: 找到了什么</a>
+    <a href="#s9"><span class="no">09</span>坑与流程摩擦</a>
+    <a href="#s10"><span class="no">10</span>建议落地方案</a>
+    <a href="#s11"><span class="no">11</span>前端专项结论</a>
+    <a href="#s12"><span class="no">12</span>附录: 复现命令</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 可行性调研报告</div>
+    <h1>变异测试框架调研与适配性: Python 与 WEB UI 语言面</h1>
+    <p class="lede">把 Python 端的 four 个活跃/半活跃变异框架与 JS 端的 StrykerJS 逐个摆出来比对后, 在本仓库<b>真跑了一遍</b>（三个样本模块、两轮换池)。结论: <b>Python 端值得做、且便宜得超出常识</b>（32 核本机全项目一轮约 25–100 分钟); <b>前端现在不具备做变异测试的结构前提</b>——不是工具不合适, 是没有可执行单元层。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-0231-report-mutation-testing-feasibility</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 02:31</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ 7baeaf10</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>问题、口径与调研方法</h2>
+    <h3>要回答的三件事</h3>
+    <ol>
+      <li>Python 与 WEB UI 涉及语言（JS）各自有哪些变异测试框架, 现状如何（是不是活的、支持什么、要什么前提)。</li>
+      <li>它们能不能落在本项目: 本机 Windows 为主、测试全 Fake 无外部依赖、提交闸门已挂 98% 分支覆盖。</li>
+      <li>成本与收益的量级 —— 不止给结论, 给<b>本机实测数字</b>外推。</li>
+    </ol>
+    <h3>方法</h3>
+    <ul>
+      <li><b>外部调研</b>: 框架官网 / PyPI / README / 第三方对比表交叉核对（单一来源的数字一律不采信)。</li>
+      <li><b>本机实测</b>: 全部在本机 Windows 上真跑。为避免污染主仓库与环境, 另建沙箱副本 <code>R:/Temp/auto-qb/mut-exp</code>（<code>uv sync</code> 独立 venv, 主仓库 <code>.venv</code>、<code>pyproject.toml</code>、<code>uv.lock</code> 一律未改动)。</li>
+      <li><b>工具选择</b>: 实测对象为 pytest-gremlins（唯一在本机原生可跑的 pytest 插件型)。mutmut 也装了并试跑, 结论是本机被明确拒绝（见 §09)。</li>
+    </ul>
+    <div class="callout warn">本报告里的<b>被测框架版本与存活数</b>是 2026-10-08 这一刻的快照: pytest-gremlins 迭代很快（几个月内 1.8 → 1.11), 换版本重跑数字会变, 特别是<b>变异算子覆盖面与存活数</b>。结论层面的判断（量级、节奏、值不值得做)不随之变化。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>结论速览</h2>
+    <table>
+      <tr><th>问题</th><th>结论</th><th>依据</th></tr>
+      <tr>
+        <td><b>Python 端做不做</b></td>
+        <td><span class="badge go">做 · 但只在定期审计</span></td>
+        <td>本机实测每变异 CPU 成本 2.6–6.2s; 全项目点估 ~7,000 个变异 ⇒ ~10 CPU-小时 ⇒ 32 核机器上 25–100 分钟一轮。<b>便宜</b>, 但仍是全量测试的 25–100 倍, 进合并闸门会拖队</td>
+      </tr>
+      <tr>
+        <td><b>选哪个框架</b></td>
+        <td><span class="badge go">pytest-gremlins</span></td>
+        <td>本机唯一原生可跑: mutmut 依赖 <code>fork()</code> 被明确拒绝 WSL-only; cosmic-ray 可跑但需 init/exec/dump 三步 + 会话库; gremlins 是 pytest 原生插件, 零配置起步</td>
+      </tr>
+      <tr>
+        <td><b>要不要进提交闸门</b></td>
+        <td><span class="badge no">不要</span></td>
+        <td>工具硬要求「基线全绿才开始变异」（实测会一行报错直接跳过); 仓库已挂 98% 分支覆盖闸门, 变异分数是「审计信号」不是「放行条件」</td>
+      </tr>
+      <tr>
+        <td><b>前端做不做</b></td>
+        <td><span class="badge no">暂不做</span></td>
+        <td>StrykerJS 官方 runner 矩阵无 Playwright; 本项目 JS 无单元层（全局 script + Vue CDN 无构建), 唯一执行面是真浏览器 e2e —— 每变异分钟级, 数千变异 ⇒ 数十 CPU-小时一轮且前提不成立</td>
+      </tr>
+      <tr>
+        <td><b>收益是否实在</b></td>
+        <td><span class="badge go">是, 但要会读</span></td>
+        <td>两个「公认覆盖良好」的模块实测出 10 与 70 个存活变异; 但也实测到:<b>测试池一放宽, 存活数 97 → 70</b> —— 存活数是测试池的函数, 假存活比例不小</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>候选框架: Python</h2>
+    <table>
+      <tr><th>框架</th><th>现状（2026-10）</th><th>机制</th><th>平台</th><th>算子面</th><th>本机可用</th></tr>
+      <tr>
+        <td><b>mutmut</b><br>3.8.0 (2026-09-12)</td>
+        <td>最主流、1.4k star、月下载百万级; 个人维护但活跃（近一年 113 提交)</td>
+        <td>fork 型变异模式: 源加载进主进程后 <code>fork()</code> 跑每个变异</td>
+        <td><b>Unix / WSL 独占</b></td>
+        <td>较全（含语句删除、返回值、常量)</td>
+        <td><span class="badge no">否</span></td>
+      </tr>
+      <tr>
+        <td><b>cosmic-ray</b><br>8.7.0 (2026-08-09)</td>
+        <td>公司维护（sixty-north), 600+ star; 可 operators 插件化、可 Celery 多机分发</td>
+        <td>import hook 拦截编译: <b>不改磁盘源码</b>; 会话库存 SQLite</td>
+        <td>跨平台（含 Windows)</td>
+        <td><b>最全</b>: 含异常处理、语句删除、装饰器</td>
+        <td><span class="badge">理论可跑</span></td>
+      </tr>
+      <tr>
+        <td><b>pytest-gremlins</b><br>1.11.2（本次实测)</td>
+        <td>新、迭代快; 单作者; PyPI 开发状态仍标 Alpha ⇒ 成熟度是主要风险</td>
+        <td>变异模式 + 环境变量切换 + 子进程隔离: <b>一次性插桩, 不重写源码</b>; pytest 原生插件</td>
+        <td>跨平台（含 Windows)</td>
+        <td>比较/边界/布尔/算术/返回值 <b>五类</b>; 缺语句删除、异常、字符串</td>
+        <td><span class="badge go">是（已实测)</span></td>
+      </tr>
+      <tr>
+        <td>mutatest</td>
+        <td><b>停维护</b>（2022 最后发布)</td>
+        <td>改 pycache 字节码、随机抽样</td>
+        <td>跨平台</td>
+        <td>较全</td>
+        <td>不推荐</td>
+      </tr>
+      <tr>
+        <td>MutPy</td>
+        <td><b>停维护</b>（Python 3.7 止)</td>
+        <td>AST + 高阶变异</td>
+        <td>跨平台</td>
+        <td>—</td>
+        <td>否</td>
+      </tr>
+    </table>
+    <h3>为什么排除了 mutmut（本机实证, 不是推断)</h3>
+    <p>装完后在本机直接试跑, 工具第一句就拒绝:</p>
+    <pre><code>$ uv run mutmut run --paths-to-mutate=src/auto_qb/infra/versioning.py --tests-dir=tests/test_versioning.py
+To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue .../issues/397</code></pre>
+    <p>本项目<b>开发主平台是 Windows</b>（Linux 只在 CI 与 <code>commands run test.linux</code> 的容器里), 所以「要跑 mutmut」等价于「所有本地迭代都要跳进 Linux 容器」。成本不是不能付, 而是没必要付 —— pytest-gremlins 在同样机器上是原生的。若日后需要 mutmut 的算子面, 第二条可用路径是 cosmic-ray。</p>
+    <h3>三者成本/性能的机制差异（决定第一眼的时间量级)</h3>
+    <ul>
+      <li><b>重写源码 vs 不改源码</b>: cosmic-ray 用 import hook、gremlins 用一次性插桩 + 环境变量切换 —— 都不落盘改文件。mutmut v3 只变异函数体内的代码（模块级常量、装饰器不在范围内)。</li>
+      <li><b>覆盖引导</b>: 三者都有; 实测是最大的时间杠杆（见 §07)。</li>
+      <li><b>增量</b>: gremlins 按内容 hash 缓存; cosmic-ray 靠会话库; mutmut 的缓存在同期评为「有限」。</li>
+      <li><b>集成形式</b>: gremlins 是 <code>pytest</code> 插件（一条命令、吃现有 fixtures/markers); 另两个是独立 CLI, 要单独配测试命令。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>候选框架: JS / TS</h2>
+    <h3>StrykerJS（v9.6.1, Apache-2.0) — 唯一的成熟选项</h3>
+    <table>
+      <tr><th>官方 runner</th><th>备注</th><th>本项目可用性</th></tr>
+      <tr><td>@stryker-mutator/jest-runner</td><td>成熟, 支持 findRelatedTests</td><td>需 Jest 单元层 —— <b>没有</b></td></tr>
+      <tr><td>@stryker-mutator/vitest-runner</td><td>ESM/TS 项目首选; 官方注明 browser mode 不在支持范围</td><td>需 Vitest 单元层 —— <b>没有</b></td></tr>
+      <tr><td>mocha / jasmine / tap(node:test) / cucumber</td><td>Node 侧执行</td><td>需对应单元层 —— <b>没有</b></td></tr>
+      <tr><td>karma-runner</td><td>浏览器执行</td><td>Karma 已 EOL, 不推荐新增</td></tr>
+      <tr><td>command runner（内置)</td><td>执行任意 shell 命令</td><td>理论可用, 但代价落在「每个变异拉起一次 Playwright」 ⇒ 分钟级 × 数千变异</td></tr>
+      <tr><td><b>Playwright runner</b></td><td><b>官方矩阵里不存在</b></td><td><span class="badge no">无</span></td></tr>
+    </table>
+    <p>Stryker 的核心加速手段 <code>coverageAnalysis: "perTest"</code>（只跑覆盖变异点的测试)依赖 runner 能吃输入用例粒度的覆盖数据 —— 而 Playwright 的执行单元是整个 spec、且带真浏览器与桩服务拉起。行业对此的一致结论也很直白: <b>把 Playwright / Cypress 这类 e2e 逐个变异跑上百遍, impractical</b>。</p>
+    <h3>半成品选项</h3>
+    <ul>
+      <li><code>mutode</code> 一类早期 JS 变异器: 长期停维护。</li>
+      <li>自写「变异 — 验证」的小脚本: 本项目其实<b>已经在做</b>（下节), 只是手工。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>本项目现状（测算基数)</h2>
+    <h3>三个测算基数</h3>
+    <table>
+      <tr><th>面</th><th>数字</th><th>来源</th></tr>
+      <tr><td>Python 源码</td><td class="num">128 文件 / 34,629 行</td><td>本次统计（<code>src/</code>, 排除 <code>__pycache__</code>)</td></tr>
+      <tr><td>Python 测试</td><td class="num">86 文件 / 2,513 个 test 函数 / 66,880 行</td><td>本次统计</td></tr>
+      <tr><td>全量测试</td><td class="num">2769 passed + 4 skipped / 38.24s / 99%<br>（最新基线切片 26-10-07-1003: 2713 passed / 56.24s / 99%)</td><td>交付前在本报告代码基线 <code>develop @ 7baeaf10</code> 上实测 <code>commands run test.full</code>; 口径与历史数字以 <code>commands run kb.baseline</code> 为准</td></tr>
+      <tr><td>覆盖率闸门</td><td class="num"><code>--cov-branch --cov-fail-under=98</code></td><td><code>pytest.ini</code></td></tr>
+      <tr><td>前端 JS</td><td class="num">20,771 行（shared 20,662 + prism 109, 排除 vendor)</td><td>本次统计</td></tr>
+      <tr><td>前端 CSS / HTML 模板</td><td class="num">7,165 行 / 3,954 行</td><td>本次统计</td></tr>
+      <tr><td>前端 e2e（Playwright)</td><td class="num">15 文件 / 3,454 行</td><td><code>e2e/</code></td></tr>
+      <tr><td>本机</td><td class="num">32 逻辑核 / Windows / Python 3.12</td><td>本次实测</td></tr>
+    </table>
+    <h3>两个决定「变异测试能见到的东西」的现状事实</h3>
+    <p><b>事实一: Python 端已经贴着变异测试在做事了, 只是手工。</b> Memory Bank 的基线切片里反复出现「变异红验 N 条」「临时还原旧行为 → 当场变红 → 逐条精确还原」。这就是手工变异测试: 人自己造一个变异、跑测试、看红不红。它的问题是<b>覆盖率低且无系统性</b> —— 人只会改自己刚碰的那几行, 而且天然挑「自己觉得会被抓到」的变异。</p>
+    <p><b>事实二: 前端没有「可执行单元层」, 只有「文本阅读层」与「浏览器层」。</b> 前端 JS 是 <code>window.AQB_*</code> 全局对象 + Vue 3 CDN 全局版本 + 严格依赖 <code>&lt;script&gt;</code> 顺序, 无模块、无构建（这是刻意选择, 见 <code>app.js</code> 头注释)。因此它的验证手段是: <code>tests/test_web.py</code> 等<b>读源码文本</b>的静态守阵 + <code>e2e/</code> 的真浏览器断言（单 instance、<code>workers: 1</code>、<code>fullyParallel: false</code>, <code>@fast</code> 子集分钟级、全矩阵单次约 164–219s)。而 <code>memory-bank/pitfalls/testing/static-guard-mutation.md</code> 已经记了这个形态的固有盲区: <b>「字符串包含」式守阵拦不住短路禁用/语句删改</b> —— 而这个盲区正好是变异测试<b>唯一补不上的那类</b>: 变异测试要执行代码, 静态守阵永远只对着文本。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>实测: 三个样本</h2>
+    <p>沙箱里对三个「大家都觉得覆盖得还不错」的模块真跑, 全部 <code>--gremlin-workers=8</code>, 命令见 §12。</p>
+    <table>
+      <tr><th>样本</th><th class="num">行数</th><th class="num">变异数</th><th class="num">密度<br>(变异/行)</th><th class="num">杀死率</th><th class="num">会话总墙时<br>(含基线)</th><th>测试选择池</th></tr>
+      <tr><td><code>infra/versioning.py</code></td><td class="num">185</td><td class="num">25</td><td class="num">0.135</td><td class="num">100%</td><td class="num">15.62s</td><td><code>test_versioning.py</code>（20 用例)</td></tr>
+      <tr><td><code>infra/file_access.py</code></td><td class="num">393</td><td class="num">56</td><td class="num">0.142</td><td class="num">82%（存活 10)</td><td class="num">26.13s</td><td><code>test_file_access.py</code>（31 用例)</td></tr>
+      <tr><td><code>infra/file_access.py</code> 换宽池</td><td class="num">393</td><td class="num">56</td><td class="num">0.142</td><td class="num">82%（存活 10)</td><td class="num">27.80s</td><td>5 个测试文件（95 用例)</td></tr>
+      <tr><td><code>infra/utils.py</code>（窄池)</td><td class="num">1,163</td><td class="num">349</td><td class="num">0.300</td><td class="num">72%（存活 97)</td><td class="num">121.54s</td><td><code>test_utils.py</code>（89 用例)</td></tr>
+      <tr><td><code>infra/utils.py</code>（宽池)</td><td class="num">1,163</td><td class="num">349</td><td class="num">0.300</td><td class="num"><b>80%（存活 70)</b></td><td class="num">290.35s</td><td>5 个测试文件（501 用例)</td></tr>
+    </table>
+    <h3>每变异的真实单价（从 JSON 报告抽取, 未加工)</h3>
+    <table>
+      <tr><th>池</th><th class="num">每变异均值</th><th class="num">中位</th><th class="num">最大</th><th class="num">CPU 合计</th><th class="num">选中用例数<br>均值/中位/最大</th></tr>
+      <tr><td>utils 窄池</td><td class="num">2.59s</td><td class="num">2.52s</td><td class="num">3.3s</td><td class="num">904s</td><td class="num">19.2 / 2 / 89</td></tr>
+      <tr><td>utils 宽池</td><td class="num">5.03s</td><td class="num">2.52s</td><td class="num">26.8s</td><td class="num">1,756s</td><td class="num">56.9 / 3 / 501</td></tr>
+    </table>
+    <p><b>读法</b>: 单价的主导项不是「跑了多少测试」（中位只选中 2–3 个用例), 而是<b>每个变异一次子进程 + pytest 集合的固定开销</b>（中位 2.52s 与池大小基本无关)。真正的成本尾巴来自那些「调用面极宽」的函数 —— 最贵的变异选中了 501 个用例、单次 26.8s。这一条决定了项目级成本不能用「均值 × 变异数」简单外推。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>成本模型与全项目外推</h2>
+    <h3>第一步: 变异总数</h3>
+    <p>实测密度带宽 0.135 – 0.300 变异/行（差异来自「逻辑密度」: 格式化/决策型代码高, 声明/dataclass/CLI 型低)。取中值 0.20 做点估, 取两端做区间:</p>
+    <table>
+      <tr><th>口径</th><th class="num">密度</th><th class="num">变异总数</th></tr>
+      <tr><td>下界（全仓库都像 versioning/file_access)</td><td class="num">0.14</td><td class="num">≈ 4,900</td></tr>
+      <tr><td><b>点估</b></td><td class="num">0.20</td><td class="num"><b>≈ 6,900</b></td></tr>
+      <tr><td>上界（全仓库都像 utils)</td><td class="num">0.30</td><td class="num">≈ 10,400</td></tr>
+    </table>
+    <h3>第二步: 单轮时长</h3>
+    <table>
+      <tr><th>口径</th><th class="num">每变异 CPU</th><th class="num">总 CPU</th><th class="num">8 worker 墙时</th><th class="num">32 worker 墙时</th></tr>
+      <tr><td>乐观（都像窄池)</td><td class="num">2.6s</td><td class="num">≈ 5 CPU-h</td><td class="num">≈ 37 min</td><td class="num">≈ 9 min</td></tr>
+      <tr><td><b>现实（混宽调用面, 5.0s)</b></td><td class="num">5.0s</td><td class="num">≈ 9.6 CPU-h</td><td class="num">≈ 72 min</td><td class="num">≈ 18 min</td></tr>
+      <tr><td>悲观（下游喇叭式选中全池)</td><td class="num">10s</td><td class="num">≈ 19 CPU-h</td><td class="num">≈ 2.4 h</td><td class="num">≈ 36 min</td></tr>
+    </table>
+    <p>对照: 当前全量测试 56.24s。<b>一轮全项目变异 ≈ 全量测试的 20–150 倍</b> —— 与业界常说「10–30×」同数量级但偏上限, 因为本机单个 pytest 子进程起步成本高（~2.5s), 而每个测试用例本身极快（Fake 数据、无 IO), 摊不掉。</p>
+    <div class="callout ok">这条数字是<b>本报告的正面结论</b>: 业界对变异测试的普遍恐惧（「小时级、烧 CI」)在本仓库不成立 —— 测试套件无 IO 等待、本机 32 核, 全项目一轮只是「一顿饭」量级。<b>按包切开后是「一杯咖啡」量级</b>（单个包约 5–20 分钟)。</div>
+    <h3>第三步: 不同节奏下的成本</h3>
+    <table>
+      <tr><th>节奏</th><th>单次成本</th><th>评价</th></tr>
+      <tr><td>每 PR / 合并闸门</td><td class="num">25–100 min（还要基线全绿才能开跑)</td><td><span class="badge no">否决</span> — 反馈太慢、且会与xdist/覆盖率闸门冲突</td></tr>
+      <tr><td>按包、每周/每 Release 前</td><td class="num">5–20 min</td><td><span class="badge go">推荐</span> — 也是避开 §09 那条 Windows 命令行长度限制的唯一可行粒度</td></tr>
+      <tr><td>全项目季度扫描</td><td class="num">0.5–2.5 h（建议后台跑)</td><td><span class="badge">可接受</span> — 作为趋势快照留存</td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>收益: 找到了什么</h2>
+    <h3>收益一: 它把这个阶段「覆盖率看不出」的洞具体标出来了</h3>
+    <p>在 99% 分支覆盖、<code>--cov-fail-under=98</code> 的前提下, 单次抽样命中:</p>
+    <ul>
+      <li><code>utils.py:48</code> —— <code>parse_hm</code> 的取值区间判别。窄池下 10 个存活（<code>&lt;= to &lt;</code>、<code>&lt;= to &gt;</code>、边界位移); 加入 <code>test_conditions.py</code> 后比较类都被杀（那几条 <code>parse_hm("23:59") / ("00:00")</code> 立功), 但<b>仍有 4 个边界位移变异存活</b> ⇒ 这条给规则引擎与通知免打扰共用的校验, 两侧边界的邻值从未被探过。</li>
+      <li><code>file_access.py</code> 的 10 个存活集中在容器/抽象实现的 <code>NotImplementedError</code> / <code>NotSupported</code> 分支与 <code>open_path</code> 默认参数 —— 这一类偏「覆盖没到」而非「断言太弱」, 价值中等。</li>
+      <li><code>utils.py</code> 里 501 用例都没杀掉的高调用面变异 —— 详见下一节, 这一类<b>不一定是真洞</b>。</li>
+    </ul>
+    <h3>收益二（必须说的反面): 存活数是「测试池」的函数, 别直接当缺口单</h3>
+    <p>实测: 同一目标 <code>utils.py</code>、同一套变异, 只把选择池从 1 个测试文件换到 5 个测试文件, <b>存活数 97 → 70（−27%)</b>。把它推到极限验了一次:</p>
+    <pre><code># 手工把 utils.py:485 的 return re.compile(...) 改成 return None, 再跑全套件
+8 failed, 2761 passed, 4 skipped   # 其中 3 条新红 ⇒ 全套件会杀死它
+# 但它在「5 文件池」下被报成 SURVIVED（且选中了 501 个用例)</code></pre>
+    <div class="callout warn"><b>方法论结论（本报告最该被记住的一条)</b>: 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的假存活。<b>判断一个存活变异是不是真洞, 唯一标准是拿全套件手工改一次验证</b> —— 也就是本项目已经在做的「变异红验」, 只是现在由机器批量提名研究对象。<b>机器提名 + 手工确认</b>才是这里的正确组合。</div>
+    <h3>收益三: 与现有手工红验是替换关系吗</h3>
+    <p>不是, 是分工: 手工红验回答「我刚写的这个守阵是不是空转」(成本极低、与行为同构, 是必要的收尾动作); 机器变异回答「哪些地方我<b>从没想过要写守阵</b>」(这件事人做不了 —— 人不会去改自己没动过的那 34,000 行)。</p>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>坑与流程摩擦（本机实证)</h2>
+    <table>
+      <tr><th>#</th><th>现象</th><th>后果</th><th>处置</th></tr>
+      <tr>
+        <td class="num">1</td>
+        <td><b>mutmut 本机直接拒绝</b>: <code>To run mutmut on Windows, please use the WSL</code></td>
+        <td>本机用不了最主流的那个</td>
+        <td>改选 pytest-gremlins; 需要它算子面时走 Linux 容器</td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td><b>全测试池下预扫崩溃</b>: 覆盖预扫子进程 <code>FileNotFoundError: [WinError 206] 文件名或扩展名太长</code></td>
+        <td>「全 src × 全 tests」一把跑在本机当前不可行</td>
+        <td>按包/按文件切目标 + 限制选择池（也正是推荐节奏); 或 <code>--gremlin-no-coverage-filter</code>（贵)</td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td><b>与 xdist 互斥</b>: <code>-n</code> 一起用会报错/零变异</td>
+        <td><code>pytest.ini</code> 的 addopts 里写了 <code>-n 4</code></td>
+        <td>每次显式 <code>-n 0</code>; 并行交给 <code>--gremlin-workers</code></td>
+      </tr>
+      <tr>
+        <td class="num">4</td>
+        <td><b>基线不绿直接不开跑</b>: <code>skipping mutation testing because 75 baseline test(s) failed</code></td>
+        <td>树已经红着的时候没法拿它定位问题</td>
+        <td>必须先全绿 —— 与本项目闸门纪律一致, 无额外成本</td>
+      </tr>
+      <tr>
+        <td class="num">5</td>
+        <td><b>覆盖率闸门误伤</b>: 带 <code>--cov-fail-under=98</code> 跑子集必然不达标</td>
+        <td>「用例全绿」被判红</td>
+        <td>必带 <code>--no-cov</code>（与 <code>test.one</code> 那条发现同形)</td>
+      </tr>
+      <tr>
+        <td class="num">6</td>
+        <td><b>TMPDIR 老坑继续适用</b>: 工具 shell 默认 <code>H:\Temp</code> 会在收尾崩（退出码非 0 但测试全过)</td>
+        <td>假红</td>
+        <td>自带 <code>set "TMPDIR=R:/Temp/auto-qb/tests"</code>（cmd.exe 写法, 引号不能省)</td>
+      </tr>
+      <tr>
+        <td class="num">7</td>
+        <td>报告默认落 <code>coverage/gremlins/</code>（仓内)</td>
+        <td>踩删除拦截层的同一类历史坑</td>
+        <td>报告目录指到 <code>R:/Temp/auto-qb/</code></td>
+      </tr>
+      <tr>
+        <td class="num">8</td>
+        <td><b>成熟度风险</b>: 单作者; PyPI 仍标 Alpha; 半年内大版本跳动快</td>
+        <td>结果随时会变</td>
+        <td>按本项目惯例 <code>==</code> 精确钉 + <code>uv lock</code>; 每轮在切片里记下版本号</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>建议落地方案</h2>
+    <h3>建议一: 定 pytest-gremlins, 但只做「定期审计」, 不进闸门</h3>
+    <ul>
+      <li><b>对象优先级</b>（按「判据密度 × 出错代价」而不是按行数): ①<code>rules/</code>（规则引擎判据) ②<code>hr/</code>（HR 判定与做种要求链路) ③<code>config/</code>（fail-fast 校验) ④<code>core/</code>（主循环/限速) —— <code>infra/</code> 与 <code>webui/server/</code> 估值最低（IO 胶水层, 变异多为等价或平凡杀死)。</li>
+      <li><b>入场练手</b>: 先用已实测的 <code>infra/utils.py</code>（349 变异 / 约 5–10 min)把整条流程跑通一轮, 先建立「真洞 / 等价变异 / 假存活」三分类的习惯。</li>
+      <li><b>记录</b>: 每轮一个基线切片 <code>testing/baselines/YY-MM-DD-HHMM-mutants-&lt;包&gt;.md</code>, 内容 = 目标/变异数/杀死率/耗时/工具版本/<b>手工确认后的真洞数</b>。目标不是「分数增长」, 是「包内不再有不知道为什么活着的变异」。</li>
+      <li><b>不做</b>: 不设 <code>break</code> 阈值挂 CI、不给 <code>thresholds</code>、不做「必须杀死 100%」的追逐 —— 等价变异（<code>@dataclass(frozen=True)</code> → <code>False</code> 这类)杀不掉是数学事实。</li>
+    </ul>
+    <h3>建议二: 命令接入 —— 新增 <code>test.mutants</code>（建议写法, 本次未改动任何命令包)</h3>
+    <p>四条必带的要素缺一不可（每一条都对应 §09 一个坑):</p>
+    <pre><code>[tasks."test.mutants"]
+run = ['set "TMPDIR=R:/Temp/auto-qb/tests" &amp;&amp; set "COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov" &amp;&amp; '
+       'uv run pytest &lt;args&gt; --gremlins -n 0 --no-cov --gremlin-workers=16 '
+       '--gremlin-targets=&lt;args&gt; --gremlin-report=json --gremlins-html-dir=R:/Temp/auto-qb/mut-report']
+when = "定期审计: 对某个包跑一轮变异测试（不要放进提交闸门）"
+note = "cmd.exe 写法 + 引号不能省（见本文件顶部）; -n 0 必带（与 xdist 互斥, addopts 里有 -n 4）; "
+       "--no-cov 必带（子集跑必然不满足 98% 闸）; 报告落 R 盘（仓内写入会撞删除拦截层）"</code></pre>
+    <p>依赖按项目惯例加: <code>uv add --dev pytest-gremlins==&lt;精确版本&gt;</code>（本项目直接依赖一律 <code>==</code> 钉死, 见 <code>techContext.md</code>), 随后 <code>commands run env.sync</code>。</p>
+    <h3>建议三: 沉淀一条 pitfall（本轮未落, 待你点头)</h3>
+    <p>「<b>变异分数与存活数是选择池的函数</b>: 窄池下 <code>utils.py</code> 存活 97, 换 5 文件池降到 70; 一个被判成存活的变异, 拿全套件手工验证后其实是被杀死的」。建议入 <code>memory-bank/pitfalls/testing/mutation-pool-artifact.md</code> —— 不先定这条规矩就投产, 第一份存活清单会被当成缺口单来处理, 从而把人力浪费在伪洞上。</p>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>前端专项结论</h2>
+    <div class="callout stop"><b>结论: 现在不具备做变异测试的结构前提, 建议不做。</b>不是「Stryker 不适合这个项目」, 是「变异测试需要一个能快速执行被测代码的单元层, 而本项目前端没有」。</div>
+    <h3>三个逐层卡点</h3>
+    <ol>
+      <li><b>没有单元层</b>: JS 是 <code>window.AQB_*</code> 全局 script + Vue 3 CDN, 无模块、无构建。要跑 Stryker 的 <code>jest/vitest</code> runner, 得先有一层能吃这些全局脚本的执行环境（jsdom + 手工拼接 <code>&lt;script&gt;</code> 顺序), 这本身就是一笔独立投资。</li>
+      <li><b>唯一执行面是浏览器 e2e</b>: Stryker 官方 runner 矩阵无 Playwright; 且 <code>@fast</code> 子集已是分钟级。按同一密度带估 ~3,000 个前端变异 → 即使按每变异 10s 乐观估, 也是 <b>数个小时 CPU/轮</b>; 叠加风险（突变引入死循环 / 状态机卡死)时更长。</li>
+      <li><b>变异测试补不了当前的真盲区</b>: <code>pitfalls/testing/static-guard-mutation.md</code> 记的「静态守阵拦不住短路禁用/语句删改」, 是<b>文本层</b>的缺陷。变异测试是<b>执行层</b>的手段 —— 它评估的是测试, 而这里缺的不是测试强弱评估, 而是「这些守卫压根没在执行这条路」。</li>
+    </ol>
+    <h3>如果将来真想要: 路径与前置</h3>
+    <ol>
+      <li><b>先决动作</b>（独立决策, 不要和变异测试打包): 从 20,771 行 JS 里挑出<b>纯决策函数</b>（格式化/比较/排序/解析类, 如 <code>shared/format.js</code>、<code>columns.js</code>、<code>sort.js</code>), 抽成可被 Node 直接引入的模块 + 配 Vitest 单元层。按规模估这是「一个专题」的工作量, 不是「顺手」。<b>这一步的价值本身不依赖变异测试</b> —— 它同时解决 e2e 反馈太慢、静态守阵只能读文本两个问题。</li>
+      <li>在这层之上再叠 <code>@stryker-mutator/vitest-runner</code>（注: 官方注明 Vitest browser mode 不在支持范围, 所以必须是 Node 侧执行的那一层)。</li>
+      <li><b>在此之前维持现状并加强</b>: 继续用手工变异（改造 JS → 看 e2e 是否红)做抽验, 并把静态守阵从「字符串包含」升级为报告里已给出的两档写法（整行活性锚定 + 逐分支语句清单)。这是当前性价比最高的前端投入。</li>
+    </ol>
+  </section>
+
+  <section id="s12">
+    <h2><span class="no">12</span>附录: 复现命令</h2>
+    <p>沙箱位于 <code>R:/Temp/auto-qb/mut-exp</code>（仓库副本 + 独立 venv; 主仓库环境未被修改)。下列命令可在其中复現本报告全部数字。</p>
+    <pre><code># 0) 准备（一次性）
+cp -r src tests extensions pyproject.toml uv.lock pytest.ini README.md resources scripts \ docker memory-bank .commands .agents .github docs assets config.yml minimal.yml test_yamls \ 想法.md resources TOOLS.md HEARTBEAT.md CLAUDE.md .style.yapf package.json R:/Temp/auto-qb/mut-exp/
+cd R:/Temp/auto-qb/mut-exp &amp;&amp; uv sync &amp;&amp; uv pip install pytest-gremlins      # 实测版本 1.11.2
+
+# 1) 单模块 + 定向测试池（样本 A / B）
+uv run pytest --gremlins --gremlin-targets=src/auto_qb/infra/versioning.py \
+              --gremlin-workers=8 -n 0 --no-cov tests/test_versioning.py
+
+# 2) 大模块 + 宽测试池（样本 C, 用时最长）
+uv run pytest --gremlins --gremlin-targets=src/auto_qb/infra/utils.py \
+              --gremlin-workers=8 -n 0 --no-cov --gremlin-report=json \
+              tests/test_utils.py tests/test_conditions.py tests/test_expr_parse.py \
+              tests/test_notify.py tests/test_web.py
+
+# 3) mutmut 在本机的行为（直接被拒）
+uv pip install mutmut &amp;&amp; uv run mutmut run --paths-to-mutate=src/auto_qb/infra/versioning.py
+#   → To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue .../397
+
+# 4) 全测试池预扫（本机当前崩溃）
+uv run pytest --gremlins --gremlin-targets=src/auto_qb/infra/file_access.py --gremlin-workers=8 -n 0 --no-cov
+#   → FileNotFoundError: [WinError 206] 文件名或扩展名太长。   （在 coverage pre-scan 子进程）
+
+# 说明: 每次都要 TMPDIR / COVERAGE_FILE 前缀, 见 §09。</code></pre>
+  </section>
+
+  <footer>
+    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照, 出厂即冻结。<br>
+    数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 本次实验数字（变异数 / 耗时 / 杀死率)均取自本机实测的沙箱环境。
+  </footer>
+
+</div>
+</body>
+</html>
