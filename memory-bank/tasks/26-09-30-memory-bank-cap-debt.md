@@ -1,11 +1,11 @@
 # 26-09-30-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-30
-**Updated:** 2026-09-30
+**Updated:** 2026-10-07
 **Topics:** memory-bank-cap-debt
 **Refs:** memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html
-**Summary:** 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工, token 成本巨大 —— 改为只 WARN 不拦提交, 知识库清理另开会话。分析结论: 合理, 但需三处补强 —— ①债务须在**提交时**派生输出并由 agent **转告用户** (agent 开不了新会话, 挂会话开始等于把返工留在同场; 清理由用户自行开会话); ②**AGENTS.md 是硬规定, 不入债务体系** (用户拍板: 不能超、不套 50% 收缩、不常改; 超 8,000 且本次改动命中仍 STOP, 无中间档); ③测试侧尺寸断言一起降级 (AGENTS.md 除外), 否则 test.full 照旧拦。拦截面盘点四处 (两处不在提交闸门里); AGENTS.md 削薄降为独立清理项; 方案见计划, D1/D3 已定, D2 (切片条数阈值去留) 已按推荐①拍板 (归债务通道)。**2026-09-30 22:xx 守卫改造实施完成**: 除 AGENTS.md 外的尺寸全部降级为债务 (提交不拦); AGENTS.md 保持硬规定 (超 8,000 且本次改动命中仍 STOP, 不入债务体系、不套 50%); 严重度单点落在 skill 的 `HARD_CAP_ROLES`, `doc.caps` 为派生可见的单一入口; 实测 cap 债务 0 项 (`doc.caps -- --strict` 绿), 全量 1874 passed + 3 skipped / 91%。剩余 = 子任务 7 (AGENTS.md 削薄, 独立清理项, 待用户另开会话)。
+**Summary:** 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工, token 成本巨大 —— 改为只 WARN 不拦提交, 知识库清理另开会话。分析结论: 合理, 但需三处补强 —— ①债务须在**提交时**派生输出并由 agent **转告用户** (agent 开不了新会话, 挂会话开始等于把返工留在同场; 清理由用户自行开会话); ②**AGENTS.md 是硬规定, 不入债务体系** (用户拍板: 不能超、不套 50% 收缩、不常改; 超 8,000 且本次改动命中仍 STOP, 无中间档); ③测试侧尺寸断言一起降级 (AGENTS.md 除外), 否则 test.full 照旧拦。拦截面盘点四处 (两处不在提交闸门里); AGENTS.md 削薄降为独立清理项; 方案见计划, D1/D3 已定, D2 (切片条数阈值去留) 已按推荐①拍板 (归债务通道)。**2026-09-30 22:xx 守卫改造实施完成**: 除 AGENTS.md 外的尺寸全部降级为债务 (提交不拦); AGENTS.md 保持硬规定 (超 8,000 且本次改动命中仍 STOP, 不入债务体系、不套 50%); 严重度单点落在 skill 的 `HARD_CAP_ROLES`, `doc.caps` 为派生可见的单一入口; 实测 cap 债务 0 项 (`doc.caps -- --strict` 绿), 全量 1874 passed + 3 skipped / 91%。**2026-10-07 全部闭合**: 子任务 7 (AGENTS.md 削薄) 已由后续清理轮落地, 实测 6,608/8,000; 全案 Done。
 
 ## 原始请求
 
@@ -38,7 +38,7 @@
 | 4 | 降级: `gen_active_recent` / `gen_baseline_recent` 尺寸 → warn (条数阈值按 D2) | ✅ `collect()` 改返回三元组 (行, 问题, 债务) |
 | 5 | 测试: 删除 KB 角色 live 尺寸断言 (保留 AGENTS.md ≤8,000 硬断言), 换「债务可发现性」断言 + docstring 清单同步 | ✅ 净 +3 用例 (1871 → 1874) |
 | 6 | 接线: `doc.caps` 补 `<args>` + note; 提交闸门 note 改写 | ✅ (闸门 `match` 补 `memory-bank/`, 否则债务触发点等于没接线) |
-| 7 | AGENTS.md 削薄 (独立清理项: 回到 ≤ 8,000, 不套 50%, 路由手术; 与守卫改造解耦, 可并入任意一次用户开启的清理会话) | 未启动 — **待用户另开清理会话**; 当前实测 7,975/8,000 (余量 25) |
+| 7 | AGENTS.md 削薄 (独立清理项: 回到 ≤ 8,000, 不套 50%, 路由手术; 与守卫改造解耦, 可并入任意一次用户开启的清理会话) | ✅ 已在后续清理轮完成 (fa918a67 / 376dda34 / cba7c4f6 / 295bb226 等), 2026-10-07 实测 6,608/8,000 (余量 1,392) |
 | 8 | 协议回写: SKILL.md cap 表注 + 收尾 DoD 一行「债务 → 提醒用户另开会话清理」 (会话开始协议不动; AGENTS.md 无必改项) | ✅ (DoD 第 7 条) |
 | 9 | 收口: kb.index + doc.caps --strict + kb.check + doc.links + doc.drift + test.full 基线 | ✅ 全绿; 1874 passed + 3 skipped / 91% |
 | 10 | 附带发现收口 (TASK_LOG_CAP 死条目 / ALL_ROLES 重复) 或入池 | ✅ 随手收口 (删 `TASK_LOG_CAP`; `ALL_ROLES` 改为 `DEFAULT_ROLES` 别名并注明) |
@@ -56,4 +56,4 @@
   ④**协议回写**: SKILL.md cap 表注加债务制段落 + AGENTS.md 例外三条, 收尾 DoD 加第 7 条「cap 债务转告」; `testing/guards.md` 守阵表同步; **会话开始协议与 AGENTS.md 未动**。
   ⑤**附带发现随手收口**: 删死条目 `_common.TASK_LOG_CAP`; `ALL_ROLES` 改为 `DEFAULT_ROLES` 别名并注明重复项的来历。
 - **实施轮实测 (2026-09-30 22:xx)**: AC-1/AC-3/AC-4 用 tmp 仓库逐条验过 (AGENTS.md 未改动 + KB 超限 → rc=0; AGENTS.md 8,001 且改动命中 → rc=1; 仅债务非空 + `--strict` → rc=1, 默认模式 → rc=0)。全量 1874 passed + 3 skipped / 91%, test.pkg 74 passed, `doc.caps --strict` / `kb.check` / `doc.links` / `doc.drift` 全绿; 当前 cap 债务 **0 项**。
-- **实施轮踩到的坑 (新档 `pitfalls/kb/cap-debt.md`)**: ①`check_caps` 的 warns 里混着下限 `CAP_MIN_WARN` 的「文件过小」提示 —— 直接当债务累计, 实测一次报 26 项假债务 (真超限 0), `doc.caps --strict` 永远红 ⇒ 债务行加 `DEBT_MARK` 前缀, 消费者只挑带标记的; ②`_kb_checker()` 找不到 skill 时抬成 STOP —— 降级不彻底 (与本次改动无关的环境状况拦住提交), 改 WARN; ③删尺寸断言而**不补**「可发现性」断言 = 把守卫撤掉 (降级后没有任何用例会红) ⇒ 判据一句话: 降级一条守卫时要问「降级之后它靠什么变红」。
+- **实施轮踩到的坑 (新档 `pitfalls/kb/cap-debt.md`)**: ①`check_caps` 的 warns 里混着下限 `CAP_MIN_WARN` 的「文件过小」提示 —— 直接当债务累计, 实测一次报 26 项假债务 (真超限 0), `doc.caps --strict` 永远红 ⇒ 债务行加 `DEBT_MARK` 前缀, 消费者只挑带标记的; ②`_kb_checker()` 找不到 skill 时抬成 STOP —— 降级不彻底 (与本次改动无关的环境状况拦住提交), 改 WARN; ③删尺寸断言而**不补**「可发现性」断言 = 把守卫撤掉 (降级后没有任何用例会红) ⇒ 判据一句话: 降级一条守卫时要问「降级之后它靠什么变红」。- **2026-10-07 07:55 (状态收口轮)**: 用户确认两计划已完成, 简单验证后翻状态。验证: ①AGENTS.md 实测 6,608/8,000 (余量 1,392, 削薄已由 fa918a67/376dda34/cba7c4f6/295bb226 等清理轮落地) → 子任务 7 闭合; ②`doc.caps` 现跑无阻塞项、cap 债务 0 项; ③test.quick 2705 passed + 4 skipped 全绿。档案 Status → Done; 计划 doc-status Open → Done (doc-updated 26-10-07-0755), kb.index 重建。

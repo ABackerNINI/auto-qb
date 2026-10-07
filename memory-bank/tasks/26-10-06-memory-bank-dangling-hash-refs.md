@@ -52,3 +52,4 @@
 - 2026-10-06 20:05 — 复扫验证: 候选 371→361, 悬空 40→4(全部为预期遗留: issue 自引用 3 条 + tasks/_index.md 生成物 1 条); kb.index 重建后生成物清零。
 - 2026-10-06 20:09 — issue 置 Done(含实际修法与验证段), 坑档 pitfalls/kb/commit-hash-refs.md 新立, 全量测试与基线切片收尾。
 - 2026-10-06 20:12 — 首跑 test.full 红 1 条: 新档案缺 **Topics:** 主键, `test_doc_topics_complete` 抓到 —— 补 `**Topics:** kb-dangling-hash-refs`(与 issue 的 doc-topic 同键)后复跑全绿 **2679 passed + 3 skipped / 99% / 40.0s**(基线切片 26-10-06-2015)。守阵有用, 记录在案。
+- 2026-10-06 20:35 — 「提交」落地: ship.commit 内部同步撞上远端闸门迁移窗口(c612082a 把 check_doc_links 迁入 memory-bank skill)—— 合并远端后复跑闸门复用了启动时旧配置(旧命令指向已迁走的根 scripts/ 路径)→ rc=2 ENOENT, 推送未完成; 提交本体已 rebase 重放 c15fb611→2595e63d。按口径补 ship.push(此时已是新配置; 手动预跑链接检查 rc=0)→ 推送成功 2595e63d。**遗留观察**: ship.commit 单进程内 rebase 改到 .my-commit-flow.toml 时, 复跑闸门用启动时旧配置 —— 计划外缺陷未动, 待拍板是否入池。
