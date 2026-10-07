@@ -316,6 +316,10 @@
 - test_frontend_toast_duration_floor_by_kind: 错误/超时类 toast 停留下限守阵(2026-10-05 用户报「右下角错误信息停留太短」) ——
   ui_feedback.js 头部 `TOAST_MS_FLOOR` 给 error/timeout 设 ≥8s 下限, `toast()` 与 `_finishToast()`
   两条排期路径都经 `toastMs(kind, ms)` 解析且 ms 缺省为 null(绕过即回到裸 ms, 下限形同虚设)
+- test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
+  state.js watch(drawerVisible) 的种子详情支路(!s 分支)进场(v 为真)必须补一发重挂
+  `$nextTick(() => this._dtSync())`($nextTick 等 Vue 把重建的 aside 补进 DOM 再定位宿主);
+  两支路互不越界(重挂只归种子支路, 流量支路退场 _qbChartDestroy / 进场 _qbReloadOnEnter 原样)
 """
 import base64
 import errno
@@ -3673,7 +3677,8 @@ def test_frontend_qb_traffic_drawer_page_guard():
        切回主内容页, 否则「点了没反应」(状态翻了、面板不在 DOM);
     4. 图的生命周期(state.js watch drawerVisible): Vue 的 v-if 拆装会**换掉建图宿主**, uPlot 的
        root/canvas 挂在被拆走的旧 .qb-chart-host 上且不自愈(要等下一拍轮询, 而间隔可能夹到 600s)
-       ⇒ 症状「回主内容页后面板里有文字没图」—— 退场销毁图、进场补拉一发(_qbLoad 内含建图)。
+       ⇒ 症状「回主内容页后面板里有文字没图」—— 退场销毁图、进场补拉一发(_qbLoad 内含建图);
+       种子详情支路(!s)的变体宿主回页重挂归 test_drawer_seed_reentry_variant_remount。
     5. 同目标幂等短路(2026-10-07 修「再按 Ctrl+\ 闪烁」): 抽屉已开着同一形态同一目标时重按入口
        (快捷键/状态栏钮)必须短路返回 —— 全量路径会把收图销毁 + 抽屉重建 + 首拉 loading 各闪一遍
        (pitfalls/web-ui/drawer-switch-flicker「快中间态本身就是闪」); 收起态重按 = 展开。"""
@@ -3721,11 +3726,12 @@ def test_frontend_qb_traffic_drawer_page_guard():
         "同目标短路必须在收图/重建副作用之前(落在后面 = 短路失效, 闪烁回归)"
 
     # 4. watch(drawerVisible): 退场销毁图 / 进场补拉重建(uPlot 宿主随 v-if 拆装被换掉)
+    #    种子详情支路的回页重挂(!s 分支 _dtSync)归 test_drawer_seed_reentry_variant_remount
     wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)
     assert wt, "state.js 缺 watch(drawerVisible)(换宿主后图不自愈 = 回页只剩文字)"
     wb = wt.group(1)
-    assert "const s = this.qbCurScope;" in wb and "if (!s) return;" in wb, \
-        "watcher 只对流量形态生效(种子详情其余页签无此生命周期)"
+    assert "const s = this.qbCurScope;" in wb and "if (!s) {" in wb, \
+        "watcher 缺流量形态作用域分支(种子详情归 !s 支路, 回页重挂见专用守阵)"
     assert "this._qbChartDestroy(s);" in wb and "this._qbReloadOnEnter(s);" in wb, \
         "drawerVisible watcher 必须退场销毁图 + 进场补拉重画(补拉内含 $nextTick 建图单点)"
     re_b = re.search(r"_qbReloadOnEnter\(scope\) \{\n(.*?)\n    \},", js, re.S)
@@ -3734,6 +3740,45 @@ def test_frontend_qb_traffic_drawer_page_guard():
     assert "this._qbLoad(scope);" in rb, "_qbReloadOnEnter 必须走 _qbLoad 单点(内含建图, 不另写请求)"
     assert 'this[def.loading]' in rb, \
         "_qbReloadOnEnter 缺在途不叠加守卫(打开路径已先发一发, 进场 watcher 会把首次请求翻倍)"
+
+
+def test_drawer_seed_reentry_variant_remount():
+    """种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」)
+
+    drawerVisible 要求 page === "groups"(drawer.js), tpl/drawer.html 的 <aside v-if> 在切到设置页
+    时被整体拆掉(抽屉数据状态保留), 切回时 Vue 重建 aside —— 变体宿主(dt-host)随之换成新节点,
+    而核心层 _dtMounted 持有的还是被拆走的旧宿主。trackers/peers 页签有 5s 轮询兜底(下一拍
+    _dtNotify 自愈, 延迟 <=5s), general/content 页签没有轮询与通知源, 变体永不重挂:
+    .dt-host:empty 藏住空宿主 + 经典包裹层 v-show 为 false(选中变体时)= 整幅正文空白。
+    钉住(state.js watch drawerVisible):
+    1. 种子详情支路(!s 分支)进场(v 为真)必须补一发重挂 `$nextTick(() => this._dtSync())` ——
+       $nextTick 等 Vue 把重建的 aside 补进 DOM 后再定位宿主(_dtFindHost 按 document 现查);
+    2. 退场(v 为假)不发重挂(种子形态退场无图可销毁, 重挂只服务进场);
+    3. 两支路互不越界: 流量支路(qbCurScope 非空)退场 _qbChartDestroy / 进场 _qbReloadOnEnter
+       原样保留, _dtSync 不得跑进流量支路(_qbReloadOnEnter 不得跑进种子支路);
+    4. 重挂必须走 _dtSync 单点(卸旧挂新), 不得在 watcher 里自写宿主定位/渲染。"""
+    state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+
+    wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)
+    assert wt, "state.js 缺 watch(drawerVisible)(回页重挂挂点, 移动了就同步本守阵)"
+    wb = wt.group(1)
+    assert "if (!s) {" in wb, "watcher 缺种子详情支路(!s 分支)——回页重挂的挂点"
+    # 1+2. 进场补一发重挂, 且只认进场(v 为真): $nextTick 等 aside 补进 DOM 再 _dtSync
+    seed_branch = wb[wb.index("if (!s) {"):wb.index("if (!v) {")]
+    assert "if (v)" in seed_branch and "$nextTick(() => this._dtSync())" in seed_branch, \
+        "种子详情支路进场(v 为真)必须补一发重挂: $nextTick 等 DOM 补进后 _dtSync 卸旧挂新" \
+        "(general/content 页签无轮询无通知源, 不补 = 回页整幅空白)"
+    # 3. 两支路互不越界: 流量支路生命周期原样, _dtSync 不进流量支路
+    traffic_branch = wb[wb.index("if (!v) {"):]
+    assert "this._qbChartDestroy(s);" in traffic_branch and "this._qbReloadOnEnter(s);" in traffic_branch, \
+        "流量支路退场销毁/进场补拉不得被回页重挂改动(uPlot 宿主生命周期单点)"
+    assert "_dtSync" not in traffic_branch, \
+        "重挂不得跑进流量支路(流量宿主重挂归 _qbReloadOnEnter -> _dtNotify 链)"
+    assert "_qbReloadOnEnter" not in seed_branch, \
+        "流量补拉不得跑进种子支路(种子页签无流量数据源)"
+    # 4. 重挂走 _dtSync 单点, watcher 内不自写宿主定位/渲染
+    assert "querySelector" not in seed_branch and "replaceChildren" not in seed_branch, \
+        "watcher 不得自写宿主定位/渲染(重挂单点在核心层 _dtSync, 绕开即双写挂载态)"
 
 
 def test_frontend_drawer_collapsed_click_peek_target():

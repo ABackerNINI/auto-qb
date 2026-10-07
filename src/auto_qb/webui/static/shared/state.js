@@ -400,10 +400,18 @@ window.AQB_STATE = {
      *   退场 -> _qbChartDestroy(拆野引用, ResizeObserver 一并断开);
      *   进场 -> 补拉一发(_qbReloadOnEnter -> _qbLoad 内含 $nextTick 建图): 隐藏期轮询被 active
      *           守卫跳过, 数据与宿主都已陈旧, 这一发同时刷新数据并对新宿主重建图。
-     * 只认流量形态(qbCurScope 非空), 种子详情其余页签无此生命周期。 */
+     * 流量形态认 qbCurScope 非空。种子详情形态(2026-10-07 报障)的变体宿主(dt-host)同样被拆装
+     * 换掉 —— _dtMounted 持有的是被拆走的旧节点, general/content 页签又没有轮询与通知源
+     * (trackers/peers 靠下一拍轮询的 _dtNotify 自愈), 变体不会重挂: .dt-host:empty 藏住空宿主 +
+     * 经典包裹层 v-show 为 false(选中变体时) = 整幅正文空白。故进场补一发重挂(_dtSync 卸旧
+     * 挂新, $nextTick 等 Vue 把新 aside 补进 DOM 再定位宿主); 经典渲染层无此缺口(包裹层是
+     * Vue 响应式, aside 重建时按 drawer.* 现值直接重渲染)。 */
     drawerVisible(v) {
       const s = this.qbCurScope;
-      if (!s) return;
+      if (!s) {
+        if (v) this.$nextTick(() => this._dtSync());
+        return;
+      }
       if (!v) {
         this._qbChartDestroy(s);
         return;
