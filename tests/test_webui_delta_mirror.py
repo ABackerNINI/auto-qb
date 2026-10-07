@@ -7,7 +7,7 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 落袋(前端持有自有副本的语义)。每轮断言 B ≡ A: 按行键集合 + 行内容逐字段, 不比数组顺序
 (S4 顺序安全事实)。
 
-## 测试计划(每个测试函数一条; M1-M5 + 无键 dirty 源本步, M6-M9 + fuzz 归后继步 S5a')
+## 测试计划(每个测试函数一条; S5a = M1-M5 + 无键 dirty 源, S5b = M6-M9 + fuzz)
 - test_m1_same_torrent_two_beats_unconfirmed_middle: M1(避坑#1, #24845 形态键级回归) —— 同一种子
   连续两拍变化、中间响应未被确认(门控跳拍): 两代键集都进窗口, B 合并后行内容 = 两拍叠加的
   最新真值 ≡ A(R1 值回放不取陈旧代)
@@ -24,9 +24,24 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 - test_unkeyed_command_source_yields_full: 无键 dirty 源(R11 缺口, S3 观察) —— 命令自写字段
   (update_torrent_fields)/reset_runtime 只置 view_changed 无行键, 落代必须 full(修复前为
   「空键集且 full=False」, delta 客户端漏变更); 对照: store 驱动常规轮不受影响照常行级增量
+- test_m6_restart_ver_seeding_old_rid_full: M6 —— 进程重启 ver 时间播种(runtime.py:137-138,
+  不回落): 时间线/累积器归零, 旧客户端 rid 窗外 -> 全量(R10); 对照: 重启后新一轮增量照常
+- test_m7_window_slide_out_and_rid_ahead_full: M7 —— 窗口滑出(41 代未消费, maxlen=40 把客户端
+  所在代挤出)与 rid>ver(时钟倒挂)都退化全量(R3/R10), 全量重放补齐后 ≡ A
+- test_m8_show_view_always_full: M8 —— view=show / 缺省(四数组)/ 未知值恒全量且响应无
+  delta/removed 键(S9 前的启用矩阵; 增量镜像客户端只覆盖 torrent/group 两个已启用视图)
+- test_m9_gate_skipped_rounds_end_to_end: M9 —— 门控跳拍累积(R4)端到端镜子版: 三拍中后两拍
+  未被消费, 键集并入下一代不丢; 恢复消费后一轮增量拿齐全部三拍变化, B ≡ A
+- test_fuzz_random_operation_sequence: fuzz —— 固定种子(random.Random(20261007))随机操作序列
+  N=220 轮, 操作池覆盖 增/删/改(量化边界+真脏字段)/同拍增删/门控跳拍/命令无键源/HR 波次,
+  每轮断言 B ≡ A
 """
+import itertools
 import json
+import random
+import time
 from types import SimpleNamespace
+from unittest import mock
 
 from auto_qb.core.qbapi import QbApi
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentStore
@@ -373,3 +388,220 @@ def test_unkeyed_command_source_yields_full():
     m2.publish(force=True)
     assert rt2._delta_timeline[-1]["full"] is True
     m2.sync(ct2, cg2)  # 修复前此处红: B 合并结果 != A 全量快照
+
+
+# ---------- M6: 重启 ver 播种 -> 旧 rid 窗外 full ----------
+
+
+def test_m6_restart_ver_seeding_old_rid_full():
+    store = _make_store("H1", "H2")
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    ct, cg = DeltaClient("torrent"), DeltaClient("group")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(ct, cg)
+    _beat(store, "H1", dlspeed=100)
+    m.publish()
+    m.sync(ct, cg)  # 旧进程两代, 旧客户端持 gen2
+    old_rid = ct.rid
+    # 重启: 全新运行时, ver 以进程启动时间播种(测试用 mock 前移播种钟点, 保证旧 rid 必然窗外);
+    # 真实重启 store 同样全新 —— 此处清掉 S1「最近一轮」残值模拟「首轮全量 sync 前无快照」
+    future = int(time.time()) + 100
+    host = rt._host
+    with mock.patch("auto_qb.webui.runtime.time") as ft:
+        ft.time.return_value = future
+        rt2 = WebUIRuntime(host)
+    host.web = rt2  # 构建器 note_cross_keys 接线切到新运行时
+    rt2.touch()
+    store.last_added = []
+    store.last_removed = []
+    store.delta_fields = {}
+    assert len(rt2._delta_timeline) == 0  # 时间线归零(进程重启)
+    assert rt2._delta_pending["upsert"]["torrent"] == set()  # 累积器归零
+    m2 = Mirror(store, rt2)
+    rt2.mark_dirty()
+    e1 = m2.publish()
+    assert e1["ver"] == future + 1 and e1["ver"] > old_rid  # 时间播种不回落, 旧 rid 必然窗外
+    # 旧客户端按旧 rid 拿增量 -> 窗外退化全量(R10), 全量重放后 ≡ A
+    out = m2.sync(ct, cg)
+    for resp in out["resps"]:
+        assert resp["full"] is True and "delta" not in resp and "removed" not in resp
+    assert set(ct.rows["torrents"]) == {r["hash"] for r in out["full"]["torrents"]}
+    assert set(cg.rows["groups"]) == {r["key"] for r in out["full"]["groups"]}
+    # 对照: 重启后新一轮变化, 旧客户端照常行级增量(rid 已追平新 ver)
+    _beat(store, "H2", dlspeed=200)
+    m2.publish()
+    out = m2.sync(ct, cg)
+    assert out["resps"][0]["full"] is False
+    assert [r["hash"] for r in out["resps"][0]["delta"]["torrents"]] == ["H2"]
+
+
+# ---------- M7: 窗口滑出 / rid>ver -> full ----------
+
+
+def test_m7_window_slide_out_and_rid_ahead_full():
+    store, rt, m, ct, cg = _mirror(("H1", "H2"))
+    # 41 代未被 ct/cg 消费: maxlen=40 把客户端所在代挤出时间线
+    for i in range(41):
+        _beat(store, "H1", dlspeed=100 + i)
+        m.publish()
+        m.sync()  # 仅 A 快照消费(维持生产节拍), ct/cg 缺席
+    assert len(rt._delta_timeline) == 40
+    assert rt._delta_timeline[0]["ver"] > ct.rid  # 前置: 客户端 rid 已窗外
+    out = m.sync(ct, cg)  # 窗口滑出 -> 全量(R10), 重放补齐后 ≡ A
+    for resp in out["resps"]:
+        assert resp["full"] is True and "delta" not in resp and "removed" not in resp
+    assert set(ct.rows["torrents"]) == {"H1", "H2"}
+    # rid > ver(时钟倒挂): 直接持未来 rid 请求 -> 全量(R3 数值区间比较)
+    ahead = rt.ensure_state(rt.group_view_ver + 5, "torrent", True)
+    assert ahead["full"] is True and "torrents" in ahead
+    assert "delta" not in ahead and "removed" not in ahead
+
+
+# ---------- M8: show 视图请求恒 full(S9 前的启用矩阵) ----------
+
+
+def test_m8_show_view_always_full():
+    store, rt, m, ct, cg = _mirror(("H1", "H2"))
+    _beat(store, "H1", dlspeed=100)
+    m.publish()  # 窗口内有带键集的代: 若启用矩阵放行本可归约
+    rid = rt.group_view_ver - 1
+    for view, arrays in (
+        ("show", {"shows", "groups", "singles"}),
+        (None, {"groups", "singles", "shows", "torrents"}),
+        ("nope", {"groups", "singles", "shows", "torrents"}),
+    ):
+        state = rt.ensure_state(rid, view, True)
+        assert state["full"] is True
+        assert {k for k in state if k in ("shows", "groups", "singles", "torrents")} == arrays
+        assert "delta" not in state and "removed" not in state
+        assert state["rid"] == rt.group_view_ver
+        assert state["updated"] is True
+
+
+# ---------- M9: 门控跳拍累积(端到端镜子版, R4) ----------
+
+
+def test_m9_gate_skipped_rounds_end_to_end():
+    store, rt, m, ct, cg = _mirror(("H1", "H2"))
+    # 三拍连续变化: 只有第一拍落代(gen2), 后两拍因「上一版未被取走」被门控跳过
+    _beat(store, "H1", dlspeed=100)
+    e2 = m.publish()
+    assert e2["upsert"]["torrent"] == {"H1"}
+    _beat(store, "H2", state="pausedUP")
+    m.publish()
+    _beat(store, "H1", upspeed=50)
+    m.publish()
+    assert len(rt._delta_timeline) == 2  # 跳拍未产生新代
+    assert rt._delta_pending["upsert"]["torrent"] == {"H1", "H2"}  # 键集暂存累积器
+    # 恢复消费: ensure_state 触发落代, 累积键集并入下一代不丢(R4)
+    out = m.sync(ct, cg)
+    assert len(rt._delta_timeline) == 3
+    resp = out["resps"][0]
+    assert resp["full"] is False
+    assert {r["hash"] for r in resp["delta"]["torrents"]} == {"H1", "H2"}
+    row = next(r for r in resp["delta"]["torrents"] if r["hash"] == "H1")
+    assert row["dlspeed"] == 100 and row["upspeed"] == 50  # 三拍变化一轮拿齐
+    row2 = next(r for r in resp["delta"]["torrents"] if r["hash"] == "H2")
+    assert row2["state"] == "pausedUP"
+
+
+# ---------- fuzz: 固定种子随机操作序列 ----------
+
+
+def test_fuzz_random_operation_sequence():
+    """固定种子(random.Random(20261007))随机操作序列 N=220 轮, 每轮断言 B ≡ A
+
+    操作池覆盖 M1-M9 全部形态: 真脏字段/量化字段(含桶内不可见跳动)、增/删(含待报删除
+    重叠)/同拍一增一删、命令无键源(R11 full)、HR 波次、门控跳拍(随机 1-3 拍不消费)。
+    跑一次全绿为准, 不追求极限压测。
+    """
+    rng = random.Random(20261007)
+    store = _make_store("H1", "H2", "H3")
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    ct, cg = DeltaClient("torrent"), DeltaClient("group")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(ct, cg)
+    add_counter = itertools.count(100)
+    states = ["stalledUP", "pausedUP", "downloading", "uploading", "stoppedUP"]
+
+    def rand_hash():
+        return rng.choice(sorted(store.client.torrents))
+
+    def op_field():  # 真脏字段(qB 增量路径)
+        h = rand_hash()
+        f = rng.choice(["dlspeed", "upspeed", "seeding_time", "tags", "state"])
+        v = {
+            "dlspeed": rng.randint(0, 10**7),
+            "upspeed": rng.randint(0, 10**7),
+            "seeding_time": rng.randint(0, 10**6),
+            "tags": ",".join(rng.sample(["a", "b", "c"], rng.randint(0, 2))),
+            "state": rng.choice(states),
+        }[f]
+        _beat(store, h, **{f: v})
+
+    def op_jitter():  # 量化字段(扩展字段不上线, 按 qB patch 形态直喂 _apply; 桶内跳动常不可见)
+        h = rand_hash()
+        f = rng.choice(["last_activity", "eta", "seeding_time", "time_active"])
+        cur = max(0, getattr(store.by_hash[h], f))
+        new = cur + rng.choice([rng.randint(0, 59), 60 + rng.randint(0, 59)])
+        store._apply({h: {f: new}}, [], full=False)
+
+    def op_add():
+        h = f"H{next(add_counter)}"
+        store.client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP", state=rng.choice(states))
+        if rng.random() < 0.5:  # 入库即归组: added 的组键在排空点可推导
+            key = (f"R:\\G{rng.randint(1, 3)}", )
+            store.member_to_key[h] = key
+            store.groups.setdefault(key, []).append(h)
+        store.apply_sync(QbApi(store.client, store))
+
+    def op_remove():
+        hs = sorted(store.client.torrents)
+        if len(hs) <= 1:
+            return
+        h = rng.choice(hs)
+        store.client.torrents.pop(h)
+        if rng.random() < 0.5:  # 自删登记在前: 待报删除与增量 removed 重叠
+            store.remove_torrent(h)
+        store.apply_sync(QbApi(store.client, store))
+
+    def op_same_tick():  # 同拍一增一删(M4b 形态; 组键解析与否随机 -> 归约/防御 full 两路都过)
+        h = f"H{next(add_counter)}"
+        if rng.random() < 0.5:
+            store.member_to_key[h] = (f"R:\\G{rng.randint(1, 3)}", )
+        tor = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP")
+        patch = {f: getattr(tor, f) for f in REQUIRED_TORRENT_FIELDS if hasattr(tor, f)}
+        if rng.random() < 0.5:
+            store._pending_removed.add(h)
+        store._apply({h: patch}, [h], full=False)
+
+    def op_unkeyed():  # 命令无键源 -> 本代 full(R11)
+        h = rand_hash()
+        pick = rng.random()
+        if pick < 0.4:
+            store.update_torrent_fields(h, state=rng.choice(states))
+        elif pick < 0.7:
+            store.update_torrent_fields(h, tags_add=rng.sample(["x", "y", "z"], rng.randint(1, 2)))
+        else:
+            store.update_torrent_fields(h, category=f"cat{rng.randint(0, 2)}")
+
+    def op_hr():  # HR revision 波次 -> 本代 full(R11)
+        hr = getattr(rt._host, "hr", None)
+        if hr is None:
+            rt._host.hr = SimpleNamespace(revision=1)
+        else:
+            hr.revision += 1
+
+    ops = [op_field] * 3 + [op_jitter] * 2 + [op_add] * 2 + [op_remove, op_same_tick, op_unkeyed, op_hr]
+    for _ in range(220):
+        rng.choice(ops)()
+        for _ in range(rng.randint(0, 2)):  # 门控跳拍: 未消费的发布(无变化轮则不落代)
+            m.publish()
+        m.publish()
+        m.sync(ct, cg)  # 每轮断言 B ≡ A
+    assert len(rt._delta_timeline) <= 40  # 时间线上限守卫
+    assert store.client.torrents  # 增删随机游走后库非空(操作池自检)

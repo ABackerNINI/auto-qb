@@ -167,6 +167,10 @@ class WebUIRuntime:
         # 比对基线显式置脏(与「错误原因」预取同一判别法)。None = 尚未重建过或重建时无
         # HR 运行时; 比对端对 None 一律跳过(经 manager 现取, 判空防御)。
         self._hr_rev_at_build: Optional[int] = None
+        # flush_views 上一次排空时的 store.rounds_applied: 判定「本拍是否有新应用轮」用 ——
+        # S1 快照(last_added/last_removed/delta_fields)是「最近一轮」语义不排空, 无新应用轮
+        # 时是残值, 不得作为纯命令源判定(本代 full)的键源(S5 镜子 fuzz 捕获)
+        self._drained_sync_rounds: int = 0
         # 最近一次 Web 请求时间(活跃门控的心跳)
         self.last_seen: float = 0.0
         # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
@@ -664,12 +668,17 @@ class WebUIRuntime:
         # 折叠在 _publish_locked(可能经 Web 线程 ensure_state 触发)的同一临界区, 同锁才无
         # 并发折叠/累积竞态(R12, 不引入新锁)。last_added/last_removed 只读不排空(下轮
         # _apply 覆盖, S1「最近一轮」语义), 同拍两次 flush 重复并入同键集 —— 集合语义幂等。
+        rounds_now = host.store.rounds_applied
         with self.view_lock:
             self._drain_delta_locked(host.store)
-            # 本拍 store 是否提供行级键: last_added/last_removed/delta_fields 恰是排空的
-            # 三个数据源 —— 命令自写字段(update_torrent_fields)/reset_runtime/标签定义删除
-            # 这类纯命令源只置 view_changed, 三者皆空
-            keyed = bool(host.store.last_added or host.store.last_removed or host.store.delta_fields)
+        # 本拍 store 是否提供行级键: last_added/last_removed/delta_fields 是「最近一轮」快照
+        # (不排空、下轮 _apply 覆盖), 无新应用轮时是残值, 不得当作本拍键源 —— 故须同时要求
+        # 本拍确有新的 _apply 轮(rounds_applied 前进)。命令自写(update_torrent_fields)/
+        # reset_runtime/标签定义删除这类纯命令源不跑 _apply, 只置 view_changed
+        keyed = rounds_now != self._drained_sync_rounds and bool(
+            host.store.last_added or host.store.last_removed or host.store.delta_fields
+        )
+        self._drained_sync_rounds = rounds_now
         # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
         if host.store.consume_view_changed():
             if keyed:
