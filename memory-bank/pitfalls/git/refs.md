@@ -25,6 +25,9 @@
   先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— **一致即落稳**。
 - **处置**: 备份 `.git` 后 `git pack-refs --all`。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
+  ✅ **停手指引已分流**(2026-10-07, `verify_ref.py` 输出契约 v4): 「HEAD==refs/heads==loose、仅
+  packed 落后」这一形态直接送本条(给 `pack-refs --all`), 不再指向「分支 ref 被回退」条目; 只有
+  分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)才送被回退条目。
 - **复发: 5** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
   自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
   靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
@@ -43,7 +46,9 @@
   —— **为什么没命中**: 停手指引仍指向「分支 ref 被回退」(verify_ref.py 未改); 本轮执行者
   grep `packed-refs` 直接路由到本条, 未按停手指引跑 update-ref。照④配方: format-patch
   留底 24KB(放仓库外 $TEMP, 防被扫进下次暂存) + pack-refs --all + verify-ref 一致 +
-  ship.push 补推一步过。
+  ship.push 补推一步过(该会话报本轮共撞 5 次, 其中一次假红由补笔提交触发, 未再单开回写提交以免递归)。
+  **本轮据此根治**: `verify_ref.py` 停手指引按形态分流(新增 `classify_form`), 「三处本地真值一致、
+  仅 packed 落后」直接送本条; 并加两条守卫测试(test_commit.py)钉住分流, 防再回退。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 

@@ -5,8 +5,11 @@
 
 判据(三者必须一致): HEAD == refs/heads/<branch> == loose ref / packed-refs
 
-输出契约 v3(计划 26-09-28-0157): 通过一行「ref 一致 <hash>」; 不一致保留完整处置步骤
-(它本来就是排障工具, 细节是它的价值)。staged 数量暴增 = 分支 ref 被回退的信号, 同样停。
+输出契约 v4(计划 26-09-28-0157; 26-10-07 补 packed-refs 陈旧形态分流): 通过一行「ref 一致 <hash>」;
+不一致保留完整处置步骤(它本来就是排障工具, 细节是它的价值)。停手指引按形态分流, 免得指错配方:
+① HEAD==refs/heads==loose、仅 packed-refs 落后 → 送「packed-refs 陈旧」条目(git pack-refs --all,
+   **不要** update-ref —— 它只写 loose, 治不了 packed-refs); ② 分支指针被回退/丢失 → 送「分支 ref 被回退」条目。
+staged 数量暴增 = 分支 ref 被回退的信号, 同样停。
 退出码: 0 一致 · 1 不一致 / staged 暴增(输出自带处置步骤)
 """
 
@@ -31,12 +34,33 @@ except Exception:  # 校验工具不因缺配置停摆: 用内置兜底值
     _CFG = dict(KEY_DEFAULTS)
 BRANCH = resolve_branch(_CFG)
 STAGED_PANIC = _CFG["staged_panic"]
-FIX_HINT = """处置(按 pitfalls「分支 ref 被回退」条目):
+# 分支指针被回退/丢失形态的处置(HEAD 与 refs/heads/loose 不一致, 或 staged 暴增)
+BRANCH_ROLLBACK_HINT = """处置(按 pitfalls「分支 ref 被回退」条目):
   1. 先确认没有别的会话正在操作同一个 .git
   2. 留底:  git format-patch -1 <sha> --stdout > 备份.patch
   3. 建锚点防 GC:  git update-ref refs/heads/tmp-<名字> <sha>
   4. 等对方结束后:  git reset --soft <sha>   (工作区/索引无需变动)
   **不要**用 git add -A / 全量提交去"解决"那批 staged —— 那是别人的在途改动。"""
+# 仅 packed-refs 陈旧形态的处置(HEAD==refs/heads==loose, 只是 packed 落后; 提交已落稳)
+PACKED_STALE_HINT = """处置(按 pitfalls「packed-refs 陈旧会导致核 ref 假红」条目):
+  判别: HEAD == refs/heads/<branch> == loose ref, 只有 packed-refs 落后 —— **提交已落稳**,
+        只是被 pack 过的分支更新时只写 loose(优先级更高), packed-refs 保留旧值直到下次 pack。
+  1. 留底(可选):  git format-patch -1 <sha> --stdout > 备份.patch
+     (pack-refs 只重写 packed-refs 一个文件, 对象零风险, 无需整份拷 .git)
+  2. git pack-refs --all
+  3. 复核:  commands run my-commit-flow.verify-ref
+  **不要**用 git update-ref —— 它只写 loose, 治不了 packed-refs(这是与「分支 ref 被回退」的关键区别)。"""
+
+
+def classify_form(head: str, branch_ref: str, loose: str, packed: str) -> str:
+    """不一致的形态: 'packed_stale' 或 'branch_rollback'。
+
+    三处本地真值(HEAD / refs/heads / loose)已一致、仅 packed-refs 落后 → 'packed_stale'
+    (提交已落稳, 只需 pack-refs); 否则是分支指针被回退/丢失 → 'branch_rollback'。
+    """
+    if head and head == branch_ref == loose and packed and packed != head:
+        return "packed_stale"
+    return "branch_rollback"
 
 
 def packed_ref(branch: str) -> str:
@@ -65,7 +89,7 @@ def check_refs(expect: str = "") -> tuple[bool, list[str]]:
     if len(staged) > STAGED_PANIC:
         return False, [
             f"[STOP] staged {len(staged)} 个(阈值 {STAGED_PANIC}) —— 分支 ref 可能被别的会话回退。",
-            FIX_HINT,
+            BRANCH_ROLLBACK_HINT,
         ]
 
     values = {v for v in (head, branch_ref, loose) if v}
@@ -75,16 +99,27 @@ def check_refs(expect: str = "") -> tuple[bool, list[str]]:
     if ok:
         return True, []
 
+    form = classify_form(head, branch_ref, loose, packed)
     detail = [
         f"  HEAD         {head}",
         f"  refs/heads/{BRANCH}".ljust(28) + branch_ref,
         f"  loose ref    {loose or '(无 loose 文件)'}",
         f"  packed-refs  {packed or '(未 pack)'}",
         "",
-        "[STOP] ref 不一致 —— 提交可能没落稳。",
-        FIX_HINT,
-        f"\n强制写回(确认无他人操作后):  git update-ref refs/heads/{BRANCH} {head or '<sha>'}",
     ]
+    if form == "packed_stale":
+        # HEAD/refs/heads/loose 已一致, 只 packed 落后 —— 提交已落稳, 别指向「分支 ref 被回退」
+        # (按其 update-ref 配方治不好 packed-refs; 2026-10-07 坑档 4 笔复发的根因)
+        detail += [
+            "[STOP] packed-refs 落后 —— 提交已落稳(HEAD==refs/heads==loose), 只是 packed 陈旧。",
+            PACKED_STALE_HINT,
+        ]
+    else:
+        detail += [
+            "[STOP] ref 不一致 —— 提交可能没落稳。",
+            BRANCH_ROLLBACK_HINT,
+            f"\n强制写回(确认无他人操作后):  git update-ref refs/heads/{BRANCH} {head or '<sha>'}",
+        ]
     return False, detail
 
 

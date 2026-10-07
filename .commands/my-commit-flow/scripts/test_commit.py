@@ -32,6 +32,12 @@
 - test_message_kept_when_nothing_to_commit
                                           树净且消息与 HEAD 不匹配(正常待提交消息) → 照旧拒绝, 文件保留
 - test_check_refs_pass_on_fresh_repo      ref 三处核对在干净仓库通过
+- test_classify_form_pure                 停手形态分流纯函数: packed 落后 vs 分支指针被回退
+- test_check_refs_packed_stale_routes_to_pack_refs
+                                          HEAD==refs/heads==loose、仅 packed 落后 → 送「packed-refs
+                                          陈旧」条目(pack-refs --all), 不再指向 update-ref(2026-10-07)
+- test_check_refs_branch_rollback_routes_to_rollback_entry
+                                          分支指针真被回退/丢失 → 仍送「分支 ref 被回退」条目
 """
 
 from __future__ import annotations
@@ -532,3 +538,42 @@ def test_message_kept_when_nothing_to_commit(repo, capsys):
 def test_check_refs_pass_on_fresh_repo(repo, monkeypatch):
     ok, detail = verify_ref_mod.check_refs()
     assert ok and detail == []
+
+
+def test_classify_form_pure():
+    """停手形态分流纯函数: 三处本地真值(HEAD/refs/heads/loose)一致且仅 packed 落后 → packed_stale;
+    其余(指针被回退/丢失、packed 一致或未 pack) → branch_rollback。"""
+    sha, old = "a" * 40, "b" * 40
+    assert verify_ref_mod.classify_form(sha, sha, sha, old) == "packed_stale"
+    assert verify_ref_mod.classify_form(sha, sha, sha, sha) == "branch_rollback"  # packed 一致
+    assert verify_ref_mod.classify_form(sha, sha, sha, "") == "branch_rollback"  # 未 pack
+    assert verify_ref_mod.classify_form(sha, old, old, old) == "branch_rollback"  # HEAD 领先指针
+    assert verify_ref_mod.classify_form(sha, old, "", old) == "branch_rollback"  # loose 丢失
+
+
+def test_check_refs_packed_stale_routes_to_pack_refs(repo, monkeypatch):
+    """2026-10-07 实证形态: HEAD==refs/heads==loose, 仅 packed-refs 落后 —— 停手指引必须送
+    「packed-refs 陈旧」条目(git pack-refs --all), 不能指向「分支 ref 被回退」的 update-ref 配方。"""
+    _git(repo, "pack-refs", "--all")  # develop 进 packed-refs(loose 文件被删)
+    _commit_file(repo, "new.txt", "new\n", "new")  # 提交只写 loose → packed 落后
+    ok, detail = verify_ref_mod.check_refs()
+    text = "\n".join(detail)
+    assert not ok
+    assert "packed-refs 落后" in text
+    assert "git pack-refs --all" in text
+    assert "「分支 ref 被回退」条目" not in text  # 不再把处置指向被回退条目
+    assert "建锚点防 GC" not in text  # 不再给被回退条目的配方
+    assert "update-ref refs/heads/develop" not in text  # 不再给治不好 packed 的 update-ref 配方
+
+
+def test_check_refs_branch_rollback_routes_to_rollback_entry(repo, monkeypatch):
+    """分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致) → 仍送「分支 ref 被回退」条目
+    (format-patch 留底 + update-ref 锚点 + reset --soft)。"""
+    _git(repo, "checkout", "--detach", "HEAD")
+    _commit_file(repo, "d.txt", "d\n", "detached")  # HEAD 前移但 develop 指针不动 → 指针被回退形态
+    ok, detail = verify_ref_mod.check_refs()
+    text = "\n".join(detail)
+    assert not ok
+    assert "分支 ref 被回退" in text
+    assert "update-ref refs/heads/develop" in text
+    assert "git pack-refs --all" not in text
