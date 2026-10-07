@@ -16,7 +16,7 @@
 | [implemented-testing.md](implemented-testing.md) | 摘要: 测试基座与副作用治理的落地记录; 语料回放线见 [roadmap.md](roadmap.md) 的对应小节。 | 做过没有, 测试, 副作用, 守阵, 基线 |
 | [implemented-tooling.md](implemented-tooling.md) | 摘要: 依赖现代化与知识库机制本身的落地记录。 | 做过没有, 依赖, uv, 知识库, 立档, 索引, 瘦身, skill 瘦身, references, 上限 |
 | [implemented-webui-history.md](implemented-webui-history.md) | implemented-webui.md 超 cap 后外迁的早期长条目(2026-09-15 三条 + 2026-09-17 第 9/10/11 轮修复 + 2026-09-18/19 四条 + 2026-09-24/25 五条 + 2026-09-26 四条 + **2026-10-03 续迁 2026-09-26~10-02 十六条** + **2026-10-05 续迁 2026-10-02~10-04 十三条**) —— 冷库流水; implemented-webui.md 再超 cap 时最老条目续迁至此, 新条目仍回 implemented-webui.md。 | 第九轮, 第十轮, 第十一轮, FX-01, R10-16, 历史流水, 外迁, 键盘快捷键, 前端文件拆分, 搜索语法, 设置页分组合并 |
-| [implemented-webui-perf.md](implemented-webui-perf.md) | 摘要: 前端性能、交互时序与状态色的落地记录 —— app.js 拆分 / 轮询节拍 / 跟手性三波次 / 乐观 UI / 状态色收口 / 组件库。 | 跟手性, 性能, 乐观 UI, 轮询节拍, 状态色, app.js 拆分, 组件库, 命令埋点 |
+| [implemented-webui-perf.md](implemented-webui-perf.md) | 摘要: 前端性能、交互时序与状态色的落地记录 —— app.js 拆分 / 轮询节拍 / 跟手性三波次 / 乐观 UI / 状态色收口 / 组件库 / rid 式增量同步。 | 跟手性, 性能, 乐观 UI, 轮询节拍, 状态色, app.js 拆分, 组件库, 命令埋点, 增量同步, delta, rid |
 | [implemented-webui.md](implemented-webui.md) | 摘要: 前端界面与视图的落地记录 —— 设置页 / 追剧视图 / 双界面 / 错误原因 / 各轮修复。 | WEB UI 做过没有, 前端功能, 设置页, 视图, 状态色, 修复轮次, 双界面 |
 | [known-bugs.md](known-bugs.md) | 来自 `想法.md` 的已知缺陷, 以及代码里仍留着的 TODO 清单。 | 已知 BUG, TODO, 待办, 缺陷, 未修 |
 | [roadmap.md](roadmap.md) | 尚未实现的功能线、仍敞着的设计取舍, 以及「已定案、别改回去」的方向性口径。 | 规划中, 下一步做什么, 路线图, 已定案口径, 别改回去, 未实现 |
