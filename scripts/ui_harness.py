@@ -382,33 +382,46 @@ def _restore_state(mgr, hashes):
     "上一次", 回弹会把它们还原成暂停态。
     """
     orig = getattr(mgr, "_harness_orig_state", None) or {}
-    touched = []
+    new_states = {}
     for h in hashes:
-        tor = mgr.store.by_hash.get(h)
-        if tor is None or h not in orig:
-            continue
-        tor.state = orig[h]
-        touched.append(h)
-    if touched:
-        _publish_with_delta(mgr, touched)
+        if h in orig and mgr.store.by_hash.get(h) is not None:
+            new_states[h] = orig[h]
+    if new_states:
+        _publish_with_delta(mgr, new_states)
 
 
-def _publish_with_delta(mgr, hashes):
+def _publish_with_delta(mgr, new_states):
     """发布"状态已变"的新版视图, 并**按增量协议保真**把脏行喂进增量时间线(plan 26-10-07-0414 S4)
 
-    真机上状态变化经主循环 sync 增量推导: store._apply 写 delta_fields(变化字段集)/
-    view_changed, flush_views 每拍排空(_drain_delta_locked)并入 _delta_pending,
-    _publish_locked 落代时折叠成时间线条目。桩这里直改 FakeTorrent.state, 两条推导都不经过
-    —— 若只 rebuild_views, 新代的 delta 桶恒空: 前端(S4 起默认带 delta=1)每轮都收
-    "full=false + 空 delta", 真值永远到不了行上, 增量合并链在冒烟里完全测不到
+    真机上状态变化经主循环 sync 增量推导: store._apply 应用增量 patch, 写 delta_fields
+    (变化字段集)/view_changed/dirty_groups 并推进 rounds_applied, flush_views 每拍排空
+    (_drain_delta_locked)并入 _delta_pending, _publish_locked 落代时折叠成时间线条目。
+
+    !桩保真(S6/S7 间回归修复, 2026-10-07): 本函数 S4 期曾直改 FakeTorrent.state + 手写
+      delta_fields/view_changed 绕过 _apply —— 当时能过; S5b 给 flush_views 加了 keyed
+      判定(「本拍确有新 _apply 轮(rounds_applied 前进)」才认行级键, 防 S1 残值误判),
+      绕过 ⇒ rounds_applied 不前进 ⇒ keyed=False ⇒ unkeyed_command_source ⇒ 命令真值轮
+      **恒 full**(增量被静默降级为全量, 违背"增量成为默认路径"的计划目标; S7 收尾冒烟
+      抓到, 净树 stash 对照确认非 S7 引入)。生产主循环每拍都跑 _apply 不受影响 ⇒ 这是
+      **桩失真不是生产回归**。
+    修法 = 让桩走生产同一条推导: 目标 state 作为增量 patch 喂给**真 store._apply**
+    (patch 形状与 qB sync 增量响应同形: 只含变化种子的变化字段), 不再手工预写任何
+    store 增量字段。FakeTorrent.apply_delta 与 TorrentRecord.apply_delta 同语义
+    (tests/helpers.py :805), patch 里 state 变化会推出 delta_fields/dirty_groups/
+    view_changed/rounds_applied++ 全套。若只 rebuild_views, 新代的 delta 桶恒空:
+    前端(S4 起默认带 delta=1)每轮都收 "full=false + 空 delta", 真值永远到不了行上
     (2026-10-07 S4 冒烟实测: 暂停后 delta.torrents=[] 而非真值行)。
-    所以这里补上同一推导(变化字段 = state), 走生产 flush_views(force=True) 排空+发布。
 
     !回弹(_restore_state)同样走这里 —— 否则回弹版同样推不出脏行, 前端行会永久停在
     "已暂停"的陈旧增量上(旧全量前端每轮整表替换, 天然掩盖了这一失真)。
     """
-    mgr.store.delta_fields = {h: frozenset({"state"}) for h in hashes}
-    mgr.store.view_changed = True
+    patches = {}
+    for h, s in new_states.items():
+        if mgr.store.by_hash.get(h) is not None:
+            patches[h] = {"state": s}
+    if not patches:
+        return
+    mgr.store._apply(patches, [], full=False)
     mgr.web.flush_views(force=True)
 
 
@@ -445,16 +458,20 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
         orig = {}
         mgr._harness_orig_state = orig
     hashes = _target_hashes(mgr, cmd, body)
+    new_states = {}
     for h in hashes:
         tor = mgr.store.by_hash.get(h)
         if tor is None:
             continue
         orig.setdefault(h, tor.state)  # 只记最初值(见 _restore_state)
         if act == "pause":
-            tor.state = _PAUSED_STATE
+            new_states[h] = _PAUSED_STATE
         else:
-            tor.state = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
-    _publish_with_delta(mgr, hashes)  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+            new_states[h] = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
+    # !不再直改 tor.state(那会让真 _apply 的 apply_delta 比不出变化), 目标 state 作为
+    #   增量 patch 经 _publish_with_delta 喂给真 _apply, 由 store 完成生产同款推导。
+    # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+    _publish_with_delta(mgr, new_states)
     if revert_ms > 0 and hashes:
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
