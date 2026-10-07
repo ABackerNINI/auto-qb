@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-07-0149">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-detail-panel-templates">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-qb-traffic-yaxis-annotation.md,memory-bank/testing/baselines/26-10-08-0559-webui-qb-traffic-yaxis-annotation.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="13 变体限速虚线/缺口斜纹注解层(uPlot 插件, P-03 备选)">
 <meta name="issue-summary" content="13 traffic 变体图上限速虚线/缺口斜纹注解层: 需暴露 uPlot 实例加注解插件, 动 qb_traffic_chart.js 现管线并过 test_frontend_qb_traffic_chart_wiring 守阵">
 <title>13 变体限速虚线/缺口斜纹注解层(uPlot 插件, P-03 备选) · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-0149-feat-webui-traffic-chart-annotation-layer</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 01:49</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,11 +163,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 01:49 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 05:40 — 用户指派认领（原话「补充文档 … 认领一并做」），与「流量图纵轴固定模式」同批实施，状态 <strong>In Progress</strong>。</li>
+      <li>2026-10-08 05:59 — 实施并验证完毕，状态 <strong>Done</strong>。认领方 = <code>memory-bank/tasks/26-10-08-webui-qb-traffic-yaxis-annotation.md</code>（本件 <code>doc-refs</code> 已回填，认领链双向闭合）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-08 05:40 按锚点重跑，现象<strong>仍复现</strong>（未消失）。① <code>drawer_tpl/13-traffic-chart-led-tall.js</code> 头注释仍写「P-03 拍板: v1 省略图上虚线/斜纹注解层」、<code>limitCell()</code> 仍以 KPI 文字格展示限速值（锚点与报告一致）；② <code>qb_traffic_chart.js</code> 建图管线此前只有 <code>setCursor</code> 一个钩子，无注解层挂点（现管线确未实现）；③ 守阵 <code>test_frontend_qb_traffic_chart_wiring</code> 在位（<code>tests/test_web.py</code> 已由 test-web-split 迁入 <code>tests/test_webui_static_dom_panel.py</code>，内容不变）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与 §06 建议修法同向，但落点从「13 变体」扩到<strong>共享图面</strong> —— 用户拍板，改道原因见下）：不走「暴露 uPlot 实例给 13 变体、插件整体放变体文件」的窄口径，而是<strong>直接把注解画进建图管线</strong> —— <code>hooks.drawClear</code> 画缺口斜纹（在系列<strong>之下</strong>）、<code>hooks.draw</code> 画限速虚线（在系列<strong>之上</strong>），三挂点 + 经典/所有变体一次全生效，且<strong>不需要对外暴露实例</strong>（净改动面反而更小）。画布口径（读 vendor 源码确认，非猜测）：uPlot 1.6.32 的 <code>ctx</code> <strong>不设 transform</strong>、坐标是<strong>设备像素</strong>，故新增 <code>_qbCanvasScale</code> 统一 <code>ctx.scale(uPlot.pxRatio)</code> 转 CSS 像素后按 <code>u.bbox/pxRatio + valToPos(v, scale)</code> 定位；色值走建图时读到的令牌（<code>tk</code>，与系列同源），不硬编码。缺口游程抽成模块级纯函数 <code>_qbGapRuns</code>（上下行<strong>皆</strong> null 才算缺口）。限速虚线只画<strong>落在可视值域内</strong>的限速（<code>0 &lt; 限速 &lt; yMax</code>）—— 自动模式下峰值未超限速时线在顶沿之上、自然不画（用户拍板「自动模式最大值超过限速才画」），固定模式下恒画；一条判据覆盖两态，不写模式分支。0（不限速）/null（未知）一律不画。</p>
+    <p><strong>改道原因</strong>：本件原为详情面板重构计划 P-03 的「13 变体」备选；本次与「流量图纵轴固定模式」同批实施时用户拍板注解层归<strong>共享图面</strong>（三挂点全生效）—— 限速虚线正好标注「限速+20%」的基准，两件事同源；且画布绘制天然属于建图管线，放变体文件反而要额外暴露实例。</p>
+    <p><strong>验证方式 / 测试数字</strong>：新增守阵 <code>tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_yaxis_and_annotation</code>（含 <code>_qbGapRuns</code> 与 <code>_qbYRange</code> 两组 node 真跑电池）+ 接线/持久化/模板/CSS 成对静态锚；<strong>红验三次</strong>（去掉峰值保底 / 摘 <code>drawClear</code> 钩子 / 断 y range 接线）均按预期变红，还原复绿。test.full <strong>2772 passed + 4 skipped / 0 failed / 48.44s / TOTAL 99%</strong>（基线切片 <code>26-10-08-0559</code>）；旁证 <code>npm run test:e2e:fast</code> <strong>8 passed</strong>（含「渲染健康: Vue 挂载成功…无运行时错误」）+ 真浏览器加载 vendor 与组件跑注解钩子自检<strong>零 pageerror</strong>、带钩子画布比不带多 9,870 个已绘制像素。13 变体自身的 KPI 限速文字格保留（其展示的是<strong>单种</strong>限速，与本次「全局限速」口径不同，属两件事）。</p>
   </section>
 
   <footer>

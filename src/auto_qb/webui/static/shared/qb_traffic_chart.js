@@ -51,6 +51,15 @@
  * 只落"选了哪档"这个用户意图, 写失败吞异常(刷新后回落默认), 不打断换窗。
  * 快捷键三入口(shortcuts.js): 打开全局图 Ctrl+Backslash / 详情面板流量页签 Alt+5 /
  * 窗口前后切换 [ ](后两条走 when 条件绑定, 仅流量图可见时消费键位)。
+ *
+ * 纵轴固定模式 + 画布注解层(2026-10-08, 用户拍板; 三挂点通用, issue 26-10-07-0149 认领一并做):
+ * 纵轴三态 auto(默认, 随数据峰值) / limit(全局限速 ×1.2) / manual(手动 MiB/s)。限速一律取
+ * **qB 全局限速上下行较大者**(三作用域同源); 峰值超出固定上限时**按峰值显示**(上限只保底,
+ * 不裁剪数据 —— _qbYRange)。偏好**三作用域各自独立**落 localStorage(qbYAxisStoreKey)。
+ * 注解层走 uPlot draw/drawClear 钩子画在**同一张画布**上(共享图面, 三挂点 + 经典/所有变体
+ * 全生效): 限速虚线(上下行各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
+ * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。画布坐标口径见
+ * _qbCanvasScale 注(uPlot 1.6.x ctx 无 transform, 坐标 = 设备像素)。
  */
 /* global uPlot */
 
@@ -89,6 +98,44 @@ function qbInitialWindow(scope) {
   return QB_WINDOW_DEFAULT;
 }
 
+/* 纵轴固定模式(2026-10-08 用户拍板, 三挂点通用): "auto" 自动(随数据峰值) / "limit" 限速+20%
+ * / "manual" 手动 MiB/s。限速一律取 **qB 全局限速**(三作用域同源, 用户拍板), 方向取上下行
+ * 限速的**较大者** —— 纵轴上下行共用一条, 取大者两条曲线都落在固定上限内。峰值超出固定上限
+ * 时**按峰值显示**(上限只保底, 不裁剪数据; 见 _qbYRange)。 */
+const QB_YAXIS_MODES = ["auto", "limit", "manual"];
+const QB_YAXIS_DEFAULT = "auto";
+const QB_YAXIS_LIMIT_FACTOR = 1.2;
+const QB_YAXIS_MIB = 1024 * 1024;
+
+/* 纵轴偏好存储键(2026-10-08 用户拍板粒度: **三作用域各自独立一份**, 与窗口档位「全局单独/
+ * 组种共用」不同) —— 全局图与单对象图的观察尺度习惯不同, 组与种子也各有偏好。 */
+const QB_YAXIS_STORE_KEYS = {
+  global: "autoqb.ui.qbYAxisGlobal",
+  torrent: "autoqb.ui.qbYAxisTorrent",
+  group: "autoqb.ui.qbYAxisGroup",
+};
+function qbYAxisStoreKey(scope) {
+  return QB_YAXIS_STORE_KEYS[scope] || QB_YAXIS_STORE_KEYS.global;
+}
+/* 纵轴初值(与 qbInitialWindow 同纪律: 只认合法模式与正数手动值, 坏值/无存储回落默认;
+ * localStorage 访问只在函数体内 —— 本文件会被 node 探针 eval, 顶层不得碰 DOM/BOM)。
+ * 返回 { mode, manual }: manual 单位 MiB/s, 0 = 未设值。 */
+function qbInitialYAxis(scope) {
+  try {
+    const raw = localStorage.getItem(qbYAxisStoreKey(scope));
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (v && QB_YAXIS_MODES.includes(v.mode)) {
+        const manual = Number(v.manual);
+        return { mode: v.mode, manual: Number.isFinite(manual) && manual > 0 ? manual : 0 };
+      }
+    }
+  } catch (e) {
+    /* 无存储/坏 JSON: 回落默认(偏好类读取失败不该影响启动) */
+  }
+  return { mode: QB_YAXIS_DEFAULT, manual: 0 };
+}
+
 /* 三挂点作用域表(模块级单一描述源): 字段名一律指到 state.js 根选项的字段(不进 app.mixin,
  * frontend-split 纪律); url(ctx, window) 组端点串, ctx = 单种 hash / 分组 key(经 this 取);
  * active = 该图此刻是否应显示/可拉(建图守卫 + 轮询 tick 跳过判据同源); stale = 在途响应
@@ -98,7 +145,7 @@ const _QB_SCOPES = {
   global: {
     host: "qbChartHost",
     window: "qbHistWindow", data: "qbHistData", loading: "qbHistLoading", error: "qbHistError",
-    hoverIdx: "qbHistHoverIdx", hoverLeft: "qbHistHoverLeft",
+    hoverIdx: "qbHistHoverIdx", hoverLeft: "qbHistHoverLeft", yaxis: "qbHistYAxis",
     url: (_ctx, w) => "/api/traffic/qb/global?window=" + w,
     ctx: null,
     // 面板 visible 同源守卫(drawerVisible): 面板只在主内容页渲染, 隐藏期还拉 = 对着不在 DOM 里的
@@ -111,7 +158,7 @@ const _QB_SCOPES = {
   torrent: {
     host: "qbChartHost",
     window: "qbTorrentWindow", data: "qbTorrentData", loading: "qbTorrentLoading", error: "qbTorrentError",
-    hoverIdx: "qbTorrentHoverIdx", hoverLeft: "qbTorrentHoverLeft",
+    hoverIdx: "qbTorrentHoverIdx", hoverLeft: "qbTorrentHoverLeft", yaxis: "qbTorrentYAxis",
     url: (h, w) => "/api/traffic/qb/torrent/" + h + "?window=" + w,
     ctx: (t) => t.drawer.hash,
     // 抽屉打开 + 种子形态 + 流量页签 + 展开态 + 种子页种子视图(面板 DOM 随 drawerVisible 出入,
@@ -124,7 +171,7 @@ const _QB_SCOPES = {
   group: {
     host: "qbChartHost",
     window: "qbGroupWindow", data: "qbGroupData", loading: "qbGroupLoading", error: "qbGroupError",
-    hoverIdx: "qbGroupHoverIdx", hoverLeft: "qbGroupHoverLeft",
+    hoverIdx: "qbGroupHoverIdx", hoverLeft: "qbGroupHoverLeft", yaxis: "qbGroupYAxis",
     // key = 分组视图 g.key(服务端 encode_group_key 产物, base64url 天然 URL 安全),
     // 与 delete_flow/commands 的 /api/groups/${k} 同款原样内插 —— 前端不自行编码(§07 表③)
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
@@ -188,6 +235,32 @@ function _qbIsolatedIdxs(u, sIdx) {
   for (let i = 0; i < v.length; i++) {
     if (v[i] != null && (i === 0 || v[i - 1] == null) && (i === v.length - 1 || v[i + 1] == null)) out.push(i);
   }
+  return out;
+}
+
+/* y 轴值域(模块级纯函数, 供 node 单测探针): 默认 [0, peak*1.05](无数据回落 1);
+ * 固定上限 cap>0 时取 max(cap, peak*1.05) —— 峰值超出固定上限**按峰值显示**(用户拍板:
+ * 固定上限只保底, 绝不裁剪数据; 峰值低于上限时上限即顶, 曲线高度可跨窗口对照)。 */
+function _qbYRange(dmax, cap) {
+  const peak = dmax > 0 ? dmax : 0;
+  const top = peak > 0 ? peak * 1.05 : 1;
+  return [0, cap > 0 ? Math.max(cap, top) : top];
+}
+
+/* 缺口游程(连续 null 桶的 [起, 止] 索引对; 模块级纯函数供 node 单测)。
+ * 判据 = **上下行皆 null**(后端整桶 null 时两列同 null; 单列 null 防御性不误判成缺口)。 */
+function _qbGapRuns(up, dl) {
+  const out = [];
+  let s = -1;
+  for (let i = 0; i < up.length; i++) {
+    const gap = up[i] == null && dl[i] == null;
+    if (gap && s < 0) s = i;
+    if (!gap && s >= 0) {
+      out.push([s, i - 1]);
+      s = -1;
+    }
+  }
+  if (s >= 0) out.push([s, up.length - 1]);
   return out;
 }
 
@@ -280,6 +353,50 @@ window.AQB_QB_TRAFFIC = {
     qbWindowNames() {
       return QB_WINDOW_NAMES;
     },
+    /* ---------------- 纵轴固定模式(2026-10-08; 三挂点各自独立) ---------------- */
+    /* 当前作用域的纵轴设置 {mode, manual}(字段名见 _QB_SCOPES.yaxis; 非流量形态返回 null) */
+    qbCurYAxis() {
+      const s = this.qbCurScope;
+      return s ? this[_QB_SCOPES[s].yaxis] : null;
+    },
+    qbYAxisMode() {
+      const y = this.qbCurYAxis;
+      return y ? y.mode : QB_YAXIS_DEFAULT;
+    },
+    qbYAxisManual() {
+      const y = this.qbCurYAxis;
+      return y ? y.manual : 0;
+    },
+    /* 工具条读数(当前生效上限, 自解释): 固定模式报上限值; 缺值/自动报回退说明 */
+    qbYAxisCapText() {
+      const s = this.qbCurScope;
+      if (!s) return "";
+      const mode = this[_QB_SCOPES[s].yaxis].mode;
+      const cap = this._qbYCapOf(s);
+      if (mode === "limit") {
+        return cap > 0 ? "上限 " + this.fmtSpeed(cap) + "(全局限速 ×1.2)" : "无全局限速 · 按自动";
+      }
+      if (mode === "manual") return cap > 0 ? "上限 " + this.fmtSpeed(cap) : "未设值 · 按自动";
+      return "自动(随数据峰值)";
+    },
+  },
+  /* 限速值变化(首次到手 / qB 重连 / 运行中改限速)时重排一次 y 轴 —— 长窗轮询间隔可夹到
+   * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与 drawer_templates.js
+   * 同款): 本 mixin 经 app.mixin 全局注入, <transition> 的 BaseTransition 假实例没有数据面,
+   * 写成 watch 选项会在其上求值即抛; mounted 里先按 this.drawer 守卫剔除假实例。 */
+  mounted() {
+    if (!this.drawer) return;  /* BaseTransition 等假实例无数据面: 跳过(真根实例恒有 drawer) */
+    this._qbLimitUnwatch = this.$watch(() => this._qbGlobalLimit(), () => {
+      for (const s of Object.keys(_QB_SCOPES)) {
+        if (_QB_SCOPES[s].active(this) && this._qbYCapOf(s) > 0) this._qbChartRescale(s);
+      }
+    });
+  },
+  beforeUnmount() {
+    if (this._qbLimitUnwatch) {
+      this._qbLimitUnwatch();
+      this._qbLimitUnwatch = null;
+    }
   },
   methods: {
     /* ---------------- 流量形态开关(三挂点并入抽屉; 打开 = 把抽屉切到流量形态) ----------------
@@ -372,6 +489,66 @@ window.AQB_QB_TRAFFIC = {
       try {
         localStorage.setItem(qbWinStoreKey(scope), w);
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* ---------------- 纵轴固定模式(2026-10-08; 三挂点各自独立持久化) ---------------- */
+    /* 全局限速(上下行**较大者**, bytes/s; 0 = 无限速或字段未知) —— 三作用域同源(用户拍板)。
+     * 取值单点 speedLimitBytes(dialogs.js, 与状态栏/速度染色同源; null = 未知, 0 = 不限速)。 */
+    _qbGlobalLimit() {
+      const { up, down } = this.speedLimitBytes || {};
+      let best = 0;
+      if (typeof up === "number" && up > best) best = up;
+      if (typeof down === "number" && down > best) best = down;
+      return best;
+    },
+    /* 该作用域的固定上限(bytes/s; 0 = 不固定, 回落自动)。"limit" = 全局限速 ×1.2(无全局限速
+     * 时回落 0); "manual" = 手动 MiB/s 换算(bytes/s, 未设值回落 0)。 */
+    _qbYCapOf(scope) {
+      const def = _QB_SCOPES[scope];
+      const y = def && this[def.yaxis];
+      if (!y) return 0;
+      if (y.mode === "limit") {
+        const lim = this._qbGlobalLimit();
+        return lim > 0 ? lim * QB_YAXIS_LIMIT_FACTOR : 0;
+      }
+      if (y.mode === "manual") return y.manual > 0 ? y.manual * QB_YAXIS_MIB : 0;
+      return 0;
+    },
+    /* 切纵轴模式(自动/限速+20%/手动): 落盘 + 立即重排 y 轴。不动数据/不重建图 —— 上限只改
+     * scale 值域, 重取数等于白拉一发(与换窗的 _qbLoad 路径刻意分开)。 */
+    qbSetYAxisMode(mode) {
+      const s = this.qbCurScope;
+      if (!s || !QB_YAXIS_MODES.includes(mode)) return;
+      const y = this[_QB_SCOPES[s].yaxis];
+      if (y.mode === mode) return;
+      y.mode = mode;  // Vue 3 深层响应式: 对象属性赋值即触发(根 data 里是普通对象)
+      this.persistQbYAxis(s);
+      this._qbChartRescale(s);
+    },
+    /* 改手动上限值(MiB/s; <=0 或非法 = 未设值, 按自动): 落盘 + 立即重排 */
+    qbSetYAxisManual(v) {
+      const s = this.qbCurScope;
+      if (!s) return;
+      const num = Number(v);
+      const manual = Number.isFinite(num) && num > 0 ? num : 0;
+      const y = this[_QB_SCOPES[s].yaxis];
+      if (y.manual === manual) return;
+      y.manual = manual;
+      this.persistQbYAxis(s);
+      this._qbChartRescale(s);
+    },
+    /* 纵轴偏好落盘(与 persistQbWindow 同纪律: 只落用户意图, 写失败吞异常; 键按 scope 分派) */
+    persistQbYAxis(scope) {
+      try {
+        const y = this[_QB_SCOPES[scope].yaxis];
+        localStorage.setItem(qbYAxisStoreKey(scope), JSON.stringify({ mode: y.mode, manual: y.manual }));
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* y 轴重排(上限变更/限速到手): 只重算 scale 并重画注解层, 不销毁重建、不重取数。
+     * setData(resetScales 默认 true) 会重跑 y range 与全部 draw 钩子(注解层随之上新)。 */
+    _qbChartRescale(scope) {
+      const u = this._qbCharts && this._qbCharts[scope];
+      if (!u || !u.root || !u.root.isConnected || !u.data) return;
+      u.setData([u.data[0], u.data[1], u.data[2]]);
     },
     /* 窗口前后切换(快捷键落点, 见 shortcuts.js traffic-win-prev/next): 按 QB_WINDOW_NAMES
      * 声明序步进, 端点夹取(不环绕 —— 从"全部"跳到"1分"是惊扰); 无流量形态(qbCurScope 空)时
@@ -514,6 +691,80 @@ window.AQB_QB_TRAFFIC = {
         axis: pick("--fg-dim", "--fg-muted"),
       };
     },
+    /* ---------------- 画布注解层(限速虚线 + 缺口斜纹; 2026-10-08 用户拍板: 共享图面, 三挂点全生效) ----------------
+     * uPlot 1.6.x 画布口径(读 vendor 源码确认): ctx **无 transform**, 坐标是**设备像素**
+     * (u.bbox 已是设备像素; valToPos(v, scale) 默认回 CSS 像素且**相对绘图区**) —— 这里统一
+     * ctx.scale(pxRatio) 转成 CSS 像素坐标系, 绝对坐标 = 绘图区左上(bbox/pxRatio) + valToPos
+     * (相对值), 线宽/虚线/间距用 CSS 值。色值一律走建图时读到的令牌(tk, 与系列同源), 不硬编码
+     * (换肤走整图重建, 新令牌随之生效)。 */
+    _qbCanvasScale(u) {
+      const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
+      u.ctx.save();
+      u.ctx.scale(px, px);
+      return px;
+    },
+    /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 采样缺口区间(null 桶游程)铺 45 度斜纹底纹,
+     * 图面自解释(与图例「缺口 = 无采样」文案同义)。裁剪在绘图区内, 不越 y 轴/时间轴。 */
+    _qbDrawGaps(u, tk) {
+      const up = u.data && u.data[1];
+      const dl = u.data && u.data[2];
+      if (!up || !dl || !u.bbox || !u.ctx) return;
+      const runs = _qbGapRuns(up, dl);
+      if (!runs.length) return;
+      const px = this._qbCanvasScale(u);
+      const ctx = u.ctx;
+      const L = u.bbox.left / px;
+      const T = u.bbox.top / px;
+      const W = u.bbox.width / px;
+      const H = u.bbox.height / px;
+      ctx.beginPath();
+      ctx.rect(L, T, W, H);
+      ctx.clip();
+      ctx.strokeStyle = tk.grid;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      const step = 8;  // 斜纹间距(CSS px)
+      for (const [a, b] of runs) {
+        const xa = L + u.valToPos(u.data[0][a], "x");
+        const xb = L + u.valToPos(u.data[0][b], "x");
+        for (let x = xa - H; x < xb; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x, T + H);
+          ctx.lineTo(x + H, T);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    },
+    /* 限速虚线(draw 钩子 = 画在系列**之上**): qB 全局限速上下行各一条水平虚线(色随方向, 与
+     * 系列同色义)。只画**落在可视值域内**的限速 —— 自动模式下峰值未超限速时该线在顶沿之上
+     * 不可见, 自然不画(用户拍板: 自动模式最大值超过限速才画); 固定模式下限速恒在顶沿之下,
+     * 恒画。0(不限速)/null(未知)一律不画。 */
+    _qbDrawLimits(u, tk) {
+      const ymax = u.scales && u.scales.y && u.scales.y.max;
+      if (!(ymax > 0) || !u.bbox || !u.ctx) return;
+      const lim = this.speedLimitBytes || {};
+      const lines = [];
+      if (typeof lim.up === "number" && lim.up > 0 && lim.up < ymax) lines.push([lim.up, tk.up]);
+      if (typeof lim.down === "number" && lim.down > 0 && lim.down < ymax) lines.push([lim.down, tk.down]);
+      if (!lines.length) return;
+      const px = this._qbCanvasScale(u);
+      const ctx = u.ctx;
+      const x0 = u.bbox.left / px;
+      const x1 = (u.bbox.left + u.bbox.width) / px;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1;
+      for (const [val, color] of lines) {
+        const y = u.bbox.top / px + u.valToPos(val, "y");
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
     _qbChartDestroy(scope) {
       if (!this._qbCharts) return;
       if (this._qbChartRos && this._qbChartRos[scope]) {
@@ -568,7 +819,9 @@ window.AQB_QB_TRAFFIC = {
         cursor: { x: true, y: false, drag: { x: false, y: false } },  // 观察用途: 只留十字线, 不做框选缩放
         scales: {
           x: { time: true },
-          y: { range: (u, dmin, dmax) => [0, dmax > 0 ? dmax * 1.05 : 1] },  // 速率从 0 起(口径: 无流量也是真值)
+          // 速率从 0 起(口径: 无流量也是真值); 固定上限走 _qbYCapOf(0 = 不固定), 峰值超出固定
+          // 上限时按峰值显示(上限只保底不裁剪, 见 _qbYRange)
+          y: { range: (u, dmin, dmax) => _qbYRange(dmax, this._qbYCapOf(scope)) },
         },
         axes: [
           { ...axis, values: (u, splits) => splits.map((ts) => this._qbTickLabel(ts, scope)) },
@@ -592,6 +845,10 @@ window.AQB_QB_TRAFFIC = {
           },
         ],
         hooks: {
+          // 注解层(共享图面, 三挂点全生效): drawClear = 系列之下(缺口斜纹), draw = 系列之上
+          // (限速虚线)。tk 由本次建图捕获 —— 令牌换肤走整图重建, 钩子随新图换新 tk。
+          drawClear: [(u) => this._qbDrawGaps(u, tk)],
+          draw: [(u) => this._qbDrawLimits(u, tk)],
           // 悬停取值通道: uPlot 算好 idx/px, Vue 侧渲染 tooltip(数据/格式化走组件既有成员)
           setCursor: [(u) => {
             const idx = u.cursor.idx;

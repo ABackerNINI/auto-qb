@@ -100,6 +100,26 @@
               </div>
               <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连)</span>
             </div>
+            <!-- 纵轴固定模式(2026-10-08, 三挂点通用): 自动 / 限速+20% / 手动 MiB/s 三态。
+                 限速取 qB 全局限速上下行较大者; 峰值超出固定上限时按峰值显示(上限只保底)。
+                 三作用域各自独立持久化(autoqb.ui.qbYAxis{Global,Torrent,Group}); 判据/绘制/
+                 落盘单点在 shared/qb_traffic_chart.js(qbSetYAxisMode/qbSetYAxisManual/_qbYRange)。
+                 右端读数 qbYAxisCapText 报当前生效上限(缺值/自动给回退说明) -->
+            <div class="qb-tools">
+              <span class="qb-tools-label">纵轴</span>
+              <div class="qb-seg">
+                <button :class="{ active: qbYAxisMode === 'auto' }"
+                        @click="qbSetYAxisMode('auto')">自动</button>
+                <button :class="{ active: qbYAxisMode === 'limit' }"
+                        @click="qbSetYAxisMode('limit')">限速+20%</button>
+                <button :class="{ active: qbYAxisMode === 'manual' }"
+                        @click="qbSetYAxisMode('manual')">手动</button>
+              </div>
+              <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
+                     min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
+                     @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
+              <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
+            </div>
             <!-- 静默续拉(2026-10-04 修「每隔几秒闪一次」+ 2026-10-05 修「空态也闪」): 已有结果时
                  loading 不接管正文 —— 整块 v-if 换成加载空态 = 每个轮询周期正文 DOM 被拆装一次
                  (闪的根源, 同 drawer-switch-flicker 的「快中间态本身就是闪」)。判据 qbCurPending

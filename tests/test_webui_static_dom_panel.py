@@ -31,6 +31,7 @@
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
+- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对
 """
 import json
 import os
@@ -429,6 +430,166 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
         scripts = _ui_manifest(ui)["scripts"]
         assert scripts.index("/shared/qb_traffic_chart.js") < scripts.index("/shared/state.js"), \
             f"{ui}: qb_traffic_chart.js 必须排在 state.js 之前(qbInitialWindow 定义处, 否则启动白屏)"
+
+
+# 纵轴固定模式 + 缺口游程 node 电池(2026-10-08): 两个模块级纯函数 _qbYRange/_qbGapRuns 真跑。
+# 无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+_NODE_QB_YAXIS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const checks = [];
+const eq = (n, got, want) => checks.push([n, JSON.stringify(got) === JSON.stringify(want)]);
+// 值域: 自动 = peak*1.05(无数据回落 1); 固定上限取 max(cap, peak*1.05) —— 峰值超上限按峰值显示
+eq("auto 无数据回落 1", _qbYRange(0, 0), [0, 1]);
+eq("auto 峰值", _qbYRange(100, 0), [0, 105]);
+eq("固定上限高于峰值(上限即顶)", _qbYRange(100, 120), [0, 120]);
+eq("峰值超固定上限按峰值显示", _qbYRange(200, 120), [0, 210]);
+eq("手动上限无峰值(上限即顶)", _qbYRange(0, 50), [0, 50]);
+// 缺口游程: 上下行皆 null 才算缺口(单列 null 防御性不误判)
+eq("缺口游程 中段+尾段", _qbGapRuns([1, null, null, 4, null], [1, null, null, 4, null]), [[1, 2], [4, 4]]);
+eq("缺口游程 前导", _qbGapRuns([null, 2, 3], [null, 2, 3]), [[0, 0]]);
+eq("缺口游程 全 null", _qbGapRuns([null, null], [null, null]), [[0, 1]]);
+eq("缺口游程 无缺口", _qbGapRuns([1, 2, 3], [1, 2, 3]), []);
+eq("单列 null 不算缺口", _qbGapRuns([null, 2], [1, 2]), []);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_traffic_yaxis_and_annotation():
+    """流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做)
+
+    用户需求: 纵轴最大值可固定(自动 / 限速+20% / 手动 MiB/s), 峰值超出固定上限时**按峰值显示**;
+    附限速虚线 + 缺口斜纹注解层(共享图面, 三挂点 + 经典/所有变体全生效)。钉住四条静默失效面:
+    1. 值域语义(_qbYRange 纯函数 node 真跑): 自动 = peak*1.05(无数据回落 1); 固定上限取
+       max(cap, peak*1.05) —— **上限只保底不裁剪**(峰值超上限按峰值显示, 用户拍板); 限速三
+       作用域同源 = qB 全局限速上下行**较大者**(单点 _qbGlobalLimit -> speedLimitBytes);
+    2. 缺口游程(_qbGapRuns node 真跑): 上下行**皆** null 才算缺口(单列 null 防御性不误判);
+    3. 持久化粒度 = **三作用域各自独立**(qbYAxisStoreKey 三键, 与窗口档位的「全局单独/组种
+       共用」不同); 初值 qbInitialYAxis 只认合法模式 + 正数手动值, 坏值/无存储回落默认;
+    4. 接线与三皮肤成对: 切模式/改值/落盘/重排四件 + 建图 y range 走 _qbYRange(_qbYCapOf(scope))
+       + draw/drawClear 两钩子画注解层(uPlot 1.6.x ctx 无 transform = 设备像素, 按 uPlot.pxRatio
+       换算; 限速线只画落在可视值域内的)+ 模板控件(.qb-seg 三态 + 手动输入 + 生效上限读数) +
+       CSS .qb-seg/.qb-yaxis-input 三皮肤成对。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
+
+    # 1. 常量单点(模式清单 / 默认 / 倍率 / MiB 换算)
+    assert 'const QB_YAXIS_MODES = ["auto", "limit", "manual"];' in js, "缺 QB_YAXIS_MODES 三态单点"
+    assert 'QB_YAXIS_DEFAULT = "auto"' in js, "缺 QB_YAXIS_DEFAULT(初值/坏值回落)"
+    assert "QB_YAXIS_LIMIT_FACTOR = 1.2" in js, "缺限速倍率 1.2 单点"
+    assert "QB_YAXIS_MIB = 1024 * 1024" in js, "缺手动值 MiB 换算单点"
+
+    # 2. 值域 + 缺口游程 node 真跑(无 node 静默跳过)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_QB_YAXIS_PROBE,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        assert proc.returncode == 0, f"纵轴值域/缺口游程 node 电池跑挂: {proc.stderr.strip()}"
+        rep = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert rep["failed"] == [], f"纵轴/缺口电池 {rep['ok']}/{rep['total']} 过, 失败: {rep['failed']}"
+
+    # 3. 限速来源单点(三作用域同源): qB 全局限速上下行较大者
+    lim = re.search(r"_qbGlobalLimit\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert lim, "缺 _qbGlobalLimit(全局限速单点)"
+    lb = lim.group(1)
+    assert "this.speedLimitBytes" in lb, "_qbGlobalLimit 必须取 speedLimitBytes 单点(与状态栏/速度染色同源)"
+    assert "up" in lb and "down" in lb and "best" in lb, \
+        "全局限速必须取上下行**较大者**(纵轴上下行共用一条, 取大者两条曲线都落在上限内)"
+
+    # 4. 上限派生单点: limit = 全局限速×1.2 / manual = MiB 换算 / auto = 0(不固定)
+    cap = re.search(r"_qbYCapOf\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert cap, "缺 _qbYCapOf(固定上限派生单点)"
+    cb = cap.group(1)
+    assert 'y.mode === "limit"' in cb and "* QB_YAXIS_LIMIT_FACTOR" in cb, "limit 模式必须 = 全局限速 ×1.2"
+    assert 'y.mode === "manual"' in cb and "* QB_YAXIS_MIB" in cb, "manual 模式必须按 MiB 换算"
+
+    # 5. 建图接线: y range 走纯函数 + 两钩子画注解层(共享图面)
+    assert "y: { range: (u, dmin, dmax) => _qbYRange(dmax, this._qbYCapOf(scope)) }" in js, \
+        "建图 y range 未接 _qbYRange/_qbYCapOf(固定上限不生效)"
+    assert "drawClear: [(u) => this._qbDrawGaps(u, tk)]" in js, "缺缺口斜纹 drawClear 钩子(画在系列之下)"
+    assert "draw: [(u) => this._qbDrawLimits(u, tk)]" in js, "缺限速虚线 draw 钩子(画在系列之上)"
+    for member in ("_qbCanvasScale(u)", "_qbDrawGaps(u, tk)", "_qbDrawLimits(u, tk)"):
+        assert member in js, f"缺画布注解层成员 {member}"
+    assert "uPlot.pxRatio" in js, "画布注解层必须按 uPlot.pxRatio 换算设备像素(uPlot ctx 无 transform)"
+    dl = re.search(r"_qbDrawLimits\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    assert dl and "lim.up < ymax" in dl.group(1) and "lim.down < ymax" in dl.group(1), \
+        "限速虚线必须只画落在可视值域内的限速(超顶沿的线不可见, 自动模式峰值未超限速即不画)"
+
+    # 6. 持久化: 三作用域各自独立 + 键单点 + 初值校验 + 落盘吞异常 + 切档重排(不重取数)
+    for scope, key in (
+        ("global", "autoqb.ui.qbYAxisGlobal"), ("torrent", "autoqb.ui.qbYAxisTorrent"),
+        ("group", "autoqb.ui.qbYAxisGroup")
+    ):
+        assert f'{scope}: "{key}"' in js, f"缺 {scope} 纵轴存储键(三作用域各自独立一份)"
+    yk = re.search(r"function qbYAxisStoreKey\(scope\) \{\n(.*?)\n\}", js, re.S)
+    assert yk and "QB_YAXIS_STORE_KEYS[scope]" in yk.group(1), "qbYAxisStoreKey 必须按 scope 单点分派"
+    yi = re.search(r"function qbInitialYAxis\(scope\) \{\n(.*?)\n\}", js, re.S)
+    assert yi, "缺 qbInitialYAxis(纵轴初值读取)"
+    yib = yi.group(1)
+    assert "localStorage.getItem(qbYAxisStoreKey(scope))" in yib and "QB_YAXIS_MODES.includes(v.mode)" in yib, \
+        "初值必须读存储且只认合法模式(坏值回落默认)"
+    assert "catch" in yib, "初值读取失败必须吞异常回落默认"
+    ps = re.search(r"persistQbYAxis\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert ps and "localStorage.setItem(qbYAxisStoreKey(scope)" in ps.group(1) and "catch" in ps.group(1), \
+        "persistQbYAxis 必须写键单点且吞写入异常(与 persistQbWindow 同纪律)"
+    for sig in ("qbSetYAxisMode(mode)", "qbSetYAxisManual(v)"):
+        blk = re.search(rf"{re.escape(sig)} \{{\n(.*?)\n    \}},", js, re.S)
+        assert blk, f"缺 {sig}(纵轴切换入口)"
+        bd = blk.group(1)
+        assert "this.persistQbYAxis(s);" in bd and "this._qbChartRescale(s);" in bd, \
+            f"{sig} 必须落盘 + 立即重排 y 轴(不改数据/不重建图, 重取数等于白拉一发)"
+    rs = re.search(r"_qbChartRescale\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert rs and "u.setData([u.data[0], u.data[1], u.data[2]])" in rs.group(1), \
+        "_qbChartRescale 必须走 setData 重算 scale(重跑 range 与 draw 钩子), 不重建图"
+    # 限速随主轮询变化重排(mounted 注册; 全局 mixin 必须先按 this.drawer 守卫剔除假实例)
+    assert "this._qbLimitUnwatch = this.$watch(() => this._qbGlobalLimit()" in js, \
+        "缺限速变化重排 watcher(长窗轮询可夹到 600s, 不重排则固定上限迟迟不生效)"
+    assert "if (!this.drawer) return;" in js, \
+        "mounted 注册必须先按 this.drawer 守卫剔除 BaseTransition 假实例(全局 mixin 会注入它)"
+
+    # 7. 作用域表三挂点各持 yaxis 字段(单一描述源)
+    scopes = re.search(r"const _QB_SCOPES = \{\n(.*?)\n\};", js, re.S)
+    assert scopes, "缺 _QB_SCOPES 作用域表"
+    sb = scopes.group(1)
+    for field in ('yaxis: "qbHistYAxis"', 'yaxis: "qbTorrentYAxis"', 'yaxis: "qbGroupYAxis"'):
+        assert field in sb, f"_QB_SCOPES 缺 {field}(三挂点各自独立纵轴字段)"
+
+    # 8. state.js 三字段按 scope 取初值 + computed 单点
+    for field in (
+        'qbHistYAxis: qbInitialYAxis("global")', 'qbTorrentYAxis: qbInitialYAxis("torrent")',
+        'qbGroupYAxis: qbInitialYAxis("group")'
+    ):
+        assert field in state_js, f"state.js 缺 {field}(根选项显式建字段)"
+    for comp in ("qbCurYAxis()", "qbYAxisMode()", "qbYAxisManual()", "qbYAxisCapText()"):
+        assert comp in js, f"缺纵轴 computed {comp}"
+
+    # 9. 模板控件(三挂点共用正文块内) + 生效上限读数
+    assert 'class="qb-tools"' in drawer_tpl and 'class="qb-seg"' in drawer_tpl, \
+        "drawer.html 缺纵轴控件(.qb-tools/.qb-seg)"
+    assert drawer_tpl.count("qbSetYAxisMode(") == 3, "纵轴三态各一个按钮(自动/限速+20%/手动)"
+    assert "v-if=\"qbYAxisMode === 'manual'\"" in drawer_tpl \
+        and "qbSetYAxisManual($event.target.value)" in drawer_tpl, \
+        "手动模式必须给输入框且 @change 走 qbSetYAxisManual"
+    assert "{{ qbYAxisCapText }}" in drawer_tpl, "缺生效上限读数(qbYAxisCapText)"
+
+    # 10. CSS 三皮肤成对(纵轴控件)
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合"),
+        (_ui_css_aggregate("console"), "console css 聚合"),
+        (_ui_css_aggregate("prism"), "prism css 聚合"),
+    ):
+        for rule in (".qb-tools {", ".qb-seg button.active", ".qb-yaxis-input"):
+            assert rule in css, f"{name} 缺 {rule}(纵轴控件三套 UI 必须成对改)"
 
 
 _DT_REGISTRY_NODE_PROBE = r"""

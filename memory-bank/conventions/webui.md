@@ -25,7 +25,8 @@
 - **选中态族**(`--sel-bg/--sel-line/--sel-bar`, 五主题均取**非绿**的靖蓝族): 只用于"用户选中"语义; **不得**再引用
   `--accent`/`--accent-soft` —— 品牌主题(orbit)下 `--accent` 与做种 `--green` 同族且明度接近, 用户分不出"选中"与"做种"。
 - **流量方向色族**(`--today-up/--today-down`, 星图 `:root` 一处 + 棱镜五主题各一处, 改值必须全处同改):
-  表达**上下行流量方向**, 消费面 = 历史流量图 SVG / qB 流量图(uPlot 经 `_qbChartTokens()` 现读令牌) /
+  表达**上下行流量方向**, 消费面 = 历史流量图 SVG / qB 流量图(uPlot 经 `_qbChartTokens()` 现读令牌;
+  2026-10-08 起同源还喂**画布注解层**: 限速虚线随方向取 `up/down`, 缺口斜纹取 `grid` 令牌) /
   状态栏今日统计(`.sb-item.sb-today .v-up/.v-down`) / 状态栏速度组方向图标(`.sb-spd .ico-up/.ico-down`) /
   i-traffic 组图标(内联 `var(--today-*)`)。取值 **上行 = `--indigo`(紫) / 下行 = `--teal`(蓝绿)**
   (2026-10-04 用户拍板交换)。⚠ 速度组图标**不要**改全局 `.ico-up/.ico-down`(绿/蓝, 还喂顶栏「种子」等

@@ -231,6 +231,9 @@ window.AQB_STATE = {
       qbHistError: "",
       qbHistHoverIdx: -1,     // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbHistHoverLeft: 0,     // 悬停十字线 px(tooltip 水平定位)
+      // 纵轴固定模式(2026-10-08): {mode: auto|limit|manual, manual: MiB/s}; 三作用域各自独立
+      // 落盘(autoqb.ui.qbYAxisGlobal), 初值函数 qbInitialYAxis 在 qb_traffic_chart.js
+      qbHistYAxis: qbInitialYAxis("global"),
       // qB 口径流量图 · 单种挂点(S5b, plan §07 表②): 种子详情抽屉「流量」页签; 开合由
       // drawer.kind === "seed" + drawer.tab === "traffic" 表达, 不设独立 open 字段(正文块在 drawer.html)
       qbTorrentWindow: qbInitialWindow("torrent"), // 十三档; 持久化 autoqb.ui.qbWinShared(与组共用)
@@ -239,6 +242,7 @@ window.AQB_STATE = {
       qbTorrentError: "",
       qbTorrentHoverIdx: -1,  // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbTorrentHoverLeft: 0,  // 悬停十字线 px(tooltip 水平定位)
+      qbTorrentYAxis: qbInitialYAxis("torrent"),  // 纵轴固定模式(三作用域各自独立: autoqb.ui.qbYAxisTorrent)
       // qB 口径流量图 · 分组挂点(S5b, §07 表③): 分组形态(与全局同挂抽屉, scope="group"),
       // 入口 = 组右键菜单「qB 口径流量图」; key = 分组视图 g.key(encode_group_key 通道)
       qbGroupKey: "",         // 打开时刻锁定的组 key(慢响应不污染下一次打开)
@@ -249,6 +253,7 @@ window.AQB_STATE = {
       qbGroupError: "",
       qbGroupHoverIdx: -1,    // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbGroupHoverLeft: 0,    // 悬停十字线 px(tooltip 水平定位)
+      qbGroupYAxis: qbInitialYAxis("group"),  // 纵轴固定模式(三作用域各自独立: autoqb.ui.qbYAxisGroup)
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。
