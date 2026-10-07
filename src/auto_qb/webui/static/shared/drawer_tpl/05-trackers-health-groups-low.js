@@ -171,8 +171,10 @@
     const m = String(t.msg || "").trim();
     const dim = b !== "warn"; /* 警告行 msg 着警示色, 其余弱化备注色 */
     const open = ui.openMsg[t.url] && m;
+    /* P3-4(报告 26-10-07-0542): 纯 span 模拟控件补键盘达(role=button + tabindex + aria-expanded) */
     const sub = m
-      ? T`<span class="dt05-sub${dim ? " dim" : ""}${open ? " open" : ""}" data-msg="${t.url}"
+      ? T`<span class="dt05-sub${dim ? " dim" : ""}${open ? " open" : ""}" role="button" tabindex="0"
+          aria-expanded="${open ? "true" : "false"}" data-msg="${t.url}"
           title="tracker 返回的原始 msg, 点击展开 / 收起">${m}</span>`
       : "";
     const stats = [];
@@ -229,8 +231,10 @@
   function render(host, ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
+    /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
+    const err = (ctx.drawer && ctx.drawer.trackersError) || "";
     /* 数据未变跳过重建(5s 通知频度下不闪不丢态) */
-    const sig = JSON.stringify(ts) + "|" + String(!!loading);
+    const sig = JSON.stringify(ts) + "|" + String(!!loading) + "|" + err;
     if (sig === ui.lastSig && host.firstChild) return;
     ui.lastSig = sig;
     const scroller = host.parentElement;
@@ -238,6 +242,12 @@
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
+      return;
+    }
+    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
+    if (err && !ts.length) {
+      host.replaceChildren(document.createRange().createContextualFragment(
+        T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {
@@ -283,7 +293,9 @@
         bodyHtml = sorted.map((t) => rowHtml(ctx, t)).join("");
       }
       return T`<section class="dt05-group dt05-g-${g.key}${folded}" data-grp="${g.key}">
-        <div class="dt05-ghead" data-fold title="点击折叠 / 展开">
+        <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
+        <div class="dt05-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
+             data-fold title="点击折叠 / 展开">
           <span class="dt05-badge"><i></i>${g.text} ${list.length}</span>
           <b>${g.text}</b>
           <span class="dt05-cnt">${g.cnt}</span>
@@ -309,6 +321,21 @@
       host.__dt05Click = null;
       host.__dt05Wired = false;
     }
+    if (host && host.__dt05Key) {
+      host.removeEventListener("keydown", host.__dt05Key);
+      host.__dt05Key = null;
+    }
+  }
+
+  /* P3-4: 纯 div/span 模拟控件的键盘触发 —— Enter/Space 转发 click 委托; 焦点在原生
+   * button/summary 等自身会发 click 的元素上时不接管(防 Enter 双重触发), 纯 div 模拟
+   * (折叠组头 data-fold / msg 展开行 data-msg)没有原生 click 才需要手动转发 */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-fold], [data-msg]")) return;
+    ev.preventDefault();
+    onClick(ev);
   }
 
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
@@ -317,6 +344,8 @@
     host.__dt05Wired = true;
     host.__dt05Click = onClick;
     host.addEventListener("click", onClick);
+    host.__dt05Key = onKeyDown;
+    host.addEventListener("keydown", onKeyDown);
   }
 
   function onClick(ev) {

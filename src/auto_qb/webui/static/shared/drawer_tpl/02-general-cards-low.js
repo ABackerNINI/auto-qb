@@ -158,7 +158,9 @@
     const folded = ui.folded[id] ? " folded" : "";
     const tone = hrTone ? " " + hrTone : "";
     return T`<section class="dt02-card${folded}${tone}" data-card="${id}">
-      <div class="dt02-card-h" data-fold title="点击折叠 / 展开">
+      <!-- P3-4(报告 26-10-07-0542): 折叠卡头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
+      <div class="dt02-card-h" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
+           data-fold title="点击折叠 / 展开">
         <b>${title}</b><span class="dt02-cnt">${cnt}</span>
         <svg class="ico ico-sm dt02-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
       </div>
@@ -300,6 +302,20 @@
       host.__dt02Click = null;
       host.__dt02Wired = false;
     }
+    if (host && host.__dt02Key) {
+      host.removeEventListener("keydown", host.__dt02Key);
+      host.__dt02Key = null;
+    }
+  }
+
+  /* P3-4: 折叠卡头纯 div 模拟控件(data-fold)的键盘触发 —— Enter/Space 转发 click 委托;
+   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-fold]")) return;
+    ev.preventDefault();
+    onClick(ev);
   }
 
   function onClick(ev) {
@@ -341,6 +357,8 @@
     host.__dt02Wired = true;
     host.__dt02Click = onClick;
     host.addEventListener("click", onClick);
+    host.__dt02Key = onKeyDown;
+    host.addEventListener("keydown", onKeyDown);
   }
 
   const _render = render;

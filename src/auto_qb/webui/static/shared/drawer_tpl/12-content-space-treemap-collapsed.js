@@ -361,6 +361,8 @@
     const files = fileList(ctx);
     const loading = ctx.drawer && ctx.drawer.filesLoading;
     const hash = (ctx.drawer && ctx.drawer.hash) || "";
+    /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
+    const err = (ctx.drawer && ctx.drawer.filesError) || "";
     /* 换种子: 选中/折叠/筛选随目标失效 */
     if (hash !== ui.lastHash) {
       ui.lastHash = hash;
@@ -369,13 +371,19 @@
       ui.fmiss = false;
     }
     /* 数据未变跳过重建 */
-    const sig = JSON.stringify(files) + "|" + String(!!loading);
+    const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
     if (sig === ui.lastSig && host.firstChild) return;
     ui.lastSig = sig;
     _ctx = ctx;
     if (loading && !files.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt12-load"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
+      return;
+    }
+    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有"; content 页签无轮询, 文案不承诺自动重拉 */
+    if (err && !files.length) {
+      host.replaceChildren(document.createRange().createContextualFragment(
+        T`<div class="dt12-load"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">文件列表加载失败, 数据不可用</span></div>`));
       return;
     }
     if (!files.length) {

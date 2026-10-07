@@ -441,7 +441,11 @@
   function headHtml(hasFiles) {
     const seg = (k, text, tip) => {
       const on = ui.sortKey === k;
-      return T`<span class="num dt07-sortable${on ? " on" : ""}${on && ui.sortDir === 1 ? " asc" : ""}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
+      /* P3-4(报告 26-10-07-0542): 排序表头纯 span 模拟控件补键盘达 + aria-sort(升/降/无
+       * 随当前排序态在渲染函数里输出) */
+      const asort = !on ? "none" : (ui.sortDir === 1 ? "ascending" : "descending");
+      return T`<span class="num dt07-sortable${on ? " on" : ""}${on && ui.sortDir === 1 ? " asc" : ""}"
+        role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
     };
     return T`<div class="dt07-head${hasFiles ? "" : " nofiles"}">
       <span>对端</span>
@@ -460,8 +464,10 @@
   function render(host, ctx) {
     const list = peerList(ctx);
     const loading = ctx.drawer && ctx.drawer.peersLoading;
+    /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
+    const err = (ctx.drawer && ctx.drawer.peersError) || "";
     /* 数据未变跳过重建(5s 通知频度下不闪不丢态) */
-    const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading);
+    const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
     if (sig === ui.lastSig && host.firstChild) return;
     ui.lastSig = sig;
     _ctx = ctx;
@@ -475,6 +481,12 @@
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
+      return;
+    }
+    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
+    if (err && !list.length) {
+      host.replaceChildren(document.createRange().createContextualFragment(
+        T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">用户列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!list.length) {
@@ -520,12 +532,24 @@
     if (ctx) _render(host, ctx);
   }
 
+  /* P3-4: 排序表头纯 span 模拟控件(data-sort)的键盘触发 —— Enter/Space 转发 click 委托;
+   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-sort]")) return;
+    ev.preventDefault();
+    onClick(ev);
+  }
+
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
   function wire(host) {
     if (host.__dt07Wired) return;
     host.__dt07Wired = true;
     host.__dt07Click = onClick;
     host.addEventListener("click", onClick);
+    host.__dt07Key = onKeyDown;
+    host.addEventListener("keydown", onKeyDown);
   }
 
   function destroy(host) {
@@ -536,6 +560,10 @@
       host.removeEventListener("click", host.__dt07Click);
       host.__dt07Click = null;
       host.__dt07Wired = false;
+    }
+    if (host && host.__dt07Key) {
+      host.removeEventListener("keydown", host.__dt07Key);
+      host.__dt07Key = null;
     }
   }
 

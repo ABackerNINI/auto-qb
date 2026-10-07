@@ -659,6 +659,9 @@ window.AQB_DRAWER = {
         open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
+        // P3-5(报告 26-10-07-0542): 三个列表 fetcher 的失败标记 —— 变体据此区分「失败」与
+        // 「真没有」(失败只 toast 时变体把空列表当空态显示, 用户误以为数据真的为空)
+        trackersError: "", filesError: "", peersError: "",
         switching: false,  // FX-29: 打开路径不存在"保留旧数据", 遮罩恒不亮(显式建字段见 vue-reactivity)
         kind: "seed", scope: "",
       };
@@ -756,8 +759,12 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/trackers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.trackers = Array.isArray(r) ? r : [];
+        this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
+        // P3-5: 失败标记落 state(过期响应不动它, 属于在途的新目标); 5s 轮询期(silent)也落,
+        // 否则静默失败变体永远停在空态
+        if (!this._drawerStale(hash, seq)) this.drawer.trackersError = e.message || "tracker 列表获取失败";
       } finally {
         // 模板核心层(计划 26-10-06-0838 S1)落袋通知放 finally: 变体(dt04/05/06)只在 _dtNotify
         // 时重渲染, 通知必须发生在 loading 清掉之后 —— 否则空列表变体会停在"正在加载…",
@@ -776,8 +783,10 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/files`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.files = Array.isArray(r) ? r : [];
+        this.drawer.filesError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
+        if (!this._drawerStale(hash, seq)) this.drawer.filesError = e.message || "文件列表获取失败";
       } finally {
         if (!this._drawerStale(hash, seq)) {
           this.drawer.filesLoading = false;
@@ -793,8 +802,10 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.peers = r || { peers: [] };
+        this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
+        if (!this._drawerStale(hash, seq)) this.drawer.peersError = e.message || "peer 列表获取失败";
       } finally {
         if (!this._drawerStale(hash, seq)) {
           this.drawer.peersLoading = false;
@@ -902,6 +913,8 @@ window.AQB_DRAWER = {
     _drawerPeekApply(hash) {
       this.drawer.hash = hash;
       this.drawer.error = "";  // error 属于上一个目标(如「种子不存在或已被删除」), 换目标即作废
+      // P3-5: 三个列表失败标记同口径作废(新目标的失败态由随后的静默拉取重新落)
+      this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";
       const m = this.memberByHash.get(hash);
       this.drawer.detail = m ? { ...m, __peek: true } : null;
       const tab = this.drawer.tab;
@@ -924,6 +937,8 @@ window.AQB_DRAWER = {
       this.drawer.hash = hash;
       this.drawer.loading = true;
       this.drawer.error = "";
+      // P3-5: 三个列表失败标记同 error 口径作废(属于上一个目标, 新目标由 fetcher 重新落)
+      this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";
       this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));
       this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
       this.filePrio.visible = false;  // 内容页签小菜单与行选中跨种子失效(与 drawerTab/closeDrawer 同口径)

@@ -234,8 +234,10 @@
   function render(host, ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
+    /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
+    const err = (ctx.drawer && ctx.drawer.trackersError) || "";
     /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 序列化比对比浅比较更强, 开销可忽略 */
-    const sig = JSON.stringify(ts) + "|" + String(!!loading);
+    const sig = JSON.stringify(ts) + "|" + String(!!loading) + "|" + err;
     if (sig === ui.lastSig && host.firstChild) return;
     ui.lastSig = sig;
     /* 滚动位置自保: 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 只读写 scrollTop 不碰结构 */
@@ -244,6 +246,12 @@
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
+      return;
+    }
+    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
+    if (err && !ts.length) {
+      host.replaceChildren(document.createRange().createContextualFragment(
+        T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {

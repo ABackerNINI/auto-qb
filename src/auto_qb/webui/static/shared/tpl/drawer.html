@@ -35,10 +35,10 @@
                   :value="dtTplCurrent" @change="dtPick($event)">
             <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
           </select>
-          <button class="drawer-fold" @click="toggleDrawerCollapse()">
+          <button class="drawer-fold" aria-label="收起/展开详情面板" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
-          <button class="drawer-close" @click="closeDrawer()">
+          <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </header>
@@ -70,10 +70,10 @@
                   :value="dtTplCurrent" @change="dtPick($event)">
             <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
           </select>
-          <button class="drawer-fold" @click="toggleDrawerCollapse()">
+          <button class="drawer-fold" aria-label="收起/展开详情面板" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
-          <button class="drawer-close" @click="closeDrawer()">
+          <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </header>

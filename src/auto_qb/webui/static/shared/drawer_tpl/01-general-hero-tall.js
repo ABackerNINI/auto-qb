@@ -251,7 +251,9 @@
   function secHtml(sec) {
     const folded = ui.folded[sec.title] ? " folded" : "";
     return T`<section class="dt01-sec${folded}" data-sec="${sec.title}">
-      <div class="dt01-sec-h" data-fold title="点击折叠 / 展开">
+      <!-- P3-4(报告 26-10-07-0542): 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
+      <div class="dt01-sec-h" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
+           data-fold title="点击折叠 / 展开">
         <svg class="ico ico-sm dt01-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
         <b>${sec.title}</b><span class="dt01-cnt">${sec.rows.length} 项</span>
         ${sec.sum ? R(T`<span class="dt01-sum">${sec.sum}</span>`) : ""}
@@ -303,6 +305,10 @@
       host.__dt01Click = null;
       host.__dt01Wired = false;
     }
+    if (host && host.__dt01Key) {
+      host.removeEventListener("keydown", host.__dt01Key);
+      host.__dt01Key = null;
+    }
   }
 
   function onClick(ev) {
@@ -337,12 +343,24 @@
     if (text) ctx.copyText(text.textContent, label ? label.textContent : "");
   }
 
+  /* P3-4: 折叠组头纯 div 模拟控件(data-fold)的键盘触发 —— Enter/Space 转发 click 委托;
+   * 焦点在原生 button/summary 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-fold]")) return;
+    ev.preventDefault();
+    onClick(ev);
+  }
+
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
   function wire(host) {
     if (host.__dt01Wired) return;
     host.__dt01Wired = true;
     host.__dt01Click = onClick;
     host.addEventListener("click", onClick);
+    host.__dt01Key = onKeyDown;
+    host.addEventListener("keydown", onKeyDown);
   }
 
   const _render = render;

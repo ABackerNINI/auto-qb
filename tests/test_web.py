@@ -50,6 +50,7 @@
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542) —— dt06/07/08/09 四变体整帧重建路径纵横滚动位成对自保(scroller=host.parentElement 上既有 scrollTop 保存旁补 scrollLeft 读取 + 整帧 replaceChildren(html) 后成对恢复, 恢复次序 scrollLeft 先 scrollTop 后), 任一变体只存不还或整体缺失即红
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3232,12 +3233,16 @@ def test_drawer_tpl_variant_field_icons():
             f"drawer_tpl/{name}: 字段行未消费行级 icon 数据(Q2: 变体丢弃 drawerGeneralSections 图标字段复发)"
         assert '"#i-download": "ico-t-io"' in text, \
             f"drawer_tpl/{name}: 缺 icoTone 同表派生(着色机制与经典链漂移)"
-        for tone in ("ico-t-io", "ico-t-cap", "ico-t-time", "ico-t-site", "ico-t-sw", "ico-t-id", "ico-t-path", "ico-t-state"):
+        for tone in (
+            "ico-t-io", "ico-t-cap", "ico-t-time", "ico-t-site", "ico-t-sw", "ico-t-id", "ico-t-path", "ico-t-state"
+        ):
             assert f".{tone} {{" in text, \
                 f"drawer_tpl/{name}: 缺 .{tone} 着色 CSS(经典 .f-row .ico-t-* 作用域在变体行不命中, 必须自带色表)"
 
     # 3. traffic 三变体: KPI/解读行含 sprite 图标引用(上下行累计为基线, 任一变体缺即退化为纯文字)
-    for name in ("13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js", "15-traffic-adaptive-collapsed.js"):
+    for name in (
+        "13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js", "15-traffic-adaptive-collapsed.js"
+    ):
         text = open(os.path.join(vdir, name), encoding="utf-8").read()
         for icon in ("#i-upload", "#i-download"):
             assert icon in text, \
@@ -3282,6 +3287,102 @@ def test_drawer_tpl_table_variants_scrollleft_restore():
         st = "scroller.scrollTop = scroll;"
         assert text.index(restore) < text.index(st), \
             f"drawer_tpl/{name}: 恢复次序漂移(成对恢复应 scrollLeft 先 scrollTop 后, 同步本守阵)"
+
+
+def test_drawer_tpl_a11y_and_fetch_error_states():
+    """详情面板变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) ——
+    核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对, 仅 svg 无文字读屏不可达);
+    纯 div/span 模拟控件 role="button" tabindex="0": 01/02/03/05/08 折叠组头(含 aria-expanded)
+    + 07/08/09 排序表头(含 aria-sort 升/降/无随排序态输出)+ 05/06 msg 展开行; keydown 委托与
+    click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space 转发前排除原生 button/summary 等
+    自身发 click 的元素(防双重触发); 三个列表 fetcher 失败标记(trackersError/filesError/
+    peersError)成功落袋即清、换目标作废; 九个 fetch 型变体(04/05/06/07/08/09/10/11/12)
+    空列表先判错误态再判空态, trackers/peers 文案带自动刷新重试口径(5s 轮询真实存在)、
+    content 文案不承诺自动重试(content 页签无轮询)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. 核心层两钮 aria-label(种子/流量两头部成对各一处; 原生 button 键盘本可达, 缺的只是可访问名)
+    assert drawer_tpl.count('<button class="drawer-fold" aria-label="收起/展开详情面板"') == 2, \
+        "drawer.html: drawer-fold 两钮缺 aria-label(种子/流量两头部成对)"
+    assert drawer_tpl.count('<button class="drawer-close" aria-label="关闭详情面板"') == 2, \
+        "drawer.html: drawer-close 两钮缺 aria-label(种子/流量两头部成对)"
+
+    # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
+    fold_variants = (
+        "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
+        "05-trackers-health-groups-low.js", "08-peers-groups-low.js"
+    )
+    sort_variants = ("07-peers-dashboard-tall.js", "08-peers-groups-low.js", "09-peers-density-collapsed.js")
+    msg_variants = ("05-trackers-health-groups-low.js", "06-trackers-table-collapsed.js")
+    all_a11y = sorted(set(fold_variants + sort_variants + msg_variants))
+    for name in all_a11y:
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        if name in fold_variants:
+            assert re.search(r'data-fold[^>]*role="button"|role="button"[^>]*data-fold', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: 折叠组头缺 role=button(P3-4: 纯 div+click 键盘不可达)"
+            assert 'aria-expanded="' in text, \
+                f"drawer_tpl/{name}: 折叠组头缺 aria-expanded(读屏不知道折叠态)"
+        if name in sort_variants:
+            assert re.search(r'role="button"[^>]*aria-sort="|aria-sort="[^>]*data-sort', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: 排序表头缺 role=button + aria-sort(P3-4: 升/降/无随排序态输出)"
+            assert 'ui.sortDir === 1 ? "ascending" : "descending"' in text, \
+                f"drawer_tpl/{name}: aria-sort 未按当前排序态输出升降(只在渲染函数里随态输出)"
+        if name in msg_variants:
+            assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
+        assert 'tabindex="0"' in text, f"drawer_tpl/{name}: 模拟控件缺 tabindex=0(键盘不可聚焦)"
+        # keydown 委托与 click 委托成对挂宿主(纯 div 模拟无原生 click, Enter/Space 手动转发)
+        assert 'addEventListener("keydown", onKeyDown)' in text, \
+            f"drawer_tpl/{name}: 缺 keydown 委托(模拟控件键盘不触发)"
+        assert 'removeEventListener("keydown"' in text, \
+            f"drawer_tpl/{name}: destroy 未摘 keydown 监听(换变体监听叠加)"
+        # 双重触发去重: 焦点在原生交互元素上时不转发(原生 Enter 本来就发 click)
+        assert 'closest("button, input, select, textarea, a[href], summary")' in text, \
+            f"drawer_tpl/{name}: keydown 转发未排除原生交互元素(Enter 会 click+keydown 双重触发)"
+
+    # 3. drawer.js 失败标记: 显式建字段(vue-reactivity 口径) + catch 落标记 + 成功清 + 换目标作废
+    for fld in ("trackersError", "filesError", "peersError"):
+        assert f'{fld}: ""' in drawer_js, \
+            f"drawer.js: drawer 初值缺 {fld} 显式建字段(vue-reactivity 坑: 后补属性不进响应式)"
+        assert f"this.drawer.{fld} = e.message" in drawer_js, \
+            f"drawer.js: {fld} 未在 fetcher catch 落失败标记(P3-5: 变体拿不到区分信号)"
+        assert f'this.drawer.{fld} = "";' in drawer_js, \
+            f"drawer.js: {fld} 成功落袋后未清(上一次失败永久钉住错误态)"
+    assert 'this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";' in drawer_js, \
+        "drawer.js: 换目标(peek/软切换)未作废三个失败标记(旧目标错误态串显到新目标)"
+
+    # 4. 九个 fetch 型变体: 错误态先于空态; 文案与轮询事实对应(trackers/peers 5s 轮询=可写自动重试;
+    #    content 无轮询=只陈述失败, 不得虚构「稍后自动重试」)
+    err_expect = {
+        "04-trackers-status-cards-tall.js": ("trackersError", "tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "05-trackers-health-groups-low.js": ("trackersError", "tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "06-trackers-table-collapsed.js": ("trackersError", "tracker 列表加载失败", "暂无 tracker"),
+        "07-peers-dashboard-tall.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
+        "08-peers-groups-low.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
+        "09-peers-density-collapsed.js": ("peersError", "用户列表加载失败", "暂无已连接用户"),
+        "10-content-tree-detail-tall.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+        "11-content-treegrid-batch-low.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+        "12-content-space-treemap-collapsed.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+    }
+    for name, (fld, err_text, empty_text) in err_expect.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert f"ctx.drawer.{fld}" in text, \
+            f"drawer_tpl/{name}: 变体未读 {fld}(P3-5: 失败与空列表同形态回潮)"
+        assert err_text in text, \
+            f"drawer_tpl/{name}: 缺错误态文案「{err_text}」(P3-5: 失败态分支被摘)"
+        assert text.index(err_text) < text.index(empty_text), \
+            f"drawer_tpl/{name}: 错误态分支必须先于空态分支(空态先行 = 失败仍显示「{empty_text}」)"
+        if name[:2] in ("10", "11", "12"):
+            # content 组无轮询: 失败文案只陈述失败, 不得虚构「稍后自动重试」承诺(P3-5 口径)
+            assert "自动重试" not in text and "自动刷新" not in text, \
+                f"drawer_tpl/{name}: content 组无轮询, 失败文案不得虚构自动重试承诺(P3-5 口径)"
+        else:
+            # trackers/peers 组 5s 轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
+            assert "下次自动刷新时重试" in text, \
+                f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(5s 轮询真实)"
 
 
 def test_drawer_tpl_classic_default():

@@ -13,9 +13,10 @@
  * ---------------- ctx 白名单契约(变体只许读/调下列成员) ----------------
  * 变体 render(host, ctx) 的 ctx 就是根组件实例(Vue mixin 方法域全在 this 上)。白名单面:
  *   读(状态): ctx.drawer.detail / .trackers / .files / .peers 及各 *Loading 态 / .error /
- *             .hash / .tab / .collapsed; ctx.qbCurData / qbCurPoints / qbCurSummary /
- *             qbCurWindow / qbCurError / qbCurPending(流量三域); ctx.memberByHash;
- *             ctx.flags(渐进字段门控)。
+ *             各列表失败标记 trackersError / filesError / peersError(P3-5, 报告 26-10-07-0542:
+ *             fetch 型变体据此区分「失败」与「真没有」) / .hash / .tab / .collapsed; ctx.qbCurData /
+ *             qbCurPoints / qbCurSummary / qbCurWindow / qbCurError / qbCurPending(流量三域);
+ *             ctx.memberByHash; ctx.flags(渐进字段门控)。
  *   调(格式化): fmtSpeed / fmtSpeedOrDash / fmtSize / fmtSizeOrDash / fmtDuration / fmtEta /
  *             fmtTs / fmtPeersQb / drawerFileRows / drawerPeerRows / drawerTrackerStatus /
  *             drawerTrackerVirtual / drawerGeneralSections / drawerTitle。

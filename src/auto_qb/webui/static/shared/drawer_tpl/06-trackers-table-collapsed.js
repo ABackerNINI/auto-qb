@@ -182,8 +182,10 @@
     const m = String(t.msg || "").trim();
     const open = ui.openMsg[t.url] && m;
     const stText = b === "err" ? bk.text : ctx.drawerTrackerStatus(t.status) || bk.text;
+    /* P3-4(报告 26-10-07-0542): msg 展开行纯 span 模拟控件补键盘达(role=button + tabindex) */
     const msg = m
-      ? T`<span class="dt06-msg${open ? " open" : ""}" data-msg="${t.url}"
+      ? T`<span class="dt06-msg${open ? " open" : ""}" role="button" tabindex="0"
+          aria-expanded="${open ? "true" : "false"}" data-msg="${t.url}"
           title="tracker 返回的原始 msg, 点击展开 / 收起">${m}</span>`
       : "";
     const sd = ctx.fmtPeersQb(t.num_seeds, t.num_complete);
@@ -218,9 +220,12 @@
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
     const d = (ctx.drawer && ctx.drawer.detail) || null;
+    /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
+    const err = (ctx.drawer && ctx.drawer.trackersError) || "";
     /* 数据未变跳过重建(含汇报倒计时: detail.reannounce_in 变了也要刷) */
     const sig = JSON.stringify(ts) + "|" + String(!!loading)
-      + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "");
+      + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "")
+      + "|" + err;
     if (sig === ui.lastSig && host.firstChild) return;
     ui.lastSig = sig;
     const scroller = host.parentElement;
@@ -231,6 +236,12 @@
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
+      return;
+    }
+    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
+    if (err && !ts.length) {
+      host.replaceChildren(document.createRange().createContextualFragment(
+        T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {
@@ -276,6 +287,9 @@
    * 比例条 + 计数; 返回已转义 HTML(核心以 v-html 消费) */
   function summary(ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
+    /* P3-5: 收起态摘要同样区分失败与空(重试口径真实: 本页签 5s 轮询会自动重拉) */
+    const err = (ctx.drawer && ctx.drawer.trackersError) || "";
+    if (err && !ts.length) return T`tracker 列表加载失败, 将重试`;
     if (!ts.length) return T`暂无 tracker`;
     const n = countsOf(ctx, ts);
     const real = ts.length - ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
@@ -307,6 +321,20 @@
       host.__dt06Click = null;
       host.__dt06Wired = false;
     }
+    if (host && host.__dt06Key) {
+      host.removeEventListener("keydown", host.__dt06Key);
+      host.__dt06Key = null;
+    }
+  }
+
+  /* P3-4: 纯 span 模拟控件(msg 展开行 data-msg)的键盘触发 —— Enter/Space 转发 click 委托;
+   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-msg]")) return;
+    ev.preventDefault();
+    onClick(ev);
   }
 
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用) */
@@ -315,6 +343,8 @@
     host.__dt06Wired = true;
     host.__dt06Click = onClick;
     host.addEventListener("click", onClick);
+    host.__dt06Key = onKeyDown;
+    host.addEventListener("keydown", onKeyDown);
   }
 
   function onClick(ev) {
