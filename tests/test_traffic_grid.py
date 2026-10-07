@@ -26,6 +26,17 @@
 - test_v4_earliest_row_ts_blocks_and_agg: (S3b)earliest 计入 day/month 行 —— 块首槽(B.start 含块首 z 游程)+ agg 三层全算; 双空 = None
 - test_v4_series_points_live_tail_merge_dedup: (S6 验收追加)活尾合流 —— 磁盘部分块+活尾 == 整块桶点(无真空 null 点);
   滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏); 无块纯活尾(z 游程 0 线)照常出点
+- test_v4_rate_from_totals_window_seed_and_baseline: (26-10-07-2127 S1)速率口径变换 —— 窗首有种子(前驱桶点作差分基线)后继首桶 rate = delta/w;
+  无种子 = 窗首基线缺失 rate=None; totals 与 w 原样保留(totals 通道不受影响)
+- test_v4_rate_from_totals_reset_per_direction_chain_unbroken: 重置桶(cur<last)rate 派不出 -> None(dl/up 逐向独立); 链推进独立于 rate 可派
+  —— 重置桶的后继对其快照差分仍有基线(链永不被 rate 缺失打断)
+- test_v4_rate_from_totals_zchain_vacuum_null_passthrough: z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点原样透传且断链;
+  断链后基线缺失 rate=None 而 totals 保留(观测面缺口不吞快照)
+- test_v4_rate_from_totals_wide_bucket_byte_conservation: 宽桶 rate = delta/w —— 逐桶 rate×w = delta 且 Σ(rate×w) = Σ delta 字节守恒(整除构造)
+- test_v4_grid_obs_rate_null_totals_valid_exemption: (D4 豁免)rate=None 但 totals 有效的桶点只更新覆盖末端与快照链(rate 权重记 0, 逐向独立)
+  —— 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线不断); 混合覆盖按速率覆盖秒加权; 真 null 点仍不参与
+- test_group_rate_points_over_transformed_obs_unchanged: 组求和口径不变(S1 钉住)—— group_null_mask/group_rate_points 消费变换后 obs
+  无需改动, 豁免桶 0 线按 0 计入组
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -38,6 +49,7 @@ import pytest
 
 from auto_qb.core.traffic_grid import (
     BucketObs,
+    V4PointEntry,
     WINDOW_SPECS,
     build_grid,
     build_month_grid,
@@ -49,6 +61,7 @@ from auto_qb.core.traffic_grid import (
     v4_agg_obs,
     v4_earliest_row_ts,
     v4_grid_obs,
+    v4_rate_from_totals,
     v4_series_points,
     v4_series_slots,
     v4_totals_points,
@@ -699,3 +712,129 @@ def test_v4_series_points_live_tail_merge_dedup():
     pts = v4_series_points((), start, start + 200, tail_slots=v4_live_tail_slots(tail_only))
     assert pts and all(p.dl_rate == 0 and p.up_rate == 0 and p.dl_total == 9 for p in pts)
     assert not any(p.dl_rate is None for p in pts)
+
+
+# ---------- v4 速率口径变换(计划 26-10-07-2127 S1: 方案 B 计数器差分区间平均, 纯读侧) ----------
+
+
+def test_v4_rate_from_totals_window_seed_and_baseline():
+    """速率口径变换 —— 窗首有种子(前驱桶点作差分基线): 后继首桶 rate = delta/w, 种子自身
+    基线缺失 rate=None(v4_grid_obs 窗外过滤天然不外发, 接线属 S2); 无种子 = 窗首基线缺失
+    rate=None; totals 与 w 原样保留(totals 通道不受影响)"""
+    pts = (
+        V4PointEntry(970, 5, 5, 1000, 2000, w=30),  # 窗外前驱桶点(D3 种子形态)
+        V4PointEntry(1000, 99, 99, 1600, 2600, w=30),  # delta 600/600 -> 区间平均 20/20
+        V4PointEntry(1030, 0, 0, 1600, 2600, w=30),  # z 形态桶: delta 0 -> 0 线续链
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [(970, None, None), (1000, 20, 20), (1030, 0, 0)]
+    assert [(p.dl_total, p.up_total, p.w) for p in out] == [
+        (1000, 2000, 30),
+        (1600, 2600, 30),
+        (1600, 2600, 30),
+    ]
+    # 无种子: 同列去掉前驱 -> 首桶基线缺失 rate=None, 其余不变
+    out2 = v4_rate_from_totals(pts[1:])
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out2] == [(1000, None, None), (1030, 0, 0)]
+
+
+def test_v4_rate_from_totals_reset_per_direction_chain_unbroken():
+    """重置桶(cur<last)rate 派不出 -> None(dl/up 逐向独立, 对齐采样器 _delta 口径);
+    链推进独立于 rate 可派 —— 重置桶的后继对其快照差分仍有基线(链永不被 rate 缺失打断)"""
+    pts = (
+        V4PointEntry(1000, 1, 1, 1000, 500, w=30),
+        V4PointEntry(1030, 1, 1, 100, 1100, w=30),  # dl 重置(100<1000)-> dl None; up +600 -> 20
+        V4PointEntry(1060, 1, 1, 700, 1400, w=30),  # 对重置桶快照差分(链不断): +600/+300 -> 20/10
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1000, None, None),  # 窗首基线缺失
+        (1030, None, 20),  # 逐向独立: dl 重置 null / up 区间平均
+        (1060, 20, 10),  # 重置桶之后链仍有基线
+    ]
+    assert [(p.dl_total, p.up_total) for p in out] == [(1000, 500), (100, 1100), (700, 1400)]  # totals 原样
+
+
+def test_v4_rate_from_totals_zchain_vacuum_null_passthrough():
+    """z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点(rate/totals 全 None)原样透传
+    且断链 —— 后继基线缺失 rate=None 而 totals 原样保留(观测面缺口不吞快照)"""
+    pts = (
+        V4PointEntry(1000, 0, 0, 1000, 500, w=30),  # z 形态
+        V4PointEntry(1030, 0, 0, 1000, 500, w=30),  # delta 0 续链
+        V4PointEntry(1060, None, None, None, None, w=0),  # 真空/断连 null 点
+        V4PointEntry(1090, 5, 5, 1100, 600, w=30),  # 断链后基线缺失
+        V4PointEntry(1120, 5, 5, 1700, 900, w=30),  # 对 1090 快照差分恢复: +600/+300 -> 20/10
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1000, None, None),  # 窗首无种子: 基线缺失(z 形态桶也无基线可差)
+        (1030, 0, 0),  # z 形态桶对前驱差分 delta=0 -> 0 线续链
+        (1060, None, None),  # null 点透传
+        (1090, None, None),  # 断链后基线缺失
+        (1120, 20, 10),
+    ]
+    assert out[2] == pts[2]  # null 点原样透传(恒等)
+    assert (out[3].dl_total, out[3].up_total) == (1100, 600)  # 断链不吞快照(totals 保留)
+
+
+def test_v4_rate_from_totals_wide_bucket_byte_conservation():
+    """宽桶分摊字节守恒(方案 B 附带收益的守阵): rate = delta/w, 逐桶 rate×w = delta 且
+    Σ(rate×w) = Σ delta 与 totals 通道严格一致(整除构造); 瞬时口径的旧 rate 列被整体重写"""
+    pts = (
+        V4PointEntry(1000, 1, 1, 1000, 500, w=30),  # 种子
+        V4PointEntry(1030, 88, 66, 2500, 1400, w=150),  # 宽桶(暂停恢复形): delta 1500/900 -> 10/6
+        V4PointEntry(1180, 99, 99, 3100, 1700, w=30),  # delta 600/300 -> 20/10
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.dl_rate, p.up_rate) for p in out] == [(None, None), (10, 6), (20, 10)]
+    assert [p.dl_rate * p.w for p in out[1:]] == [1500, 600]  # 逐桶 rate×w = delta
+    assert sum(p.dl_rate * p.w for p in out[1:]) == 3100 - 1000  # Σ = Σ delta(种子快照->末快照)
+    assert sum(p.up_rate * p.w for p in out[1:]) == 1700 - 500
+
+
+def test_v4_grid_obs_rate_null_totals_valid_exemption():
+    """D4 豁免(v4_grid_obs): rate=None 但 totals 有效的桶点仍参与归桶 —— 只更新覆盖末端
+    与快照链(rate 权重记 0, 逐向独立), 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线
+    不断); 真 null 点(率/totals 全空)仍不参与(桶 null)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
+    pts = (
+        V4PointEntry(b0, 10, 10, 1000, 500, w=30),
+        V4PointEntry(b1, None, None, 1000, 500, w=30),  # 派不出(重置/基线缺失形态): 豁免参与
+        V4PointEntry(b2, 20, 10, 1600, 800, w=30),  # delta 600/300
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(10, 10, 1000, 500)
+    assert obs[b1] == BucketObs(0, 0, 1000, 500)  # 0 线 + 快照照记(非 null 桶)
+    assert obs[b2] == BucketObs(20, 10, 1600, 800)
+    # 豁免桶的快照续链: 后续桶差分基线不断(若 b1 缺席 b2 将基线缺失)
+    tot = series_totals_points(obs, g)
+    assert tot[g.buckets.index(b1)] == {"t": b1, "dl": 0, "up": 0}
+    assert tot[g.buckets.index(b2)] == {"t": b2, "dl": 600, "up": 300}
+    # 真 null 点仍不参与: 桶无观测 = null
+    assert v4_grid_obs((V4PointEntry(b0, None, None, None, None, w=0), ), g) == {}
+    # 逐向豁免: dl 派不出(up 可派)—— dl 出 0 线, up 正常覆盖
+    obs3 = v4_grid_obs((V4PointEntry(b0, None, 6, 1200, 500, w=30), ), g)
+    assert obs3[b0] == BucketObs(0, 6, 1200, 500)
+    # 混合覆盖: 豁免点与速率点共享桶 —— 速率均值只按速率覆盖秒加权(豁免不稀释不虚 0)
+    pts4 = (
+        V4PointEntry(b2, None, None, 1000, 500, w=15),  # 覆盖 [b2, b2+15)
+        V4PointEntry(b2 + 15, 10, 10, 1300, 800, w=30),  # 覆盖 [b2+15, b2+45): 跨 b2/b2+30
+    )
+    obs4 = v4_grid_obs(pts4, g)
+    assert obs4[b2] == BucketObs(10, 10, 1300, 800)  # 15s 速率覆盖 -> 均值 10(非 (10+0)/2)
+    assert obs4[b2 + 30] == BucketObs(10, 10, 1300, 800)
+
+
+def test_group_rate_points_over_transformed_obs_unchanged():
+    """组求和口径不变(S1 钉住): group_null_mask/group_rate_points 消费变换后 v4_grid_obs
+    产物无需改动 —— 豁免桶(0 线)有快照观测即非 null, 组和按 0 计入; S2 接线后组图直接受益"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1 = g.buckets[100], g.buckets[101]
+    m1 = {b0: BucketObs(100, 50, 1000, 500), b1: BucketObs(0, 0, 1000, 500)}  # b1 = 豁免桶 0 线
+    m2 = {b0: BucketObs(30, 30, 300, 300), b1: BucketObs(20, 10, 1600, 800)}
+    mask = group_null_mask([m1, m2], g)
+    assert mask[100] is False and mask[101] is False  # 豁免桶有快照观测即非 null
+    pts = group_rate_points([m1, m2], g, mask)
+    assert pts[100] == {"t": b0, "dl": 130, "up": 80}
+    assert pts[101] == {"t": b1, "dl": 20, "up": 10}  # m1 豁免桶按 0 计(无行同款)

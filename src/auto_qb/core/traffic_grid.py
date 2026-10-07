@@ -283,7 +283,8 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 #
 # 分层纯化(为 S3b 留接缝): 天文件解析产物(V4ParsedDay.blocks) -> 本层 v4_series_slots
 # (记录时间轴, S3b agg 段合流的并流点) -> v4_series_points(桶点) -> v4_totals_points
-# (累计增量)。天文件读取在 traffic_store.V4DayCache(按天加载 + mtime/size 解析缓存);
+# (累计增量)/ v4_rate_from_totals(速率口径变换: 计数器差分区间平均, 计划 26-10-07-2127
+# S1)。天文件读取在 traffic_store.V4DayCache(按天加载 + mtime/size 解析缓存);
 # 本模块不触文件不触时钟, 视图映射(WINDOW_SPECS/agg 段/组端点)属 S3b。
 #
 # 归桶模型(D1 实施期定稿: 逐记录覆盖桶):
@@ -323,8 +324,10 @@ class V4PointEntry:
     """v4 读侧单桶点(S3a 桶点层输出, S3b 视图映射的输入形态)
 
     t = 桶起点 epoch 秒(覆盖桶 [t, t+w)); rate/totals 全 None = null 点(n 游程/块间真空
-    标记, 断线语义 —— v4 r/z 行无 null 形态, null 只来自这两种标记)。w = 覆盖桶宽秒
-    (同 key 多记录合并取最大; 栅格展开 v4_grid_obs 据此铺盖 D1 跨桶覆盖; null 点恒 0)。
+    标记, 断线语义 —— v4 r/z 行无 null 形态, null 只来自这两种标记); rate 单向 None 而
+    totals 有效 = 区间平均口径下 delta 派不出的桶(v4_rate_from_totals 产物, v4_grid_obs
+    按 D4 豁免参与快照链)。w = 覆盖桶宽秒(同 key 多记录合并取最大; 栅格展开
+    v4_grid_obs 据此铺盖 D1 跨桶覆盖; null 点恒 0)。
     """
 
     t: int  # 桶起点 epoch 秒
@@ -452,6 +455,34 @@ def v4_totals_points(points: tuple) -> tuple:
     return tuple(out)
 
 
+def v4_rate_from_totals(points: tuple) -> tuple:
+    """桶点流速率口径变换(计划 26-10-07-2127 S1, 方案 B 区间平均): 逐点重写 rate = delta/w
+
+    输入 = v4_series_points 桶点流(rate 列为 qB 瞬时速度直采的原口径), 输出同长度桶点流:
+    dl_rate/up_rate 重写为本桶覆盖区间 [t, t+w) 的计数器差分区间平均 = delta/w(delta =
+    与前桶点快照的差, w = 该点覆盖宽秒)—— 区间传了 10MiB 平均速度就是 10MiB÷区间秒,
+    上图不再随采样瞬时值抖动。差分全套边界复用 v4_totals_points(null 点断链 / cur<last
+    重置 null / 窗首基线缺失 null / z 桶 delta=0 续链 / 宽桶 delta 覆盖整段有效 dt):
+    - rate 派不出(delta=null 或 w<=0)的点 rate=None; totals 链推进与之独立 —— 快照链永
+      不被 rate 缺失打断(重置桶的后继对其快照差分仍有基线);
+    - totals 与 w 原样保留(totals 通道与 v4_grid_obs 覆盖展开均不受影响);
+    - 字节守恒: rate×w = delta(整除时严格成立, 余数按 round 落桶)—— v4_grid_obs 按覆盖
+      秒分摊后速率通道与 totals 通道严格一致;
+    - null 点(率/totals 全 None)原样透传, 断线语义仍由 v4_grid_obs 空桶承载。
+    搭配 D3 窗首种子(调用方把 read_window/v4_series_points 的 t0 外扩一个响应桶宽)使用:
+    种子点自身基线缺失 rate=None 且被 v4_grid_obs 窗外过滤天然不外发, 后继首桶即有基线。
+    """
+    out = []
+    for p, te in zip(points, v4_totals_points(points)):
+        if p.dl_rate is None:  # null 点: 原样透传(te 亦全 null, 走重建分支结果等价)
+            out.append(p)
+            continue
+        dl = None if te.dl is None or p.w <= 0 else int(round(te.dl / p.w))
+        up = None if te.up is None or p.w <= 0 else int(round(te.up / p.w))
+        out.append(V4PointEntry(p.t, dl, up, p.dl_total, p.up_total, p.w))
+    return tuple(out)
+
+
 # ======================================================================
 # v4 视图映射(S3b, §05.3): 桶点流/agg 行 -> 响应栅格桶观测
 #
@@ -473,14 +504,21 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
     - 快照取覆盖末端(t+w)最晚的桶点(同末端后到者优先)—— 宽桶(跨多栅格桶)的中间桶
       同值非 null 且同快照(D1 跨桶覆盖的栅格形态: totals 差分在首个覆盖桶落增量,
       其余桶 delta = 0 链不断);
-    - null 点(断连/真空标记)不参与 —— 栅格桶无观测 = null, 断线语义由空桶承载;
+    - D4 豁免(计划 26-10-07-2127 S1): rate=None 但 totals 有效的桶点(区间平均口径下
+      重置/基线缺失派不出的桶)仍参与归桶 —— 只更新覆盖末端与快照链, rate 权重记 0
+      (逐向独立), 使后续桶差分基线不断; 桶完全无速率覆盖时出 0 线 + 快照照记(程序刚
+      启动的窗首桶, 1/N 缺口视觉无感);
+    - null 点(断连/真空标记, 率/totals 全空)不参与 —— 栅格桶无观测 = null, 断线语义由
+      空桶承载;
     - 窗外栅格桶(b < first 或 b > last)不消费(对齐 v2 窗外行口径)。
     """
     first, last, interval = grid.first, grid.last, grid.interval
-    acc = {}  # 桶键 -> [重叠秒和, dl 加权和, up 加权和, 覆盖末端, dl_total, up_total]
+    # 桶键 -> [dl 覆盖秒, dl 加权和, up 覆盖秒, up 加权和, 覆盖末端, dl_total, up_total]
+    # (覆盖秒逐向独立: D4 豁免点不占速率权重, 只更新覆盖末端与快照链)
+    acc = {}
     for p in points:
-        if p.dl_rate is None or p.w <= 0:
-            continue  # null 点 / 无覆盖宽度的防御形不参与归桶
+        if p.w <= 0 or (p.dl_rate is None and p.up_rate is None and p.dl_total is None and p.up_total is None):
+            continue  # null 点(率/totals 全空)/ 无覆盖宽度的防御形不参与归桶
         cov_end = p.t + p.w
         if cov_end <= first or p.t > last:
             continue  # 与窗口栅格无交集
@@ -492,17 +530,28 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
             if ov > 0 and b >= first:
                 a = acc.get(b)
                 if a is None:
-                    acc[b] = [ov, p.dl_rate * ov, p.up_rate * ov, cov_end, p.dl_total, p.up_total]
-                else:
+                    a = acc[b] = [0, 0, 0, 0, cov_end, p.dl_total, p.up_total]
+                if p.dl_rate is not None:
                     a[0] += ov
                     a[1] += p.dl_rate * ov
-                    a[2] += p.up_rate * ov
-                    if cov_end >= a[3]:  # 覆盖末端最晚者胜(同末端后到者优先)
-                        a[3] = cov_end
-                        a[4] = p.dl_total
-                        a[5] = p.up_total
+                if p.up_rate is not None:
+                    a[2] += ov
+                    a[3] += p.up_rate * ov
+                if cov_end >= a[4]:  # 覆盖末端最晚者胜(同末端后到者优先)
+                    a[4] = cov_end
+                    a[5] = p.dl_total
+                    a[6] = p.up_total
             b += interval
-    return {b: BucketObs(int(round(a[1] / a[0])), int(round(a[2] / a[0])), a[4], a[5]) for b, a in acc.items()}
+    return {
+        b:
+            BucketObs(
+                int(round(a[1] / a[0])) if a[0] else 0,  # D4: 桶无速率覆盖出 0 线(快照照记, 非 null)
+                int(round(a[3] / a[2])) if a[2] else 0,
+                a[5],
+                a[6],
+            )
+        for b, a in acc.items()
+    }
 
 
 def v4_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
