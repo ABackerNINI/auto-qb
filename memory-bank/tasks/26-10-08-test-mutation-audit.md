@@ -4,7 +4,7 @@
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
 **Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -30,7 +30,8 @@
 | S3 | 实测验证: mutmut 端到端 + gremlins 端到端 + `set_conf` 幂等/覆盖 + 守卫 | Done |
 | S4 | 常驻 issue + 方法论坑档 | Done |
 | S5 | 收尾: 本档案 + activeContext 切片 + `kb.index` + `test.full` 基线切片 + skills 软链 | In Progress |
-| S6+ | 后续轮次: 按包派生计划(rules → hr → config → core), 每轮一条基线切片 + 真洞入池 | Open |
+| S6 | 派生计划(config): `plans/26-10-08-0720-plan-mutation-config.html`(按 skill 骨架; 用户点名 config) | Done |
+| S7+ | 执行审计轮次: 按计划跑 + 三分类 + 手工确认 + 真洞入池(rules → hr → core 计划仍未派生) | Open |
 
 ## 子任务状态表
 
@@ -41,7 +42,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | Open | 未开工; 由用户点名包后派生计划 |
+| S6+ 逐包轮次 | In Progress | config 计划已派生(`plans/26-10-08-0720-plan-mutation-config.html`); 等拍板后执行, rules/hr/core 未派生 |
 
 ## 进度日志
 
@@ -62,3 +63,16 @@
 - **索引与守卫**: `kb.index` 20 个生成物; `kb.check` 主键纪律 / 认领链 / 回写措辞 / 日期守卫**全过**; `doc.links` 无坏链。
 - **skills 软链**: `scripts/sync_agent_skills.py` 建 `.codebuddy/skills/mutation-testing`(该目录 gitignore)时 `mklink /J` 返回失败(脚本打 `!`), 改用 PowerShell `New-Item -ItemType Junction` 建成 —— 疑与本工具 shell 的路径处理有关, 未确认为仓库缺陷, 记一笔待复现。
 - **cap 债务(不拦提交, 转告用户另开会话清理)**: `issues/_index.md` 25,430 与 `tasks/_index.md` 25,551 均略超 25,200(两条在本轮前已越线, 本轮各加一行 ~200–250 字符); 另有存量 `tasks/26-10-08-backend-test-web-split.md` 62,661 > 48,000; 以及 activeContext 切片数 95 > 70。
+
+### 2026-10-08 R1 — 派生 config 计划(未执行)
+
+- **触发**: 用户「根据变异测试指导写一个针对 config 部分的分步执行计划」—— 即 skill「派生计划」节的第一个用例(档案 §原始请求 里预告的形态)。
+- **产物**: `memory-bank/plans/26-10-08-0720-plan-mutation-config.html`(单文件 HTML, dark, `doc-topic=mutation-audit`, 状态 `Open` 待拍板)。
+- **计划要点(按 skill 骨架逐节落到 config 上)**:
+  - 目标 glob `**/config/*.py` —— 用 fnmatch 实测覆盖顶层 + `schema/` + `validation/` 两子包, 且不误伤 `webui/server/routes/config.py`; 明确不写 `**/config/**/*.py`(会漏顶层 8 文件)。
+  - 重点函数清单按「判据密度 × 出错代价」分三档: A 校验内核(`validation/core.py` 的 `_try_number`/`_try_time`/`validate_config` 等 + sections/rules/curves) · B 迁移与写回(`migrations.py` 三个迁移 + `writer.py` 回退/版本闸) · C 加载与派生(loaders/fields/impact)。
+  - 测算基数**在报告 §08 锚点上精化**: 报告按全行估 config/ ≈5,000 变异 / ≈11 min; 计划剔除 schema 四表(groups/hr/rules/trackers, 实测 1,151 行 0 函数)后有效面 ≈3,842 行 ⇒ ≈3,800 变异 / ≈8.5 min(依据: mutmut v3 只变异函数体, 报告 §03)。首轮一律以实测为准。
+  - 池 = 6 个定向测试文件 / 186 fn: `test_config.py`(62) · `test_config_writer.py`(54) · `test_hr_config.py`(33) · `test_config_schema.py`(24) · `test_impact.py`(8) · `test_config_key_surface.py`(5)。核实池内无「读源码文本」守阵 ⇒ 默认 `--deselect` 与本轮无关(保留无副作用)。
+  - 步骤 S1–S7 全走 task id(`mutants.setup` → `mutants.run` → 三分类 → 手工确认 → 补测 → 复跑 → 记录); 附 Windows 兜底 `mutants.gremlins`。
+- **收尾**: `kb.index` 重建 20 个生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; `doc.caps` 无新增债务(3 项均为存量)。`test.full` → **2772 passed + 4 skipped / 54.25s / TOTAL 99%**(16476 语句 / 165 未覆盖 / 5694 分支 / 149 partial), 与上基线 `26-10-08-0647` 逐位持平(本轮零 `src/`、零 `tests/` 改动); 基线切片 `testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md`。
+- **未做**: 未执行审计(计划边界: 不在计划里实施); 未 commit/push(用户未说「提交」)。

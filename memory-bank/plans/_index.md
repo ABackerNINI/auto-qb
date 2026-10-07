@@ -13,6 +13,7 @@
 
 ## Open
 
+- [26-10-08-0720] [config/ 包变异测试审计 · 分步执行计划](26-10-08-0720-plan-mutation-config.html) — `mutation-audit`
 - [26-10-07-0414] [实施计划 · WebUI rid 式增量同步 · auto-qb](26-10-07-0414-plan-webui-delta-sync.html) — `webui-delta-sync`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
