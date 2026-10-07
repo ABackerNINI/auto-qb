@@ -13,6 +13,7 @@
 
 ## Open
 
+- [26-10-07-2127] [实施计划 · qB 流量图区间平均口径 + 万桶级治理 · auto-qb](26-10-07-2127-plan-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`
 - [26-10-07-0414] [实施计划 · WebUI rid 式增量同步 · auto-qb](26-10-07-0414-plan-webui-delta-sync.html) — `webui-delta-sync`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 

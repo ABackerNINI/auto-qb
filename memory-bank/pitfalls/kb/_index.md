@@ -17,6 +17,7 @@
 | [discipline.md](discipline.md) | 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、测试写在没人跑的地方等于没写。 | 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红 |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径。 | 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs |
 | [request-boundary.md](request-boundary.md) | 开工先判这一轮是"问答 / 只读"还是"执行任务" —— 把问答当执行任务去做, 是本仓库的**红线**。 | 用户提问, 想延伸排查, 想顺手入池 issue, 想顺手立档, 想 commit |
+| [scope-qualifier-parenthetical.md](scope-qualifier-parenthetical.md) | 复合命题里的限定括注(如「仅写入计划」「仅记录」「先不实施」)被默认读成只修饰紧邻子句, 其余子句照常实施 —— 拆解出的实施步骤含了用户明确排除的项, 派工被用户当场纠正。括注的修饰范围是**逐项拍板的事实, 不是语法可推断的默认**。 | 括注, 仅写入计划, 仅记录, 先不实施, 拆解任务, 派工范围, 超范围实施, 复合命题, 限定语, 实施计划 |
 | [scripts.md](scripts.md) | 脚本类改动里最容易漏的五件事 —— 冷门分支上的未定义名、STOP 级别一刀切、对固定列宽输出整段 strip、给调用方的输出做过有损摘要(只取末 N 行 / 略过提示都错, 终点是全文透传 + 声明式静默)、**正则匹配 markdown 粗体时用 `[^*]*` 横跨相邻粗体段而误报**。 | 改脚本, 改检查脚本, 预检, 解析 git 输出, 解析命令输出, 改名, 输出摘要, 截断, 略过 N 行, 信息预算, 全文透传, silent_success, token 税, 挑行, 守卫脚本, 正则, 粗体, markdown 解析, 误报 |
 | [skills-loading.md](skills-loading.md) | skill 里的脚本路径一律写 `<skill-dir>/scripts/…`; 项目级 skill 只挂 `.codebuddy/skills` 一处。 | 写 skill, 装 skill, skill 不出现, 脚本路径, find_root, 脚本找不到 |
 | [task-command-surface.md](task-command-surface.md) | `commands` 包某条 task 的 `run` 条数 / 首个脚本名 / 生成器集合被别处写死 —— 引擎自证压缩用例、`gen_cmd` 守卫、文档里的"共 N 条"都可能据此断言; 收编命令前先搜消费点, 用例改成从声明处现算。 | 改包内 task 的 run 清单, 收编命令, 命令条数变化, gen_all, kb.index, test_engine 自证压缩, GEN_CMD_BY_SCRIPT |
