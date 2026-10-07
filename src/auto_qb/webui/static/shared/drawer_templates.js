@@ -1,7 +1,8 @@
 /* auto-qb WEB UI · 种子详情面板模板核心层(计划 26-10-06-0838 S1)
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
- * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845)
+ * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
+ *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846)
  * + 收起态摘要默认实现。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
@@ -90,6 +91,10 @@
   function dtRaw(html) {
     return { __dtRaw: true, html: String(html) };
   }
+  /* 属性选择器值转义(path 可能含引号/反斜杠, 概率极低但必须成对转义保底) */
+  function cssAttrEsc(s) {
+    return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
   function dtHtml(strings) {
     var out = "";
     for (var i = 0; i < strings.length; i++) {
@@ -113,7 +118,9 @@
    *     纵横两轴成对恢复, 恢复次序 scrollLeft 先 scrollTop 后);
    *   - wireEvents/unwireEvents: 事件委托挂摘成对(宿主元素跨变体复用, 换变体必须摘掉旧监听,
    *     否则新旧变体监听叠加、同一次点击被多个 handler 重复处理)。挂摘都记账在同一张
-   *     host.__dtEvents 事件表上, 成对纪律由实现保证, 变体不再各自维护 __dtNNWired 标志。 */
+   *     host.__dtEvents 事件表上, 成对纪律由实现保证, 变体不再各自维护 __dtNNWired 标志;
+   *   - roving/rowFocusKey/rowRestore/rowMove: 行级键盘 roving tabindex(issue 26-10-07-0846,
+   *     content 组 dt10/11/12 消费) —— 锚点设置/焦点记账/重建回焦/方向键移焦四步。 */
   var HELPERS = {
     dur: function (ctx, v, dash) {
       return (v === null || v === undefined || v < 0) ? (dash || "未设") : ctx.fmtDuration(v);
@@ -145,6 +152,52 @@
       if (!host || !host.__dtEvents) return;
       for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);
       host.__dtEvents = null;
+    },
+    /* ---- 行级键盘 roving tabindex(issue 26-10-07-0846, content 组 dt10/11/12 消费) ----
+     * 行/块容器 tabindex="-1" 不进 Tab 序(行内原生控件自然参与 Tab), 锚点(选中行或首行)
+     * 由 roving() 在整帧重建后设为 0; 方向键/Home/End 由变体 keydown 委托调 rowMove() 移焦;
+     * Enter/Space 由变体转发为行激活。原子换帧会打断焦点链 —— rowFocusKey() 在重建前记账
+     * 焦点行、rowRestore() 重建后回焦, 否则一次激活就把键盘用户甩回文档头。
+     * 整行不加 role="button": 行内已含原生控件(button/checkbox), 嵌套交互语义反而更糟
+     * (入池报告根因段口径) —— 键盘可达靠 tabindex + 委托, 读屏语义靠行内控件自身。 */
+    roving: function (host, attr, selKey) {
+      if (!host) return;
+      var rows = host.querySelectorAll("[" + attr + "]");
+      var anchor = null;
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].tabIndex = -1;
+        if (!anchor && selKey && rows[i].getAttribute(attr) === selKey) anchor = rows[i];
+      }
+      if (!anchor && rows.length) anchor = rows[0];
+      if (anchor) anchor.tabIndex = 0;
+    },
+    /* 焦点行 key 记账: 焦点落在行容器或其内部任一元素上都算; 不在 host 内返回 "" */
+    rowFocusKey: function (host, attr) {
+      var el = typeof document === "undefined" ? null : document.activeElement;
+      if (!host || !el || !host.contains(el)) return "";
+      var row = el.closest("[" + attr + "]");
+      return row ? (row.getAttribute(attr) || "") : "";
+    },
+    /* 重建后回焦: 记账 key 命中才回, 且回焦行本身可聚焦(tabindex=-1 也可程序聚焦) */
+    rowRestore: function (host, attr, key) {
+      if (!host || !key) return;
+      var row = host.querySelector("[" + attr + '="' + cssAttrEsc(key) + '"]');
+      if (row) row.focus();
+    },
+    /* 方向键移焦: key 为 KeyboardEvent.key(ArrowUp/Down/Left/Right/Home/End), 移了返回 true */
+    rowMove: function (host, attr, el, key) {
+      var rows = host.querySelectorAll("[" + attr + "]");
+      var row = el && el.closest ? el.closest("[" + attr + "]") : null;
+      if (!row || !rows.length) return false;
+      var i = Array.prototype.indexOf.call(rows, row);
+      var next = -1;
+      if (key === "ArrowDown" || key === "ArrowRight") next = i + 1;
+      else if (key === "ArrowUp" || key === "ArrowLeft") next = i - 1;
+      else if (key === "Home") next = 0;
+      else if (key === "End") next = rows.length - 1;
+      if (next < 0 || next >= rows.length) return false;
+      rows[next].focus();
+      return true;
     },
   };
 

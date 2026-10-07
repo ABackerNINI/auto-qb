@@ -13,6 +13,8 @@
  * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
  * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
  * 上一种子的勾选落到新种子文件上是真实的优先级误操作面); 批量条/汇总条 sticky 吸底不随行滚动。
+ * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 勾选(issue 26-10-07-0846;
+ * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -55,6 +57,7 @@
     ".drawer .dt11-head .num { text-align:right; }",
     ".drawer .dt11-r { min-height:27px; border-bottom:1px solid var(--hairline); font-size:12px; cursor:default; }",
     ".drawer .dt11-r:hover { background:var(--bg-hover); }",
+    ".drawer .dt11-r:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
     ".drawer .dt11-r.is-chk { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
     ".drawer .dt11-r.is-chk:hover { background:var(--sel-bg); }",
     ".drawer .dt11-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
@@ -221,7 +224,7 @@
     const hl = r.dir
       ? (chkStateOf(subtreeFiles(r.path, d.fileRows).map((it) => it.row.path)) === 2)
       : ui.checked.has(r.path);
-    return T`<div class="dt11-r${r.dir ? " dir" : " file"}${hl ? " is-chk" : ""} ${hasAv ? "hasav" : "noav"}" data-node="${r.path}">
+    return T`<div class="dt11-r${r.dir ? " dir" : " file"}${hl ? " is-chk" : ""} ${hasAv ? "hasav" : "noav"}" data-node="${r.path}" tabindex="-1">
       ${R(chk)}${R(tgl)}
       <span class="dt11-n" style="padding-left:${r.depth * 14}px" title="${r.path}"><svg class="ico" viewBox="0 0 16 16"><use href="${r.dir ? "#i-folder" : "#i-list"}"></use></svg><span class="dt11-nm">${r.name}</span>${R(meta)}</span>
       <span class="dt11-sz" title="${r.dir ? "子树合计大小" : "文件大小"}">${sizeTxt}</span>
@@ -369,7 +372,10 @@
       <div class="dt11-body">${R(htmlRows.join(""))}${htmlRows.length ? "" : T`<div class="dt11-empty">该筛选下没有文件</div>`}</div>
       ${R(foot)}
     </div>`;
+    const focusKey = H.rowFocusKey(host, "data-node"); /* 重建前记账焦点行(原子换帧打断焦点链) */
     host.replaceChildren(document.createRange().createContextualFragment(html));
+    H.roving(host, "data-node", ""); /* 行级键盘锚点(首行, issue 26-10-07-0846; 勾选集无「选中行」语义) */
+    H.rowRestore(host, "data-node", focusKey);
     /* 目录行 / 主勾选框三态(native indeterminate) */
     host.querySelectorAll("input[data-dirck]").forEach((el) => {
       const st = chkStateOf(subtreeFiles(el.getAttribute("data-dirck"), d.fileRows).map((it) => it.row.path));
@@ -436,13 +442,27 @@
     }
     /* 点行 = 勾选(目录 = 整棵子树; 与设计稿 11 同语义) */
     const row = ev.target.closest("[data-node]");
-    if (row) {
-      const d = derive(_ctx);
-      const r = d.rows.find((x) => x.path === row.getAttribute("data-node"));
-      if (!r) return;
-      toggleSet(r.dir ? subtreeFiles(r.path, d.fileRows).map((it) => it.row.path) : [r.path]);
-      rerender(h);
+    if (row) toggleRow(row, h);
+  }
+  function toggleRow(row, h) {
+    const d = derive(_ctx);
+    const r = d.rows.find((x) => x.path === row.getAttribute("data-node"));
+    if (!r) return;
+    toggleSet(r.dir ? subtreeFiles(r.path, d.fileRows).map((it) => it.row.path) : [r.path]);
+    rerender(h);
+  }
+  /* 行级键盘(issue 26-10-07-0846): roving tabindex + 方向键/Home/End 移焦 + Enter/Space
+   * 转发行激活(= 勾选, 与 click 同口径)。焦点在行内原生控件(勾选框/折叠钮/优先级徽章)
+   * 上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持 */
+  function onKeyDown(ev) {
+    const row = ev.target.closest("[data-node]");
+    if (!row || ev.target !== row) return;
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      toggleRow(row, ev.currentTarget);
+      return;
     }
+    if (H.rowMove(ev.currentTarget, "data-node", row, ev.key)) ev.preventDefault();
   }
   function onChange(ev) {
     const h = ev.currentTarget;
@@ -475,7 +495,7 @@
   }
 
   function wire(host) {
-    H.wireEvents(host, { click: onClick, change: onChange });
+    H.wireEvents(host, { click: onClick, change: onChange, keydown: onKeyDown });
   }
 
   function destroy(host) {

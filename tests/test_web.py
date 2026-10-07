@@ -52,6 +52,7 @@
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select max-width 160->240(min-width:0; 160px 截断长 label 收起态)
+- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -3398,6 +3399,55 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
             # trackers/peers 组 5s 轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
             assert "下次自动刷新时重试" in text, \
                 f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(5s 轮询真实)"
+
+
+def test_drawer_tpl_content_row_keyboard_roving():
+    """content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) ——
+    dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk]/体积榜行 [data-row] 原为纯 div+click,
+    键盘/读屏不可达(修复轮 P3-4 缩围转来的已记未做项)。按 issue 建议候选① roving tabindex 落地:
+    核心 helpers 四件套单点(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦);
+    行容器 tabindex=-1 不进 Tab 序(行内原生控件自然参与 Tab; 整行不加 role=button —— 行内已含
+    原生控件, 嵌套交互语义反而更糟, 入池报告根因段口径); :focus-visible 焦点可见; keydown 委托
+    成对挂宿主且只有 ev.target 是行容器自身才接管; 重建前记账/重建后回焦成对(原子换帧打断焦点
+    链); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 与 mouseover/out 同语义)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. 核心 helpers 四件套单点(变体各自复刻会漂移, 口径同 26-10-07-0845 骨架收口)
+    for fn in ("roving: function", "rowFocusKey: function", "rowRestore: function", "rowMove: function"):
+        assert fn in core, f"核心 helpers 缺 {fn.split(':')[0]}(行级键盘单点被拆散/摘除)"
+
+    # 2. 三变体接入面: 行容器 tabindex=-1 + 锚点/回焦/移焦走核心单点 + keydown 委托挂宿主
+    cases = {
+        "10-content-tree-detail-tall.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
+        "11-content-treegrid-batch-low.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
+        "12-content-space-treemap-collapsed.js":
+            ["H.roving(mapEl, \"data-blk\"", "H.roving(host, \"data-row\"", "ev.target !== el"],
+    }
+    for name, hooks in cases.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert 'tabindex="-1"' in text, \
+            f"drawer_tpl/{name}: 行/块容器缺 tabindex=-1(roving 基线, 容器混进 Tab 序)"
+        assert 'role="button"' not in text, \
+            f"drawer_tpl/{name}: 整行加了 role=button(行内已含原生控件, 嵌套交互语义更糟 —— 入池根因段口径)"
+        for hook in hooks:
+            assert hook in text, f"drawer_tpl/{name}: 缺接入点 {hook}(锚点/接管守卫被摘)"
+        assert "H.rowFocusKey(" in text and "H.rowRestore(" in text, \
+            f"drawer_tpl/{name}: 重建前记账/重建后回焦不成对(原子换帧打断焦点链, 一次激活就甩回文档头)"
+        assert "H.rowMove(" in text, \
+            f"drawer_tpl/{name}: 方向键移焦未走核心 rowMove(键盘用户无法在行间转移焦点)"
+        assert "keydown: onKeyDown" in text, \
+            f"drawer_tpl/{name}: keydown 委托未挂宿主(Enter/Space/方向键不触发)"
+        assert "H.wireEvents(host" in text and "H.unwireEvents(host)" in text, \
+            f"drawer_tpl/{name}: 挂摘未走核心成对 helper(监听叠加回潮)"
+        assert ":focus-visible" in text, \
+            f"drawer_tpl/{name}: 行/块容器缺 :focus-visible 样式(键盘焦点不可见)"
+
+    # 3. dt12 树图块焦点互联: 复用悬停 onOver/onOut(focusin/focusout 冒泡同语义, 对侧加/摘 hl)
+    t12 = open(os.path.join(vdir, "12-content-space-treemap-collapsed.js"), encoding="utf-8").read()
+    assert "focusin: onOver" in t12 and "focusout: onOut" in t12, \
+        "drawer_tpl/12: 树图块焦点互联未复用悬停 onOver/onOut(键盘选中块时体积榜无联动高亮)"
 
 
 def test_drawer_tpl_cross_seed_fold_and_select_width():

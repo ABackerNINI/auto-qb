@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-07-0846">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-detail-panel-redesign">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-content-row-keyboard.md,memory-bank/activeContext/26-10-07-1003-webui-content-row-keyboard.md,memory-bank/testing/baselines/26-10-07-1003-webui-content-row-keyboard.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="content 组变体可点击行/树图块键盘化: 行级交互不可键盘达">
 <meta name="issue-summary" content="dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk] 纯 div+click, 键盘/读屏不可达; 行内已含原生控件, 需行级键盘方案单独立项">
 <title>content 组变体可点击行/树图块键盘化: 行级交互不可键盘达 · feat · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· feat</div>
+    <div class="kicker">计划外问题（已修）· feat</div>
     <h1>content 组变体可点击行/树图块键盘化: 行级交互不可键盘达</h1>
     <p class="lede">dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk] 纯 div+click, 键盘/读屏不可达; 行内已含原生控件, 需行级键盘方案单独立项</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-0846-feat-webui-content-row-keyboard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 08:46</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -160,9 +160,25 @@ $ grep -n "data-node\|data-blk" drawer_tpl/10-* drawer_tpl/11-* drawer_tpl/12-*
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 08:46 — 入池，状态 <strong>Open</strong>（修复轮 26-10-07-webui-detail-panel-audit-fixes 缩围转来的已记未做项）</li>
+      <li>2026-10-07 — 用户指派认领（「认领并修复issue:26-10-07-0846-…」），先复验：三锚点全部仍现（<code>data-node=</code> dt10:254 / dt11:224、<code>data-blk=</code> dt12:276/313，行号微漂）——按建议候选①实施，状态 <strong>In Progress</strong></li>
+      <li>2026-10-07 — 修完并验证，状态 <strong>Done</strong>（test.full 2713 passed / 4 skipped / 覆盖率 99%，新增守阵 <code>test_drawer_tpl_content_row_keyboard_roving</code>）</li>
     </ul>
     <h3>复验</h3>
-    <p>入池时未复验(入池当日取证,锚点即现况);认领后先重跑锚点,补一行「复验:&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>入池当日取证, 认领后重跑锚点: 三处均仍复现（见上 2026-10-07 认领行）。</p>
+    <h3>实际修法（与建议候选①一致, 无改道）</h3>
+    <p>roving tabindex 落地, 单点收口在核心层 <code>drawer_templates.js</code> 的 <code>reg.helpers</code> 四件套（口径同 26-10-07-0845 骨架收口, 变体零复刻）:</p>
+    <ul>
+      <li><code>roving(host, attr, selKey)</code> — 整帧重建后设锚点: 行容器 <code>tabindex=-1</code> 不进 Tab 序（行内原生控件自然参与 Tab）, 选中行或首行置 0;</li>
+      <li><code>rowFocusKey / rowRestore</code> — 重建前记账焦点行 / 重建后回焦（原子换帧打断焦点链, 不回焦则一次激活就把键盘用户甩回文档头）;</li>
+      <li><code>rowMove(host, attr, el, key)</code> — 方向键/Home/End 在行间移焦;</li>
+      <li>整行<strong>不加</strong> <code>role="button"</strong>: 行内已含原生控件（勾选框/折叠钮/优先级徽章）, 嵌套交互语义反而更糟（本报告根因段口径, 守阵禁止回潮）。</li>
+    </ul>
+    <p>接入面: dt10 树行（Enter/Space 切换选中）、dt11 树表行（Enter/Space = 勾选, 与 click 同口径; 目录 = 整棵子树三态）、dt12 树图块（四向箭头移焦）+ 体积榜行, keydown 委托只有 <code>ev.target</code> 是行容器自身才接管（行内原生控件键盘行为自持, 防 Enter 双重触发）; 行/块补 <code>:focus-visible</code> 样式; dt12 焦点互联复用悬停 <code>onOver/onOut</code>（focusin/focusout 冒泡同语义, 键盘选中块时体积榜联动高亮）。dt11 点击行激活逻辑顺带收成 <code>toggleRow</code> 单点供 click/keydown 两路共用。</p>
+    <h3>验证方式与测试数字</h3>
+    <ul>
+      <li>新增守阵 <code>test_drawer_tpl_content_row_keyboard_roving</code>（tests/test_web.py）: 核心 helpers 四件套单点存在、三变体 tabindex=-1/锚点/记账回焦/移焦接入点成对、禁 role=button 回潮、keydown 委托挂宿主、:focus-visible、dt12 焦点互联;</li>
+      <li><code>commands run test.full</code>: <strong>2713 passed, 4 skipped</strong>, 覆盖率 <strong>99%</strong>（2026-10-07, 本机 develop 工作区）。</li>
+    </ul>
   </section>
 
   <footer>

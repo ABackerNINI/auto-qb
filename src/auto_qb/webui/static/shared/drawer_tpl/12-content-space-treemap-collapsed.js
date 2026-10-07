@@ -11,6 +11,8 @@
  * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 选中/折叠/筛选态自保(按 path 记账;
  * 换种子只重置选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542); ResizeObserver
  * 随面板拖拽/展开重建图, destroy 摘监听 + disconnect。
+ * 行级键盘: 树图块/体积榜行 roving tabindex + 方向键移焦 + Enter/Space 选中(issue
+ * 26-10-07-0846; 锚点/记账/回焦/移焦走核心 helpers 单点; 焦点互联复用悬停 onOver/onOut)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -56,6 +58,7 @@
     "  border-color:var(--warn-line); }",
     ".drawer .dt12-blk:hover, .drawer .dt12-blk.hl { border-color:var(--accent-hi); z-index:3; }",
     ".drawer .dt12-blk.sel { box-shadow:inset 0 0 0 2px var(--ring); z-index:4; }",
+    ".drawer .dt12-blk:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
     ".drawer .dt12-lb { position:absolute; left:0; right:0; top:0; padding:3px 6px; font-size:11px; color:var(--fg);",
     "  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }",
     ".drawer .dt12-blk.part .dt12-lb { color:var(--warn); }",
@@ -72,6 +75,7 @@
     "  align-items:center; height:25px; padding:0 8px; border-bottom:1px solid var(--hairline);",
     "  font-size:11.5px; cursor:pointer; }",
     ".drawer .dt12-row:hover, .drawer .dt12-row.hl { background:var(--bg-hover); }",
+    ".drawer .dt12-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
     ".drawer .dt12-row.is-sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
     ".drawer .dt12-row .ico { width:12px; height:12px; color:var(--fg-dim); display:block; }",
     ".drawer .dt12-row .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg); }",
@@ -274,7 +278,7 @@
       + Math.max(r.w, 1).toFixed(1) + "px;height:" + Math.max(r.h, 1).toFixed(1) + "px;";
     const lv = n.prog < 100 ? ";--lv:" + n.prog.toFixed(1) + "%" : "";
     parts.push(T`<div class="${blkCls(n)}${ui.selPath === n.path ? " sel" : ""}" data-blk="${n.path}"
-      style="${style + lv}" title="${blkTitle(n, total)}">${R(blkInner(n, r.w, r.h))}</div>`);
+      tabindex="-1" style="${style + lv}" title="${blkTitle(n, total)}">${R(blkInner(n, r.w, r.h))}</div>`);
   }
   function layoutMap(host) {
     const mapEl = ui.mapEl;
@@ -311,7 +315,7 @@
           + Math.max(inner.w, 1).toFixed(1) + "px;height:" + Math.max(inner.h, 1).toFixed(1) + "px;";
         const lv = dir.prog < 100 ? ";--lv:" + dir.prog.toFixed(1) + "%" : "";
         parts.push(T`<div class="${blkCls(dir)}${ui.selPath === dir.path ? " sel" : ""}" data-blk="${dir.path}"
-          style="${style + lv}" title="${blkTitle(dir, total)}">${R(blkInner(dir, inner.w, inner.h))}</div>`);
+          tabindex="-1" style="${style + lv}" title="${blkTitle(dir, total)}">${R(blkInner(dir, inner.w, inner.h))}</div>`);
       } else {
         /* 组内按叶子文件铺排(目录层级由组头与 title 路径承接) */
         for (const r of scaleRects(leaves(dir), inner.x, inner.y, inner.w, inner.h)) {
@@ -319,13 +323,17 @@
         }
       }
     }
+    const blkFocusKey = H.rowFocusKey(mapEl, "data-blk"); /* 重建前记账焦点块(RO 重建也会打断焦点链) */
     mapEl.replaceChildren(document.createRange().createContextualFragment(parts.join("")));
+    H.roving(mapEl, "data-blk", ui.selPath); /* 树图块键盘锚点(选中块或首块, issue 26-10-07-0846) */
+    H.rowRestore(mapEl, "data-blk", blkFocusKey);
   }
   function listHtml(tree) {
     const total = tree.size || 1;
     const rows = leaves(tree).sort((a, b) => b.size - a.size).map((n) => {
       const share = Math.max(n.size / total * 100, 0.8).toFixed(1);
       return T`<div class="dt12-row${n.prog < 100 ? " part" : " ok"}${ui.selPath === n.path ? " is-sel" : ""}" data-row="${n.path}"
+        tabindex="-1"
         title="${n.path}&#10;占 ${(n.size / total * 100).toFixed(1)}% · 进度 ${n.prog.toFixed(1)}%${n.av !== undefined ? " · 可用性 " + num(n.av).toFixed(2) : ""}">
         <svg class="ico" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
         <span class="nm">${n.name}</span>
@@ -406,7 +414,10 @@
       </div>
       ${R(infoHtml(tree))}
     </div>`;
+    const rowFocusKey = H.rowFocusKey(host, "data-row"); /* 重建前记账体积榜焦点行 */
     host.replaceChildren(document.createRange().createContextualFragment(html));
+    H.roving(host, "data-row", ui.selPath); /* 体积榜行键盘锚点(选中行或首行, issue 26-10-07-0846) */
+    H.rowRestore(host, "data-row", rowFocusKey);
     ui.host = host;
     ui.mapEl = host.querySelector(".dt12-map");
     layoutMap(host);
@@ -483,9 +494,29 @@
     }
   }
 
+  /* 行级键盘(issue 26-10-07-0846): 树图块/体积榜行 roving tabindex + 方向键/Home/End 移焦
+   * (块四向箭头都开, 榜行只有纵向序但四向统一无害) + Enter/Space 转发选中(与 click 同口径)。
+   * 焦点在原生控件(组头/取消选中钮)上时不接管 —— 只有 ev.target 是块/行容器自身才处理 */
+  function onKeyDown(ev) {
+    const h = ev.currentTarget;
+    const blk = ev.target.closest("[data-blk]");
+    const row = ev.target.closest("[data-row]");
+    const el = blk || row;
+    if (!el || ev.target !== el) return;
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      ui.selPath = el.getAttribute(blk ? "data-blk" : "data-row") || "";
+      ui.lastSig = "";
+      _render(h, h.__dtCtx);
+      return;
+    }
+    if (H.rowMove(h, blk ? "data-blk" : "data-row", el, ev.key)) ev.preventDefault();
+  }
+
   /* 视图偏好变化走 lastSig 置空整帧重建; 数据通知由核心直调 _render */
   function wire(host) {
-    H.wireEvents(host, { click: onClick, mouseover: onOver, mouseout: onOut });
+    /* focusin/focusout 复用悬停互联(焦点进块/行 = 对侧加 hl, 离开 = 摘), 与 mouseover/out 同语义 */
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown, mouseover: onOver, mouseout: onOut, focusin: onOver, focusout: onOut });
   }
 
   function destroy(host) {

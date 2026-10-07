@@ -11,6 +11,8 @@
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
  * 选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542)。
+ * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 激活(issue 26-10-07-0846;
+ * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -57,6 +59,7 @@
     "  font-size:12px; cursor:default; }",
     ".drawer .dt10-r:hover { background:var(--bg-hover); }",
     ".drawer .dt10-r.sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
+    ".drawer .dt10-r:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
     ".drawer .dt10-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
     "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt10-tgl:hover { color:var(--fg); }",
@@ -251,7 +254,7 @@
       ? T`<span class="dt10-pnone" title="目录本身无优先级; 选中后可在右侧整目录批量设置">—</span>`
       : T`<button type="button" class="dt10-pbadge${prioBadgeClass(n.prio)}" data-prio="${n.index}"
           title="优先级: ${PRIO_LABEL[n.prio] || "普通"} — 点击弹出优先级小菜单">${PRIO_LABEL[n.prio] || "普通"}</button>`;
-    return T`<div class="dt10-r${n.dir ? " dir" : " file"}${ui.selPath === n.path ? " sel" : ""}" data-node="${n.path}">
+    return T`<div class="dt10-r${n.dir ? " dir" : " file"}${ui.selPath === n.path ? " sel" : ""}" data-node="${n.path}" tabindex="-1">
       ${R(tgl)}
       <span class="dt10-n" style="padding-left:${n.depth * 14}px" title="${n.path}"><svg class="ico" viewBox="0 0 16 16"><use href="${n.dir ? "#i-folder" : "#i-list"}"></use></svg><span class="dt10-nm">${n.name}</span>${R(meta)}</span>
       <span class="dt10-sz" title="${n.dir ? "子树合计大小" : "文件大小"}">${ctxOf().fmtSize(n.size)}</span>
@@ -384,7 +387,10 @@
       </section>
       <aside class="dt10-right">${R(detailHtml(sel, hasAv))}</aside>
     </div>`;
+    const focusKey = H.rowFocusKey(host, "data-node"); /* 重建前记账焦点行(原子换帧打断焦点链) */
     host.replaceChildren(document.createRange().createContextualFragment(html));
+    H.roving(host, "data-node", ui.selPath); /* 行级键盘锚点(选中行或首行, issue 26-10-07-0846) */
+    H.rowRestore(host, "data-node", focusKey);
   }
   function countBy(n, pred) {
     let c = 0;
@@ -457,8 +463,24 @@
     if (ctx) _render(host, ctx);
   }
 
+  /* 行级键盘(issue 26-10-07-0846): roving tabindex + 方向键/Home/End 移焦 + Enter/Space
+   * 转发行激活(与 click 同口径: 再触发同路径取消)。焦点在行内原生控件(折叠钮/优先级
+   * 徽章)上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持 */
+  function onKeyDown(ev) {
+    const row = ev.target.closest("[data-node]");
+    if (!row || ev.target !== row) return;
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      const p = row.getAttribute("data-node") || "";
+      ui.selPath = ui.selPath === p ? "" : p;
+      rerender(ev.currentTarget);
+      return;
+    }
+    if (H.rowMove(ev.currentTarget, "data-node", row, ev.key)) ev.preventDefault();
+  }
+
   function wire(host) {
-    H.wireEvents(host, { click: onClick });
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
   }
 
   function destroy(host) {
