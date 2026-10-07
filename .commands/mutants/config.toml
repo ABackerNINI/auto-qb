@@ -1,0 +1,43 @@
+[pack]
+name        = "mutants"
+when        = "变异测试定期审计: WSL 里跑 mutmut / Windows 侧兜底 gremlins"
+confirmed   = true
+scripts_dir = "scripts"
+
+# 全包共用的口径(逐条对应可行性报告 26-10-08-0231 §10 的坑; 完整表在 references/why.md):
+# - 主仓库环境不动: 镜像仓与工具只在 WSL 侧(--mirror, 默认 ~/auto-qb-mut)。
+# - 按包/按模块 + **定向测试池**; 全 src / 全 tests 会把 WSL 打挂(实测 37% / 74% 两处崩)。
+# - --max-children 默认 4(WSL 只有 8 核); 拉满会打挂。
+# - 脚本每次清 mutants/ 缓存: 目标/池一变, 旧缓存会让 mutmut「0 files mutated」提前收工(实测)。
+# - 结果落 R:/Temp/auto-qb/mutants(不落仓内), 存活清单只回显头部 —— 全量可能上千行, 超内联上限。
+# - **不进提交闸门**: 一轮 1-21 min, 是审计信号不是放行条件; 工具还硬要求基线全绿才开跑。
+
+[tasks."mutants.run"]
+script  = "mutants.py"
+args    = ["run"]
+timeout = 3600
+when    = "定期审计: 对某个包/模块跑一轮 mutmut(WSL) —— 按包/按模块 + 定向测试池"
+note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 4]。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂 WSL)。目标 glob 相对仓库根。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md"
+doc     = "references/why.md"
+
+[tasks."mutants.setup"]
+script  = "mutants.py"
+args    = ["setup"]
+timeout = 3600
+when    = "首次跑之前 / 镜像落后时: 建或刷新 WSL 镜像仓(git clone|fetch) + uv sync + 装 mutmut"
+note    = "幂等。镜像默认 ~/auto-qb-mut(WSL 原生 ext4, 别放 /mnt/*)。mutants.run 会自己确保镜像, 这条只在想单独预热时用。WSL 未安装时改用 mutants.gremlins"
+
+[tasks."mutants.gremlins"]
+script  = "mutants.py"
+args    = ["gremlins"]
+timeout = 1800
+when    = "Windows 侧兜底 / 交叉验证: 不想开 WSL, 或想用第二个工具核对杀死率"
+note    = "用法: commands run mutants.gremlins -- --target src/auto_qb/infra/utils.py --pool tests/test_utils.py。工具走 `uv run --with pytest-gremlins==1.11.2`, **不写进 pyproject**(主仓库依赖面不动)。算子面比 mutmut 窄(无字符串/语句删除), 分数与 mutmut 分母不同, 别横向比"
+doc     = "references/why.md"
+
+[tasks."mutants.status"]
+script  = "mutants.py"
+args    = ["status"]
+timeout = 300
+when    = "轮次之间回看: 镜像 HEAD / mutmut 是否就位 / 上一轮未杀死条数"
+note    = "只读。列出镜像路径、HEAD、mutants/ 体积、当前 only_mutate、最近一份结果文件"

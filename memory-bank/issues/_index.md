@@ -19,6 +19,7 @@
 | bug | 4 |
 | perf | 5 |
 | docs | 1 |
+| test | 1 |
 | refactor | 5 |
 | feat | 21 |
 | chore | 2 |
@@ -26,6 +27,7 @@
 
 ## Open
 
+- [test] [变异测试定期审计(常驻排期锚)](26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分…
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/…
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种…
 - [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保…

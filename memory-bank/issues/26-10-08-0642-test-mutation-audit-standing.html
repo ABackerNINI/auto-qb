@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="mutation-audit-standing">
+<meta name="issue-stamp" content="26-10-08-0642">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="变异测试定期审计(常驻排期锚)">
+<meta name="issue-summary" content="常驻锚: 按包/按模块定期跑变异测试(全量或部分), 机器提名+手工确认存活变异, 真洞各自入池; 指导见 mutation-testing skill, 命令走 mutants 包">
+<title>变异测试定期审计(常驻排期锚) · test · 常驻锚</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: #16241a; color: #8fc98f; border-color: #2f4a33; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>这个锚是干什么的</a>
+    <a href="#s2"><span class="no">02</span>为什么不进提交闸门</a>
+    <a href="#s3"><span class="no">03</span>覆盖范围与节奏</a>
+    <a href="#s4"><span class="no">04</span>怎么跑</a>
+    <a href="#s5"><span class="no">05</span>一轮的标准动作</a>
+    <a href="#s6"><span class="no">06</span>产物落在哪</a>
+    <a href="#s7"><span class="no">07</span>轮次台账</a>
+    <a href="#s8"><span class="no">08</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      <strong>常驻锚: 状态恒 Open</strong> · 不是缺陷单<br>
+      规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 常驻排期锚 · test</div>
+    <h1>变异测试定期审计(常驻排期锚)</h1>
+    <p class="lede">这是一条<b>常驻锚</b>, 不是一个待修的缺陷: 它固定住「按包/按模块定期跑一轮变异测试 —— 机器提名存活变异、人工确认真洞、真洞各自入池」这件事的排期与覆盖进度。执行方式、硬约束、三分类方法与「派生计划」模板都在 <code>mutation-testing</code> skill; 命令在 <code>mutants</code> 包。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-0642-test-mutation-audit-standing</div></div>
+      <div class="item"><div class="k">建立时间</div><div class="v">2026-10-08 06:42</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Open(常驻)</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">worktree auto-qb-clone4 / agent</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>这个锚是干什么的</h2>
+    <p>项目已有 98% 分支覆盖闸, 但覆盖率<b>量不出测试的强弱</b>: 两个「公认覆盖良好」的模块实测出 10 与 70 个存活变异; <code>rules/</code> 与 <code>infra/utils.py</code> 覆盖率是同一个 98%, 变异分数却差 17 个点(55.5% vs 72.5%)。变异测试补的就是这个刻度 —— 详见可行性报告 <a href="../reports/26-10-08-0231-report-mutation-testing-feasibility.html">26-10-08-0231</a>。</p>
+    <p>这条锚只回答两件事: <b>要不要继续做</b>、<b>覆盖到哪几个包了</b>。它<b>不</b>记流水(轮次记录在任务档案与基线切片), 也<b>不</b>替真洞背书(每个确认的真洞各自入池)。</p>
+    <div class="callout"><b>四段职责</b>(每段只在一个工位有权威): ①<b>排期锚</b>=本 issue(要不要做 / 什么时候做 / 覆盖到哪) → ②<b>派生计划</b>=<code>memory-bank/plans/</code>(针对某个包怎么修) → ③<b>执行一轮</b>=<code>mutants</code> 包(跑 + 手工确认) → ④<b>记录</b>=基线切片 + 任务档案 + 真洞各自的 issue。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>为什么不进提交闸门</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>节奏</td><td>按包一轮 <b>1–21 min</b>(实测 <code>rules/</code> 7m31s); 全项目 ≈ 79 min。是审计信号, 不是放行条件</td></tr>
+      <tr><td>工具硬要求</td><td>基线全绿才开跑(不绿直接跳过), 与提交闸门「先绿再提」的时序冲突</td></tr>
+      <tr><td>已有闸门</td><td>98% 分支覆盖已挂在 <code>pytest.ini</code>; 再叠变异分数只会拖队, 且追不平(等价变异杀不掉是数学事实)</td></tr>
+      <tr><td>分母不可比</td><td><code>no tests</code>(无覆盖)与 <code>survived</code>(有覆盖没杀掉)是两类; 两个工具分母不同, 分数只能各自纵向比</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>覆盖范围与节奏</h2>
+    <p><b>粒度是「一个包」或「一个模块」</b> —— 全项目一把跑不可行(实测在 37% / 74% 两处把 WSL 打挂, 要 <code>wsl --shutdown</code> 才救回), 按包切是硬要求而非偏好。</p>
+    <p><b>优先级</b>(按「判据密度 × 出错代价」, 不是按行数):</p>
+    <ol>
+      <li><code>rules/</code> —— 规则引擎判据, 实测 3,270 变异 / 杀死率 <b>55.5%</b>(分数最低, 最该先补)</li>
+      <li><code>hr/</code> —— HR 判定与做种要求链路</li>
+      <li><code>config/</code> —— fail-fast 校验</li>
+      <li><code>core/</code> —— 主循环 / 限速</li>
+    </ol>
+    <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
+    <p class="hint">节奏建议: 每周 / 每个 Release 前挑 1 个包; 季度做一次逐包累加(不要一把跑)。「全量」= 逐包跑完, 不是一次跑完。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>怎么跑</h2>
+    <p>命令一律走 task id, <b>不要手抄命令本体</b>(会被 <code>commands run doc.drift</code> 判红):</p>
+    <table>
+      <tr><th>task id</th><th>干什么</th></tr>
+      <tr><td><code>commands run mutants.setup</code></td><td>建 / 刷新 WSL 镜像仓 + 装工具(首次或镜像落后)</td></tr>
+      <tr><td><code>commands run mutants.run -- --target '&lt;glob&gt;' --pool &lt;测试文件...&gt;</code></td><td>主力: 对某包 / 模块跑一轮 mutmut</td></tr>
+      <tr><td><code>commands run mutants.gremlins -- --target &lt;文件&gt; --pool &lt;测试文件...&gt;</code></td><td>Windows 侧兜底 / 交叉验证</td></tr>
+      <tr><td><code>commands run mutants.status</code></td><td>回看镜像状态与上一轮未杀死条数</td></tr>
+    </table>
+    <p class="hint">用法与陷阱用 <code>commands show mutants.run</code> 取; 深读在包内 <code>references/why.md</code>。硬约束(按包 / 定向池 / forkserver / deselect / <code>-n 0 --no-cov</code> / <code>--max-children 4</code>)已内建在脚本里, 正常路径不用手工拼。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>一轮的标准动作</h2>
+    <ol>
+      <li><b>入场</b>: 基线全绿(<code>commands run test.quick</code> 过) —— 不绿先修, 别跑变异。</li>
+      <li><b>定目标与池</b>: 一个包 / 模块; 池 = 直接相关的那几个测试文件。</li>
+      <li><b>跑一轮</b>: <code>mutants.run</code>; 记下变异数 / 杀死率 / 耗时 / 工具版本 / <b>选择池</b>。</li>
+      <li><b>三分类</b>存活变异 → 真洞 / 等价变异 / 假存活(这是<b>人</b>的动作)。</li>
+      <li><b>手工确认</b>: 对每个疑似真洞, 在<b>全套件</b>下改造同构变异, 看红不红 —— <b>只认这个判据</b>。</li>
+      <li><b>处置</b>: 真洞 → 各自入池或当场补断言(补完 <code>test.full</code>); 等价变异 / 假存活 → 记一笔理由。</li>
+      <li><b>复跑</b>: 同目标<b>同池</b>, 看存活数是否下降(换池的数字不可比)。</li>
+      <li><b>记录</b>: 新建基线切片 + 任务档案追加一行轮次; 本 issue 不动(除非改覆盖范围)。</li>
+    </ol>
+    <div class="callout warn"><b>别把存活清单当缺口单</b>: 窄池下的存活相当比例是「相关测试不在池里」的假存活 —— 实测同一 <code>utils.py</code> 只换池, 存活 97 → 70; 判据与处置见坑档 <a href="../pitfalls/testing/mutation-pool-artifact.md">mutation-pool-artifact.md</a>。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>产物落在哪</h2>
+    <table>
+      <tr><th>产物</th><th>落点</th><th>权威</th></tr>
+      <tr><td>指导(怎么做)</td><td><code>.agents/skills/mutation-testing/SKILL.md</code></td><td>流程 / 硬约束 / 派生计划模板</td></tr>
+      <tr><td>命令</td><td><code>.commands/mutants/</code>(+ 包内 <code>references/why.md</code>)</td><td>命令本体与排障</td></tr>
+      <tr><td>证据 / 实测数字</td><td><code>memory-bank/reports/26-10-08-0231-…html</code></td><td>框架比对 / 成本模型 / 14 条坑</td></tr>
+      <tr><td>方法论坑</td><td><code>memory-bank/pitfalls/testing/mutation-pool-artifact.md</code></td><td>存活数是池的函数</td></tr>
+      <tr><td>每轮记录</td><td><code>memory-bank/testing/baselines/&lt;stamp&gt;-mutants-&lt;包&gt;.md</code></td><td>目标 / 池 / 变异数 / 杀死率 / 耗时 / 版本 / 真洞数</td></tr>
+      <tr><td>轮次与决策</td><td>任务档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code></td><td>做到哪了(唯一滚动)</td></tr>
+      <tr><td>真洞</td><td>各自的 <code>test</code> / <code>bug</code> issue</td><td>每条独立排期</td></tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>轮次台账</h2>
+    <p class="hint">只留指针, 不记流水 —— 明细在基线切片与任务档案里。</p>
+    <table>
+      <tr><th>轮次</th><th>目标</th><th>结果</th><th>切片 / 档案</th></tr>
+      <tr><td>R0 建立</td><td>—</td><td>指导 / 命令 / 排期锚就位; <code>infra/versioning.py</code> 走通全流程(155 变异 / 21.6s / 存活 7 + 超时 1)</td><td><code>tasks/26-10-08-test-mutation-audit.md</code></td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-08 06:42 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套审计还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。</li>
+    </ul>
+    <p class="hint">本件是常驻锚, 不随单轮完成而改状态; 轮次进度看 §07 与任务档案。</p>
+  </section>
+
+  <footer>
+    26-10-08-0642-test-mutation-audit-standing.html · 常驻排期锚(standard 档) · 由 create-issue skill 入池; 状态恒 Open, 停止审计才 Dropped
+  </footer>
+
+</div>
+</body>
+</html>
