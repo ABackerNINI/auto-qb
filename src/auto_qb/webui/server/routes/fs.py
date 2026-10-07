@@ -34,7 +34,7 @@ def _bare(p: str) -> str:
       `/?/H:/a`(**损坏**) ⇒ 所以必须先剥再规范化。
 
     单点实现在 file_access._strip_win_prefix(调用点只交逻辑路径后由包装层自理) ——
-    这里保留薄委托是为了让既有归一契约测试(test_web)继续钉在路由模块上。
+    这里保留薄委托是为了让既有归一契约测试(tests/test_web_hr.py)继续钉在路由模块上。
     """
     return file_access._strip_win_prefix(p)
 

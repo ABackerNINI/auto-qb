@@ -106,7 +106,7 @@
 - **处置**: ① 在 `state.js` 加 `watch(drawerVisible)`: 退场 `_qbChartDestroy(scope)`(连 ResizeObserver 一起断),
   进场 `_qbReloadOnEnter(scope)` 补拉一发(`_qbLoad` 内含 `$nextTick` 建图), 并对在途 `loading` 让路
   (打开路径本就先发一发, 否则首次打开的请求翻倍); ② Esc 两处名单改判 `drawerVisible`。
-- **守阵**: `tests/test_web.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
+- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
   入口页面归一 / watcher 退场销毁 + 进场补拉)。
 
 ### 列表变短 = 文档变矮: sticky 吸底脱锚, 面板跟着内容末尾走
@@ -121,7 +121,7 @@
   走 `columns.js::_syncHeadHeight` 既有单点, **不写死** —— 顶栏随媒体查询/状态条/窄屏折行变高)。
   内容列恒撑满则面板自然落点恒在视口底, sticky 恒生效, 锚点与列表长短无关。三皮肤成对改
   (atlas/console 的 components.css + prism 的 views.css)。
-- **守阵**: `test_web.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
+- **守阵**: `test_webui_static_skins.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
   `e2e/drawer-dock-stability.spec.mjs`(行为: 搜索全程面板 top 偏差 ≤2px)。配套根因(待响应期
   塌列表)见 search-pending-collapse。
 - **取证(2026-10-07)**: 修复前短列表态面板 top 416 vs 钉住态 430; 修复后三皮肤逐帧采样零变化。
@@ -137,5 +137,5 @@
 - **处置**: 流量形态由 `drawer.js::drawerPanelStyle()` 给**确定高度**(`drawerHeightPx` 有值就用它,
   没有则回落 42vh = 与 CSS 默认上限同值), 高度因此也与种子详情**共用同一 drawerHeightPx**;
   建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
-- **守阵**: `tests/test_web.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
+- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
   撑满段成对 + RO 宽高双观察) + `test_web_shortcuts.py::test_drawer_height_collapse_w3`(面板高度单点)。

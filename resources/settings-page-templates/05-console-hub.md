@@ -279,4 +279,4 @@ border-radius: 0;
 - [ ] 说明浮窗：点 `?` 就近弹出，Esc / 点外部 / 滚动都能关，窄屏不越界。
 - [ ] 首页卡片：LED 三态正确、读数正确、"建议你看一下"能指向风险项。
 - [ ] 文案：第 9 节对照表全部替换，且 schema 的新键已进 `validate_config`。
-- [ ] 全量测试：`uv run pytest tests -q`（前端静态资源有 `test_web.py::test_frontend_static_bundle_health` 之类守阵，改完必跑）。
+- [ ] 全量测试：`uv run pytest tests -q`（前端静态资源有 `test_webui_static_skins.py::test_frontend_static_bundle_health` 之类守阵，改完必跑）。

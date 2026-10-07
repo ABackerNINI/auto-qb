@@ -42,7 +42,7 @@
   会把 `position:absolute` 的 flyout 次级面板一起裁掉, 且每次开层要先复位 `maxHeight`;
   ④测试侧钉 **e2e**: 这类几何缺陷 pytest 跑不出来, 而 arrange **挑上部行**只是对冲、会把缺陷藏住
   —— 判据 = 挑**下部**锚点, 断言菜单盒 `y+height <= innerHeight - 8` **且**真实点击底部那一项。
-  守阵: `test_web.py::test_frontend_ctx_menu_refit_by_measured_size`(接线) +
+  守阵: `test_webui_static_dom_panel.py::test_frontend_ctx_menu_refit_by_measured_size`(接线) +
   `e2e/menus.spec.mjs` 的 CTX-fit 用例(几何 + 真实手势; issue 26-10-06-1717)。
 
 ### Esc 退栈顺序 = 视觉层叠顺序(z-index), 不是打开先后 —— 两图同开时按层高关
@@ -55,7 +55,7 @@
   与视觉层叠正好相反。
 - **处置**: 链序按视觉层叠排(弹层 130 > 抽屉 80 ⇒ `historyOpen` 分支先于 `drawerVisible`)。
   `dialogs.js::escBusy` 是"有没有层"的布尔(顺序无关), 不受影响, 无需改。守阵:
-  `test_web.py::test_frontend_qb_traffic_chart_wiring` 里加 `hist_at < drawer_at` 的**顺序**断言
+  `test_webui_static_dom_panel.py::test_frontend_qb_traffic_chart_wiring` 里加 `hist_at < drawer_at` 的**顺序**断言
   —— 只断言"分支存在"漏得掉顺序错(这正是本坑逃过守阵的原因)。
 
 ### 无遮罩浮层的三个细节
@@ -74,7 +74,7 @@
   形态改浮层时 JS 零改动直接沿用旧交互是直接成因)。
 - **处置**: 覆盖式浮层的收起按「选中即收 + 点外即收」设计, 收层一律清词(不引入 dismissed
   状态位, 显隐仍由词驱动); 形态切换提交前自问「原布局下每个交互在新形态下还成立吗」。
-  守阵: `test_web.py::test_frontend_tracker_search_wiring`(四条收起路径)。
+  守阵: `test_web_backend_misc.py::test_frontend_tracker_search_wiring`(四条收起路径)。
 
 ### 不可见的全屏遮罩会拦掉整页点击
 
@@ -95,7 +95,7 @@
   与语义色规则同重并按源码顺序让位); ② 收起挂**父项**的 `mouseleave`(mouseleave 只在离开父项
   **及其全部后代**时触发 ⇒ 父项↔面板互切不会误收; 面板上再挂一条 mouseleave 反而会在
   "从面板回到父项"时误收, 因为父项不会再收一次 mouseenter), 面板自身只挂 `mouseenter` 撤销挂起的收起;
-  ③ 延迟 ~180ms 收起, 一级菜单关闭时撤销挂起的定时器。守阵: `test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close`。
+  ③ 延迟 ~180ms 收起, 一级菜单关闭时撤销挂起的定时器。守阵: `test_webui_static_dom_panel.py::test_frontend_ctx_submenu_single_entry_and_hover_close`。
 
 ### 删除编排在前端而非后端
 
@@ -125,7 +125,7 @@
   ③**每个 `open*Menu` 都要写 `multi`** —— 三视图共四个入口(组/成员/剧/集), 漏一个那条路径就静默退回单目标。
   ❗`ctxAct`/`ctxDelete` 必须**先收起菜单**: 菜单根节点是 `@click.stop`, 全局"点空白关闭"接不到。
   ❗批量菜单里不放单目标项(详细信息/限速/重命名/导出/复制): 它们对 N 个目标没有明确语义。
-  守阵: `test_web.py::test_frontend_ctx_menu_multi_select_targets_selection` + 冒烟 CTX-03 六条(双 UI)。
+  守阵: `test_webui_static_dom_panel.py::test_frontend_ctx_menu_multi_select_targets_selection` + 冒烟 CTX-03 六条(双 UI)。
 
 ### 起点(anchor)与光标(focus)是两件事; 点击落起点的写入必须排除 Shift
 

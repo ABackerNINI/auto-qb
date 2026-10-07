@@ -8,11 +8,11 @@
 - **触发**: 在 CSS 注释里写含 `*` 的通配表述后紧跟 `/`(2026-09-28 实测: console/css/components.css 进度条注释写了 `(s-*/member-row 族)`, 想表达"两种行类名族")。
 - **判别**: 症状 = 某条规则"看起来在文件里却不生效"(实测: `.m-progress { display: flex }` 被吞, 三处表格进度条只剩百分比没有条, `.bar` 保持 inline 宽度 0)。**静态看文件永远"没问题"** —— 必须看浏览器实际消费的规则: DevTools Styles 面板缺这条, 或 `document.styleSheets` 遍历 cssRules 找不到该选择器。花括号配平、`_scan_css_blocks` 均查不出(注释态里括号本就不计)。
 - **处置**: 注释文字里避开 `*/` 序列(写成 `s-* / member-row` 加空格); 同理慎用 `/*` 出现在注释文字里。守阵 `test_frontend_static_bundle_health::_scan_css_comments`(浏览器同款注释语义扫描, 代码态出现孤立 `*/` 即红)。
-- **守阵**: tests/test_web.py `_scan_css_comments`(red 验证: 回退 components.css 该行测试即红)。
+- **守阵**: tests/test_web_*.py `_scan_css_comments`(red 验证: 回退 components.css 该行测试即红)。
 
 ### 自查脚本要用浏览器语义扫描, 不能用嵌套计数(否则整篇误报)
 
 - **触发**: 临时写脚本找"注释配平"问题时用 `count('/*') == count('*/')` 或 depth 计数(2026-10-03 实测误报 6 个 CSS 文件, 含 prism/css/views.css 的 HR 弹窗段 —— 一度被当成"整段样式失效"上报)。
 - **判别**: CSS 注释**不嵌套**: 进入注释后只认第一个 `*/`, 期间出现的任何 `/*` 都只是注释文字。而内含 `/*.css` 的正常写法(如 `颜色令牌由 themes/*.css 提供` —— 见 prism/css/views.css HR 弹窗段注释)会被计数法当成新的注释起点 ⇒ depth 永久 +1, 报告"从此处到文件尾全被吞"。
-- **处置**: 静态自查一律**线性扫描**(见 `test_web.py::_scan_css_comments` 的同款语义: 见 `/*` 就找下一个 `*/`, 跳到其后继续), 不要数 `/*` 与 `*/` 的个数。
+- **处置**: 静态自查一律**线性扫描**(见 `test_webui_static_skins.py::_scan_css_comments` 的同款语义: 见 `/*` 就找下一个 `*/`, 跳到其后继续), 不要数 `/*` 与 `*/` 的个数。
 - **连带纪律**: 扫描类脚本报出问题后, **必须打开源码肉眼看一眼再下结论** —— 本次误报只需看一眼第 855 行就能翻案(注释正常闭合 `圆角取本 UI 的紧圆角族。 */`), 却一路走到了"建议用户入池"。

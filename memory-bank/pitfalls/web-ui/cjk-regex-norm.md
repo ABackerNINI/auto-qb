@@ -11,6 +11,6 @@
 - **处置**: `String(s).replace(/[^\p{L}\p{N}]+/gu, ' ').toLowerCase().trim()`; **u 标志必带**
   —— 没有它 `\p{L}` 直接 SyntaxError(算是好事, 当场暴露)。
   守住同一语义的对照: Python `\W` ≈ JS `[^\p{L}\p{N}]`(Unicode 语义), JS `\W` ≈ ASCII `[^^0-9A-Za-z_]`。
-- **守阵**: `tests/test_web.py::test_frontend_tracker_search_wiring` 正则断言 config_hub.js 的
+- **守阵**: `tests/test_web_backend_misc.py::test_frontend_tracker_search_wiring` 正则断言 config_hub.js 的
   `trackerNorm` 必须含 `[^\p{L}\p{N}]+/gu`。
 - **来源**: 2026-09-28 站点页搜索实施(计划 26-09-27-1852 §04 预警在先, 首踩未遂即入库)。

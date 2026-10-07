@@ -9,7 +9,7 @@
 环境细节见 `memory-bank/techContext.md`「浏览器冒烟环境 (Playwright)」。)
 乐观 UI 的半透明与失败回滚、按视图回传后切视图、表头同步是否还在每帧强制布局、
 行窗口化后滚动是否跳动 —— 这些都属于"pytest 全绿但界面废掉"的故障形态(见
-`test_web.py::test_frontend_static_bundle_health` 的同类守阵思路: 静态能查的静态查,
+`test_webui_static_skins.py::test_frontend_static_bundle_health` 的同类守阵思路: 静态能查的静态查,
 查不了的只能真跑浏览器)。
 
 本脚本用**真实的** `auto_qb.webui.create_app` 起服务(端点/鉴权/静态挂载全是生产代码),

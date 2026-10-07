@@ -13,7 +13,7 @@ routes/=按域 APIRouter。2026-09-22 方案 C W1 整体平移为 webui/server/�
 对外导入点统一走 auto_qb.webui 门面；包内上游引用随包深 +1 层（..→... / ...→....）。
 
 !日志命名空间(K3): 本包**所有子模块**一律显式 ``logging.getLogger("auto_qb.web")``,
-  不用 __name__ —— tests/test_web.py 多处按 ``r.name == "auto_qb.web"`` 断言 caplog
+  不用 __name__ —— tests/test_web_*.py 多处按 ``r.name == "auto_qb.web"`` 断言 caplog
   记录, 子模块 logger 名漂移(auto_qb.web.auth 等)必红。
 """
 from .common import content_disposition, ensure_web_token

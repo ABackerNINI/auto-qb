@@ -85,7 +85,7 @@
   - **外发(响应体/前端 DOM)**过 `utils.mask_tracker_url()` / `mask_tracker_entry()`: 保留 `scheme://host` + path 端点名 + query 参数名(站点/端点仍可辨, 站点匹配/域名告警无感), 只把"值"换成确定性 hash16(不加盐, 两次逐字节一致, 删除改道靠它当场比对重取原文); mask 规格单点 R1–R9 在 `infra/utils.py` 与 plan 26-10-07-0055。
   - **铁律 R1**: 虚拟条目(`**`/`[DHT]`/`[PeX]`/`[LSD]`)原样透传, 不过 mask —— 它们不是 announce URL, 没有凭据。
   - **铁律 R6**: **不按参数名挑, query 全值 hash** —— 私站凭据参数名是任意的(passkey 只是最常见的一种, 还有 authkey/token/uid 等), 按名挑每漏一个名字就漏一个站; 旧日志口径因此整段丢弃, mask 口径因此全值 hash。
-  - 守阵: `tests/test_web.py` 守阵①~⑤(API 外发/删除改道/编辑下线/基线 key 原文/canary)钉住, 打回旧实现 CI 立刻红; 红验方式见各守阵 docstring。
+  - 守阵: `tests/test_web_seed_center.py` 守阵①~⑤(API 外发/删除改道/编辑下线/基线 key 原文/canary)钉住, 打回旧实现 CI 立刻红; 红验方式见各守阵 docstring。
 - **通知联动** (2026-09-12; 2026-09-27 默认改 ERROR): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 ERROR 日志点无需单独接入通知; **min_level 默认 ERROR**, 即默认只有真正危险才弹窗, WARNING 仅排障 (想看时把 min_level 调低); 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
 
 ## 格式化 (yapf, .style.yapf)

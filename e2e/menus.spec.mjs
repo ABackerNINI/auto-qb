@@ -536,7 +536,7 @@ for (const skin of SKINS) {
     test.describe('W5 off: fail-closed 门控精简组(skip-check off)', () => {
       /* 桩 --skip-check-menu off 起盘, 走真实 /api/webui/flags -> state.flags -> v-if 链。
        * 与旧脚本 off 轮同构: 只验门控, 主路径那些"菜单含跳检项"断言在关态下会假红故整组跳过。
-       * 后端 gate 的 403 双态由 pytest 兜底(test_web.py), 这里只管前端渲染面。 */
+       * 后端 gate 的 403 双态由 pytest 兜底(tests/test_web_auth.py), 这里只管前端渲染面。 */
       requireMode(test, { skipCheck: 'off' });
       installRuntimeErrorGuard(test);
 

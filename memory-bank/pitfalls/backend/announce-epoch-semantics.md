@@ -14,5 +14,5 @@
   2. **证据门控**: ②updating/status==3 在途直证撞见即收 / ④status==4 且 msg 非空才判败(msg 空不判) / ①停止种子直判「未确认」/ ⑤窗口走完落「未确认」(warn 第三态诚实标签, 不与「失败」混淆)。
   3. **S0 真机探针实证**(qB 5.2.3 / WebAPI 2.15.1, 2026-10-05): 立即路径前跳 **+5466s**(基线 next=1791168212 → call+3.03s next=1791173678, ≫ TOL 3.0s, min 同向 +5427s 佐证); updating 窗口实测 **≈2.1s**(调研估 ~0.5s 偏小, 2s tick 命中率比预估高); 推迟路径 `next=min=min_e+1` 冻结 ≥104s 后于 min_e+~2.2s 同值移动 —— **min_e 就是可靠的预计发送时刻**。
   4. **两条瞬态/极值守卫**: ①前跳判据限**基线 status≥2** 的行 —— 未联系行的时间点是 libtorrent `time_point32::min()` 类极值, 参与比较会造成假前跳; ②**基线 min 在未来时 updating 不作左证** —— 推迟 item 在 call+~1s 有 ~0.9s 的 updating=True 假瞬态(endpoint 发送态钉住所致), 撞上会经「在途直证」提前误判「已确认」, 而实际汇报 min_e 后才发出。
-- **守阵**: `tests/test_web.py` §05 十一组用例(判定矩阵 epoch/legacy、min 窗口守卫、三桶聚合、状态与前缀双契约等; 本计划净增 +7), 判定矩阵对 ==TOL 边界与「前跳不足」负样本钉死方向。
+- **守阵**: `tests/test_web_*.py` §05 十一组用例(判定矩阵 epoch/legacy、min 窗口守卫、三桶聚合、状态与前缀双契约等; 本计划净增 +7), 判定矩阵对 ==TOL 边界与「前跳不足」负样本钉死方向。
 - 同族纪律单点: [effect-confirmation.md](effect-confirmation.md)(异步操作成败宣称凭正证据门控, 范本区含 `_verdict_reannounce`)。

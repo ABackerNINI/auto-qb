@@ -25,6 +25,6 @@
 - **同族: 多行记录**。`exc_info=True` 打出的整段 traceback 折行后每行都不带字段标记 ⇒ 解析必须按
   **记录**取舍(解析得出的行开启新记录, 解析不出的行**跟随上一条**的取舍), 否则筛 ERROR 只剩
   `... 执行异常: ...` 标题行、把用户真正要看的栈丢掉。
-- **守阵**: `tests/test_web.py::test_api_log_level_filter_follows_config_format`(生产格式) ·
+- **守阵**: `tests/test_web_admin.py::test_api_log_level_filter_follows_config_format`(生产格式) ·
   `::test_api_log_note_when_level_unfilterable`(两种"筛不了") ·
   `tests/test_logging.py::test_filter_log_lines_*`(格式形状矩阵 / 多行记录 / 提示语 / 字段宽度与 `%%` 变体)。

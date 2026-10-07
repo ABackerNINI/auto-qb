@@ -731,7 +731,7 @@ class QbManager(
         (start 自注册, plan §3.2), 内核不再点名。本方法只剩一个语义: 队列(可能刚被 L2 重建)
         请求各模块按当前配置注册全局任务 —— 经 EventBus 的 queue_rebuilt 相位, 已注册的模块
         幂等跳过(TaskQueue.has_named), 新队列则重新入队。run() 启动路径由 start_all 的
-        模块 start() 承担, 不再经过这里; L2 分支与测试入口仍走本方法(test_web 守阵点名)。
+        模块 start() 承担, 不再经过这里; L2 分支与测试入口仍走本方法(测试守阵点名)。
         """
         self.events.emit("queue_rebuilt")
 

@@ -26,6 +26,6 @@
   最近」者接续(文案相同 = 语义相同, 位置最近 = 大概率同一目标); ③`watch()`/`tick()` rAF 帧环: 显示期
   每帧查 1 次 `getBoundingClientRect`(零额外 DOM 查询), 断链走重解析、四轴漂移 >1px 走重定位;
   键盘 NaN 坐标路径由**矩形基准**(首帧锚点矩形)兜住, 不依赖指针。
-- **守阵**: `test_web.py::test_aq_tip_anchor_watch_and_reacquire_wired`(接线断言); 行为层几何仍以
+- **守阵**: `test_web_longtail.py::test_aq_tip_anchor_watch_and_reacquire_wired`(接线断言); 行为层几何仍以
   Playwright 真机验证为准(本轮四项实测之一)。
 - **复发**: 0(二轮新记)

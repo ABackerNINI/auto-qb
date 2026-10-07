@@ -5,7 +5,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 
 /**
  * 停靠面板几何稳定(2026-10-07 修「种子详情面板/流量图在搜索/筛选时跳动」) —— 静态守阵
- * (test_web.py::test_frontend_search_pending_no_collapse)钉的是接线存在性; 本 spec 钉**行为**:
+ * (test_webui_static_skins.py::test_frontend_search_pending_no_collapse)钉的是接线存在性; 本 spec 钉**行为**:
  * 静态守阵探不到「调用存在但几何/时机错」的缺陷(dock-panel 坑档 2026-10-04 教训), 必须真浏览器采样。
  *
  * 两个被修缺陷的真机指纹(修复前取证, prism 皮肤 1280x800, 逐帧采样):

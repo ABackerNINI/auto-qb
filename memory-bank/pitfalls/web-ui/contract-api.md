@@ -43,7 +43,7 @@
 - **处置**: `distSegments` 按 viewMode 分支: groups 走 groups + singles / torrents 走 `torrents[].kind` /
   shows 走 `shows.list[].seasons[].episodes[].state`(**`shows` 是 `{list, unrecognized}` 不是数组**, 第一脚就踩过)。
   判定口诀"**凡跨视图呈现的派生值, 都问一次'它在另两个视图下还成立吗'**";
-  守阵: `tests/test_web.py::test_frontend_dist_segments_aggregates_per_view`。
+  守阵: `tests/test_webui_static_dom_page.py::test_frontend_dist_segments_aggregates_per_view`。
 
 ### 上游从「空/未接入」变「有值」会点亮下游**从未跑过**的展示分支 (2026-09-29)
 
@@ -61,7 +61,7 @@
   不参与 `VIEW_ARRAYS` 分片、不参与 rid 门控。**不要**反过来把阵列加回 `VIEW_ARRAYS`(会废掉 P1-1 的体积优化)。
   ③的修法是"**取数面单点**": `facetRows` 按 `viewMode` 自取数(种子页 = `torrents`, 其余 = `decoratedGroups`),
   选项一律走 `_facetOptions(kind)` —— 计数口径**随行走**(组视图 = 含该值的组数, 种子页 = 含该值的种子数),
-  与各自页面真正在筛的行一致; 静态守阵 `tests/test_web.py::_scan_filter_facets` 钉住"不许再有第二条按组算的实现"
+  与各自页面真正在筛的行一致; 静态守阵 `tests/test_webui_static_skins.py::_scan_filter_facets` 钉住"不许再有第二条按组算的实现"
   (`_memberValueOptions` 已删, 复活即红); 冒烟断言按"计数 == 用 `vm.torrents` 现数的真值"判 ——
   **只判非空会放过"仍按组算"的错误口径**(先开过辅种页再切过来时 groups 还在, 按组也能算出非零)。
 
@@ -100,7 +100,7 @@
 ### 同一概念两张表必须对齐(前端 `STATE_RANK` 与后端 `_SHOW_STATE_RANK`)
 
 - **触发**: 改状态优先级。
-- **判别**: 由 `tests/test_web.py` 静态守阵机械比对, 改一边不改另一边即红。
+- **判别**: 由 `tests/test_web_*.py` 静态守阵机械比对, 改一边不改另一边即红。
   ⚠ 且"一致"只管**两页同色**, 管不了"**同成哪个色**" —— 顺序语义本身也被钉住了:
   **`seeding` 必须严格排在 `paused` 之前**(组/集内"部分暂停部分做种中"取**做种色**, 2026-09-21 用户口径)。
   反例就在 2026-09-19 修 BUG-7 时: 把前端表整体对齐后端, 顺手把 `{paused,seeding}` 也翻成 paused ⇒
@@ -125,7 +125,7 @@
   且 drawer 按需兜底因"种子页索引由 torrents 补齐"恒短路成死路径, 两组注释口径互相矛盾
   (decorate.js「扩展字段在这份」vs drawer.js「不给响应体加字段」)。修复 = `_seed_view` 去掉
   `magnet_uri`, `copyTorrentInfo` 按需取 `/api/torrents/{hash}` 详情成唯一路径, 注释收口;
-  守阵 = test_web.py SEED_ITEM 契约测试(断言载荷**不含** magnet_uri)。
+  守阵 = test_web_seed_center.py SEED_ITEM 契约测试(断言载荷**不含** magnet_uri)。
 
 ### HR 标签着色靠"**文本逐字相等**"
 

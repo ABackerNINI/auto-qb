@@ -27,7 +27,7 @@
   **子目录被全部过滤掉(目录树恒空)** —— 看着像"这个目录就是空的", 完全不像越界。
 - **处置**: 设一个 `_bare()` 专剥前缀(`\\?\UNC\` 还原成 `\\`), 在 `normcase` / `path_normalize` **之前**调用;
   比较与返回都只认剥后形态。`_fs()` 的入参也先 `_bare` ⇒ 幂等(重复加前缀不叠加、不折坏)。
-- **守阵**: `tests/test_web.py::test_fs_path_helpers_strip_long_path_prefix_before_compare`(纯路径归一,
+- **守阵**: `tests/test_web_hr.py::test_fs_path_helpers_strip_long_path_prefix_before_compare`(纯路径归一,
   任何平台都跑 —— 故这三个 helper 特意放在**模块级**而不是路由闭包里)。
   ⚠ `os.path.realpath` **是否保留前缀与路径长度有关**(实测短路径保留、长路径剥掉) ⇒ 不能依赖它, 必须显式剥。
 

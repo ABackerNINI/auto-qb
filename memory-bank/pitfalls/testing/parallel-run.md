@@ -50,7 +50,7 @@
   | `-n 16 --no-cov` | 6.82s(**更差** —— worker 启动开销开始占主导) |
   ⇒ **`-n 4` 是甜点**。⚠ 别用 `-n 16`。
 - **怎么开的**: ①`pyproject.toml` dev 组加 `pytest-xdist==3.8.0`; ②`pytest.ini` 的 `addopts` 加 `-n 4`。
-  ⇒ **单文件跑会慢在 worker 启动上**, 排查时用 `-n 0`(如 `uv run pytest tests/test_web.py -q -n 0`)。
+  ⇒ **单文件跑会慢在 worker 启动上**, 排查时用 `-n 0`(如 `uv run pytest tests/test_web_*.py -q -n 0`)。
 - **⚠ 结论曾经是反的**: 同日早些时候 `-n 4` 在 **15.94~209.77s** 之间乱跳(中位 ~31s, **尾部比串行最坏还差**),
   当时判定"闸门保持串行"。根因是**底层文件操作被拦截**(见 [perf-measurement.md](perf-measurement.md))——
   多进程只是把那份争用**放大**。系统层排除项修好后同一命令稳定在 ~5s, 波动几乎消失。

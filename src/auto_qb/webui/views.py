@@ -91,7 +91,7 @@ _VIRTUAL_TRACKER_PREFIXES = VIRTUAL_TRACKER_PREFIXES
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
 # !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
 #   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
-#   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_web.py 静态守阵机械比对。
+#   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对。
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "other": 5}
 
 # P1-1 按视图回传: 每个视图实际要用的数组。四视图共享同一版本号(rid), 所以"只回一部分"

@@ -78,7 +78,7 @@ function qbWinStoreKey(scope) {
 }
 /* 窗口初值(持久化偏好; 与 initialDrawerTab 同纪律: 只认合法档位, 坏值/无存储回落默认)。
  * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前)由 state.js 的 data() 调用;
- * localStorage 访问只在函数体内(本文件会被 test_web 的 node 探针 eval, 顶层不得碰 DOM/BOM)。 */
+ * localStorage 访问只在函数体内(本文件会被 test_webui_static_dom_panel.py 的 node 探针 eval, 顶层不得碰 DOM/BOM)。 */
 function qbInitialWindow(scope) {
   try {
     const v = localStorage.getItem(qbWinStoreKey(scope));

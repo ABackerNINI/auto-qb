@@ -59,7 +59,7 @@
   只能从 `get_loop_factory`(uvicorn ≥0.36 替代 `setup_event_loop` 的扩展点)注入。
 - **本机复现**(不依赖时序竞态): 在一个请求处理里 `loop.call_soon(cb)`、`cb` 抛
   `ConnectionResetError(10054, ...)` —— 原生 `uvicorn.Config` 打 ERROR + traceback, 换 `_QuietLoopConfig`
-  后只剩一行 INFO。守阵见 `tests/test_web.py` 的 5 条 `*_loop_exception* / *_noise_* / *_fluctuation`。
+  后只剩一行 INFO。守阵见 `tests/test_web_*.py` 的 5 条 `*_loop_exception* / *_noise_* / *_fluctuation`。
 
 ### 锁文件残留随平台不同 (是 `filelock` 语义, 不是 bug)
 

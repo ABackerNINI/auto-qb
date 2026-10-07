@@ -32,7 +32,7 @@
 - **判别**: 「两边都能跑、一边更卡」这类差异**不报错、不红测**, headless Chromium 也复现不出来
   (实测 headless 下修复前后"点击 → 弹层可见"都在 6~18ms, longtask 都是 0 —— 软件渲染拿不到真实 GPU 合成开销)。
   ⇒ **性能证据只能是结构性的**(两套 UI 达成 parity)+ 代码层面的, **不要编实测耗时差**。
-- **处置**: 用**计数 + 位置**两条断言兜底(`tests/test_web.py::_scan_backdrop_filter`):
+- **处置**: 用**计数 + 位置**两条断言兜底(`tests/test_webui_static_skins.py::_scan_backdrop_filter`):
   ①五类元素(modal-mask / topbar / status-strip / statusbar / ce-actions)一律不许出现 backdrop-filter;
   ②两套 CSS 各自声明数必须相等(shared/* 不计, 它两边同担)—— 防"只在星图侧加回来"。
   ❗扫描前必须 `re.sub(r"/\*.*?\*/", "", text, flags=re.S)` 剥注释 —— 否则文件里解释这段历史的注释会被当成真实声明**误报**。

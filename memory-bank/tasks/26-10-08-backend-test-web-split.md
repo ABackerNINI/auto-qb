@@ -1,13 +1,13 @@
 # 26-10-08-backend-test-web-split — tests/test_web.py 拆分(15 域 → 15 平铺模块)
 
-**Status:** In Progress  
+**Status:** Done  
 **Added:** 2026-10-08  
 **Updated:** 2026-10-08  
-**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。**S4 已完成**: 批 2 webui 静态守阵(节 2 → `test_webui_static_skins.py` 8 fn + `test_webui_static_dom_panel.py` 28 fn + `test_webui_static_dom_page.py` 27 fn, 全计划最大批)在 `develop` 落地 —— 新文件 1,449/2,232/1,131 行、余量源 8,809 行(余 245 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **316 项 / 308 名 == 源**; 演练(整 `tests/` 副本 + `src` junction 保 `STATIC_ROOT`)三新文件 **63 passed**; `test.one` **63**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。**批模式再暴露并修复工具第 5 处缺陷**(共享模块被后续批清空, 见 §S4)。**S5 已完成**: 批 3 端点域(节 3 + 4 → `test_web_traffic_qb.py` 18 fn + `test_web_backend_misc.py` 37 + `test_web_hr.py` 51, 共 106 fn)在 `develop` 落地 —— 新文件 702/1,000/1,876 行(终值, 含 HR 并入 + 闸门 yapf 去尾空行)、余量源 5,270 行(余 139 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **253 项 / 245 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)三新文件 **105 passed + 1 skipped**; `test.one` **105+1s**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**(5 处已在 S3/S4 修完)。**HR 并入**: 6 个 HR 系测试随后按用户拍板并入 `test_web_hr.py`(`test_web_backend_misc.py` 37→**31** / `test_web_hr.py` 51→**57**, 合计 106 不变), 见 §S5。**S6 已完成**: 批 4 命令与视图域(节 5–9 → `test_web_commands.py` 31 fn + `test_web_views_reload.py` 25 + `test_web_admin.py` 17 + `test_web_seed_center.py` 21, 共 94 fn)在 `develop` 落地 —— 新文件 **1,401/897/635/872** 行(闸门 yapf 后 `wc -l` 实测)、余量源 **1,517 行**(余 45 fn = route_manifest 2 + keys 10 + skip_check 5 + longtail 28)、`tests/webui_helpers.py`(436)与 `tests/conftest.py`(217)均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **147 项 / 139 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)四新文件 **102 passed**; `test.one` **102**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**。见 §S6。  
+**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。**S3 已完成**: 批 1 试切(节 1 → `test_web_auth.py` 14 fn + `test_web_api_core.py` 7 fn)在 `develop` 落地 —— 新文件 409/189 行、`tests/webui_helpers.py` 437 行(21 件)、余量源文件 13,567 行(余 308 fn)、`conftest.py` +`web_env`; 校验 1–4 + 内容/行守恒全绿、collect-only **337 项 / 329 名 == 源**; `test.one` 14+7、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平)。**批模式暴露并修复了 S2 工具的 4 处「仅全量模式验证过」缺陷**(见 §S3)。**S4 已完成**: 批 2 webui 静态守阵(节 2 → `test_webui_static_skins.py` 8 fn + `test_webui_static_dom_panel.py` 28 fn + `test_webui_static_dom_page.py` 27 fn, 全计划最大批)在 `develop` 落地 —— 新文件 1,449/2,232/1,131 行、余量源 8,809 行(余 245 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **316 项 / 308 名 == 源**; 演练(整 `tests/` 副本 + `src` junction 保 `STATIC_ROOT`)三新文件 **63 passed**; `test.one` **63**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。**批模式再暴露并修复工具第 5 处缺陷**(共享模块被后续批清空, 见 §S4)。**S5 已完成**: 批 3 端点域(节 3 + 4 → `test_web_traffic_qb.py` 18 fn + `test_web_backend_misc.py` 37 + `test_web_hr.py` 51, 共 106 fn)在 `develop` 落地 —— 新文件 702/1,000/1,876 行(终值, 含 HR 并入 + 闸门 yapf 去尾空行)、余量源 5,270 行(余 139 fn)、`tests/webui_helpers.py` 与 `tests/conftest.py` 均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **253 项 / 245 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)三新文件 **105 passed + 1 skipped**; `test.one` **105+1s**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**(5 处已在 S3/S4 修完)。**HR 并入**: 6 个 HR 系测试随后按用户拍板并入 `test_web_hr.py`(`test_web_backend_misc.py` 37→**31** / `test_web_hr.py` 51→**57**, 合计 106 不变), 见 §S5。**S6 已完成**: 批 4 命令与视图域(节 5–9 → `test_web_commands.py` 31 fn + `test_web_views_reload.py` 25 + `test_web_admin.py` 17 + `test_web_seed_center.py` 21, 共 94 fn)在 `develop` 落地 —— 新文件 **1,401/897/635/872** 行(闸门 yapf 后 `wc -l` 实测)、余量源 **1,517 行**(余 45 fn = route_manifest 2 + keys 10 + skip_check 5 + longtail 28)、`tests/webui_helpers.py`(436)与 `tests/conftest.py`(217)均未动; 校验 1–4 + 内容/行守恒全绿、collect-only **147 项 / 139 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)四新文件 **102 passed**; `test.one` **102**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动); 本批工具**零新缺陷**。见 §S6。 **S7 已完成**: 批 5 结构守阵与长尾(节 10–15 → `test_web_route_manifest.py` 2 fn + `test_web_keys.py` 10 + `test_web_skip_check.py` 5 + `test_web_longtail.py` 28, 共 45 fn)在 `develop` 落地 —— 新文件 **134/321/257/824** 行(闸门 yapf 后 `wc -l` 实测)、**`tests/test_web.py` 余量为空 ⇒ 已删除**(拆分收官)、`tests/webui_helpers.py`(436)与 `tests/conftest.py`(217)未动; 校验 1–4 + 内容/行守恒全绿、collect-only **45 项 / 45 名 == 源**; 演练(整 `tests/` 副本 + `src` junction)四新文件 **45 passed**; `test.one` **45**、`test.quick` **2771+4**、`test.full` **2771+4 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。本批**首验末批删除模式**, 暴露并修复工具第 6 处缺陷(源被删后 `--collect` 误收集整个 out-dir, 见 §S7)。一次性脚本按用户拍板**保留入 `memory-bank/archive/`**(原计划默认删; 机制供以后拆次大文件复用)。**S8 已完成**: 收口验收 —— 全仓活引用 grep 处置、守阵全绿(no_duplicate / docs_forms / doc_map check / kb.check)、`test.full` 新基线切片 [26-10-08-0525](../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md)、kb 回写(切片迁出 / 计划 doc-status → Done / kb.index 重建)。见 §S8。  
 **Topics:** test-web-split  
-**Refs:** memory-bank/testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md
+**Refs:** memory-bank/testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md, memory-bank/testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md
 
-> 背景关联(不进机器认领链): 计划 26-10-07-2336 按 §2.3 声明「不声明 doc-refs, 豁免认领链」, 故本档不以 `**Refs:**` 挂计划, 只用散文引用; 计划与建档切片见 [26-10-07-2344-test-web-split-plan](../activeContext/26-10-07-2344-test-web-split-plan.md)。
+> 背景关联(不进机器认领链): 计划 26-10-07-2336 按 §2.3 声明「不声明 doc-refs, 豁免认领链」, 故本档不以 `**Refs:**` 挂计划, 只用散文引用; 计划见 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html)(建档切片 26-10-07-2344-test-web-split-plan 已随本档收口迁出)。
 
 ## 原始请求
 
@@ -39,8 +39,8 @@
 | S4 | 批 2 webui 静态守阵(节 2 → 3 份)                         | ✅  | skins(8) + panel(28) + page(27); 校验 1–4 + 守恒全绿; test.one 63 / test.quick 2771+4 / test.full 2771+4·99%; 修工具第 5 缺陷(§S4)                                                    |
 | S5 | 批 3 端点域(节 3 + 4 → traffic_qb + backend_misc + hr) | ✅  | 18 + 37 + 51 = 106 fn; 校验 1–4 + 守恒全绿; 演练 105+1s; test.one 105+1s / test.quick 2771+4 / test.full 2771+4·99%; 余量源 5,271 行(余 139 fn); 工具零新缺陷(§S5)             |
 | S6 | 批 4 命令与视图域(节 5–9)                                 | ✅  | 31 + 25 + 17 + 21 = 94 fn; 校验 1–4 + 守恒全绿; 演练 102 passed; test.one 102 / test.quick 2771+4 / test.full 2771+4·99%; 余量源 1,517 行(余 45 fn); 工具零新缺陷(§S6)             |
-| S7 | 批 5 结构守阵与长尾(节 10–15)                              | ⬜  | route_manifest(2) + keys(10) + skip_check(5) + longtail(28); 删原文件 + 一次性脚本                                                                                           |
-| S8 | 收口验收                                              | ⬜  | 守阵全绿 + 新基线 + kb 回写                                                                                                                                                  |
+| S7 | 批 5 结构守阵与长尾(节 10–15)                              | ✅  | 2 + 10 + 5 + 28 = 45 fn; 校验 1–4 + 守恒全绿; 演练 45 passed; test.one 45 / test.quick 2771+4 / test.full 2771+4·99%; **`tests/test_web.py` 已删除**(收官); 修工具第 6 缺陷(末批删除模式的 collect 面, §S7); 脚本保留入 `memory-bank/archive/`(§S7) |
+| S8 | 收口验收                                              | ✅  | 全仓活引用 grep 处置 + 守阵全绿(no_duplicate / docs_forms / doc_map / kb.check) + 新基线切片 26-10-08-0525 + kb 回写(切片迁出 / 计划 Done / kb.index)(§S8)             |
 
 ## S1 勘察结论
 
@@ -646,6 +646,60 @@
 - **节 5–9 的本地件归属经本批受检无异常**: 实测本地件 8 个(commands 1 / views_reload 5 / admin 1 / seed_center 1), 全部随唯一使用域; 本批**零新共享块**(跨文件者已在 S3 进 `webui_helpers.py`), conftest 幂等跳过。
 - **本批新测试文件对 `webui_helpers` 的 import 来自源余量既有的 `from webui_helpers import (...)` 块** 经 used-names 裁剪(非 `shared_names_used_by` 生成)—— 故 `_report` 里「共享件=0」是当前源闭包口径的显示值, 不表示新文件不依赖共享件(同 S4 口径)。
 
+## S7 批 5 结构守阵与长尾(2026-10-08)
+
+**命令**: `uv run python scripts/split_test_web.py --out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_web_route_manifest.py,test_web_keys.py,test_web_skip_check.py,test_web_longtail.py --expect-fn 45 --expect-entries 45 --collect`
+
+**产出**(实测, 行数为闸门 `dev.fmt`/yapf 后的 `wc -l`):
+
+| 文件                                | 行    | fn  | 条目 | 说明                                                    |
+| --------------------------------- | ----- | --- | -- | ----------------------------------------------------- |
+| `tests/test_web_route_manifest.py` | 134   | 2   | 2  | 节 10 W0 结构守阵 + 路由金清单(本地件 1: `_GOLDEN_ROUTES`)       |
+| `tests/test_web_keys.py`          | 321   | 10  | 10 | 节 11 快捷键 /api/keys(本地件 1: `_keys_headers`)            |
+| `tests/test_web_skip_check.py`    | 257   | 5   | 5  | 节 12 跳检三分流预检 + force 透传                               |
+| `tests/test_web_longtail.py`      | 824   | 28  | 28 | 节 13 + 14 + 15 P1 长尾 + v3 活尾                           |
+| `tests/test_web.py`               | —     | —   | —  | **余量为空 ⇒ 已删除**(拆分收官)                                  |
+| `tests/webui_helpers.py`          | 436   | —   | —  | **本批未动**(无新共享块, 幂等跳过)                                 |
+| `tests/conftest.py`               | 217   | —   | —  | **本批未动**(`web_env` 已存在, 幂等跳过)                         |
+
+**校验**: 校验 1–4 + 内容/行守恒**全绿**; `--collect` collect-only **45 项 / 45 函数名 == 源**; 块体行 1,431 逐行搬移。四新文件均 ≤2,500 行硬上限(最大 longtail 824)。
+
+**演练(不触生产)**: 整 `tests/` 副本落 gitignore 的 `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction ⇒ 校验全绿、collect-only == 源、**四新文件 45 passed**。副本与 junction 已清理(`[System.IO.Directory]::Delete($j,$false)` 摘 junction —— 防跟入删真 `src/`)。
+
+**验证**: `test.one` 四新文件 **45 passed**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线切片 26-10-08-0258 逐位持平 ⇒ 纯移动)。**不新建基线切片**(计划 §S8 落终版)。
+
+**批模式暴露并修复的第 6 处工具缺陷(末批删除模式, 首验)**: 本批是唯一「余量为空、源文件被删」的批次 —— `--rewrite-source` 删源后 `rewritten` 仍为 `None`, 而 collect 目标按 `if rewritten:` 判定 ⇒ 走了「未改写源」分支去收集**整个 out-dir**(实测 2,689 项 / 2,430 名), 校验4 假红。修法 = 判据改看 `args.rewrite_source`: 批模式恒为「选中文件 + 共享模块 (+ 改写后源文件, 仅当未被删)」。**先红后修**: 演练首跑命中(见上), 修复后复跑全绿。与 [pitfalls/testing/tool-mode-coverage.md](../pitfalls/testing/tool-mode-coverage.md) 同族(末批删除模式此前从未被任何演练/红验碰过), 已在该档补第三面并 `复发` +1。
+
+**一次性脚本去留(用户拍板)**: 计划 S7 默认「迁完删」; 用户拍板**保留复用** ⇒ 移入 `memory-bank/archive/split_test_web.py`(附 [README](../archive/README.md)), 供以后拆次大文件(§P-03)复用。迁移时把路径敏感的 `REPO` 解析由 `parent.parent` 改为**向上找 `.git`**(移入子目录后原式会指向 `memory-bank/`); 活文档引用同步改新路径。
+
+**S7 对 S1/计划的纠偏**:
+
+- **`--expect-fn/--expect-entries` 沿 S4/S5/S6 口径**: 按「当前源」填 **45 / 45**(全量 329/312 − 已迁 284)。⚠ S6 表把余量条目记作 41 是笔误 —— AST 现算为 **45**(45 函数各一条目, 无缺口), 故本批填 45。
+- **本批本地件 2 个**(route_manifest `_GOLDEN_ROUTES` / keys `_keys_headers`), 全部随唯一使用域; **零新共享块**, conftest 幂等跳过(同 S4–S6 口径)。
+
+## S8 收口验收(2026-10-08)
+
+**完成判据逐条核对**(计划 §9):
+
+| 判据                                                        | 结果                                                                          |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `tests/test_web.py` 不存在; 16 新模块在位, 329 函数集合恒等且各恰存活一次      | ✅ 校验 ①② 证据见 §S2–§S7; 16 文件 AST 并集 == 329, 0 dup                          |
+| 每新文件 docstring 反幽灵且 312 条目守恒                               | ✅ 校验 ③(各批累计 312)                                                          |
+| 单文件 ≤2,500 行                                              | ✅ 实测最大 `test_webui_static_dom_panel.py` **2,230** 行                        |
+| `test.full` ≥ 开工基线(2771+4), 覆盖率 ≥98%, 口径 -n 4            | ✅ **2771+4 / 99%**(逐位持平); 新基线切片 [26-10-08-0525](../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md) |
+| 活引用更新完毕, 全仓验收 grep 干净                                     | ✅ 见下                                                                        |
+| kb 回写闭环                                                   | ✅ 本档 Done / 计划 Done / 切片迁出 / kb.index 重建                                  |
+
+**全仓活引用 grep 处置**: 全仓 grep `test_web.py`(排除 gitignore 的 `.openclaw/` / `.workbuddy-ai/` / `tmp-analysis/`)后分两类处置 ——
+
+- **活代码**(`src/auto_qb/**`、`static/shared/*.js`、`e2e/*.mjs`、`scripts/ui_harness.py`、`tests/webui_helpers.py`、`tests/test_web_shortcuts.py`、`resources/settings-page-templates/`): 逐条改指新文件(按函数归属), **现为 0 命中**。
+- **活文档**(`memory-bank/modules/*`、`conventions/code-style.md`、`testing/guards.md`、`testing/file-conventions.md`、`systemPatterns/main-loop.md`、`pitfalls/**`): 守阵指针 `test_web.py::<fn>` 按 16 新文件 AST 的「名→文件」表机械改指, 通用引用改 `test_web_*.py`(脚本辅助, 见下)。**pitfalls 现 0 命中**(除 `attachments/` 历史冷库)。
+- **历史档案/快照**(`plans/`、`reports/`、`testing/baselines/`、旧 `tasks/` 档案、旧 `activeContext/` 切片、`progress/implemented-*` 流水、`pitfalls/*/attachments/`、`issues/`): 按计划 §08 非目标**一律不改** —— 它们是当时快照, 改反而篡改日志。
+- **`split_test_web.py`**: 文件名自带 `test_web.py` 子串(非 `tests/test_web.py` 引用), 属合法形态, 不改。
+- 勘误: S3 声称「活引用 ~18 处」只覆盖了 `src/` + 3 份 kb 文档; S8 全量清点后活代码/活文档实为 **~40 处**(代码 ~17 + kb 活文档/pitfalls ~23), 全部按上表处置。改 pitfalls 的机械重写脚本落 gitignore 的 `tmp-analysis/`(一次性, 已删)。
+
+**守阵全绿**: `test_no_duplicate_test_names`(329 名全仓唯一) / `test_docs_forms` / `gen_doc_map --check` / `kb.check`(含 check_wording / 日期守卫) / `test_memory_bank`(索引 == 生成结果 / 双向一致 / 链接不断) 全过; 唯一存量债务为「切片数 > 70」与 cap 债务(不拦提交, 另开会话清理)。
+
 ## 进度日志
 
 - **2026-10-08 02:40** 会话开工: `commands run my-commit-flow.sync` → `已同步 34356f49`。读计划全文 + memory-bank README/skill + 忆坑四篇(bulk-rename / parallel-run / single-file-coverage-gate / tmpdir)。
@@ -683,3 +737,10 @@
 - **2026-10-08 04:5x** S6 演练(不触生产): 整 `tests/` 副本 → `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction → 校验 1–4 + 内容/行守恒**全绿**, collect-only **147 项 / 139 名 == 源**, 四新文件 **102 passed**。副本 + junction 已清理(`cmd /c rmdir` 摘 junction)。
 - **2026-10-08 04:5x** S6 生产落批: `--out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_web_commands.py,test_web_views_reload.py,test_web_admin.py,test_web_seed_center.py --expect-fn 139 --expect-entries 130 --collect` → 全绿; 产出 1,402/898/637/874 行四新文件(工具值)+ 余量源 1,519 行(余 45 fn); `webui_helpers.py`(436)与 `conftest.py`(217)未动。**本批工具零新缺陷**。
 - **2026-10-08 04:5x** S6 格式化 + 验证: `dev.fmt` 四新文件 + 余量源(yapf 去尾空行)⇒ 终值 `commands` **1,401** / `views_reload` **897** / `admin` **635** / `seed_center` **872** / 余量源 **1,517** 行; 复跑 `test.one` 四新文件 **102 passed**、collect-only **147 项 == 源**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平) ⇒ 纯移动。**不新建基线切片**(同值噪声; 计划 §S8 落终版)。
+- **2026-10-08 05:0x** S7 会话开工: `commands run my-commit-flow.sync` → `已同步 8417589e`; 读计划全文 + 本档 + 忆坑(bulk-rename / ast-migration-fidelity / tool-mode-coverage / single-file-coverage-gate / tmpdir)。工作区净。AST 现算当前源: **45 fn / 45 条目 / 1,517 行**; 映射 45 fn 全覆盖(route_manifest 2 + keys 10 + skip_check 5 + longtail 28)。
+- **2026-10-08 05:0x** S7 演练(不触生产): 整 `tests/` 副本 → `tmp-analysis/split-rehearsal/` + `tmp-analysis/src` junction。**首跑暴露末批删除模式第 6 缺陷** —— 源被删后 `--collect` 误收集整个 out-dir(2,689 项 / 2,430 名, 校验4 假红); 判据改看 `args.rewrite_source` 修复。复跑: 校验 1–4 + 内容/行守恒**全绿**, collect-only **45 项 / 45 名 == 源**, 四新文件 **45 passed**。副本 + junction 已清理。
+- **2026-10-08 05:0x** S7 生产落批: `--out-dir tests --rewrite-source --emit-conftest tests/conftest.py --files test_web_route_manifest.py,test_web_keys.py,test_web_skip_check.py,test_web_longtail.py --expect-fn 45 --expect-entries 45 --collect` → 全绿; 产出 135/323/259/825 行四新文件(工具值)+ **源文件余量为空 ⇒ 已删除**(拆分收官); `webui_helpers.py`(436)与 `conftest.py`(217)未动。
+- **2026-10-08 05:0x** S7 格式化 + 验证: `dev.fmt` 四新文件(yapf 去尾空行)⇒ 终值 `route_manifest` **134** / `keys` **321** / `skip_check` **257** / `longtail` **824** 行; `test.one` 四新文件 **45 passed**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。
+- **2026-10-08 05:0x** S7 脚本去留(用户拍板): 计划默认删; 用户拍板**保留复用** ⇒ `git mv scripts/split_test_web.py memory-bank/archive/split_test_web.py` + 新增 [README](../archive/README.md); 修 `REPO` 解析为「向上找 `.git`」(移入子目录后原式失效), 冒烟确认 `REPO` 指向仓库根。
+- **2026-10-08 05:1x** S8 全仓活引用处置: 活代码 17 处 + 活文档(pitfalls 等)23 处逐条改指新文件(守阵指针按 16 新文件 AST「名→文件」表机械改; 通用引用改 `test_web_*.py`); 历史档案/快照不改; `split_test_web.py` 文件名自带子串属合法形态不改。机械重写脚本落 `tmp-analysis/`(已删)。
+- **2026-10-08 05:1x** S8 收口 DoD: 新建基线切片 [26-10-08-0525](../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md); 本档 Status → Done、切片迁出、计划 doc-status → Done、`kb.index` 重建; 守阵(no_duplicate / docs_forms / doc_map / kb.check / test_memory_bank)全绿。

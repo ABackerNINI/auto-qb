@@ -20,5 +20,5 @@
 - **触发**: 挂 `beforeunload` 监听 / 在自绘框里执行 `location.reload()`。
 - **判别**: ① 无条件常驻挂载 → Firefox 直接放弃该页的 bfcache, 且每次刷新都弹框(用户被训练成闭眼点"离开"); ② 自绘框点了「刷新」后直接 `location.reload()` → 原生框紧接着又弹一次(双框连击, 用户答了两遍)。
 - **处置**: 判据收在**脏态**一条上(本项目 = `cfgDirty`, 与页面上的"有改动还没保存"同源), 由 watcher 驱动挂载 / 摘除成对(幂等, 防句柄堆叠); 保存成功 / 放弃改动 / 登出各自清零即自动摘除; 任何主动刷新前先 `cfgGuardRelease()`。挂载范围别按"当前页"收窄 —— 配置树内存常驻, 改完没保存切走仍是脏的, 按页收窄会留下静默丢失的洞。
-- **守阵**: `tests/test_web.py::test_frontend_unsaved_changes_guard_wiring`(六类不变量: 三选一框基础设施 / 挂摘成对 / 只拦 F5·Ctrl+R 族且脏态为假放行、已有弹窗不叠框 / 三分支含保存成败判定 / 刷新前摘兜底 / lifecycle 注册撤除 + state watcher 接线), 另含反向断言「config_editor.js 不得碰 Web Storage」(整树入存会把 `qbittorrent.password` 摆上 XSS 面)。
+- **守阵**: `tests/test_webui_static_dom_page.py::test_frontend_unsaved_changes_guard_wiring`(六类不变量: 三选一框基础设施 / 挂摘成对 / 只拦 F5·Ctrl+R 族且脏态为假放行、已有弹窗不叠框 / 三分支含保存成败判定 / 刷新前摘兜底 / lifecycle 注册撤除 + state watcher 接线), 另含反向断言「config_editor.js 不得碰 Web Storage」(整树入存会把 `qbittorrent.password` 摆上 XSS 面)。
 - **来源**: 2026-10-02 issue 26-09-25-1702 实施(报告 26-10-02-0508 路线 U1-b)。

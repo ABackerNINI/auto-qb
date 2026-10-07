@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="test-web-split">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-07-2336">
-<meta name="doc-updated" content="26-10-07-2336">
+<meta name="doc-updated" content="26-10-08-0518">
 <title>tests/test_web.py 拆分实施计划</title>
 <style>
   :root {
@@ -412,9 +412,10 @@
         <table>
           <tr><th class="num">戳</th><th>变更</th></tr>
           <tr><td class="num mono">26-10-07-2336</td><td>初版。规划时点基线: 同步 0ae3212e (快进 a0511e1c→0ae3212e), 测试基线 26-10-07-2222 (2757 passed + 4 skipped / 99%); 现状数字均为当轮实测 (wc -l / grep / awk 分节统计)。</td></tr>
+          <tr><td class="num mono">26-10-08-0518</td><td>S0–S8 全部落地, 状态 Open→Done。收官实测: `tests/test_web.py` 已删, 16 个平铺模块在位(329 fn 集合恒等), 单文件最大 2,232 行; `test.full` **2771 passed + 4 skipped / 99%**(与开工基线逐位持平 ⇒ 纯移动)。计划口径纠偏: 函数 323→329 / 条目 306→312 / 基线 2757→2771 / 节 3 拆两份(目标文件 15→16)。执行档案 [26-10-08-backend-test-web-split](../tasks/26-10-08-backend-test-web-split.md); 收官基线切片 [26-10-08-0518](../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md)。</td></tr>
         </table>
         <footer>
-          <p>计划 · doc-topic <span class="mono">test-web-split</span> · 状态 Open · 拍板后冻结, 实际执行进度记任务档案。</p>
+          <p>计划 · doc-topic <span class="mono">test-web-split</span> · 状态 Done · 已收口, 实际执行进度见任务档案 26-10-08-backend-test-web-split。</p>
         </footer>
       </section>
     </main>

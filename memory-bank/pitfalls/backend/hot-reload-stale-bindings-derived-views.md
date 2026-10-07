@@ -35,7 +35,7 @@
   (`WebUIRuntime._hr_rev_at_build = hr.revision`, 挂 `_publish_locked` 末尾, 判空防御),
   `flush_views()` 先比对当前 `hr.revision` 与基线, 不等即 `mark_dirty()` —— 下一轮重建后基线自然前移,
   无循环置脏。全部发生在主循环两条线上, 与 `web.group_view_dirty` 既有跨线程语义一致。
-- **守阵**: `test_web.py` 两用例 —— 直推 publisher 抬 `hr.revision` 后 `flush_views` 断言
+- **守阵**: `test_web_*.py` 两用例 —— 直推 publisher 抬 `hr.revision` 后 `flush_views` 断言
   `group_view_dirty` 置位且重建后基线前移不再置脏。
 - **同族**: [hot-reload-held-config.md](hot-reload-held-config.md) 管服务/线程构造期**拷贝**配置那类
   静默失效; 本条管**存量记录绑定**与**派生视图消费** —— 三者都是「换对象 ≠ 下游自动跟进」的变体。

@@ -1,6 +1,10 @@
-"""一次性拆分工具: tests/test_web.py -> 16 个平铺测试模块 + tests/webui_helpers.py (+ conftest fixture)。
+"""一次性拆分工具(已归档, 保留供复用): tests/test_web.py -> 16 个平铺测试模块 + webui_helpers.py。
 
-背景: 计划 [memory-bank/plans/26-10-07-2336-plan-test-web-split.html] S2。test_web.py 是全仓最大单一
+状态: **已归档的一次性工具**。2026-10-08 完成 5 批迁移后按用户拍板保留(原计划 S7 默认删除), 供以后
+拆其它大文件复用(计划 26-10-07-2336 §P-03: test_hr_service / test_traffic_sample / test_grouping)。
+机制与逐批实测见任务档案 [../tasks/26-10-08-backend-test-web-split.md] §S2–§S7。
+
+背景: 计划 [../plans/26-10-07-2336-plan-test-web-split.html] S2。test_web.py 是当时全仓最大单一
 文件(14,556 行 / 329 个被收集测试函数), 按注释分节机械拆成 16 个平铺模块, **零逻辑改动、集合恒等**。
 手工搬 1.4 万行必然产生漏迁/重迁/夹具落错文件, 且**测试照样全绿**(bulk-rename 坑档的「静默漏迁」形态);
 脚本化后漏迁由校验器钉住, 机械面零判断。
@@ -13,11 +17,11 @@
 3. 每文件 import 头按 used-names 收集裁剪; docstring「## 测试计划」条目按函数名逐条重分布(一行不改写)。
 4. 校验 4 条(见 validate): 1 集合恒等 2 计数各恰一次 3 docstring 反幽灵 + 条目守恒 4 可编译。
 
-用法:
+用法(本脚本已移入 memory-bank/archive/, 从仓库根跑):
     # 演练(不触生产): 全量拆到 testpaths 之外的临时目录, 校验 4 条 + 报表
-    uv run python scripts/split_test_web.py --out-dir R:/Temp/aqb-split-drill --report
+    uv run python memory-bank/archive/split_test_web.py --out-dir R:/Temp/aqb-split-drill --report
     # 批次(生产): 只迁一批并改写源文件(余量为空则删除)
-    uv run python scripts/split_test_web.py --out-dir tests --rewrite-source --files <逗号分隔文件名>
+    uv run python memory-bank/archive/split_test_web.py --out-dir tests --rewrite-source --files <逗号分隔文件名>
 
 红线: 本脚本只做「行在文件间移动」, 不改任何断言/夹具/逻辑。相邻缺陷一律入池 issues, 不顺手修。
 """
@@ -30,7 +34,17 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+
+def _find_repo() -> Path:
+    """仓库根: 从本文件向上找 `.git` —— 本脚本已移入 memory-bank/archive/, 不能再用 `parent.parent`。"""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / ".git").exists():
+            return parent
+    return here.parents[2]
+
+
+REPO = _find_repo()
 DEFAULT_SOURCE = REPO / "tests" / "test_web.py"
 DEFAULT_MAP = REPO / "memory-bank" / "tasks" / "26-10-08-backend-test-web-split.md"
 HELPERS_MODULE = "webui_helpers.py"
@@ -677,9 +691,15 @@ def main(argv=None) -> int:
     if stats.get("deferred_conftest"):
         print(f"  [defer] conftest 桶(演练未写出): {stats['deferred_conftest']}")
     if args.collect:
-        # 收集面 = 本次被写出的全部文件(批内: 选中 + 共享模块 + 改写后源文件); 恒比全量函数名集。
-        if rewritten:
-            targets = [out_dir / f for f in selected] + [out_dir / HELPERS_MODULE, Path(args.source)]
+        # 收集面 = 本次被写出的全部文件; 恒比全量函数名集。
+        # - 演练/全量模式(未改写源): 整个 out_dir;
+        # - 批模式: 选中文件 + 共享模块 (+ 改写后的源文件, 仅当余量非空未被删)。
+        # 判据必须看 args.rewrite_source, 不能看 rewritten —— 末批余量为空会删源, 此时 rewritten 仍为 None,
+        # 若按 None 走「整个 out_dir」分支, 会去收集整个 tests/ 目录(实测 2,689 项), 校验4 假红。
+        if args.rewrite_source:
+            targets = [out_dir / f for f in selected] + [out_dir / HELPERS_MODULE]
+            if rewritten:
+                targets.append(Path(args.source))
         else:
             targets = [out_dir]
         if not collect_only(targets, set(model.test_to_file)):

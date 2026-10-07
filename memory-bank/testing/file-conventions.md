@@ -35,7 +35,7 @@
   `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。
   修法与判别法见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md); 本机复现 Linux 的办法同见该文。
 
-### `test_web.py` 不只测 FastAPI 路由
+### `test_web_*.py` 不只测 FastAPI 路由
 
 - **触发**: 找 WEB 功能的测试 / 加 WEB 功能。
 - **判别**: 它还覆盖 **manager 侧** —— 搜索索引构建与搜索、`_drain_web_commands` 各命令执行(含未知命令 / 异常的容错)、

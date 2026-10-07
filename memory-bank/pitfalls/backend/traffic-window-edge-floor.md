@@ -10,4 +10,4 @@
 - **触发**: 改 `traffic_grid.v4_series_points` 的窗口过滤下界 / 窗首种子外扩(D3, `seed_t0 = grid.t0 - grid.interval`) / 真空与断连 null 点生成; 或用户报「程序停机或断连后恢复的首桶出现假尖峰(离线期字节)」。
 - **判别**: 两条判据**不同源** —— ①null 标记 t = **向下取整**(真空 `int(prev_chain_end)` / 断连 `floor(ts)`); ②观测点保留 = **覆盖桶触及窗口左界**(`key + w >= t0`, 即 `ceil(ts) >= t0`)。交集带恰为 `prev_chain_end ∈ (t0-1, t0)`: 标记取整后 = `t0-1 < t0` 被丢, 种子点却因 `ceil(prev_chain_end) = t0 >= t0` 保留 ⇒ 差分链误接。带外(`prev_chain_end <= t0-1`)种子点亦被滤, 恢复首点本就无基线, 无此路径 —— 故边界带恰 1 秒宽。
 - **处置**: null 点窗过滤下界放宽 1 秒(`_V4_NULL_FLOOR_S = 1`, 取整下偏容差), 与种子点保留带精确对齐; 真空与断连两处同款下偏一并覆盖。null 点恒不外发(`v4_grid_obs` 跳过), 多留的标记只影响链断位置, 无输出面副作用。实例: issue 26-10-08-0141(假尖峰 rate 300 / totals 9000 = 离线字节 `10600-1600` 跨停机差分)。
-- **守阵**: `tests/test_traffic_grid.py::test_v4_seed_vacuum_null_t0_edge_band_chain_break`(纯函数 1s 几何 + 带外对照)、`tests/test_web.py::test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band`(端点面, 时钟钉死)。
+- **守阵**: `tests/test_traffic_grid.py::test_v4_seed_vacuum_null_t0_edge_band_chain_break`(纯函数 1s 几何 + 带外对照)、`tests/test_web_traffic_qb.py::test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band`(端点面, 时钟钉死)。

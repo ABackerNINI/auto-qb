@@ -182,7 +182,7 @@ window.AQB_POLL = {
         }
         // 真值快照行源: 把 delta 桶按 _snapshotTruth 迭代的**同名键**挂回本响应对象 ——
         // 快照的「只认这一轮 payload 真的带来的行」口径原样成立(增量轮只比脏行), 调用点
-        // `this._snapshotTruth(state)` 字面量不动(tests/test_web.py::_scan_pending_settle 钉住)。
+        // `this._snapshotTruth(state)` 字面量不动(tests/test_webui_static_skins.py::_scan_pending_settle 钉住)。
         // WARN: 此后本函数作用域内的 state.torrents/singles/groups 只代表**增量行**, 不代表
         // 全量 —— 下游不得再当全量读(现调用点之后无人读它们)。
         if (d.torrents) payload.torrents = d.torrents;

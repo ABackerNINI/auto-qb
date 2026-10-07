@@ -122,7 +122,7 @@
 - **判别**: 按下清除钮瞬间 input 失焦 ⇒ 宽度过渡回退, 按钮随右沿**移出光标**, mouseup 落在别处,
   click(mousedown+mouseup 同元素才触发)落空。无焦点时宽度不变所以正常。
 - **处置**: 清除钮加 `@mousedown.prevent`(按下不夺焦, 宽度不动, click 照常) —— 两主题成对,
-  守阵 `test_web.py::test_frontend_search_syntax_wiring` ①段钉住。
+  守阵 `test_webui_static_skins.py::test_frontend_search_syntax_wiring` ①段钉住。
 
 ### 搜索匹配曾三处各持一份实现, 同一语义修三遍 —— 已收敛服务端单点, 前端复活即红
 
@@ -137,7 +137,7 @@
   「多词须同行」口径两日两轮报障(「minions mteam」「delta 03」)后作废, 吸词代价知情接受;
   负词**种子级**; 站点/分类/路径/标签行即时, 文件行依赖索引),
   三页统一消费 searchHits。前端**禁止**再出现任何文本匹配实现 —— 反漂移守阵
-  `test_web.py::test_frontend_search_syntax_wiring` ②段按"函数名+括号(定义或调用)"断言即红。
+  `test_webui_static_skins.py::test_frontend_search_syntax_wiring` ②段按"函数名+括号(定义或调用)"断言即红。
   剧名不单设候选行: 追剧展示名是成员种子名解析出的标题(tvshows.parse_release), 名字行天然覆盖。
   代价(已接受): 种子页文本命中从"每键即时"变为"防抖 400ms + 往返", 输入新词到响应返回间沿用
   上一查询命中集(与组视图同节奏); 搜索期间新到的种子待下轮重查入集。

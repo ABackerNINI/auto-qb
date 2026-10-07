@@ -57,4 +57,4 @@
   `node --check` 判 **OK**、裸 `vm.Script` 判 **SYNTAX_ERROR** ⇒ 直接替换会给合法文件报**假红**。
 - **处置**: 必须 `new vm.Script(Module.wrap(src))`(`require('module').wrap`)——
   实测 6 个故障样本 + 1 正常 + 1 顶层 `return` 边界共 **8/8 判定与 `node --check` 一致**, 且耗时 7.4s → 0.38s。
-  落地位置: `tests/test_web.py` 的 `_NODE_SYNTAX_CHECK`(经 `node -e` 传入, 不落盘)。
+  落地位置: `tests/test_web_*.py` 的 `_NODE_SYNTAX_CHECK`(经 `node -e` 传入, 不落盘)。

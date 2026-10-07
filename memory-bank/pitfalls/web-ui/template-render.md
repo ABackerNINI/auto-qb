@@ -16,10 +16,10 @@
   与网络无关。非空列表同样中招的场景: 状态只翻转、数据不变的分支(错误清 toast 后的
   loading 复位)。
 - **处置**: 通知一律放 finally、**在 loading 清掉之后**(stale 响应仍不通知不落袋);
-  守阵 `test_web.py::test_drawer_tpl_registry_wiring` §4a 断言三 fetcher 内
+  守阵 `test_webui_static_dom_panel.py::test_drawer_tpl_registry_wiring` §4a 断言三 fetcher 内
   `loading = false` 的位置先于 `_dtNotify`。给变体加新消费状态时同问一句: 这个状态翻转
   的每条路径都有通知跟着吗。
-- **守阵**: `tests/test_web.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
+- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
 
 ### Vue <transition> 接 JS 钩子做布局动画: 钩位/几何登记/迟到的 after 钩子三处静默坑
 
@@ -52,7 +52,7 @@
   宽度退化成 fit-content ⇒ 实测只 **484px** ⇒ 卡片网格 `auto-fill minmax(272px)` 只排得下 1 列,
   **表现为「竖着排」**。
   **关键**: 这类错误**没有运行时报错**, 靠真浏览器量 computedStyle / boundingBox 才看得出来, 静态检查天然看不见 ⇒ **必须机检**。
-- **处置**: **守阵** `tests/test_web.py` 的 `_scan_page_class_wiring`(挂在 `test_frontend_static_bundle_health` 第 11 项):
+- **处置**: **守阵** `tests/test_web_*.py` 的 `_scan_page_class_wiring`(挂在 `test_frontend_static_bundle_health` 第 11 项):
   扫每张 index.html 的 `<main class="...">` 里出现的挂件类名(白名单 `_PAGE_HOOK_CLASSES` = hub-page / ce-page / layout),
   若在任何 CSS(shared/* + 各 *.css)里都找不到对应 `.X {` 规则就红; 已把 `.hub-page` 临时改回 `.hb-page` **红验**过(两套 UI 同时报警)。
   **新增挂件类时同步更新白名单。**

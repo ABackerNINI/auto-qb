@@ -5,7 +5,7 @@
 
 ### `ast.get_docstring` 是求值串, 不是源文本 (S2 踩到)
 
-- **触发**: 写 test_web.py 拆分工具(`scripts/split_test_web.py`), 用 `ast.get_docstring(tree, clean=False)` 取模块 docstring 再按函数名把「## 测试计划」条目重分布到新文件。
+- **触发**: 写 WEB UI 后端测试单文件拆分工具(`memory-bank/archive/split_test_web.py`, 已归档), 用 `ast.get_docstring(tree, clean=False)` 取模块 docstring 再按函数名把「## 测试计划」条目重分布到新文件。
 - **判别**: 源里一条计划行含 `\\p{L}\\p{N}`(正则字面量的**双反斜杠**), 经 `get_docstring` 出来变 `\p{L}\p{N}`(单反斜杠) —— 新文件内容被**静默改写**, 且编译期抛 `SyntaxWarning: "\p" is an invalid escape sequence`(源文件本身不报, 因为源是双反斜杠)。
 - **处置**: docstring 一律**从源行切片**取(`lines[start-1:end]` 去掉首尾三引号), 不用 AST 求值串。判据: 迁移工具的「行守恒」校验(输出块体逐行 == 源行多重集)必须为真 —— 内容被改写时它会红。
 - **同族**: 任何 `ast.literal_eval` / `Constant.value` / `get_docstring` 取到的都是**求值后**的值; 逐行迁移要的是**源文本**, 不是值。

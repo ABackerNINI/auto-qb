@@ -8,7 +8,7 @@
 ### 单测全绿、组合跑偶发红: 共享可变类属性 + 原地改
 
 - **触发**: 2026-10-01 P5(pipeline 收口)实施, 新增 test_modules_p5.py 改变了 xdist
-  分布, `test_web.py::test_build_group_view` 的 `mgr.config.grouping.enabled = True`
+  分布, `test_web_backend_misc.py::test_build_group_view` 的 `mgr.config.grouping.enabled = True`
   与 `test_qbmanager.py::test_refresh_removed_grouping_disabled` 的
   `assert mgr.config.grouping.enabled is False` 落进同一 worker, 后者稳定红
   (单跑恒绿 —— 单独跑时该测试拿到的类属性还是默认 False)。

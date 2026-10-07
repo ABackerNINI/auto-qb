@@ -462,7 +462,7 @@ function initialDrawerTpl() {
  * (`e.state`) 是后端按那张表算好后回传的, 而辅种页的组状态 (`decoratedGroups.status.primary`)
  * 是前端按这张表算的。两张表一旦不一致, **同一批种子在两个页面会显示成不同颜色**;
  * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
- * 两表一致性由 `tests/test_web.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
+ * 两表一致性由 `tests/test_webui_static_skins.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
  * 机械守卫(改一边必须改另一边), 该项同时钉住"做种排在暂停之前"的顺序语义。
  *
  * 语义 = "先报需要处理的, 再报在跑的, 最后报已完成的"; 但 **seeding 必须排在 paused 之前** ——

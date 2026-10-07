@@ -13,7 +13,7 @@
   经典设置页**一改「数值+单位」字段的数字就整页白屏**; 没被发现是因为模板里的 `unitParts.num` 是对的,
   只有真的去改主循环间隔 / 轮转大小这类值才触发。
 - **处置**: 改成属性访问 `this.unitParts.unit`。
-  **守阵**: `tests/test_web.py::test_frontend_computed_not_invoked_as_function` —— 扫每个片段文件的
+  **守阵**: `tests/test_webui_static_dom_page.py::test_frontend_computed_not_invoked_as_function` —— 扫每个片段文件的
   `computed: {` 块成员名, 一旦发现 `this.<名>(` 就红(注释行跳过, 否则守阵会逼人删文档); 已红验。
   ⚠ 带参渲染辅助(如 `unitLabel(u)`)必须放 `methods` —— Vue 3 的 computed getter 被框架以**组件代理**为参数调用,
   收到的 `u` 是 Proxy 而非遍历项, `String(proxy)` 抛 "Cannot convert object to primitive value"。
@@ -27,7 +27,7 @@
   **整表白屏**(chips / 状态条 / 表头 / 行 全部消失)。
   坑在编译期不报、lint 阶段单控过、`pytest --passes` 也过 —— **只有能加载页面的脚本里才能复现**。
 - **处置**: **带参的"计算"必须一律放 methods**(放 methods Vue 会把模板里的实参原样透传)。
-  静态守阵: `tests/test_web.py::test_frontend_member_window_functions_live_in_methods`
+  静态守阵: `tests/test_webui_static_dom_page.py::test_frontend_member_window_functions_live_in_methods`
   (定位 `methods:` 与 `computed:` 块边界, 断言 `memberWin` / `memberPadTop` / `memberPadBottom` 定义行落在 methods 之内)。
   ⚠ 同坑曾因"没人走那条交互路径"长期潜伏, 真机一走就塌 ⇒ 加新成员窗口函数时**先在两套 UI 都跑一遍展开/收起的冒烟**, 不能只看单测。
 
@@ -66,7 +66,7 @@
 - **处置**: 对外派生值与**模板可触达的处理器**一律**去掉下划线前缀** —— 新模板处理器命名避开 `_` 前缀;
   仅为内部约定保留 `_` 前缀的方法, 必须经 `this.` 中转暴露或干脆不进模板
   (本单修法: `commands.js` 留 `_copyText` 内部实现, 补无前缀别名 `copyText` 供模板)。
-  **守阵**: `tests/test_web.py::test_frontend_template_no_reserved_prefix_identifiers` ——
+  **守阵**: `tests/test_webui_static_dom_page.py::test_frontend_template_no_reserved_prefix_identifiers` ——
   扫全部 tpl 分片 + shell 内联段的**插值与指令表达式两类形态**, `_`/`$` 前缀裸标识符即红
   (`$event` 白名单, `obj._x` 成员访问不拦); 已红验证过。
   **复发**: 1 (2026-10-03; 未命中原因: 路由到了本条, 但当时判别只记了插值形态, 事件绑定形态对不上没认出来)。

@@ -9,7 +9,7 @@
   context=路由共享件 / common=纯工具 / lifecycle=uvicorn 启停 / static_ui=静态挂载 / routes/=按域 APIRouter）。
 
 !日志命名空间冻结（K3）: server 包内**所有子模块**一律显式 ``logging.getLogger("auto_qb.web")``,
-  不用 __name__ —— tests/test_web.py 多处按 ``r.name == "auto_qb.web"`` 断言 caplog 记录,
+  不用 __name__ —— tests/test_web_*.py 多处按 ``r.name == "auto_qb.web"`` 断言 caplog 记录,
   包目录改名不改 logger 名, 子模块 logger 名漂移必红。
 """
 from .commands import WebCommandsMixin

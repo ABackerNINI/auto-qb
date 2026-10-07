@@ -1,4 +1,4 @@
-"""webui_helpers 共享件: test_web 拆分后的跨文件辅助与常量(原 tests/test_web.py)
+"""webui_helpers 共享件: WEB UI 后端测试拆分后的跨文件辅助与常量(原单文件已拆为 16 个平铺模块, 见 tasks/26-10-08-backend-test-web-split.md)
 """
 import json
 import logging

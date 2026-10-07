@@ -54,7 +54,7 @@
   计划评审盯的是断线语义与轮询口径, 「续拉可见性」不在验收项里。
   **修法**: 静默续拉 —— 模板 loading 空态只在无数据时接管(`qbCurLoading && !qbCurPoints.length`),
   同宿主上图还活着走 `u.setData` 原地换数据(不销毁重建); 换肤因 canvas 色烘焙仍整图重建(先销毁)。
-  守阵 test_web.py `test_frontend_qb_traffic_chart_wiring` 三锚钉住。
+  守阵 test_web_*.py `test_frontend_qb_traffic_chart_wiring` 三锚钉住。
 
 - **复发 2(第二次, 2026-10-04 流量页签单击换行遮罩挂死)** —— 用户报「流量页签下单击换行一直显示
   加载中, 关抽屉重开才正常; 双击正常」。FX-29 协议只在 drawer.js 侧接了一半: `_drawerWaitSources`
@@ -80,7 +80,7 @@
 - **处置**: `openDrawerTraffic` 头部加同目标短路 —— `drawer.open && kind === "traffic" &&
   scope === scope`(分组再比 `qbGroupKey`)时幂等返回(顺带收右键菜单、收起态重按 = 展开);
   页面归一(`page = "groups"`)留在短路之前 —— 非主内容页重按仍要先切页, 面板进场补拉由
-  watch(drawerVisible) 负责, 不受短路影响。守阵: `test_web.py::test_frontend_qb_traffic_drawer_page_guard`
+  watch(drawerVisible) 负责, 不受短路影响。守阵: `test_webui_static_dom_panel.py::test_frontend_qb_traffic_drawer_page_guard`
   第 5 锚(短路存在且先于 `_stopDrawerPoll` 副作用)。
 - **为什么没命中**: 本坑前三次复发都在「数据在途/续拉」的渲染侧, 修法都落在 `_qbLoad`/遮罩层;
   这次病灶在更上游 —— 入口函数根本没有"重入"分支, 数据层做得再静默也拦不住入口主动销毁重建。
@@ -104,7 +104,7 @@
 - **为什么没命中**: 上一条复发记录的修法被写成「loading 空态只在**无数据**时接管」, 实现时
   「无数据」= `!qbCurPoints.length`(无点), 而本坑的判据是「有无落袋结果」—— 措辞里的模糊处
   就是下次复发的入口; 前一轮真机走查只走了「有图」路径, 空数据集(新装/新种子)不在验收项里。
-- **守阵**: `test_web.py::test_frontend_qb_traffic_chart_wiring` 四锚 —— 模板门 `v-if="qbCurPending"` /
+- **守阵**: `test_webui_static_dom_panel.py::test_frontend_qb_traffic_chart_wiring` 四锚 —— 模板门 `v-if="qbCurPending"` /
   `qbCurPending` 三合一判据(少一项 = 少一种既有状态被顶掉) / `_qbLoad` 里 `error` 清除只允许出现在
   `await this.api(` 与 `this[def.data] = data;` **之后** / setData 原地快路(原有)。
 

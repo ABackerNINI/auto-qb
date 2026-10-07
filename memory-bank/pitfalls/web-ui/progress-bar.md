@@ -11,6 +11,6 @@
   静态检查与 pytest 全看不出来)。
 - **处置**: 数值盒 `min-width: 4em` + `text-align: right` —— 4em 容纳最宽的「100.0%」(三套皮肤字号
   11.5-12px, 实测文本 ≤3.6em), 条长与文本解耦且数字列对齐; **不要把条定死宽度**(列宽可拖, 定死在窄列溢出/宽列留白)。
-- **守阵**: `tests/test_web.py::_scan_progress_val_parity`(静态资源守阵第 16 项) —— 三套皮肤
+- **守阵**: `tests/test_webui_static_skins.py::_scan_progress_val_parity`(静态资源守阵第 16 项) —— 三套皮肤
   (atlas/console 的 components.css + prism 的 views.css)各恰 1 条 `.m-progress .val` 基础规则且带
   min-width, 防"只改一侧 / 新皮肤漏带"; 计算宽仍须真浏览器量(静态断言兜不住布局)。

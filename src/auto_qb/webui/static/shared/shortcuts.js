@@ -17,7 +17,7 @@
  *   - 适配器 window.AQB_KEYS.load()/save() 是引擎唯一的存储出口(W6 起接 GET/PUT /api/keys 与
  *     后端 webui-keys.json, 仍保持 load 同步快照语义) —— 引擎对存储介质无感知, 反悔路径见计划 §4.6。
  *
- * !接线(三份 index.html 的 tpl-manifest 清单序, 守阵 test_web.py::_scan_mixin_wiring):
+ * !接线(三份 index.html 的 tpl-manifest 清单序, 守阵 test_webui_static_skins.py::_scan_mixin_wiring):
  *   - 本文件必须排在 app.js **之前**(app.js 末尾 app.mixin(window.AQB_SHORTCUTS))。
  *   - keydown 监听在 lifecycle.js mounted 里注册, 排在既有 Esc 退栈链**之后**; data 字段
  *     kbCursor / kbHelpOpen / 面板与录制器状态(kbDraft 等)在 state.js(根选项展开, 不许进

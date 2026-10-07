@@ -57,7 +57,7 @@ RC_UNCONFIRMED_PREFIX = "未确认: "
 # 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
 # !若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
 # -> 索引仍脏 -> 再投递 -> 立刻再唤醒 …… 中间没有 tick 兜底, 直接打满 CPU 并冲垮 qB。
-# 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web.py::test_api_enqueue_wakes_main_loop)。
+# 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web_seed_center.py::test_api_enqueue_wakes_main_loop)。
 SELF_POSTED_COMMANDS = frozenset({"build_search_index"})
 
 # 执行后会**改变 qB 种子状态**的命令: 主循环在这批命令消费完后补一次完整刷新,

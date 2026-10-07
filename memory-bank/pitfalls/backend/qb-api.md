@@ -114,7 +114,7 @@
   (且不能被"False 就不传"的过滤器吞掉, 它们要写在过滤器**之后**)。
   qB 自家 WebUI 同此口径: `addtorrent.js` 恒传 `stopped=true/false`,
   `autoTMM` 是 `<select name="autoTMM">`(Manual=false 默认 / Automatic=true)随表单恒提交。
-  守阵: `tests/test_web.py::test_add_torrent_receipt_and_optional_flags`(两个方向都钉)。
+  守阵: `tests/test_web_admin.py::test_add_torrent_receipt_and_optional_flags`(两个方向都钉)。
 
 ### `yaml.BaseLoader`: 配置全是字符串, 不要假设已给原生类型
 

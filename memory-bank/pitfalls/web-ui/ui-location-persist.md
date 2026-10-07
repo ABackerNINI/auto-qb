@@ -13,7 +13,7 @@
   请求必定带得上凭证。守阵必须**同时**断言"page 对"与"数据已加载"(`cfg.schema` 非空 / 分区标题已渲染)。
 - **守阵**: `e2e/views.spec.mjs`「设置页刷新保持位置(顶层页 + 分区 + 配置已加载)」把 `page`+`hub`+`schema`+`crumb`
   四项一起断言(旧冒烟脚本时代已红绿双验, 2026-10-06 起由 e2e 轨道承载);
-  `tests/test_web.py::test_frontend_page_location_persisted` 静态钉住 `startPolling` 里那一次 `cfgLoad`。
+  `tests/test_webui_static_dom_page.py::test_frontend_page_location_persisted` 静态钉住 `startPolling` 里那一次 `cfgLoad`。
 
 ### 恢复的值必须**对 schema 校验**, 不能无条件采用
 
@@ -37,7 +37,7 @@
 - **处置**: 还回前**必须验"那一行还在"**(组可能已被删/被筛掉), 并同步 `groupWin` 的退避判据 ——
   只判 `expandedKey` 非空的话, 一个过期的键会让行窗口**永久**退避成全量渲染
   (大库上 = 悄悄关掉 P1-2, 界面看着完全正常, 只是滚动变卡, 没人会往这里想)。
-  守阵: `tests/test_web.py::test_frontend_expand_state_survives_view_switch`。
+  守阵: `tests/test_webui_static_dom_page.py::test_frontend_expand_state_survives_view_switch`。
 
 ### 片段 mixin 里的"唯一漏斗"命名要先查重
 

@@ -104,5 +104,5 @@
 - **处置**: 初始化播种逻辑放函数**尾部**(所有路径汇合处), 空存储/异常路径也要走完整流程;
   改完必须跑真浏览器冒烟验证"空 localStorage 首载"场景(桩服务 `scripts/ui_harness.py --port <空端口>`
   + Playwright 断言表头集合), 静态扫描兜不住这条。
-- **守阵**: `tests/test_web.py::_scan_column_cells_paired`(钉住 loadColState 消费 hide 标志 +
+- **守阵**: `tests/test_webui_static_skins.py::_scan_column_cells_paired`(钉住 loadColState 消费 hide 标志 +
   每列有模板分支) —— 但运行时行为(空存储路径)只能靠冒烟, 静态检查不是它的替代。

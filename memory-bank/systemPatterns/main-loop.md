@@ -76,7 +76,7 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 速率语义, tick 频率一旦由命令决定即失效; ② 存在**自投递命令**(Web 侧索引脏时自己投递 `build_search_index`),
 会形成自激循环(唤醒→drain 500 条文件 API→索引仍脏→再投递→立刻再唤醒), 中间没有 tick 兜底 —— 不是变慢, 是
 打满 CPU 并冲垮 qB。故自投递命令登记在 `SELF_POSTED_COMMANDS` 里**不唤醒、不带 cmd_id**(单点 `webui/commands.py:31`;
-反向守阵 tests/test_web.py 扫 webui 侧全部投递点, 未登记即失败)。
+反向守阵 tests/test_web_seed_center.py 扫 webui 侧全部投递点, 未登记即失败)。
 
 **连接管理(首连 + 运行期重连)**:
 - **首连失败语义分裂是刻意的**(`qbmanager.py:441-449`): 非托管模式(stop_event=None)抛 `QbConnectError` → CLI 干净退出码 1(fail-fast, docker/compose 靠 restart 策略重拉); 托管模式按 main_tick 重试直至成功或收到停止(托盘应用保持常驻)。

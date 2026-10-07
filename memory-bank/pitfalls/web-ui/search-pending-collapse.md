@@ -16,7 +16,7 @@
   resetSearch 清除 / 落袋且过代际守卫后清除)+ `_searchGateActive(q)` 单点(filters.js): 待响应且
   命中集未落袋 → 命中门不生效, 显示输入前列表(命中集非空仍按旧集过滤, 渐进输入不跳)。
   **单点纪律**: 任何新的搜索命中消费视图必须走 `_searchGateActive`, 绕开单点现写命中门 = 复发。
-- **守阵**: `test_web.py::test_frontend_search_pending_no_collapse`(searchPending 生命周期四锚 +
+- **守阵**: `test_webui_static_skins.py::test_frontend_search_pending_no_collapse`(searchPending 生命周期四锚 +
   两派生走门 + 旧门 `if (!q) return base` 不得回潮)+ `e2e/drawer-dock-stability.spec.mjs`
   (行为: 逐帧采样, 面板 top 全程偏差 ≤2px、docH 不塌到视口高+150 以内 —— 静态守阵探不到
   「几何/时机错」形态, 必须真浏览器采样)。
