@@ -32,3 +32,14 @@
   seeding_time / tags / category 等); 或把替身字段集与真 `compat._SNAPSHOT_FIELDS` 对齐
   (那是另一个独立改动, 需评估波及面)。给真记录加快照字段时, 记得检查替身元组是否同步
   (同「替身漂移」家族, 见 stubs-sim.md)。
+
+### 替身 to_dict 用 vars() 全导出、非快照对象字段漏出 → 详情端点恒 500(实爆实例)
+
+- **触发**: 替身 `FakeTorrent.to_dict` 图省事用 `vars()` 全导出 —— 真记录「快照字段 / 非快照
+  字段」的分则被抹平, 非快照字段 `hr_link`(HrRuntime 对象, 按设计不进 JSON)随 dict 漏出。
+- **判别**: `/api/torrents/{hash}` 详情端点**恒 500**(对象不可 JSON 序列化); 列表路径走字段
+  白名单不炸, 只有详情整 dict 直传的路径暴露 —— 2026-10-07 S10 e2e 复测才逮到, pytest 全绿
+  测不到(镜子走自己的替身契约, 同上节「只有真浏览器冒烟看得到」的盲区)。
+- **处置**: 替身 to_dict 弃 `vars()` 全导出, 口径改为与真记录 `compat._SNAPSHOT_FIELDS` 同源
+  对齐(快照字段照抄 + 非快照字段按真记录分则), 947c0fb0 修复 —— 上一节「把替身字段集与真
+  compat._SNAPSHOT_FIELDS 对齐」的预警成真实爆点。

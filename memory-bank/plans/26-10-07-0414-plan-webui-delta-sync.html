@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="webui-delta-sync">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-07-0414">
-<meta name="doc-updated" content="26-10-07-0430">
-<meta name="doc-refs" content="memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html,memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html,memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html,memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html,memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
+<meta name="doc-updated" content="26-10-07-1420">
+<meta name="doc-refs" content="memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html,memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html,memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html,memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html,memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html,memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html,memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
 <style>
   :root {
     --bg: #13161c;
@@ -128,7 +128,7 @@
     <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
     <div class="item"><div class="k">类型</div><div class="v">plan</div></div>
     <div class="item"><div class="k">专题</div><div class="v">webui-delta-sync</div></div>
-    <div class="item"><div class="k">Added / Updated</div><div class="v">26-10-07-0414 / 26-10-07-0430</div></div>
+    <div class="item"><div class="k">Added / Updated</div><div class="v">26-10-07-0414 / 26-10-07-1420</div></div>
     <div class="item"><div class="k">基树</div><div class="v">f4430f32</div></div>
   </div>
   <p class="refs-line">关联链 (doc-refs):
@@ -136,6 +136,8 @@
     <a href="../reports/26-10-07-0054-report-webui-perf-issues-recheck.html"><code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code></a> ·
     <a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html"><code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code></a> ·
     <a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html"><code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code></a> ·
+    <a href="../issues/26-10-07-1420-perf-webui-group-row-hash-ref.html"><code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code></a> ·
+    <a href="../issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html"><code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code></a> ·
     <a href="../tasks/26-10-07-webui-delta-sync-feasibility.md"><code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></a>
   </p>
 </header>
@@ -149,8 +151,8 @@
     <tr><td><code>doc-type</code></td><td><code>plan</code></td></tr>
     <tr><td><code>doc-topic</code></td><td><code>webui-delta-sync</code></td></tr>
     <tr><td><code>doc-status</code></td><td><code>Open</code>(待拍板)</td></tr>
-    <tr><td><code>doc-added</code> / <code>doc-updated</code></td><td>Added 26-10-07-0414(渲染当日 stamp) / Updated 26-10-07-0430(认领链收口: web-runtime.md 移出 doc-refs, 改由正文提及)</td></tr>
-    <tr><td><code>doc-refs</code></td><td><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code>,<code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code>,<code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code>,<code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code>,<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></td></tr>
+    <tr><td><code>doc-added</code> / <code>doc-updated</code></td><td>Added 26-10-07-0414(渲染当日 stamp) / Updated 26-10-07-1420(「未来可增强项」入池: P-02 选项 B 与 P-03 条件性未来步各立一条 issue 并入 doc-refs 闭环; 前次 26-10-07-0430 认领链收口: web-runtime.md 移出 doc-refs, 改由正文提及)</td></tr>
+    <tr><td><code>doc-refs</code></td><td><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code>,<code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code>,<code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code>,<code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code>,<code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code>,<code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code>,<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></td></tr>
   </table>
 
   <h3>基树与行号锚口径</h3>

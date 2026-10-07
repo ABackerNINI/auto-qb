@@ -17,15 +17,17 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 4 |
-| perf | 5 |
+| perf | 6 |
 | docs | 1 |
-| refactor | 4 |
+| refactor | 5 |
 | feat | 22 |
 | chore | 2 |
 | question | 4 |
 
 ## Open
 
+- [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种…
+- [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保…
 - [feat] [抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)](26-10-07-0149-feat-webui-drawer-open-state-restore.html) — 报告 26-10-06-0723 §5 补强一:…
 - [feat] [09 变体 peer 悬停封禁钮(需后端端点, P-04 备选)](26-10-07-0149-feat-webui-peer-ban-action.html) — 09 peers 变体悬停封禁钮: 后端现无 p…
 - [feat] [per-tracker 汇报倒计时端点(P-02 备选)](26-10-07-0149-feat-webui-per-tracker-reannounce-endpoint.html) — 06 trackers 变体逐行汇报倒计时现以…
