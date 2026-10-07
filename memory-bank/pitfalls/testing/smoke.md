@@ -8,7 +8,7 @@
 
 - **触发**: 改任何前端渲染逻辑。
 - **判别**: 能力 = `scripts/ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵,
-  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 七个 spec(@playwright/test, 双皮肤,
+  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 八个 spec(@playwright/test, 双皮肤,
   按断言块拆分)。前端渲染**pytest 覆盖不到** ⇒ **改前端必跑 `npm run test:e2e:fast`(@fast 门禁);
   触碰乐观 UI/菜单/列设置加跑对应 spec; 全量矩阵轮收尾/排障串行人跑**。
 - **处置**: 模式矩阵 env 参数化(计划 26-10-06-0708 §3.2)—— `E2E_CMD_RESULT=ok|error|hang` /

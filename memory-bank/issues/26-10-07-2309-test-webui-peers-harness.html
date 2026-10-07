@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-07-2309">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-peers-harness">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-04-webui-tooltip-declutter.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-04-webui-tooltip-declutter.md,memory-bank/tasks/26-10-08-test-webui-peers-harness.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="ui_harness 无 peers 数据: e2e 零覆盖 peers 页签内容渲染">
 <meta name="issue-summary" content="FakeClient.peers_map 恒空, peers 页签在桩服务下永远显示空态, e2e 从未覆盖 peers 内容渲染">
 <title>ui_harness 无 peers 数据: e2e 零覆盖 peers 页签内容渲染 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-2309-test-webui-peers-harness</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 23:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,17 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 / 验证</h2>
+    <p><b>修法</b>（按建议，未改道）：<code>scripts/ui_harness.py</code> 新增 <code>_PEER_SCENES</code> 与 <code>_make_peers_response(i)</code>，起盘时按种子序号给 <code>mgr.client.peers_map[hash]</code> 灌合成 <code>sync/torrentPeers</code> 整包 —— <code>peers</code> 用 <b>dict</b>（"ip:port" 为键，与真 qB 同形），对端数 1~7 轮转，含 flags 五桶（U/D/u/K/握手未完成）、速度/进度/关联度零与非零、吸血嫌疑客户端（迅雷/XL）、内网（192.168/10.）与公网/IPv6、<code>files</code> 渐进字段。</p>
+    <p><b>验证</b>：新增 <code>e2e/drawer-peers.spec.mjs</code>（双皮肤 <code>@fast</code>）—— 开详情抽屉 → 切「用户」页签 → 断言经典 peers 表渲染出对端行且首行地址列有 <code>ip:port</code>，同时「暂无已连接用户」空态不出现。红验：临时禁用桩注入 ⇒ 两条断言 2 failed（表不可见）；还原即 2 passed。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 23:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 02:17 — 用户指派认领，置 <strong>In Progress</strong>；复验：桩 <code>peers_map</code> 恒空、<code>e2e/</code> 无 peers 内容断言，现象仍在。</li>
+      <li>2026-10-08 02:30 — 修复完成，置 <strong>Done</strong>：桩灌合成 peers + 新增 @fast 断言；红验 2 failed → 还原 2 passed，e2e 全量轮绿。</li>
     </ul>
   </section>
 

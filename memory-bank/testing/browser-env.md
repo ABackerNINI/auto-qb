@@ -45,11 +45,11 @@
 ## 轨道二(断言单点): Playwright e2e `e2e/`(@playwright/test)
 
 - **何时用**: 一切 WEB UI 浏览器断言 —— 旧单页冒烟脚本已于 2026-10-06 随迁移计划
-  26-10-06-0708 退役, `e2e/` 是唯一轨道(七个 spec 按断言块拆分, 双皮肤, 模式矩阵 env 参数化)。
+  26-10-06-0708 退役, `e2e/` 是唯一轨道(八个 spec 按断言块拆分, 双皮肤, 模式矩阵 env 参数化)。
 - **命令**: 桩服务(`scripts/ui_harness.py`)由 `playwright.config.mjs` 的 `webServer` **自动起停**
   (端口 8137, `reuseExistingServer: false`), 不需要人工先起、也不需要人工关:
   ```bash
-  commands run dev.e2e      # 全量集(七个 spec × prism/atlas 双皮肤)
+  commands run dev.e2e      # 全量集(八个 spec × prism/atlas 双皮肤)
   npm run test:e2e:fast     # @fast 门禁子集(分钟级) —— 「每次改前端」的日常口径
   npm run test:e2e:headed   # 有头模式(人工看动作)
   ```

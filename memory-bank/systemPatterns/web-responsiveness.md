@@ -62,5 +62,5 @@
 **验证手段**: 单测覆盖不到前端渲染, 靠两道 —— ①静态守阵
 `test_frontend_static_bundle_health`(JS 语法、`node --check`、CSS 闭合、`<transition>` 吞弹窗、
 模板引用的资源存在); ②**真浏览器断言** `scripts/ui_harness.py`(真 `create_app` + `FakeClient`
-+ 合成种子 + 命令泵, webServer 托管)配 `e2e/`(@playwright/test, 七个 spec 按断言块拆分, 双皮肤)。
++ 合成种子 + 命令泵, webServer 托管)配 `e2e/`(@playwright/test, 八个 spec 按断言块拆分, 双皮肤)。
 改前端渲染/交互逻辑后应当跑 `npm run test:e2e:fast`(@fast 门禁), 2026-10-06 起 e2e 轨道是唯一断言单点。
