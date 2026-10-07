@@ -19,6 +19,7 @@
 | bug | 4 |
 | perf | 6 |
 | docs | 1 |
+| test | 1 |
 | refactor | 5 |
 | feat | 22 |
 | chore | 2 |
@@ -26,6 +27,7 @@
 
 ## Open
 
+- [test] [ui_harness 无 peers 数据: e2e 零覆盖 peers 页签内容渲染](26-10-07-2309-test-webui-peers-harness.html) — FakeClient.peers_map 恒空,…
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种…
 - [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保…
 - [feat] [抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)](26-10-07-0149-feat-webui-drawer-open-state-restore.html) — 报告 26-10-06-0723 §5 补强一:…

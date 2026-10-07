@@ -1,0 +1,77 @@
+{
+  "results": [
+    {
+      "id": "a-04-all",
+      "name": "04胶囊「all」tooltip 贴胶囊",
+      "pass": true,
+      "detail": "dx=29.4px (阈值 70.75px) tip可见=true tip@(8,596) 172x35 文案=\"状态分类沿用全局状态色族\""
+    },
+    {
+      "id": "a-04-ok",
+      "name": "04胶囊「ok」tooltip 贴胶囊",
+      "pass": true,
+      "detail": "dx=0.1px (阈值 70.75px) tip可见=true tip@(104,596) 76x35 文案=\"正常 = 绿\""
+    },
+    {
+      "id": "a-04-err",
+      "name": "04胶囊「err」tooltip 贴胶囊",
+      "pass": true,
+      "detail": "dx=0.2px (阈值 70.75px) tip可见=true tip@(349,596) 76x35 文案=\"失败 = 红\""
+    },
+    {
+      "id": "b-01-hr",
+      "name": "01横幅 H&R 徽章",
+      "pass": true,
+      "detail": "SKIP(数据面): 前8行种子 hr_reason 全为空(空文案=合法无提示, 非锚定缺陷), 回落验横幅 chips"
+    },
+    {
+      "id": "b-01-chip",
+      "name": "01横幅 chip tooltip 贴chip(本轮修复面之一)",
+      "pass": true,
+      "detail": "dx=0.1px (阈值 54.5px) tip可见=true tip@(31,575) 50x35 文案=\"state\""
+    },
+    {
+      "id": "e-07-ip",
+      "name": "peers IP单元格 tooltip 贴单元格 (通道文案=在)",
+      "pass": true,
+      "detail": "dx=0.3px (阈值 133.59375px) tip可见=true tip@(70,674) 134x35 文案=\"93.184.216.34:51413\""
+    },
+    {
+      "id": "e-07-title",
+      "name": "peers IP单元格 提示文案保留于 data-aq-tip 通道(未被上轮误删)",
+      "pass": true,
+      "detail": "data-aq-tip=\"93.184.216.34:51413\" (title 属性被拦截层单向迁移属既定机制)"
+    },
+    {
+      "id": "e-04-host",
+      "name": "04卡头 host(保留项抽查) tooltip 贴 host",
+      "pass": true,
+      "detail": "dx=0.2px (阈值 486px) tip可见=true tip@(197,647) 256x35 文案=\"https://tracker.hhanclub.net/announce.php\""
+    },
+    {
+      "id": "c-06-sum",
+      "name": "06收起摘要条计数span tooltip 贴span",
+      "pass": true,
+      "detail": "dx=0.1px (阈值 40px) tip可见=true tip@(512,693) 130x35 文案=\"健康构成计数(正常)\""
+    },
+    {
+      "id": "c-09-sum",
+      "name": "09收起摘要条计数span tooltip 贴span",
+      "pass": true,
+      "detail": "dx=0.1px (阈值 40px) tip可见=true tip@(643,693) 73x35 文案=\"连接计数\""
+    },
+    {
+      "id": "d-05-ok",
+      "name": "05健康摘要条「正常」胶囊无 tooltip(上轮已删净)",
+      "pass": true,
+      "detail": "无 tooltip 弹出 (符合预期)"
+    },
+    {
+      "id": "f-console",
+      "name": "浏览器 console 零新增错误",
+      "pass": true,
+      "detail": "全程无 console.error/pageerror (原始捕获 0 条, 过滤后 0)"
+    }
+  ],
+  "consoleErrors": []
+}

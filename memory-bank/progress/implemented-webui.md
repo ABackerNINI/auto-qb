@@ -7,6 +7,12 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEBUI tooltip 二轮去冗 + 锚定下放**(2026-10-07, 分支 webui-tooltip-fix2 两提交 `94013201`/`99fa6eef`; 档案
+  [tasks/26-10-04-webui-tooltip-declutter](../tasks/26-10-04-webui-tooltip-declutter.md) Done): 详情面板机械+拍板移除 45 处
+  复述/开发者口径 title(守阵 I 组 37 needle); 容器级 title 下放实际悬浮元素 6 组(04 色族胶囊 / 01 横幅 chips / 12 画布删
+  / 14 栏头 / 收起摘要条族 5 变体 / 04 虚拟卡), 修用户报 tracker 状态卡片栅格错位; 真浏览器悬浮实测 12/12 PASS;
+  计划外发现 ui_harness peers 数据缺失入池 [issue 26-10-07-2309](../issues/26-10-07-2309-test-webui-peers-harness.html)。
+
 - **WEBUI 详情面板 followups 四修: 模板选择器定宽 / 切页返回变体重挂 / 换种子软切换 / tooltip 锚定保活**(2026-10-07, 分支
   fix/webui-detail-panel-followups 四提交 `039ea285`…`8677a415`; 档案
   [tasks/26-10-07-webui-detail-panel-followups](../tasks/26-10-07-webui-detail-panel-followups.md) Done): 用户点名 4 缺陷
