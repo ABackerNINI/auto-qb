@@ -666,9 +666,20 @@ class WebUIRuntime:
         # _apply 覆盖, S1「最近一轮」语义), 同拍两次 flush 重复并入同键集 —— 集合语义幂等。
         with self.view_lock:
             self._drain_delta_locked(host.store)
+            # 本拍 store 是否提供行级键: last_added/last_removed/delta_fields 恰是排空的
+            # 三个数据源 —— 命令自写字段(update_torrent_fields)/reset_runtime/标签定义删除
+            # 这类纯命令源只置 view_changed, 三者皆空
+            keyed = bool(host.store.last_added or host.store.last_removed or host.store.delta_fields)
         # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
         if host.store.consume_view_changed():
-            self.mark_dirty()
+            if keyed:
+                self.mark_dirty()
+            else:
+                # R11: 视图须重建但行键不可推导的纯命令源 -> 本代标 full(保守正确优先)。
+                # 否则落代为「空键集且 full=False」, 增量归约回空 delta, delta 客户端漏变更
+                # (S3 观察缺口; S5 镜子 test_unkeyed_command_source_yields_full 钉住)。
+                # store 驱动的常规轮不受影响: _apply 置 view_changed 必伴随三者之一的键。
+                self.mark_dirty(full=True, reason="unkeyed_command_source")
         # HR 判定新鲜度: revision 与重建基线不等即置脏(基线在 _publish_locked 随重建前移,
         # 故只在 revision 真变的那一拍置一次, 无循环置脏)。发布侧按内容指纹去重, 不会周期空转。
         # HR 派生字段无法归约为行级脏 -> 兼登记 full 降级理由(R11)。
