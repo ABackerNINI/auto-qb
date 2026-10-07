@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>流量图曲线过陡的口径调研: 瞬时速度 · 区间平均 · 移动平均</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="qb-traffic-rate-basis">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-07-2031">
+<meta name="doc-updated" content="26-10-07-2046">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-qb-traffic-rate-basis.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101214;
+    --paper: #14171a;
+    --well: #0c0e10;
+    --ink: #e8e6e0;
+    --ink-dim: #a3a196;
+    --ink-faint: #6f6d64;
+    --hair: rgba(255,255,255,.09);
+    --hair-strong: rgba(255,255,255,.18);
+    --accent: #e2a83d;
+    --accent-dim: rgba(226,168,61,.55);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 32px 96px;
+  }
+  .sheet { max-width: 1300px; margin: 0 auto; }
+  .frame { display: grid; grid-template-columns: 216px minmax(0,1fr); gap: 56px; }
+
+  /* ---------- 封面区 ---------- */
+  .kicker {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  header.cover { padding-bottom: 40px; border-bottom: 1px solid var(--hair-strong); margin-bottom: 40px; }
+  header.cover .kicker { display: block; margin-bottom: 18px; }
+  h1 {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 34px; font-weight: 600; line-height: 1.18; letter-spacing: -.01em;
+    max-width: 780px;
+  }
+  .subtitle { margin-top: 10px; font-size: 16px; color: var(--ink-dim); max-width: 720px; }
+  .meta-row {
+    margin-top: 28px; display: flex; flex-wrap: wrap; gap: 0 28px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; color: var(--ink-faint);
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 400; }
+
+  /* ---------- 左栏 TOC ---------- */
+  aside nav { position: sticky; top: 40px; }
+  aside .toc-title {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px;
+    letter-spacing: .12em; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  aside ol { list-style: none; border-left: 1px solid var(--hair); }
+  aside li a {
+    display: block; padding: 6px 0 6px 16px; text-decoration: none;
+    color: var(--ink-dim); font-size: 12.5px; line-height: 1.4;
+    border-left: 1px solid transparent; margin-left: -1px;
+  }
+  aside li a .no { font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; color: var(--ink-faint); margin-right: 8px; }
+  aside li a:hover { color: var(--ink); border-left-color: var(--hair-strong); }
+
+  /* ---------- 正文 ---------- */
+  main section { margin-bottom: 64px; }
+  .sec-head { margin-bottom: 22px; }
+  .sec-head .kicker { display: block; margin-bottom: 8px; }
+  h2 {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 22px; font-weight: 600; letter-spacing: -.005em; line-height: 1.2;
+  }
+  h3 {
+    font-size: 15.5px; font-weight: 600; margin: 30px 0 10px;
+  }
+  p { max-width: 72ch; margin-bottom: 14px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  strong { font-weight: 600; }
+  code {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: .88em;
+    background: var(--well); padding: 1px 5px; border: 1px solid var(--hair);
+  }
+  .ref { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--ink-dim); }
+  ul.plain { max-width: 76ch; margin: 0 0 14px 0; padding-left: 22px; }
+  ul.plain li { margin-bottom: 8px; }
+  ol.plain { max-width: 76ch; margin: 0 0 14px 0; padding-left: 22px; }
+  ol.plain li { margin-bottom: 8px; }
+
+  /* 判定区 */
+  .verdicts { border-top: 1px solid var(--hair-strong); border-bottom: 1px solid var(--hair-strong); padding: 26px 0; margin-bottom: 56px; }
+  .verdicts ol { list-style: none; counter-reset: v; }
+  .verdicts li {
+    counter-increment: v; display: grid; grid-template-columns: 44px 1fr;
+    gap: 0 14px; padding: 9px 0; max-width: 860px;
+  }
+  .verdicts li::before {
+    content: counter(v, decimal-leading-zero);
+    font-family: "Bahnschrift", "Segoe UI", sans-serif; font-size: 19px;
+    color: var(--accent); font-weight: 600; line-height: 1.3;
+  }
+  .verdicts li .v-body { font-size: 15.5px; }
+  .verdicts li .v-body .v-note { display: block; font-size: 13px; color: var(--ink-dim); margin-top: 2px; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; margin: 20px 0 8px; font-size: 13.5px; }
+  th {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; font-weight: 400;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint);
+    text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair-strong);
+  }
+  td { padding: 9px 14px 9px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  td.num, th.num { text-align: right; padding-right: 0; }
+  td .sub { display: block; font-size: 12px; color: var(--ink-faint); margin-top: 1px; }
+  .tbl-note { font-size: 12px; color: var(--ink-faint); margin: 6px 0 0; max-width: 72ch; }
+  table.matrix td:first-child { font-weight: 600; font-size: 13px; }
+
+  /* 引文与代码块 */
+  .spec { background: var(--well); border: 1px solid var(--hair); padding: 18px 20px; margin: 18px 0; overflow-x: auto; }
+  .spec .spec-title {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px;
+    letter-spacing: .1em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 12px;
+  }
+  .spec pre {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.75;
+    color: var(--ink);
+  }
+  .spec pre .c { color: var(--ink-faint); }
+  .spec pre .a { color: var(--accent-dim); }
+  blockquote {
+    border-left: 2px solid var(--accent-dim); padding: 4px 0 4px 16px;
+    margin: 16px 0; color: var(--ink-dim); font-size: 14px; max-width: 70ch;
+  }
+  blockquote .src { display: block; font-size: 12px; color: var(--ink-faint); margin-top: 4px; }
+
+  /* 提问回放与结论标注 */
+  .ask {
+    background: var(--paper); border: 1px solid var(--hair-strong); padding: 18px 22px;
+    margin: 18px 0; max-width: 76ch;
+  }
+  .ask .q { font-size: 15px; }
+  .tag {
+    display: inline-block; font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; letter-spacing: .08em; padding: 1px 7px;
+    border: 1px solid var(--hair-strong); color: var(--ink-dim); vertical-align: 1px;
+  }
+  .tag.rec { border-color: var(--accent-dim); color: var(--accent); }
+  .tag.rej { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--ink-faint); }
+  .tag.now { border-color: rgba(255,255,255,.28); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .duo { grid-template-columns: 1fr; } .frame { grid-template-columns: 1fr; } aside nav { position: static; } }
+
+  /* colophon */
+  footer.colophon { border-top: 1px solid var(--hair-strong); margin-top: 24px; padding-top: 26px; }
+  footer.colophon .kicker { display: block; margin-bottom: 14px; }
+  footer.colophon p { font-size: 12.5px; color: var(--ink-dim); max-width: 76ch; margin-bottom: 8px; }
+  footer.colophon .ref { color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="frame">
+
+    <aside>
+      <nav>
+        <div class="toc-title">CONTENTS</div>
+        <ol>
+          <li><a href="#s01"><span class="no">01</span>现象与问题</a></li>
+          <li><a href="#s02"><span class="no">02</span>本项目现状(代码事实)</a></li>
+          <li><a href="#s03"><span class="no">03</span>上游机制: qBittorrent / libtorrent</a></li>
+          <li><a href="#s04"><span class="no">04</span>业界实践</a></li>
+          <li><a href="#s05"><span class="no">05</span>四方案对比</a></li>
+          <li><a href="#s06"><span class="no">06</span>结论与建议</a></li>
+          <li><a href="#s07"><span class="no">07</span>附录: 调研方法</a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main>
+
+      <header class="cover">
+        <span class="kicker">qb-traffic · 速率口径调研</span>
+        <h1>流量图曲线过陡的口径调研: 瞬时速度 · 区间平均 · 移动平均</h1>
+        <p class="subtitle">「流量图太陡」四阶段调研的正式汇总 —— 本项目现状、qBittorrent/libtorrent 上游口径、业界通行做法与四方案对比, 回答「该用移动平均还是区间平均、瞬时速度还要不要保存」。</p>
+        <div class="meta-row">
+          <span>报告 · report</span>
+          <span><b>topic</b> qb-traffic-rate-basis</span>
+          <span><b>status</b> Done</span>
+          <span><b>added</b> 26-10-07-2031</span>
+          <span><b>基线</b> 003c7ce7 (develop)</span>
+        </div>
+      </header>
+
+      <div class="verdicts">
+        <ol>
+          <li><div class="v-body">「陡」的直接成因已定位, 是三个因素的叠加: <strong>瞬时值直采入图 + 桶宽=采样间隔(读侧无聚合) + 前端零平滑</strong>。
+            <span class="v-note">raw 段窗(1m-24h)上图值 = 每 30s 抽一次的 qB 瞬时速度字段, 采样器明文「速率字段直采不差分」; 3d+ 段窗消费 dt 加权真均值, 天然平 —— 陡只出现在 raw 段窗。</span></div></li>
+          <li><div class="v-body">上游口径: qB WebUI 的 <code>dl_info_speed</code> 是 <strong>per-torrent 5 秒 EMA 之和</strong>(libtorrent 1Hz tick, α=1/5), qB 侧无二次平滑 —— 陡是口径本身, 不是 auto-qb 采错了。
+            <span class="v-note">sessionimpl.cpp:6656-6669(qB @ 8182ae071); libtorrent stat.cpp:15-21(lt @ 53acefea9)。</span></div></li>
+          <li><div class="v-body">业界共识明确: <strong>保存累计字节计数(counter), 差分出区间平均速率</strong>是监控/计量系统的标准口径; 瞬时 gauge 直接入图是公认要避免的做法。
+            <span class="v-note">MRTG/RRDtool、Prometheus、vnstat、Windows 性能计数器、Netdata 全部是「存 counter、Δbytes/Δt 出图」。</span></div></li>
+          <li><div class="v-body"><strong>推荐 B: 区间平均速率</strong>(即用户提议的「t0→t1 传了 10MiB, 平均速度可算出」口径), <strong>纯读侧实现, 一步落地</strong>; 移动平均(C)被严格支配, 否决。
+            <span class="v-note">差分原料(盘上 totals 列)与全套差分边界函数已存在且已测试; 零存储改动、零 state_file 改动、零新配置键, 旧数据即刻按新口径出图。</span></div></li>
+          <li><div class="v-body"><strong>瞬时速度仍继续保存, 但不再上图</strong> —— r 行速率列原样保留, 图的速率通道改走差分通道。
+            <span class="v-note">瞬时值是 agg 层 dl_max(峰值)的聚合源, 也是原始信号留存(供未来分析); 改的是读侧消费口径, 不是写侧存储内容。</span></div></li>
+          <li><div class="v-body">边界语义全部已有归宿: 首样本 = 窗首外扩一桶取种子(1m 窗必带); qB 重启 = all-time 计数器经 fastresume 持久, 通常无缝; counter 回退 = 写侧关块重立基线 + 读侧 cur&lt;last→null 双侧已兜住; 旧数据 = .dat 行型不动, 即开即用。
+            <span class="v-note">无一处需要动存储格式或 state_file。</span></div></li>
+        </ol>
+      </div>
+
+      <section id="s01">
+        <div class="sec-head"><span class="kicker">01 · Problem</span><h2>现象与问题</h2></div>
+        <div class="ask">
+          <p class="q"><strong>用户原始问题</strong>: 流量图太陡, 调研 qB 和成熟解决方案, 是采用移动平均还是平均上传/下载数据而不是实时速度? 比如 t0→t1 上传了 10MiB, 这段时间的平均上传速度可以算出来, 就不需要保存瞬时速度了。</p>
+        </div>
+        <p>问题拆成三层: ①现象 —— qB 流量图在 1m-24h 窗上曲线剧烈跳变, 相邻采样点大幅上下; ②口径选择 —— 修「陡」是靠对瞬时序列做移动平均(SMA/EMA), 还是换掉口径本身、用区间累计字节差分出的平均速度? ③存储连带 —— 如果区间平均可算, 瞬时速度这个字段还有没有保存的必要?</p>
+        <p>本轮调研按四阶段展开: 本仓库现状梳理 → qBittorrent/libtorrent 上游机制 → 业界成熟做法网络调研 → 方案对比与推荐。各阶段原始笔记见 07 节附录。</p>
+      </section>
+
+      <section id="s02">
+        <div class="sec-head"><span class="kicker">02 · Code Facts</span><h2>本项目现状(代码事实)</h2></div>
+        <p>以下 file:line 相对 <span class="ref">src/auto_qb/</span>, 基线 <span class="ref">003c7ce7 (develop)</span>, 全部为只读核对。</p>
+
+        <h3>两种流量呈现, 只有 qB 流量图与「陡」相关</h3>
+        <table>
+          <thead><tr><th>呈现</th><th>文件 / 库</th><th>数据口径</th></tr></thead>
+          <tbody>
+            <tr><td>qB 流量图(本次对象)</td><td><span class="ref">webui/static/shared/qb_traffic_chart.js</span> · uPlot 双系列折线</td><td>qB 口径, raw 段窗 = 瞬时速度直采</td></tr>
+            <tr><td>历史流量图 SVG(今日流量面板)</td><td><span class="ref">webui/static/shared/dialogs.js:626-632</span> · SVG path 自绘</td><td>Traffic Monitor 的 <span class="ref">history_traffic.dat</span> 按日总量(KB/日), 非速度曲线, 与「陡」无关</td></tr>
+          </tbody>
+        </table>
+
+        <h3>速度数据链: 速率 = qB 瞬时速度字段直采, 不差分</h3>
+        <ul class="plain">
+          <li>采样器 docstring 明说「速率字段直采不差分」(<span class="ref">core/modules/traffic_sample_mod.py:16</span>)。全局系列读内存快照 <span class="ref">store.server_state</span> 的 <span class="ref">dl_info_speed / up_info_speed</span>(<span class="ref">_GLOBAL_FIELDS, traffic_sample_mod.py:175</span>); 单种系列读 <span class="ref">record.dlspeed / upspeed</span>(<span class="ref">:178</span>)。</li>
+          <li>零新增 qB 请求: 采样器读内存快照, qB 增量同步线 <span class="ref">sync_interval</span> 默认 <strong>1.5s</strong>(<span class="ref">config/models.py:345</span>; <span class="ref">core/qbmanager.py:478-494</span>), <span class="ref">torrents/store.py:148-155</span> 每轮合并 <span class="ref">server_state</span>。</li>
+          <li>本地差分其实已在跑但不上图: 累计增量对 all-time 对做 <span class="ref">delta = max(0, cur - last)</span>, cur&lt;last 判重置记 null(<span class="ref">_delta, traffic_sample_mod.py:1228-1235</span>; 基线推进 <span class="ref">:604-611</span>), 结果只进内存镜像 <span class="ref">TrafficSamplePoint.dl_inc/up_inc</span>(<span class="ref">:219-220</span>), <strong>不落盘、不上图</strong>。</li>
+        </ul>
+
+        <h3>各周期汇总</h3>
+        <table>
+          <thead><tr><th>周期</th><th class="num">值</th><th>出处</th></tr></thead>
+          <tbody>
+            <tr><td>qB 快照同步 sync_interval</td><td class="num">1.5s</td><td><span class="ref">config/models.py:345</span></td></tr>
+            <tr><td>后端主循环节拍 main_tick</td><td class="num">2s</td><td><span class="ref">config/models.py:344</span></td></tr>
+            <tr><td>采样间隔 sample_interval</td><td class="num">30s</td><td>默认; 校验下限=main_tick、上限 600s, 非 main_tick 整数倍向上取整(<span class="ref">models.py:311, 299</span>; <span class="ref">traffic_sample_mod.py:468-499</span>)</td></tr>
+            <tr><td>落盘 flush_interval</td><td class="num">600s</td><td><span class="ref">models.py:312</span>; <span class="ref">traffic_sample_mod.py:890-902</span></td></tr>
+            <tr><td>前端图轮询</td><td class="num">= meta.interval_s</td><td>raw 段窗即采样间隔 30s, 夹取 [1.5s, 600s], 回退 30s; <span class="ref">document.hidden</span> 跳过(<span class="ref">qb_traffic_chart.js:57-63, 465-484</span>)</td></tr>
+            <tr><td>前端主状态轮询 /api/state</td><td class="num">1.5/2/3s</td><td>按种子量分档(<span class="ref">polling.js:116-122</span>)</td></tr>
+          </tbody>
+        </table>
+
+        <h3>存储: v4 天文件 + agg, 三种量都在, 差分增量本体不落盘</h3>
+        <p>流量历史全部在 <span class="ref">&lt;data_dir&gt;/qb-traffic-v4/&lt;系列&gt;/&lt;YYYY-MM-DD&gt;.dat</span> + <span class="ref">agg.dat</span>(<span class="ref">traffic_sample_mod.py:9-13</span>)。r 行 <span class="ref">r,&lt;dl_rate&gt;,&lt;up_rate&gt;,&lt;dl_delta&gt;,&lt;up_delta&gt;[,&lt;dt_ms&gt;]</span> —— <strong>rate 列 = 瞬时速度直采值(上图用), delta 列 = 相对块基线的累计字节差(序列化形态)</strong>(<span class="ref">core/traffic_store.py:19</span>); z 游程 = 零速段(totals 快照), n 游程 = 断连 null 段(<span class="ref">traffic_sample_mod.py:224-235, 680-691</span>)。agg.dat 的 <span class="ref">dl_avg</span> 是 dt 加权区间均值(<span class="ref">traffic_store.py:48</span>)。raw 天文件保留期 = <span class="ref">rollup_window</span> 默认 <strong>30d</strong>(<span class="ref">models.py:314</span>; hour 行同窗, day/month 行永久, <span class="ref">traffic_sample_mod.py:107-109</span>); 24h 视图 ≈ 2880 桶。</p>
+
+        <h3>前端: 零平滑, 桶宽=采样间隔使读侧「均值」退化为恒等变换</h3>
+        <ul class="plain">
+          <li>无任何移动平均/EMA/降采样; <span class="ref">_qbPointsToData</span> 只排 x 栅格, y 值原样透传(<span class="ref">qb_traffic_chart.js:147-180</span>); <span class="ref">spanGaps:false</span> 只管 null 断线(<span class="ref">:583, :589</span>)。</li>
+          <li>窗口 13 档 <span class="ref">["1m","5m","30m","3h","6h","12h","24h","3d","7d","30d","6mo","1y","all"]</span>, 默认 <strong>24h</strong>(<span class="ref">qb_traffic_chart.js:68-69</span>; 后端逐字一致, <span class="ref">webui/server/traffic_qb.py:50</span>)。</li>
+          <li>raw 段窗(1m-24h): 桶宽 = <span class="ref">ceil(sample_interval)</span>(<span class="ref">core/traffic_grid.py:122-123</span>) → 1 桶 ≈ 1 样本, 单样本桶的「加权均值」就是该样本瞬时值本身, <strong>没有任何区间聚合发生</strong>。</li>
+          <li>agg 段窗(3d/7d/30d=hour 行, 6mo/1y=day 行, all=month 行): 直映桶, 值是写侧聚合的 dt 加权真均值 —— 天然平滑。陡只出现在 1m-24h 窗。</li>
+        </ul>
+
+        <h3>「陡」的直接成因(代码事实判定)</h3>
+        <p>直接成因 = <strong>「瞬时值直采入图 + 桶宽=采样间隔(无聚合) + 前端无平滑」三者叠加</strong>。qB 端瞬时速度本身在 1.5s sync 粒度上逐拍抖动, 30s 抽样点之间无相关性平滑 → 相邻点大幅跳变; 活尾合流(<span class="ref">traffic_qb.py:19-22</span>)让图尾实时跟随采样节拍, 使抖动无衰减地进图(放大器, 非成因)。</p>
+
+        <h3>差分基数已完全现成</h3>
+        <p>qB 总量字段已被读取并按采样节拍落盘: 全局 <span class="ref">alltime_dl / alltime_ul</span> 与 <span class="ref">dl_info_data / up_info_data</span>(<span class="ref">traffic_sample_mod.py:175</span>), 单种 <span class="ref">record.downloaded / uploaded</span>(<span class="ref">:178</span>); 每条 r 行携带 totals 快照(<span class="ref">:626</span>)。读侧差分也已实现: <span class="ref">series_totals_points / v4_totals_points</span> 相邻桶快照差分产 totals 数组(<span class="ref">core/traffic_grid.py:198-216, 435-452</span>), 前端 <span class="ref">qbCurSummary</span> 已用它求窗口累计(<span class="ref">qb_traffic_chart.js:456-463</span>)。<strong>即「把速率曲线换成计数器差分」所需的全部原料(字段、存储、差分函数、前端消费)都已存在, 只是速率 points 通道仍走瞬时直采。</strong>既有报告 <a href="26-10-05-1946-report-qb-traffic-v4-delta.html" class="ref">26-10-05-1946 qb-traffic-v4-delta</a>(块头基线 + delta 行编码)是本报告存储事实的直接前件。</p>
+      </section>
+
+      <section id="s03">
+        <div class="sec-head"><span class="kicker">03 · Upstream</span><h2>上游机制: qBittorrent / libtorrent</h2></div>
+        <p>克隆信息(完整克隆, 含全部历史; 行号以各 HEAD 为准):</p>
+        <table>
+          <thead><tr><th>仓库</th><th>克隆路径</th><th>分支</th><th class="num">HEAD commit</th></tr></thead>
+          <tbody>
+            <tr><td>qBittorrent</td><td><span class="ref">D:/Projects/Else/qBittorrent</span></td><td>master</td><td class="num"><span class="ref">8182ae071</span></td></tr>
+            <tr><td>libtorrent (arvidn)</td><td><span class="ref">D:/Projects/Else/libtorrent</span></td><td>RC_2_1</td><td class="num"><span class="ref">53acefea9</span></td></tr>
+          </tbody>
+        </table>
+
+        <h3>WebUI 速度字段的序列化来源</h3>
+        <p><span class="ref">/api/v2/transfer/info</span> 与 <span class="ref">/api/v2/sync/maindata</span> 的速度字段同源, 都是 <span class="ref">BitTorrent::SessionStatus::payloadDownloadRate / payloadUploadRate</span>: transfercontroller.cpp:70-92(<span class="ref">dl_info_speed</span> ← <span class="ref">sessionStatus.payloadDownloadRate</span>, :77)、synccontroller.cpp:157-176(:164)。</p>
+
+        <h3>qB 侧无二次平滑: WebUI 速度 = 各单种 5 秒 EMA 之和</h3>
+        <div class="spec">
+          <div class="spec-title">src/base/bittorrent/sessionimpl.cpp:6656-6669 (qB @ 8182ae071)</div>
+<pre><span class="c">// Use the sum of per-torrent payload rates instead of session-level
+// instantaneous rate calculation. Per-torrent rates are smoothed by
+// libtorrent, producing stable values consistent with the transfer list.</span>
+<span class="a">for (const TorrentImpl *torrent : asConst(m_torrents))</span>
+    totalDlRate += torrent-&gt;downloadPayloadRate();
+    totalUlRate += torrent-&gt;uploadPayloadRate();</pre>
+        </div>
+        <p>TorrentImpl 直接透传 libtorrent <span class="ref">torrent_status.download_payload_rate / upload_payload_rate</span>(torrentimpl.cpp:1579-1590), qB 侧无任何二次平滑。qB 自己另算了一套 session 级字节差分速率(calcRate, 见下), 但 WebUI 的 <span class="ref">dl_info_speed</span> 不用它。</p>
+
+        <h3>libtorrent: 每秒采样的指数滑动平均(EMA, α = 1/5)</h3>
+        <div class="spec">
+          <div class="spec-title">src/stat.cpp:15-21 second_tick (lt @ 53acefea9; 机制单点 stat.hpp/stat.cpp)</div>
+<pre><span class="c">// should be called once every second  (stat.hpp:53)</span>
+<span class="a">void stat_channel::second_tick(int tick_interval_ms)</span> {
+    std::int64_t sample = std::int64_t(m_counter) * 1000 / tick_interval_ms;
+    m_5_sec_average = std::int32_t(std::int64_t(m_5_sec_average) * 4 / 5 + sample / 5);
+    m_counter = 0;
+}</pre>
+        </div>
+        <p>每秒把该秒累计字节按实际 elapsed 换算成 B/s 的 sample, 再做 <strong>new = old×4/5 + sample/5</strong> —— 官方所称 "5 sec average"(stat.hpp:84), 采样周期 1s, 等效矩形窗约 4-5 秒, 最近样本占主导。peer / torrent / session 三级同一个类同一公式(peer_connection.cpp:1130-1141; torrent.cpp:10894-10917, 12585-12587; session_impl.cpp:3748-3793); 速率值每秒才前进一次, 快于 1Hz 的轮询拿到的是量化值。qB 的 <span class="ref">RefreshInterval</span> 默认 1500ms(sessionimpl.cpp:575), 与 auto-qb 的 <span class="ref">sync_interval</span> 默认 1.5s 同源。</p>
+
+        <h3>累计字节数: counter 差分原料在 qB 侧完全现成</h3>
+        <ul class="plain">
+          <li>会话级 <span class="ref">dl_info_data / up_info_data</span>(重启清零); <strong>alltime_dl / alltime_ul 经 fastresume 持久化</strong>(<span class="ref">AlltimeDL/AlltimeUL</span> 键, sessionimpl.cpp:6625-6626, 6959-6973) —— 跨 qB 重启单调, 适合差分; 单种 <span class="ref">downloaded = all_time_download</span>(torrentimpl.cpp:1393-1396)。</li>
+          <li><strong>字节差分平均的内部先例</strong>: sessionimpl.cpp:6578-6586 <span class="ref">calcRate</span> lambda —— <span class="ref">(current - previous) × 1s / interval</span>, 对 session_stats 单调计数器按两次 alert 的真实时间差差分; WebUI properties 的 <span class="ref">dl_speed_avg / up_speed_avg</span> = 累计字节 / 活跃秒数(torrentscontroller.cpp:844-845)。</li>
+          <li>qB GUI 自带流量图(SpeedPlotView): 数据源为每个刷新 tick 的瞬时速率, 前端 <strong>Averager 分桶窗口平均</strong>(speedplotview.h:102-139): <span class="ref">5min/1s · 30min/6s · 6h/36s · 12h/72s · 24h/144s</span> —— 时段越长桶越宽, 图上每点 = 窗口内样本的 SMA。<strong>WebUI 没有速度图</strong>(上游 issue #20868), 本工具正是在补这个缺口。</li>
+        </ul>
+        <p><strong>借鉴判断</strong>: WebUI 的 <span class="ref">dl_info_speed</span> 是「各单种 5s EMA(payload 口径, 1Hz)之和」, 陡峭是口径本身; 用「累计字节差分 / 轮询间隔」自算区间平均完全可行, 且是 qB 自家验证过的路子(calcRate / dl_speed_avg 同构)。</p>
+      </section>
+
+      <section id="s04">
+        <div class="sec-head"><span class="kicker">04 · Industry</span><h2>业界实践</h2></div>
+        <p>核心问题: 业界画流量/速率图, 通行口径是「瞬时速度」还是「累计计数器差分的区间平均」? <strong>有共识, 且是后者。</strong></p>
+
+        <h3>监控/计量系统: counter 差分是教科书口径</h3>
+        <ul class="plain">
+          <li><strong>MRTG/RRDtool</strong>(CACTI 同模型): 轮询 SNMP 单调计数器, 每次 update 做「当前 counter 减上一值, 除以流逝时间 = bytes/s」(<a href="https://oss.oetiker.ch/rrdtool/tut/rrdtutorial.en.html">rrdtutorial</a> / <a href="https://www.mankier.com/1/rrdtutorial">镜像</a>)。数据源类型 <a href="https://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html">rrdcreate</a>: <code>COUNTER</code>(含 32/64 位回绕自动补偿)、<code>DERIVE</code>(允许负 delta, 配 min:0 用于会重置的计数器)、<code>ABSOLUTE</code>(读即清零型); "the rrd *always* stores rates" —— 归档里存的从头就是速率。</li>
+          <li><strong>Prometheus</strong>: <a href="https://prometheus.io/docs/prometheus/latest/querying/functions/#rate">官方 rate() 文档</a> 原文 "rate/delta/increase should only be used with counters"; "Breaks in monotonicity (such as counter resets due to target restarts) are automatically adjusted for" —— 重置自动调整 + 窗口首末斜率外推。社区共识: 存算好的速率 = 把派生量固定在单一窗口, 事后无法按别的窗口重聚合, 还丢失 counter 重置感知(来源: <a href="https://www.asserts.ai">Asserts</a>、<a href="https://www.metricfire.com">MetricFire</a>、<a href="https://last9.io">Last9</a>)。</li>
+          <li><strong>Netdata</strong>: 反其道提高采集分辨率(每秒全量、宣称 sub-2s 延迟, <a href="https://www.netdata.cloud/features/architecture/real-time-at-scale">架构页</a>), 网络吞吐来自 /proc 计数器按每秒增量入库; 展示层 "Smooth" 开关只改渲染不改口径。反例佐证: 平均窗口过宽会抹掉 microburst(<a href="https://www.reddit.com/r/PFSENSE/">pfSense 用户帖</a>「峰值只显示 ~6 mbps」)。</li>
+          <li><strong>vnstat</strong>: 以约 5s UpdateInterval 轮询接口字节计数器, 按 5 分钟(SaveInterval)聚合入库, 最细粒度 5 分钟、保留 48 小时 —— 图上每点都是一个 5 分钟区间的平均速率; 吞吐超 <span class="ref">MaxBandwidth</span> 的读数视为无效丢弃(<a href="https://github.com/vergoh/vnstat/issues/234">issue #234</a>)。</li>
+          <li><strong>Grafana</strong>: <a href="https://grafana.com/docs/grafana/latest/dashboards/variables/add-template-variables/">$__rate_interval</a> 官方设计目标 = "guarantees a range window large enough to capture at least four samples"; 经典画法 <span class="ref">rate(node_network_receive_bytes_total[5m])</span> 即 counter 的 5 分钟窗口差分, "smoothing out momentary spikes"; 窗口经验: rate() 至少窗口内 2 个点, 建议 ≥ 2× 抓取间隔(<a href="https://www.metricfire.com">MetricFire</a>、<a href="https://hoelz.ro">hoelz.ro</a>)。</li>
+        </ul>
+
+        <h3>操作系统级网速图</h3>
+        <p><strong>Windows 任务管理器</strong>网络图约每秒刷新、60s 滚动窗, 画的是 <span class="ref">Bytes Sent/Received/sec</span> —— 源为 WMI/PDH <span class="ref">PERF_COUNTER_BULK_COUNT</span>(64 位差分速率计数: 两采样点间 Δbytes/Δt; 判据: <a href="https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmi-performance-counter-types">WMI 计数器类型文档</a>、<a href="https://stackoverflow.com/questions/49920348">SO 对照讨论</a>)。<strong>macOS 活动监视器</strong>默认每 5s 刷新(<a href="https://support.apple.com/guide/activity-monitor/actmntr154/mac">Apple 支持</a>), 平滑方式查不到公开资料。共同点: 图上每点都是采样间隔内的平均吞吐(源是 OS 计数器差分), 无再平滑。</p>
+
+        <h3>下载工具横向(源码为证)</h3>
+        <ul class="plain">
+          <li><strong>qBittorrent GUI 速度图</strong>(master @ blob 6fb78c95, GitHub contents API): 喂进去的是每次刷新的瞬时速度(1Hz×5s EWMA), 图上每点 = Averager 窗口内样本的 SMA(1s→144s 分桶)。</li>
+          <li><strong>Deluge Stats 插件</strong>(ianmartin/Deluge-stats-plugin, stats/core.py @ blob d1e9776): 每 1s 采瞬时速率存 1s 数组, 逐级 SMA 桶平均 <span class="ref">(5,1,5)→(30,5,6)→(300,30,10)</span> —— RRD「AVERAGE 合并 + 多分辨率归档」的手写翻版。</li>
+          <li><strong>Transmission / aria2 / Motrix</strong>: 无内置速度历史曲线(Transmission <a href="https://github.com/transmission/transmission/blob/main/docs/Web-Interface.md">web UI 文档</a>仅速度列), 无口径可考。</li>
+          <li>qB web UI 本身无速度图(<a href="https://github.com/qbittorrent/qBittorrent/issues/20868">issue #20868</a>), 没有「qB web 端先例」可直接抄。</li>
+          <li><strong>横向小结</strong>: 两个有真实实现的(qB GUI、Deluge 插件)都是「采样即时速度 + 时间桶 SMA」; <strong>没有任何一家从瞬时速度直接进图</strong> —— 差异只在桶宽。</li>
+        </ul>
+
+        <h3>SMA vs EMA: 没有共识, 只有场景分工</h3>
+        <p>SMA 等权更平滑、滞后更多; EMA <span class="ref">s(t)=α·x(t)+(1-α)·s(t-1)</span> 更跟手更抖(公式与取舍多来源一致, 见 <a href="https://chartschool.stockcharts.com">StockCharts ChartSchool</a>); α 与窗口等效关系 <strong>α ≈ 2/(N+1), 即 N ≈ 2/α − 1</strong>(<a href="https://quant.stackexchange.com">Quant StackExchange</a>、<a href="https://www.investopedia.com">Investopedia</a>)。窗口长度无权威标准, 但监控界锚点互相吻合: Prometheus 需窗口内 ≥2 点、Grafana 保证 ≥4 样本、MetricFire 建议 ≥2× 采样间隔 —— <strong>「窗口至少覆盖 2~5 个采样间隔」是实际共识区间</strong>。EMA 的经典先例是控制反馈而非画图(TCP RTT 估计, <a href="https://www.rfc-editor.org/rfc/rfc6298">RFC 6298</a>); 画图场景下监控生态实际采用时间桶平均(SMA)占绝对多数(RRD CF=AVERAGE、qB Averager、Deluge 多级桶、Grafana rate 窗口), 未见任何主流监控图以 EMA 为落盘口径 —— EMA 的优势场景是要省内存的流式单点平滑(O(1) 状态)。</p>
+
+        <h3>counter 回绕/重置的通行处理</h3>
+        <p>①负 delta 一律不画原值: 丢弃该点(RRD <span class="ref">DERIVE + min:0</span>、Graphite <span class="ref">nonNegativeDerivative()</span> / <span class="ref">perSecond()</span>, <a href="https://graphite.readthedocs.io">Graphite 文档</a>)或 clamp 到 0; ②有界回绕(32/64 位)按 max+1 补偿(RRD COUNTER、Graphite maxValue 参数); ③Prometheus 的「按重置后增量计」是折中: 重置点产生一次偏低的速率而非洞。对「qB 重启后 total 清零」: Δbytes 为负 → 丢弃该点或按 0 计, 与业界完全一致; qB 的 total 字节计数是 64 位, 无回绕之忧。</p>
+      </section>
+
+      <section id="s05">
+        <div class="sec-head"><span class="kicker">05 · Options</span><h2>四方案对比</h2></div>
+        <p>事实基础 = 01-03 节 + 04 笔记阶段回仓库补核的读侧链路/存储契约/配置登记点(<span class="ref">V4PointEntry(t, dl_rate, up_rate, dl_total, up_total, w)</span> 桶点同时携带速率与累计快照, <span class="ref">core/traffic_grid.py:333-346</span>; <span class="ref">v4_totals_points</span> 全套差分边界已实现且已测试, <span class="ref">:435-452</span>)。四方案: <strong>A</strong> 瞬时直采(现状) / <strong>B</strong> 区间平均(读侧差分, 用户提议口径) / <strong>C</strong> 瞬时序列 SMA/EMA / <strong>D</strong> 混合(B 底座 + 展示层平滑)。</p>
+
+        <table class="matrix">
+          <thead><tr><th>维度</th><th>A 瞬时直采 <span class="tag now">现状</span></th><th>B 区间平均(读侧差分) <span class="tag rec">推荐</span></th><th>C 瞬时序列 SMA/EMA <span class="tag rej">否</span></th><th>D 混合(B+展示层平滑)</th></tr></thead>
+          <tbody>
+            <tr><td>1m/5m 窗陡度</td><td>无改善(1m 窗仅 2 桶, 任何方案都粗)</td><td>每点变 30s 真平均, 相邻点共享 counter 链 → 采样噪声结构性消失</td><td>1m 窗 2 桶无法开窗; 5m 窗 10 桶开 3~5 窗后仅剩 2~7 个有效点</td><td>同 B; 再叠桶平均在 1m/5m 窗无意义(桶太少)</td></tr>
+            <tr><td>24h 窗陡度</td><td>最差: 2880 个互不相关的 5s-EWMA 快照直连折线</td><td>2880 个 30s 真平均点, 即 vnstat/RRD 形态; 剩余起伏 = 真实流量变化</td><td>需跨桶窗口(≥3~5 桶, 业界共识)→ 等效 90~150s 平均, 平滑但字节不守恒、滞后更大</td><td>同 B; 展示层再加宽才更平, 属化妆</td></tr>
+            <tr><td>3d+ 窗</td><td>已是 dt 加权真均值, 天然平</td><td>不动(保持 dl_avg), 或可选统一为 Δ/cov_s</td><td>无意义</td><td>同 B</td></tr>
+            <tr><td>首个样本</td><td>无此问题(瞬时值自足)</td><td>窗首基线缺失→null(语义已实现); 窗口左界外扩一桶取种子可补齐(读侧)</td><td>SMA 窗首 k-1 个 null; EMA 需递推初值</td><td>同 B</td></tr>
+            <tr><td>qB 重启/断连</td><td>n 游程 null, 正常</td><td>alltime 计数器经 fastresume 跨 qB 重启持久(02 节)→ 通常无缝; 断连 n 游程断链→null(已实现); 真回退双侧兜住</td><td>继承 B 或 A 的所有边界 + 自身窗口边界</td><td>同 B</td></tr>
+            <tr><td>counter 回退</td><td>不涉及(不差分)</td><td>写侧关块重立基线(<span class="ref">traffic_sample_mod.py:759-763</span>) + 读侧 cur&lt;last→null(<span class="ref">traffic_grid.py:435-452</span>), 双侧已兜住</td><td>同左(若作用在差分结果上)</td><td>同 B</td></tr>
+            <tr><td>与 agg 层口径一致性</td><td>raw=瞬时采样, agg=dt 加权均值, 两套口径</td><td>raw=Δ/w 与 agg=dt 加权均值都是「覆盖时间上的真平均」, 数值差仅剩 5s-EWMA 滞后量级</td><td>raw 被再平滑后与 agg 更脱节</td><td>同 B</td></tr>
+            <tr><td>状态与存储</td><td>零改动</td><td><strong>零改动</strong>: 不碰 .dat 行型、不碰 state_file、不碰采样器; 旧数据即刻按新口径出图</td><td>零存储改动; 前端逐请求重算可无状态</td><td>B 部分 + 展示层窗口(若可配则 1 个新键)</td></tr>
+            <tr><td>实现改动面</td><td>零(但问题保留)</td><td>新纯函数 1 个 + 装配接线 2-3 处 + v4_grid_obs 一处小豁免, 前端/采样器/存储零改动</td><td>前端或读侧新增加窗逻辑 + 窗口参数, 与 totals 通道数值脱钩</td><td>B + 前端/读侧平滑层 + 配置键三处登记</td></tr>
+            <tr><td>与 qB 生态/业界一致性</td><td>反模式(把 gauge 当速率用)</td><td><strong>完全一致</strong>: MRTG/RRDtool/Prometheus/vnstat/Windows 性能计数器全口径; qB 自家 calcRate 与 dl_speed_avg 同构</td><td>qB GUI/Deluge 的 SMA 前提是 1s 高分辨率采样, 本项目 30s 采样不具备; 无主流监控图以 EMA 为落盘口径</td><td>展示层平滑与 qB Averager 形态一致, 但业界把它建在区间平均之上, 不是替代 B</td></tr>
+            <tr><td>新配置键</td><td>无</td><td><strong>无</strong></td><td>平滑窗口/开关至少 1 键</td><td>平滑开关+窗口 1~2 键</td></tr>
+            <tr><td>结论</td><td><span class="tag rej">否决</span> 问题本体</td><td><span class="tag rec">推荐</span></td><td><span class="tag rej">否决</span> 被 B 严格支配</td><td>第二半本轮不做, 留作 B 落地后的观感跟进项</td></tr>
+          </tbody>
+        </table>
+
+        <h3>读侧差分 vs 写侧差分(关键裁决)</h3>
+        <table>
+          <thead><tr><th></th><th>读侧差分(B 推荐)</th><th>写侧差分</th></tr></thead>
+          <tbody>
+            <tr><td>.dat 行型</td><td><strong>零改动</strong>; r 行速率列继续存瞬时直采值(原始信号保留, 供 agg dl_max 与未来分析 —— Prometheus「留原始数据」论)</td><td>r 行速率列语义改为区间平均 → 新旧数据在 raw_window 内同窗混口径, 图上出现新旧接缝</td></tr>
+            <tr><td>agg 语义</td><td>不变(dl_avg/dl_max 继续从瞬时值聚合)</td><td>dl_max 退化为「区间平均的最大值」, 真峰值信息永久丢失</td></tr>
+            <tr><td>state_file</td><td><strong>零改动</strong>(基线链条来自磁盘 r 行)</td><td>需按黄金法则3 每系列持久化 last totals, 否则每次重启图头出洞</td></tr>
+            <tr><td>旧数据</td><td><strong>即刻按新口径出图</strong>(totals 已在盘上)</td><td>旧行仍是瞬时值, 等自然滚出 raw_window 才纯</td></tr>
+            <tr><td>实现面</td><td>读侧纯函数 + 接线</td><td>采样器 + 存储 + 状态 + 兼容四层都动</td></tr>
+          </tbody>
+        </table>
+        <p class="tbl-note">裁决: 读侧, 无悬念 —— 读侧的差分函数本来就存在且已测试, 写侧唯一的理论优势(图数据更简单)省不下任何东西。</p>
+
+        <h3>逐维度论证要点</h3>
+        <ul class="plain">
+          <li><strong>B 把每点变成真实的 30s 区间平均</strong>: 相邻点共享单调 counter 链(本桶增量 + 上桶增量 = 两桶总增量), 序列在数学上是实际传输字节的一个划分 —— 采样噪声不是被平均掉, 而是结构上不存在了。这正是 Windows 任务管理器/vnstat 曲线「平但有真实起伏」的来源。</li>
+          <li><strong>C 是在坏数据上化妆</strong>: 对 5s-EWMA 快照再开窗, 平滑的是采样伪影而不是传输过程; 业界窗口经验(≥3~5 个采样间隔)意味着 90~150s 滞后, 比 B 的 30s 更钝; 1m 窗只有 2 个桶, SMA 根本开不了窗 —— C 在最小的窗上直接失效。</li>
+          <li><strong>D 的正确形态 = 先落 B</strong>: 业界的展示层平滑(RRD AVERAGE、qB Averager、Deluge 多级桶)是建在区间平均之上的进一步加宽, 不是对瞬时口径的修补。B 落地后 30s 真平均的曲线大概率已达到 vnstat 级观感, D 有可能根本不需要(Netdata 反例: 过度平均抹掉 microburst)。</li>
+          <li><strong>1m 窗特别说明</strong>: 30s 采样下 1m 窗 = 2 个桶, 这是采样密度问题不是口径问题, 四个方案都救不了; 若在意 1m/5m 窗分辨率, 正确杠杆是既有键 <span class="ref">qb_traffic.sample_interval</span>(<span class="ref">models.py:311</span>, 下限 main_tick 上限 600s), 与本次口径改造正交。</li>
+          <li><strong>附带收益</strong>: B 落地后「速率 × 桶宽 = 累计增量」逐点成立, 前端 qbCurSummary 的窗口累计与曲线视觉严格一致(现在两者可以打架: 瞬时均值 ≠ 实际字节)。</li>
+        </ul>
+      </section>
+
+      <section id="s06">
+        <div class="sec-head"><span class="kicker">06 · Recommendation</span><h2>结论与建议</h2></div>
+
+        <div class="ask">
+          <p class="q"><strong>对用户原始问题的正面回答</strong>: 不采用移动平均 —— 采用用户提议的口径 <strong>B: 区间平均速率</strong>(t0→t1 传了 10MiB, 平均速度 = 10MiB ÷ (t1−t0)), 纯读侧实现, 一步落地。它是业界标准口径(RRDtool/Prometheus/vnstat/Windows 性能计数器), 是 qB 自家验证过的路子(calcRate / dl_speed_avg 同构), 且把采样噪声结构性消除而非化妆。<strong>瞬时速度仍继续保存(现状不变), 但图的速率通道不再用它</strong> —— 它继续作为 agg 层 dl_max 峰值的聚合源与原始信号留存。</p>
+        </div>
+
+        <h3>为什么是 B 而不是 C(移动平均)</h3>
+        <p>「陡」的结构性成因是口径错误(把 gauge 当速率用), 移动平均只治放大器。B 使相邻点共享单调 counter 链, 序列成为实际传输字节的一个划分, 噪声结构上不存在; C 在 5s-EWMA 快照上开窗, 平滑的是采样伪影, 且 1m/5m 小窗上直接失效(桶数不够开窗)。业界没有「SMA 优于 EMA」的画图共识, 但有明确分工: 历史曲线用时间桶 SMA, EMA 只用于省内存的流式平滑 —— 而两者的共同前提都是先有正确的口径底座。</p>
+
+        <h3>纯读侧实现路径要点(建议形态, 文件级)</h3>
+        <ol class="plain">
+          <li><strong><span class="ref">core/traffic_grid.py</span>(核心)</strong>: 新增桶点级变换(如 <span class="ref">v4_rate_from_totals(points)</span>) —— 复用 <span class="ref">v4_totals_points</span> 的全套边界规则(重置→null / 基线缺失→null / null 点断链 / z 桶 delta=0 续链), 输出把 <span class="ref">V4PointEntry.dl_rate/up_rate</span> 替换为 <span class="ref">delta / w</span>(w = 该点覆盖宽); totals 原样保留。约 30 行 + 单测。</li>
+          <li><strong>窗首种子</strong>: 调用侧把 t0 外扩一个桶宽取前驱桶点作链种子(不外发该点); 数据几乎总在同份当天 .dat, 零额外文件读取。1m 窗必带, 否则半图空。</li>
+          <li><strong><span class="ref">v4_grid_obs</span> 一处小豁免</strong>: 种子缺失时窗首桶点 rate=None 但 totals 有效, 现行实现会整点跳过导致 totals 链级联断 —— 需允许「rate null 但 totals 参与」(rate 权重记 0)。两行级改动。</li>
+          <li><strong>注入点选桶点级</strong>(v4_grid_obs 之前)而非 obs 级: 宽桶(采样抖动/暂停恢复产生的 w&gt;interval)的区间平均按真实覆盖秒分摊, 字节守恒; obs 级差分会把宽桶增量整段落进首个覆盖桶出假尖峰。</li>
+          <li><strong><span class="ref">webui/server/traffic_qb.py</span>(接线, 约 3-5 行)</strong>: raw 段窗三处(global :192 / 单种 :250-254 / 组 :232-234)在 <span class="ref">v4_series_points</span> 与 <span class="ref">v4_grid_obs</span> 之间插入变换; agg 段窗(3d+)速率通道不动(dl_avg 已是真均值)。</li>
+          <li><strong>零改动面</strong>: 采样器 / 存储格式 / 前端逻辑 / 配置键(零新键)。口径修复不做成可选项 —— 保留 A 作为「另一个模式」= 双口径长期维护 + 双倍测试面, 业界无此先例。</li>
+          <li><strong>测试</strong>: <span class="ref">tests/test_traffic_grid.py</span> 增变换函数用例(窗首种子/无种子、重置 null、z 链、真空断链、宽桶分摊字节守恒、组求和); <span class="ref">tests/test_webui_delta*.py</span> 一族补接线用例; 各文件头部 docstring「## 测试计划」同步。</li>
+        </ol>
+
+        <h3>边界处理</h3>
+        <table>
+          <thead><tr><th>边界</th><th>归宿</th></tr></thead>
+          <tbody>
+            <tr><td>首样本(启动后无上次 counter)</td><td>窗首外扩一桶取种子(1m 窗必带); 程序刚启动、窗口早于首个采样时窗首 null 是真值(无前驱字节可差分), 与 totals 通道现行语义一致。对 ≥5m 窗是 1/N 缺口(24h 窗 1/2880), 视觉无感。</td></tr>
+            <tr><td>qB 重启</td><td>全局 totals = alltime_dl/ul、单种 = all_time_download, 均经 qB fastresume 持久化 → <strong>qB 重启通常不产生 counter 重置</strong>, 差分无缝; fastresume 丢失才回落。</td></tr>
+            <tr><td>counter 回退</td><td>写侧: 计数器回落强制关块重立基线(<span class="ref">traffic_sample_mod.py:759-763</span>); 读侧: cur&lt;last → null(<span class="ref">traffic_grid.py:435-452</span>)。两套独立判定已在生产路径, B 直接继承。</td></tr>
+            <tr><td>断连 / 离线</td><td>n 游程断链→null(已实现); 离线期 qB 自行传输的字节不会被错误归到恢复后首桶(断链正是防这个); auto-qb 重启跨块 gap 由既有覆盖结算裁决, 连续则差分跨块成立。</td></tr>
+            <tr><td>旧数据兼容</td><td>无风险 —— .dat 行型不动, 读侧差分只消费盘上已有的 totals 列; 全部历史 v4 数据即刻按新口径出图(口径变更的预期效果, 非兼容性问题)。</td></tr>
+            <tr><td>agg 层口径残差</td><td>raw=Δ/w vs agg=dt 加权均值, 差异 ≤ 上游 5s-EWMA 滞后量级(可忽略); 严格统一(Δ/cov_s)可选, 需把 cov_s 接进 obs(现被 <span class="ref">v4_agg_obs</span> 丢弃), 不阻塞。</td></tr>
+          </tbody>
+        </table>
+
+        <h3>「是否还需要保存瞬时速度」</h3>
+        <p><strong>需要, 保存现状完全不变 —— 变的只是上图口径。</strong>三个理由: ①图的速率通道改走差分通道后, r 行 rate 列(瞬时直采值)继续落盘, 是 agg 层 <span class="ref">dl_max</span>(峰值)的聚合源 —— 换成区间平均会让「真峰值信息永久丢失」; ②原始信号留存(Prometheus 社区共识: 速率是派生量, 丢掉原始数据就丢掉可修正性), 供未来分析; ③读侧方案的全部价值就在于写侧零改动 —— 瞬时值照存、差分在读侧现算, 两者不冲突。用户提议「平均速度可算出, 就不需要保存瞬时速度了」在本项目语境下的准确回答是: <strong>不需要保存瞬时速度「上图」, 但需要继续保存瞬时速度「落盘」</strong> —— 且差分所需的 totals 也已在按同一节拍保存, 无新增存储。</p>
+
+        <h3>D 的后续位</h3>
+        <p>展示层平滑(B 底座之上的可选加宽, 如 <span class="ref">qb_traffic.chart_smooth</span> + 窗口)建议待 B 落地看实际观感再议 —— 业界形态是「B 是底座, 展示层平滑是可选加宽」; 若日后引入, 按黄金法则4 需四处同步登记(<span class="ref">config/models.py</span> QbTrafficConfig 字段、<span class="ref">config/validation/sections.py</span> KNOWN_QB_TRAFFIC_KEYS 白名单(:635 未知键直接报错)、<span class="ref">config/schema/groups.py</span> Field、守卫测试)。</p>
+      </section>
+
+      <section id="s07">
+        <div class="sec-head"><span class="kicker">07 · Method</span><h2>附录: 调研方法</h2></div>
+        <h3>四阶段笔记(全部 2026-10-07)</h3>
+        <table>
+          <thead><tr><th>阶段</th><th>笔记</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td>① 现状</td><td><span class="ref">D:/Projects/Else/auto-qb-speed-research/01-local-status.md</span></td><td>本仓库(D:/Projects/auto-qb-clone1, 只读零改动, 基线 003c7ce7)流量图数据链、存储口径、陡成因判定</td></tr>
+            <tr><td>② 上游</td><td><span class="ref">D:/Projects/Else/auto-qb-speed-research/02-qbittorrent.md</span></td><td>qBittorrent / libtorrent 速度口径与差分先例</td></tr>
+            <tr><td>③ 业界</td><td><span class="ref">D:/Projects/Else/auto-qb-speed-research/03-industry-practices.md</span></td><td>监控/计量系统、OS 网速图、下载工具横向、SMA/EMA、counter 回绕处理的网络调研(全部带来源链接)</td></tr>
+            <tr><td>④ 对比</td><td><span class="ref">D:/Projects/Else/auto-qb-speed-research/04-options-comparison.md</span></td><td>四方案对比矩阵、读侧/写侧裁决、落地要点清单</td></tr>
+            <tr><td>⑤ 汇总</td><td>本报告</td><td><span class="ref">memory-bank/reports/26-10-07-2031-report-qb-traffic-rate-basis.html</span></td></tr>
+          </tbody>
+        </table>
+
+        <h3>克隆仓库</h3>
+        <p>qBittorrent: <span class="ref">D:/Projects/Else/qBittorrent</span>(master @ <span class="ref">8182ae071</span>, 完整克隆, github.com/qbittorrent/qBittorrent); libtorrent: <span class="ref">D:/Projects/Else/libtorrent</span>(RC_2_1 @ <span class="ref">53acefea9</span>, 完整克隆, github.com/arvidn/libtorrent)。阶段③未做额外克隆 —— Deluge 与 qBittorrent 的源码片段经 GitHub contents API 直接取自网络(blob SHA 已记录在笔记)。</p>
+
+        <h3>强相关既有件(kb.docmap)</h3>
+        <ul class="plain">
+          <li><a href="26-10-05-1946-report-qb-traffic-v4-delta.html" class="ref">26-10-05-1946 report qb-traffic-v4-delta</a>(Done) —— v4 块头基线 + delta 行编码, 本报告存储事实的直接前件; 同专题另有 plan(26-10-05-2200)与任务档案。</li>
+          <li><a href="26-10-03-0757-report-qb-traffic-charts.html" class="ref">26-10-03-0757 report qb-traffic-charts</a>(Done, 专题 torrent-traffic-stats) —— 流量图可行性, 方案 C 采样管线拍板。</li>
+          <li><a href="26-10-04-0636-report-qb-traffic-storage.html" class="ref">26-10-04-0636 report qb-traffic-storage</a>(Done) —— v3 存储压缩与「速度 0 vs 断线」语义; 已记录「读侧桶内多行取均值」口径, 但 30s 档下桶内通常只有 1 行, 实际不产生平滑效果。</li>
+          <li><a href="26-10-04-1639-report-webui-qb-traffic-line-breaks.html" class="ref">26-10-04-1639 report webui-qb-traffic-line-breaks</a> 与 <a href="26-10-04-1730-report-qb-traffic-storage-v3.html" class="ref">26-10-04-1730 report qb-traffic-storage-v3</a>(Done) —— 折线断裂取证与 v3 设计。</li>
+        </ul>
+        <p class="dim">报告库中此前未见针对「曲线过陡/应改区间平均或移动平均」的既有决策 —— 本报告是该问题的首个口径决策记录。</p>
+      </section>
+
+      <footer class="colophon">
+        <span class="kicker">Colophon</span>
+        <p>本报告是证据快照, 出厂即冻结: 记录 2026-10-07 调研时点的现状、上游机制、业界口径与方案判定。实施路径以「建议/可选」表述; 实际改动以未来计划/任务档案为准。</p>
+        <p>证据链: <span class="ref">D:/Projects/Else/auto-qb-speed-research/</span>(四份阶段笔记)→ 本报告。上游行号分别对应 qBittorrent <span class="ref">8182ae071</span> 与 libtorrent <span class="ref">53acefea9</span>; 本仓库 file:line 对应 <span class="ref">003c7ce7 (develop)</span>。</p>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
