@@ -7,6 +7,20 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DECORATE);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* S7 装饰记忆化(plan 26-10-07-0414): WeakMap<组行对象, 装饰结果>。
+ *
+ * 缓存键边界(纯函数性已核): decoratedGroups 的输出**只**依赖行对象自身 ——
+ *   save_path/status/commonTags/commonCategory/sizeMismatch 全部由 g / g.members 派生,
+ *   _rank/kindText/_filterSiteTags 是纯方法(只读 STATE_RANK 等模块常量), 不读任何全局
+ *   筛选/多选态(筛选走 filters.js 独立 computed, 多选/乐观补丁走 state.js 的
+ *   pendingGroupOps 覆盖表, 都不在本输入面内)。故行对象引用即完整缓存键:
+ *   未脏行(S6 后服务端承诺跨版本引用稳定, delta 合并原样保留)直接命中复用, 重算面收敛
+ *   到脏行; 脏行(服务端新 dict / 注入新对象)自然 miss 重算。行对象从不在原地变
+ *   (服务端脏行恒新建 dict, 前端不改装饰行 —— 见 state.js pendingGroupOps 注),
+ *   无"内容变了缓存还命中"的失效漏标风险。弱引用不延长废弃行对象寿命。
+ */
+const _decoCache = new WeakMap();
+
 window.AQB_DECORATE = {
   methods: {
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
@@ -114,7 +128,13 @@ window.AQB_DECORATE = {
      */
     decoratedGroups() {
       return this.groups.map((g) => {
-        return {
+        // S7: 引用未变的行直接复用已装饰结果(键=行对象, 见文件头 _decoCache 注)。
+        // 返回结构形状逐一不变(键集/字段与无记忆化完全一致), 消费方 sort.js sortedGroups /
+        // filters.js / selection.js 不感知 —— 记忆化若改形状即踩 computed 静默白屏坑
+        // (pitfalls/web-ui/vue-reactivity.md)。
+        const hit = _decoCache.get(g);
+        if (hit) return hit;
+        const deco = {
           ...g,
           save_path: (g.members[0] && g.members[0].save_path) || "",
           status: this._aggStatus(g.members),
@@ -122,6 +142,8 @@ window.AQB_DECORATE = {
           commonCategory: this._commonCategory(g.members),
           sizeMismatch: new Set(g.members.map((m) => m.size)).size > 1,
         };
+        _decoCache.set(g, deco);
+        return deco;
       });
     },
     totalTorrents() {

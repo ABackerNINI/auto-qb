@@ -12,6 +12,9 @@ import { readInst, withVm } from './lib/vm.mjs';
  *   2. applyStateRows 行级语义的页面内直测(D4 第①类注入桩态): upsert 替换/追加 + removed
  *      剔除 + 未脏行对象引用恒等(DoD 的 === 断言)+ 数组新实例 + lastRid 置空走 full 恢复;
  *   3. 分组视图整组暂停: 组桶(groups)经增量轮渲染正确。
+ *   4. S7 装饰记忆化(plan 26-10-07-0414): decorate.js decoratedGroups 的 WeakMap 层 ——
+ *      未脏组行的装饰结果引用恒等(= 未重算的直接证据, 页内 === 断言), 脏行 miss 重算且
+ *      装饰结果与无记忆化逐字段一致、键集形状不变(computed 静默白屏坑的形状红线)。
  * 桩服务(scripts/ui_harness.py)的命令泵只真改 pause/resume 状态(见 _apply_truth), 删除
  * 不落合成数据 ⇒ removed 路径在这里走注入桩态直测, 不走 UI 删除(真删除会减少共享桩的
  * 种子总数, 打破 views.spec 的 `filteredTorrents.length === TORRENTS` 精确断言)。
@@ -248,6 +251,79 @@ for (const skin of SKINS) {
       const deltaOnes = rounds.slice(roundsBefore).filter((r) => r.full === false);
       expect(deltaOnes.length, '整组暂停后的更新轮至少有一次增量轮').toBeGreaterThan(0);
       expect(deltaOnes.some((r) => (r.buckets || '').includes('groups')), '增量轮带 groups 桶(view=group 裁剪)').toBe(true);
+    });
+
+    test('S7 装饰记忆化: 未脏组行装饰结果引用恒等(未重算) + 脏行重算且与无记忆化逐字段一致', async ({ page }) => {
+      await openApp(page, skin);  // 默认落在分组视图, vm.groups 有数据
+      /* 单次页内事务(D4 第①类注入 + 第②类读数, S4 直测同款; 一笔完成免轮询竞态):
+       * 引用比较必须在页内做 —— withVm 返回值过结构化克隆, 出页面即失对象身份。
+       * 步骤: ①快照各行装饰结果引用 → ②注入合成 delta(第 0 组脏=整行新对象, 第 1 组未脏
+       * = 引用原样, applyStateRows 的既有口径) → ③对**合并后**的每组用 vm 自带同源纯方法
+       * (_aggStatus/_commonTags/_commonCategory)做无记忆化现算, 与缓存结果逐字段比 + 键集
+       * 形状比(原行键 + 5 个派生键, 无多余/缺失) → ④返回全部断言。 */
+      const r = await withVm(page, `
+        const snap = { deco: {}, arr: vm.decoratedGroups };
+        for (const d of snap.arr) snap.deco[d.key] = d;
+        if (vm.groups.length < 2) return { skip: 'groups 不足两行' };
+
+        const g0 = vm.groups[0];                       // 脏组: 整行替换对象
+        const keepKey = vm.groups[1].key;              // 未脏见证组
+        const upG = JSON.parse(JSON.stringify(g0));
+        upG.name = (upG.name || '') + '*';
+        vm.applyStateRows({
+          rid: (typeof vm.lastRid === 'number' ? vm.lastRid : 0) + 1, updated: true, full: false,
+          delta: { groups: [upG] },
+          removed: { torrents: [], singles: [], groups: [], shows: [] },
+        });
+
+        // 无记忆化现算(纯函数口径与 decorate.js 逐字一致, 复用 vm 注入的同源方法)
+        const ADDED = ['save_path', 'status', 'commonTags', 'commonCategory', 'sizeMismatch'];
+        const fresh = {};
+        for (const g of vm.groups) {
+          fresh[g.key] = {
+            save_path: (g.members[0] && g.members[0].save_path) || '',
+            status: vm._aggStatus(g.members),
+            commonTags: vm._commonTags(g.members),
+            commonCategory: vm._commonCategory(g.members),
+            sizeMismatch: new Set(g.members.map((m) => m.size)).size > 1,
+          };
+        }
+        let mismatch = null;
+        for (const d of vm.decoratedGroups) {
+          const raw = vm.groups.find((x) => x.key === d.key);
+          const f = fresh[d.key];
+          const rawKeys = new Set(Object.keys(raw));
+          const shapeOk = Object.keys(d).length === rawKeys.size + ADDED.length &&
+            ADDED.every((k) => k in d) &&
+            Object.keys(d).every((k) => rawKeys.has(k) || ADDED.includes(k));
+          const fieldOk = d.save_path === f.save_path &&
+            JSON.stringify(d.status) === JSON.stringify(f.status) &&
+            JSON.stringify(d.commonTags) === JSON.stringify(f.commonTags) &&
+            JSON.stringify(d.commonCategory) === JSON.stringify(f.commonCategory) &&
+            d.sizeMismatch === f.sizeMismatch;
+          if (!shapeOk) { mismatch = { key: d.key, why: '键集形状漂移' }; break; }
+          if (!fieldOk) { mismatch = { key: d.key, why: '字段与无记忆化现算不一致' }; break; }
+        }
+        return {
+          mismatch,
+          arrNew: vm.decoratedGroups !== snap.arr,
+          witnessRefSame: vm.decoratedGroups.find((x) => x.key === keepKey) === snap.deco[keepKey],
+          dirtyRefNew: vm.decoratedGroups.find((x) => x.key === g0.key) !== snap.deco[g0.key],
+          dirtyRenamed: (vm.decoratedGroups.find((x) => x.key === g0.key) || {}).name === upG.name,
+        };
+      `);
+      if (r.skip) test.skip(true, r.skip);
+      expect(r.mismatch, '装饰结果与无记忆化逐字段一致 + 键集形状不变').toBeNull();
+      expect(r.arrNew, 'groups 变化触发 computed 重算(数组新实例, 消费方照常感知)').toBe(true);
+      expect(r.witnessRefSame, '未脏组行装饰结果引用恒等(WeakMap 命中 = 未重算的直接证据)').toBe(true);
+      expect(r.dirtyRefNew, '脏组行装饰结果为新对象(WeakMap miss 重算)').toBe(true);
+      expect(r.dirtyRenamed, '脏行装饰内容反映新行(名称带 *)').toBe(true);
+
+      /* 收尾: 踢一次全量刷新, 让注入的合成组被服务端真值覆盖(共享桩还原, S4 直测同款) */
+      await withVm(page, `(vm.lastRid = null, void vm.refresh(), true)`);
+      await expect.poll(async () => await readInst(page, `
+        vm.groups.some((x) => (x.name || '').endsWith('*'))
+      `), { message: '全量轮后注入的合成组被真值覆盖', timeout: 8_000 }).toBe(false);
     });
   });
 }
