@@ -409,7 +409,7 @@
         <span class="dt12-hint">块面积 = 体积占比 · 悬停树图块与右侧体积榜互联 · 点组头折叠目录</span>
       </div>
       <div class="dt12-main">
-        <div class="dt12-map" title="空间树图: 块面积 = 该文件占种子总体积的比例"></div>
+        <div class="dt12-map"></div>
         ${R(listHtml(tree))}
       </div>
       ${R(infoHtml(tree))}
@@ -550,9 +550,9 @@
     const denom = keys.reduce((s, k) => s + groups.get(k), 0) || 1;
     const segs = keys.map((k, i) =>
       T`<i style="width:${(groups.get(k) / denom * 100).toFixed(1)}%;opacity:${(1 - i * 0.13).toFixed(2)}"></i>`).join("");
-    return T`<span class="dt12-cs" title="体积构成条(顶层目录占比, 透明度梯度)+ 未完成计数">
-      <span class="hbar">${R(segs)}</span>
-      共 ${files.length} 个 · ${ctxOf().fmtSize(done)} / ${ctxOf().fmtSize(total)} · 未完成 <b class="w">${missCnt}</b></span>`;
+    return T`<span class="dt12-cs">
+      <span class="hbar" title="体积构成条(顶层目录占比, 透明度梯度)">${R(segs)}</span>
+      共 ${files.length} 个 · ${ctxOf().fmtSize(done)} / ${ctxOf().fmtSize(total)} · <span title="未完成计数">未完成 <b class="w">${missCnt}</b></span></span>`;
   }
 
   const _render = render;

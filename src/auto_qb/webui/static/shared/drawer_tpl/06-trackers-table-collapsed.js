@@ -297,14 +297,14 @@
       : "");
     const bar = [seg("hb-ok", n.ok), seg("hb-warn", n.warn), seg("hb-upd", n.upd), seg("hb-err", n.err)].join("");
     const parts = [
-      T`<span>正常 <b>${n.ok}</b></span>`,
-      n.warn ? T`<span>警告 <b>${n.warn}</b></span>` : "",
-      n.err ? T`<span class="is-err">失败 <b>${n.err}</b></span>` : "",
-      T`<span>实体 <b>${real}</b></span>`,
-      ts.length - real ? T`<span>虚拟 ${ts.length - real}</span>` : "",
+      T`<span title="健康构成计数(正常)">正常 <b>${n.ok}</b></span>`,
+      n.warn ? T`<span title="异常计数(警告)">警告 <b>${n.warn}</b></span>` : "",
+      n.err ? T`<span class="is-err" title="异常计数(失败)">失败 <b>${n.err}</b></span>` : "",
+      T`<span title="实体 tracker 计数(虚拟条目另计)">实体 <b>${real}</b></span>`,
+      ts.length - real ? T`<span title="虚拟条目计数(qB 合成)">虚拟 ${ts.length - real}</span>` : "",
     ].filter(Boolean).join("");
-    return T`<span class="dt06-cs" title="实体 tracker 健康构成(比例条)+ 异常计数">
-      <span class="hbar">${R(bar)}</span>
+    return T`<span class="dt06-cs">
+      <span class="hbar" title="实体 tracker 健康构成(比例条)">${R(bar)}</span>
       ${R(parts)}
     </span>`;
   }

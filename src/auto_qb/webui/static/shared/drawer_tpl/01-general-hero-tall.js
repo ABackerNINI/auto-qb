@@ -155,11 +155,11 @@
     const bits = [];
     let tone = "is-info";
     if (d.hr_excluded) {
-      bits.push(T`<span class="dt01-hr-badge">已排除出 HR 管理</span>`);
+      bits.push(T`<span class="dt01-hr-badge" title="${d.hr_reason || ""}">已排除出 HR 管理</span>`);
       if (d.hr_safety_text) bits.push(T`<span>${d.hr_safety_text}</span>`);
     } else if (d.hr_triggered) {
       tone = d.hr_satisfied ? "is-done" : "is-pending";
-      bits.push(T`<span class="dt01-hr-badge">${d.hr_satisfied ? "H&R 已达标" : "H&R 未达标"}</span>`);
+      bits.push(T`<span class="dt01-hr-badge" title="${d.hr_reason || ""}">${d.hr_satisfied ? "H&R 已达标" : "H&R 未达标"}</span>`);
       if (d.hr_req_time) bits.push(T`<span>要求做种 <b>${ctx.fmtDuration(d.hr_req_time)}</b></span>`);
       if (d.hr_req_ratio > 0) bits.push(T`<span>要求分享率 <b>${Number(d.hr_req_ratio).toFixed(2)}</b></span>`);
       if (d.hr_state) {
@@ -175,10 +175,10 @@
         }
       }
     }
-    if (d.hr_tag) bits.push(T`<span class="dt01-chip is-hr">${d.hr_tag}</span>`);
-    if (d.hr_tag_done) bits.push(T`<span class="dt01-chip is-hr">${d.hr_tag_done}</span>`);
+    if (d.hr_tag) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_tag}</span>`);
+    if (d.hr_tag_done) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_tag_done}</span>`);
     if (!bits.length) return "";
-    return T`<div class="dt01-hr ${tone}" title="${d.hr_reason || ""}">${R(bits.join(""))}</div>`;
+    return T`<div class="dt01-hr ${tone}">${R(bits.join(""))}</div>`;
   }
 
   /* 英雄行五数字: progress / ratio / upspeed / num_seeds / reannounce_in */

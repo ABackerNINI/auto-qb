@@ -514,9 +514,9 @@
     for (const it of d.fileRows) if (ui.checked.has(it.row.path)) checkedSize += it.size;
     const n = ui.checked.size;
     const head = n
-      ? T`已勾 <b>${n}</b> 项 · <b>${ctxOf().fmtSize(checkedSize)}</b> · `
+      ? T`<span title="当前勾选批次">已勾 <b>${n}</b> 项 · <b>${ctxOf().fmtSize(checkedSize)}</b></span> · `
       : T`<span class="dim">未勾选 — 勾选行可批量设优先级</span> · `;
-    return T`<span class="dt11-cs" title="当前勾选批次 + 文件 / 未完成计数">${R(head)}文件 <b>${d.fileRows.length}</b> · 未完成 <b class="w">${d.total.missCnt}</b></span>`;
+    return T`<span class="dt11-cs">${R(head)}<span title="文件计数">文件 <b>${d.fileRows.length}</b></span> · <span title="未完成计数">未完成 <b class="w">${d.total.missCnt}</b></span></span>`;
   }
 
   const _render = render;

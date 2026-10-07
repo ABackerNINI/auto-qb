@@ -141,7 +141,7 @@
 
     /* 段一: 窗口合计与占比 */
     const sec1 = T`<section class="dt14-sec">
-      <h4>窗口合计(${ctx.qbCurWindow})</h4>
+      <h4 title="静态解读栏(前端派生; 悬停看逐桶数值请用图上 tooltip)">窗口合计(${ctx.qbCurWindow})</h4>
       <div class="dt14-row"><span class="k">${R(rowIco("#i-upload", "is-up"))}上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
       <div class="dt14-row"><span class="k">${R(rowIco("#i-download", "is-dl"))}下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
       <div class="dt14-row"><span class="k">${R(rowIco("#i-percent"))}上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
@@ -180,7 +180,7 @@
       <h4>缺口事件</h4>${R(evRows)}
     </section>`;
 
-    const html = T`<div class="dt14-side" title="静态解读栏(前端派生; 悬停看逐桶数值请用图上 tooltip)">
+    const html = T`<div class="dt14-side">
       ${R(sec1)}${R(sec2)}${R(sec3)}
       <div class="dt14-foot">${pts.length} 桶 × ${fmtIv(iv)} 采样 · 静态解读(P-05)</div>
     </div>`;

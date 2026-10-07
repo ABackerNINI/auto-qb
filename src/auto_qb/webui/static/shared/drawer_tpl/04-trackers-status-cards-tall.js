@@ -30,13 +30,15 @@
     ok: { text: "正常", sev: 3 },
     off: { text: "未启用", sev: 9 },
   };
+  /* 色族说明下放到各胶囊(原挂在 .dt04-overview 容器上, 悬浮子元素时 tooltip 锚到容器
+   * 中上方远离光标 —— 锚点取最内层 [data-aq-tip], title 须挂在实际悬浮的小元素上) */
   const PILLS = [
-    { f: "all", text: "全部", cls: "" },
-    { f: "ok", text: "正常", cls: "pd-ok" },
-    { f: "warn", text: "警告", cls: "pd-warn" },
-    { f: "upd", text: "更新中", cls: "pd-upd" },
-    { f: "err", text: "失败", cls: "pd-err" },
-    { f: "off", text: "未启用", cls: "pd-off" },
+    { f: "all", text: "全部", cls: "", tip: "状态分类沿用全局状态色族" },
+    { f: "ok", text: "正常", cls: "pd-ok", tip: "正常 = 绿" },
+    { f: "warn", text: "警告", cls: "pd-warn", tip: "警告 = 黄" },
+    { f: "upd", text: "更新中", cls: "pd-upd", tip: "更新中 = 蓝" },
+    { f: "err", text: "失败", cls: "pd-err", tip: "失败 = 红" },
+    { f: "off", text: "未启用", cls: "pd-off", tip: "未启用 = 中性描边" },
   ];
 
   /* 视图偏好(跨重渲染与换种子保持): 计数筛选 / 排序; lastSig 供数据未变跳过重建 */
@@ -221,10 +223,10 @@
     const vs = trackers.filter((t) => ctx.drawerTrackerVirtual(t.url));
     if (!vs.length) return "";
     const chips = vs.map((t) => T`<span class="dt04-vchip" title="qB 合成的虚拟条目">${t.url}</span>`).join("");
-    return T`<article class="dt04-card st-off sp2" title="由 qBittorrent 合成, 非真实 tracker" style="order:95">
+    return T`<article class="dt04-card st-off sp2" style="order:95">
       <header class="dt04-head">
         <span class="dt04-dot"></span>
-        <span class="dt04-st">未启用 · 虚拟条目 ×${vs.length}</span>
+        <span class="dt04-st" title="由 qBittorrent 合成, 非真实 tracker">未启用 · 虚拟条目 ×${vs.length}</span>
         <span class="dt04-host dim">由 qBittorrent 合成, 非真实 tracker</span>
       </header>
       <div class="dt04-vchips">${R(chips)}</div>
@@ -263,7 +265,7 @@
       const cnt = p.f === "all" ? real : n[p.f];
       const act = ui.filter === p.f ? " active" : "";
       const dot = p.cls ? T`<span class="pdot ${p.cls}"></span>` : T`<span class="pdot" style="background:var(--fg-dim)"></span>`;
-      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}">${R(dot)}${p.text} <b>${cnt}</b></button>`;
+      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${p.text} <b>${cnt}</b></button>`;
     }).join("");
     const sortSegs = [["sev", "异常优先"], ["tier", "按 tier"]].map(([k, text]) =>
       T`<button type="button" class="dt04-seg${ui.sort === k ? " active" : ""}" data-sort="${k}">${text}</button>`).join("");
@@ -280,7 +282,7 @@
       ? T`<div class="dt04-grid">${R(cards.join(""))}</div>`
       : T`<div class="dt04-empty"><span>该分类下暂无 tracker</span></div>`;
     const html = T`<div class="dt04-wrap">
-      <div class="dt04-overview" title="状态分类沿用全局状态色族: 正常=绿 / 警告=黄 / 更新中=蓝 / 失败=红 / 未启用=中性描边">
+      <div class="dt04-overview">
         ${R(pills)}
         <span class="dt04-note">5s 自动刷新</span>
         <span class="dt04-spacer"></span>

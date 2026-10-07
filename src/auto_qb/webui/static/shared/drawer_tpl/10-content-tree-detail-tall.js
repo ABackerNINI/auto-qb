@@ -497,8 +497,8 @@
     let miss = 0;
     for (const f of files) if (num(f.progress) < 1) miss++;
     const selLast = ui.selPath ? ui.selPath.split("/").pop() : "";
-    return T`<span class="dt10-cs" title="已选节点 + 文件 / 未完成计数">${R(selLast
-      ? T`已选 <b>${selLast}</b> · ` : T`<span class="dim">未选中 —</span> · `)}共 ${files.length} 文件 · 未完成 <b class="w">${miss}</b></span>`;
+    return T`<span class="dt10-cs">${R(selLast
+      ? T`<span title="已选节点">已选 <b>${selLast}</b></span> · ` : T`<span class="dim">未选中 —</span> · `)}<span title="文件计数">共 ${files.length} 文件</span> · <span title="未完成计数">未完成 <b class="w">${miss}</b></span></span>`;
   }
 
   const _render = render;

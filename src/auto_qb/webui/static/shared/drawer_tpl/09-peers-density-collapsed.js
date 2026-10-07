@@ -356,12 +356,12 @@
     const upTotal = list.reduce((s, p) => s + num(p.upspeed), 0);
     const dnTotal = list.reduce((s, p) => s + num(p.dlspeed), 0);
     const bad = countOf(list, "bad");
-    return T`<span class="dt09-cs" title="连接构成比例条(取流/供流/闲置/限流/握手)+ 上下行合计 + 吸血嫌疑 / 连接计数">
-      <span class="hbar">${R(bar)}</span>
-      <span class="cs-up">↑ ${fmtSpeedOf(upTotal)}</span>
-      <span class="cs-dn">↓ ${fmtSpeedOf(dnTotal)}</span>
-      ${R(bad ? T`<span class="is-bad">吸血 <b>${bad}</b></span>` : "")}
-      <span>连接 <b>${list.length}</b></span>
+    return T`<span class="dt09-cs">
+      <span class="hbar" title="连接构成比例条(取流/供流/闲置/限流/握手)">${R(bar)}</span>
+      <span class="cs-up" title="上下行合计(上行)">↑ ${fmtSpeedOf(upTotal)}</span>
+      <span class="cs-dn" title="上下行合计(下行)">↓ ${fmtSpeedOf(dnTotal)}</span>
+      ${R(bad ? T`<span class="is-bad" title="吸血嫌疑计数">吸血 <b>${bad}</b></span>` : "")}
+      <span title="连接计数">连接 <b>${list.length}</b></span>
     </span>`;
   }
 
