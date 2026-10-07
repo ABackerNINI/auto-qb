@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
-**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`), 可进 S2。S1 实测对计划的四处纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)。
+**Summary:** 实施计划 [26-10-07-2336](../plans/26-10-07-2336-plan-test-web-split.html) 的执行档案(S0–S8)。把 tests/test_web.py(14,556 行 / 329 个被收集测试函数)按注释分节机械拆成 **16** 个平铺模块 + 共享件上收, 零逻辑改动、集合恒等。S0 已完成(同步 `34356f49` / 分支 `feat/test-web-split` / 基线复测 2771+4 逐位持平); S1 勘察已完成(映射表 329 fn 全覆盖, 嵌入本档 §S1); **P-01/P-02 已拍板**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`)。**S2 已完成**: `scripts/split_test_web.py` + 校验 4 条(内建, 另加内容/行守恒 2 条)+ 演练(临时目录全量拆, collect-only 337 项 / 329 名 == 源)+ 红验 3 条(6/6 先红后修), 见 §S2。S1/S2 实测对计划的纠偏: 函数数 323→**329**、docstring 条目 306→**312**、基线 2757→**2771**、节 3 内容异质(55 fn 仅 18 是流量 → 拆两份)、日志辅助类跨文件(非「内聚随节 13」→ 共享件实为 21 项)。
 **Topics:** test-web-split
 **Refs:** memory-bank/testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md
 
@@ -34,7 +34,7 @@
 | S0 | 开工前置 | ✅ | 同步 `34356f49`; 分支 `feat/test-web-split`(提交时改落 `develop`, 见决策节); 基线复测 2771+4(见切片 26-10-08-0258); 本档; 忆坑四篇(bulk-rename/parallel-run/single-file-coverage-gate/tmpdir) |
 | S1 | 勘察与映射表(只读轮) | ✅ | AST 扫描 + 映射表 329 fn 全覆盖(§S1); 节 1/节 2 聚类定界与命名; 常量/辅助归属矩阵 |
 | — | **门: P-01/P-02 拍板** | ✅ | 2026-10-08 用户裁决(§P-01): 节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py` |
-| S2 | 拆分工具与红验 | ⬜ | `scripts/split_test_web.py` + 校验 4 条(①集合 = **329** / ③条目 = **312**)+ 红验 3 条 |
+| S2 | 拆分工具与红验 | ✅ | `scripts/split_test_web.py`(AST 切块 + 映射表 + 归属闭包 + import 裁剪 + docstring 逐条重分布); 校验 4 条内建(+内容/行守恒); 演练 collect-only **337 项 / 329 名 == 源**; 红验 3 条 6/6(§S2) |
 | S3 | 批 1 试切(节 1 → auth + api_core) | ⬜ | 打通全管线(14 + 7) |
 | S4 | 批 2 webui 静态守阵(节 2 → 3 份) | ⬜ | skins(8) + panel(28) + page(27); + test.full 里程碑 |
 | S5 | 批 3 端点域(节 3 + 4 → traffic_qb + backend_misc + hr) | ⬜ | 18 + 37 + 51 |
@@ -471,6 +471,41 @@
 
 **收口口径**: 目标文件 **16** 个(计划 15); 校验① 面 = **329** 函数; 校验③ 条目守恒 = **312**。
 
+> **S2 实测纠偏**: 本节的「16 辅助 + 3 常量」漏了**日志辅助类** —— `module_log` 被 3 个目标文件使用(commands / keys / longtail), `_ListLogHandler` 经其传递亦跨 3 文件 ⇒ 二者随共享件进 `tests/webui_helpers.py`。共享件实为 **21 项**(16 非 fixture 辅助 + 3 常量 + 2 类)。详见 §S2。
+
+## S2 拆分工具与红验(2026-10-08)
+
+**工具**: `scripts/split_test_web.py`(一次性)。机制: AST 顶层语句按「gap 归属」(上一语句 end+1 .. 本语句 end)切块 —— 每条源行恰属一块, 前置节标记注释随其后第一个函数走; 映射表(读本档 §目标文件映射)+「定义→使用」传递闭包定归属(跨多文件→`webui_helpers.py`; 恰一文件→随该文件; 跨文件 fixture→conftest); 每文件 import 头按 used-names 裁剪(保留原分组), docstring「## 测试计划」条目按函数名逐条重分布(**逐字取源行**)。批次模式 `--rewrite-source` 改写源文件(余量为空则删), `--emit-conftest` 上收 fixture, `--files` 选子集。
+
+**校验 4 条(内建)+ 2 条加强**:
+
+| # | 校验 | 钉住的失败形态 | 演练实测 |
+|---|---|---|---|
+| 1 | 集合恒等(源测试函数名集合 == 输出并集) | 漏迁 / 丢函数 | 329 == 329 |
+| 2 | 计数各恰一次 | 重迁(同名两处) | 0 dup |
+| 3 | docstring 反幽灵 + 条目守恒(源侧计数钉 312) | 幽灵条目 / 漏登 | 312 == 312 |
+| 4 | 可编译 + `pytest --collect-only` 计数恒等 | import 裁剪错 / 常量落错文件 | 337 项 / 329 名 == 源 |
+| + | 内容守恒(所有顶层块落到某输出文件) | 块被静默丢弃 | 0 lost |
+| + | 行守恒(输出块体逐行 == 源行多重集) | 行被改写 / 丢失 | 14,180 行 == 源 |
+
+**演练(不触生产)**: 输出到 `R:/Temp/auto-qb/split-drill-s2`(testpaths 之外, 防误收集) → 校验 1-4 + 内容/行守恒**全绿**; `pytest --collect-only` = **337 项 / 329 函数名**, 与源 `tests/test_web.py` 逐位持平。
+
+**红验 3 条(§5.3, 先红后修)**: 全部在**临时副本**上注入(不触生产档案/源文件); 基线绿 → 注入必红 → 撤回复绿 = **6/6**。证据:
+
+| 注入 | 命中(实测) |
+|---|---|
+| 映射表划走 1 函数(漏迁) | rc=1 `[校验1] 源被收集测试函数 328 != 应 329` + `源有测试函数但映射表未列(漏迁) 1 个` |
+| 映射表同函数指两文件(重迁) | rc=2 `拆分中止: 映射表重复条目: test_api_requires_token`(载入期 fail-fast, 早于校验②) |
+| docstring 条目名改不存在(幽灵) | rc=1 `[校验3] 源 docstring 幽灵条目(无对应函数)` |
+| docstring 整行删掉(漏登) | rc=1 `[校验3] 源 docstring 条目 311 != 应 312` |
+
+**S2 实测对 §S1 的两处纠偏**:
+
+- **日志辅助类跨文件, 非「内聚随节 13」**: 计划 §3.2 / §S1 说 `module_log` + `_ListLogHandler` 随节 13 进 `test_web_longtail.py`; 实测 `module_log` 被 3 个目标文件使用(commands L10691/10703/10721/10743 · keys L13416/13446 · longtail L13901+), `_ListLogHandler` 经 `module_log` 传递亦跨 3 文件 ⇒ 二者归 `tests/webui_helpers.py`(否则要跨测试模块 import)。共享件实为 **21 项**(16 + 3 + 2 类)。
+- **节标记注释随行搬移**: 「gap 归属」把 15 处节标记(`# ---- qB 口径流量图 ... ----` 等)挂到其后第一个函数 —— 节标记随其域落进对应新文件, 不丢行(内容/行守恒校验钉住)。
+
+**踩坑**: `ast.get_docstring` 返回**求值后**的字符串, 会把源里的 `\\p{L}` 吃成 `\p{L}`(内容被改写 + 触发 SyntaxWarning) ⇒ 逐行迁移必须**从源行切片**取 docstring。已入 [pitfalls/testing/ast-migration-fidelity.md](../pitfalls/testing/ast-migration-fidelity.md)。
+
 ## 进度日志
 
 - **2026-10-08 02:40** 会话开工: `commands run my-commit-flow.sync` → `已同步 34356f49`。读计划全文 + memory-bank README/skill + 忆坑四篇(bulk-rename / parallel-run / single-file-coverage-gate / tmpdir)。
@@ -480,3 +515,9 @@
 - **2026-10-08 02:5x** **P-01/P-02 拍板(用户裁决)**: ①节 3 拆两份 —— 18 流量 → `test_web_traffic_qb.py`, 37 杂项 → `test_web_backend_misc.py`(HR 系 6 条未并入 hr); ②节 2 按内容分 `panel`(28)/`page`(27); ③节 1 维持 14/7; ④共享件 —— 仅 `web_env` fixture 进 conftest, 16 个非 fixture 跨文件辅助 + 3 常量进新建 `tests/webui_helpers.py` 显式导入。据此目标文件数 15→**16**; 映射表与归属表按拍板重算并回写本档。
 - **2026-10-08 02:58** 收尾(用户「提交」): DoD —— 复测 `test.full` **2771 passed + 4 skipped / 16476-165-5694-149 / 99% / 56.3s**(与上基线逐位持平), 新建开工基线切片 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md); 本档补 `**Refs:**` 认领链(挂基线切片); 切片「最后活动」刷新; `kb.index` 重建。
 - **2026-10-08 03:05** 推送落地(用户拍板): `ship.commit` 提交成功(`e9f82d66`)但推送失败 —— 新分支 `feat/test-web-split` 在 Gitee 不存在, `run_sync` 取不到远端 ref 即报「拿不到远端」(新分支无法自举)。用户拍板**改落 `develop`**: `develop` 快进到远端 tip `1a5f0262` → cherry-pick 本次提交(`136a42bf`)→ `ship.push`; 临时分支删除, S2–S7 亦在 develop 上做。
+- **2026-10-08 03:17** S2 会话开工: `commands run my-commit-flow.sync` → `已同步 591797e5`。**发现工作区脏**: 本档有一笔提交后写入的**陈旧草稿**(mtime 03:12:59 晚于提交 03:12:11, 缺 02:58/03:05 两条日志与 `**Refs:**` 行)⇒ 按「提交态为准」`git checkout --` 复原, 未把回退内容带进本批。
+- **2026-10-08 03:2x** S2: 写 `scripts/split_test_web.py`(AST 切块 + 映射表读取 + 归属闭包 + import 裁剪 + docstring 逐条重分布 + 校验 4 条 + 内容/行守恒)。开发中修掉两处保真缺陷: ①`ast.get_docstring` 求值转义吃掉 `\\p{L}` → 改**从源行切片**取 docstring; ②`webui_helpers.py` 自我 import(共享辅助互相引用) → 共享名扣掉本文件已定义者。导入分组按源分组号保留。
+- **2026-10-08 03:2x** S2 演练(不触生产): `--out-dir R:/Temp/auto-qb/split-drill-s2 --report --collect` → 校验 1-4 + 内容/行守恒全绿; collect-only **337 项 / 329 函数名 == 源**; 块体行 14,180 逐行搬移。
+- **2026-10-08 03:2x** S2 红验 3 条(临时副本注入): 6/6 通过(基线绿 / 4 注入必红 / 撤回复绿), 命中行见 §S2 表。
+- **2026-10-08 03:2x** S2 纠偏落档: 日志辅助类跨 3 文件(非「内聚随节 13」)→ 共享件 21 项; 新坑入 [pitfalls/testing/ast-migration-fidelity.md](../pitfalls/testing/ast-migration-fidelity.md)。`commands run test.quick` = **2771 passed + 4 skipped**(与开工基线逐位持平, 未动 tests/ 与 src/ 任何一行)。
+- **2026-10-08 03:32** S2 收尾 DoD: `commands run test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99% / 53.65s** —— 与开工基线切片 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md) **逐位持平**(本批只动 `scripts/` 与 kb 文档, 不触 src/tests) ⇒ **不新建重复切片**(两片全同是噪声); `kb.index` 重建、`kb.check` 全绿(仅存量「切片数 93 > 70」债务, 不拦提交)。

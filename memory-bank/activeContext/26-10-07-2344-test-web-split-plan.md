@@ -1,26 +1,24 @@
-# tests/test_web.py 拆分 —— S0–S1 已执行, 待 P-01 拍板
+# tests/test_web.py 拆分 —— S0–S2 已执行, 待 S3 试切
 
-> 摘要: 用户指令「实施计划S0-S1」。**S0 开工前置**已完成: `已同步 34356f49`; 分支 `feat/test-web-split`(**提交时改落 `develop`** —— 新分支流水线推不动, 经用户拍板); 基线复测 `test.full` = **2771 passed + 4 skipped / 16476-165-5694-149 / 99%**, 与切片 [26-10-08-0223](../testing/baselines/26-10-08-0223-test-webui-peers-harness.md) 逐位持平(计划基线 2757 已陈旧); 开工基线切片 [26-10-08-0258](../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md)。**S1 勘察**已完成: AST 扫描 + 映射表 329 fn 全覆盖零遗漏(嵌入档案)。**P-01/P-02 已拍板**(2026-10-08 用户裁决): 节 3 拆两份 / 节 2 panel·page / 节 1 14-7 / 共享件 fixture→conftest + 辅助→`tests/webui_helpers.py`。**纠偏四处**: ①被收集测试函数 323→**329**(327 `test_*` + 2 `testhr_*`); ②docstring 计划条目 306→**312**(0 幽灵 / 17 函数无条目); ③基线 2757→**2771**; ④节 3 内容异质 —— 计划名 `test_web_traffic_qb.py` 的 55 fn 里**仅 18 是流量**, 另 37 为 config/token/sites/group-view/error-reason/hr-status ⇒ 拆两份, 目标文件数 15→**16**。任务档案 [26-10-08-backend-test-web-split](../tasks/26-10-08-backend-test-web-split.md)(Status **In Progress**)已落; 未动 tests/ 与 src/ 任何一行。
-> 最后活动: 2026-10-08 03:05
+> 摘要: 用户指令「实施计划S2」。**S0 开工前置**、**S1 勘察与映射表**、**S2 拆分工具与红验** 已完成。S2 产出一次性工具 [scripts/split_test_web.py](../../scripts/split_test_web.py): AST 顶层块按「gap 归属」切块 + 映射表(读任务档案) + 辅助/常量「定义→使用」传递闭包定归属 + 每文件 import 头按 used-names 裁剪 + docstring「## 测试计划」条目按函数名逐条重分布(逐字取源行); 内建**校验 4 条**(①集合恒等 ②各恰一次 ③docstring 反幽灵 + 条目守恒(钉 312) ④可编译 + `--collect` 计数恒等)+ **内容/行守恒** 2 条。**演练(不触生产)**: 全量拆到 `R:/Temp/auto-qb/split-drill-s2`(testpaths 之外) → 全绿, `pytest --collect-only` = **337 项 / 329 函数名 == 源**; 块体行 14,180 逐行搬移。**红验 3 条**(§5.3, 临时副本注入)**6/6 先红后修**。**S2 纠偏**: 日志辅助类 `module_log`/`_ListLogHandler` 实跨 3 目标文件(非计划说的「内聚随节 13」)⇒ 共享件实为 **21 项**(16 辅助 + 3 常量 + 2 类)。`test.quick` **2771 passed + 4 skipped**(与开工基线逐位持平, 未动 tests/ 与 src/ 一行)。任务档案 [26-10-08-backend-test-web-split](../tasks/26-10-08-backend-test-web-split.md)(Status **In Progress**, §S2)。
+> 最后活动: 2026-10-08 03:32
 
 **Refs:** memory-bank/tasks/26-10-08-backend-test-web-split.md
 
-## 现状数字(当轮实测, HEAD `34356f49`)
+## 现状数字(当轮实测)
 
-- `wc -l`: test_web.py **14,556 行**(计划基线 0ae3212e 时 14,367)。
-- 顶层函数 **382** = 327 `test_*` + 2 `testhr_*`(被 pytest 收集, 默认 `python_functions=test*`)+ 53 辅助; `pytest --collect-only` = **337 项 / 329 函数**(`test_state_kind_maps_states` 参数化 ×9)。
-- 类 2 个(`_ListLogHandler` L13760 / `module_log` L13769, 均在节 13); 顶层常量 14 个。
-- docstring 计划条目 **312**(0 幽灵, 17 函数无条目)。
-- 节结构 15 标记: 5892 流量 / 7884 HR-refresh / 7927 sites / 8064 history / 9390 命令 / 10399 强制汇报 / 10776 视图热重载 / 11624 管理端点 / 12229 种子中心 / 13067 W0 守阵 / 13209 快捷键 / 13512 跳检 / 13757 P1 运行时长尾 / 14126 P1 路由长尾 / 14370 v3 活尾。
-- 外部牵连复核: 无 import; 仅 2 处注释(tests/helpers.py:277、test_facade_modules.py:39); pytest.ini 平铺自动收集、无需改。
+- 源 `tests/test_web.py` **14,556 行**; 顶层 **382** 函数 = 327 `test_*` + 2 `testhr_*` + 53 辅助; 类 2; 顶层常量 14; docstring 计划条目 **312**(0 幽灵, 17 函数无条目)。
+- 映射表 **329 fn → 16 文件**(节 3 拆两份 / 节 2 panel·page / 节 1 14-7)。
+- 归属闭包: 跨文件非 fixture 辅助 **16** + 常量 **3** + 类 **2** = **21 项 → `tests/webui_helpers.py`**; fixture `web_env` **1 → conftest**; 随唯一使用域 **47**(36 辅助 + 11 常量)。
+- 工具演练: 输出 16 文件 + `webui_helpers.py`; 最大单文件 `test_webui_static_dom_panel.py` **2,232 行**(≤2,500 硬上限); 块体行 **14,180**。
 
 ## 正在进行
 
-- S0–S1 已入库 `develop`(`136a42bf`; 临时分支 `feat/test-web-split` 已删 —— 新分支流水线推不动, 用户拍板改落 develop)。
-- 下一步 **S2**(尚未开工): 拆分脚本 `scripts/split_test_web.py` + 校验 4 条(①集合 = 329 / ③条目 = 312)+ 红验 3 条。
+- S0–S2 已在 `develop`(S0–S1 于 `136a42bf`/`591797e5`; S2 随本专题入库)。**开工发现工作区脏**(本档一笔提交后写入的陈旧草稿), 已 `git checkout --` 复原。
+- 下一步 **S3**(尚未开工): 批 1 试切 —— `--out-dir tests --rewrite-source --files test_web_auth.py,test_web_api_core.py --emit-conftest tests/conftest.py`; 迁后跑 `test.one` 两新文件 + `test.quick`; 同步改 2 处活注释(`tests/helpers.py:277`、`tests/test_facade_modules.py:39`)。
 
 ## 未决项
 
 - 节 3 杂项里的 6 个 HR 系测试留在 `test_web_backend_misc.py`; 若并入 `test_web_hr.py`, 说一声即可。
 - P-03(次大文件 test_hr_service 等续拆)按计划另立, 不混入本批。
-- 计划原文 S0 写档案名 `26-10-07-...`; 按 kb.time 建档日口径实际落 `26-10-08-backend-test-web-split.md`。
+- `scripts/split_test_web.py` 去留: 计划 S7 说「迁完删」(若想留作以后复用, 批 commit 前提出)。
