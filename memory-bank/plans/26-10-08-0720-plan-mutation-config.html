@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-08-0720">
-<meta name="doc-updated" content="26-10-08-0720">
+<meta name="doc-updated" content="26-10-08-0902">
 <title>config/ 包变异测试审计 · 分步执行计划</title>
 <style>
   :root {
@@ -164,7 +164,7 @@
       <h1>config/ 包变异测试审计 · 分步执行计划</h1>
       <p class="lede">对 <code>src/auto_qb/config/</code> 跑一轮 mutmut 变异审计: 机器批量提名存活变异, 人手工确认哪些是真洞, 真洞各自入池。本计划只写「怎么修、为什么这么修」—— <b>不在本计划里实施</b>; 执行时另立任务档案, 轮次进档案与基线切片。</p>
       <div class="meta-row">
-        <span>状态 <b class="mono">Open</b>(待拍板)</span>
+        <span>状态 <b class="mono">Done</b>(已执行 26-10-08-0902)</span>
         <span>立项 <b class="mono">26-10-08-0720</b></span>
         <span>目标 <b class="mono">**/config/*.py</b></span>
         <span>规划基线 <b class="mono">637be05f</b></span>
@@ -417,6 +417,11 @@
             <td class="mono">26-10-08-0720</td>
             <td>初版: config/ 包分步执行计划 (范围与目标清单 / 测算基数含「剔除纯数据表」的精化 / S1–S7 / 验收 / 风险停手点)</td>
             <td>用户「根据变异测试指导写一个针对 config 部分的分步执行计划」</td>
+          </tr>
+          <tr>
+            <td class="mono">26-10-08-0902</td>
+            <td><b>状态 Open → Done</b>: S1–S7 全流程执行完毕 —— 首轮 4799 变异 / 杀 3851 / 存活 893(80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; S5 补 10 个守阵(红验 18/18); S6 同池复跑存活 <b>772</b>(−121, 新增存活 0); S7 记基线切片 <code>testing/baselines/26-10-08-0902-mutants-config.md</code> + 6 条主题 issue + 1 条环境坑 issue/坑档。计划本身未改内容(拍板后冻结)</td>
+            <td>用户「实施计划: 26-10-08-0720-plan-mutation-config.html」</td>
           </tr>
         </table>
       </section>

@@ -30,12 +30,14 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_explicit_tracker_mapping_direct_and_wins: 显式 tracker 直取成功且优先于默认映射
 - test_explicit_tracker_missing_key_errors: 显式 tracker 键不存在 -> 报错
 - test_bound_site_requires_hr_section: 绑定站点缺 hr 段 -> 报错
+- test_site_bindings_reports_all_entries: 站点绑定逐条校验不被前一条跳过分支截断(continue 而非 break)
 - test_disabled_site_does_not_require_hr_section: enabled=false(默认)不要求 hr 段
 - test_legacy_v1_key_migrates_to_v3: 生产兼容回归锚 —— 旧键形态不改一字, 加载即沿链迁移到 v3 enabled
 - test_migration_2_3_drops_v2_keys: v2→v3 迁移单测 —— 废弃键删除 / min_torrent_interval 改名 / mode→enabled / idle_refresh_interval 原样保留(无章新写法不丢键)
 - test_migration_2_3_keeps_binding_essentials: v2→v3 迁移单测 —— tracker/refresh 保留, off 条目删除
 - test_migration_2_3_drops_tracker_hr_check: v2→v3 迁移单测 —— trackers.*.hr_check 残留直接删除
 - test_migration_1_2_then_2_3_chain: v1→v2→v3 沿链迁移结果一致(链式正确性)
+- test_migration_1_2_processes_every_tracker: v1→v2 逐个 tracker 迁移不被前一个的跳过分支中断(continue 而非 break)
 - test_v3_stamp_with_tracker_hr_check_still_migrates: 手写 v3 章且带旧键 -> 迁移照样删除(无兼容层)
 - test_unknown_keys_aggregated: hr_check / channel / sites 条目的未知键一次性报错
 - test_ranges_and_formats: 间隔下限 / 日额范围 / 页上限 / 时间窗格式聚合报错
@@ -410,6 +412,35 @@ def test_bound_site_requires_hr_section(tmp_path):
     assert any("未配置 hr 段" in e for e in errors), errors
 
 
+def test_site_bindings_reports_all_entries():
+    """站点绑定逐条校验: 前一条的跳过分支(未登记档案)不得中断后续条目(continue 而非 break)
+
+    单条目用例看不出 continue/break 的区别; 这里把"未登记档案"放前面, 再放一条会报
+    「未配置 hr 段」的合法档案条目 —— 循环若 break, 后者的错就丢了。
+    """
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "not-registered": {
+                        "enabled": "true"
+                    },
+                    "btschool": {
+                        "enabled": "true"
+                    },
+                }
+            },
+            "trackers": {
+                "btschool": {
+                    "domains": ["pt.btschool.club"]
+                }
+            },
+        }
+    )
+    assert any("未支持的站点档案" in e for e in errors), errors
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
 def test_disabled_site_does_not_require_hr_section(tmp_path):
     """enabled=false(默认)时不要求 hr 段(与旧 mode=off 同口径)"""
     errors = _validate(
@@ -560,6 +591,56 @@ def test_migration_1_2_then_2_3_chain():
     assert "hr_check" not in v2["trackers"]["BTSchool"]
     v3 = _migrate_config_2_3(v2)
     assert v3["hr_check"]["sites"]["btschool"] == {"enabled": True, "refresh_interval": "6H"}
+
+
+def test_migration_1_2_processes_every_tracker():
+    """v1→v2 逐个 tracker 迁移: 前一个 tracker 命中跳过分支不得中断循环(continue 而非 break)
+
+    四种跳过分支各放一个在前(无 hr_check / 形状烂 / mode=off / 定位不到档案), 再放一个可迁移的
+    tracker —— 单 tracker 用例只有一次迭代, 看不出 continue 与 break 的区别。
+    """
+    raw = {
+        "trackers":
+            {
+                "NoHrKey": {
+                    "domains": ["a.example"]
+                },
+                "BadShape": {
+                    "domains": ["b.example"],
+                    "hr_check": "oops"
+                },
+                "OffSite": {
+                    "domains": ["c.example"],
+                    "hr_check": {
+                        "mode": "off"
+                    }
+                },
+                "UnknownHost":
+                    {
+                        "domains": ["d.example"],
+                        "hr_check": {
+                            "mode": "partial",
+                            "hr_page_url": "https://nope.invalid/x"
+                        },
+                    },
+                "BTSchool":
+                    {
+                        "domains": ["pt.btschool.club"],
+                        "hr_check": {
+                            "mode": "partial",
+                            "hr_page_url": "https://pt.btschool.club/myhr.php"
+                        },
+                    },
+            }
+    }
+    cfg = _migrate_config_1_2(raw)
+    assert "hr_check" not in cfg["trackers"]["NoHrKey"]
+    assert "hr_check" not in cfg["trackers"]["BadShape"]  # 形状烂到读不出 mode: 直接删
+    assert "hr_check" not in cfg["trackers"]["OffSite"]  # 新口径下 off = 键不存在
+    # 定位不到档案: 旧键原地保留(交校验层报废除错)
+    assert cfg["trackers"]["UnknownHost"]["hr_check"]["mode"] == "partial"
+    # 关键断言: 最后一个 tracker 照样被迁移(前四个 continue 若退化成 break 则此处失败)
+    assert cfg["hr_check"]["sites"]["btschool"] == {"mode": "partial"}
 
 
 def test_v3_stamp_with_tracker_hr_check_still_migrates():

@@ -24,6 +24,10 @@
 - test_validate_bad_formats: 非法格式聚合(main_tick/port/log.level/限速/布尔)
 - test_validate_max_tasks_per_tick_range: max_tasks_per_tick 非正值报错(0/负值被 TaskQueue 当"不限量", 与配置语义相反)
 - test_validate_value_ranges: 取值范围收紧聚合(interval/main_tick/sync_interval 上下界, max_tasks_per_tick 上界, log.max_bytes 轮转区间, required_share_ratio 有限性与范围, hr.condition 边界, notify 上界, 规则 interval 正时间)
+- test_validate_exact_boundaries: 闭区间**端点逐值**钉住(端口/log.max_bytes/notify/max_tasks/qb_traffic 采样·落盘·保留窗/曲线阈值严格递增) —— 池内旧用例取远离边界的值, 端点位移类变异全靠这条
+- test_validate_qb_traffic_main_tick_crosscheck: sample_interval 与同一份配置的 main_tick 交叉校验(main_tick 取自当前配置而非模型默认; 边界 `>=` 相等合法)
+- test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
+- test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键);
@@ -1265,6 +1269,131 @@ def test_validate_value_ranges():
         )
         assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      interval: 5S\n") == ""
         assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      cooldown: 0S\n") == ""
+
+
+def test_validate_exact_boundaries():
+    """闭区间端点逐值钉住 —— 池内既有用例取的都是**远离边界**的值, 端点位移类变异
+    (`<=` -> `<`、闭区间端点 +1/-1)因此全部存活。本用例把每个闭区间两端都走一遍。
+
+    覆盖: 端口 [1,65535] 三处(qbittorrent/web/hr_check.channel) · log.max_bytes [1MiB,1GiB] ·
+    notify.max_per_hour [1,100] · max_tasks_per_tick [1,500] · main_tick 下限 0.5s ·
+    sync_interval [1,600]s · qb_traffic 采样/落盘/保留窗端点 · 曲线阈值 >0 且严格递增。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- 端口闭区间: 1 与 65535 合法, 0 与 65536 非法(三处同款判据)
+        for head in (
+            "config:\n  qbittorrent:\n    port: %s\n",
+            "config:\n  web:\n    port: %s\n",
+            "config:\n  hr_check:\n    channel:\n      port: %s\n",
+        ):
+            assert _load_errors(td, head % 1) == "", head
+            assert _load_errors(td, head % 65535) == "", head
+            assert "超出范围 1-65535" in _load_errors(td, head % 0), head
+            assert "超出范围 1-65535" in _load_errors(td, head % 65536), head
+
+        def log_mb(v):
+            return _load_errors(td, "config:\n  log:\n    max_bytes: %s\n" % v)
+
+        # --- log.max_bytes: 两端合法, 上下各越界一档非法
+        assert log_mb("1MiB") == ""
+        assert log_mb("1GiB") == ""
+        assert "config.log.max_bytes" in log_mb("1023KiB")
+        assert "config.log.max_bytes" in log_mb("1025MiB")
+
+        # --- notify.max_per_hour 下界端点 1 合法, 0 非法(上界 100 已有独立用例)
+        assert _load_errors(td, "config:\n  notify:\n    max_per_hour: 1\n") == ""
+        assert "必须为正整数" in _load_errors(td, "config:\n  notify:\n    max_per_hour: 0\n")
+
+        # --- max_tasks_per_tick 下界端点 1 合法, 0 非法(上界 500 已有独立用例)
+        assert _load_errors(td, "config:\n  max_tasks_per_tick: 1\n") == ""
+        assert "须 >= 1" in _load_errors(td, "config:\n  max_tasks_per_tick: 0\n")
+
+        # --- main_tick 下限端点 0.5s; sync_interval 闭区间两端
+        assert _load_errors(td, "config:\n  main_tick: 0.5S\n") == ""
+        assert _load_errors(td, "config:\n  sync_interval: 1S\n") == ""
+        assert _load_errors(td, "config:\n  sync_interval: 600S\n") == ""
+        assert "config.sync_interval: 须 <= 600s" in _load_errors(td, "config:\n  sync_interval: 601S\n")
+
+        def qbt(section):
+            return _load_errors(td, "config:\n  qb_traffic:\n" + section)
+
+        # --- qb_traffic.sample_interval 上界端点 600s / flush_interval 两端 / 两个保留窗下界
+        assert qbt("    sample_interval: 600S\n") == ""
+        assert "须 <= 600s" in qbt("    sample_interval: 601S\n")
+        assert qbt("    flush_interval: 60S\n") == ""
+        assert qbt("    flush_interval: 3600S\n") == ""
+        assert "config.qb_traffic.flush_interval: 须 >= 60s" in qbt("    flush_interval: 59S\n")
+        assert "config.qb_traffic.flush_interval: 须 <= 3600s" in qbt("    flush_interval: 3601S\n")
+        assert qbt("    raw_window: 1H\n") == ""
+        assert "config.qb_traffic.raw_window: 须 >= 3600s" in qbt("    raw_window: 59M\n")
+        assert qbt("    rollup_window: 7D\n") == ""
+        assert "config.qb_traffic.rollup_window: 须 >= 604800s" in qbt("    rollup_window: 6D\n")
+
+        # --- 曲线阈值: 必须 > 0 且**严格**递增(相等即非法)
+        gslc = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - 1B: {upload_speed_limit: 6MiB/s}\n"
+        )
+        assert _load_errors(td, gslc) == ""
+        assert "阈值必须大于 0" in _load_errors(td, gslc.replace("- 1B:", "- 0B:"))
+        assert "必须严格递增" in _load_errors(td, gslc + "            - 1B: {upload_speed_limit: 7MiB/s}\n")
+
+
+def test_validate_qb_traffic_main_tick_crosscheck():
+    """qb_traffic.sample_interval 与**同一份配置**的 main_tick 交叉校验(采样节奏不细于主循环节拍)
+
+    钉住两件事: ①main_tick 取自当前配置(而非模型默认); ②边界是 `>=`(相等合法)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # main_tick=60S 时 sample_interval 30S 必须报错(若取模型默认 2s 则不报 -> 变异存活)
+        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval: 30S\n")
+        assert "config.qb_traffic.sample_interval: 须 >= main_tick(60s)" in err, err
+        # 相等合法(>= 而非 >)
+        assert _load_errors(td, "config:\n  main_tick: 30S\n  qb_traffic:\n    sample_interval: 30S\n") == ""
+        # 大于 main_tick 合法
+        assert _load_errors(td, "config:\n  main_tick: 10S\n  qb_traffic:\n    sample_interval: 30S\n") == ""
+
+
+def test_validate_integer_and_str_list_guards():
+    """整数判据与字符串列表判据的返回语义钉住(池内用例只测了"通过"侧, 未测"拦截"侧)
+
+    - hr_check.max_requests_per_day/max_pages_per_wave 走 integer=True: 小数必须被 int() 拒
+    - 字符串列表项必须**非空白**: 空白项必须报错(_check_str_list 返回 False)
+    - state_file 显式空白串必须报错
+    """
+    with tempfile.TemporaryDirectory() as td:
+        assert "max_requests_per_day" in _load_errors(td, "config:\n  hr_check:\n    max_requests_per_day: 1.5\n")
+        assert "max_pages_per_wave" in _load_errors(td, "config:\n  hr_check:\n    max_pages_per_wave: 2.5\n")
+        assert _load_errors(td, "config:\n  hr_check:\n    max_requests_per_day: 10\n") == ""
+        # 空白项必须报错(_check_str_list 的 return False 分支)
+        assert "必须是非空字符串" in _load_errors(td, 'config:\n  delete_tags:\n    - " "\n')
+        assert _load_errors(td, "config:\n  delete_tags:\n    - ok\n") == ""
+        # state_file 显式空白串
+        assert "config.state_file: 不能为空" in _load_errors(td, 'config:\n  state_file: " "\n')
+
+
+def test_validate_fs_reports_all_entries():
+    """fs.path_map 逐条报错: 前一条非法**不得**截断后续条目的校验(循环用 continue 而非 break)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - not-a-dict\n"
+            "      - {from: 'D:/a', to: /a}\n"
+            "      - {from: 'D:/a', to: /b}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0]: 必须是字典" in err, err
+        assert "config.fs.path_map[2].from: 与第 1 条重复" in err, err
 
 
 # ---------- 示例配置守阵: 示例文件没有守卫会随 schema 演进静默漂移(pitfalls/docs/drift.md, 2026-09-25 实证) ----------

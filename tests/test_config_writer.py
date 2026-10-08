@@ -29,6 +29,9 @@
 - test_preview_tree_rejects_stale_version_tree: 预览同口径被闸门拦截
 - test_materialize_migrates_and_backups: 启动物化: 版本号备份(迁移前原样) + 磁盘落当前版本新结构 + 返回 desc 与备份路径
 - test_materialize_idempotent_and_noop: 已是当前版本零 IO; 二次调用幂等, 不产生新备份- test_materialize_dry_run_probe: write=False(dry-run 探测)只报 desc, 不校验不备份不落盘
+- test_materialize_missing_file_returns_empty: 配置文件不存在 -> 原样返回 ("", "") 且零 IO
+- test_collect_explicit_empty_paths_all_trackers: v3→v4 显式置空收集不被非 dict 条目中断(continue 而非 break)
+- test_unmask_tree_restores_nested_and_toplevel: 哨兵还原遍历整棵树, 嵌套分支命中后顶层后续键仍还原
 - test_mask_tree_non_dict_passthrough: 掩码只处理映射, 列表整体不动
 - test_unmask_tree_guards_and_sentinel_old_value: 非映射树原样返回; 旧值缺失/本身是哨兵时保持哨兵
 - test_stamp_schema_version_ignores_non_dict_cfg: 树缺 config 段时盖章静默跳过
@@ -644,6 +647,47 @@ def test_materialize_dry_run_probe(tmp_path):
     assert desc == "v1→v4" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
+
+
+def test_materialize_missing_file_returns_empty(tmp_path):
+    """配置文件不存在(测试/非常规构造直接注入配置): 无事可做, 原样返回 ("", "") 且零 IO"""
+    data_dir = tmp_path / "data"
+    assert materialize_schema_migration(str(tmp_path / "nope.yml"), str(data_dir)) == ("", "")
+    assert not data_dir.exists()
+
+
+def test_collect_explicit_empty_paths_all_trackers():
+    """v3→v4 显式置空收集: 非 dict 的 tracker 条目不得中断后续收集(continue 而非 break)"""
+    from auto_qb.config.migrations import _collect_explicit_empty_paths
+
+    cfg = {
+        "remove_similar_tags": "",
+        "trackers":
+            {
+                "Bad": "oops",  # 非 dict: 跳过它, 但不得中断后续 tracker 的收集
+                "T1": {
+                    "remove_similar_tags": "",
+                    "hr": {
+                        "add_tag": ""
+                    }
+                },
+            },
+    }
+    paths = _collect_explicit_empty_paths(cfg)
+    assert "config.remove_similar_tags" in paths, paths
+    assert "config.trackers.T1.remove_similar_tags" in paths, paths
+    assert "config.trackers.T1.hr.add_tag" in paths, paths
+
+
+def test_unmask_tree_restores_nested_and_toplevel():
+    """哨兵还原须遍历整棵树: 嵌套分支命中后不得中断顶层遍历(continue 而非 break)"""
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    tree = {"qbittorrent": {"password": MASK_SENTINEL}, "token": MASK_SENTINEL}
+    old = {"qbittorrent": {"password": "p"}, "token": "t"}
+    unmask_tree(tree, old)
+    assert tree["qbittorrent"]["password"] == "p", "嵌套分支应还原"
+    assert tree["token"] == "t", "嵌套分支命中后, 顶层后续键仍须还原"
 
 
 # ---------- T0.7 扩展: 掩码/闸门/首存 round-trip 长尾 + schema 迁移函数缺口 ----------

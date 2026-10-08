@@ -3,8 +3,8 @@
 **Status:** In Progress
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
-**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md
+**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -42,7 +42,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config 计划已派生(`plans/26-10-08-0720-plan-mutation-config.html`); 等拍板后执行, rules/hr/core 未派生 |
+| S6+ 逐包轮次 | In Progress | config 首轮**已执行**(计划 `26-10-08-0720`): 见下 R2; rules/hr/core 计划仍未派生 |
 
 ## 进度日志
 
@@ -76,3 +76,24 @@
   - 步骤 S1–S7 全走 task id(`mutants.setup` → `mutants.run` → 三分类 → 手工确认 → 补测 → 复跑 → 记录); 附 Windows 兜底 `mutants.gremlins`。
 - **收尾**: `kb.index` 重建 20 个生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; `doc.caps` 无新增债务(3 项均为存量)。`test.full` → **2772 passed + 4 skipped / 54.25s / TOTAL 99%**(16476 语句 / 165 未覆盖 / 5694 分支 / 149 partial), 与上基线 `26-10-08-0647` 逐位持平(本轮零 `src/`、零 `tests/` 改动); 基线切片 `testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md`。
 - **未做**: 未执行审计(计划边界: 不在计划里实施); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R2 — config 包首轮审计(执行计划 26-10-08-0720)
+
+- **触发**: 用户「实施计划: 26-10-08-0720-plan-mutation-config.html」。
+- **S1–S2 首轮(mutmut / WSL)**: 目标 `**/config/*.py`(回显 `19 files mutated, 109 ignored`), 池 = 6 个定向文件。
+  - 变异 **4799** · 杀 **3851** · 存活 **893** · `no tests` **55** · 超时 **0** → 杀死率 **80.25%**; 墙时 294.4s(含 setup), 变异阶段 17.41 变异/s; mutmut 3.8.0 · `--max-children 4` · WSL2 8 核。
+  - 与计划测算对照: 计划精化估 ≈3,800(剔除 schema 纯数据表)、报告全行估 ≈5,000 —— 实测 **4799** 落在两口径之间, 属 §2.2 预告的正常区, 无需复核 glob。
+- **S3 三分类**: 893 存活 + 55 no-tests 全量落盘(`R:/Temp/auto-qb/mutants/26-10-08-0742-config-py-results.txt`)并按类聚合; 机器规则先筛出 **64** 条等价(错误文案 / `open` 编码变体 / 纯展示格式), 余 **829** 条进候选。`no tests` 55 条**全部**在 `validation/rules.py` 的 `_validate_watch_fields`(36) 与 `_validate_expr_condition_spec`(19) —— 池内 6 个文件不覆盖规则条件校验, 属**池边界**而非代码缺口。
+- **S4 手工确认(唯一判据 = 全套件下同构变异)**: 对 **274** 条候选逐条 `mutmut apply` → 跑**全套件**(`-n 8 --no-cov -x -p no:cacheprovider`)→ 还原(`git checkout -- src/`), 结果:
+  - **54 条假存活**(全套件能杀 ⇒ 池没选到): `validate_config` 15 · `_validate_qb_traffic` 10 · `_expr_gate` 6 · `_validate_global_speed_limit_curve` 5 · `_validate_trigger_action_compat` 5 · `_current_main_tick` 3 · `_prepare` 2 …
+  - **220 条真洞候选**(全套件仍杀不掉): writer 74 · sections 45 · schema/__init__ 27 · core 25 · loaders 16 · rules 11 · migrations 10 · curves 9 · site_presets 2 · impact 1。
+  - 覆盖口径: 优先文件(impact / migrations / site_presets / writer / validation.core / schema.__init__)全量 + 其余文件的 `continue/break`·边界·`and/or`·语句删除类; **未覆盖的 555 条**按模式分类, 留待下轮(不在本轮声称真洞)。
+  - 耗时: 274 条 × ≈15s ≈ 68min(全套件 12s + 开销)。
+- **S5 补测(只对确认的真洞)**: 新增 **10** 个测试函数(全部落在池内文件, 同步各文件 docstring 的「## 测试计划」), 覆盖: impact diff 并集语义 · v1→v2 多 tracker 迁移 · 显式置空收集多条目 · 掩码还原遍历 · 物化缺文件返回 · `_check_str_list`/`_try_number` 拦截侧 · `state_file` 空白 · max_tasks 下界 · qb_traffic×main_tick 交叉 · 闭区间端点逐值 · fs 多条目 · 站点绑定多条目。
+  - **红验 18/18 全红**(apply 同构变异 → 目标用例变红 → 还原复绿, 主仓 `src/` 零残留)。
+- **S6 复跑(同目标同池 + 补测)**: 变异 **4799** · 杀 **3972** · 存活 **772** · `no tests` **55** → 杀死率 **82.77%**; 墙时 3m46s / 22.67 变异/s。
+  - **存活 −121 / 新增存活 0**(逐 id 对差; 被新守阵杀死者按文件: sections 74 · core 23 · migrations 7 · curves 7 · loaders 6 · writer 3 · impact 1)。验收 #3 达标(**772 ≤ 893**)。
+- **S7 记录**: 基线切片 `testing/baselines/26-10-08-0902-mutants-config.md`; 真洞余量按**主题**入池 **6 条** `test` issue(`26-10-08-0903-test-config-mutation-{loop-guards,boundary-guards,loader-defaults,writer-tail,schema-surface,validator-strings}`); 环境坑入池 `26-10-08-0758-bug-mutants-status-wsl` + 坑档 `pitfalls/testing/mutants-wsl-shell.md`。
+- **环境坑(本机)**: WSL 登录壳实为 zsh —— `cd X` 改真实 cwd, 但 `$PWD` 与 `$()` 仍报 WSL 启动目录 ⇒ `mutants.status` 恒报 `mutmut=no`(实际已装; **不影响 `mutants.run`**)。排障耗时约 30min。详见坑档。
+- **收尾实测**: `commands run test.full` → **2782 passed + 4 skipped / TOTAL 99%**(16476 语句 / 164 未覆盖 / 5694 分支 / 148 partial); 相对上基线 [26-10-08-0727](../testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md) passed **+10**、未覆盖 **−1**、partial **−1**。
+- **未做 / 遗留**: 220 条真洞候选中, 复跑新杀的 121 条覆盖了其中一部分(其余落在未 S4 验证的 555 条里), **余量未逐条补测**(按主题入池等排期); 未 commit/push(用户未说「提交」)。
