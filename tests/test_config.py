@@ -54,6 +54,12 @@
 - test_load_web_skip_check_menu_tristate: web.skip_check_menu 三态(显式 true / 显式 false / 缺省默认 false, 计划 26-10-02-1955 W1)
 - test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
+- test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path 等被改大写后须走未知键/默认分支)
+- test_validate_short_circuit_pairs_differing_truth: 短路运算符(and/or)语义钉住 —— 用两操作数取不同真值的输入(traffic_source 空列表/非 list, curves 项单键判定, 规则集绑定, removed 触发白名单)
+- test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
+- test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
+- test_validate_qb_traffic_positive_boundary: sample_interval 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
+- test_validate_gslc_interval_key_exact: global_speed_limit_curve.interval 键名精确性 + 值校验(positive)
 """
 import logging
 import os
@@ -1598,3 +1604,306 @@ def test_validate_notify_channels_edges():
     assert any("config.notify.channels[1]: 必须是单键映射" in e for e in errors)
     assert any("config.notify.channels[2]: 未知渠道 'slack'" in e for e in errors)
     assert _errs({"notify": {"channels": [{"platform": {}}]}}) == []
+
+
+def test_validate_string_keys_exact_case():
+    """键名字符串必须**精确**匹配(大小写敏感)—— 键名被改成大写后必须走未知键/默认分支
+
+    变异面: 校验器里「按字符串键名取值」的判据(`monitor.get("dat_path")` / `curve_spec["period"]` /
+    `set(curve_spec) - {... "download_curve"}` / `value.get("custom_basic_check_program_path")` /
+    `"curve" in item` / `cfg["state_file"]` 等)对键名大小写不敏感的话, 用户把键名写错大小写会被
+    静默当作"未配置"放行(本该 fail-fast 报未知键), 或反过来把正确键名当成未知键误报。
+    每条断言都构造「键名大小写与实际不符」的输入, 钉住只有精确拼写才被识别。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- curves: traffic_monitor.dat_path 大小写(变异 monitor.get("DAT_PATH") 后 dat_path 配了也判"未配置")
+        # 精确 dat_path -> expr 用到 gated 名字时门控认为"已配数据源" -> 不报门控错
+        # (若键名被改大写, monitor 取不到值 -> traffic_configured=False -> 反而报门控错, 断言翻面)
+        gated_expr = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        # dat_path 精确拼写: 数据源已配 -> 门控放行(无"无数据源"报错); 大小写不符则视作未配 -> 报门控错
+        assert "无数据源" not in _load_errors(td, gated_expr), _load_errors(td, gated_expr)
+        bad_case = gated_expr.replace("dat_path: a.dat", "DAT_PATH: a.dat")
+        # 大写键名不在白名单 -> traffic_monitor 未知键报错(未被静默接受), 且因此视为未配数据源
+        err = _load_errors(td, bad_case)
+        assert "traffic_monitor: 未知键" in err, err
+        assert "无数据源" in err, err
+
+        # --- curves: curve_spec 的 period/upload_curve/download_curve 键名大小写
+        # 精确键: 合法配置零报错; 大写键 -> 走未知键报错(而非被当成合法键)
+        gslc_ok = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          download_curve:\n"
+            "            - 10GiB: {download_speed_limit: 6MiB/s}\n"
+        )
+        assert _load_errors(td, gslc_ok) == ""
+        # period 大写: 缺 period 报错(而非"重复 period"里取错键)
+        assert "缺少 period" in _load_errors(td, gslc_ok.replace("          period: 1D", "          PERIOD: 1D"))
+        # download_curve 大写: 未知键报错 + 因为含大写与正确键都缺 -> 报"需配置 upload_curve 和/或 download_curve"
+        err = _load_errors(td, gslc_ok.replace("download_curve:", "DOWNLOAD_CURVE:"))
+        assert "DOWNLOAD_CURVE" in err, err
+        assert "需配置 upload_curve 和/或 download_curve" in err, err
+        # download_curve 精确时应**不**报"需配置 upload_curve 和/或 download_curve"(键名识别正确)
+        assert "需配置 upload_curve 和/或 download_curve" not in _load_errors(td, gslc_ok), "键名大小写须精确"
+
+        # --- rules: checking 动作 custom_basic_check_program_path 大小写
+        custom_ok = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "            custom_basic_check_program_path: /bin/verify\n"
+        )
+        # 精确拼写 -> 满足 basic_check=custom 的必填要求, 零报错
+        assert _load_errors(td, custom_ok) == ""
+        # 大写键名 -> 未知键 + 仍报"必须配置 custom_basic_check_program_path"(键名识别精确)
+        err = _load_errors(
+            td,
+            custom_ok.replace("custom_basic_check_program_path: /bin/verify", "CUSTOM_BASIC_CHECK_PROGRAM_PATH: /x")
+        )
+        assert "CUSTOM_BASIC_CHECK_PROGRAM_PATH" in err, err
+        assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+
+
+def test_validate_short_circuit_pairs_differing_truth():
+    """短路运算符(and/or)语义钉住 —— 用两个操作数**取不同真值**的输入
+
+    池内旧用例常只覆盖「两个操作数同真/同假」, 于是 `and` 换 `or` 后结果不变(变异存活)。
+    本用例专门构造「左真右假 / 左假右真」的输入, 让 and/or 互换必然翻转行为。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- curves.py: `not isinstance(raw_sources, list) or not raw_sources` (左假右真: list 但为空)
+        empty_src = "config:\n  global_speed_limit_curve:\n    traffic_source: []\n    curves:\n      - curve:\n          period: 1D\n"
+        assert "traffic_source: 必须是非空列表" in _load_errors(td, empty_src)
+        # (左真右假: 非 list)
+        bad_src = empty_src.replace("traffic_source: []", "traffic_source: notalist")
+        assert "traffic_source: 必须是非空列表" in _load_errors(td, bad_src)
+
+        # --- curves.py: `not isinstance(item, dict) or len(item) != 1 or "curve" not in item`
+        # 左假右真: item 是 dict 但键不是 curve(单键) -> "必须为单项映射"
+        wrong_key = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - notcurve:\n"
+            "          period: 1D\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, wrong_key)
+        # 左真右真(非 dict): 也报"必须为单项映射"
+        assert "必须为单项映射" in _load_errors(
+            td,
+            wrong_key.replace("      - notcurve:", "      - stritem").replace("          period: 1D\n", "")
+        )
+
+        # --- rules.py: `not isinstance(group_spec, dict) or rule_name not in group_spec`
+        # 左真右假: group_spec 非 dict(规则集 spec 非字典)
+        text = (
+            "config:\n"
+            "  setA_rules: notadict\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setA_rules.ruleX'\n"
+        )
+        assert "引用的规则不存在: @setA_rules.ruleX" in _load_errors(td, text)
+        # 左假右真: group_spec 是 dict 但规则名不存在
+        text2 = (
+            "config:\n"
+            "  setA_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setA_rules.noSuchRule'\n"
+        )
+        assert "引用的规则不存在: @setA_rules.noSuchRule" in _load_errors(td, text2)
+
+        # --- rules.py: `not isinstance(entry, dict) or len(entry) != 1`(trigger compat 白名单)
+        # 左真右假: entry 非 dict -> 跳过(结构错误由 plugin_entry 报); 左假右真: dict 但多键
+        deleted = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - stop: true\n"
+        )
+        assert "不适用于 trigger 'on_torrent_deleted'" in _load_errors(td, deleted)
+
+        # --- rules.py: `not r.startswith("@") or not r[1:].strip()` 空引用形态
+        # 左假右真: "@" 开头但 @ 后为空 -> 报"必须以 @ 开头"(而非放行)
+        empty_ref = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@'\n"
+        )
+        assert "规则引用必须以 @ 开头" in _load_errors(td, empty_ref)
+
+        # --- rules.py: trigger compat 的 `not isinstance(entry, dict) or len(entry) != 1`
+        # 左真(len 恰为 1 的非 dict): 白名单循环跳过(结构错误已由 plugin_entry 报), 不叠加"不适用"错
+        weird_entry = (
+            "config:\n"
+            "  g_rules:\n"
+            "    r1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - [stop]\n"
+        )
+        err = _load_errors(td, weird_entry)
+        assert "必须是字典" in err, err  # 结构错误照报
+        assert "不适用于 trigger 'on_torrent_deleted'" not in err, err  # 但白名单循环须跳过
+
+        # --- rules.py: `not isinstance(group_spec, dict) or rule_name not in group_spec`
+        # 左真(group_spec 非 dict)但右假(rule_name 是它的子串) -> 仍须报"引用的规则不存在"
+        sub = (
+            "config:\n"
+            "  S_rules: ruleXYZ\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@S_rules.rule'\n"
+        )
+        assert "引用的规则不存在: @S_rules.rule" in _load_errors(td, sub)
+
+        # --- curves.py: `not isinstance(item, dict) or len(item) != 1 or "curve" not in item`
+        # 左真(A) 中假(B=len==1) 右假(C="curve" in item) -> 单项映射检查须报错
+        list_item = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - [curve]\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, list_item)
+        # A 假 B 真 C 假: dict, 多键, 含 "curve" -> 仍须报"必须为单项映射"
+        multi_key = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - curve: {period: 1D}\n"
+            "        extra: 1\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, multi_key)
+
+
+def test_validate_gslc_interval_key_exact():
+    """global_speed_limit_curve.interval 键名精确性 + 值校验(钉住 interval 键名与 positive 判定)
+
+    变异面: 未知键集合字面量里的 "interval" 改大写(mutmut_13/14)会把合法的 interval 误报未知键;
+    `if "interval" in spec` 改大写(mutmut_20)与取 `spec["interval"]` 改大写(mutmut_31)会让
+    interval 值完全不被校验(非法值静默放行)。
+    """
+    base = (
+        "config:\n"
+        "  global_speed_limit_curve:\n"
+        "    traffic_source:\n"
+        "      - traffic_monitor:\n"
+        "          dat_path: a.dat\n"
+        "    curves:\n"
+        "      - curve:\n"
+        "          period: 1D\n"
+        "          upload_curve:\n"
+        "            - 1B: {upload_speed_limit: 1MiB/s}\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        # 合法 interval: 不报未知键、零报错
+        assert _load_errors(td, base + "    interval: 5M\n") == ""
+        assert "未知键" not in _load_errors(td, base + "    interval: 5M\n")
+        # 非法 interval(0)必须被校验报错(键名识别精确, positive=True)
+        assert "config.global_speed_limit_curve.interval: 必须为正时间: 0S" in _load_errors(td, base + "    interval: 0S\n")
+
+
+def test_strip_none_list_branch_and_key_case():
+    """_strip_none 的**列表分支**与 state_file 键名精确性
+
+    变异面(池内旧用例只走 dict 分支 / 只测多条):
+    - `[... for v in value if v is not None and v != ""]`:
+      `and` 换 `or`(mutmut_23)会把 None 项留下; `v != ""` 换 `v != "XXXX"`(mutmut_26)会把空串项留下;
+      列表项丢弃 `_path`(mutmut_22)会让**列表内嵌 dict** 的站点 tri_state 叶失去路径上下文、''
+      被照剥(覆盖为空的语义在数组形态下失效)。
+    - `validate_config` 的 `"state_file" in cfg`(mutmut_145/146 改大写): 只有精确键名才触发非空校验。
+    """
+    from auto_qb.config.validation.core import _strip_none
+
+    # 列表分支: None 与 "" 项都被剔除(变异 and->or / != "XXXX" 后会被留下)
+    assert _strip_none({"a": [1, None, "", "x"]}) == {"a": [1, "x"]}
+    assert _strip_none([None, "", "y"]) == ["y"]
+    # 列表内嵌 dict 的站点 tri_state 叶: '' 保留(丢弃 _path 后会被照剥成 {})
+    data = {"config": {"trackers": {"T": {"hr": [{"add_tag": ""}]}}}}
+    assert _strip_none(data) == {"config": {"trackers": {"T": {"hr": [{"add_tag": ""}]}}}}, _strip_none(data)
+
+    with tempfile.TemporaryDirectory() as td:
+        # state_file 精确键名才走非空校验: 大小写不符 -> 未知键(不是"不能为空")
+        assert "config.state_file: 不能为空" in _load_errors(td, "config:\n  state_file: ' '\n")
+        err = _load_errors(td, "config:\n  STATE_FILE: ' '\n")
+        assert "不能为空" not in err, err
+        assert "未知键 ['STATE_FILE']" in err, err
+
+
+def test_validate_rule_refs_single_char_and_short_circuit():
+    """tracker.rules 引用的边界形态: @ 后仅 1 字符是**格式合法**的引用(钉住 r[1:] 而非 r[2:])
+
+    变异面: `not r[1:].strip()` 改成 `not r[2:].strip()`(mutmut_8/40)后, '@A' 这种单字符
+    引用会被误判成"必须以 @ 开头"(报格式错), 而非"引用的规则集不存在"。单字符规则集名永不
+    存在(规则集键须以 _rules 结尾), 故行为差异体现在**报错文案**上 —— 两条断言分别钉住。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = ("config:\n"
+                "  trackers:\n"
+                "    T1:\n"
+                "      domains: [a.com]\n"
+                "      rules:\n"
+                "        - '@A'\n")
+        err = _load_errors(td, text)
+        # @ 后非空 -> 通过格式检查, 落到"规则集不存在"(而非"必须以 @ 开头")
+        assert "引用的规则集不存在: @A" in err, err
+        assert "规则引用必须以 @ 开头" not in err, err
+
+
+def test_validate_qb_traffic_positive_boundary():
+    """qb_traffic.sample_interval 正时间下界: 0 报"必须为正时间", 1 报"须 >= main_tick"
+
+    变异面: `if seconds <= 0` 改 `< 0`(mutmut_48, 0 漏判) / 改 `<= 1`(mutmut_49, 1 误判)。
+    默认 main_tick=2.0, 故 1S 合法走到"须 >= main_tick"分支 —— 两条断言分别钉住 0 与 1。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        assert "config.qb_traffic.sample_interval: 必须为正时间: 0S" in _load_errors(
+            td, "config:\n  qb_traffic:\n    sample_interval: 0S\n"
+        )
+        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval: 1S\n")
+        assert "必须为正时间" not in err, err  # 1S > 0, 不得误报"必须为正时间"
+        assert "须 >= main_tick(2s)" in err, err

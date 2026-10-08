@@ -136,7 +136,7 @@
     <ol>
       <li><code>rules/</code> —— 规则引擎判据, 实测 3,270 变异 / 杀死率 <b>55.5%</b>(分数最低, 最该先补)</li>
       <li><code>hr/</code> —— HR 判定与做种要求链路</li>
-      <li><code>config/</code> —— fail-fast 校验 <b>✔ 首轮已做(2026-10-08)</b>: 4,799 变异 / 杀死率 <b>80.25%</b>, S4 全套件确认 274 条(54 假存活 + 220 真洞候选), 补 10 个守阵后同池复跑 <b>82.77%</b>; 余量按主题入池 6 条 <code>test</code> issue</li>
+      <li><code>config/</code> —— fail-fast 校验 <b>✔ 已做两轮(2026-10-08)</b>: 首轮 4,799 变异 / 杀死率 <b>80.25%</b>, S4 全套件确认 274 条(54 假存活 + 220 真洞候选), 补 10 个守阵后同池复跑 <b>82.77%</b>; 第二轮按主题补守阵(字符串键名大小写 + <code>and</code>/<code>or</code> 短路互换)后同池复跑 <b>85.66%</b>(存活 653); 余量按主题入池 <code>test</code> issue</li>
       <li><code>core/</code> —— 主循环 / 限速</li>
     </ol>
     <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
@@ -198,10 +198,10 @@
         <td><code>config/</code></td>
         <td>2026-10-08</td>
         <td>4,799</td>
-        <td>80.25% → 82.77%</td>
-        <td>R2</td>
+        <td>80.25% → 82.77% → 85.66%</td>
+        <td>R2 / R5</td>
         <td><span class="badge go">已做(余量在池)</span></td>
-        <td><code>baselines/26-10-08-0902-mutants-config.md</code><br><code>plans/26-10-08-0720-plan-mutation-config.html</code></td>
+        <td><code>baselines/26-10-08-1016-mutants-config-validator-strings.md</code><br><code>baselines/26-10-08-0902-mutants-config.md</code><br><code>plans/26-10-08-0720-plan-mutation-config.html</code></td>
       </tr>
       <tr>
         <td><code>infra/versioning.py</code> <span class="hint">(练手)</span></td>

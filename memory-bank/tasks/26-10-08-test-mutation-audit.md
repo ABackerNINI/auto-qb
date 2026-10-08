@@ -3,8 +3,8 @@
 **Status:** In Progress
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
-**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md
+**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0), 杀死率 **82.77%**。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。 **R6 config 第二轮**(池内 `test` issue 26-10-08-0903-validator-strings): 补字符串键名大小写 + `and`/`or` 短路互换守阵, 红验 **26/26** 全红, 同池 `--no-refresh` 复跑存活 **772 → 653**(−119), 杀死率 **85.66%**。
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/testing/baselines/26-10-08-1016-mutants-config-validator-strings.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -48,6 +48,7 @@
 | S5 | 收尾: 本档案 + activeContext 切片 + `kb.index` + `test.full` 基线切片 + skills 软链 | In Progress |
 | S6 | 派生计划(config): `plans/26-10-08-0720-plan-mutation-config.html`(按 skill 骨架; 用户点名 config) | Done |
 | S7+ | 执行审计轮次: 按计划跑 + 三分类 + 手工确认 + 真洞入池(rules → hr → core 计划仍未派生) | Open |
+| S8 | config 第二轮: 池内 `test` issue 26-10-08-0903-validator-strings(字符串键名 + 短路运算符) | Done |
 
 ## 子任务状态表
 
@@ -58,7 +59,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config 首轮**已执行**(计划 `26-10-08-0720`): 见下 R2; rules/hr/core 计划仍未派生 |
+| S6+ 逐包轮次 | In Progress | config **两轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、第二轮见 R6(validator-strings, 85.66%); 池内 6 条 `test` issue 余 5 条待做; rules/hr/core 计划仍未派生 |
 
 ## 进度日志
 
@@ -144,3 +145,22 @@
 - **回写**: issue 置 `Done`(封面徽标 + `issue-status` meta 两处 + 状态日志 + 复验行 + 修复后补充); 坑档 `pitfalls/testing/mutants-wsl-shell.md` 标注「工具侧已修」; 包内 `references/why.md` 排障表该条改「已修」、诚实交代节更新; skill `mutation-testing` 的坑条同步。
 - **收尾实测**: `commands run test.full` 覆盖口径与上基线逐位持平(见基线切片 [26-10-08-0958](../testing/baselines/26-10-08-0958-mutants-status-wsl.md)); `kb.index` 20 生成物 / `kb.check` 主键与认领链全过 / `doc.drift` 0 处 / `doc.links` 过。存量红 2 项(无关文件 `activeContext/26-10-08-0713` 的裸 passed 数字, 已 stash 回退验证与本轮无关)与存量 cap 债务 3 项未动(范围守恒)。
 - **未做**: 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R6 — config 第二轮: 校验器字符串键名 + 短路运算符(issue 26-10-08-0903-validator-strings)
+
+- **触发**: 用户「认领并实施: `memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html`」—— 即首轮入池 6 条 `test` issue 中的第八条(validator-strings)。
+- **范围**: 只补两类变异形态的守阵 —— ①**字符串键名字面量大小写**(`dat_path`→`DAT_PATH` · `download_curve`→`DOWNLOAD_CURVE` · `custom_basic_check_program_path`→大写)②**`and`/`or` 短路互换**。涉及 6 个函数: rules 的 `_expr_gate` / `_check_rule_refs` / `_validate_trigger_action_compat` / `_validate_checking_action_spec`, sections 的 `_validate_qb_traffic`, curves 的 `_validate_global_speed_limit_curve`, core 的 `_strip_none`。
+- **补测(S5)**: 新增 **6** 个测试函数(均落在池内 `tests/test_config.py`, 同步该文件 docstring 的「## 测试计划」):
+  - `test_validate_string_keys_exact_case` —— 键名大小写不符须落到「未知键」而非被静默接收(经 expr 门控间接断言 `dat_path`; period/download_curve/custom_basic_check_program_path 直接断言)。
+  - `test_validate_short_circuit_pairs_differing_truth` —— 逐条构造「两操作数取不同真值」的输入击穿 `and`/`or` 互换(traffic_source 空列表 vs 非 list · curves 项单键判定 · group_spec 非 dict 但含 rule_name 子串 · 触发非 dict 单元素 list action · 空引用 `"@"`)。
+  - `test_strip_none_list_branch_and_key_case` —— 列表分支去空 + 列表内嵌 dict 的 tri_state 叶豁免 + 键名大小写对照。
+  - `test_validate_rule_refs_single_char_and_short_circuit` —— 钉 `r[1:]`(单字符引用须报「引用的规则集不存在」而不是「必须以 @ 开头」)。
+  - `test_validate_qb_traffic_positive_boundary` —— 钉 `seconds <= 0`(0S 报正时间; 1S 落到 main_tick 下界而**不**报正时间)。
+  - `test_validate_gslc_interval_key_exact` —— 钉 `interval` 精确键名与正值判定。
+- **红验 26/26 KILLED**: 用 ast 定位函数体行范围做精确替换的临时脚本(`apply` 同构变异 → 跑 5 个目标测试 → **原字节回写还原**), 26 条全红; 主仓 `src/` 零残留(首版用 `write_text` 引入 LF 行尾出现过假 modified, 已改 `read_bytes`/`write_bytes`)。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` 进镜像(否则被 `git checkout -f` 冲掉), 带 `--no-refresh` 复跑 —— 变异 **4799** · 杀 **4110** · 存活 **653** · `no tests` **36** → 杀死率 **85.66%**。
+  - **存活 772 → 653(−119)**; 辨别出 15 条「新增存活」实为 **`no tests` → `survived` 的覆盖归类漂移**(在 `_validate_expr_condition_spec` 与 `writer._backup`, 非本 issue 范围、非退化)。
+- **池内验证**: 池内 6 文件全绿(数字见 kb.baseline)。
+- **环境 / 存量问题(用户裁定)**: 首跑 `test.full` 曾现 2 failed(wording / number 守卫)—— 定位为**存量违规**(`activeContext/26-10-08-0713-webui-qb-traffic-head-layout.md:15` 手抄裸 passed 数字, 来源另一会话提交 `0e8d5432`), 当时用户答「暂时不用管」; **提交前同步远端后该违规已由远端修复**(计数 393 ≤ 冻结 394), 闸门恢复绿。
+- **S7 记录**: 基线切片 `testing/baselines/26-10-08-1016-mutants-config-validator-strings.md`; 常驻锚 §07 `config/` 行与 §03 描述同步更新(硬约束 12)。
+- **未做**: 「新增存活」15 条归类漂移不单独立项(非退化、非本 issue 范围)。

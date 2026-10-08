@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config 校验器字符串键名/布尔逻辑缺守阵">
 <meta name="issue-summary" content="键名大小写类(dat_path→DAT_PATH、download_curve→DOWNLOAD_CURVE、custom_basic_check_program_path→大写)与 and/or 互换类变异全套件仍杀不掉: rules _expr_gate/_check_rule_refs/_validate_trigger_action_compat/_validate_checking_action_spec, sections _validate_qb_traffic, curves _validate_global_speed_limit_curve, core _strip_none">
 <title>config 校验器字符串键名/布尔逻辑缺守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0903-test-config-mutation-validator-strings</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 09:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,6 +94,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 09:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 10:05 — 认领并实施，状态 <strong>Done</strong>。补 6 个守阵测试函数（落在池内文件 <code>tests/test_config.py</code>）：<code>test_validate_string_keys_exact_case</code>（dat_path/period/download_curve/custom_basic_check_program_path 等键名大小写精确性）、<code>test_validate_short_circuit_pairs_differing_truth</code>（and/or 互换：traffic_source 空列表 vs 非 list、curves 项单键判定、规则集绑定、删除触发白名单）、<code>test_strip_none_list_branch_and_key_case</code>（_strip_none 列表分支 None/空串剔除 + 列表内嵌 dict 站点 tri_state 叶保留、state_file 键名大小写）、<code>test_validate_rule_refs_single_char_and_short_circuit</code>（@ 后单字符引用走「规则集不存在」而非「必须以 @ 开头」，钉 r[1:]）、<code>test_validate_qb_traffic_positive_boundary</code>（sample_interval 0/1 的正时间下界）、<code>test_validate_gslc_interval_key_exact</code>（curves interval 键名精确 + 值校验）。<strong>红验 26/26 KILLED</strong>（本 issue 范围内全部字符串键名 + and/or 互换存活变异，全覆盖件下逐条 apply → 目标用例变红 → 还原复绿，源码零残留）。池内 6 文件 212 passed。注：<code>test.full</code> 尚余 2 红属**与本件无关的存量守卫违规**（activeContext/26-10-08-0713 手抄数字，来源另一会话提交 0e8d5432），经用户裁定「暂时不用管」。</li>
     </ul>
   </section>
 
