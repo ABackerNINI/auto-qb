@@ -100,6 +100,35 @@
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
+          <!-- 种子「流量」页签的档位/纵轴控件组(2026-10-09 修版式改回归): 时间档位与纵轴设置
+               是「图怎么看」的设置, 全局/分组流量图已上提到流量形态头部; 但**种子流量图**走的是
+               本头部(种子形态, 见 qbCurScope 的 torrent 分支)—— 版式改只接了流量形态头部, 该页签
+               的控件因此消失。这里补同款控件组(绑定/清单全在根实例 mixin, 与流量形态头部同源,
+               两处内层标记由守阵钉「逐字一致」防漂移)。种子头部已承载五页签导航 + 模板切换器,
+               控件组整体占满一行(.qb-headctl flex-basis:100%)自动换到第二行, 仍在头部不占图高。
+               门 = qbCurScope === 'torrent' = 种子形态 + 流量页签 + 功能开启(单点派生, fail-closed)。 -->
+          <div v-if="qbCurScope === 'torrent'" class="qb-headctl">
+            <div class="qb-tabs">
+              <button v-for="w in qbWindowNames" :key="w"
+                      :class="{ active: qbCurWindow === w }"
+                      @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
+            </div>
+            <div class="qb-tools">
+              <span class="qb-tools-label">纵轴</span>
+              <div class="qb-seg">
+                <button :class="{ active: qbYAxisMode === 'auto' }"
+                        @click="qbSetYAxisMode('auto')">自动</button>
+                <button :class="{ active: qbYAxisMode === 'limit' }"
+                        @click="qbSetYAxisMode('limit')">限速+20%</button>
+                <button :class="{ active: qbYAxisMode === 'manual' }"
+                        @click="qbSetYAxisMode('manual')">手动</button>
+              </div>
+              <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
+                     min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
+                     @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
+              <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
+            </div>
+          </div>
         </header>
         <!-- FX-29 软切换: switching = 旧目标数据仍在撑着面板几何, 但已不代表当前种子 ——
              用遮罩(读数降到不可读 + 屏蔽交互)代替清空: 防串显的效果一样, 面板高度与列表不塌不跳 -->

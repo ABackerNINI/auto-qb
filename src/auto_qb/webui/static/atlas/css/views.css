@@ -371,6 +371,16 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-head > .qb-tools { flex: 0 0 auto; align-self: center; margin: 0; }
 .drawer-head > .qb-tabs button { padding: 2px 8px; }
 
+/* 种子「流量」页签头部并入档位/纵轴控件(2026-10-09 修版式改回归): 种子详情头部已承载五页签
+ * 导航 + 模板切换器, 档位(13 档)与纵轴控件再并进单行放不下 —— .qb-headctl 把两者包成一组并
+ * 整体占满一整行(flex-basis:100%, 且置于头部末位 ⇒ 恒自动换到第二行); 控件仍在头部(不占图高),
+ * 与全局/分组单行头部观感一致。内层 .qb-tabs/.qb-tools 与流量形态头部同源(守阵钉逐字一致)。 */
+.drawer-head:has(> .qb-headctl) { flex-wrap: wrap; padding-top: 4px; padding-bottom: 4px; row-gap: 4px; }
+.drawer-head > .qb-headctl { flex: 1 1 100%; display: flex; align-items: center; gap: 12px; }
+.qb-headctl > .qb-tabs { flex: 0 0 auto; align-self: center; }
+.qb-headctl > .qb-tools { flex: 0 0 auto; align-self: center; margin: 0; }
+.qb-headctl > .qb-tabs button { padding: 2px 8px; }
+
 
 /* ============ 第八轮新增(修复落地 / 单种子视图 / 信息栏双模式 / 视觉刷新配套) ============ */
 

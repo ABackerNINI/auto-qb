@@ -31,7 +31,7 @@
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
-- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对
+- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对 + **两处控件组**(流量形态头部 + 种子「流量」页签头部, 2026-10-09 修版式改回归: 种子流量图走种子形态头部, 版式改漏接 ⇒ 档位/纵轴控件消失; 内层标记守阵钉逐字同源)
 """
 import json
 import os
@@ -365,6 +365,24 @@ def test_frontend_qb_traffic_chart_wiring():
     )
     assert head_blk and 'class="qb-tabs"' in head_blk.group(1) and 'class="qb-tools"' in head_blk.group(1), \
         "时间档位(.qb-tabs)与纵轴控件(.qb-tools)必须落在流量形态头部标题栏内(2026-10-08 版式改: 自正文上提, 把高度还给图)"
+    # 2026-10-09 修回归: 种子流量图(kind === "seed" + tab === "traffic")走的是**种子形态头部**,
+    # 2026-10-08 版式改只把控件接进了流量形态头部 ⇒ 种子「流量」页签的时间档位/纵轴控件消失。
+    # 修法 = 种子形态头部补同款控件组(.qb-headctl 包裹, 整体占满第二行)。
+    seed_head_blk = re.search(r'<header v-else class="drawer-head">(.*?)</header>', drawer_tpl, re.S)
+    assert seed_head_blk and 'class="qb-headctl"' in seed_head_blk.group(1) \
+        and 'class="qb-tabs"' in seed_head_blk.group(1) and 'class="qb-tools"' in seed_head_blk.group(1), \
+        "种子详情头部缺流量档位/纵轴控件组(2026-10-09 修版式改回归: 种子流量图走种子形态头部, 漏接即控件消失)"
+    assert "v-if=\"qbCurScope === 'torrent'\"" in seed_head_blk.group(1), \
+        "种子头部的档位/纵轴控件组必须门在 qbCurScope === 'torrent'(种子形态 + 流量页签 + 功能开启的单点派生)"
+
+    # 两处控件组必须同源: 内层 .qb-tabs/.qb-tools 逐字一致(空白归一后比较), 一处改了另一处必须同步
+    def _ctl_inner(blk):
+        i = blk.index('<div class="qb-tabs">')
+        j = blk.index('</div>', blk.index('qbYAxisCapText'))
+        return re.sub(r"\s+", " ", blk[i:j])
+
+    assert _ctl_inner(head_blk.group(1)) == _ctl_inner(seed_head_blk.group(1)), \
+        "两处流量档位/纵轴控件组已漂移(流量形态头部 vs 种子「流量」页签头部; 内层 .qb-tabs/.qb-tools 必须逐字同源)"
     assert 'class="hist-legend"' not in drawer_tpl, \
         "独立的图例行(.hist-legend)必须退场: 上行/下行图例已并入统计栏 .hist-summary"
     sum_blk = re.search(r'class="hist-summary">(.*?)</div>', drawer_tpl, re.S)
@@ -724,20 +742,33 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert hdr, "drawer.html 缺流量形态头部(标题栏)"
     assert 'class="qb-tools"' in hdr.group(1) and 'class="qb-seg"' in hdr.group(1), \
         "drawer.html 纵轴控件(.qb-tools/.qb-seg)必须落在流量形态头部内(2026-10-08 版式改上提)"
-    assert drawer_tpl.count("qbSetYAxisMode(") == 3, "纵轴三态各一个按钮(自动/限速+20%/手动)"
+    assert drawer_tpl.count("qbSetYAxisMode(") == 6, \
+        "纵轴三态各一个按钮(自动/限速+20%/手动) × 两处控件组(流量形态头部 + 种子「流量」页签头部)"
     assert "v-if=\"qbYAxisMode === 'manual'\"" in hdr.group(1) \
         and "qbSetYAxisManual($event.target.value)" in hdr.group(1), \
         "手动模式必须给输入框且 @change 走 qbSetYAxisManual"
     assert "{{ qbYAxisCapText }}" in hdr.group(1), "缺生效上限读数(qbYAxisCapText)"
+    # 2026-10-09 修回归: 种子「流量」页签头部同款控件组(qbCurScope === 'torrent' 门)也须齐全
+    seed_hdr = re.search(r'<header v-else class="drawer-head">(.*?)</header>', drawer_tpl, re.S)
+    assert seed_hdr and 'class="qb-tools"' in seed_hdr.group(1) and 'class="qb-seg"' in seed_hdr.group(1), \
+        "drawer.html 纵轴控件(.qb-tools/.qb-seg)必须同时落在种子「流量」页签头部内(2026-10-09 修版式改回归)"
+    assert "v-if=\"qbYAxisMode === 'manual'\"" in seed_hdr.group(1) \
+        and "qbSetYAxisManual($event.target.value)" in seed_hdr.group(1), \
+        "种子「流量」页签头部的手动模式必须给输入框且 @change 走 qbSetYAxisManual"
 
-    # 10. CSS 三皮肤成对(纵轴控件)
+    # 10. CSS 三皮肤成对(纵轴控件 + 种子头部控件组版式)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合"),
         (_ui_css_aggregate("console"), "console css 聚合"),
         (_ui_css_aggregate("prism"), "prism css 聚合"),
     ):
-        for rule in (".qb-tools {", ".qb-seg button.active", ".qb-yaxis-input"):
-            assert rule in css, f"{name} 缺 {rule}(纵轴控件三套 UI 必须成对改)"
+        for rule in (
+            ".qb-tools {",
+            ".qb-seg button.active",
+            ".qb-yaxis-input",
+            ".drawer-head > .qb-headctl { flex: 1 1 100%;",
+        ):
+            assert rule in css, f"{name} 缺 {rule}(纵轴控件/种子头部控件组三套 UI 必须成对改)"
 
 
 _DT_REGISTRY_NODE_PROBE = r"""
