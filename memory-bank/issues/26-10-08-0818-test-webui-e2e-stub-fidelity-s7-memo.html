@@ -9,9 +9,9 @@
 <meta name="doc-topic" content="webui-delta-sync">
 <meta name="doc-refs" content="memory-bank/testing/baselines/26-10-07-1336-webui-delta-sync-s10-baseline.md,memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e 存量 6 条失败: 桩保真回归(hr_link 入 JSON) + S7 记忆化与乐观 UI 交互缺口">
-<meta name="issue-summary" content="dev.e2e 6 failed 存量(根因A: FakeTorrent.to_dict 未跳 hr_link 致详情端点恒 500 ×4; 根因B: S7 decoratedGroups WeakMap 记忆化 × applyOptimistic 原地变更 ×2)">
+<meta name="issue-summary" content="复验裁定: 两条根因均已由 312165f8(to_dict 快照分则)+17dc0fc7(装饰记忆化输入指纹)修复(2026-10-07 14:13, 早于入池取证), 复跑 dev.e2e 94 passed/10 skipped/0 failed">
 <title>e2e 存量 6 条失败: 桩保真回归(hr_link 入 JSON) + S7 记忆化与乐观 UI 交互缺口 · test · 计划外问题</title>
 <style>
   :root {
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题(复验: 已修复, 重复报告) · test</div>
     <h1>e2e 存量 6 条失败: 桩保真回归(hr_link 入 JSON) + S7 记忆化与乐观 UI 交互缺口</h1>
-    <p class="lede">dev.e2e 6 failed 存量(根因A: FakeTorrent.to_dict 未跳 hr_link 致详情端点恒 500 ×4; 根因B: S7 decoratedGroups WeakMap 记忆化 × applyOptimistic 原地变更 ×2)</p>
+    <p class="lede">复验裁定: 两条根因均已由 <code>312165f8</code> + <code>17dc0fc7</code>(2026-10-07 14:13, 早于本件入池取证)修复; 复跑 <code>dev.e2e</code> <strong>94 passed / 10 skipped / 0 failed</strong>, 6 条失败已消失。本件为重复报告, 关为 Done。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 08:18</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -182,15 +182,26 @@ S4 切片 (26-10-07-0805): 90 passed / 10 skipped / 0 failed
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 08:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 08:39 — 认领复验：<strong>已复现不了，判为重复报告</strong>，状态 <strong>Open → Done</strong>（见下「复验」）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-08 08:39+08 已消失（复现不了）。</strong>复跑锚点 <code>commands run dev.e2e</code>（桩环境 <code>scripts/ui_harness.py</code>, 默认 300 档）实测 <strong>94 passed / 10 skipped / 0 failed (3.2m)</strong> —— S10 记录的 6 failed 全数复绿, 且总数已从 S4 对照点的 90 增至 94(期间新增 <code>drawer-peers.spec</code> 双皮肤 @fast)。</p>
+    <p><strong>为何"未认领就已是绿的"</strong>: 两条根因的修复在本件入池取证(2026-10-07 13:36 @ <code>1ad13659</code>)之后、入池(2026-10-08 08:18)之前已落主线 <code>develop</code>, 而入池时沿用的是 S10 切片的 <strong>13:36 旧数字</strong>、<strong>未重跑复验</strong> —— 故本件记录的是一个当时已不存在的状态(重复报告)。逐条对账:</p>
+    <ul>
+      <li><strong>根因 A 已修</strong> · <code>312165f8</code>(2026-10-07 14:13)<code>🐛 桩保真: FakeTorrent.to_dict 对齐真记录快照/非快照分则, 详情端点不再恒 500</code>。修法即本件 §06 建议①: 弃 <code>vars()</code> 全导出, 改按 <code>compat._SNAPSHOT_FIELDS</code> 只导快照字段, <code>hr_link</code>(及 <code>tracker_error_msg</code>/<code>ts</code> 等非快照字段)不再进 JSON。<code>tests/helpers.py:679</code> 现为 <code>return {f: getattr(self, f) for f in _SNAPSHOT_FIELDS}</code>。该提交自测已报 92 passed / 10 skipped / 0 failed。</li>
+      <li><strong>根因 B 已修</strong> · <code>17dc0fc7</code>(2026-10-07 14:13)<code>🐛 WeakMap 失效: decoratedGroups 记忆化加输入指纹, 乐观值恢复传导组行</code>。修法即本件 §06 建议②中"记忆化键纳入可变字段指纹"一路: <code>_decoCache</code> 条目带输入指纹(<code>_decoFpBuild</code>/<code>_decoFpHit</code>, 覆盖 <code>members</code> 引用 + 逐成员 <code>kind/size/category/site/tags</code> + 首成员 <code>save_path</code>), 命中前逐槽比对, 原地 <code>Object.assign kind</code> 后指纹失配即重算并回填。返回结构形状不变; <code>commands.js</code> 属计划零改动区, 一行未动。</li>
+      <li>两修复均在主线: <code>git merge-base --is-ancestor 312165f8 HEAD</code> / <code>... 17dc0fc7 HEAD</code> 均成立。</li>
+    </ul>
+    <div class="callout">复验口径注: 本件原先预期"92 passed"(86+6), 实测为 <strong>94</strong> —— 差额 2 条非根因相关, 是 S10 之后新增的 <code>e2e/drawer-peers.spec.mjs</code>(双皮肤 @fast, 计划外小步)所致; 判据应看 <strong>0 failed 且无本例 6 条</strong>, 而非硬编码总数。</div>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>: 非本会话所为 —— 两条根因在入池前已由 <code>312165f8</code> / <code>17dc0fc7</code> 按本件 §06 建议修法(两条独立小步)修复, 本会话仅做复验裁定, <strong>零代码改动</strong>。修复面与建议一致, 无改道。</p>
+    <p><strong>验证方式</strong>: 逐条对账修复提交的 message 与代码现状(§07 复验段) + 复跑 <code>commands run dev.e2e</code> 全档。</p>
+    <p><strong>测试数字</strong>: <code>dev.e2e</code> 实测 <strong>94 passed / 10 skipped / 0 failed (3.2m)</strong>(2026-10-08 08:39, 桩环境 300 档)。</p>
+    <p class="hint">教训(建议另立坑档或并入 testing/assertions.md): 入池/复测登记"存量失败"前<b>必须先重跑锚点</b>并记当场数字, 不要沿用更早切片的历史数字 —— 修复可能在取证与入池之间已落主线, 否则会产出重复报告, 徒增一次认领轮次。</p>
   </section>
 
   <footer>
-    26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+    26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html · 由 create-issue skill 入池；复验裁定为重复报告(两条根因已由 <code>312165f8</code>/<code>17dc0fc7</code> 于入池前修复) → Done；零代码改动
   </footer>
 
 </div>
