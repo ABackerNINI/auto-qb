@@ -473,20 +473,24 @@ eq("缺口游程 全 null", _qbGapRuns([null, null], [null, null]), [[0, 1]]);
 eq("缺口游程 无缺口", _qbGapRuns([1, 2, 3], [1, 2, 3]), []);
 eq("单列 null 不算缺口", _qbGapRuns([null, 2], [1, 2]), []);
 
-/* ---------- 缺口斜纹**配色**真跑(2026-10-08 修「颜色几乎不可分辨」) ----------
- * 用记账式假 ctx 调**真实的** AQB_QB_TRAFFIC.methods._qbDrawGaps, 断言它真正写进画布的
- * strokeStyle/globalAlpha 是**高对比专用令牌**而非 --hairline 系极低 alpha 值。
- * 这条电池的价值: 把"颜色够不够看得见"从"读源码字符串"升级为"实跑取真值并做数值下界判定"
- * —— 将来有人把 alpha 调回 0.05 级别, 静态锚可能被同步改掉, 这条数值下界不会。
- * 附: 斜纹**几何**经逐条线段比对与代数验证与原式恒等, 本电池只钉配色, 不设"位移"判据。 */
+/* ---------- 缺口斜纹**配色 + 几何**真跑(2026-10-08 两轮) ----------
+ * 用记账式假 ctx 调**真实的** AQB_QB_TRAFFIC.methods._qbDrawGaps, 断言:
+ *   ① 配色: 写进画布的 strokeStyle/globalAlpha 是高对比专用令牌而非 --hairline 系极低 alpha;
+ *   ② 几何: 逐 run 追加的**缺口矩形 clip** 恰好等于 [xa, xb] x [T, T+H], 且每条斜纹线段都被该
+ *      矩形包含(端点 x 落在 [xa, xb])—— 钉死"斜纹铺成竖矩形"的语义: 若有人删掉 per-run clip
+ *      (退回只裁绘图区), 斜带(宽 H 的平行四边形)的端点会越出 [xa, xb], 断言立刻变红。
+ * 这条电池的价值: 把"颜色够不够看得见""斜纹落在哪"从"读源码字符串"升级为"实跑取真值并做数值/
+ * 几何判定" —— 静态锚可能被同步改掉, 数值下界与几何包含判定不会。 */
 function _mkCtx2() {
   const noop = () => {};
   return {
     style: null, alpha: null, segCount: 0, _x0: 0,
-    save: noop, restore: noop, beginPath: noop, clip: noop, rect: noop,
-    setLineDash: noop,
-    moveTo(x, y) { this._x0 = x; },
-    lineTo(x, y) { this.segCount++; },
+    clips: [], _pendingRect: null, _segs: [],
+    save: noop, restore: noop, beginPath: noop, setLineDash: noop,
+    rect(x, y, w, h) { this._pendingRect = { x, y, w, h }; },
+    clip() { if (this._pendingRect) this.clips.push(this._pendingRect); },
+    moveTo(x, y) { this._sx = x; },
+    lineTo(x, y) { this.segCount++; this._segs.push([this._sx, x]); },
     stroke() {},
     set strokeStyle(v) { this.style = v; },
     get strokeStyle() { return this.style; },
@@ -518,6 +522,27 @@ function _mkCtx2() {
   const m2 = /rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)/.exec(
     "rgba(255,255,255,.22)");
   ok("专用令牌 alpha 量级 >= 0.15(0.05 级别等同不可见)", m2 && parseFloat(m2[1]) * ctx2.alpha >= 0.15);
+
+  // ---- 几何: per-run 缺口矩形 clip + 扫线覆盖 ----
+  // 注: 真实 ctx 的 clip 是**画布操作**, 不会改写我们记账到的原始端点 —— 故原始 moveTo/lineTo
+  // 端点本就会越出 [xa, xb](越界部分由 canvas clip 收掉)。几何正确性由两点钉死:
+  //   ① per-run 缺口矩形 clip 存在且 == [xa, xb] x [T, T+H](删掉它即退回"只裁绘图区"= 平行四边形缺陷);
+  //   ② 扫线范围**覆盖**缺口带(有线段右下端 >= xb, 有线段左上端 <= xa)—— 保证裁剪后左/右竖直边都铺满, 无半边留白。
+  const xa = 50 + (xs2.indexOf(120) / 4) * 825;   // 缺口 = 桶 2..3
+  const xb = 50 + (xs2.indexOf(180) / 4) * 825;
+  const T = 17, H = 233;
+  const gapClips = ctx2.clips.filter((c) => Math.abs(c.x - xa) < 1e-6 && Math.abs(c.w - (xb - xa)) < 1e-6
+    && Math.abs(c.y - T) < 1e-6 && Math.abs(c.h - H) < 1e-6);
+  ok("存在逐 run 缺口矩形 clip(ctx.rect(xa, T, xb-xa, H))", gapClips.length >= 1);
+  ok("缺口矩形 clip 与绘图区 clip 并存(外层仍收在绘图区)",
+    ctx2.clips.some((c) => Math.abs(c.w - 825) < 1e-6));
+  const segs = ctx2._segs || [];
+  // 扫线覆盖: 每条线段 = [左上端 x0, 右下端 x1](x0 = x-H, x1 = x); 需有 x1 >= xb(右端铺满)
+  // 且有 x0 <= xa(左端铺满)。
+  ok("扫线覆盖缺口左边界(有线段左上端 <= xa)", segs.some((s) => s[0] <= xa + 1e-6));
+  ok("扫线覆盖缺口右边界(有线段右下端 >= xb)", segs.some((s) => s[1] >= xb - 1e-6));
+  // 扫线步长恒定 8px(斜纹间距), 且每条线段水平跨度 = H(45 度硬约束)
+  ok("每条斜纹线段跨度 = H(45 度)", segs.every((s) => Math.abs((s[1] - s[0]) - H) < 1e-6));
 })();
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
@@ -599,13 +624,16 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert dl and "lim.up < ymax" in dl.group(1) and "lim.down < ymax" in dl.group(1), \
         "限速虚线必须只画落在可视值域内的限速(超顶沿的线不可见, 自动模式峰值未超限速即不画)"
 
-    # 5b. 缺口斜纹**配色**守阵(2026-10-08 用户报「颜色几乎不可分辨」)
-    # 根因: 斜纹色原走 tk.grid = --hairline(装饰性 1px 发丝线令牌, 实测 alpha 仅 0.05~0.08),
+    # 5b. 缺口斜纹**配色 + 几何**守阵(2026-10-08 两轮: 先修「颜色几乎不可分辨」, 再修「未落到
+    # 正确区域 / 倾斜超出范围」)
+    # 配色根因: 斜纹色原走 tk.grid = --hairline(装饰性 1px 发丝线令牌, 实测 alpha 仅 0.05~0.08),
     # 再叠 globalAlpha 0.5 ⇒ 有效不透明度约 3%, 深/亮底色上**都**等于没画。修法 = 专用高对比
     # 令牌 --qb-gap-hatch + 去掉多余的 globalAlpha 折半。
-    # 附注(防后人误改): 斜纹的**几何**经逐条线段比对与代数验证与原式恒等
-    # (`x=xa-H; x<xb` 画 (x,T+H)->(x+H,T) ≡ `x=xa; x<xb+H` 画 (x-H,T+H)->(x,T), 因两者
-    #  逐条线段一致), 故此处**不设**"位移"类锚 —— 该说法经实测证伪, 设了就是假锚。
+    # 几何根因(第二轮, 首轮曾误判为"颜色不可见导致无法判读落点"): 斜纹原只按底端 x 扫
+    # [xa-H, xb+H] 再让外层 clip 收到**整个绘图区** —— 45 度线段水平跨度恒为 H, 并集是"宽 H 的
+    # **斜向平行四边形**"(左右边界皆斜边), 缺口右段下半留白、左段上半越界到缺口左侧, 即用户报
+    # 「未落到正确区域, 倾斜超出范围」。修法 = **逐 run 追加一次 clip 到缺口矩形**(见 _qbDrawGaps
+    # 内「几何硬约束」注释), 斜纹被裁成以缺口区间为左右竖直边的竖矩形。
     gp = re.search(r"_qbDrawGaps\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
     assert gp, "缺 _qbDrawGaps(缺口斜纹注解)"
     gb = gp.group(1)
@@ -617,6 +645,12 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
         "斜纹线段必须为 (x-H, T+H) -> (x, T)(45 度, 右下角在 x)"
     assert "ctx.rect(L, T, W, H)" in gb and "ctx.clip()" in gb, \
         "缺口斜纹必须裁剪在绘图区内(两端超出部分不得越 y 轴/时间轴)"
+    # 几何硬约束: 逐 run 裁到**缺口矩形** [xa, xb] x [T, T+H](把斜带裁成竖矩形)
+    assert "ctx.rect(xa, T, xb - xa, H)" in gb, \
+        "缺口斜纹必须逐 run 裁到缺口矩形 ctx.rect(xa, T, xb-xa, H) —— 否则 45 度斜带铺成" \
+        "平行四边形: 缺口右段留白、斜边越出缺口带(用户报「未落到正确区域/倾斜超出范围」)"
+    assert "if (!(xb > xa)) continue;" in gb, \
+        "缺口宽度非正(退化 run)必须跳过, 不得画零宽/负宽矩形"
     tkb = re.search(r"_qbChartTokens\(\) \{\n(.*?)\n    \},", js, re.S)
     assert tkb, "缺 _qbChartTokens(建图令牌单点)"
     assert 'gap: pick("--qb-gap-hatch"' in tkb.group(1), \

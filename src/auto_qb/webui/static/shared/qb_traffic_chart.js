@@ -714,7 +714,15 @@ window.AQB_QB_TRAFFIC = {
       return px;
     },
     /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 采样缺口区间(null 桶游程)铺 45 度斜纹底纹,
-     * 图面自解释(与图例「缺口 = 无采样」文案同义)。裁剪在绘图区内, 不越 y 轴/时间轴。 */
+     * 图面自解释(与图例「缺口 = 无采样」文案同义)。
+     *
+     * 【几何硬约束, 别改坏 —— 2026-10-08 二次修复】缺口必须被铺成**以缺口区间为左右边的竖矩形**
+     * (x ∈ [xa, xb] 全高), 而不是"沿 45 度平移的一条斜带": 45 度线段的水平跨度恒为 H(图高), 若
+     * 只按底端 x 扫 [xa-H, xb+H] 再让外层 clip 收到**整个绘图区**, 涂出来的并集是"宽 H 的斜向
+     * 平行四边形"(左/右边界都是斜边) —— 缺口右段下半部留白、左段上半部越界到缺口左侧, 用户报
+     * 「未落到正确的区域, 且其倾斜超出了范围」即此。**必须逐 run 追加一次 clip 到缺口矩形**
+     * (ctx.rect(xa, T, xb-xa, H), 与绘图区 clip 求交), 斜纹才被裁成竖矩形。
+     * 上一次修复(颜色令牌)只治了"看不清", 几何缺陷当时被误判为"颜色不可见导致无法判读落点"。 */
     _qbDrawGaps(u, tk) {
       const up = u.data && u.data[1];
       const dl = u.data && u.data[2];
@@ -727,6 +735,7 @@ window.AQB_QB_TRAFFIC = {
       const T = u.bbox.top / px;
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
+      // 外层 clip = 绘图区(不越 y 轴/时间轴); 每个 run 再叠一层缺口矩形 clip(见上「几何硬约束」)。
       ctx.beginPath();
       ctx.rect(L, T, W, H);
       ctx.clip();
@@ -741,15 +750,21 @@ window.AQB_QB_TRAFFIC = {
       for (const [a, b] of runs) {
         const xa = L + u.valToPos(u.data[0][a], "x");
         const xb = L + u.valToPos(u.data[0][b], "x");
-        // 斜纹铺满 [xa-H, xb]: 每条 45 度线段的**右下角**落在 x 处、左上角在 (x-H, T), 故 x 从
-        // xa 起步(第一条盖住缺口左端)到 xb+H(最后一条盖住缺口右端); 两端越出绘图区的部分由上方
-        // clip 收掉, 视觉上恰好只铺在缺口区间内。
+        if (!(xb > xa)) continue;
+        // 逐 run 裁到缺口矩形 [xa, xb] x [T, T+H]: 把 45 度斜带裁成竖矩形(缺口左右边界为**竖直边**)。
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(xa, T, xb - xa, H);
+        ctx.clip();
+        // 扫线范围须覆盖整条缺口带: 每条线段右下角在 x、左上角在 (x-H, T); x 从 xa 起步(首条盖住
+        // 缺口左上)到 xb+H(末条盖住缺口右下), 越出缺口矩形的部分由上一步 clip 收掉。
         for (let x = xa; x < xb + H; x += step) {
           ctx.beginPath();
           ctx.moveTo(x - H, T + H);
           ctx.lineTo(x, T);
           ctx.stroke();
         }
+        ctx.restore();
       }
       ctx.restore();
     },
