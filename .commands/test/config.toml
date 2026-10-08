@@ -22,17 +22,17 @@ note    = "必须 cmd.exe 写法 + 引号不能省，理由见本文件顶部; s
 silent_success = true
 
 [tasks."test.quick"]
-run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov']
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov -n 8']
 timeout = 900
-when    = "只要结论、不要覆盖率报表（快约 7s；提交闸门用这条）"
-note    = "同上必须 cmd.exe 写法; silent_success: 成功只出结论行"
+when    = "只要结论、不要覆盖率报表（提交闸门用这条）"
+note    = "同上必须 cmd.exe 写法; 显式 -n 8 覆盖 pytest.ini 默认(-n 4): 2772 个用例实测 -n 4 43.8s → -n 8 26.6s(2026-10-08)。**别再降回 -n 4** —— 那是按 tests/ 老体量定的, 用例长到 2772 后已不是甜点; 详见 memory-bank/pitfalls/testing/parallel-run.md。silent_success: 成功只出结论行"
 silent_success = true
 
 [tasks."test.pkg"]
-run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest .commands .agents/skills/commands -q --no-cov -n 4']
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest .commands .agents/skills/commands -q --no-cov -n 8']
 timeout = 300
 when    = "改了 .commands/ 下的包脚本或 commands 引擎 —— 它们的测试不在 testpaths(tests/) 里, 全量测试收不到"
-note    = "**-n 0 曾挂住, 已于 2026-10-03 修根因**(根因与修法见 memory-bank/pitfalls/testing/parallel-run.md): 原先串行在本机**挂住** —— my-commit-flow 的真实临时仓库用例跑到第 15 个后不再推进, 从而**卡死 ship.commit 的闸门**(闸门是这个 task 的调用方, 表现是提交无输出即中止)。根因**不是仓库逻辑**, 是 Windows 上 `subprocess.run(capture_output=True)` 高负载 + 大量 spawn 时无限挂死(CreateProcess 不返回 / 孙进程占管道写端); 已在 `_pipeline.run_capture` 加看门狗(硬截止 + `taskkill /F /T` 杀整棵树), 修复后 `-n 0` 跑三个包脚本用例 79 passed / 275s 不再挂。**本 task 仍保持 -n 4**(闸门要快且能收口, 96 passed / ~105s)。收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。2026-09-28 起也要 TMPDIR 前缀: 上述场景测试用 tmp_path 夹具会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)。silent_success: 成功只出结论行"
+note    = "**-n 0 曾挂住, 已于 2026-10-03 修根因**(根因与修法见 memory-bank/pitfalls/testing/parallel-run.md): 原先串行在本机**挂住** —— my-commit-flow 的真实临时仓库用例跑到第 15 个后不再推进, 从而**卡死 ship.commit 的闸门**(闸门是这个 task 的调用方, 表现是提交无输出即中止)。根因**不是仓库逻辑**, 是 Windows 上 `subprocess.run(capture_output=True)` 高负载 + 大量 spawn 时无限挂死(CreateProcess 不返回 / 孙进程占管道写端); 已在 `_pipeline.run_capture` 加看门狗(硬截止 + `taskkill /F /T` 杀整棵树), 修复后 `-n 0` 跑三个包脚本用例 79 passed / 275s 不再挂。**并行度 2026-10-08 由 -n 4 调为 -n 8**: 这 134 个用例是**真实 git 子进程**场景(每个含 init/push/rebase), 属 IO 密集而非 CPU 密集 —— 实测 154 passed 下 -n 4 117s / -n 6 90s / **-n 8 73s** / -n 12 92s, 而 `-n auto`(32 worker)会因机器打满致夹具超时(**2 failed + 16 errors, 别用**); -n 8 是甜点。收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。2026-09-28 起也要 TMPDIR 前缀: 上述场景测试用 tmp_path 夹具会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)。silent_success: 成功只出结论行"
 silent_success = true
 
 [tasks."test.one"]
