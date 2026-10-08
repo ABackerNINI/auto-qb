@@ -4,7 +4,7 @@
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
 **Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -114,6 +114,7 @@
 - **收尾实测**: `commands run test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 [26-10-08-0902](../testing/baselines/26-10-08-0902-mutants-config.md)。
 - **未做 / 遗留**: 220 条真洞候选中, 复跑新杀的 121 条覆盖了其中一部分(其余落在未 S4 验证的 555 条里), **余量未逐条补测**(按主题入池等排期); 未 commit/push(用户未说「提交」)。
 
+
 ### 2026-10-08 R3 — 按首轮经验回灌指导 / 命令包 / 排期锚
 
 - **触发**: 用户「根据此次实施过程更新变异测试指导文档 + 相关 skill + 命令包和常驻排期锚(主要提交 637be05f), 使下次实施能更顺利」。
@@ -131,4 +132,15 @@
 - **证据报告(§14 新增)**: `reports/26-10-08-0231-…html` 加「config 包首轮实测」节(数字 + 三条流程修正 + 假存活比例 19.7%), 变更记录顺延为 §15, 抬 `doc-updated`。
 - **常驻排期锚**: §03 标注 config 首轮进度与数字; §04 命令表补 2 个 task; §05 标准动作改走 task id; §07 台账补 R1/R2; §08 记一条「回灌经验」(状态仍 `Open`)。
 - **收尾实测**: `test.pkg` 全绿(154 条, 与上基线同批); `test.full` 见基线切片 [26-10-08-0920](../testing/baselines/26-10-08-0920-mutation-audit-tooling.md); `doc.drift` 0 处手抄; `kb.check` 全过; `doc.caps` 无新增债务。
+- **未做**: 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R5 — 修 issue 26-10-08-0758(mutants.status WSL 失真)
+
+- **触发**: 用户「认领并修复: 26-10-08-0758-bug-mutants-status-wsl.html」。
+- **复验(防过期原则第 5 条)**: 2026-10-08 09:50 在 WSL `Ubuntu-26.04` 重跑锚点三条对照 —— `$0=/usr/bin/zsh`; `cd "$HOME/auto-qb-mut"; echo "$(pwd)"` → `/mnt/d/Projects/auto-qb-clone5`(启动目录); `cd … && test -x .venv/bin/mutmut && echo yes` → `yes`。**现象仍复现**。
+- **根因闭合**: 登录壳 zsh 的 `$PWD` / 内建 `pwd` / 相对路径解析走**逻辑目录**, `cd` 未同步逻辑 PWD ⇒ `$()` 子壳按启动目录解析。修复前 `commands run mutants.status` 实测 `mutmut=no` / `mutants=`(空)/ `head=f8f9d9b0`(= 主仓 HEAD, 非镜像的 `6214c4f3` —— 又一处同源失真)。
+- **修法**(采纳 issue 建议第 1 项): `.commands/mutants/scripts/mutants.py` 的 `cmd_status` 四条回显改 `cd {mq} && <直接命令>` 形态(与 `cmd_run` 一致), 单次 wsl 调用内并列多条, 保持一屏回显。绝对路径方案未采纳(改动面更大)。**附带闭合**: 原末行 `test -f pyproject.toml && grep -m1 only_mutate …` 在镜像未跑过 `run` 时回非零 ⇒ 只读回显却报 `[FAIL]`; 改 `|| echo 'only_mutate = (未写, 先跑一轮 run)'` 兜底, 实测恢复 `[ok]`。
+- **验证**: 修复后同命令实测 `mutmut=yes` / `mutants=87M` / `head=6214c4f3`(与 `git -C <mirror> rev-parse` 现查一致)/ `not_killed=827`, 退出码 0(`[ok]`)。三条失真行全部恢复; `run`/`setup`/`report`/`verify` 未受影响(全程 `cd X && cmd`, 本轮未改)。
+- **回写**: issue 置 `Done`(封面徽标 + `issue-status` meta 两处 + 状态日志 + 复验行 + 修复后补充); 坑档 `pitfalls/testing/mutants-wsl-shell.md` 标注「工具侧已修」; 包内 `references/why.md` 排障表该条改「已修」、诚实交代节更新; skill `mutation-testing` 的坑条同步。
+- **收尾实测**: `commands run test.full` 覆盖口径与上基线逐位持平(见基线切片 [26-10-08-0958](../testing/baselines/26-10-08-0958-mutants-status-wsl.md)); `kb.index` 20 生成物 / `kb.check` 主键与认领链全过 / `doc.drift` 0 处 / `doc.links` 过。存量红 2 项(无关文件 `activeContext/26-10-08-0713` 的裸 passed 数字, 已 stash 回退验证与本轮无关)与存量 cap 债务 3 项未动(范围守恒)。
 - **未做**: 未 commit/push(用户未说「提交」)。

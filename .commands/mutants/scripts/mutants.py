@@ -392,14 +392,22 @@ def cmd_gremlins(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
+    """只读回显镜像与工具的就位情况。
+
+    **每条 `echo` 都是 `cd {mq} && <直接命令>` 形态, 不用 `$(...)` 取相对路径** —— 本机 WSL 登录壳
+    实为 zsh: `cd X` 改了**真实 cwd**(`cd X && cmd` 正确), 但 `$PWD` 与 `$()` 子壳仍报 WSL 启动目录,
+    于是 `$(test -x .venv/bin/mutmut ...)` 会去**启动目录**找工具 ⇒ 恒报 `mutmut=no`(实际已装)。
+    `du -sh mutants` 同理(报空)。见坑档 memory-bank/pitfalls/testing/mutants-wsl-shell.md。
+    """
     mq = _bq(args.mirror)
     script = (
         f"echo mirror={mq}; cd {mq} 2>/dev/null || {{ echo '[FAIL] 镜像不存在, 先跑 setup'; exit 3; }}; "
-        "echo head=$(git rev-parse --short HEAD 2>/dev/null || echo none); "
-        "echo mutmut=$(test -x .venv/bin/mutmut && echo yes || echo no); "
-        "echo mutants=$(du -sh mutants 2>/dev/null | cut -f1 || echo none); "
-        ".venv/bin/mutmut results 2>/dev/null | wc -l | sed 's/^/not_killed=/'; "
-        "test -f pyproject.toml && grep -m1 only_mutate pyproject.toml"
+        f"cd {mq} && {{ git rev-parse --short HEAD 2>/dev/null | sed 's/^/head=/' || echo head=none; }}; "
+        f"cd {mq} && (test -x .venv/bin/mutmut && echo mutmut=yes || echo mutmut=no); "
+        f"cd {mq} && {{ du -sh mutants 2>/dev/null | cut -f1 | sed 's/^/mutants=/' || echo mutants=none; }}; "
+        f"cd {mq} && {{ .venv/bin/mutmut results 2>/dev/null | wc -l | sed 's/^/not_killed=/'; }}; "
+        # 末行给 fallback: 回显是只读的, 缺 only_mutate(镜像未跑过 run)不该让整条命令回非零 ⇒ 假 [FAIL]
+        f"cd {mq} && {{ grep -m1 only_mutate pyproject.toml 2>/dev/null || echo 'only_mutate = (未写, 先跑一轮 run)'; }}"
     )
     proc = _wsl(args.distro, script, check=False)
     _say(proc.stdout.strip() or proc.stderr.strip())

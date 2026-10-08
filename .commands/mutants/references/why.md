@@ -108,7 +108,7 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 覆盖率闸 `FAIL Required test coverage of 98% not reached` | 子集跑必然不满足全库闸 | 已固定 `--no-cov`(`set_conf.py` 的 `pytest_add_cli_args`) |
 | WSL 整体失去响应 | 目标太大 / 池太宽 / `--max-children` 拉满 | `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 4` |
 | `exec python: not found`(wrapper 端到端用例) | WSL 里通常只有 `python3` | `mutants.setup` 已补 `~/.local/bin/python` 软链(幂等) |
-| `mutants.status` 恒报 `mutmut=no`(实际已装) | WSL 登录壳实为 zsh —— `cd` 改了**真实** cwd, 但 `$PWD` / `$()` 仍报 WSL 启动目录; `status` 的 `$(test -x .venv/bin/mutmut ...)` 因此读错目录 | **别据此重装工具**; 以 `cd X && <cmd>` 的**直接输出**为准。`mutants.run` 不受影响(全程 `cd X && cmd`)。详见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
+| `mutants.status` 恒报 `mutmut=no`(实际已装) | WSL 登录壳实为 zsh —— `cd` 改了**真实** cwd, 但 `$PWD` / `$()` 仍报 WSL 启动目录; `status` 的 `$(test -x .venv/bin/mutmut ...)` 因此读错目录 | **已修(2026-10-08)**: `cmd_status` 的回显改 `cd {mq} && <直接命令>` 形态(不再用 `$()` 取相对路径); 顺带把末行 `only_mutate` 加 fallback(镜像未跑过 run 时不再误报 `[FAIL]`)。若又见到本现象, 核脚本是否被改回 `$()` 写法。详见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
 | 复跑时新加的守阵"没生效"(存活数不降) | `mutants.run` 默认 `git checkout -q -f -B develop FETCH_HEAD`, 会把镜像里**未提交的测试改动冲掉** | 先把新测试 `cp` 进镜像 `tests/`, 再 `mutants.run --no-refresh`(跳过刷新) |
 | 想看某条变异的 diff / 想批量三分类 | `mutmut results` 只有 id, 没有 diff | 用 `mutants.report`(带 diff 的清单 + 按状态/按模块汇总); 单条用 `mutmut show <id>` |
 | `verify` 跑得极慢 / 想中断 | 每条候选都要跑一遍**全套件**(实测 ~15s/条) | 先 `mutants.report` 再用 `--only-status` 或手挑把候选缩小; 中断后重跑同一 `--out` 自动续(已验 id 跳过) |
@@ -121,6 +121,5 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
   `mutants.run`(4,799 变异 / 294.4s) · `mutants.report`(导出 827 条带 diff 的清单 + 汇总) ·
   `mutants.verify`(逐条 apply → 全套件 → 还原, 14s/条, 274 条) · 补测后 `mutants.run --no-refresh` 复跑。
   ⇒ `report` / `verify` 与 `setup` 的 clone 分支都**已实测**, 不再是"只验构造"。
-- **仍未验**: `--out` 之外的落盘路径; `mutants.status` 只验了正常路径(且本机因 zsh `$()` 恒报 `mutmut=no`,
-  见排障表 —— 这条**未修**, 属计划外)。
+- **仍未验**: `--out` 之外的落盘路径。(`mutants.status` 的 zsh `$()` 失真已在 2026-10-08 修复并实测复验, 见排障表。)
 - 首次在新机器上真用 `mutants.setup` 若失败, 先核: Gitee 可达 / 镜像路径没写错 / WSL 发行版名对得上。

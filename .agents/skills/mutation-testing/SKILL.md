@@ -207,8 +207,9 @@ user-invocable: true
 - **静态守阵盲区**(与本流程互补的那类)在 [pitfalls/testing/static-guard-mutation.md](../../../memory-bank/pitfalls/testing/static-guard-mutation.md) —— 变异测试补不了文本层守阵的缺陷, 两者各管一层。
 - **结果怎么读 / 状态存在哪**(`mutmut results` 只有 id; 状态在 `mutants/<路径>.meta`, `mutmut-cache.db` 是 0 字节的幌子)
   在包内 [references/why.md](../../../.commands/mutants/references/why.md) —— 排障时才读。
-- **本机 WSL 登录壳是 zsh**: `cd` 改了真实 cwd, 但 `$PWD` / `$()` 仍报启动目录 ⇒ `mutants.status` 恒报
-  `mutmut=no`(**不影响 `mutants.run`**)。别据此重装工具 —— 见
+- **本机 WSL 登录壳是 zsh**: `cd` 改了真实 cwd, 但 `$PWD` / `$()` 仍报启动目录 —— 写 WSL 脚本别用 `$()` 取相对路径。
+  工具侧 `mutants.status` 的这处失真**已修(2026-10-08, `cd X && cmd` 直连形态)**;
+  `mutants.run` 本来就不受影响。若再见到 `mutmut=no`, 见
   [pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md)。
 
 ## 反模式

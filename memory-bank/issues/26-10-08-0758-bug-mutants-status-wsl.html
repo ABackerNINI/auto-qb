@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="mutants.status 在 WSL 下恒报 mutmut=no(命令替换取错 cwd)">
 <meta name="issue-summary" content="mutants.status 的 echo mutmut=$(test -x .venv/bin/mutmut ...) 在 WSL 里按「启动目录」求值 ⇒ 恒输出 mutmut=no(实际已装); 不影响 mutants.run(全程 cd X &amp;&amp; cmd)">
 <title>mutants.status 在 WSL 下恒报 mutmut=no(命令替换取错 cwd) · bug · 计划外问题</title>
@@ -95,16 +95,16 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>mutants.status 在 WSL 下恒报 mutmut=no(命令替换取错 cwd)</h1>
     <p class="lede">mutants.status 的 echo mutmut=$(test -x .venv/bin/mutmut ...) 在 WSL 里按「启动目录」求值 ⇒ 恒输出 mutmut=no(实际已装); 不影响 mutants.run(全程 cd X &amp;&amp; cmd)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0758-bug-mutants-status-wsl</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 07:58</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
-      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
-      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">.commands/mutants</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">变异审计 config 首轮</div></div>
     </div>
   </header>
 
@@ -158,8 +158,8 @@ echo "$0"                                        -> /usr/bin/zsh                
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查(已排除: ①镜像路径写错 —— <code>head=6214c4f3</code> 与主仓一致; ②工具真没装 —— <code>ls -la .venv/bin/mutmut</code> 在位且可执行; ③<code>--mirror</code> 收到 Windows 路径 —— 走 <code>commands run</code> 时不会发生)。</div>
-    <p>已实测的现象层结论(非根因): WSL 里 <code>cd X</code> 改了**真实 cwd**(所以 <code>cd X &amp;&amp; cmd</code> 正确), 但 <code>$PWD</code> 与 <code>$()</code> 子壳仍报 WSL 启动目录 —— 机制(登录壳 zsh / interop 注入 PWD 后 <code>cd</code> 未更新)待查。</p>
+    <div class="callout"><strong>已定位(2026-10-08 09:50 复验时确认)</strong>: WSL 里 <code>bash -lc</code> 的登录壳实为 zsh(<code>$0=/usr/bin/zsh</code>), zsh 的 <code>$PWD</code> / 内建 <code>pwd</code> / 相对路径解析走的是**逻辑目录**, 而 <code>cd</code> 只更新真实 cwd 却**没同步逻辑 PWD**; 于是 <code>$()</code> 子壳里的相对路径按**启动目录**解析。判别: 同一脚本里 <code>pwd</code>(内建, 走真实 cwd —— 实测反而对)与 <code>echo "$(pwd)"</code>(子壳, 报启动目录)不一致。已排除的假设不变(镜像路径 / 工具未装 / Windows 路径)。</div>
+    <p>影响 <code>cmd_status</code> 里**三条**取相对路径的行: <code>mutmut=$(test -x .venv/bin/mutmut …)</code> · <code>mutants=$(du -sh mutants …)</code> · <code>head=$(git rev-parse …)</code>(前二恒失真, 第三条在 cd 未生效时也会读到别处的 HEAD)。<code>cd X && cmd</code> 直连形态全程正确 —— 这就是修法。</p>
   </section>
 
   <section id="s6">
@@ -173,15 +173,20 @@ echo "$0"                                        -> /usr/bin/zsh                
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 07:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 09:49 — 被任务档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code> 认领，状态 <strong>In Progress</strong>（用户指派「认领并修复」）</li>
+      <li>2026-10-08 09:52 — 修完并复验通过，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-08 09:50 在 WSL <code>Ubuntu-26.04</code> 里重跑锚点三条对照 —— <code>$0=/usr/bin/zsh</code>；<code>cd "$HOME/auto-qb-mut"; echo "$(pwd)"</code> → <code>/mnt/d/Projects/auto-qb-clone5</code>（启动目录）；<code>cd … && test -x .venv/bin/mutmut && echo yes</code> → <code>yes</code>。**现象仍复现**（修复前），随后按建议修法改 <code>cmd_status</code>，修复后 <code>commands run mutants.status</code> 输出 <code>mutmut=yes</code> / <code>mutants=87M</code>（此前恒 <code>mutmut=no</code> / <code>mutants=</code> 空）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（采纳建议修法第 1 项，未改道）：<code>.commands/mutants/scripts/mutants.py</code> 的 <code>cmd_status</code> —— 把四条 <code>echo X=$(…相对路径…)</code> 全部改成 <code>cd {mq} &amp;&amp; &lt;直接命令&gt;</code> 形态（与 <code>cmd_run</code> 一致），单次 wsl 调用内多条 <code>cd {mq} &amp;&amp; …</code> 并列，**保持一屏回显**（不拆成多次 wsl 调用，避开候选代价里的 ~0.45s/次固定开销）。绝对路径方案未采纳：改动面更大且要保证 <code>_bq()</code> 展开后的路径不再进 <code>$()</code>，不如直连形态直白。</p>
+    <p><strong>验证方式</strong>：修复前 <code>commands run mutants.status</code> 实测 <code>mutmut=no</code> / <code>mutants=</code>（空）/ <code>head=f8f9d9b0</code>（= 主仓 HEAD，非镜像的 <code>6214c4f3</code> —— 又一处同源失真）；修复后同命令实测 <code>mutmut=yes</code> / <code>mutants=87M</code> / <code>head=6214c4f3</code>（与 <code>git -C &lt;mirror&gt; rev-parse</code> 现查一致）/ <code>not_killed=827</code>。三条失真行全部恢复。</p>
+    <p><strong>附带修正（同函数内、非本 issue 主题）</strong>：原末行 <code>test -f pyproject.toml &amp;&amp; grep -m1 only_mutate pyproject.toml</code> 在镜像尚未跑过 <code>run</code>（无 <code>only_mutate</code> 行）时回非零 ⇒ 整条命令被判 <code>[FAIL]</code>（只读回显却报失败，误导）。改为 <code>grep … || echo 'only_mutate = (未写, 先跑一轮 run)'</code> 兜底；实测该场景下 <code>mutants.status</code> 恢复 <code>[ok]</code>（rc=0）。属同一次改动的顺手闭合，已在报告与命令包深读留痕。</p>
+    <p><strong>影响面复核</strong>：<code>mutants.run</code> / <code>mutants.setup</code> / <code>mutants.report</code> / <code>mutants.verify</code> 均全程 <code>cd X &amp;&amp; cmd</code>，未受影响（本轮未改动）。包内深读 <code>references/why.md</code> 的排障表已同步该条为「已修」。</p>
   </section>
 
   <footer>
-    26-10-08-0758-bug-mutants-status-wsl.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+    26-10-08-0758-bug-mutants-status-wsl.html · 由 create-issue skill 入池；状态 <strong>Done</strong>（2026-10-08 修复并复验），变更留痕见上面「状态变更日志」
   </footer>
 
 </div>
