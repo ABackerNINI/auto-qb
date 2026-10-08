@@ -13,7 +13,7 @@
   - 首轮 **4799 变异 / 杀 3851 / 存活 893 / `no tests` 55 / 超时 0**(杀死率 **80.25%**); S4 逐条 `apply` → 跑**全套件**确认 **274** 条 → **54 假存活 + 220 真洞候选**; 补 **10** 个守阵(红验 **18/18** 全红); 同池复跑 **杀 3972 / 存活 772**(杀死率 **82.77%**, 存活 **−121**, 新增存活 0)。
   - 基线切片 `testing/baselines/26-10-08-0902-mutants-config.md`; 真洞余量按主题入池 6 条 `test` issue(`26-10-08-0903-test-config-mutation-*`)。
   - 环境坑: WSL 登录壳实为 zsh ⇒ `$()`/`$PWD` 取错 cwd, `mutants.status` 恒报 `mutmut=no`(不影响 `mutants.run`)—— 坑档 `pitfalls/testing/mutants-wsl-shell.md` + issue `26-10-08-0758-bug-mutants-status-wsl`。
-  - 收尾实测 `test.full` → **2782 passed + 4 skipped / TOTAL 99%**(16476 / 164 未覆盖 / 5694 分支 / 148 partial)。
+  - 收尾实测 `test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 `testing/baselines/26-10-08-0902-mutants-config.md`。
 
 ## 正在进行
 
