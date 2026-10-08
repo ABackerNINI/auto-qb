@@ -24,6 +24,7 @@
 - **计划文档**:用`delivery-artifact` skill,放`memory-bank/plans/`;**一律单文件HTML**(出现`.md`即违规)。
 - **报告**:审计/故障取证/可行性分析→`memory-bank/reports/`;四工位决策树与`doc-*`协议单点见`memory-bank/conventions/doc-forms.md`。
 - **HTML一律dark主题**:深色底+浅色字,样式里写`color-scheme:dark`;配色规格与文件命名见`memory-bank/conventions/webui.md`「HTML 文档一律 dark 主题」。
+- **测试基线数字只写一处**:`memory-bank/testing/baselines/` 新切片(一次全量一条,最新=事实源,`commands run kb.baseline`看);其余文档一律引用不手抄(正文写「见 kb.baseline」)。守阵`check_wording.py`扫裸数字,存量冻结只拦新增。口径见`memory-bank/testing/baseline.md`。
 
 ## 编码约束:非ASCII图形符号
 

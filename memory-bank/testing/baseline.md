@@ -11,8 +11,13 @@
   正文放 TOTAL / 耗时 / 增量明细 —— 体例照最新一条切片抄。**切片写完不改**(不可变的一次性快照)。
 - **看基线**: `commands run kb.baseline`(默认最近 3 条, 最新一条恒为当前事实源; 排障 `--all` / `-n N` 看全量)。
 - **无 `_index.md` 是特性, 也不许补** —— 时间戳文件名即索引, 缓存式索引比没有更危险。
-- **其它文档一律引用不手抄**: README / AGENTS.md / progress / 各主题文档只写量级与"见 kb.baseline",
-  数字抄一份多一处漂移。
+- **其它文档一律引用不手抄** (2026-10-08 方案 C, 已上守卫): README / AGENTS.md / progress /
+  档案 / activeContext / 计划只写量级与"见 kb.baseline" —— 数字抄一份多一处漂移。
+  - **切片正文也只写自己的 TOTAL**: 「相对上基线的逐位对比」(`passed +2 / 语句 ±0 / …`)
+    不必手写 —— 要看差值, 把本片与上片两条各读一眼即可 (脚本 `kb.baseline -n 2` 现列)。
+    **切片是一份测量快照, 不是一份对照表**; 逐位对比曾是最大的一段手抄, 且每轮都要重算。
+  - **机检**: `check_wording.py`(判据族 B)扫 `tasks/` + `activeContext/` 的裸测试数字,
+    存量已冻结 (只拦新增); 挂在 `kb.check` 与提交闸门。改写口径: 正文写「见 kb.baseline」。
 - **更早流水**: 2026-09-24 及更早的逐轮条目已一并切片化入 `baselines/`(按 `--all` 查);
   append-only 时代轮转出去的最老段在 [attachments/baseline-history-archive.md](attachments/baseline-history-archive.md)
   (冷库, 仅供深排障)。

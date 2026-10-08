@@ -53,6 +53,9 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_wording_guard_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
 - test_wording_guard_flags_status_but_exempts_dated_and_tree_state: 无日期状态行判红; 日期流水 / 树态 / 行内代码引述 / 豁免标记 都不报
 - test_wording_guard_is_wired_into_kb_check: 守卫已挂进 `kb.check` 的 run 列表 (不接线 = 没人跑)
+- test_number_guard_exempts_dated_code_and_reports_only_overflow: 判据族 B 裸数字判红; 日期/代码/豁免标记不报; 存量冻结只报溢出
+- test_number_guard_is_green_on_current_kb: 当前 KB 裸数字未超冻结常数 (存量冻结; 超出 = 本轮新增手抄)
+- test_number_guard_dated_exemption_does_not_cover_continuation_lines: 已知边界 —— 日期豁免只认首行, 续行照常入判
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 - test_kb_scripts_import_cleanly: skill 的脚本都能 import
@@ -846,3 +849,70 @@ def test_wording_guard_is_wired_into_kb_check() -> None:
 
     assert body, "kb/config.toml 里找不到 kb.check"
     assert "check_wording.py --check" in body.group(1), "check_wording.py --check 未挂进 kb.check"
+
+
+def test_number_guard_exempts_dated_code_and_reports_only_overflow(tmp_path: Path) -> None:
+    """判据族 B 边界 (2026-10-08 方案 C): 裸数字判红; 日期行 / 行内代码 / 豁免标记不判红; 存量不刷屏。
+
+    存量冻结是**数目制**: 命中数 ≤ FROZEN 放行, 超出只报溢出条数 (不刷全部存量 —— 那会把提交闸门刷屏)。
+    """
+    wording = _wording()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "tasks" / "a.md").write_text(
+        "- 本轮 test.full 2772 passed。\n"
+        "- 2026-10-08 实测 2772 passed (历史流水)。\n"
+        "- 口径里写 `2772 passed` 是引述。\n"
+        "- 数字 2772 passed <!-- wording:allow -->\n",
+        encoding="utf-8",
+    )
+
+    # 只有第 1 行 (无日期 / 无豁免) 命中; 日期行 / 行内代码 / 豁免标记都不命中。
+    assert len(wording.list_test_numbers(tmp_path, mb)) == 1
+    # 冻结常数设为 0 → 溢出 1 条, collect 只报溢出 (不刷全部存量)。
+    original = wording.FROZEN_TEST_NUM_COUNT
+    try:
+        wording.FROZEN_TEST_NUM_COUNT = 0
+        problems = wording.collect_violations(tmp_path, mb)
+    finally:
+        wording.FROZEN_TEST_NUM_COUNT = original
+    assert sum(1 for p in problems if "裸" in p) == 1, f"存量冻结: 只报新增 1 条: {problems}"
+    assert any("新增 1 处" in p for p in problems), f"应报新增条数: {problems}"
+
+    # 冻结常数够大 → 全放行 (存量不拦)。
+    wording.FROZEN_TEST_NUM_COUNT = 99
+    try:
+        assert not wording.collect_violations(tmp_path, mb)
+    finally:
+        wording.FROZEN_TEST_NUM_COUNT = original
+
+
+def test_number_guard_dated_exemption_does_not_cover_continuation_lines(tmp_path: Path) -> None:
+    """❗已知边界 (2026-10-08): 日期豁免只认**首行**, 多行流水条目的**续行**照常入判。
+
+    这不是缺陷而是判据的已知形态 (见 `pitfalls/kb/scripts.md`): 处置 = 续行内容回避禁写形态
+    (流水里写数字改「见 kb.baseline」)。本用例钉住它, 免得有人以为"带日期的整条流水都安全"。
+    """
+    wording = _wording()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "tasks" / "a.md").write_text(
+        "- 2026-10-08 08:42 — 首行带日期 (豁免), 但下面续行里的数字照常入判:\n"
+        "  本轮 test.full 2772 passed (续行, 不豁免)。\n",
+        encoding="utf-8",
+    )
+
+    hits = wording.list_test_numbers(tmp_path, mb)
+
+    assert len(hits) == 1, f"续行里的裸数字应入判 (首行已豁免): {hits}"
+
+
+def test_number_guard_is_green_on_current_kb() -> None:
+    """当前 KB 的裸数字不得超过冻结常数 (存量冻结; 超出 = 本轮又手抄了)。"""
+    wording = _wording()
+    actual = wording.count_test_numbers(ROOT, MB)
+
+    assert actual <= wording.FROZEN_TEST_NUM_COUNT, (
+        f"手抄测试数字 {actual} 处 > 冻结常数 {wording.FROZEN_TEST_NUM_COUNT} —— 本轮新增了手抄; "
+        "数字只写 testing/baselines/ 切片, 正文改「见 kb.baseline」"
+    )

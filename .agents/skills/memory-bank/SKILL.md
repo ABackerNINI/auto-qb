@@ -58,8 +58,8 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。文件名与「最后活动」的时刻一律取 `commands run kb.time`。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
 2. **tasks/**: 命中阈值 → 按下方「任务档案规范」定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
-3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。
-4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论; 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
+3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。**切片正文只写自己的 TOTAL**: 「相对上基线的逐位对比」不写(要看差值 `commands run kb.baseline -n 2` 现列) —— 卫兵 `check_wording.py` 判据族 B 扫 `tasks/`+`activeContext/` 的裸测试数字, 存量已冻结、只拦新增。
+4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论(裸数字**只进这一处**, 档案/切片正文引它而不抄它); 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
 5. **收录命令**: 遇到**反复要跑/难拼/有"看起来正常但不生效"写法**的命令 → 自己 `add` 进 `.commands/` 的对应包, 别在文档里抄(手抄会被 `commands run doc.drift` 判红)。判据见 [commands skill](../commands/SKILL.md)「收录协议」。
 6. **新坑**: 非显然的失败/陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`**: 补三行头(`# 标题`/`> 摘要:`/`> 触发:`; 建档任务再补一行 `**Refs:** <档案路径>` 反向声明), 条目写 `触发`/`判别`/`处置` **三必填**(`守阵`/`复发` 选填); 没有合适的类**先扩枚举**; 写完 `commands run kb.index`。
    - **复发闭环**: 踩到**已记的坑** → 该条 `复发` **+1**, 并在档案里写一句**为什么没命中**(路由没到/文件没读/读了没照做)。反复重踩于是变成**可排序的数字**, 也是「下沉为守阵」的优先级依据。
@@ -88,6 +88,17 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
   守阵 `tests/test_memory_bank.py`。**baselines 不在扫描面** —— 它是出厂即冻结的测量快照, 其
   「未提交」描述「这条基线测在哪棵树上」, 是解释数字差异的必需元数据 (例: `26-10-06-0547` 用它
   解释 passed 对不齐), 不是会过期的状态断言; 冻结件不随提交更新, 该缺陷形态在那里不成立。
+
+## 手抄测试数字: 只留切片一处 (2026-10-08 方案 C)
+
+同一族守卫 (`check_wording.py`) 的**判据族 B**: KB 正文 (`tasks/` + `activeContext/`) 不写裸测试
+数字 (`2772 passed` 这类) —— 它必然与切片分叉, 而数字的唯一权威是 `testing/baselines/` 最新切片。
+
+- **写什么**: 正文写「见 `commands run kb.baseline`」或量级/持平表述; **切片正文也只写自己的
+  TOTAL**, 不写「相对上基线逐位对比」(要看差值 `kb.baseline -n 2` 现列)。
+- **存量冻结 (债务制)**: 已有手抄一行不改 (是不可变历史), 只保证**不再新增** —— 命中数 ≤ 冻结
+  常数 (`FROZEN_TEST_NUM_COUNT`) 放行, 超出即判红。现算 `--count-numbers`, 全量清单 `--list-numbers`。
+- **豁免**: 带日期前缀的行 (历史流水) · 代码/围栏 (可引述) · `<!-- wording:allow -->`。
 
 ## 任务档案规范
 
@@ -145,7 +156,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 - ❌ 在 activeContext(单文件或切片)里追加长纪要 → 膨胀成流水账, 跨会话定位不到"任务档案在哪"。
 - ❌ 规则写成"跨会话的**大**任务要立档"这类不可判定措辞 → 无阈值 = 不执行。
-- ❌ 基线数字手抄到 README/AGENTS/progress → 必然漂移; 只写 `testing/baselines/` 下的基线切片。
+- ❌ 基线数字手抄到 README/AGENTS/progress/档案 → 必然漂移; 只写 `testing/baselines/` 下的基线切片, 正文改「见 kb.baseline」。**已有守卫**(`check_wording.py` 判据族 B, 存量冻结只拦新增)。
 - ❌ 用"全局单调序号"当档案主键(TASKnnn) → 并行 clone 各自发号必然撞号(2026-09-18 实测); 同理不要用"精确到分"的时间戳(每次续作都算出新文件名, 且会让"忽略日期前缀的 slug 唯一性"守卫失效)。
   ⚠ **此条只针对 tasks/ 档案主键** —— `activeContext/` 切片恰恰**故意**带时分(用它避撞名), 两者意图相反, 所以必须分目录。
 - 结构类反模式(切片截断 / `_recent.md` 缓存 / clone 标记 / 长青内容 / instructions 错位 / 手改索引)见 [references/kb-structure.md](references/kb-structure.md)。

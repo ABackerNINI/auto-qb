@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-10-07
-**Updated:** 2026-10-07
-**Summary:** 用户问「任务档案与 activeContext 切片里仍写着『`待提交`』—— 提交时点 commit hash 尚不可知, 有什么方法解决」, 拍板「实施方案①(时不变措辞) + 机械守卫」。根因是**自指不可能**: commit 的 hash 由 tree + parent + 时间戳决定, 想写进文件就改了 tree ⇒ **一个提交永远无法包含自己的 hash**; 而收尾 DoD 要求回写件随主提交一并暂存, 于是那句断言写在 hash 尚不存在的时点, 提交一落地即成假话。落地三件: ①**口径单点**进 skill「回写措辞」节(✗`待提交` / `未提交`(状态) / `等…指令` / 粗体 `未 commit`; ✓时不变措辞「随本专题入库」或直接省去, hash 用 `git log --grep <专题键>` 找回) ②**新守卫** `check_wording.py`(扫 `tasks/` + `activeContext/`; 豁免带日期的流水条目与树态描述 `未提交改动`; `testing/baselines/` 是冻结快照不入面) 挂进 `kb.check` + 守阵 3 条 ③**存量清洗** 88 处 / 64 文件(84 改 + 4 整行删; 带日期的 38 处按豁免原样保留)。test.full **2693 passed + 4 skipped / 99%**(基线切片 26-10-07-0434)。入库触发词由用户给出。
+**Updated:** 2026-10-08
+**Summary:** 用户问「任务档案与 activeContext 切片里仍写着『`待提交`』—— 提交时点 commit hash 尚不可知, 有什么方法解决」, 拍板「实施方案①(时不变措辞) + 机械守卫」。根因是**自指不可能**: commit 的 hash 由 tree + parent + 时间戳决定, 想写进文件就改了 tree ⇒ **一个提交永远无法包含自己的 hash**; 而收尾 DoD 要求回写件随主提交一并暂存, 于是那句断言写在 hash 尚不存在的时点, 提交一落地即成假话。落地三件: ①**口径单点**进 skill「回写措辞」节(✗`待提交` / `未提交`(状态) / `等…指令` / 粗体 `未 commit`; ✓时不变措辞「随本专题入库」或直接省去, hash 用 `git log --grep <专题键>` 找回) ②**新守卫** `check_wording.py`(扫 `tasks/` + `activeContext/`; 豁免带日期的流水条目与树态描述 `未提交改动`; `testing/baselines/` 是冻结快照不入面) 挂进 `kb.check` + 守阵 3 条 ③**存量清洗** 88 处 / 64 文件(84 改 + 4 整行删; 带日期的 38 处按豁免原样保留)。test.full **2693 passed + 4 skipped / 99%**(基线切片 26-10-07-0434)。入库触发词由用户给出。 **2026-10-08 二轮 (方案 C, 手抄测试数字)**: 用户报「基线维护成本高, 每轮要改切片/档案/切片正文/commit 至少 4 处」, 拍板方案 C —— 数字**只留 `testing/baselines/` 切片一处**, 其余一律引用不手抄; 给同一守卫加**判据族 B**(裸测试数字), 存量冻结 (只拦新增); 数字后续只留切片一处。
 **Topics:** memory-bank-pending-wording
 **Refs:** memory-bank/activeContext/26-10-07-0434-memory-bank-pending-wording.md,memory-bank/testing/baselines/26-10-07-0434-memory-bank-pending-wording.md
 
@@ -61,6 +61,15 @@
 5. 存量清洗: `tmp-analysis/migrate_pending_wording.py`(判据直接 import 守卫), 干跑复核 → 应用 → LF 修正。✅
 6. 闸门: `kb.check` + `test.full` + 基线切片 + 本档案 + 切片 + 坑档复发。✅
 
+### 二轮 (2026-10-08 方案 C)
+
+7. 可行性分析: 量四处写入点(baselines 切片 / 切片正文对比 / 档案/切片/计划引用 / commit msg), 对比方案 A(交给 test 脚本) / B(只写 commit msg) / C(折中)。✅
+8. 守卫判据族 B: `check_wording.py` 加 `scan_text_numbers` / `list_test_numbers` / `count_test_numbers` + `FROZEN_TEST_NUM_COUNT` 存量冻结; `--count-numbers` / `--list-numbers`。✅
+9. 口径单点: `baseline.md` 口径段加「切片正文只写自己 TOTAL + 逐位对比不写」; `SKILL.md` 加「手抄测试数字」节 + DoD 第 3/4 步 + 反模式条。✅
+10. AGENTS.md「产出口径」加一条(数字只写一处)。✅
+11. 守阵: `test_memory_bank.py` 加 2 条(边界 + 存量未超冻结)。✅
+12. 闸门 + 收尾回写 (切片 / 基线切片 / kb.index)。
+
 ## 子任务状态表
 
 | # | 子任务 | 状态 | 产出 / 备注 |
@@ -73,6 +82,10 @@
 | 6 | 存量清洗 88 处 / 64 文件 | Done | 84 改 + 4 删; 日期条目 38 处豁免保留; LF 修正 |
 | 7 | 坑档复发 +1 | Done | `pitfalls/git/editing-traps.md`(`write_text` 默认换行) |
 | 8 | 闸门 + 收尾回写 | Done | test.full 2693 passed / 4 skipped / 99% |
+| 9 | 二轮: 方案 C 分析(问答轮) | Done | 四处写入点 + 三方案优劣; 用户拍板 C |
+| 10 | 判据族 B + 存量冻结 | Done | `FROZEN_TEST_NUM_COUNT = 394`; 红验通过 |
+| 11 | 口径单点(baseline/SKILL/AGENTS) | Done | 切片只写 TOTAL; AGENTS 一条(6853 字符) |
+| 12 | 守阵 3 条 + 闸门 | Done | test_memory_bank 43 passed; test.full 见 kb.baseline |
 
 ## 进度日志
 
@@ -100,3 +113,23 @@
   所属 clone 自行重写(现状段改成「已提交并推上 Gitee: `74b25a7b`」, 旧口径措辞自然消失)。
   **冲突处置 = 采纳远端版本**(内容权威在对方), 本笔只保留上面那条摩擦记录 —— 判据: 自己的改写只
   针对措辞, 对方重写了整段叙事时, 强行保留自己的版本会丢对方的实质内容。
+- 2026-10-08 08:28 — 问答轮(方案 C 可行性): 用户报「基线维护成本高, 每轮要改切片/档案/切片正文/commit
+  至少 4 处, 而基线作用没那么高」。核实: 口径**早已**写着「数字只写 baselines/ 一处、其余引用不手抄」
+  (`baseline.md`), 只是**没守卫**所以反复违反 —— 真成本是同一数字的**四个副本**(切片正文的逐位对比最
+  重)。给三方案: A(交给 test 脚本, 但撞「冻结切片 + 禁机器索引」两条既有口径) / B(只写 commit msg,
+  最省但丢机检与认领链) / C(折中: 切片保事实源, 其余改引用 + 上守卫)。建议 C。
+- 2026-10-08 08:36 — 用户授权「实施方案 C + AGENTS.md 加简洁描述」。先 `my-commit-flow.sync`(远端领先 3
+  笔, 快进 0e8d5432→9ddd9193)。量存量: 非日期裸数字四百余处(散在档案/切片/计划) —— **多数是
+  不可变历史**(子任务状态表行 / 「实施完成, 基线 N passed」), 改写=篡改历史。就"存量口径"与"守卫形态"
+  问用户, 拍板**冻结为债务 + 扩展 check_wording.py**(与既有 cap 债务制同构, 零返工)。
+- 2026-10-08 08:38-08:41 — 加判据族 B: `TEST_NUM_RES`(三位以上 passed / N+M skipped, 只认 passed 因
+  形态稳定) + 豁免同 A 族(日期行 / 代码 / 豁免标记) + `FROZEN_TEST_NUM_COUNT` 数目制冻结。首测实测值
+  即定为常数(扫 tasks/+activeContext/, 日期行已豁免 —— 与最初粗量数的差来自扫面与正则口径)。
+  红验: 追加一个假数字 → rc=1 且只报溢出条数(不刷全部存量)。修文档串里 `\d` 的 SyntaxWarning。
+  CLI 加 `--count-numbers` / `--list-numbers`(清理会话现取全量)。
+- 2026-10-08 08:42 — 口径单点: `baseline.md`({切片正文只写自己 TOTAL, 逐位对比不写 —— 要看差值
+  `kb.baseline -n 2` 现列} + 机检指针); `SKILL.md`(「手抄测试数字」新节 + DoD 第 3/4 步 + 反模式条);
+  `AGENTS.md` 产出口径加一条(距 8000 硬上限余量充足)。守阵 3 条(边界 + 存量未超冻结 + 续行边界)。
+  `kb.check` 全绿; `test_memory_bank` 43 passed; `test.full` 通过(数字见 kb.baseline 最新切片 26-10-08-0842)。
+- 2026-10-08 08:4x — 本档案追加二轮 + 切片 + 基线切片 + `kb.index` 重建。本切片首版曾含裸数字被自家守卫
+  拦下(存量 +1) —— 已改「见 kb.baseline」; 这正是守卫在起作用(自证)。
