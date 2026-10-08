@@ -72,6 +72,20 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 **首轮实测锚点(config 包, 2026-10-08)**: 4,799 变异 / 杀 3,851 / 存活 893 / `no tests` 55 → 杀死率 80.25%;
 墙时 294.4s(含 setup), 变异阶段 17.41 变异/s; 补测后同池复跑 22.67 变异/s / 存活 772。
 
+## 跑完之后: 数字要落到哪几处(收尾别漏)
+
+一轮跑完, 同一批数字有**四个落点**, 各有唯一职责(缺一处这轮不算收尾):
+
+| 落点 | 放什么 | 何时 |
+|---|---|---|
+| 基线切片 `memory-bank/testing/baselines/<stamp>-mutants-<包>.md` | **完整**实测字段(池 / 变异数 / 杀死率 / 耗时 / 版本 / 真洞数) | 每轮 |
+| 任务档案 `memory-bank/tasks/<…>-mutation-audit.md` | 追加一行轮次 | 每轮 |
+| **常驻锚 §07 覆盖进度总表** `memory-bank/issues/<stamp>-test-mutation-audit-standing.html` | 该包一行的**汇总刻度 + 切片指针**(日期 / 变异数 / 杀死率 / 轮次 / 状态) | **每轮实施完成后必更** |
+| 真洞各自的 issue `memory-bank/issues/` | 每条真洞(填 `doc-refs`) | 有真洞时 |
+
+⚠ **别把切片数字抄进切片之外的正文** —— 回写守卫判据族 B 只允许测试通过数出现在切片里; 常驻锚那张表填的是
+**变异数 / 杀死率**(不是 `N passed`), 只做汇总与指针。规程见 skill 的「覆盖进度总表(收尾必更)」节与硬约束 12。
+
 ## 环境事实(改脚本前先核)
 
 | 项 | 值 | 备注 |

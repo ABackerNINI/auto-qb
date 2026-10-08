@@ -3,8 +3,8 @@
 **Status:** In Progress
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
-**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md
+**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -19,6 +19,22 @@
 - **结果落 `R:/Temp/auto-qb/mutants` 且只回显头部**: 存活清单可能上千行(超 AI 工具壳 30KB 内联上限), 全量落盘 + 头部回显是「搬走」不是「藏起来」; 落仓内会撞报告 §10 #7 那类坑。
 - **常驻 issue 不设 In Progress**: 认领链要求认领方反向声明, 但本件语义是「只要审计在做就 Open」; 认领方(本档案)照常反向声明, 状态词仍留 `Open`(停做才 `Dropped`)。这是对 5 词表的**刻意用法**, 不是漏改。
 - **不写进 pyproject**: mutmut / pytest-gremlins 不进主仓库依赖面(gremlins 走 `uv run --with`, mutmut 走镜像 venv 的 `uv pip install`)。理由: 报告 §01 明确「主仓库环境未被修改」是那轮调研的前提, 且 mutmut 在 Windows 原生被硬拒。
+
+### 2026-10-08 R4 — 常驻锚加「覆盖进度总表」+ 约束进 skill / 相关文档
+
+- **触发**: 用户「在变异测试长青 issue 中加一个表格(各部分测试 / 上次测试日期 / 上次测试相关 task 文档等), 每次变异测试实施完成后同步更新该表格; 将该约束加入 skill 以及相关文档; 先建表格骨架, 然后加约束」。
+- **表格骨架**: 常驻锚 `issues/26-10-08-0642-…html` 原 §07 轮次台账**顺延为 §08**, 新插入 **§07 覆盖进度总表** —— 列 = 包/模块 · 上次测试日期 · 变异数 · 杀死率 · 编号/轮次 · 状态 · 基线切片/计划/任务档案; 已按现有事实填 `config/`(R2)、`infra/versioning.py`(R0)两行, `rules/` `hr/` `core/` `infra/`+`webui/server/` 留 `待做` 占位行。原 §08 状态日志顺延为 §09, 并记一条本次变更。
+- **约束(硬约束 12 + 专节)写进 skill** `.agents/skills/mutation-testing/SKILL.md`:
+  - 流程约束列表 3 条 → **4 条**, 新增第 12 条「每轮实施完成后同步更新常驻锚 §07 覆盖进度总表」;
+  - 新增专节「覆盖进度总表(收尾必更)」—— 列口径 / 更新时机 / 三步更新内容 / 为什么不违反「issue 不记流水」(只放汇总刻度 + 指针) / 收尾口径自查;
+  - 标准步骤由 8 步 → **9 步**, 第 9 步即更新该表(**不更视为该轮未收尾**);
+  - 四段职责表「4 记录」落点补 `issues/` 锚 §07; 「issue 不记流水」那条加例外说明; 派生计划 §S8/§验收补该表; 反模式补 1 条。
+- **相关文档同步**:
+  - 证据报告 `reports/26-10-08-0231-…html` §14「三条流程修正」→ **四条**(新增「每轮实施后同步常驻锚覆盖进度总表」), §15 变更记录补 26-10-08-0935 一行, 抬 `doc-updated`;
+  - 命令包深读 `.commands/mutants/references/why.md` 新增「跑完之后: 数字要落到哪几处」小节(四落点表 + 两处勿混警告)。
+- **口径自查**: 表中两个「已做」行均有切片链接、日期/变异数/杀死率与切片逐位一致; 表内无 `N passed`(不触回写守卫判据族 B)。
+- **收尾实测**: `commands run test.full` → **2785 passed + 4 skipped / 覆盖率 99%**(与上基线 26-10-08-0920 逐位持平, 本轮零 `src/`、零 `tests/` 改动); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。基线切片 [26-10-08-0939](../testing/baselines/26-10-08-0939-mutation-audit-standing-table.md)。
+- **未做**: 未 commit/push(用户未说「提交」)。
 
 ## 实现计划
 

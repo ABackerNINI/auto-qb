@@ -87,8 +87,9 @@
     <a href="#s4"><span class="no">04</span>怎么跑</a>
     <a href="#s5"><span class="no">05</span>一轮的标准动作</a>
     <a href="#s6"><span class="no">06</span>产物落在哪</a>
-    <a href="#s7"><span class="no">07</span>轮次台账</a>
-    <a href="#s8"><span class="no">08</span>状态变更日志</a>
+    <a href="#s7"><span class="no">07</span>覆盖进度总表</a>
+    <a href="#s8"><span class="no">08</span>轮次台账</a>
+    <a href="#s9"><span class="no">09</span>状态变更日志</a>
     <div class="toc-foot">
       类型 test · 档位 standard<br>
       <strong>常驻锚: 状态恒 Open</strong> · 不是缺陷单<br>
@@ -139,7 +140,7 @@
       <li><code>core/</code> —— 主循环 / 限速</li>
     </ol>
     <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
-    <p class="hint">节奏建议: 每周 / 每个 Release 前挑 1 个包; 季度做一次逐包累加(不要一把跑)。「全量」= 逐包跑完, 不是一次跑完。</p>
+    <p class="hint">节奏建议: 每周 / 每个 Release 前挑 1 个包; 季度做一次逐包累加(不要一把跑)。「全量」= 逐包跑完, 不是一次跑完。进度与每包的实测刻度见 <a href="#s7">§07 覆盖进度总表</a>。</p>
   </section>
 
   <section id="s4">
@@ -188,8 +189,73 @@
   </section>
 
   <section id="s7">
-    <h2><span class="no">07</span>轮次台账</h2>
-    <p class="hint">只留指针, 不记流水 —— 明细在基线切片与任务档案里。</p>
+    <h2><span class="no">07</span>覆盖进度总表</h2>
+    <div class="callout"><b>本表是「覆盖到哪几个包」的唯一事实源</b> —— 每次变异测试实施完成后(即 <code>mutants</code> 包跑完一轮并出基线切片), <b>必须同步更新本表</b>, 再收尾。
+      <br>规程单点在指导 skill <code>.agents/skills/mutation-testing/SKILL.md</code> 的「覆盖进度总表(收尾必更)」节(硬约束 12); 缺更新会被该节的口径自查拦下。</div>
+    <table>
+      <tr><th>包 / 模块</th><th>上次测试日期</th><th>变异数</th><th>杀死率</th><th>编号 / 轮次</th><th>状态</th><th>基线切片 / 计划 / 任务档案</th></tr>
+      <tr>
+        <td><code>config/</code></td>
+        <td>2026-10-08</td>
+        <td>4,799</td>
+        <td>80.25% → 82.77%</td>
+        <td>R2</td>
+        <td><span class="badge go">已做(余量在池)</span></td>
+        <td><code>baselines/26-10-08-0902-mutants-config.md</code><br><code>plans/26-10-08-0720-plan-mutation-config.html</code></td>
+      </tr>
+      <tr>
+        <td><code>infra/versioning.py</code> <span class="hint">(练手)</span></td>
+        <td>2026-10-08</td>
+        <td>155</td>
+        <td>94.8%(存活 7 + 超时 1)</td>
+        <td>R0</td>
+        <td><span class="badge">已做(流程跑通)</span></td>
+        <td><code>tasks/26-10-08-test-mutation-audit.md</code>(R0)</td>
+      </tr>
+      <tr>
+        <td><code>rules/</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge">待做(优先级 1)</span></td>
+        <td>计划未派生</td>
+      </tr>
+      <tr>
+        <td><code>hr/</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge">待做(优先级 2)</span></td>
+        <td>计划未派生</td>
+      </tr>
+      <tr>
+        <td><code>core/</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge">待做(优先级 4)</span></td>
+        <td>计划未派生</td>
+      </tr>
+      <tr>
+        <td><code>infra/</code> · <code>webui/server/</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge">待做(最低, 可跳)</span></td>
+        <td>估值最低(IO 胶水层)</td>
+      </tr>
+    </table>
+    <p class="hint">列口径: <b>变异数</b>取该轮实测总数(复跑不叠加); <b>杀死率</b>首轮 → 复跑(无量轮变化就写单值); <b>状态</b>用三档: 待做 / 已做(余量在池) / 已做(已清); <b>基线切片</b>给最近一次(复跑取最新)。新包起一轮时<b>先插一行</b>(状态 <code>待做</code>), 跑完再填数字 —— 不留只有数字没切片的行。</p>
+    <div class="callout warn"><b>只搬指针, 不抄流水</b>: 表里只放「一行一个包」的汇总数字与链接; 轮次明细仍在基线切片与任务档案里(手抄 <code>N passed</code> 会被回写守卫判红 —— 本表填的是变异数/杀死率, 不是测试通过数)。</div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>轮次台账</h2>
+    <p class="hint">只留指针, 不记流水 —— 明细在基线切片与任务档案里。覆盖进度看 §07。</p>
     <table>
       <tr><th>轮次</th><th>目标</th><th>结果</th><th>切片 / 档案</th></tr>
       <tr><td>R0 建立</td><td>—</td><td>指导 / 命令 / 排期锚就位; <code>infra/versioning.py</code> 走通全流程(155 变异 / 21.6s / 存活 7 + 超时 1)</td><td><code>tasks/26-10-08-test-mutation-audit.md</code></td></tr>
@@ -198,17 +264,19 @@
     </table>
   </section>
 
-  <section id="s8">
-    <h2><span class="no">08</span>状态变更日志</h2>
+  <section id="s9">
+    <h2><span class="no">09</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 06:42 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套审计还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。</li>
       <li>2026-10-08 09:20 — config 首轮执行完毕后<b>回灌经验</b>(状态仍 <strong>Open</strong>): 命令包新增 <code>mutants.report</code>(带 diff 的清单 + 汇总)与 <code>mutants.verify</code>(S4 机械化); 指导 skill 补「流程约束 9–11」(池覆盖函数面 / S4 收窄候选 / 复跑 <code>--no-refresh</code>)与两条记录纪律(不手抄 <code>N passed</code> / issue 填 <code>doc-refs</code>); §03 标注 config 进度, §07 补 R1/R2。</li>
+      <li>2026-10-08 09:35 — 新增 <strong>§07 覆盖进度总表</strong>(包 / 上次测试日期 / 变异数 / 杀死率 / 轮次 / 状态 / 相关 task 文档), 原 §07 轮次台账顺延为 §08、状态日志为 §09; 并把「每次变异测试实施完成后同步更新该表」写成硬约束加入指导 skill 与相关文档。</li>
     </ul>
-    <p class="hint">本件是常驻锚, 不随单轮完成而改状态; 轮次进度看 §07 与任务档案。</p>
+    <p class="hint">本件是常驻锚, 不随单轮完成而改状态; 轮次进度看 §08、覆盖进度看 §07 与任务档案。</p>
   </section>
 
   <footer>
-    26-10-08-0642-test-mutation-audit-standing.html · 常驻排期锚(standard 档) · 由 create-issue skill 入池; 状态恒 Open, 停止审计才 Dropped
+    26-10-08-0642-test-mutation-audit-standing.html · 常驻排期锚(standard 档) · 由 create-issue skill 入池; 状态恒 Open, 停止审计才 Dropped<br>
+    §07 覆盖进度总表: 每轮变异测试实施完成后必须同步更新(规程见 mutation-testing skill)
   </footer>
 
 </div>
