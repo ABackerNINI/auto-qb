@@ -247,13 +247,21 @@ def test_shell_child_env_forces_utf8_stdio():
 
 
 class _FakeProc:
-    """假子进程: 只提供 `_shell` 要读的三个属性。"""
+    """假子进程: 提供 `_shell` 要读的属性(Popen 形态 —— pid / communicate / returncode)。
+
+    ❗形态随实现走: `_shell` 已不用 `subprocess.run`, 改为 `Popen` 拿 pid 才能在超时点
+    **杀整棵进程树**(2026-10-08)。假对象不同步改就会"看起来在测、其实真起子进程"。
+    """
     def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):
-        self.stdout, self.stderr, self.returncode = stdout, stderr, returncode
+        self.pid = 4242
+        self._stdout, self._stderr, self.returncode = stdout, stderr, returncode
+
+    def communicate(self, timeout=None):
+        return self._stdout, self._stderr
 
 
 def _patch_run(monkeypatch, proc: _FakeProc) -> dict:
-    """换掉 subprocess.run 并回传收到的参数 —— **进程内**验证接线。
+    """换掉 subprocess.Popen 并回传收到的参数 —— **进程内**验证接线。
 
     本项目测试禁止真起外部进程(`tests/sidefx.py` 的 POPEN 记账会判越界), 所以
     "子进程给了什么字节"由假对象直接给, 反而比真跑更好控制。
@@ -266,7 +274,7 @@ def _patch_run(monkeypatch, proc: _FakeProc) -> dict:
         seen.update(kwargs)
         return proc
 
-    monkeypatch.setattr(mod.subprocess, "run", fake)
+    monkeypatch.setattr(mod.subprocess, "Popen", fake)
     return seen
 
 

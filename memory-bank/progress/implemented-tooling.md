@@ -88,7 +88,7 @@
   ②**整包移走** `.commands/my-commit-flow` 后, 引擎仍能 `list` / `run` 其它 task。
   ③**反漂移闸门**: 故意手抄 → 判红, 改成 `commands run <task>` → 转绿(63 → 0); 手抄**脚本类**(带解释器前缀)在 `.exe` 归一后同样判红。
   ④**`pin` 守卫**: 临时树里 3 条 pin 不报、9 条报(一级与子包两层都试过)。
-  ⑤**格式化闸门去双写**: `<changed:*.py>` → `run.py run dev.fmt -- <文件…>` → 引擎再展开成 `yapf -i <文件…>`, 两段都实测过, 与旧闸门等价(仍只碰本次改过的 py)。
+  ⑤**格式化闸门去双写**: `<changed:*.py>` → `run.py run dev.fmt -- <文件…>` → 引擎再展开成 `uv run yapf -i <文件…>`, 两段都实测过, 与旧闸门等价(仍只碰本次改过的 py)。〔2026-10-08 更正: 末段原为裸 `yapf -i` —— dev.fmt 已改用**项目内** yapf, 判据见 [../pitfalls/testing/sandbox-tool-cache.md](../pitfalls/testing/sandbox-tool-cache.md)〕
   ⑥**`list --all` 去重**: 曾把常显命令打两遍(21 条显示成 25 行, 看着像 task id 重复)⇒ `--all` 时不再上浮 pin; 逐视图复验 `--all` 21 行零重复, `list` 3 / `kb` 3 / `test` 3 / `my-commit-flow` 4 / `ship` 2 / `my-commit-flow --all` 5。
   ⑦**反漂移扫描面**扩到 `.agents/skills/**/*.md`(原 `**/SKILL.md`): 细节搬进 `references/` 后只扫 SKILL.md 会留盲区; 扩前实测 0 命中(不误伤别的 skill)。
   ⑧**参数传递**: `run doc.drift -- --list` 转发成功; `run doc.caps -- --strict` **STOP rc=1 且不执行**; 脚本类 `ship.commit -- --message-file … <路径>` 仍接 argv 末尾; 无参数时 `show test.full` 与配置逐字一致。

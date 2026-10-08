@@ -22,10 +22,11 @@ when    = "真机跑主程序（<args> 先给 config.yml 与 --dry-run）"
 note    = "需真实 qBittorrent; 一律先 --dry-run 观察, 确认无误再去掉"
 
 [tasks."dev.fmt"]
-run     = ["yapf -i <args>"]
-timeout = 300
+run     = ["uv run yapf -i <args>"]
+timeout = 60
 when    = "格式化改过的 py 文件（.style.yapf: facebook 风格, 列宽 120）"
-note    = "<args> 传文件路径; 提交闸门只碰本次改过的, 别整仓跑 —— 会带出无关重排"
+note    = "用**项目内** yapf(pyproject dev 依赖组, 0.43.0), 不再用 PATH 上的系统 yapf。⚠ 沙箱约束: yapf 把语法 pickle 缓存在 `%LOCALAPPDATA%\\Google\\YAPF\\Cache`(platformdirs 的 Win32 已知文件夹 API 决定, **环境变量改不动**), 该目录不在工具 shell 沙箱白名单 ⇒ 每次跑都刷一批被拒的临时文件; 实测**多数时候仍 <1s 正常跑完**, 但 2026-10-08 观察到过挂死(100% 单核 + 持续写磁盘) ⇒ timeout 60s + 引擎超时杀整棵树兜底。彻底消除: 把该缓存目录加进沙箱白名单。根因见 memory-bank/pitfalls/testing/sandbox-tool-cache.md"
+doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 
 [tasks."dev.harness"]
 run     = ["uv run python scripts/ui_harness.py <args>"]

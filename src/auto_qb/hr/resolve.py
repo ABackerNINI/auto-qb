@@ -48,6 +48,9 @@ class HrAnchor:
     别的客户端; 放行判定 = 站点终态事实 + 锚点未漂移(本实例辅助)。
     seeding_time: 本实例做种时长(秒, qB 快照) —— 取数侧超额线(常量 3×, §3.3)的判据;
     0 = 未知。name: 本地种子名称(取数侧 B/C/D 行宽泛名称粗配要用, §4.5 D1)。
+    excluded: 命中 HR 排除表(计划 26-10-08-1249 方案 B) —— 取数侧对象集的第四档排除判据;
+    只决定「是否进对账对象集」(判定侧另有 hr_excluded 短路, 与此无关), **不影响命中识别**
+    (`local_hashes`/`local_names` 仍从全量锚点构建)。!不参与放行记录快照/漂移比对。
     """
 
     added_on: int = 0
@@ -56,6 +59,7 @@ class HrAnchor:
     progress: float = 0.0
     seeding_time: int = 0
     name: str = ""
+    excluded: bool = False
 
     def drift_reason(self, ver: HrVerified) -> str:
         """与放行记录里的锚点比对, 漂移返回人话原因, 未漂移返回空串"""

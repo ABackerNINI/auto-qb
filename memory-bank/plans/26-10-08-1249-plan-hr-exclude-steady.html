@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-steady-throttle">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-08-1249">
+<meta name="doc-updated" content="26-10-08-1305">
+<meta name="doc-refs" content="memory-bank/reports/26-10-08-1235-report-hr-exclude-steady.html,memory-bank/tasks/26-10-08-backend-hr-exclude-steady.md,memory-bank/issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 18px; padding-left: 14px; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .ok { color: var(--ok); }
+  .gap { color: var(--warn); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.stop { border-left-color: var(--no); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s01"><span class="no">01</span>拍板回执与范围</a>
+    <a href="#s02"><span class="no">02</span>现状核实与实施锚点</a>
+    <a href="#s03"><span class="no">03</span>方案设计 (方案 B)</a>
+    <a href="#s04"><span class="no">04</span>分步实施 S1–S6</a>
+    <a href="#s05"><span class="no">05</span>拍板点</a>
+    <a href="#s06"><span class="no">06</span>验收判据与真机复核</a>
+    <a href="#s07"><span class="no">07</span>风险与不变项</a>
+    <a href="#s08"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">计划工位 · 拍板后冻结<br>实施进度走任务档案</div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">Implementation Plan · HR 取数侧排除</div>
+    <h1>HR 排除落到取数侧 (方案 B) 分步实施计划</h1>
+    <p class="lede">把取证报告 <a href="../reports/26-10-08-1235-report-hr-exclude-steady.html">26-10-08-1235</a> 的结论落成分步实施计划。核心改动一点: <b>让「HR 排除」这条判据也进入取数侧</b> —— 排除种子不再进「对账对象集」, 从而让稳态条件 (对象集为空) 可达、<code>idle_refresh_interval</code> 恢复生效; 同时<b>保留其命中识别能力</b> (仍留在 <code>local_hashes</code> / <code>local_names</code>)。用户已拍板采用<b>方案 B</b>(锚点带排除位, 只出对象集)。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-1249</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">hr-steady-throttle</div></div>
+      <div class="item"><div class="k">上游</div><div class="v">report 26-10-08-1235 (方案 B)</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop@fcc3cd69 · 2026-10-08</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress · S1–S4 已落地 (26-10-08)</span></div></div>
+    </div>
+  </header>
+
+  <section id="s01">
+    <h2><span class="no">01</span>拍板回执与范围</h2>
+    <table>
+      <tr><th>事项</th><th>结论</th></tr>
+      <tr><td>修复方案</td><td><b>已拍板「方案 B」</b>(2026-10-08 用户指令: 「按方案 B 出实施计划」)—— 给 <code>HrAnchor</code> 加排除位, <code>_build_objects</code> 跳过被排除锚点; 被排除种子<b>仍参与命中识别</b>。</td></tr>
+      <tr><td>本计划范围</td><td>S1 判据带过边界 → S2 对象集跳过 → S3 守阵 → S4 文档回写 → S5 真机复核 → S6 收尾。改动 3 个源文件、净增约 3 行判据。</td></tr>
+      <tr><td>明确不在范围</td><td>① 不顺带优化「被排除种子终态行的身份下载」(现状行为, 保持逐字不变); ② 不清理被排除种子既有的 <code>verified</code> / <code>index</code> 行 (口径见 §05); ③ 不动判定侧 / 展示侧 (它们本来就认排除)。</td></tr>
+      <tr><td>Is 已修问题?</td><td>否 —— 报告 <a href="../reports/26-10-08-1235-report-hr-exclude-steady.html">26-10-08-1235</a> 判为「设计缺口」(设计文档的对象集判据本就未含排除档), 不是回归。</td></tr>
+    </table>
+    <div class="callout warn">
+      <b>本计划对报告 §08 的一处口径更正</b>: 报告在对比方案 A / B 时写着「A 会多触发一次 <code>.torrent</code> 下载」—— 复核 <code>_process_rows</code> 后该说法<b>不成立</b>: 缺 infohash 的 A 档行无论 A/B 都会下载; 有 infohash 的行在 A 下也不下载。两方案对「对象集是否为空」的结果<b>等价</b>, 真正差别只有「被排除种子是否继续参与行匹配/身份登记」。因此选 B 的理由修正为「<b>爆炸半径最小</b>」(见 §03)。这一点已回写报告后记。
+    </div>
+  </section>
+
+  <section id="s02">
+    <h2><span class="no">02</span>现状核实与实施锚点 (HEAD fcc3cd69 实测)</h2>
+    <p>取证结论 (详见报告 §04): 排除的判据单点 <code>TorrentRecord.hr_excluded()</code> 只被判定侧与展示侧消费, 取数侧两步都不读它。本次改动要动的三个落点:</p>
+    <table>
+      <tr><th>锚点</th><th>位置 (HEAD fcc3cd69)</th><th>现状</th><th>本次动作</th></tr>
+      <tr><td><code>HrAnchor</code> 结构</td><td class="num">hr/resolve.py:44–58</td><td>只有 added_on / downloaded / completion_on / progress / seeding_time / name, 无排除位</td><td><span class="gap">S1 加字段</span></td></tr>
+      <tr><td>锚点构造 <code>hr_anchor()</code></td><td class="num">torrents/record.py:286–295</td><td>逐字段拷贝快照, 不传排除态</td><td><span class="gap">S1 透传</span></td></tr>
+      <tr><td>排除判据单点</td><td class="num">torrents/record.py:297–337</td><td><code>_hr_exclusion_hits</code> / <code>hr_excluded</code> / <code>hr_excluded_by</code> (已有, 不改)</td><td>复用</td></tr>
+      <tr><td>对象集现算 <code>_build_objects</code></td><td class="num">hr/service.py:1375–1413</td><td>排除链 = 终态(1402) / 放行(1404) / 超额(1406); 循环体起于 <code>for h, anchor in anchors.items()</code>(1393)</td><td><span class="gap">S2 加第四档</span></td></tr>
+      <tr><td>命中集构建 <code>_WaveContext</code></td><td class="num">hr/service.py:284–306 (→ <code>_do_wave</code>:589)</td><td><code>local_hashes</code> / <code>local_names</code> 从<b>全量 anchors</b> 构建</td><td><span class="ok">不动 (这是 B 的关键)</span></td></tr>
+      <tr><td>锚点采集 <code>HrRuntime._anchors</code></td><td class="num">hr/runtime.py:358–383</td><td>按站点接入采集, 为 B 提供带排除位的锚点载体</td><td><span class="ok">不动</span></td></tr>
+      <tr><td>稳态判定 / 间隔闸</td><td class="num">hr/service.py:497–498 / 522–531</td><td><code>steady = anchors_known and not objects</code></td><td><span class="ok">不动 (对象集少成员即生效)</span></td></tr>
+    </table>
+    <p class="num" style="color:var(--faint)">行号须在实施时按当时 HEAD 复核 (本项目行号漂移常态, 见历史计划 §01 的重标表)。</p>
+  </section>
+
+  <section id="s03">
+    <h2><span class="no">03</span>方案设计 (方案 B)</h2>
+    <h3>3.1 一句话</h3>
+    <p>把「是否被 HR 排除」这个布尔量<b>随锚点带过线程/模块边界</b> (它在 <code>hr_anchor()</code> 里还活着, 出了 record 就丢了), 然后在对象集现算处用它作<b>第四档排除</b>。命中集构建不动 ⇒ 被排除种子仍被认识, 只是不再被对账。</p>
+    <h3>3.2 数据流 (改后)</h3>
+    <pre><code>TorrentRecord.hr_anchor()  ──(S1 新增) excluded=self.hr_excluded()──▶  HrAnchor
+   └─ HrRuntime._anchors()  {站点: {infohash: HrAnchor}}        # 不变
+        └─ worker.run_once → service.refresh_site(site, anchors) # 不变
+             ├─ _WaveContext(anchors)                            # 不变: local_hashes/local_names 取全量
+             │     ⇒ 被排除种子仍是「本地命中」(不误触发 .torrent 下载)
+             └─ _build_objects(anchors)  ──(S2) if anchor.excluded: continue──▶  不进 objects
+                   ⇒ steady = anchors_known and not objects 可为真
+                   ⇒ interval = idle_refresh_interval (24H)</code></pre>
+    <h3>3.3 为什么是 B (而不是 A)</h3>
+    <table>
+      <tr><th>维度</th><th>A: 在 <code>_anchors</code> 里剔掉</th><th>B: 锚点带排除位, 仅出对象集</th></tr>
+      <tr><td>对象集 / 稳态结果</td><td>等价</td><td>等价</td></tr>
+      <tr><td>对行匹配 / 身份登记的影响</td><td><b>会变</b>: 被排除种子从 <code>local_hashes</code>/<code>local_names</code> 消失 ⇒ 其站点行不再按本地命中处理 (命中登记 / 名称粗配触发的下载路径随之改变)</td><td><b>不变</b>: 与现状逐字相同</td></tr>
+      <tr><td>爆炸半径</td><td>大: 影响 3 个消费面 (对象集 + 命中 + 身份下载)</td><td>小: 只影响对象集一个面; 判据落点单一</td></tr>
+      <tr><td>结论</td><td>—</td><td><b>选 B</b>: 改动可被一条守阵钉死, 回归面最小</td></tr>
+    </table>
+    <h3>3.4 被排除种子的「另一半语义」必须保留</h3>
+    <p>报告 §08 的守阵方向②在此落地: 排除 ≠ 不认识。被排除种子仍进 <code>wave.local_hashes</code> / <code>local_names</code> —— 站点清单里与它对应的行仍被识别为本地命中, 不因排除而多下一次 <code>.torrent</code>。这是 B 与 A 的实质分野, 也是守阵 S3-2 要钉死的点。</p>
+  </section>
+
+  <section id="s04">
+    <h2><span class="no">04</span>分步实施 S1–S6</h2>
+
+    <h3>S1 · 判据带过边界 (resolve.py + record.py)</h3>
+    <ul>
+      <li><code>hr/resolve.py</code>: <code>HrAnchor</code> <b>末尾</b>加字段 <code>excluded: bool = False</code> (冻结 dataclass, 带默认值 ⇒ 既有全部关键字构造 / 全量相等断言不受影响)。注释写明: 「取数侧对象集的第四档排除; 不影响判定(判定侧另有短路), 只决定是否进对账对象集」。</li>
+      <li><code>torrents/record.py</code> <code>hr_anchor()</code>: 构造时补 <code>excluded=self.hr_excluded()</code>。</li>
+      <li><b>须核对</b>: <code>tests/test_qbmanager.py:1029</code> 有 <code>HrAnchor(...) == HrAnchor(...)</code> 的全量相等断言 —— 默认 False 下应恒等; 若该用例的种子命中排除表则需同步期望值。</li>
+    </ul>
+
+    <h3>S2 · 对象集跳过 (service.py <code>_build_objects</code>)</h3>
+    <ul>
+      <li>在 <code>for h, anchor in anchors.items()</code> 循环体顶部 (紧接 <code>if not h: continue</code>) 加:
+        <pre><code>if anchor.excluded:
+    continue  # HR 排除(第四档): 判定侧已短路, 无对账义务 ⇒ 不进对象集
+              # (仍在 wave.local_hashes/local_names 里 —— 命中识别不受影响)</code></pre>
+      </li>
+      <li><b>放置位置的语义</b>: 放在漂移回炉 (<code>del data.verified[h]</code>) 之前 ⇒ 被排除种子的放行记录不再被锚点漂移作废。无判定后果 (判定侧对其返 None); 且<b>撤销排除后即恢复</b> (重新进循环、漂移检查随之恢复) —— 不产生不可逆残留。</li>
+      <li>同步更新 <code>_build_objects</code> docstring 的排除链描述: 「index 活跃终态行 / 已有放行 / 超额 ≥3× / <b>HR 排除</b>」。</li>
+    </ul>
+
+    <h3>S3 · 守阵 (tests/test_hr_service.py 为主, 复用既有稳态区)</h3>
+    <ol>
+      <li><b>排除种子不进对象集 ⇒ 稳态可生效</b>: 站点零其他对象 + 一颗 <code>excluded=True</code> 的锚点 ⇒ <code>_build_objects</code> 返回空对象集; 下一波在 <code>healthy+idle</code> 内为 WAITING 且理由含「稳态降频」, 过 idle 闸才开波。<span class="num">(对照既有 <code>test_idle_interval_used_when_objects_empty</code>)</span></li>
+      <li><b>排除种子仍参与命中识别</b>: 站点 A 档行 infohash 命中被排除的本地种子 ⇒ 仍判本地命中, <b>该 tid 不产生 <code>pending_downloads</code></b>。这是 B 的核心守阵 (防被做成 A)。</li>
+      <li><b>排除=假时零静默变更</b>: <code>excluded=False</code> 的锚点, 对象集与实施前逐字相同 (边界回归)。</li>
+      <li><b>结构与透传</b>: <code>HrAnchor().excluded is False</code>; <code>record.hr_anchor().excluded == record.hr_excluded()</code> (含 tags / categories / regex 三种命中来源)。</li>
+      <li><b>既有稳态 5 条守阵复跑不回归</b> (<code>test_idle_interval_used_when_objects_empty</code> / <code>..._releases_immediately...</code> / <code>..._anchor_collection_failure_disables_idle</code> / <code>test_zero_anchors_site_still_idles</code> / <code>test_idle_mode_flip_persists_once</code>)。</li>
+    </ol>
+    <p>同时同步 <code>tests/test_hr_service.py</code> / <code>tests/test_torrents.py</code> 头部 docstring 的「## 测试计划」清单 (新增测试必须登记)。</p>
+
+    <h3>S4 · 文档回写</h3>
+    <ul>
+      <li>代码事实变更: <code>service._build_objects</code> docstring 补第四档 (S2 内联); 若有 <code>memory-bank/</code> 主题文档描述该排除链, 同步补一档 (实施时 `grep -rn "_build_objects\|排除链" memory-bank/` 定位)。</li>
+      <li>报告口径勘误: 已随本计划回写报告 §08 后记 (见 §01 callout)。</li>
+    </ul>
+
+    <h3>S5 · 真机复核 (用户侧, 只读)</h3>
+    <ul>
+      <li><code>commands run dev.run -- config.yml --dry-run</code> 冒烟 (配置/模块装载路径无异常)。</li>
+      <li>真机运行后看 <code>&lt;data_dir&gt;/hr/carpt.json</code>: <code>wave.idle_mode</code> 应能翻 <code>true</code>; 日志出现 <code>未到拉取时刻(拉取间隔·稳态降频, 还差 Ns)</code> (service.py:528)。</li>
+      <li>观测量级: 稳态期请求量应显著下降 (报告 26-10-03-1505 §13.5 给的口径)。</li>
+    </ul>
+
+    <h3>S6 · 收尾</h3>
+    <ul>
+      <li>基线切片 (<code>testing/baselines/</code>) + 计划 meta <code>Open → In Progress/Done</code> + 任务档案子任务表推进 + <code>commands run kb.index</code>。</li>
+      <li>认领链: 计划 <code>doc-refs</code> ↔ 报告 <code>doc-refs</code> ↔ 档案 <code>**Refs:**</code> 三向闭环 (本计划入库时已建)。</li>
+    </ul>
+  </section>
+
+  <section id="s05">
+    <h2><span class="no">05</span>拍板点</h2>
+    <table>
+      <tr><th>#</th><th>事项</th><th>建议 (待拍板)</th></tr>
+      <tr>
+        <td class="num">D1</td>
+        <td>种子「中途被排除」(原本已有 <code>verified</code> 放行记录 / <code>data.index</code> 行) 时, 是否清理其既有记录?</td>
+        <td><b>不清理</b>。排除是判定侧的叠加态, 撤销排除后应能立即恢复原判定; 清理会让「临时排除」变不可逆, 且无收益 (判定侧对其返 None, 残留记录不产生行为)。本计划默认不清理, 不改一行相关代码。</td>
+      </tr>
+      <tr>
+        <td class="num">D2</td>
+        <td>是否顺带省掉「被排除种子终态行的身份下载」(现状: 终态行按名称粗配命中会下载一次 <code>.torrent</code>)?</td>
+        <td><b>本批不做, 已入池</b>(2026-10-08 用户拍板) → <a href="../issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">issue 26-10-08-1304</a>(perf · Open)。它属于方案 A 的副作用面, 且改动会触及命中/身份路径, 与 B「爆炸半径最小」的取舍相悖。</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s06">
+    <h2><span class="no">06</span>验收判据与真机复核</h2>
+    <table>
+      <tr><th>#</th><th>判据</th><th>怎么验</th></tr>
+      <tr><td class="num">V1</td><td>被排除种子不进对账对象集</td><td>S3-1 单测 (对象集空 ⇒ 稳态生效)</td></tr>
+      <tr><td class="num">V2</td><td>被排除种子仍被识别为本地命中 (不误下载)</td><td>S3-2 单测 (无 pending_downloads)</td></tr>
+      <tr><td class="num">V3</td><td>未命中排除表时行为零变化</td><td>S3-3 单测 + 既有稳态 5 条守阵全绿</td></tr>
+      <tr><td class="num">V4</td><td>真机稳态降频恢复</td><td>S5: <code>wave.idle_mode=true</code> + 日志含「稳态降频」+ 请求量下降</td></tr>
+      <tr><td class="num">V5</td><td>全量套件与文档守卫全绿</td><td><code>commands run test.full</code> + <code>kb.check</code>; 新基线切片单点记数字</td></tr>
+    </table>
+  </section>
+
+  <section id="s07">
+    <h2><span class="no">07</span>风险与不变项</h2>
+    <h3>7.1 已接受的风险</h3>
+    <table>
+      <tr><th>#</th><th>风险</th><th>评估</th></tr>
+      <tr><td class="num">R1</td><td>用户误排除一颗<b>确有 HR 义务</b>的种子 ⇒ 它不再被在线核实, 且该站稳态更易触发 (拉取变稀)</td><td><b>接受</b>。这正是「排除 = 不纳入 HR 体系」的既定语义: 判定侧 <code>hr_managed</code> 早已对它恒返 False、展示侧早已标注「已排除」。本计划只是让取数侧对齐既有语义, <b>不引入新的语义分歧</b>。发现延迟上界由宽限期语义决定 (报告 §13.6: 与 24H 量级匹配)。</td></tr>
+      <tr><td class="num">R2</td><td>被排除种子不再驱动「未列出」放行签发</td><td>无判定影响 (其判定已被短路); 不构成漏管。</td></tr>
+      <tr><td class="num">R3</td><td>稳态更易触发 ⇒ 若存在遗漏的「未排除新义务种子」</td><td>由既有机制兜住: 新种子进 anchors ⇒ 对象集翻非空 ⇒ 下一 poll (≤60s) 立即回常态开波 (报告 §13.2), 本计划不改该机制。</td></tr>
+    </table>
+    <h3>7.2 不变项 (须逐条保持)</h3>
+    <ul>
+      <li><code>_WaveContext.local_hashes</code> / <code>local_names</code> 仍从<b>全量 anchors</b> 构建 (命中识别 / 名称粗配 / 换 tid 接管语义不变)。</li>
+      <li>锚点三态契约 (<code>None</code>=采集失败不降频 / <code>{}</code>=确认零锚点) 不变。</li>
+      <li>稳态判据 <code>steady = anchors_known and not objects</code> 与间隔闸取值式不变 (仅对象集成员变化)。</li>
+      <li>复用窗 <code>min(reuse_window, refresh_interval)</code> 不跟随 idle；<code>force</code> 跳两道调度闸；<code>min_interval</code>/日额/Retry-After/时间窗照常 —— 全部不变。</li>
+      <li>判定侧 / 展示侧 (record 三入口 + <code>hr_excluded_by</code>) 一行不改。</li>
+    </ul>
+  </section>
+
+  <section id="s08">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li><b>26-10-08-1305</b> 实施轮：用户下达「D2 进 issue, D1 按建议, 开始实施」⇒ <b>S1–S4 已落地</b>(S1 <code>HrAnchor.excluded</code> + <code>hr_anchor()</code> 透传; S2 <code>_build_objects</code> 第四档排除 + docstring; S3 守阵 4 条, 其中 3 条红验确认(临时关掉源码钩子即红); S4 文档回写 keys.md / modules/overview.md)。ⓐ D1 采纳建议(不清理既有 verified / index 行, 未改一行代码); ⓑ D2 入池 <a href="../issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">26-10-08-1304</a>(perf · Open)。<b>S5 真机复核待用户侧</b>(看 <code>hr/&lt;site&gt;.json</code> 的 <code>wave.idle_mode</code> 与日志「稳态降频」)。</li>
+      <li><b>26-10-08-1249</b> 初版：按用户拍板「方案 B」出分步实施计划 (S1–S6)；含对报告 §08「方案 A 副作用」的口径更正 (§01 callout)；待实施。</li>
+    </ul>
+  </section>
+
+  <footer>
+    计划工位 · 拍板后冻结 (改版 = 同文件内追加「变更记录」并抬 doc-updated, 禁止 -v2 新文件) ·
+    memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html
+  </footer>
+
+</div>
+</body>
+</html>

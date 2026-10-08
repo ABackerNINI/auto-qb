@@ -40,6 +40,7 @@
 - test_record_hr_excluded_category_and_regex: HR 排除的分类命中与 regex:/ :ignore_case 格式
 - test_record_hr_excluded_beats_site_judgement: 排除优先级最高, 站点接入(enabled)也压不过用户显式排除
 - test_record_hr_excluded_table_empty_is_noop: 排除表未命中 -> 行为与无排除一致(零静默变更)
+- test_record_hr_anchor_carries_excluded_flag: 锚点快照带排除位(方案 B 的判据载体); 未命中恒 False, 标签/分类命中即带位
 - test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
@@ -445,6 +446,24 @@ def test_record_hr_excluded_table_empty_is_noop():
     rec.tags = "HHan"
     assert rec.hr_excluded() is False and rec.check_hr_condition() is True
     assert rec.hr_excluded_by() == "", "未命中来源 token 为空串(前端据此不出依据短语)"
+
+
+def test_record_hr_anchor_carries_excluded_flag():
+    """方案 B(计划 26-10-08-1249 S1): 锚点快照携带排除位 —— 排除态在 record 之外无载体,
+    取数/对账侧的对象集现算(service._build_objects)靠它判「第四档排除」。
+    未命中排除表时恒 False(零静默变更); 标签 / 分类任一命中即带位(与 hr_excluded 同源单点)。"""
+    from auto_qb.hr.resolve import HrAnchor
+
+    assert HrAnchor().excluded is False, "结构默认 False"
+    rec = _hr_record(downloaded=70 * 1024**2)
+    assert rec.hr_anchor().excluded is False, "无排除配置 ⇒ 默认 False"
+    rec.category = "IYUU自动辅种"
+    rec.tracker_conf.hr.exclude_categories = ["IYUU自动辅种"]
+    assert rec.hr_excluded() is True and rec.hr_anchor().excluded is True, "分类命中 ⇒ 锚点带位"
+    rec.category = ""
+    rec.tags = "HHan,noHR"  # _tags_set 尚未缓存, 直接赋值即生效(同 hr_excluded 系列用例)
+    rec.tracker_conf.hr.exclude_tags = ["noHR"]
+    assert rec.hr_excluded() is True and rec.hr_anchor().excluded is True, "标签命中 ⇒ 锚点带位"
 
 
 def test_store_attaches_hr_link():

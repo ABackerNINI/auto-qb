@@ -284,7 +284,12 @@ class TorrentRecord:
 # ---------- 辅助方法 ----------
 
     def hr_anchor(self) -> HrAnchor:
-        """本实例该种子的下载锚点(取数线程作废"已放行但本实例又下载了"的记录要用)"""
+        """本实例该种子的下载锚点(取数线程作废"已放行但本实例又下载了"的记录要用)
+
+        `excluded` 随快照一并带过模块边界(计划 26-10-08-1249 方案 B): 排除态在 record 之外
+        没有载体, 取数/对账侧的对象集现算要靠它判「第四档排除」—— 不带出去则被排除种子
+        仍进对象集, 稳态降频永不生效(实报 2026-10-08)。
+        """
         return HrAnchor(
             added_on=self.added_on,
             downloaded=self.downloaded,
@@ -292,6 +297,7 @@ class TorrentRecord:
             progress=self.progress,
             seeding_time=self.seeding_time,
             name=self.name,
+            excluded=self.hr_excluded(),
         )
 
     def _hr_exclusion_hits(self) -> tuple:

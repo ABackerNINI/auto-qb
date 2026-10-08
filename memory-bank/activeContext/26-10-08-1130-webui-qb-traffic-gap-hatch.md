@@ -10,6 +10,6 @@
 - 令牌面(5 文件, 第一轮): `prism/css/themes/{ocean,galaxy,orbit}.css` 深色 `rgba(255,255,255,.22)`; `frost.css` 深墨 `rgba(27,42,58,.22)`; `golden.css` 暖墨 `rgba(60,51,39,.22)`; `atlas/style.css` + `console/style.css` `rgba(255,255,255,.22)`。
 - 关键判据(易被后人改坏): ①**面积底纹 / 高对比标注一律单列专用令牌**, 不复用发丝线(`--hairline`)与网格线令牌; 亮主题禁白色。②**45 度线铺"竖矩形"底纹必须逐 run 裁到目标矩形** —— 只裁绘图区会成斜向平行四边形。③`ctx.clip()` 不改写记账式假 ctx 的端点, 守阵不能断言"原始端点落在区间内"。
 - 守阵: `test_frontend_qb_traffic_yaxis_and_annotation` §5b(第一轮: 令牌成对 + 亮主题禁白; 第二轮: `ctx.rect(xa, T, xb-xa, H)` + `if (!(xb > xa)) continue;` 静态锚)+ node **电池**(记账式假 ctx 调真实 `_qbDrawGaps`, 断言走专用令牌 / 不折半 / **令牌 alpha 量级下界 >= 0.15** / **per-run clip == 缺口矩形** / 扫线覆盖缺口两边界 / 线段跨度恒 = H)。**红验六路**均按预期变红, 还原复绿: ①还原 `tk.grid` ②还原 `globalAlpha=0.5` ③摘 frost 令牌 ④frost 误用白色 ⑤摘 atlas 令牌 ⑥**删 per-run 缺口矩形 clip(几何锚变红)**。
-- 实测: `commands run test.full` **2791 passed + 4 skipped / 0 failed / 32.8s / TOTAL 99%**(16476 语句 / 162 未覆盖 / 5694 分支 / 146 partial)。基线切片 [26-10-08-1144](../testing/baselines/26-10-08-1144-webui-qb-traffic-gap-geometry.md)(第二轮); 与第一轮基线 26-10-08-1130 相比 passed **±0**(两轮均改同一函数内部, 未新增测试函数)。
+- 实测: `commands run test.full`(数字见 [26-10-08-1144](../testing/baselines/26-10-08-1144-webui-qb-traffic-gap-geometry.md), 第二轮; 与第一轮基线 26-10-08-1130 相比 passed 持平 —— 两轮均改同一函数内部, 未新增测试函数)。
 - 真机/真浏览器验证: 栅格化模拟 + 真浏览器 canvas 渲染截图(临时脚手架 `tmp-analysis/`, 已清理)确认第二轮修复后斜纹呈**竖矩形**, 恰好铺满缺口区间 `[xa, xb]` 全高, 左右边界为竖直边, 无斜边越界; 对比第一轮产物为斜向平行四边形(与用户截图一致)。
 - **教训**: 第一轮"几何无缺陷"结论已回改坑档 —— 症状「位置错 + 看不清」不应因"同时说颜色看不清"就跳过几何验证, 且几何验证要验"画出的形状是否等于目标形状", 而非"两段代码是否等价"(等价可能一起错)。

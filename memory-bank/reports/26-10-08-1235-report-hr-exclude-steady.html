@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 排除未落到取数侧 · 稳态降频失效取证 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="hr-steady-throttle">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-08-1235">
+<meta name="doc-updated" content="26-10-08-1249">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-backend-hr-exclude-steady.md,memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.no { background: #2a1a1a; color: var(--no); border-color: #4d2f2f; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.stop { border-left-color: var(--no); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+  .tag { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论速览</a>
+    <a href="#s2"><span class="no">02</span>问题背景与配置现场</a>
+    <a href="#s3"><span class="no">03</span>机制背景: 稳态降频怎么判</a>
+    <a href="#s4"><span class="no">04</span>根因定位</a>
+    <a href="#s5"><span class="no">05</span>现场日志对账</a>
+    <a href="#s6"><span class="no">06</span>为什么「排除」救不了场</a>
+    <a href="#s7"><span class="no">07</span>影响面评估</a>
+    <a href="#s8"><span class="no">08</span>修复方向 (候选, 未拍板)</a>
+    <a href="#s9"><span class="no">09</span>未决问题 / 待确认</a>
+    <a href="#s10"><span class="no">10</span>证据附录</a>
+    <a href="#s11"><span class="no">11</span>后记 · 方案 A 口径更正</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 故障取证报告</div>
+    <h1>HR 排除未落到取数侧 — 稳态降频失效取证</h1>
+    <p class="lede">用户报「通过标签/分类排除 HR 管理的种子似乎打破了稳态触发拉取」。取证结论: <b>排除表只在「判定侧」生效</b> (TorrentRecord 的 <code>hr_managed</code> / <code>hr_judgement</code> / <code>check_hr_condition</code> 三入口), <b>「取数/对账侧」从不读它</b> —— <code>HrRuntime._anchors</code> 把所有接入站点的本地种子无差别交给取数线程, <code>HrRefreshService._build_objects</code> 的排除链里也没有「HR 排除」这一档。后果: 被排除的种子仍进「对账对象集」⇒ 稳态条件 (对象集为空) 恒不成立 ⇒ 拉取间隔闸永远取 <code>refresh_interval</code> (用户 5H), 稳态降频 <code>idle_refresh_interval</code> (24H) 永不生效。日志侧证: 相邻两波间隔 <b>16h55m &lt; 24H</b>, 与「稳态 24H」直接矛盾。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-1235-report-hr-exclude-steady</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 12:35</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ fcc3cd69</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论速览</h2>
+    <table>
+      <tr><th>项</th><th>结论</th><th>判据</th></tr>
+      <tr>
+        <td><b>根因</b></td>
+        <td>HR 排除 (<code>hr.exclude_tags</code> / <code>hr.exclude_categories</code>) 在<b>取数/对账侧未实现</b> —— 判据单点 <code>TorrentRecord.hr_excluded()</code> 只有判定侧与 WebUI 展示侧消费, 取数侧 (锚点采集 → 对象集现算) 完全没读它。</td>
+        <td>见 <a href="#s4">§04</a> 两条代码证据 + 对照表</td>
+      </tr>
+      <tr>
+        <td><b>表现</b></td>
+        <td>被排除的种子仍算「需对账的对象」⇒ <code>steady = anchors_known and not objects</code> 恒为假 ⇒ 间隔闸恒取 <code>refresh_interval</code>, 24H 稳态降频永不生效。</td>
+        <td>service.py:497-498 / 522-531</td>
+      </tr>
+      <tr>
+        <td><b>「加了 IYUU 种子」的角色</b></td>
+        <td>是「<b>破稳态的充分条件</b>」而非「排除动作导致」。新种子进 anchors ⇒ 对象集非空, 这本就是设计要的「新下载即回常态」; 缺陷在于<b>排除本应把它们移出对象集, 却没有路径</b>。</td>
+        <td>报告 26-10-03-1505 §13.2</td>
+      </tr>
+      <tr>
+        <td><b>日志能证什么</b></td>
+        <td>两波间隔 16h55m <b>小于</b> 配置的 24H 稳态间隔 ⇒ 稳态降频当时<b>未在生效</b>。日志不能直接读出「引擎用的是 5H 还是别的」, 那要看站点文件的 <code>wave.idle_mode</code>。</td>
+        <td>见 <a href="#s5">§05</a></td>
+      </tr>
+      <tr>
+        <td><b>自愈窗口</b></td>
+        <td>即使不修, 种子做种满 <code>3 × required_seeding_time</code> (CarPT = 3 × 36H = 108H ≈ 4.5 天) 后走「超额线」自动出对象集。但 <b>IYUU 持续新增辅种</b>时总有 <code>&lt;108H</code> 的种子在线, 稳态仍然长期打不上 —— 这正是排除本该解决而没解决的问题。</td>
+        <td>service.py:1406-1407</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>一句话</b>: 排除是「用户显式声明这类种子对本站无 HR 义务」。判定侧认这条声明 (不打标 / 不管束), 取数侧不认 —— 于是它一边被当「无义务」(判定侧不展示、不管束), 一边又被当「有义务」(取数侧持续为它翻页), 两个消费侧口径分裂。
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>问题背景与配置现场</h2>
+    <h3>用户原话</h3>
+    <p>「通过标签/分类排除 HR 管理的种子似乎会打破稳态触发拉取。设置稳态拉取时间 24H。…… 在 10-07 到 08 只添加了『IYUU自动辅种』种子, 设置中将其排除了 HR。」并附日志 (见 §05)。</p>
+    <h3>配置现场 (<code>config.yml</code>, 只读引用, 未改动)</h3>
+    <pre><code># 全局 hr 段 (config.yml:67-74)
+hr:
+    exclude_categories:
+      - IYUU自动辅种          # 排除表: 命中即「不纳入 HR 体系」
+
+# HR 在线核实 (config.yml:75-89)
+hr_check:
+    enabled: true
+    channel: { enabled: true, port: 18788, ... }
+    sites:
+        btschool: { enabled: true, refresh_interval: 5H }   # 常态拉取间隔 5H
+        carpt:    { enabled: true, refresh_interval: 5H }
+        # idle_refresh_interval 未写 ⇒ 取模型默认 24H (models.py:148)
+
+# CarPT 站点 HR 规则 (config.yml:313-316)
+hr:
+    required_seeding_time: 1D
+    extra_seeding_time: 12H      # ⇒ required_seeding_time 派生值 = 36H</code></pre>
+    <p>关键点: <b>稳态间隔 = 24H</b> (未配走默认), <b>常态间隔 = 5H</b>, 排除表命中分类 <code>IYUU自动辅种</code>。两者相差 4.8 倍, 因此「稳态有没有生效」在观感上非常显著 —— 这正是用户能一眼看出异常的原因。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>机制背景: 稳态降频怎么判</h2>
+    <p>稳态降频 (计划 <a href="../plans/26-10-05-0555-plan-hr-steady-throttle.html">26-10-05-0555</a> / 报告 <a href="26-10-03-1505-report-hr-fetch-verify-forensics.html">26-10-03-1505</a> §13) 的判据只有一条: <b>对账对象集是否为空</b>。整条链路是:</p>
+    <pre><code>本地种子 (store.all)
+  └─ HrRuntime._anchors()            过滤: tracker_conf.hr_check 已接入且 enabled
+       └─ {站点: {infohash: HrAnchor}}
+            └─ (取数线程) worker.run_once → service.refresh_site(site, anchors)
+                 └─ HrRefreshService._build_objects(data, anchors, required_seeding_time)
+                      排除链: ① index 活跃终态行(B/C) → 出
+                              ② 已有放行记录 verified → 出
+                              ③ 超额线: seeding_time ≥ 3×required → 出
+                      剩余 → objects (对象集)
+                 └─ steady  = anchors_known and not objects       # service.py:497
+                    interval = idle_refresh_interval if steady else refresh_interval  # :498
+                 └─ 间隔闸: now < healthy_ts + interval ⇒ WAITING   # :522-531</code></pre>
+    <p>所以「稳态生效」的<b>等价条件</b>是: 该站点所有本地种子都已被三条排除链清掉。只要还有一个 `objects` 成员, 引擎就一直按常态 5H 跑。</p>
+    <p>另有一条与本题相关的既有事实 (报告 §13.2, 已复读确认): <b>「对象集为空也不跳波」</b>, 稳态期每波仍 A/B/C 各至少翻 1 页 = 3 个页面请求 —— 这解释了日志里为什么总是「3 行一簇」。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因定位</h2>
+    <p>「HR 排除」的概念有唯一判据单点, 位于 TorrentRecord:</p>
+    <pre><code># src/auto_qb/torrents/record.py:297-337
+def _hr_exclusion_hits(self):
+    hr = self.tracker_conf.hr
+    ...
+    tag_hit = ... match_tag_patterns(t, hr.exclude_tags) ...
+    cat_hit = ... match_tag_patterns(self.category, hr.exclude_categories) ...
+    return (tag_hit, cat_hit)
+
+def hr_excluded(self) -> bool:      # 单一判据
+    tag_hit, cat_hit = self._hr_exclusion_hits()
+    return tag_hit or cat_hit</code></pre>
+
+    <h3>证据一: 判定侧与展示侧都认它, 取数侧不认</h3>
+    <table>
+      <tr><th>消费点</th><th>是否读 <code>hr_excluded()</code></th><th>位置</th></tr>
+      <tr><td>HR 判定桥 <code>hr_judgement</code></td><td class="num">是 (命中返 None, 站点侧字段留空)</td><td>record.py:355</td></tr>
+      <tr><td>本地触发 <code>check_hr_condition</code></td><td class="num">是 (恒 False)</td><td>record.py:383</td></tr>
+      <tr><td>管理语义单点 <code>hr_managed</code></td><td class="num">是 (恒不管束)</td><td>record.py:398</td></tr>
+      <tr><td>WebUI 展示 <code>hr_view_fields</code></td><td class="num">是 (hr_excluded / hr_excluded_by)</td><td>webui/views.py:306-327</td></tr>
+      <tr><td><b>锚点采集 <code>HrRuntime._anchors</code></b></td><td class="num" style="color:var(--no)"><b>否</b></td><td>hr/runtime.py:358-383</td></tr>
+      <tr><td><b>对象集现算 <code>_build_objects</code></b></td><td class="num" style="color:var(--no)"><b>否</b></td><td>hr/service.py:1375-1413</td></tr>
+    </table>
+
+    <h3>证据二: 两处「取数侧」代码逐行核对</h3>
+    <p>锚点采集只按「站点是否接入」过滤, 完全没有排除表的概念 (hr/runtime.py:358-383):</p>
+    <pre><code>def _anchors(self):
+    out = {}
+    for rec in self._manager.store.all():
+        conf = rec.tracker_conf
+        if conf is None:
+            continue
+        site_conf = conf.hr_check
+        if site_conf is None or not site_conf.enabled:   # ← 只判「站点接入」
+            continue                                     #   (无 rec.hr_excluded() 这一档)
+        anchor = rec.hr_anchor()
+        site = out.setdefault(conf.name, {})
+        for h in (rec.infohash_v1, rec.infohash_v2):
+            if h:
+                site[h] = anchor
+    return out</code></pre>
+    <p>对象集现算的排除链有三档, 也没有 HR 排除 (hr/service.py:1402-1412):</p>
+    <pre><code>entry = bound_entries.get(h)
+if entry is not None and lane_is_terminal(entry.lane):
+    continue                                  # ① 终态 (B/C 档)
+if ver is not None:
+    continue                                  # ② 已有放行记录
+if required_seeding_time > 0 and anchor.seeding_time >= SEED_EXEMPT_RATIO * required_seeding_time:
+    continue                                  # ③ 超额线 (3×)
+objects[h] = anchor                           # ← 排除的种子在这里照样进对象集
+if entry is not None and entry.lane == LANE_SCOPE:
+    observing[h] = entry
+else:
+    unmatched[h] = anchor</code></pre>
+    <div class="callout warn">
+      <b>双向核对结论</b>: <code>HrAnchor</code> 结构里也没有承载排除态 (resolve.py:44-58 只有 added_on / downloaded / completion_on / progress / seeding_time / name)。即: 从本地快照 → 锚点 → 对象集的这条路上, 排除信息<b>在第一个环节就丢了</b>, 后面任何环节都不可能再补判。
+    </div>
+    <p class="tag">旁证: 计划 26-10-05-0555 §02 复述对象集判据时, 枚举的是「①终态 ②放行 ③超额」三条 —— 设计文档本身就没把 HR 排除列入取数侧的排除链, 说明这是一处<b>未覆盖的设计缺口</b>, 不是实现写漏了一行。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>现场日志对账</h2>
+    <p>用户日志 (站点 carpt.net, 「HR 页」= 取数页请求, 每 3 行一簇):</p>
+    <pre><code>10-08 00:06:04  carpt.net  HR 页  [x] 200  1369ms  11KB
+10-08 00:04:04  carpt.net  HR 页  [x] 200   854ms  25KB
+10-08 00:02:05  carpt.net  HR 页  [x] 200  1719ms  11KB
+10-07 07:06:51  carpt.net  HR 页  [x] 200   313ms  12KB
+10-07 07:04:51  carpt.net  HR 页  [x] 200   346ms  25KB
+10-07 07:02:52  carpt.net  HR 页  [x] 200   732ms  12KB</code></pre>
+    <h3>能确定的对账</h3>
+    <ul>
+      <li><b>每簇 3 个请求、间隔约 120s</b> —— 与「稳态/常态每波 A/B/C 各翻 1 页 = 3 请求」(报告 §13.2) 及 <code>min_interval=90s</code> + 抖动 + 请求耗时的量级一致。即<b>一簇 = 一波</b>, 日志里是两波。</li>
+      <li><b>两波起点间隔 = 16h55m (10-07 07:02:52 → 10-08 00:02:05)</b>。若稳态 24H 真在生效, 后一波不可能在 24H 之前发生 ⇒ <b>当时稳态降频未生效</b>。这是日志能给出的最强结论。</li>
+    </ul>
+    <h3>日志不能直接证明的 (别过度解读)</h3>
+    <ul>
+      <li>间隔 16h55m <b>既不等于</b> 24H <b>也不等于</b> 5H —— 这说明「取数页请求的落时刻」并不单纯由间隔闸决定: 取数通道必须可用 (浏览器扩展在线) 才会真正发出请求; 通道不可用时波会以「无可用通道/让位」收尾而不产生页面请求, 于是落时刻被「浏览器在线的时刻」过滤过。所以<b>光看这份日志反推不出引擎实际用的是哪个 interval</b>。</li>
+      <li>要读引擎的真实取值, 看站点文件: <code>&lt;data_dir&gt;/hr/carpt.json</code> 里的 <code>wave.idle_mode</code> (True = 本实例最近一次现算判为稳态) 与 <code>wave.healthy_ts</code>。</li>
+    </ul>
+    <div class="callout">
+      <b>判据 (可直接自查)</b>: 稳态生效时, 日志/状态里应出现带「稳态降频」字样的等待理由 —— <code>未到拉取时刻(拉取间隔·稳态降频, 还差 Ns)</code> (service.py:528)。若一直是 <code>未到拉取时刻(拉取间隔, 还差 Ns)</code> (不带「稳态降频」), 就是常态间隔在跑, 即稳态未生效。
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>为什么「排除」救不了场</h2>
+    <p>把用户的动作串起来看, 逻辑是闭合的:</p>
+    <ol>
+      <li>10-07→10-08 之间新增了 <code>IYUU自动辅种</code> 种子。这些种子属于已接入站点 (CarPT), 于是进入 <code>anchors</code>。</li>
+      <li>它们既无放行记录、又非终态, 做种时长也还没到 <code>3×36H=108H</code> 的超额线 ⇒ 落入 <b>objects (对象集)</b> ⇒ <code>steady=False</code> ⇒ 间隔闸退回 <b>5H</b>。这一步是<b>设计本意</b> (新下载自动破稳态, 报告 §13.2), 不是缺陷。</li>
+      <li>用户随即在设置里把它们「排除 HR」, 期望恢复稳态。但排除的唯一判据 <code>hr_excluded()</code> <b>在取数侧没有任何调用点</b> (§04) ⇒ 这些种子<b>照样进对象集</b> ⇒ 稳态照样打不上。</li>
+      <li>于是用户观察到: 明明排除了, 拉取频率却没降回来 —— 就是这个「排除不生效」。</li>
+    </ol>
+    <div class="callout warn">
+      <b>自愈窗口为何救不了长期使用</b>: 就算不修, 单颗种子做种满 108H 后会走超额线出对象集。但 IYUU 辅种是<b>持续新增</b>的, 任意时刻几乎总有若干颗 <code>seeding_time &lt; 108H</code> 的在线 ⇒ 对象集长期非空 ⇒ 稳态长期打不上 (请求量、站点访问频率一直停在高位)。而对<b>没有配 HR 规则</b>的站点, <code>required_seeding_time=0</code>, 超额线整条判据失效 (<code>required_seeding_time &gt; 0</code> 前置) ⇒ 这些站的排除种子<b>永远</b>出不了对象集。用户本次排除的正是「本该无需 HR 关注」的那一类种子 —— 排除无效使这个诉求完全落空。
+    </div>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>影响面评估</h2>
+    <table>
+      <tr><th>面</th><th>是否有影响</th><th>说明</th></tr>
+      <tr><td>HR 判定正确性</td><td class="num" style="color:var(--ok)">无</td><td>判定侧本来就认排除 (record.py 三入口 + 展示侧), 被排除种子不会被误打标/误管束; 本缺陷不改变任何判定结论。</td></tr>
+      <tr><td>防御强度 (漏 HR)</td><td class="num" style="color:var(--ok)">无削弱</td><td>缺陷是「跑得比该跑的更勤」, 不是「跑得不够」。方向安全。</td></tr>
+      <tr><td>取数频率 / 站点访问量</td><td class="num" style="color:var(--no)">有 (偏高)</td><td>本应 24H 一波, 实际停在 5H 一波 (约 4.8×)；请求量与站点风控暴露同步偏高。</td></tr>
+      <tr><td>日额 / 频控余量</td><td class="num" style="color:var(--warn)">被消耗</td><td>每波 3 请求 × 更密的波次, 吃掉站点级日额 (<code>max_requests_per_day</code>), 挤占真正需要的取数。</td></tr>
+      <tr><td>稳态降频特性 (整条)</td><td class="num" style="color:var(--no)">对有排除种子的站点形同未启用</td><td>计划 26-10-05-0555 声称的「请求量 −57%~−79%」在这类站点上拿不到。</td></tr>
+      <tr><td>展示一致性</td><td class="num" style="color:var(--warn)">口径分裂</td><td>界面显示「已排除 / 不管束」, 引擎却仍在为它翻页 —— 用户看到的与系统在做的相反。</td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>修复方向 (候选, 未拍板)</h2>
+    <p>修复的实质是: <b>把「HR 排除」这条判据补齐到取数/对账侧</b>, 使排除种子的语义在两侧一致。三档方案, 由轻到重:</p>
+    <table>
+      <tr><th>方案</th><th>做法</th><th>优点</th><th>代价 / 风险</th></tr>
+      <tr>
+        <td><b>A. 锚点采集即剔除</b></td>
+        <td>在 <code>HrRuntime._anchors</code> 里对 <code>rec.hr_excluded()</code> 为真的记录 <code>continue</code>。</td>
+        <td>改动最小、语义最直白; 对象集自然为空 ⇒ 稳态可生效。</td>
+        <td>被排除种子同时从 <code>wave.local_hashes</code> / <code>local_names</code> 消失 ⇒ 站点清单里对应的 A 档行<b>不再被识别为本地命中</b>, 反而会触发一次 .torrent 下载去登记身份 (<code>_process_rows</code> → <code>pending_downloads</code>) —— 多花配额。</td>
+      </tr>
+      <tr>
+        <td><b>B. 锚点带排除位, 只出对象集</b></td>
+        <td>给 <code>HrAnchor</code> 加 <code>excluded: bool</code> (或另传一个 excluded-hash 集合); <code>_build_objects</code> 里把 excluded 的 anchor 跳过, 但仍留在 <code>local_hashes</code>。</td>
+        <td>稳态能生效, 且保留「命中识别」能力, 不多下 .torrent; 语义精确。</td>
+        <td>要动 <code>HrAnchor</code> 结构 (注意它在放行记录快照/漂移判定链路里被引用, resolve.py:60-74); 需核对快照序列化不受影响。</td>
+      </tr>
+      <tr>
+        <td><b>C. 站点级开关</b></td>
+        <td>新增配置「本站是否让排除种子参与取数对账」。</td>
+        <td>把口径分歧显式化、可回退。</td>
+        <td>新增一个大概率永远为默认值的旋钮, 违反「程序能定的绝不配置」; 不推荐。</td>
+      </tr>
+    </table>
+    <p>倾向: <b>方案 B</b> —— 它在不削弱命中识别的前提下让稳态可生效, 与「排除 = 不纳入 HR 体系 (不打标 / 不在线核实 / 规则按未触发)」的既有文档口径 (models.py:49-51) 吻合。方案 A 的 .torrent 重复下载副作用需要评估后再定。</p>
+    <div class="callout">
+      <b>另需一并定的口径</b>: 种子「中途被排除」(原本有放行记录 / index 行) 时, 是否要清理其既有的 <code>verified</code> / <code>index</code> 行? 本文倾向<b>不清理</b> (排除是判定侧叠加态, 撤销排除后应能恢复原判定), 但需在实施计划里明确写死。
+    </div>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>未决问题 / 待确认</h2>
+    <ul>
+      <li><b>引擎实际用的 interval</b>: 请以 <code>&lt;data_dir&gt;/hr/carpt.json</code> 的 <code>wave.idle_mode</code> 为准 (True/False + <code>healthy_ts</code>), 本文对日志的解读 (§05) 只能证「稳态未生效」, 不能证「正在用 5H」。</li>
+      <li><b>被排除种子的站点侧身份</b>: 这批 IYUU 种子是否确实被 CarPT 列在「考察中(A 档)」? 若被列, 它们会长期留在对象集 (本文 §06 的长期化路径成立); 若没被列, 它们会在下一波被批量「未列出」放行而自行出对象集 —— 这两种情况的自愈速度不同, 需以站点文件 <code>index</code> / <code>verified</code> 佐证。</li>
+      <li><b>是否要把本缺陷入池</b>: 本文只做出报告 (证据快照); 「要修 / 排期」应在 issue 工位裁决 —— 未拍板前不入池。</li>
+      <li><b>是否有第二处同类缺口</b>: 「超额线」以外, 是否还有别的「判定侧认、取数侧不认」的种子属性 (如某些规则标签)? 值得在设计阶段一并列举。</li>
+    </ul>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>证据附录</h2>
+    <h3>代码引用 (基线 develop @ fcc3cd69)</h3>
+    <table>
+      <tr><th>文件 : 行</th><th>内容</th></tr>
+      <tr><td class="num">hr/runtime.py:358-383</td><td><code>HrRuntime._anchors</code> —— 锚点采集, 只按站点接入过滤, 无排除判定</td></tr>
+      <tr><td class="num">hr/service.py:1375-1413</td><td><code>_build_objects</code> —— 对象集现算; 排除链 = 终态/放行/超额 (1402-1407), 无 HR 排除</td></tr>
+      <tr><td class="num">hr/service.py:497-498</td><td><code>steady = anchors_known and not objects</code> / <code>interval</code> 动态取值</td></tr>
+      <tr><td class="num">hr/service.py:522-531</td><td>拉取间隔闸: 未到点则 WAITING (理由文案含/不含「稳态降频」是判定稳态是否生效的现场判据)</td></tr>
+      <tr><td class="num">hr/service.py:1406-1407</td><td>超额线 <code>seeding_time &gt;= 3×required</code> (自愈窗口的来源)</td></tr>
+      <tr><td class="num">hr/model.py:383-392,427-428</td><td><code>HrWaveMeta.idle_mode</code> / <code>healthy_ts</code> 落盘字段 (自查入口)</td></tr>
+      <tr><td class="num">hr/resolve.py:44-58</td><td><code>HrAnchor</code> 结构 (无排除位)</td></tr>
+      <tr><td class="num">torrents/record.py:297-337</td><td><code>_hr_exclusion_hits</code> / <code>hr_excluded</code> / <code>hr_excluded_by</code> (排除判据单点)</td></tr>
+      <tr><td class="num">torrents/record.py:355,383,398</td><td>判定侧三入口对排除的短路</td></tr>
+      <tr><td class="num">webui/views.py:306-327</td><td>展示侧 <code>hr_excluded</code> / <code>hr_excluded_by</code></td></tr>
+      <tr><td class="num">config/models.py:49-51,148</td><td>排除表口径说明 / <code>idle_refresh_interval</code> 默认 24H</td></tr>
+    </table>
+    <h3>配置引用 (config.yml, 只读)</h3>
+    <ul>
+      <li><code>hr.exclude_categories = [IYUU自动辅种]</code> (config.yml:73-74)</li>
+      <li><code>hr_check.sites.{btschool,carpt}.refresh_interval = 5H</code> (config.yml:83-89); <code>idle_refresh_interval</code> 未写 ⇒ 默认 24H</li>
+      <li><code>trackers.tracker_carpt_net.hr = {required: 1D, extra: 12H}</code> (config.yml:313-316) ⇒ <code>required_seeding_time = 36H</code> ⇒ 超额线 108H</li>
+    </ul>
+    <h3>相关制品</h3>
+    <ul>
+      <li>取证报告 <a href="26-10-03-1505-report-hr-fetch-verify-forensics.html">26-10-03-1505</a> §13 (稳态降频可行性, 及「新下载自动破稳态」「单波仍 3 请求」两条依据)</li>
+      <li>实施计划 <a href="../plans/26-10-05-0555-plan-hr-steady-throttle.html">26-10-05-0555</a> (稳态降频 S1-S6; 其 §02 对象集判据枚举未含排除)</li>
+    </ul>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>后记 (2026-10-08) · 方案 A 的副作用口径更正</h2>
+    <p>取证正文 §08 对比方案 A / B 时写道:「方案 A 会导致被排除种子从 <code>local_hashes</code>/<code>local_names</code> 消失 ⇒ 站点清单里对应的 A 档行不再被识别为本地命中, 反而会触发一次 <code>.torrent</code> 下载去登记身份」。实施计划 (<a href="../plans/26-10-08-1249-plan-hr-exclude-steady.html">26-10-08-1249</a>) 复核 <code>_process_rows</code> (hr/service.py:927-957) 后确认<b>该说法不成立</b>, 更正如下:</p>
+    <ul>
+      <li>缺 infohash 的 A 档行走 <code>elif lane == LANE_SCOPE or _row_looks_local(...)</code> ⇒ <b>无论 A/B 都会下载</b> (A 档硬规则), 与是否在 <code>local_hashes</code> 无关。</li>
+      <li>带 infohash 的行走 <code>if h:</code> 分支, 其「命中登记」并不以 <code>local_hashes</code> 为唯一入口 (<code>dl_by_hash</code> 亦可使它命中); 该分支<b>不下载</b>。</li>
+      <li>⇒ A 与 B 对「对象集是否为空 / 稳态能否生效」的<b>结果等价</b>; 实质差别只是「被排除种子是否继续参与行匹配与身份登记」。</li>
+    </ul>
+    <p>因此选 <b>B</b> 的理由修正为「<b>爆炸半径最小</b>」: 除对象集少一类成员外, 取数侧的命中识别 / 身份登记 / 下载触发 / 防伪全部与现状逐字相同, 改动可被单条守阵钉死 (见计划 §03.3 / §04 S3-2)。§08 的 A/B 选型结论 (选 B) 不变。</p>
+  </section>
+
+  <footer>
+    报告工位快照 · 出厂即冻结 (取证正文不动; 后续修复取舍走 issue / 计划工位) ·
+    memory-bank/reports/26-10-08-1235-report-hr-exclude-steady.html
+  </footer>
+
+</div>
+</body>
+</html>

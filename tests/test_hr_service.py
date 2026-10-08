@@ -63,6 +63,11 @@
 - test_zero_anchors_site_still_idles: 稳态 4. 显式 {}(采集成功零种子)照常降频 —— 与失败路径的区分回归钉
 - test_idle_mode_flip_persists_once: 稳态 5. 旗标仅翻转时写盘(翻转恰一次, 稳态期反复 poll 零额外写), JSON 往返保真
 
+### HR 排除落到取数侧(计划 26-10-08-1249 方案 B)
+- test_build_objects_skips_hr_excluded_anchor: excluded 锚点不进对象集; 未排除锚点照常进(零静默变更)
+- test_hr_excluded_anchor_does_not_break_idle: 站点只剩被排除种子 ⇒ 对象集空 ⇒ 稳态降频照常生效(实施前的回归钉)
+- test_excluded_anchor_still_counts_as_local_hit: 排除种子仍留命中集/仍判本地命中/不下载身份(防被做成方案 A)
+
 ### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
 - test_refresh_site_guard_paths: 站点未接入 / 全局开关关 / result.ok 属性
 - test_refresh_site_unknown_adapter: 未登记的 adapter -> ACTION_ERROR(不外抛)
@@ -1619,6 +1624,66 @@ def test_idle_mode_flip_persists_once(tmp_path):
     result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW, seeding_time=0)})
     assert result.action == ACTION_WAITING and "稳态降频" not in result.reason
     assert revision() == (rev1 + 1, False), "破稳态翻转 True→False 恰写一次(间隔闸 WAITING 无波次写)"
+
+
+# -------------------- HR 排除落到取数侧(计划 26-10-08-1249 方案 B) --------------------
+
+
+def test_build_objects_skips_hr_excluded_anchor(tmp_path):
+    """方案 B(计划 26-10-08-1249 S2): `excluded=True` 的锚点不进对象集 —— 稳态可达的前提;
+    未排除的同款锚点照常进对象集(零静默变更)。实施前排除态在取数侧无载体, 两个锚点行为相同。"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    kept = HrAnchor(added_on=1, downloaded=10, completion_on=100, progress=1.0, name="keep")
+    exc = HrAnchor(added_on=1, downloaded=10, completion_on=100, progress=1.0, name="exc", excluded=True)
+    objects, observing, unmatched = service._build_objects(HrSiteData(), {"HK": kept, "HE": exc}, 100.0)
+    assert "HK" in objects and "HK" in unmatched, "对照: 未排除锚点照常进对象集"
+    assert "HE" not in objects and "HE" not in observing and "HE" not in unmatched, \
+        "被排除锚点不进对象集(否则对象集恒非空 ⇒ 稳态降频永不生效)"
+
+
+def test_hr_excluded_anchor_does_not_break_idle(tmp_path):
+    """方案 B(计划 26-10-08-1249 S3-1): 站点只剩被排除的本地种子时, 对象集为空 ⇒ 稳态降频照常生效。
+    实施前该锚点进对象集 ⇒ idle 永不成立、拉取停在 refresh_interval —— 本用例即该回归的钉。"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    _, h_exc = mk_blob("IYUU SEED 1")
+    exc = HrAnchor(
+        added_on=100,
+        downloaded=1 << 30,
+        completion_on=int(T_DONE_NEW),
+        progress=1.0,
+        seeding_time=0,
+        name="IYUU SEED 1",
+        excluded=True
+    )
+    anchors = {h_exc: exc}
+    first = run_wave(service, anchors)
+    assert first.action in (ACTION_REFRESHED, ACTION_PARTIAL)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.healthy_ts == clock.now and data.wave.idle_mode is True, \
+        "被排除种子不构成对账义务 ⇒ 稳态成立"
+    clock.advance(13 * 3600.0)  # 常态间隔(12H)已过, idle(24H)未到
+    waiting = run_wave(service, anchors)
+    assert waiting.action == ACTION_WAITING
+    assert "未到拉取时刻" in waiting.reason and "稳态降频" in waiting.reason, \
+        f"被排除种子不该把间隔闸拉回常态: {waiting.action} {waiting.reason}"
+
+
+def test_excluded_anchor_still_counts_as_local_hit(tmp_path):
+    """方案 B(计划 26-10-08-1249 S3-2): 被排除种子**仍留在命中集** —— 站点行带其 infohash 时判
+    本地命中、不产生身份下载。防「排除」被实现成「不认识」(那会改变匹配语义、多下 .torrent)。"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    exc = HrAnchor(added_on=100, downloaded=1 << 30, completion_on=-1, progress=1.0, name="IYUU SEED 1", excluded=True)
+    wave = _WaveContext({"HE": exc})
+    assert "HE" in wave.local_hashes and "IYUU SEED 1" in wave.local_names, \
+        "命中集从全量锚点构建: 排除不使其从命中面消失"
+    data = HrSiteData()
+    row11 = HrEntry(tid=11, name="IYUU SEED 1")
+    row11.infohash_v1 = "HE"
+    service._process_rows(LANE_SCOPE, [row11], data, wave)
+    assert wave.hits.get("HE") == LANE_SCOPE, "行带 infohash 且本地有(即使被排除) ⇒ 判本地命中"
+    assert 11 not in wave.pending_downloads, "命中即不下载身份(排除不该让它变陌生行)"
 
 
 # ==================== P1 覆盖率提升轮(T1.1 错误路径系统补齐) ====================

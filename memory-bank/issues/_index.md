@@ -17,7 +17,7 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 4 |
-| perf | 5 |
+| perf | 6 |
 | docs | 1 |
 | test | 5 |
 | refactor | 5 |
@@ -27,6 +27,7 @@
 
 ## Open
 
+- [perf] [HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)](26-10-08-1304-perf-hr-exclude-terminal-download.html) — 被排除 HR 的种子在 B/C/D 终态行按名称…
 - [test] [config 校验器闭区间端点缺逐值守阵](26-10-08-0903-test-config-mutation-boundary-guards.html) — port/log.max_bytes/notif…
 - [test] [config loaders 关键字默认值/实参删除缺守阵](26-10-08-0903-test-config-mutation-loader-defaults.html) — _get(spec, KEY, d.<field…
 - [test] [config 校验/迁移/写回的多条目循环缺 continue/break 守阵](26-10-08-0903-test-config-mutation-loop-guards.html) — 20 个函数里的 continue 改成 bre…

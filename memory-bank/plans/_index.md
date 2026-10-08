@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
 ## Open

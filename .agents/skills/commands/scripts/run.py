@@ -215,18 +215,43 @@ def _extra(args: argparse.Namespace) -> list[str]:
     return extra
 
 
+def _kill_tree(pid: int) -> None:
+    """连孙子一起杀 —— `shell=True` 下直接子进程是 cmd.exe, 真正干活的工具是它的孙子。
+
+    ❗`subprocess.run(timeout=)` 超时只 kill **直接子进程**(cmd.exe), 孙子(yapf / uv / git)
+      会被留成**孤儿**: 继续 100% CPU 烧着、还占着管道读端, 父进程即便"超时返回"也可能卡在
+      communicate 的 join 上(2026-10-08 实报: yapf 在沙箱里挂住, 闸门超时后 yapf 仍在跑且一直
+      写磁盘)。与 my-commit-flow `_pipeline._kill_tree` 同款处置, 判据单点见
+      memory-bank/pitfalls/testing/sandbox-tool-cache.md。
+    """
+    try:
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[bool, str]:
     full = {**os.environ, **_CHILD_ENV, **(env or {})}
-    proc = subprocess.run(
+    # ❗不用 subprocess.run(timeout=): 它超时只杀直接子进程(见 _kill_tree)。用 Popen 拿 pid,
+    #   到点杀整棵树并收尸; 然后**照旧上抛 TimeoutExpired** —— cmd_run 靠它打「超时指名卡住的命令」。
+    proc = subprocess.Popen(
         cmd,
         shell=True,
         cwd=str(C.find_root()),
-        capture_output=True,
-        timeout=timeout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         env=full,
     )
-    out = _decode(proc.stdout) + _decode(proc.stderr)
-    return proc.returncode == 0, out
+    try:
+        out_b, err_b = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc.pid)
+        try:
+            out_b, err_b = proc.communicate(timeout=5)  # 收尸: 树杀掉了, 管道才会 EOF
+        except subprocess.TimeoutExpired:
+            out_b, err_b = b"", b""
+        raise
+    return proc.returncode == 0, _decode(out_b) + _decode(err_b)
 
 
 def _local_codepage() -> str:

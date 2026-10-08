@@ -54,10 +54,15 @@ generated_regen_cmd = "python <skill-dir:memory-bank>/scripts/gen_all.py"
 match = ["src/", "tests/"]
 # ❗不在这里抄命令 —— 走 `commands` 引擎的 `dev.fmt`(yapf 只在包里定义一处)。
 #   改动清单由预检算(它才是"本次改了哪些文件"的权威), 经 `<changed:>` 展开后当 `<args>` 传给 task。
+# ⚠ 2026-10-08: yapf 的语法缓存目录 `%LOCALAPPDATA%\Google\YAPF\Cache` 不在 agent 沙箱白名单里
+#   —— 每次跑都会刷一批被拒的临时 pickle(判据见 memory-bank/pitfalls/testing/sandbox-tool-cache.md)。
+#   实测**多数时候仍能在 <1s 内正常跑完**, 但当天确实观察到过挂死(100% 单核 + 持续写磁盘):
+#   故 timeout 收到 60s, 且引擎超时点会**杀整棵进程树**(不再是留孤儿继续烧)。
+#   彻底消除: 把该缓存目录加进沙箱白名单(Settings -> Permission & Approval)。
 run   = ["python <skill-dir:commands>/scripts/run.py run dev.fmt -- <changed:*.py>"]
 auto  = true
-timeout = 120
-note  = "格式化: 只碰本次改过的 py 文件(经 commands 引擎调 dev.fmt)"
+timeout = 60
+note  = "格式化: 只碰本次改过的 py 文件(经 commands 引擎调 dev.fmt); timeout 60s 是给 yapf 沙箱缓存问题兜底"
 
 [[gates]]
 match = ["src/", "tests/"]

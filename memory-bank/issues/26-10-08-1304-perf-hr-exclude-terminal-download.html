@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="hr-exclude-terminal-download">
+<meta name="issue-stamp" content="26-10-08-1304">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="hr-steady-throttle">
+<meta name="doc-refs" content="memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)">
+<meta name="issue-summary" content="被排除 HR 的种子在 B/C/D 终态行按名称粗配命中时会触发一次身份下载, 而排除种子既不管束也无需身份 ⇒ 纯浪费站点日额/频控。建议在 _process_rows 的下载触发器上对「命中排除表的本地种子」短路。源自计划 26-10-08-1249 拍板点 D2, 本批未做。">
+<title>HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求) · perf · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 perf · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· perf</div>
+    <h1>HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)</h1>
+    <p class="lede">被排除 HR 的种子在 B/C/D 终态行按名称粗配命中时会触发一次身份下载, 而排除种子既不管束也无需身份 ⇒ 纯浪费站点日额/频控。建议在 _process_rows 的下载触发器上对「命中排除表的本地种子」短路。源自计划 26-10-08-1249 拍板点 D2, 本批未做。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-08-1304-perf-hr-exclude-terminal-download</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 13:04</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <ul>
+      <li><b>怎么撞见</b>: 实施「HR 排除落到取数侧」(计划 <a href="../plans/26-10-08-1249-plan-hr-exclude-steady.html">26-10-08-1249</a> 方案 B) 时逐行复核下载触发器 <code>_process_rows</code> —— 该方案<b>有意</b>把被排除种子留在命中集(<code>local_names</code>/<code>local_hashes</code>, 为保住「本地命中识别、不改变匹配语义」), 代价就是命中集驱动的「下载身份」路径仍会对它们生效。</li>
+      <li><b>触发条件</b>: 站点清单出现一条<b>尚无 infohash</b> 的 B/C/D 终态档行, 其名称与某颗<b>命中 HR 排除表的本地种子</b>宽泛粗配(<code>fuzzy_name_match</code>), 且该 tid 未登记过身份 ⇒ 该行进 <code>pending_downloads</code> ⇒ 下载一次 <code>.torrent</code>。</li>
+      <li><b>无关项</b>: 与平台无关; 只需「站点已接入 hr_check」+「排除表命中」+「站点列出对应终态行」。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">取证 2026-10-08 13:04 · 基线 develop@fcc3cd69 + 计划 26-10-08-1249 实施后。行号为当时值(计划实施使 <code>_process_rows</code> 及之后整体下移约 8 行), 以符号 + grep 重新定位为准。</p>
+<pre><code># src/auto_qb/hr/service.py · _process_rows(取证 2026-10-08 13:04, 约 927-957)
+h = row.infohash_v1 or row.infohash_v2
+if h:
+    ...
+elif lane == LANE_SCOPE or self._row_looks_local(row, wave):
+    wave.pending_downloads.add(row.tid)      # 终态行按名称粗配命中即入队下载
+
+# 同文件 · _row_looks_local(约 959-961)
+return any(fuzzy_name_match(name, row.name) for name in wave.local_names)
+#      wave.local_names 取自全量锚点(含被排除种子) —— 正是方案 B 有意保留的命中面</code></pre>
+    <p>逻辑链: 被排除种子 → 仍在 <code>local_names</code> → 终态行粗配命中 → <code>pending_downloads</code> → <code>_run_downloads</code> 取一次 <code>.torrent</code>(消耗站点日额/频控), 而该身份对排除种子<b>没有任何消费方</b>(判定侧已短路)。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>站点列出与被排除本地种子同名(粗配)的<b>终态档行</b>, 且该行尚无身份。一次性: 登记进永久层后同一 tid 不再重下。</td></tr>
+      <tr><td>影响范围</td><td>仅 hr_check 已接入站点; 消耗站点日额(<code>max_requests_per_day</code>)与频控余量; <b>不改任何判定语义</b>。</td></tr>
+      <tr><td>严重度</td><td><b>低</b>(每 tid 至多一次)—— 但 IYUU 持续新增辅种时会反复触发, 属持续性的小浪费。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">取证 2026-10-08 13:04 · 行号为当时值, 以符号 + grep 重新定位为准(计划 26-10-08-1249 实施使 <code>_process_rows</code> 及之后下移约 8 行)。</p>
+    <ul>
+      <li><code>src/auto_qb/hr/service.py</code> · <code>_process_rows</code>(约 927-957) · grep <code>pending_downloads</code></li>
+      <li><code>src/auto_qb/hr/service.py</code> · <code>_row_looks_local</code>(约 959-961) · grep <code>_row_looks_local</code></li>
+      <li><code>src/auto_qb/hr/service.py</code> · <code>_run_downloads</code>(约 975 起) · grep <code>_run_downloads</code></li>
+      <li>判据载体: <code>src/auto_qb/hr/resolve.py</code> · <code>HrAnchor.excluded</code>(计划 26-10-08-1249 S1 新增) · grep <code>excluded</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已定位(非缺陷, 是方案 B 的已知代价): 方案 B <b>有意</b>让被排除种子留在命中集(保住「本地命中识别 / 匹配语义不变」), 而同一命中集也驱动终态行的身份下载触发器 <code>_row_looks_local</code> —— 该触发器<b>不看排除态</b> ⇒ 顺带多下一次 <code>.torrent</code>。已排除: 「排除完全无效」(计划 26-10-08-1249 已把排除落到对象集, 稳态降频恢复正常, 见报告 26-10-08-1235)。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>方向: 让<b>下载触发器</b>也认识排除态 —— 在 <code>_process_rows</code> 的 <code>elif …: pending_downloads.add(row.tid)</code> 之前, 对「粗配命中的本地种子在排除表中」的行短路(判定侧已无需它 ⇒ 不下载、不登记)。</p>
+    <ul>
+      <li><b>候选 A</b>: <code>_WaveContext</code> 增加一个「排除种子的 hash / 名称」集合(由 anchors 的 <code>excluded</code> 位派生), <code>_row_looks_local</code> 命中该集合即返回 False。代价: 新增波级集合。❗<b>别把 A 档硬规则一起改掉</b> —— 「考察中(A)行无条件下载」是另一条语义(见 pitfalls/backend/high-risk-ops), 与本项无关。</li>
+      <li><b>候选 B</b>: 维持现状, 视作「每 tid 至多一次」的可接受成本。</li>
+    </ul>
+    <p><b>待定</b>: 收益 = 省掉被排除种子终态行的无谓 <code>.torrent</code>; 成本 = 动命中集派生 + 需与 A 档规则划清边界。本报告只记录, 不实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-08 13:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-08-1304-perf-hr-exclude-terminal-download.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

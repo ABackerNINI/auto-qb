@@ -25,6 +25,7 @@ test.pkg 收集面 = .commands + .agents/skills/commands, 改引擎必被收到(
 - test_run_success_keeps_evidence                成功路径协议行(证据)存活
 - test_run_selfcheck_compressed                  risky 自证 = 首条 + 条数, 不再全量打印
 - test_run_timeout_names_command                 超时指名卡住的命令
+- test_shell_kills_process_tree_on_timeout       超时杀**整棵进程树**(不 kill 直接子进程) + 上抛 TimeoutExpired
 - test_utf8_self_stdio_reconfigures_text_layer   引擎自身 stdio 锁 UTF-8: cp936 文本层重配后中文按 UTF-8 出
 - test_engine_self_stdio_utf8_in_pipes           管道 + 剥离 UTF-8 变量子进程: 引擎输出 strict UTF-8 解码必过
 """
@@ -249,6 +250,35 @@ def test_run_timeout_names_command(monkeypatch, capsys):
     assert rc == engine.FAILED
     assert "超时(180s)" in captured
     assert "check_doc_links" in captured  # 指名卡住的命令
+
+
+def test_shell_kills_process_tree_on_timeout(monkeypatch):
+    """超时必须杀**整棵进程树**, 且照旧上抛 TimeoutExpired。
+
+    根因(2026-10-08 实报): `shell=True` 下直接子进程是 cmd.exe, 真正干活的工具是孙子; 旧实现走
+    `subprocess.run(timeout=)` 只 kill 直接子进程 ⇒ 工具(yapf)被留成**孤儿**, 继续 100% CPU 烧着、
+    还占着管道读端。守阵: 超时路径必须走 `_kill_tree(pid)`, 且**不得**只 `kill()` 直接子进程。
+    """
+    killed: list = []
+
+    class _FakeProc:
+        pid = 4242
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd="yapf", timeout=timeout)
+
+        def kill(self):  # 只杀直接子进程 = 正是要禁掉的旧行为
+            raise AssertionError("不得只 kill 直接子进程 —— shell=True 下那是 cmd.exe, 孙子会成孤儿")
+
+    monkeypatch.setattr(engine.subprocess, "Popen", lambda *a, **k: _FakeProc())
+    monkeypatch.setattr(engine, "_kill_tree", lambda pid: killed.append(pid))
+    try:
+        engine._shell("yapf -i x.py", 1)
+    except subprocess.TimeoutExpired:
+        pass
+    else:
+        raise AssertionError("超时必须上抛 TimeoutExpired(cmd_run 靠它打「超时指名卡住的命令」)")
+    assert killed == [4242], f"超时必须杀整棵进程树(且带真实 pid): {killed}"
 
 
 def test_extra_argv_passthrough():

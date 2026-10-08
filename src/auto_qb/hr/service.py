@@ -1375,10 +1375,13 @@ class HrRefreshService:
     def _build_objects(
         self, data: HrSiteData, anchors: Mapping[str, HrAnchor], required_seeding_time: float
     ) -> Tuple[Dict[str, HrAnchor], Dict[str, HrEntry], Dict[str, HrAnchor]]:
-        """覆盖对象集现算(§4.2): 未对账 ∪ 考察中; 终态/已放行/超额(≥3×)不出对象集。
+        """覆盖对象集现算(§4.2): 未对账 ∪ 考察中; 终态/已放行/超额(≥3×)/HR 排除 不出对象集。
 
         返回 (objects 全部对象, observing 考察中对象(观察期机器管), unmatched 未对账对象)。
         锚点漂移(本机重下)在这里把旧放行作废 —— 「回炉」(§3.2 行 3 机制保留)。
+        !第四档「HR 排除」(计划 26-10-08-1249 方案 B): 命中排除表的种子无对账义务 ⇒ 不进对象集
+        (否则对象集恒非空、稳态降频永不生效, 实报 2026-10-08)。但**只在这里跳过** —— 命中识别
+        用的 `local_hashes`/`local_names` 由 `_WaveContext` 从**全量锚点**构建, 不受影响。
         """
         objects: Dict[str, HrAnchor] = {}
         observing: Dict[str, HrEntry] = {}
@@ -1392,6 +1395,11 @@ class HrRefreshService:
                     bound_entries[h] = entry
         for h, anchor in anchors.items():
             if not h:
+                continue
+            if anchor.excluded:
+                # HR 排除(第四档): 判定侧已短路, 无对账义务 ⇒ 不进对象集(计划 26-10-08-1249 方案 B)。
+                # 放在漂移回炉之前 ⇒ 排除种子的放行记录不被锚点漂移作废; 撤销排除后重新进本循环,
+                # 漂移检查随之恢复(不产生不可逆残留)。命中识别不受影响(见 docstring)。
                 continue
             ver = data.verified.get(h)
             if ver is not None and anchor.drift_reason(ver):
