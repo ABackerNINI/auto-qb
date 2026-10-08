@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config schema 键面函数缺守阵">
 <meta name="issue-summary" content="schema/__init__.py 27 条真洞候选: schema_payload 16 / readonly_config_paths 8 / plugins_by_kind 3 —— 全套件仍杀不掉">
 <title>config schema 键面函数缺守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0903-test-config-mutation-schema-surface</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 09:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,6 +94,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 09:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 12:29 — 状态 <strong>Done</strong>（已认领并实施；认领方 memory-bank/tasks/26-10-08-test-mutation-audit.md）
+        <ul>
+          <li><b>S4 复验</b>: 27 条候选逐条 <code>mutmut apply</code> → 全套件 → 还原，<b>27/27 SURVIVED</b>（判据干净，无既有红守卫污染 —— 前提成立）。</li>
+          <li><b>补测</b>: 新增 <b>6</b> 个守阵（全落 <code>tests/test_config_schema.py</code>）—— readonly 路径集<b>与顺序</b> · 遍历契约<b>合成结构探针</b> · <code>plugins_by_kind</code> 的 condition/action <b>两支</b> + 兜底 · <code>constants</code> 键集合逐位 · 常量取值逐项 · <code>hr_check_site_presets</code> 每条键集合与逐字段取值。</li>
+          <li><b>关键发现</b>: 现状 4 条 readonly 路径<b>全在顶层</b>，使 <code>walk</code> 的递归/前缀机制在真实数据上「看不出差别」—— 只断言当前输出<b>钉不住</b>那 8 条。改用<b>合成结构钉机制</b>（ui_only 叶须放<b>嵌套层</b>，顶层已被 <code>real_config_fields()</code> 滤掉，放顶层探针是空转）。</li>
+          <li><b>红验 26/27 KILLED</b>；余 1 条 <b>等价变异</b> <code>readonly_config_paths__mutmut_17</code>（<code>walk(real_config_fields(), "")</code> → <code>None</code>：顶层 prefix 只被 <code>if prefix else</code> 消费，<code>""</code> 与 <code>None</code> 同为假值，全部输入产出逐一相同）—— 不追。</li>
+          <li><b>S6 复跑</b>（同目标同池 <code>--no-refresh</code>）: 4799 变异 / 杀 <b>4190</b> / 存活 <b>573</b> / no tests 36 → 杀死率 <b>87.31%</b>（前基线 653 / 85.66%）。逐 id 对差新杀 83，其中 <b>26 条 = 本轮补测</b>，另 57 条集中在 writer 模块（镜像刷新纳入 <code>fcc3cd69</code> 的 R7 守阵，非本轮）。</li>
+          <li><b>零 <code>src/</code> 改动</b>；基线切片 <a href="../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md">26-10-08-1229</a>；任务档案 R8。</li>
+        </ul>
+      </li>
     </ul>
   </section>
 

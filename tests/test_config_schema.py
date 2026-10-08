@@ -25,6 +25,14 @@
 - test_grouping_cross_group_conflict_check_default_false / _valid_bool / _non_bool_aggregates:
   新键 grouping.cross_group_conflict_check(计划 26-10-04-0107 S1) —— dataclass 缺省 false /
   合法 bool 通过校验 / 非 bool 聚合报错
+- test_readonly_config_paths_exact_and_order: readonly 点路径集合与**顺序**逐位钉住(4 条)
+- test_readonly_config_paths_walk_contract: 用合成结构钉遍历契约 —— ui_only 段须 `continue`(不
+  断链) · 前缀须逐层拼接 · 非 readonly object 段须递归(issue 26-10-08-0903-schema-surface)
+- test_plugins_by_kind_condition_and_action_branches: plugins_by_kind 的 condition/action 两支
+  分别返回对应插件表(旧守卫只走 action 一支) · 未知 kind 落到 action 兜底
+- test_schema_payload_constants_keys_exact: constants 分区键集合逐位钉住(12 项)
+- test_schema_payload_constants_values: 每个常量表与源常量的取值一致(顺序敏感)
+- test_schema_payload_preset_key_metadata: hr_check_site_presets 每条键集合与逐字段取值钉住
 """
 import re
 
@@ -331,3 +339,127 @@ def test_grouping_cross_group_conflict_check_non_bool_aggregates():
     errors = validate_config({"config": {"grouping": {"cross_group_conflict_check": "maybe", "enabled": "also-bad"}}})
     assert any("config.grouping.cross_group_conflict_check" in e for e in errors)
     assert any("config.grouping.enabled" in e for e in errors)
+
+
+# ---------- 键面/分支函数守阵(issue 26-10-08-0903-test-config-mutation-schema-surface) ----------
+#
+# 这组守阵对应变异审计里 schema/__init__.py 的 27 条「全套件杀不掉」候选:
+# readonly_config_paths 8 · plugins_by_kind 3 · schema_payload 16。
+# 旧守卫只钉了「当前输出」的一小部分(如 test_schema_payload_is_complete 只查了部分 constants 名),
+# 于是字符串键名大小写、分支短路、递归参数这类「结果恰好一样」的变异全部存活。
+# 这里改成: 能钉死的**逐位钉死**; 不能只靠当前扁平 schema 钉死的(遍历契约), 用**合成结构**探针钉住机制本身。
+
+
+def test_readonly_config_paths_exact_and_order():
+    """readonly 点路径 = 集合 + **顺序**逐位钉住
+
+    顺序是契约的一部分: writer 的 _fallback_readonly_fields 按此顺序回退, 顺序漂移会让
+    「段整体回退」的先后(如 fs 段与其叶子)对不上。旧守卫只用 set() 比较, 丢了顺序。
+    """
+    assert schema.readonly_config_paths() == ("data_dir", "state_file", "schema_version", "fs")
+
+
+def test_readonly_config_paths_walk_contract(monkeypatch):
+    """遍历契约(不依赖当前扁平 schema): ui_only 段须继续扫、前缀须逐层拼、非 readonly object 须递归
+
+    现状里 4 条 readonly 路径**全在顶层**, 使 walk 的递归/前缀机制在真实数据上「看不出差别」——
+    于是 `continue→break`、`if prefix else` 改假条件、`f.kind == "object"` 改成 `!=`/错串/错大小写、
+    `walk(x, None)` 这类变异全部存活。这些恰恰是「未来把某个 readonly 叶挂进嵌套段」时最先炸的写法,
+    所以用合成结构把机制钉住(比只断言当前输出更能挡住回归)。
+
+    合成结构分两层, 每层各钉一条机制:
+    - 顶层段: [ui_only 叶] [非 readonly object 段] —— ui_only 叶须被**跳过而非断链**, 否则后面的
+      段再也扫不到(顶层经 real_config_fields 已滤掉 ui_only, 故只在**嵌套层**才真正可达);
+    - 嵌套层: 非 readonly object 段里塞 [ui_only 叶] [readonly 叶] —— ui_only 叶必须 `continue`
+      让 readonly 叶仍被收集(`break` 会断链丢它), 且 readonly 叶须带段前缀 `zz_seg.zz_inner`。
+    """
+    from auto_qb.config.schema import Field, Group
+
+    inner = Field(
+        key="zz_seg",
+        label="zz_seg",
+        kind="object",
+        fields=(
+            Field(key="zz_inner_ui", label="zz_inner_ui", kind="str", ui_only=True),
+            Field(key="zz_inner", label="zz_inner", kind="str", readonly=True),
+        ),
+    )
+    monkeypatch.setattr(schema, "GROUPS", (Group(key="zz", label="zz", fields=(inner, )), ))
+
+    # ui_only 叶不断链(嵌套层) + 前缀逐层拼接 + 非 readonly object 段递归
+    assert schema.readonly_config_paths() == ("zz_seg.zz_inner", )
+
+
+def test_plugins_by_kind_condition_and_action_branches():
+    """plugins_by_kind 的 condition 与 action **两支**都要走对(旧守卫只覆盖 action 一支)
+
+    test_checking_action_spec_keys_match_validation 只调了 plugins_by_kind("action"), 因此
+    `kind == "condition"` 这个分支被改成恒假 / 错串 / 错大小写、以及 `and False` 短路, 全套件都杀不掉。
+    这里两支都断言, 并补「未知 kind 落到 action 兜底」的现有语义(单一 else 分支)。
+    """
+    assert schema.plugins_by_kind("condition") == {p.name: p for p in schema.CONDITION_PLUGINS}
+    assert schema.plugins_by_kind("action") == {p.name: p for p in schema.ACTION_PLUGINS}
+    # 非 "condition" 一律走 action 兜底(现语义): 误把 condition 分支扩大会让前端拿错 spec 结构
+    assert schema.plugins_by_kind("不存在的 kind") == {p.name: p for p in schema.ACTION_PLUGINS}
+
+
+def test_schema_payload_constants_keys_exact():
+    """constants 分区键集合逐位钉住(旧守卫只抽查了其中 7 个名字的存在性)
+
+    ``test_schema_payload_is_complete`` 用 ``for name in (...)`` 只验了部分常量存在 —— 键名被改成
+    ``XXlog_levelsXX`` / ``LOG_LEVELS`` 这类大小写或前缀变体时, 抽查表里没有它, 于是存活。
+    """
+    payload = schema.schema_payload()
+    assert set(payload["constants"]) == {
+        "log_levels",
+        "notify_levels",
+        "notify_channels",
+        "execute_once",
+        "stop_if",
+        "triggers",
+        "checking_basic",
+        "checking_modes",
+        "hr_modes",
+        "state_attrs",
+        "deleted_allowed_actions",
+        "hr_check_site_presets",
+    }
+
+
+def test_schema_payload_constants_values():
+    """每个常量表的取值与源常量一致(顺序敏感) —— 钉住映射关系本身而非仅键名"""
+    payload = schema.schema_payload()["constants"]
+    assert payload["log_levels"] == list(schema.LOG_LEVELS)
+    assert payload["notify_levels"] == list(schema.NOTIFY_LEVELS)
+    assert payload["notify_channels"] == list(schema.NOTIFY_CHANNELS)
+    assert payload["execute_once"] == list(schema.EXECUTE_ONCE)
+    assert payload["stop_if"] == list(schema.STOP_IF)
+    assert payload["triggers"] == list(schema.TRIGGERS)
+    assert payload["checking_basic"] == list(schema.CHECKING_BASIC)
+    assert payload["checking_modes"] == list(schema.CHECKING_MODES)
+    assert payload["hr_modes"] == list(schema.HR_MODES)
+    assert payload["state_attrs"] == list(schema.STATE_ATTRS)
+    assert payload["deleted_allowed_actions"] == list(schema.DELETED_ALLOWED_ACTIONS)
+
+
+def test_schema_payload_preset_key_metadata():
+    """hr_check_site_presets 每条键集合 + 逐字段取值钉住(旧守卫只查 4 个键存在, 漏 3 个)
+
+    这些键标亮了前端「站点接入卡片」的字段名; page_path/download_path/page_param 只在卡片上展示,
+    错了不会抛异常, 只表现为卡片少一列/值串位 —— 正是「结果一样」的静默漂移。
+    """
+    from auto_qb.config.site_presets import SITE_PRESETS
+
+    presets = schema.schema_payload()["constants"]["hr_check_site_presets"]
+    assert {p["id"] for p in presets} == set(SITE_PRESETS)
+    for entry in presets:
+        src = SITE_PRESETS[entry["id"]]
+        assert set(entry) == {
+            "id", "adapter", "web_domain", "tracker_domain", "page_path", "download_path", "page_param"
+        }, entry["id"]
+        assert entry["adapter"] == src.adapter
+        assert entry["web_domain"] == src.web_domain
+        assert entry["tracker_domain"] == src.tracker_domain
+        assert entry["page_path"] == src.page_path
+        assert entry["download_path"] == src.download_path
+        assert entry["page_param"] == src.page_param
