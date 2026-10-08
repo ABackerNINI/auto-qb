@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-testing-feasibility">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-08-0231">
-<meta name="doc-updated" content="26-10-08-0316">
+<meta name="doc-updated" content="26-10-08-0920">
 <style>
   :root {
     --bg: #10151a;
@@ -94,7 +94,8 @@
     <a href="#s11"><span class="no">11</span>建议落地方案</a>
     <a href="#s12"><span class="no">12</span>前端专项结论</a>
     <a href="#s13"><span class="no">13</span>附录: 复现命令</a>
-    <a href="#s14"><span class="no">14</span>变更记录</a>
+    <a href="#s14"><span class="no">14</span>config 包首轮实测（2026-10-08）</a>
+    <a href="#s15"><span class="no">15</span>变更记录</a>
   </nav>
 
   <header class="cover">
@@ -599,7 +600,28 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
   </section>
 
   <section id="s14">
-    <h2><span class="no">14</span>变更记录</h2>
+    <h2><span class="no">14</span>config 包首轮实测（2026-10-08）</h2>
+    <p>可行性调研之后 <b>第一个真跑的包</b>(计划 <code>26-10-08-0720</code>)—— 这一轮把「按包跑」从推算变成了实测, 也量出了流程里最贵的一步。逐轮数字见 <code>commands run kb.baseline</code> 与基线切片 <code>testing/baselines/26-10-08-0902-mutants-config.md</code>。</p>
+    <table>
+      <tr><th>项</th><th>值</th></tr>
+      <tr><td>目标 / 池</td><td><code>**/config/*.py</code>(19 文件被变异, 109 忽略) · 池 = 6 个定向测试文件</td></tr>
+      <tr><td>首轮</td><td>4,799 变异 · 杀 3,851 · 存活 893 · <code>no tests</code> 55 · 超时 0 → 杀死率 <b>80.25%</b>; 墙时 294.4s(含 setup), 变异阶段 17.41 变异/s</td></tr>
+      <tr><td>测算对照</td><td>§08 按全行外推 ≈5,000; 计划按「剔除 schema 纯数据声明」精化 ≈3,800 —— <b>实测 4,799 落在两者之间</b> ⇒ 精化只用于排期, 首轮一律以实测为准</td></tr>
+      <tr><td>S4 全套件确认</td><td>274 条候选 → <b>54 条假存活</b>(全套件能杀, 池没选到) + <b>220 条真洞候选</b>(全套件仍杀不掉); 耗时 ≈68min(≈15s/条)</td></tr>
+      <tr><td>补测 + 复跑</td><td>补 10 个守阵(红验 18/18 全红) → 同目标同池复跑: 杀 3,972 · 存活 <b>772</b> → 杀死率 <b>82.77%</b>; <b>存活 −121 / 新增存活 0</b></td></tr>
+      <tr><td>真洞候选分布</td><td>writer 74 · sections 45 · schema/__init__ 27 · core 25 · loaders 16 · rules 11 · migrations 10 · curves 9 · site_presets 2 · impact 1</td></tr>
+    </table>
+    <h3>这轮给流程的三条修正</h3>
+    <ul>
+      <li><b>「全套件确认」是最大成本项</b>(≈15s/条) —— 已收进命令包 <code>mutants.verify</code>(apply → 全套件 → 还原, 可续跑); 候选要先按「判据密度 × 出错代价」收窄, 别对全部存活无差别开跑。</li>
+      <li><b>池太窄会成片产生 <code>no tests</code></b> —— 55 条全部集中在两个规则条件校验器上(池内 6 个文件不覆盖规则条件), 那批变异连三分类都做不了。定池先核「覆盖目标包的函数面」。</li>
+      <li><b>复跑要带新守阵必须 <code>--no-refresh</code></b> —— <code>mutants.run</code> 默认 <code>git checkout -f</code> 会把镜像里未提交的测试改动冲掉, 存活数纹丝不动还以为是真洞。</li>
+    </ul>
+    <div class="callout"><b>方法论读数</b>: 274 条候选里 <b>54 条(19.7%)是假存活</b> —— 与 §09 结论同向, 但比例比调研轮(1 个文件池 → 5 个文件池, 存活降 27%)温和得多: config 的池已经是「定向 6 文件」, 漏掉的主要是与 config 交叉的<b>规则 / 事件域</b>测试文件。另记一条本机环境坑: WSL 登录壳是 zsh, <code>$()</code> 取错 cwd 会让 <code>mutants.status</code> 恒报 <code>mutmut=no</code>(不影响 <code>mutants.run</code>)。</div>
+  </section>
+
+  <section id="s15">
+    <h2><span class="no">15</span>变更记录</h2>
     <table>
       <tr><th>时间</th><th>变更</th><th>触发</th></tr>
       <tr>
@@ -618,13 +640,19 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
         <b>§09 新增收益四</b>（<code>rules/</code> 55.5% vs <code>utils</code> 72.5%, 给「先补哪个包」一个客观刻度) · 新增 §14; 抬 <code>doc-updated</code></td>
         <td>用户「本机已安装 WSL, 且变异测试只是定期审查, 不会拖开发进度, 所以重新考虑对比 mutmut 的方案」</td>
       </tr>
+      <tr>
+        <td class="num">26-10-08-0920</td>
+        <td><b>新增 §14 config 包首轮实测</b>（4,799 变异 / 杀死率 80.25% → 补测后 82.77%; S4 全套件确认 274 条 → 54 假存活 + 220 真洞候选)·
+        <b>记三条流程修正</b>（全套件确认是最大成本项 → 已收进命令包 <code>mutants.verify</code>; 池太窄会成片产生 <code>no tests</code>; 复跑带新守阵必须 <code>--no-refresh</code>)·
+        变更记录顺延为 §15; 抬 <code>doc-updated</code></td>
+        <td>用户「实施计划 26-10-08-0720」+「根据实施过程更新指导文档 / skill / 命令包 / 常驻锚」</td>
+      </tr>
     </table>
   </section>
 
   <footer>
-    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照 · 更新至 26-10-08-0316（变更记录见 §14)。<br>
-    数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 实验数字（变异数 / 耗时 / 杀死率)分两组 —— 第一轮取自 Windows 沙箱, 第二轮取自 WSL 沙箱（同一台机器、同一份代码基线)。
-  </footer>
+    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照 · 更新至 26-10-08-0920（变更记录见 §15)。<br>
+    数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 实验数字（变异数 / 耗时 / 杀死率)分两组 —— 第一轮取自 Windows 沙箱, 第二轮取自 WSL 沙箱（同一台机器、同一份代码基线), 第三轮（§14)是 <code>config/</code> 包的真跑基线。  </footer>
 
 </div>
 </body>

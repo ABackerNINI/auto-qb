@@ -3,8 +3,8 @@
 **Status:** In Progress
 **Added:** 2026-10-08
 **Updated:** 2026-10-08
-**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html
+**Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0)。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -97,3 +97,22 @@
 - **环境坑(本机)**: WSL 登录壳实为 zsh —— `cd X` 改真实 cwd, 但 `$PWD` 与 `$()` 仍报 WSL 启动目录 ⇒ `mutants.status` 恒报 `mutmut=no`(实际已装; **不影响 `mutants.run`**)。排障耗时约 30min。详见坑档。
 - **收尾实测**: `commands run test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 [26-10-08-0902](../testing/baselines/26-10-08-0902-mutants-config.md)。
 - **未做 / 遗留**: 220 条真洞候选中, 复跑新杀的 121 条覆盖了其中一部分(其余落在未 S4 验证的 555 条里), **余量未逐条补测**(按主题入池等排期); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R3 — 按首轮经验回灌指导 / 命令包 / 排期锚
+
+- **触发**: 用户「根据此次实施过程更新变异测试指导文档 + 相关 skill + 命令包和常驻排期锚(主要提交 637be05f), 使下次实施能更顺利」。
+- **命令包(新增 2 个 task + 1 个脚本)**:
+  - `mutants.report` —— 把镜像里上一轮的存活/未覆盖变异导出成**带 diff 的清单** + 按状态/按模块汇总。**为什么必须**: `mutmut results` 只回 `id: status`, 既没有文件:行也没有变异内容, 光看它做不了三分类。
+  - `mutants.verify` —— S4「全套件确认」的机械化: 逐条 `mutmut apply` → 跑**全套件** → 还原, 记 KILLED(假存活) / SURVIVED(真洞候选); **幂等可续跑**(已写进结果文件的 id 跳过)。首轮这一步是手工脚本 + 手工解析, 耗时 ≈68min。
+  - `scripts/mutants_dump.py` —— 在镜像里跑(读 `mutants/<路径>.meta` 的 `exit_code_by_key`, 用 `diff_apply` 现场重放每条变异)。配套在 `mutants.py` 加 `_wsl_write`(**内容走 stdin** —— 多行内容塞进 `bash -lc '<script>'` 会被登录壳按行拆开, 实测会静默落到别处)。
+  - 实测: `report` 导出 827 条(16.4s); `verify` 2 条 smoke = **14s/条**, KILLED/SURVIVED 判定正确。
+- **指导 skill(`.agents/skills/mutation-testing/SKILL.md`)**:
+  - 命令表补 2 个 task; 标准步骤 S3 改走 `mutants.report`、S4 改走 `mutants.verify`、S6 注明 `--no-refresh`。
+  - 硬约束新增**流程约束 9–11**(脚本没法内建的那三条): 池要覆盖目标包的**函数面**(否则成片 `no tests`) · S4 主动收窄候选(≈15s/条) · 复跑带新守阵必须 `--no-refresh`。
+  - 记录口径补**两条机械守卫**: 切片之外不手抄 `N passed`(回写守卫判据族 B) · 新 issue 填 `doc-refs`(认领链)。
+  - 派生计划 §2 修正测算口径(**别**剔除「纯数据声明」行 —— config 实测 4,799 比精化 3,800 高 26%)。
+  - 坑补「本机 WSL 登录壳是 zsh」与「结果怎么读」两条指针; 反模式补 4 条。
+- **证据报告(§14 新增)**: `reports/26-10-08-0231-…html` 加「config 包首轮实测」节(数字 + 三条流程修正 + 假存活比例 19.7%), 变更记录顺延为 §15, 抬 `doc-updated`。
+- **常驻排期锚**: §03 标注 config 首轮进度与数字; §04 命令表补 2 个 task; §05 标准动作改走 task id; §07 台账补 R1/R2; §08 记一条「回灌经验」(状态仍 `Open`)。
+- **收尾实测**: `test.pkg` 全绿(154 条, 与上基线同批); `test.full` 见基线切片 [26-10-08-0920](../testing/baselines/26-10-08-0920-mutation-audit-tooling.md); `doc.drift` 0 处手抄; `kb.check` 全过; `doc.caps` 无新增债务。
+- **未做**: 未 commit/push(用户未说「提交」)。

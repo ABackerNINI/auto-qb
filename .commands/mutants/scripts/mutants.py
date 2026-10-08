@@ -4,8 +4,18 @@
 
     python mutants.py setup     [--distro D] [--mirror P] [--branch B] [--no-sync] [--dry-run]
     python mutants.py run       --target G [--pool F ...] [--children N] [--no-refresh] [--dry-run]
+    python mutants.py report    [--target G] [--status S,S] [--limit N] [--out DIR] [--dry-run]
+    python mutants.py verify    (--from-report F | --ids-file F) [--workers N] [--no-refresh] [--dry-run]
     python mutants.py gremlins  --target F [--pool F ...] [--workers N] [--dry-run]
     python mutants.py status    [--distro D] [--mirror P]
+
+**report → verify 是本包的主线后半段**(首轮 `run` 之后):
+
+- `report` 把镜像里那一轮的存活/未覆盖变异导出成**带 diff 的清单**(`mutmut results` 只回 id,
+  没有文件:行与变异内容, 没法三分类); 同时打按状态/按模块的汇总。
+- `verify` 对清单里的候选逐条做 **S4 手工确认的机械化版本**: 在镜像里 `mutmut apply <id>` →
+  跑**全套件** → 还原, 记 KILLED(假存活, 池没选到) / SURVIVED(真洞候选或等价)。
+  **这一步是整轮的时间大头**(实测 ~15s/条), 所以清单要先按 `--status` / 手挑缩小。
 
 **为什么要有这个脚本**(而不是把命令写进 config.toml 的 run 串): 一轮 mutmut 是
 「刷新镜像 -> 装工具 -> 清缓存 -> 写 [tool.mutmut] -> 跑 -> 取结果」六步, 中间全是
@@ -23,9 +33,11 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +50,8 @@ DEFAULT_CHILDREN = 4  # WSL 只有 8 核(.wslconfig), 拉满会打挂
 DEFAULT_WORKERS = 8
 DEFAULT_OUT = "R:/Temp/auto-qb/mutants"  # 别落仓内(报告 §10 #7)
 HEAD_LINES = 30
+#: 结果导出脚本(仓库内, 由本脚本推进镜像 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像里跑
+DUMP_SCRIPT_REL = ".commands/mutants/scripts/mutants_dump.py"
 
 _PROGRESS = (re.compile(r"\d+/\d+\s"), re.compile(r"pytest-gremlins: Progress "))
 
@@ -102,6 +116,23 @@ def _wsl(distro: str, script: str, *, check: bool = True) -> subprocess.Complete
     if shutil.which("wsl.exe") is None and not _DRY:
         raise Fail("找不到 wsl.exe —— 本机没装 WSL, 走 mutants.gremlins(Windows 兜底)")
     return _run(["wsl.exe", "-d", distro, "--", "bash", "-lc", script], check=check)
+
+
+def _wsl_write(distro: str, remote_path: str, content: str) -> None:
+    """把文本写进 WSL 的文件 —— **走 stdin**, 不走命令行参数。
+
+    多行内容塞进 `bash -lc '<script>'` 会被 WSL 的登录壳按行拆开(实测: 后续行不报错地
+    落到别处), 所以统一用 `cat > <path>` + stdin 传内容。目标路径必须是 WSL 侧绝对路径。
+    """
+    if _DRY:
+        _say(f"+ (stdin -> {remote_path}) {len(content)} bytes")
+        return
+    proc = subprocess.run(
+        ["wsl.exe", "-d", distro, "--", "bash", "-lc", f"cat > {_bq(remote_path)}"],
+        input=content, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
+    if proc.returncode != 0:
+        raise Fail(f"写入 WSL 文件失败({remote_path}, rc={proc.returncode}): {proc.stderr.strip()}")
 
 
 def _strip_spinner(line: str) -> str:
@@ -236,6 +267,110 @@ def _write_results(args: argparse.Namespace) -> None:
         _say(f"... 另有 {n - HEAD_LINES} 条, 读全文见上面的文件(别整读, 按需 grep)")
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    """把镜像里**上一轮**的存活/未覆盖变异导出成带 diff 的清单 + 分类汇总(只读, 不刷新镜像)。"""
+    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=False, no_sync=True)
+    _ensure_tool(args.distro, args.mirror)
+    dump_src = (repo_root() / DUMP_SCRIPT_REL).read_text(encoding="utf-8")
+    _wsl_write(args.distro, "/tmp/mutants_dump.py", dump_src)
+    mq = _bq(args.mirror)
+    cmd = f"cd {mq} && .venv/bin/python /tmp/mutants_dump.py --status {shlex.quote(args.status)}"
+    if args.limit:
+        cmd += f" --limit {args.limit}"
+    if args.target:
+        cmd += f" --target-glob {shlex.quote(args.target)}"
+    proc = _wsl(args.distro, cmd, check=False)
+    if proc.returncode != 0:
+        for line in (proc.stdout + "\n" + proc.stderr).splitlines()[-20:]:
+            _say(line)
+        _say(f"[FAIL] 导出失败(rc={proc.returncode}) —— 先在镜像里跑一轮 mutants.run")
+        return 1
+
+    text = proc.stdout
+    stamp = datetime.now().strftime("%y-%m-%d-%H%M")
+    slug = _slug(args.target) if args.target else "mutants"
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{stamp}-{slug}-mutants-dump.txt"
+    path.write_text(text, encoding="utf-8")
+    n = sum(1 for line in text.splitlines() if line.startswith("@@@ "))
+    _say(f"[结果] 导出 {n} 条(带 diff) -> {path}")
+    for line in proc.stderr.strip().splitlines():
+        _say(line)
+    _say(f"[下一步] 挑候选后: commands run mutants.verify -- --from-report \"{path}\"")
+    return 0
+
+
+def _candidate_ids(args: argparse.Namespace) -> list[str]:
+    """候选 id 来源: --ids-file 直给, 或 --from-report 从 mutants.report 的产物里按状态挑。"""
+    if args.ids_file:
+        return [x.strip() for x in Path(args.ids_file).read_text(encoding="utf-8").splitlines() if x.strip()]
+    want = {s.strip() for s in (args.only_status or "survived").split(",") if s.strip()}
+    ids: list[str] = []
+    for line in Path(args.from_report).read_text(encoding="utf-8").splitlines():
+        if not line.startswith("@@@ "):
+            continue
+        mid, _, status = line[4:].partition(" :: ")
+        if status.strip() in want:
+            ids.append(mid.strip())
+    return ids
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    """S4 的机械化: 对候选逐条 `mutmut apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED。
+
+    KILLED = 全套件能杀 ⇒ 池没选到(假存活); SURVIVED = 全套件仍杀不掉 ⇒ 真洞候选或等价变异。
+    这是整轮的时间大头(实测 ~15s/条), 所以先 `mutants.report` 再挑候选。**幂等可续跑**:
+    已写进结果文件的 id 会跳过。
+    """
+    if not (args.from_report or args.ids_file):
+        raise Fail("verify 需要 --from-report(用 mutants.report 的产物)或 --ids-file")
+    ids = _candidate_ids(args)
+    if not ids:
+        raise Fail("候选为空 —— 核 --only-status / --ids-file / 报告文件")
+    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
+    _ensure_tool(args.distro, args.mirror)
+    mq = _bq(args.mirror)
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{datetime.now().strftime('%y-%m-%d-%H%M')}-s4-verify.txt"
+    done = set()
+    if path.exists():
+        done = {x.split(" :: ")[0] for x in path.read_text(encoding="utf-8").splitlines() if " :: " in x}
+    todo = [i for i in ids if i not in done]
+    _say(f"[verify] 候选 {len(ids)} 条(已验 {len(done)} · 本次 {len(todo)}) · 全套件 -n {args.workers}")
+    _say(f"[verify] 结果 -> {path}(逐条 ~15s, 中断后重跑自动续)")
+
+    killed = survived = failed = 0
+    with path.open("a", encoding="utf-8") as fh:
+        for i, mid in enumerate(todo, 1):
+            t0 = time.time()
+            script = (
+                f"cd {mq} && git checkout -- src/ 2>/dev/null; "
+                f".venv/bin/mutmut apply {mid} >/dev/null 2>&1 || {{ echo APPLYFAIL; exit 9; }}; "
+                f".venv/bin/python -m pytest tests/ -q -n {args.workers} --no-cov -x -p no:cacheprovider 2>&1 | tail -4; "
+                f"git checkout -- src/ 2>/dev/null"
+            )
+            proc = _wsl(args.distro, script, check=False)
+            summary = next(
+                (l.strip() for l in reversed(proc.stdout.strip().splitlines())
+                 if ("passed" in l or "failed" in l or "error" in l)), ""
+            )
+            if "APPLYFAIL" in proc.stdout:
+                verdict, failed = "APPLY_FAIL", failed + 1
+            elif "failed" in summary or "error" in summary:
+                verdict, killed = "KILLED", killed + 1
+            else:
+                verdict, survived = "SURVIVED", survived + 1
+            fh.write(f"{mid} :: {verdict} :: {summary}\n")
+            fh.flush()
+            _say(f"  [{i}/{len(todo)}] {time.time() - t0:.0f}s {verdict}  {mid}")
+    _wsl(args.distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+    _say(f"[verify] KILLED(假存活) {killed} · SURVIVED(真洞候选) {survived} · 失败 {failed} -> {path}")
+    return 0
+
+
 def cmd_gremlins(args: argparse.Namespace) -> int:
     root = repo_root()
     env = dict(os.environ)
@@ -282,11 +417,18 @@ def cmd_status(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     global _DRY
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("cmd", choices=("setup", "run", "gremlins", "status"))
+    p.add_argument("cmd", choices=("setup", "run", "report", "verify", "gremlins", "status"))
     p.add_argument("--target", help="run: 只变异的目标 glob(相对仓库根, 例 '**/config/*.py'); gremlins: 目标文件")
     p.add_argument("--pool", nargs="*", default=[], help="测试选择池(定向的几个文件; 别用全 tests)")
     p.add_argument("--children", type=int, default=DEFAULT_CHILDREN, help=f"mutmut --max-children(默认 {DEFAULT_CHILDREN})")
-    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help=f"gremlins --gremlin-workers(默认 {DEFAULT_WORKERS})")
+    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                   help=f"gremlins --gremlin-workers / verify 的全套件并行度(默认 {DEFAULT_WORKERS})")
+    p.add_argument("--status", default="survived,no tests,timeout,suspicious,segfault",
+                   help="report: 导出哪些状态(逗号分隔; 默认全部非 killed)")
+    p.add_argument("--limit", type=int, default=0, help="report: 最多导出多少条(0 = 不限)")
+    p.add_argument("--from-report", help="verify: 用 mutants.report 的产物文件挑候选")
+    p.add_argument("--ids-file", help="verify: 直接给一份候选 id 清单(每行一条)")
+    p.add_argument("--only-status", default="survived", help="verify: 从 --from-report 里挑哪些状态(默认 survived)")
     p.add_argument("--distro", default=DEFAULT_DISTRO, help=f"WSL 发行版(默认 {DEFAULT_DISTRO})")
     p.add_argument("--mirror", default=DEFAULT_MIRROR, help=f"WSL 镜像仓路径(默认 {DEFAULT_MIRROR})")
     p.add_argument("--branch", default=DEFAULT_BRANCH, help=f"镜像跟的分支(默认 {DEFAULT_BRANCH})")
@@ -303,7 +445,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cmd != "gremlins":
             check_mirror(args.mirror)
-        return {"setup": cmd_setup, "run": cmd_run, "gremlins": cmd_gremlins, "status": cmd_status}[args.cmd](args)
+        return {"setup": cmd_setup, "run": cmd_run, "report": cmd_report, "verify": cmd_verify,
+                "gremlins": cmd_gremlins, "status": cmd_status}[args.cmd](args)
     except Fail as exc:
         sys.stderr.write(f"[FAIL] {exc}\n")
         return 1

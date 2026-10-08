@@ -135,7 +135,7 @@
     <ol>
       <li><code>rules/</code> —— 规则引擎判据, 实测 3,270 变异 / 杀死率 <b>55.5%</b>(分数最低, 最该先补)</li>
       <li><code>hr/</code> —— HR 判定与做种要求链路</li>
-      <li><code>config/</code> —— fail-fast 校验</li>
+      <li><code>config/</code> —— fail-fast 校验 <b>✔ 首轮已做(2026-10-08)</b>: 4,799 变异 / 杀死率 <b>80.25%</b>, S4 全套件确认 274 条(54 假存活 + 220 真洞候选), 补 10 个守阵后同池复跑 <b>82.77%</b>; 余量按主题入池 6 条 <code>test</code> issue</li>
       <li><code>core/</code> —— 主循环 / 限速</li>
     </ol>
     <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
@@ -149,6 +149,8 @@
       <tr><th>task id</th><th>干什么</th></tr>
       <tr><td><code>commands run mutants.setup</code></td><td>建 / 刷新 WSL 镜像仓 + 装工具(首次或镜像落后)</td></tr>
       <tr><td><code>commands run mutants.run -- --target '&lt;glob&gt;' --pool &lt;测试文件...&gt;</code></td><td>主力: 对某包 / 模块跑一轮 mutmut</td></tr>
+      <tr><td><code>commands run mutants.report -- --target '&lt;glob&gt;'</code></td><td>把上一轮的存活 / 未覆盖变异导出成<b>带 diff 的清单</b> + 按状态 / 按模块汇总(三分类之前必做 —— <code>mutmut results</code> 只有 id)</td></tr>
+      <tr><td><code>commands run mutants.verify -- --from-report &lt;清单&gt;</code></td><td><b>S4 手工确认的机械化</b>: 对候选逐条 <code>apply</code> → 跑全套件 → 还原, 记 KILLED(假存活) / SURVIVED(真洞候选); 每条 ~15s, 先收窄候选</td></tr>
       <tr><td><code>commands run mutants.gremlins -- --target &lt;文件&gt; --pool &lt;测试文件...&gt;</code></td><td>Windows 侧兜底 / 交叉验证</td></tr>
       <tr><td><code>commands run mutants.status</code></td><td>回看镜像状态与上一轮未杀死条数</td></tr>
     </table>
@@ -159,12 +161,13 @@
     <h2><span class="no">05</span>一轮的标准动作</h2>
     <ol>
       <li><b>入场</b>: 基线全绿(<code>commands run test.quick</code> 过) —— 不绿先修, 别跑变异。</li>
-      <li><b>定目标与池</b>: 一个包 / 模块; 池 = 直接相关的那几个测试文件。</li>
+      <li><b>定目标与池</b>: 一个包 / 模块; 池 = 直接相关的那几个测试文件(先核「覆盖函数面」, 池太窄会让整片函数落进 <code>no tests</code>)。</li>
       <li><b>跑一轮</b>: <code>mutants.run</code>; 记下变异数 / 杀死率 / 耗时 / 工具版本 / <b>选择池</b>。</li>
+      <li><b>导出清单</b>: <code>mutants.report</code> —— 拿到<b>带 diff 的清单</b>与按状态 / 按模块汇总(<code>mutmut results</code> 只有 id, 判不了真洞 / 等价)。</li>
       <li><b>三分类</b>存活变异 → 真洞 / 等价变异 / 假存活(这是<b>人</b>的动作)。</li>
-      <li><b>手工确认</b>: 对每个疑似真洞, 在<b>全套件</b>下改造同构变异, 看红不红 —— <b>只认这个判据</b>。</li>
-      <li><b>处置</b>: 真洞 → 各自入池或当场补断言(补完 <code>test.full</code>); 等价变异 / 假存活 → 记一笔理由。</li>
-      <li><b>复跑</b>: 同目标<b>同池</b>, 看存活数是否下降(换池的数字不可比)。</li>
+      <li><b>手工确认</b>: <code>mutants.verify</code> —— 在<b>全套件</b>下逐条 <code>apply</code> → 跑 → 还原, 看红不红; <b>只认这个判据</b>(每条 ~15s, 先收窄候选)。</li>
+      <li><b>处置</b>: 真洞 → 各自入池或当场补断言(补完 <code>test.full</code>, 新守阵要红验); 等价变异 / 假存活 → 记一笔理由。</li>
+      <li><b>复跑</b>: 同目标<b>同池</b>(带新守阵时 <code>--no-refresh</code> + 先 cp 测试进镜像), 看存活数是否下降(换池的数字不可比)。</li>
       <li><b>记录</b>: 新建基线切片 + 任务档案追加一行轮次; 本 issue 不动(除非改覆盖范围)。</li>
     </ol>
     <div class="callout warn"><b>别把存活清单当缺口单</b>: 窄池下的存活相当比例是「相关测试不在池里」的假存活 —— 实测同一 <code>utils.py</code> 只换池, 存活 97 → 70; 判据与处置见坑档 <a href="../pitfalls/testing/mutation-pool-artifact.md">mutation-pool-artifact.md</a>。</div>
@@ -190,6 +193,8 @@
     <table>
       <tr><th>轮次</th><th>目标</th><th>结果</th><th>切片 / 档案</th></tr>
       <tr><td>R0 建立</td><td>—</td><td>指导 / 命令 / 排期锚就位; <code>infra/versioning.py</code> 走通全流程(155 变异 / 21.6s / 存活 7 + 超时 1)</td><td><code>tasks/26-10-08-test-mutation-audit.md</code></td></tr>
+      <tr><td>R1 派生计划</td><td><code>config/</code></td><td>计划 <code>26-10-08-0720</code> 派生(未执行)</td><td><code>plans/26-10-08-0720-plan-mutation-config.html</code></td></tr>
+      <tr><td>R2 config 首轮</td><td><code>config/</code></td><td>4,799 变异 / 杀 3,851 / 存活 893(80.25%); S4 确认 274 条(54 假存活 + 220 真洞候选); 补 10 守阵后复跑存活 <b>772</b>(−121)</td><td><code>testing/baselines/26-10-08-0902-mutants-config.md</code> · 档案 R2</td></tr>
     </table>
   </section>
 
@@ -197,6 +202,7 @@
     <h2><span class="no">08</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 06:42 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套审计还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。</li>
+      <li>2026-10-08 09:20 — config 首轮执行完毕后<b>回灌经验</b>(状态仍 <strong>Open</strong>): 命令包新增 <code>mutants.report</code>(带 diff 的清单 + 汇总)与 <code>mutants.verify</code>(S4 机械化); 指导 skill 补「流程约束 9–11」(池覆盖函数面 / S4 收窄候选 / 复跑 <code>--no-refresh</code>)与两条记录纪律(不手抄 <code>N passed</code> / issue 填 <code>doc-refs</code>); §03 标注 config 进度, §07 补 R1/R2。</li>
     </ul>
     <p class="hint">本件是常驻锚, 不随单轮完成而改状态; 轮次进度看 §07 与任务档案。</p>
   </section>

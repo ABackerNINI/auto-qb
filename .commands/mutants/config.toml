@@ -20,6 +20,22 @@ when    = "定期审计: 对某个包/模块跑一轮 mutmut(WSL) —— 按包/
 note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 4]。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂 WSL)。目标 glob 相对仓库根。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md"
 doc     = "references/why.md"
 
+[tasks."mutants.report"]
+script  = "mutants.py"
+args    = ["report"]
+timeout = 900
+when    = "首轮跑完: 把存活/未覆盖变异导出成**带 diff 的清单** + 按状态/按模块汇总(mutmut results 只回 id, 没法三分类)"
+note    = "用法: commands run mutants.report -- --target '**/config/*.py' [--status survived,no tests] [--limit N]。**只读**镜像里上一轮的缓存, 不刷新镜像、不跑变异。产物落 <out>/<stamp>-<slug>-mutants-dump.txt(每条 = id + status + unified diff), 汇总(按状态 / 按模块)打在 stderr。下一步把它喂给 mutants.verify"
+doc     = "references/why.md"
+
+[tasks."mutants.verify"]
+script  = "mutants.py"
+args    = ["verify"]
+timeout = 14400
+when    = "S4 手工确认的机械化: 对候选逐条 `mutmut apply` -> 跑**全套件** -> 还原, 记 KILLED(假存活) / SURVIVED(真洞候选)"
+note    = "用法: commands run mutants.verify -- --from-report <dump.txt> [--only-status survived] [--workers 8] [--no-refresh]。**这是整轮的时间大头**(实测 ~15s/条) —— 先用 --only-status 或手挑把候选缩小。幂等可续跑(已写进结果文件的 id 自动跳过)。会刷新镜像并在镜像 src/ 上 apply/还原(不碰主仓库)。KILLED = 全套件能杀 ⇒ 池没选到; SURVIVED = 全套件仍杀不掉 ⇒ 真洞候选或等价变异"
+doc     = "references/why.md"
+
 [tasks."mutants.setup"]
 script  = "mutants.py"
 args    = ["setup"]
