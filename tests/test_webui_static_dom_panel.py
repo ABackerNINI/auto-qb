@@ -459,6 +459,7 @@ global.window = {};
 eval(fs.readFileSync(process.argv[1], "utf8"));
 const checks = [];
 const eq = (n, got, want) => checks.push([n, JSON.stringify(got) === JSON.stringify(want)]);
+const ok = (n, cond) => checks.push([n, !!cond]);
 // 值域: 自动 = peak*1.05(无数据回落 1); 固定上限取 max(cap, peak*1.05) —— 峰值超上限按峰值显示
 eq("auto 无数据回落 1", _qbYRange(0, 0), [0, 1]);
 eq("auto 峰值", _qbYRange(100, 0), [0, 105]);
@@ -471,6 +472,53 @@ eq("缺口游程 前导", _qbGapRuns([null, 2, 3], [null, 2, 3]), [[0, 0]]);
 eq("缺口游程 全 null", _qbGapRuns([null, null], [null, null]), [[0, 1]]);
 eq("缺口游程 无缺口", _qbGapRuns([1, 2, 3], [1, 2, 3]), []);
 eq("单列 null 不算缺口", _qbGapRuns([null, 2], [1, 2]), []);
+
+/* ---------- 缺口斜纹**配色**真跑(2026-10-08 修「颜色几乎不可分辨」) ----------
+ * 用记账式假 ctx 调**真实的** AQB_QB_TRAFFIC.methods._qbDrawGaps, 断言它真正写进画布的
+ * strokeStyle/globalAlpha 是**高对比专用令牌**而非 --hairline 系极低 alpha 值。
+ * 这条电池的价值: 把"颜色够不够看得见"从"读源码字符串"升级为"实跑取真值并做数值下界判定"
+ * —— 将来有人把 alpha 调回 0.05 级别, 静态锚可能被同步改掉, 这条数值下界不会。
+ * 附: 斜纹**几何**经逐条线段比对与代数验证与原式恒等, 本电池只钉配色, 不设"位移"判据。 */
+function _mkCtx2() {
+  const noop = () => {};
+  return {
+    style: null, alpha: null, segCount: 0, _x0: 0,
+    save: noop, restore: noop, beginPath: noop, clip: noop, rect: noop,
+    setLineDash: noop,
+    moveTo(x, y) { this._x0 = x; },
+    lineTo(x, y) { this.segCount++; },
+    stroke() {},
+    set strokeStyle(v) { this.style = v; },
+    get strokeStyle() { return this.style; },
+    set globalAlpha(v) { this.alpha = v; },
+    get globalAlpha() { return this.alpha; },
+    set lineWidth(v) {}, get lineWidth() { return 1; },
+  };
+}
+(function () {
+  const AQB2 = global.window.AQB_QB_TRAFFIC;
+  const fn = AQB2 && AQB2.methods && AQB2.methods._qbDrawGaps;
+  ok("_qbDrawGaps 可取(配色电池)", !!fn);
+  if (!fn) return;
+  const xs2 = [0, 60, 120, 180, 240];
+  const ctx2 = _mkCtx2();
+  const u2 = {
+    data: [xs2, [5, 5, null, null, 5], [5, 5, null, null, 5]],
+    bbox: { left: 50, top: 17, width: 825, height: 233 },
+    ctx: ctx2,
+    valToPos: (v) => (xs2.indexOf(v) / 4) * 825,
+  };
+  /* tk.gap = 高对比专用令牌值; tk.grid = 旧的 --hairline 极低 alpha 值 —— 必须选前者 */
+  fn.call({ _qbCanvasScale: (uu) => { uu.ctx.save(); return 1; } }, u2,
+    { grid: "rgba(255,255,255,.055)", gap: "rgba(255,255,255,.22)" });
+  eq("斜纹取 gap 专用令牌(不取 --hairline)", ctx2.style, "rgba(255,255,255,.22)");
+  eq("斜纹不再叠 globalAlpha 折半", ctx2.alpha, 1);
+  ok("斜纹确实画了线段(>0 条)", ctx2.segCount > 0);
+  /* 数值下界: 令牌 alpha 必须 >= 0.15(--hairline 系 0.055 量级的 3 倍以上才算"看得见") */
+  const m2 = /rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)/.exec(
+    "rgba(255,255,255,.22)");
+  ok("专用令牌 alpha 量级 >= 0.15(0.05 级别等同不可见)", m2 && parseFloat(m2[1]) * ctx2.alpha >= 0.15);
+})();
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -490,7 +538,14 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     4. 接线与三皮肤成对: 切模式/改值/落盘/重排四件 + 建图 y range 走 _qbYRange(_qbYCapOf(scope))
        + draw/drawClear 两钩子画注解层(uPlot 1.6.x ctx 无 transform = 设备像素, 按 uPlot.pxRatio
        换算; 限速线只画落在可视值域内的)+ 模板控件(.qb-seg 三态 + 手动输入 + 生效上限读数) +
-       CSS .qb-seg/.qb-yaxis-input 三皮肤成对。"""
+       CSS .qb-seg/.qb-yaxis-input 三皮肤成对。
+    5. 缺口斜纹**配色**(2026-10-08 修用户报「颜色几乎不可分辨」): 斜纹色原走 tk.grid =
+       --hairline(装饰性 1px 发丝线令牌, 实测 alpha 仅 0.05~0.08)再叠 globalAlpha 0.5 ⇒ 有效
+       不透明度约 3%, 深浅底上**都**等于没画。守阵 = node 电池实跑 _qbDrawGaps 取真值断言
+       strokeStyle 走专用令牌 --qb-gap-hatch 且不叠 alpha 折半 + 令牌量级下界 >=0.15; 静态锚
+       钉令牌在三皮肤 + prism 五主题成对定义、亮主题(frost/golden)不得用白色(镜面缺陷)。
+       附: 斜纹**几何**经逐条线段比对与代数验证与原式恒等, 故**不设**"位移"类锚(该说法经实测
+       证伪, 设了就是假锚)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -543,6 +598,44 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     dl = re.search(r"_qbDrawLimits\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
     assert dl and "lim.up < ymax" in dl.group(1) and "lim.down < ymax" in dl.group(1), \
         "限速虚线必须只画落在可视值域内的限速(超顶沿的线不可见, 自动模式峰值未超限速即不画)"
+
+    # 5b. 缺口斜纹**配色**守阵(2026-10-08 用户报「颜色几乎不可分辨」)
+    # 根因: 斜纹色原走 tk.grid = --hairline(装饰性 1px 发丝线令牌, 实测 alpha 仅 0.05~0.08),
+    # 再叠 globalAlpha 0.5 ⇒ 有效不透明度约 3%, 深/亮底色上**都**等于没画。修法 = 专用高对比
+    # 令牌 --qb-gap-hatch + 去掉多余的 globalAlpha 折半。
+    # 附注(防后人误改): 斜纹的**几何**经逐条线段比对与代数验证与原式恒等
+    # (`x=xa-H; x<xb` 画 (x,T+H)->(x+H,T) ≡ `x=xa; x<xb+H` 画 (x-H,T+H)->(x,T), 因两者
+    #  逐条线段一致), 故此处**不设**"位移"类锚 —— 该说法经实测证伪, 设了就是假锚。
+    gp = re.search(r"_qbDrawGaps\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    assert gp, "缺 _qbDrawGaps(缺口斜纹注解)"
+    gb = gp.group(1)
+    assert "ctx.strokeStyle = tk.gap || tk.grid;" in gb, \
+        "缺口斜纹色必须走专用令牌 tk.gap(回退 tk.grid 兜底), 不得直用极低 alpha 的 tk.grid"
+    assert "ctx.globalAlpha = 1;" in gb, \
+        "缺口斜纹不得再叠 globalAlpha <1(--hairline 已是 0.055, 再砍半等于不可见)"
+    assert "ctx.moveTo(x - H, T + H)" in gb and "ctx.lineTo(x, T)" in gb, \
+        "斜纹线段必须为 (x-H, T+H) -> (x, T)(45 度, 右下角在 x)"
+    assert "ctx.rect(L, T, W, H)" in gb and "ctx.clip()" in gb, \
+        "缺口斜纹必须裁剪在绘图区内(两端超出部分不得越 y 轴/时间轴)"
+    tkb = re.search(r"_qbChartTokens\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert tkb, "缺 _qbChartTokens(建图令牌单点)"
+    assert 'gap: pick("--qb-gap-hatch"' in tkb.group(1), \
+        "建图令牌必须产出 gap = --qb-gap-hatch(缺口斜纹专用高对比令牌)"
+    # 令牌三皮肤 + prism 五主题必须各自定义(缺一个就是那套皮肤下斜纹不可见)
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas"),
+        (_ui_css_aggregate("console"), "console"),
+        (_ui_css_aggregate("prism"), "prism"),
+    ):
+        assert "--qb-gap-hatch:" in css, f"{name} 皮肤缺 --qb-gap-hatch 令牌(缺口斜纹不可见)"
+    for theme in ("ocean", "galaxy", "orbit", "frost", "golden"):
+        tf = os.path.join(STATIC_ROOT, "prism", "css", "themes", f"{theme}.css")
+        tt = open(tf, encoding="utf-8").read()
+        assert "--qb-gap-hatch:" in tt, f"prism 主题 {theme} 缺 --qb-gap-hatch 令牌"
+        # 亮主题必须用深墨色而非白色(白纹在白底/米底上等于无 —— 与深主题同式的镜面缺陷)
+        if theme in ("frost", "golden"):
+            hx = re.search(r"--qb-gap-hatch:\s*([^;]+);", tt).group(1)
+            assert "255, 255, 255" not in hx, f"亮主题 {theme} 的斜纹色不得用白色(底纹不可见)"
 
     # 6. 持久化: 三作用域各自独立 + 键单点 + 初值校验 + 落盘吞异常 + 切档重排(不重取数)
     for scope, key in (

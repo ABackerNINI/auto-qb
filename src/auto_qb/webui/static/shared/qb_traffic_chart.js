@@ -58,8 +58,12 @@
  * 不裁剪数据 —— _qbYRange)。偏好**三作用域各自独立**落 localStorage(qbYAxisStoreKey)。
  * 注解层走 uPlot draw/drawClear 钩子画在**同一张画布**上(共享图面, 三挂点 + 经典/所有变体
  * 全生效): 限速虚线(上下行各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
- * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。画布坐标口径见
- * _qbCanvasScale 注(uPlot 1.6.x ctx 无 transform, 坐标 = 设备像素)。
+ * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。
+ * !2026-10-08 修「缺口斜纹几乎不可分辨」: 斜纹原走 tk.grid(--hairline, alpha 仅 0.05~0.08 的
+ * 装饰性 1px 发丝线令牌), 再叠 globalAlpha 0.5 ⇒ 有效不透明度约 3%, 深色底上等于没画(亮主题
+ * 同理)。改走**专用高对比令牌 --qb-gap-hatch**(0.18~0.25), 并去掉多余的 globalAlpha 折半;
+ * 几何(斜纹覆盖区间)经逐条线段比对与代数验证**与原式恒等**, 未变。
+ * 画布坐标口径见 _qbCanvasScale 注(uPlot 1.6.x ctx 无 transform, 坐标 = 设备像素)。
  */
 /* global uPlot */
 
@@ -690,6 +694,10 @@ window.AQB_QB_TRAFFIC = {
         up: pick("--today-up", "--indigo", "--fg"),
         down: pick("--today-down", "--teal", "--fg"),
         grid: pick("--hairline", "--border"),
+        // 缺口斜纹底纹专用色(2026-10-08): --hairline 是 0.05~0.08 alpha 的发丝线令牌, 当底纹
+        // 用几乎不可见(用户报障根因), 故单列一枚**高对比中性**令牌; 无该令牌的旧皮肤回退
+        // --fg-muted 链条(仍比 hairline 可见), 绝不落回 grid 的极低 alpha。
+        gap: pick("--qb-gap-hatch", "--border-strong", "--fg-muted"),
         axis: pick("--fg-dim", "--fg-muted"),
       };
     },
@@ -722,18 +730,24 @@ window.AQB_QB_TRAFFIC = {
       ctx.beginPath();
       ctx.rect(L, T, W, H);
       ctx.clip();
-      ctx.strokeStyle = tk.grid;
-      ctx.globalAlpha = 0.5;
+      // 斜纹色走**专用高对比令牌**(tk.gap), 不复用 tk.grid(--hairline 仅 0.05~0.08 alpha, 是
+      // 装饰性 1px 发丝线令牌; 当缺口底纹用有效不透明度只剩约 3%, 深色底上几乎不可见 —— 用户
+      // 2026-10-08 报「颜色几乎不可分辨」的根因)。令牌缺失回退 tk.grid 兜底不裸色。
+      ctx.strokeStyle = tk.gap || tk.grid;
+      ctx.globalAlpha = 1;
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       const step = 8;  // 斜纹间距(CSS px)
       for (const [a, b] of runs) {
         const xa = L + u.valToPos(u.data[0][a], "x");
         const xb = L + u.valToPos(u.data[0][b], "x");
-        for (let x = xa - H; x < xb; x += step) {
+        // 斜纹铺满 [xa-H, xb]: 每条 45 度线段的**右下角**落在 x 处、左上角在 (x-H, T), 故 x 从
+        // xa 起步(第一条盖住缺口左端)到 xb+H(最后一条盖住缺口右端); 两端越出绘图区的部分由上方
+        // clip 收掉, 视觉上恰好只铺在缺口区间内。
+        for (let x = xa; x < xb + H; x += step) {
           ctx.beginPath();
-          ctx.moveTo(x, T + H);
-          ctx.lineTo(x + H, T);
+          ctx.moveTo(x - H, T + H);
+          ctx.lineTo(x, T);
           ctx.stroke();
         }
       }
