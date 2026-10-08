@@ -7,10 +7,10 @@
 <title>实施计划 · WebUI rid 式增量同步 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-delta-sync">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-07-0414">
-<meta name="doc-updated" content="26-10-07-1420">
-<meta name="doc-refs" content="memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html,memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html,memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html,memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html,memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html,memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html,memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
+<meta name="doc-updated" content="26-10-08-0816">
+<meta name="doc-refs" content="memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html,memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html,memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html,memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html,memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html,memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html,memory-bank/issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html,memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md">
 <style>
   :root {
     --bg: #13161c;
@@ -116,6 +116,7 @@
   <a href="#s04"><span class="no">04</span>拍板点 P-01..P-05</a>
   <a href="#s05"><span class="no">05</span>风险与对策 / 收益边界</a>
   <a href="#s06"><span class="no">06</span>实施纪律(分步派工)</a>
+  <a href="#schg"><span class="no">07</span>变更记录</a>
   <a href="#sapp"><span class="no">附</span>起草人自查记录</a>
 </nav>
 
@@ -125,7 +126,7 @@
   <h1>WebUI rid 式增量同步 · 分步实施计划</h1>
   <p class="lede">把 <code>/api/state</code> 缺的「变化时回增量」半套补上:<strong>qB 启发的窗口式自研协议 —— deque 时间线只存键、值回放时从当前已发布视图现取</strong>(不照抄 qB 的单 accepted 点 + 值驻留缓冲, 见 R1/R3)。</p>
   <div class="meta-row">
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done · 已实施</span></div></div>
     <div class="item"><div class="k">类型</div><div class="v">plan</div></div>
     <div class="item"><div class="k">专题</div><div class="v">webui-delta-sync</div></div>
     <div class="item"><div class="k">Added / Updated</div><div class="v">26-10-07-0414 / 26-10-07-1420</div></div>
@@ -138,6 +139,7 @@
     <a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html"><code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code></a> ·
     <a href="../issues/26-10-07-1420-perf-webui-group-row-hash-ref.html"><code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code></a> ·
     <a href="../issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html"><code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code></a> ·
+    <a href="../issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html"><code>memory-bank/issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html</code></a> ·
     <a href="../tasks/26-10-07-webui-delta-sync-feasibility.md"><code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></a>
   </p>
 </header>
@@ -150,9 +152,9 @@
     <tr><th>meta</th><th>值</th></tr>
     <tr><td><code>doc-type</code></td><td><code>plan</code></td></tr>
     <tr><td><code>doc-topic</code></td><td><code>webui-delta-sync</code></td></tr>
-    <tr><td><code>doc-status</code></td><td><code>Open</code>(待拍板)</td></tr>
-    <tr><td><code>doc-added</code> / <code>doc-updated</code></td><td>Added 26-10-07-0414(渲染当日 stamp) / Updated 26-10-07-1420(「未来可增强项」入池: P-02 选项 B 与 P-03 条件性未来步各立一条 issue 并入 doc-refs 闭环; 前次 26-10-07-0430 认领链收口: web-runtime.md 移出 doc-refs, 改由正文提及)</td></tr>
-    <tr><td><code>doc-refs</code></td><td><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code>,<code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code>,<code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code>,<code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code>,<code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code>,<code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code>,<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></td></tr>
+    <tr><td><code>doc-status</code></td><td><code>Done</code>(已实施; 26-10-07 分步派工 S0-S10 全部落地并收尾, 见 <code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code> 与基线切片 <code>26-10-07-1336</code>)</td></tr>
+    <tr><td><code>doc-added</code> / <code>doc-updated</code></td><td>Added 26-10-07-0414(渲染当日 stamp) / Updated <strong>26-10-08-0816</strong>(状态收口: <code>Open</code>→<code>Done</code> —— S0-S10 已全部落地收尾, 证据见 tasks 档案与基线切片 26-10-07-1336; 前次 26-10-07-1420:「未来可增强项」入池: P-02 选项 B 与 P-03 条件性未来步各立一条 issue 并入 doc-refs 闭环; 更前 26-10-07-0430 认领链收口: web-runtime.md 移出 doc-refs, 改由正文提及)</td></tr>
+    <tr><td><code>doc-refs</code></td><td><code>memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html</code>,<code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code>,<code>memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html</code>,<code>memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html</code>,<code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code>,<code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code>,<code>memory-bank/issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html</code>,<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code></td></tr>
   </table>
 
   <h3>基树与行号锚口径</h3>
@@ -492,6 +494,33 @@
     <li><strong>提交信息</strong>: gitmoji + 中文口径(首行 <code>&lt;gitmoji&gt; &lt;一句话&gt;</code>, 动机/取舍/影响面/实测数字), 引用本计划步号(如「S3: ...」)。</li>
     <li><strong>渲染与入库</strong>: 本稿经确认后渲染单文件 HTML 入 <code>memory-bank/plans/</code> + <code>commands run kb.index</code>; 渲染本身不做内容决策。</li>
   </ul>
+</section>
+
+<section id="schg">
+  <h2><span class="no">07</span>变更记录</h2>
+
+  <table>
+    <tr><th>时间</th><th>状态</th><th>变更</th></tr>
+    <tr>
+      <td><code>26-10-07-0414</code></td>
+      <td><code>Open</code></td>
+      <td>初稿渲染入库: S0-S10 四里程碑 / 拍板点 P-01..P-05 / 设计规则 R1-R12 / 起草人自查记录。</td>
+    </tr>
+    <tr>
+      <td><code>26-10-07-1420</code></td>
+      <td><code>Open</code></td>
+      <td>「未来可增强项」入池: P-02 选项 B 与 P-03 条件性未来步各立一条 issue 并入 doc-refs 闭环。</td>
+    </tr>
+    <tr>
+      <td><code>26-10-08-0816</code></td>
+      <td><code>Open</code> → <code>Done</code></td>
+      <td>
+        <strong>状态收口(本轮唯一内容变更)</strong>: 计划 S0-S10 已全部实施并走完收尾 DoD, 状态由「待拍板」改为「已实施」。<br>
+        <strong>闭环证据</strong>: ①分步派工 15+1 提交 <code>3a6e81f7..1ad13659</code>(步号与 hash 对应见任务档案「子任务状态表」<code>memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md</code>); ②机制单点回写 <a href="../systemPatterns/web-runtime.md"><code>memory-bank/systemPatterns/web-runtime.md</code></a>「rid 式增量同步」段(内容基线 <code>1ad13659</code>); ③终态基线切片 <a href="../testing/baselines/26-10-07-1336-webui-delta-sync-s10-baseline.md"><code>memory-bank/testing/baselines/26-10-07-1336-webui-delta-sync-s10-baseline.md</code></a>(test.full <strong>2745 passed + 4 skipped / 99%</strong>; e2e 分档复测 before/after; 6 条存量 e2e 失败根因留处置决策); ④P-03 裁决 = pending_ver 门控<strong>保留</strong>。<br>
+        <strong>未随本计划实施、另行留痕的三项</strong>: 留档于 <code>memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code> 与 <code>memory-bank/issues/26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html</code>(P-02 选项 B 与 P-03 条件性未来步, 已在 doc-refs); S10 归档的 6 条存量 e2e 失败(根因 A 桩保真 / 根因 B WeakMap 记忆化)按范围守恒未修, 已入池 <a href="../issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html"><code>memory-bank/issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html</code></a>(2026-10-08 补, 并入 doc-refs)。
+      </td>
+    </tr>
+  </table>
 </section>
 
 <section id="sapp">

@@ -6,7 +6,7 @@
 > 存量缺陷记录(见「e2e 复测」段, 均非 S10 引入)。
 > 基线时间: 2026-10-07 13:36
 
-**Refs:** memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, [26-10-07-1213-webui-delta-sync-s9-baseline.md](26-10-07-1213-webui-delta-sync-s9-baseline.md), [26-10-07-0514-webui-delta-sync-s0-baseline.md](26-10-07-0514-webui-delta-sync-s0-baseline.md), memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/activeContext/26-10-07-0204-webui-delta-sync-feasibility.md, memory-bank/tasks/26-10-08-webui-perf-issues-closing.md
+**Refs:** memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, [26-10-07-1213-webui-delta-sync-s9-baseline.md](26-10-07-1213-webui-delta-sync-s9-baseline.md), [26-10-07-0514-webui-delta-sync-s0-baseline.md](26-10-07-0514-webui-delta-sync-s0-baseline.md), memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/activeContext/26-10-07-0204-webui-delta-sync-feasibility.md, memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/issues/26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html
 
 ## test.full 实测
 

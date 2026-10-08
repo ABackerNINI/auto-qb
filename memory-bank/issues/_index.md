@@ -19,7 +19,7 @@
 | bug | 4 |
 | perf | 5 |
 | docs | 1 |
-| test | 1 |
+| test | 2 |
 | refactor | 5 |
 | feat | 21 |
 | chore | 2 |
@@ -27,6 +27,7 @@
 
 ## Open
 
+- [test] [e2e 存量 6 条失败: 桩保真回归(hr_link 入 JSON) + S7 记忆化与乐观 UI 交互缺口](26-10-08-0818-test-webui-e2e-stub-fidelity-s7-memo.html) — dev.e2e 6 failed 存量(根因A:…
 - [test] [变异测试定期审计(常驻排期锚)](26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分…
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/…
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种…
