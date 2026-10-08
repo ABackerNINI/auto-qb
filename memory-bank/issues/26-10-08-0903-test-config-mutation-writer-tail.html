@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config writer 回退/掩码/格式长尾缺守阵">
 <meta name="issue-summary" content="74 条真洞候选集中在 writer.py: _validate_tree 16 / _as_builtin 10 / _build_yaml 8 / _fallback_restart_fields 6 / _sync_mapping 6 / backup_versioned 4 / _fallback_readonly_fields 4 / materialize_schema_migration 3 / _stamp_schema_version 2 / _reject_stale_version 2 / _set_path 2 / _backup 2 / _build_doc 2 / _same_value 2 / _plain_scalar 2 / unmask_tree 1 / _prepare 1 / _delete_path 1">
 <title>config writer 回退/掩码/格式长尾缺守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0903-test-config-mutation-writer-tail</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 09:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -88,12 +88,14 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>按函数逐个补长尾用例(计数即缺口量级); 优先 <code>_fallback_readonly_fields</code>(VERSION_KEY 跳过分支) · <code>_fallback_restart_fields</code>(仅命中 R 段的子集) · <code>_stamp_schema_version</code>(cfg 非 dict 跳过) · <code>_sync_mapping</code>/<code>_as_builtin</code>(值未变则不动原节点)。</p>
+    <p class="hint"><b>已实施(2026-10-08 11:44)</b>：按上述方向共补 22 个守阵(覆盖表在 <code>tests/test_config_writer.py</code> 的 docstring「## 测试计划」)，复跑同 74 条候选 <b>51 KILLED / 23 SURVIVED</b>；余 22 条验证为等价变异、1 条真洞(<code>_validate_tree</code> finally 守卫 <code>and</code>→<code>or</code>)当场杀死。明细见变更日志与基线切片。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 09:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-08 11:44 — <strong>认领并实施完成，状态改 <span class="badge go">Done</span></strong>。对 74 条 S4 候选逐条在<b>全套件</b>下重做判定：先<b>修正被污染的判据</b>（镜像池残留 + 两条读源码文本的措辞/数字守卫在基线就红，会把任意 src 变异伪杀 ⇒ 74 条一度全判 KILLED），显式排除既有红守卫后得有效判据 <b>71 SURVIVED（真洞）/ 3 KILLED（假存活）</b>—— 首轮 S4 结论成立、issue 前提成立。按函数簇补 <b>22 个守阵</b>（全落 <code>tests/test_config_writer.py</code>）后复跑同 74 条 → <b>51 KILLED / 23 SURVIVED</b>（存活 <b>−48，−68%</b>）；余 <b>22 条经逐一验证为等价变异</b>（tempfile/<code>yaml.dump</code> 参数变体、<code>atomic_write</code> 内建建目录使 <code>parent</code> 冗余、<code>open</code> 默认 <code>"r"</code>、readonly 路径全不含点等），另 <b>1 条真洞</b>（<code>_validate_tree</code> finally 守卫 <code>and</code>→<code>or</code>）由新增用例当场杀死。 <b>零 <code>src/</code> 改动</b>（纯补测）。记录：基线切片 <code>testing/baselines/26-10-08-1144-mutants-config-writer-tail.md</code> · 档案 R5 · 新坑档 <code>pitfalls/testing/read-source-static-guard-mutation.md</code> · 常驻锚 §07/§08/§09 已同步。</li>
     </ul>
   </section>
 

@@ -54,6 +54,28 @@
 - test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘 v4 + 每键 WARNING(caplog)
 - test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(合法保留), 物化零 IO 不误杀
 - test_write_tree_roundtrip_preserves_site_explicit_empty: ruamel round-trip 保留站点 ''(report 待核实项①实测)
+- test_stamp_schema_version_uses_root_key_and_overwrites: 盖章读 ROOT_KEY 段(非硬编码 None)且无条件覆盖旧版本; 根键非 config 时静默跳过
+- test_materialize_passes_config_path_to_migration: 物化调迁移函数传真实 config_path(不是 None) —— spy 卡实参
+- test_backup_versioned_creates_parent_and_relative_forms: backup_versioned 按 dirname 建父目录(exist_ok=True 幂等), 嵌套目录不存在也落盘
+- test_prepare_passes_old_tree_to_restart_fallback: _prepare 调 R 级回退时 old_tree 来自 read_tree(不是 None)
+- test_reject_stale_version_guards_non_dict_cfg: 版本闸门对非映射 config 段走「版本缺失」拒绝, 不崩在属性访问上
+- test_reject_stale_version_message_carries_both_versions: 闸门错误消息须同时带两个版本号并指路刷新(整段换 None 会丢排障线索)
+- test_validate_tree_temp_file_roundtrip: _validate_tree 临时文件 dumps 后可读(delete=False 契约)+ finally 清理; 失败路径同样清理
+- test_validate_tree_finally_guard_skips_none_tmp_path: finally 守卫是短路与(and 写成 or 会把原始 OSError 掩盖成 stat(None) 的 TypeError)
+- test_build_yaml_preserves_quotes_and_indent_profile: _build_yaml 保留引号 + 4/4/2 缩进档案(preserve_quotes/indent 三参)
+- test_build_doc_reads_existing_and_falls_back_to_empty: _build_doc 读已有 CommentedMap/非映射与缺失文件都回退空文档重建
+- test_fallback_helpers_split_dot_paths_and_rebuild_missing_nodes: R 级回退按 `.` 切点路径取旧值、嵌套覆盖、磁盘无旧值则删键(不写 None)
+- test_fallback_readonly_skips_version_key_but_covers_others: readonly 回退跳过 schema_version、continue 而非 break、其余键按点路径回退
+- test_delete_path_removes_last_segment_only: _delete_path 精确删最后一段(不倒索引/不误删兄弟键), 末段缺失静默
+- test_sync_mapping_skips_unchanged_scalar_and_list_nodes: _sync_mapping「值未变不动原节点」对标量与列表都成立(保注释/引号形态)
+- test_sync_mapping_scalar_vs_container_not_skipped: _sync_mapping 标量与容器互转不得被「未变化」逻辑吞掉(and 链不得写坏)
+- test_same_value_none_and_as_builtin_semantics: _same_value(None,..)=False; _as_builtin 布尔小写/None→空串/数字→str/容器递归
+- test_plain_scalar_bool_and_lossless_rules: _plain_scalar 布尔识别大小写无关, 有损数字串(007/1.10)保持字符串
+- test_unmask_tree_init_and_guards: unmask_tree 非映射入口原样返回; 旧值缺失/旧值即哨兵时保持哨兵
+- test_unmask_tree_only_touches_sentinel_values: unmask_tree 只还原恰为哨兵的键, 用户真改的值不得被旧值覆盖
+- test_mask_tree_recurses_into_nested_dicts: mask_tree 递归进嵌套映射掩码深层敏感键; 空值不掩码; 原树不改
+- test_set_path_rebuilds_non_mapping_mid_nodes: _set_path 复用已有 dict 中途节点(不丢兄弟键)/标量重建/缺失现场建
+- test_backup_skips_when_source_missing_and_keeps_encoding: _backup 源缺失零副作用; 按 dirname 建目录; utf-8 读写无损
 """
 import copy
 import os
@@ -1163,3 +1185,535 @@ def test_write_tree_roundtrip_preserves_site_explicit_empty(tmp_path):
     assert "add_category: ''" in text, f"新增站点 '' 应写为带引号空串: {text}"
     loaded = load_config(path)
     assert loaded.trackers["A"].hr.add_tag == "" and loaded.trackers["A"].hr.add_category == ""
+
+
+# ---------- 长尾守阵: 回退/掩码/round-trip/格式判定(issue 26-10-08-0903-test-config-mutation-writer-tail) ----------
+# 背景: 变异审计确认 writer.py 有 74 条「全套件杀不掉」的真洞候选, 集中在回退(_fallback_*)、
+# 掩码还原(unmask_tree)、round-trip 比较(_same_value/_as_builtin/_sync_mapping)、格式判定
+# (_plain_scalar)与内部写盘细节(_validate_tree/_build_yaml/_build_doc)上。以下用例按函数簇补齐.
+
+
+def test_stamp_schema_version_uses_root_key_and_overwrites():
+    """盖章必须**读 ROOT_KEY 段**(不是硬编码 None)且**无条件覆盖**旧版本值
+
+    _stamp_schema_version 的两条同构变异: ①`cfg = tree.get(ROOT_KEY)` 改成 `tree.get(None)`
+    ②整句删掉 —— 前者让 cfg 恒为 None 从而静默不盖章, 后者同理。守阵: 用缺 config 段的树
+    (跳过)与带旧版本的 config 段(必须被改成当前版本)两侧夹住。
+    """
+    from auto_qb.config.writer import _stamp_schema_version
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    current = CURRENT_VERSIONS["config"]
+
+    # 正侧: config 段存在且版本落后 -> 必须被盖成当前版本(int)
+    tree = {"config": {"schema_version": 1, "x": "1"}}
+    _stamp_schema_version(tree)
+    assert tree["config"]["schema_version"] == current, "必须按 ROOT_KEY 取到 config 段并覆盖旧版本"
+    assert isinstance(tree["config"]["schema_version"], int), "盖章必须是 int, 不能是字符串"
+
+    # 反侧: 根键不是 ROOT_KEY(如 "cfg") -> 不得误盖到 `tree[None]`, 也不得凭空造 config 段
+    other = {"cfg": {"schema_version": 1}}
+    _stamp_schema_version(other)
+    assert other == {"cfg": {"schema_version": 1}}, "根键不是 config 时静默跳过, 不得改别的段"
+
+
+def test_materialize_passes_config_path_to_migration(tmp_path, monkeypatch):
+    """物化调迁移函数必须传**真实 config_path**(不是 None)
+
+    变异把 `migrate_config_schema(tree, config_path)` 的第二个实参改成 None —— 迁移里用它做
+    日志/定位, 传 None 时行为错但目前无守阵。用 spy 卡住实参。
+    """
+    from auto_qb.config import writer as writer_mod
+
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, LEGACY_V1)
+    seen = []
+    real = writer_mod.migrate_config_schema
+
+    def spy(tree, config_path):
+        seen.append(config_path)
+        return real(tree, config_path)
+
+    monkeypatch.setattr(writer_mod, "migrate_config_schema", spy)
+    desc, _ = writer_mod.materialize_schema_migration(path, str(data_dir))
+    assert desc == "v1→v4"
+    assert seen == [path], "迁移函数必须收到真实 config_path(传 None 会让迁移无法定位文件)"
+
+
+def test_backup_versioned_creates_parent_and_relative_forms(tmp_path, monkeypatch):
+    """backup_versioned: 有父目录时**必须建目录**(parent 被改成 None/缩进丢失/exit_ok 改值都会漏建)
+
+    变异簇: `parent = os.path.dirname(backup_path)` → None · `os.makedirs(parent, exist_ok=True)`
+    → `None`/`False`/整句删。守阵: 嵌套备份目录不存在时备份仍必须落盘(顺带覆盖 exist_ok 语义).
+    """
+    from auto_qb.config.writer import backup_versioned
+
+    path = _make(tmp_path, BASE)
+    nested = tmp_path / "deep" / "dir" / "data"
+    backup = backup_versioned(path, str(nested), 3)
+    assert backup == str(nested / "config.yml.v3.bak")
+    with open(backup, encoding="utf-8") as f:
+        assert f.read() == BASE, "版本号备份内容 = 迁移前原样"
+
+    # exist_ok=True 语义: 目录已存在时重入不得抛 FileExistsError
+    again = backup_versioned(path, str(nested), 3)
+    assert again == backup
+
+
+def test_prepare_passes_old_tree_to_restart_fallback(tmp_path, monkeypatch):
+    """_prepare 调 R 级回退时 old_tree 必须来自 read_tree(**不是 None**)
+
+    变异把 `_fallback_restart_fields(tree, old_tree, ...)` 的第二实参改成 None —— 回退就再也读不到
+    磁盘旧值。守阵: 用 spy 验证收到的 old_tree 含磁盘真实段值(而不是被换成的 None).
+    """
+    from auto_qb.config import writer as writer_mod
+
+    path = _make(tmp_path, BASE + "  data_dir: disk-dir\n")
+    old_config = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["data_dir"] = "ui-dir"
+    seen = []
+    real = writer_mod._fallback_restart_fields
+
+    def spy(t, old_tree, changes):
+        seen.append(old_tree)
+        return real(t, old_tree, changes)
+
+    monkeypatch.setattr(writer_mod, "_fallback_restart_fields", spy)
+    writer_mod._prepare(path, tree, old_config)
+    assert seen, "命中 R 闸时必须调用 R 级回退"
+    assert seen[0]["config"]["data_dir"] == "disk-dir", "R 级回退必须拿到磁盘旧树(传 None 会回退失败)"
+
+
+def test_reject_stale_version_guards_non_dict_cfg():
+    """版本闸门: cfg 非 dict 时不得去 `cfg.get`(变异把三元条件改成恒真会 AttributeError)
+
+    守阵: config 段是标量/列表时按「版本缺失」口径拒绝(与缺失同路), 不是崩在属性访问上。
+    """
+    from auto_qb.config.writer import _reject_stale_version
+
+    for bad_cfg in ("plain", ["x"], 5):
+        with pytest.raises(ConfigError) as ei:
+            _reject_stale_version({"config": bad_cfg})
+        assert "schema_version" in str(ei.value), f"非映射 config 段应按版本缺失拒绝: {bad_cfg!r}"
+
+
+def test_reject_stale_version_message_carries_both_versions(tmp_path):
+    """版本闸门的错误消息必须带上两个版本号(变异把消息整段换成 None 会丢掉唯一排障线索)"""
+    from auto_qb.config.writer import _reject_stale_version
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    current = CURRENT_VERSIONS["config"]
+    with pytest.raises(ConfigError) as ei:
+        _reject_stale_version({"config": {"schema_version": str(current - 1)}})
+    msg = str(ei.value)
+    assert f"v{current - 1}" in msg and f"v{current}" in msg, f"消息须同时说清两个版本号: {msg}"
+    assert "刷新" in msg, "消息须指路刷新页签"
+
+
+def test_validate_tree_temp_file_roundtrip(tmp_path, monkeypatch):
+    """_validate_tree: 落临时文件 + load_config 校验 + **finally 清理**
+
+    变异簇集中在 tempfile 参数(encoding/suffix/delete)与 yaml.dump 关键参数 — 这条用「校验
+    正例返回 Config」+「临时文件被清理」两段夹住最核心的 delete=False 契约: delete=True 时
+    文件在 with 退出即被删, 后续 load_config 无从读; 而 finally 里的 `and os.path.exists` 若被
+    改成 `or`, 空 tmp_path 分支会误删。
+    """
+    from auto_qb.config import writer as writer_mod
+
+    tmp_path_dir = tmp_path / "tmpdir"
+    tmp_path_dir.mkdir()
+    monkeypatch.setenv("TMPDIR", str(tmp_path_dir))
+    monkeypatch.setenv("TEMP", str(tmp_path_dir))
+    monkeypatch.setenv("TMP", str(tmp_path_dir))
+
+    tree = read_tree(_make(tmp_path, BASE + "  main_tick: 2s\n"))
+    cfg = writer_mod._validate_tree(tree)
+    assert cfg.main_tick == 2.0, "校验必须走到 load_config 拿到解析结果(临时文件须在 dumps 后可读)"
+    assert list(tmp_path_dir.iterdir()) == [], "校验后临时文件必须被 finally 清理"
+
+    # 校验失败路径: 同样必须清理临时文件(不留垃圾)
+    bad = {"config": {"main_tick": "abc"}}
+    with pytest.raises(ConfigError):
+        writer_mod._validate_tree(bad)
+    assert list(tmp_path_dir.iterdir()) == [], "校验失败后临时文件也必须清理"
+
+
+def test_validate_tree_finally_guard_skips_none_tmp_path(tmp_path, monkeypatch):
+    """_validate_tree 的 finally 守卫必须是 `tmp_path and os.path.exists(...)` 的**短路与**
+
+    变异把 `and` 写成 `or`: 临时文件创建失败(NamedTemporaryFile 抛)时 tmp_path 仍是 None,
+    `None or os.path.exists(None)` 会去 stat(None) 抛 TypeError, 把原始 OSError 掩盖成
+    TypeError —— 调用方看到的是"类型错误"而非真实原因(磁盘不可写/临时目录缺失).
+    守阵: 让临时文件创建失败, 断言原始 OSError 原样冒出(不变成 TypeError), 且守卫不误删.
+    """
+    from unittest import mock
+
+    from auto_qb.config import writer as writer_mod
+
+    with mock.patch("tempfile.NamedTemporaryFile", side_effect=OSError("tempdir 不可写")):
+        with pytest.raises(OSError) as ei:
+            writer_mod._validate_tree({"config": {}})
+    assert "tempdir 不可写" in str(ei.value), "原始 OSError 必须原样冒出(and 写坏成 or 会变 TypeError)"
+
+    # 正常路径: 文件被创建 -> 守卫仍须清理(and 的两侧都要生效)
+    from auto_qb.config import writer as w2
+
+    tmp_dir = tmp_path / "t2"
+    tmp_dir.mkdir()
+    monkeypatch.setenv("TMPDIR", str(tmp_dir))
+    monkeypatch.setenv("TEMP", str(tmp_dir))
+    monkeypatch.setenv("TMP", str(tmp_dir))
+    w2._validate_tree(read_tree(_make(tmp_path, BASE + "  main_tick: 2s\n")))
+    assert list(tmp_dir.iterdir()) == [], "临时文件必须被清理(守卫右侧须生效)"
+
+
+def test_build_yaml_preserves_quotes_and_indent_profile():
+    """_build_yaml 的三项配置必须是项目 YAML 风格(引号保留 + 4/4/2 缩进)
+
+    变异簇把 preserve_quotes 改成 None/False、indent 的 mapping/sequence/offset 改值或删参 —
+    这些只改格式不改语义, 但正是「写回后文件可读性」的守阵面。直接断言 ruamel 实例属性。
+    """
+    from auto_qb.config.writer import _build_yaml
+
+    ry = _build_yaml()
+    assert ry.preserve_quotes is True, "必须保留磁盘原有引号形态"
+    assert ry.map_indent == 4, "映射缩进 4(与原 config.yml 风格一致)"
+    assert ry.sequence_indent == 4, "序列缩进 4"
+    assert ry.sequence_dash_offset == 2, "序列破折号偏移 2"
+
+
+def test_build_doc_reads_existing_and_falls_back_to_empty(tmp_path):
+    """_build_doc: 已存在文件读为 CommentedMap; 非映射/不存在 -> 以空文档重建
+
+    变异把 `doc = None` 改成 `doc = ""`(初始值形状)或把 open 的 `"r"` 删掉 —— 前者在
+    「文件不存在」时 `isinstance(doc, dict)` 仍为 False 从而走 {} 分支(看似无害, 实则丢了
+    None 哨兵语义); 这条直接覆盖两条路径的行为契约.
+    """
+    from auto_qb.config.writer import _build_doc
+
+    path = _make(tmp_path, "config:\n    web:\n        # 注释\n        port: 1\n")
+    doc = _build_doc(path, {"config": {"web": {"port": "2"}}})
+    assert isinstance(doc, dict)
+    assert doc["config"]["web"]["port"] == 2, "树的值须同步进文档"
+
+    # 文件不存在 -> 从空文档建起, 树内容仍完整同步
+    missing = str(tmp_path / "nope.yml")
+    doc2 = _build_doc(missing, {"config": {"web": {"port": "3"}}})
+    assert isinstance(doc2, dict) and doc2["config"]["web"]["port"] == 3
+
+    # 磁盘是非映射 YAML -> 以空文档重建
+    np = _make(tmp_path, "- a\n- b\n")
+    doc3 = _build_doc(np, {"config": {"web": {"port": "4"}}})
+    assert isinstance(doc3, dict) and doc3["config"]["web"]["port"] == 4
+
+
+def test_fallback_helpers_split_dot_paths_and_rebuild_missing_nodes(tmp_path):
+    """R 级/readonly 回退必须按 `.` 正确切分点路径并重建中途节点
+
+    变异簇: `.split(".")` 改 `.split(None)`/`"XX.XX"`(切分错 → 找不到旧值); `_set_path` 的
+    `node.get(p)` 改 None/get(None)(中途节点被无视 → 结构写错位). 这条用「磁盘有旧值须覆盖」
+    +「磁盘无旧值须删除」两侧夹住.
+    """
+    from auto_qb.config.impact import ConfigChange
+    from auto_qb.config.writer import _fallback_restart_fields
+
+    # 磁盘旧值存在(嵌套路径 state_file 在 config 段下) -> 提交树的新值被覆盖为旧值
+    old_tree = {"config": {"state_file": "old-state.json", "nested": {"x": "old"}}}
+    tree = {"config": {"state_file": "new-state.json", "nested": {"x": "new"}}}
+    changes = [
+        ConfigChange(path="state_file", old="old-state.json", new="new-state.json"),
+        ConfigChange(path="nested.x", old="old", new="new"),
+    ]
+    _fallback_restart_fields(tree, old_tree, changes)
+    assert tree["config"]["state_file"] == "old-state.json", "点路径切分正确才能取到旧值"
+    assert tree["config"]["nested"]["x"] == "old", "嵌套点路径须正确切分并覆盖"
+
+    # 磁盘无旧值 -> 键须被删除(走默认值), 不得把 None 写进去
+    tree2 = {"config": {"data_dir": "ui-dir"}}
+    _fallback_restart_fields(tree2, {"config": {}}, [ConfigChange(path="data_dir", old=None, new="ui-dir")])
+    assert "data_dir" not in tree2["config"], "磁盘未配置的 R 级键须删除, 不是写成 None"
+
+
+def test_fallback_readonly_skips_version_key_but_covers_others():
+    """readonly 回退必须**跳过 schema_version**、**continue 而非 break**、按点路径处理其余键
+
+    三条同构变异: ①`path == VERSION_KEY` 改 `!=`(全部跳过) ②`continue` 改 `break`(命中版本键后
+    整轮中断, 后面的 readonly 键再也不回退) ③split(".") 改错. 守阵: 磁盘对 data_dir/fs 有旧值,
+    对 schema_version 也构造「程序更新」的值 — 版本键必须**不被回退**(交给校验层报错).
+    """
+    from auto_qb.config.writer import _fallback_readonly_fields
+
+    old_tree = {"config": {"data_dir": "disk-dir", "fs": {"path_map": [{"from": "a", "to": "b"}]}}}
+    tree = {
+        "config":
+            {
+                "data_dir": "ui-dir",
+                "fs": {
+                    "path_map": [{
+                        "from": "x",
+                        "to": "y"
+                    }]
+                },
+                "schema_version": 999,  # 比程序新 -> 不得被回退抹平
+            }
+    }
+    _fallback_readonly_fields(tree, old_tree)
+    assert tree["config"]["data_dir"] == "disk-dir", "readonly 键须回退为磁盘旧值"
+    assert tree["config"]["fs"] == {"path_map": [{"from": "a", "to": "b"}]}, "readonly 段须整体回退"
+
+    # break 变异的反例: 版本键在 fs/data_dir 之前时, 后续键仍须回退
+    old_tree2 = {"config": {"data_dir": "disk-dir"}}
+    tree2 = {"config": {"schema_version": 999, "data_dir": "ui-dir"}}
+    _fallback_readonly_fields(tree2, old_tree2)
+    assert tree2["config"]["data_dir"] == "disk-dir", "命中版本键后不得中断后续 readonly 键的回退"
+    assert tree2["config"]["schema_version"] == 999, "版本键必须留给盖章/校验层, 不回退"
+
+
+def test_delete_path_removes_last_segment_only():
+    """_delete_path 必须删**最后一段**(变异把 parts[-1] 改成 parts[+1] → IndexError/删错键)"""
+    from auto_qb.config.writer import _delete_path
+
+    tree = {"config": {"a": "1", "b": "2"}}
+    _delete_path(tree, ["config", "a"])
+    assert tree == {"config": {"b": "2"}}, "须精确删除目标键, 不动兄弟键"
+
+    # 单段路径: parts[-1] == parts[0], 同样必须命中
+    tree2 = {"only": "1"}
+    _delete_path(tree2, ["only"])
+    assert tree2 == {}
+
+    # 末段不存在: 静默无操作(不抛)
+    _delete_path({"config": {}}, ["config", "ghost"])
+
+
+def test_sync_mapping_skips_unchanged_scalar_and_list_nodes():
+    """_sync_mapping「值未变则不动原节点」必须对**标量与列表**都成立
+
+    变异簇把 _same_value 的两侧实参换成 None、或把 `not isinstance(...)` 的 and 链写坏 —— 后果是
+    「未修改的节点被重写」, 表现为磁盘上的引号/注释形态漂移。守阵: 用带引号标量与列表两类节点
+    夹住「未变保持原对象」这个契约(注释保留是它的可观测副作用).
+    """
+    from ruamel.yaml.comments import CommentedMap
+
+    from auto_qb.config.writer import _sync_mapping
+
+    doc = CommentedMap()
+    doc["port"] = "16585"  # 磁盘原标量(ruamel 读作 str, 因为引号形态)
+    doc.yaml_set_comment_before_after_key("port", before="keep-me", after="tail")
+    doc["tags"] = ["A", "B"]
+    port_node = doc["port"]
+    tags_node = doc["tags"]
+
+    # 树里的值与磁盘同构(标量字符串一致 / 列表项一致) -> 必须跳过赋值, 原节点不动
+    _sync_mapping(doc, {"port": "16585", "tags": ["A", "B"]})
+    assert doc["port"] is port_node, "未变化的标量不得被替换(否则注释/引号形态被重写)"
+    assert doc["tags"] is tags_node, "未变化的列表不得被替换"
+    assert doc.get("port") == "16585"
+
+    # 值真变了 -> 替换
+    _sync_mapping(doc, {"port": "999", "tags": ["C"]})
+    assert doc["port"] == 999 or doc["port"] == "999"
+    assert list(doc["tags"]) == ["C"]
+
+    # 树里缺失的键 -> 从磁盘删除
+    _sync_mapping(doc, {})
+    assert "port" not in doc and "tags" not in doc
+
+
+def test_sync_mapping_scalar_vs_container_not_skipped():
+    """_sync_mapping 的类型分派: `not isinstance(value, (dict, list)) and not isinstance(existing, ...)`
+    的 and 链不得被写坏(变异把两侧 not 去掉/换 or → 标量与容器互转时误跳过或误比较)
+
+    守阵: ①标量值覆盖容器节点 ②容器值覆盖标量节点 —— 两种都不得被"未变化"逻辑吞掉.
+    """
+    from ruamel.yaml.comments import CommentedMap
+
+    from auto_qb.config.writer import _sync_mapping
+
+    # 标量 -> 覆盖磁盘上的 dict 节点
+    doc = CommentedMap()
+    doc["x"] = CommentedMap()
+    doc["x"]["old"] = "1"
+    _sync_mapping(doc, {"x": "scalar"})
+    assert doc["x"] == "scalar", "标量须能覆盖原容器节点(类型不同不得误判为未变)"
+
+    # dict -> 覆盖磁盘上的标量节点
+    doc2 = CommentedMap()
+    doc2["y"] = "plain"
+    _sync_mapping(doc2, {"y": {"k": "v"}})
+    assert isinstance(doc2["y"], dict) and doc2["y"]["k"] == "v", "容器须能覆盖原标量节点"
+
+
+def test_same_value_none_and_as_builtin_semantics():
+    """_same_value/_as_builtin 的 BaseLoader 语义(变异把两侧实参换 None / 布尔小写化写坏)
+
+    - `existing is None` -> False(空节点不算「未变化」)
+    - 布尔统一小写字符串; None -> ""; 数字 -> str; 容器递归
+    """
+    from auto_qb.config.writer import _as_builtin, _same_value
+
+    assert _same_value(None, "x") is False, "existing 为 None 必须判为「有变化」"
+    assert _same_value("true", True) is True, "字符串 true 与 bool True 在 BaseLoader 语义下同值"
+    assert _same_value("16585", 16585) is True
+    assert _same_value("1", "2") is False
+
+    assert _as_builtin(True) == "true" and _as_builtin(False) == "false", "布尔须小写字符串化"
+    assert _as_builtin(None) == "", "None -> 空串"
+    assert _as_builtin(7) == "7", "数字 -> 字符串"
+    assert _as_builtin({"a": True}) == {"a": "true"}, "映射递归且键字符串化"
+    assert _as_builtin([1, False]) == ["1", "false"], "列表递归"
+
+
+def test_plain_scalar_bool_and_lossless_rules():
+    """_plain_scalar: 布尔识别大小写无关且**信息无损**才转换
+
+    变异把 `low` 改成 `hi`/`FALSE` —— 「FALSE」将不再被识别为布尔, 写回时形态漂移。守阵覆盖
+    大小写两侧 + 有损数字串(007/1.10)必须保持字符串.
+    """
+    from auto_qb.config.writer import _plain_scalar
+
+    assert _plain_scalar("true") is True
+    assert _plain_scalar("TRUE") is True, "布尔识别须大小写无关"
+    assert _plain_scalar("False") is False
+    assert _plain_scalar("FALSE") is False, "布尔识别须大小写无关(小写化后再判定)"
+    assert _plain_scalar("16585") == 16585
+    assert _plain_scalar("007") == "007", "有损(前导零)不得转换"
+    assert _plain_scalar("1.10") == "1.10", "有损(尾零)不得转换"
+    assert _plain_scalar({"a": ["TRUE", "1"]}) == {"a": [True, 1]}, "递归处理新子树"
+
+
+def test_unmask_tree_init_and_guards():
+    """unmask_tree 的入口守卫与哨兵判定(变异把 isinstance 判断/环回写坏)
+
+    - 非映射 tree 或 old_tree -> 原样返回(不做任何写)
+    - 哨兵命中但旧值缺失/旧值本身也是哨兵 -> 保持哨兵(不静默清空密码)
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    assert unmask_tree("plain", {"config": {}}) == "plain", "非映射 tree 原样返回"
+    assert unmask_tree({"config": {}}, "plain") == {"config": {}}, "非映射 old_tree 原样返回"
+
+    # 哨兵 + 旧值也是哨兵 -> 保持(宁可占位)
+    t = {"config": {"password": MASK_SENTINEL}}
+    out = unmask_tree(copy.deepcopy(t), {"config": {"password": MASK_SENTINEL}})
+    assert out["config"]["password"] == MASK_SENTINEL
+    # 哨兵 + 旧值缺失 -> 保持
+    out2 = unmask_tree(copy.deepcopy(t), {"config": {}})
+    assert out2["config"]["password"] == MASK_SENTINEL
+    # 哨兵 + 有真实旧值 -> 回填
+    out3 = unmask_tree(copy.deepcopy(t), {"config": {"password": "real"}})
+    assert out3["config"]["password"] == "real"
+
+
+def test_unmask_tree_only_touches_sentinel_values():
+    """unmask_tree 只还原**值恰为哨兵**的键; 旧树里有值但提交值不是哨兵时不得改动
+
+    变异把 `value == MASK_SENTINEL` 写成 `!=` 或对非哨兵值也回填 —— 后果是「用户真改了值却被
+    磁盘旧值覆盖」, 这是掩码链路最危险的静默数据丢失。守阵两侧夹住。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    # 提交值不是哨兵(用户真改了) -> 必须保留用户新值, 不得回填旧值
+    tree = {"config": {"password": "user-changed", "token": "another"}}
+    old = {"config": {"password": "disk-old", "token": "disk-token"}}
+    unmask_tree(tree, old)
+    assert tree["config"]["password"] == "user-changed", "非哨兵值不得被磁盘旧值覆盖"
+    assert tree["config"]["token"] == "another"
+
+    # 混合: 哨兵回填, 非哨兵保持
+    tree2 = {"config": {"password": MASK_SENTINEL, "token": "new-token"}}
+    unmask_tree(tree2, old)
+    assert tree2["config"]["password"] == "disk-old", "哨兵须回填"
+    assert tree2["config"]["token"] == "new-token", "非哨兵须保持"
+
+
+def test_mask_tree_recurses_into_nested_dicts():
+    """mask_tree 必须递归进嵌套映射(变异把递归分支写坏 -> 深层密码明文泄露)
+
+    守阵: 深两层的敏感键必须被掩码, 且空值不掩码(空值掩码会误导前端以为已设置).
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree
+
+    tree = {
+        "config":
+            {
+                "qbittorrent": {
+                    "password": "secret",
+                    "user": "u"
+                },
+                "web": {
+                    "authkey": "k",
+                    "apikey": "plain"
+                },
+                "trackers": {
+                    "T": {
+                        "passkey": "pk",
+                        "cookie": "ck"
+                    }
+                },
+                "empty_password": "",
+                "nothing": None,
+            }
+    }
+    out = mask_tree(tree)
+    cfg = out["config"]
+    assert cfg["qbittorrent"]["password"] == MASK_SENTINEL
+    assert cfg["qbittorrent"]["user"] == "u", "非敏感键不得被掩码"
+    assert cfg["web"]["authkey"] == MASK_SENTINEL, "键名含 authkey -> 掩码"
+    assert cfg["web"]["apikey"] == "plain", "不含敏感词的键不得被掩码"
+    assert cfg["trackers"]["T"]["passkey"] == MASK_SENTINEL, "深层敏感键须递归掩码"
+    assert cfg["trackers"]["T"]["cookie"] == MASK_SENTINEL
+    assert cfg["empty_password"] == "" and cfg["nothing"] is None, "空值不掩码(避免误导已设置)"
+    assert tree["config"]["qbittorrent"]["password"] == "secret", "原树不得被就地修改"
+
+
+def test_set_path_rebuilds_non_mapping_mid_nodes():
+    """_set_path 中途节点非映射时必须**重建为 dict**(变异把 `node.get(p)` 改 None/get(None))
+
+    前者让已存在的 dict 节点被无视而覆盖重建(丢兄弟键); 后者拿不到任何节点。守阵用 spy 语义:
+    已有 dict 的中途节点须**原地复用**(兄弟键保留), 非 dict 的须重建.
+    """
+    from auto_qb.config.writer import _set_path
+
+    # 中途节点已是 dict -> 原地复用, 兄弟键保留
+    tree = {"config": {"web": {"port": "1", "host": "h"}}}
+    _set_path(tree, ["config", "web", "port"], "2")
+    assert tree["config"]["web"] == {"port": "2", "host": "h"}, "须复用已有 dict 节点(不丢兄弟键)"
+
+    # 中途节点是标量 -> 重建为 dict
+    tree2 = {"config": {"web": "junk"}}
+    _set_path(tree2, ["config", "web", "port"], "3")
+    assert tree2["config"]["web"] == {"port": "3"}
+
+    # 中途节点缺失 -> 现场建 dict
+    tree3 = {"config": {}}
+    _set_path(tree3, ["config", "fs", "path_map"], ["x"])
+    assert tree3["config"]["fs"]["path_map"] == ["x"]
+
+
+def test_backup_skips_when_source_missing_and_keeps_encoding(tmp_path):
+    """_backup: 源文件不存在时**直接返回**(不建任何东西); 存在时按 utf-8 读并原子写
+
+    变异簇: `os.path.dirname` → None(父目录漏建) + open 的 `"r"` 被删 —— 前者让嵌套备份目录
+    不建, 后者改变读模式语义。守阵两侧夹住。
+    """
+    from auto_qb.config import writer as writer_mod
+
+    missing = str(tmp_path / "nope.yml")
+    nested_backup = tmp_path / "deep" / "x.bak"
+    writer_mod._backup(missing, str(nested_backup))
+    assert not nested_backup.exists() and not (tmp_path / "deep").exists(), "源缺失时零副作用"
+
+    path = _make(tmp_path, BASE)
+    writer_mod._backup(path, str(nested_backup))
+    assert nested_backup.exists(), "须按 dirname 建父目录并落备份"
+    with open(nested_backup, encoding="utf-8") as f:
+        assert f.read() == BASE
+
+    # 非 ASCII 内容往返(验证 utf-8 读写契约)
+    path2 = _make(tmp_path, BASE + "  web:\n    title: 中文标题\n")
+    b2 = str(tmp_path / "deep2" / "y.bak")
+    writer_mod._backup(path2, b2)
+    with open(b2, encoding="utf-8") as f:
+        assert "中文标题" in f.read(), "utf-8 读取须无损"
