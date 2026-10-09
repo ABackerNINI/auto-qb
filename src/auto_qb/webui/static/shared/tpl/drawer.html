@@ -19,10 +19,12 @@
         <div class="drawer-grip" title="拖拽调高" @pointerdown="drawerGripDown($event)"
              @pointermove="drawerGripMove($event)" @pointerup="drawerGripUp($event)"
              @pointercancel="drawerGripUp($event)"></div>
-        <!-- 流量形态头部(全局/分组/单种): 图标 + 标题 + **时间档位 + 纵轴设置** + 收起/关闭。
+        <!-- 流量形态头部(**全局/分组**): 图标 + 标题 + **时间档位 + 纵轴设置** + 收起/关闭。
              2026-10-08 版式改(用户动议): 窗口档位与纵轴控件自正文上提到本栏 —— 正文工具条
              占的是图的高度, 图被压扁; 两者本就是「图怎么看」的设置, 归设置栏才合理。
-             三挂点(全局/分组/单种)共用同一段控件块。 -->
+             注意本头部**只**由 kind === "traffic"(全局/分组)渲染; 单种流量图走的是种子详情头部
+             (v-else), 其同款控件组 2026-10-09 第 2 轮改落**图下统计栏**(见 .hist-summary 段注释)
+             —— 两者不共用头部, 内层标记由守阵钉逐字同源。 -->
         <header v-if="drawer.kind === 'traffic'" class="drawer-head">
           <div class="drawer-title">
             <span class="g-status k-other">
@@ -100,35 +102,6 @@
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
-          <!-- 种子「流量」页签的档位/纵轴控件组(2026-10-09 修版式改回归): 时间档位与纵轴设置
-               是「图怎么看」的设置, 全局/分组流量图已上提到流量形态头部; 但**种子流量图**走的是
-               本头部(种子形态, 见 qbCurScope 的 torrent 分支)—— 版式改只接了流量形态头部, 该页签
-               的控件因此消失。这里补同款控件组(绑定/清单全在根实例 mixin, 与流量形态头部同源,
-               两处内层标记由守阵钉「逐字一致」防漂移)。种子头部已承载五页签导航 + 模板切换器,
-               控件组整体占满一行(.qb-headctl flex-basis:100%)自动换到第二行, 仍在头部不占图高。
-               门 = qbCurScope === 'torrent' = 种子形态 + 流量页签 + 功能开启(单点派生, fail-closed)。 -->
-          <div v-if="qbCurScope === 'torrent'" class="qb-headctl">
-            <div class="qb-tabs">
-              <button v-for="w in qbWindowNames" :key="w"
-                      :class="{ active: qbCurWindow === w }"
-                      @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
-            </div>
-            <div class="qb-tools">
-              <span class="qb-tools-label">纵轴</span>
-              <div class="qb-seg">
-                <button :class="{ active: qbYAxisMode === 'auto' }"
-                        @click="qbSetYAxisMode('auto')">自动</button>
-                <button :class="{ active: qbYAxisMode === 'limit' }"
-                        @click="qbSetYAxisMode('limit')">限速+20%</button>
-                <button :class="{ active: qbYAxisMode === 'manual' }"
-                        @click="qbSetYAxisMode('manual')">手动</button>
-              </div>
-              <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
-                     min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
-                     @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
-              <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
-            </div>
-          </div>
         </header>
         <!-- FX-29 软切换: switching = 旧目标数据仍在撑着面板几何, 但已不代表当前种子 ——
              用遮罩(读数降到不可读 + 屏蔽交互)代替清空: 防串显的效果一样, 面板高度与列表不塌不跳 -->
@@ -189,14 +162,46 @@
                 </div>
               </div>
               <!-- 2026-10-08 版式改: 上行/下行图例自图下独立一行并入统计栏(省一行高度 = 图更高);
-                   原图下那行的说明文字(口径 + 悬停提示)已按用户要求移除, 信息在悬停 tooltip 里给。 -->
-              <div v-if="qbCurSummary" class="hist-summary">
-                <span class="hs-leg"><i class="sw up"></i>上行</span>
-                <span class="hs-leg"><i class="sw down"></i>下行</span>
-                <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
-                <span>上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
-                <span>下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
-                <span class="hist-hint">{{ qbCurSummaryHint }}</span>
+                   原图下那行的说明文字(口径 + 悬停提示)已按用户要求移除, 信息在悬停 tooltip 里给。
+                   2026-10-09 第 2 轮(用户动议): 种子「流量」页签的档位/纵轴控件组**也落进本统计栏**
+                   (排在「下载累计」之后) —— 种子头部已承载五页签导航 + 模板切换器, 13 档再并进去
+                   太挤、窄视口下会变形; 落到图下统计栏既有行里, 不新占图高。控件组内层与流量形态
+                   头部同源(守阵钉逐字一致), 门 = qbCurScope === 'torrent'(种子形态 + 流量页签 +
+                   功能开启的单点派生, fail-closed)。
+                   统计栏本体的门因此放宽一档(有汇总 **或** 本门): 首载/错误态没有汇总时控件仍要在
+                   —— 否则「数据取不到 ⇒ 连换档位都点不到」(与 2026-10-08 之前正文工具条恒可见同义)。 -->
+              <div v-if="qbCurSummary || qbCurScope === 'torrent'" class="hist-summary">
+                <template v-if="qbCurSummary">
+                  <span class="hs-leg"><i class="sw up"></i>上行</span>
+                  <span class="hs-leg"><i class="sw down"></i>下行</span>
+                  <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
+                  <span>上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
+                  <span>下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
+                </template>
+                <!-- 种子「流量」页签的档位(13)+纵轴控件组(门见上注); 排在「下载累计」之后、hint 之前 -->
+                <div v-if="qbCurScope === 'torrent'" class="qb-statctl">
+                  <div class="qb-tabs">
+                    <button v-for="w in qbWindowNames" :key="w"
+                            :class="{ active: qbCurWindow === w }"
+                            @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
+                  </div>
+                  <div class="qb-tools">
+                    <span class="qb-tools-label">纵轴</span>
+                    <div class="qb-seg">
+                      <button :class="{ active: qbYAxisMode === 'auto' }"
+                              @click="qbSetYAxisMode('auto')">自动</button>
+                      <button :class="{ active: qbYAxisMode === 'limit' }"
+                              @click="qbSetYAxisMode('limit')">限速+20%</button>
+                      <button :class="{ active: qbYAxisMode === 'manual' }"
+                              @click="qbSetYAxisMode('manual')">手动</button>
+                    </div>
+                    <input v-if="qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
+                           min="0" step="any" :value="qbYAxisManual || ''" placeholder="MiB/s"
+                           @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
+                    <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
+                  </div>
+                </div>
+                <span v-if="qbCurSummary" class="hist-hint">{{ qbCurSummaryHint }}</span>
               </div>
               <!-- S1: 图后宿主(变体 14 解读栏 / 15 自适应条落点) -->
               <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>

@@ -367,15 +367,28 @@ def test_frontend_qb_traffic_chart_wiring():
     )
     assert head_blk and 'class="qb-tabs"' in head_blk.group(1) and 'class="qb-tools"' in head_blk.group(1), \
         "时间档位(.qb-tabs)与纵轴控件(.qb-tools)必须落在流量形态头部标题栏内(2026-10-08 版式改: 自正文上提, 把高度还给图)"
-    # 2026-10-09 修回归: 种子流量图(kind === "seed" + tab === "traffic")走的是**种子形态头部**,
-    # 2026-10-08 版式改只把控件接进了流量形态头部 ⇒ 种子「流量」页签的时间档位/纵轴控件消失。
-    # 修法 = 种子形态头部补同款控件组(.qb-headctl 包裹, 整体占满第二行)。
+    # 2026-10-09 第 2 轮(用户动议): 种子流量图(kind === "seed" + tab === "traffic")的档位/纵轴
+    # 控件组**从种子头部挪走** —— 头部已承载五页签导航 + 模板切换器, 13 档再并进去太挤、窄视口下
+    # 会变形; 改落**图下统计栏** .hist-summary, 排在「下载累计」之后(用户: 「即『下载累计』后」)。
     seed_head_blk = re.search(r'<header v-else class="drawer-head">(.*?)</header>', drawer_tpl, re.S)
-    assert seed_head_blk and 'class="qb-headctl"' in seed_head_blk.group(1) \
-        and 'class="qb-tabs"' in seed_head_blk.group(1) and 'class="qb-tools"' in seed_head_blk.group(1), \
-        "种子详情头部缺流量档位/纵轴控件组(2026-10-09 修版式改回归: 种子流量图走种子形态头部, 漏接即控件消失)"
-    assert "v-if=\"qbCurScope === 'torrent'\"" in seed_head_blk.group(1), \
-        "种子头部的档位/纵轴控件组必须门在 qbCurScope === 'torrent'(种子形态 + 流量页签 + 功能开启的单点派生)"
+    assert seed_head_blk and 'class="qb-statctl"' not in seed_head_blk.group(1) \
+        and 'class="qb-headctl"' not in seed_head_blk.group(1), \
+        "种子头部不得再挂流量档位/纵轴控件组(2026-10-09 第 2 轮: 已改落图下统计栏, 头部保持单行 44px)"
+    stat_blk = drawer_tpl[drawer_tpl.index('class="hist-summary"'):drawer_tpl.index('data-dt-host="traffic-post"')]
+    assert 'class="qb-statctl"' in stat_blk and 'class="qb-tabs"' in stat_blk and 'class="qb-tools"' in stat_blk, \
+        "种子「流量」页签的档位/纵轴控件组必须落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮)"
+    assert "v-if=\"qbCurScope === 'torrent'\"" in stat_blk, \
+        "统计栏内的档位/纵轴控件组必须门在 qbCurScope === 'torrent'(种子形态 + 流量页签 + 功能开启的单点派生)"
+    # 统计栏本体的门放宽一档(有汇总 **或** 种子流量形态): 首载/错误态没有汇总, 控件仍必须可见 ——
+    # 否则「数据取不到 ⇒ 连换档位都点不到」; 与 2026-10-08 之前正文工具条恒可见的语义对齐。
+    assert 'v-if="qbCurSummary || qbCurScope === \'torrent\'"' in drawer_tpl, \
+        "统计栏本体必须门在「有汇总 或 种子流量形态」上(否则首载/错误态控件整组消失)"
+    # 落点次序(用户口径「即『下载累计』后」): 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 控件组 → 口径 hint
+    _order = [stat_blk.index(k) for k in ("hs-leg", "窗口", "上传累计", "下载累计", "qb-statctl", "qbCurSummaryHint")]
+    assert _order == sorted(_order), \
+        "统计栏次序必须为 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 档位/纵轴控件组 → 口径 hint"
+    assert 'hs-leg' in stat_blk and '上行' in stat_blk and '下行' in stat_blk, \
+        "统计栏(.hist-summary)必须含上行/下行图例(.hs-leg), 且排在「窗口 N 桶」之前"
 
     # 两处控件组必须同源: 内层 .qb-tabs/.qb-tools 逐字一致(空白归一后比较), 一处改了另一处必须同步
     def _ctl_inner(blk):
@@ -383,15 +396,10 @@ def test_frontend_qb_traffic_chart_wiring():
         j = blk.index('</div>', blk.index('qbYAxisCapText'))
         return re.sub(r"\s+", " ", blk[i:j])
 
-    assert _ctl_inner(head_blk.group(1)) == _ctl_inner(seed_head_blk.group(1)), \
-        "两处流量档位/纵轴控件组已漂移(流量形态头部 vs 种子「流量」页签头部; 内层 .qb-tabs/.qb-tools 必须逐字同源)"
+    assert _ctl_inner(head_blk.group(1)) == _ctl_inner(stat_blk), \
+        "两处流量档位/纵轴控件组已漂移(流量形态头部 vs 图下统计栏; 内层 .qb-tabs/.qb-tools 必须逐字同源)"
     assert 'class="hist-legend"' not in drawer_tpl, \
         "独立的图例行(.hist-legend)必须退场: 上行/下行图例已并入统计栏 .hist-summary"
-    sum_blk = re.search(r'class="hist-summary">(.*?)</div>', drawer_tpl, re.S)
-    assert sum_blk and 'hs-leg' in sum_blk.group(1) and '上行' in sum_blk.group(1) and '下行' in sum_blk.group(1), \
-        "统计栏(.hist-summary)必须含上行/下行图例(.hs-leg), 且排在「窗口 N 桶」之前"
-    assert sum_blk.group(1).index("hs-leg") < sum_blk.group(1).index("窗口"), \
-        "图例必须排在统计栏首位(窗口 N 桶 之前), 与用户「窗口 900桶后」的表述同向"
     assert '暂无该种子的 qB 口径流量数据(从未有传输记录)' in js, \
         "单种空态文案未收窄为「从未有传输记录」(plan §03.3 拍板: 空闲不再产生空态)"
     assert "仅活跃传输期间有采样" not in js, \
@@ -750,15 +758,15 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
         and "qbSetYAxisManual($event.target.value)" in hdr.group(1), \
         "手动模式必须给输入框且 @change 走 qbSetYAxisManual"
     assert "{{ qbYAxisCapText }}" in hdr.group(1), "缺生效上限读数(qbYAxisCapText)"
-    # 2026-10-09 修回归: 种子「流量」页签头部同款控件组(qbCurScope === 'torrent' 门)也须齐全
-    seed_hdr = re.search(r'<header v-else class="drawer-head">(.*?)</header>', drawer_tpl, re.S)
-    assert seed_hdr and 'class="qb-tools"' in seed_hdr.group(1) and 'class="qb-seg"' in seed_hdr.group(1), \
-        "drawer.html 纵轴控件(.qb-tools/.qb-seg)必须同时落在种子「流量」页签头部内(2026-10-09 修版式改回归)"
-    assert "v-if=\"qbYAxisMode === 'manual'\"" in seed_hdr.group(1) \
-        and "qbSetYAxisManual($event.target.value)" in seed_hdr.group(1), \
-        "种子「流量」页签头部的手动模式必须给输入框且 @change 走 qbSetYAxisManual"
+    # 2026-10-09 第 2 轮: 种子「流量」页签同款控件组改落图下统计栏(.qb-statctl, qbCurScope === 'torrent' 门)
+    stat_hdr = drawer_tpl[drawer_tpl.index('class="hist-summary"'):drawer_tpl.index('data-dt-host="traffic-post"')]
+    assert 'class="qb-tools"' in stat_hdr and 'class="qb-seg"' in stat_hdr, \
+        "drawer.html 纵轴控件(.qb-tools/.qb-seg)必须同时落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮)"
+    assert "v-if=\"qbYAxisMode === 'manual'\"" in stat_hdr \
+        and "qbSetYAxisManual($event.target.value)" in stat_hdr, \
+        "统计栏内的手动模式必须给输入框且 @change 走 qbSetYAxisManual"
 
-    # 10. CSS 三皮肤成对(纵轴控件 + 种子头部控件组版式)
+    # 10. CSS 三皮肤成对(纵轴控件 + 图下统计栏控件组版式)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合"),
         (_ui_css_aggregate("console"), "console css 聚合"),
@@ -768,9 +776,9 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
             ".qb-tools {",
             ".qb-seg button.active",
             ".qb-yaxis-input",
-            ".drawer-head > .qb-headctl { flex: 1 1 100%;",
+            ".hist-summary > .qb-statctl {",
         ):
-            assert rule in css, f"{name} 缺 {rule}(纵轴控件/种子头部控件组三套 UI 必须成对改)"
+            assert rule in css, f"{name} 缺 {rule}(纵轴控件/图下统计栏控件组三套 UI 必须成对改)"
 
 
 _DT_REGISTRY_NODE_PROBE = r"""
