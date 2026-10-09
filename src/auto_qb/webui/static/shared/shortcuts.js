@@ -38,6 +38,10 @@
  *     `_kbViewTop()` = 顶栏(_headH) + 吸顶列头(.group-head, 会盖住列表首行) /
  *     `_kbViewBottom()` = 固定状态栏(--statusbar-h) 与停靠面板顶缘取更紧者。
  *     凡"这一行/这个元素在视口里吗"的判定一律走这两个单点, 不许现写 _headH / innerHeight。
+ *   - 可见性判定的**坐标口径**(2026-10-09 收口坐标错位): `_kbViewTop` / `_kbViewBottom` 返回
+ *     **视口坐标**(与 getBoundingClientRect 同源, 渲染行直接比); 窗口化的前缀和 y 是**文档
+ *     坐标**, 比较时显式加回 window.scrollY。两套坐标混用 = 滚动后渲染行全判「出视口」,
+ *     无光标回落退化成跳极值行(↓ 回顶 / ↑ 落底)。
  *   - 键鼠衔接(26-09-30-1806 方案 B): 鼠标点击入口(selection.js 五个 on*Click)按所在行回写
  *     kbCursor —— 落光标 ≠ 选中(focus 语义), 键盘从点击处出发; 无光标回落 = 视口就近行
  *     (_kbViewportRow), 不再落极值行。滚动跟随仍只发生在键盘路径(_kbApplyCursor)。
@@ -548,21 +552,30 @@ window.AQB_SHORTCUTS = {
      * 末行。两条解析路: ①窗口化视图(group/torrent)用 _rowPre 前缀和换算文档 y(与
      * _kbScrollRowIntoView 同源, 长度不符视为失效, 沿用 P1-2 退避口径); ②其余情形(追剧页全量
      * 渲染 / 小列表不开窗 / 前缀和失效)扫渲染行可见性 —— 视图切换是 v-if, DOM 里只有当前视图。
+     * **两路坐标系不同**(前缀和 = 文档坐标, 渲染行 rect = 视口坐标), 见函数内首段注释: 混用会
+     * 在滚动后把渲染行全判「出视口」, 退化成跳极值行。
      * 都解析不出 → 退回旧口径: ↓ 首行 / ↑ 末行(保守, 不猜错)。只读几何, 滚动仍归 _kbApplyCursor。 */
     _kbViewportRow(rows, delta) {
-      const vTop = window.scrollY + this._kbViewTop() + 4;  // 顶栏 + 吸顶列头(列头盖住首行)
-      const vBot = window.scrollY + this._kbViewBottom() - 4;  // 状态栏 / 面板开着时让位面板顶缘(W4)
+      /* 坐标系口径(2026-10-09 修坐标错位): 单点 _kbViewTop / _kbViewBottom 返回**视口坐标**
+       * (与 getBoundingClientRect 同源) —— 渲染行 rect 直接比它; 而窗口化的**前缀和 y 是文档
+       * 坐标**, 比较时必须显式加回 sy(下面单取的滚动量)。旧实现把滚动量一并加进 vTop/vBot
+       * 再拿去比 rect —— 只在未滚动时成立, 一旦滚过一屏, 所有渲染行都被判「出视口」,
+       * 无光标回落就退化成「跳极值行」(↓ 回顶 / ↑ 落底; 实测 scrollY=1500 时期望首可见行 →
+       * 实落 row 0)。两套坐标别混用。 */
+      const vTop = this._kbViewTop();     // 视口坐标(顶栏 + 吸顶列头)
+      const vBot = this._kbViewBottom();  // 视口坐标(状态栏 / 面板开着时让位面板顶缘)
+      const sy = window.scrollY;          // 前缀和 y 是文档坐标, 比较时加回
       const kind = rows[0].kind === "torrent" || rows[0].kind === "group" ? rows[0].kind : null;
       const pre = kind && this._rowPre && this._rowPre[kind];
       if (pre && pre.length === rows.length + 1) {
         const top = this._winTop[kind] || 0;
         if (delta > 0) {
           for (let i = 0; i < rows.length; i++) {
-            if (pre[i + 1] + top > vTop) return i;  // 首个底边伸进视口的行
+            if (pre[i + 1] + top > sy + vTop + 4) return i;  // 首个底边伸进视口的行
           }
         } else {
           for (let i = rows.length - 1; i >= 0; i--) {
-            if (pre[i] + top < vBot) return i;  // 末个顶边伸进视口的行
+            if (pre[i] + top < sy + vBot - 4) return i;  // 末个顶边伸进视口的行
           }
         }
         return delta > 0 ? 0 : rows.length - 1;
@@ -570,12 +583,14 @@ window.AQB_SHORTCUTS = {
       const byId = new Map(rows.map((r, i) => [r.id, i]));
       let first = -1;
       let last = -1;
+      const vTopM = vTop + 4;
+      const vBotM = vBot - 4;
       for (const el of document.querySelectorAll("[data-key], [data-hash]")) {
         const dk = el.getAttribute("data-key");
         const i = byId.get(dk !== null ? dk : el.getAttribute("data-hash"));
         if (i === undefined) continue;
         const rect = el.getBoundingClientRect();
-        if (rect.bottom <= vTop || rect.top >= vBot) continue;  // 完全出视口(display:none 恒 0 也被挡)
+        if (rect.bottom <= vTopM || rect.top >= vBotM) continue;  // 完全出视口(display:none 恒 0 也被挡)
         if (first < 0 || i < first) first = i;
         if (i > last) last = i;
       }

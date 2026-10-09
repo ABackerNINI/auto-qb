@@ -2,6 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { BASE_URL, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
+import { withVm } from './lib/vm.mjs';
 
 /**
  * 键盘滚动跟随的可见带: 首个 / 末个种子必须**完整可见**(2026-10-09 用户报「键盘移动光标到
@@ -26,6 +27,13 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 面板关 可见带 739px(屏内 10~11 行) 而一屏前进 12 行(每屏跳 1 行); **面板开 可见带只剩 353px
  * (屏内 6 行) 而一屏仍前进 12 行 ⇒ 每翻一屏静默跳过 6 行**。判据 = 不跳行不变式: 前进量 ≤ 屏内
  * 可见行数 +1(取整余量), 面板关/开两档各测一遍。
+ *
+ * 2026-10-09 第三轮(可见带的**坐标系**): 无光标回落(_kbViewportRow)的渲染行扫描把**文档坐标**
+ * vTop/vBot(加了 window.scrollY)直接和**视口坐标** getBoundingClientRect 比较 —— 只在 scrollY=0
+ * 时成立。非窗口化视图(追剧页)一旦滚动, 所有渲染行都被判「出视口」, 回落退化成**跳极值行**:
+ * 实测 1440x900 追剧页展开一剧一集(39 行) scrollY=1500 时, ↓ 期望落屏内首行(idx 6)实落 row 0
+ * 且 scrollY 跳回 8、↑ 期望落屏内末行(idx 10)实落最末行(scrollY 冲到 2203)。判据 = 「光标必须
+ * 落在**按键前**就在可见带内的行上」(正是「视口就近行」的语义, 跳极值行必违反), ↑/↓ 各测一遍。
  */
 
 /** 读一次可见带 + 光标行几何(px 取整)。窗口化下只量渲染出来的行, 与用户所见同源。 */
@@ -203,6 +211,87 @@ for (const skin of SKINS) {
         `面板开: 一屏前进 ${p2.advance} 行 > 屏内可见 ${p2.before.visible} 行(+1 余量) ⇒ 可见带被面板压窄后仍在按整窗高翻页(可见带 ${p2.before.band}px)`,
       ).toBeLessThanOrEqual(p2.before.visible + 1);
       expect(p2.before.visible, '面板开着时可见带必须明显变窄(否则本档没测到重点)').toBeLessThan(p1.before.visible);
+    });
+
+    test(`无光标回落落屏内就近行, 不跳极值行(追剧页非窗口化视图, 滚动后) @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+
+      /**
+       * 建立被测态: 追剧页(非窗口化视图 = 渲染行扫描那条路的唯一服务对象) + 展开一剧一集
+       * (行数够多才滚得动; 集成员行走 [data-hash] 路, 与剧/集行的 [data-key] 路都覆盖到) +
+       * 光标清空(「无光标」是 _kbViewportRow 的入口前置 —— 点击/键盘都会落光标, 故用 setup 注入)。
+       * 展开态经 vm 注入(D4 允许的注入类; 若点行展开会顺手落光标, 反而到不了被测分支)。
+       */
+      await page.click('nav.tabs [data-view="shows"]');
+      await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 15_000 });
+      await withVm(
+        page,
+        `const s = vm.shows.list[0];
+         const sn = s.seasons[0];
+         const e = sn.episodes[0];
+         vm.expandedShows = [s.key];
+         vm.expandedShowEp = vm.showEpRowId(s.key, sn.season, e.key.join('-'));
+         vm.kbCursor = null;
+         return true;`,
+      );
+      await expect(page.locator('.ep-row').first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('.member-row[data-hash]').first()).toBeVisible({ timeout: 10_000 });
+
+      /** 读一次行几何(DOM 顺序 = _kbRows 顺序): 每行 rect + 可见带上下界 + 光标行号。 */
+      const readRows = () =>
+        page.evaluate(() => {
+          const head = document.querySelector('.group-head');
+          const sb = document.querySelector('.statusbar');
+          const hb = head ? head.getBoundingClientRect().bottom : 0;
+          const sbt = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+          const rows = [...document.querySelectorAll('.show-row, .ep-row, .member-row[data-hash]')];
+          return {
+            hb: Math.round(hb),
+            sbt: Math.round(sbt),
+            scrollY: Math.round(window.scrollY),
+            maxScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+            curIdx: rows.findIndex((r) => r.classList.contains('kb-cursor')),
+            rows: rows.map((r, i) => {
+              const rc = r.getBoundingClientRect();
+              return { i, top: Math.round(rc.top), bottom: Math.round(rc.bottom) };
+            }),
+          };
+        });
+
+      /**
+       * 测一个方向: 重置无光标 → 滚过一屏 → 记下**按键前**可见带内的行 → 按键 → 断言落点在其中。
+       * 旧码把 scrollY 混进渲染行比较, 滚动后所有行都被判「出视口」⇒ 回落跳极值行(↓ row 0 / ↑ 末行),
+       * 必落在可见带之外 —— 1px 取整余量对判据无影响(可见带是按实量 rect 划的, 唯一余量是行高)。
+       */
+      const checkDirection = async (key) => {
+        await withVm(page, `vm.kbCursor = null; return true;`);
+        const { maxScroll } = await readRows();
+        await page.evaluate((y) => window.scrollTo(0, y), Math.round(maxScroll * 0.7));
+        await page.waitForTimeout(250); // 等滚动 + 窗口化重渲染落定(本视图非窗口化, 只等滚动)
+        const before = await readRows();
+        const visibleBefore = before.rows
+          .filter((r) => r.bottom > before.hb && r.top < before.sbt)
+          .map((r) => r.i);
+        expect(before.scrollY, `precondition: 必须真的滚过一屏(实测 scrollY=${before.scrollY})`).toBeGreaterThan(500);
+        expect(visibleBefore.length, 'precondition: 滚动后屏内必须有可见行').toBeGreaterThan(0);
+        await page.keyboard.press(key);
+        await settleScroll(page);
+        const after = await readRows();
+        expect(
+          visibleBefore,
+          `${key === 'ArrowDown' ? '↓' : '↑'} 无光标回落落到了按键前**看不见**的行(idx=${after.curIdx}); ` +
+            `按压前屏内可见行 = [${visibleBefore.join(', ')}], 共 ${before.rows.length} 行, ` +
+            `scrollY ${before.scrollY}->${after.scrollY} —— 滚动后渲染行全判出视口 ⇒ 退化成跳极值行`,
+        ).toContain(after.curIdx);
+        expect(after.curIdx, '光标必须真的落定(不是没反应)').toBeGreaterThanOrEqual(0);
+      };
+
+      await checkDirection('ArrowDown'); // 期望: 落屏内首行(旧码落 row 0)
+      await checkDirection('ArrowUp'); // 期望: 落屏内末行(旧码落最末行)
     });
   });
 }

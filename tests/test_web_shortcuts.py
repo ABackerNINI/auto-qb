@@ -1027,7 +1027,15 @@ def test_kb_view_band_single_points() -> None:
     忽略底部固定状态栏(落点「视口底 - 8px」把末行停进状态栏背后, 实测遮 26px / 行高 50px)。
     真机取证: scrollY=40 时首行 rect.top=103 < 列头 bottom=126; 末行 bottom=892 > 状态栏 top=866。
     静态守阵只能钉「单点在且被消费、边界算式不许再裸写」, 几何正确性归 e2e 真浏览器断言
-    (tests/test_web_shortcuts.py 的既有口径: 静态全绿而真机必红的教训见 pitfalls/dock-panel)。"""
+    (tests/test_web_shortcuts.py 的既有口径: 静态全绿而真机必红的教训见 pitfalls/dock-panel)。
+
+    2026-10-09 第三轮(坐标系口径): 单点返回的是**视口坐标**(与 getBoundingClientRect 同源),
+    而无光标回落(_kbViewportRow)的渲染行扫描曾把 window.scrollY 混进上/下界, 拿文档坐标去比
+    视口坐标的 rect —— 仅 scrollY=0 时成立, 滚过一屏后渲染行全判「出视口」, 回落退化成跳极值行
+    (实测 1440x900 追剧页 scrollY=1500: ↓ 期望首可见行实落 row 0)。此处钉死两套坐标的边界:
+    vTop/vBot 必须是单点裸值(不加 scrollY), 前缀和分支(文档坐标)比较时加回 sy, 渲染行 rect 与
+    vTopM/vBotM(视口坐标)比。几何正确性仍归 e2e kbd-scroll-band.spec.mjs 的新测例。
+    """
     eng = _read("shortcuts.js")
     # --- 上界单点: 顶栏 + 吸顶列头 ---
     vt = re.search(r"_kbViewTop\(\) \{(.*?)\n    \},", eng, re.S)
@@ -1048,8 +1056,24 @@ def test_kb_view_band_single_points() -> None:
     # --- 三处消费: 上界走单点, 下界仍是 _kbViewBottom ---
     vp = re.search(r"_kbViewportRow\(rows, delta\) \{(.*?)\n    \},", eng, re.S)
     assert vp, "shortcuts.js 缺 _kbViewportRow"
-    assert "this._kbViewTop()" in vp.group(1), "无光标回落的上界必须走 _kbViewTop(列头盖住首行)"
-    assert "this._kbViewBottom()" in vp.group(1), "_kbViewportRow 下界必须走 _kbViewBottom(状态栏 + 面板)"
+    vpb = vp.group(1)
+    assert "this._kbViewTop()" in vpb, "无光标回落的上界必须走 _kbViewTop(列头盖住首行)"
+    assert "this._kbViewBottom()" in vpb, "_kbViewportRow 下界必须走 _kbViewBottom(状态栏 + 面板)"
+    # --- 坐标系口径(2026-10-09 修坐标错位): 渲染行 rect 是**视口坐标**, 前缀和 y 是**文档坐标** ---
+    # vTop/vBot 必须是单点**裸值**(视口坐标), 不得再叠 window.scrollY —— 旧码 `vTop = scrollY + 单点 + 4`
+    # 只在 scrollY=0 时成立, 滚过一屏后所有渲染行都被判「出视口」, 无光标回落退化成跳极值行。
+    assert re.search(r"const vTop = this\._kbViewTop\(\);",
+                     vpb), ("_kbViewportRow 的 vTop 必须是单点裸值(视口坐标, 与 getBoundingClientRect 同源)")
+    assert re.search(r"const vBot = this\._kbViewBottom\(\);", vpb), ("_kbViewportRow 的 vBot 必须是单点裸值(视口坐标)")
+    assert vpb.count("window.scrollY") == 1 and "const sy = window.scrollY;" in vpb, (
+        "window.scrollY 只经 sy 单点取一次(渲染行 rect 混入 scrollY 即坐标错位)"
+    )
+    # 前缀和分支(y 文档坐标)比较时加回 sy; 渲染行 rect(视口坐标)直接比 vTopM/vBotM
+    assert re.search(r"pre\[i \+ 1\] \+ top > sy \+ vTop \+ 4",
+                     vpb) and re.search(r"pre\[i\] \+ top < sy \+ vBot - 4", vpb), "窗口化前缀和(文档坐标)比较必须加回 sy"
+    assert "const vTopM = vTop + 4;" in vpb and "const vBotM = vBot - 4;" in vpb, ("渲染行可见带上下界由单点裸值加余量得出(vTopM/vBotM)")
+    assert re.search(r"rect\.bottom <= vTopM \|\| rect\.top >= vBotM",
+                     vpb), ("渲染行 rect 必须与视口坐标(vTopM / vBotM)比较 —— 与文档坐标比即坐标错位")
     si = re.search(r"_kbScrollRowIntoView\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
     assert si, "shortcuts.js 缺 _kbScrollRowIntoView"
     sib = si.group(1)
