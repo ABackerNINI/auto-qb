@@ -164,7 +164,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "speed-up", group: "视图与导航", label: "限速(上传方向)",
     def: "Shift+KeyL", scope: "list",
     run: (vm) => vm.openSpeedAt(null, "up") },
-  // ---- B · 光标与导航(追剧页走 剧/集 单元; 辅种页只走组行线性链, 成员行 vNext, §08 决策②) ----
+  // ---- B · 光标与导航(追剧页走 剧/集 单元; 辅种页走 组行 -> 展开组成员行 的线性链) ----
   { id: "cursor-up", group: "光标与导航", label: "光标上移一行",
     def: "ArrowUp", scope: "list", repeat: true,
     run: (vm) => vm._kbMove(-1) },
@@ -814,7 +814,10 @@ window.AQB_SHORTCUTS = {
         return;
       }
       if (c.kind === "torrent") {
-        this.shiftTorrentSel({ hash: c.id });
+        // 成员行的范围**随视图**取(单点 _memberRangeList): 种子页平铺 / 辅种页展开组 /
+        // 追剧页展开集。此前一律 shiftTorrentSel(种子页平铺列表) —— 辅种/追剧页上该列表为空
+        // 或与之无关, 于是成员行 Shift+↑↓ 选不中任何东西(2026-10-09 修)。
+        this.shiftMemberSel({ hash: c.id });
         return;
       }
       const units = this._kbShowUnits();

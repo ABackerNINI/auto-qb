@@ -132,13 +132,36 @@ window.AQB_SELECTION = {
         : [...this.selMembers, m.hash];
       this.selAnchorMember = m.hash;
     },
+    /* 成员行范围选择的**范围单点**: 随当前视图取成员链 ——
+     *   种子页 = 平铺行(filteredTorrents); 辅种页 = 展开组的成员; 追剧页 = 展开集的版本。
+     * !此前只在辅种页(展开组)成立(硬编码查 expandedKey), 追剧页集明细行与两页的**键盘**
+     *   Shift+↑↓ 都落空: 键盘路径一律走 shiftTorrentSel(种子页平铺列表), 在辅种/追剧页
+     *   该列表为空(懒加载)或与之无关 ⇒ 范围选不中任何成员。取序与 _kbRows / winMembers 同源
+     *   (sortedMembers), 保证"屏幕上下 = 选择上下"。 */
+    _memberRangeList() {
+      if (this.viewMode === "torrents") return this.filteredTorrents.map((x) => x.hash);
+      if (this.viewMode === "shows") {
+        const eid = this.expandedShowEp;
+        if (!eid) return [];
+        for (const s of this.decoratedShows) {
+          for (const sn of s.seasons || []) {
+            for (const e of sn.episodes || []) {
+              if (this.showEpRowId(s.key, sn.season, e.epKeyStr) === eid) {
+                return this.memberHashesOf(this.sortedMembers(e.members));
+              }
+            }
+          }
+        }
+        return [];
+      }
+      const g = this.filteredGroups.find((x) => x.key === this.expandedKey);
+      return g ? this.memberHashesOf(this.sortedMembers(g.members)) : [];
+    },
     shiftMemberSel(m) {
       this.selGroups = [];  // FX-11: 同 toggleMemberSel
       this.selAnchorGroup = null;
-      // 当前展开明细的成员内连续选择(跨组范围由分组表的多选承担)
-      const g = this.filteredGroups.find((x) => x.key === this.expandedKey);
-      if (!g) return;
-      const list = g.members.map((x) => x.hash);
+      // 当前上下文内的成员连续选择(跨组范围由分组表的多选承担); 范围随视图取(单点见 _memberRangeList)
+      const list = this._memberRangeList();
       const anchor = this._selAnchor("member", list);
       const from = list.indexOf(anchor);
       const to = list.indexOf(m.hash);

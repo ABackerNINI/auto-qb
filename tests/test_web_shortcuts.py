@@ -38,6 +38,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   起点且排除 Shift(法则 2); 四处消费者走 _selAnchor 单点解析、无裸 list[0]; _selAnchor 兜底链
   齐全(显式 -> 光标 -> 展开组 -> 首行); _selSetAnchor 不碰选中集合; _kbExtend 先落手势原点
   (_selSeedAnchorFromCursor) 再移动光标, 且已有有效起点不动
+- test_kb_member_range_context_aware: 成员行范围选择随视图取范围(2026-10-09) —— _memberRangeList
+  按 viewMode 分流(种子页平铺 / 辅种页展开组 / 追剧页展开集), shiftMemberSel 吃它, _kbExtend 的
+  torrent 分支不再一律 shiftTorrentSel(辅种/追剧页成员行 Shift+↑↓ 曾选不中)
 - test_local_scope_wiring: settings-save inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope
   settings/list 档齐全(方案A W2 起停靠面板不再是作用域, drawer 值机制留位);
   浮层打开只放行焦点局部(settings)键位; 非 inputSafe 条目不得标 inputSafe
@@ -461,6 +464,39 @@ def test_shift_anchor_unified() -> None:
     seedb = seed.group(1)
     assert "ctx.ids.includes(this[field])" in seedb, ("已有有效起点必须不动(法则 2: 同一起点多次 Shift 扩展)")
     assert "this[field] = fromCursor" in seedb, "无有效起点时必须以当前光标落起点"
+
+
+def test_kb_member_range_context_aware() -> None:
+    """成员行范围选择随视图取范围(2026-10-09): 辅种页/追剧页的成员行(展开组 / 展开集)键盘
+    Shift+↑↓ 必须能选中。范围单点 _memberRangeList 按 viewMode 分流(种子页平铺 / 辅种页展开组 /
+    追剧页展开集); _kbExtend 的 torrent 分支走它 —— 不再一律 shiftTorrentSel(后者只看种子页
+    平铺列表, 在辅种/追剧页该列表为空或无关 ⇒ 范围选不中任何成员)。"""
+    sel = _read("selection.js")
+    m = re.search(r"_memberRangeList\(\) \{(.*?)\n    \},", sel, re.S)
+    assert m, "selection.js 找不到 _memberRangeList(成员行范围单点)"
+    body = m.group(1)
+    for needle, why in [
+        ('this.viewMode === "torrents"', "缺种子页分支(平铺行范围)"),
+        ('this.viewMode === "shows"', "缺追剧页分支(展开集版本范围)"),
+        ("this.expandedShowEp", "追剧页分支必须按展开的集取成员(否则集明细行范围选不中)"),
+        ("this.expandedKey", "辅种页分支必须按展开的组取成员"),
+        ("memberHashesOf", "取 hash 必须经 memberHashesOf 单点(裸取对象 hash 会字符串化成 [object Object])"),
+        ("sortedMembers", "范围取序必须与 _kbRows / winMembers 同源(屏幕上下 = 选择上下)"),
+    ]:
+        assert needle in body, f"_memberRangeList {why}"
+    # shiftMemberSel 必须吃范围单点(不再自建 filteredGroups.find 分支 —— 追剧页 expandedKey 恒空会落空)
+    sm = re.search(r"shiftMemberSel\(m\) \{(.*?)\n    \},", sel, re.S)
+    assert sm and "_memberRangeList()" in sm.group(1), "shiftMemberSel 必须走 _memberRangeList 范围单点"
+    assert "this.filteredGroups.find" not in sm.group(1), "shiftMemberSel 不得再硬编码辅种页分支"
+    # 键盘扩展落点: torrent 分支走 shiftMemberSel(随视图), 不得再一律 shiftTorrentSel
+    eng = _read("shortcuts.js")
+    ext = re.search(r"_kbExtend\(delta\) \{(.*?)\n    \},", eng, re.S)
+    assert ext, "shortcuts.js 找不到 _kbExtend"
+    eb = ext.group(1)
+    assert "this.shiftMemberSel({ hash: c.id })" in eb, (
+        "_kbExtend 的 torrent 分支必须走 shiftMemberSel(随视图取范围) —— 否则辅种/追剧页成员行 Shift+↑↓ 选不中"
+    )
+    assert "this.shiftTorrentSel({ hash: c.id })" not in eb, ("_kbExtend 不得再一律走 shiftTorrentSel(只看种子页平铺列表, 辅种/追剧页范围落空)")
 
 
 def test_local_scope_wiring() -> None:
