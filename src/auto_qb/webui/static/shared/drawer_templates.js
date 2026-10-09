@@ -281,21 +281,23 @@
      * 26-10-07 用户报「切页签其它元素跟着变」: 原生 select 的自动最小宽 = 最宽 option 的宽,
      * dtTplOptions 按页签变化 => max-width 上限不改变内容驱动宽的病根, 选择器占位宽随页签变,
      * 同排 .drawer-title(flex:1 1 auto + min-width:0)与收起摘要 .dt-summary 跟着让位回弹。
-     * 修法 = 定宽 width:240px 取代 max-width —— 占位宽与选项集/页签/数据全部解耦; 头部同排
-     * 仅剩的另一个内容驱动宽源(收起摘要 .dt-summary)同步定宽, 见下一条。240px 在 12px 字号
-     * 下容约 19 个全角字符, 现有 15 个 label 最长 8 全角符(自然宽约 130px 含内边距与下拉箭头)
-     * 固定宽不截断, text-overflow 只是防未来长 label 的保险丝(Chromium 对 select 生效, 其余
-     * 内核退化为裁切, 不引入新的宽度抖动源)。min-width:0 允许极窄窗口下随标题按比例收缩
-     * (定宽在 flex 里即基准尺寸, shrink 语义不变)。 */
-    ".drawer .dt-select { align-self: center; width: 240px; min-width: 0; text-overflow: ellipsis; padding: 2px 4px;",
+     * 修法 = 定宽取代 max-width —— 占位宽与选项集/页签/数据全部解耦。
+     * 26-10-09 用户报「选择框太长」: 定宽 240 -> 150 —— 只收窄, 定宽口径不变(不回退内容驱动
+     * 宽)。150px 扣去内边距/边框/下拉箭头约容 10 个全角字符, 现有 15 个 label 最长 8 全角符
+     * (自然宽约 130px 含内边距与下拉箭头)固定宽不截断, text-overflow 只是防未来长 label 的
+     * 保险丝(Chromium 对 select 生效, 其余内核退化为裁切, 不引入新的宽度抖动源)。min-width:0
+     * 允许极窄窗口下随标题按比例收缩(定宽在 flex 里即基准尺寸, shrink 语义不变)。收起摘要
+     * .dt-summary 是另一个独立定宽源(240px, 见下一条), 与本框各按内容域定宽, 不必等宽。 */
+    ".drawer .dt-select { align-self: center; width: 150px; min-width: 0; text-overflow: ellipsis; padding: 2px 4px;",,
     "  font: 12px/1.6 system-ui, sans-serif; color: var(--fg-muted); background: var(--bg-hover);",
     "  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); cursor: pointer;",
     "  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease); }",
     ".drawer .dt-select:hover, .drawer .dt-select:focus { color: var(--fg); border-color: var(--border-strong); outline: none; }",
     ".drawer .dt-select option { color: var(--fg); background: var(--bg-elev); }",
     /* 收起摘要与切换器同款内容驱动宽病(速度/进度每轮询周期都在变, 收起态头部逐秒抖; 切页签
-     * 换摘要内容同款): flex-basis 定宽 240px 与 .dt-select 同柱 —— 摘要文字短则留白、长则
-     * 省略, 行几何与页签/数据恒定解耦。 */
+     * 换摘要内容同款): flex-basis 定宽 240px —— 摘要文字短则留白、长则省略, 行几何与页签/数据
+     * 恒定解耦。与 .dt-select(150px)同为独立定宽源但各按内容域取值, 不必等宽(26-10-09 切换器
+     * 收窄后分叉; 摘要承载速度/进度文案需要更宽的稳定行)。 */
     ".drawer .dt-summary { flex: 0 1 240px; min-width: 0; align-self: center; overflow: hidden;",
     "  text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.5;",
     "  color: var(--fg-muted); }",
