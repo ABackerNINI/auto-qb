@@ -1059,6 +1059,17 @@ def test_kb_view_band_single_points() -> None:
     assert "this._kbViewBottom()" in sib, "_kbScrollRowIntoView 下界必须走 _kbViewBottom(渲染行与窗口化两路)"
     assert "_headH" not in sib, "_kbScrollRowIntoView 不得再裸写 _headH 当上界(单点外零算式)"
     assert sib.count("window.innerHeight") == 0, "_kbScrollRowIntoView 不得裸用 window.innerHeight 当下界"
+    # --- PageUp / PageDown 的「一屏」: 按可见带算, 不得再用整窗高(2026-10-09 收口) ---
+    mp = re.search(r"_kbMovePage\(dir\) \{(.*?)\n    \},", eng, re.S)
+    assert mp, "shortcuts.js 缺 _kbMovePage"
+    mpb = mp.group(1)
+    assert "this._kbViewBottom()" in mpb and "this._kbViewTop()" in mpb, (
+        "一屏行数必须按**可见带**算(顶栏 + 吸顶列头 … 状态栏 / 停靠面板): 用整窗高会让面板开着时每屏跳过一半行"
+    )
+    assert re.search(r"const per = Math\.max\(1, Math\.floor\(band / est\)\);",
+                     mpb), ("一屏行数算式必须由可见带得出(per = floor(band / est))")
+    assert "_winViewH" not in mpb, "_kbMovePage 不得再用 _winViewH(整窗高)当可见带"
+    assert "innerHeight" not in mpb, "_kbMovePage 不得再裸用 innerHeight 当可见带"
 
 
 def test_drawer_open_reveal_row() -> None:

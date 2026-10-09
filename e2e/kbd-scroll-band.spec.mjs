@@ -20,6 +20,12 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 沉到库里再 Home 回顶), 判据 = 光标行矩形与列头底缘 / 状态栏顶缘**零重叠**(留 1px 取整余量),
  * 且光标确实落在列表首/末行(data-hash 与窗口化渲染窗口的首/末行同值 —— 否则「没被遮」可能只是
  * 光标没走到极值行, 断言会退化成恒真)。
+ *
+ * 2026-10-09 第二轮(同一可见带专题): PageUp / PageDown 的「一屏」也必须按可见带算 —— 旧写法取
+ * window.innerHeight, 而可见带已被顶栏/列头/状态栏/停靠面板吃掉一截: 实测 1440x900 桩 300 种子,
+ * 面板关 可见带 739px(屏内 10~11 行) 而一屏前进 12 行(每屏跳 1 行); **面板开 可见带只剩 353px
+ * (屏内 6 行) 而一屏仍前进 12 行 ⇒ 每翻一屏静默跳过 6 行**。判据 = 不跳行不变式: 前进量 ≤ 屏内
+ * 可见行数 +1(取整余量), 面板关/开两档各测一遍。
  */
 
 /** 读一次可见带 + 光标行几何(px 取整)。窗口化下只量渲染出来的行, 与用户所见同源。 */
@@ -41,6 +47,42 @@ const readBand = (page) =>
       lastHash: rows.length ? rows[rows.length - 1].getAttribute('data-hash') : null,
     };
   });
+
+/**
+ * 读一次「一屏」相关的三个量: 光标行号 / 可见带 / 屏内可见行数。
+ * vm 内部读数属 D4 允许的第②类(filteredTorrents 与 kbCursor 没有 DOM 之外的取径; 可见带是
+ * 两个内部单点); 行号取列表顺序里的下标, 与 _kbMove 的前进量同口径。
+ */
+const readPageState = (page) =>
+  page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    const vTop = vm._kbViewTop();
+    const vBot = vm._kbViewBottom();
+    const visible = [...document.querySelectorAll('.torrent-row')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > vTop && r.top < vBot;
+    }).length;
+    const list = vm.filteredTorrents || [];
+    const cur = vm.kbCursor;
+    return {
+      idx: cur ? list.findIndex((m) => m.hash === cur.id) : -1,
+      band: Math.round(vBot - vTop),
+      visible,
+    };
+  });
+
+/** 等滚动落定(翻页是 nextTick 里发的滚动 + 窗口化重渲染, 不等待会把中间态读数当结果)。 */
+const settleScroll = async (page) => {
+  let prev = '';
+  for (let i = 0; i < 40; i++) {
+    const sig = await page.evaluate(
+      () => `${Math.round(window.scrollY)}:${Math.round(document.querySelector('.kb-cursor')?.getBoundingClientRect().top ?? -1)}`,
+    );
+    if (sig === prev) return;
+    prev = sig;
+    await page.waitForTimeout(50);
+  }
+};
 
 for (const skin of SKINS) {
   test.describe(`键盘滚动跟随可见带 ${skin}`, () => {
@@ -114,6 +156,53 @@ for (const skin of SKINS) {
         top.cur.top,
         `首行顶缘被吸顶列头盖住 ${top.head.bottom - top.cur.top}px(列头 bottom=${top.head.bottom}, 行 top=${top.cur.top}, 行高 ${top.cur.h})`,
       ).toBeGreaterThanOrEqual(top.head.bottom - 1);
+    });
+
+    test(`PageUp / PageDown 一屏不超过屏内可见行数(不跳行; 面板开着同样) @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      /**
+       * 翻一屏: 从 Home 起算, 返回「本屏可见行数 / 光标前进量」。
+       * 判据(不跳行不变式): 前进量 ≤ 屏内可见行数 +1(取整余量) —— 超了说明这一屏跳过了
+       * 屏幕上从未出现过的行(修复前按 window.innerHeight 算一屏: 面板关 12 > 10, 面板开 12 > 6)。
+       * 行高 71px 下 +1 余量足够, 而修复前两种情形的越界量都远大于 1 ⇒ 判据不虚。
+       */
+      const pageTurn = async () => {
+        await page.keyboard.press('Home');
+        await settleScroll(page);
+        const before = await readPageState(page);
+        await page.keyboard.press('PageDown');
+        await settleScroll(page);
+        const after = await readPageState(page);
+        return { before, after, advance: after.idx - before.idx };
+      };
+
+      // --- 面板关(可见带 739px) ---
+      const p1 = await pageTurn();
+      expect(p1.after.idx, 'Home 后 PageDown 必须真的前进(光标行号要变大)').toBeGreaterThan(p1.before.idx);
+      expect(
+        p1.advance,
+        `面板关: 一屏前进 ${p1.advance} 行 > 屏内可见 ${p1.before.visible} 行(+1 余量) ⇒ 这一屏跳过了看不见的行(可见带 ${p1.before.band}px)`,
+      ).toBeLessThanOrEqual(p1.before.visible + 1);
+
+      // --- 面板开(可见带被面板顶缘压窄) —— 缺陷最重的一档: 屏内只剩几行而一屏仍按整窗高算 ---
+      await page.keyboard.press('Home');
+      await settleScroll(page);
+      await page.dblclick('.torrent-row >> nth=0', { force: true }); // force: 整表 2s 重渲染抢点击(smoke.md)
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await page.waitForTimeout(800); // 面板长到自然高后可见带才落定
+      const p2 = await pageTurn();
+      expect(
+        p2.advance,
+        `面板开: 一屏前进 ${p2.advance} 行 > 屏内可见 ${p2.before.visible} 行(+1 余量) ⇒ 可见带被面板压窄后仍在按整窗高翻页(可见带 ${p2.before.band}px)`,
+      ).toBeLessThanOrEqual(p2.before.visible + 1);
+      expect(p2.before.visible, '面板开着时可见带必须明显变窄(否则本档没测到重点)').toBeLessThan(p1.before.visible);
     });
   });
 }

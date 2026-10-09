@@ -593,7 +593,13 @@ window.AQB_SHORTCUTS = {
       const kind = this.kbCursor ? this.kbCursor.kind : rows[0].kind;
       const est = this._rowH[kind === "torrent" ? "torrent" : kind === "group" ? "group" : "member"] ||
         ROW_WIN_EST_H[kind === "torrent" ? "torrent" : "group"] || 44;
-      const per = Math.max(1, Math.floor((this._winViewH || window.innerHeight) / est));
+      /* PageUp / PageDown「一屏」= **可见带**内的行数(2026-10-09 收口): 可见带 = _kbViewTop 到
+       * _kbViewBottom(顶栏+吸顶列头 … 固定状态栏, 面板开着再让位面板顶缘), **不是**整窗高 ——
+       * 停靠面板一开可见带只剩一半(实测 739 → 353px, 屏内只剩 6 行), 而按整窗高算的一屏会前进
+       * 12 行 ⇒ 每翻一屏**静默跳过 6 行**(不开面板时行高 71px 也每屏跳 1 行)。
+       * 行高取 _rowH 实测均值(行窗口化维护)→ ROW_WIN_EST_H → 44 兜底, 与窗口化同一口径。 */
+      const band = Math.max(0, this._kbViewBottom() - this._kbViewTop());
+      const per = Math.max(1, Math.floor(band / est));
       this._kbMove(dir * per);
     },
     /* 列表行可见下界(W4 几何走查产出, 计划 26-10-03-0917): 停靠面板开着时它 sticky 吸在视口底
