@@ -17,6 +17,16 @@
   ⇒ **"同一动作单种子正常、聚合行失败"基本就是这个形状**。
 - **处置**: 必须先 `memberHashesOf()` 归一成 hash。
   守阵: `test_frontend_static_bundle_health` 第 7 项(集成员取 hash 的行必须含 `memberHashesOf(`)。
+- **守阵是**按行**匹配的, 分不清「逐个取 hash」与「整串当 hash 传」(2026-10-09 实测)**: 它的判据是
+  「该行含 `e.members` 且含 `.hash`/`hashes`/`for (const h of`, 却没有 `memberHashesOf(`」——
+  于是**语义安全**的写法 `for (const m of this.sortedMembers(e.members)) ... m.hash` 同样被判红
+  (模板 `shows.html` 的 `v-for="m in e.members" :key="m.hash"` 就是同款安全写法, 只是不进扫描面)。
+  ⚠ **正确反应是改代码不是放宽守阵**: 该守阵拦的是"整集/整剧动作全线哑火"这种无声故障,
+  放宽它的代价远大于多套一层函数。套法 = `memberHashesOf(sortedMembers(e.members))` ——
+  先按明细表口径排好行序(`sortedMembers` 需要**对象**, 读 `m[key]`/`m.site`), 再由单点抽出 hash;
+  两者都保留, 行序与屏幕顺序才一致(只写 `memberHashesOf(e.members)` 会丢排序)。
+- **复发**: 1 (2026-09 首记; 2026-10-09 键盘光标链纳入集成员行时再撞 —— 路由命中了但只读到"必须归一",
+  没读到"守阵按行匹配会误伤安全写法", 故补此条)。
 
 ### P1-1 按视图回传: 前端赋值必须"**键不存在则保留原引用**"
 
