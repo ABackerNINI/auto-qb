@@ -41,6 +41,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_kb_member_range_context_aware: 成员行范围选择随视图取范围(2026-10-09) —— _memberRangeList
   按 viewMode 分流(种子页平铺 / 辅种页展开组 / 追剧页展开集), shiftMemberSel 吃它, _kbExtend 的
   torrent 分支不再一律 shiftTorrentSel(辅种/追剧页成员行 Shift+↑↓ 曾选不中)
+- test_kb_collapse_parent_row: 成员行 ← 收起所属单元(2026-10-09) —— _kbCollapseRow 增成员行分支
+  (原只认 group/show/ep, 光标按 ↓ 进展开组/展开集后 ← 静默无反应), 父行解析单点 _kbParentRow
+  复用 _memberRangeList(与渲染同源, 防错位), 收起后光标带回父行(成员行随收起消失)
 - test_local_scope_wiring: settings-save inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope
   settings/list 档齐全(方案A W2 起停靠面板不再是作用域, drawer 值机制留位);
   浮层打开只放行焦点局部(settings)键位; 非 inputSafe 条目不得标 inputSafe
@@ -502,6 +505,38 @@ def test_kb_member_range_context_aware() -> None:
         "_kbExtend 的 torrent 分支必须走 shiftMemberSel(随视图取范围) —— 否则辅种/追剧页成员行 Shift+↑↓ 选不中"
     )
     assert "this.shiftTorrentSel({ hash: c.id })" not in eb, ("_kbExtend 不得再一律走 shiftTorrentSel(只看种子页平铺列表, 辅种/追剧页范围落空)")
+
+
+def test_kb_collapse_parent_row() -> None:
+    """成员行 ← 收起所属单元(2026-10-09 用户报: 光标进组后 ← 静默无反应)。
+
+    _kbCollapseRow 原只认 group/show/ep 三种 kind; 成员行(kind=torrent)落空 —— 键盘按 ↓ 进
+    展开组/展开集后, ← 收不起任何东西(不报错, 纯"按了没反应")。修法 = 成员行分支收起**所属
+    单元**并把光标带回其行; 父行解析单点 _kbParentRow(判据复用 selection.js::_memberRangeList,
+    与 _kbRows 渲染同源)。本守阵钉"分支在不在 / 走没走单点 / 光标有没有带回父行"。"""
+    eng = _read("shortcuts.js")
+    col = re.search(r"_kbCollapseRow\(\) \{(.*?)\n    \},", eng, re.S)
+    assert col, "shortcuts.js 找不到 _kbCollapseRow(← 收起当前行的落点)"
+    cb = col.group(1)
+    at = cb.find('c.kind !== "torrent"')
+    assert at >= 0, "缺成员行分支 —— 光标进展开组/展开集后 ← 会静默无反应(用户 2026-10-09 报)"
+    tb = cb[at:]
+    assert "this._kbParentRow(c)" in tb, "_kbCollapseRow 的成员行分支必须走父行解析单点 _kbParentRow"
+    assert "this.expandedKey = null" in tb and "this.expandedShowEp = null" in tb, (
+        "成员行 ← 必须真收起所属单元(清 expandedKey / expandedShowEp), 不能只移动光标"
+    )
+    assert "this._kbApplyCursor(rows, idx)" in tb or "this.kbCursor = p" in tb, ("收起所属单元后必须把光标带回父行(成员行随收起消失, 光标不能留在链外)")
+    parent = re.search(r"_kbParentRow\(c\) \{(.*?)\n    \},", eng, re.S)
+    assert parent, "shortcuts.js 缺 _kbParentRow(成员行所属行解析单点)"
+    pb = parent.group(1)
+    for needle, why in [
+        ('c.kind !== "torrent"', "必须只对成员行生效(组/剧/集行走各自分支)"),
+        ('this.viewMode === "torrents"', "种子页平铺行无父行, 必须返回 null"),
+        ("this._memberRangeList()", "父行判据必须复用成员链单点(与渲染同源, 防收起目标错位)"),
+        ("this.expandedShowEp", "追剧页父行 = 展开的集行"),
+        ("this.expandedKey", "辅种页父行 = 展开的组行"),
+    ]:
+        assert needle in pb, f"_kbParentRow {why}"
 
 
 def test_local_scope_wiring() -> None:

@@ -45,6 +45,10 @@
  *     起点在 selection.js, 键盘侧在 _kbExtend 移动光标**之前**用 _selSeedAnchorFromCursor 落
  *     "手势原点"(无有效起点时才落), 使 Shift+↑↓ 首次扩展即从当前光标起算, 不再从列表首行起。
  *     起点解析/写入单点在 selection.js(_selAnchor / _selSetAnchor)。
+ *   - 收起语义(2026-10-09): ← 在**成员行**(展开组/展开集的成员)上收起**所属单元**并把光标
+ *     带回其行 —— 成员行无自身展开态, 原实现只认 group/show/ep 三种 kind, 光标按 ↓ 进组后
+ *     ← 静默无反应(用户报)。父行解析单点 _kbParentRow, 判据复用 selection.js::_memberRangeList
+ *     (与 _kbRows 渲染同源), 保证"屏幕上的成员行"与"收起目标"不错位。
  */
 
 /* 纯修饰键: 自身发 keydown, 匹配器等非修饰键落定才判定(录制器把"只按了 Shift"判无效) */
@@ -178,6 +182,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "row-expand", group: "光标与导航", label: "展开当前行",
     def: "ArrowRight", scope: "list",
     run: (vm) => vm._kbExpandRow() },
+  // 成员行(展开组/展开集的成员)自身无展开态: ← 改收起**所属单元**并把光标带回其行(_kbParentRow)
   { id: "row-collapse", group: "光标与导航", label: "收起当前行",
     def: "ArrowLeft", scope: "list",
     run: (vm) => vm._kbCollapseRow() },
@@ -708,6 +713,21 @@ window.AQB_SHORTCUTS = {
         if (p && this.expandedShowEp !== c.id) this.expandedShowEp = c.id;
       }
     },
+    /* 成员行(torrent)的所属行解析(← 收起所属单元用): 辅种页 = 展开的组行; 追剧页 = 展开的集行;
+     * 种子页平铺行无父行(返回 null)。判据 = 成员落在**当前展开单元**的成员链上 —— 复用
+     * selection.js::_memberRangeList 单点(与 _kbRows 渲染同源: memberHashesOf(sortedMembers)),
+     * 保证"屏幕上的成员行"与"收起目标"不错位; 不在链上即无父行, 保守不动。
+     * 只可能有一个单元处于展开态(expandedKey / expandedShowEp 单值), 故父行身份直接取它。 */
+    _kbParentRow(c) {
+      if (!c || c.kind !== "torrent" || this.viewMode === "torrents") return null;
+      if (!this._memberRangeList().includes(c.id)) return null;
+      if (this.viewMode === "shows") return this.expandedShowEp ? { kind: "ep", id: this.expandedShowEp } : null;
+      return this.expandedKey ? { kind: "group", id: this.expandedKey } : null;
+    },
+    /* ← 收起当前行(注册表 row-collapse)。组/剧/集行 = 收起自身展开态(反向于 _kbExpandRow);
+     * **成员行(torrent)** 无自身展开语义 —— 原实现只认 group/show/ep 三种 kind, 光标按 ↓ 进组后
+     * ← 静默无反应(用户 2026-10-09 报)。改为收起**所属单元**并把光标带回其行: 成员行随收起消失,
+     * 不把光标留在链外(否则下一次移动要落视口就近回落, 观感是"光标丢了")。 */
     _kbCollapseRow() {
       const c = this.kbCursor;
       if (!c) return;
@@ -721,6 +741,15 @@ window.AQB_SHORTCUTS = {
         return;
       }
       if (c.kind === "ep" && this.expandedShowEp === c.id) this.expandedShowEp = null;
+      if (c.kind !== "torrent") return;
+      const p = this._kbParentRow(c);
+      if (!p) return;
+      if (p.kind === "group") this.expandedKey = null;
+      else if (p.kind === "ep") this.expandedShowEp = null;
+      const rows = this._kbRows();
+      const idx = rows.findIndex((r) => r.kind === p.kind && r.id === p.id);
+      if (idx >= 0) this._kbApplyCursor(rows, idx);
+      else this.kbCursor = p;  // 理论不可达(父行恒在收起后的链上); 保守落光标, 不留悬空引用
     },
     _kbOpenRow() {
       const c = this.kbCursor;
