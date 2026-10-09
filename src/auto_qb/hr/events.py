@@ -5,10 +5,14 @@
 翻三个文件, 更糟的是**同类事件在两端各写一遍**(service 报一次 / worker 又报一次, 措辞不同),
 排查时看着像两件事。
 
-事件(v3, 计划 26-09-28-1932 §5.2「告警升级, 行为不变」):
-- `login`    **登录失效**: 页面变成登录页 ⇒ 必须有人去浏览器登录; **不可重试解决**;
-- `parse`    **页面改版**: 表头找不到 / 字段缺失 / 排序崩塌 / 防伪不过 ⇒ 该档截断, 需人工核对页面;
-- `silence`  **通道静默**: 端点长期没被扩展联系 ⇒ 浏览器没开 / 扩展停用 / 端口或 token 配错。
+事件(v4, 计划 26-10-09-0821 §03 归属分层):
+- `login`    **登录失效**(账号层): 页面变成登录页 ⇒ 必须有人去浏览器登录; **不可重试解决**;
+- `parse`    **页面改版**(站点层): 表头找不到 / 字段缺失 / 排序崩塌 / 防伪不过 ⇒ 该档截断, 需人工核对页面;
+- `silence`  **通道静默**(通道层): 端点长期没被扩展联系 ⇒ 浏览器没开 / 扩展停用 / 端口或 token 配错;
+- `channel`  **通道不可用**(通道层): 单次取数的通道故障(等回传超时 / 端点没在监听 / 未启用通道)。
+
+!层是**单点**的表(`DOMAINS`): 事件 → 归属层, 调用点**只选事件** ⇒「通道层事件被贴上站点层标签」
+在代码上不可表达(计划 §03.4)。出口(webui 错误历史 / 系统通知)按「层 × 档位」收放, 见 `hr/log.py`。
 
 被删除的旧事件: `fuse`(熔断)与 `suspended`(停用)随模型删除 —— v3 的失败处置是
 「档位截断 + 周期自然重试」, 无独立熔断/停用机制; 失败档连续多波失效升级为
@@ -22,13 +26,32 @@ from typing import Iterable, Sequence
 EVENT_LOGIN = "login"
 EVENT_PARSE = "parse"
 EVENT_SILENCE = "silence"
+EVENT_CHANNEL = "channel"
 
 #: 事件 -> 中文标签(日志前缀用; 也是用户 grep 的锚点)
 LABELS = {
     EVENT_LOGIN: "登录失效",
     EVENT_PARSE: "页面改版",
     EVENT_SILENCE: "通道静默",
+    EVENT_CHANNEL: "通道不可用",
 }
+
+DOMAIN_CHANNEL = "channel"
+DOMAIN_ACCOUNT = "account"
+DOMAIN_SITE = "site"
+
+#: 事件 -> 归属层(计划 §03.2)。未登记的事件返回空串 = 未分层, 出口按「可见」处理(保持既有行为)
+DOMAINS = {
+    EVENT_LOGIN: DOMAIN_ACCOUNT,
+    EVENT_PARSE: DOMAIN_SITE,
+    EVENT_SILENCE: DOMAIN_CHANNEL,
+    EVENT_CHANNEL: DOMAIN_CHANNEL,
+}
+
+
+def domain_of(event: str) -> str:
+    """事件的归属层(见 `DOMAINS`); 未登记返回空串"""
+    return DOMAINS.get(event, "")
 
 
 def prefix(event: str) -> str:
@@ -111,14 +134,36 @@ def zero_listing(site: str) -> str:
     )
 
 
-def channel_silent(hours: float, where: str, sites: Sequence[str], note: str = "") -> str:
-    """通道静默: 端点级事件(扩展没来联系**就没有任何站点能取数**) ⇒ 文案里点出受影响站点"""
+def channel_unavailable(site: str, detail: str) -> str:
+    """通道不可用(通道层, 单次取数): 端点没在监听 / 未启用通道 / 等回传超时
+
+    !它**不是**「页面取数失败」: 站点页面根本没被访问到, 故不带 `[HR 页面改版]` 前缀、不写进
+    `wave.notes`、不推进档位失败(计划 §03.3 的 P1/P2/P3)。
+    """
+    return f"{prefix(EVENT_CHANNEL)} 站点 {site} | 通道不可用, 本轮不做在线核实(保守回落本地兜底): {detail}"
+
+
+def channel_silent(hours: float, where: str, sites: Sequence[str], note: str = "", *, evidence: str = "none") -> str:
+    """通道静默: 端点级事件(扩展没来联系**就没有任何站点能取数**) ⇒ 文案里点出受影响站点
+
+    `evidence` 是后端**能观测到**的证据(计划 §03.6 / §03.6.1), 决定文案指向哪个动作 —— 不再用
+    「浏览器是否在运行 / 扩展是否启用 / 端点端口与 token 是否一致?」这一句问句让用户自己猜:
+    - `rejected`: 有被拒的敲门(401/403) ⇒ 扩展**在跑**, 是 token / origin 配置问题;
+    - `web_active`: 有人在看 WebUI 而端点无任何接触 ⇒ 扩展未在联系(停用 / 卸载 / 未启用 / 跨机断);
+    - `none`: 无任何证据 ⇒ 如实并列, **不断言**(后端分不开「浏览器未运行」与「扩展未启用」)。
+    """
     affected = ", ".join(sites) if sites else "(无启用中的站点)"
+    if evidence == "rejected":
+        action = ("扩展**在联系但被拒**(401/403) ⇒ 请核对 hr_check.channel.token 与 origin 白名单"
+                  "(这是配置态问题, 不是浏览器没开)")
+    elif evidence == "web_active":
+        action = ("**有人在看 WebUI, 但端点未收到任何联系** ⇒ 扩展可能被停用 / 卸载 / 未启用, "
+                  "或跨机隧道与网络不通")
+    else:
+        action = ("端点未收到任何联系: 浏览器可能未运行, **或** 扩展未启用 / 未安装"
+                  "(二者后端不可分辨, 请自行核对)")
     tail = f" {note}" if note else ""
-    return (
-        f"{prefix(EVENT_SILENCE)} 端点已静默 {hours:.1f}h({where}扩展未联系端点), 受影响站点: {affected} | "
-        f"浏览器是否在运行 / 扩展是否启用 / 端点端口与 token 是否与扩展配置一致?{tail}"
-    )
+    return (f"{prefix(EVENT_SILENCE)} 端点已静默 {hours:.1f}h({where}扩展未联系端点), 受影响站点: {affected} | {action}{tail}")
 
 
 def summarize_sites(sites: Iterable[str]) -> str:
@@ -127,12 +172,19 @@ def summarize_sites(sites: Iterable[str]) -> str:
 
 
 __all__ = [
+    "DOMAIN_ACCOUNT",
+    "DOMAIN_CHANNEL",
+    "DOMAIN_SITE",
+    "DOMAINS",
+    "EVENT_CHANNEL",
     "EVENT_LOGIN",
     "EVENT_PARSE",
     "EVENT_SILENCE",
     "LABELS",
     "channel_silent",
+    "channel_unavailable",
     "counter_mismatch",
+    "domain_of",
     "fetch_failed",
     "lane_persistent_failure",
     "login_expired",

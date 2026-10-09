@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 故障归属分层拆分 · 分步实施计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-fault-domain">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-09-0821">
+<meta name="doc-updated" content="26-10-09-0931">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 18px; padding-left: 14px; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; }
+  h5 { font-size: 12.5px; font-weight: 600; margin: 14px 0 6px; color: var(--dim); letter-spacing: 0.02em; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .ok { color: var(--ok); }
+  .gap { color: var(--warn); }
+  .no { color: var(--no); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.stop { border-left-color: var(--no); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s01"><span class="no">01</span>拍板回执与范围</a>
+    <a href="#s02"><span class="no">02</span>现状核实与实施锚点</a>
+    <a href="#s03"><span class="no">03</span>方案设计 (归属分层)</a>
+    <a href="#s04"><span class="no">04</span>分步实施 S1–S6</a>
+    <a href="#s05"><span class="no">05</span>拍板点</a>
+    <a href="#s06"><span class="no">06</span>验收判据</a>
+    <a href="#s07"><span class="no">07</span>风险与不变项</a>
+    <a href="#s08"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">计划工位 · 拍板后冻结<br>实施进度走任务档案</div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">Implementation Plan · HR 故障归属分层</div>
+    <h1>HR 故障归属分层拆分 分步实施计划</h1>
+    <p class="lede">用户实报: 关闭浏览器一晚, WebUI 错误历史里出现 4 条 <code>[HR 页面改版] 页面取数失败(等待浏览器扩展取数超时 180s)</code> 与 2 条 <code>[HR 通道静默]</code>。用户口径五条: <b>①「连不上浏览器」这类只打后端 log, 不发到前端错误历史</b>; <b>②「等扩展超时」与「页面改版」两件不同量级的错误混为一谈, 必须绝对禁止</b>; <b>③「浏览器离线」与「扩展离线」必须分清</b> —— 故「通道/环境层」不设单一静默桶, 须按<b>可分辨证据</b>再分档(§03.6); <b>④「扩展只能本机」是设计缺陷, 未来须支持跨机(NAS + 外部扩展)</b>(issue <code>26-10-09-0855</code> / 计划 <code>26-10-09-0856</code>); <b>⑤「WebUI 在线而扩展不在线」发 WebUI 警告、不静默, 且无需判断同机 / 同源</b> —— 判据极简化为「WebUI 是否活跃」(§03.6.1)。本计划<b>不给出口打标记</b>(那是补丁 —— 把出口的意志写进产生点), 而是把已存在的<b>归属层 (fault domain)</b> 骨架补齐、并让「层」贯穿到出口。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-09-0821</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">hr-fault-domain</div></div>
+      <div class="item"><div class="k">上游</div><div class="v">用户实报 (2026-10-09 会话)</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop@5eccc5b5 · 2026-10-09</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress · 实施中</span></div></div>
+    </div>
+  </header>
+
+  <section id="s01">
+    <h2><span class="no">01</span>拍板回执与范围</h2>
+    <table>
+      <tr><th>事项</th><th>结论</th></tr>
+      <tr><td>用户诉求</td><td>① 通道/环境类事件<b>只进后端 log, 不进前端错误历史</b>; ② 通道层与站点层的混淆<b>绝对禁止</b>(不是"少报几条", 是分类模型问题)。</td></tr>
+      <tr><td>本计划范围</td><td>把「等扩展超时」补进<b>已有的异常归属分层</b>(S1) → 按层分派、消掉三处污染(S2) → 事件文案分层(S3) → 出口声明式收层 + 补「被拒接触」状态面(S4) → <b>WebUI 存活证据面(S4b, 改动面扩到 <code>webui/</code>)</b> → 守阵(S5) → 文档与收尾(S6)。</td></tr>
+      <tr><td>明确不在范围</td><td>① 不动 <code>hr_check.allow_window</code> 等运维侧缓解(那是绕开, 不是修复); ② 不为「通道离线」新增前端替代可见性(如状态栏离线角标) —— 见 §05 D2; ③ 不动判定侧对 <code>verified</code>/<code>index</code> 的任何语义。</td></tr>
+      <tr><td>Is 已修问题?</td><td>否。异常家族<b>本来就分了层</b>(见 §03.1), 「超时」是<b>漏建模</b>, 属设计缺口而非回归。</td></tr>
+      <tr><td>用户追加口径 (本轮)</td><td><b>「浏览器离线」与「扩展离线」必须分清</b>。二者在端点观测面上<b>同形</b>(都表现为「没人来联系」), 根因与动作却相反: 前者是正常作息(应静默), 后者是配置/启用故障(必须告警)。因此「通道/环境层」<b>不得整层静音</b> —— 那会把「用户以为在跑、其实扩展早已停用」一起吞掉, 是比原问题更危险的新混淆。</td></tr>
+      <tr><td>用户口径 ④ (26-10-09-0856)</td><td><b>「扩展只能本机」是设计缺陷, 未来须支持跨机(NAS + 外部扩展)</b>。→ 入池 issue <code>26-10-09-0855</code>, 另立计划 <code>26-10-09-0856</code>(专题 <code>hr-channel-remote</code>)。对本计划的影响: 原「设计边界」callout 定性翻转(见 §03.6.1)。</td></tr>
+      <tr><td>用户口径 ⑤ (26-10-09-0913)</td><td><b>「WebUI 在线而扩展不在线」适合发 WebUI 警告, 不静默; 无需判断是否同机 / 同源</b>。→ 判据<b>极简化</b>: 只看「WebUI 是否活跃」(W-a/W-b/W-c 全部撤销, S4b 退化为直接复用既有 <code>is_active()</code>); 出口改为「<b>活跃 ⇒ 入环告警 / 不活跃 ⇒ 静默</b>」(§03.6.1 / D2 ③ / D4)。</td></tr>
+    </table>
+    <div class="callout stop">
+      <b>本计划拒绝的一条路线</b>: 给这类记录挂 <code>extra={"web_silent": True}</code> 让前端跳过。它把「前端」这个词写进了 HR 业务代码 —— 产生点要知道出口的存在, 这是耦合; 而且它只让前端看不见, <b>下面三处污染一点没动</b>(见 §03.3)。用户判定为「补丁」, 采纳。
+    </div>
+  </section>
+
+  <section id="s02">
+    <h2><span class="no">02</span>现状核实与实施锚点 (HEAD 5eccc5b5 实测)</h2>
+    <p>两类事件各自的产生源, 以及被污染的三个下游面。行号须在实施时按当时 HEAD 复核(本项目行号漂移常态)。</p>
+    <table>
+      <tr><th>锚点</th><th>位置</th><th>现状</th><th>本次动作</th></tr>
+      <tr><td>异常家族</td><td class="num">hr/fetcher.py:19–64</td><td><code>HrFetchError</code> 基类 → <code>HrChannelUnavailable</code>(→ <code>Stopped</code> / <code>Quota</code>) / <code>HrLoginExpired</code>。分层已存在</td><td>复用, <span class="gap">补缺口</span></td></tr>
+      <tr><td><b>洞口</b>: 等扩展超时</td><td class="num">hr/fetcher.py:154</td><td>抛<b>裸的</b> <code>HrFetchError</code> —— 与「端点未监听」(<code>:142</code> 抛 <code>HrChannelUnavailable</code>) 不同, 它掉进基类</td><td><span class="gap">S1 建模为通道层</span></td></tr>
+      <tr><td>波级失败出口</td><td class="num">hr/service.py:666–686</td><td><code>except HrFetchError</code> → <code>wave.notes</code>(684) + <code>_mark_fetch_failed_lane</code>(685) + <code>logger.warning(fetch_failed)</code>(686)</td><td><span class="gap">S2 分派</span></td></tr>
+      <tr><td>页面级失败出口</td><td class="num">hr/service.py:727–738</td><td>同款三连, 经 <code>_warn_parse</code>(734)</td><td><span class="gap">S2 分派</span></td></tr>
+      <tr><td>波级让位/故障分组</td><td class="num">hr/service.py:725–726、642–651</td><td>已把 <code>Stopped</code>/<code>Quota</code>/<code>Unavailable</code>/<code>LoginExpired</code> 排除出「档位失败」; <code>Unavailable</code> 走 <code>_warn_no_channel</code></td><td><span class="ok">复用</span></td></tr>
+      <tr><td><b>鉴权失败出口</b></td><td class="num">hr/server.py:212–215</td><td>401 → <code>logger.error</code> 且<b>不写任何状态</b>(<code>:213</code> 注释); 扩展每 60s 敲一次 ⇒ token 配错即<b>每分钟一条 ERROR</b></td><td><span class="gap">S4 记状态 + 节流</span></td></tr>
+      <tr><td>origin 拒绝出口</td><td class="num">hr/server.py:196–199</td><td>403 → <code>logger.warning</code>, 同样不写状态</td><td><span class="gap">S4 记状态</span></td></tr>
+      <tr><td>接触记录</td><td class="num">hr/server.py:302–307</td><td><code>_note_contact</code> <b>只被成功鉴权的请求调用</b> ⇒ 被拒的敲门在状态面上完全不可见(只活在日志文件里)</td><td><span class="gap">S4 补状态面</span></td></tr>
+      <tr><td><b>WebUI 活跃心跳</b></td><td class="num">webui/runtime.py:176、375–377</td><td><code>last_seen</code> + <code>touch()</code>; 现用途 = 主循环组装视图的<b>性能门控</b></td><td><span class="gap">S4b 复用为存活证据</span></td></tr>
+      <tr><td>SSE 心跳刷 touch</td><td class="num">webui/server/routes/events.py:61</td><td>keepalive 每 <code>SSE_KEEPALIVE_S=5s</code> 调一次 <code>web.touch()</code> —— 页面开着即自动刷新, 无需用户操作(另有 20+ API 路由也 touch)</td><td><span class="ok">已有</span></td></tr>
+      <tr><td><b>WebUI 活跃信号</b></td><td class="num">webui/runtime.py:55、176、367–373</td><td><code>last_seen</code> + <code>WEB_VIEW_TTL=10.0</code>; <code>is_active()</code> 已被主循环消费(<code>:851/861/866</code>)</td><td><span class="ok">S4b 直接复用</span></td></tr>
+      <tr><td>SSE 订阅不带来源</td><td class="num">webui/runtime.py:268–286</td><td><code>_subscribers</code> 只存 <code>queue.Queue</code>, 无法区分本机 / 远端</td><td><span class="gap">S4b 扩签名</span></td></tr>
+      <tr><td>通道层告警出口</td><td class="num">hr/service.py:1469–1475</td><td><code>_warn_no_channel</code>: 每站只报一次, 通道恢复即重置(<code>:1460–1467</code>)</td><td><span class="ok">复用</span></td></tr>
+      <tr><td>站点层告警出口</td><td class="num">hr/service.py:1485–1493</td><td><code>_warn_parse</code>: WARNING 按 <code>CHANNEL_SILENCE_WARN</code> 节流</td><td><span class="ok">不动</span></td></tr>
+      <tr><td>通道静默告警</td><td class="num">hr/worker.py:388–408</td><td><code>logger.error(channel_silent)</code>, 6h 常量节流</td><td><span class="gap">S4 打层信息</span></td></tr>
+      <tr><td>事件文案与标签</td><td class="num">hr/events.py:27–31、52–54、114–121</td><td><code>fetch_failed</code> 套 <code>[HR 页面改版]</code> 前缀; 标签表只有 login/parse/silence</td><td><span class="gap">S3 分层</span></td></tr>
+      <tr><td>前端错误历史收集器</td><td class="num">webui/runtime.py:107–127</td><td><code>WebErrLogHandler.emit</code> 只看 <code>levelno &gt;= WARNING</code>, 收 <code>auto_qb</code> 全命名空间</td><td><span class="gap">S4 加过滤器</span></td></tr>
+      <tr><td>系统通知桥</td><td class="num">infra/notify.py:226–246</td><td>挂 <code>auto_qb</code>, 按 <code>min_level</code>(默认 ERROR, <code>config/models.py:246</code>) 过滤</td><td><span class="gap">S4 同步</span></td></tr>
+      <tr><td>三处污染</td><td class="num">service.py:684 / 685 / 686</td><td>notes 持久痕迹 · 档位失败计数 · action 语义, 见 §03.3</td><td><span class="gap">S2 随分层消失</span></td></tr>
+      <tr><td>纯内存守阵</td><td class="num">tests/test_webui_backend_errlog.py:135–156</td><td><code>emit</code> 源码禁出现写盘触点(<code>open(</code> / <code>Path(</code> / <code>shutil</code> 等)</td><td><span class="ok">S4 须不违反</span></td></tr>
+    </table>
+  </section>
+
+  <section id="s03">
+    <h2><span class="no">03</span>方案设计 (归属分层)</h2>
+
+    <h3>3.1 分层骨架本来就存在 —— 这不是「缺一层」</h3>
+    <p>项目已确立判据, 写在异常家族的 docstring 里: 「与 <code>HrChannelStopped</code> / <code>HrChannelQuota</code> <b>同一套判据: 能不能靠重试解决</b>」(<code>hr/fetcher.py:52–64</code>)。即<b>异常即分类</b>已经是本项目的范式, 通道层与账号层都已建模:</p>
+    <pre><code>HrFetchError                    # 基类: 通用取数失败(计失败)
+├─ HrChannelUnavailable         # 通道/环境层: 没有可用通道
+│   ├─ HrChannelStopped         #   叫停(程序自己的决定, 非事件)
+│   └─ HrChannelQuota           #   扩展侧硬上限(后端频控失效信号)
+└─ HrLoginExpired               # 账号层: 需人到场登录
+
+<!-- 洞口 -->  (裸 HrFetchError)  # !「等扩展超时」没有自己的类型, fetcher.py:154</code></pre>
+    <p><b>洞口的位置恰好最致命</b>: 唯一漏建模的那一支, 正落在最吵的路径上 —— 它掉进基类, 于是在 service 里被当作「页面取数失败」处理, 套上 <code>EVENT_PARSE</code> 的 <code>[HR 页面改版]</code> 前缀, 最后进前端错误环。</p>
+
+    <h3>3.2 归属层模型 (本计划的正式口径)</h3>
+    <p><b>通道/环境层不能是单一桶</b>(用户口径③)。它内部至少有三档, 判据是<b>后端能观测到什么证据</b> —— 而不是猜根因:</p>
+    <table>
+      <tr><th>层 / 子类</th><th>成员</th><th>判据 (后端可观测量)</th><th>出口</th></tr>
+      <tr><td><b>通道 · 预期离线</b></td><td>浏览器按作息关闭</td><td>无联系 <b>且</b> WebUI 不活跃(可再叠加 <code>allow_window</code> 之外)</td><td><b>仅后端 log</b>(降到 DEBUG/INFO) —— 这就是「用户睡觉去了」</td></tr>
+      <tr><td><b>通道 · 可定位故障</b></td><td>扩展在敲门但 token / origin 不对</td><td>被拒接触计数 &gt; 0(<b>有人来敲</b>)</td><td>后端 log + <b>告警且能指名根因</b>(「扩展在联系, 检查 token」)</td></tr>
+      <tr><td><b>通道 · 无联系</b></td><td>浏览器未运行 / 扩展未启用 / 未安装 / 等回传超时</td><td>端点在监听 且 <b>无任何接触</b>(成功与被拒都没有)</td><td>后端 log; <b>若 WebUI 活跃 ⇒ 发 WebUI 警告(不静默)</b>, 否则归「预期离线」<b>静默</b>(§03.6.1 / §05 D2)</td></tr>
+      <tr><td><b>账号层</b></td><td>登录失效</td><td>页面是登录页</td><td>后端 log + 弹窗(每站一次)</td></tr>
+      <tr><td><b>站点 / 内容层</b></td><td>改版 · 字段 · 排序 · 计数 · 守恒 · 零行</td><td>页面结构 / 字段 / 排序 / 防伪判据</td><td>后端 log + <b>前端错误历史</b></td></tr>
+    </table>
+    <p>层内判据沿用既有那条: <b>能不能靠重试解决</b>。超时的解是「等通道恢复」—— 与 <code>HrChannelUnavailable</code> 同解, 故归通道层。</p>
+
+    <h3>3.3 量级混淆的真实代价 (为什么必须禁止, 而不只是"标签难看")</h3>
+    <p>前端错误历史只是其中一面。下面三处都在前端之外, 只滤前端等于「把报警器的线剪了, 报警原因还在烧」:</p>
+    <table>
+      <tr><th>#</th><th>污染</th><th>位置</th><th>后果</th></tr>
+      <tr><td class="num">P1</td><td>写进 <code>wave.notes</code></td><td class="num">service.py:684、733</td><td>「页面取数失败: 等待浏览器扩展取数超时」进<b>站点文件</b>, 报告与 WebUI 的 notes 都读它 —— 环境噪音进了持久证据链</td></tr>
+      <tr><td class="num">P2</td><td>推进档位失败计数</td><td class="num">service.py:685 → 1495–1498</td><td>浏览器连关几晚可能攒到 <code>LANE_FAIL_ALERT_STREAK=3</code>, 把环境问题<b>升级成 ERROR「疑似改版, 建议走查」</b> —— 环境态被误判成站点结论</td></tr>
+      <tr><td class="num">P3</td><td><code>action</code> 语义被改写</td><td class="num">service.py:666–686</td><td>落 <code>ACTION_ERROR</code> 而非 <code>ACTION_NO_CHANNEL</code> —— 「通道不可用」在状态机里被伪装成「站点故障」</td></tr>
+      <tr><td class="num">P4</td><td>鉴权失败按 ERROR 无节流</td><td class="num">server.py:212–215</td><td>扩展 token 配错时, 扩展每 60s 敲一次 ⇒ <b>每分钟一条 ERROR</b> ⇒ 进前端错误历史 + 触发系统通知(默认 <code>min_level=ERROR</code>)。一个<b>持续配置态</b>被按最高级别刷屏 —— 与本计划主题同源(瞬态/配置态被当成最高量级故障)</td></tr>
+    </table>
+
+    <h3>3.4 为什么「出口打标记」是补丁, 而「分层 + 出口声明」不是</h3>
+    <table>
+      <tr><th>做法</th><th>语义</th><th>耦合方向</th></tr>
+      <tr><td><code>extra={"web_silent": True}</code></td><td>「<b>前端</b>别收我」</td><td><span class="no">产生点必须知道前端存在</span> —— 出口的意志泄漏进业务代码</td></tr>
+      <tr><td><code>hr_domain="channel"</code></td><td>「<b>我属于</b>通道层」</td><td><span class="ok">产生点只描述归属; 出口自己声明「我收哪一层」</span> —— 两者靠「层」这个共享词汇解耦</td></tr>
+    </table>
+    <p>区别的实质: 前者要在<b>每个调用点</b>记得加标记(漏一处就漂移); 后者由<b>单点</b>按事件对象附加层信息, 调用点只有一个动作 —— 「选哪一个事件」。要让「通道层事件贴上站点层标签」这件事在代码上<b>不可表达</b>, 而不是靠约定去拦。</p>
+
+    <h3>3.5 数据流 (改后)</h3>
+    <pre><code>fetcher._fetch()
+   ├─ 端点未监听 ─▶ HrChannelUnavailable            ┐
+   ├─ 等回传超时 ─▶ HrChannelTimeout (S1 新增)       ├─ 通道 / 环境层
+   ├─ 被叫停     ─▶ HrChannelStopped                │   ⇒ _warn_no_channel (每站一次, 恢复即重置)
+   └─ 扩展硬上限 ─▶ HrChannelQuota                  ┘   ⇒ 不进 wave.notes / 不推进 fail_streak
+                                                          ⇒ action = ACTION_NO_CHANNEL
+   ├─ 登录页     ─▶ HrLoginExpired ── 账号层 ─▶ _warn_login (每站一次)
+   └─ HTTP 失败  ─▶ HrFetchError ──── 站点层 ─▶ _warn_parse ─▶ 前端错误历史 ✅
+
+端点侧(与取数并行的一条观测线; S4 补「被拒」面 —— §03.6 的可分辨判据靠它):
+   敲门且鉴权通过 ─▶ _note_contact ─▶ last_contact_ts          # 既有
+   敲门但被拒     ─▶ 401 / 403     ─▶ 被拒接触面(S4 新增)      # 证明「浏览器在跑」
+
+events.py (S3): 每个文案函数归属一个 EVENT_* 层标签(parse / channel / login / silence)
+   ⇒ 层信息随事件对象走, 由单点日志出口附加到 record
+   ⇒ WebErrLogHandler 用 Filter 按「层 × 子类」放行(S4): 站点层全放行; 通道层只放「可定位故障」与「WebUI 活跃 × 无联系」</code></pre>
+
+    <h3>3.6 可分辨边界: 后端能分清什么, 分不清什么</h3>
+    <p>「浏览器离线」与「扩展离线」是否要分清? <b>先得承认后端观测面的极限</b> —— 否则只是把猜测包装成结论, 那正是本计划要消灭的那类错误。<b>而本轮结论(口径⑤)是: 不必强行分清</b> —— 我们不推断「是什么离线」, 只问「<b>有没有人在用</b>」(§03.6.1), 该问句由既有信号直接回答。</p>
+    <table>
+      <tr><th>后端能观测</th><th>不可观测</th></tr>
+      <tr><td>① 端点是否在监听(<code>ChannelStatus.listening</code>) · ② 最近一次<b>成功</b>联系(<code>last_contact_ts</code>) · ③ 曾联系过的扩展 origin(<code>extensions_seen</code>) · ④ 被拒的敲门(401/403, <b>当前只进日志、未入状态</b>)</td><td><b>浏览器进程是否存在</b> —— 后端不能主动连浏览器, 浏览器也不会通知它</td></tr>
+    </table>
+    <div class="callout warn">
+      <b>原则性不可分辨</b>: 浏览器关闭 → 扩展的 <code>chrome.alarms</code> 不触发(仅在浏览器运行时走) → 无任何请求; 扩展被停用 / 卸载 → 同样无任何请求。<b>两者在观测面上逐字同形</b>。任何声称能自动区分它们的判据都是在猜。能做的是把不可分辨的格子缩到最小, 并<b>如实说明</b>。
+    </div>
+    <p><b>但不可分辨的格子可以靠第二条独立观测线缩小</b> —— WebUI 的存活证据(§03.6.1)。</p>
+
+    <h4>3.6.1 WebUI 存活证据: 第二条独立观测线</h4>
+    <p>WebUI 与 HR 端点是<b>同一个 auto-qb 进程</b>。所以「WebUI 有活跃」= <b>有人在照看这个实例</b>(不论从哪台机器、哪个浏览器访问)。<b>本轮口径(用户指令): 不判断是否同机 / 同源</b> —— 判据只问「WebUI 是否活跃」这一件事; 「<b>WebUI 在线而扩展不在线</b>」这个状态<b>本身就值得警告</b>, 无需再推断「扩展离线」这种更强的结论。</p>
+    <table>
+      <tr><th>观测组合</th><th>可下的结论</th></tr>
+      <tr><td>端点有<b>成功联系</b>(<code>last_contact_ts</code> 新鲜)</td><td>通道健康。</td></tr>
+      <tr><td><b>WebUI 活跃</b> + 端点<b>无任何联系</b></td><td><b>发 WebUI 警告, 不静默</b> —— 有人在用 WebUI, 但扩展未在联系(浏览器可能已关 / 扩展被停用 / 卸载 / SW 崩溃 / 跨机网络断)。<b>这正是 401 抓不到的那一类。</b></td></tr>
+      <tr><td>端点有 <b>401 / 403</b> 敲门</td><td><b>扩展在跑但配置错</b>(浏览器也在跑) —— 问题在 token / origin。</td></tr>
+      <tr><td>WebUI <b>不活跃</b> + 无任何敲门</td><td>「浏览器未运行 <b>或</b> WebUI 未开 <b>或</b> 扩展未启用」—— 归<b>预期离线</b>(§03.2 第 1 行), 仅后端 log。</td></tr>
+      <tr><td>端点未在监听</td><td>本实例自身问题(<code>HrChannelUnavailable</code> 既有分支, 与扩展无关)。</td></tr>
+      <tr><td>曾经联系过, 之后中断</td><td>配置曾经成功 ⇒ 排查重心从「配对是否对」转向「浏览器是否被关 / 扩展是否被停用」。</td></tr>
+    </table>
+    <p>两条线<b>互补</b>: 401/403 覆盖「扩展在跑、配置错」, WebUI 活跃覆盖「有人在用、但扩展根本没在联系」。分子落在哪个格子, 取决于拿到哪条证据。</p>
+    <h5>判据的极简形态 (本轮用户指令 —— 撤销 W-a / W-b / W-c)</h5>
+    <div class="callout">
+      <b>不引入同源 / 同机判断</b>。曾考虑过 W-b「活跃必须与扩展同源 —— 来源地址交集」与 W-c「WebUI 与扩展同浏览器」, 现<b>一并撤销</b>: ① 它们要求新增「带来源的活跃面」, 改动面从 <code>hr/</code> 扩到 <code>webui/</code>, 成本高; ② <b>更关键 —— 它们推断的结论(「扩展离线」)比我们需要的更强</b>。我们只需知道「<b>有人在看 WebUI, 而扩展没在联系</b>」, 这由既有信号直接给出。<br>
+      <b>既有信号已够</b>: <code>WebUIRuntime.last_seen</code> + <code>is_active()</code>(<code>webui/runtime.py:176、367–373</code>, 窗口 <code>WEB_VIEW_TTL = 10.0</code>)<b>本来就存在</b>, 且由 SSE keepalive 每 5s 自动刷新(<code>routes/events.py:61</code>, 另有 20+ API 路由也 touch)。故 <b>S4b 退化为「直接复用」</b>, 不再新增任何面。
+    </div>
+    <p><b>残余代价 (明示)</b>: 不判断来源 ⇒ 若你从手机 / 另一台机器长期开着 WebUI, 而装了扩展的那台机器浏览器关了, 也会触发该警告 —— 但它是<b>警告而非误判</b>: 「扩展确实没在联系」这一事实成立, 只是它未必意味着故障。这是买「判据极简 + 不误静默」付的价格, <b>用户已确认接受</b>。</p>
+    <p>同时把被拒的敲门<b>记进端点状态面</b>(S4) —— 于是「扩展配错」从「日志里的一行」变成「状态上的一个事实」, <code>_check_channel_silence</code> 才有资格在文案里区分这些情形。</p>
+    <div class="callout stop">
+      <b>⚠ 口径更新 (26-10-09-0856): 原「设计边界」已被判定为设计缺陷</b> —— 此前本计划把「HR 取数要求扩展与 auto-qb 同机」记作<b>正当的设计边界</b>(「NAS 实例应不装扩展、走只读共享数据」); 用户判定其<b>不可接受</b>, 要求未来支持「NAS + 外部扩展」形态, 已入池 issue <code>26-10-09-0855</code> 并另立计划 <code>26-10-09-0856</code>(专题 <code>hr-channel-remote</code>)。<b>技术事实不变</b>(两端确实都写死回环), 变的是<b>结论的定性</b>: 从「受支持 = 不驱动扩展」改为「该形态应当被支持」。
+    </div>
+    <div class="callout warn">
+      <b>技术证据 (保留, 供跨机改造定位)</b> —— 端点<b>恒定监听 <code>127.0.0.1</code> 且配置面不可改</b>, 四处: ① <code>HrChannelConfig</code> 无 <code>host</code> 字段(<code>config/models.py:68–88</code>); ② 校验键面 <code>KNOWN_HR_CHANNEL_KEYS</code> 不含 <code>host</code>(<code>validation/sections.py:36</code>, 写了即报未知键); ③ <code>runtime</code> 构造端点时不传 host(<code>hr/runtime.py:305–308</code>, 走默认 —— 但 <code>HrChannelServer.__init__</code> <b>本身已接受 <code>host</code> 形参</b>, 故接线量小); ④ docstring 原文「跨机器配了也驱动不了」(<code>models.py:73–75</code>, 将被改写)。扩展侧 <code>normalize.js:14–15、38–41</code> 硬校验 + <code>manifest.json</code> 静态 host 权限同样只含回环; 症状 <code>TypeError: Failed to fetch</code>。<br>
+      ⇒ 对<b>本计划</b>的三点影响: ① <b>判据不引入同源 / 同机</b> —— 直接以「WebUI 是否活跃」为准(本轮用户指令), W-b 已撤销; ② <code>shared_dir</code> 仍是并列的只读路径, 但<b>不再是 NAS 的唯一解</b>; ③ 跨机后通道层新增「<b>网络不可达</b>」一类(隧道 / LAN / 防火墙断), 归「无联系」档的文案分支, 但需列出对应排查项。
+    </div>
+  </section>
+
+  <section id="s04">
+    <h2><span class="no">04</span>分步实施 S1–S6</h2>
+
+    <h3>S1 · 把洞口补进异常家族 (hr/fetcher.py)</h3>
+    <ul>
+      <li>新增 <code>class HrChannelTimeout(HrChannelUnavailable)</code>, docstring 写明判据: 「等回传超时 = 通道此刻不可用(浏览器关着 / 扩展停用); 解是等通道恢复, 与 <code>HrChannelUnavailable</code> 同解 —— 故计入通道层, 不参与档位失败与站点健康」。</li>
+      <li><code>fetcher.py:154</code> 的 <code>raise HrFetchError(f"等待浏览器扩展取数超时(...)")</code> 改为抛 <code>HrChannelTimeout(...)</code>。文案保留(「浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?」的排查引导仍有价值), 但<b>不再带 <code>[HR 页面改版]</code> 标签</b>。</li>
+      <li><b>须核对</b>: <code>HrChannelStopped</code> / <code>HrChannelQuota</code> 是 <code>HrChannelUnavailable</code> 的子类且<b>先于</b>它在 except 链里被捕获 —— 新类同属该族, 需确认 <code>service.py:725</code> 的分组顺序不会把它吞进更宽的兄弟分支。</li>
+    </ul>
+
+    <h3>S2 · 按层分派, 消掉三处污染 (hr/service.py)</h3>
+    <ul>
+      <li><code>_refresh_locked</code>(<code>:666</code>)与 <code>_run_pages</code>(<code>:727</code>)的 <code>except HrFetchError</code> <b>之前</b>插 <code>except HrChannelTimeout</code> 分支, 使其走通道层出口: 置 <code>result.action = ACTION_NO_CHANNEL</code> + <code>_warn_no_channel(site, e)</code> + 落盘 + 返回, <b>不</b>追加 <code>wave.notes</code>、<b>不</b>调 <code>_mark_fetch_failed_lane</code>。</li>
+      <li>由于 <code>HrChannelTimeout</code> 继承 <code>HrChannelUnavailable</code>, 波级分组(<code>:642</code>)本已把它排除出「档位失败」; 但 <code>:666</code> 的 <code>except HrFetchError</code> 在<b>同一 try 内更靠后</b>的位置, 需实测确认异常落点(这是本步唯一需要红验的地方)。</li>
+      <li>P1/P2/P3 随本步一起消失, 不需要额外过滤。</li>
+    </ul>
+
+    <h3>S3 · 事件文案分层 (hr/events.py)</h3>
+    <ul>
+      <li><code>LABELS</code> 增加 <code>EVENT_CHANNEL: "通道不可用"</code>(或复用既有 <code>EVENT_SILENCE</code> 的语义族, 见 §05 D3)。</li>
+      <li><code>fetch_failed</code> <b>只保留给真的页面问题</b>; 其文案里的「页面取数失败」与 <code>[HR 页面改版]</code> 前缀不再承接通道层原因。</li>
+      <li>新增通道层文案函数(如 <code>channel_timeout(site, detail)</code>), 供 <code>_warn_no_channel</code> 与 <code>_check_channel_silence</code> 使用。</li>
+      <li>让每个文案函数<b>与被调用方一起携带层信息</b>(S4 的输入): 文案模块仍是「只出文案」, 新增的层元数据不带判断逻辑。</li>
+      <li><b>文案按 §03.6 的可分辨边界分叉</b>(本轮新增): <code>channel_silent</code> 的现有文案「浏览器是否在运行 / 扩展是否启用 / 端点端口与 token 是否与扩展配置一致?」把三种可能并列成一句问句, 让用户自己去猜。改为两条分支: ① <b>有被拒敲门</b> ⇒ 「扩展正在联系但鉴权失败, 请核对 <code>hr.token</code> / origin」; ② <b>无任何接触</b> ⇒ 「端点未收到任何联系: 浏览器可能未运行, 或扩展未启用 / 未安装(<b>二者后端不可分辨</b>)」。</li>
+    </ul>
+
+    <h3>S4 · 出口声明式收层 (infra + webui/runtime.py)</h3>
+    <ul>
+      <li><b>单点附加层信息</b>: 在 HR 侧的日志出口统一挂 <code>extra</code>(由 S3 的层元数据推出), 而不是让每个 <code>logger.warning</code> 调用点手写 —— 这是「不可表达误分类」的落点。</li>
+      <li><b>errlog 过滤器</b>: 给 <code>WebErrLogHandler</code> 挂一个 <code>logging.Filter</code> —— <b>按「层 × 子类」放行, 不是整层一刀切</b>(本轮澄清): 站点层全放行; 通道层只放行<b>显式声明为可见的子类</b> —— 「可定位故障」(有被拒敲门)与「WebUI 活跃 × 无联系」(§03.6.1) 放行; 其余通道子类(预期离线 / WebUI 不活跃的无联系)后仅后端 log。<b>注意守阵</b>: <code>test_pure_memory_no_disk</code>(<code>tests/test_webui_backend_errlog.py:135–156</code>)静态扫 <code>emit</code> 源码, 新代码不得含 <code>open(</code> / <code>Path(</code> / <code>state_file</code> / <code>FileHandler</code> / <code>os.remove</code> / <code>makedirs</code> / <code>atomic_write</code> / <code>shutil</code>。</li>
+      <li><b>通知桥同步</b>: <code>NotifyHandler.emit</code> <b>按同一「层 × 子类」口径</b>过滤 —— 静默子类(预期离线 / WebUI 不活跃的无联系)不弹窗(否则 <code>channel_silent</code> 的 ERROR 会与「只打后端 log」相悖); 「WebUI 活跃 × 无联系」与「可定位故障」按可见子类处理。</li>
+      <li><b>级别保持不变</b>: 通道层仍是 WARNING/ERROR, 后端文件日志(<code>infra/logging.py:117</code> 跟随 <code>config.log.level</code>, 默认 INFO)照常可见 —— 这正是用户要的「只打后端 log」。</li>
+      <li><b>补状态面</b>(本轮新增, §03.6 的落点): <code>ChannelStatus</code> 增加「被拒接触」面(最近被拒时间 / 计数), 在 <code>_token_ok</code> 失败与 origin 拒绝处写入(<code>server.py:196–199、212–215</code>)。<b>仍不碰 <code>last_contact_ts</code></b>(不污染「成功联系」的语义), 只是让「有人在敲门但被拒」变成可读事实 —— 这是把 §03.6 第 2 行缩小到最小的唯一手段。</li>
+      <li><b>401 节流</b>(本轮新增, P4): 鉴权失败当前无节流, 扩展配错 token 即每分钟一条 ERROR。按既有 <code>CHANNEL_SILENCE_WARN</code> 口径改为「状态变化时报一次 + 持续期按 <code>warn_gap</code> 提醒」, 并把级别定为<b>配置态</b>档(WARNING) —— ERROR 应留给真故障。</li>
+    </ul>
+
+    <h3>S4b · WebUI 活跃信号 (本轮澄清: 不引入同源判断, §03.6.1)</h3>
+    <ul>
+      <li><b>直接复用既有信号</b> · <code>webui/runtime.py</code> 的 <code>last_seen</code> + <code>is_active()</code>(<code>:176、367–373</code>)<b>已存在</b> ⇒ 无需新增任何面: 不新增 <code>last_seen_by_source</code>, 不扩 <code>_subscribers</code> 签名, 不动 <code>web.touch()</code> 的调用点。<b>这撤销了此前「改动面扩到 <code>webui/</code>」的设计</b>(本轮用户指令: 无需判断是否同机)。</li>
+      <li><b>HR 侧注入</b> · 沿用既有回调注入范式(<code>worker</code> 的 <code>_anchors_fn</code>): 注入 <code>web_active_fn: Optional[Callable[[], bool]]</code>; 默认 <code>None</code> = <b>无信号</b>(退化为静默档, <b>不是</b>当成 False 去断言「浏览器离线」)。</li>
+      <li><b><code>_check_channel_silence</code> 分支</b>(<code>hr/worker.py:388–408</code>): ① WebUI 活跃 + 无接触 ⇒ <b>发 WebUI 警告 / 入环</b>(「WebUI 有活动, 但扩展未在联系 —— 浏览器可能已关 / 扩展被停用 / 跨机网络断」), <b>不静默</b>; ② 有被拒敲门 ⇒ <b>「扩展在联系但鉴权失败, 检查 token / origin」</b>; ③ WebUI 不活跃 + 无接触 ⇒ <b>静默</b>(归预期离线, 仅后端 log)。</li>
+    </ul>
+
+    <h3>S5 · 守阵 (tests/)</h3>
+    <ol>
+      <li><b>超时不再算档位失败</b>: 构造「等回传超时」场景 ⇒ <code>wave.notes</code> <b>不含</b>「页面取数失败」、<code>lane_states[lane].fail_streak</code> 不增、<code>result.action == ACTION_NO_CHANNEL</code>。</li>
+      <li><b>超时不再升级为「疑似改版」</b>: 连续 3 波通道不可用 ⇒ <b>不</b>触发 <code>lane_persistent_failure</code> 的 ERROR(对照 P2)。</li>
+      <li><b>通道层按子类入环</b>: 静默子类(预期离线 / WebUI 不活跃的无联系)经 <code>WebErrLogHandler.emit</code> 后环内条数不变; 站点层 WARNING 仍入环; <b>「WebUI 活跃 × 无联系」与「可定位故障」<u>必须入环</u></b>(对照 §03.6.1 / D2)。</li>
+      <li><b>真改版仍入环</b>(边界回归): 页面结构异常(<code>order_broken</code> / <code>page_changed</code>)照旧进环 —— 防「一刀切静音」把真异常一起吞了。</li>
+      <li><b>既有异常族守阵复跑不回归</b>: <code>Stopped</code> / <code>Quota</code> / <code>LoginExpired</code> 的分支行为逐字不变。</li>
+      <li><b>三档判据可分辨</b>(本轮新增): ① 时段外(<code>allow_window</code>)且 WebUI 不活跃 ⇒ 不产生任何告警, 只留 DEBUG; ② 有被拒敲门 ⇒ 结论落到「扩展在联系但鉴权失败」, <b>不</b>落「无联系」分支; ③ 无任何敲门: <b>WebUI 活跃 ⇒ 入环告警</b>(「WebUI 有活动但扩展未在联系」); <b>WebUI 不活跃 ⇒ 不入环</b>(静默), 且文案<b>不得</b>出现「浏览器离线」这类断言。</li>
+      <li><b>WebUI 活跃驱动告警</b>(本轮口径, §03.6.1): ① 注入的 <code>web_active_fn</code> 返回 True 且端点无接触 ⇒ <b>发出入环告警</b>(不静默); ② 返回 <code>None</code> / 未注入 / False ⇒ <b>不入环</b>(归静默档), 且<b>不</b>断言「浏览器离线」; ③ <b>不判断来源</b> —— 远端活跃同样算「活跃」(已接受, 见 §03.6.1 残余代价)。</li>
+    </ol>
+    <p>同步相关测试文件头部 docstring 的「## 测试计划」清单(新增测试必须登记, 项目硬约束)。</p>
+
+    <h3>S6 · 文档回写与收尾</h3>
+    <ul>
+      <li>代码事实变更回写 <code>memory-bank/</code>: 事件单点、HR 通道口径、错误历史口径(实施时 <code>grep -rn "页面改版\|errlog\|错误历史" memory-bank/</code> 定位)。</li>
+      <li>新坑按动作写进 <code>pitfalls/</code>(类目: backend 或 web-ui), 补三行头元数据。</li>
+      <li>基线: <code>commands run test.full</code> 后新建 <code>testing/baselines/</code> 切片记实测数字; 计划 meta <code>Open → In Progress/Done</code>; <code>commands run kb.index</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s05">
+    <h2><span class="no">05</span>拍板点</h2>
+    <table>
+      <tr><th>#</th><th>事项</th><th>建议 (待拍板)</th></tr>
+      <tr>
+        <td class="num">D1</td>
+        <td><code>HrChannelTimeout</code> 的归位: 继承 <code>HrChannelUnavailable</code>(并入「无通道」出口), 还是与它平级、单列一个通道层分支?</td>
+        <td><b>推荐继承 <code>HrChannelUnavailable</code></b>。按既有判据「能不能靠重试解决」, 超时的解是等通道恢复, 与「无通道」同解; 且可直接复用 <code>_warn_no_channel</code> 的<b>每站一次 + 恢复即重置</b>节流, 比现在「每 6h 一条」更安静。代价: <code>action</code> 由 <code>ERROR</code> 变 <code>NO_CHANNEL</code>, 需确认下游消费面(报告 / HR 面板)对 <code>ACTION_NO_CHANNEL</code> 的展示无回归。</td>
+      </tr>
+      <tr>
+        <td class="num">D2</td>
+        <td>静音的<b>范围</b>: 「通道/环境层」三档里, 哪些不上前端?</td>
+        <td><b>本轮按档定(其中 ③ 已由用户拍板)</b>: ① <b>预期离线</b>(无联系 + WebUI 不活跃) ⇒ <b>静默</b>(只后端 log), 这正是你要的; ② <b>可定位故障</b>(有被拒敲门) ⇒ <b>必须上前端</b> —— 它是真问题, 静音等于把「扩展早已配错」藏起来, 是最危险的一种静默; ③ <b>无联系</b> ⇒ <b>WebUI 活跃则发 WebUI 警告 / 入环(不静默)</b>, WebUI 不活跃则静默(本轮用户口径⑤, 见 §03.6.1)。</td>
+      </tr>
+      <tr>
+        <td class="num">D3</td>
+        <td>通道层文案是新增独立标签 <code>[HR 通道不可用]</code>, 还是并入既有 <code>[HR 通道静默]</code> 一族?</td>
+        <td><b>推荐新增独立标签</b>(<code>EVENT_CHANNEL</code>): 「静默」是端点级、按时间判定(6h); 「超时」是单次取数失败 —— 两者归同一<b>层</b>但不同<b>事件</b>, 合并会让「grep 锚点」失去区分度。</td>
+      </tr>
+      <tr>
+        <td class="num">D4</td>
+        <td>是否采信 WebUI 证据? <span class="ok">— 本轮已闭环</span></td>
+        <td><b>已拍板(用户口径⑤)</b>: 采信「<b>WebUI 是否活跃</b>」这一极简信号; 结论<b>只说「WebUI 有活动而扩展未在联系」</b>, <b>不推断「扩展离线」, 也不判断同源 / 同机</b>(W-a/W-b/W-c 全部撤销, S4b 退化为直接复用既有 <code>is_active()</code>)。收益: 把「扩展被停用 / 卸载 / 跨机断」从不可分辨提升为<b>可提醒</b>; 代价: 远端 WebUI 活跃也会触发(已接受, 见 §03.6.1 残余代价)。</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s06">
+    <h2><span class="no">06</span>验收判据</h2>
+    <table>
+      <tr><th>#</th><th>判据</th><th>怎么验</th></tr>
+      <tr><td class="num">V1</td><td>超时不再被标为「页面改版」, 不再进 <code>wave.notes</code> / 不推进档位失败</td><td>S5-1 单测(P1/P2)</td></tr>
+      <tr><td class="num">V2</td><td>通道不可用不升级为「疑似改版」ERROR</td><td>S5-2 单测(P2 升级路径)</td></tr>
+      <tr><td class="num">V3</td><td>通道层不进前端错误历史; 站点层仍进</td><td>S5-3 / S5-4 单测(双向边界)</td></tr>
+      <tr><td class="num">V4</td><td>后端 log 仍可见(级别不变)</td><td>真机: <code>config.log.level=INFO</code> 下, 关闭浏览器, 后端日志文件出现通道层记录而 WebUI 错误历史不增</td></tr>
+      <tr><td class="num">V5</td><td>既有异常族行为零变化</td><td>S5-5 + <code>commands run test.full</code> + <code>kb.check</code>; 新基线切片单点记数字</td></tr>
+      <tr><td class="num">V6</td><td>「有人用但扩展没在联系」上前端口, 「没人用」则静默</td><td>S5-6 单测; 真机: 错 token ⇒ 指名「扩展在联系但鉴权失败」; 关浏览器<b>且 WebUI 活跃</b> ⇒ <b>入环告警</b>; 关浏览器<b>且 WebUI 不活跃</b> ⇒ <b>静默</b></td></tr>
+      <tr><td class="num">V7</td><td>扩展配错 token 不再每分钟刷 ERROR / 推送</td><td>真机: 用错 token 跑 10 分钟, 错误历史与系统通知均不增长(P4)</td></tr>
+      <tr><td class="num">V8</td><td>WebUI 活跃 + 无联系 ⇒ 发 WebUI 警告 / 入环; 不活跃 ⇒ 静默</td><td>S5-7 单测; 真机: 开 WebUI 停用扩展 ⇒ <b>入环告警</b>; 关 WebUI 且关浏览器 ⇒ <b>不入环</b></td></tr>
+    </table>
+  </section>
+
+  <section id="s07">
+    <h2><span class="no">07</span>风险与不变项</h2>
+    <h3>7.1 已接受的风险</h3>
+    <table>
+      <tr><th>#</th><th>风险</th><th>评估</th></tr>
+      <tr><td class="num">R1</td><td>通道层静音后, 「HR 保护实际没在跑」这件事在前端不可见</td><td><b>接受</b>(用户明确要「不发到前端」)。替代可见性 = HR 面板的通道最近联系时间; 建议另立离线角标计划(§05 D2)。</td></tr>
+      <tr><td class="num">R2</td><td>浏览器开着但扩展偶发卡顿导致的超时, 也从「计失败」变为「通道层让位」</td><td>按判据这是<b>正确归位</b>: 它同样靠「等下一次轮询」解决(轮询周期 60s &lt; 窗口 180s)。代价是这类瞬态不再进档位失败统计 —— 这是买「不混淆」付的价格。</td></tr>
+      <tr><td class="num">R3</td><td>S2 的 except 落点若与预期不符(继承链 + 顺序), 可能被更宽的 <code>except HrFetchError</code> 先接住</td><td>本步唯一需红验处: 临时移除新分支应能观察到 P1/P2 复现。</td></tr>
+      <tr><td class="num">R4</td><td>「无联系」档在 WebUI 不活跃时被静默 ⇒ 「浏览器没开 / 扩展被停用」在前端不可见</td><td><b>已按本轮口径收敛</b>: WebUI 活跃时<b>会提醒</b>(D2 ③); 仅当 WebUI 也不活跃时才静默 —— 那正是「没人在用」, 静默是正确行为。后端原则分不开「浏览器关」与「扩展停用」(§03.6), 故文案只陈述「未在联系」而不点名根因。</td></tr>
+      <tr><td class="num">R5</td><td>远端 WebUI 活跃(手机 / 另一台机器)也会触发该告警</td><td><b>接受(用户裁量)</b>: 已不判断来源(W-b 撤销)。影响是「你从手机看 WebUI 而 PC 浏览器关了」也会收到告警 —— 但结论「扩展未在联系」<b>为真</b>, 属提醒而非误判, 且比「误静默」安全。文案不点名根因, 只陈述事实。</td></tr>
+    </table>
+    <h3>7.2 不变项 (须逐条保持)</h3>
+    <ul>
+      <li>站点层告警链路(<code>_warn_parse</code> 及其节流)逐字不变 —— 真改版仍必须进前端错误历史。</li>
+      <li><code>HrChannelStopped</code>(叫停非事件) / <code>HrChannelQuota</code>(后端频控失效信号) / <code>HrLoginExpired</code>(需人到场)三者的现有出口与节流不变。</li>
+      <li>「无通道」的判定 <code>last_contact_ts</code> / <code>_check_channel_silence</code> 的 6h 常量与节流不变(仅出口层信息、S4 新增的「被拒接触」面、以及 S4b 注入的「<b>WebUI 活跃</b>」信号变化); <b><code>last_contact_ts</code> 仍只由成功鉴权的请求刷新</b> —— §03.6 补的是另一个面, 不是改它的语义。</li>
+      <li>错误历史环的纯内存纪律不变(<code>tests/test_webui_backend_errlog.py:135–156</code> 守阵)。</li>
+      <li><code>hr_check.allow_window</code> / 频控 / 时间窗 / 复用窗等调度语义一行不改。</li>
+    </ul>
+  </section>
+
+  <section id="s08">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li><b>26-10-09-0931 实施完成(用户拍板: 全部按推荐默认 —— D1 继承 <code>HrChannelUnavailable</code>、D3 新增独立标签)</b>: S1–S6 已落地, <code>test.full</code> <b>2836 passed + 4 skipped / 0 failed, 覆盖率 99%</b>。
+        <ul>
+          <li><b>S1</b> <code>hr/fetcher.py</code> 新增 <code>HrChannelTimeout(HrChannelUnavailable)</code> 并在超时处抛出; <b>S2 免做</b> —— 继承链 + 现成的 <code>except HrChannelUnavailable</code>(位置在 <code>except HrFetchError</code> 之前)已让出口就位, 无需新增分支(实施时才确认, 计划原文的判断更保守)。</li>
+          <li><b>S3</b> <code>events.py</code>: <code>EVENT_CHANNEL</code>「通道不可用」+ <code>DOMAINS</code>/<code>domain_of()</code> + <code>channel_unavailable()</code>; <code>channel_silent(evidence=)</code> 三档文案。</li>
+          <li><b>S4</b> 新增 <code>hr/log.py</code>(生产点挂 <code>hr_domain</code>/<code>hr_silent</code>)+ <code>infra/logging.is_record_suppressed</code>; <code>WebErrLogHandler.emit</code> / <code>NotifyHandler.emit</code> 按档位跳过(<b>未打标 = 可见</b>, 向后兼容); <code>ChannelStatus</code> 增被拒接触面; 401 节流 + 降级 WARNING。</li>
+          <li><b>S4b</b> <code>HrWorker(web_active_fn=...)</code> ← <code>HrRuntime._web_active()</code>; <code>_check_channel_silence</code> 三分支(rejected / web_active / none)决定可见性与文案。</li>
+          <li><b>S5</b> 新增 12 个守阵用例(见基线切片), 各测试文件头「## 测试计划」清单同步。</li>
+          <li><b>S6</b> 基线 <code>testing/baselines/26-10-09-0931-hr-fault-domain.md</code>; 回写 <code>modules/overview.md</code>(events/log 口径)、<code>pitfalls/ops/alert-levels.md</code>(通道层分档)、<code>progress/implemented-core.md</code>。</li>
+        </ul>
+      </li>
+      <li><b>26-10-09-0913</b> 口径简化(用户指令:「WebUI 在线而扩展不在线适合发 WebUI 警告, 不静默, 无需判断是否同机等」): <b>W-a / W-b / W-c 三条前提全部撤销</b>, 判据退化为「<b>WebUI 是否活跃</b>」单信号。<br>① <b>结论降强度</b>: 不再推断「扩展离线」(那需要同源 / 同浏览器假设), 只陈述「WebUI 有活动而扩展未在联系」—— <b>我们需要的本来就只有这么强</b>。<br>② <b>出口反转</b>: 「WebUI 活跃 × 无联系」由「待拍板是否静音」改为 <b>发 WebUI 警告 / 入环, 不静默</b>; 「WebUI 不活跃 × 无联系」归预期离线静默。§03.2 表的「预期离线」「无联系」两行据此重写。<br>③ <b>S4b 大幅瘦身</b>: 撤销「新增带来源的活跃面 / 扩 <code>_subscribers</code> 签名 / 改各路由 <code>web.touch()</code>」—— <b>既有 <code>last_seen</code> + <code>is_active()</code> 已够</b>, 改动面<b>不再扩到 <code>webui/</code></b>, 只留 HR 侧一个回调注入点。<br>④ <b>S4 过滤器改为「层 × 子类」</b>: 原先写「只放行站点层」与 D2 ②「可定位故障必须上前端」本就矛盾; 现统一为「站点层全放行 + 通道层只放行显式可见子类(可定位故障 / WebUI 活跃×无联系)」, errlog 与通知桥同口径。§03.3 数据流图、S5-3 守阵同步。<br>⑤ <b>D2 ③ / D4 标记闭环</b>, R4/R5 重写(残余代价改为「远端活跃也会触发, 已接受」), V6/V8 判据改为「活跃⇒入环 / 不活跃⇒静默」。</li>
+      <li><b>26-10-09-0856</b> 口径同步(用户判定「扩展只能本机」为<b>设计缺陷</b>, 要求支持跨机): ① 立上游 issue <code>26-10-09-0855</code>(专题 <code>hr-channel-remote</code>)并另立计划 <code>26-10-09-0856</code> —— 该形态<b>不再作为「受支持的边界」</b>, 而是待实现的特性。② <b>W-b 升级</b>: 判据从「同源 = loopback」改为「<b>来源地址交集</b>」, 现在就按跨机形态设计, 以免落地后作废(<b>注: 该项已在 0913 版被整体撤销</b>, 见上条)。③ <b>原「设计边界」callout 定性翻转</b>: 保留全部技术证据(两端写死回环)供跨机改造定位, 但结论从「受支持 = 不驱动扩展」改为「应当被支持」; <code>shared_dir</code> 降为并列路径之一。④ 新增待办提示: 跨机后通道层需增「<b>网络不可达</b>」文案分支(隧道 / LAN / 防火墙断)。</li>
+      <li><b>26-10-09-0848</b> 改版(用户质疑「W-b 必须 loopback 欠妥」, 举 auto-qb 在 NAS + 扩展在外部 PC 为例): <b>表述采纳, 结论有据修正</b>。① W-b 改写为「活跃必须与<b>扩展同源</b>」—— 判据本体是<b>同源</b>, loopback 只是它在同机部署下的取值; 并注明若将来端点支持跨机, 此处升级为「来源地址交集」比较, 判据不复作废。② 新增 <b>「设计边界」</b>核实结论: HR 端点<b>恒定监听 <code>127.0.0.1</code> 且配置面不可改</b>(<code>HrChannelConfig</code> 无 host 字段 / <code>KNOWN_HR_CHANNEL_KEYS</code> 无 host / runtime 构造不传 host / docstring 明说「跨机器配了也驱动不了」) ⇒ 「扩展与 auto-qb 同机」在当前设计下是<b>结构性事实</b>, 故 W-b 在现实现下恰好正确(而 WebUI 的 <code>web.host</code> 可配、可远端, 两者不对称)。③ 明确 <b>NAS + 外部扩展的形态下 HR 取数整体不成立</b>, 且<b>两端都锁死</b>: 后端端点不可绑非 loopback, 扩展侧 <code>normalize.js:14–15、38–41</code> 硬拒非回环主机(注释原文点名「含 NAS 上的实例」)。设计者已给答案 —— 注释紧接着写<b>「那类实例应走『只读共享数据』」</b>(<code>hr_check.shared_dir</code>) ⇒ NAS 部署的受支持形态是「<b>不装扩展、不启用 channel, 读另一台实例的产物</b>」, 该形态下<b>根本不产生通道类告警</b>。若要跨机驱动需两端同改 + 攻击面重评, <b>不在本计划范围</b>。④ 同步 D4 / R5 / S5-7 的措辞(loopback → 同源)。</li>
+      <li><b>26-10-09-0840</b> 改版(用户提议「以『WebUI 在联系』而『扩展未联系』分清两者」): <b>采纳</b>。① 新增 <b>§03.6.1 WebUI 存活证据</b> —— WebUI 与扩展同浏览器、与 HR 端点同进程, 故「WebUI 本机活跃」可<b>独立于扩展</b>证明「本机浏览器在跑」; 它与 401/403 <b>互补</b>(那条覆盖「扩展在跑但配错」, 本条覆盖「浏览器在跑但扩展根本没在联系」)。② 写明三条前提 <b>W-a</b>(页面活跃 —— 已具备) / <b>W-b</b>(<span class="gap">必须新增</span> 只由 loopback 刷新的活跃面: 现 <code>last_seen</code> 是<b>性能门控、不分来源</b>, 远端访问会假阳性) / <b>W-c</b>(同一浏览器, 后端无法验证)。③ 新增 <b>S4b</b> 步骤(webui 侧 loopback 活跃面 + worker 回调注入 + <code>_check_channel_silence</code> 三分支)。④ 新增拍板点 <b>D4</b>、守阵 <b>S5-7</b>、验收 <b>V8</b>、风险 <b>R5</b>; §02 锚点表补 WebUI 侧四行。</li>
+      <li><b>26-10-09-0826</b> 改版(用户口径③「浏览器离线 vs 扩展离线需分清」): ① <b>撤销「通道/环境层 = 单一静默桶」</b> —— 那会把「用户以为在跑、其实扩展早已停用」一并静默, 是新的、更危险的量级混淆; 改为按<b>可分辨证据</b>分三档(预期离线 / 可定位故障 / 无联系), §03.2 表重写。② 新增 <b>§03.6 可分辨边界</b>: 明确「浏览器关闭」与「扩展被停用」在后端观测面上<b>原则性同形</b>, 只有「有 401/403 敲门」能证明浏览器在跑; 据此定文案分叉。③ 新增 <b>P4</b>(鉴权失败按 ERROR 无节流 ⇒ 扩展 token 配错即每分钟一条, <code>server.py:212–215</code>), 并把「补被拒接触状态面 + 401 节流」并入 S4。④ <b>D2 改为按档分别定</b>: 预期离线静默 / 可定位故障<b>必须可见</b> / 无联系待拍板。⑤ 守阵与验收各加条目(S5-6、V6、V7)、风险加 R4。</li>
+      <li><b>26-10-09-0821</b> 初版: 按用户口径(「连不上浏览器只打后端 log」+「两件不同量级错误混淆绝对禁止」)出归属分层方案; 明确拒绝 <code>web_silent</code> 补丁路线(§01 callout); 列 D1–D3 待拍板。待实施。</li>
+    </ul>
+  </section>
+
+  <footer>
+    计划工位 · 拍板后冻结 (改版 = 同文件内追加「变更记录」并抬 doc-updated, 禁止 -v2 新文件) ·
+    memory-bank/plans/26-10-09-0821-plan-hr-fault-domain.html
+  </footer>
+
+</div>
+</body>
+</html>

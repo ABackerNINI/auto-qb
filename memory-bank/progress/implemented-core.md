@@ -163,3 +163,20 @@
   🧪 端到端复核(真实 `QbManager(..., no_lock=False)` 构造路径): 损坏 → 内存 state == `.bak` / 主文件被自愈
   写回 / 孤儿 tmp 被清理 / `.bak` 未被损坏内容盖掉 —— 四件事全成立(脚本在 `H:/Temp/e2e_state_recovery_check.py`,
   未进仓库)。
+
+## HR 故障归属分层 (2026-10-09, 计划 26-10-09-0821)
+
+用户实报: 关浏览器过夜, WebUI 错误历史里出现 4 条 `[HR 页面改版] 页面取数失败(等待浏览器扩展取数超时 180s)`
+与 2 条 `[HR 通道静默]`。根因是**分类模型上的一个洞**: 「等扩展回传超时」在 `hr/fetcher.py` 抛的是**裸的**
+`HrFetchError`, 于是掉进 service 的 `except HrFetchError` ⇒ 被当「页面取数失败」: 套 `[HR 页面改版]` 标签、
+写 `wave.notes`、推进 `fail_streak`(连关几晚就升成「疑似改版」ERROR)。即**环境态被伪装成站点结论**。
+
+- **归位**: 新增 `HrChannelTimeout(HrChannelUnavailable)` 并于超时处抛出 ⇒ 落进既有的通道层出口
+  (`ACTION_NO_CHANNEL`、`_warn_no_channel` 每站一次), 上面三处污染一并消失。
+- **层贯穿出口**: `events.DOMAINS`(事件→层, 单点)+ 新增 `hr/log.py`(生产点挂 `hr_domain`/`hr_silent`)
+  + `infra/logging.is_record_suppressed`; 出口 `WebErrLogHandler` / `NotifyHandler` 按「层 × 档位」收放 ——
+  **通道层的静默子类只进后端 log**, 不进前端错误历史、不弹通知。
+- **可分辨边界**: `ChannelStatus` 增「被拒接触」面(401/403; 不污染 `last_contact_ts`); 401 日志由每分钟 ERROR
+  改为状态变化 + 6h 的 WARNING; 通道静默文案按 `rejected` / `web_active` / `none` 三档分叉, 不再用一句问句让用户猜。
+- **WebUI 活跃信号**: 判据取「WebUI 是否活跃」单信号(不判断同机/同源) —— 活跃 ⇒ 可见告警, 不活跃 ⇒ 静默。
+- 基线: [testing/baselines/26-10-09-0931-hr-fault-domain.md](../testing/baselines/26-10-09-0931-hr-fault-domain.md)(2836 passed)。

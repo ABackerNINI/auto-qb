@@ -356,6 +356,9 @@ class ChannelStatus:
     last_contact_ts: float = 0.0
     pending: int = 0
     extensions_seen: List[str] = field(default_factory=list)
+    #: 「被拒接触」面(计划 26-10-09-0821 §03.6): 401/403 的累计次数与最近时刻 —— >0 证明有人在敲门
+    rejected_contacts: int = 0
+    last_rejected_ts: float = 0.0
     note: str = ""
 
     @property

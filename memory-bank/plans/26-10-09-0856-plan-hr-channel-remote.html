@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-channel-remote">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-09-0856">
+<meta name="doc-updated" content="26-10-09-0913">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 18px; padding-left: 14px; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .ok { color: var(--ok); }
+  .gap { color: var(--warn); }
+  .no { color: var(--no); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.stop { border-left-color: var(--no); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s01"><span class="no">01</span>拍板回执与范围</a>
+    <a href="#s02"><span class="no">02</span>现状核实与实施锚点</a>
+    <a href="#s03"><span class="no">03</span>方案设计 (跨机形态)</a>
+    <a href="#s04"><span class="no">04</span>分步实施 S1–S6</a>
+    <a href="#s05"><span class="no">05</span>拍板点</a>
+    <a href="#s06"><span class="no">06</span>验收判据</a>
+    <a href="#s07"><span class="no">07</span>风险与不变项</a>
+    <a href="#s08"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">计划工位 · 拍板后冻结<br>实施进度走任务档案</div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">Implementation Plan · HR 通道跨机</div>
+    <h1>HR 取数通道「外部扩展 / 跨机」支持 分步实施计划</h1>
+    <p class="lede">上游 issue <code>26-10-09-0855</code>: 用户判定「扩展只能本机」为<b>设计缺陷</b>, 未来须支持「auto-qb 配置在 NAS 里, 通过 WebUI 访问, 浏览器扩展装在外部 PC」的形态。本计划放开<b>两端被写死的回环边界</b>, 并<b>先给出零改码的即时通路(SSH 隧道)</b> 作为现状兜底, 再设计原生支持。核心难点不在「放开校验」, 而在<b>放开之后的安全模型</b> —— 传输加密、鉴权节流、来源可分辨, 三者列为本计划的拍板点与实施重点。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-09-0856</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">hr-channel-remote</div></div>
+      <div class="item"><div class="k">上游</div><div class="v">issue 26-10-09-0855 · 用户实报</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop · 2026-10-09</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+    </div>
+  </header>
+
+  <section id="s01">
+    <h2><span class="no">01</span>拍板回执与范围</h2>
+    <table>
+      <tr><th>事项</th><th>结论</th></tr>
+      <tr><td>用户诉求</td><td>当前「HR 端点只听回环 + 扩展硬拒非回环」使「<b>NAS 集中管理 + 外部机器提供浏览器态</b>」这一类合理部署形态整体不成立; 用户判定为<b>设计缺陷</b>, 要求未来支持。</td></tr>
+      <tr><td>本计划范围</td><td>① 后端端点主机成为<b>可配项</b>(S1/S2); ② 扩展放开非回环校验 + 补齐端点 origin 权限申请(S3); ③ 传输安全与鉴权加固(S4, 依赖拍板); ④ 与故障归属分层的衔接(来源可分辨, S5); ⑤ 测试与文档(S6)。</td></tr>
+      <tr><td>明确不在范围</td><td>① <b>不改变保守默认</b> —— <code>host</code> 缺省仍是 <code>127.0.0.1</code>, 现有同机部署零感知(黄金法则 2); ② 不动站点 URL 白名单 / 解析 / 判定(安全资产逐字保留); ③ 不做多用户 / 多租户鉴权(超出一个自托管工具的范围); ④ <b>不废弃</b> <code>hr_check.shared_dir</code>「只读共享数据」路径 —— 它与本计划是并列的两条路。</td></tr>
+      <tr><td>Is 已修问题?</td><td>否, <b>新特性</b>。两端都是显式写死(后端连 <code>host</code> 配置键都不给、扩展 <code>normalize.js</code> 直接抛错), 注释里还点名了 NAS 场景 —— 是设计取舍, 不是回归。</td></tr>
+      <tr><td>与 <code>hr-fault-domain</code> 计划的关系</td><td>该计划的「WebUI 活跃信号」与「设计边界」callout 建立在本形态<b>不受支持</b>的前提上。本计划落地后:「设计边界」应翻转为「已支持」; 而 WebUI 活跃信号<b>不需要任何同源 / 同机判断</b>(该计划 26-10-09-0913 版已把判据简化为「WebUI 是否活跃」), 故跨机对本计划<b>不构成额外约束</b>; 但通道层需新增一类「跨机网络不可达」。<b>两份计划需同步</b>, 见 §03.4。</td></tr>
+    </table>
+    <div class="callout">
+      <b>先说一个能立刻用的通路</b>: 在用户当前形态下, 一条 <b>SSH 本地端口转发</b>即可让现状<b>零改码</b>跑通 —— 见 §03.2 路径 A。本计划设计原生支持, 但不阻塞用户今天就开工。
+    </div>
+  </section>
+
+  <section id="s02">
+    <h2><span class="no">02</span>现状核实与实施锚点 (@ develop 2026-10-09 实测)</h2>
+    <p>两端各自的锁死点, 以及放开后受影响的相邻面。行号须在实施时按当时 HEAD 复核(本项目行号漂移常态)。</p>
+    <table>
+      <tr><th>锚点</th><th>位置</th><th>现状</th><th>本次动作</th></tr>
+      <tr><td>端点主机配置</td><td class="num">config/models.py:68–88</td><td><code>HrChannelConfig</code> <b>无 <code>host</code> 字段</b>; docstring 明说「跨机器配了也驱动不了」</td><td><span class="gap">S1 加 host 键</span></td></tr>
+      <tr><td>配置键白名单</td><td class="num">validation/sections.py:36</td><td><code>KNOWN_HR_CHANNEL_KEYS</code> 不含 <code>host</code> ⇒ 写了即报未知键</td><td><span class="gap">S1 加键 + 校验</span></td></tr>
+      <tr><td>schema 面</td><td class="num">config/schema/hr.py:41</td><td>channel 键面同样无 <code>host</code>(守卫测试会查)</td><td><span class="gap">S1 同步</span></td></tr>
+      <tr><td><b>端点形参(已留位)</b></td><td class="num">hr/server.py:96–108</td><td><code>HrChannelServer.__init__(host: str = "127.0.0.1")</code> —— <b>本来就接受 host</b>, 只是没人传</td><td><span class="ok">复用</span></td></tr>
+      <tr><td>构造点</td><td class="num">hr/runtime.py:305–308</td><td>构造 <code>HrChannelServer</code> 时<b>不传 <code>host</code></b> ⇒ 走默认回环</td><td><span class="gap">S2 接线</span></td></tr>
+      <tr><td>端点自述文案</td><td class="num">hr/server.py:1、143</td><td>模块 docstring 首行「<b>只听 127.0.0.1</b>」; 启动日志「仅监听本机回环」</td><td><span class="gap">S2 按 host 分叉</span></td></tr>
+      <tr><td>服务器类命名</td><td class="num">hr/server.py:53–69</td><td>类名 <code>_LoopbackServer</code> + docstring 强调回环; <code>allow_reuse_address=False</code>(独占端口守卫)</td><td><span class="gap">S2 改述(守卫不变)</span></td></tr>
+      <tr><td>鉴权出口(401)</td><td class="num">hr/server.py:212–215</td><td>无 token/不符 ⇒ <code>logger.error</code> 且<b>不写状态、无节流</b> ⇒ 每分钟一条</td><td><span class="gap">S4 节流 + 记来源</span></td></tr>
+      <tr><td>origin 拒绝出口(403)</td><td class="num">hr/server.py:196–199</td><td><code>logger.warning</code>, 不写状态</td><td><span class="gap">S4 记来源</span></td></tr>
+      <tr><td>origin 白名单</td><td class="num">hr/channel.py:118</td><td><code>origin_allowed</code> 只放行 <code>chrome-extension://</code>(配了 <code>extension_id</code> 则只认那一个)</td><td><span class="ok">保留; 跨机下更重要</span></td></tr>
+      <tr><td>URL 白名单(SSRF)</td><td class="num">hr/channel.py <code>UrlPolicy</code></td><td>任务 URL 只能由后端按配置拼出(域名 + 路径受限), <b>端点不接受任何 URL 入参</b></td><td><span class="ok">不动(关键资产)</span></td></tr>
+      <tr><td>成功联系记录</td><td class="num">hr/server.py:302–307</td><td><code>_note_contact</code> 只被成功鉴权调用; 只记 origin, <b>不记来源地址</b></td><td><span class="gap">S5 增记来源</span></td></tr>
+      <tr><td><b>扩展硬校验</b></td><td class="num">extensions/hr-fetch-proxy/normalize.js:14–15、38–41</td><td><code>LOOPBACK_HOSTS</code> + 非回环直接 <code>throw</code>(注释点名 NAS 场景)</td><td><span class="gap">S3 放开</span></td></tr>
+      <tr><td>扩展协议折叠</td><td class="num">normalize.js:43–45</td><td>一律折成 <code>http://</code>(后端明文, 写 https 只会握手失败)</td><td><span class="gap">S3 按传输方案改</span></td></tr>
+      <tr><td>扩展静态 host 权限</td><td class="num">manifest.json:13–17</td><td><code>host_permissions</code> 仅 <code>127.0.0.1</code> / <code>localhost</code> / <code>[::1]</code></td><td><span class="gap">S3 保留 + 动态申请</span></td></tr>
+      <tr><td>扩展权限申请点</td><td class="num">options.js:267</td><td><code>chrome.permissions.request</code> <b>只申请站点 origin</b>, 端点 origin 未申请</td><td><span class="gap">S3 增端点 origin</span></td></tr>
+      <tr><td>排障文案</td><td class="num">README.md 排障表; background.js:406、424、589; options.js:489</td><td>多处写死「<code>127.0.0.1:&lt;端口&gt;</code>」「需 127.0.0.1:<端口> 这种形式」</td><td><span class="gap">S3/S6 同步</span></td></tr>
+    </table>
+  </section>
+
+  <section id="s03">
+    <h2><span class="no">03</span>方案设计 (跨机形态)</h2>
+
+    <h3>3.1 目标形态与数据流</h3>
+    <p>协议、端点集合、鉴权方式<b>全都不变</b> —— 仍然是浏览器扩展每分钟一次 HTTP 短轮询, 仍然 token + origin 两道关。变的只有两件事: <b>端点绑在哪个地址</b>、<b>扩展认不认非回环主机</b>。</p>
+    <pre><code>目标形态 (跨机):
+
+  ┌─ NAS ──────────────────────┐            ┌─ 外部 PC (日常浏览器) ─────────────┐
+  │  auto-qb 主程序            │   LAN      │  WebUI (访问 NAS 的 webui)         │
+  │  ├─ HR 取数线程 / 解析      │            │  扩展 hr-fetch-proxy (轮询端点)    │
+  │  └─ 端点 host = LAN 地址   │ ─────────▶ │  └─ 站点请求带本机登录态, 回传页面  │
+  │      (默认仍是 127.0.0.1)  │  HTTP+token │                                    │
+  └────────────────────────────┘            └────────────────────────────────────┘
+
+不变: 短轮询 60s · token 鉴权 · origin 白名单(chrome-extension://) · URL 白名单(下发时卡死)
+变化: 端点 bind 地址(可配) · 扩展主机校验(放开) · 传输加密(需拍板) · 401 节流(需补)</code></pre>
+
+    <h3>3.2 四条达成路径 (先看清"最小代价"是哪条)</h3>
+    <p>「支持外部扩展」不必等价于「改两端」。下面四条都能达成用户的目标形态, 代价差异极大:</p>
+    <table>
+      <tr><th>#</th><th>路径</th><th>改谁</th><th>攻击面 / 代价</th><th>评价</th></tr>
+      <tr>
+        <td class="num">A</td>
+        <td><b>SSH 本地端口转发</b> (隧道)</td>
+        <td><span class="ok">零改码</span></td>
+        <td>PC 上 <code>ssh -N -L 8788:127.0.0.1:8788 user@nas</code> ⇒ PC 的 <code>127.0.0.1:8788</code> 直达 NAS 端点。扩展看到的是回环, <b>两端校验都自然通过</b>; 加密由 SSH 提供。</td>
+        <td><span class="ok">立即可用</span>。隧道断则通道静默(与"浏览器关着"同形, 由故障分层的通路裁决)。</td>
+      </tr>
+      <tr>
+        <td class="num">B</td>
+        <td><b>NAS 侧反代</b> (nginx/caddy 终止 TLS)</td>
+        <td>仅扩展</td>
+        <td>反代绑 LAN + TLS, 转发到 <code>127.0.0.1:8788</code>; 后端<b>仍只听回环</b> ⇒ <b>后端攻击面零扩大</b>。扩展需放开非回环校验 + 申请远端 origin。</td>
+        <td>推荐给「想要 TLS 又不想动后端」的用户。</td>
+      </tr>
+      <tr>
+        <td class="num">C</td>
+        <td><b>端点直绑 LAN</b> (本计划主角)</td>
+        <td>两端</td>
+        <td>新增 <code>host</code> 配置键; 端点直接暴露在 LAN 上。传输安全需自决(见 §03.3 三方案)。</td>
+        <td>原生体验; 攻击面最大, 必须有传输与鉴权加固。</td>
+      </tr>
+      <tr>
+        <td class="num">D</td>
+        <td><b>VPN 组网</b> (Tailscale / WireGuard)</td>
+        <td>两端(视实现)</td>
+        <td>端点绑 VPN 接口地址; 网络面由 VPN 承担加密与准入。校验放开同 C。</td>
+        <td>适合已用 VPN 的用户; 本质是 C 的加固外壳。</td>
+      </tr>
+    </table>
+    <div class="callout warn">
+      <b>本计划的取舍</b>: 把 <b>C(直绑)</b> 做成产品化能力(配置键 + 扩展放开 + 文档), 同时把 <b>B(反代)</b> 写进文档作为「后端零改动」的推荐路径, 并<b>明确 A(隧道)是当前即可用的兜底</b>。这样: 想要原生 → C; 想要安全省事 → B; 想今天就用 → A。
+    </div>
+
+    <h3>3.3 原生路径(C)的改造面</h3>
+    <h4>3.3.1 配置面: <code>hr_check.channel.host</code></h4>
+    <ul>
+      <li>默认 <code>"127.0.0.1"</code>(保守默认不变); 允许填具体私网地址(如 <code>192.168.1.10</code>)或 <code>0.0.0.0</code>(全部网卡)。</li>
+      <li><b>校验联动(重要)</b>: 当 <code>host</code> 非回环时, 若 <code>token</code> 为空 ⇒ <code>validate_config</code> <b>报错</b> —— 绝不允许「无密钥 + 全网可达」。这是把「保守默认」升级为「安全默认」的关键一条。</li>
+      <li><code>0.0.0.0</code> 与具体地址的区别写进文档: 前者暴露所有网卡(含可能的上网口), 后者可精确限定。</li>
+    </ul>
+    <h4>3.3.2 扩展面</h4>
+    <ul>
+      <li><code>normalize.js</code>: 放开非回环; 建议<b>限定私网段</b>(<code>10./172.16-31./192.168.</code>)或走<b>显式白名单</b>, 而非任意公网域名 —— 避免扩展被诱导连公网端点。</li>
+      <li><code>manifest.json</code>: 静态 <code>host_permissions</code> 保留回环三项(同机场景零授权); 远端端点 origin 走 <b><code>chrome.permissions.request</code> 动态申请</b>(与站点 origin 同一流程, 见 <code>options.js:267</code>)。</li>
+      <li>协议折叠: 若采用 TLS 方案, <code>normalize.js:43–45</code> 不再是「一律折 http」, 而应按 <code>https</code> 保留 scheme(否则会握手失败)。</li>
+    </ul>
+    <h4>3.3.3 传输安全(三候选, 见 §05 D1)</h4>
+    <table>
+      <tr><th>方案</th><th>做法</th><th>代价</th></tr>
+      <tr><td><b>T1 受信 LAN + token</b></td><td>明确假设「端点只在受信内网」; token 已具; 依赖 LAN 物理/账号信任</td><td><span class="gap">明文 HTTP, token 在 LAN 上可嗅探</span>(家宽/小办公室可接受, 公共网络不可)</td></tr>
+      <tr><td><b>T2 端点 TLS</b></td><td>端点裹 <code>ssl</code> 自签证书</td><td>MV3 的 <code>fetch</code> <b>不能忽略证书错误</b> ⇒ 需用户导入 CA / 企业策略; 复杂度高</td></tr>
+      <tr><td><b>T3 反代终止 TLS</b></td><td>即路径 B: 反代对外 TLS, 后端仍回环</td><td>需用户自建反代; <b>后端零改动零攻击面</b> —— 这也是为什么 B 值得单独写进文档</td></tr>
+    </table>
+    <h4>3.3.4 鉴权加固(与 <code>hr-fault-domain</code> 的 P4 同源)</h4>
+    <ul>
+      <li>401 出口现为 <code>logger.error</code> 且<b>无节流</b>(<code>server.py:212–215</code>)。同机下这只是刷屏; <b>跨机后它变成可远程触发的刷屏 / 枚举面</b> —— 必须加节流(状态变化时报一次 + 持续期按 gap 提醒), 并把级别降为配置态档。</li>
+      <li>建议同时给「被拒次数」一个简单上限(如按来源地址计数, 超阈临时静默日志) —— 具体阈值待定, 不在本计划硬编码。</li>
+    </ul>
+
+    <h3>3.4 与故障归属分层(<code>hr-fault-domain</code>)的衔接</h3>
+    <p>本计划落地会让那份计划的三处口径过时, 必须同步(<b>本计划不代改那份文件</b>, 由实施时一并处理):</p>
+    <table>
+      <tr><th>#</th><th>那份计划里的原文</th><th>本计划落地后须改成</th></tr>
+      <tr><td class="num">C1</td><td><b>「WebUI 活跃信号」</b>(原 W-b「活跃必须与扩展同源 / 来源地址交集」)</td><td><b>简化为「WebUI 是否活跃」单信号</b>(用户口径⑤, 2026-10-09-0913): <b>不判断同源 / 同机</b>, 不推断「扩展离线」, 只陈述「<b>WebUI 有活动而扩展未在联系</b>」。跨机形态下因此<b>不需要来源地址比对</b> —— 本计划无需为它新增任何面。</td></tr>
+      <tr><td class="num">C2</td><td>「<b>设计边界</b>: NAS + 外部扩展的形态下 HR 取数整体不成立 … 属新特性, 不在本计划范围」</td><td>改为: 该形态<b>由本计划支持</b>(<code>hr-channel-remote</code>, issue <code>26-10-09-0855</code>); <code>shared_dir</code> 仍是并列的只读路径, 不再作为唯一解。</td></tr>
+      <tr><td class="num">C3</td><td>通道层三档: 预期离线 / 可定位故障 / 无联系</td><td>跨机后新增第四类<b>「跨机网络不可达」</b> —— 端点监听中、扩展在跑, 但 LAN / 隧道 / 防火墙断了。它在后端观测面上与「无人联系」同形, 故仍归「无联系」档的文案分支, 但需明确列出「查隧道 / 查 LAN / 查防火墙」。</td></tr>
+    </table>
+    <div class="callout">
+      <b>一个必须点明的观测盲区</b>: 路径 A(SSH 隧道)下, 隧道断与浏览器关在<b>端点观测面上再次同形</b>(都表现为"没人来联系")。区别只在于「<b>是否有人在看 WebUI</b>」—— 这由 C1 的极简判据覆盖(活跃 ⇒ 告警, 不活跃 ⇒ 静默), <b>不需要判来源、判同机</b>。故 C1 是跨机形态的必要件, 而其实现成本已被压到「复用既有 <code>is_active()</code>」。
+    </div>
+
+    <h3>3.5 安全面重评(为什么放开是可接受的)</h3>
+    <table>
+      <tr><th>风险</th><th>现状</th><th>放开后</th><th>缓解</th></tr>
+      <tr><td>端点变「带登录态的任意站代理」(SSRF)</td><td>已挡: URL 由后端按配置拼出, 端点不接受 URL 入参(<code>UrlPolicy</code>)</td><td><b>不变</b> —— 这条与 bind 地址无关</td><td><span class="ok">资产保留</span></td></tr>
+      <tr><td>token 在 LAN 上被嗅探</td><td>不适用(不出本机)</td><td>明文下可被同网段读到 token</td><td>§05 D1 的传输方案; 或文档明确「仅受信内网」</td></tr>
+      <tr><td>鉴权枚举 / 刷屏</td><td>只影响本机日志</td><td>可被远程触发</td><td>S4 节流 + 来源计数上限</td></tr>
+      <tr><td>伪造任务回传</td><td>已挡: 只有派发过的任务 id + 域名一致才收</td><td><b>不变</b></td><td><span class="ok">资产保留</span></td></tr>
+      <tr><td>普通网页 JS 打端点</td><td>已挡: 非 <code>chrome-extension://</code> origin 一律 403</td><td><b>不变</b>(LAN 上的浏览器页同样被 403)</td><td><span class="ok">资产保留</span></td></tr>
+    </table>
+    <p>结论: 放开 bind 地址<b>不引入 SSRF 类新风险</b>(URL 白名单在派发时卡死), 新增风险集中在「传输机密性」与「鉴权滥用」两点, 均可通过拍板方案收敛。</p>
+  </section>
+
+  <section id="s04">
+    <h2><span class="no">04</span>分步实施 S1–S6</h2>
+
+    <h3>S1 · 后端配置面: 新增 <code>hr_check.channel.host</code></h3>
+    <ul>
+      <li><code>HrChannelConfig</code> 加 <code>host: str = "127.0.0.1"</code>(<code>config/models.py:68–88</code>); 同步 docstring(删去「跨机器配了也驱动不了」的断言, 改为「非回环须配 token, 见 validate」)。</li>
+      <li><code>KNOWN_HR_CHANNEL_KEYS</code> 加 <code>"host"</code>(<code>validation/sections.py:36</code>); <code>schema/hr.py</code> 键面同步。</li>
+      <li><code>validate_config</code>: <code>host</code> 非空且非回环 ⇒ <b>若 <code>token</code> 为空则报错</b>; <code>host</code> 非合法地址 ⇒ 报错。</li>
+      <li><b>须核对</b>: 键面/键面守卫测试(config-mutation 系列)与 <code>config/schema</code> 一致性检查会因新增键而变, 需同步更新期望。</li>
+    </ul>
+
+    <h3>S2 · 端点接线与文案 (hr/runtime.py、hr/server.py)</h3>
+    <ul>
+      <li><code>runtime</code> 构造 <code>HrChannelServer</code> 时传 <code>host=conf.channel.host</code>(<code>hr/runtime.py:305–308</code>) —— 形参<b>已存在</b>, 只接线。</li>
+      <li><code>server.py</code> 模块 docstring 首行、启动日志(<code>:143</code>)、<code>status().note</code>: 由写死「回环」改为按 <code>host</code> 分叉(回环 ⇒ 原文案; 非回环 ⇒ 明示「监听 &lt;host&gt;, 已暴露到内网, 需 token」)。</li>
+      <li><code>_LoopbackServer</code> 更名 / 改述(如 <code>_EndpointServer</code>); <b><code>allow_reuse_address=False</code> 的独占端口守卫逐字不变</b>。</li>
+      <li>启动失败文案(<code>HrChannelBindError</code>)补充: 绑非回环地址失败时的排查提示(地址不在本机网卡 / 端口被占)。</li>
+    </ul>
+
+    <h3>S3 · 扩展放开与权限 (extensions/hr-fetch-proxy)</h3>
+    <ul>
+      <li><code>normalize.js</code>: 用「允许主机判据」替换 <code>LOOPBACK_HOSTS</code> 硬拒 —— 回环 ∪ 私网段(或显式白名单), 见 §05 D2; 错误文案从「只能是本机回环地址」改为「只支持回环或内网地址」。</li>
+      <li><code>manifest.json</code>: 静态权限保留回环三项(同机零授权); 远端端点 origin 由选项页保存时 <code>chrome.permissions.request</code> 动态申请(与站点 origin 同流程, <code>options.js:267</code>)。</li>
+      <li>协议处理: 按 §05 D1 结论决定是否保留 <code>https</code> scheme(现 <code>:43–45</code> 强制折 <code>http</code>)。</li>
+      <li>文案同步: <code>options.js</code> 默认值 / 自测提示(<code>:489</code>)、<code>background.js</code> 失败排查文案(<code>:406、424、589</code>)不再写死 <code>127.0.0.1</code>。</li>
+      <li><b>须核对</b>: <code>tests/test_extension_proxy.py</code>(node eval <code>normalize.js</code>)的用例随判据变更而改。</li>
+    </ul>
+
+    <h3>S4 · 传输与鉴权加固 (按 §05 D1 拍板)</h3>
+    <ul>
+      <li>若选 <b>T3(反代)</b>: 后端 <b>零代码改动</b> —— 只需在文档写明反代配置与扩展放开; 401 节流仍做(反代下端点仍可能被 LAN 打到? 否 —— 仍回环, 故 401 节流可选, 但建议随 S4 一并加, 因它同时服务同机习惯)。</li>
+      <li>若选 <b>T2(TLS)</b>: 端点加 <code>ssl.SSLContext</code> 包装(证书路径进配置); 扩展侧声明端点 origin 走 https; 自签信任问题在文档里给出用户侧步骤。</li>
+      <li>若选 <b>T1(受信 LAN)</b>: 不改传输, 但在启动日志与文档<b>显式标注风险</b>。</li>
+      <li><b>401 节流(三方案都要)</b>: <code>server.py:212–215</code> 改为「状态变化报一次 + 持续期按 gap 提醒」, 级别降为 WARNING(配置态档); ERROR 留给真故障。与 <code>hr-fault-domain</code> 的 P4 是同一处, 若那份计划先落地则本步复用其成果。</li>
+    </ul>
+
+    <h3>S5 · 与故障归属分层的衔接 (服务 <code>hr-fault-domain</code>)</h3>
+    <ul>
+      <li><b>WebUI 活跃信号</b>: 沿用那份计划的 S4b —— <b>判据是「WebUI 是否活跃」, 不判断同源 / 同机</b>(用户口径⑤, 2026-10-09-0913)。跨机形态下无需任何来源地址比对 ⇒ <b>本步不新增来源面</b>, 复用既有 <code>is_active()</code> 即可。</li>
+      <li><b>被拒敲门仍要记</b>(服务「可定位故障」子类): <code>_note_contact</code>(<code>server.py:302–307</code>)/ 401 / 403 出口记「被拒接触」面(与那份计划的 S4 重叠, 择一落地即可)。<b>不碰 <code>last_contact_ts</code> 的既有语义</b>。</li>
+      <li>端点级 <code>extensions_seen</code> 已是「曾联系过的扩展 origin」; 跨机下如需展示「谁在联系」可并列来源地址, 但<b>仅作展示, 不进入任何判据</b>。</li>
+    </ul>
+
+    <h3>S6 · 测试 · 文档 · 收尾</h3>
+    <ul>
+      <li>测试: 扩展 <code>normalize</code> 判据用例; 后端 <code>host</code> 校验用例(非回环 + 空 token ⇒ 报错); <code>HrChannelServer(host=...)</code> 绑定用例; 401 节流用例。</li>
+      <li>文档: 扩展 README 新增「跨机部署」节(含 §03.2 四条路径, <b>把 SSH 隧道作为首选兜底列出</b>); 排障表补「跨机连不通」一类; <code>hr-fault-domain</code> 计划的 C1/C2/C3 同步(§03.4)。</li>
+      <li>收尾: <code>commands run test.full</code> + 新建基线切片记数字; 计划 meta <code>Open → In Progress/Done</code>; <code>commands run kb.index</code>; 上游 issue <code>26-10-09-0855</code> 认领时置 <code>In Progress</code> 并填 <code>doc-refs</code> 反链。</li>
+    </ul>
+  </section>
+
+  <section id="s05">
+    <h2><span class="no">05</span>拍板点</h2>
+    <table>
+      <tr><th>#</th><th>事项</th><th>建议 (待拍板)</th></tr>
+      <tr>
+        <td class="num">D1</td>
+        <td>传输安全走哪条? <b>T1</b> 受信 LAN + token / <b>T2</b> 端点 TLS 自签 / <b>T3</b> 反代终止 TLS</td>
+        <td><b>推荐 T3 为首选并在文档主推, T1 作为「家宽/受信内网」的轻量默认, T2 标注为高复杂度备选</b>。理由: T3 让后端零改动零新攻击面(TLS 由用户的反代承担), 与「后端最小暴露」的项目气质一致; T1 是零成本但明文的现实解; T2 受 MV3 证书信任限制, 用户体验差。<b>若只选一条</b>: T3。</td>
+      </tr>
+      <tr>
+        <td class="num">D2</td>
+        <td>扩展放开到哪一档? 仅私网段 / 任意主机(加警告) / 显式白名单</td>
+        <td><b>推荐「回环 ∪ 私网段</b>(<code>10./172.16-31./192.168.</code>)<b>」</b>。理由: 恰好覆盖 NAS / 局域网场景, 又不会让扩展被诱导去连任意公网端点; 需要公网时用户应走反代 + 域名, 属进阶用法, 可后续单开白名单能力。</td>
+      </tr>
+      <tr>
+        <td class="num">D3</td>
+        <td>后端 <code>host</code> 是否允许 <code>0.0.0.0</code>(全网卡)?</td>
+        <td><b>推荐允许但文档警示</b>: <code>0.0.0.0</code> 会暴露所有网卡(可能含上网口); 引导优先填<b>具体私网地址</b>。校验层面两者都放行(不做过度限制), 靠「非回环必须配 token」兜底安全。</td>
+      </tr>
+      <tr>
+        <td class="num">D4</td>
+        <td>多扩展拓扑: 一台后端是否接受<b>多台机器</b>的扩展同时连接?</td>
+        <td><b>推荐「协议上允许, 配置上默认单扩展」</b>: <code>extension_id</code> 现可钉死一个 id; 跨机多机时需要多 id。建议先不扩 <code>extension_id</code> 为列表(避免过度设计), 文档说明「多机共用同一浏览器扩展 id 亦可(同一扩展装多台), 端点按 token 鉴权即可」—— 待真有需求再单开。</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s06">
+    <h2><span class="no">06</span>验收判据</h2>
+    <table>
+      <tr><th>#</th><th>判据</th><th>怎么验</th></tr>
+      <tr><td class="num">V1</td><td>同机部署<b>零回归</b>: 不配 <code>host</code> 时端点仍只绑 <code>127.0.0.1</code>, 现有行为逐字不变</td><td>单测(<code>host</code> 缺省) + 真机同机跑一轮</td></tr>
+      <tr><td class="num">V2</td><td>非回环 + 空 token ⇒ <code>validate_config</code> 报错</td><td>S1 校验用例(安全默认)</td></tr>
+      <tr><td class="num">V3</td><td>跨机形态(S1–S3 后)扩展能拉到任务并回传</td><td>真机: NAS 绑私网 + 外部 PC 扩展填 NAS 地址 ⇒ 一轮取数成功</td></tr>
+      <tr><td class="num">V4</td><td>扩展拒绝非私网主机(按 D2 结论)</td><td><code>normalize</code> 用例: 公网域名 ⇒ 抛错; 私网/回环 ⇒ 通过</td></tr>
+      <tr><td class="num">V5</td><td>401 不再每分钟刷 ERROR / 推送</td><td>真机: 错 token 跑 10 分钟, 日志与通知均不增长(P4)</td></tr>
+      <tr><td class="num">V6</td><td>跨机形态下「有人在看 WebUI 但扩展未在联系」能被告警</td><td>真机: NAS 上开 WebUI + 停用外部扩展 ⇒ <b>入环告警</b>; 无人用 WebUI ⇒ <b>静默</b>(判据 = WebUI 活跃, 不判来源)</td></tr>
+      <tr><td class="num">V7</td><td>文档齐备: README 跨机节 + 四条路径 + 排障新类; <code>hr-fault-domain</code> 三处口径同步</td><td>人工核对 + <code>commands run doc.links</code></td></tr>
+      <tr><td class="num">V8</td><td>全量不回归</td><td><code>commands run test.full</code> + <code>kb.check</code>; 新基线切片单点记数字</td></tr>
+    </table>
+  </section>
+
+  <section id="s07">
+    <h2><span class="no">07</span>风险与不变项</h2>
+    <h3>7.1 已接受的风险</h3>
+    <table>
+      <tr><th>#</th><th>风险</th><th>评估</th></tr>
+      <tr><td class="num">R1</td><td>明文传输下 token 可被同网段嗅探(选 T1 时)</td><td>由文档明确「仅受信内网」+ 建议 T3; 用户须知情。<b>不选 T1 则风险消失。</b></td></tr>
+      <tr><td class="num">R2</td><td>端点暴露到 LAN 后被扫描 / 探测</td><td>token 鉴权 + origin 白名单仍在; URL 白名单使端点<b>无法被用作跳板</b>。残余面是鉴权枚举 ⇒ S4 节流覆盖。</td></tr>
+      <tr><td class="num">R3</td><td>隧道/反代/VPN 中断时, 通道静默与「浏览器关着」同形</td><td>靠 <code>hr-fault-domain</code> 的「WebUI 活跃」判据区分(活跃 ⇒ 告警, 不活跃 ⇒ 静默, <b>不判来源</b>); 文案需列出「查隧道 / 查网络」。</td></tr>
+      <tr><td class="num">R4</td><td>新增配置键触发的守卫测试(writer / schema / mutation)期望变更</td><td>S1 明列须核对项; 属机械同步, 不构成设计风险。</td></tr>
+      <tr><td class="num">R5</td><td>扩展放开判据后, 误放行非预期主机</td><td>按 D2 限定私网段; 用例覆盖公网拒绝。</td></tr>
+    </table>
+    <h3>7.2 不变项 (须逐条保持)</h3>
+    <ul>
+      <li><b>默认仍回环</b> —— <code>host</code> 缺省 <code>127.0.0.1</code>, 同机部署用户零感知。</li>
+      <li>URL 白名单 / 任务绑定 / origin 白名单三道安全资产<b>逐字不变</b>。</li>
+      <li>协议不变: 仍是 60s 短轮询 + token 鉴权; 轮询周期 &lt; <code>request_timeout</code> 的硬约束不变。</li>
+      <li><code>allow_reuse_address=False</code> 的独占端口守卫不变; 端点线程「只入队 + 置一次旗标」的单一写线程假设不变。</li>
+      <li><code>hr_check.shared_dir</code>「只读共享数据」路径保留 —— 与本计划并列, 不替代。</li>
+    </ul>
+  </section>
+
+  <section id="s08">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li><b>26-10-09-0913</b> 改版(用户口径⑤:「WebUI 在线而扩展不在线发告警、不静默, 无需判断是否同机」): <b>本计划因此减负</b>。① §03.4 <b>C1 重写</b>: 原「W-b 升级为来源地址交集」被<b>撤销</b>, 判据简化为「WebUI 是否活跃」单信号 —— 跨机<b>不再需要来源地址比对</b>。② <b>S5 改造</b>: 原「新增来源地址面」删除 —— 该步不再新增任何面, 只保留「被拒接触面」(服务「可定位故障」子类); 来源地址若有, 仅作展示、不进判据。③ V6 / R3 判据随之更新(活跃 ⇒ 告警 / 不活跃 ⇒ 静默)。④ §01 关系条目同步。⑤ <code>hr-fault-domain</code> 侧同步见其 0913 条。</li>
+      <li><b>26-10-09-0856</b> 初版: 按用户口径(「扩展只能本机是设计缺陷, 未来须支持 NAS + 外部扩展形态」)出方案。① 立上游 issue <code>26-10-09-0855</code> 记录缺陷; ② §03.2 先给<b>四条达成路径矩阵</b>并点明 <b>SSH 隧道=A 零改码即时通路</b>、反代=B 后端零攻击面、直绑=C 本计划主角; ③ §03.3 给原生路径改造面(配置键 + 安全默认联动 + 扩展放开 + 传输三候选 + 401 节流); ④ §03.4 列与 <code>hr-fault-domain</code> 的口径同步; ⑤ §03.5 安全面重评(证明放开不引入 SSRF 新风险); ⑥ 列 D1–D4 拍板点、V1–V8 验收、R1–R5 风险。待拍板。</li>
+    </ul>
+  </section>
+
+  <footer>
+    计划工位 · 拍板后冻结 (改版 = 同文件内追加「变更记录」并抬 doc-updated, 禁止 -v2 新文件) ·
+    memory-bank/plans/26-10-09-0856-plan-hr-channel-remote.html · 上游 issue 26-10-09-0855
+  </footer>
+
+</div>
+</body>
+</html>

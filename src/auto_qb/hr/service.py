@@ -26,6 +26,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Set, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from . import events
+from . import log as hr_log
 from .adapters import build_adapter
 from .bencode import compute_infohashes, torrent_display_name
 from .fetcher import (
@@ -1467,12 +1468,18 @@ class HrRefreshService:
         self._login_warned.discard(site)
 
     def _warn_no_channel(self, site: str, err: Exception) -> None:
-        """无通道告警: **每个站点只报一次**(直到通道恢复)"""
+        """无通道告警: **每个站点只报一次**(直到通道恢复)
+
+        通道层(含「等扩展超时」)统一在此出 —— 且标 `silent`: 只进后端 log, 不进前端错误历史、
+        不弹通知(计划 §03.2/D2①: 「连不上浏览器」是**预期内**的环境态)。
+        """
         if site in self._no_channel_warned:
             logger.debug(f"HR 站点 {site} | 无可用取数通道(已告警过, 不重复): {err}")
             return
         self._no_channel_warned.add(site)
-        logger.warning(f"HR 站点 {site} | 无可用取数通道, 本轮不做在线核实(保守回落本地兜底): {err}")
+        hr_log.emit(
+            logger, logging.WARNING, events.channel_unavailable(site, err), event=events.EVENT_CHANNEL, silent=True
+        )
 
     def _warn_login(self, site: str, err: Exception) -> None:
         """登录失效告警: **每个站点只报一次**(直到登录恢复); 文案单点在 events.login_expired"""
@@ -1480,7 +1487,7 @@ class HrRefreshService:
             logger.info(f"HR 站点 {site} | 登录态仍未恢复(已告警过, 本轮不做在线核实): {err}")
             return
         self._login_warned.add(site)
-        logger.error(events.login_expired(site, err))
+        hr_log.emit(logger, logging.ERROR, events.login_expired(site, err), event=events.EVENT_LOGIN)
 
     def _warn_parse(self, site: str, detail: str) -> None:
         """页面形态异常告警(排序/字段/表头/防伪): WARNING 按 CHANNEL_SILENCE_WARN 节流"""
@@ -1490,22 +1497,33 @@ class HrRefreshService:
             logger.info(f"HR 站点 {site} | 页面形态异常仍存在(节流期内不重复告警): {detail}")
             return
         self._parse_warned_at[site] = now
-        logger.warning(detail)
+        hr_log.emit(logger, logging.WARNING, detail, event=events.EVENT_PARSE)
 
     def _maybe_alert_lane_fail(self, site: str, st: HrLaneState) -> None:
         """连续多波同档失效 → ERROR 告警(§5.2 告警升级): 只提示人, 不改变取数与判定行为"""
         if st.fail_streak >= LANE_FAIL_ALERT_STREAK:
-            logger.error(events.lane_persistent_failure(site, st.lane, st.fail_streak, st.detail))
+            hr_log.emit(
+                logger,
+                logging.ERROR,
+                events.lane_persistent_failure(site, st.lane, st.fail_streak, st.detail),
+                event=events.EVENT_PARSE
+            )
 
     def _warn_ext_quota(self, site: str, err: Exception) -> None:
-        """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)"""
+        """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)
+
+        归通道层, 但**可见**: 它意味着后端频控失效, 是需要人看一眼的真问题(§07.2 不变项:
+        `HrChannelQuota` 的现有出口不变)。
+        """
         if site in self._ext_quota_warned:
             logger.info(f"HR 站点 {site} | 扩展侧硬上限仍生效(已告警过, 本波让位): {err}")
             return
         self._ext_quota_warned.add(site)
-        logger.warning(
-            f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/日额配置"
-            "与日志), 也可能是扩展上限本就低于后端配额(属正常优先)"
+        hr_log.emit(
+            logger,
+            logging.WARNING, f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/日额配置"
+            "与日志), 也可能是扩展上限本就低于后端配额(属正常优先)",
+            event=events.EVENT_CHANNEL
         )
 
 

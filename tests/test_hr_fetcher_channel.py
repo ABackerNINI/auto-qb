@@ -5,7 +5,7 @@
 - test_build_returns_channel_fetcher_when_enabled: 都启用 -> ChannelFetcher(不是 NullFetcher)
 - test_get_text_dispatches_task_and_returns_body: 取数线程发起 -> 任务上队 -> 回传后拿到文本
 - test_get_bytes_returns_binary: .torrent 走二进制路径, 任务带 tid
-- test_timeout_raises_fetch_error: 无人回传 => 超时抛 HrFetchError(不能让持锁线程永久挂住)
+- test_timeout_raises_channel_timeout: 无人回传 => 超时抛 HrChannelTimeout(通道层子类; 不能让持锁线程永久挂住)
 - test_extension_failure_becomes_fetch_error: 扩展报失败(含 Retry-After) -> HrFetchError 带 retry_after
 - test_extension_quota_refusal_is_not_a_fetch_failure: 扩展侧硬上限拒发(kind=ext-quota) -> HrChannelQuota
   (子类, 与「取数失败」分开: 不计失败/不推熔断)
@@ -33,6 +33,7 @@ from auto_qb.hr.fetcher import (
     ChannelFetcher,
     HrChannelQuota,
     HrChannelStopped,
+    HrChannelTimeout,
     HrChannelUnavailable,
     HrFetchError,
     HrLoginExpired,
@@ -137,11 +138,18 @@ def test_get_bytes_returns_binary():
         auto.close()
 
 
-def test_timeout_raises_fetch_error():
+def test_timeout_raises_channel_timeout():
+    """无人回传 => 超时抛 HrChannelTimeout(通道层; 不能让持锁线程永久挂住)
+
+    !类型很关键: 它是 `HrChannelUnavailable` 的子类 ⇒ 走通道层出口(action=no-channel、不写
+    wave.notes、不推进档位失败)。此前抛裸 `HrFetchError` ⇒ 被当「页面取数失败」并套上
+    `[HR 页面改版]`(计划 §03.1 的洞口, 用户实报 2026-10-09)。
+    """
     queue, fetcher = make_fetcher(timeout=0.05)  # 没有假扩展应答
-    with pytest.raises(HrFetchError) as err:
+    with pytest.raises(HrChannelTimeout) as err:
         fetcher.get_text(URL)
     assert "超时" in str(err.value)
+    assert isinstance(err.value, HrChannelUnavailable), "必须落进通道层(否则又被当页面故障)"
     assert queue.pending() == 0, "超时后任务即作废, 不残留"
 
 

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="hr-channel-loopback-only">
+<meta name="issue-stamp" content="26-10-09-0855">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="hr-channel-remote">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立">
+<meta name="issue-summary" content="端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态">
+<title>HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立</h1>
+    <p class="lede">端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-09-0855-feat-hr-channel-loopback-only</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-09 08:55</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>撞见场景: 用户在评审 <code>hr-fault-domain</code> 计划时提出部署形态 —— <b>「auto-qb 配置在 NAS 里, 通过 WebUI 访问, 浏览器扩展不装在 NAS 中而装在外部 PC」</b>(2026-10-09 会话)。核实后确认: 该形态下 HR 取数功能<b>整体不成立</b> —— 扩展填 <code>127.0.0.1:8788</code> 会解析到 PC 自己的端口, 连不到 NAS 上的后端。</p>
+    <p>触发条件: 只要「后端实例」与「装了扩展的浏览器」不在同一台机器上, 必现。与配置开关无关 —— 端点主机在<b>两端代码里都被写死为回环</b>, 不是配置项。</p>
+    <p>用户判定: 这是<b>设计缺陷</b>(而非可接受的边界), 要求未来支持「外部扩展 / 跨机」形态。本件为记录, 详细方案另立计划(专题 <code>hr-channel-remote</code>)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>取证时间: <strong>2026-10-09 08:55</strong>(@ <code>develop</code>)。两端各锁死一处: 后端四处证据 + 扩展两条证据。</p>
+    <p><b>后端 —— 端点主机恒定且不可配</b>:</p>
+<pre><code># hr/server.py 模块 docstring 首行
+"""本地取数端点 ... 扩展 ⇄ 后端 的唯一网络面, **只听 127.0.0.1**。"""
+
+# config/models.py:68-88  HrChannelConfig —— 无 host 字段
+#   docstring 原文: 「端点只听 127.0.0.1, 浏览器只能连本机 loopback ⇒ 跨机器配了也驱动不了」
+enabled / port / token / extension_id / request_timeout   # ← 没有 host
+
+# config/validation/sections.py:36 —— 校验键面(写了 host 即报未知键)
+KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
+
+# hr/runtime.py:305-308 —— 构造端点时不传 host(走默认)
+HrChannelServer(queue=..., token=..., port=conf.channel.port, extension_id=..., ...)
+
+# hr/server.py:143 —— 启动日志自述
+"HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;(仅监听本机回环, 需 token 鉴权)"</code></pre>
+    <p><b>反证: 通道形参其实已留位, 只是配置面没接</b> —— <code>HrChannelServer.__init__(host: str = "127.0.0.1")</code>(<code>hr/server.py:96–108</code>)本身就接受 <code>host</code>, runtime 只是没往下传。故后端侧改造量比表面看的小。</p>
+    <p><b>扩展 —— 硬校验并抛错</b>:</p>
+<pre><code>// extensions/hr-fetch-proxy/normalize.js:14-15、38-41
+const LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '::1', '[::1]'];
+...
+if (LOOPBACK_HOSTS.indexOf(url.hostname) &lt; 0) {
+  // 后端只监听回环 ⇒ 填别的机器(含 NAS 上的实例)连不通; 那类实例应走"只读共享数据"
+  throw new Error(`端点只能是本机回环地址(127.0.0.1): ${url.hostname}`);
+}
+
+// extensions/hr-fetch-proxy/manifest.json:13-17 —— 静态 host 权限同样只有回环
+"host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "http://[::1]/*"]
+
+// normalize.js:43-45 —— 协议硬编码 http(后端明文, 不提供 TLS)
+return `http://${host}:${url.port}`;</code></pre>
+    <p>症状(用户视角): 扩展到端点连不通时, 浏览器只给一句 <code>TypeError: Failed to fetch</code>(<code>extensions/hr-fetch-proxy/README.md</code> 排障表首行 —— 该表把原因归为「端点没在监听」, 未覆盖「跨机」这一类)。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>后端实例与「装了扩展的浏览器」<b>不同机</b> ⇒ 必现(与任何配置开关无关; 两端都在代码里写死回环)。</td></tr>
+      <tr><td>影响范围</td><td>HR 取数的「驱动」路径整体不可用 —— 跨机形态下后端下发不了任务、取不回数据, HR 在线核实退化为「未核实」。<b>不影响</b>: 同机部署(现状默认形态)完全不受影响; 站点解析 / 判定 / 报告 / WebUI 均与通道主机无关。NAS 类实例的既有替代路径是 <code>hr_check.shared_dir</code>「只读共享数据」。</td></tr>
+      <tr><td>严重度</td><td><b>中</b> —— 不阻塞现状部署; 但封锁了一类合理部署形态(单一 NAS 集中管理 + 外部机器提供浏览器态), 且用户明确判定为缺陷并要求支持。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">行号为取证当时(2026-10-09 08:55 @ <code>develop</code>); 代码漂移后按符号名 + grep 关键词重新定位。</p>
+    <p><b>后端侧</b>:</p>
+    <ul>
+      <li><code>hr/server.py</code> 模块 docstring 首行(「只听 127.0.0.1」) · grep <code>只听 127.0.0.1</code> / <code>_LoopbackServer</code>。</li>
+      <li><code>config/models.py:68–88</code> · 符号 <code>HrChannelConfig</code>(无 <code>host</code> 字段) · grep <code>class HrChannelConfig</code> / <code>跨机器配了也驱动不了</code>。</li>
+      <li><code>config/validation/sections.py:36</code> · 符号 <code>KNOWN_HR_CHANNEL_KEYS</code> · grep <code>KNOWN_HR_CHANNEL_KEYS</code>。</li>
+      <li><code>config/schema/hr.py:41</code>(channel 键面, 同样无 host) · grep <code>extension_id</code> + <code>hr_check</code>。</li>
+      <li><code>hr/runtime.py:305–308</code> · 构造 <code>HrChannelServer</code> 时不传 <code>host</code> · grep <code>HrChannelServer(</code>。</li>
+      <li><code>hr/server.py:96–108</code> · <code>__init__(host: str = "127.0.0.1")</code> —— <b>形参已留位</b>, 是接配置的现成入口 · grep <code>host: str = "127.0.0.1"</code>。</li>
+    </ul>
+    <p><b>扩展侧</b>:</p>
+    <ul>
+      <li><code>extensions/hr-fetch-proxy/normalize.js:14–15、38–41</code> · 常量 <code>LOOPBACK_HOSTS</code> + 非回环抛错 · grep <code>LOOPBACK_HOSTS</code> / <code>端点只能是本机回环地址</code>。</li>
+      <li><code>extensions/hr-fetch-proxy/manifest.json:13–17</code> · <code>host_permissions</code> 仅回环 · grep <code>host_permissions</code>。</li>
+      <li><code>extensions/hr-fetch-proxy/options.js:267</code> · <code>chrome.permissions.request</code> <b>只申请站点 origin</b>(端点 origin 未申请) · grep <code>permissions.request</code>。</li>
+      <li><code>extensions/hr-fetch-proxy/README.md</code> 排障表首行 <code>TypeError: Failed to fetch</code> · grep <code>Failed to fetch</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p>这不是"待查"级的未知缺陷, 而是<b>设计上的显式取舍</b> —— 只是该取舍被用户判定为不可接受。</p>
+    <div class="callout"><b>非回归、亦非疏漏</b>: 两端都是<b>显式</b>写死回环 —— 后端连 <code>host</code> 配置键都不给(写了报未知键), 扩展 <code>normalize.js</code> 直接抛错; 扩展注释里还点名了这个场景(「填别的机器(<b>含 NAS 上的实例</b>)连不通」)。即设计者当时<b>主动排除</b>了跨机形态, 并以「走只读共享数据(<code>hr_check.shared_dir</code>)」作为 NAS 的替代路径。</div>
+    <p><b>已排除</b>: 不是网络/防火墙问题(扩展在本地校验阶段就被拦下, 根本发不出请求); 不是 token / origin 配置问题(还没走到鉴权那一步); 不是平台差异(两端注释均已确认是有意为之)。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p><b>方向</b>: 让「端点主机」成为可配项, 放开扩展侧的非回环校验; 同时正面重评由此扩大的安全面。经核实, 核心安全资产在跨机后<b>仍然成立</b> —— 端点 URL 白名单在<b>下发任务时</b>卡死(<code>channel.UrlPolicy</code>), 端点本身不接受任何 URL 入参 ⇒ 它<b>不是</b>「带登录态的任意站代理」(README §安全边界)。故攻击面扩大有限, 但仍需论证。详细设计见另立计划(专题 <code>hr-channel-remote</code>); 本件只记方向:</p>
+    <ol>
+      <li><b>后端</b>: 新增 <code>hr_check.channel.host</code> 配置键(默认 <code>127.0.0.1</code> 保持保守), 同步进 <code>KNOWN_HR_CHANNEL_KEYS</code> / <code>schema/hr.py</code> / <code>validate_config</code>; <code>runtime</code> 把 host 传给<b>已有的</b> <code>HrChannelServer</code> 形参。</li>
+      <li><b>扩展</b>: <code>normalize.js</code> 放开非回环主机(建议限定私网段 / 显式白名单, <b>而非</b>任意公网); <code>manifest.json</code> 静态 <code>host_permissions</code> 之外, 需在保存时用 <code>chrome.permissions.request</code> 申请<b>远端端点 origin</b>(现仅申请站点 origin)。</li>
+      <li><b>传输安全</b>: 端点现为明文 HTTP, 跨机后 token 在 LAN 上可被嗅探 —— <b>需拍板</b>(TLS 自签 / 反代 / 或明确「仅受信 LAN」假设 + token 轮换)。</li>
+      <li><b>鉴权加固</b>: 401 无节流(与 <code>hr-fault-domain</code> 计划的 <b>P4</b> 同源); 跨机后变成可远程触发的刷屏 / 爆破面, 需一并加节流。</li>
+      <li><b>文档</b>: 扩展 README 排障表、<code>hr-fault-domain</code> 计划的「设计边界」段落需同步改写(该段落把此形态写成"受支持 = 不驱动扩展", 与本次口径冲突)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-09 08:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-09-0855-feat-hr-channel-loopback-only.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

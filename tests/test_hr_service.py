@@ -44,6 +44,11 @@
 - test_interval_empty_page_keeps_manual_stamp: T52. 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
 - test_counter_truncation_gap_informational: T6 截断差值信息性 —— 非全深度 rows<claim 不告警不冻结, notes 记差值, REASON_BUDGET 语义不变
 - test_fail_streak_resets_on_clean_wave: 失效波数清零 —— 连续失效只跨失效波延续, 恢复波清零, 单次失效不背历史(修复既有从未清零)
+- test_channel_timeout_routes_to_no_channel: 等扩展超时 ⇒ 通道层(action=no-channel · 不写 wave.notes · 不推进档位失败)
+- test_event_domains_are_declared: 事件 → 归属层单点(parse=站点 / login=账号 / silence·channel=通道)
+- test_channel_unavailable_has_own_label: 通道不可用文案带独立标签, 不借 [HR 页面改版]
+- test_channel_timeout_never_upgrades_to_page_changed: 连续多波通道不可用也不升成「疑似改版」ERROR
+- test_generic_fetch_error_still_page_failure: 边界回归 —— 真页面失败仍按站点层处理(收层不一刀切)
 - test_reuse_window_uses_min_of_config_and_interval: 1.复用窗时长 = min(reuse_window, 拉取间隔)(计划 26-09-30-0240), 窗内 REUSED 语义不变
 - test_reuse_window_never_exceeds_interval: 1b. clamp 另一半 —— 复用窗 > 拉取间隔时静默收敛到拉取间隔
 - test_reuse_window_not_extended_by_idle_interval: 1c. 复用窗公式 min(reuse_window, refresh_interval) 不跟随 idle —— 稳态降频只动节奏闸, 新鲜度窗不放大(计划 26-10-05-0555 §2.7 不变项)
@@ -114,7 +119,7 @@ import pytest
 
 import auto_qb.hr.service as hr_service
 from auto_qb.hr import events
-from auto_qb.hr.fetcher import HrFetchError, NullFetcher
+from auto_qb.hr.fetcher import HrChannelTimeout, HrFetchError, NullFetcher
 from auto_qb.hr.model import (
     FETCH_LANES,
     LANE_IDLE,
@@ -2527,3 +2532,76 @@ def test_history_defer_only_on_force(tmp_path):
     assert "间隔" in defer_ev.reason
     assert defer_ev.lanes == [] and defer_ev.rows == 0 and defer_ev.pages == 0
     assert defer_ev.by == "test" and defer_ev.ts == clock.now
+
+
+def test_event_domains_are_declared():
+    """事件 → 归属层单点(计划 §03.2/§03.4): 通道/账号/站点层各就各位
+
+    层由**事件**推出而非调用点手写 —— 这是「通道层事件被贴上站点层标签」不可表达的落点。
+    """
+    assert events.domain_of(events.EVENT_PARSE) == events.DOMAIN_SITE
+    assert events.domain_of(events.EVENT_LOGIN) == events.DOMAIN_ACCOUNT
+    assert events.domain_of(events.EVENT_SILENCE) == events.DOMAIN_CHANNEL
+    assert events.domain_of(events.EVENT_CHANNEL) == events.DOMAIN_CHANNEL
+    assert events.domain_of("未登记") == "", "未登记 = 不分层(出口按可见处理, 向后兼容)"
+
+
+def test_channel_unavailable_has_own_label():
+    """通道不可用文案带**自己的**标签, 不再借 `[HR 页面改版]`(D3: 新增独立标签)"""
+    msg = events.channel_unavailable("example", "等待浏览器扩展取数超时(180s)")
+    assert msg.startswith("[HR 通道不可用]")
+    assert "[HR 页面改版]" not in msg
+    assert "不做在线核实" in msg
+
+
+class _TimeoutFetcher:
+    """取页 / 取种即抛「等扩展回传超时」: 通道层故障, 不是页面问题(计划 §03.1 的洞口)"""
+    def get_text(self, url):
+        raise HrChannelTimeout(f"等待浏览器扩展取数超时(180s): {url}")
+
+    def get_bytes(self, url):
+        raise HrChannelTimeout(f"等待浏览器扩展取数超时(180s): {url}")
+
+
+def test_channel_timeout_routes_to_no_channel(tmp_path, caplog):
+    """等扩展超时 ⇒ **通道层**出口: action=no-channel · 不写 wave.notes · 不推进档位失败
+
+    此前它抛裸 `HrFetchError` ⇒ 被当「页面取数失败」: 套 `[HR 页面改版]` 标签(进前端错误历史)、
+    写 `wave.notes`(环境噪音进持久证据链)、推进 `fail_streak`(攒到 3 就升成「疑似改版」ERROR)
+    —— 即计划 §03.3 的 P1/P2/P3(用户实报 2026-10-09)。
+    """
+    service = make_service(tmp_path, _TimeoutFetcher(), clock=Clock())
+    with caplog.at_level(logging.WARNING):
+        result = service.refresh_site(SITE, {})
+    assert result.action == ACTION_NO_CHANNEL
+    data, _err = service.store(SITE).read_unlocked()
+    assert "取数失败" not in data.wave.notes, f"通道层不得写进 wave.notes: {data.wave.notes!r}"
+    assert all(l.fail_streak == 0 for l in data.wave.lanes.values()), "通道层不得推进档位失败"
+    assert not [r for r in caplog.records if "[HR 页面改版]" in r.getMessage()], "不得套「页面改版」标签"
+    assert [r for r in caplog.records if "[HR 通道不可用]" in r.getMessage()], "通道层文案要带自己的标签"
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.action) == ("wave", "no-channel")
+
+
+def test_channel_timeout_never_upgrades_to_page_changed(tmp_path, caplog):
+    """连续多波通道不可用也**不**升级成「疑似改版」ERROR(§03.3 的 P2 升级路径)"""
+    service = make_service(tmp_path, _TimeoutFetcher(), clock=Clock())
+    with caplog.at_level(logging.ERROR):
+        for _ in range(4):
+            assert service.refresh_site(SITE, {}).action == ACTION_NO_CHANNEL
+    assert not [r for r in caplog.records if "疑似改版" in r.getMessage()], "环境态不得升级成站点结论"
+    data, _err = service.store(SITE).read_unlocked()
+    assert all(l.fail_streak == 0 for l in data.wave.lanes.values())
+
+
+def test_generic_fetch_error_still_page_failure(tmp_path, caplog):
+    """边界回归: 真页面取数失败(HrFetchError)仍按**站点层**处理 —— 收层不得一刀切吞掉真异常"""
+    fetcher = FakeFetcher(pages=standard_pages(), fail_text_at={"A": "HTTP 500"})
+    service = make_service(tmp_path, fetcher, clock=Clock())
+    with caplog.at_level(logging.WARNING):
+        result = service.refresh_site(SITE, {})
+    data, _err = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].fail_streak >= 1, "页面失败仍要推进档位失败计数"
+    assert "取数失败" in data.wave.notes, f"页面失败仍要写 wave.notes: {data.wave.notes!r}"
+    assert result.action in (ACTION_ERROR, ACTION_PARTIAL)
+    assert [r for r in caplog.records if "[HR 页面改版]" in r.getMessage()], "页面失败仍要带「页面改版」标签"

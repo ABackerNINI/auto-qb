@@ -26,6 +26,8 @@
 - test_route_unknown_path_is_404: 未登记路径 404
 - test_token_never_echoed: 响应体里绝不出现 token
 - test_contact_recorded_only_after_auth: 只有鉴权通过的请求才算「通道接触」(静默判据)
+- test_rejected_contact_recorded_and_kept_out_of_contact: 401/403 记「被拒接触」面, 但不污染「成功接触」
+- test_auth_failure_log_is_throttled: 鉴权失败按状态变化 + 6h 节流, 级别为配置态档 WARNING(不再每分钟 ERROR)
 - test_http_roundtrip_over_loopback: 真 HTTP: 拉清单 -> 回传 -> 后端拿到内容
 - test_http_requires_token: 真 HTTP 无 token -> HTTPError 401
 - test_port_conflict_fails_fast: 同端口第二个端点启动即抛 HrChannelBindError(不静默降级)
@@ -44,6 +46,7 @@
 - test_header_and_content_length_units: 头解析兼容 dict/Message/异常形状 + Content-Length 容错
 """
 import json
+import logging
 import socket
 import threading
 import time
@@ -263,6 +266,46 @@ def test_contact_recorded_only_after_auth():
     clock[0] = 2000.0
     server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN, "Origin": ORIGIN})
     assert server.last_contact_ts == 2000.0, "每次接触都刷新(静默判定看的就是它)"
+
+
+def test_rejected_contact_recorded_and_kept_out_of_contact():
+    """被拒的敲门(401/403)记进「被拒接触」面, 但**不**污染「成功接触」(计划 §03.6)
+
+    「有人在敲门但被拒」是唯一能证明「这不是浏览器离线」的证据 ⇒ 必须可读; 而 `last_contact_ts`
+    的语义是「**成功**联系」, 不能被它刷新。
+    """
+    clock = [1000.0]
+    server = make_server(now_fn=lambda: clock[0])
+    assert server.rejected_contacts == 0
+    assert server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})[0] == 401
+    assert server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN, "Origin": "https://evil.example.com"})[0] == 403
+    assert server.rejected_contacts == 2, "401 与 403 都算被拒的敲门"
+    assert server.last_rejected_ts == 1000.0
+    assert server.last_contact_ts == 0.0, "被拒不得刷新「成功联系」"
+    st = server.status()
+    assert st.rejected_contacts == 2 and st.last_rejected_ts == 1000.0
+
+
+def test_auth_failure_log_is_throttled(caplog):
+    """鉴权失败按「状态变化报一次 + 长周期提醒」节流, 级别为配置态档(WARNING)
+
+    扩展每 60s 敲一次 ⇒ 配错 token 原本是**每分钟一条 ERROR**(直通前端错误历史 + 推系统通知):
+    把持续配置态按最高量级刷屏(计划 P4)。
+    """
+    clock = [1000.0]
+    server = make_server(now_fn=lambda: clock[0])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.server"):
+        for i in range(5):  # 同一状态连续敲 5 次
+            clock[0] = 1000.0 + i
+            server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+        warns = [r for r in caplog.records if "鉴权失败" in r.getMessage()]
+        assert len(warns) == 1, f"持续期不得逐条刷: {[r.getMessage() for r in warns]}"
+        assert warns[0].levelno == logging.WARNING, "配置态档, 不是 ERROR"
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR], "不得用 ERROR 刷屏"
+        caplog.clear()
+        clock[0] = 1000.0 + 6 * 3600.0 + 1  # 跨过一个提醒周期
+        server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+        assert [r for r in caplog.records if "鉴权失败" in r.getMessage()], "长周期后要再提醒一次"
 
 
 # ---------- 2. 真 HTTP ----------

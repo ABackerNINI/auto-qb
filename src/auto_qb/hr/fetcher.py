@@ -28,6 +28,19 @@ class HrChannelUnavailable(HrFetchError):
     """本实例没有可用取数通道(未启用 channel / 浏览器未开 / 扩展被停用)"""
 
 
+class HrChannelTimeout(HrChannelUnavailable):
+    """**等待浏览器扩展回传超时** —— 通道此刻不可用(计划 26-10-09-0821 §03.1 补的洞口)
+
+    判据沿用异常家族既有那条(**能不能靠重试解决**): 超时的解是「等通道恢复」(浏览器重开 /
+    扩展重新启用 / 下一次轮询接上), 与 `HrChannelUnavailable` **同解** ⇒ 计入通道层, 不参与
+    档位失败统计、不写 `wave.notes`、`action` 落 `ACTION_NO_CHANNEL`。
+
+    !此前它抛的是**裸的** `HrFetchError`, 于是被 service 当作「页面取数失败」处理 → 套上
+    `[HR 页面改版]` 前缀 → 进前端错误历史, 并在连关几晚后攒到 `lane_persistent_failure` 的
+    ERROR「疑似改版」。那是**环境态被伪装成站点结论**的量级混淆(用户实报 2026-10-09)。
+    """
+
+
 class HrChannelStopped(HrChannelUnavailable):
     """取数被**叫停**(关停进程 / 热重挂端点时的主动放弃)
 
@@ -151,8 +164,8 @@ class ChannelFetcher:
             # 区分「被叫停」与「等超时」: 前者是关停路径(不该算一次失败), 后者才计入退避熔断
             if self.queue.cancel_reason:
                 raise HrChannelStopped(f"取数通道已停止({self.queue.cancel_reason}), 本轮放弃: {url}")
-            raise HrFetchError(f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url}"
-                               "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
+            raise HrChannelTimeout(f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url}"
+                                   "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
         if not result.ok:
             detail = result.error or f"HTTP {result.status}"
             if result.kind == KIND_LOGIN_PAGE:
@@ -213,6 +226,6 @@ def build_channel_fetcher(
 
 
 __all__ = [
-    "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelUnavailable", "HrFetchError", "HrFetcher",
-    "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available"
+    "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelTimeout", "HrChannelUnavailable", "HrFetchError",
+    "HrFetcher", "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available"
 ]

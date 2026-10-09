@@ -7,6 +7,7 @@
 - test_notify_default_min_level_is_error: 默认 min_level=ERROR, INFO/WARNING 不通知、ERROR 派发(等级整改 26-09-27-1126)
 - test_notify_handler_dispatch: WARNING/ERROR 日志入队并由后台线程派发, ERROR 标记 urgent
 - test_notify_handler_self_loop_guard: auto_qb.infra.notify 来源的记录被忽略(防自环)
+- test_notify_skips_records_suppressed_from_frontends: 标了 hr_silent(只进后端 log)的记录不弹通知; 未打标照常
 - test_notify_handler_quiet_hours: 免打扰时段(含跨午夜)跳过发送, 时段外照常
 - test_notify_quiet_hours_does_not_consume_quota: 免打扰判定在节流**之前**, 免打扰期间不消耗每小时配额/不刷新去重窗口
 - test_notify_throttle_dedup_table_evicted: 去重表按窗口淘汰(长跑进程里唯一的无界增长点)
@@ -178,6 +179,39 @@ def test_notify_handler_self_loop_guard():
     handler.emit(record)
     assert channel.sent == []
     assert handler._queue.empty(), "防自环记录不应入队"
+
+
+def test_notify_skips_records_suppressed_from_frontends():
+    """标了「只进后端 log」的记录(hr_silent)不弹通知 —— 与 errlog 同一套档位(计划 §03.2)
+
+    「连不上浏览器」这类**预期内**的环境态: 既不该进前端错误历史, 也不该弹系统通知。
+    """
+    handler, channel = _make_handler(min_level="WARNING")
+    silent = logging.LogRecord(
+        name="auto_qb.hr.worker",
+        level=logging.ERROR,  # 即便到 ERROR, 标了静默也不弹
+        pathname="p",
+        lineno=1,
+        msg="通道静默(预期离线)",
+        args=None,
+        exc_info=None,
+    )
+    silent.hr_silent = True
+    handler.emit(silent)
+    assert channel.sent == []
+    assert handler._queue.empty(), "静默记录不应入队"
+
+    visible = logging.LogRecord(
+        name="auto_qb.hr.worker",
+        level=logging.ERROR,
+        pathname="p",
+        lineno=1,
+        msg="站点改版",
+        args=None,
+        exc_info=None,
+    )
+    handler.emit(visible)
+    assert _wait_for(lambda: len(channel.sent) == 1), "未打标记录照常派发(向后兼容)"
 
 
 def test_notify_handler_quiet_hours():

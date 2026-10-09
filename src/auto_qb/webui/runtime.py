@@ -37,6 +37,7 @@ import time
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
+from ..infra.logging import is_record_suppressed
 from .commands import (
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
@@ -118,6 +119,10 @@ class WebErrLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         try:
             if record.levelno >= logging.WARNING:
+                # 只进后端 log 的记录(HR 通道/环境层的静默子类, 如「浏览器关着」)在此止步:
+                # 环境态混进站点故障的错误历史是量级混淆(计划 26-10-09-0821 §03.3)。
+                if is_record_suppressed(record):
+                    return
                 # 多行合一(换行等空白折叠成空格)+ 截断: 收集时一次处理, 展示层不管
                 msg = " ".join(str(record.getMessage()).split())
                 if len(msg) > WEB_ERR_MSG_MAX:

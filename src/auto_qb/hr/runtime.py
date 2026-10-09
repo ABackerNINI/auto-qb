@@ -321,7 +321,26 @@ class HrRuntime:
             endpoint=self.endpoint,
             poll_interval=POLL_INTERVAL,  # 常量化(v3, 计划 §6.2: 配置键 poll_interval 删除)
             anchors_fn=self._anchors,
+            web_active_fn=self._web_active,
         )
+
+    def _web_active(self) -> bool:
+        """WebUI 是否**有人在看**(现读 `manager.web` 的活跃窗口; 计划 §03.6.1)。
+
+        只服务于「通道静默」的出口分档: 活跃 ⇒ 有人在场却收不到扩展联系 ⇒ 该发声; 不活跃 ⇒
+        「没人在用」= 预期离线 ⇒ 只进后端 log。判据是「WebUI 是否活跃」这一件事, **不判断
+        是否同机 / 同源**(用户口径⑤)。
+
+        没有 web 面(测试替身 / 未装配)时如实返回 False —— 它只影响是否提醒, 不影响取数与判定;
+        返回 False 的后果是**少提醒**(保守), 不会把「没人用」误报成「有人在用」。
+        """
+        web = getattr(self._manager, "web", None)
+        if web is None:
+            return False
+        try:
+            return bool(web.is_active())
+        except Exception:
+            return False
 
     def request_refresh(self, sites: Optional[Iterable[str]] = None) -> dict:
         """「立即拉取」的汇合点(计划 26-09-30-0240): 插件端点与 WebUI 按钮都走这里。

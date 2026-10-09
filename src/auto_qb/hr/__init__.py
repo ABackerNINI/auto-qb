@@ -36,6 +36,7 @@ from .channel import (
 from .fetcher import (
     ChannelFetcher,
     HrChannelStopped,
+    HrChannelTimeout,
     HrChannelUnavailable,
     HrFetchError,
     HrFetcher,
@@ -146,6 +147,7 @@ __all__ = [
     # 取数通道
     "HrChannelUnavailable",
     "HrChannelStopped",
+    "HrChannelTimeout",
     "HrFetchError",
     "HrFetcher",
     "NullFetcher",

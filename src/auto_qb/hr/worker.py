@@ -22,6 +22,7 @@ import time
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from . import events
+from . import log as hr_log
 from .resolve import HrSiteView, HrViewSet
 from .service import (
     CHANNEL_SILENCE_WARN,
@@ -142,6 +143,7 @@ class HrWorker:
         poll_interval: float = POLL_INTERVAL,
         now_fn: Callable[[], float] = time.time,
         anchors_fn: Optional[Callable[[], Mapping[str, Mapping[str, Any]]]] = None,
+        web_active_fn: Optional[Callable[[], bool]] = None,
         name: str = "auto-qb-hr-fetch",
     ) -> None:
         self.service = service
@@ -150,6 +152,9 @@ class HrWorker:
         self.poll_interval = max(1.0, float(poll_interval))
         self._now = now_fn
         self._anchors_fn = anchors_fn
+        #: WebUI 是否活跃(现读回调, 计划 §03.6.1): 决定「通道静默」是**可见告警**还是**只进后端 log**
+        #: —— 有人在用 WebUI 却收不到扩展联系, 就是要提醒的那种状态(用户口径⑤)。None = 无信号。
+        self._web_active_fn = web_active_fn
         self._name = name
         self._cond = threading.Condition()
         self._wake_seq = 0
@@ -389,7 +394,13 @@ class HrWorker:
         """通道静默告警: 浏览器长期未开 / 扩展被停用 / token 配错(每 warn_gap 提醒一次)
 
         !本事件是**端点级**的(扩展连不上端点 ⇒ 任何站点都取不到数), 所以文案里要列出
-        **受影响站点** —— 只说「通道静默」而不说“哪些站点的数据在变旧”, 用户没法判断后果。
+        **受影响站点** —— 只说「通道静默」而不说"哪些站点的数据在变旧", 用户没法判断后果。
+
+        「该不该出声」依后端**可观测的证据**分档(计划 §03.2 / §03.6.1, 用户口径⑤):
+        - 有被拒敲门(401/403) ⇒ **可见**: 扩展在跑, 是 token / origin 配错(可定位故障);
+        - WebUI 活跃          ⇒ **可见**: 有人在用, 但扩展未在联系 —— 这**正是要提醒的**(不静默);
+        - 两者都没有          ⇒ **静默**: 「没人在用」= 预期离线, 不该进前端错误历史。
+        判据**不涉及**「是否同机 / 同源」(用户口径⑤明确免掉), 故无需任何来源比对; 见 events.channel_silent。
         """
         endpoint = self.endpoint
         if endpoint is None:
@@ -405,7 +416,17 @@ class HrWorker:
             return  # 已提醒过, 本周期内不重复(防通知轰炸)
         self._silence_warned_at = now
         where = "启动以来" if last <= 0 else "上次联系后"
-        logger.error(events.channel_silent(silent / 3600, where, self.service.enabled_sites()))
+        rejected = int(getattr(endpoint, "rejected_contacts", 0) or 0) > 0
+        web_active = bool(self._web_active_fn is not None and self._web_active_fn())
+        evidence = "rejected" if rejected else ("web_active" if web_active else "none")
+        visible = rejected or web_active
+        hr_log.emit(
+            logger,
+            logging.WARNING if visible else logging.INFO,
+            events.channel_silent(silent / 3600, where, self.service.enabled_sites(), evidence=evidence),
+            event=events.EVENT_SILENCE,
+            silent=not visible,
+        )
 
 
 __all__ = ["HrViewPublisher", "HrWorker", "view_signature"]

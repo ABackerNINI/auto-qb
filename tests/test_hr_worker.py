@@ -18,6 +18,9 @@
 - test_worker_refresh_forgets_pacing_memory: 完整刷新后清节流记忆(下次再卡住要重新说明白)
 - test_silence_reminder_is_throttled: 通道静默按 channel_silence_warn 周期提醒一次
 - test_silence_warning_names_affected_sites: 通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(M4 四类事件)
+- test_silence_is_quiet_when_nobody_watching: 无人在用 WebUI 且无被拒敲门 ⇒ 预期离线, 只进后端 log(hr_silent)
+- test_silence_is_visible_when_web_active: WebUI 活跃 + 扩展未联系 ⇒ 可见告警(不静默, 口径⑤)
+- test_silence_names_rejected_root_cause: 有被拒敲门(401/403) ⇒ 文案指名 token / origin 根因
 - test_stop_without_start_is_ok: 未启动就 stop 不得报错
 - test_start_wake_and_stop: 线程能起、能被唤醒立刻干活、能停干净
 - test_anchors_provider_failure_is_ignored: 主循环提供锚点失败不影响刷新
@@ -318,9 +321,17 @@ def test_silence_reminder_is_throttled(tmp_path, caplog, monkeypatch):
 
     class _Endpoint:
         last_contact_ts = 0.0
+        rejected_contacts = 0
 
+    # web_active=True ⇒ 走**可见**档(WARNING), 这样节流本身才看得见; 静默档走 INFO(见
+    # test_silence_is_quiet_when_nobody_watching)
     worker = HrWorker(
-        service=service, publisher=HrViewPublisher(), endpoint=_Endpoint(), poll_interval=60.0, now_fn=clock
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=_Endpoint(),
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: True,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
         worker.run_once()  # 刚起: 不告警
@@ -346,9 +357,15 @@ def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
 
     class _Endpoint:
         last_contact_ts = 0.0
+        rejected_contacts = 0
 
     worker = HrWorker(
-        service=service, publisher=HrViewPublisher(), endpoint=_Endpoint(), poll_interval=60.0, now_fn=clock
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=_Endpoint(),
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: True,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
         clock.advance(3601.0)
@@ -357,6 +374,98 @@ def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
     warns = [r.getMessage() for r in caplog.records if "[HR 通道静默]" in r.getMessage()]
     assert len(warns) == 1, f"静默告警要用事件标签前缀: {warns}"
     assert "受影响站点: pt.example.com" in warns[0], "端点级事件必须点出谁受影响"
+
+
+def test_silence_is_quiet_when_nobody_watching(tmp_path, caplog, monkeypatch):
+    """无人在用 WebUI 且无被拒敲门 ⇒ 「预期离线」: 只进后端 log(hr_silent), 不进前端错误历史
+
+    这正是用户实报的那一类(关浏览器过夜) —— 它不该出现在错误历史里(计划 §03.2 / D2①)。
+    """
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+        rejected_contacts = 0
+
+    worker = HrWorker(
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=_Endpoint(),
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: False,
+    )
+    with caplog.at_level(logging.INFO, logger="auto_qb.hr.worker"):
+        clock.advance(3601.0)
+        worker.run_once()
+    recs = [r for r in caplog.records if "[HR 通道静默]" in r.getMessage()]
+    assert len(recs) == 1
+    assert recs[0].levelno == logging.INFO, "没人在用 = 预期离线 ⇒ 只进后端 log"
+    assert getattr(recs[0], "hr_silent", False) is True, "必须打 silent 标, 否则出口滤不掉"
+    assert "浏览器可能未运行" in recs[0].getMessage()
+
+
+def test_silence_is_visible_when_web_active(tmp_path, caplog, monkeypatch):
+    """WebUI 活跃但扩展未联系 ⇒ **可见告警, 不静默**(用户口径⑤)
+
+    只陈述「有人在看 WebUI, 而扩展没在联系」; **不**推断「扩展离线」, 也**不**判断是否同机 / 同源。
+    """
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+        rejected_contacts = 0
+
+    worker = HrWorker(
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=_Endpoint(),
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: True,
+    )
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
+        clock.advance(3601.0)
+        worker.run_once()
+    recs = [r for r in caplog.records if "[HR 通道静默]" in r.getMessage()]
+    assert len(recs) == 1 and recs[0].levelno == logging.WARNING
+    assert getattr(recs[0], "hr_silent", False) is False, "可见档不得标 silent(否则出口会滤掉)"
+    assert "有人在看 WebUI" in recs[0].getMessage()
+
+
+def test_silence_names_rejected_root_cause(tmp_path, caplog, monkeypatch):
+    """有被拒敲门(401/403) ⇒ 文案**指名根因**(token / origin), 不让人猜「浏览器是否在运行」
+
+    「有人在敲门但被拒」是后端唯一能证明「不是浏览器离线」的证据(计划 §03.6 / P4)。
+    """
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+        rejected_contacts = 3
+
+    worker = HrWorker(
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=_Endpoint(),
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: False,
+    )
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
+        clock.advance(3601.0)
+        worker.run_once()
+    recs = [r for r in caplog.records if "[HR 通道静默]" in r.getMessage()]
+    assert len(recs) == 1 and recs[0].levelno == logging.WARNING
+    msg = recs[0].getMessage()
+    assert "被拒" in msg and "token" in msg, f"被拒敲门要指名根因: {msg}"
+    assert getattr(recs[0], "hr_silent", False) is False
 
 
 def test_stop_without_start_is_ok(tmp_path):

@@ -6,6 +6,7 @@
 
 ## 测试计划
 - test_levels_gate: DEBUG/INFO 不入环; WARNING/ERROR 入环
+- test_suppressed_records_skipped: hr_silent 标记的 WARNING 不入环(只进后端 log); 未打标仍入环
 - test_ring_cap_evicts_oldest: 第 201 条挤掉最旧(cap 200 环形语义)
 - test_after_increment_and_last: after 增量与 last 字段正确(含 after > last 回空)
 - test_msg_truncate_and_multiline: msg 超长截断 500 字符 + 多行合一
@@ -130,6 +131,23 @@ def test_errlog_requires_token():
     assert r.status_code == 200
     body = r.json()
     assert body["last"] == 1 and len(body["items"]) == 1 and body["items"][0]["msg"] == "走端点可见"
+
+
+def test_suppressed_records_skipped():
+    """只进后端 log 的记录(hr_silent)不入环 —— 通道/环境层的静默子类(如「浏览器关着」)
+
+    「连不上浏览器这类只打后端 log, 不发到前端错误历史」的落点(计划 26-10-09-0821 §03.2/D2①)。
+    未打标的记录行为不变(向后兼容), 可见子类(WEBUI 活跃 / 被拒敲门)也照样入环。
+    """
+    rt = _runtime()
+    handler = WebErrLogHandler(rt)
+    silent = _record(logging.WARNING, "通道静默(预期离线)")
+    silent.hr_silent = True
+    handler.emit(silent)
+    handler.emit(_record(logging.WARNING, "站点改版仍要入环"))
+    items, _last = rt.err_log_since(0)
+    msgs = [i["msg"] for i in items]
+    assert msgs == ["站点改版仍要入环"], f"静默记录必须被挡在环外: {msgs}"
 
 
 def test_pure_memory_no_disk():

@@ -49,6 +49,11 @@ logger = logging.getLogger(__name__)
 ENDPOINT_STOP_TIMEOUT = 5.0
 _JSON = "application/json; charset=utf-8"
 
+#: 鉴权 / origin 被拒的日志提醒间隔(秒) —— 与 service.CHANNEL_SILENCE_WARN **同口径**(6h)。
+#: 被拒是**持续配置态**(token 配错 ⇒ 扩展每 60s 敲一次): 只该「状态变化时报一次 + 长周期提醒」,
+#: 否则就是每分钟一条 ERROR 刷屏并推系统通知(计划 26-10-09-0821 的 P4)。
+REJECT_WARN_GAP = 6 * 3600.0
+
 
 class _LoopbackServer(ThreadingHTTPServer):
     """单机端点: 线程池处理 + 严格独占端口(见模块 docstring)"""
@@ -122,6 +127,13 @@ class HrChannelServer:
         self._state_lock = threading.Lock()
         self._last_contact_ts = 0.0
         self._origins: Set[str] = set()
+        #: 「被拒接触」面(计划 §03.6 的落点): 401/403 也记一下 —— 它证明**有人在敲门**
+        #: (浏览器在跑 / 扩展在跑), 是区分「扩展配错」与「没人联系」的唯一硬证据。
+        #: !与 `_last_contact_ts` 分开: 那个语义是「**成功**联系」, 不能被被拒的敲门污染。
+        self._rejected_contacts = 0
+        self._last_rejected_ts = 0.0
+        self._reject_warn_key = ""
+        self._reject_warn_at = 0.0
         self._handle: Optional[HrEndpointHandle] = None
 
     # ---------- 生命周期 ----------
@@ -170,10 +182,22 @@ class HrChannelServer:
         with self._state_lock:
             return self._last_contact_ts
 
+    @property
+    def rejected_contacts(self) -> int:
+        """被拒接触累计次数(401/403) —— >0 证明「有人在敲门」(计划 §03.6 可分辨判据)"""
+        with self._state_lock:
+            return self._rejected_contacts
+
+    @property
+    def last_rejected_ts(self) -> float:
+        with self._state_lock:
+            return self._last_rejected_ts
+
     def status(self, *, enabled: bool = True) -> ChannelStatus:
         """自检快照(不含密钥内容)"""
         with self._state_lock:
             contact, origins = self._last_contact_ts, sorted(self._origins)
+            rejected, rejected_ts = self._rejected_contacts, self._last_rejected_ts
         listening = self.started
         bound_port = self._handle.port if self._handle is not None else self.port
         return ChannelStatus(
@@ -184,6 +208,8 @@ class HrChannelServer:
             last_contact_ts=contact,
             pending=self.queue.pending(),
             extensions_seen=origins,
+            rejected_contacts=rejected,
+            last_rejected_ts=rejected_ts,
             note="" if listening else "端点未在监听",
         )
 
@@ -195,7 +221,7 @@ class HrChannelServer:
         cors: Dict[str, str] = {}
         if not origin_allowed(origin, self.extension_id):
             # 非扩展 origin(普通网页 JS): 拒; 不给 CORS 头, 让浏览器也读不回响应
-            logger.warning(f"HR 取数通道 | 拒绝非白名单 origin: {origin or '(空)'}")
+            self._note_rejected("origin", f"拒绝非白名单 origin: {origin or '(空)'}")
             return 403, {}, _json({"error": "origin not allowed"})
         if origin:
             cors["Access-Control-Allow-Origin"] = origin
@@ -210,8 +236,9 @@ class HrChannelServer:
             }, b""
 
         if not self._token_ok(_header(headers, TOKEN_HEADER)):
-            # !401 之前不写任何状态(不记接触、不入队、不落盘)
-            logger.error(f"HR 取数通道 | 鉴权失败({method} {route_path}), 已拒绝且未写任何状态")
+            # !401 之前不写「成功联系」状态(不记 last_contact、不入队、不落盘) —— 但仍记「被拒接触」
+            # (它证明有人在敲门, 见 _note_rejected)。
+            self._note_rejected("token", f"鉴权失败({method} {route_path}), 已拒绝")
             return 401, {**cors, "WWW-Authenticate": "X-Hr-Token"}, _json({"error": "unauthorized"})
 
         self._note_contact(origin)
@@ -298,6 +325,27 @@ class HrChannelServer:
     def _token_ok(self, given: str) -> bool:
         """常数时间比较(避免用比较耗时反推密钥); 未配置 token 时一律拒"""
         return bool(given) and bool(self.token) and secrets.compare_digest(given, self.token)
+
+    def _note_rejected(self, kind: str, detail: str) -> None:
+        """记一次**被拒**的敲门(401 / 403), 并按状态变化 + 长周期节流地报一次日志
+
+        为什么必须记: 「浏览器未运行」与「扩展未启用」在后端观测面上同形(都是没人联系), 而
+        「有人在敲门但被拒」是**唯一**能证明前端在跑的证据 —— 它把「扩展配错」从「日志里的一行」
+        变成「状态上的一个事实」, 通道静默文案才有资格指名根因(计划 §03.6)。
+        为什么要节流: 扩展每 60s 敲一次, 配错 token 就是**每分钟一条** —— 那是把持续配置态按最高
+        量级刷屏(原实现在此用 `logger.error`, 直通前端错误历史 + 系统通知; 计划 P4)。
+        """
+        with self._state_lock:
+            self._rejected_contacts += 1
+            self._last_rejected_ts = self._now()
+        now = self._now()
+        if kind != self._reject_warn_key or now - self._reject_warn_at >= REJECT_WARN_GAP:
+            self._reject_warn_key = kind
+            self._reject_warn_at = now
+            # 级别定为**配置态**档(WARNING): ERROR 应留给真故障
+            logger.warning(f"HR 取数通道 | {detail}(持续期间不再逐条记, 每 {REJECT_WARN_GAP / 3600:.0f}h 提醒一次)")
+        else:
+            logger.debug(f"HR 取数通道 | {detail}(已告警过, 不重复)")
 
     def _note_contact(self, origin: str) -> None:
         """记一次通道接触(静默告警的判据); 只成功鉴权的请求会走到这里"""

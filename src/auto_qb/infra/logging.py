@@ -126,3 +126,26 @@ def setup_logging(file: str, level: int, max_bytes: int, format: str):
 
     # 可选：记录一条启动信息
     logger.info("日志初始化完成")
+
+
+# ---------- 日志记录的「层 / 档位」标记(计划 26-10-09-0821 §03.4) ----------
+#
+# 产生点(HR 侧, 见 hr/log.py)把「归属层」与「是否只进后端 log」挂到 record 上; 出口
+# (webui 错误历史 / 系统通知)在此读取并收放。键与读取器放 infra 是因为它必须被**两侧**共用,
+# 而 infra 不依赖 hr(依赖方向 hr → infra), 放这里不会成环。
+DOMAIN_ATTR = "hr_domain"
+SILENT_ATTR = "hr_silent"
+
+
+def is_record_suppressed(record: logging.LogRecord) -> bool:
+    """出口侧判据: 该记录是否只进后端 log(不进前端错误历史 / 不弹通知)
+
+    未打标的记录一律**不静默** —— 保持既有行为(向后兼容), 且让「漏打标」的后果是"多报"
+    而不是"漏报"(后者更危险)。
+    """
+    return bool(getattr(record, SILENT_ATTR, False))
+
+
+def record_domain(record: logging.LogRecord) -> str:
+    """该记录声明的归属层(未分层返回空串; 仅供展示与排障, 出口收放只认 `is_record_suppressed`)"""
+    return str(getattr(record, DOMAIN_ATTR, "") or "")

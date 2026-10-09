@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Callable, List, Optional
 
 from . import utils
+from .logging import is_record_suppressed
 from ..config import NotifyConfig
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,10 @@ class NotifyHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         try:
             if not self.enabled:
+                return
+            if is_record_suppressed(record):
+                # 只进后端 log 的记录不弹通知(HR 通道/环境层的静默子类, 如「浏览器关着」);
+                # 与 errlog 同一套档位, 见 hr/log.py —— 「只打后端 log」对两条出口生效
                 return
             if record.name and record.name.startswith(NOTIFY_LOGGER_PREFIX):
                 return  # 防自环

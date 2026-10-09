@@ -21,12 +21,13 @@
 | docs | 1 |
 | test | 4 |
 | refactor | 5 |
-| feat | 21 |
+| feat | 22 |
 | chore | 2 |
 | question | 4 |
 
 ## Open
 
+- [feat] [HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立](26-10-09-0855-feat-hr-channel-loopback-only.html) — 端点恒绑 127.0.0…
 - [perf] [HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)](26-10-08-1304-perf-hr-exclude-terminal-download.html) — 被排除 HR 的种子在…
 - [test] [config 校验器闭区间端点缺逐值守阵](26-10-08-0903-test-config-mutation-boundary-guards.html) — port/log.max…
 - [test] [config loaders 关键字默认值/实参删除缺守阵](26-10-08-0903-test-config-mutation-loader-defaults.html) — _get(spec, K…
