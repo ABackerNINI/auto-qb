@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-09-1529] [本地通道传输安全调研: WebUI 与 HR 取数通道的加密方案对比 · auto-qb](26-10-09-1529-report-transport-encryption-feasibility.html) — `transport-encryption`
 - [26-10-08-1235] [HR 排除未落到取数侧 · 稳态降频失效取证 · auto-qb](26-10-08-1235-report-hr-exclude-steady.html) — `hr-steady-throttle`
 - [26-10-08-0231] [变异测试框架调研与适配性报告 · Python + WEB UI 语言面 · auto-qb](26-10-08-0231-report-mutation-testing-feasibility.html) — `mutation-testing-feasibility`
 - [26-10-07-2031] [流量图曲线过陡的口径调研: 瞬时速度 · 区间平均 · 移动平均](26-10-07-2031-report-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`

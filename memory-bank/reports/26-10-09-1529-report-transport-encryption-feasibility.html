@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>本地通道传输安全调研: WebUI 与 HR 取数通道的加密方案对比 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="transport-encryption">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-09-1529">
+<meta name="doc-updated" content="26-10-09-1529">
+<meta name="doc-refs" content="memory-bank/issues/26-10-09-0855-feat-hr-channel-loopback-only.html,memory-bank/activeContext/26-10-09-1529-transport-encryption.md,memory-bank/tasks/26-10-09-backend-transport-encryption.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 224px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  .badge.no { background: #2a1a1a; color: var(--no); border-color: #4d2f2f; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  h4 { font-size: 13.5px; font-weight: 600; margin: 16px 0 6px; color: var(--accent-ink); }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num, td.mono { font-family: var(--mono); white-space: nowrap; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.stop { border-left-color: var(--no); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 84ch; }
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 10px; margin: 8px 0 18px; }
+  .flow .node { border: 1px solid var(--hair); border-radius: 5px; padding: 12px 14px; background: var(--mark); }
+  .flow .node .t { font-family: var(--display); font-size: 12.5px; font-weight: 600; }
+  .flow .node .s { font-size: 11.5px; color: var(--faint); font-family: var(--mono); margin-top: 3px; }
+  .flow .arrow { text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; line-height: 1.35; }
+  .rate { font-family: var(--mono); font-size: 12.5px; }
+  .r-hi { color: var(--no); }
+  .r-mid { color: var(--warn); }
+  .r-lo { color: var(--ok); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>问题、口径与方法</a>
+    <a href="#s2"><span class="no">02</span>结论速览</a>
+    <a href="#s3"><span class="no">03</span>现状盘点: 两条通道</a>
+    <a href="#s4"><span class="no">04</span>威胁模型分层</a>
+    <a href="#s5"><span class="no">05</span>候选方案总览</a>
+    <a href="#s6"><span class="no">06</span>方案 B: HTTPS + 本地受信 CA</a>
+    <a href="#s7"><span class="no">07</span>方案 C: 反向代理 / Caddy</a>
+    <a href="#s8"><span class="no">08</span>方案 D: 应用层 AEAD(用户设想)</a>
+    <a href="#s9"><span class="no">09</span>方案 E: 网络层 VPN / 隧道</a>
+    <a href="#s10"><span class="no">10</span>决定性前提: 安全上下文与 LNA</a>
+    <a href="#s11"><span class="no">11</span>对比矩阵</a>
+    <a href="#s12"><span class="no">12</span>建议落地路径</a>
+    <a href="#s13"><span class="no">13</span>与本仓约定的衔接</a>
+    <a href="#s14"><span class="no">14</span>附录: 参考与锚点</a>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 可行性调研报告</div>
+    <h1>本地通道传输安全: WebUI 与 HR 取数通道的加密方案对比</h1>
+    <p class="lede">现状两条本机通道(浏览器 WebUI ⇄ auto-qb 后端、浏览器扩展 ⇄ auto-qb 取数端点)全部是<b>明文 HTTP + 共享令牌</b>。本报告把成熟方案(TLS/本地受信 CA、反向代理、应用层 AEAD、网络层 VPN)逐个摆出来比对。核心结论有两层: <b>在「本机回环」这一默认形态下, 明文 HTTP 的残余风险有限, 加密的边际收益小; 而一旦把通道暴露到局域网或跨机, 唯一「正确且省事」的答案是 TLS</b>。用户设想的「令牌加密载荷」在回环下技术上成立, 但在最需要它的跨机场景<b>恰恰行不通</b> —— 浏览器只在安全上下文(HTTPS 或回环)才提供 Web Crypto。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-09-1529-report-transport-encryption-feasibility</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-09 15:29</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ de0c4fa6</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>问题、口径与调研方法</h2>
+    <h3>要回答的问题</h3>
+    <ol>
+      <li>两条本机通道现在到底传输什么、暴露面在哪、已有的防护是什么。</li>
+      <li>「用 token 对数据加密, 两端解密」这个设想(方案 D)在技术上成不成立、成本多大。</li>
+      <li>相比成熟方案(TLS 本地受信 CA / 反代 / VPN), 各方案的优劣与适用面 —— 给出可拍板的分阶段路径。</li>
+    </ol>
+    <h3>方法</h3>
+    <ul>
+      <li><b>外部调研</b>: 以浏览器/规范官方来源为准(MDN 安全上下文、Chrome for Developers 的本地网络访问、mkcert/Caddy 官方文档), 博客类仅作旁证。</li>
+      <li><b>本仓核实</b>: 逐行核对两条通道的实现(鉴权/载荷/监听), 锚点见 §14; 结论里所有「现状」断言均可回代码验证。</li>
+      <li><b>口径</b>: 本报告只做<b>方案对比与可行性</b>, 不含实现。落地方案另行立项(专题 <code>hr-channel-remote</code> 已就跨机形态入池, 见 <code>issues/26-10-09-0855</code>)。</li>
+    </ul>
+    <div class="callout warn">本报告里带版本号的外部事实(如 Chrome 142 的 LNA 推出时间)是 <b>2026-10-09</b> 这一刻的快照; 浏览器安全策略迭代很快, 落地时须以当时的官方文档复核。方案层面的取舍判断不随版本变化。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>结论速览</h2>
+    <table>
+      <tr><th>部署形态</th><th>现状风险</th><th>建议</th></tr>
+      <tr>
+        <td><b>同机回环</b>(默认: <code>web.host=127.0.0.1</code> / HR 端点恒 <code>127.0.0.1</code>)</td>
+        <td>低。载荷与令牌仅在本机回环上走, 嗅探回环需本机特权; 能嗅探的同用户进程本就能直接读 token 文件。</td>
+        <td><b>维持明文 + 令牌</b>, 在文档里把残余风险写清。加 TLS 的边际收益小、成本不低。</td>
+      </tr>
+      <tr>
+        <td><b>WebUI 暴露到局域网</b>(用户把 <code>web.host</code> 改成 <code>0.0.0.0</code> 或 LAN IP)</td>
+        <td><b>高</b>。Bearer 令牌与全部载荷在 LAN 上明文可嗅; 拿到令牌 = 可删除种子 / 改配置。</td>
+        <td><b>必须上 TLS</b>(本地受信 CA 或反代), 或改走 VPN/隧道。见 §06/§07/§09。</td>
+      </tr>
+      <tr>
+        <td><b>HR 通道跨机</b>(NAS 后端 + 外部 PC 扩展, 见 issue 26-10-09-0855)</td>
+        <td><b>高</b>。当前两端写死回环、形态不成立; 一旦放开, 明文 token 在 LAN 可嗅。</td>
+        <td><b>优先 TLS + 本地受信 CA</b>; 若不愿在客户端装 CA, 可退而用<b>共享密钥 AEAD 信封</b>(§08)作受限兜底 —— 扩展侧可行, 因为它自身是安全上下文。</td>
+      </tr>
+      <tr>
+        <td><b>远程访问</b>(不在同一 LAN)</td>
+        <td>不适用(现状不支持)。</td>
+        <td>引导走 <b>VPN / 隧道</b>(Tailscale/WireGuard/SSH), 让通道在网络层就已加密, 应用层零改动。</td>
+      </tr>
+    </table>
+    <h3>三条核心判断</h3>
+    <div class="callout ok"><b>判断一: 用户设想的「token 加密载荷」不是主方案, 也不该是。</b>它能在回环下工作(回环算安全上下文, <code>crypto.subtle</code> 可用), 但在跨机 LAN 的 <code>http://&lt;私网IP&gt;</code> 页面里 <b>Web Crypto 根本不存在</b> —— 恰恰在最需要加密的场景失效。见 §08、§10。</div>
+    <div class="callout"><b>判断二: 加密要么在网络层(TLS/VPN), 要么别做。</b>TLS 同时解决三件应用层方案难同时做好的事: 机密性(含头部令牌)、服务器身份认证、前向保密。自研 AEAD 信封要么缺后两者, 要么引入大量自定义协议风险。</div>
+    <div class="callout warn"><b>判断三: 最该先做的不是加密, 而是「暴露即提醒/收口」。</b>默认回环已经安全; 真正的高风险来自用户把 <code>web.host</code> 改成非回环却没意识到后果。在配置层给一道「暴露即加密」的提示或闸门, 收益远大于默认给回环上加密。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>现状盘点: 两条通道</h2>
+    <div class="flow">
+      <div class="node"><div class="t">浏览器 WebUI</div><div class="s">http://127.0.0.1:8080</div></div>
+      <div class="arrow">HTTP<br>Bearer</div>
+      <div class="node"><div class="t">auto-qb 后端</div><div class="s">FastAPI + uvicorn</div></div>
+      <div class="arrow">HTTP<br>X-Hr-Token</div>
+      <div class="node"><div class="t">浏览器扩展</div><div class="s">http://127.0.0.1:8788</div></div>
+    </div>
+    <h3>通道一: WebUI ⇄ auto-qb 后端</h3>
+    <table>
+      <tr><th>维度</th><th>现状(可回代码核对)</th></tr>
+      <tr><td>载体</td><td>FastAPI + uvicorn, 独立线程; 默认 <code>web.host=127.0.0.1</code>, <code>web.port=8080</code>(<code>config/models.py</code> 的 <code>WebConfig</code>)</td></tr>
+      <tr><td>协议</td><td><b>明文 HTTP</b>(uvicorn 未配 ssl_certfile/ssl_keyfile)</td></tr>
+      <tr><td>鉴权</td><td><code>Authorization: Bearer &lt;web.token&gt;</code>, 常数时间比较(<code>secrets.compare_digest</code>); token 留空则首次启动生成到 <code>&lt;data_dir&gt;/web.token</code>(<code>webui/server/auth.py</code>)</td></tr>
+      <tr><td>免鉴权</td><td><code>web.skip_local_verify=true</code> 时回环连接免 token(保守默认关闭)</td></tr>
+      <tr><td>跨站防护</td><td>Host 白名单 + 写方法 Origin 同源(仅免鉴权模式启用); <code>proxy_headers=False</code> 防 XFF 伪造回环</td></tr>
+      <tr><td>SSE</td><td><code>/api/events</code> 用 EventSource(发不出 Authorization 头), 以带鉴权的 POST 换<b>一次性短时票据</b> <code>?ticket=</code>(旧 <code>?token=</code> 已删)</td></tr>
+      <tr><td>前端令牌</td><td>存 <code>localStorage.autoqb_token</code>, 每次请求拼 <code>Authorization</code> 头(<code>static/shared/auth.js</code>)</td></tr>
+      <tr><td>载荷</td><td>种子/分组/剧集视图 JSON、状态与流量快照、配置读写、命令投递、静态资源(模板/CSS/JS)</td></tr>
+    </table>
+    <h3>通道二: 浏览器扩展 ⇄ HR 取数端点</h3>
+    <table>
+      <tr><th>维度</th><th>现状(可回代码核对)</th></tr>
+      <tr><td>载体</td><td>标准库 <code>ThreadingHTTPServer</code>, 仅监听 <code>127.0.0.1:8788</code>(<code>hr/server.py</code>)</td></tr>
+      <tr><td>协议</td><td><b>明文 HTTP</b>; 扩展侧 <code>normalize.js</code> 把协议硬编码为 <code>http</code>(注释直言「后端明文, 不提供 TLS」)</td></tr>
+      <tr><td>鉴权</td><td><code>X-Hr-Token</code> 头, <code>compare_digest</code>; token 留空则生成到 <code>&lt;data_dir&gt;/hr.token</code></td></tr>
+      <tr><td>纵深防御</td><td>Origin 白名单(仅 <code>chrome-extension://</code>, 可锁单扩展 id) + 任务 URL 白名单(SSRF 在下发任务时卡死) + 任务绑定(只收回派发过的任务、域名须一致)</td></tr>
+      <tr><td>端点</td><td>4 个: <code>GET /api/hr/tasks</code>(领清单)、<code>POST /api/hr/result</code>(回传)、<code>GET /api/hr/sites</code>、<code>POST /api/hr/refresh</code></td></tr>
+      <tr><td>载荷</td><td>任务清单(URL/kind/id)、回传的<b>页面 HTML</b> 与 <b>.torrent 字节(base64)</b></td></tr>
+      <tr><td>轮询</td><td>扩展每 1 分钟拉一次清单; 站点侧节奏由后端把守</td></tr>
+    </table>
+    <h3>明文到底暴露了什么</h3>
+    <ul>
+      <li><b>令牌本身在头部明文</b> —— 这是比载荷更值钱的目标。嗅到 <code>web.token</code> 即可冒充前端下发删除/暂停/改配置命令; 嗅到 <code>hr.token</code> 即可冒充扩展领任务、回传伪造数据。</li>
+      <li><b>载荷明文</b> —— 种子名/哈希/路径、站点 URL、页面 HTML(含站点内容)、配置内容。</li>
+      <li><b>元数据明文</b> —— 请求路径、方法、时序、大小(即便只加密 body 也挡不住)。</li>
+    </ul>
+    <div class="callout">注意: 两条通道<b>现状都只听回环</b>。这意味着「明文」的实际暴露面 = 本机; 是否升级为「网络可嗅」取决于用户是否把 <code>web.host</code> 改出回环, 以及未来是否放开 HR 端点的跨机。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>威胁模型分层</h2>
+    <p>「有安全风险」必须先落到具体威胁, 否则方案无从取舍。按攻击者位置分五层:</p>
+    <table>
+      <tr><th>#</th><th>攻击者位置</th><th>能做什么</th><th>传输加密能挡吗</th></tr>
+      <tr>
+        <td>T0</td>
+        <td><b>同机、同用户</b>的进程(恶意软件/脚本)</td>
+        <td>直接读 <code>web.token</code>/<code>hr.token</code> 文件, 甚至读进程内存</td>
+        <td><span class="rate r-hi">否</span> —— 令牌文件对同用户可读, 加密通道也拦不住「有钥匙的人」</td>
+      </tr>
+      <tr>
+        <td>T1</td>
+        <td><b>同机、不同用户</b>的低权限进程</td>
+        <td>理论上嗅探回环, 但抓回环流量通常需要管理员/驱动级权限</td>
+        <td><span class="rate r-mid">部分</span> —— 有价值但门槛高; 且同机场景通常已有更简单的攻击面</td>
+      </tr>
+      <tr>
+        <td>T2</td>
+        <td><b>局域网内</b>的被动嗅探者(同 WiFi/交换机镜像端口)</td>
+        <td>嗅到明文令牌与全部载荷</td>
+        <td><span class="rate r-lo">是</span> —— <b>这是加密的主要正当理由</b>; 前提是 <code>web.host</code> 已暴露到非回环</td>
+      </tr>
+      <tr>
+        <td>T3</td>
+        <td><b>局域网内的主动中间人</b>(ARP 欺骗/伪造服务器)</td>
+        <td>除嗅探外, 还能冒充后端给扩展下发任意 URL(拿登录态打站点)、给前端返回伪造数据</td>
+        <td><span class="rate r-mid">部分</span> —— 只有带<b>服务器身份认证</b>的方案(TLS 证书校验)能挡; 纯共享密钥 AEAD 可挡「无密钥的伪造」但无前向保密</td>
+      </tr>
+      <tr>
+        <td>T4</td>
+        <td><b>恶意网页</b>(跨站请求/DNS rebinding)</td>
+        <td>用浏览器自动带上/伪造的请求打本机端点</td>
+        <td><span class="rate r-lo">已有防护</span> —— token + Origin/Host 白名单 + 任务绑定已覆盖, 与传输加密无关</td>
+      </tr>
+    </table>
+    <div class="callout ok"><b>读法</b>: T0 加密挡不住(T1 门槛高), 而默认回环形态下 T2/T3 不成立 —— 所以「默认给回环上加密」的收益很小。真正要解的是 <b>T2/T3 在通道暴露后</b>的场景, 以及为未来跨机形态备好答案。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>候选方案总览</h2>
+    <table>
+      <tr><th>方案</th><th>一句话</th><th>解决的威胁</th></tr>
+      <tr><td><b>A 现状加固</b></td><td>保持明文回环 + 令牌, 补文档与暴露提示</td><td>T4; 对 T2/T3 无解(故仅适用回环)</td></tr>
+      <tr><td><b>B HTTPS + 本地受信 CA</b></td><td>程序自建本地 CA、签发本地证书, 让浏览器/系统信任</td><td>T2 + T3, 机密性/身份/前向保密俱全</td></tr>
+      <tr><td><b>C 反向代理 / Caddy</b></td><td>用 Caddy(内部 CA)或 nginx 在前置终止 TLS</td><td>同 B, 但多一层部署依赖</td></tr>
+      <tr><td><b>D 应用层 AEAD(用户设想)</b></td><td>token 派生密钥, 对载荷做 AES-GCM 加解密</td><td>回环下可用; <b>跨机 LAN 失效</b>(见 §08)</td></tr>
+      <tr><td><b>E 网络层 VPN / 隧道</b></td><td>Tailscale / WireGuard / SSH 把通道裹进加密网络</td><td>T2 + T3, 且对远程访问一并解决; 应用层零改动</td></tr>
+    </table>
+    <p class="hint">另有一类「mTLS(双向证书)」用于强身份绑定, 但扩展的 <code>fetch</code> 不便携带客户端证书, 落地成本高, 本报告不作为候选。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>方案 B: HTTPS + 本地受信 CA(mkcert 式)</h2>
+    <h3>原理</h3>
+    <p>自签证书的痛点不是「不能加密」, 而是「浏览器不信任」—— 未受信的证书在浏览器里会弹拦截页, 而<b>扩展的 fetch 连拦截页都没有, 直接网络层失败</b>。成熟做法是 mkcert 引入的「本地 CA」: 程序(或用户)一次性生成一个根 CA, 把它装进操作系统/浏览器的信任库, 之后用它签发 <code>localhost</code>/<code>127.0.0.1</code> 的叶子证书 —— 浏览器就<b>绿灯信任</b>, 无需每次点「继续访问」。</p>
+    <h3>优点</h3>
+    <ul>
+      <li><b>真 TLS</b>: 机密性(含头部令牌)、服务器身份认证(证书校验)、前向保密(ECDHE), 三件一次到位。</li>
+      <li><b>零协议自研</b>: 用久经考验的实现(uvicorn 的 ssl 支持 + 标准证书校验), 不碰密码学细节。</li>
+      <li><b>同时喂两条通道</b>: WebUI(uvicorn)与 HR 端点都可以套同一套证书; 扩展只需信任同一个 CA。</li>
+    </ul>
+    <h3>成本与坑</h3>
+    <ul>
+      <li><b>信任安装是最大的 UX 成本</b>: 需要往 OS 信任库写根 CA(Windows <code>certutil</code>/证书存储、macOS 钥匙串、Linux <code>update-ca-certificates</code> + Chrome 走 NSS 库)。装 CA 需要用户授权, 且不同浏览器/系统路径不一 —— 这正是 mkcert 存在的理由, 但它也把复杂度留给了「首次安装」。</li>
+      <li><b>Python 侧需新增依赖</b>: 当前 <code>pyproject.toml</code> <b>没有</b> <code>cryptography</code>/<code>pycryptodome</code>。生成 CA/证书要么引入 <code>cryptography</code>(或更省事的 <code>trustme</code>, 它内部依赖 cryptography), 要么 shell 调用 openssl(跨平台脆弱)。这是一次实打实的依赖增量。</li>
+      <li><b>证书轮换/有效期</b>: 叶子证书有有效期, 需自动续期, 否则某天突然失效(且扩展侧表现为难查的 <code>Failed to fetch</code>)。</li>
+      <li><b>回环下是「过度工程」</b>: 默认形态根本不需要它 —— 收益只体现在通道暴露之后。</li>
+    </ul>
+    <div class="callout ok"><b>适用</b>: 通道需要暴露到 LAN(或跨机扩展)时的<b>首选</b>。建议做成「一键本地 CA」: 显式开启(保守默认关闭)、幂等、证书与 CA 落 <code>&lt;data_dir&gt;</code>、把信任安装步骤清晰引导给用户(或提供半自动脚本)。</div>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>方案 C: 反向代理 / Caddy 内部 CA</h2>
+    <p>把 TLS 终止交给一个成熟的反代, 后端继续只说明文回环:</p>
+    <ul>
+      <li><b>Caddy</b>: 对 <code>localhost</code>/内部主机名会<b>自动</b>用其内部 CA 签发证书(automatic HTTPS), 配置量极小; 代价是引入一个外部二进制依赖, 且其内部 CA 同样需要被客户端信任(或用户在浏览器里手动信任)。</li>
+      <li><b>nginx</b>: 更通用, 但证书与配置全手写, 对「只想本地加密」的场景偏重。</li>
+    </ul>
+    <div class="callout warn"><b>与本仓的契合度</b>: 项目定位是「单机长驻 Python 程序, 零第三方运行时依赖」的风格。引入反代等于把「部署形态」复杂化(多一个进程要管生命周期)。因此反代更像<b>用户侧的可选方案</b>(文档里给指引), 而不是程序内置路径; 程序内置首选方案 B。</div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>方案 D: 应用层 AEAD —— 对用户设想的深入评估</h2>
+    <p>用户设想: 「auto-qb 用 token 对数据加密, WebUI 收到后解密, 扩展同理」。把它具体化为一个可评估的设计:</p>
+    <pre><code>key = HKDF-SHA256(ikm = token, salt = 固定串, info = "auto-qb/transport/v1")  // 32 字节
+nonce = 随机 96 bit(每条消息)
+ciphertext = AES-256-GCM(key, nonce, plaintext, aad = 路径 + 时间戳)
+wire = base64(nonce || ciphertext || tag)</code></pre>
+    <h3>它在哪儿成立</h3>
+    <ul>
+      <li><b>回环下成立</b>: <code>http://127.0.0.1</code> 与 <code>http://localhost</code> 是<b>安全上下文</b>, 所以前端页面与扩展 service worker 都能用 <code>crypto.subtle</code> 做 AES-GCM / HKDF(MDN 明确: 回环与 <code>localhost</code> 属 potentially trustworthy origin)。</li>
+      <li><b>扩展侧更宽松</b>: 扩展自身的 origin(<code>chrome-extension://</code>)本身就是安全上下文, 所以<b>即便端点是明文 HTTP, 扩展仍能用 Web Crypto</b> —— 这让方案 D 在「跨机扩展」场景里技术上可行。</li>
+    </ul>
+    <h3>它的致命约束(为什么不能当主方案)</h3>
+    <div class="callout stop"><b>约束一: 跨机 LAN 的 WebUI 页面用不了 Web Crypto。</b>安全上下文只认 <code>https</code>/<code>wss</code>/<code>file</code>/<code>127.0.0.0/8</code>/<code>::1</code>/<code>localhost</code>/<code>*.localhost</code>。<b><code>http://192.168.x.x:8080</code> 不是安全上下文</b> ⇒ <code>window.crypto.subtle</code> 直接是 <code>undefined</code>。也就是说, 在「WebUI 暴露到 LAN」这个最需要加密的场景里, 前端侧的应用层加密<b>根本跑不起来</b>。</div>
+    <ul>
+      <li>想绕开就得引入<b>不依赖 Web Crypto</b> 的密码库(libsodium.js / TweetNaCl.js 这类 WASM/纯 JS 实现), 但那等于把「自研传输协议 + 前端密码库」两件高风险的事一起揽下 —— 相比直接用 TLS, 性价比极低。</li>
+      <li><b>保护不到头部令牌</b>: 若只加密 body, <code>Authorization</code>/<code>X-Hr-Token</code> 仍明文可嗅 —— 而令牌正是最值钱的目标。要连头部一起保护, 就得把「令牌+请求」整体塞进加密信封, 于是鉴权与传输彻底耦合, 复杂度陡增。</li>
+      <li><b>无服务器身份 / 无前向保密</b>: 共享密钥能挡「不知道密钥的伪造」, 但挡不住「持有密钥者的历史解密」(无前向保密), 也不提供证书式的身份语义。密钥一旦泄漏, 全部历史与未来都失守。</li>
+      <li><b>自管 nonce / 重放 / 时钟</b>: AES-GCM 的 nonce 复用是致命错误; 还要加时间戳/序号防重放 —— 这些都是 TLS 已经替你做好、而手写极易出错的细节。</li>
+      <li><b>Python 侧新增依赖</b>: 服务端要 AES-GCM + HKDF, 同样要引入 <code>cryptography</code> 或 <code>pycryptodome</code>(当前两者都没有)。</li>
+      <li><b>测试成本</b>: 一套自研协议要配「两端对拍 + 篡改/重放/降级」的守阵, 而 TLS 的正确性由生态背书。</li>
+    </ul>
+    <div class="callout warn"><b>定位结论</b>: 方案 D <b>不作为主方案</b>。它唯一有意义的落点是: 「HR 通道跨机 + 用户拒绝在客户端装 CA」时的<b>受限兜底</b> —— 且必须限定「扩展侧」(因为扩展是安全上下文), 明确接受「无前向保密、无证书身份」的降级, 并把 nonce/重放防护做扎实。即便如此, 也应优先推 TLS。</div>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>方案 E: 网络层 VPN / 隧道</h2>
+    <p>把「加密」交给网络层, 应用层一行不改 —— 这是最省心的路线, 尤其适合「不在同一 LAN 的远程访问」:</p>
+    <ul>
+      <li><b>Tailscale</b>: 基于 WireGuard 的零配置私有网, 设备间自动组网、加密与身份由平台管理; 适合「在家用 NAS、出门用笔记本」的形态。免费档够个人用。</li>
+      <li><b>WireGuard</b>: 自建、极简、快; 需要一点网络配置(密钥、端点、路由)。</li>
+      <li><b>SSH 隧道</b>: 最轻, <code>ssh -L 8080:127.0.0.1:8080 nas</code> 即可把远端 WebUI 映射到本地回环, 于是<b>本地页面仍是 <code>http://127.0.0.1</code>(安全上下文), 链路由 SSH 加密</b>。零应用改动。</li>
+    </ul>
+    <div class="callout ok"><b>与本仓的契合</b>: 项目本身是「单机长驻」形态, 远程访问不是核心场景。因此 VPN/隧道更适合作为<b>文档指引</b>推荐给有远程需求的用户, 而不是程序内置能力。SSH 隧道尤其值得在文档里点名 —— 它用最小的代价同时解决了「远程」与「加密」。</div>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>决定性前提: 浏览器安全上下文与 Chrome 142 LNA</h2>
+    <p>上面的取舍都指向同一条底层规则: <b>浏览器只在「安全上下文」里给你现代加密与权限能力</b>。这条规则决定了「加密必须在 TLS 层做」。</p>
+    <h3>安全上下文判定(可复核)</h3>
+    <table>
+      <tr><th>来源</th><th>安全上下文?</th><th>crypto.subtle 可用?</th></tr>
+      <tr><td><code>https://…</code> / <code>wss://</code> / <code>file://</code></td><td><span class="rate r-lo">是</span></td><td>是</td></tr>
+      <tr><td><code>http://127.0.0.1</code> / <code>http://localhost</code> / <code>http://[::1]</code></td><td><span class="rate r-lo">是</span>(potentially trustworthy)</td><td>是</td></tr>
+      <tr><td><code>http://192.168.x.x</code> / 其它私网 IP / 公网域名</td><td><span class="rate r-hi">否</span></td><td><b>否</b></td></tr>
+      <tr><td>浏览器扩展页 / 扩展 service worker(<code>chrome-extension://</code>)</td><td><span class="rate r-lo">是</span></td><td>是</td></tr>
+    </table>
+    <div class="callout stop"><b>这张表就是方案 D 的死穴</b>: 「WebUI 暴露到 LAN」时页面是 <code>http://&lt;私网IP&gt;</code>, 非安全上下文 ⇒ 前端做不了应用层加密。要在 LAN 上让 WebUI 能加密, <b>唯一出路是先给它 HTTPS</b> —— 而一旦有了 HTTPS, 加密本身就已经完成了。</div>
+    <h3>Chrome 142 的本地网络访问(LNA): 一个新变量</h3>
+    <ul>
+      <li>Chrome 从 <b>142</b> 起(官方 2025-09-29 公告)推出「本地网络访问」权限: 限制<b>公共网络来源 → 本地网络/回环目的地</b>的请求, 需要用户先授权, 且仅安全上下文能请求该权限。</li>
+      <li><b>对 WebUI 自身无影响</b>: WebUI 页面来自 <code>http://127.0.0.1</code>, 它访问的是<b>同源</b>后端, 不是「公网→本地」, 不触发 LNA。</li>
+      <li><b>对「用公网域名/隧道访问 WebUI」有影响</b>: 若用户用外网域名反代到本机 WebUI, 该页面发往本机的请求可能被判为本地网络请求而需授权 —— 这也是「远程访问更该走 VPN/隧道(SSH 隧道后页面仍是回环)」的又一理由。</li>
+      <li><b>扩展侧待观察</b>: 官方博客点名了 Service Worker 的本地网络请求规则, 但<b>未明确扩展(<code>chrome-extension://</code>)是否豁免</b>; 扩展本就用 <code>host_permissions</code> 授权, 且现状已在拉回环。这是一条<b>需要跟踪</b>的变量(见 §14 复核清单), 落地时须实测。</li>
+    </ul>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>对比矩阵</h2>
+    <table>
+      <tr>
+        <th>维度</th><th>A 现状</th><th>B 本地 CA(TLS)</th><th>C 反代/Caddy</th><th>D 应用层 AEAD</th><th>E VPN/隧道</th>
+      </tr>
+      <tr><td>机密性(载荷)</td><td class="r-hi">无</td><td class="r-lo">有</td><td class="r-lo">有</td><td class="r-mid">有(仅 body)</td><td class="r-lo">有</td></tr>
+      <tr><td>机密性(令牌/头部)</td><td class="r-hi">无</td><td class="r-lo">有</td><td class="r-lo">有</td><td class="r-hi">无</td><td class="r-lo">有</td></tr>
+      <tr><td>服务器身份认证</td><td class="r-hi">无</td><td class="r-lo">有(证书)</td><td class="r-lo">有</td><td class="r-mid">弱(共享密钥)</td><td class="r-lo">有</td></tr>
+      <tr><td>前向保密</td><td class="r-hi">无</td><td class="r-lo">有</td><td class="r-lo">有</td><td class="r-hi">无</td><td class="r-lo">有</td></tr>
+      <tr><td>跨机 LAN 可用</td><td class="r-hi">否</td><td class="r-lo">是</td><td class="r-lo">是</td><td class="r-hi">WebUI 否 / 扩展是</td><td class="r-lo">是</td></tr>
+      <tr><td>程序内新增依赖</td><td class="r-lo">无</td><td class="r-mid">cryptography/trustme</td><td class="r-mid">外部二进制</td><td class="r-mid">cryptography + 前端密码库</td><td class="r-lo">无(用户侧)</td></tr>
+      <tr><td>用户侧安装成本</td><td class="r-lo">零</td><td class="r-mid">信任根 CA(一次性)</td><td class="r-mid">装反代 + 信任 CA</td><td class="r-mid">零(但协议自研)</td><td class="r-mid">装客户端</td></tr>
+      <tr><td>自研协议风险</td><td class="r-lo">无</td><td class="r-lo">无</td><td class="r-lo">无</td><td class="r-hi">高</td><td class="r-lo">无</td></tr>
+      <tr><td>对现状代码改动</td><td class="r-lo">零</td><td class="r-mid">中(证书+配置+扩展信任)</td><td class="r-lo">零(程序内)</td><td class="r-hi">高(两端+协议)</td><td class="r-lo">零</td></tr>
+      <tr><td>回环默认形态收益</td><td>—</td><td class="r-mid">低(过度)</td><td class="r-mid">低</td><td class="r-mid">低</td><td class="r-mid">低</td></tr>
+    </table>
+    <p class="hint">评级口径: <span class="rate r-lo">绿=好/低风险/低成本</span> · <span class="rate r-mid">橙=中等</span> · <span class="rate r-hi">红=差/高风险/高成本</span>。矩阵回答的是「哪种形态该用哪个方案」, 不是「谁绝对更好」。</p>
+  </section>
+
+  <section id="s12">
+    <h2><span class="no">12</span>建议落地路径</h2>
+    <p>按「先收口、后加密」排序, 每一阶段独立可用:</p>
+    <h3>阶段 0 —— 默认形态: 维持明文回环 + 把风险写清(几乎零成本)</h3>
+    <ul>
+      <li>保持现状(回环 + 令牌), 不引入加密。在配置 UI 与文档里明确: 回环下残余风险 = 同用户恶意进程可读 token 文件, <b>传输加密对此无解</b>。</li>
+      <li>把「同用户进程可读 token 文件」这条事实写进安全边界说明(扩展 README 的「安全边界」表已有雏形, 可补一行)。</li>
+    </ul>
+    <h3>阶段 1 —— 「暴露即加密」闸门(高性价比, 建议优先)</h3>
+    <ul>
+      <li>在配置层检测 <code>web.host</code> 非回环(即 <code>0.0.0.0</code>/LAN IP)时, 给出<b>显式风险提示</b>, 并引导开启 HTTPS(方案 B)。保守默认不改变监听身份。</li>
+      <li>这是「用最小改动换取最大安全收益」的一步 —— 因为它把用户从「不知情地明文暴露」推到「知情并可选加密」。</li>
+    </ul>
+    <h3>阶段 2 —— 内置「一键本地 CA」(方案 B 的工程化)</h3>
+    <ul>
+      <li>新增配置键(如 <code>web.tls.enabled</code> / 证书路径), <b>必须</b>同步进 <code>validate_config</code> 与 <code>config/schema</code>(黄金法则 4)。</li>
+      <li>实现: 生成/复用本地 CA 与叶子证书(落 <code>&lt;data_dir&gt;</code>, 幂等), uvicorn 走 ssl; 给用户清晰的「信任根 CA」引导(或半自动脚本)。</li>
+      <li>HR 端点同理复用同一 CA; 扩展只需信任该 CA。跨机场景与 issue <code>hr-channel-remote</code> 一并推进。</li>
+    </ul>
+    <h3>阶段 3 —— 兜底与远程</h3>
+    <ul>
+      <li>若「跨机扩展 + 拒绝装 CA」无法回避, 再评估方案 D 的<b>受限版</b>(仅扩展侧、共享密钥 AEAD、明确降级说明); 但要先证明方案 B 不可行。</li>
+      <li>远程访问场景: 文档引导 <b>VPN / SSH 隧道</b>(方案 E), 应用层零改动, 顺带规避 Chrome 142 LNA。</li>
+    </ul>
+    <div class="callout"><b>一句话路径</b>: 回环照旧 → 暴露就提示 → 一键本地 CA → 跨机复用同一 CA → 远程走 VPN。加密只在「通道真的离开本机」时才上, 且用 TLS 而不是自研。</div>
+  </section>
+
+  <section id="s13">
+    <h2><span class="no">13</span>与本仓约定的衔接</h2>
+    <table>
+      <tr><th>约定</th><th>对本方案的要求</th></tr>
+      <tr><td>保守默认(黄金法则 2)</td><td>加密/暴露相关新开关一律默认关闭; 默认监听身份不变(<code>127.0.0.1</code>)。</td></tr>
+      <tr><td>fail-fast(黄金法则 4)</td><td>任何新配置键必须进 <code>config.validate_config</code> 并同步 <code>config/schema</code>; 证书路径非法/文件缺失应在配置期报错, 不静默降级为明文。</td></tr>
+      <tr><td>幂等(黄金法则 1)</td><td>CA/证书生成必须幂等: 已存在则复用, 不重复签发、不覆盖用户已有材料。</td></tr>
+      <tr><td>红线(生产文件)</td><td>CA 私钥、证书、token 均落 <code>&lt;data_dir&gt;</code>(已 gitignore), 不进仓库、不进日志。</td></tr>
+      <tr><td>依赖纪律</td><td>新增 <code>cryptography</code>/<code>trustme</code> 是一次真实成本(当前无); 需在计划里显式列出并说明取舍。</td></tr>
+      <tr><td>与既有 issue 的关系</td><td>本报告是 <code>issues/26-10-09-0855</code>(HR 通道锁死回环)第 3 条「传输安全需拍板」的<b>输入</b>; 落地方案随 <code>hr-channel-remote</code> 专题另立计划。</td></tr>
+    </table>
+    <div class="callout warn"><b>一个必须提醒的取舍</b>: 引入本地 CA 会把「单机程序」变成「需要管理证书生命周期的程序」, 与项目「零外部运行时依赖、开箱即用」的气质有张力。因此本报告主张<b>把它做成显式可选</b>(暴露才用), 而非默认路径 —— 这也是阶段 0/1 排在加密之前的原因。</div>
+  </section>
+
+  <section id="s14">
+    <h2><span class="no">14</span>附录: 参考与锚点</h2>
+    <h3>外部来源(2026-10-09 核对)</h3>
+    <ul>
+      <li>MDN《Secure contexts》—— potentially trustworthy origin 判定(<code>127.0.0.0/8</code>、<code>::1/128</code>、<code>localhost</code>、<code>*.localhost</code>; <code>http://&lt;私网IP&gt;</code> 不在此列)。</li>
+      <li>Chrome for Developers《新增了本地网络访问权限提示》—— LNA 定义、Chrome 142 推出(2025-09-29 更新)、仅安全上下文可请求、混合内容豁免规则。</li>
+      <li>mkcert(FiloSottile/mkcert)—— 本地受信 CA 的零配置范式与各平台信任库支持。</li>
+      <li>Caddy《Automatic HTTPS》—— 对 <code>localhost</code>/内部主机的自动内部 CA 签发。</li>
+      <li>Tailscale / WireGuard / SSH 隧道 —— 网络层加密与远程访问的成熟路径。</li>
+      <li>TweetNaCl.js / libsodium.js —— 不依赖 <code>crypto.subtle</code> 的 JS 密码库(方案 D 的绕行选项, 不推荐)。</li>
+    </ul>
+    <h3>本仓锚点(供复核, 行号漂移后按符号名 grep)</h3>
+    <table>
+      <tr><th>事实</th><th>锚点</th></tr>
+      <tr><td>WebUI 明文 HTTP + uvicorn 启停</td><td><code>webui/server/lifecycle.py</code> · <code>start_web_server</code>(未配 ssl)</td></tr>
+      <tr><td>WebUI 鉴权(Bearer / compare_digest / SSE 票据)</td><td><code>webui/server/auth.py</code> · <code>make_require_token</code></td></tr>
+      <tr><td>WebConfig(host/port/token/skip_local_verify)</td><td><code>config/models.py</code> · <code>class WebConfig</code></td></tr>
+      <tr><td>前端令牌存取(localStorage)</td><td><code>webui/static/shared/auth.js</code> · <code>autoqb_token</code></td></tr>
+      <tr><td>HR 端点(回环 + X-Hr-Token + origin 白名单)</td><td><code>hr/server.py</code> · <code>HrChannelServer.route</code></td></tr>
+      <tr><td>扩展协议硬编码 http / 回环校验</td><td><code>extensions/hr-fetch-proxy/normalize.js</code> · <code>LOOPBACK_HOSTS</code></td></tr>
+      <tr><td>扩展 host_permissions 仅回环</td><td><code>extensions/hr-fetch-proxy/manifest.json</code></td></tr>
+      <tr><td>跨机形态被写死排除(待重评)</td><td><code>issues/26-10-09-0855-feat-hr-channel-loopback-only.html</code></td></tr>
+    </table>
+    <h3>待跟踪的变量</h3>
+    <ul>
+      <li><b>Chrome LNA 对扩展的适用性</b>: 官方未明确 <code>chrome-extension://</code> 是否豁免; 扩展现拉 <code>http://127.0.0.1</code>, 需在 Chrome 142+ 实测确认不被拦。</li>
+      <li><b>LNA 对「公网域名反代访问 WebUI」的影响</b>: 若用户走外网域名访问本机 WebUI, 可能触发授权提示 —— 是推荐 SSH 隧道/VPN 的又一理由。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-09-1529-report-transport-encryption-feasibility.html · 报告出厂即冻结(证据快照); 方案与落地随 <code>hr-channel-remote</code> 专题另立计划推进
+  </footer>
+
+</div>
+</body>
+</html>

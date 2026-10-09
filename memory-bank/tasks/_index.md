@@ -20,7 +20,7 @@
 
 ## Open
 
-(暂无 — 下一步候选见 `想法.md` 待办与 [../progress/roadmap.md](../progress/roadmap.md))
+- [26-10-09-backend-transport-encryption] 本地通道传输安全调研(WebUI + HR 取数通道) - 用户命题「WebUI⇄auto-qb 与 auto-qb⇄扩展两条通道均为明文 HTTP, 有安全风险; 初步设想用 t…
 
 ## Done
 
