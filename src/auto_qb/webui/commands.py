@@ -14,6 +14,8 @@ import time
 from collections.abc import Mapping
 from typing import List, Optional, Tuple
 
+from qbittorrentapi import HTTP401Error, HTTP4XXError
+
 from ..config import Config
 from ..infra.utils import mask_tracker_url, sanitize_tracker_url
 
@@ -162,6 +164,34 @@ def _add_outcome(result: object) -> tuple[bool, str]:
         return (failure == 0 and (success + pending) > 0), f"成功 {success} / 失败 {failure} / 待定 {pending}"
     text = str(result)
     return ("Ok." in text), text or "无结果"
+
+
+# qB 业务拒绝(HTTP 4xx, 如 "必须启用 torrent 队列") 的**行动建议**表: 按 qB 返回文案子串匹配,
+# 命中才附到回执文案尾部。qB 文案随其 WebUI 界面语言变化, 匹配不到就只给通用前缀(尽力而为,
+# 不猜) —— 中文与英文各留一条 needle, 覆盖两种常见界面。
+QB_REJECT_HINTS = (
+    ("必须启用 torrent 队列", "请在 qB「设置 -> BitTorrent -> 队列」启用「启用队列」后重试"),
+    ("torrent queueing", "enable queueing in qB: Settings -> BitTorrent -> Queueing"),
+)
+
+
+def qb_reject_text(exc: BaseException) -> Optional[str]:
+    """qB 业务拒绝(HTTP 4xx, 401 除外) -> 面向用户的可读回执文案; 非此类返回 None
+
+    !为什么要单独分类: qB 的 4xx 是**用户这次操作被 qB 拒绝**(未启用队列 / 名字已存在等),
+      不是本程序未预期异常 —— 前端已有明确回执, 用户看得懂, 也无需立刻放下手头的事
+      (弹窗测试 -> WARNING)。若混进命令分发层的通用 except, 既打 ERROR + 堆栈显得像程序 bug,
+      又把库抛的原始文案原样丢给用户, 缺可行动建议。
+    !401 排除在外: 鉴权失败是凭据/环境故障, 需人工介入, 属 ERROR, 与「业务拒绝」不同质。
+    !文案单点: 「qB 拒绝执行: <qB 原文>(<行动建议>)」只在这里拼, 命令分发层不重复拼装。
+    """
+    if not isinstance(exc, HTTP4XXError) or isinstance(exc, HTTP401Error):
+        return None
+    detail = str(exc).strip() or "qB 拒绝了该操作"
+    for needle, hint in QB_REJECT_HINTS:
+        if needle in detail:
+            return f"qB 拒绝执行: {detail}({hint})"
+    return f"qB 拒绝执行: {detail}"
 
 
 def _bulk_call_limits(api, hashes, delete_files, extra):

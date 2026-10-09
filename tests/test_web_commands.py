@@ -11,6 +11,8 @@
 - test_drain_web_commands_torrent_write_actions: 二轮写命令正常执行(参数透传/cmd_id 回执 ok/限速位置同步快照)
 - test_drain_web_commands_torrent_write_unknown_hash_skips: 二轮写命令未知 hash 静默跳过不调 API
 - test_drain_web_commands_share_limits_and_queue_mapping: share-limits 缺省维度 -2 补齐; queue 动作映射; 未知动作 error 回执
+- test_queue_torrent_qb_reject_receipt_and_log: qB 业务拒绝(409 未启用队列) -> error 回执带可读文案 + 行动建议, 日志走 WARNING 分支不带堆栈
+- test_qb_reject_text_classification: qb_reject_text 分流(4xx 业务拒绝附建议; 401/5xx/非 qB 异常返回 None)
 - test_drain_web_commands_torrent_write_param_errors: 写命令参数错误 -> error 回执且不调 API, 后续命令继续
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
@@ -687,6 +689,45 @@ def test_drain_web_commands_share_limits_and_queue_mapping():
         assert client.calls == before
         r = mgr.web.results["qerr"]
         assert r["status"] == "error" and "middle" in r["error"], r
+
+
+def test_queue_torrent_qb_reject_receipt_and_log():
+    """qB 业务拒绝(HTTP 4xx): 队列命令遇 409 -> error 回执带可读文案 + 行动建议, 日志 WARNING 不带堆栈"""
+    from qbittorrentapi import Conflict409Error
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+
+        def _boom(torrent_hashes=None):
+            raise Conflict409Error("必须启用 torrent 队列")
+
+        client.torrents_decrease_priority = _boom
+        with module_log("auto_qb.webui.runtime") as messages:
+            mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": "down", "cmd_id": "q409"}))
+            mgr.web.consume_commands()
+        r = mgr.web.results["q409"]
+        assert r["status"] == "error", r
+        assert "qB 拒绝执行" in r["error"] and "必须启用 torrent 队列" in r["error"], r
+        assert "启用队列" in r["error"], "已知场景应附可行动建议"
+        # 分流判据: 走「被 qB 拒绝」WARNING 分支, 而非「命令执行失败」ERROR 分支(文案区分, 级别绑定分支)
+        assert any("命令被 qB 拒绝" in m for m in messages), messages
+        assert not any("命令执行失败" in m for m in messages), messages
+
+
+def test_qb_reject_text_classification():
+    """qb_reject_text: 4xx 业务拒绝 -> 可读文案(已知场景附建议); 401/5xx/非 qB 异常 -> None(交回 ERROR 分支)"""
+    from qbittorrentapi import Conflict409Error, HTTP500Error, NotFound404Error, Unauthorized401Error
+
+    from auto_qb.webui.commands import qb_reject_text
+
+    txt = qb_reject_text(Conflict409Error("必须启用 torrent 队列"))
+    assert txt is not None and "qB 拒绝执行" in txt and "启用队列" in txt, txt
+    # 未知 4xx: 只给通用前缀, 不硬塞建议
+    assert qb_reject_text(NotFound404Error("Not Found")) == "qB 拒绝执行: Not Found"
+    # 401(凭据/环境) / 5xx(服务端) / 非 qB 异常: 不属业务拒绝 -> None
+    assert qb_reject_text(Unauthorized401Error("bad creds")) is None
+    assert qb_reject_text(HTTP500Error("boom")) is None
+    assert qb_reject_text(ValueError("x")) is None
 
 
 def test_drain_web_commands_torrent_write_param_errors():

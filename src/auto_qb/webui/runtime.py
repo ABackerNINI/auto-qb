@@ -48,6 +48,7 @@ from .commands import (
     RESYNC_COMMANDS,
     SELF_POSTED_COMMANDS,
     _timing,
+    qb_reject_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -477,9 +478,18 @@ class WebUIRuntime:
                     if cmd_id:
                         self.set_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts))
                 except Exception as e:
-                    logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
+                    # qB 业务拒绝(HTTP 4xx, 未启用 torrent 队列 / 名字已存在 ...) 是**用户这次
+                    # 操作被 qB 拒绝**, 不是未预期异常: 前端已有可读回执, 用户看得懂, 不必弹窗
+                    # (弹窗测试 -> WARNING, 无堆栈)。其余(网络 / 鉴权 / 代码 bug)仍按 ERROR +
+                    # 堆栈记录。判据与文案单点在 commands.qb_reject_text, 这里只分流。
+                    reason = qb_reject_text(e)
+                    if reason is None:
+                        logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
+                        reason = str(e)
+                    else:
+                        logger.warning(f"WEB UI 命令被 qB 拒绝: {cmd}: {reason}")
                     if cmd_id:
-                        self.set_result(cmd_id, "error", str(e), _timing(queued_ts, start_ts))
+                        self.set_result(cmd_id, "error", reason, _timing(queued_ts, start_ts))
         except queue.Empty:
             pass
         return changed

@@ -1,7 +1,9 @@
 # qB API 与数据层
 
 > 摘要: qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。
-> 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执
+> 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执, WEB UI 命令被 qB 拒绝, 409, Conflict409
+
+**Refs:** memory-bank/tasks/26-10-09-webui-qb-command-reject.md
 
 ### qB 5.0+ 全局限速: `app.preferences` 的限速字段**已静默失效**
 
@@ -121,3 +123,17 @@
 - **触发**: 读配置段。
 - **判别**: 空段(如空 `trackers:`)会解析成 `None` / `str`。
 - **处置**: 新增类似段同样要防; 别用 round-trip loader 的语义去比较(BaseLoader 下 `true` 是字符串)。
+
+### qB 业务拒绝(HTTP 4xx)在 WEB UI 命令层要**分流**, 别混进"未预期异常"
+
+- **触发**: 加/改 WEB UI 写命令, 命令被 qB 以 4xx 拒绝(实测: 队列命令遇「必须启用 torrent 队列」)。
+- **判别**: qbittorrentapi 对 4xx **直接抛异常**, 冒泡到 `WebUIRuntime.consume_commands` 的兜底
+  `except Exception` ⇒ 记 ERROR + 堆栈 + 把库原文原样写进回执, **看着像程序 bug**, 且缺可行动建议。
+  ⚠ **4xx 不是一种东西**: 401(`Unauthorized401Error`)是凭据/环境故障(需人工介入, 弹窗测试 -> ERROR),
+  其余 4xx 才是"用户这次操作被 qB 拒绝"; 二者在库里的**共同基类是 `HTTP4XXError`**
+  (401 也是它的子类, **必须显式排除**)。
+- **处置**: 判据与文案单点在 `webui/commands.py::qb_reject_text`(4xx 且非 401 -> 可读文案 + 已知场景
+  行动建议, `QB_REJECT_HINTS` 按 qB 文案子串匹配; qB 文案随其界面语言变, 匹配不到只给通用前缀, 不猜),
+  分发层只分流: 命中 -> **WARNING 无堆栈**, 未命中(网络/鉴权/代码 bug) -> ERROR + `exc_info=True`。
+  守阵 `tests/test_web_commands.py::test_qb_reject_text_classification` 与
+  `test_queue_torrent_qb_reject_receipt_and_log`。
