@@ -1,15 +1,15 @@
-# WEBUI qB 流量图折线断裂 — 取证闭合, 修复三点待拍板
+# WEBUI qB 流量图折线断裂 — 已闭合(取证 + v3 吸收修复)
 
-> 摘要: 用户报 qB 流量图三症状(折线 ~10s 一断 / 更新频率固定不对齐 3s 采样设置 / 1.5s 档只剩端点), 真机数据 + 截图像素 + 代码链路三路取证闭合: 采样真实节奏被 main_tick=2s 量化成 4s(配置 3s), 读侧桶宽 ceil(sample_interval)=3s/2s < 行距 → 桶系统性走空 → spanGaps:false 碎段/全孤点; 伴生 task.interval 热重载不跟 + 前端轮询下界 15s 旧边界。报告 [26-10-04-1639](../reports/26-10-04-1639-report-webui-qb-traffic-line-breaks.html)(Done)。
-> 最后活动: 2026-10-04 16:39
+> 摘要: 用户报 qB 流量图三症状(折线 ~10s 一断 / 更新频率固定不对齐 3s 采样设置 / 1.5s 档只剩端点)。取证报告 [26-10-04-1639](../reports/26-10-04-1639-report-webui-qb-traffic-line-breaks.html) 定量闭合根因 A1-A4; 修复未按原三点单独实施, 而由 v3 存储专题 [26-10-04-backend-qb-traffic-storage-v3](../tasks/26-10-04-backend-qb-traffic-storage-v3.md) 以更彻底形式吸收: A1 节拍量化 → 写侧实测 dt 吸收; A2 读侧桶宽 → 按有效 dt 逐记录计算(伪断线根因在格式层面消除); A3 → `_apply_interval` 回写 task.interval 热重载联动; A4 → 前端轮询下界 1500ms; S6 追修 1.5s 小数秒档。档案 2026-10-09 转 Done。
+> 最后活动: 2026-10-09 14:54
 
-**Refs:** memory-bank/reports/26-10-04-1639-report-webui-qb-traffic-line-breaks.html, memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md
+**Refs:** memory-bank/reports/26-10-04-1639-report-webui-qb-traffic-line-breaks.html, memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md, memory-bank/tasks/26-10-04-backend-qb-traffic-storage-v3.md
 
 ## 现状
 
-- 取证完成, 报告 + 档案 + pitfalls(backend/task-interval-tick-quantization)已入库; 代码零改动。
-- 修复三点(报告 §07): ①读侧桶宽按量化节奏 `ceil(max(interval,tick)/tick)×tick`; ②handler 每轮回写 task.interval; ③`_QB_POLL_MIN_MS` 15s→1.5s(+test_web 守卫同步) —— **等用户拍板**后实施 + 验收。
+- **已闭合**: 三症状(碎段 / 全孤点 / 刷新频率不对齐)由 v3 读侧结构消除, 本专题无待办。
+- 原三点建议(读侧桶宽按量化节奏 / handler 回写 task.interval / 下界 1500)均已由 v3 落地或以更彻底形式替代, 见档案子任务状态表。
 
 ## 下一步
 
-- 用户说「修复/实施」→ 按报告 §07 三点动代码(traffic_grid / traffic_qb / traffic_sample_mod / qb_traffic_chart.js / test_web 守卫), 配 test_traffic_grid + test_web 用例, 真机走查 3s 与 1.5s 两档。
+- 无。若未来回归, 相关守阵在 `tests/test_traffic_grid.py`(有效 dt 桶宽/覆盖)、`tests/test_traffic_sample.py`(热重载联动)、`tests/test_webui_static_dom_panel.py`(轮询下界常量)。

@@ -3,10 +3,10 @@
 **Status:** Done
 **Topics:** qb-traffic-storage-v3
 **Added:** 2026-10-04
-**Updated:** 2026-10-05
+**Updated:** 2026-10-09
 **Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 随本专题入库; D4 拍板 6mo/1y/all 三档。真机验收追加 S6 活尾合流(2026-10-05): 用户报「流量图不实时更新, 得等落盘才更新」→ 方案 A 落地(采样模块每轮发布 LiveTail 快照 + 三端点 raw 段窗合流 + ts 精确去重), 图面尾部随采样节拍实时。
 
-**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html
+**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html, memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md
 
 ## 原始请求
 
@@ -58,4 +58,5 @@
 - **2026-10-05 S6 活尾合流(真机验收追加, 用户拍板「按推荐修复, 并入 V3」)**: 用户报「流量图不实时更新, 得等后端数据落盘时才更新」并贴 v3 实测 dat。根因定位: 写侧采样点进内存 BlockBuffer 每 flush_interval(默认 600s)批量落盘, 读侧三端点纯磁盘取数(V3DayCache), 两版间无活数据桥; 计划全文「实时」零命中 —— 设计缺口非拍板取舍。附带发现 agg 段窗更糟: 未完结小时/日/月桶在 3d+/1y/all 图恒缺(行只随封口产出)。
   修法(方案 A, set_traffic_view 快照发布同款): ①采样模块 `_publish_live_tail` 每轮 handler 末尾构建不可变 LiveTail 表整体替换引用(Web 线程只读单引用, 黄金法则 5 不破); ②store 纯函数 `v3_live_tail_slots` 复原绝对槽位 —— **head_pending(块全量未落盘)整块复用 v3_block_slots / 部分落盘从写侧游标 projected_ts 倒推**(关键定约: 中途 flush 后 buf.records 的链锚点在磁盘链上, 前向续推不成立, 倒推对非块首记录恒等且不依赖磁盘链在窗内可见 —— 1m 窗看不到上次 flush 记录时活尾定位照常); ③grid `v3_series_points` 增 tail_slots 合流(同链延续不做块间真空判定, 按槽 ts 精确去重 —— 镜像保证: 同一记录写侧推进与落盘重算的槽 ts 恒等, 保留严格更晚后缀即不重不漏); ④三端点 raw 段窗接活尾(组端点空态判据计入成员活尾)。模块宿主缺位/替身 manager 全防御退回纯磁盘读路径, 既有测试零改动。agg 段窗合流已入池 [26-10-05-1015](../issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html)(候选 S7, 未拍板不实施)。
   新增守阵 7 条(store 3 含镜像保证族 / grid 1 / sample 1 / web 2 含端到端三态逐点一致), 全部登记各文件「## 测试计划」。**实测: test.full 2596 passed + 4 skipped / 99% / 29.09+31.05s(基线 [26-10-05-1007](../testing/baselines/26-10-05-1007-qb-traffic-v3-s6-live-tail.md); 相对本 clone 改动前真值 +7 用例 / +84 语句 / +34 分支; 附: 0846 基线绝对语句数在重写历史下不可复现, 已在基线切片注记)。**
+- **2026-10-09 交叉引用**: 折线断裂专题档案 [26-10-04-webui-qb-traffic-line-breaks](26-10-04-webui-qb-traffic-line-breaks.md) 转 Done —— 其取证根因 A1-A4 已由本专题吸收(S3a 有效 dt 桶宽 / S3b 下界 1500 / S2a 热重载联动 / S6 小数秒追修), 补双向 Refs 认领链。零代码改动。
 - **2026-10-05 S6 追修: 块头 interval_s 放宽小数秒(用户报「sample_interval=1.5 实际 2s」, 拍板「直接修」)**: 根因 = `_apply_interval` 把为块头 B 行设计的整数秒口径 `int(ceil(effective))` 同时赋给 `task.interval` —— 1.5s 配 main_tick=1.5s 恰为整数倍(失配告警不触发)却被静默抬到 2s 调度; v3 计划自身不一致(下限=main_tick 硬校验 + 前端 A4 轮询下界 1500ms 均按 1.5s 档设计, 唯格式 §02 钉死整秒)。修法: ①`_apply_interval` 生效间隔保持浮点(`task.interval = effective`, 取整只发生在失配归倍数层); ②格式规格放宽「整秒 → >=1 允许小数秒」—— `_fmt_interval_s` 规范十进制(整值不带小数点与历史文件形态一致, 非整值最短往返表示如 1.5)/ `_parse_v3_interval_s`(与 run_len 正整数口径分离, NaN/inf/越界坏行)/ `V3Block`·`LiveTail`·`BlockBuffer.interval_s` int→float / `append_records` 去 `int(header[1])` 静默截断点。兼容性 = 纯放宽(旧整秒文件是小数子集, 零迁移)。新增 2 例(sample 匹配小数档 / store 小数 roundtrip+解析非法族), 重钉 1 例(30.5 从非法清单移出)。**实测: test.full 2619 passed + 4 skipped / 99%(基线 [26-10-05-1814](../testing/baselines/26-10-05-1814-qb-traffic-v3-decimal-interval.md))。**
