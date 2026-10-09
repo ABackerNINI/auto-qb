@@ -109,6 +109,11 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   登记值失效, 追赶循环逐帧重登记落定顶缘 = dock 底缘 - 面板自然高); 重开打断收场时
   清面板内联高再量自然高; after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态
   双豁免; 三皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
+- test_kb_view_band_single_points: 滚动跟随上下可见边界单点(2026-10-09 用户报: 键盘移到
+  第一个/最后一个种子只显示一半) —— 上界 _kbViewTop(顶栏 --head-h + 吸顶列头 .group-head,
+  列头吸在顶栏下缘、盖住列表首行; 未吸顶/不在 DOM 回落顶栏高) / 下界 _kbViewBottom 补
+  固定状态栏(--statusbar-h, 落点「视口底 - 8px」会停进状态栏背后); _kbViewportRow 与
+  _kbScrollRowIntoView(渲染行 + 窗口化两路)三处消费, 上界不得再裸写 _headH
 """
 
 from __future__ import annotations
@@ -977,6 +982,48 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     # 面板同样要续拉 trackers/peers(此前「换视图即不拉」会让这两页的页签数据停在打开那一刻)。
     assert 'if (this.page !== "groups") return;' in pb, "轮询 tick 必须带主内容页守卫(非主内容页面板不在 DOM)"
     assert 'this.viewMode !== "torrents"' not in pb, "轮询 tick 不得再挡视图(三视图共用面板)"
+
+
+def test_kb_view_band_single_points() -> None:
+    """键盘滚动跟随的上下可见边界单点(2026-10-09 用户报: 键盘移到第一个/最后一个种子只显示一半)。
+
+    这两处此前都把「几何在视口内」当成「看得见」: 上界只算顶栏高 --head-h, 忽略吸在顶栏下缘的
+    吸顶列头 .group-head(实测盖住首行 23px / 行高 71px, 矮行过半); 下界只取 window.innerHeight,
+    忽略底部固定状态栏(落点「视口底 - 8px」把末行停进状态栏背后, 实测遮 26px / 行高 50px)。
+    真机取证: scrollY=40 时首行 rect.top=103 < 列头 bottom=126; 末行 bottom=892 > 状态栏 top=866。
+    静态守阵只能钉「单点在且被消费、边界算式不许再裸写」, 几何正确性归 e2e 真浏览器断言
+    (tests/test_web_shortcuts.py 的既有口径: 静态全绿而真机必红的教训见 pitfalls/dock-panel)。"""
+    eng = _read("shortcuts.js")
+    # --- 上界单点: 顶栏 + 吸顶列头 ---
+    vt = re.search(r"_kbViewTop\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vt, "shortcuts.js 缺 _kbViewTop(行可见上界单点, 与 _kbViewBottom 对称)"
+    vtb = vt.group(1)
+    assert "_headH" in vtb, "上界必须含顶栏实测高(--head-h 由 columns.js 写入, 值不写死)"
+    assert 'document.querySelector(".group-head")' in vtb, "上界必须实测吸顶列头(它吸在顶栏下缘, 盖住列表首行)"
+    assert 'getComputedStyle(hd).position !== "sticky"' in vtb, "列头不在 DOM / 未吸顶必须回落顶栏高(无表头列表不无脑加高度)"
+    assert "getBoundingClientRect().height" in vtb, "列头高按自身高度复算(吸顶前后 rect 在两态间跳, 只有高度恒定)"
+    # --- 下界单点补状态栏(在面板让位之前取更紧者) ---
+    vb = re.search(r"_kbViewBottom\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vb, "shortcuts.js 缺 _kbViewBottom(行可见下界单点)"
+    vbb = vb.group(1)
+    assert 'document.querySelector(".statusbar")' in vbb, "下界必须让位底部固定状态栏(末行停进状态栏背后 = 用户报障)"
+    assert 'getComputedStyle(sb).position === "fixed"' in vbb, "状态栏让位前必须实测 position:fixed(非固定态不参与让位)"
+    assert "Math.min(bot, sbr.top)" in vbb, "下界 = 状态栏顶缘与其它遮蔽(面板)取更紧者"
+    assert vbb.index("statusbar") < vbb.index("this.drawer.open"), "状态栏让位在面板让位之前(面板在其上方, 更紧者仍会被 min 取到)"
+    # --- 三处消费: 上界走单点, 下界仍是 _kbViewBottom ---
+    vp = re.search(r"_kbViewportRow\(rows, delta\) \{(.*?)\n    \},", eng, re.S)
+    assert vp, "shortcuts.js 缺 _kbViewportRow"
+    assert "this._kbViewTop()" in vp.group(1), "无光标回落的上界必须走 _kbViewTop(列头盖住首行)"
+    assert "this._kbViewBottom()" in vp.group(1), "_kbViewportRow 下界必须走 _kbViewBottom(状态栏 + 面板)"
+    si = re.search(r"_kbScrollRowIntoView\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
+    assert si, "shortcuts.js 缺 _kbScrollRowIntoView"
+    sib = si.group(1)
+    assert sib.count("this._kbViewTop()") == 1 and sib.count("vTop + 4") == 2, (
+        "_kbScrollRowIntoView 上界两路(渲染行 rect + 窗口化前缀和 y)都要用 _kbViewTop 的落值"
+    )
+    assert "this._kbViewBottom()" in sib, "_kbScrollRowIntoView 下界必须走 _kbViewBottom(渲染行与窗口化两路)"
+    assert "_headH" not in sib, "_kbScrollRowIntoView 不得再裸写 _headH 当上界(单点外零算式)"
+    assert sib.count("window.innerHeight") == 0, "_kbScrollRowIntoView 不得裸用 window.innerHeight 当下界"
 
 
 def test_drawer_open_reveal_row() -> None:

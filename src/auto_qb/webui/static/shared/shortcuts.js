@@ -34,6 +34,10 @@
  *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
  *     web-ui/hover-keynav-fight): 渲染行用 getBoundingClientRect+scrollBy 差值, 窗口化未渲染行
  *     用 _rowWindow 前缀和换算(columns.js 已留存 this._rowPre[kind])。
+ *   - 滚动跟随的**上下可见边界各有一个单点**(2026-10-09 首/末行只显示一半的报障收口):
+ *     `_kbViewTop()` = 顶栏(_headH) + 吸顶列头(.group-head, 会盖住列表首行) /
+ *     `_kbViewBottom()` = 固定状态栏(--statusbar-h) 与停靠面板顶缘取更紧者。
+ *     凡"这一行/这个元素在视口里吗"的判定一律走这两个单点, 不许现写 _headH / innerHeight。
  *   - 键鼠衔接(26-09-30-1806 方案 B): 鼠标点击入口(selection.js 五个 on*Click)按所在行回写
  *     kbCursor —— 落光标 ≠ 选中(focus 语义), 键盘从点击处出发; 无光标回落 = 视口就近行
  *     (_kbViewportRow), 不再落极值行。滚动跟随仍只发生在键盘路径(_kbApplyCursor)。
@@ -541,9 +545,8 @@ window.AQB_SHORTCUTS = {
      * 渲染 / 小列表不开窗 / 前缀和失效)扫渲染行可见性 —— 视图切换是 v-if, DOM 里只有当前视图。
      * 都解析不出 → 退回旧口径: ↓ 首行 / ↑ 末行(保守, 不猜错)。只读几何, 滚动仍归 _kbApplyCursor。 */
     _kbViewportRow(rows, delta) {
-      const headH = this._headH || 0;
-      const vTop = window.scrollY + headH + 4;
-      const vBot = window.scrollY + this._kbViewBottom() - 4;  // 面板开着时下界让位面板顶缘(W4)
+      const vTop = window.scrollY + this._kbViewTop() + 4;  // 顶栏 + 吸顶列头(列头盖住首行)
+      const vBot = window.scrollY + this._kbViewBottom() - 4;  // 状态栏 / 面板开着时让位面板顶缘(W4)
       const kind = rows[0].kind === "torrent" || rows[0].kind === "group" ? rows[0].kind : null;
       const pre = kind && this._rowPre && this._rowPre[kind];
       if (pre && pre.length === rows.length + 1) {
@@ -596,6 +599,15 @@ window.AQB_SHORTCUTS = {
      * 断点单点在各皮肤 CSS 的 @media(max-width:900px), JS 不复制断点数。 */
     _kbViewBottom() {
       let bot = window.innerHeight;
+      /* 底部固定状态栏(--statusbar-h, 34px)同样盖住列表末行(2026-10-09 用户报「键盘移到最后一个
+       * 种子只显示一半」)。内容区底部的等高内边距治不了它: 那只在**滚到文档底**时把最后一行托到
+       * 状态栏之上, 而滚动跟随的落点是「视口底 - 8px」—— 文档余量足够滚到那里, 于是末行停进状态栏
+       * 背后(实测遮 26px / 行高 50px)。下界 = 状态栏顶缘, 与停靠面板取更紧的那个。 */
+      const sb = document.querySelector(".statusbar");
+      if (sb && getComputedStyle(sb).position === "fixed") {
+        const sbr = sb.getBoundingClientRect();
+        if (sbr.height > 0) bot = Math.min(bot, sbr.top);
+      }
       if (this.drawer.open) {
         const panel = document.querySelector(".drawer-dock > .drawer");
         // 出入过渡在途: 面板顶缘的 DOM 实量是高度插值中间值, 读登记的落定顶缘(drawer.js 钩子写入);
@@ -611,8 +623,24 @@ window.AQB_SHORTCUTS = {
       }
       return bot;
     },
+    /* 列表行可见**上界**单点(与 _kbViewBottom 对称, 2026-10-09 用户报「键盘移到第一个种子只显示
+     * 一半」): 顶栏之下还压着**吸顶列头** `.group-head`(三皮肤一律 position:sticky, top =
+     * calc(--head-h - 1px), 实测 32px 高) —— 行被它盖住时几何上「在视口内」但其实看不见, 只按
+     * _headH 当上界的滚动跟随会把落点停在列头背后(实测遮 23px / 行高 71px; 行矮时过半)。
+     * 列头不在 DOM(成员明细 .detail-head 非 sticky / 无表头的列表)或未吸顶时回落顶栏高。
+     * 返回**视口坐标**(消费方自行加 window.scrollY), 与 _kbViewBottom 同口径。 */
+    _kbViewTop() {
+      const headH = this._headH || 0;
+      const hd = document.querySelector(".group-head");
+      if (!hd || getComputedStyle(hd).position !== "sticky") return headH;
+      // 用列头自身高度而不是当前 rect.bottom: 吸顶前后 rect 在两态间跳(自然位还多一段 .layout
+      // 上内边距), 高度恒定才可复算; 吸顶落位是 top = --head-h - 1(那 1px 是防透缝重叠), 多算 1px
+      // 只是让行多让 1px, 不影响可见性。
+      return headH + hd.getBoundingClientRect().height;
+    },
     /* 滚动进视口: 目标已可见则不动(避免每次按键都跳)。渲染行用 getBoundingClientRect 差值;
-     * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。 */
+     * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。
+     * 上下边界走 _kbViewTop / _kbViewBottom 两个单点(顶栏+吸顶列头 / 固定状态栏+停靠面板)。 */
     _kbScrollRowIntoView(rows, idx) {
       this.$nextTick(() => {
         const r = rows[idx];
@@ -621,11 +649,11 @@ window.AQB_SHORTCUTS = {
           ? `[data-key="${CSS.escape(r.id)}"]`
           : `[data-hash="${CSS.escape(r.id)}"]`;
         const el = document.querySelector(sel);
-        const headH = this._headH || 0;
-        const vBot = this._kbViewBottom();  // 面板开着时下界让位面板顶缘(W4 几何走查)
+        const vTop = this._kbViewTop();     // 顶栏 + 吸顶列头(列头盖住列表首行, 2026-10-09 报障)
+        const vBot = this._kbViewBottom();  // 状态栏 + 面板开着时让位面板顶缘(W4 几何走查)
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top < headH + 4) window.scrollBy(0, rect.top - headH - 8);
+          if (rect.top < vTop + 4) window.scrollBy(0, rect.top - vTop - 8);
           else if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
           return;
         }
@@ -636,7 +664,7 @@ window.AQB_SHORTCUTS = {
         if (!pre || pre.length !== rows.length + 1) return;
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
-        if (y < window.scrollY + headH + 4) window.scrollTo(0, y - headH - 8);
+        if (y < window.scrollY + vTop + 4) window.scrollTo(0, y - vTop - 8);
         else if (y + h > window.scrollY + vBot - 4) window.scrollTo(0, y + h - vBot + 8);
       });
     },
