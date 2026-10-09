@@ -514,8 +514,12 @@ def test_drawer_dock_keyboard_w2() -> None:
     dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
     assert dtab, "shortcuts.js 找不到 _kbDrawerTab(Alt+1-4 双态入口)"
     tb = dtab.group(1)
-    assert tb.index('this.page !== "groups" || this.viewMode !== "torrents"'
-                   ) < tb.index("this.drawerTab(tab)"), "非种子页守卫必须先于双态分流(停靠落点只在种子视图)"
+    # 2026-10-08(计划 26-10-08-1217): 守卫收为主内容页级 —— 三视图共用面板, 不再挡视图
+    assert 'this.page !== "groups"' in tb, "_kbDrawerTab 缺主内容页守卫(设置页没有停靠落点)"
+    assert 'this.viewMode !== "torrents"' not in tb, \
+        "_kbDrawerTab 不得再挡视图(三视图共用面板: 辅种/追剧页 Alt+1~5 必须可用)"
+    assert tb.index('this.page !== "groups"') < tb.index("this.drawerTab(tab)"), \
+        "主内容页守卫必须先于双态分流"
     assert "this.toast(" in tb, "非种子页必须 toast 提示后忽略, 不许静默"
     assert tb.index('if (this.drawer.open && this.drawer.kind === "seed")'
                    ) < tb.index("this.drawerTab(tab)"), "开态切页签只对种子形态成立(流量形态页签按钮不渲染, 切不得)"
@@ -534,7 +538,8 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert follow, "drawer.js 找不到 _kbFollowDrawer(跟随单点应在数据面)"
     fb = follow.group(1)
     assert fb.index("this.drawer.open") < fb.index('c.kind !== "torrent"'), "跟随守卫序: 面板开 -> 种子页 -> kind=torrent"
-    assert 'this.page !== "groups" || this.viewMode !== "torrents"' in fb, "挂点必须带种子页守卫(追剧/组行视图共用 _kbApplyCursor 不波及)"
+    assert 'if (this.page !== "groups") return;' in fb, \
+        "跟随挂点必须带主内容页守卫(三视图共用面板: 只挡非主内容页, 不再挡视图)"
     assert "}, 200)" in fb, "跟随必须 200ms 防抖(连发上下键不逐行拉详情)"
     assert "this.drawer.hash === c.id" in fb, "hash 未变必须短路(光标落回同一行不重拉)"
     assert "cur.id === this.drawer.hash" in fb and "cur.kind !== \"torrent\"" in fb, "停稳复核必须再验目标(面板关/切页/目标已换/落回原行放弃)"
@@ -932,7 +937,10 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     assert poll, "drawer.js 找不到 trackers/peers 5s 轮询 tick"
     pb = poll.group(1)
     assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
-    assert 'this.viewMode !== "torrents"' in pb, "轮询 tick 必须挡非种子视图(面板 DOM 随视图 v-if, 不可见即不拉)"
+    # 2026-10-08(计划 26-10-08-1217): 面板三视图共用, 轮询只挡非主内容页 —— 在辅种页/追剧页展开的
+    # 面板同样要续拉 trackers/peers(此前「换视图即不拉」会让这两页的页签数据停在打开那一刻)。
+    assert 'if (this.page !== "groups") return;' in pb, "轮询 tick 必须带主内容页守卫(非主内容页面板不在 DOM)"
+    assert 'this.viewMode !== "torrents"' not in pb, "轮询 tick 不得再挡视图(三视图共用面板)"
 
 
 def test_drawer_open_reveal_row() -> None:

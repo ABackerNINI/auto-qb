@@ -18,6 +18,7 @@
 
 ## Done
 
+- [26-10-08-1217] [计划 · 辅种页/追剧页支持种子详情面板](26-10-08-1217-plan-webui-drawer-groups-shows.html) — `webui-detail-panel-redesign`
 - [26-10-08-0720] [config/ 包变异测试审计 · 分步执行计划](26-10-08-0720-plan-mutation-config.html) — `mutation-audit`
 - [26-10-07-2336] [tests/test_web.py 拆分实施计划](26-10-07-2336-plan-test-web-split.html) — `test-web-split`
 - [26-10-07-2127] [实施计划 · qB 流量图区间平均口径 + 万桶级治理 · auto-qb](26-10-07-2127-plan-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`

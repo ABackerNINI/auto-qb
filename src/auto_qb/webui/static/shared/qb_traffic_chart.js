@@ -165,10 +165,12 @@ const _QB_SCOPES = {
     hoverIdx: "qbTorrentHoverIdx", hoverLeft: "qbTorrentHoverLeft", yaxis: "qbTorrentYAxis",
     url: (h, w) => "/api/traffic/qb/torrent/" + h + "?window=" + w,
     ctx: (t) => t.drawer.hash,
-    // 抽屉打开 + 种子形态 + 流量页签 + 展开态 + 种子页种子视图(面板 DOM 随 drawerVisible 出入,
-    // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例; 收起态图不可见, 省请求同停)
+    // 抽屉打开 + 种子形态 + 流量页签 + 展开态 + 主内容页(面板 DOM 随 drawerVisible 出入,
+    // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例; 收起态图不可见, 省请求同停)。
+    // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 面板三视图共用, 从辅种页/追剧页成员行
+    // 打开的种子详情其流量页签同样要拉要画。
     active: (t) => !!(t.drawer.open && t.drawer.kind === "seed" && t.drawer.tab === "traffic"
-      && !t.drawer.collapsed && t.page === "groups" && t.viewMode === "torrents"),
+      && !t.drawer.collapsed && t.page === "groups"),
     stale: (t, h) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "seed"
       && t.drawer.tab === "traffic" && t.drawer.hash === h),
   },

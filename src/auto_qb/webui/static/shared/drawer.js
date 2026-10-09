@@ -17,17 +17,18 @@ const SKIP_GATE_LABELS = {
 
 window.AQB_DRAWER = {
   computed: {
-    /* 抽屉可见性(2026-10-04 双形态; 2026-10-06 收页面守卫):
+    /* 抽屉可见性(2026-10-04 双形态; 2026-10-06 收页面守卫; 2026-10-08 三视图共用):
      * 两形态一律只在主内容页(page === "groups")渲染 —— 面板是 sticky 吸底的停靠面板, 在设置页
      * (整幅配置工作台, 自己的滚动容器铺满)会压住页面底部的内容块, 看着像设置页的一部分
-     * (用户报「qB 全局流量图错误地出现在设置页」)。种子详情另限种子视图(面板是表行的附属)。
+     * (用户报「qB 全局流量图错误地出现在设置页」)。种子详情**三视图共用**(2026-10-08 计划
+     * 26-10-08-1217): 种子页/辅种页/追剧页都是表行, 成员行 hash 三视图同源(selHashSet), 面板
+     * 作为表行附属对三视图一视同仁; 不再限种子视图。
      * !状态位 drawer.open **不随切页翻**: 面板 DOM 退场但抽屉状态保持 —— 回主内容页面板连同
      *   数据/窗口选择原样回来(W1 验收项, 与原先「DOM 随种子视图 v-if 出入」同语义)。 */
     drawerVisible() {
       if (!this.drawer.open) return false;
       if (this.page !== "groups") return false;
-      if (this.drawer.kind === "traffic") return true;
-      return this.viewMode === "torrents";
+      return true;  // 三视图共用(流量形态与种子详情都只限主内容页)
     },
   },
   methods: {
@@ -643,9 +644,10 @@ window.AQB_DRAWER = {
      * + 请求代际 seq + hash 短路, §2.3), 停稳后经 _switchDrawerTarget 换目标; 显式打开/关闭在此
      * 两处作废在途跟随定时器, 显式操作优先于跟随。 */
     async openTorrentDrawer(hash) {
-      // 防御分支(W1): 面板落点只存在于种子页(torrents 视图), 非种子页没有 .drawer-dock ——
-      // 入口(双击/右键/Enter)本就只在种子页, 这里兜底防跨页调用把面板状态挂在不可见容器上
-      if (this.page !== "groups" || this.viewMode !== "torrents") return;
+      // 防御分支: 面板落点只存在于主内容页 —— 设置页没有 .drawer-dock。
+      // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 种子页/辅种页/追剧页三视图共用面板,
+      // 成员行(辅种页明细/追剧集明细)的右键「详细信息」与双击均落此入口。
+      if (this.page !== "groups") return;
       this.menu.visible = false;
       /* FX-29 家族纪律(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」): 面板已开着(种子
        * 形态)不得再走下面的整体重建 —— 重建把 peers/trackers/files 清成空列表且 loading=false,
@@ -740,10 +742,12 @@ window.AQB_DRAWER = {
       // 在主循环之外额外占用 qB。5s 仍远快于人工观察节奏。
       this._drawerTimer = setInterval(() => {
         if (!this.drawer.open || document.hidden) return;
-        // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随种子视图 v-if 出入,
-        // 切走页面/视图后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
-        // 隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回页下一拍自动恢复)。
-        if (this.page !== "groups" || this.viewMode !== "torrents") return;
+        // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随主内容页 v-if 出入,
+        // 切走页面(设置页)后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
+        // 隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回主内容页下一拍自动恢复)。
+        // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图(种子/辅种/追剧)共用面板,
+        // 在辅种页/追剧页展开的面板同样要续拉; 只挡非主内容页。
+        if (this.page !== "groups") return;
         if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
       }, 5000);
@@ -873,15 +877,16 @@ window.AQB_DRAWER = {
     },
     /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
      * 触发入口: shortcuts.js::_kbApplyCursor 尾部(鼠标路径将来接同一入口, §1.3 相邻预留)。
-     *   1) 触发单点+守卫 —— 面板开 + 种子页 + 光标是种子行(kind=torrent); 追剧/辅种组行视图共用
-     *      _kbApplyCursor, 守卫不满足即零开销返回, 不波及;
+     *   1) 触发单点+守卫 —— 面板开 + 主内容页 + 光标是种子行(kind=torrent); 辅种/追剧的
+     *      组行/剧行/集行光标(kind=group/show/ep)不跟随(2026-10-08 起成员行光标 kind=torrent
+     *      在辅种页/追剧页同样命中, 三视图一体化: 计划 26-10-08-1217);
      *   2) 防抖 200ms —— 连发上下键不逐行拉详情, 停稳才发;
      *   3) 在途请求代际 seq —— _loadDrawerTab 每次 bump, 换 hash 后旧响应一律丢弃(见上);
      *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内 5s 轮询(_startDrawerPoll)照旧, 互不打架。 */
     _kbFollowDrawer() {
       if (!this.drawer.open) return;
       if (this.drawer.collapsed) return;  // W3 收起态跟随暂停(body 不可见, 拉了也看不见); 展开时补跟
-      if (this.page !== "groups" || this.viewMode !== "torrents") return;  // 种子页守卫(面板停靠落点)
+      if (this.page !== "groups") return;  // 主内容页守卫(面板停靠落点; 三视图共用)
       const c = this.kbCursor;
       if (!c || c.kind !== "torrent") return;  // kind 守卫(组行/剧/集单元不跟随)
       if (this.drawer.hash === c.id) return;   // 纪律4: hash 未变短路(含防抖在途的重复触发)
@@ -889,7 +894,7 @@ window.AQB_DRAWER = {
       this._followDrawerTimer = setTimeout(() => {
         this._followDrawerTimer = null;
         // 停稳复核: 面板已关/已收起 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
-        if (!this.drawer.open || this.drawer.collapsed || this.page !== "groups" || this.viewMode !== "torrents") return;
+        if (!this.drawer.open || this.drawer.collapsed || this.page !== "groups") return;
         const cur = this.kbCursor;
         if (!cur || cur.kind !== "torrent" || cur.id === this.drawer.hash) return;
         this._switchDrawerTarget(cur.id);
@@ -912,13 +917,13 @@ window.AQB_DRAWER = {
     _drawerPeekTarget(hash) {
       if (!this.drawer.open || !this.drawer.collapsed) return;
       if (this.drawer.kind !== "seed") return;  // 流量形态(全局/分组)不是种子目标, 不 peek
-      if (this.page !== "groups" || this.viewMode !== "torrents") return;  // 种子页守卫(面板停靠落点)
+      if (this.page !== "groups") return;  // 主内容页守卫(面板停靠落点; 三视图共用)
       if (this.drawer.hash === hash) return;   // 纪律: hash 未变短路(同行重复点击)
       if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
       this._followDrawerTimer = setTimeout(() => {
         this._followDrawerTimer = null;
         // 停稳复核: 面板已关/已展开(展开态归 _kbFollowDrawer 管辖)/切页走了 -> 放弃本次 peek
-        if (!this.drawer.open || !this.drawer.collapsed || this.page !== "groups" || this.viewMode !== "torrents") return;
+        if (!this.drawer.open || !this.drawer.collapsed || this.page !== "groups") return;
         this._drawerPeekApply(hash);
       }, 200);
     },

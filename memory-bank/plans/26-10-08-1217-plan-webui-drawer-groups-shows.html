@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-detail-panel-redesign">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-08-1217">
+<meta name="doc-updated" content="26-10-09-0751">
+<title>计划 · 辅种页/追剧页支持种子详情面板</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --paper: #151a22;
+    --paper-2: #1a2029;
+    --ink: #d8dee8;
+    --ink-dim: #9aa5b5;
+    --ink-faint: #6b7686;
+    --line: #262d38;
+    --line-strong: #333c4a;
+    --accent: #6ea8fe;
+    --accent-soft: #1e2a3d;
+    --green: #4ec9a0;
+    --amber: #e0b155;
+    --red: #e06c75;
+    --mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; background: #0f1218; }
+  body {
+    margin: 0;
+    background: #0f1218;
+    background: var(--bg);
+    color: #d8dee8;
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 56px 28px 96px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 36px; }
+  .kicker { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 18px; letter-spacing: -.01em; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 24px; font-size: 13px; }
+  .meta-grid dt { color: var(--ink-faint); display: inline; }
+  .meta-grid .row { border-top: 1px solid var(--line); padding-top: 8px; }
+  .meta-grid dd { display: inline; margin: 0 0 0 6px; color: var(--ink-dim); }
+  .status { display: inline-block; padding: 1px 9px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--amber); font-size: 12px; }
+  h2 { font-size: 19px; margin: 44px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); letter-spacing: -.005em; }
+  h3 { font-size: 15.5px; margin: 26px 0 10px; color: var(--ink); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; color: #c8d3e2; }
+  pre { background: var(--paper-2); border: 1px solid var(--line); border-radius: 5px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; }
+  pre code { background: none; border: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 12.5px; letter-spacing: .02em; border-bottom: 1px solid var(--line-strong); }
+  .note { border-left: 2px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; margin: 18px 0; border-radius: 0 4px 4px 0; font-size: 13.5px; }
+  .warn { border-left: 2px solid var(--amber); background: #2a2418; padding: 12px 16px; margin: 18px 0; border-radius: 0 4px 4px 0; font-size: 13.5px; }
+  .danger { border-left: 2px solid var(--red); background: #2a1a1c; padding: 12px 16px; margin: 18px 0; border-radius: 0 4px 4px 0; font-size: 13.5px; }
+  .step { border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; margin: 18px 0; background: var(--paper); }
+  .step h3 { margin-top: 0; }
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 3px; border: 1px solid var(--line-strong); color: var(--ink-dim); margin-right: 6px; font-family: var(--mono); }
+  .s-done { color: var(--green); border-color: #23503f; }
+  .s-todo { color: var(--ink-dim); }
+  .s-warn { color: var(--amber); border-color: #4a3d20; }
+  .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); }
+  .foot { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-faint); }
+  strong { color: #e6ebf2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Auto-QB · 计划文档</div>
+  <h1>辅种页 / 追剧页支持种子详情面板</h1>
+  <dl class="meta-grid">
+    <div class="row"><dt>doc-type</dt><dd>plan</dd></div>
+    <div class="row"><dt>doc-topic</dt><dd>webui-detail-panel-redesign</dd></div>
+    <div class="row"><dt>doc-status</dt><dd><span class="status">Done</span></dd></div>
+    <div class="row"><dt>doc-added</dt><dd>26-10-08-1217</dd></div>
+    <div class="row"><dt>doc-updated</dt><dd>26-10-09-0751</dd></div>
+  </dl>
+</header>
+
+<h2>1 · 需求</h2>
+<p>用户命题：<strong>WEBUI 辅种页 / 追剧页需要支持种子详情面板</strong>。</p>
+<p>拍板要点（本轮澄清）：</p>
+<ul>
+  <li><strong>入口粒度</strong>：<strong>成员行</strong>级（辅种页展开明细里的成员行、追剧页集明细里的成员行）—— 面板一次显示一个种子的详情，语义与种子页一致。</li>
+  <li><strong>触发方式</strong>：成员行<strong>右键</strong>「详细信息」+ 成员行<strong>双击</strong> + <strong>键盘/鼠标光标 + 快捷键</strong>（Alt+1~5 双态入口）。</li>
+  <li><strong>挂载与切换</strong>：复用底部停靠面板（<code>.drawer-dock</code>），<strong>三视图共用槽位</strong>；切换视图时面板状态保持（与现有跨页保持语义一致）。</li>
+</ul>
+
+<h2>2 · 现状（代码事实，26-10-08 实读）</h2>
+
+<h3>2.1 面板与视图的强绑定</h3>
+<p>停靠面板的可见性单点在 <code>drawer.js</code> 的 <code>drawerVisible</code> computed：</p>
+<pre><code>drawerVisible() {
+  if (!this.drawer.open) return false;
+  if (this.page !== "groups") return false;
+  if (this.drawer.kind === "traffic") return true;
+  return this.viewMode === "torrents";   // ← 种子详情限种子视图
+}</code></pre>
+<p>打开单点 <code>openTorrentDrawer(hash)</code> 首行同样有守卫：</p>
+<pre><code>async openTorrentDrawer(hash) {
+  // 防御分支(W1): 面板落点只存在于种子页(torrents 视图), 非种子页没有 .drawer-dock
+  if (this.page !== "groups" || this.viewMode !== "torrents") return;
+  ...</code></pre>
+<div class="note">
+  这两个守卫是<strong>唯一</strong>的实际障碍。辅种页/追剧页调用 <code>openTorrentDrawer</code> 会<strong>静默返回</strong>——不报错、不提示、什么也不发生。
+</div>
+
+<h3>2.2 入口其实已经接好了一半</h3>
+<p>关键发现：辅种页的成员行与追剧页的集明细行，<strong>右键已经复用种子页的单种子菜单</strong>：</p>
+<ul>
+  <li><code>groups.html:140</code> 成员行 <code>@contextmenu.prevent="openMemberMenu($event, m)"</code></li>
+  <li><code>shows.html:127</code> 集明细行 <code>@contextmenu.prevent="openMemberMenu($event, m)"</code></li>
+  <li><code>menu.js:168 openMemberMenu()</code> 设 <code>menu.hash = member.hash</code>，而 <code>ctx-menus.html:74</code> 的 <code>v-else-if="menu.hash"</code> 分支<strong>已含</strong>「详细信息」项（<code>ctx-menus.html:85</code> → <code>openTorrentDrawer(menu.hash)</code>）。</li>
+</ul>
+<p>结论：<strong>右键菜单项无需新增</strong>，它已经渲染、已绑定正确 hash；点下去只是因为 2.1 的守卫而静默失效。</p>
+
+<h3>2.3 缺的部分</h3>
+<table>
+  <thead><tr><th>面</th><th>现状</th><th>本计划</th></tr></thead>
+  <tbody>
+    <tr><td>面板可见性</td><td>仅 <code>viewMode === "torrents"</code></td><td>放宽到 groups 视图下的三 viewMode</td></tr>
+    <tr><td>打开守卫</td><td>仅 torrents 视图</td><td>同 2.2 放宽</td></tr>
+    <tr><td>成员行双击</td><td>无绑定</td><td>补 <code>@dblclick</code></td></tr>
+    <tr><td>键盘光标链</td><td>辅种页只有组行、追剧页只有剧/集单元（注释标「成员行 vNext」）</td><td>把成员行纳入 <code>_kbRows()</code></td></tr>
+    <tr><td>Alt+1~5 双态</td><td><code>_kbDrawerTab</code> 守卫 <code>viewMode !== "torrents"</code> 即 toast 拒绝</td><td>放宽守卫；目标解析支持成员行光标</td></tr>
+    <tr><td>键盘跟随</td><td><code>_kbFollowDrawer</code> 有 page+kind 守卫</td><td>复核守卫，令成员行光标可跟随</td></tr>
+  </tbody>
+</table>
+
+<h2>3 · 设计</h2>
+
+<h3>3.1 面板挂载：三视图共用槽位</h3>
+<p><code>.drawer-dock</code> 已是 app 级分片（<code>dock.html</code>，boot.js 按选择器注入），落点在种子视图的 <code>&lt;main class="content"&gt;</code> 上（<code>groups.html:3</code> 的 <code>torrents-dock</code> 类）。</p>
+<p><strong>方案</strong>：把 <code>torrents-dock</code> 这个几何钩子的挂载条件从 <code>viewMode === 'torrents'</code> 放宽为「主内容页恒挂」。因为三视图（torrents/groups/shows）都在同一个 <code>&lt;main class="content"&gt;</code> 内用 <code>v-if</code> 切换，槽位天然只有一个、天然共用。</p>
+<pre><code>&lt;main class="content" :class="{ 'torrents-dock': true }"&gt;
+&lt;!-- 或直接去掉条件类, 由 CSS 决定是否留出底部空间 --&gt;</code></pre>
+<div class="warn">
+  <strong>高度治理注意</strong>：<code>.torrents-dock</code> 是 W3 拖拽调高与 <code>_kbViewBottom</code> 收口依赖的几何钩子。放宽后需确认：①未开面板时该 class 不留白（否则辅种页/追剧页底部会凭空多出一块）；②收起/展开动画的 dock 高度补偿逻辑对三视图一致生效。判据：<code>.torrents-dock</code> 在 <code>drawer.collapsed</code> 且 <code>!drawer.open</code> 时高度为 0。
+</div>
+
+<h3>3.2 可见性单点放宽</h3>
+<pre><code>drawerVisible() {
+  if (!this.drawer.open) return false;
+  if (this.page !== "groups") return false;
+  if (this.drawer.kind === "traffic") return true;
+  return true;   // ← 种子详情: groups 视图下三 viewMode 一律可见
+}</code></pre>
+<p>即种子详情不再限视图，只限「主内容页」。理由：面板是<strong>表行附属</strong>，而三个视图都是表行；成员行在三视图里是同一批 hash（<code>selHashSet</code> 早已跨视图同源）。</p>
+
+<h3>3.3 打开守卫放宽</h3>
+<pre><code>async openTorrentDrawer(hash) {
+  if (this.page !== "groups") return;   // 只留主内容页守卫
+  ...</code></pre>
+
+<h3>3.4 成员行双击</h3>
+<p>两处成员行模板补 <code>@dblclick</code>：</p>
+<ul>
+  <li><code>groups.html</code> 成员行：<code>@dblclick="openTorrentDrawer(m.hash)"</code></li>
+  <li><code>shows.html</code> 集明细成员行：同上</li>
+</ul>
+<div class="warn">
+  <strong>双击 vs 单击冲突</strong>：成员行单击 <code>onMemberClick</code> 目前是<strong>不选中</strong>（只落光标）。加双击不会冲突，但需确认双击的两次单击不会触发两次 <code>onMemberClick</code> 副作用 —— 现有实现只写 <code>kbCursor</code>/anchor，幂等，无副作用。与种子页 <code>torrents.html:27</code> 同款写法，风险已在该页消除。
+</div>
+
+<h3>3.5 键盘光标链纳入成员行</h3>
+<p><code>shortcuts.js:471 _kbRows()</code> 现为：</p>
+<pre><code>// 光标线性链: 辅种页=组行; 种子页=平铺行; 追剧页=剧/集单元(决策②: 成员行 vNext)。
+if (this.viewMode === "torrents") return this.filteredTorrents.map(...);
+if (this.viewMode === "shows") { ... 剧行 + 展开的集行 ... }
+return this.filteredGroups.map((g) => ({ kind: "group", id: g.key }));</code></pre>
+<p><strong>改动</strong>：在 groups 分支的组行之后、shows 分支的集行之后，分别插入<strong>展开的成员行</strong>（<code>kind: "torrent"</code>）：</p>
+<pre><code>// groups 视图: 组行 + (展开组)成员行
+const out = [];
+for (const g of this.filteredGroups) {
+  out.push({ kind: "group", id: g.key });
+  if (this.expandedKey === g.key) {
+    for (const m of this.sortedMembers(g.members)) out.push({ kind: "torrent", id: m.hash });
+  }
+}
+return out;</code></pre>
+<p>shows 分支同理：集行之后插入该集展开的成员行。选中/展开逻辑（<code>_kbExpandRow</code>/<code>_kbCollapseRow</code>）对 <code>kind === "torrent"</code> 已无展开语义，需确认 <code>_kbOpenRow</code> 落在 <code>openTorrentDrawer</code> 分支（现已在：<code>shortcuts.js:690</code> 注释「种子行: 详情面板」）。</p>
+
+<h3>3.6 Alt+1~5 双态入口</h3>
+<p><code>_kbDrawerTab</code> 的两处放宽：</p>
+<ol>
+  <li>守卫：<code>if (this.page !== "groups") { toast; return; }</code>（去掉 <code>viewMode !== "torrents"</code>）。</li>
+  <li>目标解析：<code>const hash = c &amp;&amp; c.kind === "torrent" ? c.id : this._kbSingleHash();</code> —— 光标是成员行时直接取 hash。3.5 落地后这在三视图内一致成立。</li>
+</ol>
+
+<h3>3.7 键盘跟随 <code>_kbFollowDrawer</code></h3>
+<p>单点里已有 page + kind 守卫（「相邻视图零开销返回」）。需复核其 kind 判据是否只认 <code>torrent</code>——若是，3.5 落地后成员行光标自然命中，无需改；若含 viewMode 判据则需要放宽。</p>
+
+<h2>4 · 影响面与风险</h2>
+<table>
+  <thead><tr><th>项</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>坏影响：无跨页错位</td><td>面板仍限主内容页（设置页不出现）；三视图同在 groups 页内，切设置页行为不变。</td></tr>
+    <tr><td>守阵需同步</td><td><code>test_webui_static_dom_panel.py::test_frontend_qb_traffic_drawer_page_guard</code> 第 1 段硬断言 <code>return this.viewMode === "torrents";</code> —— 放宽后<strong>必须改这条断言</strong>（改为「三视图一律可见 + 仍限主内容页」）。</td></tr>
+    <tr><td>键盘链长度变化</td><td>辅种页大库展开整组可能产生数百成员行；<code>_kbViewportRow</code> 前缀和换算依赖 <code>_rowPre</code>，需确认成员行也在窗口化前缀和的覆盖内（否则光标定位退化）。</td></tr>
+    <tr><td>收起态 peek</td><td><code>_drawerPeekTarget</code> 现含「种子页守卫」，需一并放宽到三视图（否则收起态鼠标换目标在辅种页失效）。</td></tr>
+  </tbody>
+</table>
+
+<h2>5 · 实施步骤</h2>
+
+<div class="step">
+  <h3><span class="tag s-todo">S1</span>槽位与可见性放宽</h3>
+  <ul>
+    <li><code>drawer.js drawerVisible</code>：去掉 <code>viewMode === "torrents"</code> 限制。</li>
+    <li><code>drawer.js openTorrentDrawer</code>：守卫减为 <code>page !== "groups"</code>。</li>
+    <li><code>groups.html</code> 的 <code>:class="{ 'torrents-dock': ... }"</code>：确认三视图下该几何钩子恒挂且未开面板时零高度。</li>
+    <li>守阵：改 <code>test_frontend_qb_traffic_drawer_page_guard</code> 第 1 段断言。</li>
+  </ul>
+</div>
+
+<div class="step">
+  <h3><span class="tag s-todo">S2</span>成员行双击入口</h3>
+  <ul>
+    <li><code>groups.html</code> 成员行加 <code>@dblclick</code>。</li>
+    <li><code>shows.html</code> 集明细成员行加 <code>@dblclick</code>。</li>
+    <li>守阵：新增断言「两处成员行均有 dblclick → openTorrentDrawer」。</li>
+  </ul>
+</div>
+
+<div class="step">
+  <h3><span class="tag s-todo">S3</span>键盘光标链纳入成员行</h3>
+  <ul>
+    <li><code>shortcuts.js _kbRows</code>：groups 分支补展开成员行；shows 分支集行后补展开成员行。</li>
+    <li>复核 <code>_kbFollowDrawer</code> / <code>_kbScrollRowIntoView</code> / <code>_kbViewportRow</code> 对成员行的口径。</li>
+    <li><code>_kbDrawerTab</code>：放宽守卫 + 光标已是 torrent 时直接取 hash。</li>
+    <li>守阵：<code>test_web_shortcuts.py</code> 补「成员行在光标链 / 三视图 Alt+1~5 不再拒绝」锚点。</li>
+  </ul>
+</div>
+
+<div class="step">
+  <h3><span class="tag s-todo">S4</span>收起态 peek 与跟随复核</h3>
+  <ul>
+    <li><code>_drawerPeekTarget</code> 的种子页守卫放宽到三视图。</li>
+    <li>真机/e2e 验证收起态在辅种页换目标、展开、关闭三路径。</li>
+    <li>e2e：<code>drawer-dock-stability.spec.mjs</code> 或新增场景覆盖辅种页/追剧页打开与切换。</li>
+  </ul>
+</div>
+
+<div class="step">
+  <h3><span class="tag s-todo">S5</span>收尾</h3>
+  <ul>
+    <li>跑 <code>commands run test.full</code> 并新建基线切片。</li>
+    <li>回写 <code>memory-bank/modules/webui-static-contract.md</code>（面板视图守卫口径变更）。</li>
+    <li>若新踩坑，按动作写进 <code>pitfalls/web-ui/</code>。</li>
+  </ul>
+</div>
+
+<h2>6 · 待确认</h2>
+<ul>
+  <li>面板标题/头部是否需要在「组上下文」下额外展示所属组名（当前头部只有种子名 + hash）。<strong>倾向不做</strong>——保持与种子页一致，组上下文用户从展开行本身就看得见。</li>
+  <li>追剧页「集明细」成员行的键盘链是否需要与「集行」区分展开/收起语义（成员行无子级，Enter 直接开详情）。<strong>倾向</strong>：成员行 Enter = 开详情，与种子页一致。</li>
+</ul>
+
+<h2>变更记录</h2>
+<ul>
+  <li><strong>26-10-09-0751 · S1–S5 全部落地, 状态 Open → Done。</strong>①可见性 <code>drawerVisible</code> 与打开单点 <code>openTorrentDrawer</code> 的视图守卫解除, 一律只挡主内容页; <code>.torrents-dock</code> 几何钩子从「仅种子视图」放宽为三视图恒挂(类名沿用, 三套 CSS 的 <code>.torrents-dock &gt; .group-table</code> 选择器不动)。②两处成员行(groups.html / shows.html)补 <code>@dblclick</code>。③<code>_kbRows</code> 纳入展开的成员行(兑现原注释的「成员行 vNext」), <code>_kbDrawerTab</code> 守卫放宽。④跟随 / peek / 5s 轮询 / 单种流量图 <code>active</code> 四处守卫一并只挡主内容页; <code>onMemberClick</code> 补上与 <code>onTorrentClick</code> 同款的跟随·peek 分流(此前成员行点击对开着的面板毫无反应)。⑤新增守阵 <code>test_frontend_drawer_groups_shows_views</code> + e2e <code>drawer-groups-shows.spec.mjs</code>(6 条全绿)。</li>
+  <li><strong>两处与预估不同的实况</strong>: (a) 右键「详细信息」无需新增 —— 两处成员行的右键本就走 <code>openMemberMenu</code>, 菜单项已渲染且 hash 正确, 只是被守卫静默吞掉; (b) 键盘链取 hash 必须经 <code>memberHashesOf</code> 单点 —— <code>sortedMembers(e.members)</code> 后直接读 <code>m.hash</code> 会被 <code>test_frontend_static_bundle_health</code> 的集成员守阵判红(该守阵分不清「逐个取 hash」与「把对象当 hash 传」), 改为 <code>memberHashesOf(sortedMembers(...))</code> 后既守规矩又保住行序。</li>
+</ul>
+
+<div class="foot">
+  Auto-QB · <span class="mono">memory-bank/plans/26-10-08-1217-plan-webui-drawer-groups-shows.html</span> · topic <span class="mono">webui-detail-panel-redesign</span>
+</div>
+
+</div>
+</body>
+</html>

@@ -113,7 +113,15 @@ window.AQB_SELECTION = {
         this.toggleMemberSel(m);
         return;
       }
-      if (event.shiftKey) this.shiftMemberSel(m);
+      if (event.shiftKey) {
+        this.shiftMemberSel(m);
+        return;
+      }
+      // 普通单击: 面板开则跟随换目标(防抖 200ms / 守卫全在挂点内); 收起态走 peek 分流(边界③)。
+      // 2026-10-08(计划 26-10-08-1217): 与 onTorrentClick 同款 —— 三视图共用面板后, 辅种页/追剧页
+      // 的成员行点击与种子页种子行同语义(此前成员行点击对开着的面板毫无反应)。
+      if (this.drawer.collapsed) this._drawerPeekTarget(m.hash);
+      else this._kbFollowDrawer();
     },
     toggleMemberSel(m) {
       // FX-11: 选种子 -> 清空辅种组选择(两个口径不共存)

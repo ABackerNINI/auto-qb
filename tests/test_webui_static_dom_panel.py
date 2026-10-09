@@ -18,6 +18,7 @@
   `$nextTick(() => this._dtSync())`($nextTick 等 Vue 把重建的 aside 补进 DOM 再定位宿主);
   两支路互不越界(重挂只归种子支路, 流量支路退场 _qbChartDestroy / 进场 _qbReloadOnEnter 原样)
 - test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
+- test_frontend_drawer_groups_shows_views: 辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217) —— 可见性单点 drawerVisible 与打开单点 openTorrentDrawer 一律只挡主内容页(形态/视图分叉收归页面级, 此前辅种/追剧页调用 openTorrentDrawer 静默失效: 右键菜单项早已渲染且 hash 正确却点了没反应)+ 两处成员行(辅种明细/追剧集明细)必须有 @dblclick 打开入口(与种子页同款)+ 键盘光标链 _kbRows 纳入展开的成员行(辅种的组下成员/追剧的集下成员, 兑现原注释「成员行 vNext」—— 不在链上则 ↑↓ 走不到、Alt+1~5 解析不出目标)+ 跟随 _kbFollowDrawer / peek _drawerPeekTarget / 5s 轮询 tick / 单种流量图 active 四处守卫一律只挡主内容页(换视图即停会让这两页的页签数据停在打开那一刻)
 - test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815 + 详情面板二轮清理) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」/ drawer_tpl 二轮: 05 图例五色与条级顺序说明·06 等待响应与仅看异常说明·07-09 求和口径/客户端 Top 复述/qB flags 前缀/会话累计/对端整行复述·10-11 展开折叠全部目录与全选与目录文件数·12 优先级跳过与占比细条·13-15 kpis 容器派生口径与窗口累计复述)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
@@ -1457,9 +1458,10 @@ def test_frontend_qb_traffic_drawer_page_guard():
     assert "if (!this.drawer.open) return false;" in vb, "抽屉可见性必须先挡 drawer.open"
     assert 'if (this.page !== "groups") return false;' in vb, \
         "drawerVisible 缺主内容页守卫(设置页会浮着一张不属于它的流量图/种子详情面板)"
-    assert vb.index('this.page !== "groups"') < vb.index('drawer.kind === "traffic"'), \
-        "页面守卫必须在形态分支 **之前**(按形态各写一遍 = 又一处会漏的分叉)"
-    assert 'return this.viewMode === "torrents";' in vb, "种子详情形态仍限种子视图(表行附属面板)"
+    assert 'return this.viewMode === "torrents";' not in vb, \
+        "种子详情不得再限种子视图(2026-10-08 计划 26-10-08-1217: 三视图共用面板, 成员行三视图同源)"
+    assert re.search(r"^      return true;", vb, re.M), \
+        "drawerVisible 末尾必须无条件 return true(过了主内容页守卫即显示; 形态分支已收归页面级)"
     assert "this.drawer.open = false" not in vb, \
         "可见性不得改写抽屉状态位(面板 DOM 退场 ≠ 关闭: 回主内容页状态还要回来)"
 
@@ -1574,6 +1576,15 @@ def test_frontend_drawer_collapsed_click_peek_target():
     assert "this._kbFollowDrawer();" in oc, "onTorrentClick 展开态照旧走 _kbFollowDrawer(展开跟随不回退)"
     assert oc.index("_drawerPeekTarget") > oc.index("this.shiftTorrentSel(m);"), \
         "peek 分流必须落在 Ctrl/Shift 分支之后(修饰键选择手势不跟随, 边界②)"
+    # 1b. 三视图共用面板(2026-10-08 计划 26-10-08-1217): 成员行点击入口 onMemberClick 必须同款
+    #     分流 —— 辅种页/追剧页点成员行对开着的面板此前毫无反应(面板只认种子页种子行)。
+    mm = re.search(r"onMemberClick\(m, event\) \{\n(.*?)\n    \},", sel_js, re.S)
+    assert mm, "selection.js 缺 onMemberClick(守阵正则失配, 同步本守阵)"
+    mc = mm.group(1)
+    assert "if (this.drawer.collapsed) this._drawerPeekTarget(m.hash);" in mc, \
+        "onMemberClick 收起态必须分流 _drawerPeekTarget(三视图共用: 辅种/追剧成员行同种子页)"
+    assert "this._kbFollowDrawer();" in mc, \
+        "onMemberClick 展开态必须走 _kbFollowDrawer(三视图共用: 点成员行即换目标)"
     kb = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert kb, "drawer.js 缺 _kbFollowDrawer(键盘跟随单点被移走? 同步本守阵)"
     kbbody = kb.group(1)
@@ -1590,8 +1601,8 @@ def test_frontend_drawer_collapsed_click_peek_target():
         "peek 必须只服务收起态(展开态归 _kbFollowDrawer 管辖, 两路不得重入)"
     assert 'if (this.drawer.kind !== "seed") return;' in pt, \
         "peek 必须排除流量形态(全局/分组流量图没有种子目标, 点行不得改写其状态)"
-    assert 'this.page !== "groups" || this.viewMode !== "torrents"' in pt, \
-        "peek 缺种子页守卫(面板停靠落点只存在于种子页)"
+    assert 'if (this.page !== "groups") return;' in pt, \
+        "peek 缺主内容页守卫(2026-10-08 三视图共用面板: 只挡非主内容页, 不再挡视图)"
     assert "if (this.drawer.hash === hash) return;" in pt, \
         "peek 缺 hash 未变短路(同行重复点击零副作用, 与 _kbFollowDrawer 纪律4 同构)"
     assert "this._followDrawerTimer = setTimeout" in pt and ", 200);" in pt, \
@@ -1633,6 +1644,75 @@ def test_frontend_drawer_collapsed_click_peek_target():
         assert "collapsed = " not in body and "toggleDrawerCollapse" not in body \
             and "openTorrentDrawer" not in body, \
             f"{name} 不得展开面板(Q3 口径: 收起态点行只换目标, 展开仍归双击/Enter/右键「详情」)"
+
+
+def test_frontend_drawer_groups_shows_views():
+    r"""辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217)
+
+    面板原先被两处守卫锁在种子页: drawerVisible 的 `viewMode === "torrents"` 与 openTorrentDrawer
+    首行的同款守卫。辅种页/追剧页的成员行右键菜单早已复用单种子菜单(menu.hash 分支含「详细信息」),
+    菜单项渲染且 hash 正确, 点下去却因守卫**静默失效**(不报错不提示)。本守阵钉住三视图一体化:
+
+    1. 可见性单点 drawerVisible 只挡主内容页(形态分支已收归页面级);
+    2. 打开单点 openTorrentDrawer 同样只挡主内容页;
+    3. 两处成员行(辅种明细 / 追剧集明细)必须有 @dblclick 打开入口(与种子页同款);
+    4. 键盘光标链 _kbRows 必须纳入展开的成员行(辅种的组下成员 / 追剧的集下成员), 否则 ↑↓
+       走不到成员行、Alt+1~5 也解析不出目标(注释里原标「成员行 vNext」);
+    5. 跟随 _kbFollowDrawer / peek _drawerPeekTarget / 轮询 tick / 单种流量图 scope 四处守卫
+       一律只挡主内容页 —— 换视图即停会让这两页的页签数据停在打开那一刻。
+
+    任一守卫被改回按视图分叉即红(按视图各写一遍 = 又一处会漏的分叉)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    groups_tpl = open(os.path.join(shared, "tpl", "groups.html"), encoding="utf-8").read()
+    shows_tpl = open(os.path.join(shared, "tpl", "shows.html"), encoding="utf-8").read()
+    eng = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+
+    # 1/2. 两个打开/可见单点都只挡主内容页
+    vis = re.search(r"drawerVisible\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert vis, "drawer.js 缺 drawerVisible(面板可见性单点)"
+    vb = vis.group(1)
+    assert 'this.viewMode' not in vb, "drawerVisible 不得再按 viewMode 分叉(三视图共用面板)"
+    op = re.search(r"async openTorrentDrawer\(hash\) \{\n(.*?)\n      this\.menu\.visible", drawer_js, re.S)
+    assert op, "drawer.js 缺 openTorrentDrawer(打开单点, 守阵正则失配则同步本守阵)"
+    assert 'if (this.page !== "groups") return;' in op.group(1), \
+        "openTorrentDrawer 必须保留主内容页守卫(设置页没有 .drawer-dock)"
+    assert "viewMode" not in op.group(1), "openTorrentDrawer 不得再按 viewMode 拒绝(成员行入口即静默失效)"
+
+    # 3. 两处成员行的双击打开入口(与种子页 torrents.html 同款)
+    for name, tpl in (("groups.html(辅种明细)", groups_tpl), ("shows.html(追剧集明细)", shows_tpl)):
+        seg = tpl.split('class="member-row"')[1] if 'class="member-row"' in tpl else ""
+        assert seg, f"{name} 缺 .member-row(守阵正则失配)"
+        # 取该行的标签段(到下一个 `>` 为止), 避免吃到后续单元格里的同名字串
+        tag = seg.split(">")[0]
+        assert "@dblclick" in tag and "openTorrentDrawer(m.hash)" in tag, \
+            f"{name} 成员行缺 @dblclick=\"openTorrentDrawer(m.hash)\"(双击打开详情)"
+
+    # 4. 键盘光标链纳入展开的成员行(三视图 ↑↓ 可达成员行 -> Alt+1~5 目标解析可命中)
+    rows = re.search(r"_kbRows\(\) \{\n(.*?)\n    \},", eng, re.S)
+    assert rows, "shortcuts.js 缺 _kbRows(光标线性链)"
+    rb = rows.group(1)
+    assert 'kind: "torrent"' in rb, "_kbRows 必须能产出 kind=torrent 的成员行条目"
+    assert "expandedKey" in rb, \
+        "_kbRows 辅种分支必须纳入展开组的成员行(组内成员此前不在链上, 键盘走不进去)"
+    assert "expandedShowEp" in rb, \
+        "_kbRows 追剧分支必须纳入展开集的成员行(集内版本此前不在链上)"
+
+    # 5. 四处守卫一律只挡主内容页
+    follow = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert follow and "viewMode" not in follow.group(1), \
+        "_kbFollowDrawer 不得再挡视图(三视图共用: 辅种/追剧成员行光标同样要跟随)"
+    peek = re.search(r"_drawerPeekTarget\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert peek and "viewMode" not in peek.group(1), \
+        "_drawerPeekTarget 不得再挡视图(收起态在辅种/追剧页点成员行同样要换摘要)"
+    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", drawer_js, re.S)
+    assert poll and "viewMode" not in poll.group(1), \
+        "5s 轮询 tick 不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
+    tor = re.search(r"  torrent: \{(.*?)\n  \},", chart_js, re.S)
+    assert tor, "qb_traffic_chart.js 缺 torrent 作用域(单种流量图)"
+    assert "viewMode" not in tor.group(1), \
+        "单种流量图 active 不得再挡视图(辅种/追剧页打开的种子详情其流量页签同样要拉要画)"
 
 
 def test_frontend_drawer_open_switch_no_empty_flash():

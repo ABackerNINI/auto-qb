@@ -129,6 +129,7 @@
                            :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
+                           @dblclick="openTorrentDrawer(m.hash)"
                            @contextmenu.prevent="openMemberMenu($event, m)">
                         <template v-for="col in visibleDetailCols" :key="col.key">
                           <span v-if="col.key === 'site'" class="m-site f-cell"

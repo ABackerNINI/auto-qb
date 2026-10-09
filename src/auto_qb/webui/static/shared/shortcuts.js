@@ -468,8 +468,13 @@ window.AQB_SHORTCUTS = {
       item.run(this);
     },
     /* ---------------- W2: 光标模型(按身份不按下标) ---------------- */
-    /* 光标线性链: 辅种页=组行; 种子页=平铺行; 追剧页=剧/集单元(决策②: 成员行 vNext)。
-     * 每次移动时现取现定位 —— 轮询整表替换/排序/筛选后身份重定位天然成立, 不需刷新钩子。 */
+    /* 光标线性链: 辅种页=组行(+展开组的成员行); 种子页=平铺行; 追剧页=剧/集单元(+展开集的成员行)。
+     * 每次移动时现取现定位 —— 轮询整表替换/排序/筛选后身份重定位天然成立, 不需刷新钩子。
+     * !成员行入链(2026-10-08 计划 26-10-08-1217, 原注释的「成员行 vNext」在此兑现): 面板三视图
+     *   共用后, 辅种页/追剧页的成员行也要能 ↑↓ 走到 —— 光标 kind=torrent 是 Alt+1~5 双态入口与
+     *   面板跟随(_kbFollowDrawer)的目标解析依据, 成员行不在链上则这两条路径在两页都走不通。
+     *   序 = 父行紧邻其子行(组 -> 其成员 / 集 -> 其版本), 与视觉顺序一致; 成员行 kind=torrent
+     *   天然不参与展开语义(_kbExpandRow 对 torrent 无分支), Enter 落在 openTorrentDrawer。 */
     _kbRows() {
       if (this.page !== "groups") return [];
       if (this.viewMode === "torrents") return this.filteredTorrents.map((m) => ({ kind: "torrent", id: m.hash }));
@@ -479,13 +484,30 @@ window.AQB_SHORTCUTS = {
           out.push({ kind: "show", id: s.key });
           if (this.expandedShows.includes(s.key)) {
             for (const sn of s.seasons) {
-              for (const e of sn.episodes) out.push({ kind: "ep", id: this.showEpRowId(s.key, sn.season, e.epKeyStr) });
+              for (const e of sn.episodes) {
+                const eid = this.showEpRowId(s.key, sn.season, e.epKeyStr);
+                out.push({ kind: "ep", id: eid });
+                if (this.expandedShowEp === eid) {
+                  // 版本行序走 sortedMembers(与集明细表同源, 光标上下即屏幕上下), hash 一律经
+                  // memberHashesOf 单点取(集成员在前端已换成对象, 裸传会字符串化成 [object Object])
+                  const hs = this.memberHashesOf(this.sortedMembers(e.members));
+                  for (const h of hs) out.push({ kind: "torrent", id: h });
+                }
+              }
             }
           }
         }
         return out;
       }
-      return this.filteredGroups.map((g) => ({ kind: "group", id: g.key }));
+      const out = [];
+      for (const g of this.filteredGroups) {
+        out.push({ kind: "group", id: g.key });
+        if (this.expandedKey === g.key) {
+          const hs = this.memberHashesOf(this.sortedMembers(g.members));
+          for (const h of hs) out.push({ kind: "torrent", id: h });
+        }
+      }
+      return out;
     },
     isKbCursor(kind, id) {
       const c = this.kbCursor;
@@ -698,11 +720,13 @@ window.AQB_SHORTCUTS = {
      * toast "tracker/peer 列表获取失败"), Alt+1 又因流量形态 tab 恒为 general 早退(按了没反应)。
      * 流量形态视同关态: 解析目标后 openTorrentDrawer 整体重建为种子形态并落在该页签。
      * 目标解析: 光标行(kind=torrent)优先, 其次单选种子(_kbSingleHash, 选中恰一个 hash);
-     * 非种子页(停靠落点 .drawer-dock 只在种子视图)或解析不出目标时 toast 提示后忽略 —— 不猜目标。
+     * 非主内容页(停靠落点 .drawer-dock 只存在于主内容页)或解析不出目标时 toast 提示后忽略 —— 不猜目标。
+     * 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图共用面板, 辅种页/追剧页的成员行
+     *   (光标 kind=torrent)直接命中目标解析, Alt+1~5 在三视图同样可用。
      * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
     _kbDrawerTab(tab) {
-      if (this.page !== "groups" || this.viewMode !== "torrents") {
-        this.toast("详情面板只在种子页可用", "info", 2500);
+      if (this.page !== "groups") {
+        this.toast("详情面板只在种子/辅种/追剧页可用", "info", 2500);
         return;
       }
       // 流量页签受功能门控: 页签按钮 v-if=qbTrafficOn 不渲染, 切到隐形页签 = 卡在一个没有
