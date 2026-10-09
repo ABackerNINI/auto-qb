@@ -56,10 +56,14 @@ import tempfile
 import threading
 import time
 
+import yaml
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from auto_qb.config import WebConfig  # noqa: E402
+from auto_qb.config.loaders import load_config  # noqa: E402
+from auto_qb.infra.versioning import CURRENT_VERSIONS  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
 from tests.helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store  # noqa: E402
 
@@ -670,6 +674,42 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+def _materialize_config(path: str, port: int, skip_check_menu: bool) -> None:
+    """给桩物化一份**带当前版本章**的最小合法配置(boot 期 load_config 自校验, 漂移即拒绝启动)
+
+    桩的运行期配置是 FakeConfig(内存), 但 /api/config GET/PUT 走的是磁盘树(manager.config_path)
+    —— 磁盘上没有文件时 GET 树没有 config.schema_version, PUT 的版本闸门(_reject_stale_version)
+    对缺章一律拒绝, 「保存并应用」在桩上永远 400, 保存流 e2e/冒烟完全测不到
+    (2026-10-10 规则卡冒烟实证)。reload_config 在桩上只回执不应用(_apply_truth 只认
+    pause/resume), 真配置不会顶掉 FakeConfig。
+    """
+    tree = {
+        "config":
+            {
+                "schema_version": CURRENT_VERSIONS["config"],
+                "interval": "60S",
+                "qbittorrent": {
+                    "host": "127.0.0.1",
+                    "port": "16585",
+                    "username": "u",
+                    "password": "***"
+                },
+                "web":
+                    {
+                        "enabled": "true",
+                        "host": "127.0.0.1",
+                        "port": str(port),
+                        "token": "",
+                        "skip_local_verify": "true",
+                        "skip_check_menu": "true" if skip_check_menu else "false",
+                    },
+            }
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(tree, f, allow_unicode=True, sort_keys=False)
+    load_config(path)  # 模板漂移让桩显式起不来, 而不是第一次 PUT 才 400(fail loud)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="WEB UI 浏览器冒烟桩服务")
     ap.add_argument("--torrents", type=int, default=1500, help="合成种子总数")
@@ -741,6 +781,13 @@ def main() -> int:
         skip_check_menu=(args.skip_check_menu == "on"),
     )
     mgr._last_conn_ok = True  # 状态栏显示"已连接"(否则前端走断连提示分支)
+
+    # 物化落盘配置(带版本章): /api/config GET 读磁盘树, PUT 写回并过版本闸门 —— 磁盘无文件时
+    # GET 树缺 config.schema_version, 保存流在桩上永远 400(见 _materialize_config docstring);
+    # data_dir 同步钉到临时目录, 保存备份(.bak)不落仓库根
+    mgr.config_path = os.path.join(tmp, "config.yml")
+    mgr.config.data_dir = tmp
+    _materialize_config(mgr.config_path, args.port, args.skip_check_menu == "on")
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)

@@ -234,6 +234,24 @@
                         <button class="hb-btn danger sm" @click="cfgRuleRemove(cfg.ruleGroupKey, rn)">删除</button>
                       </span>
                     </div>
+                    <!-- 规则级字段(触发/间隔/去重/冷却/后续规则/监听字段): 折叠段, 复用 hb-blk-hd 条状头
+                         + hub-field 通用行; 摘要行常显当前节奏, 展开才渲染字段(与设置页 group 段同口径) -->
+                    <div class="hb-rule-meta">
+                      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
+                           @click="cfgRuleMetaToggle(cfg.ruleGroupKey, rn)"
+                           @keyup.enter="cfgRuleMetaToggle(cfg.ruleGroupKey, rn)">
+                        <span class="bh-t">触发与节奏</span>
+                        <span class="bh-n">{{ cfgRuleMetaSummary(cfg.ruleGroupKey, rn) }}</span>
+                        <span class="bh-r">
+                          <button class="hb-btn ghost sm" :aria-expanded="cfgRuleMetaOpen(cfg.ruleGroupKey, rn)"
+                                  @click.stop="cfgRuleMetaToggle(cfg.ruleGroupKey, rn)">{{ cfgRuleMetaOpen(cfg.ruleGroupKey, rn) ? '收起' : '展开' }}</button>
+                        </span>
+                      </div>
+                      <template v-if="cfgRuleMetaOpen(cfg.ruleGroupKey, rn)">
+                        <hub-field v-for="item in cfgRuleMetaItems(cfg.ruleGroupKey, rn)"
+                                   :key="hubKey(item.path)" :item="item"></hub-field>
+                      </template>
+                    </div>
                     <div class="hb-rule-flow">
                       <div class="hb-flow-grp">
                         <div class="hb-flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div>

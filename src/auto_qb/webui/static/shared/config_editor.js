@@ -62,6 +62,7 @@ window.CONFIG_EDITOR = {
         newRuleName: "",
         addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
         collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
+        openRuleMeta: {},  // 规则卡「触发与节奏」段展开态 { "<规则集>.<规则名>": true }; 缺省 = 折叠
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
         openLists: {},  // pattern_list 字段 list 区展开态 { "<路径 join>": true }; 缺省 = 折叠
@@ -238,6 +239,7 @@ window.CONFIG_EDITOR = {
       this.cfg.addOpen = "";
       this.cfg.openGroups = {};
       this.cfg.openLists = {};
+      this.cfg.openRuleMeta = {};
       this.cfg.chartHover = null;
       this.cfgPickerClose();
     },

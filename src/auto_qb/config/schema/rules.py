@@ -18,7 +18,7 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "监听字段",
         "str_list",
         default=[],
-        show_if=("trigger", "on_torrent_field_changed"),
+        grey_if=("trigger", "on_torrent_field_changed"),
         help="仅 on_torrent_field_changed 触发时生效且必填: 监听的种子字段(每行一个), 任一变化即检查该规则"
         "(程序自身改动的不算, 防自触发); v1 支持 tags / category",
     ),
@@ -27,6 +27,7 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "扫描间隔",
         "time",
         default="0S",
+        grey_if=("trigger", "interval"),
         help="多久检查一次该规则(仅周期触发时生效); 留空 = 每 tick 级别(队列归一化为 1s); 显式配置最短 1S; 以上一轮到期时刻起算, 执行耗时不计入, 不会叠加"
     ),
     Field(

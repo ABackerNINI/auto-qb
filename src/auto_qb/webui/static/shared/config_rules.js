@@ -5,6 +5,8 @@
  * 结构映射(YAML 形状):
  *   <规则集>_rules:
  *       <规则名>:
+ *           enabled/trigger/interval/execute_once/cooldown/stop_following_rules_if/watch_fields:
+ *                       规则级字段(schema.rule_fields, 「触发与节奏」折叠段, hub-field 通用渲染)
  *           conditions: [{<插件名>: <spec>}, ...]
  *           actions:    [{<插件名>: <spec>}, ...]   # 或 {ignore_next_action_error: true} 伪动作
  *
@@ -217,7 +219,63 @@ window.CONFIG_RULES = {
     cfgRuleSummary(groupKey, ruleName) {
       const conds = this.cfgPluginList(groupKey, ruleName, "conditions").length;
       const acts = this.cfgPluginList(groupKey, ruleName, "actions").length;
-      return `${this.cfgRuleTrigger(groupKey, ruleName)} · 条件 ${conds} · 动作 ${acts}`;
+      return `${this.cfgTriggerLabel(this.cfgRuleTrigger(groupKey, ruleName))} · 条件 ${conds} · 动作 ${acts}`;
+    },
+
+    /* ---------------------------------------------------------- 规则级字段(触发与节奏)
+     *
+     * 规则卡除条件/动作外还有一排规则级字段(trigger/interval/execute_once/cooldown/
+     * stop_following_rules_if/watch_fields) —— 全部来自 schema.rule_fields(后端已在
+     * /api/config/schema 载荷里), 用 cfgFlatten 展开成通用字段项交给 hub-field 渲染,
+     * 控件形态(枚举下拉/数值+单位/列表)与帮助、「?」、条件显隐(show_if)零特判复用。 */
+    /* 触发时机的中文短标签(卡头摘要与「触发与节奏」摘要共用单点) */
+    cfgTriggerLabel(trigger) {
+      return (
+        {
+          interval: "周期检查",
+          on_torrent_added: "种子新增时",
+          on_torrent_deleted: "种子删除时",
+          on_torrent_state_enum_changed: "状态变化时",
+          on_torrent_field_changed: "字段变化时",
+        }[trigger] || trigger || "周期检查"
+      );
+    },
+    /* 规则级字段渲染项: 去掉 enabled(卡头已有启用开关, 不重复渲染);
+     * enum 字段(trigger/execute_once/stop_following_rules_if)缺省走后端默认、空串非法 ——
+     * 克隆标 required 摘掉「(未配置)」空选项, 防止写出保存必败的空值(默认值仍由
+     * cfgInputValue 兜底显示, 未动过的键不会写进树, YAML 保持简洁) */
+    cfgRuleMetaItems(groupKey, ruleName) {
+      if (!this.cfg.schema || !this.cfg.schema.rule_fields) return [];
+      const path = this.cfgRulePath(groupKey, ruleName);
+      const fields = this.cfg.schema.rule_fields
+        .filter((f) => f.key !== "enabled")
+        .map((f) => (f.kind === "enum" ? { ...f, required: true } : f));
+      return this.cfgFlatten(fields, path, 0, path);
+    },
+    /* 折叠态(缺省 = 折叠, 与设置页 group 段同口径): 摘要行常显当前值, 不展开也能看出节奏 */
+    cfgRuleMetaOpen(groupKey, ruleName) {
+      return !!this.cfg.openRuleMeta[this.cfgRulePath(groupKey, ruleName).join(".")];
+    },
+    cfgRuleMetaToggle(groupKey, ruleName) {
+      const key = this.cfgRulePath(groupKey, ruleName).join(".");
+      this.cfg.openRuleMeta = { ...this.cfg.openRuleMeta, [key]: !this.cfg.openRuleMeta[key] };
+    },
+    /* 「触发与节奏」折叠头摘要: 触发时机 + 非默认的间隔/去重/冷却(默认值不占摘要, 展开可见全部) */
+    cfgRuleMetaSummary(groupKey, ruleName) {
+      const path = this.cfgRulePath(groupKey, ruleName);
+      const trigger = this.cfgRuleTrigger(groupKey, ruleName);
+      const parts = [this.cfgTriggerLabel(trigger)];
+      if (trigger === "interval") {
+        const iv = String(this.cfgText([...path, "interval"], "") || "").trim();
+        if (iv && iv !== "0" && iv !== "0S") parts.push(`间隔 ${iv}`);
+      }
+      const onceLabel = { once: "仅执行一次", daily: "每天一次", hourly: "每小时一次" }[
+        this.cfgText([...path, "execute_once"], "never")
+      ];
+      if (onceLabel) parts.push(onceLabel);
+      const cd = String(this.cfgText([...path, "cooldown"], "0S") || "").trim();
+      if (cd && cd !== "0" && cd !== "0S") parts.push(`冷却 ${cd}`);
+      return parts.join(" · ");
     },
 
     /* ---------------------------------------------------------- 条件/动作选择面板(单例) */

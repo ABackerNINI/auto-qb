@@ -1032,6 +1032,11 @@
 .hb-step .st-r { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
 .hb-step.danger { border-color: var(--error-line, color-mix(in srgb, var(--error) 45%, transparent)); background: var(--error-soft); }
 .hb-rule-foot { border-top: 1px solid var(--hairline); padding: 8px 14px 10px; }
+/* 规则卡「触发与节奏」段: 复用 hb-blk-hd 条状头(摘掉其底边, 由段自身的 hairline 底边统一收口)
+ * + hb-row 通用行; 头部给 hover 反馈(可点折叠) */
+.hb-rule-meta { border-bottom: 1px solid var(--hairline); }
+.hb-rule-meta .hb-blk-hd { border-bottom: 0; }
+.hb-rule-meta .hb-blk-hd:hover { background: var(--surface-1); }
 
 /* ==========================================================================
    限速: 阶梯图 + 档位
