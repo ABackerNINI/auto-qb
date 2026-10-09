@@ -383,12 +383,18 @@ def test_frontend_qb_traffic_chart_wiring():
     # 否则「数据取不到 ⇒ 连换档位都点不到」; 与 2026-10-08 之前正文工具条恒可见的语义对齐。
     assert 'v-if="qbCurSummary || qbCurScope === \'torrent\'"' in drawer_tpl, \
         "统计栏本体必须门在「有汇总 或 种子流量形态」上(否则首载/错误态控件整组消失)"
-    # 落点次序(用户口径「即『下载累计』后」): 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 控件组 → 口径 hint
-    _order = [stat_blk.index(k) for k in ("hs-leg", "窗口", "上传累计", "下载累计", "qb-statctl", "qbCurSummaryHint")]
+    # 落点次序(用户口径「即『下载累计』后」): 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 控件组
+    _order = [stat_blk.index(k) for k in ("hs-leg", "窗口", "上传累计", "下载累计", "qb-statctl")]
     assert _order == sorted(_order), \
-        "统计栏次序必须为 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 档位/纵轴控件组 → 口径 hint"
+        "统计栏次序必须为 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 档位/纵轴控件组"
     assert 'hs-leg' in stat_blk and '上行' in stat_blk and '下行' in stat_blk, \
         "统计栏(.hist-summary)必须含上行/下行图例(.hs-leg), 且排在「窗口 N 桶」之前"
+    # 口径注解(2026-10-09 第 3 轮, 用户动议): 常驻文案退场, 改为两个累计读数的悬浮提示。
+    # title 走全局断供管道(ui_feedback.js 落 DOM 即迁 data-aq-tip), 文案单点仍是 qbCurSummaryHint。
+    assert stat_blk.count(':title="qbCurSummaryHint"') == 2, \
+        "「上传累计 / 下载累计」两处都要挂口径注解的悬浮提示(文案单一来源 qbCurSummaryHint)"
+    assert 'class="hist-hint"' not in drawer_tpl, \
+        "统计栏常驻口径文案(.hist-hint)必须退场(已改为两个累计读数的 tooltip; 弹层 popovers.html 里那处是另一用途)"
 
     # 两处控件组必须同源: 内层 .qb-tabs/.qb-tools 逐字一致(空白归一后比较), 一处改了另一处必须同步
     def _ctl_inner(blk):

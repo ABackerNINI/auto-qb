@@ -175,10 +175,15 @@
                   <span class="hs-leg"><i class="sw up"></i>上行</span>
                   <span class="hs-leg"><i class="sw down"></i>下行</span>
                   <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
-                  <span>上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
-                  <span>下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
+                  <!-- 口径注解(「累计为窗口内增量(断线期不计)」, 分组再加组口径尾注)自 2026-10-09
+                       起不再是常驻文案 —— 改为**两个累计读数的悬浮提示**(用户动议: 常驻占统计栏
+                       一行, 而这句只在「读数怎么算的」被问到时才有用)。title 走全局断供管道
+                       (ui_feedback.js 落 DOM 即迁成 data-aq-tip, 原生 title 断供), 两处同源
+                       取自 qbCurSummaryHint 单点。 -->
+                  <span :title="qbCurSummaryHint">上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
+                  <span :title="qbCurSummaryHint">下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
                 </template>
-                <!-- 种子「流量」页签的档位(13)+纵轴控件组(门见上注); 排在「下载累计」之后、hint 之前 -->
+                <!-- 种子「流量」页签的档位(13)+纵轴控件组(门见上注); 排在「下载累计」之后 -->
                 <div v-if="qbCurScope === 'torrent'" class="qb-statctl">
                   <div class="qb-tabs">
                     <button v-for="w in qbWindowNames" :key="w"
@@ -201,7 +206,6 @@
                     <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
                   </div>
                 </div>
-                <span v-if="qbCurSummary" class="hist-hint">{{ qbCurSummaryHint }}</span>
               </div>
               <!-- S1: 图后宿主(变体 14 解读栏 / 15 自适应条落点) -->
               <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>
