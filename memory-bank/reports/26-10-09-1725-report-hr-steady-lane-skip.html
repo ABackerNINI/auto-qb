@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 稳态期跳过 B/C 档取数可行性分析 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="hr-steady-throttle">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-09-1725">
+<meta name="doc-updated" content="26-10-09-1725">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-09-1725-hr-steady-lane-skip.md,memory-bank/tasks/26-10-09-backend-hr-steady-lane-skip.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 68ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.no { background: #2a1a1a; color: var(--no); border-color: #4d2f2f; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .ok { color: var(--ok); }
+  .gap { color: var(--warn); }
+  .no { color: var(--no); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.stop { border-left-color: var(--no); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 84ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s01"><span class="no">01</span>结论速览</a>
+    <a href="#s02"><span class="no">02</span>背景: 「稳态」在代码里是什么</a>
+    <a href="#s03"><span class="no">03</span>B/C 档被谁消费</a>
+    <a href="#s04"><span class="no">04</span>稳态下逐项推演</a>
+    <a href="#s05"><span class="no">05</span>判定回归: 超额种子迁移失明</a>
+    <a href="#s06"><span class="no">06</span>结构性副作用与口径冲突</a>
+    <a href="#s07"><span class="no">07</span>收益量化</a>
+    <a href="#s08"><span class="no">08</span>更安全的替代路径</a>
+    <a href="#s09"><span class="no">09</span>未决问题 / 待确认</a>
+    <a href="#s10"><span class="no">10</span>证据附录</a>
+    <div class="toc-foot">
+      报告工位 · 出厂即冻结<br>
+      修复取舍走 issue / 计划工位
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 可行性分析报告</div>
+    <h1>HR 稳态期跳过 B/C 档取数可行性分析</h1>
+    <p class="lede">动议: 「稳态时 B/C 页是否不用访问, 只访问 A 页」。取证结论: <b>技术上可做, 但收益极小 (每站每天省 2 个请求) 却换来一处真实的判定回归 + 两处结构性副作用, 且与 v3「每波自证覆盖」前提冲突 —— 不建议按「稳态 ⇒ 只看 A」直接实施</b>。取证报告 26-10-03-1505 §13.2 其实已预先裁定过该方向:「若要再省页数需改覆盖语义, 不建议捆绑」。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-09-1725-report-hr-steady-lane-skip</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-09 17:25</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ 7f263d62</div></div>
+      <div class="item"><div class="k">性质</div><div class="v"><span class="badge">证据快照 · 出厂即冻结</span></div></div>
+    </div>
+  </header>
+
+  <section id="s01">
+    <h2><span class="no">01</span>结论速览</h2>
+    <table>
+      <tr><th>问题</th><th>结论</th><th>判据</th></tr>
+      <tr>
+        <td><b>能不能做</b></td>
+        <td>能做 —— 改动面也不大 (跳过档位 = 从 <code>_run_pages</code> 的轮转集合里去掉 B/C)。</td>
+        <td>见 <a href="#s02">§02</a> <code>FETCH_LANES</code> 单一来源</td>
+      </tr>
+      <tr>
+        <td><b>该不该做</b></td>
+        <td class="no"><b>不建议</b>。三处代价 vs 每天 2 个请求的收益, 不成比例。</td>
+        <td>见 <a href="#s05">§05</a> / <a href="#s06">§06</a> / <a href="#s07">§07</a></td>
+      </tr>
+      <tr>
+        <td><b>最硬的反对理由</b></td>
+        <td><b>超额种子 (做种 ≥3× 要求) 的 A→B/C 迁移会失明</b> —— 这类种子被排除出对象集, 于是「本地种子还在 A 考察中」时系统仍判稳态; 它转档只能靠 B/C 页发现, 只看 A 会让判定卡在旧「受管束」。</td>
+        <td>见 <a href="#s05">§05</a> <code>service.py:1428</code> 超额线 + <code>resolve.py</code> 行 1</td>
+      </tr>
+      <tr>
+        <td><b>次硬的理由</b></td>
+        <td>全档覆盖证明被硬关 (观察期出口 / 批量签发 / 终态退役), 且「稳态」的定义并不蕴含「没有本地种子在 A」。</td>
+        <td>见 <a href="#s04">§04</a> / <a href="#s06">§06</a></td>
+      </tr>
+      <tr>
+        <td><b>若真要省请求</b></td>
+        <td>走已落地的<b>页头 H&amp;R 计数</b>: C 计数=0 时<b>有据地</b>跳过 C (而非盲跳); 或把「稳态期 B/C 各限 1 页」显式化。</td>
+        <td>见 <a href="#s08">§08</a></td>
+      </tr>
+    </table>
+    <div class="callout stop">
+      <b>一句话</b>: A 档确实是<b>新增义务的唯一入口</b>, 所以「只看 A」在直觉上很顺; 但 B/C 档在 v3 里不是「补充信息」, 而是<b>覆盖证明的一部分</b>与<b>超额种子转档的唯一见证</b> —— 砍掉它省的是页数, 动的是判定完备性的地基。
+    </div>
+  </section>
+
+  <section id="s02">
+    <h2><span class="no">02</span>背景: 「稳态」在代码里是什么</h2>
+    <p>先消除一处口径歧义 —— <b>「稳态」不蕴含「本地没有 HR 义务对象」, 它只蕴含「对账对象集为空」</b>。两者在多数时候重合, 但差额正是本报告的关键 (§05)。</p>
+    <pre><code># hr/service.py:503-504 (波前现算, 每次 poll 一次)
+steady   = anchors_known and not objects        # anchors_known: 锚点采集成功(失败不算稳态)
+interval = site_conf.idle_refresh_interval if steady else site_conf.refresh_interval</code></pre>
+    <p>三个必须记住的既有事实:</p>
+    <ul>
+      <li><b>稳态只改间隔, 不改行为</b>: 默认 <code>idle_refresh_interval = 24H</code>, 常态 <code>refresh_interval</code> (生产 5H)。<b>波照开、页照翻</b> —— 取证报告 26-10-03-1505 §13.2 原文:「降频省的是波次, 不是单波页数」。<b>不跳波</b>是本报告动议要动的那条口径。</li>
+      <li><b>档位集合是单点常量</b>: <code>model.py:35</code> <code>FETCH_LANES = (A, B, C)</code>; <code>D</code> 已免罪不翻 (<code>TERMINAL_LANES = (B, C, D)</code>, <code>model.py:37</code>)。A=考察中 / B=已达标 / C=未达标 / D=已免罪。</li>
+      <li><b>「空对象集 → 每档 1 页」的轻量波已被否决</b> (v3 审计 26-09-29-0404 §13.1, 用户定稿): 现行 accepted behavior 是空对象集仍按三停翻条件 / 末页 / 单波页数上限扫。生产日志里「一簇 3 请求」只是停翻条件② (连续 5 行 remain==0) 恰好命中 (报告 26-10-08-1235 §05), 不是设计上的「每档必 1 页」。</li>
+    </ul>
+    <div class="callout warn">
+      <b>动议的隐含前提不成立</b>: 「稳态 ⇒ 本地没有义务 ⇒ 只有新增考察中需要看 ⇒ 只看 A」。第 1 步就漏了 —— 对象集为空 ≠ 本地无种子在 A (见 §05)。所以「只看 A」不是「保守的省页」, 而是<b>在一个不成立的稳态语义上加了一个盲区</b>。
+    </div>
+  </section>
+
+  <section id="s03">
+    <h2><span class="no">03</span>B/C 档被谁消费 (逐条核到代码)</h2>
+    <p>B/C 页在取数链里有两类用途: ①<b>命中</b> —— 行匹配到本地种子, 给出终态结论; ②<b>覆盖证明</b> —— 证明「这些位置我扫过了」, 是缺席式放行 (未列出 / 观察期出口) 的前提。五处消费点:</p>
+    <table>
+      <tr><th>消费点</th><th>位置 (符号)</th><th>依赖形态</th></tr>
+      <tr>
+        <td>命中 B/C → 终态放行 (判定表行 2)</td>
+        <td class="num">service.py:697 <code>_run_pages</code> → <code>resolve.py</code> 行 2 (221-227)</td>
+        <td>只依赖「有没有抓到该行」</td>
+      </tr>
+      <tr>
+        <td>终态条目退役 + 落放行记录</td>
+        <td class="num">service.py:1292 <code>_freeze_terminal</code> (1299-1300)</td>
+        <td>要求<b>该条目所属档</b> <code>st.ok</code></td>
+      </tr>
+      <tr>
+        <td>A 档失踪观察期出口</td>
+        <td class="num">service.py:1322 <code>_advance_observation</code> → 1578 <code>_position_covered</code></td>
+        <td><b>硬遍历 <code>FETCH_LANES</code></b> (1586-1589), 任一档不 ok 即 False</td>
+      </tr>
+      <tr>
+        <td>批量「未列出」签发</td>
+        <td class="num">service.py:1366 <code>_sign_releases</code> → 1595 <code>_absence_proven_all</code> (1603-1606)</td>
+        <td>同上; 且 <code>releases_enabled</code> (1200-1203) 要求<b>全档 <code>st.ok</code></b></td>
+      </tr>
+      <tr>
+        <td>流转守恒 0.7 (防伪)</td>
+        <td class="num">service.py:1353 <code>_retention_check</code></td>
+        <td>用 A/B/C 三档的 <code>wave.seen</code></td>
+      </tr>
+    </table>
+    <p class="hint">位置为取证当时 (2026-10-09 17:25 @ 7f263d62); 行号漂移常态, 复验按符号名 + grep 定位。</p>
+  </section>
+
+  <section id="s04">
+    <h2><span class="no">04</span>稳态下逐项推演</h2>
+    <p>稳态的定义 <code>objects = 未对账 ∪ 考察中 = ∅</code> 直接给出两个空集: <code>unmatched = ∅</code> ∧ <code>observing = ∅</code>。据此逐条推演「跳过 B/C」的后果:</p>
+    <table>
+      <tr><th>消费点</th><th>稳态下跳过 B/C 的后果</th><th>定性</th></tr>
+      <tr>
+        <td>批量「未列出」签发</td>
+        <td><code>unmatched</code> 为空 ⇒ <code>_sign_releases</code> 本来就没目标可签。跳过 B/C 使其闸门 <code>releases_enabled</code> 恒 False, 但稳态下<b>无实际工作量损失</b>。</td>
+        <td class="ok">无害 (但见 §06)</td>
+      </tr>
+      <tr>
+        <td>A 档观察期出口 / 终态退役</td>
+        <td>不会产生误判 (方向保守), 但条目<b>永不退役</b>: <code>_freeze_terminal</code> 拿不到该档 <code>st.ok</code>; <code>_position_covered</code> 恒 False。后果 = <code>data.index</code> 与判定视图 <code>lane_terminal</code> 持续膨胀 (活跃条目不受 <code>_prune_index</code> 30 天淘汰), 且终态放行记录不再落盘。</td>
+        <td class="gap">慢性副作用</td>
+      </tr>
+      <tr>
+        <td>流转守恒 0.7</td>
+        <td>刚进稳态那一波, <code>prev_a_tids</code> 里迁到 B/C 的行在本波 <code>wave.seen</code> 中看不到 ⇒ 留存率假跌 ⇒ 误报「流转守恒不达标」。</td>
+        <td class="gap">误报 (只冻签发闸门)</td>
+      </tr>
+      <tr>
+        <td>命中 B/C → 终态放行</td>
+        <td>多数场景无影响 (见下 §05 的论证: 非超额种子的 A→B/C 迁移发生在「非稳态期」, 那时本就会全档抓)。<b>唯一例外是超额种子</b>。</td>
+        <td class="no">见 §05</td>
+      </tr>
+    </table>
+    <h3>为什么「多数场景无影响」是成立的</h3>
+    <p>若一颗本地种子没有放行记录、也不在超额线上, 而它的索引条目还停在 A 档 —— 它就在对象集里 ⇒ <b>不可能是稳态</b> ⇒ 那一波会全档抓, B/C 的转档被捕获。所以「跳过 B/C」只在<b>对象集为空</b>时才生效, 而此时普通种子要么已终态、要么已放行, 不存在待发现的转档。</p>
+    <div class="callout">
+      这条论证把问题收敛到<b>一个精确的例外类</b> —— 对象集为空、但本地仍有种子在站点 A 档。下一节证明这个类非空且真实。
+    </div>
+  </section>
+
+  <section id="s05">
+    <h2><span class="no">05</span>判定回归: 超额种子 A→B/C 迁移失明</h2>
+    <p>对象集的排除链里有一档是<b>超额线</b>:</p>
+    <pre><code># hr/service.py:1428-1429 (_build_objects)
+if required_seeding_time &gt; 0 and anchor.seeding_time &gt;= SEED_EXEMPT_RATIO * required_seeding_time:
+    continue   # 超额线(3×): 免除在线对账义务; 被动命中考察中仍转管束(网站绝对权威)
+# SEED_EXEMPT_RATIO = 3.0 (service.py:108); CarPT 实测 3 × 36H = 108H ≈ 4.5 天</code></pre>
+    <p>超额种子的语义是「本地做种已远超要求, 不必再为它翻页对账」。但它<b>没有被判定侧放弃</b> —— 注释写明「被动命中考察中仍转管束 (网站绝对权威)」。于是出现这样的状态:</p>
+    <ol>
+      <li>一颗本地种子做种 ≥3× 要求, 被排除出对象集; 它在站点上<b>仍在 A 档 (考察中)</b>。</li>
+      <li>⇒ 对象集可以为空 ⇒ <code>steady = True</code> ⇒ 间隔降到 24H。<b>此时本地明明有一颗种子在 A</b>, 但系统判稳态。</li>
+      <li>该种子转档 (A→B 已达标 / A→C 未达标) 后, <b>只能靠抓 B/C 页看到</b> —— 它在 A 页消失了。</li>
+      <li>若只看 A: 它在 A 页消失, 于是<b>不在 <code>wave.seen</code></b>; 观察期出口又因 <code>_position_covered</code> 恒 False 被冻住 ⇒ 索引条目<b>永远停在旧 A 档</b>。</li>
+      <li>判定侧 <code>build_site_view</code> (resolve.py:413-423) 把「活跃 A 档条目」放进 <code>lane_a</code>; <code>resolve_identity</code> 行 1 (216-219) 优先命中 <code>lane_a</code> ⇒ 该种子被<b>恒判「受管束」</b>, 而站点其实早已给出终态结论。</li>
+    </ol>
+    <div class="callout stop">
+      <b>性质</b>: 这是<b>结论错, 不是方向错</b> —— 它不会漏 HR (方向保守, 偏向多管), 但会让一颗早已达标/未达标的种子在界面与规则里长期显示「考察中·受管束」。而且<b>不能自愈</b>: 稳态下对象集恒空 ⇒ 永远不抓 B/C ⇒ 永远看不到转档。唯一出路是等下一次「对象集非空」的波 (新下载 / 新义务) 顺带全档抓一次 —— 对一个长期稳态的账号, 这可能是几天到几周。
+    </div>
+    <p><b>反证 —— 现行实现是正确的</b>: 现行每波全档抓, B 页命中 ⇒ <code>_process_rows</code> 记命中 ⇒ <code>_record_hit</code> 撤销/落放行 ⇒ 条目经 <code>_merge_seen</code> 更新为 B 档。所以本动议是<b>从正确行为退化为错判</b>, 不是「补齐一处缺口」。</p>
+    <div class="callout warn">
+      <b>根因不在 B/C 页, 而在稳态定义</b>: 「对象集为空」被当作「本地无义务」。超额线是一个<b>取数侧</b>的豁免 (省对账), 却被当成了<b>判定侧</b>的豁免。若要动这个方向, 先修的是这条语义 (§08 口径①②), 而不是把 B/C 页砍掉。
+    </div>
+  </section>
+
+  <section id="s06">
+    <h2><span class="no">06</span>结构性副作用与口径冲突</h2>
+    <h3>6.1 「全档」是写死的假设, 不是可配的旋钮</h3>
+    <p><code>_position_covered</code> 与 <code>_absence_proven_all</code> 都<b>硬遍历 <code>FETCH_LANES</code></b> 并要求每档 <code>st.ok</code>:</p>
+    <pre><code># hr/service.py:1586-1589 (_position_covered)
+for lane in FETCH_LANES:
+    st = lane_states.get(lane)
+    if st is None or not st.ok:
+        return False          # ← 少抓一档 = 覆盖证明整体失效
+
+# hr/service.py:1200-1203 (releases_enabled)
+releases_enabled = (
+    all(st.ok for st in lane_states.values()) and ...   # ← 同上
+)</code></pre>
+    <p>这不是疏漏, 是 v3 的设计前提: <b>缺席式结论要求「该位置确实被扫过」, 而位置空间是跨档的</b> (一颗种子可能在任何档)。跳过 B/C 会把这条证明整体关掉 —— 稳态下恰好没工作量, 但一旦未来需要批量签发 (例如放宽超额线、或稳态定义收紧后对象集重新非空), 就会变成「有需求但闸门恒关」。</p>
+    <h3>6.2 与 v3 基石「每波自证覆盖」直接冲突</h3>
+    <p>v3 波次引擎的原文口径 (service.py 模块 docstring):「每波都从第 1 页开始、以覆盖全部对象为目标 —— 清单是动的, 任何『从断点继续』『凭上波已见过而跳过』都在赌上波的覆盖假设仍然成立」。<b>「稳态期不查终态档」正是它要防的那类假设</b> —— 它赌「B/C 档不会有新的本地种子出现」, 而 §05 证明这个赌注会输。</p>
+    <h3>6.3 上游已裁定过这个方向</h3>
+    <div class="callout">
+      取证报告 <a href="26-10-03-1505-report-hr-fetch-verify-forensics.html">26-10-03-1505</a> §13.2 原文:「<b>稳态期单波开销不变</b>: 对象集空不跳波, 每波仍 A/B/C 各至少 1 页 (3 请求) —— 降频省的是波次, 不是单波页数; <b>若要再省页数需改覆盖语义</b> (v3 设计前提「每波自证覆盖」), <b>不建议捆绑</b>。」本报告的结论与该裁定一致, 并补上了「为什么不能只砍 B/C」的代码级论证。
+    </div>
+  </section>
+
+  <section id="s07">
+    <h2><span class="no">07</span>收益量化</h2>
+    <table>
+      <tr><th>口径</th><th>现状</th><th>跳过 B/C 后</th><th>变化</th></tr>
+      <tr>
+        <td>稳态单波请求 (每站)</td>
+        <td class="num">A/B/C 各 ≥1 页 ≈ 3</td>
+        <td class="num">A 档 ≈ 1</td>
+        <td class="num">−2 / 波</td>
+      </tr>
+      <tr>
+        <td>稳态请求量 (两站合计, 1 波/天)</td>
+        <td class="num">≈ 6 / 天</td>
+        <td class="num">≈ 2 / 天</td>
+        <td class="num">−4 / 天</td>
+      </tr>
+      <tr>
+        <td>占站点日额 (240/站)</td>
+        <td class="num">&lt; 1.5%</td>
+        <td class="num">&lt; 0.5%</td>
+        <td class="num">零头</td>
+      </tr>
+    </table>
+    <p>量化依据: 稳态 1 波/天 (idle_refresh_interval = 24H) × 两站; 请求量口径沿用取证报告 26-10-03-1505 §13.5 (稳态两站 ≈ 6 请求/天) 与报告 26-10-08-1235 §05 (一簇 3 请求 = 一波)。</p>
+    <div class="callout warn">
+      <b>结论</b>: 收益是「每天 4 个请求」量级 —— 站点日额余量本就极大 (240), 而代价是 §05 的错判 + §06 的三处结构副作用。<b>投入产出严重不成比例</b>。若目标是「再降请求量」, 应优先看别处 (见 §08)。
+    </div>
+    <p class="hint">注: 稳态下 A 档本身的翻页深度未在本次核实范围内 —— 若 §13.1 的「空对象集仍扫描」导致 A 档翻多页, 则瓶颈在 A 档的停翻条件, 而不在 B/C。这条列为 §09 待确认项。</p>
+  </section>
+
+  <section id="s08">
+    <h2><span class="no">08</span>更安全的替代路径</h2>
+    <p>若目标确实是「稳态期再少发几个请求」, 有三条<b>不破坏判定完备性</b>的路, 按推荐度排序:</p>
+    <table>
+      <tr><th>#</th><th>做法</th><th>为什么安全</th><th>代价</th></tr>
+      <tr>
+        <td class="num">A</td>
+        <td><b>用页头 H&amp;R 计数做「有据跳档」</b>: 摘要形站点 (BTSchool / CarPT) 第 1 页即带全档计数 (计划 26-09-29-2036 已落地)。C 计数 = 0 ⇒ 有证据地跳过 C。</td>
+        <td>不是「猜稳态」, 而是<b>站点自报的空集</b> —— 与既有「计数对平 / 零行自证」同源, 语义可证伪。</td>
+        <td>B 档在这两站<b>无声明</b> (BTSchool/CarPT 计数只含 A/C), 跳不了 B; 需另立计划。</td>
+      </tr>
+      <tr>
+        <td class="num">B</td>
+        <td><b>把「稳态期 B/C 各限 1 页」显式化</b>: 给空对象集的 B/C 档设 <code>max_pages=1</code>, 而非依赖停翻条件②偶然命中。</td>
+        <td>只改翻页深度上限, <b>不动「抓不抓」</b> —— 覆盖证明仍成立 (第 1 页照抓), §05 的转档仍可见。</td>
+        <td>收益有限 (现状已近似); 需要新常量或配置, 与「程序能定的绝不配置」权衡。</td>
+      </tr>
+      <tr>
+        <td class="num">C</td>
+        <td><b>收口既有 issue <code>26-10-05-0922</code></b>: <code>SiteHrCheckConfig.fetchable</code> 全仓零消费方, 「listing=none 不取数」未被取数侧强制。</td>
+        <td>修的是真实缺口 (配置声明与行为脱钩), 方向明确。</td>
+        <td>与「省页数」不是同一目标, 但同属取数侧开销治理。</td>
+      </tr>
+    </table>
+    <h3>若仍要推进「稳态只看 A」</h3>
+    <p>必须作为<b>独立计划</b>, 且先定两条口径 (否则等于在错语义上打补丁):</p>
+    <ol>
+      <li><b>稳态定义是否收紧</b>为「无本地种子在 A 档」(即把超额种子也纳入对象集 / 纳入稳态判定), 使「稳态」真正等价于「本地无义务」。<span class="gap">注意: 这会让超额种子重新参与对账, 反而增加请求 —— 与动议目标相反。</span></li>
+      <li><b><code>_position_covered</code> / <code>_absence_proven_all</code> 的「全档」假设</b>是否改为「参与档」—— 并论证缺席证明在缺档时仍然成立 (这是全报告最难的一步)。</li>
+      <li>补守阵: 「超额种子 A→B 迁移」必须被钉死 (当前无此用例, 因为现行实现天然正确)。</li>
+    </ol>
+  </section>
+
+  <section id="s09">
+    <h2><span class="no">09</span>未决问题 / 待确认</h2>
+    <ul>
+      <li><b>超额种子在 A 档的真实占比</b>: §05 的回归类是否在真机上常见? 需以站点文件 <code>&lt;data_dir&gt;/hr/&lt;site&gt;.json</code> 的 <code>index</code> 佐证 —— 看有多少活跃 A 档条目对应的锚点 <code>seeding_time ≥ 3×required</code>。若几乎为零, 该回归的<b>频度</b>低 (但性质仍是错判)。</li>
+      <li><b>空对象集下 A 档实际翻几页</b>: §13.1 裁定「仍按三停条件/末页扫描」, 生产却只见 3 请求/波。需真机日志确认 A 档的翻页深度 —— 若 A 档也常翻多页, 那真正值得优化的落点是 A 档停翻条件 (与 B/C 无关)。</li>
+      <li><b>是否入池</b>: 本报告只做可行性论证 (证据快照); 「要不要做 / 什么时候做」应在 issue 工位裁决 —— 未拍板前不入池。</li>
+      <li><b>同族缺口</b>: 「超额线」是取数侧豁免被当判定侧豁免的一例。是否存在别的「取数侧豁免 ↔ 判定侧权威」语义错位 (如 HR 排除在两侧的口径)? 值得在设计阶段一并列举 (参考报告 26-10-08-1235 同类问题的处置)。</li>
+    </ul>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>证据附录</h2>
+    <h3>代码引用 (基线 develop @ 7f263d62, 2026-10-09)</h3>
+    <table>
+      <tr><th>文件 : 行</th><th>内容</th></tr>
+      <tr><td class="num">hr/service.py:503-504</td><td><code>steady = anchors_known and not objects</code> / <code>interval</code> 动态取值 (稳态只改间隔)</td></tr>
+      <tr><td class="num">hr/model.py:35,37</td><td><code>FETCH_LANES = (A,B,C)</code> / <code>TERMINAL_LANES = (B,C,D)</code></td></tr>
+      <tr><td class="num">hr/service.py:600,712</td><td><code>lane_states</code> 初始化与 <code>_run_pages</code> 轮转集合 —— 均取自 <code>FETCH_LANES</code> (跳档的唯一改动点)</td></tr>
+      <tr><td class="num">hr/service.py:1200-1203</td><td><code>releases_enabled</code>: <code>all(st.ok ...)</code> —— 全档有效是批量签发前提</td></tr>
+      <tr><td class="num">hr/service.py:1292-1300</td><td><code>_freeze_terminal</code>: 条目所属档 <code>st.ok</code> 是退役/落放行记录的前提</td></tr>
+      <tr><td class="num">hr/service.py:1322</td><td><code>_advance_observation</code>: A 档失踪观察期推进</td></tr>
+      <tr><td class="num">hr/service.py:1353</td><td><code>_retention_check</code>: 流转守恒 0.7 (用 A/B/C seen)</td></tr>
+      <tr><td class="num">hr/service.py:1366</td><td><code>_sign_releases</code>: 批量「未列出」签发入口</td></tr>
+      <tr><td class="num">hr/service.py:1388,1428-1429</td><td><code>_build_objects</code> 排除链: <code>anchor.seeding_time &gt;= 3×required ⇒ continue</code> (超额线, §05 根因)</td></tr>
+      <tr><td class="num">hr/service.py:108</td><td><code>SEED_EXEMPT_RATIO = 3.0</code></td></tr>
+      <tr><td class="num">hr/service.py:1578-1589</td><td><code>_position_covered</code>: 硬遍历 <code>FETCH_LANES</code>, 任一档不 ok 即 False</td></tr>
+      <tr><td class="num">hr/service.py:1595-1606</td><td><code>_absence_proven_all</code>: 同上</td></tr>
+      <tr><td class="num">hr/resolve.py:216-227</td><td><code>resolve_identity</code> 行 1 (lane_a → 受管束) 优先于行 2 (lane_terminal → 放行)</td></tr>
+      <tr><td class="num">hr/resolve.py:413-423</td><td><code>build_site_view</code>: 活跃 A 档条目 → <code>lane_a</code> (旧 A 条目即陈旧管束来源)</td></tr>
+    </table>
+    <h3>相关制品</h3>
+    <ul>
+      <li>取证报告 <a href="26-10-03-1505-report-hr-fetch-verify-forensics.html">26-10-03-1505</a> §13.2 (稳态单波开销 / 「不建议捆绑」裁定) · §13.5 (收益量化口径)</li>
+      <li>v3 审计 <a href="26-09-29-0404-report-hr-verify-v3-audit.html">26-09-29-0404</a> §13.1 (轻量波已否决) · §13.4 (观察期设计依据)</li>
+      <li>计划 <a href="../plans/26-10-05-0555-plan-hr-steady-throttle.html">26-10-05-0555</a> (稳态降频实施; §2.7 不变项含「对象集空不跳波」)</li>
+      <li>计划 <a href="../plans/26-09-29-2036-plan-hr-counter-integration.html">26-09-29-2036</a> (页头 H&amp;R 计数集成 —— §08 路径 A 的现成机制)</li>
+      <li>报告 <a href="26-10-08-1235-report-hr-exclude-steady.html">26-10-08-1235</a> (§05 一簇 3 请求 = 一波的现场对账)</li>
+      <li>v3 重建计划 <a href="../plans/26-09-28-1932-plan-hr-verify-rebuild.html">26-09-28-1932</a> (「每波自证覆盖」设计前提)</li>
+    </ul>
+  </section>
+
+  <footer>
+    报告工位快照 · 出厂即冻结 (取证正文不动; 后续取舍走 issue / 计划工位) ·
+    memory-bank/reports/26-10-09-1725-report-hr-steady-lane-skip.html · 专题 hr-steady-throttle
+  </footer>
+
+</div>
+</body>
+</html>

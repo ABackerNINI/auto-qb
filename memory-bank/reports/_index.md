@@ -17,6 +17,8 @@
 
 ## Done
 
+- [26-10-09-1731] [WEBUI 快捷键「改为切换语义」适配性分析 · 哪些适合按一下开/再按一下关 · auto-qb](26-10-09-1731-report-webui-shortcuts-toggle-suitability.html) — `webui-keyboard-shortcuts`
+- [26-10-09-1725] [HR 稳态期跳过 B/C 档取数可行性分析 · auto-qb](26-10-09-1725-report-hr-steady-lane-skip.html) — `hr-steady-throttle`
 - [26-10-09-1529] [本地通道传输安全调研: WebUI 与 HR 取数通道的加密方案对比 · auto-qb](26-10-09-1529-report-transport-encryption-feasibility.html) — `transport-encryption`
 - [26-10-08-1235] [HR 排除未落到取数侧 · 稳态降频失效取证 · auto-qb](26-10-08-1235-report-hr-exclude-steady.html) — `hr-steady-throttle`
 - [26-10-08-0231] [变异测试框架调研与适配性报告 · Python + WEB UI 语言面 · auto-qb](26-10-08-0231-report-mutation-testing-feasibility.html) — `mutation-testing-feasibility`
