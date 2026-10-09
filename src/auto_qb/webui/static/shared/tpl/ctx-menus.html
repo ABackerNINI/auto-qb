@@ -181,6 +181,32 @@
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
+            <!-- CTX-03 组级动作补齐(2026-10-09 用户报「单组右键菜单缺选项」): 单组菜单此前只有
+                 开始/暂停/汇报 + 打开文件夹/流量图/删除, 而多选批量菜单还有 重新校验/跳检/限速/
+                 移动/标签分类/导出 —— 同一批动作在「右键 1 组」与「选 2 组」两条路径上项集不一致。
+                 现按批量菜单同序同图标补齐, 目标 = 该组全部成员(menu.key 组级解析); 下游复用多选
+                 同一套链路(recheckGroup / skipCheckGroup / editLimitsGroup / editMoveGroup /
+                 metaGroup / exportGroup, 见 commands.js), 不为组级另开旁路。跳检同样吃
+                 flags.skip_check_menu 门控(v-if 对 undefined 静默隐藏 = fail-closed)。 -->
+            <div class="ctx-item" @click="recheckGroup()">
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+            </div>
+            <div class="ctx-item" v-if="flags.skip_check_menu" @click="skipCheckGroup()">
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>跳检…
+            </div>
+            <div class="ctx-item" @click="editLimitsGroup()">
+              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
+            </div>
+            <div class="ctx-item" @click="editMoveGroup()">
+              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
+            </div>
+            <div class="ctx-item" @click="metaGroup()">
+              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
+            </div>
+            <div class="ctx-item" @click="exportGroup()">
+              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
+            </div>
+            <div class="ctx-sep"></div>
             <!-- FX-14: 组内成员 save_path 天然一致(组 key 首元即规范化 save_path) -->
             <div class="ctx-item" @click="openTargetPath('group', menu.key)">
               <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹

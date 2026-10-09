@@ -625,6 +625,62 @@ window.AQB_COMMANDS = {
       this.menu.visible = false;
       return this.openMetaDialog(null);
     },
+    /* ---------------- CTX-03 单组右键菜单: 组级入口(与多选批量菜单同项集) ----------------
+     * 症状(2026-10-09 用户报「单组右键菜单缺选项」): 单组菜单只有 开始/暂停/汇报 + 打开文件夹/
+     * 流量图/删除, 而多选批量菜单还有 重新校验/跳检/限速/移动/标签分类/导出 —— 同一批动作在
+     * 「右键 1 组」与「选 2 组」两条路径上项集不一致。这里补齐单组路径: 目标 = **该组全部成员**
+     * (_groupTargets, 与 _bulkTargets 同形状的 {groupKeys, memberHashes}), 下游整份复用多选链路
+     * (bulk 合单 / _skipCheckDialog / _exportHashes / openMetaDialog), 不为组级另开旁路 ——
+     * 与 CTX-03「多选升级为批量菜单」同一"目标集合单点"口径。
+     * 虚拟行(未归组命中种子)无真实组 key, 组级动作对其无意义 -> 返回 null(调用方直接收菜单返回)。
+     * 注: 目标取成员 hash 而非组 key, 是为了让各对话框/回执里的目标数直接等于**种子数**
+     * (组键在 _bulkTargets 口径里算 1 个目标, 单组场景下会显示成"1 个目标"而误导)。 */
+    _groupTargets() {
+      const k = this.menu.key;
+      if (!k) return null;
+      const g = this._findGroup(k);
+      if (!g || g.virtual) return null;
+      return { groupKeys: [], memberHashes: this.memberHashesOf(g.members) };
+    },
+    /* 组级重新校验: 与批量菜单「重新校验」同 helper 同确认文案(what=整组), 走 _actCore 统一出口 */
+    async recheckGroup() {
+      const t = this._groupTargets();
+      this.menu.visible = false;
+      if (!t || !t.memberHashes.length) return;
+      const ok = await this._recheckConfirm("整组");
+      if (!ok) return;
+      return this._actCore("recheck", { keys: [], hashes: t.memberHashes, what: "整组" });
+    },
+    /* 组级限速/移动/跳检: 直接交多选同款对话框(scope="该组的" 让文案落到组语义), 目标锁定该组 */
+    editLimitsGroup() {
+      const t = this._groupTargets();
+      if (!t) { this.menu.visible = false; return; }
+      return this.editLimitsMulti(t, "该组的");
+    },
+    editMoveGroup() {
+      const t = this._groupTargets();
+      if (!t) { this.menu.visible = false; return; }
+      return this.editMoveMulti(t, "该组的");
+    },
+    skipCheckGroup() {
+      const t = this._groupTargets();
+      if (!t) { this.menu.visible = false; return; }
+      return this.skipCheckMulti(t);
+    },
+    /* 组级标签/分类: 目标 = 该组(openMetaDialog 收 {groupKeys, memberHashes} 形状, 与键盘路径同款) */
+    metaGroup() {
+      const t = this._groupTargets();
+      this.menu.visible = false;
+      if (!t) return;
+      return this.openMetaDialog(t);
+    },
+    /* 组级导出: 展开成员 hash 后走与多选导出同一套逐个下载(_exportHashes), 不进 bulk 合单 */
+    async exportGroup() {
+      const t = this._groupTargets();
+      this.menu.visible = false;
+      if (!t || !t.memberHashes.length) return;
+      return this._exportHashes(t.memberHashes);
+    },
     async actTorrent(action) {
       this.menu.visible = false;
       if (!this.menu.hash) return;
@@ -706,12 +762,17 @@ window.AQB_COMMANDS = {
     /* 多选导出(计划 26-10-02-1955 W4, 决策点 D1 拍板 = 前端循环逐个触发下载, 零后端改动):
      * hashes 取 selHashSet 全量展开(组选中展开为成员 hash 闭包) —— 不用 _bulkTargets().memberHashes,
      * 后者把真实组的成员留在 keys 通道, 导出会漏掉整组成员(selHashSet 是选中集合的权威派生, 见
-     * selection.js)。逐 hash **串行**走单选同一套裸 fetch + Blob 口径(禁并发扇出; 文件名沿用单
-     * hash 端点的 Content-Disposition 现状); 单个失败不中断整体, 结束 toast 汇总 成功 N / 失败 K。
-     * 401 中途整段终止: _logout 已清会话与 toast, 继续循环只会再发空头。 */
+     * selection.js)。逐 hash 串行下载核心抽在 _exportHashes(单组导出 exportGroup 共用)。 */
     async exportMulti() {
       const hashes = [...this.selHashSet];
       if (!hashes.length) return;
+      return this._exportHashes(hashes);
+    },
+    /* 导出下载批处理核心(多选 exportMulti / 单组 exportGroup 共用): 逐 hash **串行**走单选同一套
+     * 裸 fetch + Blob 口径(禁并发扇出; 文件名沿用单 hash 端点的 Content-Disposition 现状);
+     * 单个失败不中断整体, 结束 toast 汇总 成功 N / 失败 K。401 中途整段终止: _logout 已清会话与
+     * toast, 继续循环只会再发空头。 */
+    async _exportHashes(hashes) {
       const tid = this.toast(`开始导出 ${hashes.length} 个 .torrent…`, "busy", 0, { sticky: true });
       const failed = [];
       let ok = 0;

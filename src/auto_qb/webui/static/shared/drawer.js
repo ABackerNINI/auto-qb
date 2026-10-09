@@ -424,14 +424,16 @@ window.AQB_DRAWER = {
      * 提交走 /api/torrents/bulk 合单通道(一次 POST + 一个聚合回执), 不做乐观贴片 —— 限速/移动
      * 的行值由 QbApi 写方法同步 store 快照 + bulk_torrents 的 RESYNC 补刷新落行(与标签/分类
      * 的 _metaBulk 同一观感)。 */
-    /* 批量限速…: 双输入各自独立, 留空 = 该方向不提交(D3 拍板), KiB/s ×1024 与单选同口径 */
-    async editLimitsMulti() {
+    /* 批量限速…: 双输入各自独立, 留空 = 该方向不提交(D3 拍板), KiB/s ×1024 与单选同口径。
+     * targets / scope 可覆盖: 单组右键(editLimitsGroup)传该组成员 + scope="该组的";
+     * 缺省 = 多选右键(选中集合 + "选中的")。 */
+    async editLimitsMulti(targets = null, scope = "选中的") {
       this.menu.visible = false;
-      const targets = this._bulkTargets();
+      targets = targets || this._bulkTargets();
       if (!targets.groupKeys.length && !targets.memberHashes.length) return;
       const res = await this._openModal({
         title: "批量限速",
-        body: `为选中的 ${targets.groupKeys.length + targets.memberHashes.length} 个目标设置上传/下载速度上限(KiB/s)。留空 = 该项保持不变, 填 0 = 不限速。`,
+        body: `为${scope} ${targets.groupKeys.length + targets.memberHashes.length} 个目标设置上传/下载速度上限(KiB/s)。留空 = 该项保持不变, 填 0 = 不限速。`,
         fields: [
           { key: "up", label: "上传上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
           { key: "dl", label: "下载上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
@@ -455,14 +457,15 @@ window.AQB_DRAWER = {
       }
       await this._bulkEditPost(targets, "limits", body, "批量限速");
     },
-    /* 批量移动…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N */
-    async editMoveMulti() {
+    /* 批量移动…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N。
+     * targets / scope 可覆盖: 单组右键(editMoveGroup)传该组成员 + scope="该组的"。 */
+    async editMoveMulti(targets = null, scope = "选中的") {
       this.menu.visible = false;
-      const targets = this._bulkTargets();
+      targets = targets || this._bulkTargets();
       const n = targets.groupKeys.length + targets.memberHashes.length;
       if (!n) return;
       const raw = await this.promptDialog("批量移动", "", {
-        body: `将选中的 ${n} 个目标的文件移动到新路径。注意: 移动后相关种子将离开当前辅种组。`,
+        body: `将${scope} ${n} 个目标的文件移动到新路径。注意: 移动后相关种子将离开当前辅种组。`,
         placeholder: "D:\\downloads\\target", okText: "下一步",
       });
       if (raw === null) return;
@@ -476,12 +479,13 @@ window.AQB_DRAWER = {
       await this._bulkEditPost(targets, "location", { location }, "批量移动");
     },
     /* 批量跳检…(计划 26-10-02-1955 W3; S4 起确认框升级为预检对话框 26-10-05-0314):
-     * 目标集合 _bulkTargets, 组键就地展开成成员 hash 后交 _skipCheckDialog(预检展示与
+     * 目标集合缺省 = _bulkTargets(多选右键), 单组右键(skipCheckGroup)传该组成员;
+     * 组键就地展开成成员 hash 后交 _skipCheckDialog(预检展示与
      * ok 子集的单一口径); 强制路径仍按 keys+hashes 双通道整份提交(与历史载荷同形 + force 键)。
      * 菜单显隐由 flags.skip_check_menu 门控(W1), 后端 bulk 分派处同样 fail-closed。 */
-    async skipCheckMulti() {
+    async skipCheckMulti(targets = null) {
       this.menu.visible = false;
-      const targets = this._bulkTargets();
+      targets = targets || this._bulkTargets();
       const n = targets.groupKeys.length + targets.memberHashes.length;
       if (!n) return;
       const hashes = [...targets.memberHashes];

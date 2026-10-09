@@ -62,7 +62,7 @@ config:
         port: 8080               # 监听端口
         token: ""                # 访问密钥; 留空首启随机生成 -> <data_dir>/web.token
         skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
-        # skip_check_menu: false  # 右键菜单显示跳检(单选与多选): 默认关闭 = 菜单不显示且 web 端点拒绝; 规则源跳检不受影响
+        # skip_check_menu: false  # 右键菜单显示跳检(单选/单组/多选): 默认关闭 = 菜单不显示且 web 端点拒绝; 规则源跳检不受影响
 
     # 主动通知: WARNING 及以上日志推送系统原生通知(默认关闭)
     # ❗容器部署无效: 无桌面会话, 且 slim 镜像没有 notify-send —— send() 只返回 False, 静默无通知

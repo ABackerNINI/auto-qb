@@ -22,10 +22,11 @@
 - test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815 + 详情面板二轮清理) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」/ drawer_tpl 二轮: 05 图例五色与条级顺序说明·06 等待响应与仅看异常说明·07-09 求和口径/客户端 Top 复述/qB flags 前缀/会话累计/对端整行复述·10-11 展开折叠全部目录与全选与目录文件数·12 优先级跳过与占比细条·13-15 kpis 容器派生口径与窗口累计复述)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
-- test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
+- test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti, 后者带可选 targets 供单组入口 skipCheckGroup 复用)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
 - test_skip_check_dialog_verdict_render: 跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4) —— _skipPrecheck 状态机分支(预检失败降级=启用普通确认且无强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认钮文案「跳检 N 个可跳检的」+ 强制钮「强制跳检全部」/ force-only=确认保持禁用 / 全 ok=只启用确认)+ ok 子集派生(cls==="ok" 过滤)+ 确认路径送 ok 子集而强制路径送全量+force(_skipExec 单发 body 仅 force 时带 force 键, 批量确认只走 hashes 通道)+ 降级文案「后端闸门仍会在执行时拦截」+ _skipVerdictRows 计数行与分组上限截断(slice(0,5)+等 X 个), 任一分支被改写即红
 - test_modal_identity_stamp_landing_guard: 模态身份戳落袋守卫单点(F1-01, issue 26-10-06-0028) —— ui_feedback.js _openModal 每框发自增 mid + _modalIsCurrent 单点(visible + mid 双比对) + drawer.js _skipCheckDialog 把 this.modal.mid 交棒 _skipPrecheck 且落袋守卫为 seq + 身份戳双条件(取消跳检框后开无关 modal, 只有身份戳拦得住迟到回执)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 单组 v-else 分支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量分支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
@@ -1989,8 +1990,10 @@ def test_skip_check_dialog_precheck_wired():
         "第三钮(extraText 通道)被改写 —— S4 强制钮必须复用既有 danger-solid 破坏性分支"
 
     # ③ 两入口均交棒 _skipCheckDialog, 且方法体内不再自带 _openModal(确认框被取代)
+    #    skipCheckMulti 现带可选 targets(单组右键 skipCheckGroup 复用同一状态机, 2026-10-09),
+    #    故签名按"可选参"收 —— 只钉"入口存在且交棒"这一语义, 不钉参数表。
     for name in ("skipCheckTorrent", "skipCheckMulti"):
-        m = re.search(rf"async {name}\(\)\s*\{{(.*?)\n    \}},", drawer, re.S)
+        m = re.search(rf"async {name}\([^)]*\)\s*\{{(.*?)\n    \}},", drawer, re.S)
         assert m, f"drawer.js 找不到 {name}(改名或挪走了? 同步本守阵)"
         assert "this._skipCheckDialog(" in m.group(1), \
             f"{name} 未走 _skipCheckDialog —— 预检对话框两入口共用的状态机被绕开(计划 26-10-05-0314 S4)"
@@ -2203,6 +2206,53 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             f"口径漂移(虚拟行/组展开/失效目标跳过), CTX-03"
         )
         assert "this.menu.visible = false" in body, f"{name} 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)"
+
+
+def test_frontend_ctx_menu_group_actions_parity():
+    """单组右键菜单与多选批量菜单「动作项集一致」守阵(2026-10-09 用户报「单组右键菜单缺选项」)
+
+    单组菜单(menu.key 的 v-else 分支)此前只有 开始/暂停/汇报 + 打开文件夹/流量图/删除, 而多选
+    批量菜单(menu.multi 分支)还有 重新校验/跳检/限速/移动/标签分类/导出 —— 同一批动作在
+    「右键 1 组」与「选 2 组」两条路径上项集不一致(用户报「单组右键菜单缺选项, 参考选中多组」)。
+    本守阵钉三处(任一处漂移即静默少一个入口, pytest/node --check 都看不见):
+      1. 单组分支必须含六个组级入口(与批量分支同项集; 组菜单独有的 打开文件夹/流量图 除外);
+      2. 跳检项必须吃 flags.skip_check_menu 门控(fail-closed, 与单选/批量两处同口径);
+      3. 六个入口方法必须在 commands.js/drawer.js 落地且复用多选同一套下游链路
+         (recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog /
+          exportGroup->_exportHashes), 不为组级另开旁路。
+    """
+    tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html"), encoding="utf-8").read()
+    # v-else 精确匹配单组分支(v-else-if 带 -if 后缀, 不会误命中)
+    m = re.search(r"<template v-else>(.*?)</template>", tpl, re.S)
+    assert m, "ctx-menus.html 找不到单组菜单 v-else 分支(结构被改? 同步本守阵)"
+    group = m.group(1)
+
+    # 1. 六个组级入口(与多选批量菜单同项集)
+    for token in (
+        "recheckGroup()", "skipCheckGroup()", "editLimitsGroup()", "editMoveGroup()", "metaGroup()", "exportGroup()"
+    ):
+        assert token in group, (f"单组右键菜单缺少 {token} —— 与多选批量菜单项集不一致(2026-10-09 报障: 单组缺选项)")
+
+    # 2. 跳检项 fail-closed 门控(v-if 对 undefined 静默隐藏; 与单选/批量两处同口径)
+    assert re.search(r'v-if="flags\.skip_check_menu"[^>]*@click="skipCheckGroup\(\)"',
+                     group), ("单组菜单「跳检…」项缺 flags.skip_check_menu 门控 —— 关态仍渲染 = fail-closed 破口")
+
+    # 3. 六个入口方法落地 + 复用多选同一套下游链路
+    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    drw = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    assert "_groupTargets()" in cmd, "commands.js 缺 _groupTargets(组级目标集合单点)"
+    assert "this.memberHashesOf(g.members)" in cmd, (
+        "commands.js _groupTargets 未走 memberHashesOf 单点(成员对象直接取 .hash 会被静态守阵拦下)"
+    )
+    for name in ("recheckGroup", "editLimitsGroup", "editMoveGroup", "skipCheckGroup", "metaGroup", "exportGroup"):
+        assert re.search(rf"\n    (?:async )?{name}\(", cmd), f"commands.js 缺组级入口 {name}"
+    for delegate in (
+        "this.editLimitsMulti(", "this.editMoveMulti(", "this.skipCheckMulti(", "this.openMetaDialog(",
+        "this._exportHashes(", "this._actCore("
+    ):
+        assert delegate in cmd, f"commands.js 组级入口未复用 {delegate}(另开了旁路?)"
+    for sig in ("editLimitsMulti(targets = null", "editMoveMulti(targets = null", "skipCheckMulti(targets = null"):
+        assert sig in drw, f"drawer.js 缺 {sig}...) 可选 targets 形参 —— 组级入口无法复用同一状态机"
 
 
 def test_frontend_meta_dialog_paired():
