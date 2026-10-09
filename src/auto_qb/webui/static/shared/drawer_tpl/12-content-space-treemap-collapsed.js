@@ -201,7 +201,7 @@
   function squarify(items, x, y, w, h) {
     const out = [];
     const list = items.filter((i) => i.a > 0).slice().sort((p, q) => q.a - p.a);
-    let X = x, Y = y, W = w, H = h;
+    let X = x, Y = y, W = w, RH = h; /* 局部 h 改名 RH: H 是 helpers 单点, 遮蔽禁令见守阵(26-10-09 用户报障) */
     const worst = (row, side) => {
       let s = 0;
       for (const n of row) s += n.a;
@@ -215,8 +215,8 @@
       return m;
     };
     while (list.length) {
-      const vert = W >= H; /* 短边 = H 时沿左缘竖排 */
-      const side = vert ? H : W;
+      const vert = W >= RH; /* 短边 = RH 时沿左缘竖排 */
+      const side = vert ? RH : W;
       const row = [list.shift()];
       while (list.length) {
         const w1 = worst(row, side);
@@ -235,14 +235,14 @@
         }
         X += th; W -= th;
       } else {
-        if (th > H) th = H;
+        if (th > RH) th = RH;
         let cx = X;
         for (const n of row) {
           const lw = n.a / th;
           out.push({ ref: n.ref, x: cx, y: Y, w: lw, h: th });
           cx += lw;
         }
-        Y += th; H -= th;
+        Y += th; RH -= th;
       }
     }
     return out;
@@ -291,12 +291,16 @@
     mapEl.style.height = availH + "px";
     const listEl = host.querySelector(".dt12-list");
     if (listEl) listEl.style.maxHeight = availH + "px";
-    const W = mapEl.clientWidth, H = mapEl.clientHeight;
-    if (W < 60 || H < 60) return; /* 收起态 body 不可见: 展开时 RO 补建 */
+    /* !局部名不得用 T/R/H —— 三名是变体文件头的 helpers 单点, 函数内再声明即遮蔽成
+     * 数字/字符串, 之后任何 H.xxx / T` / R() 调用全炸(26-10-09 用户报障根因: 本函数曾把
+     * 局部 H 声明成 clientHeight, H.rowFocusKey 对数字取属性抛 TypeError -> 核心层回落
+     * classic, 树图永远画不出来)。守阵全禁, 局部名一律另起(本函数用 mapW/mapH)。 */
+    const mapW = mapEl.clientWidth, mapH = mapEl.clientHeight;
+    if (mapW < 60 || mapH < 60) return; /* 收起态 body 不可见: 展开时 RO 补建 */
     const tree = ui.tree;
     const total = tree.size || 1;
     const parts = [];
-    for (const g of scaleRects(tree.children, 0, 0, W, H)) {
+    for (const g of scaleRects(tree.children, 0, 0, mapW, mapH)) {
       const dir = g.ref;
       const hasHeader = dir.dir && g.w >= 110 && g.h >= 44;
       const inner = hasHeader

@@ -10,6 +10,7 @@
 - test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
+- test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
 - test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽 width:240px 且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住), 与 .dt-select 同柱单点在核心 00-core 注入层(三皮肤共享)
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
@@ -1264,6 +1265,51 @@ def test_drawer_tpl_content_row_keyboard_roving():
     t12 = open(os.path.join(vdir, "12-content-space-treemap-collapsed.js"), encoding="utf-8").read()
     assert "focusin: onOver" in t12 and "focusout: onOut" in t12, \
         "drawer_tpl/12: 树图块焦点互联未复用悬停 onOver/onOut(键盘选中块时体积榜无联动高亮)"
+
+
+def test_drawer_tpl_variant_no_singleton_shadowing():
+    """变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」)。
+
+    根因: dt12 layoutMap 写了 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把
+    文件头 helpers 单点(`const H = reg.helpers`)遮蔽成数字, 同函数尾 `H.rowFocusKey(...)` 对数字
+    取属性抛 TypeError —— 树图块只在 layoutMap 里绘制, 抛错 = 树图区永远空白; 经 _dtRender catch
+    走「渲染抛错回落 classic」分支后选择被复位并落盘, 用户选择跨会话静默丢失。
+    守阵不变式: 变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件
+    (单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)
+    与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)。
+    """
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    if not os.path.isdir(vdir):
+        return
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        # 先摘掉单点声明行(整行, 含行内尾注), 只对文件里真实声明了单点的名做禁令
+        singletons = set()
+        kept = []
+        for line in text.splitlines():
+            m = re.match(r"^\s*const\s+([TRH])\s*=\s*reg\.(?:dtHtml|dtRaw|helpers)\b", line)
+            if m:
+                singletons.add(m.group(1))
+                continue  # 整行摘除: 单点声明自身形如 "const H =", 不摘会自证违例
+            kept.append(line)
+        if not singletons:
+            continue
+        body = "\n".join(kept)
+        for n in sorted(singletons):
+            # 形态一: 声明语句(至分号/行尾)内出现 "<n> =" —— 覆盖 const H = x 与
+            # let a = 1, H = 2(本案根因形态); [^;\n]* 把搜索域限制在单条声明语句内
+            m = re.search(r"\b(?:const|let|var)\b[^;\n]*\b%s\s*=" % n, body)
+            assert not m, (
+                f"drawer_tpl/{name}: 单点 {n} 被局部声明遮蔽({m.group(0).strip()!r}) —— "
+                f"遮蔽后 {n}.xxx / T` / R() 对非对象取属性抛 TypeError, 变体渲染回落 classic; "
+                f"局部名一律改名(如 mapH/RH)"
+            )
+            # 形态二: 解构声明绑定名(const { H } = ... / const { a, H: y } = ...);
+            # const { num } = H 是"读单点"不是"绑同名", 不得误伤
+            m = re.search(r"\b(?:const|let|var)\s*\{[^};\n]*\b%s\b\s*[}:,]" % n, body)
+            assert not m, f"drawer_tpl/{name}: 单点 {n} 被解构声明遮蔽(const {{ {n} }} = ...)"
 
 
 def test_drawer_tpl_cross_seed_fold_and_select_width():
