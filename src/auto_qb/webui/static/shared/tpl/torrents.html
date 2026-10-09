@@ -89,9 +89,12 @@
                   {{ cellRatio(m) }}
                   <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                 </div>
-                <div v-else-if="col.key === 'save_path'" class="g-save-path f-cell"
-                     :class="{ 'f-on': isFilterOn('pathFilter', m.save_path) }" :title="m.save_path"
-                     @click.stop="filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</div>
+                <!-- 保存路径: 强调框(f-on)必须挂**文字**包裹层 .sp-body —— 挂单元格 div 会随列宽
+                     (行是 grid, 单元格被拉满列宽), 与 .m-dur 的 .dur-body 同一教训 -->
+                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">
+                  <span class="sp-body f-cell" :class="{ 'f-on': isFilterOn('pathFilter', m.save_path) }"
+                        @click.stop="filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</span>
+                </div>
                 <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
               </template>
             </div>

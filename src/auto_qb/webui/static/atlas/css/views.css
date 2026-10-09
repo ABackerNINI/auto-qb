@@ -395,6 +395,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 
+/* 路径筛选强调框(f-on 的 inset 描边)必须落 .sp-body 文字包裹层 —— 落单元格 div 上框随列宽
+ * (行是 grid, 单元格被拉满列宽; 2026-10-09 报障), 与 .m-dur 的 .dur-body 同一教训。
+ * 省略号职责随框走: 超长路径铺满整列并省略, 不破列; 短路径时框贴文字。 */
+.g-save-path .sp-body { display: inline-block; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
 /* 视图切换/信息栏模式切换入场: 与 page-in 同族(只在元素重建时播一次, 数据轮询不重播) */
 .group-head, .group-table { animation: page-in .22s var(--ease-out); }
 

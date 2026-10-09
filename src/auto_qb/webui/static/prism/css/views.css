@@ -605,6 +605,12 @@
 .g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 
+/* 路径筛选强调框(f-on 的 inset 描边)必须落 .sp-body 文字包裹层 —— 落单元格 div 上框随列宽
+ * (行是 grid, 单元格被拉满列宽; 2026-10-09 报障), 与 .m-dur 的 .dur-body 同一教训。
+ * 省略号职责随框走: 超长路径铺满整列并省略, 不破列; 短路径时框贴文字。 */
+.g-save-path .sp-body { display: inline-block; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
 /* ==================== 种子详情面板(方案A 底部停靠, 计划 26-10-03-0917 W1) ====================
  * R1B 右缘抽屉(全屏遮罩 + blur)重设计为停靠面板: 全宽贴列表容器、无遮罩、无 backdrop-filter
  * —— 列表整幅可见(用户硬约束), PERF-01 全站归零在此收尾。布局/落点/层级口径见

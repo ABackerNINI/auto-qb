@@ -103,9 +103,11 @@
                 <!-- 最近活动 = 组内最新(0 = 全组从未 -> 空白); 与"添加于"同族时间列 -->
                 <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(g.last_activity, 'last_activity')">{{ cellTime(g.last_activity, 'last_activity') }}</div>
                 <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
-                <div v-else-if="col.key === 'save_path'" class="g-save-path f-cell"
-                     :class="{ 'f-on': isFilterOn('pathFilter', g.save_path) }" :title="g.save_path"
-                     @click.stop="filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</div>
+                <!-- 强调框(f-on)挂文字包裹层 .sp-body(同种子页口径): 挂单元格 div 会随列宽(行是 grid) -->
+                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">
+                  <span class="sp-body f-cell" :class="{ 'f-on': isFilterOn('pathFilter', g.save_path) }"
+                        @click.stop="filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
+                </div>
                 <!-- 可选列(hide 默认隐藏): 表头名称与种子页同名列对齐 -->
                 <!-- 剩余量 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
                 <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ fmtSizeOrDash(g.amount_left) }}</div>
