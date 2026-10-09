@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-dialog-keyboard-accessibility">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-09-2136">
+<meta name="doc-updated" content="26-10-09-2136">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:30px;line-height:1.28;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:82ch;margin:0 0 20px}
+  .lede strong{color:var(--ink)}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:13.5px;font-weight:600;margin:20px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  kbd{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:5px;padding:1px 7px;color:var(--ink);white-space:nowrap}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre code{background:none;border:none;padding:0}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;font-weight:500}
+  th,td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  td{color:var(--ink-2)} td strong{color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:rgba(255,255,255,.02)}
+
+  .yes{color:var(--good);font-family:var(--mono);font-size:12px;white-space:nowrap;font-weight:600}
+  .no{color:var(--bad);font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .cond{color:var(--warn);font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .key{font-family:var(--mono);font-size:12px;color:var(--ink);white-space:nowrap}
+  .id{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+
+  .callout{border:1px solid var(--line-2);border-left:3px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0;padding:14px 18px;margin:18px 0}
+  .callout p{margin:6px 0}
+  .callout.red{border-left-color:var(--bad)}
+  .callout.green{border-left-color:var(--good)}
+  .callout .cap{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+
+  .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;border:1px solid var(--line-2);border-radius:999px;padding:1px 9px;color:var(--ink-2);margin-right:6px}
+  .badge.yes{border-color:var(--good);color:var(--good)}
+  .badge.cond{border-color:var(--warn);color:var(--warn)}
+  .badge.no{border-color:var(--bad);color:var(--bad)}
+
+  .foot{border-top:1px solid var(--line);margin-top:60px;padding:22px 0 40px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+  .grp{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:26px 0 4px}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}.toc{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">auto-qb · WEBUI · 调研报告 · 26-10-09-2136</p>
+  <h1>WEBUI 弹窗键盘操作调研<br>焦点管理的成熟方案与适配路线</h1>
+  <p class="lede">命题：「弹窗内无法通过键盘操作 —— 添加种子/删除种子，无法通过键盘选择保存位置等，先调研成熟的解决方案」。本文先对现状做代码级取证（哪些弹窗哪些键位<strong>其实已经能用</strong>、缺的到底是哪一层），再对照业界成熟方案（WAI-ARIA APG、原生 <code>&lt;dialog&gt;</code>、<code>inert</code>、focus-trap、Vue headless 生态）给出取舍与分阶段路线。<strong>本轮零代码改动</strong>，实施需另行立项。</p>
+  <p class="meta"><b>类型</b> report（快照，出厂即冻结）&nbsp;·&nbsp;<b>状态</b> Done&nbsp;·&nbsp;<b>专题</b> webui-dialog-keyboard-accessibility&nbsp;·&nbsp;<b>范围</b> <code>src/auto_qb/webui/static/shared/</code>（atlas / prism / console 三皮肤共用）</p>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s1"><span class="no">01</span>结论先行</a>
+  <a href="#s2"><span class="no">02</span>现状取证</a>
+  <a href="#s23"><span class="no">2.3</span>键盘就绪矩阵</a>
+  <a href="#s24"><span class="no">2.4</span>缺口 G1–G6</a>
+  <a href="#s3"><span class="no">03</span>成熟方案调研</a>
+  <a href="#s33"><span class="no">3.3</span>focus-trap 库</a>
+  <a href="#s35"><span class="no">3.5</span>Combobox 模式</a>
+  <a href="#s4"><span class="no">04</span>方案对比与取舍</a>
+  <a href="#s5"><span class="no">05</span>推荐路线 P0–P2</a>
+  <a href="#s6"><span class="no">06</span>风险与回归面</a>
+</nav>
+
+<main>
+
+<!-- ============================================================ 01 -->
+<h2 id="s1">01 · 结论先行</h2>
+<p><strong>「弹窗内无法用键盘」不是单一缺陷，而是缺了一整层「焦点管理」骨架</strong>；而骨架之下，行为层的键位处理其实已做了大半 —— 确认框/输入框有初始焦点与 Enter/Esc、添加窗三个下拉有 ↑↓/Enter/Esc、Esc 退栈链覆盖全部浮层。用户感知「完全没法用」，主要来自三个结构性缺口：</p>
+<div class="callout">
+  <p class="cap">三个根因（覆盖 90% 的体感）</p>
+  <p><strong>R1 · 打开时焦点不进窗</strong>：除通用确认框外，绝大多数弹窗（添加种子、目录浏览器、统计、管理、标签分类）打开后焦点仍留在触发处/文档头，<kbd>Tab</kbd> 要从页面顶部开始数几十个停靠点才摸到弹窗 —— 体感即「键盘进不去」。</p>
+  <p><strong>R2 · 无焦点陷阱（focus trap）</strong>：<kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> 会跑出弹窗遍历遮罩背后的整页（背景 DOM 无 <code>inert</code>），在窗内操作到一半焦点就「消失」了 —— 体感即「键盘留不住」。</p>
+  <p><strong>R3 · 目录浏览器（选择位置面板）纯鼠标</strong>：目录行没有方向键光标、打开无初始焦点、无「进入/上一级」键位 —— 这是「无法通过键盘选择保存位置」的直接对应物。</p>
+</div>
+<p><strong>业界成熟方案高度收敛</strong>，权威口径就是 <a href="https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/">WAI-ARIA APG Dialog (Modal) Pattern</a>：打开即焦点入窗 → Tab 在窗内循环 → Esc 关闭 → 关闭后焦点归还触发者；工程实现上则有三条成熟路线（自研 trap / focus-trap 库 / 原生 <code>&lt;dialog&gt;</code>+<code>inert</code>）。结合本项目「Vue 3 全局构建 + 静态文件无构建链 + 三皮肤共用自绘遮罩体系」的约束，<strong>推荐自研一个轻量焦点管理单点（P0），复用仓内已有的 roving tabindex 成法键盘化目录浏览器（P1），再补 combobox 的 ARIA 语义与危险确认框的初始焦点口径（P2）</strong>；不建议现在迁移原生 <code>&lt;dialog&gt;</code> 或引入 headless 组件库（详见 §04/§05）。</p>
+
+<!-- ============================================================ 02 -->
+<h2 id="s2">02 · 现状取证</h2>
+
+<h3>2.1 弹窗体系结构</h3>
+<p>WEBUI 是单 Vue 3 实例（<code>vendor/vue.global.prod.js</code>），弹窗不是组件而是 <strong>v-if 浮层模板 + mixin 方法</strong>：<code>app.js</code> 按域拆出 <code>dialogs.js</code> / <code>add_torrent.js</code> / <code>delete_flow.js</code> / <code>ui_feedback.js</code> 等片段注入同一实例，模板集中在 <code>shared/tpl/</code>（三皮肤共用），遮罩为自绘 <code>.modal-mask</code>（带「拖选文字不误关」的 <code>maskDownSelf</code> 守卫）。没有任何 portal/焦点管理设施 —— 这层从未建过。</p>
+<p>两条全局键盘链已经存在且质量很高：<strong>Esc 逐层退栈链</strong>（<code>lifecycle.js:89-128</code>，顺序严格对齐视觉层叠，注释 WARN「新增浮层两处同步 escBusy」）与<strong>快捷键引擎</strong>（<code>shortcuts.js</code>，59 条注册表，浮层打开时经 <code>_kbOverlayBusy</code>（<code>shortcuts.js:435-440</code>）屏蔽列表键位、模态层内只放行模态键位）。</p>
+
+<h3>2.2 已具备的键盘能力（与「完全不能键控」的体感相反）</h3>
+<table>
+  <thead><tr><th>能力</th><th>证据</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><strong>确认框/输入框初始焦点</strong></td><td class="id">ui_feedback.js:182-196</td><td><code>_openModal</code> 开框 <code>$nextTick</code> 聚焦第一个输入框（全选）或「确定」钮；确认类 Enter 即确认（按钮原生行为）。</td></tr>
+    <tr><td><strong>modal 内 Enter 提交 / Esc 取消</strong></td><td class="id">popovers.html:154,159 · lifecycle.js:93</td><td>输入框 <code>@keyup.enter="resolveModal(true)"</code>；Esc 归退栈链 <code>resolveModal(false)</code>。</td></tr>
+    <tr><td><strong>添加窗三下拉键盘导航</strong></td><td class="id">add_torrent.js:271-294,447-465</td><td>保存路径/分类/标签：<kbd>↑</kbd><kbd>↓</kbd> 循环高亮 + <kbd>Enter</kbd> 选中 + <kbd>Esc</kbd> 只收层不关窗；还修过悬停接管选错项的竞态（issue 26-09-29-2142）。路径框聚焦即开层（FX-17），Tab 进框面板自动展开。</td></tr>
+    <tr><td><strong>Esc 逐层退栈</strong></td><td class="id">lifecycle.js:89-128 · add_torrent.js:156-171</td><td>添加窗内 Esc 先收目录浏览器→下拉→位置面板→再关窗；退栈顺序与视觉层叠严格一致。</td></tr>
+    <tr><td><strong>浮层期列表键位屏蔽</strong></td><td class="id">shortcuts.js:435-440,465-473</td><td>弹窗开着时 <kbd>Delete</kbd> 等列表键位失效（不误删）、模态层内只响应模态键位 —— 方向正确。</td></tr>
+    <tr><td><strong>仓内 roving tabindex 成法</strong></td><td class="id">drawer_templates.js:155-200</td><td>详情面板文件列表已有 <code>roving()/rowMove()/rowRestore()</code> 一整套（方向键移焦/重建回焦），是目录浏览器键盘化的现成参照。</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s23">2.3 逐弹窗键盘就绪矩阵</h3>
+<table>
+  <thead><tr><th>弹窗</th><th>初始焦点</th><th>Tab 窗内循环</th><th>Enter/Esc</th><th>列表光标</th><th>关闭归还焦点</th></tr></thead>
+  <tbody>
+    <tr><td>通用确认框/输入框（删除确认、重命名、批量移动…）</td><td class="yes">有</td><td class="no">无</td><td class="yes">有</td><td>—</td><td class="no">无</td></tr>
+    <tr><td>添加种子</td><td class="no">无</td><td class="no">无</td><td class="cond">下拉内才有</td><td class="no">无</td><td class="no">无</td></tr>
+    <tr><td>目录浏览器（选择位置…）</td><td class="no">无</td><td class="cond">仅靠行是 button</td><td class="no">仅新建框</td><td class="no">无</td><td class="no">无</td></tr>
+    <tr><td>统计面板 / 历史流量</td><td class="no">无</td><td class="no">无</td><td class="cond">仅 Esc</td><td>—</td><td class="no">无</td></tr>
+    <tr><td>分类/标签管理</td><td class="no">无</td><td class="no">无</td><td class="cond">新建框 Enter</td><td class="no">无</td><td class="no">无</td></tr>
+    <tr><td>标签/分类编辑（meta）</td><td class="no">无</td><td class="no">无</td><td class="cond">分类下拉同款键位</td><td class="no">无</td><td class="no">无</td></tr>
+    <tr><td>限速浮层</td><td class="yes">有（方向输入框全选）</td><td class="no">无</td><td class="cond">仅 Esc</td><td>—</td><td class="no">无</td></tr>
+  </tbody>
+</table>
+<p>矩阵解释了报障的确切形状：<strong>键盘触发路径上的删除确认框其实可用</strong>（列表按 <kbd>Delete</kbd> → 确认框聚焦「删除」钮 → <kbd>Enter</kbd> 即删）；而<strong>鼠标路径打开的添加种子窗、以及一切要进「选择位置」面板的场景，键盘链从第一步就断了</strong> —— 焦点不进窗，Tab 又留不住，目录列表更是无键位。半可用与全不可用混在同一批弹窗里，体感收敛成「弹窗没法用键盘」。</p>
+
+<h3 id="s24">2.4 缺口清单 G1–G6</h3>
+<table>
+  <thead><tr><th>#</th><th>缺口</th><th>证据（文件:行）</th><th>影响</th></tr></thead>
+  <tbody>
+    <tr><td class="id">G1</td><td><strong>打开时焦点不进窗</strong>（除 modal/限速外）</td><td class="id">add_torrent.js:72-92 <code>openAddTorrent</code> 无 focus；add_torrent.js:299-308 <code>openDirBrowse</code> 同</td><td>键盘链第一步即断（R1）</td></tr>
+    <tr><td class="id">G2</td><td><strong>无焦点陷阱、背景无 inert</strong></td><td class="id">各 <code>.modal-mask</code> 模板（dialogs-mgr.html:5,201; popovers.html:114 等）</td><td>Tab 跑出弹窗遍历整页（R2）；<code>aria-modal="true"</code> 已挂但 APG 明确：<strong>只有应用代码真正把窗外的交互也挡住时才允许标 modal</strong>，现状属于「标了 modal 却不做模态」的反模式</td></tr>
+    <tr><td class="id">G3</td><td><strong>关闭后焦点不归还</strong></td><td class="id">各 close* 方法（closeAddTorrent/closeDirBrowse/closeStats…）</td><td>关窗后键盘用户被甩回文档头，连续操作（加种子→继续浏览）断链</td></tr>
+    <tr><td class="id">G4</td><td><strong>目录浏览器纯鼠标</strong></td><td class="id">dialogs-mgr.html:220-224 目录行只有 @click；无方向键/初始焦点/「上一级」键位</td><td>「键盘选保存位置」的直接缺口（R3）；rows 是 <code>&lt;button&gt;</code> 尚可 Tab 强行遍历，但顺序长且无光标语义</td></tr>
+    <tr><td class="id">G5</td><td><strong>combobox 无 ARIA 语义</strong></td><td class="id">dialogs-mgr.html:106-116 候选行 div 无 role=option、输入框无 role=combobox/aria-expanded/aria-activedescendant</td><td>行为层已达标，读屏与语义层缺失；不影响纯键盘用户，影响 AT 用户与工程一致性</td></tr>
+    <tr><td class="id">G6</td><td><strong>危险确认框初始焦点落在「删除」钮</strong></td><td class="id">ui_feedback.js:194-195 无差别聚焦 <code>modalOk</code></td><td>与 APG「不可逆操作宜聚焦<strong>最不具破坏性</strong>的动作」相悖 —— 删除框内 Enter 直接触发不可逆删除，误触成本高</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ 03 -->
+<h2 id="s3">03 · 成熟方案调研</h2>
+
+<h3>3.1 WAI-ARIA APG Dialog (Modal) Pattern —— 权威规范基线</h3>
+<p><a href="https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/">APG Dialog (Modal)</a> 是所有实现的对照原点，键位契约只有四条：</p>
+<ul>
+  <li><strong>打开即焦点入窗</strong>：默认落第一个可聚焦控件；内容复杂时在开头放 <code>tabindex="-1"</code> 静态元素先读后操作；<strong>含不可逆操作（如删除数据）时宜聚焦最不具破坏性的动作</strong>；以信息/继续为主的框可聚焦最常用按钮（OK）。</li>
+  <li><strong>Tab / Shift+Tab 在窗内循环</strong>（首尾相接），「modal dialog 的窗序必须自包含」。</li>
+  <li><strong>Esc 关闭</strong>。</li>
+  <li><strong>关闭后焦点归还触发者</strong>（触发者已不存在时给工作流上的合理落点）。</li>
+</ul>
+<p>ARIA 侧两条强约束：<code>role="dialog"</code> + <code>aria-modal="true"</code> + 可见标题（labelledby/label）——本项目模板已挂前两条（如 popovers.html:116）；但 APG 注释明确警告：<strong>对 AT 标 modal 而对普通用户不做模态（背景可 Tab/可点）是禁止的反模式</strong>——这正是本项目现状（G2），修 inert 与修语义必须一起做。另外推荐 Tab 序里常驻一个可见关闭控件（关闭钮/取消钮），本项目每个弹窗都有，达标。</p>
+
+<h3>3.2 原生 <code>&lt;dialog&gt;</code> + <code>showModal()</code> —— 平台内建方案</h3>
+<p>HTML 标准元素，<a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement">Baseline 已全线可用</a>（Chrome 37+ / Firefox 98+ / Safari 15.4+，2022 年起）。<code>showModal()</code> 一次性给出：<strong>浏览器级焦点陷阱</strong>（Tab 出不了窗）、<strong>页面其余内容自动 inert</strong>（规范行为，无需手挂）、<strong>初始焦点规则</strong>（<code>autofocus</code> 属性优先，否则首个可聚焦控件）、<strong>Esc 触发 <code>cancel</code> → <code>close</code> 事件</strong>、<code>::backdrop</code> 遮罩伪元素。MDN 对 <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/inert"><code>inert</code> 属性</a>的定位同样是「模态 UI 的标准构件」，2023-04 起 Baseline。</p>
+<p><strong>与本项目的冲突点</strong>（迁移成本为什么高）：</p>
+<ul>
+  <li>自绘遮罩承担了行为：<code>maskDownSelf</code>/<code>maskCloseIfArmed</code> 的「拖选文字不误关」判据挂在 <code>.modal-mask</code> 的 mousedown/mouseup 上，<code>&lt;dialog&gt;</code> 的 backdrop 点击模型不同，需重建；</li>
+  <li>三皮肤的 <code>.modal-mask</code> 过渡动画（pop/leave transition）与 <code>::backdrop</code> 样式体系是两套写法，全部弹窗模板 + 三份 CSS 要动；</li>
+  <li>Esc 的 <code>cancel</code> 事件与现有「Esc 退栈链 + escBusy 名单两处同步」的既有约定要重新对齐（退栈链是本 UI 的成熟资产，不能被绕开）。</li>
+</ul>
+<p>定位：<strong>方向正确、但属于「重写承载层」的方案</strong>，不是本项目当下性价比最高的路径。</p>
+
+<h3 id="s33">3.3 focus-trap / tabbable —— 库方案的事实标准</h3>
+<p><a href="https://github.com/focus-trap/focus-trap">focus-trap</a>（依赖 tabbable）是 vanilla JS 焦点陷阱的通用事实标准（MIT、零框架依赖、UMD 构建可直接 <code>&lt;script&gt;</code> 引入，适配本项目「静态文件、无构建链」的形态）。行为面完整对应 APG：<code>initialFocus</code>（指定初始焦点，支持 selector/函数）、<code>fallbackFocus</code>（窗内无可聚焦元素时兜底）、Tab/Shift+Tab 循环、<code>returnFocusOnDeactivate</code>（归还触发者）、<code>escapeDeactivates</code>/<code>clickOutsideDeactivates</code> 开关、嵌套 trap（pause/unpause）。Vue 侧另有 <code>vue-a11y-dialog</code> 等薄封装，但本项目弹窗不是组件形态，直接用底层库或自研等价物更贴。</p>
+
+<h3>3.4 Vue headless 生态（reka-ui 等）—— 行为参照与「什么时候才值得引入」</h3>
+<p><a href="https://reka-ui.com/">reka-ui</a>（原 radix-vue，v2.8.x）是 Vue 生态最完整的 headless 无障碍组件库：Dialog/Combobox/Popover 等 40+ 原语内建 WAI-ARIA、FocusScope 焦点陷阱与 DismissableLayer 关闭语义（其 <a href="https://reka-ui.com/docs/components/combobox">Combobox 键位表</a>与 APG 一致：方向键开层/移动、Enter 选中、Esc 收层回填）。同类还有 Headless UI（Vue 版组件较少）与 Ark UI。它们的<strong>价值对本项目主要是「可抄的实现参照」</strong>：FocusScope 的 Tab 循环写法、Combobox 的 activedescendant 管理。整体引入则意味着把 v-if 浮层模板体系换成组件树 —— 与「单实例 mixin + 三皮肤共用模板」的既有架构正面冲突，<strong>不建议</strong>。</p>
+
+<h3 id="s35">3.5 APG Combobox Pattern —— 保存路径/分类/标签下拉的规范口径</h3>
+<p><a href="https://www.w3.org/WAI/ARIA/apg/patterns/combobox/">APG Combobox</a>（autocomplete list 形态）与本项目三下拉的现状逐项对表：</p>
+<table>
+  <thead><tr><th>APG 要求</th><th>项目现状</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr><td>输入框 <code>role="combobox"</code> + <code>aria-expanded</code> + <code>aria-controls</code></td><td>普通 input，无</td><td class="no">缺</td></tr>
+    <tr><td>列表 <code>role="listbox"</code>、候选项 <code>role="option"</code></td><td>div + <code>data-hi</code></td><td class="no">缺</td></tr>
+    <tr><td><kbd>↑</kbd><kbd>↓</kbd> 移动活动项、循环</td><td class="id">add_torrent.js:277-284</td><td class="yes">有</td></tr>
+    <tr><td><kbd>Enter</kbd> 选中活动项</td><td class="id">add_torrent.js:285-289</td><td class="yes">有</td></tr>
+    <tr><td><kbd>Esc</kbd> 收层（不关所属对话框，阻断冒泡）</td><td class="id">add_torrent.js:289-293</td><td class="yes">有</td></tr>
+    <tr><td>焦点模式：输入框持有焦点 + <code>aria-activedescendant</code> 指向活动项</td><td>高亮索引 <code>addCatHi</code> 直写 class，无 aria 桥</td><td class="cond">行为同型，语义缺</td></tr>
+  </tbody>
+</table>
+<p>结论：三下拉是「<strong>行为已经按 APG 做、语义没穿衣服</strong>」的典型 —— 键盘用户今天就能用（前提是焦点已经在输入框里），缺的是把 <code>data-hi</code> 高亮桥接成 <code>aria-activedescendant</code>，属于低风险补层。</p>
+
+<!-- ============================================================ 04 -->
+<h2 id="s4">04 · 方案对比与取舍</h2>
+<table>
+  <thead><tr><th>方案</th><th>焦点陷阱</th><th>初始焦点/归还</th><th>背景 inert</th><th>迁移成本</th><th>与本 UI 架构的契合</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>A · 自研焦点管理单点</strong><br><span class="id">新增 shared/ 焦点模块 + 各 open/close 接线</span></td>
+      <td class="yes">手写 Tab 循环</td><td class="yes">按弹窗配置</td><td class="yes">主内容容器挂 inert</td>
+      <td class="cond">中（一处单点 + 各弹窗 open/close 各一行）</td>
+      <td class="yes">高：与 escBusy/浮层名单同一范式，v-if 模板与三皮肤 CSS 全不动</td>
+      <td><span class="badge yes">P0 推荐</span></td>
+    </tr>
+    <tr>
+      <td><strong>B · focus-trap 库</strong><br><span class="id">UMD 引入替换手写 trap</span></td>
+      <td class="yes">库内建</td><td class="yes">initialFocus/fallback</td><td class="cond">库不管，仍需自挂</td>
+      <td class="cond">低-中（引 vendor + 包装单点）</td>
+      <td class="yes">高（零框架依赖、无构建链适配）</td>
+      <td><span class="badge cond">可并入 A</span></td>
+    </tr>
+    <tr>
+      <td><strong>C · 原生 &lt;dialog&gt;</strong><br><span class="id">承载层整体重写</span></td>
+      <td class="yes">浏览器内建</td><td class="yes">autofocus/归还需自理</td><td class="yes">showModal 自动</td>
+      <td class="no">高（全部模板 + 三皮肤 CSS + Esc 链重对齐 + 拖选误关守卫重建）</td>
+      <td class="cond">中（遮罩/动画/Esc 链三处冲突）</td>
+      <td><span class="badge no">暂不</span></td>
+    </tr>
+    <tr>
+      <td><strong>D · reka-ui 等 headless 库</strong></td>
+      <td class="yes">内建</td><td class="yes">内建</td><td class="yes">内建</td>
+      <td class="no">很高（模板体系换血）</td>
+      <td class="no">低（与 mixin + 共用模板正面冲突）</td>
+      <td><span class="badge no">不做</span></td>
+    </tr>
+  </tbody>
+</table>
+<div class="callout green">
+  <p class="cap">取舍结论</p>
+  <p><strong>走 A（自研单点）为主干</strong>：本项目的弹窗键位行为层已完成 70%，差的只是「焦点进窗 / Tab 循环 / inert 背景 / 归还」这一层薄壳，自研约百余行、与既有 Esc 退栈链和 <code>_kbOverlayBusy</code> 名单是同一套约定；trap 循环的边角（Safari Tab 偏好、动态 DOM 重扫）若不想自己养，可在 A 的接口内并入库 B（接口同形，随时可换）。C/D 的能力虽然最全，但都是拿承载层重写去换 —— 与收益不成比例。</p>
+</div>
+
+<!-- ============================================================ 05 -->
+<h2 id="s5">05 · 推荐路线（P0 → P2，实施需另立计划拍板）</h2>
+
+<h3>P0 · 焦点管理单点（治 R1/R2 + G3，覆盖全部弹窗）</h3>
+<ul>
+  <li>新增 <code>shared/focus_trap.js</code>（或并入 lifecycle）：<code>_openDialog(el, {initial, returnTo})</code> —— 记账触发者 → 焦点入窗（按弹窗配置落点）→ 窗上挂 keydown 捕获做 <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> 首尾循环 → 主内容容器挂 <code>inert</code> → 关闭时摘 inert 并归还焦点。</li>
+  <li>所有弹窗 open/close 方法接线（openAddTorrent/openDirBrowse/openStats/openMgr/openMeta/openHistory/_openModal/…）。<strong>_openModal 已有初始焦点逻辑，并入单点即可</strong>，同时顺手落实 G6：danger 确认框初始焦点改落「取消」钮（APG 对不可逆操作的明确建议，一行改动）。</li>
+  <li>初始焦点落点表：添加窗 → <code>ad-save-path</code>（最高频字段，聚焦即展开候选面板）；目录浏览器 → 面板标题或「上一级」；管理框 → 新建名输入框；统计/历史 → 关闭钮或标题（APG：内容复杂先读后操作）。</li>
+  <li>边界：<strong>无遮罩浮层（限速 speed-pop）不适用 modal trap</strong>（页面其余部分本就可操作），只做初始焦点；嵌套层（添加窗 → 目录浏览器 → 下拉）按 trap 栈 pause/unpause 处理，focus-trap 原生支持，自研版需记一个栈。</li>
+</ul>
+
+<h3>P1 · 目录浏览器键盘化（治 R3/G4）</h3>
+<ul>
+  <li>复用仓内成法 <code>drawer_templates.js:155-200</code> 的 roving tabindex 套件：目录行 <code>tabindex="-1"</code> + 锚点 0，<kbd>↑</kbd><kbd>↓</kbd> 移焦、<kbd>Enter</kbd> 进入目录、<kbd>Alt+↑</kbd>（或 <kbd>Backspace</kbd>，对齐 OS 文件选择器习惯，实施时拍板）上一级、<kbd>Enter</kbd> 于「选择该文件夹」语义不变。</li>
+  <li>打开时初始焦点落首行/锚点行；目录加载重建后按 <code>rowFocusKey/rowRestore</code> 成法回焦，避免键盘用户被甩回文档头。</li>
+  <li>收尾链：Esc 归 <code>escAddTorrent</code> 既有退栈（已支持），无需新链。</li>
+</ul>
+
+<h3>P2 · 语义与一致性收尾（G5 + 边角）</h3>
+<ul>
+  <li>三下拉 + meta 分类下拉补 ARIA 桥：<code>role="combobox"</code>/<code>aria-expanded</code>/<code>aria-controls</code>、列表 <code>role="listbox"</code>/<code>role="option"</code>、高亮索引桥 <code>aria-activedescendant</code>（行为不动，纯语义补层）。</li>
+  <li>全弹窗核对 <code>aria-labelledby</code> 指向可见标题（多数已有 <code>aria-label</code>，达标）；添加窗内补「<kbd>Enter</kbd> = 添加」主路径评估（当前仅按钮，可仿 modal 输入框 <code>@keyup.enter</code>，但需防止与候选 Enter 冲突 —— 仅在无浮层开着时生效）。</li>
+  <li>按仓库既有 WARN（dialogs.js:527、lifecycle.js:87）：本专题不改浮层名单本身，但实施时须把新焦点模块与「两处同步」约定写进坑档。</li>
+</ul>
+
+<!-- ============================================================ 06 -->
+<h2 id="s6">06 · 风险与回归面</h2>
+<table>
+  <thead><tr><th>风险</th><th>说明</th><th>对策</th></tr></thead>
+  <tbody>
+    <tr><td>inert 兜不住「动态插入遮罩后的节点」</td><td>inert 挂主内容容器，若未来有浮层 portal 到容器外会漏</td><td>单点约定：浮层模板必须留在既有根模板位置（现状即如此）；守阵静态断言</td></tr>
+    <tr><td>Tab 循环与 IME/输入框内的浏览器默认行为冲突</td><td>输入框内 Tab 本就应移焦，循环只需在窗内兜底</td><td>仅当下一停靠点在窗外才拦（用 tabbable 口径现算），不无差别 preventDefault</td></tr>
+    <tr><td>嵌套层（添加窗/目录浏览器/下拉）焦点栈</td><td>子层开时 trap 必须指向子层，否则 Tab 又跑回父层遮罩后</td><td>trap 栈 pause/unpause；回归用例覆盖「窗→面板→下拉」三层</td></tr>
+    <tr><td>回归面广（所有弹窗 × 三皮肤）</td><td>焦点是横切关注点，接错一处即手滑焦点丢失</td><td>P0 先覆盖通用 modal + 添加窗 + 目录浏览器三处高频面，真机 e2e（项目已有 Playwright 链路）双皮肤取证后再铺全量</td></tr>
+    <tr><td>既有键位回归</td><td>Esc 退栈链 / _kbOverlayBusy / 悬停接管竞态均已稳定</td><td>实施计划须逐条列「不改清单」：退栈顺序、名单两处同步、_comboKeydown 行为一律不动</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p class="cap">后续动作</p>
+  <p>本报告为调研快照（零代码改动）。若拍板推进，按 §05 走实施计划（建议先 P0+P1 一并立计划 —— 两者共享焦点栈设计，拆开反而要动两次同一批 open/close 接线）。</p>
+</div>
+
+<div class="foot">
+  <span class="grp">参考</span><br>
+  W3C WAI-ARIA APG · <a href="https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/">Dialog (Modal) Pattern</a> · <a href="https://www.w3.org/WAI/ARIA/apg/patterns/combobox/">Combobox Pattern</a><br>
+  MDN · <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement">&lt;dialog&gt; / showModal()</a> · <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/inert">HTMLElement.inert</a><br>
+  focus-trap (GitHub, MIT) · reka-ui (原 radix-vue) <a href="https://reka-ui.com/docs/components/combobox">Combobox 键位表</a>
+</div>
+
+</main>
+</div>
+</div>
+</body>
+</html>

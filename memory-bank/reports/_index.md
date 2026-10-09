@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-09-2136] [WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb](26-10-09-2136-report-webui-dialog-keyboard-accessibility.html) — `webui-dialog-keyboard-accessibility`
 - [26-10-09-1731] [WEBUI 快捷键「改为切换语义」适配性分析 · 哪些适合按一下开/再按一下关 · auto-qb](26-10-09-1731-report-webui-shortcuts-toggle-suitability.html) — `webui-keyboard-shortcuts`
 - [26-10-09-1725] [HR 稳态期跳过 B/C 档取数可行性分析 · auto-qb](26-10-09-1725-report-hr-steady-lane-skip.html) — `hr-steady-throttle`
 - [26-10-09-1529] [本地通道传输安全调研: WebUI 与 HR 取数通道的加密方案对比 · auto-qb](26-10-09-1529-report-transport-encryption-feasibility.html) — `transport-encryption`
