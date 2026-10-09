@@ -49,10 +49,15 @@
     ".drawer .dt11-ghost:hover { color:var(--fg); border-color:var(--border-soft); }",
     ".drawer .dt11-hint { margin-left:auto; font-size:11px; color:var(--fg-dim); }",
     /* 行区: 表头吸顶 + 行 grid */
+    /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
+     * padding-top 之下, 中途滚动时行文字从那条 14px 缝里漏出来(实测 headTop 比 body 顶缘
+     * 恒低 14px); -14px 抵消后表头贴到可见上缘。14px = 三皮肤 .drawer-body 的 padding-top
+     * (atlas|console: 14px 18px 20px / prism: 14px 16px 20px), 与下方 .dt11-foot 的
+     * margin:-16/-20 同一假设(改皮肤 padding 必须连这里一起核)。 */
     ".drawer .dt11-head, .drawer .dt11-r { display:grid; gap:8px; align-items:center; padding:0 4px; }",
     ".drawer .dt11-head.hasav, .drawer .dt11-r.hasav { grid-template-columns:26px 18px minmax(0, 1fr) 78px 130px 62px 64px; }",
     ".drawer .dt11-head.noav, .drawer .dt11-r.noav { grid-template-columns:26px 18px minmax(0, 1fr) 78px 130px 64px; }",
-    ".drawer .dt11-head { position:sticky; top:0; z-index:1; height:28px; background:var(--bg-card);",
+    ".drawer .dt11-head { position:sticky; top:-14px; z-index:1; height:28px; background:var(--bg-card);",
     "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
     ".drawer .dt11-head .num { text-align:right; }",
     ".drawer .dt11-r { min-height:27px; border-bottom:1px solid var(--hairline); font-size:12px; cursor:default; }",
@@ -96,7 +101,10 @@
     ".drawer .dt11-pnone { font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; color:var(--fg-dim); }",
     ".drawer .dt11-empty { padding:24px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
     /* 吸底条: 勾选 = 批量条, 未勾 = 汇总条(盖过 .drawer-body 的 padding) */
-    ".drawer .dt11-foot { position:sticky; bottom:0; z-index:2; display:flex; align-items:center; gap:8px;",
+    /* 吸底补偿: 同吸顶, bottom:0 实际停在 padding-bottom 之上, 底缘漏出 20px 行文字
+     * (实测 footBottom 比 body 底缘恒高 20px); -20px 抵消后统计条贴到可见下缘,
+     * 与自身 margin-bottom:-20px 的盖缝设计同一口径。 */
+    ".drawer .dt11-foot { position:sticky; bottom:-20px; z-index:2; display:flex; align-items:center; gap:8px;",
     "  margin:8px -16px -20px; padding:7px 16px 9px; background:var(--bg-card); border-top:1px solid var(--border);",
     "  font-size:11.5px; color:var(--fg-muted); flex-wrap:wrap; }",
     ".drawer .dt11-foot b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",

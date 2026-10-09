@@ -64,7 +64,10 @@
     ".drawer .dt09-r, .drawer .dt09-head { display:grid;",
     "  grid-template-columns:184px 150px 100px 112px minmax(160px, 1fr) 90px 74px 74px 44px;",
     "  gap:8px; align-items:center; padding:0 8px; }",
-    ".drawer .dt09-head { position:sticky; top:0; z-index:1; height:26px; background:var(--bg-card);",
+    /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
+     * padding-top(14px)之下, 中途滚动时行文字从那条缝里漏出来; 与 dt11 同族(机理/判据单点
+     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。 */
+    ".drawer .dt09-head { position:sticky; top:-14px; z-index:1; height:26px; background:var(--bg-card);",
     "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
     ".drawer .dt09-head .num, .drawer .dt09-head .occ-h { text-align:right; }",
     ".drawer .dt09-head .occ-h { justify-content:flex-start; }",

@@ -132,7 +132,10 @@
     /* files 整列省略时: 9 列, 「正在取」槽位让位给进度列 */
     ".drawer .dt07-r.nofiles, .drawer .dt07-head.nofiles {",
     "  grid-template-columns:190px 142px 104px minmax(150px, 1fr) 112px 100px 88px 76px 76px; }",
-    ".drawer .dt07-head { position:sticky; top:0; z-index:1; height:28px; background:var(--bg-card);",
+    /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
+     * padding-top(14px)之下, 中途滚动时行文字从那条缝里漏出来; 与 dt11 同族(机理/判据单点
+     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。 */
+    ".drawer .dt07-head { position:sticky; top:-14px; z-index:1; height:28px; background:var(--bg-card);",
     "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
     ".drawer .dt07-head .num { text-align:right; }",
     ".drawer .dt07-sortable { cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:3px;",
