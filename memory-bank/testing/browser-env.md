@@ -55,6 +55,11 @@
   ```
   模式矩阵轮(`E2E_CMD_RESULT / E2E_SKIP_CHECK / E2E_HR_SCENE / E2E_TORRENTS`)是**串行人跑**,
   六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note。
+- **桩的数据面(2026-10-09 扩充)**: 除合成种子外还按需灌 peers / trackers 响应、HR 站点与拉取历史、
+  **添加种子窗口的分类/标签候选**(`_inject_add_options`), 并给合成种子**每对独立 `save_path`**、
+  组键改用真机口径 `(save_path, ())` —— 都属"默认桩恒空/失真 ⇒ 某条渲染路径永远测不到"那一类;
+  改桩的合成数据面要同步 `e2e/` 里**按同源公式算期望值**的 spec(如 `add-options-recent-order.spec.mjs`),
+  否则那些 spec 会红(这是特性: 数据面与断言同源才有意义)。
 - **环境(2026-10-06 实测)**: 依赖 = `package.json` devDependency `@playwright/test@^1.63.0`,
   clone 后 `npm ci`(有 lock)或 `npm i` 一次即可; 旧轨的「仓库外 `npm i playwright-core` +
   `NODE_PATH` 挂载」方案随脚本退役**作废**(ESM `import` 本就不认 `NODE_PATH`)。

@@ -7,6 +7,32 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_ADD);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+
+/* ---- 添加种子三候选「最近使用」排序的单点(2026-10-09) ----
+ * 需求: 保存路径/分类/标签三个候选下拉按「最近使用」排序 —— 最近用过的排前面, 省得每次翻找。
+ * 口径(定案 = 由种子记录派生, 不新增存储): 「最近使用」= 该值下最近一次被种子使用的时间,
+ * 即**取数行**(跨视图自取数, 见 _addRecencyRows)里属该值的种子 added_on 的最大值(见 _addRecencyMaps)。
+ * 取舍: 与候选集同源(候选集本就派生自 store/qB), 故零后端改动、零新请求、零新增持久化,
+ * 多端天然一致且不受「清站点数据」影响; 代价是程序按规则自动赋的分类/标签也会计入「使用」。
+ * 排序规则: 时间降序 -> 从未使用过(时间 0)落末尾 -> 同时间按字母序(localeCompare)。
+ * 表为空/值缺失一律落字母序, 与旧行为逐字一致 ⇒ 候选未到位时零观感差异。
+ * 纯函数(不改入参): 与 _addNormPath 同在模块顶层, 供 node 单测探针直接调用。 */
+function _addOrderByRecent(options, recency) {
+  return (options || []).slice().sort((a, b) => {
+    const tb = (recency && recency.get(b)) || 0;
+    const ta = (recency && recency.get(a)) || 0;
+    if (ta !== tb) return tb - ta;
+    return a.localeCompare(b);
+  });
+}
+
+/* 路径归一(与后端 infra/utils.path_normalize 同口径): 反斜杠转正斜杠 + 压缩重复斜杠, 首尾斜杠保留。
+ * 必要性: /api/paths 返回的是**已归一**路径, 而 SEED_ITEM 的 save_path 是 qB **原文** ——
+ * 两侧不同径则时间表恒不命中, 功能静默退化成纯字母序(不报错、不白屏, 只是"排序没生效")。 */
+function _addNormPath(p) {
+  return String(p == null ? "" : p).replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+}
+
 window.AQB_ADD = {
   /* DND-01: 全局拖拽监听挂 window(照 config_hub 的钩子先例); _dragDepth 非响应式(只驱动
    * addDragOver 布尔, 不进 data 免依赖追踪)。remove 与 add 引用同一 method 实例, 严格对称。 */
@@ -79,16 +105,53 @@ window.AQB_ADD = {
         }
       };
       const [cats, tags, paths] = await Promise.all([
-        safe("/api/categories", (r) => Object.keys(r.categories || {}).sort((a, b) => a.localeCompare(b))),
+        safe("/api/categories", (r) => Object.keys(r.categories || {})),
         // exclude_auto=1: 剔除程序自动维护的标签(站点名/HR/集数等, 判定在后端), 候选只留用户可挑的
-        safe("/api/tags?exclude_auto=1", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
+        safe("/api/tags?exclude_auto=1", (r) => r.tags || []),
         safe("/api/paths", (r) => r.paths || []),
       ]);
       if (this.addOpen) {  // 仅窗口仍开着时回填(慢响应不得污染下一次打开)
-        this.addCatOptions = cats;
-        this.addTagOptions = tags;
-        this.addPathOptions = paths;
+        // 「最近使用」排序(2026-10-09): 三候选一律按最近一次被种子使用的时间降序, 未用过按字母序。
+        // 排序在落袋处单点做(端点只供候选集, 不承担展示序) —— 三个 pick 不再各自 .sort()。
+        const recent = this._addRecencyMaps();
+        this.addCatOptions = _addOrderByRecent(cats, recent.cat);
+        this.addTagOptions = _addOrderByRecent(tags, recent.tag);
+        this.addPathOptions = _addOrderByRecent(paths, recent.path);
       }
+    },
+    /* 三候选「最近使用」的取数行 —— **跨视图自取数**(与 filters.js::facetRows 同族):
+     * 添加种子入口是顶栏常驻, 而 state 的阵列按 viewMode 裁剪(VIEW_ARRAYS: 辅种页只回
+     * groups + singles、追剧页回 shows + groups + singles、种子页只回 torrents)⇒ 只读
+     * this.torrents 时, 用户在**默认的辅种页**开窗会拿到空表, 排序**静默退化**成纯字母序
+     * (不报错不白屏, 2026-10-09 e2e 首跑实测抓到)。判据同 pitfalls/web-ui/contract-api.md
+     * 「跨视图的常驻消费者不能依赖按视图裁剪的阵列」。
+     * 两分支各自完整: 种子页平铺 / 其余(groups∪singles, 追剧页 VIEW_ARRAYS 亦含 groups)。 */
+    _addRecencyRows() {
+      if (this.viewMode === "torrents" && this.torrents.length) return this.torrents;
+      const rows = [...(this.singles || [])];
+      for (const g of this.decoratedGroups || []) {
+        for (const m of g.members || []) rows.push(m);
+      }
+      return rows;
+    },
+    /* 三候选的「最近使用」时间表: 遍历取数行现算 —— 分类/保存路径取单值, 标签取数组逐项,
+     * 每值取所属种子 added_on 的最大值。纯读快照(不请求/不投命令/无副作用), 表为空时排序
+     * 退化为纯字母序(见 _addOrderByRecent 兜底)。 */
+    _addRecencyMaps() {
+      const cat = new Map(), tag = new Map(), path = new Map();
+      const bump = (m, k, ts) => {
+        if (!k || !ts) return;  // 空值不构成候选; added_on 缺失(0)不参与
+        if (ts > (m.get(k) || 0)) m.set(k, ts);
+      };
+      for (const r of this._addRecencyRows()) {
+        if (!r) continue;
+        const ts = r.added_on || 0;
+        bump(cat, r.category, ts);
+        bump(path, _addNormPath(r.save_path), ts);
+        const tlist = Array.isArray(r.tags) ? r.tags : String(r.tags || "").split(",");
+        for (const t of tlist) bump(tag, String(t).trim(), ts);
+      }
+      return { cat, tag, path };
     },
     escAddTorrent() {
       // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(目录浏览器 → 分类/标签下拉 → 位置面板)先收起, 再关对话框

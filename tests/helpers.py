@@ -79,6 +79,10 @@ class FakeClient:
     def __init__(self):
         self.tags = set()
         self.category = ""
+        # 分类定义 name -> info(与 self.tags 对称的"客户端侧全局定义"; 默认空 = 无分类,
+        # 既有用例行为逐字不变)。桩服务 scripts/ui_harness.py 按合成种子灌真实候选,
+        # 好让 /api/categories 在冒烟/截图里不再是恒空态。
+        self.categories = {}
         self.calls = []
         self.torrents = _FakeTorrents()  # 模拟客户端中的种子: hash -> info dict
         self.exported = b"TORRENT-DATA"  # torrents_export 返回值
@@ -305,7 +309,7 @@ class FakeClient:
         self.calls.append(("delete_tags", tags))
 
     def torrents_categories(self):
-        return {}
+        return dict(self.categories)
 
     def torrents_create_category(self, name=None, save_path=None, **kw):
         # 兼容旧断言: 未传 save_path 时保持二元素 calls 形状

@@ -35,6 +35,7 @@
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对 + **两处控件组**(流量形态头部 + 种子「流量」页签头部, 2026-10-09 修版式改回归: 种子流量图走种子形态头部, 版式改漏接 ⇒ 档位/纵轴控件消失; 内层标记守阵钉逐字同源)
+- test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 """
 import json
 import os
@@ -2742,3 +2743,118 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
     assert "_subCloseTimer: 0," in app, "app.js data 必须声明 _subCloseTimer(未声明的属性不进响应式, 且易漂移)"
     assert re.search(r'"menu\.visible"\(v\) \{\n(?:.*\n){0,4}?.*this\.keepSub\(\);',
                      app), ("menu.visible 关闭时必须 keepSub() 撤掉挂起的收起 —— 否则一级关掉后定时器还会再触发一次")
+
+
+# 添加种子三候选「最近使用」排序 node 电池(2026-10-09): 两个模块级纯函数
+# _addOrderByRecent/_addNormPath 真跑。无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+_NODE_ADD_RECENT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const checks = [];
+const eq = (n, got, want) => checks.push([n, JSON.stringify(got) === JSON.stringify(want)]);
+eq("路径归一: 反斜杠转正斜杠", _addNormPath("R:\\Seeds\\A"), "R:/Seeds/A");
+eq("路径归一: 压重复斜杠", _addNormPath("R://Seeds///A"), "R:/Seeds/A");
+eq("路径归一: 首尾斜杠保留", _addNormPath("/mnt//media/"), "/mnt/media/");
+eq("路径归一: 空/null/未定义安全", [_addNormPath(""), _addNormPath(null), _addNormPath(undefined)], ["", "", ""]);
+const m = new Map([["Movies", 300], ["TV", 100], ["Anime", 200]]);
+eq("最近使用降序", _addOrderByRecent(["TV", "Movies", "Anime"], m), ["Movies", "Anime", "TV"]);
+eq("未用过落末尾并按字母序", _addOrderByRecent(["Zeta", "TV", "Alpha", "Movies"], m),
+   ["Movies", "TV", "Alpha", "Zeta"]);
+eq("表空退化纯字母序", _addOrderByRecent(["b", "a", "C"], new Map()), ["a", "b", "C"]);
+eq("表为 null 不炸", _addOrderByRecent(["b", "a"], null), ["a", "b"]);
+eq("全部时间 0 按字母序", _addOrderByRecent(["c", "a", "b"], new Map([["c", 0], ["a", 0], ["b", 0]])),
+   ["a", "b", "c"]);
+eq("部分命中: 命中者在前未命中按字母序", _addOrderByRecent(["Hit", "Miss", "Aaa"], new Map([["Hit", 5]])),
+   ["Hit", "Aaa", "Miss"]);
+const src = ["b", "a"];
+_addOrderByRecent(src, new Map());
+eq("纯函数不改入参", src, ["b", "a"]);
+eq("大时间戳仍降序(int32 溢出面)", _addOrderByRecent(["Old", "New"],
+   new Map([["Old", 1700000000], ["New", 1900000000]])), ["New", "Old"]);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_add_options_recent_order():
+    """添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序)
+
+    口径定案 = **由种子记录派生**(非本机存储): 「最近使用」= 该值下种子 added_on 的最大值。
+    数据面**跨视图自取数**(`_addRecencyRows`, 与 filters.js::facetRows 同族): 添加种子入口是
+    顶栏常驻, 而 /api/state 按 viewMode 裁剪阵列(辅种页只回 groups + singles / 追剧页回
+    shows + groups + singles / 种子页只回 torrents)⇒ 直读 this.torrents 会在默认辅种页拿到
+    空表、排序**静默退化**成字母序(2026-10-09 e2e 首跑实测抓到; 判据同 pitfalls/web-ui/
+    contract-api.md「跨视图的常驻消费者不能依赖按视图裁剪的阵列」)。两类故障形态机械钉住:
+    1. 排序语义(node 真跑 _addOrderByRecent/_addNormPath): 最近使用降序 -> 未用过(时间 0)落
+       末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序(候选未到位时零观感差异);
+       纯函数不改入参(改了会把传进来的候选数组原地打乱)。路径归一必须与后端
+       infra/utils.path_normalize 同口径(反斜杠转正斜杠 + 压重复斜杠, 首尾斜杠保留) ——
+       两侧不同径则 /api/paths 的**已归一**路径与取数行的 qB **原文** save_path 对不上,
+       时间表恒不命中, 功能静默退化成纯字母序(不报错、不白屏, 只是"排序没生效");
+    2. 接线(静态): loadAddOptions 三个候选都过 _addOrderByRecent 单点(不是各自 .sort()),
+       pick 不得再内联 .sort(字母序单点收进纯函数, 两处各写一遍即漂移); 时间表由
+       _addRecencyMaps 经 _addRecencyRows 现算且三键齐全, 路径侧必须过 _addNormPath;
+       _addRecencyRows 必须按 viewMode 分支且三来源(torrents / singles / decoratedGroups
+       的 members)齐全 —— 缺一支即该视图下排序失效。
+       无 node 时纯函数电池静默跳过, 但模块级定义与接线断言照常生效(不引入 skip)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    at = open(os.path.join(shared, "add_torrent.js"), encoding="utf-8").read()
+
+    # 0. 模块级定义(探针与运行时共用同一份; 缺了则无 node 环境也当场红)
+    assert re.search(r"^function _addOrderByRecent\(", at, re.M), \
+        "add_torrent.js 缺模块级 _addOrderByRecent(排序单点; 探针与运行时同源)"
+    assert re.search(r"^function _addNormPath\(", at, re.M), \
+        "add_torrent.js 缺模块级 _addNormPath(路径归一同源)"
+
+    # 1. 纯函数真跑(有 node 时)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_ADD_RECENT_PROBE,
+             os.path.join(shared, "add_torrent.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        assert proc.returncode == 0, f"_addOrderByRecent node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"最近使用排序电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+    # 2. 接线: 三个候选都过排序单点
+    body = re.search(r"async loadAddOptions\(\) \{(.*?)\n    \},", at, re.S)
+    assert body, "add_torrent.js 找不到 loadAddOptions(改名或挪走了? 同步本守阵)"
+    b = body.group(1)
+    for opt, key in (("addCatOptions", "cat"), ("addTagOptions", "tag"), ("addPathOptions", "path")):
+        assert re.search(rf"this\.{opt} = _addOrderByRecent\(\w+, recent\.{key}\);", b), \
+            f"loadAddOptions 的 {opt} 没过 _addOrderByRecent 排序单点(最近使用排序对该列失效)"
+    assert "_addRecencyMaps()" in b, "loadAddOptions 未从 _addRecencyMaps 取时间表"
+    assert ".sort((a, b) => a.localeCompare(b))" not in b, \
+        "loadAddOptions 的 pick 仍内联字母序 .sort —— 排序单点必须只在 _addOrderByRecent 里(两处各写一遍即漂移)"
+
+    # 3. 时间表单点: 从跨视图取数行现算, 三键齐全, 路径过归一
+    maps = re.search(r"_addRecencyMaps\(\) \{(.*?)\n    \},", at, re.S)
+    assert maps, "add_torrent.js 找不到 _addRecencyMaps(三候选时间表单点)"
+    mb = maps.group(1)
+    assert "this._addRecencyRows()" in mb, \
+        "_addRecencyMaps 必须走跨视图取数单点 _addRecencyRows(直读 this.torrents 会在默认辅种页恒空)"
+    for needle in ("r.added_on", "r.category", "r.save_path", "r.tags"):
+        assert needle in mb, f"_addRecencyMaps 缺 {needle}(三候选的时间表缺一即该列排序失效)"
+    assert "_addNormPath(r.save_path)" in mb, \
+        "_addRecencyMaps 的路径键必须过 _addNormPath(缺位 = 与 /api/paths 不同径, 路径排序恒失效)"
+    assert "return { cat, tag, path };" in mb, "_addRecencyMaps 必须回三键 {cat, tag, path}"
+
+    # 4. 跨视图取数单点: 添加种子入口是顶栏常驻, 而 /api/state 按 viewMode 裁剪
+    #    (VIEW_ARRAYS: 辅种页只回 groups + singles / 追剧页回 shows + groups + singles /
+    #    种子页只回 torrents) ⇒ 只读 this.torrents 时用户在默认辅种页开窗拿到空表, 排序
+    #    静默退化成纯字母序(2026-10-09 e2e 首跑实测)。三支缺一即该视图下排序失效。
+    rows = re.search(r"_addRecencyRows\(\) \{(.*?)\n    \},", at, re.S)
+    assert rows, "add_torrent.js 找不到 _addRecencyRows(跨视图取数单点, 与 filters.js::facetRows 同族)"
+    rb = rows.group(1)
+    assert 'this.viewMode === "torrents"' in rb, "_addRecencyRows 必须按 viewMode 分支(种子页平铺 / 其余并集)"
+    for needle in ("this.torrents", "this.singles", "this.decoratedGroups", "g.members"):
+        assert needle in rb, \
+            f"_addRecencyRows 缺 {needle}(VIEW_ARRAYS 逐视图裁剪, 缺一支 = 该视图下排序静默退化)"

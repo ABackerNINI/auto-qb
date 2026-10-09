@@ -40,6 +40,9 @@
 注意
 ----
 * 仅开发期使用, 不参与打包; 数据全在内存 + 临时 state 文件, 关闭即弃。
+* 合成数据面(种子之外): peers / trackers 响应、HR 站点与拉取历史、**添加种子窗口的分类/标签候选**
+  (`_inject_add_options`) —— 都是"默认桩恒空 ⇒ 某条渲染路径永远测不到"那一类, 按需补灌;
+  合成种子的 `save_path` 按组对取同一条, 组键 = 真机口径 `(save_path, ())`。
 * 鉴权走 `skip_local_verify`(本机免密钥), 浏览器不需要带 token。
   !正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
   等于把一个免鉴权的 WEB UI 交给整个局域网(合成数据也含配置结构), 直接拒绝启动。
@@ -64,6 +67,27 @@ _STATES = ["stalledUP", "uploading", "downloading", "pausedUP", "pausedDL", "sta
 _SIZES = [2 * 1024**3, 8 * 1024**3, 25 * 1024**3, 60 * 1024**3]
 
 
+def _inject_add_options(mgr, torrents) -> None:
+    """添加种子三候选(分类/标签)的数据面 —— FakeClient 的分类/标签定义默认恒空 ⇒
+    `/api/categories` 与 `/api/tags` 恒回空, 添加窗口的分类/标签下拉在桩服务下**永远**是空态,
+    「按最近使用排序」的渲染路径在 e2e 与截图目检里从未被覆盖(同 drawer peers/trackers 两条)。
+
+    口径与真机同源: 两个端点都读 store 的 client 缓存(`all_categories`/`all_tags` → 转发
+    `client.torrents_categories()`/`torrents_tags()`), 故把按合成种子现算出的分类定义与标签
+    集合灌进 client 即可。站点标签(如 HHan)由后端 `exclude_auto=1` 过滤掉 —— 正是要覆盖的真实链路。
+    """
+    cats, tags = {}, set()
+    for tor in torrents:
+        if tor.category:
+            cats.setdefault(tor.category, {"name": tor.category, "savePath": ""})
+        for t in (tor.tags or "").split(","):
+            if t.strip():
+                tags.add(t.strip())
+    mgr.client.categories = cats
+    mgr.client.tags = tags
+    print(f"[harness] 添加种子候选已注入: 分类={len(cats)} 标签={len(tags)}", flush=True)
+
+
 def _make_torrents(count: int, site_conf):
     """合成种子: 名字/大小/状态/进度轮转, 保证每行列宽不整齐(更接近真机)"""
     out = []
@@ -77,6 +101,9 @@ def _make_torrents(count: int, site_conf):
                 name=f"Some.Show.S01E{(i % 24) + 1:02d}.1080p.WEB-DL.x265-GROUP{i}",
                 size=size,
                 total_size=size,
+                # 保存路径按**组对**(2k, 2k+1)取同一条(`i // 2`): 组内一致 = 真机形态(同组同目录)、
+                # 组间互异 ⇒ /api/paths 有多个真候选(而不是全库一条), 组键 (save_path, ()) 也不会塌成一组。
+                save_path=f"R:\\Downloads\\Set{i // 2:03d}",
                 state=state,
                 progress=1.0 if done else (i % 10) / 10,
                 downloaded=size if done else size // 3,
@@ -737,12 +764,20 @@ def main() -> int:
         # 06 变体在桩下只走回退分支, 真口径渲染路径(e2e / 截图目检)从未被覆盖。
         mgr.client.trackers_map[tor.hash] = _make_trackers_response(i)
 
+    # 添加种子窗口的分类/标签候选(2026-10-09): 与 peers/trackers 同病 —— 默认桩恒空 ⇒ 那两条
+    # 下拉的「最近使用排序」渲染路径在 e2e 与截图里从未被覆盖过(see _inject_add_options)。
+    _inject_add_options(mgr, torrents)
+
     if not args.no_groups:
         groups = {}
         for i in range(min(args.groups, len(torrents) // 2)):
             a, b = torrents[i * 2], torrents[i * 2 + 1]
             b.name = a.name  # 同组同名(真机: 同文件不同站)
-            groups[(a.name, ())] = [a.hash, b.hash]
+            # 组键 = (规范化 save_path, 文件列表) —— **真机口径**(store 归组键)。旧的 (name, ()) 是假键:
+            # /api/paths 与 /api/fs/dirs 的允许根都取 key[0](见 routes/fs.py), 拿名字当路径会把全库
+            # 种子名灌成"保存位置"候选, open-path(group) 也会去开一个名字。改走 save_path 后三处同时
+            # 归真; 组名显示取自成员 rec.name(views.py), 与组键无关 ⇒ 观感不变。
+            groups[(a.save_path, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
         # member_to_key 同步重建(增量协议保真, plan 26-10-07-0414 S4 冒烟): 真机上组键索引
         # 由 store 的归组路径维护, 桩直写 groups 绕过了它 —— 索引为空时 _drain_delta_locked
