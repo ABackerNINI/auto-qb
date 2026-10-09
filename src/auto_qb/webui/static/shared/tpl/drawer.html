@@ -2,7 +2,9 @@
          注入落点 = app 级 .drawer-dock(shared/tpl/dock.html, boot.js 按选择器注入)。
          停靠面板无遮罩无模糊 —— 列表整幅可见(用户硬约束), PERF-01 全站零 backdrop-filter 在此收尾;
          Esc 关闭(退栈链, dialogs.js escBusy); trackers/peers 在对应 tab 激活期间 5s 轮询,
-         关闭即停(见 drawer.js _startDrawerPoll); 四个页签 body 与 FX-22/截断族原样保留。
+         关闭即停(见 drawer.js _startDrawerPoll); R2 S1(计划 26-10-09-2219)起四页签经典链
+         移植为页插件(drawer_pages/), 经 dt-host 挂载, FX-22/截断族等 CSS 钩子随类名原样命中;
+         正文与页签栏右键 = 合并开关菜单(R2 S2/S3, openDrawerMenu)。
          W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 高度/开合持久化
          (localStorage, 见 drawer.js W3 块); 首屏默认关闭(D1, drawer.open 初值 false)。
          FX-29: 换目标走"软切换"(drawer.switching 遮罩沿用旧数据撑住面板几何), 见 drawer.js FX-29 块。
@@ -73,7 +75,7 @@
                  中间一帧显示成 40 字符 hash 再跳回种子名, 那是"切换闪烁"里最刺眼的一跳 -->
             <strong :title="drawerTitle()">{{ drawerTitle() }}</strong>
           </div>
-          <nav class="drawer-tabs" role="tablist">
+          <nav class="drawer-tabs" role="tablist" @contextmenu.prevent="openDrawerMenu($event)">
             <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
             <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
             <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
@@ -93,8 +95,10 @@
           </button>
         </header>
         <!-- FX-29 软切换: switching = 旧目标数据仍在撑着面板几何, 但已不代表当前种子 ——
-             用遮罩(读数降到不可读 + 屏蔽交互)代替清空: 防串显的效果一样, 面板高度与列表不塌不跳 -->
-        <div class="drawer-body" :class="{ switching: drawer.switching, 'is-traffic': qbTrafficActive }">
+             用遮罩(读数降到不可读 + 屏蔽交互)代替清空: 防串显的效果一样, 面板高度与列表不塌不跳。
+             R2 S3: 右键 = 合并开关菜单(openDrawerMenu 内守种子详情形态, 流量形态不弹) -->
+        <div class="drawer-body" :class="{ switching: drawer.switching, 'is-traffic': qbTrafficActive }"
+             @contextmenu.prevent="openDrawerMenu($event)">
           <span v-if="drawer.switching" class="drawer-busy">正在加载…</span>
           <!-- ==================== 流量形态正文(三挂点共用) ====================
                全局(/api/traffic/qb/global) / 分组(/api/traffic/qb/group/{key}) / 单种
@@ -200,10 +204,15 @@
               <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>
             </div>
           </template>
-          <!-- ==================== 种子详情形态正文(五页签) ==================== -->
+          <!-- ==================== 种子详情形态正文(五页签) ====================
+               R2 S1(计划 26-10-09-2219): 四页签经典链已移植为页插件(drawer_pages/*-classic.js,
+               经 dt-host 挂载, 与变体同机制) —— Vue 只保留两条共享空态(general 首载 loading 与
+               error, 原链首两支)与宿主骨架; 显隐只走 host 自身(dtHostOn), 插件与 Vue 争 DOM
+               红线不变。FX-22/截断族等 CSS 钩子随类名原样命中(插件 DOM 逐类名一致)。 -->
           <template v-else>
-            <!-- 首次进入的空态只归常规页签: 其余页签各有自己的行内加载态; 若让这条 general loading
-                 空态压到 Tracker/用户/内容页签之前, 每次切换就是「整幅表格 -> 一行正在加载详情…」 -->
+            <!-- 首次进入的空态只归常规页签: 其余页签各有自己的行内加载态(在 classic 插件内);
+                 若让这条 general loading 空态压到 Tracker/用户/内容页签之前, 每次切换就是
+                 「整幅表格 -> 一行正在加载详情…」 -->
             <div v-if="drawer.tab === 'general' && drawer.loading && !drawer.detail" class="empty">
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
               <span>正在加载详情…</span>
@@ -212,146 +221,41 @@
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
               <span>{{ drawer.error }}</span>
             </div>
-            <!-- 常规: HR 块 + 分组字段(预格式化见 drawerGeneralSections) + 全部字段折叠区
-                 S1(计划 26-10-06-0838): template 转 div 作经典包裹层(v-show 只受模板选择控制,
-                 链条件照旧决定渲染) —— 选中变体时此层隐藏、dt-host 显示, 二者互斥 -->
-            <div v-else-if="drawer.tab === 'general' && drawer.detail" v-show="drawerTplSel.general === 'classic'">
-              <div v-if="drawer.detail.hr_triggered || drawer.detail.hr_state || drawer.detail.hr_excluded" class="drawer-hr"
-                   :class="drawer.detail.hr_triggered ? (drawer.detail.hr_satisfied ? 'done' : 'pending') : 'info'">
-                <b v-if="drawer.detail.hr_excluded">已排除出 HR 管理</b>
-                <b v-else-if="drawer.detail.hr_triggered">{{ drawer.detail.hr_satisfied ? "H&R 已达标" : "H&R 未达标" }}</b>
-                <span v-if="drawer.detail.hr_state" :title="drawer.detail.hr_reason">{{ hrStateLine(drawer.detail) }}</span>
-                <span v-if="drawer.detail.hr_site_lane" title="站点侧值(账号级权威, 滞后一个刷新周期)">{{ hrSiteLine(drawer.detail) }}</span>
-                <span v-if="drawer.detail.hr_tag">{{ drawer.detail.hr_tag }}</span>
-                <span v-if="drawer.detail.hr_tag_done">{{ drawer.detail.hr_tag_done }}</span>
-                <span v-if="drawer.detail.hr_triggered">要求做种 {{ fmtDuration(drawer.detail.hr_req_time) }}</span>
-                <span v-if="drawer.detail.hr_triggered && drawer.detail.hr_req_ratio > 0">要求分享率 {{ drawer.detail.hr_req_ratio.toFixed(2) }}</span>
-              </div>
-              <!-- FX-22 常规页重构: 分组卡片化 + 组标题右侧汇总 + 图标语义着色 + 长值块行(路径/哈希/备注)
-                   与行内值操作(打开目录 / 复制) -->
-              <section v-for="sec in drawerGeneralSections()" :key="sec.title" class="drawer-sec">
-                <h4><span>{{ sec.title }}</span><span v-if="sec.sum" class="s-sum">{{ sec.sum }}</span></h4>
-                <div class="f-rows">
-                  <div v-for="r in sec.rows" :key="r.label" class="f-row" :class="{ wide: r.wide }">
-                    <svg class="ico ico-sm" :class="icoTone(r.icon)" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
-                    <span class="k">{{ r.label }}</span>
-                    <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
-                    <button v-if="r.act === 'open'" type="button" class="bt icon f-row-act"
-                            @click="openTargetPath('torrent', drawer.hash)">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-                    </button>
-                    <button v-else-if="r.act === 'copy'" type="button" class="bt icon f-row-act"
-                            @click="copyText(String(r.text), r.label)">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
-                    </button>
-                  </div>
+            <!-- R2 S2: 合并双列(drawerMerge + 宽度门, dtSplitOn 单点判据) —— 两列各挂对应页签
+                 当前所选页插件(classic 或变体, 模板选择与合并开关两个自由度解耦); 列序按对固定。
+                 v-if/v-else 保证同一 data-dt-host 全 DOM 只存在一份(核心 querySelector 定位)。 -->
+            <div v-if="dtSplitOn" class="drawer-split" :data-merge="drawerMerge">
+              <template v-if="drawerMerge === 'gc'">
+                <div class="dt-col">
+                  <div class="dt-col-head">常规</div>
+                  <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>
                 </div>
-              </section>
-              <details class="drawer-raw">
-                <summary>全部字段(原始键值, 与 qB API 字段名一致)</summary>
-                <div class="drawer-rows">
-                  <template v-for="(v, k) in drawer.detail" :key="k">
-                    <span class="k">{{ k }}</span>
-                    <span class="v mono">{{ typeof v === "object" ? JSON.stringify(v) : v }}</span>
-                  </template>
+                <div class="dt-col">
+                  <div class="dt-col-head">内容</div>
+                  <div v-show="dtHostOn('content')" class="dt-host" data-dt-host="content"></div>
                 </div>
-              </details>
+              </template>
+              <template v-else>
+                <div class="dt-col">
+                  <div class="dt-col-head">Tracker</div>
+                  <div v-show="dtHostOn('trackers')" class="dt-host" data-dt-host="trackers"></div>
+                </div>
+                <div class="dt-col">
+                  <div class="dt-col-head">用户</div>
+                  <div v-show="dtHostOn('peers')" class="dt-host" data-dt-host="peers"></div>
+                </div>
+              </template>
             </div>
-            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示; 顶部添加 + 行内编辑/删除(D 轮)
-                 S1: template 转 div 经典包裹层(同上) -->
-            <div v-else-if="drawer.tab === 'trackers'" v-show="drawerTplSel.trackers === 'classic'">
-              <div class="drawer-toolbar">
-                <button class="bt ghost sm" @click="trackerAdd()">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker
-                </button>
-              </div>
-              <div v-if="drawer.trackersLoading && !drawer.trackers.length" class="empty"><span>正在加载…</span></div>
-              <table v-else-if="drawer.trackers.length" class="drawer-table">
-                <thead>
-                  <tr><th>URL</th><th>状态</th><th class="num">做种</th><th class="num">用户</th><th>消息</th><th class="th-act"></th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
-                    <td class="wrap mono-cell">{{ t.url }}</td>
-                    <td>{{ drawerTrackerStatus(t.status) }}</td>
-                    <td class="num">{{ fmtPeersQb(t.num_seeds, t.num_complete) }}</td>
-                    <td class="num">{{ fmtPeersQb(t.num_leeches, t.num_incomplete) }}</td>
-                    <td class="wrap">{{ t.msg || "—" }}</td>
-                    <td class="cell-act">
-                      <template v-if="!drawerTrackerVirtual(t.url)">
-                        <button class="row-btn danger" @click="trackerRemove(t.url)">
-                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                        </button>
-                      </template>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty"><span>暂无 tracker</span></div>
-            </div>
-            <!-- 用户: qB peers 响应 dict/array 双形态归一(drawerPeerRows); S1: 经典包裹层 -->
-            <div v-else-if="drawer.tab === 'peers'" v-show="drawerTplSel.peers === 'classic'">
-              <div v-if="drawer.peersLoading && !drawerPeerRows().length" class="empty"><span>正在加载…</span></div>
-              <table v-else-if="drawerPeerRows().length" class="drawer-table">
-                <thead>
-                  <tr><th>地址</th><th>客户端</th><th>标记</th><th class="num">进度</th><th class="num">下行</th><th class="num">上行</th><th class="num">已下载</th><th class="num">已上传</th><th class="num">关联度</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(p, i) in drawerPeerRows()" :key="i">
-                    <td class="mono-cell">{{ p.addr }}</td>
-                    <td class="wrap">{{ p.client }}</td>
-                    <td>{{ p.flags }}</td>
-                    <td class="num">{{ p.progress }}%</td>
-                    <td class="num">{{ p.dlspeed }}</td>
-                    <td class="num">{{ p.upspeed }}</td>
-                    <td class="num">{{ p.downloaded }}</td>
-                    <td class="num">{{ p.uploaded }}</td>
-                    <td class="num">{{ p.relevance }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty"><span>暂无已连接用户</span></div>
-            </div>
-            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级); 行点选供重命名, 优先级点改(D 轮)
-                 S1: 经典包裹层 -->
-            <div v-else-if="drawer.tab === 'content'" v-show="drawerTplSel.content === 'classic'">
-              <div class="drawer-toolbar">
-                <button class="bt ghost sm" @click="renameFileRow()">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
-                </button>
-                <span class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span>
-              </div>
-              <div v-if="drawer.filesLoading && !drawer.files.length" class="empty"><span>正在加载…</span></div>
-              <table v-else-if="drawerFileRows().length" class="drawer-table">
-                <thead>
-                  <tr><th>文件</th><th class="num">大小</th><th class="num">进度</th><th>优先级</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(r, i) in drawerFileRows()" :key="i"
-                      :class="{ skipped: r.skipped, sel: r.path === drawerSelPath }">
-                    <td class="wrap clickable" @click="fileRowSelect(r)">
-                      <!-- R10-15: 目录/文件分色(目录 = 结构色且加粗, 文件 = 正文色; 跳过态仍弱化) -->
-                      <span class="dir-name" :class="{ dir: r.dir }" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
-                    </td>
-                    <td class="mono-cell num">{{ r.text }}</td>
-                    <td class="num">{{ r.dir ? "—" : r.progress + "%" }}</td>
-                    <td>
-                      <button v-if="!r.dir" class="prio-btn" :class="{ skipped: r.skipped }"
-                              @click.stop="openFilePrio($event, r.index)">{{ r.prio }}</button>
-                      <span v-else>—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty"><span>无文件列表</span></div>
-            </div>
-            <!-- S1(计划 26-10-06-0838): 变体宿主 x4 —— Vue 只渲染空 host 元素, 子树归变体自管
-                 (变体与 Vue 争 DOM 红线); 显隐只走 host 自身 v-show(dtHostOn), 经典包裹层与之互斥。
-                 宿主恒渲染(v-show 不卸载), 核心经 data-dt-host 定位挂载。 -->
-            <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>
-            <div v-show="dtHostOn('trackers')" class="dt-host" data-dt-host="trackers"></div>
-            <div v-show="dtHostOn('peers')" class="dt-host" data-dt-host="peers"></div>
-            <div v-show="dtHostOn('content')" class="dt-host" data-dt-host="content"></div>
+            <!-- R2 S1: 单栏宿主 x4 —— Vue 只渲染空 host 元素, 子树归页插件自管
+                 (插件与 Vue 争 DOM 红线); 显隐只走 host 自身 v-show(dtHostOn), classic 与变体
+                 同宿主挂载(经典包裹层已退役)。宿主恒渲染(v-show 不卸载), 核心经 data-dt-host
+                 定位挂载。 -->
+            <template v-else>
+              <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>
+              <div v-show="dtHostOn('trackers')" class="dt-host" data-dt-host="trackers"></div>
+              <div v-show="dtHostOn('peers')" class="dt-host" data-dt-host="peers"></div>
+              <div v-show="dtHostOn('content')" class="dt-host" data-dt-host="content"></div>
+            </template>
           </template>
         </div>
       </aside>

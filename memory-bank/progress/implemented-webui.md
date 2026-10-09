@@ -5,6 +5,8 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **WEBUI 详情面板页插件化 + 页签合并**(2026-10-09; 计划 [26-10-09-2219-plan-webui-drawer-merge-tabs](../plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html)): 四页签经典链从 drawer.html Vue 模板移植为注册表正式条目 `drawer_pages/<tab>-classic.js`(id "classic", 三 manifest 成对登记)—— 单栏与合并共用同一实现, 部件工具箱 `reg.kit`(三态外壳/表格骨架)为共享构建单点(变体渐进迁移未强制); **合并 = 抽屉级布局标志** `drawerMerge ∈ off|gc|tp`(autoqb.ui.drawerMerge)+ 右键开关(正文/页签栏 @contextmenu → drawerMenu 两对互斥勾选)+ 宽度门 1920(暂态遮蔽: 缩窗回落单栏标志保留, 拉宽自动恢复); 双列 `.drawer-split`(上限 2400 居中)两列各挂对应页签**当前所选页插件**(模板选择 × 合并解耦), 1400px 限宽收窄到 `.dt-tpl` 变体挂载态类(classic 恒满宽不误伤); 数据供给按生效对偶扩展(`_loadDrawerTab`/`_startDrawerPoll`/`_drawerWaitSources`/`_drawerMergeSupply`), FX-29 遮罩等全对齐再掀; 交互全量保留(优先级/重命名/添加删除 tracker 在合并列可用), filePrio 单例随实例销毁收回; e2e `drawer-merge.spec.mjs`(右键开合/双列渲染/门内置灰), 守阵同步(registry_wiring/width_discipline/fallback/shell 210/storage 基线); 基线见 kb.baseline 最新一条。
+
 - **WEBUI 种子详情面板折叠状态整体移除**(2026-10-09; 档案 [26-10-09-webui-drawer-collapse-removal](../tasks/26-10-09-webui-drawer-collapse-removal.md)): 用户动议「WEBUI移除种子详情面板的折叠状态」—— `drawer.collapsed` 字段、收起/展开钮、44px 收起态头部摘要条(dt-summary)、收起态鼠标换目标 peek(`_drawerPeekTarget`/`_drawerPeekApply`/`__peek` 戳)、`toggleDrawerCollapse`、收起态守卫(qb_traffic_chart 三挂点 active / 拖拽 / 跟随 / Alt+页签)与三皮肤 CSS 全部摘除; 核心层 `dtSummaryHtml`/`_dtDefaultSummary` 与 7 个变体(03/06/09/10/11/12/15)的 `summary()` 供数链同撤(收起档专供, 全成死代码); 面板行为回归纯「开/关 + 拖拽调高」; 守阵同步(删 peek 守阵整函数、D1/W3 守阵改写); 基线见 kb.baseline 最新一条。
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。

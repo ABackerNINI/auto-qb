@@ -924,12 +924,25 @@ def test_drawer_tpl_registry_wiring():
     m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
 
-    # 5. drawer.html 加挂面: 宿主 x6 / 切换器 x2
+    # 5. drawer.html 加挂面: 宿主 x6(单栏)+ x4(合并双列, v-if/v-else 与单栏互斥)/ 切换器 x2
     for host in ("general", "trackers", "peers", "content", "traffic-pre", "traffic-post"):
         assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
     assert drawer_tpl.count('class="dt-select"') == 2, "drawer.html 切换器应恰 2 处(种子头部/流量头部)"
-    assert 'v-show="drawerTplSel.general === \'classic\'"' in drawer_tpl, \
-        "经典包裹层显隐未接 drawerTplSel(classic 与变体互斥)"
+    # R2 S1(计划 26-10-09-2219): 经典包裹层退役 —— classic 是注册表正式条目(drawer_pages/),
+    # 与变体同宿主挂载; drawer.html 不再允许 v-show 读 drawerTplSel 的经典包裹层回潮
+    assert 'v-show="drawerTplSel.general === \'classic\'"' not in drawer_tpl, \
+        "经典包裹层回潮(classic 已是页插件, 显隐只走 dt-host 自身)"
+    for tab in ("general", "trackers", "peers", "content"):
+        for ui in _UI_ALL:
+            assert f"/shared/drawer_pages/{tab}-classic.js" in _ui_manifest(ui)["scripts"], \
+                f"{ui}: manifest 缺 classic 插件 drawer_pages/{tab}-classic.js"
+    # R2 S2/S3 接线: 合并标志显式建字段 + 双列宿主 + 右键菜单
+    assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
+    assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
+    assert "drawerMenu: { visible: false, x: 0, y: 0 }" in state_js, "state.js 缺 drawerMenu 显式建字段"
+    assert 'class="drawer-split"' in drawer_tpl, "drawer.html 缺合并双列宿主(R2 S2)"
+    assert "@contextmenu.prevent=\"openDrawerMenu($event)\"" in drawer_tpl, "drawer.html 缺右键菜单接线(R2 S3)"
+    assert "function initialDrawerMerge()" in app_js, "app.js 缺 initialDrawerMerge"
 
     # 6. state/app 接线 + dt* 成员全仓无重名(mixin 覆盖形态, 静默故障)
     assert "drawerTplSel: initialDrawerTpl()" in state_js, "state.js 缺 drawerTplSel 显式建字段(vue-reactivity 坑)"
@@ -963,9 +976,11 @@ def test_drawer_tpl_variant_width_discipline():
     # 注入的 CSS 字符串在 JS 源里是双引号转义形态(\"), 先还原再对选择器做子串断言
     core_css = core.replace('\\"', '"')
 
-    # 1. 共享 max-width 收口单点: 四页签宿主各出现在限宽规则里, 值与居中写法一起钉住
+    # 1. 共享 max-width 收口单点: 四页签宿主各出现在限宽规则里, 值与居中写法一起钉住。
+    #    R2 S1(计划 26-10-09-2219): 收口收窄到 .dt-tpl(变体挂载态) —— classic 也挂进宿主
+    #    (页插件化)而经典链历史上恒满宽, 限宽误伤即行为回归; 核心挂载时按 entry 加/摘类。
     for tab in ("general", "trackers", "peers", "content"):
-        assert f'.dt-host[data-dt-host="{tab}"]' in core_css, \
+        assert f'.dt-host.dt-tpl[data-dt-host="{tab}"]' in core_css, \
             f"核心缺 {tab} 宿主限宽收口(变体内容层 4K 等分拉伸复发)"
     assert "max-width: 1400px; margin-left:auto; margin-right:auto" in core_css, \
         "核心宿主收口缺 max-width/margin 居中(规则形态漂移, 同步本守阵)"
@@ -1485,9 +1500,11 @@ def test_drawer_tpl_render_error_fallback_classic():
     m = re.search(r"_dtRender\(st\) \{\n(.*?)\n      \},", core, re.S)
     assert m, "_dtRender 形态漂移(守阵正则失配, 同步本守阵)"
     catch = m.group(1)
-    assert "this._dtMounted = null" in catch, "回落必须摘挂载态(否则后续通知拿旧 st 重渲染已弃变体)"
-    assert "this.drawerTplSel[st.tab] = \"classic\"" in catch and "this.dtPersistSel()" in catch, \
-        "回落必须复位该页签 drawerTplSel 并落盘(状态单点仍是 drawerTplSel, 经典层 v-show 才接管)"
+    # R2 S1: 主列挂载态经 ownerKey 通道摘除(合并次列同式), 缺省键即主列 —— 语义等价旧直写
+    assert 'this[st.ownerKey || "_dtMounted"] = null' in catch, \
+        "回落必须摘挂载态(否则后续通知拿旧 st 重渲染已弃变体)"
+    assert 'this.drawerTplSel[st.tab] = CLASSIC' in catch and "this.dtPersistSel()" in catch, \
+        "回落必须复位该页签 drawerTplSel 并落盘(状态单点仍是 drawerTplSel, classic 插件接管)"
     assert 'st.entry.id' in catch and "console.error" in catch, \
         "回落必须 console.error 且带变体 id(不静默吞栈)"
     assert "st.entry.destroy" in catch and "replaceChildren" in catch, \

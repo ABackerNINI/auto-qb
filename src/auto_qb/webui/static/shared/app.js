@@ -456,6 +456,18 @@ function initialDrawerTpl() {
   return Object.assign(out, reg.readSel());
 }
 
+/* 页签合并布局标志初值(R2, 计划 26-10-09-2219 S2): 读 autoqb.ui.drawerMerge。
+ * 白名单只认 off/gc/tp, 脏值/坏 JSON/读失败一律回落 "off" —— 与 initialDrawerTab 同口径。
+ * 生效还受宽度门约束(dtSplitOn), 这里只还原用户的布局意图。 */
+function initialDrawerMerge() {
+  try {
+    const v = JSON.parse(localStorage.getItem("autoqb.ui.drawerMerge") || '"off"');
+    return ["off", "gc", "tp"].includes(v) ? v : "off";
+  } catch {
+    return "off";
+  }
+}
+
 /* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
  *
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态

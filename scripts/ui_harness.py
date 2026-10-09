@@ -810,6 +810,23 @@ def main() -> int:
         # 桩按 qB 5.2+ 形态灌多条含 next_announce 的 tracker(见 _make_trackers_response) —— 否则
         # 06 变体在桩下只走回退分支, 真口径渲染路径(e2e / 截图目检)从未被覆盖。
         mgr.client.trackers_map[tor.hash] = _make_trackers_response(i)
+        # 抽屉内容页签的数据面(R2 计划 26-10-09-2219): 合并视图右列=内容页, 桩灌两文件
+        # (一目录一文件、优先级一普通一跳过)让经典表走「有数据」渲染路径, e2e 可断言行内容
+        if tor.hash not in mgr.client.files_map:
+            mgr.client.files_map[tor.hash] = [
+                {
+                    "name": "Show/Season 01/Show - S01E01.mkv",
+                    "size": 734003200,
+                    "progress": 1.0,
+                    "priority": 1
+                },
+                {
+                    "name": "Show/Season 01/Show - S01E02.mkv",
+                    "size": 712000000,
+                    "progress": 0.42,
+                    "priority": 0
+                },
+            ]
 
     # 添加种子窗口的分类/标签候选(2026-10-09): 与 peers/trackers 同病 —— 默认桩恒空 ⇒ 那两条
     # 下拉的「最近使用排序」渲染路径在 e2e 与截图里从未被覆盖过(see _inject_add_options)。

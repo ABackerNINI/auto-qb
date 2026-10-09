@@ -697,6 +697,26 @@ window.AQB_DRAWER = {
       this._kbRevealRow(hash);   // 显式打开也让位: 停靠面板一开就压住列表底部, 被点行(双击/右键/Enter)要露出来(2026-10-03 报障)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
       if (initialTab !== "general") this._loadDrawerTab(initialTab);
+      // R2 S5: 合并 gc 对 + 初值常规页 —— _loadDrawerTab 不走(常规页只有详情), 文件列表在此补
+      // 一发(无 seq 只走 hash 戳守卫, _drawerWait 里的 "files" 由其 _drawerDone 登记)
+      else if (this.dtSplitOn && this._dtPairOf(initialTab) === "gc") this._fetchDrawerFiles();
+    },
+    /* R2 S5: 合并开启/门跨越后的第二列数据补给(核心层 drawerMerge $watch 与 resize 回调共用;
+     * 插件禁触碰取数/轮询纪律不破)。按生效对把缺失的数据源补齐: 已有数据/在途不重发(避免
+     * 开关抽屉反复打请求), fetcher 自带静默/loading/stale 丢弃。seq 只 bump 一次走代际守卫。 */
+    _drawerMergeSupply() {
+      if (!this.drawer.open || !this.dtSplitOn) return;
+      const pair = this._dtPairOf(this.drawer.tab);
+      if (!pair) return;
+      const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
+      if (pair === "gc") {
+        if (!this.drawer.files.length && !this.drawer.filesLoading) this._fetchDrawerFiles(false, seq);
+        if (!this.drawer.detail && !this.drawer.loading) this._fetchDrawerDetail();
+      } else if (pair === "tp") {
+        if (!this.drawer.trackers.length && !this.drawer.trackersLoading) this._fetchDrawerTrackers(false, seq);
+        if (!this.drawerPeerRows().length && !this.drawer.peersLoading) this._fetchDrawerPeers(false, seq);
+        this._startDrawerPoll();
+      }
     },
     /* 收面板: 无遮罩可关, 只做面板自身收尾(文件优先级小菜单/行选中/页签轮询);
      * drawer.open 跨页不清 —— 切页再回种子页面板状态保持(方案A W1 验收项) */
@@ -716,6 +736,7 @@ window.AQB_DRAWER = {
       }
       this.drawer.open = false;
       this.filePrio.visible = false;
+      this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3)随面板收
       this.drawerSelPath = "";
       this._stopDrawerPoll();
       this._stopDrawerFollow();
@@ -747,6 +768,12 @@ window.AQB_DRAWER = {
         // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图(种子/辅种/追剧)共用面板,
         // 在辅种页/追剧页展开的面板同样要续拉; 只挡非主内容页。
         if (this.page !== "groups") return;
+        // R2 S5: 合并 tp 对生效时双源同频(负载 = 用户页签单用时, 无新增频次)
+        if (this.dtSplitOn && this._dtPairOf(this.drawer.tab) === "tp") {
+          this._fetchDrawerTrackers(true);
+          this._fetchDrawerPeers(true);
+          return;
+        }
         if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
       }, 5000);
@@ -870,6 +897,20 @@ window.AQB_DRAWER = {
         this._qbLoad("torrent");
         this._qbPollStart("torrent");
       }
+      // R2 S5(计划 26-10-09-2219): 合并生效时第二列的数据供给也在此收口(插件禁触碰取数/轮询
+      // 纪律不破) —— gc 对补 detail+files, tp 对补 trackers+peers(带 seq 走代际守卫, 详情走
+      // hash 戳守卫, 与 _switchDrawerTarget 同式)。门内才供给: 影子期零额外请求。
+      if (this.dtSplitOn) {
+        const pair = this._dtPairOf(tab);
+        if (pair === "gc") {
+          if (tab !== "general") this._fetchDrawerDetail();
+          if (tab !== "content") this._fetchDrawerFiles(false, seq);
+        } else if (pair === "tp") {
+          if (tab !== "trackers") this._fetchDrawerTrackers(false, seq);
+          if (tab !== "peers") this._fetchDrawerPeers(false, seq);
+          if (tab !== "trackers" && tab !== "peers") this._startDrawerPoll();
+        }
+      }
       this._dtSync();  // 模板核心层(计划 26-10-06-0838 S1): 换页签即卸旧变体、按选择挂当前页签变体
     },
     /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
@@ -928,8 +969,15 @@ window.AQB_DRAWER = {
       // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
       if (this.drawer.tab !== "general") this._fetchDrawerDetail();
     },
-    /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项 */
+    /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项。
+     * R2 S5(计划 26-10-09-2219): 合并生效时按**生效对**扩展 —— gc 对等 detail+files,
+     * tp 对等 detail+trackers+peers(遮罩等全对数据源齐再掀, 不掀半新半旧)。 */
     _drawerWaitSources(tab) {
+      if (this.dtSplitOn) {
+        const pair = this._dtPairOf(tab);
+        if (pair === "gc") return ["detail", "files"];
+        if (pair === "tp") return ["detail", "trackers", "peers"];
+      }
       if (tab === "general") return ["detail"];
       if (tab === "content") return ["detail", "files"];
       return ["detail", tab];

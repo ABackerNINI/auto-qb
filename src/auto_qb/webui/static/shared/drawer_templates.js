@@ -20,9 +20,11 @@
  *             ctx.memberByHash; ctx.flags(渐进字段门控)。
  *   调(格式化): fmtSpeed / fmtSpeedOrDash / fmtSize / fmtSizeOrDash / fmtDuration / fmtEta /
  *             fmtTs / fmtPeersQb / drawerFileRows / drawerPeerRows / drawerTrackerStatus /
- *             drawerTrackerVirtual / drawerGeneralSections / drawerTitle。
+ *             drawerTrackerVirtual / drawerGeneralSections / drawerTitle / icoTone /
+ *             hrStateLine / hrSiteLine(classic 插件消费, R2 S1)。
  *   调(动作):   drawerCmd(action[, body, okText]) / trackerAdd / trackerRemove /
- *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow;
+ *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow /
+ *             fileRowSelect / renameFileRow(classic 插件消费, R2 S1);
  *             需要详情原始字段(如 magnet_uri)时走 _editDetail(hash)(按需单发, 不进轮询载荷)。
  *   禁: 不触碰面板几何(dock/动画/高度/drawerPanelStyle)、轮询生命周期(_startDrawerPoll 族)、
  *       路由/视图状态; 不直接发请求(动作一律走现有方法链, 回执/toast 由其自带)。
@@ -60,6 +62,16 @@
   var TABS = ["general", "trackers", "peers", "content", "traffic"];
   var STORE_KEY = "autoqb.ui.drawerTpl";
   var CLASSIC = "classic";
+  /* ---------------- 页签合并(R2, 计划 26-10-09-2219) ----------------
+   * 合并 = 抽屉级布局标志(drawerMerge ∈ off|gc|tp, 独立持久化键), 不是某页签的变体;
+   * 生效且门内时正文渲染双列宿主, 两列各挂对应页签当前所选页插件(classic 或变体)。
+   * 门 = 视口宽下限(单点常量): 1920 屏每列约 930px 才比单栏 1400px 值得; 以下是暂态遮蔽
+   * (dtSplitOn 判 false, 标志保留), 不是选择撤销 —— 拉宽自动恢复。 */
+  var MERGE_STORE_KEY = "autoqb.ui.drawerMerge";
+  var MERGE_VALUES = ["off", "gc", "tp"];
+  var DT_MERGE_MIN_WIDTH = 1920;
+  /* 合并对 -> [左列页签, 右列页签](列序固定, 不随当前页签换序) */
+  var MERGE_PAIRS = { gc: ["general", "content"], tp: ["trackers", "peers"] };
 
   /* ---------------- CSS 注入单点: <style data-dt="..."> ----------------
    * 变体 CSS 在 register 时注入(id 即 data-dt 值), 核心基础样式用 "00-core"。
@@ -200,6 +212,34 @@
     },
   };
 
+  /* ---------------- 部件工具箱(reg.kit, R2 S1 计划 26-10-09-2219) ----------------
+   * 经典链移植为页插件后的共享构建器单点: 三态外壳 + 表格骨架。classic 四件全走这里,
+   * 变体可选迁移(本轮不强制, 渐进收敛); 产出 HTML 字符串, 文本一律经 esc 转义,
+   * 调用方再用 dtHtml 拼接插值。DOM 结构与原 Vue 经典链逐类名一致(移植不重写)。 */
+  var KIT = {
+    loading: function (text) {
+      return '<div class="empty"><span>' + esc(text || "正在加载…") + "</span></div>";
+    },
+    empty: function (text) {
+      return '<div class="empty"><span>' + esc(text || "暂无数据") + "</span></div>";
+    },
+    error: function (text) {
+      return '<div class="empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span>' +
+        esc(text || "加载失败") + "</span></div>";
+    },
+    /* 表格骨架: headers = 字符串或 {label, num, cls}; rowsHtml = 预构建的 tbody 内联 HTML(调用方转义) */
+    table: function (headers, rowsHtml) {
+      var ths = headers.map(function (h) {
+        var label = typeof h === "string" ? h : h.label;
+        var cls = [];
+        if (h && h.num) cls.push("num");
+        if (h && h.cls) cls.push(h.cls);
+        return "<th" + (cls.length ? ' class="' + cls.join(" ") + '"' : "") + ">" + esc(label) + "</th>";
+      }).join("");
+      return '<table class="drawer-table"><thead><tr>' + ths + "</tr></thead><tbody>" + (rowsHtml || "") + "</tbody></table>";
+    },
+  };
+
   /* ---------------- 注册表(变体文件直接消费的单例, 不走 app.mixin) ----------------
    * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
    * 否则接线守阵会把它当漏注入的 mixin。 */
@@ -213,6 +253,7 @@
     dtHtml: dtHtml,
     dtRaw: dtRaw,
     helpers: HELPERS,
+    kit: KIT,
     /* 变体自注册入口: (id, tab) 唯一, tab 必须是五页签之一; id 只收 [A-Za-z0-9_-]
      * (要进 data-dt 属性与 CSS 选择器)。非法/重复 fail-fast 抛错 —— 变体半残比静默好。 */
     register: function (entry) {
@@ -243,12 +284,15 @@
       var m = TPL_BY_TAB[tab];
       return m ? (m.get(id) || null) : null;
     },
-    /* 切换器选项(不含 classic, classic 由模板端恒置首位) */
+    /* 切换器选项(不含 classic, classic 由模板端恒置首位; classic 现也是注册表正式条目) */
     options: function (tab) {
       var m = TPL_BY_TAB[tab];
       if (!m) return [];
       var out = [];
-      m.forEach(function (e) { out.push({ id: e.id, label: e.label }); });
+      m.forEach(function (e) {
+        if (e.id === CLASSIC) return; /* classic 恒由模板端置首位, 不进选项集 */
+        out.push({ id: e.id, label: e.label });
+      });
       return out;
     },
     /* localStorage autoqb.ui.drawerTpl 读侧(initialDrawerTpl 的实现, app.js 薄封装):
@@ -295,10 +339,24 @@
     /* Q1(报告 26-10-07-0542 §2): 变体内容层最大可读宽度 —— 四页签宿主统一限宽居中, 4K 下
      * 键值栅格/英雄行/多列卡片不再等分拉伸到视口宽(单点收口, 15 个变体文件零复刻); 窄视口
      * (内容宽 <= 1400px)零变化。traffic 双宿主不限宽: 图本体/工具条/图例归经典链恒满宽,
-     * 13/15 的 KPI 头行限宽会与下方图缘错位, 14 的解读栏自带 288px 固定右栏无拉伸问题。 */
-    ".drawer .dt-host[data-dt-host=\"general\"], .drawer .dt-host[data-dt-host=\"trackers\"],",
-    "  .drawer .dt-host[data-dt-host=\"peers\"], .drawer .dt-host[data-dt-host=\"content\"]",
+     * 13/15 的 KPI 头行限宽会与下方图缘错位, 14 的解读栏自带 288px 固定右栏无拉伸问题。
+     * R2(计划 26-10-09-2219 S1): 限宽收窄到 .dt-tpl(变体挂载态) —— classic 现也挂进宿主
+     * (页插件化), 而经典链历史上恒满宽, 限宽误伤即行为回归; 核心挂载时按 entry 加/摘类。 */
+    ".drawer .dt-host.dt-tpl[data-dt-host=\"general\"], .drawer .dt-host.dt-tpl[data-dt-host=\"trackers\"],",
+    "  .drawer .dt-host.dt-tpl[data-dt-host=\"peers\"], .drawer .dt-host.dt-tpl[data-dt-host=\"content\"]",
     "  { max-width: 1400px; margin-left:auto; margin-right:auto; }",
+    /* R2 S2 合并双列布局: 生效对的两列各挂各自所选页插件, 单一共享滚动(drawer-body 不变),
+     * 列头小节标题; 上限 2400 = 两列各约 1180 可读上限 + gap(与单栏 1400 同一封顶哲学);
+     * 门 1920 保证容器 >= ~1880, minmax 下限不会溢出。dt-col-head 是合并态的列标识(单栏无)。 */
+    ".drawer .drawer-split { display: grid; grid-template-columns: minmax(560px, 1fr) minmax(620px, 1.15fr);",
+    "  gap: 24px; max-width: 2400px; margin-left:auto; margin-right:auto; align-items: start; }",
+    ".drawer .dt-col { min-width: 0; }",
+    ".drawer .dt-col-head { display:flex; align-items:center; height:26px; margin-bottom:8px;",
+    "  font-size:12px; font-weight:600; color:var(--fg-muted, inherit); border-bottom:1px solid var(--border-soft, transparent); }",
+    /* R2 S3 右键菜单置灰项: 门不满足时可见但不可点(title 提示原因; 判定在 dtSetMerge 再拦一道)。
+     * 注入在核心层而不是三皮肤 components.css —— 菜单本体是共用模板, 一处注入三皮肤同效。 */
+    ".ctx-menu .ctx-item.is-gated { color: var(--fg-dim, #888); cursor: default; }",
+    ".ctx-menu .ctx-item.is-gated:hover { background: transparent; }",
     /* 流量块 template 转 div 的布局等价层: 顶替原 fragment 直挂 .drawer-body.is-traffic(flex 纵列)
      * 的几何 —— wrapper 自身成为唯一 flex item 撑满, 内部仍是纵列(qb-chart 的 flex:1 规则
      * `.drawer-body.is-traffic .qb-chart` 是后代选择器, 在 wrapper 内照常命中)。FX-29 遮罩
@@ -320,6 +378,15 @@
         var tab = this._dtCurTab();
         return (this.drawerTplSel || {})[tab] || "classic";
       },
+      /* R2 S2(计划 26-10-09-2219): 合并布局生效判据(模板 v-if 单点) —— 标志开启 + 种子详情
+       * 形态 + 当前页签属于生效对 + 门内。门是暂态遮蔽: dtWinW(state.js 显式建字段)由核心
+       * resize 监听防抖回写, 标志本身不动; 关面板/流量形态自然 false。 */
+      dtSplitOn() {
+        if ((this.drawerMerge || "off") === "off") return false;
+        if (this.qbTrafficActive) return false;
+        if (!this._dtPairOf(this.drawer && this.drawer.tab)) return false;
+        return (this.dtWinW || 0) >= window.AQB_DRAWER_TPL_REG.mergeMinWidth;
+      },
     },
     /* traffic 数据落袋通知(S6, 见文件头「S6 接入说明」)不写成 watch 选项: 本 mixin 走
      * app.mixin 全局注入, Vue 的 <transition> 内置假实例(BaseTransition)也会吃进全局 mixin
@@ -332,11 +399,46 @@
         if (!this.qbTrafficActive) return; /* 非流量形态(含关面板的数据 null 化)不通知 */
         this.$nextTick(() => this._dtNotify("traffic"));
       });
+      /* R2 S2: 视口宽回写(dtWinW 是 state.js 显式建字段) + 门边界跨越后重挂 —— 防抖 150ms。
+       * 只监听不读几何布局(dtSplitOn 是 computed, Vue 负责响应式翻转 v-if 结构)。 */
+      this._dtOnResize = () => {
+        clearTimeout(this._dtResizeT);
+        this._dtResizeT = setTimeout(() => {
+          this._dtResizeT = null;
+          this.dtWinW = window.innerWidth;
+          this.$nextTick(() => {
+            this._dtSync();  /* v-if 换代后旧宿主 isConnected 已假, 卸旧重挂 */
+            /* 门跨越恢复双列时第二列数据可能从未拉过(影子期零请求语义), 补给一次 */
+            if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
+          });
+        }, 150);
+      };
+      window.addEventListener("resize", this._dtOnResize);
+      /* R2 S2: 合并标志换代(右键开关) → 布局重挂 + 第二列数据补给。$watch 单发注册
+       * (全局 mixin 的 watch 选项会波及 BaseTransition 假实例, 同 traffic 通知的规避式)。 */
+      this._dtUnwatchMerge = this.$watch("drawerMerge", () => {
+        this.$nextTick(() => {
+          this._dtSync();
+          if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
+        });
+      });
     },
     beforeUnmount() {
       if (this._dtUnwatchTraffic) {
         this._dtUnwatchTraffic();
         this._dtUnwatchTraffic = null;
+      }
+      if (this._dtUnwatchMerge) {
+        this._dtUnwatchMerge();
+        this._dtUnwatchMerge = null;
+      }
+      if (this._dtOnResize) {
+        window.removeEventListener("resize", this._dtOnResize);
+        this._dtOnResize = null;
+      }
+      if (this._dtResizeT) {
+        clearTimeout(this._dtResizeT);
+        this._dtResizeT = null;
       }
     },
     methods: {
@@ -344,14 +446,41 @@
       _dtCurTab() {
         return this.qbTrafficActive ? "traffic" : this.drawer.tab;
       },
+      /* R2 S2: 当前页签所属合并对("gc"|"tp"|null) —— 流量与对外页签返回 null */
+      _dtPairOf(tab) {
+        if (this.qbTrafficActive) return null;
+        for (var k in MERGE_PAIRS) {
+          if (MERGE_PAIRS[k].indexOf(tab) >= 0) return k;
+        }
+        return null;
+      },
+      /* R2 S3: 合并开关宽度门(右键菜单置灰与挂载守卫共用同一判据, 常量单点 mergeMinWidth) */
+      dtMergeGateOk() {
+        return (this.dtWinW || window.innerWidth || 0) >= window.AQB_DRAWER_TPL_REG.mergeMinWidth;
+      },
+      /* R2 S3: 右键菜单勾选落点 —— 白名单校验 + 门内才生效 + 再点已选项即关 + 落盘。
+       * 布局换代(_dtSync)与第二列数据补给(_drawerMergeSupply, 本体在 drawer.js)由
+       * drawerMerge 的 $watch 单发统一触发(mounted 注册, 假实例守卫同 traffic 通知)。 */
+      dtSetMerge(v) {
+        v = String(v || "off");
+        if (MERGE_VALUES.indexOf(v) < 0) return;
+        if (v !== "off" && !this.dtMergeGateOk()) return; /* 置灰项双保险: class 拦显示, 这里拦行为 */
+        if ((this.drawerMerge || "off") === v) v = "off";
+        this.drawerMerge = v;
+        try { localStorage.setItem(MERGE_STORE_KEY, JSON.stringify(v)); } catch (e) { /* 写失败本轮仍生效 */ }
+        if (this.drawerMenu) this.drawerMenu.visible = false;
+      },
       /* 宿主显隐(模板 v-show 唯一入口 —— 变体与 Vue 争 DOM 红线: 显隐只走 host 自身):
        * 错误态与 general 无详情时宿主让位(与经典渲染链的接管口径一致); 流量正文块
-       * 自管加载/错误/空态, 宿主在其非空分支内, 无需重复判断。 */
+       * 自管加载/错误/空态, 宿主在其非空分支内, 无需重复判断。
+       * R2 S1: classic 移植为页插件后宿主恒承载内容(classic 不再是「宿主隐 + Vue 包裹层显」),
+       * 选中态只决定挂哪个插件; R2 S2: 合并生效时对内两列宿主同显(不只当前页签)。 */
       dtHostOn(tab) {
-        if (this._dtCurTab() !== tab) return false;
-        if (tab !== "traffic" && this.drawer.error) return false;
+        if (tab === "traffic") return this._dtCurTab() === "traffic";
+        if (this.drawer.error) return false;
         if (tab === "general" && !this.drawer.detail) return false;
-        return ((this.drawerTplSel || {})[tab] || "classic") !== "classic";
+        if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
+        return this._dtCurTab() === tab;
       },
       /* 切换器 change 落点(种子头部/流量头部共用): 白名单外脏值回落当前值, 合法即落盘 + 重挂 */
       dtPick(ev) {
@@ -374,27 +503,81 @@
           localStorage.setItem(STORE_KEY, JSON.stringify(out));
         } catch (e) { /* 写入失败: 本轮仍生效, 刷新后回落 classic */ }
       },
-      /* ---------------- 生命周期(drawer.js 一行式钩子的本体) ---------------- */
-      /* 换页签/换目标(_loadDrawerTab 尾): 卸旧变体, 按 drawerTplSel 挂当前页签变体并喂现数据;
-       * 选中 classic 则只亮经典包裹层(卸载即净)。 */
+      /* ---------------- 生命周期(drawer.js 一行式钩子的本体) ----------------
+       * R2 S1: classic 移植为页插件 —— _dtMountActive 对 classic 也挂载(不再是「classic 不挂、
+       * Vue 包裹层接管」); R2 S2: 合并双列 = 主列(当前页签, _dtMounted) + 次列(_dtMounted2),
+       * 主列挂载语义与回落守阵完全不动, 次列独立挂载态成对卸载/通知。 */
+      /* 换页签/换目标(_loadDrawerTab 尾): 卸旧全部实例, 挂当前页签(主列)+ 合并次列 */
       _dtSync() {
         this._dtUnmountAll();
         this._dtMountActive(this._dtCurTab());
+        this._dtMountSplit();
       },
-      /* 数据落袋(drawer.js 四 fetcher + _qbLoad): 活动变体重渲染。
+      /* 单实例挂载: 按选择取注册表条目; 变体挂载态给宿主加 .dt-tpl(限宽作用域类, R2 S1 ——
+       * 经典链历史上恒满宽, 限宽只归变体), classic 摘除。挂载失败返回 null(未挂载语义)。 */
+      _dtMountOne(tab, sel) {
+        var entry = window.AQB_DRAWER_TPL_REG.get(tab, sel || CLASSIC);
+        if (!entry) return null;
+        var host = this._dtFindHost(tab, entry);
+        if (!host) return null;
+        if (host.classList) {
+          if (entry.id !== CLASSIC) host.classList.add("dt-tpl");
+          else host.classList.remove("dt-tpl");
+        }
+        var st = { tab: tab, entry: entry, host: host, ownerKey: "" };
+        this._dtRender(st);
+        return st;
+      },
+      _dtMountActive(tab) {
+        this._dtMounted = null;
+        var sel = (this.drawerTplSel || {})[tab] || CLASSIC;
+        var st = this._dtMountOne(tab, sel);
+        if (st) {
+          st.ownerKey = "_dtMounted";
+          this._dtMounted = st;
+        }
+      },
+      /* R2 S2: 合并次列 = 生效对内非当前页签那列; 未生效(单栏/门外/对外页签)恒空 */
+      _dtMountSplit() {
+        this._dtMounted2 = null;
+        if (!this.dtSplitOn) return;
+        var pair = MERGE_PAIRS[this._dtPairOf(this.drawer.tab)];
+        var other = pair[0] === this.drawer.tab ? pair[1] : pair[0];
+        var sel = (this.drawerTplSel || {})[other] || CLASSIC;
+        var st = this._dtMountOne(other, sel);
+        if (st) {
+          st.ownerKey = "_dtMounted2";
+          this._dtMounted2 = st;
+        }
+      },
+      /* 数据落袋(drawer.js 四 fetcher + _qbLoad): 活动实例逐个重渲染。
        * 未挂载/宿主已被拆时懒挂载兜底 —— 打开抽屉走 general 初值路径时 _loadDrawerTab 不执行
-       * (openTorrentDrawer 只拉详情), 变体挂载靠 detail 落袋的第一发通知补齐; 流量正文块的
-       * 加载/错误/空态分支会拆装宿主(v-if), 拆过就卸旧重挂(四页签宿主恒在, isConnected 恒真)。 */
+       * (openTorrentDrawer 只拉详情), 插件挂载靠 detail 落袋的第一发通知补齐; 流量正文块的
+       * 加载/错误/空态分支会拆装宿主(v-if), 拆过就卸旧重挂(四页签宿主恒在, isConnected 恒真);
+       * 合并次列同判据独立兜底(v-if 换代/合并开关翻转都会拆掉旧宿主)。 */
       _dtNotify(type) {
         var tab = this._dtCurTab();
         var st = this._dtMounted;
         if (!st || st.tab !== tab || !st.host.isConnected) {
           this._dtUnmountAll();
           this._dtMountActive(tab);
+          this._dtMountSplit();
           return;
         }
+        this._dtNotifySt(st, type);
+        var st2 = this._dtMounted2;
+        if (st2) {
+          if (!st2.host.isConnected || this._dtPairOf(st2.tab) !== this._dtPairOf(tab)) {
+            this._dtUnmountOne("_dtMounted2");
+            this._dtMountSplit();
+            return;
+          }
+          this._dtNotifySt(st2, type);
+        }
+      },
+      _dtNotifySt(st, type) {
         if (st.entry.notify) {
-          try { st.entry.notify(type, st.host, this); } catch (e) { /* 变体通知失败不拖垮面板 */ }
+          try { st.entry.notify(type, st.host, this); } catch (e) { /* 插件通知失败不拖垮面板 */ }
           return;
         }
         this._dtRender(st);
@@ -403,40 +586,42 @@
         try {
           st.entry.render(st.host, this);
         } catch (e) {
-          /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落经典渲染层, 不再降级为整幅空白
-           * —— 只清宿主时经典包裹层因 drawerTplSel.<tab> !== 'classic' 仍被 v-show 藏住,
-           * .dt-host:empty 又把空宿主藏住, 两条退路同时断掉。复位 drawerTplSel.<tab> 让经典层
-           * v-show 自然接管、dtHostOn 随之隐藏宿主(状态单点仍是 drawerTplSel, 不新增并行标志);
-           * 并按 classic 语义卸载本变体(destroy + 清宿主 + 摘挂载态), 后续通知/换页签/重开面板
-           * 都按 classic 续走。复位随 dtPersistSel 落盘: 持续抛错的变体不跨会话钉死坏选择;
-           * 一次性瞬时错误的代价是用户在切换器重选一次 —— 两权取其轻取前者。从回落到 Vue 重渲染
-           * 之间的一拍, 空宿主由既有 .dt-host:empty 兜住不闪空白(主路径靠 v-show 切走, 不依赖
-           * :empty)。不静默吞栈, 报错带页签与变体 id。 */
-          this._dtMounted = null;
+          /* classic 自身抛错(R2 S1): 无更低回落层 —— 错误外壳进宿主不空屏, 不复位用户选择。 */
+          if (st.entry.id === CLASSIC) {
+            try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
+            try { st.host.innerHTML = window.AQB_DRAWER_TPL_REG.kit.error("该页渲染失败"); } catch (e2) { /* 同上 */ }
+            if (typeof console !== "undefined" && console.error) {
+              console.error("[dt] classic render failed (tab=" + st.tab + "):", e);
+            }
+            return;
+          }
+          /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落经典渲染层 —— 复位
+           * drawerTplSel.<tab>(状态单点仍是 drawerTplSel, 不新增并行标志)并按 classic 语义
+           * 卸载本变体(destroy + 清宿主 + 摘 .dt-tpl + 摘挂载态), 后续通知/换页签/重开面板
+           * 都按 classic 续走。复位随 dtPersistSel 落盘: 持续抛错的变体不跨会话钉死坏选择。
+           * R2 S1: classic 也是插件了, 复位后立即重挂 classic(不再有 Vue 包裹层兜底显示)——
+           * 守阵电池的假 ctx 只带回落路径触碰的面, 挂载助手缺省时跳过即时重挂(下一拍通知补齐)。 */
           if (st.entry.destroy) {
-            try { st.entry.destroy(st.host); } catch (e2) { /* destroy 失败不阻断回落 */ }
+            try { st.entry.destroy(st.host, this); } catch (e2) { /* destroy 失败不阻断回落 */ }
           }
           try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
-          if (this.drawerTplSel && this.drawerTplSel[st.tab] !== "classic") {
-            this.drawerTplSel[st.tab] = "classic";
+          if (st.host.classList) st.host.classList.remove("dt-tpl");
+          this[st.ownerKey || "_dtMounted"] = null;
+          if (this.drawerTplSel && this.drawerTplSel[st.tab] !== CLASSIC) {
+            this.drawerTplSel[st.tab] = CLASSIC;
             this.dtPersistSel();
+          }
+          if (typeof this._dtMountOne === "function" && typeof this._dtFindHost === "function") {
+            var stc = this._dtMountOne(st.tab, CLASSIC);
+            if (stc) {
+              stc.ownerKey = st.ownerKey || "_dtMounted";
+              this[st.ownerKey || "_dtMounted"] = stc;
+            }
           }
           if (typeof console !== "undefined" && console.error) {
             console.error("[dt] render failed, fallback to classic (tab=" + st.tab + ", variant=" + st.entry.id + "):", e);
           }
         }
-      },
-      _dtMountActive(tab) {
-        this._dtMounted = null;
-        var sel = (this.drawerTplSel || {})[tab] || "classic";
-        if (sel === "classic") return;
-        var entry = window.AQB_DRAWER_TPL_REG.get(tab, sel);
-        if (!entry) return; /* 存储里的 id 已被删文件: readSel 兜不到的运行期缺失, 回落 classic 语义 */
-        var host = this._dtFindHost(tab, entry);
-        if (!host) return;
-        var st = { tab: tab, entry: entry, host: host };
-        this._dtMounted = st;
-        this._dtRender(st);
       },
       /* 宿主定位: 四页签 = data-dt-host="<tab>"; 流量页签双宿主 data-dt-host="traffic-pre|post" */
       _dtFindHost(tab, entry) {
@@ -445,16 +630,25 @@
         var name = tab === "traffic" ? "traffic-" + entry.slot : tab;
         return root.querySelector('.dt-host[data-dt-host="' + name + '"]');
       },
-      /* 关面板(drawer.js closeDrawer): 逐变体 destroy(定时器/监听清理) + 清空宿主子树 */
+      /* 关面板(drawer.js closeDrawer): 逐实例 destroy(定时器/监听清理) + 清空宿主子树 */
       _dtUnmountAll() {
-        var st = this._dtMounted;
+        this._dtUnmountOne("_dtMounted");
+        this._dtUnmountOne("_dtMounted2");
+      },
+      _dtUnmountOne(key) {
+        var st = this[key];
         if (!st) return;
-        this._dtMounted = null;
+        this[key] = null;
         if (st.entry.destroy) {
-          try { st.entry.destroy(st.host); } catch (e) { /* destroy 失败不阻断关闭 */ }
+          try { st.entry.destroy(st.host, this); } catch (e) { /* destroy 失败不阻断关闭 */ }
         }
+        if (st.host.classList) st.host.classList.remove("dt-tpl");
         try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
       },
     },
   };
+  /* R2 对外暴露: 门常量与合并对(右键菜单/守阵/数据供给共用, 不抄第二份) */
+  window.AQB_DRAWER_TPL_REG.mergeMinWidth = DT_MERGE_MIN_WIDTH;
+  window.AQB_DRAWER_TPL_REG.mergePairs = MERGE_PAIRS;
+  window.AQB_DRAWER_TPL_REG.mergeValues = MERGE_VALUES.slice();
 })();

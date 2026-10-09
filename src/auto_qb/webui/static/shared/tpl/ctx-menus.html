@@ -277,5 +277,23 @@
           </div>
         </div>
         </transition>
+        <!-- 抽屉右键菜单(R2 S3, 计划 26-10-09-2219): 页签合并开关 —— 两对互斥勾选, 再点已选项即关。
+             门不满足置灰可见(is-gated + title 提示; dtSetMerge 里再拦一道, 无入口即无状态变化)。
+             菜单本体只在种子详情形态被 openDrawerMenu 弹出。 -->
+        <transition name="pop">
+        <div v-if="drawerMenu.visible" ref="drawerMenuEl" class="ctx-menu" :style="{left: drawerMenu.x+'px', top: drawerMenu.y+'px'}"
+             @click.stop @contextmenu.prevent>
+          <div class="ctx-item" :class="{ 'is-gated': !dtMergeGateOk() }" :title="dtMergeGateOk() ? '' : '窗口宽度不足'"
+               @click="dtSetMerge('gc')">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>常规+内容 并排
+            <svg v-if="drawerMerge === 'gc'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+          </div>
+          <div class="ctx-item" :class="{ 'is-gated': !dtMergeGateOk() }" :title="dtMergeGateOk() ? '' : '窗口宽度不足'"
+               @click="dtSetMerge('tp')">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>Tracker+用户 并排
+            <svg v-if="drawerMerge === 'tp'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+          </div>
+        </div>
+        </transition>
         </main>
       </div>

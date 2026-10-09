@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤206 行(S1 定 200, 计划 26-10-06-0838 S5/S6 各 +3)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤210 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
@@ -785,7 +785,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤206 行(S1 定 200, 计划 26-10-06-0838 S5 起 +3, S6 起再 +3)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤210 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -795,10 +795,11 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 206:
+        if n_shell > 210:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 206"
-                "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5 起 content +3, S6 起 traffic 再 +3)"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 210"
+                "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
+                "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []

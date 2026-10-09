@@ -529,7 +529,7 @@ window.AQB_DIALOGS = {
      * 时那条 Esc 该留给当前页面, 不是去关一张不在屏幕上的面板 —— 2026-10-06 面板加页面守卫后的连带改。 */
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
-        this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawerVisible || this.historyOpen ||
+        this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawerMenu.visible || this.drawerVisible || this.historyOpen ||
         this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.kbHelpOpen || this.errPanelOpen ||
         this.filterMenu ||

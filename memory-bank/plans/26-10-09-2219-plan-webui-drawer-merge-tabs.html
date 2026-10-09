@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 种子详情面板页签合并构想</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-merge-tabs">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-09-2219">
+<meta name="doc-updated" content="26-10-09-2353">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101418;
+    --panel: #151a20;
+    --panel-2: #12171d;
+    --ink: #dde5eb;
+    --muted: #93a3af;
+    --faint: #6b7a85;
+    --accent: #5fb8c9;
+    --accent-dim: rgba(95, 184, 201, 0.14);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-strong: rgba(255, 255, 255, 0.16);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --disp: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Sarasa Mono SC", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--bg);
+    padding: 56px 24px 96px;
+  }
+  .canvas { max-width: 1140px; margin: 0 auto; }
+  .prose { max-width: 74ch; }
+
+  /* ---------- 头部 ---------- */
+  .kicker {
+    font-family: var(--disp);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--disp);
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    margin-bottom: 10px;
+  }
+  .lede {
+    font-size: 16.5px;
+    color: var(--muted);
+    max-width: 68ch;
+    margin-bottom: 22px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 28px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 40px;
+  }
+  .meta-row b { color: var(--muted); font-weight: 400; }
+
+  /* ---------- 目录 ---------- */
+  .toc {
+    border: 1px solid var(--hairline);
+    background: var(--panel-2);
+    padding: 18px 24px;
+    margin-bottom: 48px;
+  }
+  .toc-title {
+    font-family: var(--disp);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 10px;
+  }
+  .toc ol { list-style: none; columns: 2; column-gap: 48px; }
+  .toc li {
+    font-size: 13.5px;
+    padding: 3px 0;
+    break-inside: avoid;
+  }
+  .toc li a { color: var(--ink); text-decoration: none; }
+  .toc li a:hover { color: var(--accent); }
+  .toc .n { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 56px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-bottom: 1px solid var(--hairline-strong);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+  }
+  .sec-num {
+    font-family: var(--disp);
+    font-size: 15px;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  h2 {
+    font-family: var(--disp);
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  h3 {
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  h3 .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--accent);
+    margin-right: 8px;
+  }
+  p { margin-bottom: 12px; }
+  .prose p, .prose li { line-height: 1.7; }
+  code, .m {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    padding: 1px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  code.long { white-space: normal; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); }
+
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 16px 0 8px;
+  }
+  th {
+    font-family: var(--disp);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+  td .m { white-space: normal; }
+  .tbl-wrap { margin: 18px 0 10px; }
+  .ok { color: #7cc08a; }
+  .no { color: #c98a7c; }
+
+  /* ---------- 引用块 ---------- */
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--panel-2);
+    padding: 12px 18px;
+    margin: 18px 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 26px 0; }
+  figcaption {
+    font-size: 12.5px;
+    color: var(--faint);
+    margin-top: 10px;
+    padding-left: 2px;
+  }
+  figcaption .fn { font-family: var(--mono); color: var(--accent); margin-right: 8px; }
+  .fig-frame {
+    border: 1px solid var(--hairline);
+    background: var(--panel-2);
+    padding: 20px;
+  }
+  svg { display: block; width: 100%; height: auto; }
+
+  /* ---------- 清单 ---------- */
+  ul.plain, ol.plain { margin: 0 0 12px 0; padding-left: 1.4em; }
+  ul.plain li, ol.plain li { margin-bottom: 6px; }
+  .check { list-style: none; padding-left: 0; }
+  .check li {
+    padding: 7px 0 7px 26px;
+    border-bottom: 1px solid var(--hairline);
+    position: relative;
+    font-size: 14px;
+  }
+  .check li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 13px;
+    width: 10px; height: 10px;
+    border: 1px solid var(--hairline-strong);
+    background: var(--panel);
+  }
+  .check li .m { font-size: 12px; }
+
+  /* ---------- 决策卡(直角, 无阴影) ---------- */
+  .verdict {
+    border: 1px solid var(--hairline-strong);
+    background: var(--panel);
+    padding: 16px 20px;
+    margin: 20px 0;
+  }
+  .verdict .v-label {
+    font-family: var(--disp);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  /* ---------- 变更记录 ---------- */
+  .changelog { border: 1px solid var(--hairline); background: var(--panel-2); }
+  .changelog .cl-item { padding: 14px 20px; border-bottom: 1px solid var(--hairline); }
+  .changelog .cl-item:last-child { border-bottom: none; }
+  .changelog .cl-stamp {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .changelog .cl-item p { font-size: 13.5px; color: var(--muted); margin: 0; }
+
+  /* ---------- 脚注区 ---------- */
+  .colophon {
+    margin-top: 64px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hairline-strong);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  @media (max-width: 760px) {
+    .toc ol { columns: 1; }
+    h1 { font-size: 27px; }
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <!-- ==================== 头部 ==================== -->
+  <header>
+    <div class="kicker">Plan · WebUI · Seed Detail Drawer · R2</div>
+    <h1>种子详情面板页签合并构想</h1>
+    <p class="lede">常规+内容、Tracker+用户 两组页签通过右键菜单自由开关并排合并,宽度足够时才可用;每一页移植为统一契约的页插件,合并列直接复用页插件(含各自模板选择与全部交互)——治高分屏限宽留白,同时消掉经典链与变体层的代码重复。</p>
+    <div class="meta-row">
+      <span><b>stamp</b> 26-10-09-2219(R2 2249 / R3 2353)</span>
+      <span><b>status</b> Done(已实施, 四项拍板: S1 先行 / 1920 暂定 / 双击不做 / 置灰)</span>
+      <span><b>topic</b> webui-drawer-merge-tabs</span>
+      <span><b>refs</b> 计划 26-10-06-0838(变体体系) · 报告 26-10-07-0542(限宽决策)</span>
+    </div>
+  </header>
+
+  <!-- ==================== 目录 ==================== -->
+  <nav class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span>背景与现状</a></li>
+      <li><a href="#s2"><span class="n">02</span>问题陈述(R2 修订)</a></li>
+      <li><a href="#s3"><span class="n">03</span>构想:四条设计决策</a></li>
+      <li><a href="#s4"><span class="n">04</span>路线对比与选型</a></li>
+      <li><a href="#s5"><span class="n">05</span>技术方案</a></li>
+      <li><a href="#s6"><span class="n">06</span>实施步骤</a></li>
+      <li><a href="#s7"><span class="n">07</span>验收清单</a></li>
+      <li><a href="#s8"><span class="n">08</span>风险与开放问题</a></li>
+      <li><a href="#s9"><span class="n">09</span>变更记录</a></li>
+    </ol>
+  </nav>
+
+  <!-- ==================== 01 背景与现状 ==================== -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>背景与现状</h2></div>
+    <div class="prose">
+      <p>种子详情面板(停靠抽屉)现有五页签:<code>general</code> 常规、<code>trackers</code> Tracker、<code>peers</code> 用户、<code>content</code> 内容、<code>traffic</code> 流量。计划 26-10-06-0838 建立了「经典 + 模板变体」体系:每页签有独立的变体选择器(<code>.dt-select</code>),变体文件 <code>drawer_tpl/NN-&lt;tab&gt;-&lt;slug&gt;.js</code> 自注册,经三份主题 manifest(atlas / console / prism 的 <code>index.html</code>)装载,当前 15 个变体。</p>
+      <p>报告 26-10-07-0542 §2 为治「4K 下键值栅格/英雄行等分拉伸到视口宽」,给四个页签的变体宿主加了<strong>单点限宽</strong>(<code>drawer_templates.js</code> 00-core 注入):</p>
+      <p><code class="long">.dt-host[data-dt-host="general|trackers|peers|content"] { max-width: 1400px; margin: auto; }</code></p>
+      <p>这条限宽在窄屏零变化、在中屏恰到好处,但在高分辨率屏幕上,居中内容两侧出现大片空白。</p>
+      <p>与本轮直接相关的第二层现状是<strong>渲染层的双轨重复</strong>:四个页签的经典视图活在 <code>tpl/drawer.html</code> 的 Vue 模板里(v-if/v-show 链),15 个变体又在各自的 JS 里以命令式 DOM 重写同类内容——加载/错误/空态外壳、小节标题、键值栅格、表格骨架,每个变体各造一遍。任何「把某页内容放到别处显示」的需求(合并视图正是这种)在现状下要么复制模板、要么复制变体,重复是结构性的。</p>
+    </div>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1080 240" role="img" aria-label="现状与合并的宽度占用对比">
+          <!-- 现状行 -->
+          <text x="0" y="24" font-family="Consolas, monospace" font-size="12" fill="#6b7a85">现状 · 2560 视口</text>
+          <rect x="0" y="36" width="1080" height="56" fill="#12171d" stroke="rgba(255,255,255,0.08)"/>
+          <rect x="121" y="44" width="589" height="40" fill="#1b232b" stroke="rgba(255,255,255,0.16)"/>
+          <text x="415" y="69" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">单页签内容 ≤ 1400px</text>
+          <text x="60" y="69" font-family="Consolas, monospace" font-size="11" fill="#6b7a85" text-anchor="middle">留白</text>
+          <text x="895" y="69" font-family="Consolas, monospace" font-size="11" fill="#6b7a85" text-anchor="middle">留白</text>
+          <!-- 合并行 -->
+          <text x="0" y="132" font-family="Consolas, monospace" font-size="12" fill="#6b7a85">合并 · 2560 视口</text>
+          <rect x="0" y="144" width="1080" height="56" fill="#12171d" stroke="rgba(255,255,255,0.08)"/>
+          <rect x="59" y="152" width="476" height="40" fill="#1b232b" stroke="rgba(255,255,255,0.16)"/>
+          <rect x="545" y="152" width="476" height="40" fill="#1b232b" stroke="rgba(255,255,255,0.16)"/>
+          <text x="297" y="177" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">常规列</text>
+          <text x="783" y="177" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">内容列</text>
+          <!-- 4K 注记 -->
+          <text x="0" y="228" font-family="Consolas, monospace" font-size="11" fill="#93a3af">2560px 下两侧各空 ~580px;3840px 下各空 ~1220px。合并后上限 2400px 居中,4K 下两侧各 ~720px。</text>
+        </svg>
+      </div>
+      <figcaption><span class="fn">图 1</span>限宽居中的留白问题与双栏合并后的宽度占用(按 2560 视口等比示意)。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ==================== 02 问题陈述 ==================== -->
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>问题陈述(R2 修订)</h2></div>
+    <div class="prose">
+      <p>用户动议(R1 概括):<strong>面板限宽后,高分辨率屏幕上两边都是空的;考虑把「常规&内容」「Tracker&用户」合并,仅当宽度足够时提供合并选项,可切换。</strong></p>
+      <p>R2 补充反馈,对 R1 方案(合并 = 页签下的特殊变体)的三点修正:</p>
+      <ol class="plain">
+        <li><strong>无法自由选择</strong>——R1 把合并做成 <code>general</code> 页签下的一个变体,合并后另一列(内容)以固定只读版式出现:另一页签自己的模板选择(经典或任一变体)被钉死,交互也被 v1 只读收敛砍掉。用户要的是<strong>随时右键开关、两列各自保持完整的页能力</strong>。</li>
+        <li><strong>功能需要完整保留</strong>——合并列不是预览,就是那一页本身:优先级、重命名、封禁等交互在合并态照常可用。</li>
+        <li><strong>各页做成插件,减少代码重复</strong>——把每一页的内容渲染收敛为统一契约的可复用单元,单页签视图与合并列消费同一个实现,顺带治 §1 末段的结构性双轨重复。</li>
+      </ol>
+      <p>把动议拆成四个可独立验证的诉求:</p>
+      <ol class="plain">
+        <li><strong>利用宽度</strong>——高分屏留白不该浪费,但不许回到「内容拉伸满视口」的老病;出路是并排放两份<strong>完整的</strong>页内容。</li>
+        <li><strong>门控</strong>——合并只在宽度足够时有意义;窄屏下强行双栏会把每列挤到不可读,开关必须按宽度可用性约束。</li>
+        <li><strong>自由可逆</strong>——右键即开即关,不分页签顺序、不锁定模板;状态跨会话记忆。</li>
+        <li><strong>插件化</strong>——每页一个实现,单栏与合并共用;新增显示形态(未来的三栏、浮窗)不再复制内容层。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ==================== 03 构想 ==================== -->
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>构想:四条设计决策</h2></div>
+
+    <h3><span class="tag">D1</span>页插件化:每一页一个统一契约的实现</h3>
+    <div class="prose">
+      <p>把「页」从模板与变体的双轨里抽出来,收敛为<strong>页插件(page plugin)</strong>:常规、Tracker、用户、内容四页各自成为一个自包含插件,连同其全部变体,统一注册到页注册表,契约一致:</p>
+      <p><code class="long">{ tab, id, render(ctx), notify(type), destroy(), available?(ctx) }</code></p>
+      <p>配套一个<strong>部件工具箱(widget kit)</strong>:加载/错误/空态外壳、小节标题、键值栅格、表格骨架、行级键盘 roving tabindex 助手——插件按需取用。经典四链从 <code>drawer.html</code> 的 Vue 模板移植为 <code>id: "classic"</code> 的正式插件(持久化键值不变,经典仍是 <code>drawerTplSel</code> 的合法值,只是从「v-show 包裹层」变成「注册表条目」);15 个既有变体契约不变、原样入表。<strong>本轮不强制变体迁移到工具箱</strong>(范围守恒),迁移是后续渐进事项。</p>
+      <p>这一步的收益与合并无关也成立:单页签视图的加载/空态/错误外壳从「四份 Vue 链各一套」变成「工具箱一份」;此后任何新显示形态都是「换个宿主挂插件」,不再有内容层复制。</p>
+    </div>
+
+    <h3><span class="tag">D2</span>合并 = 布局模式,不是某个页签的变体</h3>
+    <div class="prose">
+      <p>合并是<strong>抽屉级的布局标志</strong>(<code>drawer.merge ∈ {"off", "gc", "tp"}</code>,独立持久化),不是挂在某个页签下的变体。生效且门满足时,抽屉正文渲染双列宿主,两列各自挂对应页签<strong>当前选中的页插件</strong>——常规列尊重常规页签的模板选择(经典或任一变体),内容列同理。<strong>模板选择 × 合并开关两个自由度彻底解耦</strong>,R1 的「无法自由选择」由此消解:用户可以「常规经典 + 内容树形变体」合并,也可以两边都经典,切换器照常各管各列。</p>
+      <table>
+        <thead><tr><th>合并对</th><th>左列</th><th>右列</th><th>配对理由</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>"gc"</code><br>常规 + 内容</td>
+            <td>常规页(所选插件)</td>
+            <td>内容页(所选插件)</td>
+            <td>「这是什么种子」与「它装了什么」是同一次阅读的两个半页;均以静态数据为主,无秒级跳动。</td>
+          </tr>
+          <tr>
+            <td><code>"tp"</code><br>Tracker + 用户</td>
+            <td>Tracker 页(所选插件)</td>
+            <td>用户页(所选插件)</td>
+            <td>「谁在供种」与「谁在下」是连接观察的一体两面;同为 5s 轮询表格,节奏同频,数据供给可共享一套扩展。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>流量页签不参与合并</strong>:图表满宽是它的本性;合并标志在流量页签/流量形态下暂不渲染(标志保留,回来自动恢复)。</p>
+    </div>
+
+    <h3><span class="tag">D3</span>右键开关:自由切换,门内可用</h3>
+    <div class="prose">
+      <p>开关入口 = 抽屉正文/页签栏<strong>右键菜单</strong>(新增 <code>ctx-menus.html</code> 的抽屉菜单种类,走既有 <code>openMenu</code> 家族 + <code>_menuFitRefit</code> 视口拟合):</p>
+      <ul class="plain">
+        <li>两项带勾选态:「常规+内容 并排」「Tracker+用户 并排」,点了即在 <code>"gc"</code>/<code>"tp"</code>/<code>"off"</code> 间切换(选一对即关另一对,同一时刻至多一对生效——双列已占满可读宽度,三栏不在本轮)。</li>
+        <li>宽度门不满足时两项<strong>置灰不隐藏</strong>(title 注明「窗口宽度不足」)——置灰传达「功能存在但被宽度挡住」,比藏起来更可发现;门满足即恢复可点。</li>
+        <li>右键之外保留一条快捷路径:页签栏双击等效切换当前页所属对的合并(可选加项,实施时定)。</li>
+      </ul>
+      <p>门判据取 <code>window.innerWidth >= 1920</code>(常量单点,初值 1920,可调):1920 屏合并后每列约 930px,真正比单栏 1400px 更好用;1366/1600 笔记本屏合并只会把每列挤到 700px 以下。与 R1 相同,<strong>门是运行时的暂态遮蔽,不是选择撤销</strong>:合并开着把窗口缩窄,生效表现回落单栏(当前页签),标志保留;拉宽自动恢复双栏。</p>
+    </div>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1080 280" role="img" aria-label="右键开关与宽度门状态流转">
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#93a3af"/>
+            </marker>
+          </defs>
+          <rect x="20" y="30" width="230" height="56" fill="#1b232b" stroke="rgba(255,255,255,0.16)"/>
+          <text x="135" y="53" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">抽屉内右键</text>
+          <text x="135" y="71" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">两项勾选:gc / tp</text>
+
+          <rect x="340" y="30" width="230" height="56" fill="#1b232b" stroke="rgba(255,255,255,0.16)"/>
+          <text x="455" y="53" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">drawer.merge 落盘</text>
+          <text x="455" y="71" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">"off" | "gc" | "tp"</text>
+
+          <rect x="660" y="30" width="230" height="56" fill="#1b232b" stroke="rgba(95,184,201,0.55)"/>
+          <text x="775" y="53" font-family="Consolas, monospace" font-size="12" fill="#5fb8c9" text-anchor="middle">双列宿主</text>
+          <text x="775" y="71" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">两列各挂所选页插件</text>
+
+          <rect x="340" y="190" width="230" height="56" fill="#12171d" stroke="rgba(255,255,255,0.16)"/>
+          <text x="455" y="213" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">影子期(门不满足)</text>
+          <text x="455" y="231" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">单栏生效 · 标志保留</text>
+
+          <line x1="250" y1="58" x2="334" y2="58" stroke="#93a3af" stroke-width="1" marker-end="url(#arr)"/>
+          <line x1="570" y1="58" x2="654" y2="58" stroke="#93a3af" stroke-width="1" marker-end="url(#arr)"/>
+          <text x="582" y="46" font-family="Consolas, monospace" font-size="11" fill="#6b7a85">门内</text>
+          <line x1="775" y1="86" x2="576" y2="202" stroke="#93a3af" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+          <text x="668" y="160" font-family="Consolas, monospace" font-size="11" fill="#6b7a85">缩窗 &lt; 1920</text>
+          <line x1="455" y1="190" x2="672" y2="90" stroke="#93a3af" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+          <text x="462" y="134" font-family="Consolas, monospace" font-size="11" fill="#6b7a85">拉宽 ≥ 1920 自动恢复</text>
+        </svg>
+      </div>
+      <figcaption><span class="fn">图 2</span>右键开关与宽度门流转:影子期单栏生效、标志保留,拉宽自动恢复双列。</figcaption>
+    </figure>
+
+    <h3><span class="tag">D4</span>功能完整保留:合并列就是页本身</h3>
+    <div class="prose">
+      <p>合并列挂的是页插件的<strong>正式实例</strong>,不是只读镜像:内容列的行选中、优先级菜单、重命名,用户列的封禁等动作照常可用。配套的唯一硬要求是<strong>交互状态按实例隔离</strong>(§5.6):同一页插件可能同时存在挂载于单栏与合并列的两份实例(互斥可见),行选中、弹层锚点这类状态不能共享全局单例。R1 的「v1 只读收敛」取消。</p>
+    </div>
+
+    <div class="verdict">
+      <div class="v-label">一句话构想</div>
+      <p style="margin:0">每页一个插件(经典链移植入表 + 部件工具箱),合并 = 抽屉级布局标志 + 右键勾选开关 + 宽度门;两列各挂各自所选插件,功能全量保留,门只遮蔽不撤销。</p>
+    </div>
+  </section>
+
+  <!-- ==================== 04 路线对比 ==================== -->
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>路线对比与选型</h2></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:5%"></th><th style="width:20%">路线</th><th>做法</th><th style="width:26%">结论</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="ok">A'</td>
+            <td><strong>页插件 + 布局模式 + 右键开关</strong>(R2 选定)</td>
+            <td>四页插件化(经典移植入表 + 工具箱),合并为抽屉级布局标志,右键勾选开关,两列各挂所选插件。</td>
+            <td class="ok">自由选择(模板 × 合并解耦)、功能全量、重复收敛;代价是 classic 移植的大批次(§6 S1)。</td>
+          </tr>
+          <tr>
+            <td class="no">A</td>
+            <td>合并 = 页签下特殊变体(R1)</td>
+            <td>合并作为 <code>general</code>/<code>trackers</code> 页签下的新变体 id,复用变体注册体系。</td>
+            <td class="no">用户反馈否决:选择器只能表达「当前页签的一个形态」,另一列的模板选择被钉死、交互被砍(无法自由选择);合并列内容要复制实现(代码重复),弃。</td>
+          </tr>
+          <tr>
+            <td class="no">B</td>
+            <td>头部独立「并排」开关 + 现状双轨</td>
+            <td>不动渲染层,新增标志直接把两个页签的既有 DOM 拼进双栏。</td>
+            <td class="no">双栏拼「Vue 经典链 DOM」做不动(v-if 链与页签互斥绑定),拼变体 DOM 则必须复制内容层;不插件化就没有自由组合的原料,弃。</td>
+          </tr>
+          <tr>
+            <td class="no">C</td>
+            <td>取消 1400px 限宽</td>
+            <td>内容满宽,高分屏不再留白。</td>
+            <td class="no">治标反弹:4K 下键值栅格拉伸正是报告 26-10-07-0542 §2 限宽要治的病;表格行在 3840px 下不可读,弃。</td>
+          </tr>
+          <tr>
+            <td class="no">D</td>
+            <td>上下堆叠合并</td>
+            <td>常规在上内容在下,一页滚完。</td>
+            <td class="no">不解决宽度浪费(留白依旧),只是把页签换成了滚动距离,弃。</td>
+          </tr>
+          <tr>
+            <td class="no">E</td>
+            <td>纯 CSS 容器查询双栏</td>
+            <td><code>@container</code> 按宿主宽度自动分栏。</td>
+            <td class="no">只解决布局,解决不了开关可用性、影子期回落、第二列数据供给与实例挂载;弃。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 05 技术方案 ==================== -->
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>技术方案(路线 A' 细化)</h2></div>
+
+    <h3><span class="tag">5.1</span>页插件契约与部件工具箱</h3>
+    <div class="prose">
+      <ul class="plain">
+        <li><strong>契约</strong>:<code>{ tab, id, render(ctx), notify(type), destroy(), available?(ctx) }</code>。<code>render</code> 负责整页状态(加载/错误/空/有数据),数据落袋走既有 <code>_dtNotify</code> 通道,卸载走 <code>destroy</code>(定时器/监听/弹层清理)。</li>
+        <li><strong>注册表</strong>:<code>TPL_REG</code> 扩为页注册表,允许 <code>id: "classic"</code>(原哨兵转正式条目);<code>drawerTplSel</code> 持久化键值与白名单校验口径不变——存储向后兼容,升级零迁移。</li>
+        <li><strong>部件工具箱</strong>:核心层新增共享构建器——<code>stateShell</code>(加载/错误/空三态外壳)、<code>sectionHead</code>、<code>kvGrid</code>、<code>dataTable</code>(含冻结首列钩子)、行级键盘 roving tabindex 助手(dt10/11/12 已用的那套上提单点)。经典插件全部经工具箱构建;变体<strong>不强制迁移</strong>,新变体鼓励用。</li>
+        <li><strong>文件布局</strong>:页插件放 <code>drawer_pages/</code>(classic 四件 + 后续插件),既有 <code>drawer_tpl/</code> 15 变体原样;三主题 manifest 各增对应行。</li>
+      </ul>
+    </div>
+
+    <h3><span class="tag">5.2</span>经典链移植:行为逐位不变的硬约束</h3>
+    <div class="prose">
+      <p>S1 是全方案风险中心(§8),移植必须满足三条不变式:</p>
+      <ol class="plain">
+        <li><strong>DOM 结构与类名钩子原样</strong>——FX-22 换页签过渡、截断族、冻结首列、<code>row-btn</code>/<code>prio-btn</code> 等 CSS 都钉在经典链的类名与层级上(<code>drawer.html</code> 注释明言「四个页签 body 与 FX-22/截断族原样保留」);插件产出的 DOM 与现模板逐类名一致,移植是「搬运」不是「重写」。</li>
+        <li><strong>交互链原样</strong>——行选中、<code>filePrio</code> 优先级菜单、重命名入口、键盘 roving 域,事件委托目标与状态读写路径不变(状态隔离改造见 §5.6,单独成批可回退)。</li>
+        <li><strong>Vue 职责收缩而非清零</strong>——<code>drawer.html</code> 保留头部(页签栏/切换器/统计栏)与宿主骨架;四页签经典 body 从模板移除,加载/错误/空态一并进插件。Vue 与插件的争用红线(显隐只走宿主自身)沿用既有纪律。</li>
+      </ol>
+      <p>验收锚点:S1 合入后,<strong>门不满足、合并关闭</strong>的状态下全站行为与移植前逐位一致(含 DOM),e2e 全绿——这一批独立可回退。</p>
+    </div>
+
+    <h3><span class="tag">5.3</span>合并布局层:标志、宿主、宽度门</h3>
+    <div class="prose">
+      <ul class="plain">
+        <li><strong>状态</strong>:<code>drawer.merge</code> ∈ <code>{"off","gc","tp"}</code>,独立 localStorage 键(白名单校验,脏值回落 <code>"off"</code>,与 <code>readSel</code> 同纪律);不在 <code>drawerTplSel</code> 里,两个自由度互不污染。</li>
+        <li><strong>宿主</strong>:生效且门内时,<code>drawer-body</code> 渲染双列容器(<code>grid-template-columns: minmax(560px,1fr) minmax(620px,1.15fr); gap: 24px</code>,上限 2400px 居中——<code>.drawer-split { max-width: 2400px; margin: auto; }</code> 单点),两列各自一个列宿主;容器是 <code>drawer-body</code> 直接子节点,FX-29 遮罩(<code>.switching &gt; *</code>)照常命中。滚动沿用单一共享滚动,两列顶对齐独立生长。</li>
+        <li><strong>挂载</strong>:列宿主挂对应页签当前 <code>drawerTplSel[tab]</code> 指向的页插件;单栏态挂载逻辑(<code>_dtMountActive</code>)复用,只是目标宿主不同。<strong>页签栏照常工作</strong>:合并态下当前页签属于生效对时双列渲染;点对外页签(如流量)则本轮单栏渲染该页签,标志保留,回来自动恢复双列。列序按对固定(gc: 常规左/内容右;tp: Tracker 左/用户右),不随当前页签换序——位置记忆比「当前优先」稳定。</li>
+        <li><strong>宽度门</strong>:判据 <code>innerWidth >= DT_MERGE_MIN_WIDTH(1920)</code>,常量与判据函数单点在核心层,菜单置灰(§5.4)与挂载守卫共用。resize 防抖 150ms:双列激活但门转不满足 → 拆双列回单栏(标志不动);影子期门转满足 → 重建双列。</li>
+      </ul>
+    </div>
+
+    <h3><span class="tag">5.4</span>右键开关:抽屉菜单种类</h3>
+    <div class="prose">
+      <ul class="plain">
+        <li><code>ctx-menus.html</code> 新增抽屉菜单分支(<code>menu.drawer</code>),触发点 = 抽屉正文与页签栏的 <code>@contextmenu.prevent</code>;种子详情形态才渲染(流量形态无此项)。</li>
+        <li>两项:「常规+内容 并排」「Tracker+用户 并排」,勾选态反映 <code>drawer.merge</code>;点击互斥切换(选一对即关另一对,再点已选项即关)。</li>
+        <li>门不满足 → 两项置灰 + <code>title="窗口宽度不足"</code>;置灰项不触发 = 无入口即无状态变化。视口拟合走既有 <code>_menuFitRefit</code>,Esc 关闭走既有退栈链。</li>
+      </ul>
+    </div>
+
+    <h3><span class="tag">5.5</span>数据供给与轮询:归 drawer.js,插件零触碰</h3>
+    <div class="prose">
+      <p>插件纪律沿用「禁触碰轮询生命周期」,合并的第二列数据供给全做在 drawer.js,按「合并标志 + 门」门控:</p>
+      <ul class="plain">
+        <li><strong>gc 对</strong>:<code>openTorrentDrawer</code> / <code>_loadDrawerTab</code> 在合并生效时补一发 <code>_fetchDrawerFiles</code>;非当前页签的 <code>trackers/peers</code> 列表数据在双列激活时按需首发(进入 tp 对时两列表各一发)。</li>
+        <li><strong>tp 对</strong>:<code>_startDrawerPoll</code> tick 在合并生效时对 <code>trackers</code> 页签同时拉 <code>_fetchDrawerPeers(true)</code>(5s 同频,与用户页签单用时负载相同);<code>peers</code> 页签同理反向。</li>
+        <li><strong>FX-29</strong>:<code>_drawerWaitSources</code> 按生效对扩展(gc: <code>["detail","files"]</code>;tp: <code>["detail","trackers","peers"]</code>)——遮罩等全对数据源齐再掀,不掀半新半旧。</li>
+        <li><strong>请求代际纪律原样</strong>:补拉走既有 <code>(silent, seq)</code> 签名,换目标/换代际在途响应照旧丢弃。</li>
+      </ul>
+    </div>
+
+    <h3><span class="tag">5.6</span>交互状态按实例隔离(功能完整保留的关键)</h3>
+    <div class="prose">
+      <p>现状里一批交互状态是 app 级单例:<code>filePrio</code>(优先级弹层)、<code>drawerSelPath</code>(内容行选中)、批量选中集合。单栏态「同一时刻只挂一页」时单例无害;合并态下两个页插件实例同时活着,单例会串列(左列选中右列弹菜单)。改造原则:</p>
+      <ul class="plain">
+        <li><strong>插件实例持有自己的视图态</strong>:行选中、roving 锚点、列内排序记忆进实例;<code>destroy</code> 随实例销毁。</li>
+        <li><strong>跨实例单点状态保持单点</strong>:<code>filePrio</code> 弹层是文档级单例,但「谁打开了它」的锚点/indices 归打开它的实例;同一时刻只允许一个实例持有,切换选中即转移——与现状「切页签失效」语义一致,只是宿主从页签换成实例。</li>
+        <li>app 级数据(<code>drawer.files</code> 等)仍是共享单点,实例只读渲染——数据单点、视图态隔离,两层不混。</li>
+      </ul>
+      <p>这一批独立成批(S4),在单栏态先行合入验证(行为不变),再被合并态消费。</p>
+    </div>
+
+    <h3><span class="tag">5.7</span>回落链</h3>
+    <div class="prose">
+      <table>
+        <thead><tr><th style="width:34%">异常</th><th>处置</th></tr></thead>
+        <tbody>
+          <tr><td>某插件实例渲染抛错</td><td>实例级回落:该列回挂 <code>classic</code> 插件实例并 <code>drawerTplSel[tab]</code> 复位落盘(既有语义,宿主从全局单实例变为按列实例);另一列不受牵连。</td></tr>
+          <tr><td>门转不满足(双列激活中)</td><td>拆双列回单栏,标志保留;拉宽自动重建(暂态遮蔽)。</td></tr>
+          <tr><td>存储里 <code>merge</code> 脏值 / 插件 id 已删</td><td>白名单回落(<code>"off"</code> / classic),与 <code>readSel</code> 同纪律。</td></tr>
+          <tr><td>关面板</td><td>逐实例 destroy(定时器/监听/弹层清理)+ 清宿主;<code>filePrio</code> 单例若被某实例持有则强制归还关闭。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 06 实施步骤 ==================== -->
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>实施步骤</h2></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:10%">批次</th><th style="width:26%">内容</th><th>涉及</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>S1</code></td>
+            <td>部件工具箱 + 经典链插件化</td>
+            <td>核心层工具箱五件(stateShell/sectionHead/kvGrid/dataTable/roving 助手);<code>drawer_pages/</code> 四个 classic 插件;<code>drawer.html</code> 四页签 body 移除、头部与宿主骨架保留;注册表收编 classic;<strong>行为逐位不变,独立可回退</strong>。三 manifest 各 +4 行。</td>
+          </tr>
+          <tr>
+            <td><code>S2</code></td>
+            <td>合并布局层</td>
+            <td><code>drawer.merge</code> 标志 + 独立持久化键;<code>.drawer-split</code> 双列宿主与 2400px 上限单点;列挂载复用单栏挂载逻辑;<code>DT_MERGE_MIN_WIDTH</code> 门 + resize 防抖影子期。三 manifest 不动(无新插件文件)。</td>
+          </tr>
+          <tr>
+            <td><code>S3</code></td>
+            <td>右键开关</td>
+            <td><code>ctx-menus.html</code> 抽屉菜单分支;正文/页签栏 <code>@contextmenu</code> 接线;两项勾选互斥切换 + 门内置灰。</td>
+          </tr>
+          <tr>
+            <td><code>S4</code></td>
+            <td>交互状态按实例隔离</td>
+            <td>行选中/roving 锚点/排序记忆进插件实例;<code>filePrio</code> 持有权转移语义。单栏态先行合入(行为不变),合并态消费。</td>
+          </tr>
+          <tr>
+            <td><code>S5</code></td>
+            <td>数据供给与轮询</td>
+            <td><code>_loadDrawerTab</code>/<code>_startDrawerPoll</code>/<code>_drawerWaitSources</code> 按生效对扩展(§5.5)。</td>
+          </tr>
+          <tr>
+            <td><code>S6</code></td>
+            <td>测试</td>
+            <td>守阵:manifest 三处一致、门常量单点、影子期不动标志、实例隔离(<code>filePrio</code> 持有权);e2e:右键开关 → 双列、两列各自模板选择生效、列内优先级/重命名可用、缩窗影子/拉宽恢复、合并态换种子遮罩全对齐掀、门关态全站逐位一致。</td>
+          </tr>
+          <tr>
+            <td><code>S7</code></td>
+            <td>文档回写</td>
+            <td>webui 主题文档补页插件层与合并布局条目;本计划置 <code>Done</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="font-size:13.5px;color:var(--muted)">依赖链:S1 → S2 → S3/S4(可并行)→ S5 → S6。S1 完成即是一个独立安全点(功能零变化);S2 完成即可右键体验合并;S4/S5 补齐后才算功能完整。</p>
+  </section>
+
+  <!-- ==================== 07 验收清单 ==================== -->
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>验收清单</h2></div>
+    <ul class="check">
+      <li>S1 后、合并关闭且门不满足:全站行为与移植前<strong>逐位一致</strong>(含 DOM 结构与类名),e2e 全绿。</li>
+      <li>抽屉内右键:两项带勾选态,互斥切换;门不满足置灰 + title 提示,不产生任何状态变化。</li>
+      <li>合并生效(<code>≥ 1920</code>):双列居中(≤ 2400px),单一共享滚动,列序固定。</li>
+      <li><strong>两列各自尊重该页签的模板选择</strong>:左列经典 + 右列变体、双经典、双变体均成立;切换器改某列模板只影响该列。</li>
+      <li><strong>列内交互完整</strong>:内容列行选中/优先级菜单/重命名、用户列封禁照常;两列同时操作不串状态(<code>filePrio</code> 持有权唯一)。</li>
+      <li>合并开着缩窗过门 → 单栏生效(当前页签),右键项置灰;拉宽回门 → 双列自动恢复;<strong>全程标志不变</strong>。</li>
+      <li>合并态点对外页签(流量):该页签单栏渲染,标志保留;回到对内页签双列恢复。</li>
+      <li>合并态换种子:遮罩等全对数据源齐才掀,无半新半旧;代际纪律在途丢弃照旧;5s 轮询双源同频、<code>document.hidden</code>/非主内容页照旧跳过。</li>
+      <li>插件实例渲染抛错:该列回挂 classic 并落盘,另一列不受牵连;关面板逐实例清理,无残留定时器/弹层。</li>
+      <li>三主题 manifest 一致,既有守阵(变体注册、FX 族、按钮体系、静态体量)全绿。</li>
+    </ul>
+  </section>
+
+  <!-- ==================== 08 风险与开放问题 ==================== -->
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>风险与开放问题</h2></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:34%">点</th><th>评估与对策</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>S1 经典链移植的回归面</strong>(全方案最大风险)</td>
+            <td>四页签 body 搬运涉 FX-22/截断族/冻结首列/键盘域等大量 CSS 与守阵锚点。对策:搬运不重写(逐类名一致)+ S1 独立成批可回退 + 「门关态逐位一致」验收锚点 + e2e 先行补齐当前行为的快照用例再动。</td>
+          </tr>
+          <tr>
+            <td>实例隔离改造牵动单栏既有语义</td>
+            <td>S4 单栏先行合入验证(行为不变)再被合并态消费;「切页签选中失效」语义平移为「实例销毁即失效」,用户可感知行为不变。</td>
+          </tr>
+          <tr>
+            <td>tp 对双源 5s 轮询负载</td>
+            <td>与用户页签单用时的既有负载相同,无新增频次;peers 响应体随 peer 数增长,P1-4 注记已背书 5s 是观察用途安全档。</td>
+          </tr>
+          <tr>
+            <td>万级文件种子的内容列</td>
+            <td>经典 files 链与 dt11 的列表量级手段(S1 摸底确认)在合并列原样生效,合并不引入新渲染路径。</td>
+          </tr>
+          <tr>
+            <td>1920 阈值与带鱼屏</td>
+            <td>2400 上限封顶后居中;阈值是常量单点,实测不舒服改一个数字。</td>
+          </tr>
+          <tr>
+            <td>15 个变体未迁移工具箱</td>
+            <td>本轮非目标(范围守恒);变体契约不变照常工作,迁移是后续渐进事项,注册表已为新旧共存留好位置。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note" style="margin-top:20px">
+      <b>待拍板项</b>:① S1 大批次先行的实施顺序是否接受(先零行为移植、后合并能力);② 阈值初值 1920px;③ 双击页签栏等效切换的快捷路径做不做;④ 右键菜单两项在门内始终可见(置灰)是否符合预期。拍板后置 <code>In Progress</code>,按 §6 依赖链推进。
+    </div>
+  </section>
+
+  <!-- ==================== 09 变更记录 ==================== -->
+  <section id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>变更记录</h2></div>
+    <div class="changelog">
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-09-2353 · R3(实施完成)</div>
+        <p>四项拍板(S1 先行 / 阈值 1920 暂定 / 双击快捷路径不做 / 门内置灰)后按依赖链实施完毕。落地面: 核心层(classic 入表 + kit 工具箱 + 双实例挂载 + ownerKey 回落通道 + .dt-tpl 限宽收窄 + drawer-split 布局 + 门/resize/drawerMerge $watch)、classic 插件 x4(drawer_pages/, DOM 逐类名移植)、drawer.html 双结构宿主、三 manifest、右键菜单(ctx-menus/state/menu/lifecycle/dialogs escBusy)、数据供给对偶扩展(_loadDrawerTab/_startDrawerPoll/_drawerWaitSources/_drawerMergeSupply)。实施修正两处设计: 模板门判据须以方法调用取值; 合并开启/门跨越的第二列数据补给由 drawerMerge $watch 与 resize 回调统一触发(_drawerMergeSupply)。守阵同步 6 处(registry_wiring / width_discipline / fallback 静态+电池 / shell 上限 210 / storage 写基线 +1); e2e 新增 drawer-merge.spec.mjs(右键开合/双列渲染/门内置灰), 全量 128 passed。状态 Open → Done。</p>
+      </div>
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-09-2249 · R2</div>
+        <p>按用户反馈改版:合并从「页签下特殊变体」改为<strong>抽屉级布局标志 + 右键勾选开关</strong>(修正「无法自由选择」);新增 <strong>页插件化</strong> 设计决策(经典链移植入表 + 部件工具箱,单栏与合并共用同一实现,修正「代码重复」);取消 v1 只读收敛,合并列功能<strong>完整保留</strong>,新增交互状态按实例隔离方案(§5.6)。路线表新增 A'(选定)并标注 A(R1)否决原因;实施步骤重排为 S1–S7 依赖链;验收与风险相应更新。</p>
+      </div>
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-09-2219 · R1</div>
+        <p>初版:合并作为 general/trackers 页签下的新变体注册,宽度门 1920px 暂态遮蔽,v1 合并列只读。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="colophon">
+    <span>plan · webui-drawer-merge-tabs · 26-10-09-2219 / R2 2249</span>
+    <span>dark theme · 单文件自包含 · 双击即开</span>
+  </div>
+
+</div>
+</body>
+</html>

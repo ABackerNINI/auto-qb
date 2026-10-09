@@ -177,6 +177,18 @@ window.AQB_MENU = {
         multi: this._ctxMulti({ hashes: [member.hash] }),
       };
     },
+    /* 抽屉右键菜单(R2 S3, 计划 26-10-09-2219): 合并开关入口 —— 挂在抽屉正文与页签栏的
+     * @contextmenu 上。种子详情形态才弹(流量形态无合并项, 不弹即无入口); 对象整体替换
+     * 与三浮层同范式(state.js watch 按「对象替换」触发 _menuFitRefit 重钳位)。 */
+    openDrawerMenu(event) {
+      if (!this.drawer || !this.drawer.open || this.drawer.kind !== "seed" || this.qbTrafficActive) return;
+      event.preventDefault();
+      this._markCtxSource(event);
+      this.drawerMenu = {
+        visible: true,
+        ...this._menuPos(event),
+      };
+    },
     /* ---------------- FX-15 次级菜单(flyout) ----------------
      * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/
      * 强制开始/分享率限制/复制族 一律进「更多操作」(原则已写入 memory-bank conventions.md)。

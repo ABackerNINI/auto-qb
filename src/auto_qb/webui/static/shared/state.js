@@ -116,6 +116,15 @@ window.AQB_STATE = {
       // 详情面板模板选择(plan 26-10-06-0838 S1, P-01 初装全 classic): 按页签记模板 id;
       // 读侧白名单在核心层 readSel, 脏值/缺失/写失败一律回落 classic —— 字段必须显式建(vue-reactivity 坑)
       drawerTplSel: initialDrawerTpl(),
+      // 页签合并布局标志(R2, 计划 26-10-09-2219 S2): "off" | "gc"(常规+内容) | "tp"(Tracker+用户)。
+      // 抽屉级布局意图, 不随页签/种子/开关面板丢失; 独立于 drawerTplSel(模板选择 × 合并两个
+      // 自由度解耦)。读侧白名单同族: 脏值一律回落 "off"。生效还受宽度门约束(dtSplitOn 单点判据)。
+      drawerMerge: initialDrawerMerge(),
+      // 视口宽回写(核心层 resize 防抖 150ms): 门是暂态遮蔽 —— 缩窗过门双列回落单栏(标志不动),
+      // 拉宽自动恢复。显式建字段供 dtSplitOn computed 响应式消费。
+      dtWinW: typeof window !== "undefined" ? window.innerWidth : 0,
+      // 抽屉右键菜单(R2 S3): 合并开关入口(正文/页签栏 @contextmenu), 种子详情形态才弹
+      drawerMenu: { visible: false, x: 0, y: 0 },
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开
@@ -454,6 +463,10 @@ window.AQB_STATE = {
     },
     filePrio() {
       this.$nextTick(() => this._menuFitRefit("filePrio", "filePrioEl"));
+    },
+    // 抽屉右键菜单(R2 S3): 与三浮层同范式 —— 开层对象替换触发重钳位
+    drawerMenu() {
+      this.$nextTick(() => this._menuFitRefit("drawerMenu", "drawerMenuEl"));
     },
     // 通知(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
     // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项

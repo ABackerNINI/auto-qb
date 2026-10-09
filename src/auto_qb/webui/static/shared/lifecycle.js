@@ -71,6 +71,7 @@ window.AQB_LIFECYCLE = {
       this.uiMenuOpen = false;  // 顶栏界面切换下拉(与列选择器/筛选器同层的临时浮层)
       this.searchHelpOpen = false;  // 搜索语法浮卡(触发钮自身 @click.stop 已拦截, 点空白 = 收起)
       this.filePrio.visible = false;
+      this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 与右键菜单同层的临时浮层
       this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
       this.addTagMenu = false;
       this.addPathPop = false;
@@ -98,6 +99,7 @@ window.AQB_LIFECYCLE = {
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
+      else if (this.drawerMenu.visible) this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 同为抽屉内浮层
       // 历史流量弹层: 遮罩层(z-index 130)盖在停靠抽屉(80)之上, 与 qB 口径流量图(drawerVisible)
       // 同时存在时它才是视觉上的**最上层** —— 必须先关它, 否则 Esc 会穿过遮罩去关底下被盖住的抽屉
       // (退栈顺序 = 视觉层叠顺序: 弹层 → 抽屉; 2026-10-06 报障: 两图同开时 Esc 先关错了抽屉)

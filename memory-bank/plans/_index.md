@@ -20,6 +20,7 @@
 
 ## Done
 
+- [26-10-09-2219] [计划 · 种子详情面板页签合并构想](26-10-09-2219-plan-webui-drawer-merge-tabs.html) — `webui-drawer-merge-tabs`
 - [26-10-09-1243] [06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划](26-10-09-1243-plan-webui-per-tracker-reannounce.html) — `webui-detail-panel-templates`
 - [26-10-09-1057] [HR 排除种子终态行身份下载短路 · 分步实施计划 · auto-qb](26-10-09-1057-plan-hr-exclude-terminal-download.html) — `hr-steady-throttle`
 - [26-10-09-0821] [HR 故障归属分层拆分 · 分步实施计划 · auto-qb](26-10-09-0821-plan-hr-fault-domain.html) — `hr-fault-domain`
