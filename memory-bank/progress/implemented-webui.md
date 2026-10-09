@@ -7,6 +7,7 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEBUI Tracker 状态卡片栅格宽度统一: 虚拟合并卡去 sp2**(2026-10-09; 同专题续作无独立档案, 切片 26-10-06-0751): 用户报「变体 04 状态卡片栅格: 启用 tracker 卡片半宽, 未启用的虚拟条目全宽, 需统一」—— 根因 = 虚拟合并卡沿用设计稿 `sp2` 类跨双列全宽, 与实体卡(各占一格半宽)不一致; 拍板「虚拟卡改半宽」: 删 `.dt04-card.sp2` CSS 规则与类引用, 虚拟卡与实体卡同占一格, 与设计稿的差异点在 `virtualCardHtml` 注释标明; 基线见 [26-10-09-2012](../testing/baselines/26-10-09-2012-webui-dt04-tracker-card-width.md)。
 - **WEBUI 详情面板模板选择框收窄: 定宽 240 -> 150px**(2026-10-09; 同专题续作无独立档案, 切片 26-10-06-0751): 用户报「模板选择框太长, 长度需保持固定防切页签其它元素移位」—— 只改定宽值不回退内容驱动宽(原生 select 自动最小宽=最宽 option 的病根与守阵口径不变), `.dt-summary` 维持 240px 独立定宽(各按内容域取值, 不必等宽); 守阵 `test_drawer_tpl_select_fixed_width_tab_independent` / `test_drawer_tpl_cross_seed_fold_and_select_width` 同步 150 并加「240 不得残留」反向断言; 真浏览器双皮肤取证: 四页签 offsetWidth 恒 150(置 auto 探针后还原仍 150), 最长 label(英雄行·键值栅格)自然宽 117px 不截断; 基线见 [26-10-09-1939](../testing/baselines/26-10-09-1939-webui-detail-panel-dt-select-narrow.md)。
 - **WEBUI tooltip 二轮去冗 + 锚定下放**(2026-10-07, 分支 webui-tooltip-fix2 两提交 `94013201`/`99fa6eef`; 档案
   [tasks/26-10-04-webui-tooltip-declutter](../tasks/26-10-04-webui-tooltip-declutter.md) Done): 详情面板机械+拍板移除 45 处

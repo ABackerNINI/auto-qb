@@ -94,7 +94,6 @@
     ".drawer .dt04-card.st-err { --tr-c:var(--error); background:var(--error-soft); border-color:var(--error-line); }",
     ".drawer .dt04-card.st-err:hover { border-color:var(--error); }",
     ".drawer .dt04-card.st-off { --tr-c:var(--border-strong); background:transparent; border-style:dashed; box-shadow:none; }",
-    ".drawer .dt04-card.sp2 { grid-column:1 / -1; }",
     /* 卡头: 状态点 + 文案 + tier + 内网徽章 + host + 行内动作 */
     ".drawer .dt04-head { display:flex; align-items:center; gap:8px; min-width:0; }",
     ".drawer .dt04-dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--tr-c); }",
@@ -218,12 +217,12 @@
     </article>`;
   }
 
-  /* 虚拟条目合并卡(设计稿 sp2 弱化卡; 无虚拟条目整卡省略) */
+  /* 虚拟条目合并卡(与实体卡同占一格半宽; 无虚拟条目整卡省略) */
   function virtualCardHtml(ctx, trackers) {
     const vs = trackers.filter((t) => ctx.drawerTrackerVirtual(t.url));
     if (!vs.length) return "";
     const chips = vs.map((t) => T`<span class="dt04-vchip" title="qB 合成的虚拟条目">${t.url}</span>`).join("");
-    return T`<article class="dt04-card st-off sp2" style="order:95">
+    return T`<article class="dt04-card st-off" style="order:95">
       <header class="dt04-head">
         <span class="dt04-dot"></span>
         <span class="dt04-st" title="由 qBittorrent 合成, 非真实 tracker">未启用 · 虚拟条目 ×${vs.length}</span>
