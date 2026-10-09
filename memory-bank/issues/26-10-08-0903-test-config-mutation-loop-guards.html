@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config 校验/迁移/写回的多条目循环缺 continue/break 守阵">
 <meta name="issue-summary" content="20 个函数里的 continue 改成 break 全套件仍杀不掉(池内用例全是单条目): sections _validate_fs/_validate_trackers/_validate_hr_site_bindings/_validate_hr_check/_validate_tag_lists, curves 2, rules 4, migrations 2, loaders _resolve_hr_site_bindings, writer unmask_tree/_fallback_readonly_fields/_as_builtin, schema readonly_config_paths/plugins_by_kind">
 <title>config 校验/迁移/写回的多条目循环缺 continue/break 守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0903-test-config-mutation-loop-guards</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 09:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>多条目循环里的 <code>continue</code> 被改成 <code>break</code> 后, <b>全套件仍不红</b> —— 池内用例都是单条目(一次迭代), 看不出「首个条目命中跳过分支后, 后续条目被整体丢弃」。变异审计(计划 26-10-08-0720)首轮实测 20 个函数命中此形。</p>
+    <p><b>复验(2026-10-09, 认领开工):</b> 从首轮 dump 提取出全部 <b>30 条</b> <code>continue→break</code>/<code>break→return</code> 候选, 用 <code>mutants.verify</code> 逐条跑全套件 —— <b>21 SURVIVED / 9 KILLED</b>。9 条已被 R2/R7/R8 落的同型守阵杀死(<code>_migrate_config_1_2</code>×3 · <code>_collect_explicit_empty_paths</code> · <code>readonly_config_paths</code> · <code>_validate_hr_site_bindings</code> 的未登记档案分支 · <code>_validate_fs</code> 的非字典项分支 · <code>unmask_tree</code> · <code>_fallback_readonly_fields</code>), <b>现象仍在</b>(21 条待补)。</p>
   </section>
 
   <section id="s2">
@@ -94,7 +95,17 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 09:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-09 — 认领（用户指派「认领并修复」），状态 <strong>In Progress</strong>；开工先复验（防过期原则 5），复验结论见 §01</li>
+      <li>2026-10-09 16:11 — 修完并验证，状态 <strong>Done</strong>（补 18 个多条目守阵 · 红验 34/34 · 同池复跑存活 573→533）。实际修法/验证见 §05</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法 / 验证</h2>
+    <p><b>修法</b>（零 <code>src/</code> 改动，纯补测）：对复验后仍存活的 <b>21</b> 条候选，在 <code>tests/test_config.py</code>（10 个）与 <code>tests/test_hr_config.py</code>（8 个）补 <b>18 个「多条目」守阵</b> —— 每个用例都把「触发跳过分支的条目」放前、把「必须照常被处理的条目」放后，断言后者照常报错/被处理。同步两文件 docstring 的「## 测试计划」。</p>
+    <p><b>红验 34/34 RED</b>：30 条按首轮 dump 的 hunk 正文块逐字节套同构变异（保留 CRLF）后目标用例变红，<code>git checkout --</code> 还原（<code>src/</code> 零残留）；另 4 条（<code>_validate_trigger_action_compat</code> / <code>_validate_rules</code> 的 continue，行尾注释致首轮提取式漏收）手工合成同构变异后同样变红。</p>
+    <p><b>验证数字</b>：S4 <code>mutants.verify</code> 30 条 → <b>21 SURVIVED / 9 KILLED</b>；S6 同目标同池 <code>--no-refresh</code> 复跑 4,799 变异 / 杀 4,230 / 存活 <b>533</b> / <code>no tests</code> 36 → 杀死率 <b>88.14%</b>（上轮 573 / 87.31%）；逐 id 对差新杀 40 / 新增存活 0。全量测试数字见基线切片 <code>testing/baselines/26-10-09-1611-mutants-config-loop-guards.md</code>。</p>
+    <p><b>与「建议」的差异</b>：建议按「20 个函数」逐一补；实际以「复验后仍存活的 21 条变异」为准 —— 9 条候选已被 R2/R7/R8 的同型守阵杀死，不再重复补；<code>plugins_by_kind</code>（非循环）与 <code>_as_builtin</code>（无 continue/break）在复验中无对应循环守卫变异，不补。</p>
   </section>
 
   <footer>

@@ -59,7 +59,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config **四轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface); 池内 6 条 `test` issue 余 3 条待做; **hr 计划已派生**(`26-10-09-1459`, 见 R9); rules/core 计划仍未派生 |
+| S6+ 逐包轮次 | In Progress | config **五轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface)、R10(loop-guards); 池内 6 条 `test` issue 余 2 条待做(boundary-guards / loader-defaults); **hr 计划已派生**(`26-10-09-1459`, 见 R9); rules/core 计划仍未派生 |
 
 ## 进度日志
 
@@ -209,3 +209,17 @@
   - 步骤 S1–S8 全走 task id(`mutants.setup` → `mutants.run` → `mutants.report` + 三分类 → `mutants.verify` → 补测 → 复跑 → 记录 → **S8 更新常驻锚 §07**); 附 Windows 兜底 `mutants.gremlins` 与「单轮超 30 min 按模块再切」停手点。
 - **收尾**: `kb.index` 重建生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; 常驻锚 §07 `hr/` 行指针补计划链接 + §08 台账 + §09 日志同步。`test.full` 数字见基线切片 [26-10-09-1522](../testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md)(`src/` 与 `tests/` 零改动)。
 - **未做**: 未执行审计(计划边界: 不在计划里实施)。
+
+### 2026-10-09 R10 — 实施 loop-guards 真洞 issue(30 条 continue/break 候选复验 + 补 18 守阵)
+
+- **触发**: 用户「认领并修复: `issues/26-10-08-0903-test-config-mutation-loop-guards.html`」—— 首轮入池 6 条 `test` issue 中的第四条(config 多条目循环 continue/break 守阵)。
+- **范围**: config 校验/迁移/写回里**多条目循环**的 `continue→break` / `break→return` 类存活变异。从首轮 dump(`26-10-08-0742-config-py-mutants-dump.txt`)提取全部 **30 条**「纯 continue 行」候选。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(判据干净, 防过期原则 5)**: `mutants.verify --ids-file <30 条>` → **21 SURVIVED / 9 KILLED**(451s, ≈15s/条)。9 条已被 R2/R7/R8 落的同型守阵杀死(`_migrate_config_1_2`×3 · `_collect_explicit_empty_paths` · `readonly_config_paths` · `_validate_hr_site_bindings` 未登记档案分支 · `_validate_fs` 非字典项分支 · `unmask_tree` · `_fallback_readonly_fields`)—— 印证「issue 首轮清单已随 R2/R6/R7/R8 部分失效」, 复验是必要动作。
+- **S5 补测**: 新增 **18** 个测试函数, 全部为**多条目**形态(跳过分支条目放前 + 必被处理条目放后): `tests/test_config.py` 10 个 + `tests/test_hr_config.py` 8 个; 同步两文件 docstring 的「## 测试计划」。覆盖 `_validate_fs`(87/94/97/106/113)· `_validate_trackers`(9)· `_validate_tag_lists`(6)· `_validate_global_speed_limit_curve`(108/114)· `_validate_curve_points`(14/22)· `_check_rule_refs`(41)· `_validate_checking_action_spec`(46)· `_validate_trigger_action_compat`(25/32)· `_validate_rules`(两条 continue)· `_validate_hr_check`(237)· `_validate_hr_site_bindings`(10/50/65/76/82/88)· `loaders._resolve_hr_site_bindings`(2)。
+  - **关键发现(为什么首轮杀不掉)**: 池内旧用例都是**单条目**(一次迭代), `continue` 与 `break` 行为相同 —— 只有把「跳过分支条目 + 后续必处理条目」成对放入才能区分。`_validate_hr_site_bindings` 重复绑定那条(88)现网只有两个内置档案, 无法凑出第三条待处理条目, 故用 `monkeypatch.setitem(SITE_PRESETS, ...)` 加合成档案使 `break` 后果可观测。
+- **红验 34/34 RED**: 30 条按 dump 的 hunk 正文块**逐字节**套同构变异(保留 CRLF)→ 目标用例变红 → `git checkout --` 还原(`src/` 零残留); 余 4 条(`_validate_trigger_action_compat` 两条 / `_validate_rules` 两条)因 continue 行带行尾注释未被首轮「纯 continue 行」提取式命中, **手工合成**同构变异后同样变红。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4230** · 存活 **533** · `no tests` **36** → 杀死率 **88.14%**(R8 基线 573 存活 / 87.31%)。
+  - **存活 573 → 533(−40) / 新增存活 0**。归因: **21 条 = 本轮定向候选**(与 S4 逐 id 对应)· **2 条 = `_validate_trigger_action_compat__mutmut_25/32`**(真 `continue→break`, 行尾注释致首轮提取式漏收, 由新守阵杀死)· **17 条 = 同循环旁支变异**(`_validate_curve_points` 8/13/42 · gslc 98/113/115/137-140/159 · trigger_compat 26 · `_validate_fs` 50/111/112 · `_validate_tag_lists` 3/4)。
+- **S7 记录**: 基线切片 [26-10-09-1611-mutants-config-loop-guards](../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md); 本档案 R10; 常驻锚 §07(config 行补第 5 个切片指针)/§08/§09 同步; loop-guards issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-09-1611](../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md)(相对上基线 passed **+18** = 本轮新增用例, 未覆盖 **−2** / partial **−2**, `src/` 零改动)。
+- **未做 / 遗留**: 其余 2 条 config 真洞 issue(boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。

@@ -60,6 +60,16 @@
 - test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
 - test_validate_qb_traffic_positive_boundary: sample_interval 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
 - test_validate_gslc_interval_key_exact: global_speed_limit_curve.interval 键名精确性 + 值校验(positive)
+- test_validate_fs_reports_all_entries_after_skip_branches: fs.path_map 空 from/归一后为空/空 to 条目不得中断后续条目校验(continue 而非 break)
+- test_validate_fs_prefix_ambiguity_keeps_scanning: fs.path_map 前缀歧义自比须 continue(非 break)、命中后只 break 内层(非 return)
+- test_validate_trackers_reports_all_entries: trackers 非字典条目不得中断后续条目校验(continue 而非 break)
+- test_validate_tag_lists_reports_after_absent_key: delete_tags 缺省时 delete_tags_if_has_no_torrents 仍须校验(continue 而非 break)
+- test_validate_gslc_reports_all_curves: curves 前一条结构错不得中断后续条目(重复 period 仍须报出)
+- test_validate_curve_points_reports_all_entries: upload_curve 非单项映射/阈值不可解析条目不得中断后续条目(严格递增仍须报出)
+- test_validate_rule_refs_dedup_after_malformed: 规则引用判重轮的前置畸形引用不得中断判重(continue 而非 break)
+- test_validate_checking_action_reports_all_segments: checking 子段缺段/非字典不得中断后续段(continue 而非 break)
+- test_validate_trigger_action_compat_reports_all_actions: 删除触发白名单检查的伪动作/结构错条目不得中断后续动作(continue 而非 break)
+- test_validate_rules_reports_all_groups_and_rules: 非字典规则集/规则条目不得中断后续条目校验(continue 而非 break)
 """
 import logging
 import os
@@ -1907,3 +1917,243 @@ def test_validate_qb_traffic_positive_boundary():
         err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval: 1S\n")
         assert "必须为正时间" not in err, err  # 1S > 0, 不得误报"必须为正时间"
         assert "须 >= main_tick(2s)" in err, err
+
+
+# ---------- 多条目循环守阵(issue 26-10-08-0903-test-config-mutation-loop-guards) ----------
+#
+# 变异审计(config 首轮)发现: 校验器里一批「多条目循环」的 `continue` 改成 `break` 后**全套件仍绿** ——
+# 池内旧用例都是单条目(一次迭代), 看不出「首个条目命中跳过分支后, 后续条目被整体丢弃」。
+# 下面每个用例都把**触发跳过分支的条目放前面**, 再放一个**必须照常被处理**的条目: 若 continue 变 break,
+# 后者的报错就丢了, 断言随之变红。同型先例: test_validate_fs_reports_all_entries(单条跳过分支)。
+
+
+def test_validate_fs_reports_all_entries_after_skip_branches():
+    """fs.path_map: 空 from / 归一后为空 / 空 to 的条目不得中断后续条目的校验(continue 而非 break)
+
+    变异面: `if not src or not dst: continue`(mutmut_87) · `if not src_n: continue`(mutmut_94) ·
+    `if not dst_n: continue`(mutmut_97) —— 三处都在"跳过当前条目"后继续循环; 前置三种跳过分支各一,
+    末位重复条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - {from: '', to: /a}\n"
+            "      - {from: 'D:/x', to: '/'}\n"
+            "      - {from: '/', to: /c}\n"
+            "      - {from: 'D:/p', to: /p}\n"
+            "      - {from: 'D:/p', to: /q}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0].from: 不能为空" in err, err
+        assert "config.fs.path_map[1].to: 归一后为空" in err, err
+        assert "config.fs.path_map[2].from: 归一后为空" in err, err
+        assert "config.fs.path_map[4].from: 与第 3 条重复" in err, err
+
+
+def test_validate_fs_prefix_ambiguity_keeps_scanning():
+    """fs.path_map 前缀歧义检查: 自比跳过须 continue(非 break, mutmut_106)、命中后只 break 内层(非 return, mutmut_113)
+
+    构造两组「深路径在前、浅路径在后」的歧义对 —— 深层条目要跟**更后面**的浅层条目比才命中, 故:
+    ①自比改成 break 会漏掉本组命中(mutmut_106); ②命中后 return 会让第二组不再被检查(mutmut_113)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - {from: 'D:/a/sub', to: /s1}\n"
+            "      - {from: 'D:/a', to: /a1}\n"
+            "      - {from: 'D:/c/sub', to: /s2}\n"
+            "      - {from: 'D:/c', to: /c1}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0].from: 是第 1 条 from 的前缀" in err, err
+        assert "config.fs.path_map[2].from: 是第 3 条 from 的前缀" in err, err
+
+
+def test_validate_trackers_reports_all_entries():
+    """trackers 逐条校验: 非字典条目不得中断后续条目的校验(continue 而非 break, mutmut_9)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = ("config:\n"
+                "  trackers:\n"
+                "    Bad: oops\n"
+                "    T1: {}\n")
+        err = _load_errors(td, text)
+        assert "config.trackers.Bad: 必须是字典" in err, err
+        assert "config.trackers.T1: 缺少必填键 domains" in err, err
+
+
+def test_validate_tag_lists_reports_after_absent_key():
+    """delete_tags 缺省时 delete_tags_if_has_no_torrents 仍须校验(continue 而非 break, mutmut_6)
+
+    循环按 ("delete_tags", "delete_tags_if_has_no_torrents") 顺序走; 只配后者时前者缺失走
+    continue —— 若改 break, 后者整条跳过, 其非法项永远报不出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "  delete_tags_if_has_no_torrents:\n"
+            "    - [x]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.delete_tags_if_has_no_torrents: 第 [0] 项必须是非空字符串" in err, err
+
+
+def test_validate_gslc_reports_all_curves():
+    """global_speed_limit_curve.curves 逐条校验: 前一条结构错不得中断后续条目(continue 而非 break)
+
+    变异面: 单项映射判定 continue(mutmut_108) · curve 非字典 continue(mutmut_114) —— 后置的
+    「重复 period」条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor: {dat_path: /x}\n"
+            "    curves:\n"
+            "      - notadict\n"
+            "      - curve: bad\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.global_speed_limit_curve.curves[0] 必须为单项映射" in err, err
+        assert "config.global_speed_limit_curve.curves[1].curve: 必须是字典" in err, err
+        assert "config.global_speed_limit_curve.curves[3].curve: 重复 period: 1D" in err, err
+
+
+def test_validate_curve_points_reports_all_entries():
+    """upload_curve 逐条校验: 非单项映射/阈值不可解析的条目不得中断后续条目(continue 而非 break)
+
+    变异面: 单项映射判定 continue(mutmut_14) · parse_fsize 失败 continue(mutmut_22) —— 后置的
+    「阈值必须严格递增」条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor: {dat_path: /x}\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - notadict\n"
+            "            - {bad: {upload_speed_limit: 1MiB}}\n"
+            "            - {2MiB: {upload_speed_limit: 1MiB}}\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+        )
+        err = _load_errors(td, text)
+        assert "upload_curve[0] 必须为单项映射" in err, err
+        assert "upload_curve[1]: 无效大小格式: bad" in err, err
+        assert "upload_curve[3] 阈值必须严格递增: 1MiB" in err, err
+
+
+def test_validate_rule_refs_dedup_after_malformed():
+    """规则引用判重: 前置畸形引用不得中断判重扫描(continue 而非 break, mutmut_41)
+
+    判重是**第二轮独立循环**; 首个畸形引用('notatref')走 continue —— 若改 break, 后面的合法重复
+    引用('@example_rules' 两次)永远报不出重复。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - notatref\n"
+            "        - '@example_rules'\n"
+            "        - '@example_rules'\n"
+        )
+        err = _load_errors(td, text)
+        assert "规则引用必须以 @ 开头: 'notatref'" in err, err
+        assert "config.trackers.T1.rules[2]: 规则引用重复(与第 1 条相同): @example_rules" in err, err
+
+
+def test_validate_checking_action_reports_all_segments():
+    """checking 动作子段逐段校验: 缺段/段非字典不得中断后续段(continue 而非 break)
+
+    变异面: `if seg not in value: continue`(缺段跳过) · `if not isinstance(sub, dict): continue`
+    (mutmut_46)。ruleA 只有 without_reference(前段缺失) · ruleB 前段非字典但后段仍须报错。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    ruleA:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            without_reference: {mode: nope}\n"
+            "    ruleB:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: bad\n"
+            "            without_reference: {mode: nope}\n"
+        )
+        err = _load_errors(td, text)
+        assert "ruleA.actions[0].checking.without_reference.mode 取值非法" in err, err
+        assert "ruleB.actions[0].checking.with_reference: 必须是字典" in err, err
+        assert "ruleB.actions[0].checking.without_reference.mode 取值非法" in err, err
+
+
+def test_validate_trigger_action_compat_reports_all_actions():
+    """on_torrent_deleted 动作白名单: 前置伪动作/结构错条目不得中断后续动作的检查(continue 而非 break)
+
+    变异面: `if not isinstance(entry, dict) or len(entry) != 1: continue` ·
+    `if name == "ignore_next_action_error": continue` —— 两条 continue 若改 break, 末位越界动作就漏报。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - ignore_next_action_error: true\n"
+            "        - notadict\n"
+            "        - start: true\n"
+        )
+        err = _load_errors(td, text)
+        assert "动作 'start' 不适用于 trigger 'on_torrent_deleted'" in err, err
+
+
+def test_validate_rules_reports_all_groups_and_rules():
+    """规则集校验: 非字典规则集/规则条目不得中断后续条目(continue 而非 break)
+
+    变异面: `if not isinstance(group, dict): continue`(非字典规则集) · `if not isinstance(spec,
+    dict): continue`(非字典规则条目)。两级各放一个跳过分支在前, 末尾合法规则的错必须照常报出。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  g1_rules: oops\n"
+            "  g2_rules:\n"
+            "    bad: oops\n"
+            "    good:\n"
+            "      trigger: nope\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.g1_rules: 必须是字典(规则名 -> 规则spec)" in err, err
+        assert "config.g2_rules.bad: 必须是字典" in err, err
+        assert "config.g2_rules.good: trigger 取值非法" in err, err

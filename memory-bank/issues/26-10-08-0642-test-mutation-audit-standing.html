@@ -136,7 +136,7 @@
     <ol>
       <li><code>rules/</code> —— 规则引擎判据, 实测 3,270 变异 / 杀死率 <b>55.5%</b>(分数最低, 最该先补)</li>
       <li><code>hr/</code> —— HR 判定与做种要求链路</li>
-      <li><code>config/</code> —— fail-fast 校验 <b>✔ 已做两轮(2026-10-08)</b>: 首轮 4,799 变异 / 杀死率 <b>80.25%</b>, S4 全套件确认 274 条(54 假存活 + 220 真洞候选), 补 10 个守阵后同池复跑 <b>82.77%</b>; 第二轮按主题补守阵(字符串键名大小写 + <code>and</code>/<code>or</code> 短路互换)后同池复跑 <b>85.66%</b>(存活 653); 余量按主题入池 <code>test</code> issue</li>
+      <li><code>config/</code> —— fail-fast 校验 <b>✔ 已做五轮(R2/R6/R7/R8/R10)</b>: 首轮 4,799 变异 / 杀死率 <b>80.25%</b>(存活 893), S4 全套件确认 274 条(54 假存活 + 220 真洞候选), 补 10 个守阵后复跑 <b>82.77%</b>; 之后按入池的 <code>test</code> issue 逐条实施 —— R6 字符串键名/短路(85.66%)· R7 writer 长尾(87.31%)· R8 schema 键面 · R10 多条目循环 continue/break(存活 <b>533</b> / <b>88.14%</b>); 余量按主题入池, 尚余 boundary-guards / loader-defaults 两条未实施</li>
       <li><code>core/</code> —— 主循环 / 限速</li>
     </ol>
     <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
@@ -196,12 +196,12 @@
       <tr><th>包 / 模块</th><th>上次测试日期</th><th>变异数</th><th>杀死率</th><th>编号 / 轮次</th><th>状态</th><th>基线切片 / 计划 / 任务档案</th></tr>
       <tr>
         <td><code>config/</code></td>
-        <td>2026-10-08</td>
+        <td>2026-10-09</td>
         <td>4,799</td>
-        <td>80.25% → 82.77% → 85.66% → 87.31%</td>
-        <td>R2 / R5(mutants-status) / R6(validator-strings) / R7(writer 长尾) / <b>R8(schema 键面)</b></td>
+        <td>80.25% → 82.77% → 85.66% → 87.31% → 88.14%</td>
+        <td>R2 / R5(mutants-status) / R6(validator-strings) / R7(writer 长尾) / R8(schema 键面) / <b>R10(loop-guards)</b></td>
         <td><span class="badge go">已做(余量在池)</span></td>
-        <td><code>baselines/26-10-08-0902-mutants-config.md</code>(首轮)<br><code>baselines/26-10-08-1016-mutants-config-validator-strings.md</code>(validator-strings 长尾)<br><code>baselines/26-10-08-1144-mutants-config-writer-tail.md</code>(writer 长尾)<br><code>baselines/26-10-08-1229-mutants-config-schema-surface.md</code>(schema 键面)<br><code>plans/26-10-08-0720-plan-mutation-config.html</code></td>
+        <td><code>baselines/26-10-08-0902-mutants-config.md</code>(首轮)<br><code>baselines/26-10-08-1016-mutants-config-validator-strings.md</code>(validator-strings 长尾)<br><code>baselines/26-10-08-1144-mutants-config-writer-tail.md</code>(writer 长尾)<br><code>baselines/26-10-08-1229-mutants-config-schema-surface.md</code>(schema 键面)<br><code>baselines/26-10-09-1611-mutants-config-loop-guards.md</code>(loop-guards)<br><code>plans/26-10-08-0720-plan-mutation-config.html</code></td>
       </tr>
       <tr>
         <td><code>infra/versioning.py</code> <span class="hint">(练手)</span></td>
@@ -265,6 +265,7 @@
       <tr><td>R7 writer 长尾</td><td><code>config/writer.py</code></td><td>74 条 S4 候选重判(先修被污染判据: 镜像池 + 两条读源码守卫基线就红 → 74 伪杀成零): 有效判据 <b>71 真洞 / 3 假存活</b>; 补 <b>22 守阵</b>后复跑同 74 条 → <b>51 KILLED / 23 SURVIVED</b>(存活 −48); 余 22 等价变异 + 1 真洞当场杀</td><td><code>testing/baselines/26-10-08-1144-mutants-config-writer-tail.md</code> · 档案 R7 · 坑 <code>pitfalls/testing/read-source-static-guard-mutation.md</code></td></tr>
       <tr><td><b>R8 schema 键面</b></td><td><code>config/schema/__init__.py</code></td><td>27 条 S4 候选复验 <b>27/27 SURVIVED</b>(判据干净); 补 <b>6 守阵</b>, 红验 <b>26/27 KILLED</b>(余 1 等价变异); 同池 <code>--no-refresh</code> 复跑存活 <b>653 → 573</b>(新杀 83, 其中 26 = 本轮, 57 = 镜像纳入 R7 writer 守阵), 杀死率 85.66% → <b>87.31%</b></td><td><code>testing/baselines/26-10-08-1229-mutants-config-schema-surface.md</code> · 档案 R8 · issue <code>26-10-08-0903-test-config-mutation-schema-surface.html</code></td></tr>
       <tr><td>R9 派生计划 hr</td><td><code>hr/</code></td><td>计划 <code>26-10-09-1459</code> 派生(未执行): 目标 <code>**/hr/*.py</code> 实测命中 <b>24</b> 文件 · 池 <b>15 文件 / 457 fn</b> · 测算 ≈7,800 变异 / ≈17–25 min · 步骤 S1–S8(含更新本表 §07)</td><td><code>plans/26-10-09-1459-plan-mutation-hr.html</code> · 档案 R9</td></tr>
+      <tr><td><b>R10 loop-guards</b></td><td><code>config/</code> 多条目循环</td><td>30 条 <code>continue→break</code> 候选复验 <b>21 SURVIVED / 9 KILLED</b>(9 条已被 R2/R7/R8 守阵杀死); 补 <b>18 守阵</b>, 红验 <b>34/34</b>; 同池 <code>--no-refresh</code> 复跑存活 <b>573 → 533</b>(新杀 40 = 21 定向 + 2 真 continue→break + 17 同循环旁支, 新增存活 0), 杀死率 87.31% → <b>88.14%</b></td><td><code>testing/baselines/26-10-09-1611-mutants-config-loop-guards.md</code> · 档案 R10 · issue <code>26-10-08-0903-test-config-mutation-loop-guards.html</code></td></tr>
     </table>
   </section>
 
@@ -277,6 +278,7 @@
       <li>2026-10-08 11:44 — <b>R7 writer 长尾实施</b>(状态仍 <strong>Open</strong>): 按硬约束 12 同步更新 —— §07 config 行轮次补 <code>R7</code>、基线切片指针补 writer 长尾切片; §08 台账补 R7 行; 新增坑档 <code>pitfalls/testing/read-source-static-guard-mutation.md</code>(读源码文本的静态守卫污染变异判据 —— 74 条被伪杀成零的实证与处置)。本轮结论: 74 条 S4 候选用有效判据(排除既有红守卫)得 <b>71 真洞 / 3 假存活</b>, 补 22 守阵后复跑 <b>51 KILLED / 23 SURVIVED</b>(余 22 等价), <b>零 src 改动</b>。</li>
       <li>2026-10-08 12:29 — <b>R8 schema 键面实施</b>(状态仍 <strong>Open</strong>): 按硬约束 12 同步更新 —— §07 config 行轮次补 <code>R8</code>、杀死率补 <code>87.31%</code>、切片指针补 schema 键面切片; §08 台账补 R8 行。<code>config/schema/__init__.py</code> 27 条 S4 候选复验 <b>27/27 SURVIVED</b>; 补 6 守阵后红验 <b>26/27 KILLED</b>, 余 <code>readonly_config_paths__mutmut_17</code> 为等价变异(顶层 prefix 只被 <code>if prefix else</code> 消费, <code>""</code> 与 <code>None</code> 同为假值); 复跑存活 653 → 573。<b>零 src 改动</b>。余量: config 真洞 issue 尚余 loop-guards / boundary-guards / loader-defaults 三条未实施。</li>
       <li>2026-10-09 15:22 — <b>R9 派生 hr 计划</b>(状态仍 <strong>Open</strong>): 按硬约束 12 同步更新 —— §07 <code>hr/</code> 行指针补计划链接(状态仍 <code>待做(优先级 2)</code>, 未执行); §08 台账补 R9 行。计划 <code>plans/26-10-09-1459-plan-mutation-hr.html</code>(目标 <code>**/hr/*.py</code> fnmatch 实测命中 24 文件 · 池 15 文件 / 457 fn · 测算 ≈7,800 变异 / ≈17–25 min · 步骤 S1–S8)。<b>零 <code>src/</code> / <code>tests/</code> 改动</b>; 未执行审计(计划边界: 不在计划里实施)。</li>
+      <li>2026-10-09 16:11 — <b>R10 loop-guards 实施</b>(状态仍 <strong>Open</strong>): 按硬约束 12 同步更新 —— §07 config 行日期补 <code>2026-10-09</code>、杀死率补 <code>88.14%</code>、轮次补 <code>R10</code>、切片指针补 loop-guards 切片; §08 台账补 R10 行。首轮 dump 的 30 条 <code>continue→break</code>/<code>break→return</code> 候选复验 <b>21 SURVIVED / 9 KILLED</b>(9 条已被 R2/R7/R8 同型守阵杀死); 补 <b>18 守阵</b>(全部多条目形态)后红验 <b>34/34</b>; 同池复跑存活 <b>573 → 533</b>(新杀 40 / 新增存活 0)。<b>零 src 改动</b>。余量: config 真洞 issue 尚余 boundary-guards / loader-defaults 两条未实施。</li>
     </ul>
     <p class="hint">本件是常驻锚, 不随单轮完成而改状态; 轮次进度看 §08、覆盖进度看 §07 与任务档案。</p>
   </section>

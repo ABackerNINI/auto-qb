@@ -46,6 +46,14 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_impact_hr_check_is_single_section_change: hr_check 段变更 -> 整段一条(W4 级别表退役后粒度 = 段, 无字段级展开)
 - test_impact_trackers_whole_section_change: trackers 段变更(含派生站点 hr_check) -> 整段一条; 重匹配语义归 tracker 模块 full_round
 - test_config_error_message_points_to_section: 校验失败经 ConfigError 抛出, 消息里带具体路径
+- test_hr_check_sites_reports_all_entries: hr_check.sites 未登记档案条目的跳过分支不得中断后续条目校验(continue 而非 break)
+- test_site_bindings_reports_all_after_non_dict_tracker: 非字典 tracker 条目不得中断后续 tracker 的登记(continue 而非 break)
+- test_site_bindings_reports_all_after_disabled_entry: 未启用站点条目不得中断后续条目的绑定校验(continue 而非 break)
+- test_site_bindings_reports_all_after_explicit_missing: 显式 tracker 键不存在的跳过分支不得中断后续条目(continue 而非 break)
+- test_site_bindings_reports_all_after_default_zero_hit: 默认映射零命中的跳过分支不得中断后续条目(continue 而非 break)
+- test_site_bindings_reports_all_after_ambiguous_mapping: 默认映射歧义的跳过分支不得中断后续条目(continue 而非 break)
+- test_site_bindings_reports_all_after_duplicate_binding: 重复绑定的跳过分支不得中断后续条目(continue 而非 break; 合成第三档案)
+- test_resolve_hr_site_bindings_after_disabled_site: 绑定派生(loader)未启用条目不得中断后续条目的绑定(continue 而非 break)
 """
 import os
 
@@ -894,3 +902,285 @@ def test_config_error_message_points_to_section(tmp_path):
     with pytest.raises(ConfigError) as ei:
         load_config(path)
     assert "hr_check.min_interval" in str(ei.value)
+
+
+# ---------- 多条目循环守阵(issue 26-10-08-0903-test-config-mutation-loop-guards) ----------
+#
+# hr_check.sites 的校验与绑定派生都是多条目循环: 首个条目走跳过分支(未登记档案/未启用/显式键
+# 不存在/默认映射零命中/歧义/重复绑定)时, 后续条目**必须照常被处理** —— `continue` 改成 `break`
+# 会把后者的报错整体丢掉。池内旧用例都是单条目, 看不出这个差别(同型先例: test_site_bindings_reports_all_entries)。
+
+
+def test_hr_check_sites_reports_all_entries():
+    """hr_check.sites 逐条校验: 未登记档案条目的跳过分支不得中断后续条目(continue 而非 break, mutmut_237)
+
+    未登记档案放前, 后置的合法档案条目带未知键 —— 循环若 break, 后者的「未知键」就丢了。
+    """
+    errors = _validate(
+        {
+            "hr_check":
+                {
+                    "sites": {
+                        "not-registered": {
+                            "enabled": "true"
+                        },
+                        "btschool": {
+                            "enabled": "true",
+                            "bogus": "1"
+                        },
+                    }
+                },
+            "trackers": {
+                "btschool": {
+                    "domains": ["pt.btschool.club"],
+                    "hr": {
+                        "required_seeding_time": "3D"
+                    }
+                }
+            },
+        }
+    )
+    assert any("未支持的站点档案" in e for e in errors), errors
+    assert any("sites.btschool: 未知键 ['bogus']" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_non_dict_tracker():
+    """站点绑定: trackers 里非字典条目不得中断后续 tracker 的登记(continue 而非 break, mutmut_10)
+
+    前置 Bad 非字典 -> 若 break, 后面的 btschool 不进 tracker_names/domains_by_tracker/hr_sections,
+    默认映射变零命中(误报)。断言: 合法配置不产生"默认映射未命中"。
+    """
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "true"
+                    }
+                }
+            },
+            "trackers":
+                {
+                    "Bad": "oops",
+                    "btschool": {
+                        "domains": ["pt.btschool.club"],
+                        "hr": {
+                            "required_seeding_time": "3D"
+                        }
+                    },
+                },
+        }
+    )
+    assert not any("默认映射未命中" in e for e in errors), errors
+    assert not any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_disabled_entry():
+    """站点绑定: 未启用条目不得中断后续条目的绑定校验(continue 而非 break, mutmut_50)
+
+    未启用的 btschool 放前, 后置 carpt 绑定到缺 hr 段的 CarPT —— 循环若 break, 后者的
+    「未配置 hr 段」就丢了。
+    """
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "false"
+                    },
+                    "carpt": {
+                        "enabled": "true"
+                    },
+                }
+            },
+            "trackers": {
+                "CarPT": {
+                    "domains": ["tracker.carpt.net"]
+                }
+            },
+        }
+    )
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_explicit_missing():
+    """站点绑定: 显式 tracker 键不存在的跳过分支不得中断后续条目(continue 而非 break, mutmut_65)"""
+    errors = _validate(
+        {
+            "hr_check":
+                {
+                    "sites":
+                        {
+                            "btschool": {
+                                "enabled": "true",
+                                "tracker": "nope"
+                            },
+                            "carpt": {
+                                "enabled": "true",
+                                "tracker": "CarPT"
+                            },
+                        }
+                },
+            "trackers": {
+                "CarPT": {
+                    "domains": ["tracker.carpt.net"]
+                }
+            },
+        }
+    )
+    assert any("站点配置 'nope' 不存在" in e for e in errors), errors
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_default_zero_hit():
+    """站点绑定: 默认映射零命中的跳过分支不得中断后续条目(continue 而非 break, mutmut_76)"""
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "true"
+                    },
+                    "carpt": {
+                        "enabled": "true",
+                        "tracker": "CarPT"
+                    },
+                }
+            },
+            "trackers": {
+                "CarPT": {
+                    "domains": ["tracker.carpt.net"]
+                }
+            },
+        }
+    )
+    assert any("默认映射未命中" in e for e in errors), errors
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_ambiguous_mapping():
+    """站点绑定: 默认映射歧义的跳过分支不得中断后续条目(continue 而非 break, mutmut_82)"""
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "true"
+                    },
+                    "carpt": {
+                        "enabled": "true",
+                        "tracker": "CarPT"
+                    },
+                }
+            },
+            "trackers":
+                {
+                    "T1": {
+                        "domains": ["pt.btschool.club"]
+                    },
+                    "T2": {
+                        "domains": ["pt.btschool.club"]
+                    },
+                    "CarPT": {
+                        "domains": ["tracker.carpt.net"]
+                    },
+                },
+        }
+    )
+    assert any("默认映射命中多个站点" in e for e in errors), errors
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_site_bindings_reports_all_after_duplicate_binding(monkeypatch):
+    """站点绑定: 重复绑定的跳过分支不得中断后续条目(continue 而非 break, mutmut_88)
+
+    现网只有两个内置档案, 无法凑出「前两条撞绑定 + 第三条待处理」—— 用 monkeypatch 加一个合成
+    档案作第三条, 让 break 的后果(第三条的「未配置 hr 段」丢失)可观测。
+    """
+    from auto_qb.config import site_presets
+    from auto_qb.config.site_presets import SiteHrPreset
+
+    monkeypatch.setitem(
+        site_presets.SITE_PRESETS,
+        "zsite",
+        SiteHrPreset(
+            preset_id="zsite",
+            adapter="btschool",
+            web_domain="z.example",
+            tracker_domain="z.example",
+            page_path="/myhr.php",
+            download_path="/download.php?id={id}",
+            page_param="page",
+        ),
+    )
+    errors = _validate(
+        {
+            "hr_check":
+                {
+                    "sites":
+                        {
+                            "btschool": {
+                                "enabled": "true",
+                                "tracker": "T1"
+                            },
+                            "carpt": {
+                                "enabled": "true",
+                                "tracker": "T1"
+                            },
+                            "zsite": {
+                                "enabled": "true",
+                                "tracker": "T2"
+                            },
+                        }
+                },
+            "trackers":
+                {
+                    "T1": {
+                        "domains": ["pt.btschool.club"],
+                        "hr": {
+                            "required_seeding_time": "3D"
+                        }
+                    },
+                    "T2": {
+                        "domains": ["z.example"]
+                    },
+                },
+        }
+    )
+    assert any("已被条目" in e for e in errors), errors
+    assert any("未配置 hr 段" in e for e in errors), errors
+
+
+def test_resolve_hr_site_bindings_after_disabled_site(tmp_path):
+    """绑定派生(loader)未启用条目不得中断后续条目的绑定(continue 而非 break, loaders mutmut_2)
+
+    _resolve_hr_site_bindings 与校验器同款遍历; 未启用条目放前, 后置启用条目必须照常派生
+    trackers.*.hr_check(循环若 break, 派生视图恒为 None)。
+    """
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "btschool": {
+                            "enabled": "false"
+                        },
+                        "carpt": {
+                            "enabled": "true"
+                        },
+                    }
+                },
+                "trackers": {
+                    "CarPT": {
+                        "domains": ["tracker.carpt.net"],
+                        "hr": {
+                            "required_seeding_time": "3D"
+                        }
+                    }
+                },
+            }
+        )
+    )
+    site = cfg.trackers["CarPT"].hr_check
+    assert site is not None and site.enabled is True
+    assert site.tracker == "CarPT"
