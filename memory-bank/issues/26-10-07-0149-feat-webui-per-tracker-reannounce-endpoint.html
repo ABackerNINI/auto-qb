@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-07-0149">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-detail-panel-templates">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-10-09-1243-plan-webui-per-tracker-reannounce.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="per-tracker 汇报倒计时端点(P-02 备选)">
 <meta name="issue-summary" content="06 trackers 变体逐行汇报倒计时现以 detail.reannounce_in 全局值近似并标「全局」, 真口径需后端加 per-tracker 端点">
 <title>per-tracker 汇报倒计时端点(P-02 备选) · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-0149-feat-webui-per-tracker-reannounce-endpoint</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 01:49</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,11 +163,14 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 01:49 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-09 12:43 — 用户指派认领，状态 <strong>In Progress</strong>；实施计划 <code>memory-bank/plans/26-10-09-1243-plan-webui-per-tracker-reannounce.html</code>（Open，待拍板 P-01…P-05）。认领链: 本件 <code>doc-refs</code> ↔ 计划 <code>doc-refs</code> 互指。</li>
+      <li>2026-10-09 12:57 — 用户「按推荐实施」（P-01…P-05 全取推荐案），已实施完成，状态 <strong>Done</strong>。档案 <code>memory-bank/tasks/26-10-09-webui-per-tracker-reannounce.md</code>。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-09 12:43 — <strong>仍复现</strong>（代码锚点）: <code>06-trackers-table-collapsed.js::nextHtml</code> 仍以 <code>detail.reannounce_in</code> 渲染同一全局值 + 「全局」标；后端 <code>torrent_detail.py:44-56</code> 透传未加字段白名单，<code>mask_tracker_entry</code> 只改 url、其余字段原样 —— 即 qB 5.2+ 的 per-tracker <code>next_announce</code> 已随既有透传送达前端（字段存在性待 S0 真机确认，用户侧 qB 需 ≥ 5.2）。<strong>范围修正</strong>: 原「建议修法」假设需后端加端点/字段，实测数据已在透传里 —— 主体工作收窄为纯前端 + 低版本降级 + 守阵（详见计划 §02 取证结论）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-10-09 12:57，按计划 26-10-09-1243 推荐案）: 与「建议修法」<strong>改道</strong> —— 原建议「后端加 per-tracker 端点/字段」经取证判定<strong>不必要</strong>（per-tracker <code>next_announce</code> 已在既有 <code>/trackers</code> 透传里，qB 5.2+；<code>mask_tracker_entry</code> 只改 url），改走<strong>纯前端</strong>消费。①<code>06-trackers-table-collapsed.js::nextHtml</code> 改读<strong>行级 <code>next_announce</code></strong>（epoch 秒）减 <code>nowSec</code> 得剩余，去「全局」标、去微条（per-tracker interval 不可得）；②行缺该字段（qB &lt; 5.2）<strong>回退</strong>旧全局近似（保留原路径）；③<code>nowSec</code> 计入 <code>render()</code> 的 sig（否则跳过重建把倒计时冻帧）。</p>
+    <p><strong>验证方式 / 测试数字</strong>: 静态守阵 <code>test_drawer_tpl_trackers_per_tracker_reannounce</code>（6 断言，红验确认）+ <code>ui_harness</code> 补 <code>next_announce</code> 桩（<code>_make_trackers_response</code>）+ e2e <code>e2e/drawer-trackers-reannounce.spec.mjs</code>（双皮肤，逐行倒计时互不相同且无「全局」标）。实测数字见 <code>commands run kb.baseline</code>。真机复核（多 tracker 种子各行与 qB GUI 逐行一致）留用户侧。</p>
   </section>
 
   <footer>

@@ -7,6 +7,7 @@
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
+- test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 宽度 160->240(160px 截断长 label 收起态; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
@@ -1080,6 +1081,35 @@ def test_drawer_tpl_table_variants_scrollleft_restore():
             f"drawer_tpl/{name}: 整帧重建必须落在 withScroll 回调内(滚动位自保失效)"
         assert "host.parentElement" not in text and "scroller" not in text, \
             f"drawer_tpl/{name}: 变体内再现分散滚动自保(收口后单点在核心 withScroll, 报告 26-10-07-0845)"
+
+
+def test_drawer_tpl_trackers_per_tracker_reannounce():
+    """06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) ——
+
+    逐行倒计时从「种子级 detail.reannounce_in 全局近似」升级为「行级 next_announce(qB 5.2+ 随
+    /trackers 透传, Unix epoch 秒)减 now」。钉住: ①真口径分支读行级 t.next_announce 且先减
+    nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); ②「全局」标(dt06-gb)
+    只许出现在回退分支 —— 真口径行不得带它; ③回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
+    ④nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧); ⑤真口径分支不画微条(per-tracker interval
+    不可得, 分母不存在, 不造假); ⑥调用点 nextHtml 必须拿到行 t 与 nowSec。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    text = open(os.path.join(vdir, "06-trackers-table-collapsed.js"), encoding="utf-8").read()
+    # ① 真口径: 读行级 next_announce + 先减 now
+    assert "t.next_announce" in text, "06 逐行倒计时未读行级 next_announce(P-02 真口径回退)"
+    assert "Math.round(na - nowSec)" in text, "06 未以 epoch 减 nowSec 得剩余(epoch 当倒计时 = 事故根因)"
+    # 真口径分支 = nextHtml 里回退行(const d = ...)之前的那段
+    real_branch = text[text.index("function nextHtml"):text.index("const d = (ctx.drawer")]
+    # ②「全局」标只在回退分支
+    assert "dt06-gb" not in real_branch, "06 真口径行仍带「全局」标(真值不该标全局)"
+    # ③ 回退分支仍在
+    assert "dt06-gb" in text, "06 回退分支(全局近似)被删(qB < 5.2 无 next_announce 会整列空白)"
+    assert "detail.reannounce_in" in text, "06 回退分支未用种子级 detail.reannounce_in"
+    # ④ nowSec 计入 sig(否则跳过重建冻帧)
+    assert re.search(r'"\|" \+ nowSec\b', text), "06 未把 nowSec 计入 sig(跳过重建会把倒计时冻在上一帧)"
+    # ⑤ 真口径分支不画微条
+    assert "dt06-tbar" not in real_branch, "06 真口径行仍画微条(per-tracker interval 不可得, 属造假)"
+    # ⑥ 调用点传参
+    assert "nextHtml(ctx, t, nowSec)" in text, "06 nextHtml 调用点未传行 t / nowSec(真口径拿不到数据)"
 
 
 def test_drawer_tpl_a11y_and_fetch_error_states():

@@ -155,6 +155,58 @@ def _make_peers_response(i: int) -> dict:
     return {"rid": 0, "full_update": True, "peers": peers, "peers_removed": {}}
 
 
+# 合成 tracker 站点(逐种子轮转, 让不同行的 host 可辨)
+_TRACKER_SITES = ("tracker.hhanclub.net", "tracker.hdsky.me", "tracker.pt.example")
+
+
+def _make_trackers_response(i: int) -> list:
+    """单种子的合成 /torrents/trackers 列表(与 **qB 5.2+** 同形, 含 per-tracker 汇报时间)
+
+    06 变体逐行汇报倒计时按 P-02 升级为真 per-tracker 口径(行级 next_announce, epoch 秒) ——
+    桩若只回单条无 next_announce 的 tracker(FakeClient 默认), 冒烟/截图只走到回退分支, 真口径
+    从未被渲染过。这里固定 3 条 real tracker, 前两条 status=2(正常), 第三条按种子序号奇偶给
+    4(失败)/3(更新中) —— 保证**每个种子恒有 2 行非「更新中」**(真口径倒计时可渲染且互不相同),
+    同时覆盖 06 的 正常/失败/更新中 三档与「仅看异常」分桶。字段与 qB 5.2.3 getTrackers 同名
+    (见 reports/26-10-05-0854 §4.1), 不含虚拟条目。next_announce 自 now+30min 起逐行 +30min
+    (30/60/90 分钟), 倒计时可辨且余量足够长(同一桩服务连跑 1h 内两行仍互不相同, 不因钳到 0 而撞值)。
+    """
+    now = int(time.time())
+    third = 3 if (i % 2) else 4
+    out = []
+    for k, status in enumerate((2, 2, third)):
+        site = _TRACKER_SITES[(i + k) % len(_TRACKER_SITES)]
+        na = now + 1800 + k * 1800
+        out.append(
+            {
+                "url":
+                    f"https://{site}/announce.php",
+                "status":
+                    status,
+                "tier":
+                    k,
+                "num_peers":
+                    4 + k,
+                "num_seeds":
+                    10 + i + k,
+                "num_complete":
+                    10 + i + k,
+                "num_leeches":
+                    2 + k,
+                "num_incomplete":
+                    2 + k,
+                "num_downloaded":
+                    50 + i * 3 + k,
+                "msg":
+                    "" if status == 2 else ("Working" if status == 3 else "torrent not registered with this tracker"),
+                "next_announce":
+                    na,
+                "min_announce":
+                    na,
+            }
+        )
+    return out
+
+
 # 桩服务"真改状态"用的目标状态(与后端 _state_kind 的口径一致: pausedDL -> kind=paused,
 # uploading -> seeding, downloading -> downloading) —— 前端乐观补丁写的就是这几个 kind。
 _PAUSED_STATE = "pausedDL"
@@ -680,6 +732,10 @@ def main() -> int:
     # 走 sync_torrent_peers 整包透传, 前端据此渲染。
     for i, tor in enumerate(torrents):
         mgr.client.peers_map[tor.hash] = _make_peers_response(i)
+        # 抽屉 trackers 页签的数据面(P-02 升级, 2026-10-09): 逐行汇报倒计时改真 per-tracker 口径后,
+        # 桩按 qB 5.2+ 形态灌多条含 next_announce 的 tracker(见 _make_trackers_response) —— 否则
+        # 06 变体在桩下只走回退分支, 真口径渲染路径(e2e / 截图目检)从未被覆盖。
+        mgr.client.trackers_map[tor.hash] = _make_trackers_response(i)
 
     if not args.no_groups:
         groups = {}

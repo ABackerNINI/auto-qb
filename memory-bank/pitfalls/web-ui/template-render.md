@@ -1,7 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
 > 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准
 
 ### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询
 
@@ -20,6 +20,19 @@
   `loading = false` 的位置先于 `_dtNotify`。给变体加新消费状态时同问一句: 这个状态翻转
   的每条路径都有通知跟着吗。
 - **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
+
+### sig 跳过重建会把「随时间变化」的派生值冻帧: 时间基准必须计入 sig
+
+- **触发**: 给走 `H.skipUnchanged`(sig 比对跳过重建)的变体加一个**随真实时间变化**的显示值
+  (2026-10-09 实测: 06 变体逐行汇报倒计时从种子级相对秒 `detail.reannounce_in` 升级为行级
+  `next_announce`(epoch 绝对秒)减 now, issue 26-10-07-0149)。
+- **判别**: 跳过重建的判据是**数据派生 sig** —— 旧口径 `reannounce_in` 是**相对秒**(每轮询都变),
+  天然进 sig ⇒ 每拍重建; 新口径 `next_announce` 是**绝对 epoch**(一个 announce 周期内恒定),
+  数据未变时 sig 不变 ⇒ `skipUnchanged` 命中, **倒计时冻在上一帧**, 直到下次 announce 改了 epoch
+  才跳一次。表上表现为"倒计时不走/隔很久才动", 无任何报错。
+- **处置**: 把**时间基准**计入 sig(`nowSec = Math.floor(Date.now()/1000)`, 每秒变 ⇒ 每次通知都重算,
+  实际刷新粒度 = 轮询周期)。判据: 变体里凡有"显示值 = f(now)"就必须让 sig 感知 now。
+- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_trackers_per_tracker_reannounce`(断言 sig 含 `nowSec`)。
 
 ### Vue <transition> 接 JS 钩子做布局动画: 钩位/几何登记/迟到的 after 钩子三处静默坑
 

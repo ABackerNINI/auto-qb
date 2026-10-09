@@ -19,6 +19,7 @@
 
 ## Done
 
+- [26-10-09-1243] [06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划](26-10-09-1243-plan-webui-per-tracker-reannounce.html) — `webui-detail-panel-templates`
 - [26-10-09-1057] [HR 排除种子终态行身份下载短路 · 分步实施计划 · auto-qb](26-10-09-1057-plan-hr-exclude-terminal-download.html) — `hr-steady-throttle`
 - [26-10-09-0821] [HR 故障归属分层拆分 · 分步实施计划 · auto-qb](26-10-09-0821-plan-hr-fault-domain.html) — `hr-fault-domain`
 - [26-10-08-1217] [计划 · 辅种页/追剧页支持种子详情面板](26-10-08-1217-plan-webui-drawer-groups-shows.html) — `webui-detail-panel-redesign`

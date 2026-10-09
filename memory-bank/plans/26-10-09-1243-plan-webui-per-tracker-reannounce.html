@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-detail-panel-templates">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-09-1243">
+<meta name="doc-updated" content="26-10-09-1257">
+<meta name="doc-refs" content="memory-bank/issues/26-10-07-0149-feat-webui-per-tracker-reannounce-endpoint.html,memory-bank/tasks/26-10-09-webui-per-tracker-reannounce.md">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050;
+    --ink:#e9eff7; --ink-muted:#9cadc6; --ink-dim:#6e84a3;
+    --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15); --accent-line:rgba(58,166,166,.45);
+    --border:#23395a; --border-strong:#34507c; --hairline:rgba(255,255,255,.07);
+    --green:#3fd699; --warn:#f5bb42; --error:#f3766f;
+    --font-body:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+    --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14.5px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility}
+  .wrap{max-width:1140px; margin:0 auto; padding:52px 36px 72px}
+  p{margin:0 0 12px; max-width:80ch}
+  strong{font-weight:600; color:var(--ink)}
+  a{color:var(--accent-hi); text-decoration:none; border-bottom:1px solid rgba(92,195,195,.35); padding-bottom:1px}
+  a:hover{border-bottom-color:var(--accent-hi)}
+  code{font-family:var(--font-mono); font-size:.86em; color:var(--ink); background:var(--bg-row);
+    border:1px solid var(--hairline); border-radius:3px; padding:1px 6px; white-space:nowrap}
+  .kick-row{display:flex; align-items:baseline; gap:18px; border-top:2px solid var(--accent); padding-top:14px; flex-wrap:wrap}
+  .kick{font-family:var(--font-mono); font-size:11.5px; letter-spacing:.09em; color:var(--accent); text-transform:uppercase}
+  .kick-meta{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim)}
+  .kick-meta .st{color:var(--warn)}
+  h1{font-family:var(--font-display); font-size:36px; font-weight:600; line-height:1.14; letter-spacing:-.02em; margin:22px 0 14px; max-width:26ch}
+  h1 .thin{color:var(--ink-muted); font-weight:400}
+  .lede{font-size:16px; line-height:1.66; color:var(--ink-muted); max-width:70ch}
+  .lede strong{color:var(--ink)}
+  .head-meta{margin-top:20px; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim);
+    display:flex; gap:8px 22px; flex-wrap:wrap; border-top:1px solid var(--hairline); padding-top:12px}
+  .toc{margin:34px 0 0; border:1px solid var(--border); background:var(--bg-card); padding:4px 0}
+  .toc-row{display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:baseline;
+    padding:9px 18px; border-bottom:1px solid var(--hairline); text-decoration:none; border-bottom:1px solid var(--hairline)}
+  .toc-row:last-child{border-bottom:none}
+  .toc-row:hover{background:var(--bg-hover)}
+  .toc-no{font-family:var(--font-mono); font-size:12px; color:var(--accent)}
+  .toc-t{color:var(--ink); font-size:14px}
+  .toc-sub{font-family:var(--font-mono); font-size:11px; color:var(--ink-dim)}
+  section{margin-top:60px}
+  .sec-head{border-top:1px solid var(--border-strong); padding-top:16px; display:grid; grid-template-columns:96px 1fr; gap:0 18px}
+  .sec-no{font-family:var(--font-display); font-size:44px; font-weight:600; color:var(--border-strong); line-height:1; letter-spacing:-.02em}
+  h2{font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; line-height:1.2}
+  .sec-sub{color:var(--ink-dim); font-size:13.5px; margin:0; max-width:72ch}
+  .sec-body{grid-column:2; margin-top:22px}
+  h3{font-family:var(--font-display); font-size:17px; font-weight:600; margin:32px 0 10px}
+  h3 .h3-mono{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-dim); font-weight:400; margin-left:10px}
+  table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.2px}
+  th{font-family:var(--font-mono); font-size:10.5px; font-weight:400; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--ink-dim); text-align:left; border-bottom:1px solid var(--border-strong); padding:7px 12px; white-space:nowrap}
+  td{border-bottom:1px solid var(--hairline); padding:10px 12px; vertical-align:top; line-height:1.55}
+  tr:hover td{background:rgba(255,255,255,.018)}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .pill{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid var(--border-strong); color:var(--ink-muted); border-radius:2px; padding:1px 6px; white-space:nowrap}
+  .pill.rec{border-color:var(--accent-line); color:var(--accent-hi); background:var(--accent-soft)}
+  .pill.alt{color:var(--warn); border-color:rgba(245,187,66,.4)}
+  .pill.ok{color:var(--green); border-color:rgba(63,214,153,.42)}
+  .verdict{border:1px solid var(--accent-line); background:var(--accent-soft); padding:16px 18px; margin:20px 0}
+  .verdict .vt{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--accent-hi); text-transform:uppercase; margin-bottom:6px}
+  .verdict p{margin-bottom:8px}
+  .verdict p:last-child{margin-bottom:0}
+  .note{border:1px solid var(--border); background:var(--bg-card); padding:12px 16px; margin:14px 0}
+  .note p{margin:0; max-width:none}
+  .note.warn{border-color:rgba(245,187,66,.4)}
+  pre{font-family:var(--font-mono); font-size:12.3px; line-height:1.6; background:var(--bg-row);
+    border:1px solid var(--border); border-radius:4px; padding:14px 18px; overflow-x:auto; margin:14px 0}
+  pre code{background:none; border:none; padding:0; white-space:pre}
+  ul{margin:0 0 12px 22px; max-width:80ch}
+  li{margin-bottom:6px}
+  .ok{color:var(--green)} .no{color:var(--error)} .wr{color:var(--warn)}
+  footer{margin-top:72px; border-top:1px solid var(--border-strong); padding-top:18px;
+    font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim); line-height:2}
+  footer b{color:var(--ink-muted); font-weight:400}
+  @media (max-width:860px){
+    .wrap{padding:36px 20px 56px}
+    h1{font-size:28px}
+    .sec-head{grid-template-columns:1fr}
+    .sec-no{font-size:32px; margin-bottom:8px}
+    .toc-row{grid-template-columns:48px 1fr}
+    .toc-sub{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kick-row">
+      <span class="kick">Plan · 实施计划</span>
+      <span class="kick-meta">webui-detail-panel-templates · 26-10-09-1243 · <span class="st">Done(已实施)</span></span>
+    </div>
+    <h1>06 变体逐行汇报倒计时<br><span class="thin">从「全局近似」换真 per-tracker 口径</span></h1>
+    <p class="lede">
+      认领 issue <code>26-10-07-0149-feat-webui-per-tracker-reannounce-endpoint</code>（详情面板重构计划
+      <code>26-10-06-0838</code> §06 拍板点 <strong>P-02</strong> 当时未选的备选案）。目标: 06「增强表格」变体的
+      <strong>逐行汇报倒计时</strong>不再对所有行显示同一个种子级全局值，而是各 tracker 自己的下次汇报时间。
+      <strong>开工取证的关键发现</strong>: per-tracker 真值<strong>已在既有 <code>/trackers</code> 透传里</strong>
+      （qB 5.2+ 暴露 <code>next_announce</code>/<code>min_announce</code>），后端无需新增端点 —— 本件主体工作收窄到
+      前端 + 低版本降级 + 守阵。<strong>拍板前不动代码。</strong>
+    </p>
+    <div class="head-meta">
+      <span>doc-type plan</span><span>doc-topic webui-detail-panel-templates</span><span>doc-status Done</span>
+      <span>认领 issue 26-10-07-0149</span><span>阶段 S0-S4</span><span>拍板点 5 处</span>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+      <a class="toc-row" href="#s1"><span class="toc-no">01</span><span class="toc-t">背景与拍板反转</span><span class="toc-sub">P-02 备选案如何被认领</span></a>
+      <a class="toc-row" href="#s2"><span class="toc-no">02</span><span class="toc-t">现状取证</span><span class="toc-sub">数据链现状 · qB 字段口径 · 范围收缩结论</span></a>
+      <a class="toc-row" href="#s3"><span class="toc-no">03</span><span class="toc-t">方案设计</span><span class="toc-sub">数据来源 / 时钟 / 微条 / 降级</span></a>
+      <a class="toc-row" href="#s4"><span class="toc-no">04</span><span class="toc-t">拍板点清单</span><span class="toc-sub">P-01…P-05 · 各带推荐案</span></a>
+      <a class="toc-row" href="#s5"><span class="toc-no">05</span><span class="toc-t">分步实施</span><span class="toc-sub">S0 复验 → S4 收口</span></a>
+      <a class="toc-row" href="#s6"><span class="toc-no">06</span><span class="toc-t">验收与守阵</span><span class="toc-sub">可判定通过条件</span></a>
+      <a class="toc-row" href="#s7"><span class="toc-no">07</span><span class="toc-t">风险与坑</span><span class="toc-sub">epoch 语义 / 缓存 / 定时器</span></a>
+      <a class="toc-row" href="#s8"><span class="toc-no">08</span><span class="toc-t">变更记录</span><span class="toc-sub">版本留痕</span></a>
+    </nav>
+  </header>
+
+  <section id="s1">
+    <div class="sec-head">
+      <div class="sec-no">01</div>
+      <div>
+        <h2>背景与拍板反转</h2>
+        <p class="sec-sub">本件是详情面板重构的一个被划出范围的备选案，现在被单独认领。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>详情面板重构计划 <code>memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html</code>
+        §06 拍板点 <strong>P-02</strong> 原文（取证 2026-10-07 01:49）:</p>
+<pre><code>P-02 | 06 的逐 tracker 汇报倒计时数据缺 per-tracker 口径
+     | 推荐: 以 detail.reannounce_in 全局值近似展示, 行内标「全局」; 不加端点
+     | 备选: 省略倒计时列(信息增量少一块); 或后端加端点(超范围)</code></pre>
+      <p>当时拍板（2026-10-06）取推荐案: 06 变体每行「下次汇报」列显示<strong>同一个</strong>
+        <code>detail.reannounce_in</code> 全局值并标「全局」，微条比例 = <code>reannounce_in / reannounce</code>；
+        「后端加端点」被划出本次重构范围。<strong>本件即该备选案</strong>，2026-10-09 用户显式指派认领。</p>
+      <p><strong>触发条件</strong>: 用户在 06 变体看某行 tracker 的汇报倒计时时，多 tracker 种子上全局值与各 tracker
+        真值偏差可见（纯增强，无缺陷面）。<strong>严重度</strong>: 低（信息精度增强）。</p>
+      <div class="verdict">
+        <div class="vt">本计划的产出目标</div>
+        <p>把 06 变体的逐行汇报倒计时从「全局近似」换成<strong>真 per-tracker 口径</strong>（各 tracker 自己的
+          <code>next_announce</code>），去掉行内「全局」标，并为不暴露该字段的低版本 qB 保留可判定的降级口径。
+          范围以 §02 取证结论为准。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s2">
+    <div class="sec-head">
+      <div class="sec-no">02</div>
+      <div>
+        <h2>现状取证</h2>
+        <p class="sec-sub">开工前按防过期原则复验锚点；行号为取证时刻值，漂移后靠符号 + grep 重定位。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <tr><th>环节</th><th>现状</th><th>证据（取证 2026-10-09）</th></tr>
+        <tr>
+          <td>前端落点</td>
+          <td>06 变体 <code>nextHtml()</code> 以 <code>detail.reannounce_in</code> 渲染<strong>同一全局值</strong> + <code>&lt;span class="dt06-gb"&gt;全局&lt;/span&gt;</code>；微条比例 = <code>reannounce_in / reannounce</code>（分母缺失/非正整条省略）。更新中行显「正在汇报」，虚拟/未启用行显「—」。</td>
+          <td><code>src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js</code> <code>nextHtml</code>（:165 附近）· grep「P-02」/「dt06-gb」</td>
+        </tr>
+        <tr>
+          <td>前端数据源</td>
+          <td>详情面板 trackers 页签 5s 轮询 <code>GET /api/torrents/{hash}/trackers</code>，结果落 <code>drawer.trackers</code>。</td>
+          <td><code>drawer.js::_fetchDrawerTrackers</code>（:786 附近取数、:755 轮询、:788 端点）</td>
+        </tr>
+        <tr>
+          <td>后端透传</td>
+          <td>对 <code>client.torrents_trackers(hash)</code> 逐条 <code>mask_tracker_entry</code> 后<strong>直接</strong> <code>JSONResponse</code>（无 response_model / 字段白名单）。<code>mask_tracker_entry</code> <strong>只改 url 字段，其余字段原样透传</strong>。</td>
+          <td><code>src/auto_qb/webui/server/routes/torrent_detail.py:44-56</code> · <code>src/auto_qb/infra/utils.py:398-406</code></td>
+        </tr>
+        <tr>
+          <td>读缓存</td>
+          <td>该端点走 <code>_cached_read</code>（<code>RoCache</code>，TTL 默认 <strong>2.0s</strong>，写命令后按 <code>write_seq</code> 换键失效）。</td>
+          <td><code>src/auto_qb/webui/server/context.py:13-43</code></td>
+        </tr>
+        <tr>
+          <td>qB 字段口径</td>
+          <td><code>GET /api/v2/torrents/trackers</code> 自 <strong>WebAPI 2.13.0（qB 5.2.0, PR #23045）</strong> 起，每条 tracker 返回 <code>next_announce</code> / <code>min_announce</code>（<strong>Unix epoch 绝对秒</strong>）与 <code>endpoints[]</code>。旧版无此字段。</td>
+          <td>本仓报告 <code>memory-bank/reports/26-10-05-0854-report-reannounce-confirm-api.html</code> §4.1（源码 <code>getTrackers</code> L280-332）</td>
+        </tr>
+        <tr>
+          <td>既有消费先例</td>
+          <td>后端已读同字段: <code>_trackers_baseline</code> 记 <code>{url: {status, updating, next, min}}</code>，并用 <strong>「任一 real 行含 <code>next_announce</code> 键 = qB 5.2+」</strong> 的字段存在性探测（<code>epoch_mode</code>）判版本，<strong>不按版本号猜</strong>。</td>
+          <td><code>src/auto_qb/webui/commands.py:238-267</code></td>
+        </tr>
+      </table>
+      <div class="verdict">
+        <div class="vt">核心结论（范围收缩）</div>
+        <p>per-tracker 真值<strong>已经在既有 <code>/trackers</code> 透传里</strong>（qB 5.2+）。issue 里「后端需新增端点或透传字段」的前提<strong>部分过期</strong> —— 后端<strong>无需</strong>新增端点即可把 <code>next_announce</code> 送到前端。因此本件主体工作收窄为:
+          <strong>①前端换真口径</strong> + <strong>②低版本降级</strong> + <strong>③守阵</strong>；后端是否做小幅加固见 P-01 / P-02。</p>
+      </div>
+      <div class="note warn">
+        <p><strong>S0 复验（认领后第一件事，防过期原则第 5 条）</strong>: 重跑锚点 —— ①06 <code>nextHtml</code> 现状仍在；
+          ②后端透传未加白名单；③真机（或 <code>ui_harness</code> 打一发）确认 <code>/trackers</code> 响应<strong>确含</strong>
+          <code>next_announce</code>（用户侧 qB 版本 ≥ 5.2）。三条任一不成立，先回本计划改口径再动代码。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head">
+      <div class="sec-no">03</div>
+      <div>
+        <h2>方案设计</h2>
+        <p class="sec-sub">数据来源 / 时钟口径 / 微条比例 / 刷新粒度 / 降级 —— 各维度先给判据，具体取舍见 §04。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3>3.1 数据来源与逐行判定 <span class="h3-mono">next_announce</span></h3>
+      <p>每行 tracker 用行级 <code>t.next_announce</code>（epoch 秒）算剩余:
+        <code>remaining = next_announce - now</code>；格式化沿用现有 <code>ctx.fmtDuration</code>。逐行判定:</p>
+      <ul>
+        <li><strong>真口径行</strong>（含 <code>next_announce</code> 键，qB 5.2+）: 显示该行自己的剩余时间，<strong>去掉「全局」标</strong>。</li>
+        <li><strong>虚拟行</strong>（DHT/PeX/LSD）与<strong>未启用行</strong>: 恒「—」（不变）。</li>
+        <li><strong>更新中行</strong>（status=3）: 沿用「正在汇报」（此时 qB 把 <code>next_announce</code> 置为 <code>now</code>，剩余≈0，不必特判也可，但保持现状语义更稳）。</li>
+        <li><strong>legacy 行</strong>（不含该键，qB &lt; 5.2）: 回退 §3.5 降级口径。</li>
+      </ul>
+      <p>版本探测<strong>逐行按键存在性判</strong>，与后端 <code>_trackers_baseline</code> 的 <code>epoch_mode</code> 同一判据 ——
+        <strong>不得</strong>凭 qB 版本号或「秒/毫秒」式臆测。</p>
+
+      <h3>3.2 时钟口径 <span class="h3-mono">epoch − now</span></h3>
+      <p><code>next_announce</code> 是 qB 主机的 epoch 绝对秒；前端相减用本机 epoch
+        （<code>Date.now()/1000</code>，或既有响应式 <code>this.nowSec</code>，<code>format.js:64</code>/<code>lifecycle.js:174</code>，
+        每 30s 一跳）。单机 / 局域网场景浏览器与 qB 时钟通常已由系统 NTP 对齐，偏差可忽略。
+        若要求更强健（跨机、时钟漂移），可选后端随响应下发 server epoch 供前端算偏移（P-02）。</p>
+      <div class="note warn">
+        <p><strong>硬约束（不得回潮）</strong>: <code>next_announce</code> 是 <strong>epoch 绝对时间，不是倒计时</strong> ——
+          必须先减 <code>now</code> 再格式化。把它直接当剩余秒数是 <code>commands.py</code> 已记录的事故根因
+          （<code>_verdict_reannounce</code> docstring: 「不得把 epoch 当倒计时用」）。</p>
+      </div>
+
+      <h3>3.3 微条比例 <span class="h3-mono">分母不可得</span></h3>
+      <p>qB 只给 <code>next_announce</code> / <code>min_announce</code>，<strong>不给 per-tracker 的 announce interval</strong>；
+        故「剩余 / 周期」的<strong>真 per-tracker 分母不存在</strong>。当前全局近似用的分母是种子级 <code>detail.reannounce</code>
+        （反映的是<strong>当前活跃 tracker</strong> 的周期），用它当所有行的分母只有活跃行近似正确。取舍见 P-03。</p>
+
+      <h3>3.4 刷新粒度 <span class="h3-mono">5s vs 1s</span></h3>
+      <p>现状是 5s 轮询刷新（显示粒度 = 轮询粒度，非逐秒）。设计稿
+        <code>resources/detail-panel-templates/06-trackers-table-collapsed.html</code> 标注「倒计时微条(逐秒走)」，
+        但那是演示稿的模拟。若要逐秒走需加本地 1s ticker（变体已有 <code>destroy()</code> 钩子，重构计划亦记
+        「定时器(如 06 倒计时)必清」）。取舍见 P-04。</p>
+
+      <h3>3.5 降级 <span class="h3-mono">qB &lt; 5.2</span></h3>
+      <p>低版本 qB 无 <code>next_announce</code>：<strong>保留现状路径作为 fallback 分支</strong> —— 逐行同一全局值 +
+        「全局」标 + 种子级微条。即「现状代码」不退场，只是不再是 qB 5.2+ 下的默认分支。取舍见 P-05。</p>
+    </div>
+  </section>
+
+  <section id="s4">
+    <div class="sec-head">
+      <div class="sec-no">04</div>
+      <div>
+        <h2>拍板点清单</h2>
+        <p class="sec-sub">每点给推荐案与备选；拍板后 doc-status 转 In Progress 并开工。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <tr><th>编号</th><th>问题</th><th>推荐案</th><th>备选</th></tr>
+        <tr>
+          <td class="num">P-01</td>
+          <td>后端是否改动</td>
+          <td><span class="pill rec">推荐</span> <strong>纯前端</strong> —— 数据已在既有透传里，后端零改动（零新增 qB 调用，天然满足「5s 轮询负载不得加频」）。</td>
+          <td>后端加派生相对字段 <code>next_announce_in</code>（须处理 2s 读缓存与「相对值过期」的矛盾: 缓存命中时相对值已陈旧，需绕过缓存或改下发 server epoch）。</td>
+        </tr>
+        <tr>
+          <td class="num">P-02</td>
+          <td>时钟口径</td>
+          <td><span class="pill rec">推荐</span> 前端用<strong>本机 epoch</strong> 与 qB epoch 相减（单机/局域网已对齐，零协议改动）。</td>
+          <td>后端随响应下发 server epoch，前端算一次偏移再倒计时（更强健，但改响应形状）。</td>
+        </tr>
+        <tr>
+          <td class="num">P-03</td>
+          <td>微条比例（per-tracker interval 不可得）</td>
+          <td><span class="pill rec">推荐</span> per-tracker 模式<strong>去掉微条</strong>（分母不存在，不造假数据）—— 与文件头「不造 per-tracker 假数据」原则一致。</td>
+          <td>A: 用种子级 <code>detail.reannounce</code> 作分母近似 + tooltip 明标「比例以种子级周期为分母」；B: 仅当该种子只有一个 real tracker 时显示微条。</td>
+        </tr>
+        <tr>
+          <td class="num">P-04</td>
+          <td>刷新粒度</td>
+          <td><span class="pill rec">推荐</span> 沿用 <strong>5s 轮询粒度</strong>（与现状一致，零新增负载，无定时器）。</td>
+          <td>本地 1s ticker 逐秒走（更贴设计稿；须在 <code>destroy()</code> 清定时器并加守阵）。</td>
+        </tr>
+        <tr>
+          <td class="num">P-05</td>
+          <td>低版本（qB &lt; 5.2）回退</td>
+          <td><span class="pill rec">推荐</span> 保留<strong>全局近似</strong>（现状即 fallback，行为可预期、信息不丢）。</td>
+          <td>直接隐藏该列（更「干净」但信息更少，且与设计稿版式不符）。</td>
+        </tr>
+      </table>
+      <div class="note">
+        <p><strong>若全取推荐案</strong>: 后端零改动；前端把 <code>nextHtml</code> 改为读行级 <code>next_announce</code>、
+          去「全局」标、去微条，保留 legacy 分支；工作量落在 S1 + S3。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s5">
+    <div class="sec-head">
+      <div class="sec-no">05</div>
+      <div>
+        <h2>分步实施</h2>
+        <p class="sec-sub">S0 复验不可跳；每步一个可独立验证的收口。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <tr><th class="num">阶段</th><th>动作</th><th>产出 / 验证</th></tr>
+        <tr>
+          <td class="num">S0</td>
+          <td>开工准备: <code>my-commit-flow.sync</code>；复验 §02 三条锚点（06 现状 / 后端透传 / 真机 <code>next_announce</code> 存在性）；记 <code>kb.baseline</code> 现役基线。</td>
+          <td>复验行贴进任务档案（「复验: &lt;时间&gt; 仍复现 / 口径有变」）；锚点过期则回改本计划。</td>
+        </tr>
+        <tr>
+          <td class="num">S1</td>
+          <td>前端换真口径: <code>06-...js::nextHtml</code> 改为读行级 <code>next_announce</code> 算剩余；去「全局」标；保留 legacy 回退分支（按 P-05）。<code>render()</code> 的 sig 比对加入逐行 <code>next_announce</code>（否则倒计时变化不触发重建）。</td>
+          <td>双 tracker 种子真机/桩下各行倒计时互不相同；单 tracker 种子与 qB GUI「下一个announce」一致。</td>
+        </tr>
+        <tr>
+          <td class="num">S2</td>
+          <td>微条与刷新粒度（按 P-03 / P-04 拍板落地）。若加 1s ticker: 在 <code>destroy()</code> 清定时器 + 守阵。</td>
+          <td>版式与设计稿对齐；换种子/关面板无残留定时器。</td>
+        </tr>
+        <tr>
+          <td class="num">S3</td>
+          <td>守阵: ①桩数据（<code>tests/helpers.py::FakeClient.torrents_trackers</code> 默认返回、<code>ui_harness</code> 相关）补 <code>next_announce</code> 形态；②前端静态守阵钉「06 读行级 <code>next_announce</code>」；③e2e 断言逐行倒计时不同（或 epoch 相减口径）。</td>
+          <td>新增守阵先红后绿；<code>test.full</code> 无回归。</td>
+        </tr>
+        <tr>
+          <td class="num">S4</td>
+          <td>收口: <code>test.full</code> 记新基线切片；回写 <code>memory-bank/</code>（相关主题文档 + issue 状态）；按 DoD 归档。</td>
+          <td>issue 置 <strong>Done</strong>，写实际修法 / 验证方式 / 测试数字。</td>
+        </tr>
+      </table>
+      <div class="note">
+        <p>若 P-01 改取备选（后端加派生字段），追加 S2.5: 后端 <code>torrent_detail.py</code> 的 trackers 端点加
+          <code>next_announce_in</code> 派生 + 处理读缓存（绕过或缩短 TTL）+ 端点守阵 —— 工作量与回归面显著上升，
+          这也是推荐 P-01 取「纯前端」的原因。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s6">
+    <div class="sec-head">
+      <div class="sec-no">06</div>
+      <div>
+        <h2>验收与守阵</h2>
+        <p class="sec-sub">全部可判定，不靠人眼「看起来对」。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <ul>
+        <li><span class="ok">✓</span> 多 tracker 种子: 各行「下次汇报」<strong>互不相同</strong>，且与 qB GUI「下一个 announce」逐行一致（真机抽查，容差 = 轮询粒度）。</li>
+        <li><span class="ok">✓</span> 行内<strong>不再出现「全局」标</strong>（qB 5.2+ 路径）；legacy 路径仍带「全局」标（P-05 推荐案）。</li>
+        <li><span class="ok">✓</span> 虚拟行 / 未启用行「—」；更新中行「正在汇报」；空态 / 失败态行为不变。</li>
+        <li><span class="ok">✓</span> <strong>无新增 qB 调用</strong>（5s 轮询次数不变；P-01 推荐案下天然成立）。</li>
+        <li><span class="ok">✓</span> 换种子 / 关面板无残留定时器（若 P-04 取 1s ticker）。</li>
+        <li><span class="ok">✓</span> <code>test.full</code> 全绿，基线切片记实测数字。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="s7">
+    <div class="sec-head">
+      <div class="sec-no">07</div>
+      <div>
+        <h2>风险与坑</h2>
+        <p class="sec-sub">按动作选类，指向 <code>memory-bank/pitfalls/</code> 相关主题。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <tr><th>风险</th><th>判据 / 处置</th></tr>
+        <tr><td>epoch 当倒计时用</td><td><code>next_announce</code> 是 epoch 绝对秒 —— 必须先减 <code>now</code>。事故根因见 <code>commands.py::_verdict_reannounce</code> docstring（「不得回潮」）。</td></tr>
+        <tr><td>时钟偏差</td><td>跨机 / 未 NTP 对齐时本机 epoch 与 qB epoch 有偏差 → 倒计时整体偏移。单机/局域网可接受；否则走 P-02 备选。</td></tr>
+        <tr><td>2s 读缓存</td><td><code>/trackers</code> 走 <code>RoCache</code>（TTL 2s）。epoch 值缓存安全（绝对时间不因缓存而错）；但若改后端下发<strong>相对值</strong>，缓存会让相对值陈旧 —— 这是推荐 P-01「纯前端」的关键理由。</td></tr>
+        <tr><td>变体 sig 跳过重建</td><td><code>render()</code> 靠序列化 sig 跳过重建；换真口径后 sig 必须含逐行 <code>next_announce</code>，否则倒计时不刷新（坑档 <code>pitfalls/web-ui/template-render.md</code> 的 <code>_dtNotify</code> 变体通知族）。</td></tr>
+        <tr><td>定时器残留</td><td>若 P-04 取 1s ticker，<code>destroy()</code> 必须清（重构计划 :234 已记「定时器(如 06 倒计时)必清」）。</td></tr>
+        <tr><td>版本判定靠猜</td><td>不得凭版本号判字段有无 —— 按「行含 <code>next_announce</code> 键」逐行判（与后端 <code>epoch_mode</code> 同判据）。</td></tr>
+        <tr><td>桩保真</td><td>桩（<code>FakeClient.torrents_trackers</code> / <code>ui_harness</code>）默认返回不含 <code>next_announce</code>，e2e 若不补会走 legacy 分支 → 假绿。S3 必须补桩。</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="s8">
+    <div class="sec-head">
+      <div class="sec-no">08</div>
+      <div>
+        <h2>变更记录</h2>
+        <p class="sec-sub">计划改版 = 同文件内追加，禁堆 -v2 / -v3。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <tr><th>时间</th><th>版本</th><th>变更</th></tr>
+        <tr>
+          <td><code>26-10-09-1243</code></td>
+          <td>v1 初稿</td>
+          <td>认领 issue <code>26-10-07-0149</code>；取证结论: per-tracker 真值已在既有 <code>/trackers</code> 透传里（qB 5.2+），范围收窄为纯前端 + 降级 + 守阵；列 P-01…P-05 拍板点（全带推荐案）；分步 S0-S4。<code>doc-status Open</code>，待拍板后转 In Progress。</td>
+        </tr>
+        <tr>
+          <td><code>26-10-09-1257</code></td>
+          <td>v1 实施完成</td>
+          <td>用户「按推荐实施」—— P-01…P-05 <strong>全取推荐案</strong>（纯前端 / 本机 epoch / 去微条 / 5s 轮询 / 保留回退分支）。S1-S3 落地: <code>06-trackers-table-collapsed.js</code> 换真口径、<code>ui_harness</code> 补 <code>next_announce</code> 桩、静态守阵 1 条（红验确认）+ e2e 1 条（双皮肤）。<code>doc-status Done</code>；实施结论与实测数字见任务档案 <code>memory-bank/tasks/26-10-09-webui-per-tracker-reannounce.md</code>。</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <b>生成</b> 2026-10-09 12:43 · WorkBuddy · 单文件自包含, 双击即开<br>
+    <b>认领</b> issue <code>26-10-07-0149-feat-webui-per-tracker-reannounce-endpoint</code> · doc-topic <code>webui-detail-panel-templates</code><br>
+    <b>口径</b> 拍板前不动代码 · 认领链两侧互指（本件 doc-refs ↔ issue doc-refs）· 锚点行号随代码漂移, 靠符号 + grep 重定位
+  </footer>
+
+</div>
+</body>
+</html>

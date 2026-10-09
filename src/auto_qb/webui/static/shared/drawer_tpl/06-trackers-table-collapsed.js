@@ -3,9 +3,11 @@
  * 设计稿: resources/detail-panel-templates/06-trackers-table-collapsed.html(collapsed 档;
  * 收起/矮/高三档语义全部收进本变体 —— 收起 = 本变体 summary() 供给 44px 头部健康比例条,
  * 矮/高 = 增强表格自适应滚动)。
- * 数据: /trackers qB 透传(drawer.trackers, 5s 轮询) + detail.reannounce_in(仅 06 授权按 P-02
- * 以全局值近似逐行汇报倒计时, 行内标「全局」; 微条比例 = reannounce_in / reannounce, 后者
- * 缺失整条省略 —— 不造 per-tracker 假数据)。状态色点 / tier / num_downloaded 透传即有(渐进);
+ * 数据: /trackers qB 透传(drawer.trackers, 5s 轮询)。逐行汇报倒计时按 P-02 升级为真 per-tracker
+ * 口径(行级 next_announce, qB 5.2+/WebAPI 2.13.0 起随 /trackers 透传, Unix epoch 秒) 减 now;
+ * qB < 5.2 无该字段 → 回退种子级 detail.reannounce_in 全局近似并标「全局」; 真口径下
+ * per-tracker interval 不可得(微条分母缺失), 故不画微条 —— 不造 per-tracker 假数据)。
+ * 状态色点 / tier / num_downloaded 透传即有(渐进);
  * msg 行内点击展开全文; 「仅看异常」过滤聚焦 警告/更新中/失败 行。
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 行语义按设计稿提到失败档。
@@ -159,10 +161,20 @@
     }
   };
 
-  /* P-02(拍板): 逐 tracker 汇报倒计时缺 per-tracker 口径 —— 以 detail.reannounce_in 全局值
-   * 近似展示并标「全局」; 微条比例 = reannounce_in / reannounce(后者缺失/非正整条省略);
-   * detail 未落袋显示「—」。更新中行显「正在汇报」, 虚拟/未启用行显「—」。 */
-  function nextHtml(ctx) {
+  /* P-02(拍板升级, 2026-10-09): 逐行汇报倒计时改真 per-tracker 口径 —— 行级 next_announce
+   * (qB 5.2+ 随 /trackers 透传, Unix epoch 绝对秒) 减 nowSec 得剩余; 去「全局」标; 真口径下
+   * per-tracker interval 不可得, 不画微条(不造假)。!epoch 是绝对时间不是倒计时, 必须先减 now。
+   * 回退: 行缺 next_announce(qB < 5.2) → 种子级 detail.reannounce_in 全局近似 + 「全局」标 +
+   * 种子级微条(即旧路径)。detail 未落袋显示「—」。更新中行显「正在汇报」, 虚拟/未启用行显「—」
+   * (后两者由调用方分流, 不进本函数)。 */
+  function nextHtml(ctx, t, nowSec) {
+    const na = t ? t.next_announce : null;
+    if (num(na) && na > 0) {
+      const rem = Math.max(0, Math.round(na - nowSec));
+      return T`<span class="dt06-next" title="该 tracker 的下次汇报倒计时(行级 next_announce 真值)">
+        <span><b>${ctx.fmtDuration(rem)}</b></span>
+      </span>`;
+    }
     const d = (ctx.drawer && ctx.drawer.detail) || null;
     if (!d || !(d.reannounce_in > 0)) {
       return T`<span class="dt06-v z" title="汇报倒计时数据未落袋">—</span>`;
@@ -170,13 +182,13 @@
     const bar = num(d.reannounce) && d.reannounce > 0 && d.reannounce_in <= d.reannounce
       ? T`<span class="dt06-tbar" title="汇报周期剩余比例"><i style="width:${(d.reannounce_in / d.reannounce * 100).toFixed(1)}%"></i></span>`
       : "";
-    return T`<span class="dt06-next" title="P-02: 以种子级 detail.reannounce_in 全局值近似, 非逐 tracker 口径">
+    return T`<span class="dt06-next" title="P-02 回退: qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似">
       <span><b>${ctx.fmtDuration(d.reannounce_in)}</b> <span class="dt06-gb">全局</span></span>
       ${R(bar)}
     </span>`;
   }
 
-  function rowHtml(ctx, t, order) {
+  function rowHtml(ctx, t, order, nowSec) {
     const b = bucketOf(ctx, t);
     const bk = BUCKET[b];
     const virtual = b === "off" && ctx.drawerTrackerVirtual(t.url);
@@ -195,7 +207,7 @@
     const benign = b === "ok" || b === "off" ? "1" : "0";
     const next = b === "upd"
       ? T`<span class="dt06-next-upd"><i class="pulse"></i>正在汇报</span>`
-      : (b === "off" ? T`<span class="dt06-none">—</span>` : nextHtml(ctx));
+      : (b === "off" ? T`<span class="dt06-none">—</span>` : nextHtml(ctx, t, nowSec));
     const ops = virtual
       ? T`<span class="dt06-ops dim">—</span>`
       : T`<span class="dt06-ops">
@@ -223,9 +235,13 @@
     const d = (ctx.drawer && ctx.drawer.detail) || null;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    /* 数据未变跳过重建(含汇报倒计时: detail.reannounce_in 变了也要刷) */
+    /* 汇报倒计时基准(本机 epoch, 秒): 逐行 next_announce 是绝对时间, 减它得剩余(见 nextHtml)。
+     * 计入 sig —— 时间每前进 1s 都该重算, 否则跳过重建会把倒计时冻在上一帧(粒度 = 5s 轮询)。 */
+    const nowSec = Math.floor(Date.now() / 1000);
+    /* 数据未变跳过重建(含汇报倒计时: 逐行 next_announce / detail.reannounce_in / nowSec 变了都要刷) */
     const sig = JSON.stringify(ts) + "|" + String(!!loading)
       + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "")
+      + "|" + nowSec
       + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     if (loading && !ts.length) {
@@ -247,10 +263,12 @@
     /* 排序: 异常置顶(sev 升序), 同档保 qB 原序(稳定) */
     const rows = ts.map((t, i) => ({ t, i, b: bucketOf(ctx, t) }))
       .sort((a, b2) => BUCKET[a.b].sev - BUCKET[b2.b].sev || a.i - b2.i);
-    const rowsHtml = rows.map((r, k) => rowHtml(ctx, r.t, k)).join("");
-    const note = d && d.reannounce_in > 0
-      ? "汇报倒计时为种子级全局值(P-02 近似) · 5s 自动刷新"
-      : "5s 自动刷新";
+    const rowsHtml = rows.map((r, k) => rowHtml(ctx, r.t, k, nowSec)).join("");
+    /* 工具条注: 有任一行带 next_announce(qB 5.2+) = 真口径; 否则回退种子级全局近似 */
+    const perTracker = ts.some((t) => num(t.next_announce) && t.next_announce > 0);
+    const note = perTracker
+      ? "汇报倒计时为逐 tracker 真值(qB next_announce) · 5s 自动刷新"
+      : (d && d.reannounce_in > 0 ? "汇报倒计时为种子级全局值(qB 无 per-tracker 口径) · 5s 自动刷新" : "5s 自动刷新");
     const html = T`<div class="dt06-wrap">
       <div class="dt06-toolbar">
         <span class="dt06-note">${note}</span>
@@ -267,7 +285,7 @@
           <span class="dt06-num" title="num_seeds (num_complete)">做种</span>
           <span class="dt06-num" title="num_leeches (num_incomplete)">用户</span>
           <span class="dt06-num" title="num_downloaded: 该 tracker 报告的累计完成下载次数">完成下载</span>
-          <span title="汇报倒计时(P-02: 种子级全局值近似)">下次汇报</span>
+          <span title="下次汇报倒计时(逐 tracker 真值 next_announce; qB 无该字段时回退种子级全局近似)">下次汇报</span>
           <span class="dt06-num">操作</span>
         </div>
         ${R(rowsHtml)}
