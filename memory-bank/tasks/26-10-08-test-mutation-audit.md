@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-08
-**Updated:** 2026-10-08
+**Updated:** 2026-10-09
 **Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0), 杀死率 **82.77%**。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。 **R5**: 修 issue 26-10-08-0758(mutants.status 在 WSL 下恒报 mutmut=no, 回显改 `cd X && cmd` 直连)。 **R6 config 第二轮**(池内 `test` issue 26-10-08-0903-validator-strings): 补字符串键名大小写 + `and`/`or` 短路互换守阵, 红验 **26/26** 全红, 同池 `--no-refresh` 复跑存活 **772 → 653**(−119), 杀死率 **85.66%**。 **R7 config 第三轮**(池内 `test` issue 26-10-08-0903-writer-tail): 对 writer.py 的 74 条 S4 候选重判(先修被污染的 S4 判据 —— 镜像池 + 两条读源码文本守卫在基线就红, 74 条被伪杀成零), 排除既有红守卫后得有效判据 **71 真洞 / 3 假存活**; 补 **22 守阵**后复跑同 74 条 → **51 KILLED / 23 SURVIVED**(存活 −48), 余 22 条验证为等价变异、1 条真洞当场杀死; **零 src 改动**。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/pitfalls/testing/read-source-static-guard-mutation.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md, memory-bank/testing/baselines/26-10-08-1016-mutants-config-validator-strings.md, memory-bank/testing/baselines/26-10-08-1144-mutants-config-writer-tail.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/pitfalls/testing/read-source-static-guard-mutation.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md, memory-bank/testing/baselines/26-10-08-1016-mutants-config-validator-strings.md, memory-bank/testing/baselines/26-10-08-1144-mutants-config-writer-tail.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -59,7 +59,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config **两轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、第二轮见 R6(validator-strings, 85.66%); 池内 6 条 `test` issue 余 5 条待做; rules/hr/core 计划仍未派生 |
+| S6+ 逐包轮次 | In Progress | config **四轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface); 池内 6 条 `test` issue 余 3 条待做; **hr 计划已派生**(`26-10-09-1459`, 见 R9); rules/core 计划仍未派生 |
 
 ## 进度日志
 
@@ -195,3 +195,17 @@
 - **S7 记录**: 基线切片 [26-10-08-1229](../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md); 本档案 R8; 常驻锚 §07/§08/§09 同步(config 行补第 4 个切片指针); schema-surface issue 状态与变更日志更新。
 - **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1229](../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md)(`src/` 零改动, 新增用例 +6)。
 - **未做 / 遗留**: 其余 3 条 config 真洞 issue(loop-guards / boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
+
+### 2026-10-09 R9 — 派生 hr 计划(未执行)
+
+- **触发**: 用户「根据变异测试指导+skill写一个 hr 模块的测试计划」—— skill「派生计划」节的第二个用例(承接 R1 的 config 计划)。
+- **产物**: `memory-bank/plans/26-10-09-1459-plan-mutation-hr.html`(单文件 HTML, dark, `doc-topic=mutation-audit`, 状态 `Open` 待拍板)。
+- **计划要点(按 skill 骨架逐节落到 hr 上)**:
+  - 目标 glob `**/hr/*.py` —— 用 fnmatch 实测覆盖 hr 包**全部 24 个文件**(顶层 19 + `adapters/` 5), 且不误伤 `webui/server/routes/hr.py`; 明确不写 `**/hr/**/*.py`(会漏顶层 19 文件)。fnmatch 语义下 `*` 跨 `/`, 故第二个 `*` 吃下 `adapters/nexusphp`。
+  - 重点函数清单按「判据密度 × 出错代价」分三档: A 判定内核(`resolve.py` 四行判定表 + 12 格矩阵 · `service.py` 波次引擎的停翻/防伪/放行/释放 · `bencode.py` infohash 原始切片 · `parse.py` 数值容错) · B 链路/安全/持久化(`channel` 白名单与 token · `store` 锁与原子写 · `ratelimit` 频控 · `queue` 防伪造回传 · `worker` revision · `runtime` 热重载 · `server` 鉴权 · `model` 序列化契约) · C 表现/胶水(`status` / `report` / `events` / `fetcher` / `adapters`)。
+  - 测算基数: hr 包 **24 文件 / 7,863 行 / 439 def·class** ⇒ 报告 §08 锚点 **≈7,800 变异 / ≈17 min**(单价 0.134s/变异)。**不做**「剔除纯数据声明」的精化(config 首轮精化后低估 26%); 另标注 hr 池(457 fn)比 config 池(186 fn)大 2.5x, 单变异成本更高, 实测量级预计 17–25 min。
+  - 池 = 15 个定向测试文件 / **457 fn**(`test_hr_service` 103 · `test_hr_parse` 47 · `test_hr_runtime` 37 · `test_hr_resolve` 36 · `test_hr_server` 36 · `test_hr_worker` 33 · `test_hr_store` 31 · `test_hr_report` 28 · `test_hr_status` 26 · `test_hr_channel` 22 · `test_hr_fetcher_channel` 15 · `test_hr_bencode` 14 · `test_hr_queue` 14 · `test_hr_ratelimit` 10 · `test_hr_multisite` 5)。核过池无「读源码文本」守阵 ⇒ 默认 `--deselect` 与本轮无关。
+  - 排除面: `hr/__init__.py` / `log.py` / `module.py`(re-export / 薄封装); `test_hr.py`(HR 规则, 属 rules 轮) · `test_hr_config.py`(属 config 轮, 已做) · `test_web_hr.py` + `webui/server/routes/hr.py`(属 webui 轮)。
+  - 步骤 S1–S8 全走 task id(`mutants.setup` → `mutants.run` → `mutants.report` + 三分类 → `mutants.verify` → 补测 → 复跑 → 记录 → **S8 更新常驻锚 §07**); 附 Windows 兜底 `mutants.gremlins` 与「单轮超 30 min 按模块再切」停手点。
+- **收尾**: `kb.index` 重建生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; 常驻锚 §07 `hr/` 行指针补计划链接 + §08 台账 + §09 日志同步。`test.full` 数字见基线切片 [26-10-09-1522](../testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md)(`src/` 与 `tests/` 零改动)。
+- **未做**: 未执行审计(计划边界: 不在计划里实施)。

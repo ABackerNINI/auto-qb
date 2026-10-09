@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
-> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档 `pitfalls/testing/mutation-pool-artifact.md`。全流程在 WSL 用 `infra/versioning.py` 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。**config 包已跑两轮**: 首轮(计划 26-10-08-0720)4799 变异 / 杀 3851 / 存活 893(80.25%) → S4 全套件确认 274 条(54 假存活 + 220 真洞候选) → 补 10 守阵 → 复跑存活 **772**(−121, 82.77%); 第二轮(池内 `test` issue 26-10-08-0903-validator-strings)补字符串键名大小写 + `and`/`or` 短路互换守阵, 红验 **26/26**, 同池复跑存活 **653**(−119, **85.66%**)。档案 `tasks/26-10-08-test-mutation-audit.md`。
-> 最后活动: 2026-10-08 12:29
+> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档 `pitfalls/testing/mutation-pool-artifact.md`。全流程在 WSL 用 `infra/versioning.py` 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。**config 包已跑四轮**: 首轮(计划 26-10-08-0720)4799 变异 / 杀 3851 / 存活 893(80.25%) → S4 全套件确认 274 条(54 假存活 + 220 真洞候选) → 补 10 守阵 → 复跑存活 **772**(−121, 82.77%); 后续按主题补守阵 → 653(85.66%) → 573(**87.31%**)。**hr 包计划已派生**(`plans/26-10-09-1459-plan-mutation-hr.html`, 状态 `Open` 待拍板, 未执行)。档案 `tasks/26-10-08-test-mutation-audit.md`。
+> 最后活动: 2026-10-09 15:22
 
 ## 已完成(详情见档案, 不在此复述)
 
@@ -27,6 +27,7 @@
   - 新增 **6** 个守阵(全落 `tests/test_config_schema.py`): readonly 路径集**与顺序** · 遍历契约合成探针 · `plugins_by_kind` 的 condition/action **两支** + 兜底 · `constants` 键集合逐位 · 常量取值逐项 · `hr_check_site_presets` 每条键集合与逐字段取值。红验 **26/27 KILLED**; 余 1 条等价变异 `readonly_config_paths__mutmut_17`(`walk(..., "")` → `None`, 顶层 prefix 只被 `if prefix else` 消费, 同为假值)。
   - 同池 `--no-refresh` 复跑: 杀 **4190** / 存活 **573** / `no tests` **36** → 杀死率 **87.31%**; 逐 id 新杀 83 —— **26 条 = 本轮补测**, 另 **57 条集中在 writer**(镜像刷新纳入 `fcc3cd69` 的 R7 守阵, R6 基线时点之后才进 develop, **非本轮**)。**零 `src/` 改动**; 切片 `testing/baselines/26-10-08-1229-mutants-config-schema-surface.md`。
   - **踩坑(工具侧)**: 主仓该文件是 **CRLF** 行尾, 红验脚本按 LF 拼多行锚点会静默匹配不上(报 ANCHOR-MISS), 且手抄缩进极易差 1 空格(实测 52 vs 51)—— 已改用 `" " * 16` 拼接规避。
+- **派生计划(hr)**: `plans/26-10-09-1459-plan-mutation-hr.html`(状态 `Open` 待拍板, 未执行) —— 目标 `**/hr/*.py`(fnmatch 实测命中 **24** 文件, 不误伤 `webui/server/routes/hr.py`); 重点面分 A(判定内核: resolve/service/bencode/parse)· B(链路·安全·持久化: channel/store/ratelimit/queue/worker/runtime/server/model)· C(表现·胶水: status/report/events/fetcher/adapters)三档; 测算 ≈7,800 变异 / ≈17–25 min(hr 池比 config 大 2.5x); 池 = **15 文件 / 457 fn**; 步骤 S1–S8(含硬约束 12 的「更新常驻锚 §07」)。零 `src/` / `tests/` 改动。
 
 ## 正在进行
 
@@ -36,6 +37,6 @@
 
 - **回灌已落地**(R3): 命令包新增 `mutants.report`(带 diff 的清单 + 汇总)与 `mutants.verify`(S4 全套件确认的机械化, ≈15s/条、可续跑); skill 补「流程约束 9–11」与两条记录纪律; 报告加 §14; 排期锚补进度/台账。下次跑任一包都应走这两条 task, 别再手工拼 S4。
 - **config 真洞余量未逐条补测**: 首轮 S4 覆盖 274 条(220 条真洞候选); 后续各轮复跑又陆续杀掉一部分。余量按模式入池 6 条主题 issue, **已做 3 条**(validator-strings / writer-tail / schema-surface), 余 **3** 条等排期(`loop-guards` / `boundary-guards` / `loader-defaults`)。
-- 逐包轮次: rules → hr → core **仍未派生计划**(对象优先级见可行性报告 §11); config 复跑可作为下一轮对照点(存活应 ≤ 573)。
+- 逐包轮次: **hr 计划已派生**(`plans/26-10-09-1459-plan-mutation-hr.html`, 未执行); rules / core **仍未派生计划**(对象优先级见可行性报告 §11); config 复跑可作为下一轮对照点(存活应 ≤ 573)。
 - **存量守卫违规未处理**(用户裁定): 见上「已完成」末条; 若日后要清, 需另开会话(属 `webui-qb-traffic-head-layout` 会话产物, 非本专题范围)。
 - 常驻 issue 的认领链只有一条(本档案); 后续每轮若新增计划/档案, 记得同步 issue 的 `doc-refs`。

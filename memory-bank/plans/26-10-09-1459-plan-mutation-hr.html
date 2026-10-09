@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-09-1459">
+<meta name="doc-updated" content="26-10-09-1459">
+<title>hr/ 包变异测试审计 · 分步执行计划</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419;
+    --bg-raise: #151b22;
+    --ink: #d9dee3;
+    --ink-strong: #f0f3f5;
+    --mut: #8b949c;
+    --accent: #59b3a2;
+    --accent-dim: rgba(89, 179, 162, .14);
+    --warn: #e2a86e;
+    --warn-dim: rgba(226, 168, 110, .12);
+    --line: rgba(255, 255, 255, .09);
+    --line-soft: rgba(255, 255, 255, .05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding: 0 24px;
+  }
+  code, .mono, td.num {
+    font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  code {
+    font-size: .88em;
+    background: var(--bg-raise);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: .08em .35em;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.1; }
+  nav.toc .toc-head {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 10px;
+  }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  nav.toc .toc-foot {
+    margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--line);
+    color: var(--mut); font-size: 11.5px; line-height: 1.7;
+  }
+  main { min-width: 0; max-width: 880px; }
+
+  .kicker {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 38px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px;
+  }
+  .lede { font-size: 16.5px; color: var(--mut); max-width: 64ch; margin-bottom: 26px; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px 28px;
+    font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 12px 0; margin-bottom: 52px;
+  }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+
+  section { margin-bottom: 64px; }
+  h2 {
+    font-size: 23px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px;
+  }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 30px 0 10px; }
+  p { margin-bottom: 14px; max-width: 76ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 76ch; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 18px 0 20px; }
+  th {
+    text-align: left; font-weight: 510; font-size: 11.5px;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--line-soft); padding: 8px 12px 8px 0; vertical-align: top; }
+  td.num { text-align: right; white-space: nowrap; color: var(--ink); }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  .tier td:first-child { white-space: nowrap; color: var(--ink); }
+
+  .gate {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 10px 16px; margin: 14px 0 8px; font-size: 13.5px; max-width: 78ch;
+  }
+  .gate b { color: var(--accent); font-weight: 590; }
+  .callout {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    padding: 14px 18px; margin: 18px 0; max-width: 80ch;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-dim); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout b { color: var(--ink-strong); }
+  .step { margin-bottom: 38px; }
+  .step > h3 { margin-top: 0; }
+  .step h3 .sid { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-weight: 400; margin-right: 10px; font-size: 15px; }
+  .cmd {
+    display: block; background: var(--bg-raise); border: 1px solid var(--line-soft);
+    border-radius: 4px; padding: 10px 14px; margin: 10px 0 12px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.8px;
+    color: var(--ink-strong); overflow-x: auto; white-space: pre; max-width: 100%;
+  }
+  .decision { color: var(--accent); font-weight: 590; }
+  .warn-t { color: var(--warn); font-weight: 590; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px;
+    font-size: 12.5px; color: var(--mut);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; display: none; }
+    h1 { font-size: 31px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <a href="#s1"><b>01</b>&nbsp; 范围与目标</a>
+      <a href="#s2"><b>02</b>&nbsp; 测算基数</a>
+      <a href="#s3"><b>03</b>&nbsp; 执行步骤 S1–S8</a>
+      <a href="#s4"><b>04</b>&nbsp; 验收</a>
+      <a href="#s5"><b>05</b>&nbsp; 风险与停手点</a>
+      <a href="#s6"><b>06</b>&nbsp; 变更记录</a>
+      <div class="toc-foot">
+        派生计划 · 一次只盯一个包<br>
+        指导: <code>mutation-testing</code> skill<br>
+        命令: <code>mutants</code> 包
+      </div>
+    </nav>
+    <main>
+      <div class="kicker">派生执行计划 · mutation-testing</div>
+      <h1>hr/ 包变异测试审计 · 分步执行计划</h1>
+      <p class="lede">对 <code>src/auto_qb/hr/</code> 跑一轮 mutmut 变异审计: 机器批量提名存活变异, 人手工确认哪些是真洞, 真洞各自入池。本计划只写「怎么修、为什么这么修」—— <b>不在本计划里实施</b>; 执行时另立任务档案, 轮次进档案与基线切片。</p>
+      <div class="meta-row">
+        <span>状态 <b class="mono">Open</b>(待拍板)</span>
+        <span>立项 <b class="mono">26-10-09-1459</b></span>
+        <span>目标 <b class="mono">**/hr/*.py</b></span>
+        <span>规划基线 <b class="mono">9926953b</b></span>
+        <span>专题 <b class="mono">mutation-audit</b></span>
+      </div>
+
+      <section id="s1">
+        <h2><span class="secno">01</span>范围与目标</h2>
+        <hr class="sec-rule">
+
+        <h3>1.1 目标与边界</h3>
+        <table>
+          <tr><th>项</th><th>值</th></tr>
+          <tr><td>目标包</td><td class="mono">src/auto_qb/hr/</td></tr>
+          <tr><td>目标 glob (only_mutate)</td><td class="mono">**/hr/*.py</td></tr>
+          <tr><td>包内构成</td><td>顶层 19 文件 · <code>adapters/</code> 5 文件 = <b>24 个 .py</b></td></tr>
+          <tr><td>选择池</td><td>15 个定向测试文件 (§2.3)</td></tr>
+          <tr><td>粒度</td><td><b>一个包</b> —— 不按全 <code>src</code> 跑 (硬要求, §5)</td></tr>
+        </table>
+        <p><code>**/hr/*.py</code> 这一条已实测 (fnmatch, 2026-10-09): 命中 hr 包<b>全部 24 个文件</b>(顶层 19 + <code>adapters/</code> 5), 且<b>不</b>误伤 <code>src/auto_qb/webui/server/routes/hr.py</code>。mutmut 的匹配是 fnmatch 语义 —— <code>*</code> 会跨 <code>/</code>, 所以第二个 <code>*</code> 能吃下 <code>adapters/nexusphp</code>。不要写 <code>**/hr/**/*.py</code> —— 它要求 <code>hr/</code> 下必须有子目录, 会漏掉顶层的 19 个文件。</p>
+        <p class="small">工具约束说明: mutmut 的 <code>source_paths</code> 必须是整个 <code>src</code>(写单文件会因包内相对 import 失败), 目标靠 <code>only_mutate</code> 收窄。所以「目标 = 整个 src」是工具要求, 不是我们变异了全 src; 实际参与变异的只有 glob 命中的 hr 包。</p>
+
+        <h3>1.2 为什么先 hr</h3>
+        <ul>
+          <li><b>对象优先级第 2 位</b> —— 可行性报告 §11 按「判据密度 × 出错代价」排: ① <code>rules/</code> ② <b><code>hr/</code></b> ③ <code>config/</code> ④ <code>core/</code>; <code>infra/</code> 与 <code>webui/server/</code> 估值最低。报告 §09 的口径是「先跑一轮拿分数, 分数最低的先补」; 本计划只盯一个包, 由用户选定 <code>hr/</code>(<code>rules/</code> 优先级更高, 走它自己的一份计划)。</li>
+          <li><b>hr/ 出错代价是站点侧实打实的处罚</b> —— HR 判定错 / 做种要求漏算 / infohash 对账错, 后果是账号被站点罚分或封禁, 不是本地状态不一致。判据密度也高: 四行判定表 · 停翻三条件 · 防伪下载 · 频控 · 锁隔离 · 序列化契约。</li>
+          <li><b>hr/ 是复合体, 最难写全边界</b> —— 多线程(<code>worker</code>) + 文件锁(<code>store</code>) + 本地 HTTP 通道(<code>server</code>/<code>channel</code>) + JSON 持久化(<code>model</code>) + 站点解析(<code>parse</code>/<code>adapters</code>)。这类代码的测试最容易「偏跑通而非钉边界」, 正是变异测试的靶心。</li>
+          <li><b>池构造成本低</b> —— 15 个 <code>test_hr_*.py</code> 已按模块整齐切分、一一对应目标文件, 不用拼池。</li>
+          <li><b>本轮的核心产出是一个刻度, 不是一次修复</b> —— hr/ 目前<b>没有实测分数</b>; 本轮先给它一个覆盖率给不出的刻度, 用它决定后续要不要在 hr/ 上投入补测。</li>
+        </ul>
+
+        <h3>1.3 目标函数 / 类清单 (按判据密度 × 出错代价排序)</h3>
+        <p>下表是<b>人工预判的重点面</b>, 用于事后对照「机器提名到的是不是这些地方」; 变异目标仍以 glob 为准, 不按清单逐个跑。括号内为该符号在文件中的行号。</p>
+        <table class="tier">
+          <tr><th>档</th><th>位置</th><th>判据形态</th></tr>
+          <tr>
+            <td><b>A</b><br><span class="small">判定内核</span></td>
+            <td class="mono">
+              resolve.py: <code>resolve_identity</code> (201) · <code>judge_record</code> (246) ·
+              <code>_rank</code> (298) · <code>_tie_prefer</code> (308) · <code>safety_display</code> (364) ·
+              <code>build_site_view</code> (398) · <code>HrAnchor.drift_reason</code> (65)
+            </td>
+            <td>四行判定表 + 12 格矩阵: 受管束 / 放行 / 无证据本地兜底; 锚点漂移 → 回退; 并列取优</td>
+          </tr>
+          <tr>
+            <td><b>A</b></td>
+            <td class="mono">
+              service.py: <code>_do_wave</code> (566) · <code>_run_pages</code> (697) · <code>_order_violation</code> (847) ·
+              <code>_stop_condition</code> (869) · <code>_row_looks_local</code> (965) · <code>_record_hit</code> (976) ·
+              <code>_run_downloads</code> (988) · <code>_finish_wave</code> (1140) · <code>_freeze_terminal</code> (1292) ·
+              <code>_advance_observation</code> (1322) · <code>_retention_check</code> (1353) ·
+              <code>_sign_releases</code> (1366) · <code>_build_objects</code> (1388) · <code>_Budget.take</code> (264) ·
+              <code>fuzzy_name_match</code> (179)
+            </td>
+            <td>波次引擎: 停翻三条件(完成时间覆盖 / 零余量连击 / 本地全集覆盖) · 排序失效强制停 · 防伪(A 档无条件下载, B/C/D 粗配才下) · 预算截断 · 放行与观察期 · 释放。判据最密、出错代价最高(错放行 = 罚款)</td>
+          </tr>
+          <tr>
+            <td><b>A</b></td>
+            <td class="mono">
+              bencode.py: <code>bdecode</code> (50) · <code>_read_int</code> (21) · <code>_read_bytes</code> (35) ·
+              <code>_skip</code> (91) · <code>info_span</code> (122) · <code>compute_infohashes</code> (142) ·
+              <code>torrent_display_name</code> (156)
+            </td>
+            <td>infohash 必须取 info 的<b>原始字节切片</b>(重编码会算错) + 非规范整数(前导零 / -0)拒绝 + 深度与越界拒绝。出错代价极高: hash 错 → 整站对账全错</td>
+          </tr>
+          <tr>
+            <td><b>A</b></td>
+            <td class="mono">
+              parse.py: <code>parse_size</code> (36) · <code>parse_duration</code> (58) · <code>parse_ratio</code> (88) ·
+              <code>parse_datetime</code> (102) · <code>extract_table</code> (202) · <code>column_index</code> (221) ·
+              <code>has_next_page</code> (232) · <code>page_bounds</code> (242) · <code>page_javascript_marks</code> (254) ·
+              <code>order_violations</code> (296) · <code>cross_page_violation</code> (328)
+            </td>
+            <td>数值容错(认不出返回 <code>None</code>, 不猜) · 栈式表格锚定 · 排序失效判据(单页 + 跨页) · 翻页到底判据</td>
+          </tr>
+          <tr>
+            <td><b>B</b><br><span class="small">链路 / 安全 / 持久化</span></td>
+            <td class="mono">
+              channel.py: <code>resolve_token</code> (93) · <code>origin_allowed</code> (118) ·
+              <code>UrlPolicy.site_of</code> / <code>allows</code> / <code>require</code> (152/162/172) ·
+              <code>_absolute_download</code> (180) · <code>_scheme_of</code> / <code>host_of</code> / <code>path_of</code> (191/195/203) ·
+              <code>HrResult.from_json</code> (277) · <code>parse_results</code> (312) · <code>_as_int</code> / <code>_as_float</code> (333/340)
+            </td>
+            <td>token 常数时间比较 · origin 白名单(纵深防御) · URL 白名单(SSRF) · 回传 URL 域名与任务相符 · 空 origin 条目丢弃</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              store.py: <code>_parse</code> (119) · <code>quarantine</code> (166) · <code>read_backup</code> (182) ·
+              <code>rebaseline_after_recovery</code> (195) · <code>_check_lock_effective</code> (214) · <code>_write</code> (234) ·
+              <code>HrLockSession._recover</code> (274) · <code>commit</code> (291)
+            </td>
+            <td>每站点一把锁 · 原子写 + <code>.bak</code> 回退 · 坏文件隔离留证 · revision / 心跳被覆盖 → 降级只读</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              ratelimit.py: <code>day_key</code> (51) · <code>_day_count</code> (56) · <code>quota_left</code> (61) ·
+              <code>try_consume</code> (66) · <code>jittered_interval</code> (76) · <code>window_start_on</code> (82) ·
+              <code>next_day_reset</code> (91) · <code>next_allowed_at</code> (97)
+            </td>
+            <td>单频控: 最小间隔 + 日额窗口键幂等(重启不重置) + 抖动只向上 + Retry-After 参与下次可取 —— 超频 = 封号</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              queue.py: <code>put</code> (47) · <code>wait</code> (58) · <code>abort</code> (86) · <code>cancel_all</code> (94) ·
+              <code>resume</code> (108) · <code>take_batch</code> (121) · <code>submit</code> (137) · <code>_expire_locked</code> (171)
+            </td>
+            <td>同 URL 去重 · 派发一次性 · 防伪造回传(域名须相符) · 超时 / TTL 作废 · 叫停唤醒等待方</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              worker.py: <code>view_signature</code> (79) · <code>HrViewPublisher.publish</code> (125) ·
+              <code>HrWorker.run_once</code> (291) · <code>_note</code> (344) · <code>_check_channel_silence</code> (393)
+            </td>
+            <td>revision 只在<b>实质变化</b>时抬(仅时间流逝不算) · 冷启动先发布磁盘既有结论 · 告警去重(同状态不逐轮刷)</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              runtime.py: <code>start</code> (105) · <code>stop</code> (143) · <code>apply</code> (160) · <code>_build</code> (270) ·
+              <code>request_refresh</code> (345) · <code>_identity</code> (421) · <code>status</code> (430)
+            </td>
+            <td>热重载: 通道变更重挂端点 vs 仅 L0 节奏不重绑 · 端口冲突 fail-fast · 关功能停线程与端点</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              server.py: <code>route</code> 鉴权 / origin / URL 白名单 / CORS 回显 / 端口冲突; <code>HrChannelServer</code> 薄适配(头解析 / Content-Length / 状态码)
+            </td>
+            <td>401 / 403 边界: 不记接触、不派任务、不写状态; <code>/api/hr/sites</code> 与 <code>/api/hr/tasks</code> 同一道门</td>
+          </tr>
+          <tr>
+            <td><b>B</b></td>
+            <td class="mono">
+              model.py: <code>HrEntry.from_json</code> (175) / <code>to_json</code> (154) · <code>HrSiteData.from_json</code> (622) /
+              <code>to_json</code> (600) · <code>HrVerified.from_json</code> (296) · <code>HrLaneState.from_json</code> (360) ·
+              <code>HrWaveMeta.from_json</code> (424) · <code>prune_history</code> (539) ·
+              <code>lane_is_satisfied</code> / <code>exempt</code> / <code>terminal</code> (40/44/48) ·
+              <code>index_by_infohash</code> (589) · <code>infohash_of</code> (581)
+            </td>
+            <td>序列化契约: 往返一致 + v2 键兼容 + 缺失兜底(不猜) + 派生属性(satisfied / done_epoch)</td>
+          </tr>
+          <tr>
+            <td><b>C</b><br><span class="small">表现 / 胶水</span></td>
+            <td class="mono">
+              status.py: <code>site_status</code> (307) · <code>entry_details</code> (424) · <code>history_rows</code> (544) ·
+              <code>blocking_reason</code> (606) · <code>duration_text</code> / <code>ago_text</code> / <code>stamp_text</code> / <code>need_seed_text</code> (199/211/218/223) ·
+              <code>_history_lanes</code> (522)
+            </td>
+            <td>展示导出: 排序口径与 CLI 一致 · 人话映射(未知回落原文) · 字段面冻结(不泄 P2 字段)</td>
+          </tr>
+          <tr>
+            <td><b>C</b></td>
+            <td class="mono">
+              report.py: <code>run_hr_once</code> (75) · <code>run_hr_status</code> (124) · <code>run_hr_confirm_empty</code> (169) ·
+              <code>_status_row_cells</code> (287) · <code>_dwidth</code> / <code>_pad</code> / <code>_ellipsis</code> (305/310/316)
+            </td>
+            <td>只读走查: <b>不写任何文件</b> · 总开关关闭 / 无站点时明确提示并返回非 0 · 宽字符对齐</td>
+          </tr>
+          <tr>
+            <td><b>C</b></td>
+            <td class="mono">
+              events.py (14 def) · fetcher.py (<code>_fetch</code> 147 · <code>_scope_of</code> 183 · <code>_tid_of</code> 191 · <code>build_channel_fetcher</code> 202 · <code>is_available</code> 102) ·
+              adapters/ (nexusphp 209 · carpt 75 · btschool 39 · base 83)
+            </td>
+            <td>事件文案与分层 · 取数通道选择(启用 → ChannelFetcher, 否则 NullFetcher) · 站点 URL 拼接与页面解析</td>
+          </tr>
+        </table>
+
+        <h3>1.4 显式排除 (不在本轮范围)</h3>
+        <table>
+          <tr><th>排除项</th><th>理由</th></tr>
+          <tr><td class="mono">hr/__init__.py</td><td>纯 re-export(<b>0 函数</b>), 无判据 —— 不产生变异</td></tr>
+          <tr><td class="mono">hr/log.py</td><td>33 行日志薄封装, 无判据</td></tr>
+          <tr><td class="mono">hr/module.py</td><td>41 行模块契约胶水(start/stop 透传 + apply 降级); 其行为由 <code>test_modules_p*</code> 覆盖, 属模块宿主轮次</td></tr>
+          <tr><td class="mono">tests/test_hr.py</td><td>测的是 <b>HR 规则</b>(规则引擎判据), <b>不 import</b> <code>auto_qb.hr</code> —— 属 <code>rules/</code> 轮次</td></tr>
+          <tr><td class="mono">tests/test_hr_config.py</td><td>测的是 <code>hr_check</code> 配置段(fail-fast 校验 / 迁移), 属 <code>config/</code> 轮次(已做两轮)</td></tr>
+          <tr><td class="mono">tests/test_web_hr.py</td><td>测的是 webui 的 <code>/api/hr/*</code> 端点层, 属 <code>webui/server/</code> 轮次</td></tr>
+          <tr><td class="mono">webui/server/routes/hr.py</td><td>webui 的 API 层, 不属 hr 包</td></tr>
+          <tr><td>追杀死率 100% / 挂提交闸门</td><td>等价变异杀不掉是数学事实; 变异分数是审计信号不是放行条件 (报告 §11)</td></tr>
+        </table>
+      </section>
+
+      <section id="s2">
+        <h2><span class="secno">02</span>测算基数</h2>
+        <hr class="sec-rule">
+        <p class="small">本节数字均实测于 2026-10-09, 规划基线 <code class="mono">9926953b</code>; 单价与密度锚点引可行性报告 §08。</p>
+
+        <h3>2.1 规模</h3>
+        <table>
+          <tr><th>指标</th><th class="num">数值</th><th>说明</th></tr>
+          <tr><td>hr/ 包 .py 文件</td><td class="num">24</td><td>顶层 19 · adapters/ 5 (排除 <code>__pycache__</code>)</td></tr>
+          <tr><td>hr/ 包总行数</td><td class="num">7,863</td><td>顶层 7,374 · adapters/ 489</td></tr>
+          <tr><td>包内 def / class 总数</td><td class="num">439</td><td>service.py 62 · model.py 42 · server.py 36 · runtime.py 28 · status.py / channel.py 27 …</td></tr>
+          <tr><td>选择池</td><td class="num">15 文件 / 457 test fn</td><td>见 §2.3</td></tr>
+        </table>
+
+        <h3>2.2 变异数与单轮时长</h3>
+        <table>
+          <tr><th>口径</th><th>依据</th><th class="num">变异数</th><th class="num">单轮时长</th></tr>
+          <tr>
+            <td>报告 §08 / §09 包级锚点</td>
+            <td>1.00 变异/行 × 7,863 行 (全行计)</td>
+            <td class="num">≈ 7,800</td>
+            <td class="num">≈ 17 min</td>
+          </tr>
+        </table>
+        <p>单价 = <b>0.134s / 变异</b>, 取自报告 §08 的包级实测锚点 (rules/ 3,270 变异 / 7m31s, WSL 8 核 · <code>--max-children 4</code>)。<b>本轮不做「剔除纯数据声明」的精化</b>: 指导 skill 明确记了教训 —— config 首轮按「剔除纯数据表」精化后估 ≈3,800, 实测 <b>4,799(+26%)</b>; 估算只用于排期, <b>首轮一律以实测为准</b>并原样记进切片。</p>
+        <div class="callout warn">
+          <p><b>时长口径要留余量。</b> 0.134s/变异 是在 rules/ 的 6 文件池上量的; 本轮 hr 池是 <b>15 文件 / 457 test fn</b>(config 池才 186 fn), 每条变异要跑一遍的池<b>大 2.5 倍</b>, 单变异成本会更高 —— 实测量级预计 <b>17–25 min</b>, 不是 17 min 封顶。</p>
+          <p>· 实测显著低于 ≈7,800 → 有一批声明被排除在 mutmut 范围外, 属正常, 记一笔即可;<br>
+             · 实测显著高于 ≈8,000 → 先核 glob 是否多收了文件 (看 <code>commands run mutants.status</code> 回显的 <code>only_mutate</code>);<br>
+             · 单轮墙时超 <b>30 min</b> 或 WSL 内存吃紧 → 按 §5 停手点<b>按模块再切</b>, 不硬撑。</p>
+        </div>
+
+        <h3>2.3 选择池 (定向 15 文件)</h3>
+        <table>
+          <tr><th>池文件</th><th class="num">test fn</th><th>覆盖的 hr 面</th></tr>
+          <tr><td class="mono">tests/test_hr_service.py</td><td class="num">103</td><td>service.py 波次引擎(停翻 / 防伪 / 预算 / 放行 / 释放)</td></tr>
+          <tr><td class="mono">tests/test_hr_parse.py</td><td class="num">47</td><td>parse.py + adapters(nexusphp / carpt / btschool)</td></tr>
+          <tr><td class="mono">tests/test_hr_runtime.py</td><td class="num">37</td><td>runtime.py 门面 / 热重载重挂</td></tr>
+          <tr><td class="mono">tests/test_hr_resolve.py</td><td class="num">36</td><td>resolve.py 四行判定表 + 12 格矩阵</td></tr>
+          <tr><td class="mono">tests/test_hr_server.py</td><td class="num">36</td><td>server.py 本地端点鉴权 / origin / URL 白名单</td></tr>
+          <tr><td class="mono">tests/test_hr_worker.py</td><td class="num">33</td><td>worker.py 取数线程 + 视图发布</td></tr>
+          <tr><td class="mono">tests/test_hr_store.py</td><td class="num">31</td><td>store.py 站点文件 + 锁 + 原子写</td></tr>
+          <tr><td class="mono">tests/test_hr_report.py</td><td class="num">28</td><td>report.py 只读走查(不写盘)</td></tr>
+          <tr><td class="mono">tests/test_hr_status.py</td><td class="num">26</td><td>status.py 明细导出 / 人话映射</td></tr>
+          <tr><td class="mono">tests/test_hr_channel.py</td><td class="num">22</td><td>channel.py 协议 / 密钥 / 白名单</td></tr>
+          <tr><td class="mono">tests/test_hr_fetcher_channel.py</td><td class="num">15</td><td>fetcher.py 取数通道选择</td></tr>
+          <tr><td class="mono">tests/test_hr_bencode.py</td><td class="num">14</td><td>bencode.py infohash 原始切片</td></tr>
+          <tr><td class="mono">tests/test_hr_queue.py</td><td class="num">14</td><td>queue.py 任务队列</td></tr>
+          <tr><td class="mono">tests/test_hr_ratelimit.py</td><td class="num">10</td><td>ratelimit.py 单频控</td></tr>
+          <tr><td class="mono">tests/test_hr_multisite.py</td><td class="num">5</td><td>service / store / ratelimit 多站点隔离</td></tr>
+          <tr><td><b>合计</b></td><td class="num"><b>457</b></td><td>—</td></tr>
+        </table>
+        <ul>
+          <li><b>为什么不用全 <code>tests/</code></b>: 实测全 tests 池会把 WSL 打挂 (报告 §07 对照四); 而宽池的代价落在<b>内存</b>不在结论 —— rules/ 宽池 vs 定向池杀死率只差 1 个点 (对照五)。</li>
+          <li><b>池是「存活数的函数」</b>: 这 15 个文件就是本轮的<b>选择池变量</b>, 必须原样写进切片; 换池后跨轮数字不可比 (报告 §09 · 坑档 <a href="../pitfalls/testing/mutation-pool-artifact.md">mutation-pool-artifact.md</a>)。</li>
+          <li><b><code>tests/hr_helpers.py</code> 是共享夹具</b>(非测试文件, pytest 不收集): 它按 URL/scope 造 myhr 页面、造合法 <code>.torrent</code> 字节、提供假取数通道; 读的是 <code>tests/fixtures/hr/*.html</code>, <b>不读源码</b>。</li>
+          <li><b>池覆盖函数面(硬约束 9)</b>: 15 文件与 hr 模块基本一一对应。残差风险在 <code>events.py</code>(经 <code>test_hr_service</code> 直接 import)、<code>model.py</code> 的 <code>from_json</code>/<code>to_json</code>(多经 store/service 间接覆盖)、<code>log.py</code> / <code>module.py</code> / <code>adapters/base.py</code>(薄)。这些是否整片落进 <code>no tests</code>, 由 <b>S2 的 <code>no tests</code> 计数</b>核实 —— 若整片落进(像 config 首轮那样集中在两个校验器上), 先补进池再复跑。</li>
+          <li><b><code>--deselect</code> 与本轮无关</b>: hr 池<b>没有</b>「读源码文本做断言」的守阵(断言读的是 <code>tmp_path</code> 下的数据文件与 <code>tests/fixtures/hr/*.html</code>, 不读 <code>src/</code> 文本)。<code>set_conf.py</code> 的两条默认 <code>--deselect</code> 指向 <code>test_sim_corpus</code> / <code>test_web_seed_center</code>, 都不在池内 —— 保留即可, 无副作用。</li>
+        </ul>
+      </section>
+
+      <section id="s3">
+        <h2><span class="secno">03</span>执行步骤 S1–S8</h2>
+        <hr class="sec-rule">
+        <p>命令<b>一律走 task id</b> (命令本体与陷阱内建在 <code>mutants</code> 包里, 不手拼裸命令)。用法细节用 <code>commands run show mutants.run</code> 取。</p>
+
+        <div class="step">
+          <h3><span class="sid">S1</span>环境就绪</h3>
+          <p>建 / 刷新 WSL 镜像仓 + <code>uv sync</code> + 装 <code>mutmut 3.8.0</code>。幂等; 首次或镜像落后时跑。后续 S2 会自动确保, 这条只在想单独预热时用。</p>
+          <span class="cmd">commands run mutants.setup</span>
+          <p class="small">门槛: 本机需装 WSL(<code>Ubuntu-26.04</code>)。没有 WSL 时改走 S2′ 的 Windows 兜底 (§下)。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S2</span>首轮 (主力 · mutmut / WSL)</h3>
+          <p>对 hr 包跑一轮, 池 = §2.3 的 15 个文件。记下<b>变异数 / 杀死率 / 耗时 / 工具版本 / 选择池</b>, 以及 <code>no tests</code> 计数(用来核 §2.3 的池边界)。</p>
+          <span class="cmd">commands run mutants.run -- --target '**/hr/*.py' --pool tests/test_hr_service.py tests/test_hr_parse.py tests/test_hr_runtime.py tests/test_hr_resolve.py tests/test_hr_server.py tests/test_hr_worker.py tests/test_hr_store.py tests/test_hr_report.py tests/test_hr_status.py tests/test_hr_channel.py tests/test_hr_fetcher_channel.py tests/test_hr_bencode.py tests/test_hr_queue.py tests/test_hr_ratelimit.py tests/test_hr_multisite.py</span>
+          <p class="small">存活清单 (可能数百行) 落 <code>R:/Temp/auto-qb/mutants/&lt;stamp&gt;-*-results.txt</code>, 终端只回显头部 30 行 —— 读全文按需 grep, 别整读。</p>
+          <div class="callout warn">
+            <p><b>入场条件 (硬)</b>: 基线必须全绿 —— 先跑 <code>commands run test.quick</code>。工具硬要求「基线全绿才开始变异」, 不绿会一行报错直接跳过。不绿先修, 别跑变异。</p>
+          </div>
+          <p><b>S2′ Windows 兜底 (可选, 不想开 WSL 时)</b> —— 用第二工具交叉验证, 或作为无 WSL 时的替代:</p>
+          <span class="cmd">commands run mutants.gremlins -- --target src/auto_qb/hr/resolve.py --pool tests/test_hr_resolve.py</span>
+          <p class="small">gremlins 是<b>单文件目标</b>, 需按文件拆多次; 算子面比 mutmut 窄 (无字符串/语句删除), 且因做覆盖率过滤而<b>没有 <code>no tests</code> 分类</b> —— 两者分母不同, 分数只能各自纵向比, 不横向混。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S3</span>导出 + 三分类存活变异 (人的动作)</h3>
+          <p>先导出<b>带 diff 的清单</b>与按状态 / 按模块汇总, 再逐条判成三类之一。分类是<b>人</b>的动作, 不是工具输出:</p>
+          <span class="cmd">commands run mutants.report -- --target '**/hr/*.py'</span>
+          <table>
+            <tr><th>类</th><th>判据</th><th>处置</th></tr>
+            <tr><td><b>真洞</b></td><td>变异后行为确实错了, 且没有测试抓得住</td><td>→ S4 手工确认 → 入池或补测</td></tr>
+            <tr><td><b>等价变异</b></td><td>变异后行为与原代码在<b>所有输入上等价</b> (如 <code>@dataclass(frozen=True)</code> → <code>False</code>)</td><td>记一笔「为什么等价」, 不追</td></tr>
+            <tr><td><b>假存活</b></td><td>相关测试存在但<b>不在选择池里</b> (换宽池就死)</td><td>记一笔; 必要时加进池, 下一轮复跑</td></tr>
+          </table>
+          <p class="small">提示 —— hr 域的高频<b>等价</b>形态: 展示 / 事件文案字符串、日志级别、异常类型替换、<code>lane_is_*</code> 在有限枚举上的 <code>&lt;=</code> 与 <code>&lt;</code>。高频<b>真洞</b>形态: 停翻条件的边界(早一行 / 晚一行)、频控窗口与日额端点、排序失效判据、<code>from_json</code> 的缺失兜底、URL 白名单的路径前缀、锁有效性的 revision 比较。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S4</span>手工确认 (只认这一个判据)</h3>
+          <p>对每个<b>疑似真洞</b>, 在<b>全套件</b>下逐条 <code>apply</code> → 跑 → 还原, 看是否变红。记法 (每条一行):</p>
+          <table>
+            <tr><th>字段</th><th>记什么</th></tr>
+            <tr><td>位置</td><td class="mono">文件:行 (如 resolve.py:246)</td></tr>
+            <tr><td>同构变异</td><td>把 <code>&lt;</code> 改成 <code>&lt;=</code> / 删一行 / 换常量 …</td></tr>
+            <tr><td>全套件结果</td><td><code>N failed, M passed</code> —— 红 = 有测试抓得住(假存活, 只是没进池); <b>不红且行为错 = 真缺口</b></td></tr>
+          </table>
+          <span class="cmd">commands run mutants.verify -- --from-report &lt;清单&gt; [--only-status survived]</span>
+          <p class="small"><b>先按硬约束 10 收窄候选</b> —— 每条 ~15s, 若候选与 config 同量级(~270 条)则 ~68 min。优先文件按「判据密度 × 出错代价」取: <code>service.py</code> &gt; <code>resolve.py</code> / <code>bencode.py</code> / <code>ratelimit.py</code> &gt; <code>channel.py</code> / <code>store.py</code>; 或按变异形态(<code>continue→break</code> / 边界 / <code>and-or</code> 互换 / 语句删除)筛, 再 <code>mutants.verify</code>。</p>
+          <p class="small">判据边界 (报告 §09 实测): 一个被判 SURVIVED 的变异, 拿全套件手工验证后其实<b>可能是被杀死的</b>(utils.py 那条 <code>return None</code>: 5 文件池报存活, 全套件 3 条新红)。所以「变红」不等于「真洞」, 只等于「池没选到」。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S5</span>补测 (只对确认的真洞)</h3>
+          <p>对确认的真洞<b>加断言</b> —— 走正常测试流程 (改 <code>tests/</code>, 同步头部 docstring 的「## 测试计划」清单), 补完跑 <code>commands run test.full</code>。补的守阵必须<b>红验</b>(套上同构变异 → 目标用例变红 → 还原复绿, 源码零残留)。</p>
+          <p class="small">若真洞指向的是<b>代码缺陷</b> (而非测试缺口), 不在这里顺手改 —— 按范围守恒入池 <code>memory-bank/issues/</code>, 由用户决定什么时候修。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S6</span>复跑</h3>
+          <p><b>同目标 · 同池</b> 再跑一轮 S2, 看存活数是否下降。换池的数字不可比 —— 池必须与首轮完全一致。</p>
+          <p class="small"><b>带新守阵时用 <code>--no-refresh</code></b>: <code>mutants.run</code> 默认会 <code>git checkout -f</code> 把镜像刷成 develop, 未提交的测试改动会被冲掉 —— 要先把新测试 <code>cp</code> 进镜像 <code>tests/</code>, 再 <code>--no-refresh</code> 复跑(硬约束 11)。</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S7</span>记录</h3>
+          <ul>
+            <li>新建<b>基线切片</b> <code>memory-bank/testing/baselines/YY-MM-DD-HHMM-mutants-hr.md</code> (体例见 <code>testing/baseline.md</code>), 字段见 §4; 切片自带一行 <code>**Refs:** &lt;任务档案路径&gt;</code>。</li>
+            <li>任务档案追加一行轮次 (执行时另立 <code>tasks/</code> 档案)。</li>
+            <li>真洞<b>各自</b>入池: 每条一个独立的 <code>test</code> / <code>bug</code> issue (有位置、有复现); 新建 issue 记得填 <code>doc-refs</code>(被档案的 <code>Refs</code> 列出时必须反向声明, 否则 <code>kb.check</code> 报「认领链单向」)。</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3><span class="sid">S8</span>更新常驻锚 (收尾必做)</h3>
+          <p>按硬约束 12, 跑完一轮就改常驻锚 issue <code>26-10-08-0642-test-mutation-audit-standing</code> 的 <b>§07 覆盖进度总表</b> 里 <code>hr/</code> 那一行:</p>
+          <ul>
+            <li>上次测试日期 / 变异数 / 杀死率 / 编号轮次 / 状态(待做 → 已做(余量在池) 或 已做(已清)) / 基线切片链接;</li>
+            <li>§08 轮次台账补一行(目标 / 结果 / 切片·档案指针)。</li>
+          </ul>
+          <div class="gate"><b>这步没做完, 一轮不算收尾。</b> 表里只放「一行一个包」的汇总刻度与指针 —— 不抄 <code>N passed</code>(那是切片的事, 手抄会被回写守卫判红)。</div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2><span class="secno">04</span>验收 (可判定)</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th class="num">#</th><th>判据</th></tr>
+          <tr><td class="num">1</td><td>基线切片字段齐全 (缺一即跨轮不可比): 目标 glob · <b>选择池逐个文件</b> · 变异总数 · 杀死 / 存活 / <code>no tests</code> / 超时 计数 · 杀死率 · 耗时(墙时 + CPU) · 工具名 + 版本 · <code>--max-children</code> · 机器(WSL 核数) · <b>手工确认后的真洞数</b> + 各 issue 链接 · 一行 <code>**Refs:** &lt;任务档案路径&gt;</code></td></tr>
+          <tr><td class="num">2</td><td>三分类后的<b>真洞全部</b>已入池或已当场补测 (无悬空真洞)</td></tr>
+          <tr><td class="num">3</td><td>复跑 (同目标同池) 存活数 <b>≤</b> 首轮</td></tr>
+          <tr><td class="num">4</td><td>补测后 <code>commands run test.full</code> 全绿; 覆盖率不低于基线</td></tr>
+          <tr><td class="num">5</td><td><b>常驻锚 §07 覆盖进度总表</b>的 <code>hr/</code> 行已同步(日期 / 变异数 / 杀死率与切片逐位一致, 且挂了切片链接)</td></tr>
+        </table>
+        <div class="gate"><b>注意口径</b>: 目标<b>不是「分数涨」</b>, 是「hr 包内不再有<b>不知道为什么活着</b>的变异」—— 每条存活都要有一个分类理由 (真洞 / 等价 / 假存活)。等价变异杀不掉是数学事实, 不追。</div>
+      </section>
+
+      <section id="s5">
+        <h2><span class="secno">05</span>风险与停手点</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th>风险 / 现象</th><th>停手点与处置</th></tr>
+          <tr><td>基线不绿</td><td><b>停</b>, 先修基线 (<code>test.quick</code> 过) 再跑 —— 工具会直接跳过变异</td></tr>
+          <tr><td>WSL 整体失去响应</td><td><code>wsl --shutdown</code> 救回 → 降 <code>--max-children</code> 重来; 核目标 glob 是否多收了文件</td></tr>
+          <tr><td><b>hr 池比 config 大 2.5x, 单轮明显超 17 min</b></td><td>超 <b>30 min</b> 或内存吃紧 → <b>按模块再切</b>: 先跑 <code>service.py</code> 单模块(池 = <code>test_hr_service.py</code> + <code>test_hr_multisite.py</code>), 再 <code>resolve</code>/<code>bencode</code>/<code>parse</code>, 分多轮而不是硬撑一整包</td></tr>
+          <tr><td>池越宽内存越紧</td><td>回 §2.3 的定向 15 文件池 —— 宽池代价落在内存不在结论</td></tr>
+          <tr><td><code>no tests</code> 整片集中</td><td>若一批变异落在池没碰过的函数(如 <code>events</code> / <code>model.from_json</code>) → 先<b>补进池</b>再复跑, 否则那批连三分类都做不了(硬约束 9)</td></tr>
+          <tr><td><code>--deselect</code> 表随测试拆分漂移</td><td>本轮 hr 池无源码文本守卫, 预期不触发; 若基线仍报文本层守阵红, 先核 <code>set_conf.py</code> 的 <code>DEFAULT_DESELECT</code> 路径是否漂移</td></tr>
+          <tr><td>把存活清单当缺口单</td><td><b>停</b> —— 必须先 S3 分类 + S4 手工确认; 假存活比例不小</td></tr>
+          <tr><td>换池后跨轮比存活数</td><td>禁止 —— 池是变量, 数字不可比; 池必须写进切片</td></tr>
+          <tr><td>拿 mutmut 分数与 gremlins 分数横向比</td><td>禁止 —— 分母不同 (前者含 <code>no tests</code>)</td></tr>
+        </table>
+        <div class="callout"><b>计划的边界</b>: 本计划只写「怎么修、为什么这么修」, <b>不实施</b>。执行时按 memory-bank skill 立任务档案, 轮次进档案; 计划本身拍板后冻结 (改版 = 同文件加变更记录 + 抬 <code>doc-updated</code>)。</div>
+      </section>
+
+      <section id="s6">
+        <h2><span class="secno">06</span>变更记录</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th>时间</th><th>变更</th><th>触发</th></tr>
+          <tr>
+            <td class="mono">26-10-09-1459</td>
+            <td>初版: hr/ 包分步执行计划 (范围与目标清单含 A/B/C 三档 / 测算基数 7,863 行 ≈7,800 变异 / 15 文件 457 fn 池 / S1–S8 / 验收 5 条 / 风险停手点)</td>
+            <td>用户「根据变异测试指导+skill写一个 hr 模块的测试计划」</td>
+          </tr>
+        </table>
+      </section>
+
+      <footer>
+        26-10-09-1459-plan-mutation-hr.html · 派生执行计划 (mutation-audit 专题) · 由 mutation-testing skill 派生 · 拍板后冻结<br>
+        上游: 常驻锚 issue <code>26-10-08-0642-test-mutation-audit-standing</code> · 证据 <code>reports/26-10-08-0231-report-mutation-testing-feasibility.html</code> · 同专题 <code>plans/26-10-08-0720-plan-mutation-config.html</code>
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>

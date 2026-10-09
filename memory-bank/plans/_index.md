@@ -14,6 +14,7 @@
 
 ## Open
 
+- [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
 - [26-10-09-0856] [HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb](26-10-09-0856-plan-hr-channel-remote.html) — `hr-channel-remote`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
