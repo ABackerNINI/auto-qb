@@ -58,9 +58,9 @@ window.AQB_POLL = {
         this._esConnected = true;
       };
       es.onerror = () => {
-        // 断线沿(WEBUI 错误历史 S6, D2 拍板): 以 _esConnected 取沿, 首次断线或
+        // 断线沿(WEBUI 通知 S6, D2 拍板): 以 _esConnected 取沿, 首次断线或
         // true→false 跳变时发一条 error toast —— 经 toast() 内的 _recordErrorToast
-        // 钩子自动进错误历史(挂机型断线自此可追溯); 重试期内重复 onerror 不重复发。
+        // 钩子自动进通知(挂机型断线自此可追溯); 重试期内重复 onerror 不重复发。
         if (_esDisconnectEdge(this._esConnected)) {
           this._esConnected = false;
           this.toast("与服务的推送连接断开, 正在自动重连…", "error");

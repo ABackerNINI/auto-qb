@@ -37,11 +37,12 @@
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
-      <!-- 错误历史入口(WEBUI 错误历史 S4, 模板 T2): 照 .sb-hist/.sb-qb 范式(图标 + title +
+      <!-- 通知入口(WEBUI 通知 S4, 原「错误历史」, 2026-10-09 改名; 模板 T2): 照 .sb-hist/.sb-qb 范式(图标 + title +
            @click.stop), 样式单点在 shared/console_hub.css 的 .sb-err 段。独立按钮不入
            .sb-speed(该组 overflow: hidden), 常驻渲染(不依赖 todayTraffic)。未读徽标 =
-           面板关闭期新增错误数(errUnread 别名, 源字段 _errUnread), 无未读静默不显示(保守默认)。 -->
-      <button class="sb-err" :class="{ on: errPanelOpen }" title="错误历史" @click.stop="errPanelOpen = !errPanelOpen">
+           面板关闭期新增条目数(errUnread 别名, 源字段 _errUnread; 含陈述型通知 _recordNotice),
+           无未读静默不显示(保守默认)。 -->
+      <button class="sb-err" :class="{ on: errPanelOpen }" title="通知" @click.stop="errPanelOpen = !errPanelOpen">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bell"></use></svg>
         <span v-if="errUnread > 0" class="sb-err-badge">{{ errUnread }}</span>
       </button>

@@ -8,22 +8,25 @@
       </div>
     </div>
 
-    <!-- 错误历史面板(WEBUI 错误历史 S4/S5, 模板 T2): 非模态浮层, 无遮罩不拦滚动;
+    <!-- 通知面板(WEBUI 通知 S4/S5, 原「错误历史」, 2026-10-09 改名; 模板 T2): 非模态浮层, 无遮罩不拦滚动;
+         改名的由来: 面板不只是错误 —— 列偏好空存储这类**陈述型通知**也走它(_recordNotice),
+         再叫"错误历史"会把告知读成故障。条目三来源: toast 的 error/timeout、后端 errlog 环、
+         前端陈述型通知(source='notice', kind='info', 中性灰点)。
          Esc 走 lifecycle.js 既有退栈链, 点面板外关闭走其窗口 click 收层名单(面板根与入口钮
          .sb-err 都已 @click.stop, 点内部/入口不会误收)。开面板清未读由 state.js 的
          errPanelOpen watcher 负责, 这里只绑 UI。⚠ 必须挂在 #app 根层 —— 放进任何
          clip-path / transform 容器, fixed 后代会被裁剪或改包含块(.col-ghost 注释同源坑)。 -->
-    <div v-if="errPanelOpen" class="err-panel" role="dialog" aria-label="错误历史" @click.stop>
+    <div v-if="errPanelOpen" class="err-panel" role="dialog" aria-label="通知" @click.stop>
       <div class="err-hd">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bell"></use></svg>
-        <span class="err-hd-t">错误历史</span>
+        <span class="err-hd-t">通知</span>
         <span class="err-hd-n">{{ errHistory.length }} 条</span>
         <button class="err-clear" :disabled="!errHistory.length" @click="clearErrorHistory()">清空</button>
         <button class="err-x" @click="errPanelOpen = false">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
         </button>
       </div>
-      <div v-if="!errHistory.length" class="err-empty">暂无错误记录</div>
+      <div v-if="!errHistory.length" class="err-empty">暂无通知</div>
       <div v-else class="err-list">
         <!-- 每条 = 时间(fmtErrTs 单点口径) + kind 色点 + 文本; source='backend' 加「后端」小标;
              行内复制复用 copyText(模板安全封装, 模板里禁止直调 _copyText)。 -->
@@ -32,7 +35,7 @@
           <span class="err-dot" aria-hidden="true"></span>
           <span class="err-text">{{ e.text }}</span>
           <span v-if="e.source === 'backend'" class="err-src">后端</span>
-          <button class="err-copy" @click="copyText(e.text, '错误详情')">
+          <button class="err-copy" @click="copyText(e.text, '通知内容')">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
           </button>
         </div>

@@ -627,7 +627,27 @@ def test_frontend_cols_empty_hint_names_browser_clear_cause():
     )
     assert "edge://settings/content/all" in body, "提示必须给出可自查的浏览器设置路径(否则用户无从下手)"
     assert "sessionStorage" in body, "缺少 sessionStorage 兜底 ⇒ 清站点数据的环境下每次开浏览器都弹"
-    assert "localStorage.setItem(COLS_ORIGIN_HINT_KEY" in body, "普通场景的跨会话去重标记(只弹一次)被删了"
+    assert "localStorage.setItem(COLS_ORIGIN_HINT_KEY" in body, "普通场景的跨会话去重标记(只记一次)被删了"
+
+
+def test_frontend_cols_empty_hint_is_not_a_floating_banner():
+    """空存储提示的出口 = 通知面板, **不得是页面浮层**(2026-10-09 用户实报: 遮挡自动化测试截图)
+
+    旧实现运行时往 body 插一条 fixed 横幅(可点关 / 15s 自灭): 它压在页面内容上, 且**每次跑自动化
+    测试都触发** —— 测试用全新浏览器上下文, 没有"已提示"去重标记, 于是每张截图底部都被盖一截。
+    改道后只进通知面板(ui_feedback.js::_recordNotice): 面板默认收起、不占版面、不进截图, 入口留
+    一个未读徽标。本守阵钉死"不再建浮层"这个不变量(文案 / 去重标记的守阵在上一条)。
+    """
+    text = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    m = re.search(r"_showColsOriginHint\(\)\s*\{(.*?)\n    \},", text, re.S)
+    assert m, "columns.js 找不到 _showColsOriginHint(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "this._recordNotice(" in body, ("空存储提示没走 _recordNotice —— 出口必须是通知面板(陈述型告知一律进面板, 不占版面/不进截图)")
+    for banned in ("document.createElement", "appendChild", "position:fixed", "z-index:9999"):
+        assert banned not in body, (
+            f"空存储提示里出现 {banned} —— 页面级浮层会压住页面内容并遮挡自动化测试截图"
+            "(2026-10-09 用户实报; 陈述型提示一律走 _recordNotice)"
+        )
 
 
 def test_frontend_dir_browse_and_search_stale_guard():

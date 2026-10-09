@@ -320,8 +320,12 @@ window.AQB_COLUMNS = {
       }
     },
 
-    /* 空存储提示(W4 origin 隔离 + W5 浏览器"关闭时清除站点数据"): 本 origin 没有列偏好记录时弹一次
-     * (整条横幅可点关闭 / 15s 自灭)。运行时注入 DOM, 两套模板零改动。
+    /* 空存储提示(W4 origin 隔离 + W5 浏览器"关闭时清除站点数据"): 本 origin 没有列偏好记录时
+     * 记一次 —— 进**通知面板**(状态栏铃铛, 未读徽标)而不是页面浮层。
+     * !出口口径(2026-10-09 用户实报): 早期版本运行时往 body 里插一条 fixed 横幅, 它压在页面内容上,
+     *   且**每次自动化测试都触发**(测试用全新浏览器上下文 ⇒ 没有"已提示"去重标记), 把每张截图都
+     *   盖掉一截。改为只进通知面板(ui_feedback.js::_recordNotice): 面板默认收起, 不占版面、
+     *   不进截图, 入口徽标提示"有话要说"。文案本身一字不改 —— 陈述事实与排查路径的价值不变。
      *
      * !为什么只陈述"本地址没有偏好记录"、不做精确判定(2026-09-24 取证): 站点级"关闭窗口时清除
      * Cookie 和站点数据"(Chromium cookie 例外 setting=4 = SESSION_ONLY)会在关浏览器时把该 host 的
@@ -332,8 +336,8 @@ window.AQB_COLUMNS = {
     _showColsOriginHint() {
       if (this._colsOriginHintShown) return;
       this._colsOriginHintShown = true;
-      // 同一次标签会话只弹一次: 清站点数据的环境下 localStorage 里的"已提示"标记也一起没了,
-      // 只靠它会在每次关浏览器重开后都弹; sessionStorage 随标签关闭失效, 正好只兜"同一次会话"。
+      // 同一次标签会话只记一次: 清站点数据的环境下 localStorage 里的"已提示"标记也一起没了,
+      // 只靠它会在每次关浏览器重开后又记一条; sessionStorage 随标签关闭失效, 正好只兜"同一次会话"。
       try {
         if (sessionStorage.getItem(COLS_ORIGIN_HINT_KEY)) return;
         sessionStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
@@ -341,20 +345,14 @@ window.AQB_COLUMNS = {
       try {
         if (localStorage.getItem(COLS_ORIGIN_HINT_KEY)) return;
         localStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
-      } catch { /* 私隐模式: 写失败也继续弹, 本会话内由 _colsOriginHintShown 挡住 */ }
-      const el = document.createElement("div");
-      el.textContent = "本地址还没有列偏好记录。常见成因: 1. 偏好按站点隔离存储, 换地址/端口"
+      } catch { /* 私隐模式: 写失败也继续记, 本会话内由 _colsOriginHintShown 挡住 */ }
+      this._recordNotice(
+        "本地址还没有列偏好记录。常见成因: 1. 偏好按站点隔离存储, 换地址/端口"
         + "(127.0.0.1 ↔ localhost、38080 ↔ 38081)各存一份; 2. 浏览器在本地址上开了"
         + "「关闭窗口时清除 Cookie 和站点数据」→ 每次关掉浏览器偏好都会回默认"
         + "(Edge 可在 edge://settings/content/all 里查该地址)。可固定用同一地址, "
-        + "或改用 http://localhost:<端口> 打开。";
-      el.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;"
-        + "background:#1c252d;color:#e4eaef;border:1px solid #26313a;border-left:3px solid #5cc0cf;"
-        + "padding:10px 16px;font:13px/1.5 'Segoe UI','Microsoft YaHei',sans-serif;"
-        + "max-width:min(560px,90vw);cursor:pointer;border-radius:4px;";
-      el.addEventListener("click", () => el.remove());
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 15000);
+        + "或改用 http://localhost:<端口> 打开。"
+      );
     },
 
     /* 唯一持久化漏斗(plan 26-09-21-1551 §3.4): 全仓对 COLS_STORE_KEY 的 setItem **只允许这一处**

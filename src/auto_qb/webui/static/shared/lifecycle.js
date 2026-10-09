@@ -1,7 +1,7 @@
 /* lifecycle.js — 根组件生命周期(created/mounted/unmounted/updated): W2b 自 app.js 拆出。
  * WARN: 同 state.js: 走根选项展开, 不走 app.mixin —— 否则 hub-field 实例也会跑 mounted
  * (监听器/fetch 双份)。成员逐行原样搬运。 */
-/* 错误历史 · 后端条目合并与补拉(WEBUI 错误历史 S3) --------------------------------
+/* 通知 · 后端条目合并与补拉(WEBUI 通知 S3) --------------------------------
  * 后端在 /api/errlog 挂了 auto_qb logger 的 WARNING+ 内存环(条目 {seq, ts, level, msg},
  * seq 进程内单调、重启归零)。本段把它并进根组件 _errHistory(S1 数据层, cap 常量
  * ERR_HISTORY_CAP 单点在 ui_feedback.js, 加载序先于本文件):
@@ -17,7 +17,7 @@ function _errLevelKind(level) {
   return level === "WARNING" ? "warn" : "error";
 }
 
-/* 后端 epoch 秒 -> 完整 HH:MM:SS(错误历史要看秒位, 不走 fmtTime 的日期省略口径) */
+/* 后端 epoch 秒 -> 完整 HH:MM:SS(通知要看秒位, 不走 fmtTime 的日期省略口径) */
 function _errBackendClock(sec) {
   const d = new Date((sec || 0) * 1000);
   const p = (n) => String(n).padStart(2, "0");
@@ -52,7 +52,7 @@ window.AQB_LIFECYCLE = {
     // _rowWindow 前缀和留存(光标滚动进视口用, 见 columns.js)都是纯缓存, 刻意不进 data
     this._kbTableCache = null;
     this._rowPre = {};
-    // 错误历史 S3(非响应式: 游标与定时器句柄无渲染依赖, 刻意不进 data —— 同上 P1-2 口径)
+    // 通知 S3(非响应式: 游标与定时器句柄无渲染依赖, 刻意不进 data —— 同上 P1-2 口径)
     this._errLogCursor = 0;  // /api/errlog 已持游标(环内最大已拉 seq; 后端重启时清零重拉)
     this._errPollTimer = 0;  // 60s 补拉定时器句柄(unmounted 撤除防热重载堆叠)
   },
@@ -78,7 +78,7 @@ window.AQB_LIFECYCLE = {
        * @focusout(2026-10-03 补)收, 这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂
        * @click.stop —— 否则点 label 走"window click 收层 → label 转发 click 重开" = 闪烁。 */
       this.metaCatMenu = false;
-      // 错误历史面板(S4): 非模态浮层同族 —— 点空白收层(面板根与入口钮 .sb-err 都已 @click.stop 拦截)
+      // 通知面板(S4): 非模态浮层同族 —— 点空白收层(面板根与入口钮 .sb-err 都已 @click.stop 拦截)
       this.errPanelOpen = false;
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
@@ -111,7 +111,7 @@ window.AQB_LIFECYCLE = {
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
       else if (this.searchHelpOpen) this.searchHelpOpen = false;  // 搜索语法浮卡(pop)
       else if (this.kbHelpOpen) this.kbHelpOpen = false;  // 快捷键帮助浮层(W6, H 组 Shift+Slash 打开)
-      else if (this.errPanelOpen) this.errPanelOpen = false;  // 错误历史面板(S4): pop 层, escBusy 已同步
+      else if (this.errPanelOpen) this.errPanelOpen = false;  // 通知面板(S4): pop 层, escBusy 已同步
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
@@ -203,7 +203,7 @@ window.AQB_LIFECYCLE = {
         this.lastRid = null;
         this.startPolling();
         this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)
-        this._pullErrlogBoot();  // 错误历史 S3: 本机免鉴权路径的开页全量合并(密钥路径在 auth.js bootstrap)
+        this._pullErrlogBoot();  // 通知 S3: 本机免鉴权路径的开页全量合并(密钥路径在 auth.js bootstrap)
         return;
       }
       if (savedToken) {
@@ -255,7 +255,7 @@ window.AQB_LIFECYCLE = {
       clearInterval(this._clockTimer);
       this._clockTimer = 0;
     }
-    // 错误历史 S3: 60s 补拉定时器随组件销毁撤掉(同上, 防热重载后句柄堆叠)
+    // 通知 S3: 60s 补拉定时器随组件销毁撤掉(同上, 防热重载后句柄堆叠)
     if (this._errPollTimer) {
       clearInterval(this._errPollTimer);
       this._errPollTimer = 0;
@@ -282,7 +282,7 @@ window.AQB_LIFECYCLE = {
     this._ensureWinTop();
   },
   methods: {
-    /* ------------------------------------- 错误历史 S3(后端条目合并与补拉, 见文件头块注释) */
+    /* ------------------------------------- 通知 S3(后端条目合并与补拉, 见文件头块注释) */
     /* 后端环条目 -> _errHistory 合并单点: id = "b"+后端 seq(按 seq 稳定去重), kind 映射
      * WARNING->warn / ERROR 及以上->error, ts 转完整 HH:MM:SS, source 固定 "backend"。
      * 已存在的 id 不重复入列(刷新重拉不产生重复); 新条目 unshift 到顶部(照 _errHistory

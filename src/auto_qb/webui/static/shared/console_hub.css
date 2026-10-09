@@ -920,7 +920,7 @@
 @keyframes aq-tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
 /* ==========================================================================
-   错误历史面板(WEBUI 错误历史 S4/S5): 状态栏入口(.sb-err)+ 弹层(.err-panel)
+   通知面板(WEBUI 通知 S4/S5): 状态栏入口(.sb-err)+ 弹层(.err-panel)
    --------------------------------------------------------------------------
    三套皮肤共用本层, 颜色一律走皮肤令牌(同 .aq-tip 先例), 皮肤零差异;
    mono 字体用 var(--font-mono, 内联栈) —— 星图/控制台无 --font-mono 令牌,

@@ -22,9 +22,9 @@ const toastMs = (kind, ms) => {
   return ms == null ? Math.max(TOAST_MS_DEFAULT, floor) : Math.max(ms, floor);
 };
 
-/* 错误历史环形缓冲(WEBUI 错误历史 S1 数据层) --------------------------------
+/* 通知环形缓冲(WEBUI 通知 S1 数据层) --------------------------------
  * 把 error / timeout 类 toast 在**发出瞬间**收进会话内环形缓冲(根组件 _errHistory,
- * 字段定义在 state.js), 供后续步骤的错误历史面板回看 —— toast 停留再长也会错过。
+ * 字段定义在 state.js), 供后续步骤的通知面板回看 —— toast 停留再长也会错过。
  * 收集时机 = emit 即收而非退场时收: auth.js 登录/重连走 this.toasts = [] 整表清空,
  * 绕过 _dropToast, 退场钩子会漏掉刚发出的条目。sticky「等待中」条 emit 时是 busy,
  * 不在 ERR_HISTORY_KINDS 里(busy 本身永不入历史), 只在 _finishToast 结算成 timeout /
@@ -42,7 +42,7 @@ window.AQB_FEEDBACK = {
     toast(text, kind = "info", ms = null, opts = {}) {
       const id = ++this._toastSeq;
       this.toasts.push({ id, text, kind });
-      // 错误历史: emit 即收(上方注释; auth 整表清空绕过退场钩子, 所以不能等退场)
+      // 通知: emit 即收(上方注释; auth 整表清空绕过退场钩子, 所以不能等退场)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
       // sticky = 常驻不自动消失(强制汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
@@ -52,7 +52,7 @@ window.AQB_FEEDBACK = {
     /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
     _finishToast(id, kind, text, ms = null) {
       this._updateToast(id, { kind, text });
-      // 错误历史: 终态 upsert —— busy 链在此首次入历史, emit 即收过的条目在此覆盖(kind/text 以终态为准)
+      // 通知: 终态 upsert —— busy 链在此首次入历史, emit 即收过的条目在此覆盖(kind/text 以终态为准)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
       setTimeout(() => this._dropToast(id), toastMs(kind, ms));
     },
@@ -63,7 +63,7 @@ window.AQB_FEEDBACK = {
     _dropToast(id) {
       this.toasts = this.toasts.filter((t) => t.id !== id);
     },
-    /* --------------------------------------------- 错误历史(WEBUI 错误历史 S1 数据层) */
+    /* --------------------------------------------- 通知(WEBUI 通知 S1 数据层) */
     /* 收集/更新单点: upsert by id —— emit 后又 settle 的条目同 id 覆盖(kind/text 以终态为准),
      * 不产生重复; 新条目 unshift(新在上), 超过 ERR_HISTORY_CAP 挤掉最旧(环形语义)。
      * 面板关闭期(errPanelOpen 为 false)计未读徽标 —— 后续面板 UI 直接绑 _errUnread。 */
@@ -76,6 +76,21 @@ window.AQB_FEEDBACK = {
         this._errHistory.unshift({ id, seq: ++this._errSeq, ts: Date.now(), kind, text, source: "toast" });
         if (this._errHistory.length > ERR_HISTORY_CAP) this._errHistory.pop();
       }
+      if (!this.errPanelOpen) this._errUnread++;
+    },
+    /* 陈述型通知的单点(非 toast 来源): 「本地址还没有列偏好记录」这类**告知**走这里 ——
+     * 只进通知面板(未读徽标照计), **不弹任何浮层**。
+     * !为什么不用页面浮层(2026-10-09 用户实报): 自绘 fixed 横幅压在页面内容上, 且**每次自动化测试
+     *   都触发**(测试用全新浏览器上下文, 没有"已提示"去重标记) ⇒ 每条截图都被它盖住一截。通知面板
+     *   默认收起、只在状态栏入口留一个未读徽标, 既不占版面也不进截图。今后再加"陈述型"提示一律走
+     *   本方法, 不要另起一个 document.createElement + position:fixed。
+     * kind 固定 info(它不是错误, 走中性灰点; error/红点留给真故障), source='notice' 与
+     * toast / backend 两条来源区分; id 用 "n"+seq 前缀 —— 与数字 toast id、"b"+后端 seq 三方
+     * 互不撞(_recordErrorToast 按 id upsert, 撞了会被当成同一条覆盖)。 */
+    _recordNotice(text) {
+      const seq = ++this._errSeq;
+      this._errHistory.unshift({ id: "n" + seq, seq, ts: Date.now(), kind: "info", text, source: "notice" });
+      if (this._errHistory.length > ERR_HISTORY_CAP) this._errHistory.pop();
       if (!this.errPanelOpen) this._errUnread++;
     },
     /* 清空历史(面板「清空」动作入口): 历史/未读全归零; seq 不清 —— 保持单调,
@@ -282,7 +297,7 @@ window.AQB_FEEDBACK = {
  * 离开 / 失焦 / 点击 / 滚动 / 窗口失焦立即收起; 文案 show() 时现读最新值(轮询变值即显新值)。
  * 定位(2026-10-04 修): 上方优先 / 上方放不下转下方 / 两侧都放不下才允许溢出视口 —— **任何
  * 分支都不越过锚点**(旧版末尾无条件夹回视口内, 状态栏这类底缘锚点会被浮层压在身下)。
- * 让位(2026-10-07 修): 已开的错误历史面板(.err-panel)占着状态栏右段上方, 提示落点与它
+ * 让位(2026-10-07 修): 已开的通知面板(.err-panel)占着状态栏右段上方, 提示落点与它
  * 相交时直接收起不弹(浮层 z 90 < 面板 121, 弹了只露半截); 面板挂载也经 MutationObserver
  * 收起现显浮层(键盘 Enter 开面板不经过 mousedown)。
  * 另: 锚点在 350ms 窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标
@@ -397,9 +412,9 @@ window.AQB_FEEDBACK = {
     if (above >= EDGE) y = above;                                    // 上方放得下
     else if (below + h <= vh - EDGE) y = below;                      // 上方放不下, 下方放得下
     else y = r.top - EDGE >= vh - EDGE - r.bottom ? above : below;   // 两侧都放不下: 贴空间大的一侧
-    // 已开的错误历史面板(.err-panel, z 121)正占着状态栏右段上方 —— 状态栏一排锚点的提示
+    // 已开的通知面板(.err-panel, z 121)正占着状态栏右段上方 —— 状态栏一排锚点的提示
     // 落点几乎都撞进面板区域, 而浮层 z(90) 低于面板, 弹了只会从面板边缘露出半截
-    // (用户报「错误历史 tooltip 与弹窗重叠」)。按本函数「宁可不弹」口径直接收起, 面板
+    // (用户报「通知 tooltip 与弹窗重叠」)。按本函数「宁可不弹」口径直接收起, 面板
     // 收起后同一悬浮自然恢复。
     const panel = document.querySelector(".err-panel");
     if (panel) {
@@ -485,7 +500,7 @@ window.AQB_FEEDBACK = {
       if (m.type === "attributes") capture(m.target);
       else for (const n of m.addedNodes) {
         sweep(n);
-        // 错误历史面板挂载即收起现显浮层: 键盘路径(Tab 聚焦入口钮出提示后按 Enter)开面板
+        // 通知面板挂载即收起现显浮层: 键盘路径(Tab 聚焦入口钮出提示后按 Enter)开面板
         // 不经过 mousedown, 浮层会滞留在面板底下(z 90 < 121)从边缘露半截; 鼠标路径
         // mousedown 已收过, 此处幂等。
         if (n.nodeType === 1 && (n.classList.contains("err-panel") || n.querySelector(".err-panel"))) hide();

@@ -17,7 +17,11 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
 - test_frontend_error_history_entry_wired: statusbar.html 有 .sb-err 入口钮 (toggle errPanelOpen) 与
   未读徽标 (errUnread) 绑定; overlays.html 有 .err-panel 面板 (v-if=errPanelOpen) 与清空钮
   (clearErrorHistory 别名中转); state.js 有 errHistory/errUnread 两个无前缀模板别名 (模板代理不认
-  _ 前缀, 没别名 = 徽标与面板直接渲染失败)
+  _ 前缀, 没别名 = 徽标与面板直接渲染失败); 并钉住 2026-10-09 改名 —— 面板标题/入口 title/空态
+  三处用户可见文案一律「通知」(面板不只装错误, 陈述型通知也进它; 退回「错误历史」即红)
+- test_frontend_notice_push_wired: 陈述型通知 _recordNotice (ui_feedback.js) 的三处接线 —— 写
+  _errHistory (与 toast/后端同列, cap 同口径) + 计未读 + **不建任何 DOM 浮层**; columns.js 的
+  空存储提示经它入列 (2026-10-09 用户实报: 自绘 fixed 横幅遮挡自动化测试截图, 出口改通知面板)
 - test_frontend_error_history_copy_wired: 面板行内复制钮 @click 走 copyText 而非 _copyText (Vue 模板
   下划线方法坑, issue 26-10-03-1412; 模板保留域守阵在 test_web, 本条聚焦面板复制钮的接线指向), 且
   commands.js 的 copyText 包装存在并委托 _copyText (别名不是空壳)
@@ -133,6 +137,35 @@ def test_frontend_error_history_entry_wired() -> None:
     assert "errPanelOpen(v) {" in state and "this._errUnread = 0;" in state, (
         "state.js 缺 errPanelOpen watcher(开面板清未读) —— 徽标不灭"
     )
+    # 改名钉子(2026-10-09): 面板 = 通知(错误 + 陈述型告知), 三处用户可见文案同步
+    assert '<span class="err-hd-t">通知</span>' in ov, ("通知面板标题不是「通知」—— 面板不只装错误(陈述型通知也进它), 退回「错误历史」会把告知读成故障")
+    assert 'title="通知"' in sb, "状态栏入口 title 不是「通知」(与面板标题同口径, 改名须成对)"
+    assert 'class="err-empty">暂无通知<' in ov, "面板空态文案不是「暂无通知」(改名须同步三处可见文案)"
+
+
+def test_frontend_notice_push_wired() -> None:
+    """陈述型通知 _recordNotice 的接线(colums.js 空存储提示的出口, 2026-10-09 改道)
+
+    该提示原先是运行时插进 body 的 fixed 横幅: 压页面内容 + **每次自动化测试都触发**(测试用全新
+    浏览器上下文, 没有"已提示"去重标记) ⇒ 每张截图都被盖一截。出口改通知面板后, 判据 = ①进
+    _errHistory(与 toast / 后端同列, cap 同单点); ②计未读(面板收起时入口徽标提示有话要说);
+    ③**不碰 DOM**(再建浮层 = 本坑复发)。
+    """
+    fb = _read("ui_feedback.js")
+    rec = _fn_body(fb, "_recordNotice(text)")
+    assert "this._errHistory.unshift(" in rec, "_recordNotice 不写 _errHistory(通知进不了面板)"
+    assert "ERR_HISTORY_CAP" in rec and "this._errHistory.pop();" in rec, (
+        "_recordNotice 缺 cap 裁剪或没引用 ERR_HISTORY_CAP(口径单点; 绕开 = 无界增长)"
+    )
+    assert "this._errUnread++" in rec, "_recordNotice 不计未读(面板收起时入口无徽标 = 通知静默丢失)"
+    assert 'source: "notice"' in rec and 'kind: "info"' in rec, (
+        "通知条目缺 source/kind 标记(与 toast/backend 两条来源混同, 且告知被画成错误红点)"
+    )
+    assert "document.createElement" not in rec and "appendChild" not in rec, (
+        "_recordNotice 建了 DOM —— 陈述型通知再走浮层即复发「遮挡截图 / 压住内容」(2026-10-09 实报)"
+    )
+    col = _read("columns.js")
+    assert "this._recordNotice(" in col, "columns.js 空存储提示没走 _recordNotice(出口回退成浮层即复发)"
 
 
 def test_frontend_error_history_copy_wired() -> None:

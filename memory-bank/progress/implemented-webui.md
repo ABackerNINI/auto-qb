@@ -72,6 +72,15 @@
   + 路由金清单 `/api/errlog`(77→78); test.full 2649 passed + 4 skipped / 98%(基线
   [26-10-06-0413](../testing/baselines/26-10-06-0413-webui-toast-error-history-done.md)); 三皮肤真机
   走查未做(CLI 会话, 无真机浏览器 + 真实 qB), 待用户真机验证。
+  **2026-10-09 面板改名「通知」+ 陈述型通知出口**(用户报「列偏好空存储提示会遮挡测试截图, 每次测试都
+  触发; 并把『错误历史』改为『通知』」): 该提示原先是 `columns.js` 运行时往 `body` 插的 fixed 横幅
+  (测试用全新浏览器上下文 ⇒ 去重标记恒空 ⇒ 每次都弹、每张截图被盖一截), 改走新增的陈述型通知单点
+  `shared/ui_feedback.js::_recordNotice`(kind `info` / source `notice` / id `n`+seq, 与 toast、后端
+  errlog 同列同 cap, 只入面板不计浮层); 面板可见文案(入口 title / 标题 / 空态 / 复制 label)统一为
+  「通知」, **内部标识符与后端错误环 `/api/errlog` 保持旧名**(守阵与后端语义钉在它们上)。见
+  [activeContext 26-10-09-1137](../activeContext/26-10-09-1137-webui-notice-panel-exit.md)、档案
+  [tasks/26-10-09-webui-notice-panel-exit](../tasks/26-10-09-webui-notice-panel-exit.md)、坑档
+  [pitfalls/web-ui/floating-hint-vs-notice-panel](../pitfalls/web-ui/floating-hint-vs-notice-panel.md)。
 
 - **WEB UI 强制汇报确认机制重构: epoch 前跳证据门控 + warn 第三态**(2026-10-05, 计划
   [plans/26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html) S0-S5 全落地, 提交链
