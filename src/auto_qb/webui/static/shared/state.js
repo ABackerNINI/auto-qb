@@ -194,8 +194,10 @@ window.AQB_STATE = {
       _headObs: null,
       _headRaf: 0,
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
-      selGroups: [],          // 选中组 key
-      selMembers: [],         // 选中成员 hash
+      // 双向联动(2026-10-09, 取代 FX-11 互斥): 组选中 <=> 该组成员全选 —— 两者可同时非空,
+      // 写入口单点在 selection.js 的 _selAddGroup/_selDropGroup/_selSyncGroups。
+      selGroups: [],          // 选中组 key(其成员必在 selMembers 内)
+      selMembers: [],         // 选中成员 hash(含"组选中"带来的那部分)
       // 键盘光标行(计划 26-09-28-0354 W2; 26-09-30 方案 B 起鼠标点击同样落光标 —— 键鼠衔接):
       // {kind, id} —— kind ∈ group|torrent|show|ep, 按身份不按下标(轮询整表替换/排序后由
       // _kbMove 按身份重定位); 视觉为虚线描边, 与选中底色是两套语义, 不合并(0822 §04)

@@ -146,9 +146,10 @@
                    @dblclick="openTorrentDrawer(m.hash)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <template v-for="col in visibleDetailCols" :key="col.key">
+                  <!-- 站点列只留站点名: 代表状态的小方框已移除(状态由「状态」列表达, 见 2026-10-09 用户要求) -->
                   <span v-if="col.key === 'site'" class="m-site f-cell"
                         :class="{ 'f-on': isFilterOn('siteFilter', m.site) }"
-                        @click.stop="filterFromChip('site', m.site)"><i class="dot"></i>{{ m.site }}</span>
+                        @click.stop="filterFromChip('site', m.site)">{{ m.site }}</span>
                   <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
                   <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
                   <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>

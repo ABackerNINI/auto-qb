@@ -906,6 +906,7 @@ window.AQB_SHORTCUTS = {
         this.selGroups = [];
         this.selAnchorGroup = null;
         this.selMembers = this.filteredTorrents.map((m) => m.hash);
+        this._selSyncGroups();  // 双向联动: 凑齐的辅种组随之入选(种子页无组数据 -> no-op)
         return;
       }
       if (this.viewMode === "shows") {
@@ -914,11 +915,14 @@ window.AQB_SHORTCUTS = {
         this.selGroups = [];
         this.selAnchorGroup = null;
         this.selMembers = [...new Set(hashes)];
+        this._selSyncGroups();  // 双向联动: 同上(追剧页无组数据 -> no-op)
         return;
       }
-      this.selMembers = [];  // FX-11: 两类选择口径互斥
+      // 辅种页: 全选所有组 —— 组入选 + 各组成员全选, 经同一写入口 _selAddGroup(双向联动)
+      this.selMembers = [];
       this.selAnchorMember = null;
-      this.selGroups = this.filteredGroups.map((g) => g.key);
+      this.selGroups = [];
+      for (const g of this.filteredGroups) this._selAddGroup(g.key);
     },
     /* 目标解析(计划 W3): 有选中走选中集合(_bulkTargets 同口径), 无选中用光标行;
      * 虚拟组行(未归组命中)无组 key, 转为单种子命令(与 _bulkTargets 同处理)。 */
@@ -1092,13 +1096,14 @@ window.AQB_SHORTCUTS = {
       this.menu.hash = h;
       return this.torrentCmd(action, { enable: !m[field] }, `${m[field] ? "关闭" : "开启"}${label}`);
     },
-    /* 反选当前视图(空位动作, 默认不绑键): 三视图各自的全集做差; FX-11 两类选择口径互斥 */
+    /* 反选当前视图(空位动作, 默认不绑键): 三视图各自的全集做差; 组/成员双向联动(2026-10-09) */
     _kbInvertSel() {
       if (this.viewMode === "torrents") {
         const sel = new Set(this.selMembers);
         this.selGroups = [];
         this.selAnchorGroup = null;
         this.selMembers = this.filteredTorrents.map((m) => m.hash).filter((h) => !sel.has(h));
+        this._selSyncGroups();  // 双向联动: 凑齐的辅种组随之入选(种子页无组数据 -> no-op)
         return;
       }
       if (this.viewMode === "shows") {
@@ -1108,12 +1113,14 @@ window.AQB_SHORTCUTS = {
         this.selGroups = [];
         this.selAnchorGroup = null;
         this.selMembers = [...all].filter((h) => !sel.has(h));
+        this._selSyncGroups();  // 双向联动: 同上(追剧页无组数据 -> no-op)
         return;
       }
       const sel = new Set(this.selGroups);
-      this.selMembers = [];  // FX-11: 两类选择口径互斥
+      this.selMembers = [];
       this.selAnchorMember = null;
-      this.selGroups = this.filteredGroups.map((g) => g.key).filter((k) => !sel.has(k));
+      this.selGroups = [];
+      for (const g of this.filteredGroups) if (!sel.has(g.key)) this._selAddGroup(g.key);
     },
     /* ---------------- W6: 服务端键位装载 ----------------
      * startPolling 是两条鉴权放行路径(密钥验证/本机免鉴权)的唯一汇合点, 键位真值在那里拉;

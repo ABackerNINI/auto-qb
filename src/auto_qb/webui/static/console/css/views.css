@@ -111,10 +111,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .login-loading p { margin: 0; }
 
 /* 多选选中态: 专用令牌族(--sel-*), 左侧靛蓝色条 + 柔底 */
-.group-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
-.group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
+.group-row.selected, .member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+/* 成员行(辅种/追剧页分组内的种子)选中态与种子页种子行**同视觉**(2026-10-09 用户要求: 柔底 + 左色条)。
+ * 此前 .member-row.selected 只有柔底、没有左色条 -> 与种子页选中种子长得不一样。 */
+.group-row.selected::before, .member-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
   width: 3px; background: var(--sel-bar, var(--accent)); }
-.member-row.selected { background: var(--sel-bg, var(--accent-soft)); }
 .group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
   border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }

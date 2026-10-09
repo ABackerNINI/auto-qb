@@ -132,9 +132,10 @@
                            @dblclick="openTorrentDrawer(m.hash)"
                            @contextmenu.prevent="openMemberMenu($event, m)">
                         <template v-for="col in visibleDetailCols" :key="col.key">
+                          <!-- 站点列只留站点名: 代表状态的小方框已移除(见 groups.html 同款改动) -->
                           <span v-if="col.key === 'site'" class="m-site f-cell"
                                 :class="{ 'f-on': isFilterOn('siteFilter', m.site) }"
-                                @click.stop="filterFromChip('site', m.site)"><i class="dot"></i>{{ m.site }}</span>
+                                @click.stop="filterFromChip('site', m.site)">{{ m.site }}</span>
                           <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
                           <!-- 做种/用户: 与种子页/明细表同口径(FX-03 起统一走 cellPeers) -->
                           <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
@@ -215,7 +216,7 @@
                 <div v-for="m in unrecognizedTorrents" :key="m.hash" class="member-row unrecognized-row"
                      :class="m.kind"
                      @contextmenu.prevent="openMemberMenu($event, m)">
-                  <span class="m-site"><i class="dot"></i>{{ m.site }}</span>
+                  <span class="m-site">{{ m.site }}</span>
                   <span class="m-name" :title="m.name">{{ m.name }}</span>
                   <span class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
                   <span class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>

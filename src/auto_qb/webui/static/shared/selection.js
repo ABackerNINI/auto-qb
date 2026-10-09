@@ -54,6 +54,56 @@ window.AQB_SELECTION = {
     _selSetAnchor(kind, id) {
       this[this._selAnchorField(kind)] = id;
     },
+    /* ---------------- 组 <-> 成员 双向联动(2026-10-09 用户拍板, 取代 FX-11 互斥) ----------------
+     * 口径: **一个组被选中 <=> 该组全部成员被选中**(两个方向都要真改写选中数据, 不是只改 CSS)。
+     *   · 组选中 -> 成员全选: _selAddGroup 把组 key 与全部成员 hash 一起写进选中集合;
+     *   · 成员全选 -> 组入选: _selSyncGroups 按当前 selMembers 回扫, 全在则补组 key、不全则移出。
+     * 落点用**同一套写入口**, 五个点击入口(onGroupClick / onMemberClick / onTorrentClick /
+     * onShowEpClick / onShowClick 的单元切换)与键盘路径都只调它们, 口径只有一处。
+     * !回扫面只认**当前视图已加载的组**(groups 按视图回传: 种子页/追剧页为空) -> 那两页回扫是
+     *   no-op(不动既有选择), 辅种页才真正补/移组 key; 视觉侧 groupSelState 另有按成员完整度的
+     *   派生兜底, 因此切视图后组行也不会漏显"选中"。 */
+    _groupHashes(g) {
+      if (!g) return [];
+      if (g.virtual) return g.members && g.members[0] ? this.memberHashesOf([g.members[0]]) : [];
+      return this.memberHashesOf(g.members || []);
+    },
+    /* 选中一个组(组 -> 成员方向): 组 key + 全部成员 hash 一并入选 */
+    _selAddGroup(k) {
+      if (!this.selGroups.includes(k)) this.selGroups = [...this.selGroups, k];
+      const hashes = this._groupHashes(this._findGroup(k));
+      if (hashes.length) this.selMembers = [...new Set([...this.selMembers, ...hashes])];
+    },
+    /* 取消一个组: 组 key 与其成员 hash 一并撤出(否则成员残留成"孤儿选中") */
+    _selDropGroup(k) {
+      const drop = new Set(this._groupHashes(this._findGroup(k)));
+      this.selGroups = this.selGroups.filter((x) => x !== k);
+      if (drop.size) this.selMembers = this.selMembers.filter((h) => !drop.has(h));
+    },
+    /* 成员侧变更后回扫(成员 -> 组方向): 成员全在 => 组入选; 不全 => 组移出;
+     * 不可解析的 key(虚拟行 / 已消失的组)一律保留, 不在这里做清理。
+     * !**补选(新凑齐的组入选)只在组数据为当前视图权威时做**(viewMode !== "torrents"):
+     *   种子页按 VIEW_ARRAYS 不回 groups —— decoratedGroups 那时是上次辅种页的**冻结快照**,
+     *   拿它补选会把用户点选的种子在批量载荷里改成"按组下发"(种子页用户的心智是"我选了这些
+     *   种子", 不是"我选了这个组")。**降级(不再完整的组移出)则所有视图都做** —— 不降级会在
+     *   种子页撤选组内一个种子后残留组 key, 批量命令把已撤选的种子一并卷进去。 */
+    _selSyncGroups() {
+      const inSel = new Set(this.selMembers);
+      const known = new Set();
+      const complete = new Set();
+      for (const g of this.decoratedGroups) {
+        if (g.virtual) continue;
+        known.add(g.key);
+        const hashes = this._groupHashes(g);
+        if (hashes.length && hashes.every((h) => inSel.has(h))) complete.add(g.key);
+      }
+      const kept = [];
+      for (const k of this.selGroups) if (!known.has(k) || complete.has(k)) kept.push(k);
+      if (this.viewMode !== "torrents") {
+        for (const k of complete) if (!kept.includes(k)) kept.push(k);
+      }
+      this.selGroups = [...new Set(kept)];
+    },
     /* 当前视图的起点上下文 {kind, ids}: 键盘手势原点据此判定"当前上下文有无有效起点" */
     _selContext() {
       if (this.page !== "groups") return null;
@@ -81,18 +131,14 @@ window.AQB_SELECTION = {
       this.toggleExpand(g.key, event);  // 普通点击保持"展开明细"原行为(不清除已有选择, 清除走 Esc)
     },
     toggleGroupSel(g) {
-      // FX-11: 组选择与种子选择互斥(同一时刻只一种口径, 否则批量目标混发、计数含义不明)
-      this.selMembers = [];
-      this.selAnchorMember = null;
-      this.selGroups = this.selGroups.includes(g.key)
-        ? this.selGroups.filter((k) => k !== g.key)
-        : [...this.selGroups, g.key];
+      // 双向联动(2026-10-09 用户拍板, 替代 FX-11 的"组/成员互斥"): 组选中 <=> 成员全选。
+      // 选中组时把**全部成员 hash**一并写进 selMembers(组选中 => 成员全选); 取消组时把成员一并
+      // 撤出(否则成员会变成"孤儿选中"残留在集合里)。成员侧的全选/反选回扫见 _selSyncGroups。
+      if (this.selGroups.includes(g.key)) this._selDropGroup(g.key);
+      else this._selAddGroup(g.key);
       this.selAnchorGroup = g.key;
     },
     shiftGroupSel(g) {
-      // FX-11: Shift 扩展同样属"组选择口径" -> 清掉另一侧
-      this.selMembers = [];
-      this.selAnchorMember = null;
       // 从锚点到当前行整段加入选择(锚点不更新: 多次 Shift 可从同一起点扩展)
       // 起点解析走单点 _selAnchor: 显式锚点 -> 当前光标 -> 当前展开的组(用户要求) -> 可见列表首行
       const list = this.filteredGroups.map((x) => x.key);
@@ -101,7 +147,8 @@ window.AQB_SELECTION = {
       const to = list.indexOf(g.key);
       if (from < 0 || to < 0) return;
       const [a, b] = from <= to ? [from, to] : [to, from];
-      this.selGroups = [...new Set([...this.selGroups, ...list.slice(a, b + 1)])];
+      // 逐组 _selAddGroup: 组 key 与其成员 hash 一起入选(与 toggleGroupSel 同一写入口径)
+      for (const k of list.slice(a, b + 1)) this._selAddGroup(k);
     },
     onMemberClick(m, event) {
       // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
@@ -124,13 +171,13 @@ window.AQB_SELECTION = {
       else this._kbFollowDrawer();
     },
     toggleMemberSel(m) {
-      // FX-11: 选种子 -> 清空辅种组选择(两个口径不共存)
-      this.selGroups = [];
-      this.selAnchorGroup = null;
+      // 双向联动(2026-10-09): 成员侧只改 selMembers, 组 key 由 _selSyncGroups 回扫
+      // (组内成员全选 -> 组入选; 撤到不全 -> 组移出)
       this.selMembers = this.selMembers.includes(m.hash)
         ? this.selMembers.filter((h) => h !== m.hash)
         : [...this.selMembers, m.hash];
       this.selAnchorMember = m.hash;
+      this._selSyncGroups();
     },
     /* 成员行范围选择的**范围单点**: 随当前视图取成员链 ——
      *   种子页 = 平铺行(filteredTorrents); 辅种页 = 展开组的成员; 追剧页 = 展开集的版本。
@@ -158,8 +205,6 @@ window.AQB_SELECTION = {
       return g ? this.memberHashesOf(this.sortedMembers(g.members)) : [];
     },
     shiftMemberSel(m) {
-      this.selGroups = [];  // FX-11: 同 toggleMemberSel
-      this.selAnchorGroup = null;
       // 当前上下文内的成员连续选择(跨组范围由分组表的多选承担); 范围随视图取(单点见 _memberRangeList)
       const list = this._memberRangeList();
       const anchor = this._selAnchor("member", list);
@@ -168,6 +213,7 @@ window.AQB_SELECTION = {
       if (from < 0 || to < 0) return;
       const [a, b] = from <= to ? [from, to] : [to, from];
       this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
+      this._selSyncGroups();  // 双向联动: 段内若凑齐某组全部成员, 该组随之入选
     },
     /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
     syncTorrentHeadScroll(ev) {
@@ -206,8 +252,6 @@ window.AQB_SELECTION = {
       else this._kbFollowDrawer();
     },
     shiftTorrentSel(m) {
-      this.selGroups = [];  // FX-11: 同 toggleMemberSel
-      this.selAnchorGroup = null;
       // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展); 起点走单点解析
       const list = this.filteredTorrents.map((x) => x.hash);
       const anchor = this._selAnchor("member", list);
@@ -216,6 +260,7 @@ window.AQB_SELECTION = {
       if (from < 0 || to < 0) return;
       const [a, b] = from <= to ? [from, to] : [to, from];
       this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
+      this._selSyncGroups();  // 双向联动: 回扫(种子页无组数据 -> no-op, 组行由派生兜底)
     },
     clearSelection() {
       this.selGroups = [];
@@ -240,12 +285,13 @@ window.AQB_SELECTION = {
     isMemberSelected(m) {
       return this.selHashSet.has(m.hash);
     },
-    /* 组行选中态: 组本身被选 -> selected; 否则派生集合命中其**部分**成员 -> partial。
+    /* 组行选中态: 组本身被选 -> selected; 组内成员**全部**被选 -> 也判 selected(双向联动的视觉
+     * 兜底, 2026-10-09); 否则派生集合命中其**部分**成员 -> partial。
      * (典型场景: 在种子页选了某辅种组的几个种子, 切回辅种页该组应显示"半选"而非"没选") */
     groupSelState(g) {
       if (this.isGroupSelected(g)) return { selected: true, partial: false };
-      const st = this._selState((g.members || []).map((m) => m.hash));
-      return { selected: false, partial: st.partial };
+      const st = this._selState(this._groupHashes(g));
+      return { selected: st.selected, partial: st.partial };
     },
     _showHashes(s) {
       const out = [];
@@ -275,16 +321,15 @@ window.AQB_SELECTION = {
     epSelState(e) {
       return this._selState(this.memberHashesOf(e.members));
     },
-    /* 整单元切换: 全选中则整段取消, 否则整段加入(并清掉辅种组口径) */
+    /* 整单元切换: 全选中则整段取消, 否则整段加入(成员侧唯一改动点, 组 key 交回扫) */
     _toggleUnit(unit) {
       if (!unit || !unit.hashes.length) return;
-      this.selGroups = [];
-      this.selAnchorGroup = null;
       const all = unit.hashes;
       const cur = this.selMembers;
       const allIn = all.every((h) => cur.includes(h));
       this.selMembers = allIn ? cur.filter((h) => !all.includes(h)) : [...new Set([...cur, ...all])];
       this.selAnchorUnit = unit.id;
+      this._selSyncGroups();  // 双向联动: 整段取消/加入后回扫组完整性(追剧页无组数据 -> no-op)
     },
     _extendUnit(unit, list) {
       if (!unit) return;
@@ -297,12 +342,11 @@ window.AQB_SELECTION = {
         this._toggleUnit(unit);
         return;
       }
-      this.selGroups = [];
-      this.selAnchorGroup = null;
       const [a, b] = anchorIdx <= curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
       const add = [];
       for (const u of units.slice(a, b + 1)) add.push(...u.hashes);
       this.selMembers = [...new Set([...this.selMembers, ...add])];
+      this._selSyncGroups();  // 双向联动: 段内凑齐的辅种组随之入选(追剧页无组数据 -> no-op)
     },
     onShowClick(s, event) {
       this.kbCursor = { kind: "show", id: s.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
@@ -341,13 +385,16 @@ window.AQB_SELECTION = {
     },
   },
   computed: {
-    /* 多选总数(组 + 独立成员): 供右键菜单升级为批量菜单(menu.multi)与快捷键目标解析 */
+    /* 多选总数(去重后的种子数): 供右键菜单升级为批量菜单(menu.multi)与快捷键目标解析。
+     * !必须走 selHashSet(去重) —— 双向联动(2026-10-09)下组 key 与其成员 hash 会**同时**存在,
+     *   `selGroups.length + selMembers.length` 会把同一批种子数两遍。 */
     selectedCount() {
-      return this.selGroups.length + this.selMembers.length;
+      return this.selHashSet.size;
     },
-    /* FX-12: 选择权威 -> 派生集合。**唯一权威**仍是 selGroups(组 key) 与 selMembers(成员 hash)
-     * (FX-11 起两者互斥, 同一时刻只有一侧非空); 所有视图的"已选"一律读这里 ——
-     * 组选择展开为成员 hash 闭包, 于是"辅种页选了 1 组"在种子页/追剧页同样看得出选中。 */
+    /* FX-12: 选择权威 -> 派生集合。**唯一权威**仍是 selGroups(组 key) 与 selMembers(成员 hash);
+     * 双向联动(2026-10-09, 取代 FX-11 互斥)下两者会同时非空(组选中即把成员一并写入), 故这里
+     * 用 Set 去重合并。所有视图的"已选"一律读这里; 组选择展开为成员 hash 闭包, 于是"辅种页选了
+     * 1 组"在种子页/追剧页同样看得出选中。 */
     selHashSet() {
       const s = new Set(this.selMembers);
       for (const k of this.selGroups) {

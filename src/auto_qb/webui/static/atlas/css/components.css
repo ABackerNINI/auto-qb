@@ -430,10 +430,8 @@
 .member-row:last-child { border-bottom: 0; }
 .member-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-site { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-.m-site .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-dim); flex: 0 0 auto; }
-.member-row.seeding .m-site .dot { background: var(--green); }
-.member-row.downloading .m-site .dot, .member-row.checking .m-site .dot { background: var(--blue); }
-.member-row.error .m-site .dot { background: var(--error); }
+/* 站点列不再画"代表状态的小方框"(2026-10-09 用户要求): 状态由「状态」列的圆点表达, 站点列只留站点名。
+ * `.m-site .dot` 系列规则随之删除(曾按行状态给 statused dot 上色) —— 别再挂回来。 */
 .m-state { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); }
 .m-state .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 .member-row.seeding .m-state { color: var(--green); }
@@ -441,7 +439,6 @@
 .member-row.error .m-state { color: var(--error); }
 /* FX-06 对齐: 暂停/其它与状态芯片同族(不再是更暗的 --fg-dim) */
 .member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }
-.member-row.paused .m-site .dot, .member-row.other .m-site .dot { background: var(--paused); }
 .m-hash { color: var(--fg-dim); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 
 /* 进度: 细条 + 数字(同一 grid 单元格内横排; 数值盒定宽右对齐, 条长不随百分比文本宽漂移) */

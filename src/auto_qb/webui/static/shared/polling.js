@@ -243,6 +243,9 @@ window.AQB_POLL = {
             for (const r of this.torrents) hashes.add(r.hash);  // 平铺数组 = 全量种子(超集, 覆盖种子页多选)
             this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
+            // 双向联动(2026-10-09): 行级增删后重扫组完整性 —— 组成员被移除后组不再是"全选",
+            // 该 key 必须随之移出(否则批量目标会指向一个已经不全选、甚至已消失的组)。
+            this._selSyncGroups();
           }
           this.renderMs = Math.round((performance.now() - _t0) * 10) / 10;
           if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms)` +

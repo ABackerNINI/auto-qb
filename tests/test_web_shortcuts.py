@@ -44,6 +44,14 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_kb_collapse_parent_row: 成员行 ← 收起所属单元(2026-10-09) —— _kbCollapseRow 增成员行分支
   (原只认 group/show/ep, 光标按 ↓ 进展开组/展开集后 ← 静默无反应), 父行解析单点 _kbParentRow
   复用 _memberRangeList(与渲染同源, 防错位), 收起后光标带回父行(成员行随收起消失)
+- test_sel_group_member_linkage: 组 <-> 成员双向联动(2026-10-09 用户拍板, 取代 FX-11 互斥) ——
+  单一写入口 _selAddGroup/_selDropGroup(组选中 = 组 key 与成员 hash 一起写入) + 成员侧回扫
+  _selSyncGroups(组内成员全选 => 组入选, 撤到不全 => 组移出); 成员侧五个变更点全部回扫;
+  groupSelState 按成员完整度派生 selected(视觉兜底) / selectedCount 走 selHashSet 去重(组 key
+  与其成员 hash 同时在集合里, 直接相加会数两遍) / _bulkTargets 剔除已被选中组覆盖的成员 hash
+- test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(三皮肤 CSS 成对:
+  .member-row.selected 与 .group-row.selected 同底色同左色条) + 成员行「站点」列去掉代表状态的
+  方框(groups.html / shows.html 两处模板无 <i class="dot"> + 三皮肤无 .m-site .dot 死规则)
 - test_local_scope_wiring: settings-save inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope
   settings/list 档齐全(方案A W2 起停靠面板不再是作用域, drawer 值机制留位);
   浮层打开只放行焦点局部(settings)键位; 非 inputSafe 条目不得标 inputSafe
@@ -1206,3 +1214,103 @@ def test_drawer_transition_dock_anim() -> None:
         assert re.search(r"\.drawer-leave-active \{ position: absolute; left: 0; right: 0; bottom: 0;",
                          css), (f"{ui}: 退场必须 absolute 底缘锚定(bottom: 0, 面板沉下去而不是被顶跑)")
         assert "inset: 0" not in css.split(".drawer-leave-active")[0], f"{ui}: 退场不得用 inset: 0(顶锚定随槽位塌缩把面板顶跑)"
+
+
+def test_sel_group_member_linkage() -> None:
+    """组 <-> 成员选中双向联动(2026-10-09 用户拍板, 取代 FX-11 的"组/成员互斥")。
+
+    口径: **一个组被选中 <=> 该组全部成员被选中**, 两个方向都要真改写选中数据(不是只改 CSS):
+      · 组选中 -> 成员全选: _selAddGroup 把组 key 与全部成员 hash 一起写进选中集合;
+      · 成员全选 -> 组入选: _selSyncGroups 按当前 selMembers 回扫, 全在则补组 key、不全则移出。
+    落点用同一套写入口; 成员侧五个变更点(toggleMemberSel / shiftMemberSel / shiftTorrentSel /
+    _toggleUnit / _extendUnit)都必须回扫。FX-11 时代的"清另一侧"写法必须清干净 —— 它会把联动
+    打断(选种子时把已选中的组整段抹掉)。本守阵钉"单点在不在 / 变更点吃没吃 / 消费端去不去重"。"""
+    sel = _read("selection.js")
+
+    # ① 单一写入口三件套
+    for fn, needle, why in [
+        ("_groupHashes", "memberHashesOf", "取 hash 必须经 memberHashesOf 单点(裸取会字符串化)"),
+        ("_selAddGroup", "this.selGroups = [...this.selGroups, k]", "组 key 必须写入"),
+        ("_selAddGroup", "this.selMembers", "成员 hash 必须一并写入(组选中 => 成员全选)"),
+        ("_selDropGroup", "this.selGroups.filter", "组 key 必须撤出"),
+        ("_selDropGroup", "this.selMembers.filter", "成员 hash 必须一并撤出(否则残留孤儿选中)"),
+        ("_selSyncGroups", "this.decoratedGroups", "回扫必须遍历已知组(groups 按视图回传, 无组数据时自然 no-op)"),
+        ("_selSyncGroups", "hashes.every", "成员全在才补组 key(不全 => 组移出)"),
+    ]:
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}(双向联动写入口被改名/搬走? 同步本守阵)"
+        assert needle in m.group(1), f"{fn} {why}"
+
+    # ② 组侧入口吃单点(toggleGroupSel/shiftGroupSel 不得再手写 selGroups/selMembers)
+    for fn in ("toggleGroupSel", "shiftGroupSel"):
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}"
+        body = m.group(1)
+        assert "this._selAddGroup(" in body, f"{fn} 必须经 _selAddGroup 写入(口径单点)"
+        assert "this.selMembers = []" not in body, (f"{fn} 不得再清空 selMembers(FX-11 互斥清理已退役, 会打断组->成员联动)")
+    toggle = re.search(r"toggleGroupSel\(g\) \{(.*?)\n    \},", sel, re.S).group(1)
+    assert "this._selDropGroup(g.key)" in toggle, "toggleGroupSel 取消侧必须走 _selDropGroup(成员一并撤出)"
+
+    # ③ 成员侧变更点全部回扫(成员全选 => 组入选)
+    for fn in ("toggleMemberSel", "shiftMemberSel", "shiftTorrentSel", "_toggleUnit", "_extendUnit"):
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}"
+        body = m.group(1)
+        assert "this._selSyncGroups()" in body, f"{fn} 缺 _selSyncGroups 回扫(成员全选 => 组入选 断链)"
+        assert "this.selGroups = []" not in body, f"{fn} 不得再清空 selGroups(会打断成员->组联动)"
+
+    # ④ 消费端
+    gst = re.search(r"groupSelState\(g\) \{(.*?)\n    \},", sel, re.S)
+    assert gst, "selection.js 找不到 groupSelState(组行选中态)"
+    gb = gst.group(1)
+    assert "return { selected: st.selected, partial: st.partial };" in gb, (
+        "groupSelState 必须按成员完整度派生 selected(组内全选 => 组显示选中, 视觉兜底)"
+    )
+    cnt = re.search(r"selectedCount\(\) \{(.*?)\n    \},", sel, re.S)
+    assert cnt and "this.selHashSet.size" in cnt.group(1), (
+        "selectedCount 必须走 selHashSet 去重(联动下组 key 与其成员 hash 同时在集合里)"
+    )
+    bulk = _read("commands.js")
+    m = re.search(r"_bulkTargets\(\) \{(.*?)\n    \},", bulk, re.S)
+    assert m, "commands.js 找不到 _bulkTargets(批量目标拆解单点)"
+    assert "covered" in m.group(1), ("_bulkTargets 必须剔除已被选中组覆盖的成员 hash(否则同一目标既发组命令又发成员命令)")
+    # 组行模板绑定 selected/partial 都吃 groupSelState(两态同源)
+    groups_tpl = (SHARED / "tpl" / "groups.html").read_text(encoding="utf-8")
+    assert "selected: groupSelState(g).selected" in groups_tpl, "组行模板缺 selected 绑定"
+
+
+def test_sel_visual_parity_and_site_cell() -> None:
+    """成员行选中视觉与种子页同形 + 「站点」列去方框(2026-10-09 用户要求)。
+
+    种子页种子行是 .group-row.torrent-row -> 选中态吃 .group-row.selected(柔底 + 左色条);
+    辅种/追剧页成员行是 .member-row -> 此前只有柔底没有左色条, 与种子页选中种子长得不一样。
+    本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **同一条规则**(不漂移),
+    且 .member-row 保持 position: relative(左色条 ::before 的定位前提)。
+    「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 两处模板不得再挂
+    <i class="dot">, 三皮肤不得残留 .m-site .dot 死规则。"""
+    for ui in UIS:
+        views = (STATIC / ui / "css" / "views.css").read_text(encoding="utf-8")
+        # 成员行选中必须与组行/种子行**同一条规则**(选择器并列, 不允许另写一份漂移);
+        # prism 的 .group-row.selected > :first-child 规则在文件里出现得更早, 故按选择器全名精确锚定
+        assert re.search(r"\.group-row\.selected, \.member-row\.selected \{",
+                         views), (f"{ui}: .member-row.selected 必须与 .group-row.selected 同一条底色规则(与种子页同视觉)")
+        assert re.search(r"\.group-row\.selected::before, \.member-row\.selected::before \{",
+                         views), (f"{ui}: 成员行选中必须同吃左色条规则(与种子页选中种子同形)")
+        assert "position: relative" in re.search(r"\.group-row\.selected, \.member-row\.selected \{([^}]*)\}",
+                                                 views).group(1) or re.search(
+                                                     r"\.member-row \{[^}]*position: relative", views
+                                                 ), (f"{ui}: .member-row 缺 position: relative(左色条 ::before 没有定位锚)")
+        # .m-site .dot 死规则三皮肤分别落在 views.css / components.css, 两处都不许残留
+        # (正则只认"选择器 + 开花括号"的规则行, 注释里提到该选择器不算)
+        for css_name in ("views.css", "components.css"):
+            cssp = STATIC / ui / "css" / css_name
+            if not cssp.exists():
+                continue
+            css = cssp.read_text(encoding="utf-8")
+            assert not re.search(r"^\s*\.m-site[^{\n]*\.dot[^{\n]*\{", css,
+                                 re.M), (f"{ui}/{css_name}: 残留 .m-site .dot 死规则(站点列方框已移除, 别再挂回来)")
+    for name in ("groups.html", "shows.html"):
+        tpl = (SHARED / "tpl" / name).read_text(encoding="utf-8")
+        seg = re.search(r"col\.key === 'site'\"[^>]*>", tpl)
+        assert seg, f"{name}: 找不到成员行站点格模板(列分支被改名? 同步本守阵)"
+        assert '<i class="dot">' not in seg.group(0), (f"{name}: 成员行站点格不得再挂状态方框 <i class=\"dot\">(2026-10-09 用户要求移除)")

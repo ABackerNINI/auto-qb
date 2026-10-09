@@ -548,16 +548,27 @@ window.AQB_COMMANDS = {
       if (!this.menu.key) return;
       return this._actCore(action, { keys: [this.menu.key], hashes: [], what: "整组" });
     },
-    /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过 */
+    /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过。
+     * !双向联动(2026-10-09)下 selGroups 的组 key 与其成员 hash 会**同时**躺在选中集合里 ——
+     *   必须把已被真实组覆盖的成员 hash 剔除, 否则同一目标既发组命令又发成员命令(重复投递)。 */
     _bulkTargets() {
       const groupKeys = [];
-      const memberHashes = [...this.selMembers];
+      const memberHashes = [];
+      const covered = new Set();
       for (const k of this.selGroups) {
         const g = this._findGroup(k);
         if (!g) continue;
-        if (g.virtual) memberHashes.push(g.members[0].hash);
-        else groupKeys.push(k);
+        if (g.virtual) {
+          if (g.members[0]) {
+            memberHashes.push(g.members[0].hash);
+            covered.add(g.members[0].hash);
+          }
+          continue;
+        }
+        groupKeys.push(k);
+        for (const h of this.memberHashesOf(g.members)) covered.add(h);
       }
+      for (const h of this.selMembers) if (!covered.has(h)) memberHashes.push(h);
       return { groupKeys, memberHashes };
     },
     /* 重新校验确认框(共用 helper, 计划 26-10-05-0314 S3): 文案与调用形态**逐字**抽自
