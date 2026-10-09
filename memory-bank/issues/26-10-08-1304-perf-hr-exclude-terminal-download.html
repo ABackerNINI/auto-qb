@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-08-1304">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="hr-steady-throttle">
-<meta name="doc-refs" content="memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html">
+<meta name="doc-refs" content="memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html,memory-bank/plans/26-10-09-1057-plan-hr-exclude-terminal-download.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)">
 <meta name="issue-summary" content="被排除 HR 的种子在 B/C/D 终态行按名称粗配命中时会触发一次身份下载, 而排除种子既不管束也无需身份 ⇒ 纯浪费站点日额/频控。建议在 _process_rows 的下载触发器上对「命中排除表的本地种子」短路。源自计划 26-10-08-1249 拍板点 D2, 本批未做。">
 <title>HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求) · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-1304-perf-hr-exclude-terminal-download</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 13:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -173,11 +173,27 @@ return any(fuzzy_name_match(name, row.name) for name in wave.local_names)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 13:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-09 10:57 — <strong>认领</strong>，状态 <strong>Open → In Progress</strong>。认领方 = 计划 <a href="../plans/26-10-09-1057-plan-hr-exclude-terminal-download.html">26-10-09-1057-plan-hr-exclude-terminal-download</a>（用户指派，2026-10-09）。认领链已双向登记（本件 <code>doc-refs</code> ↔ 计划 <code>doc-refs</code>）。</li>
+      <li>2026-10-09 11:24 — <strong>修复并验证</strong>，状态 <strong>In Progress → Done</strong>（计划 26-10-09-1057 S1–S4 落地；实际修法见下「修复后补充」）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>复验：2026-10-09 10:55 仍复现</b>（HEAD develop@1f5334e5，运行时直取 <code>_WaveContext</code> + <code>_process_rows</code>）——</p>
+<pre><code>local_names      = ('IYUU SEED 1',)      # 排除种子仍在名称面
+local_hashes     = {'HE'}                # 命中面(应保持全量)
+objects(excluded)= {} | unmatched = {}   # 对象集已跳过它(方案 B 生效)
+_row_looks_local = True                  # 名称粗配仍命中
+pending_downloads= {11}                  # <- 非空即证明仍会去下一次 .torrent</code></pre>
+    <p>锚点按当时 HEAD 重新定位：<code>_row_looks_local</code> 现位于 <code>hr/service.py:960–962</code>（取证时约 959-961）；<code>_WaveContext.local_names</code> 派生在 <code>hr/service.py:290</code>。逻辑链与入池时逐字一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（计划 <a href="../plans/26-10-09-1057-plan-hr-exclude-terminal-download.html">26-10-09-1057</a>，<code>src/auto_qb/hr/service.py</code> 2 处）：把身份下载触发器的<b>名称候选面</b>从「全量本地种子名」收窄为「<b>受管（未排除）</b>本地种子名」——</p>
+    <ul>
+      <li><code>_WaveContext</code>：<code>local_names</code>（全量）改为 <code>local_names_managed = tuple(a.name for a in anchors.values() if a.name and not a.excluded)</code>。</li>
+      <li><code>_row_looks_local</code>：数据源换成 <code>wave.local_names_managed</code>。</li>
+    </ul>
+    <p>与「建议修法 候选 A」<b>一致</b>（把排除态传给下载触发器 / 短路）；仅取<b>收窄候选集</b>写法而非「命中排除名即 <code>return False</code>」，理由见计划 §03.3：粗配宽松（<code>FUZZY_NAME_K=12</code>，标题重合 ≥12 字符即命中），同一行可能<b>同时</b>命中排除与受管种子（同剧不同集/季），收窄写法保住受管那侧（绝不漏下受管种子身份）。<b>候选 B（维持现状）已否决</b>（用户认领 ⇒ 修）。</p>
+    <p><b>边界（逐字未动）</b>：<code>local_hashes</code> 命中面（「排除 ≠ 不认识」的载体）；A 档（<code>lane == LANE_SCOPE</code>）「考察中行无条件下载」硬规则（短路在前，不经本触发器）；<code>_build_objects</code> 第四档排除；判定侧 / 展示侧。</p>
+    <p><b>验证方式</b>：<code>tests/test_hr_service.py</code> 新增守阵 4 条（名称候选面派生 / 终态行只命中排除种子⇒零下载且行仍被记录 / 同一行同时命中排除+受管⇒仍下载 / A 档命中排除种子⇒仍无条件下载）+ 调整既有 <code>test_excluded_anchor_still_counts_as_local_hit</code> 的名称断言 1 处。<b>红验</b>：临时去掉名称面的排除位过滤（<code>and not a.excluded</code>）后 3 条转红（核心钉 / 派生 / S3-2 名称断言），还原复绿 —— 证守卫非恒真。<b>测试数字</b>：见 <code>commands run kb.baseline</code>（基线切片 <code>testing/baselines/26-10-09-1124-hr-exclude-terminal-download.md</code>）；<code>test.full</code> 与 <code>kb.check</code> 全绿。</p>
+    <p class="hint">真机复核（可选，用户侧）：观察站点日志不再为「命中排除表的本地种子终态行」取 <code>.torrent</code>。</p>
   </section>
 
   <footer>

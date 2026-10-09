@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-steady-throttle">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-08-1249">
-<meta name="doc-updated" content="26-10-08-1305">
+<meta name="doc-updated" content="26-10-09-1124">
 <meta name="doc-refs" content="memory-bank/reports/26-10-08-1235-report-hr-exclude-steady.html,memory-bank/tasks/26-10-08-backend-hr-exclude-steady.md,memory-bank/issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">
 <style>
   :root {
@@ -264,6 +264,7 @@
   <section id="s08">
     <h2><span class="no">08</span>变更记录</h2>
     <ul>
+      <li><b>26-10-09-1124</b> 后续项落地(计划 <a href="../plans/26-10-09-1057-plan-hr-exclude-terminal-download.html">26-10-09-1057</a>, issue <a href="../issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">26-10-08-1304</a> Done): 本计划 <b>§7.2 不变项「<code>local_names</code> 仍从全量 anchors 构建」被有意修正</b> —— 名称候选面已收窄为<b>受管集</b>(<code>local_names_managed</code>, 排除种子名不再驱动终态行的身份下载)。<code>local_hashes</code> 命中面与 A 档「考察中无条件下载」硬规则不受影响。</li>
       <li><b>26-10-08-1305</b> 实施轮：用户下达「D2 进 issue, D1 按建议, 开始实施」⇒ <b>S1–S4 已落地</b>(S1 <code>HrAnchor.excluded</code> + <code>hr_anchor()</code> 透传; S2 <code>_build_objects</code> 第四档排除 + docstring; S3 守阵 4 条, 其中 3 条红验确认(临时关掉源码钩子即红); S4 文档回写 keys.md / modules/overview.md)。ⓐ D1 采纳建议(不清理既有 verified / index 行, 未改一行代码); ⓑ D2 入池 <a href="../issues/26-10-08-1304-perf-hr-exclude-terminal-download.html">26-10-08-1304</a>(perf · Open)。<b>S5 真机复核待用户侧</b>(看 <code>hr/&lt;site&gt;.json</code> 的 <code>wave.idle_mode</code> 与日志「稳态降频」)。</li>
       <li><b>26-10-08-1249</b> 初版：按用户拍板「方案 B」出分步实施计划 (S1–S6)；含对报告 §08「方案 A 副作用」的口径更正 (§01 callout)；待实施。</li>
     </ul>

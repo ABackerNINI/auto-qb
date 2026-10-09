@@ -71,7 +71,13 @@
 ### HR 排除落到取数侧(计划 26-10-08-1249 方案 B)
 - test_build_objects_skips_hr_excluded_anchor: excluded 锚点不进对象集; 未排除锚点照常进(零静默变更)
 - test_hr_excluded_anchor_does_not_break_idle: 站点只剩被排除种子 ⇒ 对象集空 ⇒ 稳态降频照常生效(实施前的回归钉)
-- test_excluded_anchor_still_counts_as_local_hit: 排除种子仍留命中集/仍判本地命中/不下载身份(防被做成方案 A)
+- test_excluded_anchor_still_counts_as_local_hit: 排除种子仍留命中面/仍判本地命中/不下载身份(防被做成方案 A)
+
+### HR 排除种子终态行身份下载短路(计划 26-10-09-1057 / issue 26-10-08-1304)
+- test_wave_context_name_candidate_excludes_excluded_seed: 名称候选面=受管集(排除名不在); 命中面 local_hashes 仍全量
+- test_terminal_row_matching_only_excluded_seed_not_downloaded: 终态行粗配**只**命中被排除种子 ⇒ 零下载(行仍被记录)
+- test_terminal_row_matching_excluded_and_managed_still_downloaded: 粗配宽松 ⇒ 同一行可同时命中排除与受管种子 ⇒ 仍下载(形态守阵)
+- test_a_lane_row_downloads_even_when_matching_excluded_seed: A 档硬规则不动 —— 行命中被排除种子仍无条件下载
 
 ### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
 - test_refresh_site_guard_paths: 站点未接入 / 全局开关关 / result.ok 属性
@@ -1676,19 +1682,122 @@ def test_hr_excluded_anchor_does_not_break_idle(tmp_path):
 
 
 def test_excluded_anchor_still_counts_as_local_hit(tmp_path):
-    """方案 B(计划 26-10-08-1249 S3-2): 被排除种子**仍留在命中集** —— 站点行带其 infohash 时判
-    本地命中、不产生身份下载。防「排除」被实现成「不认识」(那会改变匹配语义、多下 .torrent)。"""
+    """方案 B(计划 26-10-08-1249 S3-2): 被排除种子**仍留在命中面** —— 站点行带其 infohash 时判
+    本地命中、不产生身份下载。防「排除」被实现成「不认识」(那会改变匹配语义、多下 .torrent)。
+    名称候选面随计划 26-10-09-1057 收窄为受管集(排除种子名不再驱动身份下载), 但**命中面**
+    (`local_hashes`) 仍全量 —— 本用例同时钉住这两点。"""
     service = make_service(tmp_path, FakeFetcher(pages={}))
     exc = HrAnchor(added_on=100, downloaded=1 << 30, completion_on=-1, progress=1.0, name="IYUU SEED 1", excluded=True)
     wave = _WaveContext({"HE": exc})
-    assert "HE" in wave.local_hashes and "IYUU SEED 1" in wave.local_names, \
-        "命中集从全量锚点构建: 排除不使其从命中面消失"
+    assert "HE" in wave.local_hashes, "命中面从全量锚点构建: 排除不使其从命中面消失(排除 ≠ 不认识)"
+    assert "IYUU SEED 1" not in wave.local_names_managed, \
+        "名称候选面(粗配触发器)已收窄为受管集: 排除种子名不再驱动身份下载(issue 26-10-08-1304)"
     data = HrSiteData()
     row11 = HrEntry(tid=11, name="IYUU SEED 1")
     row11.infohash_v1 = "HE"
     service._process_rows(LANE_SCOPE, [row11], data, wave)
     assert wave.hits.get("HE") == LANE_SCOPE, "行带 infohash 且本地有(即使被排除) ⇒ 判本地命中"
     assert 11 not in wave.pending_downloads, "命中即不下载身份(排除不该让它变陌生行)"
+
+
+# -------------------- HR 排除种子终态行身份下载短路(计划 26-10-09-1057 / issue 26-10-08-1304) ----
+
+
+def test_wave_context_name_candidate_excludes_excluded_seed():
+    """派生(计划 26-10-09-1057 S1): 名称候选面 `local_names_managed` 只含受管(未排除)种子名;
+    命中面 `local_hashes` 仍从全量锚点构建(排除 ≠ 不认识)。"""
+    exc = HrAnchor(added_on=1, downloaded=1, completion_on=-1, progress=1.0, name="EXC SHOW", excluded=True)
+    keep = HrAnchor(added_on=1, downloaded=1, completion_on=-1, progress=1.0, name="KEEP SHOW", excluded=False)
+    wave = _WaveContext({"HE": exc, "HK": keep})
+    assert "KEEP SHOW" in wave.local_names_managed, "受管种子名在候选面"
+    assert "EXC SHOW" not in wave.local_names_managed, "排除种子名不在候选面(不再驱动 .torrent 下载)"
+    assert wave.local_hashes == {"HE", "HK"}, "命中面仍全量(排除 ≠ 不认识)"
+
+
+def test_terminal_row_matching_only_excluded_seed_not_downloaded(tmp_path):
+    """issue 26-10-08-1304 核心: B/C/D 终态行(无 infohash)按名称粗配**只**命中被排除种子 ⇒
+    不进 pending_downloads ⇒ 零 .torrent 请求(省站点日额/频控)。行仍被记录(不下载 ≠ 不认识)。"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([], has_next=False),
+        url_of("B"): myhr_page([row(21, "Example.Ultra.S01E01.1080p")], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    blob, h21 = mk_blob("Example.Ultra.S01E01.1080p")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    exc = HrAnchor(
+        added_on=100,
+        downloaded=1 << 30,
+        completion_on=-1,
+        progress=1.0,
+        name="Example.Ultra.S01E01.1080p",
+        excluded=True
+    )
+    run_wave(service, {h21: exc})
+    assert "https://pt.example.com/download.php?id=21" not in fetcher.byte_calls, \
+        "只命中被排除种子 ⇒ 不下载身份(该身份无消费方)"
+    data, _ = service.store(SITE).read_unlocked()
+    assert any(e.tid == 21 for e in data.index.values()), "行仍被索引记录(不下载 ≠ 不认识)"
+
+
+def test_terminal_row_matching_excluded_and_managed_still_downloaded(tmp_path):
+    """形态守阵(计划 26-10-09-1057 §03.3): 粗配宽松(K=12 标题重合即命中), 同一行可**同时**命中
+    排除与受管种子(同剧不同集/季)。收窄候选集写法保住受管那侧 ⇒ 仍下载(绝不漏下受管种子身份);
+    防退回「命中排除名即 return False」的误杀写法。"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([], has_next=False),
+        url_of("B"): myhr_page([row(21, "Example.Ultra.S01E01.1080p")], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    blob, h21 = mk_blob("Example.Ultra.S01E01.1080p")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    exc = HrAnchor(
+        added_on=100,
+        downloaded=1 << 30,
+        completion_on=-1,
+        progress=1.0,
+        name="Example.Ultra.S01E01.1080p",
+        excluded=True
+    )
+    keep = HrAnchor(
+        added_on=100,
+        downloaded=1 << 30,
+        completion_on=-1,
+        progress=1.0,
+        name="Example.Ultra.S01E02.1080p",
+        excluded=False
+    )
+    run_wave(service, {"HE": exc, "HK": keep})
+    assert "https://pt.example.com/download.php?id=21" in fetcher.byte_calls, \
+        "同一行还命中受管种子 ⇒ 仍下载(收窄候选集而非提前返回)"
+
+
+def test_a_lane_row_downloads_even_when_matching_excluded_seed(tmp_path):
+    """A 档硬规则不动(issue 明示): `lane == LANE_SCOPE` 在 `_process_rows` 里短路在前 ⇒ 行名即使
+    命中被排除种子也**无条件**下载(与终态行的粗配触发器无关)。"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([row(21, "Example.Ultra.S01E01.1080p")], has_next=False),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    blob, h21 = mk_blob("Example.Ultra.S01E01.1080p")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    exc = HrAnchor(
+        added_on=100,
+        downloaded=1 << 30,
+        completion_on=-1,
+        progress=1.0,
+        name="Example.Ultra.S01E01.1080p",
+        excluded=True
+    )
+    run_wave(service, {h21: exc})
+    assert "https://pt.example.com/download.php?id=21" in fetcher.byte_calls, \
+        "A 档行无条件下载: 收窄名称候选面不该误伤 A 档硬规则"
 
 
 # ==================== P1 覆盖率提升轮(T1.1 错误路径系统补齐) ====================

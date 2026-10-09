@@ -287,7 +287,12 @@ class _WaveContext:
     def __init__(self, anchors: Mapping[str, HrAnchor]) -> None:
         self.anchors: Mapping[str, HrAnchor] = anchors
         self.local_hashes: Set[str] = {h for h in anchors if h}
-        self.local_names: Tuple[str, ...] = tuple(a.name for a in anchors.values() if getattr(a, "name", ""))
+        # 名称候选面(仅身份下载触发器 `_row_looks_local` 用): 只放**受管(未排除)**种子名 ——
+        # 排除种子无对账义务(判定侧已短路), 其名称不该驱动 .torrent 下载(issue 26-10-08-1304)。
+        # !命中面 `local_hashes` 仍从全量锚点构建(排除 ≠ 不认识)。
+        self.local_names_managed: Tuple[str, ...] = tuple(
+            a.name for a in anchors.values() if getattr(a, "name", "") and not a.excluded
+        )
         self.seen: Dict[int, HrEntry] = {}  # 本波已见行 tid -> 行对象
         self.hits: Dict[str, str] = {}  # infohash -> 命中档位(本波定论)
         self.retracted = 0  # 撤销的放行记录数(观测)
@@ -958,8 +963,15 @@ class HrRefreshService:
                 wave.pending_downloads.add(row.tid)
 
     def _row_looks_local(self, row: HrEntry, wave: _WaveContext) -> bool:
-        """终态行宽泛名称粗配(D1): 仅作**下载触发器**, 定论一律 infohash 精配(§4.5)。"""
-        return any(fuzzy_name_match(name, row.name) for name in wave.local_names)
+        """终态行宽泛名称粗配(D1): 仅作**下载触发器**, 定论一律 infohash 精配(§4.5)。
+
+        候选面只含**受管(未排除)**本地种子名 —— 排除种子无对账义务、判定侧已短路, 取回的身份
+        无消费方 ⇒ 不该驱动 .torrent 下载(issue 26-10-08-1304)。!A 档不走这里(`_process_rows` 里
+        `lane == LANE_SCOPE` 短路在前, 无条件下载)。用**收窄候选集**而非「命中排除名即 return False」:
+        粗配宽松(K=12 标题重合即命中), 同一行可能同时命中排除与受管种子, 收窄写法保住受管那侧
+        (绝不漏下受管种子身份; 漏管束 > 多一次请求)。
+        """
+        return any(fuzzy_name_match(name, row.name) for name in wave.local_names_managed)
 
     def _record_hit(self, data: HrSiteData, wave: _WaveContext, h: str, row: HrEntry) -> None:
         """infohash 精配命中: 定论按档位(§3 矩阵); 命中即撤销既有放行(它已回清单/重考)。"""
@@ -1382,7 +1394,8 @@ class HrRefreshService:
         锚点漂移(本机重下)在这里把旧放行作废 —— 「回炉」(§3.2 行 3 机制保留)。
         !第四档「HR 排除」(计划 26-10-08-1249 方案 B): 命中排除表的种子无对账义务 ⇒ 不进对象集
         (否则对象集恒非空、稳态降频永不生效, 实报 2026-10-08)。但**只在这里跳过** —— 命中识别
-        用的 `local_hashes`/`local_names` 由 `_WaveContext` 从**全量锚点**构建, 不受影响。
+        用的 `local_hashes` 由 `_WaveContext` 从**全量锚点**构建, 不受影响(名称候选面另行收窄为
+        受管集, 见 `_row_looks_local` / issue 26-10-08-1304)。
         """
         objects: Dict[str, HrAnchor] = {}
         observing: Dict[str, HrEntry] = {}
