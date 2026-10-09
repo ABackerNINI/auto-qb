@@ -7,9 +7,9 @@
 <title>HR 故障归属分层拆分 · 分步实施计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-fault-domain">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-09-0821">
-<meta name="doc-updated" content="26-10-09-0931">
+<meta name="doc-updated" content="26-10-09-1053">
 <style>
   :root {
     --bg: #10151a;
@@ -105,7 +105,7 @@
       <div class="item"><div class="k">专题</div><div class="v">hr-fault-domain</div></div>
       <div class="item"><div class="k">上游</div><div class="v">用户实报 (2026-10-09 会话)</div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop@5eccc5b5 · 2026-10-09</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress · 实施中</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done · 已完成</span></div></div>
     </div>
   </header>
 
@@ -384,7 +384,8 @@ events.py (S3): 每个文案函数归属一个 EVENT_* 层标签(parse / channel
   <section id="s08">
     <h2><span class="no">08</span>变更记录</h2>
     <ul>
-      <li><b>26-10-09-0931 实施完成(用户拍板: 全部按推荐默认 —— D1 继承 <code>HrChannelUnavailable</code>、D3 新增独立标签)</b>: S1–S6 已落地, <code>test.full</code> <b>2836 passed + 4 skipped / 0 failed, 覆盖率 99%</b>。
+      <li><b>26-10-09-1053 状态收口(用户确认「计划已完成」): <code>doc-status</code> In Progress → <code>Done</code></b>。收口前的核实(非重做): ① 计划声称的代码事实逐条在位 —— <code>hr/fetcher.py:31</code> <code>HrChannelTimeout</code> · <code>hr/events.py</code> <code>EVENT_CHANNEL</code>/<code>DOMAINS</code>/<code>domain_of()</code> · <code>hr/log.py</code> · <code>hr/channel.py:360–361</code> <code>rejected_contacts</code>/<code>last_rejected_ts</code> · <code>hr/worker.py</code> <code>web_active_fn</code> 三分支 · <code>infra/logging.py</code> <code>is_record_suppressed</code>; ② 实施提交 <code>ca585843</code> 已在 <code>develop</code>; ③ 基线切片 <a href="../testing/baselines/26-10-09-0931-hr-fault-domain.md">26-10-09-0931-hr-fault-domain.md</a> 在位; ④ 本轮仅文档改动(零代码改动), 回归用 <code>commands run test.quick</code> 全绿(数字口径见 <code>commands run kb.baseline</code>), 未另建基线切片(上一基线仍是事实源); ⑤ 回写件(<code>modules/overview.md</code> · <code>pitfalls/ops/alert-levels.md</code> · <code>pitfalls/backend/fault-domain-classification.md</code> · <code>progress/implemented-core.md</code>)均已生效; <code>kb.index</code> 重建, 本计划移入索引 Done 分区。</li>
+      <li><b>26-10-09-0931 实施完成</b>(用户拍板: 全部按推荐默认 —— D1 继承 <code>HrChannelUnavailable</code>、D3 新增独立标签): S1–S6 已落地, <code>test.full</code> <b>2836 passed + 4 skipped / 0 failed, 覆盖率 99%</b>。
         <ul>
           <li><b>S1</b> <code>hr/fetcher.py</code> 新增 <code>HrChannelTimeout(HrChannelUnavailable)</code> 并在超时处抛出; <b>S2 免做</b> —— 继承链 + 现成的 <code>except HrChannelUnavailable</code>(位置在 <code>except HrFetchError</code> 之前)已让出口就位, 无需新增分支(实施时才确认, 计划原文的判断更保守)。</li>
           <li><b>S3</b> <code>events.py</code>: <code>EVENT_CHANNEL</code>「通道不可用」+ <code>DOMAINS</code>/<code>domain_of()</code> + <code>channel_unavailable()</code>; <code>channel_silent(evidence=)</code> 三档文案。</li>

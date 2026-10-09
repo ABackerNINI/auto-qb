@@ -4,7 +4,7 @@
 > 「页面取数失败」: 套 `[HR 页面改版]` 标签(进前端错误历史)、写 `wave.notes`(环境噪音进持久证据链)、
 > 推进 `fail_streak`(连关几晚升成「疑似改版」ERROR)。现归**通道层**(`action=no-channel`), 且通道层的
 > **静默子类只进后端 log**(不进前端错误历史 / 不弹通知); 「WebUI 在线而扩展不在线」按可观测证据**可见告警**。
-> 计划: memory-bank/plans/26-10-09-0821-plan-hr-fault-domain.html (Status: In Progress)
+> 计划: memory-bank/plans/26-10-09-0821-plan-hr-fault-domain.html (Status: Done)
 > 基线时间: 2026-10-09 09:31
 
 **Refs:** memory-bank/plans/26-10-09-0821-plan-hr-fault-domain.html
