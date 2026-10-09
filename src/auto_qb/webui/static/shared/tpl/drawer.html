@@ -3,8 +3,8 @@
          停靠面板无遮罩无模糊 —— 列表整幅可见(用户硬约束), PERF-01 全站零 backdrop-filter 在此收尾;
          Esc 关闭(退栈链, dialogs.js escBusy); trackers/peers 在对应 tab 激活期间 5s 轮询,
          关闭即停(见 drawer.js _startDrawerPoll); 四个页签 body 与 FX-22/截断族原样保留。
-         W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 收起/展开钮 + 高度/开合持久化
-         (localStorage, 见 drawer.js W3 块); 首屏默认收起(D1, drawer.open 初值 false)。
+         W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 高度/开合持久化
+         (localStorage, 见 drawer.js W3 块); 首屏默认关闭(D1, drawer.open 初值 false)。
          FX-29: 换目标走"软切换"(drawer.switching 遮罩沿用旧数据撑住面板几何), 见 drawer.js FX-29 块。
          2026-10-04 双形态: kind === "seed" = 种子详情(五页签, 原样); kind === "traffic" = qB 口径
          流量图(全局/分组, 由 statusbar 入口 / 组右键菜单打开)。三挂点(全局/分组/单种)共用同一段
@@ -13,13 +13,13 @@
     <transition name="drawer" :duration="220"
                 @enter="drawerEnterHook" @after-enter="drawerAfterEnterHook"
                 @leave="drawerLeaveHook" @after-leave="drawerAfterLeaveHook">
-      <aside v-if="drawerVisible" class="drawer" :class="{ collapsed: drawer.collapsed, 'drawer-traffic': drawer.kind === 'traffic' }" :style="drawerPanelStyle()"
+      <aside v-if="drawerVisible" class="drawer" :class="{ 'drawer-traffic': drawer.kind === 'traffic' }" :style="drawerPanelStyle()"
              role="region" :aria-label="drawer.kind === 'traffic' ? 'qB 口径流量图' : '种子详情'">
-        <!-- W3 顶缘拖拽调高(夹取 [240px, 70vh], 见 drawer.js _drawerClampHeight); 收起态隐藏 -->
+        <!-- W3 顶缘拖拽调高(夹取 [240px, 70vh], 见 drawer.js _drawerClampHeight) -->
         <div class="drawer-grip" title="拖拽调高" @pointerdown="drawerGripDown($event)"
              @pointermove="drawerGripMove($event)" @pointerup="drawerGripUp($event)"
              @pointercancel="drawerGripUp($event)"></div>
-        <!-- 流量形态头部(**全局/分组**): 图标 + 标题 + **时间档位 + 纵轴设置** + 收起/关闭。
+        <!-- 流量形态头部(**全局/分组**): 图标 + 标题 + **时间档位 + 纵轴设置** + 关闭。
              2026-10-08 版式改(用户动议): 窗口档位与纵轴控件自正文上提到本栏 —— 正文工具条
              占的是图的高度, 图被压扁; 两者本就是「图怎么看」的设置, 归设置栏才合理。
              注意本头部**只**由 kind === "traffic"(全局/分组)渲染; 单种流量图走的是种子详情头部
@@ -54,16 +54,11 @@
                    @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
             <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
           </div>
-          <!-- S1(计划 26-10-06-0838): 收起态摘要(P-06 压缩进 44px 头部) + 模板切换器;
-               摘要内容由核心/活动变体 summary 供给(v-html 消费已转义 HTML, 见 drawer_templates.js) -->
-          <span v-if="drawer.collapsed" class="dt-summary" v-html="dtSummaryHtml()"></span>
+          <!-- S1(计划 26-10-06-0838): 模板切换器 -->
           <select class="dt-select" title="流量模板" aria-label="流量模板"
                   :value="dtTplCurrent" @change="dtPick($event)">
             <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
           </select>
-          <button class="drawer-fold" aria-label="收起/展开详情面板" @click="toggleDrawerCollapse()">
-            <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-          </button>
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
@@ -78,9 +73,6 @@
                  中间一帧显示成 40 字符 hash 再跳回种子名, 那是"切换闪烁"里最刺眼的一跳 -->
             <strong :title="drawerTitle()">{{ drawerTitle() }}</strong>
           </div>
-          <!-- S1(计划 26-10-06-0838): 收起态摘要(P-06 压缩进 44px 头部, 标题截断让位);
-               摘要内容由核心/活动变体 summary 供给(v-html 消费已转义 HTML, 见 drawer_templates.js) -->
-          <span v-if="drawer.collapsed" class="dt-summary" v-html="dtSummaryHtml()"></span>
           <nav class="drawer-tabs" role="tablist">
             <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
             <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
@@ -96,9 +88,6 @@
                   :value="dtTplCurrent" @change="dtPick($event)">
             <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
           </select>
-          <button class="drawer-fold" aria-label="收起/展开详情面板" @click="toggleDrawerCollapse()">
-            <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-          </button>
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>

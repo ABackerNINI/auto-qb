@@ -78,7 +78,8 @@
   已开着的东西再"打开"一次, 应当是零副作用, 不是重新表演一遍开动作。凡入口走"整体重建"路径的,
   先补同目标短路再谈切换语义。
 - **处置**: `openDrawerTraffic` 头部加同目标短路 —— `drawer.open && kind === "traffic" &&
-  scope === scope`(分组再比 `qbGroupKey`)时幂等返回(顺带收右键菜单、收起态重按 = 展开);
+  scope === scope`(分组再比 `qbGroupKey`)时幂等返回(顺带收右键菜单; 原「收起态重按 = 展开」
+  的尾巴已随面板折叠状态整体移除, 2026-10-09);
   页面归一(`page = "groups"`)留在短路之前 —— 非主内容页重按仍要先切页, 面板进场补拉由
   watch(drawerVisible) 负责, 不受短路影响。守阵: `test_webui_static_dom_panel.py::test_frontend_qb_traffic_drawer_page_guard`
   第 5 锚(短路存在且先于 `_stopDrawerPoll` 副作用)。

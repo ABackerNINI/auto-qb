@@ -1,7 +1,7 @@
 /* auto-qb WEB UI · 详情面板 content 页签变体 11「增强树表 + 批量优先级(矮)」(计划 26-10-06-0838 S5)
  *
- * 设计稿: resources/detail-panel-templates/11-content-treegrid-batch-low.html(low 档; 收起/矮/高
- * 三档语义全部收进本变体 —— 收起 = 摘要条, 矮/高 = 单表承层级自适应滚动)。
+ * 设计稿: resources/detail-panel-templates/11-content-treegrid-batch-low.html(low 档;
+ * 矮/高 = 单表承层级自适应滚动。收起档(摘要条)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: 结构单一来源 ctx.drawerFileRows()(树扁平化, 目录行 + 文件行, 文件行带 index),
  * 数值/渐进字段从 ctx.drawer.files[index] 取 —— 目录行聚合(子树大小 / 加权进度 / 文件数 /
  * 最低可用性 / 缺口)前端按路径前缀派生, 零后端改动。
@@ -113,10 +113,6 @@
     ".drawer .dt11-clear { height:24px; padding:0 9px; border-radius:var(--radius-sm); border:1px solid transparent;",
     "  background:none; color:var(--fg-dim); font:11.5px/1 system-ui, sans-serif; cursor:pointer; }",
     ".drawer .dt11-clear:hover { color:var(--fg); border-color:var(--border-soft); }",
-    /* 收起态摘要(44px 头部, dt-summary 容器内) */
-    ".drawer .dt11-cs b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",
-    ".drawer .dt11-cs b.w { color:var(--warn); }",
-    ".drawer .dt11-cs .dim { color:var(--fg-dim); }",
     ".drawer .dt11-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
@@ -504,20 +500,7 @@
     H.unwireEvents(host);
   }
 
-  /* 收起态摘要: 勾选批次 + 文件 / 未完成计数(设计稿 11 的 drawer-csum 口径) */
-  function summary(ctx) {
-    const files = fileList(ctx);
-    if (!files.length) return T`<span class="dt11-cs">无文件列表</span>`;
-    _ctx = ctx;
-    const d = derive(ctx);
-    let checkedSize = 0;
-    for (const it of d.fileRows) if (ui.checked.has(it.row.path)) checkedSize += it.size;
-    const n = ui.checked.size;
-    const head = n
-      ? T`<span title="当前勾选批次">已勾 <b>${n}</b> 项 · <b>${ctxOf().fmtSize(checkedSize)}</b></span> · `
-      : T`<span class="dim">未勾选 — 勾选行可批量设优先级</span> · `;
-    return T`<span class="dt11-cs">${R(head)}<span title="文件计数">文件 <b>${d.fileRows.length}</b></span> · <span title="未完成计数">未完成 <b class="w">${d.total.missCnt}</b></span></span>`;
-  }
+  
 
   const _render = render;
   reg.register({
@@ -529,7 +512,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();

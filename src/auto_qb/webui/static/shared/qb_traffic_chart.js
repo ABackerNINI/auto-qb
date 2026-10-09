@@ -155,7 +155,7 @@ const _QB_SCOPES = {
     // 面板 visible 同源守卫(drawerVisible): 面板只在主内容页渲染, 隐藏期还拉 = 对着不在 DOM 里的
     // 面板取数(纯浪费 + 回页数据陈旧), 故 tick/建图一律跳过 —— 回到主内容页由 watch(drawerVisible)
     // 补拉一发接着续(见 state.js)
-    active: (t) => t.drawer.open && !t.drawer.collapsed && t.page === "groups"
+    active: (t) => t.drawer.open && t.page === "groups"
       && t.drawer.kind === "traffic" && t.drawer.scope === "global",
     stale: (t) => !(t.drawer.open && t.drawer.kind === "traffic" && t.drawer.scope === "global"),
   },
@@ -165,12 +165,12 @@ const _QB_SCOPES = {
     hoverIdx: "qbTorrentHoverIdx", hoverLeft: "qbTorrentHoverLeft", yaxis: "qbTorrentYAxis",
     url: (h, w) => "/api/traffic/qb/torrent/" + h + "?window=" + w,
     ctx: (t) => t.drawer.hash,
-    // 抽屉打开 + 种子形态 + 流量页签 + 展开态 + 主内容页(面板 DOM 随 drawerVisible 出入,
-    // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例; 收起态图不可见, 省请求同停)。
+    // 抽屉打开 + 种子形态 + 流量页签 + 主内容页(面板 DOM 随 drawerVisible 出入,
+    // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例)。
     // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 面板三视图共用, 从辅种页/追剧页成员行
     // 打开的种子详情其流量页签同样要拉要画。
     active: (t) => !!(t.drawer.open && t.drawer.kind === "seed" && t.drawer.tab === "traffic"
-      && !t.drawer.collapsed && t.page === "groups"),
+      && t.page === "groups"),
     stale: (t, h) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "seed"
       && t.drawer.tab === "traffic" && t.drawer.hash === h),
   },
@@ -183,7 +183,7 @@ const _QB_SCOPES = {
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
     ctx: (t) => t.qbGroupKey,
     // page 守卫与 global 同(drawerVisible 单点): 非主内容页面板不在 DOM, 不拉不画
-    active: (t) => t.drawer.open && !t.drawer.collapsed && t.page === "groups"
+    active: (t) => t.drawer.open && t.page === "groups"
       && t.drawer.kind === "traffic" && t.drawer.scope === "group",
     stale: (t, k) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "traffic"
       && t.drawer.scope === "group" && t.qbGroupKey === k),
@@ -438,11 +438,10 @@ window.AQB_QB_TRAFFIC = {
       if (this.page !== "groups") this.page = "groups";
       // 同目标幂等短路: 已开着同一形态同一目标(分组再比 key)时重按入口(Ctrl+\ / 状态栏钮)不重建
       // —— 走下方全量路径等于把收图销毁+抽屉重建+首拉各闪一遍(pitfalls drawer-switch-flicker:
-      // 快中间态本身就是闪); 收起态重按 = 展开, 右键菜单入口仍收菜单
+      // 快中间态本身就是闪); 右键菜单入口仍收菜单
       if (this.drawer.open && this.drawer.kind === "traffic" && this.drawer.scope === scope
           && (scope !== "group" || this.qbGroupKey === key)) {
         this.menu.visible = false;
-        this.drawer.collapsed = false;
         return;
       }
       if (scope === "group") {
@@ -457,7 +456,7 @@ window.AQB_QB_TRAFFIC = {
       this._drawerSwitchEnd();  // 形态整体重建 -> 无"旧内容可保留"
       this._qbTeardown();       // 三挂点轮询与图全收(形态切换不残留旧图)
       this.drawer = {
-        open: true, collapsed: false, hash: "", tab: "general", loading: false, error: "",
+        open: true, hash: "", tab: "general", loading: false, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false, switching: false,
         kind: "traffic", scope,

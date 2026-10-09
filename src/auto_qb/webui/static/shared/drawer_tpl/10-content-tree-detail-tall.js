@@ -1,7 +1,8 @@
 /* auto-qb WEB UI · 详情面板 content 页签变体 10「折叠树 + 选中详情(高)」(计划 26-10-06-0838 S5)
  *
- * 设计稿: resources/detail-panel-templates/10-content-tree-detail-tall.html(tall 档; 收起/矮/高
- * 三档语义全部收进本变体 —— 收起 = 核心内置摘要条, 矮/高 = 左树 + 右 324px 详情自适应滚动)。
+ * 设计稿: resources/detail-panel-templates/10-content-tree-detail-tall.html(tall 档;
+ * 矮/高 = 左树 + 右 324px 详情自适应滚动。收起档(核心内置摘要条)已随面板折叠状态
+ * 整体移除(2026-10-09)。
  * 数据: /files qB 透传(drawer.files, 进入页签拉一次 + 优先级改动后静默补拉), 树与子树聚合
  * (子树大小 / 文件数 / 加权进度 / 缺口字节 / 最低可用性)全部前端派生, 零后端改动。
  * 动作(plan §04 映射行): 目录点选子树聚合; 文件行优先级徽章 → openFilePrio(经典锚定小菜单,
@@ -131,10 +132,6 @@
     ".drawer .dt10-seg.max.on { background:var(--error-soft); border-color:var(--error-line); color:var(--error); }",
     ".drawer .dt10-note { margin:10px 0 0; font-size:11px; color:var(--fg-dim); line-height:1.7; }",
     ".drawer .dt10-note b { color:var(--fg-muted); font-weight:600; }",
-    /* 收起态摘要(44px 头部, dt-summary 容器内) */
-    ".drawer .dt10-cs b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",
-    ".drawer .dt10-cs b.w { color:var(--warn); }",
-    ".drawer .dt10-cs .dim { color:var(--fg-dim); }",
     ".drawer .dt10-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
@@ -489,17 +486,7 @@
     H.unwireEvents(host);
   }
 
-  /* 收起态摘要: 当前选中节点 + 文件 / 未完成计数(设计稿 10 的 drawer-csum 口径) */
-  function summary(ctx) {
-    const files = fileList(ctx);
-    if (!files.length) return T`<span class="dt10-cs">无文件列表</span>`;
-    _ctx = ctx;
-    let miss = 0;
-    for (const f of files) if (num(f.progress) < 1) miss++;
-    const selLast = ui.selPath ? ui.selPath.split("/").pop() : "";
-    return T`<span class="dt10-cs">${R(selLast
-      ? T`<span title="已选节点">已选 <b>${selLast}</b></span> · ` : T`<span class="dim">未选中 —</span> · `)}<span title="文件计数">共 ${files.length} 文件</span> · <span title="未完成计数">未完成 <b class="w">${miss}</b></span></span>`;
-  }
+  
 
   const _render = render;
   reg.register({
@@ -511,7 +498,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();

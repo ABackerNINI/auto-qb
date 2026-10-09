@@ -617,8 +617,8 @@ window.AQB_SHORTCUTS = {
       const per = Math.max(1, Math.floor(band / est));
       this._kbMove(dir * per);
     },
-    /* 列表行可见下界(W4 几何走查产出, 计划 26-10-03-0917): 停靠面板开着时它 sticky 吸在视口底
-     * (收起态只剩头部条也一样), 底部一段列表行被面板盖住 —— 行可见下界不再是 window.innerHeight,
+    /* 列表行可见下界(W4 几何走查产出, 计划 26-10-03-0917): 停靠面板开着时它 sticky 吸在视口底,
+     * 底部一段列表行被面板盖住 —— 行可见下界不再是 window.innerHeight,
      * 而是面板顶缘(getBoundingClientRect().top 实测, 滚到文档底面板落回文档流时该值自然上移)
      * 减去 dock 的 8px 呼吸距。关闭(面板不在 DOM)或窄屏全屏态(D3, position:fixed —— 列表整幅被
      * 覆盖, 没有"部分可见"可言, 也避免 top 内插出退化区间)回落整窗高; fixed 判定走计算样式,
@@ -709,7 +709,7 @@ window.AQB_SHORTCUTS = {
         if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
       });
     },
-    /* ---------------- W2: 展开 / 收起 / 打开 ---------------- */
+    /* ---------------- W2: 展开面板与定位页签 ---------------- */
     _kbParseEpId(id) {
       const parts = String(id).split("|");
       if (parts.length < 3) return null;
@@ -792,7 +792,6 @@ window.AQB_SHORTCUTS = {
       this.openTorrentDrawer(c.id);
     },
     /* Alt+1~5 双态(方案A W2, §2.2): 面板关 = 开面板并定位该页签; 面板开 = 切页签(现行为)。
-     * W3 收起态(半开)视同开态先展开再切页签 —— 页签在收起态不可见, 切了等于没切。
      * "开态"只对种子形态(kind=seed)成立: 流量形态(全局/分组流量图, 26-10-05 三挂点并入抽屉)
      * 的抽屉 hash 恒空 —— 直接走切页签会把空 hash 打进 /api/torrents//trackers 等端点(404,
      * toast "tracker/peer 列表获取失败"), Alt+1 又因流量形态 tab 恒为 general 早退(按了没反应)。
@@ -814,7 +813,6 @@ window.AQB_SHORTCUTS = {
         return;
       }
       if (this.drawer.open && this.drawer.kind === "seed") {
-        if (this.drawer.collapsed) this.toggleDrawerCollapse();  // W3: 收起态先展开(Alt+N 本就要看该页签)
         this.drawerTab(tab);  // 开态: 切页签(现行为)
         return;
       }

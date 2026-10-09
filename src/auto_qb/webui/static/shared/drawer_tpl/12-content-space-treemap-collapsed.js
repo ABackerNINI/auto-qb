@@ -1,7 +1,7 @@
 /* auto-qb WEB UI · 详情面板 content 页签变体 12「空间树图(收起)」(计划 26-10-06-0838 S5)
  *
  * 设计稿: resources/detail-panel-templates/12-content-space-treemap-collapsed.html(collapsed 档;
- * 收起 = 摘要条体积构成, 矮/高 = 左树图 + 右体积榜自适应)。
+ * 矮/高 = 左树图 + 右体积榜自适应。收起档(摘要条体积构成)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /files qB 透传(drawer.files), squarified 树图纯前端计算 —— 块面积 = 体积占比,
  * 完整块绿面 / 未完成块琥珀水位(完成度 = --lv 渐变高), 顶层目录组头可折叠成单块聚合。
  * 动作(plan §04 映射行): 悬停互联(纯前端) —— 树图块与体积榜行互加高亮; 点选块/行 = 选中
@@ -28,7 +28,7 @@
 
   /* 视图偏好(跨重渲染保持): 选中 path / 折叠目录组 / 仅看未完成; lastSig 供跳过重建 */
   const ui = { selPath: "", colG: new Set(), fmiss: false, lastSig: "", lastHash: "", tree: null, mapEl: null, host: null };
-  let ro = null; /* ResizeObserver 单例: 面板拖拽调高 / 收起展开后重建图 */
+  let ro = null; /* ResizeObserver 单例: 面板拖拽调高后重建图 */
 
   const CSS = [
     ".drawer .dt12-tools { display:flex; align-items:center; gap:8px; margin-bottom:8px; }",
@@ -111,13 +111,6 @@
     "  border:0; border-radius:var(--radius-sm); background:none; color:var(--fg-dim); cursor:pointer; flex:none; }",
     ".drawer .dt12-close:hover { color:var(--fg); background:var(--bg-hover); }",
     ".drawer .dt12-close .ico { width:11px; height:11px; }",
-    /* 收起态摘要(44px 头部, dt-summary 容器内): 体积构成条 + 未完成数 */
-    ".drawer .dt12-cs { display:inline-flex; align-items:center; gap:8px; min-width:0; }",
-    ".drawer .dt12-cs .hbar { display:flex; width:120px; height:6px; border-radius:999px; overflow:hidden;",
-    "  background:var(--bg-sunken); flex:none; }",
-    ".drawer .dt12-cs .hbar i { display:block; height:100%; background:var(--accent); }",
-    ".drawer .dt12-cs b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",
-    ".drawer .dt12-cs b.w { color:var(--warn); }",
     ".drawer .dt12-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
@@ -296,7 +289,7 @@
      * 局部 H 声明成 clientHeight, H.rowFocusKey 对数字取属性抛 TypeError -> 核心层回落
      * classic, 树图永远画不出来)。守阵全禁, 局部名一律另起(本函数用 mapW/mapH)。 */
     const mapW = mapEl.clientWidth, mapH = mapEl.clientHeight;
-    if (mapW < 60 || mapH < 60) return; /* 收起态 body 不可见: 展开时 RO 补建 */
+    if (mapW < 60 || mapH < 60) return; /* 面板过窄/过矮不画(拖拽调高后 RO 会补建) */
     const tree = ui.tree;
     const total = tree.size || 1;
     const parts = [];
@@ -534,30 +527,7 @@
     H.unwireEvents(host);
   }
 
-  /* 收起态摘要: 体积构成条(顶层目录/文件按体积占比) + 未完成数(设计稿 12 口径) */
-  function summary(ctx) {
-    const files = fileList(ctx);
-    if (!files.length) return T`<span class="dt12-cs">无文件列表</span>`;
-    _ctx = ctx;
-    const groups = new Map(); /* 顶层目录名 -> 体积 */
-    let total = 0, done = 0, missCnt = 0;
-    for (const f of files) {
-      const size = num(f.size);
-      const prog = num(f.progress);
-      total += size;
-      done += size * prog;
-      if (prog < 1) missCnt++;
-      const top = String(f.name || "").split("/")[0] || "(根)";
-      groups.set(top, (groups.get(top) || 0) + size);
-    }
-    const keys = Array.from(groups.keys()).sort((a, b) => groups.get(b) - groups.get(a)).slice(0, 6);
-    const denom = keys.reduce((s, k) => s + groups.get(k), 0) || 1;
-    const segs = keys.map((k, i) =>
-      T`<i style="width:${(groups.get(k) / denom * 100).toFixed(1)}%;opacity:${(1 - i * 0.13).toFixed(2)}"></i>`).join("");
-    return T`<span class="dt12-cs">
-      <span class="hbar" title="体积构成条(顶层目录占比, 透明度梯度)">${R(segs)}</span>
-      共 ${files.length} 个 · ${ctxOf().fmtSize(done)} / ${ctxOf().fmtSize(total)} · <span title="未完成计数">未完成 <b class="w">${missCnt}</b></span></span>`;
-  }
+  
 
   const _render = render;
   reg.register({
@@ -569,7 +539,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();

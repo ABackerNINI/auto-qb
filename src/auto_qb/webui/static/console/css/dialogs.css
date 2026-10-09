@@ -12,9 +12,7 @@
 .drawer { position: relative; display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
   box-shadow: var(--shadow-3); }
-/* W3 高度治理: 内联 height/max-height(拖拽值, drawer.js drawerPanelStyle)覆盖这里的默认上限;
- * 收起态只留头部(body 隐藏, 高度回落内容), 展开钮在头部(chevron 翻转) */
-.drawer.collapsed .drawer-body { display: none; }
+/* W3 高度治理: 内联 height/max-height(拖拽值, drawer.js drawerPanelStyle)覆盖这里的默认上限 */
 .drawer-grip { position: absolute; top: 0; left: 0; right: 0; height: 8px; z-index: 2;
   cursor: ns-resize; touch-action: none; }
 .drawer-grip::after { content: ""; position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
@@ -47,12 +45,10 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   border-bottom: 1px solid var(--border-soft); }
 .drawer-title { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; align-items: center; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawer-close, .drawer-fold { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+.drawer-close { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
   border: 0; background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.drawer-close:hover, .drawer-fold:hover { background: var(--bg-hover); color: var(--fg); }
-.drawer-fold .ico { transition: transform var(--dur) var(--ease); }
-.drawer-fold .ico.flip { transform: rotate(180deg); }
+.drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
 /* 页签并入头部行(stretch 撑满头高): 活动页签下划线正好压在头部底边线上 */
 .drawer-tabs { display: flex; gap: 2px; }
 .drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);

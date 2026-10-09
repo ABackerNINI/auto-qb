@@ -8,21 +8,20 @@
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
 - test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
-- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-close 钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + drawer.js 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废 + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
 
 - test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 定宽(160->240 后 26-10-09 用户报框太长收窄 240->150, 定宽口径不变; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
-- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽(26-10-09 用户报框太长收窄至 width:150px, 只收窄不回退内容驱动宽)且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位 + 收起摘要 .dt-summary flex-basis 定宽 240px(速度/进度逐轮询周期变化的内容驱动宽一并稳住; 与切换器各按内容域定宽不必等宽), 两定宽单点都在核心 00-core 注入层(三皮肤共享)
+- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽(26-10-09 用户报框太长收窄至 width:150px, 只收窄不回退内容驱动宽)且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位, 定宽单点在核心 00-core 注入层(三皮肤共享)
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
 - test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
   state.js watch(drawerVisible) 的种子详情支路(!s 分支)进场(v 为真)必须补一发重挂
   `$nextTick(() => this._dtSync())`($nextTick 等 Vue 把重建的 aside 补进 DOM 再定位宿主);
   两支路互不越界(重挂只归种子支路, 流量支路退场 _qbChartDestroy / 进场 _qbReloadOnEnter 原样)
-- test_frontend_drawer_collapsed_click_peek_target: 详情面板收起态鼠标换目标守阵(Q3+P2-3, 报告 26-10-07-0542) —— 鼠标/键盘分流在调用点(onTorrentClick 收起态走 _drawerPeekTarget、展开态照旧 _kbFollowDrawer, 键盘挂点的「收起即返回」守卫一字不动) + peek 纪律五件(只服务收起态/流量形态排除/种子页守卫/hash 未变短路/防抖 200ms 共用 _followDrawerTimer + 停稳复核) + peek 落地(换 hash + 行快照写 drawer.detail 打 __peek 戳换新摘要条 + error 作废 + 非常规页签静默拉一发, 不得拉全量详情/走软切换链) + __peek 两个消费点成对(_editDetail 绕开快照预填 + toggleDrawerCollapse 展开先补拉再补跟) + 仅换目标不展开(peek 不得翻转 collapsed/开面板, 展开仍归双击/Enter/右键)
-- test_frontend_drawer_groups_shows_views: 辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217) —— 可见性单点 drawerVisible 与打开单点 openTorrentDrawer 一律只挡主内容页(形态/视图分叉收归页面级, 此前辅种/追剧页调用 openTorrentDrawer 静默失效: 右键菜单项早已渲染且 hash 正确却点了没反应)+ 两处成员行(辅种明细/追剧集明细)必须有 @dblclick 打开入口(与种子页同款)+ 键盘光标链 _kbRows 纳入展开的成员行(辅种的组下成员/追剧的集下成员, 兑现原注释「成员行 vNext」—— 不在链上则 ↑↓ 走不到、Alt+1~5 解析不出目标)+ 跟随 _kbFollowDrawer / peek _drawerPeekTarget / 5s 轮询 tick / 单种流量图 active 四处守卫一律只挡主内容页(换视图即停会让这两页的页签数据停在打开那一刻)
-- test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(收起态先展开 -> 同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
+- test_frontend_drawer_groups_shows_views: 辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217) —— 可见性单点 drawerVisible 与打开单点 openTorrentDrawer 一律只挡主内容页(形态/视图分叉收归页面级, 此前辅种/追剧页调用 openTorrentDrawer 静默失效: 右键菜单项早已渲染且 hash 正确却点了没反应)+ 两处成员行(辅种明细/追剧集明细)必须有 @dblclick 打开入口(与种子页同款)+ 键盘光标链 _kbRows 纳入展开的成员行(辅种的组下成员/追剧的集下成员, 兑现原注释「成员行 vNext」—— 不在链上则 ↑↓ 走不到、Alt+1~5 解析不出目标)+ 跟随 _kbFollowDrawer / 5s 轮询 tick / 单种流量图 active 三处守卫一律只挡主内容页(换视图即停会让这两页的页签数据停在打开那一刻)
+- test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815 + 详情面板二轮清理) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」/ drawer_tpl 二轮: 05 图例五色与条级顺序说明·06 等待响应与仅看异常说明·07-09 求和口径/客户端 Top 复述/qB flags 前缀/会话累计/对端整行复述·10-11 展开折叠全部目录与全选与目录文件数·12 优先级跳过与占比细条·13-15 kpis 容器派生口径与窗口累计复述)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
 - test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti, 后者带可选 targets 供单组入口 skipCheckGroup 复用)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
@@ -924,17 +923,11 @@ def test_drawer_tpl_registry_wiring():
             f"_fetchDrawer{fname}: _dtNotify 必须在 {flag} 清掉之后(次序反 = 空列表停\"正在加载…\"一拍轮询)"
     m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
-    m = re.search(r"toggleDrawerCollapse\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert m and 'this._dtNotify("collapse")' in m.group(1), "toggleDrawerCollapse 缺 collapse 通知"
-    m = re.search(r"drawerTab\(tab\) \{\n(.*?)\n      if \(this\.drawer\.tab === tab\) return;", drawer_js, re.S)
-    assert m and "this.toggleDrawerCollapse()" in m.group(1), \
-        "drawerTab 缺补强二(收起态点页签 = 先展开再切, 否则'点了没反应')"
 
-    # 5. drawer.html 加挂面: 宿主 x6 / 切换器 x2 / 收起摘要条 x2
+    # 5. drawer.html 加挂面: 宿主 x6 / 切换器 x2
     for host in ("general", "trackers", "peers", "content", "traffic-pre", "traffic-post"):
         assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
     assert drawer_tpl.count('class="dt-select"') == 2, "drawer.html 切换器应恰 2 处(种子头部/流量头部)"
-    assert drawer_tpl.count('class="dt-summary"') == 2, "drawer.html 收起摘要条应恰 2 处(P-06 头部形态)"
     assert 'v-show="drawerTplSel.general === \'classic\'"' in drawer_tpl, \
         "经典包裹层显隐未接 drawerTplSel(classic 与变体互斥)"
 
@@ -947,7 +940,7 @@ def test_drawer_tpl_registry_wiring():
         for n in re.findall(r"^      (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", core, re.M)
         if n.startswith("dt") or n.startswith("_dt")
     }  # 只收 dt* 成员(裸 if/for 同缩进形态不收)
-    assert {"dtPick", "dtHostOn", "dtSummaryHtml", "_dtSync", "_dtNotify", "_dtUnmountAll"} <= dt_members, \
+    assert {"dtPick", "dtHostOn", "_dtSync", "_dtNotify", "_dtUnmountAll"} <= dt_members, \
         "核心方法面清单与守阵预期漂移, 同步本守阵"
     for path, rel in _app_bundle_files():
         if rel == "shared/drawer_templates.js":
@@ -1117,7 +1110,7 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
 
 def test_drawer_tpl_a11y_and_fetch_error_states():
     """详情面板变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) ——
-    核心层 drawer-fold/drawer-close 两钮 aria-label(种子/流量两头部成对, 仅 svg 无文字读屏不可达);
+    核心层 drawer-close 钮 aria-label(种子/流量两头部成对, 仅 svg 无文字读屏不可达);
     纯 div/span 模拟控件 role="button" tabindex="0": 01/02/03/05/08 折叠组头(含 aria-expanded)
     + 07/08/09 排序表头(含 aria-sort 升/降/无随排序态输出)+ 05/06 msg 展开行; keydown 委托与
     click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space 转发前排除原生 button/summary 等
@@ -1130,9 +1123,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
     vdir = os.path.join(shared, "drawer_tpl")
 
-    # 1. 核心层两钮 aria-label(种子/流量两头部成对各一处; 原生 button 键盘本可达, 缺的只是可访问名)
-    assert drawer_tpl.count('<button class="drawer-fold" aria-label="收起/展开详情面板"') == 2, \
-        "drawer.html: drawer-fold 两钮缺 aria-label(种子/流量两头部成对)"
+    # 1. 核心层关闭钮 aria-label(种子/流量两头部成对各一处; 原生 button 键盘本可达, 缺的只是可访问名)
     assert drawer_tpl.count('<button class="drawer-close" aria-label="关闭详情面板"') == 2, \
         "drawer.html: drawer-close 两钮缺 aria-label(种子/流量两头部成对)"
 
@@ -1186,7 +1177,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         assert f'this.drawer.{fld} = "";' in drawer_js, \
             f"drawer.js: {fld} 成功落袋后未清(上一次失败永久钉住错误态)"
     assert 'this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";' in drawer_js, \
-        "drawer.js: 换目标(peek/软切换)未作废三个失败标记(旧目标错误态串显到新目标)"
+        "drawer.js: 换目标(软切换)未作废三个失败标记(旧目标错误态串显到新目标)"
 
     # 4. 九个 fetch 型变体: 错误态先于空态; 文案与轮询事实对应(trackers/peers 5s 轮询=可写自动重试;
     #    content 无轮询=只陈述失败, 不得虚构「稍后自动重试」)
@@ -1320,7 +1311,7 @@ def test_drawer_tpl_cross_seed_fold_and_select_width():
     是 path 不含 hash, 新种子 path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择;
     dt11 勾选集必须继续重置 —— 批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与
     种子无关或无折叠的变体(01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash
-    重置机制; 核心 .dt-select 定宽(现 150px: P3-7 160px 硬上限截断长 label 收起态 -> 26-10-07
+    重置机制; 核心 .dt-select 定宽(现 150px: P3-7 160px 硬上限截断长 label -> 26-10-07
     定宽化 240 -> 26-10-09 用户报框太长收窄 150; 见 test_drawer_tpl_select_fixed_width_tab_independent)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     vdir = os.path.join(shared, "drawer_tpl")
@@ -1375,12 +1366,10 @@ def test_drawer_tpl_select_fixed_width_tab_independent():
     """详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报: 切页签时切换模板的元素宽度
     变化导致其它元素跟着变化) —— 病根: 原生 select 的自动最小宽 = 最宽 option 的宽, 而
     dtTplOptions 按当前页签变化, max-width 上限挡不住内容驱动宽, 选择器占位宽随页签变, 同排
-    .drawer-title(flex:1 1 auto)与收起摘要 .dt-summary 跟着让位回弹。修法单点在核心 00-core
-    注入层(三皮肤共享): .dt-select 定宽且不再依赖 max-width(26-10-09 用户报框太长, 定宽值
-    240 收窄至 150 —— 只改值, 定宽口径是本守阵的钉子); text-overflow:
-    ellipsis 是定宽后长 label 的截断保险丝; 收起摘要 .dt-summary 的 flex-basis 独立定宽
-    240px(速度/进度逐轮询周期变化, 内容驱动宽在收起态逐秒抖, 一并稳住; 与切换器各按内容域
-    取值不必等宽)。"""
+    .drawer-title(flex:1 1 auto)跟着让位回弹。修法单点在核心 00-core 注入层(三皮肤共享):
+    .dt-select 定宽且不再依赖 max-width(26-10-09 用户报框太长, 定宽值 240 收窄至 150 ——
+    只改值, 定宽口径是本守阵的钉子); text-overflow:
+    ellipsis 是定宽后长 label 的截断保险丝。"""
     core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
     m = re.search(r'"\.drawer \.dt-select \{([^"]*)"', core)
     assert m, "核心 .dt-select 规则形态漂移(守阵正则失配, 同步本守阵)"
@@ -1391,11 +1380,6 @@ def test_drawer_tpl_select_fixed_width_tab_independent():
         "核心 .dt-select 仍带 max-width(上限不改变内容驱动宽的病根, 26-10-07 用户报回归)"
     assert "text-overflow: ellipsis" in decls, \
         "核心 .dt-select 缺长 label 截断保险丝(定宽后超宽 option 文本无省略号语义)"
-    ms = re.search(r'"\.drawer \.dt-summary \{([^"]*)"', core)
-    assert ms, "核心 .dt-summary 规则形态漂移(守阵正则失配, 同步本守阵)"
-    sdecls = ms.group(1)
-    assert "flex: 0 1 240px" in sdecls, \
-        "收起摘要 .dt-summary 仍内容驱动宽(flex-basis auto: 速度/进度逐轮询变化 => 收起态头部跟着抖)"
 
 
 def test_drawer_tpl_classic_default():
@@ -1542,7 +1526,7 @@ def test_frontend_qb_traffic_drawer_page_guard():
        种子详情支路(!s)的变体宿主回页重挂归 test_drawer_seed_reentry_variant_remount。
     5. 同目标幂等短路(2026-10-07 修「再按 Ctrl+\ 闪烁」): 抽屉已开着同一形态同一目标时重按入口
        (快捷键/状态栏钮)必须短路返回 —— 全量路径会把收图销毁 + 抽屉重建 + 首拉 loading 各闪一遍
-       (pitfalls/web-ui/drawer-switch-flicker「快中间态本身就是闪」); 收起态重按 = 展开。"""
+       (pitfalls/web-ui/drawer-switch-flicker「快中间态本身就是闪」)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -1643,106 +1627,6 @@ def test_drawer_seed_reentry_variant_remount():
         "watcher 不得自写宿主定位/渲染(重挂单点在核心层 _dtSync, 绕开即双写挂载态)"
 
 
-def test_frontend_drawer_collapsed_click_peek_target():
-    """详情面板收起态鼠标换目标守阵(Q3 + P2-3, 报告 26-10-07-0542) —— 收起(44px 摘要条态)时
-    鼠标单击列表行必须「只换目标不展开」: 头部标题 + 摘要条立即反映新种子, 面板保持收起。
-    根因是 onTorrentClick 把鼠标单击交给了 _kbFollowDrawer, 其首行「收起即返回」守卫(对键盘
-    ↑↓ 是有意设计: 收起态跟随暂停, 防连发键拉详情)挡在换目标逻辑之前。钉住五件事:
-    1. 鼠标/键盘分流在调用点(selection.js): 收起态走 _drawerPeekTarget, 展开态照旧
-       _kbFollowDrawer —— 键盘路径的收起守卫一字不动(守卫若挪进挂点内部, 收起态键盘会误跟随);
-    2. peek 自带纪律: 只服务收起态 + 流量形态不 peek + 种子页守卫 + hash 未变短路(同行重复
-       点击零副作用)+ 防抖 200ms(共用 _followDrawerTimer, 与键盘跟随互斥后到优先)+ 停稳复核;
-    3. peek 落地: 换 hash + 行快照写 drawer.detail 打 __peek 戳(摘要条数据源, P2-3 危害面;
-       常规页签零请求)+ 非常规页签按当前页签静默拉一发 —— **不得**调 _fetchDrawerDetail /
-       _loadDrawerTab / _switchDrawerTarget(收起态 body 不可见, 拉全量详情/走软切换链是浪费);
-    4. __peek 戳的两个消费点成对(缺一即串数据): _editDetail 绕开快照预填(否则限速/重命名
-       对话框拿行快照把已设限制错显成未设)+ toggleDrawerCollapse 展开时先补拉全量
-       (_switchDrawerTarget)再补跟(否则展开后还是旧行的详情);
-    5. 仅换目标不展开: peek 两方法体内不得出现 collapsed 翻转 / toggleDrawerCollapse /
-       openTorrentDrawer(展开仍归双击 / Enter / 右键「详情」, 收起态点页签先展开的补强二不变)。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    sel_js = open(os.path.join(shared, "selection.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
-
-    # 1. 鼠标/键盘分流在调用点(onTorrentClick), 键盘挂点 _kbFollowDrawer 的收起守卫原样保留
-    m = re.search(r"onTorrentClick\(m, event\) \{\n(.*?)\n    \},", sel_js, re.S)
-    assert m, "selection.js 缺 onTorrentClick(守阵正则失配, 同步本守阵)"
-    oc = m.group(1)
-    assert "if (this.drawer.collapsed) this._drawerPeekTarget(m.hash);" in oc, \
-        "onTorrentClick 收起态必须分流 _drawerPeekTarget(Q3: 收起态点行「点了没反应」)"
-    assert "this._kbFollowDrawer();" in oc, "onTorrentClick 展开态照旧走 _kbFollowDrawer(展开跟随不回退)"
-    assert oc.index("_drawerPeekTarget") > oc.index("this.shiftTorrentSel(m);"), \
-        "peek 分流必须落在 Ctrl/Shift 分支之后(修饰键选择手势不跟随, 边界②)"
-    # 1b. 三视图共用面板(2026-10-08 计划 26-10-08-1217): 成员行点击入口 onMemberClick 必须同款
-    #     分流 —— 辅种页/追剧页点成员行对开着的面板此前毫无反应(面板只认种子页种子行)。
-    mm = re.search(r"onMemberClick\(m, event\) \{\n(.*?)\n    \},", sel_js, re.S)
-    assert mm, "selection.js 缺 onMemberClick(守阵正则失配, 同步本守阵)"
-    mc = mm.group(1)
-    assert "if (this.drawer.collapsed) this._drawerPeekTarget(m.hash);" in mc, \
-        "onMemberClick 收起态必须分流 _drawerPeekTarget(三视图共用: 辅种/追剧成员行同种子页)"
-    assert "this._kbFollowDrawer();" in mc, \
-        "onMemberClick 展开态必须走 _kbFollowDrawer(三视图共用: 点成员行即换目标)"
-    kb = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert kb, "drawer.js 缺 _kbFollowDrawer(键盘跟随单点被移走? 同步本守阵)"
-    kbbody = kb.group(1)
-    assert "if (this.drawer.collapsed) return;" in kbbody, \
-        "键盘路径收起守卫不得移除(W3 有意设计: 收起态跟随暂停, 防连发键拉详情)"
-    assert kbbody.index("if (this.drawer.collapsed) return;") < kbbody.index("const c = this.kbCursor;"), \
-        "收起守卫必须保持在光标读取之前(收起态键盘跟随零开销返回)"
-
-    # 2. peek 纪律: 收起态单点 / 流量形态排除 / 种子页守卫 / hash 短路 / 防抖 / 停稳复核
-    m = re.search(r"_drawerPeekTarget\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert m, "drawer.js 缺 _drawerPeekTarget(收起态鼠标换目标入口, Q3 修复被拆?)"
-    pt = m.group(1)
-    assert "if (!this.drawer.open || !this.drawer.collapsed) return;" in pt, \
-        "peek 必须只服务收起态(展开态归 _kbFollowDrawer 管辖, 两路不得重入)"
-    assert 'if (this.drawer.kind !== "seed") return;' in pt, \
-        "peek 必须排除流量形态(全局/分组流量图没有种子目标, 点行不得改写其状态)"
-    assert 'if (this.page !== "groups") return;' in pt, \
-        "peek 缺主内容页守卫(2026-10-08 三视图共用面板: 只挡非主内容页, 不再挡视图)"
-    assert "if (this.drawer.hash === hash) return;" in pt, \
-        "peek 缺 hash 未变短路(同行重复点击零副作用, 与 _kbFollowDrawer 纪律4 同构)"
-    assert "this._followDrawerTimer = setTimeout" in pt and ", 200);" in pt, \
-        "peek 缺防抖 200ms(连点逐行拉摘要 = 请求风暴; 与键盘跟随共用 _followDrawerTimer)"
-    assert pt.count("!this.drawer.collapsed") >= 2, \
-        "peek 停稳复核缺收起态复核(定时器在途面板被展开/关闭, 不得再落地)"
-
-    # 3. peek 落地: 换 hash + 行快照摘要(P2-3)+ 页签静默拉; 不碰全量详情链
-    m = re.search(r"_drawerPeekApply\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert m, "drawer.js 缺 _drawerPeekApply(peek 落地单点)"
-    pa = m.group(1)
-    assert "this.drawer.hash = hash;" in pa, "peek 落地必须先换 hash(头部标题/状态图标由此实时反映新种子)"
-    assert 'this.drawer.detail = m ? { ...m, __peek: true } : null;' in pa, \
-        "peek 必须把行快照写进 drawer.detail 并打 __peek 戳(P2-3: 摘要条读 detail, 旧种子数据即危害面)"
-    assert 'this.drawer.error = "";' in pa, "peek 换目标必须作废上一个目标的 error(如「种子不存在或已被删除」)"
-    for frag in (
-        'this._fetchDrawerTrackers(true)', 'this._fetchDrawerPeers(true)', 'this._fetchDrawerFiles(true)',
-        'this._qbLoad("torrent")'
-    ):
-        assert frag in pa, f"peek 缺非常规页签静默拉取 {frag}(收起态摘要条在 tracker/用户/内容/流量页签也要换新)"
-    assert "_fetchDrawerDetail" not in pa and "_loadDrawerTab" not in pa and "_switchDrawerTarget" not in pa, \
-        "peek 不得拉全量详情/走软切换链(收起态 body 不可见, 口径 = 仅换目标不展开)"
-
-    # 4. __peek 戳两个消费点成对: _editDetail 绕开快照预填 + 展开先补拉再补跟
-    ed = re.search(r"async _editDetail\(hash\) \{\n(.*?)\n      try \{", drawer_js, re.S)
-    assert ed, "drawer.js 缺 _editDetail(守阵正则失配, 同步本守阵)"
-    assert "!this.drawer.detail.__peek" in ed.group(1), \
-        "_editDetail 必须绕开 __peek 行快照(拿快照预填限速/重命名会把已设限制错显成未设)"
-    tc = re.search(r"toggleDrawerCollapse\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert tc, "drawer.js 缺 toggleDrawerCollapse(守阵正则失配, 同步本守阵)"
-    tb = tc.group(1)
-    assert "this.drawer.detail.__peek" in tb and "this._switchDrawerTarget(this.drawer.hash);" in tb, \
-        "展开必须识别 __peek 快照并补拉全量(否则展开后还是旧行的详情)"
-    assert tb.index("__peek") < tb.index("this._kbFollowDrawer();"), \
-        "展开补拉必须先于补跟(补跟的定时器不被 _switchDrawerTarget 的 _stopDrawerFollow 清掉)"
-
-    # 5. 仅换目标不展开: peek 路径不得翻转 collapsed / 不得走显式开面板
-    for name, body in (("_drawerPeekTarget", pt), ("_drawerPeekApply", pa)):
-        assert "collapsed = " not in body and "toggleDrawerCollapse" not in body \
-            and "openTorrentDrawer" not in body, \
-            f"{name} 不得展开面板(Q3 口径: 收起态点行只换目标, 展开仍归双击/Enter/右键「详情」)"
-
-
 def test_frontend_drawer_groups_shows_views():
     r"""辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217)
 
@@ -1755,7 +1639,7 @@ def test_frontend_drawer_groups_shows_views():
     3. 两处成员行(辅种明细 / 追剧集明细)必须有 @dblclick 打开入口(与种子页同款);
     4. 键盘光标链 _kbRows 必须纳入展开的成员行(辅种的组下成员 / 追剧的集下成员), 否则 ↑↓
        走不到成员行、Alt+1~5 也解析不出目标(注释里原标「成员行 vNext」);
-    5. 跟随 _kbFollowDrawer / peek _drawerPeekTarget / 轮询 tick / 单种流量图 scope 四处守卫
+    5. 跟随 _kbFollowDrawer / 轮询 tick / 单种流量图 scope 三处守卫
        一律只挡主内容页 —— 换视图即停会让这两页的页签数据停在打开那一刻。
 
     任一守卫被改回按视图分叉即红(按视图各写一遍 = 又一处会漏的分叉)。"""
@@ -1796,13 +1680,10 @@ def test_frontend_drawer_groups_shows_views():
     assert "expandedShowEp" in rb, \
         "_kbRows 追剧分支必须纳入展开集的成员行(集内版本此前不在链上)"
 
-    # 5. 四处守卫一律只挡主内容页
+    # 5. 三处守卫一律只挡主内容页
     follow = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert follow and "viewMode" not in follow.group(1), \
         "_kbFollowDrawer 不得再挡视图(三视图共用: 辅种/追剧成员行光标同样要跟随)"
-    peek = re.search(r"_drawerPeekTarget\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
-    assert peek and "viewMode" not in peek.group(1), \
-        "_drawerPeekTarget 不得再挡视图(收起态在辅种/追剧页点成员行同样要换摘要)"
     poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", drawer_js, re.S)
     assert poll and "viewMode" not in poll.group(1), \
         "5s 轮询 tick 不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
@@ -1821,7 +1702,7 @@ def test_frontend_drawer_open_switch_no_empty_flash():
     两半修法钉住(pitfalls/web-ui/drawer-switch-flicker):
     1. 面板已开(种子形态)不得重建: 换目标交棒 _switchDrawerTarget 软切换(保留旧数据 + 160ms
        延迟遮罩, 与键盘跟随同链路), 同目标重入短路零副作用(与 openDrawerTraffic 同口径,
-       「打开入口的重入语义」), 收起态重按先展开 —— 分支必须落在 _stopDrawerPoll 等重建
+       「打开入口的重入语义」)—— 分支必须落在 _stopDrawerPoll 等重建
        副作用之前才算短路(同 test_frontend_qb_traffic_drawer_page_guard 第 5 锚口径);
     2. 冷启动重建(面板关着/流量形态换形, 无旧数据可保留): 初值页签的 loading 必须与空列表
        同帧置位, 详情在途窗口渲染加载态而非空态; 翻转仍归 fetcher 落袋单点(loading 清掉后才
@@ -1832,22 +1713,19 @@ def test_frontend_drawer_open_switch_no_empty_flash():
     assert m, "drawer.js 缺 openTorrentDrawer(守阵正则失配, 同步本守阵)"
     ob = m.group(1)
 
-    # 1. 已开(种子形态)重入分支: 收起先展开 + 同目标短路 + 换目标软切换, 先于重建副作用
+    # 1. 已开(种子形态)重入分支: 同目标短路 + 换目标软切换, 先于重建副作用
     assert 'if (this.drawer.open && this.drawer.kind === "seed") {' in ob, \
         "openTorrentDrawer 缺已开重入分支: 面板开着换种子仍走整体重建 = 空态->加载态->数据三连闪"
     assert ob.index('this.drawer.open && this.drawer.kind === "seed"') < ob.index("this._stopDrawerPoll()"), \
         "重入分支必须落在重建副作用(_stopDrawerPoll)之前(落在后面 = 短路失效, 闪烁回归)"
-    assert "if (this.drawer.collapsed) this.toggleDrawerCollapse();" in ob, \
-        "收起态重按入口 = 先展开(重入/换目标共用; 展开仍归双击/Enter/右键, peek 口径不回退)"
     assert "if (this.drawer.hash === hash) return;" in ob, \
         "缺同目标幂等短路: 面板开着重按同一目标, 整体重建把旧数据连 loading 各闪一遍"
     assert "this._switchDrawerTarget(hash);" in ob, \
         "已开换目标必须交棒软切换单点(保留旧数据 + 160ms 延迟遮罩), 不得自写清空/重建"
-    i_arm = ob.index("if (this.drawer.collapsed)")
     i_short = ob.index("if (this.drawer.hash === hash)")
     i_switch = ob.index("this._switchDrawerTarget(hash);")
-    assert i_arm < i_short < i_switch, \
-        "重入分支次序必须为 展开 -> 同目标短路 -> 换目标交棒(延迟遮罩只在展开态点亮, 展开须在前)"
+    assert i_short < i_switch, \
+        "重入分支次序必须为 同目标短路 -> 换目标交棒"
 
     # 2. 冷启动重建: 初值页签 loading 与空列表同帧置位(等待期渲染加载态, 不落空态)
     dm = re.search(r"this\.drawer = \{\n(.*?)\n      \};", ob, re.S)

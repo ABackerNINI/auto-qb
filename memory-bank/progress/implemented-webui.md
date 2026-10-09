@@ -5,6 +5,8 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **WEBUI 种子详情面板折叠状态整体移除**(2026-10-09; 档案 [26-10-09-webui-drawer-collapse-removal](../tasks/26-10-09-webui-drawer-collapse-removal.md)): 用户动议「WEBUI移除种子详情面板的折叠状态」—— `drawer.collapsed` 字段、收起/展开钮、44px 收起态头部摘要条(dt-summary)、收起态鼠标换目标 peek(`_drawerPeekTarget`/`_drawerPeekApply`/`__peek` 戳)、`toggleDrawerCollapse`、收起态守卫(qb_traffic_chart 三挂点 active / 拖拽 / 跟随 / Alt+页签)与三皮肤 CSS 全部摘除; 核心层 `dtSummaryHtml`/`_dtDefaultSummary` 与 7 个变体(03/06/09/10/11/12/15)的 `summary()` 供数链同撤(收起档专供, 全成死代码); 面板行为回归纯「开/关 + 拖拽调高」; 守阵同步(删 peek 守阵整函数、D1/W3 守阵改写); 基线见 kb.baseline 最新一条。
+
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
 - **WEBUI Tracker 状态卡片栅格宽度统一: 虚拟合并卡去 sp2**(2026-10-09; 同专题续作无独立档案, 切片 26-10-06-0751): 用户报「变体 04 状态卡片栅格: 启用 tracker 卡片半宽, 未启用的虚拟条目全宽, 需统一」—— 根因 = 虚拟合并卡沿用设计稿 `sp2` 类跨双列全宽, 与实体卡(各占一格半宽)不一致; 拍板「虚拟卡改半宽」: 删 `.dt04-card.sp2` CSS 规则与类引用, 虚拟卡与实体卡同占一格, 与设计稿的差异点在 `virtualCardHtml` 注释标明; 基线见 [26-10-09-2012](../testing/baselines/26-10-09-2012-webui-dt04-tracker-card-width.md)。

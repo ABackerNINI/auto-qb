@@ -2,8 +2,8 @@
  * (计划 26-10-06-0838 S2)
  *
  * 设计稿: resources/detail-panel-templates/03-general-dossier-collapsed.html(collapsed 档;
- * 收起/矮/高三档语义全部收进本变体 —— 收起 = 本变体 summary() 供给 44px 头部摘要条
- * (报告 §5 口径的基准实现: 做种中 · 进度 · 上速 · 比率 · HR 剩余 · 站点), 矮/高 = 双栏自适应滚动)。
+ * 矮/高 = 双栏自适应滚动。收起档(头部 44px 摘要条, 本变体 summary() 供给)已随面板
+ * 折叠状态整体移除(2026-10-09)。
  * 数据: 左主区 = 状态行(state/progress/availability)+ 基础/传输/时间/路径分组
  * (drawerGeneralSections() 预格式化结果); 右栏 = 归属徽章/标识(复制)/出处备注/限速配额/更多字段。
  * 字段行消费行级 icon 数据(sprite `<use href>` 静态引用, 着色复用经典链 icoTone 派生表,
@@ -132,12 +132,6 @@
     "  display:flex; align-items:center; gap:6px; }",
     ".drawer .dt03-ext summary:hover { color:var(--fg); }",
     ".drawer .dt03-ext[open] summary .dt03-chev { transform:rotate(180deg); }",
-    /* 摘要条(收起态, 核心以 v-html 消费) */
-    ".drawer .dt03-cs-st { color:var(--green); font-weight:600; }",
-    ".drawer .dt03-cs-pct { font-family:var(--font-mono, ui-monospace, monospace); color:var(--fg); }",
-    ".drawer .dt03-cs-up { font-family:var(--font-mono, ui-monospace, monospace); color:var(--today-up); }",
-    ".drawer .dt03-cs-hr { color:var(--hr-pending); }",
-    ".drawer .dt03-cs-site { font-family:var(--font-mono, ui-monospace, monospace); color:var(--accent); }",
   ].join("\n");
 
   const { present, size } = H; /* 公共格式化小工具(核心层单点) */
@@ -349,28 +343,7 @@
     });
   }
 
-  /* ---------------- 收起态摘要(报告 §5 口径的基准实现) ----------------
-   * 做种中 · 进度 · 上速 · 比率 · HR 剩余 · 站点; 返回已转义 HTML(值全走 dtHtml) */
-  function summary(ctx) {
-    const d = ctx.drawer && ctx.drawer.detail;
-    if (!d) return T`暂无详情`;
-    const parts = [];
-    const st = STATE_TEXT[d.state] || d.state || "—";
-    const stCls = SEEDING_STATES.indexOf(d.state) >= 0 ? "dt03-cs-st" : "";
-    parts.push(T`<span class="${stCls}">${st}</span>`);
-    parts.push(T`<span class="dt03-cs-pct">${((d.progress || 0) * 100).toFixed(1)}%</span>`);
-    parts.push(T`<span class="dt03-cs-up">↑ ${ctx.fmtSpeedOrDash(d.upspeed) || "—"}</span>`);
-    parts.push(T`<span>比率 ${(d.ratio ?? 0).toFixed(2)}</span>`);
-    if (d.hr_excluded) parts.push(T`<span>HR 已排除</span>`);
-    else if (d.hr_triggered) {
-      if (d.hr_satisfied) parts.push(T`<span>HR 已达标</span>`);
-      else if (d.hr_site_lane && d.hr_site_remain !== "" && d.hr_site_remain !== undefined && d.hr_site_remain !== null && d.hr_site_remain > 0) {
-        parts.push(T`<span class="dt03-cs-hr">HR 剩 ${ctx.fmtDuration(d.hr_site_remain)}</span>`);
-      } else parts.push(T`<span class="dt03-cs-hr">HR 未达标</span>`);
-    }
-    if (present(d.site) && d.site !== "") parts.push(T`<span class="dt03-cs-site" title="site">${d.site}</span>`);
-    return parts.join(' <span style="color:var(--fg-dim)">·</span> ');
-  }
+  
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
@@ -443,7 +416,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();

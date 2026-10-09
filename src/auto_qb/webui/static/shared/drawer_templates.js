@@ -2,8 +2,7 @@
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
- *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846)
- * + 收起态摘要默认实现。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
+ *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
  * 装载序: 必须排在 drawer.js 之后、state.js 之前(三份 index.html 的 tpl-manifest)。
@@ -16,7 +15,7 @@
  * 变体 render(host, ctx) 的 ctx 就是根组件实例(Vue mixin 方法域全在 this 上)。白名单面:
  *   读(状态): ctx.drawer.detail / .trackers / .files / .peers 及各 *Loading 态 / .error /
  *             各列表失败标记 trackersError / filesError / peersError(P3-5, 报告 26-10-07-0542:
- *             fetch 型变体据此区分「失败」与「真没有」) / .hash / .tab / .collapsed; ctx.qbCurData /
+ *             fetch 型变体据此区分「失败」与「真没有」) / .hash / .tab; ctx.qbCurData /
  *             qbCurPoints / qbCurSummary / qbCurWindow / qbCurError / qbCurPending(流量三域);
  *             ctx.memberByHash; ctx.flags(渐进字段门控)。
  *   调(格式化): fmtSpeed / fmtSpeedOrDash / fmtSize / fmtSizeOrDash / fmtDuration / fmtEta /
@@ -231,7 +230,6 @@
         /* 流量页签双宿主(图前/图后): slot = "pre" | "post"(缺省 post), 其余页签忽略 */
         slot: entry.slot === "pre" ? "pre" : "post",
         render: entry.render,
-        summary: typeof entry.summary === "function" ? entry.summary : null,
         notify: typeof entry.notify === "function" ? entry.notify : null,
         destroy: typeof entry.destroy === "function" ? entry.destroy : null,
       });
@@ -274,33 +272,25 @@
   };
   window.AQB_DRAWER_TPL_REG = TPL_REG;
 
-  /* ---------------- 核心基础样式(切换器/摘要条/宿主/流量布局类) ----------------
+  /* ---------------- 核心基础样式(切换器/宿主/流量布局类) ----------------
    * 只用上面白名单内的令牌; 类名 dt-* 供守阵与变体复用。 */
   dtInjectCss("00-core", [
-    /* P3-7(报告 26-10-07-0542): max-width 160 -> 240 —— 160px 硬上限截断长 label 的收起态。
+    /* P3-7(报告 26-10-07-0542): max-width 160 -> 240 —— 160px 硬上限截断长 label。
      * 26-10-07 用户报「切页签其它元素跟着变」: 原生 select 的自动最小宽 = 最宽 option 的宽,
      * dtTplOptions 按页签变化 => max-width 上限不改变内容驱动宽的病根, 选择器占位宽随页签变,
-     * 同排 .drawer-title(flex:1 1 auto + min-width:0)与收起摘要 .dt-summary 跟着让位回弹。
+     * 同排 .drawer-title(flex:1 1 auto + min-width:0)跟着让位回弹。
      * 修法 = 定宽取代 max-width —— 占位宽与选项集/页签/数据全部解耦。
      * 26-10-09 用户报「选择框太长」: 定宽 240 -> 150 —— 只收窄, 定宽口径不变(不回退内容驱动
      * 宽)。150px 扣去内边距/边框/下拉箭头约容 10 个全角字符, 现有 15 个 label 最长 8 全角符
      * (自然宽约 130px 含内边距与下拉箭头)固定宽不截断, text-overflow 只是防未来长 label 的
      * 保险丝(Chromium 对 select 生效, 其余内核退化为裁切, 不引入新的宽度抖动源)。min-width:0
-     * 允许极窄窗口下随标题按比例收缩(定宽在 flex 里即基准尺寸, shrink 语义不变)。收起摘要
-     * .dt-summary 是另一个独立定宽源(240px, 见下一条), 与本框各按内容域定宽, 不必等宽。 */
+     * 允许极窄窗口下随标题按比例收缩(定宽在 flex 里即基准尺寸, shrink 语义不变)。 */
     ".drawer .dt-select { align-self: center; width: 150px; min-width: 0; text-overflow: ellipsis; padding: 2px 4px;",,
     "  font: 12px/1.6 system-ui, sans-serif; color: var(--fg-muted); background: var(--bg-hover);",
     "  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); cursor: pointer;",
     "  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease); }",
     ".drawer .dt-select:hover, .drawer .dt-select:focus { color: var(--fg); border-color: var(--border-strong); outline: none; }",
     ".drawer .dt-select option { color: var(--fg); background: var(--bg-elev); }",
-    /* 收起摘要与切换器同款内容驱动宽病(速度/进度每轮询周期都在变, 收起态头部逐秒抖; 切页签
-     * 换摘要内容同款): flex-basis 定宽 240px —— 摘要文字短则留白、长则省略, 行几何与页签/数据
-     * 恒定解耦。与 .dt-select(150px)同为独立定宽源但各按内容域取值, 不必等宽(26-10-09 切换器
-     * 收窄后分叉; 摘要承载速度/进度文案需要更宽的稳定行)。 */
-    ".drawer .dt-summary { flex: 0 1 240px; min-width: 0; align-self: center; overflow: hidden;",
-    "  text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.5;",
-    "  color: var(--fg-muted); }",
     ".drawer .dt-host:empty { display: none; }",
     /* Q1(报告 26-10-07-0542 §2): 变体内容层最大可读宽度 —— 四页签宿主统一限宽居中, 4K 下
      * 键值栅格/英雄行/多列卡片不再等分拉伸到视口宽(单点收口, 15 个变体文件零复刻); 窄视口
@@ -318,7 +308,7 @@
 
   /* ---------------- Vue mixin(app.js 末尾 app.mixin(window.AQB_DRAWER_TPL)) ----------------
    * 方法本体都在这层; drawer.js 只留一行式钩子(_dtSync/_dtNotify/_dtUnmountAll, 经 this. 调用,
-   * 模板不可达所以允许 _ 前缀)。模板可达成员不带下划线(dtHostOn/dtPick/dtSummaryHtml)。 */
+   * 模板不可达所以允许 _ 前缀)。模板可达成员不带下划线(dtHostOn/dtPick)。 */
   window.AQB_DRAWER_TPL = {
     computed: {
       /* 当前生效页签的模板选项(经典恒在首位): 注册表是 boot 期静态数据, 依赖页签变化即可 */
@@ -391,7 +381,7 @@
         this._dtUnmountAll();
         this._dtMountActive(this._dtCurTab());
       },
-      /* 数据落袋/收起展开(drawer.js 四 fetcher + _qbLoad + toggleDrawerCollapse): 活动变体重渲染。
+      /* 数据落袋(drawer.js 四 fetcher + _qbLoad): 活动变体重渲染。
        * 未挂载/宿主已被拆时懒挂载兜底 —— 打开抽屉走 general 初值路径时 _loadDrawerTab 不执行
        * (openTorrentDrawer 只拉详情), 变体挂载靠 detail 落袋的第一发通知补齐; 流量正文块的
        * 加载/错误/空态分支会拆装宿主(v-if), 拆过就卸旧重挂(四页签宿主恒在, isConnected 恒真)。 */
@@ -403,7 +393,6 @@
           this._dtMountActive(tab);
           return;
         }
-        if (type === "collapse") return; /* 摘要条走模板响应式(v-html 重算), 通知预留给变体自身状态 */
         if (st.entry.notify) {
           try { st.entry.notify(type, st.host, this); } catch (e) { /* 变体通知失败不拖垮面板 */ }
           return;
@@ -465,75 +454,6 @@
           try { st.entry.destroy(st.host); } catch (e) { /* destroy 失败不阻断关闭 */ }
         }
         try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
-      },
-      /* ---------------- 收起态摘要(P-06: 压缩进 44px 头部, 模板 v-html 消费) ----------------
-       * 活动变体声明 summary(ctx) 则用其返回(契约: 已转义 HTML), 否则用内置默认实现。 */
-      dtSummaryHtml() {
-        var tab = this._dtCurTab();
-        var sel = (this.drawerTplSel || {})[tab] || "classic";
-        if (sel !== "classic") {
-          var entry = window.AQB_DRAWER_TPL_REG.get(tab, sel);
-          if (entry && entry.summary) {
-            try {
-              var s = entry.summary(this);
-              if (s) return String(s);
-            } catch (e) { /* 变体摘要失败回落内置默认 */ }
-          }
-        }
-        return this._dtDefaultSummary(tab);
-      },
-      /* 内置默认摘要(报告 §5 口径): 常规=状态·进度·速度·比率·HR / Tracker=健康比例 /
-       * 用户=构成比例 / 内容=体积构成+未完成数 / 流量=窗口累计。全部经 esc 转义。 */
-      _dtDefaultSummary(tab) {
-        var parts;
-        if (tab === "general") {
-          var d = this.drawer.detail;
-          if (!d) return esc("暂无详情");
-          parts = [
-            esc(d.state || "—"),
-            "进度 " + esc(((d.progress || 0) * 100).toFixed(1) + "%"),
-            "上 " + esc(this.fmtSpeedOrDash(d.dlspeed) || "—") + " · 下 " + esc(this.fmtSpeedOrDash(d.upspeed) || "—"),
-            "比率 " + esc((d.ratio ?? 0).toFixed(2)),
-          ];
-          if (d.hr_excluded) parts.push("HR 已排除");
-          else if (d.hr_triggered) parts.push("HR " + (d.hr_satisfied ? "已达标" : "未达标"));
-          return parts.join(" · ");
-        }
-        if (tab === "trackers") {
-          var ts = this.drawer.trackers || [];
-          var real = ts.filter(function (t) { return !this.drawerTrackerVirtual(t.url); }, this);
-          var ok = real.filter(function (t) { return t.status === 2; }).length;
-          var updating = real.filter(function (t) { return t.status === 3; }).length;
-          var bad = real.length - ok - updating;
-          parts = ["正常 " + ok + " / " + real.length];
-          if (updating) parts.push("更新中 " + updating);
-          if (bad) parts.push("异常 " + bad);
-          return esc(parts.join(" · "));
-        }
-        if (tab === "peers") {
-          var p = this.drawer.peers || {};
-          var list = Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
-          var dl = list.filter(function (x) { return (x.dlspeed || 0) > 0; }).length;
-          var ul = list.filter(function (x) { return (x.upspeed || 0) > 0; }).length;
-          return esc("共 " + list.length + " · 取流 " + dl + " · 供流 " + ul);
-        }
-        if (tab === "content") {
-          var files = this.drawer.files || [];
-          var total = 0, done = 0, unfinished = 0;
-          for (var i = 0; i < files.length; i++) {
-            var f = files[i];
-            total += f.size || 0;
-            done += (f.size || 0) * (f.progress || 0);
-            if ((f.progress || 0) < 1) unfinished++;
-          }
-          return esc("共 " + files.length + " 个 · " + (this.fmtSizeOrDash(done) || "—") + " / "
-            + (this.fmtSizeOrDash(total) || "—") + " · 未完成 " + unfinished);
-        }
-        /* traffic: 窗口累计(qbCurSummary 由 qb_traffic_chart.js 派生, 三挂点同形) */
-        var s = this.qbCurSummary;
-        if (!s) return esc("暂无流量数据");
-        return esc("窗口 " + (s.buckets || 0) + " 桶 · 上传 " + this.fmtSize(s.up || 0)
-          + " · 下载 " + this.fmtSize(s.down || 0));
       },
     },
   };

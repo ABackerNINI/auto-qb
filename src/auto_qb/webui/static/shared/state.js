@@ -99,11 +99,10 @@ window.AQB_STATE = {
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
       // 底部详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
-      // collapsed(W3 方案A): 收起态 = 只留头部(~44px), 展开恢复; 字段必须显式建(vue-reactivity 坑)
       // kind(2026-10-04 双形态): "seed" = 种子详情(五页签) / "traffic" = qB 口径流量图(全局/分组,
       //   scope 记挂点); 两形态共用同一抽屉壳与同一拖拽高度(drawerHeightPx) —— 原模态弹层已并入。
       drawer: {
-        open: false, collapsed: false, hash: "", tab: "general", loading: false, error: "",
+        open: false, hash: "", tab: "general", loading: false, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
         // FX-29 切换目标期的遮罩态: 保留旧内容撑住面板几何, 遮罩盖住旧值防误读, 新数据到手才撤
@@ -112,7 +111,7 @@ window.AQB_STATE = {
       },
       drawerLastTab: initialDrawerTab(),  // 记住上次停留的 tab(跨种子打开 + 刷新保持); 见 initialDrawerTab()
       // 面板高度记忆(W3 方案A): 用户拖拽调高后的 px; null = 未拖拽过, 走 CSS 默认上限 42vh。
-      // D1 拍板: 首屏默认收起(drawer.open 初值 false 不回读 drawerOpen 键), 高度记忆仍生效
+      // D1 拍板: 首屏默认关闭(drawer.open 初值 false 不回读 drawerOpen 键), 高度记忆仍生效
       drawerHeightPx: initialDrawerHeight(),
       // 详情面板模板选择(plan 26-10-06-0838 S1, P-01 初装全 classic): 按页签记模板 id;
       // 读侧白名单在核心层 readSel, 脏值/缺失/写失败一律回落 classic —— 字段必须显式建(vue-reactivity 坑)

@@ -289,11 +289,9 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       return hash || "";
     },
-    /* 编辑类对话框取当前值: 抽屉已开且同一 hash 直接用 drawer.detail —— **__peek 行快照除外**
-     * (收起态鼠标换目标的快照只有摘要字段, 见 _drawerPeekApply; 拿它预填限速/重命名会把
-     * "已设限制"错显成"未设", 必须绕开现拉真值) */
+    /* 编辑类对话框取当前值: 抽屉已开且同一 hash 直接用 drawer.detail(免一次请求) */
     async _editDetail(hash) {
-      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail && !this.drawer.detail.__peek) {
+      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail) {
         return this.drawer.detail;
       }
       try {
@@ -659,11 +657,8 @@ window.AQB_DRAWER = {
        * 塌一下; pitfalls/web-ui/drawer-switch-flicker「拉新数据前先清空旧数据」)。已开 = 有旧
        * 数据可保留, 归软切换语义: 换目标交棒 _switchDrawerTarget(保留旧数据 + 160ms 延迟遮罩,
        * 与键盘跟随同链路); 同目标重入零副作用(重建把旧数据连 loading 各闪一遍 —— 同坑档
-       * 「打开入口的重入语义」, 与 openDrawerTraffic 同目标短路同口径)。收起态重按 = 先展开
-       * (peek 行快照的全量补拉由 __peek 链兜住), 展开在前、换目标在后: _switchDrawerTarget 的
-       * 延迟遮罩只在展开态点亮, 且其 _stopDrawerFollow 要能清掉展开补跟的在途定时器。 */
+       * 「打开入口的重入语义」, 与 openDrawerTraffic 同目标短路同口径)。 */
       if (this.drawer.open && this.drawer.kind === "seed") {
-        if (this.drawer.collapsed) this.toggleDrawerCollapse();  // 收起态重按 = 展开(重入/换目标共用)
         if (this.drawer.hash === hash) return;  // 同目标重入: 短路(重建 = 对同一目标再闪一遍)
         this._switchDrawerTarget(hash);
         return;
@@ -677,7 +672,7 @@ window.AQB_DRAWER = {
       const initialTab = last === "traffic" && !this.qbTrafficOn ? "general" : (last || "general");
       this._qbTeardown();  // 若上一形态是流量图(全局/分组), 换到种子详情时收轮询与图
       this.drawer = {
-        open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
+        open: true, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         // 初值页签的 loading 与空列表同帧置位(26-10-07 报障的冷启动半边): 面板关着/流量形态换形
         // 才走重建, 无旧数据可保留 —— 详情在途窗口期非常规页签的空列表若以 loading=false 裸奔,
@@ -698,7 +693,7 @@ window.AQB_DRAWER = {
       // 创造的; 2026-10-04 回归取证)。流量页签高度恒定(drawerPanelStyle 定高), 不进集合。
       this._drawerWait = new Set(initialTab === "traffic" ? ["detail"] : this._drawerWaitSources(initialTab));
       this._drawerOpenReveal = hash;
-      this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
+      this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认关闭)
       this._kbRevealRow(hash);   // 显式打开也让位: 停靠面板一开就压住列表底部, 被点行(双击/右键/Enter)要露出来(2026-10-03 报障)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
       if (initialTab !== "general") this._loadDrawerTab(initialTab);
@@ -846,8 +841,6 @@ window.AQB_DRAWER = {
     /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
      * 切换即记住该 tab(drawerLastTab + localStorage), 使下一个种子默认停在相同页签。 */
     drawerTab(tab) {
-      // 补强二(计划 26-10-06-0838 S1, 报告 §5): 收起态点页签 = 先展开再切, 消灭"点了没反应"
-      if (this.drawer.collapsed) this.toggleDrawerCollapse();
       if (this.drawer.tab === tab) return;
       this.drawer.tab = tab;
       this.drawerLastTab = tab;
@@ -889,7 +882,6 @@ window.AQB_DRAWER = {
      *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内 5s 轮询(_startDrawerPoll)照旧, 互不打架。 */
     _kbFollowDrawer() {
       if (!this.drawer.open) return;
-      if (this.drawer.collapsed) return;  // W3 收起态跟随暂停(body 不可见, 拉了也看不见); 展开时补跟
       if (this.page !== "groups") return;  // 主内容页守卫(面板停靠落点; 三视图共用)
       const c = this.kbCursor;
       if (!c || c.kind !== "torrent") return;  // kind 守卫(组行/剧/集单元不跟随)
@@ -897,8 +889,8 @@ window.AQB_DRAWER = {
       if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
       this._followDrawerTimer = setTimeout(() => {
         this._followDrawerTimer = null;
-        // 停稳复核: 面板已关/已收起 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
-        if (!this.drawer.open || this.drawer.collapsed || this.page !== "groups") return;
+        // 停稳复核: 面板已关 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
+        if (!this.drawer.open || this.page !== "groups") return;
         const cur = this.kbCursor;
         if (!cur || cur.kind !== "torrent" || cur.id === this.drawer.hash) return;
         this._switchDrawerTarget(cur.id);
@@ -909,49 +901,6 @@ window.AQB_DRAWER = {
         clearTimeout(this._followDrawerTimer);
         this._followDrawerTimer = null;
       }
-    },
-    /* ---------------- 收起态鼠标换目标(Q3 + P2-3, 报告 26-10-07-0542) ----------------
-     * 触发入口: selection.js::onTorrentClick 普通单击且面板收起时分流至此 —— 键盘路径照旧走
-     * _kbFollowDrawer(首行「收起即返回」对键盘是有意设计: 收起态跟随暂停, 防连发键拉详情),
-     * 鼠标单击不再复用该守卫: 收起态点行只换目标**不展开**(面板保持 44px, 头部标题 + 摘要条
-     * 立即反映新种子) —— body 不可见, 拉全量详情是浪费; 摘要条可见, 必须换新。
-     * 纪律与 _kbFollowDrawer 同构: 防抖 200ms(共用 _followDrawerTimer —— 两路按收起态互斥,
-     * 后到的显式动作清掉前一路在途定时器, 天然"最后动作优先")+ hash 未变短路(同行重复点击
-     * 零副作用)。 */
-    _drawerPeekTarget(hash) {
-      if (!this.drawer.open || !this.drawer.collapsed) return;
-      if (this.drawer.kind !== "seed") return;  // 流量形态(全局/分组)不是种子目标, 不 peek
-      if (this.page !== "groups") return;  // 主内容页守卫(面板停靠落点; 三视图共用)
-      if (this.drawer.hash === hash) return;   // 纪律: hash 未变短路(同行重复点击)
-      if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
-      this._followDrawerTimer = setTimeout(() => {
-        this._followDrawerTimer = null;
-        // 停稳复核: 面板已关/已展开(展开态归 _kbFollowDrawer 管辖)/切页走了 -> 放弃本次 peek
-        if (!this.drawer.open || !this.drawer.collapsed || this.page !== "groups") return;
-        this._drawerPeekApply(hash);
-      }, 200);
-    },
-    /* peek 落地: 换 hash + 摘要换新(零请求优先)。
-     * 常规页签摘要(核心 _dtDefaultSummary 与各变体 summary)同读 drawer.detail —— 旧种子数据
-     * 就是 P2-3 的危害面。行数据(SEED_ITEM)已含摘要消费的全部字段(状态/进度/速度/比率/HR/
-     * 站点), 整份行快照写进 drawer.detail 并打 __peek 戳: ① 变体摘要不逐个配合即换新;
-     * ② __peek 戳表示"detail 是行快照非全量详情" —— 展开时 toggleDrawerCollapse 据此经
-     * _switchDrawerTarget 补拉全量, _editDetail 据此绕开快照预填, 两个消费点缺一即串数据。
-     * 非常规页签的摘要数据源(trackers/peers/files/traffic)行里没有 -> 按当前页签**静默**拉一发
-     * (与 5s 轮询同链路同 hash 戳守卫; 静默 = 不动 loading 态, 收起态 body 不可见无加载观感;
-     * 流量只拉数据, 图不重建 —— torrent 挂点 active 挡收起态, 展开补建走既有钩子)。 */
-    _drawerPeekApply(hash) {
-      this.drawer.hash = hash;
-      this.drawer.error = "";  // error 属于上一个目标(如「种子不存在或已被删除」), 换目标即作废
-      // P3-5: 三个列表失败标记同口径作废(新目标的失败态由随后的静默拉取重新落)
-      this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";
-      const m = this.memberByHash.get(hash);
-      this.drawer.detail = m ? { ...m, __peek: true } : null;
-      const tab = this.drawer.tab;
-      if (tab === "trackers") this._fetchDrawerTrackers(true);
-      else if (tab === "peers") this._fetchDrawerPeers(true);
-      else if (tab === "content") this._fetchDrawerFiles(true);
-      else if (tab === "traffic" && this.qbTrafficOn) this._qbLoad("torrent");
     },
     /* ---------------- FX-29 换目标: 软切换(治「上下键切换种子时抽屉闪烁」, 26-10-03) ----------------
      * 旧实现把 detail / trackers / files / peers 一把清空再重拉, 面板每一次光标移动都走一遍
@@ -1006,7 +955,7 @@ window.AQB_DRAWER = {
       this._drawerBusyDisarm();
       this._busyArmTimer = setTimeout(() => {
         this._busyArmTimer = null;
-        if (this.drawer.open && !this.drawer.collapsed) this.drawer.switching = true;
+        if (this.drawer.open) this.drawer.switching = true;
       }, 160);
     },
     _drawerBusyDisarm() {
@@ -1037,9 +986,9 @@ window.AQB_DRAWER = {
     },
     /* ---------------- W3 高度治理(计划 26-10-03-0917 §2.1/§3.5/D1) ----------------
      * 拖拽调高: 面板顶缘 .drawer-grip 的 pointer 事件(pointer capture, move 实时改高),
-     * 夹取 [240px, 70vh]; 收起/展开钮: 收起态只留头部(~44px); 持久化: 高度与开合态进
+     * 夹取 [240px, 70vh]; 持久化: 高度与开合态进
      * localStorage(autoqb.ui.drawerHeight / autoqb.ui.drawerOpen, 与 drawerTab 同族口径)。
-     * D1 拍板 = 首屏默认收起 + 高度记忆仍生效: drawer.open 初值恒 false(state.js),
+     * D1 拍板 = 首屏默认关闭 + 高度记忆仍生效: drawer.open 初值恒 false(state.js),
      * drawerOpen 键只作记录(写入不回读) —— 与「开合态记忆」字面有出入, 首屏满高优先(硬约束)。 */
     /* 夹取函数(纯逻辑, 守阵可锚): px 夹进 [240, 0.7*viewportH]。极小视口下 70vh<240 时
      * 取 70vh 为上界、下界随之取 min(240, 上界) —— 区间保持合法, 面板不越过 70vh 红线。 */
@@ -1052,9 +1001,9 @@ window.AQB_DRAWER = {
      * (CSS 默认 max-height:42vh 只管未拖拽过的内容自适应态; 拖到 42vh 以上必须放开);
      * 流量形态必须给确定高度 —— 图高 = 宿主高(撑满抽屉可用高), 无确定高度时 flex 无解,
      * 故未拖拽过时回落 42vh(与 CSS 默认上限同值); 与种子详情共用同一 drawerHeightPx(高度复用);
-     * 收起/关闭态交给 CSS(收起 = body 隐藏, 高度回落头部行高) */
+     * 关闭态交给 CSS(面板不渲染) */
     drawerPanelStyle() {
-      if (!this.drawer.open || this.drawer.collapsed) return {};
+      if (!this.drawer.open) return {};
       const px = this.drawerHeightPx || (this.qbTrafficActive ? Math.round(window.innerHeight * 0.42) : 0);
       if (!px) return {};
       const h = this._drawerClampHeight(px, window.innerHeight);
@@ -1064,7 +1013,7 @@ window.AQB_DRAWER = {
      * !命名约束: 模板内联处理器不得用 `_` 前缀 —— Vue 3.5 运行时编译的模板解析不了
      * 下划线开头的裸标识符(ReferenceError), 本文件其余 `_` 方法只经 this.xx 调用故无恙。 */
     drawerGripDown(e) {
-      if (!this.drawer.open || this.drawer.collapsed) return;  // 收起态无 body 可调
+      if (!this.drawer.open) return;
       if (e.button !== undefined && e.button !== 0) return;    // 只认主键
       e.preventDefault();  // 防拖拽起手选中文本/触发滚动
       const panel = e.currentTarget.parentElement;  // grip 是 .drawer 的首子节点
@@ -1075,7 +1024,7 @@ window.AQB_DRAWER = {
     drawerGripMove(e) {
       const d = this._drawerDrag;
       if (!d || e.pointerId !== d.pid) return;
-      if (!this.drawer.open || this.drawer.collapsed) { this.drawerDragStop(); return; }  // 拖拽中面板被关(键盘路径)
+      if (!this.drawer.open) { this.drawerDragStop(); return; }  // 拖拽中面板被关(键盘路径)
       this.drawerHeightPx = this._drawerClampHeight(d.startH + (d.startY - e.clientY), window.innerHeight);
     },
     drawerGripUp(e) {
@@ -1088,33 +1037,15 @@ window.AQB_DRAWER = {
       this._drawerDrag = null;
       document.body.classList.remove("drawer-resizing");
     },
-    /* 收起/展开: 收起 = 只留头部(body 隐藏); 展开即向当前光标补跟(收起期键盘跟随暂停, 见
-     * _kbFollowDrawer; 鼠标单击在收起态已实时换目标 —— peek, 数据侧快照由下方补拉兜底) */
-    toggleDrawerCollapse() {
-      this.drawer.collapsed = !this.drawer.collapsed;
-      this.persistDrawerOpen();
-      this._dtNotify("collapse");  // 模板核心层(计划 26-10-06-0838 S1): 摘要条走模板响应式, 通知留给变体自身状态
-      if (!this.drawer.collapsed) {
-        // 收起期鼠标换过目标(peek, 见 _drawerPeekApply): detail 还是行快照 -> 展开即补拉全量
-        // (_switchDrawerTarget 自带 loading/遮罩/页签数据全链)。此时目标已实时切到光标行,
-        // _kbFollowDrawer 的 hash 短路不会再触发, 数据侧由这里兜住 —— 不会"展开后还是旧行的详情";
-        // 补拉在前、补跟在后: 后者的 200ms 定时器不被 _switchDrawerTarget 的 _stopDrawerFollow 清掉
-        if (this.drawer.detail && this.drawer.detail.__peek) this._switchDrawerTarget(this.drawer.hash);
-        this._kbFollowDrawer();
-        // 流量形态: 收起期 body 不可见(图不重建), 展开后宿主重新有尺寸 -> 补一发建图
-        const s = this.qbCurScope;
-        if (s) this.$nextTick(() => this._qbChartBuild(s));
-      }
-    },
     persistDrawerHeight() {
       try {
         localStorage.setItem("autoqb.ui.drawerHeight", String(this.drawerHeightPx));
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
     },
-    /* 开合态记录(D1): 展开=1, 收起/关闭=0。只写不回读 —— 首屏恒默认收起(硬约束), 键按计划创建 */
+    /* 开合态记录(D1): 展开=1, 关闭=0。只写不回读 —— 首屏恒默认关闭(硬约束), 键按计划创建 */
     persistDrawerOpen() {
       try {
-        localStorage.setItem("autoqb.ui.drawerOpen", this.drawer.open && !this.drawer.collapsed ? "1" : "0");
+        localStorage.setItem("autoqb.ui.drawerOpen", this.drawer.open ? "1" : "0");
       } catch { /* 写入失败: 不影响本轮 */ }
     },
     /* ---------------- 出入过渡(Vue <transition> JS 钩子, drawer.html 接线; 用户报"出现/消失很生硬") ----------------

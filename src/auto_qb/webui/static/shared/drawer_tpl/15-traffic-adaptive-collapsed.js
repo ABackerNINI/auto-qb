@@ -1,11 +1,10 @@
 /* auto-qb WEB UI · 详情面板 traffic 页签变体 15「紧凑自适应(收起)」(计划 26-10-06-0838 S6)
  *
  * 设计稿: resources/detail-panel-templates/15-traffic-adaptive-collapsed.html(collapsed 档;
- * 收起/矮/高三档语义全部收进本变体)。三档处置:
+ * 矮/高两档语义收进本变体)。处置:
  *   - 高档 = KPI 5 格全量(累计上/下行 / 峰值上行 / 平均上行 / 采样健康; 限速格渐进同 13);
- *   - 矮档 = KPI 收成单行(标签左值右, 副文隐藏);
- *   - 收起档 = 正文 KPI 行整体隐藏(图独占), 头部 44px 摘要条由 summary() 供给
- *     (P-06: 近 30 分钟上行迷你走势内联 SVG + 当前窗口累计上下行 + 峰值 + 窗口名)。
+ *   - 矮档 = KPI 收成单行(标签左值右, 副文隐藏)。
+ * 收起档(正文 KPI 隐藏 + 头部 44px 摘要条)已随面板折叠状态整体移除(2026-10-09)。
  * 降级机制(纯 CSS, 不量 JS): 仅当本变体 KPI 在场时把 .dt-traffic-main 声明为 size 容器
  * (:has() 探测, 不碰 Vue 元素属性), @container 按容器高三档切换 KPI 行形态 —— 随抽屉拖拽
  * /换档实时跟随, ResizeObserver 只属于图本体(经典链), 变体零 JS 参与。
@@ -17,8 +16,7 @@
  * 渲染纪律: dtHtml 全量转义(SVG 内层为纯数字点串, 经 dtRaw 拼接), replaceChildren 原子换帧,
  * 数据未变(qbCurData 引用 + 限速字段浅比较)跳过重建; 无监听无定时器, destroy 只作重置。
  * KPI 图标(Q2, 报告 26-10-07-0542): KPI 行每格标签前置 sprite 图标, 图形/着色与变体 13 同族
- * (sprite 既有 symbol + 值色随格); 收起摘要条不加 —— 44px 头部已有迷你走势 SVG 作视觉锚点,
- * ↑/↓ 单字符是摘要条的紧凑既有记法(与变体 03 摘要同语言), 12px 图标不增信息密度。
+ * (sprite 既有 symbol + 值色随格)。↑/↓ 单字符是紧凑既有记法, 12px 图标不增信息密度。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -61,15 +59,6 @@
     "  color:var(--fg-dim); }",
     ".drawer .dt15-kpi .k .ico.is-up { color:var(--today-up); }",
     ".drawer .dt15-kpi .k .ico.is-dl { color:var(--today-down); }",
-    /* 收起摘要条内联件(44px 头部, 核心以 v-html 消费) */
-    ".drawer .dt15-spark { width:118px; height:22px; flex:none; vertical-align:middle; }",
-    ".drawer .dt15-spark .base { stroke:var(--border-soft); stroke-width:1; fill:none; }",
-    ".drawer .dt15-spark .curve { stroke:var(--today-up); stroke-width:1.5; fill:none;",
-    "  stroke-linejoin:round; stroke-linecap:round; }",
-    ".drawer .dt15-cs-up { font-family:var(--font-mono, ui-monospace, monospace); color:var(--today-up); }",
-    ".drawer .dt15-cs-dl { font-family:var(--font-mono, ui-monospace, monospace); color:var(--today-down); }",
-    ".drawer .dt15-cs-pk { font-family:var(--font-mono, ui-monospace, monospace); color:var(--fg); }",
-    ".drawer .dt15-cs-win { color:var(--fg-dim); }",
   ].join("\n");
 
   function fmtIv(s) {
@@ -159,58 +148,13 @@
     host.replaceChildren(document.createRange().createContextualFragment(html));
   }
 
-  /* ---------------- 收起态摘要(P-06): 近 30 分钟上行迷你走势 + 窗口累计 ----------------
-   * 迷你走势取窗口尾部(采样间隔口径的 30 分钟桶数; agg 段窗桶宽 > 30 分钟时取末 12 桶近似),
-   * null 桶断段(spanGaps 语义与图本体一致); 无有效采样只剩基线。 */
-  function sparkInner(ctx) {
-    const pts = ctx.qbCurPoints || [];
-    if (!pts.length) return "";
-    const iv = Number((ctx.qbCurData && ctx.qbCurData.meta && ctx.qbCurData.meta.interval_s) || 0) || 0;
-    const n = iv > 0 ? Math.max(2, Math.round(1800 / iv)) : 12;
-    const tail = pts.slice(Math.max(0, pts.length - n));
-    let max = 0;
-    for (const p of tail) if (p && (p.up || 0) > max) max = p.up || 0;
-    if (!(max > 0)) max = 1;
-    const W = 118, H = 22, PAD_B = 2, PAD_T = 2;
-    const segs = [];
-    let cur = null;
-    for (let i = 0; i < tail.length; i++) {
-      const p = tail[i];
-      if (!p) {  /* null 桶断段 */
-        if (cur && cur.length > 1) segs.push(cur.join(" "));
-        cur = null;
-        continue;
-      }
-      const x = (tail.length > 1 ? (i / (tail.length - 1)) * W : 0).toFixed(1);
-      const y = (H - PAD_B - ((p.up || 0) / max) * (H - PAD_B - PAD_T)).toFixed(1);
-      if (!cur) cur = [];
-      cur.push(x + "," + y);
-    }
-    if (cur && cur.length > 1) segs.push(cur.join(" "));
-    let inner = `<line class="base" x1="0" y1="${H - PAD_B}" x2="${W}" y2="${H - PAD_B}"/>`;
-    for (const s2 of segs) inner += `<polyline class="curve" points="${s2}"/>`;
-    return inner;
-  }
-
-  function summary(ctx) {
-    const c = derive(ctx);
-    const s = c.sum || { up: 0, down: 0 };
-    const inner = sparkInner(ctx);
-    const spark = T`<svg class="dt15-spark" viewBox="0 0 118 22" preserveAspectRatio="none" aria-hidden="true">${R(inner)}</svg>`;
-    const parts = [spark,
-      T`<span class="dt15-cs-up">↑ ${ctx.fmtSize(s.up || 0)}</span>`,
-      T`<span class="dt15-cs-dl">↓ ${ctx.fmtSize(s.down || 0)}</span>`,
-      T`<span class="dt15-cs-pk">峰值 ${ctx.fmtSpeed(c.peak)}</span>`,
-      T`<span class="dt15-cs-win">窗口 ${ctx.qbCurWindow}</span>`];
-    return parts.join(' <span style="color:var(--fg-dim)">·</span> ');
-  }
+  
 
   reg.register({
     id: "15", tab: "traffic", slot: "pre",
     label: "自适应 KPI 行",
     css: CSS,
     render,
-    summary,
     destroy(host) {
       ui.lastData = null; /* 下次挂载强制整帧重建 */
       if (host) host.replaceChildren();

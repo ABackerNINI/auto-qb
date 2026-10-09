@@ -1,8 +1,8 @@
 /* auto-qb WEB UI · 详情面板 peers 页签变体 09「密度雷达表(收起改良)」(计划 26-10-06-0838 S4)
  *
  * 设计稿: resources/detail-panel-templates/09-peers-density-collapsed.html(collapsed 档;
- * 收起/矮/高三档语义全部收进本变体 —— 收起 = 本变体 summary() 供给 44px 头部雷达摘要
- * (构成比例条 + 上下行合计 + 吸血 / 连接计数), 矮/高 = 30px 行距密度表自适应滚动)。
+ * 矮/高 = 30px 行距密度表自适应滚动。收起档(头部 44px 雷达摘要: 构成比例条 + 上下行
+ * 合计 + 吸血 / 连接计数, 本变体 summary() 供给)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询); 「↑ 占用」列 = 该对端 upspeed 占
  * 当前上行合计的比重(条长 + 数值), 默认按它降序 —— 第一行就是最吃上行的对端。
  * 动作: 悬停标记(展示, CSS :hover); 筛选 chips 与列头排序为纯前端态。
@@ -20,15 +20,6 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
-
-  /* 方向五桶(与 07/08 同判据, 纯 flags 派生) */
-  const BUCKETS = [
-    { key: "take", text: "取流中", color: "--today-up" },
-    { key: "feed", text: "供流中", color: "--today-down" },
-    { key: "idle", text: "闲置同伴", color: "--border-strong" },
-    { key: "choke", text: "被我方限流", color: "--warn" },
-    { key: "hand", text: "握手中", color: "--fg-dim" },
-  ];
 
   /* qB peer_info 标志位逐项解释(设计稿同款; 色映射按 S1 白名单就近取) */
   const FLAG_META = {
@@ -145,15 +136,6 @@
     ".drawer .dt09-rel { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-muted); text-align:right; }",
     ".drawer .dt09-empty { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
-    /* 收起态摘要(核心以 v-html 消费) */
-    ".drawer .dt09-cs { display:inline-flex; align-items:center; gap:10px; max-width:100%; overflow:hidden; }",
-    ".drawer .dt09-cs .hbar { flex:none; display:inline-flex; width:96px; height:6px; border-radius:999px;",
-    "  overflow:hidden; background:var(--bg-sunken); }",
-    ".drawer .dt09-cs .hbar i { display:block; height:100%; }",
-    ".drawer .dt09-cs b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",
-    ".drawer .dt09-cs .cs-up { font-family:var(--font-mono, ui-monospace, monospace); color:var(--today-up); }",
-    ".drawer .dt09-cs .cs-dn { font-family:var(--font-mono, ui-monospace, monospace); color:var(--today-down); }",
-    ".drawer .dt09-cs .is-bad { color:var(--error); }",
   ].join("\n");
 
   /* ---------------- 派生(与 07/08 同判据) ---------------- */
@@ -338,32 +320,7 @@
     });
   }
 
-  /* ---------------- 收起态摘要: 构成比例条 + 吸血计数(44px 头部雷达) ---------------- */
-  function summary(ctx) {
-    const list = peerList(ctx);
-    /* P3-5: 收起态摘要同样区分失败与空(重试口径真实: 本页签 5s 轮询会自动重拉) */
-    const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    if (err && !list.length) return T`用户列表加载失败, 将重试`;
-    if (!list.length) return T`暂无已连接用户`;
-    _ctx = ctx;
-    const n = { take: 0, feed: 0, idle: 0, choke: 0, hand: 0 };
-    for (const p of list) n[bucketOf(p)]++;
-    const total = list.length || 1;
-    const seg = (b) => (n[b.key] > 0
-      ? T`<i style="width:${(n[b.key] / total * 100).toFixed(1)}%;background:var(${b.color})"></i>`
-      : "");
-    const bar = BUCKETS.map(seg).join("");
-    const upTotal = list.reduce((s, p) => s + num(p.upspeed), 0);
-    const dnTotal = list.reduce((s, p) => s + num(p.dlspeed), 0);
-    const bad = countOf(list, "bad");
-    return T`<span class="dt09-cs">
-      <span class="hbar" title="连接构成比例条(取流/供流/闲置/限流/握手)">${R(bar)}</span>
-      <span class="cs-up" title="上下行合计(上行)">↑ ${fmtSpeedOf(upTotal)}</span>
-      <span class="cs-dn" title="上下行合计(下行)">↓ ${fmtSpeedOf(dnTotal)}</span>
-      ${R(bad ? T`<span class="is-bad" title="吸血嫌疑计数">吸血 <b>${bad}</b></span>` : "")}
-      <span title="连接计数">连接 <b>${list.length}</b></span>
-    </span>`;
-  }
+  
 
   function onClick(ev) {
     const h = ev.currentTarget;
@@ -421,7 +378,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();

@@ -1,8 +1,8 @@
 /* auto-qb WEB UI · 详情面板 trackers 页签变体 06「增强表格(收起改良)」(计划 26-10-06-0838 S3)
  *
  * 设计稿: resources/detail-panel-templates/06-trackers-table-collapsed.html(collapsed 档;
- * 收起/矮/高三档语义全部收进本变体 —— 收起 = 本变体 summary() 供给 44px 头部健康比例条,
- * 矮/高 = 增强表格自适应滚动)。
+ * 矮/高 = 增强表格自适应滚动。收起档(头部 44px 健康比例条, 本变体 summary() 供给)
+ * 已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /trackers qB 透传(drawer.trackers, 5s 轮询)。逐行汇报倒计时按 P-02 升级为真 per-tracker
  * 口径(行级 next_announce, qB 5.2+/WebAPI 2.13.0 起随 /trackers 透传, Unix epoch 秒) 减 now;
  * qB < 5.2 无该字段 → 回退种子级 detail.reannounce_in 全局近似并标「全局」; 真口径下
@@ -122,17 +122,6 @@
     /* 空态 */
     ".drawer .dt06-empty { padding:22px 0; display:flex; align-items:center; justify-content:center; gap:8px;",
     "  color:var(--fg-dim); font-size:12.5px; }",
-    /* 收起态摘要(核心以 v-html 消费) */
-    ".drawer .dt06-cs { display:inline-flex; align-items:center; gap:8px; max-width:100%; overflow:hidden; }",
-    ".drawer .dt06-cs .hbar { flex:none; display:inline-flex; width:96px; height:6px; border-radius:999px;",
-    "  overflow:hidden; background:var(--bg-sunken); }",
-    ".drawer .dt06-cs .hbar i { display:block; height:100%; }",
-    ".drawer .dt06-cs .hb-ok { background:var(--green); }",
-    ".drawer .dt06-cs .hb-warn { background:var(--warn); }",
-    ".drawer .dt06-cs .hb-upd { background:var(--blue); }",
-    ".drawer .dt06-cs .hb-err { background:var(--error); }",
-    ".drawer .dt06-cs b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; color:var(--fg); }",
-    ".drawer .dt06-cs .is-err { color:var(--error); }",
   ].join("\n") + "\n@keyframes dt06-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }";
 
   /* ---------------- 分桶 / 计数 ---------------- */
@@ -144,12 +133,6 @@
     if (s === 4) return "err";
     if (s === 1) return "warn";
     return "off"; /* 0 = 未启用(非虚拟也按此档) */
-  }
-
-  function countsOf(ctx, trackers) {
-    const n = { ok: 0, warn: 0, upd: 0, err: 0, off: 0 };
-    for (const t of trackers) n[bucketOf(ctx, t)]++;
-    return n;
   }
 
   const num = (v) => v !== undefined && v !== null && Number(v) >= 0;
@@ -298,34 +281,7 @@
     });
   }
 
-  /* ---------------- 收起态摘要: 健康比例条(实体计数为权值) ----------------
-   * 比例条 + 计数; 返回已转义 HTML(核心以 v-html 消费) */
-  function summary(ctx) {
-    const ts = (ctx.drawer && ctx.drawer.trackers) || [];
-    /* P3-5: 收起态摘要同样区分失败与空(重试口径真实: 本页签 5s 轮询会自动重拉) */
-    const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    if (err && !ts.length) return T`tracker 列表加载失败, 将重试`;
-    if (!ts.length) return T`暂无 tracker`;
-    const n = countsOf(ctx, ts);
-    const real = ts.length - ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
-    const total = real || 1;
-    /* 比例条段: 返回的是本变体 dtHtml 产出的预转义字符串, join 后统一 R 一次 */
-    const seg = (cls, cnt) => (cnt > 0
-      ? T`<i class="${cls}" style="width:${(cnt / total * 100).toFixed(1)}%"></i>`
-      : "");
-    const bar = [seg("hb-ok", n.ok), seg("hb-warn", n.warn), seg("hb-upd", n.upd), seg("hb-err", n.err)].join("");
-    const parts = [
-      T`<span title="健康构成计数(正常)">正常 <b>${n.ok}</b></span>`,
-      n.warn ? T`<span title="异常计数(警告)">警告 <b>${n.warn}</b></span>` : "",
-      n.err ? T`<span class="is-err" title="异常计数(失败)">失败 <b>${n.err}</b></span>` : "",
-      T`<span title="实体 tracker 计数(虚拟条目另计)">实体 <b>${real}</b></span>`,
-      ts.length - real ? T`<span title="虚拟条目计数(qB 合成)">虚拟 ${ts.length - real}</span>` : "",
-    ].filter(Boolean).join("");
-    return T`<span class="dt06-cs">
-      <span class="hbar" title="实体 tracker 健康构成(比例条)">${R(bar)}</span>
-      ${R(parts)}
-    </span>`;
-  }
+  
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
@@ -386,7 +342,6 @@
       host.__dtCtx = ctx;
       _render(host, ctx);
     },
-    summary,
     destroy,
   });
 })();
