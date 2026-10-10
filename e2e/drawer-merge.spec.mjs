@@ -111,5 +111,32 @@ for (const skin of SKINS) {
       // 单栏 classic 正文不受扰动
       await expect(drawer.locator('[data-dt-host="general"] .drawer-sec').first()).toBeVisible();
     });
+
+    test(`合并态快捷键: Alt+1/2 切两合并页签, Alt+4 停用 @fast (${skin})`, async ({ page }) => {
+      /* 2026-10-10 用户报「标签合并后没有同步修改快捷键」的回归: 合并成功时 Alt+1..5 按位次重排到
+       * 三张可见页签(1=常规&内容 / 2=Tracker&用户 / 3=流量), 4/5 停用。此处真按键验 Alt+1/2 切对、
+       * Alt+4 零变化(不借道 vm; 判据读双列 data-merge, 与用户所见一致)。 */
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await page.waitForTimeout(300);
+
+      // 开合并: 右键单开关 -> 页签栏收敛, 默认双列 = gc
+      await drawer.locator('.drawer-body').click({ button: 'right' });
+      await page.locator('.ctx-menu').locator(MERGE_ITEM).click();
+      const split = drawer.locator('.drawer-split');
+      await expect(split).toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+
+      // Alt+2 -> Tracker&用户(tp); Alt+1 -> 回常规&内容(gc); Alt+4 合并态停用 -> 零变化(仍 gc)
+      await page.keyboard.press('Alt+Digit2');
+      await expect(split, 'Alt+2 必须切到 Tracker&用户 对').toHaveAttribute('data-merge', 'tp', { timeout: 5_000 });
+      await page.keyboard.press('Alt+Digit1');
+      await expect(split, 'Alt+1 必须切回 常规&内容 对').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+      await page.keyboard.press('Alt+Digit4');
+      await expect(split, 'Alt+4 合并态停用, 双列不得切换').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+    });
   });
 }

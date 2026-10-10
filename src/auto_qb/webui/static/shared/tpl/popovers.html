@@ -338,7 +338,7 @@
             <div class="kb-help-grp-t">{{ grp }}</div>
             <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-help-row">
               <span class="kb-help-label">
-                {{ it.label }}
+                {{ kbLabel(it) }}
                 <span v-if="it.danger" class="kb-danger">⚠</span>
               </span>
               <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>

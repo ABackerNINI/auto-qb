@@ -148,7 +148,7 @@
                       <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row"
                            :class="{ rec: kbRecId === it.id }">
                         <span class="kb-row-label">
-                          {{ it.label }}
+                          {{ kbLabel(it) }}
                           <span v-if="it.danger" class="kb-danger">⚠ 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
                           <span v-if="it.fixed" class="hb-badge on">固定</span>
                         </span>

@@ -82,6 +82,11 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   _kbDrawerTab("traffic") 且方法内补流量门控: 未启用提示后忽略, 不许切到无按钮隐形页签) /
   traffic-win-prev-next(新「流量图」组, [ ], **when 条件绑定 qbTrafficActive** + run qbCycleWindow);
   引擎在 preventDefault 之前分流 when(假则不消费键位, 留给浏览器)
+- test_drawer_tab_shortcuts_merge_remap: 详情面板合并页签态快捷键重排(2026-10-10 用户报
+  「标签合并后没有同步修改快捷键」) —— KB_MERGE_TAB_REMAP 位次表(1=常规&内容 / 2=Tracker&用户 /
+  3=流量, 4/5 停用) + _kbDrawerTab 内重排**先于**流量门控(第 3 档 remap 成 traffic 后仍过
+  qbTrafficOn 门) + _kbMergeTabsOn 读 dtMergeTabsOn(与页签栏 v-if 同一判据) + 帮助浮层/设置页
+  文案经 kbLabel 随态改写(静态 label 未合并时不变)
 - test_shortcut_toggle_semantics: 切换语义(2026-10-09, 报告 26-10-09-1731 §03/§04) —— 6 条「适合」
   条目开/关双态: open-stats/open-history/open-qb-traffic/help-panel 的 run 指向 _kbToggle*
   (已开 ⇒ closeX, 未开 ⇒ openX); 详情面板 I 仍走 _kbOpenDrawer 但方法含「已开同目标 ⇒
@@ -838,6 +843,51 @@ def test_qb_traffic_shortcuts() -> None:
         "引擎缺 when 条件绑定分流(条件项无流量图时也会吞掉 [ / ])"
     assert body.index("item.when && !item.when(this)") < body.index("e.preventDefault();\n      item.run(this);"), \
         "when 分流必须在 preventDefault 之前(否则键位已被消费, 「留给浏览器」成空话)"
+
+
+def test_drawer_tab_shortcuts_merge_remap() -> None:
+    """详情面板合并页签态页签快捷键重排(2026-10-10 用户报「标签合并后没有同步修改快捷键」)。
+
+    病根: R3 把页签栏收敛成 [常规&内容][Tracker&用户](+流量) 后, 注册表五档(Alt+1..5)未随动,
+    按 Alt+3 名义上是「用户页」却落在收起的页签上。修法 = 合并态按**位次**重排到三张可见页签,
+    未合并(dtMergeTabsOn false)保持五档原样。逐条钉住不变量:
+    ① 位次表 KB_MERGE_TAB_REMAP: 1->general / 2->trackers / 3->traffic, 4/5 停用(null);
+    ② _kbDrawerTab 消费该表且重排在流量门控**之前**(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门);
+    ③ 判据单点 _kbMergeTabsOn 读 dtMergeTabsOn computed(与页签栏 v-if 同一判据, 不自造第二套);
+    ④ 帮助浮层 / 设置页快捷键文案经 kbLabel 随态改写, 未合并回落注册表静态 label。"""
+    eng = _read("shortcuts.js")
+
+    # ① 位次表: 前 3 档落三张可见页签, 4/5 停用(null)
+    remap = re.search(r"const KB_MERGE_TAB_REMAP = \{(.*?)\};", eng, re.S)
+    assert remap, "shortcuts.js 找不到 KB_MERGE_TAB_REMAP(合并态位次重排表)"
+    body = remap.group(1)
+    for frag in ('general: "general"', 'trackers: "trackers"', 'peers: "traffic"', "content: null", "traffic: null"):
+        assert frag in body, f"KB_MERGE_TAB_REMAP 缺位次映射片段: {frag}"
+
+    # ② _kbDrawerTab 消费重排表, 且先于流量门控
+    dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
+    assert dtab, "shortcuts.js 找不到 _kbDrawerTab"
+    tb = dtab.group(1)
+    assert "this._kbMergeTabsOn()" in tb, "_kbDrawerTab 未接合并态判据(_kbMergeTabsOn)"
+    assert "KB_MERGE_TAB_REMAP[tab]" in tb, "_kbDrawerTab 未消费 KB_MERGE_TAB_REMAP"
+    assert tb.index("KB_MERGE_TAB_REMAP[tab]") < tb.index('tab === "traffic" && !this.qbTrafficOn'), \
+        "合并态重排必须先于流量门控(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门)"
+
+    # ③ 判据单点
+    helper = re.search(r"_kbMergeTabsOn\(\) \{(.*?)\n    \},", eng, re.S)
+    assert helper and "this.dtMergeTabsOn" in helper.group(1), \
+        "_kbMergeTabsOn 必须读 dtMergeTabsOn(与页签栏 v-if 同一判据, 不许自造第二套)"
+
+    # ④ 文案随态: 两处模板改用 kbLabel; kbLabel 只改写详情面板组 + 随合并态
+    for rel in ("tpl/popovers.html", "tpl/settings-detail.html"):
+        assert "{{ kbLabel(it) }}" in _read(rel), f"{rel} 快捷键文案未走 kbLabel(合并态与页签栏对不上)"
+    kb_label = re.search(r"kbLabel\(item\) \{(.*?)\n    \},", eng, re.S)
+    assert kb_label, "shortcuts.js 找不到 kbLabel(随态文案单点)"
+    lb = kb_label.group(1)
+    assert 'item.group !== "详情面板"' in lb, "kbLabel 只应改写「详情面板」组(其余回落静态 label)"
+    assert "this._kbMergeTabsOn()" in lb, "kbLabel 必须随合并态(未合并不改写)"
+    for frag in ("常规&内容", "Tracker&用户", "打开/切到 流量", "合并态停用"):
+        assert frag in lb, f"kbLabel 合并态文案缺: {frag}"
 
 
 def test_shortcut_toggle_semantics() -> None:

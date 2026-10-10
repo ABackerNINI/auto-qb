@@ -25,6 +25,7 @@
  *   - W5 局部作用域: scope 五值全量生效 —— settings(设置页 Ctrl+S, inputSafe 输入框内也放行) /
  *     modal(模态层白名单: 模态内只响应模态键位, 本期无条目, 引擎已留位); drawer 档自方案A W2
  *     (计划 26-10-03-0917)起无条目 —— 停靠面板是列表附属, Alt+1-4 改 list 作用域双态(_kbDrawerTab)。
+ *     (2026-10-10)详情面板合并页签态: Alt+1~5 按位次重排到三张可见页签(见 KB_MERGE_TAB_REMAP)。
  *   - W6 自定义: 设置页「快捷键」分区(录制器 VS Code 按下即录模式 / 冲突三选一 / 黑名单拒绑 /
  *     单条与全部重置 / 保存 PUT 落盘) + ? 帮助浮层(只读速查)。Esc 是唯一 fixed 键, 面板不可改。
  *   - 流量图三入口(2026-10-05): 打开全局图 Ctrl+Backslash(run 内 qbTrafficOn 门控 + 未启用
@@ -117,6 +118,18 @@ const KB_SELF_TOGGLE_OVERLAY = {
   "open-history": "historyOpen",
   "help-panel": "kbHelpOpen",
   "col-picker": "colMenuOpen",
+};
+
+/* 合并页签态快捷键**位次重排**(2026-10-10 用户报「标签合并后没有同步修改快捷键」):
+ * 详情面板合并页签开启且宽度门内时, 页签栏只剩 [常规&内容][Tracker&用户](+流量) 三张可见页签,
+ * 注册表五档(Alt+1..5 -> general/trackers/peers/content/traffic)按**位次**重排到可见页签:
+ *   第 1 档 -> 常规&内容(general) / 第 2 档 -> Tracker&用户(trackers) / 第 3 档 -> 流量(traffic);
+ *   第 4/5 档(原 内容/流量 页) 合并态无独立页签 -> null(停用, 静默)。
+ * key = 注册表条目 run 传入的原页签; value = 合并态实际落点(null = 该档停用)。只作用于键盘
+ * run 路径(鼠标页签点击走 dtMergeTabPick / drawerTab, 不受影响)。未合并(开关关 / 宽度门外,
+ * 页签栏回落四页签)时整张表不生效, 五档原样。 */
+const KB_MERGE_TAB_REMAP = {
+  general: "general", trackers: "trackers", peers: "traffic", content: null, traffic: null,
 };
 
 /* 条目生效键位 = 模板基准(def) ⊕ 草稿 overrides(恒胜出); 空串 = 显式禁用(§4.7) */
@@ -306,7 +319,8 @@ const AQB_SHORTCUT_DEFS = [
   { id: "force-start", group: "队列与开关", label: "强制开始切换",
     def: "Shift+KeyF", scope: "list",
     run: (vm) => vm._kbTorrentToggle("force-start", "force_start", "强制开始") },  // 可逆故不入危险档(§08)
-  // ---- G · 局部作用域(设置页局部键位, W5; 方案A W2 起详情面板四条独立成组, 双态见 _kbDrawerTab) ----
+  // ---- G · 局部作用域(设置页局部键位, W5; 方案A W2 起详情面板四条独立成组, 双态见 _kbDrawerTab;
+  //      2026-10-10 起合并页签态下五档按位次重排到三张可见页签, 见 KB_MERGE_TAB_REMAP / _kbMergeTabsOn) ----
   { id: "drawer-tab-general", group: "详情面板", label: "详情面板 · 打开/切到常规页",
     def: "Alt+Digit1", scope: "list",
     run: (vm) => vm._kbDrawerTab("general") },
@@ -831,6 +845,15 @@ window.AQB_SHORTCUTS = {
         this.toast("详情面板只在种子/辅种/追剧页可用", "info", 2500);
         return;
       }
+      /* 合并页签态位次重排(2026-10-10 用户报「标签合并后没有同步修改快捷键」): 合并成功
+       * (dtMergeTabsOn: 开关开 + 宽度门内, 页签栏只剩三张可见页签)时把注册表五档按位次重排到
+       * 可见页签(1=常规&内容 / 2=Tracker&用户 / 3=流量, 4/5 停用); 未合并五档原样。必须先于流量
+       * 门控 —— 第 3 档重排成 traffic 后仍要过 qbTrafficOn 门(未启用提示后忽略, 不切到隐形页签)。 */
+      if (this._kbMergeTabsOn()) {
+        const remapped = KB_MERGE_TAB_REMAP[tab];
+        if (!remapped) return;  // 合并态无对应页签: 静默(键已消费, 无浏览器默认动作)
+        tab = remapped;
+      }
       // 流量页签受功能门控: 页签按钮 v-if=qbTrafficOn 不渲染, 切到隐形页签 = 卡在一个没有
       // 按钮可切回的页(与 openTorrentDrawer 的 initialTab 归一同一口径), 未启用时提示后忽略
       if (tab === "traffic" && !this.qbTrafficOn) {
@@ -851,6 +874,11 @@ window.AQB_SHORTCUTS = {
       this.drawerLastTab = tab;      // openTorrentDrawer 以 drawerLastTab 为初始页签
       this.persistDrawerTab();       // 与 drawerTab 切页同口径(下一个种子默认停在相同页签)
       this.openTorrentDrawer(hash);
+    },
+    /* 合并页签态判据(2026-10-10): 直接消费详情面板模板核心层的 dtMergeTabsOn computed(开关开 +
+     * 宽度门内, 与抽屉页签栏 v-if 同一判据), 未接线/无该 computed 时回落 false —— 不重排即回五档。 */
+    _kbMergeTabsOn() {
+      return !!this.dtMergeTabsOn;
     },
     /* ---------------- W2/W3: 选择与目标解析 ---------------- */
     _kbHint() {
@@ -1250,6 +1278,21 @@ window.AQB_SHORTCUTS = {
     },
     kbEntriesOf(group) {
       return AQB_SHORTCUT_DEFS.filter((it) => it.group === group);
+    },
+    /* 条目显示名(帮助浮层 / 设置页快捷键分区共用): 合并页签态下「详情面板」组五档重排到三张
+     * 可见页签, 静态 label 会与页签栏对不上, 故在此按态改写 —— 前 3 档点名对应可见页签, 后 2 档
+     * 标「合并态停用」; 非本组条目 / 未合并一律回落注册表静态 label(注册表仍是 label 单一事实源)。 */
+    kbLabel(item) {
+      if (!item) return "";
+      if (item.group !== "详情面板" || !this._kbMergeTabsOn()) return item.label;
+      const merged = {
+        "drawer-tab-general": "详情面板 · 打开/切到 常规&内容",
+        "drawer-tab-trackers": "详情面板 · 打开/切到 Tracker&用户",
+        "drawer-tab-peers": "详情面板 · 打开/切到 流量",
+        "drawer-tab-content": "详情面板 · 打开/切到内容页(合并态停用)",
+        "drawer-tab-traffic": "详情面板 · 打开/切到流量页(合并态停用)",
+      };
+      return merged[item.id] || item.label;
     },
     /* 条目当前生效键位(草稿 ⊕ 模板基准): 与引擎 _kbTable 同口径, 空串 = 显式禁用 */
     kbSerialOf(item) {
