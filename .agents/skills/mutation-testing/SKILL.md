@@ -57,7 +57,7 @@ user-invocable: true
 > 这 8 条全部由 `.commands/mutants/` 包的脚本内建(它们是「看着正常但不生效」的写法), 正常路径**不需要手工拼**。
 > 逐条取证与 14 条坑的完整表在报告 §10。
 
-**另有 4 条是流程约束(脚本没法内建, 靠执行时守)**:
+**另有 7 条是流程约束(脚本没法内建, 靠执行时守)**:
 
 9. **池要覆盖被测包的「函数面」** —— 池窄到只剩几个文件时, 被测包里**没有任何池内测试碰过**的函数会整片落进
    `no tests`(config 首轮: 55 条全集中在两个规则条件校验器上), 那批变异连三分类都做不了。定池时先核
@@ -74,6 +74,19 @@ user-invocable: true
 13. **手上只有「变异形态」没有 id 时, 走形态级手搓复验, 别硬凑 `mutants.verify`** —— 真洞 issue 常只写
     形态(如「`_get(spec, KEY, d.<field>)` 的默认值换成 None」「某个关键字实参被删」)而给不出 id,
     而 `mutants.verify` 是**按 id** 工作的, 这时用不上。做法见下节「形态级手搓复验(无 id 时的第二条路)」。
+14. **多 clone 并行时每会话用专用镜像** —— 镜像默认 `~/auto-qb-mut`, **多会话共用**; 而 `mutants.run` 每次都
+    `rm -rf mutants`, 并行会话一开跑就把**你正在跑的** `mutants/<pkg>/*.meta` 一起删掉, 使你在下一次结果落盘时
+    崩在 `FileNotFoundError: mutants/.../<file>.meta`(实测 hr 首轮在 5125/8027 处崩, 85% 作废)。
+    用 `--mirror '~/auto-qb-mut-<pkg>'` 各占一份(`report` / `verify` 带**同一个** `--mirror`); 并存时把
+    `--children` 降到 3(对方 4)。判别(两份 `mutmut run` / `only_mutate` 被别人改 / `mutants/` 下出现别人目标的
+    `.meta`)与处置见 [pitfalls/testing/mutants-shared-mirror.md](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md)。
+15. **整包单轮可能 >60 min, 且被截断后可续跑** —— `mutants.run` 的 timeout 是 3600s; hr(24 文件 / 8,027 变异)
+    实测墙时 ≈96 min(报告 §08 的单价锚点是在 config 上量的, 大包慢数倍; 且 mutmut 按「估计快的先跑」,
+    长尾吃掉大半)。撞超时后**不要从零重跑**: mutmut 对未变函数**保留既有 `exit_code`**, 直接在镜像里
+    `cd <mirror> && .venv/bin/mutmut run --max-children 4` 会**跳过已有结果、只补余量**, 与整跑等价
+    (实测: 60 min 到 6838/8027, 续跑 35m52s 补齐)。注意这条**必须绕过 `mutants.run`**(它每次都
+    `rm -rf mutants` 把续跑点删掉); 结果照旧落 `mutants/*.meta`, 之后 `mutants.report` 正常读。
+    **更稳的是先按模块切**(见「派生计划」§5 停手点)。
 
 ## 命令 (一律走 task id)
 
@@ -124,6 +137,12 @@ user-invocable: true
 > **存活数是「选择池」的函数** —— 实测同一 `utils.py` 只换池, 存活 97 → 70(−27%); 一个被判存活的变异, 拿全套件手工验证其实是被杀死的。
 > 这条不先立规矩就投产, 第一份存活清单会被当成缺口单, 人力全浪费在伪洞上。完整判据见坑档
 > [mutation-pool-artifact.md](../../../memory-bank/pitfalls/testing/mutation-pool-artifact.md)。
+
+> **推论: 假存活率也是池宽的函数, 池宽时 `mutants.verify` 帮不上忙(hr 首轮实测, 与 config 相反)** ——
+> 池宽到**覆盖整包**(hr: 15 文件 / 457 fn)时, S4 抽验 **24/24 全是 SURVIVED、0 假存活**(池内测试碰过几乎所有
+> 函数, 没有「池外能杀」的候选可捞); 池窄(config: 6 文件)时同一动作捞到 **20% 假存活**。
+> ⇒ **池宽时别指望 `mutants.verify` 缩小候选**(它只会把候选原样确认一遍), 工作量落在**读 diff 判真洞 vs 等价**
+> (机器给不了, 见下「形态级手搓复验」的边界); 池窄时它才是「捞假存活」的利器。判据是「池内测试有没有碰过这个函数」。
 
 **为什么机器提名 + 手工确认**: 手工红验回答「我刚写的守阵是不是空转」(与行为同构, 是收尾动作); 机器变异回答「哪些地方我**从没想过要写守阵**」—— 后者人做不了(没人会去改自己没动过的那几万行)。两者是分工, 不是替换。
 
@@ -178,11 +197,13 @@ user-invocable: true
 
 > `no tests`(没有任何测试覆盖)与 `survived`(有覆盖但没杀掉)是**两类**, 分开记 —— 两个工具的分母不同, 分数只能各自纵向比, 别横向混。
 
-**两个会判红的记录纪律**(都是机械守卫, 不是建议):
+**三条记录纪律(前两条是机械守卫, 会判红; 第三条靠执行时守)**:
 
 - **切片之外不手抄 `N passed`** —— 回写守卫(判据族 B)只允许测试数字出现在 `testing/baselines/` 切片里;
   任务档案 / activeContext / 主题文档一律写「见 `kb.baseline`」或指向切片, 否则 `test.quick` 判红。
 - **新建的 issue 要填 `doc-refs`** —— 被任务档案的 `Refs` 列出时必须反向声明认领方路径, 否则 `kb.check` 报「认领链单向」。
+- **轮次号先看远端再取** —— 轮次记在**共享档案**里, 多 clone 并行时两个会话可能各挑同一个号(实测 hr 轮与 config 轮
+  都用了 R11); 开工前 `git fetch` 看远端档案已到哪一轮, 合流 rebase 时**后到者重编号**(本轮 R11 → R14)。
 
 ## 覆盖进度总表(收尾必更)
 
@@ -225,6 +246,10 @@ user-invocable: true
    - 变异数 ≈ 行数 × 1.0(实测 0.84–1.23/行); 单轮时长 ≈ 变异数 × 0.134s(包级锚点, WSL 8 核 `--max-children 4`)。
      口径按**目标 glob 命中的全行**算就行 —— **别**自作聪明剔除「纯数据声明」行: config 首轮这么精化后估 ≈3,800,
      实测 **4,799**(+26%), 估算只用于排期, **首轮一律以实测为准**并原样记进切片。
+   - **墙时别用单价外推(hr 首轮实测)**: 0.134s/变异是在 config(6 文件池)上量的; hr(24 文件 / 15 文件池)整体
+     ≈**1.4 变异/s**(≈0.7s/变异, 慢约 5x), 且**极不均匀** —— mutmut 按「估计快的先跑」, 前 85% 用 60 min,
+     余 15% 长尾再花 36 min。**大包排期按「每 1,000 变异 ≥12 min」并留 2x 余量**, 并在计划里写明
+     「单轮 >60 min 就按模块切」(§5 停手点)。
    - 池: 列出 X 的直接测试文件; 说明为何不用全 `tests/`; 并核「池是否覆盖目标包的函数面」(见硬约束 9 ——
      池太窄时, 没被池碰过的函数会整片落进 `no tests`, 那批变异连三分类都做不了)。
 3. **执行步骤**(每步一条 `commands run <task>`, **不写裸命令**)
@@ -243,6 +268,9 @@ user-invocable: true
    - **常驻锚 §07 覆盖进度总表已同步该包行**(硬约束 12) —— 日期/变异数/杀死率与切片逐位一致, 且挂了切片链接。
 5. **风险与停手点**
    - 基线不绿 → 停, 先修; WSL 无响应 → `wsl --shutdown` 后降 `--max-children` 重来; 池越宽内存越紧 → 回定向池。
+   - **单轮墙时超 60 min**(撞 `mutants.run` 的 3600s timeout)或内存吃紧 → **按模块再切**(先跑最大单模块, 再逐模块),
+     别硬撑整包; 已跑一半的可用 mutmut 续跑补齐(硬约束 15)。
+   - **有并行会话在跑变异** → 用专用镜像 + 降 `--children`(硬约束 14), 否则对方 `rm -rf mutants` 会删掉你正在跑的结果。
 
 **计划的边界**: 计划只写「怎么修 / 为什么这么修」; **不在计划里实施**。执行时按 [memory-bank skill](../memory-bank/SKILL.md) 立任务档案, 轮次进档案。
 
@@ -261,6 +289,9 @@ user-invocable: true
   工具侧 `mutants.status` 的这处失真**已修(2026-10-08, `cd X && cmd` 直连形态)**;
   `mutants.run` 本来就不受影响。若再见到 `mutmut=no`, 见
   [pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md)。
+- **多 clone 并行共用镜像会被对方冲毁** —— 并行会话的 `rm -rf mutants` 删掉你正在跑的 `.meta`, 崩在
+  `FileNotFoundError: mutants/...meta`。判别与处置见
+  [pitfalls/testing/mutants-shared-mirror.md](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md)(硬约束 14)。
 
 ## 反模式
 
@@ -282,3 +313,7 @@ user-invocable: true
 - ❌ 判「等价变异」前不问「输入能不能区分派生值与字段默认」 —— 派生值恰等于字段默认时, 删实参在现存
   输入下就是等价的; 先造能区分的输入再下结论, 别把可观测的真洞误判成等价变异而放过。
 - ❌ 跑完一轮**不更常驻锚 §07 覆盖进度总表** —— 「覆盖到哪几个包了」就散了, 下轮得翻遍切片才知道谁做过了(硬约束 12; 该表只放汇总刻度与指针, 不是流水)。
+- ❌ 多 clone 并行**共用默认镜像** —— 并行会话的 `rm -rf mutants` 会删掉你正在跑的结果, 崩在 `FileNotFoundError: mutants/...meta`(实测 hr 首轮 85% 作废); 各占一份 `--mirror` + 降 `--children`(硬约束 14)。
+- ❌ 宽池时指望 `mutants.verify` **缩小候选** —— 池覆盖整包时它只会把候选原样确认一遍(实测 24/24 SURVIVED / 0 假存活); 该直接读 diff 判真洞 vs 等价, 别把整轮时间耗在「确认已知结论」上。
+- ❌ 撞 `mutants.run` 的 3600s 超时后**从零重跑整包** —— mutmut 可续跑(硬约束 15), 重跑等于白烧一遍长尾; 但续跑必须绕过 `mutants.run`(它会 `rm -rf mutants`)。
+- ❌ 轮次号**不看远端就取** —— 轮次记在共享档案里, 并行会话会撞号(实测 hr 轮与 config 轮都用了 R11); 开工先 `git fetch` 看远端档案的轮次, 合流时后到者重编号。

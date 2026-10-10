@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-testing-feasibility">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-08-0231">
-<meta name="doc-updated" content="26-10-10-0957">
+<meta name="doc-updated" content="26-10-10-1135">
 <style>
   :root {
     --bg: #10151a;
@@ -611,7 +611,7 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
       <tr><td>补测 + 复跑</td><td>补 10 个守阵(红验 18/18 全红) → 同目标同池复跑: 杀 3,972 · 存活 <b>772</b> → 杀死率 <b>82.77%</b>; <b>存活 −121 / 新增存活 0</b></td></tr>
       <tr><td>真洞候选分布</td><td>writer 74 · sections 45 · schema/__init__ 27 · core 25 · loaders 16 · rules 11 · migrations 10 · curves 9 · site_presets 2 · impact 1</td></tr>
     </table>
-    <h3>这轮与后续轮次给流程的五条修正</h3>
+    <h3>这轮与后续轮次给流程的八条修正</h3>
     <ul>
       <li><b>「全套件确认」是最大成本项</b>(≈15s/条) —— 已收进命令包 <code>mutants.verify</code>(apply → 全套件 → 还原, 可续跑); 候选要先按「判据密度 × 出错代价」收窄, 别对全部存活无差别开跑。</li>
       <li><b>池太窄会成片产生 <code>no tests</code></b> —— 55 条全部集中在两个规则条件校验器上(池内 6 个文件不覆盖规则条件), 那批变异连三分类都做不了。定池先核「覆盖目标包的函数面」。</li>
@@ -625,7 +625,35 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
         锚点 <code>count != 1</code> 必须报错停手(否则「变异没生效」会被当成「守阵挡不住」)。同源发现:
         <b>派生值恰等于字段默认时, 删实参是等价变异</b> —— 判等价前先造能区分的输入(合成非默认档案),
         别把可观测的真洞误判成等价变异。已写进 skill 硬约束 13 与「形态级手搓复验」节。</li>
+      <li><b>多 clone 并行时共用镜像会被对方冲毁(2026-10-10, hr 轮)</b> —— 镜像默认 <code>~/auto-qb-mut</code>
+        是<b>多会话共用</b>的, 而 <code>mutants.run</code> 每次都 <code>rm -rf mutants</code>; 并行会话一开跑就把你
+        <b>正在跑</b>的 <code>mutants/&lt;pkg&gt;/*.meta</code> 删掉, 你在下一次落盘时崩在
+        <code>FileNotFoundError: mutants/.../&lt;file&gt;.meta</code>(实测 hr 首轮在 5,125/8,027 处崩, 已跑 85% 作废)。
+        处置: 每会话 <code>--mirror '~/auto-qb-mut-&lt;pkg&gt;'</code> 各占一份 + 并存时 <code>--children</code> 降到 3。
+        判别(两份 <code>mutmut run</code> / <code>only_mutate</code> 被别人改 / <code>mutants/</code> 下出现别人目标的
+        <code>.meta</code>)见坑档 <code>pitfalls/testing/mutants-shared-mirror.md</code>; 已写进 skill 硬约束 14。</li>
+      <li><b>大包单轮可 &gt;60 min, 且被截断后可续跑(2026-10-10, hr 轮)</b> —— <code>mutants.run</code> 的 timeout 原是
+        3600s(按 config 量级定的); hr(24 文件 / 8,027 变异)实测墙时 ≈<b>96 min</b>(前 85% 用 60 min, 长尾 15% 再花 36 min
+        —— mutmut 按「估计快的先跑」)。处置: ①<code>mutants.run</code> 的 timeout <b>抬到 7200</b>(<code>config.toml</code>);
+        ②被截断后<b>别从零重跑</b> —— mutmut 对未变函数保留既有 <code>exit_code</code>, 在镜像里
+        <code>.venv/bin/mutmut run</code> <b>续跑</b>只补余量, 与整跑等价(须绕过 <code>mutants.run</code>, 它每次都
+        <code>rm -rf mutants</code>); ③更稳的是<b>按模块切</b>。已写进 skill 硬约束 15 与「派生计划」§2/§5。</li>
+      <li><b>假存活率是池宽的函数: 宽池下 <code>mutants.verify</code> 不缩小候选(2026-10-10, hr 轮)</b> ——
+        池宽到<b>覆盖整包</b>(hr: 15 文件 / 457 fn)时, S4 抽验 <b>24/24 全是 SURVIVED、0 假存活</b>(池内测试碰过几乎所有函数,
+        没有「池外能杀」的候选可捞); 池窄(config: 6 文件)时同一动作捞到 <b>19.7% 假存活</b>。⇒ 宽池时<b>别指望
+        <code>mutants.verify</code> 缩小候选</b>, 工作量落在<b>读 diff 判真洞 vs 等价</b>; 池窄时它才是「捞假存活」的利器。
+        已写进 skill 三分类节(与「存活数是池的函数」并列)。</li>
     </ul>
+    <h3>hr 包首轮实测（2026-10-10, 大包样本 · 计划 26-10-09-1459）</h3>
+    <p>第二个真跑的包, 也是第一个<b>大包</b>(24 文件 / 8,027 变异)—— 把「按包跑」的时间模型与并行协作风险都量了出来。逐轮数字见基线切片 <code>testing/baselines/26-10-10-1108-mutants-hr.md</code>。</p>
+    <table>
+      <tr><th>项</th><th>值</th></tr>
+      <tr><td>目标 / 池</td><td><code>**/hr/*.py</code>(24 文件被变异, 105 忽略) · 池 = 15 个定向测试文件 / 457 fn</td></tr>
+      <tr><td>首轮</td><td>8,027 变异 · 杀 5,554 · 存活 <b>2,440</b> · <code>no tests</code> 23 · 超时 10 → 杀死率 <b>69.2%</b>; 墙时 ≈<b>96 min</b>(60 min 撞 timeout 截断 + 35m52s 续跑), 整体 ≈1.4 变异/s</td></tr>
+      <tr><td>S4 抽验</td><td>24 条 A 档候选 → <b>24 SURVIVED / 0 KILLED</b> —— 池宽(覆盖整包)⇒ <b>零假存活</b>, 与 config 池窄的 19.7% 形成对照</td></tr>
+      <tr><td>处置</td><td>真洞按主题入池 6 条 <code>test</code> issue; 补测+复跑按模块拆后续轮(整包单轮 96 min 超计划 §5 的 30 min 停手点)</td></tr>
+      <tr><td>存活分布(前)</td><td>service 604 · status 285 · report 276 · server 210 · model 185 · runtime 147 · channel 126 · resolve 126 · worker 126 · bencode 89 · store 45 …</td></tr>
+    </table>
     <div class="callout"><b>方法论读数</b>: 274 条候选里 <b>54 条(19.7%)是假存活</b> —— 与 §09 结论同向, 但比例比调研轮(1 个文件池 → 5 个文件池, 存活降 27%)温和得多: config 的池已经是「定向 6 文件」, 漏掉的主要是与 config 交叉的<b>规则 / 事件域</b>测试文件。另记一条本机环境坑: WSL 登录壳是 zsh, <code>$()</code> 取错 cwd 会让 <code>mutants.status</code> 恒报 <code>mutmut=no</code>(不影响 <code>mutants.run</code>)。</div>
   </section>
 
@@ -671,11 +699,22 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
         <code>references/why.md</code>(「什么时候不用 <code>mutants.verify</code>」)、常驻锚 §05 标准动作与 §09; 抬 <code>doc-updated</code></td>
         <td>用户「根据此轮经验优化变异测试 skill 与指导文档」(config loader-defaults 轮 R11 之后)</td>
       </tr>
+      <tr>
+        <td class="num">26-10-10-1135</td>
+        <td><b>§14 补第六/七/八条流程修正 + 新增「hr 包首轮实测」小节</b>: ①多 clone 并行共用镜像会被对方
+        <code>rm -rf mutants</code> 冲毁(专用镜像 + 降 <code>--children</code>; 新坑档
+        <code>pitfalls/testing/mutants-shared-mirror.md</code>)②大包单轮 &gt;60 min 且可续跑(<code>mutants.run</code>
+        timeout 3600→7200; mutmut 续跑补齐; 更稳是按模块切)③池宽 ⇒ 零假存活, <code>mutants.verify</code> 在宽池下不缩小候选。
+        一并写进 <code>mutation-testing</code> skill(硬约束 14/15 + 三分类推论 + 派生计划 §2 墙时口径 / §5 停手点 +
+        坑指针 + 4 条反模式 + 记录口径的轮次撞号)、命令包 <code>config.toml</code>(timeout)/<code>references/why.md</code>
+        (排障表 4 行 + hr 锚点 + 环境事实)、常驻锚 §03/§09; 抬 <code>doc-updated</code></td>
+        <td>用户「根据此轮经验优化变异测试 skill 与指导文档」(hr 首轮 R14 之后)</td>
+      </tr>
     </table>
   </section>
 
   <footer>
-    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照 · 更新至 26-10-08-0920（变更记录见 §15)。<br>
+    auto-qb · 变异测试调研报告 26-10-08-0231-report-mutation-testing-feasibility · 证据快照 · 更新至 26-10-10-1135（变更记录见 §15)。<br>
     数字来源分成两层: 项目侧（全量测试 passed / 耗时 / 覆盖率等)一律引 <code>commands run kb.baseline</code>; 实验数字（变异数 / 耗时 / 杀死率)分两组 —— 第一轮取自 Windows 沙箱, 第二轮取自 WSL 沙箱（同一台机器、同一份代码基线), 第三轮（§14)是 <code>config/</code> 包的真跑基线。  </footer>
 
 </div>

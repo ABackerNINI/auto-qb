@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
 > 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档 `pitfalls/testing/mutation-pool-artifact.md`。全流程在 WSL 用 `infra/versioning.py` 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。**config 包已跑五轮**: 首轮(计划 26-10-08-0720)4799 变异 / 杀 3851 / 存活 893(80.25%) → S4 全套件确认 274 条(54 假存活 + 220 真洞候选) → 补 10 守阵 → 复跑存活 **772**(−121, 82.77%); 后续按主题补守阵 → 653(85.66%) → 573(87.31%) → **533**(**88.14%**, loop-guards)。**hr 包首轮已执行**(计划 `plans/26-10-09-1459-plan-mutation-hr.html`, R11): 目标 `**/hr/*.py` · 池 15 文件 / 457 fn → **8027 变异 / 杀 5554 / 存活 2440 / no tests 23 / 超时 10**(杀死率 **69.2%**); S4 抽验 24 条 A 档候选 **24 SURVIVED / 0 KILLED**(宽池零假存活); 真洞按主题入池 6 条 `test` issue(`26-10-10-1108-test-hr-mutation-*`); 零 `src/`/`tests/` 改动。档案 `tasks/26-10-08-test-mutation-audit.md`。
-> 最后活动: 2026-10-10 11:08
+> 最后活动: 2026-10-10 11:35
 
 ## 已完成(详情见档案, 不在此复述)
 
@@ -39,6 +39,7 @@
   - **S4 抽验**: 24 条 A 档候选全套件 `apply`→跑→还原 → **24 SURVIVED / 0 KILLED**(**零假存活** —— 池宽, 与 config 池窄的 20% 假存活形成对照)。
   - **处置**: 真洞按主题入池 **6 条** `test` issue(`26-10-10-1108-test-hr-mutation-{service-engine,judgment-core,channel-server,serialization,runtime-worker,display}`); **零 `src/`/`tests/` 改动**。补测+复跑按模块拆后续轮(计划 §5 停手点)。
   - 基线切片 `testing/baselines/26-10-10-1108-mutants-hr.md`; 常驻锚 §03/§07/§08/§09 已同步。
+- **R15 回灌(hr 首轮经验进 skill / 报告 / 命令包)+ 修 §03 漂移**: 三条可复用经验 —— ①**多 clone 并行共用镜像会被对方 `rm -rf mutants` 冲毁**(实测 hr 首轮 85% 作废; 处置: 专用镜像 `--mirror` + 降 `--children`; 新坑档 `pitfalls/testing/mutants-shared-mirror.md`)②**大包单轮 >60 min 且可续跑**(`mutants.run` timeout 3600→7200; mutmut 续跑只补余量; 更稳是按模块切)③**池宽 ⇒ 零假存活**, `mutants.verify` 在宽池下不缩小候选。落点: skill 硬约束 **14/15** + 三分类推论 + 派生计划 §2/§5 + 4 条反模式 + 记录口径(轮次撞号); 报告 §14 第六/七/八条 + hr 实测小节; 命令包 `config.toml` / `why.md`。另修 §03 `config/` 行(六轮 → 七轮, 补 R13)。**零 `src/`/`tests/` 改动**。
 
 ## 正在进行
 

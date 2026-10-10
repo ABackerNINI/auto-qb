@@ -15,9 +15,9 @@ scripts_dir = "scripts"
 [tasks."mutants.run"]
 script  = "mutants.py"
 args    = ["run"]
-timeout = 3600
+timeout = 7200
 when    = "定期审计: 对某个包/模块跑一轮 mutmut(WSL) —— 按包/按模块 + 定向测试池"
-note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 4]。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂 WSL)。目标 glob 相对仓库根。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md"
+note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 4] [--mirror '~/auto-qb-mut-<pkg>']。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂 WSL)。目标 glob 相对仓库根。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。**大包单轮可 >60 min**(hr 24 文件 / 8027 变异实测 ≈96 min) —— timeout 已从 3600 抬到 7200; 被截断后可在镜像里 `.venv/bin/mutmut run` 续跑(见包内 references/why.md), 更稳的是按模块切。**多 clone 并行时用 --mirror 各占一份镜像**(共用默认镜像会被并行会话的 rm -rf mutants 冲毁)。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md"
 doc     = "references/why.md"
 
 [tasks."mutants.report"]

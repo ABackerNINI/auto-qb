@@ -72,6 +72,10 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 **首轮实测锚点(config 包, 2026-10-08)**: 4,799 变异 / 杀 3,851 / 存活 893 / `no tests` 55 → 杀死率 80.25%;
 墙时 294.4s(含 setup), 变异阶段 17.41 变异/s; 补测后同池复跑 22.67 变异/s / 存活 772。
 
+**hr 包首轮(2026-10-10, 大包样本)**: 8,027 变异 / 杀 5,554 / 存活 2,440 / `no tests` 23 / 超时 10 → 杀死率 **69.2%**;
+墙时 ≈**96 min**(60 min 撞 timeout 截断 + 35m52s 续跑), 整体 ≈**1.4 变异/s**(比 config 慢约 5x, 且前 85% 快、
+长尾慢); S4 抽验 24/24 SURVIVED —— **池宽(15 文件覆盖整包)⇒ 零假存活**, `verify` 在此场景不缩小候选。
+
 ### 什么时候**不用** `mutants.verify`(自己写脚本更快 / 更准)
 
 `mutants.verify` 是**按 mutmut 的 id** 工作的: `apply <id>` → 跑**全套件** → 还原。两种情形它用不上或划不来,
@@ -105,8 +109,8 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 项 | 值 | 备注 |
 |---|---|---|
 | WSL 发行版 | `Ubuntu-26.04` | `--distro` 可换; `wsl.exe -l -v` 看全 |
-| 镜像仓 | `~/auto-qb-mut`(WSL 原生 ext4) | `--mirror` 可换; **别放 `/mnt/*`**(实测拷 116MB 要 52s) |
-| 核数 | 8(`.wslconfig` 限) | Windows 侧 32 逻辑核; `--max-children` 默认 4 |
+| 镜像仓 | `~/auto-qb-mut`(WSL 原生 ext4) | `--mirror` 可换; **别放 `/mnt/*`**(实测拷 116MB 要 52s); **多 clone 并行时各用一份**(如 `~/auto-qb-mut-hr`) |
+| 核数 | 8(`.wslconfig` 限) | Windows 侧 32 逻辑核; `--max-children` 默认 4(有并行会话时降到 3) |
 | 工具版本 | mutmut `3.8.0` / pytest-gremlins `1.11.2` | 常量在脚本顶部; 换版本要同步改这里 |
 | 结果目录 | `R:/Temp/auto-qb/mutants` | `--out` 可换; 别落仓内(报告 §10 #7) |
 
@@ -127,6 +131,9 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 想看某条变异的 diff / 想批量三分类 | `mutmut results` 只有 id, 没有 diff | 用 `mutants.report`(带 diff 的清单 + 按状态/按模块汇总); 单条用 `mutmut show <id>` |
 | `verify` 跑得极慢 / 想中断 | 每条候选都要跑一遍**全套件**(实测 ~15s/条) | 先 `mutants.report` 再用 `--only-status` 或手挑把候选缩小; 中断后重跑同一 `--out` 自动续(已验 id 跳过) |
 | 想用「本地新守阵」而不是 develop 的测试跑 verify | `verify` 默认刷新镜像(测试 = develop) | 加 `--no-refresh`(镜像里是什么测试就用什么) |
+| 跑到一半崩在 `FileNotFoundError: mutants/.../<file>.meta` | **并行会话**共用同一镜像, 对方的 `mutants.run` 执行了 `rm -rf mutants`, 删掉你正在跑的 `.meta` | 每会话用**专用镜像** `--mirror '~/auto-qb-mut-<pkg>'`(`report` / `verify` 带同一个); 并存时降 `--children`(实测 4+4 会互相拖慢)。判别与处置见坑档 [mutants-shared-mirror](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md) |
+| 大包单轮被 3600s timeout 截断 | `mutants.run` 的 `timeout = 3600`; 大包实测会超(hr: 8,027 变异 ≈96 min) | **别从零重跑**: 在镜像里 `cd <mirror> && .venv/bin/mutmut run --max-children 4` **续跑**(mutmut 对未变函数保留既有 `exit_code`, 跳过已有结果, 与整跑等价); 更稳的是按模块切 |
+| `only_mutate` 不是你设的目标 / `mutants/` 下出现别的包 | 同一个镜像被**另一个会话**改过配置 | 同上: 用专用镜像; 排障时先 `grep -m1 only_mutate <mirror>/pyproject.toml` 核对 |
 
 ## 本会话验证到哪一步(诚实交代)
 
