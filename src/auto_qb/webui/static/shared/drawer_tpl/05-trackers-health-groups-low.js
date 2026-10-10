@@ -283,7 +283,7 @@
         const disabled = list.filter((t) => !ctx.drawerTrackerVirtual(t.url));
         const chips = virtual.map((t) => T`<span class="dt05-vchip" title="qB 合成的虚拟条目">${t.url}</span>`).join("");
         const rows = disabled.map((t) => rowHtml(ctx, t)).join("");
-        bodyHtml = T`<div class="dt05-offline">${R(chips)}${virtual.length ? T`<span class="dt05-offnote">虚拟条目由 qBittorrent 合成, 不参与汇报</span>` : ""}</div>${R(rows)}`;
+        bodyHtml = T`<div class="dt05-offline">${R(chips)}${virtual.length ? R(T`<span class="dt05-offnote">虚拟条目由 qBittorrent 合成, 不参与汇报</span>`) : ""}</div>${R(rows)}`;
       } else {
         const sorted = g.key === "ok"
           ? list.slice().sort((a, b2) => (Number(a.tier) || 0) - (Number(b2.tier) || 0))

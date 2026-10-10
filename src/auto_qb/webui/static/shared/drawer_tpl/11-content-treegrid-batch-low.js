@@ -373,7 +373,7 @@
         ${R(d.hasAv ? T`<span class="num" title="qB availability: 全 swarm 中该数据的份数; 目录取子树最低值">可用性</span>` : "")}
         <span title="点击徽章循环: 跳过 → 普通 → 高 → 最高">优先级</span>
       </div>
-      <div class="dt11-body">${R(htmlRows.join(""))}${htmlRows.length ? "" : T`<div class="dt11-empty">该筛选下没有文件</div>`}</div>
+      <div class="dt11-body">${R(htmlRows.join(""))}${htmlRows.length ? "" : R(T`<div class="dt11-empty">该筛选下没有文件</div>`)}</div>
       ${R(foot)}
     </div>`;
     const focusKey = H.rowFocusKey(host, "data-node"); /* 重建前记账焦点行(原子换帧打断焦点链) */

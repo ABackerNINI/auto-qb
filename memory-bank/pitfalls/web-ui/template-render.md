@@ -1,7 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
 > 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote
 
 ### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询
 
@@ -163,3 +163,18 @@
 - **处置**: 落点查找必须**逐层递归下钻 `template.content`**(`boot.js` 已实现: querySelector 不中就对
   `root.querySelectorAll("template")` 逐个递归进 content 再找; 找不到 fail-fast 显式占位)。
   给 manifest 换落点后必须真浏览器起盘目检一次, 静态检查发现不了这类落点丢失。
+
+### 变体模板里把 T 标签模板的结果「裸插值」会被全量转义 —— 整段标签当纯文本透出
+
+- **触发**: 在详情面板变体(dt01~dt12)里给模板加条件子块(2026-10-10 用户报「种子详情面板出现
+  `<span class="dt05-offnote">虚拟条目由 qBittorrent 合成, 不参与汇报</span>` 原文, 健康分组模板常显」)。
+- **判别**: `dtHtml`(变体模板的 `T`)对**所有**插值一律 `esc()` —— 只有 `dtRaw`(即 `R()`)包过的才豁免。
+  把内层 `` T`<span...>` `` 的结果**直接当插值**塞进外层模板, 内层已产出的标签会被再转义一次 ⇒ 页面上
+  原样显示 `<span class="dt05-offnote">...</span>` 原文; 该元素独占的 CSS(`.dt05-offnote{...}`)**也从未命中**
+  (无报错, 纯静默)。数组形态同理 —— `dtHtml` 对数组逐元素 `esc`。文件内既有约定一律 `` R(T`...`) ``,
+  漏包的那处就是特例。
+- **处置**: 条件子块统一写 `` ${cond ? R(T`<...>`) : ""} ``(不是 `` ${cond ? T`<...>` : ""} ``)。判据一句话:
+  变体里凡「把 T 标签模板的结果当插值」就必须套 `R()`。修时同批扫全量变体(`drawer_tpl/` + `drawer_pages/`),
+  命中两处: `05-trackers-health-groups-low.js`(未启用区虚拟条目备注)、`11-content-treegrid-batch-low.js`
+  (筛选无结果的空态)。
+- **守阵**: 暂无。可复用的静态扫描判据: 逐个 `${...}` 插值表达式, 内容含 `T` + 反引号却不含 `R(` 即命中。
