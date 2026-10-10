@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-11-0033">
+<meta name="doc-updated" content="26-10-11-0033">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md">
+<title>全仓重复代码审查 · 滚动报告 (轮 00–04: 准备 + config 全包)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419; --bg-raise: #151b22; --ink: #d9dee3; --ink-strong: #f0f3f5;
+    --mut: #8b949c; --accent: #59b3a2; --accent-dim: rgba(89,179,162,.14);
+    --warn: #e2a86e; --warn-dim: rgba(226,168,110,.12); --danger: #e2705e;
+    --line: rgba(255,255,255,.09); --line-soft: rgba(255,255,255,.05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI","PingFang SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+    font-size: 15.5px; line-height: 1.62; padding: 0 24px; }
+  code, .mono { font-family: "Cascadia Code",Consolas,"JetBrains Mono",monospace; }
+  code { font-size: .88em; background: var(--bg-raise); border: 1px solid var(--line-soft);
+    border-radius: 3px; padding: .08em .35em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.0; }
+  nav.toc .toc-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); margin-bottom: 10px; }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  main { min-width: 0; max-width: 900px; }
+  .kicker { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-size: 34px; line-height: 1.14; font-weight: 600; letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--mut); max-width: 68ch; margin-bottom: 26px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 0; margin-bottom: 48px; }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+  section { margin-bottom: 58px; }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px; }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code",Consolas,monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 28px 0 10px; }
+  p { margin-bottom: 13px; max-width: 80ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 22px; }
+  th { text-align: left; font-weight: 510; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0; vertical-align: bottom; }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.r { white-space: nowrap; color: var(--ink-strong); font-weight: 510; }
+  .phase td { background: var(--bg-raise); color: var(--accent); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); }
+  .callout { border: 1px solid var(--line); border-left: 2px solid var(--accent); padding: 13px 17px; margin: 16px 0; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-dim); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout b { color: var(--ink-strong); }
+  .cls { display: inline-block; min-width: 1.4em; text-align: center; font-family: "Cascadia Code",Consolas,monospace; font-weight: 590; }
+  .cls.a { color: var(--danger); } .cls.b { color: var(--warn); } .cls.c { color: var(--accent); } .cls.d { color: var(--mut); }
+  .tag { display: inline-block; font-family: "Cascadia Code",Consolas,monospace; font-size: 11px; padding: 1px 7px; border-radius: 3px; border: 1px solid var(--line); color: var(--mut); }
+  .tag.c { color: var(--accent); border-color: rgba(89,179,162,.4); }
+  .tag.a { color: var(--danger); border-color: rgba(226,112,94,.4); }
+  .tag.b { color: var(--warn); border-color: rgba(226,168,110,.4); }
+  .tag.d { color: var(--mut); }
+  .counts { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 20px; }
+  .counts .box { border: 1px solid var(--line); border-radius: 4px; padding: 8px 14px; min-width: 96px; }
+  .counts .box .n { font-size: 22px; font-weight: 600; font-family: "Cascadia Code",Consolas,monospace; }
+  .counts .box .l { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+  .counts .a .n { color: var(--danger); } .counts .b .n { color: var(--warn); }
+  .counts .c .n { color: var(--accent); } .counts .d .n { color: var(--mut); }
+  footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px; font-size: 12.5px; color: var(--mut); }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } nav.toc { display: none; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <a href="#s1"><b>01</b>&nbsp; 概览与边界</a>
+      <a href="#s2"><b>02</b>&nbsp; 方法与口径</a>
+      <a href="#s3"><b>03</b>&nbsp; R00 准备</a>
+      <a href="#s4"><b>04</b>&nbsp; R01 config/schema</a>
+      <a href="#s5"><b>05</b>&nbsp; R02 config/validation</a>
+      <a href="#s6"><b>06</b>&nbsp; R03 config 其余</a>
+      <a href="#s7"><b>07</b>&nbsp; R04 键面总账</a>
+      <a href="#s8"><b>08</b>&nbsp; 候选排序</a>
+      <a href="#s9"><b>09</b>&nbsp; 入池 issue</a>
+      <a href="#s10"><b>10</b>&nbsp; 变更记录</a>
+    </nav>
+    <main>
+      <div class="kicker">执行报告 · 重复代码审查</div>
+      <h1>全仓重复代码审查 · 滚动报告</h1>
+      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
+      <div class="meta-row">
+        <span>状态 <b class="mono">In Progress</b></span>
+        <span>专题 <b class="mono">dup-code-audit</b></span>
+        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–04</b></span>
+        <span>取证基线 <b class="mono">0d27b69e</b></span>
+        <span>启动 <b class="mono">26-10-11-0033</b></span>
+        <span>报告形态 <b class="mono">滚动(轮 26 置 Done)</b></span>
+      </div>
+
+      <section id="s1">
+        <h2><span class="secno">01</span>概览与边界</h2>
+        <hr class="sec-rule">
+        <p>本报告是计划 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">26-10-10-2333</a> 的<b>执行现场快照</b>(该计划只定轮次与口径, 证据落点在本报告)。一份<b>滚动</b>报告, 每轮追加 <code>## Rn</code> 小节并抬 <code>doc-updated</code>; 全部轮次走完后置 <code>Done</code>。</p>
+        <div class="callout warn">
+          <p><b>报告形态取舍(计划 §06):</b> doc-forms 口径是「report 出厂即冻结」, 而本审查逐轮滚动 —— 折中采用一份滚动报告、起始状态 <code>In Progress</code>。若后续偏好冻结快照, 可改为「每阶段一份」并在轮 26 汇总。</p>
+        </div>
+        <h3>1.1 本次覆盖(用户拍板范围)</h3>
+        <table>
+          <tr><th style="width:12%">轮</th><th style="width:26%">范围</th><th>规模(实测)</th></tr>
+          <tr><td class="r">R00</td><td>Phase 0 准备</td><td>工具冒烟 · 口径固化 · 建档 · 基线确认</td></tr>
+          <tr><td class="r">R01</td><td class="mono">config/schema/</td><td>1478 行 · 6 文件</td></tr>
+          <tr><td class="r">R02</td><td class="mono">config/validation/</td><td>1358 行 · 5 文件(计划写 4, 实为 5)</td></tr>
+          <tr><td class="r">R03</td><td class="mono">config/ models·loaders·writer·migrations·site_presets·impact</td><td>~1546 行 · 6 文件(+<code>__init__</code>/<code>errors</code>)</td></tr>
+          <tr><td class="r">R04</td><td>config 键面横切核验(× docs)</td><td>C 类总账(schema/validation/models/docs/keys.md)</td></tr>
+        </table>
+        <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
+      </section>
+
+      <section id="s2">
+        <h2><span class="secno">02</span>方法与口径</h2>
+        <hr class="sec-rule">
+        <p>两段式(计划 §03): <b>机器提名</b>(pylint R0801 / jscpd, <code>uv run --with</code> 临时环境, 不写依赖) → <b>人工定性</b>(逐候选打开两侧源码, 按 §02 四分类)。工具只提名, 结论一律人工。</p>
+        <h3>2.1 工具与噪声参数(本轮实测)</h3>
+        <table>
+          <tr><th style="width:34%">工具/参数</th><th>本轮实测结果</th></tr>
+          <tr><td class="r mono">pylint duplicate-code<br>--min-similarity-lines=8 · src/auto_qb</td><td>仅 2 组(均在 <code>torrents/compat</code>↔<code>torrents/view</code> 字段列表) —— config 包 0 命中</td></tr>
+          <tr><td class="r mono">pylint … =5 · src/auto_qb/config</td><td>1 组: <code>schema/fields.py:166-177</code> ↔ <code>validation/rules.py:29-43</code>(跨轮, 即 R01-S01/R02-V04)</td></tr>
+          <tr><td class="r mono">jscpd -f python<br>--min-lines=10 --min-tokens=70 · src</td><td><b>0 clone</b>(字面重复在 Python 后端极低)</td></tr>
+          <tr><td class="r mono">jscpd --min-lines=8 --min-tokens=60 · config</td><td>1 clone: <code>writer.py[199:5-207:11] ↔ [341:5-351:4]</code>(R03-W01)</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R00 关键结论:</b> config 包的字面重复检测几乎全静默 —— <b>与计划预判一致</b>(config 是 C 类「同一事实多表示」最密的包, 而非复制粘贴)。工具仅作提名, 主战场是 §3.3 结构线索 grep 与逐文件精读。阈值冻结: pylint <code>8</code>(config 下探 <code>5</code>)、jscpd <code>8/60</code>, 供后续轮沿用/微调。</p>
+        </div>
+        <h3>2.2 四分类词(冻结, 计划 §02)</h3>
+        <p><span class="cls a">A</span> 真重复(可提取) · <span class="cls b">B</span> 分歧重复(已演化, 只登记不急合) · <span class="cls c">C</span> 同一事实多表示(单点违反, 优先) · <span class="cls d">D</span> 表面相似(明确不动, 防过度抽象)。</p>
+      </section>
+
+      <section id="s3">
+        <h2><span class="secno">03</span>R00 · 准备(工具与口径就绪)</h2>
+        <hr class="sec-rule">
+        <p><b>S5 归档:</b> 工具冒烟通过(pylint 4.1.2 via <code>uv --with</code>; npx/jscpd 可用); 四分类词固化为计划 §02 唯一词表; 建立本滚动报告与任务档案 <a href="../tasks/26-10-10-backend-dup-code-audit.md">tasks/26-10-10-backend-dup-code-audit.md</a>; <b>基线 hash 确认</b> = <code>0d27b69e</code>(会话开工 <code>my-commit-flow.sync</code> 快进所得; 计划立法基线为 <code>f03b5d4a</code>)。</p>
+        <p class="small"><b>噪声参数:</b> 见 §2.1。本轮未做源码改动, 基线切片见 §10 待补。</p>
+      </section>
+
+      <section id="s4">
+        <h2><span class="secno">04</span>R01 · config/schema/(1478 行 · 6 文件)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>__init__.py</code>(访问函数) · <code>fields.py</code>(Field/Group/Plugin 数据类 + 控件常量) · <code>groups.py</code>(GROUPS 顶层分组) · <code>trackers.py</code> · <code>hr.py</code> · <code>rules.py</code>。目标符号: <code>Field</code>/<code>Group</code>/<code>Plugin</code> · <code>KINDS</code>/<code>UNIT_KINDS</code> · 各枚举常量 · <code>HR_OUTPUT_FIELDS</code>/<code>TRACKER_HR_FIELDS</code>/<code>CHECKING_SECTION_FIELDS</code> · <code>schema_payload</code>。</p>
+        <p><b>S2 提名:</b> pylint/jscpd 对 schema 内部近乎零命中(§2.1); 主线索来自 §3.3 grep(<code>EXECUTE_ONCE</code>/<code>STATE_ATTRS</code>/<code>MAINTENANCE_TAG_MODES</code> 等常量在 schema↔validation 双现)。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">0</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">2</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R01-S01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 枚举常量在 <code>schema/fields.py:156-190</code> 与 <code>validation/{core,rules,sections}.py</code> 各声明一份(9 族: <code>EXECUTE_ONCE</code>↔<code>EXECUTE_ONCE_VALUES</code>、<code>STOP_IF</code>↔<code>STOP_IF_VALUES</code>、<code>TRIGGERS</code>↔<code>TRIGGER_VALUES</code>、<code>FIELD_WATCH_ALLOWED</code>(同名)、<code>NOTIFY_LEVELS</code>/<code>NOTIFY_CHANNELS</code>、<code>CHECKING_BASIC</code>↔<code>CHECKING_VALID_BASIC</code>、<code>CHECKING_MODES</code>↔<code>CHECKING_VALID_MODES</code>、<code>DELETED_ALLOWED_ACTIONS</code>↔<code>DELETED_TRIGGER_ALLOWED_ACTIONS</code>、<code>HR_MODES</code>)。<br><b>分歧点:</b> 值相同但容器/命名有异(如 <code>NOTIFY_CHANNELS</code> schema 是 <code>tuple</code>、validation 是 <code>set</code>); <code>DELETED_*</code> 一方 tuple 一方 set。<br><b>维护风险:</b> 改枚举值需同改两处; 由 <code>tests/test_config_schema.py</code> <b>部分</b>兜住(键面/部分常量), 未覆盖族会静默漂移。<br><b>建议:</b> 单点声明 + 另一方派生/引用。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R01-S02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>MAINTENANCE_TAG_MODES</code> 三份表示 —— <code>schema/fields.py:178</code>(<b>死件</b>: 全仓无引用, <code>schema/__init__</code> 未导出) + <code>validation/core.py:40</code>(活件, 被 <code>validate_config</code> 用) + <code>schema/groups.py:284</code> <b>内联硬编码</b>同一元组 <code>("interval","on_change")</code>(schema 自己的常量反而没用)。<br><b>维护风险:</b> 死件误导(以为 schema 是单点); 改值要记住 groups 内联那处。<br><b>建议:</b> 删 schema 死件, groups 引用活件或统一单点。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R01-D01</td><td><span class="tag d">D</span></td>
+            <td><b>五份 schema 的 Field 声明样板</b>(类型/单位/默认/帮助)。判定<b>不动</b>: 声明式数据表, 刻意显式; 抽公共会牺牲可读性且增间接层(计划 §02「表面相似不动」)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R01-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>HR_OUTPUT_FIELDS</code> 复用</b>(全局 <code>hr</code> 与站点 <code>hr</code> 共用, <code>TRACKER_HR_FIELDS = (...) + HR_OUTPUT_FIELDS</code>)。判定<b>不动</b>: 已是单点复用, 非重复。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R01-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>CHECKING_SECTION_FIELDS</code> 复用</b>(<code>with_reference</code>/<code>without_reference</code> 共用)。判定<b>不动</b>: 单点复用。</td>
+          </tr>
+        </table>
+        <p class="small"><b>候选(低置信, 交后续轮):</b> <code>unit_default</code> 与 <code>default</code> 后缀的冗余(如 <code>trackers.extra_seeding_time</code> <code>default="0H"+unit_default="H"</code>)需前端 <code>config_editor.js</code> 派生逻辑确认, 归轮 20 前端对账, 本轮不结论。</p>
+      </section>
+
+      <section id="s5">
+        <h2><span class="secno">05</span>R02 · config/validation/(1358 行 · 5 文件)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>core.py</code>(通用助手 + <code>validate_config</code>) · <code>sections.py</code>(各简单段校验器) · <code>rules.py</code>(规则 spec 校验) · <code>curves.py</code>(限速曲线段) · <code>__init__.py</code>(重导出)。目标符号: <code>KNOWN_*_KEYS</code> · <code>_strike/_try/_try_time/_try_number/_check_*</code> · 各段 <code>_validate_*</code> · 枚举常量。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">2</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">3</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">4</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R02-V01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>KNOWN_*_KEYS</code> 15 组(<code>KNOWN_CONFIG_KEYS</code>/<code>KNOWN_LOG_KEYS</code>/…/<code>RULE_KNOWN_KEYS</code>/<code>CHECKING_ACTION_KNOWN_KEYS</code>)与 schema Field 键集合是同一事实的两份。<br><b>维护风险:</b> 新增配置键要同改两处 —— 由 <code>tests/test_config_schema.py</code> 兜住(<code>test_top_level_keys_match_validation</code>/<code>test_object_section_keys_match_validation</code> …), 属「有守卫的 C」。<br><b>建议:</b> 键面单点(schema); validation 由 schema 派生。这是 R04 总账的核心。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-V02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 端口校验骨架 <code>int() + 1..65535 + 同款两行报错</code> 在 <code>sections.py</code> <b>三处逐字重复</b>: <code>_validate_qbittorrent.port:138-145</code> / <code>_validate_web.port:556-563</code> / <code>_validate_hr_check.channel.port:208-215</code>。<br><b>建议:</b> 抽 <code>_try_port(value, where, errors)</code> 单点。收益高/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-V03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 时间窗 <code>"HH:MM-HH:MM"</code> 解析两套 —— <code>hr_check.allow_window:184-191</code>(<code>split</code>+<code>parse_hm</code> try/except) 与 <code>notify.quiet_hours:585-592</code>(<code>partition</code>+<code>_try(parse_hm)</code>)。<br><b>分歧点:</b> 机制与报错文案不同(同格式同语义), 判定动作(接受/拒绝)一致。<br><b>建议:</b> 抽共享时间窗校验(统一走 <code>parse_hm</code>)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-V04</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>EXECUTE_ONCE_VALUES</code>/<code>STOP_IF_VALUES</code>/<code>TRIGGER_VALUES</code>/<code>FIELD_WATCH_ALLOWED</code>/<code>CHECKING_VALID_BASIC</code>/<code>CHECKING_VALID_MODES</code>/<code>DELETED_TRIGGER_ALLOWED_ACTIONS</code> 与 schema 同名/近名常量重复(同 R01-S01, validation 侧)。<br><b>建议:</b> 归入 R01-S01 单点收敛。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-V05</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>rules.py:204</code> 的报错文案<b>硬编码</b>状态属性串 <code>is_downloading/is_uploading/…/is_errored</code>, 与 <code>schema.STATE_ATTRS</code>、<code>rules/expr/env.py:44 _STATE_ATTRS</code> 构成<b>三份</b>同一事实(第三份还只是散文串, 无守卫)。<br><b>建议:</b> 报错文案由常量 <code>join</code> 生成; 三处收一。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>errors.append(f"{where}: …")</code> 错误聚合惯用式</b>(全文件 ~60 处)。判定<b>不动</b>: ≤3 行惯用式(计划 §02 明确不记)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>for key in (…): if key in spec: _try(parse_bool,…)</code> 布尔批量校验</b>。判定<b>不动</b>: 惯用式, 抽公共反而弱化字段名与错误路径的可读性。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>_check_unknown_keys</code>/<code>_check_str_list</code>/<code>_check_regex_patterns</code>/<code>_try</code>/<code>_try_time</code>/<code>_try_number</code>/<code>_fmt_s</code></b>。判定<b>不动</b>: 这些正是已抽好的单点(设计良好)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R02-D04</td><td><span class="tag d">D</span></td>
+            <td><b><code>_validate_pattern_list_spec</code> 映射到 4 插件</b>(category/trackers/tracker_group/remove_tags)。判定<b>不动</b>: 单点复用。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s6">
+        <h2><span class="secno">06</span>R03 · config/ 其余(models·loaders·writer·migrations·site_presets·impact)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>models.py</code>(数据模型) · <code>loaders.py</code>(解析) · <code>writer.py</code>(写回/备份) · <code>migrations.py</code>(版本链) · <code>site_presets.py</code>(站点档案) · <code>impact.py</code>(变更影响/R 级)。目标符号: <code>Config</code> 及各段 dataclass · <code>_get</code>/各 <code>load_*</code> · <code>backup_versioned</code>/<code>_backup</code>/<code>_fallback_*</code> · <code>_migrate_config_*</code> · <code>SITE_PRESETS</code> · <code>RESTART_SECTIONS</code>。</p>
+        <p><b>S2 提名:</b> jscpd 命中 <code>writer.py</code> 一处(=W01); §3.3 grep(<code>atomic_write</code>/<code>_get</code>/<code>default=</code>/<code>os.replace</code>)。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">3</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">3</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">2</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R03-M01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 配置键<b>默认值</b>多处表示 —— <code>models.py</code> dataclass 字段(类型化, 自称「唯一默认值来源」, loaders 也确按其取值) / <code>schema Field.default</code>(YAML 字符串空间) / <code>docs/configuration.md</code> 完整示例注释 / <code>config-reference/keys.md</code> 表格。<br><b>分歧点/实证漂移:</b> <code>log.format</code> 默认在 schema+models 为 <code>"%(asctime)s [%(levelname)s] %(name)s: %(message)s"</code>, docs 示例写 <code>"%(asctime)s - %(name)s - %(levelname)s - %(message)s"</code>。<br><b>维护风险:</b> 改默认要记住 schema+docs; docs 侧无守卫。<br><b>建议:</b> models 单点; schema/default 由 models 派生或加逐键守卫; docs 引用/生成。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-W01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>writer.py</code> 两处备份「读原文件 + <code>utils.atomic_write</code> 写出」逐字重复 —— <code>backup_versioned:191-207</code>(迁移前版本号备份) 与 <code>_backup:333-348</code>(保存前 <code>.bak</code>)。jscpd 命中 <code>[199:5-207:11]↔[341:5-351:4]</code>。<br><b>建议:</b> 抽 <code>_atomic_copy(src,dst)</code> 单点。收益高/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-L01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>loaders</code> 取数口径分裂 —— 多数 <code>load_*</code> 走 <code>_get(spec,key,d.key,parse)</code>, 但 <code>load_qb_traffic:397-421</code> 与 <code>load_global_speed_limit_curve:341-394</code> 手写 <code>parse(str(spec[k])) if k in spec else d.k</code> 三元(<code>load_global_speed_limit_curve</code> 还留 <code>spec["enabled"]</code> 直接索引)。<br><b>建议:</b> 两处统一走 <code>_get</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-P01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> HR 站点「页面事实」字面量在 <code>models.SiteHrCheckConfig:150-154</code> 默认值与 <code>site_presets.SITE_PRESETS:50-71</code> 各一份 —— <code>download_path="/download.php?id={id}"</code>、<code>page_param="page"</code>; 档案条目另写 <code>page_path="/myhr.php"</code>。<br><b>维护风险:</b> models docstring 明说五键「由档案填充、配置不接受」, 默认值却是具体站点值, 可漂移。<br><b>建议:</b> models 默认改空/哨兵, 真值只留 <code>SITE_PRESETS</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-L02</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> <code>load_*</code> 构造样板 6–8 处同构(<code>d=XConfig(); return XConfig(field=_get(spec,field,d.field,parse)…)</code>)。<br><b>分歧点:</b> 各字段 parser 不同; <code>load_notify_config</code> 的 <code>channels</code> 有特殊提取分支。<br><b>判定:</b> 融合即引入 dataclass 驱动泛型加载器, 会改错误语义与可读性 —— <b>本轮只登记, 不建议立即合</b>(计划 §02 B 类)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-G01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 点路径删除 <code>_delete_path</code> 在 <code>writer.py:323-330</code> 与 <code>migrations.py:195-201</code> 各一份(同名不同意: 前者 <code>.get</code> 容缺、后者按 <code>parts[1:-1]</code> 假设 <code>config</code> 前缀)。<br><b>建议:</b> 合并为 config 包内单一点路径工具(<code>_get_path</code>/<code>_set_path</code>/<code>_delete_path</code> 已在 writer 成族)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-I01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「哪些顶层段需重启 / 程序托管」这一事实在多处 —— <code>impact.RESTART_SECTIONS</code> + schema <code>readonly=True</code> 标 + <code>writer._fallback_restart_fields/_fallback_readonly_fields</code> + docs 散文(「改后需重启」)。<br><b>分歧点:</b> writer 明说两者是<b>刻意</b>的独立防线(defense-in-depth), 故部分为设计意图。<br><b>建议:</b> 保持防线, 但让 <code>RESTART_SECTIONS</code> 与 schema readonly 由同一来源派生, 减少「新增段要记住多处」。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-K01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 顶层配置段集合在多处表示 —— schema <code>GROUPS</code> 顶层键 / <code>validation.KNOWN_CONFIG_KEYS</code> / impact <code>KERNEL_SECTIONS</code> / <code>RESTART_SECTIONS</code> / 各模块 <code>sections()</code> 认领。impact 注释明说新增段必须落到「某模块 sections() 或 KERNEL_SECTIONS 或 RESTART_SECTIONS」之一。<br><b>建议:</b> 与 R04 键面总账合并考量; 段认领完备守阵(P6)已部分兜底。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-V01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>schema_version</code> 的表示多处 —— schema <code>Field.default="1"</code> / <code>infra.versioning.CURRENT_VERSIONS["config"]</code>(实为 4) / <code>writer._stamp_schema_version</code> 盖章 / <code>migrations.MIGRATIONS["config"][1..3]</code> 版本键 / docs <code>keys.md</code> 写 <code>4</code>。<b>已见不一致:</b> schema Field 默认 <code>"1"</code> 与当前版本 4、keys.md 的 4 不同源。<br><b>建议:</b> 版本号单点(infra), schema/docs 引用。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>mask_tree</code>/<code>unmask_tree</code>; <code>_get_path</code>/<code>_set_path</code></b>。判定<b>不动</b>: 已是单点。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R03-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>from ..infra import utils</code> 延迟 import</b>(writer 数处)。判定<b>不动</b>: 惯用式。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s7">
+        <h2><span class="secno">07</span>R04 · config 键面横切总账(× docs)</h2>
+        <hr class="sec-rule">
+        <p>把 config 各轮的 C 类合到一张账: <b>同一个配置键面(键名/默认/边界/枚举)在多少处表示、各自有无守卫</b>。这是计划 §04 轮 04 的核心产出(重构收益最大的一张表)。</p>
+        <h3>7.1 一个键的 N 处表示</h3>
+        <table>
+          <tr><th style="width:6%">#</th><th style="width:34%">表示处</th><th style="width:22%">位置</th><th>守卫</th></tr>
+          <tr><td class="r">1</td><td>设置页/UI 元数据(schema)</td><td class="mono">config/schema/*</td><td>键面单点(<code>test_config_schema.py</code> 多测)</td></tr>
+          <tr><td class="r">2</td><td>合法性键集合(validation)</td><td class="mono">config/validation/{core,sections,rules}.py</td><td>有 ↔ #1</td></tr>
+          <tr><td class="r">3</td><td>运行时默认值(models)</td><td class="mono">config/models.py</td><td>部分(逐键默认未全兜)</td></tr>
+          <tr><td class="r">4</td><td>解析取值(loaders)</td><td class="mono">config/loaders.py</td><td>无(按 #3 取默认)</td></tr>
+          <tr><td class="r">5</td><td>写回/R 级/readonly(writer+impact)</td><td class="mono">config/writer.py · impact.py</td><td>部分</td></tr>
+          <tr><td class="r">6</td><td>用户手册</td><td class="mono">docs/configuration.md</td><td><b>无</b></td></tr>
+          <tr><td class="r">7</td><td>键速查表</td><td class="mono">memory-bank/config-reference/keys.md</td><td><b>无</b></td></tr>
+          <tr><td class="r">8</td><td>枚举/常量</td><td class="mono">schema/fields.py ↔ validation/* ↔ rules/expr/env.py</td><td>部分(R01-S01/V04)</td></tr>
+        </table>
+        <div class="callout warn">
+          <p><b>已实证漂移(docs 侧无守卫, 已实际发生):</b></p>
+          <ul>
+            <li><code>hr_check</code> 键数三处不一致: schema/validation = <b>9</b>, <code>keys.md</code> 写「全局 <b>7</b> 键」, <code>docs/configuration.md</code> 写「<b>8</b> 键」。</li>
+            <li><code>schema_version</code>: <code>keys.md</code> 写 <b>4</b>, schema <code>Field.default</code> 写 <b>"1"</b>。</li>
+            <li><code>log.format</code> 默认: schema+models 与 docs 示例不同串(见 R03-M01)。</li>
+            <li><code>UNLIMITED_SPEED="0KiB/s"</code>(models) ↔ schema 默认 <code>"0KiB/s"</code> ↔ models 类型化默认 <code>0</code> —— 同一「0 = 不限速」事实三态。</li>
+          </ul>
+        </div>
+        <h3>7.2 结论</h3>
+        <p>键面的事实源候选 = <b>schema(键名/UI 元数据)</b> 与 <b>models(运行时默认)</b> 双单点; validation 已与 schema 有守卫耦合(可进一步派生); <b>docs 两处是最大盲区</b>(无守卫, 已漂移) —— 建议为 docs 键面加守卫或改为由 schema 生成。</p>
+      </section>
+
+      <section id="s8">
+        <h2><span class="secno">08</span>分类计数与重构候选排序</h2>
+        <hr class="sec-rule">
+        <h3>8.1 分类计数(轮 00–04)</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">5</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">8</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">9</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">A 计数含 R02-V02/V03、R03-W01/L01/P01/G01(其中 G01 亦属性近 A)。C 计数含 R01-S01/S02、R02-V01/V04/V05、R03-M01/I01/K01/V01(部分为同一族的跨轮拆分)。</p>
+        <h3>8.2 重构候选排序(收益 / 风险)</h3>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th style="width:38%">候选</th><th style="width:12%">收益</th><th style="width:12%">风险</th><th>建议时机</th></tr>
+          <tr><td class="r mono">R03-W01</td><td><span class="tag a">A</span></td><td>writer 备份抽 <code>_atomic_copy</code></td><td>低(9 行)</td><td>低</td><td>随时(可并入 config 重构批次)</td></tr>
+          <tr><td class="r mono">R02-V02</td><td><span class="tag a">A</span></td><td>端口校验抽 <code>_try_port</code></td><td>中</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R01-S02</td><td><span class="tag c">C</span></td><td>删 <code>MAINTENANCE_TAG_MODES</code> 死件 + 统一</td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R03-L01</td><td><span class="tag a">A</span></td><td>loaders 两处统一 <code>_get</code></td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R01-S01 / R02-V04 / R02-V05</td><td><span class="tag c">C</span></td><td>枚举/常量单点收敛(含 STATE_ATTRS 三份)</td><td>高</td><td>中</td><td>config 重构批次</td></tr>
+          <tr><td class="r mono">R03-M01</td><td><span class="tag c">C</span></td><td>默认值单点(models 派生 schema/docs)</td><td>高</td><td>中</td><td>config 重构批次</td></tr>
+          <tr><td class="r mono">R02-V03</td><td><span class="tag a">A</span></td><td>时间窗解析单点</td><td>中</td><td>低</td><td>随 validation 批次</td></tr>
+          <tr><td class="r mono">R03-P01</td><td><span class="tag a">A</span></td><td>站点页面事实字面量收单点</td><td>中</td><td>低</td><td>随 config 批次</td></tr>
+          <tr><td class="r mono">R03-G01</td><td><span class="tag a">A</span></td><td>点路径删除工具合并</td><td>低</td><td>低</td><td>随 config 批次</td></tr>
+          <tr><td class="r mono">R02-V01 / R04</td><td><span class="tag c">C</span></td><td>键面单点(schema) + docs 守卫/生成</td><td>高</td><td>中高</td><td>专项(触及 validation+docs 面)</td></tr>
+          <tr><td class="r mono">R03-I01 / R03-K01</td><td><span class="tag c">C</span></td><td>段认领 / R 级事实由单点派生</td><td>高</td><td>中高</td><td>专项(触及内核段认领)</td></tr>
+          <tr><td class="r mono">R03-L02</td><td><span class="tag b">B</span></td><td>load 构造样板泛化</td><td>中</td><td>中高</td><td><b>暂缓</b>(B 类, 需先钉差异点)</td></tr>
+        </table>
+      </section>
+
+      <section id="s9">
+        <h2><span class="secno">09</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
+        <hr class="sec-rule">
+        <p>本轮 <b>7 条</b>可动项已按 create-issue skill 入池(便签档), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联:</p>
+        <table>
+          <tr><th style="width:30%">issue</th><th>对应发现</th></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html">config-schema-validation-enum-dup</a></td><td>R01-S01/S02 · R02-V04/V05(枚举/常量双份 + 死件 + STATE_ATTRS 三份)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-default-multi-source.html">config-default-multi-source</a></td><td>R03-M01(默认值多处)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-key-surface-doc-drift.html">config-key-surface-doc-drift</a></td><td>R02-V01 · R04(键面/docs 漂移)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-writer-backup-copy-dup.html">config-writer-backup-copy-dup</a></td><td>R03-W01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-validation-smallchecks-dup.html">config-validation-smallchecks-dup</a></td><td>R02-V02/V03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-loaders-get-inconsistency.html">config-loaders-get-inconsistency</a></td><td>R03-L01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-site-preset-page-facts-dup.html">config-site-preset-page-facts-dup</a></td><td>R03-P01</td></tr>
+        </table>
+        <p class="small"><b>未入池(登记于本报告 §08):</b> R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。</p>
+      </section>
+
+      <section id="s10">
+        <h2><span class="secno">10</span>变更记录</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th style="width:20%">版本</th><th>变更</th></tr>
+          <tr><td class="r mono">26-10-11-0033</td><td>首版: 追加 R00–R04(config 全包)发现清单 + 分类计数 + 重构候选排序 + 入池 7 issue。纯审查轮, 零源码改动。</td></tr>
+        </table>
+        <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
+      </section>
+
+      <footer>
+        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>0d27b69e</code> · 滚动报告(起始 26-10-11-0033)<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–04(config 全包)。
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>

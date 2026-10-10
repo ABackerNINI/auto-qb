@@ -9,7 +9,7 @@
 
 ## In Progress
 
-(暂无)
+- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–04: 准备 + config 全包)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 
 ## Open
 
