@@ -48,7 +48,7 @@ window.AQB_SHOWS = {
     /* 集成员 -> hash 列表: 后端 shows 视图的 members 是 **hash 数组**, 而 decoratedShows 会把它们
      * 换成**成员对象**(带 hit 标记, 供行内渲染/筛选)。菜单与命令只认 hash —— 两种形态都要能取到,
      * 否则对象被字符串化后变成 "[object Object]": 后端查不到该 hash ⇒ 404「种子不存在」,
-     * 整集/整剧的 开始/暂停/强制汇报/打开目标文件夹/删除 全线哑火(单种子菜单传的是 member.hash,
+     * 整集/整剧的 开始/暂停/强制重新汇报/打开目标文件夹/删除 全线哑火(单种子菜单传的是 member.hash,
      * 不受影响 —— 这正是"种子右键能打开、剧/集右键打不开"的差异来源)。 */
     memberHashesOf(list) {
       return (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);

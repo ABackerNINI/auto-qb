@@ -40,7 +40,7 @@ window.AQB_FORMAT = {
       return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
     },
     fmtDuration(sec) {
-      // 做种时长: 后端已按分钟取整(torrents._VIEW_QUANTUM), 故不展示秒位
+      // 做种时间: 后端已按分钟取整(torrents._VIEW_QUANTUM), 故不展示秒位
       sec = Math.floor(sec || 0);
       if (sec < 3600) return `${Math.floor(sec / 60)}分钟`;
       if (sec < 86400) return `${Math.floor(sec / 3600)}时${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}分`;

@@ -405,7 +405,7 @@ GROUPS: Tuple[Group, ...] = (
     Group(
         "traffic",
         "流量图",
-        "qB 口径的上下行流量历史曲线(方案C 采样管线)",
+        "qB 口径的上传/下载流量历史曲线(方案C 采样管线)",
         fields=(
             Field(
                 "qb_traffic",
@@ -413,7 +413,7 @@ GROUPS: Tuple[Group, ...] = (
                 "object",
                 default=None,
                 optional=True,  # 整段缺省 = 未启用(None), 与 enabled 双重闸门(保守默认)
-                help="按采样间隔周期记录 qB 口径的上下行流量(读内存快照, 零新增 qB 请求), 供 WEB UI 流量图消费; 整段缺省或 enabled: false = 不采样零开销",
+                help="按采样间隔周期记录 qB 口径的上传/下载流量(读内存快照, 零新增 qB 请求), 供 WEB UI 流量图消费; 整段缺省或 enabled: false = 不采样零开销",
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="功能总开关; false(缺省) = 不建采样任务不建目录零文件(保守默认)"),
                     Field(

@@ -148,17 +148,17 @@
                      :style="{ left: qbCurHover.left + 'px', top: '0' }">
                   <b>{{ qbCurHover.tip }}</b>
                   <template v-if="!qbCurHover.gap">
-                    <span class="h-up">上行 {{ fmtSpeed(qbCurHover.up) }}</span>
-                    <span class="h-down">下行 {{ fmtSpeed(qbCurHover.dl) }}</span>
+                    <span class="h-up">上传 {{ fmtSpeed(qbCurHover.up) }}</span>
+                    <span class="h-down">下载 {{ fmtSpeed(qbCurHover.dl) }}</span>
                     <span>合计 {{ fmtSpeed(qbCurHover.up + qbCurHover.dl) }}</span>
                     <!-- 0 桶状态行(plan 26-10-04-0721 §05): z 派生空闲段是 (0,0) 真实观测点,
                          与 null 缺口可辨 —— 速率行照旧, 仅补一行状态语 -->
-                    <span v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种中</span>
+                    <span v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种</span>
                   </template>
                   <span v-else>无采样 · 程序未运行或 qB 断连</span>
                 </div>
               </div>
-              <!-- 2026-10-08 版式改: 上行/下行图例自图下独立一行并入统计栏(省一行高度 = 图更高);
+              <!-- 2026-10-08 版式改: 上传/下载图例自图下独立一行并入统计栏(省一行高度 = 图更高);
                    原图下那行的说明文字(口径 + 悬停提示)已按用户要求移除, 信息在悬停 tooltip 里给。
                    2026-10-09 第 2 轮(用户动议): 种子「流量」页签的档位/纵轴控件组**也落进本统计栏**
                    (排在「下载累计」之后) —— 种子头部已承载五页签导航 + 模板切换器, 13 档再并进去
@@ -169,8 +169,8 @@
                    —— 否则「数据取不到 ⇒ 连换档位都点不到」(与 2026-10-08 之前正文工具条恒可见同义)。 -->
               <div v-if="qbCurSummary || qbCurScope === 'torrent'" class="hist-summary">
                 <template v-if="qbCurSummary">
-                  <span class="hs-leg"><i class="sw up"></i>上行</span>
-                  <span class="hs-leg"><i class="sw down"></i>下行</span>
+                  <span class="hs-leg"><i class="sw up"></i>上传</span>
+                  <span class="hs-leg"><i class="sw down"></i>下载</span>
                   <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
                   <!-- 口径注解(「累计为窗口内增量(断线期不计)」, 分组再加组口径尾注)自 2026-10-09
                        起不再是常驻文案 —— 改为**两个累计读数的悬浮提示**(用户动议: 常驻占统计栏

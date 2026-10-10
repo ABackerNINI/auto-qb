@@ -149,7 +149,7 @@ window.AQB_STATE = {
       // qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一 fail-closed 口径
       flags: { skip_check_menu: false, qb_traffic_enabled: false },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
-      // 队列/TMM/超级做种/强制开始/分享率限制/复制族 都在它里面(见 conventions/webui.md)
+      // 队列/TMM/超级做种/强制启动/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced"
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
       // 子面板垂直位移(相对父项顶的 top 内联值, px): 子面板高(~12 项 ≈ 440px)锚在父项顶
@@ -288,7 +288,7 @@ window.AQB_STATE = {
       addTags: "",            // 标签(逗号分隔, 可空; combobox)
       addStart: false,        // DLG-03: 添加后开始(勾选 = 立即开始; 默认不勾 = paused 添加)
       addSkipCheck: false,    // 跳过校验(危险选项: 勾选后选项区下出警告行)
-      addSequential: false,   // 顺序下载
+      addSequential: false,   // 按顺序下载
       addFirstLast: false,    // 首末块优先
       addTmm: false,          // 自动种子管理(TMM)
       addCatOptions: [],      // DLG-03: 分类候选(GET /api/categories, 打开窗口时拉取)

@@ -1,10 +1,10 @@
 /* auto-qb WEB UI · 详情面板 peers 页签变体 09「密度雷达表(收起改良)」(计划 26-10-06-0838 S4)
  *
  * 设计稿: resources/detail-panel-templates/09-peers-density-collapsed.html(collapsed 档;
- * 矮/高 = 30px 行距密度表自适应滚动。收起档(头部 44px 雷达摘要: 构成比例条 + 上下行
+ * 矮/高 = 30px 行距密度表自适应滚动。收起档(头部 44px 雷达摘要: 构成比例条 + 上下载
  * 合计 + 吸血 / 连接计数, 本变体 summary() 供给)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询); 「↑ 占用」列 = 该对端 upspeed 占
- * 当前上行合计的比重(条长 + 数值), 默认按它降序 —— 第一行就是最吃上行的对端。
+ * 当前上传合计的比重(条长 + 数值), 默认按它降序 —— 第一行就是最吃上传的对端。
  * 动作: 悬停标记(展示, CSS :hover); 筛选 chips 与列头排序为纯前端态。
  * 拍板 P-04: 悬停封禁钮 v1 省略(无后端端点), 设计稿「处置」列不落地; 迅雷红标 = client 名含
  * "XL/迅雷" 启发式(与 07/08 同判据), 纯展示(红行 + 吸血徽章, 徽章 title 说明判据)。
@@ -38,13 +38,13 @@
   /* 筛选 chips: bad 档仅有嫌疑对端时出现(渐进) */
   const FILTERS = [
     { key: "all", text: "全部" },
-    { key: "up", text: "上行中" },
-    { key: "down", text: "下行中" },
+    { key: "up", text: "上传中" },
+    { key: "down", text: "下载中" },
     { key: "bad", text: "吸血嫌疑" },
     { key: "lan", text: "内网" },
   ];
 
-  /* 视图偏好(跨重渲染与换种子保持): 筛选 / 排序 / 上行合计(占用条分母); lastSig 供跳过重建 */
+  /* 视图偏好(跨重渲染与换种子保持): 筛选 / 排序 / 上传合计(占用条分母); lastSig 供跳过重建 */
   const ui = { filter: "all", sortKey: "up", sortDir: -1, upTotal: 0, lastSig: "" };
 
   const CSS = [
@@ -121,7 +121,7 @@
     "  font-size:11.5px; color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt09-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt09-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px; color:var(--fg-dim); }",
-    /* 「↑ 占用」列: 条长 = 占当前上行合计的比重, 色随方向令牌; 嫌疑行红 */
+    /* 「↑ 占用」列: 条长 = 占当前上传合计的比重, 色随方向令牌; 嫌疑行红 */
     ".drawer .dt09-occ { display:flex; align-items:center; gap:8px; min-width:0; }",
     ".drawer .dt09-occ .track { flex:1; height:4px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; }",
     ".drawer .dt09-occ .track i { display:block; height:100%; border-radius:999px; background:var(--today-up); }",
@@ -239,7 +239,7 @@
     const bar = v > 0 && ui.upTotal > 0
       ? T`<span class="track"><i style="width:${(v / ui.upTotal * 100).toFixed(1)}%"></i></span>`
       : "";
-    return T`<span class="dt09-occ" title="我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上行合计(${fmtSpeedOf(ui.upTotal)})的比重">${R(bar)}${R(b)}</span>`;
+    return T`<span class="dt09-occ" title="我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上传合计(${fmtSpeedOf(ui.upTotal)})的比重">${R(bar)}${R(b)}</span>`;
   }
   const dnHtml = (p) => (num(p.dlspeed) > 0
     ? T`<span class="dt09-dn" title="我方从该对端收到的即时速度(qB dlspeed)">${fmtSpeedOf(num(p.dlspeed))}</span>`
@@ -273,8 +273,8 @@
       <span>客户端</span>
       <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
       ${R(seg("prog", "进度", "对端自身进度", "num"))}
-      ${R(seg("up", "↑ 占用", "我方发给该对端的即时速度(qB upspeed); 条长 = 该对端占当前上行合计的比重", "occ-h num"))}
-      ${R(seg("down", "下行", "我方从该对端收到的即时速度(qB dlspeed)", "num"))}
+      ${R(seg("up", "↑ 占用", "我方发给该对端的即时速度(qB upspeed); 条长 = 该对端占当前上传合计的比重", "occ-h num"))}
+      ${R(seg("down", "下载", "我方从该对端收到的即时速度(qB dlspeed)", "num"))}
       ${R(seg("sent", "已发", "本次会话我方已发给该对端的累计(qB uploaded)", "num"))}
       ${R(seg("recv", "已收", "本次会话我方已从该对端收到的累计(qB downloaded)", "num"))}
       ${R(seg("rel", "关联", "relevance: 该对端拥有我缺失数据的比例", "num"))}
@@ -312,7 +312,7 @@
     const rows = sorted(filtered(list)).map(rowHtml).join("");
     const html = T`<div class="dt09-wrap">
       <div class="dt09-bar">${R(chips)}
-        <span class="dt09-note">默认按「↑ 占用」降序, 最吃上行的排最前 · 5s 自动刷新</span>
+        <span class="dt09-note">默认按「↑ 占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>
       </div>
       <div class="dt09-list">${R(headHtml())}${R(rows)}</div>
     </div>`;

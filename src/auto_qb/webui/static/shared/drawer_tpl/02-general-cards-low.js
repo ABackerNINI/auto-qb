@@ -23,12 +23,12 @@
 
   /* qB 原始 state -> 展示文案(徽章用; 与经典链 stateText 的成员视图口径独立, 只覆盖常见值) */
   const STATE_TEXT = {
-    uploading: "做种中", stalledUP: "做种中", forcedUP: "强制做种",
-    downloading: "下载中", stalledDL: "等待下载", forcedDL: "强制下载", metaDL: "获取元数据",
-    pausedUP: "已暂停(已完成)", pausedDL: "已暂停",
-    queuedUP: "排队(做种)", queuedDL: "排队(下载)",
-    checkingUP: "校验中", checkingDL: "校验中", checkingResumeData: "恢复校验",
-    allocating: "分配中", moving: "移动中", errored: "出错",
+    uploading: "做种", stalledUP: "做种", forcedUP: "强制做种",
+    downloading: "下载", stalledDL: "等待", forcedDL: "强制下载", metaDL: "下载元数据",
+    pausedUP: "已完成", pausedDL: "暂停",
+    queuedUP: "排队", queuedDL: "排队",
+    checkingUP: "校验", checkingDL: "校验", checkingResumeData: "校验恢复数据",
+    allocating: "分配中", moving: "移动中", errored: "错误",
   };
   const SEEDING_STATES = ["uploading", "stalledUP", "forcedUP"];
 
@@ -146,7 +146,7 @@
   function limitRow(ctx, label, v) {
     if (v === undefined || v === null || v < 0) return "";
     const txt = v === 0 ? "不限" : ctx.fmtSpeed(v);
-    return T`<div class="dt02-kv" title="${label === "上行限速" ? "up_limit" : "dl_limit"}"><span class="k">${label}</span><span class="v${v === 0 ? " is-dim" : ""}">${txt}</span></div>`;
+    return T`<div class="dt02-kv" title="${label === "上传限制" ? "up_limit" : "dl_limit"}"><span class="k">${label}</span><span class="v${v === 0 ? " is-dim" : ""}">${txt}</span></div>`;
   }
 
   function kv(label, text, dim, icon) {
@@ -253,8 +253,8 @@
     if (d.priority !== undefined && d.priority !== null) metaRows.push(kv("队列优先级", String(d.priority), false));
     if (d.popularity !== undefined && d.popularity !== null) metaRows.push(kv("热度", Number(d.popularity).toFixed(2), false));
     if (d.completed !== undefined && d.completed !== null) metaRows.push(kv("已完成量", size(ctx, d.completed), false));
-    metaRows.push(limitRow(ctx, "上行限速", d.up_limit));
-    metaRows.push(limitRow(ctx, "下行限速", d.dl_limit));
+    metaRows.push(limitRow(ctx, "上传限制", d.up_limit));
+    metaRows.push(limitRow(ctx, "下载限制", d.dl_limit));
     if (d.has_other_announce_error !== undefined && d.has_other_announce_error !== null) {
       metaRows.push(kv("其它汇报错误", d.has_other_announce_error ? "有" : "无", !d.has_other_announce_error));
     }
@@ -262,8 +262,8 @@
 
     /* 存储与行为卡: 路径分组行(带打开目录)+ 开关徽章 */
     const flags = [
-      ["自动管理", d.auto_tmm], ["强制开始", d.force_start], ["超级做种", d.super_seeding],
-      ["顺序下载", d.seq_dl], ["首末块优先", d.f_l_piece_prio],
+      ["自动管理", d.auto_tmm], ["强制启动", d.force_start], ["超级做种", d.super_seeding],
+      ["按顺序下载", d.seq_dl], ["首末块优先", d.f_l_piece_prio],
     ].map(([label, on]) => T`<span class="dt02-flag${on ? " is-on" : ""}" title="${label}"><i></i>${label}</span>`).join("");
     const storeBody = secRows(secs["路径"] || { rows: [] }) + (T`<div class="dt02-flags">${R(flags)}</div>`);
 
@@ -271,7 +271,7 @@
     const cols = [
       [
         hr.html ? card("hr", "做种要求 (HR)", "HR", hr.html, hr.tone) : "",
-        secs["基础"] ? card("base", "基础", secs["基础"].rows.length + " 项", secRows(secs["基础"], ["信息哈希 v1", "信息哈希 v2", "分块"])) : "",
+        secs["基础"] ? card("base", "基础", secs["基础"].rows.length + " 项", secRows(secs["基础"], ["信息哈希值 v1", "信息哈希值 v2", "分块"])) : "",
         secs["时间"] ? card("time", "时间", secs["时间"].rows.length + " 项", secRows(secs["时间"])) : "",
       ],
       [

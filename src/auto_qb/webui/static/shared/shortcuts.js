@@ -254,16 +254,16 @@ const AQB_SHORTCUT_DEFS = [
     def: "Escape", scope: "global", fixed: true,
     run: null },  // 既有 lifecycle.js 退栈链(FIX-07)实现, 引擎永不接(注册表登记只为守阵与面板展示)
   // ---- D · 一级动作(§08 决策 v4: 危险档一律二键组合; 裸键 D/C/F 释放为空位) ----
-  { id: "act-pause", group: "一级动作", label: "暂停",
+  { id: "act-pause", group: "一级动作", label: "停止",
     def: "KeyP", scope: "list",
     run: (vm) => vm._kbAct("pause") },
-  { id: "act-resume", group: "一级动作", label: "开始",
+  { id: "act-resume", group: "一级动作", label: "启动",
     def: "KeyS", scope: "list",
     run: (vm) => vm._kbAct("resume") },
-  { id: "act-reannounce", group: "一级动作", label: "强制汇报",
+  { id: "act-reannounce", group: "一级动作", label: "强制重新汇报",
     def: "Shift+KeyA", scope: "list", danger: true,
     run: (vm) => vm._kbAct("reannounce") },
-  { id: "act-recheck", group: "一级动作", label: "重新校验",
+  { id: "act-recheck", group: "一级动作", label: "强制重新检查",
     def: "Shift+KeyY", scope: "list", danger: true,
     run: (vm) => vm._kbAct("recheck") },
   { id: "act-detail", group: "一级动作", label: "详细信息(详情面板)",
@@ -301,24 +301,24 @@ const AQB_SHORTCUT_DEFS = [
     def: "KeyK", scope: "list",
     run: (vm) => vm.toggleColMenu(null) },  // toggleColMenu 本身即切换函数; 浮层开着时靠自切换白名单放行第二次按键(报告 26-10-09-1731 §04.4)
   // ---- F · 队列与开关(§08 决策③: F5/F6 保留默认键; 均为单种子命令, 复用右键菜单同链) ----
-  { id: "queue-up", group: "队列与开关", label: "队列上移",
+  { id: "queue-up", group: "队列与开关", label: "向上移动队列",
     def: "Ctrl+ArrowUp", scope: "list",
-    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "up" }), "队列上移") },
-  { id: "queue-down", group: "队列与开关", label: "队列下移",
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "up" }), "向上移动队列") },
+  { id: "queue-down", group: "队列与开关", label: "向下移动队列",
     def: "Ctrl+ArrowDown", scope: "list",
-    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "down" }), "队列下移") },
-  { id: "queue-top", group: "队列与开关", label: "队列置顶",
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "down" }), "向下移动队列") },
+  { id: "queue-top", group: "队列与开关", label: "队列顶部",
     def: "Ctrl+Home", scope: "list",
-    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "top" }), "队列置顶") },
-  { id: "queue-bottom", group: "队列与开关", label: "队列置底",
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "top" }), "队列顶部") },
+  { id: "queue-bottom", group: "队列与开关", label: "队列底部",
     def: "Ctrl+End", scope: "list",
-    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "bottom" }), "队列置底") },
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "bottom" }), "队列底部") },
   { id: "auto-tmm", group: "队列与开关", label: "自动种子管理(TMM)切换",
     def: "Shift+KeyT", scope: "list",
     run: (vm) => vm._kbTorrentToggle("auto-tmm", "auto_tmm", "自动种子管理") },
-  { id: "force-start", group: "队列与开关", label: "强制开始切换",
+  { id: "force-start", group: "队列与开关", label: "强制启动切换",
     def: "Shift+KeyF", scope: "list",
-    run: (vm) => vm._kbTorrentToggle("force-start", "force_start", "强制开始") },  // 可逆故不入危险档(§08)
+    run: (vm) => vm._kbTorrentToggle("force-start", "force_start", "强制启动") },  // 可逆故不入危险档(§08)
   // ---- G · 局部作用域(设置页局部键位, W5; 方案A W2 起详情面板四条独立成组, 双态见 _kbDrawerTab;
   //      2026-10-10 起合并页签态下五档按位次重排到三张可见页签, 见 KB_MERGE_TAB_REMAP / _kbMergeTabsOn) ----
   { id: "drawer-tab-general", group: "详情面板", label: "详情面板 · 打开/切到常规页",
@@ -1006,8 +1006,8 @@ window.AQB_SHORTCUTS = {
         /* 非活跃目标先拦(与右键/详情面板同一闸门): 早于确认框 —— 先问"确定?"再回"不行"是坏体感。
          * _actCore 里还有同一道兜底(键盘不是唯一入口), 这里前置只为省掉无谓的一问。 */
         if (!this._guardReannounce({ keys: t.groupKeys, hashes: t.memberHashes })) return;
-        const ok = await this.confirmDialog("强制汇报",
-          `将向 tracker 强制汇报${what}。频繁误触可能触发站点限流或警告。`, { okText: "确定" });
+        const ok = await this.confirmDialog("强制重新汇报",
+          `将向 tracker 强制重新汇报${what}。频繁误触可能触发站点限流或警告。`, { okText: "确定" });
         if (!ok) return;
       }
       return this._actCore(action, { keys: t.groupKeys, hashes: t.memberHashes });
@@ -1165,7 +1165,7 @@ window.AQB_SHORTCUTS = {
       }
       return arg === undefined ? this[fn](h) : this[fn](arg, h);
     },
-    /* 单目标种子命令族(队列/TMM/强制开始/超级做种): 复用 torrentCmd 回执链(与右键菜单同链),
+    /* 单目标种子命令族(队列/TMM/强制启动/超级做种): 复用 torrentCmd 回执链(与右键菜单同链),
      * 目标显式传参(S3/M3, 同上)。 */
     _kbTorrentCmd(action, makeBody, okText) {
       const h = this._kbSingleHash();

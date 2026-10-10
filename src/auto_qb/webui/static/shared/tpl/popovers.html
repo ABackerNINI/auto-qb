@@ -166,7 +166,7 @@
             <span class="opt-dot"></span><span>{{ modal.checkbox }}</span>
           </button>
         </div>
-        <!-- 多选项(删除确认框: 强制汇报 + 删除文件两项并存) -->
+        <!-- 多选项(删除确认框: 强制重新汇报 + 删除文件两项并存) -->
         <div v-if="modal.checks" class="modal-opts">
           <button v-for="c in modal.checks" :key="c.key" type="button" class="opt-pill"
                   :class="{ on: c.checked, danger: c.key === 'delete_files' }"
@@ -276,7 +276,7 @@
       </div>
     </div>
 
-    <!-- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup): 单例浮层, 触发面 = 做种时长单元格(6 处绑定)。
+    <!-- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup): 单例浮层, 触发面 = 做种时间单元格(6 处绑定)。
          teleport 到 body 级 —— 脱离列表容器的 overflow/特异性纠缠(同 .speed-pop 的教训);
          数据组装/调度/定位单点在 shared/hr.js(hrPop*), prism 主题令牌挂 html[data-theme] 自动继承。 -->
     <teleport to="body">

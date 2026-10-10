@@ -12,7 +12,7 @@
 const SKIP_GATE_LABELS = {
   G3: "已完成", G4: "活跃中", G5: "校验在途", G6: "组内正在下载",
   G7: "组内校验在途", G8: "组内校验失败", partial: "部分下载", dedup: "今日已跳检",
-  filelist: "文件缺失", gone: "已不在客户端",
+  filelist: "丢失文件", gone: "已不在客户端",
 };
 
 window.AQB_DRAWER = {
@@ -41,7 +41,7 @@ window.AQB_DRAWER = {
     menuTorrent() {
       return this.memberByHash.get(this.menu.hash) || {};
     },
-    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) —— 走既有回执链。
+    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制启动/队列) —— 走既有回执链。
      * !目标解析(S3/M3, 2026-10-10): `hash` 显式传入, 缺省回落 `menu.hash`(右键菜单路径本就以被点
      *   行为目标)。此前抽屉路径靠**写 this.menu.hash** 把抽屉目标"塞"进来 —— menu 状态被当成了
      *   全局目标变量(机制 3, 见 conventions/webui-scope.md §3)。 */
@@ -49,7 +49,7 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       const target = hash || this.menu.hash;
       if (!target) return;
-      /* 强制汇报闸门(qB 口径): 非活跃种子(暂停/停止·排队·校验中·错误)拒绝 —— 详情面板 tracker
+      /* 强制重新汇报闸门(qB 口径): 非活跃种子(暂停/停止·排队·校验·错误)拒绝 —— 详情面板 tracker
        * 页签的重报钮已置灰(drawer_tpl 04/05/06 走 drawerReannounceGate), 这里是行为层兜底
        * (与 ctx-menu 的"class 拦显示、行为层再拦一道"同款)。本方法两条入口共用: 单选右键菜单的
        * 控制命令, 与详情面板 drawerCmd(目标 = 抽屉 hash)。 */
@@ -115,7 +115,7 @@ window.AQB_DRAWER = {
         { icon: "#i-warn", label: "统计清零", value: "本地统计(上传/下载量、做种时间)将被清空", wide: true },
         { icon: "#i-warn", label: "未哈希校验", value: "数据未经哈希校验", wide: true },
         { icon: "#i-warn", label: "无参考", value: "无参考对照的跳检属高风险操作", wide: true },
-        { icon: "#i-warn", label: "HR 在管", value: "未放行的 HR 种子: 做种时长锚点会倒退、超额线(3×)推迟", wide: true },
+        { icon: "#i-warn", label: "HR 在管", value: "未放行的 HR 种子: 做种时间锚点会倒退、超额线(3×)推迟", wide: true },
       ];
       const p = this._openModal({
         title: n > 1 ? "批量跳检(跳过校验重加)" : "跳检(跳过校验重加)",
@@ -332,18 +332,18 @@ window.AQB_DRAWER = {
       }
       return false;
     },
-    /* 限速…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
+    /* 速度限制…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
     async editLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
       const kiB = (bytes) => (bytes > 0 ? String(Math.round(bytes / 1024)) : "");  // 不限/未设(≤0)留空
       const res = await this._openModal({
-        title: "限速",
+        title: "速度限制",
         body: "设置该种子的上传/下载速度上限(KiB/s)。留空 = 保持不变, 填 0 = 不限速。",
         fields: [
-          { key: "up", label: "上传上限(KiB/s)", value: d ? kiB(d.up_limit) : "", placeholder: "留空不修改, 0 = 不限" },
-          { key: "dl", label: "下载上限(KiB/s)", value: d ? kiB(d.dl_limit) : "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "up", label: "上传限制(KiB/s)", value: d ? kiB(d.up_limit) : "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "dl", label: "下载限制(KiB/s)", value: d ? kiB(d.dl_limit) : "", placeholder: "留空不修改, 0 = 不限" },
         ],
         okText: "应用", cancelText: "取消",
       });
@@ -364,7 +364,7 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "limits", body, "限速已更新");
     },
-    /* 分享率限制…: 分享率/做种时长(h)/不活跃做种时长(h) → POST share-limits(-1 = 恢复全局默认) */
+    /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) → POST share-limits(-1 = 恢复全局默认) */
     async editShareLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -375,7 +375,7 @@ window.AQB_DRAWER = {
         body: "达到任一限制后该种子将停止做种。留空 = 保持不变, 填 -1 = 恢复全局默认。",
         fields: [
           { key: "ratio", label: "分享率上限", value: d && d.max_ratio >= 0 ? String(d.max_ratio) : "", placeholder: "留空不修改, -1 = 全局" },
-          { key: "time", label: "做种时长上限(小时)", value: d ? hrs(d.max_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
+          { key: "time", label: "做种时间上限(小时)", value: d ? hrs(d.max_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
           { key: "inactive", label: "不活跃做种上限(小时)", value: d ? hrs(d.max_inactive_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
         ],
         okText: "应用", cancelText: "取消",
@@ -405,13 +405,13 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "share-limits", body, "分享率限制已更新");
     },
-    /* 移动…: 新保存路径输入(确认文案注明离开辅种组) → POST location */
+    /* 设定位置…: 新保存路径输入(确认文案注明离开辅种组) → POST location */
     async editMove(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
       const res = await this._openModal({
-        title: "移动种子",
+        title: "设定位置",
         body: "将种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。",
         fields: [{ key: "location", label: "新保存路径", value: d ? d.save_path || "" : "", placeholder: "D:\\downloads\\target" }],
         okText: "移动", cancelText: "取消",
@@ -429,7 +429,7 @@ window.AQB_DRAWER = {
      * 提交走 /api/torrents/bulk 合单通道(一次 POST + 一个聚合回执), 不做乐观贴片 —— 限速/移动
      * 的行值由 QbApi 写方法同步 store 快照 + bulk_torrents 的 RESYNC 补刷新落行(与标签/分类
      * 的 _metaBulk 同一观感)。 */
-    /* 批量限速…: 双输入各自独立, 留空 = 该方向不提交(D3 拍板), KiB/s ×1024 与单选同口径。
+    /* 批量速度限制…: 双输入各自独立, 留空 = 该方向不提交(D3 拍板), KiB/s ×1024 与单选同口径。
      * targets / scope 可覆盖: 单组右键(editLimitsGroup)传该组成员 + scope="该组的";
      * 缺省 = 多选右键(选中集合 + "选中的")。 */
     async editLimitsMulti(targets = null, scope = "选中的") {
@@ -437,11 +437,11 @@ window.AQB_DRAWER = {
       targets = targets || this._bulkTargets();
       if (!targets.groupKeys.length && !targets.memberHashes.length) return;
       const res = await this._openModal({
-        title: "批量限速",
+        title: "批量速度限制",
         body: `为${scope} ${targets.groupKeys.length + targets.memberHashes.length} 个目标设置上传/下载速度上限(KiB/s)。留空 = 该项保持不变, 填 0 = 不限速。`,
         fields: [
-          { key: "up", label: "上传上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
-          { key: "dl", label: "下载上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "up", label: "上传限制(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "dl", label: "下载限制(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
         ],
         okText: "应用", cancelText: "取消",
       });
@@ -460,9 +460,9 @@ window.AQB_DRAWER = {
         this.toast("未作修改", "ok", 2000);
         return;
       }
-      await this._bulkEditPost(targets, "limits", body, "批量限速");
+      await this._bulkEditPost(targets, "limits", body, "批量速度限制");
     },
-    /* 批量移动…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N。
+    /* 批量设定位置…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N。
      * targets / scope 可覆盖: 单组右键(editMoveGroup)传该组成员 + scope="该组的"。 */
     async editMoveMulti(targets = null, scope = "选中的") {
       this.menu.visible = false;
@@ -479,7 +479,7 @@ window.AQB_DRAWER = {
         this.toast("路径不能为空", "warn");
         return;
       }
-      const ok = await this.confirmDialog("确认移动", `将把 ${n} 个目标的保存路径移动到: ${location}`, { okText: "移动" });
+      const ok = await this.confirmDialog("确认设定位置", `将把 ${n} 个目标的保存路径移动到: ${location}`, { okText: "设定位置" });
       if (!ok) return;
       await this._bulkEditPost(targets, "location", { location }, "批量移动");
     },
@@ -1260,13 +1260,13 @@ window.AQB_DRAWER = {
             { icon: "#i-percent", label: "进度", text: `${((d.progress || 0) * 100).toFixed(1)}%` },
             { icon: "#i-hdd", label: "大小", text: size(d.size) },
             { icon: "#i-layers", label: "总大小", text: size(d.total_size) },
-            { icon: "#i-download", label: "剩余量", text: size(d.amount_left) },
+            { icon: "#i-download", label: "剩余", text: size(d.amount_left) },
             { icon: "#i-pulse", label: "可用性", text: (d.availability ?? 0).toFixed(2) },
             { icon: "#i-percent", label: "分享率", text: (d.ratio ?? 0).toFixed(3) },
             { icon: "#i-lock", label: "私有", text: yn(d.private) },
             // FX-22: 哈希/备注可能极长 -> 块行 + 右侧"复制"(不再只能悬停看 title)
-            { icon: "#i-hash", label: "信息哈希 v1", text: d.infohash_v1 || "—", mono: true, wide: true, act: "copy" },
-            { icon: "#i-hash", label: "信息哈希 v2", text: d.infohash_v2 || "—", mono: true, wide: true, act: "copy" },
+            { icon: "#i-hash", label: "信息哈希值 v1", text: d.infohash_v1 || "—", mono: true, wide: true, act: "copy" },
+            { icon: "#i-hash", label: "信息哈希值 v2", text: d.infohash_v2 || "—", mono: true, wide: true, act: "copy" },
             { icon: "#i-columns", label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
             { icon: "#i-info", label: "已含元数据", text: yn(d.has_metadata) },
             { icon: "#i-calendar", label: "创建于", text: ts(d.creation_date) },
@@ -1283,19 +1283,19 @@ window.AQB_DRAWER = {
             { icon: "#i-hourglass", label: "ETA", text: this.fmtEta(d.eta) || "—" },
             { icon: "#i-download", label: "已下载", text: size(d.downloaded) },
             { icon: "#i-upload", label: "已上传", text: size(d.uploaded) },
-            { icon: "#i-download", label: "本次会话下载", text: size(d.downloaded_session) },
-            { icon: "#i-upload", label: "本次会话上传", text: size(d.uploaded_session) },
-            { icon: "#i-warn", label: "浪费", text: size(d.total_wasted) },
-            { icon: "#i-arrow-up", label: "做种", text: String(d.num_seeds ?? 0) },
+            { icon: "#i-download", label: "会话已下载", text: size(d.downloaded_session) },
+            { icon: "#i-upload", label: "会话已上传", text: size(d.uploaded_session) },
+            { icon: "#i-warn", label: "已丢弃", text: size(d.total_wasted) },
+            { icon: "#i-arrow-up", label: "做种数", text: String(d.num_seeds ?? 0) },
             { icon: "#i-arrow-down", label: "用户(下载)", text: String(d.num_leechs ?? 0) },
             { icon: "#i-globe", label: "完整/下载中", text: `${d.num_complete ?? 0} / ${d.num_incomplete ?? 0}` },
             { icon: "#i-globe", label: "tracker 数", text: String(d.trackers_count ?? 0) },
-            { icon: "#i-link", label: "连接数", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
+            { icon: "#i-link", label: "连接", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
             { icon: "#i-refresh", label: "下次汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
             { icon: "#i-x-circle", label: "tracker 错误", text: yn(d.has_tracker_error) },
             { icon: "#i-warn", label: "tracker 警告", text: yn(d.has_tracker_warning) },
             { icon: "#i-percent", label: "分享率限制", text: (d.max_ratio ?? -1) < 0 ? "未设" : d.max_ratio.toFixed(2) },
-            { icon: "#i-timer", label: "做种时长限制", text: lim(d.max_seeding_time) },
+            { icon: "#i-timer", label: "做种时间限制", text: lim(d.max_seeding_time) },
             { icon: "#i-timer", label: "不活跃做种限制", text: lim(d.max_inactive_seeding_time) },
             { icon: "#i-bolt", label: "限制动作", text: d.share_limit_action || "—" },
           ],
@@ -1306,9 +1306,9 @@ window.AQB_DRAWER = {
           rows: [
             { icon: "#i-calendar", label: "添加于", text: ts(d.added_on) },
             { icon: "#i-check-circle", label: "完成于", text: ts(d.completion_on) },
-            { icon: "#i-eye", label: "见到完整副本", text: ts(d.seen_complete) },
+            { icon: "#i-eye", label: "最后完整可见", text: ts(d.seen_complete) },
             { icon: "#i-clock", label: "最近活动", text: ts(d.last_activity) },
-            { icon: "#i-timer", label: "活跃时间", text: dur(d.time_active, "—") },
+            { icon: "#i-timer", label: "活动时间", text: dur(d.time_active, "—") },
             { icon: "#i-timer", label: "做种时间", text: dur(d.seeding_time, "—") },
           ],
         },
@@ -1323,9 +1323,9 @@ window.AQB_DRAWER = {
             { icon: "#i-folder-open", label: "下载路径", text: d.download_path || "—", wide: true, act: "open" },
             { icon: "#i-folder", label: "根路径", text: d.root_path || "—", wide: true, act: "open" },
             { icon: "#i-sliders", label: "自动种子管理", text: yn(d.auto_tmm) },
-            { icon: "#i-play", label: "强制开始", text: yn(d.force_start) },
+            { icon: "#i-play", label: "强制启动", text: yn(d.force_start) },
             { icon: "#i-upload", label: "超级做种", text: yn(d.super_seeding) },
-            { icon: "#i-sort", label: "顺序下载", text: yn(d.seq_dl) },
+            { icon: "#i-sort", label: "按顺序下载", text: yn(d.seq_dl) },
             { icon: "#i-bolt", label: "首末块优先", text: yn(d.f_l_piece_prio) },
           ],
         },
@@ -1394,7 +1394,7 @@ window.AQB_DRAWER = {
      * drawerPeerRows, 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed
      * 取名, 故在落袋单点(_fetchDrawerPeers)做一次键名适配: 补 dlspeed / upspeed(保留原键,
      * 其余字段 dl_speed 系的 downloaded/uploaded/flags/progress/relevance 本就同名无需动)。
-     * 漏这一步的症状 = 用户页上下行恒 0(取不到值 → 0), 而桩服务若也按错名造数据则测不出来。 */
+     * 漏这一步的症状 = 用户页上下载恒 0(取不到值 → 0), 而桩服务若也按错名造数据则测不出来。 */
     _drawerNormPeers(resp) {
       const r = resp && typeof resp === "object" ? resp : { peers: [] };
       const fix = (x) => {

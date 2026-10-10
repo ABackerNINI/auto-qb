@@ -1,7 +1,7 @@
 /* auto-qb WEB UI · 详情面板 peers 页签 classic 页插件(R2 S1, 计划 26-10-09-2219)
  *
  * 经典链从 tpl/drawer.html 的 Vue 模板移植为注册表正式条目(id "classic")—— 移植不重写:
- * 九列表格(地址/客户端/标记/进度/下行/上行/已下载/已上传/关联度)类名与结构逐位一致
+ * 九列表格(地址/客户端/标记/进度/下载/上传/已下载/已上传/关联度)类名与结构逐位一致
  * (.drawer-table/.num/.mono-cell/.wrap), CSS 原样命中; 本页无行内动作(观察态页签)。
  * 数据: ctx.drawerPeerRows()(qB peers 响应 dict/array 双形态归一单点) + peersLoading。
  * 三态外壳与表格骨架走部件工具箱(reg.kit, 与其余 classic 插件共享)。
@@ -31,8 +31,8 @@
         T`<td class="num">${p.downloaded}</td><td class="num">${p.uploaded}</td><td class="num">${p.relevance}</td></tr>`
       ).join("");
       h += K.table(
-        ["地址", "客户端", "标记", { label: "进度", num: true }, { label: "下行", num: true },
-         { label: "上行", num: true }, { label: "已下载", num: true }, { label: "已上传", num: true },
+        ["地址", "客户端", "标记", { label: "进度", num: true }, { label: "下载", num: true },
+         { label: "上传", num: true }, { label: "已下载", num: true }, { label: "已上传", num: true },
          { label: "关联度", num: true }],
         trs
       );

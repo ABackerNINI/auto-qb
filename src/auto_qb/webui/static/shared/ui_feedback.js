@@ -44,7 +44,7 @@ window.AQB_FEEDBACK = {
       this.toasts.push({ id, text, kind });
       // 通知: emit 即收(上方注释; auth 整表清空绕过退场钩子, 所以不能等退场)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
-      // sticky = 常驻不自动消失(强制汇报"等待中"): 由 _finishToast 更新终态后退场
+      // sticky = 常驻不自动消失(强制重新汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
       setTimeout(() => this._dropToast(id), toastMs(kind, ms));
       return id;
@@ -119,7 +119,7 @@ window.AQB_FEEDBACK = {
         extraText: "",  // 第三个按钮文案(三选一框, 见 confirmThreeDialog); 空 = 不渲染该钮
         danger: false, input: false, value: "", placeholder: "",
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
-        checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
+        checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制重新汇报 + 删除文件并存)
         details: null,  // 目标信息区 [{icon,label,value}](删除确认框显示待删种子信息)
         fields: null,   // 多字段输入 [{key,label,value,placeholder}](编辑类对话框: 限速/分享率/移动/重命名)
         wide: false,    // 加宽形态(删除确认框: 摘要与选项宽松可读; DLG-01 成员明细区已移除)

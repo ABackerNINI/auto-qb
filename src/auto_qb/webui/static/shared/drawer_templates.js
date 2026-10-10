@@ -347,7 +347,7 @@
     "  font-size:12px; font-weight:600; color:var(--fg-muted, inherit); border-bottom:1px solid var(--border-soft, transparent); }",
     /* R2 S3 右键菜单置灰项: 门不满足时可见但不可点(title 提示原因; 判定在 dtToggleMerge 再拦一道)。
      * 注入在核心层而不是三皮肤 components.css —— 菜单本体是共用模板, 一处注入三皮肤同效。
-     * 2026-10-10: 并集上 `> .ico` —— 强制汇报项置灰(非活跃种子)时图标另有 `.ico-sync` 蓝
+     * 2026-10-10: 并集上 `> .ico` —— 强制重新汇报项置灰(非活跃种子)时图标另有 `.ico-sync` 蓝
      * (三皮肤 components.css, 特异性 0,2,0), 不压它就会出现"文字灰、图标仍蓝"的半灰态。 */
     ".ctx-menu .ctx-item.is-gated, .ctx-menu .ctx-item.is-gated > .ico { color: var(--fg-dim, #888); cursor: default; }",
     ".ctx-menu .ctx-item.is-gated:hover { background: transparent; }",

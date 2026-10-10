@@ -360,7 +360,7 @@ def test_frontend_qb_traffic_chart_wiring():
     # 6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 三皮肤共用 shared/tpl/drawer.html 与
     # shared/qb_traffic_chart.js(登记链已在上面第 3 点逐皮肤钉住), 文案单点改动三皮肤同时
     # 生效 —— 这里钉文案本体 + 触发判据 + 旧文案退场, 不逐皮肤重复
-    assert 'v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种中</span>' in drawer_tpl, \
+    assert 'v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种</span>' in drawer_tpl, \
         "悬停 0 桶缺状态行(空闲段 z 派生 (0,0) 真实观测点, 必须与 null 缺口可辨; 速率行照旧)"
     assert "无采样 · 程序未运行或 qB 断连" in drawer_tpl, \
         "悬停缺口文案未更新(plan §05 首版合并文案: 两态区分依赖可选 API 形状增强, 拍板不做)"
@@ -398,8 +398,8 @@ def test_frontend_qb_traffic_chart_wiring():
     _order = [stat_blk.index(k) for k in ("hs-leg", "窗口", "上传累计", "下载累计", "qb-statctl")]
     assert _order == sorted(_order), \
         "统计栏次序必须为 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 档位/纵轴控件组"
-    assert 'hs-leg' in stat_blk and '上行' in stat_blk and '下行' in stat_blk, \
-        "统计栏(.hist-summary)必须含上行/下行图例(.hs-leg), 且排在「窗口 N 桶」之前"
+    assert 'hs-leg' in stat_blk and '上传' in stat_blk and '下载' in stat_blk, \
+        "统计栏(.hist-summary)必须含上传/下载图例(.hs-leg), 且排在「窗口 N 桶」之前"
     # 口径注解(2026-10-09 第 3 轮, 用户动议): 常驻文案退场, 改为两个累计读数的悬浮提示。
     # title 走全局断供管道(ui_feedback.js 落 DOM 即迁 data-aq-tip), 文案单点仍是 qbCurSummaryHint。
     assert stat_blk.count(':title="qbCurSummaryHint"') == 2, \
@@ -1222,7 +1222,7 @@ ok("空行/null 不拦(不误伤)", M.reannounceBlocked(null) === false && M.rea
 const ctx = { reannounceBlocked: M.reannounceBlocked, reannounceBlockText: M.reannounceBlockText };
 const V = (rows) => M._reannounceVerdict.call(ctx, rows);
 ok("全非活跃 -> 拦", V([{ state: "pausedUP" }, { state: "queuedDL" }]).ok === false);
-ok("全非活跃 -> title 带原因与「无法强制汇报」", /无法强制汇报/.test(V([{ state: "pausedUP" }]).title));
+ok("全非活跃 -> title 带原因与「无法强制汇报」", /无法强制重新汇报/.test(V([{ state: "pausedUP" }]).title));
 ok("全非活跃(多目标) -> title 报目标数", /2 个目标/.test(V([{ state: "pausedUP" }, { state: "error" }]).title));
 ok("混合(含一个活跃) -> 放行", V([{ state: "pausedUP" }, { state: "uploading" }]).ok === true);
 ok("可汇报时 title 为空串(空串 title = 清除旧提示的通道)", V([{ state: "uploading" }]).title === "");
@@ -1352,7 +1352,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
         "_actCore 未按 reannouncePlan 收敛投递集合 —— 混选会对非活跃目标发指令, 确认层随后白等窗口报「未确认」"
     assert "跳过 ${plan.skipped} 个非活跃" in cmds, \
         "回执未体现被跳过的非活跃目标数(用户看不懂「选了 4 个怎么只汇报了 1 个」)"
-    assert "没有可强制汇报的目标" in cmds, \
+    assert "没有可强制重新汇报的目标" in cmds, \
         "缺空投递收口 —— 会落进成功分支报「成功 0 个目标」(把没做事说成做成了)"
     # 前后端判据表逐项同表(各写一份是刻意的: 前端要能在无往返时判置灰; 漂移必须立刻报红)
     assert _PY_BLOCKED_STATES == {

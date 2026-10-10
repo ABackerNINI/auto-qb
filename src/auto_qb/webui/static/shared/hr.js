@@ -41,7 +41,7 @@ const HR_SRC_BUCKETS = {
 const HR_EXCLUDED_BY_TEXT = { tag: "标签规则", category: "分类规则", "tag+category": "标签与分类规则" };
 
 /* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
- * 做种时长单元格的原生 title(一大段文字)换成悬停小弹窗。渲染规则以
+ * 做种时间单元格的原生 title(一大段文字)换成悬停小弹窗。渲染规则以
  * plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html 页脚「实现说明」为单点:
  * 结论短语已含来源与进行中状态 ⇒ 不出「来源章/考核中章」, 生命周期 chip 仅终态标「已结束」;
  * 双轨进度 = 本地粗轨(已做种/要求) + 站点细轨(还需/要求, 仅站点给出 need 端点时出现);
@@ -66,7 +66,7 @@ window.AQB_HR = {
   methods: {
     /* ---------------- HR 展示辅助(布尔/阈值均由后端算好, 前端只做比较与着色) ----------------
      * hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
-     * hr_req_time: 要求做种时长(秒); hr_req_ratio: 要求分享率(0 = 不要求)
+     * hr_req_time: 要求做种时间(秒); hr_req_ratio: 要求分享率(0 = 不要求)
      * 绝不在前端重算模板或阈值(自定义标签格式与要求值会立即失效), 见 ai/08-pitfalls。
      */
     hrTimeReached(m) {
@@ -90,7 +90,7 @@ window.AQB_HR = {
       if (!g.hr_triggered) return "";
       return g.hr_pending ? "pending" : "done";
     },
-    /* 做种时长列的档位配色(2026-09-25): 站点已接入(hr_safety 非空)按**删除安全档位**着色 ——
+    /* 做种时间列的档位配色(2026-09-25): 站点已接入(hr_safety 非空)按**删除安全档位**着色 ——
      * 站点结论优先于本地(v3.0 档位即结论: 站点说已达标, 本地时长没够线也是 reached;
      * 站点考察中, 本地够线也仍 pending)。未接入回落既有本地配色, 行为与历史逐字一致。 */
     hrDurClass(m) {
@@ -111,7 +111,7 @@ window.AQB_HR = {
     },
     /* ---------------- HR 悬停弹窗: 触发调度 + 数据组装(渲染规则单点见文件头) ---------------- */
 
-    /* 触发面 = 做种时长单元格整体(来源徽标在其内, 不单独绑): enter 120ms 后显示,
+    /* 触发面 = 做种时间单元格整体(来源徽标在其内, 不单独绑): enter 120ms 后显示,
      * leave 160ms 宽限后隐藏, 移入弹窗不隐藏(可选中复制); ESC/页面滚动/窗口缩放即时关闭。
      * trg 必须在事件回调里同步捕获(timer 里 currentTarget 已失效)。 */
     hrPopEnter(ev, m) {
@@ -304,8 +304,8 @@ window.AQB_HR = {
     },
     hrGroupTitle(g) {
       if (!g.hr_triggered) return `该${L10N_GROUP}没有成员触发 HR 条件`;
-      if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;
-      return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时长/分享率要求`;
+      if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时间/分享率要求`;
+      return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时间/分享率要求`;
     },
     /* 站点侧三态行(详情抽屉): 结论(含来源档位) + 依据原文 —— 全由后端算好,
      * 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 ⇒ 返回空串(不显示这行) */

@@ -453,7 +453,7 @@ window.AQB_DIALOGS = {
       if (!this.speedOvReady || this.speedOverride.busy) return false;
       const up = Math.max(0, Math.round(Number(this.speedOverride.up)));
       const down = Math.max(0, Math.round(Number(this.speedOverride.down)));
-      const text = `上 ${this.fmtLimit(up) || "不限速"} / 下 ${this.fmtLimit(down) || "不限速"}`;  // toast 保留"不限速"字样(TBL-02)
+      const text = `上传 ${this.fmtLimit(up) || "不限速"} / 下载 ${this.fmtLimit(down) || "不限速"}`;  // toast 保留"不限速"字样(TBL-02)
       this.speedOverride.busy = true;
       try {
         const resp = await this.api("/api/speed/override", {
@@ -583,7 +583,7 @@ window.AQB_DIALOGS = {
         });
         const r = await this.waitCmd(resp.cmd_id);
         if (r.ok) {
-          this.toast(`已更新备用限速: 上 ${this.fmtLimit(up) || "不限速"} / 下 ${this.fmtLimit(down) || "不限速"}`, "ok", 3000);
+          this.toast(`已更新备用限速: 上 ${this.fmtLimit(up) || "不限速"} / 下载 ${this.fmtLimit(down) || "不限速"}`, "ok", 3000);
           return true;
         }
         this.toast("备用限速设置失败: " + r.error, "error", 8000);
@@ -778,11 +778,11 @@ window.AQB_DIALOGS = {
       if (!sm.loaded) return "";
       if (sm.curveEnabled) {
         const t = sm.target || {};
-        return `曲线托管中 · 目标 上${this.fmtLimit(t.upload_kib) || "不限速"} / 下${this.fmtLimit(t.download_kib) || "不限速"}`;
+        return `曲线托管中 · 目标 上传${this.fmtLimit(t.upload_kib) || "不限速"} / 下载${this.fmtLimit(t.download_kib) || "不限速"}`;
       }
       const c = sm.current || {};
       if (c.upload_limit === undefined && c.download_limit === undefined) return "未托管 · qB 限速未知";
-      return `未托管 · qB 当前 上${this.fmtLimit(c.upload_limit) || "不限速"} / 下${this.fmtLimit(c.download_limit) || "不限速"}`;
+      return `未托管 · qB 当前 上传${this.fmtLimit(c.upload_limit) || "不限速"} / 下载${this.fmtLimit(c.download_limit) || "不限速"}`;
     },
     /* 覆盖表单可提交: 两方向都已有数字(空串/非数字不放行 —— 后端两方向都设置, 漏传会被当 0=不限) */
     speedOvReady() {

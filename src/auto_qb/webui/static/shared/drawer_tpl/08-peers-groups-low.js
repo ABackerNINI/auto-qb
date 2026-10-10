@@ -24,8 +24,8 @@
 
   /* 分区定义: 顺序即设计稿五区; quiet = 「只看在传数据」过滤的目标外分区 */
   const GROUPS = [
-    { key: "take", text: "正在从我这下载", color: "--today-up", tip: "对端正在从我方下载数据(U flag); HR 做种时长的来源", quiet: false },
-    { key: "feed", text: "正在给我上传", color: "--today-down", tip: "对端正在向我方供数(D flag), 补齐我缺失的数据", quiet: false },
+    { key: "take", text: "上传中", color: "--today-up", tip: "对端正在从我方下载数据(U flag); HR 做种时间的来源", quiet: false },
+    { key: "feed", text: "下载中", color: "--today-down", tip: "对端正在向我方供数(D flag), 补齐我缺失的数据", quiet: false },
     { key: "idle", text: "闲置同伴", color: "--border-strong", tip: "完整副本且当前无流量的同伴", quiet: true },
     { key: "choke", text: "被我方限流", color: "--warn", tip: "对方有意下载, 但我方已将其限流(u flag)", quiet: false },
     { key: "hand", text: "握手中", color: "--fg-dim", tip: "握手未完成, 客户端与进度未知", quiet: true },
@@ -91,7 +91,7 @@
     ".drawer .dt08-grp.g-feed .dt08-gagg b { color:var(--today-down); }",
     ".drawer .dt08-rows { display:none; flex-direction:column; border-top:1px solid var(--hairline); }",
     ".drawer .dt08-grp:not(.folded) .dt08-rows { display:flex; }",
-    /* 行(grid 10 列: 对端/客户端/Flags/正在取/进度/上行/下行/已发/已收/关联) */
+    /* 行(grid 10 列: 对端/客户端/Flags/正在取/进度/上传/下载/已发/已收/关联) */
     ".drawer .dt08-r, .drawer .dt08-gcols { display:grid;",
     "  grid-template-columns:180px 140px 96px minmax(96px, 1fr) 104px 96px 88px 72px 72px 44px;",
     "  gap:8px; align-items:center; padding:0 12px; min-height:33px; }",
@@ -152,7 +152,7 @@
     "  font-size:11.5px; color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt08-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt08-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg-dim); }",
-    /* 速度微条: 上行 = --today-up / 下行 = --today-down(方向色令牌) */
+    /* 速度微条: 上传 = --today-up / 下载 = --today-down(方向色令牌) */
     ".drawer .dt08-spd { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }",
     ".drawer .dt08-spd b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px;",
     "  line-height:1; white-space:nowrap; }",
@@ -293,8 +293,8 @@
       <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
       ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">正在取</span>` : "")}
       ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上行", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下行", "我方从该对端收到的即时速度(qB dlspeed)"))}
+      ${R(seg("up", "上传", "我方发给该对端的即时速度(qB upspeed)"))}
+      ${R(seg("down", "下载", "我方从该对端收到的即时速度(qB dlspeed)"))}
       ${R(seg("sent", "已发", "本次会话我方已发给该对端的累计(qB uploaded)"))}
       ${R(seg("recv", "已收", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
       <span class="dt08-headcell num" title="relevance: 该对端拥有我缺失数据的比例">关联</span>

@@ -1,6 +1,6 @@
 /* auto-qb WEB UI · qB 口径流量图(uPlot 双系列组件, 三挂点)
  *
- * plan 26-10-03-0946 方案C §07 P5a/P5b。一个「双系列(上行/下行)时间曲线」封装, 三图(全局/单种/
+ * plan 26-10-03-0946 方案C §07 P5a/P5b。一个「双系列(上传/下载)时间曲线」封装, 三图(全局/单种/
  * 分组)共用: uPlot options 样板(axes/series/scales/cursor)收在 _qbChartBuild 单点, 调用方只给
  * points + 容器; null 桶 = 断线不连线(uPlot spanGaps:false, §5.2 拍板语义)。
  *
@@ -54,10 +54,10 @@
  *
  * 纵轴固定模式 + 画布注解层(2026-10-08, 用户拍板; 三挂点通用, issue 26-10-07-0149 认领一并做):
  * 纵轴三态 auto(默认, 随数据峰值) / limit(全局限速 ×1.2) / manual(手动 MiB/s)。限速一律取
- * **qB 全局限速上下行较大者**(三作用域同源); 峰值超出固定上限时**按峰值显示**(上限只保底,
+ * **qB 全局限速上下载较大者**(三作用域同源); 峰值超出固定上限时**按峰值显示**(上限只保底,
  * 不裁剪数据 —— _qbYRange)。偏好**三作用域各自独立**落 localStorage(qbYAxisStoreKey)。
  * 注解层走 uPlot draw/drawClear 钩子画在**同一张画布**上(共享图面, 三挂点 + 经典/所有变体
- * 全生效): 限速虚线(上下行各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
+ * 全生效): 限速虚线(上下载各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
  * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。
  * !2026-10-08 修「缺口斜纹几乎不可分辨」: 斜纹原走 tk.grid(--hairline, alpha 仅 0.05~0.08 的
  * 装饰性 1px 发丝线令牌), 再叠 globalAlpha 0.5 ⇒ 有效不透明度约 3%, 深色底上等于没画(亮主题
@@ -103,8 +103,8 @@ function qbInitialWindow(scope) {
 }
 
 /* 纵轴固定模式(2026-10-08 用户拍板, 三挂点通用): "auto" 自动(随数据峰值) / "limit" 限速+20%
- * / "manual" 手动 MiB/s。限速一律取 **qB 全局限速**(三作用域同源, 用户拍板), 方向取上下行
- * 限速的**较大者** —— 纵轴上下行共用一条, 取大者两条曲线都落在固定上限内。峰值超出固定上限
+ * / "manual" 手动 MiB/s。限速一律取 **qB 全局限速**(三作用域同源, 用户拍板), 方向取上下载
+ * 限速的**较大者** —— 纵轴上下载共用一条, 取大者两条曲线都落在固定上限内。峰值超出固定上限
  * 时**按峰值显示**(上限只保底, 不裁剪数据; 见 _qbYRange)。 */
 const QB_YAXIS_MODES = ["auto", "limit", "manual"];
 const QB_YAXIS_DEFAULT = "auto";
@@ -254,7 +254,7 @@ function _qbYRange(dmax, cap) {
 }
 
 /* 缺口游程(连续 null 桶的 [起, 止] 索引对; 模块级纯函数供 node 单测)。
- * 判据 = **上下行皆 null**(后端整桶 null 时两列同 null; 单列 null 防御性不误判成缺口)。 */
+ * 判据 = **上下载皆 null**(后端整桶 null 时两列同 null; 单列 null 防御性不误判成缺口)。 */
 function _qbGapRuns(up, dl) {
   const out = [];
   let s = -1;
@@ -333,7 +333,7 @@ window.AQB_QB_TRAFFIC = {
       const s = this.qbCurScope;
       return s ? this[_QB_SCOPES[s].window] : "24h";
     },
-    /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下行速率(fmtSpeed 同源);
+    /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下载速率(fmtSpeed 同源);
      * 断线桶(null)不出速率, 出「无采样」文案(plan 26-10-04-0721 §05); 0 桶状态行在
      * drawer.html 模板侧(up+dl==0)。left/flip 由十字线 px 折算。 */
     qbCurHover() {
@@ -498,7 +498,7 @@ window.AQB_QB_TRAFFIC = {
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
     },
     /* ---------------- 纵轴固定模式(2026-10-08; 三挂点各自独立持久化) ---------------- */
-    /* 全局限速(上下行**较大者**, bytes/s; 0 = 无限速或字段未知) —— 三作用域同源(用户拍板)。
+    /* 全局限速(上下载**较大者**, bytes/s; 0 = 无限速或字段未知) —— 三作用域同源(用户拍板)。
      * 取值单点 speedLimitBytes(dialogs.js, 与状态栏/速度染色同源; null = 未知, 0 = 不限速)。 */
     _qbGlobalLimit() {
       const { up, down } = this.speedLimitBytes || {};
@@ -690,7 +690,7 @@ window.AQB_QB_TRAFFIC = {
         }
         return "";
       };
-      // 语义: 上/下行与今日流量卡同源(--today-up/down); 兜底仍走令牌链, 不硬编码色值
+      // 语义: 上/下载与今日流量卡同源(--today-up/down); 兜底仍走令牌链, 不硬编码色值
       return {
         up: pick("--today-up", "--indigo", "--fg"),
         down: pick("--today-down", "--teal", "--fg"),
@@ -769,7 +769,7 @@ window.AQB_QB_TRAFFIC = {
       }
       ctx.restore();
     },
-    /* 限速虚线(draw 钩子 = 画在系列**之上**): qB 全局限速上下行各一条水平虚线(色随方向, 与
+    /* 限速虚线(draw 钩子 = 画在系列**之上**): qB 全局限速上下载各一条水平虚线(色随方向, 与
      * 系列同色义)。只画**落在可视值域内**的限速 —— 自动模式下峰值未超限速时该线在顶沿之上
      * 不可见, 自然不画(用户拍板: 自动模式最大值超过限速才画); 固定模式下限速恒在顶沿之下,
      * 恒画。0(不限速)/null(未知)一律不画。 */
@@ -864,13 +864,13 @@ window.AQB_QB_TRAFFIC = {
         series: [
           { label: "时刻", value: (u, ts) => this.fmtTime(ts) },
           {
-            label: "上行", stroke: tk.up, width: 2,
+            label: "上传", stroke: tk.up, width: 2,
             spanGaps: false,  // null 桶断线不连线(§5.2 拍板: 纯断线, 无最大跨越)
             points: { show: false, size: 6, filter: (u, sIdx) => _qbIsolatedIdxs(u, sIdx) },
             value: (u, v) => this.fmtSpeed(v),
           },
           {
-            label: "下行", stroke: tk.down, width: 2,
+            label: "下载", stroke: tk.down, width: 2,
             spanGaps: false,
             points: { show: false, size: 6, filter: (u, sIdx) => _qbIsolatedIdxs(u, sIdx) },
             value: (u, v) => this.fmtSpeed(v),

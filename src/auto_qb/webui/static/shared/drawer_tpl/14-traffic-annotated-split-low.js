@@ -7,13 +7,13 @@
  * :has() 探测图后宿主内有本变体解读栏(.dt14-side)时, 给 .dt-traffic-main 右侧让位 288px 并把
  * 宿主绝对定位成右栏; 宿主为空(:empty 隐藏)或换变体时自动回落经典纵列, 零残留。
  * 解读栏内容(全部前端派生, P-05 拍板: v1 静态不与图悬停联动):
- *   - 窗口合计与上下行占比(qbCurSummary, 占比条 = 上/下行字节份额);
- *   - 峰值 Top3(有采样桶按上行速率排序, 时段 + 数值 + 相对条);
+ *   - 窗口合计与上下载占比(qbCurSummary, 占比条 = 上/下载字节份额);
+ *   - 峰值 Top3(有采样桶按上传速率排序, 时段 + 数值 + 相对条);
  *   - 缺口事件列表(连续 null 桶游程, 起止取邻桶真值 t, 边缘游程按 interval 反推)。
  * 悬停看数值沿用图上既有 tooltip(不变)。
  * KPI 行图标(Q2, 报告 26-10-07-0542): 段一(窗口合计)三行标签前置 sprite 图标(`<use href>`
  * 静态引用, 全用 sprite 既有 symbol); 段二/段三不加 —— 峰值行已有 #N 排位标记、缺口行已有
- * 「缺口」徽章, 再叠图标属重复编码; 着色随本行值色(上/下行 -> today 令牌, 其余中性)。
+ * 「缺口」徽章, 再叠图标属重复编码; 着色随本行值色(上/下载 -> today 令牌, 其余中性)。
  * 渲染纪律: dtHtml 全量转义, replaceChildren 原子换帧, 数据未变(qbCurData 引用浅比较)跳过重建;
  * 无监听无定时器, destroy 只作重置。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -90,7 +90,7 @@
     return Math.round(s / 86400) + "d";
   }
 
-  /* 峰值 Top3: 有采样桶按上行速率降序取 3 */
+  /* 峰值 Top3: 有采样桶按上传速率降序取 3 */
   function topPeaks(pts, n) {
     const arr = [];
     for (let i = 0; i < pts.length; i++) {
@@ -142,10 +142,10 @@
     /* 段一: 窗口合计与占比 */
     const sec1 = T`<section class="dt14-sec">
       <h4 title="静态解读栏(前端派生; 悬停看逐桶数值请用图上 tooltip)">窗口合计(${ctx.qbCurWindow})</h4>
-      <div class="dt14-row"><span class="k">${R(rowIco("#i-upload", "is-up"))}上行累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
-      <div class="dt14-row"><span class="k">${R(rowIco("#i-download", "is-dl"))}下行累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
-      <div class="dt14-row"><span class="k">${R(rowIco("#i-percent"))}上下行占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
-      <div class="dt14-ratio" title="上行 / 下行 字节占比"><i class="r-up" style="width:${upPct.toFixed(1)}%"></i><i class="r-dl" style="width:${(100 - upPct).toFixed(1)}%"></i></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-upload", "is-up"))}上传累计</span><span class="v is-up">${ctx.fmtSize(s.up || 0)}</span></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-download", "is-dl"))}下载累计</span><span class="v is-dl">${ctx.fmtSize(s.down || 0)}</span></div>
+      <div class="dt14-row"><span class="k">${R(rowIco("#i-percent"))}上下载占比</span><span class="v">${total > 0 ? upPct.toFixed(0) + " : " + (100 - upPct).toFixed(0) : "—"}</span></div>
+      <div class="dt14-ratio" title="上传 / 下载 字节占比"><i class="r-up" style="width:${upPct.toFixed(1)}%"></i><i class="r-dl" style="width:${(100 - upPct).toFixed(1)}%"></i></div>
     </section>`;
 
     /* 段二: 峰值 Top3(静态, P-05: 不做悬停定位联动) */
@@ -153,7 +153,7 @@
     const pkRows = tops.length
       ? tops.map((p, n) => {
         const w = (p.up / tops[0].up) * 100;
-        return T`<div class="dt14-pk" title="该桶上行速率峰值(时段为桶宽区间)">
+        return T`<div class="dt14-pk" title="该桶上传速率峰值(时段为桶宽区间)">
           <span class="rk">#${n + 1}</span>
           <span class="rg">${ctx.fmtTs(p.t) || "—"}</span>
           <span class="pv">${ctx.fmtSpeed(p.up)}</span>

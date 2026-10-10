@@ -3,8 +3,8 @@
  * 设计稿: resources/detail-panel-templates/07-peers-dashboard-tall.html(tall 档; 收起/矮/高三档
  * 语义全部收进本变体 —— 收起 = 核心内置摘要条, 矮/高 = 仪表 + 列表自适应滚动)。
  * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询), 四卡聚合全部前端派生自 peers 数组:
- * 实时流量(对端速度求和 + 会话累计 + 上行去向分段)/ 连接构成(五桶)/ 客户端 Top / 链路健康。
- * 上行去向分段与列表行内速度微条同色(--today-up, plan §04 落地要点; 设计稿多色系不在 S1
+ * 实时流量(对端速度求和 + 会话累计 + 上传去向分段)/ 连接构成(五桶)/ 客户端 Top / 链路健康。
+ * 上传去向分段与列表行内速度微条同色(--today-up, plan §04 落地要点; 设计稿多色系不在 S1
  * 令牌白名单, 分段用透明度梯度区分)。方向构成五桶色: take=--today-up / feed=--today-down /
  * idle=--border-strong / choke=--warn / hand=--fg-dim。
  * 动作: 纯观察无动作(plan §4 映射行); 筛选 chips 与列头排序为纯前端态。
@@ -26,8 +26,8 @@
   /* 方向五桶(与 08/09 同判据, 纯 flags 派生): U=我方向其上传 D=对端向我供数
    * u=被我方限流 ?/空=握手未完成, 其余(含 K 完整副本)=闲置 */
   const BUCKETS = [
-    { key: "take", text: "取流中", color: "--today-up", tip: "我方正在向其上传数据的对端" },
-    { key: "feed", text: "供流中", color: "--today-down", tip: "我方正在从其下载数据的对端" },
+    { key: "take", text: "上传中", color: "--today-up", tip: "我方正在向其上传数据的对端" },
+    { key: "feed", text: "下载中", color: "--today-down", tip: "我方正在从其下载数据的对端" },
     { key: "idle", text: "闲置同伴", color: "--border-strong", tip: "完整副本且当前无流量" },
     { key: "choke", text: "被我方限流", color: "--warn", tip: "对方有意下载, 但我方已将其限流" },
     { key: "hand", text: "握手中", color: "--fg-dim", tip: "握手未完成, 身份未明" },
@@ -50,8 +50,8 @@
   /* 筛选 chips: bad 档仅有嫌疑对端时出现(渐进) */
   const FILTERS = [
     { key: "all", text: "全部" },
-    { key: "up", text: "上行中" },
-    { key: "down", text: "下行中" },
+    { key: "up", text: "上传中" },
+    { key: "down", text: "下载中" },
     { key: "bad", text: "吸血嫌疑" },
     { key: "lan", text: "内网" },
     { key: "hand", text: "握手中" },
@@ -189,7 +189,7 @@
     "  color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt07-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt07-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg-dim); }",
-    /* 速度微条: 上行 = --today-up(与卡 1 上行去向分段同色联动) / 下行 = --today-down */
+    /* 速度微条: 上传 = --today-up(与卡 1 上传去向分段同色联动) / 下载 = --today-down */
     ".drawer .dt07-spd { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }",
     ".drawer .dt07-spd b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px;",
     "  line-height:1; white-space:nowrap; }",
@@ -267,7 +267,7 @@
     const dnN = countOf(list, "down");
     const sent = list.reduce((s, p) => s + num(p.uploaded), 0);
     const recv = list.reduce((s, p) => s + num(p.downloaded), 0);
-    /* 上行去向分段: 按 client 首词聚合 upspeed, Top 5; 与行内速度微条同色(--today-up) */
+    /* 上传去向分段: 按 client 首词聚合 upspeed, Top 5; 与行内速度微条同色(--today-up) */
     const byClient = {};
     for (const p of list) {
       if (num(p.upspeed) <= 0) continue;
@@ -282,9 +282,9 @@
       return T`<i style="width:${w}%;opacity:${op}"></i>`;
     }).join("");
     const tip = top.length
-      ? "上行去向(按占比): " + top.map((k) => k + " " + (byClient[k] / denom * 100).toFixed(1) + "%").join(" · ")
+      ? "上传去向(按占比): " + top.map((k) => k + " " + (byClient[k] / denom * 100).toFixed(1) + "%").join(" · ")
         + " — 与列表行内速度微条同色(--today-up)"
-      : "当前无上行对端";
+      : "当前无上传对端";
     return T`<div class="dt07-card">
       <div class="dt07-label"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pulse"></use></svg>实时流量</div>
       <div class="dt07-flow">
@@ -461,8 +461,8 @@
       <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
       ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">正在取</span>` : "")}
       ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上行", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下行", "我方从该对端收到的即时速度(qB dlspeed)"))}
+      ${R(seg("up", "上传", "我方发给该对端的即时速度(qB upspeed)"))}
+      ${R(seg("down", "下载", "我方从该对端收到的即时速度(qB dlspeed)"))}
       ${R(seg("sent", "已发", "本次会话我方已发给该对端的累计(qB uploaded)"))}
       ${R(seg("recv", "已收", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
       ${R(seg("rel", "关联", "relevance: 该对端拥有我缺失数据的比例"))}
@@ -502,7 +502,7 @@
     const rows = sorted(filtered(list)).map((p) => rowHtml(p, hasFiles)).join("");
     const html = T`<div class="dt07-wrap">
       <div class="dt07-cards">${R(card1Html(ctx, list))}${R(card2Html(list))}${R(card3Html(list))}${R(card4Html(list))}</div>
-      <div class="dt07-bar">${R(chips)}<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上行」降序</span></div>
+      <div class="dt07-bar">${R(chips)}<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上传」降序</span></div>
       <div class="dt07-list">${R(headHtml(hasFiles))}${R(rows)}</div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把

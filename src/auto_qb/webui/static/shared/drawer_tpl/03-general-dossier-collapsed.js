@@ -25,12 +25,12 @@
 
   /* qB 原始 state -> 展示文案(徽章/摘要用; 与经典链 stateText 的成员视图口径独立, 只覆盖常见值) */
   const STATE_TEXT = {
-    uploading: "做种中", stalledUP: "做种中", forcedUP: "强制做种",
-    downloading: "下载中", stalledDL: "等待下载", forcedDL: "强制下载", metaDL: "获取元数据",
-    pausedUP: "已暂停(已完成)", pausedDL: "已暂停",
-    queuedUP: "排队(做种)", queuedDL: "排队(下载)",
-    checkingUP: "校验中", checkingDL: "校验中", checkingResumeData: "恢复校验",
-    allocating: "分配中", moving: "移动中", errored: "出错",
+    uploading: "做种", stalledUP: "做种", forcedUP: "强制做种",
+    downloading: "下载", stalledDL: "等待", forcedDL: "强制下载", metaDL: "下载元数据",
+    pausedUP: "已完成", pausedDL: "暂停",
+    queuedUP: "排队", queuedDL: "排队",
+    checkingUP: "校验", checkingDL: "校验", checkingResumeData: "校验恢复数据",
+    allocating: "分配中", moving: "移动中", errored: "错误",
   };
   const SEEDING_STATES = ["uploading", "stalledUP", "forcedUP"];
 
@@ -303,10 +303,10 @@
     /* 限速与配额(渐进: 缺失/负值整行省略; 0 = 不限) */
     const limRows = [];
     if (d.up_limit !== undefined && d.up_limit !== null && d.up_limit >= 0) {
-      limRows.push(sideKv("上行限速", d.up_limit === 0 ? "不限" : ctx.fmtSpeed(d.up_limit), d.up_limit === 0 ? "is-dim" : "is-hr"));
+      limRows.push(sideKv("上传限制", d.up_limit === 0 ? "不限" : ctx.fmtSpeed(d.up_limit), d.up_limit === 0 ? "is-dim" : "is-hr"));
     }
     if (d.dl_limit !== undefined && d.dl_limit !== null && d.dl_limit >= 0) {
-      limRows.push(sideKv("下行限速", d.dl_limit === 0 ? "不限" : ctx.fmtSpeed(d.dl_limit), d.dl_limit === 0 ? "is-dim" : ""));
+      limRows.push(sideKv("下载限制", d.dl_limit === 0 ? "不限" : ctx.fmtSpeed(d.dl_limit), d.dl_limit === 0 ? "is-dim" : ""));
     }
     if (d.max_ratio !== undefined && d.max_ratio !== null && d.max_ratio >= 0) {
       limRows.push(sideKv("分享率限制", d.max_ratio.toFixed(2) + (d.share_limit_action ? " · " + d.share_limit_action : "")));

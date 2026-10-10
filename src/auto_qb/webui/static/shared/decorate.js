@@ -50,7 +50,7 @@ function _decoFpHit(g, fp) {
   return fp[i] === (ms.length ? ms[0].save_path : undefined);
 }
 
-/* 强制汇报"非活跃"状态集(qB 口径, 单点): qBittorrent commit aa189a7(关闭 issue #12080)
+/* 强制重新汇报"非活跃"状态集(qB 口径, 单点): qBittorrent commit aa189a7(关闭 issue #12080)
  * 起, 右键 "Force reannounce" 只在种子可汇报时可用 —— isPaused / isChecking / isQueued 时
  * `setEnabled(false)` 置灰, 其 tooltip 原文 "Can not force reannounce if torrent is
  * Paused/Queued/Errored/Checking"。根因在 libtorrent: force_tracker_request 对暂停种子
@@ -62,13 +62,13 @@ function _decoFpHit(g, fp) {
  *   会把排队种子当成活跃。state 缺失(老版本/异常行)时回落到 kind 的 paused/checking/error
  *   三档兜底(与 views.py::state_kind 的非活跃三档一一对应, 宁可漏放不误拦)。 */
 const REANNOUNCE_BLOCKED_STATES = {
-  pausedDL: "种子已暂停", pausedUP: "种子已暂停",
+  pausedDL: "种子暂停", pausedUP: "种子暂停",
   stoppedDL: "种子已停止", stoppedUP: "种子已停止",
-  queuedDL: "种子排队中", queuedUP: "种子排队中",
-  checkingDL: "种子校验中", checkingUP: "种子校验中", checkingResumeData: "种子校验中",
-  error: "种子错误", missingFiles: "文件缺失",
+  queuedDL: "种子排队", queuedUP: "种子排队",
+  checkingDL: "种子校验", checkingUP: "种子校验", checkingResumeData: "种子校验",
+  error: "种子错误", missingFiles: "丢失文件",
 };
-const REANNOUNCE_BLOCKED_KINDS = { paused: "种子已暂停", checking: "种子校验中", error: "种子错误" };
+const REANNOUNCE_BLOCKED_KINDS = { paused: "种子暂停", checking: "种子校验", error: "种子错误" };
 
 window.AQB_DECORATE = {
   methods: {
@@ -137,7 +137,7 @@ window.AQB_DECORATE = {
       return { value: diff ? "" : vals[0], diff };
     },
     kindText(kind) {
-      return { seeding: "做种", downloading: "下载", checking: "校验中", paused: "已暂停", error: "错误", other: "其他" }[kind] || kind;
+      return { seeding: "做种", downloading: "下载", checking: "校验", paused: "暂停", error: "错误", other: "其他" }[kind] || kind;
     },
     /* 单种子状态文案: 错误状态优先显示**后端算好的具体原因**(error_reason: "文件丢失" /
      * tracker 报错原文), 其余状态回落 kindText。原因文本一律由后端给出(取数单点), 前端不得
@@ -149,7 +149,7 @@ window.AQB_DECORATE = {
       return this.kindText(m.kind);
     },
     kindIcon(kind) {
-      // 状态图标(与 sprite symbol 一一对应): 校验中用 i-pulse(配合 CSS 呼吸动画, 语义=进行中)
+      // 状态图标(与 sprite symbol 一一对应): 校验用 i-pulse(配合 CSS 呼吸动画, 语义=进行中)
       return {
         seeding: "#i-upload", downloading: "#i-download", checking: "#i-pulse",
         paused: "#i-pause", error: "#i-warn", other: "#i-info",
@@ -157,7 +157,7 @@ window.AQB_DECORATE = {
     },
     /* HR 标签分类色(与后端 WebviewMixin._hr_view_tags 对应)
      *
-     * pending = 已触发 HR 条件但尚未满足做种时长/分享率(需关注, 用最鲜亮的颜色);
+     * pending = 已触发 HR 条件但尚未满足做种时间/分享率(需关注, 用最鲜亮的颜色);
      * done    = 已满足(可以放宽, 用另一组镇静的颜色)。判定依据是后端解析后的标签文本
      * (已展开 ${required_seeding_time} 变量), 因此与真正写入 qB 的标签逐字相等。
      * 组级列展示的是"共同标签"——若某标签全组共有, 则组内 HR 状态必然一致, 故用代表成员即可。
@@ -168,7 +168,7 @@ window.AQB_DECORATE = {
       if (member.hr_tag_done && tag === member.hr_tag_done) return "hr-done";
       return "";
     },
-    /* ---------------- 强制汇报可用性(qB 口径, 单点判定) ----------------
+    /* ---------------- 强制重新汇报可用性(qB 口径, 单点判定) ----------------
      * 判据表见文件顶部 REANNOUNCE_BLOCKED_STATES。四个消费面共用这一份:
      *   右键菜单(ctx-menus.html 四支)/ 键盘 shortcuts.js _kbAct / 动作层 commands.js _actCore /
      *   详情面板 tracker 页签的重报钮(drawer_tpl 04/05/06 + drawer.js torrentCmd)。
@@ -202,8 +202,8 @@ window.AQB_DECORATE = {
       return {
         ok: false,
         title: rows.length === 1
-          ? `${this.reannounceBlockText(rows[0])}，无法强制汇报`
-          : `全部 ${rows.length} 个目标均非活跃(暂停/停止/排队/校验中/错误)，无法强制汇报`,
+          ? `${this.reannounceBlockText(rows[0])}，无法强制重新汇报`
+          : `全部 ${rows.length} 个目标均非活跃(暂停/停止/排队/校验/错误)，无法强制重新汇报`,
       };
     },
     reannounceTargetsGate(t) {

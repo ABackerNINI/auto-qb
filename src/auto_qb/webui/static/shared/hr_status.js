@@ -72,7 +72,7 @@ function hrsCompareRows(a, b, key, dir) {
 
 /* ---------------- 表③ 拉取历史常量与判据(计划 26-10-04-0312 §3.5, 模块级单例) ----------------
  * token 都是后端字面量, 只比对不重算: BAD_ACTIONS = 波终态里算「异常」的四个 action
- * (kind='defer' 的拦下行不论 action 一律算异常, 计划 §3.5 拍板); TONES = result_tone 徽章
+ * (kind='defer' 的拦下载不论 action 一律算异常, 计划 §3.5 拍板); TONES = result_tone 徽章
  * 色档白名单(后端 HISTORY_RESULT_BADGES 色档族), 未知档回落 dim(与后端未知 action 回落
  * dim 同款兜底); LIMIT = 单页拉取条数(拍板值, 与端点缺省一致)。 */
 const HRS_HIST_LIMIT = 300;

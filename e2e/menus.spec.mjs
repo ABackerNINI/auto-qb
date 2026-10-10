@@ -172,7 +172,7 @@ for (const skin of SKINS) {
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
         const texts = await openMenuTexts(page);
         // W2: 批量菜单含限速/移动两项(排序从宽, 只要求同时出现 —— 旧同口径)
-        expect(texts.some((t) => t.includes('限速…')) && texts.some((t) => t.includes('移动…')),
+        expect(texts.some((t) => t.includes('速度限制…')) && texts.some((t) => t.includes('设定位置…')),
           `批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
         // W5 汇总: 四项齐 —— 专抓"加了新项挤掉旧项"这类汇总遗漏(旧收录口径同款)
         expect(['限速…', '移动…', '跳检…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
@@ -187,7 +187,7 @@ for (const skin of SKINS) {
         const N = 3;
         const picked = await pickRows(page, N);
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
-        const item = ctxItem(page, '限速…');
+        const item = ctxItem(page, '速度限制…');
         await expect(item).toBeVisible({ timeout: 5_000 });
         const { hits, off } = bulkTap(page);
         // 旧 W2 用法原样移植(第②类时序探针): armClick 依赖 armPending 预置的 window.__p;
@@ -230,11 +230,11 @@ for (const skin of SKINS) {
         // 单选: 右键未选中行(= 单目标菜单); 之后再右键选中锚点会整份替换菜单, 不会串台(旧同序)
         await clickRow(page, page.locator('.torrent-row').nth(N + 3), { button: 'right' });
         let texts = await openMenuTexts(page);
-        expect(texts.some((t) => t.includes('跳检…')), `单选菜单: ${texts.slice(0, 10).join(' / ')}`).toBe(true);
+        expect(texts.some((t) => t.includes('跳过哈希校验…')), `单选菜单: ${texts.slice(0, 10).join(' / ')}`).toBe(true);
         // 批量: 右键选中锚点(重新校验之后、限速/移动之前, 从宽只要求出现 —— 旧同口径)
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
         texts = await openMenuTexts(page);
-        expect(texts.some((t) => t.includes('跳检…')), `批量菜单: ${texts.slice(0, 9).join(' / ')}`).toBe(true);
+        expect(texts.some((t) => t.includes('跳过哈希校验…')), `批量菜单: ${texts.slice(0, 9).join(' / ')}`).toBe(true);
         await page.keyboard.press('Escape');
       });
 
@@ -252,7 +252,7 @@ for (const skin of SKINS) {
         const { hits, off } = bulkTap(page);
         // 1. 取消: 点「跳检…」→ danger 确认框 → 点「取消」→ 零 bulk POST
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
-        await ctxItem(page, '跳检…').click();
+        await ctxItem(page, '跳过哈希校验…').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await expect(page.locator('.modal-title')).toContainText('批量跳检');
         await page.locator('.modal-actions .bt.ghost').click(); // 取消
@@ -262,7 +262,7 @@ for (const skin of SKINS) {
         expect(await readInst(page, 'vm.selMembers.length'), '取消后选择保持').toBe(N);
         // 2. 确认: 再走一遍 → 点「跳检」(danger-solid) → 恰好 1 条 bulk(action=skip_check)
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
-        await ctxItem(page, '跳检…').click();
+        await ctxItem(page, '跳过哈希校验…').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await page.locator('.modal-actions .bt.danger-solid').click();
         await expect.poll(() => hits.n, { message: '确认后应恰好 1 条 bulk POST', timeout: 8_000 }).toBe(1);
@@ -517,8 +517,8 @@ for (const skin of SKINS) {
         // 单选: 不选中任何行直接右键
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
         const texts = await openMenuTexts(page);
-        expect(texts.some((t) => t.includes('限速…')), `单选菜单: ${texts.slice(0, 10).join(' / ')}`).toBe(true);
-        expect(texts.some((t) => t.includes('跳检…')), '关态单选菜单不得渲染跳检项').toBe(false);
+        expect(texts.some((t) => t.includes('速度限制…')), `单选菜单: ${texts.slice(0, 10).join(' / ')}`).toBe(true);
+        expect(texts.some((t) => t.includes('跳过哈希校验…')), '关态单选菜单不得渲染跳检项').toBe(false);
         await page.keyboard.press('Escape');
       });
 
@@ -531,7 +531,7 @@ for (const skin of SKINS) {
         const texts = await openMenuTexts(page);
         expect(['限速…', '移动…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
           `多选菜单: ${texts.slice(0, 11).join(' / ')}`).toBe(true);
-        expect(texts.some((t) => t.includes('跳检…')), '关态多选菜单不得渲染跳检项').toBe(false);
+        expect(texts.some((t) => t.includes('跳过哈希校验…')), '关态多选菜单不得渲染跳检项').toBe(false);
         await page.keyboard.press('Escape');
       });
     });
@@ -557,14 +557,14 @@ for (const skin of SKINS) {
         expect(await activeRow.count(), '首屏窗口内应有活跃行').toBeGreaterThan(0);
 
         await clickRow(page, pausedRow, { button: 'right' });
-        const item = ctxItem(page, '强制汇报');
+        const item = ctxItem(page, '强制重新汇报');
         await expect(item).toBeVisible({ timeout: 5_000 });
         await expect(item, '非活跃种子的强制汇报项应置灰(is-gated)').toHaveClass(/is-gated/);
         /* 原因提示读 **data-aq-tip**: 全站悬浮提示由 ui_feedback 的拦截层把 title **单向迁移**成
          * data-aq-tip 并删掉原属性(原生气泡断供式, 见其文件头) —— 页面上 `title` 早已不存在,
          * 真浏览器里只能读迁移后的落点。 */
         const tip = (await item.getAttribute('data-aq-tip')) || (await item.getAttribute('title'));
-        expect(tip, '置灰项提示应给出原因(data-aq-tip)').toMatch(/无法强制汇报/);
+        expect(tip, '置灰项提示应给出原因(data-aq-tip)').toMatch(/无法强制重新汇报/);
         const { hits, off } = reannounceTap(page);
         await item.click();          // 置灰项仍可被点(样式拦显示), 行为层必须拦住
         await page.waitForTimeout(700); // 观察窗: 越过点击 -> 投递的短窗
@@ -572,14 +572,14 @@ for (const skin of SKINS) {
         expect(hits.n, '非活跃种子点击强制汇报不得发出任何 reannounce 请求').toBe(0);
         await expect.poll(async () => {
           const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
-          return (ts || []).some((x) => x.startsWith('error|') && x.includes('无法强制汇报'));
+          return (ts || []).some((x) => x.startsWith('error|') && x.includes('无法强制重新汇报'));
         }, { message: '置灰项被点击后应有一条 error toast 说明原因', timeout: 5_000 }).toBe(true);
 
         // 活跃态对照: 同一菜单项不得置灰(判据只在非活跃目标上生效)
         await page.keyboard.press('Escape');
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
         await clickRow(page, activeRow, { button: 'right' });
-        const actItem = ctxItem(page, '强制汇报');
+        const actItem = ctxItem(page, '强制重新汇报');
         await expect(actItem).toBeVisible({ timeout: 5_000 });
         expect(String(await actItem.getAttribute('class')), '活跃种子的强制汇报项不得置灰').not.toMatch(/is-gated/);
         await page.keyboard.press('Escape');
@@ -608,7 +608,7 @@ for (const skin of SKINS) {
         expect(await readInst(page, '(vm.selMembers || []).length'), '混选应选中 2 个种子').toBe(2);
 
         await clickRow(page, activeRow, { button: 'right' });
-        const item = ctxItem(page, '强制汇报');
+        const item = ctxItem(page, '强制重新汇报');
         await expect(item).toBeVisible({ timeout: 5_000 });
         expect(String(await item.getAttribute('class')), '混选含活跃目标 -> 按 qB 口径放行(不得置灰)')
           .not.toMatch(/is-gated/);

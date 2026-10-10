@@ -23,12 +23,12 @@
 
   /* qB 原始 state -> 展示文案(徽章用; 与经典链 stateText 的成员视图口径独立, 只覆盖常见值) */
   const STATE_TEXT = {
-    uploading: "做种中", stalledUP: "做种中", forcedUP: "强制做种",
-    downloading: "下载中", stalledDL: "等待下载", forcedDL: "强制下载", metaDL: "获取元数据",
-    pausedUP: "已暂停(已完成)", pausedDL: "已暂停",
-    queuedUP: "排队(做种)", queuedDL: "排队(下载)",
-    checkingUP: "校验中", checkingDL: "校验中", checkingResumeData: "恢复校验",
-    allocating: "分配中", moving: "移动中", errored: "出错",
+    uploading: "做种", stalledUP: "做种", forcedUP: "强制做种",
+    downloading: "下载", stalledDL: "等待", forcedDL: "强制下载", metaDL: "下载元数据",
+    pausedUP: "已完成", pausedDL: "暂停",
+    queuedUP: "排队", queuedDL: "排队",
+    checkingUP: "校验", checkingDL: "校验", checkingResumeData: "校验恢复数据",
+    allocating: "分配中", moving: "移动中", errored: "错误",
   };
   const SEEDING_STATES = ["uploading", "stalledUP", "forcedUP"];
 
@@ -198,12 +198,12 @@
         <span class="dt01-s">上传 ${size(ctx, d.uploaded)} · 下载 ${size(ctx, d.downloaded)}</span>
       </div>
       <div title="upspeed / dlspeed">
-        <span class="dt01-k">上行速度</span>
+        <span class="dt01-k">上传速度</span>
         <span class="dt01-v is-up">${up}</span>
-        <span class="dt01-s">下行 ${ctx.fmtSpeedOrDash(d.dlspeed) || "—"}</span>
+        <span class="dt01-s">下载 ${ctx.fmtSpeedOrDash(d.dlspeed) || "—"}</span>
       </div>
       <div title="num_seeds(num_complete) / num_leechs(num_incomplete)">
-        <span class="dt01-k">做种 / 用户</span>
+        <span class="dt01-k">做种数 / 用户</span>
         <span class="dt01-v">${d.num_seeds ?? 0}<span class="u">/ ${d.num_leechs ?? 0}</span></span>
         <span class="dt01-s">swarm ${d.num_seeds ?? 0}(${d.num_complete ?? 0}) · 连接 ${d.connections_count ?? 0} / ${d.connections_limit ?? 0}</span>
       </div>

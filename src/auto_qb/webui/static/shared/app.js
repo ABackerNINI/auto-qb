@@ -34,7 +34,7 @@ const { createApp } = Vue;
  * align:  对齐口径(R10-08) —— **表头与值单元格的唯一来源**, 由 colAlignCss 生成规则注入,
  *         不在模板里逐格挂类(67 个值单元格 × 4 视图 × 2 套 UI, 逐格挂必漏)。
  *         取值 left | right | center; 缺省 = left。
- *         用户清单(2026-09-17): 名称/进度/状态/站点/分类/标签/添加于/做种时长/最近活动/
+ *         用户清单(2026-09-17): 名称/进度/状态/站点/分类/标签/添加于/做种时间/最近活动/
  *         hashv1/hash/tracker/保存路径 = 左, 其余数值/大小/速度/比率 = 右, 计数类(站数/H&R/版本)
  *         保持既有居中口径。
  */
@@ -57,7 +57,7 @@ const GROUP_COLUMNS = [
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
   { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)", align: "left" },
-  // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 WebviewMixin._build_group_view)
+  // H&R: 未满足做种时间/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 WebviewMixin._build_group_view)
   { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true, align: "center" },
   { key: "count", label: "站数", tpl: "56px", sortable: true, align: "center" },
   // TBL-06: 组级"最近添加"(组内成员最大 added_on, 后端 _build_group_view 已透出);
@@ -70,10 +70,10 @@ const GROUP_COLUMNS = [
   // 相应取消该列 —— 组内成员路径本就一致(组 key 首元即规范化 save_path), 重复展示无信息量。
   { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", sortable: true, align: "left" },
   // ---- 以下为可选列(默认隐藏, hide: true; 表头名称与种子页同名列对齐) ----
-  // 剩余量 = 组内最小: 组内指向同一份文件, 补齐一份即可 —— 最完整成员还差的字节
-  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
-  // 做种时长 = 组内平均(最老/最新成员都不代表整组), 分钟取整
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
+  // 剩余 = 组内最小: 组内指向同一份文件, 补齐一份即可 —— 最完整成员还差的字节
+  { key: "amount_left", label: "剩余", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
+  // 做种时间 = 组内平均(最老/最新成员都不代表整组), 分钟取整
+  { key: "seeding_time", label: "做种时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
   // 可用性 = 组内最高(内容获取由最好的 swarm 决定); 全组未知(qB 负值)后端回 null
   { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right", hide: true },
   // 组分享率 = 总上传 ÷ 单份大小(分母不能是 total_size —— N 份会稀释 N 倍)
@@ -84,10 +84,10 @@ const DETAIL_COLUMNS = [
   { key: "state", label: "状态", tpl: "76px", sortable: true, align: "left" },
   // TBL-06: 做种/用户(与种子页同口径 "已连接 (总数)", fmtPeersQb) —— 字段 W1a-BE 已在 _member_view 透出;
   // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头已接排序, 2026-09-17)
-  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },
+  { key: "num_seeds", label: "做种数", tpl: "92px", sortable: true, align: "right" },
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
   // 做种(总)/用户(总): tracker 汇报的 swarm 全量(即"做种/用户"列括号里的那个数), 独立成列可按它排序
-  { key: "num_complete", label: "做种(总)", tpl: "92px", sortable: true, align: "right", hide: true },
+  { key: "num_complete", label: "做种数(总)", tpl: "92px", sortable: true, align: "right", hide: true },
   { key: "num_incomplete", label: "用户(总)", tpl: "92px", sortable: true, align: "right", hide: true },
   { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -99,38 +99,38 @@ const DETAIL_COLUMNS = [
   { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes); 用户 2026-09-28 指定默认隐藏
-  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
-  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
+  { key: "up_limit", label: "上传限制", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
+  { key: "dl_limit", label: "下载限制", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
   // 与分组表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)", sortable: true, align: "left" },
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true, align: "left" },
+  { key: "seeding_time", label: "做种时间", tpl: "minmax(124px, 1.1fr)", sortable: true, align: "left" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值); Hash 不可排序(无语义), 其余列均可
   // 2026-09-26 用户要求: 分享率列左对齐(与相邻数值列的右对齐不同, 值含 "实际 / HR 要求" 两段,
   // 左对齐起读更稳); 对齐单点在列模型, 由 colAlignCss 同时作用于表头与值(两套 UI 同源)
   { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "left" },
   // 可用性: swarm 健康度(组级取最高, 这里看最高值来自哪个站); 负数/暂停不显示(cellAvailability)
   { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right", hide: true },
-  // 见到完整副本: swarm 侧最近一次出现完整拷贝的时间(保种/HR 诊断); 文案与详情抽屉一致
-  { key: "seen_complete", label: "见到完整副本", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
+  // 最后完整可见: swarm 侧最近一次出现完整拷贝的时间(保种/HR 诊断); 文案与详情抽屉一致
+  { key: "seen_complete", label: "最后完整可见", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
   // TBL-06: 添加于(_member_view 已透出), 与 Hash 同置表尾低频区
   // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
-  // 完成于/最近活动/活跃时间: 成员差异时间列, 表头名称与种子页同名列对齐
-  // 时间/时长族一律左对齐(2026-09-29 列对齐审计 R4: 与添加于/最近活动/做种时长同族同口径)
+  // 完成于/最近活动/活动时间: 成员差异时间列, 表头名称与种子页同名列对齐
+  // 时间/时长族一律左对齐(2026-09-29 列对齐审计 R4: 与添加于/最近活动/做种时间同族同口径)
   { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
   { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
-  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
-  // Tracker: 每站点各自 announce; Hash v2: v2 种子的信息哈希 —— 均成员各异(用户 2026-09-28 指定默认隐藏)
+  { key: "time_active", label: "活动时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
+  // Tracker: 每站点各自 announce; 信息哈希值 v2: v2 种子的信息哈希 —— 均成员各异(用户 2026-09-28 指定默认隐藏)
   { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)", align: "left", hide: true },
-  { key: "hash", label: "Hash", tpl: "80px", align: "left", hide: true },
-  { key: "infohash_v2", label: "Hash v2", tpl: "90px", align: "left", hide: true },
+  { key: "hash", label: "信息哈希值", tpl: "80px", align: "left", hide: true },
+  { key: "infohash_v2", label: "信息哈希值 v2", tpl: "90px", align: "left", hide: true },
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
  * 站点/做种/用户/下载/上传/剩余时间/分享率/已上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
- * (已下载/剩余量/可用性/做种时长/活跃时间/最近活动/完成于/限速/Hash v1/tracker/保存路径/Hash)
+ * (已下载/剩余/可用性/做种时间/活动时间/最近活动/完成于/限速/信息哈希值 v1/tracker/保存路径/Hash)
  * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
  * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
 const TORRENT_COLUMNS = [
@@ -139,7 +139,7 @@ const TORRENT_COLUMNS = [
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
   { key: "state", label: "状态", tpl: "76px", align: "left" },
   { key: "site", label: "站点", tpl: "110px", sortable: true, align: "left" },
-  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },  // "已连接 (总数)" 格式(TBL-04), 64px 放不下
+  { key: "num_seeds", label: "做种数", tpl: "92px", sortable: true, align: "right" },  // "已连接 (总数)" 格式(TBL-04), 64px 放不下
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
@@ -155,18 +155,18 @@ const TORRENT_COLUMNS = [
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
   // ---- 以下为列选择器可选列(默认隐藏; 字段集 = SEED_ITEM 扩展段) ----
   { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
-  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "amount_left", label: "剩余", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right" },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
-  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },  // 时间/时长族左对齐(R4, 同 DETAIL_COLUMNS)
+  { key: "seeding_time", label: "做种时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
+  { key: "time_active", label: "活动时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },  // 时间/时长族左对齐(R4, 同 DETAIL_COLUMNS)
   { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
   { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },  // 时间点族左对齐(R4)
-  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)", align: "right" },
-  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)", align: "right" },
-  { key: "infohash_v1", label: "Hash v1", tpl: "90px", align: "left" },
+  { key: "up_limit", label: "上传限制", tpl: "minmax(96px, 1fr)", align: "right" },
+  { key: "dl_limit", label: "下载限制", tpl: "minmax(96px, 1fr)", align: "right" },
+  { key: "infohash_v1", label: "信息哈希值 v1", tpl: "90px", align: "left" },
   { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)", align: "left" },
   { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", align: "left" },
-  { key: "hash", label: "Hash", tpl: "80px", align: "left" },
+  { key: "hash", label: "信息哈希值", tpl: "80px", align: "left" },
 ];
 /* 追剧视图列模型: 剧行(剧名) / 季子标题 / 集行共用同一套列; 集行是展示主体(聚合层后端算好,
  * 明细成员经 memberByHash 索引取, 不随 shows 重复回传)。列宽按列 key 记忆在独立 page "show" 下
@@ -217,7 +217,7 @@ const COLS_ORIGIN_HINT_KEY = "autoqb_cols_origin_hint_v1";
  * 最近活动看相对", 一把切会互相打架。刻意**不**塞进 COLS_STORE_KEY: 那个键管的是列集合/列宽/
  * 顺序(按 page 分段 + 跨标签合并), 显示口径是另一条生命周期, 混进去要多背一段 read-modify-write。
  * 默认值 = 改造前的现状(添加于/完成于/最近动静原本就是绝对时间, 最近活动已改相对) —— 加开关不该
- * 顺手改掉既有观感。WARN: 只收**时间点**列: 做种时长/活跃时间/ETA 是时长, 没有绝对/相对之分。 */
+ * 顺手改掉既有观感。WARN: 只收**时间点**列: 做种时间/活动时间/ETA 是时长, 没有绝对/相对之分。 */
 const TIME_FMT_STORE_KEY = "autoqb_timefmt_v1";
 const TIME_FMT_KEYS = ["added_on", "last_activity", "completion_on", "latest"];
 const TIME_FMT_DEFAULT = { added_on: "abs", last_activity: "rel", completion_on: "abs", latest: "abs" };
@@ -483,11 +483,11 @@ function initialDrawerMerge() {
  * 机械守卫(改一边必须改另一边), 该项同时钉住"做种排在暂停之前"的顺序语义。
  *
  * 语义 = "先报需要处理的, 再报在跑的, 最后报已完成的"; 但 **seeding 必须排在 paused 之前** ——
- * 组内"部分暂停部分做种中"是常态(整组只有个别站点被暂停), 取 paused 会把整个做种中的组刷成灰的。
+ * 组内"部分暂停部分做种"是常态(整组只有个别站点被暂停), 取 paused 会把整个做种的组刷成灰的。
  * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] 与后端差两处:
  * {downloading,checking}(后端取 downloading —— 保留) 与 {paused,seeding}(前端取 seeding —— 恢复)。
  * !2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
- * 辅种页"部分暂停部分做种中"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
+ * 辅种页"部分暂停部分做种"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
  */
 const STATE_RANK = { error: 0, downloading: 1, checking: 2, seeding: 3, paused: 4, other: 5 };
 // 表里没有的 kind 排到最后(与后端 `_SHOW_STATE_RANK.get(k, 9)` 同口径)

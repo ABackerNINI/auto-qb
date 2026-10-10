@@ -45,7 +45,7 @@
         r += "</td></tr>";
         return r;
       }).join("");
-      h += K.table(["URL", "状态", { label: "做种", num: true }, { label: "用户", num: true }, "消息", { label: "", cls: "th-act" }], rows);
+      h += K.table(["URL", "状态", { label: "种子", num: true }, { label: "用户", num: true }, "消息", { label: "", cls: "th-act" }], rows);
     } else {
       h += K.empty("暂无 tracker");
     }

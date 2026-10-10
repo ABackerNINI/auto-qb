@@ -3,8 +3,8 @@
  * 设计稿: resources/detail-panel-templates/13-traffic-chart-led-tall.html(tall 档)。
  * 边界(计划 §04): uPlot 图本体/tooltip/图例/汇总/窗口工具条全留 Vue 经典链 —— 本变体只往
  * 图前宿主(traffic-pre)渲染一行 KPI 头行, qb_traffic_chart.js 零改动。
- * 数据(全部前端派生): 窗口累计上/下行 = qbCurSummary(totals 单点, 与经典汇总行同源);
- * 峰值上行 / 平均上行 / 采样健康(桶数·间隔·缺口·空闲)从 qbCurPoints 逐桶派生。
+ * 数据(全部前端派生): 窗口累计上/下载 = qbCurSummary(totals 单点, 与经典汇总行同源);
+ * 峰值上传 / 平均上传 / 采样健康(桶数·间隔·缺口·空闲)从 qbCurPoints 逐桶派生。
  * 窗口切换走经典工具条(qbSetWindow 单点, 13 档清单 QB_WINDOW_NAMES) —— 变体不自建窗口 UI。
  * 限速值(P-03 拍板: v1 省略图上虚线/斜纹注解层): 以 KPI 文字格展示, 仅单种挂点有
  * drawer.detail(up_limit/dl_limit)时出现(全局/分组无该数据, 渐进字段纪律整格省略)。
@@ -99,7 +99,7 @@
     const known = (v) => v !== undefined && v !== null && v >= 0;
     if (!known(up) && !known(dl)) return "";
     const fmt = (v) => (v === 0 ? "不限" : known(v) ? ctx.fmtSpeed(v) : "—");
-    return kpiCell("上行限速", fmt(up), "下行 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)", "#i-turtle");
+    return kpiCell("上传限制", fmt(up), "下载 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)", "#i-turtle");
   }
 
   function render(host, ctx) {
@@ -121,13 +121,13 @@
         s.down > 0 ? "相对下载 ×" + ((s.up || 0) / s.down).toFixed(1) : "窗口内无下载",
         "is-up", "窗口内上传字节累计(响应 totals 求和)", "#i-upload", "is-up"),
       kpiCell("窗口累计下载", ctx.fmtSize(s.down || 0),
-        c.avgDl > 0 ? "下载均速 " + ctx.fmtSpeed(c.avgDl) : "做种窗口, 下行为 0",
+        c.avgDl > 0 ? "下载均速 " + ctx.fmtSpeed(c.avgDl) : "做种窗口, 下载为 0",
         "is-dl", "窗口内下载字节累计(响应 totals 求和)", "#i-download", "is-dl"),
-      kpiCell("峰值上行", ctx.fmtSpeed(c.peak),
+      kpiCell("峰值上传", ctx.fmtSpeed(c.peak),
         c.peak > 0 && c.peakT ? "出现于 " + (ctx.fmtTs(c.peakT) || "—") : "—",
-        "", "窗口内上行速率峰值(单桶最大值)", "#i-pulse"),
-      kpiCell("平均上行", ctx.fmtSpeed(c.avgUp), "按有采样 " + c.cnt + " 桶计", "",
-        "有采样桶的上行均值", "#i-gauge"),
+        "", "窗口内上传速率峰值(单桶最大值)", "#i-pulse"),
+      kpiCell("平均上传", ctx.fmtSpeed(c.avgUp), "按有采样 " + c.cnt + " 桶计", "",
+        "有采样桶的上传均值", "#i-gauge"),
       kpiCell("采样健康", c.cnt + " 桶",
         "间隔 " + fmtIv(c.iv) + (c.miss ? " · 缺口 " + c.miss : "") + (c.idle ? " · 空闲 " + c.idle : ""),
         "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶", "#i-check-circle"),

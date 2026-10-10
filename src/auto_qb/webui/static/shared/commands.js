@@ -20,7 +20,7 @@ window.AQB_COMMANDS = {
   methods: {
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
     _actionText(action) {
-      return { pause: "暂停", resume: "开始", reannounce: "强制汇报", recheck: "重新校验", delete: "删除" }[action] || action;
+      return { pause: "停止", resume: "启动", reannounce: "强制重新汇报", recheck: "强制重新检查", delete: "删除" }[action] || action;
     },
     /* ---------------- P0-3 埋点(点击侧): 「点击 → 补丁」/「点击 → POST 返回」 ----------------
      * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 → 命令投递」这一段
@@ -225,7 +225,7 @@ window.AQB_COMMANDS = {
      *   覆盖留着, 那一轮只会被 reapplyPending 用真值重新贴回去(观感: 一直是灰的)。
      * !真值**同时改 patch 与 prev**: patch 的值 = 已落地的真值(resume 的"落地态 6 种 vs 预测 2 种"
      *   由此收敛, 不再依赖"预测 == 真值"这种严格相等), prev 的值 = **最后已知真值** ——
-     *   兜底回滚必须回这里: 回命令前的旧值等于把一个已暂停的种子显示成做种中。
+     *   兜底回滚必须回这里: 回命令前的旧值等于把一个已暂停的种子显示成做种。
      */
     onTruthEvent(rec) {
       const truth = rec && rec.truth;
@@ -248,7 +248,7 @@ window.AQB_COMMANDS = {
       this._markCmdSettle();
     },
     /* ---------------- P0-3 乐观 UI: 点击即变 ----------------
-     * 只对"结果可预测"的动作做乐观(白名单: pause/resume); 强制汇报/重新校验/添加种子这类
+     * 只对"结果可预测"的动作做乐观(白名单: pause/resume); 强制重新汇报/重新校验/添加种子这类
      * "结果在远端"的动作不做, 由"等待中"常驻 toast 承担。
      * pending 行的乐观字段每轮 refresh 后被重新贴上(整表替换会盖掉), 直到服务端数据与预期
      * 一致或 3s 超时 —— 避免"先变过去、下一轮又弹回来"的抖动; 回执 error 立即回滚原值,
@@ -429,8 +429,8 @@ window.AQB_COMMANDS = {
       if (!this.isEpPending(e)) return e.state;
       return this._aggKind(e.members) || e.state;
     },
-    /* ---------------- 强制汇报闸门(qB 口径, 单一行为出口) ----------------
-     * 非活跃目标(暂停/停止·排队·校验中·错误/文件缺失)不允许强制汇报 —— 与 qB 的
+    /* ---------------- 强制重新汇报闸门(qB 口径, 单一行为出口) ----------------
+     * 非活跃目标(暂停/停止·排队·校验·错误/文件缺失)不允许强制重新汇报 —— 与 qB 的
      * `actionForceReannounce->setEnabled(false)` 同语义(commit aa189a7, issue #12080);
      * 判据单点 = decorate.js::reannounceTargetsGate(任一目标活跃即可用, 与 qB
      * oneCanForceReannounce 同口径)。
@@ -465,7 +465,7 @@ window.AQB_COMMANDS = {
       this._auditScope("actCore:" + action, { keys, hashes });  // S4 运行时审计(默认关, 只记账)
       const n = keys.length + hashes.length;
       if (!n) return;
-      /* 强制汇报闸门(qB 口径): 目标全为非活跃时拒绝, 早于乐观补丁与 POST(零副作用)。
+      /* 强制重新汇报闸门(qB 口径): 目标全为非活跃时拒绝, 早于乐观补丁与 POST(零副作用)。
        * 本出口覆盖 组菜单 act / 单种子 actTorrent / 整集整剧 actEpisode / 批量 bulkAct /
        * 键盘 _kbAct —— 与右键菜单的置灰(ctx-menus.html)同一判据, 互为"显示层 / 行为层"两道。 */
       if (action === "reannounce" && !this._guardReannounce({ keys, hashes })) return;
@@ -514,7 +514,7 @@ window.AQB_COMMANDS = {
           if (!jobs.length) {
             /* 闸门放行(目标解析不出时不误拦)但计划为空(组行成员被清空的罕见态): 必须显式
              * 收口 —— 落进下面的成功分支会报「成功 0 个目标」, 那是把没做事说成做成了。 */
-            this.toast(plan.skipped ? `全部 ${plan.skipped} 个目标均非活跃，已跳过` : "没有可强制汇报的目标", "error", 6000);
+            this.toast(plan.skipped ? `全部 ${plan.skipped} 个目标均非活跃，已跳过` : "没有可强制重新汇报的目标", "error", 6000);
             return;
           }
           const cnt = jobs.length;
@@ -523,10 +523,10 @@ window.AQB_COMMANDS = {
            * 才知道"我选了 2 个为什么只汇报了 1 个"。 */
           const tid = this.toast(
             plan.skipped
-              ? `强制汇报已投递 ${cnt} 个活跃目标, 跳过 ${plan.skipped} 个非活跃(tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
+              ? `强制重新汇报已投递 ${cnt} 个活跃目标, 跳过 ${plan.skipped} 个非活跃(tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
               : (cnt > 1
-                ? `强制汇报等待中…(${cnt} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
-                : "强制汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)"),
+                ? `强制重新汇报等待中…(${cnt} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
+                : "强制重新汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)"),
             "busy", 0, { sticky: true }
           );
           const results = await Promise.allSettled(
@@ -555,13 +555,13 @@ window.AQB_COMMANDS = {
           if (!errN && !warnN) {
             this._finishToast(tid, "ok",
               cnt > 1
-                ? `强制汇报成功(tracker 已确认, ${cnt} 个目标${skipTxt})`
-                : `强制汇报成功(tracker 已确认${skipTxt})`, 3000);
+                ? `强制重新汇报成功(tracker 已确认, ${cnt} 个目标${skipTxt})`
+                : `强制重新汇报成功(tracker 已确认${skipTxt})`, 3000);
             return;
           }
           /* toast 类型映射(计划 §3.4): 含 error -> error / 仅 warn -> timeout(复用现有类型, 不新增)。 */
           const kind = errN ? "error" : "timeout";
-          const head = `强制汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}${skipTxt}`;
+          const head = `强制重新汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}${skipTxt}`;
           /* 后端聚合 msg 头部「成功 X, 失败 Y, 未确认 Z: 」与前端三桶计数重复(格式被契约测试
            * 钉住), 剥头只留原因段; 投递失败/等待超时无头部, 原样保留。 */
           const detail = firstMsg.replace(/^成功 [0-9]+, 失败 [0-9]+, 未确认 [0-9]+: /, "");

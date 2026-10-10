@@ -143,7 +143,7 @@ for (const skin of SKINS) {
       const roundsBefore = (await deltaRounds(page)).length;
 
       await clickRow(page, target, { button: 'right' });
-      await ctxItem(page, '暂停该种子').first().click();
+      await ctxItem(page, '停止该种子').first().click();
 
       /* 真值对齐判据: 该行已不在 pendingOps(真值已到并清账)且行 kind 停在真值态 'paused'
        * (回执/3s 兜底路径不会同时满足这两条 —— 兜底是回滚成暂停前的 kind)。
@@ -233,7 +233,7 @@ for (const skin of SKINS) {
       const roundsBefore = (await deltaRounds(page)).length;
 
       await clickRow(page, target, { button: 'right' });
-      await ctxItem(page, '暂停整组').first().click();
+      await ctxItem(page, '停止整组').first().click();
 
       /* 组行真值对齐: 组内成员 pending 清账 + 行状态色停在真值聚合档(乐观期也会变 paused 色,
        * 所以同样以 pendingOps 清账为准 —— 成员 hash 从 pendingOps 消失即真值轮已合并)。

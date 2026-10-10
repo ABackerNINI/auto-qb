@@ -2,7 +2,7 @@
  *
  * 设计稿: resources/detail-panel-templates/15-traffic-adaptive-collapsed.html(collapsed 档;
  * 矮/高两档语义收进本变体)。处置:
- *   - 高档 = KPI 5 格全量(累计上/下行 / 峰值上行 / 平均上行 / 采样健康; 限速格渐进同 13);
+ *   - 高档 = KPI 5 格全量(累计上/下载 / 峰值上传 / 平均上传 / 采样健康; 限速格渐进同 13);
  *   - 矮档 = KPI 收成单行(标签左值右, 副文隐藏)。
  * 收起档(正文 KPI 隐藏 + 头部 44px 摘要条)已随面板折叠状态整体移除(2026-10-09)。
  * 降级机制(纯 CSS, 不量 JS): 仅当本变体 KPI 在场时把 .dt-traffic-main 声明为 size 容器
@@ -111,7 +111,7 @@
     const known = (v) => v !== undefined && v !== null && v >= 0;
     if (!known(up) && !known(dl)) return "";
     const fmt = (v) => (v === 0 ? "不限" : known(v) ? ctx.fmtSpeed(v) : "—");
-    return kpiCell("上行限速", fmt(up), "下行 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)", "#i-turtle");
+    return kpiCell("上传限制", fmt(up), "下载 " + fmt(dl), "", "限速值(站点/qB 规则; P-03: 文字展示)", "#i-turtle");
   }
 
   function render(host, ctx) {
@@ -133,12 +133,12 @@
         s.down > 0 ? "相对下载 ×" + ((s.up || 0) / s.down).toFixed(1) : "窗口内无下载",
         "is-up", "窗口内上传字节累计(响应 totals 求和)", "#i-upload", "is-up"),
       kpiCell("窗口累计下载", ctx.fmtSize(s.down || 0),
-        c.avgDl > 0 ? "下载均速 " + ctx.fmtSpeed(c.avgDl) : "做种窗口, 下行为 0",
+        c.avgDl > 0 ? "下载均速 " + ctx.fmtSpeed(c.avgDl) : "做种窗口, 下载为 0",
         "is-dl", "窗口内下载字节累计(响应 totals 求和)", "#i-download", "is-dl"),
-      kpiCell("峰值上行", ctx.fmtSpeed(c.peak), c.peak > 0 ? "有采样桶最大值" : "—", "",
-        "窗口内上行速率峰值(单桶最大值)", "#i-pulse"),
-      kpiCell("平均上行", ctx.fmtSpeed(c.avgUp), "按有采样 " + c.cnt + " 桶计", "",
-        "有采样桶的上行均值", "#i-gauge"),
+      kpiCell("峰值上传", ctx.fmtSpeed(c.peak), c.peak > 0 ? "有采样桶最大值" : "—", "",
+        "窗口内上传速率峰值(单桶最大值)", "#i-pulse"),
+      kpiCell("平均上传", ctx.fmtSpeed(c.avgUp), "按有采样 " + c.cnt + " 桶计", "",
+        "有采样桶的上传均值", "#i-gauge"),
       kpiCell("采样健康", c.cnt + " 桶",
         "间隔 " + fmtIv(c.iv) + (c.miss ? " · 缺口 " + c.miss : "") + (c.idle ? " · 空闲 " + c.idle : ""),
         "", "窗口内桶数 / 采样间隔 / 缺口与空闲桶", "#i-check-circle"),

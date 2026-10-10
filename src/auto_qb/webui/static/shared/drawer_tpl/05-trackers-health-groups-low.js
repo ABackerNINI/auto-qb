@@ -150,15 +150,15 @@
       return "鉴权信息疑似失效(passkey/身份核验被拒) —— 到站点重新下载 .torrent 或核对账号状态。";
     }
     if (/ban|client/.test(m)) {
-      return "客户端或行为可能被站点限制 —— 核对站点客户端规则后强制汇报重试。";
+      return "客户端或行为可能被站点限制 —— 核对站点客户端规则后强制重新汇报重试。";
     }
     if (/timeout|timed out|unreachable|connection|connect|host|resolve|network|refused/.test(m)) {
-      return "网络层不可达(超时/DNS/连接被拒) —— 检查本机网络与代理后强制汇报重试。";
+      return "网络层不可达(超时/DNS/连接被拒) —— 检查本机网络与代理后强制重新汇报重试。";
     }
     if (/maintenance|temporar|retry|later|busy|overload/.test(m)) {
-      return "站点侧暂时不可用(维护/限流) —— 稍后再点强制汇报。";
+      return "站点侧暂时不可用(维护/限流) —— 稍后再点强制重新汇报。";
     }
-    return "先点「强制汇报」重试一次; 若持续失败, 到站点核对种子状态与账号, 或删除该 tracker 止损。";
+    return "先点「强制重新汇报」重试一次; 若持续失败, 到站点核对种子状态与账号, 或删除该 tracker 止损。";
   }
 
   const num = (v) => v !== undefined && v !== null && Number(v) >= 0;
@@ -189,8 +189,8 @@
     const lc = ctx.fmtPeersQb(t.num_leeches, t.num_incomplete);
     if (num(t.num_seeds) || num(t.num_complete)) {
       stats.push(sd
-        ? T`<span class="dt05-s" title="num_seeds (num_complete)">做种 <b>${sd}</b></span>`
-        : T`<span class="dt05-s" title="num_seeds (num_complete)">做种 <b class="z">—</b></span>`);
+        ? T`<span class="dt05-s" title="num_seeds (num_complete)">种子 <b>${sd}</b></span>`
+        : T`<span class="dt05-s" title="num_seeds (num_complete)">种子 <b class="z">—</b></span>`);
     }
     if (num(t.num_leeches) || num(t.num_incomplete)) {
       stats.push(lc
@@ -211,7 +211,7 @@
       </div>
       ${stats.length ? R(T`<span class="dt05-stats">${R(stats.join(""))}</span>`) : ""}
       <span class="dt05-acts">
-        <button type="button" class="dt05-act${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "强制汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+        <button type="button" class="dt05-act${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "强制重新汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
         <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
       </span>
     </div>`;
@@ -226,7 +226,7 @@
         <span class="dt05-dot"></span>
         <span class="dt05-rhost">${hostOf(t.url)}</span>
         ${num(t.tier) ? R(T`<span class="dt05-tier" title="tier: 汇报层级, 数值越小越优先">T${t.tier}</span>`) : ""}
-        <button type="button" class="dt05-rbtn${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报</button>
+        <button type="button" class="dt05-rbtn${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报</button>
         <span class="dt05-acts">
           <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除失效 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
         </span>
@@ -367,7 +367,7 @@
     const ctx = h.__dtCtx;
     const act = btn.getAttribute("data-act");
     const url = btn.getAttribute("data-url") || "";
-    if (act === "report") { ctx.drawerCmd("reannounce", null, "强制汇报"); return; }
+    if (act === "report") { ctx.drawerCmd("reannounce", null, "强制重新汇报"); return; }
     if (act === "del") { ctx.trackerRemove(url); }
   }
 

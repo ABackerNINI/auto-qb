@@ -194,7 +194,7 @@ window.AQB_DELETE = {
       this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
       return true;
     },
-    /* ---------------- 删除确认框: 目标信息 + 强制汇报(默认勾选)/删除文件两选项 ---------------- */
+    /* ---------------- 删除确认框: 目标信息 + 强制重新汇报(默认勾选)/删除文件两选项 ---------------- */
     _confirmDelete(opts) {
       return this._openModal({
         title: opts.title,
@@ -202,7 +202,7 @@ window.AQB_DELETE = {
         details: opts.details || null,
         wide: true,  // 删除类确认框一律加宽: 摘要与选项宽松可读(DLG-01 成员明细已移除, 宽度见 --modal-wide-w)
         checks: [
-          { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败或未确认则不删除)", checked: true },
+          { key: "reannounce", label: "删除前先强制重新汇报(等待 tracker 确认, 失败或未确认则不删除)", checked: true },
           { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
         ],
         okText: "删除",

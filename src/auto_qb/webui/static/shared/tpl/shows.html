@@ -185,15 +185,15 @@
                           </span>
                           <!-- 可用性: 负数(qB 未知)/暂停不显示(cellAvailability), 口径与种子页一致 -->
                           <span v-else-if="col.key === 'availability'" class="m-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</span>
-                          <!-- 见到完整副本: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
+                          <!-- 最后完整可见: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
                           <span v-else-if="col.key === 'seen_complete'" class="m-stat" :title="fmtRelTime(m.seen_complete)">{{ fmtTs(m.seen_complete) }}</span>
                           <!-- TBL-06: 添加于(与明细表同列); 保存路径列已移出明细表 -->
                           <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
-                          <!-- 完成于/最近活动/活跃时间: 成员差异时间列(口径与种子页同名列一致) -->
+                          <!-- 完成于/最近活动/活动时间: 成员差异时间列(口径与种子页同名列一致) -->
                           <span v-else-if="col.key === 'completion_on'" class="m-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</span>
                           <span v-else-if="col.key === 'last_activity'" class="m-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</span>
                           <span v-else-if="col.key === 'time_active'" class="m-stat">{{ fmtDuration(m.time_active) }}</span>
-                          <!-- Tracker: 每站点各自 announce; Hash v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
+                          <!-- Tracker: 每站点各自 announce; 信息哈希值 v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
                           <span v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</span>
                           <span v-else-if="col.key === 'infohash_v2'" class="m-hash" :title="m.infohash_v2">{{ (m.infohash_v2 || '').slice(0, 8) }}</span>
                           <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
@@ -239,5 +239,5 @@
              · 图标按语义着色(.ico-play/.ico-pause/.ico-sync/.ico-danger)
              · 删除只有一项: 是否连带磁盘文件在确认框里勾选(默认不删)
              · FX-15 分层原则(已写入 memory-bank conventions.md): **一级只放 PT 日常高频动作**;
-               qB 通用能力(队列 / TMM / 超级做种 / 强制开始 / 分享率限制 / 复制族)一律进次级菜单。
+               qB 通用能力(队列 / TMM / 超级做种 / 强制启动 / 分享率限制 / 复制族)一律进次级菜单。
              · FX-14: "打开目标文件夹"走后端 /api/open-path(路径由服务端从自己的快照派生, 前端不传路径)。 -->
