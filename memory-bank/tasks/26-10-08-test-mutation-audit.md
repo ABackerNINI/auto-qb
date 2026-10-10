@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-08
-**Updated:** 2026-10-09
+**Updated:** 2026-10-10
 **Summary:** 把「变异测试定期审计」从一次可行性调研落成可复用的流程: 指导 skill(mutation-testing) + 命令包(mutants: setup/run/gremlins/status) + 常驻排期锚 issue + 方法论坑档; 全流程在 WSL 用 infra/versioning.py 端到端跑通(155 变异 / 21.6s / 杀 147), Windows 侧 gremlins 兜底同验(25 变异 / 100% / 11.9s)。后续按包派生计划逐轮推进。**config 包首轮已执行**(计划 26-10-08-0720): 4799 变异 / 杀 3851 / 存活 893(杀死率 80.25%); S4 全套件逐条确认 274 条 → 54 假存活 + 220 真洞候选; 补 10 个守阵后同池复跑存活 **772**(−121, 新增存活 0), 杀死率 **82.77%**。 **R3 回灌**: 按首轮经验给命令包补 `mutants.report` / `mutants.verify`, 给 skill 补流程约束 9–11 与两条记录纪律, 给排期锚补进度与台账。 **R4**: 常驻锚新增 §07「覆盖进度总表」(包/上次测试日期/变异数/杀死率/轮次/状态/相关 task 文档), 并把「每轮实施完成后必更该表」写成 skill 硬约束 12 与专节, 同步进报告与命令包深读。 **R5**: 修 issue 26-10-08-0758(mutants.status 在 WSL 下恒报 mutmut=no, 回显改 `cd X && cmd` 直连)。 **R6 config 第二轮**(池内 `test` issue 26-10-08-0903-validator-strings): 补字符串键名大小写 + `and`/`or` 短路互换守阵, 红验 **26/26** 全红, 同池 `--no-refresh` 复跑存活 **772 → 653**(−119), 杀死率 **85.66%**。 **R7 config 第三轮**(池内 `test` issue 26-10-08-0903-writer-tail): 对 writer.py 的 74 条 S4 候选重判(先修被污染的 S4 判据 —— 镜像池 + 两条读源码文本守卫在基线就红, 74 条被伪杀成零), 排除既有红守卫后得有效判据 **71 真洞 / 3 假存活**; 补 **22 守阵**后复跑同 74 条 → **51 KILLED / 23 SURVIVED**(存活 −48), 余 22 条验证为等价变异、1 条真洞当场杀死; **零 src 改动**。
-**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/pitfalls/testing/read-source-static-guard-mutation.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md, memory-bank/testing/baselines/26-10-08-1016-mutants-config-validator-strings.md, memory-bank/testing/baselines/26-10-08-1144-mutants-config-writer-tail.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md
+**Refs:** memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/pitfalls/testing/mutants-wsl-shell.md, memory-bank/pitfalls/testing/read-source-static-guard-mutation.md, memory-bank/testing/baselines/26-10-08-0647-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md, memory-bank/testing/baselines/26-10-08-0902-mutants-config.md, memory-bank/testing/baselines/26-10-08-0958-mutants-status-wsl.md, memory-bank/testing/baselines/26-10-08-1016-mutants-config-validator-strings.md, memory-bank/testing/baselines/26-10-08-1144-mutants-config-writer-tail.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/issues/26-10-08-0758-bug-mutants-status-wsl.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loop-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html, memory-bank/issues/26-10-08-0903-test-config-mutation-loader-defaults.html, memory-bank/issues/26-10-08-0903-test-config-mutation-writer-tail.html, memory-bank/issues/26-10-08-0903-test-config-mutation-schema-surface.html, memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html, memory-bank/testing/baselines/26-10-08-0920-mutation-audit-tooling.md, memory-bank/testing/baselines/26-10-08-0939-mutation-audit-standing-table.md, memory-bank/testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md
 **Topics:** mutation-audit
 
 ## 原始请求
@@ -47,7 +47,7 @@
 | S4 | 常驻 issue + 方法论坑档 | Done |
 | S5 | 收尾: 本档案 + activeContext 切片 + `kb.index` + `test.full` 基线切片 + skills 软链 | In Progress |
 | S6 | 派生计划(config): `plans/26-10-08-0720-plan-mutation-config.html`(按 skill 骨架; 用户点名 config) | Done |
-| S7+ | 执行审计轮次: 按计划跑 + 三分类 + 手工确认 + 真洞入池(rules → hr → core 计划仍未派生) | Open |
+| S7+ | 执行审计轮次: 按计划跑 + 三分类 + 手工确认 + 真洞入池(rules → hr → core 计划仍未派生) | In Progress |
 | S8 | config 第二轮: 池内 `test` issue 26-10-08-0903-validator-strings(字符串键名 + 短路运算符) | Done |
 
 ## 子任务状态表
@@ -59,7 +59,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config **五轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface)、R10(loop-guards); 池内 6 条 `test` issue 余 2 条待做(boundary-guards / loader-defaults); **hr 计划已派生**(`26-10-09-1459`, 见 R9); rules/core 计划仍未派生 |
+| S6+ 逐包轮次 | In Progress | config **六轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface)、R10(loop-guards)、R11(loader-defaults); 池内 6 条 `test` issue 余 1 条待做(boundary-guards); **hr 计划已派生**(`26-10-09-1459`, 见 R9); rules/core 计划仍未派生 |
 
 ## 进度日志
 
@@ -223,3 +223,24 @@
 - **S7 记录**: 基线切片 [26-10-09-1611-mutants-config-loop-guards](../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md); 本档案 R10; 常驻锚 §07(config 行补第 5 个切片指针)/§08/§09 同步; loop-guards issue 状态与变更日志更新。
 - **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-09-1611](../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md)(相对上基线 passed **+18** = 本轮新增用例, 未覆盖 **−2** / partial **−2**, `src/` 零改动)。
 - **未做 / 遗留**: 其余 2 条 config 真洞 issue(boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
+
+### 2026-10-10 R11 — 实施 loader-defaults 真洞 issue(手搓形态复验 + 补 7 守阵)
+
+- **触发**: 用户「认领并修复: `26-10-08-0903-test-config-mutation-loader-defaults.html`」—— 首轮入池 6 条 `test` issue 中的第六条(`_get(spec, KEY, d.<field>)` 默认值换 None / 关键字实参被删)。
+- **范围**: `src/auto_qb/config/loaders.py` 的**键缺省走 dataclass 字段默认**分支(load_tracker_config / load_tracker_hr / _resolve_hr_site_bindings / load_global_speed_limit_curve / load_config, 顺带同段 loader 的同类分支)。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(形态级, 防过期原则 5)**: issue 只给了**变异形态**没给 id 清单(与 R7/R8/R10 的「按 id 复验」不同), 故手搓 **40 条**同构变异(脚本 `tmp-analysis/mut_ld.py`: 字节级读写保 CRLF、删行按 `strip()` 精确匹配单行、每次跑完原字节回写)—— 补测前 **26 SURVIVED / 11 KILLED**(余 3 条首版锚点写错, 修正后并入)。结论: issue 前提成立, 且已部分失效 —— `tags`/`groups`/`remove_similar_tags`/`main_tick`/`data_dir`/`gslc.enabled`/`hr_check.enabled` 等 11 条已被 R2/R10 的同型守阵杀死。**没有走 `mutants.verify`**(它按 id 逐条跑全套件 ≈15s/条; 手搓 40 条 × ≈3s 即完成复验 + 红验两轮)。
+- **S5 补测**: 新增 **7** 个测试函数(`tests/test_config.py` 5 + `tests/test_hr_config.py` 2), 同步两文件 docstring「测试计划」:
+  - `test_loader_defaults_tracker_config_keys_absent` —— 站点段只给 `domains`, 其余键全走 `TrackerConfig` 字段默认。
+  - `test_loader_defaults_tracker_hr_output_chain` —— 站点段与全局段都没写输出键 → 回退链末段 `getattr(d, key)`(bool 分支会当场抛「无效布尔值」, str 分支才静默变 None —— 后者是本条要钉的)。
+  - `test_loader_defaults_config_top_level_scalars` —— `sync_interval`/`state_save_interval`/`max_tasks_per_tick`/`maintenance_tag_mode`/`remove_similar_tags` 全缺省(后两者是运行参数, 变 None 不报错只静默改语义)。
+  - `test_loader_defaults_sections_when_absent` —— 各段整段缺省走 `_get(cfg, "<段>", {})` 空字典分支(区别于「非字典 → 早退返回 `d` 实例」那条, 旧用例主要覆盖后者)。
+  - `test_loader_defaults_gslc_optional_keys` —— `interval` 缺省 **None**(回退主 interval)/ `enabled` 缺省 True / 省略方向曲线 **None**。
+  - `test_channel_partial_section_uses_channel_defaults` —— channel 子段给了字典但缺键, token 与 port 各缺一次(双向对照)。
+  - `test_site_binding_takes_preset_page_facts` —— 绑定派生的页面事实键取档案值; **现网两个内置档案的 `download_path/page_param/listing` 恰与字段默认同值, 删实参看不出差别**, 故用 monkeypatch 挂三项都非默认的合成档案(同 R10 合成第三档案的先例)。
+- **红验 40/40 KILLED**: 同脚本逐条 apply → 跑池内两文件 → 原字节还原(`src/` 零残留)。首版 `chan.token` 仍存活(用例只给了 `token` 显式值)→ 补反面对照后转 KILLED。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4287** · 存活 **476** · `no tests` 36 → 杀死率 **89.33%**(R10 基线 533 存活 / 88.14%)。
+  - **逐 id 对差: 新杀 57 / 新增存活 0**, 且 **57 条全部落在 `config/loaders`** —— 与本轮守阵面逐模块一致, 无旁支归因争议(对比 R8 的「57 条来自镜像纳入他人守阵」)。
+- **S7 记录**: 基线切片 [26-10-10-0925](../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md); 本档案 R11; 常驻锚 §07(config 行补第 6 个切片指针)/§08/§09 同步; loader-defaults issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-0925](../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md)(本轮 7 个新守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **踩到的已记坑**: [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) **复发 +1** —— 本轮变异形态是「删整行」, 脚本在 bytes 层比对却拿 str 锚点 ⇒ 6 条 `bind.*` 恒 `hits=0`; 另有 2 条单行锚点在两个函数里各出现一次(`count=2`)。**为什么没命中**: 坑里写的是「CRLF 让多行锚点失配 / 手抄缩进差 1」, 本轮是**第三种形态**(字节层类型失配 + 函数级重复锚点), 首版照写仍会踩; 但坑里那句「`count != 1` 必须报错停手」的兜底**生效了**(报 `ANCHOR-MISS` 而非假绿), 属守阵按预期工作。已把形态三补进坑档。
+- **未做 / 遗留**: config 真洞 issue 尚余 **boundary-guards** 一条未实施; 未回灌 skill(本轮「issue 只给形态没给 id → 手搓同构变异脚本做复验/红验, 复跑仍走 `mutants.run` 量化」的做法可进 `mutation-testing` skill 的流程约束, 未做); 未 commit/push(用户未说「提交」)。

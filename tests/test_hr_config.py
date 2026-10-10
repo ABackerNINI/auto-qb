@@ -54,6 +54,8 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_site_bindings_reports_all_after_ambiguous_mapping: 默认映射歧义的跳过分支不得中断后续条目(continue 而非 break)
 - test_site_bindings_reports_all_after_duplicate_binding: 重复绑定的跳过分支不得中断后续条目(continue 而非 break; 合成第三档案)
 - test_resolve_hr_site_bindings_after_disabled_site: 绑定派生(loader)未启用条目不得中断后续条目的绑定(continue 而非 break)
+- test_channel_partial_section_uses_channel_defaults: hr_check.channel 给了字典但缺键 -> 缺的键走 HrChannelConfig 字段默认(而非 None)
+- test_site_binding_takes_preset_page_facts: 派生视图的页面事实键取档案值(非 SiteHrCheckConfig 字段默认; 合成非默认档案)
 """
 import os
 
@@ -1184,3 +1186,115 @@ def test_resolve_hr_site_bindings_after_disabled_site(tmp_path):
     site = cfg.trackers["CarPT"].hr_check
     assert site is not None and site.enabled is True
     assert site.tracker == "CarPT"
+
+
+def test_channel_partial_section_uses_channel_defaults(tmp_path):
+    """hr_check.channel 给了字典但缺键 -> 缺的键走 HrChannelConfig 字段默认(而非 None)
+
+    变异面: `_get(channel_spec, KEY, channel_default.<field>)` 的默认值换成 None。整段缺省走
+    的是「非字典 -> 用 channel_default 实例」那条路(已被 test_defaults_when_absent 钉住),
+    「字典在但键缺」这条分支没有用例 —— 端口/超时变 None 不会报错, 只在运行时才炸。
+    """
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "channel": {
+                        "token": "tok-abc"
+                    }
+                },
+                "trackers": {
+                    "s": {
+                        "domains": ["a.example"]
+                    }
+                },
+            }
+        )
+    )
+    ch = cfg.hr_check.channel
+    assert ch.token == "tok-abc"  # 显式给的键照常解析
+    assert ch.enabled is False  # 保守默认
+    assert ch.port == 8788
+    assert ch.extension_id == ""
+    assert ch.request_timeout == 180.0
+
+    # 反面对照: 只给 port -> 缺的 token 必须落字段默认 ""(而不是 None)
+    cfg2 = load_config(
+        _write(tmp_path, {
+            "hr_check": {
+                "channel": {
+                    "port": "8899"
+                }
+            },
+            "trackers": {
+                "s": {
+                    "domains": ["a.example"]
+                }
+            },
+        })
+    )
+    assert cfg2.hr_check.channel.port == 8899
+    assert cfg2.hr_check.channel.token == ""
+    assert cfg2.hr_check.channel.extension_id == ""
+
+
+def test_site_binding_takes_preset_page_facts(monkeypatch, tmp_path):
+    """派生视图的页面事实键取**档案值**, 不是 SiteHrCheckConfig 字段默认(合成非默认档案)
+
+    变异面: _resolve_hr_site_bindings 里 download_path=/page_param=/listing= 实参被删 -> 落回
+    字段默认。现网两个内置档案的这三个值恰好与字段默认同值, 删了看不出差别 —— 故用
+    monkeypatch 挂一个**三项都非默认**的合成档案, 让删除的后果可观测。
+    """
+    from auto_qb.config import site_presets
+    from auto_qb.config.site_presets import SiteHrPreset
+
+    monkeypatch.setitem(
+        site_presets.SITE_PRESETS,
+        "zsite",
+        SiteHrPreset(
+            preset_id="zsite",
+            adapter="btschool",
+            web_domain="z.example",
+            tracker_domain="z.example",
+            page_path="/myhr.php",
+            download_path="/dl.php?id={id}&k=1",  # 字段默认 /download.php?id={id}
+            page_param="p",  # 字段默认 page
+            listing="none",  # 字段默认 list
+        ),
+    )
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "zsite": {
+                            "enabled": "true"
+                        }
+                    }
+                },
+                "trackers":
+                    {
+                        "T1":
+                            {
+                                "domains": ["z.example"],
+                                "hr": {
+                                    "required_seeding_time": "3D",
+                                    "extra_seeding_time": "1D"
+                                }
+                            }
+                    },
+            }
+        )
+    )
+    site = cfg.trackers["T1"].hr_check
+    assert site is not None and site.enabled is True
+    assert site.download_path == "/dl.php?id={id}&k=1"
+    assert site.page_param == "p"
+    assert site.listing == "none"
+    assert site.adapter == "btschool"  # 字段默认 nexusphp
+    assert site.hr_page_url == "https://z.example/myhr.php"  # 字段默认 ""
+    assert site.required_seeding_time == 4 * 86400.0  # required + extra(字段默认 0.0)
+    # 条目未配的两键 -> 走 SiteHrCheckConfig 字段默认并透传到派生视图
+    assert site.refresh_interval == 12 * 3600.0
+    assert site.idle_refresh_interval == 24 * 3600.0
+    assert cfg.hr_check.sites["zsite"].refresh_interval == 12 * 3600.0

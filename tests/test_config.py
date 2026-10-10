@@ -70,6 +70,11 @@
 - test_validate_checking_action_reports_all_segments: checking 子段缺段/非字典不得中断后续段(continue 而非 break)
 - test_validate_trigger_action_compat_reports_all_actions: 删除触发白名单检查的伪动作/结构错条目不得中断后续动作(continue 而非 break)
 - test_validate_rules_reports_all_groups_and_rules: 非字典规则集/规则条目不得中断后续条目校验(continue 而非 break)
+- test_loader_defaults_tracker_config_keys_absent: load_tracker_config 键全缺省 -> TrackerConfig 字段默认(而非 None)
+- test_loader_defaults_tracker_hr_output_chain: load_tracker_hr 输出键全缺省 -> HRRule 字段默认(回退链末段)
+- test_loader_defaults_config_top_level_scalars: load_config 顶层标量键全缺省 -> Config 字段默认
+- test_loader_defaults_sections_when_absent: 各段整段缺省 -> 段内键逐个走该段字段默认
+- test_loader_defaults_gslc_optional_keys: global_speed_limit_curve 可选键缺省 -> interval=None/enabled=True/省略方向=None
 """
 import logging
 import os
@@ -2157,3 +2162,115 @@ def test_validate_rules_reports_all_groups_and_rules():
         assert "config.g1_rules: 必须是字典(规则名 -> 规则spec)" in err, err
         assert "config.g2_rules.bad: 必须是字典" in err, err
         assert "config.g2_rules.good: trigger 取值非法" in err, err
+
+
+# ---------- loader 键缺省 -> 字段默认(issue 26-10-08-0903-loader-defaults) ----------
+
+
+def test_loader_defaults_tracker_config_keys_absent():
+    """load_tracker_config: 站点段只给 domains —— 其余键全缺省 -> 取 TrackerConfig 字段默认(而非 None)
+
+    变异面: `_get(spec, KEY, d.<field>)` 的默认值换成 None、或整个关键字实参被删。池内旧用例
+    都显式给了这些键(只钉「给了值 -> 解析对」), 缺「键缺省 -> 走字段默认」这条路径。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"))
+        t = cfg.trackers["T1"]
+        assert t.tags == [] and t.remove_tags == []
+        assert t.upload_speed_limit == 0 and t.download_speed_limit == 0  # 0 = 不限速
+        assert t.rules == [] and t.groups == []
+        assert t.remove_similar_tags is False  # 全局也未配 -> 回退字段默认
+        assert t.hr is None and t.hr_check is None
+
+
+def test_loader_defaults_tracker_hr_output_chain():
+    """load_tracker_hr: 站点段与全局段都没写输出键 -> 回退链末段取 HRRule 字段默认(而非 None)
+
+    变异面: out()/out_bool() 末段 `getattr(d, key)` -> None。bool 分支会当场抛「无效布尔值」
+    (可被别的用例撞见), str 分支静默变 None —— 正是本条要钉的。
+    """
+    rule = load_tracker_hr({"required_seeding_time": "3D"}, {})
+    assert rule.add_tag == "" and rule.add_category == ""
+    assert rule.add_tag_for_satisfied == "" and rule.add_category_for_satisfied == ""
+    assert rule.overwrite_category is False and rule.overwrite_category_for_satisfied is False
+    assert rule.required_share_ratio == 0.0 and rule.extra_seeding_time == 0
+    assert rule.condition == ("dlratio", 0.8)
+    assert rule.exclude_tags == [] and rule.exclude_categories == []
+    # 回退链中段: 全局段给了值 -> 走全局(既不是字段默认也不是 None)
+    assert load_tracker_hr({"required_seeding_time": "3D"}, {"add_tag": "zG"}).add_tag == "zG"
+
+
+def test_loader_defaults_config_top_level_scalars():
+    """load_config: 顶层标量键全缺省 -> 取 Config 字段默认(而非 None)
+
+    main_tick / interval / data_dir / state_file / skip_checking_tag 已有旧用例钉住; 本条补齐
+    sync_interval / state_save_interval / max_tasks_per_tick / maintenance_tag_mode /
+    remove_similar_tags(全局) —— 后两者是运行参数, 变 None 不会报错只会静默改语义。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"))
+        assert cfg.sync_interval == 1.5
+        assert cfg.state_save_interval == 120.0
+        assert cfg.max_tasks_per_tick == 20
+        assert cfg.maintenance_tag_mode == "interval"
+        assert cfg.remove_similar_tags is False
+        assert cfg.skip_checking_tag == "zSkipChecked"
+
+
+def test_loader_defaults_sections_when_absent():
+    """各段整段缺省: 段内键逐个走该段 dataclass 字段默认(而非 None)
+
+    段级 loader 都是「非字典 -> 返回 d 空实例」的早退形态之外, 还有「字典在但键缺」的分支;
+    整段缺省走的是后者(`_get(cfg, "<段>", {})` -> 空字典), 本条钉住这条分支的默认值来源。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"))
+        q = cfg.qbittorrent
+        assert (q.host, q.port, q.username, q.password) == ("127.0.0.1", 8080, "", "")
+        assert cfg.logging.level == logging.INFO
+        assert cfg.logging.max_bytes == 10 * 1024**2
+        assert cfg.logging.format == "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        g = cfg.grouping
+        assert (g.enabled, g.check_missing_files, g.missing_tag,
+                g.cross_group_conflict_check) == (True, True, "MISSING", False)
+        w = cfg.web
+        assert (w.host, w.port, w.token) == ("127.0.0.1", 8080, "")
+        assert w.enabled is False and w.skip_local_verify is False and w.skip_check_menu is False
+        n = cfg.notify
+        assert (n.enabled, n.min_level, n.quiet_hours, n.max_per_hour,
+                n.dedup_window) == (False, "ERROR", "", 20, 600.0)
+        assert n.channels == ["platform"]  # 缺省即 platform 单渠道(不是空表)
+        assert cfg.hr.add_tag == "" and cfg.hr.add_category == "" and cfg.hr.overwrite_category is False
+        assert cfg.fs.path_map == ()
+        assert cfg.delete_tags == [] and cfg.delete_tags_if_has_no_torrents == []
+
+
+def test_loader_defaults_gslc_optional_keys():
+    """global_speed_limit_curve: 可选键全缺省 -> interval=None(回退主 interval) / enabled=True /
+    省略方向的曲线=None(该方向不管理)
+
+    变异面: `if "interval" in spec else None` 的 None 被换成具体秒数 —— 曲线任务会脱离主
+    interval 独立跑; `if "download_curve" in curve_spec else None` 的 None 被换成空表 ——
+    语义从「不管理该方向」翻成「该方向档位为空」。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: /tmp/history_traffic.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - 10GiB: {upload_speed_limit: 6MiB/s}\n"
+        )
+        cfg = load_config(_write_raw(td, text))
+        g = cfg.global_speed_limit_curve
+        assert g.enabled is True  # 缺省 True = 现行行为
+        assert g.interval is None  # 未指定 -> 回退 config.interval
+        assert g.dat_path == "/tmp/history_traffic.dat"
+        assert g.curves[0].period == "day"
+        assert g.curves[0].upload_points is not None
+        assert g.curves[0].download_points is None  # 省略 download_curve = 不管理下载方向

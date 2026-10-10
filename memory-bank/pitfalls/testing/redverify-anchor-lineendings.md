@@ -3,7 +3,9 @@
 > 摘要: 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。
 > 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转
 
-**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md
+**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md
+
+**复发**: 1 —— 2026-10-10(config loader-defaults 轮)。为什么没命中: 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。
 
 ### 两个失配形态（2026-10-08, config schema 键面轮）
 
@@ -15,6 +17,13 @@
 
 - **形态二: 手抄缩进差 1 空格**。同一份脚本里锚点 `"            if f.ui_only:\n                continue\n"` 手抄时把 16 空格写成了 17(实测 `len` 52 vs 51), 在 CRLF 修好后仍 `count == 0`。这类错误**肉眼完全看不出来**(对齐看着一模一样), 只能靠 `count != 1` 兜底 + 用 `" " * 16` 拼接规避。
   - **处置**: 多行锚点写成 `'if f.kind == "object":' + "\n" + SP16 + 'walk(f.fields or (), path)'`(`SP16 = " " * 16`), 缩进数量显式可数。
+
+### 形态三: 字节层比对的类型失配（2026-10-10, config loader-defaults 轮）
+
+- **触发**: 本轮要变异的其中一类是「**删掉整个关键字实参**」(如删掉 `download_path=preset.download_path,`), 用整行删除而不是文本替换。脚本为保 CRLF 全程在 bytes 层操作(`data.splitlines(keepends=True)`), 比对时写成 `ln.strip() == anchor.strip()` —— 左边是 **bytes**、右边是 **str**, Python 静默判不等 ⇒ `hits=0` ⇒ 6 条 `_resolve_hr_site_bindings` 变异全报 `ANCHOR-MISS`。
+- **同源第二例**: `host=_get(spec, "host", d.host),` 这类单行锚点在 `load_qbittorrent_config` 与 `load_web_config` 里**各出现一次** ⇒ `count=2`, 同样被兜底拦下(改带上下文的两行锚点后可用)。
+- **判别**: 与形态一二完全同表 —— 输出里出现 `ANCHOR-MISS` 就停手, 别把它当「已验」; 一行锚点在**同文件里出现在两个函数**时也必须靠 `count != 1` 兜底(形态一二讲的是文件级行尾/缩进, 这条讲的是**函数级重复**)。
+- **处置**: ①字节层比对时锚点一律 `.encode()`(或整段 `decode` 后在 str 空间做、写盘前转回 —— 与形态一同一条纪律, 关键是**两侧同类型**); ②单行锚点不够唯一就**带上相邻行**(把上一行一起拼进锚点)。
 
 ### 另一个同源陷阱: 探针放在不可达的分支上（空转）
 
