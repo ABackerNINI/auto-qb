@@ -4,7 +4,8 @@
          Esc 关闭(退栈链, dialogs.js escBusy); trackers/peers 在对应 tab 激活期间 5s 轮询,
          关闭即停(见 drawer.js _startDrawerPoll); R2 S1(计划 26-10-09-2219)起四页签经典链
          移植为页插件(drawer_pages/), 经 dt-host 挂载, FX-22/截断族等 CSS 钩子随类名原样命中;
-         正文与页签栏右键 = 合并开关菜单(R2 S2/S3, openDrawerMenu)。
+         正文与页签栏右键 = 模板选择 + 合并开关菜单(R2 S2/S3, openDrawerMenu; 2026-10-10 模板选择
+         自头部下拉迁入右键, 菜单目标页签取右键命中区域)。
          W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 高度/开合持久化
          (localStorage, 见 drawer.js W3 块); 首屏默认关闭(D1, drawer.open 初值 false)。
          FX-29: 换目标走"软切换"(drawer.switching 遮罩沿用旧数据撑住面板几何), 见 drawer.js FX-29 块。
@@ -56,11 +57,8 @@
                    @change="qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
             <span class="qb-tools-hint">{{ qbYAxisCapText }}</span>
           </div>
-          <!-- S1(计划 26-10-06-0838): 模板切换器 -->
-          <select class="dt-select" title="流量模板" aria-label="流量模板"
-                  :value="dtTplCurrent" @change="dtPick($event)">
-            <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
-          </select>
+          <!-- 2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」): 原 .dt-select 下拉退役,
+               在正文/页签栏右键菜单里选(菜单目标页签 = 右键命中区域, 见 openDrawerMenu) -->
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
@@ -93,12 +91,9 @@
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
-          <!-- S1(计划 26-10-06-0838): 详情模板切换器(经典恒在首位; 选择按页签记忆
-               autoqb.ui.drawerTpl, 见 drawer_templates.js) -->
-          <select class="dt-select" title="详情模板" aria-label="详情模板"
-                  :value="dtTplCurrent" @change="dtPick($event)">
-            <option v-for="o in dtTplOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
-          </select>
+          <!-- 2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」; 选择按页签记忆
+               autoqb.ui.drawerTpl, 见 drawer_templates.js): 种子头部下拉退役, 右键正文区域出菜单 ——
+               合并时左列弹该列页签(常规/Tracker)模板, 右列弹另一列页签(内容/用户)模板 -->
           <button class="drawer-close" aria-label="关闭详情面板" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
@@ -238,21 +233,21 @@
                  v-if/v-else 保证同一 data-dt-host 全 DOM 只存在一份(核心 querySelector 定位)。 -->
             <div v-if="dtSplitOn" class="drawer-split" :data-merge="dtPair">
               <template v-if="dtPair === 'gc'">
-                <div class="dt-col">
+                <div class="dt-col" data-dt-tab="general">
                   <div class="dt-col-head">常规</div>
                   <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>
                 </div>
-                <div class="dt-col">
+                <div class="dt-col" data-dt-tab="content">
                   <div class="dt-col-head">内容</div>
                   <div v-show="dtHostOn('content')" class="dt-host" data-dt-host="content"></div>
                 </div>
               </template>
               <template v-else>
-                <div class="dt-col">
+                <div class="dt-col" data-dt-tab="trackers">
                   <div class="dt-col-head">Tracker</div>
                   <div v-show="dtHostOn('trackers')" class="dt-host" data-dt-host="trackers"></div>
                 </div>
-                <div class="dt-col">
+                <div class="dt-col" data-dt-tab="peers">
                   <div class="dt-col-head">用户</div>
                   <div v-show="dtHostOn('peers')" class="dt-host" data-dt-host="peers"></div>
                 </div>

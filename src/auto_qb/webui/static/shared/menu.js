@@ -177,17 +177,41 @@ window.AQB_MENU = {
         multi: this._ctxMulti({ hashes: [member.hash] }),
       };
     },
-    /* 抽屉右键菜单(R2 S3, 计划 26-10-09-2219): 合并开关入口 —— 挂在抽屉正文与页签栏的
-     * @contextmenu 上。种子详情形态才弹(流量形态无合并项, 不弹即无入口); 对象整体替换
-     * 与三浮层同范式(state.js watch 按「对象替换」触发 _menuFitRefit 重钳位)。 */
+    /* 抽屉右键菜单(R2 S3 计划 26-10-09-2219 · 2026-10-10 模板选择迁右键):
+     * 用户动议「模板选择改为右键选择, 在对应的区域弹右键」—— 头部 .dt-select 下拉退役, 右键
+     * 命中区域决定菜单目标页签: 命中变体/经典挂载宿主(data-dt-host, 含 traffic-pre/post 去后缀)
+     * 取其页签; 命中合并双列(列头/列空白, data-dt-tab)取其列页签; 否则回落当前页签。菜单内容 =
+     * 该页签模板选项(带勾) + 分隔线 + 合并开关(仅种子详情形态)。种子详情与流量形态都可弹(流量
+     * 形态只出流量模板选项, 无合并项)。对象整体替换(与三浮层同范式, state.js watch 按「对象替换」
+     * 触发 _menuFitRefit 重钳位)。 */
     openDrawerMenu(event) {
-      if (!this.drawer || !this.drawer.open || this.drawer.kind !== "seed" || this.qbTrafficActive) return;
+      if (!this.drawer || !this.drawer.open) return;
+      if (this.drawer.kind !== "seed" && this.drawer.kind !== "traffic") return;
       event.preventDefault();
       this._markCtxSource(event);
       this.drawerMenu = {
         visible: true,
         ...this._menuPos(event),
+        tab: this._drawerMenuTab(event),
       };
+    },
+    /* 右键命中区域 -> 目标页签: data-dt-host(挂载宿主)优先, 其次合并列 data-dt-tab, 否则当前页签。
+     * 宿主在列之内, 故先判宿主; 列头/列空白不属于任何宿主, 由列上的 data-dt-tab 兜住。 */
+    _drawerMenuTab(event) {
+      var el = event && event.target;
+      if (el && el.closest) {
+        var host = el.closest("[data-dt-host]");
+        if (host) {
+          var t = String(host.getAttribute("data-dt-host") || "").replace(/-(?:pre|post)$/, "");
+          if (t) return t;
+        }
+        var col = el.closest("[data-dt-tab]");
+        if (col) {
+          var c = col.getAttribute("data-dt-tab");
+          if (c) return c;
+        }
+      }
+      return this._dtCurTab();
     },
     /* ---------------- FX-15 次级菜单(flyout) ----------------
      * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/

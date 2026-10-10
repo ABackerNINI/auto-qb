@@ -1,7 +1,7 @@
 # WEBUI 种子详情面板页插件化 + 页签合并(已实施)
 
-> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。**R3 修订(2026-10-10)见下方; R4 修订(2026-10-10, 页签快捷键随合并态重排)见下方。**
-> 最后活动: 2026-10-10 13:29
+> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。**R3 修订(2026-10-10)见下方; R4 修订(2026-10-10, 页签快捷键随合并态重排)见下方; R5 修订(2026-10-10, 模板选择迁右键: 头部下拉退役, 右键各区域弹各自模板)见下方。**
+> 最后活动: 2026-10-10 14:01
 
 **Status:** Done
 **Added:** 2026-10-09
@@ -34,3 +34,11 @@
 - 文案: 帮助浮层 / 设置页快捷键条目经新增 `kbLabel` 随态改写(仅「详情面板」组, 静态 label 未合并不变)。
 - 验证: `commands run test.one -- tests/test_web_shortcuts.py` 34 passed; e2e `drawer-merge.spec.mjs` 6 passed(含新增合并态快捷键用例, 双皮肤); 基线见 kb.baseline 最新一条。
 - 回写: modules/webui-static-contract.md + progress/implemented-webui.md; 坑档 `pitfalls/web-ui/kbd-tab-set-sync.md`(界面页签集合改了而键盘映射没同步)。
+
+## R5 修订(2026-10-10, 用户动议「模板选择改为右键选择」; 已完成)
+
+用户命题: 「WEBUI 种子详情页模板选择改为右键选择, 在对应的区域弹右键, 比如合并时左边弹常规的模板选择, 右边弹内容的模板选择」。三项拍板: ①头部下拉移除, 右键为唯一入口; ②菜单 = 模板选项 + 合并开关合一; ③范围含全局/分组流量头部(所有模板切换器)。
+
+- 实现: 核心层删 `.dt-select` 整套定宽 CSS 与 `dtTplOptions`/`dtTplCurrent`/`dtPick`, 新增 computed `dtMenuTab`/`dtMenuTplOptions`/`dtMenuTplCurrent`/`dtMenuMergeOn` 与方法 `dtMenuPick(id)`; menu.js `openDrawerMenu` 放行 seed/traffic 两形态 + 新增 `_drawerMenuTab(event)`(变体/经典宿主 `data-dt-host` 去 `-pre/-post` → 合并列 `data-dt-tab` → 回落当前页签); drawer.html 删两处 `<select>`, 合并列加 `data-dt-tab`; ctx-menus.html 抽屉菜单改「模板选项 v-for + 勾选态 + 分隔线 + 条件合并开关」; state.js `drawerMenu` 加显式 `tab` 字段。
+- 验证: `commands run test.one -- tests/test_webui_static_dom_panel.py` 33 passed(旧 `test_drawer_tpl_select_fixed_width_tab_independent` 删除, 新 `test_drawer_tpl_menu_right_click_selection`, `test_drawer_tpl_cross_seed_fold` 改名 + 禁 `.dt-select` 回潮); e2e `drawer-merge.spec.mjs` @fast 8 passed(含新增「右键各列弹各自模板选择(左常规/右内容)」双皮肤)。基线见 kb.baseline 最新一条。
+- 回写: modules/webui-static-contract.md + progress/implemented-webui.md。

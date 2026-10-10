@@ -11,6 +11,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *   2. R3 回归(用户报「选择并排后 tracker/用户标签显示常规/内容且为空」): 合并开启下点
  *      [Tracker&用户] 合并页签 → 列头变 Tracker/用户 且两列有内容(不再渲染旧对列头 + 空列)。
  *   3. 窄视口(<1920): 菜单项置灰(.is-gated), 点击零状态变化(dtToggleMerge 双保险拦截), 四页签原样。
+ *   4. 2026-10-10 模板选择迁右键: 合并态右键左列弹常规变体、右列弹内容变体(菜单选项集按命中列),
+ *      两列各自选择互不影响。
  * 断言口径: 真实手势(右键 click button:'right'), 不借道 vm; 抽屉内容经页插件(classic)渲染。
  */
 
@@ -137,6 +139,52 @@ for (const skin of SKINS) {
       await expect(split, 'Alt+1 必须切回 常规&内容 对').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
       await page.keyboard.press('Alt+Digit4');
       await expect(split, 'Alt+4 合并态停用, 双列不得切换').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+    });
+
+    test(`宽视口: 右键各列弹各自模板选择(左常规/右内容) @fast (${skin})`, async ({ page }) => {
+      /* 2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键; 合并时左边弹常规的模板选择,
+       * 右边弹内容的模板选择」: 头部下拉退役, 右键命中的列决定菜单里的模板选项集(左列=常规变体,
+       * 右列=内容变体), 两列选择互不影响(各自页签记忆)。断言口径: 真实手势(右键 click button:'right'),
+       * 不借道 vm; 变体挂载态经宿主 .dt-tpl 类(DOM 可见事实)。 */
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await page.waitForTimeout(300);
+
+      // 开合并 -> gc 双列
+      await drawer.locator('.drawer-body').click({ button: 'right' });
+      await page.locator('.ctx-menu').locator(MERGE_ITEM).click();
+      const split = drawer.locator('.drawer-split');
+      await expect(split).toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+
+      const menu = page.locator('.ctx-menu');
+      const leftCol = split.locator('.dt-col[data-dt-tab="general"]');
+      const rightCol = split.locator('.dt-col[data-dt-tab="content"]');
+      const leftItem = menu.locator('.ctx-item', { hasText: '英雄行·键值栅格' }); // general 变体 01
+      const rightItem = menu.locator('.ctx-item', { hasText: '树 + 详情' }); // content 变体 10
+
+      // 左列右键 -> 菜单出常规变体, 不出内容变体
+      await leftCol.click({ button: 'right' });
+      await expect(menu).toBeVisible();
+      await expect(leftItem).toBeVisible();
+      await expect(menu.locator('.ctx-item', { hasText: '树 + 详情' })).toHaveCount(0);
+      await leftItem.click();
+      // 左列挂上变体(宿主加 .dt-tpl), 右列仍是经典
+      await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      await expect(split.locator('[data-dt-host="content"]')).not.toHaveClass(/dt-tpl/);
+
+      // 右列右键 -> 菜单出内容变体, 不出常规变体
+      await rightCol.click({ button: 'right' });
+      await expect(menu).toBeVisible();
+      await expect(rightItem).toBeVisible();
+      await expect(menu.locator('.ctx-item', { hasText: '英雄行·键值栅格' })).toHaveCount(0);
+      await rightItem.click();
+      await expect(split.locator('[data-dt-host="content"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      // 左列选择不受右列影响(两列各自记忆)
+      await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/);
     });
   });
 }

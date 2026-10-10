@@ -321,25 +321,12 @@
   };
   window.AQB_DRAWER_TPL_REG = TPL_REG;
 
-  /* ---------------- 核心基础样式(切换器/宿主/流量布局类) ----------------
-   * 只用上面白名单内的令牌; 类名 dt-* 供守阵与变体复用。 */
+  /* ---------------- 核心基础样式(宿主/菜单/流量布局类) ----------------
+   * 只用上面白名单内的令牌; 类名 dt-* 供守阵与变体复用。
+   * 2026-10-10(模板选择迁右键): 原 .dt-select(头部模板下拉)整套定宽规则随下拉退役删除 ——
+   * 菜单本体复用三皮肤既有 .ctx-menu/.ctx-item 样式, 模板项就是普通 .ctx-item(勾选态走 .ctx-tick),
+   * 核心不再注入任何模板选择器样式, 也不再有「选择器占位宽随页签变」的病根(原生 select 专属)。 */
   dtInjectCss("00-core", [
-    /* P3-7(报告 26-10-07-0542): max-width 160 -> 240 —— 160px 硬上限截断长 label。
-     * 26-10-07 用户报「切页签其它元素跟着变」: 原生 select 的自动最小宽 = 最宽 option 的宽,
-     * dtTplOptions 按页签变化 => max-width 上限不改变内容驱动宽的病根, 选择器占位宽随页签变,
-     * 同排 .drawer-title(flex:1 1 auto + min-width:0)跟着让位回弹。
-     * 修法 = 定宽取代 max-width —— 占位宽与选项集/页签/数据全部解耦。
-     * 26-10-09 用户报「选择框太长」: 定宽 240 -> 150 —— 只收窄, 定宽口径不变(不回退内容驱动
-     * 宽)。150px 扣去内边距/边框/下拉箭头约容 10 个全角字符, 现有 15 个 label 最长 8 全角符
-     * (自然宽约 130px 含内边距与下拉箭头)固定宽不截断, text-overflow 只是防未来长 label 的
-     * 保险丝(Chromium 对 select 生效, 其余内核退化为裁切, 不引入新的宽度抖动源)。min-width:0
-     * 允许极窄窗口下随标题按比例收缩(定宽在 flex 里即基准尺寸, shrink 语义不变)。 */
-    ".drawer .dt-select { align-self: center; width: 150px; min-width: 0; text-overflow: ellipsis; padding: 2px 4px;",,
-    "  font: 12px/1.6 system-ui, sans-serif; color: var(--fg-muted); background: var(--bg-hover);",
-    "  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); cursor: pointer;",
-    "  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease); }",
-    ".drawer .dt-select:hover, .drawer .dt-select:focus { color: var(--fg); border-color: var(--border-strong); outline: none; }",
-    ".drawer .dt-select option { color: var(--fg); background: var(--bg-elev); }",
     ".drawer .dt-host:empty { display: none; }",
     /* Q1(报告 26-10-07-0542 §2): 变体内容层最大可读宽度 —— 四页签宿主统一限宽居中, 4K 下
      * 键值栅格/英雄行/多列卡片不再等分拉伸到视口宽(单点收口, 15 个变体文件零复刻); 窄视口
@@ -371,17 +358,26 @@
 
   /* ---------------- Vue mixin(app.js 末尾 app.mixin(window.AQB_DRAWER_TPL)) ----------------
    * 方法本体都在这层; drawer.js 只留一行式钩子(_dtSync/_dtNotify/_dtUnmountAll, 经 this. 调用,
-   * 模板不可达所以允许 _ 前缀)。模板可达成员不带下划线(dtHostOn/dtPick)。 */
+   * 模板不可达所以允许 _ 前缀)。模板可达成员不带下划线(dtHostOn/dtMenuPick)。 */
   window.AQB_DRAWER_TPL = {
     computed: {
-      /* 当前生效页签的模板选项(经典恒在首位): 注册表是 boot 期静态数据, 依赖页签变化即可 */
-      dtTplOptions() {
-        var tab = this._dtCurTab();
-        return [{ id: "classic", label: "经典" }].concat(window.AQB_DRAWER_TPL_REG.options(tab));
+      /* 2026-10-10(模板选择迁右键): 菜单目标页签 —— openDrawerMenu 按右键命中区域落的
+       * drawerMenu.tab(变体宿主 data-dt-host / 合并列 data-dt-tab), 缺省回落当前页签。
+       * 选择器相关 computed(dtTplOptions/dtTplCurrent)随头部下拉一并退役, 由下列菜单 computed 取代。 */
+      dtMenuTab() {
+        return (this.drawerMenu && this.drawerMenu.tab) || this._dtCurTab();
       },
-      dtTplCurrent() {
-        var tab = this._dtCurTab();
-        return (this.drawerTplSel || {})[tab] || "classic";
+      /* 右键菜单模板选项(经典恒在首位): 注册表是 boot 期静态数据, 依赖目标页签变化即可 */
+      dtMenuTplOptions() {
+        return [{ id: "classic", label: "经典" }].concat(window.AQB_DRAWER_TPL_REG.options(this.dtMenuTab));
+      },
+      /* 右键菜单当前模板选择(带勾项) */
+      dtMenuTplCurrent() {
+        return (this.drawerTplSel || {})[this.dtMenuTab] || "classic";
+      },
+      /* 右键菜单是否含合并开关: 仅种子详情形态(traffic 形态无合并项, 只出流量模板选项) */
+      dtMenuMergeOn() {
+        return !!(this.drawer && this.drawer.kind === "seed");
       },
       /* R3: 合并开关是否开启(off|on; 兼容 R2 旧值 gc/tp —— 初值读取已迁移, 这里再兜一道) */
       dtMergeOn() {
@@ -516,17 +512,17 @@
         if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
         return this._dtCurTab() === tab;
       },
-      /* 切换器 change 落点(种子头部/流量头部共用): 白名单外脏值回落当前值, 合法即落盘 + 重挂 */
-      dtPick(ev) {
-        var tab = this._dtCurTab();
-        var id = String((ev && ev.target && ev.target.value) || "classic");
-        if (id !== "classic" && !window.AQB_DRAWER_TPL_REG.has(tab, id)) {
-          ev.target.value = this.dtTplCurrent; /* 脏值: 回落当前选择(守阵口径同 readSel) */
-          return;
-        }
+      /* 右键菜单模板选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略(守阵口径同
+       * readSel); 合法即落盘 + 重挂, 并收菜单。菜单已开, 无「回落显示值」回写口(那是原生 select
+       * 的 value 回写), 故脏值直接 return。 */
+      dtMenuPick(id) {
+        var tab = this.dtMenuTab;
+        id = String(id || "classic");
+        if (id !== "classic" && !window.AQB_DRAWER_TPL_REG.has(tab, id)) return;
         this.drawerTplSel[tab] = id;
         this.dtPersistSel();
         this._dtSync();
+        if (this.drawerMenu) this.drawerMenu.visible = false;
       },
       /* 写侧单漏斗(与 persistDrawerTab 同纪律: 写失败吞异常, 只影响刷新后落点) */
       dtPersistSel() {

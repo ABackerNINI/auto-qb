@@ -125,8 +125,10 @@ window.AQB_STATE = {
       // 视口宽回写(核心层 resize 防抖 150ms): 门是暂态遮蔽 —— 缩窗过门双列回落单栏(标志不动),
       // 拉宽自动恢复。显式建字段供 dtSplitOn computed 响应式消费。
       dtWinW: typeof window !== "undefined" ? window.innerWidth : 0,
-      // 抽屉右键菜单(R2 S3): 合并开关入口(正文/页签栏 @contextmenu), 种子详情形态才弹
-      drawerMenu: { visible: false, x: 0, y: 0 },
+      // 抽屉右键菜单(R2 S3 · 2026-10-10 模板选择迁右键): 正文/页签栏 @contextmenu 入口;
+      // 菜单 = 目标页签(右键命中区域)模板选项 + 合并开关(仅种子详情形态)。tab 显式建字段
+      // (undefined 是非响应式盲区, 呼应 vue-reactivity 静默坑; openDrawerMenu 整体替换时落真值)
+      drawerMenu: { visible: false, x: 0, y: 0, tab: "" },
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开

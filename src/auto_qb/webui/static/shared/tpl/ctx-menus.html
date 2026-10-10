@@ -277,19 +277,27 @@
           </div>
         </div>
         </transition>
-        <!-- 抽屉右键菜单(R2 S3 计划 26-10-09-2219 · R3 改单开关): 合并开关 —— 一项开/关, 再点即关。
-             开启且宽度门内时页签栏收敛为两对合并页签[常规&内容][Tracker&用户], 正文双列并排。
-             门不满足置灰可见(is-gated + title 提示; dtToggleMerge 里再拦一道, 无入口即无状态变化)。
-             菜单本体只在种子详情形态被 openDrawerMenu 弹出。 -->
+        <!-- 抽屉右键菜单(R2 S3 计划 26-10-09-2219 · 2026-10-10 模板选择迁右键): 菜单内容 = 右键
+             命中区域的模板选项(单选带勾, 经典恒在首位; 目标页签见 dtMenuTab/openDrawerMenu) +
+             分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn; 流量形态只出流量模板选项)。
+             合并开启且门内时页签栏收敛为两对合并页签[常规&内容][Tracker&用户], 正文双列并排;
+             门不满足置灰可见(is-gated + title 提示; dtToggleMerge 里再拦一道, 无入口即无状态变化)。 -->
         <transition name="pop">
         <div v-if="drawerMenu.visible" ref="drawerMenuEl" class="ctx-menu" :style="{left: drawerMenu.x+'px', top: drawerMenu.y+'px'}"
              @click.stop @contextmenu.prevent>
-          <div class="ctx-item" :class="{ 'is-gated': !dtMergeGateOk() }"
-               :title="dtMergeGateOk() ? '常规&amp;内容 · Tracker&amp;用户 并排（再点关闭）' : '窗口宽度不足'"
-               @click="dtToggleMerge()">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>合并页签
-            <svg v-if="dtMergeOn" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+          <div v-for="o in dtMenuTplOptions" :key="o.id" class="ctx-item" @click="dtMenuPick(o.id)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-layers"></use></svg>{{ o.label }}
+            <svg v-if="dtMenuTplCurrent === o.id" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
           </div>
+          <template v-if="dtMenuMergeOn">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" :class="{ 'is-gated': !dtMergeGateOk() }"
+                 :title="dtMergeGateOk() ? '常规&amp;内容 · Tracker&amp;用户 并排（再点关闭）' : '窗口宽度不足'"
+                 @click="dtToggleMerge()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>合并页签
+              <svg v-if="dtMergeOn" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+            </div>
+          </template>
         </div>
         </transition>
         </main>

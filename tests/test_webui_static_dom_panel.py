@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
-- test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 变体 label 展示名禁档位后缀(Q4, 报告 26-10-07-0542 —— 档位是物理形态非信息组织, 三档语义全收进本变体, 写进下拉名冗余误导); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/切换器 x2/摘要条 x2 + 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
+- test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 变体 label 展示名禁档位后缀(Q4, 报告 26-10-07-0542 —— 档位是物理形态非信息组织, 三档语义全收进本变体, 写进下拉名冗余误导); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; drawer.js 一行式钩子四类齐全(_loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify / closeDrawer _dtUnmountAll / collapse 通知)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/合并列 data-dt-tab x4/摘要条 x2(2026-10-10 头部 .dt-select 退役, 模板选择迁右键)+ 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
 - test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
@@ -12,8 +12,8 @@
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
 
-- test_drawer_tpl_cross_seed_fold_and_select_width: 折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 核心 .dt-select 定宽(160->240 后 26-10-09 用户报框太长收窄 240->150, 定宽口径不变; 定宽化归 test_drawer_tpl_select_fixed_width_tab_independent)
-- test_drawer_tpl_select_fixed_width_tab_independent: 详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报「切页签其它元素跟着变」) —— 核心 .dt-select 定宽(26-10-09 用户报框太长收窄至 width:150px, 只收窄不回退内容驱动宽)且不带 max-width(原生 select 自动最小宽=最宽 option 宽, dtTplOptions 按页签变化, 上限挡不住内容驱动宽的病根) + text-overflow:ellipsis 长 label 保险丝在位, 定宽单点在核心 00-core 注入层(三皮肤共享)
+- test_drawer_tpl_cross_seed_fold: 折叠态跨种子口径统一守阵(P3-6, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 2026-10-10 模板选择迁右键后核心不得再注入 .dt-select
+- test_drawer_tpl_menu_right_click_selection: 详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键; 合并时左边弹常规、右边弹内容的模板选择」) —— 核心菜单 computed(dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn)与落点 dtMenuPick 齐全且选择器 API 退役; menu.js openDrawerMenu 放行 seed/traffic 形态且目标页签解析成对(变体宿主 data-dt-host 去 traffic-pre/post 后缀优先 / 合并列 data-dt-tab 兜列头空列 / 否则当前页签); ctx-menus 渲染模板选项(v-for)+勾选态(.ctx-tick)+条件合并开关(dtMenuMergeOn)
 - test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
 - test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
 - test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
@@ -832,8 +832,8 @@ ok("dtHtml 插值自动转义", reg.dtHtml`<b>${"<script>&\"'"}</b>` === "<b>&lt
 ok("dtRaw 显式豁免", reg.dtHtml`${reg.dtRaw("<i>ok</i>")}` === "<i>ok</i>");
 ok("options 不含 classic(classic 恒由模板置首位)",
   JSON.stringify(reg.options("general")) === JSON.stringify([{ id: "t1", label: "T1" }]));
-ok("mixin 挂上 window.AQB_DRAWER_TPL", typeof window.AQB_DRAWER_TPL.methods.dtPick === "function"
-  && typeof window.AQB_DRAWER_TPL.computed.dtTplCurrent === "function");
+ok("mixin 挂上 window.AQB_DRAWER_TPL", typeof window.AQB_DRAWER_TPL.methods.dtMenuPick === "function"
+  && typeof window.AQB_DRAWER_TPL.computed.dtMenuTab === "function");
 
 const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
 console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed }));
@@ -844,7 +844,8 @@ if (failed.length) process.exit(1);
 def test_drawer_tpl_registry_wiring():
     """详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含核心且装载序正确;
     变体文件 (id, tab) 唯一且 tab 合法; 核心含 dtHtml / autoqb.ui.drawerTpl 单点; drawer.js 一行式
-    钩子四类齐全; drawer.html 宿主/切换器/摘要条成对加挂; 变体 label 展示名禁档位后缀(Q4, 报告
+    钩子四类齐全; drawer.html 宿主成对加挂 + 合并列 data-dt-tab(2026-10-10 头部切换器迁右键,
+    .dt-select 退役); 变体 label 展示名禁档位后缀(Q4, 报告
     26-10-07-0542 —— 档位只是物理形态且三档语义全收进本变体, 写进名字冗余误导); dt* 成员全仓
     无重名(mixin 合并后者覆盖前者, 静默不报错 —— drawer_templates.js 书写形态不在
     _scan_mixin_wiring 的扫描面内, 此处补钉)。"""
@@ -924,10 +925,18 @@ def test_drawer_tpl_registry_wiring():
     m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
 
-    # 5. drawer.html 加挂面: 宿主 x6(单栏)+ x4(合并双列, v-if/v-else 与单栏互斥)/ 切换器 x2
+    # 5. drawer.html 加挂面: 宿主 x6(单栏)+ x4(合并双列, v-if/v-else 与单栏互斥)
+    #    2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」): 头部 .dt-select 下拉退役,
+    #    选择入口移到 openDrawerMenu 右键菜单; 合并双列各列带 data-dt-tab(右键按命中区域定页签)
     for host in ("general", "trackers", "peers", "content", "traffic-pre", "traffic-post"):
         assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
-    assert drawer_tpl.count('class="dt-select"') == 2, "drawer.html 切换器应恰 2 处(种子头部/流量头部)"
+    assert 'class="dt-select"' not in drawer_tpl, \
+        "drawer.html 仍残留 .dt-select 头部下拉(2026-10-10 模板选择已迁右键菜单)"
+    assert "dtPick(" not in drawer_tpl and "dtTplOptions" not in drawer_tpl and "dtTplCurrent" not in drawer_tpl, \
+        "drawer.html 仍引用退役的选择器 API(dtPick/dtTplOptions/dtTplCurrent)"
+    for col in ("general", "content", "trackers", "peers"):
+        assert f'data-dt-tab="{col}"' in drawer_tpl, \
+            f"drawer.html 合并列缺 data-dt-tab={col}(右键按命中区域定位目标页签)"
     # R2 S1(计划 26-10-09-2219): 经典包裹层退役 —— classic 是注册表正式条目(drawer_pages/),
     # 与变体同宿主挂载; drawer.html 不再允许 v-show 读 drawerTplSel 的经典包裹层回潮
     assert 'v-show="drawerTplSel.general === \'classic\'"' not in drawer_tpl, \
@@ -939,7 +948,8 @@ def test_drawer_tpl_registry_wiring():
     # R2 S2/S3 接线 + R3 修订(计划 26-10-09-2219 R3): 合并开关显式建字段 + 双列宿主 + 右键单开关
     assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
     assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
-    assert "drawerMenu: { visible: false, x: 0, y: 0 }" in state_js, "state.js 缺 drawerMenu 显式建字段"
+    assert "drawerMenu: { visible: false, x: 0, y: 0, tab: \"\" }" in state_js, \
+        "state.js 缺 drawerMenu 显式建字段(含 tab 右键目标页签, undefined 是响应式盲区)"
     assert 'class="drawer-split"' in drawer_tpl, "drawer.html 缺合并双列宿主(R2 S2)"
     assert "@contextmenu.prevent=\"openDrawerMenu($event)\"" in drawer_tpl, "drawer.html 缺右键菜单接线(R2 S3)"
     assert "function initialDrawerMerge()" in app_js, "app.js 缺 initialDrawerMerge"
@@ -968,7 +978,7 @@ def test_drawer_tpl_registry_wiring():
         for n in re.findall(r"^      (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", core, re.M)
         if n.startswith("dt") or n.startswith("_dt")
     }  # 只收 dt* 成员(裸 if/for 同缩进形态不收)
-    assert {"dtPick", "dtHostOn", "_dtSync", "_dtNotify", "_dtUnmountAll"} <= dt_members, \
+    assert {"dtMenuPick", "dtHostOn", "_dtSync", "_dtNotify", "_dtUnmountAll"} <= dt_members, \
         "核心方法面清单与守阵预期漂移, 同步本守阵"
     for path, rel in _app_bundle_files():
         if rel == "shared/drawer_templates.js":
@@ -1334,15 +1344,15 @@ def test_drawer_tpl_variant_no_singleton_shadowing():
             assert not m, f"drawer_tpl/{name}: 单点 {n} 被解构声明遮蔽(const {{ {n} }} = ...)"
 
 
-def test_drawer_tpl_cross_seed_fold_and_select_width():
-    """详情面板折叠态跨种子口径统一 + 变体头选择器宽度守阵(P3-6/P3-7, 报告 26-10-07-0542) ——
-    content 组 dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选, 不得清折叠
-    记账(ui.folded/ui.colG; 用户拍板统一为跨种子保持, 以 general 组 dt01/02 口径为准; 记账 key
-    是 path 不含 hash, 新种子 path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择;
-    dt11 勾选集必须继续重置 —— 批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与
-    种子无关或无折叠的变体(01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash
-    重置机制; 核心 .dt-select 定宽(现 150px: P3-7 160px 硬上限截断长 label -> 26-10-07
-    定宽化 240 -> 26-10-09 用户报框太长收窄 150; 见 test_drawer_tpl_select_fixed_width_tab_independent)。"""
+def test_drawer_tpl_cross_seed_fold():
+    """详情面板折叠态跨种子口径统一守阵(P3-6, 报告 26-10-07-0542) —— content 组 dt10/11/12
+    换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选, 不得清折叠记账(ui.folded/ui.colG;
+    用户拍板统一为跨种子保持, 以 general 组 dt01/02 口径为准; 记账 key 是 path 不含 hash, 新种子
+    path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择; dt11 勾选集必须继续重置 ——
+    批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与种子无关或无折叠的变体
+    (01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash 重置机制; 2026-10-10
+    模板选择迁右键后, 头部 .dt-select 下拉与整套定宽规则一并从核心退役(旧 P3-7 宽度守阵作废,
+    核心不得再注入 .dt-select)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     vdir = os.path.join(shared, "drawer_tpl")
 
@@ -1382,34 +1392,51 @@ def test_drawer_tpl_cross_seed_fold_and_select_width():
         assert "lastHash" not in text, \
             f"drawer_tpl/{name}: 出现 lastHash 换种子重置机制(该变体折叠/展开 key 与种子无关或无折叠, 不应有此机制)"
 
-    # 4. P3-7: .dt-select 定宽(160px 旧上限不得回潮); 26-10-09 用户报框太长收窄 240->150
-    #    (只收窄, 定宽口径不变); 26-10-07 用户报的「切页签选择器宽度变」归新守阵
-    #    test_drawer_tpl_select_fixed_width_tab_independent
+    # 4. 2026-10-10 模板选择迁右键: 头部 .dt-select 下拉与整套定宽规则一并退役(旧 P3-7/P3-6
+    #    宽度守阵随之作废) —— 核心不得再注入任何 .dt-select 规则(「选择器占位宽随页签变」的病根
+    #    随原生 select 一并消失, 选择入口改由 openDrawerMenu 右键菜单承担, 见
+    #    test_drawer_tpl_menu_right_click_selection)
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
-    assert "width: 150px" in core, \
-        "核心 .dt-select 缺 150px 定宽(26-10-09 用户报选择框太长收窄; 不得回退内容驱动宽)"
-    assert "width: 240px" not in core, "核心 .dt-select 仍残留 240px 旧宽(26-10-09 收窄未落地)"
-    assert "max-width: 160px" not in core, "核心仍残留 .dt-select 160px 旧上限(P3-7 回潮)"
+    assert '".drawer .dt-select {' not in core, \
+        "核心仍残留 .dt-select 规则(2026-10-10 模板选择已迁右键菜单, 下拉定宽规则应一并删除)"
 
 
-def test_drawer_tpl_select_fixed_width_tab_independent():
-    """详情面板切换器占位宽与页签/选项集解耦守阵(26-10-07 用户报: 切页签时切换模板的元素宽度
-    变化导致其它元素跟着变化) —— 病根: 原生 select 的自动最小宽 = 最宽 option 的宽, 而
-    dtTplOptions 按当前页签变化, max-width 上限挡不住内容驱动宽, 选择器占位宽随页签变, 同排
-    .drawer-title(flex:1 1 auto)跟着让位回弹。修法单点在核心 00-core 注入层(三皮肤共享):
-    .dt-select 定宽且不再依赖 max-width(26-10-09 用户报框太长, 定宽值 240 收窄至 150 ——
-    只改值, 定宽口径是本守阵的钉子); text-overflow:
-    ellipsis 是定宽后长 label 的截断保险丝。"""
-    core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
-    m = re.search(r'"\.drawer \.dt-select \{([^"]*)"', core)
-    assert m, "核心 .dt-select 规则形态漂移(守阵正则失配, 同步本守阵)"
-    decls = m.group(1)
-    assert "width: 150px" in decls, \
-        "核心 .dt-select 未定宽 150px(26-10-09 收窄值漂移, 或占位宽回退由最宽 option 决定则切页签即抖)"
-    assert "max-width" not in decls, \
-        "核心 .dt-select 仍带 max-width(上限不改变内容驱动宽的病根, 26-10-07 用户报回归)"
-    assert "text-overflow: ellipsis" in decls, \
-        "核心 .dt-select 缺长 label 截断保险丝(定宽后超宽 option 文本无省略号语义)"
+def test_drawer_tpl_menu_right_click_selection():
+    """详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键;
+    合并时左边弹常规的模板选择, 右边弹内容的模板选择」) —— 头部 .dt-select 下拉退役; 右键命中区域
+    决定菜单目标页签: 变体/经典挂载宿主 data-dt-host(含 traffic-pre/post 去后缀)优先, 合并列
+    data-dt-tab 兜列头/列空白, 否则当前页签; 菜单 = 该页签模板选项(经典恒在首位, 勾选态 .ctx-tick)
+    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
+    ctx_menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
+
+    # 1. 核心层: 菜单 computed/落点方法齐全, 退役的选择器 API 不得残留
+    for member in ("dtMenuTab", "dtMenuTplOptions", "dtMenuTplCurrent", "dtMenuMergeOn"):
+        assert re.search(rf"^      {member}\(\)", core, re.M), f"核心缺右键菜单 computed {member}"
+    assert re.search(r"^      dtMenuPick\(id\) \{", core, re.M), "核心缺 dtMenuPick 落点方法"
+    for retired in ("dtTplOptions", "dtTplCurrent"):
+        assert not re.search(rf"^      {retired}\(\)", core, re.M), f"核心仍定义退役的 computed {retired}"
+    assert not re.search(r"^      dtPick\(", core, re.M), "核心仍定义退役方法 dtPick"
+    assert '".drawer .dt-select {' not in core, "核心仍注入 .dt-select(头部下拉已退役)"
+
+    # 2. menu.js: openDrawerMenu 放行 seed+traffic(流量形态也要能选流量模板), 目标页签解析成对
+    assert re.search(r"openDrawerMenu\(event\) \{", menu_js), "menu.js 缺 openDrawerMenu"
+    assert 'this.drawer.kind !== "seed" && this.drawer.kind !== "traffic"' in menu_js, \
+        "openDrawerMenu 未同时放行 seed/traffic 形态(流量形态模板选择无入口)"
+    assert "_drawerMenuTab(event)" in menu_js, "openDrawerMenu 未落目标页签(_drawerMenuTab)"
+    assert 'closest("[data-dt-host]")' in menu_js and 'closest("[data-dt-tab]")' in menu_js, \
+        "_drawerMenuTab 缺区域解析(宿主 data-dt-host / 合并列 data-dt-tab)"
+    assert 'replace(/-(?:pre|post)$/' in menu_js, \
+        "_drawerMenuTab 未剥离 traffic-pre/post 后缀(流量变体宿主右键取不到 traffic 页签)"
+
+    # 3. ctx-menus.html: 菜单渲模板选项 + 勾选态 + 条件合并开关
+    assert 'v-for="o in dtMenuTplOptions"' in ctx_menus, "ctx-menus 缺模板选项渲染"
+    assert "dtMenuPick(o.id)" in ctx_menus, "ctx-menus 缺模板选择落点 dMenuPick"
+    assert "dtMenuTplCurrent === o.id" in ctx_menus, "ctx-menus 缺模板选项勾选态"
+    assert "dtMenuMergeOn" in ctx_menus and "dtToggleMerge()" in ctx_menus, \
+        "ctx-menus 缺合并开关(条件渲染 dtMenuMergeOn)"
 
 
 def test_drawer_tpl_classic_default():
