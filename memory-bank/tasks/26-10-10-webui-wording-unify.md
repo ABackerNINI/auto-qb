@@ -41,4 +41,4 @@
 
 ## 进度日志
 
-- **2026-10-10 23:02** 开工 `my-commit-flow.sync`(已同步 `e4282642`)→ 首版报告(仅方向词/对端状态词)落 `reports/26-10-10-2237-report-webui-wording-unify.html` → 用户追加「全面排查」→ 改为读**本机** qB 源码译文(`D:\Projects\Else\qBittorrent`)建全量基准, 发现 qB WebUI 与 GUI 译文在 Seeds 等词上不一致 → 报告扩写为 6 概念域全量对照(含决策点)→ `kb.index` 重建 → 收尾: 立本档案 + 会话切片 + 基线切片 + 报告补 `doc-refs`。
+- **2026-10-10 23:02** 开工 `my-commit-flow.sync`(已同步 `e4282642`)→ 首版报告(仅方向词/对端状态词)落 `reports/26-10-10-2237-report-webui-wording-unify.html` → 用户追加「全面排查」→ 改为读**本机** qB 源码译文(`D:\Projects\Else\qBittorrent`)建全量基准, 发现 qB WebUI 与 GUI 译文在 Seeds 等词上不一致 → 报告扩写为 6 概念域全量对照(含决策点)→ `kb.index` 重建 → 收尾: 立本档案 + 会话切片 + 基线切片 + 报告补 `doc-refs` → `ship.commit` 核 ref 报 packed-refs 陈旧假红(已记坑 `refs.md`, 复发 5→6): ⑤ 的分流根治已生效 —— 失败行直接送本条并给 `git pack-refs --all`, 一步处置后 `ship.push` 补推; 本笔提交 `fb2f93f7`。

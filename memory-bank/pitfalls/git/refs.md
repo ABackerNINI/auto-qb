@@ -28,7 +28,7 @@
   ✅ **停手指引已分流**(2026-10-07, `verify_ref.py` 输出契约 v4): 「HEAD==refs/heads==loose、仅
   packed 落后」这一形态直接送本条(给 `pack-refs --all`), 不再指向「分支 ref 被回退」条目; 只有
   分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)才送被回退条目。
-- **复发: 5** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
+- **复发: 6** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
   自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
   靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
   直接送本条(指引属 verify_ref.py 代码, 尚未改)。②同日第二笔 ship.commit 照报(同形态
@@ -49,6 +49,10 @@
   ship.push 补推一步过(该会话报本轮共撞 5 次, 其中一次假红由补笔提交触发, 未再单开回写提交以免递归)。
   **本轮据此根治**: `verify_ref.py` 停手指引按形态分流(新增 `classify_form`), 「三处本地真值一致、
   仅 packed 落后」直接送本条; 并加两条守卫测试(test_commit.py)钉住分流, 防再回退。
+  ⑥2026-10-10(文案对齐 qB 报告轮): 同形态 HEAD==refs/heads==loose(`fb2f93f7`)、仅 packed 落后
+  —— **为什么没命中**: 不适用 —— ⑤ 的根治已生效, ship.commit 失败行**直接送本条**(给
+  `git pack-refs --all`), 一步处置即过, 未走弯路。本笔为分流根治后的首例实证: 再次遇到该形态时
+  不再误路由到「分支 ref 被回退」。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 
