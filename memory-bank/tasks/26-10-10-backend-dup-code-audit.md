@@ -4,8 +4,8 @@
 **Added:** 2026-10-10
 **Updated:** 2026-10-11
 **Topics:** dup-code-audit
-**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包: 内核 / 数据接入 / 流量 / 领域 / 模块契约样板 / 模块业务)**, 累计 46 项发现(A21/B6/C9/D10), 入池 core 9 issue。〔26-10-11 hr 轮〕用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包: 解析面 / 判定与序列化 / 运行面 A service / 运行面 B runtime·worker·store·channel·server·report 等)**, hr 29 项发现(A12/B1/C7/D9), 全局累计 98 项(A38/B8/C24/D28), 入池 hr 9 issue; 复核已知 issue `26-10-02-0441`(`_prune_index` 同体重复)已消除。〔26-10-11 webui 轮〕用户「做 Phase 1 webui 部分」→ 已完成 **轮 15–16(webui 全包: server 路由层 factory·context·auth·lifecycle·common·static_ui·traffic_qb + routes/*, 表现层 runtime·views·commands·module)**, webui 24 项发现(A9/B2/C7/D6), 全局累计 122 项(A47/B10/C31/D34), 入池 webui 10 issue。全程纯审查轮, 零源码改动。
-**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/activeContext/26-10-11-0240-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/testing/baselines/26-10-11-0240-dup-code-audit-hr.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/testing/baselines/26-10-11-0314-dup-code-audit-webui.md
+**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包)**; 用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包)**; 用户「做 Phase 1 webui 部分」→ 已完成 **轮 15–16(webui 全包)**; 用户「做 Phase 1, 17-19部分」→ 已完成 **轮 17–19(rules / infra / torrents+tray+entry)**, 三包 34 项发现(A11/B5/C9/D9), 全局累计 156 项(A58/B15/C40/D43)。**Phase 1 后端(config+core+hr+webui+rules+infra+torrents)全部走完**。全程纯审查轮, 零源码改动。
+**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/activeContext/26-10-11-0240-dup-code-audit.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/activeContext/26-10-11-0352-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/testing/baselines/26-10-11-0240-dup-code-audit-hr.md,memory-bank/testing/baselines/26-10-11-0314-dup-code-audit-webui.md,memory-bank/testing/baselines/26-10-11-0352-dup-code-audit-rules-infra-torrents.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 原始请求
 
@@ -32,7 +32,7 @@
 | S2 | 产出计划 HTML(`plans/26-10-10-2333-plan-dup-code-audit.html`) | Done |
 | S3 | 收尾回写(本档案 + activeContext 切片 + 基线切片 + `kb.index` + `kb.check`) | Done |
 | S4 | 计划拍板(报告形态 / 起步轮)—— 用户拍板: **范围 = Phase 0 + 轮 01–04(config 全包)**; 报告形态取默认**滚动报告** | Done |
-| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包) + 轮 15–16(webui 全包) | In Progress |
+| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config) + 轮 05–10(core) + 轮 11–14(hr) + 轮 15–16(webui) + 轮 17–19(rules / infra / torrents+tray+entry) | In Progress |
 | S6 | 轮 26 汇总: 重构候选排序表 + 跨层「同一事实」总账 + 可动项入池 | Open |
 
 ## 子任务状态表
@@ -45,7 +45,7 @@
 | Phase 1 后端(core 轮 05–10) | Done | 报告 §08–§13; 入池 core 9 issue; 46 项发现(A21/B6/C9/D10) |
 | Phase 1 后端(hr 轮 11–14) | Done | 报告 §14–§17; 入池 hr 9 issue; 29 项发现(A12/B1/C7/D9) |
 | Phase 1 后端(轮 15–16: webui 全包) | Done | 报告 §18–§19; 入池 webui 10 issue(refactor); 24 项发现(A9/B2/C7/D6) |
-| Phase 1 后端(轮 17–19: rules / infra / torrents+tray) | Open | 未开工 |
+| Phase 1 后端(轮 17–19: rules / infra / torrents+tray) | Done | 报告 §20–§22; 入池 rules 3 / infra 5 / torrents+tray 3 = 11 issue; 34 项发现(A11/B5/C9/D9); **Phase 1 后端全包完成** |
 | Phase 2 前端(轮 20–23: shared JS / 抽屉模板族 / 三皮肤 CSS / 模板) | Open | 总量最大两块之一 |
 | Phase 3 测试与横切(轮 24–25: tests/ + 跨层同一事实总账) | Open | 轮 25 是重构收益最大的一张表 |
 | Phase 4 汇总(轮 26) | Open | 重构候选排序 + issue 入池 |
@@ -111,3 +111,15 @@
 - **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §18–§19(发现清单)+ §20 累计计数/候选排序 + §21 issue 表; **10 条 refactor issue 入池**(专题 `dup-code-audit`): `webui-route-cmd-boilerplate-dup` / `webui-status-payload-dup` / `webui-hr-route-guard-dup` / `webui-sidecar-dir-convention-dup` / `webui-partial-publish-merge-dup` / `webui-cmd-pair-handlers-dup` / `webui-bulk-receipt-boilerplate-dup` / `webui-virtual-tracker-prefix-dup` / `webui-seed-view-restate-dup` / `webui-cross-layer-constant-convention-dup`。
 - **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告/issue 制品。
 - **待办下一轮**: Phase 1 后端轮 17(rules/); 或按用户偏好调整顺序。
+
+### 2026-10-11 R5 — 轮 17–19(rules / infra / torrents+tray+entry 全包)
+
+- **触发**: 用户「做 Phase 1, 17-19部分: 26-10-10-2333-plan-dup-code-audit.html」。
+- **范围(拍板推定)**: Phase 1 后端余下三包 = 轮 17 **rules/**(base·conditions·registry·checking_meta·actions/{basic,transfer,checking,full_checking,skip_checking}·expr/{lexer,parser,env,eval,types,errors}, 2187 行 · 18 文件) / 轮 18 **infra/**(utils·file_access·notify·logging·locking·versioning·autostart·errors, 2013 行 · 9 文件) / 轮 19 **torrents/ + tray/ + entry**(torrents 5 + tray 2 + cli/__main__, 1877 行 · 9 文件)。合计 ~6.1k 行 / 36 文件。
+- **S2 提名实测**: pylint R0801(`--min-similarity-lines=6`) 对三面对收 **2 组**, 均在 `torrents/compat`↔`torrents/view` 字段列表(= R19-C01) —— 亦是全批唯一工具命中; rules / infra **0 命中**。jscpd python(`10/70`)对三面 **0 clone**(33 文件) —— 与 config/core/hr/webui 同结论(字面重复极低, 主战场是结构线索 + 精读)。
+- **轮 17 rules**: A3(R17-A01 盘用量取数四处逐字同 / A02 数值谓词三处 / A03 动作 init 样板) + B2(no-HR 缺省语义两处 / AST 双类型检查) + C2(STATE_ATTRS 第三份=归 config issue / parser 死件运算符常量) + D3。
+- **轮 18 infra**: A4(A01 fmt_speed↔fmt_size 阶梯 / A02 _win_user32↔_win_kernel32 惰性绑定 / A03 host 收集↔extract_tracker_hostnames / A04 文件三态探针两实现) + B1(parse_* 三族) + C4(C01 平台判定旁路单点[autostart 6 处 + tray·notify] / C02 sanitize↔mask URL 分解 / C03 数值强转=归 R12-M02 / C04 告警节流窗口=归 R14-T03) + D3。
+- **轮 19 torrents+tray+entry**: A4(A01 notify↔tray icon 路径逐字同 / A02 cli 连接守卫 / A03 store 惰性缓存对 / A04 HR 判定入口守卫三处) + B2(view 量化↔webui / 两处基线刷新) + C3(C01 快照字段表↔视图字段表双份 / C02 平台旁路=归 R18-C01 / C03 ETA 哨兵=归 R16-C04) + D3。
+- **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §20–§22(发现清单)+ §23 累计计数/候选排序 + §24 issue 表 + §25 变更记录; **11 条 refactor issue 入池**(专题 `dup-code-audit`): `rules-expr-disk-helper-dup` / `rules-expr-numeric-predicate-dup` / `rules-parser-dead-op-constants-dup` / `infra-fmt-ladder-dup` / `infra-win-dll-lazy-bind-dup` / `infra-utils-small-helper-dup` / `infra-platform-detect-bypass-dup` / `infra-url-decompose-dup` / `torrents-snapshot-view-field-dup` / `torrents-hr-entry-guard-dup` / `notify-tray-icon-path-dup`。三包 34 项发现(A11/B5/C9/D9), 全局累计 156(A58/B15/C40/D43)。
+- **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告/issue 制品。
+- **待办下一轮**: Phase 2 前端轮 20(shared/*.js 非抽屉)。**Phase 1 后端(轮 01–19)至此全部走完**。

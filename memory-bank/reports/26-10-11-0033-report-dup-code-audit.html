@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-11-0310">
+<meta name="doc-updated" content="26-10-11-0352">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–16: 准备 + config + core + hr + webui)</title>
+<title>全仓重复代码审查 · 滚动报告 (轮 00–19: 准备 + config + core + hr + webui + rules + infra + torrents)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -104,19 +104,22 @@
       <a href="#s17"><b>17</b>&nbsp; R14 hr 运行面 B</a>
       <a href="#s18"><b>18</b>&nbsp; R15 webui/server</a>
       <a href="#s19"><b>19</b>&nbsp; R16 webui 表现层</a>
-      <a href="#s20"><b>20</b>&nbsp; 分类计数与候选排序</a>
-      <a href="#s21"><b>21</b>&nbsp; 入池 issue</a>
-      <a href="#s22"><b>22</b>&nbsp; 变更记录</a>
+      <a href="#s20"><b>20</b>&nbsp; R17 rules</a>
+      <a href="#s21"><b>21</b>&nbsp; R18 infra</a>
+      <a href="#s22"><b>22</b>&nbsp; R19 torrents+tray+entry</a>
+      <a href="#s23"><b>23</b>&nbsp; 分类计数与候选排序</a>
+      <a href="#s24"><b>24</b>&nbsp; 入池 issue</a>
+      <a href="#s25"><b>25</b>&nbsp; 变更记录</a>
     </nav>
     <main>
       <div class="kicker">执行报告 · 重复代码审查</div>
       <h1>全仓重复代码审查 · 滚动报告</h1>
-      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包) + 轮 15–16(webui 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
+      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包) + 轮 15–16(webui 全包) + 轮 17–19(rules / infra / torrents+tray+entry)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
       <div class="meta-row">
         <span>状态 <b class="mono">In Progress</b></span>
         <span>专题 <b class="mono">dup-code-audit</b></span>
-        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–16</b></span>
-        <span>取证基线 <b class="mono">86138d33</b></span>
+        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–19</b></span>
+        <span>取证基线 <b class="mono">08f116ab</b></span>
         <span>启动 <b class="mono">26-10-11-0033</b></span>
         <span>报告形态 <b class="mono">滚动(轮 26 置 Done)</b></span>
       </div>
@@ -148,6 +151,9 @@
           <tr><td class="r">R14</td><td class="mono">hr 运行面 B runtime·worker·store·queue·channel·server·events·report·ratelimit·module·log</td><td>~2545 行 · 11 文件</td></tr>
           <tr><td class="r">R15</td><td class="mono">webui/server/ factory·context·auth·lifecycle·common·static_ui·traffic_qb + routes/*</td><td>~2282 行 · 20 文件(计划写 18)</td></tr>
           <tr><td class="r">R16</td><td class="mono">webui 表现层 runtime·views·commands·module</td><td>~3851 行 · 4 文件(计划写 3534)</td></tr>
+          <tr><td class="r">R17</td><td class="mono">rules/ conditions · actions/* · expr/* · base · registry · checking_meta</td><td>2187 行 · 18 文件(计划写 15)</td></tr>
+          <tr><td class="r">R18</td><td class="mono">infra/ utils·notify·logging·file_access·locking·versioning·autostart·errors</td><td>2013 行 · 9 文件</td></tr>
+          <tr><td class="r">R19</td><td class="mono">torrents/ + tray/ + entry(store·record·view·compat; app; cli·__main__)</td><td>1877 行 · 9 文件(计划写 8)</td></tr>
         </table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
@@ -163,6 +169,8 @@
           <tr><td class="r mono">pylint … =5 · src/auto_qb/config</td><td>1 组: <code>schema/fields.py:166-177</code> ↔ <code>validation/rules.py:29-43</code>(跨轮, 即 R01-S01/R02-V04)</td></tr>
           <tr><td class="r mono">jscpd -f python<br>--min-lines=10 --min-tokens=70 · src</td><td><b>0 clone</b>(字面重复在 Python 后端极低)</td></tr>
           <tr><td class="r mono">jscpd --min-lines=8 --min-tokens=60 · config</td><td>1 clone: <code>writer.py[199:5-207:11] ↔ [341:5-351:4]</code>(R03-W01)</td></tr>
+          <tr><td class="r mono">pylint … =6 · rules+infra+torrents+tray<br>(R17–R19 实测)</td><td>2 组, 均在 <code>torrents/compat</code>↔<code>torrents/view</code> 字段列表(= R19-C01); rules / infra <b>0 命中</b>(rate 9.99/10)</td></tr>
+          <tr><td class="r mono">jscpd python 10/70 · rules+infra+torrents+tray<br>(R17–R19 实测)</td><td><b>0 clone</b>(33 文件) —— 字面重复同样极低</td></tr>
         </table>
         <div class="callout">
           <p><b>R00 关键结论:</b> config 包的字面重复检测几乎全静默 —— <b>与计划预判一致</b>(config 是 C 类「同一事实多表示」最密的包, 而非复制粘贴)。工具仅作提名, 主战场是 §3.3 结构线索 grep 与逐文件精读。阈值冻结: pylint <code>8</code>(config 下探 <code>5</code>)、jscpd <code>8/60</code>, 供后续轮沿用/微调。</p>
@@ -944,17 +952,197 @@
       </section>
 
       <section id="s20">
-        <h2><span class="secno">20</span>分类计数与重构候选排序</h2>
+        <h2><span class="secno">20</span>R17 · rules/(conditions · actions/* · expr/* · base · registry · checking_meta)</h2>
         <hr class="sec-rule">
-        <h3>20.1 分类计数(轮 00–16 累计)</h3>
+        <p><b>S1 圈定:</b> <code>base.py</code>(<code>ActionResult</code>/<code>RuleContext</code>/<code>Rule</code>) · <code>conditions.py</code>(13 条件插件) · <code>registry.py</code> · <code>checking_meta.py</code> · <code>actions/{basic,transfer,checking,full_checking,skip_checking}.py</code> · <code>expr/{lexer,parser,env,eval,types,errors}.py</code>(2187 行 · 18 文件, 计划写 15)。目标符号: <code>Rule.process</code>/<code>_log_condition_error</code>/<code>_dedup_allowed</code> · <code>BaseCondition</code>/<code>BaseAction</code> · 各条件/动作 <code>__init__</code>/<code>match</code>/<code>execute</code> · <code>expr.compile_expr</code>/<code>evaluate</code>/<code>validate</code>/<code>NAME_TABLE</code>/<code>FUNC_TABLE</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801(<code>=6</code>) 对本面 <b>0 命中</b>; jscpd python <b>0 clone</b> —— 与 config/core/hr/webui 同结论。主线索为结构线索 grep: <code>disk_usage(</code> · <code>必须是数值</code> · <code>_ARITH_OPS</code> · 各条件 <code>parse_compare</code> / <code>super().__init__</code> 样板。</p>
         <div class="counts">
-          <div class="box a"><div class="n">47</div><div class="l">A 真重复</div></div>
-          <div class="box b"><div class="n">10</div><div class="l">B 分歧</div></div>
-          <div class="box c"><div class="n">31</div><div class="l">C 同一事实</div></div>
-          <div class="box d"><div class="n">34</div><div class="l">D 不动</div></div>
+          <div class="box a"><div class="n">3</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">2</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">2</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
         </div>
-        <p class="small">累计 122 = config 轮 01–04(A5/B1/C8/D9, 见 §04–§07) + core 轮 05–10(A21/B6/C9/D10) + hr 轮 11–14(A12/B1/C7/D9) + webui 轮 15–16(A9/B2/C7/D6)。webui 分轮: R15 4/0/3/3 · R16 5/2/4/3。部分为同一族的跨轮拆分。</p>
-        <h3>20.2 重构候选排序(收益 / 风险)</h3>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R17-A01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>expr/env.py</code> 取值器 <code>_freespace</code>(199-206) / <code>_disk_total</code>(209-216) / <code>_disk_used</code>(219-226) <b>逐字同骨架</b>(仅 <code>.free/.total/.used</code> 属性与函数名不同); 且与 <code>conditions.py:250-263</code> <code>FreespaceCondition.match</code> 的「<code>disk_usage()</code> 取数 + FileAccessError/OSError→ExprError 映射」同构 —— 同一逻辑<b>四处</b>。<br><b>建议:</b> 抽 <code>_disk_usage_value(path, attr)</code> 供四处共用。收益中/风险低。见 issue <code>rules-expr-disk-helper-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-A02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 「参数/操作数必须是数值」校验三处各写 —— <code>env._num_unary</code>(259-266) / <code>env._min_max</code>(269-276) / <code>eval._as_num</code>(123-126); <code>types.is_number</code> 已是单点却未被共用。<br><b>建议:</b> 统一走 <code>is_number</code> + 单一报错 helper。收益低/风险低。见 issue <code>rules-expr-numeric-predicate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-A03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 动作插件 <code>__init__(self, spec, ignore_error=False): super().__init__(spec, ignore_error)</code> 样板在 basic 4 个 + transfer 1 个 = 5 处各写(另有 <code>_parse_section</code> 三键 dict 构造)。<br><b>建议:</b> 收益低/风险低, 登记为<b>未入池候选</b>(样板过薄, 抽基类可能反增间接)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-B01</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 「无 HR 配置的缺省语义」两处 —— <code>conditions.HrCondition.match</code>(155-167, conf=None → condition-not-met=true; conf.hr=None → mode!=condition-met) 与 <code>expr/env._hr</code>(99-107, 恒返 False)。<br><b>分歧点:</b> 条件侧区分 mode(condition-not-met 视为真), 表达式侧统一 False(有定义的缺省参与求值)。<b>只登记</b>(合并会改语义)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-B02</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 两套 AST 递归类型检查 —— <code>parser._check_literals</code>(232-256, 仅字面量) 与 <code>env.static_type</code>(395-431, 含名字/函数)。<br><b>分歧点:</b> 目的不同(编译期字面量冲突 vs 语义全量), 已部分共用 <code>types.py</code>。<b>只登记</b>(完整合并收益有限, 属刻意分层)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-C01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 状态类别属性 7 元组 —— <code>expr/env.py:44 _STATE_ATTRS</code> 与 <code>config/schema/fields.py:187 STATE_ATTRS</code> <b>逐字同</b>, 另有 <code>conditions.StateCondition</code> 运行期 <code>getattr</code> 语义同源。<br><b>建议:</b> 即 R02-V05「STATE_ATTRS 三份」的第三份, 并入既有 issue <code>config-schema-validation-enum-dup</code>, <b>不另立</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-C02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 运算符族常量 <code>_ARITH_OPS</code>/<code>_ORDER_OPS</code>/<code>_EQ_OPS</code>/<code>_LOGIC_OPS</code> 在 <code>parser.py:20-23</code> 定义但<b>本文件从不使用</b>(死件), 与 <code>types.py:14-17</code> 活件逐字同。<br><b>建议:</b> 删 parser 死件。收益低/风险低。见 issue <code>rules-parser-dead-op-constants-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>ActionResult</code> ok/fail/skip/pending 构造器 + is_* 属性</b>(base.py:33-63)。判定<b>不动</b>: 类内样板, 单一类, 设计良好。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-D02</td><td><span class="tag d">D</span></td>
+            <td><b>插件注册单点</b>(<code>registry.register_condition/register_action</code> 装饰器 + <code>CONDITIONS/ACTIONS</code> 表 + <code>create_*</code> 工厂)。判定<b>不动</b>: 注册的唯一实现, 非重复。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R17-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>utils.parse_compare</code> 的四个调用点</b>(size/seedtime/upload_ratio/freespace 条件各一行)。判定<b>不动</b>: 已单点, 调用点非独立表示。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s21">
+        <h2><span class="secno">21</span>R18 · infra/(utils · notify · logging · file_access · locking · versioning · autostart · errors)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>utils.py</code>(963 · 解析/匹配/格式化/原子写/Win 长路径与 Shell) · <code>file_access.py</code>(300 · Local/Mapped 三态) · <code>notify.py</code>(271) · <code>logging.py</code>(124) · <code>locking.py</code>(93) · <code>versioning.py</code>(154) · <code>autostart.py</code>(81) · <code>errors.py</code>(15) · <code>__init__.py</code>(2013 行 · 9 文件)。目标符号: <code>atomic_write</code> · <code>fmt_speed/fmt_size</code> · <code>sanitize_tracker_url/mask_tracker_url</code> · <code>_win_user32/_win_kernel32</code> · <code>FileAccess</code> 两实现 · <code>CURRENT_VERSIONS/migrate</code> · <code>NotifyThrottle</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801(<code>=6</code>) / jscpd python 对本面 <b>0 命中/0 clone</b>。主线索为结构线索 grep: <code>sys.platform.startswith</code> · <code>rsplit("@", 1)</code> · <code>fmt_</code> · <code>_win_bind</code> · <code>extract_tracker_hostnames</code>。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">4</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">4</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R18-A01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>fmt_speed</code>(637-642) ↔ <code>fmt_size</code>(645-654) <b>逐字同阶梯循环</b>(units/div 元组 + <code>value &gt;= div → f"{value/div:.2f} {unit}"</code>), 只差单位表与 <code>/s</code> 后缀。<br><b>建议:</b> 抽 <code>_fmt_ladder(value, units)</code>。收益低-中/风险低。见 issue <code>infra-fmt-ladder-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-A02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>_win_user32</code>(836-867) ↔ <code>_win_kernel32</code>(870-886) 同「<code>is_windows()</code> 早退 → 缓存早退 → 惰性 import ctypes → 逐个 <code>_win_bind</code> → 缓存全局」骨架, 只差 DLL 名与签名。<br><b>建议:</b> 抽 <code>_win_dll(name, sigs)</code>; 保留 <code>_bound_*</code> 全局与 monkeypatch 点。收益低-中/风险中低。见 issue <code>infra-win-dll-lazy-bind-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-A03/A04</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> ① <code>match_tracker_confs</code>(429-446) 内联 host 收集循环 ↔ 既有 <code>extract_tracker_hostnames</code>(275-288); ② <code>file_access</code> Local(187-194) 与 Mapped(296-306) 各自 <code>exists/isdir/isfile</code> 三连。<br><b>建议:</b> 抽 <code>_hosts_of(urls)</code>(注意入参形态不同) 与 <code>_probe(fn)</code>。收益低/风险低。见 issue <code>infra-utils-small-helper-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-B01</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> <code>parse_time</code>(140-149) / <code>parse_fsize</code>(152-168) / <code>parse_speed</code>(171-180) 三份同构「regex → 单位表 → <code>int(float*unit)</code>」。<br><b>分歧点:</b> 量纲/单位表/正则各异(时间 S/M/H/D 十进制; 大小须 iB; 速度含 /S)。<b>只登记</b>(抽通用解析器会损可读性)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-C01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 平台判定单点 <code>utils.is_windows/is_linux/is_mac</code>(204-221) 被绕过 —— <code>autostart.py</code> <b>6 处</b> + <code>tray/app.py:204</code> 用裸 <code>sys.platform.startswith("win32"/"darwin")</code>(utils 单点写的是 <code>"win"</code>)。<br><b>建议:</b> 改调 <code>utils.is_*</code>。收益中/风险低。见 issue <code>infra-platform-detect-bypass-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-C02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>sanitize_tracker_url</code>(295-323) ↔ <code>mask_tracker_url</code>(339-395) 共享 URL 分解口径(netloc 去 userinfo / 缺 scheme path 首段兜底 / <code>SANITIZE_FALLBACK</code>)各写一遍。<br><b>建议:</b> 抽 <code>_split_url()</code>。即 hr 轮 R14-T04「URL 分解口径」的 infra 半。见 issue <code>infra-url-decompose-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-C03</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 安全数值强转 <code>versioning._num</code>(72-77) ↔ hr <code>model._as_int/_as_float</code>(R12-M02) 同「try float/int → 0 兜底」族。<br><b>建议:</b> 并入既有 issue <code>hr-model-serialize-helper-dup</code> 的收口面, <b>不另立</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-C04</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「按窗口节流同类告警」三套实现 —— <code>NotifyThrottle</code>(53-81, 滑动窗口+同键去重) ↔ <code>rules/base._log_condition_error</code>(271-284, 单键+300s) ↔ hr 侧(R13-S03/R14-T03)。<br><b>建议:</b> 归并既有 issue <code>hr-warn-dedup-throttle-dup</code>(infra 半), <b>不另立</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>logging._level_line_re</code> / <code>filter_log_lines</code></b>。判定<b>不动</b>: 复杂格式串解析的唯一实现(设计良好的单点)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>atomic_write</code> + <code>BACKUP_SUFFIX</code>/<code>TMP_SUFFIX</code></b>。判定<b>不动</b>: infra 自身即原子写单点(调用侧各自组备份/恢复链属别轮 R07-T05/R05-S01/R14-T02)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R18-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>_exists_dir</code>/<code>_exists_file</code></b>(678-685, 各一行) 与 <code>mask_tracker_entry</code>/<code>display_host</code>/<code>path_normalize</code> 单点。判定<b>不动</b>: ≤3 行惯用式 / 单点。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s22">
+        <h2><span class="secno">22</span>R19 · torrents/ + tray/ + entry(store · record · view · compat; app; cli·__main__)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>torrents/{__init__,compat,record,store,view}.py</code>(1197) · <code>tray/{__init__,app}.py</code>(493) · <code>entry: cli.py + __main__.py</code>(187)(1877 行 · 9 文件, 计划写 8)。目标符号: <code>TorrentRecord</code>(apply_delta/to_dict/hr_*) · <code>TorrentStore</code>(apply_sync/_apply/lazy caches) · <code>compat._SNAPSHOT_FIELDS</code> · <code>view._VIEW_FIELDS/view_field_value</code> · <code>TrayUi</code>/<code>ShowIpcServer</code> · <code>cli.main</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801(<code>=6</code>) 对本面收 <b>2 组</b>(均 <code>torrents/compat</code>↔<code>torrents/view</code> 字段列表 = R19-C01, 全批唯一工具命中); jscpd python <b>0 clone</b>。主线索: <code>sys.platform.startswith</code> · <code>ICON_ICO</code> · <code>hr_excluded()</code> · <code>_format_uptime</code>。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">4</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">2</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">3</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R19-A01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>infra/notify.ICON_ICO</code>(48) ↔ <code>tray/app.ICON_ICO</code>(32) <b>逐字同</b> <code>os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.ico")</code>(tray 另有同式 <code>ICON_PNG</code>)。<br><b>建议:</b> 路径单点。收益低/风险低。见 issue <code>notify-tray-icon-path-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-A02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>cli.export_yaml</code>(17-19) ↔ <code>export_torrents_info</code>(33-35) 同「<code>if not manager.connect(): logging.error("导出失败: 无法连接 qBittorrent"); return False</code>」。<br><b>建议:</b> 抽 <code>_require_connect(manager)</code>。收益低/风险低, 登记为<b>未入池候选</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-A03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>store.all_tags</code>(422-428) ↔ <code>all_categories</code>(430-436) 同「client 守卫 + 惰性缓存」;<code>invalidate_tags</code>/<code>invalidate_categories</code>(438-444) 同对。<br><b>建议:</b> 参数化 <code>_lazy_cache</code>。收益低/风险低, 登记为<b>未入池候选</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-A04</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>record.check_hr_condition</code>(387-390) / <code>hr_managed</code>(404-407) / <code>check_hr_satisfied</code>(440-443) 顶部<b>逐字同</b>「<code>if not tracker_conf.hr: return False</code> + <code>if hr_excluded(): return False</code>」守卫(<code>hr_judgement</code> 另有一处排除短路)。<br><b>建议:</b> 抽 <code>_hr_guard()</code>。收益低/风险低。见 issue <code>torrents-hr-entry-guard-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-B01</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> <code>view.view_field_value</code>(91-102, seeding_time/eta/... 按 60s 量化) ↔ <code>webui/views.search_torrents._view</code> 的分钟量化(R16-B01)。<br><b>分歧点:</b> 一处量化一处未量化(search 行原始秒)。<b>只登记</b>(与 R16-B01 同族, 合并会改 search 行精度)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-B02</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> <code>store.update_state_snapshot</code>(301-307) ↔ <code>update_field_snapshots</code>(309-326) 同「轮末刷新基线」骨架。<br><b>分歧点:</b> 目标对象/清空策略不同(state_enum 全量替换 vs 监听字段原地更新+清已删)。<b>只登记</b>(合并收益有限)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-C01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 快照字段表 <code>compat._EXTENSION_FIELDS</code>(56-106, 43 项) ↔ 视图字段表 <code>view._VIEW_FIELDS</code>(9-76, 65 项) 两处手工枚举同一批 qB 字段名(view ⊆ snapshot 却人肉同步)。漂移风险: 新增快照字段忘进 view → 静默不置脏。<br><b>建议:</b> view 从 compat 派生 / 加守阵钉包含关系。收益中/风险中。见 issue <code>torrents-snapshot-view-field-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-C02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>tray/app.py:204</code> 裸 <code>sys.platform.startswith("win32")</code> 绕过 <code>utils.is_windows</code>。<br><b>建议:</b> 与 R18-C01 同族, 归 <code>infra-platform-detect-bypass-dup</code>, <b>不另立</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-C03</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> ETA 哨兵 <code>8640000</code> —— <code>record.py:61 eta=8640000</code>(源) ↔ <code>views._ETA_SENTINEL</code>(R16-C04) ↔ 前端 <code>format.js</code>/tpl。<br><b>建议:</b> 归 R16-C04, <b>不另立</b>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-D01</td><td><span class="tag d">D</span></td>
+            <td><b>包 <code>__init__.py</code> 全量重导出样板</b>(torrents/tray)。判定<b>不动</b>: 包导出惯例。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>tray._format_uptime</code></b>(415-421)。判定<b>不动</b>: 单点, 无第二份表示。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R19-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>cli</code> argparse 互斥校验 6 段 <code>parser.error</code></b>。判定<b>不动</b>: ≤3 行惯用式, 参数校验本就该在入口并列。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s23">
+        <h2><span class="secno">23</span>分类计数与重构候选排序</h2>
+        <hr class="sec-rule">
+        <h3>23.1 分类计数(轮 00–19 累计)</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">58</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">15</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">40</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">43</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">累计 156 = config 轮 01–04(A5/B1/C8/D9) + core 轮 05–10(A21/B6/C9/D10) + hr 轮 11–14(A12/B1/C7/D9) + webui 轮 15–16(A9/B2/C7/D6) + rules 轮 17(A3/B2/C2/D3) + infra 轮 18(A4/B1/C4/D3) + torrents 轮 19(A4/B2/C3/D3)。部分为同一族的跨轮拆分。</p>
+        <h3>23.2 重构候选排序(收益 / 风险)</h3>
         <table>
           <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th style="width:38%">候选</th><th style="width:12%">收益</th><th style="width:12%">风险</th><th>建议时机</th></tr>
           <tr><td class="r mono">R03-W01</td><td><span class="tag a">A</span></td><td>writer 备份抽 <code>_atomic_copy</code></td><td>低(9 行)</td><td>低</td><td>随时(可并入 config 重构批次)</td></tr>
@@ -998,13 +1186,32 @@
           <tr><td class="r mono">R15-C01</td><td><span class="tag c">C</span></td><td>token 口径收敛(webui 半, 见 hr-token-persist-convention-dup)</td><td>中</td><td>低</td><td>随 infra(已入池, hr 侧发起)</td></tr>
           <tr><td class="r mono">R16-C02/C03/C04</td><td><span class="tag c">C</span></td><td>跨层常量多表示(STATE_RANK / REANNOUNCE_BLOCKED / ETA 哨兵)</td><td>中</td><td>中</td><td>专项(触前端构建面, 现由守阵兜)</td></tr>
           <tr><td class="r mono">R16-B01/B02</td><td><span class="tag b">B</span></td><td>search 行精度 / 三桶集合处理</td><td>低</td><td>中高</td><td><b>暂缓</b>(B 类, 先钉分歧点)</td></tr>
+          <tr class="phase"><td colspan="6">rules 轮 17</td></tr>
+          <tr><td class="r mono">R17-A01</td><td><span class="tag a">A</span></td><td>expr 盘用量取数抽 <code>_disk_usage_value</code>(四处)</td><td>中</td><td>低</td><td>随时(rules 批次)</td></tr>
+          <tr><td class="r mono">R17-C02</td><td><span class="tag c">C</span></td><td>删 parser 死件运算符常量</td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R17-A02</td><td><span class="tag a">A</span></td><td>数值谓词校验收单点</td><td>低</td><td>低</td><td>随 rules 批次</td></tr>
+          <tr><td class="r mono">R17-C01</td><td><span class="tag c">C</span></td><td>STATE_ATTRS 第三份收敛(归 <code>config-schema-validation-enum-dup</code>)</td><td>中</td><td>中</td><td>随 config 专项</td></tr>
+          <tr><td class="r mono">R17-A03 · R17-B01/B02</td><td><span class="tag a">A</span></td><td>动作 init 样板 / no-HR 缺省语义 / AST 双检查</td><td>低</td><td>中高</td><td><b>暂缓</b>(弱候选 / B 类)</td></tr>
+          <tr class="phase"><td colspan="6">infra 轮 18</td></tr>
+          <tr><td class="r mono">R18-C01 · R19-C02</td><td><span class="tag c">C</span></td><td>平台判定改调 <code>utils.is_*</code>(消真实旁路)</td><td>中</td><td>低</td><td>随时(infra 批次)</td></tr>
+          <tr><td class="r mono">R18-A01</td><td><span class="tag a">A</span></td><td>格式化阶梯抽 <code>_fmt_ladder</code></td><td>低-中</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R18-C02</td><td><span class="tag c">C</span></td><td>URL 分解抽 <code>_split_url</code>(sanitize/mask)</td><td>中</td><td>低</td><td>随 infra 批次</td></tr>
+          <tr><td class="r mono">R18-A02</td><td><span class="tag a">A</span></td><td>Win DLL 惰性绑定抽 <code>_win_dll</code></td><td>低-中</td><td>中低</td><td>随 infra 批次(Windows 守阵)</td></tr>
+          <tr><td class="r mono">R18-A03/A04</td><td><span class="tag a">A</span></td><td>utils 小样板(host 收集 / 文件三态探针)</td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R18-C03/C04</td><td><span class="tag c">C</span></td><td>数值强转 / 告警节流窗口(归 hr 既有 issue)</td><td>中</td><td>中</td><td>随 hr 专项</td></tr>
+          <tr class="phase"><td colspan="6">torrents+tray+entry 轮 19</td></tr>
+          <tr><td class="r mono">R19-C01</td><td><span class="tag c">C</span></td><td>view 字段表从 compat 派生 / 守阵钉包含关系</td><td>中</td><td>中</td><td>专项(触热路径脏判定, 需 S5 镜子)</td></tr>
+          <tr><td class="r mono">R19-A04</td><td><span class="tag a">A</span></td><td>HR 判定入口守卫抽 <code>_hr_guard</code></td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R19-A01</td><td><span class="tag a">A</span></td><td>icon 路径单点(notify↔tray)</td><td>低</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R19-A02 · R19-A03</td><td><span class="tag a">A</span></td><td>cli 连接守卫 / store 惰性缓存 小样板</td><td>低</td><td>低</td><td>随时(弱候选)</td></tr>
+          <tr><td class="r mono">R19-B01/B02</td><td><span class="tag b">B</span></td><td>量化口径 / 轮末基线刷新</td><td>低</td><td>中高</td><td><b>暂缓</b>(B 类, 先钉分歧点)</td></tr>
         </table>
       </section>
 
-      <section id="s21">
-        <h2><span class="secno">21</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
+      <section id="s24">
+        <h2><span class="secno">24</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
         <hr class="sec-rule">
-        <p>累计 <b>35 条</b>可动项已按 create-issue skill 入池(便签档, 专题 <code>dup-code-audit</code>), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联: <b>config 7 条</b>(轮 01–04) + <b>core 9 条</b>(轮 05–10) + <b>hr 9 条</b>(轮 11–14) + <b>webui 10 条</b>(轮 15–16)。</p>
+        <p>累计 <b>46 条</b>可动项已按 create-issue skill 入池(便签档, 专题 <code>dup-code-audit</code>), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联: <b>config 7 条</b>(轮 01–04) + <b>core 9 条</b>(轮 05–10) + <b>hr 9 条</b>(轮 11–14) + <b>webui 10 条</b>(轮 15–16) + <b>rules 3 条</b>(轮 17) + <b>infra 5 条</b>(轮 18) + <b>torrents+tray 3 条</b>(轮 19)。</p>
         <table>
           <tr><th style="width:30%">issue</th><th>对应发现</th></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html">config-schema-validation-enum-dup</a></td><td>R01-S01/S02 · R02-V04/V05(枚举/常量双份 + 死件 + STATE_ATTRS 三份)</td></tr>
@@ -1042,12 +1249,26 @@
           <tr><td class="r"><a href="../issues/26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html">webui-virtual-tracker-prefix-dup</a></td><td>R16-C01</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0310-refactor-webui-seed-view-restate-dup.html">webui-seed-view-restate-dup</a></td><td>R16-A05</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html">webui-cross-layer-constant-convention-dup</a></td><td>R16-C02/C03/C04 · R15(keys 正则)</td></tr>
+          <tr class="phase"><td colspan="2">rules 轮 17</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-rules-expr-disk-helper-dup.html">rules-expr-disk-helper-dup</a></td><td>R17-A01(盘用量取数四处)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-rules-expr-numeric-predicate-dup.html">rules-expr-numeric-predicate-dup</a></td><td>R17-A02(数值谓词三处)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-rules-parser-dead-op-constants-dup.html">rules-parser-dead-op-constants-dup</a></td><td>R17-C02(parser 死件运算符常量)</td></tr>
+          <tr class="phase"><td colspan="2">infra 轮 18</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-infra-fmt-ladder-dup.html">infra-fmt-ladder-dup</a></td><td>R18-A01(fmt_speed/fmt_size 阶梯)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup.html">infra-win-dll-lazy-bind-dup</a></td><td>R18-A02(_win_user32/_win_kernel32)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-infra-utils-small-helper-dup.html">infra-utils-small-helper-dup</a></td><td>R18-A03/A04(host 收集 / 文件三态探针)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html">infra-platform-detect-bypass-dup</a></td><td>R18-C01 · R19-C02(平台判定旁路)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-infra-url-decompose-dup.html">infra-url-decompose-dup</a></td><td>R18-C02(sanitize/mask URL 分解)</td></tr>
+          <tr class="phase"><td colspan="2">torrents+tray+entry 轮 19</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-torrents-snapshot-view-field-dup.html">torrents-snapshot-view-field-dup</a></td><td>R19-C01(快照/视图字段表双份)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-torrents-hr-entry-guard-dup.html">torrents-hr-entry-guard-dup</a></td><td>R19-A04(HR 判定入口守卫)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0352-refactor-notify-tray-icon-path-dup.html">notify-tray-icon-path-dup</a></td><td>R19-A01(icon 路径推导)</td></tr>
         </table>
-        <p class="small"><b>未入池(登记于本报告 §20 候选排序):</b> config —— R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓); core —— R07-T05/R05-S01(原子写收敛, 归轮 18 infra)、R07-T04/T06/T07 · R10-X03 · R08-E02/E03(B 类暂缓)、R09-C03(相位认领, 随契约专项); hr —— R11-C01(单位口径)、R14-T04(URL 分解口径)、R12-S01(档位谓词, 弱)归轮 18/25 总账; R13-D02(复核 issue 26-10-02-0441 已消除) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。webui —— R16-B01/B02(B 类暂缓)、R15-D01/D02/D03 · R16-D01/D02/D03(不动, 见 §18/§19); R15-C01(归 <code>hr-token-persist-convention-dup</code>)、R15-C03(归 <code>hr-site-derive-convention-dup</code>)不另立, 本轮不扩池。</p>
+        <p class="small"><b>未入池(登记于本报告 §23 候选排序):</b> config —— R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓); core —— R07-T05/R05-S01(原子写收敛, 归轮 18 infra)、R07-T04/T06/T07 · R10-X03 · R08-E02/E03(B 类暂缓)、R09-C03(相位认领, 随契约专项); hr —— R11-C01(单位口径)、R14-T04(URL 分解口径)、R12-S01(档位谓词, 弱)归轮 18/25 总账; R13-D02(复核 issue 26-10-02-0441 已消除) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。webui —— R16-B01/B02(B 类暂缓)、R15-D01/D02/D03 · R16-D01/D02/D03(不动, 见 §18/§19); R15-C01(归 <code>hr-token-persist-convention-dup</code>)、R15-C03(归 <code>hr-site-derive-convention-dup</code>)不另立, 本轮不扩池。<b>rules 轮 17</b> —— R17-A03(动作 init 样板, 弱)、R17-B01/B02(B 类暂缓)、R17-D01/D02/D03(不动); R17-C01 归 <code>config-schema-validation-enum-dup</code> 不另立。<b>infra 轮 18</b> —— R18-B01(parse_* 族, B 类暂缓)、R18-D01/D02/D03(不动); R18-C03 归 <code>hr-model-serialize-helper-dup</code>、R18-C04 归 <code>hr-warn-dedup-throttle-dup</code> 不另立。<b>torrents 轮 19</b> —— R19-A02/A03(cli 连接守卫 / store 惰性缓存, 弱)、R19-B01/B02(B 类暂缓)、R19-D01/D02/D03(不动); R19-C02 归 <code>infra-platform-detect-bypass-dup</code>、R19-C03 归 R16-C04 不另立。</p>
       </section>
 
-      <section id="s22">
-        <h2><span class="secno">22</span>变更记录</h2>
+      <section id="s25">
+        <h2><span class="secno">25</span>变更记录</h2>
         <hr class="sec-rule">
         <table>
           <tr><th style="width:20%">版本</th><th>变更</th></tr>
@@ -1055,13 +1276,14 @@
           <tr><td class="r mono">26-10-11-0207</td><td>追加 R05–R10(core 全包)发现清单(46 项: A21/B6/C9/D10) + 累计分类计数 + core 重构候选排序 + 入池 core 9 issue; 覆盖表补 R05–R10; 取证基线 <code>1d7c864b</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0240</td><td>追加 R11–R14(hr 全包)发现清单(29 项: A12/B1/C7/D9) + 累计分类计数(98 项: A38/B8/C24/D28) + hr 重构候选排序 + 入池 hr 9 issue; 覆盖表补 R11–R14; 复核已知 issue <code>26-10-02-0441</code>(<code>_prune_index</code> 同体重复)已消除; 取证基线 <code>81eb863d</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0310</td><td>追加 R15–R16(webui 全包)发现清单(24 项: A9/B2/C7/D6) + 累计分类计数(122 项: A47/B10/C31/D34) + webui 重构候选排序 + 入池 webui 10 issue; 覆盖表补 R15–R16; 取证基线 <code>86138d33</code>。纯审查轮, 零源码改动。</td></tr>
+          <tr><td class="r mono">26-10-11-0352</td><td>追加 R17–R19(rules / infra / torrents+tray+entry 全包)发现清单(34 项: A11/B5/C9/D9) + 累计分类计数(156 项: A58/B15/C40/D43) + 三段重构候选排序 + 入池 rules 3 / infra 5 / torrents+tray 3 = 11 issue; 覆盖表补 R17–R19; §2.1 补工具实测; 取证基线 <code>08f116ab</code>。纯审查轮, 零源码改动。</td></tr>
         </table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
       </section>
 
       <footer>
-        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>86138d33</code> · 滚动报告(起始 26-10-11-0033)<br>
-        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–16(config + core + hr + webui 全包)。
+        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>08f116ab</code> · 滚动报告(起始 26-10-11-0033)<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–19(config + core + hr + webui + rules + infra + torrents 全包)。
       </footer>
     </main>
   </div>

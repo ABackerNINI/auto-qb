@@ -9,7 +9,7 @@
 
 ## In Progress
 
-- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–16: 准备 + config + core + hr + webui)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
+- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–19: 准备 + config + core + hr + webui + rules + infra + torrents)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 
 ## Open
 
