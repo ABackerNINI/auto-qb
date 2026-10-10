@@ -56,6 +56,9 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_resolve_hr_site_bindings_after_disabled_site: 绑定派生(loader)未启用条目不得中断后续条目的绑定(continue 而非 break)
 - test_channel_partial_section_uses_channel_defaults: hr_check.channel 给了字典但缺键 -> 缺的键走 HrChannelConfig 字段默认(而非 None)
 - test_site_binding_takes_preset_page_facts: 派生视图的页面事实键取档案值(非 SiteHrCheckConfig 字段默认; 合成非默认档案)
+- test_hr_check_range_endpoints: 频控三键闭区间**端点逐值** —— min_interval [5s,1D] 与日额/页上限 [1,100000] 的两端合法 + 端点外一档非法(旧用例只喂 1S/10/1.5)
+- test_hr_check_request_timeout_endpoints: channel.request_timeout [5s,3600s] 两端逐值(旧用例只给了 1S/2H 两个远离端点的非法值)
+- test_hr_site_interval_range_endpoints: sites 条目 refresh/idle 两键 [60s,30D] 的**未覆盖半边**; 并改用「完整路径+精确下限文案」断言(既有用例的 `须 >=` 松匹配被交叉校验文案顶替 = 假绿)
 """
 import os
 
@@ -1298,3 +1301,66 @@ def test_site_binding_takes_preset_page_facts(monkeypatch, tmp_path):
     assert site.refresh_interval == 12 * 3600.0
     assert site.idle_refresh_interval == 24 * 3600.0
     assert cfg.hr_check.sites["zsite"].refresh_interval == 12 * 3600.0
+
+
+def test_hr_check_range_endpoints():
+    """hr_check 频控三键的闭区间**端点逐值** —— 池内旧用例只喂 1S / 10 / 1.5 这类远离边界的值
+
+    - min_interval [5s, 1D]: 5S 与 1D 合法, 4S 与 86401S 非法
+    - max_requests_per_day / max_pages_per_wave [1, 100000]: 1 与 100000 合法, 0 与 100001 非法
+      (上界端点 100000 此前没喂过 —— `max=100000` -> `99999` 会让合法配置变非法而全绿)
+    """
+    def err(**kv) -> str:
+        return "; ".join(_validate({"hr_check": kv}))
+
+    # --- min_interval 两端
+    assert err(min_interval="5S") == ""
+    assert err(min_interval="1D") == ""
+    assert "config.hr_check.min_interval: 须 >= 5s" in err(min_interval="4S")
+    assert "config.hr_check.min_interval: 须 <= 86400s" in err(min_interval="86401S")
+    # --- 日额与页上限两端(同款 `_try_number(integer=True, min=1, max=100000)` 判据)
+    for key in ("max_requests_per_day", "max_pages_per_wave"):
+        assert err(**{key: 1}) == "", key
+        assert err(**{key: 100000}) == "", key
+        assert f"config.hr_check.{key}(须为正整数): 须 >= 1" in err(**{key: 0}), key
+        assert f"config.hr_check.{key}(须为正整数): 须 <= 100000" in err(**{key: 100001}), key
+
+
+def test_hr_check_request_timeout_endpoints():
+    """channel.request_timeout 闭区间 [5s, 3600s] 端点逐值
+
+    既有用例只给了 1S(低于下限)与 2H(高于上限)两个**远离端点**的非法值: 端点本身(5S / 3600S)
+    与「端点外一档」(4S / 3601S)都没喂过, 故 `min_s=5` -> `6` 或 `max_s=3600` -> `3599` 全绿。
+    """
+    def err(v) -> str:
+        return "; ".join(_validate({"hr_check": {"channel": {"request_timeout": v}}}))
+
+    assert err("5S") == ""
+    assert err("3600S") == ""
+    assert "config.hr_check.channel.request_timeout: 须 >= 5s" in err("4S")
+    assert "config.hr_check.channel.request_timeout: 须 <= 3600s" in err("3601S")
+
+
+def test_hr_site_interval_range_endpoints():
+    """sites.<档案>.refresh_interval / idle_refresh_interval 闭区间 [60s, 30D] 的**未覆盖半边**
+
+    两处判据缺口:
+    - refresh 一侧此前**完全没喂过**越界值(既有 `test_idle_refresh_interval_range` 的 bad 列表只写
+      `idle_refresh_interval`), 故 refresh 的 `min_s=60` -> `59` 与 `max_s=30*86400` -> `31*86400` 全存活;
+    - 既有用例用 `"须 >=" in e` 这种松匹配断言 idle 的 59S, 而**交叉校验文案里也带「须 >= 拉取间隔(...)」**
+      ⇒ 该断言被交叉校验顶替, 是**假绿**(实测 idle 下界 -1 的变异因此存活)。本用例按
+      「完整路径 + 精确下限文案」断言。
+    """
+    def err(entry: dict) -> str:
+        return "; ".join(_validate({"hr_check": {"sites": {"btschool": entry}}}))
+
+    w = "config.hr_check.sites.btschool"
+    # --- refresh 下界外一档 59S(idle 缺省 24H >= 59S, 不触发交叉校验, 单断言即命中)
+    assert f"{w}.refresh_interval: 须 >= 60s" in err({"refresh_interval": "59S"})
+    # --- refresh 上界: 须与 idle 同值配对, 否则交叉校验的报错会混进来干扰归因
+    assert f"{w}.refresh_interval: 须 <= 2592000s" in err({"refresh_interval": "31D", "idle_refresh_interval": "31D"})
+    # --- 两端端点合法(同值配对 => 相等 = 等效关闭降频, 不报交叉校验)
+    assert err({"refresh_interval": "60S", "idle_refresh_interval": "60S"}) == ""
+    assert err({"refresh_interval": "30D", "idle_refresh_interval": "30D"}) == ""
+    # --- idle 下界外一档 59S: 精确文案(松匹配被交叉校验顶替过的那一处)
+    assert f"{w}.idle_refresh_interval: 须 >= 60s" in err({"idle_refresh_interval": "59S"})

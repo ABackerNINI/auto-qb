@@ -25,6 +25,8 @@
 - test_validate_max_tasks_per_tick_range: max_tasks_per_tick 非正值报错(0/负值被 TaskQueue 当"不限量", 与配置语义相反)
 - test_validate_value_ranges: 取值范围收紧聚合(interval/main_tick/sync_interval 上下界, max_tasks_per_tick 上界, log.max_bytes 轮转区间, required_share_ratio 有限性与范围, hr.condition 边界, notify 上界, 规则 interval 正时间)
 - test_validate_exact_boundaries: 闭区间**端点逐值**钉住(端口/log.max_bytes/notify/max_tasks/qb_traffic 采样·落盘·保留窗/曲线阈值严格递增) —— 池内旧用例取远离边界的值, 端点位移类变异全靠这条
+- test_validate_exact_boundaries_size_and_window_tail: 端点用例的三处补缺 —— log.max_bytes **逐字节**两端(1MiB±1B / 1GiB±1B) + raw_window 上界两端(90D/91D) + flush_interval 须整数秒的**拦截侧**
+- test_validate_schema_version_lower_endpoint: schema_version 下界端点(1 合法 / 0 非法)
 - test_validate_qb_traffic_main_tick_crosscheck: sample_interval 与同一份配置的 main_tick 交叉校验(main_tick 取自当前配置而非模型默认; 边界 `>=` 相等合法)
 - test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
 - test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
@@ -1366,6 +1368,44 @@ def test_validate_exact_boundaries():
         assert _load_errors(td, gslc) == ""
         assert "阈值必须大于 0" in _load_errors(td, gslc.replace("- 1B:", "- 0B:"))
         assert "必须严格递增" in _load_errors(td, gslc + "            - 1B: {upload_speed_limit: 7MiB/s}\n")
+
+
+def test_validate_exact_boundaries_size_and_window_tail():
+    """端点用例的**逐字节 / 上界 / 整数秒**三处补缺 —— 上面那条用的是「隔一档」的值, 挡不住逐字节位移
+
+    - log.max_bytes [1MiB, 1GiB]: 上条用 1023KiB / 1025MiB 验两端, `1024**2` -> `1024**2 - 1` 与
+      `1024**3` -> `1024**3 + 1` 这类**只挪 1 字节**的位移照样全绿(区间大了/小了一字节没用例踩);
+    - qb_traffic.raw_window 上界 90D: 上条只钉了下界 1H, 上界两端(90D 合法 / 91D 非法)都没喂过;
+    - qb_traffic.flush_interval 须为整数秒: 池内只有「整数秒通过」侧, 该分支的报错语句被删也全绿。
+    """
+    with tempfile.TemporaryDirectory() as td:
+
+        def log_mb(v):
+            return _load_errors(td, "config:\n  log:\n    max_bytes: %s\n" % v)
+
+        # --- log.max_bytes 逐字节: 两端合法, 两端外 **1 字节** 非法
+        assert log_mb("1048576B") == "", "1MiB"
+        assert log_mb("1073741824B") == "", "1GiB"
+        assert "config.log.max_bytes" in log_mb("1048575B"), "1MiB - 1B"
+        assert "config.log.max_bytes" in log_mb("1073741825B"), "1GiB + 1B"
+
+        def qbt(section):
+            return _load_errors(td, "config:\n  qb_traffic:\n" + section)
+
+        # --- raw_window 上界端点 90D 合法 / 91D 非法
+        assert qbt("    raw_window: 90D\n") == ""
+        assert "config.qb_traffic.raw_window: 须 <= 7776000s" in qbt("    raw_window: 91D\n")
+        # --- flush_interval 整数秒判据的**拦截侧**
+        assert "config.qb_traffic.flush_interval: 须为整数秒" in qbt("    flush_interval: 90.5S\n")
+        assert qbt("    flush_interval: 90S\n") == ""
+
+
+def test_validate_schema_version_lower_endpoint():
+    """schema_version 下界端点: 1 合法 / 0 非法(`parsed_version < 1` -> `< 0` 的位移此前挡不住)"""
+    from auto_qb.config.validation import validate_config
+
+    assert validate_config({"config": {"schema_version": "1"}}) == []
+    assert any("config.schema_version: 须 >= 1" in e for e in validate_config({"config": {"schema_version": "0"}}))
 
 
 def test_validate_qb_traffic_main_tick_crosscheck():

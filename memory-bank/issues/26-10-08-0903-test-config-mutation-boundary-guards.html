@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config 校验器闭区间端点缺逐值守阵">
 <meta name="issue-summary" content="port/log.max_bytes/notify.max_per_hour/max_tasks_per_tick/qb_traffic 采样·落盘·保留窗/曲线阈值 的端点位移类变异全套件仍杀不掉(池内用例取远离边界的值): sections _validate_log/_validate_web/_validate_hr_check/_validate_qbittorrent/_validate_qb_traffic/_validate_notify, curves _validate_curve_points, core validate_config">
 <title>config 校验器闭区间端点缺逐值守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0903-test-config-mutation-boundary-guards</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 09:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>校验器的闭区间端点被位移(<code>&lt;=</code>→<code>&lt;</code>、端点 ±1、<code>&gt;</code>→<code>&gt;=</code>)后, <b>全套件仍不红</b> —— 池内既有用例取的是<b>远离边界</b>的值(如 port 取 99999 而非 0/65536, log.max_bytes 取 512KiB/2GiB 而非 1MiB/1GiB)。</p>
+    <p><b>复验(2026-10-10, 防过期原则 5)</b>: issue 只给了变异形态与 grep 锚点、没给 id 清单, 故按 skill 硬约束 13 走<b>形态级手搓复验</b> —— 对 config 校验器里<b>每一处闭区间</b>(端口三处 · log.max_bytes · notify 三键 · qb_traffic 采样/落盘/两保留窗 · hr_check 频控四键 · 站点 refresh/idle · 分享率 · 曲线阈值 · core 顶层各区间)手搓 <b>103 条</b>同构变异、两端各跑一遍, 补测前 <b>83 KILLED / 20 SURVIVED</b> —— <b>前提成立且已部分失效</b>: port / log 主区间 / notify / qb_traffic 主体 / 曲线阈值 / core 顶层区间侧的 83 条已被 R2 的 <code>test_validate_exact_boundaries</code> 与既有范围用例杀死; 存活 <b>20 条</b>全落在「两端没被逐值喂过」的键(hr_check 频控四键 12 条 · 站点 refresh/idle 3 条 · log.max_bytes 逐字节 2 条 · raw_window 上界 2 条 · flush 整数秒 1 条)。</p>
   </section>
 
   <section id="s2">
@@ -94,7 +95,21 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-08 09:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-10 — 认领（用户指派「认领并修复」），状态 <strong>In Progress</strong>；开工先复验（防过期原则 5），复验结论见 §01</li>
+      <li>2026-10-10 10:50 — 修完并验证，状态 <strong>Done</strong>（补 5 个端点守阵 · 红验 103/103 · 同池复跑存活 476→443）。实际修法/验证见 §05</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法 / 验证</h2>
+    <p><b>复验方式</b>：issue 给的是变异形态 + grep 锚点、没有 id 清单，故按 skill 硬约束 13 走<b>形态级手搓复验</b> —— 脚本 <code>tmp-analysis/mut_bg.py</code>（bytes 层读写、锚点命中数 <code>!= 1</code> 直接 <code>ANCHOR-MISS</code> 停手、每条跑完原字节还原）对校验器里<b>每一处闭区间</b>造 <b>103 条</b>同构变异（比较符翻转 · 端点 ±1 · 分支取反 · 报错语句删除 × 三处端口 / log.max_bytes / notify 三键 / qb_traffic 采样·落盘·两保留窗 / hr_check 频控四键 / 站点 refresh·idle / 分享率 / 曲线阈值 / core 顶层各区间），跑定向池 <code>tests/test_config.py + tests/test_hr_config.py</code>（≈1.8s/条）。补测前 <b>83 KILLED / 20 SURVIVED</b>（锚点失配 0）。</p>
+    <p><b>修法</b>（<b>零 <code>src/</code> 改动</b>，纯补测）：补 <b>5 个守阵</b>，两端都跑一遍 ——
+      <code>tests/test_config.py</code> 2 个：<code>test_validate_exact_boundaries_size_and_window_tail</code>（log.max_bytes <b>逐字节</b>两端 1MiB±1B / 1GiB±1B · raw_window 上界两端 90D/91D · flush_interval 须整数秒的<b>拦截侧</b>）· <code>test_validate_schema_version_lower_endpoint</code>（1 合法 / 0 非法）；
+      <code>tests/test_hr_config.py</code> 3 个：<code>test_hr_check_range_endpoints</code>（min_interval [5s,1D] 与日额·页上限 [1,100000] 的两端）· <code>test_hr_check_request_timeout_endpoints</code>（[5s,3600s] 两端）· <code>test_hr_site_interval_range_endpoints</code>（refresh/idle 两键 [60s,30D] 的未覆盖半边）。同步两文件 docstring 的「## 测试计划」。</p>
+    <p><b>关键发现（既有守阵是假绿）</b>：<code>test_idle_refresh_interval_range</code> 用 <code>"须 >=" in e</code> 这种<b>松匹配</b>断言 idle 的 59S，而<b>交叉校验文案里也带「须 >= 拉取间隔(...)」</b> —— 交叉校验报错把断言顶替掉了，范围判据本身从未被验证。本轮新守阵改用「<b>完整路径 + 精确下限文案</b>」（<code>config.hr_check.sites.btschool.idle_refresh_interval: 须 >= 60s</code>）才钉住。</p>
+    <p><b>红验 103/103 KILLED</b>：补测后同一脚本全量重跑，20 条原存活变异全部转红，另 83 条保持红（无回退），<code>src/</code> 零残留。</p>
+    <p><b>验证数字</b>：S6 同目标同池 <code>--no-refresh</code> 复跑 —— 变异 <b>4,799</b> · 杀 <b>4,320</b> · 存活 <b>443</b> · <code>no tests</code> 36 → 杀死率 <b>90.02%</b>（上轮 476 存活 / 89.33%）；逐 id 对差 <b>新杀 33 / 新增存活 0</b>，且 <b>33 条全部落在 <code>config/validation</code></b>（sections 31：_validate_hr_check 12 · _validate_hr_site_entry 12 · _validate_qb_traffic 7；core 2），与本轮守阵面逐模块一致、无旁支归因争议。<b>手搓的 103 条不是 mutmut 编号</b>，故与这 33 条不逐 id 对应（mutmut 不生成 <code>1024**2 - 1</code> 这类形态），量化只认复跑。</p>
+    <p><b>与「建议」的差异</b>：建议是「每个闭区间把两端都跑一遍」，本轮照此执行；额外发现<b>建议没覆盖的两类</b> —— ①<b>逐字节</b>位移（既有用例用 1023KiB / 1025MiB 这种「隔一档」的值验 log.max_bytes，挡不住只挪 1 字节）②<b>分支只有「通过」侧</b>（flush 的「须为整数秒」从未喂过非法值，该 append 被删也全绿）。</p>
   </section>
 
   <footer>
