@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-11-0207">
+<meta name="doc-updated" content="26-10-11-0240">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–10: 准备 + config + core 全包)</title>
+<title>全仓重复代码审查 · 滚动报告 (轮 00–14: 准备 + config + core + hr)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -98,19 +98,23 @@
       <a href="#s11"><b>11</b>&nbsp; R08 core 领域</a>
       <a href="#s12"><b>12</b>&nbsp; R09 模块契约样板</a>
       <a href="#s13"><b>13</b>&nbsp; R10 模块业务</a>
-      <a href="#s14"><b>14</b>&nbsp; 分类计数与候选排序</a>
-      <a href="#s15"><b>15</b>&nbsp; 入池 issue</a>
-      <a href="#s16"><b>16</b>&nbsp; 变更记录</a>
+      <a href="#s14"><b>14</b>&nbsp; R11 hr 解析面</a>
+      <a href="#s15"><b>15</b>&nbsp; R12 hr 判定与序列化</a>
+      <a href="#s16"><b>16</b>&nbsp; R13 hr 运行面 A</a>
+      <a href="#s17"><b>17</b>&nbsp; R14 hr 运行面 B</a>
+      <a href="#s18"><b>18</b>&nbsp; 分类计数与候选排序</a>
+      <a href="#s19"><b>19</b>&nbsp; 入池 issue</a>
+      <a href="#s20"><b>20</b>&nbsp; 变更记录</a>
     </nav>
     <main>
       <div class="kicker">执行报告 · 重复代码审查</div>
       <h1>全仓重复代码审查 · 滚动报告</h1>
-      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
+      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
       <div class="meta-row">
         <span>状态 <b class="mono">In Progress</b></span>
         <span>专题 <b class="mono">dup-code-audit</b></span>
-        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–10</b></span>
-        <span>取证基线 <b class="mono">1d7c864b</b></span>
+        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–14</b></span>
+        <span>取证基线 <b class="mono">81eb863d</b></span>
         <span>启动 <b class="mono">26-10-11-0033</b></span>
         <span>报告形态 <b class="mono">滚动(轮 26 置 Done)</b></span>
       </div>
@@ -136,6 +140,10 @@
           <tr><td class="r">R08</td><td class="mono">core 领域 episodes·tvshows·exporter</td><td>624 行 · 3 文件</td></tr>
           <tr><td class="r">R09</td><td class="mono">core/modules/ 契约样板(跨 9 模块 + webui/hr module)</td><td>契约层样板(不按行数)</td></tr>
           <tr><td class="r">R10</td><td class="mono">core/modules/ 业务(9 模块)</td><td>3705 行 · 11 文件</td></tr>
+          <tr><td class="r">R11</td><td class="mono">hr 解析面 adapters·parse·bencode·fetcher</td><td>994 行 · 8 文件</td></tr>
+          <tr><td class="r">R12</td><td class="mono">hr 判定与序列化 resolve·status·model</td><td>1532 行 · 3 文件</td></tr>
+          <tr><td class="r">R13</td><td class="mono">hr 运行面 A service</td><td>1528 行 · 1 文件</td></tr>
+          <tr><td class="r">R14</td><td class="mono">hr 运行面 B runtime·worker·store·queue·channel·server·events·report·ratelimit·module·log</td><td>~2545 行 · 11 文件</td></tr>
         </table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
@@ -624,17 +632,197 @@
       </section>
 
       <section id="s14">
-        <h2><span class="secno">14</span>分类计数与重构候选排序</h2>
+        <h2><span class="secno">14</span>R11 · hr 解析面(adapters · parse · bencode · fetcher)</h2>
         <hr class="sec-rule">
-        <h3>14.1 分类计数(轮 00–10 累计)</h3>
+        <p><b>S1 圈定:</b> <code>adapters/{base,nexusphp,carpt,btschool,__init__}.py</code> · <code>parse.py</code> · <code>bencode.py</code> · <code>fetcher.py</code>(994 行 · 8 文件)。目标符号: <code>HrAdapter</code>/<code>ParsedScope</code> · <code>parse_counters</code> · <code>header_hr_numbers</code> · <code>ADAPTERS</code> · <code>parse_size/duration/ratio/datetime</code> · <code>TableTree</code> · <code>bdecode/info_span</code> · <code>HrFetcher</code>/<code>ChannelFetcher</code>/<code>build_channel_fetcher</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801(<code>=6</code>)对 hr 收 2 组(ACTION_* 重导出 / model↔status 展示字段 —— 均落轮 12/14); jscpd python <b>0 clone</b>(<code>--min-lines 8 --min-tokens 60</code>); 主线索来自跨 adapter 对照与逐文件精读。</p>
         <div class="counts">
-          <div class="box a"><div class="n">26</div><div class="l">A 真重复</div></div>
-          <div class="box b"><div class="n">7</div><div class="l">B 分歧</div></div>
-          <div class="box c"><div class="n">17</div><div class="l">C 同一事实</div></div>
-          <div class="box d"><div class="n">19</div><div class="l">D 不动</div></div>
+          <div class="box a"><div class="n">3</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">2</div><div class="l">D 不动</div></div>
         </div>
-        <p class="small">累计 = config 轮 01–04(A5/B1/C8/D9, 见 §04–§07) + core 轮 05–10(A21/B6/C9/D10)。core 分轮: R05 4/0/1/3 · R06 1/0/1/1 · R07 3/3/3/1 · R08 0/2/1/2 · R09 2/0/1/3 · R10 11/1/2/0。部分为同一族的跨轮拆分。</p>
-        <h3>14.2 重构候选排序(收益 / 风险)</h3>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R11-A01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 变体 adapter 的 <code>parse_counters</code> <b>逐字同</b> —— <code>carpt.py:56-61</code> ↔ <code>btschool.py:31-36</code>: 均为 <code>nums=header_hr_numbers(html); if nums is None or len(nums)!=COUNTER_ARITY: return {}; return {lane: nums[i] ... COUNTER_LANES}</code>(仅模块常量 <code>COUNTER_ARITY</code> 不同)。<br><b>建议:</b> 上收公共函数 <code>_parse_header_counters(html, arity, lanes)</code>。收益中/风险低。见 issue <code>hr-adapter-parse-boilerplate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R11-A02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>adapters/__init__.py:30-58</code> 的 <code>ADAPTERS</code> 工厂 lambda 样板 —— nexusphp 与 btschool 两个 lambda <b>逐字同</b>(仅类名不同), carpt 多 4 个 kwarg。<br><b>建议:</b> 抽公共 kwargs helper(<code>site/hr_page_url/download_path/scopes/page_param</code> 部分)。收益低/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R11-A03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>fetcher.py:183-199</code> 的 <code>_scope_of</code> / <code>_tid_of</code> 两枚同骨架(均 <code>url.split("?",1)[-1].split("&")</code> 后按前缀提取)。<br><b>建议:</b> 抽 URL 查询参数小助手。收益低/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R11-C01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>parse.py:19-31</code> 的 <code>_SIZE_UNITS</code>(B/KB/MB/…/PIB → 字节)是「字节单位→乘数」事实的一份; 与 <code>qbapi._kib</code>/<code>curves.bytes_to_kib</code>(R06/R07)同族, 归轮 18/25 收口。<br><b>分歧点:</b> hr 侧用 1024 二进制(NexusPHP 展示口径), 与 speed 侧 KiB 同名不同场景。<br><b>建议:</b> 登记, 归 infra 单位口径总账。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R11-D01</td><td><span class="tag d">D</span></td>
+            <td><b>base 的 <code>looks_like_login</code>/<code>looks_like_challenge</code> 默认特征</b>。判定<b>不动</b>: 已是单点默认; carpt 覆写 <code>looks_like_login</code> 换表头锚点是站点差异(刻意)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R11-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>parse.py</code> 的 <code>TableTree</code> + 数值容错族</b>。判定<b>不动</b>: 站点点隔离层已是单点(零依赖设计, docstring 有据)。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s15">
+        <h2><span class="secno">15</span>R12 · hr 判定与序列化(resolve · status · model)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>model.py</code>(站点文件数据模型, 561 行) · <code>status.py</code>(展示快照折算, 583 行) · <code>resolve.py</code>(三态判定纯函数, 388 行)。目标符号: 各 dataclass 的 <code>to_json/from_json</code> · <code>_as_int/_as_float</code> · <code>lane_is_*</code> · <code>site_status</code>/展示 DTO · <code>resolve_identity</code>/<code>judge_record</code>/<code>safety_display</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801 命中 <code>model:[485:494] ↔ status:[504:512]</code>(HrHistoryEvent ↔ HistoryRow 字段镜像); 其余靠精读。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">2</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">2</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R12-M01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>model.py</code> <b>9 个 dataclass</b> 各自手写 <code>to_json</code>/<code>from_json</code> 字段样板(HrEntry/HrDownloaded/HrDlFail/HrVerified/HrLaneState/HrWaveMeta/HrRateLedger/HrHistoryEvent/HrSiteData) —— 字段名在同类里重复三次(声明 / to_json 键 / from_json 键)。<br><b>分歧点:</b> <code>HrLaneState.count_claim/count_match</code> 必须显式判空(None 直穿, 见 docstring 陷阱 T1); <code>HrSiteData</code> 的 writer 字段读写不同名。<br><b>建议:</b> 评估 dataclass 驱动序列化, 两特例显式保留。收益中/风险中。见 issue <code>hr-model-serialize-helper-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R12-M02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>_as_int</code>/<code>_as_float</code> <b>逐字同</b>两份 —— <code>model.py:73-84</code> ↔ <code>channel.py:333-344</code>。<br><b>建议:</b> 收单点(hr 内 <code>_coerce.py</code> 或 infra)。收益低/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R12-S01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「档位字母 → 结论/语义」多处表示 —— <code>model.lane_is_satisfied/lane_is_exempt/lane_is_terminal</code> + <code>HrEntry.satisfied_verdict</code> ↔ <code>resolve.safety_display</code> 的 lane 字面比较 ↔ <code>status.LANE_TEXTS</code> 人话。<br><b>建议:</b> 保持谓词单点(弱风险), 仅加互指注释; 不强行合。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R12-D01</td><td><span class="tag d">D</span></td>
+            <td><b>model → status 展示 DTO 字段镜像</b>(<code>LaneStatus↔HrLaneState</code> / <code>EntryDetail↔HrEntry</code> / <code>HistoryRow↔HrHistoryEvent</code> / <code>SiteStatus</code>)。判定<b>不动</b>: 展示层与持久化模型刻意分层(契约「前端只展示不重算」), 合并会把展示关注点拖进持久化模型。pylint 那组即此。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R12-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>SCHEMA_VERSION = CURRENT_VERSIONS["hr_site"]</code> 别名</b>(model.py:26)。判定<b>不动</b>: 已是 infra 版本表单点派生, docstring 明说语义。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s16">
+        <h2><span class="secno">16</span>R13 · hr 运行面 A(service)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>service.py</code>(1528 行 · 单文件巨型: 波次引擎 + 预算 + 行处理 + 防伪 + 告警)。目标符号: <code>HrRefreshService</code> · <code>_do_wave/_run_pages/_finish_wave</code> · <code>_truncate_lane/_mark_fetch_failed_lane</code> · <code>_warn_*</code> · <code>_lanes_summary_from</code> · <code>_release_record</code> · <code>_prune_index</code>。优先找文件内自重复。</p>
+        <p><b>S2 提名:</b> 工具对本面 0 命中; 主线索为文件内骨架对照 + 跨 service/status 摘要口径对照。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">3</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">0</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">2</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R13-S01</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 各档摘要串两套 —— <code>service._lanes_summary_from</code>(1632-1644) ↔ <code>status._lane_statuses</code> 的 <code>parts</code>(281-294)。<br><b>分歧点:</b> 文案已分叉(<code>(全深度)</code> vs <code>(全)</code>), 状态符号表写法不同(字典 vs 三元)。<br><b>判定:</b> 只登记, 先钉文案差异点再合。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R13-S02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 档位截断/失效处置骨架 <b>3 处</b>同结构 —— <code>_truncate_lane</code>(836-845) / <code>_mark_fetch_failed_lane</code>(1551-1563) / <code>_run_pages</code> 的 <code>_LaneAbort</code> 分支(813-820): 均 <code>if st.pages==0: status=FAILED; fail_streak+=1; else: status=OK; full_depth=False</code>(仅 detail 文案不同)。<br><b>建议:</b> 抽 <code>_fail_or_truncate(st, detail)</code>。收益中/风险低。见 issue <code>hr-lane-transition-boilerplate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R13-S03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 「每站只告警一次」骨架 <b>3 方法</b> —— <code>_warn_no_channel</code>/<code>_warn_login</code>/<code>_warn_ext_quota</code>(1483-1540): 均 <code>if site in warned_set: log(...); return</code> → <code>set.add</code> → <code>hr_log.emit(...)</code>。<br><b>建议:</b> 抽 <code>_warn_once(seen_set, site, level, text, event)</code>。收益中/风险低。见 issue <code>hr-warn-dedup-throttle-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R13-S04</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>_do_wave</code> 波级异常收尾样板 <b>3 分支</b>(637-647 HrChannelQuota / 648-657 HrChannelUnavailable / 676-688 Retry-After): 均 set action/reason → <code>_stamp_elapsed()</code> → <code>_append_history(...)</code> → <code>_persist_step(session)</code> → <code>return</code>。<br><b>建议:</b> 抽 <code>_abort_wave(kind, action, reason, ...)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R13-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>_release_record</code>(318-337)</b>。判定<b>不动</b>: 三处签发(批量/冻结/观察期)已收敛到这一单点, 设计良好。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R13-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>_prune_index</code></b>。判定<b>不动</b>: 现为模块级单点(1619), <code>_finish_wave</code> 唯一调用(1212)。<b>已知 issue <code>26-10-02-0441</code></b>(原「<code>HrRefreshService._prune_index</code> 与模块级同名同体」)在本实况<b>已消除</b> —— 复核通过。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s17">
+        <h2><span class="secno">17</span>R14 · hr 运行面 B(runtime · worker · store · queue · channel · server · events · report · ratelimit · module · log)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>runtime.py</code>(406) · <code>worker.py</code>(376) · <code>server.py</code>(382) · <code>channel.py</code>(337) · <code>report.py</code>(326) · <code>store.py</code>(258) · <code>queue.py</code>(154) · <code>events.py</code>(154) · <code>ratelimit.py</code>(98) · <code>module.py</code>(30) · <code>log.py</code>(24)。目标符号: 线程生命周期 / 锁与恢复 / 端点路由 / token / CLI 报告 / 队列。</p>
+        <p><b>S2 提名:</b> pylint R0801 命中 <code>hr/__init__:[184:192] ↔ service:[1647:1655]</code>(ACTION_* 重导出, 非重复); jscpd 0 clone; 主线索为跨包结构线索 grep(<code>atomic_write</code>/<code>FileLock</code>/<code>token_hex</code>/<code>warn_gap</code>/<code>east_asian_width</code>)。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">4</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">5</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R14-RP01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>_scope_of</code> <b>逐字同</b> —— <code>report.py:57-61</code> ↔ <code>fetcher.py:183-188</code>(仅默认返回值 <code>"?"</code> vs <code>""</code>)。<br><b>建议:</b> 收单点。收益低/风险低。见 issue <code>hr-report-cli-boilerplate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-RP02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 三个 CLI 入口样板 <b>3 处</b> —— <code>run_hr_once</code>/<code>run_hr_status</code>/<code>run_hr_confirm_empty</code>(report.py:75-218): 均 <code>import sys; out=out or sys.stdout; if not enabled: print; return 1; site_confs=…; enabled=[…]; if not enabled: print; return 1; service=HrRefreshService(…)</code>。<br><b>建议:</b> 抽 <code>_build_service(config, ...)</code> 入口 helper。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-RP03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>report.stamp_text_ts</code>(332-333) ↔ <code>status.stamp_text</code>(218-220) 同体异格式(<code>"%Y-%m-%d %H:%M:%S"</code> vs <code>"%m-%d %H:%M:%S"</code>); 且 <code>stamp_text_ts</code> <b>全仓无引用(疑死件)</b>。<br><b>建议:</b> 删除或改复用 <code>status.stamp_text</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-T05</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 线程生命周期骨架 —— <code>worker.start/stop</code>(180-219) ↔ <code>server.start/stop</code>(141-174)+<code>HrEndpointHandle</code>(77-96): 均「幂等 start + stop/join(timeout) + 退出/未退出日志」。<br><b>建议:</b> 评估抽 <code>_ThreadHandle</code>(server 侧已有雏形)。收益低/风险低。见 issue <code>hr-thread-lifecycle-boilerplate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-S01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「接入/启用 hr_check 的站点」派生多处 —— <code>runtime.site_confs</code>(91) ↔ <code>report._site_confs</code>(72) <b>逐字同</b>; <code>webui/server/routes/hr.py:65,94,173,215</code> 四处同口径 enabled 过滤。<br><b>建议:</b> <code>HrRuntime.site_confs/enabled_sites</code> 作单点, report/webui 复用(webui 侧属轮 15)。见 issue <code>hr-site-derive-convention-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-T01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> token 生成/持久化口径两处 <b>逐字同</b> —— <code>hr/channel.resolve_token</code>(88-112) ↔ <code>webui/server/common.ensure_web_token</code>(58-78): 显式优先 → 读文件 → <code>secrets.token_hex(32)</code> → <code>atomic_write</code> → INFO 只提示路径。<br><b>建议:</b> 抽公共 <code>resolve_or_create_token</code>(infra)。收益中/风险低。见 issue <code>hr-token-persist-convention-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-T02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「读坏 → <code>.bak</code> 兜底 → 隔离留证 → 写回自愈」恢复链两套 —— <code>hr/store</code>(<code>_read_full/_parse/read_backup/quarantine/_recover</code>, 94-193/274-285) ↔ <code>core/state</code>(<code>load/_read_state_file/_write_back_recovered</code>, 51-127); 且 <code>hr/store.py:61</code> 用裸 <code>FileLock</code>, 未走 <code>infra/locking</code> 单点。<br><b>分歧点:</b> hr 有 schema 迁移/版本回退即拒; state 有 <code>_CORRUPT</code> 三态。跨包, 风险中。<br><b>建议:</b> 与轮 18(infra) 合并考量。见 issue <code>hr-store-recover-lock-family-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-T03</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 告警节流窗口口径分散 <b>4 处</b> —— <code>service.py:1507</code> / <code>worker.py:358,408</code>(<code>warn_gap=max(60.0, CHANNEL_SILENCE_WARN)</code>) / <code>server.py:55</code>(<code>REJECT_WARN_GAP=6h</code>) / <code>core/traffic_store.py:130</code>(<code>_BAD_LINE_WARN_GAP_S=3600</code>)。<br><b>建议:</b> 收敛「6h 节流」为常量单点。见 issue <code>hr-warn-dedup-throttle-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-T04</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> URL 分解口径多处 —— <code>channel._scheme_of/host_of/path_of</code>(191-211, 单点) ↔ <code>runtime._site_origins</code>(373) 内联重算 scheme ↔ <code>channel._absolute_download</code>(180-188) 内联拆 host/scheme。<br><b>建议:</b> 登记; 调用点统一走 <code>channel</code> 的纯函数。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-D01</td><td><span class="tag d">D</span></td>
+            <td><b>CLI 表格对齐工具 <code>_dwidth/_pad/_ellipsis</code></b>(report.py:305-329)。判定<b>不动</b>: 全仓 grep 确认仅此一处(<b>计划预判「与 infra 表格工具重复」不成立</b> —— infra 无同类工具), 是既有单点。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-D02</td><td><span class="tag d">D</span></td>
+            <td><b>HTTP 头解析 <code>_header</code>/<code>_content_length</code></b>(server.py:413-437)。判定<b>不动</b>: 全仓单点(webui 侧直接用框架 <code>request.headers</code>, 非同形)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R14-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>HrTaskQueue</code></b>(queue.py)。判定<b>不动</b>: 端点↔取数线程的唯一交接面单点(零 IO 设计, 刻意)。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s18">
+        <h2><span class="secno">18</span>分类计数与重构候选排序</h2>
+        <hr class="sec-rule">
+        <h3>18.1 分类计数(轮 00–14 累计)</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">38</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">8</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">24</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">28</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">累计 98 = config 轮 01–04(A5/B1/C8/D9, 见 §04–§07) + core 轮 05–10(A21/B6/C9/D10) + hr 轮 11–14(A12/B1/C7/D9)。hr 分轮: R11 3/0/1/2 · R12 2/0/1/2 · R13 3/1/0/2 · R14 4/0/5/3。部分为同一族的跨轮拆分。</p>
+        <h3>18.2 重构候选排序(收益 / 风险)</h3>
         <table>
           <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th style="width:38%">候选</th><th style="width:12%">收益</th><th style="width:12%">风险</th><th>建议时机</th></tr>
           <tr><td class="r mono">R03-W01</td><td><span class="tag a">A</span></td><td>writer 备份抽 <code>_atomic_copy</code></td><td>低(9 行)</td><td>低</td><td>随时(可并入 config 重构批次)</td></tr>
@@ -658,13 +846,22 @@
           <tr><td class="r mono">R09-C01/C02</td><td><span class="tag a">A</span></td><td>模块契约样板(appl 短路 / 全局任务自注册)</td><td>高</td><td>中高</td><td>专项(触契约层, 联 P0 守阵)</td></tr>
           <tr><td class="r mono">R07-T05 / R05-S01</td><td><span class="tag c">C</span></td><td>原子写口径收敛到 infra 单点</td><td>高</td><td>中</td><td>专项(轮 18 infra)</td></tr>
           <tr><td class="r mono">R07-T04/T06/T07 · R10-X03 · R08-E02/E03</td><td><span class="tag b">B</span></td><td>差分/解析/集数正则族统一</td><td>中</td><td>中高</td><td><b>暂缓</b>(B 类, 先钉差异点)</td></tr>
+          <tr><td class="r mono">R12-M02 · R11-A03 · R14-RP01/RP03</td><td><span class="tag a">A</span></td><td>小助手收单点(强转 / URL 参数 / _scope_of / stamp_text)</td><td>低</td><td>低</td><td>随时(hr 批次)</td></tr>
+          <tr><td class="r mono">R14-S01 · R14-T01</td><td><span class="tag c">C</span></td><td>站点派生单点 / token 口径收敛(跨包)</td><td>中</td><td>低</td><td>随 webui/infra 批次</td></tr>
+          <tr><td class="r mono">R11-A01/A02</td><td><span class="tag a">A</span></td><td>adapter parse_counters 上收 + 工厂 kwargs helper</td><td>中</td><td>低</td><td>随 hr 批次</td></tr>
+          <tr><td class="r mono">R13-S02/S03/S04</td><td><span class="tag a">A</span></td><td>档位状态机骨架 / 告警去重骨架 / 波级异常收尾</td><td>中</td><td>低</td><td>hr 重构批次</td></tr>
+          <tr><td class="r mono">R14-RP02</td><td><span class="tag a">A</span></td><td>CLI 报告三入口抽 <code>_build_service</code></td><td>中</td><td>低</td><td>随时(hr 批次)</td></tr>
+          <tr><td class="r mono">R12-M01</td><td><span class="tag a">A</span></td><td>model 序列化样板收敛(评估 dataclass 驱动)</td><td>中</td><td>中</td><td>hr 批次(两特例显式保留)</td></tr>
+          <tr><td class="r mono">R14-T02</td><td><span class="tag c">C</span></td><td>锁 + 读坏恢复链收 infra 单点</td><td>高</td><td>中</td><td>专项(轮 18 infra, 与 R07-T05/R05-S01 合并)</td></tr>
+          <tr><td class="r mono">R14-T03/T04 · R11-C01</td><td><span class="tag c">C</span></td><td>告警节流窗口 / URL 分解 / 单位口径收口</td><td>中</td><td>低</td><td>随 infra 总账(轮 18/25)</td></tr>
+          <tr><td class="r mono">R13-S01</td><td><span class="tag b">B</span></td><td>各档摘要串统一</td><td>中</td><td>中高</td><td><b>暂缓</b>(B 类, 先钉文案差异点)</td></tr>
         </table>
       </section>
 
-      <section id="s15">
-        <h2><span class="secno">15</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
+      <section id="s19">
+        <h2><span class="secno">19</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
         <hr class="sec-rule">
-        <p>累计 <b>16 条</b>可动项已按 create-issue skill 入池(便签档, 专题 <code>dup-code-audit</code>), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联: <b>config 7 条</b>(轮 01–04) + <b>core 9 条</b>(轮 05–10)。</p>
+        <p>累计 <b>25 条</b>可动项已按 create-issue skill 入池(便签档, 专题 <code>dup-code-audit</code>), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联: <b>config 7 条</b>(轮 01–04) + <b>core 9 条</b>(轮 05–10) + <b>hr 9 条</b>(轮 11–14)。</p>
         <table>
           <tr><th style="width:30%">issue</th><th>对应发现</th></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html">config-schema-validation-enum-dup</a></td><td>R01-S01/S02 · R02-V04/V05(枚举/常量双份 + 死件 + STATE_ATTRS 三份)</td></tr>
@@ -683,24 +880,34 @@
           <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-day-key-prune-dup.html">core-day-key-prune-dup</a></td><td>R10-X01</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-speed-unit-convention-dup.html">core-speed-unit-convention-dup</a></td><td>R06-A01/A02 · R07-C01</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-episode-marker-dup.html">core-episode-marker-dup</a></td><td>R08-E01/E02/E03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-adapter-parse-boilerplate-dup.html">hr-adapter-parse-boilerplate-dup</a></td><td>R11-A01/A02/A03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-model-serialize-helper-dup.html">hr-model-serialize-helper-dup</a></td><td>R12-M01/M02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-lane-transition-boilerplate-dup.html">hr-lane-transition-boilerplate-dup</a></td><td>R13-S01/S02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-warn-dedup-throttle-dup.html">hr-warn-dedup-throttle-dup</a></td><td>R13-S03/S04 · R14-T03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-report-cli-boilerplate-dup.html">hr-report-cli-boilerplate-dup</a></td><td>R14-RP01/RP02/RP03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html">hr-store-recover-lock-family-dup</a></td><td>R14-T02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-token-persist-convention-dup.html">hr-token-persist-convention-dup</a></td><td>R14-T01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-site-derive-convention-dup.html">hr-site-derive-convention-dup</a></td><td>R14-S01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0240-refactor-hr-thread-lifecycle-boilerplate-dup.html">hr-thread-lifecycle-boilerplate-dup</a></td><td>R14-T05</td></tr>
         </table>
-        <p class="small"><b>未入池(登记于本报告 §14 候选排序):</b> config —— R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓); core —— R07-T05/R05-S01(原子写收敛, 归轮 18 infra)、R07-T04/T06/T07 · R10-X03 · R08-E02/E03(B 类暂缓)、R09-C03(相位认领, 随契约专项) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。</p>
+        <p class="small"><b>未入池(登记于本报告 §18 候选排序):</b> config —— R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓); core —— R07-T05/R05-S01(原子写收敛, 归轮 18 infra)、R07-T04/T06/T07 · R10-X03 · R08-E02/E03(B 类暂缓)、R09-C03(相位认领, 随契约专项); hr —— R11-C01(单位口径)、R14-T04(URL 分解口径)、R12-S01(档位谓词, 弱)归轮 18/25 总账; R13-D02(复核 issue 26-10-02-0441 已消除) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。</p>
       </section>
 
-      <section id="s16">
-        <h2><span class="secno">16</span>变更记录</h2>
+      <section id="s20">
+        <h2><span class="secno">20</span>变更记录</h2>
         <hr class="sec-rule">
         <table>
           <tr><th style="width:20%">版本</th><th>变更</th></tr>
           <tr><td class="r mono">26-10-11-0033</td><td>首版: 追加 R00–R04(config 全包)发现清单 + 分类计数 + 重构候选排序 + 入池 7 issue。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0207</td><td>追加 R05–R10(core 全包)发现清单(46 项: A21/B6/C9/D10) + 累计分类计数 + core 重构候选排序 + 入池 core 9 issue; 覆盖表补 R05–R10; 取证基线 <code>1d7c864b</code>。纯审查轮, 零源码改动。</td></tr>
+          <tr><td class="r mono">26-10-11-0240</td><td>追加 R11–R14(hr 全包)发现清单(29 项: A12/B1/C7/D9) + 累计分类计数(98 项: A38/B8/C24/D28) + hr 重构候选排序 + 入池 hr 9 issue; 覆盖表补 R11–R14; 复核已知 issue <code>26-10-02-0441</code>(<code>_prune_index</code> 同体重复)已消除; 取证基线 <code>81eb863d</code>。纯审查轮, 零源码改动。</td></tr>
         </table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
       </section>
 
       <footer>
-        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>1d7c864b</code> · 滚动报告(起始 26-10-11-0033)<br>
-        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–10(config + core 全包)。
+        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>81eb863d</code> · 滚动报告(起始 26-10-11-0033)<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–14(config + core + hr 全包)。
       </footer>
     </main>
   </div>

@@ -4,8 +4,8 @@
 **Added:** 2026-10-10
 **Updated:** 2026-10-11
 **Topics:** dup-code-audit
-**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包: 内核 / 数据接入 / 流量 / 领域 / 模块契约样板 / 模块业务)**, 累计 46 项发现(A21/B6/C9/D10), 入池 core 9 issue。全程纯审查轮, 零源码改动。
-**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
+**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包: 内核 / 数据接入 / 流量 / 领域 / 模块契约样板 / 模块业务)**, 累计 46 项发现(A21/B6/C9/D10), 入池 core 9 issue。〔26-10-11 hr 轮〕用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包: 解析面 / 判定与序列化 / 运行面 A service / 运行面 B runtime·worker·store·channel·server·report 等)**, hr 29 项发现(A12/B1/C7/D9), 全局累计 98 项(A38/B8/C24/D28), 入池 hr 9 issue; 复核已知 issue `26-10-02-0441`(`_prune_index` 同体重复)已消除。全程纯审查轮, 零源码改动。
+**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/activeContext/26-10-11-0240-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/testing/baselines/26-10-11-0240-dup-code-audit-hr.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 原始请求
 
@@ -32,7 +32,7 @@
 | S2 | 产出计划 HTML(`plans/26-10-10-2333-plan-dup-code-audit.html`) | Done |
 | S3 | 收尾回写(本档案 + activeContext 切片 + 基线切片 + `kb.index` + `kb.check`) | Done |
 | S4 | 计划拍板(报告形态 / 起步轮)—— 用户拍板: **范围 = Phase 0 + 轮 01–04(config 全包)**; 报告形态取默认**滚动报告** | Done |
-| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config 全包) + 轮 05–10(core 全包) | In Progress |
+| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包) | In Progress |
 | S6 | 轮 26 汇总: 重构候选排序表 + 跨层「同一事实」总账 + 可动项入池 | Open |
 
 ## 子任务状态表
@@ -43,7 +43,8 @@
 | Phase 0 准备(轮 00 工具与口径) | Done | 工具冒烟 + 口径固化 + 建档 + 基线 `0d27b69e`; 见报告 §03 |
 | Phase 1 后端(config 轮 01–04) | Done | 报告 §04–§07; 入池 7 issue(refactor) |
 | Phase 1 后端(core 轮 05–10) | Done | 报告 §08–§13; 入池 core 9 issue; 46 项发现(A21/B6/C9/D10) |
-| Phase 1 后端(轮 11–19: hr / webui / rules / infra / torrents+tray) | Open | 未开工 |
+| Phase 1 后端(hr 轮 11–14) | Done | 报告 §14–§17; 入池 hr 9 issue; 29 项发现(A12/B1/C7/D9) |
+| Phase 1 后端(轮 15–19: webui / rules / infra / torrents+tray) | Open | 未开工 |
 | Phase 2 前端(轮 20–23: shared JS / 抽屉模板族 / 三皮肤 CSS / 模板) | Open | 总量最大两块之一 |
 | Phase 3 测试与横切(轮 24–25: tests/ + 跨层同一事实总账) | Open | 轮 25 是重构收益最大的一张表 |
 | Phase 4 汇总(轮 26) | Open | 重构候选排序 + issue 入池 |
@@ -85,3 +86,16 @@
 - **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §08–§13(覆盖表 + 累计计数 §14 + core 候选排序); **9 条 refactor issue 入池**(专题 `dup-code-audit`)。
 - **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告与 issue 制品。
 - **待办下一轮**: Phase 1 后端轮 11(hr 解析面 adapters·parse·bencode·fetcher); 或按用户偏好调整顺序。
+
+### 2026-10-11 R3 — 轮 11–14(hr 全包)
+
+- **触发**: 用户「做 Phase 1 hr 部分: 26-10-10-2333-plan-dup-code-audit.html」。
+- **范围(拍板推定)**: Phase 1 后端 hr 包 = 轮 11 解析面(adapters·parse·bencode·fetcher) / 12 判定与序列化(resolve·status·model) / 13 运行面 A(service) / 14 运行面 B(runtime·worker·store·queue·channel·server·events·report·ratelimit·module·log)。合计 ~6.8k 行 / 23 文件。
+- **S2 提名实测**: pylint R0801(<code>=6</code>)对 hr 收 2 组(ACTION_* 重导出 = 非重复; model↔status 展示字段镜像 = R12-D01); jscpd python <b>0 clone</b> —— 与 config/core 同结论(字面重复极低, 主战场是结构线索 + 精读)。
+- **轮 11 解析面**: A3(parse_counters 逐字同 carpt↔btschool / ADAPTERS 工厂 lambda / fetcher URL 参数小助手) + C1(单位表 ↔ 跨包) + D2。
+- **轮 12 判定与序列化**: A2(<b>model 9 个 dataclass 的 to_json/from_json 字段样板</b> / `_as_int/_as_float` model↔channel 逐字同) + C1(档位谓词) + D2(展示 DTO 镜像层 / SCHEMA_VERSION 别名)。
+- **轮 13 运行面 A(service)**: A3(档位截断/失效骨架 3 处 / 告警去重一次骨架 3 方法 / 波级异常收尾样板 3 分支) + B1(各档摘要串两套, `(全深度)` vs `(全)`) + D2(`_release_record` 单点; **复核 issue `26-10-02-0441`(`_prune_index` 同体重复)已消除**)。
+- **轮 14 运行面 B**: A4(`_scope_of` report↔fetcher 逐字同 / run_hr_* 三入口样板 / `stamp_text_ts` 死件 / 线程生命周期骨架) + C5(<b>站点派生多处</b> runtime↔report 逐字同 + webui routes/hr 四处 / <b>token 口径</b> hr↔webui 逐字同 / <b>读坏恢复链两套</b> hr/store↔core/state + infra/locking 单点未被用 / 告警节流窗口口径分散 4 处 / URL 分解口径) + D3(CLI 表格对齐单点 —— 计划预判「与 infra 表格工具重复」<b>不成立</b>; HTTP 头解析单点; 队列单点)。
+- **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §14–§17(覆盖表 + 累计计数 §18 + hr 候选排序); **9 条 refactor issue 入池**(专题 `dup-code-audit`): `hr-adapter-parse-boilerplate-dup` / `hr-model-serialize-helper-dup` / `hr-lane-transition-boilerplate-dup` / `hr-warn-dedup-throttle-dup` / `hr-report-cli-boilerplate-dup` / `hr-store-recover-lock-family-dup` / `hr-token-persist-convention-dup` / `hr-site-derive-convention-dup` / `hr-thread-lifecycle-boilerplate-dup`。另 3 条候选(单位口径 / URL 分解 / 档位谓词)登记报告 §18 未入池。
+- **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告/issue 制品。
+- **待办下一轮**: Phase 1 后端轮 15(webui/server: factory·context·auth·lifecycle·common·static_ui·traffic_qb + routes/*); 或按用户偏好调整顺序。
