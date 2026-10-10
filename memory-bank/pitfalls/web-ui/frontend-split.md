@@ -36,6 +36,14 @@
   (shortcuts.js AQB_KEYS, 2026-09-30); W6 后端存储接入时同形态。
 - **复发**: 0
 
+### 新增 shared/ 片段文件的接线清单(三份清单 + app.mixin + prism 的 210 行硬顶)
+
+- **触发**: 往 `shared/` 下**新增一个 `.js` 片段文件**(不是改现有文件)。
+- **判别**: 四处漏一处都**静默或半静默** —— ①漏进 `tpl-manifest.scripts` → 文件根本不加载, 页面不报错、那块功能整块不存在; ②三份 shell 的 `scripts` 清单必须**逐项一致**(清单等价断言比对的是**解析后的 manifest**, 不是 shell 文本); ③文件里写了 `^window.X = {` 却没接 `app.mixin` → `_scan_mixin_wiring` 判「定义了 window.X 但 app.js 没有 app.mixin」(与下一条同族, 但这条是**新文件**)。
+- **处置**: 按「加文件 → 三份 `index.html` 的 `scripts` 各加一行 → `app.js` 补 `app.mixin(window.X)`」三步走完再跑守阵。**⚠ 第四处: `prism/index.html` 是 shell 体量上限 `210` 行的贴着线跑的那个**(atlas 203 / console 207 / prism 210, 2026-10-10 实测), 在 prism 加一行**必须先从别处腾一行** —— 腾一处多余空行即可(清单等价断言只看解析后的 manifest, 去掉空行不破坏等价, 也不会让三份 diff 失焦); **不要**去压行/合并 JSON 数组项。
+- **守阵**: `_scan_mixin_wiring`(list/注入双向) + `test_frontend_static_bundle_health` 的 shell 行数上限。
+- **复发**: 0
+
 ### 再拆前端大文件: 等价性验证 = 切割自验 + 真 API stub 冒烟 DOM 比对
 
 - **触发**: 拆任何模板/样式/JS 大文件时(W1/W2a/W2b 已各有一套, 复用方法)。

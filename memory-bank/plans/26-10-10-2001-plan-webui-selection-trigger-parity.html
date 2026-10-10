@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · WEBUI 选中 × 触发 一致性</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-selection-trigger-parity">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-10-2001">
+<meta name="doc-updated" content="26-10-10-2100">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101418;
+    --panel: #151a20;
+    --panel-2: #12171d;
+    --ink: #dde5eb;
+    --muted: #93a3af;
+    --faint: #6b7a85;
+    --accent: #5fb8c9;
+    --accent-dim: rgba(95, 184, 201, 0.14);
+    --warn: #c9a75f;
+    --bad: #c98a7c;
+    --good: #7cc08a;
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-strong: rgba(255, 255, 255, 0.16);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --disp: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Sarasa Mono SC", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--bg);
+    padding: 56px 24px 96px;
+  }
+  .canvas { max-width: 1140px; margin: 0 auto; }
+  .prose { max-width: 78ch; }
+
+  .kicker {
+    font-family: var(--disp);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--disp);
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    margin-bottom: 10px;
+  }
+  .lede {
+    font-size: 16.5px;
+    color: var(--muted);
+    max-width: 72ch;
+    margin-bottom: 22px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 28px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 40px;
+  }
+  .meta-row b { color: var(--muted); font-weight: 400; }
+
+  .toc {
+    border: 1px solid var(--hairline);
+    background: var(--panel-2);
+    padding: 18px 24px;
+    margin-bottom: 48px;
+  }
+  .toc-title {
+    font-family: var(--disp);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 10px;
+  }
+  .toc ol { list-style: none; columns: 2; column-gap: 48px; }
+  .toc li { font-size: 13.5px; padding: 3px 0; break-inside: avoid; }
+  .toc li a { color: var(--ink); text-decoration: none; }
+  .toc li a:hover { color: var(--accent); }
+  .toc .n { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; }
+
+  section { margin-bottom: 56px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-bottom: 1px solid var(--hairline-strong);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+  }
+  .sec-num { font-family: var(--disp); font-size: 15px; color: var(--accent); letter-spacing: 0.04em; }
+  h2 { font-family: var(--disp); font-size: 21px; font-weight: 600; letter-spacing: 0.01em; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 26px 0 10px; }
+  h3 .tag { font-family: var(--mono); font-size: 11px; font-weight: 400; color: var(--accent); margin-right: 8px; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  p { margin-bottom: 12px; }
+  .prose p, .prose li { line-height: 1.7; }
+  code, .m {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    padding: 1px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  code.long { white-space: normal; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 16px 0 8px; }
+  th {
+    font-family: var(--disp);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td .m { white-space: normal; }
+  td.c { text-align: center; }
+  .tbl-wrap { margin: 18px 0 10px; }
+  .tbl-cap { font-size: 12.5px; color: var(--faint); margin-bottom: 8px; font-family: var(--disp); letter-spacing: 0.06em; text-transform: uppercase; }
+  .ok { color: var(--good); }
+  .no { color: var(--bad); }
+  .wr { color: var(--warn); }
+
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--panel-2);
+    padding: 12px 18px;
+    margin: 18px 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note.warn { border-left-color: var(--warn); }
+  .note.bad { border-left-color: var(--bad); }
+
+  figure { margin: 26px 0; }
+  figcaption { font-size: 12.5px; color: var(--faint); margin-top: 10px; padding-left: 2px; }
+  figcaption .fn { font-family: var(--mono); color: var(--accent); margin-right: 8px; }
+  .fig-frame { border: 1px solid var(--hairline); background: var(--panel-2); padding: 20px; }
+  svg { display: block; width: 100%; height: auto; }
+
+  ul.plain, ol.plain { margin: 0 0 12px 0; padding-left: 1.4em; }
+  ul.plain li, ol.plain li { margin-bottom: 6px; }
+  .check { list-style: none; padding-left: 0; }
+  .check li {
+    padding: 7px 0 7px 26px;
+    border-bottom: 1px solid var(--hairline);
+    position: relative;
+    font-size: 14px;
+  }
+  .check li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 13px;
+    width: 10px; height: 10px;
+    border: 1px solid var(--hairline-strong);
+    background: var(--panel);
+  }
+  .check li .m { font-size: 12px; }
+
+  .verdict { border: 1px solid var(--hairline-strong); background: var(--panel); padding: 16px 20px; margin: 20px 0; }
+  .verdict .v-label {
+    font-family: var(--disp);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
+  @media (max-width: 880px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--hairline); background: var(--panel-2); padding: 14px 18px; }
+  .card h4 { margin-top: 0; }
+  .card p { font-size: 13.5px; color: var(--muted); margin-bottom: 8px; }
+  .card .cid { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.1em; }
+
+  .changelog { border: 1px solid var(--hairline); background: var(--panel-2); }
+  .changelog .cl-item { padding: 14px 20px; border-bottom: 1px solid var(--hairline); }
+  .changelog .cl-item:last-child { border-bottom: none; }
+  .changelog .cl-stamp { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+  .changelog .cl-item p { font-size: 13.5px; color: var(--muted); margin: 0; }
+
+  .colophon {
+    margin-top: 64px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hairline-strong);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  @media (max-width: 760px) {
+    .toc ol { columns: 1; }
+    h1 { font-size: 27px; }
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <header>
+    <div class="kicker">Plan · WebUI · Selection &times; Trigger</div>
+    <h1>WEBUI 选中 × 触发 一致性</h1>
+    <p class="lede">给「用什么输入触发、就作用在谁身上」这件事立一份契约：把散在 7 处目标解析、7 个动作出口上的口径收敛成一个作用域描述符（descriptor），再用三张互相咬合的网（静态守阵 / 运行时审计 / 真浏览器矩阵）同时钉住它 —— 新增功能只要走统一出口就**自动被检查**，不必再逐条追加断言。</p>
+    <div class="meta-row">
+      <span><b>stamp</b> 26-10-10-2001(R2 2100)</span>
+      <span><b>status</b> In Progress(S1+S2 已落地; S3 待单独一轮)</span>
+      <span><b>topic</b> webui-selection-trigger-parity</span>
+      <span><b>口径单点</b> conventions/webui-scope.md</span>
+      <span><b>取证快照</b> 2026-10-10 工作树, 行号为该时点值(上游 727b72e2 后已复核)</span>
+      <span><b>前置</b> 计划 26-10-02-1955(多选右键) · 26-10-09-2219(抽屉合并)</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span>术语与现状取证</a></li>
+      <li><a href="#s2"><span class="n">02</span>问题陈述:偏差从哪来</a></li>
+      <li><a href="#s3"><span class="n">03</span>一致性契约 C1–C5</a></li>
+      <li><a href="#s4"><span class="n">04</span>路线对比与选型</a></li>
+      <li><a href="#s5"><span class="n">05</span>技术方案</a></li>
+      <li><a href="#s6"><span class="n">06</span>实施步骤 S1–S6</a></li>
+      <li><a href="#s7"><span class="n">07</span>验收清单</a></li>
+      <li><a href="#s8"><span class="n">08</span>风险与开放问题</a></li>
+      <li><a href="#s9"><span class="n">09</span>变更记录</a></li>
+    </ol>
+  </nav>
+
+  <!-- ==================== 01 ==================== -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>术语与现状取证</h2></div>
+
+    <div class="prose">
+      <p>本轮讨论的对象是「<strong>选中</strong>」与「<strong>触发</strong>」之间的关系。先把四个词钉死，后面全篇按这套用；它们与现有代码里的字段一一对应，不是新概念：</p>
+      <ul class="plain">
+        <li><strong>选中（selection）</strong> —— 用户显式圈进来的对象，权威只有两个字段：<code>selGroups</code>（组 key 数组）与 <code>selMembers</code>（成员 hash 数组），派生集合是 <code>selHashSet</code>。普通单击<em>不</em>构成选中（2026-09-17 口径）。</li>
+        <li><strong>锚点（anchor）</strong> —— 动作被触发时指针所落的那一行对象：右键点的那行、或按钮在 DOM 上绑定的那个对象。</li>
+        <li><strong>光标（cursor）</strong> —— 键盘焦点行 <code>kbCursor</code>。它是 focus 语义，<em>不等于</em>选中（2026-09-30 方案 B 已明确）。</li>
+        <li><strong>触发（trigger）</strong> —— 一次会改变远端状态的用户输入：右键菜单项、面板按钮、快捷键、对话框提交。每次触发都必须先解析出「作用目标」才能投递。</li>
+      </ul>
+      <p>用户的疑问可以精确表述为：<em>一次触发解析出的目标，是否总是「用户以为的那个」？</em>当三类输入（鼠标锚点 / 键盘光标 / 选中集合）同时存在时，谁优先？现状没有一个统一答案。</p>
+    </div>
+
+    <h3><span class="tag">1.1</span>目标解析点：7 处，各自为政</h3>
+    <div class="prose">
+      <p>下表是本轮取证的全部「决定动谁」的函数。它们分布在不同文件里，互不引用，各自维护一套「选中集合怎么展开」的逻辑 —— 这就是口径会漂移的结构性原因。</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:52px">#</th><th style="width:200px">解析器</th><th style="width:220px">位置</th><th>输入 → 输出</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="m">R1</td>
+            <td class="m">_bulkTargets()</td>
+            <td class="m">commands.js:554</td>
+            <td><code>selGroups</code> ∪ <code>selMembers</code> → <code>{groupKeys, memberHashes}</code>；<strong>真实组的成员 hash 被剔除</strong>（由组 key 覆盖），虚拟行转成单 hash</td>
+          </tr>
+          <tr>
+            <td class="m">R2</td>
+            <td class="m">selHashSet</td>
+            <td class="m">selection.js:393</td>
+            <td>同上的输入 → <strong>hash 全集</strong>（组无差别展开为成员闭包）</td>
+          </tr>
+          <tr>
+            <td class="m">R3</td>
+            <td class="m">_groupTargets()</td>
+            <td class="m">commands.js:649</td>
+            <td><code>menu.key</code> → 该组全体成员 hash（故意不带组 key，好让目标数 = 种子数）</td>
+          </tr>
+          <tr>
+            <td class="m">R4</td>
+            <td class="m">菜单状态 <code>menu</code></td>
+            <td class="m">menu.js:151 · 168<br>shows.js:57 · 75</td>
+            <td>事件目标行 → <code>key</code> / <code>hash</code> / <code>episode.hashes</code> 三选一</td>
+          </tr>
+          <tr>
+            <td class="m">R5</td>
+            <td class="m">_kbTargets()</td>
+            <td class="m">shortcuts.js:980</td>
+            <td><strong>有选中就用 R1，忽略光标</strong>；无选中才用光标行</td>
+          </tr>
+          <tr>
+            <td class="m">R6</td>
+            <td class="m">_kbSingleHash()</td>
+            <td class="m">shortcuts.js:1158</td>
+            <td>R5 的结果恰好一个 hash 才返回，否则返回空串（提示，不猜）</td>
+          </tr>
+          <tr>
+            <td class="m">R7</td>
+            <td class="m">_kbOpenDrawer()</td>
+            <td class="m">shortcuts.js:1056</td>
+            <td>光标行 → hash（<code>torrent</code> 光标直取，<code>group</code> 光标取首成员）</td>
+          </tr>
+          <tr>
+            <td class="m">V1</td>
+            <td class="m">_ctxMulti() / _ctxScopeKey()</td>
+            <td class="m">menu.js:138 / 133</td>
+            <td>选中集合 + 锚点范围 → 布尔（菜单是否升级为「批量」变体）。<strong>与 R1–R7 平行的第二套判定</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="tag">1.2</span>动作出口：7 个函数，各自拼目标</h3>
+    <div class="prose">
+      <p>真正把命令投给后端的只有下面这些点（已排除添加种子与只读拉取）。注意它们的入参形态不统一：有的收裸 <code>keys/hashes</code>，有的读全局 <code>menu.hash</code>，有的缺省回落到 R1。</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:52px">#</th><th style="width:190px">出口</th><th style="width:190px">位置</th><th>端点 · 目标来源</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="m">E1</td><td class="m">_actCore()</td><td class="m">commands.js:441</td><td><code>/api/groups/{k}/{a}</code> · <code>/api/torrents/{h}/{a}</code> · <code>/api/torrents/bulk</code> · 调用方传 <code>keys/hashes</code></td></tr>
+          <tr><td class="m">E2</td><td class="m">_deleteFlow()</td><td class="m">delete_flow.js:123</td><td><code>/api/torrents/bulk</code>(delete) · 调用方 targets</td></tr>
+          <tr><td class="m">E3</td><td class="m">_metaBulk()</td><td class="m">dialogs.js:282</td><td><code>/api/torrents/bulk</code> · <code>metaTargets</code>（打开对话框那一刻锁定）</td></tr>
+          <tr><td class="m">E4</td><td class="m">torrentCmd()</td><td class="m">drawer.js:45</td><td><code>/api/torrents/{menu.hash}/{a}</code> · <strong>读全局 menu.hash</strong></td></tr>
+          <tr><td class="m">E5</td><td class="m">_editPost()</td><td class="m">drawer.js:306</td><td><code>/api/torrents/{h}/{a}</code> · 入参 <code>h</code></td></tr>
+          <tr><td class="m">E6</td><td class="m">_bulkEditPost()</td><td class="m">drawer.js:500</td><td><code>/api/torrents/bulk</code> · targets（<strong>缺省回落 R1</strong>）</td></tr>
+          <tr><td class="m">E7</td><td class="m">_skipExec()</td><td class="m">drawer.js:250</td><td><code>/api/torrents/{h}/skip-check</code> · <code>/api/torrents/bulk</code> · 入参 hashes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>不在模型内</b>：<code>add_torrent.js:593</code> 的 <code>/api/torrents/add</code> 与选中无关（新增种子），登记为豁免。只读端点（<code>/api/torrents/{h}</code>、<code>/trackers</code>、<code>/files</code>、<code>/peers</code>、<code>/skip-check/precheck</code>）不产生副作用，同样豁免。
+    </div>
+
+    <h3><span class="tag">1.3</span>现有守阵管到哪一步</h3>
+    <div class="prose">
+      <p>前端已经有一批质量不错的断言，但它们钉的是「<strong>单点还在不在</strong>」与「<strong>某几条链的端到端</strong>」：</p>
+      <ul class="plain">
+        <li><code>tests/test_web_shortcuts.py::test_sel_group_member_linkage</code> —— 钉 <code>selection.js</code> 的写入口三件套、五个成员侧变更点的回扫、消费端去重。<strong>只覆盖 selection.js 内部。</strong></li>
+        <li><code>tests/test_web_shortcuts.py::test_sel_visual_parity_and_site_cell</code> —— 钉选中态视觉三皮肤同形。</li>
+        <li><code>tests/test_web_shortcuts.py::test_click_lands_cursor_and_viewport_fallback</code> · <code>test_shift_anchor_unified</code> · <code>test_kb_member_range_context_aware</code> —— 钉键鼠衔接与起点/范围单点。</li>
+        <li><code>e2e/multiselect-shows.spec.mjs</code> —— CTX-03：选中行右键升级批量菜单 / 未选中行仍是单目标 / 批量暂停合单为一条 bulk。</li>
+        <li><code>e2e/menus.spec.mjs</code> —— 多选菜单项集齐全、导出请求数 == 选中展开数。</li>
+      </ul>
+      <p>缺口很清楚：<strong>没有任何一条断言在问「这个触发点走没走单点」</strong>。覆盖范围靠人肉枚举 —— 新增一个右键菜单项、一个新面板按钮、一个新快捷键，只要不去补断言，就天然不被覆盖。这正是本轮要改的地方。</p>
+    </div>
+  </section>
+
+  <!-- ==================== 02 ==================== -->
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>问题陈述:偏差从哪来</h2></div>
+
+    <div class="note bad">
+      <b>先明确前提</b>：本轮<strong>没有发现既有 BUG</strong>（用户已确认）。下面列的不是待修缺陷，而是「契约没被定义、因此也没有被检查」的空白区 —— 现在的行为大多是某次修复留下的合理选择，但它是<em>局部</em>合理，没有全局口径。
+    </div>
+
+    <h3><span class="tag">2.1</span>用户列的场景，逐条落到现状</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:270px">场景</th><th style="width:300px">现状行为（走哪个解析器）</th><th>判定</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>选中 A → 触发 A（右键 A 自己那行）</td>
+            <td>V1 判「等同」→ 单目标菜单；动作走 R4/R3 → 动 A</td>
+            <td class="ok">符合直觉</td>
+          </tr>
+          <tr>
+            <td><strong>选中 A → 右键 A 之外的 B 行</strong></td>
+            <td>V1 判「不等同」→ <strong>批量菜单</strong>；动作走 R1 → <strong>动整个 A</strong></td>
+            <td class="wr">文案说「批量…」是对的，但用户手指在 B 上；<strong>锚点被静默忽略</strong></td>
+          </tr>
+          <tr>
+            <td><strong>选中 A → 键盘光标移到 B → 按动作键</strong></td>
+            <td>R5：有选中 → 走 R1 → <strong>动整个 A</strong>，光标 B 被忽略</td>
+            <td class="wr">与右键路径<strong>优先级相反</strong>：右键锚点优先，键盘选中优先</td>
+          </tr>
+          <tr>
+            <td>无选中 → 光标在 C → 按动作键</td>
+            <td>R5：无选中 → 用光标 → 动 C</td>
+            <td class="ok">符合</td>
+          </tr>
+          <tr>
+            <td>无选中 → 右键 C</td>
+            <td>V1 返回 false → 单目标菜单；动作走 R4 → 动 C</td>
+            <td class="ok">符合</td>
+          </tr>
+          <tr>
+            <td>选中 A → 按「全选」</td>
+            <td><code>_kbSelectAll</code> 按视图覆盖三视图各自全量，并回扫联动</td>
+            <td class="ok">符合</td>
+          </tr>
+          <tr>
+            <td>选中 A（多选）→ 右键 A 内某行 → 想点「详细信息」</td>
+            <td>菜单已是<strong>批量变体</strong>，而批量变体里<em>没有</em>「详细信息」（依赖逐目标现值）</td>
+            <td class="wr">「菜单里没这个选项」—— 与坑档 <code>ctx-menu-branch-parity</code> 同族</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="tag">2.2</span>四个结构性机制</h3>
+    <div class="prose">
+      <p>上面那些「不符合直觉」不是四个独立的疏忽，而是四个机制各出一份力：</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="cid">M1 · 两套判定并行</div>
+        <h4>变体判定 ≠ 目标解析</h4>
+        <p>菜单长什么样，由 V1（<code>_ctxMulti</code> + <code>_ctxScopeKey</code> 的等同性比较）决定；动作作用在谁身上，由 R1/R3/R4 决定。两套逻辑谁也不知道对方在想什么，各自演化。</p>
+      </div>
+      <div class="card">
+        <div class="cid">M2 · 优先级相反</div>
+        <h4>鼠标锚点优先，键盘选中优先</h4>
+        <p>鼠标路径以「被点的那行」为锚定变体；键盘路径以「选中集合非空」为唯一判据。同一屏、同一选中集合，两种输入得到不同目标，且都不提示。</p>
+      </div>
+      <div class="card">
+        <div class="cid">M3 · 借道菜单状态</div>
+        <h4>键盘把解析结果塞回 <code>menu.hash</code></h4>
+        <p><code>_kbEditAct</code> / <code>_kbTorrentCmd</code> / <code>_kbTorrentToggle</code>（shortcuts.js:1164/1175/1184）先解析出 hash，再<strong>写进 <code>this.menu.hash</code></strong>，然后调菜单绑定方法（E4/E5）。键盘目标解析与菜单状态因此耦合。</p>
+      </div>
+      <div class="card">
+        <div class="cid">M4 · 两套「选中展开」</div>
+        <h4>R1 与 R2 结果不等价</h4>
+        <p>批量动作取 R1（组 key 优先覆盖成员，一个组算 1 个目标）；导出取 R2（全量展开为 hash）。同一选中集合在两条路径上「N 个目标」的含义不同，文案却共用同一个模板。</p>
+      </div>
+    </div>
+
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1080 300" role="img" aria-label="现状:一次输入分叉成两条平行判定">
+          <defs>
+            <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 z" fill="#5fb8c9"/>
+            </marker>
+            <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 z" fill="#c9a75f"/>
+            </marker>
+          </defs>
+
+          <text x="0" y="16" font-family="Consolas, monospace" font-size="11.5" fill="#6b7a85">现状 · 一次触发要过两条互不知情的判定</text>
+
+          <!-- 输入列 -->
+          <rect x="0" y="34" width="176" height="34" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="88" y="55" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">右键(锚点行)</text>
+          <rect x="0" y="80" width="176" height="34" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="88" y="101" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">键盘(光标 + 选中)</text>
+          <rect x="0" y="126" width="176" height="34" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="88" y="147" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">面板按钮 / 对话框</text>
+
+          <!-- 判定块 -->
+          <rect x="248" y="34" width="248" height="58" fill="#1b232b" stroke="rgba(201,167,95,0.55)"/>
+          <text x="372" y="57" font-family="Consolas, monospace" font-size="12" fill="#c9a75f" text-anchor="middle">V1 · menu.js:138</text>
+          <text x="372" y="76" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af" text-anchor="middle">判菜单变体(multi / 单目标)</text>
+
+          <rect x="248" y="118" width="248" height="58" fill="#1b232b" stroke="rgba(95,184,201,0.55)"/>
+          <text x="372" y="141" font-family="Consolas, monospace" font-size="12" fill="#5fb8c9" text-anchor="middle">R1–R7 · 七个解析器</text>
+          <text x="372" y="160" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af" text-anchor="middle">算实际作用目标</text>
+
+          <!-- 连线 -->
+          <path d="M176,51 L248,60" stroke="#c9a75f" stroke-width="1.2" fill="none" marker-end="url(#ar2)"/>
+          <path d="M176,97 L248,90" stroke="#c9a75f" stroke-width="1.2" fill="none" marker-end="url(#ar2)"/>
+          <path d="M176,143 L248,140" stroke="#c9a75f" stroke-width="1.2" fill="none" marker-end="url(#ar2)"/>
+          <path d="M176,51 L248,132" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+          <path d="M176,97 L248,142" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+          <path d="M176,143 L248,150" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+
+          <!-- 分叉标注 -->
+          <path d="M204,74 L204,124" stroke="rgba(201,138,124,0.7)" stroke-width="1" stroke-dasharray="3 3"/>
+          <text x="214" y="106" font-family="Consolas, monospace" font-size="10.5" fill="#c98a7c">两条路没有交汇点</text>
+
+          <!-- 出口 -->
+          <rect x="600" y="34" width="212" height="142" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="706" y="58" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">E1–E7 出口</text>
+          <text x="706" y="80" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">各自拼 keys / hashes</text>
+          <text x="706" y="98" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">各自写 toast 文案</text>
+          <text x="706" y="122" font-family="Consolas, monospace" font-size="11" fill="#c98a7c" text-anchor="middle">无一致性自检</text>
+          <text x="706" y="146" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">→ 后端</text>
+          <path d="M496,63 L600,80" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+          <path d="M496,147 L600,120" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+
+          <!-- 检查面 -->
+          <rect x="892" y="34" width="188" height="142" fill="#12171d" stroke="rgba(255,255,255,0.08)"/>
+          <text x="986" y="58" font-family="Consolas, monospace" font-size="12" fill="#dde5eb" text-anchor="middle">现有检查</text>
+          <text x="986" y="82" font-family="Consolas, monospace" font-size="11" fill="#7cc08a" text-anchor="middle">单点存在性 ✓</text>
+          <text x="986" y="102" font-family="Consolas, monospace" font-size="11" fill="#7cc08a" text-anchor="middle">少数链端到端 ✓</text>
+          <text x="986" y="126" font-family="Consolas, monospace" font-size="11" fill="#c98a7c" text-anchor="middle">触发点是否走单点 ✗</text>
+          <path d="M812,105 L892,105" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+
+          <text x="0" y="214" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af">后果:四种偏差全部静默 —— 不报错、不白屏、不弹 toast,只是「动了不该动的」或「按了没动」。</text>
+          <text x="0" y="238" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af">同一屏、同一选中集合:右键忽略选中,键盘忽略锚点 —— 两条输入对「谁在被操作」给出不同答案。</text>
+          <text x="0" y="262" font-family="Consolas, monospace" font-size="11.5" fill="#6b7a85">与坑档同族:overlays(点了没反应) · ctx-menu-branch-parity(菜单缺项) · kbd-row-kind-dispatch(按了没动静)。</text>
+        </svg>
+      </div>
+      <figcaption><span class="fn">图 1</span>现状:输入到动作之间横着两条互不知情的判定链,出口不做一致性自检,而现有检查只覆盖「单点还在不在」。</figcaption>
+    </figure>
+
+    <div class="note warn">
+      <b>为什么这类问题值得专门治</b>：它属于「静默改变作用对象」—— 最坏的情况不是按钮按不动，而是按钮动了你不知道的东西。批量删除、整组跳检这类高危动作都挂在这条链上，一次口径漂移的代价是一组种子。
+    </div>
+  </section>
+
+  <!-- ==================== 03 ==================== -->
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>一致性契约 C1–C5</h2></div>
+
+    <div class="prose">
+      <p>先把「作用域」分成三态，契约才有主语：</p>
+      <ul class="plain">
+        <li><span class="m">SEL</span><strong> 集合</strong> —— 目标 = 选中集合的展开闭包。</li>
+        <li><span class="m">ANC</span><strong> 锚点</strong> —— 目标 = 被触发行/对象的展开闭包。</li>
+        <li><span class="m">CUR</span><strong> 光标</strong> —— 目标 = 键盘光标行的展开闭包。</li>
+      </ul>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="cid">C1</div>
+        <h4>解析单点</h4>
+        <p>任一次触发必须解析出一个 <code>ScopeDescriptor</code>，由<strong>唯一函数</strong>产出。任何触发点不得自行拆解选中集合（R1–R7 全部退役为它的内部分支）。</p>
+      </div>
+      <div class="card">
+        <div class="cid">C2</div>
+        <h4>变体派生</h4>
+        <p>菜单/对话框的 UI 变体（multi / group / member / episode / show）由 descriptor <strong>派生</strong>，不得再用第二个 token 并行判定 —— V1 并入单点。</p>
+      </div>
+      <div class="card">
+        <div class="cid">C3</div>
+        <h4>文案同源</h4>
+        <p>toast 与确认框里的目标形态（「该种子」/「整组」/「N 个目标」）由 descriptor 派生，不与实际载荷各写一套。</p>
+      </div>
+      <div class="card">
+        <div class="cid">C4</div>
+        <h4>出口唯一</h4>
+        <p>所有动作投递经统一出口；出口内部做一次「descriptor ↔ 实际载荷」一致性自检。调用方<strong>拿不到</strong>自己拼目标的接口。</p>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div class="v-label">C5 · 本轮要拍板的核心口径</div>
+      <p style="margin-bottom:10px"><strong>仅当选中集合为空时，锚点与光标才有资格当目标。</strong></p>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:0">选中非空时，锚点只能用于<strong>改变选中</strong>（选中 / 取消 / 扩段），不能静默改变作用对象 —— 除非该触发点在登记表里显式声明 <code>scope: 'anchor'</code> 且可被守阵查到。</p>
+    </div>
+
+    <div class="prose">
+      <p>这条把「选中 A 右键 B」从现在的<em>隐式批量化</em>改成<strong>明确的二选一</strong>：要么菜单上写清「将作用于已选 N 项」，要么以 B 为目标并保留「仅 B」的项集。无论选哪边，用户都能从界面上读出来 —— 而不是靠猜。</p>
+    </div>
+
+    <div class="note">
+      <b>C5 的两种可行口径（待拍板项 ①）</b><br>
+      <strong>口径甲（提示型）</strong>：保持现在「升级为批量」的行为，但菜单顶部加一行不可点的说明 —— 「已选 N 项 · 本次将作用于全部选中」。改动最小，用户至少不会以为在操作 B。<br>
+      <strong>口径乙（锚点型）</strong>：右键哪行就以哪行为目标（变体随锚点走），选中集合只在键盘路径与批量按钮上生效。更符合「我点哪个就改哪个」的肌肉记忆，但要重排 V1 与 R4 的关系。<br>
+      建议<strong>口径甲</strong>：它不动已拍板过的 CTX-03 语义（选中 N 行右键 = 对全部生效），只补一个可见性缺口，风险最低。
+    </div>
+  </section>
+
+  <!-- ==================== 04 ==================== -->
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>路线对比与选型</h2></div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:210px">路线</th><th>做法</th><th style="width:170px">代价</th><th style="width:210px">新增功能还要加检查吗</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>A · 只加检查</strong></td>
+            <td>补一批静态守阵 + 一个 e2e 矩阵，覆盖用户列的四种场景。</td>
+            <td>低</td>
+            <td class="no">要 —— 每加一个触发点得人肉补一条。做一次，然后重新腐化。</td>
+          </tr>
+          <tr>
+            <td><strong>B · 单点收敛 + 声明式登记</strong><br><span class="m">(选)</span></td>
+            <td>descriptor 单点 + 出口收敛 + <code>TRIGGER_REGISTRY</code>；三类检查读<strong>同一张表</strong>。</td>
+            <td>中（S3 有行为不变式约束）</td>
+            <td class="ok">不要 —— 走出口自动被检查；不走出口守阵当场红。</td>
+          </tr>
+          <tr>
+            <td>C · 后端兜底校验</td>
+            <td>后端对 bulk 载荷按目标形态二次校验。</td>
+            <td>高</td>
+            <td class="no">不适用 —— 载荷里没有「用户以为在操作谁」这个信息，后端无从判断。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>选 <strong>B</strong>。理由直接来自用户那句「后续添加的功能可以自动停靠，而不是添加新的检查」：A 路线本质上就是「添加新的检查」，它治的是这一轮，下一轮加个「批量改分类」按钮又回到原点。B 路线把检查从「逐条枚举」换成「结构性必过」。</p>
+      <p>同时 B 允许分期：S1/S2 是<strong>纯增量、零行为改动</strong>（只登记与断言），可以先落地；真正碰行为的只有 S3 与 C5 那一条口径选择。任何时候停下来，已落地的部分都独立有效。</p>
+    </div>
+  </section>
+
+  <!-- ==================== 05 ==================== -->
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>技术方案</h2></div>
+
+    <h3><span class="tag">5.1</span>单点：<code>_scopeResolve()</code> 产出 descriptor</h3>
+    <div class="prose">
+      <p>放在 <code>selection.js</code>，与既有的 <code>_selAnchor()</code> / <code>_selSetAnchor()</code> 同族 —— 选中相关的一切单点都在这个文件里，不新开文件。签名与返回形状：</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="m">scope</td><td><code>'sel'</code> / <code>'anchor'</code> / <code>'cursor'</code> / <code>'panel'</code>（抽屉内命令，目标 = 面板当前 hash）</td></tr>
+          <tr><td class="m">keys</td><td>组 key 数组。与现在 R1 同口径：<strong>真实组的成员 hash 被它覆盖</strong>。</td></tr>
+          <tr><td class="m">hashes</td><td>未被 keys 覆盖的成员 hash 数组。</td></tr>
+          <tr><td class="m">closure</td><td>hash 全集（= 现在 R2）。<strong>导出等「逐目标」动作读它</strong>，M4 的两套展开在这里合成一个 descriptor 的两个字段，不再各取所需。</td></tr>
+          <tr><td class="m">anchor</td><td><code>{kind, id}</code>，记录锚点行；无锚点时为 null。</td></tr>
+          <tr><td class="m">variant</td><td><code>'multi' | 'group' | 'member' | 'episode' | 'show'</code>。由 <code>{scope, anchor, closure}</code> 派生，V1 的等同性判断迁入此处。</td></tr>
+          <tr><td class="m">countText</td><td>「该种子」/「整组」/「N 个目标」——C3 的文案单点。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><code>closure.length</code> 成为「N 个目标」里 N 的唯一来源，两类展开的歧义随之消失。</p>
+    </div>
+
+    <h3><span class="tag">5.2</span>出口收敛：E1–E7 → 三个</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:230px">新出口</th><th>吸收</th><th>签名约束</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="m">_dispatchAction(action, scope, opts)</td>
+            <td>E1 <code>_actCore</code>（乐观补丁 / 回执 / toast / 三桶分流全部保留）</td>
+            <td>只收 descriptor，<strong>不收裸 keys/hashes</strong></td>
+          </tr>
+          <tr>
+            <td class="m">_dispatchDelete(scope, opts)</td>
+            <td>E2 <code>_deleteFlow</code></td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td class="m">_dispatchEdit(action, scope, payload)</td>
+            <td>E3 <code>_metaBulk</code> · E5 <code>_editPost</code> · E6 <code>_bulkEditPost</code> · E7 <code>_skipExec</code></td>
+            <td>同上；<code>payload</code> 只装业务字段（限速值 / 目标路径 / 标签）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>保留的两个豁免</b>：① <code>torrentCmd</code>（E4）的单种子分支 —— 抽屉内命令的目标是「面板当前 hash」，属 <code>scope: 'panel'</code>，在登记表里可查，不走 descriptor；② <code>add_torrent.js</code> 的添加种子，<code>scope: 'none'</code>。两个都进守阵白名单，白名单本身就是「已审计过」的记号。
+    </div>
+    <div class="prose">
+      <p>收敛之后调用方<strong>无法</strong>自己拼目标 —— 这是 <code>poka-yoke</code>（防呆）手法：不是「请不要自己拼」，而是「没有接口让你自己拼」。</p>
+    </div>
+
+    <h3><span class="tag">5.3</span>触发点登记表 <code>TRIGGER_REGISTRY</code></h3>
+    <div class="prose">
+      <p>新增 <code>shared/triggers.js</code>，纯数据 + 纯函数（无 DOM、无 this），挂在 <code>window.AQB_TRIGGERS</code> 上由 app.js 注入。它有两个消费者：pytest 守阵（静态读）与 e2e（生成用例）。</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:190px">字段</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="m">id</td><td>唯一标识，如 <code>ctx.multi.act</code> / <code>kbd.act</code> / <code>panel.cmd</code></td></tr>
+          <tr><td class="m">ui</td><td><code>'ctx-menu' | 'kbd' | 'drawer' | 'button' | 'dialog'</code></td></tr>
+          <tr><td class="m">variant</td><td>仅 ctx-menu 有；与模板四支一一对应</td></tr>
+          <tr><td class="m">scope</td><td>声明的作用域（C5 的显式豁免也写在这里）</td></tr>
+          <tr><td class="m">entry</td><td><strong>所在函数名</strong> —— 守阵「直投递白名单」按它比对源码</td></tr>
+          <tr><td class="m">dispatch</td><td>走哪个出口（<code>action</code> / <code>delete</code> / <code>edit</code> / <code>panel</code>）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="tag">5.4</span>三张网</h3>
+
+    <h4>(a) 静态守阵 —— <code>tests/test_webui_trigger_registry.py</code>（新增）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:60px"></th><th style="width:260px">断言</th><th>防的是</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="m">G1</td>
+            <td><strong>直投递白名单</strong>：<code>shared/*.js</code> 里每个写端点调用点（<code>/api/torrents/…</code> · <code>/api/groups/…</code> · <code>/api/torrents/bulk</code>）所在函数名，必须属于 <code>TRIGGER_DEFS.entry</code> 或豁免白名单。<span class="no">表外即红。</span></td>
+            <td>新功能绕过出口直接投递（<strong>这是「自动停靠」的强制网</strong>）</td>
+          </tr>
+          <tr>
+            <td class="m">G2</td>
+            <td><strong>目标解析不外包</strong>：三个 <code>_dispatch*</code> 出口之外，不得出现对 <code>selGroups</code>/<code>selMembers</code> 的直接展开（<code>[...this.selMembers]</code>、<code>.selGroups.map(</code> 等），selection.js 自身与登记为 <code>scope:'sel'</code> 的白名单除外。</td>
+            <td>M1/M4：有人又写第三套展开</td>
+          </tr>
+          <tr>
+            <td class="m">G3</td>
+            <td><strong>变体 ↔ 模板支</strong>：<code>ctx-menus.html</code> 的 <code>v-if / v-else-if / v-else</code> 支数 == 登记表中 <code>ui:'ctx-menu'</code> 去重后的 variant 数。</td>
+            <td>坑档 <code>ctx-menu-branch-parity</code>：加了一支忘了另一支</td>
+          </tr>
+          <tr>
+            <td class="m">G4</td>
+            <td><strong>动作族奇偶</strong>：四支都必须有基线四族(开始/暂停/汇报/删除)，multi/member/group 还必须各有扩展六族(重新校验/跳检/限速/移动/标签分类/导出)。<span class="wr">按「动作族」而非「逐项集合」比对</span> —— 各支项集本就按形态允许不同(整集支没有限速/移动)，逐项比对会恒红；归族后正好覆盖 2026-10-09「单组右键菜单缺选项」那类回归。</td>
+            <td>「同一批动作在两条路径上项集不一致」</td>
+          </tr>
+          <tr>
+            <td class="m">G5</td>
+            <td><strong>单点唯一性</strong>：<code>ScopeDescriptor</code> 对象字面量在 <code>shared/</code> 里只允许出现在 <code>selection.js::_scopeResolve</code>。</td>
+            <td>descriptor 被影子实现</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>(b) 运行时审计 —— <code>shared/scope_audit.js</code>（新增）</h4>
+    <ul class="plain">
+      <li><strong>开关</strong>：<code>window.__AQB_AUDIT_SCOPE__</code>。e2e 用 Playwright 的注入脚本打开；<strong>生产默认关</strong>（保守默认，不污染用户 console）。</li>
+      <li><strong>动作</strong>：三个 <code>_dispatch*</code> 出口各调一次 <code>_auditScope(scope, payload)</code>，比对 <code>scope.keys/hashes/closure</code> 与最终下发载荷；不一致、或 descriptor 缺失/字段越界 → 记进有界环 <code>scopeAudit</code>（上限 50 条）并按签名去重 <code>console.warn</code> 一次。</li>
+      <li><strong>不改行为</strong>：只记账，与既有 <code>cmdStats</code> 同范式（埋点必须有消费者）。</li>
+      <li><strong>消费者</strong>：e2e 每次交互后断言环为空；排障时可从控制台读环。</li>
+    </ul>
+
+    <h4>(c) 真浏览器矩阵 —— <code>e2e/trigger-scope.spec.mjs</code>（新增）</h4>
+    <div class="prose">
+      <p>维度 = 视图（种子 / 辅种 / 追剧） × 选中态（无 / 单种子 / 单组 / 组+成员 / 半选 / 多选） × 触发点（右键各支 / 键盘动作 / 抽屉按钮 / 对话框提交） × 期望作用域。每个用例断言三层：</p>
+      <ul class="plain">
+        <li><strong>下发载荷</strong>：拦截网络，比对 <code>keys/hashes</code> 与期望闭包（不借道 vm 注入，沿用 e2e 既有 D4 守则：有真实 UI 路径就不走 vm）。</li>
+        <li><strong>审计环为空</strong>：<code>scopeAudit</code> 无记录。</li>
+        <li><strong>文案</strong>：toast / 确认框含期望的 <code>countText</code>。</li>
+      </ul>
+      <p>用例清单从 <code>TRIGGER_DEFS</code> 生成 —— 新增登记项自动出现在矩阵里，这是「自动停靠」的第三张网。按既有门禁口径拆两档：核心组合进 <code>@fast</code>（每次改前端跑），全量组合进全量轮。</p>
+    </div>
+
+    <h3><span class="tag">5.5</span>三张网怎么咬合</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:300px">新功能长什么样</th><th>谁接住它</th></tr></thead>
+        <tbody>
+          <tr><td>走三个统一出口之一</td><td class="ok">运行时 <code>scopeAudit</code> 自动检查 —— <strong>零新增代码</strong></td></tr>
+          <tr><td>不走出口，直接投递端点</td><td class="wr">静态守阵 G1 当场红 —— 要么改走出口，要么登记进表</td></tr>
+          <tr><td>新增右键菜单项 / 新变体</td><td class="ok">G3 + G4 检查变体与项集；e2e 矩阵自动扩一列</td></tr>
+          <tr><td>新增一个目标解析旁路</td><td class="wr">G2 红（不得在出口外展开选中集合）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="tag">5.6</span>菜单项集声明化（与坑档合流）</h3>
+    <div class="prose">
+      <p>现在 <code>ctx-menus.html</code> 四支各自硬编码动作项，靠人记得「四支要同步」。改成声明式：</p>
+      <ul class="plain">
+        <li>动作项抽成 <code>CTX_ACTIONS</code>（id / 图标 / 文案 / 适用 variant / flags 门控 / entry），与 <code>TRIGGER_REGISTRY</code> 同源。</li>
+        <li>模板四支改为按声明渲染（或保留结构、由守阵比对声明）。</li>
+        <li>效果：增项只在一处写，「单组菜单缺选项」这类漏项从「要记得同步四支」变成「不可能不同步」。</li>
+      </ul>
+    </div>
+
+    <h3><span class="tag">5.7</span>目标态</h3>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1080 320" role="img" aria-label="目标态:descriptor 单点 + 三出口 + 三张网">
+          <defs>
+            <marker id="br" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 z" fill="#5fb8c9"/>
+            </marker>
+          </defs>
+          <text x="0" y="16" font-family="Consolas, monospace" font-size="11.5" fill="#6b7a85">目标态 · 一次触发只过一次解析,只经一个出口,被三张网同时罩住</text>
+
+          <!-- 输入 -->
+          <rect x="0" y="46" width="150" height="30" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="75" y="66" font-family="Consolas, monospace" font-size="11.5" fill="#dde5eb" text-anchor="middle">右键(锚点)</text>
+          <rect x="0" y="88" width="150" height="30" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="75" y="108" font-family="Consolas, monospace" font-size="11.5" fill="#dde5eb" text-anchor="middle">键盘(光标+选中)</text>
+          <rect x="0" y="130" width="150" height="30" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="75" y="150" font-family="Consolas, monospace" font-size="11.5" fill="#dde5eb" text-anchor="middle">按钮 / 对话框</text>
+
+          <!-- 单点 -->
+          <rect x="216" y="66" width="252" height="76" fill="#1b232b" stroke="rgba(95,184,201,0.7)"/>
+          <text x="342" y="90" font-family="Consolas, monospace" font-size="12" fill="#5fb8c9" text-anchor="middle">_scopeResolve() · 单点</text>
+          <text x="342" y="110" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">ScopeDescriptor</text>
+          <text x="342" y="128" font-family="Consolas, monospace" font-size="10.5" fill="#6b7a85" text-anchor="middle">{scope, keys, hashes, closure, anchor, variant}</text>
+          <path d="M150,61 L216,84" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#br)"/>
+          <path d="M150,103 L216,103" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#br)"/>
+          <path d="M150,145 L216,122" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#br)"/>
+
+          <!-- 出口 -->
+          <rect x="534" y="52" width="234" height="104" fill="#151a20" stroke="rgba(255,255,255,0.16)"/>
+          <text x="651" y="74" font-family="Consolas, monospace" font-size="11.5" fill="#dde5eb" text-anchor="middle">三个统一出口</text>
+          <text x="651" y="95" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">_dispatchAction</text>
+          <text x="651" y="113" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">_dispatchDelete</text>
+          <text x="651" y="131" font-family="Consolas, monospace" font-size="11" fill="#93a3af" text-anchor="middle">_dispatchEdit</text>
+          <text x="651" y="149" font-family="Consolas, monospace" font-size="10.5" fill="#c98a7c" text-anchor="middle">只收 descriptor,不收裸 keys/hashes</text>
+          <path d="M468,104 L534,104" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#br)"/>
+
+          <!-- 后端 -->
+          <rect x="834" y="76" width="150" height="56" fill="#12171d" stroke="rgba(255,255,255,0.08)"/>
+          <text x="909" y="100" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af" text-anchor="middle">后端</text>
+          <text x="909" y="118" font-family="Consolas, monospace" font-size="10.5" fill="#6b7a85" text-anchor="middle">单点投递</text>
+          <path d="M768,104 L834,104" stroke="#5fb8c9" stroke-width="1.2" fill="none" marker-end="url(#br)"/>
+
+          <!-- 三张网 -->
+          <rect x="216" y="196" width="252" height="46" fill="#12171d" stroke="rgba(201,167,95,0.5)"/>
+          <text x="342" y="216" font-family="Consolas, monospace" font-size="11.5" fill="#c9a75f" text-anchor="middle">网① 静态守阵 G1–G5</text>
+          <text x="342" y="233" font-family="Consolas, monospace" font-size="10.5" fill="#93a3af" text-anchor="middle">表外直投递即红 · 源码级</text>
+
+          <rect x="490" y="196" width="252" height="46" fill="#12171d" stroke="rgba(95,184,201,0.5)"/>
+          <text x="616" y="216" font-family="Consolas, monospace" font-size="11.5" fill="#5fb8c9" text-anchor="middle">网② 运行时 scopeAudit</text>
+          <text x="616" y="233" font-family="Consolas, monospace" font-size="10.5" fill="#93a3af" text-anchor="middle">出口内自检 · 新功能零成本接入</text>
+
+          <rect x="764" y="196" width="252" height="46" fill="#12171d" stroke="rgba(124,192,138,0.5)"/>
+          <text x="890" y="216" font-family="Consolas, monospace" font-size="11.5" fill="#7cc08a" text-anchor="middle">网③ e2e 参数化矩阵</text>
+          <text x="890" y="233" font-family="Consolas, monospace" font-size="10.5" fill="#93a3af" text-anchor="middle">真实输入 × 载荷比对 · 从登记表生成</text>
+
+          <path d="M342,156 L342,196" stroke="rgba(201,167,95,0.6)" stroke-width="1" stroke-dasharray="3 3"/>
+          <path d="M616,156 L616,196" stroke="rgba(95,184,201,0.6)" stroke-width="1" stroke-dasharray="3 3"/>
+          <path d="M852,156 L880,196" stroke="rgba(124,192,138,0.6)" stroke-width="1" stroke-dasharray="3 3"/>
+
+          <text x="0" y="278" font-family="Consolas, monospace" font-size="11.5" fill="#93a3af">「自动停靠」的含义:新增触发点要么走出口(网②自动罩),要么登记进表(网①强制),要么模板新增变体(网①/③自动扩)。</text>
+          <text x="0" y="300" font-family="Consolas, monospace" font-size="11.5" fill="#6b7a85">人不再需要记得「这里也要补一条断言」。</text>
+        </svg>
+      </div>
+      <figcaption><span class="fn">图 2</span>目标态:解析收成单点、投递收成三出口,静态/运行时/浏览器三层检查各管一个切面,新增功能由结构而非纪律保证被覆盖。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ==================== 06 ==================== -->
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>实施步骤 S1–S6</h2></div>
+
+    <div class="prose">
+      <p>按依赖链推进，每步独立可停。<strong>S1/S2 零行为改动</strong>，可以先落地验证口径；碰行为的只有 S3 与 C5 那一条选择。</p>
+    </div>
+
+    <div class="note">
+      <b>进度(R2, 26-10-10-2100)</b>：<span class="ok">S1 + S2 已落地</span> —— 口径文档 <code>memory-bank/conventions/webui-scope.md</code>、登记表 <code>shared/triggers.js</code>(36 行 <code>ui</code> + 30 行 <code>calls</code>)、静态守阵 <code>tests/test_webui_trigger_registry.py</code>(6 条)全部就位，**零行为改动**。四条红验一次通过(未登记投递点 / 出口外展开选中集合 / 单组菜单缺项 / 登记不存在的入口，各自判红后还原即绿)。<span class="wr">S3 未动</span>(按 §8 建议留单独一轮)。
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:56px">步骤</th><th style="width:250px">落点</th><th>做什么</th><th style="width:230px">硬约束 / 不动点</th><th style="width:190px">完成判据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="m">S1</td>
+            <td><code>memory-bank/conventions/webui-scope.md</code>（新增）</td>
+            <td>把 §1 的术语表、§2 的四个机制、§3 的 C1–C5 落成约定文档，作为后续所有改动的口径单点。</td>
+            <td>纯文档；不改任何代码</td>
+            <td>文档进 <code>conventions/_index.md</code>；<code>kb.index</code> 重建通过</td>
+          </tr>
+          <tr>
+            <td class="m">S2</td>
+            <td><code>shared/triggers.js</code>（新增）+ <code>tests/test_webui_trigger_registry.py</code>（新增）</td>
+            <td>把现状 <strong>7 个解析器 + 7 个出口 + 全部触发点</strong>登记进表；写 G1/G5 两条守阵（先只钉「都在表里」与「单点唯一」，G3/G4 随后补）。</td>
+            <td><strong>不改任何行为</strong>；登记表只读源码即可推导</td>
+            <td>守阵全绿；故意在生产代码里加一行直投递 → 守阵红（红验）</td>
+          </tr>
+          <tr>
+            <td class="m">S3</td>
+            <td><code>selection.js</code> · <code>commands.js</code> · <code>delete_flow.js</code> · <code>dialogs.js</code> · <code>drawer.js</code> · <code>shortcuts.js</code> · <code>menu.js</code> · <code>shows.js</code></td>
+            <td>实现 <code>_scopeResolve()</code>；R1–R7/V1 收编为其内部分支；出口收敛为三个 <code>_dispatch*</code>；<strong>拆掉 <code>_kbEditAct</code>/<code>_kbTorrentCmd</code> 借道 <code>menu.hash</code> 的写法</strong>（M3），改为显式传 descriptor。</td>
+            <td><strong>行为不变式</strong>：S3 前后 <code>e2e</code> 全量结果逐位一致；<code>_actCore</code> 的乐观补丁/回执/toast 三态逐字保留</td>
+            <td><code>test.full</code> + <code>dev.e2e</code> 全量通过，与 S3 前基线逐位相同</td>
+          </tr>
+          <tr>
+            <td class="m">S4</td>
+            <td><code>shared/scope_audit.js</code>（新增）+ 三出口各一处调用</td>
+            <td>运行时审计：开关 <code>window.__AQB_AUDIT_SCOPE__</code>，有界环 + 按签名去重 warn。</td>
+            <td>默认关；不改行为；开时也不得影响时延（比对是 O(目标数)）</td>
+            <td>审计模式下故意造一次不一致 → 环里出现记录（红验）</td>
+          </tr>
+          <tr>
+            <td class="m">S5</td>
+            <td><code>e2e/trigger-scope.spec.mjs</code>（新增）+ <code>e2e/lib/</code> 读环辅助</td>
+            <td>参数化矩阵：覆盖用户列的四种场景 + 半选 + 三视图 + 组/成员/集/剧四种锚点；从登记表生成用例；核心组合标 <code>@fast</code>。</td>
+            <td>沿用 e2e D4 守则：有真实 UI 路径就不借道 vm；<code>reuseExistingServer: false</code> 不动</td>
+            <td>新增一条登记项 → 矩阵自动多一列（红验：不补用例也能被覆盖）</td>
+          </tr>
+          <tr>
+            <td class="m">S6</td>
+            <td><code>shared/tpl/ctx-menus.html</code> · <code>shared/triggers.js</code></td>
+            <td>菜单项集声明化：<code>CTX_ACTIONS</code> + 四支按声明渲染；补 G3/G4 守阵。</td>
+            <td>四支的视觉与项序逐位不变；flags 门控语义（fail-closed）不变</td>
+            <td>三皮肤菜单快照与改前一致；G3/G4 全绿</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <b>顺序上的一个提醒</b>：S3 是唯一可能引出具风险的步骤（它要把 E1–E7 合并）。建议 S3 单独一轮，<strong>先跑一遍 <code>e2e</code> 全量把改前结果留档</strong>，改完逐位对账；任何一位不同都当回归查，而不是当「顺手修好了」收下。
+    </div>
+  </section>
+
+  <!-- ==================== 07 ==================== -->
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>验收清单</h2></div>
+
+    <h4>口径与结构</h4>
+    <ul class="check">
+      <li>术语表（选中 / 锚点 / 光标 / 触发）与 C1–C5 已成文，后续改动可引用而非重新定义。<span class="m">S1</span></li>
+      <li><code>ScopeDescriptor</code> 在 <code>shared/</code> 里只有一个产出点，G5 守阵钉住。<span class="m">S2/S3</span></li>
+      <li>写端点在 <code>shared/*.js</code> 里的调用点 100% 落在登记表或豁免白名单内，G1 钉住。<span class="m">S2</span></li>
+      <li>出口收敛为 3 个，调用方接口不再接受裸 <code>keys/hashes</code>；<code>_kbEditAct</code> 不再写 <code>menu.hash</code>。<span class="m">S3</span></li>
+    </ul>
+
+    <h4>用户列的四类场景（e2e 必测）</h4>
+    <ul class="check">
+      <li><strong>选中 A → 触发 A</strong>：单目标菜单，载荷 == A 的展开闭包，文案含正确 <code>countText</code>。</li>
+      <li><strong>选中 A → 触发 B</strong>：按 C5 拍板口径，界面明示作用对象；载荷与界面文案一致（不许「说 B 动 A」）。</li>
+      <li><strong>无选中 → 触发 C</strong>：右键与键盘两条路径都以 C 为目标，载荷 == C 的展开闭包。</li>
+      <li><strong>选中 A → 触发全部</strong>：键盘动作 / 批量按钮的载荷 == 选中集合闭包，且组不重复展开（M4 去重）。</li>
+      <li>补充：半选（组选择派生命中）时右键该行 → 仍视为「在选中集合里」，不退回单目标菜单。</li>
+      <li>补充：三视图（种子 / 辅种 / 追剧）下同场景结论一致；跨视图切换后选中集合的展开仍正确。</li>
+    </ul>
+
+    <h4>三张网自身的有效性（红验）</h4>
+    <ul class="check">
+      <li>G1：手工加一个绕开出口的直投递 → 守阵红。</li>
+      <li>G3/G4：手工删掉单组菜单一个动作项 → 守阵红。</li>
+      <li>审计环：手工构造一次 descriptor 与载荷不一致 → 环里出现记录。</li>
+      <li>矩阵自增长：在登记表加一条 <code>entry</code> → 无需写新用例即被覆盖（或明确报「未覆盖」）。</li>
+    </ul>
+
+    <h4>不回归</h4>
+    <ul class="check">
+      <li><code>test.full</code> 全绿，实测数字写进 <code>testing/baselines/</code> 新切片（本文件只引用不抄）。</li>
+      <li><code>dev.e2e</code> 全量在 S3 前后逐位一致。<span class="m">行为不变式</span></li>
+      <li>三皮肤（atlas / console / prism）菜单、选中视觉、面板行为零变化。</li>
+      <li>高危动作（批量删除 / 整组跳检 / 重新校验）的确认框文案与取消零副作用语义不变。</li>
+    </ul>
+  </section>
+
+  <!-- ==================== 08 ==================== -->
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>风险与开放问题</h2></div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:56px"></th><th style="width:280px">风险 / 问题</th><th>处置建议</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="m">R1</td>
+            <td>出口收敛要碰 <code>_kbEditAct</code>/<code>_kbTorrentCmd</code> 借道 <code>menu.hash</code> 的写法（M3）。这是<strong>本轮唯一的必要行为改动</strong>。</td>
+            <td>必须一并拆掉，否则收敛不彻底、M3 会从新接口旁边长回来。拆法是显式传 descriptor，不改用户可见行为。</td>
+          </tr>
+          <tr>
+            <td class="m">R2</td>
+            <td>C5 的口径选择会让「选中 A 右键 B」从「静默批量化」变成「要么明示、要么仅 B」。</td>
+            <td>待拍板项 ①；建议口径甲（补一行说明），不动已拍板的 CTX-03 语义。</td>
+          </tr>
+          <tr>
+            <td class="m">R3</td>
+            <td>审计开关若误开在生产会污染用户 console。</td>
+            <td>默认关 + 仅 e2e 注入；若将来要暴露给用户，走状态栏通知面板而非浮层（坑档 <code>floating-hint-vs-notice-panel</code>）。</td>
+          </tr>
+          <tr>
+            <td class="m">R4</td>
+            <td>e2e 矩阵维度组合增长（3 视图 × 6 选中态 × 约 10 触发点）。</td>
+            <td>沿用既有门禁口径：核心组合进 <code>@fast</code>（每次改前端跑），全量组合进全量轮，避免时长失控。</td>
+          </tr>
+          <tr>
+            <td class="m">R5</td>
+            <td><code>add_torrent</code> 与只读端点在模型外，若守阵白名单写宽会变成「什么都豁免」。</td>
+            <td>白名单逐条写死函数名 + 端点对，不写通配；每条附一句「为什么不在作用域模型内」。</td>
+          </tr>
+          <tr>
+            <td class="m">R6</td>
+            <td>S3 是大手术（8 个文件），有引入回归的现实风险。</td>
+            <td>S3 单独一轮 + 先留改前 <code>e2e</code> 全量结果 + 逐位对账；不做「顺手修好」的收下。</td>
+          </tr>
+          <tr>
+            <td class="m">Q1</td>
+            <td>descriptor 要不要序列化进 URL / 日志（排障时能看出「这次动的是谁」）？</td>
+            <td>暂不做。审计环已能在 e2e 里读；真机排障确有需求时再加，避免过早设计。</td>
+          </tr>
+          <tr>
+            <td class="m">Q2</td>
+            <td>「选中集合」是否需要一个上限或二次确认（一次误触动 500 个种子）？</td>
+            <td>不属本轮范围。现有确认框（删除 / 跳检 / 重新校验）已覆盖高危档，<strong>另行入池</strong>由用户决定。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note" style="margin-top:20px">
+      <b>拍板(R2, 采纳推荐)</b>：① C5 取<strong>口径甲</strong>(保持「选中 N 项右键 = 对全部生效」，但菜单上明示作用范围)；② <strong>S1+S2 先行</strong> —— 已落地；③ <strong>S3 单独一轮</strong>(先留改前 e2e 全量结果逐位对账)；④ <strong>S6 延后</strong>(有独立价值，待 S3 后评估)；⑤ 审计开关沿用 <code>window.__AQB_AUDIT_SCOPE__</code>(纯前端、默认关)，<strong>不同步进 <code>/api/webui/flags</code></strong> —— 它不是用户可见特性，进 flags 会把排障设施变成配置面。
+    </div>
+    <div class="note">
+      <b>实施期修正(与初版的偏差)</b>：<br>
+      ① <strong>登记表位置维持 <code>shared/triggers.js</code></strong>，但落成「mixin 片段 + <code>triggerDefs()</code>」而非裸数据 —— 现有守阵要求 <code>shared/</code> 下每个片段都被清单引用且定义了 <code>window.X</code> 的必须被注入；三份 <code>index.html</code> 清单同步加一行，prism 的 shell 已在 210 行硬顶因而顺手去掉一处多余空行。<br>
+      ② <strong>T1 判据从「端点字符串」改判 <code>method: "POST"</code></strong> —— reannounce 的计划投递端点来自变量(<code>reannouncePlan</code>)，只认字面量会留盲区；改判动词后覆盖面从 11 处扩到 <strong>30 处</strong>，并把 <code>scope: "none"</code> 的全局资源类操作也纳入表内(豁免也要写理由，白名单不复存在)。<br>
+      ③ <strong>G4「项集奇偶」改为「动作族奇偶」</strong> —— 四支的项集本就允许按形态不同(整集支没有限速/移动)，逐项比对会恒红；归成动作族后四支必须各有基线四族、multi/member/group 必须各有扩展六族，正好覆盖 2026-10-09「单组右键菜单缺选项」那类回归。<br>
+      ④ <strong>上游 <code>727b72e2</code> 已落一笔同域改动</strong>(非活跃种子禁强制汇报)：其 <code>_guardReannounce</code>(允不允许) 与 <code>reannouncePlan</code>(发给谁) 的分工正是 C4「出口自检」的先例，且它实证了「详情面板不经 <code>_actCore</code>」这条旁路(机制 3 的活例)，已登记为 <code>panel.cmd</code> / <code>drawer.js::torrentCmd</code> 并在口径文档 §6 引用。
+    </div>
+  </section>
+
+  <!-- ==================== 09 ==================== -->
+  <section id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>变更记录</h2></div>
+    <div class="changelog">
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-10-2100 · R2(S1+S2 落地, 零行为改动)</div>
+        <p>用户「先同步远端(代码有改动)、然后按推荐实施」后开工: 先 <code>my-commit-flow.sync</code> 快进 905447df→727b72e2(上游落了一笔同域改动「非活跃种子禁止强制汇报」, 机制 3 的活例, 已回收进口径文档 §6 与 §8 实施期修正)。随后按 §8 的推荐落地 <strong>S1+S2</strong>: 新增口径文档 <code>conventions/webui-scope.md</code>(三态作用域 + C1–C5 + 四条偏差机制 + 登记表位置)、登记表 <code>shared/triggers.js</code>(<code>ui</code> 36 行 / <code>calls</code> 30 行)、静态守阵 <code>tests/test_webui_trigger_registry.py</code>(T1 投递点双向相等 / T2 出口外不得展开选中集合 / T3 菜单变体对账 / T4 四支动作族奇偶 / T5 登记不存在的入口 / 形状)。接线: 三份 shell 清单各加一行 + <code>app.js</code> 补 <code>app.mixin</code>; prism shell 已在 210 行硬顶, 顺手去掉一处多余空行腾位。四条红验一次通过并还原。实测: <code>test.quick</code> 3064 passed / 4 skipped。选型偏离与理由见 §8「实施期修正」; 状态 Open → In Progress, S3 按建议留单独一轮。</p>
+      </div>
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-10-2001 · R1(初版)</div>
+        <p>用户动议:WEBUI 加强「选中与触发不一致」的测试 / 守阵 / 运行时检查,举例「选中 A 触发 B / 无选中触发 C / 选中 A 触发全部」,并要求「可以重构底层使其更易被检查,后续添加的功能可以自动停靠,而不是添加新的检查」;明确本轮<strong>不修 BUG</strong>、先出计划。初版据此取证现状(7 个目标解析点 + 7 个动作出口 + 1 个平行变体判定,行号取 2026-10-10 工作树),提出三态作用域(C5 待拍板)、descriptor 单点、出口收敛、声明式登记表与三张网,并按 S1–S6 分期,前两步零行为改动。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="colophon">
+    <span>plan · webui-selection-trigger-parity · 26-10-10-2001 / R2 2100(S1+S2 落地)</span>
+    <span>dark theme · 单文件自包含 · 双击即开</span>
+  </div>
+
+</div>
+</body>
+</html>
