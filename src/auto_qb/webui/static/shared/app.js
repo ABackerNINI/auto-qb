@@ -93,7 +93,8 @@ const DETAIL_COLUMNS = [
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应); 表头名称与种子页对齐
   { key: "eta", label: "剩余时间", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
-  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 单种子(成员)视角: 与分组表"总上传"(组内求和)区分 —— 成员是单颗种子, 表头用 qB 的"已上传"
+  { key: "uploaded", label: "已上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 已下载: 各站点切换下载时的真实网络消耗(组级"已下载"求和的分站点拆分)
   { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -128,7 +129,7 @@ const DETAIL_COLUMNS = [
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
- * 站点/做种/用户/下载/上传/剩余时间/分享率/总上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
+ * 站点/做种/用户/下载/上传/剩余时间/分享率/已上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
  * (已下载/剩余量/可用性/做种时长/活跃时间/最近活动/完成于/限速/Hash v1/tracker/保存路径/Hash)
  * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
  * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
@@ -146,7 +147,8 @@ const TORRENT_COLUMNS = [
   { key: "eta", label: "剩余时间", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
   // 2026-09-26 用户要求: 与明细表同口径(见 DETAIL_COLUMNS 的 ratio 注释) —— 分享率左对齐
   { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "left" },
-  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  // 单种子视角(用户 2026-10-10): 表头「已上传」(与「已下载」对称), 不再叫"总上传" —— 分组表仍叫"总上传"(组内求和)
+  { key: "uploaded", label: "已上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   // 与分组表/明细表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
@@ -178,7 +180,8 @@ const SHOW_COLUMNS = [
   { key: "sites", label: "站点", tpl: "minmax(150px, 1.4fr)", align: "left" },
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
-  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  // 追剧集行: 表头与种子页/明细表单种子口径对齐(用户 2026-10-10) —— 不再叫"总上传"
+  { key: "uploaded", label: "已上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true, align: "center" },
   // 最近动静: 与分组表"最近活动"同族(时间列), 一律左对齐
   { key: "latest", label: "最近动静", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
