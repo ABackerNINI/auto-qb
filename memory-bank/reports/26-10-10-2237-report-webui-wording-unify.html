@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-wording-unify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-10-2237">
+<meta name="doc-updated" content="26-10-10-2237">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-webui-wording-unify.md">
+<title>WEBUI 全量文案对齐 qB · 排查报告 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --paper: #141920;
+    --ink: #d9e0e7;
+    --ink-dim: #97a3ad;
+    --ink-faint: #5f6b76;
+    --line: rgba(255, 255, 255, .08);
+    --line-soft: rgba(255, 255, 255, .05);
+    --accent: #5fb0c0;
+    --accent-ink: #0c1116;
+    --warn: #d8a657;
+    --mono: "Cascadia Mono", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 15px/1.6 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1280px; margin: 0 auto; padding: 0 40px 96px; }
+
+  .masthead { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .kicker { font-size: 12px; letter-spacing: .14em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  h1 { font-size: 34px; line-height: 1.2; font-weight: 600; letter-spacing: -.01em; max-width: 32em; }
+  .lede { margin-top: 18px; max-width: 52em; color: var(--ink-dim); font-size: 16px; line-height: 1.75; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 40px; margin-top: 28px; }
+  .meta-row div { font-size: 12.5px; color: var(--ink-faint); max-width: 30em; }
+  .meta-row b { display: block; font-weight: 500; color: var(--ink-dim); font-size: 12px; letter-spacing: .06em; margin-bottom: 2px; }
+  .meta-row code { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+
+  .grid { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 56px; padding-top: 44px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; }
+  nav.toc .t { font-size: 11px; letter-spacing: .12em; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; padding: 5px 0; color: var(--ink-dim); text-decoration: none; font-size: 13.5px; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc a i { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 10px; }
+
+  main section { margin-bottom: 72px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  .sec-head .no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.005em; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 30px 0 12px; }
+  h3 .dim { font-weight: 400; font-size: 12.5px; color: var(--ink-faint); }
+  p { max-width: 78ch; color: var(--ink); }
+  p + p { margin-top: 12px; }
+  p.dim, li.dim { color: var(--ink-dim); }
+  code { font-family: var(--mono); font-size: .86em; background: var(--paper); border: 1px solid var(--line-soft); padding: 1px 5px; border-radius: 2px; }
+
+  .tag { display: inline-block; font-size: 11px; line-height: 1; padding: 4px 8px 3px; border-radius: 2px; letter-spacing: .08em; white-space: nowrap; }
+  .tag.chg { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .tag.kd { border: 1px solid var(--line); color: var(--ink-dim); }
+  .tag.warn { border: 1px solid var(--warn); color: var(--warn); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 8px; }
+  th { text-align: left; font-size: 11px; font-weight: 500; letter-spacing: .1em; color: var(--ink-faint); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { font-size: 12.5px; line-height: 1.55; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; color: var(--ink); }
+  td.num { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; width: 30px; }
+  td.loc { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); }
+  td.qb { color: var(--ink); }
+  td.qb b { color: var(--accent); font-weight: 600; }
+  td.our { color: var(--ink); }
+  td.our em { font-style: normal; color: var(--accent); }
+  td.why { color: var(--ink-dim); min-width: 170px; }
+  td.why em { font-style: normal; color: var(--ink); }
+
+  .tally { display: flex; gap: 52px; padding: 20px 0 4px; flex-wrap: wrap; }
+  .tally .cell { border-left: 1px solid var(--line); padding-left: 16px; }
+  .tally .cell b { display: block; font-size: 32px; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; }
+  .tally .cell.rm b { color: var(--accent); }
+  .tally .cell span { font-size: 12px; color: var(--ink-faint); letter-spacing: .06em; }
+
+  .note { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 2px; margin: 18px 0; }
+  .note p { font-size: 13.5px; color: var(--ink-dim); max-width: none; }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  ul.plain { list-style: none; }
+  ul.plain li { padding: 7px 0 7px 20px; position: relative; color: var(--ink); font-size: 14px; max-width: 82ch; }
+  ul.plain li::before { content: ""; position: absolute; left: 2px; top: 16px; width: 8px; border-top: 1px solid var(--ink-faint); }
+  ul.plain li span { color: var(--ink-dim); }
+
+  footer.colophon { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px; }
+  footer.colophon p { font-size: 12px; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <header class="masthead">
+    <div class="kicker">Audit Report · WebUI · qB terminology alignment</div>
+    <h1>WEBUI 全量文案对齐 qB · 排查报告</h1>
+    <p class="lede">用户主诉:不只是「上传/下载 → 上行/下行」那几处 —— <b>凡是 qB 有既定叫法的概念, 我们的 WEBUI 都应与 qB 一致; qB 没有的, 向 qB 的用词习惯靠拢, 不新造词</b>(例: 我们叫「做种」, qB 的对应概念叫「种子 / 做种数」)。本报告拿本机 qBittorrent 源码里的官方简体中文译文当基准, 逐概念域清点我方 <code>shared/</code> 全部面向用户的中文文案, 给出「改 / 保持 / 待拍板」判定, 供拍板后一次性实施。</p>
+    <div class="meta-row">
+      <div><b>基线</b><code>develop @ e4282642</code></div>
+      <div><b>我方范围</b><code>src/auto_qb/webui/static/</code>(shared 层, 三皮肤共享)</div>
+      <div><b>基准</b>qB 官方 zh_CN 译文 · <b>WebUI</b> 版为主 + <b>GUI</b> 版交叉参考(两份在个别词上不同)</div>
+      <div><b>方法</b>grep 全量枚举我方文案 × qB 译文逐条对照</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <nav class="toc">
+      <div class="t">目 录</div>
+      <a href="#s1"><i>01</i>结论</a>
+      <a href="#s2"><i>02</i>qB 基准的取法</a>
+      <a href="#s3"><i>03</i>列头 / 字段名</a>
+      <a href="#s4"><i>04</i>种子状态词</a>
+      <a href="#s5"><i>05</i>动作菜单 / 按钮</a>
+      <a href="#s6"><i>06</i>传输方向词</a>
+      <a href="#s7"><i>07</i>对端连接状态词</a>
+      <a href="#s8"><i>08</i>保持不动 / 我方自有概念</a>
+      <a href="#s9"><i>09</i>影响面与边界</a>
+      <a href="#s10"><i>10</i>建议口径与决策点</a>
+    </nav>
+
+    <main>
+
+      <!-- ==================== 01 结论 ==================== -->
+      <section id="s1">
+        <div class="sec-head"><span class="no">01</span><h2>结论</h2></div>
+        <hr class="sec-rule">
+        <div class="tally">
+          <div class="cell"><b>6</b><span>概念域</span></div>
+          <div class="cell rm"><b>~32</b><span>需改术语(不含方向词)</span></div>
+          <div class="cell rm"><b>~50</b><span>方向词字面改点</span></div>
+          <div class="cell"><b>16</b><span>涉及 shipped 文件</span></div>
+        </div>
+        <ul class="plain">
+          <li><b>qB 有既定译词、我们没有对齐的</b><span> —— 最典型就是你点名的 <b>Seeds</b>:qB <b>WebUI 译「种子」</b>、<b>GUI 译「做种数」</b>, 而我们四处列头写成「做种」。同类还有:浪费(qB「已丢弃」)、见到完整副本(qB「最后完整可见」)、剩余量(qB「剩余」)、获取元数据(qB「下载元数据」)、文件缺失(qB「丢失文件」)、强制汇报(qB「强制重新汇报」)、重新校验(qB「强制重新校验」)、移动(qB「更改保存位置」)、首末块优先(qB「先下载首尾文件块」) 等。</span></li>
+          <li><b>qB 内部也分两种口径, 必须先选一种作准</b><span> —— 同一个概念, qB 的 <b>WebUI</b> 与 <b>桌面 GUI</b> 译文偶尔不同(Seeds、Completed、All-time share ratio、Session waste、Connected peers、剩余空间、Trackerless …)。我们是一个 WEBUI, 理应以 <b>qB WebUI</b> 为准; 但你举例用的是 GUI 的「做种数」。这是本报告第一个要拍板的口径(§10 D-Base)。</span></li>
+          <li><b>状态词的系统性偏差:我们爱加「中」</b><span> —— qB 状态是「下载 / 做种 / 校验 / 暂停 / 排队 / 等待 / 错误」, 我们大量写成「下载中 / 做种中 / 校验中 / 已暂停 / 等待下载」。且我们<b>自身不统一</b>:同一「错误」态, 抽屉里叫「出错」、列表里叫「错误」;「做种」与「做种中」并存。</span></li>
+          <li><b>动作词的偏差</b><span> —— qB WebUI 用「启动 / 停止」, 我们用「开始 / 暂停」; qB「强制重新汇报」, 我们「强制汇报」。这类改动影响菜单与 toast, 需一并核守阵。</span></li>
+        </ul>
+        <div class="note">
+          <p><b>一句话:</b>方向词(上行/下行 → 上传/下载)是"字面替换"问题;<b>术语对齐</b>才是这轮的大头 —— 列头(做种/浪费/剩余量/见到完整副本…)、状态词(去「中」)、动作词(启动/停止、强制重新汇报…)、对端状态词(取流/供流)四族, 每一族都要先定"以 qB WebUI 还是 GUI 为准", 再逐条替换。</p>
+        </div>
+      </section>
+
+      <!-- ==================== 02 基准 ==================== -->
+      <section id="s2">
+        <div class="sec-head"><span class="no">02</span><h2>qB 基准的取法</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">基准直接取自本机 qBittorrent 源码的官方简体中文译文(Qt <code>.ts</code> 格式), <b>不靠回忆、不重拉</b>:</p>
+        <ul class="plain">
+          <li><code>D:\Projects\Else\qBittorrent\src\webui\www\translations\webui_zh_CN.ts</code> —— <b>主基准</b>(qB 的 WebUI, 与我们的产品形态同构)</li>
+          <li><code>D:\Projects\Else\qBittorrent\src\lang\qbittorrent_zh_CN.ts</code> —— <b>交叉参考</b>(qB 桌面 GUI; 用词偶有不同)</li>
+        </ul>
+        <h3>两版差异清单(qB 自身不一致 · 需选边)</h3>
+        <table>
+          <thead><tr><th>概念</th><th>qB WebUI</th><th>qB GUI</th><th>备注</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Seeds(及面板 `Seeds:`)</td><td class="qb"><b>种子</b></td><td class="qb"><b>做种数</b></td><td class="why"><em>用户点名的差异</em>; GUI 另在「做种数：」出现多次</td></tr>
+            <tr><td class="loc">Completed</td><td class="qb">完成</td><td class="qb">已完成</td><td class="why">状态/筛选用词</td></tr>
+            <tr><td class="loc">All-time share ratio:</td><td class="qb">历史分享率：</td><td class="qb">全局分享率：</td><td class="why">统计面板</td></tr>
+            <tr><td class="loc">Session waste:</td><td class="qb">本次对话丢弃：</td><td class="qb">本次会话丢弃数据：</td><td class="why">统计面板</td></tr>
+            <tr><td class="loc">Connected peers:</td><td class="qb">连接用户：</td><td class="qb">已连接的用户数：</td><td class="why">统计面板</td></tr>
+            <tr><td class="loc">Free space</td><td class="qb">剩余磁盘空间</td><td class="qb">可用空间</td><td class="why">状态栏</td></tr>
+            <tr><td class="loc">Trackerless</td><td class="qb">没有 Tracker</td><td class="qb">缺少 Tracker</td><td class="why">tracker 文案</td></tr>
+            <tr><td class="loc">Stalled(状态正文 vs 计数)</td><td class="qb">等待(正文) / 暂停(计数)</td><td class="qb">暂停(计数)</td><td class="why">qB WebUI 自身冲突, 我们不必跟它的自相矛盾</td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <p><b>还有一层:</b>有些列名 <b>qB 两版都没收录</b>(<code>Down Speed / Up Speed / Address / Client / Relevance / Peer / Amount Left / Last Activity / Allocating / Copy name|hash|magnet</code> 等) —— 这些"qB 无对应词"的, 按用户要求<b>向 qB 的语言习惯靠拢</b>(用方向词、用"已X"式前缀), 不新造名词。另注 qB 的 <b>Peers 列译「用户」</b>(不是"peer/对等节点"), 这是 qB 的固定习惯。</p>
+        </div>
+      </section>
+
+      <!-- ==================== 03 列头/字段名 ==================== -->
+      <section id="s3">
+        <div class="sec-head"><span class="no">03</span><h2>列头 / 字段名对照</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">我方位置集中在 <code>shared/app.js</code> 四个列模型(GROUP/DETAIL/TORRENT/SHOW)与 <code>shared/drawer.js</code> 详情行。判定「改」= 与 qB 基准冲突。</p>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB WebUI</th><th>qB GUI</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Name / Size / Total Size</td><td class="qb">名称 / 大小 / 总大小</td><td class="qb">同</td><td class="our">名称 / 大小 / 总大小</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Progress / Status</td><td class="qb">进度 / 状态</td><td class="qb">同</td><td class="our">进度 / 状态</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Seeds</td><td class="qb"><b>种子</b></td><td class="qb"><b>做种数</b></td><td class="our"><em>做种</em>(app.js:87/142)、<em>做种(总)</em>(:90)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Peers</td><td class="qb">用户</td><td class="qb">用户</td><td class="our">用户(:88/143)、用户(总)(:91)</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">DL / UP Speed</td><td class="qb">下载速度 / 上传速度</td><td class="qb">同</td><td class="our">下载 / 上传(列头简写)</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">ETA</td><td class="qb">剩余时间</td><td class="qb">同</td><td class="our">剩余时间</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Ratio</td><td class="qb">比率(列) / 分享率：(面板)</td><td class="qb">比率 / 分享率</td><td class="our">分享率</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Availability</td><td class="qb">可用性</td><td class="qb">同</td><td class="our">可用性</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Added On / Completed On</td><td class="qb">添加于 / 完成于</td><td class="qb">同</td><td class="our">添加于 / 完成于</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Last Seen Complete</td><td class="qb"><b>最后完整可见</b></td><td class="qb">最后完整可见</td><td class="our"><em>见到完整副本</em>(app.js:116, drawer.js:1307)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Downloaded / Uploaded</td><td class="qb">已下载 / 已上传</td><td class="qb">同</td><td class="our">已下载 / 已上传</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Amount Left(Remaining)</td><td class="qb"><b>剩余</b></td><td class="qb">剩余</td><td class="our"><em>剩余量</em>(app.js:74/158, drawer.js:1261)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Wasted</td><td class="qb"><b>已丢弃</b></td><td class="qb">已丢弃</td><td class="our"><em>浪费</em>(drawer.js:1286)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Seeding time</td><td class="qb">—</td><td class="qb"><b>做种时间</b></td><td class="our"><em>做种时长</em>(app.js:76/108/160)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Active Time</td><td class="qb">活跃时间</td><td class="qb">同</td><td class="our">活跃时间</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Save Path / Category / Tags</td><td class="qb">保存路径 / 分类 / 标签</td><td class="qb">同</td><td class="our">保存路径 / 分类 / 标签</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Tracker / Priority</td><td class="qb">Tracker / 优先级</td><td class="qb">同</td><td class="our">Tracker / 优先级</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Download / Upload Limit</td><td class="qb"><b>下载限制 / 上传限制</b></td><td class="qb">同</td><td class="our">限速上行/限速下行(列)、上行限速/下行限速(详情)、上传上限/下载上限(对话框)、上行 KiB/s</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Info hash v1</td><td class="qb"><b>信息哈希值 v1</b></td><td class="qb">信息哈希值 v1</td><td class="our"><em>Hash v1 / Hash</em>(app.js:127/166/169)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Session Downloaded / Uploaded</td><td class="qb"><b>会话已下载 / 会话已上传</b></td><td class="qb">—</td><td class="our"><em>本次会话下载 / 本次会话上传</em>(drawer.js:1284-1285)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Connections</td><td class="qb">连接</td><td class="qb">连接</td><td class="our">连接数(drawer.js:1291)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Last Activity</td><td class="qb">—(未收录)</td><td class="qb">—</td><td class="our">最近活动 / 最近动静</td><td><span class="tag kd">保持</span></td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <p><b>注:</b>qB 的 <code>Ratio</code> 列头译「比率」、统计面板却译「分享率：」—— qB 自身两处不一致; 我们统一用<b>「分享率」</b>(更贴近面板口径, 也是国内通行叫法), 判"保持"。另我们比 qB 多出的<b>自有概念列</b>(站点 / H&amp;R / 站数 / 版本 / 剧名·集 / 剩余量外的聚合列)不属"不符", 见 §08。</p>
+        </div>
+      </section>
+
+      <!-- ==================== 04 状态词 ==================== -->
+      <section id="s4">
+        <div class="sec-head"><span class="no">04</span><h2>种子状态词对照</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">我方状态词有<b>三处来源</b>, 彼此不统一:抽屉 <code>03-general-dossier</code>/<code>01-general-hero</code> 的 <code>STATE_TEXT</code>、列表 <code>decorate.js</code> 的 <code>kindText</code>、状态栏 <code>app.js</code> 的状态分布。qB 状态词(WebUI)一律不加「中」而不含「已」。</p>
+        <table>
+          <thead><tr><th>qB state</th><th>qB WebUI</th><th>我方现文案(位置)</th><th>判定</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Downloading</td><td class="qb"><b>下载</b></td><td class="our"><em>下载中</em>(01:27, 03:29)</td><td><span class="tag chg">改</span></td><td class="why">去「中」</td></tr>
+            <tr><td class="loc">Seeding</td><td class="qb"><b>做种</b></td><td class="our">做种(decorate:140) / <em>做种中</em>(01:26, 03:28)</td><td><span class="tag chg">改</span></td><td class="why">自身两写法并存, 统一「做种」</td></tr>
+            <tr><td class="loc">Checking</td><td class="qb"><b>校验</b> / 正在检查(计数)</td><td class="our">校验中(decorate:140, 01:32, 03:32)</td><td><span class="tag chg">改</span></td><td class="why">去「中」</td></tr>
+            <tr><td class="loc">Paused</td><td class="qb"><b>暂停</b></td><td class="our"><em>已暂停</em>(decorate:140, 03:30)</td><td><span class="tag chg">改</span></td><td class="why">去「已」</td></tr>
+            <tr><td class="loc">Stalled</td><td class="qb"><b>等待</b></td><td class="our"><em>等待下载</em>(01:27, 03:29)</td><td><span class="tag chg">改</span></td><td class="why">qB 只「等待」; 若要区分 DL/UP 再议</td></tr>
+            <tr><td class="loc">Queued</td><td class="qb"><b>排队</b></td><td class="our"><em>排队(做种)/排队(下载)</em>(03:31)</td><td><span class="tag warn">待拍板</span></td><td class="why">括号补充是我们加的区分, qB 无; 保留可读性 vs 严格贴 qB</td></tr>
+            <tr><td class="loc">Errored</td><td class="qb"><b>错误</b></td><td class="our">错误(decorate:140) / <em>出错</em>(03:33)</td><td><span class="tag chg">改</span></td><td class="why">自身不一致, 统一「错误」</td></tr>
+            <tr><td class="loc">Missing Files</td><td class="qb"><b>丢失文件</b></td><td class="our"><em>文件缺失</em>(decorate:69, drawer:15)</td><td><span class="tag chg">改</span></td><td class="why">词序不同</td></tr>
+            <tr><td class="loc">Downloading metadata</td><td class="qb"><b>下载元数据</b></td><td class="our"><em>获取元数据</em>(01:27, 03:29)</td><td><span class="tag chg">改</span></td><td class="why">动词不同</td></tr>
+            <tr><td class="loc">Moving</td><td class="qb">移动中</td><td class="our">移动中</td><td><span class="tag kd">保持</span></td><td class="why">qB 本身带「中」</td></tr>
+            <tr><td class="loc">Stopped</td><td class="qb">已停止</td><td class="our">—(需核)</td><td><span class="tag kd">保持</span></td><td class="why">我方是否使用该态待核</td></tr>
+            <tr><td class="loc">Completed</td><td class="qb">完成</td><td class="our">已完成(drawer.js:13「已完成」)</td><td><span class="tag warn">待拍板</span></td><td class="why">GUI 作「已完成」; WebUI 作「完成」</td></tr>
+            <tr><td class="loc">(强制系)forcedDL/UP</td><td class="qb">—</td><td class="our">强制下载 / 强制做种(01:26-27)</td><td><span class="tag kd">保持</span></td><td class="why">qB 无独立译词, 我方沿"强制+动作"习惯, 合理</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ==================== 05 动作菜单 ==================== -->
+      <section id="s5">
+        <div class="sec-head"><span class="no">05</span><h2>动作菜单 / 按钮对照</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">我方位置:<code>shared/tpl/ctx-menus.html</code>(右键/表头/文件优先级菜单)、<code>shared/commands.js</code>(动作名 <code>ACTION_TEXT</code>)、<code>shared/drawer.js</code>(详情动作)、对话框标题。</p>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB WebUI</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Start / Stop</td><td class="qb"><b>启动 / 停止</b></td><td class="our"><em>开始 / 暂停</em>(ctx-menus:15,18; commands.js:23)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Force reannounce</td><td class="qb"><b>强制重新汇报</b></td><td class="our"><em>强制汇报</em>(ctx-menus:31/73/94/194)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Force recheck</td><td class="qb"><b>强制重新校验</b></td><td class="our"><em>重新校验</em>(ctx-menus:35/116/205)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Set location</td><td class="qb"><b>更改保存位置</b></td><td class="our"><em>移动…</em>(ctx-menus:48/106/214)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Queue top/up/down/bottom</td><td class="qb">队列顶部 / 向上移动队列 / 向下移动队列 / 队列底部</td><td class="our">队列置顶 / 队列上移 / 队列下移 / 队列置底</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Force start</td><td class="qb">强制启动</td><td class="our">强制开始 / 取消强制开始(ctx-menus:158-159)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Super seeding</td><td class="qb">超级做种(模式)</td><td class="our">超级做种 / 开启超级做种(ctx-menus:156)</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Download in sequential order</td><td class="qb"><b>按顺序下载</b></td><td class="our"><em>顺序下载</em>(drawer.js:1326)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">First and last pieces first</td><td class="qb"><b>先下载首尾文件块</b></td><td class="our"><em>首末块优先</em>(drawer.js:1327)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Rename / Delete / Copy name·hash·magnet</td><td class="qb">重命名 / 删除 / 复制…</td><td class="our">重命名… / 删除… / 复制名称·哈希·magnet</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Open destination folder</td><td class="qb">打开目标文件夹</td><td class="our">打开目标文件夹</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">File priority: Skip / Normal / High / Maximum</td><td class="qb">跳过 / 普通 / 高 / 最高(待核)</td><td class="our">跳过 / 普通 / 高 / 最高(ctx-menus:280-290)</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Skip hash check</td><td class="qb">跳过哈希校验</td><td class="our">跳检…(ctx-menus:40/122/208)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">Limit(速度限制)</td><td class="qb">速度限制 / 限制上传速率</td><td class="our">限速…(ctx-menus:45/103/211)</td><td><span class="tag warn">待拍板</span></td></tr>
+            <tr><td class="loc">(无 qB 对应)</td><td class="qb">—</td><td class="our">详细信息 / 导出 .torrent / 标签·分类… / 分享率限制…</td><td><span class="tag kd">保持</span></td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <p><b>提醒:</b>「开始/暂停」是全网最通用的说法, qB WebUI 却用「启动/停止」。这一族建议<b>不盲从</b> —— 归入 §10 决策点 D-C(是否连动作词也严格贴 qB)。而「强制汇报→强制重新汇报」「重新校验→强制重新校验」是<b>低风险直改</b>(只影响文案, 语义不变)。</p>
+        </div>
+      </section>
+
+      <!-- ==================== 06 方向词 ==================== -->
+      <section id="s6">
+        <div class="sec-head"><span class="no">06</span><h2>传输方向词(上行/下行 → 上传/下载)</h2></div>
+        <hr class="sec-rule">
+        <p>与首版报告同一范围, 此处只留结论; 逐条清点见该节明细。qB 传输方向一律用「上传 / 下载」(速度「下载速度 / 上传速度」、限速「限制上传速率 / 限制下载速率」), <b>全库无「上行 / 下行」</b>。</p>
+        <table>
+          <thead><tr><th>现文案(改前)</th><th>建议(改后)</th><th>典型位置</th></tr></thead>
+          <tbody>
+            <tr><td class="our"><em>上行 / 下行</em></td><td><b>上传 / 下载</b></td><td class="loc">流量图 KPI/图例(qb_traffic_chart.js:867/873; tpl/drawer.html:151-173)、details 01/02/03、peers 列头、TM/历史图</td></tr>
+            <tr><td class="our"><em>限速上行 / 限速下行 · 上行限速 · 上行 KiB/s</em></td><td><b>上传限速 / 下载限速</b>(与 qB「上传限制/下载限制」同族, 也与本仓 config_hub 已有口径一致)</td><td class="loc">app.js:102-103/164-165; tpl/dialogs.html:96-118; 02/03 详情</td></tr>
+            <tr><td class="our"><em>上下行占比</em></td><td><b>上传 / 下载 占比</b></td><td class="loc">14-traffic-annotated-split-low.js:147</td></tr>
+          </tbody>
+        </table>
+        <p class="dim">约 50 处字面改点, 全部在 <code>shared/</code>(三皮肤共享); 两张流量图的用词冲突(TM 历史图 <code>dialogs.js:756</code> 已用「上传/下载」, qB 流量图却用「上行/下行」)在统一后自然消解。</p>
+      </section>
+
+      <!-- ==================== 07 对端状态词 ==================== -->
+      <section id="s7">
+        <div class="sec-head"><span class="no">07</span><h2>对端连接状态词(取流/供流族)</h2></div>
+        <hr class="sec-rule">
+        <p>本专题最乱的一处:同一语义(某条 peer 连接此刻的方向)在 07/08/09 三个变体里出现 <b>6 种叫法</b>, 且视角不统一(我方 vs 对端)。qB 无对应概念(只有 U/D 标志位), 故按"向 qB 靠拢"落到方向词。</p>
+        <table>
+          <thead><tr><th>方向 key(语义)</th><th>07 叫法</th><th>08 叫法</th><th>09 叫法</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">up/take —— 我方正向对端<b>上传</b></td><td class="our">取流中(对端视角)</td><td class="our">正在从我这下载(对端视角)</td><td class="our">上行中(我方视角)</td></tr>
+            <tr><td class="loc">down/feed —— 我方正从对端<b>下载</b></td><td class="our">供流中(对端视角)</td><td class="our">正在给我上传(对端视角)</td><td class="our">下行中(我方视角)</td></tr>
+          </tbody>
+        </table>
+        <p class="dim">07 变体内部也自相矛盾:构成图例用「取流中/供流中」(:29-30), 同面板筛选 chips 却用「上行中/下行中」(:53-54)。建议统一为<b>「上传中 / 下载中」</b>(我方视角), 但需解「下载中」与种子状态同名问题(§10 D-State)。另 08 行内「正在取」(:291)指 qB <code>files</code> 字段, <b>另义, 不动</b>。</p>
+      </section>
+
+      <!-- ==================== 08 保持不动 ==================== -->
+      <section id="s8">
+        <div class="sec-head"><span class="no">08</span><h2>保持不动 / 我方自有概念</h2></div>
+        <hr class="sec-rule">
+        <ul class="plain">
+          <li><b>已对齐 qB 的(保持)</b><span> —— 名称/大小/总大小/进度/状态/用户/下载速度/上传速度/剩余时间/可用性/添加于/完成于/已下载/已上传/保存路径/分类/标签/Tracker/优先级/移动中/超级做种/重命名/删除/复制/打开目标文件夹/分享率(取面板口径) 等。这些是本次的<b>目标基线</b>, 不是改动对象。</span></li>
+          <li><b>我方自有概念(qB 无, 不算不符)</b><span> —— 站点 / H&amp;R / 站数 / 版本 / 剧名·集 / 最近活动 / 最近动静 / 详细信息 / 导出 .torrent / 跳检 / 标签·分类编辑 / 通知面板 / HR 在线核实 / 限速曲线的档位命名 等。它们没有 qB 对应词, 只要求"不新造与 qB 冲突的词"。</span></li>
+          <li><b>不要把状态「做种」改成「上传」</b><span> —— qB 的"上传态"叫<b>做种</b>(Seeding); 方向词的「上传」与状态的「做种」是两件事, 不可互换。</span></li>
+          <li><b>CSS 令牌 / 图表机制不动</b><span> —— 方向色 <code>--today-up/--today-down</code> 的取值、「上行=紫/下行=蓝绿」的注释可顺手对齐, 但配色逻辑与图表结构不变。</span></li>
+        </ul>
+      </section>
+
+      <!-- ==================== 09 影响面 ==================== -->
+      <section id="s9">
+        <div class="sec-head"><span class="no">09</span><h2>影响面与边界</h2></div>
+        <hr class="sec-rule">
+        <ul class="plain">
+          <li><b>改一处, 三皮肤同生效</b><span> —— 命中的都是 <code>shared/</code>(模板 + JS), atlas/prism/console 共用; 三皮肤各自的 CSS/HTML 只有<b>注释</b>提到"上行/下行"。</span></li>
+          <li><b>守阵需同步</b><span> —— <code>tests/test_webui_static_dom_panel.py:401</code> 断言 <code>drawer.html</code> 统计栏含「上行」「下行」; 同文件 <code>:2144-2156</code> 有一批「<b>不得出现</b>」的历史 tooltip 黑名单(如「上下行字节占比」「当前窗口上行峰值」), 改文案时<b>别踩中</b>这些字串。改动作词要核 <code>commands.js</code> 的 <code>ACTION_TEXT</code> 及相关断言。</span></li>
+          <li><b>设计稿(非运行依赖)</b><span> —— <code>resources/detail-panel-templates/*.html</code> 10 文件 133 处「上行/下行/取流/供流」是 drawer_tpl 的母本, 建议随本次同步, 免得持续误导后续照稿实现。</span></li>
+          <li><b>后端 schema help(经设置页渲染)</b><span> —— <code>src/auto_qb/config/schema/groups.py:408/416</code> 的 help 写「上下行流量」, 会显示在设置页配置编辑器里, 一并纳入。</span></li>
+          <li><b>文档</b><span> —— <code>docs/configuration.md:416</code> 用「上下行」(面向人的文档, 不影响 WEBUI)。</span></li>
+          <li><b>无集中文案表</b><span> —— 术语硬编码散落各处, 是"同一概念多种叫法"能长期共存的根因。是否收一个术语常量单点(按 <code>conventions/webui.md</code>「单点口径原则」)属实施期决策。</span></li>
+        </ul>
+      </section>
+
+      <!-- ==================== 10 建议与决策 ==================== -->
+      <section id="s10">
+        <div class="sec-head"><span class="no">10</span><h2>建议口径与决策点</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">下列决策点决定实施范围与目标词, 建议先拍板 D-Base / D-State / D-C 三条, 其余随之可定。</p>
+        <table>
+          <thead><tr><th>#</th><th>问题</th><th>选项</th></tr></thead>
+          <tbody>
+            <tr><td class="num">D-Base</td><td class="our">以 qB <b>WebUI</b> 还是 <b>GUI</b> 译文为准?</td><td>甲 <b>(推荐)</b> 以 qB <b>WebUI</b> 为准(形态同构):Seeds→<b>种子</b>、Completed→完成;<br>乙 以 qB <b>GUI</b> 为准(贴合你举例):Seeds→<b>做种数</b>、Completed→已完成;<br>丙 逐词择优(需逐条定, 成本高)。</td></tr>
+            <tr><td class="num">D-State</td><td class="our">状态词是否去「中 / 已」并统一?</td><td>甲 <b>(推荐)</b> 统一贴 qB:下载/做种/校验/暂停/等待/错误; 同时消弭我方「出错 vs 错误」「做种 vs 做种中」的内部冲突;<br>乙 保留现有「下载中/做种中/校验中」的可读性风格, 仅消内部冲突。</td></tr>
+            <tr><td class="num">D-C</td><td class="our">动作词是否严格贴 qB(启动/停止)?</td><td>甲 <b>(推荐)</b> 只改"零风险且不牺牲可读性"的:强制汇报→<b>强制重新汇报</b>、重新校验→<b>强制重新校验</b>、移动→<b>更改保存位置</b>、首末块优先→<b>先下载首尾文件块</b>;<br>乙 连「开始/暂停→启动/停止」也改(严格, 但牺牲通用性)。</td></tr>
+            <tr><td class="num">D-Dir</td><td class="our">方向词「上行/下行」是否全改「上传/下载」?</td><td>甲 <b>(推荐)</b> 全改; 乙 仅在窄空间(图例)保留「上行/下行」省字。</td></tr>
+            <tr><td class="num">D-Peer</td><td class="our">对端状态词统一成什么?</td><td>甲 <b>(推荐)</b> 「上传中 / 下载中」(我方视角, 贴 qB 方向词);<br>乙 「我上传 / 我下载」(消与种子状态「下载中」的同名);<br>丙 「上传中 / 下载中」+ tooltip 补「(我→对端)/(对端→我)」。</td></tr>
+            <tr><td class="num">D-Sync</td><td class="our">设计稿 / 文档是否同步?</td><td>甲 <b>(推荐)</b> 同步 <code>resources/</code>(10 文件); 乙 只改 shipped。</td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <p><b>下一步(未授权动作, 待确认):</b>① 拍板 D-Base / D-State / D-C / D-Dir / D-Peer / D-Sync → ② 若要做, 出一份实施计划(逐文件改点 + 守阵同步 + 设计稿同步), 落 <code>memory-bank/plans/</code>; 不做则本报告即为终态快照。本报告<b>只做摸底, 未改动任何代码/文案</b>。</p>
+        </div>
+      </section>
+
+      <footer class="colophon">
+        <p>全量排查报告(同文件二次扩写: 由"方向词"扩为"全量术语对齐") · 基线 develop @ e4282642 · 2026-10-10 · 我方范围 src/auto_qb/webui/static/(shared 层) · 基准 = 本机 qBittorrent 官方 zh_CN 译文(src/webui/.../webui_zh_CN.ts 为主 + src/lang/qbittorrent_zh_CN.ts 交叉) · 未改动生产文件</p>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
