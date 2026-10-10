@@ -55,6 +55,47 @@ RC_FAIL_PREFIX = "失败: tracker 未接受汇报(not working): "
 RC_DEFERRED_PREFIX = "已受理: 最小间隔未过期, 推迟至 "
 RC_UNCONFIRMED_PREFIX = "未确认: "
 
+# ---------------------------------------------------------------------------------------
+# 强制汇报"非活跃"状态集(qB 口径, 判据单点): 与前端 `decorate.js::REANNOUNCE_BLOCKED_STATES`
+# **逐项同表**(守阵 test_frontend_reannounce_inactive_gate_wiring 钉住两边 key 集合相等, 防漂移)。
+# 口径来源 = qBittorrent commit aa189a7(关闭 issue #12080): 该 commit 只在 GUI 给
+# `actionForceReannounce->setEnabled(false)`(条件 !isPaused && !isChecking && !isQueued),
+# **HTTP 端点侧没有门** —— 引擎侧的真拦截在 libtorrent(暂停种子 force_tracker_request 直接
+# 空转, 排队种子内部也是 paused 故同样发不出去)。于是后端这一道的职责不是"防误汇报"(引擎
+# 本来就不会汇报), 而是**收敛投递集合并免掉假回执**: 前端已收敛(见 reannouncePlan), 这里
+# 是防"渲染到点击之间状态变了"与其它直连端点的调用方。
+#
+# !必须判 **qB 原始 state 串**, 不能用 state_enum 的谓词: 实测 queuedDL/queuedUP 命中
+#   is_downloading/is_uploading(只有 paused*/stopped* 是 is_stopped、error/missingFiles 是
+#   is_errored), 用谓词会把排队/校验中当活跃放过去 —— 与前端"kind 只 6 档"是同一个坑。
+REANNOUNCE_BLOCKED_STATES = frozenset(
+    {
+        "pausedDL",
+        "pausedUP",
+        "stoppedDL",
+        "stoppedUP",
+        "queuedDL",
+        "queuedUP",
+        "checkingDL",
+        "checkingUP",
+        "checkingResumeData",
+        "error",
+        "missingFiles",
+    }
+)
+# 非活跃目标的回执文案(第二道闸命中时用; 前端正常路径已被 reannouncePlan 收敛, 不会到这里)
+REANNOUNCE_INACTIVE_SKIP = "种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"
+
+
+def reannounce_blocked(rec) -> bool:
+    """种子是否处于"qB 不会真的汇报"的状态(判据单点, 见上方状态表注释)
+
+    rec 为 None(种子不在快照)判 False —— 与前端 `_reannounceVerdict`「解析不出不误拦」同口径,
+    命令照发, 由 qB 的回执定论。
+    """
+    return bool(rec is not None and getattr(rec, "state", None) in REANNOUNCE_BLOCKED_STATES)
+
+
 # **自投递**命令: 由 Web 侧在自己处理过程中 put 回队列(不是用户操作), 投递后**不唤醒**主循环。
 # 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
 # !若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
@@ -383,14 +424,35 @@ class WebCommandsMixin:
             self.api.torrents_resume(torrent_hashes=hashes)
             logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
 
+    def _reannounce_active(self, hashes: List[str]) -> List[str]:
+        """按快照状态过滤出真正可汇报的种子(第二道闸, 判据见 REANNOUNCE_BLOCKED_STATES)
+
+        !取不到记录(hash 不在 store 快照)时**照发** —— 与判定层「解析不出不误拦」同口径。
+        """
+        return [h for h in hashes if not reannounce_blocked(self.store.get(h))]
+
     def _cmd_reannounce_group(self, key: tuple, cmd_id: str = ""):
         hashes = self._group_hashes(key)
         if hashes:
-            self.api.torrents_reannounce(torrent_hashes=hashes)
+            # 投递收敛(qB 口径: 非活跃的发给引擎也是空转, 只会让确认层白等窗口后落假「未确认」)
+            active = self._reannounce_active(hashes)
+            if not active:
+                if cmd_id:
+                    self._set_web_result(
+                        cmd_id,
+                        "warn",
+                        RC_UNCONFIRMED_PREFIX + f"组内 {len(hashes)} 个种子均非活跃, 已跳过",
+                    )
+                logger.info(f"WEB UI | 强制汇报跳过整组({len(hashes)}个种子均非活跃)")
+                return
+            self.api.torrents_reannounce(torrent_hashes=active)
             # 发送仅是"已下发指令"; 成功回执由 tracker 确认跟踪器在后续 tick 写入
-            baseline, epoch_mode = self._trackers_baseline(hashes)
-            self._register_reannounce_pending(cmd_id, hashes, baseline, epoch_mode)
-            logger.info(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
+            baseline, epoch_mode = self._trackers_baseline(active)
+            self._register_reannounce_pending(cmd_id, active, baseline, epoch_mode)
+            logger.info(
+                f"WEB UI | 强制汇报整组({len(active)}/{len(hashes)}个种子活跃, "
+                f"跳过 {len(hashes) - len(active)} 个非活跃), 等待 tracker 确认"
+            )
         elif cmd_id:
             # 组内成员执行时刻已全部不在快照(组快照渲染后成员被删光): 不发指令也不登记跟踪,
             # 必须显式给 error 回执 —— 否则前端 waitCmd 挂到自身超时才弹「超时」; 对齐同文件
@@ -414,10 +476,18 @@ class WebCommandsMixin:
             logger.info(f"WEB UI | 开始种子 {hash[:8]}")
 
     def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
-        if self.store.get(hash) is None:
+        rec = self.store.get(hash)
+        if rec is None:
             # 种子已不存在: 无法汇报, 直接给失败回执(删除流程据此不删除)
             if cmd_id:
                 self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
+            return
+        if reannounce_blocked(rec):
+            # 第二道闸(与 _cmd_reannounce_group 同判据): 前端 reannouncePlan 已收敛投递集合,
+            # 走到这里说明"渲染到点击之间状态变了"或其它调用方直连端点 —— 不发指令, 给显式回执。
+            if cmd_id:
+                self._set_web_result(cmd_id, "warn", RC_UNCONFIRMED_PREFIX + REANNOUNCE_INACTIVE_SKIP)
+            logger.info(f"WEB UI | 强制汇报跳过种子 {hash[:8]}: 非活跃(state={rec.state})")
             return
         self.api.torrents_reannounce(torrent_hashes=[hash])
         baseline, epoch_mode = self._trackers_baseline([hash])
@@ -440,7 +510,12 @@ class WebCommandsMixin:
 
         注册时两个立即结论(不再进轮询):
           (a) store 快照 state_enum.is_stopped -> done+warn「未确认: 种子已停止...」
-              (qB 对停止种子静默 no-op, 免白等窗口);
+              (qB 对停止种子静默 no-op, 免白等窗口)。
+              !投递面已收敛(前端 reannouncePlan + 后端 _reannounce_active 都不再投非活跃目标),
+              故本支从"常规路径"退化成**竞态兜底**: 只有"过滤判活跃 -> 引擎执行前/注册前该种子
+              转为停止"这一瞬态才会命中。保留不删 —— 它是确认层唯一的自洽出口, 删掉等于把
+              竞态推回"白等 600s 后报未确认"。同类兜底还有 runtime.check_pending 的 item 级
+              stopped 直判(那条仍是常规路径: 投递后用户在窗口内手动暂停)。
           (b) epoch 模式且 min_e - t0 > DEFER_EARLY -> done+warn「已受理: 推迟至 HH:MM」(D1
               早回执), 并把该种子登记进 web.reannounce_background(后台达 min_e 后核实, 只落日志;
               S0 实证 min 过期前 updating 是假瞬态, 不能进轮询判定)。

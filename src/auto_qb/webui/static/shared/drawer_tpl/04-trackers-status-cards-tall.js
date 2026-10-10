@@ -114,6 +114,9 @@
     "  padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-dim); cursor:pointer;",
     "  transition:color var(--dur) var(--ease), background var(--dur) var(--ease); }",
     ".drawer .dt04-act:hover { color:var(--fg); background:var(--bg-hover); }",
+    /* 非活跃种子禁汇报: 重报钮置灰不可点(qB 口径 —— 暂停/停止·排队·校验中·错误时 qB 自置灰,
+     * libtorrent 的 force_tracker_request 也不发)。特异性 (0,4,0) 压过 base 的 :hover(0,3,0)。 */
+    ".drawer .dt04-act.is-gated, .drawer .dt04-act.is-gated:hover { color:var(--fg-dim); background:transparent; cursor:not-allowed; }",
     /* 统计行 + msg 块 */
     ".drawer .dt04-stats { display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:9px; padding-top:9px;",
     "  border-top:1px solid var(--hairline); }",
@@ -173,8 +176,11 @@
     const virtual = b === "off" && ctx.drawerTrackerVirtual(t.url);
     const tier = num(t.tier) ? T`<span class="dt04-tier" title="tier: 汇报层级, 数值越小越优先">T${t.tier}</span>` : "";
     const lan = !virtual && LAN_RE.test(String(t.url || "")) ? T`<span class="dt04-tag" title="局域网 tracker, 不经过公网">内网</span>` : "";
+    /* 强制汇报钮: 当前种子非活跃(暂停/停止·排队·校验中·错误)时置灰并给出原因(qB 口径;
+     * 判据单点 = decorate.js::drawerReannounceGate, 与右键菜单/键盘同一份) */
+    const rGate = ctx.drawerReannounceGate();
     const acts = virtual ? "" : T`<span class="dt04-acts">
-      <button type="button" class="dt04-act" data-act="report" data-url="${t.url}" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+      <button type="button" class="dt04-act${rGate.ok ? "" : " is-gated"}" data-act="report" data-url="${t.url}" title="${rGate.ok ? "强制汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
       <button type="button" class="dt04-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
     </span>`;
     /* 统计行(渐进: num_peers / num_downloaded 缺失省略); 0 值着弱色, 走分支而非插值(插值会转义) */

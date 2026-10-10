@@ -243,6 +243,24 @@ const exportTap = (/** @type {import('@playwright/test').Page} */ page) => {
   return { hits, off: () => page.off('request', onReq) };
 };
 
+/**
+ * reannounce 命令 POST 计数 + 目标 token 采集(块E「非活跃禁汇报」的行为层实证: 置灰项被点也不得
+ * 发请求; 混选用例还要看"打到谁身上", 故连 URL 里的目标一起收)。
+ * token 取 `/api/torrents/{token}/reannounce` 段: 投递收敛后组目标会展开为逐成员 hash(仅活跃的
+ * 在列), 故正常路径 token 就是 40 位 hash —— 断言"非活跃行的 hash 不在其中"才落得住。
+ */
+const reannounceTap = (/** @type {import('@playwright/test').Page} */ page) => {
+  const hits = { n: 0, targets: /** @type {string[]} */ ([]) };
+  const onReq = (/** @type {import('@playwright/test').Request} */ r) => {
+    if (r.method() !== 'POST' || !/\/reannounce(\?|$)/.test(r.url())) return;
+    hits.n++;
+    const m = /\/api\/(?:torrents|groups)\/([^/?]+)\/reannounce/.exec(r.url());
+    if (m) hits.targets.push(decodeURIComponent(m[1]));
+  };
+  page.on('request', onReq);
+  return { hits, off: () => page.off('request', onReq) };
+};
+
 for (const skin of SKINS) {
   test.describe(`皮肤 ${skin}(块D: 菜单族 + W5-off)`, () => {
     test.describe('块D 主路径(W2/W3/W4/CTX, skip-check on)', () => {
@@ -572,6 +590,97 @@ for (const skin of SKINS) {
           `多选菜单: ${texts.slice(0, 11).join(' / ')}`).toBe(true);
         expect(texts.some((t) => t.includes('跳检…')), '关态多选菜单不得渲染跳检项').toBe(false);
         await page.keyboard.press('Escape');
+      });
+    });
+
+    /* 块E: 强制汇报可用性(qB 口径) —— 非活跃种子(暂停/停止·排队·校验中·错误/文件丢失)的
+     * 「强制汇报」必须置灰不可用, 活跃种子照常。判据单点 = `decorate.js::reannounceMenuGate`
+     * (qB commit `aa189a7` 关闭 issue #12080: isPaused/isChecking/isQueued 时置灰)。
+     * 行状态用**真实 DOM 类**选(`.torrent-row` 的 `s-<kind>` 由模板绑定, 桩状态池按 8 循环
+     * ⇒ 首屏窗口内恒有 s-paused 与 s-seeding/s-downloading 两种), 不借 vm 造数据;
+     * 三层断言 = 置灰类 + title 给原因 + **真实点击零 reannounce 请求**(行为层闸门才是
+     * "不可点"的实证 —— 置灰只改样式, 光看类名验不出绕行路径被堵住)。 */
+    test.describe('块E: 强制汇报可用性(qB 口径)', () => {
+      installRuntimeErrorGuard(test);
+
+      /* @fast: 「改前端必跑」门禁(harness.mjs 头部口径)—— 本条是本专题行为层绕行路径的回归断言 */
+      test('非活跃种子置灰且零请求 / 活跃种子可用 @fast', async ({ page }) => {
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const pausedRow = page.locator('.torrent-row.s-paused').first();
+        const activeRow = page.locator('.torrent-row.s-seeding, .torrent-row.s-downloading').first();
+        expect(await pausedRow.count(), '首屏窗口内应有 s-paused 行(桩状态池含 pausedUP/pausedDL)').toBeGreaterThan(0);
+        expect(await activeRow.count(), '首屏窗口内应有活跃行').toBeGreaterThan(0);
+
+        await clickRow(page, pausedRow, { button: 'right' });
+        const item = ctxItem(page, '强制汇报');
+        await expect(item).toBeVisible({ timeout: 5_000 });
+        await expect(item, '非活跃种子的强制汇报项应置灰(is-gated)').toHaveClass(/is-gated/);
+        /* 原因提示读 **data-aq-tip**: 全站悬浮提示由 ui_feedback 的拦截层把 title **单向迁移**成
+         * data-aq-tip 并删掉原属性(原生气泡断供式, 见其文件头) —— 页面上 `title` 早已不存在,
+         * 真浏览器里只能读迁移后的落点。 */
+        const tip = (await item.getAttribute('data-aq-tip')) || (await item.getAttribute('title'));
+        expect(tip, '置灰项提示应给出原因(data-aq-tip)').toMatch(/无法强制汇报/);
+        const { hits, off } = reannounceTap(page);
+        await item.click();          // 置灰项仍可被点(样式拦显示), 行为层必须拦住
+        await page.waitForTimeout(700); // 观察窗: 越过点击 -> 投递的短窗
+        off();
+        expect(hits.n, '非活跃种子点击强制汇报不得发出任何 reannounce 请求').toBe(0);
+        await expect.poll(async () => {
+          const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
+          return (ts || []).some((x) => x.startsWith('error|') && x.includes('无法强制汇报'));
+        }, { message: '置灰项被点击后应有一条 error toast 说明原因', timeout: 5_000 }).toBe(true);
+
+        // 活跃态对照: 同一菜单项不得置灰(判据只在非活跃目标上生效)
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.ctx-menu')).toHaveCount(0);
+        await clickRow(page, activeRow, { button: 'right' });
+        const actItem = ctxItem(page, '强制汇报');
+        await expect(actItem).toBeVisible({ timeout: 5_000 });
+        expect(String(await actItem.getAttribute('class')), '活跃种子的强制汇报项不得置灰').not.toMatch(/is-gated/);
+        await page.keyboard.press('Escape');
+      });
+
+      /* 混选(1 活跃 + 1 非活跃): 菜单按 qB 口径**放行**(oneCanForceReannounce = 任一活跃即可用),
+       * 但投递必须收敛为活跃子集 —— 非活跃目标发出去 qB 引擎(libtorrent)只会静默空转, 而我们的
+       * tracker 确认层会为它白等 item deadline(最长 600s)后落「未确认」, 把一次干净的成功报成
+       * 部分失败(2026-10-10 投递收敛, 机理见 pitfalls/web-ui/reannounce-inactive-gate.md)。
+       * 断言按 **hash** 落(不数请求条数): 选中行可能同属一组而被展开为整组成员, 条数会随分组变,
+       * 但"非活跃那个没被投递"这条在任何分组形态下都必须成立。 */
+      test('混选放行但只汇报活跃目标 @fast', async ({ page }) => {
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const pausedRow = page.locator('.torrent-row.s-paused').first();
+        const activeRow = page.locator('.torrent-row.s-seeding, .torrent-row.s-downloading').first();
+        expect(await pausedRow.count(), '首屏窗口内应有 s-paused 行').toBeGreaterThan(0);
+        expect(await activeRow.count(), '首屏窗口内应有活跃行').toBeGreaterThan(0);
+        const pausedHash = await pausedRow.getAttribute('data-hash');
+        const activeHash = await activeRow.getAttribute('data-hash');
+        expect(pausedHash && activeHash && pausedHash !== activeHash, '两个目标必须是不同种子').toBe(true);
+
+        await clickRow(page, pausedRow, { modifiers: ['Control'] });
+        await clickRow(page, activeRow, { modifiers: ['Control'] });
+        expect(await readInst(page, '(vm.selMembers || []).length'), '混选应选中 2 个种子').toBe(2);
+
+        await clickRow(page, activeRow, { button: 'right' });
+        const item = ctxItem(page, '强制汇报');
+        await expect(item).toBeVisible({ timeout: 5_000 });
+        expect(String(await item.getAttribute('class')), '混选含活跃目标 -> 按 qB 口径放行(不得置灰)')
+          .not.toMatch(/is-gated/);
+
+        const { hits, off } = reannounceTap(page);
+        await item.click();
+        await page.waitForTimeout(1200); // 观察窗: 越过点击 -> 投递的短窗
+        off();
+        expect(hits.targets, '活跃目标必须被投递').toContain(activeHash);
+        expect(hits.targets, '非活跃目标不得被投递(混选时必须收敛掉)').not.toContain(pausedHash);
+        await expect.poll(async () => {
+          const ts = await readInst(page, "(vm.toasts || []).map((t) => t.text)");
+          return (ts || []).some((x) => x.includes('跳过 1 个非活跃'));
+        }, { message: '回执应体现被跳过的非活跃目标数(用户要看得懂"选了 2 个为什么只汇报了 1 个")',
+          timeout: 8_000 }).toBe(true);
       });
     });
   });

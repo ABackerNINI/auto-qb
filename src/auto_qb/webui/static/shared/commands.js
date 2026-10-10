@@ -429,18 +429,45 @@ window.AQB_COMMANDS = {
       if (!this.isEpPending(e)) return e.state;
       return this._aggKind(e.members) || e.state;
     },
+    /* ---------------- 强制汇报闸门(qB 口径, 单一行为出口) ----------------
+     * 非活跃目标(暂停/停止·排队·校验中·错误/文件缺失)不允许强制汇报 —— 与 qB 的
+     * `actionForceReannounce->setEnabled(false)` 同语义(commit aa189a7, issue #12080);
+     * 判据单点 = decorate.js::reannounceTargetsGate(任一目标活跃即可用, 与 qB
+     * oneCanForceReannounce 同口径)。
+     * 前端两层: 入口处"置灰可见 + title 提示原因"(ctx-menus.html / drawer_tpl 04-06),
+     * 行为层由本方法兜底 —— 菜单项仍可被点(置灰只改样式, 见 .ctx-item.is-gated 口径),
+     * 键盘与详情面板又是另外两条入口, 不接一层就绕得过去。
+     * 返回 false = 已给 toast, 调用方直接 return(尚未发请求, 零副作用)。
+     *
+     * !本闸门只判"允不允许"(集合级全有全无, 与 qB 的 oneCanForceReannounce 一致),
+     *   **不等**于"发给谁" —— 混选(1 活跃 + N 非活跃)按 qB 口径是**放行**的, 若照集合全量
+     *   投递, qB 引擎会对非活跃的静默空转而我们的确认层仍会为它们白等窗口, 最终把一次
+     *   干净的成功报成「未确认 N」。故放行后的投递集合由 decorate.js::reannouncePlan
+     *   再收敛一次(只投活跃), 两道是"闸门 / 计划"的分工, 不可互相替代。 */
+    _guardReannounce(t) {
+      const g = this.reannounceTargetsGate(t);
+      if (g.ok) return true;
+      this.toast(g.title, "error", 7000);
+      return false;
+    },
     /* ---------------- 动作统一出口(计划 26-09-28-0354 W3 的唯一重构点) ----------------
      * 右键批量菜单 / 键盘快捷键两个入口共用同一条动作链。端点按目标形态路由:
      *   单组(仅 1 个组 key 且动作在组级端点支持面内 pause/resume) -> /api/groups/{k}/{action};
      *   单种子(仅 1 个 hash)                                      -> /api/torrents/{h}/{action};
      *   其余(多目标 / 组级端点不支持的 recheck 等)                 -> /api/torrents/bulk 合单;
-     *   reannounce 恒逐目标投递(后端 _BULK_ACTIONS 不含它, tracker 确认要逐个跟踪)。
+     *   reannounce 恒逐目标投递(后端 _BULK_ACTIONS 不含它, tracker 确认要逐个跟踪);
+     *   reannounce 的投递集合先经 reannouncePlan 收敛为**活跃子集**(非活跃的发出去也是
+     *   qB 引擎空转, 只会给确认层添假结论) —— 组目标因此展开为逐成员 hash(仅活跃的在列)。
      * what / countSuffix 只管 toast 文案(成功 = `已执行: {动作}{what}{countSuffix}`,
      * 失败 = `{动作}{what}失败`), 调用方按入口语义传入, 缺省按目标形态推导(键盘路径)。
      * 乐观补丁: pause/resume 白名单(§P0-3), 目标 = 组成员展开 ∪ hashes 去重 —— 与原三条链一致。 */
     async _actCore(action, { keys = [], hashes = [], what = "", countSuffix = "" } = {}) {
       const n = keys.length + hashes.length;
       if (!n) return;
+      /* 强制汇报闸门(qB 口径): 目标全为非活跃时拒绝, 早于乐观补丁与 POST(零副作用)。
+       * 本出口覆盖 组菜单 act / 单种子 actTorrent / 整集整剧 actEpisode / 批量 bulkAct /
+       * 键盘 _kbAct —— 与右键菜单的置灰(ctx-menus.html)同一判据, 互为"显示层 / 行为层"两道。 */
+      if (action === "reannounce" && !this._guardReannounce({ keys, hashes })) return;
       if (!what) {
         what = keys.length === 1 && !hashes.length ? "整组" : hashes.length === 1 && !keys.length ? "该种子" : "";
       }
@@ -474,14 +501,31 @@ window.AQB_COMMANDS = {
       }
       try {
         if (isRe) {
+          /* 投递集合收敛(单点 = decorate.js::reannouncePlan): 上面的闸门给的是"允不允许",
+           * 这里给的是"发给谁"。混选(1 活跃 + N 非活跃)按 qB 口径放行, 但非活跃的发出去
+           * 也是 libtorrent 空转 —— qB 的 GUI 没有 per-target 回执所以无所谓, 我们有确认层:
+           * 白等到 item deadline(最长 600s)后落「未确认」, 把干净的成功报成部分失败。 */
+          const plan = this.reannouncePlan({ keys, hashes });
           const jobs = [
-            ...keys.map((k) => `/api/groups/${k}/reannounce`),
-            ...hashes.map((h) => `/api/torrents/${h}/reannounce`),
+            ...plan.keys.map((k) => `/api/groups/${k}/reannounce`),
+            ...plan.hashes.map((h) => `/api/torrents/${h}/reannounce`),
           ];
+          if (!jobs.length) {
+            /* 闸门放行(目标解析不出时不误拦)但计划为空(组行成员被清空的罕见态): 必须显式
+             * 收口 —— 落进下面的成功分支会报「成功 0 个目标」, 那是把没做事说成做成了。 */
+            this.toast(plan.skipped ? `全部 ${plan.skipped} 个目标均非活跃，已跳过` : "没有可强制汇报的目标", "error", 6000);
+            return;
+          }
+          const cnt = jobs.length;
+          const skipTxt = plan.skipped ? `, 跳过 ${plan.skipped} 个非活跃` : "";  // 零跳过时文案与本特性上线前逐字一致
+          /* 跳过数在投递前就已知, 故等待态就报出来 —— 否则用户要盯到 tracker 确认落定(最长 40s)
+           * 才知道"我选了 2 个为什么只汇报了 1 个"。 */
           const tid = this.toast(
-            n > 1
-              ? `强制汇报等待中…(${n} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
-              : "强制汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)",
+            plan.skipped
+              ? `强制汇报已投递 ${cnt} 个活跃目标, 跳过 ${plan.skipped} 个非活跃(tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
+              : (cnt > 1
+                ? `强制汇报等待中…(${cnt} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
+                : "强制汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)"),
             "busy", 0, { sticky: true }
           );
           const results = await Promise.allSettled(
@@ -509,12 +553,14 @@ window.AQB_COMMANDS = {
           }
           if (!errN && !warnN) {
             this._finishToast(tid, "ok",
-              n > 1 ? `强制汇报成功(tracker 已确认, ${n} 个目标)` : "强制汇报成功(tracker 已确认)", 3000);
+              cnt > 1
+                ? `强制汇报成功(tracker 已确认, ${cnt} 个目标${skipTxt})`
+                : `强制汇报成功(tracker 已确认${skipTxt})`, 3000);
             return;
           }
           /* toast 类型映射(计划 §3.4): 含 error -> error / 仅 warn -> timeout(复用现有类型, 不新增)。 */
           const kind = errN ? "error" : "timeout";
-          const head = `强制汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}`;
+          const head = `强制汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}${skipTxt}`;
           /* 后端聚合 msg 头部「成功 X, 失败 Y, 未确认 Z: 」与前端三桶计数重复(格式被契约测试
            * 钉住), 剥头只留原因段; 投递失败/等待超时无头部, 原样保留。 */
           const detail = firstMsg.replace(/^成功 [0-9]+, 失败 [0-9]+, 未确认 [0-9]+: /, "");

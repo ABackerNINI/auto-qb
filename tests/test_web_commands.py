@@ -28,7 +28,8 @@
 - test_reannounce_receipt_prefix_contract: D4=warn 前缀文案契约(三前缀常量钉死, 改文案必红; 机器分流依据 = status 三值)
 - test_reannounce_confirm_success_and_timeout: epoch 确认回执: 前跳命中 -> ok 回执跟踪清空; 超时 -> warn「未确认」不再判「失败」
 - test_reannounce_confirm_group_aggregate: 组汇报三桶聚合(ok+error -> error 带计数与原因; 全推迟 -> warn「已受理」早回执 + 后台登记)
-- test_reannounce_register_immediate_verdicts_and_deadline: 注册直判(停止种子立即 warn/推迟检出早回执+后台登记) + item 级 deadline 公式与 600 上限
+- test_reannounce_register_immediate_verdicts_and_deadline: 注册直判(停止种子: 投递面已拦故注册支退化为竞态兜底/推迟检出早回执+后台登记) + item 级 deadline 公式与 600 上限
+- test_reannounce_skips_inactive_targets: 投递收敛(2026-10-10): 混选只投活跃子集(组内排队/暂停成员不发指令也不进确认层, 免白等窗口报假「未确认」)+ 全非活跃给显式 warn 回执 + 单种非活跃同口径; 判据读 qB 原始 state 串(queuedDL 命中 is_downloading, 谓词判不出排队)
 - test_reannounce_stopped_midwindow_direct_verdict: 窗口内暂停直判(下一 tick warn「种子已停止」, 不等 deadline)
 - test_reannounce_background_verify_and_cap: 推迟后台核实(达 min_e 出结论落 INFO/WARNING 日志并移除/逾时 DEBUG 静默移除/500 上限丢最旧 WARNING)
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
@@ -1267,19 +1268,81 @@ def test_reannounce_confirm_group_aggregate():
         assert mgr.web.reannounce_pending == {}
 
 
+def test_reannounce_skips_inactive_targets():
+    """投递收敛: 只投活跃子集(混选不再对非活跃发指令, 也不再给它们假「未确认」)
+
+    qB 的 gate 只在 GUI(commit aa189a7), HTTP 端点侧没有门 —— 引擎侧的真拦截在 libtorrent
+    (暂停种子 force_tracker_request 直接空转, 排队种子内部也是 paused 故同样发不出去)。
+    于是"按 qB 口径放行(任一活跃即可用)"之后照集合全量投递是**有害**的: qB 的 GUI 没有
+    per-target 回执所以无所谓, 我们有 tracker 确认层 —— 那些空转目标会白等到 item deadline
+    再落「未确认」, 把一次干净的成功报成部分失败。故前后端各收敛一道(前端 reannouncePlan
+    决定发什么, 后端这里按快照 raw state 再过滤一次, 防竞态与直连端点的调用方)。
+
+    !判据必须读 qB 原始 state 串: 实测 queuedDL/queuedUP 命中 state_enum 的 is_downloading/
+    is_uploading(只有 paused*/stopped* 是 is_stopped), 用谓词会把排队种子当活跃放过去。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        for h, st in (("HA", "uploading"), ("HB", "queuedDL")):
+            rec = mgr.store.get(h)
+            rec.state = st
+            rec._state_enum = None  # 复位惰性缓存(state_enum 按新 state 重算)
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "g-mix"}))
+        mgr.web.consume_commands()
+        assert client.reannounce_hashes_calls == [["HA"]], (f"组汇报未收敛为活跃子集: {client.reannounce_hashes_calls}(排队成员也被投递了)")
+        assert set(mgr.web.reannounce_pending["g-mix"]["items"]) == {"HA"}, \
+            "非活跃成员进了确认跟踪(会白等窗口后落假「未确认」)"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        for h, st in (("HA", "pausedUP"), ("HB", "checkingUP")):
+            rec = mgr.store.get(h)
+            rec.state = st
+            rec._state_enum = None
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "g-dead"}))
+        mgr.web.consume_commands()
+        assert client.calls == [], "全非活跃不得发任何指令(qB 引擎收到也只是空转)"
+        assert mgr.web.reannounce_pending == {}, "全非活跃不登记确认跟踪"
+        r = mgr.web.results["g-dead"]
+        assert r["status"] == "warn" and "均非活跃" in r["error"], \
+            "全非活跃组必须给显式回执(不发指令又不写回执 = 前端 waitCmd 挂到自身超时)"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        rec = mgr.store.get("HA")
+        rec.state = "error"
+        rec._state_enum = None
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "t-dead"}))
+        mgr.web.consume_commands()
+        assert client.calls == [], "单种非活跃不得发指令"
+        assert mgr.web.results["t-dead"]["status"] == "warn"
+        assert "非活跃" in mgr.web.results["t-dead"]["error"]
+
+
 def test_reannounce_register_immediate_verdicts_and_deadline():
-    """注册直判: 停止种子立即 warn; 推迟检出早回执 + 后台登记; item 级 deadline 公式与 600 上限"""
+    """注册直判: 非活跃种子不进确认层 + 竞态兜底仍出结论; 推迟检出早回执 + 后台登记; deadline 公式与 600 上限
+
+    2026-10-10 投递收敛后 (a) 支改口径: 非活跃目标在**投递面**就被拦下(前端 reannouncePlan +
+    后端 _reannounce_active), 根本走不到注册 —— 故 (a) 支从常规路径退化为**竞态兜底**
+    ("过滤判活跃 -> 注册前转停止"的瞬态), 契约面改为在本测试里直接调注册面来钉住。
+    """
     import time as _time
 
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        # (a) 停止种子: store 快照 state_enum.is_stopped -> 立即 done+warn, 不等窗口
+        # (a) 停止种子: 第二道闸直接跳过 —— 不发指令、不进确认层(不再白等窗口后报「未确认」)
         rec = mgr.store.get("HA")
         rec.state = "stoppedUP"
         rec._state_enum = None  # 复位惰性缓存(state_enum 按新 state 重算)
         mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd5"}))
         mgr.web.consume_commands()
-        it = mgr.web.reannounce_pending["cmd5"]["items"]["HA"]
+        r5 = mgr.web.results["cmd5"]
+        assert r5["status"] == "warn"
+        assert r5["error"] == "未确认: 种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"
+        assert client.reannounce_hashes_calls == [], "非活跃目标不该发指令(qB 引擎收到也只是空转)"
+        assert mgr.web.reannounce_pending == {}, "非活跃目标不该进确认跟踪(否则白等到 deadline 报未确认)"
+        assert mgr.web.reannounce_background == {}, "非活跃目标不走推迟后台"
+        # (a′) 竞态兜底: 直接调注册面, 钉住"注册时已在停止态"的即时结论文案与不等待
+        mgr._register_reannounce_pending("cmd5b", ["HA"], {}, False)
+        it = mgr.web.reannounce_pending["cmd5b"]["items"]["HA"]
         assert it["done"] and it["status"] == "warn"
         assert it["reason"] == "未确认: 种子已停止, qB 静默忽略强制汇报"
         assert mgr.web.reannounce_background == {}, "停止种子不走推迟后台"

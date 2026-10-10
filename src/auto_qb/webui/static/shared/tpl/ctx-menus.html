@@ -17,7 +17,17 @@
             <div class="ctx-item" @click="ctxAct('pause')">
               <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>批量暂停
             </div>
-            <div class="ctx-item" @click="ctxAct('reannounce')">
+            <!-- 强制汇报置灰(qB 口径, 2026-10-10): 目标**全部**非活跃(暂停/停止·排队·校验中·错误)
+                 时置灰不可用, 与 qB 的 `actionForceReannounce->setEnabled(false)` 同语义 ——
+                 libtorrent 的 force_tracker_request 对暂停种子直接 return, 排队种子同样发不出去,
+                 qB 自身也据此置灰(commit aa189a7, issue #12080)。判据单点 =
+                 decorate.js::reannounceMenuGate()(任一目标活跃即可用, 与 qB oneCanForceReannounce
+                 同口径; 亦见该文件顶部 REANNOUNCE_BLOCKED_STATES)。
+                 !title 恒绑字符串(可用时空串): ui_feedback 的「空串 title = 清除提示」通道据此摘掉
+                 置灰期间的旧提示 —— 绑 `|| null` 会走 removeAttribute 分支, 旧 data-aq-tip 不被清。
+                 行为层另有兜底(commands.js _actCore / shortcuts.js _kbAct), 本处只管显示与提示。 -->
+            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
+                 :title="reannounceMenuGate().title" @click="ctxAct('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
@@ -58,7 +68,8 @@
             <div class="ctx-item" @click="actEpisode('pause')">
               <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>{{ menu.episode.scope === 'show' ? '暂停整剧' : '暂停整集' }}
             </div>
-            <div class="ctx-item" @click="actEpisode('reannounce')">
+            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
+                 :title="reannounceMenuGate().title" @click="actEpisode('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
@@ -78,7 +89,8 @@
             <div class="ctx-item" @click="actTorrent('pause')">
               <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停该种子
             </div>
-            <div class="ctx-item" @click="actTorrent('reannounce')">
+            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
+                 :title="reannounceMenuGate().title" @click="actTorrent('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
@@ -177,7 +189,8 @@
             <div class="ctx-item" @click="act('pause')">
               <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停整组
             </div>
-            <div class="ctx-item" @click="act('reannounce')">
+            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
+                 :title="reannounceMenuGate().title" @click="act('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>

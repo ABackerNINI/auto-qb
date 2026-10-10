@@ -46,6 +46,11 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       const hash = this.menu.hash;
       if (!hash) return;
+      /* 强制汇报闸门(qB 口径): 非活跃种子(暂停/停止·排队·校验中·错误)拒绝 —— 详情面板 tracker
+       * 页签的重报钮已置灰(drawer_tpl 04/05/06 走 drawerReannounceGate), 这里是行为层兜底
+       * (与 ctx-menu 的"class 拦显示、行为层再拦一道"同款)。本方法两条入口共用: 单选右键菜单的
+       * 控制命令, 与详情面板 drawerCmd(hash 取自抽屉)。 */
+      if (action === "reannounce" && !this._guardReannounce({ keys: [], hashes: [hash] })) return;
       /* 重新校验先确认(计划 26-10-05-0314 S3): 只拦 recheck, 其它命令通道行为不变 ——
        * 单选右键(ctx-menus.html)与抽屉内命令(drawerCmd)同走本方法, 一处接入两入口覆盖;
        * 取消 = 直接返回, 尚未发请求, 零副作用。helper 与文案单点在 commands.js。 */

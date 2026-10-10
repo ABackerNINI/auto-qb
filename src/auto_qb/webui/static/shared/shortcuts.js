@@ -1011,6 +1011,9 @@ window.AQB_SHORTCUTS = {
         const ok = await this._recheckConfirm(what);
         if (!ok) return;
       } else if (action === "reannounce") {
+        /* 非活跃目标先拦(与右键/详情面板同一闸门): 早于确认框 —— 先问"确定?"再回"不行"是坏体感。
+         * _actCore 里还有同一道兜底(键盘不是唯一入口), 这里前置只为省掉无谓的一问。 */
+        if (!this._guardReannounce({ keys: t.groupKeys, hashes: t.memberHashes })) return;
         const ok = await this.confirmDialog("强制汇报",
           `将向 tracker 强制汇报${what}。频繁误触可能触发站点限流或警告。`, { okText: "确定" });
         if (!ok) return;

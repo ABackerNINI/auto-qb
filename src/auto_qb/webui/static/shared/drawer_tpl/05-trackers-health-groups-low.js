@@ -102,6 +102,10 @@
     "  background:var(--error-soft); border:1px solid var(--error-line); border-radius:var(--radius); }",
     ".drawer .dt05-fail .dt05-acts { opacity:1; }",
     ".drawer .dt05-fail .dt05-act:hover { background:var(--bg-hover); }",
+    /* 非活跃种子禁汇报: 重报钮置灰不可点(qB 口径)。本变体两处入口 —— 普通行 .dt05-act 与失败区
+     * 大钮 .dt05-rbtn; 失败区 hover 是 (0,4,0), 故显式带上 .dt05-fail 前缀一并压过。 */
+    ".drawer .dt05-act.is-gated, .drawer .dt05-act.is-gated:hover, .drawer .dt05-fail .dt05-act.is-gated:hover { color:var(--fg-dim); background:transparent; cursor:not-allowed; }",
+    ".drawer .dt05-rbtn.is-gated, .drawer .dt05-rbtn.is-gated:hover { color:var(--fg-dim); border-color:var(--border-soft); background:transparent; cursor:not-allowed; }",
     ".drawer .dt05-rtop { display:flex; align-items:center; gap:8px; min-width:0; }",
     ".drawer .dt05-rhost { min-width:0; font-family:var(--font-mono, ui-monospace, monospace); font-size:12.5px;",
     "  font-weight:600; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
@@ -169,6 +173,8 @@
   /* 分区行(警告 / 更新中 / 正常): host + tier + msg(点击展开) + 统计 + 行内动作 */
   function rowHtml(ctx, t) {
     const b = bucketOf(ctx, t);
+    /* 重报钮置灰判据(非活跃种子禁汇报, qB 口径; 判据单点 = decorate.js::drawerReannounceGate) */
+    const rGate = ctx.drawerReannounceGate();
     const m = String(t.msg || "").trim();
     const dim = b !== "warn"; /* 警告行 msg 着警示色, 其余弱化备注色 */
     const open = ui.openMsg[t.url] && m;
@@ -205,7 +211,7 @@
       </div>
       ${stats.length ? R(T`<span class="dt05-stats">${R(stats.join(""))}</span>`) : ""}
       <span class="dt05-acts">
-        <button type="button" class="dt05-act" data-act="report" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+        <button type="button" class="dt05-act${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "强制汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
         <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
       </span>
     </div>`;
@@ -213,13 +219,14 @@
 
   /* 失败块: msg 全文 + 处置建议 + 重报/删除 */
   function failHtml(ctx, t) {
+    const rGate = ctx.drawerReannounceGate();  /* 同 rowHtml: 非活跃种子禁汇报(qB 口径) */
     const m = String(t.msg || "").trim() || "tracker 未返回消息(not working)";
     return T`<div class="dt05-fail" title="${t.url}">
       <div class="dt05-rtop">
         <span class="dt05-dot"></span>
         <span class="dt05-rhost">${hostOf(t.url)}</span>
         ${num(t.tier) ? R(T`<span class="dt05-tier" title="tier: 汇报层级, 数值越小越优先">T${t.tier}</span>`) : ""}
-        <button type="button" class="dt05-rbtn" data-act="report"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报</button>
+        <button type="button" class="dt05-rbtn${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报</button>
         <span class="dt05-acts">
           <button type="button" class="dt05-act" data-act="del" data-url="${t.url}" title="删除失效 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
         </span>

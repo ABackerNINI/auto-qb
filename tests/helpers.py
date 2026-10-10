@@ -102,6 +102,9 @@ class FakeClient:
         self.alt_dl_limit_value = 0  # app/preferences alt_dl_limit 读数(bytes/s, 0 = 不限)
         self.speed_limits_mode_value = 0  # transfer/speedLimitsMode 读数(0 = 主速度 / 1 = 备用)
         self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
+        # torrents_reannounce 作用范围(hash 列表; calls 保持旧约定只记 ("reannounce", None))——
+        # 投递收敛(只投活跃子集, 2026-10-10)的断言必须看得到具体 hash, 同 recheck_hashes_calls 模式
+        self.reannounce_hashes_calls = []
         # 限速/移动三个 qB 方法的作用范围((方法名, hash 列表); calls 保持旧二元组形状不动,
         # 单独平行记录供 bulk"单次调用传全 hashes"断言用 —— 同 recheck_hashes_calls 的模式)
         self.limit_location_hashes_calls = []
@@ -342,6 +345,7 @@ class FakeClient:
 
     def torrents_reannounce(self, torrent_hashes=None):
         self.calls.append(("reannounce", None))
+        self.reannounce_hashes_calls.append(torrent_hashes)  # hash 级作用范围另记(见 __init__ 注释)
 
     def torrents_set_upload_limit(self, torrent_hashes=None, limit=None):
         self.calls.append(("set_upload_limit", limit))

@@ -117,6 +117,8 @@
     "  padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-dim); cursor:pointer;",
     "  transition:color var(--dur) var(--ease), background var(--dur) var(--ease); }",
     ".drawer .dt06-act:hover { color:var(--fg); background:var(--bg-hover); }",
+    /* 非活跃种子禁汇报: 重报钮置灰不可点(qB 口径)。特异性 (0,4,0) 压过 base 的 :hover(0,3,0)。 */
+    ".drawer .dt06-act.is-gated, .drawer .dt06-act.is-gated:hover { color:var(--fg-dim); background:transparent; cursor:not-allowed; }",
     ".drawer .dt06-ops.dim { justify-content:center; font-family:var(--font-mono, ui-monospace, monospace);",
     "  color:var(--fg-dim); font-size:12px; }",
     /* 空态 */
@@ -191,10 +193,12 @@
     const next = b === "upd"
       ? T`<span class="dt06-next-upd"><i class="pulse"></i>正在汇报</span>`
       : (b === "off" ? T`<span class="dt06-none">—</span>` : nextHtml(ctx, t, nowSec));
+    /* 重报钮置灰判据(非活跃种子禁汇报, qB 口径; 判据单点 = decorate.js::drawerReannounceGate) */
+    const rGate = ctx.drawerReannounceGate();
     const ops = virtual
       ? T`<span class="dt06-ops dim">—</span>`
       : T`<span class="dt06-ops">
-          <button type="button" class="dt06-act" data-act="report" title="强制汇报"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+          <button type="button" class="dt06-act${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "强制汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
           <button type="button" class="dt06-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
         </span>`;
     return T`<div class="dt06-r ${b}" data-benign="${benign}" data-idx="${order}" title="${t.url}">

@@ -39,6 +39,7 @@
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)
+- test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 """
 import json
 import os
@@ -46,6 +47,10 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+
+# 后端非活跃判据表(投递收敛的"第二道闸"): 与前端 REANNOUNCE_BLOCKED_STATES 逐项同表, 本文件
+# 钉住两侧一致 —— 各写一份是刻意的(前端要能在无后端往返时判置灰), 但漂移必须立刻报红。
+from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES as _PY_BLOCKED_STATES
 
 from webui_helpers import (
     STATIC_ROOT,
@@ -1182,6 +1187,211 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
     assert "dt06-tbar" not in real_branch, "06 真口径行仍画微条(per-tracker interval 不可得, 属造假)"
     # ⑥ 调用点传参
     assert "nextHtml(ctx, t, nowSec)" in text, "06 nextHtml 调用点未传行 t / nowSec(真口径拿不到数据)"
+
+
+_NODE_REANNOUNCE_GATE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const M = window.AQB_DECORATE.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+/* 判定单点只读入参, 不依赖 this --------------------------------------------------- */
+ok("停止(stoppedDL) 判非活跃", M.reannounceBlocked({ state: "stoppedDL" }) === true);
+ok("暂停(pausedUP) 判非活跃", M.reannounceBlocked({ state: "pausedUP" }) === true);
+/* 排队是"必须读 state"的理由: qbittorrent-api 把 queuedDL/UP 归进 is_downloading/is_uploading,
+ * 其 kind 落成 downloading/seeding —— 单看 kind 会把它当活跃放行 */
+ok("排队(queuedDL) 判非活跃", M.reannounceBlocked({ state: "queuedDL" }) === true);
+ok("排队(queuedUP) 判非活跃", M.reannounceBlocked({ state: "queuedUP" }) === true);
+ok("queuedDL 且 kind=downloading 仍拦(不误放行)", M.reannounceBlocked({ state: "queuedDL", kind: "downloading" }) === true);
+ok("校验中(checkingUP) 判非活跃", M.reannounceBlocked({ state: "checkingUP" }) === true);
+ok("校验中(checkingResumeData) 判非活跃", M.reannounceBlocked({ state: "checkingResumeData" }) === true);
+ok("错误(error) 判非活跃", M.reannounceBlocked({ state: "error" }) === true);
+ok("文件缺失(missingFiles) 判非活跃", M.reannounceBlocked({ state: "missingFiles" }) === true);
+ok("做种(stalledUP) 可汇报", M.reannounceBlocked({ state: "stalledUP" }) === false);
+ok("做种(uploading) 可汇报", M.reannounceBlocked({ state: "uploading" }) === false);
+ok("下载(downloading) 可汇报", M.reannounceBlocked({ state: "downloading" }) === false);
+ok("调度中(unknown) 可汇报(非暂停非校验非错误)", M.reannounceBlocked({ state: "unknown" }) === false);
+/* state 缺失时按 kind 三档兜底(老版本/异常行) */
+ok("缺 state 回落 kind=paused", M.reannounceBlocked({ kind: "paused" }) === true);
+ok("缺 state 回落 kind=checking", M.reannounceBlocked({ kind: "checking" }) === true);
+ok("缺 state 回落 kind=error", M.reannounceBlocked({ kind: "error" }) === true);
+ok("缺 state 回落 kind=seeding 放行", M.reannounceBlocked({ kind: "seeding" }) === false);
+ok("空行/null 不拦(不误伤)", M.reannounceBlocked(null) === false && M.reannounceBlocked({}) === false);
+/* 多目标: 任一活跃即可用(qB oneCanForceReannounce 同口径) ------------------------ */
+const ctx = { reannounceBlocked: M.reannounceBlocked, reannounceBlockText: M.reannounceBlockText };
+const V = (rows) => M._reannounceVerdict.call(ctx, rows);
+ok("全非活跃 -> 拦", V([{ state: "pausedUP" }, { state: "queuedDL" }]).ok === false);
+ok("全非活跃 -> title 带原因与「无法强制汇报」", /无法强制汇报/.test(V([{ state: "pausedUP" }]).title));
+ok("全非活跃(多目标) -> title 报目标数", /2 个目标/.test(V([{ state: "pausedUP" }, { state: "error" }]).title));
+ok("混合(含一个活跃) -> 放行", V([{ state: "pausedUP" }, { state: "uploading" }]).ok === true);
+ok("可汇报时 title 为空串(空串 title = 清除旧提示的通道)", V([{ state: "uploading" }]).title === "");
+ok("空集 -> 不误拦(目标已消失时行为与上线前一致)", V([]).ok === true);
+/* 投递计划: 放行之后"发给谁"(reannouncePlan 单点) ---------------------------------------------
+ * 闸门判"允不允许"(集合级全有全无, 与 qB oneCanForceReannounce 一致), 计划判"发给谁"。
+ * 混选放行后若照集合全量投递, qB 引擎对非活跃的静默空转而我们的确认层会白等窗口报「未确认」。 */
+const PGROUPS = {
+  G1: { members: [{ hash: "A", state: "uploading" }, { hash: "B", state: "queuedDL" }, { hash: "C", state: "pausedUP" }] },
+  G2: { members: [{ hash: "A", state: "uploading" }] },   // 成员与 hashes 重叠
+  G3: { members: [] },                                    // 成员被清空的罕见态
+};
+const PROWS = [{ hash: "A", state: "uploading" }, { hash: "D", state: "checkingUP" }];
+const PCTX = {
+  reannounceBlocked: M.reannounceBlocked,
+  _findGroup: (k) => PGROUPS[k] || null,
+  memberByHash: new Map(PROWS.map((r) => [r.hash, r])),
+};
+const P = (t) => M.reannouncePlan.call(PCTX, t);
+const p1 = P({ keys: ["G1"], hashes: [] });
+ok("组目标混合 -> 只投活跃成员(hash 展开)", p1.keys.length === 0 && p1.hashes.join(",") === "A");
+ok("组目标混合 -> 跳过数 = 非活跃成员数", p1.skipped === 2);
+ok("组目标全活跃 -> 零跳过", P({ keys: ["G2"], hashes: [] }).skipped === 0);
+const p2 = P({ keys: ["GONE"], hashes: [] });
+ok("组解析不出 -> 原样交回组端点(不静默丢目标)", p2.keys.join(",") === "GONE" && p2.hashes.length === 0);
+const p3 = P({ keys: [], hashes: ["A", "D", "GONE"] });
+ok("单种: 活跃投递", p3.hashes.indexOf("A") >= 0);
+ok("单种: 非活跃收敛掉并计数", p3.hashes.indexOf("D") < 0 && p3.skipped === 1);
+ok("单种: hash 解析不出照发(不误丢, 与闸门「不误拦」同口径)", p3.hashes.indexOf("GONE") >= 0);
+ok("组内成员与 hashes 重叠只投一次(去重按 hash)", P({ keys: ["G2"], hashes: ["A"] }).hashes.length === 1);
+const p5 = P({ keys: ["G3"], hashes: [] });
+ok("空成员组 -> 计划为空(调用方据此收口, 不得报「成功 0 个目标」)",
+  p5.keys.length === 0 && p5.hashes.length === 0 && p5.skipped === 0);
+ok("空入参 -> 空计划(不抛)", P({}).hashes.length === 0 && P(null).skipped === 0);
+process.stdout.write(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length,
+  total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}) + "\n");
+"""
+
+
+def test_frontend_reannounce_inactive_gate_wiring():
+    """非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) ——
+
+    qB 的右键 "Force reannounce" 只在种子活跃时可用(commit aa189a7 关闭 issue #12080:
+    isPaused/isChecking/isQueued 时 `setEnabled(false)`, tooltip 原文 "Can not force
+    reannounce if torrent is Paused/Queued/Errored/Checking"); 本项目沿用同一判据
+    (暂停/停止 · 排队 · 校验中 · 错误/文件丢失)。qB 原始 state 串必须全覆盖 —— kind 只有
+    6 档, queuedDL/queuedUP 被 qbittorrent-api 归进 is_downloading/is_uploading ⇒ 落成
+    downloading/seeding, 单看 kind 会把排队种子当活跃放行。
+
+    四个面逐项钉住(键盘与详情面板是右键之外的两条绕行路径, 少接一处即形同虚设):
+      ①判定单点 decorate.js:两张表 + 读 state + 多目标任一活跃即可用(qB oneCanForceReannounce);
+      ②右键菜单 ctx-menus.html 四支都挂 reannounceMenuGate();
+      ③行为层:_actCore 的 reannounce 前置(早于乐观补丁/POST)+ _kbAct 的先拦后确认;
+      ④详情面板:04/05/06 重报钮挂 drawerReannounceGate() + 各变体 .is-gated CSS + torrentCmd 兜底。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    deco = open(os.path.join(shared, "decorate.js"), encoding="utf-8").read()
+    cmds = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    kb = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # ① 判定单点: qB 原始 state 串全覆盖 + 读 state(不是 kind)+ 多目标"任一活跃即可用"
+    for st in (
+        "pausedDL", "pausedUP", "stoppedDL", "stoppedUP", "queuedDL", "queuedUP", "checkingDL", "checkingUP",
+        "checkingResumeData", "error", "missingFiles"
+    ):
+        assert st + ":" in deco, f"decorate.js 非活跃状态集缺 qB 状态 {st}(qB 口径漏项)"
+    assert "REANNOUNCE_BLOCKED_STATES" in deco and "REANNOUNCE_BLOCKED_KINDS" in deco, \
+        "decorate.js 缺非活跃判定单点(state 原文表 + kind 兜底表)"
+    assert "m.state" in deco, "判定未读 qB 原始 state —— 单看 kind 判不出排队种子(会误放行)"
+    assert re.search(r"rows\.some\(\(r\) => !this\.reannounceBlocked\(r\)\)", deco), \
+        "多目标判据未按「任一活跃即可用」写(qB oneCanForceReannounce 口径)"
+
+    # ② 右键菜单四支: :class 与 :title 逐支成对, 且四个 @click 都还在
+    assert menus.count(":class=\"{ 'is-gated': !reannounceMenuGate().ok }\"") == 4, \
+        "ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项未全部挂 is-gated"
+    assert menus.count(':title="reannounceMenuGate().title"') == 4, \
+        "ctx-menus.html 置灰原因 title 未逐支成对(用户看不到为什么变灰)"
+    for act in ("ctxAct('reannounce')", "actEpisode('reannounce')", "actTorrent('reannounce')", "act('reannounce')"):
+        assert act in menus, f"ctx-menus.html 缺强制汇报入口 {act}(入口被改名? 判据面要同步)"
+    assert "REANNOUNCE_BLOCKED_STATES" in menus, \
+        "ctx-menus.html 缺 qB 判据说明注释(口径单点指向 decorate.js)"
+
+    # ③ 行为层: _actCore 前置闸门(早于乐观补丁) + _kbAct 先拦后确认
+    assert "async _guardReannounce(t)" in cmds or "_guardReannounce(t) {" in cmds, \
+        "commands.js 缺 _guardReannounce 闸门"
+    assert 'if (action === "reannounce" && !this._guardReannounce({ keys, hashes })) return;' in cmds, \
+        "_actCore 未对 reannounce 前置闸门(组/单种/整集/批量会绕过去)"
+    core_at = cmds.index("async _actCore(action")
+    assert cmds.index("_guardReannounce({ keys, hashes })", core_at) < \
+        cmds.index("this.applyOptimistic(optHashes, action)", core_at), \
+        "_actCore 的强制汇报闸门落在乐观补丁之后(会先贴补丁再拒绝)"
+    kb_body = re.search(r"async _kbAct\(action\) \{(.*?)\n  \},", kb, re.S)
+    assert kb_body, "shortcuts.js 找不到 _kbAct"
+    kb_txt = kb_body.group(1)
+    assert "_guardReannounce(" in kb_txt, "键盘路径未接强制汇报闸门(非活跃目标仍能 Shift+A 绕过)"
+    assert kb_txt.index("_guardReannounce(") < kb_txt.index("confirmDialog("), \
+        "键盘路径必须先拦再确认(先问「确定?」再回「不行」是坏体感)"
+
+    # ④ 详情面板: 三变体的重报钮 + 各变体 .is-gated CSS + torrentCmd 兜底
+    for name, cls in (
+        ("04-trackers-status-cards-tall.js", "dt04-act"), ("05-trackers-health-groups-low.js", "dt05-act"),
+        ("06-trackers-table-collapsed.js", "dt06-act")
+    ):
+        t = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "drawerReannounceGate()" in t, f"{name} 重报钮未接 drawerReannounceGate(详情面板绕行路径)"
+        assert f".drawer .{cls}.is-gated" in t, f"{name} 缺 .{cls}.is-gated 置灰规则"
+        assert re.search(
+            rf'class="{cls}\$\{{rGate\.ok \? "" : " is-gated"\}}" data-act="report"', t), \
+            f"{name} 的 data-act=report 钮未按 rGate 置灰(仅删除钮该置灰=误伤)"
+        assert f'data-act="del"' in t, f"{name} 删除钮被顺手摘掉(置灰只该落到 report 钮)"
+    t05 = open(os.path.join(vdir, "05-trackers-health-groups-low.js"), encoding="utf-8").read()
+    assert ".dt05-rbtn.is-gated" in t05, "05 失败区大钮(.dt05-rbtn)缺置灰规则"
+    assert ".dt05-fail .dt05-act.is-gated:hover" in t05, \
+        "05 失败区 hover 是 (0,4,0), 置灰规则不带 .dt05-fail 前缀压不过(会半灰)"
+    assert "_guardReannounce({ keys: [], hashes: [hash] })" in drawer_js, \
+        "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"
+
+    # ⑤ 投递收敛: 闸门管"允不允许"(集合级全有全无, qB 口径), 计划管"发给谁"(只发活跃)
+    assert "reannouncePlan(t) {" in deco, "decorate.js 缺投递收敛单点 reannouncePlan"
+    assert "this.reannouncePlan({ keys, hashes })" in cmds, \
+        "_actCore 未按 reannouncePlan 收敛投递集合 —— 混选会对非活跃目标发指令, 确认层随后白等窗口报「未确认」"
+    assert "跳过 ${plan.skipped} 个非活跃" in cmds, \
+        "回执未体现被跳过的非活跃目标数(用户看不懂「选了 4 个怎么只汇报了 1 个」)"
+    assert "没有可强制汇报的目标" in cmds, \
+        "缺空投递收口 —— 会落进成功分支报「成功 0 个目标」(把没做事说成做成了)"
+    # 前后端判据表逐项同表(各写一份是刻意的: 前端要能在无往返时判置灰; 漂移必须立刻报红)
+    assert _PY_BLOCKED_STATES == {
+        "pausedDL",
+        "pausedUP",
+        "stoppedDL",
+        "stoppedUP",
+        "queuedDL",
+        "queuedUP",
+        "checkingDL",
+        "checkingUP",
+        "checkingResumeData",
+        "error",
+        "missingFiles",
+    }, f"后端 REANNOUNCE_BLOCKED_STATES 与 qB 口径漂移: {sorted(_PY_BLOCKED_STATES)}"
+    js_tbl = deco[deco.index("const REANNOUNCE_BLOCKED_STATES"):deco.index("const REANNOUNCE_BLOCKED_KINDS")]
+    # 采集面 = 表体(切片已限定), 键名以 `<state>: "` 形态出现; 值文案不参与(如 missingFiles 是
+    # 「文件缺失」不以「种子」开头 —— 按值文案收键会静默漏项, 这正是本守阵首跑抓到的那条)
+    js_states = set(re.findall(r'(\w+): "', js_tbl))
+    assert js_states == set(_PY_BLOCKED_STATES), \
+        f"前后端非活跃判据表不一致(前端 {sorted(js_states)} / 后端 {sorted(_PY_BLOCKED_STATES)})"
+
+    # ⑥ 判定语义真跑(node 电池, 无 node 静默跳过 —— 与 _DT_REGISTRY_NODE_PROBE 同口径):
+    #    "接线在"不等于"判得对", qB 状态表本身必须真跑一遍(排队那一条是判据存在的理由)。
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_REANNOUNCE_GATE_PROBE,
+         os.path.join(shared, "decorate.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"强制汇报判定 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"强制汇报判定电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 def test_drawer_tpl_a11y_and_fetch_error_states():

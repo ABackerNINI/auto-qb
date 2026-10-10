@@ -50,6 +50,26 @@ function _decoFpHit(g, fp) {
   return fp[i] === (ms.length ? ms[0].save_path : undefined);
 }
 
+/* 强制汇报"非活跃"状态集(qB 口径, 单点): qBittorrent commit aa189a7(关闭 issue #12080)
+ * 起, 右键 "Force reannounce" 只在种子可汇报时可用 —— isPaused / isChecking / isQueued 时
+ * `setEnabled(false)` 置灰, 其 tooltip 原文 "Can not force reannounce if torrent is
+ * Paused/Queued/Errored/Checking"。根因在 libtorrent: force_tracker_request 对暂停种子
+ * `if (is_paused()) return;` 直接空转, 排队种子同样发不出去(本项目调研报告
+ * 26-10-05-0854 §3 附注「停止种子盲区」)。
+ *
+ * !判定必须读 qB **原始 state 串**而不是 kind: kind 只有 6 档, queuedDL/queuedUP 被
+ *   qbittorrent-api 归进 is_downloading/is_uploading ⇒ 落成 downloading/seeding, 单看 kind
+ *   会把排队种子当成活跃。state 缺失(老版本/异常行)时回落到 kind 的 paused/checking/error
+ *   三档兜底(与 views.py::state_kind 的非活跃三档一一对应, 宁可漏放不误拦)。 */
+const REANNOUNCE_BLOCKED_STATES = {
+  pausedDL: "种子已暂停", pausedUP: "种子已暂停",
+  stoppedDL: "种子已停止", stoppedUP: "种子已停止",
+  queuedDL: "种子排队中", queuedUP: "种子排队中",
+  checkingDL: "种子校验中", checkingUP: "种子校验中", checkingResumeData: "种子校验中",
+  error: "种子错误", missingFiles: "文件缺失",
+};
+const REANNOUNCE_BLOCKED_KINDS = { paused: "种子已暂停", checking: "种子校验中", error: "种子错误" };
+
 window.AQB_DECORATE = {
   methods: {
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
@@ -147,6 +167,104 @@ window.AQB_DECORATE = {
       if (member.hr_tag && tag === member.hr_tag) return "hr-pending";
       if (member.hr_tag_done && tag === member.hr_tag_done) return "hr-done";
       return "";
+    },
+    /* ---------------- 强制汇报可用性(qB 口径, 单点判定) ----------------
+     * 判据表见文件顶部 REANNOUNCE_BLOCKED_STATES。四个消费面共用这一份:
+     *   右键菜单(ctx-menus.html 四支)/ 键盘 shortcuts.js _kbAct / 动作层 commands.js _actCore /
+     *   详情面板 tracker 页签的重报钮(drawer_tpl 04/05/06 + drawer.js torrentCmd)。
+     * 多目标与 qB 的 `oneCanForceReannounce` 同口径: **任一目标活跃即可用**(不是"全部活跃")。
+     */
+    reannounceBlocked(m) {
+      const st = m && m.state;
+      if (st && REANNOUNCE_BLOCKED_STATES[st]) return true;
+      return !!(m && REANNOUNCE_BLOCKED_KINDS[m.kind]);  // state 缺失兜底(见顶部注释)
+    },
+    reannounceBlockText(m) {
+      const st = m && m.state;
+      return (st && REANNOUNCE_BLOCKED_STATES[st]) || (m && REANNOUNCE_BLOCKED_KINDS[m.kind]) || "非活跃";
+    },
+    /* 目标解析: {keys(组 key), hashes} -> 去重后的种子行(判定只读 state/kind 两字段) */
+    _reannounceRows(t) {
+      const rows = [];
+      const seen = new Set();
+      const push = (r) => { if (r && r.hash && !seen.has(r.hash)) { seen.add(r.hash); rows.push(r); } };
+      for (const k of (t && t.keys) || []) {
+        const g = this._findGroup(k);
+        for (const m of (g && g.members) || []) push(m);
+      }
+      for (const h of (t && t.hashes) || []) push(this.memberByHash.get(h));
+      return rows;
+    },
+    /* 行集合 -> {ok, title}(title 仅在 !ok 时非空, 供置灰项/钮的 title 提示原因) */
+    _reannounceVerdict(rows) {
+      /* 目标解析不出(行已消失/虚拟行): 不误拦 —— 与判定上线前行为一致(命令照发, 后端自有回执) */
+      if (!rows.length || rows.some((r) => !this.reannounceBlocked(r))) return { ok: true, title: "" };
+      return {
+        ok: false,
+        title: rows.length === 1
+          ? `${this.reannounceBlockText(rows[0])}，无法强制汇报`
+          : `全部 ${rows.length} 个目标均非活跃(暂停/停止/排队/校验中/错误)，无法强制汇报`,
+      };
+    },
+    reannounceTargetsGate(t) {
+      return this._reannounceVerdict(this._reannounceRows(t));
+    },
+    /* 目标集合 -> **投递计划**(放行后的活跃子集, 单点): 与 qB 的"真实效果"对齐。
+     *
+     * qB 的 GUI 把整个选中集合交给引擎, 引擎(libtorrent)对暂停/排队种子空转 —— 于是"真正
+     * 被汇报的"只有活跃的那几个。本项目把这一步**前移成投递收敛**: 非活跃目标既不发请求,
+     * 也不进 tracker 确认跟踪。不收的代价是实打实的 —— 确认层会为这些"投递了但引擎空转"
+     * 的目标白等到 item deadline(最长 600s), 最后落「未确认」, 把一次干净的成功报成部分失败。
+     *
+     * 解析面与闸门**同源**(_findGroup / memberByHash), 保证"判过的集合"与"发的集合"恒一致:
+     *   组 key 解析不出 -> 原样交回组端点(后端有显式回执, 置灰与命令照发不冲突);
+     *   hash 解析不出   -> 照发(与 _reannounceVerdict 的「不误拦」同口径, 由 qB 回执定论)。
+     * 返回 {keys, hashes, skipped}: keys/hashes = 实际投递目标; skipped = 收敛掉的非活跃数。 */
+    reannouncePlan(t) {
+      const keys = [];
+      const hashes = [];
+      const seen = new Set();
+      let skipped = 0;
+      for (const k of (t && t.keys) || []) {
+        const g = this._findGroup(k);
+        if (!g) { keys.push(k); continue; }
+        for (const m of g.members || []) {
+          if (!m || !m.hash || seen.has(m.hash)) continue;
+          seen.add(m.hash);
+          if (this.reannounceBlocked(m)) { skipped += 1; continue; }
+          hashes.push(m.hash);
+        }
+      }
+      for (const h of (t && t.hashes) || []) {
+        if (!h || seen.has(h)) continue;
+        seen.add(h);
+        const row = this.memberByHash.get(h);
+        if (row && this.reannounceBlocked(row)) { skipped += 1; continue; }
+        hashes.push(h);
+      }
+      return { keys, hashes, skipped };
+    },
+    /* 右键菜单当前目标的可用性(模板 :class / :title 用)。分支判据与 ctx-menus.html 的
+     * v-if 链**同序** —— menu.multi 优先级最高(menu.js _ctxMulti 与 shows.js 两个入口都会
+     * 同时置 multi 与 episode/hash, 模板先判 multi, 故这里也必须先判 multi)。 */
+    reannounceMenuGate() {
+      const m = this.menu || {};
+      let t = null;
+      if (m.multi) { const b = this._bulkTargets(); t = { keys: b.groupKeys, hashes: b.memberHashes }; }
+      else if (m.episode) t = { keys: [], hashes: m.episode.hashes || [] };
+      else if (m.hash) t = { keys: [], hashes: [m.hash] };
+      else if (m.key) t = { keys: [m.key], hashes: [] };
+      return t ? this.reannounceTargetsGate(t) : { ok: true, title: "" };
+    },
+    /* 详情面板(抽屉)当前种子的可用性(tracker 页签重报钮用): 目标 = drawer.hash。
+     * !软切换(FX-29)期间 drawer.detail 仍是**上一个**目标的数据, 只在 detail.hash 与当前
+     *   hash 一致时才采信它; 否则回落视图行(memberByHash 随视图刷新, 恒对当前目标)。 */
+    drawerReannounceGate() {
+      const d = this.drawer || {};
+      if (!d.hash) return { ok: true, title: "" };
+      const det = d.detail && d.detail.hash === d.hash ? d.detail : null;
+      const row = det || this.memberByHash.get(d.hash);
+      return this._reannounceVerdict(row ? [row] : []);
     },
   },
   computed: {
