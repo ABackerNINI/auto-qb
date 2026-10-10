@@ -428,15 +428,15 @@ body{
 
           <div class="plist">
             <div class="dhead">
-              <span>对端</span>
+              <span>IP/地址</span>
               <span>客户端</span>
-              <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
+              <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
               <span class="num sortable" data-k="prog" title="对端自身进度">进度<svg class="ic"><use href="#i-chev"/></svg></span>
               <span class="sortable occ-h" data-k="up" title="我方发给该对端的即时速度(qB upspeed); 条长 = 该对端占当前上传合计(2.11 MiB/s)的比重">↑ 占用<svg class="ic"><use href="#i-chev"/></svg></span>
-              <span class="num sortable" data-k="down" title="我方从该对端收到的即时速度(qB dlspeed)">下载<svg class="ic"><use href="#i-chev"/></svg></span>
-              <span class="num sortable" data-k="sent" title="本次会话我方已发给该对端的累计(qB uploaded)">已发<svg class="ic"><use href="#i-chev"/></svg></span>
-              <span class="num sortable" data-k="recv" title="本次会话我方已从该对端收到的累计(qB downloaded)">已收<svg class="ic"><use href="#i-chev"/></svg></span>
-              <span class="num sortable" data-k="rel" title="relevance: 该对端拥有我缺失数据的比例">关联<svg class="ic"><use href="#i-chev"/></svg></span>
+              <span class="num sortable" data-k="down" title="我方从该对端收到的即时速度(qB dlspeed)">下载速度<svg class="ic"><use href="#i-chev"/></svg></span>
+              <span class="num sortable" data-k="sent" title="本次会话我方已发给该对端的累计(qB uploaded)">已上传<svg class="ic"><use href="#i-chev"/></svg></span>
+              <span class="num sortable" data-k="recv" title="本次会话我方已从该对端收到的累计(qB downloaded)">已下载<svg class="ic"><use href="#i-chev"/></svg></span>
+              <span class="num sortable" data-k="rel" title="relevance: 该对端拥有我缺失数据的比例">文件关联<svg class="ic"><use href="#i-chev"/></svg></span>
               <span title="将对应端加入封禁列表(模拟)">处置</span>
             </div>
             <div id="pbody"></div>
@@ -635,8 +635,8 @@ function rowHtml(p){
     ${progCell(p)}
     ${occCell(p)}
     ${dnCell(p)}
-    ${amtCell(p.sent, "已发(uploaded)")}
-    ${amtCell(p.recv, "已收(downloaded)")}
+    ${amtCell(p.sent, "已上传(uploaded)")}
+    ${amtCell(p.recv, "已下载(downloaded)")}
     ${relCell(p)}
     ${actCell(p)}
   </div>`;

@@ -278,10 +278,10 @@
         <transition name="pop">
         <div v-if="filePrio.visible" ref="filePrioEl" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
           <div class="ctx-item" @click="setFilePriority(0)">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>跳过
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>不下载
           </div>
           <div class="ctx-item" @click="setFilePriority(1)">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>普通
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>正常
           </div>
           <div class="ctx-item" @click="setFilePriority(6)">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>高

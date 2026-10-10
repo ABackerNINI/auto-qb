@@ -317,7 +317,7 @@ body{
 </style>
 </head>
 <body>
-<div class="canvas-note">视口 <b>1280 × 800</b> · 内容页方向 B:<b>增强树表 + 批量优先级</b> —— 单表承层级:目录行聚合(子树大小 / 加权进度 / 文件数 / 最低可用性), 文件行内嵌进度条 + 优先级徽章(点击循环);<b>勾选行批量改优先级</b>(勾目录 = 整棵子树, 底部浮出批量条:跳过 / 普通 / 高 / 最高 一次生效), 新增<b>可用性列</b>回收弃用字段 · 默认<b>矮档 240px</b>:27px 行距下目录聚合仍一眼可读 · 高度档 收起 / 矮(240px)/ 高(560px), 收起态头部内嵌勾选批次摘要</div>
+<div class="canvas-note">视口 <b>1280 × 800</b> · 内容页方向 B:<b>增强树表 + 批量优先级</b> —— 单表承层级:目录行聚合(子树大小 / 加权进度 / 文件数 / 最低可用性), 文件行内嵌进度条 + 优先级徽章(点击循环);<b>勾选行批量改优先级</b>(勾目录 = 整棵子树, 底部浮出批量条:不下载 / 正常 / 高 / 最高 一次生效), 新增<b>可用性列</b>回收弃用字段 · 默认<b>矮档 240px</b>:27px 行距下目录聚合仍一眼可读 · 高度档 收起 / 矮(240px)/ 高(560px), 收起态头部内嵌勾选批次摘要</div>
 
 <div class="stage">
 
@@ -415,7 +415,7 @@ body{
             <label class="g-chk" style="margin-right:2px" title="全选 / 全不选(仅文件; 目录勾选=整棵子树)"><input type="checkbox" class="ckbox" id="ckMaster"></label>
             <button class="chip active" data-f="all">全部 <b>16</b></button>
             <button class="chip c-warn" data-f="miss" title="只显示存在校验缺口的文件">未完成 <b>2</b></button>
-            <button class="chip" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>7</b></button>
+            <button class="chip" data-f="skip" title="只显示优先级为不下载的文件">不下载 <b>7</b></button>
             <span class="sp"></span>
             <span class="hint">勾选后底部批量设优先级 · 点徽章循环单个</span>
             <button class="bt sm ghost" id="expAll" title="展开全部目录"><svg class="ic"><use href="#i-chev"/></svg>展开</button>
@@ -423,7 +423,7 @@ body{
           </div>
           <div class="tg-scroll">
             <div class="tg-head">
-              <span></span><span></span><span>名称</span><span class="num">大小</span><span>进度</span><span class="num" title="qB availability: 全 swarm 中该数据的份数; 目录取子树最低值">可用性</span><span title="点击徽章循环: 跳过 → 普通 → 高 → 最高">优先级</span>
+              <span></span><span></span><span>名称</span><span class="num">大小</span><span>进度</span><span class="num" title="qB availability: 全 swarm 中该数据的份数; 目录取子树最低值">可用性</span><span title="点击徽章循环: 不下载 → 正常 → 高 → 最高">优先级</span>
             </div>
             <div id="tbody"></div>
           </div>
@@ -523,7 +523,7 @@ function toast(msg){
   toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
 }
 
-/* ---- 文件树数据(与 01-10 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 跳过 / 1 普通 / 4 高 / 7 最高, avail 可用性 ---- */
+/* ---- 文件树数据(与 01-10 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 不下载 / 1 正常 / 4 高 / 7 最高, avail 可用性 ---- */
 const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", dir:true, children:[
   { name:"Season 02", dir:true, children:[
     { name:"[Nekomoe] Some Anime S02 - 05 [1080p][AVC][JPN].mkv", size:1228.8, prog:100, prio:4, avail:21.37 },
@@ -556,7 +556,7 @@ const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", 
     { name:"[Nekomoe] sample_05.mkv", size:24.0, prog:100, prio:0, avail:21.37 }
   ]}
 ]};
-const PRIO = { 0:{t:"跳过", c:"p-skip"}, 1:{t:"普通", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
+const PRIO = { 0:{t:"不下载", c:"p-skip"}, 1:{t:"正常", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
 const PRIO_ORDER = [0, 1, 4, 7];
 const EXT_ICON = { mkv:"i-video", mp4:"i-video", flac:"i-audio", mp3:"i-audio", pdf:"i-doc", jpg:"i-img", ass:"i-sub" };
 const extOf = n => { const m = /\.([a-z0-9]+)$/i.exec(n.name); return m ? m[1].toLowerCase() : ""; };
@@ -683,7 +683,7 @@ function renderFoot(){
       <span>合计 <b>${fmtSize(ROOT.size)}</b></span>
       <span>总进度 <b>${ROOT.prog.toFixed(1)}%</b></span>
       <span>未完成 <b class="w">2</b>(缺 ${fmtSize(ROOT.miss)})</span>
-      <span>跳过 <b>${skipCnt}</b> · 占 <b>${fmtSize(skipSize)}</b></span>
+      <span>不下载 <b>${skipCnt}</b> · 占 <b>${fmtSize(skipSize)}</b></span>
     </div>`;
   }
 }

@@ -24,11 +24,11 @@
 
   /* 分区定义: 顺序即处理顺序(问题前置); 空分区整节隐藏 */
   const GROUPS = [
-    { key: "err", text: "失败", cnt: "正在拖后腿 · 优先处理" },
-    { key: "warn", text: "警告", cnt: "可用但需关注" },
+    { key: "err", text: "未工作", cnt: "正在拖后腿 · 优先处理" },
+    { key: "warn", text: "未联系", cnt: "可用但需关注" },
     { key: "upd", text: "更新中", cnt: "汇报进行时" },
-    { key: "ok", text: "正常", cnt: "按 tier 升序" },
-    { key: "off", text: "未启用", cnt: "qB 合成 / 已禁用" },
+    { key: "ok", text: "工作", cnt: "按 tier 升序" },
+    { key: "off", text: "禁用", cnt: "qB 合成 / 已禁用" },
   ];
 
   /* 视图偏好(跨重渲染与换种子保持): 分区折叠 / msg 展开集合; lastSig 供跳过重建 */
@@ -252,7 +252,7 @@
     /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
     if (err && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
+        T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">Tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {
@@ -270,11 +270,11 @@
     }
     const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
     /* 计数条: 正常 / 警告 / 更新中 / 失败 / 未启用(虚拟 m) */
-    const strip = T`<span class="dt05-c"><i style="background:var(--green)"></i>正常 <b>${n.ok}</b></span>
-      <span class="dt05-c"><i style="background:var(--warn)"></i>警告 <b>${n.warn}</b></span>
+    const strip = T`<span class="dt05-c"><i style="background:var(--green)"></i>工作 <b>${n.ok}</b></span>
+      <span class="dt05-c"><i style="background:var(--warn)"></i>未联系 <b>${n.warn}</b></span>
       <span class="dt05-c"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
-      <span class="dt05-c"><i style="background:var(--error)"></i>失败 <b>${n.err}</b></span>
-      <span class="dt05-c"><i style="background:var(--border-strong)"></i>未启用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
+      <span class="dt05-c"><i style="background:var(--error)"></i>未工作 <b>${n.err}</b></span>
+      <span class="dt05-c"><i style="background:var(--border-strong)"></i>禁用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
       <span class="dt05-note">5s 自动刷新</span>
       <span class="dt05-spacer"></span>`;
     /* 分区: 空分区整节隐藏; 正常区按 tier 升序(设计稿口径) */

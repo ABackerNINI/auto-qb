@@ -24,7 +24,7 @@
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
+  const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
 
   /* 视图偏好(跨重渲染保持): 选中 path / 折叠目录组 / 仅看未完成; lastSig 供跳过重建 */
   const ui = { selPath: "", colG: new Set(), fmiss: false, lastSig: "", lastHash: "", tree: null, mapEl: null, host: null };
@@ -255,7 +255,7 @@
   function blkInner(n, w, h) {
     if (w < 34 || h < 20) return ""; /* 太小不放标签, 悬停看 title */
     const skip = n.dir === false && n.prio === 0 && w > 70
-      ? T`<span class="dt12-skip">跳过</span>` : "";
+      ? T`<span class="dt12-skip">不下载</span>` : "";
     const sz = h >= 34 ? T`<span class="dt12-sz">${ctxOf().fmtSize(n.size)}</span>` : "";
     const nm = n.name.length > 42 ? n.name.slice(0, 41) + "…" : n.name;
     return T`<span class="dt12-lb">${nm}</span>${R(sz)}${R(skip)}`;
@@ -264,7 +264,7 @@
     const t = n.path + "\n" + ctxOf().fmtSize(n.size) + " · 占 " + (n.size / total * 100).toFixed(1) + "% · 进度 " + n.prog.toFixed(1) + "%";
     return t + (n.miss > 0.5 ? " · 缺 " + ctxOf().fmtSize(n.miss) : "")
       + (n.av !== undefined ? " · 可用性 " + num(n.av).toFixed(2) : "")
-      + (!n.dir ? " · 优先级 " + (PRIO_LABEL[n.prio] || "普通") : "");
+      + (!n.dir ? " · 优先级 " + (PRIO_LABEL[n.prio] || "正常") : "");
   }
   function leafBlocks(n, r, total, parts) {
     const style = "left:" + r.x.toFixed(1) + "px;top:" + r.y.toFixed(1) + "px;width:"

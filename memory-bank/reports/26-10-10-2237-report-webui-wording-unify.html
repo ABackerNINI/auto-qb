@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="webui-wording-unify">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-10-2237">
-<meta name="doc-updated" content="26-10-11-0101">
+<meta name="doc-updated" content="26-10-11-0223">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-10-webui-wording-unify.md">
 <title>WEBUI 全量文案对齐 qB · 排查报告 · auto-qb</title>
 <style>
@@ -127,6 +127,7 @@
       <a href="#s8"><i>08</i>保持不动 / 我方自有概念</a>
       <a href="#s9"><i>09</i>影响面与边界</a>
       <a href="#s10"><i>10</i>建议口径与决策点</a>
+      <a href="#s11"><i>11</i>补漏轮 · 种子详情面板/用户页(二轮)</a>
     </nav>
 
     <main>
@@ -346,13 +347,76 @@
           </tbody>
         </table>
         <div class="note">
-          <p><b>实施记录(2026-10-11):</b>用户拍板 —— <b>实施本报告, 完全对齐 qB GUI</b>(D-Base=乙, 状态/动作词随 GUI 严格对齐)、D-Peer 甲(对端词统一「上传中/下载中」)、D-Sync 甲(resources/ 同步)。已落地: shared 层 ~470 处 + resources 9 文件 + schema help + docs + 守阵/e2e 同步; 确认框「重新校验」按 qB GUI 原文保留; 基线实测见 kb.baseline(`26-10-11-0101` 切片; 明细见任务档案)。</p>
+          <p><b>实施记录(2026-10-11):</b>用户拍板 —— <b>实施本报告, 完全对齐 qB GUI</b>(D-Base=乙, 状态/动作词随 GUI 严格对齐)、D-Peer 甲(对端词统一「上传中/下载中」)、D-Sync 甲(resources/ 同步)。已落地: shared 层 ~470 处 + resources 9 文件 + schema help + docs + 守阵/e2e 同步; 确认框「重新校验」按 qB GUI 原文保留; 基线实测见 kb.baseline(`26-10-11-0101` 切片; 明细见任务档案)。<b>二轮补漏(2026-10-11, 用户复查指出抽屉/用户页遗漏)见 §11。</b></p>
         <p><b>下一步(未授权动作, 待确认):</b>① 拍板 D-Base / D-State / D-C / D-Dir / D-Peer / D-Sync → ② 若要做, 出一份实施计划(逐文件改点 + 守阵同步 + 设计稿同步), 落 <code>memory-bank/plans/</code>; 不做则本报告即为终态快照。本报告<b>只做摸底, 未改动任何代码/文案</b>。</p>
         </div>
       </section>
 
+      <!-- ==================== 11 补漏轮 ==================== -->
+      <section id="s11">
+        <div class="sec-head"><span class="no">11</span><h2>补漏轮 · 种子详情面板 / 用户页(2026-10-11 二轮)</h2></div>
+        <hr class="sec-rule">
+        <p class="dim">一轮实施后用户复查指出<b>遗漏很多</b>, 集中在种子详情面板(抽屉五页签)与用户页(peers 页签)。二轮把清点范围从一轮的 <code>app.js</code> 列模型 + <code>drawer.js</code> general 行扩到<b>抽屉全部页签的 classic 页插件(15-16 变体外的 4 个 drawer_pages)与全部 15 个变体</code>, 基准仍取本机 qB 译文(逐词按 <code>&lt;source&gt;</code> 抽取, 见 §02)。一轮漏掉的根因:清点只吃了 general 行与列模型, <b>变体文件与 drawer_pages 页插件没进清点面</b>。</p>
+        <h3>11.1 用户页(peers 页签)· 表头族 <span class="dim">基准 = qB PeerListWidget(GUI=WEB 两版同词)</span></h3>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">IP/Address</td><td class="qb"><b>IP/地址</b></td><td class="our"><em>对端</em>(变体 07/08/09 表头)、<em>地址</em>(peers-classic)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Flags</td><td class="qb"><b>标志</b></td><td class="our"><em>Flags / 标记</em>(变体 07/08/09、peers-classic)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Files(qB files 字段)</td><td class="qb"><b>文件</b></td><td class="our"><em>正在取</em>(变体 07/08)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Down Speed / Up Speed</td><td class="qb"><b>下载速度 / 上传速度</b></td><td class="our"><em>下载 / 上传</em>(变体 07/08/09、peers-classic 表头)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Downloaded / Uploaded</td><td class="qb"><b>已下载 / 已上传</b></td><td class="our"><em>已收 / 已发</em>(变体 07/08/09)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Relevance</td><td class="qb"><b>文件关联</b></td><td class="our"><em>关联 / 关联度</em>(变体 07/08/09、peers-classic)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Session Uploaded / Downloaded</td><td class="qb">会话已上传 / 会话已下载</td><td class="our"><em>会话已发 / 会话已收</em>(变体 08 组头聚合)</td><td><span class="tag chg">改</span></td></tr>
+          </tbody>
+        </table>
+        <h3>11.2 Tracker 页签 · 状态词与按钮 <span class="dim">基准 = qB TrackerStatus(Working=工作 / Not working=未工作 / Not contacted yet=未联系 / Disabled=禁用)</span></h3>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Working</td><td class="qb"><b>工作</b></td><td class="our"><em>正常</em>(drawer.js 状态单点 + 变体 04/05/06 分桶)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Not working</td><td class="qb"><b>未工作</b></td><td class="our"><em>失败</em>(变体 04/05/06)、<em>未连接</em>(drawer.js status 4)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Not contacted yet</td><td class="qb"><b>未联系</b></td><td class="our"><em>警告 / 未连接</em>(变体 04/05/06、drawer.js status 1)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Disabled</td><td class="qb"><b>禁用</b></td><td class="our"><em>未启用</em>(drawer.js status 0 + 变体 04/05/06)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Updating</td><td class="qb">—(两版均未收录)</td><td class="our">更新中</td><td><span class="tag kd">保持</span></td></tr>
+            <tr><td class="loc">Add trackers</td><td class="qb"><b>添加 Tracker</b></td><td class="our"><em>添加 tracker</em>(trackers-classic、变体 04/06; 与对话框标题「添加 Tracker」还自相矛盾)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Reannounce In</td><td class="qb"><b>下次重新汇报</b></td><td class="our"><em>下次汇报</em>(drawer.js 传输行、变体 01/06)</td><td><span class="tag chg">改</span></td></tr>
+          </tbody>
+        </table>
+        <h3>11.3 内容页签 · 文件优先级 <span class="dim">基准 = qB PropListDelegate/TorrentContent(Do not download=不下载 / Normal=正常 / High=高 / Maximum=最高); 一轮 §05 把该行标了「保持」, 系误判 —— 当时未逐词核对</span></h3>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Do not download</td><td class="qb"><b>不下载</b></td><td class="our"><em>跳过</em>(ctx-menus 文件优先级菜单、drawer.js 两处映射、变体 10/11/12 徽章与筛选 chip、<em>已跳过</em>态 chip)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Normal</td><td class="qb"><b>正常</b></td><td class="our"><em>普通</em>(同上全部落点)</td><td><span class="tag chg">改</span></td></tr>
+          </tbody>
+        </table>
+        <h3>11.4 General 页签 · 残留 <span class="dim">一轮改了 drawer.js 部分行, 漏了其余行与变体里的同词</span></h3>
+        <table>
+          <thead><tr><th>概念(英)</th><th>qB</th><th>我方现文案(位置)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">Pieces</td><td class="qb"><b>区块</b></td><td class="our"><em>分块</em>(drawer.js + 变体 02/03, 变体按行 label 串过滤, 与一轮「信息哈希值 v1」教训同款)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">First/last pieces first</td><td class="qb"><b>先下载首尾文件块</b></td><td class="our"><em>首末块优先</em>(drawer.js:1329 一轮漏改 + 变体 02 + 添加种子对话框 dialogs-mgr 胶囊)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Peers(详情行)</td><td class="qb"><b>用户</b></td><td class="our"><em>用户(下载)</em>(drawer.js; qB 详情面板 label 就是「用户」)</td><td><span class="tag chg">改</span></td></tr>
+            <tr><td class="loc">Tracker 大小写</td><td class="qb">恒「Tracker」</td><td class="our"><em>tracker 数 / tracker 错误 / tracker 警告 / 首选 tracker / tracker 列表加载失败</em>(drawer.js + 变体 02/03/04/05/06)</td><td><span class="tag chg">改</span></td></tr>
+          </tbody>
+        </table>
+        <h3>11.5 刻意不动(二轮复核)</h3>
+        <ul class="plain">
+          <li><b>「吸血嫌疑 / 内网 / 闲置同伴 / 被我方限流 / 握手中 / 占用 / ↑ 占用」</b><span> —— 我方自有概念(qB 无对应), 不算不符(§08 口径)。</span></li>
+          <li><b>「分配中」(Allocating)</b><span> —— qB 两版译文均未收录该 source, 向 qB 靠拢保留现词。</span></li>
+          <li><b>「更新中」(Updating)</b><span> —— qB 未收录, 保留。</span></li>
+          <li><b>「跳过校验」胶囊 + 提示行(添加种子对话框)</b><span> —— 跳的是 auto-qb 自身校验策略(非 qB Skip hash check), 自有概念保留; 但同对话框的「首末块优先」属 qB 概念, 已改。</span></li>
+          <li><b>「做种数(总) / 用户(总)」列(app.js)</b><span> —— (总)后缀是列值「已连接 (总数)」格式的一部分, 自有; 「汇报层级」(tier)描述性保留。</span></li>
+          <li><b>注释(代码 comment)里的旧词</b><span> —— 变体头注释里的分桶映射说明等纯注释未动(一轮既定口径, 记为后续候选)。</span></li>
+        </ul>
+        <div class="note">
+          <p><b>实施记录(2026-10-11 二轮):</b>上表全部「改」项已落地 —— shared 层 17 文件(变体 01-12 + drawer_pages 4 + drawer.js + ctx-menus + dialogs-mgr)约 <b>88 处</b>; <code>resources/detail-panel-templates/</code> 12 文件 <b>72 处</b>(D-Sync 甲口径); e2e <code>drawer-peers-columns.spec.mjs</code> 1 处(「正在取」列头断言→「文件」); 守阵 <code>test_webui_static_dom_panel.py</code> 错误态文案 3 处(tracker 列表→Tracker 列表)。改动 JS 全量 <code>node --check</code> 绿; <code>test.quick</code> 3112 passed; 基线实测见 <code>kb.baseline</code>。</p>
+        </div>
+      </section>
+
       <footer class="colophon">
-        <p>全量排查报告(同文件二次扩写: 由"方向词"扩为"全量术语对齐") · 基线 develop @ e4282642 · 2026-10-10 · 我方范围 src/auto_qb/webui/static/(shared 层) · 基准 = 本机 qBittorrent 官方 zh_CN 译文(src/webui/.../webui_zh_CN.ts 为主 + src/lang/qbittorrent_zh_CN.ts 交叉) · 未改动生产文件</p>
+        <p>全量排查报告(同文件三次扩写: 方向词 → 全量术语对齐 → 二轮补漏抽屉/用户页见 §11) · 基线 develop @ e4282642 · 2026-10-10 · 我方范围 src/auto_qb/webui/static/(shared 层)+ resources/detail-panel-templates · 基准 = 本机 qBittorrent 官方 zh_CN 译文(src/webui/.../webui_zh_CN.ts 为主 + src/lang/qbittorrent_zh_CN.ts 交叉)</p>
       </footer>
 
     </main>

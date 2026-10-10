@@ -405,7 +405,7 @@ body{
               <button class="seg active" data-sort="sev">异常优先</button>
               <button class="seg" data-sort="tier">按 tier</button>
             </div>
-            <button class="bt sm primary" id="addBtn"><svg class="ic"><use href="#i-plus"/></svg>添加 tracker</button>
+            <button class="bt sm primary" id="addBtn"><svg class="ic"><use href="#i-plus"/></svg>添加 Tracker</button>
           </div>
 
           <div class="tr-grid" id="trGrid">
@@ -414,7 +414,7 @@ body{
             <article class="tr-card st-err" data-st="err" data-tier="2" data-host="tracker.example.io">
               <header class="tc-head">
                 <span class="tc-dot"></span>
-                <span class="tc-st">失败</span>
+                <span class="tc-st">未工作</span>
                 <span class="tc-tier" title="tier: 汇报层级, 数值越小越优先">T2</span>
                 <span class="tc-host" title="https://tracker.example.io/announce.php?passkey=****">tracker.example.io</span>
                 <span class="tc-acts">
@@ -440,7 +440,7 @@ body{
             <article class="tr-card st-warn" data-st="warn" data-tier="1" data-host="tracker.example.net">
               <header class="tc-head">
                 <span class="tc-dot"></span>
-                <span class="tc-st">警告</span>
+                <span class="tc-st">未联系</span>
                 <span class="tc-tier" title="tier: 汇报层级, 数值越小越优先">T1</span>
                 <span class="tc-host" title="https://tracker.example.net/announce.php?passkey=****">tracker.example.net</span>
                 <span class="tc-acts">
@@ -457,7 +457,7 @@ body{
               </div>
               <div class="tc-msg m-warn" title="tracker 返回的原始 msg(仍可正常汇报)">tracker msg: <b>该 announce 地址将于 2026-10-15 停用</b>, 请改用新地址并重新下载 .torrent</div>
               <footer class="tc-foot">
-                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次汇报 <b>6m</b></span>
+                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次重新汇报 <b>6m</b></span>
                 <span class="tf-item">上次成功 <b>08:45</b></span>
               </footer>
             </article>
@@ -491,7 +491,7 @@ body{
             <article class="tr-card st-ok" data-st="ok" data-tier="0" data-host="tracker.example.org">
               <header class="tc-head">
                 <span class="tc-dot"></span>
-                <span class="tc-st">正常</span>
+                <span class="tc-st">工作</span>
                 <span class="tc-tier" title="tier: 汇报层级, 数值越小越优先">T0</span>
                 <span class="tc-host" title="https://tracker.example.org/announce.php?passkey=****">tracker.example.org</span>
                 <span class="tc-acts">
@@ -507,7 +507,7 @@ body{
                 <span class="tcs" title="num_downloaded: 该 tracker 报告的累计完成下载次数">完成下载 <b>43</b> 次</span>
               </div>
               <footer class="tc-foot">
-                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次汇报 <b>21m</b></span>
+                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次重新汇报 <b>21m</b></span>
                 <span class="tf-item">上次成功 <b>08:47</b></span>
               </footer>
             </article>
@@ -516,7 +516,7 @@ body{
             <article class="tr-card st-ok" data-st="ok" data-tier="2" data-host="192.168.31.2">
               <header class="tc-head">
                 <span class="tc-dot"></span>
-                <span class="tc-st">正常</span>
+                <span class="tc-st">工作</span>
                 <span class="tc-tier" title="tier: 汇报层级, 数值越小越优先">T2</span>
                 <span class="tc-tag" title="局域网 tracker, 不经过公网">内网</span>
                 <span class="tc-host" title="http://192.168.31.2:6969/announce">192.168.31.2</span>
@@ -534,7 +534,7 @@ body{
               </div>
               <div class="tc-msg m-note" title="tracker 备注">内网 NAS 上的 qBittorrent, 支持 uTP 直连, 不占用公网带宽</div>
               <footer class="tc-foot">
-                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次汇报 <b>14m</b></span>
+                <span class="tf-item"><svg class="ic"><use href="#i-clock"/></svg>下次重新汇报 <b>14m</b></span>
                 <span class="tf-item">上次成功 <b>08:47</b></span>
               </footer>
             </article>
@@ -707,7 +707,7 @@ document.addEventListener("click", e => {
     toast("已删除 " + host + "(演示, 刷新页面恢复)");
   }
 });
-$("#addBtn").addEventListener("click", () => toast("打开添加 tracker 对话框(演示)"));
+$("#addBtn").addEventListener("click", () => toast("打开添加 Tracker 对话框(演示)"));
 </script>
 </body>
 </html>

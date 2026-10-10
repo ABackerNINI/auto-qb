@@ -1,17 +1,18 @@
-# WEBUI 文案对齐 qB(报告已实施)
+# WEBUI 文案对齐 qB(报告已实施 + 二轮补漏完毕)
 
-> 摘要: 报告 `reports/26-10-10-2237-report-webui-wording-unify.html` 已按用户拍板实施完毕: **完全对齐 qB GUI 译文** + D-Peer 甲(对端词统一「上传中/下载中」)+ D-Sync 甲(resources/ 同步)。shared 层 ~470 处 + resources 9 文件 + schema help + docs + 守阵/e2e 同步全部落地; 基线 `test.full` 实测数字见 `kb.baseline`(`26-10-11-0101` 切片)。工作树含本轮全部改动, `ship.commit` 随本专题入库(等用户显式说「提交」)。
-> 最后活动: 2026-10-11 01:01
+> 摘要: 报告 `reports/26-10-10-2237-report-webui-wording-unify.html` 一轮实施(完全对齐 qB GUI + D-Peer 甲 + D-Sync 甲)后, 用户复查指出**抽屉/用户页仍大批遗漏** → 二轮补漏实施完毕(报告新增 §11 全表): 用户页表头族(对端→IP/地址、Flags→标志、正在取→文件、已发/已收→已上传/已下载、关联→文件关联、上传/下载→上传速度/下载速度、会话已发/收)、tracker 状态词(正常→工作、失败→未工作、警告→未联系、未启用→禁用、添加 tracker→添加 Tracker、下次汇报→下次重新汇报)、文件优先级(跳过→不下载、普通→正常)、general 残留(分块→区块、首末块优先→先下载首尾文件块、用户(下载)→用户、tracker→Tracker)。shared 17 文件 ~92 处 + resources 12 文件 72 处 + e2e 1 处 + 守阵 3 处。基线 `test.full` 实测见 `kb.baseline`(`26-10-11-0226` 切片)。工作树含一二轮全部改动, `ship.commit` 随本专题入库(等用户显式说「提交」)。
+> 最后活动: 2026-10-11 02:26
 
-**Refs:** memory-bank/tasks/26-10-10-webui-wording-unify.md,memory-bank/testing/baselines/26-10-11-0101-webui-wording-gui-unify.md
+**Refs:** memory-bank/tasks/26-10-10-webui-wording-unify.md,memory-bank/testing/baselines/26-10-11-0226-webui-wording-round2-drawer-peers.md
 
 ## 当前状态(无未竟事项)
 
-- 实施明细与「刻意不动」清单(确认框「重新校验」、state.js 自身暂停态、跳检对话框词、复制族/超级做种等)见任务档案与本轮基线切片。
-- GUI 与 WebUI 译词差异最终以 GUI 为准落地的关键项: Seeds 列=做种数(tracker 页签=种子)、Completed=已完成、Force Recheck=强制重新检查、Set location=设定位置、Start/Stop=启动/停止。
+- 一轮范围与「刻意不动」清单见报告 §01/§08/§10; 二轮范围与「刻意不动」见报告 §11.5(吸血嫌疑/内网/闲置同伴/占用等自有概念、更新中/分配中(qB 未收录)、跳过校验胶囊(自有特性)、变体头注释)。
+- **根因教训**: 一轮「全量排查」的清点面只吃了 app.js 列模型 + drawer.js general 行, 变体(drawer_tpl 15 个)与页插件(drawer_pages 4 个)没进清点面 —— 「全量」必须覆盖全部渲染出口。已写进任务档案。
 
 ## 后续候选(未开工, 均需用户另起)
 
-- 术语常量单点化(报告 §09 实施期决策; 本轮为机械替换, 未收常量)。
-- `config_hub.js` schema 字段标签(上传限速/下载限速)是否随 GUI 改「上传限制/下载限制」—— 配置域词汇, 报告未列, 本轮未动。
-- 三皮肤 CSS 注释里的方向词注释(纯注释, 本轮未动)。
+- 术语常量单点化(报告 §09 实施期决策; 两轮均为机械替换, 未收常量)。
+- `config_hub.js` schema 字段标签(上传限速/下载限速)是否随 GUI 改「上传限制/下载限制」—— 配置域词汇, 未动。
+- 三皮肤 CSS 注释与变体头注释里的旧词(纯注释, 两轮未动)。
+- 一轮遗留:「重新校验」确认框(qB GUI 原文如此, 守阵钉住)不动。

@@ -593,14 +593,14 @@ const GROUPS = [
 const FOLDED = { take:false, feed:false, idle:true, choke:false, hand:true };
 
 function aggHtml(key, ms){
-  if (key === "take")  return `↑ <b>${fmtSpd(sum(ms, "up"))}</b> · 会话已发 <b>${fmtAmt(sum(ms, "sent"))}</b>`;
-  if (key === "feed")  return `↓ <b>${fmtSpd(sum(ms, "down"))}</b> · 会话已收 <b>${fmtAmt(sum(ms, "recv"))}</b>`;
+  if (key === "take")  return `↑ <b>${fmtSpd(sum(ms, "up"))}</b> · 会话已上传 <b>${fmtAmt(sum(ms, "sent"))}</b>`;
+  if (key === "feed")  return `↓ <b>${fmtSpd(sum(ms, "down"))}</b> · 会话已下载 <b>${fmtAmt(sum(ms, "recv"))}</b>`;
   if (key === "idle")  return `完整副本 × <b>${ms.length}</b> · 当前无流量`;
   if (key === "choke") return `对方有意 · 我方已限流`;
   return `握手未完成`;
 }
 
-/* ---- 单元格构造(与 07 号模板同款, 少一列关联度: 分区本身已隐含) ---- */
+/* ---- 单元格构造(与 07 号模板同款, 少一列文件关联: 分区本身已隐含) ---- */
 function flagBadges(flags){
   return flags.split(" ").map(f => {
     const m = FLAG_META[f];
@@ -658,13 +658,13 @@ function rowHtml(p){
 }
 function colHeadHtml(){
   return `<div class="g-row gcols">
-    <span>对端</span>
+    <span>IP/地址</span>
     <span>客户端</span>
-    <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
-    <span title="对端正在获取的文件(qB files 字段)">正在取</span>
+    <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
+    <span title="对端正在获取的文件(qB files 字段)">文件</span>
     <span class="num sortable${sortKey === "prog" ? " on" : ""}${sortKey === "prog" && sortDir === 1 ? " asc" : ""}" data-k="prog" title="对端自身进度">进度<svg class="ic"><use href="#i-chev"/></svg></span>
-    <span class="num sortable${sortKey === "up" ? " on" : ""}${sortKey === "up" && sortDir === 1 ? " asc" : ""}" data-k="up" title="我方发给该对端的即时速度(qB upspeed)">上传<svg class="ic"><use href="#i-chev"/></svg></span>
-    <span class="num sortable${sortKey === "down" ? " on" : ""}${sortKey === "down" && sortDir === 1 ? " asc" : ""}" data-k="down" title="我方从该对端收到的即时速度(qB dlspeed)">下载<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "up" ? " on" : ""}${sortKey === "up" && sortDir === 1 ? " asc" : ""}" data-k="up" title="我方发给该对端的即时速度(qB upspeed)">上传速度<svg class="ic"><use href="#i-chev"/></svg></span>
+    <span class="num sortable${sortKey === "down" ? " on" : ""}${sortKey === "down" && sortDir === 1 ? " asc" : ""}" data-k="down" title="我方从该对端收到的即时速度(qB dlspeed)">下载速度<svg class="ic"><use href="#i-chev"/></svg></span>
     <span class="num sortable${sortKey === "sent" ? " on" : ""}${sortKey === "sent" && sortDir === 1 ? " asc" : ""}" data-k="sent" title="本次会话我方已发给该对端的累计(qB uploaded)">已发<svg class="ic"><use href="#i-chev"/></svg></span>
     <span class="num sortable${sortKey === "recv" ? " on" : ""}${sortKey === "recv" && sortDir === 1 ? " asc" : ""}" data-k="recv" title="本次会话我方已从该对端收到的累计(qB downloaded)">已收<svg class="ic"><use href="#i-chev"/></svg></span>
   </div>`;

@@ -203,8 +203,8 @@
   /* 组头聚合(设计稿同款口径) */
   function aggText(key, ms) {
     const sum = (k) => ms.reduce((s, p) => s + num(p[k]), 0);
-    if (key === "take") return T`↑ <b>${fmtSpeedOf(sum("upspeed"))}</b> · 会话已发 <b>${fmtSizeOf(sum("uploaded"))}</b>`;
-    if (key === "feed") return T`↓ <b>${fmtSpeedOf(sum("dlspeed"))}</b> · 会话已收 <b>${fmtSizeOf(sum("downloaded"))}</b>`;
+    if (key === "take") return T`↑ <b>${fmtSpeedOf(sum("upspeed"))}</b> · 会话已上传 <b>${fmtSizeOf(sum("uploaded"))}</b>`;
+    if (key === "feed") return T`↓ <b>${fmtSpeedOf(sum("dlspeed"))}</b> · 会话已下载 <b>${fmtSizeOf(sum("downloaded"))}</b>`;
     if (key === "idle") return T`完整副本同伴 · 当前无流量`;
     if (key === "choke") return T`对方有意 · 我方已限流`;
     return T`握手未完成`;
@@ -288,16 +288,16 @@
         role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
     };
     return T`<div class="dt08-gcols${hasFiles ? "" : " nofiles"}">
-      <span>对端</span>
+      <span>IP/地址</span>
       <span>客户端</span>
-      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
-      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">正在取</span>` : "")}
+      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
+      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">文件</span>` : "")}
       ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上传", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下载", "我方从该对端收到的即时速度(qB dlspeed)"))}
-      ${R(seg("sent", "已发", "本次会话我方已发给该对端的累计(qB uploaded)"))}
-      ${R(seg("recv", "已收", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
-      <span class="dt08-headcell num" title="relevance: 该对端拥有我缺失数据的比例">关联</span>
+      ${R(seg("up", "上传速度", "我方发给该对端的即时速度(qB upspeed)"))}
+      ${R(seg("down", "下载速度", "我方从该对端收到的即时速度(qB dlspeed)"))}
+      ${R(seg("sent", "已上传", "本次会话我方已发给该对端的累计(qB uploaded)"))}
+      ${R(seg("recv", "已下载", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
+      <span class="dt08-headcell num" title="relevance: 该对端拥有我缺失数据的比例">文件关联</span>
     </div>`;
   }
 

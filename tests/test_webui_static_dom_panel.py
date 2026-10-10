@@ -1468,9 +1468,9 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     # 4. 九个 fetch 型变体: 错误态先于空态; 文案与轮询事实对应(trackers/peers 5s 轮询=可写自动重试;
     #    content 无轮询=只陈述失败, 不得虚构「稍后自动重试」)
     err_expect = {
-        "04-trackers-status-cards-tall.js": ("trackersError", "tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
-        "05-trackers-health-groups-low.js": ("trackersError", "tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
-        "06-trackers-table-collapsed.js": ("trackersError", "tracker 列表加载失败", "暂无 tracker"),
+        "04-trackers-status-cards-tall.js": ("trackersError", "Tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "05-trackers-health-groups-low.js": ("trackersError", "Tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "06-trackers-table-collapsed.js": ("trackersError", "Tracker 列表加载失败", "暂无 tracker"),
         "07-peers-dashboard-tall.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
         "08-peers-groups-low.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
         "09-peers-density-collapsed.js": ("peersError", "用户列表加载失败", "暂无已连接用户"),

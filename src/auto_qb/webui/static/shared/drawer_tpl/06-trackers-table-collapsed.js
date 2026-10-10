@@ -26,11 +26,11 @@
 
   /* 状态分桶 -> 文案与排序权值(异常置顶; 虚拟恒排最后) */
   const BUCKET = {
-    err: { text: "失败", sev: 0 },
-    warn: { text: "警告", sev: 1 },
+    err: { text: "未工作", sev: 0 },
+    warn: { text: "未联系", sev: 1 },
     upd: { text: "更新中", sev: 2 },
-    ok: { text: "正常", sev: 3 },
-    off: { text: "未启用", sev: 9 },
+    ok: { text: "工作", sev: 3 },
+    off: { text: "禁用", sev: 9 },
   };
 
   /* 视图偏好(跨重渲染与换种子保持): 仅看异常 / msg 展开集合; lastSig 供跳过重建 */
@@ -100,7 +100,7 @@
     ".drawer .dt06-v.z { color:var(--fg-dim); }",
     ".drawer .dt06-tier { font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; color:var(--fg-dim);",
     "  text-align:right; white-space:nowrap; }",
-    /* 下次汇报列: 全局近似值 + 微条比例 */
+    /* 下次重新汇报列: 全局近似值 + 微条比例 */
     ".drawer .dt06-next { display:flex; flex-direction:column; gap:3px; min-width:0; align-items:flex-end; }",
     ".drawer .dt06-next b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px; color:var(--fg); }",
     ".drawer .dt06-next .dt06-gb { font-size:10px; color:var(--fg-dim); border:1px solid var(--border-soft);",
@@ -156,7 +156,7 @@
     const na = t ? t.next_announce : null;
     if (num(na) && na > 0) {
       const rem = Math.max(0, Math.round(na - nowSec));
-      return T`<span class="dt06-next" title="该 tracker 的下次汇报倒计时(行级 next_announce 真值)">
+      return T`<span class="dt06-next" title="该 tracker 的下次重新汇报倒计时(行级 next_announce 真值)">
         <span><b>${ctx.fmtDuration(rem)}</b></span>
       </span>`;
     }
@@ -239,7 +239,7 @@
     /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
     if (err && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
+        T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">Tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {
@@ -262,7 +262,7 @@
         <button type="button" class="dt06-toggle${ui.onlyBad ? " active" : ""}" data-toggle
           ><i></i>仅看异常</button>
         <span class="dt06-spacer"></span>
-        <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker</button>
+        <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>
       </div>
       <div class="dt06-table${ui.onlyBad ? " only-bad" : ""}">
         <div class="dt06-r head">
@@ -272,7 +272,7 @@
           <span class="dt06-num" title="num_seeds (num_complete)">种子</span>
           <span class="dt06-num" title="num_leeches (num_incomplete)">用户</span>
           <span class="dt06-num" title="num_downloaded: 该 tracker 报告的累计完成下载次数">完成下载</span>
-          <span title="下次汇报倒计时(逐 tracker 真值 next_announce; qB 无该字段时回退种子级全局近似)">下次汇报</span>
+          <span title="下次重新汇报倒计时(逐 tracker 真值 next_announce; qB 无该字段时回退种子级全局近似)">下次重新汇报</span>
           <span class="dt06-num">操作</span>
         </div>
         ${R(rowsHtml)}

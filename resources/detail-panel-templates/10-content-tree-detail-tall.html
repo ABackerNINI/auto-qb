@@ -418,7 +418,7 @@ body{
             <div class="ct-tools">
               <button class="chip active" data-f="all">全部 <b>16</b></button>
               <button class="chip c-warn" data-f="miss" title="只显示存在校验缺口的文件">未完成 <b>2</b></button>
-              <button class="chip" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>7</b></button>
+              <button class="chip" data-f="skip" title="只显示优先级为不下载的文件">不下载 <b>7</b></button>
               <span class="sp"></span>
               <span class="hint">点行查看详情 · 点箭头折叠目录</span>
               <button class="bt sm ghost" id="expAll" title="展开全部目录"><svg class="ic"><use href="#i-chev"/></svg>展开</button>
@@ -523,7 +523,7 @@ function toast(msg){
   toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
 }
 
-/* ---- 文件树数据(与 01-09 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 跳过 / 1 普通 / 4 高 / 7 最高, avail 可用性 ---- */
+/* ---- 文件树数据(与 01-09 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 不下载 / 1 正常 / 4 高 / 7 最高, avail 可用性 ---- */
 const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", dir:true, children:[
   { name:"Season 02", dir:true, children:[
     { name:"[Nekomoe] Some Anime S02 - 05 [1080p][AVC][JPN].mkv", size:1228.8, prog:100, prio:4, avail:21.37 },
@@ -556,7 +556,7 @@ const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", 
     { name:"[Nekomoe] sample_05.mkv", size:24.0, prog:100, prio:0, avail:21.37 }
   ]}
 ]};
-const PRIO = { 0:{t:"跳过", c:"p-skip"}, 1:{t:"普通", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
+const PRIO = { 0:{t:"不下载", c:"p-skip"}, 1:{t:"正常", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
 const PRIO_ORDER = [0, 1, 4, 7];
 const EXT_ICON = { mkv:"i-video", mp4:"i-video", flac:"i-audio", mp3:"i-audio", pdf:"i-doc", jpg:"i-img", ass:"i-sub" };
 const EXT_TYPE = { mkv:"视频 · Matroska", mp4:"视频 · MP4", flac:"音频 · FLAC", mp3:"音频 · MP3", pdf:"文档 · PDF", jpg:"图片 · JPEG", ass:"字幕 · ASS" };
@@ -673,7 +673,7 @@ function detailFile(n){
     (n.miss > 0.005
       ? `<span class="stchip s-warn" title="按块校验存在缺口; swarm 可用性 ${n.avail.toFixed(2)}, 有源可补, 可等待或手动强制重新检查">缺块 ${fmtSize(n.miss)}</span>`
       : `<span class="stchip s-ok" title="该文件全部块均已完整">已完成</span>`) +
-    (n.prio === 0 ? `<span class="stchip s-skip" title="优先级为跳过: 不参与下载, 已有数据保留">已跳过</span>` : "");
+    (n.prio === 0 ? `<span class="stchip s-skip" title="优先级为不下载: 不参与下载, 已有数据保留">不下载</span>` : "");
   const avTitle = n.dir ? "子树内最低可用性" : "qB availability: 全 swarm 中该文件数据的份数";
   return `
   <div class="dt-kicker">${iconOf(n, true)}文件 · ${EXT_TYPE[extOf(n)] || "其他"}</div>

@@ -25,7 +25,7 @@
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
+  const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
   const PRIO_ORDER = [0, 1, 6, 7];
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建 */
@@ -250,7 +250,7 @@
     const badge = n.dir
       ? T`<span class="dt10-pnone" title="目录本身无优先级; 选中后可在右侧整目录批量设置">—</span>`
       : T`<button type="button" class="dt10-pbadge${prioBadgeClass(n.prio)}" data-prio="${n.index}"
-          title="优先级: ${PRIO_LABEL[n.prio] || "普通"} — 点击弹出优先级小菜单">${PRIO_LABEL[n.prio] || "普通"}</button>`;
+          title="优先级: ${PRIO_LABEL[n.prio] || "正常"} — 点击弹出优先级小菜单">${PRIO_LABEL[n.prio] || "正常"}</button>`;
     return T`<div class="dt10-r${n.dir ? " dir" : " file"}${ui.selPath === n.path ? " sel" : ""}" data-node="${n.path}" tabindex="-1">
       ${R(tgl)}
       <span class="dt10-n" style="padding-left:${n.depth * 14}px" title="${n.path}"><svg class="ico" viewBox="0 0 16 16"><use href="${n.dir ? "#i-folder" : "#i-list"}"></use></svg><span class="dt10-nm">${n.name}</span>${R(meta)}</span>
@@ -278,7 +278,7 @@
         ? T`<span class="dt10-stchip warn" title="按块校验存在缺口, 有源可补">缺块 ${ctxOf().fmtSize(n.miss)}</span>`
         : T`<span class="dt10-stchip ok" title="该文件全部块均已完整">已完成</span>`);
     const skipChip = (!isDir && n.prio === 0)
-      ? T`<span class="dt10-stchip skip" title="优先级为跳过: 不参与下载, 已有数据保留">已跳过</span>` : "";
+      ? T`<span class="dt10-stchip skip" title="优先级为不下载: 不参与下载, 已有数据保留">不下载</span>` : "";
     const avCell = hasAv
       ? T`<div class="dt10-cell"><i title="${isDir ? "子树内最低可用性(最稀缺文件)" : "qB availability: 全 swarm 中该文件数据的份数"}">可用性</i><b>${isDir ? n.minAv.toFixed(2) : num(n.availability).toFixed(2)}</b></div>`
       : "";
@@ -368,7 +368,7 @@
     const chips = [
       T`<button type="button" class="dt10-chip${ui.filter === "all" ? " active" : ""}" data-f="all">全部 <b>${cnt.all}</b></button>`,
       T`<button type="button" class="dt10-chip c-warn${ui.filter === "miss" ? " active" : ""}" data-f="miss" title="只显示存在缺口的文件">未完成 <b>${cnt.miss}</b></button>`,
-      T`<button type="button" class="dt10-chip${ui.filter === "skip" ? " active" : ""}" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>${cnt.skip}</b></button>`,
+      T`<button type="button" class="dt10-chip${ui.filter === "skip" ? " active" : ""}" data-f="skip" title="只显示优先级为不下载的文件">不下载 <b>${cnt.skip}</b></button>`,
     ].join("");
     const html = T`<div class="dt10-wrap">
       <section class="dt10-left">

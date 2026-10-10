@@ -24,21 +24,21 @@
 
   /* 状态分桶 -> 展示文案与排序权值(异常优先 = 权值升序; 虚拟恒排最后) */
   const BUCKET = {
-    err: { text: "失败", sev: 0 },
-    warn: { text: "警告", sev: 1 },
+    err: { text: "未工作", sev: 0 },
+    warn: { text: "未联系", sev: 1 },
     upd: { text: "更新中", sev: 2 },
-    ok: { text: "正常", sev: 3 },
-    off: { text: "未启用", sev: 9 },
+    ok: { text: "工作", sev: 3 },
+    off: { text: "禁用", sev: 9 },
   };
   /* 色族说明下放到各胶囊(原挂在 .dt04-overview 容器上, 悬浮子元素时 tooltip 锚到容器
    * 中上方远离光标 —— 锚点取最内层 [data-aq-tip], title 须挂在实际悬浮的小元素上) */
   const PILLS = [
     { f: "all", text: "全部", cls: "", tip: "状态分类沿用全局状态色族" },
-    { f: "ok", text: "正常", cls: "pd-ok", tip: "正常 = 绿" },
-    { f: "warn", text: "警告", cls: "pd-warn", tip: "警告 = 黄" },
+    { f: "ok", text: "工作", cls: "pd-ok", tip: "工作 = 绿" },
+    { f: "warn", text: "未联系", cls: "pd-warn", tip: "未联系 = 黄" },
     { f: "upd", text: "更新中", cls: "pd-upd", tip: "更新中 = 蓝" },
-    { f: "err", text: "失败", cls: "pd-err", tip: "失败 = 红" },
-    { f: "off", text: "未启用", cls: "pd-off", tip: "未启用 = 中性描边" },
+    { f: "err", text: "未工作", cls: "pd-err", tip: "未工作 = 红" },
+    { f: "off", text: "禁用", cls: "pd-off", tip: "禁用 = 中性描边" },
   ];
 
   /* 视图偏好(跨重渲染与换种子保持): 计数筛选 / 排序; lastSig 供数据未变跳过重建 */
@@ -207,7 +207,7 @@
       msg = T`<div class="dt04-msg ${cls}" title="tracker 返回的原始 msg">${m}</div>`;
     }
     const offNote = b === "off" && !virtual
-      ? T`<div class="dt04-vnote" title="status = 0">该 tracker 已被 qB 禁用(状态「未启用」), 不参与汇报</div>` : "";
+      ? T`<div class="dt04-vnote" title="status = 0">该 tracker 已被 qB 禁用(状态「禁用」), 不参与汇报</div>` : "";
     const stText = b === "err" ? bk.text : ctx.drawerTrackerStatus(t.status) || bk.text;
     /* 排序权值: 异常优先 = sev*10+tier / 按 tier = tier*10+sev(off 恒排最后) */
     const sev = bk.sev, tierN = num(t.tier) ? Number(t.tier) : 9;
@@ -236,7 +236,7 @@
     return T`<article class="dt04-card st-off" style="order:95">
       <header class="dt04-head">
         <span class="dt04-dot"></span>
-        <span class="dt04-st" title="由 qBittorrent 合成, 非真实 tracker">未启用 · 虚拟条目 ×${vs.length}</span>
+        <span class="dt04-st" title="由 qBittorrent 合成, 非真实 tracker">禁用 · 虚拟条目 ×${vs.length}</span>
         <span class="dt04-host dim">由 qBittorrent 合成, 非真实 tracker</span>
       </header>
       <div class="dt04-vchips">${R(chips)}</div>
@@ -259,7 +259,7 @@
     /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
     if (err && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
+        T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">Tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
       return;
     }
     if (!ts.length) {
@@ -296,7 +296,7 @@
         <span class="dt04-note">5s 自动刷新</span>
         <span class="dt04-spacer"></span>
         <div class="dt04-sort" role="group" aria-label="卡片排序">${R(sortSegs)}</div>
-        <button type="button" class="dt04-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker</button>
+        <button type="button" class="dt04-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>
       </div>
       ${R(body)}
     </div>`;

@@ -584,7 +584,7 @@ window.AQB_DRAWER = {
       const hash = this.drawer.hash;
       const idx = Array.isArray(indices) ? indices.slice() : [this.filePrio.index];
       if (!hash || !idx.length || idx.some((i) => !Number.isInteger(i) || i < 0)) return;
-      const label = { 0: "跳过", 1: "普通", 6: "高", 7: "最高" }[p] || String(p);
+      const label = { 0: "不下载", 1: "正常", 6: "高", 7: "最高" }[p] || String(p);
       const okText = Array.isArray(indices)
         ? `已将 ${idx.length} 个文件设为「${label}」` : `优先级已设为「${label}」`;
       await this._editPost(hash, "files/priority", { indices: idx, priority: p }, okText);
@@ -1267,7 +1267,7 @@ window.AQB_DRAWER = {
             // FX-22: 哈希/备注可能极长 -> 块行 + 右侧"复制"(不再只能悬停看 title)
             { icon: "#i-hash", label: "信息哈希值 v1", text: d.infohash_v1 || "—", mono: true, wide: true, act: "copy" },
             { icon: "#i-hash", label: "信息哈希值 v2", text: d.infohash_v2 || "—", mono: true, wide: true, act: "copy" },
-            { icon: "#i-columns", label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
+            { icon: "#i-columns", label: "区块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
             { icon: "#i-info", label: "已含元数据", text: yn(d.has_metadata) },
             { icon: "#i-calendar", label: "创建于", text: ts(d.creation_date) },
             { icon: "#i-settings", label: "创建工具", text: d.created_by || "—" },
@@ -1287,13 +1287,13 @@ window.AQB_DRAWER = {
             { icon: "#i-upload", label: "会话已上传", text: size(d.uploaded_session) },
             { icon: "#i-warn", label: "已丢弃", text: size(d.total_wasted) },
             { icon: "#i-arrow-up", label: "做种数", text: String(d.num_seeds ?? 0) },
-            { icon: "#i-arrow-down", label: "用户(下载)", text: String(d.num_leechs ?? 0) },
+            { icon: "#i-arrow-down", label: "用户", text: String(d.num_leechs ?? 0) },
             { icon: "#i-globe", label: "完整/下载中", text: `${d.num_complete ?? 0} / ${d.num_incomplete ?? 0}` },
-            { icon: "#i-globe", label: "tracker 数", text: String(d.trackers_count ?? 0) },
+            { icon: "#i-globe", label: "Tracker 数", text: String(d.trackers_count ?? 0) },
             { icon: "#i-link", label: "连接", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
-            { icon: "#i-refresh", label: "下次汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
-            { icon: "#i-x-circle", label: "tracker 错误", text: yn(d.has_tracker_error) },
-            { icon: "#i-warn", label: "tracker 警告", text: yn(d.has_tracker_warning) },
+            { icon: "#i-refresh", label: "下次重新汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
+            { icon: "#i-x-circle", label: "Tracker 错误", text: yn(d.has_tracker_error) },
+            { icon: "#i-warn", label: "Tracker 警告", text: yn(d.has_tracker_warning) },
             { icon: "#i-percent", label: "分享率限制", text: (d.max_ratio ?? -1) < 0 ? "未设" : d.max_ratio.toFixed(2) },
             { icon: "#i-timer", label: "做种时间限制", text: lim(d.max_seeding_time) },
             { icon: "#i-timer", label: "不活跃做种限制", text: lim(d.max_inactive_seeding_time) },
@@ -1326,7 +1326,7 @@ window.AQB_DRAWER = {
             { icon: "#i-play", label: "强制启动", text: yn(d.force_start) },
             { icon: "#i-upload", label: "超级做种", text: yn(d.super_seeding) },
             { icon: "#i-sort", label: "按顺序下载", text: yn(d.seq_dl) },
-            { icon: "#i-bolt", label: "首末块优先", text: yn(d.f_l_piece_prio) },
+            { icon: "#i-bolt", label: "先下载首尾文件块", text: yn(d.f_l_piece_prio) },
           ],
         },
       ];
@@ -1369,7 +1369,7 @@ window.AQB_DRAWER = {
         }
         node.files.push({ ...f, index: fi });
       }
-      const prio = (p) => ({ 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" }[p] ?? "普通");
+      const prio = (p) => ({ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }[p] ?? "正常");
       const rows = [];
       const walk = (node, name, depth) => {
         if (name !== null) rows.push({ depth, dir: true, name, path: node.path, text: this.fmtSize(node.size) });
@@ -1425,7 +1425,7 @@ window.AQB_DRAWER = {
       }));
     },
     drawerTrackerStatus(s) {
-      return { 0: "未启用", 1: "未连接", 2: "正常", 3: "更新中", 4: "未连接" }[s] ?? "—";
+      return { 0: "禁用", 1: "未联系", 2: "工作", 3: "更新中", 4: "未工作" }[s] ?? "—";
     },
     drawerTrackerVirtual(url) {
       const u = String(url || "");

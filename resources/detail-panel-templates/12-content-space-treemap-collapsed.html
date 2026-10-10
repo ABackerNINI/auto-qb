@@ -534,7 +534,7 @@ function toast(msg){
   toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
 }
 
-/* ---- 文件树数据(与 01-11 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 跳过 / 1 普通 / 4 高 / 7 最高 ---- */
+/* ---- 文件树数据(与 01-11 号模板同一主角种子): size 单位 MiB, prog 0-100, prio 0 不下载 / 1 正常 / 4 高 / 7 最高 ---- */
 const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", dir:true, children:[
   { name:"Season 02", dir:true, children:[
     { name:"[Nekomoe] Some Anime S02 - 05 [1080p][AVC][JPN].mkv", size:1228.8, prog:100, prio:4, avail:21.37 },
@@ -567,7 +567,7 @@ const ROOT = { name:"[Nekomoe Kissaten] Some Anime S02 - 05 [1080p][AVC][JPN]", 
     { name:"[Nekomoe] sample_05.mkv", size:24.0, prog:100, prio:0, avail:21.37 }
   ]}
 ]};
-const PRIO = { 0:{t:"跳过", c:"p-skip"}, 1:{t:"普通", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
+const PRIO = { 0:{t:"不下载", c:"p-skip"}, 1:{t:"正常", c:"p-norm"}, 4:{t:"高", c:"p-high"}, 7:{t:"最高", c:"p-max"} };
 const PRIO_ORDER = [0, 1, 4, 7];
 const EXT_ICON = { mkv:"i-video", mp4:"i-video", flac:"i-audio", mp3:"i-audio", pdf:"i-doc", jpg:"i-img", ass:"i-sub" };
 const extOf = n => { const m = /\.([a-z0-9]+)$/i.exec(n.name); return m ? m[1].toLowerCase() : ""; };
@@ -669,7 +669,7 @@ function blkStyle(n, r){
 }
 function blkInner(n, w, h){
   if (w < 34 || h < 20) return ""; /* 太小不放标签, 悬停看 title */
-  const skip = n.prio === 0 && w > 70 ? `<span class="fm-skip" title="优先级: 跳过">跳过</span>` : "";
+  const skip = n.prio === 0 && w > 70 ? `<span class="fm-skip" title="优先级: 不下载">不下载</span>` : "";
   return `<span class="fm-lb">${esc(shortName(n))}</span>${h >= 34 ? `<span class="fm-sz">${fmtSize(n.size)}</span>` : ""}${skip}`;
 }
 function shortName(n){
@@ -705,7 +705,7 @@ function renderMap(){
       const rects = scaleRects(leaves, inner.x, inner.y, inner.w, inner.h);
       for (const r of rects){
         const n = r.ref;
-        parts.push(`<div class="${blkCls(n)}${state.sel === n.id ? " sel" : ""}" data-blk="${n.id}" style="${blkStyle(n, r)}" title="${esc(n.rel)}&#10;${fmtSize(n.size)} · 占 ${(n.size / TOTAL * 100).toFixed(1)}% · 进度 ${n.prog.toFixed(1)}%${n.miss > 0.005 ? " · 缺 " + fmtSize(n.miss) : ""} · 可用性 ${n.avail.toFixed(2)} · 优先级 ${PRIO[n.prio].t}${n.prio === 0 ? "(跳过不参与下载)" : ""}">
+        parts.push(`<div class="${blkCls(n)}${state.sel === n.id ? " sel" : ""}" data-blk="${n.id}" style="${blkStyle(n, r)}" title="${esc(n.rel)}&#10;${fmtSize(n.size)} · 占 ${(n.size / TOTAL * 100).toFixed(1)}% · 进度 ${n.prog.toFixed(1)}%${n.miss > 0.005 ? " · 缺 " + fmtSize(n.miss) : ""} · 可用性 ${n.avail.toFixed(2)} · 优先级 ${PRIO[n.prio].t}${n.prio === 0 ? "(不下载: 不参与下载)" : ""}">
           ${blkInner(n, r.w, r.h)}
         </div>`);
       }

@@ -7,7 +7,7 @@
  * 最低可用性 / 缺口)前端按路径前缀派生, 零后端改动。
  * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
- * 点击循环 跳过→普通→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
+ * 点击循环 不下载→正常→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
  * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
@@ -26,7 +26,7 @@
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  const PRIO_LABEL = { 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" };
+  const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建 */
@@ -221,7 +221,7 @@
     const badge = r.dir
       ? T`<span class="dt11-pnone" title="目录本身无优先级; 勾选目录后整棵子树批量设置">—</span>`
       : T`<button type="button" class="dt11-pbadge${prioBadgeClass(item.prio)}" data-cyc="${r.path}"
-          title="优先级: ${PRIO_LABEL[item.prio] || "普通"} — 点击循环 跳过→普通→高→最高">${PRIO_LABEL[item.prio] || "普通"}</button>`;
+          title="优先级: ${PRIO_LABEL[item.prio] || "正常"} — 点击循环 不下载→正常→高→最高">${PRIO_LABEL[item.prio] || "正常"}</button>`;
     const chk = r.dir
       ? T`<input type="checkbox" class="dt11-ck" data-dirck="${r.path}" title="勾选 = 整棵子树(${s ? s.files : 0} 个文件)">`
       : T`<input type="checkbox" class="dt11-ck" data-ck="${r.path}" title="勾选该文件">`;
@@ -335,7 +335,7 @@
     const chips = [
       T`<button type="button" class="dt11-chip${ui.filter === "all" ? " active" : ""}" data-f="all">全部 <b>${cnt.all}</b></button>`,
       T`<button type="button" class="dt11-chip c-warn${ui.filter === "miss" ? " active" : ""}" data-f="miss" title="只显示存在缺口的文件">未完成 <b>${cnt.miss}</b></button>`,
-      T`<button type="button" class="dt11-chip${ui.filter === "skip" ? " active" : ""}" data-f="skip" title="只显示优先级为跳过的文件">跳过 <b>${cnt.skip}</b></button>`,
+      T`<button type="button" class="dt11-chip${ui.filter === "skip" ? " active" : ""}" data-f="skip" title="只显示优先级为不下载的文件">不下载 <b>${cnt.skip}</b></button>`,
     ].join("");
     const checkedIdx = batchIndices(d.fileRows);
     let checkedSize = 0, checkedMiss = 0;

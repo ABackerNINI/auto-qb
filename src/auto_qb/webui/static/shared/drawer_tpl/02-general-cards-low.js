@@ -243,13 +243,13 @@
       if (r.act === "copy") idRows.push(T`<div class="dt02-crow">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span class="v">${r.text}</span><button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
     }
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.label === "分块") idRows.push(kv(r.label, r.text, false, r.icon));
+      if (r.label === "区块") idRows.push(kv(r.label, r.text, false, r.icon));
     }
     idRows.push(T`<div class="dt02-crow" title="magnet_uri"><span class="k">magnet</span><span class="v">点击按钮按需获取(不进轮询载荷)</span><button type="button" class="dt02-act" data-act="magnet" title="复制 magnet 链接"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
 
     /* 元信息卡: 徽章 + 回收字段(tracker/优先级/热度/已完成量/限速/其它汇报错误) */
     const metaRows = [];
-    if (present(d.tracker) && d.tracker !== "") metaRows.push(kv("首选 tracker", d.tracker, false));
+    if (present(d.tracker) && d.tracker !== "") metaRows.push(kv("首选 Tracker", d.tracker, false));
     if (d.priority !== undefined && d.priority !== null) metaRows.push(kv("队列优先级", String(d.priority), false));
     if (d.popularity !== undefined && d.popularity !== null) metaRows.push(kv("热度", Number(d.popularity).toFixed(2), false));
     if (d.completed !== undefined && d.completed !== null) metaRows.push(kv("已完成量", size(ctx, d.completed), false));
@@ -263,7 +263,7 @@
     /* 存储与行为卡: 路径分组行(带打开目录)+ 开关徽章 */
     const flags = [
       ["自动管理", d.auto_tmm], ["强制启动", d.force_start], ["超级做种", d.super_seeding],
-      ["按顺序下载", d.seq_dl], ["首末块优先", d.f_l_piece_prio],
+      ["按顺序下载", d.seq_dl], ["先下载首尾文件块", d.f_l_piece_prio],
     ].map(([label, on]) => T`<span class="dt02-flag${on ? " is-on" : ""}" title="${label}"><i></i>${label}</span>`).join("");
     const storeBody = secRows(secs["路径"] || { rows: [] }) + (T`<div class="dt02-flags">${R(flags)}</div>`);
 
@@ -271,7 +271,7 @@
     const cols = [
       [
         hr.html ? card("hr", "做种要求 (HR)", "HR", hr.html, hr.tone) : "",
-        secs["基础"] ? card("base", "基础", secs["基础"].rows.length + " 项", secRows(secs["基础"], ["信息哈希值 v1", "信息哈希值 v2", "分块"])) : "",
+        secs["基础"] ? card("base", "基础", secs["基础"].rows.length + " 项", secRows(secs["基础"], ["信息哈希值 v1", "信息哈希值 v2", "区块"])) : "",
         secs["时间"] ? card("time", "时间", secs["时间"].rows.length + " 项", secRows(secs["时间"])) : "",
       ],
       [

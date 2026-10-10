@@ -26,7 +26,7 @@
     const sig = ctx.drawer.hash + "|" + loading + "|" + JSON.stringify(list);
     if (H.skipUnchanged(host, ui, sig)) return;
     let h = '<div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="add">' +
-      '<svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker</button></div>';
+      '<svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button></div>';
     if (loading && !list.length) {
       h += K.loading("正在加载…");
     } else if (list.length) {

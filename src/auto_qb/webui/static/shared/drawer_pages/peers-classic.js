@@ -31,9 +31,9 @@
         T`<td class="num">${p.downloaded}</td><td class="num">${p.uploaded}</td><td class="num">${p.relevance}</td></tr>`
       ).join("");
       h += K.table(
-        ["地址", "客户端", "标记", { label: "进度", num: true }, { label: "下载", num: true },
-         { label: "上传", num: true }, { label: "已下载", num: true }, { label: "已上传", num: true },
-         { label: "关联度", num: true }],
+        ["IP/地址", "客户端", "标志", { label: "进度", num: true }, { label: "下载速度", num: true },
+         { label: "上传速度", num: true }, { label: "已下载", num: true }, { label: "已上传", num: true },
+         { label: "文件关联", num: true }],
         trs
       );
     } else {

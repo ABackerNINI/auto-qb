@@ -142,7 +142,7 @@ for (const skin of SKINS) {
 
       await expect(drawer.locator('.dt07-wrap')).toBeVisible({ timeout: 5_000 });
       // 「正在取」列头在位 = hasFiles 路径真的走到了(桩数据被前端消费, 不止是 route 生效)
-      await expect(drawer.locator('.dt07-head', { hasText: '正在取' })).toBeVisible({ timeout: 5_000 });
+      await expect(drawer.locator('.dt07-head', { hasText: '文件' })).toBeVisible({ timeout: 5_000 });
 
       const res = /** @type {any} */ (await page.evaluate(probeFn('07')));
       expect(res.fail, `列对齐探针: ${JSON.stringify(res)}`).toBeUndefined();

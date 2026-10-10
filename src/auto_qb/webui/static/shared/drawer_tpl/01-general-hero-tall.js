@@ -208,7 +208,7 @@
         <span class="dt01-s">swarm ${d.num_seeds ?? 0}(${d.num_complete ?? 0}) · 连接 ${d.connections_count ?? 0} / ${d.connections_limit ?? 0}</span>
       </div>
       <div title="reannounce_in / trackers_count">
-        <span class="dt01-k">下次汇报</span>
+        <span class="dt01-k">下次重新汇报</span>
         <span class="dt01-v">${dur(ctx, d.reannounce_in || d.reannounce, "—")}</span>
         <span class="dt01-s">tracker ${d.trackers_count ?? 0} 个</span>
       </div>

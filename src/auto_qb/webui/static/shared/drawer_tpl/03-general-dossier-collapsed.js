@@ -286,7 +286,7 @@
     }
     idRows.push(crow("magnet", "点击按钮按需获取", "magnet", "magnet 链接"));
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.label === "分块") idRows.push(sideKv(r.label, r.text, "", r.icon));
+      if (r.label === "区块") idRows.push(sideKv(r.label, r.text, "", r.icon));
     }
     const idHtml = T`<div class="dt03-side-sub">标识(点击按钮复制)</div>${R(idRows.join(""))}`;
 
@@ -323,7 +323,7 @@
     if (d.has_other_announce_error !== undefined && d.has_other_announce_error !== null) {
       extRows.push(sideKv("其它汇报错误", yn(d.has_other_announce_error), d.has_other_announce_error ? "" : "is-dim"));
     }
-    if (present(d.tracker) && d.tracker !== "") extRows.push(sideKv("首选 tracker", d.tracker));
+    if (present(d.tracker) && d.tracker !== "") extRows.push(sideKv("首选 Tracker", d.tracker));
     const extHtml = extRows.length
       ? T`<details class="dt03-ext"${R(ui.extOpen ? " open" : "")}>
           <summary><svg class="ico ico-sm dt03-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>更多字段(扩展)</summary>

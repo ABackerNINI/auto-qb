@@ -408,7 +408,7 @@ span.num, .tnum{text-align:right}
             <span class="tb-note" title="5s 轮询为模拟; 汇报倒计时逐秒走">上次全量汇报 2026-10-06 08:47 · 每 5s 自动刷新(模拟)</span>
             <button class="tb-toggle" id="onlyBad" title="只显示 警告 / 更新中 / 失败 行, 聚焦正在拖后腿的条目"><i></i>仅看异常</button>
             <span class="tb-spacer"></span>
-            <button class="bt sm primary" id="addBtn"><svg class="ic"><use href="#i-plus"/></svg>添加 tracker</button>
+            <button class="bt sm primary" id="addBtn"><svg class="ic"><use href="#i-plus"/></svg>添加 Tracker</button>
           </div>
 
           <div class="tr-table" id="trTable">
@@ -419,13 +419,13 @@ span.num, .tnum{text-align:right}
               <span class="num" title="num_seeds (num_complete)">种子</span>
               <span class="num" title="num_leeches (num_incomplete)">用户</span>
               <span class="num" title="num_downloaded: 该 tracker 报告的累计完成下载次数">完成下载</span>
-              <span title="reannounce 剩余时间(逐秒倒计时)">下次汇报</span>
+              <span title="reannounce 剩余时间(逐秒倒计时)">下次重新汇报</span>
               <span style="text-align:right">操作</span>
             </div>
 
             <!-- 失败 -->
             <div class="ttr err" data-st="err" data-host="tracker.example.io">
-              <span class="tst er"><i class="tdot"></i>失败</span>
+              <span class="tst er"><i class="tdot"></i>未工作</span>
               <div class="tcell-host">
                 <span class="thost" title="https://tracker.example.io/announce.php?passkey=****">tracker.example.io</span>
                 <span class="tmsg" title="tracker 返回的原始 msg, 点击展开 / 收起">Unregistered torrent (torrent not registered on this tracker)</span>
@@ -444,7 +444,7 @@ span.num, .tnum{text-align:right}
 
             <!-- 警告 -->
             <div class="ttr warn" data-st="warn" data-host="tracker.example.net">
-              <span class="tst wn"><i class="tdot"></i>警告</span>
+              <span class="tst wn"><i class="tdot"></i>未联系</span>
               <div class="tcell-host">
                 <span class="thost" title="https://tracker.example.net/announce.php?passkey=****">tracker.example.net</span>
                 <span class="tmsg" title="tracker 返回的原始 msg, 点击展开 / 收起">tracker msg: 该 announce 地址将于 2026-10-15 停用, 请改用新地址并重新下载 .torrent</span>
@@ -484,7 +484,7 @@ span.num, .tnum{text-align:right}
 
             <!-- 正常: 主站 -->
             <div class="ttr ok" data-st="ok" data-benign="1" data-host="tracker.example.org">
-              <span class="tst ok"><i class="tdot"></i>正常</span>
+              <span class="tst ok"><i class="tdot"></i>工作</span>
               <div class="tcell-host">
                 <span class="thost" title="https://tracker.example.org/announce.php?passkey=****">tracker.example.org</span>
               </div>
@@ -505,7 +505,7 @@ span.num, .tnum{text-align:right}
 
             <!-- 正常: 内网 -->
             <div class="ttr ok" data-st="ok" data-benign="1" data-host="192.168.31.2">
-              <span class="tst ok"><i class="tdot"></i>正常</span>
+              <span class="tst ok"><i class="tdot"></i>工作</span>
               <div class="tcell-host">
                 <span class="thost" title="http://192.168.31.2:6969/announce">192.168.31.2 <span style="color:var(--fg-dim); font-family:var(--font-ui); font-size:10.5px">· 内网 · uTP 可用</span></span>
                 <span class="tmsg" title="tracker 备注, 点击展开 / 收起">内网 NAS 上的 qBittorrent, 支持 uTP 直连, 不占用公网带宽</span>
@@ -527,7 +527,7 @@ span.num, .tnum{text-align:right}
 
             <!-- 未启用: 虚拟条目 -->
             <div class="ttr off" data-st="off" data-benign="1">
-              <span class="tst off"><i class="tdot"></i>未启用</span>
+              <span class="tst off"><i class="tdot"></i>禁用</span>
               <div class="tcell-host">
                 <span class="thost" title="qB 合成的虚拟条目: 私有种子下由 qB 禁用">** [DHT]</span>
               </div>
@@ -539,7 +539,7 @@ span.num, .tnum{text-align:right}
               <span class="tops dim">—</span>
             </div>
             <div class="ttr off" data-st="off" data-benign="1">
-              <span class="tst off"><i class="tdot"></i>未启用</span>
+              <span class="tst off"><i class="tdot"></i>禁用</span>
               <div class="tcell-host">
                 <span class="thost" title="qB 合成的虚拟条目: 私有种子下由 qB 禁用">** [PeX]</span>
               </div>
@@ -551,7 +551,7 @@ span.num, .tnum{text-align:right}
               <span class="tops dim">—</span>
             </div>
             <div class="ttr off" data-st="off" data-benign="1">
-              <span class="tst off"><i class="tdot"></i>未启用</span>
+              <span class="tst off"><i class="tdot"></i>禁用</span>
               <div class="tcell-host">
                 <span class="thost" title="qB 合成的虚拟条目: 私有种子下由 qB 禁用">** [LSD]</span>
               </div>
@@ -729,7 +729,7 @@ document.addEventListener("click", e => {
     toast("已删除 " + host + "(演示, 刷新页面恢复)");
   }
 });
-$("#addBtn").addEventListener("click", () => toast("打开添加 tracker 对话框(演示)"));
+$("#addBtn").addEventListener("click", () => toast("打开添加 Tracker 对话框(演示)"));
 </script>
 </body>
 </html>

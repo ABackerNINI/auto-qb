@@ -456,16 +456,16 @@
         role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
     };
     return T`<div class="dt07-head${hasFiles ? "" : " nofiles"}">
-      <span>对端</span>
+      <span>IP/地址</span>
       <span>客户端</span>
-      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">Flags</span>
-      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">正在取</span>` : "")}
+      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
+      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">文件</span>` : "")}
       ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上传", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下载", "我方从该对端收到的即时速度(qB dlspeed)"))}
-      ${R(seg("sent", "已发", "本次会话我方已发给该对端的累计(qB uploaded)"))}
-      ${R(seg("recv", "已收", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
-      ${R(seg("rel", "关联", "relevance: 该对端拥有我缺失数据的比例"))}
+      ${R(seg("up", "上传速度", "我方发给该对端的即时速度(qB upspeed)"))}
+      ${R(seg("down", "下载速度", "我方从该对端收到的即时速度(qB dlspeed)"))}
+      ${R(seg("sent", "已上传", "本次会话我方已发给该对端的累计(qB uploaded)"))}
+      ${R(seg("recv", "已下载", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
+      ${R(seg("rel", "文件关联", "relevance: 该对端拥有我缺失数据的比例"))}
     </div>`;
   }
 
