@@ -690,6 +690,10 @@
     <div class="sec-head"><span class="sec-num">09</span><h2>变更记录</h2></div>
     <div class="changelog">
       <div class="cl-item">
+        <div class="cl-stamp">26-10-10-1115 · R4(用户再动议, 改版完成)</div>
+        <p>用户报「合并开启后切到另一对页签显示错乱(选择 常规+内容 并排后, tracker/用户标签显示"常规"/"内容"且为空)」且「标签页没有合并」—— 期望页签栏本身收敛为 [常规&amp;内容][Tracker&amp;用户] 两张合并页签、可切换、不再二选一。拍板"合并为两个页签"后改版: ①开关模型 <code>off|gc|tp</code> → <code>off|on</code>(R2 旧值初值迁 on); ②新增 computed <code>dtMergeOn</code>/<code>dtMergeTabsOn</code>/<code>dtPair</code>, 双列列组与生效判据统一读 <code>dtPair</code>(与挂载/数据供给同源) —— 修掉 R2 空列 bug(模板按标志值渲染固定一对, 与当前页签脱节); ③页签栏在 <code>dtMergeTabsOn</code> 时渲染两合并页签(<code>dtMergeTabActive</code> 命中 / <code>dtMergeTabPick</code> 落点), 门外/未开回落四页签; ④右键两项互斥勾选 → 单开关 <code>dtToggleMerge</code>(<code>dtSetMerge</code> 退役)。守阵 <code>test_drawer_tpl_registry_wiring</code> 增 R3 钉子; e2e <code>drawer-merge.spec.mjs</code> 重写(含"切对页签不再空列"回归)。状态 Done 保持。</p>
+      </div>
+      <div class="cl-item">
         <div class="cl-stamp">26-10-09-2353 · R3(实施完成)</div>
         <p>四项拍板(S1 先行 / 阈值 1920 暂定 / 双击快捷路径不做 / 门内置灰)后按依赖链实施完毕。落地面: 核心层(classic 入表 + kit 工具箱 + 双实例挂载 + ownerKey 回落通道 + .dt-tpl 限宽收窄 + drawer-split 布局 + 门/resize/drawerMerge $watch)、classic 插件 x4(drawer_pages/, DOM 逐类名移植)、drawer.html 双结构宿主、三 manifest、右键菜单(ctx-menus/state/menu/lifecycle/dialogs escBusy)、数据供给对偶扩展(_loadDrawerTab/_startDrawerPoll/_drawerWaitSources/_drawerMergeSupply)。实施修正两处设计: 模板门判据须以方法调用取值; 合并开启/门跨越的第二列数据补给由 drawerMerge $watch 与 resize 回调统一触发(_drawerMergeSupply)。守阵同步 6 处(registry_wiring / width_discipline / fallback 静态+电池 / shell 上限 210 / storage 写基线 +1); e2e 新增 drawer-merge.spec.mjs(右键开合/双列渲染/门内置灰), 全量 128 passed。状态 Open → Done。</p>
       </div>

@@ -456,13 +456,15 @@ function initialDrawerTpl() {
   return Object.assign(out, reg.readSel());
 }
 
-/* 页签合并布局标志初值(R2, 计划 26-10-09-2219 S2): 读 autoqb.ui.drawerMerge。
- * 白名单只认 off/gc/tp, 脏值/坏 JSON/读失败一律回落 "off" —— 与 initialDrawerTab 同口径。
- * 生效还受宽度门约束(dtSplitOn), 这里只还原用户的布局意图。 */
+/* 页签合并开关初值(R2 计划 26-10-09-2219 S2 · R3 名单模型): 读 autoqb.ui.drawerMerge。
+ * 白名单只认 off/on; R2 旧两选项值 gc/tp 迁移为 "on"(旧语义=某一对并排, 新语义=开关; 列组
+ * 改由当前页签所属对决定, 故旧值只要"开着"即可无缝续用)。脏值/坏 JSON/读失败一律回落 "off"
+ * —— 与 initialDrawerTab 同口径。生效还受宽度门约束(dtSplitOn), 这里只还原用户的布局意图。 */
 function initialDrawerMerge() {
   try {
     const v = JSON.parse(localStorage.getItem("autoqb.ui.drawerMerge") || '"off"');
-    return ["off", "gc", "tp"].includes(v) ? v : "off";
+    if (v === "on" || v === "gc" || v === "tp") return "on";
+    return "off";
   } catch {
     return "off";
   }

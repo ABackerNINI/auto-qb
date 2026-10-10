@@ -76,10 +76,19 @@
             <strong :title="drawerTitle()">{{ drawerTitle() }}</strong>
           </div>
           <nav class="drawer-tabs" role="tablist" @contextmenu.prevent="openDrawerMenu($event)">
-            <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
-            <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
-            <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
-            <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
+            <!-- R3(计划 26-10-09-2219 R3): 合并开关开启且宽度门内 → 四页签收敛为两对合并页签
+                 [常规&内容] [Tracker&用户], 两张都可点、自由切换(不再二选一); 门外/未开启回落
+                 四页签原样。合并页签命中判据 = 当前页签落在该对内(dtMergeTabActive)。 -->
+            <template v-if="dtMergeTabsOn">
+              <button :class="{ active: dtMergeTabActive('gc') }" @click="dtMergeTabPick('gc')">常规&amp;内容</button>
+              <button :class="{ active: dtMergeTabActive('tp') }" @click="dtMergeTabPick('tp')">Tracker&amp;用户</button>
+            </template>
+            <template v-else>
+              <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
+              <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
+              <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
+              <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
+            </template>
             <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表②): enabled=false 时
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
@@ -221,11 +230,14 @@
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
               <span>{{ drawer.error }}</span>
             </div>
-            <!-- R2 S2: 合并双列(drawerMerge + 宽度门, dtSplitOn 单点判据) —— 两列各挂对应页签
-                 当前所选页插件(classic 或变体, 模板选择与合并开关两个自由度解耦); 列序按对固定。
+            <!-- R2 S2·R3: 合并双列(drawerMerge 开关 + 宽度门, dtSplitOn 单点判据) —— 列组由
+                 **当前页签所属的对**(dtPair)决定, 两列各挂对应页签当前所选页插件(classic 或
+                 变体, 模板选择与合并开关两个自由度解耦); 列序按对固定。
+                 !R3: 列组读 dtPair 而非 drawerMerge —— R2 按标志值渲染固定一对, 切到另一对页签
+                 时列头在而两列宿主空(用户报障); 现与挂载/数据供给同源。
                  v-if/v-else 保证同一 data-dt-host 全 DOM 只存在一份(核心 querySelector 定位)。 -->
-            <div v-if="dtSplitOn" class="drawer-split" :data-merge="drawerMerge">
-              <template v-if="drawerMerge === 'gc'">
+            <div v-if="dtSplitOn" class="drawer-split" :data-merge="dtPair">
+              <template v-if="dtPair === 'gc'">
                 <div class="dt-col">
                   <div class="dt-col-head">常规</div>
                   <div v-show="dtHostOn('general')" class="dt-host" data-dt-host="general"></div>

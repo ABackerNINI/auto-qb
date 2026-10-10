@@ -936,13 +936,28 @@ def test_drawer_tpl_registry_wiring():
         for ui in _UI_ALL:
             assert f"/shared/drawer_pages/{tab}-classic.js" in _ui_manifest(ui)["scripts"], \
                 f"{ui}: manifest 缺 classic 插件 drawer_pages/{tab}-classic.js"
-    # R2 S2/S3 接线: 合并标志显式建字段 + 双列宿主 + 右键菜单
+    # R2 S2/S3 接线 + R3 修订(计划 26-10-09-2219 R3): 合并开关显式建字段 + 双列宿主 + 右键单开关
     assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
     assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
     assert "drawerMenu: { visible: false, x: 0, y: 0 }" in state_js, "state.js 缺 drawerMenu 显式建字段"
     assert 'class="drawer-split"' in drawer_tpl, "drawer.html 缺合并双列宿主(R2 S2)"
     assert "@contextmenu.prevent=\"openDrawerMenu($event)\"" in drawer_tpl, "drawer.html 缺右键菜单接线(R2 S3)"
     assert "function initialDrawerMerge()" in app_js, "app.js 缺 initialDrawerMerge"
+    # R3 钉子: 开关模型(off|on, 列组由当前页签所属对决定) + 页签栏合并两页签 + 单开关入口。
+    # 旧两选项模型(标志值 gc/tp 决定渲染哪一对)是 R2 空列 bug 的根 —— dtSetMerge 不得残留,
+    # 否则新旧两套模型并存(标志值与当前页签各说各话)。
+    for member in ("dtMergeOn", "dtMergeTabsOn", "dtPair", "dtMergeTabActive", "dtMergeTabPick", "dtToggleMerge"):
+        assert re.search(rf"^      {member}[(:]", core, re.M), f"核心缺 R3 合并成员 {member}"
+    ctx_menus_tpl = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
+    assert "dtSetMerge" not in core and "dtSetMerge" not in ctx_menus_tpl, \
+        "dtSetMerge 残留(R3 已改单开关 dtToggleMerge; 双模型并存 = 空列 bug 根因复发)"
+    assert "dtToggleMerge()" in ctx_menus_tpl, "ctx-menus 缺合并单开关入口(dtToggleMerge)"
+    assert "dtMergeTabActive('gc')" in drawer_tpl and "dtMergeTabActive('tp')" in drawer_tpl, \
+        "drawer.html 页签栏缺 R3 合并页签命中判据(切对页签高亮)"
+    assert "常规&amp;内容" in drawer_tpl and "Tracker&amp;用户" in drawer_tpl, \
+        "drawer.html 缺 R3 合并页签标签(常规&内容 / Tracker&用户)"
+    assert ':data-merge="dtPair"' in drawer_tpl, \
+        "drawer.html 双列列组必须读 dtPair(R3 bug: 按标志值渲染固定一对 -> 切对页签列头在而宿主空)"
 
     # 6. state/app 接线 + dt* 成员全仓无重名(mixin 覆盖形态, 静默故障)
     assert "drawerTplSel: initialDrawerTpl()" in state_js, "state.js 缺 drawerTplSel 显式建字段(vue-reactivity 坑)"

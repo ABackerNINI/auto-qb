@@ -62,15 +62,20 @@
   var TABS = ["general", "trackers", "peers", "content", "traffic"];
   var STORE_KEY = "autoqb.ui.drawerTpl";
   var CLASSIC = "classic";
-  /* ---------------- 页签合并(R2, 计划 26-10-09-2219) ----------------
-   * 合并 = 抽屉级布局标志(drawerMerge ∈ off|gc|tp, 独立持久化键), 不是某页签的变体;
-   * 生效且门内时正文渲染双列宿主, 两列各挂对应页签当前所选页插件(classic 或变体)。
+  /* ---------------- 页签合并(R2 计划 26-10-09-2219 · R3 修订) ----------------
+   * 合并 = 抽屉级布局开关(drawerMerge ∈ off|on, 独立持久化键), 不是某页签的变体。R3 修订
+   * (用户动议「标签页没有合并」): 开关开启且门内时 **页签栏**把四页签收敛为两对合并页签
+   * [常规&内容] [Tracker&用户](可自由切换, 不再二选一); 正文按 **当前页签所属的对** 渲染双列
+   * 宿主, 两列各挂对应页签当前所选页插件(classic 或变体)。
+   * !R3 修正(用户报「选择并排后 tracker/用户标签显示常规/内容且为空」): 渲染哪一对列与挂载/
+   *   数据供给必须同源于「当前页签」—— 判据统一走 dtPair(= 当前页签所属对)。R2 曾按标志值渲染
+   *   固定一对, 切到另一对页签时模板渲染旧对的列头、挂载却按当前对找宿主, 两列列头在而内容空。
    * 门 = 视口宽下限(单点常量): 1920 屏每列约 930px 才比单栏 1400px 值得; 以下是暂态遮蔽
-   * (dtSplitOn 判 false, 标志保留), 不是选择撤销 —— 拉宽自动恢复。 */
+   * (dtSplitOn/dtMergeTabsOn 判 false, 标志保留), 不是选择撤销 —— 拉宽自动恢复。 */
   var MERGE_STORE_KEY = "autoqb.ui.drawerMerge";
-  var MERGE_VALUES = ["off", "gc", "tp"];
+  var MERGE_VALUES = ["off", "on"];
   var DT_MERGE_MIN_WIDTH = 1920;
-  /* 合并对 -> [左列页签, 右列页签](列序固定, 不随当前页签换序) */
+  /* 合并对 -> [左列页签, 右列页签](列序固定, 不随当前页签换序; 也是合并页签清单与命中/落点判据) */
   var MERGE_PAIRS = { gc: ["general", "content"], tp: ["trackers", "peers"] };
 
   /* ---------------- CSS 注入单点: <style data-dt="..."> ----------------
@@ -353,7 +358,7 @@
     ".drawer .dt-col { min-width: 0; }",
     ".drawer .dt-col-head { display:flex; align-items:center; height:26px; margin-bottom:8px;",
     "  font-size:12px; font-weight:600; color:var(--fg-muted, inherit); border-bottom:1px solid var(--border-soft, transparent); }",
-    /* R2 S3 右键菜单置灰项: 门不满足时可见但不可点(title 提示原因; 判定在 dtSetMerge 再拦一道)。
+    /* R2 S3 右键菜单置灰项: 门不满足时可见但不可点(title 提示原因; 判定在 dtToggleMerge 再拦一道)。
      * 注入在核心层而不是三皮肤 components.css —— 菜单本体是共用模板, 一处注入三皮肤同效。 */
     ".ctx-menu .ctx-item.is-gated { color: var(--fg-dim, #888); cursor: default; }",
     ".ctx-menu .ctx-item.is-gated:hover { background: transparent; }",
@@ -378,14 +383,30 @@
         var tab = this._dtCurTab();
         return (this.drawerTplSel || {})[tab] || "classic";
       },
-      /* R2 S2(计划 26-10-09-2219): 合并布局生效判据(模板 v-if 单点) —— 标志开启 + 种子详情
-       * 形态 + 当前页签属于生效对 + 门内。门是暂态遮蔽: dtWinW(state.js 显式建字段)由核心
-       * resize 监听防抖回写, 标志本身不动; 关面板/流量形态自然 false。 */
+      /* R3: 合并开关是否开启(off|on; 兼容 R2 旧值 gc/tp —— 初值读取已迁移, 这里再兜一道) */
+      dtMergeOn() {
+        return (this.drawerMerge || "off") !== "off";
+      },
+      /* R3: 页签栏是否呈现合并页签 —— 开关开 + 门内。页签栏只在种子详情头部渲染(流量形态另有
+       * 头部), 故无需再排除流量形态。门外回落四页签(暂态遮蔽, 标志不动)。 */
+      dtMergeTabsOn() {
+        return this.dtMergeOn && this.dtMergeGateOk();
+      },
+      /* R3: 当前页签所属的合并对("gc"|"tp"|null) —— 合并双列「渲染哪两列」的单点判据,
+       * 与挂载(_dtMountSplit)/数据供给(drawer.js)同源; 流量与对外页签返回 null。 */
+      dtPair() {
+        return this._dtPairOf(this.drawer && this.drawer.tab);
+      },
+      /* R2 S2(计划 26-10-09-2219)·R3 修正: 合并布局生效判据(模板 v-if 单点) —— 开关开启 +
+       * 种子详情形态 + 当前页签属于某一对 + 门内。门是暂态遮蔽: dtWinW(state.js 显式建字段)由
+       * 核心 resize 监听防抖回写, 标志本身不动; 关面板/流量形态自然 false。
+       * !R3: 判据与模板列组统一读 dtPair —— R2 只查「属于某个对」而模板按标志值渲染固定一对,
+       * 切到另一对页签时列头在而两列宿主空(用户报障), 现修正。 */
       dtSplitOn() {
-        if ((this.drawerMerge || "off") === "off") return false;
+        if (!this.dtMergeOn) return false;
         if (this.qbTrafficActive) return false;
-        if (!this._dtPairOf(this.drawer && this.drawer.tab)) return false;
-        return (this.dtWinW || 0) >= window.AQB_DRAWER_TPL_REG.mergeMinWidth;
+        if (!this.dtPair) return false;
+        return this.dtMergeGateOk();
       },
     },
     /* traffic 数据落袋通知(S6, 见文件头「S6 接入说明」)不写成 watch 选项: 本 mixin 走
@@ -446,7 +467,8 @@
       _dtCurTab() {
         return this.qbTrafficActive ? "traffic" : this.drawer.tab;
       },
-      /* R2 S2: 当前页签所属合并对("gc"|"tp"|null) —— 流量与对外页签返回 null */
+      /* R2 S2·R3: 当前页签所属合并对("gc"|"tp"|null) —— 合并页签命中(dtMergeTabActive)与
+       * 双列列组(dtPair)的单点判据; 流量与对外页签返回 null */
       _dtPairOf(tab) {
         if (this.qbTrafficActive) return null;
         for (var k in MERGE_PAIRS) {
@@ -454,21 +476,33 @@
         }
         return null;
       },
-      /* R2 S3: 合并开关宽度门(右键菜单置灰与挂载守卫共用同一判据, 常量单点 mergeMinWidth) */
+      /* R2 S3·R3: 合并开关宽度门(右键菜单置灰与挂载守卫共用同一判据, 常量单点 mergeMinWidth) */
       dtMergeGateOk() {
         return (this.dtWinW || window.innerWidth || 0) >= window.AQB_DRAWER_TPL_REG.mergeMinWidth;
       },
-      /* R2 S3: 右键菜单勾选落点 —— 白名单校验 + 门内才生效 + 再点已选项即关 + 落盘。
+      /* R3: 右键菜单单开关落点 —— 门内才生效, 再点即关 + 落盘。
        * 布局换代(_dtSync)与第二列数据补给(_drawerMergeSupply, 本体在 drawer.js)由
        * drawerMerge 的 $watch 单发统一触发(mounted 注册, 假实例守卫同 traffic 通知)。 */
-      dtSetMerge(v) {
-        v = String(v || "off");
-        if (MERGE_VALUES.indexOf(v) < 0) return;
-        if (v !== "off" && !this.dtMergeGateOk()) return; /* 置灰项双保险: class 拦显示, 这里拦行为 */
-        if ((this.drawerMerge || "off") === v) v = "off";
+      dtToggleMerge() {
+        if (!this.dtMergeGateOk()) return; /* 置灰项双保险: class 拦显示, 这里拦行为 */
+        var v = this.dtMergeOn ? "off" : "on";
         this.drawerMerge = v;
         try { localStorage.setItem(MERGE_STORE_KEY, JSON.stringify(v)); } catch (e) { /* 写失败本轮仍生效 */ }
         if (this.drawerMenu) this.drawerMenu.visible = false;
+      },
+      /* R3: 合并页签点击落点 —— 切到该对(已在其中则零副作用, 避免无谓重拉); 目标页签取对的首列
+       * (列序按对固定; 双列两列都会被挂载, 对内的具体取值不影响呈现, 只决定"主列=当前页签"的
+       * 挂载归属与头部模板切换器指向)。 */
+      dtMergeTabPick(pair) {
+        var tabs = MERGE_PAIRS[pair];
+        if (!tabs) return;
+        if (tabs.indexOf(this.drawer && this.drawer.tab) >= 0) return;
+        if (typeof this.drawerTab === "function") this.drawerTab(tabs[0]);
+      },
+      /* R3: 合并页签高亮判据 —— 当前页签落在该对内即高亮(页签栏 :class 单点) */
+      dtMergeTabActive(pair) {
+        var tabs = MERGE_PAIRS[pair];
+        return !!tabs && tabs.indexOf(this.drawer && this.drawer.tab) >= 0;
       },
       /* 宿主显隐(模板 v-show 唯一入口 —— 变体与 Vue 争 DOM 红线: 显隐只走 host 自身):
        * 错误态与 general 无详情时宿主让位(与经典渲染链的接管口径一致); 流量正文块

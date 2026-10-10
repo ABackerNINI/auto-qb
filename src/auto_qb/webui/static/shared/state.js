@@ -116,9 +116,11 @@ window.AQB_STATE = {
       // 详情面板模板选择(plan 26-10-06-0838 S1, P-01 初装全 classic): 按页签记模板 id;
       // 读侧白名单在核心层 readSel, 脏值/缺失/写失败一律回落 classic —— 字段必须显式建(vue-reactivity 坑)
       drawerTplSel: initialDrawerTpl(),
-      // 页签合并布局标志(R2, 计划 26-10-09-2219 S2): "off" | "gc"(常规+内容) | "tp"(Tracker+用户)。
+      // 页签合并开关(R2 计划 26-10-09-2219 S2 · R3 名单模型): "off" | "on"。开启且宽度门内时
+      // 页签栏收敛为两对合并页签[常规&内容][Tracker&用户], 正文双列并排(列组按当前页签所属对)。
       // 抽屉级布局意图, 不随页签/种子/开关面板丢失; 独立于 drawerTplSel(模板选择 × 合并两个
-      // 自由度解耦)。读侧白名单同族: 脏值一律回落 "off"。生效还受宽度门约束(dtSplitOn 单点判据)。
+      // 自由度解耦)。读侧白名单同族: 脏值一律回落 "off"; R2 旧值 gc/tp 迁移为 "on"。
+      // 生效还受宽度门约束(dtSplitOn/dtMergeTabsOn 单点判据)。
       drawerMerge: initialDrawerMerge(),
       // 视口宽回写(核心层 resize 防抖 150ms): 门是暂态遮蔽 —— 缩窗过门双列回落单栏(标志不动),
       // 拉宽自动恢复。显式建字段供 dtSplitOn computed 响应式消费。

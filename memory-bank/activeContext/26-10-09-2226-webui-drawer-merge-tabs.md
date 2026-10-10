@@ -1,7 +1,7 @@
 # WEBUI 种子详情面板页插件化 + 页签合并(已实施)
 
-> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。
-> 最后活动: 2026-10-09 23:53
+> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。**R3 修订(2026-10-10)见下方。**
+> 最后活动: 2026-10-10 11:15
 
 **Status:** Done
 **Added:** 2026-10-09
@@ -16,3 +16,12 @@
 - drawer.js 数据供给: _drawerWaitSources/_loadDrawerTab/_startDrawerPoll 按生效对偶扩展(FX-29 全对齐掀罩)+ _drawerMergeSupply 补给单点(drawerMerge $watch 与 resize 回调共用)。
 - 测试: 守阵同步 6 处; e2e drawer-merge.spec.mjs 4 用例 + 既有 e2e 全绿(128 passed / 10 skipped 存量); 基线切片 `26-10-09-2353-webui-drawer-merge-tabs`(2870+4, 99%)。
 - 回写: 主题文档 modules/webui-static-contract.md + progress/implemented-webui.md。
+
+## R3 修订(2026-10-10, 用户再动议; 已完成)
+
+用户报: 合并开启后切到另一对页签显示错乱 —— 「选择 常规+内容 并排后, tracker/用户标签显示"常规"/"内容"且为空」; 且「标签页没有合并」, 期望页签栏本身收敛为 `[常规&内容] [Tracker&用户]` 两张合并页签、可切换(不再二选一)。拍板: **合并为两个页签**。
+
+- 根因: R2 的 `dtSplitOn` 只查「当前页签属于某个对」, 而模板按 `drawerMerge` 的值(gc/tp)渲染**固定那一对** —— 切到另一对页签时模板渲染旧对的列头, 挂载 `_dtMountSplit`/数据供给却按当前对找宿主 → **列头在而两列空**。
+- 修法 + 改版: 开关模型收敛为 `off|on`(R2 旧值 gc/tp 初值迁移为 on); 新增 computed `dtMergeOn`/`dtMergeTabsOn`/`dtPair`, **列组与生效判据统一读 `dtPair`**(与挂载/数据供给同源, 单一真相); 页签栏在 `dtMergeTabsOn` 时渲染两合并页签(`dtMergeTabActive` 命中 / `dtMergeTabPick` 落点), 门外/未开回落四页签; 右键两项互斥勾选 → **单开关** `dtToggleMerge`; `dtSetMerge` 退役。
+- 验证: `commands run test.quick` 2886 passed / 4 skipped; e2e `drawer-merge.spec.mjs` 4 passed(含"切对页签不再空列"回归) + fast 子集 42 passed。
+- 回写: modules/webui-static-contract.md + progress/implemented-webui.md; 守阵 `test_drawer_tpl_registry_wiring` 增 R3 钉子(dtSetMerge 禁残留 / 合并页签标签 / `:data-merge="dtPair"`)。

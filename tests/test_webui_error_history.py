@@ -100,7 +100,7 @@ STORAGE_WRITE_BASELINE = {
     "config_hub.js": 1,  # hub 视图选择
     "columns.js": 3,  # 列宽/顺序/隐藏
     "drawer.js": 3,  # drawerHeight / drawerOpen / drawerTab
-    "drawer_templates.js": 2,  # +1 = 合并标志 autoqb.ui.drawerMerge 持久化(R2 计划 26-10-09-2219 S2, dtSetMerge)
+    "drawer_templates.js": 2,  # +1 = 合并开关 autoqb.ui.drawerMerge 持久化(R2 计划 26-10-09-2219 S2, 现 dtToggleMerge)
     "menu.js": 1,  # 菜单收合态
     "qb_traffic_chart.js": 2,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08)
     "view.js": 2,  # 视图选择

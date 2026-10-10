@@ -4,15 +4,20 @@ import { BASE_URL, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
- * 抽屉页签合并(R2, 计划 26-10-09-2219) —— 右键开关 / 双列布局 / 宽度门:
- *   1. 宽视口(≥1920): 正文右键 → 菜单两项可用 → 点「常规+内容 并排」→ .drawer-split 双列
- *      (常规列 = classic 分组键值, 内容列 = classic 工具栏+文件表); 再右键 → 再点已选项 → 关。
- *   2. 窄视口(<1920): 菜单项置灰(.is-gated), 点击不产生任何状态变化(dtSetMerge 双保险拦截)。
+ * 抽屉页签合并(R2 计划 26-10-09-2219 · R3 修订) —— 单开关 / 合并页签 / 双列布局 / 宽度门:
+ *   1. 宽视口(≥1920): 正文右键 → 菜单「合并页签」可用 → 点击 → 页签栏收敛为
+ *      [常规&内容][Tracker&用户] 两张合并页签, 正文双列(列头 常规/内容, 两列各挂 classic 页插件);
+ *      再右键 → 勾选态在 → 再点已开启项 → 关闭, 页签栏回四页签单栏。
+ *   2. R3 回归(用户报「选择并排后 tracker/用户标签显示常规/内容且为空」): 合并开启下点
+ *      [Tracker&用户] 合并页签 → 列头变 Tracker/用户 且两列有内容(不再渲染旧对列头 + 空列)。
+ *   3. 窄视口(<1920): 菜单项置灰(.is-gated), 点击零状态变化(dtToggleMerge 双保险拦截), 四页签原样。
  * 断言口径: 真实手势(右键 click button:'right'), 不借道 vm; 抽屉内容经页插件(classic)渲染。
  */
 
 const WIDE = { width: 2560, height: 1200 };
 const NARROW = { width: 1280, height: 800 };
+
+const MERGE_ITEM = '.ctx-item:has-text("合并页签")';
 
 async function openTorrentDrawer(page) {
   await page.click('nav.tabs [data-view="torrents"]');
@@ -27,26 +32,35 @@ for (const skin of SKINS) {
   test.describe(`抽屉页签合并 ${skin}`, () => {
     installRuntimeErrorGuard(test);
 
-    test(`宽视口: 右键开启常规+内容并排, 再点关闭 @fast (${skin})`, async ({ page }) => {
+    test(`宽视口: 合并页签开关 + 双列 + 切对不受污染 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-
-      // 视口在 boot 后拉宽: 门判据走核心 resize 防抖回写(dtWinW), 等一拍再右键
       await page.waitForTimeout(300);
+
+      // 默认四页签(合并关闭): Tracker 单页签在
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+
+      // 开启合并: 右键 → 单开关「合并页签」(门内可点)
       await drawer.locator('.drawer-body').click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible();
-      const gcItem = menu.locator('.ctx-item', { hasText: '常规+内容 并排' });
-      await expect(gcItem).not.toHaveClass(/is-gated/);
+      const item = menu.locator(MERGE_ITEM);
+      await expect(item).not.toHaveClass(/is-gated/);
+      await item.click();
 
-      // 开启合并: 双列出现, 列头 = 常规/内容; 两列各挂 classic 页插件(分组键值 + 内容工具栏)
-      await gcItem.click();
+      // 页签栏收敛为两合并页签(四页签隐去)
+      await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toHaveCount(0);
+
+      // gc 双列: 列头 常规/内容; 两列各挂 classic 页插件(分组键值 + 内容工具栏/文件表)
       const split = drawer.locator('.drawer-split');
       await expect(split).toBeVisible({ timeout: 5_000 });
+      await expect(split).toHaveAttribute('data-merge', 'gc');
       await expect(split.locator('.dt-col-head', { hasText: '常规' })).toBeVisible();
       await expect(split.locator('.dt-col-head', { hasText: '内容' })).toBeVisible();
       await expect(split.locator('[data-dt-host="general"] .drawer-sec').first()).toBeVisible();
@@ -54,14 +68,24 @@ for (const skin of SKINS) {
       // 桩灌了文件数据: 内容列经典表渲染出行(目录聚合行)
       await expect(split.locator('[data-dt-host="content"] table.drawer-table tbody tr').first()).toBeVisible();
 
-      // 菜单已随动作收起; 再开 → 勾选态在 → 再点已选项 = 关 → 双列消失(单栏宿主回归)
-      await expect(menu).toHaveCount(0);
+      // R3 回归: 点 [Tracker&用户] 合并页签 → 列组换成 Tracker/用户 且两列有内容(不再空列)
+      await drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' }).click();
+      await expect(split).toHaveAttribute('data-merge', 'tp');
+      await expect(split.locator('.dt-col-head', { hasText: 'Tracker' })).toBeVisible();
+      await expect(split.locator('.dt-col-head', { hasText: '用户' })).toBeVisible();
+      // trackers classic 恒渲染工具栏(添加 tracker); peers 列非空(表格或加载/空态)
+      await expect(split.locator('[data-dt-host="trackers"] .drawer-toolbar')).toBeVisible();
+      await expect(split.locator('[data-dt-host="peers"]')).not.toBeEmpty();
+      await expect(split).not.toHaveAttribute('data-merge', 'gc');
+
+      // 再右键 → 勾选态在 → 再点已开启项 = 关 → 双列消失, 页签栏回四页签(单栏宿主回归)
       await drawer.locator('.drawer-body').click({ button: 'right' });
-      await expect(gcItem).toBeVisible();
-      await expect(gcItem.locator('.ctx-tick')).toHaveCount(1);
-      await gcItem.click();
+      await expect(menu).toBeVisible();
+      await expect(menu.locator(MERGE_ITEM).locator('.ctx-tick')).toHaveCount(1);
+      await menu.locator(MERGE_ITEM).click();
       await expect(split).toHaveCount(0);
-      await expect(drawer.locator('[data-dt-host="general"] .drawer-sec').first()).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toHaveCount(0);
     });
 
     test(`窄视口: 门内置灰可见, 点击零状态变化 @fast (${skin})`, async ({ page }) => {
@@ -75,13 +99,15 @@ for (const skin of SKINS) {
       await drawer.locator('.drawer-body').click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible();
-      const gcItem = menu.locator('.ctx-item', { hasText: '常规+内容 并排' });
-      await expect(gcItem).toHaveClass(/is-gated/);
+      const item = menu.locator(MERGE_ITEM);
+      await expect(item).toHaveClass(/is-gated/);
 
-      // 置灰项点击 = 零状态变化(菜单保持打开, 不出双列)
-      await gcItem.click();
+      // 置灰项点击 = 零状态变化(菜单保持打开, 不出双列, 页签栏仍四页签)
+      await item.click();
       await expect(menu).toBeVisible();
       await expect(drawer.locator('.drawer-split')).toHaveCount(0);
+      await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toHaveCount(0);
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
       // 单栏 classic 正文不受扰动
       await expect(drawer.locator('[data-dt-host="general"] .drawer-sec').first()).toBeVisible();
     });
