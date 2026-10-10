@@ -9,6 +9,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
+- test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 三个横滚同步单点(sync*HeadScroll: menu/selection/shows.js)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现), 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)与右缘渐隐落影两个成分
 """
 import json
 import os
@@ -1446,4 +1447,57 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         )
         assert "display: inline-block" not in body, (
             f"{name} 排序箭头仍在行内布局(display:inline-block 恒占 11px + 3px) —— 见 pitfalls/web-ui/header-cell-gutter.md"
+        )
+
+
+def test_frontend_frozen_column_boundary_wiring():
+    """首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」)
+
+    横滚时相邻列滑进吸左首格(issue 26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)会紧贴
+    首格右缘露出; 无边界提示时残根读成与名称省略号粘连的坏字, 被误读成渲染 bug(用户报障)。
+    钉两层接线, 缺任何一层 = 残根回归"裸露":
+    1. JS: 三个横滚同步单点(sync*HeadScroll)都必须给滚动容器与吸顶表头打 .is-hscrolled
+       (scrollLeft>0 打 / 回 0 摘) —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现;
+    2. CSS: 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格**成对**
+       (漏表头 = 列名残根仍裸露), 且含发丝线(边界)与右缘渐隐落影两个成分。
+    3. CSS: 三皮肤 `.group-row > :first-child` 必须 `align-self: stretch` —— 行是
+       align-items: center, 网格项默认不拉伸, 吸左首格只有单行内容高; 站点/标签等多 chip 格
+       换行把行撑高时(小窗常态), 滑入首格下方的 chip 从首格上下两段露出来(2026-10-11 用户
+       复报「小窗时站点的徽标不会被名称列挡住」)。真浏览器红验: 关掉 stretch 后名称格 22px
+       vs 站点格 71px, chip 成排透出; stretch 后全盖。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    sync_sources = {
+        "menu.js": "syncGroupHeadScroll(ev)",
+        "selection.js": "syncTorrentHeadScroll(ev)",
+        "shows.js": "syncShowHeadScroll(ev)",
+    }
+    for fname, anchor in sync_sources.items():
+        js = open(os.path.join(shared, fname), encoding="utf-8").read()
+        seg = js[js.index(anchor):]
+        seg = seg[:seg.index("\n    },")]
+        assert 'ev.target.classList.toggle("is-hscrolled", x > 0)' in seg, (
+            f"{fname} {anchor} 缺滚动容器 is-hscrolled 打标 "
+            "(CSS 无法感知 scrollLeft, 丢标 = 吸左边界落影永不出现)"
+        )
+        assert 'head.classList.toggle("is-hscrolled", x > 0)' in seg, (
+            f"{fname} {anchor} 缺表头 is-hscrolled 打标(表头吸左首格残根裸露)"
+        )
+    for ui in _UI_ALL:
+        css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
+        mo = re.search(
+            r"\.group-table\.is-hscrolled \.group-row > :first-child,\s*"
+            r"\.group-head\.is-hscrolled > \.h-cell:first-child \{([^}]*)\}",
+            css,
+        )
+        assert mo, (f"{ui} views.css 缺 .is-hscrolled 吸左边界落影规则"
+                    "(行吸左首格与表头吸左首格必须成对声明, 漏表头 = 列名残根仍裸露)")
+        body = mo.group(1)
+        assert "inset -1px 0 0" in body, f"{ui} 边界提示缺发丝线(inset -1px 0 0)成分 —— 残根无边界可依"
+        assert "rgba(0, 0, 0" in body, f"{ui} 边界提示缺右缘渐隐落影成分 —— 残根读感仍与名称粘连"
+        ms = re.search(r"\.group-row > :first-child \{([^}]*)\}", css)
+        assert ms, f"{ui} views.css 缺 .group-row > :first-child 吸左首格规则"
+        assert "align-self: stretch" in ms.group(1), (
+            f"{ui} 吸左首格缺 align-self: stretch —— 行是 align-items:center, 首格只有单行内容高, "
+            "多 chip 格换行撑高行后徽标从首格上下两段漏出(小窗常态, 2026-10-11 用户复报)"
         )

@@ -210,6 +210,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
  *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
 .group-row > :first-child {
   position: sticky; left: 0; z-index: 2; background: var(--bg-row);
+  /* 行是 align-items: center, 网格项默认不拉伸 —— 首格只有单行内容高; 站点/标签等多 chip 格
+   * 换行把行撑高时(小窗常态), 滑入首格下方的 chip 从首格上下两段露出来(2026-10-11 用户报
+   * 「小窗时站点的徽标不会被名称列挡住」)。stretch 撑满行内容高才盖得住; 行 padding 14px
+   * >= 圆角半径, 拉伸后的方角不会戳出行缘。 */
+  align-self: stretch;
 }
 .group-row:hover > :first-child { background: var(--bg-hover); }
 .group-row.expanded > :first-child {
@@ -222,6 +227,15 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .group-head > .h-cell:first-child {
   z-index: 2; background: var(--bg);
   transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - 14px)));
+}
+/* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
+ * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
+ * 省略号粘连的坏字, 被误读成渲染 bug。横滚非零时由 sync*HeadScroll 给 .group-table 与表头打
+ * .is-hscrolled(三处单点: menu/selection/shows.js), 据此给吸左首格画右缘落影 + 发丝线:
+ * 尾字在边界渐隐, "盖住"读成 pane 边界而非破版; 未滚动不画(无物可盖, 视觉保持安静)。 */
+.group-table.is-hscrolled .group-row > :first-child,
+.group-head.is-hscrolled > .h-cell:first-child {
+  box-shadow: inset -1px 0 0 var(--border), 16px 0 14px -10px rgba(0, 0, 0, .55);
 }
 
 /* 删除类确认框加宽形态(R05: 560 -> 720; W2-FE-2 DLG-01 再调大一档 720 -> 840 并令牌化,

@@ -17,6 +17,9 @@ window.AQB_SHOWS = {
       head.style.transform = `translateX(${-x}px)`;
       // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
       head.style.setProperty("--head-pin-x", `${x}px`);
+      // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 与 syncGroupHeadScroll 同款
+      ev.target.classList.toggle("is-hscrolled", x > 0);
+      head.classList.toggle("is-hscrolled", x > 0);
     },
     toggleShow(key) {
       const i = this.expandedShows.indexOf(key);
