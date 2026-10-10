@@ -1,11 +1,11 @@
 # 红验脚本按 LF 拼锚点，在 CRLF 文件上静默匹配不上（且手抄缩进易差 1 空格）
 
 > 摘要: 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。
-> 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转
+> 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时
 
-**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md
+**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md, memory-bank/testing/baselines/26-10-10-1458-mutants-hr-serialization.md
 
-**复发**: 2 —— ①2026-10-10(config loader-defaults 轮): 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。②2026-10-10(hr service-engine 轮): 锚点来源从「手写文本」换成**从 mutmut dump 取行块**, 于是踩到「dump 行块相对源码整体**去缩进**、且**续行缩进不被归一**」⇒ 精确块匹配恒失配(9 条 ANCHOR-MISS)。新增形态四见下。
+**复发**: 3 —— ①2026-10-10(config loader-defaults 轮): 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。②2026-10-10(hr service-engine 轮): 锚点来源从「手写文本」换成**从 mutmut dump 取行块**, 于是踩到「dump 行块相对源码整体**去缩进**、且**续行缩进不被归一**」⇒ 精确块匹配恒失配(9 条 ANCHOR-MISS)。新增形态四见下。③2026-10-10(hr serialization 轮): 同源第二面 —— dump 的 hunk 行号是**函数相对**(不是文件相对)、`ǁ` 分隔符**字形不可靠**、去缩进对 **docstring 续行不生效** ⇒ 首版 271 条全失配。新增形态五见下。
 
 ### 两个失配形态（2026-10-08, config schema 键面轮）
 
@@ -34,6 +34,17 @@
 - **判别**: 与形态一二三同表 —— 输出出现 `ANCHOR-MISS` 就停手; 但这次**不是** `count=0`, 而是「所有 offset 都 0 命中」。
 - **处置**: ①**放弃精确匹配**, 改用「**strip 后内容**序列唯一命中」定位(要求整块 strip 后逐行相等且唯一); ②改写时按「源码行缩进 − 锚点行缩进」算**位移**, 只重写 strip 后**有变化**的行(difflib opcodes), **未变的上下文行原样保留**(否则会把续行重新缩进成错值)。③另一处本轮踩到的同源: 首版脚本用 `Path.write_text()` 在 Windows 把 **LF 写成 CRLF**(还原时污染工作树) ⇒ 一律 **`read_bytes` / `write_bytes`**, 不碰文本模式。
 - **一句话**: 锚点来源换成「别人产出的 diff」时, 先假设它的**空白/缩进不可信** —— 只信 strip 后的内容, 靠唯一性 + 位移复原。
+
+### 形态五: dump 的 hunk 行号是**函数相对** + `ǁ` 分隔符字形不可靠 + docstring 续行不去缩进（2026-10-10, hr serialization 轮）
+
+- **触发**: 同形态四(从 R14 dump 取行块做同构变异), 但换了实现 —— 首版想用「hunk 头 `@@ -L,C +L2,C2 @@` 的 `L` 当**文件行号**」直接定位, 结果 **271 条全报 `ANCHOR-MISS`**。
+- **根因(三层)**:
+  1. **hunk 行号是函数相对的** —— mutmut 逐函数抽体打 diff, `@@ -1,3 @@` 的 `1` 指的是**函数体第 1 行**(= `def` 行或它的装饰器行), 不是文件第 1 行。按文件行号套 ⇒ 全部错位。
+  2. **mutmut id 的分隔符字形不可靠** —— id 形如 `xǁHrEntryǁto_json`(类方法) / `x_hr_dir` / `x__opt_int`(模块函数)。那个类分隔符是 **U+01C1 `ǁ`**, 脚本里按字面 `"ǁ"` split **可能不匹配**(字形相近的不同码位 / 文件编码往返) ⇒ 解析不出 qualname。判据要写成「**非标识符字符**」(`re.split(r"[^A-Za-z0-9_]+", ...)`), 不认字形。
+  3. **去缩进对 docstring 续行不生效** —— 与形态四同源但触发源不同: 形态四是**反斜杠续行**, 本轮是 **docstring 的多行正文**。实测 `cancel_all` 的 hunk 里 `"""` 那行保留 8 空格, 而紧随的 `with self._cond:` 被去成 4 空格 ⇒ 同一块内既有 −0 也有 −4, 「整体加常量偏移」恒失配。
+- **判别**: 与形态一~四同表 —— 输出出现 `ANCHOR-MISS` 就停手; 本轮表现是「**全部**失配」而不是个别, 一眼可辨是定位法本身错了。
+- **处置**(本轮的可用配方, 比形态四更省事): ①先用变异 id 的 qualname 定位**函数体行范围**(类方法走 `class X` → `def y`); ②在范围内按 **strip 后内容**匹配被删(`-`)行序列, 要求**恰好命中一次**(函数范围天然消掉了跨函数重名); ③以「**源码该行缩进 − dump 该行缩进**」为位移, 把新增(`+`)行还原到源码缩进后替换; ④自检 —— 逐条 apply 后 `ast.parse` 必须通过、revert 后字节恒等(本轮 271 条全过)。
+- **同源边界**: 变异体若让守阵**挂起**(如 `_cond.wait(None)`), 红验脚本对子进程**必须设超时**, 否则整轮永不返回(本轮实测: 无超时版跑了 6m49s 才被手工 `TaskStop`); 挂起按「未绿 = 被杀」处理(与 mutmut 的 `timeout` 同口径)。
 
 ### 另一个同源陷阱: 探针放在不可达的分支上（空转）
 - **触发**: CRLF 与缩进都修好后仍剩 1 条 SURVIVED(`readonly_config_paths__mutmut_2`, `continue` → `break`)。手工推算这两者「应当有差别」(断链会丢后续字段), 于是先怀疑是判据/脚本问题而不是急着判等价变异, 查下去发现是探针本身空转。

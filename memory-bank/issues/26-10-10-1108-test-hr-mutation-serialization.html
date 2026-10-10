@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ 序列化与持久化变异存活(model/store/queue)">
 <meta name="issue-summary" content="hr 首轮: model 185 + store 45 + queue 41 存活(from_json/to_json 往返/原子写/锁/队列), 零假存活">
 <title>hr/ 序列化与持久化变异存活(model/store/queue) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-10-1108-test-hr-mutation-serialization</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-10 11:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -91,9 +91,20 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>处置<span class="opt">（实施记录）</span></h2>
+    <p>R17 一次做全三文件(271 条存活): <b>补 41 新守阵 + 1 处既有补断言</b>(<code>test_hr_store.py</code> 24 · <code>test_hr_queue.py</code> 15 · <code>test_hr_status.py</code> 2), 红验 <b>245/271 KILLED</b>, 余 26 条逐条判为等价变异。同池逐文件复跑: <b>model 844 变异 / 存活 1(99.88%)</b> · <b>store 205 / 存活 13(93.66%)</b> · <b>queue 140 / 存活 12 + 超时 2(90.00%)</b>; 对首轮逐文件存活对差 <b>271 → 28</b>(净 −243)。<b>零 <code>src/</code> 改动</b>(纯补测 + 文档)。</p>
+    <ul>
+      <li>model 侧用「全字段非默认值往返 + 键全缺走字段默认」两路夹逼 —— 前者杀键名改写/整值置 None, 后者杀默认值改写(<code>or "XXXX"</code> / <code>bool(raw.get("active", ...))</code> / <code>_as_float</code> 默认)。</li>
+      <li>等价 26 条: 日志/错误文案 11 · UTF-8 模式下 <code>encoding</code> 变体 5 · <code>pop(k, )</code> 保证存在 4 · 死字段 <code>_name</code>/<code>_epoch</code> 绝对值 6 · 边界恒等(<code>prune_history &gt;=</code> · <code>wait left &lt; 0</code>)2 · <code>rstrip(None)</code> 1。</li>
+      <li>基线切片 <a href="../testing/baselines/26-10-10-1458-mutants-hr-serialization.md">26-10-10-1458-mutants-hr-serialization</a>; 新坑 <a href="../pitfalls/testing/mutants-mirror-dirty-worktree.md">mutants-mirror-dirty-worktree</a>; 坑 <a href="../pitfalls/testing/redverify-anchor-lineendings.md">redverify-anchor-lineendings</a> 复发 +1(形态五)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-10 14:59 — 认领并实施（R17），状态 <strong>Done</strong>：三文件一次做全, 补 41 新守阵 + 1 处既有补断言, 红验 245/271 KILLED(余 26 等价), 同池逐文件复跑存活 271 → 28（model 99.88% / store 93.66% / queue 90.00%），零 <code>src/</code> 改动</li>
     </ul>
   </section>
 

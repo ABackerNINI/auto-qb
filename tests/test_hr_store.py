@@ -27,9 +27,36 @@
 - test_history_missing_key_legacy_compat: 旧 JSON 不含 history 键 -> from_json 得空表且其余字段无损(存量文件零迁移)
 - test_history_cap_keeps_latest: 超 HISTORY_CAP(2000)条时修剪助手保留最新 HISTORY_CAP 条(原表不动)
 - test_history_age_prune_boundary: 按龄修剪: 超过 183 天剔、恰好 183 天边界保留、未来时刻保留
+
+## R17 变异审计补测(序列化与持久化)
+- test_model_entry_roundtrip_all_fields: HrEntry 全字段非默认往返(钉键名与取值)
+- test_model_entry_optional_none_roundtrip: HrEntry 可选字段全 None 往返(None 原样穿过, 不折 0)
+- test_model_entry_missing_keys_use_defaults: HrEntry 键全缺走字段默认(active 默认 True 等)
+- test_model_downloaded_roundtrip_and_defaults: HrDownloaded 全字段往返 + 键缺省默认
+- test_model_verified_roundtrip_and_defaults: HrVerified 往返 + source/ anchor_completion_on 默认
+- test_model_lanestate_roundtrip_and_defaults: HrLaneState 往返 + count_claim/count_match 的 None 语义
+- test_model_wavemeta_roundtrip_and_defaults: HrWaveMeta 往返 + retention_ratio/retention_ok 默认
+- test_model_rateledger_roundtrip_and_defaults: HrRateLedger 往返 + day_window 空串默认
+- test_model_history_event_missing_keys_use_defaults: HrHistoryEvent 键缺走空串, notes 里 None 折空串
+- test_model_sitedata_roundtrip_all_fields: HrSiteData 顶层标量 + 子表 + wave/rate/history 全字段往返
+- test_model_sitedata_schema_version_and_writer_fallback: schema_version 从 raw 取; writer 三级回退链
+- test_model_sitedata_verified_filter_positive_ts: 放行入账闸 verified_ts > 0(正小数也算)
+- test_store_instance_id_is_twelve_hex: 实例标识固定 12 位十六进制
+- test_store_hr_dir_strips_trailing_separators: 尾部分隔符剥掉; 目录名以 X 结尾不误剥
+- test_store_init_defaults_and_lock_timeout: 构造默认(owner 12 位 / 锁超时 0 / 各旗标初始态)
+- test_store_missing_file_recoverable_flag: 文件不存在 recoverable=False(不是坏文件)
+- test_store_parse_valid_and_schema_mismatch_recoverable_flags: 正常/schema 不符都不 recoverable
+- test_store_error_hints_include_file_head: 三条错误路径的取证串都带文件开头
+- test_store_file_hint_variants: 取证串三态(不存在 -> 空串 / 空文件 -> 专用文案 / 有内容 -> 截 40 字符)
+- test_store_write_default_keeps_backup: _write 默认 keep_backup=True 留 .bak
+- test_store_write_unicode_and_sorted_keys: 落盘 ensure_ascii=False + sort_keys=True
+- test_store_session_read_alerted_false_when_clean: 读正常时 read_alerted 初始 False
+- test_store_check_lock_heartbeat_zero_is_not_unsafe: 心跳自检下界严格 0 <(心跳 0 不算被覆盖)
+- test_store_recover_unmovable_keeps_backup: 坏文件挪不走时本次写盘不盖好备份
 """
 import json
 import logging
+import os
 
 import pytest
 
@@ -37,6 +64,11 @@ from auto_qb.infra import versioning
 from auto_qb.hr.model import (
     HISTORY_CAP,
     HISTORY_MAX_AGE_S,
+    LANE_OK,
+    LANE_SCOPE,
+    LANE_UNSATISFIED,
+    SOURCE_NOT_LISTED,
+    SOURCE_SATISFIED,
     HrDownloaded,
     HrDlFail,
     HrEntry,
@@ -574,6 +606,7 @@ def test_field_parse_failure_reported(tmp_path, monkeypatch):
     monkeypatch.setattr(hr_store.HrSiteData, "from_json", classmethod(boom))
     data, err, recoverable = store._parse(store.path.read_text(encoding="utf-8"))
     assert "字段解析失败" in err and recoverable is True
+    assert "开头" in err, "字段解析失败的取证串也要带文件开头(R17)"
     monkeypatch.undo()
 
 
@@ -632,3 +665,316 @@ def test_lock_session_site_property(tmp_path):
     store = HrSiteStore("mysite", str(tmp_path))
     with store.hold() as session:
         assert session.site == "mysite"
+
+
+# ==================== R17: 序列化契约(model 全字段往返 + 键缺省默认) ====================
+
+
+def test_model_entry_roundtrip_all_fields():
+    """HrEntry 全字段非默认值往返: 键名被改写 / 取值被整段置 None 都要变红"""
+    entry = HrEntry(
+        tid=313852,
+        dl_id=173107,
+        name="例站 S01",
+        lane=LANE_UNSATISFIED,
+        uploaded_bytes=11,
+        downloaded_bytes=22,
+        ratio=1.5,
+        need_seed_seconds=33,
+        done_iso="2026-09-27T12:00:00",
+        remain_seconds=44,
+        infohash_v1="aa" * 20,
+        infohash_v2="bb" * 32,
+        first_seen=1.5,
+        last_seen=2.5,
+        active=False,
+        missing_streak=3,
+    )
+    assert HrEntry.from_json(entry.to_json()) == entry
+
+
+def test_model_entry_optional_none_roundtrip():
+    """HrEntry 可选字段全 None 往返: _opt_int/_opt_float 的「None 原样穿过」语义(不折成 0)"""
+    entry = HrEntry(
+        tid=1,
+        dl_id=None,
+        uploaded_bytes=None,
+        downloaded_bytes=None,
+        ratio=None,
+        need_seed_seconds=None,
+        done_iso=None,
+        remain_seconds=None,
+    )
+    assert HrEntry.from_json(entry.to_json()) == entry
+
+
+def test_model_entry_missing_keys_use_defaults():
+    """HrEntry 键全缺: 一律走字段默认(active 默认 True / 空串 / 0 / None), 不猜非默认值"""
+    entry = HrEntry.from_json({})
+    assert entry == HrEntry(tid=0)
+    assert entry.active is True and entry.lane == LANE_SCOPE
+    assert entry.dl_id is None and entry.ratio is None and entry.done_iso is None
+    assert entry.name == "" and entry.infohash_v1 == "" and entry.infohash_v2 == ""
+    assert entry.first_seen == 0.0 and entry.last_seen == 0.0 and entry.missing_streak == 0
+
+
+def test_model_downloaded_roundtrip_and_defaults():
+    """HrDownloaded 全字段往返 + 键缺省默认(空串不是占位符)"""
+    got = HrDownloaded(tid=9, ts=5.5, name="n9", infohash_v1="V1", infohash_v2="V2")
+    assert HrDownloaded.from_json(got.to_json()) == got
+    assert HrDownloaded.from_json({"tid": 9}) == HrDownloaded(tid=9)
+
+
+def test_model_verified_roundtrip_and_defaults():
+    """HrVerified 全字段往返 + 键缺省默认(source 默认 not-listed / anchor_completion_on 默认 -1)"""
+    ver = HrVerified(
+        infohash="cc" * 20,
+        tid=7,
+        verified_ts=8.5,
+        source=SOURCE_SATISFIED,
+        anchor_added_on=100,
+        anchor_downloaded=200,
+        anchor_completion_on=300,
+        anchor_progress=0.75,
+    )
+    assert HrVerified.from_json(ver.to_json()) == ver
+    d = HrVerified.from_json({"infohash": "cc" * 20, "tid": 7, "verified_ts": 1.0})
+    assert d.source == SOURCE_NOT_LISTED
+    assert d.anchor_completion_on == -1 and d.anchor_progress == 0.0 and d.anchor_added_on == 0
+
+
+def test_model_lanestate_roundtrip_and_defaults():
+    """HrLaneState 全字段往返 + 键缺省默认(count_claim/count_match 的 None 语义必须原样穿过)"""
+    lane = HrLaneState(
+        lane=LANE_SCOPE,
+        wave_ts=1.5,
+        status=LANE_OK,
+        pages=3,
+        rows=99,
+        cutoff_done=2.5,
+        full_depth=True,
+        detail="d",
+        fail_streak=2,
+        count_claim=100,
+        count_match=False,
+        count_mismatch_streak=3,
+    )
+    assert HrLaneState.from_json(lane.to_json()) == lane
+    d = HrLaneState.from_json({})
+    assert d == HrLaneState()
+    assert d.count_claim is None and d.count_match is None
+
+
+def test_model_wavemeta_roundtrip_and_defaults():
+    """HrWaveMeta 全字段往返 + 键缺省默认(retention_ratio 默认 -1.0 / retention_ok 默认 True)"""
+    wave = HrWaveMeta(
+        wave_ts=1.5,
+        healthy_ts=2.5,
+        idle_mode=True,
+        releases_enabled=True,
+        zero_rows=True,
+        retention_ratio=0.8,
+        retention_ok=False,
+        lanes={"A": HrLaneState(lane="A", status=LANE_OK)},
+        prev_a_tids={5: "aa" * 20},
+        notes="n",
+    )
+    assert HrWaveMeta.from_json(wave.to_json()) == wave
+    d = HrWaveMeta.from_json({})
+    assert d == HrWaveMeta()
+    assert d.retention_ratio == -1.0 and d.retention_ok is True
+
+
+def test_model_rateledger_roundtrip_and_defaults():
+    """HrRateLedger 全字段往返 + 键缺省默认(day_window 空串)"""
+    rate = HrRateLedger(day_window="2026-09-28", day_count=5, last_fetch_ts=7.5)
+    assert HrRateLedger.from_json(rate.to_json()) == rate
+    assert HrRateLedger.from_json({}) == HrRateLedger()
+
+
+def test_model_history_event_missing_keys_use_defaults():
+    """HrHistoryEvent 键缺: 字符串字段走空串(不是占位符); notes 里的 None 折成空串"""
+    ev = HrHistoryEvent.from_json({"ts": 1.0})
+    assert ev.kind == "" and ev.trigger == "" and ev.action == ""
+    assert ev.reason == "" and ev.reason_kind == "" and ev.by == ""
+    assert ev.lanes == [] and ev.notes == []
+    assert HrHistoryEvent.from_json({"ts": 1.0, "notes": [None, "x"]}).notes == ["", "x"]
+
+
+def test_model_sitedata_roundtrip_all_fields():
+    """HrSiteData 全字段往返: 顶层标量 + 四个子表 + wave/rate/history 复合结构逐字段相等"""
+    data = HrSiteData(
+        schema_version=versioning.CURRENT_VERSIONS["hr_site"],
+        revision=7,
+        fetched_at=1.5,
+        expires_at=2.5,
+        writer_instance="inst",
+        writer_heartbeat=3.5,
+        empty_confirmed_at=4.5,
+        retry_after_until=5.5,
+    )
+    data.index[1] = HrEntry(tid=1, name="n1", infohash_v1="aa" * 20)
+    data.downloaded[1] = HrDownloaded(tid=1, ts=6.5, infohash_v1="bb" * 20)
+    data.fails[1] = HrDlFail(tid=1, count=2, last_ts=7.5)
+    data.verified["cc" * 20] = HrVerified(infohash="cc" * 20, tid=1, verified_ts=8.5)
+    data.wave = HrWaveMeta(wave_ts=9.5, retention_ratio=0.5)
+    data.rate = HrRateLedger(day_window="2026-09-28", day_count=1, last_fetch_ts=10.5)
+    data.history = [HrHistoryEvent(ts=11.5, kind="wave")]
+    assert HrSiteData.from_json(data.to_json()) == data
+
+
+def test_model_sitedata_schema_version_and_writer_fallback():
+    """schema_version 从 raw 取(键缺才落 SCHEMA_VERSION); writer 走 writer.instance_id -> 顶层 writer_instance -> 空串"""
+    assert HrSiteData.from_json({"schema_version": 5}).schema_version == 5
+    assert HrSiteData.from_json({}).schema_version == versioning.CURRENT_VERSIONS["hr_site"]
+    assert HrSiteData.from_json({"writer": {"instance_id": "i1"}}).writer_instance == "i1"
+    assert HrSiteData.from_json({"writer_instance": "legacy"}).writer_instance == "legacy"
+    assert HrSiteData.from_json({}).writer_instance == ""
+    assert HrSiteData.from_json({"writer_heartbeat": 4.5}).writer_heartbeat == 4.5
+
+
+def test_model_sitedata_verified_filter_positive_ts():
+    """放行记录入账闸: 有 infohash 且 verified_ts > 0(0.5 这种正小数也算)"""
+    raw = {
+        "verified":
+            [
+                {
+                    "infohash": "aa" * 20,
+                    "tid": 1,
+                    "verified_ts": 0.5
+                },
+                {
+                    "infohash": "bb" * 20,
+                    "tid": 2,
+                    "verified_ts": 0
+                },
+                {
+                    "tid": 3,
+                    "verified_ts": 9.0
+                },
+            ]
+    }
+    assert set(HrSiteData.from_json(raw).verified) == {"aa" * 20}
+
+
+# ==================== R17: 存储层(构造默认 / 原子写 / 取证串 / 恢复路径) ====================
+
+
+def test_store_instance_id_is_twelve_hex():
+    """实例标识固定 12 位十六进制(多实例分辨用)"""
+    iid = hr_store.instance_id()
+    assert len(iid) == 12 and all(c in "0123456789abcdef" for c in iid)
+
+
+def test_store_hr_dir_strips_trailing_separators():
+    """尾部分隔符被剥掉; 目录名以 X 结尾时不误剥(只在分隔符集合上 rstrip)"""
+    assert hr_dir("/data/x/") == os.path.join("/data/x", "hr")
+    assert hr_dir("/data/x\\") == os.path.join("/data/x", "hr")
+    assert hr_dir("/data/xX") == os.path.join("/data/xX", "hr")
+    assert hr_dir("/data/x", "/share/xX") == os.path.join("/share/xX", "hr")
+
+
+def test_store_init_defaults_and_lock_timeout(tmp_path):
+    """构造默认: owner 自生成 12 位; 锁超时默认 0(不等); 心跳自检基线/告警旗标初始态"""
+    store = HrSiteStore("s", str(tmp_path))
+    assert len(store.owner) == 12
+    assert store._lock.timeout == 0.0
+    assert store._last_write_rev == 0 and store._last_write_heartbeat == 0.0
+    assert store._unsafe_warned is False
+    assert store._read_error_warned == ""
+    assert store._migration_logged is False
+
+
+def test_store_missing_file_recoverable_flag(tmp_path):
+    """文件不存在 -> (空数据, 无错, recoverable=False): 不是「坏文件」, 不该走 .bak 兜底"""
+    store = HrSiteStore("newsite", str(tmp_path))
+    data, err, recoverable = store._read_full()
+    assert err is None and recoverable is False
+
+
+def test_store_parse_valid_and_schema_mismatch_recoverable_flags(tmp_path):
+    """正常解析 recoverable=False; schema 不符也不可恢复(备份里是同一个旧版本, 猜没意义)"""
+    store = HrSiteStore("s", str(tmp_path))
+    text = json.dumps({"schema_version": versioning.CURRENT_VERSIONS["hr_site"], "index": []})
+    _d, err, recoverable = store._parse(text)
+    assert err is None and recoverable is False
+    _d2, err2, recoverable2 = store._parse(json.dumps({"schema_version": 99, "index": []}))
+    assert err2 is not None and recoverable2 is False
+
+
+def test_store_error_hints_include_file_head(tmp_path):
+    """坏文件取证串要带「开头 ...」: 只报 Expecting value 人分不清是空文件还是内容被写坏"""
+    store = HrSiteStore("s", str(tmp_path))
+    store.path.write_text("[1, 2]", encoding="utf-8")
+    _d, err, _r = store._parse("[1, 2]")  # 根节点不是字典
+    assert "开头 '[1, 2]'" in err, err
+    store.path.write_text("{ bad json", encoding="utf-8")
+    _d2, err2, _r2 = store._parse("{ bad json")  # JSON 解析失败
+    assert "开头 '{ bad json'" in err2, err2
+    store.path.write_text(json.dumps({"schema_version": 99}), encoding="utf-8")
+    _d3, err3, _r3 = store._parse(json.dumps({"schema_version": 99}))  # schema 不符
+    assert "开头" in err3, err3
+
+
+def test_store_file_hint_variants(tmp_path):
+    """取证串: 文件不存在 -> 空串; 空文件 -> 专用文案; 有内容 -> 截 40 字符"""
+    store = HrSiteStore("s", str(tmp_path))
+    assert store._file_hint() == ""  # stat 失败(文件不存在)
+    store.path.write_text("", encoding="utf-8")
+    assert store._file_hint() == "(文件为空 0 字节: 可能被编辑器 / 同步盘清空, 或写盘被中断)"
+    text = "A" * 50
+    store.path.write_text(text, encoding="utf-8")
+    assert store._file_hint(text) == f"(文件 50 字节, 开头 {'A' * 40!r})"
+
+
+def test_store_write_default_keeps_backup(tmp_path):
+    """_write 默认 keep_backup=True: 不传实参也把上一版留为 .bak(commit 显式传参, 这里钉默认值)"""
+    store = HrSiteStore("s", str(tmp_path), owner="me")
+    with store.hold() as session:
+        session.commit(now=1.0)
+    assert not (tmp_path / "s.json.bak").exists(), "首次写盘无旧文件 -> 不产生 .bak"
+    store._write(HrSiteData(), 2.0)
+    assert (tmp_path / "s.json.bak").exists()
+
+
+def test_store_write_unicode_and_sorted_keys(tmp_path):
+    """落盘: ensure_ascii=False(中文不转义) + sort_keys=True(键序稳定, 便于 diff 与取证)"""
+    store = HrSiteStore("s", str(tmp_path), owner="me")
+    with store.hold() as session:
+        session.data.index[1] = HrEntry(tid=1, name="例站 中文")
+        session.commit(now=1.0)
+    text = (tmp_path / "s.json").read_text(encoding="utf-8")
+    assert "例站 中文" in text, "中文不得被转义(ensure_ascii=False)"
+    assert text.startswith('{"downloaded"'), "顶层键按 sort_keys=True 排序"
+
+
+def test_store_session_read_alerted_false_when_clean(tmp_path):
+    """读正常时 read_alerted 初始为 False(供调用方决定是否另报一次)"""
+    store = HrSiteStore("s", str(tmp_path))
+    with store.hold() as session:
+        assert session.read_alerted is False
+
+
+def test_store_check_lock_heartbeat_zero_is_not_unsafe(tmp_path):
+    """心跳自检下界是**严格** 0 < heartbeat: 心跳为 0 表示无快照, 不得判成「被覆盖」"""
+    store = HrSiteStore("s", str(tmp_path), owner="me")
+    with store.hold() as session:
+        session.commit(now=10.0)  # 让 _last_write_heartbeat > 0
+    payload = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    payload["writer"] = {"instance_id": "me", "heartbeat": 0}  # 心跳 0(无快照)
+    (tmp_path / "s.json").write_text(json.dumps(payload), encoding="utf-8")
+    with store.hold() as session:
+        assert session.writable is True, "0 < heartbeat 为假 -> 不是「心跳被覆盖」"
+
+
+def test_store_recover_unmovable_keeps_backup(tmp_path):
+    """坏文件挪不走时: 本次写盘不得把好备份盖成坏内容(keep_backup 要随恢复置 False)"""
+    store = _write_versions(tmp_path, entries=(1, ))
+    backup_before = (tmp_path / "s.json.bak").read_bytes()
+    store.quarantine = lambda: ""  # 模拟挪走失败(被别的程序占用)
+    (tmp_path / "s.json").write_text("{ 坏", encoding="utf-8")
+    with store.hold() as session:
+        assert session.recovered_from_backup is True
+        assert "坏文件未能挪走(它将被下次写盘覆盖); 已从备份" in session.read_error, session.read_error
+        assert session.commit(now=9.0) == "written"
+    assert (tmp_path / "s.json.bak").read_bytes() == backup_before, "恢复后的写入不得把好备份盖成坏内容"
