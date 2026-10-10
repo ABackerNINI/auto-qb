@@ -136,7 +136,7 @@ def _make_torrents(count: int, site_conf):
 # (迅雷/XL)、内网(192.168/10.)与公网/IPv6、速度与进度的零值与非零值、files 渐进字段。
 # 字段集与 qB sync/torrentPeers 的 peer_info 同形(缺省字段渐进省略: country_code/connection/files)。
 _PEER_SCENES = [
-    # client, flags, ip, port, progress, dlspeed, upspeed, relevance, country_code, connection, files
+    # client, flags, ip, port, progress, dl_speed, up_speed, relevance, country_code, connection, files
     ("qBittorrent 5.0.2", "U K E", "203.0.113.7", 51413, 1.0, 0, 512 * 1024, 1.0, "DE", "BT", None),
     ("Transmission 4.0.5", "D E", "198.51.100.23", 6881, 0.62, 256 * 1024, 0, 0.31, "US", "BT", None),
     (
@@ -155,23 +155,25 @@ def _make_peers_response(i: int) -> dict:
 
     !peers 用 **dict**(以 "ip:port" 为键)而非数组 —— 真 qB 恒为 dict, 前端 drawerPeerRows 做
     dict/数组双形态归一; 桩若图省事给数组, 归一的 dict 分支就永远测不到(口径同 tests/helpers.py
-    FakeClient.sync_torrent_peers)。对端数与组合按种子序号 i 轮转(1~7 个, 首尾相接地错开), 让不同
-    种子拿到不同的 flags/速度/进度组合 —— 单种全量轮转只覆盖一种形态, 冒烟就会"自以为测过"
-    (见 pitfalls/testing/stubs-sim.md)。
+    FakeClient.sync_torrent_peers)。**速度字段名必须是 qB 原始 dl_speed / up_speed**(与
+    torrents/info 的 dlspeed / upspeed 不同名)—— 曾按 dlspeed / upspeed 造假数据, 前端据此
+    「看得见速度」, 真机却恒 0, 测假; 前端在 drawer.js::_drawerNormPeers 落袋单点适配两键。
+    对端数与组合按种子序号 i 轮转(1~7 个, 首尾相接地错开), 让不同种子拿到不同的 flags/速度/
+    进度组合 —— 单种全量轮转只覆盖一种形态, 冒烟就会"自以为测过"(见 pitfalls/testing/stubs-sim.md)。
     """
     n = 1 + (i % len(_PEER_SCENES))
     peers = {}
     for k in range(n):
         scene = _PEER_SCENES[(i + k) % len(_PEER_SCENES)]
-        client, flags, ip, port, progress, dlspeed, upspeed, relevance, cc, conn, files = scene
+        client, flags, ip, port, progress, dl_speed, up_speed, relevance, cc, conn, files = scene
         peer = {
             "ip": ip,
             "port": port,
             "client": client,
             "flags": flags,
             "progress": progress,
-            "dlspeed": dlspeed,
-            "upspeed": upspeed,
+            "dl_speed": dl_speed,
+            "up_speed": up_speed,
             "downloaded": int(progress * 4 * 1024**3),
             "uploaded": (k + 1) * 128 * 1024**2,
             "relevance": relevance,

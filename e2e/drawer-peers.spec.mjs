@@ -17,6 +17,11 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 断言口径: 打开种子详情抽屉 → 切「用户」页签 → 经典 peers 表渲染出对端行(>0)且首行地址列有
  * IP:port 文本, 同时「暂无已连接用户」空态**不出现**。真实手势(locator click), 不借道 vm。
  * 默认模板为 classic(`drawerTplSel.peers` 初值), 故断言落在经典表 `.drawer-table` 上。
+ *
+ * 2026-10-10 补速度列守卫: 真 qB sync/torrentPeers 的速度键是 dl_speed / up_speed(与列表侧
+ * torrents/info 的 dlspeed / upspeed 不同名)。前端落袋单点 `_drawerNormPeers` 若漏适配, 用户页
+ * 上下行恒 0(用户报障) —— 而本 specs 原先只断「有行 + 地址有 ip:port」, 速度列全 "—" 也不红。
+ * 现加「上下行至少一格含数字」守卫, 桩每种子恒有非零速度对端, 确保失配即红。
  */
 
 for (const skin of SKINS) {
@@ -51,6 +56,17 @@ for (const skin of SKINS) {
       // 首行地址列 = "ip:port"(drawerPeerRows 归一后的 addr), 证明是真内容不是占位行
       const addr = (await rows.first().locator('td').first().innerText()).trim();
       expect(addr, `peers 首行地址="${addr}"`).toMatch(/[\d.:]+/);
+
+      // 上下行(第5/6列)必须渲染出真实速度 —— 回归守卫: qB sync/torrentPeers 的速度键是
+      // dl_speed / up_speed(与列表侧 dlspeed / upspeed 不同名)。落袋单点(drawer.js::
+      // _drawerNormPeers)若未做键名适配, 取不到值 → 全部退化成 "—"(用户报「上下行始终为 0」)。
+      // 桩每个种子恒有 >=1 个非零速度对端, 故「至少一格含数字」在有适配时恒真、失配时恒假。
+      const speedCells = await table.locator('tbody tr td:nth-child(5), tbody tr td:nth-child(6)')
+        .allInnerTexts();
+      expect(
+        speedCells.some((t) => /\d/.test(t)),
+        `peers 上下行应渲染出真实速度(非全 "—"), 实际=${JSON.stringify(speedCells)}`,
+      ).toBe(true);
 
       // 空态文案必须消失(「有数据」与「真没有」在此分界)
       await expect(drawer.locator('.empty', { hasText: '暂无已连接用户' })).toHaveCount(0);

@@ -17,7 +17,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * drawer-content-dt11-sticky.spec.mjs(dt11 吸顶 + 吸底两档)。
  */
 
-/** 合成 peer 列表: 40 行让 .drawer-body 滚出数屏。字段集与 qB sync/torrentPeers 同形。 */
+/** 合成 peer 列表: 40 行让 .drawer-body 滚出数屏。字段集与 qB sync/torrentPeers 同形
+ *  (速度键是 qB 原始的 dl_speed / up_speed, 非列表侧的 dlspeed / upspeed)。 */
 function makePeers(n) {
   const ccs = ['CN', 'US', 'DE', 'JP', 'BR'];
   const conns = ['UV', 'UT', 'IU', 'IT'];
@@ -29,8 +30,8 @@ function makePeers(n) {
       client: `qBittorrent 5.${i % 5}.${i % 3}`,
       flags: i % 3 ? 'U D' : 'U D H',
       progress: (i % 10) / 10,
-      dlspeed: (i % 4) * 125000,
-      upspeed: (i % 3) * 250000,
+      dl_speed: (i % 4) * 125000,
+      up_speed: (i % 3) * 250000,
       relevance: 0.5 + (i % 50) / 100,
       country_code: ccs[i % ccs.length],
       connection: conns[i % conns.length],

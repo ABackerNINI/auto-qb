@@ -1,7 +1,9 @@
 # 桩与仿真保真度
 
 > 摘要: 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。
-> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness
+> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness, 字段名, dl_speed, up_speed, peers, 对端速度
+
+**Refs:** memory-bank/tasks/26-10-10-webui-peers-speed-field.md
 
 ### `helpers.FakeConfig` 是**手写**桩: 真实 `Config` 新增字段时要同步补, 否则一批用例集体炸
 
@@ -27,6 +29,11 @@
   **依赖详情的整条链路(详情抽屉 / 限速 / 分享率 / 移动 / 重命名 / 复制磁力)从未被冒烟覆盖**,
   且前端 catch 后**只弹 toast**, 断言看不到。
 - **处置**: 加一条"**无 console.error**"断言, 并至少 GET 一次该链路。
+- **复发**: 1 —— 2026-10-10 `scripts/ui_harness.py` 合成 `sync/torrentPeers` 的对端用 `dlspeed`/
+  `upspeed`, 而真 qB 是 `dl_speed`/`up_speed` ⇒ 冒烟「看得见速度」而真机用户页上下行恒 0, 一路逃过
+  全部 e2e(机理见 [../backend/qb-api.md](../backend/qb-api.md))。**为什么没命中**: 桩只对了"形状"
+  (peers 用 dict 而非数组)—— 字段**名**没人核对; 且 e2e 只断"行存在"不断"值非零", 速度列全 "—" 也不红。
+
 
 ### `FakeQbServer` 的出口必须可 JSON 序列化
 

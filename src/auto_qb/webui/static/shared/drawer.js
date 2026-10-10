@@ -852,7 +852,7 @@ window.AQB_DRAWER = {
       try {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.peers = r || { peers: [] };
+        this.drawer.peers = this._drawerNormPeers(r);
         this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
@@ -1381,6 +1381,25 @@ window.AQB_DRAWER = {
       };
       walk(root, null, -1);
       return rows;
+    },
+    /* qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(qB 原始命名), 与列表侧
+     * torrents/info 的 dlspeed / upspeed **不同名** —— 抽屉 peers 的全部消费点(经典表经
+     * drawerPeerRows, 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed
+     * 取名, 故在落袋单点(_fetchDrawerPeers)做一次键名适配: 补 dlspeed / upspeed(保留原键,
+     * 其余字段 dl_speed 系的 downloaded/uploaded/flags/progress/relevance 本就同名无需动)。
+     * 漏这一步的症状 = 用户页上下行恒 0(取不到值 → 0), 而桩服务若也按错名造数据则测不出来。 */
+    _drawerNormPeers(resp) {
+      const r = resp && typeof resp === "object" ? resp : { peers: [] };
+      const fix = (x) => {
+        if (!x || typeof x !== "object") return x;
+        if (x.dlspeed === undefined && x.dl_speed !== undefined) x.dlspeed = x.dl_speed;
+        if (x.upspeed === undefined && x.up_speed !== undefined) x.upspeed = x.up_speed;
+        return x;
+      };
+      if (Array.isArray(r.peers)) r.peers = r.peers.map(fix);
+      else if (r.peers && typeof r.peers === "object")
+        r.peers = Object.fromEntries(Object.entries(r.peers).map(([k, v]) => [k, fix(v)]));
+      return r;
     },
     /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 —— 双形态归一 */
     drawerPeerRows() {

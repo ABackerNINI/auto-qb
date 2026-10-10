@@ -3,7 +3,7 @@
 > 摘要: qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。
 > 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执, WEB UI 命令被 qB 拒绝, 409, Conflict409
 
-**Refs:** memory-bank/tasks/26-10-09-webui-qb-command-reject.md
+**Refs:** memory-bank/tasks/26-10-09-webui-qb-command-reject.md,memory-bank/tasks/26-10-10-webui-peers-speed-field.md
 
 ### qB 5.0+ 全局限速: `app.preferences` 的限速字段**已静默失效**
 
@@ -137,3 +137,21 @@
   分发层只分流: 命中 -> **WARNING 无堆栈**, 未命中(网络/鉴权/代码 bug) -> ERROR + `exc_info=True`。
   守阵 `tests/test_web_commands.py::test_qb_reject_text_classification` 与
   `test_queue_torrent_qb_reject_receipt_and_log`。
+
+### qB `sync/torrentPeers` 的对端速度字段是 `dl_speed` / `up_speed`, **不是** `dlspeed` / `upspeed`
+
+- **触发**: 消费 qB `sync/torrentPeers` 的对端(peer)对象; 或排障「种子详情用户页上下行恒 0 / 恒 —」。
+- **判别**: qB 两套接口对**同义字段用了不同名** —— 列表侧 `torrents/info`(及 `sync/maindata` 的
+  torrents)用 `dlspeed` / `upspeed`; 而**对端**对象(qB 源码 `synccontroller.cpp` 的
+  `KEY_PEER_DOWN_SPEED`/`KEY_PEER_UP_SPEED`)用 `dl_speed` / `up_speed`。对端里 `downloaded` /
+  `uploaded` / `flags` / `progress` / `relevance` 恰与列表侧**同名** ⇒ 拿 `dlspeed`/`upspeed` 取
+  对端时会**只坏「上下行」两列**(前端 `x.dlspeed || 0` → 0), 其余列正常 —— 这个「只坏两列」是本坑指纹。
+- **处置**: 在**落袋单点**做一次键名适配(2026-10-10 落地: `webui/static/shared/drawer.js::_drawerNormPeers`
+  在 `_fetchDrawerPeers` 落袋处补 `dlspeed`/`upspeed`, peers 为 dict/数组双形态同归一), 全部消费点
+  (经典表经 `drawerPeerRows`、变体 07/08/09 各自的 `peerList` 直读原始对端对象)**一处修好**;
+  别在各消费点各写一遍。**配套**: 桩服务 / 合成数据必须用**真 qB 键名**(`dl_speed`/`up_speed`) ——
+  本 bug 正是因 `scripts/ui_harness.py` 自造数据用了 `dlspeed`/`upspeed`, 冒烟「看得见速度」而真机恒 0,
+  一路逃过全部 e2e(见 [../testing/stubs-sim.md](../testing/stubs-sim.md) 同名复发条)。
+- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_peers_speed_keys_normalized`(适配单点在 +
+  落袋走单点 + 桩键名与真 qB 同形); e2e `e2e/drawer-peers.spec.mjs`「上下行至少一格含数字」守卫。
+
