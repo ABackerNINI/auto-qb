@@ -4,6 +4,7 @@ import { BASE_URL, SKINS } from './harness.mjs';
 import { CMD_RESULT, requireMode } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
+import { tab, ctxItem, clickRow, openApp, openMenuTexts, pickRows, bulkTap } from './lib/gestures.mjs';
 import { armClick, armPending, readPending } from './lib/probes.mjs';
 
 /**
@@ -126,112 +127,6 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    同语义); W5-off flags 轮询 10s(旧 waitForFunction 同值)。
  *  · 每 test 独立 context ⇒ 旧脚本跨块 settle sleep(等 3s 兜底窗口过/清选择/关弹层)不再需要。
  */
-
-/** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
-const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
-/** 菜单项定位器(ctx 菜单是 div.ctx-item, 无 role, 按文案取)。 */
-const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text });
-
-/**
- * 行点击统一入口: 真实鼠标手势 + 落点可验(对冲写法沿用 multiselect-shows.spec, 机理见其文件头:
- * 宽行居中滚动把 {x:8,y:8} 落点滚出裁剪面 ⇒ sticky-head/html 交替拦截 30s —— 这里 5 拍 arrange
- * + elementFromPoint 验落点, 拦截发生时立即带现场报错)。
- *
- * @param {import('@playwright/test').Page} page
- * @param {import('@playwright/test').Locator} row
- * @param {{button?: 'left'|'right', modifiers?: Array<'Control'|'Shift'|'Alt'|'Meta'>}} [opts]
- * @returns {Promise<void>}
- */
-async function clickRow(page, row, opts = {}) {
-  const { button = 'left', modifiers = [] } = opts;
-  let last = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    last = await row.evaluate(async (/** @type {HTMLElement} */ el) => {
-      const cont = el.closest('.group-table');
-      if (cont && cont.scrollLeft !== 0) cont.scrollLeft = 0;
-      const head = document.querySelector('.sticky-head');
-      const headBottom = head ? head.getBoundingClientRect().bottom : 0;
-      let r = el.getBoundingClientRect();
-      if (r.top < headBottom + 8 || r.bottom > window.innerHeight - 8) {
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
-        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-        r = el.getBoundingClientRect();
-      }
-      const x = r.left + 8;
-      const y = r.top + 8;
-      const hit = document.elementFromPoint(x, y);
-      return {
-        x, y,
-        ok: !!hit && (hit === el || el.contains(hit)),
-        hit: hit ? `${hit.tagName}.${String(hit.className && hit.className.baseVal !== undefined ? hit.className.baseVal : hit.className || '')}`.slice(0, 60) : '(null)',
-      };
-    });
-    if (last.ok) break;
-  }
-  if (!last.ok || !last) {
-    throw new Error(`clickRow: 落点验证 5 拍未过(行左缘 8,8 被拦截, 最后拦截者 ${last ? last.hit : '?'})—— ` +
-      `这是 smoke.md「点击拦截面随布局漂移」签名, 请带 trace 走 issue 流程, 别加 sleep 硬等`);
-  }
-  /* 修饰键走 keyboard.down/up 包夹 mouse.click(page.mouse.click 的 options 没有 modifiers,
-   * 裸传会被静默忽略 —— multiselect-shows.spec 首跑实测), 仍是 CDP 输入管线的真实手势。 */
-  if (modifiers.length) {
-    for (const k of modifiers) await page.keyboard.down(k);
-  }
-  try {
-    await page.mouse.click(last.x, last.y, { button });
-  } finally {
-    for (const k of modifiers) await page.keyboard.up(k);
-  }
-}
-
-/**
- * 打开首页并等首屏渲染(每 test 独立 context 的公共 arrange 前奏, 与既有 spec 同款)。
- * @param {import('@playwright/test').Page} page
- * @param {string} skin
- */
-async function openApp(page, skin) {
-  collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
-}
-
-/**
- * 断言右键菜单已打开, 返回菜单项文本数组(供"含什么/不含什么"两类断言共用)。
- * @param {import('@playwright/test').Page} page
- * @returns {Promise<string[]>}
- */
-async function openMenuTexts(page) {
-  await expect(page.locator('.ctx-menu')).toBeVisible({ timeout: 5_000 });
-  const texts = await page.locator('.ctx-item').allInnerTexts();
-  return texts.map((t) => t.trim());
-}
-
-/**
- * Ctrl+click 选中前 N 个已渲染行(行窗口化 ~26 行, 300 种子下前 N 行恒在窗口内),
- * 返回选中集合权威读数(vm.selMembers, evaluate 第②类)。
- * @param {import('@playwright/test').Page} page
- * @param {number} n
- * @returns {Promise<string[]>}
- */
-async function pickRows(page, n) {
-  const rows = page.locator('.torrent-row');
-  for (let i = 0; i < n; i++) {
-    await clickRow(page, rows.nth(i), { modifiers: ['Control'] });
-  }
-  const picked = await readInst(page, 'vm.selMembers.slice()');
-  expect(picked, `Ctrl+click ${n} 行后选中集合(selMembers)`).toHaveLength(n);
-  return /** @type {string[]} */ (picked);
-}
-
-/** bulk POST 计数 + 末条载荷捕获(W2/W3 载荷形状断言共用口径)。 */
-const bulkTap = (/** @type {import('@playwright/test').Page} */ page) => {
-  const hits = { n: 0, body: /** @type {string|null} */ (null) };
-  const onReq = (/** @type {import('@playwright/test').Request} */ r) => {
-    if (r.url().includes('/api/torrents/bulk')) { hits.n++; hits.body = r.postData(); }
-  };
-  page.on('request', onReq);
-  return { hits, off: () => page.off('request', onReq) };
-};
 
 /** /export 请求计数(W4 逐个导出口径, 旧 onReq 同款)。 */
 const exportTap = (/** @type {import('@playwright/test').Page} */ page) => {

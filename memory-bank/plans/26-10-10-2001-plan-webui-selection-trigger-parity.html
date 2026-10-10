@@ -8,7 +8,7 @@
 <meta name="doc-topic" content="webui-selection-trigger-parity">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-10-2001">
-<meta name="doc-updated" content="26-10-10-2100">
+<meta name="doc-updated" content="26-10-10-2329">
 <style>
   :root {
     color-scheme: dark;
@@ -235,7 +235,7 @@
     <p class="lede">给「用什么输入触发、就作用在谁身上」这件事立一份契约：把散在 7 处目标解析、7 个动作出口上的口径收敛成一个作用域描述符（descriptor），再用三张互相咬合的网（静态守阵 / 运行时审计 / 真浏览器矩阵）同时钉住它 —— 新增功能只要走统一出口就**自动被检查**，不必再逐条追加断言。</p>
     <div class="meta-row">
       <span><b>stamp</b> 26-10-10-2001(R2 2100)</span>
-      <span><b>status</b> In Progress(S1+S2 已落地; S3 待单独一轮)</span>
+      <span><b>status</b> In Progress(S1–S5 已落地, 三张网闭合; S6 菜单项集声明化延后待评估)</span>
       <span><b>topic</b> webui-selection-trigger-parity</span>
       <span><b>口径单点</b> conventions/webui-scope.md</span>
       <span><b>取证快照</b> 2026-10-10 工作树, 行号为该时点值(上游 727b72e2 后已复核)</span>
@@ -1016,6 +1016,18 @@
   <section id="s9">
     <div class="sec-head"><span class="sec-num">09</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-10-2329 · R5(S5 落地: e2e 参数化矩阵, 三张网闭合)</div>
+        <p>承接 R4 继续 S5: 新增 <code>e2e/lib/scope_ring.mjs</code>(读环辅助: 开审计+清环 / 读环 / 环净断言 / 注入造不一致红验, D4 第①②类合规)与 <code>e2e/trigger-scope.spec.mjs</code>(参数化矩阵, describe 标 @fast 进「改前端必跑」门禁)。矩阵 7 用例: <strong>T-1</strong> 选中2行右键锚点行→批量菜单→bulk 载荷==选中集合+toast 计数「(2 个目标)」/ <strong>T-2</strong> 选中2行右键未选中行→单目标菜单→目标==锚点行(不静默扩选, C5 另一侧) / <strong>T-3</strong> 无选中右键→目标==锚点行 / <strong>T-4a</strong> 选中1组右键该组→<strong>单组支</strong>(集合==锚点范围不升批量, C2 口径的实测锚定——初版预设「升批量」为误, 首跑即纠) / <strong>T-4b</strong> 选中2组右键锚点组→批量菜单→bulk keys==两组 / <strong>T-5</strong> 种子页键盘光标按 S→目标==光标行(C5 cursor 侧) / <strong>T-6</strong> 登记表真机探针(暴露形态是 <code>methods.triggerDefs()</code> 包一层, 首跑纠偏) / <strong>T-7</strong> 审计红验真机化(注入造不一致→环里 dup+warn, S4 完成判据落地)。T-1..T-5 per-skin, 全部断言三层(下发载荷 / 审计环净 / 文案明示)。配套: menus.spec 本地手势辅助(tab/clickRow/openApp/openMenuTexts/pickRows/bulkTap, 106 行)<strong>原样上移</strong> <code>e2e/lib/gestures.mjs</code>(50 行精密函数复制两份必漂移), 新增 groupActionTap/torrentActionTap 两个单目标路径拦截器。实测: 矩阵 14 passed; menus.spec 上移后 20 passed / 6 skipped 无回归; <code>test:e2e:fast</code> <strong>64 passed</strong>(50+14); <code>test.quick</code> 3112 passed / 4 skipped。<strong>三张网至此闭合</strong>: 静态守阵(T1–T6) / 运行时审计(默认关, e2e 消费) / 真浏览器矩阵(从登记表咬合, 新触发点走出口即被 T-1..T-5 的环断言自动罩住)。</p>
+      </div>
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-10-2303 · R4(S4 落地: 运行时审计环)</div>
+        <p>承接 R3 继续 S4: 新增 <code>shared/scope_audit.js</code>(mixin 单点 <code>_auditScope(event, targets)</code>) —— 开关 <code>window.__AQB_AUDIT_SCOPE__</code> 生产默认关(关态 O(1) 直返, 不碰环不碰 console); 开态做形状/去重/空载荷三类校验(kind ∈ ok/shape/dup/empty, 全部 O(目标数)), 偏差记进有界环 <code>window.__AQB_SCOPE_RING__</code>(50 条挤出)并按签名去重 <code>console.warn</code> 一次; 环字段 <code>{t, event, kind, keys, hashes, msg, sig}</code>, e2e(S5)断言环内无偏差、排障从控制台直读 —— 只记账不改行为(cmdStats 同范式)。接线: 三出口 <code>_actCore</code>/<code>_deleteFlow</code>/<code>_metaBulk</code> 各恰一处调用(载荷形状兼容 <code>{keys,hashes}</code> 与 <code>{groupKeys,memberHashes}</code> 两形态)、三份 shell 清单各 +1 行、<code>app.js</code> +1 行 mixin(prism shell 加行后破 210 硬顶, 顺手去掉 svg 后一处多余空行回位)。守阵: T6 进 <code>test_webui_trigger_registry.py</code>(三出口恰一处 / 开关全源码无赋值点 / 环有界 + 单点)。红验(node 直跑): 正常载荷 ok / 重复目标 dup+warn1 次 / 同签名再犯 warn 不重复 / 形状越界 shape / 空载荷 empty(含 <code>{groupKeys,memberHashes}</code> 形状兼容) / 60 条挤出到 50 / 关态不碰环 —— 全部符合设计。实测: <code>test.quick</code> 3112 passed / 4 skipped; <code>test:e2e:fast</code> 50 passed(三皮肤装载正常)。收尾期修正: S3 基线切片的主题链接少一层 <code>../</code>(baselines 两层深)被判坏链, 已修; 会话切片「待提交」措辞按回写守卫口径改时不变措辞。</p>
+      </div>
+      <div class="cl-item">
+        <div class="cl-stamp">26-10-10-2238 · R3(S3 落地: descriptor 单点 + M3 拆借道)</div>
+        <p>用户「提交然后继续S3」: S1+S2 先提交入库(e4282642, 提交时同步 rebase 带入上游一笔 HR 变异守阵, 不涉本域), 随后按 §6 S3 实施。<strong>改前基线</strong>已先留: <code>dev.e2e</code> 全量 136 passed / 10 skipped(3.4m)。落地内容: ① <strong>R1–R7 + V1 全部收编进 <code>selection.js::_scopeResolve(kind, anchor)</code> 单点</strong> —— 产出 ScopeDescriptor <code>{scope, keys, hashes, closure, anchor, variant, countText}</code>, <code>keys/hashes</code> 与 <code>closure</code> 出自同一次解析(R1/R2 两套选中展开收敛为同一对象的两个字段); <code>_bulkTargets</code>/<code>_groupTargets</code>/<code>selHashSet</code>/<code>_kbTargets</code> 退化为薄投影, <code>_ctxMulti</code> 改由描述符派生(C2, anchor 形态与 <code>_scopeResolve</code> 同构)。② <strong>M3 拆借道</strong>: <code>_kbEditAct</code>/<code>_kbTorrentCmd</code>/<code>_kbTorrentToggle</code>/<code>drawerCmd</code>/<code>drawerAct</code>/<code>drawerDel</code> 不再写 <code>menu.hash</code>, 全部显式传参(<code>menu.hash</code> 写入点清零); 下游 <code>actTorrent</code>/<code>exportTorrent</code>/<code>torrentCmd</code>/<code>copyTorrentInfo</code>/<code>delTorrent</code> 增加缺省回落 <code>menu.hash</code> 的显式 hash 形参(右键菜单路径零改动)。<strong>实施期修正(出口签名)</strong>: §5 的「出口收敛为 3 个 <code>_dispatch*</code>」<strong>降级为保留既有出口形状</strong> —— 7 个出口的载荷 <code>{groupKeys, memberHashes}</code> 已是 descriptor 的形状投影, 重签名会触及全部模板直调点、扩大回归面, 与「e2e 逐位一致」行为不变式冲突; 口径收敛的核心收益(解析单点 + T2 可检查性)已由 <code>_scopeResolve</code> 达成, 出口重签名留待后续有行为诉求时再评估。<strong>守阵同步</strong>: 4 条钉实现细节字面量的既有守阵跟着搬家(<code>_bulkTargets</code> covered 剔除 → <code>_selExpandGroups</code> / <code>_groupTargets</code> memberHashesOf → 同上 / torrentCmd 签名正则 / <code>_guardReannounce</code> 形参名), 断言语义全部不变。实测: <code>test.quick</code> 3111 passed / 4 skipped; 登记表守阵 6 条 + 红验 2 条(出口外展开 / 未登记投递点)重构后仍会拦。</p>
+      </div>
       <div class="cl-item">
         <div class="cl-stamp">26-10-10-2100 · R2(S1+S2 落地, 零行为改动)</div>
         <p>用户「先同步远端(代码有改动)、然后按推荐实施」后开工: 先 <code>my-commit-flow.sync</code> 快进 905447df→727b72e2(上游落了一笔同域改动「非活跃种子禁止强制汇报」, 机制 3 的活例, 已回收进口径文档 §6 与 §8 实施期修正)。随后按 §8 的推荐落地 <strong>S1+S2</strong>: 新增口径文档 <code>conventions/webui-scope.md</code>(三态作用域 + C1–C5 + 四条偏差机制 + 登记表位置)、登记表 <code>shared/triggers.js</code>(<code>ui</code> 36 行 / <code>calls</code> 30 行)、静态守阵 <code>tests/test_webui_trigger_registry.py</code>(T1 投递点双向相等 / T2 出口外不得展开选中集合 / T3 菜单变体对账 / T4 四支动作族奇偶 / T5 登记不存在的入口 / 形状)。接线: 三份 shell 清单各加一行 + <code>app.js</code> 补 <code>app.mixin</code>; prism shell 已在 210 行硬顶, 顺手去掉一处多余空行腾位。四条红验一次通过并还原。实测: <code>test.quick</code> 3064 passed / 4 skipped。选型偏离与理由见 §8「实施期修正」; 状态 Open → In Progress, S3 按建议留单独一轮。</p>

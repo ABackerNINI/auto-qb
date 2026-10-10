@@ -121,6 +121,7 @@ window.AQB_DELETE = {
       ];
     },
     async _deleteFlow(targets) {
+      this._auditScope("delete", targets);  // S4 运行时审计(默认关, 只记账)
       const keys = targets.keys || [];
       const hashes = targets.hashes || [];
       if (!keys.length && !hashes.length) return;
@@ -231,27 +232,29 @@ window.AQB_DELETE = {
         label: `"${g.name}"`,
       });
     },
-    /* 删除单个种子: 确认框显示种子名/站点/状态/路径/大小 + 两个选项 */
-    async delTorrent() {
+    /* 删除单个种子: 确认框显示种子名/站点/状态/路径/大小 + 两个选项。
+     * !目标 hash 显式传入, 缺省回落 menu.hash(S3/M3, 2026-10-10): 抽屉路径 drawerDel 此前靠
+     *   写 this.menu.hash 把目标"塞"进来, 现改为显式传参 —— menu 状态不再被当全局目标变量。 */
+    async delTorrent(hash = "") {
       this.menu.visible = false;
-      const hash = this.menu.hash;
-      if (!hash) return;
+      const target = hash || this.menu.hash;
+      if (!target) return;
       let m = null;
       for (const g of this.filteredGroups) {
-        const hit = (g.members || []).find((x) => x.hash === hash);
+        const hit = (g.members || []).find((x) => x.hash === target);
         if (hit) {
           m = hit;
           break;
         }
       }
-      if (!m) m = this.singles.find((x) => x.hash === hash) || null;  // 单种子视图里的未归组种子
-      if (!m) m = this.torrents.find((x) => x.hash === hash) || null;  // 种子页平铺数组(全量兑底)
+      if (!m) m = this.singles.find((x) => x.hash === target) || null;  // 单种子视图里的未归组种子
+      if (!m) m = this.torrents.find((x) => x.hash === target) || null;  // 种子页平铺数组(全量兑底)
       if (!m) return;
       // FX-16: 删除链统一 —— 走 _deleteFlow(目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
       // R10-16: 不再自传 details(条目与右键/批量/整集同构)
       await this._deleteFlow({
         keys: [],
-        hashes: [hash],
+        hashes: [target],
         title: "删除该种子",
         body: "将删除该种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。",
         countText: "该种子",

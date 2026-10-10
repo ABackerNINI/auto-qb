@@ -1,11 +1,12 @@
 # WEBUI 选中 × 触发 一致性(作用域契约 + 触发点登记表 + 静态守阵)
 
-> 摘要: 用户动议「WEBUI 加强选中与触发不一致的测试/守阵/运行时检查, 可以重构底层使其更易被检查, 后续添加的功能可以自动停靠, 而不是添加新的检查」, 举例「选中 A 触发 B / 无选中触发 C / 选中 A 触发全部」; 明确**暂时没发现相关 BUG**, 先出计划。计划 26-10-10-2001(专题 `webui-selection-trigger-parity`)已出并拍板(采纳推荐: C5 取口径甲 / S1+S2 先行 / S3 单独一轮 / S6 延后 / 审计开关不同步进 flags)。本轮落地 **S1+S2, 零行为改动**: 口径单点 `conventions/webui-scope.md`(三态作用域 + C1–C5 + 四条偏差机制)、登记表 `shared/triggers.js`(`ui` 36 行 + `calls` 30 行)、静态守阵 `tests/test_webui_trigger_registry.py`(6 条)。**S3(descriptor 单点 + 出口收敛)按计划建议留单独一轮** —— 它是全专题唯一碰行为的步骤。
-> 最后活动: 2026-10-10 21:03
+> 摘要: 用户动议「WEBUI 加强选中与触发不一致的测试/守阵/运行时检查, 可以重构底层使其更易被检查, 后续添加的功能可以自动停靠, 而不是添加新的检查」, 举例「选中 A 触发 B / 无选中触发 C / 选中 A 触发全部」; 明确**暂时没发现相关 BUG**, 先出计划。计划 26-10-10-2001(专题 `webui-selection-trigger-parity`)已出并拍板(采纳推荐: C5 取口径甲 / S1+S2 先行 / S3 单独一轮 / S6 延后 / 审计开关不同步进 flags)。**S1+S2 已落地并提交(e4282642)**; **S3 已落地**: descriptor 单点 `selection.js::_scopeResolve`(R1–R7 + V1 全部收编, R1/R2 两套选中展开收敛为同一 descriptor 的 `keys/hashes` 与 `closure` 两字段) + M3 拆借道(`menu.hash` 写入点清零, `actTorrent/exportTorrent/torrentCmd/copyTorrentInfo/delTorrent` 增显式 hash 形参缺省回落菜单)。**实施期修正**: 出口重签名(3 个 `_dispatch*`)降级为保留既有出口形状 —— 载荷已是 descriptor 投影, 重签名与「e2e 逐位一致」约束冲突, 见计划 §9 R3。实测: test.full 3111 passed / 4 skipped / TOTAL 99%(基线 26-10-10-2245); dev.e2e 全量 136 passed / 10 skipped 与改前逐位一致。
+> 最后活动: 2026-10-10 22:45
 
 ## 正在进行
 
-- **S3 待开工**(下一轮的唯一入口): 实现 `selection.js::_scopeResolve()` 产出 `ScopeDescriptor`(含 `closure` 字段, 一并消灭「两套选中展开」) + 出口收敛为 `_dispatchAction` / `_dispatchDelete` / `_dispatchEdit` 三个(只收描述符, 不收裸 `keys/hashes`)。**前置纪律**: 先留改前 `dev.e2e` 全量结果, 改完逐位对账; 唯一必要的行为改动是拆掉 `_kbEditAct` / `_kbTorrentCmd` / `_kbTorrentToggle` **借道 `menu.hash`** 的写法(机制 3)。
+- **S3+S4+S5 已完成**(S3: descriptor 单点 + M3 拆借道; S4: 运行时审计环 `scope_audit.js` + T6 守阵 + 三出口接线; S5: e2e 参数化矩阵 `trigger-scope.spec.mjs` + 读环辅助 `scope_ring.mjs` + 手势上移 `gestures.mjs`)。**三张网闭合**: 静态守阵 T1–T6 / 运行时审计(默认关, e2e 断言环净) / 真浏览器矩阵(`test:e2e:fast` 64 passed)。剩余: S6 菜单项集声明化(§8 拍板延后, 待评估); S1–S5 随本专题入库。
+- e2e 矩阵(S5, 用户列的四类场景参数化)与 S4 是剩余两张网; S6 菜单项集声明化延后(§8 拍板)。
 
 ## 关键结论(供后续触发点/动作入口改动参考)
 

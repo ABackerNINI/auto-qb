@@ -16,6 +16,13 @@
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SELECTION);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
+ *
+ * !作用域解析单点(计划 26-10-10-2001 S3, 契约 C1): 「这次动作作用在谁身上」只由
+ *   `_scopeResolve(kind, anchor)` 产出 ScopeDescriptor; 原先散在 7 处(R1 `_bulkTargets` /
+ *   R2 `selHashSet` / R3 `_groupTargets` / R4 菜单状态 / R5 `_kbTargets` / R6 `_kbSingleHash` /
+ *   R7 `_kbOpenDrawer`)加一个平行变体判定 V1 的口径全部收编为它的薄委托或内部分支。
+ *   口径词表与契约 C1–C5 见 memory-bank/conventions/webui-scope.md; 守阵
+ *   tests/test_webui_trigger_registry.py 的 T2 钉住「出口之外不得展开选中集合」。
  */
 window.AQB_SELECTION = {
   methods: {
@@ -110,6 +117,123 @@ window.AQB_SELECTION = {
       if (this.viewMode === "torrents") return { kind: "member", ids: this.filteredTorrents.map((m) => m.hash) };
       if (this.viewMode === "shows") return { kind: "unit", ids: this._kbShowUnits().map((u) => u.id) };
       return { kind: "group", ids: this.filteredGroups.map((g) => g.key) };
+    },
+    /* ================= 作用域解析单点(计划 26-10-10-2001 S3, 契约 C1) =================
+     * 「这次动作作用在谁身上」的**唯一**产出点。此前这件事散在 7 处 —— R1 `_bulkTargets` /
+     * R2 `selHashSet` / R3 `_groupTargets` / R4 菜单状态 / R5 `_kbTargets` / R6 `_kbSingleHash` /
+     * R7 `_kbOpenDrawer` —— 外加一个平行的变体判定 V1(`_ctxMulti`/`_ctxScopeKey`), 互不引用;
+     * 于是「选中 A 却动了 B」这类**静默作用对象偏移**既无断言覆盖, 也无声明可查。现在那 7 处
+     * 一律薄委托到这里(守阵 T2 钉住「出口之外不得再展开选中集合」)。
+     *
+     * kind(词表与三态定义见 memory-bank/conventions/webui-scope.md §1):
+     *   "sel"               选中集合 —— selGroups ∪ selMembers
+     *   "anchor"            触发锚点(右键那行 / 按钮绑定的那个对象), 需传 anchor 描述
+     *   "cursor"            键盘光标行
+     *   "sel-first-cursor"  有选中就用选中, 否则用光标(既有的 _kbTargets 口径, 原样保留)
+     *   "panel"             面板/菜单当前目标(hash 由调用方显式给出, 不走选中/锚点)
+     *
+     * anchor 描述(按触发形态; 组/成员由本方法自己查, 集/剧的成员表由调用方给出):
+     *   {kind:"group", id}               整组(虚拟行进 hashes, 真实组进 keys)
+     *   {kind:"member", id}              单种子
+     *   {kind:"episode"|"show", hashes}  整集 / 整剧
+     *
+     * 返回 ScopeDescriptor {scope, keys, hashes, closure, anchor, variant, countText}:
+     *   · keys/hashes 与 `_bulkTargets` 同口径 —— 真实组的成员 hash 被组 key **覆盖**(同一目标
+     *     不能既发组命令又发成员命令), 虚拟行(未归组命中种子)无真实组 key 故转其唯一成员 hash;
+     *   · closure 是 hash 全集(= 原 `selHashSet` 口径)。「两套选中展开」由此收成**同一个对象的
+     *     两个字段** —— 谁读 keys、谁读 closure 仍由调用方决定, 但两者出自同一次解析, 不会再各自演化;
+     *   · variant 是菜单/对话框变体(**C2**: 由描述符派生, 不另立 token 判);
+     *   · countText 是「该种子 / 整组 / N 个目标」文案(原 `_kbTargetText`)。
+     */
+    _scopeResolve(kind, anchor) {
+      const bag = {
+        scope: "sel", keys: [], hashes: [], closure: new Set(),
+        anchor: anchor || null, variant: "member", countText: "",
+      };
+      if (kind === "panel") {
+        bag.scope = "panel";
+        const h = (anchor && anchor.id) || "";
+        if (h) { bag.hashes.push(h); bag.closure.add(h); }
+        return this._scopeFinish(bag);
+      }
+      if (kind === "sel") {
+        const covered = this._selExpandGroups(this.selGroups, bag);
+        for (const h of this.selMembers) if (!covered.has(h)) bag.hashes.push(h);
+        for (const h of bag.hashes) bag.closure.add(h);
+        return this._scopeFinish(bag);
+      }
+      if (kind === "sel-first-cursor") {
+        if (this.selGroups.length || this.selMembers.length) return this._scopeResolve("sel");
+        return this._scopeResolve("cursor");
+      }
+      if (kind === "cursor") {
+        bag.scope = "cursor";
+        const c = this.kbCursor;
+        if (!c) return this._scopeFinish(bag);
+        if (c.kind === "group") return this._scopeResolve("anchor", { kind: "group", id: c.id });
+        if (c.kind === "torrent") return this._scopeResolve("anchor", { kind: "member", id: c.id });
+        const unit = this._kbUnitOf(c);   // 剧/集单元: 整单元(与鼠标 Ctrl+点击同语义)
+        if (unit && unit.hashes.length) {
+          return this._scopeResolve("anchor", { kind: c.kind, hashes: [...new Set(unit.hashes)] });
+        }
+        return this._scopeFinish(bag);
+      }
+      // kind === "anchor"
+      const a = anchor || {};
+      bag.scope = "anchor";
+      bag.anchor = a;
+      if (a.kind === "group") {
+        this._selExpandGroups(a.id ? [a.id] : [], bag);
+        return this._scopeFinish(bag);
+      }
+      if (a.kind === "member") {
+        if (a.id) { bag.hashes.push(a.id); bag.closure.add(a.id); }
+        return this._scopeFinish(bag);
+      }
+      for (const h of a.hashes || []) {
+        if (h && !bag.hashes.includes(h)) { bag.hashes.push(h); bag.closure.add(h); }
+      }
+      return this._scopeFinish(bag);
+    },
+    /* 组 key -> bag 展开单点: 真实组进 keys 并把成员 hash 记进 covered/closure(供调用方剔除
+     * 重复的成员通道); 虚拟行(未归组命中种子)没有真实组 key, 退化为其唯一成员 hash。 */
+    _selExpandGroups(groupKeys, bag) {
+      const covered = new Set();
+      for (const k of groupKeys) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        if (g.virtual) {
+          const h = g.members && g.members[0] ? g.members[0].hash : "";
+          if (h) { bag.hashes.push(h); covered.add(h); bag.closure.add(h); }
+          continue;
+        }
+        bag.keys.push(k);
+        for (const h of this.memberHashesOf(g.members || [])) { covered.add(h); bag.closure.add(h); }
+      }
+      return covered;
+    },
+    /* 收尾: 派生 variant(C2)与 countText(原 _kbTargetText 口径, 逐字不变) */
+    _scopeFinish(bag) {
+      const n = bag.keys.length + bag.hashes.length;
+      bag.countText = bag.keys.length === 1 && !bag.hashes.length ? "整组"
+        : bag.hashes.length === 1 && !bag.keys.length ? "该种子"
+          : `${n} 个目标`;
+      const ak = bag.anchor && bag.anchor.kind;
+      bag.variant = bag.scope === "sel" ? "multi"
+        : bag.scope === "panel" ? "member"
+          : (ak === "ep" ? "episode" : ak) || "member";
+      return bag;
+    },
+    /* descriptor -> 单目标 hash(面板 / 抽屉类入口用): 恰一个 hash 时取它(单种子与虚拟行);
+     * 恰一个组 key 时取该组闭包首元(与既有「组光标取首成员」同口径); 其余(整集/整剧/多目标)
+     * 返回空串 = 无单目标, 调用方静默不动作(与原 _kbOpenDrawer 同口径)。 */
+    _scopeFirstHash(d) {
+      if (d.hashes.length === 1 && !d.keys.length) return d.hashes[0];
+      if (d.keys.length === 1 && !d.hashes.length) {
+        const it = d.closure.values().next();
+        return it.done ? "" : it.value;
+      }
+      return "";
     },
     /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
     isGroupSelected(g) {
@@ -389,19 +513,12 @@ window.AQB_SELECTION = {
     /* FX-12: 选择权威 -> 派生集合。**唯一权威**仍是 selGroups(组 key) 与 selMembers(成员 hash);
      * 双向联动(2026-10-09, 取代 FX-11 互斥)下两者会同时非空(组选中即把成员一并写入), 故这里
      * 用 Set 去重合并。所有视图的"已选"一律读这里; 组选择展开为成员 hash 闭包, 于是"辅种页选了
-     * 1 组"在种子页/追剧页同样看得出选中。 */
+     * 1 组"在种子页/追剧页同样看得出选中。
+     * !2026-10-10(计划 26-10-10-2001 S3): 展开口径**收进 `_scopeResolve("sel").closure` 单点**
+     *   —— 本 computed 退化为它的薄投影, 不再自己写一遍合并(「两套选中展开」的收敛点见该方法的
+     *   注释; 守阵 T2 钉住出口之外不许再展开选中集合)。 */
     selHashSet() {
-      const s = new Set(this.selMembers);
-      for (const k of this.selGroups) {
-        const g = this._findGroup(k);
-        if (!g) continue;
-        if (g.virtual) {
-          if (g.members[0]) s.add(g.members[0].hash);
-          continue;
-        }
-        for (const m of g.members || []) s.add(m.hash);
-      }
-      return s;
+      return this._scopeResolve("sel").closure;
     },
   },
 };

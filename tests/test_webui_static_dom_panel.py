@@ -1343,8 +1343,8 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert ".dt05-rbtn.is-gated" in t05, "05 失败区大钮(.dt05-rbtn)缺置灰规则"
     assert ".dt05-fail .dt05-act.is-gated:hover" in t05, \
         "05 失败区 hover 是 (0,4,0), 置灰规则不带 .dt05-fail 前缀压不过(会半灰)"
-    assert "_guardReannounce({ keys: [], hashes: [hash] })" in drawer_js, \
-        "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"
+    assert "_guardReannounce({ keys: [], hashes: [target] })" in drawer_js, \
+        "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"  # 2026-10-10(S3): 目标形参 hash -> target(显式传参, 缺省回落 menu.hash)
 
     # ⑤ 投递收敛: 闸门管"允不允许"(集合级全有全无, qB 口径), 计划管"发给谁"(只发活跃)
     assert "reannouncePlan(t) {" in deco, "decorate.js 缺投递收敛单点 reannouncePlan"
@@ -2211,7 +2211,10 @@ def test_recheck_confirm_wired_all_mouse_entries():
     ), "bulkAct 的 recheck 确认分支被摘除/改写 —— 批量右键重新校验恢复裸奔(计划 26-10-05-0314 S3; 接入点改写须同步本守阵)"
 
     # ④ 单选通道(torrentCmd): 单选右键与抽屉内命令入口, 只拦 recheck 其它命令不受影响
-    m = re.search(r"async torrentCmd\(action, body = null, okText = \"\"\)\s*\{(.*?)\n    \},", drawer, re.S)
+    # 2026-10-10(S3): 签名加第 4 参 hash(显式传参, 抽屉/键盘路径不再写 menu.hash 借道)
+    m = re.search(
+        r"async torrentCmd\(action, body = null, okText = \"\", hash = \"\"\)\s*\{(.*?)\n    \},", drawer, re.S
+    )
     assert m, "drawer.js 找不到 torrentCmd(改名或挪走了? 同步本守阵)"
     assert re.search(
         r'^      if \(action === "recheck"\) \{\n'
@@ -2531,8 +2534,15 @@ def test_frontend_ctx_menu_group_actions_parity():
     cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
     drw = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
     assert "_groupTargets()" in cmd, "commands.js 缺 _groupTargets(组级目标集合单点)"
-    assert "this.memberHashesOf(g.members)" in cmd, (
-        "commands.js _groupTargets 未走 memberHashesOf 单点(成员对象直接取 .hash 会被静态守阵拦下)"
+    # 2026-10-10(S3): _groupTargets 退化为 _scopeResolve("anchor") 的投影, 成员展开单点
+    # (memberHashesOf)随之收进 selection.js::_selExpandGroups —— 守阵跟着搬家, 语义不变
+    assert '_scopeResolve("anchor", { kind: "group", id: k })' in cmd, (
+        "commands.js _groupTargets 必须走作用域单点 _scopeResolve(口径收敛, 计划 26-10-10-2001 S3)"
+    )
+    selsrc = open(os.path.join(STATIC_ROOT, "shared", "selection.js"), encoding="utf-8").read()
+    exg = re.search(r"_selExpandGroups\(groupKeys, bag\) \{(.*?)\n    \},", selsrc, re.S)
+    assert exg and "this.memberHashesOf(" in exg.group(1), (
+        "selection.js _selExpandGroups 未走 memberHashesOf 单点(成员对象直接取 .hash 会被静态守阵拦下)"
     )
     for name in ("recheckGroup", "editLimitsGroup", "editMoveGroup", "skipCheckGroup", "metaGroup", "exportGroup"):
         assert re.search(rf"\n    (?:async )?{name}\(", cmd), f"commands.js 缺组级入口 {name}"

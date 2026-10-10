@@ -66,7 +66,7 @@ window.AQB_SHOWS = {
         hash: null,
         episode: { hashes, label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
         // CTX-03: 该集属于选中集合且集合更大时升级为批量菜单(见 menu.js _ctxMulti)
-        multi: this._ctxMulti({ hashes }),
+        multi: this._ctxMulti({ kind: "episode", hashes }),
       };
     },
     /* FX-13: 整剧右键菜单。追剧页的"剧"这一层此前只有左键展开、没有 @contextmenu ——
@@ -96,7 +96,7 @@ window.AQB_SHOWS = {
         hash: null,
         episode: { hashes, label: show.name, scope: "show" },
         // CTX-03: 该剧属于选中集合且集合更大时升级为批量菜单(见 menu.js _ctxMulti)
-        multi: this._ctxMulti({ hashes }),
+        multi: this._ctxMulti({ kind: "show", hashes }),
       };
     },
     async actEpisode(action) {

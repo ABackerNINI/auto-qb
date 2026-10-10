@@ -101,7 +101,6 @@
     <!-- 第八轮新增: 信息栏模式切换(侧栏/顶栏布局轮廓) -->
     <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.2" y="3" width="11.6" height="10" rx="1.6"/><path d="M6.8 3v10"/></symbol>
   </svg>
-
   <div id="app" v-cloak>
     <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现)。
          本地已有密钥时验证过程显示"验证中"加载态而非输入表单(修复刷新时闪现输入密钥界面) -->
@@ -169,6 +168,7 @@
       "/shared/commands.js",
       "/shared/add_torrent.js",
       "/shared/selection.js",
+      "/shared/scope_audit.js",
       "/shared/triggers.js",
       "/shared/shows.js",
       "/shared/delete_flow.js",

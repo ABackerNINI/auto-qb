@@ -280,6 +280,7 @@ window.AQB_DIALOGS = {
     /* bulk 投递统一走这里: 与 bulkAct 同链路(api + waitCmd + toast 三态), 但目标集合用
      * 打开时刻锁定的 metaTargets, 且不做乐观贴片 —— 标签/分类由 bulk 的 RESYNC 补刷新落行 */
     async _metaBulk(action, extra, okText) {
+      this._auditScope("meta:" + action, this.metaTargets);  // S4 运行时审计(默认关, 只记账)
       const { groupKeys, memberHashes } = this.metaTargets;
       const t0 = this._newCmdStats(action);
       this._markCmdPatch(t0);

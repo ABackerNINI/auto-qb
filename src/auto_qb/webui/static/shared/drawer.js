@@ -41,16 +41,19 @@ window.AQB_DRAWER = {
     menuTorrent() {
       return this.memberByHash.get(this.menu.hash) || {};
     },
-    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) —— 走既有回执链 */
-    async torrentCmd(action, body = null, okText = "") {
+    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) —— 走既有回执链。
+     * !目标解析(S3/M3, 2026-10-10): `hash` 显式传入, 缺省回落 `menu.hash`(右键菜单路径本就以被点
+     *   行为目标)。此前抽屉路径靠**写 this.menu.hash** 把抽屉目标"塞"进来 —— menu 状态被当成了
+     *   全局目标变量(机制 3, 见 conventions/webui-scope.md §3)。 */
+    async torrentCmd(action, body = null, okText = "", hash = "") {
       this.menu.visible = false;
-      const hash = this.menu.hash;
-      if (!hash) return;
+      const target = hash || this.menu.hash;
+      if (!target) return;
       /* 强制汇报闸门(qB 口径): 非活跃种子(暂停/停止·排队·校验中·错误)拒绝 —— 详情面板 tracker
        * 页签的重报钮已置灰(drawer_tpl 04/05/06 走 drawerReannounceGate), 这里是行为层兜底
        * (与 ctx-menu 的"class 拦显示、行为层再拦一道"同款)。本方法两条入口共用: 单选右键菜单的
-       * 控制命令, 与详情面板 drawerCmd(hash 取自抽屉)。 */
-      if (action === "reannounce" && !this._guardReannounce({ keys: [], hashes: [hash] })) return;
+       * 控制命令, 与详情面板 drawerCmd(目标 = 抽屉 hash)。 */
+      if (action === "reannounce" && !this._guardReannounce({ keys: [], hashes: [target] })) return;
       /* 重新校验先确认(计划 26-10-05-0314 S3): 只拦 recheck, 其它命令通道行为不变 ——
        * 单选右键(ctx-menus.html)与抽屉内命令(drawerCmd)同走本方法, 一处接入两入口覆盖;
        * 取消 = 直接返回, 尚未发请求, 零副作用。helper 与文案单点在 commands.js。 */
@@ -59,7 +62,7 @@ window.AQB_DRAWER = {
         if (!ok) return;
       }
       try {
-        const resp = await this.api(`/api/torrents/${hash}/${action}`, {
+        const resp = await this.api(`/api/torrents/${target}/${action}`, {
           method: "POST",
           body: body ? JSON.stringify(body) : undefined,
         });
@@ -70,10 +73,9 @@ window.AQB_DRAWER = {
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
-    /* 抽屉内命令: 与 torrentCmd 同链路, 但 hash 取自抽屉(菜单未开时 menu.hash 为空) */
+    /* 抽屉内命令: 与 torrentCmd 同链路, 目标 = 抽屉当前 hash(显式传参, 不动 menu 状态) */
     drawerCmd(action, body = null, okText = "") {
-      this.menu.hash = this.drawer.hash;
-      this.torrentCmd(action, body, okText);
+      this.torrentCmd(action, body, okText, this.drawer.hash);
     },
     /* ---------------- 右键跳检(P2', plan 26-09-30-0109 §3.6; S4 预检对话框 26-10-05-0314) ----------------
      * 高风险操作: 删除并以跳过校验方式重加, 本地统计(上传/下载量、做种时间)被清零,
@@ -617,9 +619,11 @@ window.AQB_DRAWER = {
         old_path: row.path, new_path: parent + nn, is_folder: !!row.dir,
       }, row.dir ? "目录已重命名" : "文件已重命名");
     },
-    async copyTorrentInfo(field) {
+    /* 复制种子信息: 目标 hash 显式传入, 缺省回落 menu.hash(S3/M3: 键盘路径 _kbEditAct 传 (field, h),
+     * 不再借道菜单状态) */
+    async copyTorrentInfo(field, h = "") {
       this.menu.visible = false;
-      const hash = this.menu.hash;
+      const hash = h || this.menu.hash;
       const m = this.memberByHash.get(hash);
       if (!m) return;
       let value = field === "name" ? m.name
@@ -1226,16 +1230,14 @@ window.AQB_DRAWER = {
       }
       this._drawerAnimTop = 0;
     },
-    /* 抽屉头部动作: 复用 actTorrent(它读 menu.hash 并自带回执/toast) */
+    /* 抽屉头部动作: 复用 actTorrent(自带回执/toast), 目标 = 抽屉 hash(显式传参, 不动 menu 状态) */
     drawerAct(action) {
-      this.menu.hash = this.drawer.hash;
-      this.actTorrent(action);
+      this.actTorrent(action, this.drawer.hash);
     },
     /* 抽屉删除: 复用 delTorrent(确认框流程一致); 删除成功(成员消失)后自动收起抽屉 */
     drawerDel() {
-      this.menu.hash = this.drawer.hash;
       this._drawerDeletePending = true;
-      Promise.resolve(this.delTorrent()).then(() => {
+      Promise.resolve(this.delTorrent(this.drawer.hash)).then(() => {
         if (this._drawerDeletePending && !this.memberByHash.get(this.drawer.hash)) this.closeDrawer();
         this._drawerDeletePending = false;
       });

@@ -1367,7 +1367,13 @@ def test_sel_group_member_linkage() -> None:
     bulk = _read("commands.js")
     m = re.search(r"_bulkTargets\(\) \{(.*?)\n    \},", bulk, re.S)
     assert m, "commands.js 找不到 _bulkTargets(批量目标拆解单点)"
-    assert "covered" in m.group(1), ("_bulkTargets 必须剔除已被选中组覆盖的成员 hash(否则同一目标既发组命令又发成员命令)")
+    # 2026-10-10(S3): _bulkTargets 退化为 _scopeResolve("sel") 的形状投影, 覆盖剔除逻辑
+    # 收进 selection.js::_selExpandGroups 单点 —— 守阵跟着搬家, 语义不变(剔除覆盖成员)
+    assert '_scopeResolve("sel")' in m.group(1), "_bulkTargets 必须委托作用域单点 _scopeResolve(口径收敛, 计划 26-10-10-2001 S3)"
+    selx = re.search(r"_selExpandGroups\(groupKeys, bag\) \{(.*?)\n    \},", sel, re.S)
+    assert selx and "covered" in selx.group(1), (
+        "覆盖剔除(已被选中组覆盖的成员 hash 不再发成员命令)必须落在 _selExpandGroups 单点 —— 否则同一目标既发组命令又发成员命令"
+    )
     # 组行模板绑定 selected/partial 都吃 groupSelState(两态同源)
     groups_tpl = (SHARED / "tpl" / "groups.html").read_text(encoding="utf-8")
     assert "selected: groupSelState(g).selected" in groups_tpl, "组行模板缺 selected 绑定"

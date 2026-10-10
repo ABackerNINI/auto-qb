@@ -21,6 +21,9 @@
   (2026-10-09 用户报「单组右键菜单缺选项」的回归位)
 - test_trigger_registry_entries_exist: T5 —— 登记表里每个 entry / calls.fn 都必须是源码里
   真实存在的方法名(治「登记了不存在的入口」这类反向漂移)
+- test_scope_audit_wiring: T6 —— 运行时审计接线(计划 26-10-10-2001 S4): 三出口(_actCore/
+  _deleteFlow/_metaBulk)各恰一处 _auditScope 调用、开关 `window.__AQB_AUDIT_SCOPE__` 全源码
+  无赋值点(生产默认关)、审计环有界(50 条)
 """
 import json
 import re
@@ -298,3 +301,45 @@ def test_trigger_registry_entries_exist() -> None:
         text = all_text.get(row["file"])
         assert text is not None, f"calls 行声明了不存在的片段文件 {row['file']}"
         assert row["fn"] in {n for n, _ in _methods(text)}, (f"calls 行 {row['file']}::{row['fn']} 在该片段里找不到同名方法")
+
+
+def _method_body(text: str, fn: str) -> str:
+    """取 mixin 片段里某方法的整个方法体(4 空格缩进单行签名 -> 4 空格缩进 `},` 结束)。"""
+    m = re.search(rf"^    (?:async\s+)?{fn}\s*\([^)]*\)\s*\{{\n(.*?)^    \}},", text, re.S | re.M)
+    assert m, f"找不到方法体 {fn}(改名/搬走? 同步本守阵)"
+    return m.group(1)
+
+
+def test_scope_audit_wiring() -> None:
+    """T6: 运行时审计接线(S4, 计划 26-10-10-2001 §5b/§6)。
+
+    审计是第三张网的运行时半张: 三出口各记账一次, e2e 断言环内无偏差。本守阵钉三件事:
+    1. 三出口(_actCore/_deleteFlow/_metaBulk)各恰一处 `_auditScope(` —— 出口收敛的运行时
+       消费点, 少一处 = 有出口绕开审计; 多一处 = 审计面被稀释(同一动作记两次账);
+    2. 开关 `window.__AQB_AUDIT_SCOPE__` 全源码(含模板)无赋值点 —— 生产默认关是保守默认
+       硬约束(黄金法则 2); 打开只允许发生在 e2e 的 Playwright 注入脚本里;
+    3. 环有界(>50 挤出) —— 长会话不涨内存; 环单点在 scope_audit.js(不许散落第二处)。
+    """
+    all_text = _shared_js()
+    audit = all_text.get("scope_audit.js")
+    assert audit, "shared/scope_audit.js 不存在(S4 审计单点被删?)"
+
+    # 1) 三出口各恰一处
+    outlets = {"commands.js": "_actCore", "delete_flow.js": "_deleteFlow", "dialogs.js": "_metaBulk"}
+    for fname, fn in outlets.items():
+        body = _method_body(all_text[fname], fn)
+        assert "this._auditScope(" in body, f"{fname}::{fn} 出口缺 _auditScope 记账(S4 三出口接线断裂)"
+    total = sum(t.count("this._auditScope(") for t in all_text.values())
+    assert total == 3, f"_auditScope 调用点共 {total} 处, 应恰为三出口各 1 处(多=审计面被稀释, 少=有出口绕开)"
+
+    # 2) 默认关: 开关只有读取, 没有任何赋值点(shared/*.js + tpl/*.html)
+    for name, text in all_text.items():
+        assert not re.search(r"__AQB_AUDIT_SCOPE__\s*=", text), f"{name} 出现审计开关赋值点(生产默认关被破坏)"
+    for tpl in SHARED.glob("tpl/*.html"):
+        assert not re.search(r"__AQB_AUDIT_SCOPE__\s*=", tpl.read_text(encoding="utf-8"
+                                                                      )), (f"tpl/{tpl.name} 出现审计开关赋值点(生产默认关被破坏)")
+
+    # 3) 环有界 + 单点
+    assert "ring.length > 50" in audit, "审计环缺 50 条有界挤出(长会话会无限涨)"
+    ring_sites = [n for n, t in all_text.items() if "__AQB_SCOPE_RING__" in t]
+    assert ring_sites == ["scope_audit.js"], f"环单点外泄到 {ring_sites} —— 审计环只允许 scope_audit.js 一处"

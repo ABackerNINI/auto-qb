@@ -513,6 +513,7 @@ app.mixin(window.AQB_COMMANDS);
 app.mixin(window.AQB_ADD);
 app.mixin(window.AQB_SELECTION);
 app.mixin(window.AQB_TRIGGERS);  // 触发点登记表(计划 26-10-10-2001 S2): 声明式单点, 守阵与 e2e 消费
+app.mixin(window.AQB_SCOPE_AUDIT);  // 作用域运行时审计(S4): 默认关, 只记账不改行为
 app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);

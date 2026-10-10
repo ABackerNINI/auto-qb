@@ -462,6 +462,7 @@ window.AQB_COMMANDS = {
      * 失败 = `{动作}{what}失败`), 调用方按入口语义传入, 缺省按目标形态推导(键盘路径)。
      * 乐观补丁: pause/resume 白名单(§P0-3), 目标 = 组成员展开 ∪ hashes 去重 —— 与原三条链一致。 */
     async _actCore(action, { keys = [], hashes = [], what = "", countSuffix = "" } = {}) {
+      this._auditScope("actCore:" + action, { keys, hashes });  // S4 运行时审计(默认关, 只记账)
       const n = keys.length + hashes.length;
       if (!n) return;
       /* 强制汇报闸门(qB 口径): 目标全为非活跃时拒绝, 早于乐观补丁与 POST(零副作用)。
@@ -594,28 +595,15 @@ window.AQB_COMMANDS = {
       if (!this.menu.key) return;
       return this._actCore(action, { keys: [this.menu.key], hashes: [], what: "整组" });
     },
-    /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过。
-     * !双向联动(2026-10-09)下 selGroups 的组 key 与其成员 hash 会**同时**躺在选中集合里 ——
-     *   必须把已被真实组覆盖的成员 hash 剔除, 否则同一目标既发组命令又发成员命令(重复投递)。 */
+    /* 选中集合拆解 -> {groupKeys, memberHashes}。
+     * !2026-10-10(计划 26-10-10-2001 S3): 展开逻辑收进 selection.js::_scopeResolve("sel") 单点,
+     *   本方法退化为它的**形状投影** —— 保留 `{groupKeys, memberHashes}` 是因为这是多个退出入口与
+     *   批量对话框的既有载荷形状, 不是第二套口径。语义逐位不变: 虚拟行(未归组命中种子)无真实组
+     *   key 转单种子命令; 已消失的目标跳过; 双向联动下已被真实组覆盖的成员 hash 必须剔除, 否则
+     *   同一目标既发组命令又发成员命令(重复投递)。 */
     _bulkTargets() {
-      const groupKeys = [];
-      const memberHashes = [];
-      const covered = new Set();
-      for (const k of this.selGroups) {
-        const g = this._findGroup(k);
-        if (!g) continue;
-        if (g.virtual) {
-          if (g.members[0]) {
-            memberHashes.push(g.members[0].hash);
-            covered.add(g.members[0].hash);
-          }
-          continue;
-        }
-        groupKeys.push(k);
-        for (const h of this.memberHashesOf(g.members)) covered.add(h);
-      }
-      for (const h of this.selMembers) if (!covered.has(h)) memberHashes.push(h);
-      return { groupKeys, memberHashes };
+      const d = this._scopeResolve("sel");
+      return { groupKeys: d.keys, memberHashes: d.hashes };
     },
     /* 重新校验确认框(共用 helper, 计划 26-10-05-0314 S3): 文案与调用形态**逐字**抽自
      * shortcuts.js _kbAct 键盘路径原状, 各入口共用一份 —— 批量(本文件 bulkAct)/单选右键
@@ -697,7 +685,11 @@ window.AQB_COMMANDS = {
       if (!k) return null;
       const g = this._findGroup(k);
       if (!g || g.virtual) return null;
-      return { groupKeys: [], memberHashes: this.memberHashesOf(g.members) };
+      /* 展开走同一单点(selection.js::_scopeResolve), 只是取其 closure: 组闭包 = 该组全部成员 hash。
+       * 这里**刻意**不带组 key(与 _bulkTargets 的 keys 通道不同)—— 见上方注释: 组键在批量口径里
+       * 算 1 个目标, 单组场景下会显示成"1 个目标"而误导。 */
+      const d = this._scopeResolve("anchor", { kind: "group", id: k });
+      return { groupKeys: [], memberHashes: [...d.closure] };
     },
     /* 组级重新校验: 与批量菜单「重新校验」同 helper 同确认文案(what=整组), 走 _actCore 统一出口 */
     async recheckGroup() {
@@ -738,10 +730,15 @@ window.AQB_COMMANDS = {
       if (!t || !t.memberHashes.length) return;
       return this._exportHashes(t.memberHashes);
     },
-    async actTorrent(action) {
+    /* 单种子动作(右键单种子菜单 / 抽屉头部动作 drawerAct)。目标 = hash 显式传入, 缺省回落
+     * menu.hash(菜单路径本就以被点行为目标, 无需再传)。
+     * !2026-10-10(S3/M3): 抽屉与键盘路径此前靠**写 this.menu.hash** 把目标"塞"进来, 现改为
+     *   显式传参 —— menu 状态不再被当全局目标变量(见 conventions/webui-scope.md §3 机制 3)。 */
+    async actTorrent(action, hash = "") {
       this.menu.visible = false;
-      if (!this.menu.hash) return;
-      return this._actCore(action, { keys: [], hashes: [this.menu.hash], what: "该种子" });
+      const h = hash || this.menu.hash;
+      if (!h) return;
+      return this._actCore(action, { keys: [], hashes: [h], what: "该种子" });
     },
     /* 复制种子信息(种子页右键 R1A): clipboard API 优先, execCommand 降级(非安全上下文/权限拒绝);
      * 无论成功失败都给 toast 反馈 */
@@ -777,12 +774,12 @@ window.AQB_COMMANDS = {
     /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
      * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流; 下载核心抽在 _exportDownload,
      * 多选导出(W4)共用同一套, 本方法只补单选的 toast 语义) */
-    async exportTorrent() {
+    async exportTorrent(hash = "") {
       this.menu.visible = false;
-      const hash = this.menu.hash;
-      if (!hash) return;
+      const target = hash || this.menu.hash;
+      if (!target) return;
       try {
-        await this._exportDownload(hash);
+        await this._exportDownload(target);
         this.toast("已导出 .torrent", "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("导出失败: " + e.message, "error", 8000);

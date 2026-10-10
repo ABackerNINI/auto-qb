@@ -135,18 +135,21 @@ window.AQB_MENU = {
       const h = [...(scope.hashes || [])].sort();
       return g.join("\u0001") + "\u0002" + h.join("\u0001");
     },
-    _ctxMulti(anchorScope) {
-      const sel = this._bulkTargets();   // 选中集合拆解(组 key + 成员 hash; 与批量动作同口径)
-      if (!sel.groupKeys.length && !sel.memberHashes.length) return false;
-      const gk = anchorScope.groupKeys || [];
-      const hs = anchorScope.hashes || [];
-      const inSel = gk.length
-        ? gk.every((k) => this.selGroups.includes(k))
-        : hs.some((h) => this.selHashSet.has(h));
+    /* !C2(计划 26-10-10-2001 S3): 本判定**由作用域描述符派生**, 不再自己拆一遍选中集合 ——
+     *   anchor 形态与 selection.js::_scopeResolve 的 anchor 描述同构:
+     *     {kind:"group", id} / {kind:"member", id} / {kind:"episode"|"show", hashes}
+     *   「集合范围」与「这一行范围」两侧都取自同一次解析, 于是变体与动作目标不会各算一套。 */
+    _ctxMulti(anchor) {
+      const sel = this._scopeResolve("sel");            // 选中集合(keys + hashes + closure)
+      if (!sel.keys.length && !sel.hashes.length) return false;
+      const a = this._scopeResolve("anchor", anchor);   // 被点的那一行的范围
+      const inSel = a.keys.length
+        ? a.keys.every((k) => this.selGroups.includes(k))
+        : a.hashes.some((h) => sel.closure.has(h));
       if (!inSel) return false;
       // 集合与该行范围一致 = 只选中了它自己 -> 仍是单目标菜单(文案/项目集不该变成批量)
-      return this._ctxScopeKey({ groupKeys: sel.groupKeys, hashes: sel.memberHashes }) !==
-        this._ctxScopeKey({ groupKeys: gk, hashes: hs });
+      return this._ctxScopeKey({ groupKeys: sel.keys, hashes: sel.hashes }) !==
+        this._ctxScopeKey({ groupKeys: a.keys, hashes: a.hashes });
     },
     openMenu(event, group) {
       event.preventDefault();
@@ -162,7 +165,7 @@ window.AQB_MENU = {
         ...this._menuPos(event),
         key: group.key,
         hash: null,
-        multi: this._ctxMulti({ groupKeys: [group.key] }),
+        multi: this._ctxMulti({ kind: "group", id: group.key }),
       };
     },
     openMemberMenu(event, member) {
@@ -174,7 +177,7 @@ window.AQB_MENU = {
         ...this._menuPos(event),
         key: null,
         hash: member.hash,
-        multi: this._ctxMulti({ hashes: [member.hash] }),
+        multi: this._ctxMulti({ kind: "member", id: member.hash }),
       };
     },
     /* 抽屉右键菜单(R2 S3 计划 26-10-09-2219 · 2026-10-10 模板选择迁右键):

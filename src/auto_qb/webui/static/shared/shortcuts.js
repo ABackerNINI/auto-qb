@@ -975,21 +975,13 @@ window.AQB_SHORTCUTS = {
       this.selGroups = [];
       for (const g of this.filteredGroups) this._selAddGroup(g.key);
     },
-    /* 目标解析(计划 W3): 有选中走选中集合(_bulkTargets 同口径), 无选中用光标行;
-     * 虚拟组行(未归组命中)无组 key, 转为单种子命令(与 _bulkTargets 同处理)。 */
+    /* 目标解析: **薄投影**到作用域单点(计划 26-10-10-2001 S3, 契约 C1)。口径 = 有选中走选中
+     * 集合, 无选中走光标行; 虚拟组行(未归组命中)无真实组 key, 转单种子命令。保留
+     * `{groupKeys, memberHashes}` 形状是因为它是键盘族与 _actCore/_deleteFlow 的既有载荷形状,
+     * 不是第二套口径 —— 语义与委托前逐位一致。 */
     _kbTargets() {
-      if (this.selGroups.length || this.selMembers.length) return this._bulkTargets();
-      const c = this.kbCursor;
-      if (!c) return { groupKeys: [], memberHashes: [] };
-      if (c.kind === "group") {
-        const g = this._findGroup(c.id);
-        if (!g) return { groupKeys: [], memberHashes: [] };
-        if (g.virtual) return { groupKeys: [], memberHashes: g.members[0] ? [g.members[0].hash] : [] };
-        return { groupKeys: [c.id], memberHashes: [] };
-      }
-      if (c.kind === "torrent") return { groupKeys: [], memberHashes: [c.id] };
-      const unit = this._kbUnitOf(c);
-      return { groupKeys: [], memberHashes: unit ? [...new Set(unit.hashes)] : [] };
+      const d = this._scopeResolve("sel-first-cursor");
+      return { groupKeys: d.keys, memberHashes: d.hashes };
     },
     _kbTargetText(t) {
       const n = t.groupKeys.length + t.memberHashes.length;
@@ -1057,17 +1049,13 @@ window.AQB_SHORTCUTS = {
      * 开着流量形态 ⇒ 照旧 openTorrentDrawer 打开。与 Alt+1~5(有条件, 待定)分工: I 管面板整体开关,
      * Alt+N 管定位页签。 */
     _kbOpenDrawer() {
-      const c = this.kbCursor;
-      if (!c) {
+      if (!this.kbCursor) {
         this._kbHint();
         return;
       }
-      let hash = "";
-      if (c.kind === "torrent") hash = c.id;
-      else if (c.kind === "group") {
-        const g = this._findGroup(c.id);
-        hash = g && g.members && g.members[0] ? g.members[0].hash : "";
-      }
+      /* 目标走作用域单点(S3/C1): 光标行 -> 单目标 hash(组光标取闭包首元, 与既有同口径;
+       * 剧/集单元与多目标无单目标 -> 空串, 静默不动作) */
+      const hash = this._scopeFirstHash(this._scopeResolve("cursor"));
       if (!hash) return;  // 无目标(组无成员 / 剧集单元等)静默不动作(与原实现同口径)
       if (this.drawer.open && this.drawer.kind === "seed" && this.drawer.hash === hash) {
         this.closeDrawer();  // 已开同目标 ⇒ 关(切换语义; 换目标仍走下方打开)
@@ -1112,9 +1100,11 @@ window.AQB_SHORTCUTS = {
       }
       return this.openQbHistory();
     },
+    /* 标签/分类(键盘): 目标走作用域单点(S3/C1) —— 有选中传 null = 整个选中集合(与批量动作同口径);
+     * 无选中用光标行。虚拟行(未归组命中种子)没有真实组 key, 与原实现同口径**静默不动作**。 */
     _kbMeta() {
       if (this.selGroups.length || this.selMembers.length) {
-        this.openMetaDialog(null);  // 有选中传 null = 整个选中集合(与批量动作同口径)
+        this.openMetaDialog(null);
         return;
       }
       const c = this.kbCursor;
@@ -1122,17 +1112,16 @@ window.AQB_SHORTCUTS = {
         this._kbHint();
         return;
       }
-      if (c.kind === "torrent") {
-        this.openMetaDialog(c.id);
+      if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        if (!g || g.virtual) return;
+      }
+      const d = this._scopeResolve("cursor");
+      if (d.keys.length === 1 && !d.hashes.length) {
+        this.openMetaDialog({ groupKeys: d.keys, memberHashes: [] });
         return;
       }
-      const unit = this._kbUnitOf(c);
-      if (unit && unit.hashes.length) {
-        this.openMetaDialog({ groupKeys: [], memberHashes: [...new Set(unit.hashes)] });
-        return;
-      }
-      const g = c.kind === "group" ? this._findGroup(c.id) : null;
-      if (g && !g.virtual) this.openMetaDialog({ groupKeys: [c.id], memberHashes: [] });
+      if (d.hashes.length) this.openMetaDialog({ groupKeys: [], memberHashes: d.hashes });
     },
     _kbOpenFolder() {
       const c = this.kbCursor;
@@ -1159,30 +1148,32 @@ window.AQB_SHORTCUTS = {
      * 目标解析要求恰有一个 hash —— 多选/整组/剧集单元一律提示, 不猜第一个(静默错目标
      * 比不动作更糟)。选中集合走 _kbTargets 同一口径, 无选中用光标行。 */
     _kbSingleHash() {
-      const t = this._kbTargets();
-      if (t.groupKeys.length || t.memberHashes.length !== 1) return "";
-      return t.memberHashes[0];
+      const d = this._scopeResolve("sel-first-cursor");
+      if (d.keys.length || d.hashes.length !== 1) return "";
+      return d.hashes[0];
     },
-    /* 单目标编辑/复制族: 既有方法读 menu.hash(与右键菜单同一入口), 这里只做解析与挂载 */
+    /* 单目标编辑/复制族: 目标由作用域单点解析后**显式传参**。
+     * !2026-10-10(S3/M3): 此前是 `this.menu.hash = h; this[fn]()` —— 把目标"塞进"菜单状态再让
+     *   下游去读(机制 3, 见 conventions/webui-scope.md §3)。现改为显式传参, 被调方法一律以
+     *   `(hash)` 或 `(arg, hash)` 收目标: editMove/editLimits/editShareLimits/editRename 收 (h),
+     *   copyTorrentInfo 收 (field, h), exportTorrent 收 (h)。 */
     _kbEditAct(fn, arg) {
       const h = this._kbSingleHash();
       if (!h) {
         this._kbHint();
         return;
       }
-      this.menu.hash = h;
-      if (arg === undefined) return this[fn]();
-      return this[fn](arg);
+      return arg === undefined ? this[fn](h) : this[fn](arg, h);
     },
-    /* 单目标种子命令族(队列/TMM/强制开始/超级做种): 复用 torrentCmd 回执链(右键菜单同链) */
+    /* 单目标种子命令族(队列/TMM/强制开始/超级做种): 复用 torrentCmd 回执链(与右键菜单同链),
+     * 目标显式传参(S3/M3, 同上)。 */
     _kbTorrentCmd(action, makeBody, okText) {
       const h = this._kbSingleHash();
       if (!h) {
         this._kbHint();
         return;
       }
-      this.menu.hash = h;
-      return this.torrentCmd(action, makeBody(), okText);
+      return this.torrentCmd(action, makeBody(), okText, h);
     },
     _kbTorrentToggle(action, field, label) {
       const h = this._kbSingleHash();
@@ -1191,8 +1182,7 @@ window.AQB_SHORTCUTS = {
         return;
       }
       const m = this.memberByHash.get(h) || {};
-      this.menu.hash = h;
-      return this.torrentCmd(action, { enable: !m[field] }, `${m[field] ? "关闭" : "开启"}${label}`);
+      return this.torrentCmd(action, { enable: !m[field] }, `${m[field] ? "关闭" : "开启"}${label}`, h);
     },
     /* 反选当前视图(空位动作, 默认不绑键): 三视图各自的全集做差; 组/成员双向联动(2026-10-09) */
     _kbInvertSel() {
