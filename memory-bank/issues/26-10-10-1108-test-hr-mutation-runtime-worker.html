@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ 运行时与取数线程变异存活(runtime/worker/fetcher/events/adapters)">
 <meta name="issue-summary" content="hr 首轮: runtime 147 + worker 126 + fetcher 39 + events 41 + adapters 43 存活(热重载/revision/取数通道), 零假存活">
 <title>hr/ 运行时与取数线程变异存活(runtime/worker/fetcher/events/adapters) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-10-1108-test-hr-mutation-runtime-worker</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-10 11:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,6 +94,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-10 19:00 — 认领并实施（R18），状态 <strong>Done</strong>：六个文件（runtime / worker / fetcher / events / adapters / log）一次做全 —— 读带 diff 清单三分类 → 补守阵（runtime +22 / worker +25 / fetcher +13 / 新建 <code>tests/test_hr_events.py</code> 15 / adapters +12）→ 红验按文件逐条同构变异复验 → 同池逐文件复跑。等价变异按类逐条记理由（默认值与字段默认同值 / 不可达分支 / 死字段 / 排障展示）; 零 <code>src/</code> 改动</li>
     </ul>
   </section>
 

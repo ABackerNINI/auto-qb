@@ -21,6 +21,21 @@
 ### P1 覆盖率提升轮: 无通道与 URL 解析长尾
 - test_null_fetcher_rejects_both_kinds: NullFetcher 对页面与 .torrent 都报不可用
 - test_tid_of_malformed_and_missing: 非数字 id 与无 id 都回 0
+
+### hr 首轮变异审计轮: 取数通道长尾(issue 26-10-10-1108-runtime-worker)
+- test_null_fetcher_default_reason_names_config_key: NullFetcher 缺省 reason 指向配置键(可照做)
+- test_null_fetcher_message_carries_reason_and_url: 报错串带 reason 与目标 URL
+- test_channel_fetcher_default_request_timeout_is_180: 真通道缺省 request_timeout = 180.0
+- test_fetch_default_scope_and_tid: 页面任务无 tid -> 0; 下载任务无档位 -> 空串
+- test_dispatch_carries_site_and_url: 下发任务带策略解析出的站点名与原始 URL
+- test_endpoint_not_listening_message_names_cause: 端点未监听报错串点名根因与 URL
+- test_timeout_message_points_to_browser_checklist: 超时报错串给「浏览器/扩展/登录」核对清单
+- test_login_page_message_names_cause: 登录页报错串点名「登录页」
+- test_empty_body_message_is_informative: 空内容报错串点名「空」
+- test_cancel_after_dispatch_reports_stopped: 任务已下发后叫停 -> HrChannelStopped(不是超时)
+- test_build_channel_fetcher_null_reason_names_config_key: 未启用时空通道的 reason 指向配置键
+- test_scope_of_url_query_parsing: 档位提取只切第一个 `?`/`&`/`=`(排障展示)
+- test_tid_of_url_query_parsing: 种子 id 提取只切第一个 `?`/`&`/`=`
 """
 import threading
 import time
@@ -292,3 +307,145 @@ def test_tid_of_malformed_and_missing():
     assert _tid_of("https://pt.example.com/download.php?id=abc") == 0
     assert _tid_of("https://pt.example.com/download.php") == 0
     assert _tid_of("https://pt.example.com/download.php?id=42") == 42
+
+
+# ==================== hr 首轮变异审计轮: 取数通道长尾 ====================
+
+
+def test_null_fetcher_default_reason_names_config_key():
+    """NullFetcher 缺省 reason 指向配置键 —— 用户照着就能改对"""
+    with pytest.raises(HrChannelUnavailable) as err:
+        NullFetcher().get_text("https://pt.example.com/myhr.php")
+    assert str(err.value).startswith("本实例未启用取数通道 (hr_check.channel.enabled=false)"), str(err.value)
+
+
+def test_null_fetcher_message_carries_reason_and_url():
+    with pytest.raises(HrChannelUnavailable) as err:
+        NullFetcher("未启用").get_bytes(DL)
+    assert "未启用" in str(err.value)
+    assert DL in str(err.value)
+
+
+def test_channel_fetcher_default_request_timeout_is_180():
+    fetcher = ChannelFetcher(HrTaskQueue(), policy=UrlPolicy({"pt.example.com": site_conf()}))
+    assert fetcher.request_timeout == 180.0
+
+
+def test_fetch_default_scope_and_tid():
+    """页面任务没有 tid -> 缺省 0; 下载任务没有档位 -> 缺省空串(两处缺省各自独立)"""
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue)
+    try:
+        fetcher.get_text(URL)
+        fetcher.get_bytes(DL)
+    finally:
+        auto.close()
+    assert auto.seen[0].tid == 0, "URL 无 id -> 页面任务 tid 缺省 0"
+    assert auto.seen[1].scope == "", "URL 无 hrtype/status -> 下载任务档位缺省空串"
+
+
+def test_dispatch_carries_site_and_url():
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue)
+    try:
+        fetcher.get_text(URL)
+    finally:
+        auto.close()
+    task = auto.seen[0]
+    assert task.site == "pt.example.com", "站点名取自策略解析(不是 None)"
+    assert task.url == URL
+
+
+def test_endpoint_not_listening_message_names_cause():
+    queue, fetcher = make_fetcher(timeout=30.0, listening=lambda: False)
+    with pytest.raises(HrChannelUnavailable) as err:
+        fetcher.get_text(URL)
+    assert "端点未在监听" in str(err.value)
+    assert URL in str(err.value)
+
+
+def test_timeout_message_points_to_browser_checklist():
+    queue, fetcher = make_fetcher(timeout=0.05)
+    with pytest.raises(HrChannelTimeout) as err:
+        fetcher.get_text(URL)
+    assert str(err.value).endswith("(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)"), \
+        "超时文案要给出可照做的核对清单"
+
+
+def test_login_page_message_names_cause():
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue, ok=False, answer=b"", error="download.php 返回 HTML", kind=KIND_LOGIN_PAGE)
+    try:
+        with pytest.raises(HrLoginExpired) as err:
+            fetcher.get_bytes(DL)
+        assert "登录页" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_empty_body_message_is_informative():
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue, answer=b"")
+    try:
+        with pytest.raises(HrFetchError) as err:
+            fetcher.get_text(URL)
+        assert "空" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_cancel_after_dispatch_reports_stopped():
+    """任务已下发后才叫停 -> 等回传落空 -> HrChannelStopped(与「等超时」分开)"""
+    queue, fetcher = make_fetcher(timeout=30.0)
+    errors = []
+
+    def _run():
+        try:
+            fetcher.get_text(URL)
+        except Exception as exc:  # noqa: BLE001 - 记录被抛出的类型供断言
+            errors.append(exc)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    for _ in range(400):
+        if queue.pending() > 0:
+            break
+        time.sleep(0.005)
+    assert queue.pending() > 0, "任务应先下发, 才能测「下发后叫停」"
+    queue.cancel_all("HR 取数线程正在停止")
+    thread.join(5.0)
+    assert errors and isinstance(errors[0], HrChannelStopped), errors
+    assert "停止" in str(errors[0])
+
+
+def test_build_channel_fetcher_null_reason_names_config_key():
+    got = build_channel_fetcher(
+        channel_conf=HrChannelConfig(enabled=False), enabled=True, queue=HrTaskQueue(), site_confs={}
+    )
+    with pytest.raises(HrChannelUnavailable) as err:
+        got.get_text(URL)
+    assert str(err.value) == ("本实例未启用取数通道 (hr_check.channel.enabled=false): 装上浏览器扩展并开启后才会在线核实: " + URL), str(err.value)
+
+
+def test_scope_of_url_query_parsing():
+    """档位提取只切第一个 `?` / `&` / `=`(排障展示用, 不参与解析)"""
+    from auto_qb.hr.fetcher import _scope_of
+
+    assert _scope_of("https://pt.example.com/myhr.php?hrtype=A") == "A"
+    assert _scope_of("https://carpt.net/myhr.php?status=1") == "1"
+    assert _scope_of("https://pt.example.com/myhr.php") == ""
+    assert _scope_of("https://pt.example.com/myhr.php?hrtype=B&x=1") == "B"
+    assert _scope_of("https://pt.example.com/myhr.php?a=1&hrtype=C") == "C"
+    assert _scope_of("https://pt.example.com/myhr.php?next=/p?hrtype=A") == ""
+    assert _scope_of("https://pt.example.com/myhr.php?hrtype=A=B") == "A=B"
+
+
+def test_tid_of_url_query_parsing():
+    """种子 id 提取只切第一个 `?` / `&` / `=`"""
+    from auto_qb.hr.fetcher import _tid_of
+
+    assert _tid_of("https://pt.example.com/download.php?id=42") == 42
+    assert _tid_of("https://pt.example.com/download.php") == 0
+    assert _tid_of("https://pt.example.com/download.php?id=42&a=b") == 42
+    assert _tid_of("https://pt.example.com/d.php?id=7&next=/a?b") == 7
+    assert _tid_of("https://pt.example.com/d.php?id=4=2") == 0

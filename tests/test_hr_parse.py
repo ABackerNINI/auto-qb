@@ -37,13 +37,28 @@
 - test_order_violations_insufficient_evidence: 可比行 < 2 = 证据不足不判
 - test_order_violations_all_equal_no_direction: 全相等不算违反但方向推不出
 - test_cross_page_violation_desc_and_asc: 跨页证据判据(desc/asc/方向未知/上页空)
+
+### hr 首轮变异审计轮: adapter 注册表 / 构造默认 / 解析边界(issue 26-10-10-1108-runtime-worker)
+- test_available_adapters_lists_registered_names: 注册表名录按字母序稳定输出(配置报错提示可用值)
+- test_build_adapter_passes_site_through: 工厂把站点名原样交给 adapter
+- test_nexusphp_default_page_param_is_page: 构造器 page_param 缺省 = "page"(第二页 URL 带 page=)
+- test_nexusphp_root_empty_for_schemeless_page_url: hr_page_url 无 scheme -> _root 为空, 下载地址是裸路径
+- test_nexusphp_page_url_unknown_scope_falls_back_to_letter: 档位不在映射表 -> 按字母原样传(不是 None)
+- test_nexusphp_parse_page_keeps_scope_on_all_paths: 三条降级路径都保留入参 scope
+- test_nexusphp_missing_field_rate_counts_every_row: 逐行累计缺失(两行缺失 -> 2/N, 不是只记 1)
+- test_nexusphp_map_row_short_row_blank_and_lane: 残行缺列回空串不越界; 行档位取自入参 scope
+- test_is_blank_index_edges: 负下标/恰等长度都算缺失; 有内容的 0 号格不算
+- test_base_looks_like_login_single_marker_each: 基类登录判据两个标记各自独立成立(or 非 and)
+- test_base_looks_like_challenge_each_marker: 挑战页五个特征词各自命中(lower 后比对)
+- test_carpt_looks_like_login_single_marker_each: CarPT 登录判据两个标记各自独立成立
 """
 import pytest
 
-from auto_qb.hr.adapters import build_adapter
-from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS, NexusPhpMyhrAdapter, header_hr_numbers
+from auto_qb.hr.adapters import available_adapters, build_adapter
+from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS, NexusPhpMyhrAdapter, _is_blank, header_hr_numbers
 import auto_qb.hr.adapters.nexusphp as hr_nexusphp
 from auto_qb.hr.parse import (
+    Cell,
     cell_text,
     flat_rows,
     column_index,
@@ -579,3 +594,110 @@ def test_adapter_parse_page_without_tid_column_degrades(monkeypatch):
     monkeypatch.setattr(hr_nexusphp, "extract_table", lambda html, key: HtmlTable(columns=("种子名称", ), rows=((), )))
     parsed = adapter.parse_page("A", "<table></table>")
     assert parsed.entries == [] and parsed.header_found is False
+
+
+# ==================== hr 首轮变异审计轮: adapter 注册表 / 构造默认 / 解析边界 ====================
+
+
+def _bare_nexusphp(**overrides):
+    """直接构造(不经 build_adapter, 故 page_param 等走构造器**缺省值**)"""
+    kwargs = dict(
+        hr_page_url="https://pt.example.com/myhr.php",
+        download_path="/download.php?id={id}",
+        scopes=("A", "B", "C"),
+    )
+    kwargs.update(overrides)
+    return NexusPhpMyhrAdapter("example", **kwargs)
+
+
+def test_available_adapters_lists_registered_names():
+    """注册表名录按字母序稳定输出(配置报错时提示可用值)"""
+    assert available_adapters() == ("btschool", "carpt", "nexusphp")
+
+
+def test_build_adapter_passes_site_through():
+    """工厂把站点名原样交给 adapter(不得丢失)"""
+    adapter = build_adapter("pt.example.com", site_conf())
+    assert adapter is not None
+    assert adapter.site == "pt.example.com"
+
+
+def test_nexusphp_default_page_param_is_page():
+    """构造器 page_param 缺省 = "page": 第二页 URL 带 `page=`"""
+    assert _bare_nexusphp().page_url("A", 2).endswith("&page=2")
+
+
+def test_nexusphp_root_empty_for_schemeless_page_url():
+    """hr_page_url 无 scheme -> _root 为空, 下载地址回落裸路径(不得拼出 `://`)"""
+    adapter = _bare_nexusphp(hr_page_url="/myhr.php")
+    assert adapter.download_url(7) == "/download.php?id=7"
+
+
+def test_nexusphp_page_url_unknown_scope_falls_back_to_letter():
+    """档位不在映射表 -> 按字母原样传(不是 None)"""
+    assert _bare_nexusphp().page_url("Z", 1) == "https://pt.example.com/myhr.php?hrtype=Z"
+
+
+def test_nexusphp_parse_page_keeps_scope_on_all_paths(monkeypatch):
+    """三条路径(表头缺失 / 缺 HR编号列 / 正常)都保留入参 scope —— 调用方按 scope 归位"""
+    from auto_qb.hr.parse import HtmlTable
+
+    adapter = _bare_nexusphp()
+    assert adapter.parse_page("B", REVISED_PAGE).scope == "B"
+    monkeypatch.setattr(hr_nexusphp, "extract_table", lambda html, key: HtmlTable(columns=("种子名称", ), rows=((), )))
+    assert adapter.parse_page("B", "<table></table>").scope == "B"
+    monkeypatch.undo()
+    assert adapter.parse_page("C", myhr_page([row(1)])).scope == "C"
+
+
+def test_nexusphp_missing_field_rate_counts_every_row():
+    """两行各缺必填字段 -> 缺失率 2/N(逐行累计, 不是只记 1)"""
+    page = myhr_page([row(1, need="", remain=""), row(2, need="", remain=""), row(3)])
+    parsed = _bare_nexusphp().parse_page("A", page)
+    assert parsed.row_count == 3
+    assert parsed.missing_field_rate == pytest.approx(2 / 3)
+
+
+def test_nexusphp_map_row_short_row_blank_and_lane():
+    """残行(格子数少于表头)缺列 -> 空串不越界; 行档位取自入参 scope(非 A 档才可辨)"""
+    adapter = _bare_nexusphp()
+    idx = {name: i for i, name in enumerate(adapter._columns.values())}
+    cells = (Cell(text="7"), )  # 只有 HR编号 一格, 其余列越界
+    entry = adapter._map_row("C", cells, idx)
+    assert entry.tid == 7
+    assert entry.name == "", "缺列 -> 空串(不是 XXXX, 也不得越界)"
+    assert entry.lane == "C", "行档位必须来自入参 scope"
+
+
+def test_is_blank_index_edges():
+    """列缺失判据: 负下标 / 恰等长度都算缺失; 有内容的 0 号格不算"""
+    cells = (Cell(text="a"), Cell(text="b"))
+    assert _is_blank(cells, 0) is False
+    assert _is_blank(cells, -1) is True, "负下标 = 缺失(不是「取最后一个」)"
+    assert _is_blank(cells, 2) is True, "恰好 == len 也算缺失(不越界)"
+    assert _is_blank(cells, 9) is True
+
+
+def test_base_looks_like_login_single_marker_each():
+    """两个标记各自独立成立(or 而非 and); 表头锚点在场即排除误判"""
+    adapter = _bare_nexusphp()
+    assert adapter.looks_like_login('<form action="takelogin.php">') is True
+    assert adapter.looks_like_login('<input name="password" type="password">') is True
+    assert adapter.looks_like_login('<form action="takelogin.php">HR编号</form>') is False
+    assert adapter.looks_like_login('<a href="x">HR编号</a>') is False
+
+
+def test_base_looks_like_challenge_each_marker():
+    """挑战页五个特征词各自命中(先 lower 再比对)"""
+    adapter = _bare_nexusphp()
+    for marker in ("Just a moment", "cf-chl", "__cf_chl", "Attention Required", "Checking your browser"):
+        assert adapter.looks_like_challenge(f"<html><body>{marker}</body></html>") is True, marker
+    assert adapter.looks_like_challenge("<html><body>HR编号 表格</body></html>") is False
+
+
+def test_carpt_looks_like_login_single_marker_each():
+    """CarPT 登录判据两个标记各自独立成立(or 而非 and); 本站表头锚点在场即排除误判"""
+    adapter = _carpt_adapter()
+    assert adapter.looks_like_login('<form action="takelogin.php">') is True
+    assert adapter.looks_like_login('<input name="password">') is True
+    assert adapter.looks_like_login(load_fixture(CARPT_PAGE1)) is False

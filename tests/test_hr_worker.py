@@ -27,6 +27,37 @@
 - test_no_sites_publishes_empty_view: 没有启用站点时不发布也不崩
 - test_loop_survives_round_exception: 单轮异常不打死线程
 - test_revision_bumps_when_data_changes: 数据实质变化(新增条目) -> revision 抬升
+
+### hr 首轮变异审计轮: 取数线程长尾(issue 26-10-10-1108-runtime-worker)
+- test_stable_key_blank_and_none_inputs: 空串/None 输入 -> 空串(不落 "XXXX")
+- test_pacing_class_unknown_and_blank: 未命中类别回落稳定指纹; 空串 -> 空串
+- test_view_signature_rounds_healthy_ts_to_three_places: 指纹里的健康时刻按 3 位取整
+- test_worker_init_defaults: 线程名 / poll 下界 / 各初始计数位
+- test_start_message_and_thread_props: 启动 INFO 报间隔与站点(多站), 线程名/daemon/起始位
+- test_start_message_no_sites_placeholder: 无启用站点 -> 「站点: (无)」
+- test_stop_cancels_fetch_channel_with_reason: stop 先叫停取数通道并带上原因串
+- test_stop_clean_reports_and_clears_handle: 干净退出: 留 INFO + 清线程句柄
+- test_stop_keeps_thread_handle_when_not_exited: 未退出: 留句柄 + ERROR 说明
+- test_stop_default_timeout_is_ten_seconds: stop 缺省等待上限 10s(契约)
+- test_wake_increments_sequence: wake 递增唤醒序号(每次 +1)
+- test_request_refresh_accumulates_and_bumps_seq: 受理累加(不覆盖) + 唤醒序号递增
+- test_request_refresh_logs_accepted_sites: 受理日志精确报出站点清单
+- test_run_once_hands_site_anchors_three_state: 锚点三态交接(None / 映射 / 缺键 {})
+- test_run_once_records_note_under_site: _note 以站点为键记账
+- test_build_views_prefers_memory_snapshot: 本轮结果的内存快照覆盖已落盘视图; generated_at 取现读时钟
+- test_note_logs_normal_action_only_on_change: 正常动作只在变化时记一条, 缺省文案「正常」
+- test_note_pacing_key_and_message: 节流键取自原因; 缺省文案「正常」; 精确文案
+- test_note_warn_gap_floor_and_exact_boundary: 非节流告警的 warn_gap 下界 60s 且「恰好到点」即再报
+- test_note_pacing_reminder_fires_at_exact_gap: 节流态持续时恰好满一个 warn_gap 即再说明一次
+- test_note_warn_message_names_site_and_action: 改版告警文案点名站点与动作
+- test_note_info_branch_message: 非告警动作走 INFO 分支并带站点与动作
+- test_silence_reference_prefers_last_contact: 静默基准优先「上次联系时刻」(非启动时刻)
+- test_silence_reference_defaults_when_attr_missing: 端点缺 last_contact_ts/rejected_contacts 时保守缺省
+- test_silence_where_labels_both_branches: 「启动以来」/「上次联系后」两分支各自精确
+- test_silence_gap_floor_and_exact_boundary: 静默 gap 下界 60s; 恰好到点即出声
+- test_silence_rejected_threshold_is_positive: 被拒计数 >0 即算被拒(不是 >1)
+- test_silence_hours_value_uses_3600: 静默小时数 = 秒 / 3600(展示取整可辨)
+- test_silence_event_tag_sets_domain: 静默出口挂通道层标签(hr_domain)
 """
 import logging
 import threading
@@ -38,7 +69,11 @@ from auto_qb.hr.resolve import HrIdentity, HrSiteView, HrViewSet, judge_record
 from auto_qb.hr.service import ACTION_ERROR, ACTION_NO_CHANNEL, ACTION_PARTIAL, ACTION_REFRESHED, ACTION_REUSED, \
     ACTION_WAITING, REASON_BUDGET, HrRefreshResult, HrRefreshService
 import auto_qb.hr.worker as worker_module
-from auto_qb.hr.worker import HrViewPublisher, HrWorker, stable_key, view_signature
+from auto_qb.hr import events
+from auto_qb.hr.fetcher import HrFetchError, NullFetcher
+from auto_qb.hr.worker import HrViewPublisher, HrWorker, pacing_class, stable_key, view_signature
+from auto_qb.infra.logging import DOMAIN_ATTR
+from helpers import capture_logs
 from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, \
     torrent_blob
 
@@ -702,3 +737,491 @@ class worker_log:
         self._logger.setLevel(self._old_level)
         self._logger.propagate = self._old_propagate
         return False
+
+
+# ==================== hr 首轮变异审计轮: 取数线程长尾 ====================
+
+
+def test_stable_key_blank_and_none_inputs():
+    assert stable_key("") == ""
+    assert stable_key(None) == ""
+    assert stable_key("还差 104s") == "还差 #s"
+
+
+def test_pacing_class_unknown_and_blank():
+    assert pacing_class("") == ""
+    assert pacing_class(None) == ""
+    assert pacing_class("未知状态") == "未知状态"
+
+
+def test_view_signature_rounds_healthy_ts_to_three_places():
+    def sig(ts):
+        view = HrSiteView(site="s", listing="list", healthy_ts=ts)
+        return view_signature(HrViewSet(views={"s": view}))[0][4]
+
+    assert sig(1.2349) == round(1.2349, 3)
+    assert sig(1.5) == round(1.5, 3)
+    assert sig(2.0) == round(2.0, 3)
+
+
+def test_worker_init_defaults(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    worker = HrWorker(service=service, publisher=HrViewPublisher())
+    assert worker._name == "auto-qb-hr-fetch"
+    assert worker.poll_interval == 60.0
+    assert worker._wake_seq == 0
+    assert worker._stopped is False
+    assert worker.last_run_ts == 0.0
+    assert worker.last_results == []
+    assert worker._silence_warned_at == 0.0, "「从未提醒过」的哨兵值"
+    assert HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=1.0).poll_interval == 1.0, \
+        "下界是 max(1.0, ...): 1s 不该被抬"
+
+
+def test_start_message_and_thread_props(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)))
+    service.site_confs["pt2.example.com"] = site_conf()
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=30.0)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker.start()
+        try:
+            assert worker._thread.name == "auto-qb-hr-fetch"
+            assert worker._thread.daemon is True
+            assert worker._stopped is False
+            assert worker._started_at is not None
+            assert worker.last_run_ts > 0
+        finally:
+            worker.stop(timeout=5.0)
+    assert any(
+        m.startswith("HR 取数线程已启动: 每 30s 自唤醒检查一次站点(与主循环节拍无关); 站点: pt.example.com, pt2.example.com") for m in cap.messages
+    ), cap.messages
+
+
+def test_start_message_no_sites_placeholder(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    service.site_confs["pt.example.com"] = site_conf(enabled=False)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=30.0)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker.start()
+        try:
+            pass
+        finally:
+            worker.stop(timeout=5.0)
+    assert any("站点: (无)" in m for m in cap.messages), cap.messages
+    assert not any("XX" in m for m in cap.messages), cap.messages
+
+
+class _CancelQueue:
+    def __init__(self):
+        self.reason = ""
+
+    def cancel_all(self, reason):
+        self.reason = reason
+
+
+class _FetcherWithQueue:
+    def __init__(self):
+        self.queue = _CancelQueue()
+
+    def get_text(self, url):
+        raise HrFetchError("无")
+
+    def get_bytes(self, url):
+        raise HrFetchError("无")
+
+
+def test_stop_cancels_fetch_channel_with_reason(tmp_path):
+    fetcher = _FetcherWithQueue()
+    worker = HrWorker(service=_service(tmp_path, fetcher), publisher=HrViewPublisher(), poll_interval=60.0)
+    assert worker.stop(timeout=0.1) is True
+    assert fetcher.queue.reason == "HR 取数线程正在停止"
+
+
+def test_stop_clean_reports_and_clears_handle(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    worker.start()
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        assert worker.stop(timeout=5.0) is True
+    assert "HR 取数线程已停止" in cap.messages, cap.messages
+    assert worker._thread is None, "干净退出后句柄要清掉"
+    assert worker.started is False
+
+
+def test_stop_keeps_thread_handle_when_not_exited(tmp_path, monkeypatch):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    release = threading.Event()
+    entered = threading.Event()
+
+    def blocking():
+        entered.set()
+        release.wait(5.0)
+
+    monkeypatch.setattr(worker, "run_once", blocking)
+    worker.start()
+    try:
+        assert entered.wait(10.0), "用例前提: 线程已进到阻塞的一轮里"
+        with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+            assert worker.stop(timeout=0.05) is False, "线程还阻塞着 -> 未退出"
+        assert worker._thread is not None and worker.started, "没退出就得留着句柄(否则再也停不掉)"
+        assert any("未退出" in m for m in cap.messages), cap.messages
+    finally:
+        release.set()
+        worker.stop(timeout=5.0)
+
+
+def test_stop_default_timeout_is_ten_seconds():
+    """契约: stop 的缺省等待上限是 10s(改它等于改关停行为)"""
+    import inspect
+
+    assert inspect.signature(HrWorker.stop).parameters["timeout"].default == 10.0
+
+
+def test_wake_increments_sequence(tmp_path):
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    assert worker._wake_seq == 0
+    worker.wake()
+    assert worker._wake_seq == 1
+    worker.wake()
+    assert worker._wake_seq == 2
+
+
+def test_request_refresh_accumulates_and_bumps_seq(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    service.site_confs["pt2.example.com"] = site_conf()
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    assert worker.request_refresh(["pt.example.com"]) == ["pt.example.com"]
+    assert worker._wake_seq == 1
+    assert worker.request_refresh(["pt2.example.com"]) == ["pt2.example.com"]
+    assert worker._wake_seq == 2
+    assert worker._force == {"pt.example.com", "pt2.example.com"}, "受理要累加(不是覆盖)"
+
+
+def test_request_refresh_logs_accepted_sites(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    service.site_confs["pt2.example.com"] = site_conf()
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker.request_refresh(["pt.example.com", "pt2.example.com"])
+    assert cap.messages == ["HR 收到立即拉取请求: pt.example.com, pt2.example.com(取数线程将跳过复用窗与拉取间隔, 频控仍生效)"], cap.messages
+
+
+def test_run_once_hands_site_anchors_three_state(tmp_path):
+    """锚点三态交接: 映射原样直通 / 采集失败(None) 直通 / 该站键缺失 -> {}"""
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    captured = []
+
+    def spy(site, anchors, *, force=False):
+        captured.append((site, anchors, force))
+        return HrRefreshResult(site=site, action=ACTION_WAITING, reason="未到可取时刻", reason_kind=REASON_BUDGET)
+
+    service.refresh_site = spy
+    mapping = {"pt.example.com": {"h1": "anchor"}}
+
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, anchors_fn=lambda: mapping)
+    worker.run_once()
+    assert captured == [("pt.example.com", {"h1": "anchor"}, False)]
+    assert "pt.example.com" in worker._last_action, "_note 以站点为键记账"
+
+    captured.clear()
+    HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0).run_once()
+    assert captured == [("pt.example.com", None, False)], "采集失败(None) 原样直通"
+
+    captured.clear()
+    HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, anchors_fn=lambda: {}).run_once()
+    assert captured == [("pt.example.com", {}, False)], "确认该站零锚点 -> {}"
+
+
+def test_build_views_prefers_memory_snapshot(tmp_path):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=lambda: 123.0)
+    service.build_view_for = lambda site, data: ("built", site, data)
+    snapshot = object()
+    views = worker._build_views([HrRefreshResult(site="pt.example.com", action=ACTION_REFRESHED, snapshot=snapshot)])
+    assert views.views["pt.example.com"] == ("built", "pt.example.com", snapshot), "本轮内存快照优先"
+    assert views.generated_at == 123.0
+
+
+def test_note_logs_normal_action_only_on_change(tmp_path):
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", HrRefreshResult(site="pt.example.com", action=ACTION_REFRESHED, reason="正常"))
+        worker._note("pt.example.com", HrRefreshResult(site="pt.example.com", action=ACTION_REFRESHED, reason="正常"))
+        worker._note("pt2.example.com", HrRefreshResult(site="pt2.example.com", action=ACTION_REUSED, reason=""))
+    assert cap.messages.count("HR 站点 pt.example.com | refreshed: 正常") == 1, cap.messages
+    assert "HR 站点 pt2.example.com | reused: 正常" in cap.messages, cap.messages
+
+
+def test_note_pacing_key_and_message(tmp_path):
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    waiting = HrRefreshResult(
+        site="pt.example.com", action=ACTION_WAITING, reason="未到可取时刻(间隔, 还差 5s)", reason_kind=REASON_BUDGET
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", waiting)
+        assert worker._pacing_key["pt.example.com"] == pacing_class(waiting.reason), "节流键取自原因"
+        worker._note(
+            "pt.example.com",
+            HrRefreshResult(site="pt.example.com", action=ACTION_WAITING, reason="", reason_kind=REASON_BUDGET)
+        )
+    assert "HR 站点 pt.example.com | waiting: 未到可取时刻(间隔, 还差 5s)(节流中, 非故障)" in cap.messages, cap.messages
+    assert "HR 站点 pt.example.com | waiting: 正常(节流中, 非故障)" in cap.messages, cap.messages
+
+
+def test_note_warn_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
+    """非节流告警: warn_gap 下界 60s; 同 action 恰好到点即再报"""
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 0.0)
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={}), clock=clock),
+        publisher=HrViewPublisher(),
+        poll_interval=60.0,
+        now_fn=clock,
+    )
+    err = HrRefreshResult(site="pt.example.com", action=ACTION_ERROR, reason="表头缺失")
+    with capture_logs("auto_qb.hr.worker", logging.WARNING) as cap:
+        worker._note("pt.example.com", err)
+        worker._note("pt.example.com", err)
+        clock.advance(60.0)
+        worker._note("pt.example.com", err)
+    assert len(cap.messages) == 2, cap.messages
+    assert "站点 pt.example.com" in cap.messages[-1] and f"| {ACTION_ERROR}:" in cap.messages[-1], cap.messages[-1]
+
+
+def test_note_pacing_reminder_fires_at_exact_gap(tmp_path, monkeypatch):
+    """节流态持续: 恰好满一个 warn_gap 就要再说明白一次(不是「超过」才说)"""
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={}), clock=clock),
+        publisher=HrViewPublisher(),
+        poll_interval=60.0,
+        now_fn=clock,
+    )
+    waiting = HrRefreshResult(
+        site="pt.example.com", action=ACTION_WAITING, reason="未到可取时刻(间隔, 还差 5s)", reason_kind=REASON_BUDGET
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", waiting)
+        worker._note("pt.example.com", waiting)
+        clock.advance(3600.0)
+        worker._note("pt.example.com", waiting)
+    assert len(cap.messages) == 2, cap.messages
+
+
+def test_note_info_branch_message(tmp_path):
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", HrRefreshResult(site="pt.example.com", action=ACTION_NO_CHANNEL, reason="通道不可用"))
+    assert "HR 站点 pt.example.com | no-channel: 通道不可用" in cap.messages, cap.messages
+
+
+def _silence_worker(tmp_path, clock, endpoint, *, web_active):
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+    return HrWorker(
+        service=service,
+        publisher=HrViewPublisher(),
+        endpoint=endpoint,
+        poll_interval=60.0,
+        now_fn=clock,
+        web_active_fn=lambda: web_active,
+    )
+
+
+def test_silence_reference_prefers_last_contact(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Endpoint:
+        last_contact_ts = 5.0
+        rejected_contacts = 0
+
+    worker = _silence_worker(tmp_path, clock, _Endpoint(), web_active=True)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._check_channel_silence()
+    assert any("上次联系后" in m for m in cap.messages), cap.messages
+
+
+def test_silence_reference_defaults_when_attr_missing(tmp_path, monkeypatch):
+    """端点缺 last_contact_ts -> 缺省 0.0 = 视为刚启动, 不告警"""
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _BareEndpoint:
+        pass
+
+    worker = _silence_worker(tmp_path, clock, _BareEndpoint(), web_active=False)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._check_channel_silence()
+    assert cap.messages == [], cap.messages
+
+
+def test_silence_missing_rejected_attr_defaults_zero(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _NoRejected:
+        last_contact_ts = 5.0
+
+    worker = _silence_worker(tmp_path, clock, _NoRejected(), web_active=False)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._check_channel_silence()
+    assert len(cap.messages) == 1 and "端点未收到任何联系" in cap.messages[0], cap.messages
+
+
+def test_silence_where_started_label(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Fresh:
+        last_contact_ts = 0.0
+        rejected_contacts = 0
+
+    worker = _silence_worker(tmp_path, clock, _Fresh(), web_active=True)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        clock.advance(3601.0)
+        worker._check_channel_silence()
+    assert any("(启动以来扩展未联系端点)" in m for m in cap.messages), cap.messages
+
+
+def test_silence_where_after_contact_label(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Contacted:
+        last_contact_ts = 5.0
+        rejected_contacts = 0
+
+    class _Recent:
+        last_contact_ts = 0.5
+        rejected_contacts = 0
+
+    for endpoint in (_Contacted(), _Recent()):
+        worker = _silence_worker(tmp_path, clock, endpoint, web_active=True)
+        with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+            worker._check_channel_silence()
+        assert any("(上次联系后扩展未联系端点)" in m for m in cap.messages), cap.messages
+
+
+def test_silence_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
+    """静默 gap 下界 60s; 恰好到点即出声(不是「超过」才出声)"""
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 0.0)
+
+    class _Fresh:
+        last_contact_ts = 0.0
+        rejected_contacts = 0
+
+    worker = _silence_worker(tmp_path, clock, _Fresh(), web_active=True)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        clock.advance(60.0)
+        worker._check_channel_silence()
+        clock.advance(60.0)
+        worker._check_channel_silence()
+    assert len(cap.messages) == 2, cap.messages
+
+
+def test_silence_rejected_threshold_is_positive(tmp_path, monkeypatch):
+    """被拒计数 >0 即算「有人在敲门」"""
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+        rejected_contacts = 1
+
+    worker = _silence_worker(tmp_path, clock, _Endpoint(), web_active=False)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        clock.advance(3601.0)
+        worker._check_channel_silence()
+    assert any("被拒" in m for m in cap.messages), cap.messages
+
+
+def test_silence_hours_value_uses_3600(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Endpoint:
+        last_contact_ts = clock() - 650000.0
+        rejected_contacts = 0
+
+    worker = _silence_worker(tmp_path, clock, _Endpoint(), web_active=True)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._check_channel_silence()
+    assert any("180.6h" in m for m in cap.messages), cap.messages
+
+
+def test_silence_event_tag_sets_domain(tmp_path, monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+        rejected_contacts = 0
+
+    worker = _silence_worker(tmp_path, clock, _Endpoint(), web_active=True)
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        clock.advance(3601.0)
+        worker._check_channel_silence()
+    recs = [r for r in cap.records if "[HR 通道静默]" in r.getMessage()]
+    assert len(recs) == 1
+    assert getattr(recs[0], DOMAIN_ATTR) == events.DOMAIN_CHANNEL
+
+
+def test_loop_startup_publish_failure_logs_traceback(tmp_path, monkeypatch):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=0.05)
+
+    def boom(_results):
+        raise RuntimeError("读盘失败")
+
+    monkeypatch.setattr(worker, "_build_views", boom)
+
+    def stop_after_one():
+        with worker._cond:
+            worker._stopped = True
+        return []
+
+    monkeypatch.setattr(worker, "run_once", stop_after_one)
+    with capture_logs("auto_qb.hr.worker", logging.ERROR) as cap:
+        worker._loop()
+    assert any("启动时发布既有视图失败" in m for m in cap.messages), cap.messages
+    assert all(isinstance(r.exc_info, tuple) for r in cap.records), "要带堆栈(exc_info=True)"
+
+
+def test_loop_round_exception_logs_traceback(tmp_path, monkeypatch):
+    service = _service(tmp_path, FakeFetcher(pages={}))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=0.05)
+
+    def boom():
+        with worker._cond:
+            worker._stopped = True
+        raise RuntimeError("单轮炸了")
+
+    monkeypatch.setattr(worker, "run_once", boom)
+    with capture_logs("auto_qb.hr.worker", logging.ERROR) as cap:
+        worker._loop()
+    assert any("单轮异常" in m for m in cap.messages), cap.messages
+    assert all(isinstance(r.exc_info, tuple) for r in cap.records), "要带堆栈(exc_info=True)"
+
+
+def test_loop_waits_for_poll_interval(tmp_path):
+    """没被唤醒就不该多跑 —— 等待谓词若失效会退化成忙等(rounds 疯涨)"""
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)))
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    worker.start()
+    try:
+        assert _wait_until(lambda: worker.rounds >= 1, timeout=10.0)
+        time.sleep(0.4)
+        assert worker.rounds == 1, "poll_interval=60s, 0.4s 内不该再跑"
+    finally:
+        worker.stop(timeout=5.0)
