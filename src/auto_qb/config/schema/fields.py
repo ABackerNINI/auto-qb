@@ -83,6 +83,12 @@ class Field:
                   留空则前端回退到该 kind 的第一个单位; 常见值可由默认值后缀直接读出
                   (如 default="3D" -> D), 只有需要偏离默认值后缀时才显式声明
                   (如 extra_seeding_time 的 default 为 0S, 但用户习惯从 H 开始填)。
+    hidden:     暂不图形化(2026-10-10): 键仍在配置契约里 —— 校验层接受、loader 读取、存量
+                配置里的值原样保留 —— 只是设置页不渲染它(前端 cfgFlatten 跳过)。用于"键合法
+                但在 UI 上表达不出有效差异"的字段(如 v1 的 notify.channels: 渠道值域只有
+                platform 一档且等于缺省, 勾选/取消两个方向都没有可观测差异; 取消还会写出
+                校验层拒绝的空列表)。**不要拿它表达"改了风险大"**(那是 risk 文案的职责),
+                也不要拿它替掉校验层的键(那样存量配置会变成未知键)。
     tri_state:   三态键(report 26-10-03-0504 方案 B 阶段 1): True = 该键的显式空串('')是合法值,
                  不被 _strip_none 当作「未配置」剥掉。仅对**站点段回退链键**有意义 —— 站点 hr 段里
                  '' = 「覆盖为空」(如本站不打标), 键缺失 = 跟随全局; 全局段同名键的 '' 语义仍是
@@ -112,6 +118,7 @@ class Field:
     unit_default: str = ""
     open: bool = False  # object 段缺省展开态(True = 平铺不渲染折叠头; 现 schema 仅 hr_check 段在用)
     readonly: bool = False  # 程序托管字段: 见类 docstring —— 前端禁用渲染 + writer 写盘回退防线共用此标
+    hidden: bool = False  # 暂不图形化: 见类 docstring —— 键仍在配置契约里, 只是不进设置页渲染
     tri_state: bool = False  # 三态键(站点级「覆盖为空」): 见类 docstring —— _strip_none 豁免按此标派生
 
 

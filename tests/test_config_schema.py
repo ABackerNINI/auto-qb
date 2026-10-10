@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_top_level_keys_match_validation: schema 顶层键集合 == KNOWN_CONFIG_KEYS(防漏登记配置键)
 - test_object_section_keys_match_validation: 各对象段子键集合 == 对应 KNOWN_*_KEYS
+- test_notify_channels_hidden_from_ui_but_kept_in_contract: notify.channels 暂不图形化(2026-10-10 报障: 取消勾选写空列表 → 脏标记不消 + 保存被"必须是非空列表"拒) —— schema 保留该字段且打 hidden(键面守卫以 schema 为单点, 摘字段 = 判删键)/ hidden 声明面恰好一处 / KNOWN_NOTIFY_KEYS 仍有该键(存量配置合法)/ 校验仍接受 platform 条目、仍拒绝空列表
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
 - test_hr_sites_fields_match_validation: hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS
@@ -115,6 +116,50 @@ def test_object_section_keys_match_validation(top_key, known):
     sub = {"channel": schema.HR_CHECK_CHANNEL_FIELDS}.get(top_key)
     got = _field_map(sub) if sub is not None else _nested(top_key)
     assert set(got) == known
+
+
+def test_notify_channels_hidden_from_ui_but_kept_in_contract():
+    """notify.channels: 暂不图形化(2026-10-10 报障), 但配置契约一环都不能少 —— 四面各一条
+
+    背景: v1 渠道值域只有 platform 一档, 而 loader 缺省即 ["platform"], 于是设置页那个
+    keyed_list 勾选框两个方向都表达不出有效差异 —— 勾选只是写一条与缺省等价的键; 取消
+    则写空列表, 既与"键缺失"不同构(全树 JSON 对比的脏标记消不掉, 用户看到"勾了又取消
+    仍提示有改动未保存"), 又被校验层以「必须是非空列表」拒绝保存。处置 = 打 Field.hidden
+    (不进 UI 渲染), **不是**从 schema 摘字段。
+
+    四面(少一条就会以另一种方式复发):
+    1. schema 的 notify 子字段里**仍有** channels 且 hidden=True —— 键面守卫
+       (test_config_key_surface)以 schema 为键面单点, 直接摘字段会被判成"删键"(破坏性变更:
+       抬版本 + 注册迁移), 而本次根本没有改配置契约;
+    2. hidden 的声明面恰好是这一处 —— 该标记是"键合法但 UI 表达不出差异"的专用口, 别拿它
+       藏别的字段(藏了等于配置项静默消失, 用户再也改不到);
+    3. KNOWN_NOTIFY_KEYS 仍有 channels —— 存量配置里已落盘的这个键必须仍然合法, 从校验层
+       摘掉 = 老配置启动即报"未知键"(比原报障严重得多);
+    4. 校验仍接受 `- platform: {}`、仍拒绝空列表 —— 前者是存量配置形态, 后者是本次报障的
+       保存报错面(放开空列表是另一件事, 需要先给出"空 = 一个渠道都不选"的语义)。
+    """
+    from auto_qb.config.validation import validate_config
+
+    sub = _nested("notify")
+    assert "channels" in sub, ("schema 的 notify 段没了 channels —— 键面守卫会把它判成删键(破坏性变更), 本次只是暂不图形化")
+    assert sub["channels"].hidden is True, "notify.channels 未打 hidden —— 它在 UI 上表达不出有效差异(见报障 2026-10-10)"
+
+    hidden = []
+    for top in schema.real_config_fields():
+
+        def walk(fields):
+            for f in fields:
+                if f.hidden:
+                    hidden.append(f.key)
+                walk(f.fields or ())
+
+        walk((top, ))
+    assert sorted(hidden) == ["channels"], f"hidden 声明面变了({sorted(hidden)}) —— 该标记只用于'键合法但 UI 表达不出差异'"
+
+    assert "channels" in KNOWN_NOTIFY_KEYS, "KNOWN_NOTIFY_KEYS 丢了 channels —— 存量配置里的该键会变成'未知键'"
+    assert validate_config({"config": {"notify": {"channels": [{"platform": {}}]}}}) == []
+    errs = validate_config({"config": {"notify": {"channels": []}}})
+    assert any("config.notify.channels: 必须是非空列表" in e for e in errs), errs
 
 
 def test_tracker_fields_match_validation():

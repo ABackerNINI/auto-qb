@@ -22,6 +22,8 @@
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
+- test_frontend_flatten_skips_hidden_fields: 静态守阵 —— cfgFlatten 必须 `if (f.hidden) continue`(两套 UI 同源于此函数; 不跳过 = 隐藏字段照旧渲染, 报障复发)
+- test_frontend_keyed_list_toggle_deletes_key_when_emptied: 静态防回潮 —— keyed_list 的 toggleKey 取消最后一项必须 cfgDelPath 删键(写空列表 = 脏标记消不掉 + 保存被"必须是非空列表"拒, 2026-10-10 报障), cfgSetPath 必须挂长度守卫
 - test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -1015,6 +1017,44 @@ def test_frontend_hub_field_renders_readonly_fields():
         assert "b.item.field && b.item.field.readonly" in html, (
             f"{skin} 的 settings-detail 块级 section 开关未对 readonly 段收口 —— fs 段可从 UI 整段删除"
         )
+
+
+def test_frontend_keyed_list_toggle_deletes_key_when_emptied():
+    """keyed_list 勾选框取消**最后一项**必须删键, 不能写空列表(静态防回潮)
+
+    现象(2026-10-10 报障, notify.channels 是当时唯一用上该 kind 的字段): toggleKey 把最后
+    一项 splice 掉后仍 `cfgSetPath(path, [])` —— 两个后果同源:
+    ① 空列表与"键缺失"**不同构**, 而脏标记是全树 JSON 对比(cfgDirty), 于是「勾选再取消」
+       之后照样提示"有改动还没保存", 界面上却看不出任何差异(用户无从自救);
+    ② 空列表过不了后端校验(config.notify.channels: 必须是非空列表), 保存必败 —— 报错里还
+       带一个临时文件路径, 用户看不到是哪一项有问题。
+
+    定稿口径 = 与同文件 cfgItemRemove 一致: 清空即 cfgDelPath(删键 = 回到"未配置"), 勾选再
+    取消因此是零副作用的可逆操作。本守阵钉住: 写回必须挂在长度守卫里, 空则走删键。
+    """
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    m = re.search(r"toggleKey\(name\)\s*\{(.*?)\n    \},", editor, re.S)
+    assert m, "config_editor.js 里找不到 toggleKey(name)(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "cfgDelPath(this.path)" in body, ("toggleKey 取消最后一项时未删键 —— 写空列表会让脏标记消不掉, 且保存被后端「必须是非空列表」拒")
+    assert re.search(r"if \(list\.length\) this\.ce\.cfgSetPath\(this\.path, list\);",
+                     body), ("toggleKey 的 cfgSetPath 未挂长度守卫 —— 空列表会原样写回树(见 cfgItemRemove 的同口径写法)")
+
+
+def test_frontend_flatten_skips_hidden_fields():
+    """schema Field.hidden(暂不图形化)必须在 cfgFlatten 里被跳过(静态守阵)
+
+    背景(2026-10-10 报障, notify.channels 是第一个用到它的字段): 键合法但 UI 表达不出有效
+    差异时, 正确处置是打 hidden 让设置页不渲染 —— **不是**从 schema 摘字段(键面守卫以 schema
+    为键面单点, 摘了会被判成删键, 要走抬版本 + 注册迁移的破坏性流程)。而 hidden 只有在
+    cfgFlatten 里跳过才真的生效: 两套 UI 的 hub 页与经典设置页都由它供给渲染项, 漏了这条
+    skip = 字段照样出现在界面上, 报障原样复发。
+    """
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    m = re.search(r"cfgFlatten\(fields, basePath, depth, ownerPath[^\n]*\n(.*?)\n      const byKey", editor, re.S)
+    assert m, "config_editor.js 里找不到 cfgFlatten 的分组循环(改名或挪走了? 同步本守阵)"
+    assert "f.hidden" in m.group(1), ("cfgFlatten 未跳过 f.hidden —— 打了 hidden 的字段仍会渲染进设置页(两套 UI 同源于此函数)")
+    assert re.search(r"if \(f\.hidden\) continue;", m.group(1)), "hidden 的跳过必须是 continue(整项不进渲染项表)"
 
 
 def test_frontend_statusbar_speed_reads_server_totals():

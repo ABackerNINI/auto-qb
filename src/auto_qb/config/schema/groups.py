@@ -231,6 +231,15 @@ GROUPS: Tuple[Group, ...] = (
                         grey_if=("enabled", "true"),
                         help="该窗口内「同一来源 + 同级别 + 消息开头 80 字相同」的通知只推第一条, 避免重复轰炸; 0 = 不去重",
                     ),
+                    # notify.channels(通知渠道)暂不图形化(2026-10-10 报障): v1 渠道值域只有
+                    # platform 一档, 而 loader 缺省即 ["platform"] —— 设置页的勾选框两个方向都
+                    # 表达不出有效差异: 勾选 = 写一条与缺省等价的键; 取消 = 写空列表, 既与"键
+                    # 缺失"不同构(脏标记消不掉), 又被校验层以「必须是非空列表」拒绝保存。
+                    # 故打 hidden 而不是从 schema 摘掉: 键仍在配置契约里(校验接受 / loader 读 /
+                    # 存量配置里的值原样保留), 只是不进设置页渲染 —— 摘掉会被键面守卫判成"删键"
+                    # (破坏性变更, 要抬版本 + 写迁移)。等多渠道(webhook/邮件/Telegram, 想法.md)
+                    # 落地: 去掉 hidden 即可恢复(那时空列表才有"一个都不选"的语义, 且要同步放开
+                    # 校验层的非空约束)。
                     Field(
                         "channels",
                         "通知渠道",
@@ -238,6 +247,7 @@ GROUPS: Tuple[Group, ...] = (
                         default=["platform"],
                         options=NOTIFY_CHANNELS,
                         grey_if=("enabled", "true"),
+                        hidden=True,
                         help="当前仅支持系统原生通知(Windows/macOS/Linux)"
                     ),
                 )

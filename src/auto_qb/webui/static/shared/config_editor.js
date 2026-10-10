@@ -471,6 +471,9 @@ window.CONFIG_EDITOR = {
       const inlineChildren = new Map();
       const roots = [];
       for (const f of fields) {
+        // 暂不图形化(schema Field.hidden): 键仍在配置契约里(校验接受 / loader 读 / 存量值保留),
+        // 只是不进设置页 —— 在这里单点跳过, 两套 UI 的 hub 页与经典设置页同时生效
+        if (f.hidden) continue;
         if (allowGrouping && f.group_of) {
           const bucket = f.kind === "bool" ? inlineChildren : children;
           if (!bucket.has(f.group_of)) bucket.set(f.group_of, []);
@@ -1358,13 +1361,19 @@ window.CE_FIELD_BASE = {
       const v = this.ce.cfgRaw(this.path);
       return Array.isArray(v) && v.some((it) => it && typeof it === "object" && name in it);
     },
+    /* 取消勾选**最后一项**时必须删键, 不能写空列表(2026-10-10 报障, 与 cfgItemRemove 同口径):
+     * ① 空列表与"键缺失"不同构 —— 全树 JSON 对比的脏标记认它是改动, 「勾选再取消」后仍提示
+     *    "有改动还没保存", 且这一改动在 UI 上没有任何可见痕迹;
+     * ② 空列表过不了后端校验(notify.channels 要求非空), 保存必败且用户无法从界面自救。
+     * 删键 = 回到"未配置"(后端走缺省), 勾选再取消因此是零副作用的可逆操作。 */
     toggleKey(name) {
       const v = this.ce.cfgRaw(this.path);
       const list = Array.isArray(v) ? [...v] : [];
       const idx = list.findIndex((it) => it && typeof it === "object" && name in it);
       if (idx >= 0) list.splice(idx, 1);
       else list.push({ [name]: {} });
-      this.ce.cfgSetPath(this.path, list);
+      if (list.length) this.ce.cfgSetPath(this.path, list);
+      else this.ce.cfgDelPath(this.path);
     },
   },
 };
