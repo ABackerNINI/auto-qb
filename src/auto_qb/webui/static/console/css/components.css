@@ -340,17 +340,22 @@
 .member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
 .member-row.error .cat-chip { background: var(--error-soft); color: var(--error); }
 
-/* 挂件点击即筛选(2026-09-29): 与 atlas/components.css 同口径 —— 站点/标签/分类胶囊与路径、
- * 明细站点单元格可点, 点击 = 切换顶栏筛选弹层里的对应值; f-on = 该值已在筛选中
- * (currentColor 环随状态色; 本皮肤 site-chip 有 clip-path 切角, 故环一律用 inset 不被裁)。 */
+/* 挂件点击即筛选(2026-09-29): 与 atlas/views.css 同口径 —— 站点/标签/分类胶囊与路径、
+ * 明细站点单元格可点, 点击 = 切换顶栏筛选弹层里的对应值; f-on = 该值已在筛选中,
+ * 强调一律用**笔直横线**(currentColor 底线; 绝对定位 ::after 画直线而非 inset box-shadow ——
+ * box-shadow 会沿 border-radius 画成弧; 本皮肤 site-chip 有 clip-path 切角, ::after 一并被它裁)。
+ * 胶囊与文本格已统一为同一条 2px 底线)。 */
 .site-chip, .tag-chip, .cat-chip { cursor: pointer;
   transition: background var(--dur) var(--ease), filter var(--dur-fast) var(--ease),
     box-shadow var(--dur-fast) var(--ease); }
 .site-chip:hover, .tag-chip:hover, .cat-chip:hover { filter: brightness(1.12); }
-.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on { box-shadow: inset 0 0 0 1.5px currentColor; }
+.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on, .f-cell.f-on { position: relative; overflow: hidden; }
+.site-chip.f-on::after, .tag-chip.f-on::after, .cat-chip.f-on::after, .f-cell.f-on::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: currentColor; pointer-events: none; }
 .f-cell { cursor: pointer; border-radius: var(--radius-sm, 4px); }
 .f-cell:hover { background-image: linear-gradient(rgba(127, 127, 127, .16), rgba(127, 127, 127, .16)); }
-.f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor; font-weight: 600; }
+.f-cell.f-on { font-weight: 600; }
 
 /* ± / 多分类 = 组内该字段不一致: 中性低调 */
 .diff-mark { flex: 0 0 auto; padding: 0 5px; background: var(--surface-2);

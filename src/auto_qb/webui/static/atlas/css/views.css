@@ -131,14 +131,19 @@ select option { background: var(--bg-elev); color: var(--fg); }
   transform: translateY(-1px); }
 /* 挂件点击即筛选(2026-09-29): 站点/标签/分类胶囊与路径、明细站点单元格可点 —— 点击 = 切换
  * 顶栏筛选弹层里的对应值(再点一次取消, 与弹层同一多选语义); f-on = 该值已在筛选中,
- * 环用 currentColor 自动跟随各状态色/HR 色变体(inset 环不被 console 皮肤的 clip-path 裁掉)。
- * 过渡复用上方 chip 基线(已含 filter/box-shadow)。 */
+ * 强调一律用**笔直横线**(currentColor 底线, 自动跟随各状态色/HR 色变体)。用绝对定位 ::after
+ * 画直线而非 inset box-shadow —— box-shadow 会沿 border-radius 画成弧(胶囊两端翘起);
+ * ::after 直线配合 overflow:hidden 由圆角裁边, 线体恒直, 也不改布局(绝对定位不动流)。
+ * 胶囊与文本格此前厚度不一(1.5px / 1px 环), 现已统一为同一条 2px 底线。 */
 .site-chip, .tag-chip, .cat-chip { cursor: pointer; }
 .site-chip:hover, .tag-chip:hover, .cat-chip:hover { filter: brightness(1.12); }
-.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on { box-shadow: inset 0 0 0 1.5px currentColor; }
+.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on, .f-cell.f-on { position: relative; overflow: hidden; }
+.site-chip.f-on::after, .tag-chip.f-on::after, .cat-chip.f-on::after, .f-cell.f-on::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: currentColor; pointer-events: none; }
 .f-cell { cursor: pointer; border-radius: var(--radius-sm, 4px); }
 .f-cell:hover { background-image: linear-gradient(rgba(127, 127, 127, .16), rgba(127, 127, 127, .16)); }
-.f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor; font-weight: 600; }
+.f-cell.f-on { font-weight: 600; }
 /* 进度条填充: 数值变化平滑过渡, 不再瞬间跳变 */
 .m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
 /* 可折叠箭头的展开回弹 */
@@ -395,9 +400,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 
-/* 路径筛选强调框(f-on 的 inset 描边)必须落 .sp-body 文字包裹层 —— 落单元格 div 上框随列宽
- * (行是 grid, 单元格被拉满列宽; 2026-10-09 报障), 与 .m-dur 的 .dur-body 同一教训。
- * 省略号职责随框走: 超长路径铺满整列并省略, 不破列; 短路径时框贴文字。 */
+/* 路径筛选选中底线(f-on 的 ::after)必须落 .sp-body 文字包裹层 —— 落单元格 div 上
+ * 线随列宽(行是 grid, 单元格被拉满列宽; 2026-10-09 报障, 强调由"框"改"下划线"后同理),
+ * 与 .m-dur 的 .dur-body 同一教训。省略号职责随线走: 超长路径铺满整列并省略, 不破列;
+ * 短路径时线贴文字。 */
 .g-save-path .sp-body { display: inline-block; max-width: 100%; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 
