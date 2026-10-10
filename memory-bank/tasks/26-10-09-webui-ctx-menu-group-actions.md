@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09
 **Summary:** 用户报「辅种页单组右键菜单缺选项, 参考选中多组时右键菜单」。根因: `shared/tpl/ctx-menus.html` 右键菜单分四支, 其中 `menu.multi`(多选批量)分支 10 项, 而 `v-else`(单组)分支只有 开始/暂停/汇报 + 打开文件夹/流量图/删除 —— 同一批动作在「右键 1 组」与「Ctrl 选 2 组」两条路径上项集不一致。修法: 单组分支按批量菜单同序同图标补 6 项(重新校验/跳检/限速/移动/标签分类/导出), 目标 = 该组全部成员(`_groupTargets`), 下游整份复用多选链路(bulk 合单 / `_skipCheckDialog` / `_exportHashes` / `openMetaDialog`), 不为组级另开旁路。新增守阵 `test_frontend_ctx_menu_group_actions_parity`; 同步放宽 `skipCheckMulti` 的签名锚定(可选参)。实测数字见 `commands run kb.baseline`。
 **Topics:** webui-ctx-menu-group-actions
-**Refs:** memory-bank/pitfalls/web-ui/ctx-menu-branch-parity.md,memory-bank/testing/baselines/26-10-09-0933-webui-ctx-menu-group-actions.md,memory-bank/activeContext/26-10-09-0933-webui-ctx-menu-group-actions.md
+**Refs:** memory-bank/pitfalls/web-ui/ctx-menu-branch-parity.md,memory-bank/testing/baselines/26-10-09-0933-webui-ctx-menu-group-actions.md
 
 ## 原始请求
 

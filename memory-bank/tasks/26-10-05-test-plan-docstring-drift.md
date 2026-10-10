@@ -6,7 +6,7 @@
 **Topics:** test-plan-docstring-drift
 **Summary:** 认领 issue 26-10-05-0922 (docs 便签档: tests/test_config_schema.py 头部清单列着已删用例)。复验仍复现; 按 issue 建议「顺手 grep 其他测试文件」把范围扩到全 tests/ —— 79 份带「## 测试计划」的文件里, 11 份 / 21 条清单条目指向全仓不存在的函数(幽灵条目)。逐条裁决「有明确后继则改名 / 无后继则删除」: 改名或合并 15 条 · 删除 5 条 · 跨文件指针修正 1 条, 另补登 2 条漏登用例。只改 docstring, 不动测试代码。复扫幽灵 0 条; test.full **2603 passed + 4 skipped / 99%**。
 
-**Refs:** memory-bank/issues/26-10-05-0922-docs-config-schema-docstring-drift.html, memory-bank/testing/baselines/26-10-05-0945-test-plan-docstring-drift.md, memory-bank/activeContext/26-10-05-0945-test-plan-docstring-drift.md
+**Refs:** memory-bank/issues/26-10-05-0922-docs-config-schema-docstring-drift.html, memory-bank/testing/baselines/26-10-05-0945-test-plan-docstring-drift.md
 
 ## 原始请求
 

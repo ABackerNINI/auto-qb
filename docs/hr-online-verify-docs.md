@@ -26,8 +26,8 @@
 | 09-25 #16 | [hr-v30-source-priority.md](../memory-bank/testing/baselines/26-09-25-0000-hr-v30-source-priority.md) | 测试基线 | 1602(+1): v3.0 达标判定「档位即结论」(`satisfied_verdict` 来源优先级), +2 守阵 | backend-partial-hr-verify |
 | 09-25 18:23 | [plan-webui-hr-safety-display.html](../memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html) | 计划 | HR 在线核实的 WEB UI 呈现: 删除安全档位 × 来源档位(着色/徽标/删除确认点名/筛选/批量统计) | webui-hr-safety-display |
 | 09-25 #17 | [webui-hr-safety-display.md](../memory-bank/testing/baselines/26-09-25-0000-webui-hr-safety-display.md) | 测试基线 | 1607(+1): 安全档位呈现落地; 双 UI 浏览器冒烟 94 项全过 | webui-hr-safety-display |
-| 09-25 19:14 | [activeContext/…webui-hr-safety-display.md](../memory-bank/activeContext/26-09-25-1914-webui-hr-safety-display.md) | 活动切片 | 安全档位呈现收尾切片(已入库 441ffe4) | webui-hr-safety-display |
-| 09-25 20:15 | [activeContext/…webui-hr-site-blank-screen.md](../memory-bank/activeContext/26-09-25-2015-webui-hr-site-blank-screen.md) | 活动切片 | 故障切片: 站点接入后 `hr.js` 三处漏 `this.` 致 Vue 整树白屏, 修复入库 c00fc94 | webui-hr-safety-display |
+| 09-25 19:14 | [任务档案](../memory-bank/tasks/26-09-25-webui-hr-safety-display.md) | 活动切片 | 安全档位呈现收尾切片(已入库 441ffe4) | webui-hr-safety-display |
+| 09-25 20:15 | [progress·白屏修复条目](../memory-bank/progress/implemented-core.md) | 活动切片 | 故障切片: 站点接入后 `hr.js` 三处漏 `this.` 致 Vue 整树白屏, 修复入库 c00fc94 | webui-hr-safety-display |
 | 09-25 20:43 | [plan-webui-hr-popup-t1-spec-card.html](../memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) | 计划 | HR 悬停弹窗模板三选一 · T1 档案卡 | webui-hr-popup |
 | 09-25 20:43 | [plan-webui-hr-popup-t2-verdict-card.html](../memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html) | 计划 | HR 悬停弹窗模板三选一 · T2 结论卡 | webui-hr-popup |
 | 09-25 20:43 | [plan-webui-hr-popup-t3-progress-ledger.html](../memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html) | 计划 | HR 悬停弹窗模板三选一 · T3 进度仪表(最终定稿) | webui-hr-popup |
@@ -38,25 +38,25 @@
 | 09-26 00:31 | [plan-hr-ext-options-style.html](../memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html) | 计划 | HR 取数代理扩展选项页风格选型(三选一) | backend-partial-hr-verify |
 | 09-26 00:31 | [hr-safety-rework.md](../memory-bank/testing/baselines/26-09-26-0031-hr-safety-rework.md) | 测试基线 | 1629: 两线合流重测——HR 未达标红档语义修正(+0 改 4 处守阵) × 扩展选项页终态(+1) | backend-partial-hr-verify |
 | 09-26 00:31 | [ext-options-terminal.md](../memory-bank/testing/baselines/26-09-26-0031-ext-options-terminal.md) | 测试基线 | 扩展选项页终态基线(与 hr-safety-rework 同点, 次级键定序) | backend-partial-hr-verify |
-| 09-26 02:24 | [activeContext/…hr-popup.md](../memory-bank/activeContext/26-09-26-0224-hr-popup.md) | 活动切片 | HR 悬停弹窗 T3 落码收尾切片(随 09-26 提交入库) | webui-hr-popup |
+| 09-26 02:24 | [任务档案](../memory-bank/tasks/26-09-26-webui-hr-popup.md) | 活动切片 | HR 悬停弹窗 T3 落码收尾切片(随 09-26 提交入库) | webui-hr-popup |
 | 09-26 04:25 | [single-line-hr-v34.md](../memory-bank/testing/baselines/26-09-26-0425-single-line-hr-v34.md) | 测试基线 | 1638(+1): v3.4 缺口——HR D 档已免罪来源单列 | backend-partial-hr-verify |
 | 09-26 08:20 | [hr-popup-t3.md](../memory-bank/testing/baselines/26-09-26-0820-hr-popup-t3.md) | 测试基线 | 1666: HR 悬停弹窗 T3 落码(原生 title 换进度仪表浮层, `shared/hr.js` 单点); 合并工作树重测 | webui-hr-popup |
 | 09-26 | [26-09-26-webui-hr-popup.md](../memory-bank/tasks/26-09-26-webui-hr-popup.md) | 任务档案 | HR 悬停弹窗任务档案(做种时长/来源徽标 hover popover, T3 定稿) | webui-hr-popup |
 | 09-26 16:28 | [report-hr-online-verify-audit.html](../memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html) | 审计报告 | HR 在线核实设计审查: 触发模型 / 访问节奏 / 安全可靠性(此报告后转化为 09-27-1815 修改计划) | backend-partial-hr-verify |
 | 09-26 16:33 | [hr-audit-report.md](../memory-bank/testing/baselines/26-09-26-1633-hr-audit-report.md) | 测试基线 | 1666(持平): 审查报告落盘纯文档轮, 验证报告通过文档形态守阵 | backend-partial-hr-verify |
-| 09-27 12:35 | [activeContext/…backend-hr-carpt-site.md](../memory-bank/activeContext/26-09-27-1235-backend-hr-carpt-site.md) | 活动切片 | CarPT 接入收尾: v3.5 经用户样张验证; 挖出「H&R ID 与种子 id 是两个 id 空间」真缺陷已修(`HrEntry.dl_id`) | backend-partial-hr-verify |
+| 09-27 12:35 | [progress·CarPT 条目](../memory-bank/progress/implemented-core.md) | 活动切片 | CarPT 接入收尾: v3.5 经用户样张验证; 挖出「H&R ID 与种子 id 是两个 id 空间」真缺陷已修(`HrEntry.dl_id`) | backend-partial-hr-verify |
 | 09-27 12:35 | [hr-carpt-adapter.md](../memory-bank/testing/baselines/26-09-27-1235-hr-carpt-adapter.md) | 测试基线 | 1693: CarPT 变体 adapter(`?status=N` + H&R ID 十列表头), NexusPhpMyhrAdapter 参数化 | backend-partial-hr-verify |
 | 09-27 12:46 | [hr-carpt-dlid.md](../memory-bank/testing/baselines/26-09-27-1246-hr-carpt-dlid.md) | 测试基线 | 1693: CarPT status=2 已达标样张(17 行)验证通过 + dl_id 修复 | backend-partial-hr-verify |
 | 09-27 12:54 | [post-merge-hr-carpt.md](../memory-bank/testing/baselines/26-09-27-1254-post-merge-hr-carpt.md) | 测试基线 | 1693: 合并远端(webui 模板共享化)后重测, 数字零漂移 | backend-partial-hr-verify |
 | 09-27 13:18 | [plan-hr-check-site-presets.html](../memory-bank/plans/26-09-27-1318-plan-hr-check-site-presets.html) | 计划 | HR 在线核实配置收敛: 内置站点档案(`config/site_presets.py`) + 站点配置上收 `hr_check.sites` 分区 | hr-check-site-presets |
 | 09-27 14:20 | [hr-site-presets.md](../memory-bank/testing/baselines/26-09-27-1420-hr-site-presets.md) | 测试基线 | 1700: 配置收敛三里程碑落地(btschool/carpt 两档内置档案, 键 = 档案 id 点选启用) | hr-check-site-presets |
-| 09-27 15:23 | [activeContext/…hr-site-presets.md](../memory-bank/activeContext/26-09-27-1523-hr-site-presets.md) | 活动切片 | 配置收敛收尾切片(plans 1318 REV2 全部落地: 后端 + 配置面/UI + 文档) | hr-check-site-presets |
+| 09-27 15:23 | [progress·站点配置收敛条目](../memory-bank/progress/implemented-core.md) | 活动切片 | 配置收敛收尾切片(plans 1318 REV2 全部落地: 后端 + 配置面/UI + 文档) | hr-check-site-presets |
 | 09-27 15:47 | [report-docs-implementation-audit.html](../memory-bank/reports/26-09-27-1547-report-docs-implementation-audit.html) | 审计报告 | 全库 plans/reports 实施状态清点与漂移审计(含 HR 线清点: 只差真机走查; 弹窗 T1/T2 状态漂移等) | 全库(含 HR) |
-| 09-27 15:47 | [activeContext/…docs-implementation-audit.md](../memory-bank/activeContext/26-09-27-1547-docs-implementation-audit.md) | 活动切片 | 上述清点审计的过程切片(61 计划 + 13 报告交叉核对) | 全库(含 HR) |
+| 09-27 15:47 | [审计报告](../memory-bank/reports/26-09-27-1547-report-docs-implementation-audit.html) | 活动切片 | 上述清点审计的过程切片(61 计划 + 13 报告交叉核对) | 全库(含 HR) |
 | 09-27 18:15 | [plan-hr-verify-audit-fixes.html](../memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) | 计划 | **在线核实 v2**: 审计报告转修改计划——M5.1–M5.5 实施拆解 + P1/P2/P3 修复落点 + 10 项待拍板 | backend-partial-hr-verify |
 | 09-27 18:38 | [hr-verify-audit-plan.md](../memory-bank/testing/baselines/26-09-27-1838-hr-verify-audit-plan.md) | 测试基线 | 1742(+3 skipped): 审计报告转修改计划轮(纯文档, 代码零改动) | backend-partial-hr-verify |
 | 09-27 19:30 | [plan-hr-binding-tracker-mapping.html](../memory-bank/plans/26-09-27-1930-plan-hr-binding-tracker-mapping.html) | 计划 | HR 站点绑定改映射制: web 域与 announce 域两命名空间永不互相比对, 双域档案 + 已知映射零配置 + 旧键迁移 v1→v2 | hr-binding-tracker-mapping |
-| 09-27 20:22 | [activeContext/…hr-binding-tracker-mapping.md](../memory-bank/activeContext/26-09-27-2022-hr-binding-tracker-mapping.md) | 活动切片 | 映射制实施完成 + 写回事故修复 + config 迁移物化重构落地 | hr-binding-tracker-mapping |
+| 09-27 20:22 | [HR 主档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md) | 活动切片 | 映射制实施完成 + 写回事故修复 + config 迁移物化重构落地 | hr-binding-tracker-mapping |
 | 09-27 20:22 | [hr-binding-tracker-mapping.md](../memory-bank/testing/baselines/26-09-27-2022-hr-binding-tracker-mapping.md) | 测试基线 | 1752(+3): 映射制轮落地(档案双域硬编码 + 默认映射查表 + 迁移) | hr-binding-tracker-mapping |
 | 09-27 20:35 | [hr-m5-implemented.md](../memory-bank/testing/baselines/26-09-27-2035-hr-m5-implemented.md) | 测试基线 | 1796(+3): **M5.1–M5.5 全部落地, 在线核实 v2 代码侧完成**(判据观测/信号处置与停用/配额拆分双令牌桶等) | backend-partial-hr-verify |
 | 09-27 | [26-09-27-config-hr-binding-mapping.md](../memory-bank/tasks/26-09-27-config-hr-binding-mapping.md) | 任务档案 | HR 绑定映射制任务档案(含旧键迁移 v1→v2) | hr-binding-tracker-mapping |
@@ -118,7 +118,7 @@
 
 ## 四、阅读路径建议
 
-- **想了解功能全貌**: 先读 [任务档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md)(主档案, 全程记录), v3 重构后的复审现状见 [activeContext 切片 26-09-29-0404](../memory-bank/activeContext/26-09-29-0404-hr-verify-v3-audit.md)。
+- **想了解功能全貌**: 先读 [任务档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md)(主档案, 全程记录), v3 重构后的复审现状见 [审计报告](../memory-bank/reports/26-09-29-0404-report-hr-verify-v3-audit.html)。
 - **想了解为什么这么设计**: 计划 [26-09-22-2204](../memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html)(初版) → 审计 [26-09-26-1628](../memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html) → v2 计划 [26-09-27-1815](../memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html)。
 - **想知道 v2 之后还有什么没做**: 最新审计 [26-09-28-0030](../memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) 的 F1–F4 待拍板项。
 - **想配置/接入新站点**: [docs/configuration.md](configuration.md) 的 `hr_check` 节 + [extensions/hr-fetch-proxy/README.md](../extensions/hr-fetch-proxy/README.md)。

@@ -6,7 +6,7 @@
 **Topics:** drawer-tpl, a11y, roving-tabindex, keyboard-nav
 **Summary:** content 组 dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk]/体积榜行 [data-row] 纯 div+click, 键盘/读屏不可达(修复轮 26-10-07-webui-detail-panel-audit-fixes P3-4 缩围转来的已记未做项)。修法 = issue 建议候选① roving tabindex, 单点收口在核心层 reg.helpers 四件套(roving 锚点 / rowFocusKey 记账 / rowRestore 回焦 / rowMove 移焦), 整行不加 role=button(行内已含原生控件, 嵌套交互语义更糟)。守阵: test_web.py 新增 test_drawer_tpl_content_row_keyboard_roving。
 
-**Refs:** memory-bank/issues/26-10-07-0846-feat-webui-content-row-keyboard.html,memory-bank/activeContext/26-10-07-1003-webui-content-row-keyboard.md,memory-bank/testing/baselines/26-10-07-1003-webui-content-row-keyboard.md
+**Refs:** memory-bank/issues/26-10-07-0846-feat-webui-content-row-keyboard.html,memory-bank/testing/baselines/26-10-07-1003-webui-content-row-keyboard.md
 
 ## 原始请求
 

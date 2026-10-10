@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09 16:35
 **Topics:** webui-selection
 **Summary:** 用户命题三件套(辅种页 + 类推追剧页): ①成员行「站点」列去掉代表状态的小方框(只留站点名); ②成员行选中视觉与种子页选中种子同形(柔底 + 左色条); ③组↔成员选中**双向联动**且真改写选中数据 —— 组选中 ⇒ 成员全选(`_selAddGroup` 把组 key 与成员 hash 一起写入), 成员全选 ⇒ 组入选(`_selSyncGroups` 回扫), 撤到不全 ⇒ 组移出。连带修两个消费端口径: `selectedCount` 改走 `selHashSet.size` 去重(组 key 与其成员 hash 同时在集合里)、`_bulkTargets` 剔除已被选中组覆盖的成员 hash(否则同一目标既发组命令又发成员命令)。**补选/降级分治**: 补选只在组数据为当前视图权威的视图做(viewMode !== "torrents" —— 种子页不回 groups, `decoratedGroups` 是冻结快照), 降级(不再完整的组移出)所有视图都做。改动 12 个前端文件(模板 2 + 三皮肤 CSS 4 + shared js 5)+ 守阵 2 条 + e2e 全绿。
-**Refs:** memory-bank/activeContext/26-10-09-1615-webui-selection-linkage.md,memory-bank/testing/baselines/26-10-09-1634-webui-selection-linkage.md
+**Refs:** memory-bank/testing/baselines/26-10-09-1634-webui-selection-linkage.md
 
 ## 原始请求
 

@@ -4,7 +4,7 @@
 **Added:** 2026-10-09
 **Updated:** 2026-10-09
 **Summary:** 用户命题「HR 在线核实稳态时 B/C 页是否不用访问, 只访问 A 页, 分析可行性」。产出可行性报告 `reports/26-10-09-1725-report-hr-steady-lane-skip.html`。**结论: 不建议** —— A 档确是新增义务的唯一入口, 但 B/C 在 v3 里是覆盖证明的一部分 (观察期出口 / 批量签发 / 终态退役) 与超额种子转档的唯一见证; 砍掉只省每天 2 个请求, 却换来一处真实判定回归 (超额种子 A→B/C 迁移失明 ⇒ 陈旧「受管束」) + 两处结构副作用, 并与 v3「每波自证覆盖」前提冲突。**本轮零 `src/` / `tests/` 改动**; 若要推进须另立计划 (报告 §08 给了两条前置口径)。
-**Refs:** memory-bank/reports/26-10-09-1725-report-hr-steady-lane-skip.html, memory-bank/activeContext/26-10-09-1725-hr-steady-lane-skip.md
+**Refs:** memory-bank/reports/26-10-09-1725-report-hr-steady-lane-skip.html
 **Topics:** hr-steady-throttle
 
 ## 原始请求

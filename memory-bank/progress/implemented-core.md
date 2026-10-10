@@ -5,6 +5,14 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **站点接入数据白屏修复: hr.js methods 裸调用缺 `this.` (2026-09-25, `c00fc94`)**: `hrSiteLine` 三处裸调 `fmtDuration`/`fmtSize`, 未接入站点时数据分支不进不响, Vue 3 渲染 ReferenceError 卸整树 = 全页白屏; 补 `this.` 修复, 桩服务加 `--hr-site` 注入堵替身盲区。判据 → [pitfalls/web-ui/vue-reactivity.md](../pitfalls/web-ui/vue-reactivity.md)。
+- **限速曲线手动保护日志节流 (2026-09-26, `16f1adc`)**: 手动保护分支逐轮 INFO 刷屏(手动值是持续状态); 抽 `_log_manual_skip`(进入/变化记 INFO + 每 1h 提醒, 其余 DEBUG, 退出清记忆) + `_MANUAL_REMIND_GAP` 常量; 节流不是行为开关, 不加配置键。判据 → [pitfalls/ops/alert-levels.md](../pitfalls/ops/alert-levels.md)。
+- **HR 接入 CarPT 适配器 (2026-09-27, 档案 [26-09-22-backend-partial-hr-verify](../tasks/26-09-22-backend-partial-hr-verify.md))**: v3.5 站点参数化 + `hr/adapters/carpt.py` 新增; 验证挖出 H&R ID 与种子 id 是两个 id 空间 ⇒ 新增 `HrEntry.dl_id`(行内链接提取)。
+- **HR 站点配置收敛: 内置站点档案 (2026-09-27)**: 站点启用改为 `hr_check.sites.<档案id>`(单点 `config/site_presets.py`)点选 + 微调, loaders 按域名交集自动绑定派生 `trackers.*.hr_check`, 旧键兼容等价迁移, 生产 config 零修改行为不变。计划 26-09-27-1318。
+- **移除不成熟的限速统计设计 (2026-09-27, 计划 [26-09-27-1232](../plans/26-09-27-1232-plan-remove-upload-stats.html))**: upload_size 四条件 + begin_round 底座整体拆除(7 代码触点 + state v1→v2 迁移清 upload_snapshots), 重设计候选入 feature issue 26-09-27-1248。
+- **HR v3 波次模型重建 + 重写后复审 (2026-09-29, 计划 [26-09-28-1932](../plans/26-09-28-1932-plan-hr-verify-rebuild.html) / 报告 [26-09-29-0404](../reports/26-09-29-0404-report-hr-verify-v3-audit.html))**: 判定四行表 + 单波型波次引擎 + 三键频控 + 配置 v3(40→14 键); 复审总评通过附 1 高危 H1(Retry-After 不跨波)等, 已随报告 §13.5 修复; 防伪收敛为流转守恒 + 零行戳两道。真机走查遗留见档案。
+- **主循环异常路径退避 (2026-10-05, issue [26-10-02-0728](../issues/26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html))**: 时间线推进写在动作之后, 异常时 next_*_at 恒过期 ⇒ wait_for=0 快速重试; 异常分支把两条时间线推到 max(原值, now+main_tick), 守阵 `test_run_exception_backs_off_next_tick`。
+
 - **🆕 qB 口径流量 v4 格式换代: 块头基线 delta + 按落盘切块 + 自然推算结算 (2026-10-05~06, 计划
   [plans/26-10-05-2200](../plans/26-10-05-2200-plan-qb-traffic-v4-delta.html) 全段, 报告
   [26-10-05-1946](../reports/26-10-05-1946-report-qb-traffic-v4-delta.html) Done)**:

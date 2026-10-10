@@ -6,7 +6,7 @@
 **Topics:** webui-rule-meta-fields
 **Summary:** 用户报「WEBUI 规则设置只能设置条件与动作, 无法设置 interval/cooldown 等其它」—— 规则卡新增「触发与节奏」折叠段, schema.rule_fields 六字段(trigger/interval/execute_once/cooldown/stop_following_rules_if/watch_fields)经 cfgFlatten + hub-field 全量图形化; interval/watch_fields 挂 grey_if(事件触发下灰显仍可清); 桩物化版本章配置打通保存流冒烟(PUT 200 + 落盘形状正确 + 刷新回读)。测试面见 `commands run kb.baseline`。
 
-**Refs:** memory-bank/activeContext/26-10-09-2219-webui-rule-meta-fields.md,memory-bank/pitfalls/web-ui/show-if-residual-key.md,memory-bank/pitfalls/testing/harness-save-flow.md,memory-bank/testing/baselines/26-10-09-2219-webui-rule-meta-fields.md
+**Refs:** memory-bank/pitfalls/web-ui/show-if-residual-key.md,memory-bank/pitfalls/testing/harness-save-flow.md,memory-bank/testing/baselines/26-10-09-2219-webui-rule-meta-fields.md
 
 ## 原始请求
 

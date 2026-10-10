@@ -5,7 +5,7 @@
 **Updated:** 2026-10-07 03:58
 **Summary:** 用户报「搜索后所有种子都是匹配的, 即所有种子都会高亮, 失去了意义」, 要求移除搜索命中种子的行级高亮。根因 = 行级 `search-hit` 高亮挂在"保留即命中"的行上 —— 种子页种子行、辅种页组行、追剧页集行/未识别行都是"显示了就必命中"(种子页 `filteredTorrents` 只留命中; 组/集/未识别行按成员命中整行保留), 恒亮无区分。**用户拍板范围: 只去冗余的行级高亮** —— 保留明细里"仅命中成员才亮"的高亮(辅种/追剧明细成员行 + 站点挂件, 那处仍能区分命中与未命中), 追剧**剧行**(`hit` = 该剧全部集都保留, 非恒亮)也保留。改动 = 4 处模板类绑定 + 清理 4 处随之失效的死数据/方法(`columns.js::isHit`、组对象 `hit`、集对象 `hit`、未识别行 `hit`)。CSS 三皮肤规则全保留(剧行/成员行/挂件仍在用)。test.full **2689 passed + 4 skipped / 99%**(基线切片 26-10-07-0358)。
 **Topics:** webui-search-highlight
-**Refs:** memory-bank/issues/26-10-01-2119-feat-webui-search-highlight.html, memory-bank/activeContext/26-10-07-0358-webui-search-highlight.md, memory-bank/testing/baselines/26-10-07-0358-webui-search-highlight.md
+**Refs:** memory-bank/issues/26-10-01-2119-feat-webui-search-highlight.html, memory-bank/testing/baselines/26-10-07-0358-webui-search-highlight.md
 
 ## 原始请求
 

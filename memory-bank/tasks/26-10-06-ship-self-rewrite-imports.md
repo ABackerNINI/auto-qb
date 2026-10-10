@@ -5,7 +5,7 @@
 **Updated:** 2026-10-06  
 **Topics:** ship-self-rewrite-imports  
 **Summary:** 用户「提交」时实测的事故 —— `commands run ship.commit` 提交已落盘(`9e0b35fc`), 却在末尾内联推送步抛 `ImportError: cannot import name 'retry_note' from '_pipeline'`, 退出码被置 1(与包内 v3 契约「推送未完成不改退出码」相悖, 明明成功却像硬失败)。根因 = **包脚本住在仓库里**: 该次内部同步把远端新版包脚本(`aaff8b3a`, 给 `_pipeline` 加了 `retry_note`)rebase 进工作区, 而 `commit.py` **进程启动时**已把旧 `_pipeline` 载入 `sys.modules`; 延迟的 `from push import run_push` 导进来的**新** push.py 执行 `from _pipeline import … retry_note` 时按缓存解析 ⇒ 找不到新名字。修法 = `_pipeline.refresh_package_modules()`: 延迟 import 前按**内容摘要**判定源码是否被改写, 用 `importlib.reload`(保模块身份)重载本包模块, `commit.py` 在推送步前调用。守阵 = `test_pipeline.py::PackageRefreshTest`(机制: 变则重载 / 没变**零动作**不冲替身) + `test_commit.py::test_push_path_refreshes_package_modules`(接线顺序 = 同步 → 刷新 → 推送)。端到端复现脚本先重现同一 ImportError(`REPRO-OK`), 刷新后导入成功(`FIX-OK`, 重载名单恰为 `['_pipeline']`)。  
-**Refs:** memory-bank/pitfalls/git/self-rewrite-imports.md, memory-bank/testing/baselines/26-10-06-1836-ship-self-rewrite-imports.md, memory-bank/activeContext/26-10-06-1836-ship-self-rewrite-imports.md
+**Refs:** memory-bank/pitfalls/git/self-rewrite-imports.md, memory-bank/testing/baselines/26-10-06-1836-ship-self-rewrite-imports.md
 
 ## 原始请求
 

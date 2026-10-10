@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09
 **Summary:** 用户动议移除种子详情面板(底部停靠抽屉)的折叠状态 —— `drawer.collapsed` 字段、收起/展开钮、44px 收起态头部摘要条、收起态鼠标换目标(peek)、`toggleDrawerCollapse`、各处收起守卫与三皮肤 CSS 全部摘除; 收起态专供的核心摘要管线(dtSummaryHtml/_dtDefaultSummary/注册表 summary 槽)与 7 个变体的 `summary()` 同撤(全成死代码); 面板行为回归纯「开/关 + 拖拽调高」; 两份守阵文件同步改写, test.full 绿(基线见 Refs)。
 
-**Refs:** memory-bank/activeContext/26-10-09-2040-webui-drawer-collapse-removal.md, memory-bank/testing/baselines/26-10-09-2044-webui-drawer-collapse-removal.md
+**Refs:** memory-bank/testing/baselines/26-10-09-2044-webui-drawer-collapse-removal.md
 **Topics:** drawer-dock
 
 ## 原始请求

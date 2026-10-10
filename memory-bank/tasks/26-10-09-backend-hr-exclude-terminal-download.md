@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09 11:24
 **Topics:** hr-steady-throttle
 **Summary:** 认领并修复 issue 26-10-08-1304(计划 26-10-09-1057)。B/C/D 终态行(无 infohash)按名称粗配**只**命中「已被 HR 排除」的本地种子时, 原实现仍会取一次 `.torrent` —— 而排除种子无对账义务、判定侧已短路, 该身份**无任何消费方**。修法 = 把身份下载触发器的**名称候选面**从「全量本地种子名」收窄为「受管(未排除)种子名」(`_WaveContext.local_names` → `local_names_managed`), `_row_looks_local` 换数据源。命中面 `local_hashes` 与 A 档「考察中无条件下载」硬规则**逐字不动**。改动 1 源文件 2 处 + 守阵 4 条(3 条红验)。
-**Refs:** memory-bank/plans/26-10-09-1057-plan-hr-exclude-terminal-download.html,memory-bank/testing/baselines/26-10-09-1124-hr-exclude-terminal-download.md,memory-bank/activeContext/26-10-09-1124-hr-exclude-terminal-download.md
+**Refs:** memory-bank/plans/26-10-09-1057-plan-hr-exclude-terminal-download.html,memory-bank/testing/baselines/26-10-09-1124-hr-exclude-terminal-download.md
 
 ## 原始请求
 

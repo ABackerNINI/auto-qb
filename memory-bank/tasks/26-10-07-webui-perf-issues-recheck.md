@@ -5,7 +5,7 @@
 **Updated:** 2026-10-07 01:15
 **Summary:** 用户指派复验两条 WebUI perf issue（26-09-19-2122 节拍门控双生产者 / 26-09-21-1408 四视图全量重建）——代码经内核化重构后原锚点全失效。逐符号重定位核对: 两条的结构性事实全部原样保留, 均仍成立、Open 维持, 按用户预案出复验报告; issue 1 的实际影响被入池两天后引入的 SSE ver 推送（0c18fcda）改写——SSE 主路径上门控等效失效、请求侧 +48.7ms 伤害基本消失、方案 A 的 -51% 蒸发（消费率=生产率, 每个被消费版本必须建一次）, 轮询兜底路径原动态原样回归; issue 2 前置「P1 拆 create_app」已 Done 转为可认领, 且 SSE 使活跃库下大库有效刷新节奏达 1.5s（分档设计 3s 的 2 倍频）痛点变重非缓解。顺带发现 `runtime.py:499`「发布侧按内容指纹去重」注释与 hr/worker.py 机制张冠李戴（四视图发布无指纹去重）, 按范围守恒未动码未入池, 处置留用户。
 **Topics:** webui-perf-issues-recheck
-**Refs:** memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/activeContext/26-10-07-0115-webui-perf-issues-recheck.md, memory-bank/testing/baselines/26-10-07-0115-webui-perf-issues-recheck.md
+**Refs:** memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/testing/baselines/26-10-07-0115-webui-perf-issues-recheck.md
 
 ## 原始请求
 

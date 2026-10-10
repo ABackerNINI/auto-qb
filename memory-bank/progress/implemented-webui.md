@@ -7,6 +7,12 @@
 
 - **WEBUI 详情面板页插件化 + 页签合并**(2026-10-09; 计划 [26-10-09-2219-plan-webui-drawer-merge-tabs](../plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html)): 四页签经典链从 drawer.html Vue 模板移植为注册表正式条目 `drawer_pages/<tab>-classic.js`(id "classic", 三 manifest 成对登记)—— 单栏与合并共用同一实现, 部件工具箱 `reg.kit`(三态外壳/表格骨架)为共享构建单点(变体渐进迁移未强制); **合并 = 抽屉级布局开关** `drawerMerge ∈ off|on`(autoqb.ui.drawerMerge, R2 旧值 gc/tp 迁 on)+ 右键**单开关**(正文/页签栏 @contextmenu → drawerMenu 一项「合并页签」dtToggleMerge, 门内置灰)+ 宽度门 1920(暂态遮蔽: 缩窗回落单栏标志保留, 拉宽自动恢复); **R3(2026-10-10)**: 开关+门内 → 页签栏收敛为 `[常规&内容][Tracker&用户]` 两合并页签(可自由切换, 不再二选一), 正文列组按当前页签所属对 `dtPair` 渲染(顺修 R2「切对页签列头在而两列空」的空列 bug); 双列 `.drawer-split`(上限 2400 居中)两列各挂对应页签**当前所选页插件**(模板选择 × 合并解耦), 1400px 限宽收窄到 `.dt-tpl` 变体挂载态类(classic 恒满宽不误伤); 数据供给按生效对偶扩展(`_loadDrawerTab`/`_startDrawerPoll`/`_drawerWaitSources`/`_drawerMergeSupply`), FX-29 遮罩等全对齐再掀; 交互全量保留(优先级/重命名/添加删除 tracker 在合并列可用), filePrio 单例随实例销毁收回; e2e `drawer-merge.spec.mjs`(右键单开关开合 / 两合并页签切换(含 R3 空列回归) / 双列渲染 / 门内置灰), 守阵同步(registry_wiring/width_discipline/fallback/shell 210/storage 基线); 基线见 kb.baseline 最新一条。
 
+- **WEBUI qB 流量图轮询闪烁两轮修复 (2026-10-04~05, `f019ed9c`)**: 有图态 = 静默续拉 + 同宿主 setData 原地快路; 空态/错误态 = 判据改「有无落袋结果」(`qbCurPending = loading && !data && !error`), error 清除后移到成功落袋。判据 → [pitfalls/web-ui/drawer-switch-flicker.md](../pitfalls/web-ui/drawer-switch-flicker.md)。
+- **WEBUI toast 按 kind 停留下限 (2026-10-05)**: `ui_feedback.js` 新增 `TOAST_MS_FLOOR`(error/timeout 12s, warn 8s), 调用点显式短值抬到下限、长值不封顶, 三皮肤单点零模板改动。
+- **WEBUI 设置页分区重排 (2026-10-06)**: 站点提到第二位、限速/HR 后置 —— 单点改 `config/schema/groups.py::GROUPS` 顺序, 首页卡片/搜索直跳/风险清单自动跟随。
+- **WEBUI 详情面板变体空列表停「正在加载…」修复 (2026-10-07, `74b25a7b`)**: 变体只在 `_dtNotify` 时重渲染, 而 fetcher 通知放在 try 块(loading 还挂着); trackers/files/peers 三 fetcher 通知移进 finally。判据 → [pitfalls/web-ui/template-render.md](../pitfalls/web-ui/template-render.md)。
+- **WEBUI 详情面板变体骨架去重 reg.helpers (2026-10-07, issue [26-10-07-0845](../issues/26-10-07-0845-refactor-webui-drawer-tpl-dedup.html))**: 核心层增设 helpers 单点(dur/size/present/num + sig 比对 + withScroll + 挂摘成对), 变体 01-12 全部改消费, 净 -111 行。
+
 - **WEBUI 种子详情面板折叠状态整体移除**(2026-10-09; 档案 [26-10-09-webui-drawer-collapse-removal](../tasks/26-10-09-webui-drawer-collapse-removal.md)): 用户动议「WEBUI移除种子详情面板的折叠状态」—— `drawer.collapsed` 字段、收起/展开钮、44px 收起态头部摘要条(dt-summary)、收起态鼠标换目标 peek(`_drawerPeekTarget`/`_drawerPeekApply`/`__peek` 戳)、`toggleDrawerCollapse`、收起态守卫(qb_traffic_chart 三挂点 active / 拖拽 / 跟随 / Alt+页签)与三皮肤 CSS 全部摘除; 核心层 `dtSummaryHtml`/`_dtDefaultSummary` 与 7 个变体(03/06/09/10/11/12/15)的 `summary()` 供数链同撤(收起档专供, 全成死代码); 面板行为回归纯「开/关 + 拖拽调高」; 守阵同步(删 peek 守阵整函数、D1/W3 守阵改写); 基线见 kb.baseline 最新一条。
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
@@ -84,7 +90,7 @@
   `shared/ui_feedback.js::_recordNotice`(kind `info` / source `notice` / id `n`+seq, 与 toast、后端
   errlog 同列同 cap, 只入面板不计浮层); 面板可见文案(入口 title / 标题 / 空态 / 复制 label)统一为
   「通知」, **内部标识符与后端错误环 `/api/errlog` 保持旧名**(守阵与后端语义钉在它们上)。见
-  [activeContext 26-10-09-1137](../activeContext/26-10-09-1137-webui-notice-panel-exit.md)、档案
+  [任务档案](../tasks/26-10-09-webui-notice-panel-exit.md)、档案
   [tasks/26-10-09-webui-notice-panel-exit](../tasks/26-10-09-webui-notice-panel-exit.md)、坑档
   [pitfalls/web-ui/floating-hint-vs-notice-panel](../pitfalls/web-ui/floating-hint-vs-notice-panel.md)。
 

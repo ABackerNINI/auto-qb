@@ -6,7 +6,7 @@
 **Topics:** drawer-dock, search-pending, sticky-anchor
 **Summary:** 搜索首词待响应窗(防抖400ms+往返)空命中集把列表塌成 0 行 → 文档高塌掉 → 滚动位置钳回 0、停靠面板失去 sticky 锚点弹跳; 短列表下 sticky 吸底还会脱锚上浮。修法 = searchPending 门(待响应且命中集未落袋不许命中门接管列表) + 三皮肤 .layout min-height 撑满首屏(--head-h 单点)。守阵: test_web.py 新增静态守阵 + e2e/drawer-dock-stability.spec.mjs 行为守阵。
 
-**Refs:** memory-bank/activeContext/26-10-07-0346-webui-drawer-search-jump.md,memory-bank/pitfalls/web-ui/search-pending-collapse.md,memory-bank/testing/baselines/26-10-07-0346-webui-drawer-search-jump.md
+**Refs:** memory-bank/pitfalls/web-ui/search-pending-collapse.md,memory-bank/testing/baselines/26-10-07-0346-webui-drawer-search-jump.md
 
 ## 原始请求
 

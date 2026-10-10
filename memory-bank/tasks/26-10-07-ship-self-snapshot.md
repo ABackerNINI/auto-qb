@@ -5,7 +5,7 @@
 **Updated:** 2026-10-07  
 **Topics:** my-commit-flow-self-snapshot  
 **Summary:** 用户报出本包自我改写的**治本**需求: `ship.commit` 内部同步的 rebase 会把远端新版**包脚本 / 配置**换进工作区(本包目录就在仓库里), 于是同一次调用里"提交前"与"提交后"跑的可能不是同一版代码 / 同一份规则 —— 既有修复(`reload_config` + `refresh_package_modules`)是逐点打补丁, **治标**: 入口脚本自身无法热刷新、`importlib.reload` 不重绑调用方已导入的名字、配置重取只覆盖两个点、逐点接线无全局不变量、门控与依赖序本身脆弱(共 5 处漏洞)。用户提出「把整包复制到临时目录运行」。本轮**只做分析与可行性验证, 未改生产脚本**: ①通读全部脚本与 references, 逐点核对既有修复的覆盖边界; ②对**真实包**注入快照机制原型, 端到端实测 **10/10 通过**(真仓真包提交成功 / 副本在仓库外 / **改写原包后旧副本免疫** / 新调用采纳新版 / `import` 不重入 / 信息入口作用于原包 / 根解析 / 退出码透传), 复制开销 avg 26.2ms。结论: **临时目录快照自举可行且为最优解**, 采纳「快照语义」= 一次调用只认一个版本; 方案空间(移出仓库 / git worktree / 两段进程 / 继续打补丁)均有结构性缺陷。完整分析见报告; 实施与批次待用户拍板。 **实施已完成(2026-10-07)**: 新增 `scripts/_snapshot.py`(快照自举核心), 四个入口 `commit/sync/push/verify_ref` 的 `__main__` 各加 3 行守卫, `_ship_config.find_root()` 认 `COMMAND_FLOW_REPO_ROOT`; 退役 `refresh_package_modules` / `reload_config` / `sync._reload_cfg` 三条治标机制及全部接线(生产脚本里已零残留), 新增 `_pipeline.pack_touched()` 步骤行(上游改本包 → 提示重跑); 守阵迁到 `test_snapshot.py`(15 条: 重入 / 免疫 / 采纳 / 根注入 / `import` 不重入 / 退出码透传 / 治标机制已退役静态守卫), `test_commit.py` 增 `test_post_rebase_pack_changed_leaves_hint`; 真机 `my-commit-flow.sync` 与 `verify-ref` 均经快照重入成功、无残留临时目录; test.pkg **142 passed**。  
-**Refs:** memory-bank/reports/26-10-07-0208-report-my-commit-flow-self-snapshot.html, memory-bank/activeContext/26-10-07-0208-ship-self-snapshot.md
+**Refs:** memory-bank/reports/26-10-07-0208-report-my-commit-flow-self-snapshot.html
 
 ## 原始请求
 

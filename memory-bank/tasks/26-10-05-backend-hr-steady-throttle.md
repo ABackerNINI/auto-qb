@@ -51,7 +51,7 @@
 
 ## 进度日志
 
-- **2026-10-05 05:55** 计划入库(plans/26-10-05-0555, 状态 Open), 实施待指令; 切片 [26-10-05-0555-hr-steady-throttle-plan](../activeContext/26-10-05-0555-hr-steady-throttle-plan.md)。
+- **2026-10-05 05:55** 计划入库(plans/26-10-05-0555, 状态 Open), 实施待指令; 切片 [计划 26-10-05-0555](../plans/26-10-05-0555-plan-hr-steady-throttle.html)。
 - **2026-10-05 05:55–08:32** 实施六阶段, 每阶段独立 commit 全绿(各步 test.quick 依次 2572 / 2572 / 2575 / 2581 passed + 4 skipped; S4 结论「未发现前序阶段实现缺陷」): `10984535`(S1 配置键) → `eeb9290e`(S2 引擎闸; 既有用例计划内最小调整 12 处) → `4d88bf7e`(S3 展示 + D1 注记) → `a270aabb`(S4 守阵 6 条) → `943ff662`(S5 docs 机制段 + service docstring 对齐)。
 - **2026-10-05 09:03** S6 收尾回写完成: ①全量基线已记(数字单点见 `testing/baselines/` 最新切片, `commands run kb.baseline`; 相对上基线 26-10-05-0630 的 2567+4 净增 14 用例 = S1 5 + S3 3 + S4 6, 全计划内); ②计划 meta doc-status Open → Done + §05 D1/D2「结果」列 + §07 验收判据逐条标注 + footer 变更记录追加实施完成轮; ③docs 漂移补齐两处 —— configuration.md 站点接入键清单(3 键→4 键)与配置样例补 `idle_refresh_interval`、hr-online-verify-docs.md 主线时间总表补 26-10-03-1505 报告与 26-10-05-0555 计划两行; ④本档案立档(Refs 双向: 计划 + 报告); ⑤kb.index 重建索引。
 - **2026-10-05 09:02** 真机 dry-run 冒烟(`commands run dev.run -- config.yml --dry-run`, 只读): 配置加载 / schema 迁移 v3→v4(仅内存不落盘) / 全局任务创建均正常, 走到连接 qB(127.0.0.1:16585)一步因 qB 未运行失败(WinError 10061 连接被拒) —— 环境性失败, 按口径记录不重试不修复; 配置面与 HR 模块装载路径无异常。

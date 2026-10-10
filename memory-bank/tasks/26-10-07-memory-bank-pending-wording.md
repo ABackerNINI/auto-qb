@@ -5,7 +5,7 @@
 **Updated:** 2026-10-08
 **Summary:** 用户问「任务档案与 activeContext 切片里仍写着『`待提交`』—— 提交时点 commit hash 尚不可知, 有什么方法解决」, 拍板「实施方案①(时不变措辞) + 机械守卫」。根因是**自指不可能**: commit 的 hash 由 tree + parent + 时间戳决定, 想写进文件就改了 tree ⇒ **一个提交永远无法包含自己的 hash**; 而收尾 DoD 要求回写件随主提交一并暂存, 于是那句断言写在 hash 尚不存在的时点, 提交一落地即成假话。落地三件: ①**口径单点**进 skill「回写措辞」节(✗`待提交` / `未提交`(状态) / `等…指令` / 粗体 `未 commit`; ✓时不变措辞「随本专题入库」或直接省去, hash 用 `git log --grep <专题键>` 找回) ②**新守卫** `check_wording.py`(扫 `tasks/` + `activeContext/`; 豁免带日期的流水条目与树态描述 `未提交改动`; `testing/baselines/` 是冻结快照不入面) 挂进 `kb.check` + 守阵 3 条 ③**存量清洗** 88 处 / 64 文件(84 改 + 4 整行删; 带日期的 38 处按豁免原样保留)。test.full **2693 passed + 4 skipped / 99%**(基线切片 26-10-07-0434)。入库触发词由用户给出。 **2026-10-08 二轮 (方案 C, 手抄测试数字)**: 用户报「基线维护成本高, 每轮要改切片/档案/切片正文/commit 至少 4 处」, 拍板方案 C —— 数字**只留 `testing/baselines/` 切片一处**, 其余一律引用不手抄; 给同一守卫加**判据族 B**(裸测试数字), 存量冻结 (只拦新增); 数字后续只留切片一处。
 **Topics:** memory-bank-pending-wording
-**Refs:** memory-bank/activeContext/26-10-07-0434-memory-bank-pending-wording.md,memory-bank/testing/baselines/26-10-07-0434-memory-bank-pending-wording.md
+**Refs:** memory-bank/testing/baselines/26-10-07-0434-memory-bank-pending-wording.md
 
 ## 原始请求
 

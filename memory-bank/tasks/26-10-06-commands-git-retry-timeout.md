@@ -5,7 +5,7 @@
 **Updated:** 2026-10-06 18:18
 **Summary:** 用户动议「Gitee 偶尔卡住, 经常需要补推」⇒ 给 my-commit-flow 的 git 命令加统一容错: 单次超时 120s→**20s**, 失败后**有界重试 3 次, 全部失败才判失败**, 覆盖 push/pull/fetch 等所有 git 命令; GitHub 镜像**只给超时不给重试**。机制下沉到 `_pipeline.run_git`(`git()`/`git_rc()`/`git_run()` 一律经它), 判据 `_retryable` **分三档**而非「任何非 0 都重试」: 网络子命令失败即重试 / 非幂等本地写(commit·rebase·merge…)只给超时不给重试 / 其余仅在超时或瞬时签名时重试。`push.py` 手写重试循环与 `sync.py` 的 `remote_sha_with_retry` 退役(避免双层重试), `_ship_config.git()` 补上原本**完全缺失**的超时。新增 15 条守阵。test.pkg 126 passed(my-commit-flow 单独 106 条); test.full 2677 passed + 4 skipped / 99%(基线 [26-10-06-1818](../testing/baselines/26-10-06-1818-commands-git-retry-timeout.md))。
 **Topics:** commands-git-retry-timeout
-**Refs:** memory-bank/testing/baselines/26-10-06-1818-commands-git-retry-timeout.md, memory-bank/activeContext/26-10-06-1818-commands-git-retry-timeout.md, memory-bank/pitfalls/git/push.md
+**Refs:** memory-bank/testing/baselines/26-10-06-1818-commands-git-retry-timeout.md, memory-bank/pitfalls/git/push.md
 
 ## 原始请求
 

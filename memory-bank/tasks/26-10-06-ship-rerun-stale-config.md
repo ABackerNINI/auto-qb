@@ -5,7 +5,7 @@
 **Updated:** 2026-10-07  
 **Topics:** ship-rerun-stale-config  
 **Summary:** 另一会话报出的**计划外引擎缺陷**(撞迁移窗口必现, 平时不可见): `ship.commit` 的闸门**复跑**发生在内部同步的 rebase 之后, 而它用的 `cfg` 是**进程启动时**读的那份 —— 若那次 rebase 把远端新版 `.my-commit-flow.toml` 换进了工作区(本包目录就在仓库里), 复跑就是"用**旧规则**验合并后的新树": 旧闸门集 / 旧 `each_limit` / 旧红线 / 旧生成物白名单全都对不上, 而输出与"全过"**一字不差**(比同族的 ImportError 隐蔽得多)。修法 = 复跑前先 `refresh_package_modules()`(让 `_ship_config.KEY_DEFAULTS` 跟着现版本, 否则远端新加的键会被按「顶层未知键」误判 STOP), 再 `_pipeline.reload_config(cfg)`: 交出**磁盘现版本**并**复检 STOP 级问题**; 配置变了登记一行步骤行(没变静默), 读不到 / 新配置有错则按「推送未完成」停下 —— **绝不拿旧规则硬跑**。守阵 = `test_pipeline.py::ReloadConfigTest`(机制 3) + `test_commit.py` 接线 3(复跑用重取那份 / 没变不留痕 / 新配置坏则停), **红验两处**。第二轮(2026-10-07)收掉同族第三处: `sync.py` 的**生成物自动化解**在把树推到上游 tip 之后仍用启动那份 `cfg` 取白名单 / 重跑命令 —— 旧白名单**放宽** = 静默丢内容, 收窄 = 该保的没保, `generated_regen_cmd` 换了 = 重跑的是旧生成器(自证也自证的是旧规则)。修法 = `sync._reload_cfg(cfg)`(`_pipeline.reload_config` + "新配置仍允许自动化解" 两档), 快进后 / rebase 每轮开头与收尾各取一次; 任一档不成立即**放弃自动化解、回滚**, 退回现状失败行(自动化解是优化, 不为它新增失败模板)。守阵 = `test_sync.py` 4 条, **红验三处**。  
-**Refs:** memory-bank/pitfalls/git/self-rewrite-config.md, memory-bank/testing/baselines/26-10-06-2108-ship-rerun-stale-config.md, memory-bank/testing/baselines/26-10-07-0138-ship-autoresolve-stale-config.md, memory-bank/activeContext/26-10-06-2108-ship-rerun-stale-config.md
+**Refs:** memory-bank/pitfalls/git/self-rewrite-config.md, memory-bank/testing/baselines/26-10-06-2108-ship-rerun-stale-config.md, memory-bank/testing/baselines/26-10-07-0138-ship-autoresolve-stale-config.md
 
 ## 原始请求
 

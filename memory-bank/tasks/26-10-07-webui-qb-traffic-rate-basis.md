@@ -6,7 +6,7 @@
 **Summary:** 流量图「太陡」口径调研完成: 陡因=raw 窗 1 桶 1 瞬时样本+前端零平滑; 裁决数据口径采用区间平均(计数器差分 Δbytes/Δt)、否决移动平均(平滑归展示层); 落地为纯读侧接线(traffic_grid.py 桶点变换 + traffic_qb.py 端点), 零存储/state_file/配置改动; 报告 26-10-07-2031; 实施计划 26-10-07-2127 的 S1-S4 已全部实施(读侧区间平均 + 三端点接线 + raw 桶数上限 MAX_RAW_BUCKETS=2880; 万桶级治理入实施, 采样间隔演进 D6 仅入计划留后续切片)。
 **Topics:** qb-traffic-rate-basis
 
-**Refs:** memory-bank/reports/26-10-07-2031-report-qb-traffic-rate-basis.html,memory-bank/activeContext/26-10-07-2046-qb-traffic-rate-basis.md,memory-bank/testing/baselines/26-10-07-2053-webui-qb-traffic-rate-basis.md,memory-bank/testing/baselines/26-10-08-0142-webui-qb-traffic-rate-basis-impl.md,memory-bank/plans/26-10-07-2127-plan-qb-traffic-rate-basis.html
+**Refs:** memory-bank/reports/26-10-07-2031-report-qb-traffic-rate-basis.html,memory-bank/testing/baselines/26-10-07-2053-webui-qb-traffic-rate-basis.md,memory-bank/testing/baselines/26-10-08-0142-webui-qb-traffic-rate-basis-impl.md,memory-bank/plans/26-10-07-2127-plan-qb-traffic-rate-basis.html
 
 ## 原始请求
 

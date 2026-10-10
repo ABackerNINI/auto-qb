@@ -5,7 +5,7 @@
 **Updated:** 2026-10-06 19:17
 **Topics:** playwright-e2e
 **Summary:** 认领并修 issue 26-10-06-1717(docs 类)。`scripts/ui_smoke.cjs` 随 plan 26-10-06-0708 S7 退役后, **受版本控制**的文件里仍有 8 处**注释**指向它(`app.js:241` / `polling.js:113` + `scripts/ui_harness.py` 6 处), 全部改指 e2e 轨(对应 spec 文件 + `E2E_*` 模式 env)。纯注释改动零行为: 复验 `git grep ui_smoke -- ':!memory-bank'` = **0**, `test.full` **2678 passed + 4 skipped / 99%**(相对上一轮 1840 基线: 覆盖率四项逐位相同, passed +1 全来自并行会话入库的 `9e0b35fc`)。
-**Refs:** memory-bank/issues/26-10-06-1717-docs-docs-ui-smoke-comment-residue.html, memory-bank/activeContext/26-10-06-0508-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-1902-docs-ui-smoke-comment-residue.md, memory-bank/pitfalls/docs/drift.md
+**Refs:** memory-bank/issues/26-10-06-1717-docs-docs-ui-smoke-comment-residue.html, memory-bank/testing/baselines/26-10-06-1902-docs-ui-smoke-comment-residue.md, memory-bank/pitfalls/docs/drift.md
 
 ## 原始请求
 

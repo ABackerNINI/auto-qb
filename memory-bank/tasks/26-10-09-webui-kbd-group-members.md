@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09
 **Summary:** 用户命题「WEBUI 当辅种/追剧打开分组时需要支持键盘上下键选中分组成员」。真浏览器复验: **光标链本身早已可用**(`_kbRows` 自 2026-10-09 `51654e44` 起已纳入展开组/展开集的成员行, 双皮肤双视图实测 ↓ 均可落成员行), 真正缺失的是**选中**那条链 —— `_kbExtend`(Shift+↑↓)把 `kind==="torrent"` 一律交给 `shiftTorrentSel`, 而它的候选是**种子页平铺列表** `filteredTorrents`: 辅种/追剧页上该列表为空(懒加载)或与屏幕行无关 ⇒ 范围选择**静默落空**; 鼠标路径同族, `shiftMemberSel` 硬编码查 `expandedKey`, 追剧页该字段恒空 ⇒ 集明细行 Shift+点击同样选不中。修法 = 候选列表收成按上下文解析的单点 `selection.js::_memberRangeList`(种子页平铺 / 辅种页展开组 / 追剧页展开集), 键盘与鼠标两个入口都吃它, 取序与 `_kbRows`/`winMembers` 同源(`sortedMembers`)。新增静态守阵 `test_kb_member_range_context_aware` + 新 e2e `e2e/kbd-members.spec.mjs`(此前键盘导航**零**浏览器覆盖)。实测数字见 `commands run kb.baseline`。
 **Topics:** webui-kbd-group-members
-**Refs:** memory-bank/pitfalls/web-ui/kbd-range-view-scope.md,memory-bank/testing/baselines/26-10-09-1038-webui-kbd-group-members.md,memory-bank/activeContext/26-10-09-1038-webui-kbd-group-members.md
+**Refs:** memory-bank/pitfalls/web-ui/kbd-range-view-scope.md,memory-bank/testing/baselines/26-10-09-1038-webui-kbd-group-members.md
 
 ## 原始请求
 

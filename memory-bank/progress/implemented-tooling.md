@@ -5,6 +5,10 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **AGENTS.md 精简 + Copilot 入口收敛指针 (2026-10-06, 三笔 `376dda34`/`cba7c4f6`/`295bb226`)**: 7,896→6,533 字符(去链接/装饰/空格 950→163/日期标注), 判据一条没删; `.github/copilot-instructions.md` 2,159→83 纯指针。坑: 文档删不干净先查是不是机检 token 在吊着; 「」引文照抄原文(新坑 [pitfalls/docs/anchor-quote.md](../pitfalls/docs/anchor-quote.md))。
+- **my-commit-flow 输出契约 v3.1 步骤行 (2026-10-06, 档案 [26-09-28-commands-shipflow-output-contract](../tasks/26-09-28-commands-shipflow-output-contract.md))**: 真改写 HEAD 的步骤在结果行上面各留一行 旧hash→新hash(链尾==结果行, 相邻两步首尾相接), 没发生不报; 结果行逐字不动。
+- **COMMIT_MSG_AI 消费即删 + 残留收口 (2026-09-27 / 2026-10-07)**: 消息文件在 ref 核对通过后删除(失败出口保留现场); 恢复路径补「HEAD 消息与文件一致照常消费 + 入口残留扫描 + unlink 重试」。
+
 - **memory-bank 四工位导航页 · 三视图可切换 (2026-10-04, 计划 26-10-04-0952 全段落地)**: issues / plans /
   reports / tasks 的状态与关联做成本地导航页, 主视图三套并存(台账 / 控制台 / 卡片墙)顶栏一键切换(选择记忆
   localStorage, file:// 降级)。数据层 `nav_data.collect_nav()` 复用 `gen_doc_map.collect()` 做**薄 enrich**

@@ -5,7 +5,7 @@
 **Updated:** 2026-10-06
 **Topics:** webui-row-menu-click
 **Summary:** 认领 issue 26-10-06-1717(用户指派)并修复 —— `_menuPos` 以常量 h=222 估算菜单高度做视口钳位, 而菜单真实高度随分支差一倍以上(批量菜单实测 393px) ⇒ 锚点落在视口下部时菜单底越出下缘最多 171px, 底部项(标签分类/导出/批量删除)真实点击不可达(旧冒烟 W4 组选中导出段的存量 30s 超时即此, 曾被误当 flaky)。修法 = `ui_feedback.js` 新增 `_menuFit`/`_menuFitRefit`(按 offsetWidth/Height 实测重钳位, 极矮视口退化分支限高可滚), `state.js` 在 `menu`/`headMenu`/`filePrio` 三个**开层 watcher**(判据 = 对象替换, 覆盖"菜单开着又右键另一行")里 `$nextTick` 调出口, `tpl/ctx-menus.html` 三处补 ref。验证: 新 e2e 回归「挑视口下部行 → 菜单盒整体在视口内 + 真实点击底部项」修复前双皮肤红 / 修复后绿; 新静态守阵钉接线(摘 ref 红验过); 全量 e2e 82 passed + 10 skipped / 0 failed; `test.full` 见下方基线切片。
-**Refs:** memory-bank/issues/26-10-06-1717-bug-webui-batch-menu-viewport-overflow.html, memory-bank/pitfalls/web-ui/overlays.md, memory-bank/testing/baselines/26-10-06-1830-webui-ctx-menu-viewport.md, memory-bank/activeContext/26-10-06-1817-webui-ctx-menu-viewport.md
+**Refs:** memory-bank/issues/26-10-06-1717-bug-webui-batch-menu-viewport-overflow.html, memory-bank/pitfalls/web-ui/overlays.md, memory-bank/testing/baselines/26-10-06-1830-webui-ctx-menu-viewport.md
 
 ## 原始请求
 

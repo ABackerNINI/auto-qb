@@ -6,7 +6,7 @@
 **Updated:** 2026-10-09
 **Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 随本专题入库; D4 拍板 6mo/1y/all 三档。真机验收追加 S6 活尾合流(2026-10-05): 用户报「流量图不实时更新, 得等落盘才更新」→ 方案 A 落地(采样模块每轮发布 LiveTail 快照 + 三端点 raw 段窗合流 + ts 精确去重), 图面尾部随采样节拍实时。
 
-**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html, memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md
+**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html, memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md
 
 ## 原始请求
 

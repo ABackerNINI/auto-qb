@@ -5,7 +5,7 @@
 **Updated:** 2026-10-09 12:57
 **Topics:** webui-detail-panel-templates
 **Summary:** 认领并实施 issue 26-10-07-0149(计划 26-10-09-1243, 详情面板重构 26-10-06-0838 §06 拍板点 P-02 的备选案)。06「增强表格」变体的逐行「下次汇报」列原以种子级 `detail.reannounce_in` 全局值近似并对所有行标「全局」。取证发现 per-tracker 真值**已在既有 `/trackers` 透传里**(qB 5.2+/WebAPI 2.13.0 每条 tracker 返回 `next_announce`, epoch 秒; 后端 `mask_tracker_entry` 只改 url), 故按推荐案走**纯前端**。修法 = `06-trackers-table-collapsed.js::nextHtml` 改读行级 `next_announce` 减 `nowSec`, 去「全局」标、去微条(per-tracker interval 不可得, 不造假); qB < 5.2 无该字段时**回退**旧全局近似分支; `nowSec` 计入 sig(否则跳过重建把倒计时冻帧)。1 源文件 + 1 桩 + 1 守阵 + 1 e2e。
-**Refs:** memory-bank/plans/26-10-09-1243-plan-webui-per-tracker-reannounce.html,memory-bank/testing/baselines/26-10-09-1300-webui-per-tracker-reannounce.md,memory-bank/activeContext/26-10-09-1243-webui-per-tracker-reannounce.md
+**Refs:** memory-bank/plans/26-10-09-1243-plan-webui-per-tracker-reannounce.html,memory-bank/testing/baselines/26-10-09-1300-webui-per-tracker-reannounce.md
 
 ## 原始请求
 
