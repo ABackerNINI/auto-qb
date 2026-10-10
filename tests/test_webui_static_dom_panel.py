@@ -38,6 +38,7 @@
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对 + **两处控件组**(流量形态头部 + 种子「流量」页签头部, 2026-10-09 修版式改回归: 种子流量图走种子形态头部, 版式改漏接 ⇒ 档位/纵轴控件消失; 内层标记守阵钉逐字同源)
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
+- test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)
 """
 import json
 import os
@@ -1028,6 +1029,39 @@ def test_drawer_tpl_variant_width_discipline():
             f"drawer_tpl/{name}: justify-content:space-between 复活(Q1 label/value 两端推开病根; 非 kv 场景确需请改本守阵并注明)"
     assert "justify-content:space-between" not in core.replace(" ", ""), \
         "核心注入 CSS 不得用 justify-content:space-between(同上)"
+
+
+def test_drawer_tpl_trackers_card_uniform_height():
+    """04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障) ——
+    缺陷: 虚拟合并卡沿用设计稿 footer 的长描述后, 卡身比实体卡高出一截 —— 同一栅格里同为
+    「未启用」的实体卡(真浏览器实测 69px)与虚拟卡(100px)高度不一致。口径(用户拍板「同排
+    等高」): 栅格 .dt04-grid 走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡
+    恒等高, 无需给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉
+    三件事: ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③virtualCardHtml
+    内不得再出现 dt04-vnote(实体『未启用』卡的同名短注是另一回事, 别顺手连类一起删)。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    name = "04-trackers-status-cards-tall.js"
+    text = open(os.path.join(vdir, name), encoding="utf-8").read()
+
+    # 1. 同排等高机制: .dt04-grid 必须 stretch(与 align-items:start 互斥)
+    grid = [l for l in text.splitlines() if ".dt04-grid {" in l]
+    assert grid, f"drawer_tpl/{name}: 缺 .dt04-grid 规则(形态漂移, 同步本守阵)"
+    assert "align-items:stretch" in grid[0].replace(" ", ""), \
+        f"drawer_tpl/{name}: .dt04-grid 必须 align-items:stretch(同排等高口径; 缺则虚拟卡与同排实体卡高度不一致复发)"
+    assert "align-items:start" not in text.replace(" ", ""), \
+        f"drawer_tpl/{name}: 出现 align-items:start(卡片栅格等高机制被改回, 2026-10-10 报障复发)"
+
+    # 2. 虚拟合并卡: 描述文案 + 描述行都不许回来
+    assert "私有 tracker 种子" not in text, \
+        f"drawer_tpl/{name}: 虚拟条目描述文案回潮(2026-10-10 用户要求移除)"
+    m = re.search(r"function virtualCardHtml\([^)]*\) \{(.*?)\n  \}", text, re.S)
+    assert m, f"drawer_tpl/{name}: virtualCardHtml 形态漂移(守阵正则失配, 同步本守阵)"
+    assert "dt04-vnote" not in m.group(1), \
+        f"drawer_tpl/{name}: 虚拟合并卡又挂 dt04-vnote 描述行(卡身再次高出实体卡)"
+
+    # 3. 实体「未启用」卡的短注(vnote 类)必须保留 —— 别把整个类连带删掉
+    assert ".drawer .dt04-vnote {" in text, \
+        f"drawer_tpl/{name}: .dt04-vnote 类被整体删除(实体『未启用』卡的短注仍用它)"
 
 
 def test_drawer_tpl_variant_field_icons():

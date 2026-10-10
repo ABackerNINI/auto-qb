@@ -80,8 +80,10 @@
     "  font-size:11.5px; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt04-seg:hover { color:var(--fg); }",
     ".drawer .dt04-seg.active { background:var(--bg-hover); color:var(--fg); }",
-    /* 卡片栅格(双列; 异常排序用 order, 不动 DOM 顺序) */
-    ".drawer .dt04-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; align-items:start; }",
+    /* 卡片栅格(双列; 异常排序用 order, 不动 DOM 顺序) —— align-items:stretch = 同排卡片自动
+     * 等高(虚拟合并卡与其同排实体卡恒齐平); 2026-10-10 用户报障「虚拟条目卡片高度与其它的不
+     * 一致」, 改回 start 即回归, 守阵 test_drawer_tpl_trackers_card_uniform_height 钉住 */
+    ".drawer .dt04-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; align-items:stretch; }",
     ".drawer .dt04-card { position:relative; min-width:0; padding:10px 12px 10px 16px; background:var(--bg-card);",
     "  border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-1);",
     "  transition:border-color var(--dur) var(--ease); }",
@@ -217,7 +219,10 @@
     </article>`;
   }
 
-  /* 虚拟条目合并卡(与实体卡同占一格半宽; 无虚拟条目整卡省略) */
+  /* 虚拟条目合并卡(与实体卡同占一格半宽; 无虚拟条目整卡省略) —— 与设计稿的刻意差异:
+   * ①设计稿 sp2 跨全宽, 本卡取半宽与实体卡对齐(2026-10-09 用户拍板「宽度统一」);
+   * ②设计稿 footer 的「qB 下 DHT/PeX/LSD 已禁用」长描述 2026-10-10 用户要求移除 —— 卡面只留
+   * head + chips, 高度改由栅格 align-items:stretch 与同排实体卡齐平。 */
   function virtualCardHtml(ctx, trackers) {
     const vs = trackers.filter((t) => ctx.drawerTrackerVirtual(t.url));
     if (!vs.length) return "";
@@ -229,7 +234,6 @@
         <span class="dt04-host dim">由 qBittorrent 合成, 非真实 tracker</span>
       </header>
       <div class="dt04-vchips">${R(chips)}</div>
-      <div class="dt04-vnote">私有 tracker 种子: DHT / PeX / LSD 已由 qB 禁用, 状态恒为「未启用」, 不参与汇报</div>
     </article>`;
   }
 
