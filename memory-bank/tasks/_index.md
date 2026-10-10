@@ -22,6 +22,7 @@
 
 ## Open
 
+- [26-10-10-backend-dup-code-audit] 全仓重复代码审查(分步执行计划) - 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分…
 - [26-10-09-backend-transport-encryption] 本地通道传输安全调研(WebUI + HR 取数通道) - 用户命题「WebUI⇄auto-qb 与 auto-qb⇄扩展两条通道均为明文 HTTP, 有安全风险; 初步设想用 t…
 
 ## Done

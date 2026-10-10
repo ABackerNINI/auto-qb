@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-10-2333">
+<meta name="doc-updated" content="26-10-10-2333">
+<title>全仓重复代码审查 · 分步执行计划</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419;
+    --bg-raise: #151b22;
+    --ink: #d9dee3;
+    --ink-strong: #f0f3f5;
+    --mut: #8b949c;
+    --accent: #59b3a2;
+    --accent-dim: rgba(89, 179, 162, .14);
+    --warn: #e2a86e;
+    --warn-dim: rgba(226, 168, 110, .12);
+    --line: rgba(255, 255, 255, .09);
+    --line-soft: rgba(255, 255, 255, .05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding: 0 24px;
+  }
+  code, .mono, td.num {
+    font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  code {
+    font-size: .88em;
+    background: var(--bg-raise);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: .08em .35em;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.1; }
+  nav.toc .toc-head {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 10px;
+  }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  nav.toc .toc-foot {
+    margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--line);
+    color: var(--mut); font-size: 11.5px; line-height: 1.7;
+  }
+  main { min-width: 0; max-width: 900px; }
+
+  .kicker {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 37px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px;
+  }
+  .lede { font-size: 16.5px; color: var(--mut); max-width: 66ch; margin-bottom: 26px; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px 28px;
+    font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 12px 0; margin-bottom: 52px;
+  }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+
+  section { margin-bottom: 64px; }
+  h2 {
+    font-size: 23px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px;
+  }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 30px 0 10px; }
+  p { margin-bottom: 14px; max-width: 78ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 78ch; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.3px; margin: 18px 0 22px; }
+  th {
+    text-align: left; font-weight: 510; font-size: 11.5px;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  td.num { text-align: right; white-space: nowrap; color: var(--ink); font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.r { white-space: nowrap; color: var(--ink-strong); font-weight: 510; }
+  .phase td {
+    background: var(--bg-raise); color: var(--accent);
+    font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase;
+    padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line);
+  }
+
+  .gate {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 10px 16px; margin: 14px 0 8px; font-size: 13.5px; max-width: 80ch;
+  }
+  .gate b { color: var(--accent); font-weight: 590; }
+  .callout {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    padding: 14px 18px; margin: 18px 0; max-width: 82ch;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-dim); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout b { color: var(--ink-strong); }
+  .cmd {
+    display: block; background: var(--bg-raise); border: 1px solid var(--line-soft);
+    border-radius: 4px; padding: 10px 14px; margin: 10px 0 12px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.8px;
+    color: var(--ink-strong); overflow-x: auto; white-space: pre; max-width: 100%;
+  }
+  .cls { display: inline-block; min-width: 1.5em; text-align: center;
+    font-family: "Cascadia Code", Consolas, monospace; font-weight: 590; }
+  .cls.a { color: #e2705e; }
+  .cls.b { color: var(--warn); }
+  .cls.c { color: var(--accent); }
+  .cls.d { color: var(--mut); }
+  .step { margin-bottom: 34px; }
+  .step > h3 { margin-top: 0; }
+  .step h3 .sid { color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; font-weight: 400; margin-right: 10px; font-size: 15px; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px;
+    font-size: 12.5px; color: var(--mut);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 1000px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; display: none; }
+    h1 { font-size: 30px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <a href="#s1"><b>01</b>&nbsp; 背景与目标</a>
+      <a href="#s2"><b>02</b>&nbsp; 重复口径</a>
+      <a href="#s3"><b>03</b>&nbsp; 方法与工具</a>
+      <a href="#s4"><b>04</b>&nbsp; 分轮清单</a>
+      <a href="#s5"><b>05</b>&nbsp; 每轮微步骤</a>
+      <a href="#s6"><b>06</b>&nbsp; 产出与归档</a>
+      <a href="#s7"><b>07</b>&nbsp; 停手点与风险</a>
+      <a href="#s8"><b>08</b>&nbsp; 验收</a>
+      <a href="#s9"><b>09</b>&nbsp; 变更记录</a>
+      <div class="toc-foot">
+        全仓审查 · 一轮一个面<br>
+        纯审查轮 · 不改任何代码<br>
+        专题: <code>dup-code-audit</code>
+      </div>
+    </nav>
+    <main>
+      <div class="kicker">执行计划 · 重复代码审查</div>
+      <h1>全仓重复代码审查 · 分步执行计划</h1>
+      <p class="lede">对 <code>src/auto_qb/</code> 八个后端包 + <code>webui/static/</code> 三皮肤前端 + <code>tests/</code> 做一轮<b>系统性重复代码审查</b>, 产出后续重构可依据的「重复清单」与「重构候选」。本计划只定<b>轮次、口径与步骤</b> —— 不在本计划内改任何代码; 发现可动项一律入池 issue, 由后续重构任务分别认领。</p>
+      <div class="meta-row">
+        <span>状态 <b class="mono">Open</b>(待拍板)</span>
+        <span>立项 <b class="mono">26-10-10-2333</b></span>
+        <span>范围 <b class="mono">src/auto_qb/** + webui/static/** + tests/**</b></span>
+        <span>粒度 <b class="mono">一轮一个面</b></span>
+        <span>专题 <b class="mono">dup-code-audit</b></span>
+        <span>规划基线 <b class="mono">f03b5d4a</b></span>
+      </div>
+
+      <section id="s1">
+        <h2><span class="secno">01</span>背景与目标</h2>
+        <hr class="sec-rule">
+
+        <h3>1.1 为什么单独做一轮「重复代码」审查</h3>
+        <p>仓库已有多轮通用 Code Review 与变异测试审计, 但<b>没有一次专门盯「重复 / 同一事实多份表示」</b>。重复代码的问题不在当下会不会出错, 而在<b>后续每一次改动要记住几个地方</b> —— 它是维护成本与一致性的放大器: 改 A 忘了改 B, 就产生漂移。这正是本次审查的靶心。</p>
+        <p>已知的零散证据说明这个问题真实存在, 只欠一次系统排查: 详情面板 15 变体骨架重复 (issue <code>26-10-07-0845</code>)、<code>HrRefreshService._prune_index</code> 与模块级同名函数同体重复 (issue <code>26-10-02-0441</code>)、颜色令牌族「各套 UI 各声明一处, 改值必须全处同改」(conventions/webui.md 明文纪律) —— 这类「必须记住的成对约束」越多, 维护点越多。</p>
+
+        <h3>1.2 目标与非目标</h3>
+        <table>
+          <tr><th style="width:34%">项</th><th>内容</th></tr>
+          <tr><td class="r">要产出</td><td>每轮一份重复发现清单 (位置 · 类别 · 分歧点 · 建议收敛形态); 全局一份重构候选排序表</td></tr>
+          <tr><td class="r">要减少</td><td>「一个事实的 N 个表示处」数量; 后续改动的跨文件记忆点</td></tr>
+          <tr><td class="r">非目标</td><td>不改代码 · 不查缺陷/安全 · 不做性能优化 · 不评价圈复杂度 · 不追求「零重复」</td></tr>
+          <tr><td class="r">判定原则</td><td>宁少勿滥 —— 表面相似不算重复 (见 <a href="#s2">§02 D 类</a>); 不制造过度抽象</td></tr>
+        </table>
+
+        <h3>1.3 与既有制品的关系</h3>
+        <ul>
+          <li><b>全项目 Code Review</b> (<code>26-10-05-0951</code> / 报告 <code>26-10-05-1036</code>): 查的是缺陷、安全、边界; 本次查的是<b>结构重复</b> —— 不同视角, 取并集不重叠。</li>
+          <li><b>变异测试审计</b> (专题 <code>mutation-audit</code>): 管「测试够不够硬」; 本次管「代码要不要合并」, 互不替代。</li>
+          <li><b>前端拆分 / 抽屉去重</b>: 已有局部结论的地方<b>只引用不重查</b>, 本次做<b>全仓统账</b>。</li>
+        </ul>
+      </section>
+
+      <section id="s2">
+        <h2><span class="secno">02</span>重复口径 (分类词)</h2>
+        <hr class="sec-rule">
+        <p>每条发现必须落进下面四类之一。分类决定「建议动作」, 也决定这条要不要入池。<b>这是本计划唯一的判定词表, 各轮不得自造。</b></p>
+        <table>
+          <tr><th style="width:9%">类</th><th style="width:20%">名称</th><th>判据</th><th style="width:26%">建议动作</th></tr>
+          <tr>
+            <td><span class="cls a">A</span></td><td><b>真重复</b><br><span class="small">可提取</span></td>
+            <td>逐字或近逐字重复, 语义完全相同; 典型为样板 (boilerplate)、复制粘贴</td>
+            <td>提取函数 / 基类 / 装饰器; 收益高、风险低</td>
+          </tr>
+          <tr>
+            <td><span class="cls b">B</span></td><td><b>分歧重复</b><br><span class="small">已各自演化</span></td>
+            <td>同源但已长出差异, 直接合并会改行为</td>
+            <td>先钉差异点与回归保护, 再合; <b>本轮只登记不建议立即合</b></td>
+          </tr>
+          <tr>
+            <td><span class="cls c">C</span></td><td><b>同一事实多表示</b><br><span class="small">单点违反</span></td>
+            <td>同一个键面 / 令牌 / 口径 / 枚举 / 文案, 在多处以不同形式存在</td>
+            <td>收敛为单点 + 派生/生成; <b>维护成本最高, 优先</b></td>
+          </tr>
+          <tr>
+            <td><span class="cls d">D</span></td><td><b>表面相似</b><br><span class="small">不动</span></td>
+            <td>形状像但语义无关, 或为可读性刻意重复</td>
+            <td>记录后<b>明确判定不动</b>, 防止后续误合并</td>
+          </tr>
+        </table>
+        <div class="callout">
+          <p><b>明确不算重复 (不记或记 D):</b></p>
+          <ul>
+            <li>≤3 行的惯用式 (如 <code>if x is None: return None</code>);</li>
+            <li>语义无关的同形结构 (两个不同领域的同名小函数);</li>
+            <li>测试里刻意的显式重复 (为了让用例自洽可读);</li>
+            <li>为性能/线程安全刻意内联而不抽公共函数的代码 (需在注释里说明, 否则按 A 记)。</li>
+          </ul>
+        </div>
+        <h3>2.1 每条发现的记录字段</h3>
+        <p><code>位置 (文件:行)</code> · <code>类别 A/B/C/D</code> · <code>重复对象 (哪些点)</code> · <code>分歧点</code> · <code>维护风险</code> · <code>建议收敛形态</code> · <code>预估收益/风险</code>。</p>
+      </section>
+
+      <section id="s3">
+        <h2><span class="secno">03</span>方法与工具</h2>
+        <hr class="sec-rule">
+
+        <h3>3.1 两段式: 机器提名 → 人工判定</h3>
+        <p>机器负责<b>穷举候选</b> (它不认识语义), 人负责<b>定性</b> (机器不懂哪些是刻意重复)。禁止只凭工具报告下结论, 也禁止只凭肉眼漫读 —— 两者都漏。</p>
+        <ol>
+          <li><b>提名</b>: 跑重复检测工具拿基线候选; 叠加「结构线索」grep 补齐语义重复 (工具只看字面, 抓不到改写过的同一逻辑)。</li>
+          <li><b>判定</b>: 逐候选打开两侧源码核对, 按 §02 四分类定性, 记分歧点。</li>
+        </ol>
+
+        <h3>3.2 工具 (临时环境, 不改依赖)</h3>
+        <p class="small">Python 侧走 <code>uv run --with</code> 临时环境, <b>不写进 pyproject</b>; 前端侧用 <code>npx</code>。命令只作参考, 具体参数每轮按噪声调。</p>
+        <span class="cmd"># Python: pylint R0801 duplicate-code (逐文件对提名)
+uv run --with pylint pylint --disable=all --enable=duplicate-code --min-similarity-lines=8 src/auto_qb
+
+# 全仓多语言 (python / js / css / html): jscpd (需 Node)
+npx --yes jscpd -f python,javascript,css,html --min-lines 10 --min-tokens 70 src tests</span>
+
+        <h3>3.3 结构线索 (grep, 补语义重复)</h3>
+        <p class="small">同一逻辑被改写后工具抓不到, 用「这是同一件事的固有特征」去搜 —— 命中的多个实现点往往就是 C 类。</p>
+        <ul>
+          <li><b>同一动作的多个实现</b>: <code>os.replace</code> / 临时文件+改名 (原子写)、<code>json.loads</code>+兜底、<code>time.time()</code> 取时钟。</li>
+          <li><b>同一契约的多个方向</b>: <code>from_json</code> / <code>to_json</code>、<code>from_dict</code> / <code>to_dict</code>、<code>parse_*</code> / <code>format_*</code>。</li>
+          <li><b>同一键面/令牌的多次声明</b>: 配置键名常量、CSS <code>--token</code>、枚举值、中文文案。</li>
+        </ul>
+      </section>
+
+      <section id="s4">
+        <h2><span class="secno">04</span>分轮清单</h2>
+        <hr class="sec-rule">
+        <p><b>一轮一个面, 独立会话。</b>规模列给出该面源码行数 (实测, 基线 f03b5d4a) 与文件数; 顺序按「重复密度 × 读取代价」排 —— 先 config (同一事实多表示的密度最高), 再 core, 再 hr, 再 webui/其余, 最后前端与测试。<b>顺序可按需调整, 但「一轮一面」不破。</b></p>
+        <div class="gate">
+          <b>为什么先 config:</b> 一个配置键在 schema / loaders / validation / writer / docs / config-reference / 设置页元数据 至少七处出现 —— 它是全仓 C 类 (同一事实多表示) 最密的包, 收益最大且相对自包含。
+        </div>
+
+        <table>
+          <tr><th style="width:7%">轮</th><th style="width:24%">范围</th><th style="width:11%">规模</th><th>主要重复靶面 (预判, 待核)</th></tr>
+
+          <tr class="phase"><td colspan="4">Phase 0 · 准备</td></tr>
+          <tr>
+            <td class="r">00</td>
+            <td>工具与口径就绪</td>
+            <td class="num">—</td>
+            <td>冒烟 <code>pylint</code> / <code>jscpd</code>; 固化 §02 分类词; 建滚动报告与任务档案; 确认基线 hash</td>
+          </tr>
+
+          <tr class="phase"><td colspan="4">Phase 1 · 后端</td></tr>
+          <tr>
+            <td class="r">01</td>
+            <td class="mono">config/schema/</td>
+            <td class="num">1478 · 6</td>
+            <td>字段描述符样板; <code>fields/groups/rules/trackers/hr</code> 五份 schema 的同类字段声明 (类型/单位/默认值/帮助文案) 重复</td>
+          </tr>
+          <tr>
+            <td class="r">02</td>
+            <td class="mono">config/validation/</td>
+            <td class="num">1358 · 4</td>
+            <td><code>core/sections/rules/curves</code> 四份 validate 的循环骨架、类型转换 (<code>_get/int/bool</code>)、错误聚合 (<code>ConfigError</code> 追加) 重复; 端点/枚举/正则小校验</td>
+          </tr>
+          <tr>
+            <td class="r">03</td>
+            <td class="mono">config/ (models·loaders·writer·migrations·site_presets·impact)</td>
+            <td class="num">1634 · 6</td>
+            <td>取值样板 <code>_get</code> ↔ dataclass <code>from_dict</code> ↔ writer 写回; migrations 逐版本升级骨架与 schema 的版本常量</td>
+          </tr>
+          <tr>
+            <td class="r">04</td>
+            <td colspan="1">config 键面 <b>横切核验</b> (× docs)</td>
+            <td class="num">—</td>
+            <td><b>C 类总账</b>: 同一键在 schema / loader / validation / writer / <code>docs/configuration.md</code> / <code>config-reference/</code> / 设置页元数据 的 N 份表示对比</td>
+          </tr>
+          <tr>
+            <td class="r">05</td>
+            <td class="mono">core 调度内核 (qbmanager·taskqueue·state·module)</td>
+            <td class="num">1491 · 4</td>
+            <td>state 载入/落盘原子写样板; taskqueue 出入队样板; 主循环三线骨架; ModuleHost 编排 (与各模块的重复见轮 09)</td>
+          </tr>
+          <tr>
+            <td class="r">06</td>
+            <td class="mono">core 数据接入 (qbapi·qbclient)</td>
+            <td class="num">~700 · 2</td>
+            <td>QbApi Facade 的透传样板 (方法名/参数映射反复书写); qbclient 的 HTTP 调用与错误转换重复</td>
+          </tr>
+          <tr>
+            <td class="r">07</td>
+            <td class="mono">core 流量 (traffic_store·traffic_grid·curves)</td>
+            <td class="num">~1900 · 3</td>
+            <td>dat 版本演进 (v2/v3/v4) 的旧分支残留; 块化/聚合与 speed_curve 的区间口径重复</td>
+          </tr>
+          <tr>
+            <td class="r">08</td>
+            <td class="mono">core 领域 (episodes·tvshows·exporter)</td>
+            <td class="num">~600 · 3</td>
+            <td>剧集解析 (episodes/tvshows 边界重叠); exporter 导出样板</td>
+          </tr>
+          <tr>
+            <td class="r">09</td>
+            <td class="mono">core/modules/ 契约样板 (跨 8 模块 + webui/hr module)</td>
+            <td class="num">—</td>
+            <td><b>A 类</b>: <code>name/sections/start/stop/apply/subscribe</code> 六动词样板 + <code>ctx</code> 挂载 + <code>ApplyResult</code> 构造, 在 10 个模块里各写一遍</td>
+          </tr>
+          <tr>
+            <td class="r">10</td>
+            <td class="mono">core/modules/ 业务 (ops·maintenance·tracker·grouping·rules·logging·notify·speed_curve·traffic_sample)</td>
+            <td class="num">3705 · 11</td>
+            <td>模块内部: 配置段读取、日志/事件文案、危险动作闸门、打标/分类的样板</td>
+          </tr>
+          <tr>
+            <td class="r">11</td>
+            <td class="mono">hr 解析面 (adapters/·parse·bencode·fetcher)</td>
+            <td class="num">994 · 7</td>
+            <td><b>A 类</b>: <code>nexusphp</code>/<code>carpt</code>/<code>btschool</code> 三 adapter 的表格解析、数值容错、翻页判定重复; fetch 通道选择样板</td>
+          </tr>
+          <tr>
+            <td class="r">12</td>
+            <td class="mono">hr 判定与序列化 (resolve·status·model)</td>
+            <td class="num">1532 · 3</td>
+            <td>model 五个 dataclass 的 <code>from_json/to_json</code> 样板; status 的展示映射 ↔ CLI 口径重复</td>
+          </tr>
+          <tr>
+            <td class="r">13</td>
+            <td class="mono">hr 运行面 A (service)</td>
+            <td class="num">1528 · 1</td>
+            <td>单文件巨型: 波次引擎内多处重复的取数/对账/告警去重骨架; 优先找文件内自重复</td>
+          </tr>
+          <tr>
+            <td class="r">14</td>
+            <td class="mono">hr 运行面 B (runtime·worker·store·queue·channel·server·events·report·ratelimit·module·log)</td>
+            <td class="num">~2740 · 12</td>
+            <td>线程生命周期 (start/stop/join) 样板; store 原子写+文件锁 ↔ 内核 state 同族; channel/server HTTP 头解析; report CLI 表格对齐 (与 infra 表格工具重复)</td>
+          </tr>
+          <tr>
+            <td class="r">15</td>
+            <td class="mono">webui/server/ (factory·context·auth·lifecycle·common·static_ui·traffic_qb + routes/*)</td>
+            <td class="num">2282 · 18</td>
+            <td><b>A 类</b>: <code>routes/*</code> 的 handler 样板 (鉴权 / 参数解析 / JSON 返回 / 错误映射) 逐文件重写; factory/context 装配重复</td>
+          </tr>
+          <tr>
+            <td class="r">16</td>
+            <td class="mono">webui 表现层 (runtime·views·commands·module)</td>
+            <td class="num">3534 · 4</td>
+            <td>views 视图构建口径; commands 命令分发样板; runtime 热重载分支</td>
+          </tr>
+          <tr>
+            <td class="r">17</td>
+            <td class="mono">rules/ (conditions·actions/*·expr/*·base·registry·checking_meta)</td>
+            <td class="num">2187 · 15</td>
+            <td>13 条件 / 12 动作各自的参数解析与注册样板; expr 的 lexer/parser/eval 类型判据重复</td>
+          </tr>
+          <tr>
+            <td class="r">18</td>
+            <td class="mono">infra/ (utils·notify·logging·file_access·locking·versioning·autostart·errors)</td>
+            <td class="num">2013 · 9</td>
+            <td><b>C 类重灾区</b>: <code>utils</code> 的单位/时间/原子写小工具 ↔ <code>hr/parse</code>、config、torrents 各处私自实现同一转换</td>
+          </tr>
+          <tr>
+            <td class="r">19</td>
+            <td class="mono">torrents/ + tray/ + entry (store·record·view·compat; app; cli·__main__·auto-qb.py)</td>
+            <td class="num">1902 · 8</td>
+            <td>record 字段样板; view 构建与 webui views 口径重复; compat 别名层; cli 参数与 __main__ 入口重复</td>
+          </tr>
+
+          <tr class="phase"><td colspan="4">Phase 2 · 前端 (webui/static/)</td></tr>
+          <tr>
+            <td class="r">20</td>
+            <td class="mono">shared/*.js (非抽屉)</td>
+            <td class="num">~8000 · 40</td>
+            <td>格式化/排序/视图/列/筛选/状态/菜单/生命周期/轮询里的助手函数重复; 单点口径 (speedLimitBytes、单元格口径) 是否已被多处重算</td>
+          </tr>
+          <tr>
+            <td class="r">21</td>
+            <td class="mono">shared/drawer_tpl/* + drawer_pages/* + drawer_templates.js</td>
+            <td class="num">~6000 · 20</td>
+            <td><b>已知</b> issue <code>26-10-07-0845</code> (15 变体骨架重复) —— 复核 + 扩展到底座/滚动自保/sig 之外</td>
+          </tr>
+          <tr>
+            <td class="r">22</td>
+            <td class="mono">atlas/prism/console css (tokens·views·components·dialogs·style·themes/*)</td>
+            <td class="num">~12000 · 17</td>
+            <td><b>C 类</b>: 令牌族「各套各声明一处, 改值全处同改」(webui.md 明纪律); 三套 CSS 的同类规则; prism 五主题变量重复</td>
+          </tr>
+          <tr>
+            <td class="r">23</td>
+            <td class="mono">shared/tpl/*.html + 三 index.html</td>
+            <td class="num">~4000 · 20</td>
+            <td>模板片段结构重复 (dock/topbar/statusbar/dialogs 族); 三套 index.html 的骨架</td>
+          </tr>
+
+          <tr class="phase"><td colspan="4">Phase 3 · 测试与横切</td></tr>
+          <tr>
+            <td class="r">24</td>
+            <td class="mono">tests/</td>
+            <td class="num">63956 · 108</td>
+            <td>Fake/桩/夹具 (helpers·webui_helpers·hr_helpers·sidefx) 的重复; 断言样板; 「## 测试计划」docstring 与用例漂移</td>
+          </tr>
+          <tr>
+            <td class="r">25</td>
+            <td>跨层「同一事实」总账</td>
+            <td class="num">—</td>
+            <td>把各轮 C 类合到一张账: 配置键面 · 颜色令牌 · 模块契约 · 枚举/状态词 · 中文文案 · 口径单点。这是<b>重构收益最大的一张表</b></td>
+          </tr>
+
+          <tr class="phase"><td colspan="4">Phase 4 · 汇总</td></tr>
+          <tr>
+            <td class="r">26</td>
+            <td>汇总与重构路线图</td>
+            <td class="num">—</td>
+            <td>分类计数 → 重构候选按「收益 / 风险」排序 → 可动项入池 issue (type=refactor) → 形成清偿顺序</td>
+          </tr>
+        </table>
+
+        <h3>4.1 规模备注</h3>
+        <p class="small">合计: 后端 Python 约 <b>31.4k 行 / 151 文件</b>; 前端静态约 <b>33.0k 行 / 86 文件</b> (不含 vendor); 测试约 <b>64.0k 行 / 108 文件</b>。前端的共享 JS 与三皮肤 CSS 是总量最大的两块, 故单独立轮。</p>
+      </section>
+
+      <section id="s5">
+        <h2><span class="secno">05</span>每轮微步骤 (S1–S6)</h2>
+        <hr class="sec-rule">
+        <p>每一轮都按同一套六步走, 保证可重复、可中断、可交接。<b>执行时另立任务档案</b>, 每轮的 S5/S6 结果回写档案与 activeContext。</p>
+        <div class="step">
+          <h3><span class="sid">S1</span>圈定</h3>
+          <p>列本轮文件清单 + 行数 + <b>目标符号清单</b> (预判的重点函数/类), 写进档案; 确认基线 hash。</p>
+        </div>
+        <div class="step">
+          <h3><span class="sid">S2</span>提名 (机器)</h3>
+          <p>跑 §3.2 工具收候选; 叠加 §3.3 结构线索 grep。<b>只收候选, 不下结论</b>; 噪声阈值本轮记下, 供下轮调参。</p>
+        </div>
+        <div class="step">
+          <h3><span class="sid">S3</span>精读 (只读)</h3>
+          <p>逐候选打开两侧源码核对 (禁止只读工具报告); 补齐工具抓不到的语义重复 (改写过的同一逻辑)。</p>
+        </div>
+        <div class="step">
+          <h3><span class="sid">S4</span>判定与记录</h3>
+          <p>按 §02 四分类定性, 填 §2.1 七字段; 对 B 类必须写清<b>分歧点</b> (这是后续能否安全合并的关键); 对 D 类写一句「为何不动」。</p>
+        </div>
+        <div class="step">
+          <h3><span class="sid">S5</span>归档</h3>
+          <p>本轮发现追加进滚动报告; 可动项按 create-issue skill 入池 (type=<code>refactor</code>) 并在文件里写一句结论 (重复对象 + 建议收敛形态); 回写任务档案与 activeContext 切片。</p>
+        </div>
+        <div class="step">
+          <h3><span class="sid">S6</span>止损</h3>
+          <p>到量即停 (见 §07 上限), <b>不做任何修复</b>; 向用户报本轮分类计数与待办下一轮。</p>
+        </div>
+      </section>
+
+      <section id="s6">
+        <h2><span class="secno">06</span>产出与归档</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th style="width:26%">制品</th><th style="width:30%">放哪</th><th>内容</th></tr>
+          <tr><td class="r">本计划</td><td class="mono">plans/26-10-10-2333-plan-dup-code-audit.html</td><td>轮次与口径 (拍板后冻结; 改版走「## 变更记录」+ 抬 <code>doc-updated</code>)</td></tr>
+          <tr><td class="r">滚动报告</td><td class="mono">reports/&lt;stamp&gt;-report-dup-code-audit.html</td><td>每轮追加 <code>## Rn &lt;面&gt;</code> 小节; 每轮抬 <code>doc-updated</code>; 全部轮完置 <code>Done</code></td></tr>
+          <tr><td class="r">可动项池</td><td class="mono">issues/&lt;stamp&gt;-refactor-&lt;slug&gt;.html</td><td>一格一 issue (create-issue skill); 认领后走 refactor 任务</td></tr>
+          <tr><td class="r">跨会话档案</td><td class="mono">tasks/26-10-10-dup-code-audit.md</td><td>唯一滚动更新: 做到哪轮 / 分类计数 / 下轮待办 (memory-bank skill)</td></tr>
+          <tr><td class="r">每轮快照</td><td class="mono">activeContext/&lt;stamp&gt;-dup-code-audit.md</td><td>本次会话做到哪 (DoD 收尾时更新)</td></tr>
+        </table>
+        <div class="callout warn">
+          <p><b>报告形态的取舍:</b> doc-forms 口径是「report 出厂即冻结」, 而本审查是<b>逐轮滚动</b>的。折中: 用<b>一份</b>滚动报告 (每轮抬版), 全文定稿于轮 26 后置 <code>Done</code>。<b>若你更偏好冻结快照</b>, 改为「每阶段一份」(后端 / 前端 / 测试横切 共 3 份), 轮 26 时一并汇总。</p>
+        </div>
+      </section>
+
+      <section id="s7">
+        <h2><span class="secno">07</span>停手点与风险</h2>
+        <hr class="sec-rule">
+
+        <h3>7.1 硬停手点</h3>
+        <ul>
+          <li><b>只审查、不改码</b> —— 任何发现都不得在本轮顺手重构 (scope-guard; 黄金法则 6)。</li>
+          <li><b>单轮上限</b>: 源码 ≤ 4000 行 / 提名组 ≤ 30 —— 到量即停, 余下拆到下一轮。</li>
+          <li><b>一轮一面</b>: 不跨轮混读; 每轮结束回写档案, 用户可暂停 / 调整下一轮顺序。</li>
+          <li><b>B 类只登记</b>: 近似含分歧的重复, 一律不在本轮给「直接合并」结论。</li>
+        </ul>
+
+        <h3>7.2 风险</h3>
+        <table>
+          <tr><th style="width:30%">风险</th><th>对策</th></tr>
+          <tr><td class="r">误判 → 过度抽象</td><td>严守 D 类: 表面相似不动; 每轮 S4 反问「合并后语义会更清楚吗」</td></tr>
+          <tr><td class="r">工具噪声淹没结论</td><td>先调 <code>--min-similarity-lines</code> / <code>--min-tokens</code> 到噪声可接受; 工具只提名</td></tr>
+          <tr><td class="r">大文件读取成本</td><td>按符号清单局部读, 不整读 (检索纪律); 轮 13/10/22 尤其注意</td></tr>
+          <tr><td class="r">C 类跨文件难穷举</td><td>靠 §3.3 结构线索 + 轮 25 统一收口, 不在单轮强求</td></tr>
+          <tr><td class="r">审查轮与重构轮混淆</td><td>本计划恒为纯审查; 任何改动需另立 refactor 任务并单独拍板</td></tr>
+        </table>
+      </section>
+
+      <section id="s8">
+        <h2><span class="secno">08</span>验收</h2>
+        <hr class="sec-rule">
+        <ul>
+          <li><b>覆盖面</b>: 8 个后端包 + 前端三皮肤 + tests 各至少过一轮 (轮 01–24 全部走完)。</li>
+          <li><b>每轮完备</b>: 有 §2.1 七字段发现清单 + 四分类计数 + 噪声参数记录。</li>
+          <li><b>全局产出</b>: 重构候选排序表 (收益/风险) + 跨层「同一事实」总账 (轮 25) + 入池 issue 索引。</li>
+          <li><b>零改动</b>: 全程 <code>git status</code> 无源码变更 (仅新增文档制品)。</li>
+          <li><b>可交接</b>: 任一后续会话读本计划 + 任务档案即可接手下一轮。</li>
+        </ul>
+      </section>
+
+      <section id="s9">
+        <h2><span class="secno">09</span>变更记录</h2>
+        <hr class="sec-rule">
+        <table>
+          <tr><th style="width:20%">版本</th><th>变更</th></tr>
+          <tr><td class="r mono">26-10-10-2333</td><td>初版: 全仓四类口径 + 27 轮分步清单 (00–26) + 每轮六步微步骤 + 归档与验收。</td></tr>
+        </table>
+      </section>
+
+      <footer>
+        执行计划 · 专题 <code>dup-code-audit</code> · 规划基线 <code>f03b5d4a</code> · 立项 2026-10-10 23:33<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>
