@@ -1,11 +1,11 @@
 # WEBUI 种子详情面板页插件化 + 页签合并(已实施)
 
-> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。**R3 修订(2026-10-10)见下方; R4 修订(2026-10-10, 页签快捷键随合并态重排)见下方; R5 修订(2026-10-10, 模板选择迁右键: 头部下拉退役, 右键各区域弹各自模板)见下方。**
-> 最后活动: 2026-10-10 14:01
+> 摘要: 用户动议「常规&内容 / Tracker&用户 合并, 仅宽度足够时提供选项, 可切换」—— R2 改版(右键开关 + 页插件化 + 功能全量保留)经四项拍板后实施完成: classic 四件页插件(drawer_pages/)入注册表, 合并 = 抽屉级布局标志 `drawerMerge` + 右键勾选菜单 + 宽度门 1920(暂态遮蔽); 双列各挂各自所选页插件, 交互全量保留。计划 `memory-bank/plans/26-10-09-2219-plan-webui-drawer-merge-tabs.html`(R3, Done)。**R3 修订(2026-10-10)见下方; R4 修订(2026-10-10, 页签快捷键随合并态重排)见下方; R5 修订(2026-10-10, 模板选择迁右键: 头部下拉退役, 右键各区域弹各自模板)见下方; R6 修订(2026-10-10, 合并列间隙/留白右键回落左列修正)见下方。**
+> 最后活动: 2026-10-10 18:42
 
 **Status:** Done
 **Added:** 2026-10-09
-**Updated:** 2026-10-09
+**Updated:** 2026-10-10
 **Topics:** webui-drawer-merge-tabs
 
 ## 已完成(迁自「正在进行」)
@@ -42,3 +42,12 @@
 - 实现: 核心层删 `.dt-select` 整套定宽 CSS 与 `dtTplOptions`/`dtTplCurrent`/`dtPick`, 新增 computed `dtMenuTab`/`dtMenuTplOptions`/`dtMenuTplCurrent`/`dtMenuMergeOn` 与方法 `dtMenuPick(id)`; menu.js `openDrawerMenu` 放行 seed/traffic 两形态 + 新增 `_drawerMenuTab(event)`(变体/经典宿主 `data-dt-host` 去 `-pre/-post` → 合并列 `data-dt-tab` → 回落当前页签); drawer.html 删两处 `<select>`, 合并列加 `data-dt-tab`; ctx-menus.html 抽屉菜单改「模板选项 v-for + 勾选态 + 分隔线 + 条件合并开关」; state.js `drawerMenu` 加显式 `tab` 字段。
 - 验证: `commands run test.one -- tests/test_webui_static_dom_panel.py` 33 passed(旧 `test_drawer_tpl_select_fixed_width_tab_independent` 删除, 新 `test_drawer_tpl_menu_right_click_selection`, `test_drawer_tpl_cross_seed_fold` 改名 + 禁 `.dt-select` 回潮); e2e `drawer-merge.spec.mjs` @fast 8 passed(含新增「右键各列弹各自模板选择(左常规/右内容)」双皮肤)。基线见 kb.baseline 最新一条。
 - 回写: modules/webui-static-contract.md + progress/implemented-webui.md。
+
+## R6 修订(2026-10-10, 用户报「合并后右侧鼠标右键菜单会显示更改左边的模板选项」; 已完成)
+
+用户报: 合并态在**右侧**右键, 菜单出的是**左列(常规)**的模板选项(改错了列)。
+
+- 根因(真浏览器实测): 右列(内容)通常远短于左列(常规) —— 步长 2560 视口下 `.dt-col[content]` 仅 ~204px 高, 而 `[general]` 高 ~2059px。grid `align-items:start` 不撑高低列, **右列下方大片留白不属于任何 `.dt-col`**; 列间 24px gap 与分栏居中封顶 2400 之外的两侧留白同样不落列元素。`_drawerMenuTab` 命不中 host/col 时裸回落 `_dtCurTab()`(= 当前页签, 合并态常为左列/常规)⇒ 右侧空白拿到左列模板选项。
+- 修法: `menu.js::_drawerMenuTab` 在 host/col 都命不中时, 若 `dtSplitOn` 且指针落在**正文区**(`el.closest(".drawer-body")`), 改走新增 `_drawerMenuColByX(event)` —— 按指针 `clientX` 与各 `.dt-col[data-dt-tab]` 矩形归列(取首个右缘不早于 x 的列; 落在最右列之右取最右列、最左列之左取最左列), 与「左右半区」视觉直觉一致。页签栏/头部不在此限, 仍回落当前页签(不带回归)。
+- 验证: 探针实测修复前右列下方空白/列间隙/右侧留白 `menuTab=general`, 修复后一律 `content`(左列/左留白仍 `general`)。`test.one -- tests/test_webui_static_dom_panel.py -k drawer_tpl` 12 passed(守阵加 R6 三钉); e2e `drawer-merge.spec.mjs` **8 passed**(用例扩「右列下方空白右键仍须弹内容模板」); `test.full` 2958 passed + 4 skipped / TOTAL 99%(基线 `26-10-10-1842`)。
+- 回写: modules/webui-static-contract.md + progress/implemented-webui.md; 坑档 `pitfalls/web-ui/drawer-merge-hit-region.md`(几何分区式右键命中: 区域容器不必然覆盖其视觉范围)。

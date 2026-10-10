@@ -1406,7 +1406,9 @@ def test_drawer_tpl_menu_right_click_selection():
     合并时左边弹常规的模板选择, 右边弹内容的模板选择」) —— 头部 .dt-select 下拉退役; 右键命中区域
     决定菜单目标页签: 变体/经典挂载宿主 data-dt-host(含 traffic-pre/post 去后缀)优先, 合并列
     data-dt-tab 兜列头/列空白, 否则当前页签; 菜单 = 该页签模板选项(经典恒在首位, 勾选态 .ctx-tick)
-    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。"""
+    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。
+    2026-10-10 用户报「合并后右侧空白右键弹左列模板」: 命不中 host/col 时(列间隙/分栏两侧留白
+    不落列元素上)不得直接回落当前页签, 正文区内按指针 x 归列(_drawerMenuColByX)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
@@ -1430,6 +1432,15 @@ def test_drawer_tpl_menu_right_click_selection():
         "_drawerMenuTab 缺区域解析(宿主 data-dt-host / 合并列 data-dt-tab)"
     assert 'replace(/-(?:pre|post)$/' in menu_js, \
         "_drawerMenuTab 未剥离 traffic-pre/post 后缀(流量变体宿主右键取不到 traffic 页签)"
+
+    # 2b. 合并双列兜底(2026-10-10 用户报「合并后右侧空白右键弹左列模板」): 列间隙/分栏两侧留白
+    #     不属于任何 .dt-col, 命不中 host/col 时必须在正文区内按指针 x 归列, 不得直接回落当前页签。
+    assert "_drawerMenuColByX(event)" in menu_js, \
+        "menu.js 缺合并列按 x 归列的兜底(_drawerMenuColByX, 右侧空白右键会回落左列模板)"
+    assert 'this.dtSplitOn && el.closest(".drawer-body")' in menu_js, \
+        "x 归列兜底未限定在合并双列 + 正文区内(页签栏/头部仍应回落当前页签)"
+    assert 'querySelectorAll(".drawer .drawer-split .dt-col[data-dt-tab]")' in menu_js, \
+        "_drawerMenuColByX 未按合并列 DOM(.dt-col[data-dt-tab])取列"
 
     # 3. ctx-menus.html: 菜单渲模板选项 + 勾选态 + 条件合并开关
     assert 'v-for="o in dtMenuTplOptions"' in ctx_menus, "ctx-menus 缺模板选项渲染"

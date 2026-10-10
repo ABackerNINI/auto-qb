@@ -196,7 +196,11 @@ window.AQB_MENU = {
       };
     },
     /* 右键命中区域 -> 目标页签: data-dt-host(挂载宿主)优先, 其次合并列 data-dt-tab, 否则当前页签。
-     * 宿主在列之内, 故先判宿主; 列头/列空白不属于任何宿主, 由列上的 data-dt-tab 兜住。 */
+     * 宿主在列之内, 故先判宿主; 列头/列空白不属于任何宿主, 由列上的 data-dt-tab 兜住。
+     * !2026-10-10 用户报「合并后右侧右键弹左列模板」: 合并双列的**列间 24px 间隙**与分栏两侧
+     * 留白(drawer-split 居中封顶 2400, 宽屏两侧可各空出数百 px)都不属于任何 .dt-col 元素 ——
+     * 命不中时若直接回落当前页签, x 明明在右半区却拿到(常为左列的)当前页签模板选项。正文区内
+     * 补一道按指针 x 归列的兜底(见 _drawerMenuColByX); 页签栏/头部不在此限, 仍回落当前页签。 */
     _drawerMenuTab(event) {
       var el = event && event.target;
       if (el && el.closest) {
@@ -210,8 +214,32 @@ window.AQB_MENU = {
           var c = col.getAttribute("data-dt-tab");
           if (c) return c;
         }
+        if (this.dtSplitOn && el.closest(".drawer-body")) {
+          var byX = this._drawerMenuColByX(event);
+          if (byX) return byX;
+        }
       }
       return this._dtCurTab();
+    },
+    /* 合并双列: 按指针 x 归属列页签(只拦列间隙/分栏两侧留白这类「不落在列元素上」的命中)。
+     * 只判水平 —— 列按渲染序排序, 取首个右缘不早于 x 的列; 落在最右列之右(右侧留白)取最右列,
+     * 落在最左列之左取最左列(视觉上的「左右半区」语义)。无列(未合并/流量形态)返回 ""。 */
+    _drawerMenuColByX(event) {
+      var x = event && typeof event.clientX === "number" ? event.clientX : null;
+      if (x === null || typeof document === "undefined") return "";
+      var nodes = document.querySelectorAll(".drawer .drawer-split .dt-col[data-dt-tab]");
+      if (!nodes.length) return "";
+      var cols = Array.prototype.slice.call(nodes).sort(function (a, b) {
+        return a.getBoundingClientRect().left - b.getBoundingClientRect().left;
+      });
+      var pick = cols[cols.length - 1];
+      for (var i = 0; i < cols.length; i++) {
+        if (x <= cols[i].getBoundingClientRect().right) {
+          pick = cols[i];
+          break;
+        }
+      }
+      return pick.getAttribute("data-dt-tab") || "";
     },
     /* ---------------- FX-15 次级菜单(flyout) ----------------
      * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/

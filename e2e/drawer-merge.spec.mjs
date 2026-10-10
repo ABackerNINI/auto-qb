@@ -13,6 +13,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *   3. 窄视口(<1920): 菜单项置灰(.is-gated), 点击零状态变化(dtToggleMerge 双保险拦截), 四页签原样。
  *   4. 2026-10-10 模板选择迁右键: 合并态右键左列弹常规变体、右列弹内容变体(菜单选项集按命中列),
  *      两列各自选择互不影响。
+ *   5. 2026-10-10 用户报「合并后右侧空白右键弹左列模板」回归: 右列(内容)通常短于左列, 其下方
+ *      空白格区/列间隙不落在任何 .dt-col 元素上 —— 右键仍须归右列(不得回落当前/左列)。
  * 断言口径: 真实手势(右键 click button:'right'), 不借道 vm; 抽屉内容经页插件(classic)渲染。
  */
 
@@ -185,6 +187,18 @@ for (const skin of SKINS) {
       await expect(split.locator('[data-dt-host="content"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
       // 左列选择不受右列影响(两列各自记忆)
       await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/);
+
+      // 2026-10-10 用户报「右侧空白右键弹左列模板」回归: 右列(内容)短于左列(常规), 右列下方
+      // 空白格区不属于任何 .dt-col(align-items:start 不撑高) —— 右键该处仍须弹内容模板, 不得
+      // 回落当前页签(常为左列)。真实手势点右列底缘 + 40px(钳在正文可视底内)。
+      const rightBox = await rightCol.boundingBox();
+      const bodyBox = await drawer.locator('.drawer-body').boundingBox();
+      const blankY = Math.min(rightBox.y + rightBox.height + 40, bodyBox.y + bodyBox.height - 8);
+      await page.mouse.click(rightBox.x + rightBox.width / 2, blankY, { button: 'right' });
+      await expect(menu, '右列下方空白右键必须仍弹右列(内容)模板菜单').toBeVisible();
+      await expect(rightItem, '右列空白命中须归内容页签, 不得回落左列').toBeVisible();
+      await expect(menu.locator('.ctx-item', { hasText: '英雄行·键值栅格' })).toHaveCount(0);
+      await page.mouse.click(5, 5); // 收菜单, 不点任何项(避免改动选择)
     });
   });
 }
