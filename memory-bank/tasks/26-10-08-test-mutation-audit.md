@@ -243,4 +243,15 @@
 - **S7 记录**: 基线切片 [26-10-10-0925](../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md); 本档案 R11; 常驻锚 §07(config 行补第 6 个切片指针)/§08/§09 同步; loader-defaults issue 状态与变更日志更新。
 - **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-0925](../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md)(本轮 7 个新守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
 - **踩到的已记坑**: [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) **复发 +1** —— 本轮变异形态是「删整行」, 脚本在 bytes 层比对却拿 str 锚点 ⇒ 6 条 `bind.*` 恒 `hits=0`; 另有 2 条单行锚点在两个函数里各出现一次(`count=2`)。**为什么没命中**: 坑里写的是「CRLF 让多行锚点失配 / 手抄缩进差 1」, 本轮是**第三种形态**(字节层类型失配 + 函数级重复锚点), 首版照写仍会踩; 但坑里那句「`count != 1` 必须报错停手」的兜底**生效了**(报 `ANCHOR-MISS` 而非假绿), 属守阵按预期工作。已把形态三补进坑档。
-- **未做 / 遗留**: config 真洞 issue 尚余 **boundary-guards** 一条未实施; 未回灌 skill(本轮「issue 只给形态没给 id → 手搓同构变异脚本做复验/红验, 复跑仍走 `mutants.run` 量化」的做法可进 `mutation-testing` skill 的流程约束, 未做); 未 commit/push(用户未说「提交」)。
+- **未做 / 遗留**: config 真洞 issue 尚余 **boundary-guards** 一条未实施; 「形态级手搓复验」的做法当时未回灌 skill(R12 补上); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-10 R12 — 回灌指导: 形态级复验进 skill / 报告 / 命令包 / 锚
+
+- **触发**: 用户「根据此轮经验优化变异测试 skill 与指导文档」(R11 loader-defaults 轮之后)。
+- **回灌内容**(两条可复用经验, 都是 R11 现踩出来的):
+  - **① 形态级手搓复验**(skill 硬约束 13 + 专节「形态级手搓复验(无 id 时的第二种路)」): 真洞 issue 常只写**变异形态**(`_get(...)` 默认值换 None / 删关键字实参)给不出 id, 而 `mutants.verify` 按 id 工作 —— 这时写临时脚本(落 `tmp-analysis/`)按形态造同构变异, 跑**定向池**(实测 ≈3s/条)而非全套件(≈15s/条), 同一份脚本跑两遍 = 形态复验(补测前存活几条) + 红验(补测后是否全红)。**边界写进 skill**: 手搓变异不是 mutmut 编号, **不进存活计数**, 量化只认 `mutants.run` 同目标同池复跑, 切片里要如实标注两者不逐 id 对应。
+  - **② 等价变异的一类新形态**(三分类节): **派生值恰等于字段默认**时, 「删实参 / 默认值换 None」在所有现存输入上都看不出差别 → 是等价变异但看着像真洞。判等价前先问「我造的输入能把派生值与字段默认区分开吗」, 区分不开就先造输入(合成非默认档案 / 「键在」与「键缺」反向对照), 再下结论。
+- **同步落点**: 证据报告 §14「这轮与后续轮次给流程的**五条**修正」第五条(原「三条」标题实为四条, 顺手改对)+ §15 变更记录一行 + 抬 `doc-updated`; 命令包深读 `references/why.md` 新增「什么时候**不用** `mutants.verify`」; 常驻锚 §05 标准动作改「两路」、§06 产物表补红验坑档行、§09 日志; skill 另补 3 条反模式(手搓条数当存活数报 / 守阵只给「键在」一种输入 / 判等价前不问输入能否区分)与坑指针(四种锚点失配形态)。
+- **踩到的已记坑**: 无(本轮纯文档)。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1000](../testing/baselines/26-10-10-1000-mutation-audit-skill-feedback.md)(`src/` 与 `tests/` **零改动**); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **未做**: 未 commit/push(用户未说「提交」)。

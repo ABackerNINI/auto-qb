@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-testing-feasibility">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-08-0231">
-<meta name="doc-updated" content="26-10-08-0935">
+<meta name="doc-updated" content="26-10-10-0957">
 <style>
   :root {
     --bg: #10151a;
@@ -611,12 +611,20 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
       <tr><td>补测 + 复跑</td><td>补 10 个守阵(红验 18/18 全红) → 同目标同池复跑: 杀 3,972 · 存活 <b>772</b> → 杀死率 <b>82.77%</b>; <b>存活 −121 / 新增存活 0</b></td></tr>
       <tr><td>真洞候选分布</td><td>writer 74 · sections 45 · schema/__init__ 27 · core 25 · loaders 16 · rules 11 · migrations 10 · curves 9 · site_presets 2 · impact 1</td></tr>
     </table>
-    <h3>这轮给流程的三条修正</h3>
+    <h3>这轮与后续轮次给流程的五条修正</h3>
     <ul>
       <li><b>「全套件确认」是最大成本项</b>(≈15s/条) —— 已收进命令包 <code>mutants.verify</code>(apply → 全套件 → 还原, 可续跑); 候选要先按「判据密度 × 出错代价」收窄, 别对全部存活无差别开跑。</li>
       <li><b>池太窄会成片产生 <code>no tests</code></b> —— 55 条全部集中在两个规则条件校验器上(池内 6 个文件不覆盖规则条件), 那批变异连三分类都做不了。定池先核「覆盖目标包的函数面」。</li>
       <li><b>复跑要带新守阵必须 <code>--no-refresh</code></b> —— <code>mutants.run</code> 默认 <code>git checkout -f</code> 会把镜像里未提交的测试改动冲掉, 存活数纹丝不动还以为是真洞。</li>
       <li><b>每轮实施后要同步常驻锚的覆盖进度总表</b> —— 增加第四个记录工位: 常驻排期锚 <code>issues/26-10-08-0642-…html</code> 的 §07 覆盖进度总表(包 / 上次测试日期 / 变异数 / 杀死率 / 轮次 / 状态 / 切片链接), 一轮跑完必更; 否则「覆盖到哪几个包了」没有单点, 下轮得翻遍切片。该表只放汇总刻度与指针, 不是流水(规程见 <code>mutation-testing</code> skill 的「覆盖进度总表(收尾必更)」节与硬约束 12)。</li>
+      <li><b>只有「变异形态」没有 id 时, 走形态级手搓复验(2026-10-10, config loader-defaults 轮)</b> —— 真洞
+        issue 常只写形态(<code>_get(spec, KEY, d.&lt;field&gt;)</code> 默认值换成 <code>None</code> / 删掉关键字实参)给不出
+        id, 而 <code>mutants.verify</code> 是<b>按 id</b> 工作的, 这时用不上。做法: 临时脚本按形态造同构变异 → 跑<b>定向池</b>
+        (实测 ≈3s/条)而非全套件(≈15s/条), 同一份脚本跑两遍 = 形态复验(补测前存活几条) + 红验(补测后是否全红)。
+        <b>边界</b>: 手搓变异不是 mutmut 编号, <b>不进存活计数</b>, 量化仍走 <code>mutants.run</code> 同目标同池复跑;
+        锚点 <code>count != 1</code> 必须报错停手(否则「变异没生效」会被当成「守阵挡不住」)。同源发现:
+        <b>派生值恰等于字段默认时, 删实参是等价变异</b> —— 判等价前先造能区分的输入(合成非默认档案),
+        别把可观测的真洞误判成等价变异。已写进 skill 硬约束 13 与「形态级手搓复验」节。</li>
     </ul>
     <div class="callout"><b>方法论读数</b>: 274 条候选里 <b>54 条(19.7%)是假存活</b> —— 与 §09 结论同向, 但比例比调研轮(1 个文件池 → 5 个文件池, 存活降 27%)温和得多: config 的池已经是「定向 6 文件」, 漏掉的主要是与 config 交叉的<b>规则 / 事件域</b>测试文件。另记一条本机环境坑: WSL 登录壳是 zsh, <code>$()</code> 取错 cwd 会让 <code>mutants.status</code> 恒报 <code>mutmut=no</code>(不影响 <code>mutants.run</code>)。</div>
   </section>
@@ -652,6 +660,16 @@ uv run mutmut run --max-children 6      # → 生成 34,702 变异; 跑到 ~37% 
         <td class="num">26-10-08-0935</td>
         <td><b>§14 补第四条流程修正</b>: 每轮实施后同步常驻锚 §07 覆盖进度总表(包 / 上次测试日期 / 变异数 / 杀死率 / 轮次 / 状态 / 切片链接), 作为「覆盖到哪几个包」的单点; 一并写进 <code>mutation-testing</code> skill(硬约束 12 + 专节 + 反模式) 与常驻锚本体。抬 <code>doc-updated</code></td>
         <td>用户「在变异测试长青 issue 中加表格(各部分测试/上次测试日期/相关 task 文档), 每次实施完必更, 约束进 skill 与相关文档」</td>
+      </tr>
+      <tr>
+        <td class="num">26-10-10-0957</td>
+        <td><b>§14 补第五条流程修正</b>: 只有变异形态没有 id 时的<b>形态级手搓复验</b>(临时脚本按形态造同构变异 → 跑定向池
+        ≈3s/条 vs <code>mutants.verify</code> 全套件 ≈15s/条; 同一份脚本跑两遍 = 形态复验 + 红验), 含两条边界(手搓条数
+        不进存活计数, 量化只认 <code>mutants.run</code>; 锚点 <code>count != 1</code> 必须停手)与同源发现(派生值恰等于
+        字段默认 ⇒ 删实参是等价变异, 先造能区分的输入再判)。一并写进 <code>mutation-testing</code> skill(硬约束 13 +
+        「形态级手搓复验」专节 + 三分类的等价变异新形态 + 坑指针 + 3 条反模式)、命令包深读
+        <code>references/why.md</code>(「什么时候不用 <code>mutants.verify</code>」)、常驻锚 §05 标准动作与 §09; 抬 <code>doc-updated</code></td>
+        <td>用户「根据此轮经验优化变异测试 skill 与指导文档」(config loader-defaults 轮 R11 之后)</td>
       </tr>
     </table>
   </section>
