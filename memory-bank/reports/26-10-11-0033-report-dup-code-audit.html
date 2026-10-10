@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-11-0033">
+<meta name="doc-updated" content="26-10-11-0207">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–04: 准备 + config 全包)</title>
+<title>全仓重复代码审查 · 滚动报告 (轮 00–10: 准备 + config + core 全包)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -92,19 +92,25 @@
       <a href="#s5"><b>05</b>&nbsp; R02 config/validation</a>
       <a href="#s6"><b>06</b>&nbsp; R03 config 其余</a>
       <a href="#s7"><b>07</b>&nbsp; R04 键面总账</a>
-      <a href="#s8"><b>08</b>&nbsp; 候选排序</a>
-      <a href="#s9"><b>09</b>&nbsp; 入池 issue</a>
-      <a href="#s10"><b>10</b>&nbsp; 变更记录</a>
+      <a href="#s8"><b>08</b>&nbsp; R05 core 调度内核</a>
+      <a href="#s9"><b>09</b>&nbsp; R06 core 数据接入</a>
+      <a href="#s10"><b>10</b>&nbsp; R07 core 流量</a>
+      <a href="#s11"><b>11</b>&nbsp; R08 core 领域</a>
+      <a href="#s12"><b>12</b>&nbsp; R09 模块契约样板</a>
+      <a href="#s13"><b>13</b>&nbsp; R10 模块业务</a>
+      <a href="#s14"><b>14</b>&nbsp; 分类计数与候选排序</a>
+      <a href="#s15"><b>15</b>&nbsp; 入池 issue</a>
+      <a href="#s16"><b>16</b>&nbsp; 变更记录</a>
     </nav>
     <main>
       <div class="kicker">执行报告 · 重复代码审查</div>
       <h1>全仓重复代码审查 · 滚动报告</h1>
-      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
+      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
       <div class="meta-row">
         <span>状态 <b class="mono">In Progress</b></span>
         <span>专题 <b class="mono">dup-code-audit</b></span>
-        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–04</b></span>
-        <span>取证基线 <b class="mono">0d27b69e</b></span>
+        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–10</b></span>
+        <span>取证基线 <b class="mono">1d7c864b</b></span>
         <span>启动 <b class="mono">26-10-11-0033</b></span>
         <span>报告形态 <b class="mono">滚动(轮 26 置 Done)</b></span>
       </div>
@@ -124,6 +130,12 @@
           <tr><td class="r">R02</td><td class="mono">config/validation/</td><td>1358 行 · 5 文件(计划写 4, 实为 5)</td></tr>
           <tr><td class="r">R03</td><td class="mono">config/ models·loaders·writer·migrations·site_presets·impact</td><td>~1546 行 · 6 文件(+<code>__init__</code>/<code>errors</code>)</td></tr>
           <tr><td class="r">R04</td><td>config 键面横切核验(× docs)</td><td>C 类总账(schema/validation/models/docs/keys.md)</td></tr>
+          <tr><td class="r">R05</td><td class="mono">core 调度内核 qbmanager·taskqueue·state·module</td><td>1491 行 · 4 文件</td></tr>
+          <tr><td class="r">R06</td><td class="mono">core 数据接入 qbapi·qbclient</td><td>379 行 · 2 文件(计划写 ~700)</td></tr>
+          <tr><td class="r">R07</td><td class="mono">core 流量 traffic_store·traffic_grid·curves</td><td>1881 行 · 3 文件</td></tr>
+          <tr><td class="r">R08</td><td class="mono">core 领域 episodes·tvshows·exporter</td><td>624 行 · 3 文件</td></tr>
+          <tr><td class="r">R09</td><td class="mono">core/modules/ 契约样板(跨 9 模块 + webui/hr module)</td><td>契约层样板(不按行数)</td></tr>
+          <tr><td class="r">R10</td><td class="mono">core/modules/ 业务(9 模块)</td><td>3705 行 · 11 文件</td></tr>
         </table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
@@ -332,17 +344,297 @@
       </section>
 
       <section id="s8">
-        <h2><span class="secno">08</span>分类计数与重构候选排序</h2>
+        <h2><span class="secno">08</span>R05 · core 调度内核(qbmanager · taskqueue · state · module)</h2>
         <hr class="sec-rule">
-        <h3>8.1 分类计数(轮 00–04)</h3>
+        <p><b>S1 圈定:</b> <code>qbmanager.py</code>(主循环节拍/连接/刷新管线) · <code>taskqueue.py</code>(时间优先堆) · <code>state.py</code>(state.json 服务) · <code>module.py</code>(AppContext/ModuleHost/EventBus/契约)。目标符号: <code>connect</code>/<code>run</code> · <code>TaskQueue.add_task/run_due</code> · <code>StateService.save/load</code> · <code>ModuleHost.run_*_line</code> · <code>ApplyResult</code>/<code>BaseModule</code>。</p>
+        <p><b>S2 提名:</b> pylint R0801(<code>=5</code>)对 core 仅 1 组(<code>modules/__init__</code>), jscpd python <b>0 clone</b> —— 与 config 同结论: 字面重复极低, 主战场是结构线索 + 逐文件精读。</p>
         <div class="counts">
-          <div class="box a"><div class="n">5</div><div class="l">A 真重复</div></div>
-          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
-          <div class="box c"><div class="n">8</div><div class="l">C 同一事实</div></div>
-          <div class="box d"><div class="n">9</div><div class="l">D 不动</div></div>
+          <div class="box a"><div class="n">4</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
         </div>
-        <p class="small">A 计数含 R02-V02/V03、R03-W01/L01/P01/G01(其中 G01 亦属性近 A)。C 计数含 R01-S01/S02、R02-V01/V04/V05、R03-M01/I01/K01/V01(部分为同一族的跨轮拆分)。</p>
-        <h3>8.2 重构候选排序(收益 / 风险)</h3>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R05-M01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 连接失败节流样板 <b>3 份</b> —— <code>qbmanager.connect()</code> 的 <code>except APIConnectionError</code>(369-374) 与 <code>except Exception</code>(375-382) 函数体逐字相同, <code>run()</code> 主循环 <code>except APIConnectionError</code>(564-570) 同款; 均为 <code>if self._last_conn_ok is not False: logger.error("连接 qBittorrent 失败: {e}"); self._last_conn_ok = False</code>。<br><b>建议:</b> 抽 <code>_note_conn_failed(e)</code>。收益高/风险低。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-M02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 重连成功处理 <b>2 份</b> —— <code>connect</code>(363-368) 与 <code>run</code>(558-561): <code>self._last_conn_ok = True; self._reset_reconnect_backoff(); logger.info("已重新连接 qBittorrent")</code>。<br><b>建议:</b> 抽 <code>_note_conn_ok()</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-M03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> state 加载样板 <b>2 份</b> —— <code>__init__</code>(179-180) 与 <code>run</code>(467-468): <code>self.state = self.ctx.state.load(); self.ctx.state.bind_field_snapshots(self.store)</code>。<br><b>建议:</b> 抽 <code>_load_state()</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-M04</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>ModuleHost</code> loop-hook 分发 —— <code>run_sync_line</code>(335-340) 与 <code>run_task_line</code>(342-347) <b>逐字同构</b>(仅 hook 名串不同), <code>run_command_line</code>(326-333) 同骨架加「changed 聚合」。<br><b>建议:</b> 抽 <code>_run_hook(name, *args)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-S01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>state.py</code> 原子写调用样板 <b>2 份</b> —— <code>save()</code>(161-176) 与 <code>_write_back_recovered()</code>(116-128) 都是 <code>utils.atomic_write(path, lambda f: json.dump(self._state_write_payload(...)))</code>(仅 <code>keep_backup</code> 不同)。<br><b>建议:</b> 抽 payload 写出闭包; 归入 R07-T05 的「原子写收敛」一并考量。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-D01</td><td><span class="tag d">D</span></td>
+            <td><b>服务委托属性对</b>(config/store/api/state/task_queue/web 的 getter+setter 委托 ctx)。判定<b>不动</b>: D1 拍板永久保留的公共外观面(76 构造点 / 279 <code>make_manager</code> 测试零改动), 非可收敛的重复。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>_throttle</code> vs <code>_wait_next</code></b>。判定<b>不动</b>: 形似义不同(非托管 <code>time.sleep</code> vs 唤醒优先 + 停止分段), 合并会改延迟语义。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R05-D03</td><td><span class="tag d">D</span></td>
+            <td><b>BaseModule 默认无操作动词 / TaskQueue 出入队单点</b>。判定<b>不动</b>: 基类样板与已抽好的单点, 刻意。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s9">
+        <h2><span class="secno">09</span>R06 · core 数据接入(qbapi · qbclient)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>qbapi.py</code>(QbApi Facade, 330 行) · <code>qbclient.py</code>(客户端构造, 49 行)。目标符号: 写方法 store 同步族 · 透传族 · <code>_kib</code>/<code>get/set_*_speed_limits</code>。</p>
+        <p><b>S2 提名:</b> pylint/jscpd 对本面 0 命中; 主线索为逐方法精读(<code>1024</code> / <code>_kib</code> / 透传形状)。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">1</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">1</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R06-A01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 局部助手 <code>_kib</code> <b>2 份</b> —— <code>get_global_speed_limits</code>(352-353) 与 <code>get_alt_speed_limits</code>(382-384)(bytes→KiB, <code>&lt;=0 → 0</code>), 逐字近同(后者多一层 <code>int(x or 0)</code>)。<br><b>建议:</b> 抽模块级 <code>_to_kib</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R06-A02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「KiB↔bytes + 0=不限速」单位口径多处 —— <code>set_global_speed_limits</code>(368/370) 与 <code>set_alt_speed_limits</code>(399/401) 均为 <code>0 if x &lt;= 0 else int(x)*1024</code>(<b>4 处</b>), 加上 <code>_kib</code> 两份; 且与 <code>curves.bytes_to_kib</code>(取整<b>向上</b>) <b>方向分歧</b>(qbapi 为 floor)。<br><b>建议:</b> 单点单位换算, 显式钉死取整方向(见 issue <code>core-speed-unit-convention-dup</code>)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R06-D01</td><td><span class="tag d">D</span></td>
+            <td><b>透传 facade ~20 个 <code>return self._client.X(...)</code> 方法</b>。判定<b>不动</b>: 刻意显式(与 qbittorrentapi duck-type 名对齐 + 显式公共签名面), 收成 <code>__getattr__</code> 会削弱签名可见性与测试断言 —— 计划 §02「刻意重复不记 A」。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s10">
+        <h2><span class="secno">10</span>R07 · core 流量(traffic_store · traffic_grid · curves)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>traffic_store.py</code>(v4 存储层, 1254 行) · <code>traffic_grid.py</code>(读侧栅格纯函数, 524 行) · <code>curves.py</code>(曲线计算, 103 行)。目标符号: <code>TrafficV4Store.*</code> · <code>V4DayCache.*</code> · <code>parse_v4_*_text</code> · <code>v4_*</code> 纯函数族 · <code>_write_text_payload</code> · <code>build_grid</code> · <code>bytes_to_kib</code>。</p>
+        <p><b>S2 提名:</b> pylint/jscpd 对本面 0 命中(字面重复在 Python 后端极低); 主线索为「读写/解析/差分/聚合」成对形状的逐文件精读。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">3</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">3</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">3</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">1</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R07-T01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 读侧「读文件 → 解析 → 坏行告警」样板 <b>4 处</b>, 两两逐字同构 —— <code>TrafficV4Store.read_agg</code>(855-867) ≈ <code>V4DayCache._read_parse_agg</code>(1080-1088); <code>TrafficV4Store.read_day</code>(921-930) ≈ <code>V4DayCache._read_parse</code>(1090-1099)(后者注释自称「对齐 TrafficV4Store.xxx」)。<br><b>建议:</b> 抽 <code>_read_parse(path, parser)</code>, 缓存层复用 store 层。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 追加写「建头行 + 撕裂尾补换行」样板 <b>2 处</b>逐字同构 —— <code>append_records</code>(827-835) 与 <code>append_agg_rows</code>(877-885): <code>makedirs</code> / 文件空则 <code>HEADER_LINE_V4 + key</code> / 否则 seek(-1) 补 <code>\n</code>。<br><b>建议:</b> 抽 <code>_ensure_file_prefix(key, path)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>build_grid</code> 的 raw 分支(132-138) 与 hour 分支(145-150) 除 interval 计算外逐字同构(<code>t0%interval</code> floor 对齐 + ceil 桶数 + <code>tuple(first + i*interval ...)</code>)。<br><b>建议:</b> 抽 <code>_floor_buckets(t0, t1, interval)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T04</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 「相邻桶快照差分」口径两实现 —— <code>series_totals_points</code>(208-226, obs+grid) 与 <code>v4_totals_points</code>(458-475, points), 注释自称「v2 规则平移」。<br><b>分歧点:</b> 输入形态不同(栅格 obs 表 vs 桶点流)。<br><b>判定:</b> 只登记, 不立即合。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T05</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 原子整文件重写口径 —— <code>_write_text_payload</code>(1129-1162) 自实现 <code>tmp+fsync+os.replace</code>(+ <code>PermissionError</code> 重试), docstring 自称「纪律对齐 utils.atomic_write 先例」; 与 <code>state.py</code>(R05-S01) / <code>hr.store</code> / <code>torrents.store</code> 同族。<br><b>建议:</b> 收敛到 infra 单点(带重试参数); 属跨包, 与轮 18(infra)合看。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T06</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 天文件与 agg 文件解析纪律骨架两套 —— <code>parse_v4_day_text</code>(1324-1437) 与 <code>parse_v4_agg_text</code>(670-731): 头行门闩 / <code>data</code>+<code>bad</code> 计数 / <code>#</code>空行跳 / <code>split(",")</code> / try-except / torn_tail 全同骨架。<br><b>分歧点:</b> 行型完全不同(块/行型 vs 9 列聚合)。<br><b>判定:</b> 只登记(见 issue <code>core-traffic-parse-diff-family-dup</code>)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-T07</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 加权聚合两实现 <code>v4_hour_agg</code>(734-756) 与 <code>v4_rollup_agg</code>(1102-1126) 同构(avg/max/totals/cov)。<br><b>分歧点:</b> dt 加权 vs cov 加权; 注释称 hour 退化为 <code>_aggregate_bucket</code>。<br><b>判定:</b> 只登记。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-C01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 单位/口径跨文件分歧 —— <code>curves.bytes_to_kib</code>(120-124, 半值<b>向上</b>取整, 略严) vs <code>qbapi._kib</code>(R06-A01, <b>floor</b>): 同一「bytes↔KiB」事实两口径。<br><b>建议:</b> 归入 issue <code>core-speed-unit-convention-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-C02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> v3 遗留 8 列 agg 行仍被兼容 —— <code>AGG_LEGACY_FIELDS=8</code>(227-228) + parse 兜底 <code>cov_s=HOUR_SECONDS</code>(701-703), 而 v4 换代声明「不设双读」。<br><b>维护风险:</b> 防御分支与换代语义轻微相悖。<br><b>建议:</b> 登记, 评估是否移除或补注释。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R07-D01</td><td><span class="tag d">D</span></td>
+            <td><b>各 <code>*_points</code> / <code>group_*_points</code> / <code>v4_grid_obs</code> 遍历栅格出数组</b>。判定<b>不动</b>: 聚合规则各异(速率求和 / 逐成员差分 / 覆盖加权), 刻意分立。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s11">
+        <h2><span class="secno">11</span>R08 · core 领域(episodes · tvshows · exporter)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>episodes.py</code>(集数解析, 109 行) · <code>tvshows.py</code>(剧集识别, 393 行) · <code>exporter.py</code>(YAML 模板导出, 122 行)。目标符号: <code>_EPISODE_PATTERNS</code> · <code>_RESOLUTION_SET</code>/<code>_BARE_EXCLUDE</code>/<code>_bare_ok</code> · <code>parse_release</code>/<code>parse_files</code> · <code>export_yaml_template</code>。</p>
+        <p><b>S2 提名:</b> 0 命中; 主线索为同一领域(集数标记)在两个模块各写一份。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">0</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">2</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">2</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R08-E01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「分辨率/年份不是集数」排除集两处<b>同值</b> —— <code>episodes._RESOLUTION_SET</code>(+<code>_BARE_NUMBER_RE</code> 注释掉的 bare 分支, 32-33) 与 <code>tvshows._BARE_EXCLUDE</code>(<code>_bare_ok</code> 的 1900-2099 判定, 181-191): 同为 <code>{480,576,720,1080,2160,4320}</code>。<br><b>建议:</b> 抽单点常量(收益高/风险低)。见 issue <code>core-episode-marker-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R08-E02</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 集数标记正则族两份同源<b>已演化</b> —— <code>episodes._EPISODE_PATTERNS</code> 4 项(14-27) vs <code>tvshows._EPISODE_PATTERNS</code> 7 项(119-166)。<br><b>分歧点:</b> tvshows 是超集(加 1x05 / 中文数字 / 日期 / 区间 / 裸数字), 直接合并会改行为。<br><b>判定:</b> 只登记, 先钉差异点。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R08-E03</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 季标记同样两处 —— <code>tvshows._SEASON_PATTERNS</code>(104-113) 与 <code>parse_files</code> 内联目录季正则(427-429, 第x季/Season/S)。<br><b>分歧点:</b> 一处扫全名、一处扫目录段。<br><b>判定:</b> 只登记。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R08-D01</td><td><span class="tag d">D</span></td>
+            <td><b><code>extract_episodes_from_files</code> / <code>_from_names</code></b>(episodes)。判定<b>不动</b>: 同一实现的两个显式包装(消费方语义区分), 已注释说明。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R08-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>tvshows.parse_files</code> 复用 <code>episodes.extract_episodes_from_names</code></b>。判定<b>不动</b>: 已是单点复用(跨模块调用)。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s12">
+        <h2><span class="secno">12</span>R09 · core/modules/ 契约样板(跨 9 模块 + webui/hr module)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>core/module.py</code>(<code>Module</code> Protocol / <code>BaseModule</code> / <code>ModuleHost</code>) + 9 个模块实现(logging/notify/tracker/speed_curve/maintenance/grouping/ops/rules/traffic_sample) + <code>webui/module.py</code> / <code>hr/module.py</code>。目标: 六动词 <code>name/sections/start/stop/apply/subscribe</code> 的实现样板。</p>
+        <p><b>S2 提名:</b> 契约样板靠跨模块对照, 工具不适用。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">2</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">1</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R09-C01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>apply()</code> 的「段相等短路 + <code>ApplyResult</code> 构造」样板 —— logging(40-44) / notify(40-47) / tracker(43-53) / rules(128-133) 各写一遍 <code>if old.SEG == new.SEG: return ApplyResult(self.name)</code> + 动作分支 <code>return ApplyResult(self.name, "xxx")</code>。<br><b>建议:</b> <code>BaseModule</code> 提供 apply 骨架钩子(子类只声明消费段名与差异动作)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R09-C02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 全局任务自注册样板 —— <code>SpeedCurveModule._register_global_task</code>(115-131) 与 <code>MaintenanceModule._register_global_tasks</code>(99-126) 同骨架(<code>queue=ctx.task_queue</code> / 已注册或未启用即返回 / 构造 <code>Task("internal", ...)</code> / 入队 / 日志「创建全局任务 N 个」), 且 <code>start</code> 与 <code>_on_queue_rebuilt</code> 双入口各写一次。<br><b>建议:</b> 抽基类 helper。见 issue <code>core-module-contract-boilerplate-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R09-C03</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> <code>subscribe</code> + <code>_on_*</code> 相位认领骨架 —— 各模块 <code>phases.on("X", self._on_x)</code>(tracker/speed_curve/maintenance/rules/grouping)。<br><b>分歧点:</b> handler 各异(业务不同)。<br><b>建议:</b> 登记; 可考虑声明式相位认领表。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R09-D01</td><td><span class="tag d">D</span></td>
+            <td><b>BaseModule 默认无操作动词 + <code>name=""</code></b>。判定<b>不动</b>: 契约样板基类, 刻意(只减样板、不引隐藏行为)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R09-D02</td><td><span class="tag d">D</span></td>
+            <td><b><code>__init__(self, ctx): self._ctx = ctx</code></b>。判定<b>不动</b>: 显式持有上下文(「现取不缓存」纪律的另一面), 惯用式。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R09-D03</td><td><span class="tag d">D</span></td>
+            <td><b><code>Module</code> Protocol(runtime_checkable) 与 <code>BaseModule</code></b>。判定<b>不动</b>: 契约声明的两表示(结构 Protocol + 可选基类)是 typing 惯例。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s13">
+        <h2><span class="secno">13</span>R10 · core/modules/ 业务(9 模块 · 3705 行)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定:</b> <code>grouping_mod</code>(554) · <code>ops_mod</code>(801) · <code>rules_mod</code>(405) · <code>maintenance_mod</code>(303) · <code>speed_curve_mod</code>(291) · <code>traffic_sample_mod</code>(1133) · <code>logging/notify/tracker</code>。目标: 模块内业务样板(标签/分类动作、事件分派、缺文件扫描、危险动作闸门、采样/聚合)。</p>
+        <p><b>S2 提名:</b> 单文件内自重复 + 跨文件同骨架; 工具 0 命中。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">11</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">2</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">0</div><div class="l">D 不动</div></div>
+        </div>
+        <table>
+          <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr>
+            <td class="r mono">R10-G01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 缺文件扫描触发骨架 <b>3 处</b>同构(grouping) —— <code>_handle_removed_torrents</code>(130-134) / <code>_handle_save_path_changes</code>(171-174) / <code>_handle_state_transitions</code>(208-212): <code>for key in triggered: members=...; torrents=[...]; if torrents: self._check_missing_files(...)</code>。<br><b>建议:</b> 抽 <code>_scan_triggered_groups(triggered, dry_run)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-G02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 「活跃下载」谓词 <b>2 处</b>逐字同(grouping 429 / 527): <code>e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left &gt; 0</code>, 注释自称「同款」。<br><b>建议:</b> 抽 <code>_is_active_download(t)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-O01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>ops_mod</code> R1/R2 实时复核样板 <b>2 处</b>(202-209 recheck / ~415-421 skip_check): <code>try torrents_info / except → fail "(未执行任何变更)" / if not live → skip gone</code>。<br><b>建议:</b> 抽 <code>_live_recheck(hash, prefix)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-O02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>ops_mod</code> 关块重开骨架 <b>3 处</b>(747-751 / 756-758 / 766-768): <code>_flush_series(close_block=True)</code> → 递归 <code>_append_record</code> → <code>return</code>。<br><b>分歧点:</b> 触发原因不同(跨天 / n-only 前缀 / 计数器重置)。<br><b>建议:</b> 抽 <code>_close_and_reopen(key, rec, ...)</code>, 原因参数化。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-D01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 两个全局标签清理 handler 同骨架(maintenance) —— <code>handle_delete_tags</code>(316-335) 与 <code>handle_delete_tags_if_has_no_torrents</code>(337-363): patterns 取值 / 空返回 / 取 <code>all_tags</code> try-except / <code>match_tag_patterns</code> / dry_run 写 / 日志。<br><b>建议:</b> 抽公共清理骨架。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-D02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> 打标/删标动作骨架 <b>3 处</b>(maintenance 161-223): <code>add_tags</code> / <code>remove_tags</code> / <code>remove_similar_tags</code> —— 计算 new/to_remove → <code>if X: if not dry_run: api(...); logger.info(...); return True; return False</code>。<br><b>建议:</b> 抽 helper。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-R01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>rules_mod._dispatch_events</code> 三触发块同骨架(304-350): state / field / added 三段均为 <code>if rules_by_trigger(X): for h: tor=get; if None/conf None: continue; for rule in _torrent_event_rules(...): _apply_event_rule(...); triggered.append(h)</code>。<br><b>建议:</b> 抽 <code>_dispatch_trigger(trigger, hashes, ...)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-R02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>rules_mod</code> RuleContext 构造 + try process + except log <b>3 份</b>(<code>_handle_rule</code> 253-257 / <code>_apply_event_rule</code> 374-380 / <code>_handle_event_rule</code> 393-399)。<br><b>建议:</b> 抽 <code>_run_rule(rule, ctx, tag)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-T01</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>traffic_sample_mod</code> BlockBuffer 块状态复位 <b>8 行 × 2</b> 逐字同(869-876 / 881-888): <code>start_epoch/date_str/header_written/dl_base/up_base/has_r_row/last_dl_total/last_up_total</code> 全部置空。<br><b>建议:</b> 抽 <code>_reset_block(buf)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-T02</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>traffic_sample_mod</code> <code>_agg_ingest_hour</code>(1011-1026) 与 <code>_agg_ingest_day</code>(1033-1043) 同骨架(append → 维护最老 → 同 epoch 替换 → 翻父级联封口)。<br><b>建议:</b> 抽参数化 rollup 入账 helper。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-T03</td><td><span class="tag a">A</span></td>
+            <td><b>重复对象:</b> <code>traffic_sample_mod._recover_series</code> 的 by_day(1152-1163) 与 by_month(1164-1175) catch-up 循环同骨架(水位跳过 / 当日未完结 / 追加 rollup)。<br><b>建议:</b> 抽 <code>_catchup_level(...)</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-X01</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 「state 日键淘汰」口径 <b>3 处形态各异</b> —— <code>state.StateService._prune_exec_history</code>(230-243, keep-N-days + 比 <code>v['date']</code> 值) / <code>speed_curve_mod._record_curve_state</code>(284-292, keep-N-days + 比字典键) / <code>ops_mod</code> 的 <code>skip_check_day</code> 清理(545-560, 只留当日)。<br><b>分歧点:</b> 保留窗 vs 只留当日; 键 vs 值。<br><b>建议:</b> 单点 <code>prune_day_keys(d, today, keep_days)</code>。见 issue <code>core-day-key-prune-dup</code>。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-X02</td><td><span class="tag c">C</span></td>
+            <td><b>重复对象:</b> 计数器重置判据 <code>cur &lt; last</code> 多处相近 —— <code>traffic_sample_mod._delta</code>/<code>_append_record</code>、<code>traffic_grid._bucket_delta</code>、<code>traffic_store</code> 解析侧负 delta 校验。<br><b>分歧点:</b> 基线来源(跨轮基线 vs 块内 last)分层不同。<br><b>建议:</b> 保持分层, 仅加互指注释(不强行合)。</td>
+          </tr>
+          <tr>
+            <td class="r mono">R10-X03</td><td><span class="tag b">B</span></td>
+            <td><b>重复对象:</b> 「站点优先/全局回落」判定 —— <code>maintenance_mod._seed_exempt_baseline</code>(29-41) 与 <code>hr</code> 取数侧对象集排除线(<code>hr/service</code> SEED_EXEMPT_RATIO)。<br><b>分歧点:</b> 打标路径 vs 取数路径, 注释自称「同源」。<br><b>判定:</b> 只登记(跨 core/hr 两包)。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s14">
+        <h2><span class="secno">14</span>分类计数与重构候选排序</h2>
+        <hr class="sec-rule">
+        <h3>14.1 分类计数(轮 00–10 累计)</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">26</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">7</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">17</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">19</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">累计 = config 轮 01–04(A5/B1/C8/D9, 见 §04–§07) + core 轮 05–10(A21/B6/C9/D10)。core 分轮: R05 4/0/1/3 · R06 1/0/1/1 · R07 3/3/3/1 · R08 0/2/1/2 · R09 2/0/1/3 · R10 11/1/2/0。部分为同一族的跨轮拆分。</p>
+        <h3>14.2 重构候选排序(收益 / 风险)</h3>
         <table>
           <tr><th style="width:8%">编号</th><th style="width:7%">类</th><th style="width:38%">候选</th><th style="width:12%">收益</th><th style="width:12%">风险</th><th>建议时机</th></tr>
           <tr><td class="r mono">R03-W01</td><td><span class="tag a">A</span></td><td>writer 备份抽 <code>_atomic_copy</code></td><td>低(9 行)</td><td>低</td><td>随时(可并入 config 重构批次)</td></tr>
@@ -357,13 +649,22 @@
           <tr><td class="r mono">R02-V01 / R04</td><td><span class="tag c">C</span></td><td>键面单点(schema) + docs 守卫/生成</td><td>高</td><td>中高</td><td>专项(触及 validation+docs 面)</td></tr>
           <tr><td class="r mono">R03-I01 / R03-K01</td><td><span class="tag c">C</span></td><td>段认领 / R 级事实由单点派生</td><td>高</td><td>中高</td><td>专项(触及内核段认领)</td></tr>
           <tr><td class="r mono">R03-L02</td><td><span class="tag b">B</span></td><td>load 构造样板泛化</td><td>中</td><td>中高</td><td><b>暂缓</b>(B 类, 需先钉差异点)</td></tr>
+          <tr><td class="r mono">R07-T01/T02/T03</td><td><span class="tag a">A</span></td><td>traffic 读写样板抽 helper(读解析/建头/栅格)</td><td>中</td><td>低</td><td>随时(core 重构批次)</td></tr>
+          <tr><td class="r mono">R05-M01..M04</td><td><span class="tag a">A</span></td><td>连接节流/重连成功/state 加载/hook 分发样板</td><td>中</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R06-A01 / R07-C01</td><td><span class="tag c">C</span></td><td>速度单位 KiB↔bytes 单点(取整方向对齐)</td><td>中</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R10-X01</td><td><span class="tag c">C</span></td><td>state 日键淘汰单点 <code>prune_day_keys</code></td><td>中</td><td>低</td><td>随时</td></tr>
+          <tr><td class="r mono">R10-G01/G02/O01/O02/D01/D02/R01/R02/T01/T02/T03</td><td><span class="tag a">A</span></td><td>模块内业务样板抽 helper(扫描/复核/标签/事件分派/块复位)</td><td>中高</td><td>低-中</td><td>core 重构批次</td></tr>
+          <tr><td class="r mono">R08-E01</td><td><span class="tag c">C</span></td><td>集数排除集单点常量</td><td>低</td><td>低</td><td>随 core 批次</td></tr>
+          <tr><td class="r mono">R09-C01/C02</td><td><span class="tag a">A</span></td><td>模块契约样板(appl 短路 / 全局任务自注册)</td><td>高</td><td>中高</td><td>专项(触契约层, 联 P0 守阵)</td></tr>
+          <tr><td class="r mono">R07-T05 / R05-S01</td><td><span class="tag c">C</span></td><td>原子写口径收敛到 infra 单点</td><td>高</td><td>中</td><td>专项(轮 18 infra)</td></tr>
+          <tr><td class="r mono">R07-T04/T06/T07 · R10-X03 · R08-E02/E03</td><td><span class="tag b">B</span></td><td>差分/解析/集数正则族统一</td><td>中</td><td>中高</td><td><b>暂缓</b>(B 类, 先钉差异点)</td></tr>
         </table>
       </section>
 
-      <section id="s9">
-        <h2><span class="secno">09</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
+      <section id="s15">
+        <h2><span class="secno">15</span>入池 issue(type=refactor, 专题 dup-code-audit)</h2>
         <hr class="sec-rule">
-        <p>本轮 <b>7 条</b>可动项已按 create-issue skill 入池(便签档), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联:</p>
+        <p>累计 <b>16 条</b>可动项已按 create-issue skill 入池(便签档, 专题 <code>dup-code-audit</code>), 均由 <a href="../tasks/26-10-10-backend-dup-code-audit.md">任务档案</a> 关联: <b>config 7 条</b>(轮 01–04) + <b>core 9 条</b>(轮 05–10)。</p>
         <table>
           <tr><th style="width:30%">issue</th><th>对应发现</th></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html">config-schema-validation-enum-dup</a></td><td>R01-S01/S02 · R02-V04/V05(枚举/常量双份 + 死件 + STATE_ATTRS 三份)</td></tr>
@@ -373,23 +674,33 @@
           <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-validation-smallchecks-dup.html">config-validation-smallchecks-dup</a></td><td>R02-V02/V03</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-loaders-get-inconsistency.html">config-loaders-get-inconsistency</a></td><td>R03-L01</td></tr>
           <tr><td class="r"><a href="../issues/26-10-11-0032-refactor-config-site-preset-page-facts-dup.html">config-site-preset-page-facts-dup</a></td><td>R03-P01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-conn-state-boilerplate-dup.html">core-conn-state-boilerplate-dup</a></td><td>R05-M01/M02/M03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-module-contract-boilerplate-dup.html">core-module-contract-boilerplate-dup</a></td><td>R05-M04 · R09-C01/C02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-traffic-store-read-write-dup.html">core-traffic-store-read-write-dup</a></td><td>R07-T01/T02/T03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-traffic-parse-diff-family-dup.html">core-traffic-parse-diff-family-dup</a></td><td>R07-T04/T06/T07 · R10-X02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-modules-ops-grouping-boilerplate-dup.html">core-modules-ops-grouping-boilerplate-dup</a></td><td>R10-G01/G02/O01/O02</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-modules-tag-rules-sample-boilerplate-dup.html">core-modules-tag-rules-sample-boilerplate-dup</a></td><td>R10-D01/D02/R01/R02/T01/T02/T03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-day-key-prune-dup.html">core-day-key-prune-dup</a></td><td>R10-X01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-speed-unit-convention-dup.html">core-speed-unit-convention-dup</a></td><td>R06-A01/A02 · R07-C01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-11-0207-refactor-core-episode-marker-dup.html">core-episode-marker-dup</a></td><td>R08-E01/E02/E03</td></tr>
         </table>
-        <p class="small"><b>未入池(登记于本报告 §08):</b> R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。</p>
+        <p class="small"><b>未入池(登记于本报告 §14 候选排序):</b> config —— R03-G01(点路径工具)、R03-I01/K01(段认领/R 级)、R03-L02(B 类暂缓); core —— R07-T05/R05-S01(原子写收敛, 归轮 18 infra)、R07-T04/T06/T07 · R10-X03 · R08-E02/E03(B 类暂缓)、R09-C03(相位认领, 随契约专项) —— 留待轮 26 汇总时按清偿顺序决定, 本轮不扩池。</p>
       </section>
 
-      <section id="s10">
-        <h2><span class="secno">10</span>变更记录</h2>
+      <section id="s16">
+        <h2><span class="secno">16</span>变更记录</h2>
         <hr class="sec-rule">
         <table>
           <tr><th style="width:20%">版本</th><th>变更</th></tr>
           <tr><td class="r mono">26-10-11-0033</td><td>首版: 追加 R00–R04(config 全包)发现清单 + 分类计数 + 重构候选排序 + 入池 7 issue。纯审查轮, 零源码改动。</td></tr>
+          <tr><td class="r mono">26-10-11-0207</td><td>追加 R05–R10(core 全包)发现清单(46 项: A21/B6/C9/D10) + 累计分类计数 + core 重构候选排序 + 入池 core 9 issue; 覆盖表补 R05–R10; 取证基线 <code>1d7c864b</code>。纯审查轮, 零源码改动。</td></tr>
         </table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
       </section>
 
       <footer>
-        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>0d27b69e</code> · 滚动报告(起始 26-10-11-0033)<br>
-        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–04(config 全包)。
+        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>1d7c864b</code> · 滚动报告(起始 26-10-11-0033)<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–10(config + core 全包)。
       </footer>
     </main>
   </div>

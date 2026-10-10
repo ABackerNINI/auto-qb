@@ -4,8 +4,8 @@
 **Added:** 2026-10-10
 **Updated:** 2026-10-11
 **Topics:** dup-code-audit
-**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。待拍板两处: 报告形态(滚动 vs 每阶段冻结) 与起步轮(默认轮 01 `config/schema/`)。
-**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
+**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包: 内核 / 数据接入 / 流量 / 领域 / 模块契约样板 / 模块业务)**, 累计 46 项发现(A21/B6/C9/D10), 入池 core 9 issue。全程纯审查轮, 零源码改动。
+**Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 原始请求
 
@@ -32,7 +32,7 @@
 | S2 | 产出计划 HTML(`plans/26-10-10-2333-plan-dup-code-audit.html`) | Done |
 | S3 | 收尾回写(本档案 + activeContext 切片 + 基线切片 + `kb.index` + `kb.check`) | Done |
 | S4 | 计划拍板(报告形态 / 起步轮)—— 用户拍板: **范围 = Phase 0 + 轮 01–04(config 全包)**; 报告形态取默认**滚动报告** | Done |
-| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config 全包) | In Progress |
+| S5+ | 逐轮执行 Phase 0 → Phase 4(轮 00–26, 每轮独立会话)—— 已完成 Phase 0 + 轮 01–04(config 全包) + 轮 05–10(core 全包) | In Progress |
 | S6 | 轮 26 汇总: 重构候选排序表 + 跨层「同一事实」总账 + 可动项入池 | Open |
 
 ## 子任务状态表
@@ -42,7 +42,8 @@
 | 计划落盘 | Done | `plans/26-10-10-2333-plan-dup-code-audit.html`(dark · `doc-topic=dup-code-audit` · `Open`) |
 | Phase 0 准备(轮 00 工具与口径) | Done | 工具冒烟 + 口径固化 + 建档 + 基线 `0d27b69e`; 见报告 §03 |
 | Phase 1 后端(config 轮 01–04) | Done | 报告 §04–§07; 入池 7 issue(refactor) |
-| Phase 1 后端(轮 05–19: core / core-modules / hr / webui / rules / infra / torrents+tray) | Open | 未开工 |
+| Phase 1 后端(core 轮 05–10) | Done | 报告 §08–§13; 入池 core 9 issue; 46 项发现(A21/B6/C9/D10) |
+| Phase 1 后端(轮 11–19: hr / webui / rules / infra / torrents+tray) | Open | 未开工 |
 | Phase 2 前端(轮 20–23: shared JS / 抽屉模板族 / 三皮肤 CSS / 模板) | Open | 总量最大两块之一 |
 | Phase 3 测试与横切(轮 24–25: tests/ + 跨层同一事实总账) | Open | 轮 25 是重构收益最大的一张表 |
 | Phase 4 汇总(轮 26) | Open | 重构候选排序 + issue 入池 |
@@ -69,3 +70,18 @@
 - **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html)(§01–§10); **7 条 refactor issue 入池**(专题 `dup-code-audit`): `config-schema-validation-enum-dup` / `config-default-multi-source` / `config-key-surface-doc-drift` / `config-writer-backup-copy-dup` / `config-validation-smallchecks-dup` / `config-loaders-get-inconsistency` / `config-site-preset-page-facts-dup`。另 3 条候选(点路径工具/段认领/B 类)登记报告 §08 未入池。
 - **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告与 issue 制品。
 - **待办下一轮**: Phase 1 后端轮 05(core 调度内核 qbmanager·taskqueue·state·module); 或按用户偏好调整顺序。
+
+### 2026-10-11 R2 — 轮 05–10(core 全包)
+
+- **触发**: 用户「做 Phase 1 core部分」。
+- **范围(拍板推定)**: Phase 1 后端 core 包 = 轮 05 调度内核(qbmanager·taskqueue·state·module) / 06 数据接入(qbapi·qbclient) / 07 流量(traffic_store·traffic_grid·curves) / 08 领域(episodes·tvshows·exporter) / 09 模块契约样板(跨 9 模块 + webui/hr module) / 10 模块业务(9 模块)。合计 ~8.1k 行 / 32 文件(+ 契约层样板)。
+- **S2 提名实测**: pylint R0801(<code>=8</code>)对 core 0 命中(下探 <code>=5</code> 仅 1 组 modules/__init__); jscpd python <b>0 clone</b> —— 与 config 同结论(config/core 字面重复极低, 主战场是结构线索 + 精读)。
+- **轮 05 内核**: A4(R05-M01 连接失败节流 3 份 / M02 重连成功 2 份 / M03 state 加载 2 份 / M04 ModuleHost hook 分发 2 份逐字同) + C1(state 原子写调用 2 份) + D3(服务委托属性对 / _throttle↔_wait_next / BaseModule 样板)。
+- **轮 06 数据接入**: A1(R06-A01 `_kib` 2 份) + C1(R06-A02 KiB↔bytes+0=不限速 4+处, 且与 curves 取整方向分歧) + D1(透传 facade ~20 方法刻意显式)。
+- **轮 07 流量**: A3(T01 读解析 4 处两两同构 / T02 追加建头 2 处 / T03 build_grid 分支 2 处) + B3(T04 差分两实现 / T06 解析骨架两套 / T07 加权聚合两实现) + C3(T05 原子写自实现 / C01 单位口径跨文件 / C02 v3 遗留 8 列兜底) + D1。
+- **轮 08 领域**: C1(E01 分辨率/年份排除集同值两份) + B2(E02 集数正则族两份已演化 / E03 季标记两处) + D2(双入口包装 / 跨模块复用)。
+- **轮 09 契约样板**: A2(C01 apply 段相等短路样板 4 模块 / C02 全局任务自注册样板 2 模块) + C1(C03 相位认领骨架) + D3。
+- **轮 10 模块业务**: A11(G01 缺文件扫描触发 3 处 / G02 活跃下载谓词 2 处 / O01 实时复核 2 处 / O02 关块重开 3 处 / D01 两 delete-tags handler / D02 打标删标 3 处 / R01 事件分派 3 块 / R02 RuleContext 构造 3 份 / T01 块复位 8 行 2 份 / T02 agg 入账 / T03 catch-up) + C2(X01 <b>state 日键淘汰三处形态各异</b> / X02 计数器重置判据分层) + B1(X03 站点优先回落判定)。
+- **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §08–§13(覆盖表 + 累计计数 §14 + core 候选排序); **9 条 refactor issue 入池**(专题 `dup-code-audit`)。
+- **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告与 issue 制品。
+- **待办下一轮**: Phase 1 后端轮 11(hr 解析面 adapters·parse·bencode·fetcher); 或按用户偏好调整顺序。

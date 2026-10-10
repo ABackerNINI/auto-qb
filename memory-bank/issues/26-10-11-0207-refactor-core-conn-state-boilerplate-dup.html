@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="core-conn-state-boilerplate-dup">
+<meta name="issue-stamp" content="26-10-11-0207">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="qbmanager 连接状态节流/重连成功/状态加载样板各重复 2-3 份">
+<meta name="issue-summary" content="connect()/run() 的连接失败节流、重连成功处理、state 加载+bind 样板重复; 抽 _note_conn_failed/_note_conn_ok/_load_state (dup-code-audit R05)">
+<title>qbmanager 连接状态节流/重连成功/状态加载样板各重复 2-3 份 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>qbmanager 连接状态节流/重连成功/状态加载样板各重复 2-3 份</h1>
+    <p class="lede">connect()/run() 的连接失败节流、重连成功处理、state 加载+bind 样板重复; 抽 _note_conn_failed/_note_conn_ok/_load_state (dup-code-audit R05)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-11-0207-refactor-core-conn-state-boilerplate-dup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:07</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R05</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><b>A 类(可提取)。</b><code>QbManager</code> 的连接状态样板在 <code>connect()</code> 与 <code>run()</code> 主循环里重复三组: ①「连接失败节流」<code>if self._last_conn_ok is not False: logger.error("连接 qBittorrent 失败: ..."); self._last_conn_ok = False</code> 共 <b>3 份</b>(connect 的 <code>APIConnectionError</code> 分支、connect 的 <code>Exception</code> 分支、run 主循环的 <code>APIConnectionError</code> 分支; 前两者函数体逐字相同); ②「重连成功」<code>self._last_conn_ok = True; self._reset_reconnect_backoff(); logger.info("已重新连接 qBittorrent")</code> <b>2 份</b>(connect / run); ③「state 加载」<code>self.state = self.ctx.state.load(); self.ctx.state.bind_field_snapshots(self.store)</code> <b>2 份</b>(__init__ / run)。改一处要记住多处, 注释已多处互指「同口径/同款」。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>src/auto_qb/core/qbmanager.py:369-382</code> connect() 两个 except 节流块 · grep <code>_last_conn_ok is not False</code>（取证 26-10-11 @1d7c864b）</li>
+      <li><code>src/auto_qb/core/qbmanager.py:564-570</code> run() 主循环节流块 · grep <code>连接 qBittorrent 失败</code></li>
+      <li><code>src/auto_qb/core/qbmanager.py:363-368</code> 与 <code>558-561</code> 重连成功 · grep <code>已重新连接 qBittorrent</code></li>
+      <li><code>src/auto_qb/core/qbmanager.py:179-180</code> 与 <code>467-468</code> state 加载 · grep <code>bind_field_snapshots</code></li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>抽三个私有方法 <code>_note_conn_failed(e)</code> / <code>_note_conn_ok()</code> / <code>_load_state()</code>, 各调用点归一。收益高、风险低。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-11 02:07 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-11-0207-refactor-core-conn-state-boilerplate-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
