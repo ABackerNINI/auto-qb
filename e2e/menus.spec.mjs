@@ -444,6 +444,54 @@ for (const skin of SKINS) {
         await page.keyboard.press('Escape'); // 收尾关菜单
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
       });
+
+      /* CTX-sub fit(2026-10-10 用户报「二级菜单显示不全, 部分出现在屏幕外」的回归断言):
+       * 子面板不能搬出父项(CTX-05 的 mouseleave 语义依赖它是父项 DOM 后代), 只能按触发
+       * 位置就地收进视口 —— 水平: .ctx-sub 锚在父项**右缘**+4px, 旧判据从父项**左缘**+200
+       * 估算少算一个父项宽, 菜单右缘离视口 200~390px 时判"不用翻", 子面板整条探出右缘;
+       * 垂直: 子面板 ~12 项(≈440px)锚在父项顶-6px, 父项靠视口下部时底越下缘, 旧实现
+       * 无任何垂直处理。断言 = 子面板盒四边全部收进视口(±1px, 与主菜单 CTX-fit 同口径)。
+       * arrange: 挑视口下半带内完整可见的行, 右键点行右段(光标 x = vw-320, 落在旧判据
+       * "不翻"窗口(vw-404, vw-214] 内且新判据必翻) —— 一级菜单钳位后父项靠下部, 双轴同证。 */
+      test('CTX-sub fit: 子面板整盒收进视口(右缘翻转 + 底缘上移)', async ({ page }) => {
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const spot = await page.evaluate(() => {
+          const rows = [...document.querySelectorAll('.torrent-row')];
+          for (let i = rows.length - 1; i >= 0; i--) {
+            const r = rows[i].getBoundingClientRect();
+            if (r.top >= window.innerHeight * 0.5 && r.bottom <= window.innerHeight - 8) {
+              const x = Math.min(r.right - 12, window.innerWidth - 320);
+              const y = r.top + 10;
+              const hit = document.elementFromPoint(x, y);
+              if (hit && rows[i].contains(hit)) return { x, y };
+            }
+          }
+          return null;
+        });
+        expect(spot, '视口下半带内找到可右键的行(行右段落点)').toBeTruthy();
+        await page.mouse.click(spot.x, spot.y, { button: 'right' });
+        await expect(page.locator('.ctx-menu')).toBeVisible({ timeout: 5_000 });
+        await page.locator('.ctx-menu > .ctx-item.has-sub').hover();
+        const sub = page.locator('.ctx-sub');
+        await expect(sub).toBeVisible({ timeout: 3_000 });
+        const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());
+        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await sub.boundingBox());
+        expect(b, '子面板盒量不到').toBeTruthy();
+        expect(Math.round(b.x + b.width),
+          `子面板右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8 —— 溢出即右缘项点不到`)
+          .toBeLessThanOrEqual(vp.width - 8 + 1);
+        expect(Math.round(b.x), `子面板左缘 ${Math.round(b.x)} 应 ≥ 8(翻转后不得越左缘)`)
+          .toBeGreaterThanOrEqual(8 - 1);
+        expect(Math.round(b.y + b.height),
+          `子面板底缘 ${Math.round(b.y + b.height)} 应 ≤ 视口高 - 8 —— 旧实现无垂直钳位, 底越下缘`)
+          .toBeLessThanOrEqual(vp.height - 8 + 1);
+        expect(Math.round(b.y), `子面板顶缘 ${Math.round(b.y)} 应 ≥ 8(上移后不得越上缘)`)
+          .toBeGreaterThanOrEqual(8 - 1);
+        await page.keyboard.press('Escape'); // 收尾关菜单
+        await expect(page.locator('.ctx-menu')).toHaveCount(0);
+      });
     });
 
     test.describe('W5 off: fail-closed 门控精简组(skip-check off)', () => {

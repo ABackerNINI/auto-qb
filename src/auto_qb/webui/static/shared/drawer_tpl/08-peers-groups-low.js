@@ -261,7 +261,10 @@
     T`<span class="dt08-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
 
   function rowHtml(p, hasFiles) {
-    const cls = ["dt08-r", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "",
+    /* nofiles 必须与列头同进退: 列头无 files 时已切 9 列网格(.dt08-gcols.nofiles),
+     * 行若仍走 10 列网格而只渲染 9 格, 1fr 列两侧宽度各算各的(头部 1fr 多吞
+     * 44px 末列 + 1 个 gap 的份额), 「进度」起的所有列整体错位(用户报) */
+    const cls = ["dt08-r", hasFiles ? "" : "nofiles", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "",
       bucketOf(p) === "hand" ? "handrow" : ""].filter(Boolean).join(" ");
     const files = hasFiles
       ? (p.files

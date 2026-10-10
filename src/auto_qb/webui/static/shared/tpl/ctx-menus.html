@@ -138,6 +138,7 @@
               <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>更多操作
               <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
                    @click.stop @mouseenter="keepSub()">
                 <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
                   <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶

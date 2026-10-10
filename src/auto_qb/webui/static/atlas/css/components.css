@@ -494,6 +494,8 @@
   transform: rotate(-90deg); transition: transform var(--dur) var(--ease); }
 .ctx-item.has-sub.open .ctx-caret { opacity: 1; transform: none; color: var(--accent-hi); }
 .ctx-item.has-sub.open { background: var(--bg-hover); }
+/* top 的内联覆盖见 menu.js _subFitViewport: 父项靠视口下部时子面板实测上移收进视口,
+ * 不裁剪时 Vue 绑定的内联 top 恒为 -6px —— 与本条默认值一致, 改默认值两处要同步 */
 .ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
   min-width: 190px; padding: 6px; border-radius: var(--radius);
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);

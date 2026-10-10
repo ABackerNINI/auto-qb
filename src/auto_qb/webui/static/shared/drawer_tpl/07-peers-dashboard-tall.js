@@ -428,7 +428,11 @@
 
   function rowHtml(p, hasFiles) {
     const b = bucketOf(p);
-    const cls = ["dt07-r", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "", b === "hand" ? "hand" : ""]
+    /* nofiles 必须与表头同进退: 表头无 files 时已切 9 列网格(.dt07-head.nofiles),
+     * 行若仍走 10 列网格而只渲染 9 格, 1fr 列两侧宽度各算各的(头部 1fr 多吞
+     * 46px 第 10 列 + 1 个 gap 的份额), 「进度」起的所有列整体错位(用户报) */
+    const cls = ["dt07-r", hasFiles ? "" : "nofiles", isBad(p) ? "bad" : "",
+      isLanIp(p.ip) ? "lan" : "", b === "hand" ? "hand" : ""]
       .filter(Boolean).join(" ");
     const files = hasFiles
       ? (p.files

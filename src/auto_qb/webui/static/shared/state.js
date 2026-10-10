@@ -152,6 +152,10 @@ window.AQB_STATE = {
       // 队列/TMM/超级做种/强制开始/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced"
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
+      // 子面板垂直位移(相对父项顶的 top 内联值, px): 子面板高(~12 项 ≈ 440px)锚在父项顶
+      // - 6px, 父项靠视口下部时底会整段探出屏幕外 —— openSub 展开后实测上移收进视口
+      // (menu.js _subFitViewport); 不裁剪时恒为 -6 = .ctx-sub 的 CSS 默认 top
+      subTop: -6,
       // CTX-05: 移出后延迟收起的定时器句柄(0 = 无挂起); 延迟只用于跨过父项与子面板之间的缝隙
       _subCloseTimer: 0,
       // 表头右键菜单(TBL-05): 针对**该列**的操作 —— 隐藏「列名」(隐藏单列)/升序/降序/打开列选择器

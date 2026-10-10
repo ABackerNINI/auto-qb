@@ -261,7 +261,45 @@ window.AQB_MENU = {
     openSub(name, ev) {
       this.keepSub();
       this.subMenu = name;
-      this.subFlip = this._menuOverflowsRight(ev && ev.currentTarget, 200);
+      this.subTop = -6; /* 每次展开现算垂直位移, 先复位回 CSS 默认基准 */
+      this.subFlip = this._subOverflowsRight(ev && ev.currentTarget);
+      /* 渲染后按**实测**尺寸复核水平方向并钳垂直方向(估宽只管首帧方向,
+       * 精确收口在实测; 机理同主菜单 _menuPos 估 + _menuFitRefit 实测两级) */
+      this.$nextTick(() => this._subFitViewport(ev && ev.currentTarget));
+    },
+    /* 子面板水平方向初判: .ctx-sub 锚在**父项右缘** + 4px 缝(left: calc(100% + 4px)),
+     * 判据必须从父项右缘起算 —— 旧实现 _menuOverflowsRight(currentTarget, 200) 从父项
+     * **左缘** + 200 估算, 少算一个父项宽(~190px): 主菜单右缘离视口 200~390px 时判
+     * "不用翻", 子面板实际已整条探出视口右缘(用户报"二级菜单部分出现在屏幕外")。
+     * 估宽 = min-width 190 + 内边距 12 ≈ 202; 实测重判在 _subFitViewport。 */
+    _subOverflowsRight(anchor) {
+      if (!anchor || !anchor.getBoundingClientRect) return false;
+      return anchor.getBoundingClientRect().right + 4 + 202 > window.innerWidth - 8;
+    },
+    /* 子面板展开后按实测尺寸重钳位。子面板不能搬出父项 —— 它是父项的 DOM 后代
+     * (CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:
+     * 1) 水平: 实测宽复核 subFlip(估宽判错的两头都纠: 该翻没翻/不该翻翻了);
+     * 2) 垂直: 理想顶 = 父项顶 - 6(.ctx-sub top 基准), 底越视口下缘则整体上移收进
+     *    视口(顶再钳回上缘留白) —— 位移写成相对父项的 top 内联值, 不动 DOM 结构。 */
+    _subFitViewport(anchor) {
+      if (!anchor || !anchor.getBoundingClientRect) return;
+      const host = this.$refs.ctxMenu;
+      const el = host && host.querySelector ? host.querySelector(".ctx-sub") : null;
+      if (!el) return; // 子面板已收起(v-if): 无可钳位
+      const rect = anchor.getBoundingClientRect();
+      if (!rect.width && !rect.height) return; // 锚点已脱离文档(整帧被换): 放弃
+      const EDGE = 8; // 视口边缘留白(与 _menuFit/_menuOverflowsRight 同口径)
+      const GAP = 4;  // 与 .ctx-sub left/right 的 4px 缝同口径
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const roomRight = rect.right + GAP + w <= vw - EDGE;
+      const roomLeft = rect.left - GAP - w >= EDGE;
+      if (!this.subFlip && !roomRight && roomLeft) this.subFlip = true;
+      else if (this.subFlip && !roomLeft && roomRight) this.subFlip = false;
+      /* 视口系理想顶 = 父项顶 - 6; 收进视口的最高顶 = vh - EDGE - h; 取小再钳回上缘,
+       * 换算成相对父项的 top(CSS top 基准 = 父项顶)。不裁剪时结果恒为 -6 = CSS 默认。 */
+      const want = Math.max(EDGE, Math.min(rect.top - 6, vh - EDGE - h));
+      this.subTop = want - rect.top;
     },
     /* 指针落在父项或子面板上: 撤销挂起的收起(子面板上不要再算 flip —— 锚点是父项不是面板) */
     keepSub() {
