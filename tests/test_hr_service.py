@@ -115,6 +115,39 @@
   + 零写盘(站点文件一字节不变) —— 硬不变量
 - test_history_defer_only_on_force: defer 事件仅 force 路径产生(立即拉取撞 min_interval -> 一条 defer
   显式落盘); 非 force 被闸拦无事件不写盘
+
+### R16 变异审计守阵(计划 26-10-09-1459 / issue 26-10-10-1108-test-hr-mutation-service-engine)
+
+- test_stop_condition_zero_remain_streak_counts_from_zero: 停翻2. 连击起点为 0(单页 4 行全到期不足 5 不停翻)
+- test_stop_condition_tail_nonzero_resets_streak: 停翻2. 页尾非到期行 -> 连击清零(非从 1 起算)
+- test_stop_condition_empty_page_resets_streak: 停翻2. 空页不算整页全到期 -> 连击清零
+- test_stop_condition_hit_object_skipped_in_oldest_scan: 停翻1. 已定论对象跳过但扫完其余(continue 非 break)
+- test_stop_condition_trusted_done_keyed_by_hash: 停翻1. 可信完成时间按 infohash 取值
+- test_stop_condition_oldest_is_min_not_last: 停翻1. 取最老可信完成时间(逐个取小)
+- test_stop_condition_zero_done_not_selected_as_oldest: 停翻1. 完成时刻 0(未知)不参与最老判定
+- test_stop_condition_slack_boundary_is_exclusive: 停翻1. 对齐余量边界(恰等不停翻, < 而非 <=)
+- test_stop_condition_local_coverage_is_not_full_depth: 停翻3. 本地全集覆盖 = 位置有界(非全深度)
+- test_stop_condition_no_condition_reports_not_full: 停翻全不成立 -> (False, False, "") 兜底
+- test_run_downloads_backfill_discards_pending_without_local_hit: 永久层回填(身份非本地)也把 tid 出队
+- test_run_downloads_continues_after_backfill: 回填分支后继续处理后续 tid(continue 非 break)
+- test_run_downloads_cooldown_gate_boundaries: 下载失败冷却闸(达上限且窗内跳过 / 恰到期放行)
+- test_run_downloads_failure_paths_count_and_continue: 失败路径各计一次并 continue; 计数累加; 告警文案保留
+- test_run_downloads_registers_hash_pending_and_clears_fail: 成功落 dl_by_hash(v1/v2)/tid 出队/清失败记账
+- test_run_downloads_downloaded_record_fields: HrDownloaded 记录字段(ts/name 取 torrent 名/v1 v2 双写)
+- test_run_downloads_hit_prefers_local_hash: 命中侧取本地那一侧(v1 不本地 v2 本地 -> 记 v2)
+- test_run_downloads_no_hit_when_neither_hash_local: 两侧都不本地 -> 不记命中(不回落 v1/占位串)
+- test_run_downloads_subsecond_retry_after_yields_wave: 下载 Retry-After 亚秒级也认 -> 上抛波级让位
+- test_finish_wave_meta_and_result_fields: 波元数据(wave_ts/retention)与 result 汇总字段落盘
+- test_finish_wave_releases_signed_includes_observation_exits: releases_signed = 批量签发 + 观察期出口
+- test_finish_wave_depth_broken_reason_parse_and_alerted: depth_broken -> reason_kind=parse ∧ alerted=True
+- test_finish_wave_alerted_from_parse_problem: alerted: 排序违反单因即告警(不依赖 had_error)
+- test_finish_wave_empty_stamp_any_positive: 零行确认戳任何正数都生效(> 0 而非 > 1)
+- test_finish_wave_single_row_clears_empty_stamp: 再现恰好 1 行即清确认戳(> 0 而非 > 1)
+- test_finish_wave_healthy_requires_rows_or_full_depth: 健康波判据(ok ∧ (有行 ∨ 全深度))
+- test_finish_wave_not_healthy_when_rows_zero_and_not_full: ok 但零行且非全深度不算健康
+- test_finish_wave_counter_mismatch_error_level_and_text: 计数对不平 ERROR 升级的级别与逐参文案
+- test_finish_wave_counter_claim_one_zero_rows_hard_error: 声明 1 行实抓 0 行也走硬告警(> 0 而非 > 1)
+- test_finish_wave_truncation_note_boundary: 截断差值只在 rows < claim 时记(恰等不记)
 """
 import logging
 import time
@@ -134,6 +167,7 @@ from auto_qb.hr.model import (
     LANE_UNSATISFIED,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    HrDlFail,
     HrDownloaded,
     HrEntry,
     HrLaneState,
@@ -151,10 +185,15 @@ from auto_qb.hr.service import (
     ACTION_PARTIAL,
     ACTION_REFRESHED,
     ACTION_WAITING,
+    COVERAGE_SLACK,
+    DL_RETRY_COOLDOWN,
     FUZZY_NAME_K,
     HrRefreshService,
+    MAX_DOWNLOAD_RETRIES,
     REASON_BUDGET,
     REASON_NONE,
+    REASON_PARSE,
+    _Budget,
     _WaveContext,
     _lanes_summary_from,
     _mark_fetch_failed_lane,
@@ -647,6 +686,7 @@ def test_zero_rows_no_release(tmp_path):
     assert data.wave.releases_enabled is False
     assert h11 not in data.verified
     assert "清单为 0" in result.reason
+    assert result.alerted is True  # 零行未确认 = 产生处已告警
     # M3 展示口径对齐(计划 26-09-29-2036): 无计数站点不误标「计数自证空集」, 人工戳提示照旧
     snap = build_site_statuses(service, clock.now)[0]
     assert snap.count_attested_empty is False
@@ -703,9 +743,11 @@ def test_retention_check_freezes_batch(tmp_path):
     # 第二波: A 档只剩 1 行(2/3 失踪, 留存率 33% < 70%) → 守恒不达标
     fetcher.pages = standard_pages(rows_a=[row(11, "STRANGER 11")], rows_b=five_expired_rows(20))
     clock.advance(13 * 3600)
-    run_wave(service, anchors)
+    result = run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.retention_ok is False
+    assert abs(data.wave.retention_ratio - 1 / 3) < 1e-9  # 观测值如实落盘(非 -1 哨兵 / 字段不丢)
+    assert result.alerted is True  # 守恒不达标 = 产生处已告警(单因即成立)
     assert "h1" not in data.verified  # 批量签发被冻结(即便覆盖证明成立)
 
 
@@ -1268,6 +1310,7 @@ def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
     data, _ = service.store(SITE).read_unlocked()
     assert "h1" in data.verified and data.wave.releases_enabled is True
     assert "清单为 0" not in result.reason and "零行" not in result.reason
+    assert result.alerted is False  # 计数自证空集 = 已确认, 不告警
     assert "若确认账号的 HR 清单确实为空" not in caplog.text
     # M3 展示口径对齐(计划 26-09-29-2036 §2.5): 计数自证空集的站点不再标「零行未确认」/「需人工对账」
     snap = build_site_statuses(service, clock.now)[0]
@@ -1308,6 +1351,7 @@ def test_interval_empty_page_keeps_manual_stamp(tmp_path, monkeypatch, caplog):
     data, _ = service.store(SITE).read_unlocked()
     assert "h1" not in data.verified and data.wave.releases_enabled is False
     assert "清单为 0" in result.reason  # 人工对账戳路径保留(--hr-confirm-empty)
+    assert result.alerted is True  # 零行未确认 = 产生处已告警
     assert "若确认账号的 HR 清单确实为空" in caplog.text
 
 
@@ -2714,3 +2758,509 @@ def test_generic_fetch_error_still_page_failure(tmp_path, caplog):
     assert "取数失败" in data.wave.notes, f"页面失败仍要写 wave.notes: {data.wave.notes!r}"
     assert result.action in (ACTION_ERROR, ACTION_PARTIAL)
     assert [r for r in caplog.records if "[HR 页面改版]" in r.getMessage()], "页面失败仍要带「页面改版」标签"
+
+
+# ---------------- R16 变异审计守阵(issue 26-10-10-1108-test-hr-mutation-service-engine) ----------------
+
+
+class _Parsed:
+    """_stop_condition 消费的最小 parsed 替身(只有 .entries 被读)"""
+    def __init__(self, entries):
+        self.entries = entries
+
+
+class _StubAdapter:
+    """只提供 download_url 的桩(下载路径不碰站点解析)"""
+    @staticmethod
+    def download_url(tid):
+        return f"https://pt.example.com/download.php?id={tid}"
+
+
+def _expired(tid: int) -> HrEntry:
+    """remain_seconds == 0 的到期行(停翻2. 尾部连击计数用)"""
+    return HrEntry(tid=tid, name=f"EXPIRED {tid}", remain_seconds=0)
+
+
+def _live(tid: int, done_iso: str = "") -> HrEntry:
+    """remain 非零的行(不参与停翻2. 的尾部连击)"""
+    return HrEntry(tid=tid, name=f"LIVE {tid}", remain_seconds=3600, done_iso=done_iso or None)
+
+
+def _dl_budget(service, data, *, per_day: int = 100):
+    from auto_qb.hr.ratelimit import HrLimits
+
+    return _Budget(data, HrLimits(min_interval=0.0, max_requests_per_day=per_day), service._now, None)
+
+
+# ---- 停翻三条件(_stop_condition) ----
+
+
+def test_stop_condition_zero_remain_streak_counts_from_zero(tmp_path):
+    """停翻2. 跨页连击的**起点**是 0: 单页 4 行全到期不足 5 ⇒ 不停翻(不是 1+4=5 就停)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    stop, full, _why = service._stop_condition("B", _Parsed([_expired(i) for i in range(4)]), wave, {}, {})
+    assert (stop, full) == (False, False)
+    assert wave.zero_remain_streaks["B"] == 4
+
+
+def test_stop_condition_tail_nonzero_resets_streak(tmp_path):
+    """停翻2. 页尾非到期行 ⇒ 连击清零(不是从 1 起算)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    service._stop_condition("B", _Parsed([_expired(1), _live(2)]), wave, {}, {})
+    assert wave.zero_remain_streaks["B"] == 0
+
+
+def test_stop_condition_empty_page_resets_streak(tmp_path):
+    """停翻2. 空页不算「整页全到期」⇒ 连击清零(空 entries 不得沿用上一页连击)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    wave.zero_remain_streaks["B"] = 3
+    service._stop_condition("B", _Parsed([]), wave, {}, {})
+    assert wave.zero_remain_streaks["B"] == 0
+
+
+def test_stop_condition_hit_object_skipped_in_oldest_scan(tmp_path):
+    """停翻1. 已定论(hit)的对象不驱动覆盖深度 —— 跳过它之后仍要扫完其余对象(continue 非 break)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    wave.hits = {"h1": "A"}
+    objects = {"h1": anchor_for("h1"), "h2": anchor_for("h2")}
+    wave.trusted_done = {"h2": E("2026-09-20 10:00:00")}
+    stop, _full, why = service._stop_condition("A", _Parsed([_live(1, "2026-09-01 10:00:00")]), wave, objects, {})
+    assert stop is True and "完成时间覆盖" in why
+
+
+def test_stop_condition_trusted_done_keyed_by_hash(tmp_path):
+    """停翻1. 可信完成时间按 **infohash** 取值(取 None/空键会让最老判定失效)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    objects = {"h2": anchor_for("h2")}
+    wave.trusted_done = {"h2": E("2026-09-20 10:00:00")}
+    stop, _full, _why = service._stop_condition("A", _Parsed([_live(1, "2026-09-01 10:00:00")]), wave, objects, {})
+    assert stop is True
+
+
+def test_stop_condition_oldest_is_min_not_last(tmp_path):
+    """停翻1. 取对象里**最老**的可信完成时间(逐个比较取小), 不是被最后一个覆盖"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    objects = {"a": anchor_for("a"), "b": anchor_for("b")}
+    wave.trusted_done = {"a": E("2026-09-20 10:00:00"), "b": E("2026-09-25 10:00:00")}
+    stop, _full, _why = service._stop_condition("A", _Parsed([_live(1, "2026-09-21 10:00:00")]), wave, objects, {})
+    assert stop is False  # 09-21 不早于 09-20 - 1D
+
+
+def test_stop_condition_zero_done_not_selected_as_oldest(tmp_path):
+    """停翻1. 完成时刻为 0(未知)的对象不参与最老判定(否则 oldest 归零 ⇒ 永不停翻)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    objects = {
+        "a": anchor_for("a", completion_on=E("2026-09-20 10:00:00")),
+        "b": anchor_for("b", completion_on=0),
+    }
+    stop, _full, _why = service._stop_condition("A", _Parsed([_live(1, "2026-09-01 10:00:00")]), wave, objects, {})
+    assert stop is True
+
+
+def test_stop_condition_slack_boundary_is_exclusive(tmp_path):
+    """停翻1. 对齐余量边界: 最深行**恰好**等于「最老完成 - 1D」⇒ 不停翻(< 而非 <=)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    deepest = E("2026-09-01 10:00:00")
+    objects = {"a": anchor_for("a", completion_on=deepest + COVERAGE_SLACK)}
+    stop, _full, _why = service._stop_condition("A", _Parsed([_live(1, "2026-09-01 10:00:00")]), wave, objects, {})
+    assert stop is False
+
+
+def test_stop_condition_local_coverage_is_not_full_depth(tmp_path):
+    """停翻3. 本地全集覆盖 ⇒ 位置有界(不是全深度)"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    wave.hits = {"h1": "A"}
+    stop, full, why = service._stop_condition("A", _Parsed([_live(1)]), wave, {}, {"h1": anchor_for("h1")})
+    assert stop is True and full is False and "本地全集覆盖" in why
+
+
+def test_stop_condition_no_condition_reports_not_full(tmp_path):
+    """停翻全不成立 ⇒ (False, False, "") —— 兜底返回的 full 标志不得变 True"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    wave = _WaveContext({})
+    assert service._stop_condition("A", _Parsed([_live(1)]), wave, {}, {}) == (False, False, "")
+
+
+# ---- 下载与身份登记(_run_downloads) ----
+
+
+def test_run_downloads_backfill_discards_pending_without_local_hit(tmp_path):
+    """永久层回填(身份不在本地)也要把 tid 出队 —— 只在命中时出队会留队列残渣"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    data = HrSiteData()
+    data.downloaded[13] = HrDownloaded(tid=13, ts=1.0, name="x", infohash_v1="HX")
+    wave = _WaveContext({})
+    wave.local_hashes = set()
+    wave.dl_by_hash = hr_service._dl_by_hash(data)
+    wave.pending_downloads = {13}
+    wave.seen[13] = HrEntry(tid=13, name="from-store")
+    budget = _dl_budget(service, data)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(
+            SITE, _StubAdapter(), data, budget, wave, hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED),
+            session
+        )
+    assert 13 not in wave.pending_downloads
+    assert wave.hits == {}
+
+
+def test_run_downloads_continues_after_backfill(tmp_path):
+    """回填分支后继续处理后续 tid(continue 不是 break)"""
+    clock = Clock()
+    blob, h14 = mk_blob("T14")
+    service = make_service(tmp_path, FakeFetcher(pages={}, blobs={14: blob}), clock=clock)
+    data = HrSiteData()
+    data.downloaded[13] = HrDownloaded(tid=13, ts=1.0, name="x", infohash_v1="HX")
+    wave = _WaveContext({})
+    wave.local_hashes = set()
+    wave.dl_by_hash = hr_service._dl_by_hash(data)
+    wave.pending_downloads = {13, 14}
+    wave.seen[13] = HrEntry(tid=13, name="from-store")
+    wave.seen[14] = HrEntry(tid=14, name="t14")
+    budget = _dl_budget(service, data)
+    result = hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(SITE, _StubAdapter(), data, budget, wave, result, session)
+    assert result.torrents_fetched == 1 and wave.seen[14].infohash_v1 == h14
+
+
+def test_run_downloads_cooldown_gate_boundaries(tmp_path):
+    """下载失败冷却闸: 达上限 ∧ 冷却窗内 → 跳过; 恰好到期(now - last_ts == 冷却) → 放行"""
+    clock = Clock()
+    blob, _h = mk_blob("T11")
+    fetcher = FakeFetcher(pages={}, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+
+    def _run(data, wave):
+        budget = _dl_budget(service, data)
+        with service.store(SITE).hold() as session:
+            service._run_downloads(SITE, _StubAdapter(), data, budget, wave, result, session)
+
+    def _wave():
+        wave = _WaveContext({})
+        wave.local_hashes = set()
+        wave.dl_by_hash = {}
+        wave.pending_downloads = {11}
+        wave.seen[11] = HrEntry(tid=11, name="t11")
+        return wave
+
+    data = HrSiteData()
+    data.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock())
+    _run(data, _wave())
+    assert fetcher.byte_calls == [], "冷却窗内不得重下"
+
+    fetcher.byte_calls.clear()
+    data2 = HrSiteData()
+    data2.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock() - DL_RETRY_COOLDOWN)
+    _run(data2, _wave())
+    assert fetcher.byte_calls, "恰好到期应放行下载"
+
+
+def test_run_downloads_failure_paths_count_and_continue(tmp_path, caplog):
+    """失败路径: HrFetchError 与非法 blob 各计一次失败并 **continue** 到后续 tid;
+    torrents_failed / torrents_fetched 均累加(非赋值/自减); 两条告警文案保留"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    blob14, _h14 = mk_blob("T14")
+    blob15, _h15 = mk_blob("T15")
+    fetcher = FakeFetcher(
+        pages={}, blobs={
+            13: b"not a torrent",
+            14: blob14,
+            15: blob15
+        }, fail_bytes_at={
+            11: "boom-11",
+            12: "boom-12"
+        }
+    )
+    service = make_service(tmp_path, fetcher, clock=clock)
+    data = HrSiteData()
+    wave = _WaveContext({})
+    wave.local_hashes = set()
+    wave.dl_by_hash = {}
+    wave.pending_downloads = {11, 12, 13, 14, 15}
+    for tid in (11, 12, 13, 14, 15):
+        wave.seen[tid] = HrEntry(tid=tid, name=f"t{tid}")
+    budget = _dl_budget(service, data)
+    result = hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(SITE, _StubAdapter(), data, budget, wave, result, session)
+    assert result.torrents_failed == 3
+    assert result.torrents_fetched == 2
+    assert "取 .torrent 失败" in caplog.text and "不是合法 .torrent" in caplog.text
+
+
+def test_run_downloads_registers_hash_pending_and_clears_fail(tmp_path):
+    """下载成功: dl_by_hash 登记 v1/v2 → tid / tid 出队 / 清失败记账 / torrents_fetched 累加"""
+    clock = Clock()
+    blob11, _h11 = mk_blob("T11")
+    blob12, _h12 = mk_blob("T12")
+    service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob11, 12: blob12}), clock=clock)
+    data = HrSiteData()
+    data.fails[11] = HrDlFail(tid=11, count=1, last_ts=0.0)
+    wave = _WaveContext({})
+    wave.local_hashes = set()
+    wave.dl_by_hash = {}
+    wave.pending_downloads = {11, 12}
+    wave.seen[11] = HrEntry(tid=11, name="t11")
+    wave.seen[12] = HrEntry(tid=12, name="t12")
+    budget = _dl_budget(service, data)
+    result = hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(SITE, _StubAdapter(), data, budget, wave, result, session)
+    rec11, rec12 = data.downloaded[11], data.downloaded[12]
+    assert wave.dl_by_hash.get(rec11.infohash_v1) == 11
+    assert wave.dl_by_hash.get(rec11.infohash_v2) == 11
+    assert wave.dl_by_hash.get(rec12.infohash_v1) == 12
+    assert 11 not in wave.pending_downloads and 12 not in wave.pending_downloads
+    assert 11 not in data.fails
+    assert result.torrents_fetched == 2
+
+
+def test_run_downloads_downloaded_record_fields(tmp_path):
+    """下载成功落 HrDownloaded: ts=取回时刻 / name 取 torrent 展示名(非行名) / v1 v2 双写"""
+    clock = Clock()
+    blob, h1 = mk_blob("other.bin")
+    fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(11, "EXAMPLE 11")]), blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    rec = data.downloaded[11]
+    assert rec.ts == clock.now
+    assert rec.name == "other.bin"
+    assert rec.infohash_v1 == h1 and rec.infohash_v2
+
+
+def test_run_downloads_hit_prefers_local_hash(tmp_path):
+    """命中侧: v1 不在本地而 v2 在 → 记 v2 命中(取本地那一侧)"""
+    clock = Clock()
+    blob, _h1 = mk_blob("T11")
+    service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob}), clock=clock)
+    _v1, v2, _info = hr_service.compute_infohashes(blob)
+    data = HrSiteData()
+    wave = _WaveContext({})
+    wave.local_hashes = {v2}
+    wave.dl_by_hash = {}
+    wave.pending_downloads = {11}
+    wave.seen[11] = HrEntry(tid=11, name="t11")
+    budget = _dl_budget(service, data)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(
+            SITE, _StubAdapter(), data, budget, wave, hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED),
+            session
+        )
+    assert wave.hits == {v2: LANE_SCOPE}
+
+
+def test_run_downloads_no_hit_when_neither_hash_local(tmp_path):
+    """命中侧: 两侧都不在本地 → 不记命中(不得回落 v1 / 空串 / 占位串)"""
+    clock = Clock()
+    blob, _h1 = mk_blob("T11")
+    service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob}), clock=clock)
+    data = HrSiteData()
+    wave = _WaveContext({})
+    wave.local_hashes = set()
+    wave.dl_by_hash = {}
+    wave.pending_downloads = {11}
+    wave.seen[11] = HrEntry(tid=11, name="t11")
+    budget = _dl_budget(service, data)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(
+            SITE, _StubAdapter(), data, budget, wave, hr_service.HrRefreshResult(site=SITE, action=ACTION_REFRESHED),
+            session
+        )
+    assert wave.hits == {}
+
+
+def test_run_downloads_subsecond_retry_after_yields_wave(tmp_path):
+    """下载收到 Retry-After(亚秒级也认) → 上抛波级让位, 不计种子失败"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(21, "LOCAL 21")]), retry_bytes_at={21: 0.5})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.torrents_failed == 0 and result.action == ACTION_WAITING
+    assert data.retry_after_until >= clock.now
+
+
+# ---- 波后收尾(_finish_wave) ----
+
+
+def test_finish_wave_meta_and_result_fields(tmp_path):
+    """波元数据落盘: wave_ts=本波时刻; 无上波 A 行时 retention_ratio=-1 ∧ retention_ok=True;
+    result 汇总字段(lane_texts/verified_count/persisted)如实填写"""
+    clock = Clock()
+    service = make_service(tmp_path, FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20))), clock=clock)
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.wave_ts == clock.now
+    assert data.wave.retention_ratio == -1.0
+    assert data.wave.retention_ok is True
+    assert result.verified_count == len(data.verified) == 1
+    assert "A:" in result.lane_texts and "C:" in result.lane_texts
+    assert result.persisted is True
+
+
+def test_finish_wave_releases_signed_includes_observation_exits(tmp_path):
+    """releases_signed = 批量签发 + 观察期出口(相加, 不是相减)"""
+    clock = Clock()
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(11, "EXAMPLE 11")]), blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    fetcher.pages = standard_pages()
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    clock.advance(13 * 3600)
+    result = run_wave(service, anchors)
+    assert result.releases_signed == 1  # 批量签发 0 + 观察期出口 1
+
+
+def test_finish_wave_depth_broken_reason_parse_and_alerted(tmp_path, monkeypatch):
+    """depth_broken(计数对不平) ⇒ reason_kind=parse ∧ alerted=True"""
+    clock = Clock()
+    counter_adapter(monkeypatch, {"B": 50})
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    assert result.reason_kind == REASON_PARSE
+    assert result.alerted is True
+
+
+def test_finish_wave_alerted_from_parse_problem(tmp_path):
+    """alerted: 排序违反(parse_problem)单因即告警 —— 不依赖 had_error, 也不依赖 depth_broken"""
+    clock = Clock()
+    bad = myhr_page(
+        [
+            row(11, "OTHER 11", done="2026-09-25 10:00:00"),
+            row(12, "OTHER 12", done=DONE_OLD),
+            row(13, "OTHER 13", done=DONE_NEW),
+        ]
+    )
+    pages = {url_of("A"): bad, url_of("B"): myhr_page(five_expired_rows(20)), url_of("C"): myhr_page([])}
+    service = make_service(tmp_path, FakeFetcher(pages=pages), clock=clock)
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    assert result.alerted is True
+
+
+def test_finish_wave_empty_stamp_any_positive(tmp_path):
+    """零行确认戳任何正数都生效(判据是 > 0 而非 > 1)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    with service.store(SITE).hold() as session:
+        session.data.empty_confirmed_at = 1.0  # 任何正数都算确认戳
+        session.commit(clock())
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified
+
+
+def test_finish_wave_single_row_clears_empty_stamp(tmp_path):
+    """清单再现**恰好 1 行**即清确认戳(判据是 > 0 而非 > 1)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    with service.store(SITE).hold() as session:
+        session.data.empty_confirmed_at = clock()
+        session.commit(clock())
+    clock.advance(13 * 3600)
+    fetcher.pages = standard_pages(rows_a=[row(11, "OTHER 11")])  # 恰好 1 行
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.empty_confirmed_at == 0.0
+
+
+def test_finish_wave_healthy_requires_rows_or_full_depth(tmp_path):
+    """健康波判据: 档位 ok ∧ (有行 ∨ 全深度) —— 有行但未全深度(1.停翻)也算健康"""
+    clock = Clock()
+    pages = {
+        url_of(l): myhr_page([row(10 + i, f"OTHER {i}", done=DONE_OLD)], has_next=True)
+        for i, l in enumerate("ABC")
+    }
+    service = make_service(tmp_path, FakeFetcher(pages=pages), clock=clock)
+    run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(
+        data.wave.lanes[l].ok and data.wave.lanes[l].rows > 0 and not data.wave.lanes[l].full_depth for l in "ABC"
+    )
+    assert data.wave.healthy_ts == clock.now
+
+
+def test_finish_wave_not_healthy_when_rows_zero_and_not_full(tmp_path):
+    """健康波判据: ok 但零行且非全深度(页面取数失败截断)不算健康 ⇒ healthy_ts 不前进"""
+    clock = Clock()
+    pages = {url_of(l, 1): myhr_page([], has_next=True) for l in "ABC"}  # 第 2 页缺失 → 取数失败
+    service = make_service(tmp_path, FakeFetcher(pages=pages), clock=clock)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(data.wave.lanes[l].ok and data.wave.lanes[l].rows == 0 for l in "ABC")
+    assert data.wave.healthy_ts == 0.0
+
+
+def test_finish_wave_counter_mismatch_error_level_and_text(tmp_path, monkeypatch, caplog):
+    """计数对不平 ERROR 升级: 连续 3 波恰一条 ERROR, 且逐参文案(站点/档位/实抓/声明/波数)完整"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {"B": 50})
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    for _ in range(3):
+        run_wave(service, anchors)
+        clock.advance(13 * 3600)
+    errs = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR and "计数对不平" in r.getMessage()]
+    assert len(errs) == 1, errs
+    msg = errs[0]
+    assert "站点 example" in msg and "档位 B" in msg
+    assert "实抓 5 行" in msg and "站点声明 50 行" in msg and "(已连续 3 波)" in msg
+
+
+def test_finish_wave_counter_claim_one_zero_rows_hard_error(tmp_path, monkeypatch, caplog):
+    """声明 1 行实抓 0 行也走 page_changed 硬告警(判据是 claim > 0 而非 > 1), 不落到 mismatch 节流告警"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {"A": 1, "B": 1, "C": 1})
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    assert "声明 1 行但实抓 0 行" in caplog.text
+    assert "计数对不平" not in caplog.text
+
+
+def test_finish_wave_truncation_note_boundary(tmp_path, monkeypatch):
+    """截断差值只在 rows < claim 时记(恰好相等不记)"""
+    clock = Clock()
+    counter_adapter(monkeypatch, {"A": 1, "B": 1, "C": 1})
+    pages = {
+        url_of("A", 1):
+            myhr_page([row(11, "OTHER 11")], has_next=True),
+        url_of("B", 1):
+            myhr_page(five_expired_rows(20)[:1], has_next=True),
+        url_of("C", 1):
+            myhr_page([row(31, "OTHER 31", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+    }
+    gconf = global_conf(max_pages_per_wave=3)
+    service = make_service(
+        tmp_path, FakeFetcher(pages=pages, blobs={11: torrent_blob(name="OTHER 11")}), gconf=gconf, clock=clock
+    )
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(st.rows == 1 and st.count_claim == 1 and not st.full_depth for st in data.wave.lanes.values())
+    assert "未翻完" not in result.reason

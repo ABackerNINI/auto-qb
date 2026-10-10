@@ -225,11 +225,11 @@
       <tr>
         <td><code>hr/</code></td>
         <td>2026-10-10</td>
-        <td>8,027</td>
-        <td>69.2%(存活 2,440)</td>
-        <td>R14</td>
+        <td>8,027 <span class="hint">(整包)</span></td>
+        <td>69.2%(存活 2,440) · <b>service.py 单模块 76.07%</b>(存活 604→502)</td>
+        <td>R14 / <b>R16</b>(service.py 第一批)</td>
         <td><span class="badge go">已做(余量在池)</span></td>
-        <td><code>baselines/26-10-10-1108-mutants-hr.md</code>(首轮)<br><code>plans/26-10-09-1459-plan-mutation-hr.html</code></td>
+        <td><code>baselines/26-10-10-1108-mutants-hr.md</code>(首轮整包)<br><code>baselines/26-10-10-1408-mutants-hr-service.md</code>(service.py 第一批: 停翻/下载/收尾)<br><code>plans/26-10-09-1459-plan-mutation-hr.html</code></td>
       </tr>
       <tr>
         <td><code>core/</code></td>
@@ -270,12 +270,14 @@
       <tr><td><b>R11 loader-defaults</b></td><td><code>config/loaders.py</code></td><td>形态级复验(issue 只给形态没给 id, 故手搓 <b>40 条</b>同构变异): 补测前 <b>26 SURVIVED / 11 KILLED</b>; 补 <b>7 守阵</b>, 红验 <b>40/40</b>; 同池 <code>--no-refresh</code> 复跑存活 <b>533 → 476</b>(新杀 <b>57</b>, <b>全部落在 loaders</b>, 新增存活 0), 杀死率 88.14% → <b>89.33%</b></td><td><code>testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md</code> · 档案 R11 · issue <code>26-10-08-0903-test-config-mutation-loader-defaults.html</code></td></tr>
       <tr><td><b>R13 boundary-guards</b></td><td><code>config/validation</code> 闭区间端点</td><td>形态级复验(issue 只给形态没给 id, 故手搓 <b>103 条</b>同构变异): 补测前 <b>83 KILLED / 20 SURVIVED</b>; 补 <b>5 守阵</b>, 红验 <b>103/103</b>; 同池 <code>--no-refresh</code> 复跑存活 <b>476 → 443</b>(新杀 <b>33</b>, <b>全部落在 <code>config/validation</code></b>, 新增存活 0), 杀死率 89.33% → <b>90.02%</b></td><td><code>testing/baselines/26-10-10-1045-mutants-config-boundary-guards.md</code> · 档案 R13 · issue <code>26-10-08-0903-test-config-mutation-boundary-guards.html</code></td></tr>
       <tr><td><b>R14 hr 首轮</b></td><td><code>hr/</code></td><td>8,027 变异 / 杀 5,554 / 存活 <b>2,440</b> / <code>no tests</code> 23 / 超时 10 → 杀死率 <b>69.2%</b>; S4 抽验 24 条 <b>24 SURVIVED / 0 KILLED</b>(宽池零假存活); 真洞按主题入池 <b>6 条</b> <code>test</code> issue(service-engine / judgment-core / channel-server / serialization / runtime-worker / display)。<b>零 <code>src/</code> / <code>tests/</code> 改动</b>(纯入池); 补测+复跑按模块拆后续轮(整包单轮 96 min, 超计划 30 min 停手点)</td><td><code>testing/baselines/26-10-10-1108-mutants-hr.md</code> · 档案 R11 · 计划 <code>plans/26-10-09-1459-plan-mutation-hr.html</code></td></tr>
+      <tr><td><b>R16 hr service.py 第一批</b></td><td><code>hr/service.py</code></td><td>实施首轮建议的三个函数(<code>_stop_condition</code> / <code>_run_downloads</code> / <code>_finish_wave</code>): 补 <b>30 新守阵 + 4 处既有用例补断言</b>, 红验 <b>85/85 KILLED</b>; 同池单模块复跑 <b>2098 变异 / 存活 502</b>(杀死率 76.07%), 对 R14 的 service.py 存活逐 id 对差 <b>604 → 502</b>(净 −102 = 新杀 103 / 新增存活 1, 其中三目标函数 93); 踩到坑 <code>redverify-anchor-lineendings</code> 复发 +1(新增形态四); <b>零 src 改动</b>; issue 置 <code>In Progress</code>(其余 12+ 函数留后续轮)</td><td><code>testing/baselines/26-10-10-1408-mutants-hr-service.md</code> · 档案 R16 · issue <code>26-10-10-1108-test-hr-mutation-service-engine.html</code></td></tr>
     </table>
   </section>
 
   <section id="s9">
     <h2><span class="no">09</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-10 14:08 — <b>R16 hr/service.py 第一批守阵</b>(状态仍 <strong>Open</strong>, 本件不因单轮完成而改状态): 按硬约束 12 同步更新 —— §07 <code>hr/</code> 行补 <code>service.py 单模块 76.07%</code>(存活 604→502)、轮次补 <code>R16</code>、切片指针补 service.py 切片; §08 台账补 R16 行。认领 issue <code>26-10-10-1108-test-hr-mutation-service-engine</code>(hr 首轮入池的 service.py 604 条存活), 实施其建议的**第一批三函数**(<code>_stop_condition</code> / <code>_run_downloads</code> / <code>_finish_wave</code>): 读带 diff 清单三分类 → 补 <b>30 新守阵</b>(<code>tests/test_hr_service.py</code>) + <b>4 处既有用例补断言</b> → 红验 <b>85/85 KILLED</b>(dump 驱动同构变异逐条 apply→定向守阵变红→原字节还原)。S6 同池单模块复跑(目标 <code>**/hr/service.py</code> · R14 同一份 15 文件池 · <code>--no-refresh</code>): <b>2098 变异 / 杀 1596 / 存活 502 / 杀死率 76.07%</b>(墙时 26m08s); 对 R14 的 service.py 存活**逐 id 对差 604 → 502**(净 −102 = 新杀 103 / 新增存活 1, 三目标函数占 93)。<b>零 <code>src/</code> 改动</b>。坑 <code>redverify-anchor-lineendings</code> <b>复发 +1</b>(新增形态四: 锚点取自 mutmut dump ⇒ 去缩进 + 续行不归一)。<b>issue 置 <code>In Progress</code></b>(604 条里其余 12+ 函数留后续轮)。</li>
       <li>2026-10-10 10:50 — <b>R13 boundary-guards 实施</b>(状态仍 <strong>Open</strong>, 本件不因单轮完成而改状态): 按硬约束 12 同步更新 —— §07 config 行杀死率补 <code>90.02%</code>、轮次补 <code>R13</code>、切片指针补 boundary-guards 切片; §08 台账补 R13 行。config 校验器<b>闭区间端点</b>位移类变异: 手搓 <b>103 条</b>同构变异复验得 <b>83 KILLED / 20 SURVIVED</b>(20 条全落「两端没被逐值喂过」的键), 补 <b>5 守阵</b>(test_config 2 + test_hr_config 3)后红验 <b>103/103</b>; 同池复跑存活 <b>476 → 443</b>(新杀 33, 全部落在 <code>config/validation</code>, 新增存活 0), 杀死率 <b>90.02%</b>。<b>关键发现</b>: <code>test_idle_refresh_interval_range</code> 的松匹配 <code>"须 &gt;=" in e</code> 被交叉校验文案顶替, 范围判据从未被验证(假绿)。<b>零 src 改动</b>。本轮为首轮入池 6 条 <code>test</code> issue 的<b>最后一条</b>, config 真洞 issue 已全清。</li>
       <li>2026-10-08 06:42 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套审计还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。</li>
       <li>2026-10-08 09:20 — config 首轮执行完毕后<b>回灌经验</b>(状态仍 <strong>Open</strong>): 命令包新增 <code>mutants.report</code>(带 diff 的清单 + 汇总)与 <code>mutants.verify</code>(S4 机械化); 指导 skill 补「流程约束 9–11」(池覆盖函数面 / S4 收窄候选 / 复跑 <code>--no-refresh</code>)与两条记录纪律(不手抄 <code>N passed</code> / issue 填 <code>doc-refs</code>); §03 标注 config 进度, §07 补 R1/R2。</li>

@@ -3,9 +3,9 @@
 > 摘要: 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。
 > 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转
 
-**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md
+**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md
 
-**复发**: 1 —— 2026-10-10(config loader-defaults 轮)。为什么没命中: 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。
+**复发**: 2 —— ①2026-10-10(config loader-defaults 轮): 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。②2026-10-10(hr service-engine 轮): 锚点来源从「手写文本」换成**从 mutmut dump 取行块**, 于是踩到「dump 行块相对源码整体**去缩进**、且**续行缩进不被归一**」⇒ 精确块匹配恒失配(9 条 ANCHOR-MISS)。新增形态四见下。
 
 ### 两个失配形态（2026-10-08, config schema 键面轮）
 
@@ -25,8 +25,17 @@
 - **判别**: 与形态一二完全同表 —— 输出里出现 `ANCHOR-MISS` 就停手, 别把它当「已验」; 一行锚点在**同文件里出现在两个函数**时也必须靠 `count != 1` 兜底(形态一二讲的是文件级行尾/缩进, 这条讲的是**函数级重复**)。
 - **处置**: ①字节层比对时锚点一律 `.encode()`(或整段 `decode` 后在 str 空间做、写盘前转回 —— 与形态一同一条纪律, 关键是**两侧同类型**); ②单行锚点不够唯一就**带上相邻行**(把上一行一起拼进锚点)。
 
-### 另一个同源陷阱: 探针放在不可达的分支上（空转）
+### 形态四: 锚点取自 mutmut dump 时的「整体去缩进 + 续行不归一」（2026-10-10, hr service-engine 轮）
 
+- **触发**: 本轮不再手写锚点, 而是**从 R14 的带 diff dump 直接取每条候选的行块**做同构变异(省掉手抄)。首版脚本按「整块精确匹配」找锚点, 结果 9 条 `_run_downloads` 变异全报 `ANCHOR-MISS`。
+- **根因(两层)**:
+  1. **dump 行块相对源码整体去缩进** —— mutmut 抽取函数体再打 diff, 方法体行在 dump 里比源码**少 4 空格**(类体缩进)。所以拿 dump 行块去 `==` 源码行**恒不等**。
+  2. **续行(反斜杠续行)的缩进 mutmut 不归一** —— 同一个 hunk 内, 普通行是「源码 − 4」, 而**续行**(如 `if ... and \` 的下一行)却是「源码 − 0」。实测同一块里既有 −4 也有 −0 ⇒ 想用「整体加一个常量偏移」的写法也**恒失配**(这也是为什么「逐 offset 试精确匹配」这一版只救回一部分, 9 条仍失配)。
+- **判别**: 与形态一二三同表 —— 输出出现 `ANCHOR-MISS` 就停手; 但这次**不是** `count=0`, 而是「所有 offset 都 0 命中」。
+- **处置**: ①**放弃精确匹配**, 改用「**strip 后内容**序列唯一命中」定位(要求整块 strip 后逐行相等且唯一); ②改写时按「源码行缩进 − 锚点行缩进」算**位移**, 只重写 strip 后**有变化**的行(difflib opcodes), **未变的上下文行原样保留**(否则会把续行重新缩进成错值)。③另一处本轮踩到的同源: 首版脚本用 `Path.write_text()` 在 Windows 把 **LF 写成 CRLF**(还原时污染工作树) ⇒ 一律 **`read_bytes` / `write_bytes`**, 不碰文本模式。
+- **一句话**: 锚点来源换成「别人产出的 diff」时, 先假设它的**空白/缩进不可信** —— 只信 strip 后的内容, 靠唯一性 + 位移复原。
+
+### 另一个同源陷阱: 探针放在不可达的分支上（空转）
 - **触发**: CRLF 与缩进都修好后仍剩 1 条 SURVIVED(`readonly_config_paths__mutmut_2`, `continue` → `break`)。手工推算这两者「应当有差别」(断链会丢后续字段), 于是先怀疑是判据/脚本问题而不是急着判等价变异, 查下去发现是探针本身空转。
 
 - 修完锚点后仍有 1 条 SURVIVED(`readonly_config_paths__mutmut_2`, `continue` → `break`)。原因不在行尾, 而在**探针设计**: 首版合成结构把 `ui_only` 叶放在**顶层**, 而 `readonly_config_paths()` 走的是 `real_config_fields()`, 后者**已先行滤掉 ui_only** —— 那句 `if f.ui_only: continue` 在顶层**永远进不去**, `continue` 与 `break` 自然同结果, 探针空转。
