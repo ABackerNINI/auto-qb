@@ -53,6 +53,13 @@
  *     带回其行 —— 成员行无自身展开态, 原实现只认 group/show/ep 三种 kind, 光标按 ↓ 进组后
  *     ← 静默无反应(用户报)。父行解析单点 _kbParentRow, 判据复用 selection.js::_memberRangeList
  *     (与 _kbRows 渲染同源), 保证"屏幕上的成员行"与"收起目标"不错位。
+ *   - 切换语义(2026-10-09, 报告 26-10-09-1731 §03/§04): 6 条「适合」条目(流量图 Ctrl+\ / 统计 \ /
+ *     历史 Shift+\ / 详情面板 I / 帮助 Shift+/ / 列选择器 K)由「只打开」升级为「开/关双态」——
+ *     再按一次同一键关掉自己打开的东西(关闭复用既有 closeX/closeDrawer, Esc 仍是唯一固定关闭
+ *     出口, 两者不冲突)。抽屉类(流量图/详情面板)不在浮层屏蔽名单, 第二按直达; 浮层类(统计/
+ *     历史/帮助/列选择器)靠 KB_SELF_TOGGLE_OVERLAY 自切换白名单放行(见 _kbOnKeyDown)。**只改
+ *     键盘 run 路径**, 鼠标入口(状态栏按钮/右键菜单/双击)保持原语义。其余 4 条「有条件」与
+ *     49 条「不适合」不动(报告 §05/§06)。
  */
 
 /* 纯修饰键: 自身发 keydown, 匹配器等非修饰键落定才判定(录制器把"只按了 Shift"判无效) */
@@ -99,6 +106,18 @@ function kbInBlacklist(serial) {
   if (serial.split("+").includes("Meta")) return true;  // mac Cmd 全族 OS 先拿
   return KB_BLACKLIST.has(serial);
 }
+
+/* 自切换白名单(2026-10-09「切换语义」, 报告 26-10-09-1731 §07.1): 条目 id -> 它自己控制的浮层状态字段。
+ * 浮层打开时引擎默认屏蔽列表键位(_kbOverlayBusy), 而「再按一下关」需要第二次按键**抵达 run** ——
+ * 若打开着的正是本键自己控制的浮层, 本键仍消费(交给 run 里的切换分支关掉); 其余浮层照旧屏蔽。
+ * 只列「浮层类」四条: 抽屉类(流量图/详情面板)不在 _kbOverlayBusy 名单, 第二按本就能直达。
+ * 键位唯一性不受影响 —— 这是**派发放行**名单, 不是键表(不新增注册表字段, §07.3)。 */
+const KB_SELF_TOGGLE_OVERLAY = {
+  "open-stats": "statsOpen",
+  "open-history": "historyOpen",
+  "help-panel": "kbHelpOpen",
+  "col-picker": "colMenuOpen",
+};
 
 /* 条目生效键位 = 模板基准(def) ⊕ 草稿 overrides(恒胜出); 空串 = 显式禁用(§4.7) */
 function kbSerialWithDraft(item, draft) {
@@ -163,13 +182,13 @@ const AQB_SHORTCUT_DEFS = [
     run: (vm) => vm._kbFocusSearch() },
   { id: "open-stats", group: "视图与导航", label: "统计面板",
     def: "Backslash", scope: "global",
-    run: (vm) => vm.openStats() },
+    run: (vm) => vm._kbToggleStats() },  // 切换语义: 已开 ⇒ closeStats(报告 26-10-09-1731 §03)
   { id: "open-history", group: "视图与导航", label: "历史流量",
     def: "Shift+Backslash", scope: "global",
-    run: (vm) => vm.openHistory() },
+    run: (vm) => vm._kbToggleHistory() },  // 切换语义: 已开 ⇒ closeHistory
   { id: "open-qb-traffic", group: "视图与导航", label: "qB 口径流量图",
     def: "Ctrl+Backslash", scope: "global",
-    run: (vm) => vm.openQbHistory() },  // 状态栏入口的键盘对应(openQbHistory 内含 qbTrafficOn 门 + 未启用提示)
+    run: (vm) => vm._kbToggleQbTraffic() },  // 切换语义: 已开同目标 ⇒ 关; 未开走 openQbHistory(内含 qbTrafficOn 门 + 未启用提示)
   { id: "speed-down", group: "视图与导航", label: "限速(下载方向)",
     def: "KeyL", scope: "list",
     run: (vm) => vm.openSpeedAt(null, "down") },
@@ -267,7 +286,7 @@ const AQB_SHORTCUT_DEFS = [
     run: (vm) => vm._kbEditAct("copyTorrentInfo", "magnet") },
   { id: "col-picker", group: "次要动作", label: "列选择器",
     def: "KeyK", scope: "list",
-    run: (vm) => vm.toggleColMenu(null) },  // 按钮路径(常规 CSS 定位); 键盘再按被浮层屏蔽, 关闭走 Esc
+    run: (vm) => vm.toggleColMenu(null) },  // toggleColMenu 本身即切换函数; 浮层开着时靠自切换白名单放行第二次按键(报告 26-10-09-1731 §04.4)
   // ---- F · 队列与开关(§08 决策③: F5/F6 保留默认键; 均为单种子命令, 复用右键菜单同链) ----
   { id: "queue-up", group: "队列与开关", label: "队列上移",
     def: "Ctrl+ArrowUp", scope: "list",
@@ -318,7 +337,7 @@ const AQB_SHORTCUT_DEFS = [
   // ---- H · 面板(W6) ----
   { id: "help-panel", group: "面板", label: "打开快捷键帮助面板",
     def: "Shift+Slash", scope: "global",
-    run: (vm) => vm.kbOpenHelp() },  // 只读速查浮层(附「前往设置自定义」); 面板内 Esc 关闭归退栈链
+    run: (vm) => vm._kbToggleKbHelp() },  // 切换语义: 已开 ⇒ closeKbHelp(只读速查浮层, 附「前往设置自定义」; 面板内 Esc 关闭归退栈链)
   // ---- I · 默认不绑定空位(可自定义) ----
   { id: "super-seeding", group: "更多动作", label: "超级做种切换",
     def: "", scope: "list", danger: true,
@@ -470,7 +489,13 @@ window.AQB_SHORTCUTS = {
         // 浮层打开: 只放行焦点局部(设置页 Ctrl+S)自身的键位 —— 列表键位在浮层下仍然失效(同 W1-W4)。
         // 方案A W2: drawer.open 已摘出浮层名单 —— 停靠面板是列表附属不是浮层, 面板开着列表键位
         // 全部存活(§2.2 矩阵); scope==="drawer" 判定随名单摘除不再可达, 机制保留(条目清空)。
-        if (item.scope !== scope || (scope !== "drawer" && scope !== "settings")) return;
+        // 自切换白名单(2026-10-09 切换语义, 报告 26-10-09-1731 §07.1): 若打开着的正是**本键自己
+        // 控制的浮层**(统计/历史/帮助/列选择器), 本键仍消费 —— 否则第二次按键被本闸门吞掉,
+        // 「再按一下关」永远到不了 run。名单外浮层开着时本键仍失效(原口径不变)。
+        const own = KB_SELF_TOGGLE_OVERLAY[item.id];
+        if (!(own && this[own])) {
+          if (item.scope !== scope || (scope !== "drawer" && scope !== "settings")) return;
+        }
       } else if (item.scope !== "global" && item.scope !== scope) {
         return;                                        // 非焦点页不串扰
       }
@@ -996,21 +1021,65 @@ window.AQB_SHORTCUTS = {
         label: countText,
       });
     },
+    /* 详情面板 I(切换语义, 报告 26-10-09-1731 §04.2): 目标解析同旧(torrent 光标优先, group 光标取
+     * 首成员); 已开着**同一目标**的种子详情形态 ⇒ closeDrawer(再按一下关); 换目标 / 面板关着 /
+     * 开着流量形态 ⇒ 照旧 openTorrentDrawer 打开。与 Alt+1~5(有条件, 待定)分工: I 管面板整体开关,
+     * Alt+N 管定位页签。 */
     _kbOpenDrawer() {
       const c = this.kbCursor;
       if (!c) {
         this._kbHint();
         return;
       }
-      if (c.kind === "torrent") {
-        this.openTorrentDrawer(c.id);
+      let hash = "";
+      if (c.kind === "torrent") hash = c.id;
+      else if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        hash = g && g.members && g.members[0] ? g.members[0].hash : "";
+      }
+      if (!hash) return;  // 无目标(组无成员 / 剧集单元等)静默不动作(与原实现同口径)
+      if (this.drawer.open && this.drawer.kind === "seed" && this.drawer.hash === hash) {
+        this.closeDrawer();  // 已开同目标 ⇒ 关(切换语义; 换目标仍走下方打开)
         return;
       }
-      if (c.kind === "group") {
-        const g = this._findGroup(c.id);
-        const h = g && g.members && g.members[0] ? g.members[0].hash : "";
-        if (h) this.openTorrentDrawer(h);
+      this.openTorrentDrawer(hash);
+    },
+    /* ---------------- 2026-10-09: 切换语义(报告 26-10-09-1731 §03/§04) ----------------
+     * 6 条「适合」条目由「只打开」升级为「开/关双态」: 再按一次同一键关掉自己打开的东西。
+     * 关闭一律复用既有 closeX / closeDrawer(不新造状态); Esc 仍是唯一固定关闭出口, 两者不冲突。
+     * **只改键盘 run 路径** —— 鼠标入口(状态栏按钮 / 右键菜单 / 双击)保持原语义(范围守恒)。 */
+    /* 统计面板 \: 已开 ⇒ closeStats */
+    _kbToggleStats() {
+      if (this.statsOpen) {
+        this.closeStats();
+        return;
       }
+      return this.openStats();
+    },
+    /* 历史流量 Shift+\: 已开 ⇒ closeHistory */
+    _kbToggleHistory() {
+      if (this.historyOpen) {
+        this.closeHistory();
+        return;
+      }
+      return this.openHistory();
+    },
+    /* 快捷键帮助 Shift+/: 已开 ⇒ closeKbHelp */
+    _kbToggleKbHelp() {
+      if (this.kbHelpOpen) {
+        this.closeKbHelp();
+        return;
+      }
+      this.kbOpenHelp();
+    },
+    /* qB 口径流量图 Ctrl+\: 已开着全局流量形态 ⇒ closeDrawer; 否则走 openQbHistory(含 qbTrafficOn
+     * 门 + 未启用提示)。同目标 = 关, 未开/换形态仍走原打开语义。 */
+    _kbToggleQbTraffic() {
+      if (this.qbTrafficOn && this.drawer.open && this.drawer.kind === "traffic" && this.drawer.scope === "global") {
+        this.closeDrawer();
+        return;
+      }
+      return this.openQbHistory();
     },
     _kbMeta() {
       if (this.selGroups.length || this.selMembers.length) {
