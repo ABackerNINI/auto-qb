@@ -59,7 +59,9 @@
         <button class="sb-alt" :class="{ on: sbAltOn }" :title="sbAltTitle" @click.stop="toggleAltSpeed()">
           <svg class="ico ico-sm" :class="{ spin: altToggling }" viewBox="0 0 16 16"><use href="#i-turtle"></use></svg>
         </button>
-        <button class="sb-spd" :class="{ off: sbLimits.down === '不限' }"
+        <!-- 2026-10-11: 速度数值染方向色(.spd-down/.spd-up -> --today-down/up, 与流量图同源);
+             限速 .lim 保持中性灰不动 -->
+        <button class="sb-spd spd-down" :class="{ off: sbLimits.down === '不限' }"
                 @click.stop="openSpeedAt($event, 'down')">
           <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
           <span class="val">{{ fmtSpeed(totalDl) }}</span>
@@ -67,7 +69,7 @@
           <span class="lim">{{ sbLimits.down }}</span>
         </button>
         <span class="sb-sep"></span>
-        <button class="sb-spd" :class="{ off: sbLimits.up === '不限' }"
+        <button class="sb-spd spd-up" :class="{ off: sbLimits.up === '不限' }"
                 @click.stop="openSpeedAt($event, 'up')">
           <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
           <span class="val">{{ fmtSpeed(totalUl) }}</span>

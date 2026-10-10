@@ -471,7 +471,10 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-spd:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
+/* 2026-10-11: 速度数值也染方向色(用户要求与流量图同色); 限速 .lim 维持中性灰不动 */
 .sb-spd .val { color: var(--fg); font-weight: 600; font-size: 12.5px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sb-spd.spd-down .val { color: var(--today-down); }
+.sb-spd.spd-up .val { color: var(--today-up); }
 /* 2026-10-04: 方向图标统一到流量语义色(与今日流量/历史与 qB 流量图同源), 不再用全局绿/蓝 */
 .sb-spd .ico-down { color: var(--today-down); }
 .sb-spd .ico-up { color: var(--today-up); }
