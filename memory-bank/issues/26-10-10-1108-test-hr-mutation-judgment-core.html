@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ 判定内核与边界变异存活(resolve/bencode/ratelimit/parse)">
 <meta name="issue-summary" content="hr 首轮: resolve 126 + bencode 89 + ratelimit 38 + parse 39 存活(判定表/边界/频控窗口/数值容错), 零假存活">
 <title>hr/ 判定内核与边界变异存活(resolve/bencode/ratelimit/parse) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-10-1108-test-hr-mutation-judgment-core</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-10 11:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,6 +94,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-10 20:00 — 认领并实施（R19），状态 <strong>In Progress</strong>：四文件（resolve / bencode / ratelimit / parse）读带 diff 清单三分类 → 补守阵 → 红验按文件逐条同构变异复验 → 同池逐文件复跑</li>
+      <li>2026-10-10 20:44 — 实施完毕（R19），状态 <strong>Done</strong>：四文件一次做全 —— 补 <b>47 新守阵</b>（resolve 19 / bencode 8 / parse 13 / ratelimit 7）→ 红验 <b>170/292 KILLED</b>（余 118 条逐条判等价 + 4 条超时）→ S6 同池逐文件复跑（resolve <b>93.48%</b> · bencode <b>76.45%</b> · ratelimit <b>92.25%</b> · parse <b>95.40%</b>），四文件存活 <b>292 → 122</b>（净 <b>−170</b>）。等价变异按类逐条记理由（错误文案 / MAX_DEPTH 深度计数 / find 起点边界 / 缺省实参死值）; 零 <code>src/</code> 改动。基线切片 <code>testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md</code></li>
     </ul>
   </section>
 

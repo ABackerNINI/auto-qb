@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
-> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/report/verify/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档。**config 包已全清**(七轮, 存活 893 → 443 / 杀死率 **90.02%**, 首轮入池 6 条 `test` issue 全实施)。**hr 包**: 首轮(R14)8027 变异 / 存活 2440(**69.2%**), 真洞按主题入池 6 条 `test` issue; 已实施 **R16**(service.py 第一批: 存活 604→502 / **76.07%**)与 **R17**(model·store·queue 三文件: 存活 **271→28**; model **99.88%** / store **93.66%** / queue **90.00%**), 余 4 条 issue(judgment-core / channel-server / runtime-worker / display)。**rules / core 未派生计划**。档案 `tasks/26-10-08-test-mutation-audit.md`。
-> 最后活动: 2026-10-10 14:59
+> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/report/verify/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档。**config 包已全清**(七轮, 存活 893 → 443 / 杀死率 **90.02%**, 首轮入池 6 条 `test` issue 全实施)。**hr 包**: 首轮(R14)8027 变异 / 存活 2440(**69.2%**), 真洞按主题入池 6 条 `test` issue; 已实施 **R16**(service.py 第一批) / **R17**(model·store·queue) / **R18**(runtime·worker·fetcher·events·adapters·log) / **R19**(resolve·bencode·ratelimit·parse 判定内核与边界: 存活 **292→122**, 四文件 **93.48% / 76.45% / 92.25% / 95.40%**), 余 **2 条** issue(channel-server / display)。**rules / core 未派生计划**。档案 `tasks/26-10-08-test-mutation-audit.md`。
+> 最后活动: 2026-10-10 20:44
 
 ## 已完成(详情见档案, 不在此复述)
 
@@ -43,14 +43,16 @@
 - **config 后四轮 + R13 收口**(池内 `test` issue 逐条实施): loader-defaults(R11, 存活 476 / 89.33%)· boundary-guards(R13, 存活 443 / **90.02%**)· 另含 R6 validator-strings / R7 writer 长尾 / R8 schema 键面 / R10 loop-guards。**config 首轮入池 6 条 `test` issue 已全部实施**, 余量仅剩未逐条补测的 555 条 S4 未验证候选。切片见 `testing/baselines/26-10-08-*` 与 `26-10-09-1611` / `26-10-10-0925` / `26-10-10-1045`。
 - **R16 hr/service.py 第一批守阵**(issue `26-10-10-1108-service-engine`): 实施首轮建议的三函数(`_stop_condition` / `_run_downloads` / `_finish_wave`)—— 补 **30 新守阵 + 4 处既有补断言**, 红验 **85/85 KILLED**; 同池单模块复跑存活 **604 → 502**(**76.07%**)。**零 `src/` 改动**; 切片 `testing/baselines/26-10-10-1408-mutants-hr-service.md`; **issue 置 `In Progress`**(其余 12+ 函数留后续轮)。坑 `redverify-anchor-lineendings` 复发 +1(形态四)。
 - **R17 hr/model·store·queue 序列化与持久化守阵**(issue `26-10-10-1108-serialization`): **三文件一次做全**(271 条存活, 首轮建议 `model.from_json` 145 条为最大单点)—— 补 **41 新守阵 + 1 处既有补断言**, 红验 **245/271 KILLED**(余 26 条逐条判等价); 同池逐文件复跑 **model 844/存活 1(99.88%) · store 205/存活 13(93.66%) · queue 140/存活 12+超时 2(90.00%)**, 对首轮逐文件存活对差 **271 → 28**(净 −243)。**零 `src/` 改动**; 切片 `testing/baselines/26-10-10-1458-mutants-hr-serialization.md`; **issue 置 `Done`**。新坑 `pitfalls/testing/mutants-mirror-dirty-worktree.md`(镜像工作树残留 apply 变异体而 git 判净) + 坑 `redverify-anchor-lineendings` 复发 +1(形态五)。
+- **R18 hr 运行时与取数线程六文件守阵**(issue `26-10-10-1108-runtime-worker`): runtime / worker / fetcher / events / adapters / log **一次做全**(386 条存活 + 14 条 `no tests`)—— 补 **96 新守阵**(含**新建 `tests/test_hr_events.py`** —— events/log 此前无专属池文件), 红验 **366/400 KILLED**(余 34 条逐条判等价 + 1 条假存活); 同池逐文件复跑 **runtime 95.20% / worker 97.07% / fetcher 98.08% / events 94.37% / adapters 99.48%–100% / log 90.00%**, 六文件存活 **386 → 34**(净 −352)。红验暴露并当场补上 4 处假绿(松匹配被顶替 / 第二处 raise / 节流边界 / `exc_info=False`)。**零 `src/` 改动**; 切片 `testing/baselines/26-10-10-1940-mutants-hr-runtime-worker.md`; **issue 置 `Done`**。坑 `redverify-anchor-lineendings` 复发 +1(形态六)。
+- **R19 hr 判定内核与边界四文件守阵**(issue `26-10-10-1108-judgment-core`): resolve / bencode / ratelimit / parse **一次做全**(292 条存活)—— 补 **47 新守阵**(resolve 19 / bencode 8 / parse 13 / ratelimit 7), 红验 **170/292 KILLED**(余 118 条逐条判等价 + 4 条超时); 同池逐文件复跑 **resolve 93.48% / bencode 76.45% / ratelimit 92.25% / parse 95.40%**, 四文件存活 **292 → 122**(净 −170)。等价 118 条集中在错误文案(bencode 主导)/ MAX_DEPTH 深度计数 / find 起点边界 / 缺省实参死值。**零 `src/` 改动**; 切片 `testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md`; **issue 置 `Done`**。坑 `redverify-anchor-lineendings` 复发 +1(形态七: 整段 hunk 定位后取首行缩进作 add 行基准 ⇒ 函数体内被改行丢缩进 ⇒ `IndentationError` 伪判 KILLED)。
 
 ## 正在进行
 
-- (无) —— R16 / R17 已闭环。hr 包余 **4 条** `test` issue 未实施(judgment-core / channel-server / runtime-worker / display), 属后续轮。
+- (无) —— R16 / R17 / R18 / R19 均已闭环。hr 包余 **2 条** `test` issue 未实施(channel-server / display), 属后续轮。
 
 ## 未决项
 
-- **hr 首轮入池 6 条 `test` issue 已做 2 条**: R16 service.py 第一批(604 条中三函数) / R17 model·store·queue(全量); 余 **4 条**未实施 —— `judgment-core` / `channel-server` / `runtime-worker` / `display`。
+- **hr 首轮入池 6 条 `test` issue 已做 4 条**: R16 service.py 第一批(604 条中三函数) / R17 model·store·queue(全量) / R18 runtime·worker·fetcher·events·adapters·log(六文件全量) / R19 resolve·bencode·ratelimit·parse(四文件全量); 余 **2 条**未实施 —— `channel-server` / `display`。
 - **config 真洞 issue 已全清**(6 条全实施); 余量仅剩 config 包内未逐条补测的 555 条 S4 未验证候选(按需另立轮)。
 - **service.py 其余函数未覆盖**(R16 余量: `_run_pages` / `_do_wave` / `_refresh_locked` / `_append_history` 等, 见 R16 切片「余量」节); `rules` / `core` **仍未派生计划**(对象优先级见可行性报告 §11)。
 - 常驻 issue 的认领链只有一条(本档案); 后续每轮若新增计划/档案, 记得同步 issue 的 `doc-refs`。

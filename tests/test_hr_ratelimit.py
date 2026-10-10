@@ -13,7 +13,18 @@
 ### P1 覆盖率提升轮: 日额门槛与工具长尾
 - test_next_allowed_at_reports_day_reset_when_quota_exhausted: 日额到顶 -> 下次可取 = 次日零点(原因「日配额」)
 - test_now_ts_returns_positive_epoch: now_ts 返回当前 epoch 秒
+
+### hr 首轮变异审计轮: 频控窗口 / 端点 / 取值守阵(issue 26-10-10-1108-judgment-core)
+- test_hr_limits_merge_carries_allow_window: merge 三字段原样搬自全局配置(allow_window 不得丢)
+- test_day_key_exact_local_date_format: 天窗口键格式钉死 "%Y-%m-%d"(持久化契约)
+- test_next_day_reset_is_exact_next_midnight: 日额重置 = 次日零点整
+- test_window_start_on_pins_start_endpoint_and_rollover: 窗口起点取起点端 + 顺延 + 精确归零
+- test_next_allowed_at_takes_latest_gate_and_reason: 多门槛取最晚者 + 对应原因
+- test_next_allowed_at_clear_returns_empty_reason: 候选存在但都 <= now -> now + 空原因
+- test_next_allowed_at_exact_due_equals_now_is_clear: due 恰等 now 视为已满足(<= 而非 <)
 """
+import random
+
 from auto_qb.hr.model import HrSiteData
 from auto_qb.hr.ratelimit import (
     HrLimits,
@@ -23,6 +34,7 @@ from auto_qb.hr.ratelimit import (
     next_day_reset,
     quota_left,
     try_consume,
+    window_start_on,
 )
 import auto_qb.hr.ratelimit as rl
 
@@ -133,3 +145,76 @@ def test_now_ts_returns_positive_epoch():
     got = rl.now_ts()
     after = _time.time()
     assert before <= got <= after
+
+
+# ==================== hr 首轮变异审计轮: 频控窗口 / 端点 / 取值守阵 ====================
+
+import datetime as _dt
+
+
+def _ts(y, mo, d, h, mi, s=0):
+    return _dt.datetime(y, mo, d, h, mi, s).timestamp()
+
+
+class _GlobalConf:
+    """HrLimits.merge 的最小入参桩(只取三个字段)"""
+
+    min_interval = 90.0
+    max_requests_per_day = 240
+    allow_window = "08:00-20:00"
+
+
+def test_hr_limits_merge_carries_allow_window():
+    """merge 三字段原样搬自全局配置(allow_window 不得丢成 None / 默认空串)"""
+    lim = HrLimits.merge(_GlobalConf())
+    assert lim.min_interval == 90.0
+    assert lim.max_requests_per_day == 240
+    assert lim.allow_window == "08:00-20:00"
+
+
+def test_day_key_exact_local_date_format():
+    """天窗口键格式钉死 "%Y-%m-%d"(它是 state.json 持久化契约, 换格式 = 窗口静默重置)"""
+    assert day_key(_ts(2026, 3, 7, 15, 30)) == "2026-03-07"
+    assert day_key(_ts(2026, 12, 31, 23, 59)) == "2026-12-31"
+
+
+def test_next_day_reset_is_exact_next_midnight():
+    """日额重置 = 次日零点整(hour/minute/second/microsecond 全归零 + 86400)"""
+    now = _dt.datetime(2026, 3, 7, 15, 30, 45, 123456).timestamp()
+    assert next_day_reset(now) == _ts(2026, 3, 8, 0, 0)
+    assert next_day_reset(_ts(2026, 3, 7, 0, 0)) == _ts(2026, 3, 8, 0, 0)
+
+
+def test_window_start_on_pins_start_endpoint_and_rollover():
+    """窗口起点: 取 spec 的**起点**端, 当天已过则顺延次日; 时分秒/微秒精确归零"""
+    now = _dt.datetime(2026, 3, 7, 15, 30, 45, 123456).timestamp()
+    # 15:30 已过 08:00 -> 顺延次日 08:00
+    assert window_start_on(now, "08:00-20:00") == _ts(2026, 3, 8, 8, 0)
+    # 03:00 未到 08:00 -> 当天 08:00
+    assert window_start_on(_ts(2026, 3, 7, 3, 0), "08:00-20:00") == _ts(2026, 3, 7, 8, 0)
+    # 起点恰为 now: 仍顺延次日(严格 ts > now)
+    assert window_start_on(_ts(2026, 3, 7, 8, 0), "08:00-20:00") == _ts(2026, 3, 8, 8, 0)
+
+
+def test_next_allowed_at_takes_latest_gate_and_reason():
+    """多个门槛并存: 取最晚者, 原因取对应门槛(不是先到 / 按原因字符串排)"""
+    d = data_with(last_ts=NOW, retry_after=NOW + 500)
+    due, why = next_allowed_at(d, limits(min_interval=90.0), NOW)
+    assert due == NOW + 500 and why == "Retry-After"
+
+
+def test_next_allowed_at_clear_returns_empty_reason():
+    """门槛都已满足(候选存在但都 <= now): 返回 now 且原因为空串(不是占位串)"""
+    d = data_with(last_ts=NOW - 1000)
+    due, why = next_allowed_at(d, limits(min_interval=90.0), NOW)
+    assert due == NOW and why == ""
+
+
+def test_next_allowed_at_exact_due_equals_now_is_clear():
+    """due 恰等于 now 视为已满足(<= 而非 <): 原因空串"""
+    j = 90.0 * (1.0 + random.Random(7).random() * 0.25)
+    last = NOW - 1000.0
+    now = last + j
+    d = data_with(last_ts=last)
+    due, why = next_allowed_at(d, limits(min_interval=90.0), now, rng=random.Random(7))
+    assert due == now and why == ""

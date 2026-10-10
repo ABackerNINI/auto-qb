@@ -3,9 +3,9 @@
 > 摘要: 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。
 > 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时
 
-**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md, memory-bank/testing/baselines/26-10-10-1458-mutants-hr-serialization.md
+**Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md, memory-bank/testing/baselines/26-10-10-1458-mutants-hr-serialization.md, memory-bank/testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md
 
-**复发**: 3 —— ①2026-10-10(config loader-defaults 轮): 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。②2026-10-10(hr service-engine 轮): 锚点来源从「手写文本」换成**从 mutmut dump 取行块**, 于是踩到「dump 行块相对源码整体**去缩进**、且**续行缩进不被归一**」⇒ 精确块匹配恒失配(9 条 ANCHOR-MISS)。新增形态四见下。③2026-10-10(hr serialization 轮): 同源第二面 —— dump 的 hunk 行号是**函数相对**(不是文件相对)、`ǁ` 分隔符**字形不可靠**、去缩进对 **docstring 续行不生效** ⇒ 首版 271 条全失配。新增形态五见下。
+**复发**: 5 —— ①2026-10-10(config loader-defaults 轮): 本轮的形态是「**删整行**」而不是「替换多行文本」, 首版脚本在**字节层**做(`splitlines(keepends=True)` 后逐行 `strip()` 比对), 却拿 **str 锚点**去比 bytes 行 ⇒ 恒不相等、`hits=0`; 以及单行锚点在两个函数里各出现一次(`count=2`)。两个都由坑里那句「`count != 1` 必须报错停手」的兜底抓住(报 `ANCHOR-MISS` 而非假绿), 属于**守阵按预期工作**, 但坑里没写「字节层操作的类型失配」这一形态, 首版照写仍会踩。新增形态三见下。②2026-10-10(hr service-engine 轮): 锚点来源从「手写文本」换成**从 mutmut dump 取行块**, 于是踩到「dump 行块相对源码整体**去缩进**、且**续行缩进不被归一**」⇒ 精确块匹配恒失配(9 条 ANCHOR-MISS)。新增形态四见下。③2026-10-10(hr serialization 轮): 同源第二面 —— dump 的 hunk 行号是**函数相对**(不是文件相对)、`ǁ` 分隔符**字形不可靠**、去缩进对 **docstring 续行不生效** ⇒ 首版 271 条全失配。新增形态五见下。④2026-10-10(hr runtime-worker 轮): dump 的 hunk **带上下文行**且 docstring 续行不去缩进 ⇒ 拿「首行缩进差」当统一位移, 首版整块替换把上下文行也吃掉(6 条 APPLY-ERROR)。新增形态六见下。⑤2026-10-10(hr judgment-core 轮): 改用「整段 hunk(上下文 + 删除行)」定位后, 取**首行**缩进作 `add` 行基准 —— hunk 首行是 `def`/docstring(缩进 0)而被改行在函数体内(缩进 4)时, `add` 行**丢缩进** ⇒ `IndentationError` ⇒ pytest 收集失败被**伪判 KILLED**(首版红验 242/292 与 S6 严重不符, 实测 ~52 条虚高)。新增形态七见下。
 
 ### 两个失配形态（2026-10-08, config schema 键面轮）
 
@@ -45,6 +45,21 @@
 - **判别**: 与形态一~四同表 —— 输出出现 `ANCHOR-MISS` 就停手; 本轮表现是「**全部**失配」而不是个别, 一眼可辨是定位法本身错了。
 - **处置**(本轮的可用配方, 比形态四更省事): ①先用变异 id 的 qualname 定位**函数体行范围**(类方法走 `class X` → `def y`); ②在范围内按 **strip 后内容**匹配被删(`-`)行序列, 要求**恰好命中一次**(函数范围天然消掉了跨函数重名); ③以「**源码该行缩进 − dump 该行缩进**」为位移, 把新增(`+`)行还原到源码缩进后替换; ④自检 —— 逐条 apply 后 `ast.parse` 必须通过、revert 后字节恒等(本轮 271 条全过)。
 - **同源边界**: 变异体若让守阵**挂起**(如 `_cond.wait(None)`), 红验脚本对子进程**必须设超时**, 否则整轮永不返回(本轮实测: 无超时版跑了 6m49s 才被手工 `TaskStop`); 挂起按「未绿 = 被杀」处理(与 mutmut 的 `timeout` 同口径)。
+
+### 形态六: dump 的 hunk **带上下文行** + docstring 续行不去缩进（2026-10-10, hr runtime-worker 轮）
+
+- **触发**: 从 R14 dump 取 hunk 做同构变异时, 首版拿「整块(含上下文行)替换」—— 结果 6 条 `APPLY-ERROR`(把**上下文行**也一起吃掉了)。
+- **根因**: dump 的 hunk **不只有 `-`/`+` 行**, 还带**上下文行**(未变行, 前缀空格); 且同形态四五 —— **去缩进对 docstring 续行不生效**(同 hunk 内代码行 −4 / docstring 行 −0)⇒ 不能拿「首行缩进差」当**统一位移**。
+- **处置**: ①**只用 `-` 行**定位与取缩进; ②歧义(命中不唯一)时用**整段 hunk(上下文 + `-`)定位**, 但**只替换 `-` 区间**(上下文行原样保留); ③`+` 行的缩进基准取**首个 `-` 行**对应源行的缩进。
+
+### 形态七: 整段 hunk 定位后取**首行**缩进作 `add` 行基准 ⇒ 丢缩进 ⇒ `IndentationError` 伪判 KILLED（2026-10-10, hr judgment-core 轮）
+
+- **触发**: 按形态六改用「整段 hunk(上下文行 + 删除行)strip 唯一命中」定位后, 红验报 **242/292 KILLED** —— 但 S6 只支持 ~170。**逐文件对差严重不符**(bencode 红验 68 杀 vs S6 16 杀)。
+- **根因**: 重排 `add`(`+`)行时, 缩进基准取的是**匹配到的首行**(`base_indent = 首行缩进`)—— 当 hunk **首行是 `def`/docstring**(缩进 0)而被改行在**函数体内**(缩进 4)时, `rel = add缩进 − del缩进 = 0` ⇒ `add` 行被重排成**缩进 0**, 插进函数体里 ⇒ **`IndentationError`**。pytest 收集即失败 ⇒ 脚本按「跑完非零 = KILLED」**伪判被杀**。实测 ~52 条虚高(bencode `bdecode m3` 等)。
+  - **危险点**: 与「守阵真的杀死了这条」在 `KILLED` 列上**完全无法区分** —— 唯一暴露方式是**与 S6(权威工具)对差**, 或 apply 后做语法自检。
+- **处置**: ①缩进基准改取**首个删除行**对应的源行(`d0 = 第一个 del 的下标; base_indent = src_lines[i+d0] 的缩进`), `rel = add缩进 − 首个del缩进`; ②**apply 后 `ast.parse` 自检**, 不通过记 `APPLY-ERROR`(而非跑测试) —— 把「文件被改坏」与「守阵杀掉变异」彻底分开; ③**红验数字必须与 S6 对差**(逐文件新杀数), 对不上先怀疑脚本而非结论。
+
+- **一句话(六/七同源)**: 用**整段 hunk**定位时, 「缩进基准」必须绑定到**被替换的 `-` 行**, 不能绑定到「匹配到的第一行」; 且 apply 后一律 `ast.parse` 自检。
 
 ### 另一个同源陷阱: 探针放在不可达的分支上（空转）
 - **触发**: CRLF 与缩进都修好后仍剩 1 条 SURVIVED(`readonly_config_paths__mutmut_2`, `continue` → `break`)。手工推算这两者「应当有差别」(断链会丢后续字段), 于是先怀疑是判据/脚本问题而不是急着判等价变异, 查下去发现是探针本身空转。

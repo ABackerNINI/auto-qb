@@ -39,6 +39,27 @@
 - test_row3_release_without_anchor_skips_drift_check: 行 3 不传锚点跳过漂移检查
 - test_safety_display_exempt_and_graduation_labels: 免罪/毕业展示标签(带事实按档位, 无事实按来源)
 - test_build_site_view_skips_unknown_lane_entries: 空档位条目不进判定面
+
+### hr 首轮变异审计轮: 判定内核与展示守阵(issue 26-10-10-1108-judgment-core)
+- test_site_facts_of_carries_all_fields: HrSiteFacts.of 逐字段搬运
+- test_row1_reason_reports_remaining_hours: 行 1 人话带「还差 Nh」(整除; 0/None 无后缀)
+- test_row2_reasons_exact: 行 2 三档(B/C/D)人话逐字
+- test_row3_reason_carries_source_text: 行 3 放行记录人话按来源取文案
+- test_row3_drift_reason_kept: 锚点漂移作废时 reason 带漂移人话
+- test_row4_reason_default_and_notes: 行 4 reason 默认文案 / notes 覆盖(or 而非 and)
+- test_missing_infohash_reason_and_site: infohash 缺位 reason 与 site 如实带上
+- test_judgement_carries_reason_and_site: judge_record 结果透传 reason / site
+- test_anchor_drift_completion_on_zero_snapshot: completion_on=0 快照也参与漂移比对
+- test_tie_hr_keeps_smaller_remain_even_when_best_has_value: 同为管束保先到更小 remain
+- test_tie_c_terminal_beats_stronger_release_source: C 终态不被更强放行依据盖掉
+- test_tie_two_c_keeps_first_remain: 同为 C 保先到
+- test_tie_release_stronger_source_both_orders: 同为放行取依据更强者(两键序)
+- test_tie_release_d_exempt_kept_over_b: D 免罪 > B 达标
+- test_tie_two_b_keeps_first: 同为放行且依据同强(B=B)保先到
+- test_safety_display_all_texts_exact: safety_display 全分支 text 逐字
+- test_safety_display_released_src_branches_exact: 按 released_src 取 (safety, src, text)
+- test_build_site_view_carries_all_view_fields: build_site_view 逐字段落视图
+- test_build_site_view_continue_not_break_on_unknown_lane: 未知档位 continue 而非 break
 """
 from typing import Optional
 
@@ -63,6 +84,7 @@ from auto_qb.hr.resolve import (
     HrAnchor,
     HrIdentity,
     HrJudgement,
+    HrSiteFacts,
     HrSiteView,
     build_site_view,
     judge_record,
@@ -558,3 +580,223 @@ def test_build_site_view_skips_unknown_lane_entries():
     data.index[1] = idle
     view = build_site_view("s", "list", data, channel_state=CHANNEL_OK, generated_at=1.0)
     assert view.lane_a == {} and view.lane_terminal == {}
+
+
+# ==================== hr 首轮变异审计轮: 判定内核与展示守阵 ====================
+
+
+def _facts_entry() -> HrEntry:
+    """四个展示字段都取**非默认**值, 便于钉 HrSiteFacts.of 逐字段搬运"""
+    return HrEntry(
+        tid=7,
+        name="FACTS",
+        lane=LANE_SCOPE,
+        need_seed_seconds=111,
+        remain_seconds=222,
+        ratio=1.5,
+        downloaded_bytes=333,
+    )
+
+
+def test_site_facts_of_carries_all_fields():
+    """HrSiteFacts.of 逐字段搬运(need_seed / remain / ratio / downloaded 一个都不能丢成 None)"""
+    f = HrSiteFacts.of(_facts_entry())
+    assert (f.lane, f.need_seed_seconds, f.remain_seconds, f.ratio, f.downloaded_bytes) == (
+        LANE_SCOPE,
+        111,
+        222,
+        1.5,
+        333,
+    )
+
+
+def test_row1_reason_reports_remaining_hours():
+    """行 1 人话带「还差 Nh」(整除小时; 0 / None 时无该后缀, 不出现占位串)"""
+    view = make_view(entry=make_entry(LANE_SCOPE, remain=3600))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.reason == "清单命中·考察中(档位 A, 还差 1h)"
+    for rem in (0, None):
+        j2 = judge_record(make_view(entry=make_entry(LANE_SCOPE, remain=rem)), ("h1", ), anchor=anchor(), now=NOW)
+        assert j2.reason == "清单命中·考察中(档位 A)"
+
+
+def test_row2_reasons_exact():
+    """行 2 三档(B / C / D)人话逐字钉死"""
+    for lane, want in (
+        (LANE_SATISFIED, "清单命中·已达标(B, 终态放行)"),
+        (LANE_UNSATISFIED, "清单命中·未达标(C, 考核结论已定, 终态放行)"),
+        (LANE_EXEMPT, "清单命中·已免罪(D, 终态放行)"),
+    ):
+        j = judge_record(make_view(entry=make_entry(lane, remain=0)), ("h1", ), anchor=anchor(), now=NOW)
+        assert j.reason == want
+
+
+def test_row3_reason_carries_source_text():
+    """行 3 放行记录人话按来源取文案(D 免罪 / 已达标移出 / 覆盖范围内未列出)"""
+    for src, want in (
+        (SOURCE_EXEMPT, "D 档已免罪"),
+        (SOURCE_SATISFIED, "已达标移出"),
+        (SOURCE_NOT_LISTED, "覆盖范围内未列出"),
+    ):
+        ver = make_verified(source=src)
+        view = make_view(verified=ver)
+        j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+        assert j.reason == f"放行记录({want}, 依据 {ver.verified_ts:.0f})"
+
+
+def test_row3_drift_reason_kept():
+    """锚点漂移作废时 reason 带漂移人话(不丢成 None)"""
+    view = make_view(verified=make_verified())
+    j = judge_record(view, ("h1", ), anchor=anchor(downloaded=2 << 30), now=NOW)
+    assert j.identity is HrIdentity.NO_EVIDENCE
+    assert "锚点漂移" in j.reason and "增长" in j.reason
+
+
+def test_row4_reason_default_and_notes():
+    """行 4 reason 默认文案; 视图带 notes 时用 notes(or 而非 and)"""
+    j = judge_record(make_view(), ("h1", ), anchor=anchor(), now=NOW)
+    assert j.reason == "无有效站点证据(本地判据兜底)"
+    view = HrSiteView(site="s", notes="站点自述: 维护中")
+    j2 = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j2.reason == "站点自述: 维护中"
+
+
+def test_missing_infohash_reason_and_site():
+    """infohash 缺位: reason 与 site 都要如实带上"""
+    view = make_view(entry=make_entry(LANE_SCOPE))
+    j = judge_record(view, ("", ), anchor=anchor(), now=NOW)
+    assert j.reason == "身份缺位(infohash 未回填)"
+    assert j.site == "example"
+
+
+def test_judgement_carries_reason_and_site():
+    """judge_record 结果透传 reason / site(不得丢成 None)"""
+    view = make_view(entry=make_entry(LANE_SCOPE))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.reason.startswith("清单命中")
+    assert j.site == "example"
+
+
+def test_anchor_drift_completion_on_zero_snapshot():
+    """锚点快照 completion_on=0(合法快照)也要参与漂移比对(>= 0, 不是 > 0 / >= 1)"""
+    a = HrAnchor(added_on=0, downloaded=0, completion_on=9, progress=0.0)
+    ver = _ver(anchor_added_on=0, anchor_downloaded=0, anchor_completion_on=0, anchor_progress=0.0)
+    assert ver.has_anchor_snapshot is True
+    assert a.drift_reason(ver) == "completion_on 变化"
+
+
+def test_tie_hr_keeps_smaller_remain_even_when_best_has_value():
+    """同为管束: 先到的更小 remain 被保留(后到有具体值 / None 都不顶掉先到)"""
+    e1 = make_entry(LANE_SCOPE, "h1", remain=100)
+    e2 = make_entry(LANE_SCOPE, "h2", remain=3600)
+    j = judge_record(_two_entry_view(e1, e2), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.facts is not None and j.facts.remain_seconds == 100
+    e3 = make_entry(LANE_SCOPE, "h1", remain=100)
+    e4 = make_entry(LANE_SCOPE, "h2", remain=None)
+    j2 = judge_record(_two_entry_view(e3, e4), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j2.facts is not None and j2.facts.remain_seconds == 100
+
+
+def test_tie_c_terminal_beats_stronger_release_source():
+    """C 终态未达标不被更强放行依据(D 免罪)盖掉 —— best_c 特判必须生效"""
+    c = make_entry(LANE_UNSATISFIED, "h1", remain=0)
+    d = make_entry(LANE_EXEMPT, "h2", remain=0)
+    j = judge_record(_two_entry_view(c, d), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.facts is not None and j.facts.lane == LANE_UNSATISFIED
+
+
+def test_tie_two_c_keeps_first_remain():
+    """同为 C 终态: 保先到(_tie_prefer 的 and not best_c 不得改成 or)"""
+    c1 = make_entry(LANE_UNSATISFIED, "h1", remain=100)
+    c2 = make_entry(LANE_UNSATISFIED, "h2", remain=200)
+    j = judge_record(_two_entry_view(c1, c2), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.facts is not None and j.facts.remain_seconds == 100
+
+
+def test_tie_release_stronger_source_both_orders():
+    """同为放行: 依据更强者胜 —— B 达标 vs 缺席式放行(两个键序都验)"""
+    ver = make_verified("h1")  # 缺席式放行(strength 1)
+    b = make_entry(LANE_SATISFIED, "h2", remain=0)  # B 达标(strength 2)
+    j = judge_record(_two_entry_view(None, b, verified={ver.infohash: ver}), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.released_src == SOURCE_SATISFIED
+    b2 = make_entry(LANE_SATISFIED, "h1", remain=0)
+    ver2 = make_verified("h2")
+    j2 = judge_record(_two_entry_view(b2, None, verified={ver2.infohash: ver2}), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j2.released_src == SOURCE_SATISFIED
+
+
+def test_tie_release_d_exempt_kept_over_b():
+    """同为放行: D 免罪(先到)不被 B 达标(后到)顶掉"""
+    d = make_entry(LANE_EXEMPT, "h1", remain=0)
+    b = make_entry(LANE_SATISFIED, "h2", remain=0)
+    j = judge_record(_two_entry_view(d, b), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.released_src == SOURCE_EXEMPT
+
+
+def test_tie_two_b_keeps_first():
+    """同为放行且依据同强(B = B): 保先到(严格 > 而非 >=)"""
+    e1 = make_entry(LANE_SATISFIED, "h1", remain=0)
+    e2 = make_entry(LANE_SATISFIED, "h2", remain=99)
+    j = judge_record(_two_entry_view(e1, e2), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.facts is not None and j.facts.remain_seconds == 0
+
+
+def test_safety_display_all_texts_exact():
+    """safety_display 全部分支的 text 逐字钉死(展示口径单点, 不得丢成 None / 占位串)"""
+    assert safety_display(None, triggered=False, satisfied=True).text == "本地·达标"
+    assert safety_display(None, triggered=True, satisfied=False).text == "本地·未达标"
+    assert safety_display(None, triggered=False, satisfied=False).text == "本地·未达标(疑似辅种)"
+    j_a = judge_record(make_view(entry=make_entry(LANE_SCOPE)), ("h1", ), anchor=anchor(), now=NOW)
+    assert safety_display(j_a, triggered=True, satisfied=False).text == "在线·考察中"
+    j_b = judge_record(make_view(entry=make_entry(LANE_SATISFIED, remain=0)), ("h1", ), anchor=anchor(), now=NOW)
+    assert safety_display(j_b, triggered=False, satisfied=True).text == "在线·已达标"
+    j_c = judge_record(make_view(entry=make_entry(LANE_UNSATISFIED, remain=0)), ("h1", ), anchor=anchor(), now=NOW)
+    assert safety_display(j_c, triggered=True, satisfied=False).text == "在线·未达标(终态)"
+    j_d = judge_record(make_view(entry=make_entry(LANE_EXEMPT, remain=0)), ("h1", ), anchor=anchor(), now=NOW)
+    assert safety_display(j_d, triggered=False, satisfied=True).text == "在线·已免罪"
+    j_r = judge_record(make_view(verified=make_verified()), ("h1", ), anchor=anchor(), now=NOW)
+    assert safety_display(j_r, triggered=False, satisfied=False).text == "在线·已核实，安全放行"
+
+
+def test_safety_display_released_src_branches_exact():
+    """无命中行事实时按 released_src 取 (safety, src, text) 三元组"""
+    j_ex = HrJudgement(identity=HrIdentity.RELEASED, released_src=SOURCE_EXEMPT)
+    d = safety_display(j_ex, triggered=False, satisfied=True)
+    assert (d.safety, d.src, d.text) == (SAFETY_SAFE, SRC_SITE_EXEMPT, "在线·已免罪")
+    j_sat = HrJudgement(identity=HrIdentity.RELEASED, released_src=SOURCE_SATISFIED)
+    d2 = safety_display(j_sat, triggered=False, satisfied=True)
+    assert (d2.safety, d2.src, d2.text) == (SAFETY_SAFE, SRC_SITE_SATISFIED, "在线·已达标")
+
+
+def test_build_site_view_carries_all_view_fields():
+    """build_site_view 逐字段落到视图(listing / revision / channel_state / generated_at / healthy_ts / notes)"""
+    from auto_qb.hr.model import HrEntry, HrSiteData
+
+    data = HrSiteData()
+    data.revision = 42
+    data.wave.healthy_ts = 123.0
+    data.wave.notes = "波备注"
+    data.index[1] = HrEntry(tid=1, name="x", lane=LANE_SCOPE, infohash_v1="H1")
+    view = build_site_view("s", "none", data, channel_state="ok", generated_at=9.0)
+    assert view.site == "s"
+    assert view.listing == "none"
+    assert view.revision == 42
+    assert view.channel_state == "ok"
+    assert view.generated_at == 9.0
+    assert view.healthy_ts == 123.0
+    assert view.notes == "波备注"
+    assert "H1" in view.lane_a
+
+
+def test_build_site_view_continue_not_break_on_unknown_lane():
+    """未知档位条目 continue(跳过)而非 break: 其后的合法条目仍要进判定面"""
+    from auto_qb.hr.model import HrEntry, HrSiteData
+
+    data = HrSiteData()
+    idle = HrEntry(tid=1, name="idle", lane="")
+    idle.infohash_v1 = "IDLE"
+    data.index[1] = idle
+    data.index[2] = HrEntry(tid=2, name="good", lane=LANE_SCOPE, infohash_v1="GOOD")
+    view = build_site_view("s", "list", data, channel_state=CHANNEL_OK, generated_at=1.0)
+    assert "GOOD" in view.lane_a
+    assert "IDLE" not in view.lane_a

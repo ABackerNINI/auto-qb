@@ -51,6 +51,21 @@
 - test_base_looks_like_login_single_marker_each: 基类登录判据两个标记各自独立成立(or 非 and)
 - test_base_looks_like_challenge_each_marker: 挑战页五个特征词各自命中(lower 后比对)
 - test_carpt_looks_like_login_single_marker_each: CarPT 登录判据两个标记各自独立成立
+
+### hr 首轮变异审计轮: 解析边界与排序守阵(issue 26-10-10-1108-judgment-core)
+- test_parse_size_strips_thousands_separator: "1,024 MB" 千分位逗号剥除
+- test_parse_duration_uppercase_day_marker: 天数前缀大小写都认("2D")
+- test_parse_duration_zero_days_only_is_none: "0天" -> None(不是 0)
+- test_parse_duration_non_digit_parts_rejected: 段内非数字 -> None, 不抛
+- test_table_tree_accumulates_multiple_text_segments: 单元格文本跨段累加
+- test_table_tree_recognizes_th_cells: <th> 与 <td> 同为单元格
+- test_extract_table_skips_empty_rows_before_header: 表头前空行不越界
+- test_has_next_page_is_case_insensitive: 下一页链接判据大小写不敏感
+- test_order_violations_insufficient_keeps_counts: 证据不足分支带 comparable / total
+- test_order_violations_all_equal_keeps_counts: 全相等分支带 comparable / total
+- test_order_violations_direction_from_first_pair: 方向由首对可比行推断(desc / asc)
+- test_order_violations_equal_adjacent_not_violation: 相邻相等不算违反
+- test_cross_page_violation_asc_equal_boundary_not_violation: 跨页 asc 边界相等不算违反
 """
 import pytest
 
@@ -701,3 +716,86 @@ def test_carpt_looks_like_login_single_marker_each():
     assert adapter.looks_like_login('<form action="takelogin.php">') is True
     assert adapter.looks_like_login('<input name="password">') is True
     assert adapter.looks_like_login(load_fixture(CARPT_PAGE1)) is False
+
+
+# ==================== hr 首轮变异审计轮: 解析边界与排序守阵 ====================
+
+
+def test_parse_size_strips_thousands_separator():
+    """大小串的千分位逗号要剥除(不是替换成占位串 / 不剥)"""
+    assert parse_size("1,024 MB") == 1024 * 1024**2
+    assert parse_size("1,024.5 MB") == int(1024.5 * 1024**2)
+
+
+def test_parse_duration_uppercase_day_marker():
+    """天数前缀大小写都认("2D" 与 "2d" 同值)"""
+    assert parse_duration("2D") == 2 * 86400
+    assert parse_duration("2d") == 2 * 86400
+
+
+def test_parse_duration_zero_days_only_is_none():
+    """"0天"(天数 0 且无时分秒段) -> None(不是 0)"""
+    assert parse_duration("0天") is None
+
+
+def test_parse_duration_non_digit_parts_rejected():
+    """段内非数字(如 "1.2:3", 过了字符白名单但 int() 会炸) -> None, 不抛"""
+    assert parse_duration("1.2:3") is None
+
+
+def test_table_tree_accumulates_multiple_text_segments():
+    """单元格文本跨多个文本段要**累加**(+= 不是 =): "a<b>b</b>c" -> "abc" """
+    rows = flat_rows("<table><tr><td>a<b>b</b>c</td></tr></table>")
+    assert cell_text(rows[0].cells[0]) == "abc"
+
+
+def test_table_tree_recognizes_th_cells():
+    """<th> 与 <td> 同为单元格(th 在起止标签都认)"""
+    rows = flat_rows("<table><tr><th>H</th></tr><tr><td>x</td></tr></table>")
+    assert [cell_text(r.cells[0]) for r in rows] == ["H", "x"]
+
+
+def test_extract_table_skips_empty_rows_before_header():
+    """表头前有空行(0 单元格)时不越界(列数判定 > header_column, 不是 >=)"""
+    html = "<table><tr></tr><tr><td>HR编号</td></tr><tr><td>1</td></tr></table>"
+    table = extract_table(html, "HR编号")
+    assert table.columns == ("HR编号", )
+    assert len(table.rows) == 1
+
+
+def test_has_next_page_is_case_insensitive():
+    """下一页链接判据大小写不敏感(href 里的 myhr.php 可大写)"""
+    assert has_next_page('<a href="MYHR.PHP?page=2">下一页</a>') is True
+
+
+def test_order_violations_insufficient_keeps_counts():
+    """证据不足(可比 < 2)分支仍如实带 comparable / total(不是 None / 丢字段)"""
+    ov = order_violations([100.0])
+    assert ov.insufficient is True
+    assert ov.comparable == 1 and ov.total == 1
+    ov = order_violations([None, None])
+    assert ov.comparable == 0 and ov.total == 2
+
+
+def test_order_violations_all_equal_keeps_counts():
+    """全相等分支(方向推不出)仍如实带 comparable / total 且方向为空"""
+    ov = order_violations([100.0, 100.0, 100.0])
+    assert ov.direction == "" and ov.inversions == 0
+    assert ov.comparable == 3 and ov.total == 3
+
+
+def test_order_violations_direction_from_first_pair():
+    """方向由首对可比行推断: [200,100,300] 首对降 -> desc; [200,300,100] 首对升 -> asc"""
+    assert order_violations([200.0, 100.0, 300.0]).direction == "desc"
+    assert order_violations([200.0, 300.0, 100.0]).direction == "asc"
+
+
+def test_order_violations_equal_adjacent_not_violation():
+    """相邻相等不算违反(desc / asc 两方向: 严格不等才判)"""
+    assert order_violations([1000.0, 900.0, 900.0, 800.0]).inversions == 0
+    assert order_violations([100.0, 200.0, 200.0, 300.0]).inversions == 0
+
+
+def test_cross_page_violation_asc_equal_boundary_not_violation():
+    """跨页 asc 边界相等不算违反(min(cur) < max(prev) 严格小于)"""
+    assert cross_page_violation([100.0, 200.0], [200.0, 300.0], "asc") is False

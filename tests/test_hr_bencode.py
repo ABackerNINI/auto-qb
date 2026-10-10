@@ -15,6 +15,16 @@
 - test_info_span_rejects_unclosed_and_missing_info: 顶层字典未闭合 / 顶层没有 info 键
 - test_compute_infohashes_rejects_non_dict_info: info 值不是字典 -> 拒绝
 - test_read_bytes_rejects_missing_colon: 字节串长度后没有冒号
+
+### hr 首轮变异审计轮: infohash 边界与容错守阵(issue 26-10-10-1108-judgment-core)
+- test_read_int_negative_single_digit_and_zero: 负单数字整数与 0 正确解出
+- test_read_int_rejects_whitespace_and_two_digit_leading_zero: 空格 / 两位前导零拒
+- test_read_bytes_accepts_zero_length: 零长字节串 "0:" 合法
+- test_bdecode_dict_returns_position_after_terminator: 字典解码返回闭合 e 之后的位置
+- test_bdecode_nested_dict_at_nonzero_pos: 位置 > 0 的嵌套字典正确解出
+- test_bdecode_rejects_deeply_nested_dict: 深嵌套字典触发 MAX_DEPTH 拒绝
+- test_skip_position_for_nested_list: _skip 跳过嵌套列表后位置正确
+- test_torrent_display_name_replaces_invalid_utf8: 非法 UTF-8 按 replace 处理不抛
 """
 import base64
 import hashlib
@@ -206,3 +216,58 @@ def test_read_bytes_rejects_missing_colon():
 
     with pytest.raises(ValueError):
         _read_bytes(b"5", 0)
+
+
+# ==================== hr 首轮变异审计轮: infohash 边界与容错守阵 ====================
+
+
+def test_read_int_negative_single_digit_and_zero():
+    """负单数字整数与 0 都要正确解出(只有前导零 / -0 才拒, 合法值不误伤)"""
+    assert bdecode(b"i-1e")[0] == -1
+    assert bdecode(b"i-9e")[0] == -9
+    assert bdecode(b"i0e")[0] == 0
+
+
+def test_read_int_rejects_whitespace_and_two_digit_leading_zero():
+    """非数字(空格)与两位前导零都拒(前导零判定是 len > 1)"""
+    with pytest.raises(ValueError):
+        bdecode(b"i 1e")
+    with pytest.raises(ValueError):
+        bdecode(b"i00e")
+
+
+def test_read_bytes_accepts_zero_length():
+    """零长字节串 "0:" 合法(长度前导零判定是 len > 1, 单个 "0" 不拒)"""
+    assert bdecode(b"0:") == (b"", 2)
+
+
+def test_bdecode_dict_returns_position_after_terminator():
+    """字典解码返回的位置 = 闭合 e 之后(不是之前 / 之后多一位)"""
+    assert bdecode(b"d1:ai1ee") == ({b"a": 1}, 8)
+
+
+def test_bdecode_nested_dict_at_nonzero_pos():
+    """嵌套字典(位置 > 0)也要正确解出 —— pos 推进是 += 1, 不是 = 1"""
+    assert bdecode(b"d1:ad1:bi1eee") == ({b"a": {b"b": 1}}, 13)
+
+
+def test_bdecode_rejects_deeply_nested_dict():
+    """深嵌套字典(经 value 递归)也要触发 MAX_DEPTH 拒绝"""
+    deep = b"d1:a" * 100 + b"i1e" + b"e" * 100
+    with pytest.raises(ValueError):
+        bdecode(deep)
+
+
+def test_skip_position_for_nested_list():
+    """_skip 跳过嵌套列表后返回其后位置(列表推进 += 1, 非 = 1)"""
+    from auto_qb.hr.bencode import _skip
+
+    assert _skip(b"d1:ali1eee", 0) == 10
+
+
+def test_torrent_display_name_replaces_invalid_utf8():
+    """非法 UTF-8 字节按 replace 处理(不得抛 UnicodeDecodeError)"""
+    got = torrent_display_name({b"name": b"ok\xff\xfebad"})
+    assert isinstance(got, str)
+    assert got.startswith("ok") and got.endswith("bad")
+    assert "\ufffd" in got
