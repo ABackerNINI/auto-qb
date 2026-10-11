@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 4 |
+| bug | 6 |
 | perf | 5 |
 | docs | 1 |
 | test | 5 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成…
+- [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply…
 - [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值…
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 d…
 - [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_sp…

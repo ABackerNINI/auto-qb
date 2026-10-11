@@ -620,6 +620,10 @@ def test_checking_skip_dedup_across_rules():
     # 模拟另一条规则B: 换规则名但同种子, 同日再跳检
     rule_b = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     client.calls.clear()
+    # !保真替身下规则A跳检成功后种子已完成(progress=1) ⇒ rules 决策链 0 会先判"种子非暂停中
+    #   未完成", 走不到跨规则去重闸门 —— 真机同理。把进度还原为未完成以单独验证去重闸门本身
+    #   (report 26-10-11-2017 §5 的替身保真连锁)。
+    t.progress = 0.0
     ctx = make_ctx(mgr, t, client, dry_run=False)
     from auto_qb.rules.actions import CheckAction
     action = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "skip-checking"}})

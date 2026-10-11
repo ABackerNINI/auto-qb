@@ -151,6 +151,32 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
     }
 )
 
+# 乐观白名单里的**批量**动作(与前端 shared/commands.js _optimisticPatch 同源: 只有 pause/resume)。
+# 这些动作结果可预测、且必须能收到 `truth` 事件来收敛 —— 所以即使是 bulk_torrents 也不许走
+# "handler 自写回执"的延迟回执族, 要回到 drain 的 defer_receipt 通路(与单种 resume_torrent 同路)。
+# !bulk_torrents 是一个 handler 扛 8 种 action 的命令, 对"是否延迟回执"只能**按 action 分流** ——
+#   整体归属会把 pause/resume 的真值出口一并切断(report 26-10-11-2017 §4.3): 那两条真值支路
+#   (_truth_landed / _affected_hashes 的 bulk 分支)本已写好, 只是永远走不到。
+_OPTIMISTIC_BULK_ACTIONS = frozenset({"pause", "resume"})
+
+# 接受 cmd_id 关键字参数的命令集(handler 内可能读它写回执): 延迟回执族 + bulk_torrents。
+# !与 DEFERRED_RECEIPT_COMMANDS **不同**: 后者是"handler 自写回执、drain 不补写"; 本集合只管
+#   "drain 要不要把 cmd_id 传下去" —— bulk_torrents 的 pause/resume 回执由 drain 写, 但它的
+#   错误回执(部分 hash 缺失 / 参数不合法)仍由 handler 写, 故 handler 必须拿到 cmd_id。
+CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {"bulk_torrents"}
+
+
+def is_deferred_receipt(cmd: str, args: Optional[dict] = None) -> bool:
+    """该命令是否由 handler 自写回执(drain 不补写、也不登记真值)
+
+    单点: drain 分派(runtime.consume_commands)与 handler 内部的回执分支都调本函数 —— 两处各写
+    一份必然漂移。bulk_torrents 的 pause/resume 例外返回 False: 它们的回执与真值登记由 drain 的
+    defer_receipt 一并完成(与单种 pause_torrent/resume_torrent 完全同通路)。
+    """
+    if cmd == "bulk_torrents" and (args or {}).get("action") in _OPTIMISTIC_BULK_ACTIONS:
+        return False
+    return cmd in DEFERRED_RECEIPT_COMMANDS
+
 
 def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
     """P0-0 埋点: 把一次命令拆成两段耗时(毫秒), 供 /api/cmd/{id} 回传
@@ -941,7 +967,10 @@ class WebCommandsMixin:
                 self._set_web_result(cmd_id, "error", msg)
             logger.info(f"WEB UI | 批量 {action}({len(known)}个种子): {msg}")
         else:
-            if cmd_id:
+            # !pause/resume 是例外(见 is_deferred_receipt): 它们的回执 + 真值登记由 drain 的
+            #   defer_receipt 一并完成, handler 这里**不写** —— 否则回执双写, 且会挤掉 drain 的
+            #   真值登记(report 26-10-11-2017 §6.2 落点 3)。其余动作仍是 handler 自写回执。
+            if cmd_id and is_deferred_receipt("bulk_torrents", {"action": action}):
                 self._set_web_result(cmd_id, "ok")
             logger.info(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
 

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-optimistic-ui">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-11-2040">
+<meta name="doc-updated" content="26-10-11-2040">
+<meta name="doc-refs" content="memory-bank/reports/26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html,memory-bank/tasks/26-10-11-webui-optimistic-bulk-desync.md">
+<title>批量跳检后「批量开始」状态脱节 · 修复方案</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc7a2;
+    --bad: #e2908a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.ok { background: #16261d; color: var(--ok); border-color: #2b4436; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .ok { color: var(--ok); }
+  td .no { color: var(--bad); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">修复方案</div>
+  <a href="#s1"><span class="no">1</span>摘要与落点总览</a>
+  <a href="#s2"><span class="no">2</span>验收判据</a>
+  <a href="#s3"><span class="no">3</span>6.1 跳检收尾回写真值</a>
+  <a href="#s4"><span class="no">4</span>6.2 批量真值出口</a>
+  <a href="#s5"><span class="no">5</span>6.3 前端回滚与收敛</a>
+  <a href="#s6"><span class="no">6</span>6.4 加固与机械守阵</a>
+  <a href="#s7"><span class="no">7</span>被否的替代方案</a>
+  <a href="#s8"><span class="no">8</span>变更记录</a>
+  <div class="toc-foot">现场取证（本方案的事实来源）：<br>reports/<br>26-10-11-2017-report-<br>webui-bulk-skipcheck-<br>start-desync.html</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">Implementation Plan · auto-qb</div>
+  <h1>批量跳检后「批量开始」状态脱节 · 修复方案</h1>
+  <p class="lede">针对报告 §4 的四条根因，给出「止血 + 加固」四条修复、六处后端改动 + 三处前端改动 + 三条测试改动，全部落在既有单点上，不新增旁路。方案已实施并验证（实测数字见任务档案）。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">专题</div><div class="v">webui-optimistic-ui</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Done</div></div>
+    <div class="item"><div class="k">档位</div><div class="v">止血 + 加固</div></div>
+    <div class="item"><div class="k">改动面</div><div class="v">5 源文件 · 5 测试文件</div></div>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<section id="s1">
+<h2><span class="no">1</span>摘要与落点总览</h2>
+<p>报告把症状拆成三条独立缺陷叠加 + 一条加固项：<b>①</b> 跳检收尾不回写快照（必要）；<b>②</b> 批量命令没有真值出口（必要）；<b>③</b> 前端预测/回滚/收敛三个单点各自是陷阱（必要）；<b>④</b> <code>_sync_paused_state</code> 用陈旧完成位反推 state（加固）。</p>
+<p>方案与之一一对应，六处后端改动 + 三处前端改动，另加三条测试改动（含两条机械守阵）：</p>
+<table>
+  <tr><th>#</th><th>落点</th><th>文件 · 符号</th><th>性质</th></tr>
+  <tr><td>P1</td><td>跳检收尾直查真值回写记录</td><td><code>core/modules/ops_mod.py</code> · <code>_skip_readd</code></td><td>止血</td></tr>
+  <tr><td>P2</td><td>抽 <code>is_deferred_receipt(cmd, args)</code> 单点</td><td><code>webui/commands.py</code></td><td>止血</td></tr>
+  <tr><td>P3</td><td>加 <code>CMD_ID_COMMANDS</code>（cmd_id 传递与「谁写回执」解耦）</td><td><code>webui/commands.py</code></td><td>止血</td></tr>
+  <tr><td>P4</td><td>drain 改用单点判定 + <code>cmd_id not in self.results</code> 守卫</td><td><code>webui/runtime.py</code> · <code>consume_commands</code></td><td>止血</td></tr>
+  <tr><td>P5</td><td>bulk pause/resume 成功分支不再自写回执</td><td><code>webui/commands.py</code> · <code>_cmd_bulk_torrents</code></td><td>止血</td></tr>
+  <tr><td>P6</td><td>完成位联合 <code>progress &gt;= 1.0</code></td><td><code>core/qbapi.py</code> · <code>_sync_paused_state</code></td><td>加固</td></tr>
+  <tr><td>F1</td><td>兜底回滚目标改为 truthSnapshot 现值</td><td><code>static/shared/commands.js</code> · <code>_expirePending</code></td><td>止血</td></tr>
+  <tr><td>F2</td><td><code>_snapshotTruth</code> 顺带保鲜 <code>op.prev</code></td><td><code>static/shared/commands.js</code></td><td>止血</td></tr>
+  <tr><td>F3</td><td>收敛判据按 action，与服务端同谓词</td><td><code>static/shared/commands.js</code> · <code>_optimisticSettled</code></td><td>止血</td></tr>
+  <tr><td>T1</td><td>替身保真：<code>is_skip_checking</code> ⇒ 已完成</td><td><code>tests/helpers.py</code> · <code>FakeClient.torrents_add</code></td><td>加固</td></tr>
+  <tr><td>T2</td><td>机械守阵：乐观白名单必有真值出口</td><td><code>tests/test_web_commands.py</code></td><td>守阵</td></tr>
+  <tr><td>T3</td><td>机械守阵：回滚/收敛/prev 保鲜静态扫</td><td><code>tests/test_web_seed_center.py</code></td><td>守阵</td></tr>
+</table>
+<div class="callout">
+  <b>设计主线</b>：能复用既有单点的一律复用（<code>defer_receipt</code> / <code>apply_delta</code> / <code>_live_recheck</code> 的读法），能靠白名单归属解决的不写新机制 —— 本方案<b>没有新增任何并发路径、没有新增 API 端点、没有改主循环结构</b>。
+</div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section id="s2">
+<h2><span class="no">2</span>验收判据</h2>
+<p>每条都可机检（前四条由上表 T2/T3 两条守阵 + 既有用例钉住）：</p>
+<ol>
+  <li>跳检成功后，store 里该种子的 <code>state</code>/<code>progress</code> <b>等于 qB 实时值</b>，不再停留于「跳检前的暂停 0%」；</li>
+  <li>批量 pause/resume 走完 <code>consume_commands</code> 后，<code>web.truth_pending</code> 里<b>有</b>该 <code>cmd_id</code>（真值出口存在），且回执由 drain 写；</li>
+  <li>前端 <code>_expirePending</code> 的回滚目标读 <code>truthSnapshot</code>，拿不到才退回 <code>op.prev</code>；</li>
+  <li>前端 <code>_optimisticSettled</code> 对 resume/pause 用「已离开命令前状态」判据（<code>kind != "paused"</code> / <code>kind == "paused"</code>），与服务端 <code>_truth_landed</code> 逐字同谓词；</li>
+  <li>全量测试通过；新增两条守阵在位（删掉任一条的实现即红）。</li>
+</ol>
+<p class="hint">症状级验收（真机）：多选一批暂停未完成的辅种 → 批量跳检 → 立即批量开始，行状态应直接稳定在「做种」，不再出现「下载 → 已停止」。</p>
+</section>
+
+<!-- ============================================================ 3 -->
+<section id="s3">
+<h2><span class="no">3</span>6.1 跳检收尾回写真值 <span class="badge">止血</span></h2>
+<h3>改法</h3>
+<p><code>ops_mod._skip_readd</code> 在 <code>store.restore_torrent(tor)</code> <b>之前</b>，对刚确认出现的种子做一次 <code>torrents_info(hash)</code> 直查，把返回的实时字段 <code>apply_delta</code> 到 <code>tor</code> 上，再放回 store；字段有变时置 <code>store.view_changed</code>。</p>
+<pre><code>try:
+    live = self._ctx.api.torrents_info(torrent_hashes=hash)
+except Exception as e:
+    logger.warning(f"跳检收尾回写真值失败(跳检本身已成功, 下轮 sync 校准): {e}")
+    live = []
+if live and tor.apply_delta(live[0]):
+    self._ctx.store.view_changed = True
+self._ctx.store.restore_torrent(tor)</code></pre>
+<h3>为什么这么修</h3>
+<ul>
+  <li>跳检是<b>不可逆操作刚生效</b>的决定性时刻，本仓既有纪律要求此时直查真值（<code>pitfalls/backend/effect-confirmation.md</code>），而不是回落到快照；</li>
+  <li>复用 <code>apply_delta</code>（增量字段写入单点）与 R2 已用的 <code>torrents_info</code> 读法，<b>不新造字段映射</b>；</li>
+  <li>失败 <b>fail-closed 但不改变跳检结论</b>：种子确已在 qB，字段下轮 sync 也能跟上，只记 warning。这与「复核失败就放弃」的 R2 语义不同 —— 那时还没动手，这时已经动手了。</li>
+</ul>
+<h3>代价</h3>
+<p>每次跳检多一次 <code>torrents_info</code> 往返。跳检是天级低频操作（<code>skip_check_day</code> 去重），该代价可忽略。</p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section id="s4">
+<h2><span class="no">4</span>6.2 批量真值出口：按 action 分流归属 <span class="badge">止血</span></h2>
+<p>目标：让 <code>bulk_torrents</code> 的 pause/resume 走回与单种<b>完全相同</b>的真值通路。下游 <code>_truth_landed</code>（已按 action 分流）与 <code>_affected_hashes</code>（已展开 keys）<b>无需改动</b> —— 它们本就是为批量写好的，只是可达性被名单归属切断。</p>
+<h3>四处落点</h3>
+<table>
+  <tr><th>#</th><th>改动</th></tr>
+  <tr><td>P2</td><td>抽单点 <code>is_deferred_receipt(cmd, args)</code>：<code>bulk_torrents</code> 且 <code>action in {pause, resume}</code> → <code>False</code>（放行到 drain 的 <code>defer_receipt</code>），其余按 <code>DEFERRED_RECEIPT_COMMANDS</code> 判。</td></tr>
+  <tr><td>P3</td><td>加 <code>CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {"bulk_torrents"}</code> —— <b>cmd_id 的传递与「谁写回执」是两件事</b>：pause/resume 回执由 drain 写，但它「部分 hash 缺失」时的 error 回执仍由 handler 写，故 handler 必须拿到 cmd_id。</td></tr>
+  <tr><td>P4</td><td>drain 用 P2 的单点判定；并在写回执前加 <code>cmd_id not in self.results</code> 守卫，防 handler 已写的 error 被 drain 的 ok 覆盖。</td></tr>
+  <tr><td>P5</td><td><code>_cmd_bulk_torrents</code> 的 pause/resume <b>成功</b>分支不再自写 <code>_set_web_result</code>（错误分支照旧）。</td></tr>
+</table>
+<div class="callout warn">
+  <b>P3 是实施期发现的坑</b>：只做 P2/P4/P5 时，pause/resume 会落进 <code>not deferred</code> 分支 ⇒ drain <b>不传 cmd_id</b> ⇒ handler 写不出 error 回执 ⇒ 反被 drain 的 ok 覆盖。<b>先跑测试才暴露</b>（4 条用例同时红）。修法就是把「传不传 cmd_id」的判据从 <code>deferred</code> 拆出来。
+</div>
+<h3>为什么不能一刀切</h3>
+<p><b>不能</b>把 <code>bulk_torrents</code> 整条移出 <code>DEFERRED_RECEIPT_COMMANDS</code>：同一个 handler 还扛着 <code>recheck</code> / <code>skip_check</code> / <code>add_torrents</code>，它们的聚合回执（带 <code>results</code>/<code>summary</code> 与跳过/失败计数）必须自写，裸 ok 会盖掉数据位 —— 而本次症状的起点正是 <code>skip_check</code>。</p>
+<p><b>也不</b>在 handler 内自调 <code>self.web.defer_receipt</code>：handler 拿不到 drain 拆出的 <code>timing</code>（<code>wait_ms</code>/<code>exec_ms</code>），自调会丢埋点。判定放回 drain，回执 / 计时 / 真值登记三件事仍归同一单点。</p>
+</section>
+
+<!-- ============================================================ 5 -->
+<section id="s5">
+<h2><span class="no">5</span>6.3 前端：回滚不打旧值 + 收敛同谓词 <span class="badge">止血</span></h2>
+<p>三处小改，独立成立：</p>
+<table>
+  <tr><th>#</th><th>改动</th><th>理由</th></tr>
+  <tr><td>F1</td><td><code>_expirePending</code> 回滚目标：有本轮服务端快照就用它，没有才退回 <code>op.prev</code>。</td><td><code>prev</code> 的「最后已知真值」语义只在真值事件刷新过时才成立；批量路径没有真值事件 ⇒ 裸用 prev = 打回点击那一刻的旧状态，这正是本 bug 的直接成因。</td></tr>
+  <tr><td>F2</td><td><code>_snapshotTruth</code> 里顺手 <code>op.prev = { ...op.prev, ...v }</code>。</td><td>把「prev = 最后已知真值」这条语义在<b>前端本地</b>补上（<code>onTruthEvent</code> 已在真值到达时这么刷）。快照若仍是命令前的值，刷了等于没刷，无害。</td></tr>
+  <tr><td>F3</td><td><code>_optimisticSettled</code> 按 <code>op.action</code> 判：resume <code>kind != "paused"</code> / pause <code>kind == "paused"</code>。</td><td>resume 的落地态有 downloading/seeding/checking 等多种，前端预测只猜得出两种；要求「服务端 kind 严格等于预测值」会让预测偏一格的动作永远收敛不了 —— 服务端 <code>_truth_landed</code> 早就是宽谓词，两端必须同源。</td></tr>
+</table>
+<div class="callout">
+  <b>调用顺序已核实</b>：<code>polling.refresh</code> 里 <code>applyStateRows → _snapshotTruth → _expirePending → reapplyPending</code> —— F1 依赖的 <code>truthSnapshot</code> 在 <code>_expirePending</code> 之前就已就绪。
+</div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section id="s6">
+<h2><span class="no">6</span>6.4 加固与机械守阵 <span class="badge ok">加固</span></h2>
+<h3>P6 · 完成位联合判据</h3>
+<p><code>_sync_paused_state</code> 原先只看 <code>state_enum.is_complete</code>（state 后缀 UP）。一份陈旧的 <code>pausedDL</code> 记录会把「已完成」写成 <code>stalledDL</code>。改为 <code>is_complete or progress &gt;= 1.0</code>。</p>
+<p class="hint">刻意<b>不</b>并 <code>amount_left == 0</code>：<code>TorrentRecord.amount_left</code> 的 slot 默认值就是 <code>0</code>，未同步的记录会被误判成「已完成」（假阳性）。<code>progress</code> 默认 <code>0.0</code>，无此问题。</p>
+<h3>T1 · 替身保真</h3>
+<p><code>FakeClient.torrents_add</code> 在 <code>is_skip_checking=True</code> 时把新种子造成 <code>progress=1.0</code>（qB 跳过校验 = 全部块视为有效）。原替身恒 <code>progress=0.0</code>，使「跳检后快照仍说 0%」这条脱节在单测里天然不可见。</p>
+<div class="callout warn">
+  <b>连锁（已按保真处理，非回退）</b>：替身保真后，「跳检成功 ⇒ 种子已完成」变成事实 ⇒ 第二次跳检会先被 G3「种子已完成」/ 规则侧决策链 0 拦下，<b>走不到</b> dedup（跨规则同日去重）闸门。真机同理。<br>
+  处理：<code>test_ops_skip_check_day_shared_across_sources</code> 与 <code>test_checking_skip_dedup_across_rules</code> 在第二次跳检前把进度还原为「未完成」，以单独验证去重闸门本身（并注明原因）。<br>
+  <b>dedup 闸门被 G3 遮蔽</b>属闸门顺序问题，超出本方案范围 —— 另立 issue 处置，本方案不动闸门顺序。
+</div>
+<h3>T2 / T3 · 两条机械守阵</h3>
+<ul>
+  <li><b>T2（后端）</b>：按前端乐观白名单遍历，断言每个动作都「不在延迟回执族 + 走完 drain 后登记待推真值 + 回执由 drain 写」；反向断言非乐观动作保持延迟回执族。<b>新增乐观动作时必须同步</b> —— 这就是「白名单加了新动作、真值出口没跟上」的机械守卫。</li>
+  <li><b>T3（前端静态）</b>：读 <code>commands.js</code> 源码断言 F1/F2/F3 三条写法在位（回滚读 <code>truthSnapshot</code>、<code>op.prev</code> 保鲜、<code>_optimisticSettled</code> 的 action 分支）。任一处被改回旧写法即红。</li>
+</ul>
+</section>
+
+<!-- ============================================================ 7 -->
+<section id="s7">
+<h2><span class="no">7</span>被否的替代方案</h2>
+<table>
+  <tr><th>方案</th><th>否决理由</th></tr>
+  <tr><td>把批量拆成 N 次单种调用</td><td>复用单种机制的实质是<b>共用真值通路</b>，不是共用调用次数 —— bulk 与单种底层是同一个 <code>QbApi.torrents_resume</code>。拆开会带来 N 次命令队列往返 + N 次主循环 tick，无任何额外正确性。</td></tr>
+  <tr><td><code>bulk_torrents</code> 整条移出延迟回执族</td><td>会害了 <code>recheck</code> / <code>skip_check</code> / <code>add_torrents</code> 的聚合回执（见 §4）。</td></tr>
+  <tr><td>handler 内自调 <code>defer_receipt</code></td><td>丢 drain 的 <code>timing</code> 埋点；判定与消费会被拆成两份（见 §4）。</td></tr>
+  <tr><td>兜底回滚只删 <code>pendingOps</code> 不回值</td><td>rid 门控下服务端版本未变时不回传数组、行对象不被替换 ⇒ 上一轮贴的假值会一直留在行上（<code>_expirePending</code> 注释里记着的 hang 实测）。必须显式回一个值。</td></tr>
+  <tr><td>把 dedup 闸门提到 G3 之前</td><td>闸门顺序是设计决策，超出本方案范围（应另立 issue 讨论）；本方案只保证修复不改变既有闸门语义。</td></tr>
+</table>
+</section>
+
+<!-- ============================================================ 8 -->
+<section id="s8">
+<h2><span class="no">8</span>变更记录</h2>
+<table>
+  <tr><th>时间</th><th>变更</th></tr>
+  <tr><td>26-10-11-2040</td><td>初版：四条修复（6.1~6.4）方案定案并实施 —— 六处后端 + 三处前端 + 三条测试改动。实施期间发现并并入 P3（cmd_id 传递与回执归属解耦）与 T1 的两处测试连锁处理。实测数字与验证记录见任务档案 <code>tasks/</code>。</td></tr>
+</table>
+<p class="hint">本方案只承担「怎么修、为什么这么修」；「当时现场是什么样」在报告，两者不互相重述。</p>
+</section>
+
+<footer>
+  方案已实施：改动落点为上表 P1~P3 / F1~F3 / T1~T3，验收判据见 §2。<br>
+  现场取证与逐层根因：<code>memory-bank/reports/26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html</code>。
+</footer>
+
+</div>
+</body>
+</html>

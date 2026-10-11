@@ -39,6 +39,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ..infra.logging import is_record_suppressed
 from .commands import (
+    CMD_ID_COMMANDS,
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
     RC_UNCONFIRMED_PREFIX,
@@ -48,6 +49,7 @@ from .commands import (
     RESYNC_COMMANDS,
     SELF_POSTED_COMMANDS,
     _timing,
+    is_deferred_receipt,
     qb_reject_text,
 )
 
@@ -450,8 +452,13 @@ class WebUIRuntime:
                 queued_ts = payload.get("_queued_ts")
                 start_ts = time.time()  # 出队即开始, 用于拆 wait_ms / exec_ms
                 try:
-                    deferred = cmd in DEFERRED_RECEIPT_COMMANDS
-                    if cmd_id and deferred:
+                    # !按 (cmd, action) 分流判定: bulk_torrents 的 pause/resume 不走延迟回执族,
+                    #   要落到下面的 defer_receipt(与单种同通路)。判定单点在 commands.is_deferred_receipt。
+                    deferred = is_deferred_receipt(cmd, args)
+                    # !cmd_id 的**传递**与"谁写回执"是两件事(见 commands.CMD_ID_COMMANDS):
+                    #   bulk_torrents 的 pause/resume 回执由 drain 写, 但 handler 仍需 cmd_id
+                    #   才能写错误回执(部分 hash 缺失 / 参数不合法)。
+                    if cmd_id and cmd in CMD_ID_COMMANDS:
                         handlers[cmd](cmd_id=cmd_id, **args)
                     else:
                         handlers[cmd](**args)
@@ -460,7 +467,9 @@ class WebUIRuntime:
                     if cmd not in SELF_POSTED_COMMANDS:
                         self.write_seq += 1
                     timing = _timing(queued_ts, start_ts)
-                    if cmd_id and not deferred:
+                    # !`cmd_id not in self.results`: handler 可能已自写回执(bulk 部分 hash 缺失时
+                    #   写的是 error) —— 那种情况 drain 不得再用 ok 覆盖(report 26-10-11-2017 §6.2)。
+                    if cmd_id and not deferred and cmd_id not in self.results:
                         if cmd in RESYNC_COMMANDS:
                             # 改种子状态的命令: 回执**推迟到补刷新之后**再写(见 flush_truths)。
                             # 原写法在这里就写 ok, 而补刷新还在后面才跑 ⇒ 前端"拿到回执就立刻

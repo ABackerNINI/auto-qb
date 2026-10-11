@@ -20,6 +20,7 @@
 - test_tracker_edit_offline_route_and_static: 守阵③ 编辑下线(plan 26-10-07-0055 S2/S4) —— POST trackers/edit 不落到处理器(404/405; 根挂 StaticFiles 兜 405) + 路由表白名单复核 + static/ 遍历 grep "trackers/edit" 零命中(金清单行由 test_web_route_manifest_frozen 钉); 红验: 临时加回路由/写回字样
 - test_trackers_baseline_keys_are_raw_urls: 守阵④ 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
 - test_torrent_detail_trackers_route_mask_canary: 守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵① 改回透传
+- test_optimistic_rollback_and_settle_use_truth_not_stale_prev: 守阵(report 26-10-11-2017 §6.4) 静态扫 commands.js —— _expirePending 回滚目标为 truthSnapshot 现值(缺失才退 op.prev)、_optimisticSettled 按 action 用"已离开命令前状态"判据(与服务端 _truth_landed 同谓词)、_snapshotTruth 顺带保鲜 op.prev
 """
 import logging
 import os
@@ -735,6 +736,40 @@ def test_truth_hold_matches_truth_push_cap():
     ) == float(TRUTH_PUSH_CAP_MS
               ), (f"前端值覆盖保持 {m.group(1)}ms != 后端真值推送上限 {TRUTH_PUSH_CAP_MS}ms —— "
                   "两边必须一致, 否则会出现'前端先回滚、真值后到'的错配")
+
+
+def test_optimistic_rollback_and_settle_use_truth_not_stale_prev():
+    """守阵(report 26-10-11-2017 §6.4): 前端兜底回滚与收敛判据必须"认真值", 不得认命令前的旧值
+
+    两条不变量(任一处被改回旧写法即红):
+      1. _expirePending 的回滚目标必须是**最后已知真值**(truthSnapshot), 拿不到才退回 op.prev ——
+         批量路径没有真值事件, 裸用 prev 会把一个已改变的种子显示回旧态(本 bug 的直接成因);
+      2. _optimisticSettled 必须按 action 用"已离开命令前状态"判据(与服务端 _truth_landed 同谓词) ——
+         严格要求"服务端 kind == 预测值"时, 预测偏一格(seeding vs downloading)就永远收敛不了。
+    另钉 op.prev 的保鲜写法(在 _snapshotTruth 里用服务端快照刷新), 防它退回"点击那一刻的旧值"。
+    """
+    import re
+
+    js = open(
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "static", "shared", "commands.js"),
+        encoding="utf-8",
+    ).read()
+    m = re.search(r"_expirePending\(\)\s*\{(.*?)\n    \},", js, re.S)
+    assert m, "commands.js 找不到 _expirePending(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "this.truthSnapshot" in body, \
+        "_expirePending 回滚前必须看服务端真值快照 —— 否则批量路径会打回'命令前的旧值'"
+    assert "Object.assign(row, t || op.prev)" in body, \
+        "_expirePending 回滚目标应为 truthSnapshot 现值(缺失才退回 op.prev)"
+    ms = re.search(r"_optimisticSettled\(hash, op\)\s*\{(.*?)\n    \},", js, re.S)
+    assert ms, "commands.js 找不到 _optimisticSettled(改名或挪走了? 同步本守阵)"
+    sbody = ms.group(1)
+    assert 'op.action === "resume"' in sbody and 't.kind !== "paused"' in sbody, \
+        "_optimisticSettled 缺 resume 的'已离开命令前状态'判据(应与服务端 _truth_landed 同谓词)"
+    assert 'op.action === "pause"' in sbody and 't.kind === "paused"' in sbody, \
+        "_optimisticSettled 缺 pause 判据"
+    assert "op.prev = { ...op.prev, ...v }" in js, \
+        "_snapshotTruth 应顺带让 op.prev 保鲜(prev 的语义 = 最后已知服务端真值)"
 
 
 def test_cmd_trackers_log_sanitized(caplog):

@@ -282,7 +282,12 @@ window.AQB_COMMANDS = {
          * 保住"失败/未知绝不留假状态"这条。 */
         const cap = op.hold ? TRUTH_HOLD_MS : 3000;
         if (now - op.ts <= cap) continue;
-        this._forEachRow(h, (row) => Object.assign(row, op.prev));
+        /* 回滚目标不得是"命令前的旧值"(report 26-10-11-2017 §4.4): 若本轮服务端快照已经
+         * 离开命令前的状态, 说明命令其实已生效 —— 回 op.prev 等于把一个已改变的种子显示回
+         * 旧态(本 bug 的直接成因: 批量路径没有真值事件 ⇒ prev 永远停在点击那一刻)。
+         * 有服务端现值就用它(它才是"最后已知真值"), 没有才退回 prev。 */
+        const t = this.truthSnapshot && this.truthSnapshot.get(h);
+        this._forEachRow(h, (row) => Object.assign(row, t || op.prev));
         delete this.pendingOps[h];
       }
     },
@@ -375,6 +380,10 @@ window.AQB_COMMANDS = {
         const v = {};
         for (const k of Object.keys(op.patch)) v[k] = r[k];
         m.set(r.hash, v);
+        /* 顺手让 op.prev 保鲜(report 26-10-11-2017 §6.3): prev 的语义是"最后已知服务端真值",
+         * 兜底回滚要回这里(onTruthEvent 在真值到达时就是这么刷的)。批量路径没有真值事件,
+         * 就在这里用服务端快照补上 —— 否则 prev 永远停在点击那一刻, 超时必打回旧值。 */
+        op.prev = { ...op.prev, ...v };
       };
       for (const r of state.torrents || []) take(r);
       for (const r of state.singles || []) take(r);
@@ -385,6 +394,11 @@ window.AQB_COMMANDS = {
     _optimisticSettled(hash, op) {
       const t = this.truthSnapshot && this.truthSnapshot.get(hash);
       if (!t) return false;  // 本轮 payload 没带它的真值 -> 不算对齐(继续贴, 3s 兜底收尾)
+      /* 判据与服务端 _truth_landed 同谓词(report 26-10-11-2017 §4.4): 不要求"服务端 kind 严格
+       * 等于预测值" —— resume 的落地态有 downloading/seeding/checking 等多种, 前端预测只猜得出
+       * 两种, 严格相等会让预测偏一格的动作永远收敛不了, 补丁一直挂到兜底超时。 */
+      if (op.action === "resume") return t.kind !== "paused";
+      if (op.action === "pause") return t.kind === "paused";
       for (const k of Object.keys(op.patch)) {
         if (t[k] !== op.patch[k]) return false;
       }

@@ -108,8 +108,15 @@ class QbApi:
         buckets: dict = {}
         for h in hashes:
             rec = self.store.by_hash.get(h)
+            # !完成位联合判据(加固, report 26-10-11-2017 §4.2/§6.4): 只看 state 后缀 UP 时, 一份
+            #   陈旧的 pausedDL 记录会把"已完成"写成 stalledDL —— p=1 的做种种子被显示成"下载"。
+            #   progress 与 state 同源同步, 任一为真即视为已完成。
+            #   (不并 amount_left: TorrentRecord 该 slot 默认就是 0, 单独成判必假阳性。)
             enum = getattr(rec, "state_enum", None) if rec is not None else None
-            complete = bool(enum is not None and getattr(enum, "is_complete", False))
+            complete = bool(
+                (enum is not None and getattr(enum, "is_complete", False)) or
+                (rec is not None and getattr(rec, "progress", 0.0) >= 1.0)
+            )
             if paused:
                 want = "pausedUP" if complete else "pausedDL"
             else:
