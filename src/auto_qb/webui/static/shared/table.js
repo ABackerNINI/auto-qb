@@ -30,6 +30,43 @@
  * !模板放 tpl/xtpl.html 的 <script type="text/x-template">(与 hub-field 同范式): 该分片由
  *   tpl-manifest 注入 **body**(在 #app 之外), 故不会被当作根模板编译, 也不多包一层 DOM。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要 `app.component(...)` 读 window.AQ_*)。
+ *
+ * ============================ 对外契约(P6) ============================
+ * 1722 P6 欠账于计划 26-10-12-0527 U0 交付(26-10-12-0533)。接入承诺的完整表述:
+ * 「新增一个表格表面 = 注册一行描述符 + (新行模型才需)一个行渲染器;
+ *   表壳 / 交互引擎 / 持久化 / 对齐 CSS 零改动」。
+ *
+ * ① 描述符(TABLE_DEFS / DRAWER_TABLE_DEFS 各一行; ALL_TABLE_DEFS 聚合, columns.js / sort.js
+ *    按 table-id 消费 —— 列态 / grid / 对齐 / 持久化 / 排序 scope 全部 id 驱动):
+ *      columns   列定义数组 { key, label, tpl(grid track), sortable, locked, align }
+ *                —— 列能力与持久化的唯一事实源; 变体列子集 = 以经典列数组为底裁剪/追加(数据声明)
+ *      label     面向用户的表名(列选择器分组标题)
+ *      headRef   吸顶表头 ref 名; 表头渲染在**子组件内部**时恒 null → columns.js `_headEl` 走
+ *                DOM 兜底(按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)
+ *      tableRef  行容器 ref 名(行窗口化测量消费); null = 无独立滚动容器
+ *      grid      grid-template computed 名(_gridTemplate(id) 出 {gridTemplateColumns})
+ *      cols      可见列 computed 名
+ *      window    行窗口化 kind; 面板级数据量(数十~数百行)恒 null
+ *      sort      { gk, gd, defKey, defDir } —— 根实例排序键/方向 data 字段名 + 三态第三击
+ *                恢复目标; gk/gd 指向的字段须在 state.js **显式建字段**(后补属性不进响应式)
+ *    [变体表扩展字段, 计划 26-10-12-0527 §3.2, U1 起生效]:
+ *      rowModel  行模型名 → 渲染器组件(优先复用经典; 变体专属格新增单份渲染器)
+ *      features  行为开关 { sort, resize, hide, window }
+ *      hostAnchor  Teleport 锚选择器(见 ④)
+ * ② 表壳 <aq-table>: props = tableId / cols / sortKey / sortDir / drag / mode("grid"|"thead")。
+ *    只渲染表头 + emit("sort", key) —— 行为归调用方: 列头点击接 `setSort(key, tableId)`
+ *    (表 id 即 scope, 无视图推断)。thead 模式不挂拖宽/重排/右键(借壳模式, HR 先例)。
+ * ③ 行渲染器(aq-*-cells): **纯消费方** —— props = 可见列 cols + 行模型自然名属性(g/m/s/e/t/p/f);
+ *    内部按 col.key 查表(v-if 链); 回调一律 `$root.xxx`(组件数据只有 props, 根数据走 $root,
+ *    复制方法实现会触发 _scan_mixin_wiring 重名守阵); 模板走 xtpl-cells.html 的 x-template
+ *    分片 + 三份 index.html manifest 行。
+ * ④ 变体表格体锚约定(计划 26-10-12-0527 D1=M1): 变体外壳 dtHtml 在表格区输出空锚
+ *    `<div data-dt-table-anchor="<tableId>"></div>`; drawer.html 以 `<Teleport :to>` 把表壳 +
+ *    行渲染器传送进锚内(单一 Vue 应用, 非 createApp 子应用); 锚存在性由挂载机械在变体挂载后
+ *    置响应式标志(W7 $nextTick 时序教训面 —— U1 四路径硬闸门: 初开/切页签/软切换/合并双列)。
+ * ⑤ 接入 checklist: 描述符一行 → (新行模型才需)渲染器一份 → 列偏好键 = table-id(新增即隔离,
+ *    绝不升 COLS_STORE_KEY 版本) → 三皮肤 CSS(对齐吃引擎 colAlignCss, 不手写列宽) →
+ *    manifest 行 → 守阵计数锚同轮改版。
  */
 window.AQ_TABLE_COMPONENT = {
   name: "aq-table",
