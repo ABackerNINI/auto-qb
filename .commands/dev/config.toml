@@ -31,8 +31,9 @@ doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 [tasks."dev.harness"]
 run     = ["uv run python scripts/ui_harness.py <args>"]
 timeout = 900
-when    = "浏览器冒烟（真浏览器跑前端断言合集）"
-note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi"
+when    = "起常驻桩服务（手动开浏览器看；**不跑断言** —— 断言在 dev.e2e）"
+note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi。⚠ 本命令是**阻塞常驻**(uvicorn 起后不返回, timeout 900s), 别当冒烟闸门跑; 要断言用 dev.e2e(Playwright 自带 webServer 起/收桩)"
+doc     = "../../memory-bank/pitfalls/testing/harness-is-stub-server.md"
 
 [tasks."dev.e2e"]
 run     = ["npx playwright test <args>"]

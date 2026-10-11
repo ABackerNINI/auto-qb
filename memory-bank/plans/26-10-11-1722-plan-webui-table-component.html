@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-table-component">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-11-1722">
+<meta name="doc-updated" content="26-10-11-1806">
+<title>WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012;
+    --paper:#15171b;
+    --paper-2:#191c21;
+    --ink:#e7e7e4;
+    --muted:#a2a8af;
+    --dim:#6f757c;
+    --line:rgba(255,255,255,.10);
+    --line-soft:rgba(255,255,255,.055);
+    --accent:#d8a657;
+    --accent-soft:rgba(216,166,87,.13);
+    --warn:#e0705f;
+    --ok:#86b46a;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(216,166,87,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  code{color:#d7d2c4;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+
+  /* ---------- cover ---------- */
+  .cover{padding:88px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:44px;line-height:1.12;letter-spacing:-.022em;font-weight:600;margin:20px 0 0;max-width:19ch}
+  .sub{font-size:19px;color:var(--muted);margin-top:18px;max-width:60ch;line-height:1.5}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:38px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:14px 18px 2px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  .meta dd{margin:0;font-size:14px;color:var(--ink)}
+  .lede{margin-top:34px;font-size:16.5px;color:#cfd2d0;max-width:78ch}
+
+  /* ---------- layout ---------- */
+  .doc{display:grid;grid-template-columns:198px minmax(0,1fr);gap:60px;padding-top:52px;padding-bottom:96px}
+  nav.toc{position:sticky;top:34px;align-self:start;font-size:13px}
+  nav.toc .t-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px}
+  nav.toc a{display:block;color:var(--muted);border:0;padding:5px 0;line-height:1.35}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--dim);margin-right:9px}
+  nav.toc a:hover{color:var(--ink)}
+  main{min-width:0}
+
+  section{padding:38px 0 6px;border-top:1px solid var(--line)}
+  section:first-child{border-top:0;padding-top:0}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 6px}
+  h2 .idx{color:var(--accent)}
+  h3{font-size:24px;line-height:1.24;letter-spacing:-.014em;font-weight:600;margin:6px 0 18px}
+  h4{font-size:16px;font-weight:600;margin:30px 0 10px;letter-spacing:-.005em}
+  h4 .h4n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-right:8px}
+  p{margin:0 0 14px;max-width:76ch}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:76ch}
+  li{margin:5px 0}
+  li::marker{color:var(--dim)}
+  strong{font-weight:600;color:#f2f1ec}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  hr.rule{border:0;border-top:1px solid var(--line-soft);margin:26px 0}
+
+  /* ---------- tables ---------- */
+  .bleed{max-width:none}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 20px}
+  caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding-bottom:9px}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
+  thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody tr:hover{background:rgba(255,255,255,.018)}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  td .path{font-family:var(--mono);font-size:12px;color:#cbc6b8}
+
+  /* ---------- callouts (hairline, no cards) ---------- */
+  .note{border-left:2px solid var(--accent);padding:2px 0 2px 18px;margin:20px 0;color:#d3d6d3}
+  .note .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
+  .risk{border-left:2px solid var(--warn);padding:2px 0 2px 18px;margin:18px 0}
+  .risk .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--warn);display:block;margin-bottom:5px}
+
+  /* ---------- phase list ---------- */
+  .phase{border-top:1px solid var(--line-soft);padding:16px 0 14px;display:grid;grid-template-columns:74px minmax(0,1fr);gap:18px}
+  .phase:last-child{border-bottom:1px solid var(--line-soft)}
+  .phase .pid{font-family:var(--mono);font-size:12px;color:var(--accent);padding-top:3px;letter-spacing:.04em}
+  .phase .pbody h5{margin:0 0 8px;font-size:15.5px;font-weight:600}
+  .phase dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 14px;font-size:13.5px}
+  .phase dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding-top:3px;white-space:nowrap}
+  .phase dd{margin:0;color:#cfd2d0}
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;border:1px solid var(--line);border-radius:3px;padding:.05em .42em;color:var(--muted);white-space:nowrap}
+
+  /* ---------- decision list ---------- */
+  .dec{border-top:1px solid var(--line-soft);padding:15px 0}
+  .dec:last-child{border-bottom:1px solid var(--line-soft)}
+  .dec .q{font-weight:600;margin-bottom:6px}
+  .dec .q .qn{font-family:var(--mono);color:var(--dim);margin-right:8px}
+  .dec .opt{font-size:13.5px;color:var(--muted);margin:0 0 6px;padding-left:0}
+  .dec .rec{font-size:13.5px;color:#d8d2c2}
+  .dec .rec b{color:var(--accent);font-weight:600}
+
+  figure{margin:22px 0}
+  figure svg{width:100%;height:auto;display:block;border:1px solid var(--line-soft);border-radius:4px;background:var(--paper)}
+  figcaption{font-size:12px;color:var(--dim);margin-top:9px;font-family:var(--mono);letter-spacing:.03em}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 70px;color:var(--dim);font-size:12px;font-family:var(--mono);letter-spacing:.04em}
+  @media (max-width:900px){
+    .doc{grid-template-columns:1fr;gap:26px}
+    nav.toc{position:static}
+    h1{font-size:33px}
+    .meta{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <div class="kicker">Plan · WebUI 前端重构</div>
+    <h1>WEBUI 表格公共组件</h1>
+    <p class="sub">把辅种表与追剧表抽成一份公共表壳，支持拖拽换位 / 拖拽调宽 / 点击排序 / 右键隐藏，并让后续的种子详情页用户列表、文件列表与设置页各类表都能派生接入。</p>
+    <dl class="meta">
+      <div><dt>Topic</dt><dd>webui-table-component</dd></div>
+      <div><dt>Status</dt><dd>Open · 待拍板</dd></div>
+      <div><dt>Added</dt><dd>26-10-11-1722</dd></div>
+      <div><dt>Scope</dt><dd>前端 only · 三皮肤 · 无构建链</dd></div>
+    </dl>
+    <p class="lede">盘点的第一结论改变了本计划的落点：<strong>列的“行为”其实已经单点了</strong>（<code>shared/columns.js</code> 715 行 + <code>shared/sort.js</code> 83 行 已承载显隐 / 重排 / 调宽 / 排序 / 持久化 / 行窗口化），<strong>没有单点的是“模板”</strong>——表头块 5 份、单元格分支 127 条、列选择器 4 段、横滚同步 3 份、页枚举硬编码散在 4 个文件里。所以本轮重心不是重写交互，而是<strong>抽表壳 + 把“表”从四页硬编码泛化为注册表</strong>；行为层只在既有单点上做参数化，不搬家。</p>
+  </div>
+</header>
+
+<div class="wrap doc">
+  <nav class="toc">
+    <div class="t-h">目录</div>
+    <a href="#s1"><span class="n">01</span>目标与边界</a>
+    <a href="#s2"><span class="n">02</span>现状盘点</a>
+    <a href="#s3"><span class="n">03</span>目标架构</a>
+    <a href="#s4"><span class="n">04</span>差异派生模型</a>
+    <a href="#s5"><span class="n">05</span>分步实施 P0–P6</a>
+    <a href="#s6"><span class="n">06</span>风险与红线</a>
+    <a href="#s7"><span class="n">07</span>拍板点</a>
+    <a href="#s8"><span class="n">08</span>验收与基线</a>
+    <a href="#s9"><span class="n">09</span>变更记录</a>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 ============ -->
+    <section id="s1">
+      <h2><span class="idx">01</span> 目标与边界</h2>
+      <h3>把五份表壳收敛成一份，让“加一张表”变成“注册一行”</h3>
+
+      <h4><span class="h4n">1.1</span> 目标</h4>
+      <ul>
+        <li><strong>公共表壳</strong>：表头（列名 + 排序箭头 + 拖宽把手 + 拖拽重排指示线 + 右键菜单）、行容器、行窗口化占位，收敛为<strong>一份</strong>可复用实现。</li>
+        <li><strong>四项交互齐备且同源</strong>：拖拽换位、拖拽调宽、点击排序、右键隐藏——全部由既有单点承载，组件只是消费方。</li>
+        <li><strong>差异派生</strong>：每张表的差异只落在 4 个轴上（列定义 / 行模型与单元格 / 行为开关 / 宿主与滚动同步），不复制表壳。</li>
+        <li><strong>可接入面</strong>：主视图（辅种 / 追剧 / 种子页 / 成员明细）与设置页（HR 各类表）接入同一套描述符；<strong>详情面板的用户 / 文件列表</strong>作为重构后的目标接入面（本轮不迁移）。</li>
+      </ul>
+
+      <h4><span class="h4n">1.2</span> 非目标（本轮明确不做）</h4>
+      <ul>
+        <li>不改观感、不改列集合、不改数据契约（前端 <code>SEED_ITEM</code> / <code>GROUP_ITEM</code> / <code>SHOW_ITEM</code> 形状不动，后端零改动）。</li>
+        <li>不引入构建链（继续 Vue 3 CDN + 全局 mixin + <code>shared/tpl/*.html</code> 分片聚合）。</li>
+        <li>不重写列状态模型——双轨模型（意图 / 生效）是定案，本轮只<strong>把它的页枚举泛化</strong>。</li>
+        <li><strong>不为现有详情面板做兼容适配</strong>：详情面板问题多、后续将<strong>完全重构且不考虑兼容</strong>（用户 26-10-11 定），本轮不迁移它的表、不为它的字符串 DOM 架构写兼容层，只为重构后的面板预留接入面（见 P6 / D4）。</li>
+      </ul>
+
+      <div class="note">
+        <span class="lab">本计划的落点</span>
+        用户诉求是“抽公共模板组件”。盘点后落点收窄为两件事：<strong>① 抽表壳（模板单点）；② 把 4 页硬编码泛化为表注册表</strong>。行为单点已经存在，重写它只会把稳定面搅动一遍。
+      </div>
+    </section>
+
+    <!-- ============ 02 ============ -->
+    <section id="s2">
+      <h2><span class="idx">02</span> 现状盘点</h2>
+      <h3>三类表格系统、六处重复、两处已单点</h3>
+
+      <h4><span class="h4n">2.1</span> 三类表格系统</h4>
+      <table class="bleed">
+        <caption>表 A — 前端现存表格系统</caption>
+        <thead><tr><th>系统</th><th>渲染技术</th><th>成员</th><th>列交互</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>A · 主视图列模型网格表</strong></td>
+            <td>Vue 根组件内联模板（<span class="path">shared/tpl/*.html</span>）</td>
+            <td>辅种表 <code>group</code>、种子页 <code>torrent</code>、追剧表 <code>show</code>、成员明细 <code>detail</code></td>
+            <td>齐全：排序 / 调宽 / 重排 / 隐藏 / 持久化 / 窗口化</td>
+          </tr>
+          <tr>
+            <td><strong>B · 详情面板表</strong> <span class="tag">待完全重构</span></td>
+            <td>字符串 DOM（<span class="path">drawer_templates.js</span> 的 <code>kit.table</code> + <code>dtHtml</code>）</td>
+            <td>classic 三页（用户 / Tracker / 内容）；变体 <code>07–12</code> 各自 CSS 硬编码 <code>grid-template-columns</code></td>
+            <td>无（classic 连排序都没有；变体各有各的列序）</td>
+          </tr>
+          <tr>
+            <td><strong>C · 设置页表</strong></td>
+            <td>Vue 内联 <code>&lt;table class="drawer-table"&gt;</code></td>
+            <td>HR 详情表 / 波次表 / 站点 kv 表 / 拉取历史表</td>
+            <td>仅 HR 详情表自带一份三态排序（<span class="path">hr_status.js</span>）</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="lab">范围提示</span>
+        系统 B（详情面板）已确定后续<strong>完全重构、不考虑兼容</strong>，其表格<strong>不在本轮迁移范围</strong>——本轮只覆盖系统 A 与 C，并为重构后的面板留接入契约。
+      </div>
+
+      <h4><span class="h4n">2.2</span> 已经单点的（本轮不搬家）</h4>
+      <table class="bleed">
+        <caption>表 B — 已单点的行为层</caption>
+        <thead><tr><th>能力</th><th>单点位置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>列显隐</td><td><span class="path">shared/columns.js</span> <code>toggleColumn</code></td><td>locked 列双保险不可隐藏</td></tr>
+          <tr><td>列重排（拖拽换位）</td><td><code>startColDrag</code> / <code>applyColOrder</code></td><td>mousedown 阈值方案 + 指示线 + 虚影；隐藏列相对序保持</td></tr>
+          <tr><td>列宽（拖拽 / 双击自适应）</td><td><code>startResize</code> / <code>autoFitColumn</code></td><td>起始固化全部可见列；Shift 互挤；capture 拦误触排序</td></tr>
+          <tr><td>对齐</td><td><code>colAlignCss</code> computed</td><td>生成 <code>:where([data-table="page"])</code> 规则注入 <code>&lt;head&gt;</code>，表头与值同源</td></tr>
+          <tr><td>持久化</td><td><code>persistPage</code>（唯一写入口）</td><td>双轨：只存意图 <code>hidden/order/w</code>，派生宽度不落盘</td></tr>
+          <tr><td>行窗口化</td><td><code>_rowWindow</code> 族</td><td>逐行实测 + 前缀和 + 上下占位</td></tr>
+          <tr><td>三态排序</td><td><span class="path">shared/sort.js</span> <code>setSort</code></td><td>首点降 → 再点升 → 第三击恢复默认</td></tr>
+          <tr><td>列定义</td><td><span class="path">shared/app.js</span> 四组常量</td><td><code>GROUP/DETAIL/TORRENT/SHOW_COLUMNS</code> + <code>TABLE_COLUMNS</code> 映射</td></tr>
+        </tbody>
+      </table>
+
+      <h4><span class="h4n">2.3</span> 未单点的（本轮目标）</h4>
+      <table class="bleed">
+        <caption>表 C — 重复点清单（实测行号 / 份数）</caption>
+        <thead><tr><th>重复件</th><th>位置</th><th class="num">份数</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>表头块：<code>.h-cell</code> + 排序箭头 + <code>.resizer</code> + <code>.col-drop-line</code></td>
+            <td><span class="path">groups.html:13</span>（组头）· <span class="path">groups.html:125</span>（明细头）· <span class="path">shows.html:2</span>（剧头）· <span class="path">shows.html:108</span>（明细头）· <span class="path">torrents.html:2</span>（种子头）</td>
+            <td class="num">5</td>
+          </tr>
+          <tr>
+            <td>单元格 <code>v-if</code> 分支链</td>
+            <td><span class="path">groups.html</span> 49 条 · <span class="path">shows.html</span> 50 条 · <span class="path">torrents.html</span> 28 条</td>
+            <td class="num">127</td>
+          </tr>
+          <tr>
+            <td>成员行单元格（detail 模型两份逐字近似）</td>
+            <td><span class="path">groups.html:150-217</span> · <span class="path">shows.html:134-200</span></td>
+            <td class="num">2</td>
+          </tr>
+          <tr>
+            <td>列选择器四段（含标题 + 勾选 + 锁定态 + 底部动作）</td>
+            <td><span class="path">tpl/topbar.html:74-121</span></td>
+            <td class="num">4</td>
+          </tr>
+          <tr>
+            <td>表头横滚同步（含 <code>.is-hscrolled</code> 边界提示）</td>
+            <td><span class="path">menu.js:87</span> · <span class="path">selection.js:342</span> · <span class="path">shows.js:13</span></td>
+            <td class="num">3</td>
+          </tr>
+          <tr>
+            <td>页枚举硬编码 <code>["group","detail","torrent","show"]</code></td>
+            <td><span class="path">columns.js</span> 里 <code>"group"</code> 字面量 10 处（<code>gridStyle</code>/<code>_headEl</code>/<code>_winGapOf</code>/<code>_measureRowH</code>/<code>recomputeEffective</code>/<code>colAlignCss</code>…）· <span class="path">app.js</span> 5 处 · <span class="path">sort.js</span> 3 处 <code>viewMode</code> 分派</td>
+            <td class="num">18+</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="risk">
+        <span class="lab">盘点里的关键耦合</span>
+        表头拖拽手势用 <code>event.target.closest(".group-head") || closest(".detail-head")</code> 认容器（<span class="path">columns.js:440 / :546</span>），调宽与重排都靠它。<strong>泛化时这张“类名白名单”必须同步扩展</strong>，否则新表的把手拖不动——而且是静默失败（不报错，只是拖了没反应）。
+      </div>
+    </section>
+
+    <!-- ============ 03 ============ -->
+    <section id="s3">
+      <h2><span class="idx">03</span> 目标架构</h2>
+      <h3>一个核心引擎，两个渲染适配</h3>
+
+      <p>渲染技术目前是分裂的——主视图与设置页是 Vue，现有详情面板是字符串 DOM（宿主归插件自管，Vue 零感知）。但详情面板<strong>后续将完全重构、不考虑兼容</strong>，为它现有的字符串 DOM 架构写适配层属于沉没成本。因此收敛目标收窄为：<strong>把与渲染无关的部分（描述符 + 行为引擎）抽成唯一核心，配一个 Vue 适配作为主路径；DOM 适配降级为条件项</strong>——仅当重构后的面板仍走字符串 DOM 才需要，见拍板点 D4。</p>
+
+      <figure>
+        <svg viewBox="0 0 680 300" role="img" aria-label="三层目标架构图">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10" fill="none" stroke="#6f757c" stroke-width="1.2"/>
+            </marker>
+          </defs>
+          <!-- layer 1 -->
+          <rect x="16" y="18" width="648" height="58" rx="4" fill="#191c21" stroke="rgba(255,255,255,.14)"/>
+          <text x="34" y="41" fill="#e7e7e4" font-family="monospace" font-size="12.5">① 表描述符注册表  TABLE_DEFS[tableId]</text>
+          <text x="34" y="62" fill="#a2a8af" font-size="11.5">columns[] · rowModel · 行为开关 · 默认排序 · 宿主 ref · 列选择器分组标题</text>
+          <!-- arrow -->
+          <line x1="340" y1="76" x2="340" y2="104" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar)"/>
+          <!-- layer 2 -->
+          <rect x="16" y="106" width="648" height="58" rx="4" fill="#191c21" stroke="rgba(255,255,255,.14)"/>
+          <text x="34" y="129" fill="#e7e7e4" font-family="monospace" font-size="12.5">② 核心引擎  table-engine.js（与渲染无关）</text>
+          <text x="34" y="150" fill="#a2a8af" font-size="11.5">visibleCols · gridTemplate · 调宽 · 重排 · 显隐 · 排序 · 对齐 CSS · 窗口化 · 持久化</text>
+          <!-- arrows -->
+          <line x1="220" y1="164" x2="220" y2="196" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar)"/>
+          <line x1="470" y1="164" x2="470" y2="196" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar)"/>
+          <!-- adapters -->
+          <rect x="16" y="198" width="300" height="84" rx="4" fill="#15171b" stroke="#d8a657" stroke-width="1.2"/>
+          <text x="34" y="222" fill="#e7e7e4" font-family="monospace" font-size="12.5">③a Vue 适配  &lt;aq-table&gt;</text>
+          <text x="34" y="243" fill="#a2a8af" font-size="11.5">主视图 4 表 + 设置页 HR 表</text>
+          <text x="34" y="262" fill="#a2a8af" font-size="11.5">表壳 markup · 行内联渲染 · 单元格渲染器</text>
+          <rect x="364" y="198" width="300" height="84" rx="4" fill="#15171b" stroke="rgba(255,255,255,.16)" stroke-dasharray="4 3"/>
+          <text x="382" y="222" fill="#a2a8af" font-family="monospace" font-size="12.5">③b DOM 适配（条件项）</text>
+          <text x="382" y="243" fill="#6f757c" font-size="11.5">仅当重构后面板仍走字符串 DOM</text>
+          <text x="382" y="262" fill="#6f757c" font-size="11.5">现有详情面板不迁移（待完全重构）</text>
+        </svg>
+        <figcaption>图 1 · 核心唯一、适配可换；两个适配共用同一描述符与同一套 CSS 类名</figcaption>
+      </figure>
+
+      <h4><span class="h4n">3.1</span> 描述符注册表（差异的唯一声明处）</h4>
+      <p>把今天散在 <span class="path">app.js</span>（列常量）、<span class="path">columns.js</span>（四页枚举）、<span class="path">sort.js</span>（视图分派）里的“表身份”收进一张注册表，每张表一行：</p>
+      <ul>
+        <li><code>id</code>：表标识（即今天的 page 键：<code>group</code>/<code>detail</code>/<code>torrent</code>/<code>show</code>，后续新增 <code>peers</code>/<code>files</code>/<code>hr</code>…）。</li>
+        <li><code>columns</code>：列定义数组（今天四组常量原样搬入）。</li>
+        <li><code>rowModel</code>：行数据模型名，决定单元格渲染器与行类名。</li>
+        <li><code>features</code>：行为开关（<code>sort</code>/<code>resize</code>/<code>reorder</code>/<code>hide</code>/<code>window</code>）——差异表只需关掉不需要的项。</li>
+        <li><code>defaultSort</code>、<code>hostRef</code>、<code>pickerGroupLabel</code>：默认排序键、滚动容器 / 表头 ref 名、列选择器分组标题。</li>
+      </ul>
+
+      <h4><span class="h4n">3.2</span> 核心引擎（把“四页硬编码”换成“按 id 迭代”）</h4>
+      <p><span class="path">columns.js</span> 里所有写死四页的地方改为遍历注册表：<code>TABLE_PAGES</code> 常量退役、<code>recomputeEffective</code>/<code>colAlignCss</code>/<code>gridStyle</code>/<code>_headEl</code>/<code>_winGapOf</code> 一律吃 <code>tableId</code>。这一步<strong>零行为变化</strong>，是后续所有步骤的地基。</p>
+
+      <h4><span class="h4n">3.3</span> 两个渲染适配</h4>
+      <ul>
+        <li><strong>Vue 适配 <code>&lt;aq-table&gt;</code></strong>：全局组件（<code>app.component</code>，属既有接线四形态之一）。只包<strong>表壳</strong>（表头 + 行容器 + 占位），<strong>行仍由调用方 <code>v-for</code> 内联渲染</strong>——这是为 3000 行窗口化路径保留的硬约束（见 06 风险 4）。单元格经“行模型渲染器”产出，避免 127 条分支再复制。</li>
+        <li><strong>DOM 适配 <code>table-dom.js</code>（条件项，默认不做）</strong>：只有当重构后的详情面板仍采用字符串 DOM 渲染时才需要。它复用 <code>dtHtml</code> 转义单点 + <code>H.wireEvents</code> 事件委托，输出同一套类名。<strong>不为现有抽屉做迁移</strong>——现有抽屉将整体废弃。</li>
+      </ul>
+
+      <h4><span class="h4n">3.4</span> 必须保持的不变式</h4>
+      <ul>
+        <li>双轨列状态铁律：只存意图，派生宽度不落盘（<span class="path">pitfalls/web-ui/columns-persist.md</span>）。</li>
+        <li>行窗口化占位契约：占位高 = 折叠行高之和，逐行实测不近似。</li>
+        <li>三皮肤同名类成对；新增类要三份 CSS 同步。</li>
+        <li>无构建链；分片文件按 <code>tpl-manifest</code> 清单序装载。</li>
+        <li><strong>不为将废弃的详情面板做兼容</strong>：现有抽屉（字符串 DOM + 15 变体）不迁移、不写适配层；表组件只需保证“重构后的面板能干净接入”。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 04 ============ -->
+    <section id="s4">
+      <h2><span class="idx">04</span> 差异派生模型</h2>
+      <h3>每张表的差异只准落在四个轴上</h3>
+      <table class="bleed">
+        <caption>表 D — 差异轴与现状映射</caption>
+        <thead><tr><th>轴</th><th>声明处</th><th>辅种表示例</th><th>追剧表示例</th></tr></thead>
+        <tbody>
+          <tr><td>① 列定义</td><td>描述符 <code>columns</code></td><td>21 列（含 4 隐藏）</td><td>11 列</td></tr>
+          <tr><td>② 行模型 / 单元格</td><td>描述符 <code>rowModel</code> + 渲染器</td><td><code>group</code>（组级聚合）+ <code>detail</code>（成员）</td><td><code>show-ep</code>（剧 / 季 / 集）+ 复用 <code>detail</code></td></tr>
+          <tr><td>③ 行为开关</td><td>描述符 <code>features</code></td><td>全开</td><td>全开（剧行部分列只占位不显示值）</td></tr>
+          <tr><td>④ 宿主 / 滚动同步</td><td>描述符 <code>hostRef</code></td><td><code>groupHead</code> / <code>groupTable</code></td><td><code>showHead</code> / <code>showTable</code></td></tr>
+        </tbody>
+      </table>
+      <p>接入一张新表 = <strong>注册一行描述符 + 写一个行模型渲染器</strong>；表壳、交互、持久化、窗口化零改动。设置页 HR 表按同一模型声明（可只留 <code>sort</code>）；<strong>详情面板的用户 / 文件列表</strong>留给重构后的新面板直接按同一模型声明——本轮不迁移现有的。</p>
+    </section>
+
+    <!-- ============ 05 ============ -->
+    <section id="s5">
+      <h2><span class="idx">05</span> 分步实施 P0–P6</h2>
+      <h3>一步一停手点，每步独立会话、独立验收</h3>
+      <p class="muted">排序原则：先做“零行为变化”的地基，再做表壳抽取，最后接入设置页。P0–P2 是用户点名的主线（辅种表 + 追剧表）；P3–P5 是顺带收敛与扩展面；P6 只留前向契约（详情面板待完全重构，不迁移）。</p>
+
+      <div class="phase">
+        <div class="pid">P0</div>
+        <div class="pbody">
+          <h5>注册表骨架：把四页硬编码泛化为按 id 迭代</h5>
+          <dl>
+            <dt>目标</dt><dd>建立 <code>TABLE_DEFS</code> 与 <code>tableId</code> 语义；<code>TABLE_PAGES</code> 退役改为注册表派生。</dd>
+            <dt>改动面</dt><dd><span class="path">shared/app.js</span>（列常量搬入注册表，<code>TABLE_COLUMNS</code> 保留为派生视图）· <span class="path">shared/columns.js</span>（10 处 <code>"group"</code> 字面量 → <code>tableId</code>）· <span class="path">shared/sort.js</span>（<code>_sortKeys</code> 分派泛化）。</dd>
+            <dt>验收</dt><dd><code>test.full</code> 全绿（<strong>零行为变化</strong>）；真浏览器 stub 冒烟 DOM 逐字节等价。</dd>
+            <dt>停手点</dt><dd>不改任何模板、不改 CSS、不动 DOM 结构。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P1</div>
+        <div class="pbody">
+          <h5>抽表壳组件，先只接辅种表</h5>
+          <dl>
+            <dt>目标</dt><dd><code>&lt;aq-table&gt;</code> 渲染表头（<code>.h-cell</code> + 箭头 + <code>.resizer</code> + <code>.col-drop-line</code>）、行容器、上下占位；辅种表改用它。</dd>
+            <dt>改动面</dt><dd>新增 Vue 组件片段（三份 <code>index.html</code> 的 <code>scripts</code> 各加一行 + <code>app.js</code> 补接线）· <span class="path">tpl/groups.html:13-30</span> 表头块替换为组件调用。</dd>
+            <dt>验收</dt><dd>DOM 等价比对通过；列宽拖拽 / 重排 / 排序 / 右键隐藏四项真浏览器手测不变；e2e 逐位一致。</dd>
+            <dt>停手点</dt><dd>行渲染不进组件（仍是内联 <code>v-for</code>）；追剧表暂不动。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P2</div>
+        <div class="pbody">
+          <h5>追剧表接入 + 两处成员明细合并为一份</h5>
+          <dl>
+            <dt>目标</dt><dd>追剧表（剧头 + 明细头）接入组件；<span class="path">groups.html:150-217</span> 与 <span class="path">shows.html:134-200</span> 的成员行合并为同一行模型渲染器。</dd>
+            <dt>改动面</dt><dd><span class="path">tpl/shows.html</span>（两处表头 + 成员行）· <span class="path">tpl/groups.html</span>（成员行）· <strong>守阵 <code>_scan_column_cells_paired</code> 改扫注册表</strong>（见 06 风险 2）。</dd>
+            <dt>验收</dt><dd>两页展开明细逐位等价；守阵改版后红验通过（故意删一个渲染器分支必须报红）。</dd>
+            <dt>停手点</dt><dd>只做 group/show/detail 三表；种子页与设置页留后续。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P3</div>
+        <div class="pbody">
+          <h5>单元格渲染器收敛（127 条分支按行模型归拢）</h5>
+          <dl>
+            <dt>目标</dt><dd>每个行模型（<code>group</code>/<code>torrent</code>/<code>show-ep</code>/<code>member</code>）一份渲染器，按 <code>col.key</code> 查表；同名列跨表复用同一份实现。</dd>
+            <dt>改动面</dt><dd>新增渲染器注册表片段 · 四个模板的 <code>v-if</code> 链替换为查表调用。</dd>
+            <dt>验收</dt><dd>四视图 DOM 等价；<code>test_webui_static_skins.py</code> 相关守阵全绿。</dd>
+            <dt>停手点</dt><dd>不引入 <code>h()</code> 手写 VNode（除非拍板点 D2 选它）；保留声明式可读性。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P4</div>
+        <div class="pbody">
+          <h5>列选择器 / 横滚同步 / 排序键 三处重复收敛</h5>
+          <dl>
+            <dt>目标</dt><dd><span class="path">topbar.html:74-121</span> 四段 → 按注册表 <code>v-for</code>；三个 <code>sync*HeadScroll</code> → 一个；<code>_sortKeys</code> 的 <code>viewMode</code> 分派 → 走描述符。</dd>
+            <dt>改动面</dt><dd><span class="path">tpl/topbar.html</span> · <span class="path">menu.js</span> · <span class="path">selection.js</span> · <span class="path">shows.js</span> · <span class="path">sort.js</span>。注意守阵 <code>test_frontend_frozen_column_boundary_wiring</code> 钉住三个横滚单点，收敛时必须同轮改守阵。</dd>
+            <dt>验收</dt><dd>列选择器勾选 / 恢复默认 / 适应窗口行为不变；横滚边界落影仍在。</dd>
+            <dt>停手点</dt><dd>不改列选择器的视觉与交互。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P5</div>
+        <div class="pbody">
+          <h5>设置页 HR 表接入（Vue 适配）</h5>
+          <dl>
+            <dt>目标</dt><dd>HR 详情表 / 波次表 / kv 表按描述符声明；是否把 HR 自带三态排序并入引擎见拍板点 D3。</dd>
+            <dt>改动面</dt><dd><span class="path">tpl/settings-detail.html</span> · <span class="path">hr_status.js</span>（<code>hrsSetSort</code> 若并入则退役）。</dd>
+            <dt>验收</dt><dd>HR 表排序 / 档位 chips / 已删除切换 / 排障视图行为不变；<code>test_frontend_hr_detail_table_wiring</code> 与 <code>test_frontend_hr_diag_view_wiring</code> 绿。</dd>
+            <dt>停手点</dt><dd>HR 数据契约与后端零改动。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">P6</div>
+        <div class="pbody">
+          <h5>详情面板：只留接入面，不做兼容迁移</h5>
+          <dl>
+            <dt>目标</dt><dd>详情面板（抽屉）问题多、后续<strong>完全重构且不考虑兼容</strong>，故本轮<strong>不迁移</strong>它的任何表。只做一件前向的事：把表组件的对外契约（描述符字段 / 行为开关 / 单元格渲染器接口）写成文档化接口，让重构后的新面板能<strong>直接声明式接入</strong>（用户列表 / 文件列表各注册一行 + 一个行渲染器）。</dd>
+            <dt>改动面</dt><dd>仅文档与接口注释（<span class="path">memory-bank/conventions/webui.md</span> 或组件头注释）；<strong>零代码迁移</strong>。</dd>
+            <dt>验收</dt><dd>契约能覆盖用户列表（对端 9 列）与文件列表（树 / 平铺）两类形态；不触碰 <span class="path">drawer_templates.js</span> 与 <span class="path">drawer_pages/*</span>。</dd>
+            <dt>停手点</dt><dd>现有抽屉一行不改；重构方案另立计划（见 D4）。</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 06 ============ -->
+    <section id="s6">
+      <h2><span class="idx">06</span> 风险与红线</h2>
+      <h3>九条会静默失效或误伤的点</h3>
+
+      <div class="risk">
+        <span class="lab">风险 1 · 列偏好被重置（复发陷阱）</span>
+        双轨模型铁律：新增表 = 新增 <code>pages</code> 子键，<strong>绝不升 <code>COLS_STORE_KEY</code> 版本</strong>。升版本会清空用户手调的宽 / 隐 / 序——这正是历史上“列宽时不时被重置”的机制性来源。见 <span class="path">pitfalls/web-ui/columns-persist.md</span>。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 2 · 守阵会红（不能删，只能改口径）</span>
+        <code>_scan_column_cells_paired</code>（<span class="path">tests/test_webui_static_skins.py:569</span>）要求每个列 key 在模板里有 <code>col.key === 'k'</code> 字面分支。渲染器收敛后该字面不再存在——<strong>必须同轮把守卫改为扫渲染器注册表</strong>，而不是放宽或删除。同理 <code>test_frontend_frozen_column_boundary_wiring</code> 钉住三个横滚单点。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 3 · prism shell 210 行硬顶</span>
+        新增 <code>shared/*.js</code> 片段要三份 <code>index.html</code> 的 <code>scripts</code> 各加一行，而 <span class="path">prism/index.html</span> 贴着 210 行上限跑——<strong>加一行必须先腾一行</strong>（删空行即可，勿压行）。见 <span class="path">pitfalls/web-ui/frontend-split.md</span>。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 4 · 窗口化热点不得退化</span>
+        3000 行场景靠“只渲染视口附近几十行”压住主线程。若把<strong>每行</strong>包成一个组件实例，会在 2s 轮询刷新时引入新的 patch 开销。<strong>组件只包表壳，行仍内联 <code>v-for</code> 渲染</strong>；行窗口化的 <code>padTop/padBottom</code> 契约原样透传。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 5 · 拖拽手势的类名白名单</span>
+        <code>startResize</code>/<code>startColDrag</code> 靠 <code>closest(".group-head")||closest(".detail-head")</code> 认容器（<span class="path">columns.js:440 / :546</span>）。新表若换容器类名而白名单没扩，表现为“拖了没反应”，无报错。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 6 · 全局 mixin 与根选项的边界</span>
+        组件方法域走 <code>app.mixin</code>；<code>data</code>/<code>computed</code>/<code>watch</code>/生命周期只能进 <code>state.js</code>/<code>lifecycle.js</code> 经根选项展开——塞进全局 mixin 会波及一切组件实例（含 <code>hub-field</code>），静默双跑。见 <span class="path">pitfalls/web-ui/frontend-split.md</span>。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 7 · 三皮肤 CSS 成对</span>
+        表壳类名（<code>.group-head</code>/<code>.h-cell</code>/<code>.resizer</code>/<code>.col-drop-line</code>）在三份 CSS 里各有规则。新增类必须三份同步；有 shell 行数与成对守卫盯着。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 8 · e2e 逐位一致</span>
+        列设置、隐藏列宽保留、横滚边界落影等场景在 <code>dev.e2e</code> 与冒烟里有断言。每步收口都要跑，不能只看 <code>pytest</code>。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 9 · 视觉零回归</span>
+        本轮不改观感。表壳抽取若改了 DOM 层级（如多包一层 div），会破坏 <code>:nth-child</code> 列对齐规则（<code>colAlignCss</code> 依赖 <code>[data-table]</code> 的直接子元素）与 grid 布局。DOM 等价比对是本轮的硬验收。
+      </div>
+      <div class="risk">
+        <span class="lab">风险 10 · 为将废弃的面板投入适配（沉没成本）</span>
+        详情面板待完全重构，任何“让现有抽屉的表接入公共组件”的工作都会被整体丢弃。<strong>本轮把抽屉排除在迁移范围外</strong>，只在 P6 留契约；反过来，也不要为迁就现有抽屉的字符串 DOM 而扭曲表组件的接口设计。
+      </div>
+    </section>
+
+    <!-- ============ 07 ============ -->
+    <section id="s7">
+      <h2><span class="idx">07</span> 拍板点</h2>
+      <h3>五处需要用户先定方向</h3>
+
+      <div class="dec">
+        <div class="q"><span class="qn">D1</span>组件形态</div>
+        <p class="opt">A · 纯引擎 + Vue 全局组件 <code>&lt;aq-table&gt;</code>（单适配）｜ B · 模板内 <code>v-for</code> 描述符循环 ｜ C · 纯引擎 + Vue 组件 + DOM 构建器（双适配）</p>
+        <p class="rec">推荐 <b>A</b>（随详情面板移出范围而升级）：主视图与设置页都是 Vue，单适配即可覆盖本轮全部接入面；DOM 构建器（C）只在重构后的面板仍走字符串 DOM 时才补，属条件项。</p>
+      </div>
+
+      <div class="dec">
+        <div class="q"><span class="qn">D2</span>单元格渲染方式</div>
+        <p class="opt">A · <code>h()</code> 手写 VNode 函数注册表 ｜ B · 保留声明式模板，但按行模型收敛为单份</p>
+        <p class="rec">推荐 <b>B</b>（先做 B，A 留作 P6 之后的可选优化）：声明式对 127 条分支的迁移更安全，且不触碰窗口化热路径。</p>
+      </div>
+
+      <div class="dec">
+        <div class="q"><span class="qn">D3</span>设置页 HR 表</div>
+        <p class="opt">A · 把 HR 自带三态排序并入核心引擎（<code>hrsSetSort</code> 退役）｜ B · 只借表壳，排序仍走 HR 自己的实现</p>
+        <p class="rec">推荐 <b>B</b>：HR 表的排序语义（逐站点独立 + 空值恒末位）与主表不同，强行并入会改行为；先只借壳，后续再评估。</p>
+      </div>
+
+      <div class="dec">
+        <div class="q"><span class="qn">D4</span>详情面板（用户已定：完全重构、不考虑兼容）</div>
+        <p class="opt">A · 只留前向契约，重构方案另立计划 ｜ B · 现在就同步设计重构后的表架构（含是否仍走字符串 DOM）</p>
+        <p class="rec">推荐 <b>A</b>：本轮 P0–P5 已足够独立交付；重构后的面板渲染模型（Vue 还是字符串 DOM）决定要不要 <code>table-dom.js</code>，先不预设。若选 B，需先回答“新面板用不用 Vue”。</p>
+      </div>
+
+      <div class="dec">
+        <div class="q"><span class="qn">D5</span>是否立任务档案</div>
+        <p class="opt">A · 立档（<code>tasks/26-10-11-webui-table-component.md</code>）｜ B · 等 P0 落地后再立</p>
+        <p class="rec">推荐 <b>B</b>：本计划跨多会话、多波次，达立档阈值；但先等 P0 拍板确认范围再立，避免档案先于方案。</p>
+      </div>
+    </section>
+
+    <!-- ============ 08 ============ -->
+    <section id="s8">
+      <h2><span class="idx">08</span> 验收与基线</h2>
+      <h3>每步三道闸，终态一条判据</h3>
+      <ul>
+        <li><strong>静态守阵</strong>：<code>test.full</code> 全绿；渲染器收敛同轮改版 <code>_scan_column_cells_paired</code> 并红验（故意删分支必须报红）。</li>
+        <li><strong>真浏览器等价</strong>：改造前后跑同一 stub（真 <code>app.js</code> + 最小 API），渲染 DOM 逐字节等价（归一相对时间 / 脚本清单）。</li>
+        <li><strong>e2e 一致</strong>：<code>dev.e2e</code> 全量与改前逐位一致（列设置 / 隐藏列宽保留 / 横滚边界）。</li>
+        <li><strong>基线</strong>：每步收口跑 <code>test.full</code> 并新建一条 <code>testing/baselines/</code> 切片记实测数字（一次全量一条，最新即事实源）。</li>
+      </ul>
+      <div class="note">
+        <span class="lab">终态判据</span>
+        新增一张表 = <strong>注册一行描述符 + 写一个行模型渲染器</strong>，表壳 / 交互 / 持久化 / 窗口化零改动。达标即“减少维护点”的目标成立。
+      </div>
+    </section>
+
+    <!-- ============ 09 ============ -->
+    <section id="s9">
+      <h2><span class="idx">09</span> 变更记录</h2>
+      <table class="bleed">
+        <thead><tr><th>时间</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">26-10-11-1722</td><td>初稿：现状盘点（三类系统 / 六处重复 / 两处已单点）、三层目标架构、差异四轴、P0–P6 分步、九条风险、五个拍板点。</td></tr>
+          <tr><td class="mono">26-10-11-1734</td><td>按用户定调修订：详情面板（抽屉）后续<strong>完全重构、不考虑兼容</strong> → 现有抽屉移出迁移范围；DOM 适配降级为条件项（仅当重构后仍走字符串 DOM）；P6 改为“只留前向契约、零代码迁移”；D1 推荐改为单适配（Vue 组件），D4 改为“只留契约 vs 同步设计新面板架构”；新增风险 10（沉没成本）。</td></tr>
+          <tr><td class="mono">26-10-11-1806</td><td>用户「按推荐开始实施」→ <strong>P0 已落地</strong>（状态 Open → In Progress）：app.js 新增 <code>TABLE_DEFS</code> + <code>VIEW_TABLE</code>，<code>TABLE_PAGES</code> 由注册表派生；<code>columns.js</code>/<code>sort.js</code> 十处页字面量与 ref 名映射改为按 id 取；新增守阵 <code>test_frontend_table_registry_single_point</code>（红绿双验过）。全量 <code>test.full</code> 与上片基线仅差新增守阵一条，四项指标逐位相同；e2e 34 项失败经 A/B 证实为存量。执行记录见 <code>tasks/26-10-11-webui-table-component.md</code>。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    memory-bank/plans/26-10-11-1722-plan-webui-table-component.html · topic webui-table-component · status Open
+  </div>
+</footer>
+
+</body>
+</html>

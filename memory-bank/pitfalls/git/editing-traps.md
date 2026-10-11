@@ -109,6 +109,14 @@
   「git status 看 CRLF 警告」定式。处置照旧: 按字节归一回 LF
   (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
 
+- **复发 +1 (2026-10-11)**: 触发又换成 **Edit 工具改前端 JS** —— 一次普通方法体替换把
+  `shared/sort.js` 整份从 `LF=77 / CRLF=0` 写成 `CRLF=77 / LF=0`(同一批改动的 `app.js` /
+  `columns.js` 仍是 LF ⇒ **"哪个文件会被写坏"不可预测**, 不能按文件挑)。暴露方式与上次同款:
+  `git status` 末尾的 `warning: … CRLF will be replaced by LF`。为什么没命中: 本轮是前端重构,
+  路由只读了 `pitfalls/web-ui/`, 行尾类条目在 `pitfalls/git/` 没被翻到 —— 定式应固化为
+  **"改完任何文本文件就跑一次 `git status` 扫 CRLF 警告"**, 与改的是哪个目录无关。处置照旧按字节归一回 LF
+  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
+
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 
 - **触发**: 在 `core.autocrlf=true` 的仓库里编辑文件。

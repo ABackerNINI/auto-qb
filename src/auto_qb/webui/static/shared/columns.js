@@ -37,7 +37,9 @@ window.AQB_COLUMNS = {
     },
     gridStyle(page) {
       // 列模板由 computed 缓存(见 *_Grid): 行渲染只取同一引用, 不每行拼字符串
-      return { group: this.groupGrid, detail: this.detailGrid, torrent: this.torrentGrid, show: this.showGrid }[page];
+      // 表 id -> grid computed 名的映射在 TABLE_DEFS(注册表单点, 计划 26-10-11-1722 P0)
+      const def = TABLE_DEFS[page];
+      return def ? this[def.grid] : null;
     },
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
@@ -79,7 +81,8 @@ window.AQB_COLUMNS = {
       return out;
     },
     _headEl(page) {
-      const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead", show: "showHead" }[page]];
+      const def = TABLE_DEFS[page];
+      const ref = def ? this.$refs[def.headRef] : null;
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
     /* 列对齐规则注入(单例 <style id="col-align-css">): 首次创建后只改 textContent ——
@@ -142,8 +145,8 @@ window.AQB_COLUMNS = {
      * 模板只消费三个产物: 可见切片、上占位高、下占位高。窗口关闭时 == 全量渲染(零差异回退)。 */
     _winContainer(kind, refName) {
       if (refName) return this.$refs[refName] || null;
-      // 成员行: 容器 = .detail —— 明细表头(ref="detailHead")的父元素
-      const head = this.$refs.detailHead;
+      // 成员行: 容器 = .detail —— 明细表头(注册表 detail.headRef)的父元素
+      const head = this.$refs[TABLE_DEFS.detail.headRef];
       return head && head.parentElement ? head.parentElement : null;
     },
     /* 行容器的**真实**行间距(px): 三个容器并不相同 —— atlas `.group-table` 是 6px、
@@ -153,9 +156,9 @@ window.AQB_COLUMNS = {
      * !返回 **null = 容器当前没渲染**(如种子页未打开时问 .group-table) —— 调用方**不得**
      * 把它当 0 缓存: 否则在分组页问一次就把种子页的间距永久记成 0(实测占位总高少 5px×2999)。 */
     _winGapOf(kind) {
-      const el = kind === "torrent" ? this._winContainer(kind, "torrentTable")
-        : kind === "group" ? this._winContainer(kind, "groupTable")
-          : this._winContainer(kind, null);
+      // 容器 ref 由注册表给(group/torrent 有 tableRef; member 无 -> null, 走 .detail 父容器)
+      const def = TABLE_DEFS[kind];
+      const el = this._winContainer(kind, def ? def.tableRef : null);
       if (!el) return null;
       if (typeof getComputedStyle !== "function") return ROW_WIN_GAP_FALLBACK;
       const g = parseFloat(getComputedStyle(el).rowGap);
@@ -181,9 +184,8 @@ window.AQB_COLUMNS = {
       for (const kind of ["torrent", "group", "member"]) {
         const sig = `${base}|${kind}`;
         if (this._winTopSig[kind] === sig) continue;
-        const el = kind === "torrent" ? this._winContainer(kind, "torrentTable")
-          : kind === "group" ? this._winContainer(kind, "groupTable")
-            : this._winContainer(kind, null);
+        const def = TABLE_DEFS[kind];
+        const el = this._winContainer(kind, def ? def.tableRef : null);
         this._winTop[kind] = el ? el.getBoundingClientRect().top + window.scrollY : 0;
         this._winTopSig[kind] = sig;
       }
@@ -193,7 +195,9 @@ window.AQB_COLUMNS = {
      * 首次(或列集合变化后)由一轮**全量渲染**量齐所有行, 之后每轮只更新当前窗口里的行。 */
     _measureRowH() {
       if (!this.rowWin) return;
-      const sig = `${this.viewMode}|${this._winResize}|${this.visibleGroupCols.length}|${this.visibleTorrentCols.length}|${this.visibleDetailCols.length}`;
+      // 签名取三个有窗口的层(与 _rowWindow 的 kind 对齐; 顺序 group/torrent/detail 与旧字面量一致)
+      const winDefs = [TABLE_DEFS.group, TABLE_DEFS.torrent, TABLE_DEFS.detail];
+      const sig = `${this.viewMode}|${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
       // !用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
       // 3000 行就是 1200px 的漂移。
       const probes = [["torrent", ".torrent-row[data-hash]"], ["group", ".group-row:not(.torrent-row)[data-key]"], ["member", ".member-row[data-hash]"]];
@@ -308,7 +312,7 @@ window.AQB_COLUMNS = {
      *   "派生值没有资格落盘"是双轨模型唯一铁律(守阵 test_frontend_persist_page_takes_intent_only)。
      */
     recomputeEffective() {
-      for (const page of ["group", "detail", "torrent", "show"]) {
+      for (const page of TABLE_PAGES) {
         if (this.colW[page]) {
           this.colWidths = { ...this.colWidths, [page]: { ...this.colW[page] } };
           continue;
@@ -649,7 +653,7 @@ window.AQB_COLUMNS = {
      */
     colAlignCss() {
       const out = [];
-      for (const page of ["group", "detail", "torrent", "show"]) {
+      for (const page of TABLE_PAGES) {
         const cols = this._visibleCols(page);
         for (let i = 0; i < cols.length; i++) {
           const align = cols[i].align || "left";
@@ -664,7 +668,7 @@ window.AQB_COLUMNS = {
      * 三个窗口共用 _rowWindow(); 未启用时 win.active=false, 切片 = 全量、上下占位 = 0,
      * 模板与不开窗时完全等价(因此关掉开关就是老行为, 回退路径零成本)。 */
     torrentWin() {
-      return this._rowWindow("torrent", this.filteredTorrents, "torrentTable");
+      return this._rowWindow("torrent", this.filteredTorrents, TABLE_DEFS.torrent.tableRef);
     },
     visibleTorrents() {
       const w = this.torrentWin;
@@ -686,7 +690,7 @@ window.AQB_COLUMNS = {
       if (this.expandedKey && this.filteredGroups.some((g) => g.key === this.expandedKey)) {
         return { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
       }
-      return this._rowWindow("group", this.filteredGroups, "groupTable");
+      return this._rowWindow("group", this.filteredGroups, TABLE_DEFS.group.tableRef);
     },
     visibleGroups() {
       const w = this.groupWin;

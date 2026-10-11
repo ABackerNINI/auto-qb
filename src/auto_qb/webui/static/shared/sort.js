@@ -24,25 +24,19 @@ window.AQB_SORT = {
       }
       this._resetSort(scope);
     },
-    /* 当前视图的排序键/方向(data 属性名) —— 分组/种子/追剧三视图各自独立;
-     * scope="detail" = 展开明细表(与视图正交: 三视图的明细共用同一套排序键) */
+    /* 当前表的排序键/方向(data 字段名 + 恢复默认序目标值) —— 全部取自表注册表(计划 26-10-11-1722 P0)。
+     * 表 id 解析: scope="detail" = 展开明细表(与视图正交: 三视图的明细共用同一套排序键);
+     * 其余随当前视图(VIEW_TABLE; 未知/默认回落 group)。 */
     _sortKeys(scope) {
-      if (scope === "detail") return { gk: "detailSortKey", gd: "detailSortDir" };
-      if (this.viewMode === "torrents") return { gk: "torrentSortKey", gd: "torrentSortDir" };
-      if (this.viewMode === "shows") return { gk: "showSortKey", gd: "showSortDir" };
-      return { gk: "sortKey", gd: "sortDir" };
+      const id = scope === "detail" ? "detail" : (VIEW_TABLE[this.viewMode] || "group");
+      return TABLE_DEFS[id].sort;
     },
-    /* 恢复默认排序: 追剧视图 = 最近动静降序(后端同序); 明细表 = 后端原序(成员扫描顺序);
-     * 其余 = 最近添加降序 */
+    /* 恢复默认排序(三态第三击): 目标值随表走 —— 分组/种子 = 最近添加降序(DEFAULT_SORT),
+     * 追剧 = 最近动静降序(后端同序), 明细 = 后端原序(空键)。见 TABLE_DEFS[*].sort.defKey/defDir */
     _resetSort(scope) {
-      const { gk, gd } = this._sortKeys(scope);
-      if (scope === "detail") {
-        this[gk] = "";
-        this[gd] = -1;
-        return;
-      }
-      this[gk] = this.viewMode === "shows" ? "latest" : DEFAULT_SORT.key;
-      this[gd] = DEFAULT_SORT.dir;
+      const { gk, gd, defKey, defDir } = this._sortKeys(scope);
+      this[gk] = defKey;
+      this[gd] = defDir;
     },
     /* 明细表行序(展开的组明细 / 追剧集明细共用): 空键 = 后端原序, 点击列头后按该列三态排序;
      * 同值时按站点名稳定排序(与分组表"同值按名称"同思路, 避免刷新抖动)。

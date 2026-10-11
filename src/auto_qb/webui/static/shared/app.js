@@ -239,6 +239,55 @@ function loadTimeFmt() {
  */
 const DEFAULT_SORT = { key: "added_on", dir: -1 };
 
+/* ---------------- 表注册表(计划 26-10-11-1722 P0) ----------------
+ * 「表身份」的单点: 每张表一行 —— 列定义 / 宿主 ref / grid 与可见列 computed 名 / 行窗口化 kind /
+ * 排序键字段。取代此前散在 columns.js 里的四页硬编码(`["group","detail","torrent","show"]`)。
+ *
+ * !本轮(P0)是**零行为变化**的地基: 列定义常量(GROUP_COLUMNS 等)保持原样(守阵
+ *   `_scan_column_cells_paired` 按 const 名 + 模板字面扫), 注册表只引用它们; 模板与 DOM 结构不动
+ *   (表壳抽取在 P1)。TABLE_PAGES 由本表派生, 顺序即定义序(与旧字面量逐位一致)。
+ * !新增一张表 = 在此加一行(列定义 + 宿主 + 排序键), 并在 state.js 加对应的排序字段;
+ *   **不升 COLS_STORE_KEY 版本**(见 pitfalls/web-ui/columns-persist: 升版本会清空用户手调的宽/隐/序)。
+ *
+ * 字段:
+ *   columns  列定义数组(单一来源)
+ *   label    面向用户的表名(列选择器分组标题 / 契约文档用)
+ *   headRef  吸顶表头元素 ref(_headEl 与横滚同步消费)
+ *   tableRef 行容器 ref(行窗口化测量消费; null = 明细成员容器 .detail, 无独立滚动容器)
+ *   grid     表头/行 grid 模板 computed 名(模板 gridStyle 消费)
+ *   cols     可见列 computed 名(模板 visible*Cols 消费)
+ *   window   行窗口化 kind(与 _rowWindow 的 kind 对齐; 明细 = member)
+ *   sort     排序键/方向 data 字段名 + 恢复默认序的目标值(三态排序第三击落点)
+ */
+const TABLE_DEFS = {
+  group: {
+    columns: GROUP_COLUMNS, label: "辅种表",
+    headRef: "groupHead", tableRef: "groupTable",
+    grid: "groupGrid", cols: "visibleGroupCols", window: "group",
+    sort: { gk: "sortKey", gd: "sortDir", defKey: DEFAULT_SORT.key, defDir: DEFAULT_SORT.dir },
+  },
+  detail: {
+    columns: DETAIL_COLUMNS, label: "明细表",
+    headRef: "detailHead", tableRef: null,
+    grid: "detailGrid", cols: "visibleDetailCols", window: "member",
+    sort: { gk: "detailSortKey", gd: "detailSortDir", defKey: "", defDir: -1 },
+  },
+  torrent: {
+    columns: TORRENT_COLUMNS, label: "种子页",
+    headRef: "torrentHead", tableRef: "torrentTable",
+    grid: "torrentGrid", cols: "visibleTorrentCols", window: "torrent",
+    sort: { gk: "torrentSortKey", gd: "torrentSortDir", defKey: DEFAULT_SORT.key, defDir: DEFAULT_SORT.dir },
+  },
+  show: {
+    columns: SHOW_COLUMNS, label: "追剧视图",
+    headRef: "showHead", tableRef: "showTable",
+    grid: "showGrid", cols: "visibleShowCols", window: "show",
+    sort: { gk: "showSortKey", gd: "showSortDir", defKey: "latest", defDir: -1 },
+  },
+};
+/* 视图模式 -> 表 id(排序 scope 解析单点; groups 是默认视图, 未知值回落 group) */
+const VIEW_TABLE = { groups: "group", torrents: "torrent", shows: "show" };
+
 /* ---------------- P1-2 行窗口化(windowed rows) ----------------
  *
  * 背景(实测, 3000 种子, 见 e2e/perf.spec.mjs「P1-2/P1-3 A/B 埋点」): 每轮全量回传后前端整表替换,
@@ -282,7 +331,8 @@ const ROW_WIN_GAP_FALLBACK = 0;
  * 设置页里的"配置分组"是 schema 分组(无关语义), 不适用本常量。 */
 const L10N_GROUP = "辅种";
 
-const TABLE_PAGES = ["group", "detail", "torrent", "show"];
+/* 表页清单由注册表派生(顺序即定义序) —— 旧字面量 ["group","detail","torrent","show"] 的唯一来源 */
+const TABLE_PAGES = Object.keys(TABLE_DEFS);
 const emptyColState = () => ({ hidden: {}, order: {}, w: {} });  // 运行时意图态: w[page] = null | {列key: "Npx"}
 
 function columnKeys(page) {
