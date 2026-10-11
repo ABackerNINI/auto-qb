@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-rules-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="rules/expr/parser 死件运算符常量与 types 重复">
 <meta name="issue-summary" content="parser.py _ARITH_OPS/_ORDER_OPS/_EQ_OPS/_LOGIC_OPS 本文件从不使用, 与 types.py 逐字同">
 <title>rules/expr/parser 死件运算符常量与 types 重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-rules-parser-dead-op-constants-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,18 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法<span class="opt">（Done）</span></h2>
+    <p>删 <code>rules/expr/parser.py:20-23</code> 的 <code>_ARITH_OPS</code>/<code>_ORDER_OPS</code>/<code>_EQ_OPS</code>/<code>_LOGIC_OPS</code> 四行死件（保留 <code>_BINOPS</code>/<code>_UNARY_OPS</code>/<code>_LITERAL_KINDS</code>）；运算符族常量只由 <code>types.py:14-17</code> 活件持有。</p>
+    <p><b>删前复核（防误删）：</b>全仓 grep 确认 parser 内无引用、外部无 <code>from .parser import _ARITH_OPS…</code>、<code>tests/</code> 零引用 —— 属真死件。</p>
+    <p><b>验证：</b>新增守阵 <code>test_parser_has_no_dead_op_constants</code>（断言 parser 不再持有四个名字）；<code>test_expr_parse.py</code> / <code>test_expr_eval.py</code> 全绿。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 16:25 — 用户指派认领（「修复 rules 部分问题…相关 issue 一并认领」），状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:25 — 修完验证，状态 <strong>Done</strong>；认领方 [26-10-11-backend-rules-dup-code-fix](../tasks/26-10-11-backend-rules-dup-code-fix.md)</li>
     </ul>
   </section>
 

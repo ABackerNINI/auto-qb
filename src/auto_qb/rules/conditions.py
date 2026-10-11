@@ -2,9 +2,10 @@
 upload_ratio, freespace, expr(表达式)"""
 from datetime import datetime
 
-from ..infra import file_access, utils
+from ..infra import utils
 from .base import BaseCondition, RuleContext
 from .expr import compile_expr, evaluate, validate
+from .expr.env import disk_usage_value
 from .expr.errors import ExprError
 from .registry import register_condition
 
@@ -250,15 +251,7 @@ class FreespaceCondition(BaseCondition):
     def match(self, ctx: RuleContext):
         if not self.path:
             return False
-        try:
-            free = file_access.get_file_access().disk_usage(self.path).free
-        except file_access.FileAccessError as e:
-            # 映射 miss: 「不可判定」显式报错优于静默 False(报告 §05, 与 disk_* 表达式同口径;
-            # ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」)
-            raise ExprError(str(e)) from e
-        except OSError as e:
-            # 盘不可读/盘符掉线: 与映射 miss / expr 形式 freespace()(env.py)同口径 ——
-            # 绝不降级成假值(拍板 P-07); 磁盘故障时规则由静默失活变显式停规则 + ERROR,
-            # ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」
-            raise ExprError(f"磁盘不可用: '{self.path}': {e}") from e
+        # 与 disk_* 表达式同口径(单点 disk_usage_value): 映射 miss / 盘不可读都显式报错,
+        # 绝不降级成假值(拍板 P-07); ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」
+        free = disk_usage_value(self.path, "free")
         return utils.compare(self.op, free, self.value)

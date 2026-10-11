@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-rules-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="rules 数值谓词校验三处各写">
 <meta name="issue-summary" content="env._num_unary/_min_max 与 eval._as_num 重复实现「参数必须是数值」校验(is_number 已存在)">
 <title>rules 数值谓词校验三处各写 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-rules-expr-numeric-predicate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,18 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法<span class="opt">（Done）</span></h2>
+    <p><code>rules/expr/types.py</code> 新增运行期断言 <code>require_number(value, what)</code>（判据走既有的 <code>is_number</code> 单点，报错文案骨架 <code>f"{what}必须是数值, 得到 {label(type_name(value))}"</code>）；<code>env._num_unary</code>/<code>_min_max</code> 与 <code>eval._as_num</code> 三处降为一行委托，各自的报错主体短语（<code>"该函数的参数"</code> / <code>f"'{op}' 的操作数"</code>）作参数传入 —— <b>用户可见文案逐字不变</b>，仅判据实现收成一处。</p>
+    <p><b>口径复核：</b>原 env 两处的 <code>isinstance(x,(int,float)) and not isinstance(x,bool)</code> 与 <code>is_number</code> 判据逐值等价（bool/int/float 全分支同真值），故无行为变化。<code>types.check_op_types</code>/<code>check_unary_types</code>（编译期 <code>ExprSyntaxError</code>）不属本项，未动。</p>
+    <p><b>验证：</b>新增守阵 <code>test_require_number_single_point</code>（patch <code>require_number</code> 断言 env 数值函数与 eval 算术运算符均经其路由）；既有 <code>test_runtime_error_paths_batch</code>（数值函数吃非数值）/<code>test_runtime_type_errors</code>/<code>test_arith_and_compare_runtime</code> 全绿。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 16:25 — 用户指派认领（「修复 rules 部分问题…相关 issue 一并认领」），状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:25 — 修完验证，状态 <strong>Done</strong>；认领方 [26-10-11-backend-rules-dup-code-fix](../tasks/26-10-11-backend-rules-dup-code-fix.md)</li>
     </ul>
   </section>
 

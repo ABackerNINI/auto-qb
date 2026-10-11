@@ -131,7 +131,17 @@
 - **执行注意(供后续修复轮复用)**: ① **报告的分类描述要复核, 不能照抽** —— 报告把档位处置三处判为 A 类「仅 detail 文案不同」, 实读发现 `fail_streak` 推进与升级告警三处各不相同, 照建议的 `_fail_or_truncate(st, detail)` 抽会**静默改行为**(给预算截断也计连续失效); 后续轮次对每个 A 类项都要**逐处比对行为**, 差异用显式参数承载。② **「口径收敛」先查值是否真相同** —— 报告建议把「6h 节流」收敛成单点, 但 4 处窗口值不同(且 worker 侧有 16 条单测按模块常量打补丁)⇒ 只抽算法、阈值留各模块常量。③ **删死件前先查测试引用** —— `stamp_text_ts` 生产侧零调用但有自己的单测, 删件须连带删测试与「测试计划」清单行。
 - **零改动确认**: 改动面仅 hr 包内 9 源文件 + 1 测试文件; 跨包(webui/core/infra)零改动; `config.yml` / `auto-qb-data/` 未触碰。
 - **待办下一轮**: hr 余 4 条暂缓件按各自轮次处理; 重复代码审查主线(Phase 2 前端 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。
+
 ### 2026-10-11 — webui 修复轮(认领 7 条 issue)
 
 - **触发**: 用户「修复 webui 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」(追问拍板: 新建修复轮档案作认领方 + 先做低风险 7 条)。
 - **认领与结果**: 见修复轮档案 [26-10-11-webui-dup-code-fixes](26-10-11-webui-dup-code-fixes.md) —— 7 条置 `Done`(行为逐字不变 + 5 条新守阵过红验), 3 条留 `Open`(热路径 merge / 跨层常量 / 路由表驱动)。
+
+### 2026-10-11 R7 — 修复轮(rules 全包, 3 条 issue 认领与修复)
+
+- **触发**: 用户「修复 rules 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。
+- **范围**: 报告 §20(轮 17 rules)入池 3 条 refactor issue —— 全部在包内、报告均标「风险低」, 故**全做**(无跨包暂缓件, 与 R6 的 hr 子集不同)。
+- **产物**: 修 3 条并置 `Done`(`rules-expr-disk-helper-dup` 收 `env.disk_usage_value` / `rules-expr-numeric-predicate-dup` 收 `types.require_number` / `rules-parser-dead-op-constants-dup` 删死件), 新增 3 个守阵测试。档案 [26-10-11-backend-rules-dup-code-fix](26-10-11-backend-rules-dup-code-fix.md)。
+- **执行注意(供后续修复轮复用)**: ① 报告口径仍需逐处复核 —— R17-A01 条件侧原只捕 `OSError`、env 侧捕 `(OSError, ValueError)`, 取超集后对条件侧是不可达路径的防御性放宽(实测两实现不抛 `ValueError`), 行为等价; ② 「文案逐字不变」是保守口径的关键 —— 三处数值校验文案不同, helper 用 `what` 参数承载主体短语而非硬编一种; ③ 收口后**清未用导入**(conditions 的 `file_access`)。
+- **零改动确认**: 改动面仅 rules 包内 5 源文件 + 1 测试文件; 跨包零改动; `config.yml` / `auto-qb-data/` 未触碰。
+- **待办下一轮**: infra 轮 18 的 5 条 issue 仍在 `Open`, 属后续修复轮候选; 重复代码审查主线(Phase 2 前端 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。

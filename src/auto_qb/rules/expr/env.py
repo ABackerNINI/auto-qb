@@ -34,6 +34,7 @@ from .types import (
     check_op_types,
     check_unary_types,
     label,
+    require_number,
     result_type,
     type_name,
 )
@@ -194,34 +195,33 @@ def _traffic(period: str, index: int):
     return get
 
 
-def _freespace(ctx, args):
-    path = str(args[0])
+def disk_usage_value(path, attr: str):
+    """取 path 所在盘的用量属性(free / total / used) —— 表达式 freespace()/disk_*() 与
+    FreespaceCondition 共用(conditions.py 从此导入), 消四处逐字同的「取数 + 错误映射」。
+
+    「不可判定」显式报错(报告 §05), **绝不降级成假值**: 映射 miss 转 ExprError;
+    盘不可读/盘符掉线同口径 —— 磁盘故障时规则由静默失活变显式停规则 + ERROR。
+    ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」。
+    """
+    path = str(path)
     try:
-        return file_access.get_file_access().disk_usage(path).free
+        return getattr(file_access.get_file_access().disk_usage(path), attr)
     except file_access.FileAccessError as e:
-        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
+        raise ExprError(str(e)) from e
     except (OSError, ValueError) as e:
         raise ExprError(f"磁盘不可用: '{path}': {e}") from e
+
+
+def _freespace(ctx, args):
+    return disk_usage_value(args[0], "free")
 
 
 def _disk_total(ctx, args):
-    path = str(args[0])
-    try:
-        return file_access.get_file_access().disk_usage(path).total
-    except file_access.FileAccessError as e:
-        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
-    except (OSError, ValueError) as e:
-        raise ExprError(f"磁盘不可用: '{path}': {e}") from e
+    return disk_usage_value(args[0], "total")
 
 
 def _disk_used(ctx, args):
-    path = str(args[0])
-    try:
-        return file_access.get_file_access().disk_usage(path).used
-    except file_access.FileAccessError as e:
-        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
-    except (OSError, ValueError) as e:
-        raise ExprError(f"磁盘不可用: '{path}': {e}") from e
+    return disk_usage_value(args[0], "used")
 
 
 def _exists(ctx, args):
@@ -256,10 +256,7 @@ def _len_of(ctx, args):
 
 def _num_unary(fn):
     def call(ctx, args):
-        value = args[0]
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
-            raise ExprError(f"该函数的参数必须是数值, 得到 {label(type_name(value))}")
-        return fn(value)
+        return fn(require_number(args[0], "该函数的参数"))
 
     return call
 
@@ -267,8 +264,7 @@ def _num_unary(fn):
 def _min_max(fn):
     def call(ctx, args):
         for a in args:
-            if not isinstance(a, (int, float)) or isinstance(a, bool):
-                raise ExprError(f"该函数的参数必须是数值, 得到 {label(type_name(a))}")
+            require_number(a, "该函数的参数")
         return fn(args)
 
     return call

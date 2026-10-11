@@ -17,10 +17,6 @@ from .types import check_op_types, check_unary_types, is_number, type_name
 # 中缀运算符("=" 归一化为 "=="; 一元 not/-/+ 不在其中)
 _BINOPS = (">=", "<=", "==", "!=", "=", ">", "<", "and", "or", "in", "~", "+", "-", "*", "/", "%")
 _UNARY_OPS = ("not", "-", "+")
-_ARITH_OPS = ("+", "-", "*", "/", "%")
-_ORDER_OPS = (">", "<", ">=", "<=")
-_EQ_OPS = ("==", "!=")
-_LOGIC_OPS = ("and", "or")
 _LITERAL_KINDS = ("num", "size", "time", "speed", "hhmm", "str", "bool")
 
 # ---------- AST 节点 ----------

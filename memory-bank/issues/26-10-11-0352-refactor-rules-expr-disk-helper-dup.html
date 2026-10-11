@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-rules-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="rules 表达式盘用量取数重复">
 <meta name="issue-summary" content="env._freespace/_disk_total/_disk_used 三份逐字同 + FreespaceCondition.match 同构(取数+错误映射四处)">
 <title>rules 表达式盘用量取数重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-rules-expr-disk-helper-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,18 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法<span class="opt">（Done）</span></h2>
+    <p><code>rules/expr/env.py</code> 新增模块级 <code>disk_usage_value(path, attr)</code>（承载 <code>get_file_access().disk_usage(path)</code> 取数 + <code>FileAccessError</code>/<code>(OSError, ValueError)</code> → <code>ExprError</code> 映射），<code>_freespace</code>/<code>_disk_total</code>/<code>_disk_used</code> 降为一行委托（<code>attr</code> = free/total/used）；<code>rules/conditions.py</code> 的 <code>FreespaceCondition.match</code> 改为 <code>from .expr.env import disk_usage_value</code> 复用同一单点，并删去随之不再使用的 <code>file_access</code> 导入。<b>四处逐字同 → 一处</b>。</p>
+    <p><b>口径复核（与报告描述一致）：</b>错误映射语义逐字保留 —— 映射 miss 转 <code>ExprError(str(e))</code>、盘不可读转 <code>ExprError("磁盘不可用: '&lt;path&gt;': …")</code>，绝不降级成假值。<b>唯一差异</b>：条件侧原只捕 <code>OSError</code>，单点统一为 <code>(OSError, ValueError)</code>（env 侧既有口径）—— 属超集，<code>shutil.disk_usage</code> 两实现（Local / Mapped）实际不抛 <code>ValueError</code>，行为等价。</p>
+    <p><b>验证：</b>新增守阵 <code>test_disk_usage_value_single_point</code>（patch <code>disk_usage_value</code> 断言 env 三取值器 + <code>FreespaceCondition</code> 均经其路由）；既有 <code>test_expr_exists_and_disk_undetermined</code> / <code>test_freespace_condition_undetermined</code> / <code>test_freespace_os_error</code> / <code>test_freespace_triggered·not_triggered</code> 全绿。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 16:25 — 用户指派认领（「修复 rules 部分问题…相关 issue 一并认领」），状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:25 — 修完验证，状态 <strong>Done</strong>；认领方 [26-10-11-backend-rules-dup-code-fix](../tasks/26-10-11-backend-rules-dup-code-fix.md)</li>
     </ul>
   </section>
 

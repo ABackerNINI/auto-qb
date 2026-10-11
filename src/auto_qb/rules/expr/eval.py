@@ -15,7 +15,7 @@ from ...infra import utils
 from . import env
 from .errors import ExprError
 from .parser import Binary, Call, ListLit, Lit, Name, Unary
-from .types import LIST, is_number, label, type_name
+from .types import LIST, is_number, label, require_number, type_name
 
 _LOGIC = ("and", "or")
 _ARITH = ("+", "-", "*", "/", "%")
@@ -121,9 +121,7 @@ def _as_bool(value, op: str) -> bool:
 
 
 def _as_num(value, op: str):
-    if not is_number(value):
-        raise ExprError(f"'{op}' 的操作数必须是数值, 得到 {label(type_name(value))}")
-    return value
+    return require_number(value, f"'{op}' 的操作数")
 
 
 def _unary(node: Unary, ctx):

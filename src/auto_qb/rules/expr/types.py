@@ -2,8 +2,11 @@
 
 被 parser.py(字面量之间的检查)与 env.py(名字/函数的静态类型检查)**共用** —— 两边规则必须一致,
 否则会出现"写字面量报错、写名字不报错"的割裂, 用户会觉得校验时灵时不灵。
+
+另提供运行期数值断言 `require_number`(is_number 单点的唯一消费者): 求值侧的「操作数/参数
+必须是数值」校验(env 的数值函数 + eval 的算术运算符)统一走它, 判据与报错文案只有一处实现。
 """
-from .errors import ExprSyntaxError
+from .errors import ExprError, ExprSyntaxError
 
 NUM = "num"
 BOOL = "bool"
@@ -39,6 +42,18 @@ def type_name(value) -> str:
 
 def label(kind: str) -> str:
     return _TYPE_LABEL.get(kind, kind)
+
+
+def require_number(value, what: str):
+    """运行期断言 value 是数值(非布尔), 否则抛 ExprError
+
+    what = 报错主体短语(如 "该函数的参数" / "'abs' 的操作数"), 由调用方按语境传入 ——
+    判据与文案骨架单点在此, 具体指代仍贴各自场景。判据复用 is_number, 与编译期
+    check_op_types/check_unary_types 同源(不重复 isinstance(...) and not isinstance(..., bool))。
+    """
+    if not is_number(value):
+        raise ExprError(f"{what}必须是数值, 得到 {label(type_name(value))}")
+    return value
 
 
 def result_type(op: str) -> str:

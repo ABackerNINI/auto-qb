@@ -33,6 +33,12 @@
 - test_trace_walks_all_node_kinds: trace 遍历 Call/Unary/ListLit + _jsonable 容器/inf/异型兜底
 - test_eval_cache_created_on_missing: ctx 无 expr_cache 时求值侧自建缓存
 - test_name_table_skips_unmapped_annotation: 注解无类型映射的快照字段跳过登记(不炸), 全局表不受重建影响
+- test_disk_usage_value_single_point: 盘用量取数单点(env 三取值器 + FreespaceCondition 都走
+  disk_usage_value; issue rules-expr-disk-helper-dup 的守阵)
+- test_require_number_single_point: 数值断言单点(env 数值函数 + eval 算术运算符都走 require_number;
+  issue rules-expr-numeric-predicate-dup 的守阵)
+- test_parser_has_no_dead_op_constants: parser 不再携带本文件不用的运算符常量死件
+  (issue rules-parser-dead-op-constants-dup 的守阵)
 """
 import os
 import shutil
@@ -49,6 +55,8 @@ from auto_qb.infra.file_access import UNDETERMINED, FileAccessError
 from auto_qb.rules.base import Rule
 from auto_qb.rules.expr import env as expr_env
 from auto_qb.rules.expr import ANY, compile_expr, evaluate, validate
+from auto_qb.rules.expr import eval as expr_eval
+from auto_qb.rules.expr import parser as expr_parser
 from auto_qb.rules.expr.errors import ExprError, ExprSyntaxError
 from auto_qb.rules.expr.eval import trace
 from auto_qb.rules.expr.parser import Binary, Lit
@@ -568,3 +576,47 @@ def test_name_table_skips_unmapped_annotation(monkeypatch):
     assert "tor.size" in table and table["tor.size"].type == expr_env._PY_KIND["int"]
     assert "tor.tags" in table, "手工登记的派生名不受注解映射影响"
     assert "tor.name" in expr_env.NAME_TABLE, "重建只产局部表, 模块级全局表保持原样"
+
+
+def test_disk_usage_value_single_point(monkeypatch):
+    """盘用量取数单点(issue rules-expr-disk-helper-dup): env 三个取值器与 FreespaceCondition
+    都走 disk_usage_value —— 防四处逐字同的「取数 + 错误映射」回潮"""
+    from auto_qb.rules import conditions as cond_mod
+
+    seen = []
+
+    def fake(path, attr):
+        seen.append((str(path), attr))
+        return f"<{attr}>"
+
+    monkeypatch.setattr(expr_env, "disk_usage_value", fake)
+    assert expr_env._freespace(None, ["D:/x"]) == "<free>"
+    assert expr_env._disk_total(None, ["D:/x"]) == "<total>"
+    assert expr_env._disk_used(None, ["D:/x"]) == "<used>"
+
+    cond_seen = []
+    monkeypatch.setattr(cond_mod, "disk_usage_value", lambda path, attr: cond_seen.append((str(path), attr)) or 0)
+    FreespaceCondition({"path": "D:/x", "amount": "<100GiB"}).match(SimpleNamespace())
+    assert cond_seen == [("D:/x", "free")], "条件侧应复用同一单点(取 free)"
+    assert seen == [("D:/x", "free"), ("D:/x", "total"), ("D:/x", "used")]
+
+
+def test_require_number_single_point(monkeypatch):
+    """数值断言单点(issue rules-expr-numeric-predicate-dup): env 数值函数与 eval 算术运算符
+    都走 require_number —— 防三处各写「必须是数值」校验回潮"""
+    seen = []
+    monkeypatch.setattr(expr_env, "require_number", lambda v, what: seen.append(what) or v)
+    assert expr_env.FUNC_TABLE["abs"].call(None, (-5, )) == 5
+    assert expr_env.FUNC_TABLE["min"].call(None, (3, 7)) == 3
+
+    monkeypatch.setattr(expr_eval, "require_number", lambda v, what: seen.append(what) or v)
+    ctx = SimpleNamespace(torrent=None, manager=None, config=None, client=None)
+    assert evaluate(compile_expr("1 + 2").root, ctx) == 3
+    assert seen == ["该函数的参数"] * 3 + ["'+' 的操作数"] * 2
+
+
+def test_parser_has_no_dead_op_constants():
+    """parser 不再携带本文件从不使用的运算符常量死件(与 types 逐字同;
+    issue rules-parser-dead-op-constants-dup 的守阵)"""
+    for name in ("_ARITH_OPS", "_ORDER_OPS", "_EQ_OPS", "_LOGIC_OPS"):
+        assert not hasattr(expr_parser, name), f"parser 不应再定义 {name}(死件, 运算符族常量只由 types 持有)"
