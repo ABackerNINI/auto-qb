@@ -587,7 +587,7 @@ def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     root = tmp_path / "fsroot"
     root.mkdir()
-    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root), root_path="")}
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731
 
     class _FakeFA:

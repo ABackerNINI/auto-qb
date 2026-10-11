@@ -788,6 +788,21 @@ class OpsModule(BaseModule):
             backup = self._backup_torrent(tor, data)
             return ActionResult.fail(f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
                                      f"种子已从客户端移除(文件保留), .torrent 已备份: {backup}")
+        # 回写真值再放回(report 26-10-11-2017 §4.1): 重加走 is_skip_checking=True ⇒ qB 把全部块
+        # 视为有效(progress=1 / 本地统计清零 / 状态进 stoppedUP), 而删除前捕获的 tor 仍是"跳检前的
+        # 暂停 0%" —— 直接 restore 等于把一份撒谎的快照放回, 且系统随后会拿它做判定(G5/G7 的
+        # is_checking、分组冲突、_sync_paused_state 的完成位), 不只是显示问题。
+        # 决定性时刻直查真值(pitfalls/backend/effect-confirmation.md): 用刚确认种子的同一个
+        # torrents_info 结果回写, 把"跳检结果"立刻带进快照, 不等下轮 sync。
+        # 失败 fail-closed: 记 warning 即可 —— 种子确已在 qB, 字段下轮 sync 也能跟上, 不改跳检结论。
+        try:
+            live = self._ctx.api.torrents_info(torrent_hashes=hash)
+        except Exception as e:
+            logger.warning(f"跳检收尾回写真值失败(跳检本身已成功, 下轮 sync 校准): {e}")
+            live = []
+        if live:
+            if tor.apply_delta(live[0]):
+                self._ctx.store.view_changed = True
         self._ctx.store.restore_torrent(tor)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何来源的 checking 都不再跳检)
         self.state.setdefault("skip_check_day", {})[hash] = date.today().isoformat()

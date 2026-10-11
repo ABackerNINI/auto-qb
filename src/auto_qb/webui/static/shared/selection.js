@@ -338,18 +338,8 @@ window.AQB_SELECTION = {
       this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
       this._selSyncGroups();  // 双向联动: 段内若凑齐某组全部成员, 该组随之入选
     },
-    /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
-    syncTorrentHeadScroll(ev) {
-      const head = this.$refs.torrentHead;
-      if (!head) return;
-      const x = ev.target.scrollLeft;
-      head.style.transform = `translateX(${-x}px)`;
-      // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
-      head.style.setProperty("--head-pin-x", `${x}px`);
-      // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 与 syncGroupHeadScroll 同款
-      ev.target.classList.toggle("is-hscrolled", x > 0);
-      head.classList.toggle("is-hscrolled", x > 0);
-    },
+    /* 单种子表横向滚动同步自计划 26-10-11-1722 P4 起收敛为 columns.js::syncHeadScroll(ev, page)
+     * 单点(三视图共用一份) —— 本文件不再持有 syncTorrentHeadScroll。 */
     /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中。
      * 另接详情面板跟随(计划 26-10-03-0917 §1.3 相邻预留的鼠标路径): 普通单击与键盘共用
      * _kbFollowDrawer 同一个挂点, 面板开着点哪行面板就换到哪行 —— 此前只有键盘 ↑↓ 会跟随,

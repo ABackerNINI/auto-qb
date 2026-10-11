@@ -71,51 +71,23 @@
             </button>
             <transition name="pop">
             <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip && !colMenuAt }" :style="colMenuStyle()" @click.stop>
-              <div class="col-menu-title">{{ l10nGroup }}表</div>
-              <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
-                   :class="{ locked: c.locked, on: colVisible('group', c.key) }"
-                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('group', c.key)"
-                   @click="!c.locked && toggleColumn('group', c.key)"
-                   @keyup.enter="!c.locked && toggleColumn('group', c.key)">
-                <span class="pop-value">{{ c.label }}</span>
-                <span v-if="c.locked" class="col-lock">必显</span>
-                <svg v-else-if="colVisible('group', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-              </div>
-              <div class="col-menu-title">明细表</div>
-              <div v-for="c in detailColumns" :key="c.key" class="pop-item col-menu-item"
-                   :class="{ locked: c.locked, on: colVisible('detail', c.key) }"
-                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('detail', c.key)"
-                   @click="!c.locked && toggleColumn('detail', c.key)"
-                   @keyup.enter="!c.locked && toggleColumn('detail', c.key)">
-                <span class="pop-value">{{ c.label }}</span>
-                <span v-if="c.locked" class="col-lock">必显</span>
-                <svg v-else-if="colVisible('detail', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-              </div>
-              <div class="col-menu-title">种子页</div>
-              <div v-for="c in torrentColumns" :key="c.key" class="pop-item col-menu-item"
-                   :class="{ locked: c.locked, on: colVisible('torrent', c.key) }"
-                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('torrent', c.key)"
-                   @click="!c.locked && toggleColumn('torrent', c.key)"
-                   @keyup.enter="!c.locked && toggleColumn('torrent', c.key)">
-                <span class="pop-value">{{ c.label }}</span>
-                <span v-if="c.locked" class="col-lock">必显</span>
-                <svg v-else-if="colVisible('torrent', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-              </div>
-              <div class="col-menu-title">追剧视图</div>
-              <div v-for="c in showColumns" :key="c.key" class="pop-item col-menu-item"
-                   :class="{ locked: c.locked, on: colVisible('show', c.key) }"
-                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('show', c.key)"
-                   @click="!c.locked && toggleColumn('show', c.key)"
-                   @keyup.enter="!c.locked && toggleColumn('show', c.key)">
-                <span class="pop-value">{{ c.label }}</span>
-                <span v-if="c.locked" class="col-lock">必显</span>
-                <svg v-else-if="colVisible('show', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-              </div>
+              <template v-for="def in tableDefs" :key="def.id">
+                <div class="col-menu-title">{{ def.label }}</div>
+                <div v-for="c in def.columns" :key="c.key" class="pop-item col-menu-item"
+                     :class="{ locked: c.locked, on: colVisible(def.id, c.key) }"
+                     role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible(def.id, c.key)"
+                     @click="!c.locked && toggleColumn(def.id, c.key)"
+                     @keyup.enter="!c.locked && toggleColumn(def.id, c.key)">
+                  <span class="pop-value">{{ c.label }}</span>
+                  <span v-if="c.locked" class="col-lock">必显</span>
+                  <svg v-else-if="colVisible(def.id, c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </template>
               <div class="col-menu-actions">
-                <button class="bt ghost sm" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent'); resetAllColumnWidths('show')">
+                <button class="bt ghost sm" @click="resetAllColumnWidthsAll()">
                   恢复默认列宽
                 </button>
-                <button class="bt ghost sm" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent'); fitColumnsToWindow('show')">
+                <button class="bt ghost sm" @click="fitColumnsToWindowAll()">
                   适应窗口宽度
                 </button>
               </div>

@@ -69,7 +69,7 @@ import { readInst } from './lib/vm.mjs';
  *    (含 +5 起手 / +60px 步进 6)。
  *  · evaluate 保留处(均为 D4 允许的两类): ①守阵 1 的 F3 visibilitychange 模拟 —— 标签冻结/恢复
  *    是浏览器行为, 无真实 UI 路径(旧脚本同款); ②守阵 4 的 v4 载荷注入 —— 桩态注入; ③vm 内部
- *    字段读数(colW/colHidden/_visibleCols/groupColumns) —— 列意图态没有 DOM 之外的取径。
+ *    字段读数(colW/colHidden/_visibleCols/tableDefs) —— 列意图态没有 DOM 之外的取径。
  *  · 装饰性 waitForTimeout(400/600/500/300/200) 全部换成 expect / expect.poll 显式等待:
  *    跨标签 storage 事件传播(旧 600ms)→ poll 等对方 vm 采纳了具体键; Escape 收弹层(旧 200ms)→
  *    poll vm.colMenuOpen === false(不用 toHaveCount(0): pop 过渡挂在 rAF 上, 后台页可能不停走完,
@@ -259,10 +259,11 @@ for (const skin of SKINS) {
        * 回归 —— 用例 26-09-30-0602 的 前=undefined 后=92px 即此。断言的对象应是"被本用例隐藏的
        * 那一列"。 */
       const k = await readInst(page, 'vm._visibleCols("group")[2].key');
-      /* 隐藏该列走真实手势(旧 vm.toggleColumn): 菜单项 = groupColumns(列定义序, 空存储无自定义序
-       * 时与 _visibleCols 同源)里同 key 的文案。 */
+      /* 隐藏该列走真实手势(旧 vm.toggleColumn): 菜单项 = 表注册表(列定义序, 空存储无自定义序
+       * 时与 _visibleCols 同源)里同 key 的文案。列定义自计划 26-10-11-1722 P4 起从 TABLE_DEFS
+       * 派生(computed `tableDefs`, 取代原 groupColumns 数据字段)。 */
       const label = await readInst(
-        page, `(vm.groupColumns.find((c) => c.key === ${JSON.stringify(k)}) || {}).label`);
+        page, `(vm.tableDefs.find((d) => d.id === "group").columns.find((c) => c.key === ${JSON.stringify(k)}) || {}).label`);
       expect(label, `列 ${k} 的菜单文案`).toBeTruthy();
       await colToggle(page, '辅种表', label, true);
       const s2 = await colState(page);

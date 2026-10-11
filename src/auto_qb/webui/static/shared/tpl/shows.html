@@ -1,23 +1,8 @@
         <template v-if="viewMode === 'shows'">
-          <div class="group-head sticky-head" ref="showHead" data-table="show" :style="gridStyle('show')">
-            <div v-for="col in visibleShowCols" :key="col.key" class="h-cell"
-                 :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'show' && colDrag.key === col.key }]"
-                 @click="col.sortable && setSort(col.key)"
-                 @mousedown="startColDrag($event, 'show', col.key)"
-                 @contextmenu.prevent="openHeadMenu($event, 'show', col)">
-              <span class="h-label">{{ col.label }}</span>
-              <span v-if="col.sortable" class="arrow">
-                <svg v-if="showSortKey === col.key" class="ico" viewBox="0 0 16 16">
-                  <use :href="showSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
-                </svg>
-              </span>
-              <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
-                    @mousedown.stop.prevent="startResize($event, 'show', col.key)"
-                    @dblclick.stop.prevent="autoFitColumn($event, 'show', col.key)"></span>
-            </div>
-            <span v-if="colDrag && colDrag.page === 'show'" class="col-drop-line" :style="colDropLineStyle('show')"></span>
-          </div>
-          <div class="group-table" ref="showTable" @scroll="syncShowHeadScroll">
+          <!-- 表壳组件(计划 26-10-11-1722 P2): 剧头接入 <aq-table>; 行容器与剧/季/集行仍在本页内联 -->
+          <aq-table ref="showHead" table-id="show" :cols="visibleShowCols"
+                    :sort-key="showSortKey" :sort-dir="showSortDir" :drag="colDrag"></aq-table>
+          <div class="group-table" ref="showTable" @scroll="syncHeadScroll($event, 'show')">
             <template v-for="s in decoratedShows" :key="s.key">
               <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义)
                    FX-13: 右键 = 整剧菜单(此前该层无 @contextmenu, "剧"这一级操作无处可做) -->
@@ -25,25 +10,7 @@
               <div class="group-row show-row" data-table="show" :data-key="s.key" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial, 'is-pending': isShowPending(s), 'kb-cursor': isKbCursor('show', s.key) }"
                    :style="gridStyle('show')" @click="onShowClick(s, $event)"
                    @contextmenu.prevent="openShowMenu($event, s)">
-                <template v-for="col in visibleShowCols" :key="col.key">
-                  <div v-if="col.key === 'name'" class="g-name" :title="s.name">
-                    <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                    <span class="g-name-text show-name-text">{{ s.name }}</span>
-                  </div>
-                  <div v-else-if="col.key === 'state'" class="g-cat zero"></div>
-                  <div v-else-if="col.key === 'progress'" class="g-cat zero"></div>
-                  <div v-else-if="col.key === 'size'" class="g-stat zero"></div>
-                  <div v-else-if="col.key === 'versions'" class="g-count">{{ s.member_count }}</div>
-                  <div v-else-if="col.key === 'sites'" class="g-cat">
-                    <span class="zero">{{ s.seasons.length }} 个季</span>
-                  </div>
-                  <div v-else-if="col.key === 'dlspeed'" class="g-stat zero"></div>
-                  <div v-else-if="col.key === 'upspeed'" class="g-stat zero"></div>
-                  <div v-else-if="col.key === 'uploaded'" class="g-stat zero"></div>
-                  <div v-else-if="col.key === 'hr'" class="g-hr zero"></div>
-                  <!-- FX-28: 口径可切(表头右键); 悬停给另一种口径, 无数据时退回列义说明 -->
-                  <div v-else-if="col.key === 'latest'" class="g-stat" :title="cellTimeHint(s.latest, 'latest') || '剧内最近添加时间'">{{ cellTime(s.latest, 'latest') }}</div>
-                </template>
+                <aq-show-cells :cols="visibleShowCols" :s="s"></aq-show-cells>
               </div>
               <template v-if="isShowExpanded(s.key)">
                 <template v-for="sn in s.seasons" :key="s.key + '~' + sn.season">
@@ -61,68 +28,12 @@
                          :style="gridStyle('show')"
                          @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">
-                      <template v-for="col in visibleShowCols" :key="col.key">
-                        <div v-if="col.key === 'name'" class="g-name ep-name">
-                          <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                          <span class="ep-key">{{ epLabel(e.key) }}</span>
-                          <span v-if="e.key[0] === 'pack' || e.key[0] === 'range'" class="ep-pack">包</span>
-                          <span class="ep-site-count" :title="e.count + ' 个版本(同集不同站点/编码)'">×{{ e.count }}</span>
-                        </div>
-                        <div v-else-if="col.key === 'state'" class="g-cat">
-                          <span class="g-status" :class="'k-' + e.state" :title="kindText(e.state)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(e.state)"></use></svg>
-                          </span>
-                          <span class="state-text">{{ kindText(e.state) }}</span>
-                        </div>
-                        <div v-else-if="col.key === 'progress'" class="m-progress">
-                          <span class="bar"><i :style="{ width: Math.min(100, e.progress * 100) + '%' }"></i></span>
-                          <span class="val">{{ (e.progress * 100).toFixed(1) }}%</span>
-                        </div>
-                        <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
-                             :title="'最完整版本大小'">{{ fmtSizeOrDash(e.size) }}</div>
-                        <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
-                        <div v-else-if="col.key === 'sites'" class="g-sites">
-                          <span v-for="m in e.members" :key="m.hash" class="site-chip"
-                                :class="[m.kind, { 'search-hit': m.hit, 'f-on': isFilterOn('siteFilter', m.site) }]"
-                                @click.stop="filterFromChip('site', m.site)">
-                            {{ m.site }}
-                          </span>
-                        </div>
-                        <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ fmtSpeedOrDash(e.dlspeed) }}</div>
-                        <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ fmtSpeedOrDash(e.upspeed) }}</div>
-                        <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ fmtSizeOrDash(e.uploaded) }}</div>
-                        <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(e)"
-                             :title="e.hr_triggered ? (e.hr_pending ? e.hr_pending + '/' + e.hr_triggered + ' 未满足要求' : 'HR 已全部达标') : '该集无成员触发 HR'">
-                          <span v-if="!e.hr_triggered" class="zero"></span>
-                          <svg v-else-if="!e.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
-                          <template v-else>
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
-                            <span class="hr-num">{{ e.hr_pending }}/{{ e.hr_triggered }}</span>
-                          </template>
-                        </div>
-                        <div v-else-if="col.key === 'latest'" class="g-stat" :title="cellTimeHint(e.added_on, 'latest')">{{ cellTime(e.added_on, 'latest') }}</div>
-                      </template>
+                      <aq-ep-cells :cols="visibleShowCols" :e="e"></aq-ep-cells>
                     </div>
-                    <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表 -->
+                    <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表; 明细表头同样走表壳组件 -->
                     <div v-if="expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr)" class="detail">
-                      <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
-                        <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
-                             :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
-                             @click="col.sortable && setSort(col.key, 'detail')"
-                             @mousedown="startColDrag($event, 'detail', col.key)"
-                             @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
-                          <span class="h-label">{{ col.label }}</span>
-                          <span v-if="col.sortable" class="arrow">
-                            <svg v-if="detailSortKey === col.key" class="ico" viewBox="0 0 16 16">
-                              <use :href="detailSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
-                            </svg>
-                          </span>
-                          <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
-                                @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
-                                @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
-                        </div>
-                        <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
-                      </div>
+                      <aq-table ref="detailHead" table-id="detail" :cols="visibleDetailCols"
+                                :sort-key="detailSortKey" :sort-dir="detailSortDir" :drag="colDrag"></aq-table>
                       <!-- 集成员行同样走窗口(通常不到阈值; 超 200 个版本的集才真正生效) -->
                       <div v-if="memberPadTop(e.members)" class="row-pad" :style="{ height: memberPadTop(e.members) + 'px' }" aria-hidden="true"></div>
                       <div v-for="m in winMembers(e.members)" :key="m.hash" class="member-row" data-table="detail" :data-hash="m.hash"
@@ -131,73 +42,7 @@
                            @click="onMemberClick(m, $event)"
                            @dblclick="openTorrentDrawer(m.hash)"
                            @contextmenu.prevent="openMemberMenu($event, m)">
-                        <template v-for="col in visibleDetailCols" :key="col.key">
-                          <!-- 站点列只留站点名: 代表状态的小方框已移除(见 groups.html 同款改动) -->
-                          <span v-if="col.key === 'site'" class="m-site f-cell"
-                                :class="{ 'f-on': isFilterOn('siteFilter', m.site) }"
-                                @click.stop="filterFromChip('site', m.site)">{{ m.site }}</span>
-                          <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
-                          <!-- 做种/用户: 与种子页/明细表同口径(FX-03 起统一走 cellPeers) -->
-                          <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
-                          <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</span>
-                          <!-- 做种(总)/用户(总): tracker 汇报的 swarm 全量(与"做种/用户"括号里的总数同源), 独立成列可排序 -->
-                          <span v-else-if="col.key === 'num_complete'" class="m-stat" :class="{ zero: !m.num_complete }">{{ m.num_complete }}</span>
-                          <span v-else-if="col.key === 'num_incomplete'" class="m-stat" :class="{ zero: !m.num_incomplete }">{{ m.num_incomplete }}</span>
-                          <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
-                          <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
-                          <!-- 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应) -->
-                          <span v-else-if="col.key === 'eta'" class="m-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</span>
-                          <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
-                          <!-- 已下载: 该站点切换下载时的真实网络消耗(组级求和的分站点拆分) -->
-                          <span v-else-if="col.key === 'downloaded'" class="m-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</span>
-                          <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
-                          <!-- 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes) -->
-                          <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ fmtLimitBytes(m.up_limit) }}</span>
-                          <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ fmtLimitBytes(m.dl_limit) }}</span>
-                          <span v-else-if="col.key === 'category'" class="m-cat">
-                            <span v-if="m.category" class="cat-chip"
-                                  :class="{ 'f-on': isFilterOn('categoryFilter', m.category) }"
-                                  @click.stop="filterFromChip('category', m.category)">{{ m.category }}</span>
-                            <span v-else class="zero"></span>
-                          </span>
-                          <span v-else-if="col.key === 'tags'" class="m-tags">
-                            <span v-for="t in mTags(m)" :key="t" class="tag-chip"
-                                  :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
-                                  @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                            <span v-if="!mTags(m).length" class="zero"></span>
-                          </span>
-                          <span v-else-if="col.key === 'progress'" class="m-progress">
-                            <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
-                            <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
-                          </span>
-                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[hrDurClass(m), hrSrcClass(m)]" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
-                            <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
-                                 (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
-                            <span class="dur-body">
-                              <span class="dur-val">{{ cellSeedingTime(m) }}<i v-if="hrSrcHalf(m)" class="hr-line"></i></span>
-                              <span v-if="cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
-                              <i v-if="hrSrcFull(m)" class="hr-line"></i>
-                            </span>
-                          </span>
-                          <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
-                            {{ cellRatio(m) }}
-                            <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
-                          </span>
-                          <!-- 可用性: 负数(qB 未知)/暂停不显示(cellAvailability), 口径与种子页一致 -->
-                          <span v-else-if="col.key === 'availability'" class="m-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</span>
-                          <!-- 最后完整可见: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
-                          <span v-else-if="col.key === 'seen_complete'" class="m-stat" :title="fmtRelTime(m.seen_complete)">{{ fmtTs(m.seen_complete) }}</span>
-                          <!-- TBL-06: 添加于(与明细表同列); 保存路径列已移出明细表 -->
-                          <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
-                          <!-- 完成于/最近活动/活动时间: 成员差异时间列(口径与种子页同名列一致) -->
-                          <span v-else-if="col.key === 'completion_on'" class="m-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</span>
-                          <span v-else-if="col.key === 'last_activity'" class="m-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</span>
-                          <span v-else-if="col.key === 'time_active'" class="m-stat">{{ fmtDuration(m.time_active) }}</span>
-                          <!-- Tracker: 每站点各自 announce; 信息哈希值 v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
-                          <span v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</span>
-                          <span v-else-if="col.key === 'infohash_v2'" class="m-hash" :title="m.infohash_v2">{{ (m.infohash_v2 || '').slice(0, 8) }}</span>
-                          <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
-                        </template>
+                        <aq-member-cells :cols="visibleDetailCols" :m="m"></aq-member-cells>
                       </div>
                       <div v-if="memberPadBottom(e.members)" class="row-pad" :style="{ height: memberPadBottom(e.members) + 'px' }" aria-hidden="true"></div>
                     </div>

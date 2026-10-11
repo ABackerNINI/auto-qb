@@ -191,3 +191,125 @@
       </div>
     </div>
   </script>
+
+  <!-- ================================================================================
+       表壳组件(计划 26-10-11-1722 P1): 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键。
+       取代此前 5 份逐字近似的表头块(groups 组头/明细头 · shows 剧头/明细头 · torrents 种子头)。
+       三皮肤同名类(.group-head/.detail-head/.h-cell/.h-label/.arrow/.resizer/.col-drop-line)成对;
+       data-table 由 tableId 给 —— colAlignCss 的 `:where([data-table=...]) > :nth-child(n)` 规则靠它
+       同时命中表头与值格(表头与值同源)。行为一律回调根实例($root.xxx), 组件不持有状态。
+       WARN: 属性顺序(class → data-table → style)与旧内联块逐位一致 —— DOM 等价比对是 P1 的硬验收。
+       P5 增 thead 模式(见下方分支注释): 同一个组件的第二根, grid 分支一字未动。
+       ================================================================================ -->
+  <script type="text/x-template" id="tpl-aq-table">
+    <!-- thead 模式(计划 26-10-11-1722 P5): 原生 <table> 的表头行 —— 设置页 HR 详情表借壳。
+         调用方占位必须写成 `<tr is="vue:aq-table" mode="thead" …>`: 根模板是 in-DOM 的
+         (#app innerHTML), 浏览器只认表格内容模型 —— 自定义元素直接放 <thead> 里会被 foster-parent
+         移出表格, 故借 <tr> 占位并用 `vue:` 前缀让编译器把它当组件(Vue 内建的口径)。
+         排序仍走调用方自己的实现(D3=B: 只借壳不并引擎) —— 组件只 emit('sort', key) 并按
+         sortKey/sortDir 画箭头, 不持有排序状态, 也不挂拖宽/重排/右键(grid 模式专属)。 -->
+    <tr v-if="mode === 'thead'">
+      <th v-for="col in cols" :key="col.key" class="sortable" :class="{ num: col.num }"
+          @click="$emit('sort', col.key)"><span>{{ col.label }}</span><span class="arrow"
+          :class="{ on: sortKey === col.key }"><svg class="ico" viewBox="0 0 16 16"><use
+            :href="sortKey === col.key && sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use></svg></span></th>
+    </tr>
+    <div v-else :class="tableId === 'detail' ? 'detail-head' : 'group-head sticky-head'"
+         :data-table="tableId" :style="$root.gridStyle(tableId)">
+      <div v-for="col in cols" :key="col.key" class="h-cell"
+           :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': drag && drag.page === tableId && drag.key === col.key }]"
+           @click="col.sortable && $root.setSort(col.key, tableId === 'detail' ? 'detail' : undefined)"
+           @mousedown="$root.startColDrag($event, tableId, col.key)"
+           @contextmenu.prevent="$root.openHeadMenu($event, tableId, col)">
+        <span class="h-label">{{ col.label }}</span>
+        <span v-if="col.sortable" class="arrow">
+          <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
+            <use :href="sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+          </svg>
+        </span>
+        <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
+              @mousedown.stop.prevent="$root.startResize($event, tableId, col.key)"
+              @dblclick.stop.prevent="$root.autoFitColumn($event, tableId, col.key)"></span>
+      </div>
+      <span v-if="drag && drag.page === tableId" class="col-drop-line" :style="$root.colDropLineStyle(tableId)"></span>
+    </div>
+  </script>
+
+  <!-- ================================================================================
+       明细成员单元格渲染器(计划 26-10-11-1722 P2, member 行模型): 28 个列分支只此一份 ——
+       此前 groups.html(辅种页展开明细) 与 shows.html(追剧集成员) 各有一份逐字近似副本,
+       漏改一处 = 该页该列空白且无任何报错。守阵 _scan_column_cells_paired 已同轮改扫本模板。
+       !多根片段: 单元格必须仍是 .member-row 的**直接子元素**(行是 grid, :nth-child 列对齐与
+         data-table 都依赖它) —— 故本组件不包任何 wrapper, 由调用方保证一个成员行一个实例。
+       !行为/格式化一律 $root.xxx(根数据在根实例上, 直接 this.xxx 会读到 undefined)。
+       ================================================================================ -->
+  <script type="text/x-template" id="tpl-aq-member-cells">
+    <template v-for="col in cols" :key="col.key">
+      <!-- 站点列只留站点名: 代表状态的小方框已移除(状态由「状态」列表达, 见 2026-10-09 用户要求) -->
+      <span v-if="col.key === 'site'" class="m-site f-cell"
+            :class="{ 'f-on': $root.isFilterOn('siteFilter', m.site) }"
+            @click.stop="$root.filterFromChip('site', m.site)">{{ m.site }}</span>
+      <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ $root.stateText(m) }}</span></span>
+      <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
+      <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</span>
+      <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</span>
+      <!-- 做种(总)/用户(总): tracker 汇报的 swarm 全量(与"做种/用户"括号里的总数同源), 独立成列可排序 -->
+      <span v-else-if="col.key === 'num_complete'" class="m-stat" :class="{ zero: !m.num_complete }">{{ m.num_complete }}</span>
+      <span v-else-if="col.key === 'num_incomplete'" class="m-stat" :class="{ zero: !m.num_incomplete }">{{ m.num_incomplete }}</span>
+      <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</span>
+      <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ $root.fmtSpeedOrDash(m.upspeed) }}</span>
+      <!-- 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应) -->
+      <span v-else-if="col.key === 'eta'" class="m-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ $root.fmtEta(m.eta) }}</span>
+      <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ $root.fmtSizeOrDash(m.uploaded) }}</span>
+      <!-- 已下载: 该站点切换下载时的真实网络消耗(组级求和的分站点拆分) -->
+      <span v-else-if="col.key === 'downloaded'" class="m-stat" :class="[{ zero: !m.downloaded }, $root.numTone(m.downloaded, m.size)]">{{ $root.fmtSizeOrDash(m.downloaded) }}</span>
+      <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ $root.fmtSizeOrDash(m.size) }}</span>
+      <!-- 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes) -->
+      <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ $root.fmtLimitBytes(m.up_limit) }}</span>
+      <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ $root.fmtLimitBytes(m.dl_limit) }}</span>
+      <span v-else-if="col.key === 'tags'" class="m-tags">
+        <span v-for="t in $root.mTags(m)" :key="t" class="tag-chip"
+              :class="[$root.tagClass(t, m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
+        <span v-if="!$root.mTags(m).length" class="zero"></span>
+      </span>
+      <span v-else-if="col.key === 'category'" class="m-cat">
+        <span v-if="m.category" class="cat-chip"
+              :class="{ 'f-on': $root.isFilterOn('categoryFilter', m.category) }"
+              @click.stop="$root.filterFromChip('category', m.category)">{{ m.category }}</span>
+        <span v-else class="zero"></span>
+      </span>
+      <span v-else-if="col.key === 'progress'" class="m-progress">
+        <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
+        <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+      </span>
+      <!-- 做种时间/分享率: 口径单点化(FX-02/04) —— 0 分钟且无 HR 要求 与 进度为 0 的种子不显示 -->
+      <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[$root.hrDurClass(m), $root.hrSrcClass(m)]" @mouseenter="$root.hrPopEnter($event, m)" @mouseleave="$root.hrPopLeave">
+        <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
+             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
+        <span class="dur-body">
+          <span class="dur-val">{{ $root.cellSeedingTime(m) }}<i v-if="$root.hrSrcHalf(m)" class="hr-line"></i></span>
+          <span v-if="$root.cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ $root.fmtDuration(m.hr_req_time) }}</span>
+          <i v-if="$root.hrSrcFull(m)" class="hr-line"></i>
+        </span>
+      </span>
+      <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="$root.hrRatioClass(m)">
+        {{ $root.cellRatio(m) }}
+        <span v-if="$root.cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+      </span>
+      <!-- 可用性: 负数(qB 未知)/暂停不显示(cellAvailability), 口径与种子页一致 -->
+      <span v-else-if="col.key === 'availability'" class="m-stat" :class="[{ zero: !$root.cellAvailability(m) }, $root.numTone(m.availability, 1)]">{{ $root.cellAvailability(m) }}</span>
+      <!-- 最后完整可见: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
+      <span v-else-if="col.key === 'seen_complete'" class="m-stat" :title="$root.fmtRelTime(m.seen_complete)">{{ $root.fmtTs(m.seen_complete) }}</span>
+      <!-- TBL-06: 添加于(_member_view 已透出); 保存路径列已移出明细表(见 GROUP_COLUMNS) -->
+      <span v-else-if="col.key === 'added_on'" class="m-stat" :title="$root.cellTimeHint(m.added_on, 'added_on')">{{ $root.cellTime(m.added_on, 'added_on') }}</span>
+      <!-- 完成于/最近活动/活动时间: 成员差异时间列(口径与种子页同名列一致) -->
+      <span v-else-if="col.key === 'completion_on'" class="m-stat" :title="$root.cellTimeHint(m.completion_on, 'completion_on')">{{ $root.cellTime(m.completion_on, 'completion_on') }}</span>
+      <span v-else-if="col.key === 'last_activity'" class="m-stat" :title="$root.cellTimeHint(m.last_activity, 'last_activity')">{{ $root.cellTime(m.last_activity, 'last_activity') }}</span>
+      <span v-else-if="col.key === 'time_active'" class="m-stat">{{ $root.fmtDuration(m.time_active) }}</span>
+      <!-- Tracker: 每站点各自 announce; 信息哈希值 v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
+      <span v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</span>
+      <span v-else-if="col.key === 'infohash_v2'" class="m-hash" :title="m.infohash_v2">{{ (m.infohash_v2 || '').slice(0, 8) }}</span>
+      <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
+    </template>
+  </script>

@@ -1387,8 +1387,8 @@ def test_sel_visual_parity_and_site_cell() -> None:
     辅种/追剧页成员行是 .member-row -> 此前只有柔底没有左色条, 与种子页选中种子长得不一样。
     本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **同一条规则**(不漂移),
     且 .member-row 保持 position: relative(左色条 ::before 的定位前提)。
-    「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 两处模板不得再挂
-    <i class="dot">, 三皮肤不得残留 .m-site .dot 死规则。"""
+    「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 渲染器与三皮肤都不得再挂
+    <i class="dot"> / 残留 .m-site .dot 死规则。"""
     for ui in UIS:
         views = (STATIC / ui / "css" / "views.css").read_text(encoding="utf-8")
         # 成员行选中必须与组行/种子行**同一条规则**(选择器并列, 不允许另写一份漂移);
@@ -1410,8 +1410,15 @@ def test_sel_visual_parity_and_site_cell() -> None:
             css = cssp.read_text(encoding="utf-8")
             assert not re.search(r"^\s*\.m-site[^{\n]*\.dot[^{\n]*\{", css,
                                  re.M), (f"{ui}/{css_name}: 残留 .m-site .dot 死规则(站点列方框已移除, 别再挂回来)")
+    # 成员行站点格自计划 26-10-11-1722 P2 起收敛为**单份渲染器** <aq-member-cells>(模板在
+    # shared/tpl/xtpl.html#tpl-aq-member-cells) —— 辅种页/追剧页共用, 故站点格只此一处;
+    # 两个调用点仍必须走它(退回内联副本 = 站点格又变两份, 改一处漏一处)
+    xtpl = (SHARED / "tpl" / "xtpl.html").read_text(encoding="utf-8")
+    seg = re.search(r"col\.key === 'site'\"[^>]*>", xtpl)
+    assert seg, "shared/tpl/xtpl.html: 找不到成员行站点格模板(列分支被改名? 同步本守阵)"
+    assert '<i class="dot">' not in seg.group(0), (
+        "shared/tpl/xtpl.html: 成员行站点格不得再挂状态方框 <i class=\"dot\">(2026-10-09 用户要求移除)"
+    )
     for name in ("groups.html", "shows.html"):
         tpl = (SHARED / "tpl" / name).read_text(encoding="utf-8")
-        seg = re.search(r"col\.key === 'site'\"[^>]*>", tpl)
-        assert seg, f"{name}: 找不到成员行站点格模板(列分支被改名? 同步本守阵)"
-        assert '<i class="dot">' not in seg.group(0), (f"{name}: 成员行站点格不得再挂状态方框 <i class=\"dot\">(2026-10-09 用户要求移除)")
+        assert "<aq-member-cells" in tpl, (f"{name}: 明细成员单元格必须走单份渲染器 <aq-member-cells>(P2 收敛; 退回内联副本 = 站点格两份漂移)")

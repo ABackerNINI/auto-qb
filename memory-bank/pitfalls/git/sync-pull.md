@@ -1,7 +1,20 @@
 # Git 同步上游 (fetch / pull / 镜像线)
 
-> 摘要: `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景两条出路: stash 配方或提交先行 —— 2026-10-04 起 ship.commit 提交先行, 旧「先提交是死锁」作废); 双 UI 镜像线何时该重放。
-> 触发: git fetch, git pull, 同步上游, 落后, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线
+> 摘要: 开工同步**无豁免** —— 问答/只读分析轮次也必须先同步; `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景两条出路: stash 配方或提交先行 —— 2026-10-04 起 ship.commit 提交先行, 旧「先提交是死锁」作废); 双 UI 镜像线何时该重放。
+> 触发: git fetch, git pull, 同步上游, 落后, 只读轮次, 问答轮次, 开工同步口径, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线
+
+**Refs:** memory-bank/tasks/26-09-22-memory-bank-sync-rule-rework-check-started.md
+
+### 开工同步无豁免: 只读分析轮次也必须先同步
+
+- **触发**: 会话开工 —— **任何轮次**, 含只答问题 / 只做只读分析的轮次; 念头「先看完再同步」。
+- **判别**: 没有豁免面 —— 任何轮次都在第一个动作前先同步; 落后基线上给出的只读结论(路由 / 口径 / 数字)
+  是陈旧树的, 而多 clone 并行下几分钟就可能落后。口径单点: `AGENTS.md`「会话协议 · 开始」① 与黄金法则 7
+  的「开工同步不受本条豁免」子条。
+- **处置**: 第一个动作前跑 `commands run my-commit-flow.sync`, 结果行「已同步 <hash>」贴进回复, 然后才读 / 答;
+  **禁止在落后的分支上工作 —— 只读分析同样禁止**。同步失败(树脏 / 冲突): **只读轮次贴失败行并停下, 不代做
+  stash**(那是写操作); 执行轮次照失败行自带的两条出路走。该规则是多入口副本(`AGENTS.md` /
+  `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), **改规则必须一次改全**。
 
 ### `git status -sb` 的 ahead/behind 是上次 fetch 时的快照, 不会自己刷新
 

@@ -6,29 +6,14 @@
         <main class="content" :class="{ 'torrents-dock': true }">
 
         <template v-if="viewMode === 'groups'">
-        <!-- 列头吸顶(脱离 .group-table 的双轴滚动容器, 直接挂到 .content 下做纵向 sticky):
-             spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto, sticky 上下文会变
-             成 .group-table 自身(它不纵向滚动)失效; 把 .group-head 移出表容器 + JS 同步横向
-             滚动, 上下滚时常驻、左右滚不错位 -->
-        <div class="group-head sticky-head" ref="groupHead" data-table="group" :style="gridStyle('group')">
-          <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
-               :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'group' && colDrag.key === col.key }]"
-               @click="col.sortable && setSort(col.key)"
-               @mousedown="startColDrag($event, 'group', col.key)"
-               @contextmenu.prevent="openHeadMenu($event, 'group', col)">
-            <span class="h-label">{{ col.label }}</span>
-            <span v-if="col.sortable" class="arrow">
-              <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
-                <use :href="sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
-              </svg>
-            </span>
-            <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
-                  @mousedown.stop.prevent="startResize($event, 'group', col.key)"
-                  @dblclick.stop.prevent="autoFitColumn($event, 'group', col.key)"></span>
-          </div>
-          <span v-if="colDrag && colDrag.page === 'group'" class="col-drop-line" :style="colDropLineStyle('group')"></span>
-        </div>
-        <div class="group-table" ref="groupTable" @scroll="syncGroupHeadScroll">
+        <!-- 表壳组件(计划 26-10-11-1722 P1): 表头块(列名/排序箭头/拖宽把手/重排指示线/表头右键)
+             收敛为单点 <aq-table>(shared/table.js + tpl/xtpl.html#tpl-aq-table)。
+             !吸顶仍需移出 .group-table(spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto,
+               sticky 上下文会变成 .group-table 自身而失效; 故表头直接挂 .content 下 + JS 同步横向滚动)。
+             !行容器与行仍在本页内联(v-for) —— 组件只包表壳, 窗口化热路径不引入逐行组件实例。 -->
+        <aq-table ref="groupHead" table-id="group" :cols="visibleGroupCols"
+                  :sort-key="sortKey" :sort-dir="sortDir" :drag="colDrag"></aq-table>
+        <div class="group-table" ref="groupTable" @scroll="syncHeadScroll($event, 'group')">
 
           <!-- P1-2 行窗口: 上下占位撑住总高(滚动条长度与滚到底照旧), 中间只渲染视口附近的行 -->
           <div v-if="groupPadTop" class="row-pad" :style="{ height: groupPadTop + 'px' }" aria-hidden="true"></div>
@@ -38,108 +23,13 @@
                  :style="gridStyle('group')"
                  @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">
-              <template v-for="col in visibleGroupCols" :key="col.key">
-                <div v-if="col.key === 'name'" class="g-name" :title="g.name">
-                  <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                  <span class="g-name-text">{{ g.name }}</span>
-                  <span v-if="g.cross_group_conflict" class="risk-mark"
-                        title="与其他辅种组的文件指向同一磁盘物理文件 —— 涉事下载方已被暂停">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-                  </span>
-                </div>
-                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }">{{ fmtSpeedOrDash(g.dlspeed) }}</div>
-                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !g.upspeed }">{{ fmtSpeedOrDash(g.upspeed) }}</div>
-                <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !g.uploaded }">{{ fmtSizeOrDash(g.uploaded) }}</div>
-                <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !g.size }">
-                  {{ fmtSizeOrDash(g.size) }}
-                  <span v-if="g.sizeMismatch" class="risk-mark"
-                        title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-                  </span>
-                </div>
-                <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ fmtSizeOrDash(g.total_size) }}</div>
-                <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
-                <div v-else-if="col.key === 'progress'" class="m-progress">
-                  <span class="bar"><i :style="{ width: Math.min(100, g.progress * 100) + '%' }"></i></span>
-                  <span class="val">{{ (g.progress * 100).toFixed(1) }}%</span>
-                </div>
-                <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
-                <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ fmtEta(g.eta) }}</div>
-                <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
-                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, numTone(g.downloaded, g.size)]">{{ fmtSizeOrDash(g.downloaded) }}</div>
-                <div v-else-if="col.key === 'tags'" class="g-tags">
-                  <span v-for="t in g.commonTags.list" :key="t" class="tag-chip"
-                        :class="[tagClass(t, g.members[0]), { 'f-on': isFilterOn('tagFilter', t) }]"
-                        @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                  <span v-if="!g.commonTags.list.length" class="zero"></span>
-                  <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
-                </div>
-                <div v-else-if="col.key === 'category'" class="g-cat">
-                  <span v-if="g.commonCategory.value" class="cat-chip"
-                        :class="{ 'f-on': isFilterOn('categoryFilter', g.commonCategory.value) }"
-                        @click.stop="filterFromChip('category', g.commonCategory.value)">{{ g.commonCategory.value }}</span>
-                  <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
-                  <span v-else class="zero"></span>
-                </div>
-                <div v-else-if="col.key === 'sites'" class="g-sites">
-                  <span v-for="m in g.members" :key="m.hash"
-                        class="site-chip" :class="[m.kind, { 'search-hit': m.hit, 'f-on': isFilterOn('siteFilter', m.site) }]"
-                        @click.stop="filterFromChip('site', m.site)">
-                    {{ m.site }}
-                  </span>
-                </div>
-                <!-- H&R: 未满足做种时间/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
-                <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(g)" :title="hrGroupTitle(g)">
-                  <span v-if="!g.hr_triggered" class="zero"></span>
-                  <svg v-else-if="!g.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
-                  <template v-else>
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
-                    <span class="hr-num">{{ g.hr_pending }}/{{ g.hr_triggered }}</span>
-                  </template>
-                </div>
-                <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
-                <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
-                <div v-else-if="col.key === 'added_on'" class="g-stat" :title="cellTimeHint(g.added_on, 'added_on')">{{ cellTime(g.added_on, 'added_on') }}</div>
-                <!-- 最近活动 = 组内最新(0 = 全组从未 -> 空白); 与"添加于"同族时间列 -->
-                <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(g.last_activity, 'last_activity')">{{ cellTime(g.last_activity, 'last_activity') }}</div>
-                <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
-                <!-- 选中下划线(f-on)挂文字包裹层 .sp-body(同种子页口径): 挂单元格 div 会随列宽(行是 grid) -->
-                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">
-                  <span class="sp-body f-cell" :class="{ 'f-on': isFilterOn('pathFilter', g.save_path) }"
-                        @click.stop="filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
-                </div>
-                <!-- 可选列(hide 默认隐藏): 表头名称与种子页同名列对齐 -->
-                <!-- 剩余 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
-                <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ fmtSizeOrDash(g.amount_left) }}</div>
-                <!-- 做种时间 = 组内平均(分钟取整) -->
-                <div v-else-if="col.key === 'seeding_time'" class="g-stat" :class="{ zero: !g.seeding_time }">{{ g.seeding_time ? fmtDuration(g.seeding_time) : '' }}</div>
-                <!-- 可用性 = 组内最高(null = 全组未知 -> 空白) -->
-                <div v-else-if="col.key === 'availability'" class="g-stat" :class="{ zero: !g.availability }">{{ g.availability == null || g.availability < 0 ? '' : g.availability.toFixed(2) }}</div>
-                <!-- 组分享率 = 总上传 ÷ 单份大小; 复用 cellRatio(组进度为 0 不显示, FX-04 同口径) -->
-                <div v-else-if="col.key === 'ratio'" class="g-stat" :class="{ zero: !g.ratio }">{{ cellRatio(g) }}</div>
-              </template>
+              <aq-group-cells :cols="visibleGroupCols" :g="g"></aq-group-cells>
             </div>
 
-            <!-- 展开明细: 紧跟本组行显示(列头 + 各分站点行) -->
+            <!-- 展开明细: 紧跟本组行显示(列头 + 各分站点行); 明细表头同样走表壳组件 -->
             <div v-if="expandedKey===g.key" class="detail">
-              <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
-                <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
-                     :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
-                     @click="col.sortable && setSort(col.key, 'detail')"
-                     @mousedown="startColDrag($event, 'detail', col.key)"
-                     @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
-                  <span class="h-label">{{ col.label }}</span>
-                  <span v-if="col.sortable" class="arrow">
-                    <svg v-if="detailSortKey === col.key" class="ico" viewBox="0 0 16 16">
-                      <use :href="detailSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
-                    </svg>
-                  </span>
-                  <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
-                        @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
-                        @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
-                </div>
-                <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
-              </div>
+              <aq-table ref="detailHead" table-id="detail" :cols="visibleDetailCols"
+                        :sort-key="detailSortKey" :sort-dir="detailSortDir" :drag="colDrag"></aq-table>
               <div v-if="memberPadTop(g.members)" class="row-pad" :style="{ height: memberPadTop(g.members) + 'px' }" aria-hidden="true"></div>
               <div v-for="m in winMembers(g.members)" :key="m.hash"
                    class="member-row" data-table="detail" :data-hash="m.hash" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
@@ -147,74 +37,7 @@
                    @click="onMemberClick(m, $event)"
                    @dblclick="openTorrentDrawer(m.hash)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
-                <template v-for="col in visibleDetailCols" :key="col.key">
-                  <!-- 站点列只留站点名: 代表状态的小方框已移除(状态由「状态」列表达, 见 2026-10-09 用户要求) -->
-                  <span v-if="col.key === 'site'" class="m-site f-cell"
-                        :class="{ 'f-on': isFilterOn('siteFilter', m.site) }"
-                        @click.stop="filterFromChip('site', m.site)">{{ m.site }}</span>
-                  <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
-                  <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
-                  <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
-                  <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</span>
-                  <!-- 做种(总)/用户(总): tracker 汇报的 swarm 全量(与"做种/用户"括号里的总数同源), 独立成列可排序 -->
-                  <span v-else-if="col.key === 'num_complete'" class="m-stat" :class="{ zero: !m.num_complete }">{{ m.num_complete }}</span>
-                  <span v-else-if="col.key === 'num_incomplete'" class="m-stat" :class="{ zero: !m.num_incomplete }">{{ m.num_incomplete }}</span>
-                  <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
-                  <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
-                  <!-- 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应) -->
-                  <span v-else-if="col.key === 'eta'" class="m-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</span>
-                  <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
-                  <!-- 已下载: 该站点切换下载时的真实网络消耗(组级求和的分站点拆分) -->
-                  <span v-else-if="col.key === 'downloaded'" class="m-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</span>
-                  <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
-                  <!-- 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes) -->
-                  <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ fmtLimitBytes(m.up_limit) }}</span>
-                  <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ fmtLimitBytes(m.dl_limit) }}</span>
-                  <span v-else-if="col.key === 'tags'" class="m-tags">
-                    <span v-for="t in mTags(m)" :key="t" class="tag-chip"
-                          :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
-                          @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                    <span v-if="!mTags(m).length" class="zero"></span>
-                  </span>
-                  <span v-else-if="col.key === 'category'" class="m-cat">
-                    <span v-if="m.category" class="cat-chip"
-                          :class="{ 'f-on': isFilterOn('categoryFilter', m.category) }"
-                          @click.stop="filterFromChip('category', m.category)">{{ m.category }}</span>
-                    <span v-else class="zero"></span>
-                  </span>
-                  <span v-else-if="col.key === 'progress'" class="m-progress">
-                    <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
-                    <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
-                  </span>
-                  <!-- 做种时间/分享率: 口径单点化(FX-02/04) —— 0 分钟且无 HR 要求 与 进度为 0 的种子不显示 -->
-                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[hrDurClass(m), hrSrcClass(m)]" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
-                    <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
-                         (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
-                    <span class="dur-body">
-                      <span class="dur-val">{{ cellSeedingTime(m) }}<i v-if="hrSrcHalf(m)" class="hr-line"></i></span>
-                      <span v-if="cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
-                      <i v-if="hrSrcFull(m)" class="hr-line"></i>
-                    </span>
-                  </span>
-                  <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
-                    {{ cellRatio(m) }}
-                    <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
-                  </span>
-                  <!-- 可用性: 负数(qB 未知)/暂停不显示(cellAvailability), 口径与种子页一致 -->
-                  <span v-else-if="col.key === 'availability'" class="m-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</span>
-                  <!-- 最后完整可见: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
-                  <span v-else-if="col.key === 'seen_complete'" class="m-stat" :title="fmtRelTime(m.seen_complete)">{{ fmtTs(m.seen_complete) }}</span>
-                  <!-- TBL-06: 添加于(_member_view 已透出); 保存路径列已移出明细表(见 GROUP_COLUMNS) -->
-                  <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
-                  <!-- 完成于/最近活动/活动时间: 成员差异时间列(口径与种子页同名列一致) -->
-                  <span v-else-if="col.key === 'completion_on'" class="m-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</span>
-                  <span v-else-if="col.key === 'last_activity'" class="m-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</span>
-                  <span v-else-if="col.key === 'time_active'" class="m-stat">{{ fmtDuration(m.time_active) }}</span>
-                  <!-- Tracker: 每站点各自 announce; 信息哈希值 v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
-                  <span v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</span>
-                  <span v-else-if="col.key === 'infohash_v2'" class="m-hash" :title="m.infohash_v2">{{ (m.infohash_v2 || '').slice(0, 8) }}</span>
-                  <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
-                </template>
+                <aq-member-cells :cols="visibleDetailCols" :m="m"></aq-member-cells>
               </div>
               <div v-if="memberPadBottom(g.members)" class="row-pad" :style="{ height: memberPadBottom(g.members) + 'px' }" aria-hidden="true"></div>
             </div>

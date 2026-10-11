@@ -570,6 +570,10 @@ def test_ops_skip_check_day_shared_across_sources():
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_ok, f"web 跳检应完成: {r}"
     assert mgr.state["skip_check_day"]["HASH123"] == date.today().isoformat(), "web 跳检应记录同日去重"
+    # !保真替身下跳检成功后种子已完成(progress=1, 由跳检收尾的"回写真值"写进记录) ⇒ 第二次
+    #   跳检会先被 G3「种子已完成」拦下, 走不到 dedup 闸门 —— 真机同理(已完成自然无需再跳)。
+    #   把进度还原为"未完成"以单独验证 dedup 闸门本身(report 26-10-11-2017 §5 的替身保真连锁)。
+    t.progress = 0.0
     r2 = mgr.ctx.ops.skip_check("HASH123", source="rule")
     assert r2.is_skipped and "今日已跳检过" in r2.message, f"跨来源同日应去重: {r2}"
 

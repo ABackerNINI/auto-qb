@@ -1,0 +1,239 @@
+  <!-- ================================================================================
+       行模型单元格渲染器(计划 26-10-11-1722 P3): group / torrent / show-ep 三类各一份。
+       member 行模型渲染器 <aq-member-cells> 在 P2 已落 xtpl.html(#tpl-aq-member-cells)。
+       此前这些 v-if 分支链内联在三个页面模板里(groups.html 49 条 / torrents.html 28 条 /
+       shows.html 剧行 + 集行各 ~11 条) —— 收敛为**每行模型单份**后, 页面模板只剩结构, 改一处
+       不再漏一处; 后续新表(设置页 HR / 重构后面板的用户·文件列表)可直接复用同一渲染器。
+       !与 <aq-member-cells> 同范式: 多根片段(<template v-for>), 单元格仍是行的**直接子元素**
+         (行是 grid, :nth-child 列对齐与 data-table 都依赖它) —— 故不包任何 wrapper。
+       !行为/格式化一律 `$root.xxx`: 根数据(sortKey/filters/timeFmt/speedLimitBytes…)只在根实例上,
+         组件实例直接 this.xxx 会读到 undefined(排序键恒空 / 筛选高亮失灵)。
+       !本分片由 tpl-manifest 注入 **body**(与 xtpl.html 同), 不被当作根模板编译, 也不多包 DOM 层。
+       ================================================================================ -->
+
+  <!-- group 行模型(辅种组行): 49 个列分支只此一份(原 groups.html 内联) -->
+  <script type="text/x-template" id="tpl-aq-group-cells">
+    <template v-for="col in cols" :key="col.key">
+      <div v-if="col.key === 'name'" class="g-name" :title="g.name">
+        <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+        <span class="g-name-text">{{ g.name }}</span>
+        <span v-if="g.cross_group_conflict" class="risk-mark"
+              title="与其他辅种组的文件指向同一磁盘物理文件 —— 涉事下载方已被暂停">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+        </span>
+      </div>
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }">{{ $root.fmtSpeedOrDash(g.dlspeed) }}</div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !g.upspeed }">{{ $root.fmtSpeedOrDash(g.upspeed) }}</div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !g.uploaded }">{{ $root.fmtSizeOrDash(g.uploaded) }}</div>
+      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !g.size }">
+        {{ $root.fmtSizeOrDash(g.size) }}
+        <span v-if="g.sizeMismatch" class="risk-mark"
+              title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+        </span>
+      </div>
+      <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ $root.fmtSizeOrDash(g.total_size) }}</div>
+      <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
+      <div v-else-if="col.key === 'progress'" class="m-progress">
+        <span class="bar"><i :style="{ width: Math.min(100, g.progress * 100) + '%' }"></i></span>
+        <span class="val">{{ (g.progress * 100).toFixed(1) }}%</span>
+      </div>
+      <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
+      <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ $root.fmtEta(g.eta) }}</div>
+      <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
+      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, $root.numTone(g.downloaded, g.size)]">{{ $root.fmtSizeOrDash(g.downloaded) }}</div>
+      <div v-else-if="col.key === 'tags'" class="g-tags">
+        <span v-for="t in g.commonTags.list" :key="t" class="tag-chip"
+              :class="[$root.tagClass(t, g.members[0]), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
+        <span v-if="!g.commonTags.list.length" class="zero"></span>
+        <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
+      </div>
+      <div v-else-if="col.key === 'category'" class="g-cat">
+        <span v-if="g.commonCategory.value" class="cat-chip"
+              :class="{ 'f-on': $root.isFilterOn('categoryFilter', g.commonCategory.value) }"
+              @click.stop="$root.filterFromChip('category', g.commonCategory.value)">{{ g.commonCategory.value }}</span>
+        <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
+        <span v-else class="zero"></span>
+      </div>
+      <div v-else-if="col.key === 'sites'" class="g-sites">
+        <span v-for="m in g.members" :key="m.hash"
+              class="site-chip" :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              @click.stop="$root.filterFromChip('site', m.site)">
+          {{ m.site }}
+        </span>
+      </div>
+      <!-- H&R: 未满足做种时间/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
+      <div v-else-if="col.key === 'hr'" class="g-hr" :class="$root.hrGroupClass(g)" :title="$root.hrGroupTitle(g)">
+        <span v-if="!g.hr_triggered" class="zero"></span>
+        <svg v-else-if="!g.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
+        <template v-else>
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+          <span class="hr-num">{{ g.hr_pending }}/{{ g.hr_triggered }}</span>
+        </template>
+      </div>
+      <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
+      <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
+      <div v-else-if="col.key === 'added_on'" class="g-stat" :title="$root.cellTimeHint(g.added_on, 'added_on')">{{ $root.cellTime(g.added_on, 'added_on') }}</div>
+      <!-- 最近活动 = 组内最新(0 = 全组从未 -> 空白); 与"添加于"同族时间列 -->
+      <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(g.last_activity, 'last_activity')">{{ $root.cellTime(g.last_activity, 'last_activity') }}</div>
+      <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
+      <!-- 选中下划线(f-on)挂文字包裹层 .sp-body(同种子页口径): 挂单元格 div 会随列宽(行是 grid) -->
+      <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">
+        <span class="sp-body f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', g.save_path) }"
+              @click.stop="$root.filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
+      </div>
+      <!-- 可选列(hide 默认隐藏): 表头名称与种子页同名列对齐 -->
+      <!-- 剩余 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
+      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ $root.fmtSizeOrDash(g.amount_left) }}</div>
+      <!-- 做种时间 = 组内平均(分钟取整) -->
+      <div v-else-if="col.key === 'seeding_time'" class="g-stat" :class="{ zero: !g.seeding_time }">{{ g.seeding_time ? $root.fmtDuration(g.seeding_time) : '' }}</div>
+      <!-- 可用性 = 组内最高(null = 全组未知 -> 空白) -->
+      <div v-else-if="col.key === 'availability'" class="g-stat" :class="{ zero: !g.availability }">{{ g.availability == null || g.availability < 0 ? '' : g.availability.toFixed(2) }}</div>
+      <!-- 组分享率 = 总上传 ÷ 单份大小; 复用 cellRatio(组进度为 0 不显示, FX-04 同口径) -->
+      <div v-else-if="col.key === 'ratio'" class="g-stat" :class="{ zero: !g.ratio }">{{ $root.cellRatio(g) }}</div>
+    </template>
+  </script>
+
+  <!-- torrent 行模型(种子页平铺行): 28 个列分支只此一份(原 torrents.html 内联) -->
+  <script type="text/x-template" id="tpl-aq-torrent-cells">
+    <template v-for="col in cols" :key="col.key">
+      <div v-if="col.key === 'name'" class="g-name" :title="m.name">
+        <span class="g-name-text">{{ m.name }}</span>
+      </div>
+      <div v-else-if="col.key === 'site'" class="g-sites">
+        <span class="site-chip" :class="[m.kind, { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              @click.stop="$root.filterFromChip('site', m.site)">{{ m.site }}</span>
+      </div>
+      <div v-else-if="col.key === 'state'" class="g-cat">
+        <span class="g-status" :class="'k-' + m.kind">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="$root.kindIcon(m.kind)"></use></svg>
+        </span>
+        <span class="state-text">{{ $root.stateText(m) }}</span>
+      </div>
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, $root.numTone(m.dlspeed, $root.speedLimitBytes.down)]">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, $root.numTone(m.upspeed, $root.speedLimitBytes.up)]">{{ $root.fmtSpeedOrDash(m.upspeed) }}</div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, $root.numTone(m.uploaded, m.size)]">{{ $root.fmtSizeOrDash(m.uploaded) }}</div>
+      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ $root.fmtSizeOrDash(m.size) }}</div>
+      <div v-else-if="col.key === 'category'" class="g-cat">
+        <span v-if="m.category" class="cat-chip"
+              :class="{ 'f-on': $root.isFilterOn('categoryFilter', m.category) }"
+              @click.stop="$root.filterFromChip('category', m.category)">{{ m.category }}</span>
+        <span v-else class="zero"></span>
+      </div>
+      <div v-else-if="col.key === 'tags'" class="g-tags">
+        <span v-for="t in $root.mTags(m)" :key="t" class="tag-chip"
+              :class="[$root.tagClass(t, m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
+        <span v-if="!$root.mTags(m).length" class="zero"></span>
+      </div>
+      <div v-else-if="col.key === 'progress'" class="m-progress">
+        <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
+        <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+      </div>
+      <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</div>
+      <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</div>
+      <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ $root.fmtEta(m.eta) }}</div>
+      <div v-else-if="col.key === 'added_on'" class="g-stat" :title="$root.cellTimeHint(m.added_on, 'added_on')">{{ $root.cellTime(m.added_on, 'added_on') }}</div>
+      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, $root.numTone(m.downloaded, m.size)]">{{ $root.fmtSizeOrDash(m.downloaded) }}</div>
+      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ $root.fmtSizeOrDash(m.amount_left) }}</div>
+      <!-- FX-26: 负数(-1 = qB 未知)与暂停中的种子不显示, 口径走 cellAvailability -->
+      <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !$root.cellAvailability(m) }, $root.numTone(m.availability, 1)]">{{ $root.cellAvailability(m) }}</div>
+      <div v-else-if="col.key === 'time_active'" class="g-stat">{{ $root.fmtDuration(m.time_active) }}</div>
+      <!-- FX-27/28: 相对时间(表头右键可切绝对); 另一种口径留作 title -->
+      <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(m.last_activity, 'last_activity')">{{ $root.cellTime(m.last_activity, 'last_activity') }}</div>
+      <div v-else-if="col.key === 'completion_on'" class="g-stat" :title="$root.cellTimeHint(m.completion_on, 'completion_on')">{{ $root.cellTime(m.completion_on, 'completion_on') }}</div>
+      <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="$root.numTone(m.up_limit, m.up_limit)">{{ $root.fmtLimitBytes(m.up_limit) }}</div>
+      <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="$root.numTone(m.dl_limit, m.dl_limit)">{{ $root.fmtLimitBytes(m.dl_limit) }}</div>
+      <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
+      <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
+      <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[$root.hrDurClass(m), $root.hrSrcClass(m)]" @mouseenter="$root.hrPopEnter($event, m)" @mouseleave="$root.hrPopLeave">
+        <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
+             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
+        <span class="dur-body">
+          <span class="dur-val">{{ $root.cellSeedingTime(m) }}<i v-if="$root.hrSrcHalf(m)" class="hr-line"></i></span>
+          <span v-if="$root.cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ $root.fmtDuration(m.hr_req_time) }}</span>
+          <i v-if="$root.hrSrcFull(m)" class="hr-line"></i>
+        </span>
+      </div>
+      <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="$root.hrRatioClass(m)">
+        {{ $root.cellRatio(m) }}
+        <span v-if="$root.cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+      </div>
+      <!-- 保存路径: 选中下划线(f-on)必须挂**文字**包裹层 .sp-body —— 挂单元格 div 会随列宽
+           (行是 grid, 单元格被拉满列宽), 与 .m-dur 的 .dur-body 同一教训 -->
+      <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">
+        <span class="sp-body f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', m.save_path) }"
+              @click.stop="$root.filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</span>
+      </div>
+      <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
+    </template>
+  </script>
+
+  <!-- show-ep 行模型 · 剧行: 11 个列分支(原 shows.html 内联); 集行另见 #tpl-aq-ep-cells -->
+  <script type="text/x-template" id="tpl-aq-show-cells">
+    <template v-for="col in cols" :key="col.key">
+      <div v-if="col.key === 'name'" class="g-name" :title="s.name">
+        <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+        <span class="g-name-text show-name-text">{{ s.name }}</span>
+      </div>
+      <div v-else-if="col.key === 'state'" class="g-cat zero"></div>
+      <div v-else-if="col.key === 'progress'" class="g-cat zero"></div>
+      <div v-else-if="col.key === 'size'" class="g-stat zero"></div>
+      <div v-else-if="col.key === 'versions'" class="g-count">{{ s.member_count }}</div>
+      <div v-else-if="col.key === 'sites'" class="g-cat">
+        <span class="zero">{{ s.seasons.length }} 个季</span>
+      </div>
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat zero"></div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat zero"></div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat zero"></div>
+      <div v-else-if="col.key === 'hr'" class="g-hr zero"></div>
+      <!-- FX-28: 口径可切(表头右键); 悬停给另一种口径, 无数据时退回列义说明 -->
+      <div v-else-if="col.key === 'latest'" class="g-stat" :title="$root.cellTimeHint(s.latest, 'latest') || '剧内最近添加时间'">{{ $root.cellTime(s.latest, 'latest') }}</div>
+    </template>
+  </script>
+
+  <!-- show-ep 行模型 · 集行: 11 个列分支(原 shows.html 内联) -->
+  <script type="text/x-template" id="tpl-aq-ep-cells">
+    <template v-for="col in cols" :key="col.key">
+      <div v-if="col.key === 'name'" class="g-name ep-name">
+        <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+        <span class="ep-key">{{ $root.epLabel(e.key) }}</span>
+        <span v-if="e.key[0] === 'pack' || e.key[0] === 'range'" class="ep-pack">包</span>
+        <span class="ep-site-count" :title="e.count + ' 个版本(同集不同站点/编码)'">×{{ e.count }}</span>
+      </div>
+      <div v-else-if="col.key === 'state'" class="g-cat">
+        <span class="g-status" :class="'k-' + e.state" :title="$root.kindText(e.state)">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="$root.kindIcon(e.state)"></use></svg>
+        </span>
+        <span class="state-text">{{ $root.kindText(e.state) }}</span>
+      </div>
+      <div v-else-if="col.key === 'progress'" class="m-progress">
+        <span class="bar"><i :style="{ width: Math.min(100, e.progress * 100) + '%' }"></i></span>
+        <span class="val">{{ (e.progress * 100).toFixed(1) }}%</span>
+      </div>
+      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
+           :title="'最完整版本大小'">{{ $root.fmtSizeOrDash(e.size) }}</div>
+      <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
+      <div v-else-if="col.key === 'sites'" class="g-sites">
+        <span v-for="m in e.members" :key="m.hash" class="site-chip"
+              :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              @click.stop="$root.filterFromChip('site', m.site)">
+          {{ m.site }}
+        </span>
+      </div>
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ $root.fmtSpeedOrDash(e.dlspeed) }}</div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ $root.fmtSpeedOrDash(e.upspeed) }}</div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ $root.fmtSizeOrDash(e.uploaded) }}</div>
+      <div v-else-if="col.key === 'hr'" class="g-hr" :class="$root.hrGroupClass(e)"
+           :title="e.hr_triggered ? (e.hr_pending ? e.hr_pending + '/' + e.hr_triggered + ' 未满足要求' : 'HR 已全部达标') : '该集无成员触发 HR'">
+        <span v-if="!e.hr_triggered" class="zero"></span>
+        <svg v-else-if="!e.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
+        <template v-else>
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+          <span class="hr-num">{{ e.hr_pending }}/{{ e.hr_triggered }}</span>
+        </template>
+      </div>
+      <div v-else-if="col.key === 'latest'" class="g-stat" :title="$root.cellTimeHint(e.added_on, 'latest')">{{ $root.cellTime(e.added_on, 'latest') }}</div>
+    </template>
+  </script>

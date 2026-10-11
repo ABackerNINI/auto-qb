@@ -226,7 +226,7 @@
 /* 数值/计数类格子: 真的排不下时截断, 不要溢出到相邻列(stats 文本短, 常规下不会触发) */
 .g-stat, .g-count, .g-hr, .m-stat { overflow: hidden; text-overflow: ellipsis; }
 /* 表头: 脱离 .group-table 容器, 直接挂到 .content 做纵向 sticky(overflow-x:auto 容器内
- * sticky 会被 spec 规则转成 auto 上下文, 失效)。横向位移由 app.js syncGroupHeadScroll 写
+ * sticky 会被 spec 规则转成 auto 上下文, 失效)。横向位移由 columns.js syncHeadScroll 写
  * transform 跟随 .group-table 滚动, 不用 transition 跟手; 吸顶时给阴影/底边线浮起感。
  * FIX-03 配色: 底色从 --bg-card 改为 --bg 页底色 —— 之前与顶栏 --glass 玻璃底明度相近,
  * 吸顶时像"第二根导航"; 改用不透明页底色读作"页面面板", 视觉权重更低且不透滚动内容。

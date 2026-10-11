@@ -81,22 +81,8 @@ window.AQB_MENU = {
       return TIME_FMT_KEYS.indexOf(this.headMenu.key) >= 0;
     },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
-    /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
-       横向滚动靠 JS 桥接避免列头与列体错位)。用 transform 而非 scrollLeft,
-       避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后 */
-    syncGroupHeadScroll(ev) {
-      const head = this.$refs.groupHead;
-      if (!head) return;
-      const x = ev.target.scrollLeft;
-      head.style.transform = `translateX(${-x}px)`;
-      // 首列吸左(issue 26-10-06-1717): 表头首格反向位移抵消容器滚动, 与行内 sticky 同形
-      // (规则见该皮肤 CSS 的 .group-head > .h-cell:first-child)
-      head.style.setProperty("--head-pin-x", `${x}px`);
-      // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 横滚非零 = 有列滑进吸左首格下方,
-      // 给滚动容器与表头打标, CSS 据此画右缘落影; 回到 0 摘标(无物可盖, 保持安静)
-      ev.target.classList.toggle("is-hscrolled", x > 0);
-      head.classList.toggle("is-hscrolled", x > 0);
-    },
+    /* 表头横滚同步自计划 26-10-11-1722 P4 起收敛为 columns.js::syncHeadScroll(ev, page) 单点
+     * (三个视图共用一份) —— 本文件不再持有 syncGroupHeadScroll。 */
     toggleExpand(key, event) {
       // 仅左键触发展开: 右键菜单不应连带展开明细(旧实现在 openMenu 里主动展开, 已移除)
       if (event && event.button !== 0) return;

@@ -49,7 +49,7 @@
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 - test_parse_bool_invalid: 非法布尔值 -> ValueError
 - test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(PIDL 不可用时 win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
-- test_open_path_windows_long_path_uses_shell_pidl: Windows 长路径目录/定位选中走 Shell PIDL, 绝不触达 os.startfile 与 explorer
+- test_open_path_windows_long_path_uses_shell_pidl: Windows 长路径"进入目录"(enter)/"定位选中"走 Shell PIDL, 绝不触达 os.startfile 与 explorer
 - test_open_path_windows_falls_back_to_string_route: PIDL 返回 False 时退回字符串路线(不静默什么都不做)
 - test_open_path_non_windows_never_calls_shell_pidl: 非 Windows 平台绝不触达 PIDL 路线(防守阵假阳性)
 - test_open_path_windows_schedules_foreground_bringup: Windows 打开后调度后台置前(参数 = 打开前快照 + 目录名), 非 Windows 不调度
@@ -64,7 +64,7 @@
 - test_win_force_foreground_retries_until_focus: 单次被拒后有封顶重试(不无限执念)
 - test_win_user32_kernel32_non_windows_none: 非 Windows 上句柄取用返回 None(靠早退而非"恰好抛异常")
 - test_win_user32_binds_signatures: 每个 user32 API 必须绑死 argtypes —— 不绑时 x64 传参静默失效(本轮真根因的守阵)
-- test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open 前置返回 False, 不碰 ctypes
+- test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open / _win_shell_enter 前置返回 False, 不碰 ctypes
 
 ### P1 覆盖率提升轮: infra 长尾
 - test_atomic_write_backup_failure_continues: 备份失败只 WARNING, 写盘照常
@@ -74,6 +74,7 @@
 - test_auto_managed_tag_rules_skips_empty_templates: 集数模板空串跳过不产正则
 - test_timer_units_us_and_ms: timer 三种单位落日志
 - test_win_shell_open_pidl_routes: PIDL 三分支(成功/解析失败/打开失败/COM 异常) + 前缀剥离 + 配对卸载
+- test_win_shell_enter_pidl_routes: 进入目录经 ShellExecuteExW(结构体契约 fMask/lpVerb/PIDL/nShow/cbSize) + 失败降级 + 无导出兜底
 - test_win_user32_and_kernel32_bind_signatures: user32/kernel32 惰性句柄绑定与缓存
 - test_win_explorer_hwnds_and_topmost_and_switch: Explorer 枚举/TOPMOST 开关/SwitchToThisWindow + 失败静默
 - test_win_force_foreground_matrix: 三层升级矩阵(还原/显示/焦点/借线程/硬切/异常)
@@ -645,13 +646,14 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
     # 置前调度一并 stub: 真跑会起后台线程去枚举/推前台真实窗口(测试期不得碰)
     _fake_windows(monkeypatch)
     with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils, "_win_shell_enter", return_value=False), \
             mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(str(f), select=True)
         assert sfile.call_count == 0
         run.assert_called_once_with(["explorer", "/select,", os.path.normpath(str(f))], check=False)
-        # 目标不是文件(目录) -> 普通打开该目录
+        # 目标不是文件(目录) -> 进入该目录(两个 PIDL 入口都不可用时退字符串路线)
         run.reset_mock()
         utils.open_path(str(tmp_path), select=True)
         assert run.call_count == 0
@@ -679,30 +681,45 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
 
 
 def test_open_path_windows_long_path_uses_shell_pidl(tmp_path, monkeypatch):
-    """Windows 长路径: 目录 / 定位选中走 Shell PIDL, **绝不触达** os.startfile 与 explorer
+    """Windows 长路径: **进入目录** / 定位选中都走 Shell PIDL, **绝不触达** os.startfile 与 explorer
 
     本次修复的核心断言 —— 实测超长路径下 `os.startfile` 抛 `FileNotFoundError`、
     `explorer /select,` **静默打开"桌面"**, 所以这两条路径对长路径必须完全不被触达。
-    存在性判定与 PIDL 入口都 mock 掉(真调会弹资源管理器; 长路径在 POSIX 宿主上也不成立)。
+    目录目标是"进入"语义(`_win_shell_enter`), 它不可用时才退"定位选中"(`_win_shell_open`)。
+    存在性判定与两个 PIDL 入口都 mock 掉(真调会弹资源管理器; 长路径在 POSIX 宿主上也不成立)。
     """
     _fake_windows(monkeypatch)
     long_dir = str(tmp_path) + "/" + "d" * 150 + "/" + "e" * 150
     long_file = long_dir + "/a.mkv"
     assert len(long_dir) >= utils.WIN_MAX_PATH, "用例前提: 目标确实是超长路径"
 
-    with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
+    with mock.patch.object(utils, "_win_shell_enter", return_value=True) as enter, \
+            mock.patch.object(utils, "_win_shell_open") as pidl, \
             mock.patch.object(utils, "_exists_dir", return_value=True), \
             mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
-        utils.open_path(long_dir)  # 目录 -> 打开该目录
-        pidl.assert_called_once_with(long_dir)
+        utils.open_path(long_dir)  # 目录 -> 进入该目录
+        enter.assert_called_once_with(long_dir)
+        assert pidl.call_count == 0, "enter 成功即不再退'定位选中'"
         assert sfile.call_count == 0, "长路径目录不得退回 os.startfile"
         assert run.call_count == 0, "长路径目录不得退回 explorer"
 
-    with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
-            mock.patch.object(utils, "_exists_file", return_value=True), \
+    # enter 不可用 -> 退"定位选中"(目录 pidl), 仍不得落字符串路线
+    with mock.patch.object(utils, "_win_shell_enter", return_value=False), \
+            mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
+            mock.patch.object(utils, "_exists_dir", return_value=True), \
             mock.patch.object(utils, "_win_foreground_explorer_async"), \
+            mock.patch.object(utils.os, "startfile", create=True) as sfile, \
+            mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(long_dir)
+        pidl.assert_called_once_with(long_dir)
+        assert sfile.call_count == 0
+        assert run.call_count == 0
+
+    with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
+            mock.patch.object(utils, "_exists_file", return_value=True), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(long_file, select=True)  # 单文件种子 -> 打开父目录并选中
@@ -716,6 +733,7 @@ def test_open_path_windows_falls_back_to_string_route(tmp_path, monkeypatch):
     _fake_windows(monkeypatch)
     d = str(tmp_path)
     with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils, "_win_shell_enter", return_value=False), \
             mock.patch.object(utils, "_exists_dir", return_value=True), \
             mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils, "_win_string_open") as fallback:
@@ -740,10 +758,12 @@ def test_open_path_non_windows_never_calls_shell_pidl(tmp_path, monkeypatch):
     for plat in ("linux", "darwin"):
         monkeypatch.setattr(sys, "platform", plat)
         with mock.patch.object(utils, "_win_shell_open") as pidl, \
+                mock.patch.object(utils, "_win_shell_enter") as enter, \
                 mock.patch.object(utils.subprocess, "run"):
             utils.open_path(str(f))
             utils.open_path(str(tmp_path), select=True)
             assert pidl.call_count == 0, f"{plat} 不得触达 PIDL 路线"
+            assert enter.call_count == 0, f"{plat} 不得触达 PIDL 路线(进入目录)"
 
 
 def test_open_path_windows_schedules_foreground_bringup(tmp_path, monkeypatch):
@@ -761,12 +781,14 @@ def test_open_path_windows_schedules_foreground_bringup(tmp_path, monkeypatch):
             mock.patch.object(utils, "_win_foreground_explorer_async") as fg:
         utils.open_path(str(f), select=True)
         fg.assert_called_once_with({7, 8}, os.path.normpath(str(f)))
-    # 目录目标同样调度
+    # 目录目标同样调度(且走"进入目录"的 PIDL 入口)
     with mock.patch.object(utils, "_win_explorer_hwnds", return_value=set()), \
+            mock.patch.object(utils, "_win_shell_enter", return_value=True) as enter, \
             mock.patch.object(utils, "_win_shell_open", return_value=True), \
             mock.patch.object(utils, "_exists_dir", return_value=True), \
             mock.patch.object(utils, "_win_foreground_explorer_async") as fg:
         utils.open_path(str(tmp_path))
+        enter.assert_called_once_with(str(tmp_path))
         fg.assert_called_once_with(set(), os.path.normpath(str(tmp_path)))
     # 非 Windows: 不调度(也不做快照)
     for plat in ("linux", "darwin"):
@@ -1016,14 +1038,16 @@ def test_win_explorer_hwnds_non_windows_empty(monkeypatch):
 
 
 def test_win_shell_open_non_windows_returns_false(monkeypatch):
-    """非 Windows 上 `_win_shell_open` 前置返回 False
+    """非 Windows 上 `_win_shell_open` / `_win_shell_enter` 前置返回 False
 
     必须靠 `is_windows()` 早返回, 而不是靠捕获 `AttributeError` —— `ctypes.windll` 在 POSIX 上
-    根本不存在, 让行为依赖"恰好抛了异常"会让 Linux CI 变成偶然通过。
+    根本不存在, 让行为依赖"恰好抛了异常"会让 Linux CI 变成偶然通过。两个入口都要覆盖:
+    它们各自被 sidefx 计成 LAUNCH, 少了任一条"非 Windows 空转"就少了对应的假阳性守阵。
     """
     for plat in ("linux", "darwin"):
         monkeypatch.setattr(sys, "platform", plat)
         assert utils._win_shell_open("/tmp/whatever") is False
+        assert utils._win_shell_enter("/tmp/whatever") is False
 
 
 def test_win_string_open_degrades_long_path_to_ancestor(monkeypatch):
@@ -1372,11 +1396,17 @@ def test_win_shell_open_not_windows(monkeypatch):
     assert utils._win_shell_open("D:/x") is False
 
 
-def _fake_shell(parse_result=0, open_result=0, parse_sets_pidl=False, coinit_raises=False):
-    """假 shell32/ole32 替身(记录调用, 不碰真 Shell)"""
+def _fake_shell(
+    parse_result=0, open_result=0, parse_sets_pidl=False, coinit_raises=False, exec_result=1, has_exec=True
+):
+    """假 shell32/ole32 替身(记录调用, 不碰真 Shell)
+
+    `exec_result` / `has_exec` 只服务 `_win_shell_enter`(ShellExecuteExW 的成功/失败分支与
+    "该导出不存在"的降级); `exec` 记的是**解引用后的结构体对象**(CArgObject._obj), 供用例
+    直接断言 fMask/lpVerb/lpIDList 等字段。
+    """
     import ctypes
-    calls = {"parse": [], "open": [], "ilfree": 0, "couninit": 0}
-    pidl_holder = {"value": None}
+    calls = {"parse": [], "open": [], "ilfree": 0, "couninit": 0, "exec": []}
 
     def parse(target, _none, byref_pidl, _flags, _byref_sfgao):
         calls["parse"].append(target)
@@ -1388,6 +1418,10 @@ def _fake_shell(parse_result=0, open_result=0, parse_sets_pidl=False, coinit_rai
         calls["open"].append(pidl)
         return open_result
 
+    def exec_ex(byref_info):
+        calls["exec"].append(byref_info._obj)
+        return exec_result
+
     def coinit(_reserved, _mode):
         if coinit_raises:
             raise AttributeError("no COM")
@@ -1398,6 +1432,8 @@ def _fake_shell(parse_result=0, open_result=0, parse_sets_pidl=False, coinit_rai
         SHOpenFolderAndSelectItems=open_items,
         ILFree=lambda pidl: calls.__setitem__("ilfree", calls["ilfree"] + 1),
     )
+    if has_exec:
+        shell32.ShellExecuteExW = exec_ex
     ole32 = SimpleNamespace(
         CoInitializeEx=coinit,
         CoUninitialize=lambda: calls.__setitem__("couninit", calls["couninit"] + 1),
@@ -1420,6 +1456,21 @@ def _unwrapped_shell_open(monkeypatch):
             monkeypatch.setattr(utils, "_win_shell_open", original)
             return
     raise AssertionError("sidefx 未包装 _win_shell_open: 前置条件变化, 请复核本辅助")
+
+
+def _unwrapped_shell_enter(monkeypatch):
+    """取回被 sidefx 记账包装前的原 _win_shell_enter(仅本测试内直调)
+
+    理由与 `_unwrapped_shell_open` 逐条相同: 本测试把 shell32/ole32 全换成假替身, 不可能产生
+    真实打开, 而 sidefx 的记账包装包在函数外层不区分真假 —— 直调会按 LAUNCH 记成越界假阳性。
+    """
+    import sidefx
+
+    for container, name, original in list(getattr(sidefx.SESSION, "_saved", ())):
+        if container is utils and name == "_win_shell_enter":
+            monkeypatch.setattr(utils, "_win_shell_enter", original)
+            return
+    raise AssertionError("sidefx 未包装 _win_shell_enter: 前置条件变化, 请复核本辅助")
 
 
 def _shim_posix_ctypes(monkeypatch):
@@ -1477,6 +1528,49 @@ def test_win_shell_open_pidl_routes(monkeypatch):
     monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
     monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
     assert u._win_shell_open("D:/nope") is False
+
+
+def test_win_shell_enter_pidl_routes(monkeypatch):
+    """`_win_shell_enter`(进入目录) PIDL 路线: ShellExecuteExW + `open` 动词 + PIDL, 长路径安全
+
+    本函数与 `_win_shell_open`(SHOpenFolderAndSelectItems: 打开**父**窗口并选中该条目)是两件事 ——
+    用例钉住结构体装填(fMask 含 IDLIST / 动词 / PIDL / nShow / cbSize 等于真实大小)、成功与
+    失败分支、以及"该导出不存在"时的降级(绝不抛)。全程假 shell32/ole32 替身, 不碰真 Shell。
+    """
+    import ctypes
+
+    import auto_qb.infra.utils as u
+
+    _shim_posix_ctypes(monkeypatch)
+    monkeypatch.setattr(sys, "platform", "win32")
+    _unwrapped_shell_enter(monkeypatch)
+    # 成功: 结构体按 ShellExecuteEx 契约装填; 前缀剥离; pidl 释放 + COM 配对卸载
+    shell32, ole32, calls = _fake_shell(parse_sets_pidl=True)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_enter("\\\\?\\D:/长路径目录") is True
+    info = calls["exec"][0]
+    assert info.lpVerb == "open" and info.fMask == u._SEE_MASK_INVOKEIDLIST
+    assert info.lpIDList == 0x1234, "必须把 PIDL 直接交给 Shell(字符串路线对长路径不可靠)"
+    assert info.nShow == u._SW_SHOWNORMAL
+    assert info.cbSize == ctypes.sizeof(type(info)), "cbSize 必须等于结构体真实大小, 否则 Shell 直接失败"
+    assert calls["parse"] and not calls["parse"][0].startswith("\\\\?\\"), "前缀与 PIDL 路线互斥, 已剥离"
+    assert calls["ilfree"] == 1 and calls["couninit"] == 1
+    # ShellExecuteExW 返回 0 -> False(调用方降级), 但 pidl 仍要释放
+    shell32, ole32, calls = _fake_shell(parse_sets_pidl=True, exec_result=0)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_enter("D:/nope") is False and calls["ilfree"] == 1
+    # 解析失败 -> False 且不释放未置位的 pidl
+    shell32, ole32, calls = _fake_shell(parse_result=1)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_enter("D:/nope") is False and calls["ilfree"] == 0 and not calls["exec"]
+    # 无 ShellExecuteExW 导出 -> False(防御分支, 由字符串路线兜住)
+    shell32, ole32, calls = _fake_shell(parse_sets_pidl=True, has_exec=False)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_enter("D:/nope") is False and not calls["exec"]
 
 
 def test_win_user32_and_kernel32_bind_signatures(monkeypatch):

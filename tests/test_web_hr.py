@@ -44,7 +44,7 @@
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
-- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)/回退 save_path(缺失或下载中未落盘)/组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
+- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10 + 2026-10-11 三层口径) —— 文件(单文件种子, select=True 定位选中) > root_path > content_path > save_path; 组按单个种子处理(单成员 / content_path 或 root_path 任一全同)与不一致回退组 save_path; 未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
 - test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
@@ -1296,12 +1296,16 @@ def test_api_paths_endpoint(web_env):
 
 
 def test_api_open_path_endpoint(web_env, tmp_path):
-    """POST /api/open-path (FX-14 + R10-10): 服务端自行派生目录/文件后交系统默认程序打开
+    """POST /api/open-path (FX-14 + R10-10 + 2026-10-11 解析口径): 服务端派生目录/文件后打开
 
-    覆盖: 目录型 content_path 取自身 / **文件型 content_path 取文件本身并带 select=True(R10-10
-    "在文件夹中选中相关文件")** / content_path 缺失回退 save_path / **content_path 未落盘(下载中,
-    qB 报逻辑完成名而磁盘尚无该路径)回退 save_path, 不因"未完成"而 404** / 组键取 key 首元 /
-    未知组与不存在目录 404 / content 与 save_path 都不存在 404 / kind 非法 400 /
+    解析顺序 **文件(单文件种子) > root_path > content_path > save_path** 逐层覆盖:
+    目录型 content_path 打开该目录 / **文件型 content_path(单文件种子)取文件本身并带 select=True
+    (R10-10 "在文件夹中选中相关文件")** / **content_path 不可用而 root_path 是已存在目录时取
+    root_path** / content_path 未落盘(下载中, qB 报逻辑完成名而磁盘尚无该路径)回退 save_path,
+    不因"未完成"而 404 / content 与 save_path 都不存在 404。
+    组(kind=group)按**单个种子**处理的条件: 组内只含一个种子, 或成员 content_path / root_path
+    **任一**归一后全同(辅种组常态) —— 走同一套解析; 内容确不一致则退回组 key 首元(save_path)。
+    另覆盖: 未知组/未知 hash/不存在目录 404 / kind 非法 400 /
     **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
     """
     mgr, client = web_env
@@ -1310,23 +1314,45 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     d_content.mkdir()
     f_file = d_content / "movie.mkv"
     f_file.write_bytes(b"x")
+    d_left = tmp_path / "left"
+    d_left.mkdir()
+    d_right = tmp_path / "right"
+    d_right.mkdir()
     d_seed = tmp_path / "seeds"
     d_seed.mkdir()
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径(仅统一分隔符)
-    mgr.store.groups = {(norm(d_seed), ("a.mkv", )): ["HA"]}
+    rec = lambda h, save, content, root="": SimpleNamespace(  # noqa: E731  root_path 缺省 = 空串(单文件/老版本 qB)
+        hash=h, save_path=str(save), content_path=str(content), root_path=str(root)
+    )
     mgr.store.by_hash = {
-        "HA":
-            SimpleNamespace(hash="HA", save_path=str(d_seed), content_path=str(d_content)),
-        "HB":
-            SimpleNamespace(hash="HB", save_path=str(d_seed), content_path=str(f_file)),
-        "HC":
-            SimpleNamespace(hash="HC", save_path=str(d_seed), content_path=""),
+        # 多文件种子: content_path / root_path 都是内容目录(qB 口径: root_path = 文件树首个公共子目录)
+        "HA": rec("HA", d_seed, d_content, d_content),
+        # 单文件种子: content_path 即该文件, root_path 为空(文件直接落在 save_path)
+        "HB": rec("HB", d_seed, f_file),
+        # content_path 缺失但 root_path 是内容目录 -> 新 root_path 层级接住
+        "HC": rec("HC", d_seed, "", d_content),
         # 下载中单文件种子: content_path 是 qB 报的逻辑完成名, 磁盘上尚未落盘(或带 .!qB 后缀) —— 实际故障场景
-        "HD":
-            SimpleNamespace(hash="HD", save_path=str(d_seed), content_path=str(d_seed / "incomplete.mkv")),
+        "HD": rec("HD", d_seed, d_seed / "incomplete.mkv"),
+        # 下载中多文件种子: content_path 与 root_path 都还没落盘 -> 回退 save_path
+        "HF": rec("HF", d_seed, d_seed / "NewMovie", d_seed / "NewMovie"),
         # content 与 save_path 都不存在: 回退后终检兜底 404
-        "HE":
-            SimpleNamespace(hash="HE", save_path=str(tmp_path / "gone"), content_path=str(tmp_path / "gone" / "x.mkv")),
+        "HE": rec("HE", tmp_path / "gone", tmp_path / "gone" / "x.mkv", tmp_path / "gone"),
+        # ---- 组用例成员 ----
+        "HB2": rec("HB2", d_seed, f_file),  # 与 HB 同一份单文件内容(辅种): content_path 全同
+        "HI": rec("HI", d_seed, d_left, d_left),  # key_c: 与 HJ 内容确不一致
+        "HJ": rec("HJ", d_seed, d_right, d_right),
+        "HK": rec("HK", d_seed, d_content / "k1.mkv", d_content),  # key_d: content_path 各异但 root_path 全同
+        "HL": rec("HL", d_seed, d_content / "l1.mkv", d_content),
+    }
+    k_a = (norm(d_seed), ("a.mkv", ))
+    k_b = (norm(d_seed), ("b.mkv", ))
+    k_c = (norm(d_seed), ("c.mkv", ))
+    k_d = (norm(d_seed), ("d.mkv", ))
+    mgr.store.groups = {
+        k_a: ["HA"],  # 只含一个种子 -> 按单个种子
+        k_b: ["HB", "HB2"],  # 多成员但 content_path 全同 -> 按单个种子
+        k_c: ["HI", "HJ"],  # 内容确不一致 -> 退回组 key 首元(save_path)
+        k_d: ["HK", "HL"],  # content_path 各异但 root_path 全同 -> 任一相同即按单个种子
     }
     # web_env 的 store 是轻量 namespace(get 恒 None), 这里按真实 Store.get 语义接上 by_hash
     mgr.store.get = lambda h: mgr.store.by_hash.get(h)
@@ -1334,7 +1360,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     # patch 地址 = auto_qb.web.common.open_path(web.py 拆 web/ 包后模块地址稳定化;
     # 原地址 auto_qb.web.open_path 随模块拆分失效 —— 管线性改动, plan 26-09-22-1857 W1)
     with mock.patch("auto_qb.webui.server.common.open_path") as spy:
-        # 1. 目录型 content_path -> 取自身(非选中语义)
+        # 1. 目录型 content_path -> 打开该目录(进入语义, 不选中)
         r = post({"kind": "torrent", "hash": "HA"})
         assert r.status_code == 200 and r.json() == {"opened": norm(d_content), "select": False}, r.text
         spy.assert_called_once_with(norm(d_content), select=False)
@@ -1342,23 +1368,50 @@ def test_api_open_path_endpoint(web_env, tmp_path):
         spy.reset_mock()
         assert post({"kind": "torrent", "hash": "HB"}).json() == {"opened": norm(f_file), "select": True}
         spy.assert_called_once_with(norm(f_file), select=True)
-        # 3. content_path 缺失 -> 回退 save_path
+        # 2b. content_path 缺失但 root_path 是内容目录 -> root_path 层级接住
         spy.reset_mock()
-        assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed), "select": False}
-        spy.assert_called_once_with(norm(d_seed), select=False)
-        # 3b. content_path 未落盘(下载中既非目录也非文件) -> 回退 save_path, 不 404
+        assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_content), "select": False}
+        spy.assert_called_once_with(norm(d_content), select=False)
+        # 3. content_path 未落盘(下载中既非目录也非文件) -> 回退 save_path, 不 404
         spy.reset_mock()
         assert post({"kind": "torrent", "hash": "HD"}).json() == {"opened": norm(d_seed), "select": False}
         spy.assert_called_once_with(norm(d_seed), select=False)
-        # 4. 组: 组键首元即规范化 save_path(组内成员天然一致)
+        # 3b. 多文件且 content_path/root_path 都未落盘 -> 同样回退 save_path
         spy.reset_mock()
-        group_key = encode_group_key((norm(d_seed), ("a.mkv", )))
-        assert post({"kind": "group", "key": group_key}).json() == {"opened": norm(d_seed), "select": False}
+        assert post({"kind": "torrent", "hash": "HF"}).json() == {"opened": norm(d_seed), "select": False}
+        spy.assert_called_once_with(norm(d_seed), select=False)
+        # 4. 组只含一个种子 -> 按单个种子解析(内容目录)
+        spy.reset_mock()
+        assert post({
+            "kind": "group",
+            "key": encode_group_key(k_a)
+        }).json() == {
+            "opened": norm(d_content),
+            "select": False
+        }
+        spy.assert_called_once_with(norm(d_content), select=False)
+        # 4b. 组多成员但 content_path 全同(辅种组) -> 按单个种子解析(单文件 -> 定位选中)
+        spy.reset_mock()
+        assert post({"kind": "group", "key": encode_group_key(k_b)}).json() == {"opened": norm(f_file), "select": True}
+        spy.assert_called_once_with(norm(f_file), select=True)
+        # 4c. 组 content_path 各异但 root_path 全同(任一相同即可) -> 仍按单个种子解析
+        spy.reset_mock()
+        assert post({
+            "kind": "group",
+            "key": encode_group_key(k_d)
+        }).json() == {
+            "opened": norm(d_content),
+            "select": False
+        }
+        spy.assert_called_once_with(norm(d_content), select=False)
+        # 4d. 组内容确不一致 -> 退回组 key 首元(规范化 save_path)
+        spy.reset_mock()
+        assert post({"kind": "group", "key": encode_group_key(k_c)}).json() == {"opened": norm(d_seed), "select": False}
         spy.assert_called_once_with(norm(d_seed), select=False)
         # 5. 安全: 客户端多传的 path 被忽略 —— 打开的是服务端派生的目录, 不是它
         spy.reset_mock()
-        post({"kind": "group", "key": group_key, "path": "C:/Windows/System32"})
-        spy.assert_called_once_with(norm(d_seed), select=False)
+        post({"kind": "group", "key": encode_group_key(k_a), "path": "C:/Windows/System32"})
+        spy.assert_called_once_with(norm(d_content), select=False)
         # 6. 未知组 / 未知 hash / 不存在目录 -> 404; kind 非法 -> 400; 均不调用系统打开
         spy.reset_mock()
         assert post({"kind": "group", "key": encode_group_key(("D:/nope", ("z", )))}).status_code == 404
@@ -1519,7 +1572,9 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     (root / "sub").mkdir(parents=True)
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
     mgr.store.groups = {(norm(root), ("a.mkv", )): ["HA"]}
-    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    mgr.store.by_hash = {
+        "HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root), root_path=str(root))
+    }
     mgr.store.get = lambda h: mgr.store.by_hash.get(h)
 
     calls = []
@@ -1564,7 +1619,7 @@ def test_fs_endpoints_unmapped_root_semantic_404(web_env, tmp_path):
         unmapped = tmp_path / "unmapped"
         unmapped.mkdir()  # 宿主真实存在, 但前缀不在映射表里 -> 逻辑空间不可判定
         norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
-        mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(unmapped), content_path="")}
+        mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(unmapped), content_path="", root_path="")}
         mgr.store.groups = {(norm(unmapped), ("a.mkv", )): ["HA"]}
         mgr.store.get = lambda h: mgr.store.by_hash.get(h)
         # 1. 目录浏览: 白名单内(是已知保存路径)但未命中映射 -> 404 不可判定

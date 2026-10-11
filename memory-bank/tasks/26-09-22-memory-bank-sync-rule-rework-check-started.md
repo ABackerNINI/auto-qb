@@ -2,9 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-09-22
-**Updated:** 2026-09-22
-**Summary:** AGENTS「会话协议·开始」①与 rebase 禁令互斥(a1f3476 补丁漏改①)致规则静默失效; 4 处 always-on 入口一次改全为 fetch + ls-remote + merge --ff-only(锚点改"首个执行动作前"+问答轮豁免), preflight 落后判据 ls-remote 现查并新增 --check-started 只读开工自检; skill 自测 34 passed / 全量 1189+1 / 两项真跑 exit 0
+**Updated:** 2026-10-11
+**Summary:** AGENTS「会话协议·开始」①与 rebase 禁令互斥(a1f3476 补丁漏改①)致规则静默失效; 4 处 always-on 入口一次改全为 fetch + ls-remote + merge --ff-only(锚点改"首个执行动作前"+问答轮豁免), preflight 落后判据 ls-remote 现查并新增 --check-started 只读开工自检; skill 自测 34 passed / 全量 1189+1 / 两项真跑 exit 0。**续作(用户指定): 开工同步改为无豁免 —— 问答/只读分析轮次也必须先同步, 全部入口与新坑档同步改写**
 **Topics:** memory-bank-git-rules
+**Refs:** memory-bank/activeContext/26-10-11-2129-memory-bank-sync-no-exemption.md,memory-bank/testing/baselines/26-10-11-2129-memory-bank-sync-no-exemption.md,memory-bank/pitfalls/git/sync-pull.md
 
 ## 原始请求
 
@@ -18,6 +19,7 @@
 - **通用资产判别法**: SKILL.md / ai-lib.md 只承载机制(命令用 `<主线远端>` 占位或指针), 本仓库事实(远端名 gitee)留在 AGENTS.md 与 copilot-instructions.md; preflight 消息文本保持通用(不写本仓库 pitfalls 路径), repo 事实全在 .commit-flow.toml。
 - **自检刻意无状态**: --check-started 不存"已同步"标记文件 —— 不引入第二个会陈旧的快照; 连 fetch 都不做(不写任何 ref/对象), 与 #5 提交期检查的唯一区别。
 - **挂 preflight 而非独立脚本**: 复用配置解析 / PASS-WARN-STOP 协议 / GBK 兜底, 分类逻辑抽纯函数 classify_sync 便于自测。
+- **同步无豁免(用户指定)**: 开工同步为**任何轮次**(含只答问题 / 只做只读分析)的第一个动作前必须完成, **禁止在落后的分支上工作(只读分析同样禁止)** —— 理由: 多 clone 并行下几分钟就可能落后, 只读结论(路由 / 口径 / 数字)按陈旧树给出是实害。落地: ①`AGENTS.md`「会话协议 · 开始」① 改写 + 黄金法则 7 增「开工同步不受本条豁免」子条; ②memory-bank skill 第 1 步 / `.github/instructions/ai-lib.md` / `conventions/process.md` / `conventions/collaboration.md` / `pitfalls/kb/request-boundary.md` 同步改写, ai-lib.md 里已漂移的手工 `git fetch + merge --ff-only` 配方删除(单点回到 `commands run my-commit-flow.sync`); ③只读轮次遇同步失败(树脏 / 冲突)**贴失败行并停下, 不代做 stash**(写操作)—— 处置落 `pitfalls/git/sync-pull.md` 头节; ④命令面 `.commands/my-commit-flow/config.toml` 的 `when` 与包 README 同轮改写。
 
 ## 实现计划
 
@@ -33,9 +35,12 @@
 | 授权同步 SKILL.md / ai-lib.md(4 处入口改全) | 完成(2026-09-22) |
 | 第 5 项 --check-started(classify_sync 七状态 + 主流程只读短路 + 自测 7 例 + 机检句) | 完成(2026-09-22) |
 | 提交 + 推送 + 幽灵 diff 核查 | 本笔(随主提交入库) |
+| **同步无豁免口径落地**: 入口四处(AGENTS.md / memory-bank skill / ai-lib.md / process.md)+ collaboration.md + 两坑档(request-boundary / sync-pull 头节)+ 命令面(config.toml when / 包 README) | 完成(2026-10-11) |
+| **收口**: `doc.caps` AGENTS.md 硬上限内 + `kb.check` / `test.full` 全绿(数字见 `commands run kb.baseline`) | 完成(2026-10-11) |
 
 ## 进度日志
 
 - 2026-09-22 20:44-21:20 — 只读取证: `-S 'pull --rebase'` 证实①文本 09-21 15:17 后未动而禁令 07:38 落地; reflog 当日 4 pull / 6 merge / 0 rebase, 无人按①原文执行; status -sb 假绿灯现场(远端 c5b1e37→93c0155, 本地连对象都没有); preflight L371/L373 处置文本仍在引导"先 rebase"。
 - 2026-09-22 21:32-21:52 — 用户指令执行 1-4: 本 clone fetch + ff-only 同步; AGENTS.md ①重写 + collaboration.md L12/L16 + copilot-instructions.md; preflight 落后判据 ls-remote 化 + 文案去 rebase; SKILL.md / ai-lib.md 按通用资产规则暂不动并报请授权。
 - 2026-09-22 21:58-22:07 — 用户「授权修改, 然后实施 5」: 两处入口同步(4 处改全, `pull --rebase` 现行文档归零); preflight 新增 --check-started(classify_sync 纯函数 + 主流程只读短路 + AGENTS.md 机检句 + SKILL.md 机检钩子引用); 实测: skill 自测 34 passed / 全量 1189 passed + 1 skipped / AGENTS.md 6568/8000 / preflight 端到端与 --check-started 真跑均 exit 0; 跨 clone 查重无同名 slug, 立档随主提交。
+- 2026-10-11 — 用户令「开工前必须同步, 无论只读分析还是要修改文件; 禁止在落后的分支上工作; 与之冲突的口径都要改」: 全仓 grep 定位活文档 6 处 + 命令面 2 处, 逐一改写为**无豁免**表述(问答/只读分析轮次也先同步、禁止在落后分支上工作), 并删 ai-lib.md 里已漂移的手工 fetch + ff-only 配方; `pitfalls/git/sync-pull.md` 加头节「开工同步无豁免」(含只读轮次同步失败不代做 stash 的处置), `pitfalls/kb/request-boundary.md` 加「开工同步不在豁免之列」条; 冻结的 plans / reports / issues 不动。收口: `doc.caps` AGENTS.md 硬上限内 + `kb.check` 全绿 + `test.full` 全绿(数字见 `commands run kb.baseline`)。

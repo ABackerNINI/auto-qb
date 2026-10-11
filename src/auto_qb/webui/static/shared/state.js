@@ -96,8 +96,8 @@ window.AQB_STATE = {
       expandedShows: [],
       expandedShowEp: null,
       unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
-      groupColumns: GROUP_COLUMNS,
-      detailColumns: DETAIL_COLUMNS,
+      // 列选择器的列定义不再各存一份: 计划 26-10-11-1722 P4 起按表注册表 TABLE_DEFS 派生
+      // (columns.js computed `tableDefs`), 四段硬编码标题 + v-for 收敛为一段。
       // 底部详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
       // kind(2026-10-04 双形态): "seed" = 种子详情(五页签) / "traffic" = qB 口径流量图(全局/分组,
       //   scope 记挂点); 两形态共用同一抽屉壳与同一拖拽高度(drawerHeightPx) —— 原模态弹层已并入。
@@ -129,8 +129,6 @@ window.AQB_STATE = {
       // 菜单 = 目标页签(右键命中区域)模板选项 + 合并开关(仅种子详情形态)。tab 显式建字段
       // (undefined 是非响应式盲区, 呼应 vue-reactivity 静默坑; openDrawerMenu 整体替换时落真值)
       drawerMenu: { visible: false, x: 0, y: 0, tab: "" },
-      torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
-      showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开
       colHidden: initialColState.hidden,  // 意图: {page: [列key]}
       colOrder: initialColState.order,    // 意图: {page: [列key]} (TBL-05 表头拖动重排; 空 = 定义顺序)

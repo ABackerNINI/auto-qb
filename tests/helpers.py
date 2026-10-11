@@ -271,12 +271,16 @@ class FakeClient:
             raise self.add_error
         # 新种子进入客户端(hash 固定 HASH123, 与 FakeTorrent 默认一致); 存对象而非 dict,
         # 保证 store.refresh / trackers_info 等按 .hash/.state 属性访问不崩
+        # 保真(加固, report 26-10-11-2017 §5/§6.4): qB 在 is_skip_checking=True 时把全部块视为
+        #   有效 ⇒ 完成。旧替身恒定 progress=0, 让"跳检重加后快照仍说 0%"这条脱节在单测里天然
+        #   不可见(amount_left 默认已是 0, 无需另设)。
         self.torrents["HASH123"] = FakeTorrent(
             hash="HASH123",
             state="pausedUP" if stopped else "stalledUP",
             save_path=save_path or r"R:\Downloads",
             category=category or "",
             tags=tags or "",
+            progress=1.0 if is_skip_checking else 0.0,
         )
         # WARN: 只模拟 **Web API < 2.14.0** 的文本形态("Ok."/"Fails."); 真机 qB 5.2+(API 2.14.0 起)
         #   回的是 JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`,

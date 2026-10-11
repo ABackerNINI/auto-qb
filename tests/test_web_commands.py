@@ -16,6 +16,7 @@
 - test_qb_reject_text_classification: qb_reject_text 分流(4xx 业务拒绝附建议; 401/5xx/非 qB 异常返回 None)
 - test_drain_web_commands_torrent_write_param_errors: 写命令参数错误 -> error 回执且不调 API, 后续命令继续
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
+- test_bulk_optimistic_actions_have_truth_channel: 守阵(report 26-10-11-2017 §6.4): 乐观白名单 {pause,resume} 的批量动作必须不在延迟回执族、走完 drain 登记待推真值、回执由 drain 写; 非乐观批量动作保持延迟回执族
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
 - test_drain_web_commands_bulk_torrents_tags_category: bulk 标签/分类命令执行 —— add_tags/remove_tags/set_category 单次调用带全部 hash; 缺 tags / 缺 category 键 error 回执; 空串分类(清除)合法; 标签非空校验
 - test_drain_web_commands_bulk_torrents_limits_location: bulk 限速/移动分派 —— 只调有值方向、每方向一次调用传全 hashes; 写后快照同步(up_limit/dl_limit/save_path); 缺值 error 回执不调 API
@@ -864,6 +865,39 @@ def test_drain_web_commands_bulk_torrents():
         mgr.web.commands.put(("bulk_torrents", {"hashes": [], "action": "pause", "cmd_id": "b6"}))
         mgr.web.consume_commands()
         assert mgr.web.results["b6"]["status"] == "error"
+
+
+def test_bulk_optimistic_actions_have_truth_channel():
+    """守阵(report 26-10-11-2017 §6.4): 前端乐观白名单的动作必须都具备"真值出口"
+
+    bulk_torrents 是 8-action 大杂烩 —— 若对"是否延迟回执"做**整体**归属, pause/resume 的真值
+    出口会被一并切断(§4.3: 前端 resolveOptimistic 成功时设 hold=true 等真值事件, 而批量路径永远
+    等不到 ⇒ 8 秒兜底回滚到"点击那一刻的旧值")。
+
+    本用例按乐观白名单遍历断言: 每个动作都 ① 不在延迟回执族 ② 走完 drain 后登记待推真值
+    ③ 回执由 drain 写。**新增乐观动作(前端 _optimisticPatch 加分支)时必须同步进来** —— 这就是
+    "白名单加了新动作、真值出口没跟上"这类回归的机械守卫。
+    """
+    from auto_qb.webui.commands import _OPTIMISTIC_BULK_ACTIONS, is_deferred_receipt
+    assert _OPTIMISTIC_BULK_ACTIONS, "乐观白名单不应为空(空则本守阵失去意义)"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        for i, action in enumerate(sorted(_OPTIMISTIC_BULK_ACTIONS)):
+            assert not is_deferred_receipt("bulk_torrents", {"action": action}), \
+                f"{action} 是乐观动作, 不得进延迟回执族(否则收不到真值事件)"
+            cid = f"t{i}"
+            mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA"], "action": action, "cmd_id": cid}))
+            mgr.web.consume_commands()
+            assert mgr.web.results[cid]["status"] == "ok", (action, mgr.web.results[cid])
+            assert cid in mgr.web.truth_pending, f"{action}: 乐观动作必须登记待推真值(真值出口)"
+        # 反向: 非乐观的批量动作仍走延迟回执族(handler 自写回执, drain 不登记真值)
+        for action in ("recheck", "skip_check", "delete", "add_tags", "limits"):
+            assert is_deferred_receipt("bulk_torrents", {"action": action}), \
+                f"{action} 非乐观动作应保持延迟回执族"
+        # 单发 pause/resume 本就走 drain 的真值通路(handler 不自写回执); recheck 由 handler 自写
+        assert not is_deferred_receipt("pause_torrent")
+        assert not is_deferred_receipt("resume_torrent")
+        assert is_deferred_receipt("recheck_torrent")
 
 
 def test_drain_web_commands_bulk_torrents_group_keys():

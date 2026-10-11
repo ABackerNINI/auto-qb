@@ -674,6 +674,12 @@ WIN_MAX_PATH = 260
 _COINIT_APARTMENTTHREADED = 0x2
 _COINIT_OK = (0, 1)
 
+# ShellExecuteEx 的 fMask / nShow(`_win_shell_enter` 进入目录用):
+# SEE_MASK_INVOKEIDLIST(shellapi.h = 0x0C)**已含** SEE_MASK_IDLIST(0x04) —— 置前者即可传 PIDL
+# 而非字符串, 这正是长路径可用的前提。
+_SEE_MASK_INVOKEIDLIST = 0x0000000C
+_SW_SHOWNORMAL = 1
+
 
 def _exists_dir(path: str) -> bool:
     """目录判定(Windows 长路径经 `\\\\?\\` 前缀; 非 Windows 是空操作 —— 见 add_long_path_prefix_for_win)"""
@@ -685,16 +691,18 @@ def _exists_file(path: str) -> bool:
     return os.path.isfile(add_long_path_prefix_for_win(path))
 
 
-def _win_shell_open(path: str) -> bool:
-    """Windows 专用: 经 Shell 命名空间 PIDL 打开路径, **支持 >MAX_PATH 的长路径**。
+def _win_shell_with_pidl(path: str, use) -> bool:
+    """Windows 专用: 把 `path` 解析成 Shell 命名空间 PIDL 后交 `use(pidl, shell32, ctypes) -> bool`。
+
+    **支持 >MAX_PATH 的长路径**。两种打开语义(`_win_shell_open` 在父目录定位选中 /
+    `_win_shell_enter` 打开进入目录)共用本段的全部约束与 plumbing(反斜杠归一 / 剥 `\\\\?\\`
+    前缀 / COM 初始化配对 / PIDL 释放), 只有最后那次 Shell 调用不同 —— 收一份在这里,
+    免得两份副本各自漂移。
 
     为何另起一条路线: `os.startfile` 与 `explorer /select,` 都是**字符串路径**入口, 实测对
     314 字符裸路径分别抛 `FileNotFoundError(WinError 2)` 与**静默打开"桌面"**(误导性失败);
     加 `\\\\?\\` 前缀也不行 —— ShellExecute 系不吃该前缀(实测 `SHParseDisplayName` 对它返回
-    `0x80070057 E_INVALIDARG`)。PIDL 路线绕开字符串: `SHParseDisplayName(裸路径)` ->
-    `SHOpenFolderAndSelectItems(pidl)`。实测(2026-09-30, Win11)目录/文件 pidl 行为一致:
-    **都是打开父窗口并选中该条目**(旧注释"传目录 pidl = 打开该目录"与实测不符, 见
-    `_win_reuse_title_candidates`)。
+    `0x80070057 E_INVALIDARG`)。PIDL 路线绕开字符串: `SHParseDisplayName(裸路径)` -> 具体动作。
 
     实测约束(勿改):
     - `SHParseDisplayName` **只认反斜杠**, 正斜杠与 `\\\\?\\` 前缀都判 E_INVALIDARG;
@@ -725,8 +733,6 @@ def _win_shell_open(path: str) -> bool:
         ctypes.POINTER(wintypes.DWORD)
     ]
     shell32.SHParseDisplayName.restype = ctypes.c_long
-    shell32.SHOpenFolderAndSelectItems.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p, wintypes.DWORD]
-    shell32.SHOpenFolderAndSelectItems.restype = ctypes.c_long
     shell32.ILFree.argtypes = [ctypes.c_void_p]
     # ole32 的 COM 初始化/卸载同样要绑: 第一参数是 LPVOID(指针宽度), 不绑会踩与
     # `_win_user32` 同一类 x64 传参问题(实测教训见该处 docstring)
@@ -747,18 +753,85 @@ def _win_shell_open(path: str) -> bool:
         if shell32.SHParseDisplayName(target, None, ctypes.byref(pidl), 0, ctypes.byref(sfgao)) != 0:
             logger.debug(f"Shell PIDL 解析失败, 退回字符串路线: {path}")
             return False
-        if shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0) != 0:
-            logger.debug(f"Shell PIDL 打开失败, 退回字符串路线: {path}")
+        try:
+            ok = bool(use(pidl, shell32, ctypes))
+        except (AttributeError, OSError) as e:  # pragma: no cover - 防御: Shell 异常不该逃逸
+            logger.debug(f"Shell PIDL 路线异常, 退回字符串路线: {path} ({e})")
             return False
-        return True
-    except (AttributeError, OSError) as e:  # pragma: no cover - 防御: Shell 异常不该逃逸
-        logger.debug(f"Shell PIDL 路线异常, 退回字符串路线: {path} ({e})")
-        return False
+        if not ok:
+            logger.debug(f"Shell PIDL 打开失败, 退回字符串路线: {path}")
+        return ok
     finally:
         if pidl:
             shell32.ILFree(pidl)
         if hr in _COINIT_OK:
             ole32.CoUninitialize()
+
+
+def _win_shell_open(path: str) -> bool:
+    """Windows 专用: 经 Shell PIDL **在父目录中定位选中**该条目(支持 >MAX_PATH 长路径)。
+
+    `SHOpenFolderAndSelectItems`: 实测(2026-09-30, Win11)传**目录** pidl 与传**文件** pidl
+    行为一致 —— **都是打开父窗口并选中该条目**(旧注释"传目录 pidl = 打开该目录"与实测不符,
+    见 `_win_reuse_title_candidates`)。所以本函数只服务"单文件种子定位选中"这一种语义;
+    "打开**进入**某个目录"是另一件事, 走 `_win_shell_enter`。
+    """
+    def _reveal(pidl, shell32, ctypes):
+        from ctypes import wintypes
+
+        shell32.SHOpenFolderAndSelectItems.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p, wintypes.DWORD]
+        shell32.SHOpenFolderAndSelectItems.restype = ctypes.c_long
+        return shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0) == 0
+
+    return _win_shell_with_pidl(path, _reveal)
+
+
+def _win_shell_enter(path: str) -> bool:
+    """Windows 专用: 经 Shell PIDL **打开进入**目录(显示其中内容), 支持 >MAX_PATH 长路径。
+
+    与 `_win_shell_open` 的分工(2026-10-11 用户诉求: 目标是文件夹时**直接进入**): 后者是
+    "在父目录里高亮该条目", 本函数才是"进入该目录"—— 与字符串路线的 `os.startfile(目录)`
+    同语义, 但绕开 MAX_PATH 限制: 经 `ShellExecuteExW` 在该目录的 PIDL 上执行 `open` 默认动作
+    (`fMask=SEE_MASK_INVOKEIDLIST`, 已含 SEE_MASK_IDLIST ⇒ 用 PIDL 而不是字符串)。
+
+    返回 True = 已交给 Shell; False = 本路线不可用, 调用方降级(普通长度路径靠字符串路线仍能进入)。
+    """
+    def _enter(pidl, shell32, ctypes):
+        from ctypes import wintypes
+
+        class _SHELLEXECUTEINFOW(ctypes.Structure):
+            """shellapi.h 的 SHELLEXECUTEINFOW(x64 自然对齐后 112 字节, 字段序即 ABI)"""
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("fMask", wintypes.DWORD),
+                ("hwnd", wintypes.HWND),
+                ("lpVerb", wintypes.LPCWSTR),
+                ("lpFile", wintypes.LPCWSTR),
+                ("lpParameters", wintypes.LPCWSTR),
+                ("lpDirectory", wintypes.LPCWSTR),
+                ("nShow", ctypes.c_int),
+                ("hInstApp", wintypes.HINSTANCE),
+                ("lpIDList", ctypes.c_void_p),
+                ("lpClass", wintypes.LPCWSTR),
+                ("hkeyClass", wintypes.HKEY),
+                ("dwHotKey", wintypes.DWORD),
+                ("hIcon", wintypes.HANDLE),
+                ("hProcess", wintypes.HANDLE),
+            ]
+
+        fn = getattr(shell32, "ShellExecuteExW", None)
+        if fn is None:  # pragma: no cover - 防御: 极少见的无该导出
+            return False
+        _win_bind(fn, [ctypes.POINTER(_SHELLEXECUTEINFOW)], wintypes.BOOL)
+        info = _SHELLEXECUTEINFOW()
+        info.cbSize = ctypes.sizeof(info)
+        info.fMask = _SEE_MASK_INVOKEIDLIST
+        info.lpVerb = "open"
+        info.lpIDList = pidl.value
+        info.nShow = _SW_SHOWNORMAL
+        return bool(fn(ctypes.byref(info)))
+
+    return _win_shell_with_pidl(path, _enter)
 
 
 def _win_string_open(path: str, select: bool) -> None:
@@ -1110,8 +1183,16 @@ def open_path(path: str, select: bool = False) -> None:
     - Linux: 无通用"选中"语义(依赖具体文件管理器), 退化为打开父目录 —— 明确比静默丢弃好。
     目标不是已存在文件(或平台不支持)时退化为普通打开该路径, 不抛错(动作类工具的容错优先)。
 
+    `select=False` + **目录** = "打开**进入**该目录"(显示其中内容) —— 目录里有多条内容条目,
+    在父目录里高亮目录本身对用户无用(2026-10-11 用户诉求):
+    - Windows: Shell PIDL 传**目录** pidl -> `_win_shell_enter`(`ShellExecuteExW` + PIDL 走
+      `open` 默认动作)。**不能**用 `_win_shell_open`(SHOpenFolderAndSelectItems)代替 ——
+      实测它对目录 pidl 也是"打开**父**窗口并选中该目录"(见其 docstring); 它只作为 enter
+      失败时的降级(至少把用户带到该目录所在处);
+    - macOS/Linux: `open <dir>` / `xdg-open <dir>` 本就是进入语义(分支逐字未变)。
+
     长路径(>MAX_PATH, Windows): 字符串路线对超长路径一个抛错、一个静默开错地方, 故
-    **目录**与**定位选中**两种语义改走 Shell PIDL; 目录判定一律经 `_exists_dir`(带前缀)。
+    **进入目录**与**定位选中**两种语义都走 Shell PIDL; 目录判定一律经 `_exists_dir`(带前缀)。
     macOS/Linux 无 260 限制(PATH_MAX 1024 / 4096), 分支**逐字保持改动前行为**。
 
     !`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
@@ -1129,8 +1210,11 @@ def open_path(path: str, select: bool = False) -> None:
                     return
                 _win_string_open(path, select=True)
                 return
-            if _exists_dir(path) and _win_shell_open(path):  # 目录 pidl -> 打开父窗口并选中该目录(实测)
-                return
+            if _exists_dir(path):
+                # 目录 = 多条内容条目: **进入**该目录; enter 不可用时退"定位选中"(至少把用户
+                # 带到该目录所在处), 两者都不行才落字符串路线
+                if _win_shell_enter(path) or _win_shell_open(path):
+                    return
             _win_string_open(path, select=False)
             return
         finally:

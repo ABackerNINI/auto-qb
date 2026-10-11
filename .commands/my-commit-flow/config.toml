@@ -19,7 +19,7 @@ enabled = true
 [tasks."my-commit-flow.sync"]
 script = "sync.py"
 pin    = true
-when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前。自动 fetch + 快进/rebase(分叉保线性)。提交路径已不需要它(2026-10-04 起 ship.commit 提交先行); 想在提交前手工合流仍可单独跑"
+when   = "会话开工：任何轮次（含只读分析/问答）的第一个动作之前，硬性无豁免。自动 fetch + 快进/rebase(分叉保线性)。提交路径已不需要它(2026-10-04 起 ship.commit 提交先行); 想在提交前手工合流仍可单独跑"
 note   = "结果行: 已同步/同步成功 <hash>(生成物自动化解附「自动重跑生成物 N 处」); 真改写 HEAD 的步骤在其上各留一行「旧hash→新hash」(齐平/本地领先无步骤); 失败一行含原因与步骤(冲突已自动回滚); 结果行贴进回复"
 doc    = "references/pipeline.md"
 

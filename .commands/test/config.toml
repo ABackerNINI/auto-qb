@@ -50,5 +50,5 @@ note    = "消失键且版本未抬时脚本拒绝重生成(先抬 CURRENT_VERSI
 script  = "linux_ci.py"
 timeout = 900
 when    = "本机复现 Linux CI(平台差异排查): 起容器跑全量, 与 Windows 侧对照 —— 改了平台相关代码/测试后必跑"
-note    = "用脚本而不是一行 run: 命令里全是 && / ; / | 与多层引号, 引擎在 Windows 上走 cmd.exe, 引号地狱必踩。配方与两个必踩点(别删容器内 /work/.git, 否则 test_commands_engine 多 5 条假红; 先删宿主 .venv 再 uv sync)单点在 memory-bank/pitfalls/testing/patching.md「Docker 等价复现」节。默认镜像 python3.12(= CI 矩阵), 传参可换镜像(如 python3.13-bookworm-slim)。输出全文透传(排障要看 FAILED 明细与覆盖率行)"
+note    = "用脚本而不是一行 run: 命令里全是 && / ; / | 与多层引号, 引擎在 Windows 上走 cmd.exe, 引号地狱必踩。配方与两个必踩点(别删容器内 /work/.git, 否则 test_commands_engine 多 5 条假红; 先删宿主 .venv 再 uv sync)单点在 memory-bank/pitfalls/testing/patching.md「Docker 等价复现」节。2026-10-11 起**代理自动透传**: http_proxy/https_proxy 带回环主机(127.0.0.1/localhost)时改写成 host.docker.internal 并补 --add-host, no_proxy 恒并入回环 —— 缺改写则容器内 uv sync 连不上 PyPI, 缺回环放行则回环端点用例假红(守阵 .commands/test/scripts/test_linux_ci.py)。默认镜像 python3.12(= CI 矩阵), 传参可换镜像(如 python3.13-bookworm-slim)。输出全文透传(排障要看 FAILED 明细与覆盖率行)"
 doc     = "../../memory-bank/pitfalls/testing/patching.md"
