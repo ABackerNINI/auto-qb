@@ -1,7 +1,9 @@
 # Windows 长路径(MAX_PATH 260)
 
 > 摘要: 超过 MAX_PATH 的路径在 Windows 上**裸路径一律失败**, 而失败方式有**三种**(给假 / 抛错 / 静默退化), 同一根因会在不同层伪装成不同症状 —— 前缀、比较、打开、删除四处各有坑。
-> 触发: 长路径, MAX_PATH, 260, `\\?\`, 扩展长度前缀, 路径过长, 打不开文件夹, 打开目标文件夹, open_path, PIDL, SHParseDisplayName, SHOpenFolderAndSelectItems, ShellExecute, isdir, scandir, realpath, normcase, path_normalize, rmtree, WinError 3, WinError 2, 深目录, 中文长名
+> 触发: 长路径, MAX_PATH, 260, `\\?\`, 扩展长度前缀, 路径过长, 打不开文件夹, 打开目标文件夹, open_path, PIDL, SHParseDisplayName, SHOpenFolderAndSelectItems, ShellExecute, ShellExecuteExW, SEE_MASK_INVOKEIDLIST, 进入目录, 打开目录, isdir, scandir, realpath, normcase, path_normalize, rmtree, WinError 3, WinError 2, 深目录, 中文长名
+
+**Refs:** memory-bank/tasks/26-10-11-webui-open-path-resolve.md
 
 ### 长路径必须加 `\\?\` 前缀, 且**新文件访问一律走同一工具**
 
@@ -48,6 +50,9 @@
   (`S_OK`/`S_FALSE` 均需配对 `CoUninitialize`)。
   ⚠ **反斜杠是硬要求**: 正斜杠与 `\\?\` 前缀都被判 `0x80070057 E_INVALIDARG` ⇒ **前缀与 PIDL 路线互斥**。
   代价: 窗口标题/地址栏会显示 `\\?\H:\…` 原样前缀(功能正常, 属外观瑕疵)。
+  ⚠ **"进入"目录是另一条路线**(2026-10-11): `SHOpenFolderAndSelectItems` 对目录 pidl **也是"打开父窗口并选中该目录"**, 不是进入。要真正**进入**目录(显示其中内容)须走
+  `ShellExecuteExW`(`fMask=SEE_MASK_INVOKEIDLIST`(0x0C, 已含 `SEE_MASK_IDLIST`), `lpVerb="open"`, `lpIDList=目录 PIDL`) —— 在 PIDL 上执行 `open` 默认动作 = 进入, 且**长路径安全**(全程 PIDL, 不碰字符串长度)。
+  单点 `utils._win_shell_enter`(与 `_win_shell_open` 共用 `_win_shell_with_pidl` 收 COM 配对 / `ILFree` 释放); `open_path` 目录分支 enter 优先、`_win_shell_open` 作降级(至少把用户带到该目录所在处)。守阵 `tests/test_utils.py::test_win_shell_enter_pidl_routes`。
 - **守阵**: `tests/test_utils.py::test_open_path_windows_*`(平台分支) + **`tests/sidefx.py` 的 LAUNCH 类必须收录该入口**
   —— 它是 ctypes 直调 shell32, 不经任何 stdlib 入口, 不单列就是守阵盲区。
 

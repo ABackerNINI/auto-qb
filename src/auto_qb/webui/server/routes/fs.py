@@ -11,7 +11,7 @@ Windows 长路径前缀收编进 Local 实现单点, 容器映射(Mapped)在此�
 import errno
 import logging
 import os
-from typing import List
+from typing import List, Tuple
 from fastapi import HTTPException
 
 from ....infra import file_access
@@ -221,13 +221,27 @@ def build_router(ctx: WebContext) -> APIRouter:
         默认程序打开目标, 等于把"任意文件执行"暴露给 WEB 端点。故请求只带 kind + 标识,
         路径一律由服务端从自己的快照派生, 且只允许**已存在的目录或(单文件种子的)文件**。
 
-        解析口径: group 取组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表),
-        组内成员路径天然一致, 无需再比对); torrent 按 content_path 的**实际存在形态**三段分流:
-        文件存在 = 单文件种子, 打开所在目录并**定位选中**该文件(R10-10 用户诉求: "没有创建
-        文件夹的要在文件夹中选中相关文件"); 目录存在 = 多文件种子, 打开内容目录; 都不存在
-        (下载中最常见 —— qB 报的 content_path 是逻辑完成名, 文件未落盘 / 启用 .!qB 未完成
-        后缀时磁盘上没有该路径) 则回退 save_path, 至少把目录打开, 不因"未完成"而 404。
-        content_path 与 save_path 都缺时同样回退 save_path(空)。
+        解析口径(2026-10-11 优化, 单点见下方 `_probe`): **文件(单文件种子) > root_path /
+        content_path > save_path** ——
+        1. `content_path`(单文件种子的绝对值就是该文件)或 `root_path` 指向**已存在的文件**
+           = 单文件种子 ⇒ 交回该文件并带 `select=True`, 打开层据此"打开父目录并**定位选中**"
+           该文件(R10-10 用户诉求: "没有创建文件夹的要在文件夹中选中相关文件")。这是唯一
+           "选中条目"的层级 —— 目标只有一条, 选中才有意义。
+        2. 否则 `root_path` 优先、`content_path` 次之取**已存在的目录** = 多文件种子 ⇒ 打开
+           **进入**该目录(不选中): 目录里有多条内容条目, 在父目录里高亮目录本身对用户无用。
+        3. 两者都不可用(下载中最常见 —— qB 报的 content_path 是**逻辑完成名**, 文件未落盘 /
+           启用 `.!qB` 后缀时磁盘上没有该路径; 无元数据时两者皆空) ⇒ 回退 `save_path`, 至少把
+           下载目录打开, 不因"未完成"而 404。
+        `root_path` = qB 5.0+ 的"torrent 文件树**首个公共子目录**"(多文件种子即 `save_path/<名称>`,
+        单文件落在 save_path 或条带根目录模式下为空串), 比 content_path 更贴近"这份内容在哪";
+        为空时自然落到 content_path。判据见 pitfalls/backend/qb-content-path-semantics.md。
+
+        组(kind=group)按**单个种子**处理的条件: 组内只含一个种子, **或**组内成员的
+        content_path / root_path **任一**归一后全同(即都指向同一份内容 —— 辅种组常态)。条件
+        成立时用代表成员走上面同一套解析(单文件组也能"定位选中", 多文件组进入内容目录而非
+        再落到装了上百个种子的共享保存目录); 否则(确有多份不同内容)退回组 key 首元(save_path)。
+        组 key = (规范化 save_path, 文件列表), 故 save_path 天然一致, 此处只补"内容路径"这一维。
+
         只读: 不投命令、不写 state —— 单一写线程假设不受影响。
 
         容器(Mapped)实现 open_path 恒 NotSupported —— 优雅降级为 501 + 引导「复制路径」
@@ -238,20 +252,49 @@ def build_router(ctx: WebContext) -> APIRouter:
         kind = str(b.get("kind") or "").strip()
         select = False
         fa = file_access.get_file_access()
+
+        def _probe(rec) -> Tuple[str, bool]:
+            """打开目标解析单点: (target, select)。文件(单文件种子) > root_path > content_path > save_path
+
+            UNDET 细节串沿用既有口径: 候选路径**不可判定**(Mapped 下白名单内但未命中 fs.path_map)
+            即语义化 404 并停手 —— 「不可判定」不冒充「不存在」, 也不静默跳过当它没出现。
+            """
+            content = path_normalize(rec.content_path or "")
+            root = path_normalize(rec.root_path or "")
+            for cand in (content, root):  # 单文件种子(文件已落盘): 定位选中, 不降级成"只打开父目录"
+                if cand and _determinable(fa.isfile(cand), "路径不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
+                    return cand, True
+            for cand in (root, content):  # 多文件种子: root_path 是精确的 torrent 根目录, 优先
+                if cand and _determinable(fa.isdir(cand), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
+                    return cand, False
+            return path_normalize(rec.save_path or ""), False  # 未落盘(下载中) -> 回退保存路径
+
+        def _paths_consistent(recs) -> bool:
+            """组成员"路径一致"判定: content_path / root_path **任一**归一后同一取值(空值不参与)
+
+            成立即"组内都指向同一份内容"(辅种组常态) ⇒ 按单个种子处理。组 key 已保证 save_path
+            与文件列表一致, 本判定只补内容路径维度: qB 报回的 content_path/root_path 仍可能逐成员
+            有差异(老版本 qB 无 root_path / torrent 名称变动), 任一字段全同即可放心按单个处理。
+            """
+            for attr in ("content_path", "root_path"):
+                values = {path_normalize(getattr(rec, attr) or "") for rec in recs}
+                values.discard("")
+                if len(values) == 1:
+                    return True
+            return False
+
         if kind == "group":
             key = _group_key_param(str(b.get("key") or ""))
-            if key not in manager.store.groups:
+            members = manager.store.groups.get(key)
+            if members is None:
                 raise HTTPException(status_code=404, detail="辅种不存在")
-            target = key[0] or ""
-        elif kind == "torrent":
-            rec = _require_torrent(str(b.get("hash") or "").strip())
-            content = path_normalize(rec.content_path or "")
-            if content and _determinable(fa.isfile(content), "路径不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
-                target, select = content, True  # 单文件种子(文件已落盘): 定位选中, 不降级成"只打开父目录"
-            elif content and _determinable(fa.isdir(content), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
-                target = content  # 多文件种子: 打开内容目录
+            recs = [manager.store.by_hash[h] for h in tuple(members) if h in manager.store.by_hash]
+            if recs and (len(recs) == 1 or _paths_consistent(recs)):
+                target, select = _probe(recs[0])  # 组内同一份内容: 按单个种子解析
             else:
-                target = path_normalize(rec.save_path or "")  # content 未落盘(下载中) -> 回退保存路径
+                target = key[0] or ""  # 确有多份不同内容 / 成员索引缺失: 退回组 save_path
+        elif kind == "torrent":
+            target, select = _probe(_require_torrent(str(b.get("hash") or "").strip()))
         else:
             raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
         target = path_normalize(target)
