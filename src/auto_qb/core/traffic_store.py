@@ -26,7 +26,9 @@ v4 全部写新目录; 旧 qb-traffic-v3/ 与更早的 qb-traffic/ 原样留存�
   把 n-only 前缀拆成 3 列 B 无基线块(块内仅 n 游程合法, 出现 r/z 即坏行 —— 解析守卫),
   恢复传输的记录开新块立基线。基线二态须成对(全 None / 全非 None)。
 - 负 delta: 基线块内必是损坏 —— 绝对值形态做不到的解析免费校验(计数器回落由写侧「重置
-  强制关块重立基线」排除)。
+  强制关块重立基线」排除)。!这是「cur < last 判重置」口径的解析层形态(采样器 _delta /
+  视图层 _bucket_delta 记 null, 本层 delta 形态直接记坏行 —— 分层语义不同、判据同源,
+  issue 26-10-11-0207 R07/R10 登记)。
 - dt_ms: 正整数且 <= DT_MS_MAX; 写侧累积漂移 <= DRIFT_TOL_MS(250ms, D2)时缺省(按标称
   interval / run_len x interval 推进); 时钟回拨钳制 dt_ms >= 1。dt 链定约(读写两侧同源)
   见「纯函数区」头注释: 游标 = 上一已消费记录槽位锚点, 游程槽均摊, 链式自洽; 全路径无
@@ -156,6 +158,37 @@ def _warn_bad_lines(source: str, bad_lines: int, data_lines: int, torn_tail: boo
         f"流量存储 | {source} 坏行 {bad}/{data_lines} 行(占比 {bad / data_lines:.1%} 超阈), "
         "已逐行跳过(图面数据缺失, 疑似磁盘损坏/外部编辑)"
     )
+
+
+def _read_parse(path: str, parser, empty):
+    """「读文件 -> 解析 -> 坏行超阈告警」缺省纪律单点(issue 26-10-11-0207 R07)
+
+    缺失/空文件返回 empty(调用方声明空态: agg = 空解析结果, day = None), 其余整读后
+    交 parser(解析坏行/撕裂尾/同 epoch 取末行等纪律全在 parser 内); OSError 上抛,
+    调用方按恢复失败口径处理。TrafficV4Store 与 V4DayCache 共用 —— 缓存层与 store 层
+    同一读纪律, 防两份漂移。
+    """
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return empty
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        parsed = parser(f.read())
+    _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
+    return parsed
+
+
+def _ensure_file_prefix(key: str, path: str) -> str:
+    """追加写前缀单点(issue 26-10-11-0207 R07): append_records / append_agg_rows 共用
+
+    文件不存在/空 = 头行(v4) + key 行; 已有文件且尾字节非换行 = 撕裂尾补一个换行
+    (不与残行合并, 每 flush 查补一次 —— v2 逐行查补退役); 其余空串。
+    """
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return f"{HEADER_LINE_V4}\nkey,{key}\n"
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        if f.read(1) != b"\n":
+            return "\n"
+    return ""
 
 
 def _warn_bad_lines_path(path: str, parsed) -> None:
@@ -674,6 +707,9 @@ def parse_v4_agg_text(text: str) -> V4ParsedAgg:
     行 9 列, 8 列旧行兜底 cov_s = 3600(防御性, v4 全新目录正常不出现); 同 kind 同
     epoch 重复行取最后一行(重封 = 追加行的读侧口径); 坏行纪律与天文件一致。
     返回按 kind 分列、epoch 升序。
+    !解析骨架与 parse_v4_day_text 同族(头行门闩 / data+bad 计数 / 空行注释跳 /
+    split(",") / try-except / 撕裂尾豁免), 仅行型不同 —— 差异点已钉在行型分支,
+    issue 26-10-11-0207 R07/R10 登记不急合; 改公共纪律(门闩/撕裂尾/坏行占比)两处同步。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")
@@ -736,7 +772,9 @@ def v4_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     cov_s = min(Σdt_i, HOUR_SECONDS); max 取逐记录最大; totals 取级末快照(末记录);
     cov_s = 0(无有效覆盖)或空 samples -> ValueError(hour 行只在有覆盖时产出, 调用方
     义务)。dt_i 恒等于 interval_s 时严格退化为现行 _aggregate_bucket 纯活跃桶公式
-    (avg = round(Σrate/n)) —— 测试对照钉住。"""
+    (avg = round(Σrate/n)) —— 测试对照钉住。
+    !与 v4_rollup_agg 同构双实现(加权量不同: 本函数 dt 加权 vs 逐级 cov 加权),
+    issue 26-10-11-0207 R07/R10 登记不急合 —— 合并需先统一加权量语义。"""
     if not samples:
         raise ValueError("hour 聚合无样本")
     cov = min(sum(s.dt_s for s in samples), float(HOUR_SECONDS))
@@ -825,14 +863,7 @@ class TrafficV4Store:
             return
         path = self.series_day_path(key, date_str)  # 非法键/日期在此 fail-fast
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        prefix = ""
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            prefix = f"{HEADER_LINE_V4}\nkey,{key}\n"
-        else:
-            with open(path, "rb") as f:
-                f.seek(-1, os.SEEK_END)
-                if f.read(1) != b"\n":
-                    prefix = "\n"
+        prefix = _ensure_file_prefix(key, path)  # 建头行/撕裂尾查补单点(与 append_agg_rows 同款)
         dl_base, up_base = block_base if block_base is not None else (None, None)
         lines = []
         if header is not None:
@@ -859,12 +890,11 @@ class TrafficV4Store:
         读侧快读口径(D3, §05.2): agg.dat 单次快读上界按 ~1MB 口径放宽(全年 hour 行
         ≈8760 x ~90B + day/month 行) —— 口径记录非强制截断, S3b 视图读取沿用本入口。"""
         path = v4_agg_file_path(self._data_dir, key)
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            parsed = parse_v4_agg_text(f.read())
-        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
-        return parsed
+        return _read_parse(
+            path,
+            parse_v4_agg_text,
+            V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0),
+        )
 
     def append_agg_rows(self, key: str, rows: tuple) -> None:
         """追加一批聚合行(§04.2): 与 append_records 同款追加纪律 —— 单次 open("a") +
@@ -875,14 +905,7 @@ class TrafficV4Store:
             return
         path = v4_agg_file_path(self._data_dir, key)  # 非法键 fail-fast
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        prefix = ""
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            prefix = f"{HEADER_LINE_V4}\nkey,{key}\n"
-        else:
-            with open(path, "rb") as f:
-                f.seek(-1, os.SEEK_END)
-                if f.read(1) != b"\n":
-                    prefix = "\n"
+        prefix = _ensure_file_prefix(key, path)  # 建头行/撕裂尾查补单点(与 append_records 同款)
         with open(path, "a", encoding="utf-8", newline="\n") as f:
             f.write(prefix)
             f.write("\n".join(format_agg_row(r) for r in rows) + "\n")
@@ -922,12 +945,7 @@ class TrafficV4Store:
         """读单天文件(§04.3 catch-up 的 raw 源; 批 2 本棒起 v4 行型解析): 缺失/空文件 =
         None; OSError 上抛。"""
         path = self.series_day_path(key, date_str)
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return None
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            parsed = parse_v4_day_text(f.read())
-        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
-        return parsed
+        return _read_parse(path, parse_v4_day_text, None)
 
     def trim_agg_hours(self, key: str, now: float, rollup_window: float) -> Optional[int]:
         """hour 行按 rollup_window 裁剪(§04.5, 本层唯一 tmp+fsync+os.replace 原子重写点):
@@ -1037,7 +1055,7 @@ class V4DayCache:
             if ent is not None and ent[0] == stat_key:
                 self._entries.move_to_end((key, date_str))
                 return ent[2]
-        parsed = self._read_parse(path)  # 锁外解析(慢段; 并发重复解析无害)
+        parsed = _read_parse(path, parse_v4_day_text, None)  # 锁外解析(慢段; 并发重复解析无害; 读纪律单点)
         with self._lock:
             self._entries[(key, date_str)] = (stat_key, size, parsed)
             self._entries.move_to_end((key, date_str))
@@ -1069,33 +1087,16 @@ class V4DayCache:
             if ent is not None and ent[0] == stat_key:
                 self._agg_entries.move_to_end(key)
                 return ent[1]
-        parsed = self._read_parse_agg(path)  # 锁外解析(慢段; OSError 上抛不落缓存)
+        parsed = _read_parse(
+            path,
+            parse_v4_agg_text,
+            V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0),
+        )  # 锁外解析(慢段; OSError 上抛不落缓存; 读纪律单点 _read_parse)
         with self._lock:
             self._agg_entries[key] = (stat_key, parsed)
             self._agg_entries.move_to_end(key)
             while len(self._agg_entries) > V4_AGG_CACHE_MAX_ENTRIES:
                 self._agg_entries.popitem(last=False)
-        return parsed
-
-    @staticmethod
-    def _read_parse_agg(path: str) -> V4ParsedAgg:
-        """agg.dat 缺省解析纪律(对齐 TrafficV4Store.read_agg): 缺失/空文件 = 空解析结果。"""
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            parsed = parse_v4_agg_text(f.read())
-        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
-        return parsed
-
-    @staticmethod
-    def _read_parse(path: str) -> Optional["V4ParsedDay"]:
-        """缺省解析纪律(对齐 TrafficV4Store.read_day): 缺失/空文件 None, 其余整读解析。
-        批 2 本棒起天文件为 v4 行型(头行门闩 v4, 不设双读)。"""
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return None
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            parsed = parse_v4_day_text(f.read())
-        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
         return parsed
 
 
@@ -1104,7 +1105,9 @@ def v4_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
     day 不从 raw 直聚: raw_window 裁剪边缘的 cov_s 链只在逐级传递才完整):
     avg = round(Σ(下级.avg x 下级.cov) / Σcov), max = max(下级.max), totals = 级末快照
     (epoch 最大的下级行), cov = Σ下级.cov。kind 限 {"day","month"}(hour 由 v4_hour_agg
-    从记录直聚); children 空或 Σcov <= 0 -> ValueError。"""
+    从记录直聚); children 空或 Σcov <= 0 -> ValueError。
+    !与 v4_hour_agg 同构双实现(加权量不同: 逐级 cov 加权 vs dt 加权), 两处互指;
+    issue 26-10-11-0207 R07/R10 登记不急合。"""
     if kind not in V4_ROLLUP_KINDS:
         raise ValueError(f"非法逐级聚合行型(须 day/month): {kind!r}")
     if not children:
@@ -1333,6 +1336,9 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
     n 行不变。其余纪律 —— key 行取首个(重复记坏)/空行注释行跳过/坏行列数 r ∈ {5,6},
     z ∈ {4,5}, n ∈ {2,3}/dt_ms 须正整数且 <= DT_MS_MAX/撕裂尾半行豁免损坏占比/损坏占比
     分母 —— 原样沿用 v3 口径。
+    !解析骨架与 parse_v4_agg_text 同族(头行门闩 / data+bad 计数 / 空行注释跳 /
+    split(",") / try-except / 撕裂尾豁免), 仅行型不同(B/R/Z/N vs hour/day/month);
+    两处互指, issue 26-10-11-0207 R07/R10 登记不急合 —— 改公共纪律两处同步。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")

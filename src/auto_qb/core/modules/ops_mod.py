@@ -53,6 +53,7 @@ from ...rules.checking_meta import (
 )
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule
+from ..state import prune_day_keys
 from ..taskqueue import FINISHED, REQUEUE, Task
 
 logger = logging.getLogger(__name__)
@@ -198,16 +199,12 @@ class OpsModule(BaseModule):
         tq = self._ctx.task_queue
 
         # ---- R1 实时复核(全来源, plan 26-10-04-1824 P1): 动手前对 qB 单 hash 直查核实(跳检 R2
-        # 同款范式)。次序约束(计划 §6.1): 在冷却之后(冷却拒绝不付 API 成本)、登记之前(拒绝时
-        # 不留任何登记); live 空 = 种子已不在(qB 侧已删, 快照尚在) -> 放弃。
-        try:
-            live = self._ctx.api.torrents_info(torrent_hashes=hash)
-        except Exception as e:
-            # 复核异常 fail-closed: 看不见就不提交(未执行任何变更), 与跳检 R2 同口径
-            return ActionResult.fail(f"提交前实时复核失败(未执行任何变更): {e}")
-        if not live:
-            logger.info(f"{prefix} {self._ops_repr(tor)} | recheck 放弃: {_RECHECK_GONE_MSG}")
-            return ActionResult.skip(_RECHECK_GONE_MSG)
+        # 同款范式, 骨架单点 _live_recheck)。次序约束(计划 §6.1): 在冷却之后(冷却拒绝不付
+        # API 成本)、登记之前(拒绝时不留任何登记); live 空 = 种子已不在(qB 侧已删, 快照尚在)
+        # -> 放弃。
+        live = self._live_recheck(hash, "提交前", f"{prefix} {self._ops_repr(tor)} | recheck 放弃", _RECHECK_GONE_MSG)
+        if isinstance(live, ActionResult):
+            return live
         if is_piece_checking(live[0].state):
             # live 真值在校验(快照窗口内不可见, 典型: qB 自家 WebUI 刚发起) -> 拒绝重复提交
             logger.info(f"{prefix} {self._ops_repr(tor)} | recheck 拒绝: {_RECHECK_BUSY_MSG}(实时复核)")
@@ -410,15 +407,11 @@ class OpsModule(BaseModule):
         if tor is None:
             return ActionResult.skip(_SKIP_GONE_MSG)
 
-        # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态 ----
+        # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态(骨架单点 _live_recheck)
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
-        try:
-            live = self._ctx.api.torrents_info(torrent_hashes=hash)
-        except Exception as e:
-            return ActionResult.fail(f"跳检前实时复核失败(未执行任何变更): {e}")
-        if not live:
-            logger.info(f"{prefix} {tor.log_repr} | 跳检放弃: {_SKIP_GONE_MSG}")
-            return ActionResult.skip(_SKIP_GONE_MSG)
+        live = self._live_recheck(hash, "跳检前", f"{prefix} {tor.log_repr} | 跳检放弃", _SKIP_GONE_MSG)
+        if isinstance(live, ActionResult):
+            return live
 
         # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用; filelist 排最后) ----
         gate = self._skip_gates(hash, tor, force=force)
@@ -535,6 +528,25 @@ class OpsModule(BaseModule):
             )
         return results
 
+    def _live_recheck(self, hash: str, purpose: str, gone_log: str, gone_msg: str):
+        """R1/R2 实时复核样板单点(issue 26-10-11-0207 R10): 动手前对 qB 单 hash 直查核实
+
+        - 复核异常 fail-closed: 看不见就不提交(未执行任何变更), R1/R2 同口径;
+        - live 空 = 种子已不在(qB 侧已删, 快照尚在) -> 记 INFO 放弃(gone_log 为整行去掉
+          msg 的前缀, R1 = f"{prefix} {_ops_repr} | recheck 放弃" / R2 = "跳检放弃")。
+
+        返回 live 列表(继续往下走); 失败/放弃直接返回 ActionResult(fail/skip), 调用方
+        isinstance 分流。
+        """
+        try:
+            live = self._ctx.api.torrents_info(torrent_hashes=hash)
+        except Exception as e:
+            return ActionResult.fail(f"{purpose}实时复核失败(未执行任何变更): {e}")
+        if not live:
+            logger.info(f"{gone_log}: {gone_msg}")
+            return ActionResult.skip(gone_msg)
+        return live
+
     def _skip_gates(self, hash: str, tor: TorrentRecord, force: bool = False) -> Optional[ActionResult]:
         """跳检前置闸门(执行路径): 从 _skip_gates_detail 派生 —— 取首个未过闸门转 ActionResult,
         谓词只写一遍、执行与预检两路径同源(防两套谓词漂移, T18 同源断言钉死)。
@@ -553,11 +565,11 @@ class OpsModule(BaseModule):
             if v.gate == "dedup":
                 return ActionResult.skip(v.text)
             return ActionResult.fail(v.text)
-        today = date.today().isoformat()
         skip_day = self.state.get("skip_check_day")
         if skip_day:
-            for h in [h for h, d in skip_day.items() if d != today]:
-                del skip_day[h]
+            # 只留当日 = 保留窗 keep_days=0 的特例(prune_day_keys 单点, 对齐
+            # state/_prune_exec_history 与 speed_curve 的日键淘汰口径)
+            prune_day_keys(skip_day, date.today(), 0, lambda k, v: v)
         return None
 
     def _skip_gates_detail(self, hash: str, tor: TorrentRecord) -> list:

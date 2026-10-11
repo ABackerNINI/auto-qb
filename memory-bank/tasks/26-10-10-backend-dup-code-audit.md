@@ -145,3 +145,18 @@
 - **执行注意(供后续修复轮复用)**: ① 报告口径仍需逐处复核 —— R17-A01 条件侧原只捕 `OSError`、env 侧捕 `(OSError, ValueError)`, 取超集后对条件侧是不可达路径的防御性放宽(实测两实现不抛 `ValueError`), 行为等价; ② 「文案逐字不变」是保守口径的关键 —— 三处数值校验文案不同, helper 用 `what` 参数承载主体短语而非硬编一种; ③ 收口后**清未用导入**(conditions 的 `file_access`)。
 - **零改动确认**: 改动面仅 rules 包内 5 源文件 + 1 测试文件; 跨包零改动; `config.yml` / `auto-qb-data/` 未触碰。
 - **待办下一轮**: infra 轮 18 的 5 条 issue 仍在 `Open`, 属后续修复轮候选; 重复代码审查主线(Phase 2 前端 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。
+### 2026-10-11 R8 — core 批次 9 条 issue 实施(用户「修复core部分问题…相关issue一并认领」)
+
+- **触发**: 用户指名按报告 `26-10-11-0033` 修复 core 部分, 相关 issue 一并认领。9 条 `26-10-11-0207-refactor-core-*` 全部 Open → In Progress → **Fixed**(状态变更日志逐条留痕)。
+- **实施口径**: A/C 类抽单点收敛; B 类按计划「只登记」口径加互指注释不合并。逐条:
+  - **R05 qbmanager**: 抽 `_note_conn_failed/_note_conn_ok/_reload_state` 三私有方法, connect()/run()/__init__ 七个调用点归一。⚠初版命名 `_load_state` 撞**别名冻结守阵**(`test_qbmanager_alias_freeze`: 退役 forward 成员名禁复活)红验, 改名 `_reload_state`; 接线守阵 `test_state_migration_materialize_is_wired_in_run` 同步改锚 `_reload_state()`(意图不变: 物化在加载后)。
+  - **R10 日键淘汰**: `state.prune_day_keys(d, today, keep_days, date_of)` 单点 —— 三形态(键即日期 / 值字段 date / 值即日期)由 `date_of(key, value)` 声明; ops skip_check_day 的「只留当日」= keep_days=0 特例(理论行为差: 未来日期不再被删, 实际写入只产当日)。
+  - **R08 集数标记**: 排除集单点 `episodes.RESOLUTION_EXCLUDE`(tvshows `_BARE_EXCLUDE` 引用之, tvshows 顶部补 `from . import episodes`, 无环); 集数/季标记正则族 B 类互指注释(episodes 是 tvshows 超集的子集, 评估复用后再定)。⚠注释初稿函数名 `_derive_from_directory` 系臆测, 已按实改 `parse_files`。
+  - **R05/R09 模块契约**: ModuleHost 抽 `_iter_hooks`(「有则调用, 无则跳过」getattr 单点; run_command_line 保留全量循环**不短路** —— any() 会跳过后续模块命令消费); BaseModule 增 `apply_section`(段相等短路 + 回执骨架; logging/notify 接入, tracker(双短路原因)/rules(复合谓词)保持显式并注明缘由)与 `register_global_tasks`(自注册骨架; speed_curve/maintenance/traffic_sample 三处接入, 「创建全局任务 N 个」日志格式三处原已一致由单点承载); module.py 新增 `from .taskqueue import Task` 运行时导入(taskqueue 无反向依赖, 无环)。
+  - **R10 ops/grouping**: grouping `_scan_triggered_groups`(缺文件扫描触发骨架 ×3)+ `_is_active_download`(谓词 ×2); ops `_live_recheck`(R1/R2 实时复核样板, 日志行逐字节保持, 调用方 isinstance 分流 ActionResult); traffic_sample `_close_block_and_reopen`(关块重开 ×3, reset_log 参数化计数器重置审计行 —— ⚠issue 位置笔误标成 ops_mod, 实际全在 traffic_sample_mod, 按 grep 事实落点)。
+  - **R10 maintenance/rules/sample**: maintenance `_apply_tag_changes`(标签动作 ×3)+ `_purge_matched_tags`(两 handler, select 回调声明命中判据, tag_usage 调用时序保持); rules `_make_ctx`/`_run_rule`(RuleContext+process+except ×3, 日志前缀参数化)+ `_dispatch_trigger_rules`(分派内层 ×4, deleted 路径 snapshot 透传); traffic_sample `_reset_block`(复位 8 字段 ×2)+ `_ingest_acc`(hour/day 累计器并入骨架, cascade 闭包承载翻桶差异 —— **落批 append(row) 时序保持原序**, 防文件行序漂移)+ `_catch_up_level`(day/month catch-up 同构, 三元组返回避 setattr)。
+  - **R06/R07 速度单位**: curves 增「速度单位换算单点」段 —— `kib_to_bytes`(0=不限速)与 `bytes_to_kib`(曲线目标, 半值向上)/`bytes_to_kib_floor`(读回现值, 整除向下)显式双函数钉死取整方向; qbapi 6 处消费, 局部 `_kib` ×2 退役。
+  - **R07 traffic_store/grid**: 模块级 `_read_parse(path, parser, empty)`(读解析告警纪律单点, 缓存层两个静态壳退役直调)+ `_ensure_file_prefix`(建头/撕裂尾查补单点); traffic_grid `_floor_buckets`(raw/hour 桶序列单点)。
+  - **R07/R10 traffic 解析差分层(B/C)**: 按建议只登记 —— parse day↔agg 骨架互指、series_totals_points↔v4_totals_points 互指、v4_hour_agg↔v4_rollup_agg 互指、「cur < last 判重置」三层(采样器/视图/解析)互指注释。
+- **测试**: 每项任务后 `test.quick` 全绿; 收口 `test.full` **3113 passed + 4 skipped / TOTAL 99%**(基线切片 `26-10-11-1630-core-dup-code-fixes`); 全部改动文件过 `dev.fmt`。
+- **待办**: Phase 2 前端轮 20(shared/*.js 非抽屉); webui/hr/rules/infra/torrents/config 各批 issue 实施另开会话。

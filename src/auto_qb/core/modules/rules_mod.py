@@ -126,6 +126,8 @@ class RulesModule(BaseModule):
     # ---------- 热重载(W3 合并点: L2 重建收进 apply; W4: 判据单点在本模块) ----------
 
     def apply(self, old, new) -> ApplyResult:
+        # 判定是复合谓词(_rebuild_needed, 非单段相等) —— 不套 BaseModule.apply_section
+        # 骨架, 保持显式(issue 26-10-11-0207 R05/R09 登记)。
         if not self._rebuild_needed(old, new):
             return ApplyResult(self.name)
         logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
@@ -240,6 +242,25 @@ class RulesModule(BaseModule):
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
         )
 
+    def _make_ctx(self, hash: str, dry_run: bool, task: Optional[Task] = None, snapshot=None) -> RuleContext:
+        """RuleContext 构造单点(issue 26-10-11-0207 R10): 三条执行路径同参 —— manager/
+        client/config 三件套由本模块持有, hash/dry_run/task/snapshot 由调用路径给。"""
+        return RuleContext(
+            self._manager, self._manager.client, self._ctx.config, hash, dry_run, task=task, snapshot=snapshot
+        )
+
+    def _run_rule(self, rule: Rule, ctx: RuleContext, error_log_prefix: str) -> bool:
+        """规则执行 + 异常日志骨架单点(issue 26-10-11-0207 R10): 三条执行路径共用 ——
+        process 抛异常记 ERROR(exc_info)不外抛(规则异常不致命)。返回 process 是否正常
+        返回(False = 抛了且已记日志), 调用方按各自路径处置(interval 路径 REQUEUE /
+        事件路径吞掉)。error_log_prefix 为日志行去掉 `: {e}` 的前缀。"""
+        try:
+            rule.process(ctx)
+            return True
+        except Exception as e:
+            logger.error(f"{error_log_prefix}: {e}", exc_info=True)
+            return False
+
     def _handle_rule(self, rule: Rule, task: Task, dry_run: bool) -> bool:
         """种子级规则任务: 执行指定规则于该种子。
 
@@ -250,11 +271,8 @@ class RulesModule(BaseModule):
         """
         if task.torrent is None:
             return FINISHED
-        ctx = RuleContext(self._manager, self._manager.client, self._ctx.config, task.hash, dry_run, task=task)
-        try:
-            handled, _stop = rule.process(ctx)
-        except Exception as e:
-            logger.error(f"任务[{task.log_tag}] | 规则执行异常: {e}", exc_info=True)
+        ctx = self._make_ctx(task.hash, dry_run, task=task)
+        if not self._run_rule(rule, ctx, f"任务[{task.log_tag}] | 规则执行异常"):
             return REQUEUE
         # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
         return FINISHED if task.has_breakpoint else REQUEUE
@@ -306,9 +324,7 @@ class RulesModule(BaseModule):
                 snap = (removed_snapshots or {}).get(h)
                 if snap is None or snap.tracker_conf is None:
                     continue  # 无 tracker 配置, 无规则可绑定
-                for rule in self._torrent_event_rules(snap, "on_torrent_deleted"):
-                    self._apply_event_rule(rule, h, dry_run=dry_run, snapshot=snap)
-                    triggered.append(h)
+                self._dispatch_trigger_rules(snap, h, "on_torrent_deleted", dry_run, triggered, snapshot=snap)
 
         # on_torrent_state_enum_changed: 本轮 state 字段变化的种子(增量应用时收集, O(变化数))
         if state_changed and self._rules_by_trigger("on_torrent_state_enum_changed"):
@@ -319,9 +335,7 @@ class RulesModule(BaseModule):
                 tor = self._ctx.store.get(h)
                 if tor is None or tor.tracker_conf is None:
                     continue
-                for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
-                    self._apply_event_rule(rule, h, dry_run=dry_run)
-                    triggered.append(h)
+                self._dispatch_trigger_rules(tor, h, "on_torrent_state_enum_changed", dry_run, triggered)
 
         # on_torrent_field_changed: 本轮监听字段的净变化种子(store 侧已对比持久化基线, O(变化数))
         if field_changed and self._rules_by_trigger("on_torrent_field_changed"):
@@ -329,11 +343,9 @@ class RulesModule(BaseModule):
                 tor = self._ctx.store.get(h)
                 if tor is None or tor.tracker_conf is None:
                     continue
-                for rule in self._torrent_event_rules(tor, "on_torrent_field_changed"):
-                    if not set(rule.watch_fields) & fields:
-                        continue  # 本次变化字段与该规则监听的无关
-                    self._apply_event_rule(rule, h, dry_run=dry_run)
-                    triggered.append(h)
+                self._dispatch_trigger_rules(
+                    tor, h, "on_torrent_field_changed", dry_run, triggered, watch_fields=fields
+                )
 
         # on_torrent_added: 匹配 tracker 配置并触发(命中者由内核做后续自有动作)
         if self._rules_by_trigger("on_torrent_added") and added:
@@ -345,11 +357,22 @@ class RulesModule(BaseModule):
                     tor.tracker_conf = self._ctx.trackers.match(tor)
                 if tor.tracker_conf is None:
                     continue  # 未匹配 tracker: 内核 added 循环负责告警
-                for rule in self._torrent_event_rules(tor, "on_torrent_added"):
-                    self._apply_event_rule(rule, h, dry_run=dry_run)
-                    triggered.append(h)
+                self._dispatch_trigger_rules(tor, h, "on_torrent_added", dry_run, triggered)
 
         return triggered
+
+    def _dispatch_trigger_rules(
+        self, tor, h: str, trigger: str, dry_run: bool, triggered: list, watch_fields=None, snapshot=None
+    ) -> None:
+        """事件分派内层单点(issue 26-10-11-0207 R10): 该种子指定 trigger 的规则逐个触发
+        并登记 triggered; watch_fields 非空时按监听字段交集过滤(field_changed 路径专用);
+        snapshot 透传给 rule-event Task(deleted 路径用删除前快照副本)。外层 guard(触发
+        开关/候选收集/前置换取)语义各异, 留在 _dispatch_events 显式写。"""
+        for rule in self._torrent_event_rules(tor, trigger):
+            if watch_fields is not None and not set(rule.watch_fields) & watch_fields:
+                continue  # 本次变化字段与该规则监听的无关
+            self._apply_event_rule(rule, h, dry_run=dry_run, snapshot=snapshot)
+            triggered.append(h)
 
     def _torrent_event_rules(self, tor, trigger: str) -> list:
         """该种子指定 trigger 的事件规则: 经 tracker 引用绑定的规则 ∩ 指定触发器(与 interval 同语义)"""
@@ -371,13 +394,8 @@ class RulesModule(BaseModule):
             interval=rule.interval,
             handler=lambda t, d, r=rule, s=snapshot: self._handle_event_rule(r, t, s, d),
         )
-        ctx = RuleContext(
-            self._manager, self._manager.client, self._ctx.config, hash, dry_run, task=task, snapshot=snapshot
-        )
-        try:
-            rule.process(ctx)
-        except Exception as e:
-            logger.error(f"事件规则[{rule.name}] {hash[:8]} | 执行异常: {e}", exc_info=True)
+        ctx = self._make_ctx(hash, dry_run, task=task, snapshot=snapshot)
+        self._run_rule(rule, ctx, f"事件规则[{rule.name}] {hash[:8]} | 执行异常")
         return task
 
     def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
@@ -390,13 +408,8 @@ class RulesModule(BaseModule):
         """
         if task.torrent is None:
             return FINISHED
-        ctx = RuleContext(
-            self._manager, self._manager.client, self._ctx.config, task.hash, dry_run, task=task, snapshot=snapshot
-        )
-        try:
-            rule.process(ctx)
-        except Exception as e:
-            logger.error(f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常: {e}", exc_info=True)
+        ctx = self._make_ctx(task.hash, dry_run, task=task, snapshot=snapshot)
+        self._run_rule(rule, ctx, f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常")
         return FINISHED
 
     # ---------- tracker 引用 ----------

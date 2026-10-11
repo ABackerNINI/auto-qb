@@ -20,6 +20,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, runtime_checkable
 
+from .taskqueue import Task
+
 if TYPE_CHECKING:
     from ..config import Config
     from ..torrents import TorrentStore
@@ -153,6 +155,44 @@ class BaseModule:
 
     def subscribe(self, phases: "PhaseRegistry") -> None:
         return None
+
+    # ---------- 契约样板单点(issue 26-10-11-0207 R05/R09) ----------
+
+    def apply_section(
+        self, old: "Config", new: "Config", section: str, action, status: str = "remounted"
+    ) -> ApplyResult:
+        """apply 的「段相等短路 + 重挂动作 + ApplyResult 构造」骨架单点
+
+        子类 apply 一行声明消费段名与差异动作: 段相等 -> 空回执(短路, hot-reload-simplify
+        §3.3 规则 1); 段变化 -> action(new.<section>) 后按 status 出回执。消费**单个整段**
+        的模块(logging/notify)走此骨架; 短路原因不止段相等(tracker 的 client None)或
+        判定是复合谓词(rules 的 _rebuild_needed)的模块保持显式 apply, 不强套。
+        """
+        if getattr(old, section) == getattr(new, section):
+            return ApplyResult(self.name)
+        action(getattr(new, section))
+        return ApplyResult(self.name, status)
+
+    def register_global_tasks(self, ctx: "AppContext", specs: list) -> int:
+        """全局任务自注册样板单点: speed_curve / maintenance / traffic_sample 三处同骨架
+
+        队列引用现取 ctx.task_queue(L2 重建后 manager 委托落回 ctx, 不存在旧队列);
+        已在当前队列的同名任务幂等跳过(黄金法则 1, 判据单点 TaskQueue.has_named);
+        「未启用不建任务」判定留给调用方(各模块配置形状不同)。specs = (任务名, handler,
+        interval) 序列, 实际入队数返回; 有入队记一条「创建全局任务 N 个」日志(三处原
+        日志格式一致, maintenance 双任务聚一条由本单点统一承载)。
+        """
+        queue = ctx.task_queue
+        if queue is None:
+            return 0
+        tasks = [
+            Task("internal", name, interval=interval, handler=handler)
+            for name, handler, interval in specs if not queue.has_named(name)
+        ]
+        if tasks:
+            queue.add_tasks(tasks)
+            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.log_tag for t in tasks]}")
+        return len(tasks)
 
 
 # ---------- 事件总线(相位广播, plan §4.2) ----------
@@ -323,28 +363,32 @@ class ModuleHost:
 
     # ---------- loop hooks(可选, 按装配序) ----------
 
-    def run_command_line(self) -> bool:
-        """命令线 hook: 各模块消费控制命令; 任一报告「本批改了 qB 状态」即 True"""
-        changed = False
+    def _iter_hooks(self, hook_name: str):
+        """按装配序迭代提供了 hook_name 的模块 —— 「有则调用, 无则跳过」的 getattr
+        探测单点(issue 26-10-11-0207 R05/R09), 三个 loop-hook 分发共用同一骨架。"""
         for m in self._modules:
-            hook = getattr(m, "on_command_line", None)
+            hook = getattr(m, hook_name, None)
             if hook is not None:
-                changed = bool(hook()) or changed
+                yield hook
+
+    def run_command_line(self) -> bool:
+        """命令线 hook: 各模块消费控制命令; 任一报告「本批改了 qB 状态」即 True
+
+        !循环不短路: 全部 hook 都要跑(any() 会跳过后续模块的命令消费)。"""
+        changed = False
+        for hook in self._iter_hooks("on_command_line"):
+            changed = bool(hook()) or changed
         return changed
 
     def run_sync_line(self, force: bool) -> None:
         """同步线收尾 hook(webui: 视图发布)"""
-        for m in self._modules:
-            hook = getattr(m, "on_sync_line", None)
-            if hook is not None:
-                hook(force)
+        for hook in self._iter_hooks("on_sync_line"):
+            hook(force)
 
     def run_task_line(self, force: bool) -> None:
         """任务线收尾 hook(webui: 错误原因预取 / 搜索索引)"""
-        for m in self._modules:
-            hook = getattr(m, "on_task_line", None)
-            if hook is not None:
-                hook(force)
+        for hook in self._iter_hooks("on_task_line"):
+            hook(force)
 
 
 __all__ = [

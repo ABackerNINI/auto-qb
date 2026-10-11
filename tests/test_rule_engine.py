@@ -250,13 +250,13 @@ def test_materialize_state_migration():
 
 
 def test_state_migration_materialize_is_wired_in_run():
-    """接线守阵: 物化必须挂在 run() 的 `self.state = self.ctx.state.load()` 之后 —— 加载才有迁移描述"""
+    """接线守阵: 物化必须挂在 run() 的 state 加载(`_reload_state()`)之后 —— 加载才有迁移描述"""
     import inspect
 
     from auto_qb.core.qbmanager import QbManager
 
     src = inspect.getsource(QbManager.run)
-    i_load = src.find("self.ctx.state.load()")
+    i_load = src.find("self._reload_state()")
     i_mat = src.find("materialize_migration")
     assert i_load >= 0 and i_mat > i_load, "物化必须在加载之后(run() 内, 已持锁)"
 

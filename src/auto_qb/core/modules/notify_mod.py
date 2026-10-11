@@ -38,13 +38,13 @@ class NotifyModule(BaseModule):
         return None  # 派发线程是 daemon 随进程退出; 现行退出路径也不摘 handler, 保持
 
     def apply(self, old, new) -> ApplyResult:
-        if old.notify == new.notify:
-            return ApplyResult(self.name)
-        # 重挂保留原 L1 分支语义: 先摘旧 handler, force=True 重挂(挂载即 enabled=True,
-        # 与托盘会话开关同源 —— force 对配置未启用也挂, 会话级, 重启后回到配置状态)
-        self._unmount()
-        self._mount(new.notify, force=True)
-        return ApplyResult(self.name, "remounted")
+        def remount(conf) -> None:
+            # 重挂保留原 L1 分支语义: 先摘旧 handler, force=True 重挂(挂载即 enabled=True,
+            # 与托盘会话开关同源 —— force 对配置未启用也挂, 会话级, 重启后回到配置状态)
+            self._unmount()
+            self._mount(conf, force=True)
+
+        return self.apply_section(old, new, "notify", remount)
 
     # ---------- 托盘/外围公开口(plan §3.2: ctx.notify.*) ----------
 

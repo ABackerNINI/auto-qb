@@ -97,33 +97,16 @@ class MaintenanceModule(BaseModule):
             self.add_episode_tags(torrent, dry_run)
 
     def _register_global_tasks(self, ctx: AppContext) -> None:
-        """全局标签清理任务自注册: 已在当前队列的幂等跳过(黄金法则 1, 判据 TaskQueue.has_named);
-        队列引用现取 ctx.task_queue(L2 重建后 manager 委托落回 ctx, 不存在旧队列)"""
-        queue = ctx.task_queue
-        if queue is None:
-            return
-        tasks = []
-        if ctx.config.delete_tags and not queue.has_named("delete_tags"):
-            tasks.append(
-                Task(
-                    "internal",
-                    "delete_tags",
-                    interval=ctx.config.interval,
-                    handler=self.handle_delete_tags,
-                )
+        """全局标签清理任务自注册(骨架走 BaseModule.register_global_tasks 单点):
+        enabled 判定在调用方 —— 两个 delete-tags 任务同批入队, 聚一条「创建全局任务」日志。"""
+        specs = []
+        if ctx.config.delete_tags:
+            specs.append(("delete_tags", self.handle_delete_tags, ctx.config.interval))
+        if ctx.config.delete_tags_if_has_no_torrents:
+            specs.append(
+                ("delete_tags_if_has_no_torrents", self.handle_delete_tags_if_has_no_torrents, ctx.config.interval)
             )
-        if ctx.config.delete_tags_if_has_no_torrents and not queue.has_named("delete_tags_if_has_no_torrents"):
-            tasks.append(
-                Task(
-                    "internal",
-                    "delete_tags_if_has_no_torrents",
-                    interval=ctx.config.interval,
-                    handler=self.handle_delete_tags_if_has_no_torrents,
-                )
-            )
-        if tasks:
-            queue.add_tasks(tasks)
-            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.log_tag for t in tasks]}")
+        self.register_global_tasks(ctx, specs)
 
     # ---------- 种子级维护(原 TagsMixin + qbmanager._handle_maintenance) ----------
 
@@ -158,6 +141,26 @@ class MaintenanceModule(BaseModule):
             handled |= self.add_hr_tag_or_category(torrent, dry_run)
         return REQUEUE
 
+    def _apply_tag_changes(
+        self,
+        torrent: TorrentRecord,
+        changed: List[str],
+        apply_changes,
+        log_text: str,
+        dry_run: bool,
+        log_level: int = logging.INFO
+    ) -> bool:
+        """标签动作落盘骨架单点(issue 26-10-11-0207 R10): add_tags / remove_tags /
+        remove_similar_tags 三处同构 —— 变更集为空 False; 非空时 dry_run 跳 API、
+        记日志、True。apply_changes(changed) 封装 API 差异(add/remove), log_text 为
+        完整日志行。"""
+        if not changed:
+            return False
+        if not dry_run:
+            apply_changes(changed)
+        logger.log(log_level, log_text)
+        return True
+
     def add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO):
         """为种子添加标签（若不存在）; log_level 控制日志级别(如分组流程整组宣告后传 DEBUG 避免逐成员重复)"""
         if not tags:
@@ -165,12 +168,14 @@ class MaintenanceModule(BaseModule):
 
         current_tags = torrent.tags_set
         new_tags = [t for t in tags if t not in current_tags]
-        if new_tags:
-            if not dry_run:
-                self._ctx.api.torrents_add_tags(tags=new_tags, torrent_hashes=torrent.hash)
-            logger.log(log_level, f"维护 {torrent.log_repr} | 添加标签: {new_tags}")
-            return True
-        return False
+        return self._apply_tag_changes(
+            torrent,
+            new_tags,
+            lambda t: self._ctx.api.torrents_add_tags(tags=t, torrent_hashes=torrent.hash),
+            f"维护 {torrent.log_repr} | 添加标签: {new_tags}",
+            dry_run,
+            log_level,
+        )
 
     def remove_tags(self, torrent: TorrentRecord, patterns: List[str], dry_run: bool):
         """为种子删除标签（若存在）."""
@@ -179,12 +184,13 @@ class MaintenanceModule(BaseModule):
 
         current_tags = torrent.tags_set
         to_remove_tags = [tag for tag in current_tags if utils.match_tag_patterns(tag, patterns)]
-        if to_remove_tags:
-            if not dry_run:
-                self._ctx.api.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=torrent.hash)
-            logger.info(f"维护 {torrent.log_repr} | 删除标签: {to_remove_tags}")
-            return True
-        return False
+        return self._apply_tag_changes(
+            torrent,
+            to_remove_tags,
+            lambda t: self._ctx.api.torrents_remove_tags(tags=t, torrent_hashes=torrent.hash),
+            f"维护 {torrent.log_repr} | 删除标签: {to_remove_tags}",
+            dry_run,
+        )
 
     def add_episode_tags(self, torrent: TorrentRecord, dry_run: bool):
         """种子添加时自动添加集数标签(如 zE1-5)
@@ -214,13 +220,13 @@ class MaintenanceModule(BaseModule):
 
         # 删除单词相同但大小写不一致的标签
         to_remove_tags = [tag for tag in current_tags if tag.lower() in [t.lower() for t in tags] and tag not in tags]
-        if to_remove_tags:
-            if not dry_run:
-                self._ctx.api.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=torrent.hash)
-            logger.info(f"维护 {torrent.log_repr} | 删除相似标签: {to_remove_tags}")
-            return True
-
-        return False
+        return self._apply_tag_changes(
+            torrent,
+            to_remove_tags,
+            lambda t: self._ctx.api.torrents_remove_tags(tags=t, torrent_hashes=torrent.hash),
+            f"维护 {torrent.log_repr} | 删除相似标签: {to_remove_tags}",
+            dry_run,
+        )
 
     def set_category(self, torrent: TorrentRecord, category: str, overwrite: bool, dry_run: bool):
         """设置种子的分类"""
@@ -313,25 +319,40 @@ class MaintenanceModule(BaseModule):
 
     # ---------- 全局标签清理(全局任务自注册, 见 start/queue_rebuilt) ----------
 
+    def _purge_matched_tags(self, patterns: List[str], select, log_text: str, dry_run: bool) -> int:
+        """全局标签清理骨架单点(issue 26-10-11-0207 R10): handle_delete_tags /
+        handle_delete_tags_if_has_no_torrents 两 handler 同构 —— 匹配全量标签定义
+        (惰性缓存, 获取异常记 ERROR 本轮放弃), select(all_tags) 由调用方声明命中判据
+        (全删 vs 仅无种子), 命中集非空才删 + 日志。返回删除标签数。"""
+        if not patterns:
+            return 0
+        try:
+            all_tags = self._ctx.store.all_tags()  # 惰性缓存
+        except Exception as e:
+            logger.error(f"获取标签列表失败: {e}")
+            return 0
+        if not all_tags:
+            return 0
+        matched = select(all_tags)
+        if not matched:
+            return 0
+        if not dry_run:
+            self._ctx.api.torrents_delete_tags(tags=matched)
+        logger.info(f"{log_text}: {matched}")
+        return len(matched)
+
     def handle_delete_tags(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除匹配格式的标签(支持正则, regex: 前缀)
 
         匹配所有现有标签定义(含无种子的), 调用 torrents_delete_tags 从所有种子移除并删除定义。
         """
         patterns = self._ctx.config.delete_tags or []
-        if not patterns:
-            return REQUEUE
-        try:
-            all_tags = self._ctx.store.all_tags()  # 惰性缓存
-        except Exception as e:
-            logger.error(f"获取标签列表失败: {e}")
-            return REQUEUE
-        matched = [t for t in all_tags if utils.match_tag_patterns(t, patterns)]
-        if not matched:
-            return REQUEUE
-        if not dry_run:
-            self._ctx.api.torrents_delete_tags(tags=matched)
-        logger.info(f"彻底删除标签: {matched}")
+        self._purge_matched_tags(
+            patterns,
+            lambda all_tags: [t for t in all_tags if utils.match_tag_patterns(t, patterns)],
+            "彻底删除标签",
+            dry_run,
+        )
         return REQUEUE
 
     def handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
@@ -340,24 +361,11 @@ class MaintenanceModule(BaseModule):
         仅当标签定义存在且没有任何种子使用(所有种子 tags 的并集之外)时才删除。
         """
         patterns = self._ctx.config.delete_tags_if_has_no_torrents or []
-        if not patterns:
-            return REQUEUE
-        try:
-            all_tags = self._ctx.store.all_tags()  # 惰性缓存
-        except Exception as e:
-            logger.error(f"获取标签列表失败: {e}")
-            return REQUEUE
-        if not all_tags:
-            return REQUEUE
 
-        # 从快照聚合标签使用情况(替代 torrents.info(tag=) 逐个查询), 使用数为 0 则删除
-        used = self._ctx.store.tag_usage()
-        matched = [tag for tag in all_tags if utils.match_tag_patterns(tag, patterns) and used.get(tag, 0) == 0]
+        def select_unused(all_tags):
+            # 从快照聚合标签使用情况(替代 torrents.info(tag=) 逐个查询), 使用数为 0 则删除
+            used = self._ctx.store.tag_usage()
+            return [tag for tag in all_tags if utils.match_tag_patterns(tag, patterns) and used.get(tag, 0) == 0]
 
-        if not matched:
-            return REQUEUE
-        if not dry_run:
-            self._ctx.api.torrents_delete_tags(tags=matched)
-        logger.info(f"彻底删除无种子的标签: {matched}")
-
+        self._purge_matched_tags(patterns, select_unused, "彻底删除无种子的标签", dry_run)
         return REQUEUE

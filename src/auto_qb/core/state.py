@@ -35,6 +35,21 @@ _EXEC_HISTORY_KEEP_DAYS = 30
 _EXEC_HISTORY_MAX_ENTRIES = 2000
 
 
+def prune_day_keys(d: dict, today: date, keep_days: int, date_of) -> None:
+    """state 日键按日期淘汰的单点(仅主循环线程调用; 幂等)
+
+    同一「state dict 按日期淘汰日键」约定在此收敛(issue 26-10-11-0207 R10): 早于保留窗
+    (today - keep_days)的条目原地删除。date_of(key, value) 返回该条目的日期字符串(ISO
+    形态) —— 日期存于键(speed_curve 日键)、值字段(exec_history["date"])或值本身
+    (skip_check_day)三种形态由调用点声明; 「只留当日」= keep_days=0 的特例(当日及以后
+    保留, 实际写入只产生当日日期)。调用方仍需自带 state.setdefault 取 dict —— 本函数只
+    负责淘汰, 不负责键面创建。
+    """
+    cutoff = (today - timedelta(days=keep_days)).isoformat()
+    for k in [k for k, v in d.items() if date_of(k, v) < cutoff]:
+        del d[k]
+
+
 class StateService:
     """state.json 的读写 / 迁移 / 周期落盘 / 执行历史, 一处收拢"""
     def __init__(self, state_file: str) -> None:
@@ -228,11 +243,8 @@ class StateService:
         }
 
     def _prune_exec_history(self, history: dict, today: date) -> None:
-        """exec_history 键面清理: 早于保留期的记录 + 超上限时最旧的非当日记录(仅主循环线程)"""
-        cutoff = (today - timedelta(days=_EXEC_HISTORY_KEEP_DAYS)).isoformat()
-        stale = [k for k, v in history.items() if v.get("date", "") < cutoff]
-        for k in stale:
-            del history[k]
+        """exec_history 键面清理: 早于保留期的记录(prune_day_keys 单点) + 超上限时最旧的非当日记录(仅主循环线程)"""
+        prune_day_keys(history, today, _EXEC_HISTORY_KEEP_DAYS, lambda k, v: v.get("date", ""))
         overflow = len(history) - _EXEC_HISTORY_MAX_ENTRIES
         if overflow > 0:
             candidates = sorted(
@@ -256,4 +268,4 @@ class StateService:
         store.field_snapshots = self.data.setdefault("field_snapshots", {})
 
 
-__all__ = ["StateService"]
+__all__ = ["StateService", "prune_day_keys"]

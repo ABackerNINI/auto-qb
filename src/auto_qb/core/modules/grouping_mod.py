@@ -128,10 +128,17 @@ class GroupingModule(BaseModule):
             if key is not None:
                 affected.add(key)
         for key in affected:
-            members = self._ctx.store.groups.get(key, [])
-            torrents = [self._ctx.store.by_hash[h] for h in members if h in self._ctx.store.by_hash]
-            if torrents:
-                self._check_missing_files(torrents, self._ctx.store.group_sizes.get(key, {}), dry_run, key)
+            self._scan_triggered_groups({key}, dry_run)
+
+    def _scan_triggered_groups(self, triggered: set, dry_run: bool) -> None:
+        """缺文件扫描触发骨架单点(issue 26-10-11-0207 R10): 删除/路径变化/状态转移三个
+        事件路径同构 —— 对每个触发组取现存成员(by_hash 过滤已删), 组非空才扫; 同组只扫
+        一次由 triggered 集合保证。"""
+        store = self._ctx.store
+        for key in triggered:
+            members = [store.by_hash[h] for h in store.groups.get(key, []) if h in store.by_hash]
+            if members:
+                self._check_missing_files(members, store.group_sizes.get(key, {}), dry_run, key)
 
     def _handle_save_path_changes(self, dry_run: bool):
         """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
@@ -168,10 +175,7 @@ class GroupingModule(BaseModule):
             return  # 配置禁用缺文件检查
 
         # 缺文件检查
-        for key in triggered:
-            members = [store.by_hash[m] for m in store.groups.get(key, []) if m in store.by_hash]
-            if members:
-                self._check_missing_files(members, store.group_sizes.get(key, {}), dry_run, key)
+        self._scan_triggered_groups(triggered, dry_run)
 
     def _handle_state_transitions(self, dry_run: bool):
         """
@@ -205,11 +209,7 @@ class GroupingModule(BaseModule):
             key = member_to_key.get(h)
             if key is not None:
                 triggered.add(key)
-        for key in triggered:
-            members = store.groups[key]
-            torrent = [store.by_hash[h] for h in members if h in store.by_hash]
-            if torrent:
-                self._check_missing_files(torrent, store.group_sizes.get(key, {}), dry_run, key)
+        self._scan_triggered_groups(triggered, dry_run)
 
     # ---------- 归组 ----------
 
@@ -267,6 +267,13 @@ class GroupingModule(BaseModule):
             store.group_sizes.pop(key, None)
             return None
         return key
+
+    @staticmethod
+    def _is_active_download(t: TorrentRecord) -> bool:
+        """「活跃下载」谓词单点(issue 26-10-11-0207 R10): 冲突检测与跨组检测两处同款
+        (注释自称同款即此) —— 下载中且未停/未校验且还有余量。"""
+        e = t.state_enum
+        return e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left > 0
 
     @staticmethod
     def _size_mismatch(members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]]) -> bool:
@@ -426,7 +433,7 @@ class GroupingModule(BaseModule):
                 if t is None:
                     continue
                 e = t.state_enum
-                if e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left > 0:
+                if self._is_active_download(t):
                     n_dl += 1
                 if e.is_complete and t.amount_left <= 0 and missing_tag not in t.tags_set:
                     n_done += 1
@@ -523,8 +530,7 @@ class GroupingModule(BaseModule):
                     continue  # 幽灵成员(组表有快照无): 不参与豁免与激活判定
                 if missing_tag in t.tags_set:
                     has_missing = True
-                e = t.state_enum
-                if e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left > 0:
+                if self._is_active_download(t):
                     dl.append(h)
             group_dl[key] = dl
             group_missing[key] = has_missing

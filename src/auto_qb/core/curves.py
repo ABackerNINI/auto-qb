@@ -117,8 +117,26 @@ def merge_direction(speeds: List[int]) -> Optional[int]:
     return min(nonzero) if nonzero else 0
 
 
+# ---------- 速度单位换算单点(issue 26-10-11-0207 R06/R07) ----------
+# qB 速度限制的整数单位是 KiB/s, API 层是 bytes/s, 0 = 不限速(与 config UNLIMITED_SPEED
+# 的 "0KiB/s" 三态口径对齐)。取整方向按用途显式选两个函数, 不共用一个换算:
+#   曲线**目标**限速 -> 半值向上(bytes_to_kib, 略严);
+#   **读回**qB 现值 -> 整除向下(bytes_to_kib_floor, 展示/比较不放大)。
+
+
+def kib_to_bytes(v_kib: int) -> int:
+    """KiB/s -> bytes/s; <=0 归 0(0 = 不限速, qB 5.0 transfer 端点口径)"""
+    return 0 if v_kib <= 0 else int(v_kib) * 1024
+
+
 def bytes_to_kib(v_bps: int) -> int:
-    """字节/秒 -> KiB/s(qB 全局速度整数单位; 半值向上取整 = 略严; 0/负数归 0)"""
+    """字节/秒 -> KiB/s(半值向上取整 = 略严; 0/负数归 0)—— 曲线目标限速用"""
     if v_bps <= 0:
         return 0
     return int(v_bps / 1024 + 0.5)
+
+
+def bytes_to_kib_floor(v_bps) -> int:
+    """字节/秒 -> KiB/s(整除向下; 0/负数归 0)—— 读回 qB 现值用(展示/比较, 不放大)"""
+    b = int(v_bps or 0)
+    return b // 1024 if b > 0 else 0

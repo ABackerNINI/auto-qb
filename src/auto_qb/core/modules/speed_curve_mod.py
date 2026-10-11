@@ -26,12 +26,13 @@ Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin
 """
 import logging
 import time
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Optional, Tuple
 
 from ...infra import utils
 from .. import curves
 from ..module import AppContext, BaseModule
+from ..state import prune_day_keys
 from ..taskqueue import REQUEUE, Task
 
 logger = logging.getLogger(__name__)
@@ -113,22 +114,15 @@ class SpeedCurveModule(BaseModule):
         self._register_global_task(self._ctx)
 
     def _register_global_task(self, ctx: AppContext) -> None:
-        """曲线任务自注册: 已在当前队列则幂等跳过(黄金法则 1, 判据单点 TaskQueue.has_named);
-        队列引用现取 ctx.task_queue(L2 重建后 manager 委托落回 ctx, 不存在旧队列)"""
-        queue = ctx.task_queue
-        if queue is None or queue.has_named("speed_limit_curve"):
-            return
+        """曲线任务自注册(骨架走 BaseModule.register_global_tasks 单点): 未启用判定
+        在调用方(配置形状各模块不同); 缺省 interval 回退主 interval。"""
         gslc = ctx.config.global_speed_limit_curve
         if gslc is None:  # 未启用该功能: 不建任务(与原 _create_global_tasks 同判据)
             return
-        task = Task(
-            "internal",
-            "speed_limit_curve",
-            interval=gslc.interval or ctx.config.interval,  # 缺省回退主 interval
-            handler=self.handle_speed_limit_curve,
+        self.register_global_tasks(
+            ctx,
+            [("speed_limit_curve", self.handle_speed_limit_curve, gslc.interval or ctx.config.interval)],
         )
-        queue.add_task(task)
-        logger.info(f"创建全局任务 1 个: ['{task.log_tag}']")
 
     # ---------- 全局任务执行体 ----------
 
@@ -278,13 +272,12 @@ class SpeedCurveModule(BaseModule):
         """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)
 
         日键保 _CURVE_STATE_KEEP_DAYS 天(issue A-03: 每天新增一日键且从不清 -> state 缓慢
-        无界增长; 对齐 ops_mod skip_check_day 的执行路径清理先例): 写入时顺带删掉保留期外的
-        旧日键。仅主循环线程调用(黄金法则 5), 重复执行清理结果一致(幂等)。
+        无界增长; 淘汰口径走 prune_day_keys 单点, 对齐 ops_mod skip_check_day 的执行路径
+        清理先例): 写入时顺带删掉保留期外的旧日键。仅主循环线程调用(黄金法则 5), 重复执行
+        清理结果一致(幂等)。
         """
         curve_state = self._ctx.state.data.setdefault("speed_limit_curve", {})
-        cutoff = (today - timedelta(days=_CURVE_STATE_KEEP_DAYS)).isoformat()
-        for day in [d for d in curve_state if d < cutoff]:
-            del curve_state[day]
+        prune_day_keys(curve_state, today, _CURVE_STATE_KEEP_DAYS, lambda k, v: k)
         curve_state[today.isoformat()] = {
             "upload_kib": upload_kib,
             "download_kib": download_kib,

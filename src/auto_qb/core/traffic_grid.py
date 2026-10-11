@@ -113,6 +113,15 @@ class WindowGrid:
         return self.buckets[-1]
 
 
+def _floor_buckets(t0: int, t1: int, interval: int) -> tuple:
+    """等宽桶序列单点(issue 26-10-11-0207 R07): 起点向下取整对齐(epoch 恒正) + ceil 桶数
+    + 生成。build_grid 的 raw 与 hour 两分支共用(除桶宽计算外逐字同构); day 分支桶键是
+    本地日界, 不走此处。"""
+    first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)
+    n = (t1 - first + interval - 1) // interval  # ceil
+    return tuple(first + i * interval for i in range(n))
+
+
 def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_INTERVAL_S) -> WindowGrid:
     """窗口名 + 当前时刻 -> 时间栅格(纯函数; sample_interval 只在 raw 段生效)
 
@@ -133,9 +142,7 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         interval = max(1, math.ceil(sample_interval), math.ceil(span / MAX_RAW_BUCKETS))
         t1 = int(now)
         t0 = t1 - span
-        first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)
-        n = (t1 - first + interval - 1) // interval  # ceil
-        buckets = tuple(first + i * interval for i in range(n))
+        buckets = _floor_buckets(t0, t1, interval)
     elif segment == "day":
         interval = DAY_SECONDS
         t1 = int(now)
@@ -145,9 +152,7 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         interval = HOUR_SECONDS
         t1 = int(now)
         t0 = t1 - span
-        first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)
-        n = (t1 - first + interval - 1) // interval  # ceil
-        buckets = tuple(first + i * interval for i in range(n))
+        buckets = _floor_buckets(t0, t1, interval)
     return WindowGrid(window, t0, t1, interval, segment, buckets)
 
 
@@ -197,7 +202,9 @@ def rate_points(obs: dict, grid: WindowGrid) -> list:
 
 
 def _bucket_delta(cur: Optional[int], last: Optional[int]) -> Optional[int]:
-    """累计快照差分(§05.1): max(0,·) 的等价形 + 回落判重置 -> null; 基线缺失 -> None"""
+    """累计快照差分(§05.1): max(0,·) 的等价形 + 回落判重置 -> null; 基线缺失 -> None
+    !「cur < last 判重置」口径的分层形态之一(采样器 traffic_sample_mod._delta / v4
+    解析侧负 delta 校验同判据, 三处互指; issue 26-10-11-0207 R07/R10 登记保持分层)"""
     if cur is None or last is None:
         return None
     if cur < last:
@@ -210,6 +217,9 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
 
     前桶无快照(窗首基线缺失/空桶断链)-> 该桶 null; 空桶本身 null 且断链后继(下一有观测
     桶同样基线缺失)。dl/up 两向独立判定(对齐采样器 _delta 逐向口径)。
+    !同源双实现登记(issue 26-10-11-0207 R07/R10, B/C 类只登记不急合): agg 段的
+    v4_totals_points 是本函数的 v2 规则平移(输入形态 obs 桶表 vs v4 点序列, 边界
+    max(0,·) 等价形), 改差分口径两处同步。
     """
     out = []
     prev = None  # 相邻前桶快照(dl_total, up_total)
@@ -456,7 +466,8 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
 
 
 def v4_totals_points(points: tuple) -> tuple:
-    """累计增量段(§05.1): 相邻桶点快照差分 —— v2 规则平移(series_totals_points):
+    """累计增量段(§05.1): 相邻桶点快照差分 —— v2 规则平移(series_totals_points,
+    两处互指; issue 26-10-11-0207 R07/R10 登记不急合):
     max(0,·) 等价形 + cur < last 判计数器重置 -> null + 基线缺失(窗首/null 点断链)->
     null; dl/up 两向独立判定。游程快照(z 槽桶 totals 恒定)进差分链 —— 空闲段每桶
     delta = 0 链不断, 其后首个活跃桶恢复有基线; 宽桶(跨桶覆盖)的 delta 覆盖其整段

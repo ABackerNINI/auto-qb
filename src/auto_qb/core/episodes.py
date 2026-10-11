@@ -11,6 +11,9 @@ from typing import List
 #   第5集 / 第05-08集 / S01E05  >  EP05  >  E05
 # 每项: (正则, 提取函数(match -> List[int])), 提取函数返回该文件贡献的集数列表
 # 新增模式: 在合适优先级位置插入一项即可, 无需改提取逻辑
+# !本族是 tvshows._EPISODE_PATTERNS 的子集(tvshows 版多 1x05/中文数字/日期/区间/裸数字
+# 五类), 同源已演化 —— 直接合并会改行为, 差异点登记于 issue
+# 26-10-11-0207-refactor-core-episode-marker-dup(R08, B 类), 评估复用 tvshows 解析后再定。
 _EPISODE_PATTERNS: List[tuple] = [
     # 第x集 / 第x-y集(区间展开为多集)
     (
@@ -30,7 +33,10 @@ _EPISODE_PATTERNS: List[tuple] = [
 # 要求数字两侧是分隔符或边界(不能与字母粘连, 防止扩展名数字如 "xx.mp4" 的 4 被误判),
 # 且排除 分辨率(720/1080/2160...) 与 年份(19xx/20xx)
 _BARE_NUMBER_RE = re.compile(r"(?:^|[^A-Za-z0-9])(\d{1,4})(?:[^A-Za-z0-9]|$)")
-_RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
+# 「分辨率不是集数」排除集单点(issue 26-10-11-0207 R08): tvshows 的 bare 判定
+# (_BARE_EXCLUDE)共用此处, 改口径只动这一处; 年份半边在 tvshows._bare_ok 以
+# 1900-2099 区间判定, 不在此重复。
+RESOLUTION_EXCLUDE = {480, 576, 720, 1080, 2160, 4320}
 
 # 视频文件扩展名(小写): 只有视频文件参与集数解析, 截图(jpg)/字幕(ass/srt)/字体等一律跳过
 _VIDEO_EXTENSIONS = {

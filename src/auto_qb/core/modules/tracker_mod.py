@@ -41,6 +41,8 @@ class TrackerModule(BaseModule):
     # ---------- 热重载(plan 26-10-03-0436 Step 1: trackers 段变化立即重绑存量记录) ----------
 
     def apply(self, old, new) -> ApplyResult:
+        # 短路原因有二(段相等 / qB 断开), 后者非段相等语义 —— 不套 BaseModule.apply_section
+        # 骨架(该骨架只承载单一短路原因), 保持显式(issue 26-10-11-0207 R05/R09 登记)。
         if old.trackers == new.trackers:
             return ApplyResult(self.name)
         if self._ctx.api.client is None:  # qB 断开: match 无从取 URLs, 留给下轮 full_round / L2 兑现

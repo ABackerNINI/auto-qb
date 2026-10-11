@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="traffic 解析/差分层族重复: day↔agg 解析骨架 + 快照差分两实现 + 加权聚合两实现">
 <meta name="issue-summary" content="parse_v4_day_text↔parse_v4_agg_text 骨架同、series_totals_points↔v4_totals_points 差分同口径、v4_hour_agg↔v4_rollup_agg 加权同构; 多为 B 类只登记 (dup-code-audit R07/R10)">
 <title>traffic 解析/差分层族重复: day↔agg 解析骨架 + 快照差分两实现 + 加权聚合两实现 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0207-refactor-core-traffic-parse-diff-family-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:07</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R07/R10</div></div>
     </div>
   </header>
@@ -98,6 +98,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:07 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:38 — 认领实施，状态 <strong>In Progress</strong>（dup-code-audit core 批次）</li>
+      <li>2026-10-11 16:30 — 已修并验证，状态 <strong>Done</strong>（test.full 3113 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-11-1630-core-dup-code-fixes</code>；实施说明见任务档案 R6 节）</li>
     </ul>
   </section>
 

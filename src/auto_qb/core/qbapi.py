@@ -24,6 +24,7 @@ from qbittorrentapi import Client
 
 from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
+from . import curves
 
 logger = logging.getLogger(__name__)
 
@@ -347,27 +348,25 @@ class QbApi:
 
         qB 5.0(Web API v2.9+ / qbittorrent-api 2026.8.x)中 app/preferences 的旧键
         upload_limit/download_limit 已失效(静默无效), 全局限速走 transfer 端点且单位
-        为 bytes/s。此处读取 bytes/s 并整除 1024 换算为 KiB/s。
+        为 bytes/s。读取 bytes/s 经 bytes_to_kib_floor(整除向下)换算为 KiB/s —— 取整
+        方向单点见 curves「速度单位换算单点」段。
         """
-        def _kib(limit_bytes: int) -> int:
-            return limit_bytes // 1024 if limit_bytes > 0 else 0
-
         return {
-            "upload_limit": _kib(int(self._client.transfer_upload_limit())),
-            "download_limit": _kib(int(self._client.transfer_download_limit())),
+            "upload_limit": curves.bytes_to_kib_floor(int(self._client.transfer_upload_limit())),
+            "download_limit": curves.bytes_to_kib_floor(int(self._client.transfer_download_limit())),
         }
 
     def set_global_speed_limits(self, upload_kib: int = None, download_kib: int = None):
         """设置 qB 全局上传/下载速度限制(KiB/s); 0 = 不限速
 
-        走 qB 5.0 transfer 端点(transfer_set_upload_limit/download_limit), 单位
-        bytes/s: KiB * 1024, 0 即不限速(旧版 app.preferences 的 -1 标记不再使用)。
-        仅传非 None 的方向; 调用方先比较当前值, 有变化才调用。
+        走 qB 5.0 transfer 端点(transfer_set_upload_limit/download_limit), 单位换算
+        经 curves.kib_to_bytes(bytes/s, 0 即不限速; 旧版 app.preferences 的 -1 标记
+        不再使用)。仅传非 None 的方向; 调用方先比较当前值, 有变化才调用。
         """
         if upload_kib is not None:
-            self._client.transfer_set_upload_limit(limit=0 if upload_kib <= 0 else int(upload_kib) * 1024)
+            self._client.transfer_set_upload_limit(limit=curves.kib_to_bytes(upload_kib))
         if download_kib is not None:
-            self._client.transfer_set_download_limit(limit=0 if download_kib <= 0 else int(download_kib) * 1024)
+            self._client.transfer_set_download_limit(limit=curves.kib_to_bytes(download_kib))
 
     # ---------- 备用(替代)速度限制与模式切换(qB"乌龟"; ALT-01) ----------
 
@@ -375,30 +374,27 @@ class QbApi:
         """读取 qB 备用全局速度限制; 对外以 KiB/s 返回(<=0 归一为 0 = 不限)
 
         qB 5.0 的端点迁移只动了**主速度**两个键(upload/download_limit -> transfer 端点),
-        备用速度 alt_dl_limit/alt_up_limit 仍在 app/preferences, 单位 bytes/s。
+        备用速度 alt_dl_limit/alt_up_limit 仍在 app/preferences, 单位 bytes/s
+        (换算同主速度: curves.bytes_to_kib_floor 单点)。
         """
         prefs = self._client.app_preferences() or {}
 
-        def _kib(limit_bytes) -> int:
-            b = int(limit_bytes or 0)
-            return b // 1024 if b > 0 else 0
-
         return {
-            "upload_limit": _kib(prefs.get("alt_up_limit")),
-            "download_limit": _kib(prefs.get("alt_dl_limit")),
+            "upload_limit": curves.bytes_to_kib_floor(prefs.get("alt_up_limit")),
+            "download_limit": curves.bytes_to_kib_floor(prefs.get("alt_dl_limit")),
         }
 
     def set_alt_speed_limits(self, upload_kib: int = None, download_kib: int = None):
         """设置 qB 备用全局速度限制(KiB/s); 0 = 不限速
 
         app/setPreferences 是增量语义: 只传需要改的 alt_* 键, 其余偏好不动。
-        仅传非 None 的方向; 单位换算与主速度一致(KiB * 1024)。
+        仅传非 None 的方向; 单位换算与主速度一致(curves.kib_to_bytes 单点)。
         """
         prefs: dict = {}
         if upload_kib is not None:
-            prefs["alt_up_limit"] = 0 if upload_kib <= 0 else int(upload_kib) * 1024
+            prefs["alt_up_limit"] = curves.kib_to_bytes(upload_kib)
         if download_kib is not None:
-            prefs["alt_dl_limit"] = 0 if download_kib <= 0 else int(download_kib) * 1024
+            prefs["alt_dl_limit"] = curves.kib_to_bytes(download_kib)
         if prefs:
             self._client.app_set_preferences(json=prefs)
 

@@ -379,23 +379,12 @@ class TrafficSampleModule(BaseModule):
         self._register_task(self._ctx)
 
     def _register_task(self, ctx: AppContext) -> None:
-        """采样任务自注册: 已在当前队列幂等跳过(黄金法则 1, 判据单点 TaskQueue.has_named);
-        enabled=false(含段缺省 None)不建任务零开销(黄金法则 2); 队列引用现取 ctx.task_queue
-        (L2 重建后 manager 委托落回 ctx, 不存在旧队列)"""
-        queue = ctx.task_queue
-        if queue is None or queue.has_named(TASK_NAME):
-            return
+        """采样任务自注册(骨架走 BaseModule.register_global_tasks 单点): enabled=false
+        (含段缺省 None)不建任务零开销(黄金法则 2) —— 判定在调用方。"""
         conf = ctx.config.qb_traffic
         if conf is None or not conf.enabled:  # 未启用: 不建任务不建目录零文件
             return
-        task = Task(
-            "internal",
-            TASK_NAME,
-            interval=conf.sample_interval,
-            handler=self.handle_traffic_sample,
-        )
-        queue.add_task(task)
-        logger.info(f"创建全局任务 1 个: ['{task.log_tag}']")
+        self.register_global_tasks(ctx, [(TASK_NAME, self.handle_traffic_sample, conf.sample_interval)])
 
     # ---------- 全局任务执行体 ----------
 
@@ -746,25 +735,27 @@ class TrafficSampleModule(BaseModule):
         if not block_head:
             if buf.date_str != v4_epoch_date_str(end_ts):
                 # 00:00 硬切(§3.3): 旧块先落盘(旧日期文件), 本记录成为新块首
-                self._flush_series(key, close_block=True)
-                self._append_record(key, rec, start_ts, end_ts)
+                self._close_block_and_reopen(key, rec, start_ts, end_ts)
                 return
             if isinstance(rec, (V4Sample, V4ZeroRun)):
                 if buf.dl_base is None:
                     # n-only 前缀拆块(§01「基线立点」): 无基线块仅 n 游程合法, 恢复传输的
                     # 记录开新块立基线 —— 前缀先落盘成 3 列 B 无基线块
-                    self._flush_series(key, close_block=True)
-                    self._append_record(key, rec, start_ts, end_ts)
+                    self._close_block_and_reopen(key, rec, start_ts, end_ts)
                     return
                 if rec.dl_total < buf.last_dl_total or rec.up_total < buf.last_up_total:
                     # 计数器重置(cur < last, §01 关块状态机): 强制关块重开 —— 新块基线 =
                     # 重置后 totals, 首记录 delta = 0, 重置段绝不混入旧块产负 delta
-                    logger.info(
-                        f"流量采样 | {key} 计数器回落({buf.last_dl_total}/{buf.last_up_total} -> "
-                        f"{rec.dl_total}/{rec.up_total}), 强制关块重立基线"
+                    self._close_block_and_reopen(
+                        key,
+                        rec,
+                        start_ts,
+                        end_ts,
+                        reset_log=(
+                            f"流量采样 | {key} 计数器回落({buf.last_dl_total}/{buf.last_up_total} -> "
+                            f"{rec.dl_total}/{rec.up_total}), 强制关块重立基线"
+                        ),
                     )
-                    self._flush_series(key, close_block=True)
-                    self._append_record(key, rec, start_ts, end_ts)
                     return
         if block_head:
             # 新块首记录(§3.1): B.start = 块首记录实测 epoch(整数秒); v4 基线状态清零重立
@@ -832,6 +823,18 @@ class TrafficSampleModule(BaseModule):
         if buf.slots >= V4_BUFFER_SLOT_CAP:
             self._flush_series(key)  # Q3 保险闸(§3.1): 超限提前 flush(v4 关块谓词下带 r 行的块随本 flush 关闭)
 
+    def _close_block_and_reopen(
+        self, key: str, rec, start_ts: float, end_ts: float, reset_log: Optional[str] = None
+    ) -> None:
+        """关块重开骨架单点(issue 26-10-11-0207 R10): 三个触发原因(00:00 硬切 / n-only
+        前缀拆块 / 计数器重置)同构 —— _flush_series(close_block=True) 落盘旧块后本记录
+        递归走 _append_record(成为新块首); reset_log 非空时先记一条审计(计数器重置专用)。
+        调用方紧跟 return(分派在 _append_record 的新块首路径)。"""
+        if reset_log:
+            logger.info(reset_log)
+        self._flush_series(key, close_block=True)
+        self._append_record(key, rec, start_ts, end_ts)
+
     def _flush_series(self, key: str, close_block: bool = False) -> None:
         """单系列批量落盘(§3.3): 单次 open("a") 写待写记录(块头在该块首次 flush 随批写入,
         跨 flush 的同块只写一次头; v4 B 行携带块基线, r/z 行 delta 序列化每批需基线 ——
@@ -866,26 +869,26 @@ class TrafficSampleModule(BaseModule):
                     else:
                         logger.warning(f"流量采样 | {key} 批量落盘失败(本批数据丢失, 后续失败不再重复告警): {e}")
                         self._persist_warned = True
-                    buf.start_epoch = None
-                    buf.date_str = None
-                    buf.header_written = False
-                    buf.dl_base = None
-                    buf.up_base = None
-                    buf.has_r_row = False
-                    buf.last_dl_total = None
-                    buf.last_up_total = None
+                    self._reset_block(buf)
             buf.records = []
             buf.slots = 0
         if close_block or buf.has_r_row:
             # 关块(谓词见 docstring): 块状态整体复位, 之后的记录按块首立基线开新块
-            buf.start_epoch = None
-            buf.date_str = None
-            buf.header_written = False
-            buf.dl_base = None
-            buf.up_base = None
-            buf.has_r_row = False
-            buf.last_dl_total = None
-            buf.last_up_total = None
+            self._reset_block(buf)
+
+    @staticmethod
+    def _reset_block(buf: "BlockBuffer") -> None:
+        """块状态整体复位 8 字段单点(issue 26-10-11-0207 R10): 落盘失败放弃与关块两处
+        逐字同 —— 复位后记录按块首立基线开新块。slots/records 由调用方各自清(两者在
+        失败路径不清)。"""
+        buf.start_epoch = None
+        buf.date_str = None
+        buf.header_written = False
+        buf.dl_base = None
+        buf.up_base = None
+        buf.has_r_row = False
+        buf.last_dl_total = None
+        buf.last_up_total = None
 
     def _maybe_flush_all(self, conf, now: float) -> None:
         """flush 驱动(§3.3): handler 内计时, now - last_flush >= flush_interval -> 全系列
@@ -1001,6 +1004,23 @@ class TrafficSampleModule(BaseModule):
         return wrote
 
     @staticmethod
+    def _ingest_acc(row, cur_epoch, cur_rows, bucket_epoch_of, cascade) -> tuple:
+        """聚合累计器并入骨架单点(issue 26-10-11-0207 R10): hour/day 两级同构 —— 首桶开
+        累计器 / 同桶追加(同 epoch 重封替换) / 翻桶先级联封口(cascade)再开新累计器。
+        返回 (new_epoch, new_rows); 本行落批(rows_out.append)与 hour 的 earliest_hour
+        判据由调用方自理。"""
+        e = bucket_epoch_of(row.epoch)
+        if cur_epoch is None:
+            return e, [row]
+        if e == cur_epoch:
+            rows = [h if h.epoch != row.epoch else row for h in cur_rows]
+            if all(h.epoch != row.epoch for h in rows):
+                rows.append(row)
+            return cur_epoch, rows
+        cascade(cur_epoch, cur_rows)
+        return e, [row]
+
+    @staticmethod
     def _agg_ingest_hour(agg: SeriesAgg, row, rows_out: list) -> None:
         """完结 hour 行落批 + 并入 day 累计器(严格逐级): 本行先 append 进 rows_out 随本批
         落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加行, 解析取最后一行);
@@ -1011,19 +1031,14 @@ class TrafficSampleModule(BaseModule):
         rows_out.append(row)
         if agg.earliest_hour is None or row.epoch < agg.earliest_hour:
             agg.earliest_hour = row.epoch
-        d = v4_day_epoch(row.epoch)
-        if agg.day_epoch is None:
-            agg.day_epoch, agg.day_hours = d, [row]
-        elif d == agg.day_epoch:
-            agg.day_hours = [h if h.epoch != row.epoch else row for h in agg.day_hours]
-            if all(h.epoch != row.epoch for h in agg.day_hours):
-                agg.day_hours.append(row)
-        else:
+
+        def cascade(close_epoch, close_rows) -> None:
             # 前一日随本行翻日封口(其末 hour 已过, 前一日必已完结)
-            TrafficSampleModule._agg_ingest_day(
-                agg, v4_rollup_agg("day", agg.day_epoch, tuple(agg.day_hours)), rows_out
-            )
-            agg.day_epoch, agg.day_hours = d, [row]
+            TrafficSampleModule._agg_ingest_day(agg, v4_rollup_agg("day", close_epoch, tuple(close_rows)), rows_out)
+
+        agg.day_epoch, agg.day_hours = TrafficSampleModule._ingest_acc(
+            row, agg.day_epoch, agg.day_hours, v4_day_epoch, cascade
+        )
 
     @staticmethod
     def _agg_ingest_day(agg: SeriesAgg, row, rows_out: list) -> None:
@@ -1031,16 +1046,13 @@ class TrafficSampleModule(BaseModule):
         落盘(§4.2 完结本地日 append day 行; 同 epoch 重封 = 追加行); 同月追加 / 同 epoch
         替换 / 翻月级联封前一月(语义同 _agg_ingest_hour)。"""
         rows_out.append(row)
-        m = v4_month_epoch(row.epoch)
-        if agg.month_epoch is None:
-            agg.month_epoch, agg.month_days = m, [row]
-        elif m == agg.month_epoch:
-            agg.month_days = [d if d.epoch != row.epoch else row for d in agg.month_days]
-            if all(d.epoch != row.epoch for d in agg.month_days):
-                agg.month_days.append(row)
-        else:
-            rows_out.append(v4_rollup_agg("month", agg.month_epoch, tuple(agg.month_days)))
-            agg.month_epoch, agg.month_days = m, [row]
+
+        def cascade(close_epoch, close_rows) -> None:
+            rows_out.append(v4_rollup_agg("month", close_epoch, tuple(close_rows)))
+
+        agg.month_epoch, agg.month_days = TrafficSampleModule._ingest_acc(
+            row, agg.month_epoch, agg.month_days, v4_month_epoch, cascade
+        )
 
     def _agg_append(self, key: str, rows: tuple) -> bool:
         """聚合行批量落盘(同款追加纪律, dry_run 静默跳过): OSError 按落盘失败口径
@@ -1113,6 +1125,26 @@ class TrafficSampleModule(BaseModule):
             except OSError as e:
                 logger.warning(f"流量采样 | {key} 聚合恢复失败(该系列按 agg 现状运行): {e}")
 
+    @staticmethod
+    def _catch_up_level(children: list, bucket_epoch_of, cur_bucket: int, watermark: Optional[int], kind: str) -> tuple:
+        """catch-up 逐级补算骨架单点(issue 26-10-11-0207 R10): day/month 两级同构 ——
+        子行(存量 + 新补)按桶分组成本级行, 未完结的当前桶重建累计器、水位前已有行不重算
+        (前向水位 §4.4)、其余完结桶补算 rollup 行(返回作上一级输入)。累计器字段名两级
+        不同, 故 (补算行, 当前桶 epoch, 当前桶子行) 三元组返回由调用方落回 agg。"""
+        buckets: dict = {}
+        for c in children:
+            buckets.setdefault(bucket_epoch_of(c.epoch), []).append(c)
+        cur_epoch, cur_rows = None, []
+        out = []
+        for b in sorted(buckets):
+            if b >= cur_bucket:
+                cur_epoch, cur_rows = b, list(buckets[b])  # 当前桶累计器(未完结)
+                continue
+            if watermark is not None and b <= watermark:
+                continue  # 已有行: 不重算
+            out.append(v4_rollup_agg(kind, b, tuple(buckets[b])))
+        return out, cur_epoch, cur_rows
+
     def _recover_series(self, key: str, store: TrafficV4Store, now: float, window: float) -> None:
         """单系列恢复(§4.3/§4.4): 扫 agg 文尾 -> 水位(= 文件尾行, 不落内存不重 append)
         + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 窗口内天文件
@@ -1149,30 +1181,12 @@ class TrafficSampleModule(BaseModule):
             else:
                 agg.pending[h] = list(samples)  # 开放小时 -> 重建累计器
         # --- 当日/当月累计器从文件内行重建 + day/month catch-up(严格逐级) ---
-        by_day: dict = {}
-        for h in list(parsed.hours) + new_hours:
-            by_day.setdefault(v4_day_epoch(h.epoch), []).append(h)
-        agg.day_epoch, agg.day_hours = None, []
-        new_days = []
-        for d in sorted(by_day):
-            if d >= today:
-                agg.day_epoch, agg.day_hours = d, list(by_day[d])  # 当日累计器(未完结)
-                continue
-            if wm_day is not None and d <= wm_day:
-                continue  # 已有日行: 不重算
-            new_days.append(v4_rollup_agg("day", d, tuple(by_day[d])))
-        by_month: dict = {}
-        for d in list(parsed.days) + new_days:
-            by_month.setdefault(v4_month_epoch(d.epoch), []).append(d)
-        agg.month_epoch, agg.month_days = None, []
-        new_months = []
-        for m in sorted(by_month):
-            if m >= cur_month:
-                agg.month_epoch, agg.month_days = m, list(by_month[m])  # 当月累计器(未完结)
-                continue
-            if wm_month is not None and m <= wm_month:
-                continue
-            new_months.append(v4_rollup_agg("month", m, tuple(by_month[m])))
+        new_days, agg.day_epoch, agg.day_hours = self._catch_up_level(
+            list(parsed.hours) + new_hours, v4_day_epoch, today, wm_day, "day"
+        )
+        new_months, agg.month_epoch, agg.month_days = self._catch_up_level(
+            list(parsed.days) + new_days, v4_month_epoch, cur_month, wm_month, "month"
+        )
         rows = tuple(new_hours + new_days + new_months)
         if rows:
             self._agg_append(key, rows)  # catch-up 补算 append(幂等: 同 epoch 取最后一行)
@@ -1228,7 +1242,11 @@ class TrafficSampleModule(BaseModule):
     @staticmethod
     def _delta(key: str, direction: str, cur, last) -> Optional[int]:
         """累计差分: delta = max(0, cur - last)(cur >= last 时天然非负);
-        cur < last 判计数器重置: 该点增量记 null + INFO 记录(P6 真机验证重置语义靠它观察)"""
+        cur < last 判计数器重置: 该点增量记 null + INFO 记录(P6 真机验证重置语义靠它观察)。
+        !「cur < last 判重置」口径的分层形态(issue 26-10-11-0207 R07/R10 登记, 保持分层
+        不急合): 采样器本函数(判重置记 null) / 视图层 traffic_grid._bucket_delta(判重置
+        记 null, 无日志) / 解析侧 v4 天文件负 delta 校验(delta 形态下直接记坏行) ——
+        三层同一判据、各自语义, 改判据口径三处同步。"""
         if cur < last:
             logger.info(f"流量采样 | {key} {direction}累计计数器回落({last} -> {cur}), 判重置, 本点增量记 null")
             return None

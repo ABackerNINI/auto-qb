@@ -176,8 +176,7 @@ class QbManager(
         self.ctx.state = StateService(self.config.state_file)
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
         os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
-        self.state = self.ctx.state.load()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
-        self.ctx.state.bind_field_snapshots(self.store)  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
+        self._reload_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
         # 周期落盘计时器(见 StateService.maybe_flush): run() 加载状态后重置为首个到期点
         self.ctx.state.next_flush_at = 0.0
         # 规则结构初始化移入 RulesModule(P5; 规则加载在 run() 中进行: --export-yaml 等
@@ -355,30 +354,49 @@ class QbManager(
         self._reconnect_at = now + base
         return True
 
+    def _note_conn_failed(self, e: Exception) -> None:
+        """连接失败节流(issue A-07): 仅状态转换时记录一次失败, 断开期间静默不刷屏
+
+        connect() 的两个 except 分支与 run() 主循环的 APIConnectionError 分支共用 ——
+        同一根因只说明白一次(pitfalls/ops/alert-levels.md 2.), 失败态下再失败静默。
+        """
+        if self._last_conn_ok is not False:
+            logger.error(f"连接 qBittorrent 失败: {e}")
+            self._last_conn_ok = False
+
+    def _note_conn_ok(self) -> None:
+        """重连成功: 记录一次"已连接"状态 + 清零退避
+
+        connect()(连接恢复或首次连接)与 run() 主循环的连接恢复检测共用。
+        """
+        if self._last_conn_ok is False:
+            logger.info("已重新连接 qBittorrent")
+        self._last_conn_ok = True
+        self._reset_reconnect_backoff()
+
+    def _reload_state(self) -> None:
+        """state 加载 + 字段变化基线挂接(计划 26-09-27-1438)
+
+        __init__ 与 run() 双入口同口径: run() 时再次加载覆盖, 字段变化基线随整体
+        替换重新挂接。
+        """
+        self.state = self.ctx.state.load()
+        self.ctx.state.bind_field_snapshots(self.store)
+
     def connect(self) -> bool:
         """连接 qBittorrent(本地地址经 new_client 使用关闭 trust_env 的 LocalQbClient)"""
         try:
             self.client = new_client(self.config.qbittorrent)
             self.api.auth_log_in()
-            # 连接恢复(此前断开)或首次连接: 记录一次"已连接"状态
-            if self._last_conn_ok is False:
-                logger.info("已重新连接 qBittorrent")
-            self._last_conn_ok = True
-            self._reset_reconnect_backoff()
+            self._note_conn_ok()
             return True
         except APIConnectionError as e:
-            # 仅状态转换时记录一次失败(首次失败或从连接态转入); 断开期间静默不刷屏
-            if self._last_conn_ok is not False:
-                logger.error(f"连接 qBittorrent 失败: {e}")
-                self._last_conn_ok = False
+            self._note_conn_failed(e)
             return False
         except Exception as e:
             # 非 API 类连接异常(典型: 凭据错 LoginError)与连接类同用转换节流(issue A-07):
-            # 托管模式首连重试循环每 main_tick 走一次这里, 无条件 ERROR 等于逐拍刷屏;
-            # 同一根因只说明白一次(pitfalls/ops/alert-levels.md 2.), 失败态下再失败静默。
-            if self._last_conn_ok is not False:
-                logger.error(f"连接 qBittorrent 失败: {e}")
-                self._last_conn_ok = False
+            # 托管模式首连重试循环每 main_tick 走一次这里, 无条件 ERROR 等于逐拍刷屏。
+            self._note_conn_failed(e)
             return False
 
     def reconnect(self) -> None:
@@ -464,8 +482,7 @@ class QbManager(
                 if not retry_warned:
                     logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
                     retry_warned = True
-            self.state = self.ctx.state.load()
-            self.ctx.state.bind_field_snapshots(self.store)  # state 被整体替换, 字段变化基线重新挂接
+            self._reload_state()  # state 被整体替换, 字段变化基线重新挂接
             # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。
             # 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
             self.ctx.state.materialize_migration(dry_run)
@@ -556,17 +573,13 @@ class QbManager(
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
                         if (sync_due or tick_due) and self._last_conn_ok is False:
-                            self._last_conn_ok = True
-                            self._reset_reconnect_backoff()
-                            logger.info("已重新连接 qBittorrent")
+                            self._note_conn_ok()
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
                     except APIConnectionError as e:
-                        # 连接失败节流: 仅状态转换时记录一次, 断开期间静默(qB 宕机时不刷屏);
-                        # 断开期间自动重建连接(qB 重启/网络恢复后下一 tick 自动接上)
-                        if self._last_conn_ok is not False:
-                            logger.error(f"连接 qBittorrent 失败: {e}")
-                            self._last_conn_ok = False
+                        # 连接失败节流(_note_conn_failed) + 断开期间自动重建连接(qB 重启/网络恢复
+                        # 后下一 tick 自动接上)
+                        self._note_conn_failed(e)
                         self.client = None
                         # 退避: 不在每 tick 重建 Client(见 _reconnect_due)。qB 重启/网络恢复后
                         # 仍会自动接上, 只是重试间隔逐步拉长到 30s, 而不是 2s 一次空转。

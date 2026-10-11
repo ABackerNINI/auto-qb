@@ -38,10 +38,7 @@ class LoggingModule(BaseModule):
         return None  # 日志随进程终灭, 无可停(现行退出路径也不拆 handler)
 
     def apply(self, old, new) -> ApplyResult:
-        if old.logging == new.logging:
-            return ApplyResult(self.name)
-        self._configure(new.logging)
-        return ApplyResult(self.name, "remounted")
+        return self.apply_section(old, new, "logging", self._configure)
 
     def _configure(self, conf) -> None:
         setup_logging(conf.file, conf.level, conf.max_bytes, conf.format)

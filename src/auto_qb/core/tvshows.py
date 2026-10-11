@@ -32,6 +32,8 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
+from . import episodes
+
 # 种子名解析缓存上限: 追剧视图(_build_shows_view)对**每个种子**跑一次 parse_release,
 # 十余条正则 —— 视图每 tick 重建时就是 N 次全量解析(N=2000 时约 2000 次/2s)。种子名
 # 不变则结果恒定(ParsedRelease 是 frozen dataclass, 纯函数可安全缓存), 故缓存命中后
@@ -101,6 +103,8 @@ _NUM_GROUP = r"(\d{1,4}|[零一二两三四五六七八九十百]{1,6})"
 
 # 季标记(独立出现, 不带集数)。S01 需负向预查排除 S01E05/S01x05/S1 E05 —— 带集数的
 # S 由集数模式匹配并回填季号, 若此处也命中会重复计位(标题被切短)。
+# !目录名侧还有一个精简季正则组(parse_files 内联, 锚定 $ 的三形态)——
+# 同一「目录季标记」口径的两种形态(标题模糊搜 vs 目录整段锚定), 互指见该处注释。
 _SEASON_PATTERNS = [
     (re.compile(r"(?<![A-Za-z0-9])[Ss](\d{1,2})(?![A-Za-z0-9]|\s*[EeXx]\s*\d)"), lambda m: _cjk_int(m.group(1))),
     (re.compile(r"(?<![A-Za-z0-9])Season[ ._-]?(\d{1,2})(?![0-9])", re.IGNORECASE), lambda m: _cjk_int(m.group(1))),
@@ -116,6 +120,9 @@ _SEASON_PATTERNS = [
 # 每项第三元 bare 标志: 动画 bare number 只认 "- 05" 与 "[05]"/"(05)" 两种形态,
 # 且起点需过 _bare_ok(排除分辨率/年份); 其余模式起点不设此限(E1080 类大编号合法)。
 # 裸尾随数字(如 Oceans.11)不识别 —— 与 episodes.py 禁用 bare number 同一顾虑。
+# !本族是 episodes._EPISODE_PATTERNS 的超集(多 1x05/中文数字/日期/区间/裸数字五类),
+# 同源已演化 —— 直接合并会改行为, 差异点登记于 issue
+# 26-10-11-0207-refactor-core-episode-marker-dup(R08, B 类), 评估 episodes 复用本解析后再定。
 _EPISODE_PATTERNS = [
     # S01E05 / S01E05-E06 / S01E05E06 / S01x05(季号内嵌, 优先级最高)
     # 区间续接两分支: "-06"/"-E06"(破折号 + 可选 E)与 "E06"(直接连写); 裸空格接数字不算区间
@@ -177,8 +184,9 @@ _MULTI_SEASON_RE = re.compile(
     r"|第\s*\d{1,2}\s*[-~至到]\s*\d{1,2}\s*季"
 )
 
-# bare number 排除集: 分辨率与年份(1900-2099)
-_BARE_EXCLUDE = {480, 576, 720, 1080, 2160, 4320}
+# bare number 排除集: 分辨率(单点 episodes.RESOLUTION_EXCLUDE, 与 episodes.py bare 分支
+# 同口径; issue 26-10-11-0207 R08)与年份(1900-2099, 见 _bare_ok)
+_BARE_EXCLUDE = episodes.RESOLUTION_EXCLUDE
 
 
 def _bare_ok(n: Optional[int]) -> bool:
@@ -423,6 +431,8 @@ def parse_files(names: List[str]) -> Tuple[Optional[int], List[int]]:
         parts = (n or "").replace("\\", "/").split("/")
         for part in parts[:-1]:
             p = part.strip()
+            # 目录名季标记(整段锚定): _SEASON_PATTERNS(标题模糊搜)的同口径精简形态,
+            # 两处互指 —— 合并需先统一锚定语义(issue 26-10-11-0207 R08 登记, 不急合)
             m = (
                 re.search(r"第\s*(\d{1,2}|[一二三四五六七八九十]{1,3})\s*季$", p) or
                 re.search(r"Season[ ._-]?(\d{1,2})$", p, re.IGNORECASE) or re.search(r"^[Ss](\d{1,2})$", p)
