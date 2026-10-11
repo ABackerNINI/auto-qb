@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-drawer-table-rework">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-12-0527">
-<meta name="doc-updated" content="26-10-12-0527">
+<meta name="doc-updated" content="26-10-12-0533">
 <meta name="doc-refs" content="memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html">
 <title>WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）</title>
 <style>
@@ -94,7 +94,7 @@
   <p class="sub">依据双计划联合审计（26-10-12-0455 报告）。用户裁定澄清：「不考虑兼容」= 旧详情页表格<b>全部重写</b>——变体表格体重写接引擎，而非保留手搓实现。</p>
   <dl class="meta">
     <div><dt>计划编号</dt><dd class="mono">26-10-12-0527</dd></div>
-    <div><dt>状态</dt><dd>Open（待拍板 D1–D6）</dd></div>
+    <div><dt>状态</dt><dd>In Progress（26-10-12-0533 用户拍板：D1–D6 全推荐项，开工 U0）</dd></div>
     <div><dt>前置输入</dt><dd>审计报告 26-10-12-0455 · 前计划 26-10-11-1722 · 后计划 26-10-11-2106</dd></div>
     <div><dt>预期波次</dt><dd>U0–U5（六波，一步一停手点）</dd></div>
   </dl>
@@ -291,17 +291,17 @@
 <section id="s7">
 <h2><span class="idx">07</span> 拍板点</h2>
 <h4><span class="h4n">D1</span> 桥架构</h4>
-<p>A · <b>Teleport 锚</b>（M1，推荐：单一 Vue 应用、外壳零感知引擎、重写面最小）｜ B · 正文组件化（M2）｜ C · 变体全 Vue 化（M3，与 W7「模板能力保留」冲突，不推荐）。</p>
+<p>A · <b>Teleport 锚</b>（M1，推荐：单一 Vue 应用、外壳零感知引擎、重写面最小）<b class="ok">【26-10-12-0533 已拍板: A】</b>｜ B · 正文组件化（M2）｜ C · 变体全 Vue 化（M3，与 W7「模板能力保留」冲突，不推荐）。</p>
 <h4><span class="h4n">D2</span> 变体列个性</h4>
-<p>A · <b>保留</b>——每变体列子集/专属列/默认序在描述符声明，观感不变（推荐：变体存在意义就是版式差异）｜ B · 全部对齐经典列集（变体失去表格个性，与「模板能力保留」精神相悖）。</p>
+<p>A · <b>保留</b>——每变体列子集/专属列/默认序在描述符声明，观感不变（推荐：变体存在意义就是版式差异）<b class="ok">【已拍板: A】</b>｜ B · 全部对齐经典列集（变体失去表格个性，与「模板能力保留」精神相悖）。</p>
 <h4><span class="h4n">D3</span> 排序并入范围</h4>
-<p>A · <b>全部并引擎</b>（推荐：G2 要求行为同源；比较器口径逐列核对）｜ B · 语义特殊表借壳不并排序（HR D3=B 先例，预计仅可能适用于树表 10/11；选 B 须逐例记档并入 Q3 对账单列）。</p>
+<p>A · <b>全部并引擎</b>（推荐：G2 要求行为同源；比较器口径逐列核对）<b class="ok">【已拍板: A】</b>｜ B · 语义特殊表借壳不并排序（HR D3=B 先例，预计仅可能适用于树表 10/11；选 B 须逐例记档并入 Q3 对账单列）。</p>
 <h4><span class="h4n">D4</span> 树表（10/11）形态</h4>
-<p>A · <b>树缩进格进渲染器</b>——树是行模型的一部分，表壳/交互照常（推荐）｜ B · 树表整体例外（保留手搓，缺口从 8 减到 6）——若选 B，Q1 终态改 16/18 并记档原因。</p>
+<p>A · <b>树缩进格进渲染器</b>——树是行模型的一部分，表壳/交互照常（推荐）<b class="ok">【已拍板: A】</b>｜ B · 树表整体例外（保留手搓，缺口从 8 减到 6）——若选 B，Q1 终态改 16/18 并记档原因。</p>
 <h4><span class="h4n">D5</span> 观感口径</h4>
-<p>A · <b>保持变体版式个性</b>（推荐：G2 明言「不要求观感相同，要求行为同源」）｜ B · 表格体统一为经典观感（变体表格个性消失）。</p>
+<p>A · <b>保持变体版式个性</b>（推荐：G2 明言「不要求观感相同，要求行为同源」）<b class="ok">【已拍板: A】</b>｜ B · 表格体统一为经典观感（变体表格个性消失）。</p>
 <h4><span class="h4n">D6</span> 偏好键</h4>
-<p>A · <b>每变体表独立 table-id</b>（如 <code>drawerPeerV07</code>；推荐：与经典/变体互不串扰，切模板不互相污染）｜ B · 同页签变体与经典共享键（切模板时列偏好互通，但列集不同会互写脏值）。</p>
+<p>A · <b>每变体表独立 table-id</b>（如 <code>drawerPeerV07</code>；推荐：与经典/变体互不串扰，切模板不互相污染）<b class="ok">【已拍板: A】</b>｜ B · 同页签变体与经典共享键（切模板时列偏好互通，但列集不同会互写脏值）。</p>
 </section>
 
 <section id="s8">
@@ -326,6 +326,7 @@
   <thead><tr><th style="width:130px">时间</th><th>变更</th></tr></thead>
   <tbody>
     <tr><td class="mono">26-10-12-0527</td><td>初稿：依据双计划联合审计（26-10-12-0455 报告）与用户裁定「不考虑兼容 = 旧表格全部重写」起草。审计 fork 消除（DOM 适配路线出局，1722 §03 ③b 条件项关闭）；量化目标 Q1–Q5 进验收函数；U0–U5 六波（契约欠账先行 → 引擎 spike → 用户表 07/08/09 先行 → tracker 04/05/06 → 树表 10/11 → 收口）；十条风险；六个拍板点。</td></tr>
+    <tr><td class="mono">26-10-12-0533</td><td><strong>拍板定稿（用户：「按推荐实施」）</strong>：D1 = Teleport 锚桥；D2 = 保留变体列个性（引擎列子集声明）；D3 = 排序全并引擎；D4 = 树缩进格进渲染器（10/11 树形态保留）；D5 = 观感保持变体个性（重写只动表格体，皮肤注入 CSS 重写为引擎等价规则）；D6 = 列偏好键每变体独立（<code>autoqb.tables.drawerPeerV07</code> 等 table-id）。状态 Open → In Progress，开工 U0。</td></tr>
   </tbody>
 </table>
 </section>
@@ -333,7 +334,7 @@
 </main>
 </div>
 
-<footer>memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html · topic webui-drawer-table-rework · status Open（待拍板 D1–D6）</footer>
+<footer>memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html · topic webui-drawer-table-rework · status In Progress（26-10-12-0533 拍板 D1–D6 全推荐项）</footer>
 </div>
 </body>
 </html>

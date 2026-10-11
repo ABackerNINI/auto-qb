@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-11-1722] [WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划](26-10-11-1722-plan-webui-table-component.html) — `webui-table-component`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
@@ -16,7 +17,6 @@
 
 ## Open
 
-- [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
 - [26-10-09-0856] [HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb](26-10-09-0856-plan-hr-channel-remote.html) — `hr-channel-remote`
