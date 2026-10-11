@@ -3,7 +3,7 @@ import math
 import re
 from typing import List
 
-from ...infra.utils import MatchPattern, parse_bool, parse_time
+from ...infra.utils import MatchPattern, parse_bool, parse_hm, parse_time
 from ..schema.trackers import HR_OUTPUT_FIELDS
 
 # config 顶层已知键
@@ -35,9 +35,37 @@ KNOWN_CONFIG_KEYS = {
     "maintenance_tag_mode",
 }
 
-# maintenance_tag_mode 取值域(与 schema.MAINTENANCE_TAG_MODES 一致): interval = 现状(默认),
-# on_change = 站点 tags 维护改为"添加时 + tags 外部变化时"(计划 26-09-27-1438 D5)
+# maintenance_tag_mode 取值域(本包单点; 旧 schema 侧同名死件已删, issue 26-10-11-0031):
+# interval = 现状(默认), on_change = 站点 tags 维护改为"添加时 + tags 外部变化时"(计划 26-09-27-1438 D5)
 MAINTENANCE_TAG_MODES = ("interval", "on_change")
+
+
+def _try_port(value, where: str, errors: List[str]) -> None:
+    """端口校验单点(issue 26-10-11-0032): 可解析为整数 + 1..65535(qbittorrent/web/hr_check.channel 三处共用)"""
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        errors.append(f"{where}: 必须是整数: {value}")
+        return
+    if not 1 <= port <= 65535:
+        errors.append(f"{where}: 超出范围 1-65535: {port}")
+
+
+def _try_time_window(value, where: str, errors: List[str]) -> None:
+    """时间窗 "HH:MM-HH:MM" 校验单点(issue 26-10-11-0032): hr_check.allow_window 与 notify.quiet_hours 共用
+
+    空值 = 未配置放行; 支持跨午夜; 时刻合法性复用 parse_hm 单一事实来源。
+    窗口的方向语义(「该时段不发」vs「仅该时段取数」)由各键的 help/文档表达, 报错只管形状。
+    """
+    v = str(value or "").strip()
+    if not v:
+        return
+    try:
+        start_s, end_s = v.split("-", 1)
+        parse_hm(start_s)
+        parse_hm(end_s)
+    except ValueError as e:
+        errors.append(f"{where}: 须为 'HH:MM-HH:MM'(可跨午夜): {e}")
 
 
 def _is_tri_state_site_leaf(path: tuple, key, value) -> bool:

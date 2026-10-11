@@ -153,11 +153,15 @@ class Plugin:
     risk: str = ""  # 非空 = 高风险插件(前端在卡片头显示醒目警示)
 
 
+# ---------- 枚举/取值域常量: 全仓单点(issue 26-10-11-0031) ----------
+# 本模块是纯声明层, 以下取值域常量由 config/validation 与 rules/expr/env 引用派生 ——
+# 同一事实不再第二份手写; 一致性由 tests/test_config_schema.py 的单源守卫(is 断言)钉住。
+
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 NOTIFY_LEVELS = ("INFO", "WARNING", "ERROR")
 
-NOTIFY_CHANNELS = ("platform", )
+NOTIFY_CHANNELS = ("platform", )  # v1 仅平台原生单渠道(按运行平台自动分派; 多渠道按 traffic_source 同模式演进)
 
 EXECUTE_ONCE = ("never", "once", "daily", "hourly")
 
@@ -171,11 +175,9 @@ TRIGGERS = (
     "on_torrent_field_changed",
 )
 
-# on_torrent_field_changed 可监听字段(与 validation.FIELD_WATCH_ALLOWED 一致)
+# on_torrent_field_changed 可监听字段白名单(v1, 计划 26-09-27-1438 D2): state 已有专属触发时机,
+# amount_left 高频变化事件化即噪音, 均不入列
 FIELD_WATCH_ALLOWED = ("tags", "category")
-
-# maintenance_tag_mode 取值(维护任务站点 tags 部分的执行节奏, 计划 26-09-27-1438 D5)
-MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 CHECKING_BASIC = ("filelist", "piecehashes", "custom")
 
@@ -183,8 +185,11 @@ CHECKING_MODES = ("skip-checking", "full-checking")
 
 HR_MODES = ("condition-met", "condition-not-met", "satisfied")
 
-# state 条件的 is_* 类别属性(与 validation._validate_state_condition_spec 一致)
+# state 条件的 is_* 类别属性(qB TorrentState 语义; validation._validate_state_condition_spec
+# 的报错文案与 rules/expr/env 的取值名表都从本表派生)
 STATE_ATTRS = ("is_downloading", "is_uploading", "is_complete", "is_checking", "is_stopped", "is_paused", "is_errored")
 
-# on_torrent_deleted 允许的动作(与 validation.DELETED_TRIGGER_ALLOWED_ACTIONS 一致)
+# on_torrent_deleted 允许的动作白名单: 删除后种子无活现场, 现存动作几乎都对已删种子无意义,
+# 仅允许"不依赖活现场"的只读/记录类动作(如 print_torrent_details)。未来通知/记录类动作加入此集合。
+# 空集合 = 禁止任何动作(on_torrent_deleted 仅作语义占位)。其它触发时机不设白名单(全部动作可用)。
 DELETED_ALLOWED_ACTIONS = ("print_torrent_details", )

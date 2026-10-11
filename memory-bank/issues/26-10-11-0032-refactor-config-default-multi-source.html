@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0032">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-config-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="配置默认值在 models/schema/docs/config-reference 多处表示, 已见 log.format 漂移">
 <meta name="issue-summary" content="dataclass(类型化)/schema Field(字符串)/docs 示例/keys.md 各自声明默认; 收敛为 models 单点 + schema/docs 派生或引用 (dup-code-audit R03/R04)">
 <title>配置默认值在 models/schema/docs/config-reference 多处表示, 已见 log.format 漂移 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0032-refactor-config-default-multi-source</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 00:32</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R03/R04</div></div>
     </div>
   </header>
@@ -99,6 +99,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 00:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:58 — 认领（用户指派，档案 memory-bank/tasks/26-10-11-config-dup-code-fixes.md），状态 <strong>Open → In Progress</strong>；复验：log.format 漂移 / models・schema・docs・keys.md 四处默认锚点仍在</li>
+      <li>2026-10-11 16:11 — 修复完成(建议修法部分改道)，状态 <strong>In Progress → Done</strong>。实际修法: ①docs/configuration.md log.format 示例修正为 models 缺省串(实漂移清零); ②schema_version Field.default "1"(已与真实版本漂移)改为派生 infra.versioning.CURRENT_VERSIONS(与 writer 盖章同源, 守阵 test_schema_version_field_default_tracks_versioning); ③「schema.Field.default 全键由 models 派生」判收益/成本不匹配暂不做(YAML↔解析空间逐键换算, 且已有 unit_default/可解析守卫 + 新 docs 守卫兜主要漂移面, 改道理由见档案决策段)。验证: test.full 全绿 3117 passed + 3 skipped(覆盖率 99%, 基线切片 26-10-11-1611)</li>
     </ul>
   </section>
 

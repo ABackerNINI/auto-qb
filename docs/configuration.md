@@ -53,7 +53,7 @@ config:
         file: ""                 # 日志文件路径，默认 <data_dir>/logs/auto-qb.log
         level: INFO              # 日志等级
         max_bytes: 10MiB         # 日志轮转大小(1MiB~1GiB)
-        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
+        format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s" # 日志格式(与 models.LoggingConfig 缺省一致)
 
     # Web UI: 辅种管理 + 图形化配置编辑(默认关闭; 推荐的日常配置方式)
     web:
@@ -176,7 +176,7 @@ B 已达标 / C 未达标 / D 已免罪 → 放行**(站点结论已定, 终态�
 就可视为完成, 在线核实只是保障准确」)。做种时长 ≥ 3 × 要求时长(程序常量)的种子免除在线对账义务
 (不为它翻页下载), 但被动命中考察中仍照常管束。
 
-- **全局段** `config.hr_check`(8 键): `enabled`(总开关, 默认 false) + 单频控三键 ——
+- **全局段** `config.hr_check`(9 键 = 7 个标量键 + `channel` + `sites`): `enabled`(总开关, 默认 false) + 单频控三键 ——
   `min_interval`(默认 90S, 相邻请求最小间隔, 页面与 .torrent 统一适用, 抖动只向上 +0~25%)、
   `max_requests_per_day`(默认 240, 站点级日额保险, 零点重置)、`max_pages_per_wave`(默认 30,
   单波页数上限安全阀, 到顶该档截断, 下波从头再翻) + `allow_window`(可选, 仅该时段取数) +

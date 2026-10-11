@@ -3,9 +3,20 @@ import logging
 import re
 from typing import List
 
-from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed, parse_time
+from ...infra.utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
-from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _fmt_s, _try, _try_number, _try_time
+from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
+from .core import (
+    _check_regex_patterns,
+    _check_str_list,
+    _check_unknown_keys,
+    _fmt_s,
+    _try,
+    _try_number,
+    _try_port,
+    _try_time,
+    _try_time_window,
+)
 from .rules import _check_rule_refs
 
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
@@ -62,10 +73,7 @@ KNOWN_HR_SITE_KEYS = {
 #: 两处等价性由 tests/test_hr_channel.py 的对照用例钉死。
 _EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 
-# notify.channels 已知渠道(v1 仅平台原生单渠道; 多渠道按 traffic_source 同模式演进)
-NOTIFY_CHANNELS = {"platform"}
-
-NOTIFY_LEVELS = ("INFO", "WARNING", "ERROR")
+# notify.channels 已知渠道已收敛至 schema.fields 单点(issue 26-10-11-0031, 顶部导入)
 
 KNOWN_HR_KEYS = {
     "add_tag",
@@ -119,7 +127,7 @@ def _validate_log(spec, errors: List[str]) -> None:
     if "level" in spec:
         level = getattr(logging, str(spec["level"]).upper(), None)
         if not isinstance(level, int):
-            errors.append(f"config.log.level: 非法日志等级 '{spec['level']}', 可选: DEBUG/INFO/WARNING/ERROR/CRITICAL")
+            errors.append(f"config.log.level: 非法日志等级 '{spec['level']}', 可选: {'/'.join(LOG_LEVELS)}")
     if "max_bytes" in spec:
         n = _try(parse_fsize, spec["max_bytes"], "config.log.max_bytes", errors)
         # 0 在 RotatingFileHandler 语义 = 从不轮转(单文件无限增长直至磁盘写满);
@@ -136,13 +144,7 @@ def _validate_qbittorrent(spec, errors: List[str]) -> None:
         return
     _check_unknown_keys(spec, KNOWN_QBITTORRENT_KEYS, "config.qbittorrent", errors)
     if "port" in spec:
-        try:
-            port = int(spec["port"])
-        except (TypeError, ValueError):
-            errors.append(f"config.qbittorrent.port: 必须是整数: {spec['port']}")
-        else:
-            if not 1 <= port <= 65535:
-                errors.append(f"config.qbittorrent.port: 超出范围 1-65535: {port}")
+        _try_port(spec["port"], "config.qbittorrent.port", errors)
 
 
 def _validate_global_hr(spec, errors: List[str]) -> None:
@@ -180,15 +182,8 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
         if key in spec:
             _try_number(spec[key], f"config.hr_check.{key}(须为正整数)", errors, integer=True, min=1, max=100000)
     if "allow_window" in spec:
-        # 语义与 notify.quiet_hours 相反(那个是「该时段不发」, 本项是「仅该时段取数」), 故文案必须写清
-        v = str(spec["allow_window"] or "").strip()
-        if v:
-            try:
-                start_s, end_s = v.split("-", 1)
-                parse_hm(start_s)
-                parse_hm(end_s)
-            except ValueError as e:
-                errors.append(f"config.hr_check.allow_window: 须为 'HH:MM-HH:MM'(可跨午夜): {e}")
+        # 语义与 notify.quiet_hours 相反(那个是「该时段不发」, 本项是「仅该时段取数」), 方向语义由 help/文档表达
+        _try_time_window(spec["allow_window"], "config.hr_check.allow_window", errors)
     if "shared_dir" in spec and not isinstance(spec["shared_dir"], str):
         errors.append("config.hr_check.shared_dir: 必须是字符串")
     if "reuse_window" in spec:
@@ -206,13 +201,7 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
             if "enabled" in channel:
                 _try(parse_bool, channel["enabled"], "config.hr_check.channel.enabled", errors)
             if "port" in channel:
-                try:
-                    port = int(channel["port"])
-                except (TypeError, ValueError):
-                    errors.append(f"config.hr_check.channel.port: 必须是整数: {channel['port']}")
-                else:
-                    if not 1 <= port <= 65535:
-                        errors.append(f"config.hr_check.channel.port: 超出范围 1-65535: {port}")
+                _try_port(channel["port"], "config.hr_check.channel.port", errors)
             if "token" in channel and not isinstance(channel["token"], str):
                 errors.append("config.hr_check.channel.token: 必须是字符串")
             if "extension_id" in channel:
@@ -554,13 +543,7 @@ def _validate_web(spec, errors: List[str]) -> None:
         if not isinstance(spec["host"], str) or not spec["host"].strip():
             errors.append("config.web.host: 必须是非空字符串")
     if "port" in spec:
-        try:
-            port = int(spec["port"])
-        except (TypeError, ValueError):
-            errors.append(f"config.web.port: 必须是整数: {spec['port']}")
-        else:
-            if not 1 <= port <= 65535:
-                errors.append(f"config.web.port: 超出范围 1-65535: {port}")
+        _try_port(spec["port"], "config.web.port", errors)
     if "token" in spec and not isinstance(spec["token"], str):
         errors.append("config.web.token: 必须是字符串")
     if "skip_local_verify" in spec:
@@ -583,13 +566,7 @@ def _validate_notify(spec, errors: List[str]) -> None:
         if str(spec["min_level"]).strip().upper() not in NOTIFY_LEVELS:
             errors.append(f"config.notify.min_level: 须为 {'/'.join(NOTIFY_LEVELS)} 之一: '{spec['min_level']}'")
     if "quiet_hours" in spec:
-        v = str(spec["quiet_hours"] or "").strip()
-        if v and "-" in v:
-            start_s, _, end_s = v.partition("-")
-            for part in (start_s, end_s):
-                _try(parse_hm, part, f"config.notify.quiet_hours('{v}')", errors)
-        elif v:
-            errors.append(f"config.notify.quiet_hours: 须为 \"HH:MM-HH:MM\" 格式(支持跨午夜): '{v}'")
+        _try_time_window(spec["quiet_hours"], "config.notify.quiet_hours", errors)
     if "max_per_hour" in spec:
         try:
             n = int(spec["max_per_hour"])

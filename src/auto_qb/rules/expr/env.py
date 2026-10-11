@@ -18,6 +18,7 @@ from dataclasses import dataclass, fields as dc_fields
 from datetime import datetime
 from typing import Any, Callable, Dict, Tuple
 
+from ...config.schema.fields import STATE_ATTRS  # 枚举族单点(issue 26-10-11-0031): 第三份声明已删
 from ...core import curves
 from ...infra import file_access, utils
 from ...torrents import TorrentRecord
@@ -39,9 +40,6 @@ from .types import (
 
 _SNAPSHOT_SET = frozenset(_SNAPSHOT_FIELDS)
 _PY_KIND = {"str": STR, "int": NUM, "float": NUM, "bool": BOOL}
-
-# 状态类别属性(与 qB TorrentState 语义一致, 取代旧 state 条件)
-_STATE_ATTRS = ("is_downloading", "is_uploading", "is_complete", "is_checking", "is_stopped", "is_paused", "is_errored")
 
 
 @dataclass(frozen=True)
@@ -300,7 +298,7 @@ def _build_name_table() -> Dict[str, NameInfo]:
     table["tor.tags_raw"] = NameInfo("tor.tags_raw", STR, _attr("tags"))
 
     # B. 派生值
-    for attr in _STATE_ATTRS:
+    for attr in STATE_ATTRS:
         table["tor." + attr] = NameInfo("tor." + attr, BOOL, _state(attr))
     table["tor.progress_pct"] = NameInfo("tor.progress_pct", NUM, lambda ctx: ctx.torrent.progress * 100)
     table["tor.tags_count"] = NameInfo("tor.tags_count", NUM, lambda ctx: len(ctx.torrent.tags_set))

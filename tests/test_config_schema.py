@@ -18,7 +18,10 @@
 - test_unit_default_only_on_unit_kinds: unit_default 仅用于 UNIT_KINDS 且在合法单位表内
 - test_unit_kind_defaults_are_parseable: UNIT_KINDS 字段的 default 可拆为 数值+单位(单位合法)
 - test_checking_action_spec_keys_match_validation: checking 动作 spec 字段 == CHECKING_ACTION_KNOWN_KEYS
-- test_deleted_trigger_whitelist_matches_validation: 删除触发白名单与 validation 一致
+- test_validation_enums_are_schema_derived: 枚举族单源守卫(issue 26-10-11-0031) —— validation/sections/rules.expr.env 侧常量必须就是 schema.fields 对象(is 断言, 防第二份声明回潮) + env 取值名表覆盖 STATE_ATTRS 族
+- test_site_hr_page_facts_are_preset_only: SiteHrCheckConfig 派生五键默认空(issue 26-10-11-0032, 真值单点在 SITE_PRESETS)
+- test_schema_version_field_default_tracks_versioning: schema_version Field.default 与 CURRENT_VERSIONS 同源(issue 26-10-11-0032)
+- test_docs_config_facts_match_code: docs↔代码漂移守卫(issue 26-10-11-0032) —— configuration.md 的 log.format 示例与两份文档的 hr_check 键数表述跟代码一致
 - test_schema_payload_is_complete: schema_payload 含全部前端所需分区
 - test_tri_state_marks_site_hr_str_fallback_keys: tri_state(站点级「覆盖为空」)声明面守卫 —— 全库仅
   站点 hr 回退链 4 个 str 键打标, bool/list 键不标(_strip_none 豁免按此派生, 打错位置 = '' 语义误翻转)
@@ -36,13 +39,13 @@
 - test_schema_payload_preset_key_metadata: hr_check_site_presets 每条键集合与逐字段取值钉住
 """
 import re
+from pathlib import Path
 
 import pytest
 
 from auto_qb.config import schema
 from auto_qb.config.validation import (
     CHECKING_ACTION_KNOWN_KEYS,
-    DELETED_TRIGGER_ALLOWED_ACTIONS,
     KNOWN_CONFIG_KEYS,
     KNOWN_FS_KEYS,
     KNOWN_GROUPING_KEYS,
@@ -308,9 +311,79 @@ def test_checking_action_spec_keys_match_validation():
     assert set(_field_map(plugin.fields)) == CHECKING_ACTION_KNOWN_KEYS
 
 
-def test_deleted_trigger_whitelist_matches_validation():
-    """删除触发可用动作白名单与 validation 一致(前端按 trigger 过滤动作下拉)"""
-    assert set(schema.DELETED_ALLOWED_ACTIONS) == DELETED_TRIGGER_ALLOWED_ACTIONS
+def test_validation_enums_are_schema_derived():
+    """枚举族单源守卫(issue 26-10-11-0031): validation/sections/rules.expr.env 侧常量必须**就是**
+    schema.fields 的同一对象(is 派生断言) —— 有人回退成第二份手写声明(哪怕同值)即判红;
+    env 取值名表须覆盖整个 STATE_ATTRS 族(tor.<attr> 与 schema 声明同源)。
+    """
+    from auto_qb.config import validation
+    from auto_qb.config.schema import fields as schema_fields
+    from auto_qb.config.validation import sections
+    from auto_qb.rules.expr import env
+
+    for name in (
+        "EXECUTE_ONCE",
+        "STOP_IF",
+        "TRIGGERS",
+        "FIELD_WATCH_ALLOWED",
+        "CHECKING_BASIC",
+        "CHECKING_MODES",
+        "DELETED_ALLOWED_ACTIONS",
+    ):
+        assert getattr(validation, name) is getattr(schema_fields, name), f"validation.{name} 偏离 schema 单点"
+    assert sections.NOTIFY_CHANNELS is schema_fields.NOTIFY_CHANNELS, "NOTIFY_CHANNELS 偏离 schema 单点"
+    assert sections.NOTIFY_LEVELS is schema_fields.NOTIFY_LEVELS, "NOTIFY_LEVELS 偏离 schema 单点"
+    assert sections.LOG_LEVELS is schema_fields.LOG_LEVELS, "LOG_LEVELS 偏离 schema 单点"
+    assert env.STATE_ATTRS is schema_fields.STATE_ATTRS, "rules.expr.env 的 STATE_ATTRS 偏离 schema 单点"
+    for attr in schema_fields.STATE_ATTRS:
+        assert f"tor.{attr}" in env.NAME_TABLE, f"env 取值名表缺 tor.{attr}"
+    # schema 侧旧死件不得回潮(MAINTENANCE_TAG_MODES 活件单点在 validation/core)
+    assert not hasattr(schema_fields, "MAINTENANCE_TAG_MODES")
+
+
+# ---------- 重复代码修复守阵(issue 26-10-11-0032, dup-code-audit) ----------
+
+
+def test_site_hr_page_facts_are_preset_only():
+    """SiteHrCheckConfig 派生五键默认空(issue 26-10-11-0032): 页面事实真值单点在 SITE_PRESETS,
+    models 默认再写具体站点值即第二份可漂移表示; 默认实例 = 「未绑定」, fetchable 恒 False;
+    档案侧每条页面事实仍齐全(loaders 派生填充的数据源)。
+    """
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.config.site_presets import SITE_PRESETS
+
+    d = SiteHrCheckConfig()
+    for name in ("adapter", "hr_page_url", "download_path", "page_param", "listing"):
+        assert getattr(d, name) == "", f"派生键 {name} 的默认值应为空(真值在 SITE_PRESETS)"
+    assert d.fetchable is False
+    for preset in SITE_PRESETS.values():
+        assert preset.adapter and preset.page_path and preset.download_path and preset.page_param, preset.preset_id
+
+
+def test_schema_version_field_default_tracks_versioning():
+    """schema_version Field.default 与版本链单点同源(issue 26-10-11-0032): 不再手写 ——
+    与 writer._stamp_schema_version 盖的章读同一个 infra.versioning.CURRENT_VERSIONS,
+    UI 初始值与落盘版本号不再可能漂移(存量漂移: default="1" vs 当前 v4)。
+    """
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    assert _top_field("schema_version").default == str(CURRENT_VERSIONS["config"])
+
+
+def test_docs_config_facts_match_code():
+    """docs↔代码漂移守卫(issue 26-10-11-0032): configuration.md 的 log.format 示例与
+    models.LoggingConfig 缺省一致(存量漂移已实证); 两份文档的 hr_check 键数表述与
+    KNOWN_HR_CHECK_KEYS 同源(存量漂移 7/8/9 三处各说各话)。docs 侧此前无任何守卫。
+    """
+    root = Path(__file__).resolve().parents[1]
+    cfg_md = (root / "docs" / "configuration.md").read_text(encoding="utf-8")
+    keys_md = (root / "memory-bank" / "config-reference" / "keys.md").read_text(encoding="utf-8")
+    from auto_qb.config.models import LoggingConfig
+
+    assert LoggingConfig().format in cfg_md, "docs 示例的 log.format 与 models.LoggingConfig 缺省漂移"
+    count = len(KNOWN_HR_CHECK_KEYS)
+    assert f"({count} 键 = 7 个标量键 + `channel` + `sites`)" in cfg_md, "configuration.md 的 hr_check 键数表述漂移"
+    assert f"全局 {count} 键" in keys_md, "keys.md 的 hr_check 键数表述漂移"
 
 
 def test_schema_payload_is_complete():

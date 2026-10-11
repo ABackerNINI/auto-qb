@@ -363,9 +363,6 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     if spec is None:
         return None
 
-    # 曲线任务执行间隔(可选; 缺省 None = 回退主 interval)
-    interval: Optional[float] = parse_time(str(spec["interval"])) if "interval" in spec else None
-
     # 数据源: 校验已保证仅单个 traffic_monitor
     (source, ) = spec["traffic_source"]
     dat_path = str(source["traffic_monitor"]["dat_path"]).strip()
@@ -386,11 +383,13 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
                 ),
             )
         )
+    # 取值统一走 _get(issue 26-10-11-0032): 本模型必填 dat_path/curves 无法缺省构造,
+    # 字段默认经类属性读取(dataclass 有默认值的字段即类属性, 默认值单源仍是 models)
     return GlobalSpeedLimitCurve(
         dat_path=dat_path,
         curves=period_curves,
-        interval=interval,
-        enabled=parse_bool(spec["enabled"]) if "enabled" in spec else True,
+        interval=_get(spec, "interval", GlobalSpeedLimitCurve.interval, parse_time),
+        enabled=_get(spec, "enabled", GlobalSpeedLimitCurve.enabled, parse_bool),
     )
 
 
@@ -413,11 +412,11 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
         return None
     d = QbTraffic()
     return QbTraffic(
-        enabled=parse_bool(str(spec["enabled"])) if "enabled" in spec else d.enabled,
-        sample_interval=parse_time(str(spec["sample_interval"])) if "sample_interval" in spec else d.sample_interval,
-        flush_interval=parse_time(str(spec["flush_interval"])) if "flush_interval" in spec else d.flush_interval,
-        raw_window=parse_time(str(spec["raw_window"])) if "raw_window" in spec else d.raw_window,
-        rollup_window=parse_time(str(spec["rollup_window"])) if "rollup_window" in spec else d.rollup_window,
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        sample_interval=_get(spec, "sample_interval", d.sample_interval, parse_time),
+        flush_interval=_get(spec, "flush_interval", d.flush_interval, parse_time),
+        raw_window=_get(spec, "raw_window", d.raw_window, parse_time),
+        rollup_window=_get(spec, "rollup_window", d.rollup_window, parse_time),
     )
 
 

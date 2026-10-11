@@ -5,6 +5,17 @@ from typing import List
 from qbittorrentapi import TorrentState
 
 from ...infra.utils import parse_bool
+from ..schema.fields import (
+    # 枚举族单点(issue 26-10-11-0031): 取值域/白名单只在 schema/fields 声明, 本包引用派生
+    CHECKING_BASIC,
+    CHECKING_MODES,
+    DELETED_ALLOWED_ACTIONS,
+    EXECUTE_ONCE,
+    FIELD_WATCH_ALLOWED,
+    STATE_ATTRS,
+    STOP_IF,
+    TRIGGERS,
+)
 from .core import _check_regex_patterns, _check_unknown_keys, _try, _try_time
 
 # 规则 spec 已知键(watch_fields 仅 on_torrent_field_changed 触发时机下允许)
@@ -20,35 +31,8 @@ RULE_KNOWN_KEYS = {
     "watch_fields",
 }
 
-EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
-
-STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
-
-# 触发时机: interval 周期轮询 / on_torrent_added / on_torrent_deleted / on_torrent_state_enum_changed /
-# on_torrent_field_changed(监听字段变化)事件触发
-TRIGGER_VALUES = (
-    "interval",
-    "on_torrent_added",
-    "on_torrent_deleted",
-    "on_torrent_state_enum_changed",
-    "on_torrent_field_changed",
-)
-
-# on_torrent_field_changed 可监听的字段白名单(v1): state 已有专属触发时机, amount_left 高频变化
-# 事件化即噪音, 均不入列(计划 26-09-27-1438 D2)
-FIELD_WATCH_ALLOWED = ("tags", "category")
-
-# on_torrent_deleted 允许的动作白名单: 删除后种子无活现场, 现存动作几乎都对已删种子无意义,
-# 仅允许"不依赖活现场"的只读/记录类动作(如 print_torrent_details)。未来通知/记录类动作加入此集合。
-# 空集合 = 禁止任何动作(on_torrent_deleted 仅作语义占位)。其它触发时机不设白名单(全部动作可用)。
-DELETED_TRIGGER_ALLOWED_ACTIONS = {"print_torrent_details"}
-
 # checking 动作 spec 已知键与取值域(skip_checking_tag 为全局配置, 不按规则覆盖, 故列为未知键)
 CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
-
-CHECKING_VALID_BASIC = ("filelist", "piecehashes", "custom")
-
-CHECKING_VALID_MODES = ("skip-checking", "full-checking")
 
 # checking 动作子段(with_reference / without_reference)已知键(与 schema CHECKING_SECTION_FIELDS 同键面;
 # 26-10-06-0028 D-02: 子段嵌套两层拼错概率不低, 未知键必须 fail-fast 而非运行时静默缺省)
@@ -141,17 +125,15 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                 _try_time(spec["interval"], f"{where}.interval", errors, positive=True)
             if "cooldown" in spec:
                 _try_time(spec["cooldown"], f"{where}.cooldown", errors)
-            if "execute_once" in spec and spec["execute_once"] not in EXECUTE_ONCE_VALUES:
-                errors.append(
-                    f"{where}: execute_once 取值非法: '{spec['execute_once']}', 可选: {'/'.join(EXECUTE_ONCE_VALUES)}"
-                )
-            if "stop_following_rules_if" in spec and spec["stop_following_rules_if"] not in STOP_IF_VALUES:
+            if "execute_once" in spec and spec["execute_once"] not in EXECUTE_ONCE:
+                errors.append(f"{where}: execute_once 取值非法: '{spec['execute_once']}', 可选: {'/'.join(EXECUTE_ONCE)}")
+            if "stop_following_rules_if" in spec and spec["stop_following_rules_if"] not in STOP_IF:
                 errors.append(
                     f"{where}: stop_following_rules_if 取值非法: '{spec['stop_following_rules_if']}', "
-                    f"可选: {'/'.join(STOP_IF_VALUES)}"
+                    f"可选: {'/'.join(STOP_IF)}"
                 )
-            if "trigger" in spec and spec["trigger"] not in TRIGGER_VALUES:
-                errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 可选: {'/'.join(TRIGGER_VALUES)}")
+            if "trigger" in spec and spec["trigger"] not in TRIGGERS:
+                errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 可选: {'/'.join(TRIGGERS)}")
             if "watch_fields" in spec:
                 _validate_watch_fields(spec, where, errors)
             conds = spec.get("conditions")
@@ -199,10 +181,7 @@ def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None
     for v in values:
         for s in str(v).split("&"):
             if not s.startswith("is_") or not hasattr(TorrentState, s):
-                errors.append(
-                    f"{where}: 非法状态属性 '{s}', "
-                    "可选: is_downloading/is_uploading/is_complete/is_checking/is_stopped/is_paused/is_errored"
-                )
+                errors.append(f"{where}: 非法状态属性 '{s}', 可选: {'/'.join(STATE_ATTRS)}")
 
 
 def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None:
@@ -213,8 +192,8 @@ def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None
     _check_unknown_keys(value, CHECKING_ACTION_KNOWN_KEYS, where, errors)
     if "basic_check" not in value:
         errors.append(f"{where}: 必须配置 basic_check")
-    elif value["basic_check"] not in CHECKING_VALID_BASIC:
-        errors.append(f"{where}: basic_check 取值非法: '{value['basic_check']}', 可选: {list(CHECKING_VALID_BASIC)}")
+    elif value["basic_check"] not in CHECKING_BASIC:
+        errors.append(f"{where}: basic_check 取值非法: '{value['basic_check']}', 可选: {list(CHECKING_BASIC)}")
     if value.get("basic_check") == "custom" and not str(value.get("custom_basic_check_program_path") or "").strip():
         errors.append(f"{where}: basic_check=custom 时必须配置 custom_basic_check_program_path")
     for seg in ("with_reference", "without_reference"):
@@ -229,8 +208,8 @@ def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None
         _check_unknown_keys(sub, CHECKING_SECTION_KNOWN_KEYS, f"{where}.{seg}", errors)
         if "enabled" in sub:
             _try(parse_bool, sub["enabled"], f"{where}.{seg}.enabled", errors)
-        if str(sub.get("mode", "")) not in CHECKING_VALID_MODES:
-            errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_VALID_MODES)}")
+        if str(sub.get("mode", "")) not in CHECKING_MODES:
+            errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_MODES)}")
 
 
 def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:
@@ -331,7 +310,7 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
     trigger = str(spec.get("trigger", "interval"))
     if trigger != "on_torrent_deleted":
         return
-    allowed = DELETED_TRIGGER_ALLOWED_ACTIONS
+    allowed = DELETED_ALLOWED_ACTIONS
     acts = spec.get("actions") or []
     for i, entry in enumerate(acts):
         if not isinstance(entry, dict) or len(entry) != 1:

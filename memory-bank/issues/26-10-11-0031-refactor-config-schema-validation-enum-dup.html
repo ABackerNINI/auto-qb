@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0031">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-config-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="配置枚举/常量在 schema 与 validation 双份声明 (STATE_ATTRS 三份 + MAINTENANCE_TAG_MODES 残留死件)">
 <meta name="issue-summary" content="同一枚举在 schema.fields 与 validation 各声明一份(9 族), 另有第三份 STATE_ATTRS 与硬编码错误文案; 收敛为单点声明+派生 (dup-code-audit R01/R02/R04)">
 <title>配置枚举/常量在 schema 与 validation 双份声明 (STATE_ATTRS 三份 + MAINTENANCE_TAG_MODES 残留死件) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0031-refactor-config-schema-validation-enum-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 00:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R01/R02/R04</div></div>
     </div>
   </header>
@@ -101,6 +101,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 00:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:58 — 认领（用户指派，档案 memory-bank/tasks/26-10-11-config-dup-code-fixes.md），状态 <strong>Open → In Progress</strong>；复验：枚举 9 族双份 / MAINTENANCE_TAG_MODES 死件 / env._STATE_ATTRS 第三份 / rules.py 报错硬编码串锚点全部仍在</li>
+      <li>2026-10-11 16:11 — 修复完成，状态 <strong>In Progress → Done</strong>。实际修法: 枚举族收敛 schema/fields 单点，validation/rules・validation/__init__(重导出挂规范名, 旧 *-VALUES 别名删除)・validation/sections(NOTIFY_CHANNELS/NOTIFY_LEVELS/LOG_LEVELS)・rules/expr/env(STATE_ATTRS) 全部改引派生; schema 死件 MAINTENANCE_TAG_MODES 删除(活件单点留 validation/core); rules.py 状态属性报错与 sections.py log.level 报错文案改由常量 join 派生。验证: 新守阵 test_validation_enums_are_schema_derived(is 断言 + env 名表覆盖族) + test.full 全绿 3117 passed + 3 skipped(覆盖率 99%, 基线切片 26-10-11-1611)</li>
     </ul>
   </section>
 

@@ -146,12 +146,14 @@ class SiteHrCheckConfig:
     # (相等 = 等效关闭降频)。拍板 26-10-05: 默认 24H 默认启用。黄金法则 4: 进 validate_config
     # (含 idle >= refresh 交叉校验)与 schema。
     idle_refresh_interval: float = 24 * 3600.0
-    # ---- 以下全部由档案/绑定派生(配置不再接受) ----
-    adapter: str = "nexusphp"  # 由站点档案填充
+    # ---- 以下全部由档案/绑定派生(配置不再接受) —— 默认留空 = 「未绑定」状态 ----
+    # 真值单点在 config/site_presets.SITE_PRESETS(issue 26-10-11-0032): 默认再写具体站点值
+    # 即第二份可漂移表示(loaders._resolve_hr_site_bindings 派生填充时才见真值)
+    adapter: str = ""  # 由站点档案填充; 空 = 未绑定(hr/adapters 工厂对空串回退 DEFAULT_ADAPTER)
     hr_page_url: str = ""  # 由站点档案按 web 域派生
-    download_path: str = "/download.php?id={id}"  # 由站点档案填充; passkey 由取数通道在页面上下文补
-    page_param: str = "page"  # 由站点档案填充
-    listing: str = "list"  # 由站点档案填充: list 清单型(取数) | none 全站型(不取数, 恒行 4 本地兜底)
+    download_path: str = ""  # 由站点档案填充(须含 {id} 占位); passkey 由取数通道在页面上下文补
+    page_param: str = ""  # 由站点档案填充
+    listing: str = ""  # 由站点档案填充: list 清单型(取数) | none 全站型(不取数, 恒行 4 本地兜底); 空 = 未绑定
     #: 要求做种时长(秒, required + extra; 由绑定站点的 hr 规则派生) —— 超额线(常量 3×)判据
     required_seeding_time: float = 0.0
 

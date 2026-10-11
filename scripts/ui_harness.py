@@ -345,8 +345,9 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
         data_dir=data_dir,
         global_conf=mgr.config.hr_check,
         site_confs={
-            "HHan": SiteHrCheckConfig(enabled=True, tracker="HHan"),
-            "HDSky": SiteHrCheckConfig(enabled=True, tracker="HDSky"),
+            # 桩模拟「已绑定」: 页面形态显式给 list(models 派生键默认已改空, 真值在 SITE_PRESETS)
+            "HHan": SiteHrCheckConfig(enabled=True, tracker="HHan", listing="list"),
+            "HDSky": SiteHrCheckConfig(enabled=True, tracker="HDSky", listing="list"),
         },
         fetcher=NullFetcher("桩服务不执行取数"),
         owner="harness",
@@ -471,7 +472,7 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
             tracker.tags = [name]
             tracker.domains = [f"tracker.{name.lower()}.invalid"]
             mgr.config.trackers[name] = tracker
-        tracker.hr_check = SiteHrCheckConfig(enabled=True, tracker=name)
+        tracker.hr_check = SiteHrCheckConfig(enabled=True, tracker=name, listing="list")
 
     # 站点状态块(/api/hr/status)与表③(/api/hr/history)同源的消费面: 真读 service 的
     # 磁盘文件, 桩只补「线程在跑」的运行时快照与一个永远 409 的立即拉取(桩没有取数线程)。

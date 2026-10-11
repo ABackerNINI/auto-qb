@@ -188,6 +188,23 @@ def materialize_schema_migration(config_path: str, backup_dir: str, *, write: bo
     return desc, backup_path
 
 
+def _atomic_copy(src_path: str, dst_path: str) -> None:
+    """把 src 文件原样复制到 dst(经 utils.atomic_write; 父目录按需创建) —— 备份复制块单点
+
+    backup_versioned(迁移前版本号备份)与 _backup(保存前 .bak)共用(issue 26-10-11-0032
+    config-writer-backup-copy-dup): 备份恰是坏配置的恢复资产, 写盘中断不得留半截文件
+    (issue 26-10-06-0028 chore-config-writer-backup-atomic)。
+    """
+    parent = os.path.dirname(dst_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(src_path, "r", encoding="utf-8") as src:
+        content = src.read()
+    from ..infra import utils
+
+    utils.atomic_write(dst_path, lambda f: f.write(content))
+
+
 def backup_versioned(config_path: str, backup_dir: str, from_version: int) -> str:
     """迁移前原样的版本号备份(计划 26-09-27-2252): <backup_dir>/<名>.v<m>.bak, 返回备份路径
 
@@ -196,14 +213,7 @@ def backup_versioned(config_path: str, backup_dir: str, from_version: int) -> st
     陈旧备份冒充本次状态。备份本身走 atomic_write: 中断不留半截文件。
     """
     backup_path = os.path.join(backup_dir, f"{os.path.basename(config_path)}.v{from_version}.bak")
-    parent = os.path.dirname(backup_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(config_path, "r", encoding="utf-8") as src:
-        content = src.read()
-    from ..infra import utils
-
-    utils.atomic_write(backup_path, lambda f: f.write(content))
+    _atomic_copy(config_path, backup_path)
     return backup_path
 
 
@@ -338,14 +348,7 @@ def _backup(config_path: str, backup_path: str) -> None:
     """
     if not os.path.exists(config_path):
         return
-    parent = os.path.dirname(backup_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(config_path, "r", encoding="utf-8") as src:
-        content = src.read()
-    from ..infra import utils
-
-    utils.atomic_write(backup_path, lambda f: f.write(content))
+    _atomic_copy(config_path, backup_path)
 
 
 def _build_yaml():

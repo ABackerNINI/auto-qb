@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0032">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-config-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config/writer.py 两处配置文件备份复制块逐字重复 (jscpd 命中)">
 <meta name="issue-summary" content="backup_versioned 与 _backup 共享读文件+atomic_write 复制块逐字重复; 抽单点 _atomic_copy (dup-code-audit R03)">
 <title>config/writer.py 两处配置文件备份复制块逐字重复 (jscpd 命中) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0032-refactor-config-writer-backup-copy-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 00:32</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R03</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 00:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:58 — 认领（用户指派，档案 memory-bank/tasks/26-10-11-config-dup-code-fixes.md），状态 <strong>Open → In Progress</strong>；复验：backup_versioned 与 _backup 的读源+atomic_write 复制块仍逐字重复</li>
+      <li>2026-10-11 16:11 — 修复完成，状态 <strong>In Progress → Done</strong>。实际修法: 抽 _atomic_copy(src, dst) 单点(父目录创建 + 读源 + utils.atomic_write), backup_versioned 与 _backup 复用; 版本号命名与存在性检查各留调用方(与建议一致); atomic_write 语义不变(26-10-06-0028 防半截文件防线保持)。验证: test.full 全绿 3117 passed + 3 skipped(覆盖率 99%, 基线切片 26-10-11-1611)</li>
     </ul>
   </section>
 

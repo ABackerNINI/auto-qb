@@ -1,5 +1,7 @@
 """schema 顶层分组: GROUPS 表(左导航分组, 顺序即表单顺序)"""
 from typing import Tuple
+
+from ...infra.versioning import CURRENT_VERSIONS
 from .fields import Field, Group, LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
 from .hr import HR_CHECK_FIELDS
 from .trackers import HR_OUTPUT_FIELDS
@@ -106,7 +108,9 @@ GROUPS: Tuple[Group, ...] = (
                 "schema_version",
                 "配置 schema 版本",
                 "int",
-                default="1",
+                # 默认派生版本链单点(issue 26-10-11-0032): 不再手写 "1"(与真实版本已漂移) ——
+                # 与 writer._stamp_schema_version 盖的章同源(infra.versioning.CURRENT_VERSIONS)
+                default=str(CURRENT_VERSIONS["config"]),
                 min=1,
                 help="配置文件格式版本标记(升级链, 计划 26-09-26-0506): 旧版本配置加载时自动逐级迁移, 无需手写",
                 risk="文件格式标记, 程序保存时自动盖章 —— 请勿手改",

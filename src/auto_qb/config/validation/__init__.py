@@ -15,18 +15,18 @@
 - 值格式复用 utils.parse_*(时间/大小/速度/布尔)单一事实来源
 - 规则集 spec 的条件/动作名称经 registry 延迟导入校验(避免模块循环依赖)
 """
-from .core import KNOWN_CONFIG_KEYS, MAINTENANCE_TAG_MODES, _strip_none, validate_config
-from .rules import (
-    CHECKING_ACTION_KNOWN_KEYS,
-    CHECKING_VALID_BASIC,
-    CHECKING_VALID_MODES,
-    DELETED_TRIGGER_ALLOWED_ACTIONS,
-    EXECUTE_ONCE_VALUES,
+from ..schema.fields import (
+    # 枚举族单点(issue 26-10-11-0031): 重导出改挂 schema 规范名, 旧 *-VALUES 别名已删
+    CHECKING_BASIC,
+    CHECKING_MODES,
+    DELETED_ALLOWED_ACTIONS,
+    EXECUTE_ONCE,
     FIELD_WATCH_ALLOWED,
-    RULE_KNOWN_KEYS,
-    STOP_IF_VALUES,
-    TRIGGER_VALUES,
+    STOP_IF,
+    TRIGGERS,
 )
+from .core import KNOWN_CONFIG_KEYS, MAINTENANCE_TAG_MODES, _strip_none, validate_config
+from .rules import CHECKING_ACTION_KNOWN_KEYS, RULE_KNOWN_KEYS
 from .sections import (
     KNOWN_FS_KEYS,
     KNOWN_GROUPING_KEYS,
@@ -65,13 +65,13 @@ __all__ = [
     "KNOWN_HR_CHANNEL_KEYS",
     "KNOWN_HR_SITE_KEYS",
     "RULE_KNOWN_KEYS",
-    "EXECUTE_ONCE_VALUES",
-    "STOP_IF_VALUES",
-    "TRIGGER_VALUES",
+    "EXECUTE_ONCE",
+    "STOP_IF",
+    "TRIGGERS",
     "FIELD_WATCH_ALLOWED",
     "MAINTENANCE_TAG_MODES",
-    "DELETED_TRIGGER_ALLOWED_ACTIONS",
+    "DELETED_ALLOWED_ACTIONS",
     "CHECKING_ACTION_KNOWN_KEYS",
-    "CHECKING_VALID_BASIC",
-    "CHECKING_VALID_MODES",
+    "CHECKING_BASIC",
+    "CHECKING_MODES",
 ]

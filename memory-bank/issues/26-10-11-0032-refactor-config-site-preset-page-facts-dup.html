@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0032">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-config-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 站点页面事实字面量在 site_presets 与 models 默认各一份">
 <meta name="issue-summary" content="download_path/page_param/page_path 等字面量在 models 默认与 SITE_PRESETS 条目重复, 可漂移 (dup-code-audit R03)">
 <title>HR 站点页面事实字面量在 site_presets 与 models 默认各一份 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0032-refactor-config-site-preset-page-facts-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 00:32</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit 审查 · 计划 26-10-10-2333 · R03</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 00:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:58 — 认领（用户指派，档案 memory-bank/tasks/26-10-11-config-dup-code-fixes.md），状态 <strong>Open → In Progress</strong>；复验：models.SiteHrCheckConfig 五个派生键默认值仍为具体站点值（fetchable 无消费点、测试构造面已核）</li>
+      <li>2026-10-11 16:11 — 修复完成，状态 <strong>In Progress → Done</strong>。实际修法: models.SiteHrCheckConfig 派生五键(adapter/hr_page_url/download_path/page_param/listing)默认改空串(= 「未绑定」), 真值单点 SITE_PRESETS; 消费面核验: fetchable 全仓无消费点, loaders 派生填充恒带档案真值, hr/adapters 工厂对空 adapter 本就回退 DEFAULT_ADAPTER, ui_harness 三处桩构造补 listing="list"(桩保真)。守阵: test_site_hr_page_facts_are_preset_only。验证: test.full 全绿 3117 passed + 3 skipped(覆盖率 99%, 基线切片 26-10-11-1611)</li>
     </ul>
   </section>
 

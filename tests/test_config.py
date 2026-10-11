@@ -851,7 +851,7 @@ def test_validate_notify():
         err = _load_errors(td, text)
         assert "config.notify: 未知键 ['unknown_key']" in err, err
         assert "config.notify.min_level: 须为 INFO/WARNING/ERROR 之一: 'DEBUG'" in err, err
-        assert "config.notify.quiet_hours('25:00-99:99')" in err, err
+        assert "config.notify.quiet_hours: 须为 'HH:MM-HH:MM'(可跨午夜)" in err, err
         assert "config.notify.max_per_hour: 必须为正整数" in err, err
         assert "config.notify.dedup_window" in err, err
         assert "config.notify.channels[0]: 未知渠道 'dingtalk'" in err, err
