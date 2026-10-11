@@ -4,11 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (64)
+## Open (63)
 
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
-- [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](../26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_speed 与 fmt_size 同「单位表+>=div 格式化」骨架, 只差单位表与后缀
 - [refactor] [平台判定旁路 infra 单点](../26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html) — utils.is_windows/is_linux/is_mac 单点被 autostart.py(6处)+tray/app.py 裸 sys.platform.startswith 绕过
@@ -77,8 +76,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (173)
+## Done (174)
 
+- [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [docs] [三份基线切片缺三行头 > 摘要 致 kb.check 恒红](../26-10-11-1630-docs-baselines-missing-summary-header.html) — 26-10-10-2245/2306/2335 三份 webui 基线切片缺 `> 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦
 - [refactor] [rules 表达式盘用量取数重复](../26-10-11-0352-refactor-rules-expr-disk-helper-dup.html) — env._freespace/_disk_total/_disk_used 三份逐字同 + FreespaceCondition.match 同构(取数+错误映射四处)
 - [refactor] [rules 数值谓词校验三处各写](../26-10-11-0352-refactor-rules-expr-numeric-predicate-dup.html) — env._num_unary/_min_max 与 eval._as_num 重复实现「参数必须是数值」校验(is_number 已存在)

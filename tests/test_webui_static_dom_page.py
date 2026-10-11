@@ -7,7 +7,7 @@
 - test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
-- test_frontend_template_no_reserved_prefix_identifiers: 模板表达式(插值+指令)禁止 `_`/`$` 前缀裸标识符 —— Vue 内部保留域解析不到, 抛 ReferenceError 且整块渲染失败(issue 26-10-03-1412 复制钮 `_copyText`); `$event` 白名单, 成员访问不拦
+- test_frontend_template_no_reserved_prefix_identifiers: 模板表达式(插值+指令)禁止 `_`/`$` 前缀裸标识符 —— Vue 内部保留域解析不到, 抛 ReferenceError 且整块渲染失败(issue 26-10-03-1412 复制钮 `_copyText`); `$event`/`$root`/`$emit` 白名单, 成员访问不拦; 扫描抽单点 `_reserved_prefix_problems` + 恒久活性探针(issue 26-10-11-2030: 指令分支曾取错捕获组整支变死, 死时全绿无征兆)
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
 - test_frontend_cols_store_single_setitem_site: COLS_STORE_KEY 的 setItem 全仓恰好一处(persistPage 内) —— 散写回潮即红
 - test_frontend_persist_page_takes_intent_only: persistPage 只收意图态(colHidden/colOrder/colW), 生效宽度 colWidths 不得进持久化路径(双轨模型铁律, plan 26-09-21-1551)
@@ -465,6 +465,41 @@ def test_frontend_computed_not_invoked_as_function():
     assert not problems, "computed 被当函数调用: " + "; ".join(problems)
 
 
+# ---- 模板保留前缀守阵(issue 26-10-03-1412 / 26-10-11-2030)扫描单点 ----
+# 指令正则组 1 = 引号本身(为 \1 回引用而捕获), 表达式在组 2 —— issue 26-10-11-2030:
+# 旧版消费处取 group(1) 当表达式, 组 1 是引号字符, 指令分支检出能力恒为 0(死分支)且全绿无征兆。
+_RESERVED_PREFIX_SPAN_PATS = (
+    (r"\{\{(.*?)\}\}", 1),  # 插值: 组 1 = 表达式
+    (r"""(?:^|\s)(?:v-[\w:.\-]+|@[\w.\-]+|:[\w.\-]+)\s*=\s*(["'])(.*?)\1""", 2),  # 指令: 组 2 = 表达式
+)
+_RESERVED_PREFIX_WHITELIST = ("$event", "$root", "$emit")  # Vue 内建(口径见守阵 docstring), 模板里合法
+
+
+def _reserved_prefix_problems(rel, text):
+    """单份模板源的保留前缀扫描, 返回违规描述列表 —— 真实分片与活性探针共用这一份逻辑
+
+    抽单点的动机(issue 26-10-11-2030): 扫描型守阵「没扫到」与「扫了没有违规」不可分辨,
+    死分支不会让任何真实模板变红; 活性探针拿已知违规样本喂同一函数并断言命中,
+    才能把「每条形态分支必须活」钉进断言。
+    """
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)  # 注释里的"别这么写"示例不算违规, 否则守阵会逼人删文档
+    problems = []
+    for pat, expr_group in _RESERVED_PREFIX_SPAN_PATS:
+        for m in re.finditer(pat, text, re.S):
+            expr, pos = m.group(expr_group), m.start()
+            for t in re.finditer(r"(?<![\w$.])([_$][A-Za-z_$][\w$]*)", expr):
+                tok = t.group(1)
+                if tok in _RESERVED_PREFIX_WHITELIST:
+                    continue
+                ln = text[:pos].count("\n") + 1
+                problems.append(
+                    f"{rel}:{ln} 模板表达式含保留前缀标识符 `{tok}` —— Vue 解析不到(_/$ 前缀不对模板暴露, "
+                    f"成员定义在 methods/data 里也会抛 ReferenceError 且整块渲染失败); "
+                    f"模板处理器一律去前缀, 内部 `_` 方法经无前缀别名中转(issue 26-10-03-1412)"
+                )
+    return problems
+
+
 def test_frontend_template_no_reserved_prefix_identifiers():
     """模板表达式里禁止 `_`/`$` 前缀裸标识符 —— Vue 把两类前缀当内部保留域, 模板解析不到
 
@@ -482,8 +517,11 @@ def test_frontend_template_no_reserved_prefix_identifiers():
     回调根实例(根数据只在根实例上), 组件自身不复制方法实现; `$emit` = 组件向调用方发事件
     (P5 表壳 thead 模式: 排序状态归调用方, 组件只 `$emit("sort", key)`)。
     `obj._x` 成员访问(点号后)不属于裸标识符, 不拦。
+
+    issue 26-10-11-2030: 指令分支曾取错捕获组(组 1 是引号, 表达式在组 2), 整支变死且全绿无征兆
+    —— 扫描抽成单点 `_reserved_prefix_problems` 并加恒久活性探针: 已知违规必须命中、
+    白名单内建必须放行, 分支再死 = 本守阵红, 不再依赖一次性红验碰运气。
     """
-    problems = []
     sources = []  # (rel, text): 盘上全部分片 + 各 UI shell 的 #app 内联段(与运行时编译输入同源)
     tpl_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
     for name in sorted(os.listdir(tpl_dir)):
@@ -492,26 +530,20 @@ def test_frontend_template_no_reserved_prefix_identifiers():
             sources.append((rel, open(os.path.join(tpl_dir, name), encoding="utf-8").read()))
     for ui in _UI_ALL:
         sources.append((f"{ui}/index.html(#app 内联)", _ui_shell_inline(ui)))
+    problems = [p for rel, text in sources for p in _reserved_prefix_problems(rel, text)]
 
-    # 逐文件剥 HTML 注释(注释里的"别这么写"示例不算违规, 否则守阵会逼人删文档)
-    stripped = [(rel, re.sub(r"<!--.*?-->", "", text, flags=re.S)) for rel, text in sources]
-    for rel, text in stripped:
-        spans = [(m.group(1), m.start()) for m in re.finditer(r"\{\{(.*?)\}\}", text, re.S)]
-        spans += [
-            (m.group(1), m.start())
-            for m in re.finditer(r"""(?:^|\s)(?:v-[\w:.\-]+|@[\w.\-]+|:[\w.\-]+)\s*=\s*(["'])(.*?)\1""", text, re.S)
-        ]
-        for expr, pos in spans:
-            for m in re.finditer(r"(?<![\w$.])([_$][A-Za-z_$][\w$]*)", expr):
-                tok = m.group(1)
-                if tok in ("$event", "$root", "$emit"):  # Vue 内建(见 docstring 白名单口径), 模板里合法
-                    continue
-                ln = text[:pos].count("\n") + 1
-                problems.append(
-                    f"{rel}:{ln} 模板表达式含保留前缀标识符 `{tok}` —— Vue 解析不到(_/$ 前缀不对模板暴露, "
-                    f"成员定义在 methods/data 里也会抛 ReferenceError 且整块渲染失败); "
-                    f"模板处理器一律去前缀, 内部 `_` 方法经无前缀别名中转(issue 26-10-03-1412)"
-                )
+    # 恒久活性探针(issue 26-10-11-2030): 两条形态各喂一条已知违规必须命中; 白名单内建必须放行。
+    probe_hits = _reserved_prefix_problems("活性探针", '<div @click="_probeTap()" :prop="$root.ok">{{ _probeVar }}</div>')
+    probe_toks = sorted(re.search(r"`([^`]+)`", p).group(1) for p in probe_hits)
+    assert probe_toks == ["_probeTap", "_probeVar"], (
+        f"守阵活性探针未命中已知违规(指令形态 _probeTap + 插值形态 _probeVar, 实测 {probe_toks}) —— "
+        "扫描分支有死支或捕获组取错(issue 26-10-11-2030), 同步本守阵"
+    )
+    whitelist_probe = _reserved_prefix_problems(
+        "白名单探针", '<div @click="$emit(\'sort\', k)" :prop="$root.x" @input="$event">{{ $root.y }}</div>'
+    )
+    assert not whitelist_probe, (f"白名单探针误拦 Vue 内建($event/$root/$emit): {whitelist_probe} —— 白名单口径漂移, 同步本守阵")
+
     assert not problems, "模板保留前缀标识符: " + "; ".join(problems)
 
 

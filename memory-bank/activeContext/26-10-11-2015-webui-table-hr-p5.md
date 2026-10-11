@@ -17,7 +17,7 @@
 - **`:class="{num}"` 与静态字面不等价**: normalizeClass 恒回字符串, 非 num 列会渲出空 `class=""`; 要逐字节等价就走 `v-if` 两支, 且 `v-for` 的 `<template>` 内不留换行缩进(空白被折成零长文本节点)。
 - **守阵同轮改版 4 条**(不是放宽, 全红绿双验过): shell 单点守阵增 ④thead 分支与占位形态 + 内联 `<th>` 零残留; HR 排序守阵表头断言从「锚段 markup 字面」改为「锚段接线 + 表壳模板 markup」, 十列键改扫 `HR_TABLE_DEFS.hrDetail`, `hrsArrowHref` 进死代码零残留; diag 守阵增 `hrsWaveCols()`; 保留前缀守阵白名单并入 `$emit`。
 - **e2e 首轮 1 failed 是已知抖动**: `delta-sync.spec.mjs:170`(prism)8s 轮询超时, 与既有 issue `26-10-11-1825-test-delta-sync-full-round-flake` 同签名(18:25 入池, 早于本轮); 隔离重跑 B 侧 3 次 + A(HEAD)侧 3 次均 8/8 绿, 复跑全量 158/0/10 与上片基线逐位一致 ⇒ 非本轮引入。
-- **顺带发现(已入池, 待认领)**: `test_frontend_template_no_reserved_prefix_identifiers` 的**指令表达式分支是死的** —— 正则 `\s*=\s*(["'])(.*?)\1` 的捕获组 1 是引号本身, 守阵却读 `m.group(1)` 当表达式(表达式在组 2) ⇒ `@click="_x()"` 这类指令形态从未被真正检出(docstring 宣称覆盖)。按「范围守恒」一行未改, 证据/根因/建议修法见 issue [26-10-11-2030-test-guard-reserved-prefix-directive-dead](../issues/26-10-11-2030-test-guard-reserved-prefix-directive-dead.html)。
+- **顺带发现(已入池, 26-10-12 认领修复)**: `test_frontend_template_no_reserved_prefix_identifiers` 的**指令表达式分支是死的** —— 正则 `\s*=\s*(["'])(.*?)\1` 的捕获组 1 是引号本身, 守阵却读 `m.group(1)` 当表达式(表达式在组 2) ⇒ `@click="_x()"` 这类指令形态从未被真正检出(docstring 宣称覆盖)。按「范围守恒」一行未改, 证据/根因/建议修法见 issue [26-10-11-2030-test-guard-reserved-prefix-directive-dead](../issues/26-10-11-2030-test-guard-reserved-prefix-directive-dead.html)。→ 26-10-12 认领修复: 改读 `group(2)` + 扫描抽单点 + 恒久活性探针, 真注入红验过, issue 置 Done(坑档 `pitfalls/testing/guard-dead-branch.md`)。
 
 ## 坑与意外
 

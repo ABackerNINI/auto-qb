@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-table-component">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)">
 <meta name="issue-summary" content="保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click=&quot;_x()&quot; 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类">
 <title>守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错) · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)</h1>
     <p class="lede">保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click=&quot;_x()&quot; 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-2030-test-guard-reserved-prefix-directive-dead</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 20:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -172,11 +172,14 @@ for m in re.finditer(r"(?<![\w$.])([_$][A-Za-z_$][\w$]*)", expr):   # expr = '"'
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 20:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-12 02:15 — 用户指派认领，状态 <strong>Open → In Progress</strong>；复验：仍复现（锚点 <code>group(1)</code>=引号 / 白名单回退仍假绿），详见「复验」段</li>
+      <li>2026-10-12 02:33 — 修完，状态 <strong>In Progress → Done</strong>；实际修法/验证见「修复后补充」；坑档落 <code>pitfalls/testing/guard-dead-branch.md</code></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-10-12 02:15, 仓库 <code>develop</code> @ <code>acd0e26f</code>: <strong>仍复现</strong>。锚点消费处仍取 <code>group(1)</code>(指令正则组 1 = 引号); 合成样例 <code>@click="$emit('sort', col.key)"</code> 实测 <code>group(1)='"'</code> / <code>group(2)="$emit('sort', col.key)"</code>; 白名单回退复刻 <code>($event, $root)</code> 扫 19 份源(tpl/*.html + 三 UI shell 内联段)仍 0 命中 —— 假绿复现; 修后预览(<code>group(2)</code> + 白名单 <code>$event/$root/$emit</code>)同 19 份源 <strong>0 存量违规</strong>(§06③ 核清, 修后守阵不会首次爆红)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(2026-10-12 02:33): ①消费处改读 <code>m.group(2)</code>(建议①原样, 正则不动); ②扫描抽成模块级单点 <code>_reserved_prefix_problems(rel, text)</code>(剥注释 + 两形态 spans + 白名单过滤), 真实分片与探针共用一份逻辑; ③守阵尾部加<strong>恒久活性探针</strong> —— 超出建议①的「临时红验」: 指令形态 <code>@click="_probeTap()"</code> 与插值形态 <code>{{ _probeVar }}</code> 必须命中、白名单内建 <code>$emit/$root/$event</code> 必须放行。理由: 本分支死过一次且死时全绿, 一次性红验防不住「再死」, 把「分支必须活」钉进断言(坑档 <code>pitfalls/testing/guard-dead-branch.md</code>)。建议②照做(真注入红验), 建议③照做(修前预览 19 份扫描源 0 存量违规, 修后守阵未首次爆红)。</p>
+    <p><strong>验证方式</strong>: 修前复验假绿复现(白名单回退复刻仍 0 命中) → 修后单守阵 <code>test.one</code> 绿 → 真注入红(<code>ctx-menus.html</code> 尾写 <code>@click="_probeRed()"</code> 精准报红 <code>ctx-menus.html:281</code>) → 还原复绿 → 全量 <code>commands run test.full</code> 全绿(数字见 <code>commands run kb.baseline</code>, 基线切片 26-10-12-0233)。</p>
   </section>
 
   <footer>
