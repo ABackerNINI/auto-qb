@@ -15,6 +15,11 @@
 判据:
 - 只查**相对**链接(跳过 `http(s)://` / `mailto:` / 纯锚点 `#x`)。
 - 目标存在即通过; 不存在则报"坏链"。
+- ❗**存在性按 Linux 口径判**(组件级 `listdir` 精确比对, 见 `link_exists`), **不用 `Path.exists()`**:
+  Win32 会静默剥掉结尾的点/空格且大小写不敏感 ⇒ `kb/...` 被判成"存在"(实际塌成父目录 `kb/`)、
+  `Cap.md` 能命中 `cap.md` —— 坏链在**本机恒绿**, 只在 Linux CI 红。2026-10-11 一条真坏链
+  连过三道本机防线(doc.links 闸门 / test.quick 闸门 / 手工 test.full), 根因就是这个:
+  详见 `memory-bank/pitfalls/testing/patching.md`「路径归一化」条。
 - 允许"锚点"后缀(`path.md#sec`)—— 只校验 `path.md` 是否存在。
 - **历史留档例外**: `memory-bank/plans/*.html` · `memory-bank/reports/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
   按存根策略本就允许指向旧路径)。
@@ -24,6 +29,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import re
 import sys
@@ -49,9 +55,51 @@ def is_frozen(path: pathlib.Path) -> bool:
     return path.suffix == ".html" and ("plans" in parts or "reports" in parts or "issues" in parts)
 
 
+def _entries(directory: pathlib.Path, cache: dict[str, frozenset[str]]) -> frozenset[str]:
+    """目录里的条目名(**保留原始大小写**); 取不到(不存在 / 无权限)记空集。"""
+    key = str(directory)
+    if key not in cache:
+        try:
+            cache[key] = frozenset(os.listdir(directory))
+        except OSError:
+            cache[key] = frozenset()
+    return cache[key]
+
+
+def _is_literal_name(name: str) -> bool:
+    """该组件名能否在 Windows 上"按字面"存在 —— 结尾的点 / 空格会被 Win32 静默剥掉。"""
+    return name.rstrip(". ") == name
+
+
+def link_exists(base: pathlib.Path, rel: str, cache: dict[str, frozenset[str]]) -> bool:
+    """相对目标是否存在 —— **组件级精确比对**, 即 Linux / CI 的口径。
+
+    ❗别退回 `(base / rel).exists()`: 实测 Windows 上 `(kb / "...").exists()` 为 `True`
+    (Win32 把结尾的点剥掉, 路径塌成 `kb/`), 而 `os.listdir(kb)` 里根本没有 `...` ——
+    同一行判据在两套文件系统语义下答案相反, 坏链于是**本机恒绿、只在 Linux CI 红**。
+    同族还有大小写不敏感(本机 `cap-counting.MD` 也判存在)。
+    另外**探针自己也别用 `resolve()` / `abspath()`** —— 它们同样走 Win32 归一, 会把 `...` 吃掉
+    (2026-10-11 写核对脚本时先被骗过一次, 报假绿)。
+    """
+    cur = base
+    for comp in rel.replace("\\", "/").split("/"):
+        if comp in ("", "."):
+            continue
+        if comp == "..":
+            cur = cur.parent
+            continue
+        if not _is_literal_name(comp):
+            return False  # Windows 存不出这种名字 ⇒ 该链接在 CI(Linux)上必坏
+        if comp not in _entries(cur, cache):
+            return False
+        cur = cur / comp
+    return True
+
+
 def scan_file(path: pathlib.Path, root: pathlib.Path) -> list[tuple[str, int, str]]:
     """返回 [(文件, 行号, 目标)] 的坏链清单。"""
     broken: list[tuple[str, int, str]] = []
+    cache: dict[str, frozenset[str]] = {}
     text = path.read_bytes().decode("utf-8", errors="replace")
     for lineno, line in enumerate(text.replace("\r\n", "\n").split("\n"), 1):
         for target in LINK_RE.findall(CODE_RE.sub("", line)):
@@ -60,7 +108,7 @@ def scan_file(path: pathlib.Path, root: pathlib.Path) -> list[tuple[str, int, st
             rel = target.split("#", 1)[0]
             if not rel:
                 continue
-            if not (path.parent / rel).exists():
+            if not link_exists(path.parent, rel, cache):
                 broken.append((str(path.relative_to(root)), lineno, target))
     return broken
 

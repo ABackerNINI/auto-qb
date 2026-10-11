@@ -1,9 +1,9 @@
 # 平台差异与打桩 (Windows / Linux)
 
-> 摘要: 「Windows 全绿 / Linux 全红」的四类根因与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
-> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红
+> 摘要: 「Windows 全绿 / Linux 全红」的**五类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 末一类最隐蔽: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**, 2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
+> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位
 
-**Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md
+**Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md,memory-bank/tasks/26-10-11-doc-links-strict-check.md
 
 ### 「Windows 全绿 / Linux 全红」: 本机跑通不等于 CI 跑通 (Linux CI 一次红 4 项, 真根因三个)
 
@@ -57,10 +57,11 @@
   泛化: **"回退本地环境"的代码, 环境被工具 shell 改写时既可能是假红也可能是真缺陷 ——
   先问"被回退的真实对象吃不吃这个环境变量"再定性**。
 
-### 判别法: 四类"本机绿不算绿"
+### 判别法: 五类"本机绿不算绿"
 
 - **触发**: 判断一条失败是不是平台差异。
-- **判别**: 凡是"**记账器判越界 / 平台专属模块导入 / 真实 socket 连接 / 平台相关的路径 API**"这四类,
+- **判别**: 凡是"**记账器判越界 / 平台专属模块导入 / 真实 socket 连接 / 平台相关的路径 API /
+  路径存在性归一化(结尾点 · 空格 · 大小写, 见 ⑥)**"这五类,
   本机绿**不算绿**。平台相关测试必须以 `monkeypatch` **固定平台**(测试主体是"平台逻辑"而非"当前真实平台");
   纯 Windows 行为(长路径 `\\?\` 前缀)直接断言在 Linux CI 上**必失败**。
 - **处置**: 按四类分别用 `monkeypatch.setitem(sys.modules, …)` / 补 `dir_fd` 绝对路径 / patch 真实名字。
@@ -108,6 +109,28 @@
   磁盘上根本没有文件 ⇒ `_walk()` 前后都是 0 ⇒ 断言**恒假**(比不测更糟);
   用例里显式断言 `before > 0`, 把"没物化"变成**红**。
 
+### ⑥ 路径归一化: 判据在本机恒真, 只在 Linux 现形(结尾点 / 大小写)
+
+- **触发**: 2026-10-11 develop 上 CI 单条红(`test_doc_links_are_not_broken`:
+  `memory-bank/pitfalls/kb/index-archive-view.md:45 → ...`), 而本机 **doc.links 闸门 + test.quick 闸门
+  + 手工 test.full 三道防线全绿**, 提交信息也诚实地写着"doc.links 绿" —— 不是三处都漏, 是同一行判据
+  在两套文件系统语义下答案相反。
+- **判别**: 坏链目标是省略号占位 `[history](...)`, 而检查器的判据只有 `(dir / rel).exists()` 一句:
+  - `(kb / "...").exists()` 在本机返回 **True** —— Win32 把结尾的点剥掉, 路径**塌成父目录 `kb/`**
+    (父目录当然存在); 而 `"..." in os.listdir(kb)` 是 **False**, 磁盘上从无此名 ⇒ 判的根本不是同一件事。
+  - 同族第二类: **大小写不敏感** —— 本机 `(kb / "Cap.md").exists()` 也是 True(命中 `cap.md`)。
+  - 两类方向一致: 本机只会把"坏"判成"好" ⇒ **本机绿只是上界, 真值在 Linux**。
+  - ❗**写核对探针时自己也踩了一次**: `os.path.abspath()` / `Path.resolve()` 同样走 Win32 归一
+    (实测 `abspath(".../kb/...")` 直接变成 `.../kb`), 探针于是报"0 处", 假绿复现一遍。
+    严格判据必须**组件级 `os.listdir` 精确比对**, 全程不碰 `resolve()` / `abspath()`。
+- **处置**: `check_doc_links.py::link_exists` 改组件级精确比对 + 拒绝结尾点/空格的组件名
+  (`_is_literal_name`: Windows 存不出这种名字 ⇒ 该链接在 CI 必坏); 守阵
+  `tests/test_memory_bank.py::test_doc_links_rejects_windows_normalized_targets`。
+  **红验现场**(退回 `.exists()` 即红): 夹具里三条可疑目标只报出 `kb/x.`, **漏掉 `kb/...` 与 `kb/Cap.md`**
+  —— 正是两类漏检的实证。
+  **泛化: 任何"按路径存在性判绿"的检查(链接 / 找文件 / 白名单比对)在本机都是上界**;
+  收口时补一次 `commands run test.linux` 或等 CI, 别拿本机绿当结论。
+
 ### 本机复现 CI 的平台差异(比推上去等 CI 快得多)
 
 - **触发**: 怀疑平台差异, 想在本机验证。
@@ -124,6 +147,17 @@
   **为什么是脚本而不是一行 `run`**: 命令里全是 `&&` / `;` / `|` 与多层引号, 而引擎在 Windows 上走
   `cmd.exe`(`shell=True`)—— 引号地狱必踩。
   容器内 `ctypes.wintypes` **可导入**, 只有 `ctypes.windll` / `ctypes.WINFUNCTYPE` / `winreg` 缺失。
+- **❗两条容器网络坑 (2026-10-11 实测, 各烧掉一轮 10 分钟)**: ①**容器内 `uv` 直连 PyPI 被墙**
+  (`Failed to resolve … hatchling` / `tls handshake eof`) —— 宿主是走代理的, 而容器里
+  `127.0.0.1:4085` 指向容器自己 ⇒ `uv sync` 起不来; 出口选宿主代理
+  `-e http_proxy=… -e https_proxy=http://host.docker.internal:4085`(需 `--add-host=host.docker.internal:host-gateway`;
+  实测宿主代理通、清华镜像 `pypi.tuna` 也通、**直连 pypi 不通**)。②**注了代理就必须同时排除回环**:
+  `urllib` 会把 `127.0.0.1` 的请求也交给代理 ⇒ `tests/test_hr_server.py` 那批监听回环的端点测试
+  **6 failed + 2 errors 假红**(环境造假红, 与 PYTHONUTF8 那条同族)——
+  补 `-e no_proxy=127.0.0.1,localhost,::1` 后同一命令 **3128 passed + 6 skipped / 0 failed**。
+  ⚠ **已内建 (2026-10-11)**: `linux_ci.py` 现在自动透传代理 —— 回环主机改写成 `host.docker.internal`
+  (+`--add-host`), `no_proxy` 恒并入回环; 守阵 `.commands/test/scripts/test_linux_ci.py`(红验: 拆掉任一改写点即红)。
+  脚本在, 别再手拼容器命令。
 - **处置**: 退而求其次的**等价论证** —— 用
   `monkeypatch.setattr(模块, "os", types.SimpleNamespace(path=posixpath))` 再跑判据 ——
   这**精确等价**于"该代码跑在 Linux", 于是**在 Windows 上就能复现 Linux 的失败**。

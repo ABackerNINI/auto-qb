@@ -40,6 +40,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
 - test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 memory-bank skill 的 `scripts/check_doc_links.py`, 2026-10-06 从根 `scripts/` 迁入)
+- test_doc_links_rejects_windows_normalized_targets: 存在性按 Linux 口径判 —— 结尾点(`kb/...`) / 大小写不符 判坏链, 本机 Windows 的路径归一化不得让它恒绿 (2026-10-11 CI 单条红的根因)
 
 时间守卫 (检查器 memory-bank skill 的 `scripts/timekit.py`, 2026-10-06 加):
 
@@ -568,23 +569,54 @@ def test_skill_cap_table_matches_cap_policy() -> None:
     ), (f"SKILL.md cap 表与 `_common.CAP_POLICY` 漂移:\n  表: {sorted(nums)}\n  源: {sorted(_common.CAP_POLICY.values())}")
 
 
-def test_doc_links_are_not_broken() -> None:
-    """全库**相对链接存在性** —— 改名 / 搬家后的坏链不会让任何测试失败, 只能机检。
-
-    知识库目录化重构一次新增/改写了 400+ 处相对链接; 这条守卫把"改文件名后必须查全仓引用"
-    从人工扫变成可自动跑的判据(实测首跑就抓出 73 处坏链, 全是搬家导致的相对深度错位)。
-    检查器在 memory-bank skill 的 `scripts/check_doc_links.py`(2026-10-06 从根 `scripts/` 迁入,
-    随 skill 移植), **进程内 import**(本项目测试禁止起子进程)。
-    """
+def _doc_links_module():
+    """载入 memory-bank skill 的链接检查器 (**进程内 import** —— 本项目测试禁止起子进程)。"""
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("check_doc_links", SKILL_SCRIPTS / "check_doc_links.py")
     assert spec and spec.loader, "缺少 memory-bank skill 的 scripts/check_doc_links.py"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
 
-    broken = module.scan_all(ROOT)
+
+def test_doc_links_are_not_broken() -> None:
+    """全库**相对链接存在性** —— 改名 / 搬家后的坏链不会让任何测试失败, 只能机检。
+
+    知识库目录化重构一次新增/改写了 400+ 处相对链接; 这条守卫把"改文件名后必须查全仓引用"
+    从人工扫变成可自动跑的判据(实测首跑就抓出 73 处坏链, 全是搬家导致的相对深度错位)。
+    检查器在 memory-bank skill 的 `scripts/check_doc_links.py`(2026-10-06 从根 `scripts/` 迁入,
+    随 skill 移植), **进程内 import**(本项目测试禁止起子进程)。存在性口径见下条。
+    """
+    broken = _doc_links_module().scan_all(ROOT)
     assert not broken, "相对链接坏链:\n" + "\n".join(f"  {p}:{n} → {t}" for p, n, t in broken)
+
+
+def test_doc_links_rejects_windows_normalized_targets(tmp_path: Path) -> None:
+    """存在性必须按 **Linux / CI 口径**判 —— 不许被 Windows 的路径归一化骗成恒绿。
+
+    2026-10-11 的真实 CI 红(本机三道防线全绿): 目标 `...` 在 Windows 上 `(kb / "...").exists()`
+    返回 `True` —— Win32 把结尾的点剥掉, 路径塌成父目录 `kb/`, 而 `os.listdir` 里根本没有该条目;
+    同族还有大小写不敏感(`kb/Cap.md` 命中 `kb/cap.md`)。于是坏链连过 doc.links 闸门 /
+    test.quick 闸门 / 手工 test.full, 只在 ubuntu job 红。
+    红验: 把 `link_exists` 退回 `(base / rel).exists()` ⇒ 本用例在本机立刻红。
+    """
+    mb = tmp_path / "memory-bank"
+    (mb / "kb").mkdir(parents=True)
+    (mb / "kb" / "cap.md").write_text("# cap\n", encoding="utf-8")
+    (mb / "doc.md").write_text(
+        "- 真链接 [a](kb/cap.md)\n"
+        "- 父目录导航 [b](..)\n"
+        "- 锚点 [c](kb/cap.md#sec)\n"
+        "- 省略号占位 [d](kb/...)\n"
+        "- 结尾点 [e](kb/x.)\n"
+        "- 大小写不符 [f](kb/Cap.md)\n"
+        "- 引述 `[g](kb/...)` 不算链接\n",
+        encoding="utf-8",
+    )
+
+    broken = _doc_links_module().scan_all(tmp_path)
+    assert [(n, t) for _, n, t in broken] == [(4, "kb/..."), (5, "kb/x."), (6, "kb/Cap.md")], broken
 
 
 def test_kb_scripts_import_cleanly() -> None:
