@@ -10,18 +10,8 @@
 window.AQB_SHOWS = {
   methods: {
     /* ---------------- 追剧视图(R10): 剧/集展开与整集操作 ---------------- */
-    syncShowHeadScroll(ev) {
-      // 表头元素走 _headEl(计划 26-10-11-1722 P2: 剧头已组件化, $refs 拿到的是组件实例)
-      const head = this._headEl("show");
-      if (!head) return;
-      const x = ev.target.scrollLeft;
-      head.style.transform = `translateX(${-x}px)`;
-      // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
-      head.style.setProperty("--head-pin-x", `${x}px`);
-      // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 与 syncGroupHeadScroll 同款
-      ev.target.classList.toggle("is-hscrolled", x > 0);
-      head.classList.toggle("is-hscrolled", x > 0);
-    },
+    /* 剧头横滚同步自计划 26-10-11-1722 P4 起收敛为 columns.js::syncHeadScroll(ev, page) 单点
+     * (三视图共用一份) —— 本文件不再持有 syncShowHeadScroll。 */
     toggleShow(key) {
       const i = this.expandedShows.indexOf(key);
       if (i >= 0) this.expandedShows.splice(i, 1);

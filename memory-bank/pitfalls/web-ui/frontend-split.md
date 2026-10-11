@@ -38,10 +38,11 @@
 
 ### 新增 shared/ 片段文件的接线清单(三份清单 + app.mixin + prism 的 210 行硬顶)
 
-- **触发**: 往 `shared/` 下**新增一个 `.js` 片段文件**(不是改现有文件)。
-- **判别**: 四处漏一处都**静默或半静默** —— ①漏进 `tpl-manifest.scripts` → 文件根本不加载, 页面不报错、那块功能整块不存在; ②三份 shell 的 `scripts` 清单必须**逐项一致**(清单等价断言比对的是**解析后的 manifest**, 不是 shell 文本); ③文件里写了 `^window.X = {` 却没接 `app.mixin` → `_scan_mixin_wiring` 判「定义了 window.X 但 app.js 没有 app.mixin」(与下一条同族, 但这条是**新文件**)。
-- **处置**: 按「加文件 → 三份 `index.html` 的 `scripts` 各加一行 → `app.js` 补 `app.mixin(window.X)`」三步走完再跑守阵。**⚠ 第四处: `prism/index.html` 是 shell 体量上限 `210` 行的贴着线跑的那个**(atlas 203 / console 207 / prism 210, 2026-10-10 实测), 在 prism 加一行**必须先从别处腾一行** —— 腾一处多余空行即可(清单等价断言只看解析后的 manifest, 去掉空行不破坏等价, 也不会让三份 diff 失焦); **不要**去压行/合并 JSON 数组项。
-- **守阵**: `_scan_mixin_wiring`(list/注入双向) + `test_frontend_static_bundle_health` 的 shell 行数上限。
+- **触发**: 往 `shared/` 下**新增一个 `.js` 片段文件**(不是改现有文件), 或新增一个 `shared/tpl/*.html` **模板分片**。
+- **判别**: 漏一处都**静默或半静默** —— ①`.js` 漏进 `tpl-manifest.scripts` / `.html` 漏进 `parts` → 文件根本不加载, 页面不报错、那块功能整块不存在(盘上有、清单没挂的 `tpl/*.html` 还会被 `test_frontend_template_split_wiring` 的**孤儿分片**项单独判红); ②三份 shell 的清单必须**逐项一致**(清单等价断言比对的是**解析后的 manifest**, 不是 shell 文本); ③`.js` 里写了 `^window.X = {` 却没接 `app.mixin` → `_scan_mixin_wiring` 判「定义了 window.X 但 app.js 没有 app.mixin」(**模板分片无此步** —— 它只贡献 markup)。
+- **处置**: `.js` 按「加文件 → 三份 `index.html` 的 `scripts` 各加一行 → `app.js` 补 `app.mixin(window.X)`」; `.html` 按「加文件 → 三份 `index.html` 的 `parts` 各加一行(`into` 取 `app`/`body`/`.选择器`)」。**⚠ 两个体量硬顶必须同时算**: ①`prism/index.html` 贴着 shell 上限 **210 行**(atlas/console 各有 2~4 行余量, 但别赌 —— 三份都要按上限管); ②**单分片 ≤400 行**(`settings-detail.html` 单独给到 560)。`tpl/xtpl.html` 收行模型单元格渲染器时会**先撞 400 行**(P3 实测: 302 + 211 = 513)⇒ 必须另开一个分片(`tpl/xtpl-cells.html`), 而不是硬塞。
+- **腾行**: 加清单行时 shell 超顶,**先从该 shell 腾掉一行**(纯排版空行优先 —— atlas/console 各有空行可删; prism 无空行时**把两个相邻的 `parts` 数组项合并到同一行**是安全的: JSON 空白不参与解析, 清单等价断言比对的是 `json.loads` 结果)。合并**只对 `parts` 做**; `scripts` 保持一行一项(它是加载序的阅读面)。
+- **守阵**: `_scan_mixin_wiring`(list/注入双向) + `test_frontend_template_split_wiring`(清单完整性 / 三 shell 清单等价 / 孤儿分片 / shell ≤210 / 单分片 ≤400) + `test_frontend_static_bundle_health` 的 shell 行数上限。
 - **复发**: 0
 
 ### 再拆前端大文件: 等价性验证 = 切割自验 + 真 API stub 冒烟 DOM 比对

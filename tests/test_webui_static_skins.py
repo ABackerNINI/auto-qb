@@ -10,8 +10,8 @@
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复)
-- test_frontend_table_shell_single_point: 表壳/明细单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2) —— 表头块 5 份内联副本 + 成员单元格 2 份逐字近似收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table) 与 `<aq-member-cells>`(#tpl-aq-member-cells); 钉 ①两个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 的四个表头调用点都走 `<aq-table>`、`.h-cell` 内联零残留(种子页本轮未迁移, 显式例外)
-- test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 三个横滚同步单点(sync*HeadScroll: menu/selection/shows.js)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现), 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)与右缘渐隐落影两个成分
+- test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备
+- test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)与右缘渐隐落影两个成分
 """
 import json
 import os
@@ -570,86 +570,114 @@ def _extract_column_keys(app_js: str, const_name: str):
 
 
 def _scan_column_cells_paired(problems):
-    """列模型每个列 key 必须在对应模板里有值单元格分支(辅种扩列 2026-09-28 守阵; P2 改扫渲染器)
+    """列模型每个列 key 必须在对应行模型渲染器里有值单元格分支(辅种扩列 2026-09-28 守阵; P2/P3 改扫渲染器)
 
-    列模型(TABLE_COLUMNS)是表头/grid 模板/列选择器的单一来源 —— 但**值单元格**是模板里的
-    v-if/v-else-if 分支, 模板漏写某列的分支时没有任何报错: 表头照常渲染、列选择器照常可勾,
+    列模型(TABLE_COLUMNS)是表头/grid 模板/列选择器的单一来源 —— 但**值单元格**是渲染器里的
+    v-if/v-else-if 分支, 漏写某列的分支时没有任何报错: 表头照常渲染、列选择器照常可勾,
     值格却永远空白, 且无法从"pytest 全绿"察觉。
 
-    !明细列(DETAIL_COLUMNS)自计划 26-10-11-1722 P2 起**不再是两份成对模板**: 辅种页展开明细
-      (groups.html)与追剧集成员(shows.html)的单元格分支已收敛为**单份行模型渲染器**
-      `<aq-member-cells>`(模板在 shared/tpl/xtpl.html#tpl-aq-member-cells)。故改为扫渲染器所在
-      分片, 并额外钉住"注册为全局组件 + 两个调用点都走它"—— 漏一处即退回内联副本(静默回潮)。
-      "删一个渲染器分支必须报红"的语义不变, 只是红点从两份页面模板挪到渲染器。
+    !值单元格自计划 26-10-11-1722 P2/P3 起**不再是页面模板里的内联副本**:
+      · group / torrent / show-ep 三类收敛为**每行模型单份**渲染器
+        (<aq-group-cells> / <aq-torrent-cells> / <aq-show-cells> / <aq-ep-cells>,
+         模板在 shared/tpl/xtpl-cells.html);
+      · 明细成员单元格(member)在 P2 已收敛为 <aq-member-cells>(模板在 shared/tpl/xtpl.html)。
+    故改为扫渲染器所在分片, 并额外钉住"注册为全局组件 + 页面调用点都走它"—— 漏一处即退回内联副本
+    (静默回潮)。"删一个渲染器分支必须报红"的语义不变, 只是红点从页面模板挪到渲染器。
     另钉住 loadColState 必须消费 `hide` 标志(默认隐藏列的注入单点, 漏消费 = hide 列全部
     默认可见, 可选列设计失守)。
     """
     app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
     plans = (
-        ("GROUP_COLUMNS", ("tpl/groups.html", )),
-        ("DETAIL_COLUMNS", ("tpl/xtpl.html", )),  # 单份渲染器 <aq-member-cells>(P2 收敛)
-        ("TORRENT_COLUMNS", ("tpl/torrents.html", )),
-        ("SHOW_COLUMNS", ("tpl/shows.html", )),
+        ("GROUP_COLUMNS", "tpl/xtpl-cells.html"),  # 单份渲染器 <aq-group-cells>(P3)
+        ("DETAIL_COLUMNS", "tpl/xtpl.html"),  # 单份渲染器 <aq-member-cells>(P2)
+        ("TORRENT_COLUMNS", "tpl/xtpl-cells.html"),  # 单份渲染器 <aq-torrent-cells>(P3)
+        ("SHOW_COLUMNS", "tpl/xtpl-cells.html"),  # 单份渲染器 <aq-show-cells>/<aq-ep-cells>(P3)
     )
-    for const, tpls in plans:
+    for const, tpl in plans:
         keys = _extract_column_keys(app_js, const)
         if keys is None:
             problems.append(f"app.js 缺少列模型 {const}(列模型单一来源被改名/搬走?)")
             continue
+        text = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
+        for k in keys:
+            if f"col.key === '{k}'" not in text:
+                problems.append(f"{const} 列 {k} 在 shared/{tpl} 没有值单元格分支(col.key === '{k}') —— 表头在、值永远空白")
+    # 行模型渲染器的接线单点(注册 + 页面调用点): 漏注册 = 该页整块渲染不出来; 漏调用 = 退回内联副本
+    renderers = (
+        ("aq-member-cells", "AQ_MEMBER_CELLS_COMPONENT", ("tpl/groups.html", "tpl/shows.html")),
+        ("aq-group-cells", "AQ_GROUP_CELLS_COMPONENT", ("tpl/groups.html", )),
+        ("aq-torrent-cells", "AQ_TORRENT_CELLS_COMPONENT", ("tpl/torrents.html", )),
+        ("aq-show-cells", "AQ_SHOW_CELLS_COMPONENT", ("tpl/shows.html", )),
+        ("aq-ep-cells", "AQ_EP_CELLS_COMPONENT", ("tpl/shows.html", )),
+    )
+    for name, glob, tpls in renderers:
+        if not re.search(r'app\.component\(\s*"%s"\s*,\s*window\.%s\s*\)' % (name, glob), app_js):
+            problems.append(f"app.js 未注册 {name}(window.{glob}) —— 行模型渲染器没接线, 该页值格全空")
         for tpl in tpls:
             text = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
-            for k in keys:
-                if f"col.key === '{k}'" not in text:
-                    problems.append(f"{const} 列 {k} 在 shared/{tpl} 没有值单元格分支(col.key === '{k}') —— 表头在、值永远空白")
-    # 明细单元格渲染器的接线单点(注册 + 两个调用点)
-    if not re.search(r'app\.component\(\s*"aq-member-cells"\s*,\s*window\.AQ_MEMBER_CELLS_COMPONENT\s*\)', app_js):
-        problems.append("app.js 未注册 aq-member-cells(window.AQ_MEMBER_CELLS_COMPONENT) —— "
-                        "明细单元格渲染器没接线, 两页明细的值格全空")
-    for tpl in ("tpl/groups.html", "tpl/shows.html"):
-        text = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
-        if "<aq-member-cells" not in text:
-            problems.append(f"shared/{tpl} 未使用 <aq-member-cells> —— 明细单元格渲染器收敛回潮"
-                            "(该页退回内联副本, 改一处漏一处)")
+            if f"<{name}" not in text:
+                problems.append(f"shared/{tpl} 未使用 <{name}> —— 行模型渲染器收敛回潮"
+                                "(该页退回内联副本, 改一处漏一处)")
     if ".filter((c) => c.hide)" not in app_js:
         problems.append("app.js loadColState 未消费列定义 hide 标志(hide 列默认隐藏失灵)")
 
 
 def test_frontend_table_shell_single_point():
-    """表壳 / 明细单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2)
+    """表壳 / 行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3)
 
     表头块曾是 **5 份逐字近似**的内联副本(groups.html 组头 + 明细头 · shows.html 剧头 + 明细头 ·
-    torrents.html 种子头), 明细成员单元格曾是 **2 份**(groups.html / shows.html)。收敛为单点后,
+    torrents.html 种子头); 行模型单元格曾是散在页面模板里的 **127 条 v-if 分支**。收敛为单点后,
     "又有人往页面模板里内联一份"是**静默**回潮: 页面照常工作, 单点却慢慢失效(改一处漏一处 ——
     正是本轮要消灭的维护点)。钉三层:
-    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与
-       `aq-member-cells`(明细渲染器) —— 组件模板里的行为一律经 `$root` 回调根实例;
+    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与五个行模型
+       渲染器 `<aq-member-cells>`(member) / `<aq-group-cells>`(group) / `<aq-torrent-cells>`
+       (torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行) —— 组件模板里的行为
+       一律经 `$root` 回调根实例;
     ② 表壳模板唯一且内容齐备: tpl/xtpl.html 恰一份 `#tpl-aq-table`, 且四件交互把手
        (`.h-cell` / `.h-label` / `.arrow` / `.resizer` / `.col-drop-line`)都在里面 —— 把手丢了
        表现为"拖了没反应 / 右键没菜单", 无任何报错;
-    ③ 接线单点: groups.html / shows.html 各 2 个 `<aq-table>` 调用点, 且页面模板里 `.h-cell`
-       内联零残留。!种子页(torrents.html)本轮**未迁移**(计划 P2 停手点: 只做 group/show/detail),
-       故它是 `.h-cell` 残留的显式例外 —— 迁移时把例外删掉即可。
+    ③ 接线单点: groups.html / shows.html 各 2 个 `<aq-table>` 调用点, torrents.html 1 个
+       (种子页表头自 P3/P4 起也已迁移 —— 原 `.h-cell` 内联例外已删), 且三个页面模板里 `.h-cell`
+       内联零残留; 各页面还必须有对应行模型渲染器的调用点(漏挂 = 该页值格全空)。
     """
     app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
-    for name, glob in (("aq-table", "AQ_TABLE_COMPONENT"), ("aq-member-cells", "AQ_MEMBER_CELLS_COMPONENT")):
+    comps = (
+        ("aq-table", "AQ_TABLE_COMPONENT"),
+        ("aq-member-cells", "AQ_MEMBER_CELLS_COMPONENT"),
+        ("aq-group-cells", "AQ_GROUP_CELLS_COMPONENT"),
+        ("aq-torrent-cells", "AQ_TORRENT_CELLS_COMPONENT"),
+        ("aq-show-cells", "AQ_SHOW_CELLS_COMPONENT"),
+        ("aq-ep-cells", "AQ_EP_CELLS_COMPONENT"),
+    )
+    for name, glob in comps:
         assert re.search(r'app\.component\(\s*"%s"\s*,\s*window\.%s\s*\)' % (name, glob),
                          app_js), (f'app.js 缺 app.component("{name}", window.{glob}) —— 组件未注册, 用到它的页面模板整块渲染不出来')
     table_js = open(os.path.join(STATIC_ROOT, "shared", "table.js"), encoding="utf-8").read()
-    for glob in ("AQ_TABLE_COMPONENT", "AQ_MEMBER_CELLS_COMPONENT"):
+    for _name, glob in comps:
         assert f"window.{glob} = {{" in table_js, f"shared/table.js 缺 window.{glob} 定义(组件单点被搬走/改名?)"
     xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
     for tid in ("tpl-aq-table", "tpl-aq-member-cells"):
         assert xtpl.count(f'id="{tid}"') == 1, f"shared/tpl/xtpl.html 的 {tid} 模板必须恰一份(表壳/渲染器单点)"
+    xtpl_cells = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
+    for tid in ("tpl-aq-group-cells", "tpl-aq-torrent-cells", "tpl-aq-show-cells", "tpl-aq-ep-cells"):
+        assert xtpl_cells.count(f'id="{tid}"') == 1, \
+            f"shared/tpl/xtpl-cells.html 的 {tid} 模板必须恰一份(行模型渲染器单点)"
     shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
     shell = shell[:shell.index("</script>")]
     for handle in ('class="h-cell"', 'class="h-label"', 'class="arrow"', 'class="resizer"', 'class="col-drop-line"'):
         assert handle in shell, (f"#tpl-aq-table 缺 {handle} —— 表壳四件交互把手(列名/排序箭头/拖宽把手/重排指示线)缺一即静默失效")
-    for tpl in ("tpl/groups.html", "tpl/shows.html"):
+    # 页面模板接线: <aq-table> 调用点数(注释里提到不算) + 行模型渲染器调用点 + .h-cell 内联零残留
+    for tpl, want_tables, cells in (
+        ("tpl/groups.html", 2, ("aq-group-cells", )),
+        ("tpl/shows.html", 2, ("aq-show-cells", "aq-ep-cells")),
+        ("tpl/torrents.html", 1, ("aq-torrent-cells", )),
+    ):
         raw = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
-        # 注释里提到 <aq-table>(说明性文字)不算调用点 —— 先剥注释再数
         text = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
         n = len(re.findall(r"<aq-table\b", text))
-        assert n == 2, (f"shared/{tpl} 的 <aq-table> 调用点应为 2(本页表头 + 明细表头), 实为 {n} —— 表壳接线漏挂/重复挂")
+        assert n == want_tables, (f"shared/{tpl} 的 <aq-table> 调用点应为 {want_tables}, 实为 {n} —— 表壳接线漏挂/重复挂")
+        for comp in cells:
+            assert f"<{comp}" in text, f"shared/{tpl} 未使用 <{comp}> —— 行模型渲染器接线漏挂(该页值格全空)"
         assert 'class="h-cell"' not in text, (f"shared/{tpl} 又出现内联表头块(.h-cell) —— 表壳单点回潮, 应走 <aq-table>")
 
 
@@ -1226,8 +1254,10 @@ def test_frontend_hr_safety_wiring():
         assert 'class="hr-src"' not in html, f"{ui} 做种时长列仍有 .hr-src 文字 chip —— 文案应只走 title"
         assert ">已排除<" not in html, f"{ui} 做种时长列仍有「已排除」文字 chip —— 应已撤进 title"
         # 要求时长必须「有要求就显示」(2026-09-29 用户实报: 未核/在线行只剩来源芯片, 看不到要求):
-        # 门只能是「已做种非空 + 有要求」—— 依赖 hr_triggered 会把未触发行连要求一起藏掉
-        assert '"cellSeedingTime(m) && m.hr_req_time"' in html, \
+        # 门只能是「已做种非空 + 有要求」—— 依赖 hr_triggered 会把未触发行连要求一起藏掉。
+        # !自计划 26-10-11-1722 P3 起该列也搬进了渲染器(种子页 <aq-torrent-cells>), 行为经 $root
+        #   回调根实例 —— 故 pattern 两种形态都收(裸名 / $root. 前缀), 与上方其它换绑项同口径。
+        assert re.search(r'v-if="(?:\$root\.)?cellSeedingTime\(m\) && m\.hr_req_time"', html), \
             f"{ui} 做种时长列的要求渲染门被改 —— 应只按 hr_req_time 判定(未触发行也要看得到要求)"
 
     # 弹窗「无时长要求」收起条件: 不得再把 unverified 包进去(它有本地要求, 收起就看不到),
@@ -1564,8 +1594,10 @@ def test_frontend_frozen_column_boundary_wiring():
     横滚时相邻列滑进吸左首格(issue 26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)会紧贴
     首格右缘露出; 无边界提示时残根读成与名称省略号粘连的坏字, 被误读成渲染 bug(用户报障)。
     钉两层接线, 缺任何一层 = 残根回归"裸露":
-    1. JS: 三个横滚同步单点(sync*HeadScroll)都必须给滚动容器与吸顶表头打 .is-hscrolled
+    1. JS: 横滚同步**单点** columns.js::syncHeadScroll(ev, page)(计划 26-10-11-1722 P4 把
+       menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled
        (scrollLeft>0 打 / 回 0 摘) —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现;
+       三个滚动容器(辅种/种子/追剧)必须各自带表 id 调用它;
     2. CSS: 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格**成对**
        (漏表头 = 列名残根仍裸露), 且含发丝线(边界)与右缘渐隐落影两个成分。
     3. CSS: 三皮肤 `.group-row > :first-child` 必须 `align-self: stretch` —— 行是
@@ -1575,21 +1607,25 @@ def test_frontend_frozen_column_boundary_wiring():
        vs 站点格 71px, chip 成排透出; stretch 后全盖。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
-    sync_sources = {
-        "menu.js": "syncGroupHeadScroll(ev)",
-        "selection.js": "syncTorrentHeadScroll(ev)",
-        "shows.js": "syncShowHeadScroll(ev)",
-    }
-    for fname, anchor in sync_sources.items():
-        js = open(os.path.join(shared, fname), encoding="utf-8").read()
-        seg = js[js.index(anchor):]
-        seg = seg[:seg.index("\n    },")]
-        assert 'ev.target.classList.toggle("is-hscrolled", x > 0)' in seg, (
-            f"{fname} {anchor} 缺滚动容器 is-hscrolled 打标 "
-            "(CSS 无法感知 scrollLeft, 丢标 = 吸左边界落影永不出现)"
-        )
-        assert 'head.classList.toggle("is-hscrolled", x > 0)' in seg, (
-            f"{fname} {anchor} 缺表头 is-hscrolled 打标(表头吸左首格残根裸露)"
+    # 1. JS: 横滚同步单点 —— 计划 26-10-11-1722 P4 起 menu/selection/shows 三份收敛为
+    #    columns.js 的 syncHeadScroll(ev, page) 一份; 三个滚动容器各带自己的表 id 调它。
+    cols_js = open(os.path.join(shared, "columns.js"), encoding="utf-8").read()
+    anchor = "syncHeadScroll(ev, page) {"
+    assert anchor in cols_js, ("columns.js 缺横滚同步单点 syncHeadScroll(ev, page)(P4 收敛后被删/改名? 同步本守阵)")
+    seg = cols_js[cols_js.index(anchor):]
+    seg = seg[:seg.index("\n    },")]
+    assert 'ev.target.classList.toggle("is-hscrolled", x > 0)' in seg, (
+        "columns.js syncHeadScroll 缺滚动容器 is-hscrolled 打标 "
+        "(CSS 无法感知 scrollLeft, 丢标 = 吸左边界落影永不出现)"
+    )
+    assert 'head.classList.toggle("is-hscrolled", x > 0)' in seg, (
+        "columns.js syncHeadScroll 缺表头 is-hscrolled 打标(表头吸左首格残根裸露)"
+    )
+    for tpl, page in (("tpl/groups.html", "group"), ("tpl/torrents.html", "torrent"), ("tpl/shows.html", "show")):
+        text = open(os.path.join(shared, tpl), encoding="utf-8").read()
+        assert f'@scroll="syncHeadScroll($event, \'{page}\')"' in text, (
+            f"shared/{tpl} 的滚动容器未接横滚同步单点 syncHeadScroll($event, '{page}')"
+            "(P4 收敛后漏改 / 回退到已删的 sync*HeadScroll?)"
         )
     for ui in _UI_ALL:
         css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()

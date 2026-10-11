@@ -42,6 +42,25 @@ window.AQB_COLUMNS = {
       return def ? this[def.grid] : null;
     },
 
+    /* 表头横滚同步(计划 26-10-11-1722 P4 收敛): 三视图共用一份。
+     * 表头已脱离 .group-table 容器做纵向 sticky(overflow 上下文), 横向滚动靠 JS 桥接:
+     * 用 transform 而非 scrollLeft, 避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后。
+     * 三件事(缺一即静默坏): ①表头位移 = 容器 scrollLeft 反向; ②--head-pin-x 供首列吸左首格反向抵消;
+     * ③.is-hscrolled 打标(容器 + 表头)供 CSS 画右缘落影 —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现。
+     * 调用点: groups.html(container ref=groupTable, page=group) / torrents.html(torrentTable, torrent)
+     *        / shows.html(showTable, show) —— 三个容器都是 .group-table, 表头元素经 _headEl(page) 取。 */
+    syncHeadScroll(ev, page) {
+      const head = this._headEl(page);
+      if (!head) return;
+      const x = ev.target.scrollLeft;
+      head.style.transform = `translateX(${-x}px)`;
+      // 首列吸左(issue 26-10-06-1717): 首格反向位移抵消容器滚动, 与行内 sticky 同形(规则在 CSS)
+      head.style.setProperty("--head-pin-x", `${x}px`);
+      // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 横滚非零 = 有列滑进吸左首格下方
+      ev.target.classList.toggle("is-hscrolled", x > 0);
+      head.classList.toggle("is-hscrolled", x > 0);
+    },
+
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
 
     _visibleCols(page) {
@@ -433,6 +452,14 @@ window.AQB_COLUMNS = {
       this.persistPage(page);
       this.$nextTick(() => this.recomputeEffective());
     },
+    /* 列选择器底部两个动作的"全表"入口(计划 26-10-11-1722 P4): 遍历注册表 TABLE_PAGES,
+     * 取代模板里逐页手写的四条调用(加一张表不用再改模板)。 */
+    resetAllColumnWidthsAll() {
+      for (const page of TABLE_PAGES) this.resetAllColumnWidths(page);
+    },
+    fitColumnsToWindowAll() {
+      for (const page of TABLE_PAGES) this.fitColumnsToWindow(page);
+    },
 
     /* 列宽拖拽: 拖某列**只改该列**
      *
@@ -626,6 +653,12 @@ window.AQB_COLUMNS = {
     },
   },
   computed: {
+    /* 表注册表的**有序数组视图**(计划 26-10-11-1722 P4): 列选择器按它 v-for(四段硬编码收敛为一段),
+     * 每项 { id, label, columns } —— label 即列选择器的分组标题, columns 即列定义单点。
+     * TABLE_DEFS 是模块常量(非响应式), 故本 computed 只在首帧算一次, 引用稳定(不引起重渲染抖动)。 */
+    tableDefs() {
+      return TABLE_PAGES.map((id) => ({ id, label: TABLE_DEFS[id].label, columns: TABLE_DEFS[id].columns }));
+    },
     /* 列模板: computed 缓存(列宽/列显隐变化才变), 行渲染只取同一引用, 不再每行拼字符串 */
     groupGrid() {
       return { gridTemplateColumns: this._gridTemplate("group") };

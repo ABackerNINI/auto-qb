@@ -1,14 +1,18 @@
 /* auto-qb WEB UI · 表格公共组件(表壳 + 行模型单元格渲染器)
  *
- * 计划 26-10-11-1722 的 P1/P2 落地。盘点结论: 四项列交互(拖拽换位 / 拖宽 / 点击排序 / 右键隐藏)
+ * 计划 26-10-11-1722 的 P1/P2/P3 落地。盘点结论: 四项列交互(拖拽换位 / 拖宽 / 点击排序 / 右键隐藏)
  * 的**行为**早已单点在 shared/columns.js(显隐/重排/调宽/对齐/持久化/行窗口化)与 shared/sort.js
  * (三态排序) —— **没单点的是模板**:
  *   · 表头块 5 份: groups.html 组头 + 明细头 · shows.html 剧头 + 明细头 · torrents.html 种子头;
- *   · 明细成员单元格 2 份逐字近似: groups.html(辅种页展开明细) / shows.html(追剧集成员)。
+ *   · 行模型单元格 v-if 分支链 127 条: 散在 groups.html(49) / torrents.html(28) / shows.html(剧+集)
+ *     / 明细成员单元格 2 份逐字近似(groups.html / shows.html)。
  * 本文件把这两处收敛为**单份**:
- *   <aq-table>        表壳: 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键(三皮肤同名类)
- *   <aq-member-cells> 明细成员行的单元格渲染器(member 行模型; 28 个列分支只此一份)
- * 两者都是**纯消费方**: 不搬行为、不持有状态 —— 表壳只渲染 + 回调, 行为仍在既有单点上。
+ *   <aq-table>         表壳: 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键(三皮肤同名类)
+ *   <aq-member-cells>  明细成员行的单元格渲染器(member 行模型; 28 个列分支只此一份)
+ *   <aq-group-cells>   group 行模型单元格渲染器(49 个分支, 原 groups.html 内联)
+ *   <aq-torrent-cells> torrent 行模型单元格渲染器(28 个分支, 原 torrents.html 内联)
+ *   <aq-show-cells> / <aq-ep-cells>  show-ep 行模型单元格渲染器(剧行 / 集行, 原 shows.html 内联)
+ * 以上都是**纯消费方**: 不搬行为、不持有状态 —— 表壳只渲染 + 回调, 行为仍在既有单点上。
  *
  * !与根实例的接线(本应用是「单根组件 + 全局 mixin」架构: state.js/lifecycle.js 经根选项展开,
  *   其余片段经 app.mixin 注入同一个根实例): 组件模板里的 `$root.xxx` 即根实例上的同一个方法 ——
@@ -44,4 +48,52 @@ window.AQ_MEMBER_CELLS_COMPONENT = {
     m: { type: Object, required: true },         // 成员行(SEED_ITEM 的成员视角)
   },
   template: "#tpl-aq-member-cells",
+};
+
+/* ---------------- P3 行模型单元格渲染器(计划 26-10-11-1722) ----------------
+ * 「渲染器注册表」= 下面四个组件 + 上面的 aq-member-cells 的 **app.component 注册块**(app.js 末尾)。
+ * 行模型 → 组件单点:
+ *   group      → <aq-group-cells>      (辅种组行)
+ *   torrent    → <aq-torrent-cells>    (种子页平铺行)
+ *   show-ep    → <aq-show-cells>       (追剧剧行) + <aq-ep-cells> (追剧集行; 同一列集两形态)
+ *   member     → <aq-member-cells>     (展开明细成员行, P2 已落)
+ * 每份渲染器内部按 `col.key` 查表(v-if 链), 列定义仍单点在 app.js 的 TABLE_DEFS[*].columns。
+ * 模板放 tpl/xtpl-cells.html(member 在 xtpl.html, P2 先落) —— 同为 body 注入的 x-template。
+ * WARN: 属性名保持各行的自然名(g/m/s/e)而非统一 row —— 分支体从页面模板**逐字搬入**,
+ *   少改一字就少一处 DOM 等价风险(本轮的硬验收是渲染 DOM 逐字节等价)。
+ */
+window.AQ_GROUP_CELLS_COMPONENT = {
+  name: "aq-group-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见辅种列(visibleGroupCols)
+    g: { type: Object, required: true },         // 辅种组行(decoratedGroups 元素)
+  },
+  template: "#tpl-aq-group-cells",
+};
+
+window.AQ_TORRENT_CELLS_COMPONENT = {
+  name: "aq-torrent-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见种子列(visibleTorrentCols)
+    m: { type: Object, required: true },         // 平铺种子行(SEED_ITEM)
+  },
+  template: "#tpl-aq-torrent-cells",
+};
+
+window.AQ_SHOW_CELLS_COMPONENT = {
+  name: "aq-show-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见追剧列(visibleShowCols)
+    s: { type: Object, required: true },         // 剧行(decoratedShows 元素)
+  },
+  template: "#tpl-aq-show-cells",
+};
+
+window.AQ_EP_CELLS_COMPONENT = {
+  name: "aq-ep-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见追剧列(visibleShowCols)
+    e: { type: Object, required: true },         // 集行(decoratedShows 的 season.episodes 元素)
+  },
+  template: "#tpl-aq-ep-cells",
 };
