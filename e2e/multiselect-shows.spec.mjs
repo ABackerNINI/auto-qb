@@ -204,12 +204,12 @@ for (const skin of SKINS) {
       // 1. 菜单文案: 右键选中行 -> 批量菜单(CTX-03 选中行右键 -> 批量菜单, 旧 L808)
       await clickRow(page, rows.nth(0), { button: 'right' });
       let texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量暂停')), `选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('批量停止')), `选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
 
       // 2. 右键未选中行 -> 仍是单目标菜单(CTX-03 未选中行右键 -> 仍是单目标菜单, 旧 L811)
       await clickRow(page, rows.nth(N + 3), { button: 'right' }); // 再右键整份替换菜单, 不必先关
       texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('暂停该种子')), `未选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('停止该种子')), `未选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
       expect(texts.some((t) => t.includes('批量')), '未选中行菜单不出现批量项').toBe(false);
 
       // 3. 实际投递: 右键选中行 -> 点「批量暂停」-> 恰好 1 条 bulk / 0 条逐目标(旧 L835)
@@ -221,7 +221,7 @@ for (const skin of SKINS) {
       };
       page.on('request', onReq);
       await clickRow(page, rows.nth(0), { button: 'right' });
-      const item = ctxItem(page, '批量暂停');
+      const item = ctxItem(page, '批量停止');
       await expect(item).toBeVisible({ timeout: 5_000 });
       await armPending(page, '.torrent-row.is-pending, .group-row.is-pending'); // 点击**之前**装好
       await armClick(page, await item.elementHandle());
@@ -261,7 +261,7 @@ for (const skin of SKINS) {
       const sRow = sRows.first();
       const before = await sRow.getAttribute('class');
       await clickRow(page, sRow, { button: 'right' });
-      const item = ctxItem(page, '暂停整剧');
+      const item = ctxItem(page, '停止整剧');
       await expect(item).toBeVisible({ timeout: 5_000 });
       // 桩命令泵瞬时回执 ⇒ 压暗窗口只有几十 ms, expect.poll 的 100ms 间隔会整段错过
       // (旧脚本此处用 rAF 频率的 waitForFunction 才采到)。改用记录器: 点击**之前**装好,
@@ -312,7 +312,7 @@ for (const skin of SKINS) {
       const before = await ep0.getAttribute('class');
       await clickRow(page, ep0, { button: 'right' });
       // 菜单项按可用文案取: 暂停整集 / 暂停整剧(scope 决定文案, 与旧脚本同一匹配序)
-      const item = ctxItem(page, '暂停整集').or(ctxItem(page, '暂停整剧'));
+      const item = ctxItem(page, '停止整集').or(ctxItem(page, '停止整剧'));
       await expect(item.first()).toBeVisible({ timeout: 5_000 });
       await armPending(page, '.group-row.ep-row.is-pending');
       await armClick(page, await item.first().elementHandle());
@@ -359,8 +359,8 @@ for (const skin of SKINS) {
 
       await clickRow(page, epRows.nth(0), { button: 'right' });
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量暂停')), `多选右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
-      expect(texts.some((t) => t.includes('暂停整集')), '多选时不再出现单集目标项').toBe(false);
+      expect(texts.some((t) => t.includes('批量停止')), `多选右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('停止整集')), '多选时不再出现单集目标项').toBe(false);
       await page.keyboard.press('Escape');
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
     });
@@ -379,8 +379,8 @@ for (const skin of SKINS) {
 
       await clickRow(page, gRows.nth(0), { button: 'right' });
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量暂停')), `多组右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
-      expect(texts.some((t) => t.includes('暂停整组')), '多选时不再出现单组目标项').toBe(false);
+      expect(texts.some((t) => t.includes('批量停止')), `多组右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('停止整组')), '多选时不再出现单组目标项').toBe(false);
       await page.keyboard.press('Escape');
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
     });

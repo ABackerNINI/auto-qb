@@ -22,7 +22,7 @@
 | bug | 4 |
 | perf | 5 |
 | docs | 1 |
-| test | 3 |
+| test | 4 |
 | refactor | 20 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 d…
 - [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_sp…
 - [refactor] [平台判定旁路 infra 单点](26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html) — utils.is_win…
 - [refactor] [infra URL 分解口径两份(sanitize/mask)](26-10-11-0352-refactor-infra-url-decompose-dup.html) — sanitize_tra…

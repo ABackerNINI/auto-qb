@@ -39,10 +39,10 @@ for (const skin of SKINS) {
       // 锚点行在选中集合内 -> 批量菜单(C5 口径甲: 菜单明示"批量", 作用对象=整个选中集合)
       await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量开始')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('批量启动')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = bulkTap(page);
-      await page.locator('.ctx-item', { hasText: '批量开始' }).first().click();
+      await page.locator('.ctx-item', { hasText: '批量启动' }).first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条 bulk POST', timeout: 8_000 }).toBe(1);
       off();
       const posted = JSON.parse(/** @type {string} */ (hits.body));
@@ -69,11 +69,11 @@ for (const skin of SKINS) {
       const anchorHash = await anchorRow.getAttribute('data-hash');
       await clickRow(page, anchorRow, { button: 'right' });
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量开始')), `不得渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
-      expect(texts.some((t) => t.includes('开始该种子')), `应有单目标「开始该种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('批量启动')), `不得渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
+      expect(texts.some((t) => t.includes('启动该种子')), `应有单目标「启动该种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = torrentActionTap(page);
-      await page.locator('.ctx-item', { hasText: '开始该种子' }).first().click();
+      await page.locator('.ctx-item', { hasText: '启动该种子' }).first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条单目标 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == resume').toBe('resume');
@@ -94,10 +94,10 @@ for (const skin of SKINS) {
       const anchorHash = await anchorRow.getAttribute('data-hash');
       await clickRow(page, anchorRow, { button: 'right' });
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('暂停该种子')), `单目标菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('停止该种子')), `单目标菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = torrentActionTap(page);
-      await page.locator('.ctx-item', { hasText: '暂停该种子' }).first().click();
+      await page.locator('.ctx-item', { hasText: '停止该种子' }).first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条单目标 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == pause').toBe('pause');
@@ -119,11 +119,11 @@ for (const skin of SKINS) {
       await clickRow(page, gRows.nth(0), { button: 'right' });
       const texts = await openMenuTexts(page);
       // C2 口径: 集合与锚点行范围一致 = 只选中了它自己 -> 单组支(不是批量菜单) —— 2026-10-10 实测锚定
-      expect(texts.some((t) => t.includes('批量开始')), `单组选中不得升批量: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
-      expect(texts.some((t) => t.includes('开始整组')), `应有单组支「开始整组」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('批量启动')), `单组选中不得升批量: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
+      expect(texts.some((t) => t.includes('启动整组')), `应有单组支「启动整组」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = groupActionTap(page);
-      await page.locator('.ctx-item', { hasText: '开始整组' }).first().click();
+      await page.locator('.ctx-item', { hasText: '启动整组' }).first().click();
       await expect.poll(() => hits.n, { message: '单组 resume 应走组路径 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == resume').toBe('resume');
@@ -145,10 +145,10 @@ for (const skin of SKINS) {
       await clickRow(page, gRows.nth(0), { button: 'right' });
       const texts = await openMenuTexts(page);
       // 集合(2 组)比锚点行(1 组)大 -> 升级批量菜单(C5 口径甲: 选中 N 项右键 = 对全部生效)
-      expect(texts.some((t) => t.includes('批量开始')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => t.includes('批量启动')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = bulkTap(page);
-      await page.locator('.ctx-item', { hasText: '批量开始' }).first().click();
+      await page.locator('.ctx-item', { hasText: '批量启动' }).first().click();
       await expect.poll(() => hits.n, { message: '多组应走 bulk POST', timeout: 8_000 }).toBe(1);
       off();
       const posted = JSON.parse(/** @type {string} */ (hits.body));

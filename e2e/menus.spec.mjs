@@ -175,7 +175,7 @@ for (const skin of SKINS) {
         expect(texts.some((t) => t.includes('速度限制…')) && texts.some((t) => t.includes('设定位置…')),
           `批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
         // W5 汇总: 四项齐 —— 专抓"加了新项挤掉旧项"这类汇总遗漏(旧收录口径同款)
-        expect(['限速…', '移动…', '跳检…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
+        expect(['速度限制…', '设定位置…', '跳过哈希校验…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
           `四项齐: ${texts.join(' / ')}`).toBe(true);
         await page.keyboard.press('Escape');
       });
@@ -215,8 +215,8 @@ for (const skin of SKINS) {
           // (旧 error 轮该项恒红系存量假红, S3 对账实测; 新轨按"该断言只该在 ok 模式跑"修掉)
           await expect.poll(async () => {
             const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
-            return (ts || []).includes(`ok|已执行: 批量限速(${N} 个目标)`);
-          }, { message: `W5 成功回执 toast「已执行: 批量限速(${N} 个目标)」`, timeout: 5_000 }).toBe(true);
+            return (ts || []).includes(`ok|已执行: 批量速度限制(${N} 个目标)`);
+          }, { message: `W5 成功回执 toast「已执行: 批量速度限制(${N} 个目标)」`, timeout: 5_000 }).toBe(true);
         }
         await readPending(page); // 收口: 清掉 armPending 的 10ms 采样器(与本 test 装的记录器配对)
       });
@@ -529,7 +529,7 @@ for (const skin of SKINS) {
         await pickRows(page, 3); // 门控只藏高危项: 多选菜单其余三项必须照常
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
         const texts = await openMenuTexts(page);
-        expect(['限速…', '移动…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
+        expect(['速度限制…', '设定位置…', '导出 .torrent'].every((k) => texts.some((t) => t.includes(k))),
           `多选菜单: ${texts.slice(0, 11).join(' / ')}`).toBe(true);
         expect(texts.some((t) => t.includes('跳过哈希校验…')), '关态多选菜单不得渲染跳检项').toBe(false);
         await page.keyboard.press('Escape');
