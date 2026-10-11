@@ -53,12 +53,27 @@ EMPTY_HINT = {
 # (按状态归档**无外部引用**的老条目), 别条件反射抬 cap。
 SUMMARY_MAX = 12
 
+# 2026-10-11 —— 后备出口兑现, 但**走视图归档而不是搬文件**: 条数涨到 243(Done 173), 索引 31,196,
+# 而**无摘要口径 27,336 = cap 108%** ⇒ 摘要砍到 0 都超, 病根确证是「条目数本身撑爆 cap」。
+# 为什么不搬文件到 `attachments/`: ①零外部引用的只有 28 条(Done 24), 搬光也清偿不完;
+# ②被搬的会牵动 27 个 md 的链接 + 21 个件的 `**Refs:**`/`doc-refs` 认领链 token(其中 18 个是
+# plans/reports 冻结件)—— 双向认领链要求目标存在且反向声明, 搬错一处 `kb.check` 就红。
+# 正解 = **只让老条目出索引, 文件原地不动**: 已关闭状态(Done/Dropped/Superseded)区只渲染最近
+# `CLOSED_KEEP` 条, 全量清单另写 `attachments/_archive.md`(该目录在 `EXCLUDED_DIRS`, 不计 cap)。
+# 于是 ①零坏链零改指 ②索引大小由常量钉住, 不再随入池线性涨 ③老 issue 照样可检索(归档索引)。
+# 实测: 保留 60 条 → 主索引 16,716(余量 8,484); 保留 90 条 → 20,849。取 60 留足增长余量。
+CLOSED_KEEP = 60
+CLOSED_STATUSES = ("Done", "Dropped", "Superseded")
+ARCHIVE_REL = "attachments/_archive.md"
+
 
 def header(issues_dir: Path, root: Path) -> str:
     skill_rel = rel_skill(issues_dir)
     script_rel = f"{skill_rel}/scripts/gen_issues_index.py" if skill_rel else "gen_issues_index.py"
     skill_link = f"({skill_rel}/SKILL.md)" if skill_rel else ""
     dir_name = dir_of(issues_dir, root)
+    closed = " / ".join(f"`{s}`" for s in CLOSED_STATUSES)
+    archive = ARCHIVE_REL
     return f"""# Issues Index
 
 > **本文件是生成物, 不要手改** —— 由 `{script_rel}` 扫描 `{dir_name}/*.html` 的 meta
@@ -69,6 +84,9 @@ def header(issues_dir: Path, root: Path) -> str:
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: {" / ".join(TYPES)}。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在报告里): 这样索引大小由**条数**决定, 不随摘要写得多长而膨胀
 > —— 否则迟早撞 `index-auto` cap, 而靠"外迁老条目"化解会打坏外部引用。
+> **已关闭状态**({closed})只列**最近** `CLOSED_KEEP` 条(更老的**报告原地不动**, 只是不出本索引):
+> 条数涨到 243 时无摘要口径已达 cap 108%, 砍摘要救不回来; 搬文件又会牵动 `**Refs:**` 认领链。
+> 全量清单见 [{archive}]({archive}), 该目录不计 cap。
 > **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill {skill_link}
 > (该不该现在修, 见 scope-guard skill)。
 """
@@ -122,7 +140,19 @@ def count_table(items: list[dict]) -> list[str]:
     return ["", "## 待处理分布（Open）", "", "| 类型 | 条数 |", "|---|---|", *rows, ""]
 
 
+def entry_line(item: dict, summary_max: int | None, prefix: str = "") -> str:
+    """一条索引行; `summary_max=None` 表示摘要不截断(归档索引用全文)。"""
+    line = f"- [{item['type']}] [{item['title']}]({prefix}{item['file']})"
+    summary = item["summary"]
+    if summary:
+        if summary_max is not None and len(summary) > summary_max:
+            summary = summary[:summary_max].rstrip() + "…"
+        line += f" — {summary}"
+    return line
+
+
 def render(items: list[dict], issues_dir: Path, root: Path) -> str:
+    """主索引: 已关闭状态只留最近 `CLOSED_KEEP` 条(报告原地不动, 只是不出索引)。"""
     out = [header(issues_dir, root)]
     out.extend(count_table(items))
     for status in STATUSES:
@@ -132,20 +162,53 @@ def render(items: list[dict], issues_dir: Path, root: Path) -> str:
             out.append(EMPTY_HINT.get(status, "(暂无)"))
             out.append("")
             continue
-        for item in sorted(group, key=lambda i: i["stamp"], reverse=True):
-            line = f"- [{item['type']}] [{item['title']}]({item['file']})"
-            if item["summary"]:
-                summary = item["summary"]
-                if len(summary) > SUMMARY_MAX:
-                    summary = summary[:SUMMARY_MAX].rstrip() + "…"
-                line += f" — {summary}"
-            out.append(line)
+        ordered = sorted(group, key=lambda i: i["stamp"], reverse=True)
+        hidden = 0
+        if status in CLOSED_STATUSES and len(ordered) > CLOSED_KEEP:
+            hidden = len(ordered) - CLOSED_KEEP
+            ordered = ordered[:CLOSED_KEEP]
+        for item in ordered:
+            out.append(entry_line(item, SUMMARY_MAX))
+        if hidden:
+            out.append("")
+            out.append(
+                f"> 更早的 **{hidden}** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), "
+                f"全量清单见 [{ARCHIVE_REL}]({ARCHIVE_REL})."
+            )
+        out.append("")
+    return "\n".join(out)
+
+
+def render_archive(items: list[dict], issues_dir: Path, root: Path) -> str:
+    """归档索引: 全量清单(摘要不截断), 落在 `attachments/`(不计 cap), 保住老 issue 的可检索性。"""
+    dir_name = dir_of(issues_dir, root)
+    out = [
+        "# Issues 归档索引 (全量)",
+        "",
+        "> **本文件是生成物, 不要手改** —— 由 `gen_issues_index.py` 与 `_index.md` 同批生成;",
+        "> 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。",
+        f"> 每条链接指回 `{dir_name}/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
+        "",
+    ]
+    for status in STATUSES:
+        group = sorted((i for i in items if i["status"] == status), key=lambda i: i["stamp"], reverse=True)
+        out.append(f"## {status} ({len(group)})\n")
+        if not group:
+            out.append("(暂无)")
+            out.append("")
+            continue
+        for item in group:
+            out.append(entry_line(item, None, prefix="../"))
         out.append("")
     return "\n".join(out)
 
 
 def build(root: Path, issues_dir: Path) -> str:
     return render(collect(issues_dir), issues_dir, root)
+
+
+def build_archive(root: Path, issues_dir: Path) -> str:
+    return render_archive(collect(issues_dir), issues_dir, root)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -161,24 +224,30 @@ def main(argv: list[str] | None = None) -> int:
     issues_dir = resolve_issues_dir(root, args.dir)
     index = issues_dir / "_index.md"
 
+    archive = issues_dir / ARCHIVE_REL
     try:
         rendered = build(root, issues_dir)
+        rendered_archive = build_archive(root, issues_dir)
     except ValueError as exc:
         sys.stderr.write(f"{exc}\n")
         return 2
 
     if args.check:
-        current = index.read_text(encoding="utf-8") if index.exists() else ""
-        if current != rendered:
-            sys.stderr.write("_index.md 与生成结果不一致, 请运行 gen_issues_index.py\n")
-            return 1
-        return 0
+        ok = True
+        for path, target in ((index, rendered), (archive, rendered_archive)):
+            current = path.read_text(encoding="utf-8") if path.exists() else ""
+            if current != target:
+                sys.stderr.write(f"{path.name} 与生成结果不一致, 请运行 gen_issues_index.py\n")
+                ok = False
+        return 0 if ok else 1
 
     issues_dir.mkdir(parents=True, exist_ok=True)
+    archive.parent.mkdir(parents=True, exist_ok=True)
     # newline="\n": 生成物一律 LF —— write_text 默认按 os.linesep 翻换行, Windows 上会写成 CRLF
     # (纯行尾噪音, 见 pitfalls/git/editing-traps.md)。守阵 test_generated_indexes_are_lf_only。
     index.write_text(rendered, encoding="utf-8", newline="\n")
-    print(f"已生成 {index}")
+    archive.write_text(rendered_archive, encoding="utf-8", newline="\n")
+    print(f"已生成 {index} 与 {archive}")
     return 0
 
 

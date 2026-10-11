@@ -85,6 +85,9 @@ STATUSES = ("In Progress", "Open", "Done", "Dropped")
 
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
+# 非 `_index.md` 的生成物 —— 新增一个必须显式登记(详见 test_gen_all_declares_exactly_all_indexes)
+EXTRA_GENERATED = ("memory-bank/issues/attachments/_archive.md", )
+
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
 LEGACY_PREFIX_RE = re.compile(r"^TASK\d{3}-")
 FILE_RE = re.compile(r"^(?:TASK\d{3}-|\d{2}-\d{2}-\d{2}-)[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
@@ -606,14 +609,19 @@ def _gen_all():
 
 
 def test_gen_all_declares_exactly_all_indexes() -> None:
-    """生成物集合单点: gen_all 的产出 == 库内**全部** `_index.md` —— 一个不多, 一个不少。
+    """生成物集合单点: gen_all 的产出 == 库内**全部** `_index.md` + `EXTRA_GENERATED` —— 一个不多, 一个不少。
 
     这是 sync 自动化解白名单的安全底线: 白名单里多一个其实不是生成物的路径, sync 就会
     在冲突时静默丢弃手写内容(第 3 步自证也救不回来); 少一个则冲突化解不了。
+
+    `EXTRA_GENERATED`(2026-10-11 加入): 不叫 `_index.md` 的**生成物**。issues 归档索引是第一个 ——
+    它落在 `attachments/`(该目录不计 cap)才敢放全量清单, 而名字不叫 `_index.md` 正是为了
+    **不**被 `index-auto` 角色套上 25,200 的 cap。新增同类生成物必须**显式登记在这里** ——
+    否则本守阵会在它出现的那一刻红, 逼你确认它确实是生成物而不是手写件。
     """
     gen_all = _gen_all()
     outputs = gen_all.collect(ROOT, MB)
-    on_disk = set(MB.rglob("_index.md"))
+    on_disk = set(MB.rglob("_index.md")) | {ROOT / rel for rel in EXTRA_GENERATED}
     assert set(outputs) == on_disk, (
         f"gen_all 产出与库内 _index.md 不一致: 多 {sorted(set(outputs) - on_disk)} / "
         f"少 {sorted(on_disk - set(outputs))}"

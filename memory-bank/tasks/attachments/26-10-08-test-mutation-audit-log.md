@@ -1,0 +1,232 @@
+# 26-10-08-test-mutation-audit — 进度日志 R0–R14 (外迁存档)
+
+> 摘要: 变异测试审计档案 `tasks/26-10-08-test-mutation-audit.md` 的早期进度日志(R0–R14)原样外迁 —— 主档 56,960 撞 `task` cap 48,000, 按「触顶切最老一半到 `attachments/`」处置(切走 33,660, 主档落到 23,299)。
+> 触发: 查 R0–R14 轮次细节, cap 外迁, 进度日志归档
+
+> 本文件是**外迁存档**: 主档 `## 进度日志` 段的 R0–R14 原文, **一字未改**搬来(仅相对链接整体上移一层 —— 本文件在 `tasks/attachments/`)。
+> 主档仍保留 R15 起的近期日志与全部必备章节; 本目录在 `EXCLUDED_DIRS`, 不计 cap。
+
+## 进度日志 (R0–R14 · 外迁原文)
+
+### 2026-10-08 R0 — 建立(指导 / 命令 / 排期锚)
+
+- **环境摸清**: WSL2 `Ubuntu-26.04`(8 核, `.wslconfig` 限), 已有调研沙箱 `~/mut-wsl`(ext4, 含 venv + mutmut 3.8.0 + 旧 `mutants/` 残留)。`uv 0.12.14`; 仓库 origin = Gitee, 分支 `develop`。
+- **端到端实测(mutmut, 用现成镜像 `--no-refresh`)**:
+  - `infra/versioning.py` + `tests/test_versioning.py` → **155 变异 / 21.6s / 杀 147**(存活 7 + 超时 1), 8.25 mut/s。
+  - 与报告 §07 的 155 变异一致(密度复核通过)。
+- **端到端实测(gremlins, Windows)**: `uv run --with pytest-gremlins==1.11.2 pytest tests/test_versioning.py --gremlins --gremlin-targets=src/auto_qb/infra/versioning.py -n 0 --no-cov --gremlin-workers=8` → **25 变异 / 100% 杀 / 11.9s**。确认 `uv run --with` 路线可行(不动主仓库依赖)。
+- **踩到并当场处置的坑**(已内建进脚本, 并写进包内 `references/why.md`):
+  - **旧 `mutants/` 缓存让 mutmut「0 files mutated」提前收工**(目标从 `rules/` 换成 `infra/versioning.py` 时复现) → `mutants.run` 每次 `rm -rf mutants mutmut-cache.db`。
+  - **Git Bash 把未加引号的 `~` 展开成 `C:/Users/...`**, 再进 WSL 是个错路径且不报错 → 加 `check_mirror()` 停手 + 提示加引号(走 `commands run` 时 cmd.exe 不展开 `~`, 不受影响)。
+  - **deselect 表已漂移**: 报告写的 `tests/test_web.py::test_api_enqueue_wakes_main_loop` 因 test_web 拆分已不存在, 现址 `tests/test_web_seed_center.py`(2026-10-08 06:36 取证) → 写进 `set_conf.py` 的 `DEFAULT_DESELECT` 并在包内文档标注「会随拆分漂移」。
+- **产物**: skill `mutation-testing`; 包 `mutants`(4 task, `commands list` 可见); issue `26-10-08-0642-test-mutation-audit-standing`(Open, 常驻); 坑档 `pitfalls/testing/mutation-pool-artifact.md`。
+- **未验到**: `mutants.setup` 的 `git clone` 分支(需联网克隆 116MB)、`--out` 之外的路径 —— 已在包内 `references/why.md`「本会话验证到哪一步」如实标注。
+- **收尾实测**: `commands run test.full` → **2772 passed + 4 skipped / 54.75s / TOTAL 99%**(16476 语句 / 165 未覆盖 / 5694 分支 / 149 partial), 与上基线逐位持平(`src/` 与 `tests/` 零改动); `commands run test.pkg` → **154 passed / 115.35s**(新包脚本不进收集面, 未破坏包脚本测试面)。基线切片 `testing/baselines/26-10-08-0647-test-mutation-audit.md`。
+- **索引与守卫**: `kb.index` 20 个生成物; `kb.check` 主键纪律 / 认领链 / 回写措辞 / 日期守卫**全过**; `doc.links` 无坏链。
+- **skills 软链**: `scripts/sync_agent_skills.py` 建 `.codebuddy/skills/mutation-testing`(该目录 gitignore)时 `mklink /J` 返回失败(脚本打 `!`), 改用 PowerShell `New-Item -ItemType Junction` 建成 —— 疑与本工具 shell 的路径处理有关, 未确认为仓库缺陷, 记一笔待复现。
+- **cap 债务(不拦提交, 转告用户另开会话清理)**: `issues/_index.md` 25,430 与 `tasks/_index.md` 25,551 均略超 25,200(两条在本轮前已越线, 本轮各加一行 ~200–250 字符); 另有存量 `tasks/26-10-08-backend-test-web-split.md` 62,661 > 48,000; 以及 activeContext 切片数 95 > 70。
+
+### 2026-10-08 R1 — 派生 config 计划(未执行)
+
+- **触发**: 用户「根据变异测试指导写一个针对 config 部分的分步执行计划」—— 即 skill「派生计划」节的第一个用例(档案 §原始请求 里预告的形态)。
+- **产物**: `memory-bank/plans/26-10-08-0720-plan-mutation-config.html`(单文件 HTML, dark, `doc-topic=mutation-audit`, 状态 `Open` 待拍板)。
+- **计划要点(按 skill 骨架逐节落到 config 上)**:
+  - 目标 glob `**/config/*.py` —— 用 fnmatch 实测覆盖顶层 + `schema/` + `validation/` 两子包, 且不误伤 `webui/server/routes/config.py`; 明确不写 `**/config/**/*.py`(会漏顶层 8 文件)。
+  - 重点函数清单按「判据密度 × 出错代价」分三档: A 校验内核(`validation/core.py` 的 `_try_number`/`_try_time`/`validate_config` 等 + sections/rules/curves) · B 迁移与写回(`migrations.py` 三个迁移 + `writer.py` 回退/版本闸) · C 加载与派生(loaders/fields/impact)。
+  - 测算基数**在报告 §08 锚点上精化**: 报告按全行估 config/ ≈5,000 变异 / ≈11 min; 计划剔除 schema 四表(groups/hr/rules/trackers, 实测 1,151 行 0 函数)后有效面 ≈3,842 行 ⇒ ≈3,800 变异 / ≈8.5 min(依据: mutmut v3 只变异函数体, 报告 §03)。首轮一律以实测为准。
+  - 池 = 6 个定向测试文件 / 186 fn: `test_config.py`(62) · `test_config_writer.py`(54) · `test_hr_config.py`(33) · `test_config_schema.py`(24) · `test_impact.py`(8) · `test_config_key_surface.py`(5)。核实池内无「读源码文本」守阵 ⇒ 默认 `--deselect` 与本轮无关(保留无副作用)。
+  - 步骤 S1–S7 全走 task id(`mutants.setup` → `mutants.run` → 三分类 → 手工确认 → 补测 → 复跑 → 记录); 附 Windows 兜底 `mutants.gremlins`。
+- **收尾**: `kb.index` 重建 20 个生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; `doc.caps` 无新增债务(3 项均为存量)。`test.full` → **2772 passed + 4 skipped / 54.25s / TOTAL 99%**(16476 语句 / 165 未覆盖 / 5694 分支 / 149 partial), 与上基线 `26-10-08-0647` 逐位持平(本轮零 `src/`、零 `tests/` 改动); 基线切片 `testing/baselines/26-10-08-0727-test-mutation-audit-config-plan.md`。
+- **未做**: 未执行审计(计划边界: 不在计划里实施); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R2 — config 包首轮审计(执行计划 26-10-08-0720)
+
+- **触发**: 用户「实施计划: 26-10-08-0720-plan-mutation-config.html」。
+- **S1–S2 首轮(mutmut / WSL)**: 目标 `**/config/*.py`(回显 `19 files mutated, 109 ignored`), 池 = 6 个定向文件。
+  - 变异 **4799** · 杀 **3851** · 存活 **893** · `no tests` **55** · 超时 **0** → 杀死率 **80.25%**; 墙时 294.4s(含 setup), 变异阶段 17.41 变异/s; mutmut 3.8.0 · `--max-children 4` · WSL2 8 核。
+  - 与计划测算对照: 计划精化估 ≈3,800(剔除 schema 纯数据表)、报告全行估 ≈5,000 —— 实测 **4799** 落在两口径之间, 属 §2.2 预告的正常区, 无需复核 glob。
+- **S3 三分类**: 893 存活 + 55 no-tests 全量落盘(`R:/Temp/auto-qb/mutants/26-10-08-0742-config-py-results.txt`)并按类聚合; 机器规则先筛出 **64** 条等价(错误文案 / `open` 编码变体 / 纯展示格式), 余 **829** 条进候选。`no tests` 55 条**全部**在 `validation/rules.py` 的 `_validate_watch_fields`(36) 与 `_validate_expr_condition_spec`(19) —— 池内 6 个文件不覆盖规则条件校验, 属**池边界**而非代码缺口。
+- **S4 手工确认(唯一判据 = 全套件下同构变异)**: 对 **274** 条候选逐条 `mutmut apply` → 跑**全套件**(`-n 8 --no-cov -x -p no:cacheprovider`)→ 还原(`git checkout -- src/`), 结果:
+  - **54 条假存活**(全套件能杀 ⇒ 池没选到): `validate_config` 15 · `_validate_qb_traffic` 10 · `_expr_gate` 6 · `_validate_global_speed_limit_curve` 5 · `_validate_trigger_action_compat` 5 · `_current_main_tick` 3 · `_prepare` 2 …
+  - **220 条真洞候选**(全套件仍杀不掉): writer 74 · sections 45 · schema/__init__ 27 · core 25 · loaders 16 · rules 11 · migrations 10 · curves 9 · site_presets 2 · impact 1。
+  - 覆盖口径: 优先文件(impact / migrations / site_presets / writer / validation.core / schema.__init__)全量 + 其余文件的 `continue/break`·边界·`and/or`·语句删除类; **未覆盖的 555 条**按模式分类, 留待下轮(不在本轮声称真洞)。
+  - 耗时: 274 条 × ≈15s ≈ 68min(全套件 12s + 开销)。
+- **S5 补测(只对确认的真洞)**: 新增 **10** 个测试函数(全部落在池内文件, 同步各文件 docstring 的「## 测试计划」), 覆盖: impact diff 并集语义 · v1→v2 多 tracker 迁移 · 显式置空收集多条目 · 掩码还原遍历 · 物化缺文件返回 · `_check_str_list`/`_try_number` 拦截侧 · `state_file` 空白 · max_tasks 下界 · qb_traffic×main_tick 交叉 · 闭区间端点逐值 · fs 多条目 · 站点绑定多条目。
+  - **红验 18/18 全红**(apply 同构变异 → 目标用例变红 → 还原复绿, 主仓 `src/` 零残留)。
+- **S6 复跑(同目标同池 + 补测)**: 变异 **4799** · 杀 **3972** · 存活 **772** · `no tests` **55** → 杀死率 **82.77%**; 墙时 3m46s / 22.67 变异/s。
+  - **存活 −121 / 新增存活 0**(逐 id 对差; 被新守阵杀死者按文件: sections 74 · core 23 · migrations 7 · curves 7 · loaders 6 · writer 3 · impact 1)。验收 #3 达标(**772 ≤ 893**)。
+- **S7 记录**: 基线切片 `testing/baselines/26-10-08-0902-mutants-config.md`; 真洞余量按**主题**入池 **6 条** `test` issue(`26-10-08-0903-test-config-mutation-{loop-guards,boundary-guards,loader-defaults,writer-tail,schema-surface,validator-strings}`); 环境坑入池 `26-10-08-0758-bug-mutants-status-wsl` + 坑档 `pitfalls/testing/mutants-wsl-shell.md`。
+- **环境坑(本机)**: WSL 登录壳实为 zsh —— `cd X` 改真实 cwd, 但 `$PWD` 与 `$()` 仍报 WSL 启动目录 ⇒ `mutants.status` 恒报 `mutmut=no`(实际已装; **不影响 `mutants.run`**)。排障耗时约 30min。详见坑档。
+- **收尾实测**: `commands run test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 [26-10-08-0902](../../testing/baselines/26-10-08-0902-mutants-config.md)。
+- **未做 / 遗留**: 220 条真洞候选中, 复跑新杀的 121 条覆盖了其中一部分(其余落在未 S4 验证的 555 条里), **余量未逐条补测**(按主题入池等排期); 未 commit/push(用户未说「提交」)。
+
+
+### 2026-10-08 R3 — 按首轮经验回灌指导 / 命令包 / 排期锚
+
+- **触发**: 用户「根据此次实施过程更新变异测试指导文档 + 相关 skill + 命令包和常驻排期锚(主要提交 637be05f), 使下次实施能更顺利」。
+- **命令包(新增 2 个 task + 1 个脚本)**:
+  - `mutants.report` —— 把镜像里上一轮的存活/未覆盖变异导出成**带 diff 的清单** + 按状态/按模块汇总。**为什么必须**: `mutmut results` 只回 `id: status`, 既没有文件:行也没有变异内容, 光看它做不了三分类。
+  - `mutants.verify` —— S4「全套件确认」的机械化: 逐条 `mutmut apply` → 跑**全套件** → 还原, 记 KILLED(假存活) / SURVIVED(真洞候选); **幂等可续跑**(已写进结果文件的 id 跳过)。首轮这一步是手工脚本 + 手工解析, 耗时 ≈68min。
+  - `scripts/mutants_dump.py` —— 在镜像里跑(读 `mutants/<路径>.meta` 的 `exit_code_by_key`, 用 `diff_apply` 现场重放每条变异)。配套在 `mutants.py` 加 `_wsl_write`(**内容走 stdin** —— 多行内容塞进 `bash -lc '<script>'` 会被登录壳按行拆开, 实测会静默落到别处)。
+  - 实测: `report` 导出 827 条(16.4s); `verify` 2 条 smoke = **14s/条**, KILLED/SURVIVED 判定正确。
+- **指导 skill(`.agents/skills/mutation-testing/SKILL.md`)**:
+  - 命令表补 2 个 task; 标准步骤 S3 改走 `mutants.report`、S4 改走 `mutants.verify`、S6 注明 `--no-refresh`。
+  - 硬约束新增**流程约束 9–11**(脚本没法内建的那三条): 池要覆盖目标包的**函数面**(否则成片 `no tests`) · S4 主动收窄候选(≈15s/条) · 复跑带新守阵必须 `--no-refresh`。
+  - 记录口径补**两条机械守卫**: 切片之外不手抄 `N passed`(回写守卫判据族 B) · 新 issue 填 `doc-refs`(认领链)。
+  - 派生计划 §2 修正测算口径(**别**剔除「纯数据声明」行 —— config 实测 4,799 比精化 3,800 高 26%)。
+  - 坑补「本机 WSL 登录壳是 zsh」与「结果怎么读」两条指针; 反模式补 4 条。
+- **证据报告(§14 新增)**: `reports/26-10-08-0231-…html` 加「config 包首轮实测」节(数字 + 三条流程修正 + 假存活比例 19.7%), 变更记录顺延为 §15, 抬 `doc-updated`。
+- **常驻排期锚**: §03 标注 config 首轮进度与数字; §04 命令表补 2 个 task; §05 标准动作改走 task id; §07 台账补 R1/R2; §08 记一条「回灌经验」(状态仍 `Open`)。
+- **收尾实测**: `test.pkg` 全绿(154 条, 与上基线同批); `test.full` 见基线切片 [26-10-08-0920](../../testing/baselines/26-10-08-0920-mutation-audit-tooling.md); `doc.drift` 0 处手抄; `kb.check` 全过; `doc.caps` 无新增债务。
+- **未做**: 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R5 — 修 issue 26-10-08-0758(mutants.status WSL 失真)
+
+- **触发**: 用户「认领并修复: 26-10-08-0758-bug-mutants-status-wsl.html」。
+- **复验(防过期原则第 5 条)**: 2026-10-08 09:50 在 WSL `Ubuntu-26.04` 重跑锚点三条对照 —— `$0=/usr/bin/zsh`; `cd "$HOME/auto-qb-mut"; echo "$(pwd)"` → `/mnt/d/Projects/auto-qb-clone5`(启动目录); `cd … && test -x .venv/bin/mutmut && echo yes` → `yes`。**现象仍复现**。
+- **根因闭合**: 登录壳 zsh 的 `$PWD` / 内建 `pwd` / 相对路径解析走**逻辑目录**, `cd` 未同步逻辑 PWD ⇒ `$()` 子壳按启动目录解析。修复前 `commands run mutants.status` 实测 `mutmut=no` / `mutants=`(空)/ `head=f8f9d9b0`(= 主仓 HEAD, 非镜像的 `6214c4f3` —— 又一处同源失真)。
+- **修法**(采纳 issue 建议第 1 项): `.commands/mutants/scripts/mutants.py` 的 `cmd_status` 四条回显改 `cd {mq} && <直接命令>` 形态(与 `cmd_run` 一致), 单次 wsl 调用内并列多条, 保持一屏回显。绝对路径方案未采纳(改动面更大)。**附带闭合**: 原末行 `test -f pyproject.toml && grep -m1 only_mutate …` 在镜像未跑过 `run` 时回非零 ⇒ 只读回显却报 `[FAIL]`; 改 `|| echo 'only_mutate = (未写, 先跑一轮 run)'` 兜底, 实测恢复 `[ok]`。
+- **验证**: 修复后同命令实测 `mutmut=yes` / `mutants=87M` / `head=6214c4f3`(与 `git -C <mirror> rev-parse` 现查一致)/ `not_killed=827`, 退出码 0(`[ok]`)。三条失真行全部恢复; `run`/`setup`/`report`/`verify` 未受影响(全程 `cd X && cmd`, 本轮未改)。
+- **回写**: issue 置 `Done`(封面徽标 + `issue-status` meta 两处 + 状态日志 + 复验行 + 修复后补充); 坑档 `pitfalls/testing/mutants-wsl-shell.md` 标注「工具侧已修」; 包内 `references/why.md` 排障表该条改「已修」、诚实交代节更新; skill `mutation-testing` 的坑条同步。
+- **收尾实测**: `commands run test.full` 覆盖口径与上基线逐位持平(见基线切片 [26-10-08-0958](../../testing/baselines/26-10-08-0958-mutants-status-wsl.md)); `kb.index` 20 生成物 / `kb.check` 主键与认领链全过 / `doc.drift` 0 处 / `doc.links` 过。存量红 2 项(无关文件 `activeContext/26-10-08-0713` 的裸 passed 数字, 已 stash 回退验证与本轮无关)与存量 cap 债务 3 项未动(范围守恒)。
+- **未做**: 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R6 — config 第二轮: 校验器字符串键名 + 短路运算符(issue 26-10-08-0903-validator-strings)
+
+- **触发**: 用户「认领并实施: `memory-bank/issues/26-10-08-0903-test-config-mutation-validator-strings.html`」—— 即首轮入池 6 条 `test` issue 中的第八条(validator-strings)。
+- **范围**: 只补两类变异形态的守阵 —— ①**字符串键名字面量大小写**(`dat_path`→`DAT_PATH` · `download_curve`→`DOWNLOAD_CURVE` · `custom_basic_check_program_path`→大写)②**`and`/`or` 短路互换**。涉及 6 个函数: rules 的 `_expr_gate` / `_check_rule_refs` / `_validate_trigger_action_compat` / `_validate_checking_action_spec`, sections 的 `_validate_qb_traffic`, curves 的 `_validate_global_speed_limit_curve`, core 的 `_strip_none`。
+- **补测(S5)**: 新增 **6** 个测试函数(均落在池内 `tests/test_config.py`, 同步该文件 docstring 的「## 测试计划」):
+  - `test_validate_string_keys_exact_case` —— 键名大小写不符须落到「未知键」而非被静默接收(经 expr 门控间接断言 `dat_path`; period/download_curve/custom_basic_check_program_path 直接断言)。
+  - `test_validate_short_circuit_pairs_differing_truth` —— 逐条构造「两操作数取不同真值」的输入击穿 `and`/`or` 互换(traffic_source 空列表 vs 非 list · curves 项单键判定 · group_spec 非 dict 但含 rule_name 子串 · 触发非 dict 单元素 list action · 空引用 `"@"`)。
+  - `test_strip_none_list_branch_and_key_case` —— 列表分支去空 + 列表内嵌 dict 的 tri_state 叶豁免 + 键名大小写对照。
+  - `test_validate_rule_refs_single_char_and_short_circuit` —— 钉 `r[1:]`(单字符引用须报「引用的规则集不存在」而不是「必须以 @ 开头」)。
+  - `test_validate_qb_traffic_positive_boundary` —— 钉 `seconds <= 0`(0S 报正时间; 1S 落到 main_tick 下界而**不**报正时间)。
+  - `test_validate_gslc_interval_key_exact` —— 钉 `interval` 精确键名与正值判定。
+- **红验 26/26 KILLED**: 用 ast 定位函数体行范围做精确替换的临时脚本(`apply` 同构变异 → 跑 5 个目标测试 → **原字节回写还原**), 26 条全红; 主仓 `src/` 零残留(首版用 `write_text` 引入 LF 行尾出现过假 modified, 已改 `read_bytes`/`write_bytes`)。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` 进镜像(否则被 `git checkout -f` 冲掉), 带 `--no-refresh` 复跑 —— 变异 **4799** · 杀 **4110** · 存活 **653** · `no tests` **36** → 杀死率 **85.66%**。
+  - **存活 772 → 653(−119)**; 辨别出 15 条「新增存活」实为 **`no tests` → `survived` 的覆盖归类漂移**(在 `_validate_expr_condition_spec` 与 `writer._backup`, 非本 issue 范围、非退化)。
+- **池内验证**: 池内 6 文件全绿(数字见 kb.baseline)。
+- **环境 / 存量问题(用户裁定)**: 首跑 `test.full` 曾现 2 failed(wording / number 守卫)—— 定位为**存量违规**(`activeContext/26-10-08-0713-webui-qb-traffic-head-layout.md:15` 手抄裸 passed 数字, 来源另一会话提交 `0e8d5432`), 当时用户答「暂时不用管」; **提交前同步远端后该违规已由远端修复**(计数 393 ≤ 冻结 394), 闸门恢复绿。
+- **S7 记录**: 基线切片 `testing/baselines/26-10-08-1016-mutants-config-validator-strings.md`; 常驻锚 §07 `config/` 行与 §03 描述同步更新(硬约束 12)。
+- **未做**: 「新增存活」15 条归类漂移不单独立项(非退化、非本 issue 范围)。
+
+### 2026-10-08 R7 — 实施 writer-tail 真洞 issue(74 条 S4 候选重判 + 补 22 守阵)
+
+- **触发**: 用户「认领并实施: `issues/26-10-08-0903-test-config-mutation-writer-tail.html`」, 并在追问下选择「全部 74 条逐条补(推荐)」。
+- **范围**: `src/auto_qb/config/writer.py` 的 **74 条 S4 真洞候选**(来自首轮 config 审计的 S4 清单, `R:/Temp/auto-qb/mutants/real_holes.json` 的 `.config.writer.` 前缀)。这是「writer 回退/掩码/格式长尾缺守阵」那条 issue 的实施轮。**零 `src/` 改动**(纯补测 + 文档)。
+- **关键发现(判据污染)**: 首轮 S4 的「74 条全套件杀不掉」结论**先被假象推翻、再被纠正回来**, 详见坑档 [read-source-static-guard-mutation](../../pitfalls/testing/read-source-static-guard-mutation.md):
+  - **首次判定(伪影)**: 直接用**镜像**工作树跑 → 74 条**全 KILLED**。根因两层: ①镜像池含另一工作流未提交的 `tests/test_config.py` +309 行(池漂移); ②主因: 镜像 `memory-bank/` 落后一条, 使两条**读源码文本**的守卫(`test_wording_guard_is_green_on_current_kb` / `test_number_guard_is_green_on_current_kb`)在**基线就红**, 而它们对 src 文本敏感 ⇒ 任意 src 变异都被「杀」。
+  - **二次验证**: 复位镜像 `tests/` 后仍全 KILLED; 实测这两条守卫在**原样 HEAD** 上本就 **2 failed**(「手抄测试数字 395 > 冻结常数 394」), 属既有债务。
+  - **三次判定(有效)**: **显式 `--deselect` 两条既有红守卫** → 基线绿 → 74 条得 **71 SURVIVED(真洞) / 3 KILLED(假存活)**。**issue 前提成立**(且首轮 S4 的 74 条真洞结论正确)。
+- **S5 补测**: 新增 **22** 个测试函数(全部落 `tests/test_config_writer.py`, 同步该文件 docstring「测试计划」), 按函数簇: 盖章/物化实参 · backup_versioned/_backup 建目录与编码 · 版本闸门消息 · `_validate_tree` 临时文件往返 + finally 短路与 · `_build_yaml` 引号/缩进档案 · `_build_doc` 回退 · R 级/readonly 回退点路径切分与删键 · `_delete_path` 精确末段 · `_sync_mapping` 未变不动原节点 + 类型互转 · `_same_value`/`_as_builtin` BaseLoader 语义 · `_plain_scalar` 布尔/无损 · `unmask_tree` 守卫与只碰哨兵 · `mask_tree` 递归 + 空值不掩码 · `_set_path` 复用/重建中途节点。
+- **S6 复跑(同 74 条 + 补测, 排除既有红守卫)**: **51 KILLED / 23 SURVIVED**(首轮有效判据 71 SURVIVED ⇒ 存活 **−48, −68%**)。
+- **余 22 条经逐一验证 = 等价变异**(无法杀死): `_validate_tree` 的 tempfile 参数(`encoding=None/UTF-8`、`suffix` 变体、`"w"`) · `yaml.dump` 参数(`allow_unicode`、`default_flow_style` —— 临时文件解析等价) · `_validate_tree__mutmut_1`(`tmp_path=""` 与 None 同为假值) · `_backup__mutmut_3` / `backup_versioned__mutmut_7`(`parent=None` —— `utils.atomic_write` 内部自带 `makedirs(dirname, exist_ok=True)`, 纵深冗余不可观测) · `_backup__mutmut_14` / `_build_doc__mutmut_8`(删 `open` 的 `"r"`, 默认即 `"r"`) · `_build_doc__mutmut_2`(`doc=""` 与 None 同路) · `_fallback_readonly_fields__mutmut_4/5`(`split(None)` / `split("XX.XX")` —— readonly 路径全不含点, 返回同一单元素列表)。
+- **真洞 1 条当场杀死**: `_validate_tree__mutmut_29`(finally 守卫的 `and` → `or`)—— 新增 `test_validate_tree_finally_guard_skips_none_tmp_path`(mock 造临时文件创建失败, 断言原始 OSError 原样冒出; `or` 会变 `stat(None)` TypeError)。**⇒ 71 真洞 = 48 复跑杀 + 1 当场杀 = 49 已清, 22 条等价(不追)**。
+- **S7 记录**: 基线切片 [26-10-08-1144-mutants-config-writer-tail](../../testing/baselines/26-10-08-1144-mutants-config-writer-tail.md); 新坑档 [read-source-static-guard-mutation](../../pitfalls/testing/read-source-static-guard-mutation.md); 本档案 R7; 常驻锚 §07/§08/§09 同步(config 行补第 3 个切片指针, 台账补 R7); writer-tail issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1144](../../testing/baselines/26-10-08-1144-mutants-config-writer-tail.md)(2 failed 为既有债务 `tests/test_memory_bank.py` 两条读源码守卫, 远端已在 R6 后修复, 本轮基线 `f9101a33` 上复跑已转绿); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。
+- **未做 / 遗留**: 其余 4 条 config 真洞 issue(loop-guards / boundary-guards / loader-defaults / schema-surface)未实施; 未重跑 `mutants.run` 全包(writer 单文件非 mutmut 目标粒度, 本轮是**对既有 74 条候选的 S4 重判 + 补测复跑**); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-08 R8 — 实施 schema-surface 真洞 issue(27 条 S4 候选复验 + 补 6 守阵)
+
+- **触发**: 用户「认领并修复: `issues/26-10-08-0903-test-config-mutation-schema-surface.html`」—— 首轮入池 6 条 `test` issue 中的第五条。
+- **范围**: `src/auto_qb/config/schema/__init__.py` 的 **27 条 S4 真洞候选**(schema_payload 16 / readonly_config_paths 8 / plugins_by_kind 3)。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(判据干净)**: `mutants.verify` 对 27 条逐条 `apply` → 全套件 → 还原, **27/27 SURVIVED**(473s, ≈17s/条)。与 R7 不同, 本轮**未**出现「读源码文本守卫在基线就红」的判据污染(该两类守卫已在远端修复), 无需 `--deselect`。
+- **S5 补测**: 新增 **6** 个测试函数(全落 `tests/test_config_schema.py`, 同步该文件 docstring「测试计划」): `readonly_config_paths` 的路径集**与顺序** · 遍历契约**合成结构探针** · `plugins_by_kind` 的 condition/action **两支** + 兜底 · `constants` 键集合逐位 · 常量取值逐项 · `hr_check_site_presets` 每条键集合与逐字段取值。
+  - **关键发现(为什么旧守卫杀不掉)**: 现状 4 条 readonly 路径**全在顶层**, 使 `walk` 的递归/前缀机制在真实数据上「看不出差别」—— 只断言当前输出**钉不住** `continue→break`、`if prefix else` 改假条件、`kind == "object"` 变体、`walk(x, None)` 这几类。故改用**合成结构钉机制**: 把 `[ui_only 叶][readonly 叶]` 放进**嵌套层**(顶层已由 `real_config_fields()` 滤掉 ui_only, 放顶层探针是空转 —— 首版就踩了这个坑, 探针空转导致 mutmut_2 仍存活)。
+- **红验 26/27 KILLED**(apply 同构变异 → 跑目标测试文件 → 原字节还原, `src/` 零残留)。余 **1 条等价变异**: `readonly_config_paths__mutmut_17`(`walk(real_config_fields(), "")` → `None` —— 顶层 prefix 只被 `if prefix else` 消费, `""` 与 `None` 同为假值, 全部输入产出逐一相同)。
+  - **踩坑(工具侧)**: 主仓 `src/auto_qb/config/schema/__init__.py` 是 **CRLF** 行尾, 红验脚本按 LF 拼多行锚点会「静默匹配不上」(报 ANCHOR-MISS 而非假绿); 另外手抄缩进空格数极易差 1(**实测差 1 空格 → 锚点长度 52 vs 51**), 已改用 `" " * 16` 拼接规避。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config_schema.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4190** · 存活 **573** · `no tests` **36** → 杀死率 **87.31%**(R6 基线 653 存活 / 85.66%)。
+  - **逐 id 对差: 新杀 83 / 新增存活 3**。归因拆分: **26 条 = 本轮补测**(与红验 26/26 逐 id 对应); **57 条集中在 writer 模块** —— 镜像 12:07 刷新到 `origin/develop` 时纳入了 `fcc3cd69`(R7 的 22 守阵), 而 R6 基线(10:16)时点尚未包含它, **非本轮补测**, 已在切片里如实标注。新增存活 3 条(`writer.x__backup__mutmut_12/15/19`)为归类漂移、非退化。
+- **S7 记录**: 基线切片 [26-10-08-1229](../../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md); 本档案 R8; 常驻锚 §07/§08/§09 同步(config 行补第 4 个切片指针); schema-surface issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1229](../../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md)(`src/` 零改动, 新增用例 +6)。
+- **未做 / 遗留**: 其余 3 条 config 真洞 issue(loop-guards / boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
+
+### 2026-10-09 R9 — 派生 hr 计划(未执行)
+
+- **触发**: 用户「根据变异测试指导+skill写一个 hr 模块的测试计划」—— skill「派生计划」节的第二个用例(承接 R1 的 config 计划)。
+- **产物**: `memory-bank/plans/26-10-09-1459-plan-mutation-hr.html`(单文件 HTML, dark, `doc-topic=mutation-audit`, 状态 `Open` 待拍板)。
+- **计划要点(按 skill 骨架逐节落到 hr 上)**:
+  - 目标 glob `**/hr/*.py` —— 用 fnmatch 实测覆盖 hr 包**全部 24 个文件**(顶层 19 + `adapters/` 5), 且不误伤 `webui/server/routes/hr.py`; 明确不写 `**/hr/**/*.py`(会漏顶层 19 文件)。fnmatch 语义下 `*` 跨 `/`, 故第二个 `*` 吃下 `adapters/nexusphp`。
+  - 重点函数清单按「判据密度 × 出错代价」分三档: A 判定内核(`resolve.py` 四行判定表 + 12 格矩阵 · `service.py` 波次引擎的停翻/防伪/放行/释放 · `bencode.py` infohash 原始切片 · `parse.py` 数值容错) · B 链路/安全/持久化(`channel` 白名单与 token · `store` 锁与原子写 · `ratelimit` 频控 · `queue` 防伪造回传 · `worker` revision · `runtime` 热重载 · `server` 鉴权 · `model` 序列化契约) · C 表现/胶水(`status` / `report` / `events` / `fetcher` / `adapters`)。
+  - 测算基数: hr 包 **24 文件 / 7,863 行 / 439 def·class** ⇒ 报告 §08 锚点 **≈7,800 变异 / ≈17 min**(单价 0.134s/变异)。**不做**「剔除纯数据声明」的精化(config 首轮精化后低估 26%); 另标注 hr 池(457 fn)比 config 池(186 fn)大 2.5x, 单变异成本更高, 实测量级预计 17–25 min。
+  - 池 = 15 个定向测试文件 / **457 fn**(`test_hr_service` 103 · `test_hr_parse` 47 · `test_hr_runtime` 37 · `test_hr_resolve` 36 · `test_hr_server` 36 · `test_hr_worker` 33 · `test_hr_store` 31 · `test_hr_report` 28 · `test_hr_status` 26 · `test_hr_channel` 22 · `test_hr_fetcher_channel` 15 · `test_hr_bencode` 14 · `test_hr_queue` 14 · `test_hr_ratelimit` 10 · `test_hr_multisite` 5)。核过池无「读源码文本」守阵 ⇒ 默认 `--deselect` 与本轮无关。
+  - 排除面: `hr/__init__.py` / `log.py` / `module.py`(re-export / 薄封装); `test_hr.py`(HR 规则, 属 rules 轮) · `test_hr_config.py`(属 config 轮, 已做) · `test_web_hr.py` + `webui/server/routes/hr.py`(属 webui 轮)。
+  - 步骤 S1–S8 全走 task id(`mutants.setup` → `mutants.run` → `mutants.report` + 三分类 → `mutants.verify` → 补测 → 复跑 → 记录 → **S8 更新常驻锚 §07**); 附 Windows 兜底 `mutants.gremlins` 与「单轮超 30 min 按模块再切」停手点。
+- **收尾**: `kb.index` 重建生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; 常驻锚 §07 `hr/` 行指针补计划链接 + §08 台账 + §09 日志同步。`test.full` 数字见基线切片 [26-10-09-1522](../../testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md)(`src/` 与 `tests/` 零改动)。
+- **未做**: 未执行审计(计划边界: 不在计划里实施)。
+
+### 2026-10-09 R10 — 实施 loop-guards 真洞 issue(30 条 continue/break 候选复验 + 补 18 守阵)
+
+- **触发**: 用户「认领并修复: `issues/26-10-08-0903-test-config-mutation-loop-guards.html`」—— 首轮入池 6 条 `test` issue 中的第四条(config 多条目循环 continue/break 守阵)。
+- **范围**: config 校验/迁移/写回里**多条目循环**的 `continue→break` / `break→return` 类存活变异。从首轮 dump(`26-10-08-0742-config-py-mutants-dump.txt`)提取全部 **30 条**「纯 continue 行」候选。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(判据干净, 防过期原则 5)**: `mutants.verify --ids-file <30 条>` → **21 SURVIVED / 9 KILLED**(451s, ≈15s/条)。9 条已被 R2/R7/R8 落的同型守阵杀死(`_migrate_config_1_2`×3 · `_collect_explicit_empty_paths` · `readonly_config_paths` · `_validate_hr_site_bindings` 未登记档案分支 · `_validate_fs` 非字典项分支 · `unmask_tree` · `_fallback_readonly_fields`)—— 印证「issue 首轮清单已随 R2/R6/R7/R8 部分失效」, 复验是必要动作。
+- **S5 补测**: 新增 **18** 个测试函数, 全部为**多条目**形态(跳过分支条目放前 + 必被处理条目放后): `tests/test_config.py` 10 个 + `tests/test_hr_config.py` 8 个; 同步两文件 docstring 的「## 测试计划」。覆盖 `_validate_fs`(87/94/97/106/113)· `_validate_trackers`(9)· `_validate_tag_lists`(6)· `_validate_global_speed_limit_curve`(108/114)· `_validate_curve_points`(14/22)· `_check_rule_refs`(41)· `_validate_checking_action_spec`(46)· `_validate_trigger_action_compat`(25/32)· `_validate_rules`(两条 continue)· `_validate_hr_check`(237)· `_validate_hr_site_bindings`(10/50/65/76/82/88)· `loaders._resolve_hr_site_bindings`(2)。
+  - **关键发现(为什么首轮杀不掉)**: 池内旧用例都是**单条目**(一次迭代), `continue` 与 `break` 行为相同 —— 只有把「跳过分支条目 + 后续必处理条目」成对放入才能区分。`_validate_hr_site_bindings` 重复绑定那条(88)现网只有两个内置档案, 无法凑出第三条待处理条目, 故用 `monkeypatch.setitem(SITE_PRESETS, ...)` 加合成档案使 `break` 后果可观测。
+- **红验 34/34 RED**: 30 条按 dump 的 hunk 正文块**逐字节**套同构变异(保留 CRLF)→ 目标用例变红 → `git checkout --` 还原(`src/` 零残留); 余 4 条(`_validate_trigger_action_compat` 两条 / `_validate_rules` 两条)因 continue 行带行尾注释未被首轮「纯 continue 行」提取式命中, **手工合成**同构变异后同样变红。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4230** · 存活 **533** · `no tests` **36** → 杀死率 **88.14%**(R8 基线 573 存活 / 87.31%)。
+  - **存活 573 → 533(−40) / 新增存活 0**。归因: **21 条 = 本轮定向候选**(与 S4 逐 id 对应)· **2 条 = `_validate_trigger_action_compat__mutmut_25/32`**(真 `continue→break`, 行尾注释致首轮提取式漏收, 由新守阵杀死)· **17 条 = 同循环旁支变异**(`_validate_curve_points` 8/13/42 · gslc 98/113/115/137-140/159 · trigger_compat 26 · `_validate_fs` 50/111/112 · `_validate_tag_lists` 3/4)。
+- **S7 记录**: 基线切片 [26-10-09-1611-mutants-config-loop-guards](../../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md); 本档案 R10; 常驻锚 §07(config 行补第 5 个切片指针)/§08/§09 同步; loop-guards issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-09-1611](../../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md)(相对上基线 passed **+18** = 本轮新增用例, 未覆盖 **−2** / partial **−2**, `src/` 零改动)。
+- **未做 / 遗留**: 其余 2 条 config 真洞 issue(boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
+
+### 2026-10-10 R11 — 实施 loader-defaults 真洞 issue(手搓形态复验 + 补 7 守阵)
+
+- **触发**: 用户「认领并修复: `26-10-08-0903-test-config-mutation-loader-defaults.html`」—— 首轮入池 6 条 `test` issue 中的第六条(`_get(spec, KEY, d.<field>)` 默认值换 None / 关键字实参被删)。
+- **范围**: `src/auto_qb/config/loaders.py` 的**键缺省走 dataclass 字段默认**分支(load_tracker_config / load_tracker_hr / _resolve_hr_site_bindings / load_global_speed_limit_curve / load_config, 顺带同段 loader 的同类分支)。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(形态级, 防过期原则 5)**: issue 只给了**变异形态**没给 id 清单(与 R7/R8/R10 的「按 id 复验」不同), 故手搓 **40 条**同构变异(脚本 `tmp-analysis/mut_ld.py`: 字节级读写保 CRLF、删行按 `strip()` 精确匹配单行、每次跑完原字节回写)—— 补测前 **26 SURVIVED / 11 KILLED**(余 3 条首版锚点写错, 修正后并入)。结论: issue 前提成立, 且已部分失效 —— `tags`/`groups`/`remove_similar_tags`/`main_tick`/`data_dir`/`gslc.enabled`/`hr_check.enabled` 等 11 条已被 R2/R10 的同型守阵杀死。**没有走 `mutants.verify`**(它按 id 逐条跑全套件 ≈15s/条; 手搓 40 条 × ≈3s 即完成复验 + 红验两轮)。
+- **S5 补测**: 新增 **7** 个测试函数(`tests/test_config.py` 5 + `tests/test_hr_config.py` 2), 同步两文件 docstring「测试计划」:
+  - `test_loader_defaults_tracker_config_keys_absent` —— 站点段只给 `domains`, 其余键全走 `TrackerConfig` 字段默认。
+  - `test_loader_defaults_tracker_hr_output_chain` —— 站点段与全局段都没写输出键 → 回退链末段 `getattr(d, key)`(bool 分支会当场抛「无效布尔值」, str 分支才静默变 None —— 后者是本条要钉的)。
+  - `test_loader_defaults_config_top_level_scalars` —— `sync_interval`/`state_save_interval`/`max_tasks_per_tick`/`maintenance_tag_mode`/`remove_similar_tags` 全缺省(后两者是运行参数, 变 None 不报错只静默改语义)。
+  - `test_loader_defaults_sections_when_absent` —— 各段整段缺省走 `_get(cfg, "<段>", {})` 空字典分支(区别于「非字典 → 早退返回 `d` 实例」那条, 旧用例主要覆盖后者)。
+  - `test_loader_defaults_gslc_optional_keys` —— `interval` 缺省 **None**(回退主 interval)/ `enabled` 缺省 True / 省略方向曲线 **None**。
+  - `test_channel_partial_section_uses_channel_defaults` —— channel 子段给了字典但缺键, token 与 port 各缺一次(双向对照)。
+  - `test_site_binding_takes_preset_page_facts` —— 绑定派生的页面事实键取档案值; **现网两个内置档案的 `download_path/page_param/listing` 恰与字段默认同值, 删实参看不出差别**, 故用 monkeypatch 挂三项都非默认的合成档案(同 R10 合成第三档案的先例)。
+- **红验 40/40 KILLED**: 同脚本逐条 apply → 跑池内两文件 → 原字节还原(`src/` 零残留)。首版 `chan.token` 仍存活(用例只给了 `token` 显式值)→ 补反面对照后转 KILLED。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4287** · 存活 **476** · `no tests` 36 → 杀死率 **89.33%**(R10 基线 533 存活 / 88.14%)。
+  - **逐 id 对差: 新杀 57 / 新增存活 0**, 且 **57 条全部落在 `config/loaders`** —— 与本轮守阵面逐模块一致, 无旁支归因争议(对比 R8 的「57 条来自镜像纳入他人守阵」)。
+- **S7 记录**: 基线切片 [26-10-10-0925](../../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md); 本档案 R11; 常驻锚 §07(config 行补第 6 个切片指针)/§08/§09 同步; loader-defaults issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-0925](../../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md)(本轮 7 个新守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **踩到的已记坑**: [redverify-anchor-lineendings](../../pitfalls/testing/redverify-anchor-lineendings.md) **复发 +1** —— 本轮变异形态是「删整行」, 脚本在 bytes 层比对却拿 str 锚点 ⇒ 6 条 `bind.*` 恒 `hits=0`; 另有 2 条单行锚点在两个函数里各出现一次(`count=2`)。**为什么没命中**: 坑里写的是「CRLF 让多行锚点失配 / 手抄缩进差 1」, 本轮是**第三种形态**(字节层类型失配 + 函数级重复锚点), 首版照写仍会踩; 但坑里那句「`count != 1` 必须报错停手」的兜底**生效了**(报 `ANCHOR-MISS` 而非假绿), 属守阵按预期工作。已把形态三补进坑档。
+- **未做 / 遗留**: config 真洞 issue 尚余 **boundary-guards** 一条未实施; 「形态级手搓复验」的做法当时未回灌 skill(R12 补上); 未 commit/push(用户未说「提交」)。
+
+### 2026-10-10 R12 — 回灌指导: 形态级复验进 skill / 报告 / 命令包 / 锚
+
+- **触发**: 用户「根据此轮经验优化变异测试 skill 与指导文档」(R11 loader-defaults 轮之后)。
+- **回灌内容**(两条可复用经验, 都是 R11 现踩出来的):
+  - **① 形态级手搓复验**(skill 硬约束 13 + 专节「形态级手搓复验(无 id 时的第二种路)」): 真洞 issue 常只写**变异形态**(`_get(...)` 默认值换 None / 删关键字实参)给不出 id, 而 `mutants.verify` 按 id 工作 —— 这时写临时脚本(落 `tmp-analysis/`)按形态造同构变异, 跑**定向池**(实测 ≈3s/条)而非全套件(≈15s/条), 同一份脚本跑两遍 = 形态复验(补测前存活几条) + 红验(补测后是否全红)。**边界写进 skill**: 手搓变异不是 mutmut 编号, **不进存活计数**, 量化只认 `mutants.run` 同目标同池复跑, 切片里要如实标注两者不逐 id 对应。
+  - **② 等价变异的一类新形态**(三分类节): **派生值恰等于字段默认**时, 「删实参 / 默认值换 None」在所有现存输入上都看不出差别 → 是等价变异但看着像真洞。判等价前先问「我造的输入能把派生值与字段默认区分开吗」, 区分不开就先造输入(合成非默认档案 / 「键在」与「键缺」反向对照), 再下结论。
+- **同步落点**: 证据报告 §14「这轮与后续轮次给流程的**五条**修正」第五条(原「三条」标题实为四条, 顺手改对)+ §15 变更记录一行 + 抬 `doc-updated`; 命令包深读 `references/why.md` 新增「什么时候**不用** `mutants.verify`」; 常驻锚 §05 标准动作改「两路」、§06 产物表补红验坑档行、§09 日志; skill 另补 3 条反模式(手搓条数当存活数报 / 守阵只给「键在」一种输入 / 判等价前不问输入能否区分)与坑指针(四种锚点失配形态)。
+- **踩到的已记坑**: 无(本轮纯文档)。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1000](../../testing/baselines/26-10-10-1000-mutation-audit-skill-feedback.md)(`src/` 与 `tests/` **零改动**); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **未做**: 未 commit/push(用户未说「提交」)。
+
+### 2026-10-10 R13 — 实施 boundary-guards 真洞 issue(手搓形态复验 + 补 5 守阵)
+
+- **触发**: 用户「认领并修复: `memory-bank/issues/26-10-08-0903-test-config-mutation-boundary-guards.html`」—— 首轮入池 6 条 `test` issue 中的**最后一条**(第七个 config 执行轮)。
+- **范围**: config 校验器**闭区间端点**被位移(`<=`→`<`、端点 ±1、`>`→`>=`)后全套件仍不红的变异。**零 `src/` 改动**(纯补测 + 文档)。
+- **S4 复验(形态级手搓, 防过期原则 5)**: issue 只给了变异形态与 grep 锚点、没给 id 清单(同 R11), 故手搓 **103 条**同构变异(脚本 `tmp-analysis/mut_bg.py`: bytes 层读写保 CRLF、**锚点命中数 `!= 1` 直接 `ANCHOR-MISS` 停手**、每条跑完原字节回写) —— 覆盖三处 port · `log.max_bytes`(逐字节两端) · `notify` 三键 · `qb_traffic` 采样/落盘/两保留窗 · `hr_check` 频控四键 · 站点 `refresh`/`idle` · 分享率 · 曲线阈值 · `core` 顶层各区间。补测前 **83 KILLED / 20 SURVIVED**(锚点失配 0)。结论: **issue 前提成立且已部分失效** —— 83 条已被 R2 的 `test_validate_exact_boundaries` 与既有范围用例杀死; 存活 **20 条**全落「两端没被**逐值**喂过」的键(hr_check 频控四键 **12** · 站点 refresh/idle **3** · `log.max_bytes` 逐字节 **2** · `raw_window` 上界 **2** · `flush` 整数秒 **1**)。**没有走 `mutants.verify`**(形态级复验, 手搓 103 条 × ≈1.8s = ≈3.1min 完成复验 + 红验两轮)。
+- **S5 补测**: 新增 **5** 个测试函数, 两端都跑一遍 ——
+  - `tests/test_config.py` 2 个: `test_validate_exact_boundaries_size_and_window_tail`(`log.max_bytes` **逐字节**两端 1MiB±1B / 1GiB±1B · `raw_window` 上界两端 90D/91D · `flush_interval` 须整数秒的**拦截侧**)· `test_validate_schema_version_lower_endpoint`(1 合法 / 0 非法)。
+  - `tests/test_hr_config.py` 3 个: `test_hr_check_range_endpoints`(`min_interval` [5s,1D] 与日额·页上限 [1,100000] 两端)· `test_hr_check_request_timeout_endpoints`([5s,3600s] 两端)· `test_hr_site_interval_range_endpoints`(`refresh`/`idle` 两键 [60s,30D] 的未覆盖半边)。
+  - 同步两文件 docstring 的「## 测试计划」。
+- **关键发现(既有守阵是假绿)**: `test_idle_refresh_interval_range` 用 `"须 >=" in e` 这种**松匹配**断言 idle 的 59S, 而**交叉校验文案里也带「须 >= 拉取间隔(...)」** —— 交叉校验报错把断言顶替掉了, 范围判据本身从未被验证(实测 idle 下界 −1 的变异因此存活)。本轮新守阵改用「**完整路径 + 精确下限文案**」才钉住。
+- **红验 103/103 KILLED**: 同脚本逐条 apply → 跑池内两文件 → 原字节回写还原(主仓 `src/` 零残留)。20 条原存活全部转红, 另 83 条保持红(**无回退**)。
+- **与「建议」的差异**: 额外发现**建议没覆盖的两类** —— ①**逐字节**位移(既有用例取 1023KiB/1025MiB 这种「隔一档」值, 挡不住只挪 1 字节)②**分支只有「通过」侧**(`flush` 的「须为整数秒」append 语句被删也全绿)。
+- **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4320** · 存活 **443** · `no tests` **36** → 杀死率 **90.02%**(R11 基线 476 存活 / 89.33%)。
+  - **逐 id 对差: 新杀 33 / 新增存活 0**, 且 **33 条全部落在 `config/validation`**(sections 31: `_validate_hr_check` 12 · `_validate_hr_site_entry` 12 · `_validate_qb_traffic` 7; core 2)—— 与本轮守阵面逐模块一致、无旁支归因争议。
+- **S7 记录**: 基线切片 [26-10-10-1045](../../testing/baselines/26-10-10-1045-mutants-config-boundary-guards.md); 本档案 R13; 常驻锚 §07(config 行杀死率补 `90.02%`、轮次补 `R13`、切片指针补 boundary-guards 切片)/§08/§09 同步; boundary-guards issue 状态置 `Done` 与变更日志更新。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1045](../../testing/baselines/26-10-10-1045-mutants-config-boundary-guards.md)(本轮新增 5 个守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **未做 / 遗留**: config 首轮入池的 6 条 `test` issue **已全部实施完毕**(余量仅剩 config 包内未逐条补测的 555 条 S4 未验证候选, 按需另立轮); hr / rules / core 计划仍未执行; 未 commit/push(用户未说「提交」)。
+### 2026-10-10 R14 — hr 包首轮审计(执行计划 26-10-09-1459)
+
+- **触发**: 用户「实施计划: memory-bank/plans/26-10-09-1459-plan-mutation-hr.html」。
+- **S1–S2 首轮(mutmut / WSL)**: 目标 `**/hr/*.py`(回显 `24 files mutated, 105 ignored`), 池 = 15 个定向测试文件 / 457 fn。变异 **8027** · 杀 **5554** · 存活 **2440** · `no tests` **23** · 超时 **10** → 杀死率 **69.2%**; mutmut 3.8.0 · WSL2 `Ubuntu-26.04`(8 核)。与计划测算对照: 计划估 ≈7,800 变异(实测 8,027 属正常区), 但**墙时 ≈96 min**(计划估 17–25 min, **超 4x**)—— mutmut 按「估计快的先跑」排序, 长尾(慢变异)吃掉大半时间。
+- **环境事故与处置(重要)**: 首跑在**共享镜像** `~/auto-qb-mut` 上进行, 与**并行会话**冲突 —— 对方 `mutants.run` 的 `rm -rf mutants` 冲掉本轮 `mutants/src/auto_qb/hr/*.meta`, 致 5125/8027 处 `FileNotFoundError` 崩溃(镜像 `only_mutate` 已被对方改成 `**/config/*.py`, 进程树可证)。处置: 改用**专用镜像** `~/auto-qb-mut-hr` + `--children 3`(与对方 4 并存)。专用镜像首跑 60 min 撞上 `mutants.run` 的 **3600s 超时**被杀(到 6838/8027 = 85.2%); 因 `create_mutants_for_file` 对未变函数**保留既有 exit_code**(且 `source_mtime < mutant_mtime` 时短路), 用 `mutmut run --max-children 4` **续跑**补齐余量(35m52s), 结果与整跑等价。
+- **S3 三分类(机器 + 人工)**: 导出 2473 条(存活 2440 + `no tests` 23 + 超时 10), dump `R:/Temp/auto-qb/mutants/26-10-10-1059-hr-py-mutants-dump.txt`。人工判读 A 档(bencode/resolve/ratelimit/channel/store): **等价**集中在错误文案(`raise ValueError(None)` / `XX..XX`)与纯展示文案; **真洞**集中在边界(`>`↔`>=`、`pos+1`↔`pos+2`、`len>1`↔`>=1`)、`and`↔`or`、URL 解析(`split("://",1)` 变体)、日额窗口(`strftime`/`.replace(hour=..)`)、`from_json` 缺失兜底。每文件存活(前): service 604 · status 285 · report 276 · server 210 · model 185 · runtime 147 · channel 126 · resolve 126 · worker 126 · bencode 89。
+- **S4 手工确认**: `mutants.verify` 抽验 **24** 条 A 档真洞候选(全套件 apply→跑→还原) → **24 SURVIVED / 0 KILLED**(394.7s, ≈16s/条)。**零假存活** —— 与 config 首轮(池窄, 20% 假存活)形成对照: hr 池宽(15 文件覆盖整包), 存活即真洞或等价。
+- **S5 处置**: 真洞**按主题入池 6 条 `test` issue**(`26-10-10-1108-test-hr-mutation-{service-engine,judgment-core,channel-server,serialization,runtime-worker,display}`), 各带函数级分布 + dump 指针 + `doc-refs`。**零 `src/` / `tests/` 改动**(纯入池)。
+- **S6 复跑**: **N/A** —— 本轮无代码/测试改动, 复跑无数值意义。按计划 §5 停手点(整包单轮 96 min 远超 30 min), 补测+复跑**按模块拆分**为后续轮次(每条池内 issue 实施时各自复跑, 单模块成本远低于整包)。
+- **S7/S8 记录**: 基线切片 `testing/baselines/26-10-10-1108-mutants-hr.md`; 常驻锚 §03/§07/§08/§09 全部同步(硬约束 12)。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-10-1108](../../testing/baselines/26-10-10-1108-mutants-hr.md)(`src/` 零改动)。
+- **未做 / 遗留**: 2440 条存活未逐条判读(按主题入池等排期); 补测与复跑未做(按模块拆后续轮); 未 commit/push(用户未说「提交」)。

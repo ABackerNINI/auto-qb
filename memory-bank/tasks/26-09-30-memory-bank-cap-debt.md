@@ -57,3 +57,27 @@
   ⑤**附带发现随手收口**: 删死条目 `_common.TASK_LOG_CAP`; `ALL_ROLES` 改为 `DEFAULT_ROLES` 别名并注明重复项的来历。
 - **实施轮实测 (2026-09-30 22:xx)**: AC-1/AC-3/AC-4 用 tmp 仓库逐条验过 (AGENTS.md 未改动 + KB 超限 → rc=0; AGENTS.md 8,001 且改动命中 → rc=1; 仅债务非空 + `--strict` → rc=1, 默认模式 → rc=0)。全量 1874 passed + 3 skipped / 91%, test.pkg 74 passed, `doc.caps --strict` / `kb.check` / `doc.links` / `doc.drift` 全绿; 当前 cap 债务 **0 项**。
 - **实施轮踩到的坑 (新档 `pitfalls/kb/cap-debt.md`)**: ①`check_caps` 的 warns 里混着下限 `CAP_MIN_WARN` 的「文件过小」提示 —— 直接当债务累计, 实测一次报 26 项假债务 (真超限 0), `doc.caps --strict` 永远红 ⇒ 债务行加 `DEBT_MARK` 前缀, 消费者只挑带标记的; ②`_kb_checker()` 找不到 skill 时抬成 STOP —— 降级不彻底 (与本次改动无关的环境状况拦住提交), 改 WARN; ③删尺寸断言而**不补**「可发现性」断言 = 把守卫撤掉 (降级后没有任何用例会红) ⇒ 判据一句话: 降级一条守卫时要问「降级之后它靠什么变红」。- **2026-10-07 07:55 (状态收口轮)**: 用户确认两计划已完成, 简单验证后翻状态。验证: ①AGENTS.md 实测 6,608/8,000 (余量 1,392, 削薄已由 fa918a67/376dda34/cba7c4f6/295bb226 等清理轮落地) → 子任务 7 闭合; ②`doc.caps` 现跑无阻塞项、cap 债务 0 项; ③test.quick 2705 passed + 4 skipped 全绿。档案 Status → Done; 计划 doc-status Open → Done (doc-updated 26-10-07-0755), kb.index 重建。
+
+### 2026-10-11 R20 — 存量字符 cap 债务 5 项清零(用户令「清理 cap 债务」)
+
+- 开工 `doc.caps -- --strict` 报 **5 项**字符债务(条数债务 64 ≤ 70 本就不超): `issues/_index.md`
+  31,196 / `tasks/_index.md` 25,974 / `pitfalls/web-ui/_index.md` 25,940 /
+  `progress/implemented-webui.md` 23,251 / `tasks/26-10-08-test-mutation-audit.md` 56,960。
+- **三路处置**(判据 = 先量「无摘要口径」占 cap 多少):
+  ①**issues 侧 = 条目数撑爆**(无摘要口径 27,336 = cap 108%) ⇒ **视图归档**: 生成器加
+  `CLOSED_KEEP=60`, 已关闭状态只渲染最近 60 条, 报告**原地不动**; 全量清单(48,932)另落
+  `issues/attachments/_archive.md`(`EXCLUDED_DIRS` 不计 cap)⇒ 31,196 → **16,960**。
+  *不走「搬文件」*: 零外部引用的只有 28/243 条(搬光也不够), 且被搬件牵动 27 个 md 链接 +
+  21 个件的 `doc-refs`/`**Refs:**` 双向认领链(18 个为冻结件), 漏改一处即红 —— 新坑
+  [index-archive-view](../pitfalls/kb/index-archive-view.md)。
+  ②**tasks / web-ui 侧 = 摘要顶爆**(无摘要口径仍 < cap) ⇒ 压渲染口径:
+  `gen_tasks_index.SUMMARY_MAX` 60→30(→ 20,190); `gen_kb_index` 新增 `SUMMARY_MAX=140` /
+  `TRIGGER_MAX=120`(→ 15,986)。
+  ③两件手写文档按「切最老一半到 `attachments/`」外迁: 档案进度日志 R0–R14 外迁(→ 23,480);
+  `implemented-webui.md` 六条胖条目外迁 + 41 条同质指针行压成一行(→ 10,362, 零信息损失)。
+- **守阵**: 新增非 `_index.md` 生成物使 `test_gen_all_declares_exactly_all_indexes` 先红, 已在
+  `tests/test_memory_bank.py` 的 `EXTRA_GENERATED` 显式登记(**未**放宽为恒真)。
+- **未动**: `CAP_POLICY`(未抬任何 cap)、`SLICE_COUNT_LIMIT`(条数上限属治理政策)。
+- 收口: `doc.caps -- --strict` **0 债务** / `doc.links` 绿 / `kb.check` 全绿 /
+  `test.full` **3124 passed + 4 skipped**(基线切片 `testing/baselines/26-10-11-1745-memory-bank-cap-cleanup.md`)。
+- **Refs:** memory-bank/activeContext/26-10-11-1745-memory-bank-cap-cleanup.md, memory-bank/pitfalls/kb/index-archive-view.md, memory-bank/pitfalls/kb/cap-counting.md

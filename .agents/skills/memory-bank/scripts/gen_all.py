@@ -124,6 +124,9 @@ def collect(root: Path, mb: Path) -> dict[Path, str]:
     ci = _load_isolated(ci_scripts / "gen_issues_index.py", "_gen_issues_index")
     issues_dir = ci.resolve_issues_dir(root)
     out[issues_dir / "_index.md"] = ci.build(root, issues_dir)
+    # 归档索引: 主索引的已关闭区只留最近 `CLOSED_KEEP` 条(控 cap), 全量清单另落这里 ——
+    # 它必须与主索引**同批**生成, 否则 `gen_issues_index --check` 会因它缺席而恒红。
+    out[issues_dir / ci.ARCHIVE_REL] = ci.build_archive(root, issues_dir)
     return out
 
 

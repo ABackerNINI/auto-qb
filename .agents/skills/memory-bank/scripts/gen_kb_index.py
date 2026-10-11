@@ -44,6 +44,24 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|") if text else "—"
 
 
+# 索引行里「一句话 / 触发词」的截断长度 —— 与 `gen_tasks_index.SUMMARY_MAX` 同款病:
+# 摘要与触发词**只增不减**, 整条打进索引后索引大小由「元数据写得多长」决定, 而不是由「有几个主题」。
+# 2026-10-11 实测: `pitfalls/web-ui/_index.md` 55 个主题 ⇒ 25,940 撞 `index-auto` cap (25,200),
+# 其中摘要总长 14,868(均值 270!) / 触发词总长 7,378(均值 134) —— 主题数远没到上限, 是元数据顶爆。
+# 截断到 (140, 120) 后 15,647(余量 9,553, 还够 ~20 个新主题); 摘要/触发词全文点开主题文件就有,
+# 无信息损失。**触发词也截**是无奈: 它同样是索引行的大头(均值 134), 只截摘要的话余量不够。
+# ⚠ 别条件反射抬 cap: 先量「去掉两列后占 cap 多少」 —— 那才是条目数本身能否容纳的判据。
+SUMMARY_MAX = 140
+TRIGGER_MAX = 120
+
+
+def _clip(text: str, limit: int) -> str:
+    """截断到 `limit` 字符, 超长加省略号(中文一字一字符, 与 cap 口径一致)。"""
+    if limit and len(text) > limit:
+        return text[:limit].rstrip() + "…"
+    return text
+
+
 def render_dir(directory: Path, root: Path, mb: Path) -> str:
     """渲染一个目录的 `_index.md`。"""
     about = read_meta(directory / ABOUT_NAME)
@@ -70,7 +88,8 @@ def render_dir(directory: Path, root: Path, mb: Path) -> str:
             meta = read_meta(sub / ABOUT_NAME)
             lines.append(
                 f"| [{sub.name}]({rel_link(directory, sub / INDEX_NAME)}) "
-                f"| {_cell(meta.summary)} | {_cell(meta.triggers)} |"
+                f"| {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
+                f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
             )
 
     topics = iter_topic_files(directory)
@@ -78,7 +97,9 @@ def render_dir(directory: Path, root: Path, mb: Path) -> str:
     if topics:
         for path in topics:
             meta = read_meta(path)
-            lines.append(f"| [{path.name}]({path.name}) | {_cell(meta.summary)} | {_cell(meta.triggers)} |")
+            summary = _clip(meta.summary or "", SUMMARY_MAX)
+            triggers = _clip(meta.triggers or "", TRIGGER_MAX)
+            lines.append(f"| [{path.name}]({path.name}) | {_cell(summary)} | {_cell(triggers)} |")
     else:
         lines.append("| (暂无) |  |  |")
 

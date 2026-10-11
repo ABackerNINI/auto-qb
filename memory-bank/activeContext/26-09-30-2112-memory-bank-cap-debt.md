@@ -1,7 +1,7 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
-> 摘要: cap 治理专题。守卫改造 2026-09-30 实施完成(除 AGENTS.md 外尺寸全降级为债务: 提交不拦、派生输出转告用户、清理另开会话; AGENTS.md 硬规定照拦), AGENTS.md 削薄已由 10-06 清理轮落地(6,853/8,000)。**2026-10-10 清理会话: 条数债务 125 > 70 清偿 —— 删 79 片留 46 片**(判据与覆盖去向见下), `SLICE_COUNT_LIMIT` 未抬、活跃片零删除。
-> 最后活动: 2026-10-10 12:45
+> 摘要: cap 治理专题。守卫改造 2026-09-30 实施完成(除 AGENTS.md 外尺寸全降级为债务: 提交不拦、派生输出转告用户、清理另开会话; AGENTS.md 硬规定照拦), AGENTS.md 削薄已由 10-06 清理轮落地(6,853/8,000)。**2026-10-10 清理会话: 条数债务 125 > 70 清偿 —— 删 79 片留 46 片**(判据与覆盖去向见下), `SLICE_COUNT_LIMIT` 未抬、活跃片零删除。**2026-10-11 清理会话(用户令「清理 cap 债务」): 字符 cap 债务 5 项 → 0** —— 索引三件(issues 走**视图归档** `CLOSED_KEEP=60` + 全量归档索引落 `attachments/`; tasks / web-ui 类索引压渲染口径) + 手写两件按「切最老一半」外迁到 `attachments/`; 条数债务本就不超(64 ≤ 70)。判据与副产物见 [26-10-11-1745 切片](26-10-11-1745-memory-bank-cap-cleanup.md) 与坑档 [index-archive-view(索引条目数撑爆 → 视图归档)](../pitfalls/kb/index-archive-view.md)。
+> 最后活动: 2026-10-11 17:45
 
 ## 状态
 
@@ -16,6 +16,15 @@
 - **蒸馏落点**: 无档案旧片按域压缩成 26 条新条目 —— core 7 / webui 5 / perf 2 / testing 9 / tooling 3(含 CI 计时口径、HR 守阵族、run_capture 看门狗等; 守阵与坑档单点均为事实源, 条目只留指针); 5 个 progress 文件全部仍在 20,000 cap 内。
 - **链接改指**: 可编辑面 11 处(tasks 1 / progress 1 / cap-debt 片互链 1 / `docs/hr-online-verify-docs.md` 8 —— docs 不在守卫扫描面但属人读文档, 指向删除目标的链接改指档案/报告/progress)。冻结件(基线/报告/计划 HTML)零改动。
 - 本轮改动全部随本提交入库; 收口机检 `kb.check` / `doc.links` / `doc.caps -- --strict` / `kb.active` 全绿(数字见基线切片)。
+
+- **2026-10-11 清理轮(字符 cap 债务 5 → 0)**: 开工 `doc.caps -- --strict` 报 5 项 ——
+  `issues/_index.md` 31,196 / `tasks/_index.md` 25,974 / `pitfalls/web-ui/_index.md` 25,940 /
+  `progress/implemented-webui.md` 23,251 / `tasks/26-10-08-test-mutation-audit.md` 56,960。
+  按「先量无摘要口径」分三路(详见 [26-10-11-1745 切片](26-10-11-1745-memory-bank-cap-cleanup.md)):
+  ①issues 侧无摘要口径 27,336 = cap **108%**(条目数撑爆)⇒ **视图归档**(文件不动, 只出索引);
+  ②tasks / web-ui 侧无摘要口径仍 < cap ⇒ 压**渲染口径**; ③两件手写文档按「切最老一半」外迁。
+  **未抬任何 cap、未调 `SLICE_COUNT_LIMIT`**。收口 `doc.caps` 0 债务 / `doc.links` 绿 / `kb.check` 全绿 /
+  test.full **3124 passed + 4 skipped**(基线切片 `testing/baselines/26-10-11-1745-memory-bank-cap-cleanup.md`)。
 
 ## 债务判据速记(后续清理会话直接复用)
 
