@@ -185,3 +185,22 @@
   取色用 `getComputedStyle(el.querySelector('.g-name-text')).color` ——
   **组行没有 `.state-text` 列**, 整行靠 `.group-row.s-<kind> .g-name-text` 那条规则着色
   (做种绿 `rgb(23,138,92)` / 暂停灰 `rgb(82,112,140)`)。
+
+### 真实手势的前置条件: 拖拽收尾会吞掉紧随的 click / 浮层离场动画期间仍拦截点击
+
+- **触发**: 在真浏览器里连做多个手势的用例(如"拖拽重排 → 右键 → 菜单里点一项"; "右键开菜单 →
+  Escape → 拖宽"), 计划 26-10-11-1722 P1/P2 的表头四项交互取证实测。
+- **判别**: 两个**假红**形态, 症状都像"改造把功能弄坏了":
+  ① **拖拽收尾的 swallow**: `columns.js::startColDrag`/`startResize` 的 `up` 里会装一个
+     **capture 阶段** `click` 监听(`swallow`)吃掉紧随的一次 click(防"调列宽/拖重排顺手触发排序",
+     既有设计)。它只吃**一次**, 但会吃掉**下一个动作**的那次 click ⇒ 表现为"右键菜单点了没反应 /
+     表头点了不排序", 而产品完全正常。
+  ② **离场动画期的拦截**: 浮层是 `<transition name="pop">` 包裹的, `v-if` 置假后元素**要等离场动画
+     结束才摘除** —— 期间它仍在文档流上盖住底下的表头。实测 `document.elementFromPoint(表头坐标)`
+     返回 `DIV.ctx-menu pop-leave-active`: 此时按表头坐标 `mouse.down()` 落在**菜单**上, 拖宽静默
+     不生效(`colW.show` 恒空), 不报错。
+- **处置**: ①含拖拽的用例把**拖拽放到最后**, 或在拖拽后先做一次无关 click 把 swallow 消费掉;
+  ②Escape 关浮层后**等元素真的摘除**再对底下元素做手势 —— `await expect.poll(() => page.locator('.ctx-menu').count()).toBe(0)`,
+  别只等 `vm.headMenu.visible === false`(状态已假、DOM 还在)。排障时 `elementFromPoint` 是首选仪器:
+  一眼看出"落点被谁接走了"。
+- **复发**: 0

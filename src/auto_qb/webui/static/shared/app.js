@@ -7,7 +7,8 @@
  * (polling.js)/视图切换与搜索(view.js)以 `window.AQB_*` 全局 mixin 方法域注入。**其余业务方法
  * 在 15 个片段文件里**(ui_feedback / filters / columns / format / decorate / hr / sort / menu /
  * commands / add_torrent / selection / shows / delete_flow / drawer / dialogs), 同一 mixin 范式,
- * 方法体里的 this 仍是**同一个**组件实例。
+ * 方法体里的 this 仍是**同一个**组件实例。**组件片段**(table.js: 表壳 <aq-table> + 明细成员单元格
+ * 渲染器 <aq-member-cells>)同样走全局注册, 但只贡献**模板** —— 行为一律经 $root 回调根实例。
  *
  * !三条硬约束(改动前先看 memory-bank/modules.md「前端契约速查 · 拆分」):
  *   1.片段文件在清单里必须排在**本文件之前**(本文件要读 window.AQB_*; boot.js 按清单序放行);
@@ -579,4 +580,8 @@ app.mixin(window.AQB_POLL);
 app.mixin(window.AQB_VIEW);
 app.mixin(window.AQB_SHORTCUTS);  // 键盘快捷键引擎(计划 26-09-28-0354 W1; data 在 state.js / 监听在 lifecycle.js)
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
+// 表格公共组件(计划 26-10-11-1722 P1/P2): 表壳 <aq-table> + 明细成员单元格渲染器 <aq-member-cells>。
+// 二者只包**模板**(表头块 / 成员单元格分支), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。
+app.component("aq-table", window.AQ_TABLE_COMPONENT);
+app.component("aq-member-cells", window.AQ_MEMBER_CELLS_COMPONENT);
 app.mount("#app");

@@ -49,3 +49,42 @@
 - **触发**: 拆任何模板/样式/JS 大文件时(W1/W2a/W2b 已各有一套, 复用方法)。
 - **判别**: 静态守阵抓不住**载入期**错误 —— 实测 W2b 切分脚本把原 `const app = createApp({` 残留造成双重声明, pytest 全绿而页面不挂载, 是 stub 冒烟的 `data-drv-mounted` 现形的。
 - **处置**: ①程序化切割(解析器地标定切点 + 切点锚断言 + 多重集完整性自验), 不手抄; ②改造前先抓 DOM 基线, 改造后跑同一 stub(真 app.js + 最小 API: /api/config/public 免鉴权 + /api/state 定态 + /api/events 即回即关)比对渲染 DOM 逐字节等价(归一相对时间/脚本清单); ③工装是临时目录产物不入仓库(注入点适配见 [../testing/ui-preview-harness.md](../testing/ui-preview-harness.md))。
+
+### 组件片段只贡献模板: 行为与根数据一律经 `$root` 回调根实例
+
+- **触发**: 往 `shared/` 加一个**只渲染模板**的 Vue 组件(表壳 `<aq-table>` / 明细单元格渲染器
+  `<aq-member-cells>`, 计划 26-10-11-1722 P1/P2), 组件里要调格式化 / 筛选 / HR 口径等方法。
+- **判别**: 全局 mixin 让**子组件也有方法域**, 于是 `this.fmtSizeOrDash(...)` 看着能用 —— 但
+  **根数据**(`sortKey`/`colDrag`/`viewMode`/`timeFmt`/filters…)只挂在**根实例**上, 子组件里读到
+  的是 undefined: 轻则排序键恒空 / 筛选高亮失灵, 重则 `this.timeFmt[key]` 直接 TypeError —— 两种
+  都是「页面照常渲染」的形态, 静态守阵看不出, 只能靠真浏览器。
+- **处置**: 组件模板一律写 `$root.xxx(...)`(`this` 仍是根实例, 与内联模板逐字节等价), 且
+  **不复制**任何方法实现(复制会触发 `_scan_mixin_wiring` 的重名守阵: 后者覆盖前者, 被盖掉的
+  实现永不执行)。⚠ 随之而来一条: 「模板禁 `_`/`$` 前缀标识符」守阵
+  (`tests/test_webui_static_dom_page.py`, issue 26-10-03-1412)会把 `$root` 一起拦下 —— 该守阵拦的
+  是**用户成员**(data/methods 里的 `_x`/`$x` 被 Vue 排除在组件代理之外), Vue **内建**
+  (`$event`/`$root`/`$refs`/`$el`…)在实例上真实存在且模板可解析, 不属同类 ⇒ 加进**内建白名单**
+  放行(别改用无前缀别名中转几十个方法 —— 那反而多一层手抄名单 + 漏一个就静默退化)。
+- **另两条连带(同轮实测)**: ①**表头组件化后 `$refs[headRef]` 是组件实例不是元素** —— 取表头
+  元素的唯一入口是 `_headEl(page)`(它 unwrap `$el`), 否则 `head.style.transform` TypeError
+  (横滚同步整条挂)、`head.parentElement` 静默 null(成员行窗口化退化成全量渲染); ②**多根片段
+  组件**(渲染一组兄弟节点)不包 wrapper —— 单元格必须仍是行容器的**直接子元素**(行是 grid,
+  `:nth-child` 列对齐与 `data-table` 都依赖它), 故每**行**一个实例而不是每格一个(patch 开销差
+  一个量级); 实测 Vue 对 `v-for` 根片段**不插占位节点**, 故 `outerHTML` 与改造前逐字节相同。
+- **守阵**: `test_frontend_table_shell_single_point` + `_scan_column_cells_paired`(明细列改扫
+  渲染器) + `test_frontend_template_no_reserved_prefix_identifiers`(内建白名单)。
+- **复发**: 0
+
+### 收敛模板会连带改掉按「字面调用」计数的守阵 —— 同轮补覆盖, 不是放宽
+
+- **触发**: 把 N 份重复模板并成一份(或把内联片段搬进组件)之后跑全量测试。
+- **判别**: 一批守阵是靠**在聚合模板里数某个字面调用出现几次**来钉接线的(HR 安全档位: 做种时长
+  列的 `hrDurClass(m)`/`hrSrcHalf(m)`/`hrPopEnter($event, m)` 各 3 处触发面; 站点格守阵扫两页
+  模板)。副本一合并, 计数必然变(3 → 2), 页面本身没坏 —— 这是**收敛的必然**, 不是漏改。
+- **处置**: 改计数可以, 但**必须同轮把"原本靠份数保证的覆盖"钉到别处**: 例如「两个页面共用同一
+  渲染器」由 `_scan_column_cells_paired`(两个调用点都必须用 `<aq-member-cells>`)与
+  `test_frontend_table_shell_single_point`(调用点计数)钉住。**只改数字不补覆盖 = 悄悄丢掉"某页
+  漏改"的检出能力**, 是这类守阵最常见的失效方式。另: 模板里的方法调用带 `$root.` 前缀后, 按裸名
+  匹配的 pattern 会全部落空 —— 改成兼容两种形态的正则, 别把断言删了。
+- **守阵**: `test_frontend_hr_safety_wiring` · `test_sel_visual_parity_and_site_cell`(本轮同轮改版)。
+- **复发**: 0

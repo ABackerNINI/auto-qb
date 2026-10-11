@@ -85,7 +85,8 @@ window.AQB_MENU = {
        横向滚动靠 JS 桥接避免列头与列体错位)。用 transform 而非 scrollLeft,
        避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后 */
     syncGroupHeadScroll(ev) {
-      const head = this.$refs.groupHead;
+      // 表头元素走 _headEl(计划 26-10-11-1722 P1: 表头已组件化, $refs 拿到的是组件实例)
+      const head = this._headEl("group");
       if (!head) return;
       const x = ev.target.scrollLeft;
       head.style.transform = `translateX(${-x}px)`;

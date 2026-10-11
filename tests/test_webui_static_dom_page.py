@@ -472,7 +472,11 @@ def test_frontend_template_no_reserved_prefix_identifiers():
 
     覆盖两类形态(上次复发 1 的根子就是判别只记了插值形态, `@click="_x()"` 没被认出来):
     插值 `{{ ... }}` 与指令表达式(v-on / v-bind / v-if 等的属性值)。
-    `$event` 是 Vue 内建事件形参, 白名单放行; `obj._x` 成员访问(点号后)不属于裸标识符, 不拦。
+    白名单放行 **Vue 内建**(组件实例上真实存在、模板可解析, 与"用户成员被排除在组件代理之外"
+    是两回事): `$event` 事件形参; `$root` = 根实例代理 —— 表壳/明细单元格渲染器组件(计划
+    26-10-11-1722 P1/P2)是「单根组件 + 全局 mixin」架构下的**纯模板**片段, 行为经 `$root`
+    回调根实例(根数据只在根实例上), 组件自身不复制方法实现。
+    `obj._x` 成员访问(点号后)不属于裸标识符, 不拦。
     """
     problems = []
     sources = []  # (rel, text): 盘上全部分片 + 各 UI shell 的 #app 内联段(与运行时编译输入同源)
@@ -495,7 +499,7 @@ def test_frontend_template_no_reserved_prefix_identifiers():
         for expr, pos in spans:
             for m in re.finditer(r"(?<![\w$.])([_$][A-Za-z_$][\w$]*)", expr):
                 tok = m.group(1)
-                if tok == "$event":  # Vue 内建事件形参, 模板里合法
+                if tok in ("$event", "$root"):  # Vue 内建(见 docstring 白名单口径), 模板里合法
                     continue
                 ln = text[:pos].count("\n") + 1
                 problems.append(

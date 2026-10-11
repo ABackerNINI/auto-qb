@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="webui-table-component">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-1722">
-<meta name="doc-updated" content="26-10-11-1806">
+<meta name="doc-updated" content="26-10-11-1841">
 <title>WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划</title>
 <style>
   :root{
@@ -138,7 +138,7 @@
     <p class="sub">把辅种表与追剧表抽成一份公共表壳，支持拖拽换位 / 拖拽调宽 / 点击排序 / 右键隐藏，并让后续的种子详情页用户列表、文件列表与设置页各类表都能派生接入。</p>
     <dl class="meta">
       <div><dt>Topic</dt><dd>webui-table-component</dd></div>
-      <div><dt>Status</dt><dd>Open · 待拍板</dd></div>
+      <div><dt>Status</dt><dd>In Progress · P0–P2 已落地</dd></div>
       <div><dt>Added</dt><dd>26-10-11-1722</dd></div>
       <div><dt>Scope</dt><dd>前端 only · 三皮肤 · 无构建链</dd></div>
     </dl>
@@ -576,6 +576,7 @@
           <tr><td class="mono">26-10-11-1722</td><td>初稿：现状盘点（三类系统 / 六处重复 / 两处已单点）、三层目标架构、差异四轴、P0–P6 分步、九条风险、五个拍板点。</td></tr>
           <tr><td class="mono">26-10-11-1734</td><td>按用户定调修订：详情面板（抽屉）后续<strong>完全重构、不考虑兼容</strong> → 现有抽屉移出迁移范围；DOM 适配降级为条件项（仅当重构后仍走字符串 DOM）；P6 改为“只留前向契约、零代码迁移”；D1 推荐改为单适配（Vue 组件），D4 改为“只留契约 vs 同步设计新面板架构”；新增风险 10（沉没成本）。</td></tr>
           <tr><td class="mono">26-10-11-1806</td><td>用户「按推荐开始实施」→ <strong>P0 已落地</strong>（状态 Open → In Progress）：app.js 新增 <code>TABLE_DEFS</code> + <code>VIEW_TABLE</code>，<code>TABLE_PAGES</code> 由注册表派生；<code>columns.js</code>/<code>sort.js</code> 十处页字面量与 ref 名映射改为按 id 取；新增守阵 <code>test_frontend_table_registry_single_point</code>（红绿双验过）。全量 <code>test.full</code> 与上片基线仅差新增守阵一条，四项指标逐位相同；e2e 34 项失败经 A/B 证实为存量。执行记录见 <code>tasks/26-10-11-webui-table-component.md</code>。</td></tr>
+          <tr><td class="mono">26-10-11-1841</td><td><strong>P1/P2 已落地</strong>（模板单点）：表头块 5 份收敛为单份表壳组件 <code>&lt;aq-table&gt;</code>，明细成员单元格 2 份收敛为单份行模型渲染器 <code>&lt;aq-member-cells&gt;</code>（辅种页/追剧页共用）；两者只贡献模板，行为一律经 <code>$root</code> 回调根实例（新增片段 <code>shared/table.js</code> + <code>tpl/xtpl.html</code> 两份 x-template，三份 shell 清单各加一行）。连带：<code>_headEl</code> 统一 unwrap 组件实例、三个横滚同步单点与成员容器改走它。守阵同轮改版 —— <code>_scan_column_cells_paired</code> 明细列改扫渲染器 + 新增 <code>test_frontend_table_shell_single_point</code>（红绿双验过）；HR 安全档位触发面计数 3→2、站点格守阵改扫渲染器（计数变了即补覆盖，不放宽）。验收：真浏览器 <strong>A/B DOM 逐字节等价</strong>（17 项探针 × 2 皮肤，差异 0；A 侧 = 11 个改动件还原到 HEAD）+ e2e 与上片基线逐位一致 + 全量守阵绿。<strong>停手点遵守</strong>：行渲染仍内联 <code>v-for</code>、行容器与占位留在页面模板；种子页表头本轮未迁移（P3/P4 接入时删掉守阵里的例外）。执行记录见 <code>tasks/26-10-11-webui-table-component.md</code>。</td></tr>
         </tbody>
       </table>
     </section>
@@ -585,7 +586,7 @@
 
 <footer>
   <div class="wrap">
-    memory-bank/plans/26-10-11-1722-plan-webui-table-component.html · topic webui-table-component · status Open
+    memory-bank/plans/26-10-11-1722-plan-webui-table-component.html · topic webui-table-component · status In Progress (P0–P2 已落地)
   </div>
 </footer>
 

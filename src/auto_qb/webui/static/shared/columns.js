@@ -83,7 +83,11 @@ window.AQB_COLUMNS = {
     _headEl(page) {
       const def = TABLE_DEFS[page];
       const ref = def ? this.$refs[def.headRef] : null;
-      return Array.isArray(ref) ? ref[0] : ref || null;
+      const el = Array.isArray(ref) ? ref[0] : ref;
+      if (!el) return null;
+      // 表头现由表壳组件 <aq-table> 渲染(计划 26-10-11-1722 P1): ref 拿到的是**组件实例**,
+      // 取它的根元素(单根组件, 即 .group-head / .detail-head); 组件化前 ref 即元素, 原样返回。
+      return el.$el || el;
     },
     /* 列对齐规则注入(单例 <style id="col-align-css">): 首次创建后只改 textContent ——
      * 不能重建元素: 重建会让它排到 <head> 末尾的其它运行时样式之后, 层叠顺序不再稳定。 */
@@ -145,8 +149,9 @@ window.AQB_COLUMNS = {
      * 模板只消费三个产物: 可见切片、上占位高、下占位高。窗口关闭时 == 全量渲染(零差异回退)。 */
     _winContainer(kind, refName) {
       if (refName) return this.$refs[refName] || null;
-      // 成员行: 容器 = .detail —— 明细表头(注册表 detail.headRef)的父元素
-      const head = this.$refs[TABLE_DEFS.detail.headRef];
+      // 成员行: 容器 = .detail —— 明细表头(注册表 detail.headRef)的父元素。表头组件化后
+      // 走 _headEl 取根元素(计划 26-10-11-1722 P1), 不能再直接读 $refs(那是组件实例)。
+      const head = this._headEl("detail");
       return head && head.parentElement ? head.parentElement : null;
     },
     /* 行容器的**真实**行间距(px): 三个容器并不相同 —— atlas `.group-table` 是 6px、

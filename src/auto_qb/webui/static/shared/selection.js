@@ -340,7 +340,8 @@ window.AQB_SELECTION = {
     },
     /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
     syncTorrentHeadScroll(ev) {
-      const head = this.$refs.torrentHead;
+      // 表头元素走 _headEl(与 syncGroupHeadScroll 同款; 种子页表头尚未组件化, _headEl 原样回元素)
+      const head = this._headEl("torrent");
       if (!head) return;
       const x = ev.target.scrollLeft;
       head.style.transform = `translateX(${-x}px)`;

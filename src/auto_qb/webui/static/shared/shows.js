@@ -11,7 +11,8 @@ window.AQB_SHOWS = {
   methods: {
     /* ---------------- 追剧视图(R10): 剧/集展开与整集操作 ---------------- */
     syncShowHeadScroll(ev) {
-      const head = this.$refs.showHead;
+      // 表头元素走 _headEl(计划 26-10-11-1722 P2: 剧头已组件化, $refs 拿到的是组件实例)
+      const head = this._headEl("show");
       if (!head) return;
       const x = ev.target.scrollLeft;
       head.style.transform = `translateX(${-x}px)`;
