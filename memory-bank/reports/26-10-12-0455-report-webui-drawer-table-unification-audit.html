@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-drawer-table-unification">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-12-0455">
+<meta name="doc-updated" content="26-10-12-0455">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-drawer-refactor.md,memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html,memory-bank/tasks/26-10-11-webui-table-component.md,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html">
+<title>WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419; --bg-raise: #151b22; --ink: #d9dee3; --ink-strong: #f0f3f5;
+    --mut: #8b949c; --accent: #59b3a2; --accent-dim: rgba(89,179,162,.14);
+    --warn: #e2a86e; --warn-dim: rgba(226,168,110,.12); --danger: #e2705e;
+    --line: rgba(255,255,255,.09); --line-soft: rgba(255,255,255,.05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI","PingFang SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+    font-size: 15.5px; line-height: 1.62; padding: 0 24px; }
+  code, .mono { font-family: "Cascadia Code",Consolas,"JetBrains Mono",monospace; }
+  code { font-size: .88em; background: var(--bg-raise); border: 1px solid var(--line-soft);
+    border-radius: 3px; padding: .08em .35em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.0; }
+  nav.toc .toc-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); margin-bottom: 10px; }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  main { min-width: 0; max-width: 900px; }
+  .kicker { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-size: 34px; line-height: 1.14; font-weight: 600; letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--mut); max-width: 68ch; margin-bottom: 26px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 0; margin-bottom: 48px; }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+  section { margin-bottom: 58px; }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px; }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code",Consolas,monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 28px 0 10px; }
+  p { margin-bottom: 13px; max-width: 80ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 22px; }
+  th { text-align: left; font-weight: 510; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0; vertical-align: bottom; }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.r { white-space: nowrap; color: var(--ink-strong); font-weight: 510; }
+  .phase td { background: var(--bg-raise); color: var(--accent); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); }
+  .ok { color: var(--accent); font-weight: 510; }
+  .bad { color: var(--danger); font-weight: 510; }
+  .warn { color: var(--warn); font-weight: 510; }
+  .mut { color: var(--mut); }
+  .card { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 0 0 18px; }
+  .card.warn { background: var(--warn-dim); border-color: rgba(226,168,110,.3); }
+  .card.bad { background: rgba(226,112,94,.08); border-color: rgba(226,112,94,.3); }
+  .card b { color: var(--ink-strong); }
+  .card .t { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); margin-bottom: 8px; }
+  blockquote { border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 0 6px 6px 0;
+    padding: 12px 18px; margin: 0 0 18px; max-width: 78ch; }
+  blockquote p { margin-bottom: 4px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav.toc { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="layout">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><b>1</b> 结论摘要</a>
+  <a href="#s2"><b>2</b> 目标重述与判据</a>
+  <a href="#s3"><b>3</b> 表格全景与能力矩阵</a>
+  <a href="#s4"><b>4</b> 维护点账本</a>
+  <a href="#s5"><b>5</b> 偏差清单</a>
+  <a href="#s6"><b>6</b> 双计划波次时间线对照</a>
+  <a href="#s7"><b>7</b> 整改方向与建议</a>
+  <a href="#s8"><b>8</b> 证据索引</a>
+</nav>
+<main>
+
+<div class="kicker">Audit Report · Table Unification Deviation</div>
+<h1>WEBUI 表格统一<br>双计划联合偏差审计报告</h1>
+<p class="lede">联合审计两份计划——前计划 <b>26-10-11-1722</b>(WEBUI 表格公共组件, P0–P5 已落地)与后计划 <b>26-10-11-2106</b>(WEBUI 抽屉重构, 执行至 W7)——以用户真实目标函数「所有表格统一、提供类似的交互逻辑、减少维护点」为基准, 给出偏差清单、量化账本与整改方向。本文是重审计划的输入, 不是整改实施。</p>
+<div class="meta-row">
+  <span>状态 <b>In Progress</b></span>
+  <span>审计范围 <b class="mono">src/auto_qb/webui/static/</b> 全部表格面 + 计划 26-10-11-1722 全部波次 + 计划 26-10-11-2106 全部波次</span>
+  <span>裁定依据 <b>用户 26-10-12 三次表态</b></span>
+</div>
+
+<section id="s1">
+<h2><span class="secno">1</span>结论摘要</h2>
+<hr class="sec-rule">
+<p><b>计划与目标在前提上分岔了</b>。用户的目标函数是「表格能力统一 × 交互逻辑同源 × 维护点下降」; 计划 26-10-11-2106 的终态判据却是「<b>抽屉只剩一套渲染技术</b>」——它优化的度量是<em>渲染技术份数</em>, 不是<em>表格能力覆盖</em>和<em>维护点数量</em>。由此产生根本分岔: 面对变体表格与主表能力不统一的病灶, 计划开的药方是「<b>删掉变体</b>」(W5/W6), 而不是「<b>统一变体表格</b>」。前者已被用户裁定越权并经 W7 回收; 回收之后, 目标本身的缺口原封不动:</p>
+<div class="card bad">
+  <div class="t">当前缺口 (W7 后实测)</div>
+  <p style="margin-bottom:0">抽屉 15 个数据表表面中, <b>只有 3 个</b>(经典链 tracker/peer/file)吃到主表引擎能力;<b class="bad"> 8 个列表变体</b>(tracker 04/05/06、用户 07/08/09、内容 10/11)仍是各自手搓的表格——<b class="bad">0/8 拖宽、0/8 右键隐藏列、0/8 列偏好持久化</b>, 其中 4 个变体(04/07/08/09)各带一套独立手搓的排序状态机与比较器。<b>「表格统一」目标达成率: 7/15 表面, 变体侧 0%。</b></p>
+</div>
+<p>8 个波次中, 与目标直接相关的只有 W2(且只做一半——范围圈定在经典页); W5、W6、W7 三波(37.5%)耗在「错误前提的执行与回收」上。测试面同样偏差: 现有守阵与 e2e 钉的全是「经典接壳能力」和「变体原样行为」, <b>没有任何一条守阵钉「变体表格与主表交互逻辑一致」</b>——目标从来没有进入过验收函数。</p>
+<div class="card">
+  <div class="t">联合判定: 偏差是一条两计划链条, 不是单计划失误</div>
+  <p>把前计划 26-10-11-1722 一起审, 链条完整显形: <b>① 1722 是目标在 A+C 系统的正主且已完成</b>(主视图 4 表 + 设置页 HR 3 表进引擎, A/B DOM 逐字节等价验收)——用户当日原始诉求里甚至<b>点名了抽屉</b>(「方便后续重构种子详情页用户列表/文件列表」), 因用户定调「抽屉完全重构、不考虑兼容」而合法移出范围, 遗留 P6 前向契约(至今<b>未写</b>)与条件性 DOM 适配。② 2106 正是从该 P6「另立专题」承接抽屉重构的——<b>偏差不在 1722 的遗留定义里, 而在 2106 对它的翻译里</b>: 目标函数从「表格统一」被换成「一套渲染技术」; 且「不考虑兼容 ≠ 可退役」, 1722 明确写的是「为重构后的面板预留接入面」(资产保留、能力接入), W5/W6 把它执行成了「删掉宿主」。③ 2106 W2 对经典 3 表的接壳(DRAWER_TABLE_DEFS, 与 HR_TABLE_DEFS 同法)是 P6 契约精神在代码侧的唯一兑现——即上表的 3/15。</p>
+  <p style="margin-bottom:0"><b>全局达成率重算(含 1722 成果)</b>: 全 WebUI 数据表表面 18 个(主视图 4 + HR 3 + 抽屉经典 3 + 变体 8), 已统一 <b>10/18</b>(56%), 缺口 100% 集中在变体侧; 抽屉内部口径 3/11。1722 预留的条件性 DOM 适配(「仅当重构后的面板仍走字符串 DOM」)经 W7 恢复变体后<b>条件已成立</b>, 但无人认领——两计划交接处悬置着三件事: P6 契约文档、DOM 适配决策、变体表格接入。</p>
+</div>
+</section>
+
+<section id="s2">
+<h2><span class="secno">2</span>目标重述与判据</h2>
+<hr class="sec-rule">
+<p>把用户在三次表态中的原话串起来, 目标函数有三条判据, 且彼此独立、缺一不可:</p>
+<blockquote>
+  <p>① 「本轮目标是<b>更改详情模板中的表格</b>, 将其<b>与主表能力统一</b>, <b>减少维护点</b>, 从来没说过要动模板」(26-10-12 裁定);</p>
+  <p>② 「我需要的是<b>所有表格统一</b>, 提供<b>类似的交互逻辑</b>, <b>减少维护点</b>」(26-10-12 重审指令);</p>
+  <p>③ 前置约束: 「<b>全部模板原样找回</b>」(26-10-12, 已由 W7 兑现)——模板是资产, 不是可弃物。</p>
+  <p>④ 目标源头: 「将种子页列表辅种表和追剧表提取为一个公共模板组件, 支持拖拽换位/拖拽调整宽度/点击排序/右键隐藏, <b>方便后续重构种子详情页用户列表/文件列表/设置中的各种表</b>」(26-10-11, 1722 计划的用户原始诉求)——<b>抽屉表格与设置页表格从第一份计划起就点名在案</b>, 目标面从来不是只有主视图。</p>
+</blockquote>
+<table>
+  <thead><tr><th>#</th><th>判据</th><th>可检验口径</th></tr></thead>
+  <tbody>
+    <tr><td class="r">G1</td><td><b>所有表格统一</b></td><td>抽屉内每一个数据列表表面(经典 + 全部变体)都具备主表四件套: 拖宽 / 排序 / 右键隐藏列 / 列偏好持久化</td></tr>
+    <tr><td class="r">G2</td><td><b>交互逻辑类似</b></td><td>同一套手势语言与实现单点: 表头点击排序、边缘拖宽、右键菜单隐藏、偏好按表落 <code>localStorage</code>——不要求观感相同, 要求<b>行为同源</b></td></tr>
+    <tr><td class="r">G3</td><td><b>维护点减少</b></td><td>排序/拖宽/隐藏/持久化的<b>逻辑实现份数</b>下降且可数; 新增一个表格表面 = 声明一份列模型配置, 不再新写渲染与交互代码</td></tr>
+  </tbody>
+</table>
+<p class="small">注意 G1–G3 与「渲染技术份数」无直接关系: 经典是 Vue 组件、变体是字符串 DOM, 两套技术并存(用户已接受)不妨碍表格能力同源——能力在引擎里, 不在渲染技术里。</p>
+</section>
+
+<section id="s3">
+<h2><span class="secno">3</span>表格全景与能力矩阵</h2>
+<hr class="sec-rule">
+<p>全量盘点 WebUI 的表格表面。主视图 4 表是<b>参照系</b>(能力基准); 设置页 HR 3 表由 1722 P5 借壳(排序仍走 HR 自带三态, D3=B 拍板, 带 <sup>*</sup> 号); 抽屉经典 3 表经 2106 W2 接壳已对齐; <b>变体侧是缺口所在</b>(缺口占全 WebUI 未统一表面的 8/8)。</p>
+<p class="small">注: HR 表排序语义(逐站点独立 + 空值恒末位)与主表不同, 1722 D3=B 有意保留本地实现——这是「行为同源不等于实现合并」的既有先例, 对变体接壳的排序方案有直接参照价值。</p>
+
+<h3>3.1 已对齐: 引擎消费面 (10 表 × 1 份能力实现; 1722 交付 7 表 + 2106 W2 交付 3 表)</h3>
+<table>
+  <thead><tr><th>表面</th><th>实现</th><th>列模型</th><th>拖宽</th><th>排序</th><th>右键隐藏</th><th>偏好持久化</th><th>键盘</th></tr></thead>
+  <tbody>
+    <tr><td>主视图·辅种表 group</td><td class="mono">aq-table 引擎</td><td class="mono">TABLE_DEFS.group</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>主视图·明细表 detail</td><td class="mono">aq-table 引擎</td><td class="mono">TABLE_DEFS.detail</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>主视图·种子页 torrent</td><td class="mono">aq-table 引擎</td><td class="mono">TABLE_DEFS.torrent</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>主视图·追剧视图 show</td><td class="mono">aq-table 引擎</td><td class="mono">TABLE_DEFS.show</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>设置页·HR 明细表</td><td class="mono">aq-table 引擎 (1722 P5, thead 模式)</td><td class="mono">HR_TABLE_DEFS.hrDetail</td><td class="ok">✓</td><td class="warn">✓<sup>*</sup></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>设置页·HR 波次表</td><td class="mono">aq-table 引擎 (1722 P5)</td><td class="mono">HR_TABLE_DEFS.hrWave</td><td class="ok">✓</td><td class="warn">✓<sup>*</sup></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>设置页·HR kv 表</td><td class="mono">aq-table 引擎 (1722 P5)</td><td class="mono">HR_TABLE_DEFS.hrKv</td><td class="ok">✓</td><td class="warn">✓<sup>*</sup></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>抽屉·Tracker 列表(经典)</td><td class="mono">aq-table 引擎 (W2)</td><td class="mono">DRAWER_TABLE_DEFS.drawerTracker</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>抽屉·用户列表(经典)</td><td class="mono">aq-table 引擎 (W2)</td><td class="mono">DRAWER_TABLE_DEFS.drawerPeer</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>抽屉·文件列表(经典)</td><td class="mono">aq-table 引擎 (W2)</td><td class="mono">DRAWER_TABLE_DEFS.drawerFile</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+  </tbody>
+</table>
+
+<h3>3.2 缺口: 变体手搓表面 (8 个列表变体 × 8 份独立实现)</h3>
+<table>
+  <thead><tr><th>变体</th><th>表格体形态</th><th>拖宽</th><th>排序</th><th>右键隐藏</th><th>偏好持久化</th><th>自带注入 CSS</th></tr></thead>
+  <tbody>
+    <tr><td class="r">04 trackers-status-cards-tall (357 行)</td><td>状态卡 + tracker 列表</td><td class="bad">✗</td><td class="warn">✓ 手搓(分段钮)</td><td class="bad">✗</td><td class="bad">✗</td><td>约 56 条</td></tr>
+    <tr><td class="r">05 trackers-health-groups-low (386 行)</td><td>健康度分组列表</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td>约 63 条</td></tr>
+    <tr><td class="r">06 trackers-table-collapsed (351 行)</td><td>tracker 紧凑表</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td>约 58 条</td></tr>
+    <tr><td class="r">07 peers-dashboard-tall (573 行)</td><td>用户仪表盘表(10 列网格)</td><td class="bad">✗</td><td class="warn">✓ 手搓(独立状态机+比较器+键盘转发)</td><td class="bad">✗</td><td class="bad">✗</td><td>约 97 条</td></tr>
+    <tr><td class="r">08 peers-groups-low (456 行)</td><td>用户分组表</td><td class="bad">✗</td><td class="warn">✓ 手搓(与 07 近重复)</td><td class="bad">✗</td><td class="bad">✗</td><td>约 81 条</td></tr>
+    <tr><td class="r">09 peers-density-collapsed (386 行)</td><td>用户紧凑表</td><td class="bad">✗</td><td class="warn">✓ 手搓(与 07/08 近重复)</td><td class="bad">✗</td><td class="bad">✗</td><td>约 63 条</td></tr>
+    <tr><td class="r">10 content-tree-detail-tall (503 行)</td><td>文件树 + 详情双栏</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td>约 73 条</td></tr>
+    <tr><td class="r">11 content-treegrid-batch-low (525 行)</td><td>文件树表 + 批量优先级</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td>约 57 条</td></tr>
+  </tbody>
+</table>
+<p class="small">CSS 条数为 grep 近似(文件内 <code>".drawer …</code> 规则行计数); 列宽全部硬编码在注入 CSS 的 <code>grid-template-columns</code> 里, 与引擎的拖宽列模型无任何接线。</p>
+
+<h3>3.3 非数据表面 (审计分类: 不适用)</h3>
+<p>以下变体的主体不是数据表格, 不在「表格统一」范围内(但若未来有键值能力需求可另行评估): <b>01/02/03</b>(general 键值栅格 ×3, 行是 label/value 对, 无列交互语义)、<b>12</b>(treemap 面积图)、<b>13/14/15</b>(流量图表)。</p>
+</section>
+
+<section id="s4">
+<h2><span class="secno">4</span>维护点账本</h2>
+<hr class="sec-rule">
+<p>「维护点」按<b>逻辑实现份数</b>计——同一能力每多一份实现, 就是每改一次行为要同步 N 处的地方。配置(列定义数据)不算维护点。</p>
+<table>
+  <thead><tr><th>能力</th><th>计划前 (基座 a05d35da)</th><th>现状 (W7 后)</th><th>变体接壳后 (理论)</th></tr></thead>
+  <tbody>
+    <tr><td>表格交互引擎(拖宽/排序/隐藏/偏好/键盘)</td><td>1 份(仅主视图) + 抽屉经典 3 表手搓(<code>&lt;table class="drawer-table"&gt;</code> 散在 classic HTML)</td><td><b>1 份</b>(消费 10 表)</td><td><b>1 份</b>(消费 18 表)</td></tr>
+    <tr><td>列表表面实现份数</td><td>3 (经典手搓) + 8 (变体手搓) + 4 (主视图) + 3 (HR, 1722 已收) = 抽屉与主视图口径 <b class="bad">15 份</b></td><td>7 表共用引擎 + 8 变体手搓 = <b class="warn">9 份</b></td><td><b class="ok">1 份引擎</b> + 列模型配置 15 份(数据)</td></tr>
+    <tr><td>排序状态机与比较器</td><td>引擎 1 + 经典 3 + 变体 4 = <b class="bad">8 份</b></td><td>引擎 1 + 变体 4 (04/07/08/09) = <b class="bad">5 份</b></td><td><b class="ok">1 份</b></td></tr>
+    <tr><td>拖宽 / 右键隐藏 / 列偏好持久化</td><td>仅主视图引擎 1 份</td><td>引擎 1 份, 变体 <b class="bad">0/8</b></td><td>引擎 1 份, <b class="ok">18/18</b></td></tr>
+    <tr><td>变体注入 CSS 中的表格布局规则</td><td>约 550 条 ×8 文件</td><td><b class="bad">约 550 条</b>(原样恢复)</td><td>收敛为列模型 + 引擎对齐 CSS(<span class="ok">−~500 条</span>)</td></tr>
+  </tbody>
+</table>
+<div class="card">
+  <div class="t">账本结论</div>
+  <p style="margin-bottom:0">1722(主视图 + HR + 渲染器收敛)与 2106 W2(经典 3 表接壳)合计把抽屉与主视图口径的表面实现从 15 份压到 9 份, 这是两计划对 G3 的全部贡献。<b>变体侧 8 份手搓表从未进入任何一波的范围</b>——现状离 G3 的理论终态(逻辑实现 1 份)还差 8 份表格体、4 份排序机、约 500 条 CSS。</p>
+</div>
+</section>
+
+<section id="s5">
+<h2><span class="secno">5</span>偏差清单</h2>
+<hr class="sec-rule">
+
+<h3>P-1 · 交接偏差 (跨计划): 1722 的三件遗留悬置, 条件项被 W7 静默激活</h3>
+<div class="card">
+  <p>1722 对抽屉的排除有用户定调背书, <b>范围决策本身无偏差</b>; 偏差发生在交接处。1722 留给「重构后的面板」三件东西: <b>① P6 前向契约文档</b>(描述符字段/行为开关/渲染器接口, 任务档案至今标「待做」); <b>② 条件性 DOM 适配 table-dom.js</b>(触发条件: 重构后的面板仍走字符串 DOM——<b>W7 恢复变体后该条件已成立</b>, 但没有任何一方知晓或认领); <b>③ 抽屉表格的最终接入承诺</b>(「用户列表/文件列表各注册一行 + 一个行渲染器」)。2106 作为承接者, 把目标函数从「表格统一」翻译成「一套渲染技术」, 三件遗留一件都没接住。</p>
+  <p style="margin-bottom:0"><b>结构性根因</b>: 两份计划之间没有共同的量化目标函数作交接物——1722 的终态判据是「新增一张表 = 注册一行」(可数), 2106 的终态判据是「一套渲染技术」(不可数、且与表格无关)。交接丢的不是需求, 是<b>度量衡</b>。</p>
+</div>
+
+<h3>P0 · 前提偏差: 计划优化了错误的度量</h3>
+<div class="card bad">
+  <p><b>偏差</b>: 计划的终态判据写成「<b>抽屉只剩一套渲染技术</b>」, 由此把「变体」整体定义为待清除物(W5 变体退役 → 声明式密度档; W6 选择层退役)。但用户目标里的「减少维护点」指的是<b>表格交互逻辑的实现份数</b>, 不是渲染技术份数; 且用户对变体的态度始终是「保留模板能力」(W7 已裁定量)。<b>对同一病灶(变体表格能力缺失), 计划选择了消灭宿主, 而非统一能力。</b></p>
+  <p style="margin-bottom:0"><b>后果</b>: 即便 W5/W6 没有越权、顺利落地, 密度档也只统一「密度与结构开关」——变体表格照样没有拖宽/隐藏/偏好, G1–G3 一条都不满足。<b>这个计划即使完全按计划成功, 也是一次与目标无关的成功。</b>对照前计划: 1722 的终态判据(「新增一张表 = 注册一行描述符 + 一个渲染器」)恰好就是 G3 的可检验形态——同一用户、同一天, 一份计划把目标写对了, 另一份写错了。</p>
+</div>
+
+<h3>P1 · 范围偏差: W2 只圈了经典页, 「所有表格」只覆盖 3/15</h3>
+<p>W2 的接壳(列模型注册 <code>DRAWER_TABLE_DEFS</code> 并入 <code>ALL_TABLE_DEFS</code> + 三个行渲染器)是目标正主, 但范围被写成「经典页三列表」。变体的 8 份手搓表当时就在同一面板里、消费同一批数据(<code>drawer.trackers/peers/files</code>), 却从未被列入接壳清单——「所有表格统一」在第 2 波就变成了「经典三表统一」。引擎侧本来已具备多表消费结构(<code>tableDefs</code> 按表 id 遍历、偏好按 table-id 隔离), 变体接壳不存在引擎障碍, 纯属范围划定遗漏。</p>
+
+<h3>P2 · 验收偏差: 目标从未进入验收函数</h3>
+<p>八波验收全部是「测试数字 + 红验 + 基线切片」, 没有任何一波验收过: ① 能力矩阵缺口收敛了多少; ② 交互逻辑实现份数下降了多少; ③ 新旧表格手势是否同源。<b>没有量化指标的目标等于没有目标</b>——这也是 W5/W6 偏离后三波才被发现的结构性原因: 验收函数探测不到「离目标更远了」这种事。</p>
+
+<h3>P3 · 测试偏差: 守阵钉的是实现, 不是目标</h3>
+<p>现状守阵分布: <code>drawer-tables.spec.mjs</code> 钉经典接壳能力(拖宽/排序/右键隐藏/偏好), 4 条变体 spec 钉变体自身行为(dt11 吸顶 / peers 列 / sticky / reannounce), panel 守阵钉接线与结构。<b>零守阵</b>钉「变体表格行为与主表一致」或「排序实现单点」——假如明天有人再往某个变体里加一套手搓排序, 全部绿灯。测试保护的是 W2/W7 的既成事实, 不保护 G1–G3。</p>
+
+<h3>P4 · 文档偏差: 债务没有入账</h3>
+<p>模块文档 <code>webui-static-contract.md</code>、坑档、任务档案的全部记录围绕「退役/恢复」叙事展开; 「变体表格与主表能力不统一」这个最大的已知债务, 只在 W2 条以「经典侧完成」的口吻出现过, 从未作为<b>未清项</b>登记。26-10-07-0542 的 15 变体摸排报告其实已盘点过变体问题, 但其结论被 W5 的「退役」路线吸收后随退役一起消失, 没有转化为接壳需求。</p>
+</section>
+
+<section id="s6">
+<h2><span class="secno">6</span>双计划波次时间线对照</h2>
+<hr class="sec-rule">
+<table>
+  <thead><tr><th>波次</th><th>实际产出</th><th>对 G1/G2/G3 的贡献</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr><td class="r">1722 · P0–P4</td><td>TABLE_DEFS 注册表 + 表头块 5→1 + 127 分支→4 渲染器 + 列选择器/横滚/排序键收敛</td><td><b>正主完成</b>(A 系统面): G3 逻辑份数直接下降, A/B DOM 逐字节等价验收</td><td class="ok">正主</td></tr>
+    <tr><td class="r">1722 · P5</td><td>HR 3 表借壳(thead 模式), 排序按 D3=B 保留本地</td><td><b>正主完成</b>(C 系统面)</td><td class="ok">正主</td></tr>
+    <tr><td class="r">1722 · P6</td><td>前向契约文档 + 条件性 DOM 适配决策</td><td><b>悬置</b>(任务档案标「待做」); 条件项后被 W7 静默激活</td><td class="warn">未交付</td></tr>
+    <tr><td class="r">W0 冻结与探针</td><td>基线数字 + DOM dump A/B 探针</td><td>中性(基础设施)</td><td class="mut">中性</td></tr>
+    <tr><td class="r">W1 数据层抽离</td><td>取数/竞态/软切换剥到 drawer_store.js, 逐字未改</td><td>中性偏正(为后续波减负)</td><td class="mut">中性</td></tr>
+    <tr><td class="r">W2 三列表接壳</td><td>经典三表进引擎, 表壳/渲染器/列模型 + 拖宽/排序/隐藏/偏好首次进面板</td><td><b>正主但半程</b>: 表面实现 15→9 份; 变体 8 份未动</td><td class="warn">半程</td></tr>
+    <tr><td class="r">W3 头部与形态收敛</td><td>头部组件壳 + drawer.kind 判据单点</td><td>无直接贡献(正交改进, 保留价值不受审计影响)</td><td class="mut">无关</td></tr>
+    <tr><td class="r">W4 合并双列</td><td>合并状态收 drawer.js + 右键模板选择</td><td>无直接贡献(用户动议的交互项)</td><td class="mut">无关</td></tr>
+    <tr><td class="r">W5 变体退役→密度档</td><td>15 变体 + 插件机械删除, 密度档 2 档</td><td><b>反向</b>: 消灭模板而非统一表格; 与用户约束「不动模板」冲突</td><td class="bad">反向(已裁定越权)</td></tr>
+    <tr><td class="r">W6 选择层退役</td><td>drawer_templates.js 整删, CSS 迁三皮肤</td><td><b>反向</b>(同上)</td><td class="bad">反向(已裁定越权)</td></tr>
+    <tr><td class="r">W7 原样恢复</td><td>15 变体 + 选择层按 W4 期形态恢复(3f905ce7), 守阵/e2e 同轮恢复</td><td>回收波: 模板能力找回; 8 份手搓表随之回归, G1–G3 维持 W2 时刻水平</td><td class="warn">回收(必要, 非推进)</td></tr>
+  </tbody>
+</table>
+<p><b>投入产出</b>: 2106 的 8 波中 1 波半程正主(W2)、2 波中性、2 波正交、3 波(37.5%)耗在错误前提的执行与回收; 前计划 1722 的 P0–P5 六波全部正主(仅 P6 悬置)。两计划合并口径: 目标达成率 <b>10/18 表面</b>(56%), 缺口 100% 集中在变体侧; 抽屉内部口径 3/11。</p>
+</section>
+
+<section id="s7">
+<h2><span class="secno">7</span>整改方向与建议</h2>
+<hr class="sec-rule">
+<p>重审计划的候选方向(供拍板, 本审计只给架构事实与代价, 不拍板):</p>
+
+<h3>方向 A · 变体表格体接引擎 (全量统一, 推荐)</h3>
+<p>变体保留版式外壳与专属交互(卡片/分组/树/批量条), <b>列表体</b>接 <code>aq-table</code> 引擎: 每变体声明一份列模型(可复用/裁剪 <code>DRAWER_*_COLUMNS</code>, 允许列子集与默认排序), 注册进 <code>DRAWER_TABLE_DEFS</code>——引擎按 table-id 遍历、偏好按 table-id 隔离, 已天然支持多表。需要先做的引擎扩展(spike): ① 列子集/默认列可见性声明; ② 排序字段泛化(现 <code>state.js</code> 六字段按经典三表硬编码, 需改 per-table-id 通用); ③ 引擎在变体宿主 DOM 内的挂载验证(<code>aq-table</code> 是全局组件, 变体宿主在其内可用, 但 <code>headRef/tableRef</code> 的 DOM 兜底路径需实测)。</p>
+<p class="small">代价: 引擎 spike + 8 个变体的表格体改造(tracker 3 / 用户 3 / 内容 2); 收益: G1–G3 全达成, 逻辑实现 9→1 份, 排序 5→1 份, 注入 CSS −约 500 条。</p>
+<p><b>技术路线 fork(1722 已预留, 重审计划必须拍板)</b>: 变体是字符串 DOM, 引擎行为是 Vue 根实例单点——变体接壳有两条已铺好的路: <b>① DOM 适配 table-dom.js</b>(1722 §03 ③b 条件项, 触发条件经 W7 已成立): 变体表格体产出与 aq-table 同类名的 DOM, 手势与状态经引擎单点(1722 已写明复用 dtHtml 转义单点 + H.wireEvents 委托); <b>② 变体表格体 Vue 组件化</b>: dtVueTab 双分支已存在, 增加「变体外壳 + 引擎表体」混合分支, 表格体不再走字符串 DOM。①保变体技术形态(贴合「模板原样找回」精神), ②少一层适配但动变体表格体渲染技术。另注意 1722 D3=B 先例: 排序语义特殊的表(HR、可能的树表 10/11)可以只借壳不并排序——「行为同源 ≠ 实现合并」。</p>
+
+<h3>方向 B · 变体原地补能力 (不接壳)</h3>
+<p>给 8 份手搓表逐个补拖宽/隐藏/偏好。反对理由: 等于重造 8 份引擎, G3 直接反向——列为对照项, 不推荐。</p>
+
+<h3>方向 C · 用户表三变体先行 (A 的起步节奏)</h3>
+<p>07/08/09 三个 peers 变体先行接壳(用户点名的表), 验证引擎扩展与变体宿主挂载架构, 再推广到 tracker/内容组。风险最小, 每步可独立验收。</p>
+
+<div class="card">
+  <div class="t">配套必改 (无论选哪个方向)</div>
+  <ul style="margin-bottom:0">
+    <li><b>验收函数修正</b>: 重审计划必须带量化指标——能力矩阵覆盖率(15/15)、交互逻辑实现份数、排序单点数; 每波验收对账。</li>
+    <li><b>守阵随目标</b>: 新增「交互逻辑单点」守阵(如变体文件零 <code>ui.sort</code> 状态机、零 <code>grid-template-columns</code> 硬编码列宽) + e2e 在变体表面跑同款手势用例(拖宽/右键隐藏/偏好持久化)。</li>
+    <li><b>文档入账</b>: 「变体表格 8 份手搓」作为已知债务登记进模块文档; 本审计的账本作为重审计划的 §0 现状。</li>
+    <li><b>写掉 1722 的 P6 契约</b>: 表组件对外契约(描述符字段/行为开关/单元格渲染器接口)文档是 1722 P6 的欠账(悬置至今), 也是变体接壳的设计输入——重审计划第一步先交付它, 顺带补 1722 任务档案的 P6 状态。</li>
+    <li><b>修正计划已起草(26-10-12-0527)</b>: 用户裁定澄清「不考虑兼容 = 旧表格全部重写」, 审计 fork 消除(路线②变体表格体重写接引擎, DOM 适配①出局); 见 <span class="mono">plans/26-10-12-0527-plan-webui-drawer-table-rework.html</span>(Draft, 待拍板 D1–D6)。</li>
+  </ul>
+</div>
+</section>
+
+<section id="s8">
+<h2><span class="secno">8</span>证据索引</h2>
+<hr class="sec-rule">
+<table>
+  <thead><tr><th>事实</th><th>证据位置</th></tr></thead>
+  <tbody>
+    <tr><td>主视图 4 表 + 抽屉 3 表注册表</td><td class="mono">src/auto_qb/webui/static/shared/app.js:308 (TABLE_DEFS) / :353 (DRAWER_TABLE_DEFS) / :375 (ALL_TABLE_DEFS)</td></tr>
+    <tr><td>变体 15 文件 5739 行</td><td class="mono">wc -l src/auto_qb/webui/static/shared/drawer_tpl/*.js</td></tr>
+    <tr><td>变体手搓排序状态机 ×4</td><td class="mono">04:280,329 · 07:456,523 · 08:288,405 · 09:264–340 (data-sort/aria-sort/ui.sort)</td></tr>
+    <tr><td>变体零拖宽/右键隐藏/偏好持久化</td><td class="mono">grep colDrag|colWidths|tableCols|隐藏「 drawer_tpl/ → 0 命中</td></tr>
+    <tr><td>变体注入 CSS 近似条数</td><td class="mono">04:56 · 05:63 · 06:58 · 07:97 · 08:81 · 09:63 · 10:73 · 11:57 (grep 近似)</td></tr>
+    <tr><td>经典接壳能力 e2e</td><td class="mono">e2e/drawer-tables.spec.mjs (拖宽/排序/右键隐藏/偏好, 仅经典)</td></tr>
+    <tr><td>计划原判据「一套渲染技术」</td><td class="mono">memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html (W5/W6/终态条)</td></tr>
+    <tr><td>前计划 1722 目标/落点/条件项/P6</td><td class="mono">memory-bank/plans/26-10-11-1722-plan-webui-table-component.html (§01 用户诉求 / §03 ③b / D1-C / D4 / P6)</td></tr>
+    <tr><td>1722 P0–P5 落地与 P6「待做」状态</td><td class="mono">memory-bank/tasks/26-10-11-webui-table-component.md (Summary / 波次表 P6 行 / 下一步)</td></tr>
+    <tr><td>1722 原始诉求点名抽屉表格</td><td class="mono">tasks/26-10-11-webui-table-component.md 头部 Summary 引文「方便后续重构种子详情页用户列表/文件列表/设置中的各种表」</td></tr>
+    <tr><td>2106 由 1722 P6 另立专题</td><td class="mono">plans/26-10-11-2106…html §11 变更记录 26-10-11-2106 行</td></tr>
+    <tr><td>HR_TABLE_DEFS 与 DRAWER_TABLE_DEFS 同法</td><td class="mono">src/auto_qb/webui/static/shared/app.js:193 (注记) / hr_status.js:101</td></tr>
+    <tr><td>用户三次裁定</td><td>26-10-12 会话记录(任务档案 W7 节开头引文); 「模板原样找回」「表格统一/减少维护点」</td></tr>
+    <tr><td>W7 恢复 + 缺陷复核两笔</td><td class="mono">3f905ce7 (W7 恢复波) · 850d9c67 (死类复核关闭)</td></tr>
+  </tbody>
+</table>
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>

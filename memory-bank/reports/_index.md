@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-10-12-0455] [WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)](26-10-12-0455-report-webui-drawer-table-unification-audit.html) — `webui-drawer-table-unification`
 - [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–19: 准备 + config + core + hr + webui + rules + infra + torrents)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 
 ## Open

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-table-rework">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-12-0527">
+<meta name="doc-updated" content="26-10-12-0527">
+<meta name="doc-refs" content="memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html">
+<title>WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012;
+    --paper:#15171b;
+    --paper-2:#191c21;
+    --ink:#e7e7e4;
+    --muted:#a2a8af;
+    --dim:#6f757c;
+    --line:rgba(255,255,255,.10);
+    --line-soft:rgba(255,255,255,.055);
+    --accent:#d8a657;
+    --accent-soft:rgba(216,166,87,.13);
+    --warn:#e0705f;
+    --ok:#86b46a;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(216,166,87,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  code{color:#d7d2c4;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+  .cover{padding:88px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:44px;line-height:1.12;letter-spacing:-.022em;font-weight:600;margin:20px 0 0;max-width:19ch}
+  .sub{font-size:19px;color:var(--muted);margin-top:18px;max-width:60ch;line-height:1.5}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:38px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:14px 18px 2px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  .meta dd{margin:0;font-size:14px;color:var(--ink)}
+  .lede{margin-top:34px;font-size:16.5px;color:#cfd2d0;max-width:78ch}
+  .doc{display:grid;grid-template-columns:198px minmax(0,1fr);gap:60px;padding-top:52px;padding-bottom:96px}
+  nav.toc{position:sticky;top:34px;align-self:start;font-size:13px}
+  nav.toc .t-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px}
+  nav.toc a{display:block;color:var(--muted);border:0;padding:5px 0;line-height:1.35}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--dim);margin-right:9px}
+  nav.toc a:hover{color:var(--ink)}
+  main{min-width:0}
+  section{padding:38px 0 6px;border-top:1px solid var(--line)}
+  section:first-child{border-top:0;padding-top:0}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 6px}
+  h2 .idx{color:var(--accent)}
+  h3{font-size:24px;line-height:1.24;letter-spacing:-.014em;font-weight:600;margin:6px 0 18px}
+  h4{font-size:16px;font-weight:600;margin:30px 0 10px;letter-spacing:-.005em}
+  h4 .h4n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-right:8px}
+  p{margin:0 0 14px;max-width:76ch}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:76ch}
+  li{margin:5px 0}
+  li::marker{color:var(--dim)}
+  strong{font-weight:600;color:#f2f1ec}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  hr.rule{border:0;border-top:1px solid var(--line-soft);margin:26px 0}
+  table{width:100%;border-collapse:collapse;margin:18px 0 26px;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .mono{font-size:12.5px}
+  blockquote{margin:18px 0;padding:14px 20px;border-left:2px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0;max-width:76ch}
+  blockquote p{margin:0 0 8px}
+  blockquote p:last-child{margin:0}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:8px;padding:18px 22px;margin:18px 0}
+  .card .t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  .card.bad{border-color:rgba(224,112,95,.4)}
+  .card.bad .t{color:var(--warn)}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+  .tag.ok{color:var(--ok);border-color:rgba(134,180,106,.4)}
+  .tag.warn{color:var(--warn);border-color:rgba(224,112,95,.4)}
+  footer{border-top:1px solid var(--line);padding:26px 0 60px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="cover">
+  <div class="kicker">Rework Plan · Drawer Table Unification</div>
+  <h1>WEBUI 抽屉表格统一重写<br>修正计划</h1>
+  <p class="sub">依据双计划联合审计（26-10-12-0455 报告）。用户裁定澄清：「不考虑兼容」= 旧详情页表格<b>全部重写</b>——变体表格体重写接引擎，而非保留手搓实现。</p>
+  <dl class="meta">
+    <div><dt>计划编号</dt><dd class="mono">26-10-12-0527</dd></div>
+    <div><dt>状态</dt><dd>Open（待拍板 D1–D6）</dd></div>
+    <div><dt>前置输入</dt><dd>审计报告 26-10-12-0455 · 前计划 26-10-11-1722 · 后计划 26-10-11-2106</dd></div>
+    <div><dt>预期波次</dt><dd>U0–U5（六波，一步一停手点）</dd></div>
+  </dl>
+  <p class="lede">审计确认：全 WebUI 18 个数据表表面已统一 10 个（1722 交付主视图 4 + HR 3，2106 W2 交付抽屉经典 3），缺口 100% 集中在变体侧——8 个列表变体 0/8 拖宽、0/8 右键隐藏、0/8 列偏好持久化、4 套手搓排序状态机、约 550 条硬编码列宽 CSS。本计划把这 8 个表面全部重写为引擎消费面，并把 1722 悬置的 P6 契约一并交付。</p>
+</div>
+
+<div class="doc">
+<nav class="toc">
+  <div class="t-h">目录</div>
+  <a href="#s1"><span class="n">01</span>目标与边界</a>
+  <a href="#s2"><span class="n">02</span>现状（引审计账本）</a>
+  <a href="#s3"><span class="n">03</span>目标架构</a>
+  <a href="#s4"><span class="n">04</span>差异派生模型</a>
+  <a href="#s5"><span class="n">05</span>分步实施 U0–U5</a>
+  <a href="#s6"><span class="n">06</span>风险与红线</a>
+  <a href="#s7"><span class="n">07</span>拍板点</a>
+  <a href="#s8"><span class="n">08</span>验收与基线</a>
+  <a href="#s9"><span class="n">09</span>变更记录</a>
+</nav>
+<main>
+
+<section id="s1">
+<h2><span class="idx">01</span> 目标与边界</h2>
+<h3>1.1 用户裁定与目标函数</h3>
+<p>本计划的目标函数继承审计报告 §2 的 G1–G3，并由用户 26-10-12 的最新裁定补全第④条前置：</p>
+<blockquote>
+  <p>① <b>所有表格统一</b>：每一个数据列表表面都具备主表四件套（拖宽 / 排序 / 右键隐藏 / 列偏好持久化）；</p>
+  <p>② <b>交互逻辑类似</b>：同一套手势语言与实现单点——行为同源，不要求观感相同；</p>
+  <p>③ <b>减少维护点</b>：交互逻辑实现份数下降且可数；新增一个表格表面 = 注册一行描述符 + 一个行模型渲染器；</p>
+  <p>④ <b>「不考虑兼容」= 旧表格全部重写</b>（用户 26-10-12 澄清，取代审计中悬而未决的 fork）：变体的表格体<b>重写为引擎消费面</b>，不再保留手搓实现，也不需要为旧表格行为做兼容过渡。</p>
+</blockquote>
+<p><b>与 W7 裁定的边界划分</b>：W7 的「模板原样找回」约束在本轮<b>只对表格体解除</b>——变体的版式外壳（卡片布局 / 分组结构 / 树形缩进 / 批量操作条 / 吸顶行为等非表格部分）维持 W7 恢复形态，一行不改；被重写并接引擎的只有 8 个列表变体中的<b>表格体</b>。这样「模板能力保留」（变体仍存在、仍可选）与「表格统一」（能力同源）两个已定裁定同时成立，互不侵犯。</p>
+<table>
+  <thead><tr><th>#</th><th>量化目标（验收函数，每波对账）</th><th>现状</th><th>终态</th></tr></thead>
+  <tbody>
+    <tr><td class="r">Q1</td><td>引擎消费表面数</td><td class="mono">10/18</td><td class="mono"><b>18/18</b></td></tr>
+    <tr><td class="r">Q2</td><td>表格交互逻辑实现份数（拖宽/隐藏/偏好）</td><td class="mono">引擎 1 + 变体 0/8</td><td class="mono"><b>1 份</b></td></tr>
+    <tr><td class="r">Q3</td><td>排序状态机与比较器份数</td><td class="mono">引擎 1 + 变体手搓 4（04/07/08/09）</td><td class="mono"><b>1 份</b>（或 D4 拍板的 1 + 借壳特例）</td></tr>
+    <tr><td class="r">Q4</td><td>变体注入 CSS 中的表格布局规则</td><td class="mono">约 550 条</td><td class="mono"><b>−约 500 条</b></td></tr>
+    <tr><td class="r">Q5</td><td>「变体与主表交互一致」守阵</td><td class="mono">0 条</td><td class="mono"><b>≥1 条静态 + 变体表面 e2e 手势用例</b></td></tr>
+  </tbody>
+</table>
+
+<h3>1.2 非目标（本轮明确不做）</h3>
+<ul>
+  <li>不动<b>抽屉经典 3 表</b>（已是引擎参照系）与<b>主视图 4 表 / HR 3 表</b>（1722 已收口）。</li>
+  <li>不动<b>非表变体</b> 01/02/03（键值栅格）、12（treemap）、13/14/15（流量图）的任何部分。</li>
+  <li>不动 8 个列表变体的<b>非表格部分</b>：外壳结构、注册表接线、模板选择右键、合并双列、专属交互（卡片/分组/树/批量条/吸顶）全部原样——<b>范围守恒</b>。</li>
+  <li>不引入构建链、不重写列状态双轨模型、不升 <code>COLS_STORE_KEY</code> 版本。</li>
+  <li>不做 DOM 适配 <code>table-dom.js</code>（1722 §03 ③b 条件项）——「全部重写」裁定使该路线出局，1722 计划中该条件项就此关闭。</li>
+</ul>
+
+<h3>1.3 与两份前计划的关系</h3>
+<ul>
+  <li><b>对 1722</b>：承接其 P6 前向契约（「用户列表/文件列表各注册一行 + 一个行渲染器」的接入承诺）；U0 交付契约文档，补上这笔欠账，1722 任务档案 P6 行随之闭环。</li>
+  <li><b>对 2106</b>：承接其审计整改方向 A + 路线②（变体表格体组件化）；2106 保持 Done + 审计回注状态，本计划不修改它的波次记录。</li>
+  <li><b>立档</b>：沿用 1722 D5 先例——本计划获用户拍板后、U0 落地时立任务档案（<span class="mono">tasks/26-10-12-webui-drawer-table-rework.md</span>）。</li>
+</ul>
+</section>
+
+<section id="s2">
+<h2><span class="idx">02</span> 现状（引审计账本）</h2>
+<h3>2.1 引擎消费面（10 表，不动）</h3>
+<p>主视图 group/detail/torrent/show（<code>TABLE_DEFS</code>）· 设置页 hrDetail/hrWave/hrKv（<code>HR_TABLE_DEFS</code>，1722 P5）· 抽屉经典 drawerTracker/drawerPeer/drawerFile（<code>DRAWER_TABLE_DEFS</code>，2106 W2）。引擎能力：拖宽 / 排序 / 右键隐藏 / 列偏好持久化 / 对齐 CSS / 键盘，全部单点在 <code>columns.js</code> + <code>sort.js</code>。</p>
+<h3>2.2 缺口（本轮对象，8 表）</h3>
+<table>
+  <thead><tr><th>变体</th><th>表格体现状</th><th>排序</th><th>接壳后行模型来源</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">04 trackers-status-cards-tall</td><td>状态卡 + tracker 列表（手搓）</td><td>手搓（分段钮）</td><td>裁剪 <code>DRAWER_TRACKER_COLUMNS</code></td></tr>
+    <tr><td class="mono">05 trackers-health-groups-low</td><td>健康度分组列表（手搓）</td><td>无</td><td>裁剪 <code>DRAWER_TRACKER_COLUMNS</code></td></tr>
+    <tr><td class="mono">06 trackers-table-collapsed</td><td>tracker 紧凑表（手搓）</td><td>无</td><td>裁剪 <code>DRAWER_TRACKER_COLUMNS</code></td></tr>
+    <tr><td class="mono">07 peers-dashboard-tall</td><td>用户仪表盘表 10 列网格（手搓）</td><td>手搓（独立状态机+比较器+键盘转发）</td><td>裁剪 <code>DRAWER_PEER_COLUMNS</code></td></tr>
+    <tr><td class="mono">08 peers-groups-low</td><td>用户分组表（手搓）</td><td>手搓（与 07 近重复）</td><td>裁剪 <code>DRAWER_PEER_COLUMNS</code></td></tr>
+    <tr><td class="mono">09 peers-density-collapsed</td><td>用户紧凑表（手搓）</td><td>手搓（与 07/08 近重复）</td><td>裁剪 <code>DRAWER_PEER_COLUMNS</code></td></tr>
+    <tr><td class="mono">10 content-tree-detail-tall</td><td>文件树 + 详情双栏（手搓）</td><td>无</td><td>新行模型 <code>drawerFileTree</code>（树语义，见 D4）</td></tr>
+    <tr><td class="mono">11 content-treegrid-batch-low</td><td>文件树表 + 批量优先级（手搓）</td><td>无</td><td>新行模型 <code>drawerFileTree</code> + 批量条保留在外壳</td></tr>
+  </tbody>
+</table>
+<p class="small">量化依据与证据行号见审计报告 §3.2 / §8。变体数据与经典三表同源（<code>drawer.trackers/peers/files</code>），无新数据契约。</p>
+</section>
+
+<section id="s3">
+<h2><span class="idx">03</span> 目标架构</h2>
+<h3>3.1 总图：引擎唯一，表格体重写，外壳不动</h3>
+<p>变体的渲染分层重划——<b>外壳层</b>（字符串 DOM，W7 资产，不动）与<b>表格体层</b>（Vue 组件，本轮重写，消费引擎）：</p>
+<table>
+  <thead><tr><th>层</th><th>形态</th><th>归属</th><th>本轮动作</th></tr></thead>
+  <tbody>
+    <tr><td>变体外壳（头部/卡片/分组/树架/批量条）</td><td>字符串 DOM（dtHtml + 插件挂载机械）</td><td>drawer_tpl/*.js</td><td><b>不动</b>（仅删其中的表格体拼装代码与列宽 CSS 注入）</td></tr>
+    <tr><td>变体表格体（列表区）</td><td>Vue 组件（表壳 + 行模型渲染器）</td><td>tpl/xtpl-cells.html 体系</td><td><b>重写</b>：每变体注册一行描述符 + 复用/新增行渲染器</td></tr>
+    <tr><td>交互引擎（拖宽/排序/隐藏/偏好/对齐）</td><td>Vue 根实例单点</td><td>columns.js + sort.js</td><td><b>不动</b>（仅 U1 三件泛化扩展）</td></tr>
+    <tr><td>桥（外壳内的表格体挂载点）</td><td>Teleport 锚（D1=M1 推荐）</td><td>drawer.html + 挂载机械</td><td><b>新建</b>（U1 spike 验证）</td></tr>
+  </tbody>
+</table>
+<h4><span class="h4n">3.1.1</span> 桥的三种候选（拍板点 D1）</h4>
+<p><b>M1 · Teleport 锚（推荐）</b>：变体字符串 DOM 在表格区输出一个空锚（如 <code>&lt;div data-dt-table-anchor="peer"&gt;</code>，由 dtHtml 拼进外壳）；drawer.html 在变体分支内用 <code>&lt;Teleport :to&gt;</code> 把表格体组件（<code>aq-table</code> 表壳 + 行渲染器）渲染进锚内。Teleport 目标的存在性由一个响应式标志控制（挂载机械 <code>_dtRender</code> 完成后置位），时序风险见 R2。优点：单一 Vue 应用、引擎零感知外壳、外壳零感知引擎；表格体的列宽/偏好/手势全部走既有单点。缺点：新增一条「字符串 DOM 与 Vue 树共存」的时序路径，需 U1 实测。</p>
+<p><b>M2 · 正文组件化</b>：列表类变体把整个正文区（表格体 + 紧邻的表格级工具条）改为 Vue 组件分支，外壳只留头部。比 M1 多让渡一块版式，少一层桥。备选。</p>
+<p><b>M3 · 变体全 Vue 化</b>：8 个列表变体整体重写为 Vue 组件（drawer_tabs 体系）。重写面最大，且实质上废弃变体外壳资产——<b>与 W7「模板能力保留」裁定冲突，不推荐</b>，仅列作对照。</p>
+<h3>3.2 描述符注册表（差异的唯一声明处）</h3>
+<p>沿用 1722 §3.1 / 2106 W2 已定型的模型——每变体一行，进 <code>DRAWER_TABLE_DEFS</code>（与经典三表同注册表、同形状，<code>ALL_TABLE_DEFS</code> 聚合面自动扩大）：</p>
+<ul>
+  <li><span class="mono">id</span>：变体表标识（如 <code>drawerPeerV07</code>）——<b>偏好按 table-id 隔离</b>，与经典表互不串扰（R1）。</li>
+  <li><span class="mono">columns</span>：列定义数组——以 <code>DRAWER_*_COLUMNS</code> 为底做<b>列子集/变体专属列</b>裁剪（数据声明，不算维护点）。</li>
+  <li><span class="mono">rowModel</span>：行模型名——优先复用经典渲染器（peer/tracker/file 已有）；变体专属格（如 07 的仪表盘格、08 的分组头格）新增<b>变体行模型渲染器</b>，每行模型一份（1722 P3「127 条分支」教训：不做同名列跨表合并，只做单份收敛）。</li>
+  <li><span class="mono">features</span>：行为开关（sort/resize/hide/window）——变体数据量为面板级（数十~数百行），<code>window: false</code>；树表 10/11 的排序开关见 D4。</li>
+  <li><span class="mono">defaultSort / hostAnchor</span>：默认排序键 + Teleport 锚选择器。</li>
+</ul>
+<h3>3.3 必须保持的不变式</h3>
+<ul>
+  <li><b>双轨列状态铁律</b>：新增表 = 新增 pages 子键，绝不升 <code>COLS_STORE_KEY</code> 版本（<span class="mono">pitfalls/web-ui/columns-persist.md</span>）。</li>
+  <li><b>单一 Vue 应用</b>：Teleport 是根应用内的传送，不是 createApp 子应用（<span class="mono">pitfalls/web-ui/frontend-split.md</span>）。</li>
+  <li><b>三皮肤同名类成对</b>：表格体吃引擎对齐 CSS（<code>colAlignCss</code> 按 table-id 注入），变体注入 CSS 中的列宽规则同波删除，三份皮肤同步。</li>
+  <li><b>无构建链</b>：新增组件片段走 x-template 分片 + 三份 index.html 清单行（prism 210 行硬顶，见 R5）。</li>
+  <li><b>行为同源 ≠ 观感同源</b>：表格体保持各变体的版式个性（列子集、密度、格子样式经渲染器与变体 CSS 表达），手势与状态必须同源（G2 口径，审计已钉）。</li>
+</ul>
+</section>
+
+<section id="s4">
+<h2><span class="idx">04</span> 差异派生模型</h2>
+<p>每张变体表的差异只准落在四个轴上（与 1722 §04 同构）：</p>
+<table>
+  <thead><tr><th>轴</th><th>声明处</th><th>07 peers-dashboard-tall 示例</th><th>10 content-tree-detail-tall 示例</th></tr></thead>
+  <tbody>
+    <tr><td>① 列定义</td><td class="mono">columns（子集/专属列）</td><td>10 列网格 = DRAWER_PEER_COLUMNS 裁剪 + 仪表盘专属格</td><td>树列 + 名称/大小/进度列子集</td></tr>
+    <tr><td>② 行模型/单元格</td><td class="mono">rowModel + 渲染器</td><td>复用 <code>aq-peer-cells</code> + 变体格新增单份渲染器</td><td>新行模型 <code>drawerFileTree</code>（树缩进格）</td></tr>
+    <tr><td>③ 行为开关</td><td class="mono">features</td><td>全开、window:false</td><td>hide/resize 开；sort 见 D4；window:false</td></tr>
+    <tr><td>④ 宿主锚</td><td class="mono">hostAnchor</td><td class="mono">[data-dt-table-anchor="peerV07"]</td><td class="mono">[data-dt-table-anchor="fileV10"]</td></tr>
+  </tbody>
+</table>
+<p>接入一个新变体表格表面 = 外壳输出一个锚 + 注册一行描述符 + （必要时）一个行模型渲染器；表壳、交互、持久化、对齐 CSS 零改动。这正是 1722 终态判据在变体侧的兑现。</p>
+</section>
+
+<section id="s5">
+<h2><span class="idx">05</span> 分步实施 U0–U5</h2>
+<p>一步一停手点，每步独立会话、独立验收。顺序依据：先地基与欠账（U0–U1），再按<b>用户点名表优先</b>（用户表 07/08/09 是最初动议的直接对象）。</p>
+
+<h4><span class="h4n">U0</span> 冻结、契约交付、验收函数改造（零行为变化）</h4>
+<p><b>目标</b>：① 基线冻结（test.full + dev.e2e 全量 + 基线切片）；② <b>交付 1722 P6 契约文档</b>——表组件对外契约（描述符字段 / 行为开关 / 行渲染器接口 / 锚约定）写入组件头注或 <span class="mono">conventions/</span>，补 1722 任务档案 P6 状态；③ 把 Q1–Q5 写进本计划验收函数与守阵设计。<br>
+<b>改动面</b>：文档 + 基线切片，零代码。<br>
+<b>验收</b>：契约文档能完整描述「注册一行 + 一个渲染器」接入路径；test.full 与 e2e 数字入档。<br>
+<b>停手点</b>：不动任何 runtime 文件。</p>
+
+<h4><span class="h4n">U1</span> 引擎 spike：三件泛化 + Teleport 桥验证（零用户可见变化）</h4>
+<p><b>目标</b>：① <b>列子集声明</b>——描述符支持 <code>columns</code> 子集与变体专属列（默认可见性声明）；② <b>排序键 per-table-id 泛化</b>——<code>state.js</code> 六字段按经典三表硬编码的排序状态改为按 table-id 通用存取；③ <b>Teleport 桥挂载验证</b>——stub 数据下验证「字符串 DOM 锚 → Teleport 渲染表格体 → 引擎手势全通」，覆盖四条时序路径：初次打开 / 页签切换 / 软切换换目标 / 合并双列（复用 W7 的 $nextTick 教训面）。<br>
+<b>改动面</b>：<code>app.js</code>（描述符字段）· <code>columns.js</code>/<code>sort.js</code>（按 id 泛化，主视图零行为变化）· <code>drawer.html</code>/挂载机械（桥，暂只接一个 stub 变体）· 守阵扩 <code>test_frontend_table_registry_single_point</code> 到 <code>DRAWER_TABLE_DEFS</code> 面。<br>
+<b>验收</b>：主视图 A/B DOM 逐字节等价（泛化不得动主视图）；stub 变体四路径手势真浏览器手测全通；test.full 全绿。<br>
+<b>停手点</b>：不改任何真实变体；桥未过四路径不进 U2。</p>
+
+<h4><span class="h4n">U2</span> 用户表三变体重写（07/08/09，用户点名的表）</h4>
+<p><b>目标</b>：三变体表格体重写——07/08/09 各注册一行描述符（列子集 + 变体格渲染器），删三套手搓排序状态机与比较器（07 的键盘转发并入引擎键盘面），删各自注入 CSS 中的列宽规则。<br>
+<b>改动面</b>：<code>drawer_tpl/07|08|09</code>（外壳删表格体拼装 + 输出锚）· <code>DRAWER_TABLE_DEFS</code> 三行 · 渲染器分片（变体格单份）· 三皮肤 CSS · 变体 spec（07/08/09 手势断言改引擎口径）· panel 守阵计数锚同轮改版（R3/R4）。<br>
+<b>验收</b>：三变体表面 e2e 手势用例（拖宽 / 排序 / 右键隐藏 / 偏好持久化按 table-id 落盘）红绿双验；版式个性视觉对账（D5 口径）；Q1–Q5 对账第一步（13/18）。<br>
+<b>停手点</b>：外壳非表格部分一行不改；04/05/06/10/11 不动。</p>
+
+<h4><span class="h4n">U3</span> Tracker 三变体重写（04/05/06）</h4>
+<p><b>目标</b>：同 U2 法；04 的手搓分段钮排序并引擎（口径逐列核对，R7），05 的健康度分组头保留在外壳（分组是版式，行是引擎表体）。<br>
+<b>验收</b>：同 U2 口径；reannounce 闸门等变体专属行为守阵逐条对账（W7 恢复的断言面不得丢，只改锚）。Q1–Q5 对账（16/18）。<br>
+<b>停手点</b>：同上。</p>
+
+<h4><span class="h4n">U4</span> 内容两变体重写（10/11，树表特殊语义）</h4>
+<p><b>目标</b>：新行模型 <code>drawerFileTree</code>（树缩进格）单份渲染器；11 的批量优先级条保留在外壳，批量选择状态与表格行的接线走渲染器回调；10/11 排序开关按 D4 拍板（树表可能适用「借壳不并排序」先例——HR D3=B）。<br>
+<b>验收</b>：树行为（展开/缩进/目录聚合）等价 + 手势用例；批量优先级行为不变。Q1–Q5 终态对账（18/18）。<br>
+<b>停手点</b>：树数据契约零改动。</p>
+
+<h4><span class="h4n">U5</span> 收口：守阵定型、债务入账、终态对账</h4>
+<p><b>目标</b>：① 新增交互单点守阵定型——变体文件零 <code>ui.sort</code> 状态机、零 <code>grid-template-columns</code> 硬编码列宽（注入即红的红验）；② 审计账本五项（Q1–Q5）终态对账并入基线切片；③ 「变体表格 8 份手搓」债务条目在模块文档改为「已清偿 + 新判据」；④ 1722 任务档案 P6 闭环、2106 档案回引本计划；⑤ 全量 test.full + dev.e2e + 红验两条。<br>
+<b>停手点</b>：不留中间产物；一次性探针与 dump 不进仓库。</p>
+</section>
+
+<section id="s6">
+<h2><span class="idx">06</span> 风险与红线</h2>
+<h4><span class="h4n">R1</span> 列偏好被重置（复发陷阱，1722 风险 1 同款）</h4>
+<p>新增变体表 id = 新增 pages 子键，<b>绝不升 <code>COLS_STORE_KEY</code> 版本</b>——升版本会清空用户手调的宽/隐/序。守阵沿用既有持久化红线。</p>
+<h4><span class="h4n">R2</span> 桥的挂载时序（W7 已付过一次学费）</h4>
+<p>字符串 DOM 晚于 Vue 渲染：Teleport 目标锚必须等 <code>_dtRender</code> 完成才存在。W7 的 <code>dtMenuPick</code> 同步挂载扑空教训直接适用——标志位翻转 / <code>$nextTick</code> 时机必须覆盖四条路径（初次打开 / 页签切换 / 软切换 / 合并双列），U1 spike 是硬闸门。种子重挂路径（state.js watcher 的 $nextTick 支路）也要过。</p>
+<h4><span class="h4n">R3</span> 守阵计数锚会红（不能删，只能改口径）</h4>
+<p>W7 恢复的 panel 守阵钉了大量变体断言面（reannounce ④ 三变体、菜单/注册表面、tooltip I 组变体条目），表格体重写会改变计数与锚形态——<b>同轮改版 + 红绿双验，不放宽不删除</b>（1722 风险 2 定式、1722 P5「计数照改 + 补覆盖」先例）。</p>
+<h4><span class="h4n">R4</span> W7 恢复的 4 条变体 spec 同轮对账</h4>
+<p><span class="mono">drawer-peers-columns / drawer-peers-sticky-flush / drawer-trackers-reannounce / drawer-content-dt11-sticky</span> 等断言的是旧手搓表格的列宽/交互——重写后逐条改口径为引擎手势，不许静默删除；新增变体表面手势用例（审计 P3 的欠账）。</p>
+<h4><span class="h4n">R5</span> 三皮肤 CSS 成对 + prism 行数硬顶</h4>
+<p>删列宽规则与新增表壳类规则必须三份皮肤同步（成对守阵盯着）；新增 x-template 分片要三份 index.html 各加一行，prism 贴 210 行上限，加一行先腾一行（<span class="mono">pitfalls/web-ui/frontend-split.md</span>）。</p>
+<h4><span class="h4n">R6</span> 观感回归</h4>
+<p>重写不改版式个性（D5 口径）。表格体 DOM 结构变化可能破坏变体专属 CSS 选择器（如 08 的分组行选择器）——逐变体视觉对账，变体注入 CSS 中仅删列宽/表格布局规则，版式规则保留。</p>
+<h4><span class="h4n">R7</span> 排序语义逐列核对</h4>
+<p>07/08/09 的手搓比较器各有口径（空值位次 / 进度 / 速度 / 键盘转发），并引擎时逐列核对；语义确实特殊的表可走「借壳不并排序」先例（HR D3=B），但必须记档并在 Q3 对账中单列，不得静默并存两套。</p>
+<h4><span class="h4n">R8</span> 性能：表格体进 Vue patch 路径</h4>
+<p>变体数据为面板级（数十~数百行），<code>features.window: false</code>；但仍须在 5k 种子桩冒烟确认打开/切换无卡顿（<code>features.window</code> 开关保留为将来大数据表的后路）。</p>
+<h4><span class="h4n">R9</span> 范围守恒</h4>
+<p>只动表格体。执行中撞见变体外壳、非表变体、主视图、经典链的任何「顺手想改」，一律入池不修（scope-guard 纪律）——2106 的教训就是从范围蠕动开始的。</p>
+<h4><span class="h4n">R10</span> 验收函数先行</h4>
+<p>Q1–Q5 在 U0 就写进计划与守阵设计，每波对账——审计 P2 的教训：没有量化指标的目标等于没有目标，偏差三波后才被发现。</p>
+</section>
+
+<section id="s7">
+<h2><span class="idx">07</span> 拍板点</h2>
+<h4><span class="h4n">D1</span> 桥架构</h4>
+<p>A · <b>Teleport 锚</b>（M1，推荐：单一 Vue 应用、外壳零感知引擎、重写面最小）｜ B · 正文组件化（M2）｜ C · 变体全 Vue 化（M3，与 W7「模板能力保留」冲突，不推荐）。</p>
+<h4><span class="h4n">D2</span> 变体列个性</h4>
+<p>A · <b>保留</b>——每变体列子集/专属列/默认序在描述符声明，观感不变（推荐：变体存在意义就是版式差异）｜ B · 全部对齐经典列集（变体失去表格个性，与「模板能力保留」精神相悖）。</p>
+<h4><span class="h4n">D3</span> 排序并入范围</h4>
+<p>A · <b>全部并引擎</b>（推荐：G2 要求行为同源；比较器口径逐列核对）｜ B · 语义特殊表借壳不并排序（HR D3=B 先例，预计仅可能适用于树表 10/11；选 B 须逐例记档并入 Q3 对账单列）。</p>
+<h4><span class="h4n">D4</span> 树表（10/11）形态</h4>
+<p>A · <b>树缩进格进渲染器</b>——树是行模型的一部分，表壳/交互照常（推荐）｜ B · 树表整体例外（保留手搓，缺口从 8 减到 6）——若选 B，Q1 终态改 16/18 并记档原因。</p>
+<h4><span class="h4n">D5</span> 观感口径</h4>
+<p>A · <b>保持变体版式个性</b>（推荐：G2 明言「不要求观感相同，要求行为同源」）｜ B · 表格体统一为经典观感（变体表格个性消失）。</p>
+<h4><span class="h4n">D6</span> 偏好键</h4>
+<p>A · <b>每变体表独立 table-id</b>（如 <code>drawerPeerV07</code>；推荐：与经典/变体互不串扰，切模板不互相污染）｜ B · 同页签变体与经典共享键（切模板时列偏好互通，但列集不同会互写脏值）。</p>
+</section>
+
+<section id="s8">
+<h2><span class="idx">08</span> 验收与基线</h2>
+<p>每步三道闸 + 量化对账：</p>
+<ul>
+  <li><b>静态守阵</b>：test.full 全绿；守阵改版同轮红绿双验；U5 定型的交互单点守阵做注入即红。</li>
+  <li><b>e2e</b>：dev.e2e 全量；U2 起新增变体表面手势用例（真实手势，不借道 vm）。</li>
+  <li><b>红验</b>：每波至少一条注入即红（桥时序 / 守阵活性 / 偏好隔离）。</li>
+  <li><b>量化对账</b>：Q1–Q5 每波对账一次，写进当波基线切片——<b>这是与 2106 的根本区别</b>：目标进了验收函数。</li>
+  <li><b>基线</b>：每步收口跑 test.full 并新建 <span class="mono">testing/baselines/</span> 切片。</li>
+</ul>
+<div class="card">
+  <div class="t">终态判据</div>
+  <p style="margin-bottom:0">Q1 = 18/18 表面统一；Q2 = 交互逻辑 1 份；Q3 = 排序 1 份（或 1 + 记档特例）；Q4 ≈ −500 条 CSS；Q5 守阵就位。且：<b>新增一个变体表格表面 = 外壳输出一个锚 + 注册一行描述符 + 一个行渲染器，表壳/交互/持久化/对齐零改动</b>——1722 终态判据在抽屉侧的兑现，用户目标函数 G1–G3 全达成。</p>
+</div>
+</section>
+
+<section id="s9">
+<h2><span class="idx">09</span> 变更记录</h2>
+<table>
+  <thead><tr><th style="width:130px">时间</th><th>变更</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">26-10-12-0527</td><td>初稿：依据双计划联合审计（26-10-12-0455 报告）与用户裁定「不考虑兼容 = 旧表格全部重写」起草。审计 fork 消除（DOM 适配路线出局，1722 §03 ③b 条件项关闭）；量化目标 Q1–Q5 进验收函数；U0–U5 六波（契约欠账先行 → 引擎 spike → 用户表 07/08/09 先行 → tracker 04/05/06 → 树表 10/11 → 收口）；十条风险；六个拍板点。</td></tr>
+  </tbody>
+</table>
+</section>
+
+</main>
+</div>
+
+<footer>memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html · topic webui-drawer-table-rework · status Open（待拍板 D1–D6）</footer>
+</div>
+</body>
+</html>
