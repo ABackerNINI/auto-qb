@@ -16,7 +16,6 @@
 
 ## Open
 
-- [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
 - [26-10-09-0856] [HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb](26-10-09-0856-plan-hr-channel-remote.html) — `hr-channel-remote`
@@ -24,6 +23,7 @@
 
 ## Done
 
+- [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`
 - [26-10-11-2040] [批量跳检后「批量开始」状态脱节 · 修复方案](26-10-11-2040-plan-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
 - [26-10-09-2219] [计划 · 种子详情面板页签合并构想](26-10-09-2219-plan-webui-drawer-merge-tabs.html) — `webui-drawer-merge-tabs`
 - [26-10-09-1243] [06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划](26-10-09-1243-plan-webui-per-tracker-reannounce.html) — `webui-detail-panel-templates`

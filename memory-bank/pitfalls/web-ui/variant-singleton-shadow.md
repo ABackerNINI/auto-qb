@@ -7,3 +7,4 @@
 ## 条目
 
 - 2026-10-09 用户报「WEBUI种子详情内容页空间树图异常: 选择后无显示, 切换种子后回到经典」。根因 = `12-content-space-treemap-collapsed.js` layoutMap 第 294 行局部 `H`(clientHeight)遮蔽第 24 行 helpers 单点, 第 326 行 `H.rowFocusKey(mapEl, "data-blk")` 对数字取属性抛 TypeError。两条可见症状同一根因: ①图块只在 layoutMap 绘制, 抛错即无块(选择后无显示); ②数据落袋/换种子走 `_dtRender`, catch 分支复位 `drawerTplSel.content = "classic"` 并落盘(换种子后回到经典、且刷新后仍是经典)。修复 = 局部改名 mapW/mapH; 同文件 squarify 的局部 H(无爆雷但属同坑类)一并改名 RH 让守阵不变式无例外; 新增守阵 `test_drawer_tpl_variant_no_singleton_shadowing`(tests/test_webui_static_dom_panel.py)。为何没被既有守阵抓到: 变体真跑类守阵只盖 dtHtml 转义/register fail-fast/回落分支四要素, 没有「变体渲染成功路径逐函数真跑」的电池, 静态守阵也没盯单点遮蔽 —— 本守阵补后者, 前者(逐变体 node 真跑)仍是缺口, 变体再加复杂几何函数时应优先补真跑。
+- **退役注 (2026-10-12, 计划 26-10-11-2106 W6)**: 本坑的**载体**(变体文件与 helpers 单点三件套)已随 15 个变体整体退役删除(W5), 守阵 `test_drawer_tpl_variant_no_singleton_shadowing` 同批退役(并入退役确认阵 `test_drawer_tpl_facility_retired`)。**机理仍在库**: 「模块级单点被同名局部遮蔽」在任何文件形态下照读本档 —— 单点声明后其名在文件域禁再绑定, 局部名一律另起。

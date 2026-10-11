@@ -6,6 +6,11 @@
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DRAWER);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
+ *
+ * W1(计划 26-10-11-2106): 取数 / 竞态 / 等待集合 / 软切换序号已剥到 shared/drawer_store.js
+ *   (window.AQB_DRAWER_STORE)。本文件只留「面板开合 / 几何 / 拖高 / 持久化 / 跟随挂点 / 过渡钩子 /
+ *   派生列表」; 四 fetcher 与软切换协议的调用点仍写 `this._fetchDrawerXxx`, 由 mixin 合并解析 ——
+ *   调用形态与拆分前逐字等价。
  */
 /* 跳检预检 gate id -> 分组行短标签(S4, 计划 26-10-05-0314): 取值与 ops_mod.GateVerdict 的
  * gate 对齐(G3-G8 / partial / dedup / filelist + gone); 漂移只影响分组行可读性, 不影响分流判定。 */
@@ -14,6 +19,137 @@ const SKIP_GATE_LABELS = {
   G7: "组内校验在途", G8: "组内校验失败", partial: "部分下载", dedup: "今日已跳检",
   filelist: "丢失文件", gone: "已不在客户端",
 };
+
+/* ---------------- 页签合并(W4, 计划 26-10-11-2106: 合并状态收进面板核心单点) ----------------
+ * W3 前这套判据住在模板选择层(AQB_DRAWER_TPL mixin, 插件/变体层) —— 但合并是
+ * **抽屉级布局状态**, 不是插件层概念; W4 把它收进本文件(渲染核心)。
+ * W6(同计划)起模板选择层(drawer_templates.js)整体退役并收进本文件: 密度档单点/
+ * 读侧白名单迁移/右键菜单与显隐判据全在(见下方「模板选择层」段), 变体设施零残留 ——
+ * 「抽屉只剩一套渲染技术」终态。
+ * !单一状态源(计划 W4 目标「不再 computed 与模板两处读法」): 合并对 MERGE_PAIRS 是**列表**
+ *   (有序), 渲染列组(dtPairCols)/合并页签清单(dtMergeTabList)/命中判据(_dtPairOf)共此一份
+ *   —— tpl/drawer.html 不再硬编码 gc/tp 两个 <template> 分支与两张合并页签按钮(删「渲染列组
+ *   vs 命中」双份判据, 计划 W4 改动面)。
+ * !R2→R3 历史(判据语义, 不得回退): R2 曾按标志值渲染固定一对 + 挂载按当前对找宿主 = 空列 bug
+ *   (用户报「选择并排后 tracker/用户标签显示常规/内容且为空」); R3 起列组/挂载/命中统一读
+ *   「当前页签所属对」(dtPair)。宽度门 1920 是**暂态遮蔽**(dtSplitOn/dtMergeTabsOn 判 false,
+ *   drawerMerge 标志不动) —— 缩窗过门回落单栏, 拉宽自动恢复; 门常量与两列封顶 2400(在
+ *   (drawer_templates.js 的 00-core CSS 注入里)都是 W4 停手点, 口径不变。 */
+const MERGE_STORE_KEY = "autoqb.ui.drawerMerge";
+const DT_MERGE_MIN_WIDTH = 1920;
+const MERGE_PAIRS = [
+  { id: "gc", label: "常规&内容", tabs: ["general", "content"] },
+  { id: "tp", label: "Tracker&用户", tabs: ["trackers", "peers"] },
+];
+/* 合并列的列头小节标题(单栏页签按钮的文案在 tpl/drawer.html 硬编码, 属其自身呈现, 不在此列) */
+const DT_TAB_LABELS = { general: "常规", trackers: "Tracker", peers: "用户", content: "内容" };
+/* 跨文件单点: 合并对的**结构**只在本文件定义一次, 任何消费方不得自建第二份映射
+ * (双份判据即 R2 空列 bug 的根)。
+ * !赋值形态与 AQB_DRAWER_TPL_REG 同(先建局部量再赋 window): 它是普通单点对象不是 mixin,
+ * 不走 app.mixin 注入, 也就不用 `window.X = {` 字面量(mixin 接线守阵只钉「定义了必须注入」的
+ * mixin 面, 见 _scan_mixin_wiring)。 */
+const AQB_DRAWER_MERGE_SINGLE = {
+  PAIRS: MERGE_PAIRS,
+  MIN_WIDTH: DT_MERGE_MIN_WIDTH,
+  pairOf(tab) {
+    for (let i = 0; i < MERGE_PAIRS.length; i++) {
+      if (MERGE_PAIRS[i].tabs.indexOf(tab) >= 0) return MERGE_PAIRS[i];
+    }
+    return null;
+  },
+};
+window.AQB_DRAWER_MERGE = AQB_DRAWER_MERGE_SINGLE;
+
+/* ---------------- 模板选择层(W6 自 drawer_templates.js 收口, 计划 26-10-11-2106 W5 收敛语义) ----------------
+ * 「换版式」= **声明式密度档**(D2 拍板 A): 每页签 2 档(首档 = 经典重建版式, 次档 = 紧凑密度),
+ * 档位集 / 结构开关 / 旧 id 迁移去向全部由 DRAWER_DENSITY 一张表描述, 组件只消费描述符
+ * 不抄字面量。W5 前 15 个过程式变体(shared/drawer_tpl/<NN>-*.js)与插件挂载机械
+ * (_dtMount 系列 / _dtSync / _dtNotify / _dtRender / dtHtml / KIT / HELPERS)已整体退役;
+ * W6 退役 drawer_templates.js, 退役后余下四件全在本文件: 密度档单点 + 读侧白名单迁移 +
+ * 右键菜单/显隐判据(并入下方 mixin) —— 密度 CSS 已迁三皮肤(views/components.css, 规则逐条未改)。
+ * 停手点: 不新增过程式字符串构建, 四页签正文恒由 Vue 组件渲染(drawer_tabs.js)。
+ *
+ * 装载序: 本文件必须排在 state.js 之前(硬约束): state.js 的 data() 调 initialDrawerTpl()(app.js),
+ * 其白名单校验依赖本层 —— 否则已存的合法档位会被当成脏值回落 classic(静默, 不报错)。 */
+const DTPL_TABS = ["general", "trackers", "peers", "content", "traffic"];
+const DTPL_STORE_KEY = "autoqb.ui.drawerTpl";
+const DTPL_CLASSIC = "classic";
+
+/* DD_TIERS: 档位描述符。cls = 密度类(挂组件根/流量主块, CSS 只做密度收紧);
+ * raw/hint = 结构开关(经典原始键值区 / content 工具条提示行) —— 档位关掉的结构是
+ * 真隐藏(v-if), 不是 CSS 藏(计划 §08 R7); 对不适用该开关的页签字段无害。
+ * DRAWER_DENSITY: 每页签的档位集(顺序 = 右键菜单序; 首档恒 classic, 与升级前
+ * classic 用户零观感差)+ 旧变体 id 的**显式迁移**映射 —— tall(01/04/07/10/13)内容
+ * 最全迁 classic, low/collapsed(其余十枚)迁 compact; 迁移在读侧一次性归一, 旧 id
+ * 不报错、不静默丢(验收口径), 其余脏值一律回落 classic(P-01 同口径)。 */
+const DTPL_TIERS = {
+  classic: { id: DTPL_CLASSIC, label: "经典", cls: "", raw: true, hint: true },
+  compact: { id: "compact", label: "紧凑", cls: "dd-compact", raw: false, hint: false },
+};
+const DTPL_DENSITY = {
+  general:  { tiers: ["classic", "compact"], legacy: { "01": "classic", "02": "compact", "03": "compact" } },
+  trackers: { tiers: ["classic", "compact"], legacy: { "04": "classic", "05": "compact", "06": "compact" } },
+  peers:    { tiers: ["classic", "compact"], legacy: { "07": "classic", "08": "compact", "09": "compact" } },
+  content:  { tiers: ["classic", "compact"], legacy: { "10": "classic", "11": "compact", "12": "compact" } },
+  traffic:  { tiers: ["classic", "compact"], legacy: { "13": "classic", "14": "compact", "15": "compact" } },
+};
+/* 跨文件单点(消费方: 本文件 mixin / app.js initialDrawerTpl / 组件模板 / 守阵)。
+ * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
+ * 否则接线守阵会把它当漏注入的 mixin。 */
+const AQB_DRAWER_DENSITY_SINGLE = {
+  tiers: DTPL_TIERS,
+  /* 右键菜单选项(不含 classic —— classic 恒由模板端置首位) */
+  options: function (tab) {
+    var cfg = DTPL_DENSITY[tab];
+    var out = [];
+    if (cfg) {
+      for (var i = 0; i < cfg.tiers.length; i++) {
+        var t = DTPL_TIERS[cfg.tiers[i]];
+        if (t && t.id !== DTPL_CLASSIC) out.push({ id: t.id, label: t.label });
+      }
+    }
+    return out;
+  },
+  /* 档位描述符(mixin.drawerTier(tab) 的本体; 未知档位回落 classic) */
+  tierOf: function (tab, sel) {
+    var cfg = DTPL_DENSITY[tab];
+    var id = (cfg && cfg.tiers.indexOf(sel) >= 0) ? sel : DTPL_CLASSIC;
+    return DTPL_TIERS[id];
+  },
+  /* 读侧唯一入口: 白名单校验 + 旧 id 显式迁移。返回归一后的档位 id, 非法返回 null
+   * (调用方回落 classic —— 与 initialDrawerTab 同口径: 不信任存储内容)。 */
+  normalize: function (tab, id) {
+    var cfg = DTPL_DENSITY[tab];
+    if (!cfg || typeof id !== "string") return null;
+    if (id === DTPL_CLASSIC) return DTPL_CLASSIC;
+    if (cfg.tiers.indexOf(id) >= 0) return id;
+    return cfg.legacy[id] || null;
+  },
+};
+window.AQB_DRAWER_DENSITY = AQB_DRAWER_DENSITY_SINGLE;
+
+/* 读侧(autoqb.ui.drawerTpl): app.js initialDrawerTpl 薄封装消费。
+ * 按页签记档位 id; 白名单 + 旧 id 迁移走 AQB_DRAWER_DENSITY.normalize —— 脏值/缺失/坏 JSON/
+ * 读失败一律 classic(P-01: 升级零观感差异)。 */
+const AQB_DRAWER_TPL_REG_SINGLE = {
+  tabs: DTPL_TABS.slice(),
+  readSel: function () {
+    var out = {};
+    for (var i = 0; i < DTPL_TABS.length; i++) out[DTPL_TABS[i]] = DTPL_CLASSIC;
+    try {
+      var raw = JSON.parse(localStorage.getItem(DTPL_STORE_KEY) || "{}");
+      if (raw && typeof raw === "object") {
+        for (var j = 0; j < DTPL_TABS.length; j++) {
+          var tab = DTPL_TABS[j];
+          var norm = AQB_DRAWER_DENSITY_SINGLE.normalize(tab, raw[tab]);
+          if (norm) out[tab] = norm;
+        }
+      }
+    } catch (e) { /* 无存储/坏 JSON/隐私模式: 保持全 classic */ }
+    return out;
+  },
+};
+window.AQB_DRAWER_TPL_REG = AQB_DRAWER_TPL_REG_SINGLE;
 
 window.AQB_DRAWER = {
   computed: {
@@ -30,8 +166,218 @@ window.AQB_DRAWER = {
       if (this.page !== "groups") return false;
       return true;  // 三视图共用(流量形态与种子详情都只限主内容页)
     },
+    /* ---------------- 形态判据收口(W3, 计划 26-10-11-2106; W6 收全) ----------------
+     * 面板两形态由一个字段裁决: kind === "seed"(种子详情, 五页签) / "traffic"(qB 口径流量图,
+     * 三挂点)。此前的字面量比较散落在模板与四个片段里(drawer.html 三处 / 本文件二处 /
+     * 模板选择层 / menu.js / shortcuts.js) —— 「同功能多形态各一份, 改一处漏一处」
+     * (表 B 问题 4)正是从这种散点长出来的。现收成下面的派生单点。
+     * !非根实例(全局 mixin 会注入 <transition> 的 BaseTransition 假实例)一律 false: 判据自带
+     *   `this.drawer &&` 守卫, 调用方不必再抄一遍(旧写法每处都要写 `this.drawer &&` 或
+     *   先判 `!this.drawer` 提前返回, 漏一处就是 BaseTransition 上求值抛错)。
+     * W6: qb_traffic_chart.js 的 _QB_SCOPES.active/stale 与 qbCurScope 也已改吃本单点
+     *   (W3 停手点「uPlot 与图表模块零改动」在 W6 兑现) —— 全仓 `drawer.kind` 字面量只余
+     *   本文件两个定义处(守阵 test_frontend_drawer_form_judge_single_point 钉死)。 */
+    drawerIsSeed() {
+      return !!(this.drawer && this.drawer.kind === "seed");
+    },
+    drawerIsTraffic() {
+      return !!(this.drawer && this.drawer.kind === "traffic");
+    },
+    /* 头部标题块的成员徽标口径(单点): 徽标色档(k-<kind>)/ 图标 / 悬浮状态语三处同源。此前那段
+     * `(memberByHash.get(drawer.hash) || {}).kind || 'other'` 在头部模板里手抄三遍 —— 同一
+     * 「改一处漏一处」的形态, 故一并收口(与上面两个形态判据同批, 都是「头部渲染的输入」)。
+     * memberByHash 是根数据里的 Map(Vue 3 对集合做响应式代理), 缺失(换目标瞬间 / 成员不在当前
+     * 视图)回落 { kind: "other" } —— 与旧模板逐字同义: 状态语走 stateText(它读 error_reason),
+     * 故这里给的是**对象**而不是 kind 字符串, 不能退化成 stateText({ kind })。 */
+    drawerMember() {
+      const m = this.memberByHash && this.memberByHash.get(this.drawer && this.drawer.hash);
+      return m || { kind: "other" };
+    },
+    drawerMemberKind() {
+      return this.drawerMember.kind || "other";
+    },
+    /* ---------------- 页签合并(W4 收口, 计划 26-10-09-2219 R3 语义) ----------------
+     * dtMergeOn/dtMergeTabsOn/dtPair/dtSplitOn 四个判据与 R3 逐字同义, 只换落点到面板核心;
+     * dtMergeTabList/dtPairCols 是 W4 新增的**渲染单点** —— 合并页签按钮与双列列组改由
+     * v-for 消费, 模板不再硬编码 gc/tp 分支(删「渲染列组 vs 命中」双份判据)。 */
+    /* R3: 合并开关是否开启(off|on; 兼容 R2 旧值 gc/tp —— 初值读取已迁移, 这里再兜一道) */
+    dtMergeOn() {
+      return (this.drawerMerge || "off") !== "off";
+    },
+    /* R3: 页签栏是否呈现合并页签 —— 开关开 + 门内。页签栏只在种子详情头部渲染(流量形态另有
+     * 头部), 故无需再排除流量形态。门外回落四页签(暂态遮蔽, 标志不动)。 */
+    dtMergeTabsOn() {
+      return this.dtMergeOn && this.dtMergeGateOk();
+    },
+    /* R3: 当前页签所属的合并对("gc"|"tp"|null) —— 合并双列「渲染哪两列」的单点判据,
+     * 与数据供给(drawer_store.js)同源; 流量与对外页签返回 null。 */
+    dtPair() {
+      return this._dtPairOf(this.drawer && this.drawer.tab);
+    },
+    /* R2 S2(计划 26-10-09-2219)·R3 修正: 合并布局生效判据(模板 v-if 单点) —— 开关开启 +
+     * 种子详情形态 + 当前页签属于某一对 + 门内。门是暂态遮蔽: dtWinW(state.js 显式建字段)由
+     * 核心 resize 监听防抖回写, 标志本身不动; 关面板/流量形态自然 false。 */
+    dtSplitOn() {
+      if (!this.dtMergeOn) return false;
+      if (this.qbTrafficActive) return false;
+      if (!this.dtPair) return false;
+      return this.dtMergeGateOk();
+    },
+    /* W4: 合并页签清单(页签栏 v-for 单点) —— 注册表是 boot 期静态数据, 依赖 dtMergeTabsOn
+     * 翻转即可; 高亮判据在模板内联 mt.id === dtPair(与 dtPair 同源, 不再要 dtMergeTabActive)。 */
+    dtMergeTabList() {
+      return window.AQB_DRAWER_MERGE.PAIRS;
+    },
+    /* W4: 当前生效对的列定义(正文双列 v-for 单点)。general 列经 props 传详情(组件 prop 面
+     * 与单栏一致), 其余列组件无 props(v-bind 空对象 = 无操作); label 即 .dt-col-head 文案。 */
+    dtPairCols() {
+      const p = window.AQB_DRAWER_MERGE.pairOf(this.drawer && this.drawer.tab);
+      if (!p) return [];
+      return p.tabs.map((tab) => ({
+        tab,
+        label: DT_TAB_LABELS[tab] || tab,
+        props: tab === "general" ? { d: this.drawer.detail } : {},
+      }));
+    },
+    /* ---------------- 右键菜单: 模板/档位选择(W6 自 drawer_templates.js 收口) ----------------
+     * 菜单目标页签/选项集/勾选态/合并项显隐四个 computed + 落点方法(dtMenuPick, 见 methods)。 */
+    /* 菜单目标页签(2026-10-10 模板选择迁右键): openDrawerMenu 按右键命中区域落的
+     * drawerMenu.tab(合并列 data-dt-tab), 缺省回落当前页签。 */
+    dtMenuTab() {
+      return (this.drawerMenu && this.drawerMenu.tab) || this._dtCurTab();
+    },
+    /* 右键菜单档位选项(经典恒在首位; 选项源 = 声明式密度档, 不再是变体注册表) */
+    dtMenuTplOptions() {
+      return [{ id: DTPL_CLASSIC, label: "经典" }].concat(window.AQB_DRAWER_DENSITY.options(this.dtMenuTab));
+    },
+    /* 右键菜单当前档位选择(带勾项) */
+    dtMenuTplCurrent() {
+      return (this.drawerTplSel || {})[this.dtMenuTab] || DTPL_CLASSIC;
+    },
+    /* 右键菜单是否含合并开关: 仅种子详情形态(traffic 形态无合并项, 只出档位选项)。
+     * W3: 改走形态判据单点 drawerIsSeed —— 它自带 `this.drawer &&` 守卫。 */
+    dtMenuMergeOn() {
+      return this.drawerIsSeed;
+    },
+  },
+  /* W4 收口的两条监听(语义逐字未改): ① resize 防抖回写 dtWinW +
+   * 门跨越后重挂/补给; ② drawerMerge 换代(右键开关)后重挂 + 第二列数据补给。
+   * !全局 mixin 会波及子组件与 <transition> 的 BaseTransition 假实例(其上无数据面), 必须
+   * `if (!this.drawer) return;` 守卫 —— 与旧模板选择层的 traffic 通知同规避式。 */
+  mounted() {
+    if (!this.drawer) return;
+    this._mergeOnResize = () => {
+      clearTimeout(this._mergeResizeT);
+      this._mergeResizeT = setTimeout(() => {
+        this._mergeResizeT = null;
+        this.dtWinW = window.innerWidth;
+        this.$nextTick(() => {
+          /* 门跨越恢复双列时第二列数据可能从未拉过(影子期零请求语义), 补给一次。
+           * W5: 布局换代无需任何重挂 —— 正文恒由 Vue 组件渲染, v-if 对 dtSplitOn 响应式自翻。 */
+          if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
+        });
+      }, 150);
+    };
+    window.addEventListener("resize", this._mergeOnResize);
+    this._unwatchMerge = this.$watch("drawerMerge", () => {
+      this.$nextTick(() => {
+        /* W5: 无插件重挂 —— v-if 对 dtSplitOn 响应式自翻; 只补第二列数据 */
+        if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
+      });
+    });
+  },
+  beforeUnmount() {
+    if (this._unwatchMerge) {
+      this._unwatchMerge();
+      this._unwatchMerge = null;
+    }
+    if (this._mergeOnResize) {
+      window.removeEventListener("resize", this._mergeOnResize);
+      this._mergeOnResize = null;
+    }
+    if (this._mergeResizeT) {
+      clearTimeout(this._mergeResizeT);
+      this._mergeResizeT = null;
+    }
   },
   methods: {
+    /* ---------------- 页签合并(W4 收口) ----------------
+     * 方法体与 R3 逐字同义, 只换落点; W5 起无插件挂载机械, 布局换代全靠 v-if 响应式。 */
+    /* R2 S2·R3: 当前页签所属合并对("gc"|"tp"|null) —— 合并页签高亮(模板 mt.id === dtPair)、
+     * 双列列组(dtPair)与数据供给(drawer_store.js)的单点判据;
+     * 流量与对外页签返回 null。 */
+    _dtPairOf(tab) {
+      if (this.qbTrafficActive) return null;
+      const p = window.AQB_DRAWER_MERGE.pairOf(tab);
+      return p ? p.id : null;
+    },
+    /* R2 S3·R3: 合并开关宽度门(右键菜单置灰与挂载守卫共用同一判据, 常量单点 MIN_WIDTH) */
+    dtMergeGateOk() {
+      return (this.dtWinW || window.innerWidth || 0) >= window.AQB_DRAWER_MERGE.MIN_WIDTH;
+    },
+    /* R3: 右键菜单单开关落点 —— 门内才生效, 再点即关 + 落盘。
+     * 布局换代靠 v-if 响应式自翻(W5 起无插件重挂); 第二列数据补给(_drawerMergeSupply,
+     * 本体在 drawer_store.js)由 drawerMerge 的 $watch 单发统一触发(本文件 mounted 注册)。 */
+    dtToggleMerge() {
+      if (!this.dtMergeGateOk()) return; /* 置灰项双保险: class 拦显示, 这里拦行为 */
+      const v = this.dtMergeOn ? "off" : "on";
+      this.drawerMerge = v;
+      try { localStorage.setItem(MERGE_STORE_KEY, JSON.stringify(v)); } catch (e) { /* 写失败本轮仍生效 */ }
+      if (this.drawerMenu) this.drawerMenu.visible = false;
+    },
+    /* R3: 合并页签点击落点 —— 切到该对(已在其中则零副作用, 避免无谓重拉); 目标页签取对的首列
+     * (列序按对固定; 双列两列都会被挂载, 对内的具体取值不影响呈现, 只决定"主列=当前页签"的
+     * 挂载归属与头部模板切换器指向)。 */
+    dtMergeTabPick(pairId) {
+      const p = window.AQB_DRAWER_MERGE.PAIRS.find((x) => x.id === pairId);
+      if (!p) return;
+      if (p.tabs.indexOf(this.drawer && this.drawer.tab) >= 0) return;
+      if (typeof this.drawerTab === "function") this.drawerTab(p.tabs[0]);
+    },
+    /* ---------------- 模板选择层(W6 自 drawer_templates.js 收口) ---------------- */
+    /* 当前档位归属页签: 流量形态归 traffic, 其余随 drawer.tab */
+    _dtCurTab() {
+      return this.qbTrafficActive ? "traffic" : this.drawer.tab;
+    },
+    /* 宿主显隐(模板 v-show 唯一入口; W2 起四页签正文恒由 Vue 组件渲染, 本判据只管显隐):
+     * 错误态与 general 无详情时让位(与空态骨架的接管口径一致); 合并生效时对内两列同显。 */
+    dtHostOn(tab) {
+      if (tab === "traffic") return this._dtCurTab() === "traffic";
+      if (this.drawer.error) return false;
+      if (tab === "general" && !this.drawer.detail) return false;
+      if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
+      return this._dtCurTab() === tab;
+    },
+    /* 当前档位描述符(组件/模板的结构开关与密度类唯一来源; drawerTplSel 由 state.js
+     * 显式建字段, 读侧已归一, 这里不再二次校验) */
+    drawerTier(tab) {
+      return window.AQB_DRAWER_DENSITY.tierOf(tab, (this.drawerTplSel || {})[tab] || DTPL_CLASSIC);
+    },
+    /* 右键菜单档位选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略;
+     * 合法即落盘 + 收菜单。无插件重挂 —— 正文是 Vue 组件, 读 drawerTplSel 响应式
+     * 自更新(换档即换渲染分支, 与数据更新同一条路)。 */
+    dtMenuPick(id) {
+      const tab = this.dtMenuTab;
+      id = String(id || DTPL_CLASSIC);
+      const opts = window.AQB_DRAWER_DENSITY.options(tab);
+      let ok = id === DTPL_CLASSIC;
+      for (let i = 0; i < opts.length; i++) {
+        if (opts[i].id === id) ok = true;
+      }
+      if (!ok) return;
+      this.drawerTplSel[tab] = id;
+      this.dtPersistSel();
+      if (this.drawerMenu) this.drawerMenu.visible = false;
+    },
+    /* 写侧单漏斗(与 persistDrawerTab 同纪律: 写失败吞异常, 只影响刷新后落点) */
+    dtPersistSel() {
+      try {
+        const out = {};
+        const tabs = window.AQB_DRAWER_TPL_REG.tabs;
+        for (let i = 0; i < tabs.length; i++) out[tabs[i]] = (this.drawerTplSel || {})[tabs[i]] || DTPL_CLASSIC;
+        localStorage.setItem(DTPL_STORE_KEY, JSON.stringify(out));
+      } catch (e) { /* 写入失败: 本轮仍生效, 刷新后回落 classic */ }
+    },
     /* 自动种子管理开关(种子页右键 R2 补遗): 复用 torrentCmd 回执链 */
     autoTmmToggle() {
       const m = this.menuTorrent();
@@ -50,9 +396,9 @@ window.AQB_DRAWER = {
       const target = hash || this.menu.hash;
       if (!target) return;
       /* 强制重新汇报闸门(qB 口径): 非活跃种子(暂停/停止·排队·校验·错误)拒绝 —— 详情面板 tracker
-       * 页签的重报钮已置灰(drawer_tpl 04/05/06 走 drawerReannounceGate), 这里是行为层兜底
-       * (与 ctx-menu 的"class 拦显示、行为层再拦一道"同款)。本方法两条入口共用: 单选右键菜单的
-       * 控制命令, 与详情面板 drawerCmd(目标 = 抽屉 hash)。 */
+       * 页签的重报钮已置灰(右键菜单项走 drawerReannounceGate; 旧变体 04/05/06 同款, W5 退役),
+       * 这里是行为层兜底(与 ctx-menu 的"class 拦显示、行为层再拦一道"同款)。本方法两条入口共用:
+       * 单选右键菜单的控制命令, 与详情面板 drawerCmd(目标 = 抽屉 hash)。 */
       if (action === "reannounce" && !this._guardReannounce({ keys: [], hashes: [target] })) return;
       /* 重新校验先确认(计划 26-10-05-0314 S3): 只拦 recheck, 其它命令通道行为不变 ——
        * 单选右键(ctx-menus.html)与抽屉内命令(drawerCmd)同走本方法, 一处接入两入口覆盖;
@@ -667,7 +1013,7 @@ window.AQB_DRAWER = {
        * 数据可保留, 归软切换语义: 换目标交棒 _switchDrawerTarget(保留旧数据 + 160ms 延迟遮罩,
        * 与键盘跟随同链路); 同目标重入零副作用(重建把旧数据连 loading 各闪一遍 —— 同坑档
        * 「打开入口的重入语义」, 与 openDrawerTraffic 同目标短路同口径)。 */
-      if (this.drawer.open && this.drawer.kind === "seed") {
+      if (this.drawer.open && this.drawerIsSeed) {
         if (this.drawer.hash === hash) return;  // 同目标重入: 短路(重建 = 对同一目标再闪一遍)
         this._switchDrawerTarget(hash);
         return;
@@ -685,9 +1031,9 @@ window.AQB_DRAWER = {
         detail: null, trackers: [], files: [], peers: { peers: [] },
         // 初值页签的 loading 与空列表同帧置位(26-10-07 报障的冷启动半边): 面板关着/流量形态换形
         // 才走重建, 无旧数据可保留 —— 详情在途窗口期非常规页签的空列表若以 loading=false 裸奔,
-        // 经典链与变体会各渲染一帧空态(暂无已连接用户/暂无 tracker/无文件列表), 详情落袋后
-        // _loadDrawerTab 才翻成加载态 -> 三连闪。翻转仍归 fetcher 落袋单点(loading 清掉后才
-        // _dtNotify, 见三 fetcher finally), 这里只保证等待期不落空态。
+        // 会先渲染一帧空态(暂无已连接用户/暂无 tracker/无文件列表), 详情落袋后
+        // _loadDrawerTab 才翻成加载态 -> 三连闪。翻转仍归 fetcher 落袋单点, 这里只保证
+        // 等待期不落空态(W5 起无变体, 正文由 Vue 组件按 loading 态自渲染)。
         trackersLoading: initialTab === "trackers", filesLoading: initialTab === "content",
         peersLoading: initialTab === "peers",
         // P3-5(报告 26-10-07-0542): 三个列表 fetcher 的失败标记 —— 变体据此区分「失败」与
@@ -710,24 +1056,8 @@ window.AQB_DRAWER = {
       // 一发(无 seq 只走 hash 戳守卫, _drawerWait 里的 "files" 由其 _drawerDone 登记)
       else if (this.dtSplitOn && this._dtPairOf(initialTab) === "gc") this._fetchDrawerFiles();
     },
-    /* R2 S5: 合并开启/门跨越后的第二列数据补给(核心层 drawerMerge $watch 与 resize 回调共用;
-     * 插件禁触碰取数/轮询纪律不破)。按生效对把缺失的数据源补齐: 已有数据/在途不重发(避免
-     * 开关抽屉反复打请求), fetcher 自带静默/loading/stale 丢弃。seq 只 bump 一次走代际守卫。 */
-    _drawerMergeSupply() {
-      if (!this.drawer.open || !this.dtSplitOn) return;
-      const pair = this._dtPairOf(this.drawer.tab);
-      if (!pair) return;
-      const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
-      if (pair === "gc") {
-        if (!this.drawer.files.length && !this.drawer.filesLoading) this._fetchDrawerFiles(false, seq);
-        if (!this.drawer.detail && !this.drawer.loading) this._fetchDrawerDetail();
-      } else if (pair === "tp") {
-        if (!this.drawer.trackers.length && !this.drawer.trackersLoading) this._fetchDrawerTrackers(false, seq);
-        if (!this.drawerPeerRows().length && !this.drawer.peersLoading) this._fetchDrawerPeers(false, seq);
-        this._startDrawerPoll();
-      }
-    },
-    /* 收面板: 无遮罩可关, 只做面板自身收尾(文件优先级小菜单/行选中/页签轮询);
+    /* 收面板: 无遮罩可关, 只做面板自身收尾(文件优先级小菜单/行选中; 轮询/软切换收口在数据层
+     * drawer_store.js 的 _stopDrawerPoll/_drawerSwitchEnd —— W1 已把取数/竞态/等待集合剥出本文件);
      * drawer.open 跨页不清 —— 切页再回种子页面板状态保持(方案A W1 验收项) */
     closeDrawer() {
       // 槽位冻结 + 落定顶缘登记: leave 期面板转 absolute 出流, dock 会瞬间塌 0 —— 把用户可见高
@@ -751,128 +1081,7 @@ window.AQB_DRAWER = {
       this._stopDrawerFollow();
       this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
       this._qbTeardown();       // 流量形态(全局/分组/单种)轮询与图一并收(2026-10-04 三挂点并入抽屉)
-      this._dtUnmountAll();     // 模板核心层(计划 26-10-06-0838 S1): 逐变体 destroy + 清空宿主子树
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
-    },
-    _stopDrawerPoll() {
-      if (this._drawerTimer) {
-        clearInterval(this._drawerTimer);
-        this._drawerTimer = null;
-      }
-      // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
-      // _switchDrawerTarget/openTorrentDrawer 全走这里), 页签切走/换目标/关面板即停 —— 若新页签
-      // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
-      this._qbPollStop("torrent");
-    },
-    _startDrawerPoll() {
-      this._stopDrawerPoll();
-      // P1-4: 3s → 5s。抽屉是观察用途, peers/trackers 秒级变化对操作没有意义;
-      // 而每次轮询都要 Web 线程直连 qB(peers 走 sync/torrentPeers, 响应体随 peer 数增长),
-      // 在主循环之外额外占用 qB。5s 仍远快于人工观察节奏。
-      this._drawerTimer = setInterval(() => {
-        if (!this.drawer.open || document.hidden) return;
-        // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随主内容页 v-if 出入,
-        // 切走页面(设置页)后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
-        // 隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回主内容页下一拍自动恢复)。
-        // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图(种子/辅种/追剧)共用面板,
-        // 在辅种页/追剧页展开的面板同样要续拉; 只挡非主内容页。
-        if (this.page !== "groups") return;
-        // R2 S5: 合并 tp 对生效时双源同频(负载 = 用户页签单用时, 无新增频次)
-        if (this.dtSplitOn && this._dtPairOf(this.drawer.tab) === "tp") {
-          this._fetchDrawerTrackers(true);
-          this._fetchDrawerPeers(true);
-          return;
-        }
-        if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
-        else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
-      }, 5000);
-    },
-    /* W2 请求代际纪律: 四个 fetcher 均带可选 seq(0 = 无代际约束, 走 hash 戳守卫) ——
-     * 换 hash(跟随/显式打开)或换代际(切页签)后, 在途旧响应一律丢弃, 防止慢响应把新目标的
-     * 详情/列表覆盖成旧的。hash 戳另兜一路: 5s 轮询(seq=0)发出后恰逢跟随换目标, 响应也不落袋。 */
-    _drawerStale(hash, seq) {
-      return this.drawer.hash !== hash || (!!seq && seq !== this._drawerLoadSeq);
-    },
-    async _fetchDrawerDetail(seq = 0) {
-      const hash = this.drawer.hash;
-      this.drawer.loading = true;
-      this.drawer.error = "";
-      try {
-        const r = await this.api(`/api/torrents/${hash}`);
-        if (this._drawerStale(hash, seq)) return;  // 旧响应丢弃(W2 代际纪律)
-        this.drawer.detail = (r && r.torrent) || null;
-        if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
-        this._dtNotify("detail");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知活动变体重渲染
-      } catch (e) {
-        if (this._drawerStale(hash, seq)) return;
-        if (!e.auth) this.drawer.error = e.message || "详情获取失败";
-      } finally {
-        // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
-        if (!this._drawerStale(hash, seq)) this.drawer.loading = false;
-        this._drawerDone("detail", hash, seq);  // FX-29: 落定登记(该数据源已到手)
-      }
-    },
-    async _fetchDrawerTrackers(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (!silent) this.drawer.trackersLoading = true;
-      try {
-        const r = await this.api(`/api/torrents/${hash}/trackers`);
-        if (this._drawerStale(hash, seq)) return;
-        this.drawer.trackers = Array.isArray(r) ? r : [];
-        this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
-      } catch (e) {
-        if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
-        // P3-5: 失败标记落 state(过期响应不动它, 属于在途的新目标); 5s 轮询期(silent)也落,
-        // 否则静默失败变体永远停在空态
-        if (!this._drawerStale(hash, seq)) this.drawer.trackersError = e.message || "tracker 列表获取失败";
-      } finally {
-        // 模板核心层(计划 26-10-06-0838 S1)落袋通知放 finally: 变体(dt04/05/06)只在 _dtNotify
-        // 时重渲染, 通知必须发生在 loading 清掉之后 —— 否则空列表变体会停在"正在加载…",
-        // 等下一拍 5s 轮询才翻到空态(2026-10-07 报障: 用户页实测复现同一机理)
-        if (!this._drawerStale(hash, seq)) {
-          this.drawer.trackersLoading = false;
-          this._dtNotify("trackers");
-        }
-        this._drawerDone("trackers", hash, seq);
-      }
-    },
-    async _fetchDrawerFiles(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (!silent) this.drawer.filesLoading = true;
-      try {
-        const r = await this.api(`/api/torrents/${hash}/files`);
-        if (this._drawerStale(hash, seq)) return;
-        this.drawer.files = Array.isArray(r) ? r : [];
-        this.drawer.filesError = "";  // 成功落袋即清失败标记(同 trackers)
-      } catch (e) {
-        if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
-        if (!this._drawerStale(hash, seq)) this.drawer.filesError = e.message || "文件列表获取失败";
-      } finally {
-        if (!this._drawerStale(hash, seq)) {
-          this.drawer.filesLoading = false;
-          this._dtNotify("files");  // 通知在 loading 清掉之后(理由同 trackers, 变体 dt10/11/12)
-        }
-        this._drawerDone("files", hash, seq);
-      }
-    },
-    async _fetchDrawerPeers(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (!silent) this.drawer.peersLoading = true;
-      try {
-        const r = await this.api(`/api/torrents/${hash}/peers`);
-        if (this._drawerStale(hash, seq)) return;
-        this.drawer.peers = this._drawerNormPeers(r);
-        this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
-      } catch (e) {
-        if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
-        if (!this._drawerStale(hash, seq)) this.drawer.peersError = e.message || "peer 列表获取失败";
-      } finally {
-        if (!this._drawerStale(hash, seq)) {
-          this.drawer.peersLoading = false;
-          this._dtNotify("peers");  // 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
-        }
-        this._drawerDone("peers", hash, seq);
-      }
     },
     /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
      * 切换即记住该 tab(drawerLastTab + localStorage), 使下一个种子默认停在相同页签。 */
@@ -885,42 +1094,6 @@ window.AQB_DRAWER = {
       this._drawerSwitchEnd();  // FX-29: 切页签使在途的那一组响应全部过期(stale 不落袋), 若不撤等待
       this._stopDrawerPoll();   //     遮罩会挂死 —— 显式操作视作结束上一次切换
       this._loadDrawerTab(tab);
-    },
-    /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab / W2 跟随换目标共用, 单一加载逻辑):
-     * 每次进入 bump 请求代际 seq —— 之后所有带 seq 的在途响应过期, 换目标/换页签竞态在此收口。 */
-    _loadDrawerTab(tab) {
-      const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
-      if (tab === "general") this._fetchDrawerDetail(seq);
-      else if (tab === "trackers") {
-        this._fetchDrawerTrackers(false, seq);
-        this._startDrawerPoll();
-      } else if (tab === "peers") {
-        this._fetchDrawerPeers(false, seq);
-        this._startDrawerPoll();
-      } else if (tab === "content") this._fetchDrawerFiles(false, seq);
-      // 流量页签(S5b, plan 26-10-03-0946 §07 表②): 数据源 /api/traffic/qb/torrent/{hash};
-      // 打开时拉取一次 + 打开期间按采样间隔低频续拉(qb_traffic_chart.js _qbPollStart,
-      // meta.interval_s 取间隔), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
-      // hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
-      else if (tab === "traffic" && this.qbTrafficOn) {
-        this._qbLoad("torrent");
-        this._qbPollStart("torrent");
-      }
-      // R2 S5(计划 26-10-09-2219): 合并生效时第二列的数据供给也在此收口(插件禁触碰取数/轮询
-      // 纪律不破) —— gc 对补 detail+files, tp 对补 trackers+peers(带 seq 走代际守卫, 详情走
-      // hash 戳守卫, 与 _switchDrawerTarget 同式)。门内才供给: 影子期零额外请求。
-      if (this.dtSplitOn) {
-        const pair = this._dtPairOf(tab);
-        if (pair === "gc") {
-          if (tab !== "general") this._fetchDrawerDetail();
-          if (tab !== "content") this._fetchDrawerFiles(false, seq);
-        } else if (pair === "tp") {
-          if (tab !== "trackers") this._fetchDrawerTrackers(false, seq);
-          if (tab !== "peers") this._fetchDrawerPeers(false, seq);
-          if (tab !== "trackers" && tab !== "peers") this._startDrawerPoll();
-        }
-      }
-      this._dtSync();  // 模板核心层(计划 26-10-06-0838 S1): 换页签即卸旧变体、按选择挂当前页签变体
     },
     /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
      * 触发入口: shortcuts.js::_kbApplyCursor 尾部(鼠标路径将来接同一入口, §1.3 相邻预留)。
@@ -951,81 +1124,6 @@ window.AQB_DRAWER = {
         clearTimeout(this._followDrawerTimer);
         this._followDrawerTimer = null;
       }
-    },
-    /* ---------------- FX-29 换目标: 软切换(治「上下键切换种子时抽屉闪烁」, 26-10-03) ----------------
-     * 旧实现把 detail / trackers / files / peers 一把清空再重拉, 面板每一次光标移动都走一遍
-     * 「整幅内容消失 -> 落到加载空态 -> 数据回来重建」, 连按上下键时就是持续闪烁; 且未拖过高的
-     * 面板只有 CSS 42vh 上限(高度随内容), 空态把面板抽成一条再撑开, 列表与停靠面板连锁跳动。
-     * 软切换 = 保留旧数据撑住几何, 用 **遮罩** 而不是清空来防串显: 内容此刻属于上个种子, 罩住
-     * 即不可读(并屏蔽交互), 新数据全部到手才掀开 —— 「看着上个种子的值」不会成立, 但面板几何
-     * 全程不动, 用户眼里只有内容换了一帧。落定按「数据源集合」而不是「任一请求」: 早到的单个请求
-     * 不许提前掀罩(那时另一个源还是上个种子的值), 故按 tab 登记待到集合, 全部到手才算落定。 */
-    _switchDrawerTarget(hash) {
-      this._stopDrawerPoll();
-      this._stopDrawerFollow();
-      this.drawer.hash = hash;
-      this.drawer.loading = true;
-      this.drawer.error = "";
-      // P3-5: 三个列表失败标记同 error 口径作废(属于上一个目标, 新目标由 fetcher 重新落)
-      this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";
-      this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));
-      this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
-      this.filePrio.visible = false;  // 内容页签小菜单与行选中跨种子失效(与 drawerTab/closeDrawer 同口径)
-      this.drawerSelPath = "";
-      this._loadDrawerTab(this.drawer.tab);
-      // 详情恒拉(头部标题/常规页都依赖, 与 openTorrentDrawer 同口径): _loadDrawerTab 只在 general
-      // 页签拉详情, 其余页签在此补一发 —— seq 归 _loadDrawerTab 先 bump(页签数据走代际守卫),
-      // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
-      if (this.drawer.tab !== "general") this._fetchDrawerDetail();
-    },
-    /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项。
-     * R2 S5(计划 26-10-09-2219): 合并生效时按**生效对**扩展 —— gc 对等 detail+files,
-     * tp 对等 detail+trackers+peers(遮罩等全对数据源齐再掀, 不掀半新半旧)。 */
-    _drawerWaitSources(tab) {
-      if (this.dtSplitOn) {
-        const pair = this._dtPairOf(tab);
-        if (pair === "gc") return ["detail", "files"];
-        if (pair === "tp") return ["detail", "trackers", "peers"];
-      }
-      if (tab === "general") return ["detail"];
-      if (tab === "content") return ["detail", "files"];
-      return ["detail", tab];
-    },
-    /* 单个数据源到手(成功或失败都算到手 —— 失败要让 error 态显出来, 不能把遮罩挂死)。
-     * 过期响应不登记: 它的数据没落袋, 状态仍属于在途的新目标。 */
-    _drawerDone(src, hash, seq) {
-      const w = this._drawerWait;
-      if (!w || this._drawerStale(hash, seq)) return;
-      w.delete(src);
-      if (w.size) return;      // 还有兄弟源在飞 —— 不提前掀罩(防半新半旧)
-      this._drawerSwitchEnd();
-      if (this._drawerOpenReveal) {  // 开场路径的落定补让位(挂单见 openTorrentDrawer; 切换路径无挂单)
-        const h = this._drawerOpenReveal;
-        this._drawerOpenReveal = "";
-        // 双守卫防迟到兑现: 挂单后被打断(关闭/换目标)时 drawer.open/hash 已易主, 那是别的种子几何
-        if (this.drawer.open && this.drawer.hash === h) this._kbRevealRow(h);
-      }
-    },
-    /* 遮罩延迟点亮: 局域网详情常在 100ms 内就到 —— 那一刻用户看到的是「内容直接换成新的」,
-     * 中间没有任何一帧变淡; 只有真的慢下来(>160ms)才滑入加载胶囊并把旧值淡到不可读。 */
-    _drawerBusyArm() {
-      this._drawerBusyDisarm();
-      this._busyArmTimer = setTimeout(() => {
-        this._busyArmTimer = null;
-        if (this.drawer.open) this.drawer.switching = true;
-      }, 160);
-    },
-    _drawerBusyDisarm() {
-      if (this._busyArmTimer) {
-        clearTimeout(this._busyArmTimer);
-        this._busyArmTimer = null;
-      }
-    },
-    /* 切换期收尾: 撤待到集合 / 撤延迟 / 撤遮罩(closeDrawer 与中途打断同样走这里) */
-    _drawerSwitchEnd() {
-      this._drawerWait = null;
-      this._drawerBusyDisarm();
-      this.drawer.switching = false;
     },
     /* 头部标题: 优先主表成员名(memberByHash 每 1.5~3s 一轮已在本地, 切换瞬间即得) ——
      * 旧实现等详情到位, 中间一帧把标题显示成 40 字符 hash 再跳回种子名, 是肉眼最刺眼的一跳。 */
@@ -1179,7 +1277,7 @@ window.AQB_DRAWER = {
       // 槽位落定后补一发让位: 文档底打开时开场让位被钳制成 0(下滚余量是停靠槽位长高才创造的,
       // 2026-10-04 取证), 此刻槽位已回自然高、余量足额, 且收场兜底强制回自然高后几何是实量值。
       // 流量形态无种子行可让, 不发。
-      if (this.drawer.kind === "seed") this._kbRevealRow(this.drawer.hash);
+      if (this.drawerIsSeed) this._kbRevealRow(this.drawer.hash);
     },
     drawerLeaveHook(el) {
       // closeDrawer 已冻结槽位(drawer-anim + 捕获高)时先取值再清理 —— 面板马上转 absolute 出流,
@@ -1372,7 +1470,10 @@ window.AQB_DRAWER = {
       const prio = (p) => ({ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }[p] ?? "正常");
       const rows = [];
       const walk = (node, name, depth) => {
-        if (name !== null) rows.push({ depth, dir: true, name, path: node.path, text: this.fmtSize(node.size) });
+        if (name !== null) rows.push({
+          depth, dir: true, name, path: node.path, text: this.fmtSize(node.size),
+          _raw: { name, size: node.size, progress: 0 },
+        });
         for (const [dn, d] of node.dirs) walk(d, dn, name === null ? 0 : depth + 1);
         for (const f of node.files) {
           const last = String(f.name || "").split("/").pop();
@@ -1383,32 +1484,18 @@ window.AQB_DRAWER = {
             index: f.index,
             text: this.fmtSize(f.size), progress: Math.round((f.progress || 0) * 100),
             prio: prio(f.priority), skipped: f.priority === 0,
+            // W2: 排序取原始值(大小/进度) —— 显示值 text 是 "1.2 MiB" 这类格式化字符串, 见 _sortVal
+            _raw: { name: last, size: f.size || 0, progress: f.progress || 0, prio: f.priority },
           });
         }
       };
       walk(root, null, -1);
       return rows;
     },
-    /* qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(qB 原始命名), 与列表侧
-     * torrents/info 的 dlspeed / upspeed **不同名** —— 抽屉 peers 的全部消费点(经典表经
-     * drawerPeerRows, 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed
-     * 取名, 故在落袋单点(_fetchDrawerPeers)做一次键名适配: 补 dlspeed / upspeed(保留原键,
-     * 其余字段 dl_speed 系的 downloaded/uploaded/flags/progress/relevance 本就同名无需动)。
-     * 漏这一步的症状 = 用户页上下载恒 0(取不到值 → 0), 而桩服务若也按错名造数据则测不出来。 */
-    _drawerNormPeers(resp) {
-      const r = resp && typeof resp === "object" ? resp : { peers: [] };
-      const fix = (x) => {
-        if (!x || typeof x !== "object") return x;
-        if (x.dlspeed === undefined && x.dl_speed !== undefined) x.dlspeed = x.dl_speed;
-        if (x.upspeed === undefined && x.up_speed !== undefined) x.upspeed = x.up_speed;
-        return x;
-      };
-      if (Array.isArray(r.peers)) r.peers = r.peers.map(fix);
-      else if (r.peers && typeof r.peers === "object")
-        r.peers = Object.fromEntries(Object.entries(r.peers).map(([k, v]) => [k, fix(v)]));
-      return r;
-    },
-    /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 —— 双形态归一 */
+    /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 —— 双形态归一。
+     * W2(计划 26-10-11-2106): 每行附 `_raw`(原始数值) —— 接壳后列头可排序, 而显示值 dlspeed 等
+     * 是 `fmtSpeedOrDash` 出的字符串("1.2 MiB"), 按显示值比就是字典序错排; 排序取值见
+     * sort.js `_sortVal`(优先 `_raw`)。显示字段一个未动 —— 15 个变体与其它消费方零影响。 */
     drawerPeerRows() {
       const p = this.drawer.peers || {};
       const list = Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
@@ -1422,6 +1509,32 @@ window.AQB_DRAWER = {
         downloaded: this.fmtSizeOrDash(x.downloaded || 0) || "—",
         uploaded: this.fmtSizeOrDash(x.uploaded || 0) || "—",
         relevance: `${Math.round((x.relevance || 0) * 100)}%`,
+        _raw: {
+          addr: `${x.ip || "?"}${x.port ? ":" + x.port : ""}`,
+          client: x.client || "", flags: x.flags || "",
+          progress: x.progress || 0,
+          dlspeed: x.dlspeed || 0, upspeed: x.upspeed || 0,
+          downloaded: x.downloaded || 0, uploaded: x.uploaded || 0,
+          relevance: x.relevance || 0,
+        },
+      }));
+    },
+    /* Trackers tab 的行模型(W2 新增): 与上面两张同形 —— 显示值 + `_raw` 原始值。
+     * !移到这里而不是留在页签组件的 computed: 行装配是**数据层**职责(与渲染无关), 且这里是
+     *   "tracker 行长什么样"的唯一落点(变体若要用也有据可依; W2 之前它只在 classic 页里拼字符串)。 */
+    drawerTrackerRows() {
+      return (this.drawer.trackers || []).map((t) => ({
+        url: t.url,
+        status: this.drawerTrackerStatus(t.status),
+        seeds: this.fmtPeersQb(t.num_seeds, t.num_complete),
+        leeches: this.fmtPeersQb(t.num_leeches, t.num_incomplete),
+        msg: t.msg,
+        virtual: this.drawerTrackerVirtual(t.url),
+        _raw: {
+          url: t.url, status: t.status,
+          num_seeds: t.num_seeds || 0, num_leeches: t.num_leeches || 0,
+          msg: t.msg || "",
+        },
       }));
     },
     drawerTrackerStatus(s) {

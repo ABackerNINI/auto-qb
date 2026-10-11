@@ -1,0 +1,136 @@
+<!-- 详情面板四页签的 Vue 组件模板(计划 26-10-11-2106 W2)
+     与 <aq-table> 同范式: x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层),
+     app.component 注册; 数据与动作一律经 $root 回调根实例(不复制任何方法实现)。
+
+     !W5(计划 26-10-11-2106): 变体退役, 本组件成为所在页签的**唯一**渲染实现。密度档
+     (drawerTier 描述符)消费在本模板: cls 挂根(dd-compact, CSS 只做密度收紧), 结构开关
+     (raw/hint)走 v-if 真隐藏 —— 档位描述符是 drawer.js 的 DRAWER_DENSITY 单点(W6 起核心层收进 drawer.js)。
+
+     !根元素带 .dt-host 类但**不带 data-dt-host** —— 后者是旧插件的挂载锚
+     (_dtFindHost 按 `.dt-host[data-dt-host="<tab>"]` querySelector)。W5 起插件机械已退役,
+     保留不带锚的纪律只防回归(若插件机械复活, 结构性不可见仍是第一道闸)。
+
+     !可见性门在本组件根(v-show 读 $root.dtHostOn) + 内容再上一道 v-if(同一判据):
+     v-show 只切 display, 子树照渲染 —— 不加内容门, 四个页签的正文会在每屏都各渲染一份
+     (旧插件只在活动页签挂载正文, 非活动宿主恒空). 内容门与挂载集合同源(dtHostOn),
+     故非活动页签的宿主与旧 DOM 一样是"空且隐藏"。
+
+     !列表接壳(W2 第二程): trackers / peers / content 三页签的**列表**不再自带 <table class="drawer-table">,
+     而是与主视图同一条路 —— 表头 <aq-table grid>(拖宽 / 拖序 / 右键隐藏 / 排序 / 列偏好持久化),
+     行容器 .group-table + 行 .group-row + cells 渲染器(<aq-tracker-cells> / <aq-peer-cells> /
+     <aq-file-cells>, 模板在 tpl/xtpl-cells.html)。列定义单点在 app.js 的 DRAWER_*_COLUMNS,
+     表身份在 DRAWER_TABLE_DEFS —— 与主视图共用 columns.js 引擎, 但**不进 TABLE_PAGES**。
+     !因此这三页签的 DOM **不再与旧经典页逐字节等价**, 这是 26-10-11 用户拍板接受的观感变化
+     (「div 网格, 与主视图完全同源」+「以与主视图一致为准则, 观感变化整体接受」)。A/B 口径
+     (`e2e/zz-drawer-canon` 那套: 注释锚/文本节点合并/style 空白三类归一)对**常规页签**仍然适用
+     —— 它没接壳, 仍是逐字节等价。三皮肤 CSS 与守阵同轮改版, 见计划 §11 变更记录。
+
+     !A/B 对照口径(W2 第一程, 对「常规」页签有效): 比对用 e2e/zz-drawer-canon.spec.mjs 的
+     规范化 dump, 归一三类纯渲染产物的差异, 其余(元素/层级/属性/文本)逐字节比:
+       ·Vue 的注释锚与纯空白文本锚 —— 已接受的已知偏差(plans/26-10-11-1722 §P5 备注);
+       ·相邻同深度文本节点合并 —— OLD 字符串 DOM 里 `要求做种 {x}` 是一个文本节点, Vue 切成
+        「静态段 + 插值」两个相邻文本节点, 渲染文本完全一致;
+       ·style 属性去 `:` 后空格与尾分号 —— OLD `padding-left:8px` vs Vue `padding-left: 8px;`。
+     归一后仅剩一处结构性偏差: 组件根不带 `data-dt-host`(理由见上)。 -->
+<script type="text/x-template" id="tpl-aq-drawer-general">
+  <div class="dt-host" :class="$root.drawerTier('general').cls" v-show="$root.dtHostOn('general')">
+    <template v-if="$root.dtHostOn('general')">
+      <div v-if="d.hr_triggered || d.hr_state || d.hr_excluded" class="drawer-hr"
+           :class="d.hr_triggered ? (d.hr_satisfied ? 'done' : 'pending') : 'info'">
+        <b v-if="d.hr_excluded">已排除出 HR 管理</b>
+        <b v-else-if="d.hr_triggered">H&amp;R {{ d.hr_satisfied ? '已达标' : '未达标' }}</b>
+        <span v-if="d.hr_state" :title="d.hr_reason || ''">{{ $root.hrStateLine(d) }}</span>
+        <span v-if="d.hr_site_lane" title="站点侧值(账号级权威, 滞后一个刷新周期)">{{ $root.hrSiteLine(d) }}</span>
+        <span v-if="d.hr_tag">{{ d.hr_tag }}</span>
+        <span v-if="d.hr_tag_done">{{ d.hr_tag_done }}</span>
+        <span v-if="d.hr_triggered">要求做种 {{ $root.fmtDuration(d.hr_req_time) }}</span>
+        <span v-if="d.hr_triggered && d.hr_req_ratio > 0">要求分享率 {{ d.hr_req_ratio.toFixed(2) }}</span>
+      </div>
+      <section v-for="(sec, si) in $root.drawerGeneralSections()" :key="si" class="drawer-sec">
+        <h4><span>{{ sec.title }}</span><span v-if="sec.sum" class="s-sum">{{ sec.sum }}</span></h4>
+        <div class="f-rows">
+          <div v-for="(r, ri) in sec.rows" :key="si + '-' + ri" class="f-row" :class="{ wide: r.wide }">
+            <svg class="ico ico-sm" :class="$root.icoTone(r.icon)" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
+            <span class="k">{{ r.label }}</span>
+            <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
+            <button v-if="r.act" type="button" class="bt icon f-row-act" :data-dt-act="r.act"
+                    @click="r.act === 'open' ? $root.openTargetPath('torrent', $root.drawer.hash) : $root.copyText(String(r.text), r.label)"><svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="r.act === 'open' ? '#i-folder-open' : '#i-copy'"></use></svg></button>
+          </div>
+        </div>
+      </section>
+      <!-- 密度档结构开关(W5 描述符 raw): 紧凑档真隐藏原始键值区(档位关掉的结构是 v-if, 不是 CSS 藏) -->
+      <details v-if="$root.drawerTier('general').raw" class="drawer-raw" :open="ui.generalRaw" @toggle="ui.generalRaw = $event.target.open">
+        <summary>全部字段(原始键值, 与 qB API 字段名一致)</summary>
+        <div class="drawer-rows">
+          <template v-for="k in Object.keys(d)" :key="k"><span class="k">{{ k }}</span><span class="v mono">{{ typeof d[k] === 'object' ? JSON.stringify(d[k]) : d[k] }}</span></template>
+        </div>
+      </details>
+    </template>
+  </div>
+</script>
+<script type="text/x-template" id="tpl-aq-drawer-trackers">
+  <div class="dt-host" :class="$root.drawerTier('trackers').cls" v-show="$root.dtHostOn('trackers')">
+    <template v-if="$root.dtHostOn('trackers')">
+      <div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="add" @click="$root.trackerAdd()"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button></div>
+      <div v-if="$root.drawer.trackersLoading && !trkRows.length" class="empty"><span>正在加载…</span></div>
+      <!-- 接壳(W2): 表头由 <aq-table grid> 渲出(拖宽 / 拖序 / 右键隐藏 / 排序箭头 / 列偏好持久化
+           与主视图同源), 行容器与行类也照主视图(.group-table + .group-row + data-table)——
+           :nth-child 列对齐与 colAlignCss 的锚都靠 data-table, 行宽靠 gridStyle 同一引用。
+           表头无 ref: 它在**本组件**模板里, 根实例 $refs 取不到 —— columns.js `_headEl` 按
+           `.group-head[data-table=...]` 兜底(表壳根自带 data-table)。 -->
+      <template v-else-if="trkRows.length">
+        <aq-table table-id="drawerTracker" :cols="$root.visibleDrawerTrackerCols"
+                  :sort-key="$root.dtrkSortKey" :sort-dir="$root.dtrkSortDir" :drag="$root.colDrag"></aq-table>
+        <div class="group-table" @scroll="syncHeadScroll($event, 'drawerTracker')">
+          <div v-for="t in trkRows" :key="t.url" class="group-row" data-table="drawerTracker"
+               :class="{ virtual: t.virtual }" :style="$root.gridStyle('drawerTracker')">
+            <aq-tracker-cells :cols="$root.visibleDrawerTrackerCols" :t="t"></aq-tracker-cells>
+          </div>
+        </div>
+      </template>
+      <div v-else class="empty"><span>暂无 tracker</span></div>
+    </template>
+  </div>
+</script>
+<script type="text/x-template" id="tpl-aq-drawer-peers">
+  <div class="dt-host" :class="$root.drawerTier('peers').cls" v-show="$root.dtHostOn('peers')">
+    <template v-if="$root.dtHostOn('peers')">
+      <div v-if="$root.drawer.peersLoading && !peerRows.length" class="empty"><span>正在加载…</span></div>
+      <!-- 接壳(W2): 九列对端表, 同 trackers 一条路 -->
+      <template v-else-if="peerRows.length">
+        <aq-table table-id="drawerPeer" :cols="$root.visibleDrawerPeerCols"
+                  :sort-key="$root.dpeerSortKey" :sort-dir="$root.dpeerSortDir" :drag="$root.colDrag"></aq-table>
+        <div class="group-table" @scroll="syncHeadScroll($event, 'drawerPeer')">
+          <div v-for="p in peerRows" :key="p.addr" class="group-row" data-table="drawerPeer"
+               :style="$root.gridStyle('drawerPeer')">
+            <aq-peer-cells :cols="$root.visibleDrawerPeerCols" :p="p"></aq-peer-cells>
+          </div>
+        </div>
+      </template>
+      <div v-else class="empty"><span>暂无已连接用户</span></div>
+    </template>
+  </div>
+</script>
+<script type="text/x-template" id="tpl-aq-drawer-content">
+  <div class="dt-host" :class="$root.drawerTier('content').cls" v-show="$root.dtHostOn('content')">
+    <template v-if="$root.dtHostOn('content')">
+      <div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="rename" @click="$root.renameFileRow()"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…</button><span v-if="$root.drawerTier('content').hint" class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span></div>
+      <div v-if="$root.drawer.filesLoading && !fileRows.length" class="empty"><span>正在加载…</span></div>
+      <!-- 接壳(W2): 行类可叠加(skipped 与 sel 两键独立 —— 跳过态的行也能是重命名选中行);
+           这两个修饰类在旧经典页里**从未生效**(条件属性被整段插值进 dtHtml, 引号被转义成
+           类名的一部分), 见 tpl/xtpl-cells.html 的 W2 注与坑档 esc-attr-quote-dead-class。 -->
+      <template v-else-if="fileRows.length">
+        <aq-table table-id="drawerFile" :cols="$root.visibleDrawerFileCols"
+                  :sort-key="$root.dfileSortKey" :sort-dir="$root.dfileSortDir" :drag="$root.colDrag"></aq-table>
+        <div class="group-table" @scroll="syncHeadScroll($event, 'drawerFile')">
+          <div v-for="f in fileRows" :key="f.path" class="group-row" data-table="drawerFile"
+               :class="{ skipped: f.skipped, sel: f.path === ($root.drawerSelPath || '') }"
+               :style="$root.gridStyle('drawerFile')">
+            <aq-file-cells :cols="$root.visibleDrawerFileCols" :f="f"></aq-file-cells>
+          </div>
+        </div>
+      </template>
+      <div v-else class="empty"><span>无文件列表</span></div>
+    </template>
+  </div>
+</script>

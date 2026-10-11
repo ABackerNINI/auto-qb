@@ -1,0 +1,61 @@
+<!-- 详情面板「头部外壳」与「流量档位/纵轴控件组」的组件模板(计划 26-10-11-2106 W3)
+     x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层), app.component 注册;
+     两个组件都是**纯模板件** —— 数据与动作一律经 $root 回调根实例, 本文件不定义任何方法
+     (见 pitfalls/web-ui/frontend-split「组件片段只贡献模板」条: 复制方法实现会触发
+     _scan_mixin_wiring 的重名守阵, 被盖掉的那份永不执行)。
+
+     !<aq-drawer-head> = 面板**唯一**头部(计划 §02 表 B 问题 4 的正解)。此前抽屉两形态各写一份
+     `<header class="drawer-head">`(流量形态 v-if / 种子详情 v-else): 标题块与关闭按钮逐字复写,
+     而 §03 又要求「两形态不共用头部、控件落点各自独立」—— 两形态**中部**确实不同(流量: 档位 +
+     纵轴控件组; 种子: 五页签导航), 复写的只是**外壳**。现拆为: 外壳(标题块 + 默认插槽 + 关闭
+     按钮)一份, 中部由调用点给。这不违「不共用头部」的语义(两形态中部仍是各自的), 却让
+     「控件从正文上提到头部」这类版式改**只可能接一处** —— 那正是坑档
+     pitfalls/web-ui/drawer-multi-form-hosts 的根因(版式改只接了一个形态宿主, 另一形态整组消失)。
+
+     !<aq-qb-ctl> 必须是**多根片段**(.qb-tabs 与 .qb-tools 两个平级节点, 不留 wrapper): 三皮肤
+     CSS 靠**直接子选择器**定位它们 —— `.drawer-head:has(> .qb-tabs)` / `.drawer-head > .qb-tabs` /
+     `.drawer-head > .qb-tools`(流量形态头部内)与 `.hist-summary > .qb-statctl` /
+     `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools`(种子「流量」页签的图下统计栏内)。
+     多包一层 div 会让这些规则**全部静默落空**(头部换行、控件错位)—— pytest 扫源码看得见控件,
+     只有真浏览器量布局才现形, 故由 e2e/drawer-traffic.spec.mjs 按「直接子元素」钉住。
+
+     !两挂点单点化是本组件的全部意义: 旧实现是两处**逐字复写** + 守阵钉「内层逐字同源」
+     (坑档 drawer-multi-form-hosts 的处置条: 无 partial 机制只能复写, 复写必须逐字同源并加守阵)。
+     本仓库现在有 partial 机制了(Vue 组件), 故收敛为**只有一处实现**, 守阵口径随之从「同源」升级为
+     「单点」: 模板里只有一份 .qb-tabs/.qb-tools, 两个挂点都写 <aq-qb-ctl>(单点强于同源)。 -->
+<script type="text/x-template" id="tpl-aq-drawer-head">
+  <header class="drawer-head">
+    <div class="drawer-title">
+      <span class="g-status" :class="'k-' + tone" :title="statusTitle || null">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="icon"></use></svg>
+      </span>
+      <strong :title="textTitle || null">{{ text }}</strong>
+    </div>
+    <!-- 形态中部: 流量形态 = <aq-qb-ctl>(档位 + 纵轴); 种子详情 = 五页签导航 nav.drawer-tabs -->
+    <slot></slot>
+    <button class="drawer-close" aria-label="关闭详情面板" @click="$root.closeDrawer()">
+      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+    </button>
+  </header>
+</script>
+<script type="text/x-template" id="tpl-aq-qb-ctl">
+  <div class="qb-tabs">
+    <button v-for="w in $root.qbWindowNames" :key="w" :class="{ active: $root.qbCurWindow === w }"
+            @click="$root.qbSetWindow(w)">{{ $root.qbWindowLabel(w) }}</button>
+  </div>
+  <div class="qb-tools">
+    <span class="qb-tools-label">纵轴</span>
+    <div class="qb-seg">
+      <button :class="{ active: $root.qbYAxisMode === 'auto' }"
+              @click="$root.qbSetYAxisMode('auto')">自动</button>
+      <button :class="{ active: $root.qbYAxisMode === 'limit' }"
+              @click="$root.qbSetYAxisMode('limit')">限速+20%</button>
+      <button :class="{ active: $root.qbYAxisMode === 'manual' }"
+              @click="$root.qbSetYAxisMode('manual')">手动</button>
+    </div>
+    <input v-if="$root.qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
+           min="0" step="any" :value="$root.qbYAxisManual || ''" placeholder="MiB/s"
+           @change="$root.qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
+    <span class="qb-tools-hint">{{ $root.qbYAxisCapText }}</span>
+  </div>
+</script>

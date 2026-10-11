@@ -631,3 +631,29 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }
 .hp-reason { font-size: 11px; line-height: 1.55; color: var(--fg-muted); overflow-wrap: anywhere; }
 .hp-lag { font-size: 10.5px; line-height: 1.5; color: var(--fg-dim); }
+
+/* ================= 详情面板三张列表的网格行(计划 26-10-11-2106 W2 接壳) =================
+ * Tracker / 用户 / 文件三张列表不再自带 <table class="drawer-table">, 而是与主视图同一条路:
+ * 表头 <aq-table grid> + 行容器 .group-table + 行 .group-row + cells 渲染器(tpl/xtpl-cells.html)。
+ * 上面那批 `.drawer-table ...` 规则**仍在用**(设置页两张 HR 表同挂 .drawer-table), 本段补的是
+ * 面板网格行自己的几件 —— 三皮肤成对。
+ */
+/* .group-head 自带 position: sticky + top: calc(--head-h) —— 那是**页面级**口径(相对文档滚动);
+ * 抽屉里它的滚动祖先是 .drawer-body, 吸顶会盖住列表上方的工具条("添加 Tracker"/"重命名…")。
+ * 故面板内改静态: 表头随列表滚走, 与接壳前 <thead> 的行为一致。 */
+.drawer-body .group-head { position: static; border-radius: var(--radius); }
+/* 行本身不可点(旧经典页只有文件名称格与优先级按钮挂 handler): 主视图的 pointer 光标会撒谎 */
+.drawer-body .group-row { cursor: default; }
+/* 行态: 虚拟 tracker / 跳过文件 = 弱化; 重命名选中行 = accent 柔底(W2 起才真正生效 —— 旧经典页
+ * 把这两个类名当整段属性插值拼进 dtHtml, 引号被转义成类名的一部分, 见坑档 esc-attr-quote-dead-class) */
+.drawer-body .group-row.virtual > * { color: var(--fg-dim); }
+.drawer-body .group-row.skipped > * { color: var(--fg-dim); }
+.drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
+.drawer-body .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.drawer-body .dir-name { color: var(--fg-muted); }
+.drawer-body .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
+.drawer-body .dfile-name { cursor: pointer; }
+/* 动作槽(删 tracker / 改优先级)贴右缘: 列定义里这两列 align=right, 单元格自身也得是 flex 容器
+ * 才能让按钮落在右缘(flex 子项不吃 text-align) */
+.drawer-body .dtrk-act, .drawer-body .dfile-prio { display: flex; justify-content: flex-end; }
+.drawer-body .dpeer-client, .drawer-body .dtrk-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

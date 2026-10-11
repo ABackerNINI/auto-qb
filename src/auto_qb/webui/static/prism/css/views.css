@@ -591,6 +591,28 @@
 .drawer-head > .qb-tools { flex: 0 0 auto; align-self: center; margin: 0; }
 .drawer-head > .qb-tabs button { padding: 2px 8px; }
 
+/* 详情抽屉 · 合并双列与密度档(计划 26-10-11-2106 W2/W4/W5 规则; W6 自 drawer_templates.js
+ * 的 <style data-dt> 注入单点迁入三皮肤, 逐条未改):
+ * · .dt-host:empty —— W2 Vue 组件根也带 .dt-host 类; 内容门关时子树只剩注释锚, :empty 兜底藏根
+ *   (显隐主门仍是组件内 v-show 读 dtHostOn)。
+ * · .drawer-split —— R2 S2 合并双列布局(W4 收口 drawer.js); 上限 2400 = 两列各约 1180 可读
+ *   上限 + gap(与单栏同封顶哲学); 门 1920 保证容器 >= ~1880, minmax 下限不会溢出。
+ * · .dt-traffic-main —— 流量块 template 转 div 的布局等价层(顶替原 fragment 直挂
+ *   .drawer-body.is-traffic flex 纵列的几何; FX-29 遮罩对 wrapper 生效, 故不用 display:contents)。
+ * · .dd-compact —— W5 密度档(描述符 cls 挂组件根/流量主块), 只做密度收紧 —— 结构开关
+ *   (raw/hint)走模板 v-if; 收紧基线取三皮肤现行值(f-row 6px / drawer-sec 18px /
+ *   group-row 10px 14px), 纯字面值, 不引入新令牌。 */
+.drawer .dt-host:empty { display: none; }
+.drawer .drawer-split { display: grid; grid-template-columns: minmax(560px, 1fr) minmax(620px, 1.15fr);
+  gap: 24px; max-width: 2400px; margin-left:auto; margin-right:auto; align-items: start; }
+.drawer .dt-col { min-width: 0; }
+.drawer .dt-col-head { display:flex; align-items:center; height:26px; margin-bottom:8px;
+  font-size:12px; font-weight:600; color:var(--fg-muted, inherit); border-bottom:1px solid var(--border-soft, transparent); }
+.drawer .dt-traffic-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.drawer .dd-compact .drawer-sec { margin-bottom: 10px; }
+.drawer .dd-compact .f-row { padding: 2px 0; }
+.drawer .dd-compact .group-table .group-row { padding: 6px 10px; }
+
 /* 种子「流量」页签的档位/纵轴控件组(2026-10-09 第 2 轮用户动议): **自种子头部改落图下统计栏**
  * (.hist-summary, 排在「下载累计」之后) —— 种子头部已承载五页签导航 + 模板切换器, 13 档再并进
  * 去太挤、窄视口下会变形; 落进既有统计栏行不新占图高。内层 .qb-tabs/.qb-tools 与流量形态头部

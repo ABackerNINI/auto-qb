@@ -188,7 +188,51 @@ const SHOW_COLUMNS = [
   // 最近动静: 与分组表"最近活动"同族(时间列), 一律左对齐
   { key: "latest", label: "最近动静", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
 ];
-const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS };
+/* ---------------- 详情面板三张列表的列模型(计划 26-10-11-2106 W2) ----------------
+ * 与主视图四张表**同模型**(label/tpl/sortable/locked/align 全套), 但**只共用列交互引擎, 不并身份**:
+ * 抽屉表另立注册表 DRAWER_TABLE_DEFS(与 hr_status.js 的 HR_TABLE_DEFS 同法, 见计划 §07 表 D)。
+ *
+ * !为什么另立而不并进 TABLE_DEFS: `TABLE_PAGES = Object.keys(TABLE_DEFS)` 驱动的是"页面"语义 ——
+ *   列选择器分组 / 行窗口化的 kind 分派 / 「恢复默认列宽·适应窗口宽度」两动作; 抽屉表没有视图,
+ *   也没有 3000 行的窗口化需求。列的**交互引擎**(拖宽/拖序/右键隐藏/持久化/对齐注入)在
+ *   columns.js, 它按**表 id 集合**(ALL_TABLE_PAGES)工作, 两侧都吃得到。
+ *
+ * !列 key 与行模型字段同名(表头 / 排序 / 值单元格三处靠它对齐)。抽屉行的数值字段有"显示值"与
+ *   "原始值"两份(dlspeed 等是 fmtSpeedOrDash 出的字符串), 排序一律读 `_raw` 侧 —— 否则 "1.2 MiB"
+ *   会按字典序排。见 shared/drawer_tabs.js 的行装配与 columns.js 的 `_sortVal`。
+ *
+ * !act(操作)列是**动作槽**不是数据列: 无 label(表头留空)、不可排序、locked(隐藏了就没法删 tracker)。
+ */
+const DRAWER_TRACKER_COLUMNS = [
+  { key: "url", label: "URL", tpl: "minmax(240px, 2.6fr)", sortable: true, locked: true, align: "left" },
+  { key: "status", label: "状态", tpl: "88px", sortable: true, align: "left" },
+  // 种子/用户两列沿用主视图口径 fmtPeersQb("已连接 (总数)"), 排序按**已连接数**原始值
+  { key: "num_seeds", label: "种子", tpl: "104px", sortable: true, align: "right" },
+  { key: "num_leeches", label: "用户", tpl: "104px", sortable: true, align: "right" },
+  { key: "msg", label: "消息", tpl: "minmax(180px, 2fr)", sortable: true, align: "left" },
+  { key: "act", label: "", tpl: "64px", locked: true, align: "right" },
+];
+const DRAWER_PEER_COLUMNS = [
+  { key: "addr", label: "IP/地址", tpl: "minmax(170px, 1.6fr)", sortable: true, locked: true, align: "left" },
+  { key: "client", label: "客户端", tpl: "minmax(150px, 1.6fr)", sortable: true, align: "left" },
+  { key: "flags", label: "标志", tpl: "88px", sortable: true, align: "left" },
+  { key: "progress", label: "进度", tpl: "84px", sortable: true, align: "right" },
+  { key: "dlspeed", label: "下载速度", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  { key: "upspeed", label: "上传速度", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "uploaded", label: "已上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "relevance", label: "文件关联", tpl: "96px", sortable: true, align: "right" },
+];
+const DRAWER_FILE_COLUMNS = [
+  { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "progress", label: "进度", tpl: "84px", sortable: true, align: "right" },
+  { key: "prio", label: "优先级", tpl: "104px", align: "left" },
+];
+const TABLE_COLUMNS = {
+  group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS,
+  drawerTracker: DRAWER_TRACKER_COLUMNS, drawerPeer: DRAWER_PEER_COLUMNS, drawerFile: DRAWER_FILE_COLUMNS,
+};
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
@@ -290,6 +334,47 @@ const TABLE_DEFS = {
 /* 视图模式 -> 表 id(排序 scope 解析单点; groups 是默认视图, 未知值回落 group) */
 const VIEW_TABLE = { groups: "group", torrents: "torrent", shows: "show" };
 
+/* ---------------- 详情面板三张列表的表身份(计划 26-10-11-2106 W2) ----------------
+ * 与 TABLE_DEFS **同形但独立** —— 这是计划 §07 表 D 的口径: 三张抽屉表接公共表壳 <aq-table>,
+ * 拖宽 / 拖序 / 右键隐藏 / 列偏好持久化与主视图**同源**(同一套 columns.js 引擎), 但**不进
+ * TABLE_PAGES**(否则列选择器多出三个"页面"分组、行窗口化多出三个 kind)。
+ *
+ * 与 TABLE_DEFS 的两处形态差异:
+ *   headRef  恒为 null —— 抽屉表头渲染在**页签组件内部**(<aq-drawer-trackers> 等),
+ *            子组件模板里的 ref 只登记在子组件上, 根实例的 $refs 取不到; 故走 columns.js
+ *            `_headEl` 的 **DOM 兜底**(按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)。
+ *            ⇒ 拖宽 / 拖序 / 双击自适应那三处 `closest(".group-head")` 一字不改就能命中。
+ *   window   恒为 null —— 抽屉列表最多百级行, 远低于 ROW_WIN_MIN, 不开窗口化。
+ *   grid/cols 走各自 computed(columns.js 里三对) —— 与主视图同一条 `_gridTemplate` 生成路径。
+ *
+ * sort 描述符同 TABLE_DEFS: gk/gd = 根实例上的排序键/方向 data 字段名, defKey/defDir = 三态
+ * 第三击的恢复目标(空键 = 后端原序, 与 detail 表同口径)。
+ */
+const DRAWER_TABLE_DEFS = {
+  drawerTracker: {
+    columns: DRAWER_TRACKER_COLUMNS, label: "Tracker 列表",
+    headRef: null, tableRef: null,
+    grid: "drawerTrackerGrid", cols: "visibleDrawerTrackerCols", window: null,
+    sort: { gk: "dtrkSortKey", gd: "dtrkSortDir", defKey: "", defDir: -1 },
+  },
+  drawerPeer: {
+    columns: DRAWER_PEER_COLUMNS, label: "用户列表",
+    headRef: null, tableRef: null,
+    grid: "drawerPeerGrid", cols: "visibleDrawerPeerCols", window: null,
+    sort: { gk: "dpeerSortKey", gd: "dpeerSortDir", defKey: "", defDir: -1 },
+  },
+  drawerFile: {
+    columns: DRAWER_FILE_COLUMNS, label: "文件列表",
+    headRef: null, tableRef: null,
+    grid: "drawerFileGrid", cols: "visibleDrawerFileCols", window: null,
+    sort: { gk: "dfileSortKey", gd: "dfileSortDir", defKey: "", defDir: -1 },
+  },
+};
+/* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
+ * 主视图"页面" + 抽屉表。两者的差集只有一个用途 —— 见 columns.js `tableDefs` 的取法。 */
+const ALL_TABLE_DEFS = { ...TABLE_DEFS, ...DRAWER_TABLE_DEFS };
+const ALL_TABLE_PAGES = Object.keys(ALL_TABLE_DEFS);
+
 /* ---------------- P1-2 行窗口化(windowed rows) ----------------
  *
  * 背景(实测, 3000 种子, 见 e2e/perf.spec.mjs「P1-2/P1-3 A/B 埋点」): 每轮全量回传后前端整表替换,
@@ -357,7 +442,8 @@ function templateMinPx(tpl) {
  * 迁移即清零, 正是用户要的"从头算"。 */
 function migrateLegacyToV5(raw) {
   const pages = {};
-  for (const page of TABLE_PAGES) {
+  // 遍历全集(含抽屉表): 旧载荷里没有它们的段 -> 生成空意图, 与"缺该 page 即空"同义
+  for (const page of ALL_TABLE_PAGES) {
     const fixed = !!((raw.manual || {})[page]);
     const widths = (raw.widths || {})[page];
     pages[page] = {
@@ -397,7 +483,9 @@ function loadColState() {
   try {
     const raw = readColStateRaw();
     if (raw && typeof raw === "object") {
-      for (const page of TABLE_PAGES) {
+      // 遍历全集(含抽屉表): 抽屉表的列偏好存在同一份 v5 载荷的独立 page 子树下 —— 新增 page
+      // 是向后兼容扩展(缺该 page 即空), **不升 COLS_STORE_KEY 版本**(R1: 升版本会清空用户手调的宽/隐/序)
+      for (const page of ALL_TABLE_PAGES) {
         const keys = columnKeys(page);
         const src = (raw.pages || {})[page] || {};
         const w = src.w;
@@ -433,7 +521,7 @@ function loadColState() {
   // 隐藏集。有任何已存偏好(哪怕空 hidden)一律不播 —— "刻意全开"是合法偏好, 被默认值反复
   // 覆盖就是"列偏好时不时被重置"的同形陷阱(pitfalls web-ui/columns-persist)。
   // 播种只进内存意图态, 随首次 persistPage 自然落盘; 用户之后显隐任何列都以存储为准。
-  for (const page of TABLE_PAGES) {
+  for (const page of ALL_TABLE_PAGES) {
     if (!out.hidden[page] && !out.order[page] && !out.w[page]) {
       const defaults = TABLE_COLUMNS[page].filter((c) => c.hide).map((c) => c.key);
       if (defaults.length) out.hidden[page] = defaults;
@@ -446,7 +534,7 @@ const initialColState = loadColState();  // 模块级只读一次(data() 的初�
 /* 生效宽度初值: 固化页取意图(首帧即正确), 全自动页空(等 recomputeEffective 按当前窗口现算)。 */
 const initialEffectiveWidths = (() => {
   const out = {};
-  for (const page of TABLE_PAGES) out[page] = initialColState.w[page] ? { ...initialColState.w[page] } : {};
+  for (const page of ALL_TABLE_PAGES) out[page] = initialColState.w[page] ? { ...initialColState.w[page] } : {};
   return out;
 })();
 
@@ -500,10 +588,11 @@ function initialDrawerHeight() {
   }
 }
 
-/* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记 id)。
- * 白名单校验在核心层 readSel(变体名单只有注册表加载后才齐, 装载序见 drawer_templates.js 头注释);
- * 这里薄封装 —— 核心未载入(清单序错)时也要返回全 classic 映射, 不能返回空对象/undefined:
- * drawer.html 经典包裹层的 v-show 直接读 drawerTplSel.<tab>, 缺键会把经典正文藏掉。 */
+/* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记档位 id)。
+ * 白名单校验与旧变体 id 显式迁移在核心层 readSel(W5 起走 DRAWER_DENSITY.normalize, 单点在
+ * drawer.js —— W6 起 drawer_templates.js 已退役收进该文件); 这里薄封装 —— 核心未载入(清单序错)
+ * 时也要返回全 classic 映射, 不能返回空对象/undefined: 组件显隐门 dtHostOn/档位判据读
+ * drawerTplSel.<tab>, 缺键会藏正文。 */
 function initialDrawerTpl() {
   const out = { general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
   const reg = window.AQB_DRAWER_TPL_REG;
@@ -569,7 +658,7 @@ app.mixin(window.AQB_SCOPE_AUDIT);  // 作用域运行时审计(S4): 默认关, 
 app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);
-app.mixin(window.AQB_DRAWER_TPL);  // 详情面板模板核心层(计划 26-10-06-0838 S1): 钩子方法域 + 切换器/摘要
+app.mixin(window.AQB_DRAWER_STORE);  // 抽屉数据/行为层(计划 26-10-11-2106 W1): 取数/竞态/等待集合/软切换序号, 与渲染无关
 app.mixin(window.AQB_DIALOGS);
 app.mixin(window.AQB_QB_TRAFFIC);  // qB 口径流量图(P5a, plan 26-10-03-0946 §07): uPlot 双系列组件 + 弹层方法域
 app.mixin(window.AQB_HR_STATUS);
@@ -591,4 +680,22 @@ app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);
 app.component("aq-show-cells", window.AQ_SHOW_CELLS_COMPONENT);
 app.component("aq-ep-cells", window.AQ_EP_CELLS_COMPONENT);
+// 抽屉三表的行模型单元格渲染器(计划 26-10-11-2106 W2): 与上面五个同一份「渲染器注册表」单点,
+// 只是宿主换成了页签组件 —— 组件模板一律 $root 回调, 不复制实现。
+app.component("aq-tracker-cells", window.AQ_TRACKER_CELLS_COMPONENT);
+app.component("aq-peer-cells", window.AQ_PEER_CELLS_COMPONENT);
+app.component("aq-file-cells", window.AQ_FILE_CELLS_COMPONENT);
+// 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
+// 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
+// W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。
+app.component("aq-drawer-general", window.AQ_DRAWER_GENERAL_COMPONENT);
+app.component("aq-drawer-trackers", window.AQ_DRAWER_TRACKERS_COMPONENT);
+app.component("aq-drawer-peers", window.AQ_DRAWER_PEERS_COMPONENT);
+app.component("aq-drawer-content", window.AQ_DRAWER_CONTENT_COMPONENT);
+// 详情面板头部外壳与流量控件组(计划 26-10-11-2106 W3): 两形态此前各写一份 <header>, 标题块与
+// 关闭按钮逐字复写(表 B 问题 4 的温床); 现外壳一份 + 中部插槽, 形态差异只在调用点。控件组
+// <aq-qb-ctl> 是**多根片段**, 两挂点(流量形态头部 / 种子流量页签图下统计栏)共用同一份实现 ——
+// 三皮肤 CSS 的直接子选择器(.drawer-head > .qb-tabs / .qb-statctl > .qb-tools)依赖它不留 wrapper。
+app.component("aq-drawer-head", window.AQ_DRAWER_HEAD_COMPONENT);
+app.component("aq-qb-ctl", window.AQ_QB_CTL_COMPONENT);
 app.mount("#app");

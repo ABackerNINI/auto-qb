@@ -194,6 +194,7 @@
 .ctx-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm);
   font-size: 13px; cursor: pointer; transition: background var(--dur) var(--ease); }
 .ctx-item:hover { background: var(--bg-hover); }
+.ctx-menu .ctx-item.is-gated, .ctx-menu .ctx-item.is-gated > .ico { color: var(--fg-dim, #888); cursor: default; } .ctx-menu .ctx-item.is-gated:hover { background: transparent; }  /* 右键菜单置灰项(R2 S3; W6 自 drawer_templates.js 注入迁入): 门不满足时可见不可点(title 提示; 行为层 dtToggleMerge 再拦一道); 并上 `> .ico` 不压 .ico-sync 蓝 */
 .ctx-item .ico { color: var(--fg-dim); }
 /* CTX-04: hover 只提亮**该项自己**那颗图标 —— 两处刻意的写法, 缺一就会回到"整片图标变灰":
  * 1. `>` 限定直接子级: 子面板(.ctx-sub)是父项的 DOM 后代, 用后代选择器时 hover 父项会连子面板
@@ -667,3 +668,18 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 卫星绕心旋转: 12s 线性匀速, 低干扰; prefers-reduced-motion 由 base.css 全局降级停转 */
 @keyframes orbit-spin { to { transform: rotate(360deg); } }
 .brand-orbit { animation: orbit-spin 12s linear infinite; transform-origin: 50% 50%; }
+
+/* ================= 详情面板三张列表的网格行(计划 26-10-11-2106 W2 接壳) =================
+ * 与 atlas/console 同名同义成对; prism 的弱化色取 --fg-muted(views.css 的 .drawer-table
+ * tr.virtual/tr.skipped 同口径)。 */
+.drawer-body .group-head { position: static; border-radius: var(--radius-sm); }
+.drawer-body .group-row { cursor: default; }
+.drawer-body .group-row.virtual > * { color: var(--fg-muted); }
+.drawer-body .group-row.skipped > * { color: var(--fg-muted); }
+.drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
+.drawer-body .mono-cell { font-family: var(--font-mono); font-size: 12px; }
+.drawer-body .dir-name { color: var(--fg-muted); }
+.drawer-body .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
+.drawer-body .dfile-name { cursor: pointer; }
+.drawer-body .dtrk-act, .drawer-body .dfile-prio { display: flex; justify-content: flex-end; }
+.drawer-body .dpeer-client, .drawer-body .dtrk-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

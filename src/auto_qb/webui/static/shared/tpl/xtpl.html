@@ -200,6 +200,9 @@
        同时命中表头与值格(表头与值同源)。行为一律回调根实例($root.xxx), 组件不持有状态。
        WARN: 属性顺序(class → data-table → style)与旧内联块逐位一致 —— DOM 等价比对是 P1 的硬验收。
        P5 增 thead 模式(见下方分支注释): 同一个组件的第二根, grid 分支一字未动。
+       !表头**独占右键**(2026-10-11 W2): 列头自己的"隐藏/排序/列选择器"菜单走 @contextmenu
+       .prevent.stop —— 面板把右键当"选模板"的入口挂在 .drawer-body 上, 表头在里面(抽屉三表接壳
+       后), 不拦冒泡会**同时弹出两个菜单**(列菜单 + 模板菜单), 用户无从选择。
        ================================================================================ -->
   <script type="text/x-template" id="tpl-aq-table">
     <!-- thead 模式(计划 26-10-11-1722 P5): 原生 <table> 的表头行 —— 设置页 HR 详情表借壳。
@@ -218,9 +221,9 @@
          :data-table="tableId" :style="$root.gridStyle(tableId)">
       <div v-for="col in cols" :key="col.key" class="h-cell"
            :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': drag && drag.page === tableId && drag.key === col.key }]"
-           @click="col.sortable && $root.setSort(col.key, tableId === 'detail' ? 'detail' : undefined)"
+           @click="col.sortable && $root.setSort(col.key, tableId)"
            @mousedown="$root.startColDrag($event, tableId, col.key)"
-           @contextmenu.prevent="$root.openHeadMenu($event, tableId, col)">
+           @contextmenu.prevent.stop="$root.openHeadMenu($event, tableId, col)">
         <span class="h-label">{{ col.label }}</span>
         <span v-if="col.sortable" class="arrow">
           <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">

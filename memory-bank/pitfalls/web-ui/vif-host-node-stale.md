@@ -19,3 +19,4 @@
   `isConnected` 才跳过, 旧引用失联就地重挂, 同目标重入零副作用。守阵
   `test_drawer_seed_reentry_variant_remount`。
 - **复发**: 0(新记, 2026-10-07)
+- **退役注 (2026-10-12, 计划 26-10-11-2106 W6)**: 本坑的**宿主**(变体插件挂载的 `.dt-host` 节点)与**处置**(`_dtSync` 回页重挂)已随变体退役消失(W5), 守阵 `test_drawer_seed_reentry_variant_remount` 同批退役。**不变式仍在**: watch(drawerVisible) 进场补拉的现状支路(`if (!s) return;`)与「v-if 拆建会换掉图表宿主」的机理照旧 —— uPlot 建图宿主仍随面板 v-if 出入, 消化方是 state.js watch(drawerVisible) 的退场销毁/进场补拉(qb_traffic_chart.js), 与插件重挂无关。

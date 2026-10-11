@@ -37,8 +37,9 @@ window.AQB_COLUMNS = {
     },
     gridStyle(page) {
       // 列模板由 computed 缓存(见 *_Grid): 行渲染只取同一引用, 不每行拼字符串
-      // 表 id -> grid computed 名的映射在 TABLE_DEFS(注册表单点, 计划 26-10-11-1722 P0)
-      const def = TABLE_DEFS[page];
+      // 表 id -> grid computed 名的映射在注册表(主视图 TABLE_DEFS / 抽屉表 DRAWER_TABLE_DEFS,
+      // 计划 26-10-11-2106 W2: 抽屉三表接壳后同吃本函数, 故查并集)
+      const def = ALL_TABLE_DEFS[page];
       return def ? this[def.grid] : null;
     },
 
@@ -100,13 +101,21 @@ window.AQB_COLUMNS = {
       return out;
     },
     _headEl(page) {
-      const def = TABLE_DEFS[page];
-      const ref = def ? this.$refs[def.headRef] : null;
+      const def = ALL_TABLE_DEFS[page];
+      const ref = def && def.headRef ? this.$refs[def.headRef] : null;
       const el = Array.isArray(ref) ? ref[0] : ref;
-      if (!el) return null;
-      // 表头现由表壳组件 <aq-table> 渲染(计划 26-10-11-1722 P1): ref 拿到的是**组件实例**,
-      // 取它的根元素(单根组件, 即 .group-head / .detail-head); 组件化前 ref 即元素, 原样返回。
-      return el.$el || el;
+      if (el) {
+        // 表头现由表壳组件 <aq-table> 渲染(计划 26-10-11-1722 P1): ref 拿到的是**组件实例**,
+        // 取它的根元素(单根组件, 即 .group-head / .detail-head); 组件化前 ref 即元素, 原样返回。
+        return el.$el || el;
+      }
+      /* DOM 兜底(计划 26-10-11-2106 W2): 抽屉三表的表头渲染在**页签组件内部**, 子组件模板里的
+       * ref 只登记在子组件上 —— 根实例的 $refs 永远取不到它。表壳根自带 data-table(它就是
+       * colAlignCss 注入的锚), 故按它查即可。主视图的 ref 路径优先命中, 本条对它们零影响;
+       * 抽屉未打开 / 该页签未激活时查不到 -> 返回 null(调用方全都已按 null 处理)。 */
+      if (!def) return null;
+      const found = document.querySelector('.group-head[data-table="' + page + '"]');
+      return found || null;
     },
     /* 列对齐规则注入(单例 <style id="col-align-css">): 首次创建后只改 textContent ——
      * 不能重建元素: 重建会让它排到 <head> 末尾的其它运行时样式之后, 层叠顺序不再稳定。 */
@@ -336,7 +345,7 @@ window.AQB_COLUMNS = {
      *   "派生值没有资格落盘"是双轨模型唯一铁律(守阵 test_frontend_persist_page_takes_intent_only)。
      */
     recomputeEffective() {
-      for (const page of TABLE_PAGES) {
+      for (const page of ALL_TABLE_PAGES) {
         if (this.colW[page]) {
           this.colWidths = { ...this.colWidths, [page]: { ...this.colW[page] } };
           continue;
@@ -452,13 +461,14 @@ window.AQB_COLUMNS = {
       this.persistPage(page);
       this.$nextTick(() => this.recomputeEffective());
     },
-    /* 列选择器底部两个动作的"全表"入口(计划 26-10-11-1722 P4): 遍历注册表 TABLE_PAGES,
-     * 取代模板里逐页手写的四条调用(加一张表不用再改模板)。 */
+    /* 列选择器底部两个动作的"全表"入口(计划 26-10-11-1722 P4): 遍历注册表, 取代模板里逐页手写的
+     * 四条调用(加一张表不用再改模板)。W2 起取**全集** —— 列选择器既然列出抽屉三表的列, 两个
+     * "全表"动作就必须覆盖它们, 否则会出现"能勾选但恢复不了"的半截能力(见 computed `tableDefs`)。 */
     resetAllColumnWidthsAll() {
-      for (const page of TABLE_PAGES) this.resetAllColumnWidths(page);
+      for (const page of ALL_TABLE_PAGES) this.resetAllColumnWidths(page);
     },
     fitColumnsToWindowAll() {
-      for (const page of TABLE_PAGES) this.fitColumnsToWindow(page);
+      for (const page of ALL_TABLE_PAGES) this.fitColumnsToWindow(page);
     },
 
     /* 列宽拖拽: 拖某列**只改该列**
@@ -655,9 +665,14 @@ window.AQB_COLUMNS = {
   computed: {
     /* 表注册表的**有序数组视图**(计划 26-10-11-1722 P4): 列选择器按它 v-for(四段硬编码收敛为一段),
      * 每项 { id, label, columns } —— label 即列选择器的分组标题, columns 即列定义单点。
-     * TABLE_DEFS 是模块常量(非响应式), 故本 computed 只在首帧算一次, 引用稳定(不引起重渲染抖动)。 */
+     * 注册表是模块常量(非响应式), 故本 computed 只在首帧算一次, 引用稳定(不引起重渲染抖动)。
+     * !W2 取舍(计划 26-10-11-2106): 取**全集**, 抽屉三表在列选择器里各占一个分组 —— 与计划 §07
+     * 的括注("不进 TABLE_PAGES 否则列选择器多出分组")**有意偏差**, 理由: 抽屉表头的右键隐藏
+     * (`headMenuHide` -> `toggleColumn`)是**不可逆**操作, 没有选择器这一档就没有恢复入口
+     * (只剩改 localStorage)。用户 26-10-11 拍板「以与主视图一致为准则」(D 组 Q2), 故取全集。
+     * 计划 §11 变更记录已登记本偏差。 */
     tableDefs() {
-      return TABLE_PAGES.map((id) => ({ id, label: TABLE_DEFS[id].label, columns: TABLE_DEFS[id].columns }));
+      return ALL_TABLE_PAGES.map((id) => ({ id, label: ALL_TABLE_DEFS[id].label, columns: ALL_TABLE_DEFS[id].columns }));
     },
     /* 列模板: computed 缓存(列宽/列显隐变化才变), 行渲染只取同一引用, 不再每行拼字符串 */
     groupGrid() {
@@ -671,6 +686,16 @@ window.AQB_COLUMNS = {
     },
     showGrid() {
       return { gridTemplateColumns: this._gridTemplate("show") };
+    },
+    /* 抽屉三表(W2): 与上面四张同一条 _gridTemplate 路径 —— 列宽/列序/隐藏任一变化即换引用 */
+    drawerTrackerGrid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerTracker") };
+    },
+    drawerPeerGrid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerPeer") };
+    },
+    drawerFileGrid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerFile") };
     },
     /* 列对齐规则(R10-08): align 定义在列模型里, 这里按**当前可见列**生成 :nth-child 规则注入 <head>。
      *
@@ -691,7 +716,9 @@ window.AQB_COLUMNS = {
      */
     colAlignCss() {
       const out = [];
-      for (const page of TABLE_PAGES) {
+      // 遍历全集(含抽屉三表, 计划 26-10-11-2106 W2): 对齐规则靠 [data-table] 锚命中表头与值格,
+      // 抽屉表头根带 data-table="drawer*"、行容器同挂, 故与主视图同一条注入路径。
+      for (const page of ALL_TABLE_PAGES) {
         const cols = this._visibleCols(page);
         for (let i = 0; i < cols.length; i++) {
           const align = cols[i].align || "left";
@@ -752,6 +779,16 @@ window.AQB_COLUMNS = {
     },
     visibleShowCols() {
       return this._visibleCols("show");
+    },
+    // 抽屉三表的可见列(W2): 表壳 :cols 与单元格渲染器 :cols 同取本引用(列序天然一致)
+    visibleDrawerTrackerCols() {
+      return this._visibleCols("drawerTracker");
+    },
+    visibleDrawerPeerCols() {
+      return this._visibleCols("drawerPeer");
+    },
+    visibleDrawerFileCols() {
+      return this._visibleCols("drawerFile");
     },
   },
 };

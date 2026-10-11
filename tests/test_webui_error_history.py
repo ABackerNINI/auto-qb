@@ -99,8 +99,8 @@ STORAGE_WRITE_BASELINE = {
     "auth.js": 1,  # autoqb_token
     "config_hub.js": 1,  # hub 视图选择
     "columns.js": 3,  # 列宽/顺序/隐藏
-    "drawer.js": 3,  # drawerHeight / drawerOpen / drawerTab
-    "drawer_templates.js": 2,  # +1 = 合并开关 autoqb.ui.drawerMerge 持久化(R2 计划 26-10-09-2219 S2, 现 dtToggleMerge)
+    "drawer.js":
+        5,  # drawerHeight / drawerOpen / drawerTab + 合并开关落盘(dtToggleMerge, W4) + 模板选择 autoqb.ui.drawerTpl(dtPersistSel, W6 自已退役的 drawer_templates.js 收进, 计划 26-10-11-2106)
     "menu.js": 1,  # 菜单收合态
     "qb_traffic_chart.js": 2,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08)
     "view.js": 2,  # 视图选择

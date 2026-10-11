@@ -105,3 +105,41 @@ window.AQ_EP_CELLS_COMPONENT = {
   },
   template: "#tpl-aq-ep-cells",
 };
+
+/* ---------------- 详情面板三表的行模型单元格渲染器(计划 26-10-11-2106 W2) ----------------
+ * 「渲染器注册表」的第二组 —— 与上面四个同范式(纯消费方: 只渲染 + 回调 $root), 差别只在
+ * **宿主是组件**: 三张表由 <aq-drawer-trackers>/<aq-drawer-peers>/<aq-drawer-content> 承载,
+ * 故表头的 ref 够不到根实例(见 columns.js `_headEl` 的 DOM 兜底注释)。
+ *   tracker-row → <aq-tracker-cells>   (Tracker 页签)
+ *   peer-row    → <aq-peer-cells>      (用户页签)
+ *   file-row    → <aq-file-cells>      (内容页签, 缩进树序 = 现行"树"形态)
+ * 模板在 tpl/xtpl-cells.html 末尾(同为 body 注入的 x-template)。
+ * !属性名保持各行的自然名(t/p/f)而非统一 row —— 与上面四个同理由: 分支体少改一字就少一处
+ *   DOM 等价风险; 且列的 key 与行模型的字段同名, 排序取值才有落点(见 app.js 的列定义注释)。
+ */
+window.AQ_TRACKER_CELLS_COMPONENT = {
+  name: "aq-tracker-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleDrawerTrackerCols)
+    t: { type: Object, required: true },         // tracker 行(drawerTrackerRows 元素)
+  },
+  template: "#tpl-aq-tracker-cells",
+};
+
+window.AQ_PEER_CELLS_COMPONENT = {
+  name: "aq-peer-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleDrawerPeerCols)
+    p: { type: Object, required: true },         // 对端行(drawerPeerRows 元素)
+  },
+  template: "#tpl-aq-peer-cells",
+};
+
+window.AQ_FILE_CELLS_COMPONENT = {
+  name: "aq-file-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleDrawerFileCols)
+    f: { type: Object, required: true },         // 文件行(drawerFileRows 元素)
+  },
+  template: "#tpl-aq-file-cells",
+};

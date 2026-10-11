@@ -12,8 +12,9 @@
  * 三挂点(2026-10-04 起全部并入底部详情抽屉, 以 _QB_SCOPES 作用域表为单一描述源): ① global 全局
  * (/api/traffic/qb/global, 状态栏「qB 口径流量图」入口) ② group 分组(/api/traffic/qb/group/{key},
  * 组右键菜单入口; key = 分组视图 g.key, 即 encode_group_key 通道, 前端不自行编码) ③ torrent 单种
- * (/api/traffic/qb/torrent/{hash}, 种子详情抽屉「流量」页签)。全局/分组走 drawer.kind === "traffic"
- * (scope 记挂点), 单种走 drawer.kind === "seed" + drawer.tab === "traffic"; 三者共用同一抽屉壳、
+ * (/api/traffic/qb/torrent/{hash}, 种子详情抽屉「流量」页签)。全局/分组走流量形态(drawerIsTraffic,
+ * W6 起吃 drawer.js 的形态判据单点, scope 记挂点), 单种走种子形态(drawerIsSeed) + drawer.tab ===
+ * "traffic"; 三者共用同一抽屉壳、
  * 同一拖拽高度(drawerHeightPx)与同一段正文块(drawer.html qbTrafficActive), 故建图落点统一
  * ref="qbChartHost"(同一时刻只渲染一个流量形态)。
  *
@@ -155,9 +156,9 @@ const _QB_SCOPES = {
     // 面板 visible 同源守卫(drawerVisible): 面板只在主内容页渲染, 隐藏期还拉 = 对着不在 DOM 里的
     // 面板取数(纯浪费 + 回页数据陈旧), 故 tick/建图一律跳过 —— 回到主内容页由 watch(drawerVisible)
     // 补拉一发接着续(见 state.js)
-    active: (t) => t.drawer.open && t.page === "groups"
-      && t.drawer.kind === "traffic" && t.drawer.scope === "global",
-    stale: (t) => !(t.drawer.open && t.drawer.kind === "traffic" && t.drawer.scope === "global"),
+    active: (t) => t.drawerIsTraffic && t.drawer.open && t.page === "groups"
+      && t.drawer.scope === "global",
+    stale: (t) => !(t.drawerIsTraffic && t.drawer.open && t.drawer.scope === "global"),
   },
   torrent: {
     host: "qbChartHost",
@@ -169,9 +170,9 @@ const _QB_SCOPES = {
     // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例)。
     // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 面板三视图共用, 从辅种页/追剧页成员行
     // 打开的种子详情其流量页签同样要拉要画。
-    active: (t) => !!(t.drawer.open && t.drawer.kind === "seed" && t.drawer.tab === "traffic"
+    active: (t) => !!(t.drawerIsSeed && t.drawer.open && t.drawer.tab === "traffic"
       && t.page === "groups"),
-    stale: (t, h) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "seed"
+    stale: (t, h) => !!(t.qbTrafficOn && t.drawerIsSeed && t.drawer.open
       && t.drawer.tab === "traffic" && t.drawer.hash === h),
   },
   group: {
@@ -183,9 +184,9 @@ const _QB_SCOPES = {
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
     ctx: (t) => t.qbGroupKey,
     // page 守卫与 global 同(drawerVisible 单点): 非主内容页面板不在 DOM, 不拉不画
-    active: (t) => t.drawer.open && t.page === "groups"
-      && t.drawer.kind === "traffic" && t.drawer.scope === "group",
-    stale: (t, k) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "traffic"
+    active: (t) => t.drawerIsTraffic && t.drawer.open && t.page === "groups"
+      && t.drawer.scope === "group",
+    stale: (t, k) => !!(t.qbTrafficOn && t.drawerIsTraffic && t.drawer.open
       && t.drawer.scope === "group" && t.qbGroupKey === k),
   },
 };
@@ -286,8 +287,8 @@ window.AQB_QB_TRAFFIC = {
      * 抽屉流量形态高度判据(drawer.js drawerPanelStyle)的单一派生点。 */
     qbCurScope() {
       if (!this.drawer.open) return "";
-      if (this.drawer.kind === "traffic") return this.drawer.scope || "";
-      if (this.drawer.kind === "seed" && this.drawer.tab === "traffic" && this.qbTrafficOn) return "torrent";
+      if (this.drawerIsTraffic) return this.drawer.scope || "";
+      if (this.drawerIsSeed && this.drawer.tab === "traffic" && this.qbTrafficOn) return "torrent";
       return "";
     },
     qbTrafficActive() {
@@ -389,8 +390,8 @@ window.AQB_QB_TRAFFIC = {
     },
   },
   /* 限速值变化(首次到手 / qB 重连 / 运行中改限速)时重排一次 y 轴 —— 长窗轮询间隔可夹到
-   * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与 drawer_templates.js
-   * 同款): 本 mixin 经 app.mixin 全局注入, <transition> 的 BaseTransition 假实例没有数据面,
+   * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与各 AQB_* 片段同款):
+   * 本 mixin 经 app.mixin 全局注入, <transition> 的 BaseTransition 假实例没有数据面,
    * 写成 watch 选项会在其上求值即抛; mounted 里先按 this.drawer 守卫剔除假实例。 */
   mounted() {
     if (!this.drawer) return;  /* BaseTransition 等假实例无数据面: 跳过(真根实例恒有 drawer) */
@@ -439,7 +440,7 @@ window.AQB_QB_TRAFFIC = {
       // 同目标幂等短路: 已开着同一形态同一目标(分组再比 key)时重按入口(Ctrl+\ / 状态栏钮)不重建
       // —— 走下方全量路径等于把收图销毁+抽屉重建+首拉各闪一遍(pitfalls drawer-switch-flicker:
       // 快中间态本身就是闪); 右键菜单入口仍收菜单
-      if (this.drawer.open && this.drawer.kind === "traffic" && this.drawer.scope === scope
+      if (this.drawer.open && this.drawerIsTraffic && this.drawer.scope === scope
           && (scope !== "group" || this.qbGroupKey === key)) {
         this.menu.visible = false;
         return;

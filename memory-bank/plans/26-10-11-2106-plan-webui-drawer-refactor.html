@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-drawer-refactor">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-11-2106">
-<meta name="doc-updated" content="26-10-11-2106">
+<meta name="doc-updated" content="26-10-11-2136">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-drawer-refactor.md">
 <title>种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划</title>
 <style>
   :root{
@@ -138,7 +139,7 @@
     <p class="sub">把底部停靠抽屉从「字符串 DOM + 15 个过程式变体」重建为 Vue 面板，剥出与渲染无关的数据层，并让 Tracker / 用户 / 文件三张列表接上公共表壳 <code>&lt;aq-table&gt;</code>。</p>
     <dl class="meta">
       <div><dt>Topic</dt><dd>webui-drawer-refactor</dd></div>
-      <div><dt>Status</dt><dd>Open · 待拍板</dd></div>
+      <div><dt>Status</dt><dd>Done · D1–D4 已拍板(A) · W0–W6 全部落地（26-10-12-0255 终态：抽屉只剩一套渲染技术）</dd></div>
       <div><dt>Added</dt><dd>26-10-11-2106</dd></div>
       <div><dt>Scope</dt><dd>前端 only · 三皮肤 · 无构建链</dd></div>
     </dl>
@@ -308,11 +309,12 @@
       <h2><span class="idx">05</span> 分步实施 W0–W6</h2>
       <h3>一步一停手点，每步独立验收、可回退</h3>
       <p class="muted">排序原则：先冻结基线，再剥数据层（零观感变化），然后按页签分波换渲染，最后收口退役。<strong>W0–W6 即表组件计划 §05 P6 的分步落地</strong>；每一步都跑 <code>test.full</code> 与 e2e，并按 §10 新建基线切片。</p>
+      <div class="note"><span class="lab">进度</span><strong>W0 / W1 / W2 已落地（26-10-11-2259）</strong>：W0 冻结基线（e2e 与 DOM dump 哈希，见 §10 基线切片）；W1 把取数/竞态/等待集合/软切换序号剥成 <span class="path">shared/drawer_store.js</span>（<code>window.AQB_DRAWER_STORE</code>，与渲染无关），app.mixin 注入 + 三份 manifest 成对登记。W2 四页签全转 Vue 组件（<span class="path">shared/drawer_tabs.js</span> + <span class="path">tpl/drawer-tabs.html</span>），三列表经<strong>独立注册表</strong> <code>DRAWER_TABLE_DEFS</code> 接入 <code>&lt;aq-table&gt;</code>（新壳 <code>ALL_TABLE_DEFS</code> = 主视图四表 + 抽屉三表），<span class="path">drawer_pages/*-classic.js</span> 四件整体退役。W1 验收 = <strong>真浏览器 A/B DOM dump 逐字节等价</strong>（10 项探针 × 双皮肤，sha256 相同）+ <code>test.full</code> 与 e2e 与基线逐位一致；W2 是<strong>有观感变化</strong>的一波，见下方 W2「落地」条与 §11 变更记录（用户 26-10-11 拍板「以与主视图一致为准则，观感变化整体接受」）。W3 已落地（26-10-12-0009）：seed 五页签（含流量）与 traffic 三挂点统一到新面板，<span class="path">shared/drawer_head.js</span> + <span class="path">tpl/drawer-head.html</span> 收掉「两形态各一份头部」的复写，<code>drawer.kind</code> 形态判据收归 <code>drawerIsSeed</code>/<code>drawerIsTraffic</code> 两个 computed；<strong>qB 流量图表本体与 uPlot 零改动</strong>（停手点），且流量正文<strong>留在壳模板</strong>（根实例 <code>$refs</code> 取不到子组件的 ref —— 见 W3「落地」条与 §11）。W4 已落地（26-10-12-0117）：合并状态（开关 / 宽度门 / 对判据 / 两条监听）整体收进 <span class="path">shared/drawer.js</span> 面板核心（合并对单点 <code>AQB_DRAWER_MERGE</code>），合并页签与双列列组改 <code>v-for</code> 消费单点（删「渲染列组 vs 命中」双份判据，R2 空列 bug 类永久闭环）；<code>_drawerMenuColByX</code> 复核后<strong>保留</strong>（根因仍在，已注 W4 结论）；新增「门跨越 / 拉宽自动恢复」真手势 e2e。W5 已落地（26-10-12-0224）：15 个过程式变体（<span class="path">drawer_tpl/</span> 5739 行）与插件挂载机械整体退役，「换版式」收敛为每页签 2 档的声明式密度档（<code>DRAWER_DENSITY</code> 一张表），旧 id 显式迁移、结构开关 <code>v-if</code> 真隐藏、换档 = Vue 响应式。W6 已落地（26-10-12-0255）：选择层 <span class="path">drawer_templates.js</span> 整文件退役（四件收进 <span class="path">drawer.js</span>，CSS 迁三皮肤），W3 停手点兑现（<code>qb_traffic_chart.js</code> 谓词改吃形态判据单点），坑档收口 —— <strong>终态判据「抽屉只剩一套渲染技术」达成</strong>，详见 §11。</div>
 
       <div class="phase">
         <div class="pid">W0</div>
         <div class="pbody">
-          <h5>冻结契约与验收基线</h5>
+          <h5>冻结契约与验收基线 <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>把 §03 的逐面等价清单落成文档，并冻结一套「重建基线」：现状抽屉的 e2e（drawer-groups-shows / drawer-merge / column-prefs / 快捷键）+ 真浏览器 DOM 与交互探针 dump，作为后续每一步的 A/B 对照。</dd>
             <dt>改动面</dt><dd>仅文档 + 一条基线切片（<span class="path">memory-bank/testing/baselines/</span>）；<strong>零代码</strong>。</dd>
@@ -325,7 +327,7 @@
       <div class="phase">
         <div class="pid">W1</div>
         <div class="pbody">
-          <h5>数据层抽离（零观感变化）</h5>
+          <h5>数据层抽离（零观感变化） <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>把取数 / 竞态 / 等待集合 / 软切换序号剥成 <span class="path">shared/drawer_store.js</span>（与渲染无关），现有字符串 DOM 仍消费它，渲染结果<strong>逐字节等价</strong>。</dd>
             <dt>改动面</dt><dd>新增 store 片段 + <span class="path">drawer.js</span> 改为薄适配（四 fetcher / <code>_drawerWaitSources</code> / <code>_drawerDone</code> / <code>_drawerSwitchEnd</code> 迁入）；三份 shell 清单各加一行（<span class="path">prism/index.html</span> 210 行硬顶，先腾后加，手法见 <span class="path">pitfalls/web-ui/frontend-split.md</span>）。</dd>
@@ -338,12 +340,13 @@
       <div class="phase">
         <div class="pid">W2</div>
         <div class="pbody">
-          <h5>四页签 Vue 重建（按页签分波，三列表接入表壳）</h5>
+          <h5>四页签 Vue 重建（按页签分波，三列表接入表壳） <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>general / trackers / peers / content 四个页签各重写为 Vue 组件；Tracker / 用户 / 文件三张列表接入 <code>&lt;aq-table&gt;</code>（注册三张表 + 三个行模型渲染器）；删 <span class="path">drawer_pages/&lt;tab&gt;-classic.js</span>。</dd>
             <dt>改动面</dt><dd>新增面板组件分片 + 三张表注册（与 <code>TABLE_DEFS</code> 同族的<strong>独立</strong>注册表）；<span class="path">tpl/drawer.html</span> 的 <code>dt-host</code> 骨架替换为组件调用。</dd>
             <dt>验收</dt><dd>四页签 DOM 与现状 A/B 等价（或按拍板的观感升级逐项确认）；拖宽 / 排序 / 右键隐藏 / 行键盘在面板内可用；守阵 <code>test_drawer_tpl_*</code> 同轮改版而非放宽。</dd>
             <dt>停手点</dt><dd>一页签一波；未替换的页签仍走旧插件（<strong>单一挂载点 + 特性开关</strong>，避免双实现同屏）。</dd>
+            <dt>落地</dt><dd><strong>26-10-11-2259</strong>（用户 26-10-11 定「<strong>全部一起做</strong>」+「<strong>Vue 连变体一起声明式实现</strong>」，故四页签同波、不逐页签停）。四页签 = <span class="path">shared/drawer_tabs.js</span> 四个组件 + <span class="path">tpl/drawer-tabs.html</span>；三列表接壳 = 独立注册表 <code>DRAWER_TABLE_DEFS</code>（<code>headRef: null</code>、每表独立 <code>sort.gk/gd</code>）并入新壳 <code>ALL_TABLE_DEFS</code>（<strong>不等于</strong> <code>TABLE_DEFS</code>，主视图四表语义零改），三个行模型渲染器 <code>aq-tracker-cells</code> / <code>aq-peer-cells</code> / <code>aq-file-cells</code>；<span class="path">drawer_pages/*-classic.js</span> 四件删除（git <code>D</code>）。<strong>两处拍板外的实际取舍</strong>：① 抽屉表<strong>不进</strong> <code>TABLE_PAGES</code> 但<strong>进</strong>列选择器分组（与 §07 括注的<strong>有意偏差</strong>，理由 = 右键隐藏不可逆、选择器是唯一恢复入口，用户「以与主视图一致为准则」）；② 表头右键加 <code>.stop</code> 独占（面板正文的「选模板」右键入口在 <code>.drawer-body</code> 上，不拦冒泡会同时弹两个菜单）。<strong>观感变化（已按拍板整体接受）</strong>：抽屉三列表由 <code>&lt;table class="drawer-table"&gt;</code> 变为与主视图同源的 <code>div</code> 网格（<code>.group-head</code> / <code>.group-row[data-table=…]</code>），表头在面板内改 <code>position:static</code>（不吸顶，三皮肤成对）。</dd>
           </dl>
         </div>
       </div>
@@ -351,12 +354,13 @@
       <div class="phase">
         <div class="pid">W3</div>
         <div class="pbody">
-          <h5>流量页签与形态收敛</h5>
+          <h5>流量页签与形态收敛 <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>seed 五页签（含流量）与 traffic 三挂点（全局 / 分组 / 单种）统一到新面板；<code>drawer.kind</code> 形态判据收口；消掉「两形态各一份头部」的复写（问题 4 的根因）。</dd>
             <dt>改动面</dt><dd><span class="path">qb_traffic_chart.js</span> 的宿主以薄包装接入；<code>.drawer-body.is-traffic</code> 布局类保留（三皮肤 CSS 零改动优先）。</dd>
             <dt>验收</dt><dd>三挂点控件齐全（守阵按「两形态各接一份 + 内层逐字同源」钉）；静默续拉（<code>qbCurPending</code> 三合一）语义不变。</dd>
             <dt>停手点</dt><dd>uPlot 与图表模块零改动。</dd>
+            <dt>落地</dt><dd><strong>26-10-12-0009</strong>（用户 26-10-11 定「<strong>缺陷留到 W5</strong>」—— <code>esc-attr-quote-dead-class</code> 不回灌 15 个变体，随 W5 整体退役消失；随后继续 W3）。<strong>头部复写收敛</strong>：新增 <span class="path">shared/drawer_head.js</span>（<code>AQ_DRAWER_HEAD_COMPONENT</code> / <code>AQ_QB_CTL_COMPONENT</code>）+ <span class="path">tpl/drawer-head.html</span>；<code>&lt;aq-drawer-head&gt;</code> 是面板唯一头部壳（标题块 + 默认 slot + 关闭钮），seed/traffic 两形态各以一行调用表达，byte 级复写消除；<code>&lt;aq-qb-ctl&gt;</code> 承载档位 + 纵轴控件组，traffic 头部与 seed「流量」页签的 <code>.qb-statctl</code> 两处挂点共用<strong>同一份实现</strong>（守阵改钉「单一实现 + 恰两挂点 + 面板模板零拷贝」，强于旧「两处逐字同源」）。<strong>两处计划外的实际取舍</strong>：① <code>&lt;aq-qb-ctl&gt;</code> 必须是<strong>多根片段</strong>（<code>.qb-tabs</code> / <code>.qb-tools</code> 两个兄弟根节点、不套包裹）—— 三皮肤的 <code>.drawer-head &gt; .qb-tabs/.qb-tools</code> 与 <code>.qb-statctl &gt; .qb-tabs/.qb-tools</code> 全是<strong>直接子选择器</strong>，包一层即全部静默失效（守阵新增结构级判根 <code>_tpl_top_level_tags</code>，红验确认类名 count 钉不住这类回归）；② <strong>流量正文留在壳模板</strong>、不经组件包装 —— 计划写「宿主以薄包装接入」，实做把「薄包装」落在壳模板的 <code>v-if="drawerIsTraffic"</code> 分支上：<code>_qbChartBuild(scope)</code> 经根实例 <code>this.$refs[def.host]</code> 取挂载点，而 Vue 只在<strong>声明 ref 的实例</strong>上登记 <code>$refs</code>，子组件模板里的 <code>ref</code> 永远到不了根实例 ⇒ 搬进组件图表会<strong>静默不画</strong>（同 W2 <code>_headEl</code> DOM 兜底的病灶族）。<strong>形态判据收口</strong>：新增 <code>drawerIsSeed</code>/<code>drawerIsTraffic</code> 两个 computed（<code>drawer.kind</code> 字面量全前端仅剩这两处定义 + <code>qb_traffic_chart.js</code> 的 <code>active/stale</code> 谓词 —— 后者按停手点冻结），<code>drawer_templates.js</code>/<code>menu.js</code>/<code>shortcuts.js</code>/<code>drawer.html</code> 四处调用点同轮换；新增守阵 <code>test_frontend_drawer_form_judge_single_point</code> 钉谓词原文与各文件出现数。三皮肤 CSS 零改动（<code>.drawer-body.is-traffic</code> 布局类原样保留）；<code>qb_traffic_chart.js</code> / uPlot 零改动。</dd>
           </dl>
         </div>
       </div>
@@ -364,12 +368,13 @@
       <div class="phase">
         <div class="pid">W4</div>
         <div class="pbody">
-          <h5>合并双列与右键模板选择</h5>
+          <h5>合并双列与右键模板选择 <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd><code>drawerMerge</code> 开关 + 宽度门 1920 + <code>dtPair</code> + 右键模板选择 + 合并页签，全部以新面板<strong>单一状态源</strong>表达（不再 computed 与模板两处读法）。</dd>
             <dt>改动面</dt><dd>删 <code>MERGE_PAIRS</code> 的双份判据（渲染列组 vs 命中）；坐标兜底 <code>_drawerMenuColByX</code> 若新架构下不再需要则退役，否则保留并注释根因。</dd>
             <dt>验收</dt><dd>合并开关 / 门跨越 / 两列各自模板记忆 / 右键命中区域四条 e2e 全绿；拉宽自动恢复。</dd>
             <dt>停手点</dt><dd>宽度门 1920 与两列封顶 2400 口径不变。</dd>
+            <dt>落地</dt><dd><strong>26-10-12-0117</strong>。<strong>单一状态源</strong>：合并状态（<code>dtMergeOn</code>/<code>dtMergeTabsOn</code>/<code>dtPair</code>/<code>dtSplitOn</code> 四判据 + <code>_dtPairOf</code>/<code>dtMergeGateOk</code>/<code>dtToggleMerge</code>/<code>dtMergeTabPick</code> 四方法 + resize 回写 <code>dtWinW</code> 与 <code>drawerMerge</code> $watch 两条监听）自 <span class="path">drawer_templates.js</span>（插件/变体层）整体迁 <span class="path">drawer.js</span>（面板核心）—— 合并是抽屉级布局状态，不属插件层；插件文件只留挂载机械（<code>_dtMountSplit</code> 经新单点消费），W5/W6 退役该文件时合并不再陪葬。合并对常量改**列表形态**（<code>[{ id, label, tabs }]</code>）落 <code>window.AQB_DRAWER_MERGE</code>（跨文件单点，赋值形态同 <code>AQB_DRAWER_TPL_REG</code> 不走 mixin 接线守阵）。<strong>删双份判据</strong>：合并页签按钮与双列列组改由 <code>dtMergeTabList</code>/<code>dtPairCols</code> 两个渲染单点经 <code>v-for</code> 驱动，<span class="path">tpl/drawer.html</span> 不再硬编码 gc/tp 两个 <code>&lt;template&gt;</code> 分支、两张按钮与标签（<code>dtMergeTabActive</code> 方法随内联 <code>mt.id === dtPair</code> 删除 —— 高亮判据与列组同源）；general 列经 props 传详情（<code>dtPairCols</code> 数据化）。<strong>_drawerMenuColByX 复核 = 保留</strong>：<code>.drawer-split</code> 的 <code>align-items:start</code> + 封顶 2400 + 24px gap 三条几何事实与列的渲染技术无关，短列下方/间隙/两侧留白照旧不落在任何 <code>.dt-col</code> 上，退役它 = R6「右侧空白右键弹左列」回归复发（menu.js 已注 W4 结论）。<strong>验收补强</strong>：既有四条合并 e2e 全绿之外，新增「门跨越 / 拉宽自动恢复」真手势用例（预置开关 → 1280 无合并 → 拉宽 2560 自动恢复 + 第二列数据补给 → 缩回回落 → 再拉宽直接恢复），钉住两条监听随迁的行为面。<strong>红验四条</strong>（RC1 高亮脱钩 / RC2 回插硬编码分支 / RC3 插件层自建映射 / RC4 监听迁丢）均 rc=1 非退化 —— 其中 RC1/RC4 首轮被**说明性注释与声明处喂饱**（裸字符串 pin 退化），同轮改为代码形态锚定后重验。三皮肤 CSS 零改动（合并样式仍在 00-core 注入 —— W5/W6 退役注册表文件时需随迁三皮肤，见基线切片风险条）。</dd>
           </dl>
         </div>
       </div>
@@ -377,7 +382,7 @@
       <div class="phase">
         <div class="pid">W5</div>
         <div class="pbody">
-          <h5>变体策略落地（按 D2 拍板）</h5>
+          <h5>变体策略落地（按 D2 拍板） <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>把 15 个过程式变体替换为<strong>声明式密度变体</strong>（或按拍板收敛 / 删除）；<span class="path">shared/drawer_tpl/*</span> 与变体设施退役。</dd>
             <dt>改动面</dt><dd>删 <span class="path">shared/drawer_tpl/*</span>（15 文件）与 <code>dtHtml</code> / <code>dtRaw</code> / <code>KIT</code> / <code>HELPERS</code> / 宿主挂载 API；<code>autoqb.ui.drawerTpl</code> 的旧 id <strong>显式迁移</strong>（旧 id → 新档位，升级零观感差异）。</dd>
@@ -390,7 +395,7 @@
       <div class="phase">
         <div class="pid">W6</div>
         <div class="pbody">
-          <h5>收口与退役</h5>
+          <h5>收口与退役 <span class="tag">已落地</span></h5>
           <dl>
             <dt>目标</dt><dd>删尽第二套渲染技术；守阵与坑档同轮改版；文档回写。</dd>
             <dt>改动面</dt><dd>删 <span class="path">drawer_templates.js</span> 的宿主 / 注册 / 挂载（<code>_dtMounted</code> / <code>_dtSync</code> / <code>_dtRender</code> / <code>_dtNotify</code>）、<span class="path">drawer_pages/*</span>、<span class="path">drawer_tpl/*</span>；<code>test_drawer_tpl_registry_wiring</code> / <code>test_drawer_tpl_*</code> / <code>test_drawer_seed_reentry_variant_remount</code> 等整体退役或改写为 Vue 版；坑档 <span class="path">drawer-switch-flicker</span> / <span class="path">vif-host-node-stale</span> / <span class="path">variant-singleton-shadow</span> 标注「随重建退役（协议移植见 W1 / W3）」。</dd>
@@ -431,6 +436,10 @@
       <div class="note">
         <span class="lab">归属口径</span>
         三表与 <code>HR_TABLE_DEFS</code> 同法——<strong>独立注册表，不进 <code>TABLE_PAGES</code></strong>（否则列选择器 / 列对齐多出分组 = 观感变化）；行渲染走表组件计划 P3 的行模型渲染器范式（每行模型一份实现）。
+      </div>
+      <div class="note">
+        <span class="lab">落地偏差（26-10-11-2259）</span>
+        W2 实做把上面两件事<strong>拆开</strong>了，只满足前者：<strong>不进</strong> <code>TABLE_PAGES</code>（主视图四表语义零改），但<strong>进</strong>了列选择器分组（新壳 <code>ALL_TABLE_DEFS</code> 供 <code>tableDefs</code> 消费）。理由是右键隐藏<strong>不可逆</strong>——抽屉表若不在选择器里成组出现，用户误隐藏一列后只能改 localStorage 才能找回来；用户 26-10-11 拍板「以『与主视图一致』为准则，观感变化整体接受」，本偏差按该准则登记（代价 = 列选择器多出「Tracker 列表 / 用户列表 / 文件列表」三组）。
       </div>
     </section>
 
@@ -480,6 +489,7 @@
     <section id="s9">
       <h2><span class="idx">09</span> 拍板点</h2>
       <h3>四处需要用户先定方向</h3>
+      <div class="note"><span class="lab">拍板结论（26-10-11）</span>用户指令「<strong>按推荐实施</strong>」= D1/D2/D3/D4 一律取<strong>推荐项 A</strong>：Vue 3 组件重建 · 收敛为声明式密度变体 · 按页签分波替换 · 三列表注册进 <code>&lt;aq-table&gt;</code>。据此 W0/W1 已落地，W2 起照此推进。</div>
       <div class="dec">
         <div class="q"><span class="qn">D1</span>渲染模型</div>
         <p class="opt">A · Vue 3 组件重建 ｜ B · 保留字符串 DOM 只做清理（抽 store + 修问题）</p>
@@ -524,6 +534,35 @@
       <table class="bleed">
         <thead><tr><th>时间</th><th>变更</th></tr></thead>
         <tbody>
+          <tr><td class="mono">26-10-12-0255</td><td><strong>W6 落地</strong>（收口与退役）—— 选择层整文件退役，<strong>终态判据「抽屉只剩一套渲染技术」达成</strong>。<br>
+            <strong>源</strong>：<span class="path">drawer_templates.js</span> 整文件<strong>删除</strong>；W5 余下的选择层四件收进 <span class="path">drawer.js</span>：① 密度档单点 <code>window.AQB_DRAWER_DENSITY</code>（DTPL_TIERS/DTPL_DENSITY/三 API，先建局部量再赋 window 的形态防 mixin 误判）；② 读侧 <code>window.AQB_DRAWER_TPL_REG</code>（readSel 白名单 + 旧 id 迁移）；③ 菜单/显隐判据（<code>dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn</code> 四 computed 与 <code>_dtCurTab/dtHostOn/drawerTier/dtMenuPick/dtPersistSel</code> 五 methods）<strong>并入 AQB_DRAWER mixin 本体</strong> —— app.js 删第二份 <code>app.mixin(window.AQB_DRAWER_TPL)</code>；④ <code>dtInjectCss</code> 注入单点退役。装载序硬约束改「drawer.js &lt; state.js」（state data() 调 initialDrawerTpl 依赖 ②）。<br>
+            <strong>CSS 迁三皮肤</strong>（规则逐条未改）：00-core 合并 CSS（<code>.drawer-split</code>/<code>.dt-col</code>/<code>.dt-col-head</code>/<code>.dt-host:empty</code>/<code>.dt-traffic-main</code>）与 00-density 密度 CSS（<code>.dd-compact</code> 族）迁三皮肤 views.css；<code>.ctx-menu .ctx-item.is-gated</code> 置灰项迁 components.css；atlas components.css 贴 700 行上限（迁移注释压行尾净增 2 行贴线过闸）。<br>
+            <strong>W3 停手点兑现</strong>：<code>qb_traffic_chart.js</code> 的 <code>_QB_SCOPES.active/stale</code>（三挂点谓词）、<code>qbCurScope</code>、<code>openDrawerTraffic</code> 同目标短路全部改吃 <code>drawerIsTraffic</code>/<code>drawerIsSeed</code> 单点 —— 全仓 <code>drawer.kind</code> 字面量只剩 drawer.js 两个定义处。<br>
+            <strong>守阵同轮改版（不放宽）</strong>：<code>test_drawer_tpl_registry_wiring</code>（manifest 断言反转 + 皮肤聚合 CSS 成对断言 + 成员锚换家缩进 6→4 + mixin 注入负 pin + dtInjectCss 负 pin）、<code>test_drawer_tpl_facility_retired</code>（文件级退役 + 注入活代码负 pin + 密度段 space-between/.dt-select 禁令改锚皮肤）、<code>test_drawer_tpl_menu_right_click_selection</code>、<code>test_drawer_tpl_classic_default</code>（node 电池加载 drawer.js，<code>window.AQB_DRAWER.methods</code>）、<code>test_frontend_drawer_form_judge_single_point</code>（摘 W3 豁免，改钉四件含图表模块零散点计数）、<code>test_frontend_qb_traffic_drawer_page_guard</code>（openDrawerTraffic 短路改单点形态）、<code>test_webui_error_history</code>（写入基线 drawer.js 4→5：dtPersistSel 写入点随迁移合并，行内注明）。<br>
+            <strong>坑档收口</strong>：<code>variant-singleton-shadow</code> / <code>vif-host-node-stale</code> / <code>drawer-switch-flicker</code> 加退役注（缺陷面随退役消失，机理/不变式入库；软切换协议与 uPlot 宿主纪律仍现役、守阵仍活，逐档注明）。<br>
+            <strong>红验两条（注入即红 / 还原即绿）</strong>：RC1 迁移去向错（legacy <code>"01"</code>→compact → node 电池「旧 tall id→classic」两断言红）；RC2 皮肤 CSS 缺失（删 console <code>.drawer-split</code> 规则 → wiring「皮肤聚合 CSS 缺规则」红）。<br>
+            <strong>验收</strong>：<code>test.full</code> = <strong>3122 passed + 4 skipped</strong> / <code>TOTAL 16517 151 5626 134 99%</code>（与 W5 基线逐位相同 —— 本波零测试增删，唯一变更 = 写入基线的合法演化更新）；全量 e2e = <strong>156 passed + 10 skipped</strong>（与 W5 基线一致）。坑档守阵零悬空。</td></tr>
+          <tr><td class="mono">26-10-12-0224</td><td><strong>W5 落地</strong>（变体退役与声明式密度档，D2 拍板 A）—— 15 个过程式变体整体退役，「换版式」收敛为每页签 2 档的密度档。<br>
+            <strong>源</strong>：删 <span class="path">shared/drawer_tpl/</span>（15 文件 5739 行）与三份 index.html 的变体 manifest（各 15 行）；<span class="path">drawer_templates.js</span>（624→约 250 行）从「注册表 + 宿主生命周期 + 变体工具箱」收敛为「选择层」—— 新增 <code>DRAWER_DENSITY</code> 声明式密度表（<code>DD_TIERS</code> 描述符 <code>{id,label,cls,raw,hint}</code>；classic = 经典重建版式 / compact = 紧凑密度）+ <code>window.AQB_DRAWER_DENSITY</code> 三 API（options/tierOf/normalize）+ <code>dtInjectCss("00-density")</code> 密度 CSS 三条；<strong>旧 id 显式迁移</strong>（tall 01/04/07/10/13→classic、low/collapsed 其余十枚→compact、脏值→classic，读侧一次性归一，P-01 口径不报错）。插件机械（<code>_dtMount*</code>/<code>_dtSync</code>/<code>_dtNotify</code>/<code>_dtRender</code>/<code>dtHtml</code>/<code>dtRaw</code>/KIT/HELPERS）全删，Vue 响应式取代通知/重挂；<span class="path">drawer.js</span> 删 <code>_dtSync</code>（resize/merge $watch 两处）与 <code>_dtUnmountAll</code>；<span class="path">drawer_store.js</span> 删 4 处 <code>_dtNotify</code>；<span class="path">state.js</span> watcher 种子支路 <code>if (!s) return;</code>；<span class="path">menu.js</span> 删 <code>data-dt-host</code> 分支（<code>_drawerMenuColByX</code> 保留）；<span class="path">tpl/drawer.html</span> 与 <span class="path">tpl/drawer-tabs.html</span> 删宿主/双分支，四组件根挂 <code>drawerTier(tab).cls</code>，<code>raw</code>/<code>hint</code> 结构开关走 <code>v-if</code> 真隐藏（general <code>details.drawer-raw</code> / content <code>.drawer-toolbar-hint</code>）；流量主块 <code>.dt-traffic-main</code> 同挂密度类。<br>
+            <strong>守阵同轮改版（不放宽）</strong>：<code>test_webui_static_dom_panel.py</code> 大手术（收集 45→27）—— 删 10 条变体专用守阵；<code>test_drawer_tpl_registry_wiring</code> 改密度档接线钉（manifest 装载序 / 三 API / 迁移映射齐 15 / 描述符消费 / W4 合并面原样 / dt* 无重名）；新增 <code>test_drawer_tpl_facility_retired</code>（退役确认，<strong>活代码形态锚定</strong>防「不得复活」退化为注释喂饱）与 <code>_DT_DENSITY_NODE_PROBE</code> node 电池（normalize 迁移 / readSel 脏值 / dtMenuPick 白名单 / drawerTier 结构开关）；a11y / reannounce gate / 右键菜单 / page_guard / traffic 切片锚等七文件同轮改。<strong>红验两条</strong>（均注入即红 / 还原即绿）：RC1 迁移去向错（legacy 01→compact，node 电池「旧 tall id → classic」红）；RC2 结构开关失效（compact raw→true，wiring + node 电池双红）。<br>
+            <strong>测试面（e2e）</strong>：新增 <span class="path">e2e/drawer-density.spec.mjs</span>（2 用例 × 2 皮肤：旧 id 预置迁移〔tall/low/脏值混预置，DOM 断言逐页签档位〕；右键切档 + localStorage 落盘 + 刷新持久化 + 经典回切 + 列记忆互不牵连）；<span class="path">drawer-merge.spec.mjs</span> 模板选择用例改密度档口径（紧凑/经典 + 结构开关断言，右列空白归列回归保留）；<span class="path">drawer-tables.spec.mjs</span> 用例③改「菜单锚点解析效果判别」（选紧凑须落 trackers 记忆，插件宿主负 pin）；4 条变体专用 spec 退役（dt11-sticky / peers-columns / sticky-flush / trackers-reannounce，7 用例 × 2 皮肤 = 14 执行；dt06 逐行汇报倒计时的逐行口径随变体消失，经典列已由静态守阵承接等价键面）。<br>
+            <strong>验收</strong>：<code>test.full</code> = <strong>3122 passed + 4 skipped</strong> / <code>TOTAL 16517 151 5626 134 99%</code>（worktree 收集清单 diff 逐条对账：HEAD <code>acd0e26f</code> = 3130 + W3 未提交守阵 1 + 本轮新增 1 − 退役 10 = 3122 ✓）；全量 e2e = <strong>156 passed + 10 skipped</strong>（W4 基线 166 − 退役 14 + 新增 4 = 156 ✓）。数字见基线切片。</td></tr>
+          <tr><td class="mono">26-10-12-0117</td><td><strong>W4 落地</strong>（合并双列与右键模板选择）—— 合并状态收进面板核心单一状态源。<br>
+            <strong>源</strong>：<span class="path">drawer.js</span> 新增合并判据群（<code>dtMergeOn</code>/<code>dtMergeTabsOn</code>/<code>dtPair</code>/<code>dtSplitOn</code> computed + <code>_dtPairOf</code>/<code>dtMergeGateOk</code>/<code>dtToggleMerge</code>/<code>dtMergeTabPick</code> 方法，R3 语义逐字同义只换落点）与两条监听（resize 防抖回写 <code>dtWinW</code> + <code>drawerMerge</code> $watch，含假实例守卫）与新渲染单点 <code>dtMergeTabList</code>/<code>dtPairCols</code>；合并对常量改列表形态落 <code>window.AQB_DRAWER_MERGE</code> 跨文件单点；<span class="path">drawer_templates.js</span> 删除迁出成员与 <code>REG.merge*</code> 三处暴露，<code>_dtMountSplit</code> 改吃 <code>AQB_DRAWER_MERGE.pairOf</code>，<code>dtMergeTabActive</code> 删除；<span class="path">tpl/drawer.html</span> 页签栏两按钮与正文 gc/tp 两分支改 <code>v-for</code> 消费单点；<span class="path">menu.js</span> 的 <code>_drawerMenuColByX</code> 复核后保留并注 W4 结论。三皮肤 CSS 与 <code>qb_traffic_chart.js</code>/uPlot 零改动。<br>
+            <strong>守阵同轮改版（不放宽）</strong>：<code>test_drawer_tpl_registry_wiring</code> 合并钉块整体改版（成员清单移 drawer.js + <code>dtMergeTabActive</code>/硬编码分支/<code>MERGE_PAIRS</code> 残留三组负 pin + 监听注册形态 pin + 对单点消费 pin）；<code>test_webui_error_history</code> 的 setItem 基线随落盘落点迁移（drawer.js 3→4 / drawer_templates.js 2→1）。<strong>红验四条</strong>（RC1 高亮脱钩 / RC2 回插硬编码分支 / RC3 自建映射 / RC4 监听迁丢）均 rc=1 非退化；RC1/RC4 首轮被说明性注释/声明处喂饱（裸字符串 pin 退化），同轮改代码形态锚定后重验 —— 新教训：<strong>给注释丰富的文件写 pin 必须锚代码形态</strong>。<br>
+            <strong>测试面</strong>：新增 <span class="path">e2e/drawer-merge.spec.mjs</span>「门跨越 / 拉宽自动恢复」用例（×2 皮肤）—— 预置 <code>drawerMerge=on</code> → 1280 开面板无合并 → 拉宽 2560 双列自动恢复 + 第二列数据补给 → 缩回回落 → 再拉宽直接恢复（标志未被门撤销）。<br>
+            <strong>验收</strong>：四条既有合并 e2e 全绿；<code>test.full</code> = <strong>3131 passed + 4 skipped</strong> / <code>TOTAL 16517 151 5626 134 99%</code>（HEAD <code>acd0e26f</code> 基线 3130 + W3 新增 1 条守阵；W4 零新增 pytest 用例 —— 经 worktree 收集清单 diff 逐条对账，HEAD 在 W2→W3 会话间前移 +1 用例）；全量 e2e = <strong>166 passed + 0 failed + 10 skipped</strong>（W2 基线 164 + 本轮 2）。数字见基线切片。</td></tr>
+          <tr><td class="mono">26-10-12-0009</td><td><strong>W3 落地</strong>（流量页签与形态收敛）—— 用户 26-10-11 先拍板「<strong>缺陷留到 W5</strong>」（<code>esc-attr-quote-dead-class</code> 不回灌 15 个变体，随 W5 退役消失），随后继续 W3。<br>
+            <strong>源</strong>：新增 <span class="path">shared/drawer_head.js</span>（<code>AQ_DRAWER_HEAD_COMPONENT</code> / <code>AQ_QB_CTL_COMPONENT</code>，只贡献模板 + props，数据/动作一律 <code>$root</code>）+ <span class="path">tpl/drawer-head.html</span>（两个 x-template；三 shell <code>parts</code> 尾行 + <code>scripts</code> 各加一行成对登记，prism/console 压相邻 parts 项腾行保 208 行硬顶内）；<span class="path">tpl/drawer.html</span> 的两段 <code>&lt;header class="drawer-head"&gt;</code> 复写替换为 <code>&lt;aq-drawer-head v-if="drawerIsTraffic"&gt;</code> / <code>v-else</code> 两行调用（流量中部 = <code>&lt;aq-qb-ctl&gt;</code>，种子中部 = 五页签 <code>nav.drawer-tabs</code>），seed「流量」页签的 <code>.qb-statctl</code> 挂点同样接 <code>&lt;aq-qb-ctl&gt;</code> —— 控件组两挂点共用<strong>同一份实现</strong>。守阵同轮改版到新单点：旧的「两处控件组逐字同源」块换成更强的「单一实现（head_tpl 各 1 处）+ 面板模板零拷贝（各 0 处）+ 恰两挂点」，并新增<strong>结构级</strong>判根助手 <code>_tpl_top_level_tags</code>（HTML 解析 depth-0 根元素清单）钉住 <code>&lt;aq-qb-ctl&gt;</code> 必须<strong>多根</strong> —— 三皮肤对 <code>.qb-tabs/.qb-tools</code> 的四组规则全是直接子选择器，包一层 wrapper 即静默失效而类名 count 不变（红验证实 count 钉不住、结构钉得住）。<strong>形态判据收口</strong>：<code>drawer.js</code> 新增 <code>drawerIsSeed</code>/<code>drawerIsTraffic</code> computed（全前端 <code>drawer.kind</code> 字面量仅剩这两处定义，<code>qb_traffic_chart.js</code> 的 <code>active/stale</code> 谓词按<strong>停手点</strong>冻结豁免）；<code>drawer_templates.js</code>（<code>dtMenuMergeOn</code>）/ <span class="path">menu.js</span>（<code>openDrawerMenu</code>）/ <span class="path">shortcuts.js</span>（<code>_kbDrawerTab</code> / <code>_kbOpenDrawer</code> / <code>_kbToggleQbTraffic</code>）/ <code>openTorrentDrawer</code> / <code>drawerAfterEnterHook</code> 各调用点同轮换；新增守阵 <code>test_frontend_drawer_form_judge_single_point</code> 钉两个谓词原文 + 各文件出现数。<strong>一处与计划文本的有意偏差</strong>：计划写「<code>qb_traffic_chart.js</code> 的宿主以薄包装接入」，实做把薄包装落在<strong>壳模板</strong>（<code>v-if="drawerIsTraffic"</code> 分支）而<strong>不</strong>把流量正文搬进组件 —— <code>_qbChartBuild</code> 经根实例 <code>this.$refs["qbChartHost"]</code> 取挂载点，Vue 只在声明 ref 的实例上登记 <code>$refs</code>，子组件模板里的 ref 永远到不了根实例 ⇒ 搬进组件图表<strong>静默不画</strong>（与 W2 <code>_headEl</code> 兜底同病灶族，测试面 <code>ref="qbChartHost"</code> pin 留在 drawer.html 并注根因）。<strong>验收</strong>：三挂点控件齐全 = traffic 头部一份 + seed 流量页签 <code>.qb-statctl</code> 一份（守阵钉）；<code>qbCurPending</code> 三合一语义不变（红验：回退两段版 rc=1）；<code>test.full</code> = <strong>3130 passed + 4 skipped</strong> / <code>TOTAL 16517 151 5626 134 99%</strong>（基线 3129 + 本轮新增 1 条守阵），全量 e2e = <strong>164 passed + 0 failed + 10 skipped</strong> 与 W2 基线逐位一致（W3 验收口径是守阵，未加 e2e 用例；四条红验 RC1 拆双头部 / RC2 包 wrapper / RC3 翻谓词 / RC4 回退 qbCurPending 均 rc=1 非退化）；三皮肤 CSS 与 <code>qb_traffic_chart.js</code>/uPlot <strong>零改动</strong>。数字见基线切片。</td></tr>
+          <tr><td class="mono">26-10-11-2259</td><td><strong>W2 落地</strong>（四页签 Vue 重建 + 三列表接壳）—— 用户拍板「<strong>全部一起做</strong>」与「<strong>Vue 连变体一起声明式实现</strong>」，故四页签<strong>同波</strong>替换、不停手，且变体走声明式路线（变体本体归 W5）。<br>
+            <strong>源</strong>：新增 <span class="path">shared/drawer_tabs.js</span>（<code>AQ_DRAWER_{GENERAL,TRACKERS,PEERS,CONTENT}_COMPONENT</code>）+ <span class="path">tpl/drawer-tabs.html</span>；<span class="path">tpl/drawer.html</span> 的 <code>dt-host</code> 骨架改为 <code>v-if="dtVueTab(tab)"</code> 组件 / <code>v-else</code> 旧宿主互斥；<span class="path">drawer_pages/{general,trackers,peers,content}-classic.js</span> 四件<strong>删除</strong>（git <code>D</code>）。三列表接壳 = <code>app.js</code> 新增 <code>DRAWER_{TRACKER,PEER,FILE}_COLUMNS</code> 与<strong>独立注册表</strong> <code>DRAWER_TABLE_DEFS</code>，再并入新壳 <code>ALL_TABLE_DEFS</code> / <code>ALL_TABLE_PAGES</code>（<code>TABLE_DEFS</code> 与 <code>TABLE_PAGES</code> <strong>语义零改</strong>，仅四处循环改吃新壳）；<code>table.js</code> + <span class="path">tpl/xtpl-cells.html</span> 新增三个行模型渲染器 <code>aq-{tracker,peer,file}-cells</code>（行内多根 <code>v-for="col in cols"</code>，单元格是网格行直接子元素 —— <code>:nth-child</code> 对齐与 <code>data-table</code> 依赖此形态）；<code>columns.js</code> 的 <code>gridStyle</code>/<code>colAlignCss</code>/<code>recomputeEffective</code>/<code>resetAllColumnWidthsAll</code>/<code>fitColumnsToWindowAll</code>/<code>tableDefs</code> 改吃 <code>ALL_TABLE_*</code>，<code>_headEl</code> 补 <code>.group-head[data-table=…]</code> <strong>DOM 兜底</strong>（抽屉表头在页签组件内，根实例 <code>$refs</code> 取不到）；<code>sort.js</code> 的 <code>_sortKeys(scope)</code> 改为「scope 即表 id」（主视图传 <code>tableId</code> 与原解析<strong>等价</strong>，故零回归），新增 <code>sortedDrawer</code>/<code>_sortVal</code>（行带 <code>_raw</code> 原始数值，避免 <code>"1.2 MiB"</code> 按字典序排）；<code>state.js</code> 加六个排序字段；三皮肤 CSS 成对（抽屉作用域的 <code>.group-head{position:static}</code> / <code>.group-row</code> / <code>.virtual</code> / <code>.skipped</code> / <code>.sel</code> / 单元格省略号）。<br>
+            <strong>修掉的真 bug</strong>：抽屉表头右键会<strong>连带弹出模板菜单</strong>（面板把「选模板」右键挂在 <code>.drawer-body</code>，表头在其内不拦冒泡即两个 <code>.ctx-menu</code> 同屏）⇒ 表头改 <code>@contextmenu.prevent.stop</code>。<br>
+            <strong>两处与计划文本的有意偏差</strong>（均按用户「以与主视图一致为准则」登记）：① 抽屉三表<strong>不进</strong> <code>TABLE_PAGES</code> 但<strong>进</strong>列选择器分组（§07 括注说「不进否则多出分组」；实做拆开 —— 右键隐藏不可逆，选择器是唯一恢复入口）；② 表头独占右键（见上）。<br>
+            <strong>观感变化（按拍板整体接受，逐项登记）</strong>：三列表由真 <code>&lt;table class="drawer-table"&gt;</code> 换成<strong>与主视图同源的 div 网格</strong>（<code>.group-head</code> + <code>.h-cell</code> / <code>.group-row[data-table=…]</code>），表头在面板内 <code>position:static</code> 不吸顶；附带修好「旧实现条件属性拼进 <code>dtHtml</code> 插值 ⇒ 类名带引号 ⇒ <code>tr.virtual/.skipped/.sel</code> 规则全线静默失效」（坑档 <span class="path">pitfalls/web-ui/esc-attr-quote-dead-class.md</span>）——迁移后的页签由 Vue <code>:class</code> 给出真实类名，<strong>变灰/高亮从此真的生效</strong>。<br>
+            <strong>守阵同轮改版（R8，不放宽）</strong>：<code>test_frontend_table_shell_single_point</code>（组件面 9 项 / xtpl-cells 7 模板 / 抽屉三个调用点）、<code>test_frontend_table_registry_single_point</code>（新增 W2 块：<code>DRAWER_TABLE_DEFS</code> 形状、抽屉 id <strong>不在</strong> <code>TABLE_DEFS</code> 体内、<code>TABLE_PAGES</code>/<code>ALL_TABLE_PAGES</code> 并存、四条接线 pin）、<code>test_web_shortcuts</code>/<code>test_webui_static_dom_panel</code>。<br>
+            <strong>测试面</strong>：新增 <span class="path">e2e/drawer-tables.spec.mjs</span>（3 用例 × 2 皮肤）—— ① 拖宽 / 排序 / 右键隐藏 / 列偏好持久化 / 选择器恢复；② 面板开着<strong>行键盘仍可用 + 面板跟随</strong>（W2 验收第四件）；③ 单栏正文右键弹<strong>当前页签</strong>模板集 + 变体/经典<strong>单一挂载点</strong>；四支既有 spec 同轮改锚点（<span class="path">drawer-peers</span> / <span class="path">drawer-merge</span> 从 <code>table.drawer-table tbody tr</code> 改到 <code>.group-row[data-table=…]</code>）。四条新 pin 逐条<strong>红验</strong>（注入回归后 rc=1，非退化）。<br>
+            <strong>验收</strong>：<code>test.full</code> = <strong>3129 passed + 4 skipped</strong> / <code>TOTAL 16517 151 5626 134 99%</code>，与 W0/W1 基线<strong>逐位相同</strong>；全量 e2e 见基线切片。</td></tr>
+          <tr><td class="mono">26-10-11-2136</td><td><strong>W0 落地</strong>（冻结契约与验收基线，零代码）：跑 <code>test.full</code>（3129 passed / 4 skipped）与全量 e2e（158 passed / 0 failed / 10 skipped）记入基线切片；建「抽屉 DOM dump」临时探针（打开种子详情 → 四页签 + 回常规，双皮肤共 10 项，归一后取 sha256）作后续每步的 A/B 对照，基线哈希见 §10 基线切片。<strong>W1 落地</strong>（数据层抽离，零观感变化）：把取数 / 竞态 / 等待集合 / 软切换序号从 <span class="path">drawer.js</span> 剥成 <span class="path">shared/drawer_store.js</span>（<code>window.AQB_DRAWER_STORE</code>，<code>methods</code> 方法体逐字未改，只换落点）—— 四 fetcher / <code>_drawerLoadSeq</code> / <code>_drawerStale</code> / <code>_drawerWait|_drawerWaitSources|_drawerDone</code> / <code>_drawerBusyArm|Disarm|_drawerSwitchEnd</code> / <code>_loadDrawerTab</code> / <code>_switchDrawerTarget</code> / <code>_startDrawerPoll|_stopDrawerPoll</code> / <code>_drawerMergeSupply</code> / <code>_drawerNormPeers</code>；跨模块登记（流量）成对纪律写入 store 头注。接线：<code>app.mixin(window.AQB_DRAWER_STORE)</code> + 三份 tpl-manifest 各加一行（prism/console 贴 210 行硬顶，压一条相邻 parts 项腾行）。守阵同轮改版 4 条用例的读取面（<code>test_web_shortcuts</code> 三处 + <code>test_webui_static_dom_panel</code> 五处，只把 <code>drawer.js</code> 换成 <code>drawer_store.js</code>，断言口径不变）。验收：A/B DOM dump sha256 相同 + <code>test.full</code> 与 e2e 与基线逐位一致。doc-status Open → In Progress。</td></tr>
           <tr><td class="mono">26-10-11-2106</td><td>初稿：由表组件计划 <code>26-10-11-1722</code> §05 P6「只留前向契约」处<strong>另立专题</strong>（用户 26-10-11 定「完全重构、不考虑兼容」）。含现状三层盘点 + 问题清单 10 条（逐条锚坑档）、七面等价清单、目标架构（数据层剥离 + Vue 面板 + 三列表接壳）、分步 W0–W6、六条不变式、三表接入注册、风险 R1–R9、拍板点 D1–D4。doc-status Open，待拍板后转 In Progress。</td></tr>
         </tbody>
       </table>
@@ -534,7 +573,7 @@
 
 <footer>
   <div class="wrap">
-    memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html · topic webui-drawer-refactor · status Open (待拍板)
+    memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html · topic webui-drawer-refactor · status Done
   </div>
 </footer>
 

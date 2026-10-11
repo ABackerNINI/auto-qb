@@ -172,14 +172,14 @@ window.AQB_MENU = {
     },
     /* 抽屉右键菜单(R2 S3 计划 26-10-09-2219 · 2026-10-10 模板选择迁右键):
      * 用户动议「模板选择改为右键选择, 在对应的区域弹右键」—— 头部 .dt-select 下拉退役, 右键
-     * 命中区域决定菜单目标页签: 命中变体/经典挂载宿主(data-dt-host, 含 traffic-pre/post 去后缀)
-     * 取其页签; 命中合并双列(列头/列空白, data-dt-tab)取其列页签; 否则回落当前页签。菜单内容 =
-     * 该页签模板选项(带勾) + 分隔线 + 合并开关(仅种子详情形态)。种子详情与流量形态都可弹(流量
-     * 形态只出流量模板选项, 无合并项)。对象整体替换(与三浮层同范式, state.js watch 按「对象替换」
+     * 命中区域决定菜单目标页签: 命中合并双列(列头/列空白, data-dt-tab)取其列页签, 否则回落
+     * 当前页签(W5 起无 data-dt-host 挂载宿主, 单栏正文恒回落当前页签)。菜单内容 = 该页签
+     * 档位选项(带勾) + 分隔线 + 合并开关(仅种子详情形态)。种子详情与流量形态都可弹(流量
+     * 形态只出流量档位选项, 无合并项)。对象整体替换(与三浮层同范式, state.js watch 按「对象替换」
      * 触发 _menuFitRefit 重钳位)。 */
     openDrawerMenu(event) {
       if (!this.drawer || !this.drawer.open) return;
-      if (this.drawer.kind !== "seed" && this.drawer.kind !== "traffic") return;
+      if (!this.drawerIsSeed && !this.drawerIsTraffic) return;
       event.preventDefault();
       this._markCtxSource(event);
       this.drawerMenu = {
@@ -188,8 +188,8 @@ window.AQB_MENU = {
         tab: this._drawerMenuTab(event),
       };
     },
-    /* 右键命中区域 -> 目标页签: data-dt-host(挂载宿主)优先, 其次合并列 data-dt-tab, 否则当前页签。
-     * 宿主在列之内, 故先判宿主; 列头/列空白不属于任何宿主, 由列上的 data-dt-tab 兜住。
+    /* 右键命中区域 -> 目标页签: 合并列 data-dt-tab 优先, 否则当前页签。
+     * W5: data-dt-host 挂载宿主已随变体退役(旧实现宿主优先, 现只余列锚与回落)。
      * !2026-10-10 用户报「合并后右侧右键弹左列模板」: 合并双列的**列间 24px 间隙**与分栏两侧
      * 留白(drawer-split 居中封顶 2400, 宽屏两侧可各空出数百 px)都不属于任何 .dt-col 元素 ——
      * 命不中时若直接回落当前页签, x 明明在右半区却拿到(常为左列的)当前页签模板选项。正文区内
@@ -197,11 +197,6 @@ window.AQB_MENU = {
     _drawerMenuTab(event) {
       var el = event && event.target;
       if (el && el.closest) {
-        var host = el.closest("[data-dt-host]");
-        if (host) {
-          var t = String(host.getAttribute("data-dt-host") || "").replace(/-(?:pre|post)$/, "");
-          if (t) return t;
-        }
         var col = el.closest("[data-dt-tab]");
         if (col) {
           var c = col.getAttribute("data-dt-tab");
@@ -216,7 +211,12 @@ window.AQB_MENU = {
     },
     /* 合并双列: 按指针 x 归属列页签(只拦列间隙/分栏两侧留白这类「不落在列元素上」的命中)。
      * 只判水平 —— 列按渲染序排序, 取首个右缘不早于 x 的列; 落在最右列之右(右侧留白)取最右列,
-     * 落在最左列之左取最左列(视觉上的「左右半区」语义)。无列(未合并/流量形态)返回 ""。 */
+     * 落在最左列之左取最左列(视觉上的「左右半区」语义)。无列(未合并/流量形态)返回 ""。
+     * !W4 复核(计划 26-10-11-2106 改动面「若新架构下不再需要则退役」): **保留**。根因仍在 ——
+     *   `.drawer-split` 的 `align-items:start`(列不互相撑高) + 居中封顶 2400 + 列间 24px gap
+     *   三条几何事实与列的渲染技术无关(W5 起列内正文恒为 Vue 组件, 列容器 .dt-col 仍由
+     *   drawer.html 渲染, 短列下方/间隙/两侧留白照旧不属于任何 .dt-col 元素); 退役它 = 右侧
+     *   空白右键回落左列的 R6 回归复发(e2e「右列空白右键必须仍弹右列」守着这条)。 */
     _drawerMenuColByX(event) {
       var x = event && typeof event.clientX === "number" ? event.clientX : null;
       if (x === null || typeof document === "undefined") return "";

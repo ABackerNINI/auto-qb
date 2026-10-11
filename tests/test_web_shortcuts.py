@@ -62,7 +62,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   流量形态 hash 恒空, 切页签会打出 /api/torrents//trackers 空 hash 404 / 关态开面板定位该页签,
   目标解析 kbCursor(torrent) 优先 + 单选种子兜底);
   跟随单点 _kbFollowDrawer 挂 _kbApplyCursor 尾部, page+kind 守卫 + 200ms 防抖 + hash 短路 +
-  停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃;
+  停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃
+  (W1 计划 26-10-11-2106 起这层剥在 drawer_store.js, 守阵读该文件);
   _switchDrawerTarget 换目标走 FX-29 软切换(不清空旧数据, switching 遮罩防串显 + 按 tab 的
   待到集合全到手才落定); open/close 作废在途跟随定时器; 头部标题走 drawerTitle(memberByHash
   名优先, 不等详情); 详情加载空态只归常规页签; 三皮肤 CSS 成对(switching 遮罩 + 加载胶囊)
@@ -586,6 +587,7 @@ def test_drawer_dock_keyboard_w2() -> None:
     """方案A W2(计划 26-10-03-0917 §2.2 矩阵 / §2.3 跟随纪律 / §3.2 scope 派发 / §3.4 数据面)"""
     eng = _read("shortcuts.js")
     drawer_js = _read("drawer.js")
+    store_js = _read("drawer_store.js")  # W1: 取数/竞态/等待集合/软切换已剥出 drawer.js
     # --- §3.2 名单分叉: _kbOverlayBusy 摘 drawer.open(面板≠浮层), escBusy 保留(Esc 关面板) ---
     busy = re.search(r"_kbOverlayBusy\(\) \{(.*?)\n    \},", eng, re.S)
     assert busy, "shortcuts.js 找不到 _kbOverlayBusy"
@@ -616,11 +618,12 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert tb.index('this.page !== "groups"') < tb.index("this.drawerTab(tab)"), \
         "主内容页守卫必须先于双态分流"
     assert "this.toast(" in tb, "非种子页必须 toast 提示后忽略, 不许静默"
-    assert tb.index('if (this.drawer.open && this.drawer.kind === "seed")'
+    assert tb.index('if (this.drawer.open && this.drawerIsSeed)'
                    ) < tb.index("this.drawerTab(tab)"), "开态切页签只对种子形态成立(流量形态页签按钮不渲染, 切不得)"
     # 流量形态开态(全局/分组流量图, hash 恒空)必须视同关态换目标打开: 直接切页签会把空 hash
     # 打进 /api/torrents//trackers 等端点(404 toast), Alt+1 因流量形态 tab 恒 general 早退(按了没反应)
-    assert tb.index('this.drawer.kind === "seed"') < tb.index("openTorrentDrawer(hash)"), \
+    # 形态判据收口(W3): 字面量比较改走 drawerIsSeed 单点(见 test_frontend_drawer_form_judge_single_point)
+    assert tb.index('this.drawerIsSeed') < tb.index("openTorrentDrawer(hash)"), \
         "流量形态开态必须落到 openTorrentDrawer 换形打开, 不许走 drawerTab(空 hash 404)"
     assert "this.drawerLastTab = tab;" in tb and "this.persistDrawerTab()" in tb, "关态开面板必须经 drawerLastTab 定位该页签(openTorrentDrawer 的初始页签口径)"
     # 目标解析: kbCursor(kind=torrent) 优先, 单选种子兜底, 无目标 _kbHint
@@ -639,20 +642,20 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert "this.drawer.hash === c.id" in fb, "hash 未变必须短路(光标落回同一行不重拉)"
     assert "cur.id === this.drawer.hash" in fb and "cur.kind !== \"torrent\"" in fb, "停稳复核必须再验目标(面板关/切页/目标已换/落回原行放弃)"
     # --- §3.4 数据面: _loadDrawerTab 代际 seq + fetcher 旧响应丢弃 + 换目标清数据 ---
-    load = re.search(r"_loadDrawerTab\(tab\) \{(.*?)\n    \},", drawer_js, re.S)
+    load = re.search(r"_loadDrawerTab\(tab\) \{(.*?)\n    \},", store_js, re.S)
     assert load and "this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1" in load.group(
         1
     ), "_loadDrawerTab 必须 bump 请求代际 seq(换目标/换页签后旧响应丢弃)"
     for fn in ("_fetchDrawerDetail", "_fetchDrawerTrackers", "_fetchDrawerFiles", "_fetchDrawerPeers"):
-        sig = re.search(rf"async {fn}\((.*?)\) \{{", drawer_js)
+        sig = re.search(rf"async {fn}\((.*?)\) \{{", store_js)
         assert sig and "seq = 0" in sig.group(1), f"{fn} 必须带可选 seq(代际守卫)"
-    assert drawer_js.count("this._drawerStale(hash, seq)") >= 8, "四个 fetcher 的成功/异常/finally 三路都必须过 _drawerStale 旧响应丢弃"
-    stale = re.search(r"_drawerStale\(hash, seq\) \{\n      return (.*?);\n    \},", drawer_js, re.S)
+    assert store_js.count("this._drawerStale(hash, seq)") >= 8, "四个 fetcher 的成功/异常/finally 三路都必须过 _drawerStale 旧响应丢弃"
+    stale = re.search(r"_drawerStale\(hash, seq\) \{\n      return (.*?);\n    \},", store_js, re.S)
     assert stale and "this.drawer.hash !== hash" in stale.group(1) and "seq !== this._drawerLoadSeq" in stale.group(
         1
     ), "_drawerStale 必须 hash 戳 + 代际双守卫(hash 戳兜 5s 轮询竞态)"
-    switch = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
-    assert switch, "drawer.js 找不到 _switchDrawerTarget(跟随换目标落点)"
+    switch = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
+    assert switch, "drawer_store.js 找不到 _switchDrawerTarget(跟随换目标落点; W1 起在数据层)"
     sb = switch.group(1)
     # --- FX-29 软切换: 不清空旧数据(保留几何) + 遮罩防串显 + 早到请求不提前掀罩 ---
     for line in (
@@ -672,8 +675,8 @@ def test_drawer_dock_keyboard_w2() -> None:
         "换目标必须恒拉详情(头部标题依赖; _loadDrawerTab 只在 general 页签拉, 走查发现的串显 hash 缺口)"
     )
     # 落定只认「本 tab 的全套数据源」, 且过期响应不登记(否则另一个源还是上个种子的值就掀了罩)
-    done = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", drawer_js, re.S)
-    assert done, "drawer.js 找不到 _drawerDone(FX-29 单个数据源到手登记)"
+    done = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", store_js, re.S)
+    assert done, "drawer_store.js 找不到 _drawerDone(FX-29 单个数据源到手登记; W1 起在数据层)"
     db = done.group(1)
     assert db.index("this._drawerStale(hash, seq)") < db.index("w.delete(src)"), "过期响应不得登记到手(stale 先判)"
     assert "if (w.size) return;" in db, "兄弟源仍在飞时必须继续罩着(防半新半旧的中间帧)"
@@ -681,10 +684,14 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert re.search(r"drawerTitle\(\) \{\n.*?this\.memberByHash\.get\(this\.drawer\.hash\)", drawer_js,
                      re.S), ("drawerTitle 必须优先取 memberByHash 的名字(FX-29: 原实现等详情, 中间一帧标题是 40 字符 hash)")
     # --- 模板: 标题走 drawerTitle / 遮罩挂 body / 详情空态只归常规页签 ---
+    # W3: 标题插值随两形态共用头部壳上移到 aq-drawer-head 片段(面板模板改为把 drawerTitle()
+    # 经 :text 入参交给组件), 故「取成员名优先」这条要在两处各钉一半: 入参面(面板) + 渲染面(片段)
     tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
-    assert "{{ drawerTitle() }}" in tpl and "drawer.detail ? drawer.detail.name : drawer.hash" not in tpl, (
-        "头部标题必须走 drawerTitle()(成员名优先, 不再是 hash)"
+    head_tpl = (SHARED / "tpl" / "drawer-head.html").read_text(encoding="utf-8")
+    assert ':text="drawerTitle()"' in tpl and "drawer.detail ? drawer.detail.name : drawer.hash" not in tpl, (
+        "头部标题必须走 drawerTitle()(成员名优先, 不再是 hash; W3 起经 aq-drawer-head 的 :text 入参)"
     )
+    assert "{{ text }}" in head_tpl, "头部壳片段必须渲染 text 入参(标题渲染面单点)"
     assert ':class="{ switching: drawer.switching,' in tpl and 'class="drawer-busy"' in tpl, (
         "body 必须挂 switching 遮罩类与加载胶囊(FX-29)"
     )
@@ -824,7 +831,7 @@ def test_qb_traffic_shortcuts() -> None:
     tb = dtab.group(1)
     gate = tb.index('tab === "traffic" && !this.qbTrafficOn')
     assert gate > tb.index('this.page !== "groups"'), "流量门控必须在页面守卫之后(守卫序: 页面 -> 功能门 -> 双态)"
-    assert gate < tb.index('if (this.drawer.open && this.drawer.kind === "seed")'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
+    assert gate < tb.index('if (this.drawer.open && this.drawerIsSeed)'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
     assert "qB 口径流量图未启用" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
 
     # ③ 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_webui_static_dom_page.py 的持久化守阵)
@@ -936,8 +943,8 @@ def test_shortcut_toggle_semantics() -> None:
     assert od, "shortcuts.js 找不到 _kbOpenDrawer"
     assert "this.closeDrawer()" in od.group(1) and "this.openTorrentDrawer(hash)" in od.group(1), \
         "详情面板 I 缺 已开同目标⇒关 / 否则打开 双分支"
-    assert 'this.drawer.kind === "seed" && this.drawer.hash === hash' in od.group(1), \
-        "详情面板 I 只在种子形态同目标时关(流量形态/换目标仍打开)"
+    assert 'this.drawerIsSeed && this.drawer.hash === hash' in od.group(1), \
+        "详情面板 I 只在种子形态同目标时关(流量形态/换目标仍打开; 形态判据走 drawerIsSeed 单点)"
 
     # ④ 引擎自切换白名单: 四条浮层 id -> 状态字段; 浮层打开时放行第二次按键
     assert "const KB_SELF_TOGGLE_OVERLAY = {" in eng, "缺自切换白名单(报告 §07.1)"
@@ -1075,8 +1082,11 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     """方案A W4(计划 26-10-03-0917 W4/D3 + 前波移交观察项): D3 窄屏降级三皮肤成对;
     行可见下界 _kbViewBottom(停靠面板盖住列表视口底部, 走查实证后收口); 轮询停靠化语义收口"""
     # --- D3: ≤900px 面板转全屏覆盖主区(三皮肤成对; 关闭钮在模板, 断言不被降级样式移除) ---
-    tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
-    assert 'class="drawer-close"' in tpl, "关闭钮必须在(drawer.html, D3 全屏态唯一的关面板入口)"
+    # W3: 关闭钮随两形态共用头部壳一并上移到 aq-drawer-head 片段(单一实现, 面板模板不再各写一份)
+    head_tpl = (SHARED / "tpl" / "drawer-head.html").read_text(encoding="utf-8")
+    assert head_tpl.count('class="drawer-close"') == 1, ("关闭钮必须在头部壳片段(drawer-head.html, D3 全屏态唯一的关面板入口; 两形态共用一处)")
+    assert 'class="drawer-close"' not in (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8"), \
+        "关闭钮不得在面板模板再写一份(两形态各一份头部的复写正是问题 4 根因, W3 收口)"
     for ui in ("atlas", "console", "prism"):
         cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
         css = cssp.read_text(encoding="utf-8")
@@ -1112,8 +1122,9 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     assert sib.count("window.innerHeight") == 0, "_kbScrollRowIntoView 不得再裸用 window.innerHeight 当下界"
     # --- 前波移交观察项收口: 面板不可见(切走页面/视图)即停轮询拉取(定时器不拆, 回页自恢复) ---
     drawer_js = _read("drawer.js")
-    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", drawer_js, re.S)
-    assert poll, "drawer.js 找不到 trackers/peers 5s 轮询 tick"
+    store_js = _read("drawer_store.js")  # W1: 页签轮询收口在数据层
+    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", store_js, re.S)
+    assert poll, "drawer_store.js 找不到 trackers/peers 5s 轮询 tick(W1 起轮询收口在数据层)"
     pb = poll.group(1)
     assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
     # 2026-10-08(计划 26-10-08-1217): 面板三视图共用, 轮询只挡非主内容页 —— 在辅种页/追剧页展开的
@@ -1205,6 +1216,7 @@ def test_drawer_open_reveal_row() -> None:
     2026-10-04 回归: 开场那发量的是 loading 态几何(面板随后长到 42vh), 且文档底打开时
     scrollBy 被钳制成 0(下滚余量是停靠槽位长高才创造的) —— 数据落定与槽位落定各补一发"""
     drawer_js = _read("drawer.js")
+    store_js = _read("drawer_store.js")  # W1: _drawerDone 在数据层
     open_fn = re.search(r"async openTorrentDrawer\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
     assert open_fn, "drawer.js 找不到 openTorrentDrawer"
     body = open_fn.group(1)
@@ -1214,7 +1226,7 @@ def test_drawer_open_reveal_row() -> None:
         "流量页签定高不进集合"
     )
     assert "this._drawerOpenReveal = hash" in body, "开场必须挂落定补让位挂单(数据源全到手后兑现)"
-    done_fn = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", drawer_js, re.S)
+    done_fn = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", store_js, re.S)
     assert done_fn and "_drawerOpenReveal" in done_fn.group(1), (
         "待到集合清空(_drawerDone)必须兑现开场挂单补发让位 —— 那是数据落定时刻, 页签数据晚到也覆盖"
     )
@@ -1224,7 +1236,7 @@ def test_drawer_open_reveal_row() -> None:
         "槽位落定(afterEnter)必须补一发让位: 文档底打开时开场 scrollBy 被钳制成 0, "
         "下滚余量是停靠槽位长高才创造的, 落定后才有足额余量(2026-10-04 取证)"
     )
-    assert 'this.drawer.kind === "seed"' in after_enter.group(1), "流量形态无种子行可让, afterEnter 补发必须按形态门控"
+    assert 'this.drawerIsSeed' in after_enter.group(1), "流量形态无种子行可让, afterEnter 补发必须按形态门控(走 drawerIsSeed 单点)"
     eng = _read("shortcuts.js")
     rv = re.search(r"_kbRevealRow\(hash\) \{(.*?)\n    \},", eng, re.S)
     assert rv, "shortcuts.js 缺 _kbRevealRow(显式打开路径的行让位单点)"

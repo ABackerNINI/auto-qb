@@ -860,7 +860,7 @@ window.AQB_SHORTCUTS = {
         this.toast("qB 口径流量图未启用", "info", 2500);
         return;
       }
-      if (this.drawer.open && this.drawer.kind === "seed") {
+      if (this.drawer.open && this.drawerIsSeed) {
         this.drawerTab(tab);  // 开态: 切页签(现行为)
         return;
       }
@@ -1057,7 +1057,7 @@ window.AQB_SHORTCUTS = {
        * 剧/集单元与多目标无单目标 -> 空串, 静默不动作) */
       const hash = this._scopeFirstHash(this._scopeResolve("cursor"));
       if (!hash) return;  // 无目标(组无成员 / 剧集单元等)静默不动作(与原实现同口径)
-      if (this.drawer.open && this.drawer.kind === "seed" && this.drawer.hash === hash) {
+      if (this.drawer.open && this.drawerIsSeed && this.drawer.hash === hash) {
         this.closeDrawer();  // 已开同目标 ⇒ 关(切换语义; 换目标仍走下方打开)
         return;
       }
@@ -1094,7 +1094,7 @@ window.AQB_SHORTCUTS = {
     /* qB 口径流量图 Ctrl+\: 已开着全局流量形态 ⇒ closeDrawer; 否则走 openQbHistory(含 qbTrafficOn
      * 门 + 未启用提示)。同目标 = 关, 未开/换形态仍走原打开语义。 */
     _kbToggleQbTraffic() {
-      if (this.qbTrafficOn && this.drawer.open && this.drawer.kind === "traffic" && this.drawer.scope === "global") {
+      if (this.qbTrafficOn && this.drawer.open && this.drawerIsTraffic && this.drawer.scope === "global") {
         this.closeDrawer();
         return;
       }

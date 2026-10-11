@@ -571,3 +571,18 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }
 .hp-reason { font-size: 11px; line-height: 1.55; color: var(--fg-muted); overflow-wrap: anywhere; }
 .hp-lag { font: 500 10.5px/1.5 var(--font-mono); color: var(--fg-dim); }
+
+/* ================= 详情面板三张列表的网格行(计划 26-10-11-2106 W2 接壳) =================
+ * 与 atlas 同名同义成对; 只差令牌族(mono 走 --font-mono)。上面那批 `.drawer-table ...`
+ * 规则仍在用(设置页两张 HR 表同挂 .drawer-table)。 */
+.drawer-body .group-head { position: static; border-radius: var(--radius); }
+.drawer-body .group-row { cursor: default; }
+.drawer-body .group-row.virtual > * { color: var(--fg-dim); }
+.drawer-body .group-row.skipped > * { color: var(--fg-dim); }
+.drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
+.drawer-body .mono-cell { font-family: var(--font-mono); font-size: 12px; }
+.drawer-body .dir-name { color: var(--fg-muted); }
+.drawer-body .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
+.drawer-body .dfile-name { cursor: pointer; }
+.drawer-body .dtrk-act, .drawer-body .dfile-prio { display: flex; justify-content: flex-end; }
+.drawer-body .dpeer-client, .drawer-body .dtrk-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

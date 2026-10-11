@@ -629,16 +629,18 @@ def test_frontend_table_shell_single_point():
     torrents.html 种子头); 行模型单元格曾是散在页面模板里的 **127 条 v-if 分支**。收敛为单点后,
     "又有人往页面模板里内联一份"是**静默**回潮: 页面照常工作, 单点却慢慢失效(改一处漏一处 ——
     正是本轮要消灭的维护点)。钉三层:
-    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与五个行模型
-       渲染器 `<aq-member-cells>`(member) / `<aq-group-cells>`(group) / `<aq-torrent-cells>`
-       (torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行) —— 组件模板里的行为
-       一律经 `$root` 回调根实例;
+    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与八个行模型
+       渲染器 —— 主视图五个 `<aq-member-cells>`(member) / `<aq-group-cells>`(group) /
+       `<aq-torrent-cells>`(torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行),
+       加抽屉三表的 `<aq-tracker-cells>` / `<aq-peer-cells>` / `<aq-file-cells>`(计划
+       26-10-11-2106 W2「三列表接表壳」) —— 组件模板里的行为一律经 `$root` 回调根实例;
     ② 表壳模板唯一且内容齐备: tpl/xtpl.html 恰一份 `#tpl-aq-table`, 且四件交互把手
        (`.h-cell` / `.h-label` / `.arrow` / `.resizer` / `.col-drop-line`)都在里面 —— 把手丢了
        表现为"拖了没反应 / 右键没菜单", 无任何报错;
     ③ 接线单点: groups.html / shows.html 各 2 个 `<aq-table>` 调用点, torrents.html 1 个
-       (种子页表头自 P3/P4 起也已迁移 —— 原 `.h-cell` 内联例外已删), 且三个页面模板里 `.h-cell`
-       内联零残留; 各页面还必须有对应行模型渲染器的调用点(漏挂 = 该页值格全空)。
+       (种子页表头自 P3/P4 起也已迁移 —— 原 `.h-cell` 内联例外已删), **drawer-tabs.html 3 个**
+       (W2: trackers / peers / content 三页签各一张), 且各模板里 `.h-cell` 内联零残留;
+       各页面还必须有对应行模型渲染器的调用点(漏挂 = 该页值格全空)。
     ④ thead 模式(P5, 计划 26-10-11-1722): 同一个表壳的第二根 —— 原生 <table> 表头行, 设置页
        HR 详情表借壳。占位必须写成 `<tr is="vue:aq-table" mode="thead">`(in-DOM 表内容模型),
        且该段内联 `<th>` 零残留(回潮 = 表头 markup 又有第二份)。
@@ -651,6 +653,9 @@ def test_frontend_table_shell_single_point():
         ("aq-torrent-cells", "AQ_TORRENT_CELLS_COMPONENT"),
         ("aq-show-cells", "AQ_SHOW_CELLS_COMPONENT"),
         ("aq-ep-cells", "AQ_EP_CELLS_COMPONENT"),
+        ("aq-tracker-cells", "AQ_TRACKER_CELLS_COMPONENT"),
+        ("aq-peer-cells", "AQ_PEER_CELLS_COMPONENT"),
+        ("aq-file-cells", "AQ_FILE_CELLS_COMPONENT"),
     )
     for name, glob in comps:
         assert re.search(r'app\.component\(\s*"%s"\s*,\s*window\.%s\s*\)' % (name, glob),
@@ -662,7 +667,10 @@ def test_frontend_table_shell_single_point():
     for tid in ("tpl-aq-table", "tpl-aq-member-cells"):
         assert xtpl.count(f'id="{tid}"') == 1, f"shared/tpl/xtpl.html 的 {tid} 模板必须恰一份(表壳/渲染器单点)"
     xtpl_cells = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
-    for tid in ("tpl-aq-group-cells", "tpl-aq-torrent-cells", "tpl-aq-show-cells", "tpl-aq-ep-cells"):
+    for tid in (
+        "tpl-aq-group-cells", "tpl-aq-torrent-cells", "tpl-aq-show-cells", "tpl-aq-ep-cells", "tpl-aq-tracker-cells",
+        "tpl-aq-peer-cells", "tpl-aq-file-cells"
+    ):
         assert xtpl_cells.count(f'id="{tid}"') == 1, \
             f"shared/tpl/xtpl-cells.html 的 {tid} 模板必须恰一份(行模型渲染器单点)"
     shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
@@ -687,6 +695,9 @@ def test_frontend_table_shell_single_point():
         ("tpl/groups.html", 2, ("aq-group-cells", )),
         ("tpl/shows.html", 2, ("aq-show-cells", "aq-ep-cells")),
         ("tpl/torrents.html", 1, ("aq-torrent-cells", )),
+        # W2(计划 26-10-11-2106): 抽屉三表各一张 —— 三页签的列表不再是自带 <table class="drawer-table">
+        # 的字符串 DOM(那是"面板里没有列模型"的根因: 拖宽/排序/右键隐藏一件都接不上)
+        ("tpl/drawer-tabs.html", 3, ("aq-tracker-cells", "aq-peer-cells", "aq-file-cells")),
     ):
         raw = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
         text = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
@@ -741,6 +752,75 @@ def test_frontend_table_registry_single_point():
     sort_js = open(os.path.join(STATIC_ROOT, "shared", "sort.js"), encoding="utf-8").read()
     for probe in ('viewMode === "torrents"', 'viewMode === "shows"'):
         assert probe not in sort_js, (f"sort.js 又出现 {probe} 视图分派 —— 应走 TABLE_DEFS[id].sort(注册表单点)")
+
+    # ---------------- W2「三列表接表壳」(计划 26-10-11-2106) ----------------
+    # 抽屉三表的**表身份**必须独立于 TABLE_PAGES: 并进 TABLE_DEFS 会让 TABLE_PAGES 把它们当"页面"
+    # 参与行窗口化与"全表"动作, 而它们没有视图、也没有 3000 行的窗口化需求。但列的**交互引擎**
+    # (拖宽/拖序/右键隐藏/持久化/对齐注入)要覆盖它们 —— 故引擎侧另取 ALL_TABLE_PAGES 全集。
+    m2 = re.search(r"const DRAWER_TABLE_DEFS = \{(.*?)\n\};", app, re.S)
+    assert m2, "app.js 缺 DRAWER_TABLE_DEFS(抽屉三表的表身份注册表) —— 形态变了请同步本守阵"
+    dbody = m2.group(1)
+    drawer_tables = (
+        (
+            "drawerTracker", "DRAWER_TRACKER_COLUMNS", "drawerTrackerGrid", "visibleDrawerTrackerCols", "dtrkSortKey",
+            "dtrkSortDir"
+        ),
+        (
+            "drawerPeer", "DRAWER_PEER_COLUMNS", "drawerPeerGrid", "visibleDrawerPeerCols", "dpeerSortKey",
+            "dpeerSortDir"
+        ),
+        (
+            "drawerFile", "DRAWER_FILE_COLUMNS", "drawerFileGrid", "visibleDrawerFileCols", "dfileSortKey",
+            "dfileSortDir"
+        ),
+    )
+    state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+    for tid, const, grid, colsc, gk, gd in drawer_tables:
+        assert tid not in body, (
+            f"{tid} 混进了 TABLE_DEFS —— 抽屉表进了 TABLE_PAGES 就会被当成页面"
+            f"(列选择器多一个'页面'/行窗口化多一个 kind); 表身份走 DRAWER_TABLE_DEFS"
+        )
+        seg = re.search(r"\n  %s: \{(.*?)\n  \}," % tid, dbody, re.S)
+        assert seg, f"DRAWER_TABLE_DEFS 缺 {tid}(或段落格式变了, 同步本守阵)"
+        s = seg.group(1)
+        assert f"columns: {const}" in s, f"DRAWER_TABLE_DEFS.{tid}.columns 未指向 {const}(列定义单点断了)"
+        assert f'grid: "{grid}"' in s and f'cols: "{colsc}"' in s, \
+            f"DRAWER_TABLE_DEFS.{tid} 的 grid/cols computed 名不匹配(表壳行宽与可见列没锚点)"
+        assert f'gk: "{gk}"' in s and f'gd: "{gd}"' in s, \
+            f"DRAWER_TABLE_DEFS.{tid} 的排序字段名不匹配(表头点了排序会写到别的表上)"
+        assert "headRef: null" in s, ("抽屉表头渲染在页签组件内部, 根实例 $refs 取不到 —— "
+                                      "headRef 必须是 null 走 _headEl 的 DOM 兜底")
+        assert f"const {const} = [" in app, f"app.js 缺列定义常量 {const}"
+        assert f"{grid}()" in cols, f"columns.js 缺 computed {grid} —— 行宽(gridStyle 消费)没有来源"
+        assert f"{colsc}()" in cols, f"columns.js 缺 computed {colsc} —— 可见列没有单点"
+        assert f"{gk}:" in state_js and f"{gd}:" in state_js, \
+            f"state.js 缺排序字段 {gk}/{gd} —— 表壳列头点一下会写进 undefined"
+    # TABLE_PAGES 仍由 TABLE_DEFS 派生(不是 ALL_TABLE_DEFS); 引擎侧全集另有一条
+    assert re.search(r"const TABLE_PAGES = Object\.keys\(TABLE_DEFS\)", app), \
+        "TABLE_PAGES 不再是 Object.keys(TABLE_DEFS) —— 上面那条'抽屉表不进 TABLE_PAGES'的独立性判据就失效了"
+    assert re.search(r"const ALL_TABLE_PAGES = Object\.keys\(ALL_TABLE_DEFS\)", app), \
+        "app.js 缺 ALL_TABLE_PAGES(列交互引擎的表 id 全集)"
+    # 三处**接线**(缺一即静默坏, 静态层面只能靠形态钉):
+    # ① 表壳列头必须把自己的 tableId 当排序 scope 传下去 —— 传 undefined 会回落"当前视图的表";
+    # ② sort.js 必须按表 id 解析 scope(抽屉三表各有一座独立排序键靠它);
+    # ③ columns.js `_headEl` 必须有 DOM 兜底 —— 表头在页签组件内, ref 路径取不到它;
+    # ④ 列选择器与"全表"两个动作都必须覆盖全集 —— 否则右键隐藏是不可逆动作(无恢复入口)。
+    xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
+    shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
+    shell = shell[:shell.index("</script>")]
+    assert "$root.setSort(col.key, tableId)" in shell, \
+        ("表壳列头未把 tableId 当排序 scope 传下去 —— setSort 会按当前视图解析: 点抽屉列头排的是主视图, "
+         "本表箭头永不出现(静默)")
+    assert "ALL_TABLE_DEFS[scope] ? scope" in sort_js, \
+        "sort.js `_sortKeys` 未按表 id 解析 scope(抽屉三表各自独立的排序键靠它)"
+    assert '.group-head[data-table="' in cols, \
+        ("columns.js `_headEl` 缺 DOM 兜底 —— 抽屉表头在页签组件内(根实例 $refs 取不到它的 ref), "
+         "没有兜底时拖宽/双击自适应第一行就 return, 表现为'拖了完全没反应'且无报错")
+    m3 = re.search(r"\n    tableDefs\(\) \{(.*?)\n    \},", cols, re.S)
+    assert m3, "columns.js tableDefs computed 形态漂移(守阵正则失配, 同步本守阵)"
+    assert "ALL_TABLE_PAGES.map" in m3.group(1) and "ALL_TABLE_DEFS[id].columns" in m3.group(1), \
+        ("列选择器必须列出**全集**(含抽屉三表): 表头右键隐藏是不可逆动作, 选择器不给入口就只能改 "
+         "localStorage 才能把列找回来。这是计划 §07 括注的**有意偏差**, §11 变更记录已登记")
 
 
 def _scan_progress_val_parity(problems):
