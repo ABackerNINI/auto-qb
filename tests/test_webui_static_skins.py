@@ -818,9 +818,109 @@ def test_frontend_table_registry_single_point():
          "没有兜底时拖宽/双击自适应第一行就 return, 表现为'拖了完全没反应'且无报错")
     m3 = re.search(r"\n    tableDefs\(\) \{(.*?)\n    \},", cols, re.S)
     assert m3, "columns.js tableDefs computed 形态漂移(守阵正则失配, 同步本守阵)"
-    assert "ALL_TABLE_PAGES.map" in m3.group(1) and "ALL_TABLE_DEFS[id].columns" in m3.group(1), \
-        ("列选择器必须列出**全集**(含抽屉三表): 表头右键隐藏是不可逆动作, 选择器不给入口就只能改 "
+    # 26-10-12-0527 U1 改版: 全集遍历 + 变体表过滤(带 variantTab 的表只在对应变体被选中时
+    # 进选择器)。恢复入口不变式不变 —— 变体选中期间右键隐藏的列仍可在选择器勾回; 经典表
+    # (无 variantTab)恒在, 语义与全集逐位一致。
+    assert "for (const id of ALL_TABLE_PAGES)" in m3.group(1) and "def.columns" in m3.group(1), \
+        ("列选择器必须遍历**全集**(含抽屉三表): 表头右键隐藏是不可逆动作, 选择器不给入口就只能改 "
          "localStorage 才能把列找回来。这是计划 §07 括注的**有意偏差**, §11 变更记录已登记")
+    assert "def.variantTab" in m3.group(1) and "dtBridgeTbl(def.variantTab) !== id" in m3.group(1), \
+        ("变体表格体的选择器过滤失守: 八个变体表恒列出会把生产选择器撑爆 —— 只许在对应变体被"
+         "选中时出现(经 dtBridgeTbl 反查), 过滤口只有这一处")
+
+
+def test_drawer_table_bridge_wiring():
+    """变体表格体 Teleport 锚桥接线守阵(计划 26-10-12-0527 U1, D1 拍板)。
+
+    桥 = 变体外壳字符串 DOM 锚 + <aq-dt-bridge> Teleport(表壳 + 行渲染器) + 锚代数单调换代。
+    四件挂载时序路径(初开/切页签/软切换/合并双列)由 e2e/drawer-bridge-stub.spec.mjs 钉死,
+    本守阵钉**接线不变量**: 断任何一环, 桥静默失效或内容写进游离旧锚(e2e 路径C 实测根因)。
+    """
+    import os
+    import re
+    shared = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared"
+    )
+
+    def read(*parts):
+        return open(os.path.join(shared, *parts), encoding="utf-8").read()
+
+    # ① state.js: dtBridge = { gen(单调), on } —— gen 永不回落(回落即 :key 净零 → 游离旧锚)
+    st = read("state.js")
+    m = re.search(r"dtBridge: \{\},", st)
+    assert m, "state.js 缺 dtBridge 桥代数 data(U1 桥的锚代数表)"
+    assert "gen **单调自增**" in st and "on = 锚当前在 DOM" in st, \
+        "state.js dtBridge 注释口径漂移(gen 单调 + on 摘除两件必须写明 —— 那是路径C 红验换来的)"
+
+    # ② drawer_templates.js: register 收 tableId(字符集校验) + 挂载 gen 单调自增 + 卸载只摘 on
+    dt = read("drawer_templates.js")
+    assert 'throw new Error("[dt] register: bad tableId " + tableId)' in dt, \
+        "register 未校验 tableId 字符集(tableId 要进选择器与锚属性, 与 id 同纪律)"
+    assert "gen: (cur ? cur.gen : 0) + 1" in dt, \
+        "挂载机械锚代数必须**单调自增**(gen 恒定 = :key 净零 = Teleport 原地补丁进游离旧锚, e2e 路径C 红验根因)"
+    assert "this.dtBridge[tid].on = false" in dt and "gen 保持单调, 只摘 on" in dt, \
+        "卸载必须只摘 on(gen 保持单调)且不得清 gen"
+    assert "data-dt-table-anchor" in dt, \
+        "挂载/卸载机械未按锚属性 data-dt-table-anchor 扫描(锚约定单点, 见 table.js 对外契约④)"
+
+    # ③ 桥方法四件 + 取数四件(drawer.html 的 <aq-dt-bridge> 消费面)
+    for name in (
+        "dtBridgeTbl", "dtBridgeOn", "dtBridgeTo", "dtBridgeKey", "dtBridgeDef", "dtBridgeRows", "dtBridgeRowKey",
+        "dtBridgeRowModel", "dtBridgeRowProp"
+    ):
+        assert f"      {name}(" in dt, f"drawer_templates.js 缺桥方法 {name}(桥消费面被拆即静默失效)"
+
+    # ④ drawer.html: 桥挂点恰两处(单栏 v-for + 合并列), :key 含锚代数(换代纪律)
+    drh = read("tpl", "drawer.html")
+    assert drh.count("<aq-dt-bridge") == 2, \
+        f"drawer.html 桥挂点应为恰 2 处(单栏 + 合并列), 实测 {drh.count('<aq-dt-bridge')}"
+    assert drh.count(':key="dtBridgeKey(') == 2, \
+        "桥挂点缺 :key=锚代数(不换代 = 宿主重建后内容写进游离旧锚)"
+    assert "v-for=\"t in ['general', 'trackers', 'peers', 'content']\"" in drh, \
+        "单栏桥未按四页签自点亮(硬编码单页签会让其他页签变体桥失效)"
+
+    # ⑤ 桥组件 + x-template: 表壳/行渲染器/滚动同步/引擎排序全走 $root 单点
+    tbl = read("table.js")
+    assert 'name: "aq-dt-bridge"' in tbl and 'template: "#tpl-aq-dt-bridge"' in tbl, \
+        "table.js 缺 aq-dt-bridge 组件定义(桥的载体)"
+    xt = read("tpl", "xtpl.html")
+    m2 = re.search(r'<script type="text/x-template" id="tpl-aq-dt-bridge">(.*?)</script>', xt, re.S)
+    assert m2, "xtpl.html 缺桥 x-template 分片"
+    btpl = m2.group(1)
+    assert "$root.dtBridgeTo(tab)" in btpl, "桥模板 teleport :to 未走 dtBridgeTo 单点(锚约定)"
+    assert "<aq-table" in btpl and "-cells" in btpl, "桥模板必须复用表壳 + 行渲染器(不许自拼表格)"
+    assert "$root.sortedDrawer(" in btpl, "桥行序必须走 sortedDrawer 单点(dyn 分支) —— 手拼即第二份排序机"
+    assert "$root.syncHeadScroll(" in btpl, "桥缺表头横滚同步(横滚时表头不动 = 静默坏)"
+
+    # ⑥ sort.js: dyn 分支(变体表排序状态按 table-id 通用存取, 不再每表加 state 字段)
+    srt = read("sort.js")
+    assert srt.count("setSort(key, scope)") == 1, "sort.js setSort 出现重复定义(重构残留)"
+    assert "if (s.dyn) return { dyn: true, id, defKey: s.defKey, defDir: s.defDir };" in srt, \
+        "_sortKeys 缺 dyn 分支(变体表排序状态走 dtSortState 映射)"
+    assert "def.sort.dyn ? this.dtSortCell(tableId)" in srt, \
+        "sortedDrawer 缺 dyn 分支(变体表行序回退恒原序, 排序静默无效)"
+
+    # ⑦ app.js: stub 描述符行 + 列子集 + 描述符导出口
+    app = read("app.js")
+    assert "drawerStubV0: {" in app and "variantTab: \"peers\"" in app, \
+        "app.js 缺 drawerStubV0 描述符行(U1 spike 的桥验证表)"
+    assert "const DRAWER_STUB_V0_COLUMNS = [" in app and "DRAWER_PEER_COLUMNS[0]" in app, \
+        "stub 列子集未以经典用户列集为底裁剪(D2 口径: 列个性 = 数据声明)"
+    assert "window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;" in app, \
+        "app.js 未导出 DRAWER_TABLE_DEFS 读取口(桥反查依赖, 经 window 中转保装载序)"
+    assert "drawerStubV0: DRAWER_STUB_V0_COLUMNS" in app, \
+        "TABLE_COLUMNS 未注册 stub 列集(_visibleCols 按 page 取列定义)"
+
+    # ⑧ stub 变体: ?dtstub 门 + 桥声明 + 稳定 HTML 不变量
+    stub = read("drawer_tpl", "90-peers-stub-bridge.js")
+    assert 'indexOf("dtstub")' in stub, "stub 变体缺 ?dtstub 查询参数门(生产必须零观感)"
+    assert 'tableId: "drawerStubV0"' in stub, "stub 变体未声明 tableId(桥契约的声明侧)"
+    assert "H.skipUnchanged" in stub, "stub 变体缺 skipUnchanged(桥变体的稳定 HTML 不变量: 锚不得随轮询重建)"
+
+    # ⑨ 三份 index.html: stub 装载行各 1 条
+    for skin in ("atlas", "console", "prism"):
+        idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
+        assert idx.count("drawer_tpl/90-peers-stub-bridge.js") == 1, f"{skin} index.html stub 装载行失守"
 
 
 def _scan_progress_val_parity(problems):

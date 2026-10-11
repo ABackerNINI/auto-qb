@@ -126,6 +126,16 @@
 - **文档回写**: 计划 §05 进度注 + §11 W7 条; `modules/webui-static-contract.md` 修正条; 本切片 + activeContext 新切片(26-10-12-0340)。
 - **缺陷复核(用户指令「修复缺陷」)**: `esc-attr-quote-dead-class` 随变体恢复重新存在的**遗留判定不成立** —— 实证两件: ① 静态全扫描(15 变体 + drawer_templates.js 全部字符串字面量与全部模板插值)零「整段属性进 esc 插值」形态, 变体条件类全走正确形态(`class="x${cond ? " y" : ""}"`), 命中引号字面量全是 CSS 串/选择器构建/KIT 直拼(不经 esc); ② 新增运行时守阵 `e2e/lib/dt-dead-class.mjs`(`expectNoDeadClass` 渲染后全文档 class 值零引号), 钉 drawer-tables(经典+变体 06)/drawer-merge(经典+变体 01+10)五处, 注入坏形态两皮肤即红、还原即绿。**判定: 缺陷不存在, 无需修码** —— W2 时「15 个变体仍带同一缺陷」是未枚举的悲观外推, 真实点位只有 W2 已删的旧经典页。坑档加 W7 复核注; 该遗留就此关闭。
 
+### 2026-10-12 · 表格统一 U0/U1 (计划 26-10-12-0527, 用户拍板 D1–D6 全推荐项)
+
+- **U0 冻结+契约交付**: P6 契约全文落 `shared/table.js` 头注「对外契约(P6)」节(描述符/表壳/渲染器/锚约定/checklist); 1722 档案 P6 状态 待做→已交付; 「变体表格 8 份手搓」债务入账模块文档; 基线切片 26-10-12-0540(test.full 3131+4 / e2e 166+10, 与 W7 逐位相同 = 零行为变化证据)。
+- **U1 引擎 spike(硬闸门通过)**: ① 列子集声明(TABLE_COLUMNS + 描述符行); ② 排序 dyn 泛化(sort.js `_sortKeys`/`setSort`/`_resetSort`/`sortedDrawer` 四处 dyn 分支 + `dtSortCell` 取数口, 变体表不再需要 state.js 排序字段); ③ Teleport 桥 = `aq-dt-bridge` 组件(xtpl 分片) + 挂载机械锚代数(`dtBridge: {gen, on}`) + drawer.html 两挂点(单栏 v-for + 合并列) + stub 变体 90(?dtstub 门) + 列选择器变体过滤(`tableDefs` 按 variantTab 反查, 恢复入口不变式保持)。
+- **e2e 实测抓到两个关键缺陷(探针定位)**: ① 桥行漏套 `sortedDrawer`——行序不随列头; ② 锚代数回落(卸载清零→再挂回 1, :key 净零)→ Vue 原地补丁把 Teleport 内容写进**游离旧锚**, 软切换后桥静默"消失"。修法: gen 单调自增 + on 摘除。两处均入守阵(`test_drawer_table_bridge_wiring` 九段接线 pin)。
+- **验收**: stub 四路径 e2e 10 passed(双皮肤; 手势三件套: 排序/拖宽落盘/右键隐藏落盘 + 刷新双偏好回放); 红验: gen 恒定注入→路径C 两皮肤红→还原绿; 主视图零改动。
+- **数字**: `test.full` 3132 passed + 4 skipped(+1 桥守阵); 全量 e2e 176 passed + 10 skipped(+10 桥验证 spec); 基线切片 26-10-12-0641。
+
+**Refs:** memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html
+
 ### 2026-10-12 · 表格统一偏差审计 (重审计划的前置输入)
 
 - **触发(用户)**: 「计划偏差太大, 重新审视计划, 我需要的是所有表格统一, 提供类似的交互逻辑, 减少维护点, 先写一个审计报告, 偏差了哪些」——重审 26-10-11-2106 的目标函数: 从「一套渲染技术」修正为「所有表格统一 × 交互逻辑同源 × 维护点下降」。

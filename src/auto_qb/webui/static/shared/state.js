@@ -124,6 +124,15 @@ window.AQB_STATE = {
       // 详情面板模板选择(plan 26-10-06-0838 S1, P-01 初装全 classic): 按页签记模板 id;
       // 读侧白名单在核心层 readSel, 脏值/缺失/写失败一律回落 classic —— 字段必须显式建(vue-reactivity 坑)
       drawerTplSel: initialDrawerTpl(),
+      /* 变体表格体 Teleport 锚代数(计划 26-10-12-0527 U1, D1 桥): tableId -> { gen, on }。
+       * gen **单调自增**(挂载机械每见一次锚 +1, 永不回落): :key 含 gen, 宿主重建后锚是新
+       * 元素, Teleport 必须重挂进当前锚 —— 不重挂会残留进游离节点; 若 gen 回落(卸载清零
+       * 再挂回 1), :key 净零变化会让 Vue 原地补丁、内容写进游离旧锚(e2e 路径C 实测)。
+       * on = 锚当前在 DOM(v-if 口径): 卸载置 false 摘内容, 防死锚泄漏。 */
+      dtBridge: {},
+      /* 变体表格体排序状态(按 table-id 通用存取, sort.js dyn 分支消费):
+       * tableId -> { key, dir }。经典表不走这里(各自 data 字段, 描述符 sort.gk 指名)。 */
+      dtSortState: {},
       // 页签合并开关(R2 计划 26-10-09-2219 S2 · R3 名单模型): "off" | "on"。开启且宽度门内时
       // 页签栏收敛为两对合并页签[常规&内容][Tracker&用户], 正文双列并排(列组按当前页签所属对)。
       // 抽屉级布局意图, 不随页签/种子/开关面板丢失; 独立于 drawerTplSel(模板选择 × 合并两个

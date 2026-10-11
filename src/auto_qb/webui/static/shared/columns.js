@@ -35,6 +35,13 @@ window.AQB_COLUMNS = {
       if (!at) return null;
       return { position: "fixed", left: at.x + "px", top: at.y + "px", maxHeight: at.mh + "px", overflowY: "auto" };
     },
+    /* 变体表格体桥(计划 26-10-12-0527 D1)的公共取列口: drawer.html 的 Teleport 块按 tableId
+     * 动态取可见列(经典链走描述符 cols 指名的 computed, 变体表同样可用 —— 本方法只是模板
+     * 动态 id 的取法, 语义与 _visibleCols 逐位一致)。 */
+    visibleColsOf(page) {
+      return this._visibleCols(page);
+    },
+
     gridStyle(page) {
       // 列模板由 computed 缓存(见 *_Grid): 行渲染只取同一引用, 不每行拼字符串
       // 表 id -> grid computed 名的映射在注册表(主视图 TABLE_DEFS / 抽屉表 DRAWER_TABLE_DEFS,
@@ -672,7 +679,17 @@ window.AQB_COLUMNS = {
      * (只剩改 localStorage)。用户 26-10-11 拍板「以与主视图一致为准则」(D 组 Q2), 故取全集。
      * 计划 §11 变更记录已登记本偏差。 */
     tableDefs() {
-      return ALL_TABLE_PAGES.map((id) => ({ id, label: ALL_TABLE_DEFS[id].label, columns: ALL_TABLE_DEFS[id].columns }));
+      /* 变体表格体(26-10-12-0527): 带 variantTab 的表只在**对应变体被选中**时进选择器
+       * (dtBridgeTbl 是 drawer_templates.js mixin 的桥反查; 经典选中时该变体表不出现 ——
+       * 八个变体表恒列出会把生产选择器撑爆, 且全部隐藏列无意义)。恢复入口不变式保持:
+       * 变体选中期间右键隐藏的列仍可在选择器勾回。 */
+      const out = [];
+      for (const id of ALL_TABLE_PAGES) {
+        const def = ALL_TABLE_DEFS[id];
+        if (def.variantTab && this.dtBridgeTbl(def.variantTab) !== id) continue;
+        out.push({ id, label: def.label, columns: def.columns });
+      }
+      return out;
     },
     /* 列模板: computed 缓存(列宽/列显隐变化才变), 行渲染只取同一引用, 不再每行拼字符串 */
     groupGrid() {
@@ -696,6 +713,11 @@ window.AQB_COLUMNS = {
     },
     drawerFileGrid() {
       return { gridTemplateColumns: this._gridTemplate("drawerFile") };
+    },
+    /* 变体表格体(计划 26-10-12-0527 U1 stub): 与抽屉三表同一条 _gridTemplate 路径 ——
+     * 列宽/列序/隐藏任一变化即换引用; U2 起每变体表一行(声明式追加, 形态同此)。 */
+    drawerStubV0Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerStubV0") };
     },
     /* 列对齐规则(R10-08): align 定义在列模型里, 这里按**当前可见列**生成 :nth-child 规则注入 <head>。
      *
@@ -789,6 +811,10 @@ window.AQB_COLUMNS = {
     },
     visibleDrawerFileCols() {
       return this._visibleCols("drawerFile");
+    },
+    /* 变体表格体(26-10-12-0527 U1 stub): 同抽屉三表口径(表壳 :cols 与渲染器 :cols 同引用) */
+    visibleDrawerStubV0Cols() {
+      return this._visibleCols("drawerStubV0");
     },
   },
 };

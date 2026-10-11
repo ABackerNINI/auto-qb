@@ -219,6 +219,9 @@
                 <div class="dt-col-head">{{ col.label }}</div>
                 <component v-if="dtVueTab(col.tab)" :is="'aq-drawer-' + col.tab" v-bind="col.props"></component>
                 <div v-else class="dt-host" v-show="dtHostOn(col.tab)" :data-dt-host="col.tab"></div>
+                <!-- 变体表格体桥(计划 26-10-12-0527 U1): 变体声明 tableId 时表格体经 Teleport
+                     传送进外壳锚; :key 含锚代数 —— 宿主重建后强制重挂进当前锚(U1 四路径闸门)。 -->
+                <aq-dt-bridge v-if="dtBridgeOn(col.tab)" :key="dtBridgeKey(col.tab)" :tab="col.tab"></aq-dt-bridge>
               </div>
             </div>
             <!-- W2(计划 26-10-11-2106): 四页签「经典」由 Vue 组件渲染(shared/drawer_tabs.js +
@@ -233,6 +236,11 @@
               <div v-else class="dt-host" v-show="dtHostOn('peers')" data-dt-host="peers"></div>
               <aq-drawer-content v-if="dtVueTab('content')"></aq-drawer-content>
               <div v-else class="dt-host" v-show="dtHostOn('content')" data-dt-host="content"></div>
+              <!-- 变体表格体桥(计划 26-10-12-0527 U1): 逐页签自点亮(锚代数 > 0 才渲染),
+                   classic / 无 tableId 声明 / 锚不在 DOM 恒不渲染 —— 生产零观感。 -->
+              <template v-for="t in ['general', 'trackers', 'peers', 'content']" :key="'dtb-' + t">
+                <aq-dt-bridge v-if="dtBridgeOn(t)" :key="dtBridgeKey(t)" :tab="t"></aq-dt-bridge>
+              </template>
             </template>
           </template>
         </div>

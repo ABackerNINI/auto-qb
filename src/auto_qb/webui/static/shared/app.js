@@ -223,6 +223,16 @@ const DRAWER_PEER_COLUMNS = [
   { key: "uploaded", label: "已上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "relevance", label: "文件关联", tpl: "96px", sortable: true, align: "right" },
 ];
+
+/* 变体表格体列子集(计划 26-10-12-0527 U1 stub): 以经典用户列集为底裁剪(D2: 变体列个性 =
+ * 数据声明) —— 5 列演示子集; U2 起各变体照此模式声明自己的子集/专属列。 */
+const DRAWER_STUB_V0_COLUMNS = [
+  DRAWER_PEER_COLUMNS[0], /* addr */
+  DRAWER_PEER_COLUMNS[1], /* client */
+  DRAWER_PEER_COLUMNS[3], /* progress */
+  DRAWER_PEER_COLUMNS[4], /* dlspeed */
+  DRAWER_PEER_COLUMNS[5], /* upspeed */
+];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -232,6 +242,8 @@ const DRAWER_FILE_COLUMNS = [
 const TABLE_COLUMNS = {
   group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS,
   drawerTracker: DRAWER_TRACKER_COLUMNS, drawerPeer: DRAWER_PEER_COLUMNS, drawerFile: DRAWER_FILE_COLUMNS,
+  /* 变体表格体列集(26-10-12-0527): 与 DRAWER_TABLE_DEFS 同步注册(声明即事实源) */
+  drawerStubV0: DRAWER_STUB_V0_COLUMNS,
 };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
@@ -369,11 +381,36 @@ const DRAWER_TABLE_DEFS = {
     grid: "drawerFileGrid", cols: "visibleDrawerFileCols", window: null,
     sort: { gk: "dfileSortKey", gd: "dfileSortDir", defKey: "", defDir: -1 },
   },
+  /* ---------------- 变体表格体(计划 26-10-12-0527, D1 Teleport 锚桥) ----------------
+   * 变体表格体接入 = 这里注册一行 + 变体外壳 dtHtml 输出锚(`data-dt-table-anchor="<id>"`)
+   * + (新行模型才需)一个渲染器 —— 表壳/交互/持久化/对齐零改动(对外契约见 table.js 头注)。
+   * 与经典三表的形态差异(增量, 经典三表不动):
+   *   sort.dyn   排序状态进根 data 的 `dtSortState` 映射(按 table-id 通用存取, sort.js
+   *              dyn 分支) —— 不再每表往 state.js 加两个 data 字段(注册一行即完事);
+   *   variantTab/variantId  归属页签与变体 id —— ① columns.js `tableDefs` 据此过滤列选择器
+   *              (变体表只在对应变体被选中时出现, 不泄进生产选择器); ② drawer.html 桥按
+   *              dtBridgeTbl(tab) 反查(选择变体 → 桥表格)。
+   *   rows/rowProp/rowModel  行来源(根方法名)/渲染器 prop 名/渲染器模型(aq-<rowModel>-cells)。
+   * drawerStubV0 = U1 spike 的 stub(真实变体一行不改): 列 = DRAWER_PEER_COLUMNS 列子集
+   * (D2 口径), 行复用 peer 行模型与 drawerPeerRows 装配 —— 只由 ?dtstub 查询参数激活的
+   * 测试变体(stubbridge)输出锚, 生产不可见。 */
+  drawerStubV0: {
+    columns: DRAWER_STUB_V0_COLUMNS, label: "桥验证表(测试)",
+    headRef: null, tableRef: null,
+    grid: "drawerStubV0Grid", cols: "visibleDrawerStubV0Cols", window: null,
+    sort: { dyn: true, defKey: "", defDir: -1 },
+    variantTab: "peers", variantId: "stubbridge",
+    rows: "drawerPeerRows", rowKey: "addr", rowModel: "peer", rowProp: "p",
+  },
 };
 /* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
  * 主视图"页面" + 抽屉表。两者的差集只有一个用途 —— 见 columns.js `tableDefs` 的取法。 */
 const ALL_TABLE_DEFS = { ...TABLE_DEFS, ...DRAWER_TABLE_DEFS };
 const ALL_TABLE_PAGES = Object.keys(ALL_TABLE_DEFS);
+/* 变体表格体桥(计划 26-10-12-0527)的描述符读取口: drawer_templates.js 的桥方法按 table-id
+ * 反查(注册表在模板层, 描述符在数据层, 装载序 app.js 先于 drawer_templates.js —— 经 window
+ * 中转, 运行时才求值)。 */
+window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;
 
 /* ---------------- P1-2 行窗口化(windowed rows) ----------------
  *
@@ -685,6 +722,8 @@ app.component("aq-ep-cells", window.AQ_EP_CELLS_COMPONENT);
 app.component("aq-tracker-cells", window.AQ_TRACKER_CELLS_COMPONENT);
 app.component("aq-peer-cells", window.AQ_PEER_CELLS_COMPONENT);
 app.component("aq-file-cells", window.AQ_FILE_CELLS_COMPONENT);
+/* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 → Teleport 表壳 + 行渲染器(见 table.js 尾注) */
+app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
 // 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
 // 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
 // W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。

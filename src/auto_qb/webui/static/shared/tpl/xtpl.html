@@ -316,3 +316,25 @@
       <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
     </template>
   </script>
+
+<script type="text/x-template" id="tpl-aq-dt-bridge">
+  <!-- 变体表格体桥(计划 26-10-12-0527 U1): 表壳 + 行渲染器经 Teleport 传送进变体外壳锚。
+       全部引擎行为走 $root 既有单点; 描述符(app.js DRAWER_TABLE_DEFS 变体行)声明
+       rows/rowKey/rowModel/rowProp 四件即接入 —— 外壳/引擎/本组件三方零特判。 -->
+  <teleport :to="$root.dtBridgeTo(tab)">
+    <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
+              :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
+              :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>
+    <div v-if="$root.sortedDrawer($root.dtBridgeTbl(tab), $root.dtBridgeRows(tab)).length" class="group-table"
+         @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))">
+      <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), $root.dtBridgeRows(tab))"
+           :key="r[$root.dtBridgeRowKey(tab)]" class="group-row"
+           :data-table="$root.dtBridgeTbl(tab)" :style="$root.gridStyle($root.dtBridgeTbl(tab))">
+        <component :is="'aq-' + $root.dtBridgeRowModel(tab) + '-cells'"
+                   :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
+                   v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>
+      </div>
+    </div>
+    <div v-else class="empty"><span>暂无数据</span></div>
+  </teleport>
+</script>

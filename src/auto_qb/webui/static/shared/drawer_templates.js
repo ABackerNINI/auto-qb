@@ -269,9 +269,15 @@
       if (typeof entry.render !== "function") throw new Error("[dt] register: render required (id " + id + ")");
       var m = tabMap(tab);
       if (m.has(id)) throw new Error("[dt] register: duplicate (id, tab) = (" + id + ", " + tab + ")");
+      /* 变体表格体桥声明(计划 26-10-12-0527 D1): tableId = DRAWER_TABLE_DEFS 键 —— 变体声明
+       * 了 tableId 即表示其表格体走引擎(dtHtml 只出锚, 行/表壳由 drawer.html 的 Teleport 渲染);
+       * 缺省 ""(外壳自管表格, 现状)。字符集与 id 同纪律(要进选择器与锚属性)。 */
+      var tableId = String(entry.tableId || "");
+      if (tableId && /[^A-Za-z0-9_-]/.test(tableId)) throw new Error("[dt] register: bad tableId " + tableId);
       m.set(id, {
         id: id, tab: tab,
         label: String(entry.label || id),
+        tableId: tableId,
         /* 流量页签双宿主(图前/图后): slot = "pre" | "post"(缺省 post), 其余页签忽略 */
         slot: entry.slot === "pre" ? "pre" : "post",
         render: entry.render,
@@ -403,6 +409,55 @@
         if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
         return this._dtCurTab() === tab;
       },
+      /* ---------------- 变体表格体桥(计划 26-10-12-0527 D1 = Teleport 锚) ----------------
+       * 变体声明 tableId 时, 其表格体 = dtHtml 输出的空锚 + drawer.html 的 <teleport> 渲染
+       * (表壳 aq-table + 行渲染器, 全 Vue 管理)。锚代数表 dtBridge(state.js data):
+       * _dtMountOne 每见一次锚自增(:key 含代数 → 宿主重建后 Teleport 强制重挂进**当前**锚,
+       * 不重挂会残留进游离节点 —— Vue 3 Teleport 目标被移除后不会自行迁回), _dtUnmountOne
+       * 清零(v-if 摘内容, 防死锚泄漏)。四件方法都是模板可达(不带下划线)。 */
+      /* 该页签当前选中变体的桥表 id; classic / 未声明 tableId / 未注册 → ""(无桥) */
+      dtBridgeTbl(tab) {
+        var sel = (this.drawerTplSel || {})[tab] || CLASSIC;
+        var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
+        return e && e.tableId ? e.tableId : "";
+      },
+      /* 桥是否点亮: 有表 id + 描述符在 + 该锚当前有代数(锚在 DOM) */
+      dtBridgeOn(tab) {
+        var tid = this.dtBridgeTbl(tab);
+        return !!tid && !!window.AQB_DRAWER_TPL_DEFS && !!window.AQB_DRAWER_TPL_DEFS[tid] && !!(this.dtBridge[tid] && this.dtBridge[tid].on);
+      },
+      /* Teleport :to(锚选择器, 约定单点: data-dt-table-anchor="<tableId>") */
+      dtBridgeTo(tab) {
+        return '[data-dt-table-anchor="' + this.dtBridgeTbl(tab) + '"]';
+      },
+      /* Teleport :key(含代数 —— 代数变即重挂) */
+      dtBridgeKey(tab) {
+        var st = this.dtBridge[this.dtBridgeTbl(tab)];
+        return this.dtBridgeTbl(tab) + "@" + (st ? st.gen : 0);
+      },
+      /* 桥描述符取数(drawer.html 的 teleport 块消费; 描述符字段见 app.js DRAWER_TABLE_DEFS
+       * 变体行注 —— rows/rowKey/rowModel/rowProp 四件)。非桥形态返回 null(模板 v-if 已挡)。 */
+      dtBridgeDef(tab) {
+        var tid = this.dtBridgeTbl(tab);
+        return tid ? ((window.AQB_DRAWER_TPL_DEFS || {})[tid] || null) : null;
+      },
+      dtBridgeRows(tab) {
+        var def = this.dtBridgeDef(tab);
+        if (!def || !this[def.rows]) return [];
+        return this[def.rows]();
+      },
+      dtBridgeRowKey(tab) {
+        var def = this.dtBridgeDef(tab);
+        return (def && def.rowKey) || "";
+      },
+      dtBridgeRowModel(tab) {
+        var def = this.dtBridgeDef(tab);
+        return (def && def.rowModel) || "";
+      },
+      dtBridgeRowProp(tab) {
+        var def = this.dtBridgeDef(tab);
+        return (def && def.rowProp) || "r";
+      },
       /* 右键菜单模板选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略(守阵口径同
        * readSel); 合法即落盘 + 重挂, 并收菜单。菜单已开, 无「回落显示值」回写口(那是原生 select
        * 的 value 回写), 故脏值直接 return。 */
@@ -452,6 +507,19 @@
         }
         var st = { tab: tab, entry: entry, host: host, ownerKey: "" };
         this._dtRender(st);
+        /* 桥锚代数(26-10-12-0527): 变体 HTML 里声明的每个锚自增一次代数 —— drawer.html 的
+         * teleport :key 含代数, 宿主重建(锚换新元素)后强制重挂进当前锚。node 探针环境无 DOM。 */
+        if (typeof host.querySelectorAll === "function") {
+          var anchors = host.querySelectorAll("[data-dt-table-anchor]");
+          for (var i = 0; i < anchors.length; i++) {
+            var tid = anchors[i].getAttribute("data-dt-table-anchor");
+            if (tid) {
+              var cur = this.dtBridge[tid];
+              /* gen 单调自增(永不回落 —— 回落即 :key 净零, Teleport 原地补丁进游离旧锚) */
+              this.dtBridge[tid] = { gen: (cur ? cur.gen : 0) + 1, on: true };
+            }
+          }
+        }
         return st;
       },
       _dtMountActive(tab) {
@@ -554,6 +622,14 @@
           try { st.entry.destroy(st.host, this); } catch (e) { /* destroy 失败不阻断关闭 */ }
         }
         if (st.host.classList) st.host.classList.remove("dt-tpl");
+        /* 桥锚代数清零(26-10-12-0527): 先记账后清空 —— 清空后锚已不在 DOM, 查不到 */
+        try {
+          var anchors = st.host.querySelectorAll("[data-dt-table-anchor]");
+          for (var i = 0; i < anchors.length; i++) {
+            var tid = anchors[i].getAttribute("data-dt-table-anchor");
+            if (tid && this.dtBridge[tid]) this.dtBridge[tid].on = false; /* gen 保持单调, 只摘 on */
+          }
+        } catch (e3) { /* node 探针环境假宿主 */ }
         try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
       },
     },

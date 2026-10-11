@@ -180,3 +180,19 @@ window.AQ_FILE_CELLS_COMPONENT = {
   },
   template: "#tpl-aq-file-cells",
 };
+
+/* ---------------- 变体表格体桥(计划 26-10-12-0527 U1, 拍板 D1 = Teleport 锚) ----------------
+ * 变体外壳(字符串 DOM)在表格区输出空锚 `<div data-dt-table-anchor="<tableId>">`, 本组件把
+ * 表壳 + 行渲染器传送进锚内 —— 单一 Vue 应用, 外壳零感知引擎, 引擎零感知外壳。
+ * 锚代数(dtBridge, state.js)由挂载机械维护: 挂载自增/卸载清零, drawer.html 以 :key=代数
+ * 强制宿主重建后重挂进当前锚(Vue 3 Teleport 目标被移除后不会自行迁回 —— 游离残留)。
+ * 全部行为(排序/拖宽/右键隐藏/偏好/对齐)经 $root 走既有引擎单点, 本组件是纯声明:
+ * 描述符(app.js DRAWER_TABLE_DEFS 变体行)声明 rows/rowKey/rowModel/rowProp 四件即接入。
+ * !挂载时序四路径(U1 硬闸门): 初开 / 页签切换 / 软切换换目标 / 合并双列 —— e2e 钉死。 */
+window.AQ_DT_BRIDGE_COMPONENT = {
+  name: "aq-dt-bridge",
+  props: {
+    tab: { type: String, required: true },       // 桥归属页签(反查选中变体的 tableId)
+  },
+  template: "#tpl-aq-dt-bridge",
+};
