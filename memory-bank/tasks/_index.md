@@ -24,6 +24,7 @@
 
 ## Open
 
+- [26-10-12-webui-traffic-limit-history] qB 流量图限速线按当时值分段 - 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更…
 - [26-10-09-backend-transport-encryption] 本地通道传输安全调研(WebUI + HR 取数通道) - 用户命题「WebUI⇄auto-qb 与 auto-qb⇄扩…
 
 ## Done

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-limit-history">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-12-0535">
+<meta name="doc-updated" content="26-10-12-0613">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-limit-history.md">
+<title>计划 · qB 流量图限速线按当时值分段</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101014;
+    --paper: #15151b;
+    --ink: #e2e2e6;
+    --muted: #9a9aa6;
+    --dim: #6d6d78;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #d9a45b;
+    --accent-dim: rgba(217,164,91,.16);
+    --up: #6fb3ae;
+    --down: #7f95c9;
+    --mono: "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 48px 24px 96px;
+  }
+  .page { max-width: 960px; margin: 0 auto; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.2;
+    margin: 10px 0 14px;
+  }
+  .lede { color: var(--muted); font-size: 16px; max-width: 72ch; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0 28px;
+    margin: 22px 0 0; padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+  }
+  .meta b { color: var(--muted); font-weight: 500; }
+  section { margin-top: 56px; }
+  h2 {
+    font-size: 13px; font-weight: 600;
+    font-family: var(--mono);
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent);
+    padding-top: 14px;
+    border-top: 1px solid var(--hairline-strong);
+    margin-bottom: 18px;
+  }
+  h2 .no { color: var(--dim); margin-right: 10px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 10px; }
+  p { margin: 0 0 12px; max-width: 76ch; }
+  p.wide { max-width: none; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 6px; max-width: 74ch; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: rgba(255,255,255,.05);
+    padding: 1px 5px; border-radius: 3px;
+    color: var(--ink);
+  }
+  .path { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 18px; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 11.5px;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dim);
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+  td:first-child { white-space: nowrap; }
+  td code { white-space: nowrap; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    color: var(--accent); border: 1px solid var(--hairline-strong);
+    padding: 0 7px; border-radius: 3px; line-height: 1.7;
+  }
+  .note {
+    border-left: 2px solid var(--accent);
+    padding: 2px 0 2px 14px;
+    color: var(--muted);
+    margin: 14px 0;
+  }
+  figure { margin: 26px 0; }
+  figcaption { font-size: 12px; color: var(--dim); margin-top: 10px; font-family: var(--mono); }
+  .svgbox {
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+    padding: 18px 14px 8px;
+  }
+  .changelog td:first-child { font-family: var(--mono); font-size: 12.5px; }
+  .footer-meta {
+    margin-top: 72px; padding-top: 14px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">PLAN · auto-qb · WEBUI</div>
+  <h1>qB 流量图限速线按当时值分段</h1>
+  <p class="lede">限速虚线从「拉取那一刻的当前值画满整窗」改为「按限速历史逐时段分段」——每段画在各自时间区间内, 反映当时真实生效的 qB 全局限速; 缺记录的区间不画线、不猜测。后端在主循环采样点顺带记录限速变化事件, 按天落独立小文件(<code>qb-traffic-v4/limits/</code>), 目录与流量数据一致, 不新增配置键。</p>
+
+  <div class="meta">
+    <span><b>Stamp</b> 26-10-12-0535</span>
+    <span><b>Status</b> Open(待实施确认)</span>
+    <span><b>Topic</b> webui-traffic-limit-history</span>
+    <span><b>决策方式</b> grilling 两轮收敛</span>
+    <span><b>基线</b> 850d9c67</span>
+  </div>
+
+  <!-- ================ 1 ================ -->
+  <section>
+    <h2><span class="no">§1</span>背景与问题定性</h2>
+    <p>流量图(qB 口径, 三挂点: 全局 / 分组 / 单种)的画布注解层会画限速虚线。用户报: <b>线显示的是当前限速值, 有误导性</b>——窗口默认 24h, 期间限速可能变过多轮, 但线只反映「现在」, 历史曲线段对着一条不属于那个时刻的限速看。</p>
+    <table>
+      <tr><th>现状事实</th><th>落点(已核到代码)</th></tr>
+      <tr><td>限速线 = 拉取响应那一刻的值, 横线画满整个窗口</td><td><code class="path">shared/qb_traffic_chart.js</code> <code>_qbDrawLimits</code>(draw 钩子, x 取整个绘图区)</td></tr>
+      <tr><td>取值单点 = <code>server_state.dl_rate_limit / up_rate_limit</code>(当前生效值)</td><td><code class="path">shared/dialogs.js</code> <code>speedLimitBytes</code>(R10-04 单点)</td></tr>
+      <tr><td>限速会变: 限速曲线模块按档位自动改写 / WebUI 手动覆盖 / 备用限速切换</td><td><code class="path">core/modules/speed_curve_mod.py</code> 每轮查档后 <code>set_global_speed_limits</code></td></tr>
+      <tr><td>主循环采样点每轮已拿到完整 <code>server_state</code></td><td><code class="path">core/modules/traffic_sample_mod.py</code> <code>_sample_global</code></td></tr>
+      <tr><td>注解层范围: 主线共享图面三挂点生效; 变体 13 省略注解层, 14/15 有</td><td>2026-10-08 拍板(issue 26-10-07-0149) + W7 变体恢复裁定</td></tr>
+    </table>
+    <div class="note">26-10-08 既有拍板(限速取 qB 全局限速、上下载各一条、自动模式峰值超限才画)是本计划的前置契约——本计划<b>只改「线的取值方式」</b>(单值 → 分段历史), 不推翻其余判据。</div>
+  </section>
+
+  <!-- ================ 2 ================ -->
+  <section>
+    <h2><span class="no">§2</span>已裁定事项(grilling 拍板记录)</h2>
+    <p>2026-10-12 会话内按 grilling 协议走完一轮七问, 用户逐项拍板; 第二轮前沿为空, 收敛。下列裁决即本计划的需求边界:</p>
+    <table>
+      <tr><th>#</th><th>决策</th><th>裁定</th></tr>
+      <tr><td>D1</td><td>记录什么</td><td>qB 全局限速的<b>实际生效值</b>(上/下行分开); 不记曲线目标值——手动保护跳过时目标并未写进 qB, 记目标会制造新的失真</td></tr>
+      <tr><td>D2</td><td>记录挂点</td><td>主循环流量采样点顺带对比, <b>有变化才追加事件</b>; 单线程(黄金法则 5)、零新增请求, 天然覆盖一切变化源(含 qB 原生界面手改)</td></tr>
+      <tr><td>D3</td><td>存储与保留</td><td><b>分天保存(独立天文件), 目录与流量数据一致; 不加配置键; 保留时间与流量图最大保存时间对齐</b>(用户修订项, 26-10-12 两轮裁定: 先定独立文件, 后定分天; 见 §3-D3′)</td></tr>
+      <tr><td>D4</td><td>前端画法</td><td>限速虚线按历史<b>分段</b>: 每段画在各自时间区间, 最后一段延伸到当前时刻; 上/下各一条、色随方向; 可见性判据逐段化(延续 26-10-08 拍板); 文案标明「按当时值」</td></tr>
+      <tr><td>D5</td><td>缺数据区间</td><td>记录起点之前<b>不画线、不回填</b>——「没有线」就是「当时值未知」的诚实表达</td></tr>
+      <tr><td>D6</td><td>生效范围</td><td>主线三挂点照旧全生效; 变体 13/14/15 维持现状(13 无注解层、14/15 有), 不为变体额外定制</td></tr>
+      <tr><td>D7</td><td>悬停读数</td><td>十字线 tooltip 增补「当时限速」读数(取悬停时刻生效的事件值)</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 3 ================ -->
+  <section>
+    <h2><span class="no">§3</span>方案设计</h2>
+
+    <figure>
+      <div class="svgbox">
+        <svg viewBox="0 0 900 300" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="现状与目标对比示意图">
+          <!-- ===== 上: 现状 ===== -->
+          <text x="8" y="18" fill="#9a9aa6" font-family="Consolas, monospace" font-size="11">现状 · 单值画满整窗(误导)</text>
+          <line x1="8" y1="270" x2="450" y2="270" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <line x1="8" y1="270" x2="8" y2="30" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <!-- 曲线: 上传 -->
+          <path d="M8,210 C40,190 60,230 90,215 C130,195 150,225 190,205 C230,190 260,220 300,200 C340,185 380,215 440,195" fill="none" stroke="#6fb3ae" stroke-width="1.5" opacity=".9"/>
+          <!-- 曲线: 下载 -->
+          <path d="M8,160 C45,140 70,175 105,155 C145,135 170,170 210,150 C250,132 280,165 320,145 C360,128 400,160 440,140" fill="none" stroke="#7f95c9" stroke-width="1.5" opacity=".9"/>
+          <!-- 全宽限速线 -->
+          <line x1="8" y1="95" x2="440" y2="95" stroke="#d9a45b" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="352" y="88" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">当前值 · 整窗一条</text>
+          <text x="8" y="288" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">窗口起点</text>
+          <text x="404" y="288" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">now</text>
+
+          <!-- ===== 下: 目标 ===== -->
+          <text x="470" y="18" fill="#9a9aa6" font-family="Consolas, monospace" font-size="11">目标 · 按当时值分段</text>
+          <line x1="470" y1="270" x2="892" y2="270" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <line x1="470" y1="270" x2="470" y2="30" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <!-- 曲线: 上传 -->
+          <path d="M470,210 C500,190 520,230 550,215 C590,195 610,225 650,205 C690,190 720,220 760,200 C800,185 840,215 884,195" fill="none" stroke="#6fb3ae" stroke-width="1.5" opacity=".9"/>
+          <!-- 曲线: 下载 -->
+          <path d="M470,160 C505,140 530,175 565,155 C605,135 630,170 670,150 C710,132 740,165 780,145 C820,128 855,160 884,140" fill="none" stroke="#7f95c9" stroke-width="1.5" opacity=".9"/>
+          <!-- 记录起点 -->
+          <line x1="570" y1="30" x2="570" y2="270" stroke="rgba(217,164,91,.35)" stroke-width="1"/>
+          <text x="476" y="44" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">记录起点前 · 不画</text>
+          <!-- 分段限速线 -->
+          <line x1="570" y1="120" x2="660" y2="120" stroke="#d9a45b" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <line x1="660" y1="80" x2="770" y2="80" stroke="#d9a45b" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <line x1="770" y1="105" x2="884" y2="105" stroke="#d9a45b" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="590" y="113" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">t1 值</text>
+          <text x="690" y="73" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">t2 值</text>
+          <text x="800" y="98" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">t3 值 → now</text>
+          <text x="470" y="288" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">窗口起点</text>
+          <text x="848" y="288" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">now</text>
+        </svg>
+      </div>
+      <figcaption>图 1 · 左: 现状, 一条「当前值」横线画满整窗; 右: 目标, 各时段画各自生效值, 记录起点之前留空(示意, 非真实数据)。</figcaption>
+    </figure>
+
+    <h3>D3′ 数据记录与存储(后端)</h3>
+    <ul>
+      <li><b>存储形态</b>(用户拍板 D3, 两轮裁定终值 = <b>分天</b>): <code class="path">&lt;data_dir&gt;/qb-traffic-v4/limits/&lt;YYYY-MM-DD&gt;.dat</code> —— 目录与流量数据一致, 天文件名与 v4 天文件同款日期格式(单点 <code>V4_DATE_FORMAT</code>); <code>limits/</code> 不是系列目录(<code>v4_rel_dir_to_key</code> 只认 <code>global/</code> 与 <code>torrents/&lt;hash&gt;</code>), 系列扫描与整目录淘汰天然跳过它, 不会被误删误列。每文件体量天然有界, 与 v4 天文件形态同构。</li>
+      <li><b>行格式</b>(追加写, 纯文本 CSV): <code>&lt;epoch_s&gt;,&lt;up_bytes_s&gt;,&lt;down_bytes_s&gt;</code>; 值 = 采样时刻 <code>server_state</code> 读到的生效值, <code>0</code> = 该方向不限速。备用限速生效期间读到的即生效值, 以 qB 实际下发为准, 事件序列如实反映切回切出。</li>
+      <li><b>事件语义</b>: 每轮采样对比内存缓存的上一记录值 <code>(up, down)</code>, 有变化才追加 + flush; 变化粒度 ≤ 采样间隔(默认 30s)。事件率 = 限速物理变化率的镜像, 记录器自己不制造事件, 文件增速有天然上界(≤ 采样率 × 行宽)。</li>
+      <li><b>跨天轮转</b>: 00:00 硬切新天文件(v4 关块同款触发, 不新造时钟); <b>新天首行 = 基线 carry</b>(上一生效值无条件写入, 值没变也写)——单看一个天文件自洽可读, 读侧拼接无需回溯前一天文件。重启去重口径: 启动首轮若与当日文件末条相同则跳过(不产生假事件; 已有基线 carry 的天文件同理)。</li>
+      <li><b>失败降级</b>: 追加 <code>OSError</code> → WARNING(节流)+ 本轮不记, <b>不上抛</b>——记录器是观测面, 丢失 = 事件缺口, 读侧「延续语义」自然兜住; 不因它挂主循环。撕裂尾(崩溃致残行)读侧跳过, 与 <code>traffic_store</code> 坏行豁免同理念。</li>
+      <li><b>读侧</b>: 按窗口日期集合只读涉及天文件(24h 窗至多 2 个, 与流量 raw 段同形状) + <b>合成首事件</b>(窗口起点 ≤t0 的最近生效值; ≤t0 的事件可能落在前一天文件末行, 读时窥前文件末行 carry); 记录起点前不给值(D5)。解析走 <b>mtime+size 键控缓存</b>(照 <code>V4DayCache</code> 形状): 文件没变零解析——不淘汰策略下历史持续变大, all 窗口也不因总历史变大而多花解析。</li>
+      <li><b>保留对齐口径</b>(D3): 流量图最大可看范围 = day/month 聚合行(全保留、无淘汰, 6mo/1y/all 窗口即看它); 限速天文件<b>同样不淘汰</b>, 两者生命周期一致——对齐语义逐字落地, 且不新增配置键。</li>
+      <li><b>落点</b>: 记录器与读侧收进 <code class="path">core/traffic_limits.py</code>(traffic_* 家族单文件小类, ~百行级); 接线在 <code class="path">traffic_sample_mod.py</code> <code>_sample_global</code> 内调用(仅主循环线程, 黄金法则 5)。</li>
+    </ul>
+
+    <h3>D3″ API(读侧)</h3>
+    <ul>
+      <li><code class="path">webui/server/traffic_qb.py</code> 的 <code>_respond</code> 统一附加 <code>limits</code> 字段——全局限速三作用域同源(26-10-08 拍板), global / torrent / group 三个 payload 同一份, 分组/单种不另读文件。</li>
+      <li><b>形状</b>: <code>limits: [[ts, up, down], ...]</code>——窗口内的变化事件按时间升序; 首元素是<b>合成事件</b> = 窗口起点时刻的生效值(≤ t0 的最近事件), 前端据此直接构段; 记录起点晚于窗口起点则首元素从记录起点开始, 起点前不给值(对应 D5)。</li>
+      <li>按窗口日期集合读涉及天文件; 单天体量小(变化才记 + 基线 carry, 一天几十条), mtime+size 解析缓存兜住 all 窗口多年积累; Web 线程只读, 与写侧(主循环)无锁竞争, 最坏读到半行由撕裂尾豁免兜住。</li>
+    </ul>
+
+    <h3>D4/D7 前端(分段线 + 悬停读数)</h3>
+    <ul>
+      <li><code>_qbDrawLimits</code> 改<b>分段绘制</b>: 从图数据 <code>data.limits</code> 构段 <code>[seg_t0, seg_t1) × (up, down)</code>, 每段 x = 各自时间区间(经 <code>valToPos(·, "x")</code>), 最后一段延伸到当前时刻; 上一段与新段之间天然呈阶梯。缺口(无流量采样)处线仍画——限速是时间真值, 独立于流量存在与否(缺口斜纹已表达无采样)。</li>
+      <li><b>可见性判据逐段化</b>: 每段每方向 <code>0 &lt; v &lt; ymax</code> 才画该段该方向的线(延续 26-10-08 拍板「自动模式峰值未超限速不画」的逐段版本); <code>0</code>(不限速)/缺值不画。</li>
+      <li><b>数据通路</b>: <code>_qbChartBuild</code> 建图与静默续拉快路(<code>setData</code> 原地换数据)都要把 <code>data.limits</code> 随图暂存(uPlot <code>u.data</code> 只有三列, 需挂在图记录上), 快路换数据时同步换——否则限速变更要等整图重建才可见。</li>
+      <li><b>悬停读数</b>(D7): <code>_qbHoverOf</code> 按悬停桶时刻二分事件序列取生效值, tooltip 增补「当时限速」一行; 模板改动在悬浮读数区(实现时定位具体挂点)。</li>
+      <li><b>文案</b>: 流量页签说明区增补一句「限速虚线 = 当时生效的 qB 全局限速; 记录起点前不显示」; 纵轴 <code>limit</code> 模式的上限口径<b>不变</b>(仍取当前全局限速 ×1.2, 见 §5 取舍)。</li>
+    </ul>
+  </section>
+
+  <!-- ================ 4 ================ -->
+  <section>
+    <h2><span class="no">§4</span>波次与验收</h2>
+    <table>
+      <tr><th>波次</th><th>内容</th><th>验收判据</th></tr>
+      <tr>
+        <td>W1 后端</td>
+        <td><code>core/traffic_limits.py</code>(记录器 + 读侧)<br><code>traffic_sample_mod.py</code> 接线<br><code>traffic_qb.py</code> payload 扩展<br>后端测试(新测试文件 + 既有流量端点测试扩展)</td>
+        <td>事件语义全绿(基线 / 变化才记 / 重启去重 / 00:00 硬切 + 基线 carry / 失败降级不上抛); 读侧(窗口裁剪 / 跨天拼接与 carry / 合成首事件 / 起点前不给值 / 撕裂尾容错 / 解析缓存命中); payload 三作用域同源; 注入红验(还原即绿)</td>
+      </tr>
+      <tr>
+        <td>W2 前端</td>
+        <td><code>qb_traffic_chart.js</code>: <code>_qbDrawLimits</code> 分段化 + 快路暂存 + <code>_qbHoverOf</code> 读数<br>说明文案<br>node 电池扩展 + 红验</td>
+        <td>node 电池覆盖分段几何(每段 x 区间 / 逐段可见性 / 起点前不画 / 0 值不画 / 最后一段到 now); 真浏览器抽查: 运行中改限速 → 线出阶梯; 变体 14/15 同步生效、13 无注解层不回归</td>
+      </tr>
+      <tr>
+        <td>W3 收尾</td>
+        <td><code>test.full</code> 新基线切片<br>文档回写(<code>conventions/webui.md</code> 注解层条目、modules 路由)<br>真机走查(改限速 → 看历史段)</td>
+        <td>数字只写基线切片; 回写随主提交; 真机验收通过</td>
+      </tr>
+    </table>
+    <p style="color: var(--muted);">测试纪律沿用库内口径: 新增测试同步文件头「## 测试计划」清单; 每条守阵注入即红 / 还原即绿; <code>TMPDIR</code> 已内置在 <code>test.*</code> 任务里不手工加。</p>
+  </section>
+
+  <!-- ================ 5 ================ -->
+  <section>
+    <h2><span class="no">§5</span>风险与取舍</h2>
+    <table>
+      <tr><th>点</th><th>判断</th></tr>
+      <tr><td>曲线目标值不记录</td><td>手动保护期间曲线「想写但被跳过」, 生效值未变 → 无事件, 图上如实无变化。若以后想看「曲线意图」, 另立项(曲线状态已有 <code>state.speed_limit_curve</code> 日键, 保留 7 天, 形状不合图用)</td></tr>
+      <tr><td>纵轴 limit 模式仍取当前值</td><td>它只是视口缩放选择, 不是历史表达; 按窗口内最大限速排轴属新语义, 本轮不做(记录在案, 需要时另议)</td></tr>
+      <tr><td>采样间隔 = 事件时间分辨率</td><td>限速变化时刻精确到采样轮(默认 30s); 对 24h 以上窗口远小于一个像素宽, 足够</td></tr>
+      <tr><td>缺数据区界定</td><td>限速是阶梯函数: 记录起点后每个时刻恒有生效值(0 = 不限速也是值)——<b>内部无缺口</b>, 唯一缺区 = t &lt; 首事件(记录起点), 不画线即「当时值未知」的诚实表达(D5)。停机/写失败窗口内发生的变化, 事件时刻延迟到恢复后首个采样, 误差 ≤ 停机时长; 值本身不丢(恢复首轮基线补上), 时刻误差图上不标注(成本大于收益, 已知边界)</td></tr>
+      <tr><td>病态翻转护栏</td><td>外部脚本级高频改限速(每个采样间隔翻转)是唯一理论风险, 文件增速上界 ≈ 采样率 × 行宽(~100KB/天/文件); 防(不删数据——删了违背对齐语义), 走<b>常量阈值 WARNING + 节流</b>(照 <code>_BAD_LINE_WARN_*</code> 先例, 观测面异常可见); 图面如实画阶梯, 本身就是诊断信息</td></tr>
+      <tr><td>文件无头行</td><td>纯 CSV 追加, 无 v4 头行门闩需求(单文件单写者、无换代语义); 若未来改格式, 按行解析失败即豁免, 自然兼容</td></tr>
+      <tr><td>多实例</td><td><code>data_dir</code> 每实例独立, 文件随实例隔离, 无共享冲突</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 6 ================ -->
+  <section>
+    <h2><span class="no">§6</span>非目标</h2>
+    <ul>
+      <li>不做单种/分组级限速历史(qB 单种限速是另一字段族, 且 26-10-08 已拍板限速线三作用域同源取全局)。</li>
+      <li>不为变体 13 补注解层、不为 14/15 做定制(W7 恢复现状即终态)。</li>
+      <li>不加配置键、不做独立保留期淘汰(用户拍板 D3)。</li>
+      <li>不改限速曲线模块本体、不改状态栏/限速浮层的当前值口径。</li>
+      <li>不回填历史(功能启用前的限速无从得知, 不猜)。</li>
+    </ul>
+  </section>
+
+  <!-- ================ 变更记录 ================ -->
+  <section>
+    <h2><span class="no">§7</span>变更记录</h2>
+    <table class="changelog">
+      <tr><th>时间</th><th>变更</th></tr>
+      <tr><td>26-10-12-0535</td><td>初版。grilling 一轮七问收敛后成文; D3 为用户修订项(独立文件 / 目录与流量数据一致 / 无配置键 / 保留对齐流量最大保存时间), 其余取推荐。</td></tr>
+      <tr><td>26-10-12-0613</td><td>D3 二次裁定 → <b>分天保存</b>(<code>qb-traffic-v4/limits/&lt;日期&gt;.dat</code>, 00:00 硬切 + 新天基线 carry); 同轮补强: 读侧 mtime+size 解析缓存 / 缺数据区界定规则(阶梯函数恒有值 + 停机时刻误差边界) / 病态翻转常量告警护栏; W1 验收判据随行扩充。</td></tr>
+    </table>
+  </section>
+
+  <div class="footer-meta">
+    <span>auto-qb · memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html</span>
+    <span>topic: webui-traffic-limit-history · status: Open</span>
+  </div>
+
+</div>
+</body>
+</html>
