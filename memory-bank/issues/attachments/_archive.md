@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (61)
+## Open (62)
 
+- [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](../26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_speed 与 fmt_size 同「单位表+>=div 格式化」骨架, 只差单位表与后缀
 - [refactor] [平台判定旁路 infra 单点](../26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html) — utils.is_windows/is_linux/is_mac 单点被 autostart.py(6处)+tray/app.py 裸 sys.platform.startswith 绕过

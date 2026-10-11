@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-11
 **Updated:** 2026-10-11
-**Summary:** 用户「将种子页列表辅种表和追剧表提取为一个公共模板组件, 支持拖拽换位/拖拽调整宽度/点击排序/右键隐藏, 方便后续重构种子详情页用户列表/文件列表/设置中的各种表; 先写一个计划」→ 计划 [26-10-11-1722-plan-webui-table-component.html](../plans/26-10-11-1722-plan-webui-table-component.html)(topic `webui-table-component`, `In Progress`)出后, 用户定调「详情面板问题很多, 后续需要完全重构, 不考虑兼容」并按推荐开始实施。**盘点结论改变了落点**: 四项交互的**行为已单点**(`columns.js` + `sort.js`), **未单点的是模板**(表头块 5 份 / 单元格 `v-if` 分支 127 条 / 列选择器 4 段 / 横滚同步 3 份 / 页枚举硬编码 18+ 处) ⇒ 本轮重心 = 抽表壳 + 表注册表化, 行为层只在既有单点上参数化。**P0 已落地**(零行为变化): app.js 顶部新增表注册表 `TABLE_DEFS`, `TABLE_PAGES` 由它派生, `columns.js`/`sort.js` 里十处页字面量与 ref 名映射一律改为按 id 取; 新增守阵 `test_frontend_table_registry_single_point`。**P1/P2 已落地**: 表头块 5 份收敛为单份表壳组件 `<aq-table>`, 明细成员单元格 2 份收敛为单份行模型渲染器 `<aq-member-cells>`(辅种页/追剧页共用); 组件只贡献模板, 行为经 `$root` 回调根实例; `_headEl` 统一 unwrap 组件实例, 三个横滚同步单点与成员容器随之改走它; 新增守阵 `test_frontend_table_shell_single_point`, `_scan_column_cells_paired` 的明细列改扫渲染器。验收 = 真浏览器 A/B **DOM 逐字节等价**(17 项探针 × 2 皮肤, 差异 0)+ e2e 与基线逐位一致 + 全量守阵绿(数字见 `commands run kb.baseline`)。**P3/P4 已落地**: P3 = 行模型单元格渲染器按 group/torrent/show-ep 收敛(新增分片 `tpl/xtpl-cells.html`, 页面模板 127 条 `v-if` 链清零, 种子页表头同轮接入 `<aq-table>`); P4 = 列选择器四段按注册表 `v-for`(新增 `tableDefs` computed + 两个全表动作方法)/ 三个 `sync*HeadScroll` 收敛为 `columns.js::syncHeadScroll(ev,page)` 一份 / 排序键(P0 已完成, 零残留)。验收 = 真浏览器 A/B **DOM 逐字节等价**(20 项探针 × 2 皮肤 = 40 项, 差异 0)+ e2e 158 passed / 0 failed / 10 skipped(34 项存量红已由上游 `c2a723a3` 转绿)+ `test.full` 3126 passed / 4 skipped(四项覆盖率指标与上片逐位相同)。P5/P6 待续。
+**Summary:** 用户「将种子页列表辅种表和追剧表提取为一个公共模板组件, 支持拖拽换位/拖拽调整宽度/点击排序/右键隐藏, 方便后续重构种子详情页用户列表/文件列表/设置中的各种表; 先写一个计划」→ 计划 [26-10-11-1722-plan-webui-table-component.html](../plans/26-10-11-1722-plan-webui-table-component.html)(topic `webui-table-component`, `In Progress`)出后, 用户定调「详情面板问题很多, 后续需要完全重构, 不考虑兼容」并按推荐开始实施。**盘点结论改变了落点**: 四项交互的**行为已单点**(`columns.js` + `sort.js`), **未单点的是模板**(表头块 5 份 / 单元格 `v-if` 分支 127 条 / 列选择器 4 段 / 横滚同步 3 份 / 页枚举硬编码 18+ 处) ⇒ 本轮重心 = 抽表壳 + 表注册表化, 行为层只在既有单点上参数化。**P0 已落地**(零行为变化): app.js 顶部新增表注册表 `TABLE_DEFS`, `TABLE_PAGES` 由它派生, `columns.js`/`sort.js` 里十处页字面量与 ref 名映射一律改为按 id 取; 新增守阵 `test_frontend_table_registry_single_point`。**P1/P2 已落地**: 表头块 5 份收敛为单份表壳组件 `<aq-table>`, 明细成员单元格 2 份收敛为单份行模型渲染器 `<aq-member-cells>`(辅种页/追剧页共用); 组件只贡献模板, 行为经 `$root` 回调根实例; `_headEl` 统一 unwrap 组件实例, 三个横滚同步单点与成员容器随之改走它; 新增守阵 `test_frontend_table_shell_single_point`, `_scan_column_cells_paired` 的明细列改扫渲染器。验收 = 真浏览器 A/B **DOM 逐字节等价**(17 项探针 × 2 皮肤, 差异 0)+ e2e 与基线逐位一致 + 全量守阵绿(数字见 `commands run kb.baseline`)。**P3/P4 已落地**: P3 = 行模型单元格渲染器按 group/torrent/show-ep 收敛(新增分片 `tpl/xtpl-cells.html`, 页面模板 127 条 `v-if` 链清零, 种子页表头同轮接入 `<aq-table>`); P4 = 列选择器四段按注册表 `v-for`(新增 `tableDefs` computed + 两个全表动作方法)/ 三个 `sync*HeadScroll` 收敛为 `columns.js::syncHeadScroll(ev,page)` 一份 / 排序键(P0 已完成, 零残留)。验收 = 真浏览器 A/B **DOM 逐字节等价**(20 项探针 × 2 皮肤 = 40 项, 差异 0)+ e2e 158 passed / 0 failed / 10 skipped(34 项存量红已由上游 `c2a723a3` 转绿)+ `test.full` 3126 passed / 4 skipped(四项覆盖率指标与上片逐位相同)。**P5 已落地**(口径经用户拍板「复用表壳 · th 模式」): `<aq-table>` 加 **thead 模式**(同一表壳的第二根 = 原生 `<table>` 表头行), HR 详情表表头借壳渲染 —— 关键机制是根模板 in-DOM、自定义元素放 `<thead>` 会被浏览器 foster-parent 移出表格, 占位必须写成 `<tr is="vue:aq-table" mode="thead">`; HR 三张表列定义单点进 `hr_status.js` 的 `HR_TABLE_DEFS`(与 `TABLE_DEFS` 同形但独立, 不进 `TABLE_PAGES`), 波次表表头改注册表 `v-for`, 排序仍走 `hrsSetSort`(D3=B), 死件 `hrsArrowHref` 退役; 守阵同轮改版 4 条(全红绿双验)。验收 = 真浏览器 A/B 表头 DOM 逐字节等价(表① outerHTML+骨架、表② outerHTML 与 HEAD 相同; 已知偏差: 表② v-for 引入 18 个零长文本锚点, Vue 片段不变量)+ e2e 与基线一致 + `test.full` 3127 passed / 4 skipped(数字见 `commands run kb.baseline`)。P6 待续。
 **Topics:** webui-table-component
 
 ## 原始请求
@@ -38,7 +38,7 @@
 | P2 | 追剧表接入 + 两处成员明细合并; 守阵 `_scan_column_cells_paired` 改扫注册表 | **Done** |
 | P3 | 单元格渲染器收敛(127 条分支按行模型归拢) | **Done** |
 | P4 | 列选择器 / 横滚同步 / 排序键 三处重复收敛 | **Done** |
-| P5 | 设置页 HR 表接入(只借壳, D3=B) | 待做 |
+| P5 | 设置页 HR 表接入(只借壳, D3=B) | **Done** |
 | P6 | 详情面板: 只留前向契约, 零代码迁移(D4=A) | 待做 |
 
 ## 进度日志
@@ -83,6 +83,24 @@
 - **e2e 探针改造**: `e2e/column-prefs.spec.mjs` 的列文案取数从 `vm.groupColumns` 改为 `vm.tableDefs`(列定义改由注册表派生); 该 spec 单跑全绿。
 - 文档回写: `modules/webui-static-contract.md`(分片数 14→15 / app.js 行数 587→594 / 表格公共组件段重写为六组件 + 注册表口径 + 行模型渲染器 / 新增「列选择器 + 横滚同步单点」条 / 列模型段的值单元格分支映射改写) + `pitfalls/web-ui/frontend-split.md`(接线清单条扩到 `.html` 分片 + 两个体量硬顶 + 腾行手法)。
 
+### 2026-10-11 · P5 设置页 HR 表接入(表壳 thead 模式 + HR 表注册表)
+
+- **口径拍板(用户选「复用表壳 · th 模式」)**: 计划 P5 只写「按描述符声明 + 只借壳」与两文件改动面, 但 HR 表是原生 `<table>`、现有表壳是 div 网格, 两者不能直接互换 —— 两种落地(物理复用组件 vs 仅描述符声明)爆炸半径差一个量级, 先问后做。拍板后改动面扩到 `table.js`/`xtpl.html`(thead 模式本体)+ 守阵, 与计划 §03 架构图「主视图 4 表 + 设置页 HR 表」一致。
+- **`shared/table.js` + `tpl/xtpl.html`: `<aq-table>` 加 `mode` prop(grid=默认 / thead)**: thead 分支渲染 `<tr><th class="sortable">` + 排序箭头, `$emit("sort", col.key)` 回调调用方; grid 分支一字未动(DOM 等价不受影响)。组件加 `emits: ["sort"]`。thead 模式不挂拖宽/重排/右键(那些行为只在 grid 模式存在)。
+- **关键机制 —— `<tr is="vue:aq-table">` 占位(本轮最大的坑)**: 本应用根模板是 **in-DOM 的**(`boot.js` 把分片 `insertAdjacentHTML` 进 `#app`, `app.mount("#app")` 用 innerHTML 编译), 浏览器解析遵守表格内容模型 —— **自定义元素直接放 `<thead>` 里会被 foster-parent 移出表格**(表头整段消失, 且无报错)。解法 = Vue 官方口径: 占位写成合法的 `<tr is="vue:aq-table" mode="thead" …>`, `vue:` 前缀让编译器把 `<tr>` 当组件(已核 vendored vue.global.prod.js 的解析器确实认 `vue:` 前缀并置 tagType=COMPONENT)。`<slot>` 方案不可行: slot 内容在非表格上下文被浏览器按 in-body 规则解析, `<tr>` 会被**直接丢弃**。
+- **`hr_status.js` 新增 `HR_TABLE_DEFS`(模块级)**: hrDetail(十列, features={sort:true}) / hrWave(八列) / hrKv(两列, header:false 只登记形状)。与 `TABLE_DEFS` **同形但独立** —— 不进 `TABLE_PAGES`(后者由 `Object.keys(TABLE_DEFS)` 派生, 收进去会让列选择器/列对齐多出分组 = 观感变化)。`hrsCols()` 改取注册表, 新增 `hrsWaveCols()`; **删死件 `hrsArrowHref`**(箭头 href 的解析(`sortKey===key && dir===1 ? up : down`)并入表壳, 与主视图同源 —— 排序**状态机** `hrsSetSort` 原样保留, D3=B 的「排序仍走 HR 自己的实现」指的是状态机)。
+- **`tpl/settings-detail.html`**: 表① `<thead>` 内联 `<th v-for>` 块(4 行)替换为 `<tr is="vue:aq-table" mode="thead" table-id="hrDetail" :cols="hrsCols()" :sort-key="hrsSortKeyOf(s.site)" :sort-dir="hrsSortDirOf(s.site)" @sort="hrsSetSort(s.site, $event)"></tr>`; 表② 波次表 8 个静态 `<th>` 替换为 `<template v-for="c in hrsWaveCols()">` 两支(v-if/v-else)。文件 539→543 行(硬顶 560)。
+- **守阵同轮改版(不是放宽, 全部红绿双验过)**:
+  - `test_frontend_table_shell_single_point`: 增 ④ —— `#tpl-aq-table` 含 thead 分支(`mode="thead"` + `class="sortable"` + sprite 双箭头)、settings-detail 的 HR 详情表段必须是 `<tr is="vue:aq-table" mode="thead">` 占位且该段内联 `<th>` 零残留。
+  - `test_frontend_hr_table_sort_filter_reorg_wiring`: 表头断言从「锚段里的 markup 字面」改为「锚段里的**接线**(`<tr is=… mode="thead">` + `:cols`/`:sort-key` + `@sort="hrsSetSort(s.site, $event)")` + 表壳模板里的 markup(`class="sortable"` + sprite 双箭头)」; 十列键改扫 `HR_TABLE_DEFS.hrDetail`; `hrsArrowHref` 加入死代码零残留清单。
+  - `test_frontend_hr_diag_view_wiring`: 增波次表列定义取注册表(`hrsWaveCols()`)。
+  - `test_frontend_template_no_reserved_prefix_identifiers`: Vue 内建白名单 `$event`/`$root` → 并入 `$emit`。
+- **验证**: ①守阵红绿双验 4 例(删 `is="vue:aq-table"` → 表壳守阵红; 删注册表一列 → 排序守阵红; 改 `hrsWaveCols` 名 → diag 守阵红; 各用 `cp` 备份 + sha256 复核还原)。②真浏览器 A/B(临时探针, 不进仓库): 读盘上**两侧真实** `settings-detail.html` 锚段里的 `<thead>`, 用真 in-DOM 路径(`page.setContent` → 浏览器解析 → `mount("#app")` 用 innerHTML 编译)+ 真 `table.js`/`hr_status.js` 渲染 —— 表① 表头 `outerHTML` 与**子节点骨架**(含文本节点)、表② 表头 `outerHTML` 三项与 HEAD **逐字节相同**; 排序交互(首击降 → 箭头 on 只落命中列 → 第三击回默认)两侧行为一致。③`test.full` 3127 passed / 4 skipped, 覆盖率四项与上片逐位相同。④e2e 全量与基线一致(见「验证」)。⑤探针已删。
+- **两处与计划的偏差(需记一笔)**:
+  - **表② 表头 v-for 引入零长文本锚点**: Vue 3 的 v-for 片段在 DOM 里插 2 个空文本锚点(fragment start/end), 本例 8 列 × 2 + 片段首尾 = **18 个**。`outerHTML` 序列化不含它们(零长)、CSS 表格修正对 whitespace-only 文本不参与布局 ⇒ 视觉与行为零影响, 但**子节点骨架**比对即见。属 v-for 实现不变量(任何 v-for 都有), 非本轮缺陷; 若要绝对零差异只能放弃注册表化(退回静态字面)。探针里 `outerHTML` 三项全等、仅骨架多锚点, 已在计划 §09 记录。
+  - **改动面从 2 文件扩到 4 + 守阵**: 计划 P5 改动面写 `settings-detail.html` + `hr_status.js`, 但「复用表壳」必须动 `table.js`(mode prop)/`xtpl.html`(thead 分支)。
+- **顺带发现(已入池, 待认领)**: `test_frontend_template_no_reserved_prefix_identifiers` 的**指令表达式分支是死的** —— 正则 `…\s*=\s*(["'])(.*?)\1` 的捕获组 1 是引号本身, 守阵却读 `m.group(1)` 当表达式(表达式在组 2) ⇒ `@click="_copyText(…)"` 这类指令形态实际上从未被检出(docstring 宣称覆盖)。本轮的 `$emit` 只出现在指令里, 故白名单改动对现行判定是**防御性**的(不修正则, 按「范围守恒」一行不改)。证据/根因/建议修法见 issue [26-10-11-2030-test-guard-reserved-prefix-directive-dead](../issues/26-10-11-2030-test-guard-reserved-prefix-directive-dead.html)。
+
 ### 验证
 
 - `commands run test.full`: 全绿(与上一片基线相比 = 仅新增守阵那一条; 数字见 `commands run kb.baseline`)。
@@ -99,6 +117,7 @@
 - **真浏览器 A/B DOM 逐字节等价(本轮硬验收)**: 一次性探针 spec(不进仓库)在两皮肤各 dump **20 项** —— 列选择器弹层 `outerHTML`、辅种表头/组行/明细头/成员行、种子页表头/行、追剧剧头/剧行/集行/集成员行、四类行的 `outerHTML` 与**子节点骨架(含注释与文本节点)**、行 `grid-template-columns` 内联样式、注入的 `col-align-css` 全文。**A 侧 = 把 14 个改动件 `git checkout` 回 HEAD + 把新分片移出树**(跑完按 `sha256sum -c` 复核逐文件还原一致); **B 侧 = 本轮构建**。**合计 40 项(20 × 2 皮肤)差异 0**, A/B 两份 dump 的 sha256 **完全相同**。
 - `commands run dev.e2e` 全量: **158 passed / 0 failed / 10 skipped**(3.9m)。对照上一片基线 `26-10-11-1804-webui-table-registry-p0` 的 124 passed / 34 failed / 10 skipped: 34 项失败已由上游提交 `c2a723a3`(e2e 菜单选择器同步 qB GUI 新文案)转绿, **124 + 34 = 158 逐项对得上**, 非本轮遮蔽; 通过/跳过/失败三项与 P1/P2 后基线一致。列模型相关 spec(`column-prefs.spec.mjs` 等)全绿。
 - 结构自检: 7 个改动 JS `node --check` 通过; `git ls-files --eol` 14 个改动件**全部 `w/lf`**; 一次性探针 spec 与 A/B dump 已删除(不留痕)。
+- **P3 与计划的偏差(记档)**: 计划 P3 的目标句含「同名列跨表复用同一份实现」—— 该条在**保持 DOM 逐字节等价**的前提下不可达(同名列跨表的 class/口径不同: 如 `dlspeed` 组行 `:class="{zero}"` vs 种子行 `:class="[{zero}, numTone(...)]"`; `site` 成员格 `.m-site` vs 种子行 `.g-sites > .site-chip`)。按计划 P3 停手点(D2=B「保留声明式模板, 按行模型收敛为单份」)落地为「**每行模型单份渲染器**」, 跨表同名列合并留作后续可选优化(计划已把 `h()` VNode 方案标为 P6 之后)。
 
 ### 坑与意外
 
@@ -110,6 +129,6 @@
 
 ### 下一步
 
-- P3/P4 已完成(见上「P3/P4」段)。**P3 与计划的差异(需记一笔)**: 计划 P3 的目标句含「同名列跨表复用同一份实现」—— 该条在**保持 DOM 逐字节等价**的前提下不可达(同名列跨表的 class/口径不同: 如 `dlspeed` 组行 `:class="{zero}"` vs 种子行 `:class="[{zero}, numTone(...)]"`; `site` 成员格 `.m-site` vs 种子行 `.g-sites > .site-chip`)。按计划 P3 停手点(D2=B「保留声明式模板, 按行模型收敛为单份」)落地为「**每行模型单份渲染器**」, 跨表同名列合并留作后续可选优化(计划已把 `h()` VNode 方案标为 P6 之后)。
-- P5: 设置页 HR 表接入(只借壳, D3=B)。P6: 详情面板只留前向契约(零代码迁移, D4=A)。
-- 本轮**未**为渲染器新增 `test_*` 用例(只改既有三条守阵), 故 `test.full` 用例数不变; 若后续给「新增一张表 = 注册一行 + 一个渲染器」补端到端样例, 那是独立用例。
+- P5 已完成(见上「P5」段)。**P5 与计划的偏差(需记两笔)**: ①表② 表头 `v-for` 引入零长文本锚点(18 个, Vue 片段不变量, `outerHTML` 不可见、不参与表格布局)—— 「DOM 逐字节等价」在骨架层面不可达, 除非放弃注册表化; 已记计划 §09 + 基线切片 + [pitfalls/web-ui/frontend-split.md](../pitfalls/web-ui/frontend-split.md)。②计划改动面写两文件, 实际扩到 `table.js`/`xtpl.html`(thead 模式本体)+ 4 条守阵。③顺带发现 `test_frontend_template_no_reserved_prefix_identifiers` 的**指令表达式分支是死的**(正则捕获组 1 是引号, 守阵读它当表达式 ⇒ `@click="_x()"` 从未被真正检出; docstring 宣称覆盖)—— 按「范围守恒」一行未改, **已入池** issue [26-10-11-2030-test-guard-reserved-prefix-directive-dead](../issues/26-10-11-2030-test-guard-reserved-prefix-directive-dead.html)(Open, 待认领)。
+- P6: 详情面板只留前向契约(零代码迁移, D4=A)。
+- 本轮**未**新增 `test_*` 用例(只改既有 4 条守阵), 故 `test.full` 用例数不变; 若后续给「新增一张表 = 注册一行 + 一个渲染器」补端到端样例, 那是独立用例。

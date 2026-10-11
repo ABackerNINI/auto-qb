@@ -199,9 +199,22 @@
        data-table 由 tableId 给 —— colAlignCss 的 `:where([data-table=...]) > :nth-child(n)` 规则靠它
        同时命中表头与值格(表头与值同源)。行为一律回调根实例($root.xxx), 组件不持有状态。
        WARN: 属性顺序(class → data-table → style)与旧内联块逐位一致 —— DOM 等价比对是 P1 的硬验收。
+       P5 增 thead 模式(见下方分支注释): 同一个组件的第二根, grid 分支一字未动。
        ================================================================================ -->
   <script type="text/x-template" id="tpl-aq-table">
-    <div :class="tableId === 'detail' ? 'detail-head' : 'group-head sticky-head'"
+    <!-- thead 模式(计划 26-10-11-1722 P5): 原生 <table> 的表头行 —— 设置页 HR 详情表借壳。
+         调用方占位必须写成 `<tr is="vue:aq-table" mode="thead" …>`: 根模板是 in-DOM 的
+         (#app innerHTML), 浏览器只认表格内容模型 —— 自定义元素直接放 <thead> 里会被 foster-parent
+         移出表格, 故借 <tr> 占位并用 `vue:` 前缀让编译器把它当组件(Vue 内建的口径)。
+         排序仍走调用方自己的实现(D3=B: 只借壳不并引擎) —— 组件只 emit('sort', key) 并按
+         sortKey/sortDir 画箭头, 不持有排序状态, 也不挂拖宽/重排/右键(grid 模式专属)。 -->
+    <tr v-if="mode === 'thead'">
+      <th v-for="col in cols" :key="col.key" class="sortable" :class="{ num: col.num }"
+          @click="$emit('sort', col.key)"><span>{{ col.label }}</span><span class="arrow"
+          :class="{ on: sortKey === col.key }"><svg class="ico" viewBox="0 0 16 16"><use
+            :href="sortKey === col.key && sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use></svg></span></th>
+    </tr>
+    <div v-else :class="tableId === 'detail' ? 'detail-head' : 'group-head sticky-head'"
          :data-table="tableId" :style="$root.gridStyle(tableId)">
       <div v-for="col in cols" :key="col.key" class="h-cell"
            :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': drag && drag.page === tableId && drag.key === col.key }]"

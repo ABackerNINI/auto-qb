@@ -7,7 +7,9 @@
  *   · 行模型单元格 v-if 分支链 127 条: 散在 groups.html(49) / torrents.html(28) / shows.html(剧+集)
  *     / 明细成员单元格 2 份逐字近似(groups.html / shows.html)。
  * 本文件把这两处收敛为**单份**:
- *   <aq-table>         表壳: 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键(三皮肤同名类)
+ *   <aq-table>         表壳: 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键(三皮肤同名类);
+ *                      两模式(P5): grid = div 网格表头(主视图 4 表) / thead = 原生 <table>
+ *                      表头行(设置页 HR 详情表; 调用方以 `<tr is="vue:aq-table" mode="thead">` 占位)
  *   <aq-member-cells>  明细成员行的单元格渲染器(member 行模型; 28 个列分支只此一份)
  *   <aq-group-cells>   group 行模型单元格渲染器(49 个分支, 原 groups.html 内联)
  *   <aq-torrent-cells> torrent 行模型单元格渲染器(28 个分支, 原 torrents.html 内联)
@@ -32,12 +34,18 @@
 window.AQ_TABLE_COMPONENT = {
   name: "aq-table",
   props: {
-    tableId: { type: String, required: true },   // 表 id(= TABLE_DEFS 键): group/detail/show/torrent
+    tableId: { type: String, required: true },   // 表 id(= TABLE_DEFS 键): group/detail/show/torrent/hrDetail
     cols: { type: Array, required: true },       // 可见列(顺序 = grid 模板序, 与值单元格同源)
     sortKey: { type: String, default: "" },      // 当前排序键(根数据, 由调用方传入)
     sortDir: { type: Number, default: 1 },
     drag: { type: Object, default: null },       // 根数据的 colDrag(本表命中时才画指示线/拖拽源类)
+    /* 渲染模式(计划 26-10-11-1722 P5): grid = div 网格表头(主视图 4 表, 默认);
+     * thead = 原生 <table> 表头行(设置页 HR 详情表借壳)。两者共用一个组件(一份表壳) —— 差异只在
+     * markup 族(div.h-cell vs tr>th)与行为开关: thead 模式不挂拖宽/重排/右键(那些行为只在
+     * grid 模式存在), 排序状态仍归调用方(D3=B: 只借壳不并引擎), 组件只 emit("sort", key)。 */
+    mode: { type: String, default: "grid" },
   },
+  emits: ["sort"],
   template: "#tpl-aq-table",
 };
 

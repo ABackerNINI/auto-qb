@@ -21,6 +21,10 @@
  *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
+ * !表身份(P5, 计划 26-10-11-1722): 三张 HR 表的列定义单点在模块级 HR_TABLE_DEFS(与主视图
+ *   TABLE_DEFS 同形但**独立** —— 不进 TABLE_PAGES, 否则列选择器/列对齐会多出分组); 详情表表头
+ *   借表壳组件 <aq-table> 的 thead 模式渲染(一份表壳), 排序仍走本文件 hrsSetSort(D3=B: 只借壳
+ *   不并引擎 —— HR 排序是逐站点独立 + 空值恒末位, 与主表不同)。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 
@@ -81,6 +85,53 @@ const HRS_HIST_TONES = ["ok", "warn", "dim", "err", "blue"];
 function hrsHistIsBad(r) {
   return HRS_HIST_BAD_ACTIONS.indexOf(r.action) >= 0 || r.kind === "defer";
 }
+
+/* ---------------- HR 表注册表(计划 26-10-11-1722 P5) ----------------
+ * 「HR 表身份」单点: 与主视图 TABLE_DEFS 同**模型**(label + columns + features), 但**不进**
+ * TABLE_DEFS —— 后者由 TABLE_PAGES = Object.keys(TABLE_DEFS) 派生, 驱动列选择器 / colAlignCss /
+ * 列偏好持久化, 把 HR 表收进去会让设置页的列选择器多出三个分组(观感变化, 计划 §06 风险 9)。
+ * 故 HR 表自成一张同形注册表, 加一张 HR 表 = 在此加一行 + 模板里挂调用点。
+ *
+ * columns: 列定义(key/label/num 与既有表头逐字一致 —— P5 硬验收是 DOM 逐字节等价)。
+ * features: 只声明差异 —— hrDetail 有 sort(排序仍走 HR 自己的 hrsSetSort 三态, D3=B: 只借壳);
+ *   hrWave / hrKv 无排序无调宽(纯展示; 波次表行数 ≤4, 计划 26-10-02-1936 §3.4)。
+ * header: false = 该表无列头(kv 表是两列固定 k/v 列表, 行模型 hrsKvRows 驱动, 只登记形状)。
+ * 表头渲染: hrDetail 借表壳组件 thead 模式(shared/table.js, 与主视图同一份表壳);
+ *   hrWave 由模板 v-for 摆列(无排序语义, 不必上组件)。 */
+const HR_TABLE_DEFS = {
+  hrDetail: {
+    label: "HR 明细表", features: { sort: true },
+    columns: [
+      { key: "lane", label: "档位" },
+      { key: "name", label: "名称" },
+      { key: "tid", label: "tid" },
+      { key: "uploaded_bytes", label: "上传量", num: true },
+      { key: "downloaded_bytes", label: "下载量", num: true },
+      { key: "ratio", label: "分享率", num: true },
+      { key: "need_seed_seconds", label: "还需做种", num: true },
+      { key: "done_iso", label: "完成时间" },
+      { key: "verified_ts", label: "核实结论" },
+      { key: "last_seen", label: "在列" },
+    ],
+  },
+  hrWave: {
+    label: "HR 波次表", features: {},
+    columns: [
+      { key: "lane", label: "档位" },
+      { key: "status", label: "状态" },
+      { key: "pages", label: "页数", num: true },
+      { key: "rows", label: "行数", num: true },
+      { key: "cutoff", label: "截至深度", num: true },
+      { key: "fail_streak", label: "连续失效", num: true },
+      { key: "count", label: "对平(声称/命中)", num: true },
+      { key: "detail", label: "说明" },
+    ],
+  },
+  hrKv: {
+    label: "HR 诊断表", features: {}, header: false,
+    columns: [{ key: "k", label: "项" }, { key: "v", label: "值" }],
+  },
+};
 
 window.AQB_HR_STATUS = {
   data() {
@@ -248,24 +299,14 @@ window.AQB_HR_STATUS = {
       this.hrs.sortSel[site] = "";
       this.hrs.sortDir[site] = -1;
     },
-    /* 表① 十列的排序键与表头文案单点(表② 波次表不接排序); 箭头只认 sprite 双图标
-     * (#i-arrow-up/#i-arrow-down, 与种子页同款) */
+    /* 表① 列定义取 HR 表注册表(P5: 表身份单点在 HR_TABLE_DEFS); 表头由表壳组件 thead 模式渲染
+     * (列名 + 排序箭头 + emit sort), 排序状态与三态机仍走本文件 hrsSetSort(D3=B: 只借壳)。 */
     hrsCols() {
-      return [
-        { key: "lane", label: "档位" },
-        { key: "name", label: "名称" },
-        { key: "tid", label: "tid" },
-        { key: "uploaded_bytes", label: "上传量", num: true },
-        { key: "downloaded_bytes", label: "下载量", num: true },
-        { key: "ratio", label: "分享率", num: true },
-        { key: "need_seed_seconds", label: "还需做种", num: true },
-        { key: "done_iso", label: "完成时间" },
-        { key: "verified_ts", label: "核实结论" },
-        { key: "last_seen", label: "在列" },
-      ];
+      return HR_TABLE_DEFS.hrDetail.columns;
     },
-    hrsArrowHref(site, key) {
-      return this.hrsSortKeyOf(site) === key && this.hrsSortDirOf(site) === 1 ? "#i-arrow-up" : "#i-arrow-down";
+    /* 表② 波次表列定义取注册表(不接排序: 行数 ≤4, 计划 26-10-02-1936 §3.4); 表头由模板 v-for 摆 */
+    hrsWaveCols() {
+      return HR_TABLE_DEFS.hrWave.columns;
     },
     /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 已删除种子切换
      * AND 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持

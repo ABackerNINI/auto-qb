@@ -317,12 +317,13 @@
                             <div v-else-if="d.readError" class="empty"><span>站点文件读取失败: {{ d.readError }}</span></div>
                             <table v-else-if="hrsDetailRows(s.site).length" class="drawer-table hr-detail-table">
                               <thead>
-                                <tr>
-                                  <th v-for="c in hrsCols()" :key="c.key" class="sortable" :class="{ num: c.num }"
-                                      @click="hrsSetSort(s.site, c.key)"><span>{{ c.label }}</span><span class="arrow"
-                                        :class="{ on: hrsSortKeyOf(s.site) === c.key }"><svg class="ico" viewBox="0 0 16 16"><use
-                                          :href="hrsArrowHref(s.site, c.key)"></use></svg></span></th>
-                                </tr>
+                                <!-- 表头借表壳组件 thead 模式(计划 26-10-11-1722 P5): 根模板是
+                                     in-DOM 的, 自定义元素直接放 <thead> 里会被浏览器 foster-parent
+                                     移出表格 ⇒ 用 <tr is="vue:aq-table"> 占位; 排序仍走 HR 自己的
+                                     hrsSetSort(D3=B), 组件只画列名/箭头并 emit sort -->
+                                <tr is="vue:aq-table" mode="thead" table-id="hrDetail" :cols="hrsCols()"
+                                    :sort-key="hrsSortKeyOf(s.site)" :sort-dir="hrsSortDirOf(s.site)"
+                                    @sort="hrsSetSort(s.site, $event)"></tr>
                               </thead>
                               <tbody>
                                 <tr v-for="e in hrsDetailRows(s.site)" :key="e.tid" :class="{ missing: !e.active }">
@@ -365,9 +366,13 @@
                             </table>
                             <table v-if="s.lanes && s.lanes.length" class="drawer-table hr-detail-table hr-wave-table">
                               <thead>
+                                <!-- 波次表列定义取 HR 表注册表(hrsWaveCols, 计划 26-10-11-1722 P5);
+                                     不接排序(行数 ≤4), 故不上表壳组件。两支写在同一行(v-for 的
+                                     template 内不留空白 —— 空白会被 Vue 折成零长文本节点混进 <tr>,
+                                     子节点骨架比对即红)且 num 列走 v-if 而不是 `:class="{num}"` ——
+                                     后者在非 num 列会渲出空 class=""(normalizeClass 恒回字符串) -->
                                 <tr>
-                                  <th>档位</th><th>状态</th><th class="num">页数</th><th class="num">行数</th>
-                                  <th class="num">截至深度</th><th class="num">连续失效</th><th class="num">对平(声称/命中)</th><th>说明</th>
+                                  <template v-for="c in hrsWaveCols()" :key="c.key"><th v-if="c.num" class="num">{{ c.label }}</th><th v-else>{{ c.label }}</th></template>
                                 </tr>
                               </thead>
                               <tbody>

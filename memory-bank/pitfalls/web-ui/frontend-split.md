@@ -71,9 +71,36 @@
   (横滚同步整条挂)、`head.parentElement` 静默 null(成员行窗口化退化成全量渲染); ②**多根片段
   组件**(渲染一组兄弟节点)不包 wrapper —— 单元格必须仍是行容器的**直接子元素**(行是 grid,
   `:nth-child` 列对齐与 `data-table` 都依赖它), 故每**行**一个实例而不是每格一个(patch 开销差
-  一个量级); 实测 Vue 对 `v-for` 根片段**不插占位节点**, 故 `outerHTML` 与改造前逐字节相同。
+  一个量级); 实测 Vue 对 `v-for` 根片段**不插占位节点**, 故 `outerHTML` 与改造前逐字节相同
+  (⚠ 2026-10-11 P5 修正: 这句的**结论错了, 证据也不成立** —— P2 的 A/B 两侧都是同一个
+  `v-for`, 锚点两侧相消所以 diff=0, 并不能证明"不插"; 实测任何 v-for 片段都在 DOM 里插
+  **2 个零长文本锚点**, 见下一条)。
 - **守阵**: `test_frontend_table_shell_single_point` + `_scan_column_cells_paired`(明细列改扫
   渲染器) + `test_frontend_template_no_reserved_prefix_identifiers`(内建白名单)。
+- **复发**: 0
+
+### 原生 `<table>` 里上组件必须借 `<tr is="vue:…">` 占位; v-for 会插零长文本锚点(P5)
+
+- **触发**: 把公共表壳组件接进**真 `<table>`** 的表头(计划 26-10-11-1722 P5, 设置页 HR 详情表)。
+- **判别(坑一 · foster-parent)**: 本应用根模板是 **in-DOM 的**(`boot.js` 把分片
+  `insertAdjacentHTML` 进 `#app`, `app.mount("#app")` 用 innerHTML 编译), 浏览器解析遵守表格
+  内容模型 —— **自定义元素(`<aq-table>`)直接放 `<thead>`/`<table>` 里会被 foster-parent 移出
+  表格**: 表头整段消失、无任何报错, pytest 全绿(守阵扫的是源码字面, 不是渲染产物)。
+  `<slot>` 方案同样不可行: slot 内容在**非表格上下文**被浏览器按 in-body 规则解析,
+  `<tr>`/`<td>` start tag 会被**直接丢弃**。
+- **处置(坑一)**: 占位写成合法的 `<tr is="vue:aq-table" mode="thead">` —— `<tr>` 在 `<thead>`
+  里合法, `is` 属性带 **`vue:` 前缀**让编译器把它当组件(已核 vendored vue.global.prod.js 的
+  解析器确实认 `vue:` 并置 tagType=COMPONENT; 不带前缀的裸 `is` 会被当自定义内置元素)。
+  组件自身的根由 x-template 字符串编译, 不过浏览器解析, `<tr>` 根随便写。
+- **判别(坑二 · v-for 锚点)**: 表头改由注册表 `v-for` 摆列后, 子节点骨架比对多出**零长文本
+  节点**(`nodeValue === ""`), 而 `outerHTML` 序列化**不含它们**(零长) —— 只比 outerHTML 会假绿。
+  实测(2026-10-11, 真 chromium): 纯 `v-for` = **2 个**锚点(fragment start/end); `v-for` 里再有
+  `v-if/v-else` 分支 = **每次迭代再插 2 个**(分支切换靠锚点定位) ⇒ 8 列两支 = 8×2+2 = **18 个**。
+- **处置(坑二)**: 锚点是 Vue 片段实现的不变量, 消不掉; 只能**记录在案**并在骨架比对时排除
+  (零长文本对 CSS 表格修正是 whitespace-only、不参与布局, `:nth-child` 只数元素 ⇒ 视觉与
+  行为零影响)。**避坑**: ①`v-for` 的 `<template>` 内不留换行缩进(空白会被折成零长文本节点,
+  与锚点混在一起更难数); ②列的 `class` 别用 `:class="{num}"` —— normalizeClass 恒回字符串,
+  非 num 列会渲出空 `class=""`, 与静态字面 `<th>` 不等价, 走 `v-if` 两支。
 - **复发**: 0
 
 ### 收敛模板会连带改掉按「字面调用」计数的守阵 —— 同轮补覆盖, 不是放宽
