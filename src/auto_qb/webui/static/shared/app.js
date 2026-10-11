@@ -588,11 +588,10 @@ function initialDrawerHeight() {
   }
 }
 
-/* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记档位 id)。
- * 白名单校验与旧变体 id 显式迁移在核心层 readSel(W5 起走 DRAWER_DENSITY.normalize, 单点在
- * drawer.js —— W6 起 drawer_templates.js 已退役收进该文件); 这里薄封装 —— 核心未载入(清单序错)
- * 时也要返回全 classic 映射, 不能返回空对象/undefined: 组件显隐门 dtHostOn/档位判据读
- * drawerTplSel.<tab>, 缺键会藏正文。 */
+/* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记模板 id)。
+ * 白名单校验(仅收 classic + 已注册变体 id)在核心层 readSel(drawer_templates.js, W7 恢复);
+ * 这里薄封装 —— 核心未载入(清单序错)时也要返回全 classic 映射, 不能返回空对象/undefined:
+ * 正文分支开关 dtVueTab / 宿主显隐门 dtHostOn 读 drawerTplSel.<tab>, 缺键会藏正文。 */
 function initialDrawerTpl() {
   const out = { general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
   const reg = window.AQB_DRAWER_TPL_REG;
@@ -659,6 +658,7 @@ app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);
 app.mixin(window.AQB_DRAWER_STORE);  // 抽屉数据/行为层(计划 26-10-11-2106 W1): 取数/竞态/等待集合/软切换序号, 与渲染无关
+app.mixin(window.AQB_DRAWER_TPL);  // 详情面板模板核心层(W7 恢复): 菜单/读侧/显隐判据 + 变体挂载机械(原家 drawer_templates.js)
 app.mixin(window.AQB_DIALOGS);
 app.mixin(window.AQB_QB_TRAFFIC);  // qB 口径流量图(P5a, plan 26-10-03-0946 §07): uPlot 双系列组件 + 弹层方法域
 app.mixin(window.AQB_HR_STATUS);

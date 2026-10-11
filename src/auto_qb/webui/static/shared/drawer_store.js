@@ -90,7 +90,7 @@ window.AQB_DRAWER_STORE = {
         if (this._drawerStale(hash, seq)) return;  // 旧响应丢弃(W2 代际纪律)
         this.drawer.detail = (r && r.torrent) || null;
         if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
-        /* W5: 无落袋通知 —— 正文恒由 Vue 组件渲染, 读 drawer.* 响应式自更新 */
+        this._dtNotify("detail");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知活动变体重渲染(W7 恢复)
       } catch (e) {
         if (this._drawerStale(hash, seq)) return;
         if (!e.auth) this.drawer.error = e.message || "详情获取失败";
@@ -116,7 +116,7 @@ window.AQB_DRAWER_STORE = {
       } finally {
         if (!this._drawerStale(hash, seq)) {
           this.drawer.trackersLoading = false;
-          /* W5: 无落袋通知(旧变体需通知才重渲染, 理由见 2026-10-07 报障; Vue 响应式自更新) */
+          this._dtNotify("trackers");  // W7 恢复: 旧变体需通知才重渲染, 理由见 2026-10-07 报障
         }
         this._drawerDone("trackers", hash, seq);
       }
@@ -135,7 +135,7 @@ window.AQB_DRAWER_STORE = {
       } finally {
         if (!this._drawerStale(hash, seq)) {
           this.drawer.filesLoading = false;
-          /* W5: 无落袋通知(理由同 trackers) */
+          this._dtNotify("files");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt10/11/12)
         }
         this._drawerDone("files", hash, seq);
       }
@@ -154,7 +154,7 @@ window.AQB_DRAWER_STORE = {
       } finally {
         if (!this._drawerStale(hash, seq)) {
           this.drawer.peersLoading = false;
-          /* W5: 无落袋通知(理由同 trackers) */
+          this._dtNotify("peers");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
         }
         this._drawerDone("peers", hash, seq);
       }
@@ -193,7 +193,7 @@ window.AQB_DRAWER_STORE = {
           if (tab !== "trackers" && tab !== "peers") this._startDrawerPoll();
         }
       }
-      /* W5: 无换页签重挂 —— 正文恒由 Vue 组件渲染, 显隐归 dtHostOn 响应式 */
+      this._dtSync();  // 换页签重挂(W7 恢复): 卸旧全部实例, 挂当前页签主列 + 合并次列
     },
     /* ---------------- FX-29 换目标: 软切换(治「上下键切换种子时抽屉闪烁」, 26-10-03) ----------------
      * 旧实现把 detail / trackers / files / peers 一把清空再重拉, 面板每一次光标移动都走一遍

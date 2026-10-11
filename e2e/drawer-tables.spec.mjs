@@ -93,14 +93,14 @@ for (const skin of SKINS) {
       await expect(drawer.locator('.group-row[data-table="drawerTracker"]').first()).toBeVisible();
 
       // ③ 右键隐藏: 表头右键 → 菜单(逐列"隐藏「X」") → 点击 → 该列出表。
-      // !表头**独占右键**: 面板把"档位选择"的右键入口挂在 .drawer-body 上, 表头在里面 —— 列头
-      // 若不拦冒泡就同时弹出密度档菜单。故这里顺带钉住"档位菜单没被带出来"(W5 后正文只有
-      // 密度档一种右键菜单, 无模板菜单文案可言, 断言口径 = 完全无 ctx-menu)。
+      // !表头**独占右键**: 面板把"模板选择"的右键入口挂在 .drawer-body 上, 表头在里面 —— 列头
+      // 若不拦冒泡就同时弹出模板菜单。故这里顺带钉住"模板菜单没被带出来"(「经典」是各页签
+      // 模板选项恒有的首位项, 足以判别)。
       await cells.nth(4).click({ button: 'right' });
       const hideItem = page.locator('.ctx-item', { hasText: '隐藏「消息」' });
       await expect(hideItem).toBeVisible({ timeout: 5_000 });
-      await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '紧凑' }),
-        '列头右键不得连带弹出密度档菜单').toHaveCount(0);
+      await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '经典' }),
+        '列头右键不得连带弹出模板选择菜单').toHaveCount(0);
       await hideItem.click();
       await expect(head.locator('.h-cell.hc-msg')).toHaveCount(0);
       await expect(cells).toHaveCount(5);
@@ -171,14 +171,14 @@ for (const skin of SKINS) {
       await expect(drawer).toBeVisible();
     });
 
-    test(`单栏: 正文右键弹当前页签的密度档选择(锚点解析回归) @fast (${skin})`, async ({ page }) => {
-      /* W2 曾钉"右键锚点解析路径": _drawerMenuTab 首选旧插件宿主 data-dt-host(组件态不存在),
-       * 落 closest("[data-dt-tab]") 再回落当前页签。W5(计划 26-10-11-2106)变体退役后插件宿主
-       * 从 DOM 消失, 落点只剩 data-dt-tab / 当前页签两跳; 且各页签密度档选项集**同名**
-       * (经典/紧凑), 菜单归属只能靠**效果**判别 —— 在 Tracker 页签右键选「紧凑」, 必须落到
-       * trackers 的记忆(localStorage trackers=compact, general 不动)。若有人把菜单页签解析
-       * 接错(比如固定 "general"), 菜单照样弹出、不报错 —— 只有这条效果断言能抓到。
-       * 换档即换渲染分支(Vue 响应式, 无重挂机械): host 类即时翻转, 网格正文不中断。 */
+    test(`单栏: 正文右键弹当前页签的模板选择(锚点解析回归) @fast (${skin})`, async ({ page }) => {
+      /* 2026-10-10 起右键锚点解析路径(W7 恢复注: _drawerMenuTab 宿主优先分支随变体层恢复):
+       * _drawerMenuTab 首选插件宿主 data-dt-host(经典组件态不存在 —— 宿主只在变体分支渲染),
+       * 落 closest("[data-dt-tab]")(合并列才有)再回落当前页签。单栏经典态两跳都落空, 菜单归属
+       * 只能靠**效果**判别 —— 在 Tracker 页签右键选变体, 必须落到 trackers 的记忆
+       * (localStorage trackers=<id>, general 不动)。若有人把菜单页签解析接错(比如固定
+       * "general"), 菜单照样弹出、不报错 —— 只有这条效果断言能抓到。选变体即走插件挂载机械
+       * (宿主加 .dt-tpl 类, 字符串 DOM 接管), 再选「经典」由 Vue 组件分支接管(双分支互斥)。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
@@ -187,24 +187,32 @@ for (const skin of SKINS) {
 
       const drawer = await openTrackerTab(page);
       const grid = drawer.locator('.group-row[data-table="drawerTracker"]');
-      await expect(grid.first(), '正文即接壳后的网格').toBeVisible({ timeout: 5_000 });
-      // W5 退役确认: 插件宿主(data-dt-host)不得复活
-      await expect(drawer.locator('[data-dt-host]'), '变体插件宿主已退役, 不得出现在 DOM').toHaveCount(0);
+      await expect(grid.first(), '经典正文即接壳后的网格').toBeVisible({ timeout: 5_000 });
+      // 经典态: 宿主不渲染(组件分支接管), data-dt-host 全 DOM 零个
+      await expect(drawer.locator('[data-dt-host]'), '经典组件态下插件宿主不得渲染').toHaveCount(0);
 
       // 右键**行**(不是表头 —— 表头 @contextmenu.prevent.stop 独占, 见用例一 ③)
       await grid.first().click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible({ timeout: 5_000 });
-      await expect(menu.locator('.ctx-item', { hasText: '紧凑' }), '右键须弹密度档选项').toBeVisible();
+      await expect(menu.locator('.ctx-item', { hasText: '经典' }), '右键须弹模板选择(经典恒在首位)').toBeVisible();
 
-      // 选「紧凑」→ 即时生效且落 trackers 记忆(不是 general)
-      await menu.locator('.ctx-item', { hasText: '紧凑' }).click();
-      await expect(drawer.locator('.drawer-body .dt-host:visible'), '换档即换渲染分支(host 类即时翻转)')
-        .toHaveClass(/dd-compact/, { timeout: 5_000 });
-      await expect(grid.first(), '换档不重建网格: 表壳行仍在').toBeVisible();
+      // 选变体「增强表格」→ 即时挂载且落 trackers 记忆(不是 general)
+      await menu.locator('.ctx-item', { hasText: '增强表格' }).click();
+      await expect(drawer.locator('.drawer-body .dt-host:visible'), '选变体即挂插件宿主(.dt-tpl)')
+        .toHaveClass(/dt-tpl/, { timeout: 5_000 });
       const store = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
-      expect(store.trackers, '右键菜单必须落当前页签(trackers)的记忆').toBe('compact');
-      expect(store.general, '不得落 general 的记忆').toBe('classic');
+      expect(store.trackers, '右键菜单必须落当前页签(trackers)的记忆').toBe('06');
+      expect(store.general, '不得落 general 的记忆(未动页签落 classic 默认)').toBe('classic');
+
+      // 经典回切(反向过渡): 变体 DOM 内右键仍归 trackers(宿主分支命中 data-dt-host) ——
+      // 选「经典」由 Vue 组件分支接管, 表壳网格回归; 记忆回写 classic。
+      await drawer.locator('.drawer-body .dt-host[data-dt-host="trackers"]').click({ button: 'right' });
+      await expect(menu).toBeVisible({ timeout: 5_000 });
+      await menu.locator('.ctx-item', { hasText: '经典' }).first().click();
+      await expect(grid.first(), '回切经典后表壳网格回归').toBeVisible({ timeout: 5_000 });
+      const store2 = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
+      expect(store2.trackers, '回切经典落 trackers 记忆').toBe('classic');
     });
   });
 }

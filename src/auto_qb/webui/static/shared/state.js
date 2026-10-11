@@ -431,12 +431,15 @@ window.AQB_STATE = {
      *           守卫跳过, 数据与宿主都已陈旧, 这一发同时刷新数据并对新宿主重建图。
      * 流量形态认 qbCurScope 非空。种子详情形态(2026-10-07 报障)的变体宿主(dt-host)同样被拆装
      * 换掉 —— 旧插件持有的是被拆走的旧节点, 变体不会自愈: .dt-host:empty 藏住空宿主 = 整幅
-     * 正文空白, 故旧实现进场补一发重挂(_dtSync)。W5(计划 26-10-11-2106)起变体退役、正文恒由
-     * Vue 组件渲染(drawer_tabs.js) —— 组件随 aside 重建按 drawer.* 现值直接重渲染, 无此缺口,
-     * 进场无需任何补挂。 */
+     * 正文空白, 故进场补一发重挂(_dtSync)。
+     * W7(计划 26-10-11-2106 恢复注): W5 曾随变体退役删掉本补挂(Vue 组件随 aside 重建自渲染,
+     * 无此缺口) —— 变体层原样恢复, 补挂同批恢复(选「经典」时 _dtSync 无宿主可挂 = 空转, 无害)。 */
     drawerVisible(v) {
       const s = this.qbCurScope;
-      if (!s) return;
+      if (!s) {
+        if (v) this.$nextTick(() => this._dtSync());  // 进场补挂: 等 aside 补进 DOM 再定位宿主(经典档空转)
+        return;
+      }
       if (!v) {
         this._qbChartDestroy(s);
         return;

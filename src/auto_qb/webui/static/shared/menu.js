@@ -188,8 +188,9 @@ window.AQB_MENU = {
         tab: this._drawerMenuTab(event),
       };
     },
-    /* 右键命中区域 -> 目标页签: 合并列 data-dt-tab 优先, 否则当前页签。
-     * W5: data-dt-host 挂载宿主已随变体退役(旧实现宿主优先, 现只余列锚与回落)。
+    /* 右键命中区域 -> 目标页签: 变体宿主 data-dt-host 优先, 合并列 data-dt-tab 次之, 否则当前页签。
+     * W7: data-dt-host 挂载宿主随变体层原样恢复(W5 曾删; 命中宿主即宿主页签, 变体态右键
+     * 不得回落 —— 守阵/e2e 同轮恢复)。
      * !2026-10-10 用户报「合并后右侧右键弹左列模板」: 合并双列的**列间 24px 间隙**与分栏两侧
      * 留白(drawer-split 居中封顶 2400, 宽屏两侧可各空出数百 px)都不属于任何 .dt-col 元素 ——
      * 命不中时若直接回落当前页签, x 明明在右半区却拿到(常为左列的)当前页签模板选项。正文区内
@@ -197,6 +198,11 @@ window.AQB_MENU = {
     _drawerMenuTab(event) {
       var el = event && event.target;
       if (el && el.closest) {
+        var host = el.closest("[data-dt-host]");
+        if (host) {
+          var t = String(host.getAttribute("data-dt-host") || "").replace(/-(?:pre|post)$/, "");
+          if (t) return t;
+        }
         var col = el.closest("[data-dt-tab]");
         if (col) {
           var c = col.getAttribute("data-dt-tab");

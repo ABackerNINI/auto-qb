@@ -33,8 +33,8 @@ const SKIP_GATE_LABELS = {
  * !R2→R3 历史(判据语义, 不得回退): R2 曾按标志值渲染固定一对 + 挂载按当前对找宿主 = 空列 bug
  *   (用户报「选择并排后 tracker/用户标签显示常规/内容且为空」); R3 起列组/挂载/命中统一读
  *   「当前页签所属对」(dtPair)。宽度门 1920 是**暂态遮蔽**(dtSplitOn/dtMergeTabsOn 判 false,
- *   drawerMerge 标志不动) —— 缩窗过门回落单栏, 拉宽自动恢复; 门常量与两列封顶 2400(在
- *   (drawer_templates.js 的 00-core CSS 注入里)都是 W4 停手点, 口径不变。 */
+ *   drawerMerge 标志不动) —— 缩窗过门回落单栏, 拉宽自动恢复; 门常量与两列封顶 2400(W6 起
+ *   在三皮肤 views.css 的合并布局段)都是 W4 停手点, 口径不变。 */
 const MERGE_STORE_KEY = "autoqb.ui.drawerMerge";
 const DT_MERGE_MIN_WIDTH = 1920;
 const MERGE_PAIRS = [
@@ -60,96 +60,13 @@ const AQB_DRAWER_MERGE_SINGLE = {
 };
 window.AQB_DRAWER_MERGE = AQB_DRAWER_MERGE_SINGLE;
 
-/* ---------------- 模板选择层(W6 自 drawer_templates.js 收口, 计划 26-10-11-2106 W5 收敛语义) ----------------
- * 「换版式」= **声明式密度档**(D2 拍板 A): 每页签 2 档(首档 = 经典重建版式, 次档 = 紧凑密度),
- * 档位集 / 结构开关 / 旧 id 迁移去向全部由 DRAWER_DENSITY 一张表描述, 组件只消费描述符
- * 不抄字面量。W5 前 15 个过程式变体(shared/drawer_tpl/<NN>-*.js)与插件挂载机械
- * (_dtMount 系列 / _dtSync / _dtNotify / _dtRender / dtHtml / KIT / HELPERS)已整体退役;
- * W6 退役 drawer_templates.js, 退役后余下四件全在本文件: 密度档单点 + 读侧白名单迁移 +
- * 右键菜单/显隐判据(并入下方 mixin) —— 密度 CSS 已迁三皮肤(views/components.css, 规则逐条未改)。
- * 停手点: 不新增过程式字符串构建, 四页签正文恒由 Vue 组件渲染(drawer_tabs.js)。
- *
- * 装载序: 本文件必须排在 state.js 之前(硬约束): state.js 的 data() 调 initialDrawerTpl()(app.js),
- * 其白名单校验依赖本层 —— 否则已存的合法档位会被当成脏值回落 classic(静默, 不报错)。 */
-const DTPL_TABS = ["general", "trackers", "peers", "content", "traffic"];
-const DTPL_STORE_KEY = "autoqb.ui.drawerTpl";
-const DTPL_CLASSIC = "classic";
-
-/* DD_TIERS: 档位描述符。cls = 密度类(挂组件根/流量主块, CSS 只做密度收紧);
- * raw/hint = 结构开关(经典原始键值区 / content 工具条提示行) —— 档位关掉的结构是
- * 真隐藏(v-if), 不是 CSS 藏(计划 §08 R7); 对不适用该开关的页签字段无害。
- * DRAWER_DENSITY: 每页签的档位集(顺序 = 右键菜单序; 首档恒 classic, 与升级前
- * classic 用户零观感差)+ 旧变体 id 的**显式迁移**映射 —— tall(01/04/07/10/13)内容
- * 最全迁 classic, low/collapsed(其余十枚)迁 compact; 迁移在读侧一次性归一, 旧 id
- * 不报错、不静默丢(验收口径), 其余脏值一律回落 classic(P-01 同口径)。 */
-const DTPL_TIERS = {
-  classic: { id: DTPL_CLASSIC, label: "经典", cls: "", raw: true, hint: true },
-  compact: { id: "compact", label: "紧凑", cls: "dd-compact", raw: false, hint: false },
-};
-const DTPL_DENSITY = {
-  general:  { tiers: ["classic", "compact"], legacy: { "01": "classic", "02": "compact", "03": "compact" } },
-  trackers: { tiers: ["classic", "compact"], legacy: { "04": "classic", "05": "compact", "06": "compact" } },
-  peers:    { tiers: ["classic", "compact"], legacy: { "07": "classic", "08": "compact", "09": "compact" } },
-  content:  { tiers: ["classic", "compact"], legacy: { "10": "classic", "11": "compact", "12": "compact" } },
-  traffic:  { tiers: ["classic", "compact"], legacy: { "13": "classic", "14": "compact", "15": "compact" } },
-};
-/* 跨文件单点(消费方: 本文件 mixin / app.js initialDrawerTpl / 组件模板 / 守阵)。
- * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
- * 否则接线守阵会把它当漏注入的 mixin。 */
-const AQB_DRAWER_DENSITY_SINGLE = {
-  tiers: DTPL_TIERS,
-  /* 右键菜单选项(不含 classic —— classic 恒由模板端置首位) */
-  options: function (tab) {
-    var cfg = DTPL_DENSITY[tab];
-    var out = [];
-    if (cfg) {
-      for (var i = 0; i < cfg.tiers.length; i++) {
-        var t = DTPL_TIERS[cfg.tiers[i]];
-        if (t && t.id !== DTPL_CLASSIC) out.push({ id: t.id, label: t.label });
-      }
-    }
-    return out;
-  },
-  /* 档位描述符(mixin.drawerTier(tab) 的本体; 未知档位回落 classic) */
-  tierOf: function (tab, sel) {
-    var cfg = DTPL_DENSITY[tab];
-    var id = (cfg && cfg.tiers.indexOf(sel) >= 0) ? sel : DTPL_CLASSIC;
-    return DTPL_TIERS[id];
-  },
-  /* 读侧唯一入口: 白名单校验 + 旧 id 显式迁移。返回归一后的档位 id, 非法返回 null
-   * (调用方回落 classic —— 与 initialDrawerTab 同口径: 不信任存储内容)。 */
-  normalize: function (tab, id) {
-    var cfg = DTPL_DENSITY[tab];
-    if (!cfg || typeof id !== "string") return null;
-    if (id === DTPL_CLASSIC) return DTPL_CLASSIC;
-    if (cfg.tiers.indexOf(id) >= 0) return id;
-    return cfg.legacy[id] || null;
-  },
-};
-window.AQB_DRAWER_DENSITY = AQB_DRAWER_DENSITY_SINGLE;
-
-/* 读侧(autoqb.ui.drawerTpl): app.js initialDrawerTpl 薄封装消费。
- * 按页签记档位 id; 白名单 + 旧 id 迁移走 AQB_DRAWER_DENSITY.normalize —— 脏值/缺失/坏 JSON/
- * 读失败一律 classic(P-01: 升级零观感差异)。 */
-const AQB_DRAWER_TPL_REG_SINGLE = {
-  tabs: DTPL_TABS.slice(),
-  readSel: function () {
-    var out = {};
-    for (var i = 0; i < DTPL_TABS.length; i++) out[DTPL_TABS[i]] = DTPL_CLASSIC;
-    try {
-      var raw = JSON.parse(localStorage.getItem(DTPL_STORE_KEY) || "{}");
-      if (raw && typeof raw === "object") {
-        for (var j = 0; j < DTPL_TABS.length; j++) {
-          var tab = DTPL_TABS[j];
-          var norm = AQB_DRAWER_DENSITY_SINGLE.normalize(tab, raw[tab]);
-          if (norm) out[tab] = norm;
-        }
-      }
-    } catch (e) { /* 无存储/坏 JSON/隐私模式: 保持全 classic */ }
-    return out;
-  },
-};
-window.AQB_DRAWER_TPL_REG = AQB_DRAWER_TPL_REG_SINGLE;
+/* ---------------- 模板选择层落点(恢复注, 计划 26-10-11-2106 W7) ----------------
+ * 右键菜单 computed 组 / 读侧 readSel / 显隐判据 dtHostOn / 挂载机械(_dtMount 系列/_dtSync/
+ * _dtNotify/_dtRender/dtHtml/KIT/HELPERS)的原家是 drawer_templates.js(W4 期形态)。W5/W6 曾
+ * 把选择层收进本文件并退役变体层(声明式密度档) —— W7 用户裁定该退役**越权**(计划目标只是
+ * 「表格与主表能力统一」, 从未授权动模板), 变体层原样恢复, 选择层随之归位 drawer_templates.js
+ * (装载序: 本文件 < drawer_templates.js < 变体自注册 < state.js, 见其头注); 本文件只保留
+ * 合并(W4 收口)与形态判据(W3)。 */
 
 window.AQB_DRAWER = {
   computed: {
@@ -224,7 +141,7 @@ window.AQB_DRAWER = {
       return this.dtMergeGateOk();
     },
     /* W4: 合并页签清单(页签栏 v-for 单点) —— 注册表是 boot 期静态数据, 依赖 dtMergeTabsOn
-     * 翻转即可; 高亮判据在模板内联 mt.id === dtPair(与 dtPair 同源, 不再要 dtMergeTabActive)。 */
+     * 翻转即可; 高亮判据在模板内联 mt.id === dtPair(与列组同源, 无独立高亮态)。 */
     dtMergeTabList() {
       return window.AQB_DRAWER_MERGE.PAIRS;
     },
@@ -239,31 +156,12 @@ window.AQB_DRAWER = {
         props: tab === "general" ? { d: this.drawer.detail } : {},
       }));
     },
-    /* ---------------- 右键菜单: 模板/档位选择(W6 自 drawer_templates.js 收口) ----------------
-     * 菜单目标页签/选项集/勾选态/合并项显隐四个 computed + 落点方法(dtMenuPick, 见 methods)。 */
-    /* 菜单目标页签(2026-10-10 模板选择迁右键): openDrawerMenu 按右键命中区域落的
-     * drawerMenu.tab(合并列 data-dt-tab), 缺省回落当前页签。 */
-    dtMenuTab() {
-      return (this.drawerMenu && this.drawerMenu.tab) || this._dtCurTab();
-    },
-    /* 右键菜单档位选项(经典恒在首位; 选项源 = 声明式密度档, 不再是变体注册表) */
-    dtMenuTplOptions() {
-      return [{ id: DTPL_CLASSIC, label: "经典" }].concat(window.AQB_DRAWER_DENSITY.options(this.dtMenuTab));
-    },
-    /* 右键菜单当前档位选择(带勾项) */
-    dtMenuTplCurrent() {
-      return (this.drawerTplSel || {})[this.dtMenuTab] || DTPL_CLASSIC;
-    },
-    /* 右键菜单是否含合并开关: 仅种子详情形态(traffic 形态无合并项, 只出档位选项)。
-     * W3: 改走形态判据单点 drawerIsSeed —— 它自带 `this.drawer &&` 守卫。 */
-    dtMenuMergeOn() {
-      return this.drawerIsSeed;
-    },
   },
   /* W4 收口的两条监听(语义逐字未改): ① resize 防抖回写 dtWinW +
    * 门跨越后重挂/补给; ② drawerMerge 换代(右键开关)后重挂 + 第二列数据补给。
    * !全局 mixin 会波及子组件与 <transition> 的 BaseTransition 假实例(其上无数据面), 必须
-   * `if (!this.drawer) return;` 守卫 —— 与旧模板选择层的 traffic 通知同规避式。 */
+   * `if (!this.drawer) return;` 守卫 —— 与模板选择层的 traffic 通知同规避式(后者在
+   * drawer_templates.js 的 mixin 里, 同为全局注入, 互不重复注册)。 */
   mounted() {
     if (!this.drawer) return;
     this._mergeOnResize = () => {
@@ -272,8 +170,8 @@ window.AQB_DRAWER = {
         this._mergeResizeT = null;
         this.dtWinW = window.innerWidth;
         this.$nextTick(() => {
-          /* 门跨越恢复双列时第二列数据可能从未拉过(影子期零请求语义), 补给一次。
-           * W5: 布局换代无需任何重挂 —— 正文恒由 Vue 组件渲染, v-if 对 dtSplitOn 响应式自翻。 */
+          this._dtSync();  /* v-if 换代后旧宿主 isConnected 已假, 卸旧重挂(W7 恢复) */
+          /* 门跨越恢复双列时第二列数据可能从未拉过(影子期零请求语义), 补给一次 */
           if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
         });
       }, 150);
@@ -281,7 +179,7 @@ window.AQB_DRAWER = {
     window.addEventListener("resize", this._mergeOnResize);
     this._unwatchMerge = this.$watch("drawerMerge", () => {
       this.$nextTick(() => {
-        /* W5: 无插件重挂 —— v-if 对 dtSplitOn 响应式自翻; 只补第二列数据 */
+        this._dtSync();  /* 布局换代重挂(W7 恢复插件面) + 第二列数据补给 */
         if (this.dtSplitOn && typeof this._drawerMergeSupply === "function") this._drawerMergeSupply();
       });
     });
@@ -334,50 +232,9 @@ window.AQB_DRAWER = {
       if (p.tabs.indexOf(this.drawer && this.drawer.tab) >= 0) return;
       if (typeof this.drawerTab === "function") this.drawerTab(p.tabs[0]);
     },
-    /* ---------------- 模板选择层(W6 自 drawer_templates.js 收口) ---------------- */
-    /* 当前档位归属页签: 流量形态归 traffic, 其余随 drawer.tab */
-    _dtCurTab() {
-      return this.qbTrafficActive ? "traffic" : this.drawer.tab;
-    },
-    /* 宿主显隐(模板 v-show 唯一入口; W2 起四页签正文恒由 Vue 组件渲染, 本判据只管显隐):
-     * 错误态与 general 无详情时让位(与空态骨架的接管口径一致); 合并生效时对内两列同显。 */
-    dtHostOn(tab) {
-      if (tab === "traffic") return this._dtCurTab() === "traffic";
-      if (this.drawer.error) return false;
-      if (tab === "general" && !this.drawer.detail) return false;
-      if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
-      return this._dtCurTab() === tab;
-    },
-    /* 当前档位描述符(组件/模板的结构开关与密度类唯一来源; drawerTplSel 由 state.js
-     * 显式建字段, 读侧已归一, 这里不再二次校验) */
-    drawerTier(tab) {
-      return window.AQB_DRAWER_DENSITY.tierOf(tab, (this.drawerTplSel || {})[tab] || DTPL_CLASSIC);
-    },
-    /* 右键菜单档位选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略;
-     * 合法即落盘 + 收菜单。无插件重挂 —— 正文是 Vue 组件, 读 drawerTplSel 响应式
-     * 自更新(换档即换渲染分支, 与数据更新同一条路)。 */
-    dtMenuPick(id) {
-      const tab = this.dtMenuTab;
-      id = String(id || DTPL_CLASSIC);
-      const opts = window.AQB_DRAWER_DENSITY.options(tab);
-      let ok = id === DTPL_CLASSIC;
-      for (let i = 0; i < opts.length; i++) {
-        if (opts[i].id === id) ok = true;
-      }
-      if (!ok) return;
-      this.drawerTplSel[tab] = id;
-      this.dtPersistSel();
-      if (this.drawerMenu) this.drawerMenu.visible = false;
-    },
-    /* 写侧单漏斗(与 persistDrawerTab 同纪律: 写失败吞异常, 只影响刷新后落点) */
-    dtPersistSel() {
-      try {
-        const out = {};
-        const tabs = window.AQB_DRAWER_TPL_REG.tabs;
-        for (let i = 0; i < tabs.length; i++) out[tabs[i]] = (this.drawerTplSel || {})[tabs[i]] || DTPL_CLASSIC;
-        localStorage.setItem(DTPL_STORE_KEY, JSON.stringify(out));
-      } catch (e) { /* 写入失败: 本轮仍生效, 刷新后回落 classic */ }
-    },
+    /* ---------------- 模板选择层(W7 归位 drawer_templates.js, 见其 mixin) ----------------
+     * _dtCurTab/dtHostOn/dtMenuPick/dtPersistSel 已随选择层回原家; 本文件零残留(双份定义会被
+     * mixin 静默覆盖, 守阵 _scan_mixin_wiring/成员重名钉会红)。 */
     /* 自动种子管理开关(种子页右键 R2 补遗): 复用 torrentCmd 回执链 */
     autoTmmToggle() {
       const m = this.menuTorrent();
@@ -1079,6 +936,7 @@ window.AQB_DRAWER = {
       this.drawerSelPath = "";
       this._stopDrawerPoll();
       this._stopDrawerFollow();
+      this._dtUnmountAll();     // 插件实例逐个 destroy + 清宿主(W7 恢复; 本体 drawer_templates.js)
       this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
       this._qbTeardown();       // 流量形态(全局/分组/单种)轮询与图一并收(2026-10-04 三挂点并入抽屉)
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)

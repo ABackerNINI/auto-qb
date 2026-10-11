@@ -67,7 +67,7 @@
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
           <!-- 2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」; 选择按页签记忆
-               autoqb.ui.drawerTpl, 见 drawer.js 模板选择层): 原头部 .dt-select 下拉退役 ——
+               autoqb.ui.drawerTpl, 见 drawer_templates.js 选择层): 原头部 .dt-select 下拉退役 ——
                页签栏与正文两处右键都出菜单, 菜单目标页签 = 右键命中区域(见 menu.js openDrawerMenu)。
                关闭按钮不在此处: 它归 <aq-drawer-head> 外壳(两形态同源, W3)。 -->
         </aq-drawer-head>
@@ -121,9 +121,13 @@
             <!-- S1(计划 26-10-06-0838): template v-else 转 div(唯一非加挂改动)带布局类
                  dt-traffic-main —— 核心注入的规则使其与原 fragment 直挂 .drawer-body.is-traffic
                  的 flex 纵列几何等价(FX-29 遮罩对 wrapper 生效, display:contents 会废掉 opacity);
-                 密度档类(描述符 cls)挂本块 —— W5 起变体的图前/图后宿主(traffic-pre/post)退役,
-                 正文归 Vue + uPlot 本体(qb_traffic_chart.js 零改动)。 -->
-            <div v-else class="dt-traffic-main" :class="$root.drawerTier('traffic').cls">
+                 W7(恢复注): 图前/图后变体宿主(traffic-pre/post)原样恢复 —— 13 KPI 头行 /
+                 14 解读栏 / 15 自适应条落点; uPlot 图与其宿主 ref 保持 Vue 所有
+                 (qb_traffic_chart.js 零改动)。共用规则(.dt-traffic-main 布局等价层)自 W6 起在
+                 三皮肤 views.css(单一来源)。 -->
+            <div v-else class="dt-traffic-main">
+              <!-- 图前宿主(变体 13 的 KPI 头行落点) -->
+              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-pre"></div>
               <p v-if="qbCurData.meta && qbCurData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
               <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽高, tooltip 为其兄弟绝对定位;
                    悬停 idx/px 由 uPlot setCursor 钩子写回(scope 化 hoverIdx/hoverLeft) -->
@@ -175,13 +179,17 @@
                   <aq-qb-ctl></aq-qb-ctl>
                 </div>
               </div>
+              <!-- 图后宿主(变体 14 解读栏 / 15 自适应条落点) -->
+              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>
             </div>
           </template>
           <!-- ==================== 种子详情形态正文(五页签) ====================
                R2 S1(计划 26-10-09-2219): 四页签经典链曾移植为页插件(drawer_pages/*-classic.js);
                W2(计划 26-10-11-2106)把「经典」一档收回 Vue 组件(shared/drawer_tabs.js);
-               W5(同计划)变体整体退役 —— 正文恒由 Vue 组件渲染(旧 data-dt-host 宿主与
-               特性开关双分支一并退役), 显隐只走组件内 v-show 读 dtHostOn。四处空态
+               W7(恢复注): 变体层原样恢复 —— 正文按页签选择走 v-if="dtVueTab(tab)" 组件 /
+               v-else 插件宿主(data-dt-host)互斥双分支, 同一锚全 DOM 只存在一份
+               (_dtFindHost querySelector 定位); 显隐判据 dtHostOn 单点在 drawer_templates.js。
+               四处空态
                (general 首载 loading 与 error 两条共享空态)仍归本模板。
                FX-22/截断族等 CSS 钩子随类名原样命中。 -->
           <template v-else>
@@ -204,22 +212,27 @@
                  双份判据); general 列经 props 传详情, 其余列组件无 props。
                  !R3: 列组读 dtPair 而非 drawerMerge —— R2 按标志值渲染固定一对, 切到另一对页签
                  时列头在而两列宿主空(用户报障); 现与数据供给同源。
-                 W5(同计划): 变体退役, 列内正文恒为 Vue 组件(无插件宿主分支)。 -->
+                 W7(恢复注): 列内正文同样走 dtVueTab 双分支 —— 经典 = 组件 / 变体 = 宿主,
+                 两列可各自选档互不牵连。 -->
             <div v-if="dtSplitOn" class="drawer-split" :data-merge="dtPair">
               <div v-for="col in dtPairCols" :key="col.tab" class="dt-col" :data-dt-tab="col.tab">
                 <div class="dt-col-head">{{ col.label }}</div>
-                <component :is="'aq-drawer-' + col.tab" v-bind="col.props"></component>
+                <component v-if="dtVueTab(col.tab)" :is="'aq-drawer-' + col.tab" v-bind="col.props"></component>
+                <div v-else class="dt-host" v-show="dtHostOn(col.tab)" :data-dt-host="col.tab"></div>
               </div>
             </div>
-            <!-- W2(计划 26-10-11-2106): 四页签正文由 Vue 组件渲染(shared/drawer_tabs.js +
-                 tpl/drawer-tabs.html); W5(同计划)起变体退役 —— 组件成为**唯一**渲染实现,
-                 旧 data-dt-host 宿主与 v-if/v-else 双分支整体退役(第二套渲染技术删尽,
-                 显隐归组件内 v-show 读 dtHostOn)。 -->
+            <!-- W2(计划 26-10-11-2106): 四页签「经典」由 Vue 组件渲染(shared/drawer_tabs.js +
+                 tpl/drawer-tabs.html); W7(恢复注): 变体选择时 v-else 落插件宿主
+                 (data-dt-host, _dtSync 挂载), 双分支互斥保证宿主全 DOM 唯一。 -->
             <template v-else>
-              <aq-drawer-general :d="drawer.detail"></aq-drawer-general>
-              <aq-drawer-trackers></aq-drawer-trackers>
-              <aq-drawer-peers></aq-drawer-peers>
-              <aq-drawer-content></aq-drawer-content>
+              <aq-drawer-general v-if="dtVueTab('general')" :d="drawer.detail"></aq-drawer-general>
+              <div v-else class="dt-host" v-show="dtHostOn('general')" data-dt-host="general"></div>
+              <aq-drawer-trackers v-if="dtVueTab('trackers')"></aq-drawer-trackers>
+              <div v-else class="dt-host" v-show="dtHostOn('trackers')" data-dt-host="trackers"></div>
+              <aq-drawer-peers v-if="dtVueTab('peers')"></aq-drawer-peers>
+              <div v-else class="dt-host" v-show="dtHostOn('peers')" data-dt-host="peers"></div>
+              <aq-drawer-content v-if="dtVueTab('content')"></aq-drawer-content>
+              <div v-else class="dt-host" v-show="dtHostOn('content')" data-dt-host="content"></div>
             </template>
           </template>
         </div>

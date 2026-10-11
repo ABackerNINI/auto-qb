@@ -3,12 +3,22 @@
 ## 测试计划(每个测试函数一条)
 - test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且三份 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
-- test_drawer_tpl_registry_wiring: 详情面板模板选择层接线守阵(plan 26-10-06-0838 S1 · W6 收编版, 计划 26-10-11-2106) —— drawer_templates.js 整文件退役(文件不存在 + 三份 manifest 不再挂), 选择层四件收进 drawer.js: 装载序 drawer.js < state.js(state data() 调 initialDrawerTpl 依赖本层) + drawer_tpl//drawer_pages 目录退役; 声明式密度档单点 DRAWER_DENSITY(options/tierOf/normalize 三 API + 每页签恰两档首档 classic + 旧 id 迁移映射齐 01..15 显式迁移 + raw/hint 结构开关); 密度/合并 CSS 迁三皮肤(views/components.css 成对); drawer.html 正文恒 Vue 组件(变体宿主/data-dt-host 锚/dtVueTab 双分支退役)+ 流量主块密度类绑定 + 合并接线(W4 面)原样; 组件消费描述符(cls 挂根 + raw/hint v-if 真隐藏 + dtHostOn 显隐/内容双门); 菜单选项源 = DENSITY_REG.options(classic 模板端恒置首位) + dtMenuPick 落盘收菜单且无插件机械; state/app 接线(app.js 不得再注入第二份 AQB_DRAWER_TPL mixin) + dt* 成员全仓无重名(mixin 覆盖静默故障)
-- test_drawer_tpl_facility_retired: [W5+W6 退役确认阵](D2 拍板 A) —— 15 个过程式变体、插件挂载机械与选择层文件不得复活: drawer_templates.js 文件级退役(复活即第二份选择实现回潮)+ drawer_tpl/ 目录与三 manifest 引用归零; drawer.js 无 dtHtml/dtRaw/KIT/HELPERS/register/挂载/通知/宿主定位活代码(按活代码形态锚定, 注释留痕不算); 三皮肤 CSS 的抽屉密度段禁 space-between(Q1 两端推开病根)与 .dt-select(2026-10-10 右键迁移); drawer.html/menu.js 无 data-dt-host 锚; state.js 无回页补挂。原十条变体守阵的主体随变体退役, 其中仍活的纪律并入本阵
-- test_drawer_tpl_a11y_and_fetch_error_states: 详情面板可访问性 + fetch 失败标记守阵(P3-4/P3-5 · W5 收敛版) —— drawer-close 钮可访问名单点在 <aq-drawer-head>(组件模板恰一枚 + drawer.html 零复写 + 两形态各一调用点); 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段/catch 落/成功清/换目标作废(W1 起在数据层; 变体模拟控件 a11y 面与九变体错误态分支随 W5 变体退役, 经典链控件均为原生 button/details)
-- test_drawer_tpl_menu_right_click_selection: 详情面板模板选择迁右键守阵(2026-10-10 用户动议 · W6 收编版) —— 菜单 computed(dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn)与落点 dtMenuPick 齐全(单点在 drawer.js, W6 起 drawer_templates.js 已退役), dtMenuPick 走 DENSITY_REG.options 白名单 + 落盘 + 收菜单且无插件重挂机械($nextTick/_dtSync 不得回潮); 选择器 API(dtTplOptions/dtTplCurrent/dtPick)退役不回潮; menu.js openDrawerMenu 放行 seed/traffic 形态且目标页签解析只余合并列 data-dt-tab(W5 起 data-dt-host 宿主退役, 死代码不得残留)+ x 归列兜底(_drawerMenuColByX, 右侧空白右键弹右列); ctx-menus 渲染档位选项(v-for)+勾选态(.ctx-tick)+条件合并开关(dtMenuMergeOn)
-- test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1 · W6 版) —— 有 node 时真跑选择层 node 电池(加载 drawer.js: normalize 白名单 + 旧变体 id 01..15 显式迁移 tall->classic / low,collapsed->compact 不报错不静默丢 + 迁移面外脏值 null; readSel: 脏值/坏 JSON/无存储一律回落 classic; dtMenuPick: 白名单外忽略 + 合法落盘收菜单; drawerTier: 结构开关描述符正确); 无 node 静态兜底: app.js initialDrawerTpl 缺核心时也必须返回全 classic 映射(返回空对象会把正文藏掉)
-- (W5 退役) test_drawer_seed_reentry_variant_remount: 曾守「回页变体宿主重挂」(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) —— 变体退役后正文恒由 Vue 组件响应式渲染, 回页缺口不复存在; 退役确认归 test_drawer_tpl_facility_retired
+- test_drawer_tpl_registry_wiring: 详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含 drawer_templates.js 且装载序 drawer.js < 核心 < state.js(state data() 调 initialDrawerTpl 依赖注册表); 变体文件 (id, tab) 唯一且 tab 合法且三 manifest 成对登记(S1 变体数为 0, 断言按当前集合写); 变体 label 展示名禁档位后缀(Q4, 报告 26-10-07-0542 —— 档位是物理形态非信息组织, 三档语义全收进本变体, 写进下拉名冗余误导); 核心含 AQB_DRAWER_TPL_REG/dtHtml+dtRaw/autoqb.ui.drawerTpl/data-dt CSS 注入单点; 一行式钩子四类齐全(调用点随 W1 数据层抽离落 drawer_store.js: _loadDrawerTab 尾 _dtSync / 四 fetcher _dtNotify; closeDrawer _dtUnmountAll 与 collapse 通知仍在 drawer.js)+ 列表三 fetcher 通知在 loading 清掉之后(2026-10-07 用户页空列表停"正在加载…"报障)+ drawerTab 补强二; drawer.html 宿主 x6/合并列 data-dt-tab x4/摘要条 x2(2026-10-10 头部 .dt-select 退役, 模板选择迁右键)+ 经典包裹层 v-show 接 drawerTplSel; state.js 显式建字段 + app.js initialDrawerTpl + app.mixin; dt* 成员全仓无重名(mixin 覆盖静默故障, 核心书写形态不在 _scan_mixin_wiring 扫描面内, 此处补钉)
+- test_drawer_tpl_variant_width_discipline: 详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 含四页签宿主(general/trackers/peers/content)的 max-width 1400px 居中收口(15 变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏) + 全部变体与核心注入 CSS 禁 justify-content:space-between(label/value 两端推开病根, 标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明)
+- test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons)
+- test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
+- test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-close 钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段(初值在 drawer.js)/catch 落/成功清/换目标作废(随 W1 数据层抽离在 drawer_store.js) + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
+- test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
+
+- test_drawer_tpl_cross_seed_fold: 折叠态跨种子口径统一守阵(P3-6, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 2026-10-10 模板选择迁右键后核心不得再注入 .dt-select
+- test_drawer_tpl_menu_right_click_selection: 详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键; 合并时左边弹常规、右边弹内容的模板选择」) —— 核心菜单 computed(dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn)与落点 dtMenuPick 齐全且选择器 API 退役; menu.js openDrawerMenu 放行 seed/traffic 形态且目标页签解析成对(变体宿主 data-dt-host 去 traffic-pre/post 后缀优先 / 合并列 data-dt-tab 兜列头空列 / 否则当前页签); ctx-menus 渲染模板选项(v-for)+勾选态(.ctx-tick)+条件合并开关(dtMenuMergeOn)
+- test_drawer_tpl_classic_default: 详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层 node 电池(readSel 白名单: 脏值/未注册 id/坏 JSON 一律回落 classic; register fail-fast 四分支: 重复 (id,tab)/非法 tab/非法字符 id/缺 render; dtHtml 插值自动转义 + dtRaw 显式豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 核心未载入时也必须返回全 classic 映射(返回空对象会把经典包裹层藏掉)
+- test_drawer_tpl_render_error_fallback_classic: 变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 有 node 时真跑 _dtRender 抛错电池(该页签 drawerTplSel 复位 classic 且随 dtPersistSel 落盘 / 其它页签选择不受牵连 / 挂载态摘除(_dtMounted 置空, 后续通知按 classic 续走)/ 宿主清空 + 变体 destroy 回调 / console.error 不吞栈且带页签与变体 id / sel 已 classic 时稳态不重复复位); 无 node 静态兜底: _dtRender catch 块必须含复位/落盘/摘挂载/带 id 报错四要素(只清宿主的旧空白降级不得回潮)
+- test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
+- test_frontend_drawer_form_judge_single_point: 面板形态判据收口守阵(计划 26-10-11-2106 W3; W7 保留) —— drawer.kind 字面量只许 drawer.js 定义处恰两处(menu.js/shortcuts.js/tpl/drawer.html/qb_traffic_chart.js 零处, 新增散点比较即红) + 调用点逐个钉走 drawerIsSeed/drawerIsTraffic 派生单点 + 判据自带 this.drawer 守卫(全局 mixin 会把 computed 注入 <transition> 的 BaseTransition 假实例, 手抄防御不得回潮)
+- test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_drawer_groups_shows_views: 辅种页/追剧页支持种子详情面板守阵(计划 26-10-08-1217) —— 可见性单点 drawerVisible 与打开单点 openTorrentDrawer 一律只挡主内容页(形态/视图分叉收归页面级, 此前辅种/追剧页调用 openTorrentDrawer 静默失效: 右键菜单项早已渲染且 hash 正确却点了没反应)+ 两处成员行(辅种明细/追剧集明细)必须有 @dblclick 打开入口(与种子页同款)+ 键盘光标链 _kbRows 纳入展开的成员行(辅种的组下成员/追剧的集下成员, 兑现原注释「成员行 vNext」—— 不在链上则 ↑↓ 走不到、Alt+1~5 解析不出目标)+ 跟随 _kbFollowDrawer / 5s 轮询 tick / 单种流量图 active 三处守卫一律只挡主内容页(换视图即停会让这两页的页签数据停在打开那一刻)
 - test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815 + 详情面板二轮清理) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」/ drawer_tpl 二轮: 05 图例五色与条级顺序说明·06 等待响应与仅看异常说明·07-09 求和口径/客户端 Top 复述/qB flags 前缀/会话累计/对端整行复述·10-11 展开折叠全部目录与全选与目录文件数·12 优先级跳过与占比细条·13-15 kpis 容器派生口径与窗口累计复述)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
@@ -943,14 +953,17 @@ def test_frontend_drawer_form_judge_single_point():
         "qb_traffic_chart.js 仍写 drawer.kind 散点比较(W6 已改吃单点, W3 停手点豁免已摘)"
 
     # 3. 调用点逐个钉(全部形态判据调用面)
-    assert "dtMenuMergeOn() {\n      return this.drawerIsSeed;" in drawer_js, \
-        "drawer.js dtMenuMergeOn 未走判据单点(右键菜单「合并页签」项的放行判据; W6 自模板选择层收编)"
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert "dtMenuMergeOn() {\n        return this.drawerIsSeed;" in core, \
+        "drawer_templates.js dtMenuMergeOn 未走判据单点(右键菜单「合并页签」项的放行判据; W7 随选择层归位原家)"
+    assert "drawer.kind" not in core, \
+        "drawer_templates.js 仍写 drawer.kind 散点比较(形态判据必须走 drawerIsSeed / drawerIsTraffic 单点)"
     assert "if (!this.drawerIsSeed && !this.drawerIsTraffic) return;" in menu_js, \
         "menu.js openDrawerMenu 未走判据单点(seed/traffic 两形态放行, 流量形态模板选择靠它)"
     assert shortcuts_js.count("this.drawerIsSeed") == 2 and shortcuts_js.count("this.drawerIsTraffic") == 1, \
         "shortcuts.js 未全走判据单点(Alt+1..5 切页签 / Alt+3 开合面板 / Ctrl+\\ 全局流量图 三处)"
-    assert drawer_js.count("this.drawerIsSeed") == 3, \
-        "drawer.js 未全走判据单点(openTorrentDrawer 已开重入分支 + drawerAfterEnterHook 让位 + dtMenuMergeOn)"
+    assert drawer_js.count("this.drawerIsSeed") == 2, \
+        "drawer.js 未全走判据单点(openTorrentDrawer 已开重入分支 + drawerAfterEnterHook 让位)"
     for form, what in (
         (':class="{ \'drawer-traffic\': drawerIsTraffic }"', "面板 .drawer-traffic 布局类"),
         (":aria-label=\"drawerIsTraffic ? 'qB 口径流量图' : '种子详情'\"", "面板 aria-label"),
@@ -963,232 +976,6 @@ def test_frontend_drawer_form_judge_single_point():
         " torrent active+stale 用 drawerIsSeed)"
     assert traffic_js.count("this.drawerIsTraffic") == 2 and traffic_js.count("this.drawerIsSeed") == 1, \
         "qb_traffic_chart.js 调用面未全走单点(qbCurScope 两形态分派 + openDrawerTraffic 同目标短路)"
-
-
-def test_drawer_tpl_registry_wiring():
-    """详情面板模板选择层接线守阵(plan 26-10-06-0838 S1 · W6 收编版, 计划 26-10-11-2106) ——
-    drawer_templates.js 整文件退役(文件不存在, 三份 manifest 不再挂), 选择层四件收进 drawer.js:
-    声明式密度档单点(DRAWER_DENSITY: 每页签档位集 / 结构开关 / 旧 id 显式迁移 01..15 齐)自洽;
-    autoqb.ui.drawerTpl 读写走单点; 密度/合并 CSS 迁三皮肤(views/components.css 成对); 右键菜单
-    选项源 = 密度档; 正文恒 Vue 组件(变体宿主/dtVueTab 双分支退役, 密度类挂组件根, raw/hint 走 v-if
-    真隐藏); 合并接线(W4 面: 判据/渲染单点/监听在 drawer.js)原样; app.js 不再注入第二份选择层
-    mixin(AQB_DRAWER_TPL 已并入 AQB_DRAWER); dt* 成员全仓无重名(mixin 合并后者覆盖前者, 静默不报错)。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    core = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()  # W6: 选择层新家
-    drawer_js = core
-    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
-    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
-    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
-    drawer_tabs_js = open(os.path.join(shared, "drawer_tabs.js"), encoding="utf-8").read()
-    drawer_tabs_tpl = open(os.path.join(shared, "tpl", "drawer-tabs.html"), encoding="utf-8").read()
-
-    # 1. drawer_templates.js 文件级退役 + manifest 不再挂; 装载序 drawer.js < state.js
-    #    (硬约束: state data() 调 initialDrawerTpl -> readSel 白名单/迁移依赖 AQB_DRAWER_TPL_REG,
-    #    序错则已存档位静默回落)
-    assert not os.path.exists(os.path.join(shared, "drawer_templates.js")), \
-        "drawer_templates.js 必须已删除(W6: 选择层收进 drawer.js, 复活即第二份选择实现回潮)"
-    for ui in _UI_ALL:
-        scripts = _ui_manifest(ui)["scripts"]
-        assert "/shared/drawer_templates.js" not in scripts, f"{ui}: manifest 仍挂已退役的选择层文件(W6)"
-        assert "/shared/drawer_tabs.js" in scripts, f"{ui}: manifest 缺 Vue 页签组件层"
-        assert scripts.index("/shared/drawer.js") < scripts.index("/shared/state.js"), \
-            f"{ui}: drawer.js 必须排在 state.js 之前(state data() 调 initialDrawerTpl, 序错 = 启动白屏)"
-        assert not any("/shared/drawer_tpl/" in x for x in scripts), \
-            f"{ui}: manifest 仍挂已退役的变体文件(W5)"
-        assert "/shared/tpl/drawer-tabs.html" in [p["src"] for p in _ui_manifest(ui)["parts"]], \
-            f"{ui}: manifest 缺页签组件模板分片 tpl/drawer-tabs.html"
-    assert not os.path.isdir(os.path.join(shared, "drawer_tpl")), \
-        "drawer_tpl/ 目录不得复活(W5 变体整体退役, 复活即第二套渲染技术回潮)"
-    assert not os.path.isdir(os.path.join(shared, "drawer_pages")), \
-        "W2 后 drawer_pages/ 应整体退役(四页签经典链全在 Vue 组件里)"
-
-    # 1b. 密度/合并 CSS 迁三皮肤(成对改; 原 <style data-dt> 注入单点已退役)
-    for ui in _UI_ALL:
-        css = _ui_css_aggregate(ui)
-        for rule in (
-            ".drawer .drawer-split {", ".drawer .dt-host:empty", ".drawer .dt-traffic-main",
-            ".drawer .dd-compact .drawer-sec { margin-bottom: 10px; }"
-        ):
-            assert rule in css, f"{ui}: 皮肤聚合 CSS 缺 {rule}(W6 密度/合并 CSS 迁三皮肤, 规则逐条未改)"
-        assert ".ctx-menu .ctx-item.is-gated" in css, \
-            f"{ui}: 皮肤聚合 CSS 缺右键菜单置灰项(W6 自注入单点迁 components.css)"
-
-    # 2. 声明式密度档单点: 三 API 齐全 + 每页签恰两档(首档 classic) + 旧 id 迁移映射齐 15 枚
-    assert "window.AQB_DRAWER_DENSITY" in core, "核心缺密度档单点(DENSITY_REG)"
-    assert '"autoqb.ui.drawerTpl"' in core, "核心缺 autoqb.ui.drawerTpl 存储键(选择持久化单点)"
-    assert "options: function" in core and "tierOf: function" in core and "normalize: function" in core, \
-        "密度档单点缺 options/tierOf/normalize 三 API(菜单/描述符/读侧迁移各走其一, 不得旁路)"
-    legacy_ids = []
-    for lm in re.finditer(r"legacy: \{([^}]*)\}", core):
-        legacy_ids += re.findall(r'"(\d{2})":', lm.group(1))
-    assert sorted(legacy_ids) == [f"{i:02d}" for i in range(1, 16)], \
-        f"旧变体 id 迁移映射必须齐 01..15(显式迁移, 不报错不静默丢), 实测 {sorted(legacy_ids)}"
-    assert "classic: { id: DTPL_CLASSIC" in core and 'compact: { id: "compact"' in core, \
-        "档位描述符缺 classic/compact 两档(D2 拍板: 每页签 2 档, 首档=经典重建版式零观感差)"
-    assert "raw: true" in core and "raw: false" in core and "hint: true" in core and "hint: false" in core, \
-        "档位描述符缺 raw/hint 结构开关(档位关掉的结构走模板 v-if 真隐藏, 非 CSS 藏)"
-    assert "dtInjectCss" not in core and 'style[data-dt' not in core.replace(" ", ""), \
-        "CSS 注入单点必须退役(W6: 规则迁三皮肤, JS 运行时注入 CSS 的旧路径不得残留)"
-
-    # 3. drawer.html: 正文恒 Vue 组件(变体宿主/双分支退役) + W4 合并接线原样
-    assert 'data-dt-host="' not in drawer_tpl, "drawer.html 仍残留插件宿主锚 data-dt-host(W5 已退役)"
-    assert "dtVueTab" not in drawer_tpl, "drawer.html 仍引用 dtVueTab(双分支退役后判据消失)"
-    for tab in ("general", "trackers", "peers", "content"):
-        assert f"<aq-drawer-{tab}" in drawer_tpl, \
-            f"drawer.html 缺 <aq-drawer-{tab}>(该页签正文的唯一渲染实现)"
-    assert "drawerTier('traffic').cls" in drawer_tpl, \
-        "drawer.html 流量主块缺密度档类绑定(描述符 cls 是密度 CSS 的唯一挂点)"
-    assert 'class="dt-select"' not in drawer_tpl, \
-        "drawer.html 仍残留 .dt-select 头部下拉(2026-10-10 模板选择已迁右键菜单)"
-    assert "dtPick(" not in drawer_tpl and "dtTplOptions" not in drawer_tpl and "dtTplCurrent" not in drawer_tpl, \
-        "drawer.html 仍引用退役的选择器 API(dtPick/dtTplOptions/dtTplCurrent)"
-    # W4: 合并列的 data-dt-tab 由 dtPairCols v-for 绑定(右键按命中区域定位目标页签的锚不变)
-    assert ':data-dt-tab="col.tab"' in drawer_tpl and 'v-for="col in dtPairCols"' in drawer_tpl, \
-        "drawer.html 合并列缺 data-dt-tab 绑定(右键按命中区域定位目标页签; W4 起列组由 dtPairCols v-for 驱动)"
-    assert 'v-show="drawerTplSel.general === \'classic\'"' not in drawer_tpl, \
-        "经典包裹层回潮(显隐只走组件内 dtHostOn)"
-    assert 'class="drawer-split"' in drawer_tpl, "drawer.html 缺合并双列宿主(R2 S2)"
-    assert "@contextmenu.prevent=\"openDrawerMenu($event)\"" in drawer_tpl, "drawer.html 缺右键菜单接线(R2 S3)"
-
-    # 4. 组件消费描述符: cls 挂根(四页签) + raw/hint 结构开关 v-if + 显隐/内容门同读 dtHostOn
-    _tpl_block = re.findall(
-        r'<script type="text/x-template" id="tpl-aq-drawer-(\w+)">(.*?)</script>', drawer_tabs_tpl, re.S
-    )
-    assert sorted(t for t, _ in _tpl_block) == sorted(("general", "trackers", "peers", "content")), \
-        f"tpl/drawer-tabs.html 的 x-template 集合漂移: {[t for t, _ in _tpl_block]}"
-    for _tab, _body in _tpl_block:
-        assert "data-dt-host" not in _body, \
-            f"tpl-aq-drawer-{_tab}: 组件根带 data-dt-host = 旧插件挂载锚(结构性隔离不得放弃)"
-        assert _body.count(f"dtHostOn('{_tab}')") >= 2, \
-            f"tpl-aq-drawer-{_tab}: 显隐(v-show)与内容门(v-if)必须同读 dtHostOn('{_tab}')"
-        assert f":class=\"$root.drawerTier('{_tab}').cls\"" in _body, \
-            f"tpl-aq-drawer-{_tab}: 组件根缺密度档类绑定(W5 描述符 cls)"
-        assert f'name: "aq-drawer-{_tab}"' in drawer_tabs_js, \
-            f"drawer_tabs.js 缺组件定义 aq-drawer-{_tab}(name 与挂载点名成对)"
-        assert f'app.component("aq-drawer-{_tab}", window.AQ_DRAWER_{_tab.upper()}_COMPONENT)' in app_js, \
-            f"app.js 未注册 aq-drawer-{_tab}(组件不注册 = 该页签正文整块静默消失)"
-    assert 'v-if="$root.drawerTier(\'general\').raw"' in drawer_tabs_tpl, \
-        "general 原始键值区缺档位结构开关(W5: compact 档真隐藏 raw, 描述符字段不得旁路)"
-    assert 'v-if="$root.drawerTier(\'content\').hint"' in drawer_tabs_tpl, \
-        "content 工具条提示行缺档位结构开关(W5: compact 档真隐藏 hint)"
-
-    # 5. 菜单/选择接线: 选项源 = DENSITY_REG(经典恒模板端置首位), 落点无插件机械
-    #    (W6 起成员在 drawer.js, 缩进 4/6)
-    assert re.search(r'\[\{ id: DTPL_CLASSIC, label: "经典" \}\]\.concat\(window\.AQB_DRAWER_DENSITY\.options', core), \
-        "菜单选项必须 = 模板端 classic 首位 + DENSITY_REG.options(变体注册表 options 已退役)"
-    for member in ("dtMenuTab", "dtMenuTplOptions", "dtMenuTplCurrent", "dtMenuMergeOn"):
-        assert re.search(rf"^    {member}\(\)", core, re.M), f"drawer.js 缺右键菜单 computed {member}"
-    for member in ("dtMenuPick", "dtPersistSel", "drawerTier", "dtHostOn", "_dtCurTab"):
-        assert re.search(rf"^    {member}[(:]", core, re.M), f"drawer.js 缺方法 {member}"
-    _m = re.search(r"^    dtMenuPick\(id\) \{\n(.*?)\n    \},", core, re.M | re.S)
-    assert _m, "dtMenuPick 形态漂移(守阵正则失配, 同步本守阵)"
-    assert "window.AQB_DRAWER_DENSITY.options" in _m.group(1), \
-        "dtMenuPick 白名单必须走密度档单点 options"
-    assert "this.dtPersistSel()" in _m.group(1) and "drawerTplSel[tab] = id" in _m.group(1) \
-        and "this.drawerMenu.visible = false" in _m.group(1), \
-        "dtMenuPick 必须落 drawerTplSel + 落盘 + 收菜单"
-    assert "_dtSync" not in _m.group(1) and "$nextTick" not in _m.group(1), \
-        "dtMenuPick 残留插件重挂机械(W5 已退役; 换档由 Vue 响应式自翻)"
-
-    # 6. state/app 接线(app.js 不得再注入第二份选择层 mixin —— W6 起成员并入 AQB_DRAWER)
-    assert "drawerTplSel: initialDrawerTpl()" in state_js, "state.js 缺 drawerTplSel 显式建字段(vue-reactivity 坑)"
-    assert "function initialDrawerTpl()" in app_js, "app.js 缺 initialDrawerTpl"
-    for tab in ("general", "trackers", "peers", "content", "traffic"):
-        assert f'{tab}: "classic"' in app_js, f"initialDrawerTpl 兜底映射缺 {tab}(核心未载入时正文会被藏掉)"
-    assert "app.mixin(window.AQB_DRAWER_TPL)" not in app_js, \
-        "app.js 仍注入 AQB_DRAWER_TPL(W6 已并入 AQB_DRAWER; 第二份 mixin = 成员覆盖面翻倍)"
-
-    # 7. W4 合并接线(选择层与合并互不隶属, 但同挂根实例 —— 断言面原样保留)
-    assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
-    assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
-    assert "drawerMenu: { visible: false, x: 0, y: 0, tab: \"\" }" in state_js, \
-        "state.js 缺 drawerMenu 显式建字段(含 tab 右键目标页签, undefined 是响应式盲区)"
-    assert "function initialDrawerMerge()" in app_js, "app.js 缺 initialDrawerMerge"
-    for member in ("dtMergeOn", "dtMergeTabsOn", "dtPair", "dtSplitOn", "dtMergeTabList", "dtPairCols"):
-        assert re.search(rf"^    {member}[(:]", drawer_js, re.M), f"drawer.js 缺 R3/W4 合并成员 {member}"
-    for member in ("_dtPairOf", "dtMergeGateOk", "dtToggleMerge", "dtMergeTabPick"):
-        assert re.search(rf"^    {member}[(:]", drawer_js, re.M), f"drawer.js 缺 R3/W4 合并方法 {member}"
-    assert not re.search(r"^\s*dtMergeTabActive\(", drawer_js, re.M) \
-        and "dtMergeTabActive" not in drawer_tpl, \
-        "dtMergeTabActive 不得残留(W4 已删: 高亮判据必须与列组同源, 模板内联 mt.id === dtPair)"
-    assert "window.AQB_DRAWER_MERGE" in drawer_js and "MERGE_PAIRS = [" in drawer_js, \
-        "drawer.js 缺合并对跨文件单点 AQB_DRAWER_MERGE(对结构全仓仅此一份)"
-    assert 'this._unwatchMerge = this.$watch("drawerMerge"' in drawer_js \
-        and 'window.addEventListener("resize", this._mergeOnResize)' in drawer_js, \
-        "drawer.js 缺合并两条监听(resize 回写 dtWinW + drawerMerge $watch; W4 收口)"
-    ctx_menus_tpl = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
-    assert "dtSetMerge" not in drawer_js and "dtSetMerge" not in ctx_menus_tpl, \
-        "dtSetMerge 残留(R3 已改单开关 dtToggleMerge; 双模型并存 = 空列 bug 根因复发)"
-    assert "dtToggleMerge()" in ctx_menus_tpl, "ctx-menus 缺合并单开关入口(dtToggleMerge)"
-    assert 'v-for="mt in dtMergeTabList"' in drawer_tpl \
-        and re.search(r':class="\{ active: mt\.id === dtPair \}"', drawer_tpl) \
-        and "dtMergeTabPick(mt.id)" in drawer_tpl, \
-        "drawer.html 页签栏合并按钮必须由 dtMergeTabList v-for 驱动(高亮 = mt.id === dtPair)"
-    assert "dtPair === 'gc'" not in drawer_tpl and "dtPair === 'tp'" not in drawer_tpl, \
-        "drawer.html 不得再硬编码 gc/tp 列组分支(W4 改 dtPairCols v-for; 双份判据 = R2 空列 bug 根因)"
-    assert 'v-for="col in dtPairCols"' in drawer_tpl and ':data-dt-tab="col.tab"' in drawer_tpl \
-        and 'v-bind="col.props"' in drawer_tpl, \
-        "drawer.html 双列必须由 dtPairCols v-for 驱动(列头/列锚/详情 props 全部数据化; 宿主锚已随 W5 退役)"
-    assert "常规&内容" in drawer_js and "Tracker&用户" in drawer_js, \
-        "drawer.js 的 MERGE_PAIRS 缺合并页签标签(W4 起标签随对数据走, 模板不再硬编码)"
-    assert ':data-merge="dtPair"' in drawer_tpl, \
-        "drawer.html 双列列组必须读 dtPair(R3 bug: 按标志值渲染固定一对 -> 切对页签列头在而宿主空)"
-
-    # 8. dt* 成员全仓无重名(mixin 覆盖形态, 静默故障; W6 起全部 dt* 成员单点在 drawer.js)
-    dt_members = {
-        n
-        for n in re.findall(r"^    (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", core, re.M)
-        if n.startswith("dt") or n.startswith("_dt")
-    }  # 只收 dt* 成员(裸 if/for 同缩进形态不收)
-    assert {"dtMenuPick", "dtHostOn", "dtPersistSel", "_dtCurTab"} <= dt_members, \
-        "选择层方法面清单与守阵预期漂移, 同步本守阵"
-    for path, rel in _app_bundle_files():
-        if rel == "shared/drawer.js":
-            continue
-        other = open(path, encoding="utf-8").read()
-        for name in dt_members:
-            assert not re.search(rf"^      (?:async )?{name}\s*[(:]", other, re.M) \
-                and not re.search(rf"^    (?:async )?{name}\s*[(:]", other, re.M), \
-                f"{rel} 与选择层成员重名 {name}(mixin 合并后者覆盖前者, 静默不报错)"
-
-
-def test_drawer_tpl_facility_retired():
-    """[W5+W6 退役确认阵](计划 26-10-11-2106, D2 拍板 A) —— 15 个过程式变体、插件挂载机械与
-    选择层文件整体退役, 本阵看守「不得复活」。原十条变体守阵(test_drawer_tpl_{variant_width_discipline,
-    trackers_card_uniform_height,variant_field_icons,table_variants_scrollleft_restore,
-    trackers_per_tracker_reannounce,content_row_keyboard_roving,variant_no_singleton_shadowing,
-    cross_seed_fold,render_error_fallback_classic} + test_drawer_seed_reentry_variant_remount)
-    的主体随变体文件消失, 其中仍然活着的纪律(抽屉密度 CSS 禁 space-between(Q1 两端推开病根);
-    .dt-select 不得回潮; state.js 回页无补挂)并入本阵与现役守阵。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    # 文件级退役(W6): 选择层整文件删除 —— 复活 = 第二份选择实现回潮
-    assert not os.path.exists(os.path.join(shared, "drawer_templates.js")), \
-        "drawer_templates.js 必须已删除(W6: 选择层收进 drawer.js; 复活即退役确认阵整体失效)"
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
-    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
-    menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
-    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
-    # 活代码形态锚定(说明性注释提及符号名不算 —— 退役史必须留痕在注释里)
-    for sym in (
-        "function dtHtml", "function dtRaw", "var HELPERS", "var KIT", "register: function", "var TPL_BY_TAB",
-        "_dtMountOne(", "_dtMountActive(", "_dtMountSplit(", "_dtSync()", "_dtNotify(", "_dtRender(", "_dtFindHost(",
-        "dtVueTab(", "VUE_TABS", "wireEvents: function", "roving: function", "reg.helpers", "function dtInjectCss",
-        'dtInjectCss("00-core"', 'dtInjectCss("00-density"'
-    ):
-        assert sym not in drawer_js, f"drawer.js 残留插件机械/注入活代码 {sym}(变体设施复活)"
-    # 密度 CSS 迁三皮肤后, 原「核心注入 CSS」纪律改为钉皮肤侧的抽屉密度段(规则同源迁入)
-    for skin in ("atlas", "console", "prism"):
-        css = _ui_css_aggregate(skin)
-        compact_rules = [ln for ln in css.splitlines() if ".dd-compact" in ln or ".drawer-sec" in ln]
-        assert compact_rules, f"{skin}: 聚合 CSS 缺抽屉密度段(W6 迁入)"
-        assert not any("justify-content:space-between" in ln.replace(" ", "") for ln in compact_rules), \
-            f"{skin}: 抽屉密度 CSS 不得用 justify-content:space-between(Q1 label/value 两端推开病根)"
-        assert ".drawer .dt-select" not in css, f"{skin}: 皮肤仍含 .dt-select(头部下拉已退役, 不得回潮)"
-    assert 'data-dt-host="' not in drawer_tpl, "drawer.html 残留插件宿主锚(变体宿主复活)"
-    assert 'closest("[data-dt-host]")' not in menu_js, \
-        "menu.js 仍解析插件宿主锚(命中判定死代码; 右键目标页签解析只余列锚与当前页签回落)"
-    assert "this._dtSync" not in state_js and "this.$nextTick(() => this._dtSync())" not in state_js, \
-        "state.js 回页补挂复活(W5 起正文恒 Vue 响应式, 回页无重挂需求; 宿主重挂机械已随变体退役)"
 
 
 _NODE_REANNOUNCE_GATE_PROBE = r"""
@@ -1266,6 +1053,859 @@ process.stdout.write(JSON.stringify({
 }) + "\n");
 """
 
+_DT_REGISTRY_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩(readSel/dtPersistSel 走它); document 保持 undefined —— 核心的 dtInjectCss
+ * 有 typeof document 守卫, node 探针环境跳过 CSS 注入。 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const reg = window.AQB_DRAWER_TPL_REG;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const CLASSIC = JSON.stringify({ general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" });
+
+ok("五页签注册表", JSON.stringify(reg.tabs) === JSON.stringify(["general", "trackers", "peers", "content", "traffic"]));
+ok("无存储全 classic(P-01)", JSON.stringify(reg.readSel()) === CLASSIC);
+store["autoqb.ui.drawerTpl"] = '{"general":"t1","traffic":123,"peers":"classic"}';
+ok("脏值/未注册 id/数字值一律 classic", JSON.stringify(reg.readSel()) === CLASSIC);
+store["autoqb.ui.drawerTpl"] = "not-json{";
+ok("坏 JSON 回落 classic", JSON.stringify(reg.readSel()) === CLASSIC);
+store["autoqb.ui.drawerTpl"] = '{"general":"t1"}';
+reg.register({ id: "t1", tab: "general", label: "T1", render() {} });
+ok("注册后合法 id 被白名单接受", reg.readSel().general === "t1");
+ok("其余页签不受影响", reg.readSel().trackers === "classic");
+let threw = "";
+try { reg.register({ id: "t1", tab: "general", render() {} }); } catch (e) { threw = e.message; }
+ok("重复 (id, tab) fail-fast", threw.indexOf("duplicate") >= 0);
+threw = "";
+try { reg.register({ id: "t2", tab: "bogus", render() {} }); } catch (e) { threw = e.message; }
+ok("非法 tab fail-fast", threw.indexOf("bad tab") >= 0);
+threw = "";
+try { reg.register({ id: "a b", tab: "peers", render() {} }); } catch (e) { threw = e.message; }
+ok("非法字符 id fail-fast", threw.indexOf("bad id") >= 0);
+threw = "";
+try { reg.register({ id: "t3", tab: "peers" }); } catch (e) { threw = e.message; }
+ok("缺 render fail-fast", threw.indexOf("render") >= 0);
+ok("dtHtml 插值自动转义", reg.dtHtml`<b>${"<script>&\"'"}</b>` === "<b>&lt;script&gt;&amp;&quot;&#39;</b>");
+ok("dtRaw 显式豁免", reg.dtHtml`${reg.dtRaw("<i>ok</i>")}` === "<i>ok</i>");
+ok("options 不含 classic(classic 恒由模板置首位)",
+  JSON.stringify(reg.options("general")) === JSON.stringify([{ id: "t1", label: "T1" }]));
+ok("mixin 挂上 window.AQB_DRAWER_TPL", typeof window.AQB_DRAWER_TPL.methods.dtMenuPick === "function"
+  && typeof window.AQB_DRAWER_TPL.computed.dtMenuTab === "function");
+
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed }));
+if (failed.length) process.exit(1);
+"""
+
+
+def test_drawer_tpl_registry_wiring():
+    """详情面板模板核心层接线守阵(plan 26-10-06-0838 S1) —— 三份 manifest 成对含核心且装载序正确;
+    变体文件 (id, tab) 唯一且 tab 合法; 核心含 dtHtml / autoqb.ui.drawerTpl 单点; drawer.js 一行式
+    钩子四类齐全; drawer.html 宿主成对加挂 + 合并列 data-dt-tab(2026-10-10 头部切换器迁右键,
+    .dt-select 退役); 变体 label 展示名禁档位后缀(Q4, 报告
+    26-10-07-0542 —— 档位只是物理形态且三档语义全收进本变体, 写进名字冗余误导); dt* 成员全仓
+    无重名(mixin 合并后者覆盖前者, 静默不报错 —— drawer_templates.js 书写形态不在
+    _scan_mixin_wiring 的扫描面内, 此处补钉)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
+    tabs = ("general", "trackers", "peers", "content", "traffic")
+
+    # 1. 三份 manifest 成对含核心, 装载序 drawer.js < 核心 < state.js(后者是硬约束:
+    #    state data() 调 initialDrawerTpl -> readSel 白名单依赖注册表, 序错则已存合法 id 静默回落 classic)
+    for ui in _UI_ALL:
+        scripts = _ui_manifest(ui)["scripts"]
+        assert "/shared/drawer_templates.js" in scripts, f"{ui}: manifest 缺模板核心层"
+        assert scripts.index("/shared/drawer.js") < scripts.index("/shared/drawer_templates.js"), \
+            f"{ui}: 核心必须排在 drawer.js 之后(同域阅读序, 守阵钉住防漂移)"
+        assert scripts.index("/shared/drawer_templates.js") < scripts.index("/shared/state.js"), \
+            f"{ui}: 核心必须排在 state.js 之前(state data() 调 initialDrawerTpl, 序错 = 启动白屏)"
+
+    # 2. 核心单点: 注册表 / dtHtml 转义标签模板 / autoqb.ui.drawerTpl 键 / CSS 注入 data-dt 单点
+    assert "window.AQB_DRAWER_TPL_REG" in core, "核心缺注册表单点(变体自注册入口)"
+    assert "dtHtml" in core and "dtRaw" in core, "核心缺 dtHtml/dtRaw 转义标签模板(XSS 单点收口)"
+    assert '"autoqb.ui.drawerTpl"' in core or "'autoqb.ui.drawerTpl'" in core, \
+        "核心缺 autoqb.ui.drawerTpl 存储键(选择持久化单点)"
+    assert "data-dt" in core, "核心缺 CSS 注入单点(style data-dt)"
+    for tab in tabs:
+        assert f'"{tab}"' in core, f"核心注册表缺页签 {tab}"
+
+    # 3. 变体文件(S1 为 0, 断言按"当前已注册变体集合"写, 不写死 15):
+    #    每个变体必须 (id, tab) 唯一、tab 合法、且三份 manifest 成对登记
+    vdir = os.path.join(shared, "drawer_tpl")
+    seen_pairs = set()
+    for ui in _UI_ALL:
+        scripts = _ui_manifest(ui)["scripts"]
+        assert scripts.index("/shared/drawer_templates.js") < scripts.index("/shared/state.js")
+    if os.path.isdir(vdir):
+        for name in sorted(os.listdir(vdir)):
+            if not name.endswith(".js"):
+                continue
+            text = open(os.path.join(vdir, name), encoding="utf-8").read()
+            mo = re.search(r'id:\s*"([^"]+)"\s*,\s*tab:\s*"([^"]+)"', text)
+            assert mo, f"drawer_tpl/{name}: 缺 (id, tab) 注册对(变体自注册形态漂移)"
+            vid, vtab = mo.group(1), mo.group(2)
+            assert vtab in tabs, f"drawer_tpl/{name}: 非法 tab {vtab}"
+            assert (vid, vtab) not in seen_pairs, f"drawer_tpl/{name}: (id, tab) 重复 ({vid}, {vtab})"
+            seen_pairs.add((vid, vtab))
+            # Q4: label 展示名禁档位后缀 —— 档位(tall/low/collapsed)只是物理形态, 三档语义
+            # 全收进本变体(各文件头注声明), 写进下拉展示名冗余且误导(报告 26-10-07-0542 §2 Q4)
+            mo = re.search(r'label:\s*"([^"]+)"', text)
+            assert mo, f"drawer_tpl/{name}: 缺 label 注册字段(变体自注册形态漂移)"
+            bad = [s for s in ("(高)", "(矮)", "(收起)") if s in mo.group(1)]
+            assert not bad, \
+                f"drawer_tpl/{name}: label \"{mo.group(1)}\" 含档位后缀 {bad}(Q4: 档位写进展示名冗余误导, 改描述性命名)"
+            assert "reg.register(" in text or "AQB_DRAWER_TPL_REG.register(" in text, \
+                f"drawer_tpl/{name}: 缺 register 调用"
+            for ui in _UI_ALL:
+                assert f"/shared/drawer_tpl/{name}" in _ui_manifest(ui)["scripts"], \
+                    f"{ui}: manifest 缺变体 drawer_tpl/{name}"
+
+    # 4. 数据层一行式钩子四类齐全(方法本体在核心层, 这里只有调用点;
+    #    W1 起 _loadDrawerTab/四 fetcher 落 drawer_store.js, 调用点随迁)
+    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    m = re.search(r"_loadDrawerTab\(tab\) \{\n(.*?)\n    \},", store_js, re.S)
+    assert m and "this._dtSync()" in m.group(1), "_loadDrawerTab 尾部缺 _dtSync(换页签不挂/不卸变体)"
+    for typ in ("detail", "trackers", "files", "peers"):
+        assert f'this._dtNotify("{typ}")' in store_js, f"四 fetcher 落袋处缺 _dtNotify(\"{typ}\")"
+    # 4a. 列表三 fetcher 的落袋通知必须在 loading 清掉之后(变体只在 _dtNotify 时重渲染,
+    #     通知先于清 loading = 空列表停在"正在加载…"到下一拍 5s 轮询; 2026-10-07 用户页报障。
+    #     detail 不在列: general 变体不渲染 loading 态, 经典层走 Vue 响应式无此窗口)
+    for fname, flag in (("Trackers", "trackersLoading"), ("Files", "filesLoading"), ("Peers", "peersLoading")):
+        fm = re.search(rf"async _fetchDrawer{fname}\(.*?\n    \}},", store_js, re.S)
+        assert fm, f"_fetchDrawer{fname} 形态漂移(守阵正则失配, 同步本守阵)"
+        clear = fm.group(0).find(f"this.drawer.{flag} = false")
+        notify = fm.group(0).find(f'this._dtNotify("{fname.lower()}")')
+        assert clear != -1 and notify != -1 and clear < notify, \
+            f"_fetchDrawer{fname}: _dtNotify 必须在 {flag} 清掉之后(次序反 = 空列表停\"正在加载…\"一拍轮询)"
+    m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
+
+    # 5. drawer.html 加挂面: 宿主 x6(单栏)+ x4(合并双列, v-if/v-else 与单栏互斥)
+    #    2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」): 头部 .dt-select 下拉退役,
+    #    选择入口移到 openDrawerMenu 右键菜单; 合并双列各列带 data-dt-tab(右键按命中区域定页签)
+    for host in ("general", "trackers", "peers", "content", "traffic-pre", "traffic-post"):
+        assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
+    assert 'class="dt-select"' not in drawer_tpl, \
+        "drawer.html 仍残留 .dt-select 头部下拉(2026-10-10 模板选择已迁右键菜单)"
+    assert "dtPick(" not in drawer_tpl and "dtTplOptions" not in drawer_tpl and "dtTplCurrent" not in drawer_tpl, \
+        "drawer.html 仍引用退役的选择器 API(dtPick/dtTplOptions/dtTplCurrent)"
+    # W4: 合并列由 dtPairCols v-for 渲染, data-dt-tab 为动态绑定单点(:data-dt-tab="col.tab",
+    #     四页签一份数据面; 静态逐列字面量已退役)
+    assert ':data-dt-tab="col.tab"' in drawer_tpl, \
+        "drawer.html 合并列缺 :data-dt-tab=\"col.tab\" 动态绑定(右键按命中区域定位目标页签)"
+    assert drawer_tpl.count(":data-dt-tab=") == 1, \
+        "drawer.html :data-dt-tab 绑定超一处(应由 dtPairCols v-for 单点渲染)"
+    # W2(计划 26-10-11-2106): 「经典」收回 Vue 组件(drawer_tabs.js) —— drawer_pages 经典插件
+    # 已删(表格统一接公共表壳, 本计划正主), 不得复活; 正文走 dtVueTab v-if 组件 / v-else 宿主
+    # 互斥双分支(同一 data-dt-host 全 DOM 唯一), 显隐门 dtHostOn 在组件根与宿主上同源。
+    assert not os.path.isdir(os.path.join(shared, "drawer_pages")), \
+        "drawer_pages/ 不得复活(W2 经典链已收回 Vue 组件并接公共表壳)"
+    assert 'dtVueTab(col.tab)' in drawer_tpl and 'dtVueTab(\'general\')' in drawer_tpl, \
+        "drawer.html 缺 dtVueTab 双分支(W2 经典=组件/变体=宿主互斥)"
+    for tab in ("general", "trackers", "peers", "content"):
+        assert drawer_tpl.count(f'data-dt-host="{tab}"') == 1, \
+            f"drawer.html: data-dt-host={tab} 必须恰一份(v-else 互斥分支保证)"
+    # R2 S2/S3 接线 + R3 修订(计划 26-10-09-2219 R3): 合并开关显式建字段 + 双列宿主 + 右键单开关
+    assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
+    assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
+    assert "drawerMenu: { visible: false, x: 0, y: 0, tab: \"\" }" in state_js, \
+        "state.js 缺 drawerMenu 显式建字段(含 tab 右键目标页签, undefined 是响应式盲区)"
+    assert 'class="drawer-split"' in drawer_tpl, "drawer.html 缺合并双列宿主(R2 S2)"
+    assert "@contextmenu.prevent=\"openDrawerMenu($event)\"" in drawer_tpl, "drawer.html 缺右键菜单接线(R2 S3)"
+    assert "function initialDrawerMerge()" in app_js, "app.js 缺 initialDrawerMerge"
+    # R3 钉子: 开关模型(off|on, 列组由当前页签所属对决定) + 页签栏合并两页签 + 单开关入口。
+    # 旧两选项模型(标志值 gc/tp 决定渲染哪一对)是 R2 空列 bug 的根 —— dtSetMerge 不得残留,
+    # 否则新旧两套模型并存(标志值与当前页签各说各话)。
+    # W4(计划 26-10-11-2106): 合并机械收进 drawer.js(面板核心) —— 判据/方法 4 空格缩进;
+    # dtMergeTabActive 已随「高亮与列组同源」删除(模板内联 mt.id === dtPair), 不得回潮;
+    # 核心层(选择层)零合并成员(双份判据 = R2 空列 bug 根因形态)。
+    for member in ("dtMergeOn", "dtMergeTabsOn", "dtPair", "dtMergeTabPick", "dtToggleMerge"):
+        assert re.search(rf"^    {member}[(:]", drawer_js, re.M), f"drawer.js 缺 R3 合并成员 {member}"
+        assert not re.search(rf"^      {member}[(:]", core, re.M), \
+            f"drawer_templates.js 不得自建合并成员 {member}(W4 起单点在 drawer.js)"
+    assert "dtMergeTabActive" not in core and "dtMergeTabActive" not in drawer_js \
+        and "dtMergeTabActive" not in drawer_tpl, \
+        "dtMergeTabActive 不得残留(W4 已删: 高亮判据必须与列组同源, 模板内联 mt.id === dtPair)"
+    # W4: 核心层零自建合并数据面(对结构/宽度计算单点在 drawer.js AQB_DRAWER_MERGE 命名空间);
+    # _dtMountSplit 挂载机械留在核心层, 只做 pairOf 机械消费(见下一条 pin), 不得复制对数据。
+    assert "mergeMinWidth" not in core and "mergePairs" not in core and "mergeValues" not in core, \
+        "drawer_templates.js 不得自建合并对数据/宽度计算(W4 起单点在 drawer.js)"
+    m = re.search(r"_dtMountSplit\(\) \{\n(.*?)\n      \},", core, re.S)
+    assert m and "window.AQB_DRAWER_MERGE.pairOf" in m.group(1), \
+        "_dtMountSplit 必须经 AQB_DRAWER_MERGE.pairOf 消费对结构(W4: 插件层零自建映射)"
+    assert 'this._unwatchMerge = this.$watch("drawerMerge"' in drawer_js \
+        and 'window.addEventListener("resize", this._mergeOnResize)' in drawer_js, \
+        "drawer.js 缺合并两条监听(resize 回写 dtWinW + drawerMerge $watch; W4 自核心层注册)"
+    ctx_menus_tpl = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
+    assert "dtSetMerge" not in core and "dtSetMerge" not in ctx_menus_tpl, \
+        "dtSetMerge 残留(R3 已改单开关 dtToggleMerge; 双模型并存 = 空列 bug 根因复发)"
+    assert "dtToggleMerge()" in ctx_menus_tpl, "ctx-menus 缺合并单开关入口(dtToggleMerge)"
+    # W4: 合并页签按钮与标签由 dtMergeTabList(对单点)经 v-for 驱动, 模板零硬编码;
+    # 标签文案单点在 drawer.js MERGE_PAIRS(列头 .dt-col-head 同一份对数据)。
+    assert "dtMergeTabList" in drawer_tpl and "mt.id === dtPair" in drawer_tpl, \
+        "drawer.html 页签栏缺 W4 合并页签 v-for(按钮清单/高亮与列组同源)"
+    for label in ("常规&内容", "Tracker&用户"):
+        assert f'label: "{label}"' in drawer_js, f"drawer.js 合并对缺标签 {label}(W4 标签随对数据走)"
+    assert ':data-merge="dtPair"' in drawer_tpl, \
+        "drawer.html 双列列组必须读 dtPair(R3 bug: 按标志值渲染固定一对 -> 切对页签列头在而宿主空)"
+
+    # 6. state/app 接线 + dt* 成员全仓无重名(mixin 覆盖形态, 静默故障)
+    assert "drawerTplSel: initialDrawerTpl()" in state_js, "state.js 缺 drawerTplSel 显式建字段(vue-reactivity 坑)"
+    assert "function initialDrawerTpl()" in app_js, "app.js 缺 initialDrawerTpl"
+    assert "app.mixin(window.AQB_DRAWER_TPL)" in app_js, "app.js 未注入 AQB_DRAWER_TPL(核心方法域整体消失)"
+    dt_members = {
+        n
+        for n in re.findall(r"^      (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", core, re.M)
+        if n.startswith("dt") or n.startswith("_dt")
+    }  # 只收 dt* 成员(裸 if/for 同缩进形态不收)
+    assert {"dtMenuPick", "dtHostOn", "_dtSync", "_dtNotify", "_dtUnmountAll"} <= dt_members, \
+        "核心方法面清单与守阵预期漂移, 同步本守阵"
+    for path, rel in _app_bundle_files():
+        if rel == "shared/drawer_templates.js":
+            continue
+        other = open(path, encoding="utf-8").read()
+        for name in dt_members:
+            assert not re.search(rf"^      (?:async )?{name}\s*[(:]", other, re.M) \
+                and not re.search(rf"^    (?:async )?{name}\s*[(:]", other, re.M), \
+                f"{rel} 与核心层成员重名 {name}(mixin 合并后者覆盖前者, 静默不报错)"
+
+
+def test_drawer_tpl_variant_width_discipline():
+    """详情面板变体宽度纪律守阵(Q1, 报告 26-10-07-0542) —— 核心注入 CSS 必须含四页签宿主的
+    max-width 居中收口(15 个变体单点共享, 变体文件零复刻; traffic 双宿主排除 —— 图本体/工具条
+    归经典链恒满宽, 13/15 KPI 头行限宽会与图缘错位, 14 解读栏自带 288px 固定右栏无拉伸);
+    全部变体与核心注入 CSS 禁 justify-content:space-between(4K 下 label/value 两端推开病根,
+    改为标签在前值紧随; 非 kv 场景确需两端分布须显式改本守阵并注明场景)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    # 注入的 CSS 字符串在 JS 源里是双引号转义形态(\"), 先还原再对选择器做子串断言
+    core_css = core.replace('\\"', '"')
+
+    # 1. 共享 max-width 收口单点: 四页签宿主各出现在限宽规则里, 值与居中写法一起钉住。
+    #    R2 S1(计划 26-10-09-2219): 收口收窄到 .dt-tpl(变体挂载态) —— classic 也挂进宿主
+    #    (页插件化)而经典链历史上恒满宽, 限宽误伤即行为回归; 核心挂载时按 entry 加/摘类。
+    for tab in ("general", "trackers", "peers", "content"):
+        assert f'.dt-host.dt-tpl[data-dt-host="{tab}"]' in core_css, \
+            f"核心缺 {tab} 宿主限宽收口(变体内容层 4K 等分拉伸复发)"
+    assert "max-width: 1400px; margin-left:auto; margin-right:auto" in core_css, \
+        "核心宿主收口缺 max-width/margin 居中(规则形态漂移, 同步本守阵)"
+
+    # 2. traffic 双宿主不得进限宽收口(与经典链图缘对齐, 判据见核心注入处注释)
+    for slot in ("traffic-pre", "traffic-post"):
+        hit = [l for l in core_css.splitlines() if f'data-dt-host="{slot}"' in l]
+        assert not hit, \
+            f"traffic 宿主 {slot} 不得进限宽收口(图本体归经典链恒满宽, 限宽与图缘错位)"
+
+    # 3. label/value 两端推开零容忍: 15 个变体 + 核心注入 CSS(比较前去空格, 兼容空格写法)
+    vdir = os.path.join(shared, "drawer_tpl")
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "justify-content:space-between" not in text.replace(" ", ""), \
+            f"drawer_tpl/{name}: justify-content:space-between 复活(Q1 label/value 两端推开病根; 非 kv 场景确需请改本守阵并注明)"
+    assert "justify-content:space-between" not in core.replace(" ", ""), \
+        "核心注入 CSS 不得用 justify-content:space-between(同上)"
+
+
+def test_drawer_tpl_trackers_card_uniform_height():
+    """04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障) ——
+    缺陷: 虚拟合并卡沿用设计稿 footer 的长描述后, 卡身比实体卡高出一截 —— 同一栅格里同为
+    「未启用」的实体卡(真浏览器实测 69px)与虚拟卡(100px)高度不一致。口径(用户拍板「同排
+    等高」): 栅格 .dt04-grid 走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡
+    恒等高, 无需给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉
+    三件事: ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③virtualCardHtml
+    内不得再出现 dt04-vnote(实体『未启用』卡的同名短注是另一回事, 别顺手连类一起删)。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    name = "04-trackers-status-cards-tall.js"
+    text = open(os.path.join(vdir, name), encoding="utf-8").read()
+
+    # 1. 同排等高机制: .dt04-grid 必须 stretch(与 align-items:start 互斥)
+    grid = [l for l in text.splitlines() if ".dt04-grid {" in l]
+    assert grid, f"drawer_tpl/{name}: 缺 .dt04-grid 规则(形态漂移, 同步本守阵)"
+    assert "align-items:stretch" in grid[0].replace(" ", ""), \
+        f"drawer_tpl/{name}: .dt04-grid 必须 align-items:stretch(同排等高口径; 缺则虚拟卡与同排实体卡高度不一致复发)"
+    assert "align-items:start" not in text.replace(" ", ""), \
+        f"drawer_tpl/{name}: 出现 align-items:start(卡片栅格等高机制被改回, 2026-10-10 报障复发)"
+
+    # 2. 虚拟合并卡: 描述文案 + 描述行都不许回来
+    assert "私有 tracker 种子" not in text, \
+        f"drawer_tpl/{name}: 虚拟条目描述文案回潮(2026-10-10 用户要求移除)"
+    m = re.search(r"function virtualCardHtml\([^)]*\) \{(.*?)\n  \}", text, re.S)
+    assert m, f"drawer_tpl/{name}: virtualCardHtml 形态漂移(守阵正则失配, 同步本守阵)"
+    assert "dt04-vnote" not in m.group(1), \
+        f"drawer_tpl/{name}: 虚拟合并卡又挂 dt04-vnote 描述行(卡身再次高出实体卡)"
+
+    # 3. 实体「未启用」卡的短注(vnote 类)必须保留 —— 别把整个类连带删掉
+    assert ".drawer .dt04-vnote {" in text, \
+        f"drawer_tpl/{name}: .dt04-vnote 类被整体删除(实体『未启用』卡的短注仍用它)"
+
+
+def test_drawer_tpl_variant_field_icons():
+    """详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)
+    字段行必须消费 drawerGeneralSections() 自带的行级 icon 数据(sprite `<use href>` 静态引用,
+    字符串拼 HTML 不走 Vue 绑定)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典选择器
+    .f-row .ico-t-* 在变体行不命中, 变体必须自带重定作用域的色表); traffic 三变体(13/14/15)
+    KPI/解读行必须含 sprite 图标引用; 全部六变体的 #i-* 引用都不得超出三皮肤 index.html
+    sprite 的既有 symbol 集合(三皮肤集合还必须两两相等, 防单边加图标), 且不得引入外部图标库
+    (<img / iconfont / fontawesome / material-icons)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. sprite 单点: 三皮肤 index.html 的 symbol id 集合两两相等(变体引用的前提交底)
+    sprite_ids = None
+    for ui in _UI_ALL:
+        html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        ids = set(re.findall(r'id="(i-[a-z0-9-]+)"', html))
+        assert ids, f"{ui}: index.html 未找到 sprite symbol(图标引用的解析基点缺失)"
+        if sprite_ids is None:
+            sprite_ids = ids
+        else:
+            assert ids == sprite_ids, f"{ui}: sprite symbol 集合与其它皮肤不一致(单边加图标)"
+
+    # 2. general 三变体: 消费 r.icon + icoTone 同表 + 自带 .ico-t-* 着色 CSS
+    for name in ("01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js"):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert 'href="${r.icon}"' in text or 'href="${icon}"' in text, \
+            f"drawer_tpl/{name}: 字段行未消费行级 icon 数据(Q2: 变体丢弃 drawerGeneralSections 图标字段复发)"
+        assert '"#i-download": "ico-t-io"' in text, \
+            f"drawer_tpl/{name}: 缺 icoTone 同表派生(着色机制与经典链漂移)"
+        for tone in (
+            "ico-t-io", "ico-t-cap", "ico-t-time", "ico-t-site", "ico-t-sw", "ico-t-id", "ico-t-path", "ico-t-state"
+        ):
+            assert f".{tone} {{" in text, \
+                f"drawer_tpl/{name}: 缺 .{tone} 着色 CSS(经典 .f-row .ico-t-* 作用域在变体行不命中, 必须自带色表)"
+
+    # 3. traffic 三变体: KPI/解读行含 sprite 图标引用(上下行累计为基线, 任一变体缺即退化为纯文字)
+    for name in (
+        "13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js", "15-traffic-adaptive-collapsed.js"
+    ):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        for icon in ("#i-upload", "#i-download"):
+            assert icon in text, \
+                f"drawer_tpl/{name}: KPI 行缺 sprite 图标 {icon}(Q2: traffic 变体零图标复发)"
+
+    # 4. 引用不越界 + 不引入外部图标库(全变体扫描, 含未来新增文件)
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        unknown = {r for r in re.findall(r"#(i-[a-z0-9-]+)", text) if r not in sprite_ids}
+        assert not unknown, f"drawer_tpl/{name}: 引用了 sprite 不存在的图标 {sorted(unknown)}(不得凭空造 id)"
+        low = text.lower()
+        for bad in ("<img", "iconfont", "fontawesome", "material-icons"):
+            assert bad not in low, \
+                f"drawer_tpl/{name}: 引入外部图标形态 {bad}(图标只许用站内 SVG sprite)"
+
+
+def test_drawer_tpl_table_variants_scrollleft_restore():
+    """表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) ——
+    dt06/07/08/09 四个定宽 grid 表格变体最小宽约 990-1000px, 窄窗口(含 <=900px 固定全屏态)下
+    drawer-body overflow:auto 必然横向滚动; 整帧重建(sig 变)只还 scrollTop 会把用户的横向滚动位
+    打回最左。骨架收口后单点在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先
+    scrollTop 后), 守阵钉住: 核心实现两轴成对且恢复次序正确 + 四变体整帧重建都包在 withScroll
+    回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮。"""
+    core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
+    for axis in ("scrollTop", "scrollLeft"):
+        assert f"sc ? sc.{axis} : 0" in core, \
+            f"核心 withScroll 缺 {axis} 读取(纵横成对自保)"
+    restore_l = "sc.scrollLeft = left;"
+    restore_t = "sc.scrollTop = top;"
+    assert restore_l in core and restore_t in core, \
+        "核心 withScroll 缺滚动位恢复(纵横成对自保纪律)"
+    assert core.index(restore_l) < core.index(restore_t), \
+        "核心 withScroll 恢复次序漂移(应 scrollLeft 先 scrollTop 后)"
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    for name in (
+        "06-trackers-table-collapsed.js", "07-peers-dashboard-tall.js", "08-peers-groups-low.js",
+        "09-peers-density-collapsed.js"
+    ):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "H.withScroll(host, () => {" in text, \
+            f"drawer_tpl/{name}: 整帧重建未走核心 withScroll(滚动自保单点回潮/漂移)"
+        rebuild = "host.replaceChildren(document.createRange().createContextualFragment(html));"
+        assert text.count(rebuild) == 1, \
+            f"drawer_tpl/{name}: 整帧重建调用点形态漂移(守阵按单点定位, 同步本守阵)"
+        assert text.index("H.withScroll(host") < text.index(rebuild), \
+            f"drawer_tpl/{name}: 整帧重建必须落在 withScroll 回调内(滚动位自保失效)"
+        assert "host.parentElement" not in text and "scroller" not in text, \
+            f"drawer_tpl/{name}: 变体内再现分散滚动自保(收口后单点在核心 withScroll, 报告 26-10-07-0845)"
+
+
+def test_drawer_tpl_trackers_per_tracker_reannounce():
+    """06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) ——
+
+    逐行倒计时从「种子级 detail.reannounce_in 全局近似」升级为「行级 next_announce(qB 5.2+ 随
+    /trackers 透传, Unix epoch 秒)减 now」。钉住: ①真口径分支读行级 t.next_announce 且先减
+    nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); ②「全局」标(dt06-gb)
+    只许出现在回退分支 —— 真口径行不得带它; ③回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
+    ④nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧); ⑤真口径分支不画微条(per-tracker interval
+    不可得, 分母不存在, 不造假); ⑥调用点 nextHtml 必须拿到行 t 与 nowSec。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    text = open(os.path.join(vdir, "06-trackers-table-collapsed.js"), encoding="utf-8").read()
+    # ① 真口径: 读行级 next_announce + 先减 now
+    assert "t.next_announce" in text, "06 逐行倒计时未读行级 next_announce(P-02 真口径回退)"
+    assert "Math.round(na - nowSec)" in text, "06 未以 epoch 减 nowSec 得剩余(epoch 当倒计时 = 事故根因)"
+    # 真口径分支 = nextHtml 里回退行(const d = ...)之前的那段
+    real_branch = text[text.index("function nextHtml"):text.index("const d = (ctx.drawer")]
+    # ②「全局」标只在回退分支
+    assert "dt06-gb" not in real_branch, "06 真口径行仍带「全局」标(真值不该标全局)"
+    # ③ 回退分支仍在
+    assert "dt06-gb" in text, "06 回退分支(全局近似)被删(qB < 5.2 无 next_announce 会整列空白)"
+    assert "detail.reannounce_in" in text, "06 回退分支未用种子级 detail.reannounce_in"
+    # ④ nowSec 计入 sig(否则跳过重建冻帧)
+    assert re.search(r'"\|" \+ nowSec\b', text), "06 未把 nowSec 计入 sig(跳过重建会把倒计时冻在上一帧)"
+    # ⑤ 真口径分支不画微条
+    assert "dt06-tbar" not in real_branch, "06 真口径行仍画微条(per-tracker interval 不可得, 属造假)"
+    # ⑥ 调用点传参
+    assert "nextHtml(ctx, t, nowSec)" in text, "06 nextHtml 调用点未传行 t / nowSec(真口径拿不到数据)"
+
+
+def test_drawer_tpl_a11y_and_fetch_error_states():
+    """详情面板变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) ——
+    核心层 drawer-close 钮 aria-label(种子/流量两头部成对, 仅 svg 无文字读屏不可达);
+    纯 div/span 模拟控件 role="button" tabindex="0": 01/02/03/05/08 折叠组头(含 aria-expanded)
+    + 07/08/09 排序表头(含 aria-sort 升/降/无随排序态输出)+ 05/06 msg 展开行; keydown 委托与
+    click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space 转发前排除原生 button/summary 等
+    自身发 click 的元素(防双重触发); 三个列表 fetcher 失败标记(trackersError/filesError/
+    peersError)成功落袋即清、换目标作废; 九个 fetch 型变体(04/05/06/07/08/09/10/11/12)
+    空列表先判错误态再判空态, trackers/peers 文案带自动刷新重试口径(5s 轮询真实存在)、
+    content 文案不承诺自动重试(content 页签无轮询)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. 核心层关闭钮 aria-label(种子/流量两头部成对各一处; 原生 button 键盘本可达, 缺的只是可访问名)
+    # W3(计划 26-10-11-2106): 关闭钮收进 <aq-drawer-head> 外壳(组件模板恰一枚, 两形态同源);
+    # drawer.html 零复写(复写即「两份实现」回潮)
+    head_tpl = open(os.path.join(shared, "tpl", "drawer-head.html"), encoding="utf-8").read()
+    assert head_tpl.count('<button class="drawer-close" aria-label="关闭详情面板"') == 1, \
+        "drawer-head.html: drawer-close 钮缺 aria-label 或不在外壳组件内(W3 单点)"
+    assert 'drawer-close' not in drawer_tpl, "drawer.html 复写 drawer-close 钮(W3 起归 <aq-drawer-head>)"
+
+    # 1.5 挂摘纪律单点(骨架收口 26-10-07-0845): 核心 wireEvents/unwireEvents 挂摘必须成对
+    # (同一张 host.__dtEvents 记账表), 变体不再各自维护 __dtNNWired 标志
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert "for (var k in map) host.addEventListener(k, map[k]);" in core \
+        and "for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);" in core, \
+        "核心 wireEvents/unwireEvents 挂摘不成对(换变体监听叠加回潮)"
+
+    # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
+    fold_variants = (
+        "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
+        "05-trackers-health-groups-low.js", "08-peers-groups-low.js"
+    )
+    sort_variants = ("07-peers-dashboard-tall.js", "08-peers-groups-low.js", "09-peers-density-collapsed.js")
+    msg_variants = ("05-trackers-health-groups-low.js", "06-trackers-table-collapsed.js")
+    all_a11y = sorted(set(fold_variants + sort_variants + msg_variants))
+    for name in all_a11y:
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        if name in fold_variants:
+            assert re.search(r'data-fold[^>]*role="button"|role="button"[^>]*data-fold', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: 折叠组头缺 role=button(P3-4: 纯 div+click 键盘不可达)"
+            assert 'aria-expanded="' in text, \
+                f"drawer_tpl/{name}: 折叠组头缺 aria-expanded(读屏不知道折叠态)"
+        if name in sort_variants:
+            assert re.search(r'role="button"[^>]*aria-sort="|aria-sort="[^>]*data-sort', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: 排序表头缺 role=button + aria-sort(P3-4: 升/降/无随排序态输出)"
+            assert 'ui.sortDir === 1 ? "ascending" : "descending"' in text, \
+                f"drawer_tpl/{name}: aria-sort 未按当前排序态输出升降(只在渲染函数里随态输出)"
+        if name in msg_variants:
+            assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', text.replace("\n", " ")), \
+                f"drawer_tpl/{name}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
+        assert 'tabindex="0"' in text, f"drawer_tpl/{name}: 模拟控件缺 tabindex=0(键盘不可聚焦)"
+        # keydown 委托与 click 委托成对挂宿主(纯 div 模拟无原生 click, Enter/Space 手动转发):
+        # 挂摘纪律收口在核心 wireEvents/unwireEvents 单点(26-10-07-0845), 变体只声明事件表
+        assert "click: onClick" in text and "keydown: onKeyDown" in text, \
+            f"drawer_tpl/{name}: keydown 委托与 click 委托未成对挂宿主(模拟控件键盘不触发)"
+        assert "H.wireEvents(host" in text and "H.unwireEvents(host)" in text, \
+            f"drawer_tpl/{name}: 挂摘未走核心成对 helper(监听叠加回潮)"
+        # 双重触发去重: 焦点在原生交互元素上时不转发(原生 Enter 本来就发 click)
+        assert 'closest("button, input, select, textarea, a[href], summary")' in text, \
+            f"drawer_tpl/{name}: keydown 转发未排除原生交互元素(Enter 会 click+keydown 双重触发)"
+
+    # 3. 失败标记: 显式建字段(vue-reactivity 口径) + catch 落标记 + 成功清 + 换目标作废
+    #    W1 起四 fetcher/软切换作废落 drawer_store.js(数据层), 初值显式建字段仍住 drawer.js
+    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    for fld in ("trackersError", "filesError", "peersError"):
+        assert f'{fld}: ""' in drawer_js, \
+            f"drawer.js: drawer 初值缺 {fld} 显式建字段(vue-reactivity 坑: 后补属性不进响应式)"
+        assert f"this.drawer.{fld} = e.message" in store_js, \
+            f"drawer_store.js: {fld} 未在 fetcher catch 落失败标记(P3-5: 变体拿不到区分信号)"
+        assert f'this.drawer.{fld} = "";' in store_js, \
+            f"drawer_store.js: {fld} 成功落袋后未清(上一次失败永久钉住错误态)"
+    assert 'this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";' in store_js, \
+        "drawer_store.js: 换目标(软切换)未作废三个失败标记(旧目标错误态串显到新目标)"
+
+    # 4. 九个 fetch 型变体: 错误态先于空态; 文案与轮询事实对应(trackers/peers 5s 轮询=可写自动重试;
+    #    content 无轮询=只陈述失败, 不得虚构「稍后自动重试」)
+    err_expect = {
+        "04-trackers-status-cards-tall.js": ("trackersError", "Tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "05-trackers-health-groups-low.js": ("trackersError", "Tracker 列表加载失败, 将在下次自动刷新时重试", "暂无 tracker"),
+        "06-trackers-table-collapsed.js": ("trackersError", "Tracker 列表加载失败", "暂无 tracker"),
+        "07-peers-dashboard-tall.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
+        "08-peers-groups-low.js": ("peersError", "用户列表加载失败, 将在下次自动刷新时重试", "暂无已连接用户"),
+        "09-peers-density-collapsed.js": ("peersError", "用户列表加载失败", "暂无已连接用户"),
+        "10-content-tree-detail-tall.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+        "11-content-treegrid-batch-low.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+        "12-content-space-treemap-collapsed.js": ("filesError", "文件列表加载失败, 数据不可用", "无文件列表"),
+    }
+    for name, (fld, err_text, empty_text) in err_expect.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert f"ctx.drawer.{fld}" in text, \
+            f"drawer_tpl/{name}: 变体未读 {fld}(P3-5: 失败与空列表同形态回潮)"
+        assert err_text in text, \
+            f"drawer_tpl/{name}: 缺错误态文案「{err_text}」(P3-5: 失败态分支被摘)"
+        assert text.index(err_text) < text.index(empty_text), \
+            f"drawer_tpl/{name}: 错误态分支必须先于空态分支(空态先行 = 失败仍显示「{empty_text}」)"
+        if name[:2] in ("10", "11", "12"):
+            # content 组无轮询: 失败文案只陈述失败, 不得虚构「稍后自动重试」承诺(P3-5 口径)
+            assert "自动重试" not in text and "自动刷新" not in text, \
+                f"drawer_tpl/{name}: content 组无轮询, 失败文案不得虚构自动重试承诺(P3-5 口径)"
+        else:
+            # trackers/peers 组 5s 轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
+            assert "下次自动刷新时重试" in text, \
+                f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(5s 轮询真实)"
+
+
+def test_drawer_tpl_content_row_keyboard_roving():
+    """content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) ——
+    dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk]/体积榜行 [data-row] 原为纯 div+click,
+    键盘/读屏不可达(修复轮 P3-4 缩围转来的已记未做项)。按 issue 建议候选① roving tabindex 落地:
+    核心 helpers 四件套单点(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦);
+    行容器 tabindex=-1 不进 Tab 序(行内原生控件自然参与 Tab; 整行不加 role=button —— 行内已含
+    原生控件, 嵌套交互语义反而更糟, 入池报告根因段口径); :focus-visible 焦点可见; keydown 委托
+    成对挂宿主且只有 ev.target 是行容器自身才接管; 重建前记账/重建后回焦成对(原子换帧打断焦点
+    链); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 与 mouseover/out 同语义)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. 核心 helpers 四件套单点(变体各自复刻会漂移, 口径同 26-10-07-0845 骨架收口)
+    for fn in ("roving: function", "rowFocusKey: function", "rowRestore: function", "rowMove: function"):
+        assert fn in core, f"核心 helpers 缺 {fn.split(':')[0]}(行级键盘单点被拆散/摘除)"
+
+    # 2. 三变体接入面: 行容器 tabindex=-1 + 锚点/回焦/移焦走核心单点 + keydown 委托挂宿主
+    cases = {
+        "10-content-tree-detail-tall.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
+        "11-content-treegrid-batch-low.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
+        "12-content-space-treemap-collapsed.js":
+            ["H.roving(mapEl, \"data-blk\"", "H.roving(host, \"data-row\"", "ev.target !== el"],
+    }
+    for name, hooks in cases.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert 'tabindex="-1"' in text, \
+            f"drawer_tpl/{name}: 行/块容器缺 tabindex=-1(roving 基线, 容器混进 Tab 序)"
+        assert 'role="button"' not in text, \
+            f"drawer_tpl/{name}: 整行加了 role=button(行内已含原生控件, 嵌套交互语义更糟 —— 入池根因段口径)"
+        for hook in hooks:
+            assert hook in text, f"drawer_tpl/{name}: 缺接入点 {hook}(锚点/接管守卫被摘)"
+        assert "H.rowFocusKey(" in text and "H.rowRestore(" in text, \
+            f"drawer_tpl/{name}: 重建前记账/重建后回焦不成对(原子换帧打断焦点链, 一次激活就甩回文档头)"
+        assert "H.rowMove(" in text, \
+            f"drawer_tpl/{name}: 方向键移焦未走核心 rowMove(键盘用户无法在行间转移焦点)"
+        assert "keydown: onKeyDown" in text, \
+            f"drawer_tpl/{name}: keydown 委托未挂宿主(Enter/Space/方向键不触发)"
+        assert "H.wireEvents(host" in text and "H.unwireEvents(host)" in text, \
+            f"drawer_tpl/{name}: 挂摘未走核心成对 helper(监听叠加回潮)"
+        assert ":focus-visible" in text, \
+            f"drawer_tpl/{name}: 行/块容器缺 :focus-visible 样式(键盘焦点不可见)"
+
+    # 3. dt12 树图块焦点互联: 复用悬停 onOver/onOut(focusin/focusout 冒泡同语义, 对侧加/摘 hl)
+    t12 = open(os.path.join(vdir, "12-content-space-treemap-collapsed.js"), encoding="utf-8").read()
+    assert "focusin: onOver" in t12 and "focusout: onOut" in t12, \
+        "drawer_tpl/12: 树图块焦点互联未复用悬停 onOver/onOut(键盘选中块时体积榜无联动高亮)"
+
+
+def test_drawer_tpl_variant_no_singleton_shadowing():
+    """变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」)。
+
+    根因: dt12 layoutMap 写了 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把
+    文件头 helpers 单点(`const H = reg.helpers`)遮蔽成数字, 同函数尾 `H.rowFocusKey(...)` 对数字
+    取属性抛 TypeError —— 树图块只在 layoutMap 里绘制, 抛错 = 树图区永远空白; 经 _dtRender catch
+    走「渲染抛错回落 classic」分支后选择被复位并落盘, 用户选择跨会话静默丢失。
+    守阵不变式: 变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件
+    (单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)
+    与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)。
+    """
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    if not os.path.isdir(vdir):
+        return
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        # 先摘掉单点声明行(整行, 含行内尾注), 只对文件里真实声明了单点的名做禁令
+        singletons = set()
+        kept = []
+        for line in text.splitlines():
+            m = re.match(r"^\s*const\s+([TRH])\s*=\s*reg\.(?:dtHtml|dtRaw|helpers)\b", line)
+            if m:
+                singletons.add(m.group(1))
+                continue  # 整行摘除: 单点声明自身形如 "const H =", 不摘会自证违例
+            kept.append(line)
+        if not singletons:
+            continue
+        body = "\n".join(kept)
+        for n in sorted(singletons):
+            # 形态一: 声明语句(至分号/行尾)内出现 "<n> =" —— 覆盖 const H = x 与
+            # let a = 1, H = 2(本案根因形态); [^;\n]* 把搜索域限制在单条声明语句内
+            m = re.search(r"\b(?:const|let|var)\b[^;\n]*\b%s\s*=" % n, body)
+            assert not m, (
+                f"drawer_tpl/{name}: 单点 {n} 被局部声明遮蔽({m.group(0).strip()!r}) —— "
+                f"遮蔽后 {n}.xxx / T` / R() 对非对象取属性抛 TypeError, 变体渲染回落 classic; "
+                f"局部名一律改名(如 mapH/RH)"
+            )
+            # 形态二: 解构声明绑定名(const { H } = ... / const { a, H: y } = ...);
+            # const { num } = H 是"读单点"不是"绑同名", 不得误伤
+            m = re.search(r"\b(?:const|let|var)\s*\{[^};\n]*\b%s\b\s*[}:,]" % n, body)
+            assert not m, f"drawer_tpl/{name}: 单点 {n} 被解构声明遮蔽(const {{ {n} }} = ...)"
+
+
+def test_drawer_tpl_cross_seed_fold():
+    """详情面板折叠态跨种子口径统一守阵(P3-6, 报告 26-10-07-0542) —— content 组 dt10/11/12
+    换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选, 不得清折叠记账(ui.folded/ui.colG;
+    用户拍板统一为跨种子保持, 以 general 组 dt01/02 口径为准; 记账 key 是 path 不含 hash, 新种子
+    path 空间不同则旧条目自然不命中, 同名目录延续上一部折叠选择; dt11 勾选集必须继续重置 ——
+    批量优先级真提交, 旧勾选落到新种子文件上是误操作面); 折叠态与种子无关或无折叠的变体
+    (01-09/13-15, 组头 key 是节名/组键/tracker url)不得引入 lastHash 重置机制; 2026-10-10
+    模板选择迁右键后, 头部 .dt-select 下拉与整套定宽规则一并从核心退役(旧 P3-7 宽度守阵作废,
+    核心不得再注入 .dt-select)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    vdir = os.path.join(shared, "drawer_tpl")
+
+    # 1. P3-6: dt10/11/12 的换种子重置块不再清折叠记账, 且按 path 记账的容器仍在
+    fold_accounts = {
+        "10-content-tree-detail-tall.js": ("folded", 'data-tgl="${n.path}"'),
+        "11-content-treegrid-batch-low.js": ("folded", 'data-tgl="${r.path}"'),
+        "12-content-space-treemap-collapsed.js": ("colG", 'data-gh="${dir.path}"'),
+    }
+    for name, (fold_key, path_attr) in fold_accounts.items():
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        m = re.search(r"if \(hash !== ui\.lastHash\) \{(.*?)\n    \}", text, re.S)
+        assert m, f"drawer_tpl/{name}: 换种子重置块形态漂移(守阵正则失配, 同步本守阵)"
+        block = m.group(1)
+        assert "ui.lastHash = hash" in block, \
+            f"drawer_tpl/{name}: lastHash 更新丢失(选中/筛选的重置锚点没了)"
+        assert fold_key not in block, \
+            f"drawer_tpl/{name}: 换种子重置块清了折叠记账 {fold_key}(P3-6: 口径已统一为跨种子保持, 不得回潮)"
+        assert f"{fold_key}: new Set()" in text, \
+            f"drawer_tpl/{name}: 折叠记账容器 {fold_key} 消失(跨种子保持的载体)"
+        assert path_attr in text, \
+            f"drawer_tpl/{name}: 折叠交互未按 path 落账({path_attr} 形态漂移, 记账 key 不再是 path)"
+
+    # 2. dt11 勾选集仍随换种子重置(批量优先级真提交, 不许跨种子残留; 折叠是纯视图语义, 不同)
+    text11 = open(os.path.join(vdir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
+    block11 = re.search(r"if \(hash !== ui\.lastHash\) \{(.*?)\n    \}", text11, re.S).group(1)
+    assert "ui.checked = new Set()" in block11, \
+        "drawer_tpl/11: 换种子重置块丢了勾选集清空(批量优先级会落到新种子文件上)"
+
+    # 3. 其余变体(01-09/13-15)不得出现换种子重置机制 —— 它们没有折叠态或记账 key 与种子
+    #    无关(dt01/02/03 节名·卡片id / 05 组键·tracker url / 06 tracker url / 08 组键;
+    #    04/07/09 仅筛选, 13/14/15 traffic 无折叠), lastHash 机制进它们即口径漂移
+    for name in sorted(os.listdir(vdir)):
+        if not name.endswith(".js") or name[:2] in ("10", "11", "12"):
+            continue
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "lastHash" not in text, \
+            f"drawer_tpl/{name}: 出现 lastHash 换种子重置机制(该变体折叠/展开 key 与种子无关或无折叠, 不应有此机制)"
+
+    # 4. 2026-10-10 模板选择迁右键: 头部 .dt-select 下拉与整套定宽规则一并退役(旧 P3-7/P3-6
+    #    宽度守阵随之作废) —— 核心不得再注入任何 .dt-select 规则(「选择器占位宽随页签变」的病根
+    #    随原生 select 一并消失, 选择入口改由 openDrawerMenu 右键菜单承担, 见
+    #    test_drawer_tpl_menu_right_click_selection)
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert '".drawer .dt-select {' not in core, \
+        "核心仍残留 .dt-select 规则(2026-10-10 模板选择已迁右键菜单, 下拉定宽规则应一并删除)"
+
+
+def test_drawer_tpl_menu_right_click_selection():
+    """详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键;
+    合并时左边弹常规的模板选择, 右边弹内容的模板选择」) —— 头部 .dt-select 下拉退役; 右键命中区域
+    决定菜单目标页签: 变体/经典挂载宿主 data-dt-host(含 traffic-pre/post 去后缀)优先, 合并列
+    data-dt-tab 兜列头/列空白, 否则当前页签; 菜单 = 该页签模板选项(经典恒在首位, 勾选态 .ctx-tick)
+    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。
+    2026-10-10 用户报「合并后右侧空白右键弹左列模板」: 命不中 host/col 时(列间隙/分栏两侧留白
+    不落列元素上)不得直接回落当前页签, 正文区内按指针 x 归列(_drawerMenuColByX)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
+    ctx_menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
+
+    # 1. 核心层: 菜单 computed/落点方法齐全, 退役的选择器 API 不得残留
+    for member in ("dtMenuTab", "dtMenuTplOptions", "dtMenuTplCurrent", "dtMenuMergeOn"):
+        assert re.search(rf"^      {member}\(\)", core, re.M), f"核心缺右键菜单 computed {member}"
+    assert re.search(r"^      dtMenuPick\(id\) \{", core, re.M), "核心缺 dtMenuPick 落点方法"
+    for retired in ("dtTplOptions", "dtTplCurrent"):
+        assert not re.search(rf"^      {retired}\(\)", core, re.M), f"核心仍定义退役的 computed {retired}"
+    assert not re.search(r"^      dtPick\(", core, re.M), "核心仍定义退役方法 dtPick"
+    assert '".drawer .dt-select {' not in core, "核心仍注入 .dt-select(头部下拉已退役)"
+
+    # 2. menu.js: openDrawerMenu 放行 seed+traffic(流量形态也要能选流量模板), 目标页签解析成对
+    assert re.search(r"openDrawerMenu\(event\) \{", menu_js), "menu.js 缺 openDrawerMenu"
+    assert "!this.drawerIsSeed && !this.drawerIsTraffic" in menu_js, \
+        "openDrawerMenu 未同时放行 seed/traffic 形态(流量形态模板选择无入口; W3 走判据单点)"
+    assert "_drawerMenuTab(event)" in menu_js, "openDrawerMenu 未落目标页签(_drawerMenuTab)"
+    assert 'closest("[data-dt-host]")' in menu_js and 'closest("[data-dt-tab]")' in menu_js, \
+        "_drawerMenuTab 缺区域解析(宿主 data-dt-host / 合并列 data-dt-tab)"
+    assert 'replace(/-(?:pre|post)$/' in menu_js, \
+        "_drawerMenuTab 未剥离 traffic-pre/post 后缀(流量变体宿主右键取不到 traffic 页签)"
+
+    # 2b. 合并双列兜底(2026-10-10 用户报「合并后右侧空白右键弹左列模板」): 列间隙/分栏两侧留白
+    #     不属于任何 .dt-col, 命不中 host/col 时必须在正文区内按指针 x 归列, 不得直接回落当前页签。
+    assert "_drawerMenuColByX(event)" in menu_js, \
+        "menu.js 缺合并列按 x 归列的兜底(_drawerMenuColByX, 右侧空白右键会回落左列模板)"
+    assert 'this.dtSplitOn && el.closest(".drawer-body")' in menu_js, \
+        "x 归列兜底未限定在合并双列 + 正文区内(页签栏/头部仍应回落当前页签)"
+    assert 'querySelectorAll(".drawer .drawer-split .dt-col[data-dt-tab]")' in menu_js, \
+        "_drawerMenuColByX 未按合并列 DOM(.dt-col[data-dt-tab])取列"
+
+    # 3. ctx-menus.html: 菜单渲模板选项 + 勾选态 + 条件合并开关
+    assert 'v-for="o in dtMenuTplOptions"' in ctx_menus, "ctx-menus 缺模板选项渲染"
+    assert "dtMenuPick(o.id)" in ctx_menus, "ctx-menus 缺模板选择落点 dMenuPick"
+    assert "dtMenuTplCurrent === o.id" in ctx_menus, "ctx-menus 缺模板选项勾选态"
+    assert "dtMenuMergeOn" in ctx_menus and "dtToggleMerge()" in ctx_menus, \
+        "ctx-menus 缺合并开关(条件渲染 dtMenuMergeOn)"
+
+
+def test_drawer_tpl_classic_default():
+    """详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层
+    node 电池: 白名单脏值/未注册 id/坏 JSON 一律回落 classic; 注册 fail-fast 四分支; dtHtml 转义
+    与 dtRaw 豁免; classic 恒在切换器首位。无 node 静态兜底: app.js initialDrawerTpl 缺核心时
+    也必须返回全 classic 映射(不能返回空对象 —— 经典包裹层 v-show 读 drawerTplSel.<tab>, 缺键
+    会把经典正文藏掉, 与"零观感差异"验收门冲突)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    for tab in ("general", "trackers", "peers", "content", "traffic"):
+        assert f'{tab}: "classic"' in app_js, f"initialDrawerTpl 兜底映射缺 {tab}(核心未载入时经典正文会被藏掉)"
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _DT_REGISTRY_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"drawer_templates node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"classic 默认电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_DT_FALLBACK_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩(dtPersistSel 落盘走它); document 保持 undefined —— dtInjectCss 有守卫跳过注入 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const M = window.AQB_DRAWER_TPL.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+/* 假 ctx: 只带回落路径触碰的面(drawerTplSel + 挂载态 + 持久化方法, 与真根实例的字段面对齐) */
+function makeCtx(sel) {
+  const ctx = { drawerTplSel: Object.assign({}, sel), _dtMounted: null };
+  ctx.dtPersistSel = M.dtPersistSel;
+  return ctx;
+}
+function makeHost() {
+  const host = { children: [], cleared: false, destroyed: false,
+    replaceChildren() { host.children.length = 0; host.cleared = true; } };
+  return host;
+}
+const errors = [];
+const realErr = console.error;
+console.error = (...a) => errors.push(a.map(String).join(" "));
+
+window.AQB_DRAWER_TPL_REG.register({ id: "boom", tab: "general", label: "B",
+  render() { throw new Error("boom-render"); },
+  destroy(h) { h.destroyed = true; } });
+
+/* 主场景: 变体渲染抛错 -> 该页签复位 classic + 落盘 + 摘挂载 + 清宿主 + destroy + 不吞栈 */
+const sel = { general: "boom", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
+const ctx = makeCtx(sel);
+const host = makeHost();
+const st = { tab: "general", entry: window.AQB_DRAWER_TPL_REG.get("general", "boom"), host: host };
+ctx._dtMounted = st;
+M._dtRender.call(ctx, st);
+
+ok("渲染抛错后该页签复位 classic(经典层 v-show 接管)", ctx.drawerTplSel.general === "classic");
+ok("复位随 dtPersistSel 落盘(autoqb.ui.drawerTpl)",
+  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).general === "classic"; } catch (e) { return false; } })());
+ok("其它页签选择不受牵连",
+  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).trackers === "classic"; } catch (e) { return false; } })());
+ok("挂载态已摘除(后续 _dtNotify 按 classic 路径续走)", ctx._dtMounted === null);
+ok("宿主子树已清空", host.cleared === true && host.children.length === 0);
+ok("变体 destroy 已回调(定时器/监听清理不丢)", host.destroyed === true);
+ok("console.error 未吞栈且带页签与变体 id",
+  errors.length === 1 && errors[0].indexOf("boom") >= 0 && errors[0].indexOf("general") >= 0);
+
+/* 稳态: sel 已 classic(重复回落/经典渲染自身抛错路径不触及本函数, 但要稳) */
+errors.length = 0;
+delete store["autoqb.ui.drawerTpl"];
+const ctx2 = makeCtx({ general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" });
+M._dtRender.call(ctx2, { tab: "general", entry: st.entry, host: makeHost() });
+ok("sel 已 classic 时稳态不重复复位不落盘", ctx2.drawerTplSel.general === "classic" && !("autoqb.ui.drawerTpl" in store));
+
+console.error = realErr;
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed }));
+if (failed.length) process.exit(1);
+"""
+
+
+def test_drawer_tpl_render_error_fallback_classic():
+    """变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 旧实现 catch 里只清宿主:
+    经典包裹层因 drawerTplSel.<tab> !== 'classic' 仍被 v-show 藏住 + .dt-host:empty 把空宿主
+    藏住, 两条退路同时断掉 = 该页签整幅空白。有 node 时真跑 _dtRender 抛错电池钉住回落五件
+    (复位 classic + 落盘 / 不牵连其它页签 / 摘挂载态 / 清宿主 + destroy 回调 / console.error
+    带页签与变体 id); 无 node 静态兜底: catch 块四要素缺一即红(只清宿主的空白降级不得回潮)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    m = re.search(r"_dtRender\(st\) \{\n(.*?)\n      \},", core, re.S)
+    assert m, "_dtRender 形态漂移(守阵正则失配, 同步本守阵)"
+    catch = m.group(1)
+    # R2 S1: 主列挂载态经 ownerKey 通道摘除(合并次列同式), 缺省键即主列 —— 语义等价旧直写
+    assert 'this[st.ownerKey || "_dtMounted"] = null' in catch, \
+        "回落必须摘挂载态(否则后续通知拿旧 st 重渲染已弃变体)"
+    assert 'this.drawerTplSel[st.tab] = CLASSIC' in catch and "this.dtPersistSel()" in catch, \
+        "回落必须复位该页签 drawerTplSel 并落盘(状态单点仍是 drawerTplSel, classic 插件接管)"
+    assert 'st.entry.id' in catch and "console.error" in catch, \
+        "回落必须 console.error 且带变体 id(不静默吞栈)"
+    assert "st.entry.destroy" in catch and "replaceChildren" in catch, \
+        "回落必须按 classic 语义卸载变体(destroy + 清宿主)"
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _DT_FALLBACK_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"回落 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"回落电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
 
 def test_frontend_reannounce_inactive_gate_wiring():
     """非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) ——
@@ -1281,8 +1921,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
       ①判定单点 decorate.js:两张表 + 读 state + 多目标任一活跃即可用(qB oneCanForceReannounce);
       ②右键菜单 ctx-menus.html 四支都挂 reannounceMenuGate();
       ③行为层:_actCore 的 reannounce 前置(早于乐观补丁/POST)+ _kbAct 的先拦后确认;
-      ④详情面板:torrentCmd 兜底闸门(旧变体 04/05/06 重报钮挂 drawerReannounceGate 一面随
-        W5 变体退役; 经典链无逐行重报钮, 面板内重报投递走 drawerCmd 同一判据)。
+      ④详情面板:04/05/06 重报钮挂 drawerReannounceGate() + 各变体 .is-gated CSS + torrentCmd 兜底。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     deco = open(os.path.join(shared, "decorate.js"), encoding="utf-8").read()
@@ -1329,7 +1968,19 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert kb_txt.index("_guardReannounce(") < kb_txt.index("confirmDialog("), \
         "键盘路径必须先拦再确认(先问「确定?」再回「不行」是坏体感)"
 
-    # ④ 详情面板行为层兜底(W5: 变体 04/05/06 重报钮随变体退役; drawerCmd 兜底闸门保留)
+    # ④ 详情面板: 三变体的重报钮 + 各变体 .is-gated CSS + torrentCmd 兜底(W7 恢复注: 变体层
+    #    随 W5 越权退役曾一并退场, W7 恢复后该断言面原样回归)
+    vdir = os.path.join(shared, "drawer_tpl")
+    for name, cls in (
+        ("04-trackers-status-cards-tall.js", "dt04-act"), ("05-trackers-health-groups-low.js", "dt05-act"),
+        ("06-trackers-table-collapsed.js", "dt06-act")
+    ):
+        t = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "drawerReannounceGate()" in t, f"{name} 重报钮未接 drawerReannounceGate(详情面板绕行路径)"
+        assert f".drawer .{cls}.is-gated" in t, f"{name} 缺 .{cls}.is-gated 置灰规则"
+        assert re.search(
+            rf'class="{cls}\$\{{rGate\.ok \? "" : " is-gated"\}}" data-act="report"', t), \
+            f"{name} 的 data-act=report 钮未按 rGate 置灰(仅删除钮该置灰=误伤)"
     assert "_guardReannounce({ keys: [], hashes: [target] })" in drawer_js, \
         "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"  # 2026-10-10(S3): 目标形参 hash -> target(显式传参, 缺省回落 menu.hash)
 
@@ -1379,212 +2030,6 @@ def test_frontend_reannounce_inactive_gate_wiring():
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], \
         f"强制汇报判定电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
-
-
-def test_drawer_tpl_a11y_and_fetch_error_states():
-    """详情面板可访问性 + fetch 失败标记守阵(P3-4/P3-5, 报告 26-10-07-0542 · W5 收敛版) ——
-    核心层 drawer-close 钮 aria-label(W3 计划 26-10-11-2106 起为**单点**: 关闭钮归
-    <aq-drawer-head> 外壳, 两形态此前各写一份 = 同一枚按钮复写两遍);
-    三个列表 fetcher 失败标记(trackersError/filesError/peersError)的数据层纪律:
-    显式建字段(vue-reactivity 口径)、catch 落标记、成功落袋即清、换目标作废。
-    W5(计划 26-10-11-2106)起变体退役, 原模拟控件 a11y 面(role=button/aria-sort/wireEvents
-    成对)与九个 fetch 型变体的错误态分支随之退役 —— 退役确认归 test_drawer_tpl_facility_retired;
-    经典链控件均为原生 button/details, 无模拟控件面。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
-    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()  # W1: fetcher 失败标记/换目标作废在数据层
-
-    # 1. 核心层关闭钮 aria-label(W3 计划 26-10-11-2106 起为**单点**): 关闭钮归 <aq-drawer-head>
-    #    外壳(两形态此前各写一份 = 同一枚按钮复写两遍), 故登记面从 drawer.html 移到组件模板,
-    #    口径由「两处成对」升级为「只有一处 + 两形态都走它」: 组件模板里恰一枚(带可访问名),
-    #    drawer.html 里零枚(复写不得回潮), 且两形态各有一个调用点。
-    head_tpl = open(os.path.join(shared, "tpl", "drawer-head.html"), encoding="utf-8").read()
-    assert head_tpl.count('<button class="drawer-close" aria-label="关闭详情面板"') == 1, \
-        "tpl/drawer-head.html: 关闭钮必须恰一枚且带可访问名(仅 svg 无文字读屏不可达)"
-    assert 'class="drawer-close"' not in drawer_tpl, \
-        "drawer.html 仍手写关闭钮(复写回潮: 关闭钮归 <aq-drawer-head> 外壳单点)"
-    # !按行首锚数调用点(不按子串): 上面那段说明注释里也写着组件名, 子串计数会把注释算进来
-    assert len(re.findall(r"^        <aq-drawer-head (?:v-if|v-else)", drawer_tpl, re.M)) == 2, \
-        "drawer.html 必须恰两个 <aq-drawer-head> 调用点(流量形态 v-if / 种子详情 v-else)"
-
-    # (W5 退役) 原 1.5 挂摘纪律与 2 模拟控件 a11y 两节随变体退役 —— 退役确认归
-    # test_drawer_tpl_facility_retired; 经典链控件均为原生 button/details, 无模拟控件面。
-
-    # 3. drawer.js 失败标记: 显式建字段(vue-reactivity 口径) + catch 落标记 + 成功清 + 换目标作废
-    for fld in ("trackersError", "filesError", "peersError"):
-        assert f'{fld}: ""' in drawer_js, \
-            f"drawer.js: drawer 初值缺 {fld} 显式建字段(vue-reactivity 坑: 后补属性不进响应式)"
-        assert f"this.drawer.{fld} = e.message" in store_js, \
-            f"drawer_store.js: {fld} 未在 fetcher catch 落失败标记(P3-5: 变体拿不到区分信号; W1 起 fetcher 在数据层)"
-        assert f'this.drawer.{fld} = "";' in store_js, \
-            f"drawer_store.js: {fld} 成功落袋后未清(上一次失败永久钉住错误态)"
-    assert 'this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";' in store_js, \
-        "drawer_store.js: 换目标(软切换)未作废三个失败标记(旧目标错误态串显到新目标; W1 起在数据层)"
-
-
-def test_drawer_tpl_menu_right_click_selection():
-    """详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键;
-    合并时左边弹常规的模板选择, 右边弹内容的模板选择」) —— 头部 .dt-select 下拉退役; 右键命中区域
-    决定菜单目标页签: 合并列 data-dt-tab 兜列头/列空白(W5 起无 data-dt-host 挂载宿主, 单栏正文
-    回落当前页签), 否则当前页签; 菜单 = 该页签档位选项(经典恒在首位, 勾选态 .ctx-tick)
-    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。
-    2026-10-10 用户报「合并后右侧空白右键弹左列模板」: 命不中 host/col 时(列间隙/分栏两侧留白
-    不落列元素上)不得直接回落当前页签, 正文区内按指针 x 归列(_drawerMenuColByX)。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    core = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()  # W6: 选择层新家
-    menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
-    ctx_menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
-
-    # 1. 核心层: 菜单 computed/落点方法齐全, 退役的选择器 API 不得残留
-    for member in ("dtMenuTab", "dtMenuTplOptions", "dtMenuTplCurrent", "dtMenuMergeOn"):
-        assert re.search(rf"^    {member}\(\)", core, re.M), f"核心缺右键菜单 computed {member}"
-    assert re.search(r"^    dtMenuPick\(id\) \{", core, re.M), "核心缺 dtMenuPick 落点方法"
-    # 1b. W5(计划 26-10-11-2106): 无插件重挂 —— 换档只是改 drawerTplSel, 正文由 Vue 响应式
-    #     自翻; 旧 $nextTick 挂载 / _dtSync 调用不得回潮(回潮 = 插件机械复活)。落盘 + 收菜单在。
-    _m = re.search(r"^    dtMenuPick\(id\) \{\n(.*?)\n    \},", core, re.M | re.S)
-    assert _m, "dtMenuPick 形态漂移(守阵正则失配, 同步本守阵)"
-    assert "this.dtPersistSel()" in _m.group(1) and "drawerTplSel[tab] = id" in _m.group(1) \
-        and "this.drawerMenu.visible = false" in _m.group(1), \
-        "dtMenuPick 必须落 drawerTplSel + 落盘 + 收菜单"
-    assert "_dtSync" not in _m.group(1) and "$nextTick" not in _m.group(1), \
-        "dtMenuPick 残留插件重挂机械(W5 已退役)"
-    assert "window.AQB_DRAWER_DENSITY.options" in _m.group(1), \
-        "dtMenuPick 白名单必须走密度档单点 options(不再查变体注册表)"
-    for retired in ("dtTplOptions", "dtTplCurrent"):
-        assert not re.search(rf"^    {retired}\(\)", core, re.M), f"核心仍定义退役的 computed {retired}"
-    assert not re.search(r"^    dtPick\(", core, re.M), "核心仍定义退役方法 dtPick"
-
-    # 2. menu.js: openDrawerMenu 放行 seed+traffic(流量形态也要能选流量模板), 目标页签解析成对
-    assert re.search(r"openDrawerMenu\(event\) \{", menu_js), "menu.js 缺 openDrawerMenu"
-    # W3(计划 26-10-11-2106): 形态判据收口后走派生单点(drawer.js 的 drawerIsSeed/drawerIsTraffic)
-    # —— 口径一字不变(两个形态都放行), 只是断言面换成单点形态; 判据本体与「收口」另由
-    # test_frontend_qb_traffic_chart_wiring 的形态判据段钉住(那里钉字面量只许出现在定义处)。
-    assert 'if (!this.drawerIsSeed && !this.drawerIsTraffic) return;' in menu_js, \
-        "openDrawerMenu 未同时放行 seed/traffic 形态(流量形态模板选择无入口; 判据须走单点)"
-    assert "_drawerMenuTab(event)" in menu_js, "openDrawerMenu 未落目标页签(_drawerMenuTab)"
-    assert 'closest("[data-dt-tab]")' in menu_js, \
-        "_drawerMenuTab 缺合并列区域解析(data-dt-tab)"
-    assert 'closest("[data-dt-host]")' not in menu_js, \
-        "menu.js 仍解析插件宿主锚 data-dt-host(W5 宿主已退役, 死代码不得残留)"
-
-    # 2b. 合并双列兜底(2026-10-10 用户报「合并后右侧空白右键弹左列模板」): 列间隙/分栏两侧留白
-    #     不属于任何 .dt-col, 命不中 host/col 时必须在正文区内按指针 x 归列, 不得直接回落当前页签。
-    assert "_drawerMenuColByX(event)" in menu_js, \
-        "menu.js 缺合并列按 x 归列的兜底(_drawerMenuColByX, 右侧空白右键会回落左列模板)"
-    assert 'this.dtSplitOn && el.closest(".drawer-body")' in menu_js, \
-        "x 归列兜底未限定在合并双列 + 正文区内(页签栏/头部仍应回落当前页签)"
-    assert 'querySelectorAll(".drawer .drawer-split .dt-col[data-dt-tab]")' in menu_js, \
-        "_drawerMenuColByX 未按合并列 DOM(.dt-col[data-dt-tab])取列"
-
-    # 3. ctx-menus.html: 菜单渲模板选项 + 勾选态 + 条件合并开关
-    assert 'v-for="o in dtMenuTplOptions"' in ctx_menus, "ctx-menus 缺模板选项渲染"
-    assert "dtMenuPick(o.id)" in ctx_menus, "ctx-menus 缺模板选择落点 dMenuPick"
-    assert "dtMenuTplCurrent === o.id" in ctx_menus, "ctx-menus 缺模板选项勾选态"
-    assert "dtMenuMergeOn" in ctx_menus and "dtToggleMerge()" in ctx_menus, \
-        "ctx-menus 缺合并开关(条件渲染 dtMenuMergeOn)"
-
-
-_DT_DENSITY_NODE_PROBE = r"""
-const fs = require("fs");
-global.window = {};
-/* localStorage 桩(读侧 readSel / 写侧 dtPersistSel 都走它); document 保持 undefined ——
- * drawer.js 顶层不触 DOM(W6 起 CSS 注入已迁三皮肤, dtInjectCss 退役) */
-const store = {};
-global.localStorage = {
-  getItem: (k) => (k in store ? store[k] : null),
-  setItem: (k, v) => { store[k] = String(v); },
-};
-eval(fs.readFileSync(process.argv[1], "utf8"));
-const D = window.AQB_DRAWER_DENSITY;
-const M = window.AQB_DRAWER.methods;  // W6: 选择层成员并入 AQB_DRAWER mixin
-const TABS = ["general", "trackers", "peers", "content", "traffic"];
-const checks = [];
-const ok = (name, cond) => checks.push([name, !!cond]);
-
-/* 1. normalize: 白名单 + 旧变体 id 显式迁移(01..15 -> 声明档位, 不报错不静默丢) */
-ok("classic 恒合法", D.normalize("general", "classic") === "classic");
-ok("新档位合法", D.normalize("general", "compact") === "compact");
-ok("旧 tall id(01/04/07/10/13) -> classic", ["01","04","07","10","13"].every((id, i) => D.normalize(TABS[i], id) === "classic"));
-ok("旧 low/collapsed id -> compact", D.normalize("general", "02") === "compact" && D.normalize("general", "03") === "compact"
-  && D.normalize("peers", "08") === "compact" && D.normalize("peers", "09") === "compact" && D.normalize("content", "11") === "compact");
-ok("迁移面之外未知 id -> null(读侧回落 classic)", D.normalize("general", "zz") === null);
-ok("非字符串脏值 -> null", D.normalize("general", 42) === null && D.normalize("general", null) === null);
-ok("非法 tab -> null", D.normalize("nope", "01") === null);
-ok("每页签恰两档且 options 不含 classic(模板端恒置首位)",
-  TABS.every((t) => D.options(t).map((o) => o.id).join(",") === "compact"));
-ok("options 带展示名", D.options("general")[0].label === "紧凑");
-ok("tierOf 未知档位回落 classic / compact 带 dd-compact 类",
-  D.tierOf("general", "zz").id === "classic" && D.tierOf("general", "compact").cls === "dd-compact");
-
-/* 2. readSel: 旧 id / 新档位 / 脏值 / 坏 JSON / 无存储 */
-store["autoqb.ui.drawerTpl"] = JSON.stringify({ general: "01", peers: "compact", content: "zz", trackers: 42 });
-const sel = window.AQB_DRAWER_TPL_REG.readSel();
-ok("旧 id 01 显式迁移为 classic", sel.general === "classic");
-ok("新档位直通", sel.peers === "compact");
-ok("迁移面外脏值回落 classic", sel.content === "classic");
-ok("非字符串脏值回落 classic", sel.trackers === "classic");
-ok("未提及页签保持 classic", sel.traffic === "classic");
-store["autoqb.ui.drawerTpl"] = "{bad json";
-ok("坏 JSON 全回落 classic", TABS.every((t) => window.AQB_DRAWER_TPL_REG.readSel()[t] === "classic"));
-delete store["autoqb.ui.drawerTpl"];
-ok("无存储全 classic", TABS.every((t) => window.AQB_DRAWER_TPL_REG.readSel()[t] === "classic"));
-
-/* 3. dtMenuPick: 白名单外忽略(旧 id 不再是合法选项, 迁移只在读侧); 合法落盘 + 收菜单 */
-function makeCtx(sel_, tab) {
-  /* dtMenuTab 在真实例是 computed, 假 ctx 直接给同名字段(dtMenuPick 只读它) */
-  const ctx = { drawerTplSel: Object.assign({}, sel_), drawerMenu: { visible: true, tab }, dtMenuTab: tab };
-  ctx.dtPersistSel = M.dtPersistSel;
-  return ctx;
-}
-const base = { general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
-const c1 = makeCtx(base, "general");
-M.dtMenuPick.call(c1, "compact");
-ok("合法档位落盘", c1.drawerTplSel.general === "compact");
-ok("选择随 dtPersistSel 落盘", (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).general === "compact"; } catch (e) { return false; } })());
-ok("菜单已收", c1.drawerMenu.visible === false);
-delete store["autoqb.ui.drawerTpl"];
-const c2 = makeCtx(base, "general");
-M.dtMenuPick.call(c2, "01");
-ok("旧变体 id 菜单白名单外忽略(不落盘不迁移)", c2.drawerTplSel.general === "classic" && !("autoqb.ui.drawerTpl" in store));
-const c3 = makeCtx(base, "general");
-M.dtMenuPick.call(c3, "");
-ok("空参按 classic 处理", c3.drawerTplSel.general === "classic");
-
-/* 4. drawerTier: 结构开关描述符(组件模板 v-if 消费) */
-ok("classic 档结构全开", M.drawerTier.call({ drawerTplSel: base }, "general").raw === true);
-ok("compact 档 raw 关(general 结构开关)", M.drawerTier.call({ drawerTplSel: Object.assign({}, base, { general: "compact" }) }, "general").raw === false);
-ok("compact 档 hint 关(content 结构开关)", M.drawerTier.call({ drawerTplSel: Object.assign({}, base, { content: "compact" }) }, "content").hint === false);
-
-const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
-console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed }));
-if (failed.length) process.exit(1);
-"""
-
-
-def test_drawer_tpl_classic_default():
-    """详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1 · W5 版) —— 有 node 时真跑
-    选择层 node 电池: 读侧白名单脏值/坏 JSON/无存储一律回落 classic; 旧变体 id(01..15)显式迁移
-    到声明档位(不报错、不静默丢); 菜单白名单外忽略; 档位描述符结构开关正确。无 node 静态兜底:
-    app.js initialDrawerTpl 缺核心时也必须返回全 classic 映射(不能返回空对象 —— 组件显隐门
-    dtHostOn/档位判据读 drawerTplSel.<tab>, 缺键会把正文藏掉, 与「升级零观感差异」验收门冲突)。"""
-    shared = os.path.join(STATIC_ROOT, "shared")
-    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
-    for tab in ("general", "trackers", "peers", "content", "traffic"):
-        assert f'{tab}: "classic"' in app_js, f"initialDrawerTpl 兜底映射缺 {tab}(核心未载入时正文会被藏掉)"
-    node = shutil.which("node")
-    if not node:
-        return
-    proc = subprocess.run(
-        [node, "-e", _DT_DENSITY_NODE_PROBE, os.path.join(shared, "drawer.js")],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    assert proc.returncode == 0, f"密度档 node 电池跑挂: {proc.stderr.strip()}"
-    report = json.loads(proc.stdout.strip().splitlines()[-1])
-    assert report["failed"] == [], f"classic 默认电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 def test_frontend_qb_traffic_drawer_page_guard():
@@ -1651,12 +2096,13 @@ def test_frontend_qb_traffic_drawer_page_guard():
         "同目标短路必须在收图/重建副作用之前(落在后面 = 短路失效, 闪烁回归)"
 
     # 4. watch(drawerVisible): 退场销毁图 / 进场补拉重建(uPlot 宿主随 v-if 拆装被换掉)
-    #    种子详情支路(!s)W5 起无回页补挂(正文恒 Vue 响应式; 旧变体重挂守阵随变体退役)
+    #    种子详情支路(!s)W7 恢复进场补挂($nextTick 等 aside 补进 DOM 再 _dtSync; 见
+    #    test_drawer_seed_reentry_variant_remount 全套钉法, 此处只钉挂点存在)
     wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)
     assert wt, "state.js 缺 watch(drawerVisible)(换宿主后图不自愈 = 回页只剩文字)"
     wb = wt.group(1)
-    assert "const s = this.qbCurScope;" in wb and "if (!s) return;" in wb, \
-        "watcher 缺流量形态作用域分支(种子详情归 !s 支路; W5 起正文恒 Vue 响应式, 回页无补挂)"
+    assert "const s = this.qbCurScope;" in wb and "if (!s) {" in wb and "$nextTick(() => this._dtSync())" in wb, \
+        "watcher 缺种子详情支路进场补挂(!s 分支 $nextTick -> _dtSync; W7 随变体层恢复)"
     assert "this._qbChartDestroy(s);" in wb and "this._qbReloadOnEnter(s);" in wb, \
         "drawerVisible watcher 必须退场销毁图 + 进场补拉重画(补拉内含 $nextTick 建图单点)"
     re_b = re.search(r"_qbReloadOnEnter\(scope\) \{\n(.*?)\n    \},", js, re.S)
@@ -1665,6 +2111,45 @@ def test_frontend_qb_traffic_drawer_page_guard():
     assert "this._qbLoad(scope);" in rb, "_qbReloadOnEnter 必须走 _qbLoad 单点(内含建图, 不另写请求)"
     assert 'this[def.loading]' in rb, \
         "_qbReloadOnEnter 缺在途不叠加守卫(打开路径已先发一发, 进场 watcher 会把首次请求翻倍)"
+
+
+def test_drawer_seed_reentry_variant_remount():
+    """种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」)
+
+    drawerVisible 要求 page === "groups"(drawer.js), tpl/drawer.html 的 <aside v-if> 在切到设置页
+    时被整体拆掉(抽屉数据状态保留), 切回时 Vue 重建 aside —— 变体宿主(dt-host)随之换成新节点,
+    而核心层 _dtMounted 持有的还是被拆走的旧宿主。trackers/peers 页签有 5s 轮询兜底(下一拍
+    _dtNotify 自愈, 延迟 <=5s), general/content 页签没有轮询与通知源, 变体永不重挂:
+    .dt-host:empty 藏住空宿主 + 经典包裹层 v-show 为 false(选中变体时)= 整幅正文空白。
+    钉住(state.js watch drawerVisible):
+    1. 种子详情支路(!s 分支)进场(v 为真)必须补一发重挂 `$nextTick(() => this._dtSync())` ——
+       $nextTick 等 Vue 把重建的 aside 补进 DOM 后再定位宿主(_dtFindHost 按 document 现查);
+    2. 退场(v 为假)不发重挂(种子形态退场无图可销毁, 重挂只服务进场);
+    3. 两支路互不越界: 流量支路(qbCurScope 非空)退场 _qbChartDestroy / 进场 _qbReloadOnEnter
+       原样保留, _dtSync 不得跑进流量支路(_qbReloadOnEnter 不得跑进种子支路);
+    4. 重挂必须走 _dtSync 单点(卸旧挂新), 不得在 watcher 里自写宿主定位/渲染。"""
+    state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+
+    wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)
+    assert wt, "state.js 缺 watch(drawerVisible)(回页重挂挂点, 移动了就同步本守阵)"
+    wb = wt.group(1)
+    assert "if (!s) {" in wb, "watcher 缺种子详情支路(!s 分支)——回页重挂的挂点"
+    # 1+2. 进场补一发重挂, 且只认进场(v 为真): $nextTick 等 aside 补进 DOM 再 _dtSync
+    seed_branch = wb[wb.index("if (!s) {"):wb.index("if (!v) {")]
+    assert "if (v)" in seed_branch and "$nextTick(() => this._dtSync())" in seed_branch, \
+        "种子详情支路进场(v 为真)必须补一发重挂: $nextTick 等 DOM 补进后 _dtSync 卸旧挂新" \
+        "(general/content 页签无轮询无通知源, 不补 = 回页整幅空白)"
+    # 3. 两支路互不越界: 流量支路生命周期原样, _dtSync 不进流量支路
+    traffic_branch = wb[wb.index("if (!v) {"):]
+    assert "this._qbChartDestroy(s);" in traffic_branch and "this._qbReloadOnEnter(s);" in traffic_branch, \
+        "流量支路退场销毁/进场补拉不得被回页重挂改动(uPlot 宿主生命周期单点)"
+    assert "_dtSync" not in traffic_branch, \
+        "重挂不得跑进流量支路(流量宿主重挂归 _qbReloadOnEnter -> _dtNotify 链)"
+    assert "_qbReloadOnEnter" not in seed_branch, \
+        "流量补拉不得跑进种子支路(种子页签无流量数据源)"
+    # 4. 重挂走 _dtSync 单点, watcher 内不自写宿主定位/渲染
+    assert "querySelector" not in seed_branch and "replaceChildren" not in seed_branch, \
+        "watcher 不得自写宿主定位/渲染(重挂单点在核心层 _dtSync, 绕开即双写挂载态)"
 
 
 def test_frontend_drawer_groups_shows_views():
@@ -1807,9 +2292,79 @@ def test_removed_redundant_tooltips_stay_removed():
         ("shared/tpl/xtpl.html", ("点击收起", )),
         # H1 · columns.js 列偏好提示横幅: 横幅整体可点 + 手型光标 + 15s 自毁
         ("shared/columns.js", ("点击关闭", )),
-        # I 组 · 详情面板冗余 tooltip 二轮: 同屏可见文本的复述 + 开发者口径(求和/前端派生)
-        #     + 图例/按钮自明文案, 同屏信息已足够不再悬浮重复(drawer_tpl 条目随 W5 变体退役移除)
+        # I 组 · 详情面板冗余 tooltip 二轮(drawer_tpl A/B 清单): 同屏可见文本的复述 +
+        #     开发者口径(求和/前端派生) + 图例/按钮自明文案, 同屏信息已足够不再悬浮重复
         ("shared/tpl/drawer.html", (':title="t.url"', )),
+        ("shared/drawer_tpl/01-general-hero-tall.js", ('title="${r.label}"', )),
+        ("shared/drawer_tpl/02-general-cards-low.js", ('title="${r.label}"', )),
+        ("shared/drawer_tpl/03-general-dossier-collapsed.js", ('title="${r.label}"', )),
+        (
+            "shared/drawer_tpl/05-trackers-health-groups-low.js", (
+                'title="正常"',
+                'title="警告"',
+                'title="更新中"',
+                'title="失败"',
+                "未启用(含虚拟条目)",
+                'title="分区顺序即处理顺序',
+            )
+        ),
+        ("shared/drawer_tpl/06-trackers-table-collapsed.js", (
+            "正在等待 tracker 响应",
+            "只显示 警告 / 更新中 / 失败 行",
+        )),
+        (
+            "shared/drawer_tpl/07-peers-dashboard-tall.js", (
+                "对端 upspeed 求和",
+                "对端 dlspeed 求和",
+                'title="${k} × ${byClient[k]}"',
+                'title="其它 ${keys.length - 3}',
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        (
+            "shared/drawer_tpl/08-peers-groups-low.js", (
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        (
+            "shared/drawer_tpl/09-peers-density-collapsed.js", (
+                'title="qB flags: ',
+                'title="会话累计"',
+                'title="会话累计 0"',
+                '· ${p.client || "未知"}"',
+            )
+        ),
+        ("shared/drawer_tpl/10-content-tree-detail-tall.js", ("展开全部目录", "折叠全部目录")),
+        ("shared/drawer_tpl/11-content-treegrid-batch-low.js", (
+            "全选 / 全不选(文件)",
+            "目录内共",
+            "展开全部目录",
+            "折叠全部目录",
+        )),
+        ("shared/drawer_tpl/12-content-space-treemap-collapsed.js", (
+            'title="优先级: 跳过"',
+            'title="占总体积 ',
+        )),
+        ("shared/drawer_tpl/13-traffic-chart-led-tall.js", ("前端派生自 points/totals", )),
+        ("shared/drawer_tpl/14-traffic-annotated-split-low.js", (
+            "窗口内上传字节累计",
+            "窗口内下载字节累计",
+            "上下行字节占比",
+        )),
+        (
+            "shared/drawer_tpl/15-traffic-adaptive-collapsed.js", (
+                "当前窗口累计上传",
+                "当前窗口累计下载",
+                "当前窗口上行峰值",
+                "前端派生自 points/totals",
+            )
+        ),
     )
     for rel, needles in checks:
         text = open(os.path.join(STATIC_ROOT, *rel.split("/")), encoding="utf-8").read()

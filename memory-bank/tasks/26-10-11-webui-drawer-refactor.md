@@ -113,10 +113,22 @@
 - **验收**: `test.full` = **3122 passed + 4 skipped** / `TOTAL 16517 151 5626 134 99%`(与 W5 基线逐位相同 —— 本波零测试增删, 唯一测试面变更 = 写入基线合法演化更新); 全量 e2e = **156 passed + 10 skipped**(与 W5 基线一致 —— 本波只换实现落点不换行为, 无新增 spec)。**终态判据达成: 抽屉只剩一套渲染技术**; 坑档守阵零悬空。数字见基线切片 `testing/baselines/26-10-12-0255-webui-drawer-refactor-w6.md`。
 - **文档回写**: 计划 Status → Done(doc-status meta + footer)、§05 进度注、W6 tag、§11 W6 落地条; `modules/webui-static-contract.md` 新增「选择层退役与终态」条; 三坑档退役注; 本切片 + activeContext 新切片(26-10-12-0255)。
 
+### 2026-10-12 · W7 恢复波(修正波: W5/W6 退役裁定越权, 模板原样找回)
+
+- **用户裁定(本轮执行依据)**: 本计划目标 = 「更改详情模板中的表格, 将其与主表能力统一, 减少维护点」= **W2 接壳**, 从未授权动模板 —— W5(变体退役)/W6(选择层退役)属计划越权, 一并撤销; 指令「全部模板原样找回」。W2–W4 成果(三列表接表壳 / 形态判据单点 / 合并机械收 drawer.js)全部保留。
+- **考古恢复法**: W2–W6 一锅进 0d07dbdd, W4 期中间态被 W5 重写不可考 —— 恢复基座 = `a05d35da`(W2 前最后形态), 增量按任务档案 W1–W4 日志重放(W1 拆数据层未动模板层 / W2 经典转 Vue 组件 / W3 形态判据单点 / W4 合并机械收 drawer.js)。
+- **恢复面**: `drawer_tpl/` 15 文件 `git checkout a05d35da --` 原样恢复; `drawer_templates.js` 从基座(导出 tmp-analysis/dtpl_base.js)做 12 处精确变换重建(555 行, node --check 过), 头注记四条有意适配(① 合并机械住 drawer.js / ② classic=Vue 组件 dtVueTab 双分支 / ③ 00-core 注入只余 .dt-tpl 限宽 / ④ dtMenuPick $nextTick 后 _dtSync); 接线恢复 drawer.js(密度层删+菜单面删+双监听+closeDrawer 卸载)/menu.js(宿主优先分支)/state.js(种子支路 $nextTick)/drawer_store.js(四 _dtNotify)/app.js(第二份 mixin)/三 index(16 装载行)/三皮肤 views.css(.dd-compact 删)。W6 保留项: qb_traffic_chart 吃判据单点、合并布局 CSS 在三皮肤。
+- **守阵同轮改版(不放宽)**: panel 六删(W6 版 wiring/facility_retired/a11y/menu_right_click/classic_default/密度电池) + 基座 16 块恢复 + W2–W4 事实适配(menu 放行判据 / close 钮在 aq-drawer-head / page_guard 种子支路 / form_judge 缩进计数 / wiring 钩子段读 drawer_store.js + :data-dt-tab 动态绑定单点 + pairOf 机械消费合法 / reannounce ④ 变体断言面与 tooltip I 组条目回归), 37 全绿; error_history 写入基线回改 drawer.js 5→4、drawer_templates.js 新增 1。
+- **e2e 恢复**: 删 drawer-density.spec.mjs; 4 条变体 spec 基座恢复; drawer-merge/drawer-tables 反向 W5 编辑, 锚点按恢复语义改(经典态宿主 v-else 不渲染 → toHaveCount(0))。
+- **重建漏项(e2e 抓到)**: dtMenuPick 同步 _dtSync 在双分支下扑空(旧分支在 DOM、新宿主未插入, _dtFindHost 查不到 → 挂载静默失败, general 无轮询永不挂) —— 补 $nextTick(适配④), 4 条失败全复绿。首轮 e2e 另 1 条 trigger-scope 为时序 flaky, 单跑复绿。
+- **红验两条(注入即红 / 还原即绿)**: RC1 静态 —— dtPersistSel 落盘短路 → error_history 基线 + classic_default + render_error_fallback 三红; RC2 e2e —— 变体 06 register id 破坏 → drawer-tables 锚点解析两皮肤红。
+- **验收**: `test.full` = **3131 passed + 4 skipped** / `TOTAL 16517 151 5626 134 99%`(W6 3122 → +9: facility_retired 退役, 基座变体守阵九函数回归); 全量 e2e = **166 passed + 10 skipped**(W6 156 → +10 = 恢复变体 spec 用例 × 皮肤)。数字见基线切片 `testing/baselines/26-10-12-0340-webui-drawer-refactor-w7.md`。
+- **文档回写**: 计划 §05 进度注 + §11 W7 条; `modules/webui-static-contract.md` 修正条; 本切片 + activeContext 新切片(26-10-12-0340)。
+
 ## 待办 / 移交
 
-- **全计划 W0–W6 已落地, 计划 doc-status = Done, 本任务档案归档**。终态判据「抽屉只剩一套渲染技术」达成: 四页签正文恒 Vue 组件(drawer_tabs.js), 密度档单点/读侧迁移/菜单与显隐判据单点在 drawer.js, 变体/插件机械/JS 运行时 CSS 注入零残留。
+- **W0–W4 + W7 已落地; W5/W6 被裁定越权并由 W7 撤销**。终态 = 「经典 Vue 组件 + 变体字符串 DOM」双实现并存(模板能力全量找回, W2 表格统一成果保留); W5/W6 的「终态判据: 抽屉只剩一套渲染技术」作废。
 - **cap 债务**: `modules/webui-static-contract.md` 已超 evergreen cap(W2–W6 各增一条), 需另开新会话跑 `commands run doc.caps -- --strict` 收口。
 - **切片数债务**: `kb.check` 报「切片数 > 70」的既有债务(每波新增切片后加深), 需另开新会话收口。
-- **工作树**: W2 + W3 + W4 + W5 + W6 五轮改动均未提交(用户未要求 commit)。
-- **dt06 逐行汇报倒计时**: 变体独有能力随 W5 退役消失(逐行「下次汇报」列 + 真 per-tracker 口径), 经典 trackers 列表无逐行等价物 —— 若用户需要该口径须在经典列表加列(新需求, 不属重构范围), 待用户表态。
+- **工作树**: W2–W6 已随 0d07dbdd 提交; W7 恢复波改动未提交(用户未要求 commit)。
+- **dt06 逐行汇报倒计时**: 随 W7 变体恢复**能力回归**(test_drawer_tpl_trackers_per_tracker_reannounce 守阵仍活), 无需另开需求。

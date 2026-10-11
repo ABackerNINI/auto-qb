@@ -2,13 +2,13 @@
      与 <aq-table> 同范式: x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层),
      app.component 注册; 数据与动作一律经 $root 回调根实例(不复制任何方法实现)。
 
-     !W5(计划 26-10-11-2106): 变体退役, 本组件成为所在页签的**唯一**渲染实现。密度档
-     (drawerTier 描述符)消费在本模板: cls 挂根(dd-compact, CSS 只做密度收紧), 结构开关
-     (raw/hint)走 v-if 真隐藏 —— 档位描述符是 drawer.js 的 DRAWER_DENSITY 单点(W6 起核心层收进 drawer.js)。
+     !W7(计划 26-10-11-2106): 变体层原样恢复 —— 本组件渲染所在页签的「经典」档; 选变体时
+     drawer.html 的 v-if="dtVueTab(tab)" 翻到 v-else 宿主, 插件(_dtFindHost 按
+     `.dt-host[data-dt-host="<tab>"]` querySelector)接管。组件根带 .dt-host 类但**不带
+     data-dt-host**(互斥双分支保证同一锚全 DOM 只存在一份)。
 
-     !根元素带 .dt-host 类但**不带 data-dt-host** —— 后者是旧插件的挂载锚
-     (_dtFindHost 按 `.dt-host[data-dt-host="<tab>"]` querySelector)。W5 起插件机械已退役,
-     保留不带锚的纪律只防回归(若插件机械复活, 结构性不可见仍是第一道闸)。
+     !本模板零密度档消费(W5 发明的声明式密度档随越权退役一并撤销): raw/details 与
+     content 工具条提示恒渲染(经典版式原样)。
 
      !可见性门在本组件根(v-show 读 $root.dtHostOn) + 内容再上一道 v-if(同一判据):
      v-show 只切 display, 子树照渲染 —— 不加内容门, 四个页签的正文会在每屏都各渲染一份
@@ -33,7 +33,7 @@
        ·style 属性去 `:` 后空格与尾分号 —— OLD `padding-left:8px` vs Vue `padding-left: 8px;`。
      归一后仅剩一处结构性偏差: 组件根不带 `data-dt-host`(理由见上)。 -->
 <script type="text/x-template" id="tpl-aq-drawer-general">
-  <div class="dt-host" :class="$root.drawerTier('general').cls" v-show="$root.dtHostOn('general')">
+  <div class="dt-host" v-show="$root.dtHostOn('general')">
     <template v-if="$root.dtHostOn('general')">
       <div v-if="d.hr_triggered || d.hr_state || d.hr_excluded" class="drawer-hr"
            :class="d.hr_triggered ? (d.hr_satisfied ? 'done' : 'pending') : 'info'">
@@ -59,7 +59,7 @@
         </div>
       </section>
       <!-- 密度档结构开关(W5 描述符 raw): 紧凑档真隐藏原始键值区(档位关掉的结构是 v-if, 不是 CSS 藏) -->
-      <details v-if="$root.drawerTier('general').raw" class="drawer-raw" :open="ui.generalRaw" @toggle="ui.generalRaw = $event.target.open">
+      <details class="drawer-raw" :open="ui.generalRaw" @toggle="ui.generalRaw = $event.target.open">
         <summary>全部字段(原始键值, 与 qB API 字段名一致)</summary>
         <div class="drawer-rows">
           <template v-for="k in Object.keys(d)" :key="k"><span class="k">{{ k }}</span><span class="v mono">{{ typeof d[k] === 'object' ? JSON.stringify(d[k]) : d[k] }}</span></template>
@@ -69,7 +69,7 @@
   </div>
 </script>
 <script type="text/x-template" id="tpl-aq-drawer-trackers">
-  <div class="dt-host" :class="$root.drawerTier('trackers').cls" v-show="$root.dtHostOn('trackers')">
+  <div class="dt-host" v-show="$root.dtHostOn('trackers')">
     <template v-if="$root.dtHostOn('trackers')">
       <div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="add" @click="$root.trackerAdd()"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button></div>
       <div v-if="$root.drawer.trackersLoading && !trkRows.length" class="empty"><span>正在加载…</span></div>
@@ -93,7 +93,7 @@
   </div>
 </script>
 <script type="text/x-template" id="tpl-aq-drawer-peers">
-  <div class="dt-host" :class="$root.drawerTier('peers').cls" v-show="$root.dtHostOn('peers')">
+  <div class="dt-host" v-show="$root.dtHostOn('peers')">
     <template v-if="$root.dtHostOn('peers')">
       <div v-if="$root.drawer.peersLoading && !peerRows.length" class="empty"><span>正在加载…</span></div>
       <!-- 接壳(W2): 九列对端表, 同 trackers 一条路 -->
@@ -112,9 +112,9 @@
   </div>
 </script>
 <script type="text/x-template" id="tpl-aq-drawer-content">
-  <div class="dt-host" :class="$root.drawerTier('content').cls" v-show="$root.dtHostOn('content')">
+  <div class="dt-host" v-show="$root.dtHostOn('content')">
     <template v-if="$root.dtHostOn('content')">
-      <div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="rename" @click="$root.renameFileRow()"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…</button><span v-if="$root.drawerTier('content').hint" class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span></div>
+      <div class="drawer-toolbar"><button class="bt ghost sm" data-dt-act="rename" @click="$root.renameFileRow()"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…</button><span class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span></div>
       <div v-if="$root.drawer.filesLoading && !fileRows.length" class="empty"><span>正在加载…</span></div>
       <!-- 接壳(W2): 行类可叠加(skipped 与 sel 两键独立 —— 跳过态的行也能是重命名选中行);
            这两个修饰类在旧经典页里**从未生效**(条件属性被整段插值进 dtHtml, 引号被转义成
