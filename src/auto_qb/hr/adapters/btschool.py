@@ -19,7 +19,7 @@
 """
 from typing import Dict, Optional
 
-from .nexusphp import NexusPhpMyhrAdapter, header_hr_numbers
+from .nexusphp import NexusPhpMyhrAdapter, parse_header_counters
 
 #: 页头计数条位数与档位映射(样张钉死): 2 个数 = 考察中(A) / 未达标(C)
 COUNTER_ARITY = 2
@@ -30,10 +30,7 @@ class BtschoolMyhrAdapter(NexusPhpMyhrAdapter):
     """BTSchool 形态: 标准 myhr 表格 + 页头 H&R 计数条(2 数)"""
     def parse_counters(self, html: str) -> Dict[str, Optional[int]]:
         """页头摘要形计数(载体与校准证据见模块 docstring): 2 数 = A 考察中 / C 未达标。"""
-        nums = header_hr_numbers(html)
-        if nums is None or len(nums) != COUNTER_ARITY:
-            return {}  # 位数不对 = 载体变了 = 无证据降级(铁律: 宁可不用, 不可错用)
-        return {lane: nums[i] for i, lane in enumerate(COUNTER_LANES)}
+        return parse_header_counters(html, COUNTER_ARITY, COUNTER_LANES)
 
 
 __all__ = ["BtschoolMyhrAdapter", "COUNTER_ARITY", "COUNTER_LANES"]

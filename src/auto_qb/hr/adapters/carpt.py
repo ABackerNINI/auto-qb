@@ -28,7 +28,7 @@
 """
 from typing import Dict, Optional
 
-from .nexusphp import NexusPhpMyhrAdapter, header_hr_numbers
+from .nexusphp import NexusPhpMyhrAdapter, parse_header_counters
 
 #: 档位字母 -> CarPT status 参数值(样张 tab 核对: 1 考察中 / 2 已达标 / 3 未达标 / 4 已免罪)
 SCOPE_STATUS = {"A": "1", "B": "2", "C": "3", "D": "4"}
@@ -55,10 +55,7 @@ class CarPtMyhrAdapter(NexusPhpMyhrAdapter):
     """CarPT 形态: 标准 myhr 表格 + status 参数 + 变体表头名 + 页头 H&R 计数条(3 数)"""
     def parse_counters(self, html: str) -> Dict[str, Optional[int]]:
         """页头摘要形计数(载体与校准证据见模块 docstring): 3 数 = A 考察中 / C 未达标, 上限不采。"""
-        nums = header_hr_numbers(html)
-        if nums is None or len(nums) != COUNTER_ARITY:
-            return {}  # 位数不对 = 载体变了 = 无证据降级(铁律: 宁可不用, 不可错用)
-        return {lane: nums[i] for i, lane in enumerate(COUNTER_LANES)}
+        return parse_header_counters(html, COUNTER_ARITY, COUNTER_LANES)
 
     def looks_like_login(self, html: str) -> bool:
         # 基类用标准表头「HR编号」排除误判, CarPT 页面没有这个词, 换本站表头锚点

@@ -88,6 +88,19 @@ def header_hr_numbers(html: str) -> Optional[List[int]]:
     return [int(n) for n in re.findall(r"\d+", re.sub(r"<[^>]+>", "", m.group(1)))]
 
 
+def parse_header_counters(html: str, arity: int, lanes: Tuple[str, ...]) -> Dict[str, Optional[int]]:
+    """页头摘要形计数的公共收尾(变体 adapter 共用): 位数与站点声明不符即降级空集。
+
+    提取(`header_hr_numbers`)与降级(铁律「宁可不用, 不可错用」)单点在此; 各站点 adapter
+    只钉自己样张实证的 `arity` 与 `lanes`(校准记录见 carpt.py / btschool.py 模块 docstring),
+    解析逻辑不再逐站重写。
+    """
+    nums = header_hr_numbers(html)
+    if nums is None or len(nums) != arity:
+        return {}  # 位数不对 = 载体变了 = 无证据降级
+    return {lane: nums[i] for i, lane in enumerate(lanes)}
+
+
 #: 兼容历史导入(标准形态的必填列名)
 REQUIRED_COLUMNS = tuple(STANDARD_COLUMNS[k] for k in REQUIRED_KEYS)
 

@@ -11,7 +11,7 @@
    `config/site_presets.py` 的 SITE_PRESETS —— 只在此登记 adapter 而不立档案的站点,
    用户配置期就会被拒(未入档案的站点不允许启用)。
 """
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from ...config.models import SiteHrCheckConfig
 from ..model import FETCH_LANES
@@ -25,31 +25,27 @@ from .nexusphp import NexusPhpMyhrAdapter
 
 AdapterFactory = Callable[[str, SiteHrCheckConfig], HrAdapter]
 
+
+def _standard_kwargs(conf: SiteHrCheckConfig) -> Dict[str, Any]:
+    """标准 myhr 形态的公共构造参数; 变体站点(如 CarPT)在此之上追加 scope_param / header_key 等。"""
+    return {
+        "hr_page_url": conf.hr_page_url,
+        "download_path": conf.download_path,
+        "scopes": FETCH_LANES,
+        "page_param": conf.page_param,
+    }
+
+
 #: adapter 名 -> 工厂。名字来自站点配置的 `adapter` 键(缺省 `nexusphp`)
 ADAPTERS: Dict[str, AdapterFactory] = {
     "nexusphp":
-        lambda site, conf: NexusPhpMyhrAdapter(
-            site,
-            hr_page_url=conf.hr_page_url,
-            download_path=conf.download_path,
-            scopes=FETCH_LANES,
-            page_param=conf.page_param,
-        ),
+        lambda site, conf: NexusPhpMyhrAdapter(site, **_standard_kwargs(conf)),
     "btschool":
-        lambda site, conf: BtschoolMyhrAdapter(
-            site,
-            hr_page_url=conf.hr_page_url,
-            download_path=conf.download_path,
-            scopes=FETCH_LANES,
-            page_param=conf.page_param,
-        ),
+        lambda site, conf: BtschoolMyhrAdapter(site, **_standard_kwargs(conf)),
     "carpt":
         lambda site, conf: CarPtMyhrAdapter(
             site,
-            hr_page_url=conf.hr_page_url,
-            download_path=conf.download_path,
-            scopes=FETCH_LANES,
-            page_param=conf.page_param,
+            **_standard_kwargs(conf),
             scope_param="status",
             scope_values=CARPT_SCOPE_STATUS,
             header_key=CARPT_HEADER_KEY,

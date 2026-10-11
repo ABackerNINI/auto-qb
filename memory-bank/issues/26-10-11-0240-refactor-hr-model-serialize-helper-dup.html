@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0240">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr model 序列化与强转助手重复">
 <meta name="issue-summary" content="9 个 dataclass 的 to_json/from_json 字段样板 + _as_int/_as_float 在 model/channel 逐字同">
 <title>hr model 序列化与强转助手重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0240-refactor-hr-model-serialize-helper-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,17 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:55 — 认领开工（用户指派「修复 hr 部分问题…相关 issue 一并认领」；本轮 hr 低风险子集，**只做强转助手**），状态 <strong>In Progress</strong>（任务档案：<a href="../tasks/26-10-11-backend-hr-dup-code-fix.md">tasks/26-10-11-backend-hr-dup-code-fix.md</a>）</li>
+      <li>2026-10-11 15:55 — 修复完成（强转助手部分），状态 <strong>Done</strong>（见下「修复后补充」）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充<span class="opt">（2026-10-11）</span></h2>
+    <ul>
+      <li>实际修法（仅强转助手）: 删 <code>channel.py</code> 自抄的 <code>_as_int</code> / <code>_as_float</code>（与 <code>model.py</code> 逐字同），改 <code>from .model import _as_float, _as_int</code> —— hr 内单点。</li>
+      <li>保守跳过（评估型）: 9 个 dataclass 的 <code>to_json</code> / <code>from_json</code> 改 dataclass 驱动序列化属<strong>改数据形状</strong>，按本轮「只做无行为变化的收口」口径<strong>未做</strong>；两处特例（<code>HrLaneState.count_claim/count_match</code> 必须显式判空、<code>HrSiteData</code> writer 字段读写异名）原样保留。留待专项评估。</li>
+      <li>验证方式: hr 相关 9 个测试文件 <strong>462 passed</strong>（含 <code>test_hr_channel</code> / <code>test_hr_service</code> 的反序列化用例）；全量 <code>test.full</code> <strong>3112 passed + 4 skipped / 0 failed / 99%</strong>。</li>
     </ul>
   </section>
 

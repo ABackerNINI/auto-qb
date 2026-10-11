@@ -27,7 +27,7 @@ from typing import List, Optional, Tuple
 from ..config.models import Config
 from ..infra.utils import fmt_size
 from .channel import API_TASKS, describe_token_source, token_path
-from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
+from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher, query_param
 from .model import HrEntry, HrSiteData
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
 from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, need_seed_text, site_status, stamp_text
@@ -55,10 +55,11 @@ class LocalPageFetcher:
 
 
 def _scope_of(url: str) -> str:
-    for part in url.split("?", 1)[-1].split("&"):
-        if part.startswith("hrtype=") or part.startswith("status="):  # status= 是 CarPT 等变体站点的档位参数
-            return part.split("=", 1)[1]
-    return "?"
+    """离线页面替身按档位取文件名: 从 URL 查询串取档位, 无则回落 `?`(文件名 `?.html`)。
+
+    查询串解析单点在 `fetcher.query_param`(与 `fetcher._scope_of` 共用), 这里只差默认值。
+    """
+    return query_param(url, "hrtype", "status", default="?")
 
 
 def build_fetcher(html_dir: Optional[str]) -> HrFetcher:
@@ -72,26 +73,49 @@ def _site_confs(config: Config) -> dict:
     return {name: tc.hr_check for name, tc in config.trackers.items() if tc.hr_check is not None}
 
 
+def _gate_enabled_sites(config: Config, out, *, what: str) -> Optional[List[str]]:
+    """三入口公共前置门: 总开关 + 「至少一个站点启用」; 不通过则打印并返回 None。
+
+    `what` 只进提示文案(走查 / 查看), 让各入口的措辞保持不变。
+    """
+    if not config.hr_check.enabled:
+        print(f"hr_check.enabled=false: HR 在线核实未启用, 无可{what}内容。", file=out)
+        return None
+    enabled = [name for name, conf in _site_confs(config).items() if conf.enabled]
+    if not enabled:
+        print(f"没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可{what}内容。", file=out)
+        return None
+    return enabled
+
+
+def _build_service(
+    config: Config, *, fetcher: HrFetcher, persist: bool, allow_fetch: bool, **extra
+) -> HrRefreshService:
+    """三入口公共构造: 站点派生 / owner / 持久化与取数开关单点; `extra` 透传走查专用参数。"""
+    return HrRefreshService(
+        data_dir=config.data_dir,
+        global_conf=config.hr_check,
+        site_confs=_site_confs(config),
+        fetcher=fetcher,
+        owner=instance_id(),
+        persist=persist,
+        allow_fetch=allow_fetch,
+        **extra,
+    )
+
+
 def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int:
     """跑一遍各站点的波次走查并打印报告; 返回进程退出码(0 = 出报告成功)"""
     import sys
 
     out = out or sys.stdout
-    if not config.hr_check.enabled:
-        print("hr_check.enabled=false: HR 在线核实未启用, 无可走查内容。", file=out)
-        return 1
-    site_confs = _site_confs(config)
-    enabled = [name for name, conf in site_confs.items() if conf.enabled]
-    if not enabled:
-        print("没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可走查内容。", file=out)
+    enabled = _gate_enabled_sites(config, out, what="走查")
+    if enabled is None:
         return 1
 
-    service = HrRefreshService(
-        data_dir=config.data_dir,
-        global_conf=config.hr_check,
-        site_confs=site_confs,
+    service = _build_service(
+        config,
         fetcher=build_fetcher(html_dir),
-        owner=instance_id(),
         persist=False,  # 只读走查: 不写站点文件
         allow_fetch=True,
         # 走查是「把一波跑完给人看」: 遇到间隔/日额门槛等满而不是放弃(单次上限 DIAGNOSTIC_MAX_WAIT)。
@@ -131,21 +155,13 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     import sys
 
     out = out or sys.stdout
-    if not config.hr_check.enabled:
-        print("hr_check.enabled=false: HR 在线核实未启用, 无可查看内容。", file=out)
-        return 1
-    site_confs = _site_confs(config)
-    enabled = [name for name, conf in site_confs.items() if conf.enabled]
-    if not enabled:
-        print("没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可查看内容。", file=out)
+    enabled = _gate_enabled_sites(config, out, what="查看")
+    if enabled is None:
         return 1
 
-    service = HrRefreshService(
-        data_dir=config.data_dir,
-        global_conf=config.hr_check,
-        site_confs=site_confs,
+    service = _build_service(
+        config,
         fetcher=NullFetcher("状态报告不取数"),
-        owner=instance_id(),
         persist=False,
         allow_fetch=False,  # 本报告连「试着取一次」都不做: 要抓数据请看 --hr-once
     )
@@ -178,12 +194,9 @@ def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
     if not config.hr_check.enabled:
         print("hr_check.enabled=false: HR 在线核实未启用, 无需对账。", file=out)
         return 1
-    service = HrRefreshService(
-        data_dir=config.data_dir,
-        global_conf=config.hr_check,
-        site_confs=_site_confs(config),
+    service = _build_service(
+        config,
         fetcher=NullFetcher("确认操作不取数"),
-        owner=instance_id(),
         persist=True,
         allow_fetch=False,
     )
@@ -327,10 +340,6 @@ def _ellipsis(text: str, width: int) -> str:
         out.append(ch)
         used += w
     return "".join(out) + "…"
-
-
-def stamp_text_ts(ts: float) -> str:
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts and ts > 0 else "-"
 
 
 def _print_channel(config: Config, service: HrRefreshService, out) -> None:

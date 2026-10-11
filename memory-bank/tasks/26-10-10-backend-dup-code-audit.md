@@ -123,3 +123,11 @@
 - **产物**: 滚动报告 [26-10-11-0033](../reports/26-10-11-0033-report-dup-code-audit.html) 追加 §20–§22(发现清单)+ §23 累计计数/候选排序 + §24 issue 表 + §25 变更记录; **11 条 refactor issue 入池**(专题 `dup-code-audit`): `rules-expr-disk-helper-dup` / `rules-expr-numeric-predicate-dup` / `rules-parser-dead-op-constants-dup` / `infra-fmt-ladder-dup` / `infra-win-dll-lazy-bind-dup` / `infra-utils-small-helper-dup` / `infra-platform-detect-bypass-dup` / `infra-url-decompose-dup` / `torrents-snapshot-view-field-dup` / `torrents-hr-entry-guard-dup` / `notify-tray-icon-path-dup`。三包 34 项发现(A11/B5/C9/D9), 全局累计 156(A58/B15/C40/D43)。
 - **零改动确认**: 全程 `src/`、`tests/` 无变更; 仅新增报告/issue 制品。
 - **待办下一轮**: Phase 2 前端轮 20(shared/*.js 非抽屉)。**Phase 1 后端(轮 01–19)至此全部走完**。
+
+### 2026-10-11 R6 — 修复轮(hr 低风险子集, 5 条 issue 认领与修复)
+
+- **触发**: 用户「修复 hr 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」→ 拍板**只做低风险高收益子集(5 条)+ 保守口径(无行为变化的收口)**。
+- **产物**: 修 5 条 hr refactor issue 并置 `Done`(`hr-adapter-parse-boilerplate-dup` / `hr-report-cli-boilerplate-dup` / `hr-lane-transition-boilerplate-dup` / `hr-warn-dedup-throttle-dup` / `hr-model-serialize-helper-dup` 的强转助手部分); 余 4 条跨包/低收益件暂缓留 `Open`。档案 [26-10-11-backend-hr-dup-code-fix](26-10-11-backend-hr-dup-code-fix.md)。
+- **执行注意(供后续修复轮复用)**: ① **报告的分类描述要复核, 不能照抽** —— 报告把档位处置三处判为 A 类「仅 detail 文案不同」, 实读发现 `fail_streak` 推进与升级告警三处各不相同, 照建议的 `_fail_or_truncate(st, detail)` 抽会**静默改行为**(给预算截断也计连续失效); 后续轮次对每个 A 类项都要**逐处比对行为**, 差异用显式参数承载。② **「口径收敛」先查值是否真相同** —— 报告建议把「6h 节流」收敛成单点, 但 4 处窗口值不同(且 worker 侧有 16 条单测按模块常量打补丁)⇒ 只抽算法、阈值留各模块常量。③ **删死件前先查测试引用** —— `stamp_text_ts` 生产侧零调用但有自己的单测, 删件须连带删测试与「测试计划」清单行。
+- **零改动确认**: 改动面仅 hr 包内 9 源文件 + 1 测试文件; 跨包(webui/core/infra)零改动; `config.yml` / `auto-qb-data/` 未触碰。
+- **待办下一轮**: hr 余 4 条暂缓件按各自轮次处理; 重复代码审查主线(Phase 2 前端 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。

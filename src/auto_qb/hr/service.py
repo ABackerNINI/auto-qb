@@ -152,6 +152,16 @@ DL_RETRY_COOLDOWN = 3600.0
 #: 通道静默告警阈值 / 同类解析告警的节流窗口
 CHANNEL_SILENCE_WARN = 6 * 3600.0
 
+
+def warn_gap_floor(threshold: float) -> float:
+    """告警节流窗口的公共算法: 给定阈值下限 60s(防配置成 0 时刷屏)。
+
+    service 与 worker 的节流点共用此算法(此前各写一遍 `max(60.0, float(<常量>))`); 阈值本身
+    仍是各模块自己的常量, 便于单测按模块打补丁。
+    """
+    return max(60.0, float(threshold))
+
+
 #: 取数线程醒来检查的节奏(worker 用; 配置键已删除, 常量化 §6.2)
 POLL_INTERVAL = 60.0
 
@@ -614,6 +624,14 @@ class HrRefreshService:
             )
         pages_left = max(1, int(self.global_conf.max_pages_per_wave))
 
+        def _abort_wave() -> None:
+            """波级让位收尾单点(§3.3): 盖时间戳 → 记拉取历史 → 落盘; 三处异常分支共用。"""
+            _stamp_elapsed()
+            self._append_history(
+                site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
+            )
+            self._persist_step(session)
+
         try:
             self._run_pages(
                 site,
@@ -639,21 +657,13 @@ class HrRefreshService:
             result.action = ACTION_WAITING
             result.reason = f"扩展侧硬上限挡下(后端频控可能失效), 本波让位: {e}"
             self._warn_ext_quota(site, e)
-            _stamp_elapsed()
-            self._append_history(
-                site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
-            )
-            self._persist_step(session)
+            _abort_wave()
             return
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
             self._warn_no_channel(site, e)
-            _stamp_elapsed()
-            self._append_history(
-                site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
-            )
-            self._persist_step(session)
+            _abort_wave()
             return
         except HrLoginExpired as e:
             # 登录失效: 只有人去浏览器登录才会好 —— 不算取数失败。痕迹: 1.一条 WARNING 2.
@@ -680,11 +690,7 @@ class HrRefreshService:
                 budget.mark()
                 result.action = ACTION_WAITING
                 result.reason = f"站点要求等待(Retry-After {retry_after:.0f}s): {e}"
-                _stamp_elapsed()
-                self._append_history(
-                    site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
-                )
-                self._persist_step(session)
+                _abort_wave()
                 return
             wave.had_error = True
             wave.notes.append(f"页面取数失败: {e}")
@@ -806,17 +812,11 @@ class HrRefreshService:
                         continue  # 该档退出轮转, 同轮其它档照常推进
                 except _LaneAbort as abort:
                     # 档位结构失效(表头缺失/字段缺失): 该档截断, 其它档继续(§3.4 档位独立)
-                    st.detail = abort.reason
                     wave.parse_problem = True
                     wave.notes.append(f"档位 {abort.lane} {abort.reason}, 该档证据在此截断")
                     self._warn_parse(site, events.page_changed(site, ACTION_PARTIAL, f"档位 {abort.lane} {abort.reason}"))
-                    if st.pages == 0:
-                        st.status = LANE_FAILED
-                        st.fail_streak += 1
+                    if _settle_lane(st, failed_detail=abort.reason, truncated_detail=abort.reason, count_failure=True):
                         self._maybe_alert_lane_fail(site, st)
-                    else:
-                        st.status = LANE_OK
-                        st.full_depth = False
                     active.remove(lane)
             if not progressed:
                 break
@@ -836,13 +836,7 @@ class HrRefreshService:
     @staticmethod
     def _truncate_lane(st: HrLaneState, why: str) -> None:
         """预算截断: 该档证据在截断点截止(之前有效), 下波从头再翻(无断点续翻)"""
-        if st.pages == 0:
-            st.status = LANE_FAILED
-            st.detail = why
-            return
-        st.status = LANE_OK
-        st.full_depth = False
-        st.detail = why
+        _settle_lane(st, failed_detail=why, truncated_detail=why, count_failure=False)
 
     def _order_violation(self, lane: str, parsed, wave: _WaveContext, st: HrLaneState) -> bool:
         """排序单调校验(§3.4): 页内逆序 / 跨页乱序 / 方向翻转。基于原始行序。"""
@@ -1480,31 +1474,61 @@ class HrRefreshService:
         self._ext_quota_warned.discard(site)
         self._login_warned.discard(site)
 
+    def _warn_once(
+        self,
+        seen: set,
+        site: str,
+        *,
+        dup_level: int,
+        dup_msg: str,
+        level: int,
+        msg: str,
+        event: str,
+        silent: bool = False
+    ) -> None:
+        """「每站只报一次」单点(直到状态恢复, 由 `_reset_warned_on_recovery` 清标记)。
+
+        三个 `_warn_*` 只在这里的参数上不同: 去重集合 / 去重时的日志级别与文案 / 告警级别与事件 /
+        是否静默(`silent` = 只进后端 log, 不进前端错误历史、不弹通知)。
+        """
+        if site in seen:
+            logger.log(dup_level, dup_msg)
+            return
+        seen.add(site)
+        hr_log.emit(logger, level, msg, event=event, silent=silent)
+
     def _warn_no_channel(self, site: str, err: Exception) -> None:
         """无通道告警: **每个站点只报一次**(直到通道恢复)
 
         通道层(含「等扩展超时」)统一在此出 —— 且标 `silent`: 只进后端 log, 不进前端错误历史、
         不弹通知(计划 §03.2/D2①: 「连不上浏览器」是**预期内**的环境态)。
         """
-        if site in self._no_channel_warned:
-            logger.debug(f"HR 站点 {site} | 无可用取数通道(已告警过, 不重复): {err}")
-            return
-        self._no_channel_warned.add(site)
-        hr_log.emit(
-            logger, logging.WARNING, events.channel_unavailable(site, err), event=events.EVENT_CHANNEL, silent=True
+        self._warn_once(
+            self._no_channel_warned,
+            site,
+            dup_level=logging.DEBUG,
+            dup_msg=f"HR 站点 {site} | 无可用取数通道(已告警过, 不重复): {err}",
+            level=logging.WARNING,
+            msg=events.channel_unavailable(site, err),
+            event=events.EVENT_CHANNEL,
+            silent=True,
         )
 
     def _warn_login(self, site: str, err: Exception) -> None:
         """登录失效告警: **每个站点只报一次**(直到登录恢复); 文案单点在 events.login_expired"""
-        if site in self._login_warned:
-            logger.info(f"HR 站点 {site} | 登录态仍未恢复(已告警过, 本轮不做在线核实): {err}")
-            return
-        self._login_warned.add(site)
-        hr_log.emit(logger, logging.ERROR, events.login_expired(site, err), event=events.EVENT_LOGIN)
+        self._warn_once(
+            self._login_warned,
+            site,
+            dup_level=logging.INFO,
+            dup_msg=f"HR 站点 {site} | 登录态仍未恢复(已告警过, 本轮不做在线核实): {err}",
+            level=logging.ERROR,
+            msg=events.login_expired(site, err),
+            event=events.EVENT_LOGIN,
+        )
 
     def _warn_parse(self, site: str, detail: str) -> None:
         """页面形态异常告警(排序/字段/表头/防伪): WARNING 按 CHANNEL_SILENCE_WARN 节流"""
-        warn_gap = max(60.0, float(CHANNEL_SILENCE_WARN))
+        warn_gap = warn_gap_floor(CHANNEL_SILENCE_WARN)
         now = self._now()
         if now - self._parse_warned_at.get(site, 0.0) < warn_gap:
             logger.info(f"HR 站点 {site} | 页面形态异常仍存在(节流期内不重复告警): {detail}")
@@ -1528,15 +1552,15 @@ class HrRefreshService:
         归通道层, 但**可见**: 它意味着后端频控失效, 是需要人看一眼的真问题(§07.2 不变项:
         `HrChannelQuota` 的现有出口不变)。
         """
-        if site in self._ext_quota_warned:
-            logger.info(f"HR 站点 {site} | 扩展侧硬上限仍生效(已告警过, 本波让位): {err}")
-            return
-        self._ext_quota_warned.add(site)
-        hr_log.emit(
-            logger,
-            logging.WARNING, f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/日额配置"
+        self._warn_once(
+            self._ext_quota_warned,
+            site,
+            dup_level=logging.INFO,
+            dup_msg=f"HR 站点 {site} | 扩展侧硬上限仍生效(已告警过, 本波让位): {err}",
+            level=logging.WARNING,
+            msg=f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/日额配置"
             "与日志), 也可能是扩展上限本就低于后端配额(属正常优先)",
-            event=events.EVENT_CHANNEL
+            event=events.EVENT_CHANNEL,
         )
 
 
@@ -1548,19 +1572,30 @@ class _LaneAbort(Exception):
         self.reason = reason
 
 
+def _settle_lane(st: HrLaneState, *, failed_detail: str, truncated_detail: str, count_failure: bool) -> bool:
+    """档位收尾单点(§3.4 档位独立): 本波无页 = 记失效(可推进连续失效计数), 有页 = 记截断(之前有效)。
+
+    三处调用只在文案与「是否推进连续失效」上不同: 结构失效 / 取数失败推进(要触发多波升级告警),
+    预算截断不推进(不是故障)。返回 True = 记了失效(供调用方决定是否升级告警)。
+    """
+    if st.pages == 0:
+        st.status = LANE_FAILED
+        st.detail = failed_detail
+        if count_failure:
+            st.fail_streak += 1
+        return True
+    st.status = LANE_OK
+    st.full_depth = False
+    st.detail = truncated_detail
+    return False
+
+
 def _mark_fetch_failed_lane(lane_states, wave: "_WaveContext") -> None:
     """页面级取数失败: 失败页无效, 该档在失效点截断(之前有效); 首页即失败 = 该档失效"""
     st = lane_states.get(wave.current_lane)
     if st is None or st.status == LANE_OK:
         return
-    if st.pages == 0:
-        st.status = LANE_FAILED
-        st.detail = "页面取数失败"
-        st.fail_streak += 1
-    else:
-        st.status = LANE_OK
-        st.full_depth = False
-        st.detail = "页面取数失败(失效点之前数据有效)"
+    _settle_lane(st, failed_detail="页面取数失败", truncated_detail="页面取数失败(失效点之前数据有效)", count_failure=True)
 
 
 # ---------------- 模块级纯函数(便于单测直调) ----------------

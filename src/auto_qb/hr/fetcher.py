@@ -180,23 +180,30 @@ class ChannelFetcher:
         return result
 
 
+def query_param(url: str, *names: str, default: str = "") -> str:
+    """从 URL 查询串取首个匹配参数的值 —— 仅供排障展示, 不做 URL 解码。
+
+    只切第一个 `?` 与 `&`, 且取首个 `=` 右侧整段(`hrtype=A=B` 取 `A=B`), 与站点页面参数的
+    实际形态一致; 无匹配返回 `default`。`_scope_of` / `_tid_of` 与报告层的档位提取共用此单点。
+    """
+    for part in url.split("?", 1)[-1].split("&"):
+        for name in names:
+            if part.startswith(name + "="):
+                return part.split("=", 1)[1]
+    return default
+
+
 def _scope_of(url: str) -> str:
     """从 URL 取档位(`hrtype=A` / CarPT 等变体的 `status=1`)—— 仅供排障展示, 解析不看它"""
-    for part in url.split("?", 1)[-1].split("&"):
-        if part.startswith("hrtype=") or part.startswith("status="):
-            return part.split("=", 1)[1]
-    return ""
+    return query_param(url, "hrtype", "status")
 
 
 def _tid_of(url: str) -> int:
     """从 URL 取种子 id(`id=123`)—— 仅供排障展示"""
-    for part in url.split("?", 1)[-1].split("&"):
-        if part.startswith("id="):
-            try:
-                return int(part.split("=", 1)[1])
-            except ValueError:
-                return 0
-    return 0
+    try:
+        return int(query_param(url, "id"))
+    except ValueError:
+        return 0
 
 
 def build_channel_fetcher(
@@ -227,5 +234,5 @@ def build_channel_fetcher(
 
 __all__ = [
     "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelTimeout", "HrChannelUnavailable", "HrFetchError",
-    "HrFetcher", "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available"
+    "HrFetcher", "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available", "query_param"
 ]

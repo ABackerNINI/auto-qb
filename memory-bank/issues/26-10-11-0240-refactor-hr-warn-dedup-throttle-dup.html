@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0240">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr 告警去重与节流样板重复">
 <meta name="issue-summary" content="每站告警一次骨架(3 方法) + 波级异常收尾样板 + 节流窗口口径分散 4 处">
 <title>hr 告警去重与节流样板重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0240-refactor-hr-warn-dedup-throttle-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,6 +98,17 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-11 15:55 — 认领开工（用户指派「修复 hr 部分问题…相关 issue 一并认领」；本轮 hr 低风险子集），状态 <strong>In Progress</strong>（任务档案：<a href="../tasks/26-10-11-backend-hr-dup-code-fix.md">tasks/26-10-11-backend-hr-dup-code-fix.md</a>）</li>
+      <li>2026-10-11 15:55 — 修复完成，状态 <strong>Done</strong>（见下「修复后补充」）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充<span class="opt">（2026-10-11）</span></h2>
+    <ul>
+      <li>实际修法: ① <code>service.py</code> 新增 <code>_warn_once(seen, site, *, dup_level, dup_msg, level, msg, event, silent=False)</code>，<code>_warn_no_channel</code> / <code>_warn_login</code> / <code>_warn_ext_quota</code> 降为参数化调用（去重日志级别 / 文案、告警级别 / 事件 / silent 全保留）；② <code>_do_wave</code> 三处异常收尾（配额 / 无通道 / Retry-After）抽嵌套 <code>_abort_wave()</code>（盖时间戳 → 记历史 → 落盘）；③ 新增模块级 <code>warn_gap_floor(threshold)</code>，service 与 worker 的节流窗口共用该算法。</li>
+      <li>与「建议修法」的差异（③ 改道）: 报告建议「收敛 6h 常量为单点」，但 4 处窗口<strong>值并不相同</strong>（service / worker 用 <code>max(60, CHANNEL_SILENCE_WARN)</code>、server 用 6h 字面量、core/traffic_store 用 3600s），且 worker 侧有 16 条单测按模块常量打补丁（<code>monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", ...)</code>）。故只抽<strong>算法</strong>（<code>max(60.0, float(阈值))</code>），阈值仍留各模块常量 —— 既消重又不动补丁面；server 的 6h 与 core/traffic_store 的 1h 属跨包 / 不同语义，未动。</li>
+      <li>验证方式: <code>test_hr_service.py</code>（含登录告警「每站只报一次」用例）+ <code>test_hr_worker.py</code>（含节流窗口下限与边界用例）全绿；全量 <code>test.full</code> <strong>3112 passed + 4 skipped / 0 failed / 99%</strong>。</li>
     </ul>
   </section>
 

@@ -26,6 +26,7 @@ from . import log as hr_log
 from .resolve import HrSiteView, HrViewSet
 from .service import (
     CHANNEL_SILENCE_WARN,
+    warn_gap_floor,
     ACTION_ERROR,
     ACTION_PARTIAL,
     ACTION_REFRESHED,
@@ -355,7 +356,7 @@ class HrWorker:
         prev = self._last_action.get(site)
         self._last_action[site] = result.action
         now = self._now()
-        warn_gap = max(60.0, float(CHANNEL_SILENCE_WARN))
+        warn_gap = warn_gap_floor(CHANNEL_SILENCE_WARN)
 
         if result.action in (ACTION_REFRESHED, ACTION_REUSED):
             if result.action != prev:
@@ -405,7 +406,7 @@ class HrWorker:
         endpoint = self.endpoint
         if endpoint is None:
             return
-        warn_gap = max(60.0, float(CHANNEL_SILENCE_WARN))
+        warn_gap = warn_gap_floor(CHANNEL_SILENCE_WARN)
         now = self._now()
         last = float(getattr(endpoint, "last_contact_ts", 0.0) or 0.0)
         reference = last or self._started_at or now

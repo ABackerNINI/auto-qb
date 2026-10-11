@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 from ..config.models import SiteHrCheckConfig
 from ..infra.errors import AutoQbError
 from ..infra.utils import atomic_write
+from .model import _as_float, _as_int  # 数值强转单点在 model(此前 channel 另抄一份逐字同)
 
 logger = logging.getLogger(__name__)
 
@@ -328,20 +329,6 @@ def decode_json(body: bytes) -> Any:
         return json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
         raise HrChannelError(f"请求体不是合法 JSON: {e}") from e
-
-
-def _as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _as_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 @dataclass(slots=True)

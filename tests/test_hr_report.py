@@ -32,7 +32,6 @@
   恰一条 confirm_empty 事件(trigger=confirm / action=confirm-empty)随既有 commit 落盘
 - test_status_row_cells_marks_observation: 观察期行的档位文案后缀
 - test_ellipsis_respects_cjk_double_width: CJK 双宽截断(保最后 1 格给 …)
-- test_stamp_text_ts_zero_is_dash: 无时刻显示 "-"
 - test_print_channel_lists_shared_dir_when_configured: 配了共享目录时明示
 - test_print_site_includes_view_line: 走查报告视图行(view 非空输出)
 """
@@ -578,14 +577,6 @@ def test_ellipsis_respects_cjk_double_width():
     cut = _ellipsis(wide, 20)
     assert _dwidth(cut) <= 20 and cut.endswith("…")
     assert _dwidth(cut[:-1]) <= 19, "正文部分不超可用格宽"
-
-
-def test_stamp_text_ts_zero_is_dash():
-    """无时刻(0/None 语义)显示 '-'(不渲染 1970)"""
-    from auto_qb.hr.report import stamp_text_ts
-
-    assert stamp_text_ts(0.0) == "-"
-    assert stamp_text_ts(1700000000.0).startswith("20")
 
 
 def test_print_channel_lists_shared_dir_when_configured(tmp_path):
