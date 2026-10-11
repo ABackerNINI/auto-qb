@@ -1,7 +1,7 @@
 # 知识库与协作纪律
 
-> 摘要: 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、测试写在没人跑的地方等于没写。
-> 触发: 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红
+> 摘要: 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、**该判的却没判(闸门漏挂 → 静默红)**、测试写在没人跑的地方等于没写。
+> 触发: 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红, 闸门漏挂, 静默红, 闸门覆盖, kb.check
 
 ### 纪律"反复强调但从不执行"时按顺序查四条 (缺任一都会衰减)
 
@@ -45,3 +45,16 @@
   守阵 `tests/test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`: 调用点全覆盖 +
   task id 真实存在 + **提示说跑 `kb.index` 的脚本必须真的在它的 run 列表里**(两处红验过:
   退回旧的两条 `kb.index` ⇒ 红; 删掉一条 `GEN_CMD_BY_SCRIPT` 登记 ⇒ 红)。
+
+### 闸门漏挂某条 `--check` → 那条检查就是**静默红**(该判的没判)
+
+- **触发**: 往 `kb.check` 加 / 改一条 `--check`, 或改 `my-commit-flow` 的 `[[gates]]` run 清单。
+- **判别**: 闸门里的 `--check` 清单与 `kb.check` 的 run 清单是**两份各自手抄的副本**, 一旦分叉,
+  只挂在 `kb.check` 的那条就"能判红却不在闸门里" —— 缺陷静默通过所有提交, 只能靠人手动跑
+  `kb.check` 撞见。2026-10-11 实测 (issue `26-10-11-1630-docs-baselines-missing-summary-header`):
+  三份基线切片缺三行头, `kb.check` 第 4 条 (`gen_baseline_recent --check`) 恒红, 而闸门里
+  **既没有它、也没有 `check_wording --check`** —— 两条都漏了。
+- **处置**: 把缺的 `<脚本> --check` 补进 `.my-commit-flow.toml` 的 `[[gates]]` run 清单; 守阵
+  `tests/test_memory_bank.py::test_commit_gate_covers_kb_check` 钉住「闸门 ⊇ `kb.check`」
+  (取 `kb.check` 的每条 `--check`, `gen_all` 展开成 `GENERATORS`; 改闸门漏同步即红)。
+  与本节上一条是**同一条纪律的两个方向**: 那条管"判红了修不修得掉", 这条管"该判的有没有判"。

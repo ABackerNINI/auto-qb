@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-selection-trigger-parity">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="三份基线切片缺三行头 &gt; 摘要 致 kb.check 恒红">
 <meta name="issue-summary" content="26-10-10-2245/2306/2335 三份 webui 基线切片缺 `&gt; 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦">
 <title>三份基线切片缺三行头 &gt; 摘要 致 kb.check 恒红 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-1630-docs-baselines-missing-summary-header</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 16:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,9 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 16:30 — 入池，状态 <strong>Open</strong>（计划外，未修；rules 修复轮收尾时发现）</li>
+      <li>2026-10-11 16:54 — 用户指派修复（「修复问题」）→ 认领，状态 <strong>Open</strong> → <strong>In Progress</strong>；复验：<code>commands run kb.check</code> 第 4 条（<code>gen_baseline_recent --check</code>）仍报三份缺 <code>&gt; 摘要:</code>（rc=1），现象成立。</li>
+      <li>2026-10-11 16:54 — 修复：三份切片标题后补齐三行头 —— 补 <code>&gt; 摘要:</code>（取各切片主题/首段要点）+ <code>&gt; 基线时间:</code>（取文件名时间戳，与排序回退一致），正文一字未动。验证：<code>commands run kb.check</code> 全 6 条转绿（rc=0）。状态 <strong>In Progress</strong> → <strong>Done</strong>。</li>
+      <li>2026-10-11 17:09 — 续作（用户「修复静默红的根因」）：静默红的根因 = 提交闸门 <code>.my-commit-flow.toml</code> 的 memory-bank 闸门漏挂 <code>gen_baseline_recent --check</code> 与 <code>check_wording --check</code>（两条都在 <code>kb.check</code> 的 run 里）。已把两条补进闸门 run 清单，并新增守阵 <code>tests/test_memory_bank.py::test_commit_gate_covers_kb_check</code> 钉住「闸门 ⊇ kb.check」（红验过：摘掉一条即红，还原即绿）。状态维持 <strong>Done</strong>。</li>
     </ul>
   </section>
 

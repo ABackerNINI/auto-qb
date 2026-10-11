@@ -92,14 +92,21 @@ note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"
 
 [[gates]]
 match = ["memory-bank/"]
+# 2026-10-11 补两条 (静默红根因, issue 26-10-11-1630): 原清单只有索引生成器 + timekit, 漏了
+#   `gen_baseline_recent --check` 与 `check_wording --check` —— 二者都在 `kb.check` 的 run 列表里
+#   (即"该跑的"), 却没进闸门, 于是"能判红却不在闸门里" = **静默红** (实测: 三份基线切片缺三行头
+#   使 kb.check 第 4 条恒红, 提交照过)。覆盖面从此与 kb.check 对齐, 由
+#   tests/test_memory_bank.py::test_commit_gate_covers_kb_check 钉住 (再漏即红)。
 run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
+         "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
+         "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
          "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 auto  = true
 timeout = 60
-note  = "知识库索引 + 制品索引与专题视图 + 日期守卫: 生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加)"
+note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面)"
 
 [[gates]]
 match = ["memory-bank/activeContext/"]

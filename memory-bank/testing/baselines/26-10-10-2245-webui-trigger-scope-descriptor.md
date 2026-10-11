@@ -1,5 +1,8 @@
 # 基线: WEBUI 选中×触发一致性 S3(descriptor 单点 + M3 拆借道)
 
+> 摘要: 计划 26-10-10-2001(专题 `webui-selection-trigger-parity`)的 S3 落地: descriptor 单点 `selection.js::_scopeResolve` 收编 R1–R7 + V1(R1/R2 两套选中展开收敛为同一 descriptor 的 `keys/hashes` 与 `closure` 两字段) + M3 拆借道(`menu.hash` 写入点清零, `actTorrent/exportTorrent/torrentCmd/copyTorrentInfo/delTorrent` 增显式 hash 形参缺省回落菜单)。出口重签名(3 个 `_dispatch*`)降级为保留既有出口形状(与「e2e 逐位一致」约束冲突, 见计划 §9 R3)。
+> 基线时间: 2026-10-10 22:45
+
 - 主题: [../../activeContext/26-10-10-2103-webui-selection-trigger-parity.md](../../activeContext/26-10-10-2103-webui-selection-trigger-parity.md) · 计划 26-10-10-2001(S3, R3)
 - 命令: `commands run test.full`(Windows, 单次采样 —— 耗时口径见 [../baseline.md](../baseline.md)「必须带区间」)
 - **实测 (Windows)**: **3111 passed + 4 skipped, 0 failed, 覆盖率 TOTAL 99%**

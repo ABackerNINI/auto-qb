@@ -1,5 +1,8 @@
 # 基线: WEBUI 选中×触发一致性 S5(e2e 参数化矩阵, 三张网闭合)
 
+> 摘要: 计划 26-10-10-2001(专题 `webui-selection-trigger-parity`)的 S5 落地: e2e 参数化矩阵(新增 `e2e/trigger-scope.spec.mjs` + `lib/scope_ring.mjs` + `lib/gestures.mjs`, 上移 menus.spec 本地手势), 三张网闭合。本笔只动 `e2e/`, 不改任何生产代码 ⇒ pytest 覆盖面与 S4 基线逐位一致, 不另起 pytest 数字。
+> 基线时间: 2026-10-10 23:35
+
 - 主题: [../../activeContext/26-10-10-2103-webui-selection-trigger-parity.md](../../activeContext/26-10-10-2103-webui-selection-trigger-parity.md) · 计划 26-10-10-2001(S5, R5)
 - 本笔只动 `e2e/`(新增 `trigger-scope.spec.mjs` + `lib/scope_ring.mjs` + `lib/gestures.mjs`; 上移 menus.spec 本地手势), **不改任何生产代码** —— pytest 覆盖面与 S4 基线(26-10-10-2306, 3112 passed / TOTAL 99%)逐位一致, 不另起 pytest 数字。
 - **e2e 实测 (Windows, 单次采样)**:

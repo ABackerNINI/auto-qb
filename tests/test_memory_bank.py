@@ -53,6 +53,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_wording_guard_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
 - test_wording_guard_flags_status_but_exempts_dated_and_tree_state: 无日期状态行判红; 日期流水 / 树态 / 行内代码引述 / 豁免标记 都不报
 - test_wording_guard_is_wired_into_kb_check: 守卫已挂进 `kb.check` 的 run 列表 (不接线 = 没人跑)
+- test_commit_gate_covers_kb_check: 提交闸门 [[gates]] 覆盖 `kb.check` 的每一条 `--check` (gen_all 展开成 GENERATORS) —— 漏挂 = 静默红 (2026-10-11 实测: 基线切片缺三行头致 kb.check 恒红而闸门不拦)
 - test_number_guard_exempts_dated_code_and_reports_only_overflow: 判据族 B 裸数字判红; 日期/代码/豁免标记不报; 存量冻结只报溢出
 - test_number_guard_is_green_on_current_kb: 当前 KB 裸数字未超冻结常数 (存量冻结; 超出 = 本轮新增手抄)
 - test_number_guard_dated_exemption_does_not_cover_continuation_lines: 已知边界 —— 日期豁免只认首行, 续行照常入判
@@ -849,6 +850,39 @@ def test_wording_guard_is_wired_into_kb_check() -> None:
 
     assert body, "kb/config.toml 里找不到 kb.check"
     assert "check_wording.py --check" in body.group(1), "check_wording.py --check 未挂进 kb.check"
+
+
+def test_commit_gate_covers_kb_check() -> None:
+    """提交闸门必须覆盖 `kb.check` 的**每一条** `--check` —— 漏挂的那条就是**静默红**。
+
+    2026-10-11 实测缺陷 (issue `26-10-11-1630-docs-baselines-missing-summary-header`): 三份基线切片
+    缺三行头, `kb.check` 第 4 条 (`gen_baseline_recent --check`) 恒红, 而提交闸门里**没有**这条
+    (`check_wording --check` 同样漏挂) ⇒ "能判红却不在闸门里": 缺陷静默通过所有提交, 只能靠人
+    手动跑 `kb.check` 撞见。根因是闸门的 `[[gates]]` run 清单与 `kb.check` 各自演化 (手抄副本)。
+
+    判据: 取 `kb.check` run 列表里所有 `X.py --check`, 把 `gen_all.py` 展开成它声明的 `GENERATORS`
+    (索引生成器的集合单点), 要求每个都出现在 `.my-commit-flow.toml` 的某个 `[[gates]]` run 里。
+    与 `test_gen_cmd_hints_name_real_tasks` 的"`kb.index` 覆盖面 ⊇ 闸门判红集"同旨, 这里是反方向
+    (闸门 ⊇ `kb.check`), 两条合起来钉住"闸门判红的每一条都有人能修、且该跑的都真的在跑"。
+    """
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    body = re.search(r'^\[tasks\."kb\.check"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert body, "kb/config.toml 里找不到 kb.check"
+    checked = set(re.findall(r"([\w_]+\.py) --check", body.group(1)))
+    assert checked, "kb.check 的 run 列表里没有 `--check` (写法变了? 同步本守阵)"
+
+    if "gen_all.py" in checked:  # 索引生成器的集合单点: 展开成 GENERATORS 再核对
+        checked.discard("gen_all.py")
+        checked |= {script for _skill, script in _gen_all().GENERATORS}
+
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    gated = set(re.findall(r"([\w_]+\.py) --check", gate_cfg))
+
+    missing = sorted(checked - gated)
+    assert not missing, (
+        f"提交闸门漏挂 kb.check 的 `--check`: {missing} —— 这些检查能判红却不在闸门里 = 静默红; "
+        "把对应 `<脚本> --check` 加进 .my-commit-flow.toml 的 [[gates]] run 列表"
+    )
 
 
 def test_number_guard_exempts_dated_code_and_reports_only_overflow(tmp_path: Path) -> None:
