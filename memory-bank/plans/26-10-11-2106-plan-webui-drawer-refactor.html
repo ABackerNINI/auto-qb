@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-refactor">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-11-2106">
+<meta name="doc-updated" content="26-10-11-2106">
+<title>种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012;
+    --paper:#15171b;
+    --paper-2:#191c21;
+    --ink:#e7e7e4;
+    --muted:#a2a8af;
+    --dim:#6f757c;
+    --line:rgba(255,255,255,.10);
+    --line-soft:rgba(255,255,255,.055);
+    --accent:#d8a657;
+    --accent-soft:rgba(216,166,87,.13);
+    --warn:#e0705f;
+    --ok:#86b46a;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(216,166,87,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  code{color:#d7d2c4;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+
+  /* ---------- cover ---------- */
+  .cover{padding:88px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:44px;line-height:1.12;letter-spacing:-.022em;font-weight:600;margin:20px 0 0;max-width:20ch}
+  .sub{font-size:19px;color:var(--muted);margin-top:18px;max-width:60ch;line-height:1.5}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:38px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:14px 18px 2px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  .meta dd{margin:0;font-size:14px;color:var(--ink)}
+  .lede{margin-top:34px;font-size:16.5px;color:#cfd2d0;max-width:78ch}
+
+  /* ---------- layout ---------- */
+  .doc{display:grid;grid-template-columns:198px minmax(0,1fr);gap:60px;padding-top:52px;padding-bottom:96px}
+  nav.toc{position:sticky;top:34px;align-self:start;font-size:13px}
+  nav.toc .t-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px}
+  nav.toc a{display:block;color:var(--muted);border:0;padding:5px 0;line-height:1.35}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--dim);margin-right:9px}
+  nav.toc a:hover{color:var(--ink)}
+  main{min-width:0}
+
+  section{padding:38px 0 6px;border-top:1px solid var(--line)}
+  section:first-child{border-top:0;padding-top:0}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 6px}
+  h2 .idx{color:var(--accent)}
+  h3{font-size:24px;line-height:1.24;letter-spacing:-.014em;font-weight:600;margin:6px 0 18px}
+  h4{font-size:16px;font-weight:600;margin:30px 0 10px;letter-spacing:-.005em}
+  h4 .h4n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-right:8px}
+  p{margin:0 0 14px;max-width:76ch}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:76ch}
+  li{margin:5px 0}
+  li::marker{color:var(--dim)}
+  strong{font-weight:600;color:#f2f1ec}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  hr.rule{border:0;border-top:1px solid var(--line-soft);margin:26px 0}
+
+  /* ---------- tables ---------- */
+  .bleed{max-width:none}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 20px}
+  caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding-bottom:9px}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
+  thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody tr:hover{background:rgba(255,255,255,.018)}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  td .path{font-family:var(--mono);font-size:12px;color:#cbc6b8}
+
+  /* ---------- callouts (hairline, no cards) ---------- */
+  .note{border-left:2px solid var(--accent);padding:2px 0 2px 18px;margin:20px 0;color:#d3d6d3}
+  .note .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
+  .risk{border-left:2px solid var(--warn);padding:2px 0 2px 18px;margin:18px 0}
+  .risk .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--warn);display:block;margin-bottom:5px}
+
+  /* ---------- phase list ---------- */
+  .phase{border-top:1px solid var(--line-soft);padding:16px 0 14px;display:grid;grid-template-columns:74px minmax(0,1fr);gap:18px}
+  .phase:last-child{border-bottom:1px solid var(--line-soft)}
+  .phase .pid{font-family:var(--mono);font-size:12px;color:var(--accent);padding-top:3px;letter-spacing:.04em}
+  .phase .pbody h5{margin:0 0 8px;font-size:15.5px;font-weight:600}
+  .phase dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 14px;font-size:13.5px}
+  .phase dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding-top:3px;white-space:nowrap}
+  .phase dd{margin:0;color:#cfd2d0}
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;border:1px solid var(--line);border-radius:3px;padding:.05em .42em;color:var(--muted);white-space:nowrap}
+
+  /* ---------- decision list ---------- */
+  .dec{border-top:1px solid var(--line-soft);padding:15px 0}
+  .dec:last-child{border-bottom:1px solid var(--line-soft)}
+  .dec .q{font-weight:600;margin-bottom:6px}
+  .dec .q .qn{font-family:var(--mono);color:var(--dim);margin-right:8px}
+  .dec .opt{font-size:13.5px;color:var(--muted);margin:0 0 6px;padding-left:0}
+  .dec .rec{font-size:13.5px;color:#d8d2c2}
+  .dec .rec b{color:var(--accent);font-weight:600}
+
+  figure{margin:22px 0}
+  figure svg{width:100%;height:auto;display:block;border:1px solid var(--line-soft);border-radius:4px;background:var(--paper)}
+  figcaption{font-size:12px;color:var(--dim);margin-top:9px;font-family:var(--mono);letter-spacing:.03em}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 70px;color:var(--dim);font-size:12px;font-family:var(--mono);letter-spacing:.04em}
+  @media (max-width:900px){
+    .doc{grid-template-columns:1fr;gap:26px}
+    nav.toc{position:static}
+    h1{font-size:33px}
+    .meta{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <div class="kicker">Plan · WebUI 前端重构</div>
+    <h1>种子详情面板重构</h1>
+    <p class="sub">把底部停靠抽屉从「字符串 DOM + 15 个过程式变体」重建为 Vue 面板，剥出与渲染无关的数据层，并让 Tracker / 用户 / 文件三张列表接上公共表壳 <code>&lt;aq-table&gt;</code>。</p>
+    <dl class="meta">
+      <div><dt>Topic</dt><dd>webui-drawer-refactor</dd></div>
+      <div><dt>Status</dt><dd>Open · 待拍板</dd></div>
+      <div><dt>Added</dt><dd>26-10-11-2106</dd></div>
+      <div><dt>Scope</dt><dd>前端 only · 三皮肤 · 无构建链</dd></div>
+    </dl>
+    <p class="lede">本计划是表组件计划 <a href="26-10-11-1722-plan-webui-table-component.html">26-10-11-1722</a> 的 §05 <strong>P6 的详案</strong>：那份计划的 P0–P5 已把主视图（辅种 / 追剧 / 种子 / 明细）与设置页（HR）的表壳<strong>单点化</strong>，P6 只留了「前向接入契约」。用户 26-10-11 定调抽屉<strong>「完全重构、不考虑兼容」</strong>，故此处<strong>另立专题</strong>给出重建方案。与 P6 的停手点一致：<strong>现有抽屉一行不改</strong>，重建按下文 W0–W6 另起波次施工。</p>
+  </div>
+</header>
+
+<div class="wrap doc">
+  <nav class="toc">
+    <div class="t-h">目录</div>
+    <a href="#s1"><span class="n">01</span>目标与边界</a>
+    <a href="#s2"><span class="n">02</span>现状盘点</a>
+    <a href="#s3"><span class="n">03</span>等价面清单</a>
+    <a href="#s4"><span class="n">04</span>目标架构</a>
+    <a href="#s5"><span class="n">05</span>分步实施 W0–W6</a>
+    <a href="#s6"><span class="n">06</span>不变式与移植清单</a>
+    <a href="#s7"><span class="n">07</span>与表组件的接口</a>
+    <a href="#s8"><span class="n">08</span>风险与红线</a>
+    <a href="#s9"><span class="n">09</span>拍板点</a>
+    <a href="#s10"><span class="n">10</span>验收与基线</a>
+    <a href="#s11"><span class="n">11</span>变更记录</a>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 ============ -->
+    <section id="s1">
+      <h2><span class="idx">01</span> 目标与边界</h2>
+      <h3>把第二套渲染技术整条换掉，而不是再打一层遮罩补丁</h3>
+
+      <h4><span class="h4n">1.1</span> 目标</h4>
+      <ul>
+        <li><strong>渲染单点</strong>：抽屉正文由 Vue 3 全局组件承载（与 <code>&lt;aq-table&gt;</code> / <code>hub-field</code> 同形态），彻底消除「Vue + 字符串 DOM」两套渲染技术并存。</li>
+        <li><strong>数据层剥离</strong>：把取数 / 竞态 / 等待集合 / 软切换序号从渲染代码里剥到与渲染<strong>无关</strong>的模块，让软切换协议有唯一宿主——这是治「换目标闪烁」<strong>结构性</strong>的手段。</li>
+        <li><strong>列表接壳</strong>：Tracker / 用户 / 文件三张列表注册进 <code>&lt;aq-table&gt;</code>，拖宽 / 排序 / 右键隐藏与主视图同源；这正是 P6 承诺的「接入面」落成真实代码。</li>
+        <li><strong>变体收敛</strong>：15 个过程式字符串变体不再逐一手搬；改为配置驱动的<strong>声明式密度档位</strong>（档数见拍板点）。</li>
+      </ul>
+
+      <h4><span class="h4n">1.2</span> 非目标（本计划明确不做）</h4>
+      <ul>
+        <li>不改数据契约（前端 <code>drawer.detail/trackers/files/peers</code> 形状不动，后端零改动、零新端点）。</li>
+        <li>不引入构建链（继续 Vue 3 CDN + <code>shared/tpl/*.html</code> 分片 + 全局 mixin 接线；无 SFC、无打包器）。</li>
+        <li>不动流量图：<span class="path">qb_traffic_chart.js</span>（uPlot）<strong>零改动</strong>，仅以薄包装承载其宿主 <code>ref</code>。</li>
+        <li>不改抽屉几何契约（停靠占文档流、高度夹取 [240px, 70vh] 与持久化）与键盘口径（Alt+1..5、合并重排）。</li>
+        <li><strong>不为现有字符串 DOM 写任何适配层</strong>——现有抽屉整体废弃，不做兼容迁移。</li>
+      </ul>
+
+      <div class="note">
+        <span class="lab">与上一份抽屉计划的关系</span>
+        <a href="26-10-06-0838-plan-webui-detail-panel-redesign.html">26-10-06-0838</a>（专题 <code>webui-detail-panel-redesign</code>，状态 Done）建成的是<strong>现有</strong>变体体系（注册表 + 宿主 + classic 兜底 + 15 变体）。本计划不是它的改版，而是其后继<strong>重建</strong>：目标架构、渲染技术、变体策略都不同，故另立专题而非在同文件堆版本。
+      </div>
+    </section>
+
+    <!-- ============ 02 ============ -->
+    <section id="s2">
+      <h2><span class="idx">02</span> 现状盘点</h2>
+      <h3>三层现状：一个 mixin、一个核心层、十九份变体/经典页</h3>
+
+      <h4><span class="h4n">2.1</span> 三层现状结构</h4>
+      <table class="bleed">
+        <caption>表 A — 抽屉现状分层（实测件/行数）</caption>
+        <thead><tr><th>层</th><th>载体</th><th>职责</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>数据 / 行为层</strong></td>
+            <td><span class="path">shared/drawer.js</span>（1435 行，<code>window.AQB_DRAWER</code> mixin）</td>
+            <td>开合 / 页签 / 收起 / 拖高 / 5s 轮询 / 四 fetcher（<code>_fetchDrawerDetail|Trackers|Files|Peers</code>）/ 软切换（<code>_drawerWaitSources</code> / <code>_drawerDone</code> / <code>_drawerSwitchEnd</code>）/ 数据组装与格式化</td>
+          </tr>
+          <tr>
+            <td><strong>核心层</strong></td>
+            <td><span class="path">shared/drawer_templates.js</span>（686 行，<code>window.AQB_DRAWER_TPL_REG</code>）</td>
+            <td>变体注册表 / 宿主生命周期（<code>_dtSync</code> / <code>_dtNotify</code> / 卸载）/ <code>dtHtml</code> 转义标签模板（<code>dtRaw</code> 显式豁免）/ CSS 注入单点 / <code>autoqb.ui.drawerTpl</code> 读写 / 收起态摘要默认实现</td>
+          </tr>
+          <tr>
+            <td><strong>变体 / 经典页层</strong></td>
+            <td><span class="path">shared/drawer_tpl/01-…-15-….js</span>（15 文件）· <span class="path">shared/drawer_pages/*-classic.js</span>（4 页）</td>
+            <td>每变体自注册 <code>{id,tab,label,css,render(host,ctx),summary,destroy}</code>，内部纯命令式拼字符串；classic 四页为兜底与对照</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4><span class="h4n">2.2</span> 为什么必须重构（问题清单，逐条有坑档佐证）</h4>
+      <table class="bleed">
+        <caption>表 B — 现状问题与根因</caption>
+        <thead><tr><th class="num">#</th><th>问题</th><th>证据</th><th>根因</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td><strong>换目标闪烁</strong>（面板塌一下 / 标题跳成 hash / 遮罩挂死）</td><td><span class="path">pitfalls/web-ui/drawer-switch-flicker.md</span>（<strong>复发 7 次</strong>）</td><td>取数在途、渲染、几何三件事耦在一处；「先清空再拉」把"还没到"渲染成"什么都没有"</td></tr>
+          <tr><td class="num">2</td><td><strong>变体静默失效</strong>回落 classic，用户选择跨会话丢失</td><td><span class="path">pitfalls/web-ui/variant-singleton-shadow.md</span></td><td>15 变体各自模块级 <code>T/R/H</code> 单点 + 过程式字符串构建；渲染抛错被 <code>catch</code> 吞成回落并落盘</td></tr>
+          <tr><td class="num">3</td><td><strong>页签永不自愈空白</strong>（切设置页返回后）</td><td><span class="path">pitfalls/web-ui/vif-host-node-stale.md</span></td><td>模块级 <code>_dtMounted</code> 持节点引用，与 <code>v-if</code> 拆建并存</td></tr>
+          <tr><td class="num">4</td><td><strong>同功能多形态各一份</strong>，改一处漏一处</td><td><span class="path">pitfalls/web-ui/drawer-multi-form-hosts.md</span></td><td>无模板 partial 机制，形态各复制一份；守阵断言口径太窄</td></tr>
+          <tr><td class="num">5</td><td>全局 mixin 波及 <code>&lt;transition&gt;</code> 假实例（13 条报错）</td><td><span class="path">pitfalls/web-ui/global-mixin-basetransition-watch.md</span></td><td>无构建链 + 全局 <code>app.mixin</code> + 根选项边界</td></tr>
+          <tr><td class="num">6</td><td>合并双列命中区靠坐标兜底</td><td><span class="path">pitfalls/web-ui/drawer-merge-hit-region.md</span></td><td>列间 gap / 两侧留白不落在任何元素上</td></tr>
+          <tr><td class="num">7</td><td><strong>两套渲染技术并存</strong> ⇒ 新表壳用不上</td><td>本计划 §04；表组件计划 §02 / §03</td><td>字符串 DOM 与 Vue 互不可见</td></tr>
+          <tr><td class="num">8</td><td>变体维护量：15 文件 × 20–34KB + 4 classic 页</td><td><span class="path">drawer_templates.js</span> 头注 · <code>reg.helpers</code> 收口史</td><td>过程式构建，无声明式列 / 结构模型</td></tr>
+          <tr><td class="num">9</td><td>XSS 转义全靠纪律（<code>dtHtml</code> / <code>dtRaw</code>）</td><td><span class="path">drawer_templates.js</span> 头注</td><td>字符串 DOM 天然要纪律</td></tr>
+          <tr><td class="num">10</td><td>形态 × 页签 × 模板 × 合并 四维组合 ⇒ 快捷键 / 持久化 / 命中面爆炸</td><td>R2–R6 记录（见 §08）</td><td>组合自由度未被收敛到单一状态源</td></tr>
+        </tbody>
+      </table>
+      <div class="risk">
+        <span class="lab">盘点的第一结论</span>
+        问题 1–4 是<strong>同一个根因的四个侧面</strong>：渲染与数据/生命周期没有边界。所以重建的第一刀不是「换掉字符串拼接」，而是<strong>先剥出数据层</strong>（W1），否则换了 Vue 也照样闪。
+      </div>
+    </section>
+
+    <!-- ============ 03 ============ -->
+    <section id="s3">
+      <h2><span class="idx">03</span> 等价面清单</h2>
+      <h3>重建必须达到的七个语义面</h3>
+      <table class="bleed">
+        <caption>表 C — 逐面现状与「重建不许丢」的语义</caption>
+        <thead><tr><th>面</th><th>现状落点</th><th>重建必须保的语义</th></tr></thead>
+        <tbody>
+          <tr><td>取数</td><td><span class="path">drawer.js</span> 四 fetcher + <span class="path">qb_traffic_chart.js</span> 的 <code>_qbLoad</code></td><td>竞态纪律（stale 不落袋）· 失败与空态可辨 · 5s 轮询只在对应页签激活时</td></tr>
+          <tr><td>软切换</td><td><code>drawer.switching</code> + <code>_drawerWaitSources</code> / <code>_drawerDone</code> / <code>_drawerSwitchEnd</code> + 160ms 延迟点亮</td><td>按 tab 待到集合；<strong>每个入集源都必须登记</strong>（流量页签跨模块踩过）；入口同目标幂等 / 换目标交棒</td></tr>
+          <tr><td>几何</td><td><span class="path">tpl/dock.html</span> 的 <code>.drawer-dock</code> + <code>.drawer-grip</code> 拖高（夹取 [240px, 70vh]）+ 高度持久化</td><td>停靠面板占文档流；高度变化会传导给列表 ⇒「内容更新要不要动几何」先问一句</td></tr>
+          <tr><td>形态</td><td><code>drawer.kind</code>：<code>seed</code>（五页签）· <code>traffic</code>（全局 / 分组 / 单种）共用同一壳</td><td>两形态<strong>不共用头部</strong>，控件落点各自独立（外推即回归）</td></tr>
+          <tr><td>合并</td><td><code>drawerMerge</code> off/on + 宽度门 1920 + <code>dtPair</code> + 右键模板选择</td><td>渲染哪两列由<strong>当前页签所属对</strong>决定（不是按标志值）</td></tr>
+          <tr><td>键盘</td><td>Alt+1..5 + <code>KB_MERGE_TAB_REMAP</code> + 行级 roving tabindex 四件套</td><td>重排<strong>先于</strong>流量门控；帮助浮层文案随态改写</td></tr>
+          <tr><td>持久化</td><td><code>autoqb.ui.drawerTpl</code> / <code>drawerMerge</code> / 抽屉高度 / <code>drawerTab</code></td><td>升级零观感差异；脏值 / 坏 JSON 一律回落默认（不报错）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 04 ============ -->
+    <section id="s4">
+      <h2><span class="idx">04</span> 目标架构</h2>
+      <h3>唯一核心 + 渲染适配：先剥数据层，再换渲染</h3>
+      <p>与表组件计划 §03 同一取向。P0–P5 已证明「主视图 / 设置页 = Vue」这条主路径成立；重建把详情面板并入该路径，并把取数从渲染里剥出去。</p>
+      <figure>
+        <svg viewBox="0 0 680 300" role="img" aria-label="详情面板重建目标架构图">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10" fill="none" stroke="#6f757c" stroke-width="1.2"/>
+            </marker>
+          </defs>
+          <rect x="16" y="18" width="648" height="58" rx="4" fill="#191c21" stroke="rgba(255,255,255,.14)"/>
+          <text x="34" y="41" fill="#e7e7e4" font-family="monospace" font-size="12.5">① 面板数据层  shared/drawer_store.js（与渲染无关）</text>
+          <text x="34" y="62" fill="#a2a8af" font-size="11.5">per-hash 详情 + 四列表 + 流量 + 等待集合 + 软切换序号 + 竞态/登记纪律</text>
+          <line x1="340" y1="76" x2="340" y2="104" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar2)"/>
+          <rect x="16" y="106" width="648" height="58" rx="4" fill="#191c21" stroke="rgba(255,255,255,.14)"/>
+          <text x="34" y="129" fill="#e7e7e4" font-family="monospace" font-size="12.5">② Vue 面板组件（app.component · 分片模板 · 无 SFC/构建链）</text>
+          <text x="34" y="150" fill="#a2a8af" font-size="11.5">抽屉壳 · 页签 · 四页签正文 · 流量薄包装 · 合并双列 · 右键菜单</text>
+          <line x1="220" y1="164" x2="220" y2="196" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar2)"/>
+          <line x1="470" y1="164" x2="470" y2="196" stroke="#6f757c" stroke-width="1.2" marker-end="url(#ar2)"/>
+          <rect x="16" y="198" width="300" height="84" rx="4" fill="#15171b" stroke="#d8a657" stroke-width="1.2"/>
+          <text x="34" y="222" fill="#e7e7e4" font-family="monospace" font-size="12.5">③a 公共表壳 &lt;aq-table&gt;</text>
+          <text x="34" y="243" fill="#a2a8af" font-size="11.5">Tracker / 用户 / 文件 三列表注册</text>
+          <text x="34" y="262" fill="#a2a8af" font-size="11.5">拖宽 · 排序 · 右键隐藏 · 与主视图同源</text>
+          <rect x="364" y="198" width="300" height="84" rx="4" fill="#15171b" stroke="rgba(255,255,255,.16)" stroke-dasharray="4 3"/>
+          <text x="382" y="222" fill="#a2a8af" font-family="monospace" font-size="12.5">③b 流量图（零改动）</text>
+          <text x="382" y="243" fill="#6f757c" font-size="11.5">qb_traffic_chart.js（uPlot）</text>
+          <text x="382" y="262" fill="#6f757c" font-size="11.5">薄包装承载其宿主 ref / ResizeObserver</text>
+        </svg>
+        <figcaption>图 1 · 数据层剥离 + 渲染单点；列表复用 P0–P5 的表壳，流量图保持独立</figcaption>
+      </figure>
+      <ul>
+        <li><strong>渲染模型</strong>：Vue 3 全局组件（<code>app.component</code>，与 <code>&lt;aq-table&gt;</code> / <code>hub-field</code> 同形态），模板放 <code>shared/tpl/*.html</code> 分片；<strong>无 SFC、无构建链</strong>。组件只贡献模板与最小实例态，行为经 <code>$root</code> 或独立模块（对齐 <code>&lt;aq-table&gt;</code> 的接线口径）。</li>
+        <li><strong>数据层抽离</strong>：把「取数 + 竞态 + 等待集合 + 软切换序号」从渲染代码剥到与渲染无关的 <span class="path">shared/drawer_store.js</span>，成为软切换协议的<strong>唯一宿主</strong>。这是治「闪烁 7 次复发」的<strong>结构性</strong>手段，而不是再加一层遮罩补丁。</li>
+        <li><strong>列表复用表壳</strong>：Tracker / 用户 / 文件三张列表注册进 <code>&lt;aq-table&gt;</code>（与 <code>HR_TABLE_DEFS</code> 同法：<strong>独立注册表，不进 <code>TABLE_PAGES</code></strong>），行模型渲染器各一份 ⇒ 拖宽 / 排序 / 右键隐藏与主视图<strong>同源</strong>。</li>
+        <li><strong>流量页签</strong>：<span class="path">qb_traffic_chart.js</span>（uPlot）<strong>零改动</strong>，用一个薄 Vue 包装组件承载其宿主 <code>ref</code>。</li>
+        <li><strong>变体策略</strong>：15 个过程式变体不再逐一手搬；改为「每页签 N 档密度变体」的声明式配置（列 / 卡片 / 结构由描述符决定），档数见拍板点 D2。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 05 ============ -->
+    <section id="s5">
+      <h2><span class="idx">05</span> 分步实施 W0–W6</h2>
+      <h3>一步一停手点，每步独立验收、可回退</h3>
+      <p class="muted">排序原则：先冻结基线，再剥数据层（零观感变化），然后按页签分波换渲染，最后收口退役。<strong>W0–W6 即表组件计划 §05 P6 的分步落地</strong>；每一步都跑 <code>test.full</code> 与 e2e，并按 §10 新建基线切片。</p>
+
+      <div class="phase">
+        <div class="pid">W0</div>
+        <div class="pbody">
+          <h5>冻结契约与验收基线</h5>
+          <dl>
+            <dt>目标</dt><dd>把 §03 的逐面等价清单落成文档，并冻结一套「重建基线」：现状抽屉的 e2e（drawer-groups-shows / drawer-merge / column-prefs / 快捷键）+ 真浏览器 DOM 与交互探针 dump，作为后续每一步的 A/B 对照。</dd>
+            <dt>改动面</dt><dd>仅文档 + 一条基线切片（<span class="path">memory-bank/testing/baselines/</span>）；<strong>零代码</strong>。</dd>
+            <dt>验收</dt><dd>基线切片含四支 e2e 的当前通过数与 DOM dump 哈希；拍板点 D1–D4 定案。</dd>
+            <dt>停手点</dt><dd>不改一行产品代码。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W1</div>
+        <div class="pbody">
+          <h5>数据层抽离（零观感变化）</h5>
+          <dl>
+            <dt>目标</dt><dd>把取数 / 竞态 / 等待集合 / 软切换序号剥成 <span class="path">shared/drawer_store.js</span>（与渲染无关），现有字符串 DOM 仍消费它，渲染结果<strong>逐字节等价</strong>。</dd>
+            <dt>改动面</dt><dd>新增 store 片段 + <span class="path">drawer.js</span> 改为薄适配（四 fetcher / <code>_drawerWaitSources</code> / <code>_drawerDone</code> / <code>_drawerSwitchEnd</code> 迁入）；三份 shell 清单各加一行（<span class="path">prism/index.html</span> 210 行硬顶，先腾后加，手法见 <span class="path">pitfalls/web-ui/frontend-split.md</span>）。</dd>
+            <dt>验收</dt><dd>现有 e2e 与基线逐位一致；闪烁相关场景（换目标 / 换页签 / 入口重入）行为不变。</dd>
+            <dt>停手点</dt><dd>渲染仍走字符串 DOM，面板外观零变化。跨模块登记（流量）必须在 store 里<strong>显式成对</strong>，不再靠「在 fetcher <code>finally</code> 里调」隐含成立。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W2</div>
+        <div class="pbody">
+          <h5>四页签 Vue 重建（按页签分波，三列表接入表壳）</h5>
+          <dl>
+            <dt>目标</dt><dd>general / trackers / peers / content 四个页签各重写为 Vue 组件；Tracker / 用户 / 文件三张列表接入 <code>&lt;aq-table&gt;</code>（注册三张表 + 三个行模型渲染器）；删 <span class="path">drawer_pages/&lt;tab&gt;-classic.js</span>。</dd>
+            <dt>改动面</dt><dd>新增面板组件分片 + 三张表注册（与 <code>TABLE_DEFS</code> 同族的<strong>独立</strong>注册表）；<span class="path">tpl/drawer.html</span> 的 <code>dt-host</code> 骨架替换为组件调用。</dd>
+            <dt>验收</dt><dd>四页签 DOM 与现状 A/B 等价（或按拍板的观感升级逐项确认）；拖宽 / 排序 / 右键隐藏 / 行键盘在面板内可用；守阵 <code>test_drawer_tpl_*</code> 同轮改版而非放宽。</dd>
+            <dt>停手点</dt><dd>一页签一波；未替换的页签仍走旧插件（<strong>单一挂载点 + 特性开关</strong>，避免双实现同屏）。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W3</div>
+        <div class="pbody">
+          <h5>流量页签与形态收敛</h5>
+          <dl>
+            <dt>目标</dt><dd>seed 五页签（含流量）与 traffic 三挂点（全局 / 分组 / 单种）统一到新面板；<code>drawer.kind</code> 形态判据收口；消掉「两形态各一份头部」的复写（问题 4 的根因）。</dd>
+            <dt>改动面</dt><dd><span class="path">qb_traffic_chart.js</span> 的宿主以薄包装接入；<code>.drawer-body.is-traffic</code> 布局类保留（三皮肤 CSS 零改动优先）。</dd>
+            <dt>验收</dt><dd>三挂点控件齐全（守阵按「两形态各接一份 + 内层逐字同源」钉）；静默续拉（<code>qbCurPending</code> 三合一）语义不变。</dd>
+            <dt>停手点</dt><dd>uPlot 与图表模块零改动。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W4</div>
+        <div class="pbody">
+          <h5>合并双列与右键模板选择</h5>
+          <dl>
+            <dt>目标</dt><dd><code>drawerMerge</code> 开关 + 宽度门 1920 + <code>dtPair</code> + 右键模板选择 + 合并页签，全部以新面板<strong>单一状态源</strong>表达（不再 computed 与模板两处读法）。</dd>
+            <dt>改动面</dt><dd>删 <code>MERGE_PAIRS</code> 的双份判据（渲染列组 vs 命中）；坐标兜底 <code>_drawerMenuColByX</code> 若新架构下不再需要则退役，否则保留并注释根因。</dd>
+            <dt>验收</dt><dd>合并开关 / 门跨越 / 两列各自模板记忆 / 右键命中区域四条 e2e 全绿；拉宽自动恢复。</dd>
+            <dt>停手点</dt><dd>宽度门 1920 与两列封顶 2400 口径不变。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W5</div>
+        <div class="pbody">
+          <h5>变体策略落地（按 D2 拍板）</h5>
+          <dl>
+            <dt>目标</dt><dd>把 15 个过程式变体替换为<strong>声明式密度变体</strong>（或按拍板收敛 / 删除）；<span class="path">shared/drawer_tpl/*</span> 与变体设施退役。</dd>
+            <dt>改动面</dt><dd>删 <span class="path">shared/drawer_tpl/*</span>（15 文件）与 <code>dtHtml</code> / <code>dtRaw</code> / <code>KIT</code> / <code>HELPERS</code> / 宿主挂载 API；<code>autoqb.ui.drawerTpl</code> 的旧 id <strong>显式迁移</strong>（旧 id → 新档位，升级零观感差异）。</dd>
+            <dt>验收</dt><dd>每页签的档位切换生效并持久化；旧 id 不报错、有明确迁移去向。</dd>
+            <dt>停手点</dt><dd>不新增过程式字符串构建。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pid">W6</div>
+        <div class="pbody">
+          <h5>收口与退役</h5>
+          <dl>
+            <dt>目标</dt><dd>删尽第二套渲染技术；守阵与坑档同轮改版；文档回写。</dd>
+            <dt>改动面</dt><dd>删 <span class="path">drawer_templates.js</span> 的宿主 / 注册 / 挂载（<code>_dtMounted</code> / <code>_dtSync</code> / <code>_dtRender</code> / <code>_dtNotify</code>）、<span class="path">drawer_pages/*</span>、<span class="path">drawer_tpl/*</span>；<code>test_drawer_tpl_registry_wiring</code> / <code>test_drawer_tpl_*</code> / <code>test_drawer_seed_reentry_variant_remount</code> 等整体退役或改写为 Vue 版；坑档 <span class="path">drawer-switch-flicker</span> / <span class="path">vif-host-node-stale</span> / <span class="path">variant-singleton-shadow</span> 标注「随重建退役（协议移植见 W1 / W3）」。</dd>
+            <dt>验收</dt><dd><code>test.full</code> 全绿；e2e 全量与重建基线逐位一致（或按观感升级逐项确认）；坑档与守阵零悬空。</dd>
+            <dt>停手点</dt><dd>旧渲染设施<strong>删干净</strong>，不留半套。</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 06 ============ -->
+    <section id="s6">
+      <h2><span class="idx">06</span> 不变式与移植清单</h2>
+      <h3>重建最容易丢的六条</h3>
+      <ul>
+        <li><strong>软切换协议整体移植，不许重写</strong>：160ms 延迟点亮遮罩；按 tab 待到集合；<strong>每个入集数据源都必须显式登记</strong>（含跨模块的流量）；入口「同目标幂等短路 / 换目标交棒」；标题取 <code>memberByHash</code> 而非等详情。</li>
+        <li><strong>几何</strong>：停靠面板占文档流，高度变化传导给列表——任何「会改高度的内容更新」先问要不要动几何。</li>
+        <li><strong>持久化</strong>：<code>drawerTpl</code> / <code>drawerMerge</code> / 高度 / <code>drawerTab</code> 零迁移或显式映射；脏值 / 坏 JSON 一律回落默认（不报错）。</li>
+        <li><strong>形态数据域单一、UI 挂点各自独立</strong>：<code>qbCurScope</code> 派生；别从另一形态的拍板外推落点。</li>
+        <li><strong>键盘</strong>：Alt+1..5 重排<strong>先于</strong>流量门控；帮助文案随态改写；行级 roving 四件套。</li>
+        <li><strong>无构建链</strong>：分片清单序 + <span class="path">prism/index.html</span> 210 行硬顶（腾行手法见 <span class="path">pitfalls/web-ui/frontend-split.md</span>）。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 07 ============ -->
+    <section id="s7">
+      <h2><span class="idx">07</span> 与表组件的接口</h2>
+      <h3>面板三张列表的注册（P6 原承诺的「接入面」落地）</h3>
+      <table class="bleed">
+        <caption>表 D — 三张列表接入 <code>&lt;aq-table&gt;</code></caption>
+        <thead><tr><th>列表</th><th>行模型</th><th>列（摘要）</th><th>features</th></tr></thead>
+        <tbody>
+          <tr><td>Tracker 列表</td><td><code>tracker-row</code></td><td>站点 / 状态 / 消息 / 上传量 / 下载量 …</td><td><code>sort</code></td></tr>
+          <tr><td>用户列表</td><td><code>peer-row</code>（对端 9 列）</td><td>IP / 端口 / 客户端 / 进度 / 速度 …</td><td><code>sort</code></td></tr>
+          <tr><td>文件列表</td><td><code>file-row</code>（树 / 平铺两形态）</td><td>名称 / 大小 / 进度 / 优先级 …</td><td><code>sort</code> + 优先级右键</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="lab">归属口径</span>
+        三表与 <code>HR_TABLE_DEFS</code> 同法——<strong>独立注册表，不进 <code>TABLE_PAGES</code></strong>（否则列选择器 / 列对齐多出分组 = 观感变化）；行渲染走表组件计划 P3 的行模型渲染器范式（每行模型一份实现）。
+      </div>
+    </section>
+
+    <!-- ============ 08 ============ -->
+    <section id="s8">
+      <h2><span class="idx">08</span> 风险与红线</h2>
+      <h3>九条会静默失效或误伤的点</h3>
+      <div class="risk">
+        <span class="lab">R1 · 持久化键不得升版本 / 改名</span>
+        <code>drawerTpl</code> / <code>drawerMerge</code> / 抽屉高度 / <code>drawerTab</code> 旧值必须可读——升级零观感差异，旧 id 一律显式映射而不是清空。
+      </div>
+      <div class="risk">
+        <span class="lab">R2 · 软切换协议整体移植（7 次复发的教训）</span>
+        最易丢的两条：<strong>跨模块登记</strong>（流量页签必须在 store 里显式登记）与 <strong>160ms 延迟点亮</strong>（快响应下点亮遮罩 = 制造新闪烁）。重建若"顺手简化"这两条，闪烁必复发。
+      </div>
+      <div class="risk">
+        <span class="lab">R3 · e2e 是硬约束</span>
+        <span class="path">drawer-groups-shows</span> / <span class="path">drawer-merge</span> / <span class="path">column-prefs</span> / 快捷键四支 spec 逐条对齐；新面板若改文案 / 类名，<strong>同轮改 spec</strong>，不许放宽容忍。
+      </div>
+      <div class="risk">
+        <span class="lab">R4 · 无构建链</span>
+        Vue 3 CDN + <span class="path">shared/tpl</span> 分片；禁 SFC / 打包器。组件形态照 <code>&lt;aq-table&gt;</code>（只贡献模板，行为经 <code>$root</code> 或独立模块）。
+      </div>
+      <div class="risk">
+        <span class="lab">R5 · 三皮肤 CSS 成对</span>
+        新类要么复用既有类，要么三份 CSS 同步 + 成对守卫；<code>.dt-host</code> 限宽 1400 与 <code>.drawer-split</code> 封顶 2400 等布局口径需保留（classic 历史恒满宽，误伤即回归）。
+      </div>
+      <div class="risk">
+        <span class="lab">R6 · 流量图边界</span>
+        <span class="path">qb_traffic_chart.js</span> 保持 Vue 所有、<strong>零改动</strong>；宿主 <code>ref</code> 与 <code>ResizeObserver</code> 契约不变。
+      </div>
+      <div class="risk">
+        <span class="lab">R7 · 双实现期歧义</span>
+        新旧并存必须<strong>单一挂载点 + 特性开关</strong>；禁「两个都渲染、靠 CSS 藏一个」——那会重演 <span class="path">variant-singleton-shadow</span> 的静默双跑。
+      </div>
+      <div class="risk">
+        <span class="lab">R8 · 守阵不得放宽</span>
+        重建期 <code>test_drawer_tpl_*</code> / <code>_dtMounted</code> / <code>dtHtml</code> 相关守卫<strong>同轮改版</strong>（删或改口径），不许「删断言了事」；计数变化必须补覆盖。
+      </div>
+      <div class="risk">
+        <span class="lab">R9 · 不为将废弃的旧面板写适配层（反向沉没成本）</span>
+        表组件计划 §03 的 DOM 适配 <code>table-dom.js</code>（条件项）只在 D1 选「保留字符串 DOM」时才做；若重建走 Vue，该条件项<strong>直接作废</strong>。
+      </div>
+    </section>
+
+    <!-- ============ 09 ============ -->
+    <section id="s9">
+      <h2><span class="idx">09</span> 拍板点</h2>
+      <h3>四处需要用户先定方向</h3>
+      <div class="dec">
+        <div class="q"><span class="qn">D1</span>渲染模型</div>
+        <p class="opt">A · Vue 3 组件重建 ｜ B · 保留字符串 DOM 只做清理（抽 store + 修问题）</p>
+        <p class="rec">推荐 <b>A</b>：与表组件计划的单适配取向一致，且是唯一能让「接入面」变成真实代码的路径；B 只能治表面问题，第 7 条（两套渲染技术）与第 8 条（维护量）原地不动。</p>
+      </div>
+      <div class="dec">
+        <div class="q"><span class="qn">D2</span>变体去留</div>
+        <p class="opt">A · 收敛为声明式密度变体（每页签 2–3 档，配置驱动）｜ B · 15 变体逐一手搬 Vue ｜ C · 全删只留一版式</p>
+        <p class="rec">推荐 <b>A</b>：保住「换版式」能力的同时把 15 份过程式字符串换成配置；B 是把维护负担原样搬家，C 丢能力（用户既有偏好也要迁移）。</p>
+      </div>
+      <div class="dec">
+        <div class="q"><span class="qn">D3</span>切换策略</div>
+        <p class="opt">A · 按页签分波，旧抽屉当 A/B 基线逐页签替换 ｜ B · 一次性大爆炸替换</p>
+        <p class="rec">推荐 <b>A</b>：每波可独立验收、可回退，且能把 §03 的逐面等价清单当验收面；B 一旦回归，定位成本极高。</p>
+      </div>
+      <div class="dec">
+        <div class="q"><span class="qn">D4</span>列表接入</div>
+        <p class="opt">A · Tracker / 用户 / 文件三列表注册进 <code>&lt;aq-table&gt;</code> ｜ B · 面板自带私有表壳</p>
+        <p class="rec">推荐 <b>A</b>：这正是表组件计划 P6 说的「接入面」，且拖宽 / 排序 / 右键隐藏与主视图同源、零新维护点；B 会长出第三套表系统。</p>
+      </div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="s10">
+      <h2><span class="idx">10</span> 验收与基线</h2>
+      <h3>每步三道闸，终态一条判据</h3>
+      <ul>
+        <li><strong>静态守阵</strong>：<code>test.full</code> 全绿；相关 <code>test_drawer_tpl_*</code> 同轮改版并红验（故意删接线必须报红）。</li>
+        <li><strong>真浏览器等价</strong>：改造前后跑同一 stub（真 <code>app.js</code> + 最小 API），渲染 DOM 逐字节等价（归一相对时间 / 脚本清单）；合并 / 形态 / 三挂点逐项对照。</li>
+        <li><strong>e2e 一致</strong>：<code>dev.e2e</code> 全量与改前逐位一致（drawer-groups-shows / drawer-merge / column-prefs / 快捷键）。</li>
+        <li><strong>基线</strong>：每步收口跑 <code>test.full</code> 并新建一条 <span class="path">testing/baselines/</span> 切片记实测数字（一次全量一条，最新即事实源）。</li>
+      </ul>
+      <div class="note">
+        <span class="lab">终态判据</span>
+        抽屉只剩<strong>一套渲染技术</strong>：字符串 DOM 设施（<code>dtHtml</code> / 变体注册表 / 宿主挂载）全部退役；三张列表与主视图同源；换版式由声明式档位配置驱动。达标即「消除第二套渲染技术」的目标成立。
+      </div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="s11">
+      <h2><span class="idx">11</span> 变更记录</h2>
+      <table class="bleed">
+        <thead><tr><th>时间</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">26-10-11-2106</td><td>初稿：由表组件计划 <code>26-10-11-1722</code> §05 P6「只留前向契约」处<strong>另立专题</strong>（用户 26-10-11 定「完全重构、不考虑兼容」）。含现状三层盘点 + 问题清单 10 条（逐条锚坑档）、七面等价清单、目标架构（数据层剥离 + Vue 面板 + 三列表接壳）、分步 W0–W6、六条不变式、三表接入注册、风险 R1–R9、拍板点 D1–D4。doc-status Open，待拍板后转 In Progress。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html · topic webui-drawer-refactor · status Open (待拍板)
+  </div>
+</footer>
+
+</body>
+</html>
