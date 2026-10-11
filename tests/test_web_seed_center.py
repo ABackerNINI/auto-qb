@@ -2,6 +2,8 @@
 
 ## 测试计划(每个测试函数一条)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
+- test_seed_view_no_member_view_restatement: 守阵(issue webui-seed-view-restate-dup) _seed_view 不重述 _member_view 字段 —— ast 静态零交集 + 同名字段值等值(防口径被重述静默盖住)
+- test_api_status_and_state_share_status_payload: 守阵(issue webui-status-payload-dup) /api/status 与 /api/state 的 status 前 6 字段同源(_status_payload 单点), /api/state 只多 server/totals
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
@@ -150,6 +152,75 @@ def test_seed_flat_view_fields_and_gating():
         # 同版本: torrents 与 groups/singles/shows 同门控不回传
         again = mgr.web.ensure_state(rid=state["rid"])
         assert "torrents" not in again and "groups" not in again and "singles" not in again
+
+
+def test_seed_view_no_member_view_restatement():
+    """守阵: `_seed_view` 不重述 `_member_view` 字段(issue webui-seed-view-restate-dup)
+
+    静态(ast): `_seed_view` 字典字面量里**显式声明**的键与 `_member_view` 的键零交集 ——
+    起手的 `{**self._member_view(r), ...}` 之外的扩展段才是它该有的内容; 重述(同名键再写一遍)
+    会让 `_member_view` 的口径变更被静默盖住, 种子页与分组/单种子页展示漂移。
+    动态: 同一条记录下两边同名字段**值必须等值**(删重述不得丢字段/改值)。
+    红验: 把任一重述键写回 `_seed_view`(如 `"eta": view_field_value("eta", r.eta)`)本守阵判红。
+    """
+    import ast
+
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views.py"
+
+    def _declared_keys(fn_name: str) -> set:
+        tree = ast.parse(src.read_text(encoding="utf-8"))
+        fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == fn_name)
+        ret = next(n for n in ast.walk(fn) if isinstance(n, ast.Return))
+        return {k.value for k in ret.value.keys if k is not None and isinstance(k, ast.Constant)}
+
+    member_keys = _declared_keys("_member_view")
+    seed_keys = _declared_keys("_seed_view")
+    overlap = member_keys & seed_keys
+    assert not overlap, f"_seed_view 重述了 _member_view 的字段: {sorted(overlap)}"
+
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        tor = FakeTorrent(
+            hash="H1",
+            name="T1",
+            state="stalledUP",
+            eta=8640030,
+            time_active=3641,
+            num_seeds=5,
+            num_leechs=2,
+            availability=1.25,
+            dl_limit=1024,
+            up_limit=2048,
+        )
+        seed_store(mgr, [tor])
+        rec = mgr.store.get("H1")
+        member = mgr._member_view(rec)
+        seed = mgr._seed_view(rec)
+    shared = set(member) & set(seed)
+    assert shared, "两个视图应有共有字段(成员视图是种子视图的子集)"
+    diff = {k: (member[k], seed[k]) for k in shared if member[k] != seed[k]}
+    assert not diff, f"同名字段值不等(口径漂移): {diff}"
+
+
+def test_api_status_and_state_share_status_payload(web_env):
+    """守阵: /api/status 与 /api/state 的 status 前 6 字段同源(issue webui-status-payload-dup)
+
+    两端点曾各拼一份(逐字同), 新增/改名状态字段漏改一处即两接口口径漂移 —— 现在同走
+    `_status_payload`; /api/state 只在其上叠 server/totals 专属段。
+    红验: 把任一共有字段在单侧改名/删掉, 本守阵判红。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    status = client.get("/api/status", headers=auth).json()
+    state = client.get("/api/state", headers=auth).json()["status"]
+    shared = ("connected", "paused", "torrents", "groups", "version", "traffic")
+    for k in shared:
+        assert k in status and k in state, f"status 字段 {k} 必须两端点同在"
+        assert status[k] == state[k], f"status 字段 {k} 两端点口径漂移: {status[k]!r} != {state[k]!r}"
+    assert set(state) - set(status) == {"server", "totals"}, "/api/state 只多 server/totals 专属段"
 
 
 def test_flat_view_refreshed_by_main_loop_tick():

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0310">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 命令处理器成对样板重复">
 <meta name="issue-summary" content="commands.py pause/resume、create/edit、tags、speed_override/alt 等成对 _cmd_* 近乎逐字同">
 <title>webui 命令处理器成对样板重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0310-refactor-webui-cmd-pair-handlers-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:10</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,8 +96,16 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-11 16:10 — 认领(用户指派「修复 webui 部分问题 + 相关 issue 一并认领」; 认领方 <code>memory-bank/tasks/26-10-11-webui-dup-code-fixes.md</code>), 状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:10 — 修完并验证(实际修法见 05 段; 测试数字见 <code>commands run kb.baseline</code> 最新切片 <code>26-10-11-1610</code>), 状态 <strong>Done</strong></li>
       <li>2026-10-11 03:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/commands.py</code> 抽五个按「qB 方法名 + 日志动词」参数化的单点 —— <code>_group_action</code> / <code>_torrent_action</code> / <code>_category_action</code> / <code>_tags_action</code> / <code>_speed_action</code>; 六对 <code>_cmd_*</code>(pause/resume 组、pause/resume 单种子、super_seeding/force_start、category create/edit、tags create/delete、speed override/alt)各缩成一行, 命令名与签名不动(分派按名)。日志文案一字未改: 分类 create/edit 的尾部形状不同(<code>(保存路径 X)</code> vs <code> -&gt; 保存路径 X</code>), 尾部作参数传入而不统一格式。</p>
+    <p><b>验证:</b> 既有命令用例全覆盖(调用形状与日志文案逐字断言, 未新增守阵 —— 摘任一单点即回落到既有用例); 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>

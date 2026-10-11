@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0309">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui status 子字典在 api_status 与 api_state 双份">
 <meta name="issue-summary" content="state.py 两处各拼 connected/paused/torrents/groups/version/traffic">
 <title>webui status 子字典在 api_status 与 api_state 双份 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0309-refactor-webui-status-payload-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,12 @@
     <ul>
       <li>2026-10-11 03:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/server/routes/state.py</code> 抽 <code>_status_payload(manager, snap)</code> 单点(connected/paused/torrents/groups/version/traffic), <code>/api/status</code> 直接返回它, <code>/api/state</code> 用 <code>**_status_payload(manager, snap)</code> 起手后只叠 server/totals 专属段。!求值顺序未动: <code>snap</code> 仍由调用方**先**取好再传入, <code>/api/state</code> 侧仍是先跑 <code>ensure_state</code> 再拼 status(原注释口径)。</p>
+    <p><b>验证:</b> test_api_status_and_state_share_status_payload(6 字段两端点等值 + /api/state 只多 server/totals); 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>

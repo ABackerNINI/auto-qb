@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0310">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui _seed_view 重述 _member_view 字段">
 <meta name="issue-summary" content="_seed_view 以 **_member_view 起手后又重复列出 13+ 同名字段">
 <title>webui _seed_view 重述 _member_view 字段 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0310-refactor-webui-seed-view-restate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:10</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,8 +95,16 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-11 16:10 — 认领(用户指派「修复 webui 部分问题 + 相关 issue 一并认领」; 认领方 <code>memory-bank/tasks/26-10-11-webui-dup-code-fixes.md</code>), 状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:10 — 修完并验证(实际修法见 05 段; 测试数字见 <code>commands run kb.baseline</code> 最新切片 <code>26-10-11-1610</code>), 状态 <strong>Done</strong></li>
       <li>2026-10-11 03:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/views.py::_seed_view</code> 删掉与 <code>_member_view</code> 逐字同值的 16 个重述键(eta / completion_on / time_active / last_activity / availability / dl_limit / up_limit / tracker / num_seeds / num_leechs / num_complete / num_incomplete / downloaded / amount_left / seen_complete / infohash_v2), 只留真正的平铺扩展段; 同名字段一律以 <code>_member_view</code> 为准(口径变不再被重述静默盖住)。SEED_ITEM 契约字段集不变(由既有契约用例钉)。</p>
+    <p><b>验证:</b> test_seed_view_no_member_view_restatement(ast 静态零交集 + 同名字段值等值); 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>

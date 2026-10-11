@@ -8,6 +8,7 @@
 - test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
 - test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
 - test_api_hr_site_entries_409_worker_absent: hr 门面在但取数服务缺席(service=None) -> 409 不假装有数据
+- test_hr_route_guard_single_point: 守阵(issue webui-hr-route-guard-dup) HR 路由前置守卫与启用站点派生各走单点 —— 派生式/hr_check 读取各只一份 + 三档校验码(400/404/409)不变
 - test_api_hr_history_rows_from_real_wave: 拉取历史端点(计划 26-10-04-0312 §3.4)200 —— 行键面 = §3.4 全集,
   真实波次(S2 记录器)落表; 完成徽章/触发人话/档位 lane_text/写者短标识全由后端算好
 - test_api_hr_history_site_filter: site 过滤只回该站; 未接入 404 点名已接入清单(与 entries 同款话术)
@@ -255,6 +256,37 @@ def test_api_hr_site_entries_409_worker_absent(web_env, tmp_path):
 
 
 # ---------- 拉取历史(计划 26-10-04-0312 §3.4): GET /api/hr/history ----------
+
+
+def test_hr_route_guard_single_point(web_env, tmp_path):
+    """守阵: HR 路由的「前置守卫」与「启用站点集派生」各走单点(issue webui-hr-route-guard-dup)
+
+    此前 hr.py 五个端点各自重写同一段守卫(取 hr_check → 未启用 400 / service 缺位 409)共 5 处,
+    且「启用 hr_check 的站点集」推导式逐字同 4 处 —— 开一个端点要成套抄守卫, 改校验口径要改多处。
+    静态: 派生式全文只一份(在 `_hr_enabled_sites`); `getattr(manager.config, "hr_check", None)`
+    只一份(在 `_hr_conf` 读取单点, 守卫收进 `_require_hr_enabled`)。
+    行为: 三档校验码与话术不变(未启用 400 / 站点未接入 404 / service 缺席 409)。
+    红验: 任一端点写回自己的守卫块或派生式, 静态半判红; 改状态码/话术, 行为半判红。
+    """
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "server" / "routes" / "hr.py"
+    text = src.read_text(encoding="utf-8")
+    assert text.count("tc.hr_check is not None and tc.hr_check.enabled") == 1, "启用站点派生必须只有一份"
+    assert text.count('getattr(manager.config, "hr_check", None)') == 1, "hr_check 读取必须收进 _hr_conf 单点"
+
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.config.hr_check.enabled = False
+    for path, method in (("/api/hr/sites/HHan/entries", "get"), ("/api/hr/history", "get")):
+        assert getattr(client, method)(path, headers=auth).status_code == 400, f"{path} 未启用须 400"
+    mgr.config.hr_check.enabled = True
+    r = client.get("/api/hr/sites/Nope/entries", headers=auth)
+    assert r.status_code == 404 and "Nope" in r.json()["detail"], "站点未接入 404 点名清单"
+    mgr.hr.service = None
+    r = client.get("/api/hr/history", headers=auth)
+    assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"], "service 缺席 409"
 
 
 def test_api_hr_history_rows_from_real_wave(web_env, tmp_path):

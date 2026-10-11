@@ -41,6 +41,44 @@ def mark_local_present(rows: List[Dict], by_hash: Mapping[str, Any]) -> None:
         )
 
 
+def _hr_enabled_sites(config) -> set:
+    """「已启用 hr_check 的站点集」派生单点(webui 侧; issue webui-hr-route-guard-dup)
+
+    此前本文件 4 处逐字重写同一推导式; 与 hr 侧同值(`HrService.enabled_sites()` =
+    site_confs 里 enabled 的站点), 跨包收敛归 R14-S01(issue hr-site-derive-convention-dup)。
+    """
+    return {name for name, tc in config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled}
+
+
+def _hr_conf(manager):
+    """hr_check 配置读取单点(总开关可能压根没配置 -> None; 端点各自决定抛还是回空态)"""
+    return getattr(manager.config, "hr_check", None)
+
+
+def _require_hr_enabled(manager):
+    """总开关前置守卫单点: hr_check 未启用 -> 400(端点文案不变)"""
+    conf = _hr_conf(manager)
+    if conf is None or not conf.enabled:
+        raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+    return conf
+
+
+def _require_hr_runtime(manager):
+    """取数线程前置守卫单点(只需投递请求的端点: refresh)—— 未启动 -> 409"""
+    runtime = getattr(manager, "hr", None)
+    if runtime is None:
+        raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+    return runtime
+
+
+def _require_hr_service(manager):
+    """service 前置守卫单点(要读数据的端点)—— runtime/service 缺位 -> 409"""
+    service = getattr(getattr(manager, "hr", None), "service", None)
+    if service is None:
+        raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+    return service
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     router = APIRouter()
@@ -57,13 +95,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         site = str(b.get("site") or "").strip()
         if not site:
             raise HTTPException(status_code=400, detail="缺少 site 参数")
-        conf = getattr(manager.config, "hr_check", None)
-        if conf is None or not conf.enabled:
-            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
-        enabled = {
-            name
-            for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
-        }
+        _require_hr_enabled(manager)
+        enabled = _hr_enabled_sites(manager.config)
         if site not in enabled:
             raise HTTPException(status_code=400, detail=f"站点 {site} 未启用 hr_check(已启用: {sorted(enabled)})")
         code = run_hr_confirm_empty(manager.config, [site])
@@ -79,20 +112,14 @@ def build_router(ctx: WebContext) -> APIRouter:
         (manager.hr.request_refresh 单点); 线程未启动回 409(不是错误形态, 是「现在拉不了」)。
         """
         manager.web.touch()
-        runtime = getattr(manager, "hr", None)
-        if runtime is None:
-            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
-        conf = getattr(manager.config, "hr_check", None)
-        if conf is None or not conf.enabled:
-            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+        # !顺序: 线程未启动先回 409(未启用总开关时才轮到 400)—— 与既有行为逐字一致
+        runtime = _require_hr_runtime(manager)
+        _require_hr_enabled(manager)
         b = body or {}
         site = str(b.get("site") or "").strip()
         sites = None
         if site:
-            enabled = {
-                name
-                for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
-            }
+            enabled = _hr_enabled_sites(manager.config)
             if site not in enabled:
                 raise HTTPException(status_code=400, detail=f"站点 {site} 未启用 hr_check(已启用: {sorted(enabled)})")
             sites = [site]
@@ -110,7 +137,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         `limit` 不设: 站点数是配置量(个位到十位数), 一次全给比让前端分页简单得多。
         """
         manager.web.touch()
-        conf = getattr(manager.config, "hr_check", None)
+        conf = _hr_conf(manager)
         runtime = getattr(manager, "hr", None)
         service = getattr(runtime, "service", None)
         if conf is None or not conf.enabled or service is None:
@@ -165,19 +192,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         决策点③a), entry_details 本体保持纯站点口径。
         """
         manager.web.touch()
-        conf = getattr(manager.config, "hr_check", None)
-        if conf is None or not conf.enabled:
-            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
-        enabled = {
-            name
-            for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
-        }
+        _require_hr_enabled(manager)
+        enabled = _hr_enabled_sites(manager.config)
         if site not in enabled:
             raise HTTPException(status_code=404, detail=f"站点 {site} 未接入 hr_check(已接入: {sorted(enabled)})")
-        runtime = getattr(manager, "hr", None)
-        service = getattr(runtime, "service", None)
-        if service is None:
-            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+        service = _require_hr_service(manager)
         data, err = service.store(site).read_unlocked()
         rows = [d.to_dict() for d in entry_details(data)]
         mark_local_present(rows, manager.store.by_hash)
@@ -201,19 +220,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         limit 钳进 [1, HISTORY_CAP]: 查询参数卫生, 空页与不设防的全量都没意义。
         """
         manager.web.touch()
-        conf = getattr(manager.config, "hr_check", None)
-        if conf is None or not conf.enabled:
-            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
-        runtime = getattr(manager, "hr", None)
-        service = getattr(runtime, "service", None)
-        if service is None:
-            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+        _require_hr_enabled(manager)
+        service = _require_hr_service(manager)
         site = str(site or "").strip()
         if site:
-            enabled = {
-                name
-                for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
-            }
+            enabled = _hr_enabled_sites(manager.config)
             if site not in enabled:
                 raise HTTPException(status_code=404, detail=f"站点 {site} 未接入 hr_check(已接入: {sorted(enabled)})")
             names: List[str] = [site]

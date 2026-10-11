@@ -55,11 +55,22 @@ def config_backup_path(manager) -> str:
     return os.path.join(manager.config.data_dir, os.path.basename(manager.config_path) + ".bak")
 
 
+def state_dir(manager) -> str:
+    """运行时旁挂文件主目录 = `state_file` 所在目录(web.token / webui-keys.json 同寻址单点)
+
+    issue webui-sidecar-dir-convention-dup: 此前 webui 内三处各写一遍「state_file 目录 + 文件名」
+    的拼接(连 `or "."` 的裸文件名兜底一起抄), 改寻址规则要逐处记得改; 跨包另有 tray 端口
+    文件 / ops 跳检备份 / qbmanager 建目录 / cli 四处, 采用归后续总账轮(本轮只收 webui 侧三处)。
+    state_file 无目录段(裸文件名)时回 "."(= cwd), 与原口径逐字一致。
+    """
+    return os.path.dirname(manager.state_file) or "."
+
+
 def ensure_web_token(manager) -> str:
     """确定 WEB 访问密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/web.token(0600)"""
     if manager.config.web.token:
         return manager.config.web.token
-    token_file = os.path.join(os.path.dirname(manager.state_file) or ".", "web.token")
+    token_file = os.path.join(state_dir(manager), "web.token")
     if os.path.exists(token_file):
         with open(token_file, "r", encoding="ascii") as f:
             token = f.read().strip()

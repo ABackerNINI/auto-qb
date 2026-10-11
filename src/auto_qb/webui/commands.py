@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple
 from qbittorrentapi import HTTP401Error, HTTP4XXError
 
 from ..config import Config
-from ..infra.utils import mask_tracker_url, sanitize_tracker_url
+from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +311,9 @@ class WebCommandsMixin:
 
         baseline: {hash: {url: {"status", "updating", "next", "min"}}} —— 逐 real tracker 行
         记 status/updating 与 next_announce/min_announce(epoch 绝对秒); 行缺键时对应值为 None。
-        排除 DHT/PeX/LSD 虚拟 tracker(url 以 **/[DHT]/[PeX]/[LSD] 开头, 它们不走 announce)。
+        排除 DHT/PeX/LSD 虚拟 tracker(url 以 **/[DHT]/[PeX]/[LSD] 开头, 它们不走 announce);
+        前缀集复用 infra 单点 VIRTUAL_TRACKER_PREFIXES(issue webui-virtual-tracker-prefix-dup:
+        本文件曾硬编码 3 份字面量, 增删前缀会漏改)。
         epoch_mode(D3 字段存在性探测): 任一种子的任一 real 行含 "next_announce" 键 = qB 5.2+
         epoch 语义; 全部行都不含 = legacy qB(无前跳判据可用)。同一 qB 实例版本一致, 全局任一
         即可判定。
@@ -324,7 +326,7 @@ class WebCommandsMixin:
             real = {}
             for t in trackers:
                 url = str(t.get("url") or "")
-                if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+                if url.startswith(VIRTUAL_TRACKER_PREFIXES):
                     continue
                 if "next_announce" in t:
                     epoch_mode = True
@@ -369,7 +371,7 @@ class WebCommandsMixin:
         """
         for t in trackers:
             url = str(t.get("url") or "")
-            if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+            if url.startswith(VIRTUAL_TRACKER_PREFIXES):
                 continue
             b = baseline.get(url) or {}
             b_status = b.get("status")
@@ -412,17 +414,45 @@ class WebCommandsMixin:
         if not self.web.search_index_dirty:
             logger.info(f"WEB UI | 搜索索引已构建: {len(self.web.search_index)} 个种子")
 
-    def _cmd_pause_group(self, key: tuple):
+    # ---------- 成对命令的共用单点(issue webui-cmd-pair-handlers-dup) ----------
+    # pause/resume、超级做种/强制开始、分类/标签/限速这类成对命令此前各写一遍, 只差「qB 方法名 +
+    # 日志动词」, 改判空/调用形状/日志口径极易漏改另一半 —— 按 (method, verb) 参数化后, 每个
+    # _cmd_* 仍是一行, 但形状只有一份(方法名以字符串传, 便于守阵钉命令->方法映射)。
+
+    def _group_action(self, key: tuple, method: str, verb: str) -> None:
+        """整组动作单点: 取组内 hash -> 调 qB 方法 -> 一条日志(空组不下发, 与既有行为一致)"""
         hashes = self._group_hashes(key)
         if hashes:
-            self.api.torrents_pause(torrent_hashes=hashes)
-            logger.info(f"WEB UI | 暂停整组({len(hashes)}个种子)")
+            getattr(self.api, method)(torrent_hashes=hashes)
+            logger.info(f"WEB UI | {verb}整组({len(hashes)}个种子)")
+
+    def _torrent_action(self, hash: str, method: str, verb: str, **kwargs) -> None:
+        """单种子动作单点: 快照里还在才下发(删后点击静默忽略) -> 一条日志; kwargs 直传 qB 方法"""
+        if self.store.get(hash) is None:
+            return
+        getattr(self.api, method)(torrent_hashes=[hash], **kwargs)
+        logger.info(f"WEB UI | 种子 {hash[:8]} {verb}")
+
+    def _category_action(self, name: str, save_path: str, method: str, verb: str, tail: str) -> None:
+        """分类写命令单点: create/edit 只差方法名 / 日志动词 / 日志尾部(尾部由调用方给, 文案不变)"""
+        getattr(self.api, method)(name=name, save_path=save_path or None)
+        logger.info(f"WEB UI | {verb}分类: {name}{tail}")
+
+    def _tags_action(self, tags, method: str, verb: str) -> None:
+        """标签写命令单点: create/delete 只差方法名与日志动词"""
+        getattr(self.api, method)(tags=tags)
+        logger.info(f"WEB UI | {verb}标签: {', '.join(tags)}")
+
+    def _speed_action(self, upload_kib: int, download_kib: int, method: str, verb: str) -> None:
+        """全局/备用限速写命令单点: 只差方法名与日志动词(0 = 不限)"""
+        getattr(self.api, method)(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
+        logger.info(f"WEB UI | {verb}: 上 {upload_kib} / 下 {download_kib} KiB/s")
+
+    def _cmd_pause_group(self, key: tuple):
+        self._group_action(key, "torrents_pause", "暂停")
 
     def _cmd_resume_group(self, key: tuple):
-        hashes = self._group_hashes(key)
-        if hashes:
-            self.api.torrents_resume(torrent_hashes=hashes)
-            logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
+        self._group_action(key, "torrents_resume", "开始")
 
     def _reannounce_active(self, hashes: List[str]) -> List[str]:
         """按快照状态过滤出真正可汇报的种子(第二道闸, 判据见 REANNOUNCE_BLOCKED_STATES)
@@ -466,14 +496,10 @@ class WebCommandsMixin:
             logger.info(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
 
     def _cmd_pause_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_pause(torrent_hashes=[hash])
-            logger.info(f"WEB UI | 暂停种子 {hash[:8]}")
+        self._torrent_action(hash, "torrents_pause", "暂停")
 
     def _cmd_resume_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_resume(torrent_hashes=[hash])
-            logger.info(f"WEB UI | 开始种子 {hash[:8]}")
+        self._torrent_action(hash, "torrents_resume", "开始")
 
     def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
         rec = self.store.get(hash)
@@ -630,14 +656,10 @@ class WebCommandsMixin:
         )
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):
-        if self.store.get(hash) is not None:
-            self.api.torrents_set_super_seeding(enable=enable, torrent_hashes=[hash])
-            logger.info(f"WEB UI | 种子 {hash[:8]} 超级做种({'开' if enable else '关'})")
+        self._torrent_action(hash, "torrents_set_super_seeding", f"超级做种({'开' if enable else '关'})", enable=enable)
 
     def _cmd_force_start(self, hash: str, enable: bool = False):
-        if self.store.get(hash) is not None:
-            self.api.torrents_set_force_start(enable=enable, torrent_hashes=[hash])
-            logger.info(f"WEB UI | 种子 {hash[:8]} 强制开始({'开' if enable else '关'})")
+        self._torrent_action(hash, "torrents_set_force_start", f"强制开始({'开' if enable else '关'})", enable=enable)
 
     def _cmd_set_torrent_limits(self, hash: str, up_limit: Optional[int] = None, dl_limit: Optional[int] = None):
         """种子传输限速(bytes/s, 0 = 不限); 只下发非 None 的方向, 快照 up_limit/dl_limit 同步更新"""
@@ -735,7 +757,7 @@ class WebCommandsMixin:
         hits = []
         for t in (self.client.torrents_trackers(hash) or []):
             original = str(t.get("url") or "")
-            if original.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+            if original.startswith(VIRTUAL_TRACKER_PREFIXES):
                 continue
             if mask_tracker_url(original) == url:
                 hits.append(original)
@@ -923,6 +945,35 @@ class WebCommandsMixin:
                 self._set_web_result(cmd_id, "ok")
             logger.info(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
 
+    # ---------- 批量聚合回执的共用单点(issue webui-bulk-receipt-boilerplate-dup) ----------
+    # 批量 recheck / 批量跳检的收口骨架此前各写一遍(缺失文案 + "; ".join + 有文案回 error 否则 ok
+    # + 一条日志), 改回执口径要改两处; 两族的**分桶计数**仍各自保留(跳过语义不同: 计数 vs 按原因分桶)。
+
+    def _bulk_missing_msgs(self, missing: int, n_req: int, missing_groups: int, n_keys: int) -> List[str]:
+        """批量回执的「缺失」文案段单点(种子 + 组两条; 文案逐字不变)"""
+        msgs = []
+        if missing:
+            msgs.append(f"{missing}/{n_req} 个种子不存在或已被删除")
+        if missing_groups:
+            msgs.append(f"{missing_groups}/{n_keys} 个组不存在或成员为空")
+        return msgs
+
+    def _bulk_receipt(self, cmd_id: str, msgs: List[str], ok_line: str, fail_line: str) -> None:
+        """批量回执收口单点: 有异常文案 -> error + fail_line 日志; 全清 -> ok + ok_line 日志
+
+        部分成功也报错(拒绝/跳过计数必须可见)是既有口径, 本单点不改写; ok/fail 两行日志文案
+        由调用方给(各自的计数口径不同: recheck 说「提交」, 跳检说「成功」)。
+        """
+        if msgs:
+            msg = "; ".join(msgs)
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", msg)
+            logger.info(f"WEB UI | {fail_line}: {msg}")
+            return
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok")
+        logger.info(f"WEB UI | {ok_line}")
+
     def _bulk_recheck_via_ops(
         self,
         hashes: List[str],
@@ -950,24 +1001,17 @@ class WebCommandsMixin:
                 fail_msgs.append(r.message)
             else:
                 ok_n += 1
-        msgs = []
-        if missing:
-            msgs.append(f"{missing}/{n_req} 个种子不存在或已被删除")
-        if missing_groups:
-            msgs.append(f"{missing_groups}/{n_keys} 个组不存在或成员为空")
+        msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
         if skip_n:
             msgs.append(f"{skip_n} 个校验进行中已跳过")
         if fail_n:
             msgs.append(f"{fail_n} 个发送失败: {'; '.join(fail_msgs[:3])}")
-        if msgs:
-            msg = "; ".join(msgs)
-            if cmd_id:
-                self._set_web_result(cmd_id, "error", msg)
-            logger.info(f"WEB UI | 批量 recheck(提交 {ok_n}, 跳过 {skip_n}, 失败 {fail_n}): {msg}")
-            return
-        if cmd_id:
-            self._set_web_result(cmd_id, "ok")
-        logger.info(f"WEB UI | 批量 recheck(提交 {ok_n} 个种子)")
+        self._bulk_receipt(
+            cmd_id,
+            msgs,
+            ok_line=f"批量 recheck(提交 {ok_n} 个种子)",
+            fail_line=f"批量 recheck(提交 {ok_n}, 跳过 {skip_n}, 失败 {fail_n})",
+        )
 
     def _bulk_skip_check_via_ops(
         self,
@@ -1004,24 +1048,17 @@ class WebCommandsMixin:
             else:
                 ok_n += 1
         skip_n = sum(skip_buckets.values())
-        msgs = []
-        if missing:
-            msgs.append(f"{missing}/{n_req} 个种子不存在或已被删除")
-        if missing_groups:
-            msgs.append(f"{missing_groups}/{n_keys} 个组不存在或成员为空")
+        msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
         for reason, n in skip_buckets.items():
             msgs.append(f"{n} 个跳过: {reason}")
         if fail_n:
             msgs.append(f"{fail_n} 个失败: {'; '.join(fail_msgs[:3])}")
-        if msgs:
-            msg = "; ".join(msgs)
-            if cmd_id:
-                self._set_web_result(cmd_id, "error", msg)
-            logger.info(f"WEB UI | 批量跳检(成功 {ok_n}, 跳过 {skip_n}, 失败 {fail_n}): {msg}")
-            return
-        if cmd_id:
-            self._set_web_result(cmd_id, "ok")
-        logger.info(f"WEB UI | 批量跳检(成功 {ok_n} 个种子)")
+        self._bulk_receipt(
+            cmd_id,
+            msgs,
+            ok_line=f"批量跳检(成功 {ok_n} 个种子)",
+            fail_line=f"批量跳检(成功 {ok_n}, 跳过 {skip_n}, 失败 {fail_n})",
+        )
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)
@@ -1029,36 +1066,32 @@ class WebCommandsMixin:
     # ---------- 管理命令(R2B: 分类/标签/限速覆盖/添加种子) ----------
 
     def _cmd_create_category(self, name: str, save_path: str = ""):
-        self.api.torrents_create_category(name=name, save_path=save_path or None)
-        logger.info(f"WEB UI | 新建分类: {name}" + (f"(保存路径 {save_path})" if save_path else ""))
+        self._category_action(
+            name, save_path, "torrents_create_category", "新建", f"(保存路径 {save_path})" if save_path else ""
+        )
 
     def _cmd_edit_category(self, name: str, save_path: str = ""):
-        self.api.torrents_edit_category(name=name, save_path=save_path or None)
-        logger.info(f"WEB UI | 修改分类: {name} -> 保存路径 {save_path or '(未设置)'}")
+        self._category_action(name, save_path, "torrents_edit_category", "修改", f" -> 保存路径 {save_path or '(未设置)'}")
 
     def _cmd_remove_categories(self, names=None):
         self.api.torrents_remove_categories(categories=names)
         logger.info(f"WEB UI | 删除分类: {', '.join(names)}")
 
     def _cmd_create_tags(self, tags=None):
-        self.api.torrents_create_tags(tags=tags)
-        logger.info(f"WEB UI | 新建标签: {', '.join(tags)}")
+        self._tags_action(tags, "torrents_create_tags", "新建")
 
     def _cmd_delete_tags(self, tags=None):
-        self.api.torrents_delete_tags(tags=tags)
-        logger.info(f"WEB UI | 删除标签: {', '.join(tags)}")
+        self._tags_action(tags, "torrents_delete_tags", "删除")
 
     def _cmd_speed_override(self, upload_kib: int = 0, download_kib: int = 0):
         """全局限速手动覆盖(D2): 曲线启用时为"临时覆盖"——曲线任务下一档位切换写回目标值;
         曲线停用即常态设置。不做"暂停曲线接管"状态。"""
-        self.api.set_global_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
-        logger.info(f"WEB UI | 全局限速手动覆盖: 上 {upload_kib} / 下 {download_kib} KiB/s")
+        self._speed_action(upload_kib, download_kib, "set_global_speed_limits", "全局限速手动覆盖")
 
     def _cmd_speed_alt_set(self, upload_kib: int = 0, download_kib: int = 0):
         """备用速度限制设置(ALT-01): app/setPreferences(alt_*), 与主速度覆盖互不触碰;
         曲线任务只写主速度(transfer 端点), 备用速度无接管方。"""
-        self.api.set_alt_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
-        logger.info(f"WEB UI | 备用速度限制设置: 上 {upload_kib} / 下 {download_kib} KiB/s")
+        self._speed_action(upload_kib, download_kib, "set_alt_speed_limits", "备用速度限制设置")
 
     def _cmd_speed_alt_toggle(self):
         """主/备速度模式切换(ALT-01, 状态栏乌龟按钮): qB toggle 端点;

@@ -13,6 +13,7 @@ from typing import Any, Optional
 import uvicorn
 
 from ...infra.utils import display_host
+from .common import state_dir
 from .factory import create_app
 
 logger = logging.getLogger("auto_qb.web")
@@ -186,7 +187,7 @@ def start_web_server(manager) -> WebServerHandle:
         # 开启时每次启动都弹通知; 监听地址本身在消息文本里, 0.0.0.0 的暴露面由配置 UI 的 risk 提示兜底)
         logger.info(
             f"WEB UI 已启动: http://{shown}:{manager.config.web.port} "
-            f"(密钥见 {os.path.join(os.path.dirname(manager.state_file) or '.', 'web.token')})"
+            f"(密钥见 {os.path.join(state_dir(manager), 'web.token')})"
         )
     else:
         logger.error(f"WEB UI 启动失败: {shown}:{manager.config.web.port} 无法监听"

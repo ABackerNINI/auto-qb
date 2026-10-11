@@ -1006,7 +1006,8 @@ def test_adapter_and_backend_endpoints() -> None:
         assert needle in eng, f"适配器缺口: {why}"
     keys_py = (ROOT / "src" / "auto_qb" / "webui" / "server" / "routes" / "keys.py").read_text(encoding="utf-8")
     assert "webui-keys.json" in keys_py, "后端存储文件名必须是 webui-keys.json(计划 §4.4)"
-    assert "manager.state_file" in keys_py, "存储路径必须与 web.token 同寻址(state_file 同目录)"
+    # 寻址走 webui 旁挂目录单点(同寻址口径不变: state_file 同目录; 见 common.state_dir)
+    assert "state_dir(manager)" in keys_py, "存储路径必须走 state_dir 单点(与 web.token 同寻址)"
     assert "atomic_write(" in keys_py and "keep_backup=True" in keys_py, "写盘必须走 atomic_write + .bak"
     init = (ROOT / "src" / "auto_qb" / "webui" / "server" / "routes" / "__init__.py").read_text(encoding="utf-8")
     assert "_keys.build_router" in init, "keys 路由未注册进 ROUTE_BUILDERS"

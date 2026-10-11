@@ -13,6 +13,24 @@ from fastapi import APIRouter
 from ..context import WebContext
 
 
+def _status_payload(manager, snap: dict) -> dict:
+    """status 子字典单点(issue webui-status-payload-dup): /api/status 与 /api/state 共用前 6 字段
+
+    此前两个端点各拼一份(逐字同), 新增/改名状态字段要记得改两处, 漏一处即两接口口径漂移。
+    !调用时机: `groups`/`traffic` 读的是 Web 运行时视图, `snap` 由调用方**先**取好再传进来 ——
+      /api/state 侧必须先跑 `ensure_state`(真正触发视图发布的地方)再进本函数, 否则读到上一轮旧值
+      (求值顺序口径见 api_state 内的注释)。
+    """
+    return {
+        "connected": snap["connected"],
+        "paused": snap["paused"],
+        "torrents": snap["torrents"],
+        "groups": len(manager.web.group_view),
+        "version": _app_version(),
+        "traffic": manager.web.traffic_view,
+    }
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     _qb_traffic = _QbTrafficChartApi(manager)
@@ -22,14 +40,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_status():
         manager.web.touch()
         snap = manager.status_snapshot()
-        return {
-            "connected": snap["connected"],
-            "paused": snap["paused"],
-            "torrents": snap["torrents"],
-            "groups": len(manager.web.group_view),
-            "version": _app_version(),
-            "traffic": manager.web.traffic_view,
-        }
+        return _status_payload(manager, snap)
 
     @router.get("/api/state")
     def api_state(rid: int = -1, view: str = "", delta: int = 0):
@@ -56,26 +67,24 @@ def build_router(ctx: WebContext) -> APIRouter:
         payload = {
             "status":
                 {
-                    "connected": snap["connected"],
-                    "paused": snap["paused"],
-                    "torrents": snap["torrents"],
-                    "groups": len(manager.web.group_view),
-                    "version": _app_version(),
-                    # 限速/流量快照: 恒回传(不受 rid 门控) —— 数据源是限速曲线任务而非分组视图,
-                    # 若参与版本门控会与 groups 的脏语义耦合, 反而可能长时间不刷新
-                    "traffic": manager.web.traffic_view,
+                    # 前 6 字段(含 traffic: 限速/流量快照, 恒回传 —— 数据源是限速曲线任务而非
+                    # 分组视图, 若参与版本门控会与 groups 的脏语义耦合, 反而可能长时间不刷新)
+                    # 与 /api/status 同源(单点 _status_payload); 下面是 /api/state 专属段
+                    **_status_payload(manager, snap),
                     # qB 全局状态(server_state: 连接状态/全局速度/累计流量/磁盘剩余等)。
                     # 与 traffic 同为"恒回传"口径: 数据源是 sync 快照而非分组视图, 不参与
                     # rid 门控。此前前端状态栏要为此**单独再打一次 /api/stats**, 两条链路
                     # 刷新频率不同 ⇒ 出现"状态栏速度正常、种子行速度滞后"的错位观测;
                     # 合并后每轮只剩 1 条请求, 且两者同源同轮。
-                    "server": manager.store.server_state,
+                    "server":
+                        manager.store.server_state,
                     # 全量种子的上传/下载速度合计(状态栏常显统计): 与 traffic / server 同为
                     # "恒回传"口径 —— !**不参与 VIEW_ARRAYS 视图分片、不受 rid 门控**。
                     # 状态栏是跨视图的常驻显示, 一旦让它去读按视图裁剪的数组(旧实现对 groups
                     # 求和), 种子页就会恒显示 0(issue 26-09-20-1646); 服务端算好标量再回传,
                     # 前端只读这一个值, 彻底与视图分片解耦。
-                    "totals": manager.web.speed_totals,
+                    "totals":
+                        manager.web.speed_totals,
                 },
             **group_state,
         }

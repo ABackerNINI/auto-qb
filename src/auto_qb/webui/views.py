@@ -539,26 +539,21 @@ class WebviewMixin:
         WEB UI 替代 qB 界面的"种子页"数据源: 平铺列表/详情抽屉展示用。在 _member_view
         基础上补齐 TorrentRecord 的全部展示字段(字段集 = torrents/view._VIEW_FIELDS
         的平铺扩展段); eta/time_active/last_activity 按分钟量化(与重建判定同一步长)。
+
+        !**不重述 `_member_view` 已给的字段**(issue webui-seed-view-restate-dup): 此前这里
+        以 `{**_member_view(r), ...}` 起手后又重列了 eta/completion_on/availability/dl_limit/
+        up_limit/tracker/num_*/downloaded 等 16 个同名字段(值逐字相同) —— 同一字段两处声明,
+        `_member_view` 改口径(如量化步长)会被这里的重述静默盖住, 种子页与分组/单种子页展示
+        漂移。现在只剩真正的平铺扩展段; 同名字段一律以 `_member_view` 为准(守阵:
+        test_seed_view_no_member_view_restatement 钉两边同名字段等值)。
         """
         return {
             **self._member_view(r),
-            "downloaded": r.downloaded,
             "total_size": r.total_size,
-            "eta": view_field_value("eta", r.eta),
             "max_ratio": r.max_ratio,
             "max_seeding_time": r.max_seeding_time,
             "max_inactive_seeding_time": r.max_inactive_seeding_time,
-            "completion_on": r.completion_on,
-            "time_active": view_field_value("time_active", r.time_active),
-            "availability": round(r.availability, 2),
-            "num_seeds": r.num_seeds,
-            "num_leechs": r.num_leechs,
-            "num_complete": r.num_complete,
-            "num_incomplete": r.num_incomplete,
-            "tracker": r.tracker,
             "trackers_count": r.trackers_count,
-            "dl_limit": r.dl_limit,
-            "up_limit": r.up_limit,
             "seq_dl": r.seq_dl,
             "f_l_piece_prio": r.f_l_piece_prio,
             "auto_tmm": r.auto_tmm,
@@ -570,7 +565,6 @@ class WebviewMixin:
             # contract-api); "复制磁力"经 /api/torrents/{hash} 按需取一次详情(drawer.js
             # copyTorrentInfo), 该端点 to_dict() 全字段兜底。
             "infohash_v1": r.infohash_v1,
-            "infohash_v2": r.infohash_v2,
             "private": r.private,
             "comment": r.comment,
             "created_by": r.created_by,
@@ -579,7 +573,6 @@ class WebviewMixin:
             "piece_size": r.piece_size,
             "pieces_have": r.pieces_have,
             "pieces_num": r.pieces_num,
-            "last_activity": view_field_value("last_activity", r.last_activity),
             "total_wasted": r.total_wasted,
             "connections_count": r.connections_count,
             "connections_limit": r.connections_limit,
@@ -588,12 +581,10 @@ class WebviewMixin:
             "has_tracker_error": r.has_tracker_error,
             "has_tracker_warning": r.has_tracker_warning,
             "has_other_announce_error": r.has_other_announce_error,
-            "amount_left": r.amount_left,
             "content_path": r.content_path,
             "download_path": r.download_path,
             "root_path": r.root_path,
             "popularity": r.popularity,
-            "seen_complete": r.seen_complete,
             "downloaded_session": r.downloaded_session,
             "uploaded_session": r.uploaded_session,
         }

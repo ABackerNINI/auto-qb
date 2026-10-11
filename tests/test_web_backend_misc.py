@@ -8,6 +8,7 @@
 - test_config_tree_restart_field_fallback: R 级字段(data_dir)提交后被回退为磁盘旧值
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_web_token_not_printed_in_logs: 生成的访问密钥不进任何日志(WARNING 会被 notify 推送, 且 /api/log 可读回)
+- test_web_sidecar_dir_single_point: 守阵(issue webui-sidecar-dir-convention-dup) 旁挂文件「state_file 同目录」寻址走 common.state_dir 单点 —— 三处调用点零自写 dirname + 裸文件名回 "."
 - test_web_token_generated_atomic_and_readable: 首次生成密钥落盘 web.token 且读回一致, 无临时文件残留(走 atomic_write, issue 26-09-21-1347)
 - test_web_token_existing_file_reused_without_rewrite: 已有合法 token 时直接复用文件现值, 不触达写盘路径(不重写不漂移)
 - test_web_token_write_interrupt_leaves_no_half_token: 写盘中断不留非空半截 token —— 经真实 atomic_write 跑"写一半抛错", 旧文件不被破坏、临时文件被清理, 下次调用重新生成(自愈)
@@ -168,6 +169,35 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
 
 
 _WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+
+
+def test_web_sidecar_dir_single_point(tmp_path):
+    """守阵: 旁挂文件「与 state_file 同目录」寻址走 `common.state_dir` 单点(issue webui-sidecar-dir-convention-dup)
+
+    web.token / webui-keys.json / 启动日志提示三处此前各写一遍
+    `os.path.join(os.path.dirname(manager.state_file) or ".", <name>)`, 改寻址规则要逐处记得改。
+    静态: 三处调用点源码里都不再出现自写的 `os.path.dirname(manager.state_file)`;
+    行为: state_dir == state_file 目录, keys 文件落在该目录下; state_file 是裸文件名(无目录段)时回 "."(= cwd, 原口径)。
+    红验: 任一侧改回自写 dirname, 静态半判红; 单点漏掉 `or "."` 兜底, 裸文件名分支判红。
+    """
+    from pathlib import Path
+
+    from auto_qb.webui.server.common import state_dir
+    from auto_qb.webui.server.routes.keys import keys_file_path
+
+    root = Path(__file__).resolve().parents[1] / "src" / "auto_qb"
+    for rel in ("webui/server/lifecycle.py", "webui/server/routes/keys.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert "os.path.dirname(manager.state_file)" not in text, f"{rel} 仍在自写旁挂目录寻址(应走 state_dir)"
+    # 单点本体只允许在 common.state_dir 里出现一次(多了 = 又有人在别处自写)
+    common = (root / "webui/server/common.py").read_text(encoding="utf-8")
+    assert common.count("os.path.dirname(manager.state_file)") == 1, "旁挂目录寻址必须在 common.state_dir 单点"
+
+    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    assert state_dir(mgr) == os.path.dirname(mgr.state_file)
+    assert keys_file_path(mgr) == os.path.join(state_dir(mgr), "webui-keys.json")
+    assert keys_file_path(SimpleNamespace(state_file="state.json")) == os.path.join(".", "webui-keys.json")
+    assert state_dir(SimpleNamespace(state_file="state.json")) == ".", "裸文件名回 cwd(与原口径逐字一致)"
 
 
 def test_web_token_generated_atomic_and_readable(tmp_path):

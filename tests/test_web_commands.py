@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
+- test_virtual_tracker_prefix_single_point: 守阵(issue webui-virtual-tracker-prefix-dup) 虚拟 tracker 前缀集只认 infra 单点 —— commands.py 零字面量 + 改单点即改三处过滤(猴补空元组后 DHT 行进基线)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
 - test_api_t_bulk_group_keys_enqueue: bulk 组键模式(DLG-02): keys 编码组键入队解码回 tuple, 可与 hashes 混合; 纯 hash 载荷不带 keys 键; 无密钥 401
 - test_api_t_bulk_tags_category_enqueue: bulk 标签/分类动作入队 —— tags 过滤空串非空才透传、category 按键存在性透传(空串=清除分类要保留)、未提供时载荷不带键(历史形态不变); 无密钥 401
@@ -77,6 +78,47 @@ def test_drain_web_commands_torrent_actions():
         mgr.web.commands.put(("delete_torrent", {"hash": "GONE", "delete_files": True}))
         mgr.web.consume_commands()
         assert client.calls == before, "种子不在快照应跳过(删除守阵)"
+
+
+def test_virtual_tracker_prefix_single_point(monkeypatch):
+    """守阵: 虚拟 tracker 前缀集只认 infra 单点(issue webui-virtual-tracker-prefix-dup)
+
+    commands.py 此前把 ("**","[DHT]","[PeX]","[LSD]") 字面量硬编码 3 处(基线/判定/移除),
+    而 infra.utils.VIRTUAL_TRACKER_PREFIXES 是既有单点(views.py 早已引用) —— 增删前缀
+    要改单点 + 3 处字面量 + 前端 1 处, 是真实漂移点。
+    静态: commands.py 源码零字面量; 行为: 模块级名字就是 infra 单点, 且**改单点即改三处过滤**
+    (猴补为空元组后 DHT 行会进基线, 证明过滤读的是单点而不是各自抄的字面量)。
+    红验: 任一处写回字面量元组, 静态半判红; 单点删一项而 commands 自抄, 行为半判红。
+    """
+    from pathlib import Path
+
+    from auto_qb.infra.utils import VIRTUAL_TRACKER_PREFIXES
+    from auto_qb.webui import commands as cmd_mod
+
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "commands.py"
+    text = src.read_text(encoding="utf-8")
+    for literal in ('"[DHT]"', '"[PeX]"', '"[LSD]"', '"**"'):
+        assert literal not in text, f"commands.py 仍在硬编码虚拟 tracker 前缀 {literal}(应 import 单点)"
+    assert cmd_mod.VIRTUAL_TRACKER_PREFIXES is VIRTUAL_TRACKER_PREFIXES, "必须复用 infra 单点同一对象"
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        client.trackers_map["HA"] = [
+            {
+                "url": "** [DHT] **",
+                "status": 0
+            },
+            {
+                "url": "https://tracker.hhanclub.net/announce.php",
+                "status": 2
+            },
+        ]
+        baseline, _epoch = mgr._trackers_baseline(["HA"])
+        assert set(baseline["HA"]) == {"https://tracker.hhanclub.net/announce.php"}, "虚拟行不入基线"
+        # 改单点: 过滤读的是单点(不是各自抄的字面量)
+        monkeypatch.setattr(cmd_mod, "VIRTUAL_TRACKER_PREFIXES", ())
+        baseline2, _ = mgr._trackers_baseline(["HA"])
+        assert "** [DHT] **" in baseline2["HA"], "过滤必须读单点: 单点置空后虚拟行应进基线"
 
 
 def test_api_torrent_write_endpoints_enqueue(web_env):

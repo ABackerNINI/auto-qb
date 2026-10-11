@@ -494,6 +494,20 @@ class WebUIRuntime:
             pass
         return changed
 
+    def _judge_reannounce(self, h: str, baseline: dict, *, t0: float, now: float) -> tuple:
+        """读一次 trackers 并出结论(判定处置单点) -> (state, reason)
+
+        `check_pending`(在途轮询确认)与 `_advance_reannounce_background`(推迟后台核实)两处
+        同骨架「读 trackers -> host._verdict_reannounce」, 抽本单点后异常面仍各自处理:
+        前者落 item 级 error 回执, 后者只 DEBUG(issue webui-bulk-receipt-boilerplate-dup)。
+        qB 断连(host.client 为 None)不下读: 回 ("", "") = 无结论, 调用方照旧等恢复。
+        """
+        host = self._host
+        if host.client is None:
+            return "", ""
+        trackers = host.client.torrents_trackers(h) or []
+        return host._verdict_reannounce(trackers, baseline, t0=t0, tol=REANNOUNCE_JUMP_TOL, now=now)
+
     def check_pending(self) -> None:
         """每 tick 检查在途的强制汇报确认与推迟后台核实; 某 cmd_id 全部种子出结论后聚合写回执
 
@@ -533,13 +547,8 @@ class WebUIRuntime:
                         it["done"], it["status"] = True, "warn"
                         it["reason"] = RC_UNCONFIRMED_PREFIX + "种子已停止, qB 静默忽略强制汇报"
                         continue
-                if host.client is None:
-                    continue  # qB 断连: 等恢复继续确认, item 级 deadline 到点落「未确认」
                 try:
-                    trackers = host.client.torrents_trackers(h) or []
-                    state, reason = host._verdict_reannounce(
-                        trackers, it["baseline"], t0=it["t0"], tol=REANNOUNCE_JUMP_TOL, now=now
-                    )
+                    state, reason = self._judge_reannounce(h, it["baseline"], t0=it["t0"], now=now)
                 except Exception as e:
                     it["done"], it["status"], it["reason"] = True, "error", f"读取 tracker 状态失败: {e}"
                     continue
@@ -547,6 +556,7 @@ class WebUIRuntime:
                     it["done"], it["status"] = True, "ok"
                 elif state == "rejected":
                     it["done"], it["status"], it["reason"] = True, "error", reason
+                # 断连 / 无结论: item 留在 pending, deadline 到点落「未确认」(见上方超时分支)
             if all(it["done"] for it in entry["items"].values()):
                 finished.append(cmd_id)
         for cmd_id in finished:
@@ -578,7 +588,6 @@ class WebUIRuntime:
         """
         if not self.reannounce_background:
             return
-        host = self._host
         for h in list(self.reannounce_background):
             bg = self.reannounce_background[h]
             if now < bg["min_e"]:
@@ -587,13 +596,8 @@ class WebUIRuntime:
                 del self.reannounce_background[h]
                 logger.debug(f"WEB UI | 推迟汇报后台核实逾时移除 {h[:8]}")
                 continue
-            if host.client is None:
-                continue
             try:
-                trackers = host.client.torrents_trackers(h) or []
-                state, reason = host._verdict_reannounce(
-                    trackers, bg["baseline"], t0=bg["t0"], tol=REANNOUNCE_JUMP_TOL, now=now
-                )
+                state, reason = self._judge_reannounce(h, bg["baseline"], t0=bg["t0"], now=now)
             except Exception as e:
                 logger.debug(f"WEB UI | 推迟汇报后台核实读取失败 {h[:8]}: {e}")
                 continue

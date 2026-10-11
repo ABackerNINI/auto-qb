@@ -22,6 +22,7 @@ import re
 from fastapi import APIRouter, HTTPException
 
 from ....infra.utils import atomic_write
+from ..common import state_dir
 from ..context import WebContext
 
 logger = logging.getLogger("auto_qb.web")
@@ -33,8 +34,12 @@ _KEYS_DEFAULT = {"schema_version": _KEYS_SCHEMA_VERSION, "template": "aqb-defaul
 
 
 def keys_file_path(manager) -> str:
-    """webui-keys.json 路径: <state_file 同目录>(与 web.token 同寻址规则, 计划 §4.4)"""
-    return os.path.join(os.path.dirname(manager.state_file) or ".", "webui-keys.json")
+    """webui-keys.json 路径: <state_file 同目录>(与 web.token 同寻址规则, 计划 §4.4)
+
+    目录段走 `common.state_dir` 单点(issue webui-sidecar-dir-convention-dup), 与 web.token
+    同一寻址口径 —— 改寻址规则只改一处。
+    """
+    return os.path.join(state_dir(manager), "webui-keys.json")
 
 
 def _sanitize(doc):

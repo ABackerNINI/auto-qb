@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0309">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 旁挂文件『与 state_file 同目录』寻址口径多处">
 <meta name="issue-summary" content="web.token / webui-keys.json / 启动日志各写一遍 dirname(state_file), 跨包另有 4 处">
 <title>webui 旁挂文件『与 state_file 同目录』寻址口径多处 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0309-refactor-webui-sidecar-dir-convention-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,6 +98,12 @@
     <ul>
       <li>2026-10-11 03:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/server/common.py</code> 新增 <code>state_dir(manager)</code> 单点(<code>dirname(state_file)</code>, 裸文件名回 <code>"."</code>); <code>common.ensure_web_token</code>(web.token) / <code>lifecycle</code> 启动日志提示 / <code>routes/keys.keys_file_path</code>(webui-keys.json) 三处改走它。跨包四处(tray 端口文件 / ops 跳检备份 / qbmanager 建目录 / cli)按建议归后续总账轮, 本轮未动。</p>
+    <p><b>验证:</b> test_web_sidecar_dir_single_point(两处调用点源码零自写 dirname + common 内只一份 + 裸文件名回 "."); 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>

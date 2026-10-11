@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0309">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui HR 路由前置守卫与启用站点派生样板重复">
 <meta name="issue-summary" content="hr.py 5 处 hr_check 前置守卫 + 4 处 enabled 站点派生(与 R14-S01 同源)">
 <title>webui HR 路由前置守卫与启用站点派生样板重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0309-refactor-webui-hr-route-guard-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,6 +98,12 @@
     <ul>
       <li>2026-10-11 03:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/server/routes/hr.py</code> 抽五个单点 —— <code>_hr_conf</code>(读取) / <code>_require_hr_enabled</code>(未启用 400) / <code>_require_hr_runtime</code>(线程未启动 409) / <code>_require_hr_service</code>(service 缺位 409) / <code>_hr_enabled_sites</code>(启用站点集派生); 5 处端点守卫与 4 处派生式全部收敛。状态码与文案逐字不变, refresh 端点「线程未启动 409 先于未启用 400」的顺序也原样保留(该端点只需 runtime, 不强制 service)。站点派生与 hr 侧 <code>HrService.enabled_sites()</code> 同值, 跨包收敛随 issue <code>hr-site-derive-convention-dup</code>(R14-S01)。</p>
+    <p><b>验证:</b> test_hr_route_guard_single_point(派生式与 hr_check 读取各只一份 + 400/404/409 三档行为不变); 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>

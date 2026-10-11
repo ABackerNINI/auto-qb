@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0310">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 批量命令聚合回执骨架重复">
 <meta name="issue-summary" content="_bulk_recheck_via_ops 与 _bulk_skip_check_via_ops 及 reannounce 判定两处同骨架">
 <title>webui 批量命令聚合回执骨架重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0310-refactor-webui-bulk-receipt-boilerplate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:10</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,8 +96,16 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-11 16:10 — 认领(用户指派「修复 webui 部分问题 + 相关 issue 一并认领」; 认领方 <code>memory-bank/tasks/26-10-11-webui-dup-code-fixes.md</code>), 状态 <strong>In Progress</strong></li>
+      <li>2026-10-11 16:10 — 修完并验证(实际修法见 05 段; 测试数字见 <code>commands run kb.baseline</code> 最新切片 <code>26-10-11-1610</code>), 状态 <strong>Done</strong></li>
       <li>2026-10-11 03:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> ① <code>webui/commands.py</code> 抽 <code>_bulk_missing_msgs</code>(缺失文案段) + <code>_bulk_receipt</code>(有文案回 error 否则 ok 的收口形状), 两处调用点保留各自的分桶计数(recheck 计数 / 跳检按原因分桶)与日志文案(各自带计数口径: 「提交」vs「成功」); ② <code>webui/runtime.py</code> 抽 <code>_judge_reannounce</code>(读 trackers → <code>_verdict_reannounce</code> 的判定处置单点), <code>check_pending</code> 与 <code>_advance_reannounce_background</code> 共用, 断连回 <code>("", "")</code> 等恢复, 异常面仍各自处理(前者落 item error, 后者只 DEBUG)。</p>
+    <p><b>验证:</b> 既有批量用例(日志串「批量跳检(成功 1, 跳过 1, 失败 2)」等逐字断言) + 汇报确认用例; 未新增守阵; 收口 <code>test.full</code> 全绿(数字见 kb.baseline, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120)。</p>
   </section>
 
   <footer>
