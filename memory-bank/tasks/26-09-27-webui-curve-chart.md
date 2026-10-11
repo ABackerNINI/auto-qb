@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-09-27
-**Updated:** 2026-09-28
-**Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。
+**Updated:** 2026-10-11
+**Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。2026-10-11 追加: 预览图配色并入流量方向色族(`--today-up` / `--today-down`), 五处一次性对齐(曲线线色 / 面积填充 / 悬停标记点 / 图例方向标 / 档位组方向条), 三皮肤同步; 数字见 kb.baseline。
 **Topics:** webui-curve-chart
-**Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html
+**Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html, memory-bank/testing/baselines/26-10-11-1843-webui-curve-color-unify.md, memory-bank/activeContext/26-10-11-1843-webui-curve-chart.md
 
 ## 原始请求
 
@@ -42,6 +42,7 @@
 | 「添加档位」与「下载档位」间距(09-28) | Done | 6px → 18px(`.hb-tier-add` margin-bottom 12px), 浏览器实测 |
 | 设置页行内「?」按钮语调色对齐选项(09-28) | Done | xtpl 挂 `hubToneOf` 类 + console_hub.css 两变体; danger 实测边框/发光/底/字全红 |
 | 「?」语调色补漏: schema tone 字段单点(09-28 二次) | Done | `Field` 加 `tone` 属性, `hubToneOf` 优先读它回落静态表; 删标两字段补红, CSS 零改动 |
+| 预览图配色并入流量方向色族(10-11) | Done | 三皮肤 `.ce-chart-up/.ce-chart-down` 五处 → `--today-up`/`--today-down`; 面积 `color-mix` 同族; conventions/webui.md 消费面补记 |
 
 ## 进度日志
 
@@ -49,3 +50,4 @@
 - 2026-09-27 22:05 按用户反馈**取消 ∞ 水印**(大号半透明 ∞ 装饰字): 模板/冒烟页/`settings-detail.html` 元素、`_buildCurveChart` 的 infMark 字段、三主题 `.ce-chart-inf-mark` 规则全部撤除(死类连 CSS 一起清); ∞ 语义仍由 X 轴右缘刻度 + 图例「末档 ∞」表达。复验(浏览器 infMarks=0 + 渲染正常)与 test.quick 全绿。
 - 2026-09-28 05:49 用户两条新反馈落地(同专题追加): ①曲线**标题栏整栏可点**折叠(删「收起/展开」独立钮), 状态由 `#i-chevron` 旋转指示(收起朝右/展开朝下, 160ms 过渡); 周期输入框与「删除曲线」`@click.stop` 防误触, 支持 Tab+Enter。坑: 可点手型光标既有选择器 `.hb-blk-hd.hb-sub-toggle` 命中不了 `.hb-curve-hd` —— `cursor` 直接写进 `.hb-curve-hd` 并实测。②「添加档位」→「下载档位」间距 6px → 18px(`.hb-tier-add` margin-bottom:12px)。③同轮附带: 设置页行内「?」按钮语调色对齐选项 —— `xtpl.html` 叶子行「?」挂 `hubToneOf(item)` 类, `console_hub.css` 加 `.hb-ask.important/.danger` 变体(静息描边 `--tone-line` 与输入框同配方, hover/打开整组转语义色)。验证: dev.harness 桩 + 真浏览器逐项量测(折叠/图标/键盘/间距像素/?「on」态全红), test.full 见基线 26-09-28。
 - 2026-09-28 17:38 用户报「?」语调色**仍有遗漏**(同专题三次追加): 站点「删除标签格式」(`trackers.<站点>.remove_tags`)与自动化「彻底删除标签」(`delete_tags`)仍中性灰。根因: 语调取值只查前端 `HUB_TONE` 静态表, 动态路径(站点级)字段进不去表, 顶层 `delete_tags` 也不在表里。修法: schema `Field` 加 **`tone` 属性**(破坏性字段显式声明, 与 `risk` 文案解耦 —— 带 risk 不全是危险, "需重启"类只写文案不标), `config_hub.js` 的 `hubToneOf` 改为 `field.tone` 优先、静态表回落; 两个删标字段标 `tone="danger"`。CSS 零改动复用 eb57595 的 `.hb-ask.danger` 变体。附带: 两字段行条纹由 warn 黄转红(`hubRowClass` 按 tone 判 danger)。验证: 桩服务 + 真浏览器量测 —— 两行静息描边红 45%/on 态字+底+发光全红/弹层正常, 普通行(域名)中性灰不变, 静态表老键(qbittorrent.password)回落正常; test.full 1820 passed / 3 skipped(基线 26-09-28-1738)。
+- 2026-10-11 18:43 用户令「WEBUI 设置限速曲线预览图颜色改为上传/下载色, 与其它地方统一」(同专题四次追加)。判据: `conventions/webui.md`「令牌分工 —— 同名语义只允许有一个令牌族」; 曲线两色表达的就是上下行方向, 却借了状态色族(`--warn` / `--blue`, 09-28 引入)⇒ 跨族误用, 归入流量方向色族。落点(三皮肤 × 五处): 曲线 `stroke` / 面积 `fill` / 悬停标记点 `fill` / 图例 `.ce-lg-dir.up|down` / 档位组方向条 `.ce-dir-dot.up|down`; 面积软色由 `--warn-soft`/`--blue-soft` 改 **`color-mix(in srgb, <today 令牌> 16%, transparent)`** —— `--today-*` 是间接令牌(指向 `--indigo`/`--teal`), 不能借 `--indigo-soft`(主题换指向即脱族); 回退链 `var(--today-up, var(--indigo))` / `var(--today-down, var(--teal))`, 不落回 `--accent`。悬停标记点一并归族(原固定 `--fg` 中性灰, 与线色半吊子; 历史流量图 `.hist-dot.up/.down` 本就随方向色)。**验证**: 逐个核对 `--today-up`/`--today-down`/`--indigo`/`--teal` 在星图 `:root`、棱镜五主题均已声明; `test.full` 全绿零回归(数字见 kb.baseline); 守阵空白(配色属看图验收, 与历史流量图同理), 本轮零测试改动。回写: `conventions/webui.md` 流量方向色族消费面补第五处(限速曲线预览图)。

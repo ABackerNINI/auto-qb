@@ -29,8 +29,13 @@
   表达**上下行流量方向**, 消费面 = 历史流量图 SVG / qB 流量图(uPlot 经 `_qbChartTokens()` 现读令牌;
   2026-10-08 起同源还喂**画布注解层**: 限速虚线随方向取 `up/down`, 缺口斜纹取 `grid` 令牌) /
   状态栏今日统计(`.sb-item.sb-today .v-up/.v-down`) / 状态栏速度组方向图标(`.sb-spd .ico-up/.ico-down`) /
-  i-traffic 组图标(内联 `var(--today-*)`)。取值 **上行 = `--indigo`(紫) / 下行 = `--teal`(蓝绿)**
-  (2026-10-04 用户拍板交换)。⚠ 速度组图标**不要**改全局 `.ico-up/.ico-down`(绿/蓝, 还喂顶栏「种子」等
+  i-traffic 组图标(内联 `var(--today-*)`) / **设置页限速曲线预览图**(`.ce-chart-up`/`.ce-chart-down`
+  五处: 曲线线色 / 面积填充 / 悬停标记点 / 图例方向标 `.ce-lg-dir` / 档位组方向条 `.ce-dir-dot`;
+  2026-10-11 归族, 此前误借状态色族 `--warn`/`--blue`)。取值 **上行 = `--indigo`(紫) / 下行 = `--teal`(蓝绿)**
+  (2026-10-04 用户拍板交换)。⚠ 该族是**间接令牌**(指向 `--indigo`/`--teal`), 需要"同色软底"时**不能**借
+  `--indigo-soft`/`--teal-soft`(主题换指向即脱族) —— 用 `color-mix(in srgb, var(--today-up) 16%, transparent)`
+  从同一令牌现算, 或照直方图 `.hist-area.up|down` 的 `fill: var(--today-*)` + `opacity` 写法。
+  ⚠ 速度组图标**不要**改全局 `.ico-up/.ico-down`(绿/蓝, 还喂顶栏「种子」等
   非流量位置), 只能按 `.sb-spd` 作用域覆盖。状态栏限速值(`.sb-spd .lim`)是**参考值**, 用中性灰 `--fg-dim`
   (与做种要求值 `.m-pair .req` 同款), 不随方向染色。
 - **表面/底色族**: 状态栏用专用 `--statusbar-bg`(与页底形成可见层级); **不要改 `--glass`** —— 它同时管顶栏,

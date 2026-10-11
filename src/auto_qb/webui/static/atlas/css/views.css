@@ -492,19 +492,23 @@ select option { background: var(--bg-elev); color: var(--fg); }
   color: var(--fg); font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 
 
-/* ---------------- 限速曲线预览: 上传/下载配色区分(2026-09-28) ----------------
- * 覆盖 components.css 的默认 accent —— 上传暖色(warn) / 下载冷色(blue);
- * 放 views.css 而非 components.css: 后者 700 行体量守阵已贴顶(699 行) */
-.ce-chart-up .ce-chart-line { stroke: var(--warn); }
-.ce-chart-up .ce-chart-area { fill: var(--warn-soft); }
-.ce-chart-down .ce-chart-line { stroke: var(--blue); }
-.ce-chart-down .ce-chart-area { fill: var(--blue-soft); }
+/* ---------------- 限速曲线预览: 上传/下载配色(2026-10-11 改) ----------------
+ * 与全站上传/下载语义色同源 --today-up / --today-down(同状态栏速度组 · 今日流量卡 · 历史流量图 ·
+ * qB 流量图), 取代旧的自证配色 上传 warn / 下载 blue; 面积填充由同一令牌压到 16% alpha(color-mix),
+ * 主题把 up/down 指到哪个色都同族。令牌缺失时回退同族原色链(--indigo / --teal)。
+ * 放 views.css 而非 components.css: 后者 700 行体量守阵已贴顶 */
+.ce-chart-up .ce-chart-line { stroke: var(--today-up, var(--indigo)); }
+.ce-chart-up .ce-chart-area { fill: color-mix(in srgb, var(--today-up, var(--indigo)) 16%, transparent); }
+.ce-chart-up .ce-chart-dot { fill: var(--today-up, var(--indigo)); }
+.ce-chart-down .ce-chart-line { stroke: var(--today-down, var(--teal)); }
+.ce-chart-down .ce-chart-area { fill: color-mix(in srgb, var(--today-down, var(--teal)) 16%, transparent); }
+.ce-chart-down .ce-chart-dot { fill: var(--today-down, var(--teal)); }
 .ce-chart-legend .ce-lg-dir { color: var(--fg-muted); white-space: nowrap; }
 .ce-chart-legend .ce-lg-dir::before { content: ""; display: inline-block; width: 12px;
   border-top: 2px solid currentColor; vertical-align: middle; margin-right: 5px; }
-.ce-chart-legend .ce-lg-dir.up { color: var(--warn); }
-.ce-chart-legend .ce-lg-dir.down { color: var(--blue); }
+.ce-chart-legend .ce-lg-dir.up { color: var(--today-up, var(--indigo)); }
+.ce-chart-legend .ce-lg-dir.down { color: var(--today-down, var(--teal)); }
 .ce-dir-dot { display: inline-block; width: 12px; border-top: 2px solid currentColor;
   vertical-align: middle; margin-right: 6px; }
-.ce-dir-dot.up { color: var(--warn); }
-.ce-dir-dot.down { color: var(--blue); }
+.ce-dir-dot.up { color: var(--today-up, var(--indigo)); }
+.ce-dir-dot.down { color: var(--today-down, var(--teal)); }
