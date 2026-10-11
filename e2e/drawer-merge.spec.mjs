@@ -2,6 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { BASE_URL, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
+import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
 
 /**
  * 抽屉页签合并(R2 计划 26-10-09-2219 · R3 修订) —— 单开关 / 合并页签 / 双列布局 / 宽度门:
@@ -204,6 +205,8 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
       await page.waitForTimeout(300);
+      // 死类守阵(坑档 esc-attr-quote-dead-class): 经典(Vue :class)态全文档零「类名含引号」
+      await expectNoDeadClass(page, '合并前经典态');
 
       // 开合并 -> gc 双列
       await drawer.locator('.drawer-body').click({ button: 'right' });
@@ -226,6 +229,8 @@ for (const skin of SKINS) {
       // 左列挂上变体(宿主加 .dt-tpl), 右列仍是经典(W2: 经典 = 组件分支, v-else 宿主不渲染)
       await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
       await expect(split.locator('[data-dt-host="content"]')).toHaveCount(0);
+      // 死类守阵: 变体 01(dtHtml 字符串 DOM)挂载态全文档零「类名含引号」
+      await expectNoDeadClass(page, '常规变体 01 挂载态');
 
       // 右列右键 -> 菜单出内容变体, 不出常规变体
       await rightCol.click({ button: 'right' });
@@ -236,6 +241,8 @@ for (const skin of SKINS) {
       await expect(split.locator('[data-dt-host="content"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
       // 左列选择不受右列影响(两列各自记忆)
       await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/);
+      // 死类守阵: 变体 10 挂载态 + 双变体并存态全文档零「类名含引号」
+      await expectNoDeadClass(page, '内容变体 10 挂载态');
 
       // 2026-10-10 用户报「右侧空白右键弹左列模板」回归: 右列(内容)短于左列(常规), 右列下方
       // 空白格区不属于任何 .dt-col(align-items:start 不撑高) —— 右键该处仍须归右列(内容页签),

@@ -124,6 +124,7 @@
 - **红验两条(注入即红 / 还原即绿)**: RC1 静态 —— dtPersistSel 落盘短路 → error_history 基线 + classic_default + render_error_fallback 三红; RC2 e2e —— 变体 06 register id 破坏 → drawer-tables 锚点解析两皮肤红。
 - **验收**: `test.full` = **3131 passed + 4 skipped** / `TOTAL 16517 151 5626 134 99%`(W6 3122 → +9: facility_retired 退役, 基座变体守阵九函数回归); 全量 e2e = **166 passed + 10 skipped**(W6 156 → +10 = 恢复变体 spec 用例 × 皮肤)。数字见基线切片 `testing/baselines/26-10-12-0340-webui-drawer-refactor-w7.md`。
 - **文档回写**: 计划 §05 进度注 + §11 W7 条; `modules/webui-static-contract.md` 修正条; 本切片 + activeContext 新切片(26-10-12-0340)。
+- **缺陷复核(用户指令「修复缺陷」)**: `esc-attr-quote-dead-class` 随变体恢复重新存在的**遗留判定不成立** —— 实证两件: ① 静态全扫描(15 变体 + drawer_templates.js 全部字符串字面量与全部模板插值)零「整段属性进 esc 插值」形态, 变体条件类全走正确形态(`class="x${cond ? " y" : ""}"`), 命中引号字面量全是 CSS 串/选择器构建/KIT 直拼(不经 esc); ② 新增运行时守阵 `e2e/lib/dt-dead-class.mjs`(`expectNoDeadClass` 渲染后全文档 class 值零引号), 钉 drawer-tables(经典+变体 06)/drawer-merge(经典+变体 01+10)五处, 注入坏形态两皮肤即红、还原即绿。**判定: 缺陷不存在, 无需修码** —— W2 时「15 个变体仍带同一缺陷」是未枚举的悲观外推, 真实点位只有 W2 已删的旧经典页。坑档加 W7 复核注; 该遗留就此关闭。
 
 ## 待办 / 移交
 
@@ -132,3 +133,4 @@
 - **切片数债务**: `kb.check` 报「切片数 > 70」的既有债务(每波新增切片后加深), 需另开新会话收口。
 - **工作树**: W2–W6 已随 0d07dbdd 提交; W7 恢复波改动未提交(用户未要求 commit)。
 - **dt06 逐行汇报倒计时**: 随 W7 变体恢复**能力回归**(test_drawer_tpl_trackers_per_tracker_reannounce 守阵仍活), 无需另开需求。
+- **esc-attr-quote-dead-class 遗留已关闭**: 复核判定变体层从未带该缺陷(W2 外推有误), 运行时守阵 `expectNoDeadClass` 长期防回潮, 见坑档 W7 复核注。

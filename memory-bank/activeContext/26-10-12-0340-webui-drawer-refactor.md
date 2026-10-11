@@ -18,4 +18,4 @@
 - **cap 债务**: `modules/webui-static-contract.md` 超 evergreen cap(W2–W7 各一条); 清理需跑 `commands run doc.caps -- --strict`。
 - **切片数债务**: `kb.check` 报「切片数 > 70」(每波新增切片加深)。
 - **工作树**: W7 恢复波改动未提交(用户未要求 commit; W2–W6 已随 0d07dbdd 入库)。
-- **esc-attr-quote-dead-class 缺陷**: 变体 dtHtml 条件属性拼类名带引号, 随变体恢复**重新存在**(W3 期用户拍板「留到 W5」原意是不回灌; W5 撤销后缺陷随模板回来) —— 是否按坑档流程修复, 待用户表态。
+- **esc-attr-quote-dead-class 缺陷(已关闭, 26-10-12 复核)**: 「随恢复重新存在」判定**不成立** —— 静态全扫描(16 文件字面量+插值)零坏形态, 新增运行时守阵 `e2e/lib/dt-dead-class.mjs` 钉五处、注入即红/还原即绿; 判定缺陷不存在无需修码, W2 时「15 个变体仍带缺陷」系未枚举的悲观外推。见坑档 W7 复核注。

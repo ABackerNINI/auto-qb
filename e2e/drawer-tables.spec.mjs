@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { BASE_URL, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
+import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
 
 /**
  * 详情面板三张列表接入公共表壳(计划 26-10-11-2106 W2「三列表接表壳」) —— 面板内必须与主视图
@@ -190,6 +191,8 @@ for (const skin of SKINS) {
       await expect(grid.first(), '经典正文即接壳后的网格').toBeVisible({ timeout: 5_000 });
       // 经典态: 宿主不渲染(组件分支接管), data-dt-host 全 DOM 零个
       await expect(drawer.locator('[data-dt-host]'), '经典组件态下插件宿主不得渲染').toHaveCount(0);
+      // 死类守阵(坑档 esc-attr-quote-dead-class): 经典(Vue :class)态全文档零「类名含引号」
+      await expectNoDeadClass(page, '经典态');
 
       // 右键**行**(不是表头 —— 表头 @contextmenu.prevent.stop 独占, 见用例一 ③)
       await grid.first().click({ button: 'right' });
@@ -201,6 +204,9 @@ for (const skin of SKINS) {
       await menu.locator('.ctx-item', { hasText: '增强表格' }).click();
       await expect(drawer.locator('.drawer-body .dt-host:visible'), '选变体即挂插件宿主(.dt-tpl)')
         .toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      // 死类守阵: 变体 06(dtHtml 字符串 DOM)态全文档零「类名含引号」—— W7 复核注: 15 个变体
+      // 全源扫描零「整段属性进插值」形态, 该缺陷只在 W2 已删的旧经典页存在过; 此 pin 防回潮。
+      await expectNoDeadClass(page, '变体 06 挂载态');
       const store = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
       expect(store.trackers, '右键菜单必须落当前页签(trackers)的记忆').toBe('06');
       expect(store.general, '不得落 general 的记忆(未动页签落 classic 默认)').toBe('classic');
