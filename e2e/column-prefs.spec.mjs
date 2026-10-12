@@ -19,7 +19,8 @@ import { readInst } from './lib/vm.mjs';
  * ── 对账映射表(旧断言名 → 新 test 名; 旧块 add() 调用点 5 名 × 2 处 = 10 处, ok 模式主路径 5 处/皮肤) ──
  *  旧 add() 行号(删块前 grep 实测)   旧断言名                                 新去向下落
  *  L257  列设置多标签页互不覆盖        → 列设置多标签页互不覆盖(双标签各改一列, storage 事件合流)。
- *          旧判据 hidden.group.length >= 2 自 2026-09-28 hide 默认隐藏播种起**恒真**(播种 4 键),
+ *          旧判据 hidden.group.length >= 2 自默认隐藏播种起**恒真**(2026-10-12 起播种口径 =
+ *          app.js DEFAULT_HIDDEN_KEYS 与本表交集; 辅种表交集 1 键 = amount_left),
  *          升级为「两个改动键(uploaded/total_size)都在」—— issue 26-09-20-1800 的本意(谁也不吞谁)。
  *  L317  列设置·异视口双窗互不吞+F3    → 异视口双窗互不吞+F3(1 test 3 断言 —— 共享同一次双窗编排,
  *          拆开要重演"两窗五步"): okMerge(A 采纳 B) / okF3(F3 补漏采纳) / okReload(刷新仍在)。

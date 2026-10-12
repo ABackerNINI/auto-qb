@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-column-picker">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列">
 <meta name="issue-summary" content="TORRENT_COLUMNS 扩展段注释声明默认隐藏, 但 13 列均无 hide:true; loadColState 播种判据 filter(c=&gt;c.hide) 因此不隐藏 ⇒ 种子页默认 28 列全显(与注释及文件头口径不一致)。">
 <title>种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-12-1911-docs-webui-torrent-column-default-hidden</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-12 19:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -92,18 +92,22 @@
 
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
-    <p><b>待定（需定调）</b> —— 两个方向二选一，未定调前不改码：</p>
+    <p><b>已定调（2026-10-12 用户拍板）</b> —— 原两方向均未原样采纳，用户改出第三条路：全部移除 + 单点收口。</p>
     <ul>
-      <li><b>方向 ①</b>：认定注释为准，给 13 个扩展列补 <code>hide: true</code>（恢复默认隐藏，与辅种表/明细表同口径）。</li>
-      <li><b>方向 ②</b>：认定注释过期，删除/改写这两处注释（接受种子页默认 28 列全显）。</li>
+      <li><b>方向 ①</b>（未原样采纳）：认定注释为准，给 13 个扩展列补 <code>hide: true</code>（恢复默认隐藏，与辅种表/明细表同口径）。</li>
+      <li><b>方向 ②</b>（未采纳）：认定注释过期，删除/改写这两处注释（接受种子页默认 28 列全显）。</li>
+      <li><b>实际改道（用户 2026-10-12 定调）</b>：①旧默认隐藏列<b>全部移除，包括所有表</b>；②三张主页表（辅种/明细/种子）的默认隐藏<b>写在一处</b> —— 新单点 <code>DEFAULT_HIDDEN_KEYS</code>（app.js），用户暂定 6 键：剩余 / 最后完整可见 / Tracker / 信息哈希值 v1 / 信息哈希值 v2 / 完成于，后续按需只加这一处；③统一哈希列命名并与 qB 对齐：明细表 <code>hash</code>「信息哈希值」并入 <code>infohash_v1</code>「信息哈希值 v1」，种子页重复的 <code>hash</code> 列删除（种子页 28 → 27 列）。</li>
     </ul>
-    <p class="hint">注意（防过期原则第 1 条）：本单只记事实，不判哪个方向对；根因（漏加标志 vs 注释未同步）待查。相关调研与对比见 <code>memory-bank/reports/26-10-12-1854-report-webui-column-picker-redesign.html</code>（§1 附带发现）。</p>
+    <p class="hint">防过期原则第 1 条留痕：根因（漏加标志 vs 注释未同步）已无判明必要 —— 按用户定调，机制本身（逐列 hide 标志）被废除，收口为单点集合。相关调研与对比见 <code>memory-bank/reports/26-10-12-1854-report-webui-column-picker-redesign.html</code>（§1 附带发现）。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-12 19:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-12 19:18 — 用户指派认领，状态 <strong>Open</strong> → <strong>In Progress</strong>；复验：仍复现（app.js <code>TORRENT_COLUMNS</code> 扩展段 13 列 0 个 <code>hide:true</code>，<code>loadColState</code> 的 <code>filter(c=&gt;c.hide)</code> 不播种，torrent 页首载 28 列全显；辅种表 4 / 明细表 13 列有显式 <code>hide:true</code> 对照；三处锚点行号与取证时一致，无漂移）</li>
+      <li>2026-10-12 20:15 — 修完，状态 <strong>In Progress → Done</strong>。实际修法（用户定调「全部移除 + 单点收口」）：① app.js 清空全部 17 处 <code>hide: true</code>（辅种 4 / 明细 13；种子页本就没有、抽屉表从来没有）⇒ 三表默认隐藏全部回到 0 列；② 新增默认隐藏单点 <code>DEFAULT_HIDDEN_KEYS</code>（app.js，TABLE_COLUMNS 上方），<code>loadColState</code> 播种改按「本表列 key ∩ 集合」注入（集合含某表没有的 key 时静默跳过），暂定 6 键 = amount_left/seen_complete/tracker/infohash_v1/infohash_v2/completion_on ⇒ 辅种表隐藏 1 列（剩余）、明细表 5 列、种子页 4 列；③ 哈希列命名统一对齐 qB（qB WebUI 列名 Info Hash v1/v2，key 同）：明细表 <code>hash</code>→<code>infohash_v1</code>（后端 <code>_member_view</code> 透传 <code>infohash_v1</code>，<code>_seed_view</code> 不再重述 —— 守阵 webui-seed-view-restate-dup 保持零交集），种子页删重复 <code>hash</code> 列（28→27 列），前端单元格老快照缺字段时回落 <code>hash</code>；④ app.js/xtpl.html/xtpl-cells.html 注释与 <code>modules/webui-static-contract.md</code>、activeContext 26-10-12-1912 同步回写；⑤ 存量守阵（static bundle health 第 14 项）重指向新单点并<b>禁写 hide:true</b>，红绿双向验证过（注入 hide:true 判红 / 还原 <code>.hide</code> 消费判红 / 还原复绿）。</li>
+      <li>验证方式与数字：<code>test.one</code> 定向两文件 37 passed → <code>commands run test.full</code> 3147 passed / 4 skipped（覆盖率 TOTAL 99%）→ <code>commands run dev.e2e</code> 真浏览器 196 passed / 10 skipped（5.8m，含列设置守阵块H 全部通过）。</li>
     </ul>
   </section>
 

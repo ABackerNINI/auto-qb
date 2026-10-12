@@ -1,7 +1,7 @@
 """test_webui_static_skins 测试计划: webui 前端资产静态守阵: 皮肤清单 / CSS / 挂件类名
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤210 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
@@ -584,8 +584,9 @@ def _scan_column_cells_paired(problems):
       · 明细成员单元格(member)在 P2 已收敛为 <aq-member-cells>(模板在 shared/tpl/xtpl.html)。
     故改为扫渲染器所在分片, 并额外钉住"注册为全局组件 + 页面调用点都走它"—— 漏一处即退回内联副本
     (静默回潮)。"删一个渲染器分支必须报红"的语义不变, 只是红点从页面模板挪到渲染器。
-    另钉住 loadColState 必须消费 `hide` 标志(默认隐藏列的注入单点, 漏消费 = hide 列全部
-    默认可见, 可选列设计失守)。
+    另钉住默认隐藏策略单点(2026-10-12 issue 26-10-12-1911 收口): loadColState 必须消费
+    DEFAULT_HIDDEN_KEYS(漏消费 = 默认隐藏列全部默认可见), 且列定义不得再写 hide:true
+    (回潮即三表口径再漂移)。
     """
     app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
     plans = (
@@ -619,8 +620,10 @@ def _scan_column_cells_paired(problems):
             if f"<{name}" not in text:
                 problems.append(f"shared/{tpl} 未使用 <{name}> —— 行模型渲染器收敛回潮"
                                 "(该页退回内联副本, 改一处漏一处)")
-    if ".filter((c) => c.hide)" not in app_js:
-        problems.append("app.js loadColState 未消费列定义 hide 标志(hide 列默认隐藏失灵)")
+    if "DEFAULT_HIDDEN_KEYS" not in app_js or "DEFAULT_HIDDEN_KEYS.has(c.key)" not in app_js:
+        problems.append("app.js loadColState 未消费默认隐藏单点 DEFAULT_HIDDEN_KEYS(默认隐藏列全部可见)")
+    if "hide: true" in app_js:
+        problems.append("app.js 列定义又见 hide:true —— 默认隐藏策略只应写在 DEFAULT_HIDDEN_KEYS 单点(issue 26-10-12-1911)")
 
 
 def test_frontend_table_shell_single_point():
@@ -1210,7 +1213,8 @@ def _scan_frontend_assets():
 
     14. 列模型每个列 key 必须在对应模板有值单元格分支(见 _scan_column_cells_paired) ——
        模板漏写分支无任何报错(表头在、列选择器可勾、值永远空白); 明细列两份模板
-       (groups.html/shows.html)必须成对; loadColState 必须消费 hide 标志(默认隐藏列注入单点)。
+       (groups.html/shows.html)必须成对; loadColState 必须消费 DEFAULT_HIDDEN_KEYS 单点
+       (默认隐藏列注入单点, 列定义禁止再写 hide:true)。
 
     15. CSS 注释体内不得出现 `*/`(见 _scan_css_comments) —— 注释被提前终止后, 尾巴落成
        代码态垃圾, 浏览器按错误恢复把紧跟的规则整条静默丢弃(2026-09-28 实测: console 皮肤

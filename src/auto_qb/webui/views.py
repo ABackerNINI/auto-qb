@@ -400,6 +400,7 @@ class WebviewMixin:
             "dl_limit": r.dl_limit,
             "up_limit": r.up_limit,
             "tracker": r.tracker,
+            "infohash_v1": r.infohash_v1,
             "infohash_v2": r.infohash_v2,
             "seen_complete": r.seen_complete,
             # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 hr_view_fields
@@ -564,7 +565,8 @@ class WebviewMixin:
             # 动作时才需要的字段不进每轮响应体(magnet 添加型库为 MB 级增量, 坑档
             # contract-api); "复制磁力"经 /api/torrents/{hash} 按需取一次详情(drawer.js
             # copyTorrentInfo), 该端点 to_dict() 全字段兜底。
-            "infohash_v1": r.infohash_v1,
+            # infohash_v1 已并入 _member_view 透传段(2026-10-12, 与 infohash_v2 同源 —— 种子页
+            # 不再单独重述, 守阵 issue webui-seed-view-restate-dup 钉两边同名字段等值)。
             "private": r.private,
             "comment": r.comment,
             "created_by": r.created_by,
