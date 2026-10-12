@@ -1475,12 +1475,14 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     """详情面板变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) ——
     核心层 drawer-close 钮 aria-label(种子/流量两头部成对, 仅 svg 无文字读屏不可达);
     纯 div/span 模拟控件 role="button" tabindex="0": 01/02/03/05/08 折叠组头(含 aria-expanded)
-    + 07/08/09 排序表头(含 aria-sort 升/降/无随排序态输出)+ 05/06 msg 展开行; keydown 委托与
-    click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space 转发前排除原生 button/summary 等
-    自身发 click 的元素(防双重触发); 三个列表 fetcher 失败标记(trackersError/filesError/
-    peersError)成功落袋即清、换目标作废; 九个 fetch 型变体(04/05/06/07/08/09/10/11/12)
-    空列表先判错误态再判空态, trackers/peers 文案带自动刷新重试口径(5s 轮询真实存在)、
-    content 文案不承诺自动重试(content 页签无轮询)。"""
+    + 05/06 msg 展开行; keydown 委托与 click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space
+    转发前排除原生 button/summary 等自身发 click 的元素(防双重触发)。
+    U2(计划 26-10-12-0527)改版: 07/08/09 手搓排序表头退役(D3 排序并引擎 aq-table, 变体文件
+    零手搓表头由 test_drawer_table_bridge_wiring ⑪ 钉), 其 aria-sort pin 随载体退役; 07/09
+    交互面只剩原生 <button> 筛选 chips(键盘天然可达), 08 折叠组头仍走 P3-4 模拟控件件套。
+    三个列表 fetcher 失败标记(trackersError/filesError/peersError)成功落袋即清、换目标作废;
+    九个 fetch 型变体(04/05/06/07/08/09/10/11/12)空列表先判错误态再判空态, trackers/peers
+    文案带自动刷新重试口径(5s 轮询真实存在)、content 文案不承诺自动重试(content 页签无轮询)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
     drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
@@ -1502,13 +1504,16 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         "核心 wireEvents/unwireEvents 挂摘不成对(换变体监听叠加回潮)"
 
     # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
+    # U2(计划 26-10-12-0527, D3): 07/08/09 手搓排序表头退役 —— 排序交互/表头/箭头全归引擎 aq-table
+    # (xtpl.html tpl-aq-table: col.sortable 点击走 $root.setSort 单点), 变体文件零手搓排序表头由
+    # test_drawer_table_bridge_wiring ⑪ 钉死。引擎 .h-cell 是 click 表头, 与主视图各表同款同形态;
+    # 引擎级表头 a11y 补课(role/aria-sort)属引擎全域议题不属本计划, 已入 issue 池另议。
     fold_variants = (
         "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
         "05-trackers-health-groups-low.js", "08-peers-groups-low.js"
     )
-    sort_variants = ("07-peers-dashboard-tall.js", "08-peers-groups-low.js", "09-peers-density-collapsed.js")
     msg_variants = ("05-trackers-health-groups-low.js", "06-trackers-table-collapsed.js")
-    all_a11y = sorted(set(fold_variants + sort_variants + msg_variants))
+    all_a11y = sorted(set(fold_variants + msg_variants))
     for name in all_a11y:
         text = open(os.path.join(vdir, name), encoding="utf-8").read()
         if name in fold_variants:
@@ -1516,11 +1521,6 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
                 f"drawer_tpl/{name}: 折叠组头缺 role=button(P3-4: 纯 div+click 键盘不可达)"
             assert 'aria-expanded="' in text, \
                 f"drawer_tpl/{name}: 折叠组头缺 aria-expanded(读屏不知道折叠态)"
-        if name in sort_variants:
-            assert re.search(r'role="button"[^>]*aria-sort="|aria-sort="[^>]*data-sort', text.replace("\n", " ")), \
-                f"drawer_tpl/{name}: 排序表头缺 role=button + aria-sort(P3-4: 升/降/无随排序态输出)"
-            assert 'ui.sortDir === 1 ? "ascending" : "descending"' in text, \
-                f"drawer_tpl/{name}: aria-sort 未按当前排序态输出升降(只在渲染函数里随态输出)"
         if name in msg_variants:
             assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', text.replace("\n", " ")), \
                 f"drawer_tpl/{name}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
@@ -1534,6 +1534,17 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         # 双重触发去重: 焦点在原生交互元素上时不转发(原生 Enter 本来就发 click)
         assert 'closest("button, input, select, textarea, a[href], summary")' in text, \
             f"drawer_tpl/{name}: keydown 转发未排除原生交互元素(Enter 会 click+keydown 双重触发)"
+
+    # 2.5 peers 三变体(U2 重写后)的 a11y/挂摘口径: 07/09 交互面只剩原生 <button> 筛选 chips
+    # (键盘天然可达, 无模拟控件故无 role/tabindex/keydown 转发件套); 08 归上面 fold 组
+    # (折叠组头仍是纯 div 模拟控件)。排序/表头 a11y 归引擎(见本段头注)。
+    for name in ("07-peers-dashboard-tall.js", "08-peers-groups-low.js", "09-peers-density-collapsed.js"):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "H.wireEvents(host" in text and "H.unwireEvents(host)" in text, \
+            f"drawer_tpl/{name}: 挂摘未走核心成对 helper(监听叠加回潮)"
+        if name != "08-peers-groups-low.js":
+            assert 'type="button"' in text, \
+                f"drawer_tpl/{name}: 筛选 chips 必须是原生 <button>(键盘可达; 换纯 div 模拟须补 P3-4 件套)"
 
     # 3. 失败标记: 显式建字段(vue-reactivity 口径) + catch 落标记 + 成功清 + 换目标作废
     #    W1 起四 fetcher/软切换作废落 drawer_store.js(数据层), 初值显式建字段仍住 drawer.js

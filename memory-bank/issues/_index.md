@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 5 |
 | docs | 1 |
 | test | 4 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移)](26-10-12-0800-bug-webui-table-head-a11y.html) — D3 排序并引擎后, 旧…
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成…
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply…
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 d…

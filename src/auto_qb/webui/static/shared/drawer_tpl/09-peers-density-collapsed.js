@@ -5,12 +5,19 @@
  * 合计 + 吸血 / 连接计数, 本变体 summary() 供给)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询); 「↑ 占用」列 = 该对端 upspeed 占
  * 当前上传合计的比重(条长 + 数值), 默认按它降序 —— 第一行就是最吃上传的对端。
- * 动作: 悬停标记(展示, CSS :hover); 筛选 chips 与列头排序为纯前端态。
+ * 动作: 悬停标记(展示, CSS :hover); 筛选 chips 为纯前端态。
  * 拍板 P-04: 悬停封禁钮 v1 省略(无后端端点), 设计稿「处置」列不落地; 迅雷红标 = client 名含
  * "XL/迅雷" 启发式(与 07/08 同判据), 纯展示(红行 + 吸血徽章, 徽章 title 说明判据)。
  * 渐进字段: country_code/connection 随 qB 版本浮动 —— cc 徽章逐行省略; flags 缺失行不猜。
+ * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
+ *   表格体重写为**引擎消费面** —— 外壳只出锚槽(anchFill 保活), 表壳/行渲染器由
+ *   <aq-dt-bridge> Teleport 进锚(描述符 drawerPeerV09: 列集 DRAWER_PEER_V09_COLUMNS,
+ *   「↑ 占用」= upspeed 列改 label —— 排序键不变(R7), occ 条长由行装配预挂 occBar)。
+ *   手搓排序状态机/列宽 grid/表头拼装全部退役(Q4), 默认序 upspeed 降序由描述符
+ *   sort.defKey/defDir 声明。行来源与筛选是版式语义, 单点在 rowsFn。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 滚动位置/筛选/排序态自保。
+ * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
+ * 重挂 = 行抖动), 滚动位置/筛选态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -19,7 +26,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
 
   /* qB peer_info 标志位逐项解释(设计稿同款; 色映射按 S1 白名单就近取) */
   const FLAG_META = {
@@ -44,8 +51,10 @@
     { key: "lan", text: "内网" },
   ];
 
-  /* 视图偏好(跨重渲染与换种子保持): 筛选 / 排序 / 上传合计(占用条分母); lastSig 供跳过重建 */
-  const ui = { filter: "all", sortKey: "up", sortDir: -1, upTotal: 0, lastSig: "" };
+  /* 视图偏好(跨重渲染与换种子保持): 筛选; lastSig 供跳过重建。
+   * !排序态已并引擎(dtSortState.drawerPeerV09, 默认 upspeed 降序 = 描述符声明);
+   *   手搓 sortKey/sortDir/upTotal 退役(占用条分母在 rowsFn 现算)。 */
+  const ui = { filter: "all", lastSig: "" };
 
   const CSS = [
     /* 筛选 chips 行 */
@@ -59,33 +68,22 @@
     ".drawer .dt09-fchip.active { background:var(--accent-soft); border-color:var(--accent-line); color:var(--fg); }",
     ".drawer .dt09-fchip.c-err.active { background:var(--error-soft); border-color:var(--error-line); }",
     ".drawer .dt09-note { margin-left:auto; font-size:11.5px; color:var(--fg-dim); }",
-    /* 密度表(30px 行距) */
+    /* 密度表容器(表格体 = 引擎表壳 + 行渲染器经桥 Teleport 进锚, U2) */
     ".drawer .dt09-list { display:flex; flex-direction:column; }",
-    ".drawer .dt09-r, .drawer .dt09-head { display:grid;",
-    "  grid-template-columns:184px 150px 100px 112px minmax(160px, 1fr) 90px 74px 74px 44px;",
-    "  gap:8px; align-items:center; padding:0 8px; }",
+    /* 引擎行容器的变体个性(D5): 30px 行距密度 + 发丝线 + 修饰行 */
+    ".drawer .dt09-list .group-row { min-height:30px; border-bottom:1px solid var(--hairline);",
+    "  border-radius:var(--radius-sm); font-size:12px; }",
+    ".drawer .dt09-list .group-row:hover { background:var(--bg-hover); }",
+    ".drawer .dt09-list .group-row.bad { background:var(--error-soft); }",
+    ".drawer .dt09-list .group-row.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
+    ".drawer .dt09-list .group-row.lan { box-shadow:inset 2px 0 0 var(--blue); }",
+    ".drawer .dt09-list .group-row.handrow { opacity:.55; }",
     /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
      * padding-top(14px)之下, 中途滚动时行文字从那条缝里漏出来; 与 dt11 同族(机理/判据单点
-     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。 */
-    ".drawer .dt09-head { position:sticky; top:-14px; z-index:1; height:26px; background:var(--bg-card);",
-    "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
-    ".drawer .dt09-head .num, .drawer .dt09-head .occ-h { text-align:right; }",
-    ".drawer .dt09-head .occ-h { justify-content:flex-start; }",
-    ".drawer .dt09-sortable { cursor:pointer; user-select:none; display:inline-flex; align-items:center;",
-    "  gap:3px; width:100%; }",
-    ".drawer .dt09-sortable.num, .drawer .dt09-sortable.num .chev { justify-content:flex-end; }",
-    ".drawer .dt09-sortable:hover { color:var(--fg); }",
-    ".drawer .dt09-sortable .chev { opacity:0; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }",
-    ".drawer .dt09-sortable.on { color:var(--accent); }",
-    ".drawer .dt09-sortable.on .chev { opacity:1; }",
-    ".drawer .dt09-sortable.asc .chev { transform:rotate(180deg); }",
-    ".drawer .dt09-r { min-height:30px; border-bottom:1px solid var(--hairline); border-radius:var(--radius-sm);",
-    "  font-size:12px; }",
-    ".drawer .dt09-r:hover { background:var(--bg-hover); }",
-    ".drawer .dt09-r.bad { background:var(--error-soft); }",
-    ".drawer .dt09-r.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
-    ".drawer .dt09-r.lan { box-shadow:inset 2px 0 0 var(--blue); }",
-    ".drawer .dt09-r.handrow { opacity:.55; }",
+     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。
+     * (引擎表头 .group-head 在抽屉内被皮肤置 static —— 变体在此恢复吸顶个性。) */
+    ".drawer .dt09-list .group-head { position:sticky; top:-14px; z-index:1; background:var(--bg-card);",
+    "  border-bottom:1px solid var(--border); }",
     /* 单元格 */
     ".drawer .dt09-addr { display:flex; align-items:center; gap:7px; min-width:0; }",
     ".drawer .dt09-cc { flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);",
@@ -128,8 +126,8 @@
     ".drawer .dt09-occ b { flex:none; font-family:var(--font-mono, ui-monospace, monospace); font-weight:600;",
     "  font-size:12px; color:var(--today-up); white-space:nowrap; }",
     ".drawer .dt09-occ b.z { color:var(--fg-dim); font-weight:400; }",
-    ".drawer .dt09-r.bad .dt09-occ b { color:var(--error); }",
-    ".drawer .dt09-r.bad .dt09-occ .track i { background:var(--error); }",
+    ".drawer .dt09-list .group-row.bad .dt09-occ b { color:var(--error); }",
+    ".drawer .dt09-list .group-row.bad .dt09-occ .track i { background:var(--error); }",
     ".drawer .dt09-dn { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-weight:600;",
     "  font-size:12px; color:var(--today-down); text-align:right; white-space:nowrap; }",
     ".drawer .dt09-dn.z { color:var(--fg-dim); font-weight:400; }",
@@ -184,101 +182,47 @@
     if (f === "all") return list;
     return list.filter((p) => countOf([p], f) > 0);
   }
-  function sorted(list) {
-    const k = ui.sortKey, dir = ui.sortDir;
-    const val = (p) => {
-      if (k === "prog") return num(p.progress);
-      if (k === "up") return num(p.upspeed);
-      if (k === "down") return num(p.dlspeed);
-      if (k === "sent") return num(p.uploaded);
-      if (k === "recv") return num(p.downloaded);
-      return num(p.relevance);
-    };
-    return list.slice().sort((a, b) => (val(a) - val(b)) * dir);
-  }
 
-  let _ctx = null; /* render 期只读引用(纯格式化) */
-  const fmtSpeedOf = (v) => _ctx.fmtSpeed(v);
-  const fmtSizeOf = (v) => _ctx.fmtSize(v);
-
-  /* ---------------- 单元格 ---------------- */
-  function flagsHtml(p) {
+  /* ---------------- 行装配(U2: 数据判据在这里, 呈现在渲染器分片) ---------------- */
+  function rowOf(ctx, p, upTotal) {
     const f = flagTokens(p);
-    if (!f.length) return T`<span class="dt09-none" title="flags 缺失">—</span>`;
-    return T`${R(f.map((x) => {
-      const m = FLAG_META[x];
-      return m
-        ? T`<span class="dt09-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt09-fl fl-h">${x}</span>`;
-    }).join(""))}`;
-  }
-  function addrHtml(p) {
     const lan = isLanIp(p.ip);
-    const cc = lan
-      ? T`<span class="dt09-cc lan" title="局域网直连(私有地址段启发式)">内网</span>`
-      : (p.country_code
-        ? T`<span class="dt09-cc" title="${p.country || p.country_code}">${p.country_code}</span>`
-        : "");
-    const conn = p.connection ? " · " + p.connection : "";
-    return T`<span class="dt09-addr">${R(cc)}<span class="dt09-ip" title="${p.ip || "?"}:${p.port || ""}${conn}">${p.ip || "?"}${p.port ? ":" + p.port : ""}</span></span>`;
-  }
-  function clientHtml(p) {
-    const badge = isBad(p)
-      ? T`<span class="dt09-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>`
-      : "";
-    return T`<span class="dt09-client"><span class="cname" title="${p.client || "未知"}">${p.client || "未知"}</span>${R(badge)}</span>`;
-  }
-  function progHtml(p) {
-    const pct = Math.round((p.progress || 0) * 100);
-    return T`<span class="dt09-prog${pct === 0 ? " zero" : ""}" title="对端自身进度 ${pct}%">
-      <span class="bar"><i style="width:${pct}%"></i></span><em>${pct}%</em></span>`;
-  }
-  function occHtml(p) {
-    const v = num(p.upspeed);
-    const b = v > 0 ? T`<b>${fmtSpeedOf(v)}</b>` : T`<b class="z">0</b>`;
-    const bar = v > 0 && ui.upTotal > 0
-      ? T`<span class="track"><i style="width:${(v / ui.upTotal * 100).toFixed(1)}%"></i></span>`
-      : "";
-    return T`<span class="dt09-occ" title="我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上传合计(${fmtSpeedOf(ui.upTotal)})的比重">${R(bar)}${R(b)}</span>`;
-  }
-  const dnHtml = (p) => (num(p.dlspeed) > 0
-    ? T`<span class="dt09-dn" title="我方从该对端收到的即时速度(qB dlspeed)">${fmtSpeedOf(num(p.dlspeed))}</span>`
-    : T`<span class="dt09-dn z" title="我方从该对端收到的即时速度(qB dlspeed)">0</span>`);
-  const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt09-amt">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt09-amt z">0</span>`);
-  const relHtml = (p) =>
-    T`<span class="dt09-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
-
-  function rowHtml(p) {
-    const cls = ["dt09-r", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "",
-      bucketOf(p) === "hand" ? "handrow" : ""].filter(Boolean).join(" ");
-    return T`<div class="${cls}">
-      ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt09-flags">${R(flagsHtml(p))}</span>${R(progHtml(p))}${R(occHtml(p))}
-      ${R(dnHtml(p))}${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}
-    </div>`;
-  }
-
-  function headHtml() {
-    const seg = (k, text, tip, numCls) => {
-      const on = ui.sortKey === k;
-      /* P3-4(报告 26-10-07-0542): 排序表头纯 span 模拟控件补键盘达 + aria-sort(升/降/无
-       * 随当前排序态在渲染函数里输出) */
-      const asort = !on ? "none" : (ui.sortDir === 1 ? "ascending" : "descending");
-      return T`<span class="${numCls} dt09-sortable${on ? " on" : ""}${on && ui.sortDir === 1 ? " asc" : ""}"
-        role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
+    const up = num(p.upspeed), down = num(p.dlspeed);
+    const addr = `${p.ip || "?"}${p.port ? ":" + p.port : ""}`;
+    return {
+      addr,
+      addrTitle: `${p.ip || "?"}:${p.port || ""}${p.connection ? " · " + p.connection : ""}`,
+      cc: lan ? "内网" : String(p.country_code || ""),
+      ccTitle: lan ? "局域网直连(私有地址段启发式)" : String(p.country || p.country_code || ""),
+      lan,
+      client: String(p.client || "未知"),
+      bad: isBad(p),
+      flagToks: f.map((x) => {
+        const m = FLAG_META[x];
+        return { ch: x, cls: m ? m.c : "fl-h", tip: m ? m.t : "" };
+      }),
+      progress: Math.round((p.progress || 0) * 100),
+      upspeed: up > 0 ? ctx.fmtSpeed(up) : "0",
+      dlspeed: down > 0 ? ctx.fmtSpeed(down) : "0",
+      uploaded: num(p.uploaded) > 0 ? ctx.fmtSize(num(p.uploaded)) : "0",
+      downloaded: num(p.downloaded) > 0 ? ctx.fmtSize(num(p.downloaded)) : "0",
+      relevance: Math.round((p.relevance || 0) * 100) + "%",
+      occBar: up > 0 && upTotal > 0 ? Number((up / upTotal * 100).toFixed(1)) : 0,
+      upTotalTxt: ctx.fmtSpeed(upTotal),
+      _raw: {
+        addr, client: String(p.client || ""), flags: String(p.flags || ""),
+        progress: p.progress || 0, dlspeed: down, upspeed: up,
+        downloaded: num(p.downloaded), uploaded: num(p.uploaded), relevance: p.relevance || 0,
+      },
+      _cls: [isBad(p) ? "bad" : "", lan ? "lan" : "", bucketOf(p) === "hand" ? "handrow" : ""]
+        .filter(Boolean).join(" ") || null,
     };
-    return T`<div class="dt09-head">
-      <span>IP/地址</span>
-      <span>客户端</span>
-      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
-      ${R(seg("prog", "进度", "对端自身进度", "num"))}
-      ${R(seg("up", "↑ 占用", "我方发给该对端的即时速度(qB upspeed); 条长 = 该对端占当前上传合计的比重", "occ-h num"))}
-      ${R(seg("down", "下载速度", "我方从该对端收到的即时速度(qB dlspeed)", "num"))}
-      ${R(seg("sent", "已上传", "本次会话我方已发给该对端的累计(qB uploaded)", "num"))}
-      ${R(seg("recv", "已下载", "本次会话我方已从该对端收到的累计(qB downloaded)", "num"))}
-      ${R(seg("rel", "文件关联", "relevance: 该对端拥有我缺失数据的比例", "num"))}
-    </div>`;
+  }
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 占用条分母按全量列表的 upspeed 合计 */
+  function rowsFn(ctx) {
+    const list = peerList(ctx);
+    const upTotal = list.reduce((s, p) => s + num(p.upspeed), 0);
+    return filtered(list).map((p) => rowOf(ctx, p, upTotal));
   }
 
   function render(host, ctx) {
@@ -286,11 +230,9 @@
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态) */
+    /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 锚元素由 anchFill 跨帧保活(U2 不变量) */
     const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
-    _ctx = ctx;
-    ui.upTotal = list.reduce((s, p) => s + num(p.upspeed), 0);
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt09-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -309,21 +251,20 @@
     }
     const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
       T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
-    const rows = sorted(filtered(list)).map(rowHtml).join("");
+    /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位(U2) */
     const html = T`<div class="dt09-wrap">
       <div class="dt09-bar">${R(chips)}
         <span class="dt09-note">默认按「↑ 占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>
       </div>
-      <div class="dt09-list">${R(headHtml())}${R(rows)}</div>
+      <div class="dt09-list"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
      * 用户的横向滚动位打回最左) —— 单点 helper */
     H.withScroll(host, () => {
       host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, "drawerPeerV09");
     });
   }
-
-  
 
   function onClick(ev) {
     const h = ev.currentTarget;
@@ -331,14 +272,8 @@
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h);
-      return;
-    }
-    const seg = ev.target.closest("[data-sort]");
-    if (seg) {
-      const k = seg.getAttribute("data-sort");
-      if (ui.sortKey === k) ui.sortDir = -ui.sortDir;
-      else { ui.sortKey = k; ui.sortDir = -1; }
-      rerender(h);
+      /* 行来源变了(筛选是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn */
+      H.anchTouch(h, h.__dtCtx, "drawerPeerV09");
     }
   }
 
@@ -349,19 +284,9 @@
     if (ctx) _render(host, ctx);
   }
 
-  /* P3-4: 排序表头纯 span 模拟控件(data-sort)的键盘触发 —— Enter/Space 转发 click 委托;
-   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
-  function onKeyDown(ev) {
-    if (ev.key !== "Enter" && ev.key !== " ") return;
-    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
-    if (!ev.target.closest("[data-sort]")) return;
-    ev.preventDefault();
-    onClick(ev);
-  }
-
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
+    H.wireEvents(host, { click: onClick });
   }
 
   function destroy(host) {
@@ -375,6 +300,10 @@
   reg.register({
     id: "09", tab: "peers",
     label: "密度雷达",
+    /* 桥声明(U2): 表格体走引擎 —— tableId 对应 DRAWER_TABLE_DEFS.drawerPeerV09,
+     * rowsFn = 行来源与筛选(版式语义), 排序/列交互/持久化归引擎。 */
+    tableId: "drawerPeerV09",
+    rowsFn: rowsFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

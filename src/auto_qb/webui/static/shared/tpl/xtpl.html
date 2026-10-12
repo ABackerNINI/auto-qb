@@ -318,23 +318,30 @@
   </script>
 
 <script type="text/x-template" id="tpl-aq-dt-bridge">
-  <!-- 变体表格体桥(计划 26-10-12-0527 U1): 表壳 + 行渲染器经 Teleport 传送进变体外壳锚。
+  <!-- 变体表格体桥(计划 26-10-12-0527 U1/U2): 表壳 + 行渲染器经 Teleport 传送进变体外壳锚。
        全部引擎行为走 $root 既有单点; 描述符(app.js DRAWER_TABLE_DEFS 变体行)声明
-       rows/rowKey/rowModel/rowProp 四件即接入 —— 外壳/引擎/本组件三方零特判。 -->
-  <teleport :to="$root.dtBridgeTo(tab)">
-    <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
-              :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
-              :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>
-    <div v-if="$root.sortedDrawer($root.dtBridgeTbl(tab), $root.dtBridgeRows(tab)).length" class="group-table"
-         @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))">
-      <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), $root.dtBridgeRows(tab))"
-           :key="r[$root.dtBridgeRowKey(tab)]" class="group-row"
-           :data-table="$root.dtBridgeTbl(tab)" :style="$root.gridStyle($root.dtBridgeTbl(tab))">
-        <component :is="'aq-' + $root.dtBridgeRowModel(tab) + '-cells'"
-                   :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
-                   v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>
+       rows/rowKey/rowModel/rowProp(+可选 rowCls/segs)即接入 —— 外壳/引擎/本组件三方零特判。
+       U2 分段化: dtBridgeSegs 归一返回 [{key, rows}](描述符 segs=true 时 rows 方法自带分段,
+       如 08 五分组 —— 每组一个锚, 分组头留在外壳; 单锚段 key=""), 逐段 teleport + 逐段
+       sortedDrawer(同 tableId 同一座排序键)。行修饰类(rowCls)绑 .group-row —— 变体行级
+       个性(红行/内网标/握手半透明)经引擎行容器保留(D5 口径)。 -->
+  <template v-for="seg in $root.dtBridgeSegs(tab)" :key="$root.dtBridgeKey(tab) + '#' + seg.key">
+    <teleport :to="$root.dtBridgeTo(tab, seg.key)">
+      <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
+                :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
+                :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>
+      <div v-if="$root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows).length" class="group-table"
+           @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))">
+        <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows)"
+             :key="r[$root.dtBridgeRowKey(tab)]" class="group-row"
+             :class="$root.dtBridgeRowCls(tab) ? r[$root.dtBridgeRowCls(tab)] : null"
+             :data-table="$root.dtBridgeTbl(tab)" :style="$root.gridStyle($root.dtBridgeTbl(tab))">
+          <component :is="'aq-' + $root.dtBridgeRowModel(tab) + '-cells'"
+                     :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
+                     v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>
+        </div>
       </div>
-    </div>
-    <div v-else class="empty"><span>暂无数据</span></div>
-  </teleport>
+      <div v-else class="empty"><span>暂无数据</span></div>
+    </teleport>
+  </template>
 </script>

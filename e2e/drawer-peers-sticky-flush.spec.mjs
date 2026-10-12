@@ -10,6 +10,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 容器 `.drawer-body` 自身 padding 内缩 —— 表头写 top:0 时实际停在 padding-top(14px)之下,
  * 中途滚动时 peer 行文字从那条缝里漏出来。修复 = top:-14px 抵消。本阵在两变体 × 双皮肤上
  * 量「吸顶态表头顶缘 == .drawer-body 顶缘(±1px)」; 滚动容器 padding 一变或 inset 被改回 0 即红。
+ * U2(计划 26-10-12-0527): 行体/表头归引擎 —— 探针换引擎口径(.group-head[data-table=drawerPeerV0X]),
+ * 吸顶个性由变体 CSS 以 .dtNN-list .group-head 恢复(压过皮肤 .drawer-body .group-head 的 static)。
  *
  * 断言口径: page.route 桩掉 /api/torrents/{hash}/peers(合成 40 个 peer 保证可滚 —— 桩服务
  * 默认每种子只有 1~7 个 peer, 滚不起来) → 预置 localStorage 选 07/09 为 peers 页签模板 →
@@ -78,14 +80,15 @@ for (const skin of SKINS) {
 
         const wrap = drawer.locator(`.dt${v.id}-wrap`);
         await expect(wrap).toBeVisible({ timeout: 5_000 });
-        await expect(drawer.locator(`.dt${v.id}-r`).first()).toBeVisible({ timeout: 5_000 });
+        // U2: 行体是引擎表体(.group-row[data-table=drawerPeerV0X], 桥 Teleport 进变体锚)
+        await expect(drawer.locator(`.group-row[data-table="drawerPeerV${v.id}"]`).first()).toBeVisible({ timeout: 5_000 });
 
         await page.evaluate(() => { document.querySelector('.drawer .drawer-body').scrollTop = 300; });
         const geom = await page.evaluate((id) => {
           const body = document.querySelector('.drawer .drawer-body');
           return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
             const b = body.getBoundingClientRect();
-            const head = document.querySelector(`.drawer .dt${id}-head`);
+            const head = document.querySelector(`.drawer .group-head[data-table="drawerPeerV${id}"]`);
             const h = head.getBoundingClientRect();
             res({
               scrollable: body.scrollHeight - body.clientHeight,

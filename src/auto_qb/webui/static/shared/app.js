@@ -233,6 +233,33 @@ const DRAWER_STUB_V0_COLUMNS = [
   DRAWER_PEER_COLUMNS[4], /* dlspeed */
   DRAWER_PEER_COLUMNS[5], /* upspeed */
 ];
+/* 变体表格体列集(U2, 计划 26-10-12-0527 D2/D6): 每变体一份 —— 列子集/专属列/默认序/可排性
+ * 都是**数据声明**(以经典用户列集为底裁剪/重排/追加)。omisEmpty = 渐进列(qB files 字段随
+ * 版本浮动, 无任何对端携带时整列省略 —— 原变体口径; 引擎单点在 columns.js _colsOmitEmpty,
+ * 省略态下表头/行/grid/对齐同走一条 _visibleCols, nofiles 9 列错位 bug 类结构性根除)。 */
+const DRAWER_PEER_FILE_COLUMN = {
+  key: "files", label: "文件", tpl: "minmax(110px, 1fr)", sortable: false, align: "left", omitEmpty: true,
+};
+/* 07 四卡仪表: 10 列(上传速度在下载速度之前 —— 变体惯例), files 渐进 */
+const DRAWER_PEER_V07_COLUMNS = [
+  DRAWER_PEER_COLUMNS[0], DRAWER_PEER_COLUMNS[1], DRAWER_PEER_COLUMNS[2], DRAWER_PEER_FILE_COLUMN,
+  DRAWER_PEER_COLUMNS[3], DRAWER_PEER_COLUMNS[5], DRAWER_PEER_COLUMNS[4],
+  DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6], DRAWER_PEER_COLUMNS[8],
+];
+/* 08 五区分组: 同 07 的 10 列, 但「文件关联」不可排序(原口径: 分区语义已隐含关联度) */
+const DRAWER_PEER_V08_COLUMNS = [
+  DRAWER_PEER_COLUMNS[0], DRAWER_PEER_COLUMNS[1], DRAWER_PEER_COLUMNS[2], DRAWER_PEER_FILE_COLUMN,
+  DRAWER_PEER_COLUMNS[3], DRAWER_PEER_COLUMNS[5], DRAWER_PEER_COLUMNS[4],
+  DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6],
+  { ...DRAWER_PEER_COLUMNS[8], sortable: false },
+];
+/* 09 密度雷达: 9 列, 「↑ 占用」= upspeed 列的变体语义(条长 = 占当前上传合计比重, 渲染器出),
+ * 排序仍按 upspeed 原始值 —— 列个性 = 声明(改 label), 排序语义不换键(R7 口径) */
+const DRAWER_PEER_V09_COLUMNS = [
+  DRAWER_PEER_COLUMNS[0], DRAWER_PEER_COLUMNS[1], DRAWER_PEER_COLUMNS[2], DRAWER_PEER_COLUMNS[3],
+  { ...DRAWER_PEER_COLUMNS[5], label: "↑ 占用" }, DRAWER_PEER_COLUMNS[4],
+  DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6], DRAWER_PEER_COLUMNS[8],
+];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -244,6 +271,9 @@ const TABLE_COLUMNS = {
   drawerTracker: DRAWER_TRACKER_COLUMNS, drawerPeer: DRAWER_PEER_COLUMNS, drawerFile: DRAWER_FILE_COLUMNS,
   /* 变体表格体列集(26-10-12-0527): 与 DRAWER_TABLE_DEFS 同步注册(声明即事实源) */
   drawerStubV0: DRAWER_STUB_V0_COLUMNS,
+  drawerPeerV07: DRAWER_PEER_V07_COLUMNS,
+  drawerPeerV08: DRAWER_PEER_V08_COLUMNS,
+  drawerPeerV09: DRAWER_PEER_V09_COLUMNS,
 };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
@@ -401,6 +431,37 @@ const DRAWER_TABLE_DEFS = {
     sort: { dyn: true, defKey: "", defDir: -1 },
     variantTab: "peers", variantId: "stubbridge",
     rows: "drawerPeerRows", rowKey: "addr", rowModel: "peer", rowProp: "p",
+  },
+  /* ---------------- U2: 用户表三变体(07/08/09, 计划 26-10-12-0527; 拍板 D2/D3/D5/D6 = A) ----------------
+   * rows: "dtTplRows" = 行来源与筛选(07/09 筛选 chips、08 五区分桶/只看在传)回变体注册条目的
+   * rowsFn(版式语义); 排序/拖宽/右键隐藏/偏好持久化全走引擎(dyn 排序键 + table-id 偏好键)。
+   * 默认序按各变体原口径: upspeed 降序(07/08/09 一致 —— 09 的「↑ 占用」列也是 upspeed 键)。
+   * rowCls = 行装配预挂的修饰类串(红行/内网标/握手半透明 —— 行级个性经引擎行容器保留)。
+   * 08 加 segs: true —— rowsFn 返回 [{key, rows}] 分段, 每组一个锚, 分组头留在外壳(D5:
+   * 分组是版式, 行是引擎表体); 组内排序跨组共享一座键(与原手搓状态机同口径)。 */
+  drawerPeerV07: {
+    columns: DRAWER_PEER_V07_COLUMNS, label: "用户表·四卡仪表",
+    headRef: null, tableRef: null,
+    grid: "drawerPeerV07Grid", cols: "visibleDrawerPeerV07Cols", window: null,
+    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    variantTab: "peers", variantId: "07",
+    rows: "dtTplRows", rowKey: "addr", rowModel: "dt07", rowProp: "p", rowCls: "_cls",
+  },
+  drawerPeerV08: {
+    columns: DRAWER_PEER_V08_COLUMNS, label: "用户表·五区分组",
+    headRef: null, tableRef: null,
+    grid: "drawerPeerV08Grid", cols: "visibleDrawerPeerV08Cols", window: null,
+    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    variantTab: "peers", variantId: "08", segs: true,
+    rows: "dtTplRows", rowKey: "addr", rowModel: "dt08", rowProp: "p", rowCls: "_cls",
+  },
+  drawerPeerV09: {
+    columns: DRAWER_PEER_V09_COLUMNS, label: "用户表·密度雷达",
+    headRef: null, tableRef: null,
+    grid: "drawerPeerV09Grid", cols: "visibleDrawerPeerV09Cols", window: null,
+    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    variantTab: "peers", variantId: "09",
+    rows: "dtTplRows", rowKey: "addr", rowModel: "dt09", rowProp: "p", rowCls: "_cls",
   },
 };
 /* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
@@ -724,6 +785,10 @@ app.component("aq-peer-cells", window.AQ_PEER_CELLS_COMPONENT);
 app.component("aq-file-cells", window.AQ_FILE_CELLS_COMPONENT);
 /* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 → Teleport 表壳 + 行渲染器(见 table.js 尾注) */
 app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
+/* U2 变体格渲染器(计划 26-10-12-0527): 用户表三变体的行模型(桥模板按 rowModel 动态解析) */
+app.component("aq-dt07-cells", window.AQ_DT07_CELLS_COMPONENT);
+app.component("aq-dt08-cells", window.AQ_DT08_CELLS_COMPONENT);
+app.component("aq-dt09-cells", window.AQ_DT09_CELLS_COMPONENT);
 // 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
 // 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
 // W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。

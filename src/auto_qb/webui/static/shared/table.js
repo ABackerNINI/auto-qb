@@ -196,3 +196,38 @@ window.AQ_DT_BRIDGE_COMPONENT = {
   },
   template: "#tpl-aq-dt-bridge",
 };
+
+/* ---------------- U2 变体格渲染器(计划 26-10-12-0527, 用户表 07/08/09) ----------------
+ * 「渲染器注册表」第三组 —— 与经典 aq-peer-cells 同范式(纯消费方: props = 可见列 cols +
+ * 行模型自然名 p, 内部按 col.key 查表, 行为一律 $root.xxx)。行对象由变体注册条目的 rowsFn
+ * 装配(drawer_templates.js dtTplRows 回调): 显示值 + _raw 原始值(排序走 _sortVal) + 变体
+ * 修饰字段(flagToks 徽章数组 / up·down 微条宽度 / bad·lan·hand 行修饰) —— 渲染器只做
+ * 声明式呈现, 判据零复制。行级修饰类(bad/lan/hand)不在这里: 走描述符 rowCls 绑 .group-row。
+ *   dt07 四卡仪表 → <aq-dt07-cells>   dt08 五区分组 → <aq-dt08-cells>   dt09 密度雷达 → <aq-dt09-cells>
+ * 模板在 tpl/xtpl-cells.html 末尾(同为 body 注入的 x-template, 无需 manifest 行)。 */
+window.AQ_DT07_CELLS_COMPONENT = {
+  name: "aq-dt07-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerPeerV07"))
+    p: { type: Object, required: true },         // dt07 行(rowsFn 装配)
+  },
+  template: "#tpl-aq-dt07-cells",
+};
+
+window.AQ_DT08_CELLS_COMPONENT = {
+  name: "aq-dt08-cells",
+  props: {
+    cols: { type: Array, required: true },
+    p: { type: Object, required: true },
+  },
+  template: "#tpl-aq-dt08-cells",
+};
+
+window.AQ_DT09_CELLS_COMPONENT = {
+  name: "aq-dt09-cells",
+  props: {
+    cols: { type: Array, required: true },
+    p: { type: Object, required: true },
+  },
+  template: "#tpl-aq-dt09-cells",
+};

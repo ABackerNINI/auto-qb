@@ -214,6 +214,40 @@
       rows[next].focus();
       return true;
     },
+    /* ---------------- 桥锚保活/触碰(U2, 计划 26-10-12-0527; 与模块函数 dtSyncAnchors 同族) ----------------
+     * anchFill: 桥变体外壳整帧重建时**保住锚元素身份** —— 帧内表格区放
+     *   `<div data-dt-anchor-slot="<segKey>"></div>`(单锚段 key 留空), 重建后由本 helper 把
+     *   宿主记账的锚元素(首次则新建)替换进 slot 位。锚元素不换 = dtSyncAnchors 不换代 =
+     *   桥零重挂(行更新走引擎响应式; stub 的"恒定 sig 锚不重建"不变量在真实变体上的等价物:
+     *   锚被重建 = Teleport 重挂 = 行抖动 + .group-table 横滚位丢失)。段离场(组空/过滤)时
+     *   记账丢弃, 再现即换新锚(代数自增)。
+     * anchTouch: 变体 UI 态(筛选/只看在传)变化后的强制换代 —— 锚元素身份没变但 rowsFn 的
+     *   读数(ui.filter 等, 非响应式)变了, 引擎无从感知; 对在场锚自增一代, 桥重挂重读行装配。
+     *   锚全部离场的态翻转(如过滤后无组)由 dtSyncAnchors 对账摘 on, 不在这里硬点。 */
+    anchFill: function (host, tableId) {
+      if (!host || typeof host.querySelectorAll !== "function") return;
+      var slots = host.querySelectorAll("[data-dt-anchor-slot]");
+      var book = host.__dtAnchorKeep || (host.__dtAnchorKeep = {});
+      var keep = {};
+      for (var i = 0; i < slots.length; i++) {
+        var seg = slots[i].getAttribute("data-dt-anchor-slot") || "";
+        var key = tableId + "#" + seg;
+        var el = book[key];
+        if (!el) {
+          el = document.createElement("div");
+          el.setAttribute("data-dt-table-anchor", tableId);
+          if (seg) el.setAttribute("data-dt-seg", seg);
+        }
+        slots[i].replaceWith(el);
+        keep[key] = el;
+      }
+      host.__dtAnchorKeep = keep;
+    },
+    anchTouch: function (host, vm, tableId) {
+      dtSyncAnchors(host, vm); /* 先按在场元素对账(锚离场的态翻转在这里摘 on) */
+      var cur = vm && vm.dtBridge ? vm.dtBridge[tableId] : null;
+      if (cur && cur.on) vm.dtBridge[tableId] = { gen: cur.gen + 1, on: true };
+    },
   };
 
   /* ---------------- 部件工具箱(reg.kit, R2 S1 计划 26-10-09-2219) ----------------
@@ -278,6 +312,10 @@
         id: id, tab: tab,
         label: String(entry.label || id),
         tableId: tableId,
+        /* 变体行装配(U2): 桥描述符 rows: "dtTplRows" → 根方法按本条目回调 —— 行来源与筛选
+         * 是版式语义(过滤 chips/只看在传/五区分桶), 单点回变体文件; 排序仍由引擎 sortedDrawer
+         * 做。声明了 tableId 却无 rowsFn 的变体行恒空(守阵钉"桥变体必须配 rowsFn")。 */
+        rowsFn: typeof entry.rowsFn === "function" ? entry.rowsFn : null,
         /* 流量页签双宿主(图前/图后): slot = "pre" | "post"(缺省 post), 其余页签忽略 */
         slot: entry.slot === "pre" ? "pre" : "post",
         render: entry.render,
@@ -339,6 +377,41 @@
     "  .drawer .dt-host.dt-tpl[data-dt-host=\"peers\"], .drawer .dt-host.dt-tpl[data-dt-host=\"content\"]",
     "  { max-width: 1400px; margin-left:auto; margin-right:auto; }",
   ].join("\n"));
+
+  /* ---------------- 桥锚对账(计划 26-10-12-0527 U2 收口单点) ----------------
+   * U1 的锚代数账记在 _dtMountOne(只看挂载一拍); U2 起真实变体的外壳随数据轮询整帧重建,
+   * 锚的生死/换代散落在三条路径上, 收口成一个模块函数, 三处消费:
+   *   ·_dtRender 成功后(挂载 + 每次数据通知) —— 对账: 锚在场且元素没换 = 不动(桥零重挂,
+   *     行更新走引擎自身响应式); 锚新出现/被外壳重建 = gen 单调自增; 锚全部离场(空态) = 摘 on。
+   *   ·_dtRender 的回落 catch(变体渲染抛错清宿主后) —— 同一次对账把 on 摘干净(否则桥 teleport
+   *     悬在已消失的锚上)。
+   *   ·H.anchTouch(变体 UI 态变化: 筛选 chips/只看在传 —— 锚元素身份没变但行来源变了, 引擎
+   *     无感知) —— 先对账再对在场 tid 强制自增一代, 桥重挂后 rowsFn 重读变体行装配。
+   * 多锚同 id(08 五分组)按**元素集合**比对 —— 逐个比对会把第二个锚误判为"换代"导致每次
+   * 渲染都重挂(实测假阳)。
+   * !gen **单调自增**永不回落(U1 路径C 红验): 回落即 :key 净零, Teleport 原地补丁写进游离旧锚。 */
+  function dtSyncAnchors(host, vm) {
+    if (!host || typeof host.querySelectorAll !== "function" || !vm || !vm.dtBridge) return;
+    var prev = host.__dtAnchorEls || {};
+    var seen = {};
+    var anchors = host.querySelectorAll("[data-dt-table-anchor]");
+    for (var i = 0; i < anchors.length; i++) {
+      var tid = anchors[i].getAttribute("data-dt-table-anchor");
+      if (tid) (seen[tid] || (seen[tid] = [])).push(anchors[i]);
+    }
+    for (var t in seen) {
+      var cur = vm.dtBridge[t];
+      var old = prev[t] || [];
+      var same = cur && cur.on && old.length === seen[t].length &&
+        old.every(function (e, k) { return e === seen[t][k]; });
+      if (same) continue; /* 锚在场且元素身份未变: 代数不动(数据轮询下桥零重挂) */
+      vm.dtBridge[t] = { gen: (cur ? cur.gen : 0) + 1, on: true };
+    }
+    for (var t2 in prev) {
+      if (!seen[t2] && vm.dtBridge[t2]) vm.dtBridge[t2].on = false; /* 锚离场(空态/换变体): 摘 on, gen 保持单调 */
+    }
+    host.__dtAnchorEls = seen;
+  }
 
   /* ---------------- Vue mixin(app.js 末尾 app.mixin(window.AQB_DRAWER_TPL)) ----------------
    * 方法本体都在这层; drawer.js 只留一行式钩子(_dtSync/_dtNotify/_dtUnmountAll, 经 this. 调用,
@@ -426,9 +499,11 @@
         var tid = this.dtBridgeTbl(tab);
         return !!tid && !!window.AQB_DRAWER_TPL_DEFS && !!window.AQB_DRAWER_TPL_DEFS[tid] && !!(this.dtBridge[tid] && this.dtBridge[tid].on);
       },
-      /* Teleport :to(锚选择器, 约定单点: data-dt-table-anchor="<tableId>") */
-      dtBridgeTo(tab) {
-        return '[data-dt-table-anchor="' + this.dtBridgeTbl(tab) + '"]';
+      /* Teleport :to(锚选择器, 约定单点: data-dt-table-anchor="<tableId>"; 分段桥(U2, 08
+       * 五分组)追 [data-dt-seg="<segKey>"] —— 同一 tableId 的多锚按段寻址, 单锚段 seg 恒 "") */
+      dtBridgeTo(tab, seg) {
+        var base = '[data-dt-table-anchor="' + this.dtBridgeTbl(tab) + '"]';
+        return seg ? base + '[data-dt-seg="' + seg + '"]' : base;
       },
       /* Teleport :key(含代数 —— 代数变即重挂) */
       dtBridgeKey(tab) {
@@ -444,7 +519,32 @@
       dtBridgeRows(tab) {
         var def = this.dtBridgeDef(tab);
         if (!def || !this[def.rows]) return [];
-        return this[def.rows]();
+        return this[def.rows](tab);
+      },
+      /* 行修饰类字段名(U2): 变体行装配在行对象上预挂的类串(bad/lan/hand…), 桥模板绑到
+       * .group-row 上 —— 行级个性(红行/内网标/握手半透明)经引擎行容器保留(D5 口径)。 */
+      dtBridgeRowCls(tab) {
+        var def = this.dtBridgeDef(tab);
+        return (def && def.rowCls) || "";
+      },
+      /* 分段桥(U2): 描述符 segs = true 时 rows 方法返回 [{key, rows}](08 五分组: 每组一个
+       * 锚, 分组头留在外壳 —— 分组是版式, 行是引擎表体); 否则归一为单段 { key: "", rows }。
+       * 排序在桥模板对**每段**调 sortedDrawer(同 tableId 同一座排序键 —— 08 的组内排序
+       * 跨组共享, 与原手搓状态机同口径)。 */
+      dtBridgeSegs(tab) {
+        var def = this.dtBridgeDef(tab);
+        if (!def) return [];
+        var rs = this.dtBridgeRows(tab);
+        if (def.segs) return Array.isArray(rs) ? rs : [];
+        return [{ key: "", rows: rs || [] }];
+      },
+      /* 变体行装配单点(U2): 描述符 rows: "dtTplRows" → 按当前选中变体的注册条目回调
+       * rowsFn(ctx)。行来源与筛选是版式语义(变体文件自管), 排序/列交互归引擎 —— 两层
+       * 在桥模板会合。无 rowsFn 的条目返回 [](行恒空, 守阵钉"桥变体必须配 rowsFn")。 */
+      dtTplRows(tab) {
+        var sel = (this.drawerTplSel || {})[tab] || "classic";
+        var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
+        return e && typeof e.rowsFn === "function" ? e.rowsFn(this) : [];
       },
       dtBridgeRowKey(tab) {
         var def = this.dtBridgeDef(tab);
@@ -507,19 +607,8 @@
         }
         var st = { tab: tab, entry: entry, host: host, ownerKey: "" };
         this._dtRender(st);
-        /* 桥锚代数(26-10-12-0527): 变体 HTML 里声明的每个锚自增一次代数 —— drawer.html 的
-         * teleport :key 含代数, 宿主重建(锚换新元素)后强制重挂进当前锚。node 探针环境无 DOM。 */
-        if (typeof host.querySelectorAll === "function") {
-          var anchors = host.querySelectorAll("[data-dt-table-anchor]");
-          for (var i = 0; i < anchors.length; i++) {
-            var tid = anchors[i].getAttribute("data-dt-table-anchor");
-            if (tid) {
-              var cur = this.dtBridge[tid];
-              /* gen 单调自增(永不回落 —— 回落即 :key 净零, Teleport 原地补丁进游离旧锚) */
-              this.dtBridge[tid] = { gen: (cur ? cur.gen : 0) + 1, on: true };
-            }
-          }
-        }
+        /* 桥锚代数(U2 起)在 _dtRender 尾部统一对账(dtSyncAnchors) —— 挂载与数据通知共用
+         * 一个对账单点, 这里不再重复扫描(U1 的挂载拍扫描已并入)。 */
         return st;
       },
       _dtMountActive(tab) {
@@ -579,6 +668,10 @@
       _dtRender(st) {
         try {
           st.entry.render(st.host, this);
+          /* 桥锚对账(U2 单点): 挂载拍 + 每次数据通知都过这里 —— 锚在场且元素身份未变不换代
+           * (数据轮询下桥零重挂, 行更新走引擎响应式); 锚新现/重建 gen 单调自增; 锚离场摘 on。
+           * node 探针环境无 DOM(函数内自守)。 */
+          dtSyncAnchors(st.host, this);
         } catch (e) {
           /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落经典渲染层 —— 复位
            * drawerTplSel.<tab>(状态单点仍是 drawerTplSel, 不新增并行标志)并按 classic 语义
@@ -590,6 +683,8 @@
             try { st.entry.destroy(st.host, this); } catch (e2) { /* destroy 失败不阻断回落 */ }
           }
           try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
+          /* 锚离场对账(U2): 回落清宿主后把桥 on 摘干净 —— 否则 teleport 悬在已消失的锚上 */
+          try { dtSyncAnchors(st.host, this); } catch (e2) { /* node 探针环境假宿主 */ }
           if (st.host.classList) st.host.classList.remove("dt-tpl");
           this[st.ownerKey || "_dtMounted"] = null;
           if (this.drawerTplSel && this.drawerTplSel[st.tab] !== CLASSIC) {
@@ -630,6 +725,8 @@
             if (tid && this.dtBridge[tid]) this.dtBridge[tid].on = false; /* gen 保持单调, 只摘 on */
           }
         } catch (e3) { /* node 探针环境假宿主 */ }
+        st.host.__dtAnchorEls = null;   /* 桥锚对账记账清零(U2): 下次挂载按"全新锚"换代 */
+        st.host.__dtAnchorKeep = null;  /* 锚保活记账清零: 跨变体复用的宿主不得复用旧变体的锚元素 */
         try { st.host.replaceChildren(); } catch (e2) { /* host 已不在 DOM */ }
       },
     },

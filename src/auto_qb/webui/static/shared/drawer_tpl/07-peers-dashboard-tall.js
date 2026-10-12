@@ -7,12 +7,20 @@
  * 上传去向分段与列表行内速度微条同色(--today-up, plan §04 落地要点; 设计稿多色系不在 S1
  * 令牌白名单, 分段用透明度梯度区分)。方向构成五桶色: take=--today-up / feed=--today-down /
  * idle=--border-strong / choke=--warn / hand=--fg-dim。
- * 动作: 纯观察无动作(plan §4 映射行); 筛选 chips 与列头排序为纯前端态。
+ * 动作: 纯观察无动作(plan §4 映射行); 筛选 chips 为纯前端态。
  * 吸血嫌疑 = client 名含 "XL/迅雷" 启发式, 纯展示(与 09 同判据); 链路健康卡的警戒条不接动作。
- * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— 有则渲染, files 整列省略、
- * cc 徽章逐行省略; flags 缺失行归握手段。
+ * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— 有则渲染; files 列在列定义声明
+ * omitEmpty(无任何对端携带时整列省略, 引擎单点 columns.js _colsOmitEmpty); cc 徽章逐行省略;
+ * flags 缺失行归握手段。
+ * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
+ *   表格体重写为**引擎消费面** —— 外壳只出锚槽(anchFill 保活), 表壳/行渲染器由
+ *   <aq-dt-bridge> Teleport 进锚(描述符 drawerPeerV07: 列集 DRAWER_PEER_V07_COLUMNS +
+ *   行模型 dt07 + dyn 排序 + rowCls 行修饰)。手搓排序状态机/列宽 grid/表头拼装全部退役
+ *   (Q4), 排序/拖宽/右键隐藏/偏好持久化与主视图同源(按 table-id 落盘)。行来源与筛选是
+ *   版式语义, 单点在 rowsFn(register 声明) —— 筛选翻动经 anchTouch 强制桥换代重读。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 滚动位置/筛选/排序态自保。
+ * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
+ * 重挂 = 行抖动), 滚动位置/筛选态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -21,7 +29,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
 
   /* 方向五桶(与 08/09 同判据, 纯 flags 派生): U=我方向其上传 D=对端向我供数
    * u=被我方限流 ?/空=握手未完成, 其余(含 K 完整副本)=闲置 */
@@ -57,8 +65,9 @@
     { key: "hand", text: "握手中" },
   ];
 
-  /* 视图偏好(跨重渲染与换种子保持): 筛选 / 排序 / 微条满刻度; lastSig 供跳过重建 */
-  const ui = { filter: "all", sortKey: "up", sortDir: -1, maxUp: 1, maxDown: 1, lastSig: "" };
+  /* 视图偏好(跨重渲染与换种子保持): 筛选; lastSig 供跳过重建。
+   * !排序态已并引擎(dtSortState.drawerPeerV07, U2) —— 手搓 sortKey/sortDir 退役。 */
+  const ui = { filter: "all", lastSig: "" };
 
   const CSS = [
     /* 四卡仪表条 */
@@ -124,34 +133,23 @@
     ".drawer .dt07-fchip.active { background:var(--accent-soft); border-color:var(--accent-line); color:var(--fg); }",
     ".drawer .dt07-fchip.c-err.active { background:var(--error-soft); border-color:var(--error-line); }",
     ".drawer .dt07-note { margin-left:auto; font-size:11.5px; color:var(--fg-dim); }",
-    /* 列表(grid 行制) */
+    /* 列表容器(表格体 = 引擎表壳 + 行渲染器经桥 Teleport 进锚, U2) */
     ".drawer .dt07-list { display:flex; flex-direction:column; }",
-    ".drawer .dt07-r, .drawer .dt07-head { display:grid;",
-    "  grid-template-columns:190px 142px 104px minmax(110px, 1fr) 112px 100px 88px 76px 76px 46px;",
-    "  gap:8px; align-items:center; padding:0 8px; }",
-    /* files 整列省略时: 9 列, 「正在取」槽位让位给进度列 */
-    ".drawer .dt07-r.nofiles, .drawer .dt07-head.nofiles {",
-    "  grid-template-columns:190px 142px 104px minmax(150px, 1fr) 112px 100px 88px 76px 76px; }",
+    /* 引擎行容器的变体个性(D5: 只保留行级观感, 列宽/网格归引擎): 35px 行距 + 发丝线 + 修饰行 */
+    ".drawer .dt07-list .group-row { min-height:35px; border-bottom:1px solid var(--hairline);",
+    "  border-radius:var(--radius-sm); }",
+    ".drawer .dt07-list .group-row:hover { background:var(--bg-hover); }",
+    ".drawer .dt07-list .group-row.bad { background:var(--error-soft); }",
+    ".drawer .dt07-list .group-row.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
+    ".drawer .dt07-list .group-row.lan { box-shadow:inset 2px 0 0 var(--blue); }",
+    ".drawer .dt07-list .group-row.hand { opacity:.55; }",
     /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
      * padding-top(14px)之下, 中途滚动时行文字从那条缝里漏出来; 与 dt11 同族(机理/判据单点
-     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。 */
-    ".drawer .dt07-head { position:sticky; top:-14px; z-index:1; height:28px; background:var(--bg-card);",
-    "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
-    ".drawer .dt07-head .num { text-align:right; }",
-    ".drawer .dt07-sortable { cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:3px;",
-    "  justify-content:flex-end; width:100%; }",
-    ".drawer .dt07-sortable:hover { color:var(--fg); }",
-    ".drawer .dt07-sortable .chev { opacity:0; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }",
-    ".drawer .dt07-sortable.on { color:var(--accent); }",
-    ".drawer .dt07-sortable.on .chev { opacity:1; }",
-    ".drawer .dt07-sortable.asc .chev { transform:rotate(180deg); }",
-    ".drawer .dt07-r { min-height:35px; border-bottom:1px solid var(--hairline); border-radius:var(--radius-sm); }",
-    ".drawer .dt07-r:hover { background:var(--bg-hover); }",
-    ".drawer .dt07-r.bad { background:var(--error-soft); }",
-    ".drawer .dt07-r.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
-    ".drawer .dt07-r.lan { box-shadow:inset 2px 0 0 var(--blue); }",
-    ".drawer .dt07-r.hand { opacity:.55; }",
-    /* 单元格 */
+     * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。
+     * (引擎表头 .group-head 在抽屉内被皮肤置 static —— 变体在此恢复吸顶个性。) */
+    ".drawer .dt07-list .group-head { position:sticky; top:-14px; z-index:1; background:var(--bg-card);",
+    "  border-bottom:1px solid var(--border); }",
+    /* 单元格(值格呈现归渲染器 tpl-aq-dt07-cells, 规则仍在变体注入 CSS) */
     ".drawer .dt07-addr { display:flex; align-items:center; gap:7px; min-width:0; }",
     ".drawer .dt07-cc { flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);",
     "  background:var(--surface-1); border:1px solid var(--border-soft);",
@@ -198,7 +196,7 @@
     ".drawer .dt07-spd b.z { color:var(--fg-dim); font-weight:400; }",
     ".drawer .dt07-spd .track { width:100%; height:3px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; }",
     ".drawer .dt07-spd .track i { display:block; height:100%; border-radius:999px; }",
-    ".drawer .dt07-r.bad .dt07-spd.u b { color:var(--error); }",
+    ".drawer .dt07-list .group-row.bad .dt07-spd.u b { color:var(--error); }",
     ".drawer .dt07-amt { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-soft); text-align:right; white-space:nowrap; }",
     ".drawer .dt07-amt.z { color:var(--fg-dim); }",
@@ -358,128 +356,70 @@
     </div>`;
   }
 
-  /* ---------------- 列表 ---------------- */
+  /* ---------------- 行装配(U2: 数据判据在这里, 呈现在渲染器分片) ----------------
+   * 行对象 = 显示值 + _raw 排序原值(sort.js _sortVal 消费) + 修饰字段(徽章/微条/行类)。
+   * 排序由引擎按列 key 做, 这里不排; 筛选是版式语义(chips), 在 rowsFn 里做。 */
   function filtered(list) {
     const f = ui.filter;
     if (f === "all") return list;
     return list.filter((p) => countOf([p], f) > 0);
   }
-  function sorted(list) {
-    const k = ui.sortKey, dir = ui.sortDir;
-    const val = (p) => {
-      if (k === "prog") return num(p.progress);
-      if (k === "up") return num(p.upspeed);
-      if (k === "down") return num(p.dlspeed);
-      if (k === "sent") return num(p.uploaded);
-      if (k === "recv") return num(p.downloaded);
-      return num(p.relevance);
+  function rowOf(ctx, p, maxUp, maxDown) {
+    const f = flagTokens(p);
+    const lan = isLanIp(p.ip);
+    const up = num(p.upspeed), down = num(p.dlspeed);
+    const addr = `${p.ip || "?"}${p.port ? ":" + p.port : ""}`;
+    return {
+      addr,
+      addrTitle: `${p.ip || "?"}:${p.port || ""}${p.connection ? " · " + p.connection : ""}`,
+      cc: lan ? "内网" : String(p.country_code || ""),
+      ccTitle: lan ? "局域网直连(私有地址段启发式)" : String(p.country || p.country_code || ""),
+      lan,
+      client: String(p.client || "未知"),
+      bad: isBad(p),
+      flagToks: f.map((x) => {
+        const m = FLAG_META[x];
+        return { ch: x, cls: m ? m.c : "fl-h", tip: m ? m.t : "" };
+      }),
+      files: String(p.files || ""),
+      progress: Math.round((p.progress || 0) * 100),
+      upspeed: up > 0 ? ctx.fmtSpeed(up) : "0",
+      dlspeed: down > 0 ? ctx.fmtSpeed(down) : "0",
+      uploaded: num(p.uploaded) > 0 ? ctx.fmtSize(num(p.uploaded)) : "0",
+      downloaded: num(p.downloaded) > 0 ? ctx.fmtSize(num(p.downloaded)) : "0",
+      relevance: Math.round((p.relevance || 0) * 100) + "%",
+      upBar: up > 0 && maxUp > 0 ? Number((up / maxUp * 100).toFixed(1)) : 0,
+      downBar: down > 0 && maxDown > 0 ? Number((down / maxDown * 100).toFixed(1)) : 0,
+      _raw: {
+        addr, client: String(p.client || ""), flags: String(p.flags || ""),
+        progress: p.progress || 0, dlspeed: down, upspeed: up,
+        downloaded: num(p.downloaded), uploaded: num(p.uploaded), relevance: p.relevance || 0,
+      },
+      _cls: [isBad(p) ? "bad" : "", lan ? "lan" : "", bucketOf(p) === "hand" ? "hand" : ""]
+        .filter(Boolean).join(" ") || null,
     };
-    return list.slice().sort((a, b) => (val(a) - val(b)) * dir);
+  }
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 微条满刻度按全量列表算(与原口径一致) */
+  function rowsFn(ctx) {
+    const list = peerList(ctx);
+    const maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
+    const maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
+    return filtered(list).map((p) => rowOf(ctx, p, maxUp, maxDown));
   }
 
   let _ctx = null; /* render 期只读引用(纯格式化; 动作链仍走 host.__dtCtx) */
-  const fmtSpeedOf = (v) => _ctx.fmtSpeed(v);
   const fmtSizeOf = (v) => _ctx.fmtSize(v);
-
-  function flagsHtml(p) {
-    const f = flagTokens(p);
-    if (!f.length) return T`<span class="dt07-none" title="flags 缺失">—</span>`;
-    return T`${R(f.map((x) => {
-      const m = FLAG_META[x];
-      return m
-        ? T`<span class="dt07-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt07-fl fl-h">${x}</span>`;
-    }).join(""))}`;
-  }
-  function addrHtml(p) {
-    const lan = isLanIp(p.ip);
-    const cc = lan
-      ? T`<span class="dt07-cc lan" title="局域网直连(私有地址段启发式)">内网</span>`
-      : (p.country_code
-        ? T`<span class="dt07-cc" title="${p.country || p.country_code}">${p.country_code}</span>`
-        : "");
-    const conn = p.connection ? " · " + p.connection : "";
-    return T`<span class="dt07-addr">${R(cc)}<span class="dt07-ip" title="${p.ip || "?"}:${p.port || ""}${conn}">${p.ip || "?"}${p.port ? ":" + p.port : ""}</span></span>`;
-  }
-  function clientHtml(p) {
-    const badge = isBad(p)
-      ? T`<span class="dt07-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>`
-      : "";
-    return T`<span class="dt07-client"><span class="cname" title="${p.client || "未知"}">${p.client || "未知"}</span>${R(badge)}</span>`;
-  }
-  function progHtml(p) {
-    const pct = Math.round((p.progress || 0) * 100);
-    return T`<span class="dt07-prog${pct === 0 ? " zero" : ""}" title="对端自身进度 ${pct}%">
-      <span class="bar"><i style="width:${pct}%"></i></span><em>${pct}%</em></span>`;
-  }
-  function spdHtml(p, dir, maxV) {
-    const v = num(dir === "u" ? p.upspeed : p.dlspeed);
-    const b = v > 0 ? T`<b>${fmtSpeedOf(v)}</b>` : T`<b class="z">0</b>`;
-    const bar = v > 0 && maxV > 0
-      ? T`<span class="track"><i style="width:${(v / maxV * 100).toFixed(1)}%"></i></span>`
-      : "";
-    return T`<span class="dt07-spd ${dir}">${R(b)}${R(bar)}</span>`;
-  }
-  const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt07-amt">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt07-amt z">0</span>`);
-  const relHtml = (p) =>
-    T`<span class="dt07-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
-
-  function rowHtml(p, hasFiles) {
-    const b = bucketOf(p);
-    /* nofiles 必须与表头同进退: 表头无 files 时已切 9 列网格(.dt07-head.nofiles),
-     * 行若仍走 10 列网格而只渲染 9 格, 1fr 列两侧宽度各算各的(头部 1fr 多吞
-     * 46px 第 10 列 + 1 个 gap 的份额), 「进度」起的所有列整体错位(用户报) */
-    const cls = ["dt07-r", hasFiles ? "" : "nofiles", isBad(p) ? "bad" : "",
-      isLanIp(p.ip) ? "lan" : "", b === "hand" ? "hand" : ""]
-      .filter(Boolean).join(" ");
-    const files = hasFiles
-      ? (p.files
-        ? T`<span class="dt07-files" title="对端正在获取的文件(qB files 字段)">${p.files}</span>`
-        : T`<span class="dt07-files dimc">—</span>`)
-      : "";
-    return T`<div class="${cls}">
-      ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt07-flags">${R(flagsHtml(p))}</span>${R(files)}${R(progHtml(p))}
-      ${R(spdHtml(p, "u", ui.maxUp))}${R(spdHtml(p, "d", ui.maxDown))}
-      ${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}
-    </div>`;
-  }
-
-  function headHtml(hasFiles) {
-    const seg = (k, text, tip) => {
-      const on = ui.sortKey === k;
-      /* P3-4(报告 26-10-07-0542): 排序表头纯 span 模拟控件补键盘达 + aria-sort(升/降/无
-       * 随当前排序态在渲染函数里输出) */
-      const asort = !on ? "none" : (ui.sortDir === 1 ? "ascending" : "descending");
-      return T`<span class="num dt07-sortable${on ? " on" : ""}${on && ui.sortDir === 1 ? " asc" : ""}"
-        role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
-    };
-    return T`<div class="dt07-head${hasFiles ? "" : " nofiles"}">
-      <span>IP/地址</span>
-      <span>客户端</span>
-      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
-      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">文件</span>` : "")}
-      ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上传速度", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下载速度", "我方从该对端收到的即时速度(qB dlspeed)"))}
-      ${R(seg("sent", "已上传", "本次会话我方已发给该对端的累计(qB uploaded)"))}
-      ${R(seg("recv", "已下载", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
-      ${R(seg("rel", "文件关联", "relevance: 该对端拥有我缺失数据的比例"))}
-    </div>`;
-  }
 
   function render(host, ctx) {
     const list = peerList(ctx);
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态) */
+    /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 锚元素由 anchFill 跨帧保活 ——
+     * 锚被重建 = Teleport 重挂 = 行抖动(桥变体稳定 HTML 不变量, U2) */
     const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
-    ui.maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
-    ui.maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -496,19 +436,19 @@
         T`<div class="dt07-empty"><span>暂无已连接用户</span></div>`));
       return;
     }
-    const hasFiles = list.some((p) => p.files);
     const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
       T`<button type="button" class="dt07-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
-    const rows = sorted(filtered(list)).map((p) => rowHtml(p, hasFiles)).join("");
+    /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt07-wrap">
       <div class="dt07-cards">${R(card1Html(ctx, list))}${R(card2Html(list))}${R(card3Html(list))}${R(card4Html(list))}</div>
       <div class="dt07-bar">${R(chips)}<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上传」降序</span></div>
-      <div class="dt07-list">${R(headHtml(hasFiles))}${R(rows)}</div>
+      <div class="dt07-list"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
      * 用户的横向滚动位打回最左) —— 单点 helper */
     H.withScroll(host, () => {
       host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, "drawerPeerV07");
     });
   }
 
@@ -518,14 +458,8 @@
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h);
-      return;
-    }
-    const seg = ev.target.closest("[data-sort]");
-    if (seg) {
-      const k = seg.getAttribute("data-sort");
-      if (ui.sortKey === k) ui.sortDir = -ui.sortDir;
-      else { ui.sortKey = k; ui.sortDir = -1; }
-      rerender(h);
+      /* 行来源变了(筛选是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn */
+      H.anchTouch(h, h.__dtCtx, "drawerPeerV07");
     }
   }
 
@@ -536,19 +470,9 @@
     if (ctx) _render(host, ctx);
   }
 
-  /* P3-4: 排序表头纯 span 模拟控件(data-sort)的键盘触发 —— Enter/Space 转发 click 委托;
-   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
-  function onKeyDown(ev) {
-    if (ev.key !== "Enter" && ev.key !== " ") return;
-    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
-    if (!ev.target.closest("[data-sort]")) return;
-    ev.preventDefault();
-    onClick(ev);
-  }
-
   /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
   function wire(host) {
-    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
+    H.wireEvents(host, { click: onClick });
   }
 
   function destroy(host) {
@@ -562,6 +486,10 @@
   reg.register({
     id: "07", tab: "peers",
     label: "四卡仪表",
+    /* 桥声明(U2): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerPeerV07,
+     * rowsFn = 行来源与筛选(版式语义), 排序/列交互/持久化归引擎。 */
+    tableId: "drawerPeerV07",
+    rowsFn: rowsFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

@@ -75,18 +75,36 @@ window.AQB_COLUMNS = {
       const hidden = this.colHidden[page] || [];
       const defs = TABLE_COLUMNS[page];
       const order = this.colOrder[page];
-      if (!order || !order.length) return defs.filter((c) => !hidden.includes(c.key));  // 无自定义序 = 定义序(向后兼容)
-      // 按 colOrder 输出; 未入序的列(新增/残留 key)按定义序补尾 —— 宽/隐仍按列 key 对应, 换序不丢宽度
-      const rest = new Map(defs.map((c) => [c.key, c]));
-      const out = [];
-      for (const k of order) {
-        const c = rest.get(k);
-        if (!c) continue;
-        rest.delete(k);
-        if (!hidden.includes(k)) out.push(c);
+      let out;
+      if (!order || !order.length) out = defs.filter((c) => !hidden.includes(c.key));  // 无自定义序 = 定义序(向后兼容)
+      else {
+        // 按 colOrder 输出; 未入序的列(新增/残留 key)按定义序补尾 —— 宽/隐仍按列 key 对应, 换序不丢宽度
+        const rest = new Map(defs.map((c) => [c.key, c]));
+        out = [];
+        for (const k of order) {
+          const c = rest.get(k);
+          if (!c) continue;
+          rest.delete(k);
+          if (!hidden.includes(k)) out.push(c);
+        }
+        for (const c of defs) if (rest.has(c.key) && !hidden.includes(c.key)) out.push(c);
       }
-      for (const c of defs) if (rest.has(c.key) && !hidden.includes(c.key)) out.push(c);
-      return out;
+      return this._colsOmitEmpty(page, out);
+    },
+    /* 渐进列(U2, 计划 26-10-12-0527 D2): 列定义声明 omitEmpty 的列(07/08 的 qB files 字段
+     * —— 随 qB 版本浮动, 原变体口径「无任何对端携带时整列省略」)在**当前所有行都无该字段
+     * 值**时整列省略。行来源走描述符 rows(变体表 = dtTplRows → rowsFn; 经典表无 omitEmpty
+     * 列, 零开销短路)。行未落袋(加载中)按声明全集保守显示。
+     * !放在 _visibleCols 尾部单点: 表头/行/grid 模板/colAlignCss/列选择器全走同一条路,
+     *   省略态下 :nth-child 列对齐天然一致(nofiles 9 列错位 bug 类的结构性根除)。 */
+    _colsOmitEmpty(page, cols) {
+      const def = ALL_TABLE_DEFS[page];
+      if (!def || !def.columns.some((c) => c.omitEmpty)) return cols;
+      if (typeof this[def.rows] !== "function") return cols;
+      let rows = this[def.rows](def.variantTab) || [];
+      if (def.segs) rows = rows.flatMap((s) => (s && s.rows) || []);
+      if (!rows.length) return cols;
+      return cols.filter((c) => !c.omitEmpty || rows.some((r) => r && r[c.key]));
     },
     /* 列模板: 有 px 覆盖用覆盖值, 否则用默认模板(仅首次渲染会出现这种混合态) */
     _gridTemplate(page) {
@@ -815,6 +833,27 @@ window.AQB_COLUMNS = {
     /* 变体表格体(26-10-12-0527 U1 stub): 同抽屉三表口径(表壳 :cols 与渲染器 :cols 同引用) */
     visibleDrawerStubV0Cols() {
       return this._visibleCols("drawerStubV0");
+    },
+    /* 变体表格体(U2): 07/08/09 三表, 同一条 _gridTemplate / _visibleCols 路径(omitEmpty
+     * 渐进列在 _visibleCols 尾部单点生效 —— 0621 注: cols computed 主要供经典链同名消费
+     * 惯例与守阵对齐面, 桥模板实际取 visibleColsOf)。 */
+    drawerPeerV07Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerPeerV07") };
+    },
+    drawerPeerV08Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerPeerV08") };
+    },
+    drawerPeerV09Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerPeerV09") };
+    },
+    visibleDrawerPeerV07Cols() {
+      return this._visibleCols("drawerPeerV07");
+    },
+    visibleDrawerPeerV08Cols() {
+      return this._visibleCols("drawerPeerV08");
+    },
+    visibleDrawerPeerV09Cols() {
+      return this._visibleCols("drawerPeerV09");
     },
   },
 };

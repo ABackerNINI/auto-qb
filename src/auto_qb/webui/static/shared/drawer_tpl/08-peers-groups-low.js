@@ -8,10 +8,19 @@
  * 一键收起安静分区(idle/hand 整组隐藏)。
  * 动作: 分组折叠 + 只看在传数据过滤(纯前端, plan §4 映射行)。
  * 吸血嫌疑 = client 名含 "XL/迅雷" 启发式, 纯展示红标(与 07/09 同判据)。
- * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— files 整列省略、cc 徽章逐行省略;
- * 关联度列设计稿未纳入(分区语义已隐含), 空分区整节隐藏。
+ * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— files 列在列定义声明 omitEmpty
+ * (无任何对端携带时整列省略, 引擎单点 columns.js _colsOmitEmpty); cc 徽章逐行省略;
+ * 关联度列设计稿未纳入(分区语义已隐含, 列定义 sortable:false), 空分区整节隐藏。
+ * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
+ *   表格体重写为**引擎消费面**, 分段桥(segs)形态 —— 分组头留在外壳(分组是版式), 每组的
+ *   行体是引擎表体: 每组一个锚槽(data-dt-anchor-slot="<组key>"), 桥按段 teleport
+ *   aq-table + 行渲染器进各组锚。rowsFn 返回 [{key, rows}] 分段(与外壳同一条分桶判据),
+ *   组内排序走引擎 dyn 键且**跨组共享一座键**(与原手搓状态机同口径)。描述符
+ *   drawerPeerV08: 列集 DRAWER_PEER_V08_COLUMNS + 行模型 dt08 + rowCls 行修饰。
+ *   手搓排序状态机/列宽 grid/每组列头拼装全部退役(Q4)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 滚动位置/折叠/筛选/排序态自保。
+ * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 各组锚元素跨帧保活(锚被重建 =
+ * Teleport 重挂 = 行抖动), 滚动位置/折叠/筛选态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -20,7 +29,7 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
 
   /* 分区定义: 顺序即设计稿五区; quiet = 「只看在传数据」过滤的目标外分区 */
   const GROUPS = [
@@ -45,12 +54,10 @@
     "?": { c: "fl-q", t: "? — 握手未完成, 状态未知" },
   };
 
-  const SORTS = ["prog", "up", "down", "sent", "recv"];
-
-  /* 视图偏好(跨重渲染与换种子保持): 只看在传数据 / 组折叠(默认 idle/hand 收起) /
-   * 组内排序; lastSig 供跳过重建 */
-  const ui = { onlyMoving: false, folded: { idle: true, hand: true }, sortKey: "up", sortDir: -1,
-    maxUp: 1, maxDown: 1, lastSig: "" };
+  /* 视图偏好(跨重渲染与换种子保持): 只看在传数据 / 组折叠(默认 idle/hand 收起);
+   * lastSig 供跳过重建。!排序态已并引擎(dtSortState.drawerPeerV08, U2) —— 手搓
+   * sortKey/sortDir/组内 maxUp/maxDown 退役(微条满刻度在 rowsFn 现算)。 */
+  const ui = { onlyMoving: false, folded: { idle: true, hand: true }, lastSig: "" };
 
   const CSS = [
     /* 工具行 */
@@ -91,29 +98,14 @@
     ".drawer .dt08-grp.g-feed .dt08-gagg b { color:var(--today-down); }",
     ".drawer .dt08-rows { display:none; flex-direction:column; border-top:1px solid var(--hairline); }",
     ".drawer .dt08-grp:not(.folded) .dt08-rows { display:flex; }",
-    /* 行(grid 10 列: 对端/客户端/Flags/正在取/进度/上传/下载/已发/已收/关联) */
-    ".drawer .dt08-r, .drawer .dt08-gcols { display:grid;",
-    "  grid-template-columns:180px 140px 96px minmax(96px, 1fr) 104px 96px 88px 72px 72px 44px;",
-    "  gap:8px; align-items:center; padding:0 12px; min-height:33px; }",
-    /* files 整列省略时: 9 列(关联列并入末列宽) */
-    ".drawer .dt08-r.nofiles, .drawer .dt08-gcols.nofiles {",
-    "  grid-template-columns:180px 140px 96px minmax(120px, 1fr) 104px 96px 88px 72px 72px; }",
-    ".drawer .dt08-gcols { min-height:26px; background:var(--surface-1); color:var(--fg-dim);",
-    "  font-size:11.5px; white-space:nowrap; }",
-    ".drawer .dt08-rows .dt08-r:not(.gcols) { border-bottom:1px solid var(--hairline); border-radius:var(--radius-sm); }",
-    ".drawer .dt08-rows .dt08-r:not(.gcols):hover { background:var(--bg-hover); }",
-    ".drawer .dt08-r.bad { background:var(--error-soft); }",
-    ".drawer .dt08-r.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
-    ".drawer .dt08-r.lan { box-shadow:inset 2px 0 0 var(--blue); }",
-    ".drawer .dt08-r.handrow { opacity:.55; }",
-    ".drawer .dt08-headcell.num, .drawer .dt08-cellr { text-align:right; }",
-    ".drawer .dt08-sortable { cursor:pointer; user-select:none; display:inline-flex; align-items:center;",
-    "  gap:3px; justify-content:flex-end; width:100%; }",
-    ".drawer .dt08-sortable:hover { color:var(--fg); }",
-    ".drawer .dt08-sortable .chev { opacity:0; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }",
-    ".drawer .dt08-sortable.on { color:var(--accent); }",
-    ".drawer .dt08-sortable.on .chev { opacity:1; }",
-    ".drawer .dt08-sortable.asc .chev { transform:rotate(180deg); }",
+    /* 引擎行容器的变体个性(D5: 只保留行级观感, 列宽/网格/列头归引擎) */
+    ".drawer .dt08-rows .group-row { min-height:33px; border-bottom:1px solid var(--hairline);",
+    "  border-radius:var(--radius-sm); }",
+    ".drawer .dt08-rows .group-row:hover { background:var(--bg-hover); }",
+    ".drawer .dt08-rows .group-row.bad { background:var(--error-soft); }",
+    ".drawer .dt08-rows .group-row.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
+    ".drawer .dt08-rows .group-row.lan { box-shadow:inset 2px 0 0 var(--blue); }",
+    ".drawer .dt08-rows .group-row.handrow { opacity:.55; }",
     /* 单元格(与 07 同款尺寸) */
     ".drawer .dt08-addr { display:flex; align-items:center; gap:7px; min-width:0; }",
     ".drawer .dt08-cc { flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);",
@@ -214,96 +206,57 @@
   const fmtSpeedOf = (v) => _ctx.fmtSpeed(v);
   const fmtSizeOf = (v) => _ctx.fmtSize(v);
 
-  /* ---------------- 单元格(与 07 同款) ---------------- */
-  function flagsHtml(p) {
+  /* ---------------- 行装配(U2: 数据判据在这里, 呈现在渲染器分片; 分段 = 分桶) ---------------- */
+  function rowOf(ctx, p, maxUp, maxDown) {
     const f = flagTokens(p);
-    if (!f.length) return T`<span class="dt08-none" title="flags 缺失">—</span>`;
-    return T`${R(f.map((x) => {
-      const m = FLAG_META[x];
-      return m
-        ? T`<span class="dt08-fl ${m.c}" title="${m.t}">${x}</span>`
-        : T`<span class="dt08-fl fl-h">${x}</span>`;
-    }).join(""))}`;
-  }
-  function addrHtml(p) {
     const lan = isLanIp(p.ip);
-    const cc = lan
-      ? T`<span class="dt08-cc lan" title="局域网直连(私有地址段启发式)">内网</span>`
-      : (p.country_code
-        ? T`<span class="dt08-cc" title="${p.country || p.country_code}">${p.country_code}</span>`
-        : "");
-    const conn = p.connection ? " · " + p.connection : "";
-    return T`<span class="dt08-addr">${R(cc)}<span class="dt08-ip" title="${p.ip || "?"}:${p.port || ""}${conn}">${p.ip || "?"}${p.port ? ":" + p.port : ""}</span></span>`;
-  }
-  function clientHtml(p) {
-    const badge = isBad(p)
-      ? T`<span class="dt08-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>`
-      : "";
-    return T`<span class="dt08-client"><span class="cname" title="${p.client || "未知"}">${p.client || "未知"}</span>${R(badge)}</span>`;
-  }
-  function progHtml(p) {
-    const pct = Math.round((p.progress || 0) * 100);
-    return T`<span class="dt08-prog${pct === 0 ? " zero" : ""}" title="对端自身进度 ${pct}%">
-      <span class="bar"><i style="width:${pct}%"></i></span><em>${pct}%</em></span>`;
-  }
-  function spdHtml(p, dir, maxV) {
-    const v = num(dir === "u" ? p.upspeed : p.dlspeed);
-    const b = v > 0 ? T`<b>${fmtSpeedOf(v)}</b>` : T`<b class="z">0</b>`;
-    const bar = v > 0 && maxV > 0
-      ? T`<span class="track"><i style="width:${(v / maxV * 100).toFixed(1)}%"></i></span>`
-      : "";
-    return T`<span class="dt08-spd ${dir}">${R(b)}${R(bar)}</span>`;
-  }
-  const amtHtml = (v) => (num(v) > 0
-    ? T`<span class="dt08-amt">${fmtSizeOf(v)}</span>`
-    : T`<span class="dt08-amt z">0</span>`);
-  const relHtml = (p) =>
-    T`<span class="dt08-rel" title="relevance: 该对端拥有我缺失数据的比例">${Math.round((p.relevance || 0) * 100)}%</span>`;
-
-  function rowHtml(p, hasFiles) {
-    /* nofiles 必须与列头同进退: 列头无 files 时已切 9 列网格(.dt08-gcols.nofiles),
-     * 行若仍走 10 列网格而只渲染 9 格, 1fr 列两侧宽度各算各的(头部 1fr 多吞
-     * 44px 末列 + 1 个 gap 的份额), 「进度」起的所有列整体错位(用户报) */
-    const cls = ["dt08-r", hasFiles ? "" : "nofiles", isBad(p) ? "bad" : "", isLanIp(p.ip) ? "lan" : "",
-      bucketOf(p) === "hand" ? "handrow" : ""].filter(Boolean).join(" ");
-    const files = hasFiles
-      ? (p.files
-        ? T`<span class="dt08-files" title="对端正在获取的文件(qB files 字段)">${p.files}</span>`
-        : T`<span class="dt08-files dimc">—</span>`)
-      : "";
-    return T`<div class="${cls}">
-      ${R(addrHtml(p))}${R(clientHtml(p))}<span class="dt08-flags">${R(flagsHtml(p))}</span>${R(files)}${R(progHtml(p))}
-      ${R(spdHtml(p, "u", ui.maxUp))}${R(spdHtml(p, "d", ui.maxDown))}
-      ${R(amtHtml(p.uploaded))}${R(amtHtml(p.downloaded))}${R(relHtml(p))}
-    </div>`;
-  }
-
-  function colHeadHtml(hasFiles) {
-    const seg = (k, text, tip) => {
-      const on = ui.sortKey === k;
-      /* P3-4(报告 26-10-07-0542): 排序表头纯 span 模拟控件补键盘达 + aria-sort(升/降/无
-       * 随当前排序态在渲染函数里输出) */
-      const asort = !on ? "none" : (ui.sortDir === 1 ? "ascending" : "descending");
-      return T`<span class="dt08-headcell num dt08-sortable${on ? " on" : ""}${on && ui.sortDir === 1 ? " asc" : ""}"
-        role="button" tabindex="0" aria-sort="${asort}" data-sort="${k}" title="${tip}">${text}<svg class="ico ico-sm chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></span>`;
+    const up = num(p.upspeed), down = num(p.dlspeed);
+    const addr = `${p.ip || "?"}${p.port ? ":" + p.port : ""}`;
+    return {
+      addr,
+      addrTitle: `${p.ip || "?"}:${p.port || ""}${p.connection ? " · " + p.connection : ""}`,
+      cc: lan ? "内网" : String(p.country_code || ""),
+      ccTitle: lan ? "局域网直连(私有地址段启发式)" : String(p.country || p.country_code || ""),
+      lan,
+      client: String(p.client || "未知"),
+      bad: isBad(p),
+      flagToks: f.map((x) => {
+        const m = FLAG_META[x];
+        return { ch: x, cls: m ? m.c : "fl-h", tip: m ? m.t : "" };
+      }),
+      files: String(p.files || ""),
+      progress: Math.round((p.progress || 0) * 100),
+      upspeed: up > 0 ? ctx.fmtSpeed(up) : "0",
+      dlspeed: down > 0 ? ctx.fmtSpeed(down) : "0",
+      uploaded: num(p.uploaded) > 0 ? ctx.fmtSize(num(p.uploaded)) : "0",
+      downloaded: num(p.downloaded) > 0 ? ctx.fmtSize(num(p.downloaded)) : "0",
+      relevance: Math.round((p.relevance || 0) * 100) + "%",
+      upBar: up > 0 && maxUp > 0 ? Number((up / maxUp * 100).toFixed(1)) : 0,
+      downBar: down > 0 && maxDown > 0 ? Number((down / maxDown * 100).toFixed(1)) : 0,
+      _raw: {
+        addr, client: String(p.client || ""), flags: String(p.flags || ""),
+        progress: p.progress || 0, dlspeed: down, upspeed: up,
+        downloaded: num(p.downloaded), uploaded: num(p.uploaded), relevance: p.relevance || 0,
+      },
+      _cls: [isBad(p) ? "bad" : "", lan ? "lan" : "", bucketOf(p) === "hand" ? "handrow" : ""]
+        .filter(Boolean).join(" ") || null,
     };
-    return T`<div class="dt08-gcols${hasFiles ? "" : " nofiles"}">
-      <span>IP/地址</span>
-      <span>客户端</span>
-      <span title="qB peer_info 标志位, 悬停每个字母看逐项解释">标志</span>
-      ${R(hasFiles ? T`<span title="对端正在获取的文件(qB files 字段)">文件</span>` : "")}
-      ${R(seg("prog", "进度", "对端自身进度"))}
-      ${R(seg("up", "上传速度", "我方发给该对端的即时速度(qB upspeed)"))}
-      ${R(seg("down", "下载速度", "我方从该对端收到的即时速度(qB dlspeed)"))}
-      ${R(seg("sent", "已上传", "本次会话我方已发给该对端的累计(qB uploaded)"))}
-      ${R(seg("recv", "已下载", "本次会话我方已从该对端收到的累计(qB downloaded)"))}
-      <span class="dt08-headcell num" title="relevance: 该对端拥有我缺失数据的比例">文件关联</span>
-    </div>`;
+  }
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 描述符 segs=true → 返回 [{key, rows}] 分段。
+   * 分桶判据与外壳 render 同一条(GROUPS × bucketOf × onlyMoving) —— 桥段与锚槽一一对应。 */
+  function rowsFn(ctx) {
+    const list = peerList(ctx);
+    const maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
+    const maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
+    const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
+    for (const p of list) buckets[bucketOf(p)].push(p);
+    return GROUPS
+      .filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet))
+      .map((g) => ({ key: g.key, rows: buckets[g.key].map((p) => rowOf(ctx, p, maxUp, maxDown)) }));
   }
 
-  function groupHtml(g, ms, hasFiles) {
+  function groupHtml(g, ms) {
     const folded = ui.folded[g.key] ? " folded" : "";
-    const rows = sorted(ms).map((p) => rowHtml(p, hasFiles)).join("");
     return T`<section class="dt08-grp g-${g.key}${folded}" data-grp="${g.key}">
       <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt08-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
@@ -314,21 +267,10 @@
         <span class="dt08-gcnt">${ms.length}</span>
         <span class="dt08-gagg">${R(aggText(g.key, ms))}</span>
       </div>
-      <div class="dt08-rows">${R(colHeadHtml(hasFiles))}${R(rows)}</div>
+      <!-- 组体 = 引擎表体(U2 分段桥): 锚槽由 anchFill 换成保活锚, 桥逐段 teleport
+           aq-table(列头, 替代原 dt08-gcols 手拼) + 行渲染器进锚 -->
+      <div class="dt08-rows"><div data-dt-anchor-slot="${g.key}"></div></div>
     </section>`;
-  }
-
-  function sorted(list) {
-    const k = ui.sortKey, dir = ui.sortDir;
-    const val = (p) => {
-      if (k === "prog") return num(p.progress);
-      if (k === "up") return num(p.upspeed);
-      if (k === "down") return num(p.dlspeed);
-      if (k === "sent") return num(p.uploaded);
-      if (k === "recv") return num(p.downloaded);
-      return num(p.relevance);
-    };
-    return list.slice().sort((a, b) => (val(a) - val(b)) * dir);
   }
 
   function render(host, ctx) {
@@ -336,12 +278,11 @@
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态, 组头聚合数随落袋数据刷新) */
+    /* 数据未变跳过重建(5s 通知频度下不闪不丢态, 组头聚合数随落袋数据刷新);
+     * 各组锚元素由 anchFill 跨帧保活(桥变体稳定 HTML 不变量, U2) */
     const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
-    ui.maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
-    ui.maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt08-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -358,13 +299,12 @@
         T`<div class="dt08-empty"><span>暂无已连接用户</span></div>`));
       return;
     }
-    const hasFiles = list.some((p) => p.files);
-    /* 五区分桶(空分区整节隐藏; 「只看在传数据」= quiet 分区整组隐藏) */
+    /* 五区分桶(空分区整节隐藏; 「只看在传数据」= quiet 分区整组隐藏) —— 与 rowsFn 同判据 */
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
     for (const p of list) buckets[bucketOf(p)].push(p);
     const groups = GROUPS
       .filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet))
-      .map((g) => groupHtml(g, buckets[g.key], hasFiles));
+      .map((g) => groupHtml(g, buckets[g.key]));
     const body = groups.length
       ? groups.join("")
       : T`<div class="dt08-empty"><span>该过滤下没有对端连接</span></div>`;
@@ -381,6 +321,7 @@
      * 用户的横向滚动位打回最左) —— 单点 helper */
     H.withScroll(host, () => {
       host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, "drawerPeerV08");
     });
   }
 
@@ -390,6 +331,8 @@
     if (toggle) {
       ui.onlyMoving = !ui.onlyMoving;
       rerender(h);
+      /* 行来源变了(分区过滤是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn 分段 */
+      H.anchTouch(h, h.__dtCtx, "drawerPeerV08");
       return;
     }
     const foldHead = ev.target.closest("[data-fold]");
@@ -400,14 +343,6 @@
         ui.folded[key] = !ui.folded[key];
         grp.classList.toggle("folded");
       }
-      return;
-    }
-    const seg = ev.target.closest("[data-sort]");
-    if (seg) {
-      const k = seg.getAttribute("data-sort");
-      if (ui.sortKey === k) ui.sortDir = -ui.sortDir;
-      else { ui.sortKey = k; ui.sortDir = -1; }
-      rerender(h);
     }
   }
 
@@ -418,13 +353,13 @@
     if (ctx) _render(host, ctx);
   }
 
-  /* P3-4: 纯 div/span 模拟控件的键盘触发(折叠组头 data-fold / 排序表头 data-sort) ——
-   * Enter/Space 转发 click 委托; 焦点在原生 button 等自身会发 click 的元素上时不接管
-   * (防 Enter 双重触发) */
+  /* P3-4: 折叠组头纯 div 模拟控件(data-fold)的键盘触发 —— Enter/Space 转发 click 委托;
+   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发)。
+   * !排序表头的键盘达(U2 起归引擎表壳原生 click 面) —— 手搓排序表头随手搓表头退役。 */
   function onKeyDown(ev) {
     if (ev.key !== "Enter" && ev.key !== " ") return;
     if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
-    if (!ev.target.closest("[data-fold], [data-sort]")) return;
+    if (!ev.target.closest("[data-fold]")) return;
     ev.preventDefault();
     onClick(ev);
   }
@@ -445,6 +380,10 @@
   reg.register({
     id: "08", tab: "peers",
     label: "五区分组",
+    /* 桥声明(U2, 分段形态): tableId 对应 DRAWER_TABLE_DEFS.drawerPeerV08(描述符 segs:true),
+     * rowsFn 返回 [{key, rows}] 与锚槽一一对应; 组头聚合/折叠留在外壳。 */
+    tableId: "drawerPeerV08",
+    rowsFn: rowsFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

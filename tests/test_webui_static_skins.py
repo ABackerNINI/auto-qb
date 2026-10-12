@@ -830,11 +830,13 @@ def test_frontend_table_registry_single_point():
 
 
 def test_drawer_table_bridge_wiring():
-    """变体表格体 Teleport 锚桥接线守阵(计划 26-10-12-0527 U1, D1 拍板)。
+    """变体表格体 Teleport 锚桥接线守阵(计划 26-10-12-0527 U1 桥 + U2 分段/保活, D1 拍板)。
 
     桥 = 变体外壳字符串 DOM 锚 + <aq-dt-bridge> Teleport(表壳 + 行渲染器) + 锚代数单调换代。
     四件挂载时序路径(初开/切页签/软切换/合并双列)由 e2e/drawer-bridge-stub.spec.mjs 钉死,
     本守阵钉**接线不变量**: 断任何一环, 桥静默失效或内容写进游离旧锚(e2e 路径C 实测根因)。
+    U2 段: 07/08/09 三变体接入(描述符/列集/渲染器/锚保活/触碰) + 变体文件零手搓排序状态机
+    零列宽 grid(U5 终态判据的用户表份额, 先到先钉)。
     """
     import os
     import re
@@ -852,21 +854,30 @@ def test_drawer_table_bridge_wiring():
     assert "gen **单调自增**" in st and "on = 锚当前在 DOM" in st, \
         "state.js dtBridge 注释口径漂移(gen 单调 + on 摘除两件必须写明 —— 那是路径C 红验换来的)"
 
-    # ② drawer_templates.js: register 收 tableId(字符集校验) + 挂载 gen 单调自增 + 卸载只摘 on
+    # ② drawer_templates.js: register 收 tableId/rowsFn(字符集校验) + 锚代数单调自增 + 卸载只摘 on
     dt = read("drawer_templates.js")
     assert 'throw new Error("[dt] register: bad tableId " + tableId)' in dt, \
         "register 未校验 tableId 字符集(tableId 要进选择器与锚属性, 与 id 同纪律)"
+    assert "rowsFn: typeof entry.rowsFn === \"function\" ? entry.rowsFn : null" in dt, \
+        "register 未收 rowsFn(桥变体行装配的回读口, U2)"
     assert "gen: (cur ? cur.gen : 0) + 1" in dt, \
-        "挂载机械锚代数必须**单调自增**(gen 恒定 = :key 净零 = Teleport 原地补丁进游离旧锚, e2e 路径C 红验根因)"
+        "锚代数必须**单调自增**(gen 恒定 = :key 净零 = Teleport 原地补丁进游离旧锚, e2e 路径C 红验根因)"
     assert "this.dtBridge[tid].on = false" in dt and "gen 保持单调, 只摘 on" in dt, \
         "卸载必须只摘 on(gen 保持单调)且不得清 gen"
     assert "data-dt-table-anchor" in dt, \
         "挂载/卸载机械未按锚属性 data-dt-table-anchor 扫描(锚约定单点, 见 table.js 对外契约④)"
+    # ②b 锚对账/保活/触碰三件(U2): 对账在 _dtRender 尾部单点; 保活/触碰经 H 消费
+    assert "function dtSyncAnchors(host, vm)" in dt and "dtSyncAnchors(st.host, this)" in dt, \
+        "缺锚对账单点 dtSyncAnchors(挂载拍 + 数据通知 + 回落清宿主三路必须同走一处, U2 收口)"
+    assert "anchFill: function (host, tableId)" in dt and "data-dt-anchor-slot" in dt, \
+        "缺锚保活 helper anchFill(外壳整帧重建必须保住锚元素身份, 锚被重建 = Teleport 重挂 = 行抖动)"
+    assert "anchTouch: function (host, vm, tableId)" in dt, \
+        "缺锚触碰 helper anchTouch(变体 UI 态翻动后桥必须换代重读 rowsFn, 引擎对非响应式行源无感知)"
 
-    # ③ 桥方法四件 + 取数四件(drawer.html 的 <aq-dt-bridge> 消费面)
+    # ③ 桥方法四件 + 取数六件(drawer.html 的 <aq-dt-bridge> 消费面; U2 加 Segs/RowCls/dtTplRows)
     for name in (
         "dtBridgeTbl", "dtBridgeOn", "dtBridgeTo", "dtBridgeKey", "dtBridgeDef", "dtBridgeRows", "dtBridgeRowKey",
-        "dtBridgeRowModel", "dtBridgeRowProp"
+        "dtBridgeRowModel", "dtBridgeRowProp", "dtBridgeRowCls", "dtBridgeSegs", "dtTplRows"
     ):
         assert f"      {name}(" in dt, f"drawer_templates.js 缺桥方法 {name}(桥消费面被拆即静默失效)"
 
@@ -879,7 +890,7 @@ def test_drawer_table_bridge_wiring():
     assert "v-for=\"t in ['general', 'trackers', 'peers', 'content']\"" in drh, \
         "单栏桥未按四页签自点亮(硬编码单页签会让其他页签变体桥失效)"
 
-    # ⑤ 桥组件 + x-template: 表壳/行渲染器/滚动同步/引擎排序全走 $root 单点
+    # ⑤ 桥组件 + x-template: 表壳/行渲染器/滚动同步/引擎排序全走 $root 单点; 分段 teleport
     tbl = read("table.js")
     assert 'name: "aq-dt-bridge"' in tbl and 'template: "#tpl-aq-dt-bridge"' in tbl, \
         "table.js 缺 aq-dt-bridge 组件定义(桥的载体)"
@@ -887,10 +898,12 @@ def test_drawer_table_bridge_wiring():
     m2 = re.search(r'<script type="text/x-template" id="tpl-aq-dt-bridge">(.*?)</script>', xt, re.S)
     assert m2, "xtpl.html 缺桥 x-template 分片"
     btpl = m2.group(1)
-    assert "$root.dtBridgeTo(tab)" in btpl, "桥模板 teleport :to 未走 dtBridgeTo 单点(锚约定)"
+    assert "$root.dtBridgeTo(tab" in btpl, "桥模板 teleport :to 未走 dtBridgeTo 单点(锚约定)"
+    assert "$root.dtBridgeSegs(tab)" in btpl, "桥模板未走分段取数 dtBridgeSegs(U2: 分组变体逐段 teleport)"
     assert "<aq-table" in btpl and "-cells" in btpl, "桥模板必须复用表壳 + 行渲染器(不许自拼表格)"
     assert "$root.sortedDrawer(" in btpl, "桥行序必须走 sortedDrawer 单点(dyn 分支) —— 手拼即第二份排序机"
     assert "$root.syncHeadScroll(" in btpl, "桥缺表头横滚同步(横滚时表头不动 = 静默坏)"
+    assert "$root.dtBridgeRowCls(tab)" in btpl, "桥行缺 rowCls 修饰类绑定(变体行级个性失守, D5)"
 
     # ⑥ sort.js: dyn 分支(变体表排序状态按 table-id 通用存取, 不再每表加 state 字段)
     srt = read("sort.js")
@@ -900,24 +913,89 @@ def test_drawer_table_bridge_wiring():
     assert "def.sort.dyn ? this.dtSortCell(tableId)" in srt, \
         "sortedDrawer 缺 dyn 分支(变体表行序回退恒原序, 排序静默无效)"
 
-    # ⑦ app.js: stub 描述符行 + 列子集 + 描述符导出口
+    # ⑦ columns.js: 渐进列 omitEmpty 单点(07/08 的 qB files 字段整列省略)
+    col = read("columns.js")
+    assert "_colsOmitEmpty(page, out)" in col and "c.omitEmpty" in col, \
+        "_visibleCols 尾部缺 omitEmpty 单点(渐进列省略必须表头/行/grid/对齐同走一条路, 否则 nofiles 错位 bug 类回潮)"
+
+    # ⑧ app.js: stub + U2 三描述符行 + 列子集 + 描述符导出口 + 渲染器注册
     app = read("app.js")
     assert "drawerStubV0: {" in app and "variantTab: \"peers\"" in app, \
         "app.js 缺 drawerStubV0 描述符行(U1 spike 的桥验证表)"
+    for tid, segs in (("drawerPeerV07", False), ("drawerPeerV08", True), ("drawerPeerV09", False)):
+        assert f"{tid}: {{" in app, f"app.js 缺 {tid} 描述符行(U2 用户表三变体接入)"
+        blk = app.split(f"{tid}: {{", 1)[1].split("\n  },", 1)[0]
+        assert 'rows: "dtTplRows"' in blk and 'variantTab: "peers"' in blk and "rowCls: \"_cls\"" in blk, \
+            f"{tid} 描述符缺 rows/variantTab/rowCls 三件(U2 桥契约)"
+        assert ('segs: true' in blk) == segs, f"{tid} segs 声明与预期不符(08 分段桥, 07/09 单锚)"
     assert "const DRAWER_STUB_V0_COLUMNS = [" in app and "DRAWER_PEER_COLUMNS[0]" in app, \
         "stub 列子集未以经典用户列集为底裁剪(D2 口径: 列个性 = 数据声明)"
+    for cst in ("DRAWER_PEER_V07_COLUMNS", "DRAWER_PEER_V08_COLUMNS", "DRAWER_PEER_V09_COLUMNS"):
+        assert f"const {cst} = [" in app and "drawerPeerV07: DRAWER_PEER_V07_COLUMNS" in app, \
+            f"{cst} 未声明或未注册进 TABLE_COLUMNS(_visibleCols 按 page 取列定义)"
+    assert "omitEmpty: true" in app, "files 渐进列缺 omitEmpty 声明(无 files 时整列省略失守)"
+    for comp in ("aq-dt07-cells", "aq-dt08-cells", "aq-dt09-cells"):
+        assert f'app.component("{comp}"' in app, f"app.js 未注册 {comp}(U2 变体格渲染器没接线)"
     assert "window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;" in app, \
         "app.js 未导出 DRAWER_TABLE_DEFS 读取口(桥反查依赖, 经 window 中转保装载序)"
     assert "drawerStubV0: DRAWER_STUB_V0_COLUMNS" in app, \
         "TABLE_COLUMNS 未注册 stub 列集(_visibleCols 按 page 取列定义)"
 
-    # ⑧ stub 变体: ?dtstub 门 + 桥声明 + 稳定 HTML 不变量
+    # ⑨ 渲染器分片: 三份 x-template + 列 key 配对(值格漏分支 = 表头在、值恒空)
+    cells = read("tpl", "xtpl-cells.html")
+    for comp in ("dt07", "dt08", "dt09"):
+        assert f'id="tpl-aq-{comp}-cells"' in cells, f"xtpl-cells.html 缺 tpl-aq-{comp}-cells 分片"
+    app_keys = re.findall(r"\{ key: \"(\w+)\"", app)
+    for comp, colconst in (
+        ("dt07", "DRAWER_PEER_V07_COLUMNS"),
+        ("dt08", "DRAWER_PEER_V08_COLUMNS"),
+        ("dt09", "DRAWER_PEER_V09_COLUMNS"),
+    ):
+        m3 = re.search(r"const %s = \[(.*?)\];" % colconst, app, re.S)
+        assert m3, f"app.js 缺 {colconst}"
+        block = m3.group(1)
+        tpl_blk = re.search(r'<script type="text/x-template" id="tpl-aq-%s-cells">(.*?)</script>' % comp, cells, re.S)
+        assert tpl_blk, f"xtpl-cells.html 缺 {comp} 分片"
+        for k in ("addr", "client", "flags", "progress", "upspeed", "dlspeed", "uploaded", "downloaded", "relevance"):
+            assert f"col.key === '{k}'" in tpl_blk.group(1), f"{comp} 渲染器缺 {k} 值格分支(表头在、值恒空)"
+
+    # ⑩ stub 变体: ?dtstub 门 + 桥声明 + 稳定 HTML 不变量
     stub = read("drawer_tpl", "90-peers-stub-bridge.js")
     assert 'indexOf("dtstub")' in stub, "stub 变体缺 ?dtstub 查询参数门(生产必须零观感)"
     assert 'tableId: "drawerStubV0"' in stub, "stub 变体未声明 tableId(桥契约的声明侧)"
     assert "H.skipUnchanged" in stub, "stub 变体缺 skipUnchanged(桥变体的稳定 HTML 不变量: 锚不得随轮询重建)"
 
-    # ⑨ 三份 index.html: stub 装载行各 1 条
+    # ⑪ U2 三变体: tableId/rowsFn 声明 + 锚保活/触碰 + 零手搓排序状态机 + 零列宽 grid + 零排序表头
+    for fname, tid, segkey in (
+        ("07-peers-dashboard-tall.js", "drawerPeerV07", ""),
+        ("08-peers-groups-low.js", "drawerPeerV08", "take"),
+        ("09-peers-density-collapsed.js", "drawerPeerV09", ""),
+    ):
+        v = read("drawer_tpl", fname)
+        assert f'tableId: "{tid}"' in v, f"{fname} 未声明 tableId(桥契约的声明侧)"
+        assert "rowsFn: rowsFn" in v, f"{fname} 未声明 rowsFn(桥变体必须自带行装配, U2)"
+        assert "H.anchFill(host," in v and f'"{tid}"' in v, f"{fname} 缺锚保活(锚被重建 = Teleport 重挂 = 行抖动)"
+        assert "H.anchTouch(" in v, f"{fname} 缺锚触碰(筛选/只看在传翻动后桥必须换代重读 rowsFn)"
+        assert "ui.sortKey" not in v and "data-sort" not in v, f"{fname} 残留手搓排序状态机(U3/Q3: 排序并引擎, D3)"
+        # Q4 判据本体 = 表格容器上零列宽 grid(列宽归引擎 aq-table 的 grid 契约);
+        # 卡片/图例等版式 grid 是 D5 保留面, 不在本判据内(07 四卡仪表条与图例两列是版式个性)。
+        nn = tid[-2:]
+        for ln in v.splitlines():
+            if "grid-template-columns" in ln and (
+                ".group-head" in ln or ".group-row" in ln or re.search(r"\.dt%s-(?:h|r|head|row|gcols)\b" % nn, ln)
+            ):
+                raise AssertionError(f"{fname} 表格容器残留列宽 grid 硬编码(Q4: 列宽归引擎): {ln.strip()[:80]}")
+        assert "dt07-sortable" not in v and "dt08-sortable" not in v and "dt09-sortable" not in v, \
+            f"{fname} 残留手搓排序表头(表头归引擎 aq-table)"
+        if segkey:
+            # 分段桥锚槽是动态寻址(data-dt-anchor-slot="${g.key}"), 逐组 teleport :to 追 [data-dt-seg=key];
+            # segkey 钉在分组键表声明侧(键名漂移即桥段寻址失配)。
+            assert 'data-dt-anchor-slot="${g.key}"' in v, f"{fname} 缺分组锚槽动态寻址(分段桥的段寻址侧)"
+            assert f'{{ key: "{segkey}"' in v, f"{fname} 缺分组键 {segkey}(分段桥段寻址的声明侧)"
+        else:
+            assert 'data-dt-anchor-slot=""' in v, f"{fname} 缺单锚槽"
+
+    # ⑫ 三份 index.html: stub 装载行各 1 条
     for skin in ("atlas", "console", "prism"):
         idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
         assert idx.count("drawer_tpl/90-peers-stub-bridge.js") == 1, f"{skin} index.html stub 装载行失守"

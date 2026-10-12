@@ -7,15 +7,16 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * dt07「四卡仪表」/ dt08「五区分组」peers 列表 列头×行 列对齐守阵(2026-10-10 用户报障回归) ——
  *
  * 症状: qB 不回 peers.files 渐进字段时(真机常态), 「进度」列起后续所有列头与行内容错位。
- * 根因: 表头在无 files 时已切 9 列网格(.dt07-head.nofiles / .dt08-gcols.nofiles), 而行
- * rowHtml 从未补 nofiles 类 —— 行仍走 10 列模板却只渲染 9 格, 两个网格里 1fr 列(「正在取」)
- * 各算各的宽(头部 1fr 多吞末列 44/46px + 1 个 gap 的份额), 其后所有列整体错开 50+px。
- * 修复 = 行 cls 与表头同进退补 nofiles。
+ * 历史根因(手搓表时代): 表头无 files 切 9 列网格而行仍走 10 列模板, 两网格各算各的 1fr。
+ * U2(计划 26-10-12-0527)起表格体归引擎: 列定义 omitEmpty 单点(_colsOmitEmpty) —— 无任何
+ * 行携带该字段时**表头/行/网格同走一条路整列省略**, 错位 bug 类结构性根除; 本阵继续钉
+ * 「无 files = 9 列对齐 / 有 files = 10 列对齐」两个路径防回归。
  *
  * 断言口径: page.route 桩掉 /api/torrents/{hash}/peers(与 drawer-peers-sticky-flush.spec
- * 同款手法) —— 无 files 版钉 9 列对齐(报障路径), 含 files 版钉 10 列对齐(渐进字段在位时不回归);
- * 逐列量 列头格 与 每一行同名次格 的视口左缘(±1px), 格数不齐即红(错位的结构签名)。
- * dt08 按组量(每组自带 .dt08-gcols 列头), 折叠组跳过(display:none 格 rect 恒 0 不可量)。
+ * 同款手法); 逐列量 列头格 与 每一行同名次格 的视口左缘(±1px), 格数不齐即红(错位的结构签名)。
+ * 探针引擎口径(U2): 表头 = .group-head[data-table=drawerPeerV0X](.h-cell 格), 行 =
+ * .group-row(格是渲染器分片直出, 行内 grid 由引擎 gridStyle 同源) —— 07 单锚在 .dt07-list,
+ * 08 逐组分段锚([data-dt-table-anchor=drawerPeerV08][data-dt-seg=<组key>]), 折叠组跳过。
  * 手法同族: drawer-peers-sticky-flush.spec(桩 peers + addInitScript 预选模板 + 双击开抽屉)。
  */
 
@@ -49,8 +50,9 @@ const VARIANTS = [
 ];
 
 /** 列对齐探针(页面内量测): 逐列比较 列头格 与 每行同名次格 的视口左缘(±1px)。
- *  dt07 = 单列头(.dt07-head); dt08 = 每个未折叠组各带列头(.dt08-gcols), 折叠组跳过 ——
- *  折叠组 rows 是 display:none, 格 rect 恒 0, 量了必假红。 */
+ *  U2 引擎口径: 表头 = .group-head[data-table=...](.h-cell 逐列), 行 = .group-row
+ *  (渲染器分片直出格, 与表头同一条 omitEmpty/grid 路); 07 单锚, 08 逐组分段锚, 折叠组跳过
+ *  —— 折叠组 rows 是 display:none, 格 rect 恒 0, 量了必假红。 */
 function probeFn(id) {
   return `(() => {
     const cellLefts = (el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().left * 10) / 10);
@@ -66,20 +68,21 @@ function probeFn(id) {
       return { ok: true, cols: hc.length, rows: rows.length };
     };
     if ('${id}' === '07') {
-      const head = document.querySelector('.drawer .dt07-head');
+      const head = document.querySelector('.drawer .group-head[data-table="drawerPeerV07"]');
       if (!head) return { fail: 'no-head' };
-      return cmp(head, [...document.querySelectorAll('.drawer .dt07-list > .dt07-r')], 'dt07');
+      return cmp(head, [...document.querySelectorAll('.drawer [data-dt-table-anchor="drawerPeerV07"] .group-row')], 'dt07');
     }
     const groups = [...document.querySelectorAll('.drawer .dt08-grp:not(.folded)')];
     if (!groups.length) return { fail: 'no-group' };
     for (const g of groups) {
-      const head = g.querySelector(':scope .dt08-gcols');
-      const rows = [...g.querySelectorAll(':scope .dt08-rows > .dt08-r')];
+      const anchor = g.querySelector(':scope [data-dt-table-anchor="drawerPeerV08"]');
+      const head = anchor && anchor.querySelector(':scope .group-head');
+      const rows = anchor ? [...anchor.querySelectorAll(':scope .group-row')] : [];
       if (!head) return { fail: 'no-gcols', tag: g.getAttribute('data-grp') };
       const out = cmp(head, rows, g.getAttribute('data-grp'));
       if (!out.ok) return out;
     }
-    return { ok: true, groups: groups.length, cols: groups[0].querySelector('.dt08-gcols').children.length };
+    return { ok: true, groups: groups.length, cols: groups[0].querySelector('[data-dt-table-anchor="drawerPeerV08"] .group-head').children.length };
   })()`;
 }
 
@@ -141,8 +144,8 @@ for (const skin of SKINS) {
       await drawer.locator('.drawer-tabs button', { hasText: '用户' }).click();
 
       await expect(drawer.locator('.dt07-wrap')).toBeVisible({ timeout: 5_000 });
-      // 「正在取」列头在位 = hasFiles 路径真的走到了(桩数据被前端消费, 不止是 route 生效)
-      await expect(drawer.locator('.dt07-head', { hasText: '文件' })).toBeVisible({ timeout: 5_000 });
+      // 「文件」列头在位 = hasFiles 路径真的走到了(桩数据被前端消费, 不止是 route 生效; U2 引擎表头)
+      await expect(drawer.locator('.group-head[data-table="drawerPeerV07"]', { hasText: '文件' })).toBeVisible({ timeout: 5_000 });
 
       const res = /** @type {any} */ (await page.evaluate(probeFn('07')));
       expect(res.fail, `列对齐探针: ${JSON.stringify(res)}`).toBeUndefined();
