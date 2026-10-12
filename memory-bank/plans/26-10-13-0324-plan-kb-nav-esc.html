@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-esc">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-13-0324">
+<meta name="doc-updated" content="26-10-13-0333">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md">
+<title>方案 · kb.nav Esc 功能 · 借鉴 auto-qb Esc 退栈设计 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114; --paper: #12161b; --paper-2: #161b21;
+    --ink: #dde3e8; --ink-dim: #9aa4ad; --ink-faint: #6d7781;
+    --hair: #232b33; --hair-soft: #1a2027;
+    --accent: #5cc0cf; --accent-ink: #86d7e0; --accent-soft: rgba(92,192,207,.10);
+    --ok: #7fc08a; --warn: #e2a86e; --bad: #e0796f;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1060px; margin: 0 auto; padding: 52px 44px 80px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 29px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 72ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 11px; max-width: 84ch; }
+  ul, ol { margin: 8px 0 14px; padding-left: 22px; max-width: 84ch; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--ink-faint); }
+  code { font-family: var(--mono); font-size: .86em; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 4px; padding: 1px 6px; }
+  pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--paper); border: 1px solid var(--hair); border-radius: 4px; padding: 12px 14px; margin: 10px 0 14px; overflow-x: auto; }
+  strong { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 10px; font-size: 13.5px; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-faint); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair); font-weight: 600; white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .dim { color: var(--ink-dim); }
+  .panel { background: var(--paper); border: 1px solid var(--hair); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 18px; margin: 14px 0; }
+  .panel h3 { margin: 0 0 8px; }
+  .chip { font-family: var(--mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--hair); color: var(--ink-dim); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">Plan · kb-nav-esc · Open</div>
+  <h1>kb.nav 加 Esc 功能 —— 借鉴 auto-qb Esc 退栈设计</h1>
+  <p class="lede">导航页 (<code>kb.nav</code>) 现 Esc 只覆盖两处 (搜索词清空、右键菜单收)。主 webui 把 Esc 做成<strong>逐层退栈</strong> (退栈): 一次按键退视觉最上一层, IME 组合期不劫劫, 兜底档有门条件。本方案移植该设计到 nav 壳, 适配其层集 (错误浮层 / 右键菜单 / 详情抽屉 / 行选择 / 搜索词), 改动面单文件.</p>
+  <div class="panel">
+    <h3>本轮新增 (26-10-13-0333) · 拉取失败全屏锁</h3>
+    <p>用户报: <em>拉取失败导致全屏无法操作一段时间</em>. 实测单点 —— <code>doPull()</code> 失败分支 (line 1487 / 1493) 调用 <code>showError()</code>, 把 <code>#overlay</code> 现 <code>position: fixed; inset: 0; z-index: 50</code> (line 528) —— <strong>全屏遮罩, 压详情抽屉 (z-30) 与右键菜单 (z-40) 之上</strong>. 遮罩现<em>无 dismiss 路径</em>: <code>hideError()</code> 只在 <code>applyData()</code> (line 1444) 即<em>下一轮现算成功</em> 里跑, 轮 <code>POLL_MS = 30000</code> —— 失败即整页 up-to-30s 不可点击. 本方案把遮罩退栈<em>最上档</em> + Esc 即收, 直接消该锁.</p>
+  </div>
+  <div class="meta-row">
+    <div class="item"><div class="k">Topic</div><div class="v">kb-nav-esc</div></div>
+    <div class="item"><div class="k">Status</div><div class="v">Open (待拍板)</div></div>
+    <div class="item"><div class="k">Added</div><div class="v">26-10-13-0324</div></div>
+    <div class="item"><div class="k">改动面</div><div class="v">nav_page.html + tests/test_kb_nav.py</div></div>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#s01">01 参考口径</a>
+  <a href="#s02">02 nav 现状</a>
+  <a href="#s03">03 缺口与提案</a>
+  <a href="#s04">04 拍板点</a>
+  <a href="#s05">05 改动面与守阵</a>
+  <a href="#s06">06 验证口径</a>
+  <a href="#s07">07 非范围</a>
+</nav>
+
+<section id="s01">
+  <h2><span class="no">01</span>auto-qb Esc 设计 (参考口径)</h2>
+  <p>单点实现 <code>src/auto_qb/webui/static/shared/lifecycle.js</code> (行 ~90-130), 四构件:</p>
+  <ul>
+    <li><strong>单 document-level keydown 链</strong>: <code>if (e.key !== "Escape") return;</code> 后一条 <code>else if</code> 退栈 —— 按<em>视觉层叠顺序</em> (浮层最上先), 一次按键退 exactly one layer. 例: 弹层遮罩 (z 130) 先于停靠抽屉 (z 80), 否则 Esc 穿过遮罩关被盖住的抽屉 (26-10-06 实测报障)。</li>
+    <li><strong>IME 守卫</strong>: <code>if (e.isComposing || e.keyCode === 229) return;</code> —— 中文输入组合期 Esc 属于输入法 (取消候选), 不劫劫浮层/搜索词.</li>
+    <li><strong>判据用可见性, 不状态位</strong>: <code>drawerVisible</code> 而非 <code>drawer.open</code> —— 看不见的面板不吃 Esc (设置页那次 Esc 退设置首页, 不是关 off-screen panel).</li>
+    <li><strong>兜底档有门条件 + 点名 toast</strong>: 最深档 (清全部筛选) 仅数据页 + 非输入态 + 无 hrPop 卡, 触发即 toast 点名, 不静默.</li>
+    <li>配套纪律: 浮层名单两处同步 (<code>dialogs.js::escBusy</code> 与 chain); 键盘快捷键引擎注册<em>后</em>链, 引擎自身对 Escape 直接放行 (双保险).</li>
+  </ul>
+</section>
+
+<section id="s02">
+  <h2><span class="no">02</span>kb.nav 现状 (实测 <code>nav_page.html</code> 1536 行)</h2>
+  <table>
+    <tr><th>层 (z)</th><th>现 Esc 行为</th><th>证据</th></tr>
+    <tr><td>错误浮层 overlay (<strong>z-50, 全屏遮罩</strong>)</td><td class="bad">无 Esc 路径 —— 拉取失败即全屏锁 ≤30s</td><td>showError line 911/1487/1493; hideError 只 applyData line 1444</td></tr>
+    <tr><td>右键菜单 ctxMenu (z-40)</td><td class="ok">有 —— <code>document keydown → closeCtx()</code></td><td>line 1382</td></tr>
+    <tr><td>详情抽屉 drawer (z-30, <code>S.sel</code>)</td><td class="bad">无 Esc 路径</td><td>only <code>dclose</code> button, line 1385</td></tr>
+    <tr><td>行选择 <code>tr.sel</code></td><td class="bad">无 Esc 路径</td><td>—</td></tr>
+    <tr><td>搜索词 gq / cq</td><td class="ok">有 —— per-input keydown 清词</td><td>lines 1321 / 1398</td></tr>
+    <tr><td>IME 组合期</td><td class="bad">无守卫 anywhere</td><td>grep <code>isComposing</code> 零命中</td></tr>
+  </table>
+  <p>Handlers scattered (per-element keydown + one document-level); no retreat-stack ordering. z 值实测: overlay 50 &gt; ctxMenu 40 &gt; drawer 30 —— 遮罩压其余两, 退栈最上档必先收它.</p>
+</section>
+
+<section id="s03">
+  <h2><span class="no">03</span>缺口与提案</h2>
+  <p>移植退栈 pattern scaled to nav 层集 —— 一条 document-level chain, 注册在 wire() 后既有 handlers (注册序 = 触发序照 webui 口径), 链里按视觉层叠:</p>
+  <pre>Escape 一次按键退一档 (退栈 order = visual z-order, 遮罩先):
+  0. IME 组合期 → return (不劫)
+  1. overlay 现 (z-50) → hideError()                [新增 —— 消拉取失败全屏锁]
+  2. ctxMenu open (z-40) → closeCtx()               [现有, 并入链]
+  3. drawer open (z-30) → S.sel = null; closeDrawer() [新增]
+  4. sel row 有        → 清行选择 (复用 dclose 逻辑)  [新增]
+  5. 兜底档 (拍板, 见 §04): 收展开态 openRows / 专题 selTopic? 清筛选? </pre>
+  <p>overlay 退栈档即消该锁: 拉取失败弹遮罩, 用户按 Esc 即收遮罩, 页面操作恢复 —— 不再 wait ≤30s poll. 照 webui 口径 (遮罩层先于被盖住的抽屉, 26-10-06 实测报障同根): 遮罩压 drawer/ctxMenu, 退栈必先收遮罩, 否则 Esc 穿过遮罩关被盖住的 drawer (看不见面判).</p>
+  <p>gq/cq per-input Esc 清词: <strong>keep</strong> (input-scoped, 链里在Input 档天然先手照 webui <code>inInput</code> 口径); 链里兜档不得双清. 或 fold into chain with <code>e.target.closest("input")</code> detection —— 拍点 P3.</p>
+  <div class="panel">
+    <h3>安全/保守默认 (黄金法则 ②)</h3>
+    <p>兜底档 (清筛选/清词) 是<em>destructive-ish</em> on persisted localStorage prefs (<code>mb-nav-filters</code>). 默认<em>off</em>: 兜档 = 收展开态 + 清 selTopic 选择 only; 清筛选 only if拍板 explicit. 与 webui 兜档 (toast 点名) 同纪律: 触发即点名, 不静默.</p>
+  </div>
+</section>
+
+<section id="s04">
+  <h2><span class="no">04</span>拍板点 (需 explicit 确认)</h2>
+  <table>
+    <tr><th>#</th><th>点</th><th>默认 (保守)</th></tr>
+    <tr><td>P1</td><td>退栈 order overlay → ctxMenu → drawer → sel (z 50→40→30) —— 确认</td><td class="ok">as proposed</td></tr>
+    <tr><td>P2</td><td>兜档清筛选 (照 webui 兜档)?</td><td class="warn">NO —— 收展开态 + 清 selTopic only; toast 点名</td></tr>
+    <tr><td>P3</td><td>gq/cq Esc 清词: keep per-input, or fold into chain?</td><td class="ok">keep per-input (已对, 最小改动)</td></tr>
+    <tr><td>P4</td><td>IME 守卫: 加 (nav 搜索框中文输入 real)</td><td class="ok">yes</td></tr>
+  </table>
+</section>
+
+<section id="s05">
+  <h2><span class="no">05</span>改动面与守阵</h2>
+  <ul>
+    <li><code>nav_page.html</code> wire() 段: 新增 one <code>escRetreat()</code> chain function + IME guard; drawer Esc branch; 兜档. 数据层 (<code>nav_data</code> collect) / 服务层 (<code>nav_server.py</code>) 零改动.</li>
+    <li><code>tests/test_kb_nav.py</code> 守阵 +4 (static source assertions, 照既有 shell 守阵 style): <code>test_esc_retreat_chain_single_point</code> (one document-level Escape handler; no stray ones outside chain except per-input 清词 pair), <code>test_esc_ime_guard</code> (<code>isComposing || keyCode === 229</code> present), <code>test_esc_closes_overlay_first</code> (chain里 overlay branch calls <code>hideError()</code> and it排<em>先于</em> ctxMenu/drawer branches —— 退栈 order 钉), <code>test_esc_closes_drawer</code> (chain里 drawer branch clears <code>S.sel</code> + <code>closeDrawer</code>).</li>
+    <li>红线照 pitfalls/web-ui: 退栈 order = visual z-order (ctxMenu 浮层 above drawer —— confirm CSS z-index before finalizing order); 判据用可见性照既有 pin/hide 骨架 (<code>derive()</code> 只读).</li>
+  </ul>
+</section>
+
+<section id="s06">
+  <h2><span class="no">06</span>验证口径</h2>
+  <ul>
+    <li>targeted: <code>commands run test.quick</code> 单文件 pre-run (照 hide 轮: 39 passed 单文件预跑口径).</li>
+    <li><code>commands run test.full</code> + new baseline slice in <code>testing/baselines/</code> (实测数字, 一次全量一条).</li>
+    <li>IAB smoke (optional): open drawer → Esc closes → ctxMenu open → Esc closes → 中文 IME 组合期 Esc 不劫.</li>
+  </ul>
+</section>
+
+<section id="s07">
+  <h2><span class="no">07</span>非范围</h2>
+  <p>快捷键引擎 (webui W1 equivalent, Alt+1..5 族) 不 in scope —— 只 Esc. pin/hide 骨架 untouched. 拉取 button CSRF 护栏 untouched.</p>
+</section>
+
+<div class="meta-row" style="border-top:1px solid var(--hair); margin-top:28px; padding-top:14px;">
+  <div class="item"><div class="k">变更记录</div><div class="v">26-10-13-0324 初版 (Open) · 26-10-13-0333 拉取失败全屏锁并入退栈 (overlay z-50 退栈档 + 守阵 +1)</div></div>
+</div>
+
+</div>
+</body>
+</html>

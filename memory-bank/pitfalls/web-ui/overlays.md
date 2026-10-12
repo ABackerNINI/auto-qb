@@ -3,6 +3,14 @@
 > 摘要: 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序; 含浮层几何(视口钳位 / 尺寸估算)与 Esc 退栈顺序。
 > 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport, ESC 退栈, 退栈顺序, Esc 关错层, 两图同开, 层叠顺序
 
+**Refs:** memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md, memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md
+
+### 全屏遮罩错误浮层无 dismiss 路径 = 整页操作锁 ≤ 轮周期
+
+- **触发**: 错误/提示遮罩 (`position:fixed; inset:0` 全屏) 弹后, 用户"全屏无法操作一段时间"。
+- **判别**: 遮罩 dismiss 只在**下一数据轮**里跑 (kb.nav 实测: `hideError()` 只 `applyData()`, 轮 `POLL_MS=30000` ⇒ 拉取失败即整页 ≤30s 不可点击); 遮罩 z 值压其余浮层之上 (nav: overlay 50 > ctxMenu 40 > drawer 30) —— 按 Esc 或点其余层都吃遮罩。
+- **处置**: 遮罩退栈**最上档** + Esc 即收 (照 webui 26-10-06 口径: 退栈 order = visual z-order, 遮罩先于被盖住的层, 否则 Esc 穿过遮罩关被盖的**不见**层); 遮罩档判用 `hidden` 现 (屏幕上能看见的东西同名)。
+
 ### 浮层"点了没反应"首先查**定位祖先**
 
 - **触发**: 浮层点了没反应 / 面板看不见。

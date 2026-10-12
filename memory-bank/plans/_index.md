@@ -16,6 +16,7 @@
 
 ## Open
 
+- [26-10-13-0324] [方案 · kb.nav Esc 功能 · 借鉴 auto-qb Esc 退栈设计 · auto-qb](26-10-13-0324-plan-kb-nav-esc.html) — `kb-nav-esc`
 - [26-10-12-0535] [计划 · qB 流量图限速线按当时值分段](26-10-12-0535-plan-webui-traffic-limit-history.html) — `webui-traffic-limit-history`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
