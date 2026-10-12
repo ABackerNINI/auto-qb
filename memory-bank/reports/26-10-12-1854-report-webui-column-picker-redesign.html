@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-column-picker">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-12-1854">
+<meta name="doc-updated" content="26-10-12-1854">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-column-picker.md">
+<title>WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101419; --bg-raise: #151b22; --bg-raise2: #1a2129; --ink: #d9dee3; --ink-strong: #f0f3f5;
+    --mut: #8b949c; --accent: #59b3a2; --accent-dim: rgba(89,179,162,.14);
+    --warn: #e2a86e; --warn-dim: rgba(226,168,110,.12); --danger: #e2705e; --danger-dim: rgba(226,112,94,.08);
+    --line: rgba(255,255,255,.09); --line-soft: rgba(255,255,255,.05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI","PingFang SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+    font-size: 15.5px; line-height: 1.62; padding: 0 24px; }
+  code, .mono { font-family: "Cascadia Code",Consolas,"JetBrains Mono",monospace; }
+  code { font-size: .88em; background: var(--bg-raise); border: 1px solid var(--line-soft);
+    border-radius: 3px; padding: .08em .35em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 0 96px; }
+  .layout { display: grid; grid-template-columns: 232px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; line-height: 2.0; }
+  nav.toc .toc-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); margin-bottom: 10px; }
+  nav.toc a { color: var(--mut); text-decoration: none; display: block; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--ink); font-weight: 510; }
+  main { min-width: 0; max-width: 920px; }
+  .kicker { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-size: 34px; line-height: 1.14; font-weight: 600; letter-spacing: -0.02em; color: var(--ink-strong); margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--mut); max-width: 70ch; margin-bottom: 26px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 12.5px; color: var(--mut);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 0; margin-bottom: 48px; }
+  .meta-row b { color: var(--ink); font-weight: 510; }
+  .meta-row .mono { color: var(--ink); }
+  section { margin-bottom: 58px; }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); margin-bottom: 6px; padding-top: 8px; }
+  h2 .secno { color: var(--accent); font-family: "Cascadia Code",Consolas,monospace; font-size: 15px; font-weight: 400; margin-right: 12px; }
+  .sec-rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0 22px; }
+  h3 { font-size: 16.5px; font-weight: 590; color: var(--ink-strong); margin: 30px 0 10px; }
+  h4 { font-size: 14px; font-weight: 590; color: var(--ink-strong); margin: 20px 0 8px; }
+  p { margin-bottom: 13px; max-width: 82ch; }
+  p.small, .small { font-size: 13px; color: var(--mut); }
+  ul, ol { margin: 0 0 14px 1.4em; max-width: 82ch; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 22px; }
+  th { text-align: left; font-weight: 510; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--mut);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0; vertical-align: bottom; }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.r { white-space: nowrap; color: var(--ink-strong); font-weight: 510; }
+  td.c { text-align: center; }
+  .ok { color: var(--accent); font-weight: 510; }
+  .bad { color: var(--danger); font-weight: 510; }
+  .warn { color: var(--warn); font-weight: 510; }
+  .mut { color: var(--mut); }
+  .card { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 0 0 18px; }
+  .card.warn { background: var(--warn-dim); border-color: rgba(226,168,110,.3); }
+  .card.bad { background: var(--danger-dim); border-color: rgba(226,112,94,.3); }
+  .card.good { background: var(--accent-dim); border-color: rgba(89,179,162,.3); }
+  .card b { color: var(--ink-strong); }
+  .card .t { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); margin-bottom: 8px; }
+  blockquote { border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 0 6px 6px 0;
+    padding: 12px 18px; margin: 0 0 18px; max-width: 80ch; }
+  blockquote p { margin-bottom: 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pill { display: inline-block; font-size: 11px; font-family: "Cascadia Code",Consolas,monospace;
+    border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--mut); margin-right: 6px; }
+  .pill.on { color: var(--accent); border-color: rgba(89,179,162,.4); background: var(--accent-dim); }
+  .pill.no { color: var(--danger); border-color: rgba(226,112,94,.35); background: var(--danger-dim); }
+  figure { margin: 18px 0 22px; }
+  figcaption { font-size: 12.5px; color: var(--mut); margin-top: 8px; }
+  .src { font-size: 12.5px; color: var(--mut); }
+  .src a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .src a:hover { text-decoration: underline; }
+  .src li { margin-bottom: 8px; }
+  .kv { font-size: 12.5px; color: var(--mut); }
+  .kv b { color: var(--ink); font-weight: 510; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav.toc { display: none; } .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="layout">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><b>1</b> 结论摘要</a>
+  <a href="#s2"><b>2</b> 现状取证</a>
+  <a href="#s3"><b>3</b> 根因分析</a>
+  <a href="#s4"><b>4</b> 业界方案调研</a>
+  <a href="#s5"><b>5</b> 方案对比矩阵</a>
+  <a href="#s6"><b>6</b> 两个初步方案评估</a>
+  <a href="#s7"><b>7</b> 推荐方案</a>
+  <a href="#s8"><b>8</b> 落地拆解</a>
+  <a href="#s9"><b>9</b> 风险与边界</a>
+  <a href="#s10"><b>10</b> 参考资料</a>
+</nav>
+<main>
+
+<div class="kicker">Research Report · Column Picker IA</div>
+<h1>WEBUI「列」选择器<br>信息架构重设计 · 方案调研与对比</h1>
+<p class="lede">用户报「表格太多，统一到『列』按钮里显得杂乱难寻」。本报告先量化取证这一体感的成因（实测：一个 300px 弹层里平铺 <b>7 个分组 / 107 个勾选项</b>），再横向调研业界 6 类成熟方案（AG Grid / MUI X / DevExtreme / Syncfusion / TanStack+shadcn / Airtable·Notion 等），最后对用户提出的两个初步方案做逐项评估，给出推荐形态与落地拆解。<b>本文是调研与设计输入，不改任何代码。</b></p>
+<div class="meta-row">
+  <span>状态 <b>Done</b>（快照）</span>
+  <span>取证范围 <b class="mono">src/auto_qb/webui/static/shared/</b> 列模型 · 列交互引擎 · 顶栏与表头模板</span>
+  <span>结论 <b>作用域收敛 + 双入口 + 分类折叠 + 检索</b></span>
+</div>
+
+<section id="s1">
+<h2><span class="secno">1</span>结论摘要</h2>
+<hr class="sec-rule">
+<p>「杂乱难寻」不是一个视觉问题，是一个<b>信息架构问题</b>：当前选择器的<em>作用域</em>是「整个应用的全部表」，而用户此刻面对的只是「一张表」。实测用户在辅种页点「列」，会看到一个 300px 宽、<code>max-height:70vh</code> 的弹层，里面线性平铺 <b>7 个分组标题 + 107 个勾选项</b>，其中约 <b>86 项属于屏幕上根本看不见的表</b>（明细表 / 种子页 / 追剧视图 / 抽屉三表）。</p>
+<div class="card bad">
+  <div class="t">现状一句话</div>
+  <p style="margin-bottom:0">一个入口、一个弹层、一张 107 行的线性清单：<b>无检索、分组不可折叠、跨表混列、无状态提示</b>。要勾「种子页 · 保存路径」必须从顶滚到底。</p>
+</div>
+<p>调研结论（详见 §4–§5）：<b>业界没有任何一款成熟数据表格把「所有表的全部列」平铺进一个弹层</b>。跨表/多列场景的成熟做法只有两条路——要么在弹层内加「<b>分组折叠 + 检索 + 全选</b>」（AG Grid / MUI X / DevExtreme / DataTables colvis），要么干脆把作用域<b>收敛到当前表/当前视图</b>（AG Grid 表头菜单、原生 Finder 右键列头、Airtable/Notion 视图级字段配置）。</p>
+<p>对用户提出的两个初步方案：</p>
+<table>
+  <thead><tr><th>初步方案</th><th>判断</th><th>理由</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="r">① 保留「列」按钮，分类 + 折叠</td>
+      <td class="warn">必要但不充分</td>
+      <td>默认展开项可从 107 降到 21（辅种页），首屏噪音显著下降；但作用域仍是「全应用」，其它 6 组只是被折起，<b>错配没解</b>，且仍无检索。</td>
+    </tr>
+    <tr>
+      <td class="r">② 右键 + 弹窗，各表分开</td>
+      <td class="ok">方向正确</td>
+      <td>作用域 = 被操作的那张表，语义最贴；且<b>代码地基已有 70%</b>——<code>openColMenuAt(ev, page)</code> 的 <code>page</code> 参数已预留但闲置，表头右键菜单 <code>openHeadMenu</code> 已在线上。唯一短板是右键的可发现性。</td>
+    </tr>
+  </tbody>
+</table>
+<div class="card good">
+  <div class="t">推荐形态（§7）</div>
+  <p style="margin-bottom:0"><b>以方案 ② 为骨、方案 ① 为肉</b>：弹层数据源从「全表」收敛为「当前表」（复用已闲置的 <code>page</code> 参数，零新增 API 面）→ 表头右键为主入口、顶栏「列」按钮为<em>当前表</em>的备选入口（按钮上标注当前表名）→ 弹层内做<b>检索框 + 分类折叠（按列语义族）+ 组内可见计数 + 三态勾选 + 重置本表显隐</b> → 抽屉/变体表的恢复入口随作用域一起迁到「各自表头的右键菜单」。<b>持久化层零改动</b>（仍走 <code>persistPage</code> 唯一漏斗与 v5 双轨模型）。</p>
+</div>
+<p class="small">附带发现（只取证不改）：<code>TORRENT_COLUMNS</code> 第 158 行注释称扩展字段「默认隐藏」，但这 13 个列定义里<b>没有 <code>hide: true</code> 标志</b>，而 <code>loadColState</code> 的播种判据是 <code>filter(c =&gt; c.hide)</code> —— 即<b>种子页实际默认渲染全部 28 列</b>。这很可能是「表格太挤」体感的一部分成因。属注释与代码漂移，本报告只记录，是否修/入池需另行确认（范围守恒）。</p>
+</section>
+
+<section id="s2">
+<h2><span class="secno">2</span>现状取证</h2>
+<hr class="sec-rule">
+
+<h3>2.1 注册表规模：16 张表 / 107 列</h3>
+<p>列模型的单点在 <code>shared/app.js</code>。表身份注册表有两份并集（<code>ALL_TABLE_DEFS = TABLE_DEFS + DRAWER_TABLE_DEFS</code>），列交互引擎（<code>shared/columns.js</code>）按表 id 全集 <code>ALL_TABLE_PAGES</code> 遍历。</p>
+<table>
+  <thead><tr><th>来源</th><th>表</th><th>列选择器分组标题</th><th class="c">列数</th><th class="c">默认隐藏</th></tr></thead>
+  <tbody>
+    <tr class="phase"><td colspan="5">TABLE_DEFS（主视图 4 张）</td></tr>
+    <tr><td class="r">group</td><td class="mut">主视图</td><td>辅种表</td><td class="c">21</td><td class="c">4</td></tr>
+    <tr><td class="r">detail</td><td class="mut">主视图</td><td>明细表</td><td class="c">28</td><td class="c">13</td></tr>
+    <tr><td class="r">torrent</td><td class="mut">主视图</td><td>种子页</td><td class="c">28</td><td class="c bad">0 *</td></tr>
+    <tr><td class="r">show</td><td class="mut">主视图</td><td>追剧视图</td><td class="c">11</td><td class="c">0</td></tr>
+    <tr class="phase"><td colspan="5">DRAWER_TABLE_DEFS（抽屉经典 3 张，恒定进选择器）</td></tr>
+    <tr><td class="r">drawerTracker</td><td class="mut">抽屉</td><td>Tracker 列表</td><td class="c">6</td><td class="c">0</td></tr>
+    <tr><td class="r">drawerPeer</td><td class="mut">抽屉</td><td>用户列表</td><td class="c">9</td><td class="c">0</td></tr>
+    <tr><td class="r">drawerFile</td><td class="mut">抽屉</td><td>文件列表</td><td class="c">4</td><td class="c">0</td></tr>
+    <tr class="phase"><td colspan="5">变体表 8 张 + 测试桥 1 张（仅对应变体被选中时进选择器）</td></tr>
+    <tr><td class="r">drawerPeerV07/08/09</td><td class="mut">变体</td><td>用户表 · 四卡仪表 / 五区分组 / 密度雷达</td><td class="c">10 / 9 / 9</td><td class="c">0</td></tr>
+    <tr><td class="r">drawerTrackerV04/05/06</td><td class="mut">变体</td><td>Tracker 表 · 状态卡片栅格 / 健康分组 / 增强表格</td><td class="c">1 / 1 / 8</td><td class="c">0</td></tr>
+    <tr><td class="r">drawerContentV10/11</td><td class="mut">变体</td><td>内容表 · 树 + 详情 / 树表批量</td><td class="c">5 / 7</td><td class="c">0</td></tr>
+    <tr><td class="r">drawerStubV0</td><td class="mut">测试桥</td><td>桥验证表(测试)</td><td class="c">5</td><td class="c">0</td></tr>
+    <tr><td class="r"><b>生产态恒定分组合计</b></td><td colspan="2" class="mut">经典 7 表</td><td class="c"><b>107</b></td><td class="c"><b>17</b></td></tr>
+  </tbody>
+</table>
+<p class="small">* 见 §1 附带发现：种子页扩展列的「默认隐藏」注释与代码漂移，实际 28 列全可见。变体表列数以 <code>DRAWER_PEER_COLUMNS</code> 共享引用计（V07 声明 10 项、V08 9 项、V09 9 项，脚本对共享引用的识别略有出入，此处取声明行数）。</p>
+
+<h3>2.2 弹层规格与入口</h3>
+<div class="grid2">
+  <div class="card">
+    <div class="t">弹层规格（三皮肤一致）</div>
+    <ul style="margin-bottom:0">
+      <li>容器：<code>.col-menu</code>，<b>width: 300px</b></li>
+      <li>高度：<code>max-height: 70vh; overflow-y: auto</code></li>
+      <li>结构：<code>v-for def in tableDefs</code> → 每表一个 <code>.col-menu-title</code> + N 个 <code>.col-menu-item</code></li>
+      <li>底部动作：恢复默认列宽 / 适应窗口宽度（<b>全表</b>，遍历 <code>ALL_TABLE_PAGES</code>）</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="t">入口（两条，同一弹层）</div>
+    <ul style="margin-bottom:0">
+      <li><b>顶栏「列」按钮</b>：<code>topbar.html</code>，仅 <code>page === 'groups'</code> 时渲染 → <code>toggleColMenu</code></li>
+      <li><b>表头右键</b>：<code>openHeadMenu</code> → 「显示/隐藏列…」→ <code>headMenuPicker()</code> → <code>openColMenuAt(ev, page)</code></li>
+      <li>右键菜单已含：隐藏本列 / 按本列排序 / 时间口径切换 / 显示隐藏列…</li>
+    </ul>
+  </div>
+</div>
+<div class="card good">
+  <div class="t">关键事实：方案 ② 的扩展点已经存在</div>
+  <p style="margin-bottom:0"><code>columns.js::openColMenuAt(ev, page)</code> 已经接收 <code>page</code> 参数，但源码注释明说「<b>page 参数当前仅区分语义（弹层四段全量展示），留作按视图段落定位的扩展点</b>」——它被调用时确实带着表 id（<code>headMenuPicker</code> 传 <code>m.page</code>），只是数据源没用它。<b>也就是说「各表分开」不需要新增 API 面，只需要让 <code>tableDefs</code> 按 <code>page</code> 过滤。</b></p>
+</div>
+
+<h3>2.3 会被触碰的测试面</h3>
+<table>
+  <thead><tr><th>文件</th><th>依赖形态</th><th>重设计后的影响</th></tr></thead>
+  <tbody>
+    <tr><td class="r">e2e/column-prefs.spec.mjs</td><td><b>按 <code>.col-menu-item</code> 全局下标取项</b>（如 <code>items[3]</code> / <code>items[5]</code>）+ 按「分组标题 + 标签」XPath 定位</td><td class="bad">全局下标会因作用域收敛而整体移位 —— 主要脆弱点，需改为「分组 + 标签」定位</td></tr>
+    <tr><td class="r">e2e/drawer-tables.spec.mjs</td><td>断言主选择器里出现「Tracker 列表 / 用户列表 / 文件列表」三个抽屉分组</td><td class="bad">作用域收敛后必须改为「抽屉表头右键可恢复」</td></tr>
+    <tr><td class="r">tests/test_webui_static_skins.py</td><td>正则钉 <code>columns.js</code> 的 <code>tableDefs()</code> computed 形态</td><td class="warn">形态守阵需同轮改版</td></tr>
+    <tr><td class="r">tests/test_web_shortcuts.py</td><td><code>("col-picker", "colMenuOpen")</code> 键位映射</td><td class="mut">若按钮语义变化需同步</td></tr>
+  </tbody>
+</table>
+
+<h3>2.4 持久化层（重设计不触碰）</h3>
+<p>列状态走<b>双轨模型</b>：意图态（<code>colHidden</code> / <code>colOrder</code> / <code>colW</code>）是唯一持久化对象，经唯一漏斗 <code>persistPage</code> 按 <code>v5</code> 页子树 RMW 落盘；生效态（<code>colWidths</code>）永不落盘。重设计只改「UI 呈现 + 数据源过滤」，<b>不动存储结构，因此不升版本</b>（符合 <code>pitfalls/web-ui/columns-persist.md</code> 的判据）。</p>
+</section>
+
+<section id="s3">
+<h2><span class="secno">3</span>根因分析</h2>
+<hr class="sec-rule">
+<p>「杂乱」是三条结构性成因叠加的结果，缺一条都不至于如此：</p>
+<div class="card">
+  <div class="t">成因一 · 作用域错配（主因）</div>
+  <p style="margin-bottom:0">选择器的数据源是 <code>tableDefs</code>（<code>ALL_TABLE_PAGES</code> 全量），作用域 = 「整个应用的全部表」。但用户此刻面对的是「一张表」。在辅种页点「列」，看到的是 107 项，其中 86 项（明细表 28 + 种子页 28 + 追剧视图 11 + 抽屉 19）与屏幕上的任何东西都无关 —— 用户必须先在脑子里做一次「这些跟我现在看的东西有什么关系」的映射，这本身就是负担。</p>
+</div>
+<div class="card">
+  <div class="t">成因二 · 无检索 / 分组不可折叠</div>
+  <p style="margin-bottom:0">107 项线性平铺，只有 7 个<b>不可折叠</b>的标题分隔（<code>.col-menu-title</code> 只是视觉分隔，无交互）。要勾「种子页 · 保存路径」，需从弹层顶部滚动到中部再逐行找。业界在超过约 10–15 项时普遍提供检索框，这里没有。</p>
+</div>
+<div class="card">
+  <div class="t">成因三 · 无状态提示</div>
+  <p style="margin-bottom:0">勾选项不区分「默认隐藏 / 用户隐藏 / 必显（<code>locked</code>）」，也不显示「当前可见 N / 共 M」。用户无法一眼看出「我改了哪些」和「这张表一共几列」，进一步放大了「找不到」的感觉。</p>
+</div>
+<div class="card warn">
+  <div class="t">补充 · 「表格太多」的另一半来自列本身</div>
+  <p style="margin-bottom:0">用户原话是「表格太多了」——除了表多，<b>列也多</b>：种子页 28 列默认全可见（§1 附带发现）。即使选择器改得再好，表体本身拥挤的体感也需要单独处理（本报告不改）。</p>
+</div>
+</section>
+
+<section id="s4">
+<h2><span class="secno">4</span>业界成熟方案调研</h2>
+<hr class="sec-rule">
+<p>把主流数据表格/表格型产品的「列管理」抽象，可归为 <b>6 类模式</b>。每类给出代表产品、特性清单与对本项目的适配判断。</p>
+
+<h3>模式 A · 工具侧栏（Tool Panel）</h3>
+<p><b>代表：</b>AG Grid <em>Columns Tool Panel</em>、Grafana 表格面板 <em>Fields</em> 页、Notion 视图属性面板。</p>
+<ul>
+  <li>常驻或可开关的<b>侧栏</b>，按用途分节（AG Grid：Columns / Row Groups / Values / Pivot / Column Labels），每节可展开折叠；</li>
+  <li>顶部<b>检索框</b>（对列名与分组名过滤）；</li>
+  <li>支持<b>拖拽重排</b>、全选/清空、列分组树（父级三态勾选）；</li>
+  <li>与「表格是页面主体」不抢焦点，可常驻。</li>
+</ul>
+<p><b>优点：</b>空间充足，能同时容纳检索/分组/拖序/全选，是「大列表」场景的最强形态。<br>
+<b>缺点：</b>占宽（AG Grid 默认约 250px）；本项目主内容区已有 <code>.layout</code> 两栏语义 + 吸底抽屉（见 <code>pitfalls/web-ui/dock-panel.md</code>），再插一个侧栏会挤压布局，且三皮肤需成对改，窄屏退化成本高。<br>
+<b>适配：<span class="warn">中</span></b>——适合作为「完整模式」的远期选项，不适合本期。</p>
+
+<h3>模式 B · 弹层复选（Dropdown + Checkbox）</h3>
+<p><b>代表：</b>TanStack Table（headless）+ shadcn/ui <em>Data Table with column visibility</em>、MUI X Data Grid <em>Column visibility panel</em>、Ant Design 生态的「列设置」、DataTables <code>colvis</code>。</p>
+<ul>
+  <li>工具栏按钮 → 弹层，内含<b>复选列表</b>（TanStack/shadcn 即 DropdownMenu + CheckboxItem）；</li>
+  <li>MUI X 面板含：<b>检索框</b>、勾选列表、<code>hideable:false</code> 的禁改项、<b>重置按钮</b>、<code>toggleAllMode: 'filteredOnly'</code>（检索态下「全选」只作用于过滤结果）；</li>
+  <li>DataTables 的 <code>colvis</code>：下拉 + 复选 + <code>colvisGroup</code>（按分组批量显隐）+ Show all / Show none；</li>
+  <li>AntD 生态的「列设置」普遍是 Popover + 复选 +（第三方）拖拽排序 + 分组树。</li>
+</ul>
+<p><b>优点：</b>与现状形态最接近，改造成本最低；可在原位加检索/分组/折叠/全选；不占布局。<br>
+<b>缺点：</b>300px 宽弹层塞「检索 + 7 组折叠 + 107 项」仍偏挤；高度受视口限制。<br>
+<b>适配：<span class="ok">高</span></b>——这就是「方案 ①」的正确实现形态。</p>
+
+<h3>模式 C · 模态列选器（Modal Column Chooser）</h3>
+<p><b>代表：</b>AG Grid <em>Column Chooser</em>（dialog 版）、DevExtreme <code>columnChooser</code>、Syncfusion <em>Column Chooser</em>。</p>
+<ul>
+  <li>独立弹窗/覆盖层，含标题与<b>列检索 UI</b>（DevExtreme <code>allowSearch</code>，官方在「隐藏列较多」时推荐开启）；</li>
+  <li>DevExtreme 两种模式：<code>mode: 'dragAndDrop'</code>（拖列头进出）与 <code>'select'</code>（勾选，面向触屏）；</li>
+  <li>两个独立开关：<code>allowHiding:false</code>（永不可隐藏）与 <code>showInColumnChooser:false</code>（隐藏后不出现在列选器里）；</li>
+  <li>程序化 API：<code>showColumnChooser()</code> / <code>hideColumnChooser()</code>。</li>
+</ul>
+<p><b>优点：</b>空间充足，可放检索 + 分组 + 拖序 + 全选 + 重置，与主布局解耦。<br>
+<b>缺点：</b>模态遮罩打断「边看表边调列」的即时反馈；本项目已有大量浮层（<code>ctx-menu</code> / <code>pop-menu</code> / <code>col-menu</code>），再加模态要处理层级与 Esc 栈（见 <code>overlays</code> / <code>dock-panel</code> 坑档）。<br>
+<b>适配：<span class="warn">中</span></b>——不推荐（与既有浮层体系冲突）。</p>
+
+<h3>模式 D · 表头右键（Header Context Menu）</h3>
+<p><b>代表：</b>原生 OS 惯例（macOS Finder / Windows 资源管理器：右键列头 → 列清单勾选）、AG Grid 表头菜单（Pin / Autosize / Hide / Reset）、MUI X 列菜单的「Manage columns」。</p>
+<ul>
+  <li>在<b>列头</b>上右键 → 菜单里给出「隐藏本列 / 列选择器」等入口；</li>
+  <li>语义最贴：「我就在这一列上，我要动这一列」；</li>
+  <li>本项目<b>已实现</b>：<code>openHeadMenu</code> → 隐藏本列 / 按本列排序 / 时间口径 / 显示隐藏列…</li>
+</ul>
+<p><b>优点：</b>零占位、语义最贴、代码已在线上。<br>
+<b>缺点：</b><b>可发现性最差</b>（无视觉提示，新用户不知道能右键）；不适合「一次性配置多列」的长任务。<br>
+<b>适配：<span class="ok">高</span></b>——作为<b>主入口</b>，但必须配可发现性兜底（顶栏按钮）。</p>
+
+<h3>模式 E · 按视图保存（Saved Views / Presets）</h3>
+<p><b>代表：</b>Airtable / Notion（字段显隐是<b>视图级配置</b>，可保存多个视图）、Grafana panel field overrides、Excel「自定义视图」（列宽/显隐/筛选的命名快照）、Linear / Jira 的「保存视图」。</p>
+<ul>
+  <li>一次配置复用；多场景（如「下载视图」「保种视图」）切换；</li>
+  <li>列配置随「视图」这一对象走，而不是随「表」走。</li>
+</ul>
+<p><b>优点：</b>复用性强，多场景友好。<br>
+<b>缺点：</b>引入「视图」这一<b>新维度</b>（当前是「每张表一份偏好」，见 v5 存储）；实现与心智成本最高。<br>
+<b>适配：<span class="mut">低-中</span></b>——可作为<b>远期</b>演进，本期不做。</p>
+
+<h3>模式 F · 命令面板 / 模糊检索（Command Palette）</h3>
+<p><b>代表：</b>VS Code / Linear 的 ⌘K、各类「快速切换列」实现。</p>
+<ul>
+  <li>输入列名即过滤并可直接切换；</li>
+  <li>107 项时检索最快，键盘流友好。</li>
+</ul>
+<p><b>优点：</b>检索效率最高。<br>
+<b>缺点：</b>纯键盘交互，与「鼠标勾选」的表格用户习惯有距离，仍需一个可视化列表兜底。<br>
+<b>适配：<span class="warn">中</span></b>——作为<b>增强</b>：在弹层顶部加一个检索框即可拿到约 80% 的收益，无需另做面板。</p>
+
+<figure>
+<svg viewBox="0 0 680 250" width="100%" role="img" aria-label="现状与推荐形态的弹层信息架构对比">
+  <rect x="0" y="0" width="680" height="250" fill="none"/>
+  <!-- 现状 -->
+  <text x="16" y="22" fill="#e2705e" font-family="Consolas,monospace" font-size="12">现状 · 单一弹层 / 107 项平铺</text>
+  <rect x="16" y="34" width="300" height="196" rx="8" fill="#151b22" stroke="rgba(255,255,255,.09)"/>
+  <rect x="28" y="46" width="276" height="14" rx="3" fill="rgba(226,112,94,.18)"/>
+  <text x="34" y="57" fill="#8b949c" font-size="9" font-family="Consolas,monospace">辅种表 (21)</text>
+  <g fill="rgba(255,255,255,.10)">
+    <rect x="28" y="66" width="276" height="9" rx="2"/><rect x="28" y="79" width="276" height="9" rx="2"/>
+    <rect x="28" y="92" width="276" height="9" rx="2"/><rect x="28" y="105" width="276" height="9" rx="2"/>
+  </g>
+  <text x="34" y="131" fill="#8b949c" font-size="9" font-family="Consolas,monospace">明细表 (28)</text>
+  <text x="34" y="152" fill="#8b949c" font-size="9" font-family="Consolas,monospace">种子页 (28)</text>
+  <text x="34" y="173" fill="#8b949c" font-size="9" font-family="Consolas,monospace">追剧视图 (11)</text>
+  <text x="34" y="194" fill="#8b949c" font-size="9" font-family="Consolas,monospace">Tracker 列表 (6)</text>
+  <text x="34" y="215" fill="#8b949c" font-size="9" font-family="Consolas,monospace">用户列表 (9) · 文件列表 (4)</text>
+  <text x="34" y="243" fill="#e2705e" font-size="9" font-family="Consolas,monospace">无检索 / 不可折叠 / 跨表混列</text>
+  <!-- 箭头 -->
+  <text x="330" y="140" fill="#59b3a2" font-size="22" font-family="Consolas,monospace">-&gt;</text>
+  <!-- 推荐 -->
+  <text x="372" y="22" fill="#59b3a2" font-family="Consolas,monospace" font-size="12">推荐 · 作用域收敛 + 检索 + 分类折叠</text>
+  <rect x="372" y="34" width="292" height="196" rx="8" fill="#151b22" stroke="rgba(89,179,162,.35)"/>
+  <rect x="384" y="46" width="268" height="16" rx="4" fill="rgba(89,179,162,.12)" stroke="rgba(89,179,162,.35)"/>
+  <text x="392" y="58" fill="#59b3a2" font-size="9" font-family="Consolas,monospace">搜索列名…</text>
+  <text x="392" y="78" fill="#d9dee3" font-size="9.5" font-family="Consolas,monospace">当前表 · 辅种表</text>
+  <g>
+    <rect x="384" y="86" width="268" height="14" rx="3" fill="rgba(255,255,255,.06)"/>
+    <text x="392" y="96" fill="#d9dee3" font-size="9" font-family="Consolas,monospace">v 标识 · 名称</text>
+    <text x="630" y="96" fill="#8b949c" font-size="9" font-family="Consolas,monospace">2/2</text>
+    <rect x="384" y="103" width="268" height="14" rx="3" fill="rgba(255,255,255,.06)"/>
+    <text x="392" y="113" fill="#d9dee3" font-size="9" font-family="Consolas,monospace">v 速度 · 下载/上传</text>
+    <text x="626" y="113" fill="#8b949c" font-size="9" font-family="Consolas,monospace">2/2</text>
+    <rect x="384" y="120" width="268" height="14" rx="3" fill="rgba(89,179,162,.14)"/>
+    <text x="392" y="130" fill="#59b3a2" font-size="9" font-family="Consolas,monospace">&gt; 体量 · 大小/总大小…</text>
+    <text x="626" y="130" fill="#59b3a2" font-size="9" font-family="Consolas,monospace">3/6</text>
+    <rect x="396" y="137" width="256" height="11" rx="2" fill="rgba(255,255,255,.10)"/>
+    <text x="402" y="146" fill="#8b949c" font-size="8.5" font-family="Consolas,monospace">已下载 / 剩余 / 可用性 / 分享率</text>
+    <rect x="384" y="151" width="268" height="14" rx="3" fill="rgba(255,255,255,.06)"/>
+    <text x="392" y="161" fill="#d9dee3" font-size="9" font-family="Consolas,monospace">&gt; 时间 · 添加于/最近活动…</text>
+    <text x="626" y="161" fill="#8b949c" font-size="9" font-family="Consolas,monospace">5/6</text>
+    <rect x="384" y="168" width="268" height="14" rx="3" fill="rgba(255,255,255,.06)"/>
+    <text x="392" y="178" fill="#d9dee3" font-size="9" font-family="Consolas,monospace">&gt; 站点与标签 · 分类/标签/站点</text>
+    <text x="626" y="178" fill="#8b949c" font-size="9" font-family="Consolas,monospace">3/3</text>
+    <rect x="384" y="185" width="268" height="14" rx="3" fill="rgba(255,255,255,.06)"/>
+    <text x="392" y="195" fill="#d9dee3" font-size="9" font-family="Consolas,monospace">&gt; 计数与诊断 · H&amp;R/站数</text>
+    <text x="626" y="195" fill="#8b949c" font-size="9" font-family="Consolas,monospace">2/2</text>
+  </g>
+  <rect x="384" y="204" width="268" height="18" rx="4" fill="rgba(255,255,255,.05)"/>
+  <text x="392" y="216" fill="#8b949c" font-size="9" font-family="Consolas,monospace">恢复列宽 · 适应窗口 · 重置本表显隐</text>
+  <text x="392" y="240" fill="#59b3a2" font-size="9" font-family="Consolas,monospace">默认展开 6 组 / 21 项 · 检索即过滤</text>
+</svg>
+<figcaption>图 1 · 现状（左：跨表 107 项平铺）与推荐形态（右：作用域收敛到当前表 + 检索 + 按语义族折叠分组）的信息架构对比。示意，非像素稿。</figcaption>
+</figure>
+</section>
+
+<section id="s5">
+<h2><span class="secno">5</span>方案对比矩阵</h2>
+<hr class="sec-rule">
+<p>把 6 类模式放在同一组维度上对比（<span class="ok">●</span> 强 / <span class="warn">◐</span> 中 / <span class="mut">○</span> 弱），并给出对本项目的适配结论。</p>
+<table>
+  <thead>
+    <tr>
+      <th>模式</th><th class="c">可发现性</th><th class="c">空间效率</th><th class="c">承载 107 项</th><th class="c">检索</th><th class="c">分组折叠</th><th class="c">作用域契合</th><th class="c">改造成本</th><th class="c">本项目适配</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="r">A 工具侧栏</td><td class="c ok">●</td><td class="c mut">○</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c warn">◐</td><td class="c mut">○（高成本）</td><td class="c warn">中（远期）</td></tr>
+    <tr><td class="r">B 弹层复选</td><td class="c warn">◐</td><td class="c ok">●</td><td class="c warn">◐</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●（低成本）</td><td class="c ok">高（本期）</td></tr>
+    <tr><td class="r">C 模态列选器</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c warn">◐</td><td class="c warn">◐</td><td class="c warn">中（不推荐）</td></tr>
+    <tr><td class="r">D 表头右键</td><td class="c mut">○（最差）</td><td class="c ok">●</td><td class="c warn">◐</td><td class="c mut">○</td><td class="c mut">○</td><td class="c ok">●</td><td class="c ok">●（已有）</td><td class="c ok">高（主入口）</td></tr>
+    <tr><td class="r">E 按视图保存</td><td class="c warn">◐</td><td class="c ok">●</td><td class="c ok">●</td><td class="c warn">◐</td><td class="c ok">●</td><td class="c ok">●</td><td class="c mut">○（新维度）</td><td class="c mut">低-中（远期）</td></tr>
+    <tr><td class="r">F 命令面板</td><td class="c mut">○</td><td class="c ok">●</td><td class="c ok">●</td><td class="c ok">●</td><td class="c mut">○</td><td class="c warn">◐</td><td class="c warn">◐</td><td class="c warn">中（增强）</td></tr>
+  </tbody>
+</table>
+<div class="card">
+  <div class="t">矩阵读出的三条结论</div>
+  <ol style="margin-bottom:0">
+    <li><b>没有任何单一模式在「可发现性 + 作用域契合 + 低成本」三项同时满分。</b>D 的「作用域契合」与「已有实现」是独一档优势，短板恰好是 B 的强项（可发现性）；B 的短板是 D 的强项。→ <b>组合，而非二选一。</b></li>
+    <li><b>「作用域契合」这一列才是本题的胜负手</b>（§3 成因一）。B/C 都在「作用域契合」上要么靠实现（B 可收敛）要么偏弱（C 偏全局），只有 D 天然正确。</li>
+    <li><b>检索与分组折叠是「承载 107 项」的必需品</b>，无论选哪种容器：AG Grid / MUI X / DevExtreme / DataTables 全部内置其中之一或全部。</li>
+  </ol>
+</div>
+</section>
+
+<section id="s6">
+<h2><span class="secno">6</span>两个初步方案评估</h2>
+<hr class="sec-rule">
+
+<h3>6.1 方案 ①：保留「列」按钮 + 分类 + 折叠</h3>
+<table>
+  <thead><tr><th>维度</th><th>评估</th></tr></thead>
+  <tbody>
+    <tr><td class="r">做法</td><td>把 7 个 <code>.col-menu-title</code> 从「视觉分隔」升级为「可折叠分组头」，默认只展开当前视图对应的那一组。</td></tr>
+    <tr><td class="r">收益</td><td>默认展开项从 107 → 21（辅种页），首屏噪音显著下降；改动面小（模板 + CSS + 一条 <code>colGroupOpen</code> 状态）。</td></tr>
+    <tr><td class="r">局限</td><td>
+      <span class="bad">①</span> 作用域仍是全应用（其它 6 组仍在，只是收起）；<br>
+      <span class="bad">②</span> 仍无检索；<br>
+      <span class="bad">③</span> 「我在这张表，为什么要看别的表」这层错配没解；<br>
+      <span class="bad">④</span> <code>page</code> 参数继续闲置。
+    </td></tr>
+    <tr><td class="r">结论</td><td class="warn"><b>必要但不充分</b>——是最终方案的组成部分（「肉」），不是完整方案。</td></tr>
+  </tbody>
+</table>
+
+<h3>6.2 方案 ②：右键 + 弹窗，各表分开</h3>
+<table>
+  <thead><tr><th>维度</th><th>评估</th></tr></thead>
+  <tbody>
+    <tr><td class="r">做法</td><td>表头右键 → 弹层只列<b>本表</b>的列（作用域 = 被右键的表）。</td></tr>
+    <tr><td class="r">收益</td><td>作用域正确（21 项而非 107）；语义最贴；<b>代码地基已有 70%</b>（<code>page</code> 参数 + <code>openHeadMenu</code> 已在线）。</td></tr>
+    <tr><td class="r">局限</td><td>
+      <span class="warn">①</span> 可发现性差（右键无提示，新用户不知道）；<br>
+      <span class="warn">②</span> 顶栏「列」按钮若仍是「全表」，两条入口语义不一致；<br>
+      <span class="warn">③</span> 抽屉表/变体表的「恢复入口」不变式必须保住（见 §7.4）。
+    </td></tr>
+    <tr><td class="r">结论</td><td class="ok"><b>方向正确</b>——作为骨架（「骨」）。</td></tr>
+  </tbody>
+</table>
+
+<div class="card good">
+  <div class="t">为什么不是「二选一」</div>
+  <p style="margin-bottom:0">方案 ① 解「弹层内怎么摆」，方案 ② 解「弹层该装什么」。两者是<b>正交</b>的两个决策：先定作用域（②），再定弹层内信息架构（①）。把它们合成一个方案，才能同时拿下「作用域正确」与「大列表可导航」。</p>
+</div>
+</section>
+
+<section id="s7">
+<h2><span class="secno">7</span>推荐方案</h2>
+<hr class="sec-rule">
+<p><b>一句话：作用域收敛到当前表 + 双入口同语义 + 弹层内检索与分类折叠 + 抽屉/变体表的恢复入口随作用域一起迁移。持久化层零改动。</b></p>
+
+<h3>7.1 作用域单点：让闲置的 <code>page</code> 参数上岗</h3>
+<p>弹层数据源从 <code>tableDefs</code>（全表）改为按 <code>page</code> 过滤：新增 <code>tableDefFor(page)</code>（或 <code>tableDefsFor(page)</code>），返回该表一项。<code>openColMenuAt(ev, page)</code> 的 <code>page</code> 从「仅区分语义」变为「数据源过滤键」。<b>零新增 API 面</b>——调用方本就已传 <code>page</code>。</p>
+
+<h3>7.2 双入口同语义</h3>
+<table>
+  <thead><tr><th>入口</th><th>作用域</th><th>可发现性角色</th></tr></thead>
+  <tbody>
+    <tr><td class="r">表头右键（主）</td><td>被右键的那张表</td><td>快捷、语义最贴；现有 <code>openHeadMenu</code> → 「显示/隐藏列…」</td></tr>
+    <tr><td class="r">顶栏「列」按钮（备选）</td><td>当前视图的表（<code>VIEW_TABLE[viewMode]</code>）</td><td>消除「不知道能右键」的盲区；建议按钮文案标注当前表名，如「列 · 辅种表」</td></tr>
+  </tbody>
+</table>
+<p class="small">两条入口打开的是同一个弹层、同一份数据源 —— 不会出现两套语义。注意顶栏按钮当前只在 <code>page === 'groups'</code> 渲染；若希望种子页/追剧页也有可发现入口，需同步放开渲染条件（属可选增强）。</p>
+
+<h3>7.3 弹层内信息架构（方案 ① 的正确实现）</h3>
+<ul>
+  <li><b>顶部检索框</b>：按列 label 过滤，命中即展开所在分组；「全选」只作用于过滤结果（MUI X 的 <code>toggleAllMode:'filteredOnly'</code> 语义）。</li>
+  <li><b>分类折叠分组</b>：分组维度建议取<b>列语义族</b>（标识 / 速度 / 体量 / 时间 / 站点与标签 / 计数与诊断 / 操作），而<b>不是「按表」</b>——作用域已收敛到单表，再按表分组就退化成「一组」，折叠失去意义。</li>
+  <li><b>组头三态</b>：显示「可见 / 共」计数（如 <code>3/6</code>）+ 三态勾选（组内全显 / 全隐 / 混合）。</li>
+  <li><b>每项状态提示</b>：区分「必显（<code>locked</code>，置灰不可点）/ 用户隐藏 / 默认隐藏」。</li>
+  <li><b>底部动作</b>：保留「恢复默认列宽 / 适应窗口宽度」（现有），新增「<b>重置本表列显隐</b>」（语义 = 清空本表 <code>colHidden[page]</code>）。</li>
+</ul>
+
+<h3>7.4 「全表」恢复入口（保住既有不变式）</h3>
+<div class="card warn">
+  <div class="t">必须保住的一条不变式</div>
+  <p style="margin-bottom:0">现行「全表弹层」是 <b>2026-10-11 W2 的有意决策</b>（计划 26-10-11-2106）：抽屉三表头右键的「隐藏本列」是<b>不可逆</b>操作，把抽屉表列进主选择器，是为了给它们留一条恢复入口（否则只剩改 localStorage）。<b>任何作用域收敛都必须重新提供这条恢复路径。</b></p>
+</div>
+<p>解法：把恢复入口随作用域一起迁到<b>各自表头的右键菜单</b>——抽屉表头本就已走同一条 <code>openHeadMenu</code>（见 <code>app.js</code> 中 <code>DRAWER_TABLE_DEFS</code> 的 <code>headRef:null</code> + <code>columns.js::_headEl</code> 的 DOM 兜底），所以「在谁的头上右键，就在谁的菜单里恢复」天然成立，且比现在更贴。对<b>无表头</b>的变体（如 Tracker 04/05、内容 10，列头被 CSS 隐藏，源码已记「拖宽/右键隐藏/列偏好不适用」），本来就没有右键隐藏能力，也就无需恢复入口 —— 口径自洽。</p>
+
+<h3>7.5 不动的部分</h3>
+<p>列宽拖拽、拖序重排、双击自适应、列对齐注入（<code>colAlignCss</code>）、行窗口化、<code>persistPage</code> 唯一漏斗与 v5 双轨存储 —— <b>全部不动</b>。</p>
+</section>
+
+<section id="s8">
+<h2><span class="secno">8</span>落地拆解</h2>
+<hr class="sec-rule">
+<p>建议按四波推进，每波可独立验收：</p>
+<table>
+  <thead><tr><th>波次</th><th>内容</th><th>触碰点</th><th>验收</th></tr></thead>
+  <tbody>
+    <tr><td class="r">W1<br>数据源收敛</td><td><code>tableDefs</code> → 增加 <code>tableDefFor(page)</code>；<code>openColMenuAt</code> 消费 <code>page</code>；<code>toggleColMenu</code> 传当前表 id</td><td><code>columns.js</code>、<code>topbar.html</code></td><td>弹层只出现当前表一项；<code>page</code> 参数不再是死参</td></tr>
+    <tr><td class="r">W2<br>弹层 IA</td><td>检索框 + 分类折叠 + 组头计数 + 三态 + 「重置本表显隐」；分组元数据单点（列定义加 <code>group</code> 字段或一张映射表）</td><td><code>topbar.html</code>、<code>columns.js</code>、三皮肤 CSS</td><td>默认展开项 ≤ 25；检索可过滤；分组可折叠</td></tr>
+    <tr><td class="r">W3<br>入口统一</td><td>顶栏按钮标注当前表名；<code>headMenuPicker</code> 传 <code>page</code>（已传）；抽屉/变体表头右键复用同一弹层</td><td><code>topbar.html</code>、<code>menu.js</code></td><td>两入口同弹层同数据源；抽屉表头右键可恢复其隐藏列</td></tr>
+    <tr><td class="r">W4<br>测试迁移与收口</td><td><code>e2e/column-prefs.spec.mjs</code> 全局下标取项改「分组 + 标签」定位；<code>e2e/drawer-tables.spec.mjs</code> 的「主选择器含抽屉三组」断言改为「抽屉表头右键可恢复」；<code>tableDefs</code> 形态守阵同步</td><td><code>e2e/</code>、<code>tests/test_webui_static_skins.py</code>、<code>tests/test_web_shortcuts.py</code></td><td>全量 e2e 与 <code>test.full</code> 绿；无下标型脆弱断言残留</td></tr>
+  </tbody>
+</table>
+<p class="small">分组元数据建议做成<b>单点映射表</b>（一个 <code>key → 语义族</code> 的表，或给列定义加 <code>group</code> 字段），不要散在模板里逐项写死 —— 与项目「单一写点」口径一致。</p>
+</section>
+
+<section id="s9">
+<h2><span class="secno">9</span>风险与边界</h2>
+<hr class="sec-rule">
+<table>
+  <thead><tr><th>风险</th><th>说明</th><th>对策</th></tr></thead>
+  <tbody>
+    <tr><td class="r">可发现性</td><td>右键入口无视觉提示，功能可能被埋</td><td>保留顶栏「列」按钮作为备选入口（作用域 = 当前表）</td></tr>
+    <tr><td class="r">抽屉/变体表恢复入口</td><td>作用域收敛会移走它们的列恢复入口（W2 不变式）</td><td>迁到各自表头右键菜单；无表头的变体本无此能力，口径自洽</td></tr>
+    <tr><td class="r">测试面脆弱</td><td><code>e2e/column-prefs.spec.mjs</code> 依赖 <code>.col-menu-item</code> 全局下标</td><td>W4 统一改为「分组 + 标签」定位；避免新增下标型断言</td></tr>
+    <tr><td class="r">分组维度选择</td><td>按「列语义族」分组需为 107 个列定义归族</td><td>用单点映射表；归族口径需一次拍板（可先按现有注释里的语义段落归）</td></tr>
+    <tr><td class="r">顶栏按钮渲染条件</td><td>当前仅 <code>page === 'groups'</code> 渲染，种子页/追剧页无按钮入口</td><td>若要全面可发现，需放开渲染条件（可选增强，单独拍板）</td></tr>
+  </tbody>
+</table>
+<div class="card">
+  <div class="t">明确不做（本期）</div>
+  <ul style="margin-bottom:0">
+    <li><b>模式 E「保存视图」</b>：引入「视图」新维度，实现与心智成本最高，列为远期演进。</li>
+    <li><b>模式 C 模态列选器</b>：与既有浮层体系（<code>ctx-menu</code>/<code>pop-menu</code>/<code>col-menu</code>）的层级与 Esc 栈冲突。</li>
+    <li><b>种子页默认隐藏漂移的修复</b>：属范围外，本报告只取证；是否修/入池需另行确认。</li>
+  </ul>
+</div>
+</section>
+
+<section id="s10">
+<h2><span class="secno">10</span>参考资料</h2>
+<hr class="sec-rule">
+<ul class="src">
+  <li>AG Grid · Columns Tool Panel — <a href="https://www.ag-grid.com/javascript-data-grid/tool-panel-columns/">ag-grid.com/javascript-data-grid/tool-panel-columns/</a></li>
+  <li>AG Grid · Column Chooser（dialog 版，含 API / toolbar / 表头菜单入口）— <a href="https://www.ag-grid.com/vue-data-grid/column-chooser.md">ag-grid.com/vue-data-grid/column-chooser.md</a></li>
+  <li>MUI X Data Grid · Column visibility（工具栏 Columns 面板 / 列菜单 Manage columns / 检索 / 重置 / <code>hideable</code> / <code>toggleAllMode</code>）— <a href="https://mui.com/x/react-data-grid/column-visibility/">mui.com/x/react-data-grid/column-visibility/</a></li>
+  <li>DevExtreme DataGrid · Column Chooser（<code>mode: dragAndDrop|select</code> / <code>allowSearch</code> / <code>allowHiding</code> / <code>showInColumnChooser</code>）— <a href="https://js.devexpress.com/Angular/Documentation/Guide/UI_Components/datagrid/Columns/Column_Chooser/">js.devexpress.com/.../Column_Chooser/</a></li>
+  <li>Syncfusion Data Grid · Column Chooser and Column Menu — <a href="https://www.syncfusion.com/data-grid/column-chooser-menu">syncfusion.com/data-grid/column-chooser-menu</a></li>
+  <li>TanStack Table / shadcn/ui · Data Table with column visibility（DropdownMenu + CheckboxItem）— <a href="https://www.shadcn.io/examples/data-table-with-column-visibility.mdx">shadcn.io/examples/data-table-with-column-visibility.mdx</a></li>
+  <li>Pencil &amp; Paper · UX pattern analysis: enterprise data tables — <a href="https://www.pencilandpaper.io/articles/ux-pattern-analysis-enterprise-data-tables">pencilandpaper.io/articles/ux-pattern-analysis-enterprise-data-tables</a></li>
+  <li>UX Patterns for Developers · Data Table pattern — <a href="https://uxpatterns.dev/patterns/data-display/table">uxpatterns.dev/patterns/data-display/table</a></li>
+  <li>SaaS Data Table &amp; List View UX Patterns — <a href="https://www.saasui.design/blog/saas-data-table-ux-patterns">saasui.design/blog/saas-data-table-ux-patterns</a></li>
+  <li>Notion API · View（视图级 filter / sort / layout 配置）— <a href="https://developers.notion.com/reference/view">developers.notion.com/reference/view</a></li>
+</ul>
+<h4>仓内证据索引</h4>
+<ul class="src">
+  <li><code>src/auto_qb/webui/static/shared/app.js</code> — 列模型（<code>GROUP_COLUMNS</code> 等）、表注册表（<code>TABLE_DEFS</code> / <code>DRAWER_TABLE_DEFS</code> / <code>ALL_TABLE_PAGES</code>）、<code>loadColState</code> 播种判据</li>
+  <li><code>src/auto_qb/webui/static/shared/columns.js</code> — 列交互引擎、<code>tableDefs</code> computed、<code>openColMenuAt(ev, page)</code>、<code>persistPage</code> 唯一漏斗</li>
+  <li><code>src/auto_qb/webui/static/shared/tpl/topbar.html</code> — 顶栏「列」按钮与 <code>.col-menu</code> 弹层模板</li>
+  <li><code>src/auto_qb/webui/static/shared/menu.js</code> — <code>openHeadMenu</code> / <code>headMenuPicker</code>（表头右键菜单）</li>
+  <li><code>src/auto_qb/webui/static/shared/tpl/ctx-menus.html</code> — 表头右键菜单模板</li>
+  <li><code>memory-bank/pitfalls/web-ui/columns-persist.md</code> — 列状态持久化与双轨模型铁律</li>
+  <li><code>memory-bank/plans/26-10-11-2106-plan-webui-drawer-refactor.html</code> — 「抽屉表进选择器」的 W2 决策来源</li>
+</ul>
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>

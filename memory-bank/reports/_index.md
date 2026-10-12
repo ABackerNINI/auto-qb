@@ -18,6 +18,7 @@
 
 ## Done
 
+- [26-10-12-1854] [WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)](26-10-12-1854-report-webui-column-picker-redesign.html) — `webui-column-picker`
 - [26-10-11-2017] [批量跳检后批量开始 · UI 与 qB 状态脱节 · 原因分析报告](26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
 - [26-10-10-2237] [WEBUI 全量文案对齐 qB · 排查报告 · auto-qb](26-10-10-2237-report-webui-wording-unify.html) — `webui-wording-unify`
 - [26-10-09-2136] [WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb](26-10-09-2136-report-webui-dialog-keyboard-accessibility.html) — `webui-dialog-keyboard-accessibility`
