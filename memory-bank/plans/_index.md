@@ -155,6 +155,7 @@
 
 ## Superseded
 
+- [26-10-13-0413] [种子状态双写通道重构 · B2 实施计划 — 真值回写 + 显式自写变更发射](26-10-13-0413-plan-seed-state-writeback-truth-emission.html) — `seed-state-writeback`
 - [26-09-30-1751] [计划 · 热重载机制简化: 统一挂载口 vs 保存即重启](26-09-30-1751-plan-hot-reload-simplify.html) — `hot-reload-simplify`
 - [26-09-26-0822] [计划 · WEB UI 键盘快捷键（可自定义）· 可行性分析与实施计划](26-09-26-0822-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-25-2043] [HR 悬停弹窗模板 · T1 档案卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) — `webui-hr-popup-t1`

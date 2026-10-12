@@ -56,7 +56,11 @@ _tick = _sync_line(flush=False) + _task_line()       # 完整一轮; 两线同�
 **分层节拍 (2026-09-19)**: 主循环拆成**两条独立时间线** —— 同步线(`sync_interval`, 默认 1.5s)只刷新状态不跑任务,
 任务线(`main_tick`, 默认 2s)跑任务 + tracker 预取 + 搜索索引。拆开后状态新鲜度不再被任务节拍拖累, 而
 `max_tasks_per_tick` 的**速率语义**(20 个/2s = 10 任务/秒)与每 tick 的 qB 请求预算仍由 `main_tick` 唯一决定。
-取值 1.5s 的依据: qB 自带 WebUI **1500ms** 更新一次, 比 qB 自身数据粒度更快没有意义。
+取值 1.5s 的依据: **qB 服务端的 torrent 状态本身按 `BitTorrent/Session/RefreshInterval` 节流刷新**(默认 1500ms;
+qB 源码 `sessionimpl.cpp:575` 定义 + `:6009-6027` `enqueueRefresh()` 延迟投递 `post_torrent_updates()`, alert 侧
+`:6557/:6736` 自维持循环), 比 qB 自身数据粒度更快没有意义。⚠这是**服务端状态缓存**的粒度, **不是**「qB 自带
+WebUI 的轮询选择」—— 任何客户端(含 `/sync/maindata` 与 `/torrents/info`)都拿不到更细粒度, 调快本侧节拍或用
+info 直查都不改变这一点(evidence: report 26-10-12-2148 §3 R4 的 26-10-13-0441 补证)。
 ❗**不能**退化成"单一 cadence + 任务线在内部按 next_tick_at 门控": 那样任务实际间隔会被循环粒度量化
 (1.5s 循环粒 + 2s 任务间隔 ⇒ 实际 3s 一次), 速率语义失真 —— 等待必须用 `min(两条线的到期时间)` 才能各自精确。
 

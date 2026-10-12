@@ -8,7 +8,8 @@
 <meta name="doc-topic" content="seed-state-writeback">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-12-2148">
-<meta name="doc-updated" content="26-10-12-2315">
+<meta name="doc-updated" content="26-10-13-0441">
+<meta name="doc-refs" content="memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/tasks/26-10-13-backend-seed-state-writeback.md">
 <style>
   :root {
     color-scheme: dark;
@@ -105,6 +106,9 @@
   <div class="metagrid">
     <span>本轮修订: <b>26-10-12-2315</b> —— 用户意向选方案 A，追加「A + 延迟访问（把自写后的同 tick 状态访问延至下一 tick）」变体评估（新增 §4.9）：结构性事实（_tick = sync 线 + task 线，apply_sync 仅一拍开头一次；WEB 命令路径经 P0-5 本已新鲜）、分层可行性（task 线 run_due 单入口重排 / post 相位脏组跳过自愈）、逐项对账（幂等可解；G4/G6 安全闸门是 deferral 唯一不可替代的价值；deferral 不碰快照故不与下轮发射打架）、核心取舍（构造性安全 vs 纪律性安全）与结论（可行且完整，但必要性几乎全压在 G4/G6 ⇒ 推荐局部 deferral + 可选 <code>pending_writes</code> 诚实标记）。§5 裁定补 A 系落地路径；§1 摘要、§6 清单同步。</span>
   </div>
+  <div class="metagrid">
+    <span>本轮修订: <b>26-10-13-0441</b> —— 用户质疑「qB 返回信息并非实时、每 1.5s 才更新一次」并要求回源码确认（qB 源码 <code>D:/Projects/Else/qBittorrent</code>）。<b>确认成立，且比质疑更硬</b>：这不是「qB 自带 WebUI 每 1500ms 轮询」而是 <b>qB 服务端 torrent 状态本身的节流缓存</b>（<code>BitTorrent/Session/RefreshInterval</code>，默认 1500ms；<code>sessionimpl.cpp:575</code> 定义 + <code>:6009-6027</code> <code>enqueueRefresh()</code> 延迟投递，alert 侧 <code>:6557/:6736</code> 自维持循环）。据此：<b>§3 R4 由「异步应用竞态」上修为「默认粒度」并补全证据链</b>；<b>修正 §5 的 B / B′ 两行</b>（「同 tick 新鲜度全保留」在暂停轴上结构性不可得 —— 写后直查 <code>torrents_info</code> 读到的是写前值，写回退化为 no-op）；<b>§5 裁定补记该证据对 B′ 理由的削弱</b>（B′ 的必要件从此只剩发射通道，值层为 best-effort）。<b>§2 取证与 R1/R2/R3/R5/R6 结论不变；原推荐（A 系）不变且被强化。</b>本轮另修正两处归因漂移：<code>systemPatterns/main-loop.md</code> 与 <code>config-reference/keys.md</code> 把该节流误述为「qB 自带 WebUI 1500ms 更新一次」（是服务端粒度，不是 UI 轮询选择）。</span>
+  </div>
 </header>
 
 <!-- ============================================================ 1 -->
@@ -124,7 +128,7 @@
   <tr><th style="width:130px">议题</th><th>结论</th></tr>
   <tr><td>移除可行性</td><td><b>高</b>。单点收口 + 单写线程，无并发竞态；<code>state</code> 不落盘，无迁移面。纯移除的真实代价收敛为：同 tick 幂等门失效（低）+ 冲突判定延迟一轮（低）+ 缺文件停种路径每次事件多一次冗余扫描（低，有界）。§4.2/§4.3 两项经重审<b>不是回归而是收益/语义正确</b>。</td></tr>
   <tr><td>不一致是否真实存在</td><td><b>是</b>，6 类风险面（§3）：值域压平（4 值 vs qB 全枚举）、完成位推断陈旧、隐式吸收无登记、异步应用竞态、全量停种形态零覆盖、失配静默变「外部变化」。</td></tr>
-  <tr><td>推荐路径</td><td><b>用户意向方案 A；A 系推荐形态 = A + 局部 deferral</b>（§4.9）：删回写与合成值（R1-R6 全消），源无关发射天然获得；只对校验类决策（G4/G6 等，消费点可枚举）做局部延迟，收回 A 唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。<b>B′</b>（真值回写 + 显式发射）是「同 tick 全决策新鲜」优先时的替代路径。B 单独<b>不完整</b>：只修值失真，吸收盲点原样保留。</td></tr>
+  <tr><td>推荐路径</td><td><b>用户意向方案 A；A 系推荐形态 = A + 局部 deferral</b>（§4.9）：删回写与合成值（R1-R6 全消），源无关发射天然获得；只对校验类决策（G4/G6 等，消费点可枚举）做局部延迟，收回 A 唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。<b>B′</b>（真值回写 + 显式发射）是「同 tick 全决策新鲜」优先时的替代路径。<b>（26-10-13-0441 补证：这条替代路径的「新鲜度优先」理由已被削弱 —— qB 服务端状态按 <code>RefreshInterval</code> 默认 1500ms 节流，真值回写在写后 ≤1.5s 内读到的常是写前值、退化为 no-op，见 §3 R4。）</b>B 单独<b>不完整</b>：只修值失真，吸收盲点原样保留。</td></tr>
   <tr><td>影响面（若执意 A）</td><td>规则 <code>on_torrent_state_enum_changed</code> 对自有停/起发射（<b>语义正确</b>：自家停种也是真实状态变化，用户规则应可感知；反馈环需显式 external-only 过滤而非静默隐藏）；分组「上传转暂停」检测对自家停种发射（<b>收益</b>：源无关检查；缺文件停种路径仅多一次冗余扫描，有界）；同 tick 幂等门失效（低）；冲突判定延迟一轮（低）；G4/G6 校验闸门陈旧-放行窗口（A 的唯一实质缺口，<b>局部 deferral 收口</b>，§4.9.3）；WebUI 显示延迟 ≤1 tick（低，P0-5 兜底且同 tick 补刷新）。</td></tr>
   <tr><td>测试守阵</td><td>3 条直接守阵钉在「写后同步」契约上（<code>tests/test_actions.py:157/179/210</code>），任何方案都需按新契约重写；其余为权威通道仿真，不受影响。</td></tr>
 </table>
@@ -202,7 +206,7 @@
   </tr>
   <tr>
     <td><b>R4</b></td><td>异步应用竞态（意图当成事实）</td>
-    <td>pause/start 下发后 qB 会话状态并非即时翻转（resume 尤其明显，WebUI 侧专为此建了 <code>truth_pending</code>/<code>TRUTH_RETRY_S</code> 重试机制，<code>qbmanager.py:536-538/568-572</code>；flush 注释原话：<i>「resume 后 qB 要过一会儿才翻状态」</i>）。直接回写在 API 返回后立刻把「意图」当「事实」落进快照，与真值机制并行双轨。同仓库的跳检重加流程刻意不采用回写，而是<b>「决定性时刻直查真值」</b>（<code>ops_mod.py:791-806</code>：用 <code>torrents_info</code> 刚确认的结果 <code>apply_delta</code>）—— 即项目内部已有相反方向的最佳实践。</td>
+    <td>pause/start 下发后 qB 会话状态并非即时翻转（resume 尤其明显，WebUI 侧专为此建了 <code>truth_pending</code>/<code>TRUTH_RETRY_S</code> 重试机制，<code>qbmanager.py:536-538/568-572</code>；flush 注释原话：<i>「resume 后 qB 要过一会儿才翻状态」</i>）。直接回写在 API 返回后立刻把「意图」当「事实」落进快照，与真值机制并行双轨。同仓库的跳检重加流程刻意不采用回写，而是<b>「决定性时刻直查真值」</b>（<code>ops_mod.py:791-806</code>：用 <code>torrents_info</code> 刚确认的结果 <code>apply_delta</code>）—— 即项目内部已有相反方向的最佳实践。<br><b>（26-10-13-0441 补证：这不是边界竞态，而是默认粒度 —— 且它封顶了所有「真值回写」类方案）</b> qB 服务端的 torrent 状态本身<b>节流刷新</b>：<code>BitTorrent/Session/RefreshInterval</code>（默认 1500ms，<code>sessionimpl.cpp:575</code>）经 <code>enqueueRefresh()</code>（<code>:6009-6027</code>）把 <code>post_torrent_updates()</code> <b>延迟</b>投递，alert 侧每轮重挂（<code>:6557/:6736</code>）形成自维持循环。而 <code>TorrentImpl::stop()/start()</code>（<code>torrentimpl.cpp:2014-2060</code>）<b>只翻 <code>m_isStopped</code>、不调 <code>updateState()</code></b>（<code>setAutoManaged</code> 只动 libtorrent flags、<code>handleQueueingModeChanged</code> 不在暂停路径 —— 已逐条排除即时路径），<code>m_state</code> 只在 alert 路径的 <code>updateStatus()</code> 里重算（<code>:2690-2700</code>）；WebAPI 的 <code>state</code> 字段取自 <code>torrentStateToString(torrent.state())</code>（<code>serialize_torrent.cpp:141</code>），<code>/sync/maindata</code> 同源（<code>synccontroller.cpp:492</code>）。<b>⇒ 写后立即直查 <code>torrents_info</code>（≤1.5s 内）读到的仍是写前值，写回成为 no-op；B/B′ 的「同 tick 新鲜」在暂停轴上结构性不可得</b>（调小 qB 侧间隔可解 —— GUI 高级设置 “Refresh interval”，最小 30ms —— 但本报告不假定会调；用户 26-10-13 明确「暂不考虑改 qB 设置」）。</td>
     <td><span class="badge b-warn">中</span></td>
   </tr>
   <tr>
@@ -351,14 +355,14 @@
     <td><b>B 真值回写</b><br><span class="sm">（单独实施<b>不完整</b>，须配 B′）</span></td>
     <td>保留「写后同步」契约：调完 client 立即 <code>torrents_info(torrent_hashes=hashes)</code>，对返回逐条 <code>apply_delta</code> 写真值（仓库内先例：<code>ops_mod.py:798-805</code>）</td>
     <td>R1/R2/R3/R6 结构性消除（值即 qB 真值，含 queued/forced/checking/moving 全枚举）。R4 收窄为与 sync 通道同级的异步窗口，由已有 <code>truth_pending</code> 重试兜底。R5 可选顺手补上（None 形态退化记日志）</td>
-    <td>同 tick 新鲜度全保留（幂等/视图脏/组脏）；<b>但吸收盲点原样保留</b>——真值与 qB 逐字一致 ⇒ 下一轮无 delta ⇒ 自家停种<b>仍不触发</b>转移扫描与状态事件（§4.2/§4.3 的信号压制未解除）</td>
+    <td><b>（26-10-13-0441 修正）同 tick 新鲜度只在 qB 缓存已前进时成立</b> —— qB 服务端按 <code>RefreshInterval</code> 默认 1500ms 节流，写后直查读到的常为写前值 ⇒ 写回退化为 no-op，暂停轴的「同 tick 新鲜」结构性不可得（§3 R4 补证）；幂等/视图脏/组脏一并按此受限。<b>且吸收盲点原样保留</b>——真值与 qB 逐字一致 ⇒ 下一轮无 delta ⇒ 自家停种<b>仍不触发</b>转移扫描与状态事件（§4.2/§4.3 的信号压制未解除）</td>
     <td>每个停/起动作 +1 次 info 调用（单 hash 与批量均为 1 次，qB 侧廉价）；info 失败 ⇒ 不写 + warning，下轮 sync 校准（fail-closed，对齐 <code>ops_mod.py:798-802</code> 口径）。<code>hashes=None</code> 跳过回写（全量查询太贵）</td>
   </tr>
   <tr>
     <td><b>B′ 真值回写 +<br>显式自写变更发射</b><br><span class="badge b-fix">推荐</span></td>
     <td>B 的全部，外加：动作前捕获 <code>state_enum</code> 登记 <code>pending_self_state: {hash: 动作前基线}</code>；下一轮 <code>transitions</code> 相位与 <code>on_torrent_state_enum_changed</code> 分派对登记 hash <b>用动作前基线强制发射</b>（绕过 <code>prev==cur</code> 静默跳过，<code>rules_mod.py:333</code>）后消费登记</td>
     <td>B 的全部 + 解除信号压制：自有停/起按源无关语义触发缺文件扫描与状态事件</td>
-    <td><b>同 tick 新鲜度 + 源无关发射两者兼得</b></td>
+    <td><b>源无关发射</b>（登记通道，方案自主可控）；「同 tick 新鲜」受 §3 R4 补证约束（qB 服务端节流，非本方案可控）⇒ <b>B′ 的必要件是发射通道，值层降为 best-effort</b>（26-10-13-0441 修正）</td>
     <td>B 的成本 + store 一个 pending 登记（{hash: 基线}，随消费即清，量级 = 每轮停/起动作数）+ 两侧消费点配对修改；需防登记跨失败轮残留（登记在成功发射或轮末兜底清理）</td>
   </tr>
   <tr>
@@ -372,12 +376,12 @@
 
 <div class="box ok">
   <div class="t">可行性裁定（26-10-12-2315 修订）</div>
-  <b>移除可行；三条路径按取舍排序，用户意向 A。</b>26-10-12-2229 追加仓库主人侧裁定：<b>暂停的磁盘风险与来源无关，自家停种同样必须被检查、被事件感知</b>。26-10-12-2315 用户意向选 A，并考察「自写后同 tick 访问延至下一 tick」的 deferral 变体（§4.9 评估：可行且完整）。重排：<b>① A + 局部 deferral（用户意向下的推荐形态）</b> —— 删 <code>_sync_paused_state</code> 与合成值，源无关发射天然获得；只对校验类决策（G4/G5/G6/G7-8 + 决策链 0/1/1.5，消费点可枚举收敛）做局部延迟，收回 G4/G6 陈旧-放行这一 A 的唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。其余面接受 ≤1 tick 滞后——与外部变更完全对称，本就是系统既有工作模式（且最高频的 WEB 命令路径经 P0-5 同 tick 已新鲜）。<b>② B′</b> —— 同 tick 全决策新鲜的替代路径（真值回写 + <code>pending_self_state</code> 显式发射），新鲜度优先时选它。<b>③ B 单独</b> —— 不完整：只修值失真，吸收盲点原样保留。<b>C</b> 定位为 R3 可观测化的可选叠加。
+  <b>移除可行；三条路径按取舍排序，用户意向 A。</b>26-10-12-2229 追加仓库主人侧裁定：<b>暂停的磁盘风险与来源无关，自家停种同样必须被检查、被事件感知</b>。26-10-12-2315 用户意向选 A，并考察「自写后同 tick 访问延至下一 tick」的 deferral 变体（§4.9 评估：可行且完整）。重排：<b>① A + 局部 deferral（用户意向下的推荐形态）</b> —— 删 <code>_sync_paused_state</code> 与合成值，源无关发射天然获得；只对校验类决策（G4/G5/G6/G7-8 + 决策链 0/1/1.5，消费点可枚举收敛）做局部延迟，收回 G4/G6 陈旧-放行这一 A 的唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。其余面接受 ≤1 tick 滞后——与外部变更完全对称，本就是系统既有工作模式（且最高频的 WEB 命令路径经 P0-5 同 tick 已新鲜）。<b>② B′</b> —— 同 tick 全决策新鲜的替代路径（真值回写 + <code>pending_self_state</code> 显式发射），新鲜度优先时选它。<b>③ B 单独</b> —— 不完整：只修值失真，吸收盲点原样保留。<b>C</b> 定位为 R3 可观测化的可选叠加。<br><b>（26-10-13-0441 补记）</b>上述排序不因新证据改变，但 ② 的立论被削弱：B′ 赖以立身的「同 tick 新鲜」在暂停轴上结构性不可得（§3 R4 补证），其相对 ① 的净优势收敛为「值域不被压平 + 快照可推进到 qB 最后一次刷新」；反之 ① 的立论被强化 —— 既然真实「新鲜」在 qB 侧本来就不存在，删掉合成回写不损失真实新鲜度，只损失自造的假新鲜，而 G4/G6 安全窗与 qB 节流无关、由局部 deferral 收回。据此：<b>本报告推荐 ① 的结论保持并加强</b>；若仍走 B′，其必要件只有发射通道，值层应显式标注为 best-effort。
 </div>
 
 <div class="box">
   <div class="t">什么情况下仍选 A / 何时升级（26-10-12-2315 修订）</div>
-  A + 局部 deferral 是语义最干净的形态：快照严格 = 最近一次 sync 的应用结果，转移检测与状态事件天然源无关，无合成值、无跨切面新鲜度不变量。升级到 B′ 的唯一理由是「同 tick 全决策新鲜」成为硬需求（规则密集、校验与动作高频同批交错的场景）；升级到全系统 deferral 的唯一理由是「同 tick 新鲜」且「不接受每动作一次 info 调用」——此时必须把「状态依赖消费方不得对自写 hash 出决策」写成守阵（新消费方未接判据即红），并把该不变量当作长期契约维护。若未来把「快照严格 = sync 应用结果」定为架构不变量（多写线程、快照外供审计），A 系是唯一形态。
+  A + 局部 deferral 是语义最干净的形态：快照严格 = 最近一次 sync 的应用结果，转移检测与状态事件天然源无关，无合成值、无跨切面新鲜度不变量。升级到 B′ 的理由是「同 tick 全决策新鲜」成为硬需求（规则密集、校验与动作高频同批交错的场景）—— <b>但 26-10-13-0441 补证指出该理由在暂停轴上已不可兑现</b>（qB 服务端按 1500ms 节流，真值回写在写后 ≤1.5s 内退化为 no-op），故 B′ 的现实必要性只剩其发射通道（该通道亦可叠加在 A 系之上）；升级到全系统 deferral 的唯一理由是「同 tick 新鲜」且「不接受每动作一次 info 调用」——此时必须把「状态依赖消费方不得对自写 hash 出决策」写成守阵（新消费方未接判据即红），并把该不变量当作长期契约维护。若未来把「快照严格 = sync 应用结果」定为架构不变量（多写线程、快照外供审计），A 系是唯一形态。
 </div>
 
 <!-- ============================================================ 6 -->
@@ -435,11 +439,11 @@
 
 <div class="box">
   <div class="t">本报告不做的事</div>
-  未跑测试基线（本轮零代码改动，无基线数字可记，按口径不手抄既有数字）；未改任何代码；未入池 issue / 未立档 / 未 commit。26-10-12-2229 完成 §4.2/§4.3/§5/§6 的源无关语义改判；26-10-12-2315 按用户意向（选 A）追加 §4.9「A + 延迟访问」变体评估与 A 系落地清单。后续若拍板实施（A 系或 B′），按 plans 工位单独立件（doc-topic 沿用 <code>seed-state-writeback</code> 串联）。
+  未跑测试基线（本轮零代码改动，无基线数字可记，按口径不手抄既有数字）；未改任何代码；未入池 issue / 未立档 / 未 commit。26-10-12-2229 完成 §4.2/§4.3/§5/§6 的源无关语义改判；26-10-12-2315 按用户意向（选 A）追加 §4.9「A + 延迟访问」变体评估与 A 系落地清单。26-10-13-0441 按用户指令回 qB 源码确证服务端状态节流（<code>BitTorrent/Session/RefreshInterval</code> 默认 1500ms），并据此上修 §3 R4、修正 §5 的 B/B′ 行、补记裁定；同时修正 <code>systemPatterns/main-loop.md</code> 与 <code>config-reference/keys.md</code> 的「qB 自带 WebUI 1500ms」归因漂移。后续若拍板实施（A 系或 B′），按 plans 工位单独立件（doc-topic 沿用 <code>seed-state-writeback</code> 串联）——<b>已按 B′ 立件 <code>plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html</code>，因 26-10-13-0441 的 R4 补证证否其值层基础，该计划已置 <code>Superseded</code>；后续若走 A 系，另件立。</b>
 </div>
 
 <div class="foot">
-  auto-qb-clone5 · memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html · doc-type=report · doc-status=Done · doc-added=26-10-12-2148 · doc-updated=26-10-12-2315（2229 源无关语义改判；2315 §4.9 A+延迟访问变体评估）· 行号基于 12033f27
+  auto-qb-clone5 · memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html · doc-type=report · doc-status=Done · doc-added=26-10-12-2148 · doc-updated=26-10-13-0441（2229 源无关语义改判；2315 §4.9 A+延迟访问变体评估；0441 qB 服务端节流补证 —— 上修 §3 R4、修正 §5 B/B′ 行）· 行号基于 12033f27 · 0441 修订于 clone3
 </div>
 
 </div>
