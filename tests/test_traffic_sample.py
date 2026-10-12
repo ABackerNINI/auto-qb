@@ -69,6 +69,9 @@
   未完结小时留累计器; hour 行并入 day 累计器(严格逐级)
 - test_agg_hour_degenerate_equal_interval_matches_v2: dt_i ≡ interval_s 时 hour 行与现行 v2
   等间隔均值公式 round(Σrate/n)(v2 纯活跃桶口径, 内联对照)逐列一致, 且等于 v4_hour_agg 标称输入
+- test_agg_flush_subsecond_hour_rolls_up_without_raise: 亚秒小时桶的日封口(2026-10-13 真机
+  「逐级聚合无有效覆盖」回归)—— 迟到补记重建的小时桶只带亚秒残余覆盖时 cov_s 下限 1,
+  day 封口不再抛异常(修复前 Σcov_s = 0 -> _agg_flush_series 每轮 flush 抛且整批 agg 行丢弃)
 - test_agg_z_n_runs_and_block_gap_vacuum: z 游程槽速率恒 0 + totals 行程快照; n 游程 null 期
   不贡献且清空信用; 新块首 gap 超容差(条件结算) —— 块间 gap = 真空不虚记覆盖
 - test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v4_rollup_agg;
@@ -1398,6 +1401,25 @@ def test_agg_hour_row_dt_weighted_across_hour_boundary(tmp_path):
     assert len(agg.pending[h0 + HOUR_SECONDS]) == 1 and agg.pending[h0 + HOUR_SECONDS][0].dt_s == 5.0
     assert agg.day_epoch == v4_day_epoch(h0) and len(agg.day_hours) == 1  # 严格逐级: hour 并入 day
     assert agg.month_epoch is None and agg.month_days == []
+
+
+def test_agg_flush_subsecond_hour_rolls_up_without_raise(tmp_path):
+    """亚秒小时桶的日封口(2026-10-13 真机「逐级聚合无有效覆盖」回归): 迟到补记重建的
+    小时桶只带跨小时界亚秒残余覆盖时, cov_s 下限 1 让 day 封口不再抛异常 —— 修复前
+    v4_hour_agg 折 0 -> Σcov_s = 0 -> _agg_flush_series 抛 ValueError(且异常在落盘前
+    抛出, 于是每轮 flush 复现、整批 agg 行丢弃); day 行既出, 数值仍按 float cov 加权"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    day1 = int(datetime(2026, 3, 2).timestamp())  # 本地 3 月 2 日 00:00(hour 对齐)
+    r1, r2 = V4Sample(100, 50, 1000, 2000), V4Sample(200, 60, 2000, 3000)
+    mod._agg_feed(key, r1, day1, day1, True, 30.0)  # 块首 r: 开信用(首块无前块上下文)
+    mod._agg_feed(key, r2, day1, day1 + 0.263, False, 30.0)  # 亚秒残余: 只结算 [day1, day1+0.263)
+    assert mod._agg_flush_series(key, now=day1 + 86400 + 600) is True  # 跨本地日 -> hour + day 两行一批
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert parsed.hours == (AggRow("hour", day1, 100, 100, 50, 50, 1000, 2000, 1), )
+    assert parsed.days == (AggRow("day", day1, 100, 100, 50, 50, 1000, 2000, 1), )
+    assert mod._agg_states[key].month_epoch == v4_month_epoch(day1)  # day 行已并入 month 累计器(严格逐级)
 
 
 def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):

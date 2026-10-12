@@ -769,12 +769,19 @@ def parse_v4_agg_text(text: str) -> V4ParsedAgg:
 
 def v4_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     """hour 聚合行(dt 加权, §04.1): avg = round(Σ(rate_i x dt_i) / cov_s),
-    cov_s = min(Σdt_i, HOUR_SECONDS); max 取逐记录最大; totals 取级末快照(末记录);
+    cov_s = min(Σdt_i, HOUR_SECONDS) 且下限 1; max 取逐记录最大; totals 取级末快照(末记录);
     cov_s = 0(无有效覆盖)或空 samples -> ValueError(hour 行只在有覆盖时产出, 调用方
     义务)。dt_i 恒等于 interval_s 时严格退化为现行 _aggregate_bucket 纯活跃桶公式
     (avg = round(Σrate/n)) —— 测试对照钉住。
     !与 v4_rollup_agg 同构双实现(加权量不同: 本函数 dt 加权 vs 逐级 cov 加权),
-    issue 26-10-11-0207 R07/R10 登记不急合 —— 合并需先统一加权量语义。"""
+    issue 26-10-11-0207 R07/R10 登记不急合 —— 合并需先统一加权量语义。
+
+    cov_s 下限 1(§04.1 不变量「行存在即有覆盖」): 小时已封口后迟到的补记会重建该桶并
+    重封, 此时桶内只有跨小时界的亚秒残余覆盖(2026-10-13 真机实测 0.263s), round 把它
+    折成 0 —— 该 hour 行 cov_s = 0 让 day 封口的 v4_rollup_agg 失掉 Σcov_s > 0 前置
+    条件, 抛「逐级聚合无有效覆盖」; 该异常在落盘前抛出, 于是每轮 flush 复现且整批 agg
+    行丢弃。avg 仍按 float cov 加权, 只对落盘/上卷的度量取下限, 亚秒桶偏差 <= 1s(与
+    round 自身 ±0.5s 同阶)。"""
     if not samples:
         raise ValueError("hour 聚合无样本")
     cov = min(sum(s.dt_s for s in samples), float(HOUR_SECONDS))
@@ -790,7 +797,7 @@ def v4_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
         up_max=max(s.up_rate for s in samples),
         dl_total=int(last.dl_total),
         up_total=int(last.up_total),
-        cov_s=int(round(cov)),
+        cov_s=max(1, int(round(cov))),  # 下限 1: 行存在即有覆盖(亚秒残余桶不得折 0, 见 docstring)
     )
 
 
@@ -1107,6 +1114,9 @@ def v4_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
     avg = round(Σ(下级.avg x 下级.cov) / Σcov), max = max(下级.max), totals = 级末快照
     (epoch 最大的下级行), cov = Σ下级.cov。kind 限 {"day","month"}(hour 由 v4_hour_agg
     从记录直聚); children 空或 Σcov <= 0 -> ValueError。
+    Σcov > 0 由生产者保证(hour 下级 cov_s 下限 1 见 v4_hour_agg; 本级 cov_s = int(Σcov)
+    且每个下级 >= 1), 此处只做断言式 fail-fast —— 给 hour 行放宽 cov_s 下限前先想清楚
+    day/month 两侧。
     !与 v4_hour_agg 同构双实现(加权量不同: 逐级 cov 加权 vs dt 加权), 两处互指;
     issue 26-10-11-0207 R07/R10 登记不急合。"""
     if kind not in V4_ROLLUP_KINDS:

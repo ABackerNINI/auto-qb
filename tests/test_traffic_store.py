@@ -27,6 +27,9 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_paths_dates_and_window: 按天目录与路径解析(§06.2)
 - test_v4_agg_roundtrip_and_legacy_8col: agg.dat roundtrip + 8 列旧行兜底 cov_s=3600(防御性保留)
 - test_v4_hour_agg_dt_weighted_degenerate_to_v2: dt 加权 hour 聚合, 等间隔退化公式对照钉住
+- test_v4_hour_agg_subsecond_coverage_floors_cov_to_one: 亚秒覆盖桶 cov_s 下限 1(行存在即有覆盖)——
+  迟到补记重封桶的亚秒残余覆盖不再折 0, hour->day->month 逐级链恒可上卷(2026-10-13 真机
+  「逐级聚合无有效覆盖」回归); 零覆盖(无观测)仍 fail-fast; avg 仍按 float cov 加权
 - test_v4_rollup_strict_level_by_level: 逐级派生 day/month
 - test_v4_format_fail_fast_and_torn_tail: 序列化 fail-fast + 撕裂尾行豁免口径
 
@@ -682,6 +685,30 @@ def test_v4_hour_agg_dt_weighted_degenerate_to_v2():
     # fail-fast: 空样本 / 零覆盖
     with pytest.raises(ValueError):
         v4_hour_agg(h0, ())
+    with pytest.raises(ValueError):
+        v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, 0.0), ))
+
+
+def test_v4_hour_agg_subsecond_coverage_floors_cov_to_one():
+    """亚秒覆盖桶 cov_s 下限 1(§04.1 不变量「行存在即有覆盖」, 2026-10-13 真机
+    「逐级聚合无有效覆盖」回归): 迟到补记重封的桶只带跨小时界亚秒残余覆盖, round 把它
+    折 0 会让 day/month 封口的 v4_rollup_agg 失掉 Σcov_s > 0 前置条件 -> 逐级链恒可
+    上卷; cov == 0(无观测)仍 fail-fast; cov_s 是落盘/上卷的度量, avg 仍按 float cov 加权"""
+    h0 = 36_000
+    tiny = v4_hour_agg(h0, (V4HourSample(100, 50, 1000, 500, 0.263), ))  # 0.263s = 真机实测残余
+    assert tiny.cov_s == 1  # round(0.263) = 0 -> 下限 1 兜住
+    assert (tiny.dl_avg, tiny.up_avg, tiny.dl_total, tiny.up_total) == (100, 50, 1000, 500)
+    # (0, 0.5] 全带内: 0.5 恰在 round 的银行家舍入边界, 同样须为 1
+    assert [v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, dt), )).cov_s for dt in (0.001, 0.263, 0.5)] == [1, 1, 1]
+    # 既有整值形态不受下限影响(不回归已落盘数字)
+    assert v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, 3597.0), )).cov_s == 3597
+    assert v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, 3600.0), )).cov_s == 3600
+    # 逐级链回归(报错路径): Σcov_s 不再为 0 -> day 可上卷, day 行再上卷 month
+    day = v4_rollup_agg("day", 0, (tiny, ))
+    assert (day.cov_s, day.dl_avg, day.dl_total) == (1, 100, 1000)
+    month = v4_rollup_agg("month", 0, (day, ))
+    assert (month.cov_s, month.dl_avg) == (1, 100)
+    # 下限只兜「有覆盖」: 零覆盖(无观测)仍 fail-fast
     with pytest.raises(ValueError):
         v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, 0.0), ))
 
