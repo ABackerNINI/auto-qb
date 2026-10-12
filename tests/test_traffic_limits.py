@@ -29,7 +29,7 @@ from auto_qb.core.traffic_limits import (
     parse_limits_day_text,
 )
 from auto_qb.core.traffic_limits import LimitsCache
-from auto_qb.core.traffic_store import v4_epoch_date_str
+from auto_qb.core.traffic_store import v4_day_epoch, v4_epoch_date_str
 
 
 def _state(up, down):
@@ -174,7 +174,10 @@ def test_recorder_patological_flip_guard(tmp_path, caplog):
     """病态翻转护栏: 单天事件超阈值只告警照记(节流 1h), 数据不删"""
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
-    ts = int(time.time())
+    # 固定同一天内: 循环 ts+i(i 到阈值+30) 跨本地零点即把 _day_events 清零(按天护栏语义,
+    # 生产正确), 2000 阈值永不达 —— 距零点 <约2030s 跑必红。锚当日 00:01(v4_day_epoch 本地口径
+    # 单点, 与 v4_epoch_date_str 一致), 跨度 <86400 恒同日。
+    ts = v4_day_epoch(int(time.time())) + 60
     date = v4_epoch_date_str(ts)
     from auto_qb.core import traffic_limits as tl
 
@@ -196,7 +199,8 @@ def test_recorder_warn_first_fire_on_fresh_boot(tmp_path, caplog, monkeypatch):
 
     monkeypatch.setattr(tl.time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟: < 3600
     data_dir = str(tmp_path)
-    ts = int(time.time())
+    # 固定同一天内(场景 B 病态翻转循环 ts+i 跨零点即把 _day_events 清零, 2000 阈值永不达)
+    ts = v4_day_epoch(int(time.time())) + 60
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
         # 场景 A: 追加失败告警
         rec = tl.SpeedLimitRecorder(data_dir)

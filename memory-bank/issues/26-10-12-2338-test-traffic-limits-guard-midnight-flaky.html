@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-12-2338">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-traffic-limit-history">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-12-0815-webui-traffic-limit-history.md,memory-bank/pitfalls/testing/flaky-midnight-daycount.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发">
 <meta name="issue-summary" content="test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达">
 <title>限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-12-2338-test-traffic-limits-guard-midnight-flaky</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-12 23:38</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,15 @@ guard_ts   = None            # 护栏从未触发
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-12 23:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-13 07:15 — 用户指派认领，状态 <strong>In Progress</strong>（复验仍复现，见下方）</li>
+      <li>2026-10-13 07:22 — 修复落地，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下方）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-10-13 07:15 <strong>仍复现</strong>（时刻相关）：把循环起点 <code>ts</code> 距本地零点 1359s（死窗 offset∈[31,2000]）后 <code>_guard_count</code> 读 <code>day_events=672</code>、<code>超常</code> 告条 <code>False</code> —— 与入池取证 672 一字一致。距零点 30s（edge）day2 仍达 2001 即绿；同日即绿。单文件跑 <code>test.one</code> 现时刻绿（13 passed），全量现时刻绿 —— 现象只在距零点 &lt;约2030s 时段现形，纯时刻运气。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：两条用例把循环起点 <code>ts</code> 锚到当日 00:01 —— <code>ts = v4_day_epoch(int(time.time())) + 60</code>（<code>v4_day_epoch</code> 本地口径单点，与 <code>v4_epoch_date_str</code> 一致），跨度 &lt;86400 恒同日，<code>_day_events</code> 不再跨天清零。两条同改（<code>test_recorder_patological_flip_guard</code> / <code>test_recorder_warn_first_fire_on_fresh_boot</code> 场景 B）。</p>
+    <p><strong>与建议修法改道原因</strong>：建议写 <code>int(time.time()) // 86400 * 86400 + 60</code>（UTC 秒对齐），改道用 <code>v4_day_epoch</code> —— 后者按本地时区（与 <code>v4_epoch_date_str</code> 的 <code>datetime.fromtimestamp</code> 口径）取当日 00:00，前者按 UTC 秒对齐；非 UTC+0 时两者日界不一致，建议形态会把 <code>date = v4_epoch_date_str(ts)</code> 与循环跨天判定错位，在 UTC+8 上距零点 &lt;8h 仍跨天 —— 用仓库现单点 <code>v4_day_epoch</code> 对齐两端口径，避免新 flaky。</p>
+    <p><strong>验证方式</strong>：① <code>test.one tests/test_traffic_limits.py</code> 13 passed；② 时刻无关证 —— 把 <code>time.time()</code> 钉距零点 1359s（死窗）跑两用用例 <code>2 passed</code>（修复前同时刻直读探针 <code>day_events=672</code>、告条 False 即红验锚点）；③ 全量 <code>test.full</code> 全绿，数字见 <code>commands run kb.baseline</code>。</p>
   </section>
 
   <footer>
