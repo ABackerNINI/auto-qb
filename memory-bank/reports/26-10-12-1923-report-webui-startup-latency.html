@@ -8,7 +8,8 @@
 <meta name="doc-topic" content="webui-startup-latency">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-12-1923">
-<meta name="doc-updated" content="26-10-12-1923">
+<meta name="doc-updated" content="26-10-12-2017">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-startup-recovery-on-demand.md">
 <style>
   :root {
     color-scheme: dark;
@@ -459,6 +460,49 @@ PY</code></pre>
   <li><b>数据保留口径</b>：<code>rollup_window: 1000000D</code>（永久保留）是用户有意设定吗？<b>B3（补 raw_window 删除）与 A1（调小 rollup_window）都会改变保留口径</b>，需明确。</li>
   <li><b>本报告与本轮取证产物</b>是否入库（<code>提交</code>）、是否要另立任务档案。</li>
 </ol>
+
+<!-- ============================================================ 10 -->
+<h2><span class="no">10</span>附：为什么启动恢复必须读 raw（不是「打开才读」）</h2>
+
+<p class="lead">本节为 2026-10-12 20:17 追加：讨论中提出「流量图定调一直是按需读取，为什么不打开就完全不用读」，这里把 §7-B1 的口径说全 —— <b>恢复读的不是图表数据，而是写侧聚合链的缺口</b>。</p>
+
+<table>
+  <tr><th>问题</th><th>答案</th></tr>
+  <tr>
+    <td>「按需读取」管的是谁？</td>
+    <td>管<b>图表读侧</b>：打开页签才拉取，只读窗口涉及的天文件（24h ≤2 天，见 <code>webui/server/traffic_qb.py</code> → <code>V4DayCache.read_window</code>），前端关闭后无任何请求路径。这一层<b>已经是按需</b>，本报告与修复都不动它。</td>
+  </tr>
+  <tr>
+    <td>启动恢复读的是什么？</td>
+    <td><b>写侧（采样器）聚合链的缺口</b>：当前小时累计器与当日/当月累计器只存在于内存（<code>_agg_states</code>），进程一停就没了；上次停机时<b>尚未封口的那几个小时</b>的 raw 只落在天文件里 —— 它是唯一幸存来源。恢复 = 用这段 raw 把缺的 hour 行补出来。</td>
+  </tr>
+  <tr>
+    <td>不补会怎样？</td>
+    <td>那几小时<b>永不封口</b> ⇒ hour 行永久缺失 ⇒ day/month 行（<b>只从 hour 行逐级派生，不从 raw 直聚</b>）永久偏小；且 3d/6mo/1y/all 窗口只读 <code>agg.dat</code>，缺口在图上永远看不到补。时间上也等不起：重启后第一次 flush（默认 600s 内必到）就会把残缺累计器封成行，错误当场固化 —— 等不到你打开图表。</td>
+  </tr>
+  <tr>
+    <td>为什么不让「打开图表」触发它？</td>
+    <td>图表读侧是<b>只读契约</b>（读 raw 窗口 + <code>agg.dat</code>，零写入）。让它去补封口 hour 行 = 读路径写盘 ⇒ 破坏「单一写线程」（黄金法则 5）与读侧契约；而且不打开就永不补 ⇒ 不是「暂时看不到」，是<b>永久丢数据</b>。</td>
+  </tr>
+  <tr>
+    <td>那「按需」定调被破坏了吗？</td>
+    <td><b>没有</b> —— §7-B1 把恢复读集收敛为 <code>[agg 水位所在日, 今日]</code>（常态 1 个、跨日界至多 2 个天文件），与 24h 图表<b>同阶、读同一批文件</b>；差别只在<b>触发时机</b>：写侧因「重启后要接着聚合」而读（且只读在途那一段），UI 因「你打开」而读。这正是本报告要修的那一刀。</td>
+  </tr>
+</table>
+
+<div class="box">
+  <div class="t">若要「重启零 raw 读」，只有两条取舍路（都不免费）</div>
+  <ul>
+    <li><b>在途累计器落盘</b>（每次 flush 快照进 <code>state.json</code>）：重启不读 raw，代价是每 flush 写放大 + 与 raw 双份记账；</li>
+    <li><b>接受空洞</b>：在途小时永不封口，hour/day/month 永久缺这一段 —— 主动丢掉本来可恢复的数据（与既有「崩溃窗口 ≤ <code>flush_interval</code> 丢样本」不是一回事）。</li>
+  </ul>
+  当前设计取「raw 单一事实源 + 重启补读有界」；取舍与实施见计划 <a href="../plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html">26-10-12-2010</a>。
+</div>
+
+<div class="box ok">
+  <div class="t">对 §7 建议的影响</div>
+  不改变方向，只把 B1 的口径说全：<b>不是「不读」，而是「只读在途那一段」</b>。B4 埋点照旧（把「读了多少」变成可见事实，而不是又一个静默洞）。
+</div>
 
 <!-- ============================================================ 附录 -->
 <h2><span class="no">A</span>附录：引用位置清单</h2>

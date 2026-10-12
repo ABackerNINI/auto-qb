@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-startup-recovery-on-demand">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-12-2010">
+<meta name="doc-updated" content="26-10-12-2010">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-startup-recovery-on-demand.md">
+<title>计划 · 流量启动恢复改为按需读取口径</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101014;
+    --paper: #15151b;
+    --ink: #e2e2e6;
+    --muted: #9a9aa6;
+    --dim: #6d6d78;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #d9a45b;
+    --accent-dim: rgba(217,164,91,.16);
+    --ok: #6fb3ae;
+    --warn: #c98a7f;
+    --mono: "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 48px 24px 96px;
+  }
+  .page { max-width: 980px; margin: 0 auto; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.2;
+    margin: 10px 0 14px;
+  }
+  .lede { color: var(--muted); font-size: 16px; max-width: 76ch; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0 28px;
+    margin: 22px 0 0; padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+  }
+  .meta b { color: var(--muted); font-weight: 500; }
+  section { margin-top: 56px; }
+  h2 {
+    font-size: 13px; font-weight: 600;
+    font-family: var(--mono);
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent);
+    padding-top: 14px;
+    border-top: 1px solid var(--hairline-strong);
+    margin-bottom: 18px;
+  }
+  h2 .no { color: var(--dim); margin-right: 10px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 10px; }
+  p { margin: 0 0 12px; max-width: 80ch; }
+  p.wide { max-width: none; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 6px; max-width: 78ch; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: rgba(255,255,255,.05);
+    padding: 1px 5px; border-radius: 3px;
+    color: var(--ink);
+  }
+  .path { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 18px; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 11.5px;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dim);
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+  td:first-child { white-space: nowrap; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    color: var(--accent); border: 1px solid var(--hairline-strong);
+    padding: 0 7px; border-radius: 3px; line-height: 1.7;
+  }
+  .tag.muted { color: var(--dim); }
+  .note {
+    border-left: 2px solid var(--accent);
+    padding: 2px 0 2px 14px;
+    color: var(--muted);
+    margin: 14px 0;
+  }
+  .note.warn { border-left-color: var(--warn); }
+  figure { margin: 26px 0; }
+  figcaption { font-size: 12px; color: var(--dim); margin-top: 10px; font-family: var(--mono); }
+  .svgbox {
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+    padding: 18px 14px 8px;
+  }
+  .changelog td:first-child { font-family: var(--mono); font-size: 12.5px; }
+  .footer-meta {
+    margin-top: 72px; padding-top: 14px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">PLAN · auto-qb · WEBUI · TRAFFIC</div>
+  <h1>流量启动恢复改为按需读取口径</h1>
+  <p class="lede">把启动恢复的读集从「<code>rollup_window</code> 内全部历史天文件」收敛为「agg 水位所在日 → 今日」，已封口小时不读不重算；<code>agg.dat</code> 按系列照读（水位与聚合行数据）。启动死区从此与历史数据量、与保留口径彻底解耦：不打开流量图，启动不碰历史天文件；打开 24h 流量图，启动与图表读的是同一份 ≤2 天的数据。<code>rollup_window: 1000000D</code> 的永久保留口径不动。</p>
+
+  <div class="meta">
+    <span><b>Stamp</b> 26-10-12-2010</span>
+    <span><b>Status</b> Open(待实施确认)</span>
+    <span><b>Topic</b> webui-traffic-startup-recovery-on-demand</span>
+    <span><b>依据</b> 报告 26-10-12-1923</span>
+    <span><b>基线</b> 9548367d</span>
+  </div>
+
+  <!-- ================ 1 ================ -->
+  <section>
+    <h2><span class="no">§1</span>摘要与结论</h2>
+    <p>报告 <a href="../reports/26-10-12-1923-report-webui-startup-latency.html">26-10-12-1923</a> 把「启动后 WEB UI 好几秒才正常」定位为<b>启动死区</b>：装配序最后一个模块的 <code>TrafficSampleModule.start()</code> 调 <code>_recover_aggregates()</code>，在 WEB 监听就绪与主循环第一拍之间<b>静默地</b>把 <code>qb-traffic-v4/</code> 的全部历史天文件重读一遍并逐槽重算（实测死区 11.16s，其中恢复全量实测 7.09~7.28s，且随历史 <span class="tag">+1.5~2.0s/天</span> 无界增长）。</p>
+
+    <p>本轮用户定调给出判定基准：<b>流量图的数据方案定调一直是「按需读取」</b>——不打开流量图，理论上不需要读任何历史文件；打开 24h 流量图，理论上最多读 2 天数据。据此，<b>启动恢复全量重读历史 = 该定调的实施缺口</b>（不是配置问题，也不是「WEB UI 慢」）。</p>
+
+    <div class="note">
+      <b>结论（一句话）</b>：修 = 把恢复读集下界从「配置窗口 <code>now - rollup_window</code>」改为「<b>agg 水位</b>（<code>wm_hour</code>）所在日」，读集变为 <code>[day(wm_hour), day(now)]</code>——常态 1 个天文件、跨日界至多 2 个，与 24h 流量图的读侧契约同阶；<code>agg.dat</code> 仍按系列读（小文件，水位与聚合行）。保留口径（<code>rollup_window: 1000000D</code>）不动。
+    </div>
+
+    <table>
+      <tr><th>#</th><th>项</th><th>裁定</th></tr>
+      <tr><td>靶点</td><td>启动死区 = 恢复读集无界</td><td>修（报告 §7-B1 方向，按用户定调收敛为「读集下界 = agg 水位」）</td></tr>
+      <tr><td>保留口径</td><td><code>rollup_window: 1000000D</code> 永久保留</td><td><b>不动</b>——用户有意设定；B3（补 raw_window 删除）/ A1（调小 rollup_window）出局</td></tr>
+      <tr><td>次要因素</td><td>搜索索引首建独占主循环（1.7~2.5s）</td><td><b>不在本计划</b>——与流量图按需口径无关，另立 issue（报告 §7-C1）</td></tr>
+      <tr><td>读侧图表</td><td>raw 段窗按窗口日期集只读涉及天文件</td><td><b>零改动</b>——已是按需读取，本计划只让启动恢复对齐它</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 2 ================ -->
+  <section>
+    <h2><span class="no">§2</span>已裁定事项(本轮拍板记录)</h2>
+    <p>用户本轮给出三条定调（D1–D3），加两条由报告与既有契约推出的边界裁定（D4–D5）。这些即本计划的需求边界，实施不得越界：</p>
+    <table>
+      <tr><th>#</th><th>决策</th><th>裁定</th></tr>
+      <tr><td>D1</td><td>按需读取是既定契约</td><td><b>不打开流量图 ⇒ 启动不得读历史天文件</b>；打开 24h 流量图 ⇒ <b>最多读 2 天数据</b>。启动恢复必须遵守同一契约，而不是按配置保留窗全量重读。</td></tr>
+      <tr><td>D2</td><td>保留口径不动</td><td><code>rollup_window: 1000000D</code>（等效永久保留）是<b>有意设定</b>——本场景下不应有性能问题。<b>不改保留语义</b>：不启用 <code>raw_window</code> 删除（B3）、不调小 <code>rollup_window</code>（A1）、不改 hour 行裁剪与系列淘汰口径。</td></tr>
+      <tr><td>D3</td><td>启动恢复保持同步</td><td>不做 B2（恢复后台化/挪出关键路径）——读集收敛后同步成本有界，不值得引入与在线记账的并发/时序契约（黄金法则 5 单写线程）。</td></tr>
+      <tr><td>D4</td><td>agg.dat 仍按系列读</td><td>恢复需要水位与聚合行数据（<code>read_agg</code>，实测 24 系列合计 0.021s）；<b>agg.dat 不是历史天文件</b>，不在「按需」排除面内。</td></tr>
+      <tr><td>D5</td><td>正确性优先于成本</td><td>agg 缺失/不可信（无 <code>wm_hour</code>）时<b>退回现读法</b>（<code>now - rollup_window</code> 全量兜底）并留日志——诚实兜底，不猜、不静默。</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 3 ================ -->
+  <section>
+    <h2><span class="no">§3</span>现状事实与代码锚点</h2>
+    <p>本节只列本计划要动的面（行号基于基线 <code>9548367d</code>，引用时以符号名为准）。</p>
+    <table>
+      <tr><th>事实</th><th>落点(已核到代码)</th></tr>
+      <tr><td>恢复入口：遍历现存系列逐系列恢复</td><td><code class="path">core/modules/traffic_sample_mod.py</code> <code>_recover_aggregates</code>(:1124)</td></tr>
+      <tr><td><b>读集下界 = <code>now - rollup_window</code></b>（现值 1000000D ⇒ 全部历史）</td><td><code class="path">traffic_sample_mod.py</code> <code>_recover_series</code>(:1158) → <code>store.series_day_dates(key, now - window)</code>(:1176)</td></tr>
+      <tr><td>逐槽入账占恢复耗时约 85%（游程展开成槽后 Python 循环）</td><td><code class="path">traffic_sample_mod.py</code> <code>_agg_credit_day_file</code>(:1206)</td></tr>
+      <tr><td>水位之后的过滤判据已存在（<code>h &lt;= wm_hour</code> 不重算）</td><td><code class="path">traffic_sample_mod.py</code> <code>_recover_series</code> hour 循环(:1183-1192)</td></tr>
+      <tr><td><code>series_day_dates</code> 生产调用方<b>只有恢复路径一处</b></td><td>全仓 grep：<code class="path">traffic_store.py</code>:929（定义） · <code class="path">traffic_sample_mod.py</code>:1176（唯一调用）</td></tr>
+      <tr><td>读侧图表 raw 段窗 = 按窗口日期集只读涉及天文件（24h 常态 2 个、跨午夜至多 3 个）</td><td><code class="path">webui/server/traffic_qb.py</code> <code>_payload_series</code>(:286) → <code>V4DayCache.read_window</code>(<code class="path">traffic_store.py</code>:1066)</td></tr>
+      <tr><td>该读侧契约已有现成守阵（「24h 窗只开 2 个日期文件」）</td><td><code class="path">tests/test_traffic_store.py</code>:1028</td></tr>
+      <tr><td>前端只在流量页签打开期间轮询（关闭后无任何请求路径）</td><td><code class="path">shared/qb_traffic_chart.js</code>:317 · <code class="path">shared/drawer_store.js</code>:175-180</td></tr>
+      <tr><td>既有恢复等价守阵（停机数小时 catch-up 等价 / 硬序 catch-up 先于裁剪 / 空闲段 cov 无偏）</td><td><code class="path">tests/test_traffic_sample.py</code>:1482 / :1546 / :2114</td></tr>
+    </table>
+    <div class="note">报告 §4.2 已证明「调小 <code>rollup_window</code> 治不了本」：只要系列还在产数据，天文件就永不删（唯一删除点是整系列淘汰），30D 稳态仍是约 750 个天文件。所以本计划<b>不动配置</b>，只改恢复自己的读集口径——这正是「按需读取」与「保留多久」解耦的那一刀。</div>
+  </section>
+
+  <!-- ================ 4 ================ -->
+  <section>
+    <h2><span class="no">§4</span>方案设计</h2>
+
+    <figure>
+      <div class="svgbox">
+        <svg viewBox="0 0 900 250" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="现状与目标读集对比">
+          <!-- ===== 上: 现状 ===== -->
+          <text x="8" y="16" fill="#9a9aa6" font-family="Consolas, monospace" font-size="11">现状 · 恢复读集 = 保留窗内全部历史天文件</text>
+          <line x1="40" y1="96" x2="860" y2="96" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <rect x="40" y="42" width="820" height="44" fill="rgba(217,164,91,.10)" stroke="rgba(217,164,91,.45)" stroke-width="1"/>
+          <text x="52" y="69" fill="#d9a45b" font-family="Consolas, monospace" font-size="11">96 个天文件 · 13.8 MB · 430 万槽 (实测 7.09~7.28s)</text>
+          <g stroke="rgba(255,255,255,.14)" stroke-width="1">
+            <line x1="68" y1="96" x2="68" y2="104"/><line x1="150" y1="96" x2="150" y2="104"/>
+            <line x1="232" y1="96" x2="232" y2="104"/><line x1="314" y1="96" x2="314" y2="104"/>
+            <line x1="396" y1="96" x2="396" y2="104"/><line x1="478" y1="96" x2="478" y2="104"/>
+            <line x1="560" y1="96" x2="560" y2="104"/><line x1="642" y1="96" x2="642" y2="104"/>
+            <line x1="724" y1="96" x2="724" y2="104"/><line x1="806" y1="96" x2="806" y2="104"/>
+          </g>
+          <text x="40" y="122" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">~30 天前</text>
+          <text x="806" y="122" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">now</text>
+
+          <!-- ===== 下: 目标 ===== -->
+          <text x="8" y="164" fill="#9a9aa6" font-family="Consolas, monospace" font-size="11">目标 · 恢复读集 = [agg 水位所在日, 今日]</text>
+          <line x1="40" y1="222" x2="860" y2="222" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+          <!-- 不读区: 斜纹 -->
+          <defs>
+            <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect x="40" y="186" width="700" height="36" fill="url(#hatch)" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
+          <text x="52" y="209" fill="#6d6d78" font-family="Consolas, monospace" font-size="10.5">不读: 这些小时的 agg 行已在 agg.dat(水位之前不重算)</text>
+          <!-- 读集区 -->
+          <rect x="740" y="186" width="120" height="36" fill="rgba(217,164,91,.14)" stroke="rgba(217,164,91,.5)" stroke-width="1"/>
+          <text x="748" y="209" fill="#d9a45b" font-family="Consolas, monospace" font-size="10.5">≤ 2 天</text>
+          <line x1="740" y1="180" x2="740" y2="228" stroke="#d9a45b" stroke-width="1.2"/>
+          <text x="700" y="176" fill="#d9a45b" font-family="Consolas, monospace" font-size="10">day(wm_hour)</text>
+          <line x1="860" y1="180" x2="860" y2="228" stroke="rgba(255,255,255,.3)" stroke-width="1.2"/>
+          <text x="826" y="242" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">now</text>
+          <text x="40" y="242" fill="#6d6d78" font-family="Consolas, monospace" font-size="10">agg.dat 每系列照读(水位 + 聚合行, 小文件)</text>
+        </svg>
+      </div>
+      <figcaption>图 1 · 上：现状读集横跨全部历史（成本 ∝ 累积数据）；下：目标读集只覆盖水位日到今日（成本 ∝ 在途小时），与 24h 流量图读侧同阶。示意，非真实比例。</figcaption>
+    </figure>
+
+    <h3>4.1 核心改动: 读集下界 = agg 水位所在日</h3>
+    <ul>
+      <li><b>口径</b>：<code>_recover_series</code> 里把 <code>store.series_day_dates(key, now - window)</code> 的实参改为
+        <code>v4_day_epoch(wm_hour)</code>（<code>wm_hour = parsed.hours[-1].epoch</code>，即 agg 文件尾最新封口小时）。</li>
+      <li><b>为什么是「所在日」而不是「水位时刻」</b>：<code>series_day_dates</code> 按<b>文件名日期</b>过滤（<code>v4_date_str_epoch(d) &gt;= min_epoch</code>，<code class="path">traffic_store.py</code>:940）。传 <code>day(wm_hour)</code> 恰好把「水位当天的天文件」纳入——水位之后的 raw 就落在这一天文件里；传更细的时刻会误排掉该文件。</li>
+      <li><b>为什么足够</b>：小时行 <code>h &lt;= wm_hour</code> 已在 agg.dat（现判据 :1183-1192 已在过滤，不重算）；需要补算的只有 <code>h &gt; wm_hour</code> 的小时，而它们必然属于 <code>day(wm_hour)</code> 或更晚的天文件（天文件 00:00 硬切、块不跨天）。</li>
+      <li><b>fallback（D5）</b>：<code>wm_hour is None</code>（agg.dat 缺失/损坏/尚无 hour 行）时，退回现口径 <code>now - window</code> —— 无可信水位时全量兜底是唯一诚实的做法；此路径打 INFO/WARNING（见 4.2），且属罕见路径。</li>
+      <li><b>硬序不变</b>：catch-up 全部 append 完成之后才 <code>_agg_trim</code>（:1203）——这条既有钉住不放。</li>
+    </ul>
+
+    <h3>4.2 埋点(报告 §7-B4): 消除静默</h3>
+    <ul>
+      <li><code>_recover_aggregates</code> 起止各留一条 INFO：开始行（启用态、系列数）、完成行（系列数 / <b>读入天文件数</b> / <b>补算小时数</b> / 耗时）。</li>
+      <li>单系列级：读集 &gt; 2 天（水位陈旧或 fallback 全量）时留一条 INFO 说明下界来源（水位日 / fallback 窗口），便于下次这类问题 5 分钟定位。</li>
+      <li>失败路径 WARNING 维持现状（<code>OSError</code> 不阻断其它系列）。</li>
+      <li>计数（系列数/天文件数/槽数/耗时）落模块级属性，供测试断言——把「读集有界」变成可机检的事实，而非靠读日志目测。</li>
+    </ul>
+
+    <h3>4.3 不做的事(边界)</h3>
+    <table>
+      <tr><th>项</th><th>为什么不做</th></tr>
+      <tr><td>B2 恢复挪出关键路径</td><td>D3：读集收敛后同步成本有界；后台化会与在线记账争 <code>_agg_states</code>/水位，破单写线程假设，风险大于收益。</td></tr>
+      <tr><td>B3 补 raw_window 天文件删除</td><td>D2：保留口径变更，用户要永久保留。</td></tr>
+      <tr><td>A1 调小 rollup_window</td><td>D2：同上，且报告 §4.2 已证短期无改善、治不了本。</td></tr>
+      <tr><td>C1 搜索索引首建不独占主循环</td><td>与流量图按需口径无关（是独立次要因素），另立 issue 单独评估。</td></tr>
+      <tr><td>改读侧图表/前端轮询</td><td>读侧已按需（24h 窗 ≤2 个天文件，守阵 <code>test_traffic_store.py</code>:1028），零改动面。</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 5 ================ -->
+  <section>
+    <h2><span class="no">§5</span>边界情形与正确性论证</h2>
+    <table>
+      <tr><th>情形</th><th>读集</th><th>为什么正确</th></tr>
+      <tr><td>正常停机(优雅退出)</td><td>水位日 → 今日，常态 <b>1</b> 个天文件</td><td><code>stop()</code> 已封口 + flush；<code>wm_hour</code> = 最后封口小时，其后的小时只在当天天文件里。停机数小时 → 补算等价（既有守阵 :1482 覆盖）。</td></tr>
+      <tr><td>崩溃(无 stop)</td><td>同上，至多 <b>2</b> 个天文件</td><td>append 成功即水位推进；崩溃窗口 ≤ <code>flush_interval</code>（默认 600s）的 raw 已在当天天文件，<code>h &gt; wm_hour</code> 判据照常补算；撕裂尾/坏行由解析层整行跳过。缺文件断链（<code>day_tail=None</code>）语义不变。</td></tr>
+      <tr><td>停机跨多日 / 反复重启</td><td>水位日 → 今日；<b>实际存在的文件仍 ≤ 2</b></td><td>停机期间不写新天文件；<code>day(wm_hour)</code> 天文件含水位后的全部 raw，today 文件（若已建）含重启后 raw。中间日期目录里没有文件，<code>read_day</code> 返回 None → 真空（与块间 gap 同语义）。</td></tr>
+      <tr><td>长停机 + hour 行已裁剪</td><td>同「停机跨多日」</td><td><code>wm_hour</code> 是<b>最新</b>封口行（不是最老），裁剪只删老行，水位仍指向停机前最后封口小时；读集不因裁剪变小或变大。</td></tr>
+      <tr><td>agg.dat 缺失/损坏</td><td><code>now - rollup_window</code>（现口径）</td><td>D5 兜底：无水位则不可判「哪些小时已聚合」，全量重算 + 日志；正确性不降级（该路径与现状逐字一致）。</td></tr>
+      <tr><td>系列目录只有 agg.dat、无天文件</td><td>空读集</td><td><code>series_day_dates</code> 返回空 → 只重建累计器，零 raw 读（现状即如此）。</td></tr>
+      <tr><td>00:00 跨天覆盖结算</td><td>读集含跨日界两个文件时</td><td>读集是<b>连续日期区间</b>（水位日→今日），<code>prev_tail</code> 接力链不断；跨午夜至多 3 个文件的情形只在读侧图表出现（窗首外扩），恢复侧不需要外扩。</td></tr>
+    </table>
+    <div class="note warn">与 24h 流量图「最多 2 天」的口径差异（有意保留）：读侧图表在窗首跨本地午夜时外扩一个桶宽、至多 3 个天文件（<code>traffic_qb.py</code>:15-16 契约）；恢复侧读集是<b>日期区间</b>，跨日界时同样落在 2 个日期文件内（水位日在昨天 + 今日）。两者同阶，不是同一个数——计划不强行统一，避免为对齐数字引入窗首外扩这种读侧专用语义。</div>
+  </section>
+
+  <!-- ================ 6 ================ -->
+  <section>
+    <h2><span class="no">§6</span>改动点清单</h2>
+    <table>
+      <tr><th>文件</th><th>改动</th></tr>
+      <tr>
+        <td><code class="path">core/modules/traffic_sample_mod.py</code></td>
+        <td>① <code>_recover_series</code>：读集下界 <code>now - window</code> → <code>v4_day_epoch(wm_hour)</code>（<code>wm_hour is None</code> 时退回 <code>now - window</code>）；② 模块 docstring §4.3 与 <code>_recover_series</code> docstring 的口径句「补算窗口 = rollup_window = 天文件存活期」改写为新口径；③ <code>_recover_aggregates</code>：起止 INFO + 计数属性（系列数/天文件数/补算小时数/耗时）；④ 单系列读集 &gt; 2 天时 INFO 说明下界来源。</td>
+      </tr>
+      <tr>
+        <td><code class="path">core/traffic_store.py</code></td>
+        <td><code>series_day_dates</code> docstring 更新（「补算窗口过滤」→「调用方传读集下界」；行为零改动，仍按文件名日期 <code>&gt;= min_epoch</code> 过滤）。</td>
+      </tr>
+      <tr>
+        <td><code class="path">tests/test_traffic_sample.py</code></td>
+        <td>新增守阵与测试（见 §7），并同步文件头「## 测试计划」清单。</td>
+      </tr>
+    </table>
+    <div class="note">不新增配置键、不动 <code>config/schema.py</code>（黄金法则 4 无涉）；不改 <code>config.yml</code>（红线）。</div>
+  </section>
+
+  <!-- ================ 7 ================ -->
+  <section>
+    <h2><span class="no">§7</span>波次与验收</h2>
+    <table>
+      <tr><th>波次</th><th>内容</th><th>验收判据</th></tr>
+      <tr>
+        <td>W0 冻结</td>
+        <td>冻结契约与验收基线（零代码）</td>
+        <td>确认读侧契约守阵（<code>test_traffic_store.py</code>:1028）与既有恢复等价/硬序守阵（<code>test_traffic_sample.py</code>:1482/:1546/:2114）全绿；<code>commands run kb.baseline</code> 记下开工数字。</td>
+      </tr>
+      <tr>
+        <td>W1 后端</td>
+        <td>§6 的 <code>traffic_sample_mod.py</code> 改动（读集下界 + 埋点 + docstring）<br><code>traffic_store.py</code> docstring</td>
+        <td><b>读集有界</b>：构造 24 系列 × 30 天天文件 + 水位在昨日的 agg，<code>start()</code> 后断言读入天文件数 ≤ 2/系列且只发生在水位日与今日（计数属性断言）；<b>fallback 不烂</b>：agg.dat 缺失时全量兜底且行为与现状一致；<b>既有等价/硬序/空闲 cov 守阵全绿</b>；埋点行含系列数/天文件数/小时数/耗时；注入红验（下界改回 <code>now - window</code> ⇒ 读集守阵红；还原即绿）。</td>
+      </tr>
+      <tr>
+        <td>W2 收尾</td>
+        <td>全量测试 + e2e + 基线切片 + 文档回写</td>
+        <td><code>commands run test.full</code> 全绿并新建基线切片（数字只写切片，正文引用 <code>kb.baseline</code>）；e2e 与基线逐位一致（零前端零 API 改动面）；回写 <code>memory-bank/</code> 相关口径（本计划 + 模块 docstring 为单点）；真机走查（重启 auto-qb 看新 INFO 行与死区时长）留待用户。</td>
+      </tr>
+    </table>
+    <p style="color: var(--muted);">测试纪律沿用库内口径：新增测试同步文件头「## 测试计划」清单；守阵注入即红 / 还原即绿；<code>TMPDIR</code> 已内置在 <code>test.*</code> 任务里不手工加。</p>
+  </section>
+
+  <!-- ================ 8 ================ -->
+  <section>
+    <h2><span class="no">§8</span>风险与取舍</h2>
+    <table>
+      <tr><th>点</th><th>判断</th></tr>
+      <tr><td>水位可信性依赖「append 成功即推进」</td><td>既有语义（agg 文件尾 = 水位，崩溃于 append 后从文件尾恢复不重 append，幂等），本计划不改。水位之后的 raw 一定在天文件里——这是补算的全部前提，已在 §5 逐情形论证。</td></tr>
+      <tr><td>恢复仍读 agg.dat（每系列一个）</td><td>实测 24 系列合计 0.021s；agg.dat 是水位与聚合行的唯一来源，不是历史天文件。系列数增长时该项线性（小常数），与「历史天数」无关——正是要达成的解耦。</td></tr>
+      <tr><td>读集仍随「在途小时数」线性</td><td>在途 = <code>now - wm_hour</code>，由 <code>flush_interval</code>（默认 600s）封顶 ⇒ 常态只读当天天文件的一部分。崩溃/停机越久在途越长，但读集仍 ≤ 2 个天文件（§5）。</td></tr>
+      <tr><td>埋点行会新增日志</td><td>启动一次两条 INFO，可忽略；换来的是这类「静默死区」问题下次可 5 分钟定位（报告把「完全静默」列为最大排查障碍）。</td></tr>
+      <tr><td>与既有 hard-ordering 的交互</td><td>只改读集下界，catch-up → append → trim 的硬序与累计器重建逻辑零改动；既有三条恢复守阵即是回归网。</td></tr>
+      <tr><td>跨 clone 取证数据</td><td>报告数据取自另一 clone（只读）；本计划与实施只动当前 clone，跨仓库写操作绝对禁止。</td></tr>
+    </table>
+  </section>
+
+  <!-- ================ 9 ================ -->
+  <section>
+    <h2><span class="no">§9</span>非目标</h2>
+    <ul>
+      <li>不改保留口径（<code>rollup_window</code> / <code>raw_window</code> / 天文件删除 / 系列淘汰）。</li>
+      <li>不改图表读侧端点与前端轮询（已验证按需，零改动面）。</li>
+      <li>不做后台化/懒加载 catch-up（B2）。</li>
+      <li>不做 v4 格式、agg 行型、水位封口语义变更。</li>
+      <li>不动搜索索引首建（C1，另立 issue）。</li>
+      <li>不动 <code>config.yml</code>、不新增配置键。</li>
+    </ul>
+  </section>
+
+  <!-- ================ 变更记录 ================ -->
+  <section>
+    <h2><span class="no">§10</span>变更记录</h2>
+    <table class="changelog">
+      <tr><th>时间</th><th>变更</th></tr>
+      <tr><td>26-10-12-2010</td><td>初版。依据报告 26-10-12-1923 与用户本轮定调（D1 按需读取为既定契约 / D2 永久保留有意设定 / D3 保持同步恢复）成文：靶点收敛为「读集下界 = agg 水位所在日」+ B4 埋点；B2/B3/A1/C1 出局或另题。</td></tr>
+    </table>
+  </section>
+
+  <div class="footer-meta">
+    <span>auto-qb · memory-bank/plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html</span>
+    <span>topic: webui-traffic-startup-recovery-on-demand · status: Open</span>
+  </div>
+
+</div>
+</body>
+</html>

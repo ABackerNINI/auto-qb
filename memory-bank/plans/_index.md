@@ -16,6 +16,7 @@
 
 ## Open
 
+- [26-10-12-2010] [计划 · 流量启动恢复改为按需读取口径](26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html) — `webui-traffic-startup-recovery-on-demand`
 - [26-10-12-0535] [计划 · qB 流量图限速线按当时值分段](26-10-12-0535-plan-webui-traffic-limit-history.html) — `webui-traffic-limit-history`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
