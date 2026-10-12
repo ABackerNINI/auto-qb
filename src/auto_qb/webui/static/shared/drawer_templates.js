@@ -394,28 +394,41 @@
    *     悬在已消失的锚上)。
    *   ·H.anchTouch(变体 UI 态变化: 筛选 chips/只看在传 —— 锚元素身份没变但行来源变了, 引擎
    *     无感知) —— 先对账再对在场 tid 强制自增一代, 桥重挂后 rowsFn 重读变体行装配。
-   * 多锚同 id(08 五分组)按**元素集合**比对 —— 逐个比对会把第二个锚误判为"换代"导致每次
-   * 渲染都重挂(实测假阳)。
+   * !判据是**按 (tid, seg) 映射的元素身份**, 不是位置数组(2026-10-12 用户报障实锤):
+   *   多锚同 id(08 五分组/05 健康分组)的段集合随数据增减/重排是**常态** —— 组空整节隐藏
+   *   (锚离场)、组补进新锚、dtHoldAnchors 早分支把锚改挂宿主尾部(次序变), 集合内容没变
+   *   也会被位置比对误判"换代" → gen++ → **整桥(所有组的表)重挂 = 全表格闪烁**, 且 5s 轮询
+   *   下活数据每拍组 membership 翻动 = 每拍全闪(数据还只随重挂刷新, 观感"冻在一帧一爆")。
+   *   正解: 仅当**同一 seg 的锚元素被换新**才换代 —— 那段 teleport 的目标元素变了, 必须重挂
+   *   重解析(Vue 3 Teleport 目标被外部换新后不会自行迁回); seg 新增不换代(该段 segment 本就
+   *   随 v-for 新挂进新锚), seg 消失不换代(该段 segment 随 rowsFn 过滤卸载, 无游离 teleport)。
    * !gen **单调自增**永不回落(U1 路径C 红验): 回落即 :key 净零, Teleport 原地补丁写进游离旧锚。 */
   function dtSyncAnchors(host, vm) {
     if (!host || typeof host.querySelectorAll !== "function" || !vm || !vm.dtBridge) return;
-    var prev = host.__dtAnchorEls || {};
-    var seen = {};
+    var prev = host.__dtAnchorEls || {};   /* tid -> { seg -> el }(上一拍对账快照) */
+    var seen = {};                         /* tid -> { seg -> el }(本拍在场锚) */
     var anchors = host.querySelectorAll("[data-dt-table-anchor]");
     for (var i = 0; i < anchors.length; i++) {
       var tid = anchors[i].getAttribute("data-dt-table-anchor");
-      if (tid) (seen[tid] || (seen[tid] = [])).push(anchors[i]);
+      var seg = anchors[i].getAttribute("data-dt-seg") || "";
+      if (tid) (seen[tid] || (seen[tid] = {}))[seg] = anchors[i];
     }
     for (var t in seen) {
       var cur = vm.dtBridge[t];
-      var old = prev[t] || [];
-      var same = cur && cur.on && old.length === seen[t].length &&
-        old.every(function (e, k) { return e === seen[t][k]; });
-      if (same) continue; /* 锚在场且元素身份未变: 代数不动(数据轮询下桥零重挂) */
+      var old = prev[t] || {};
+      var same = !!cur && !!cur.on;
+      if (same) {
+        for (var s in seen[t]) {
+          /* 只问"这个 seg 上拍的锚还在不在、是不是同一个元素"; 上拍没有的 seg(新增)
+           * 不构成换代理由 —— 新段随 v-for 新挂, 新锚就是它的首宿。 */
+          if (old[s] && old[s] !== seen[t][s]) { same = false; break; }
+        }
+      }
+      if (same) continue; /* 各在场段的锚元素都没换: 代数不动(数据轮询下桥零重挂) */
       vm.dtBridge[t] = { gen: (cur ? cur.gen : 0) + 1, on: true };
     }
     for (var t2 in prev) {
-      if (!seen[t2] && vm.dtBridge[t2]) vm.dtBridge[t2].on = false; /* 锚离场(空态/换变体): 摘 on, gen 保持单调 */
+      if (!seen[t2] && vm.dtBridge[t2]) vm.dtBridge[t2].on = false; /* 锚全离场(空态/换变体): 摘 on, gen 保持单调 */
     }
     host.__dtAnchorEls = seen;
   }
