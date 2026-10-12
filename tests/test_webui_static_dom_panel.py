@@ -40,6 +40,7 @@
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
+- test_drawer_peers_switch_empty_grace_wiring: 抽屉 peers 软切换空态宽限守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 软切换本意「保留旧数据撑几何 + 遮罩防串显」(FX-29), 但换目标后 qB 对新种子的首个 /peers 常瞬时为空(连接/状态未就绪) ⇒ 空响应直接落袋会覆盖旧数据渲染成一帧空态, 下一拍(5s)真实对端到达再顶回表格 = 用户所报「闪一下」; 修法 = 换目标窗口内**首个空响应视为「未就绪」**: 不落袋(保留旧数据)/不掀罩(不登记 _drawerDone)/短延迟快速重拉一次, 仍空才接受(真没对端)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-peers.spec.mjs「切换种子首个空 peers 响应不得闪现空态」逐帧采样值守): ①_fetchDrawerPeers 有宽限分支(空响应判据 + deferred 短路, finally 里早退不落袋/不通知/保持 loading) + 一次性重拉 setTimeout; ②宽限标记 _drawerPeerGrace 由 _switchDrawerTarget 置位且**在 _loadDrawerTab 之后**(其内 _startDrawerPoll→_stopDrawerPoll 会清零, 置前即静默失效); ③待重拉 timer(_drawerPeerRetry) 由 _stopDrawerPoll 收口(换页签/换目标/关面板不得泄漏); ④_e2e 覆盖缺口补记: 既有全部用例只 dblclick nth=0 单次打开, 且桩每种子恒有对端 —— 「切换种子 + 首拍空」这条真机路径此前零覆盖
 """
 import json
 import os
@@ -3686,10 +3687,12 @@ def test_drawer_peers_speed_keys_normalized():
     assert "Array.isArray(r.peers)" in nb and "Object.entries(r.peers)" in nb, \
         "_drawerNormPeers 必须同时覆盖 peers 的 dict 与数组双形态(真 qB 恒 dict)"
 
-    # ② 落袋单点走适配(直存 r 即漏原始键名)
+    # ② 落袋单点走适配(直存 r 即漏原始键名)。2026-10-13 软切换宽限引入 norm 局部量
+    #    (首个空响应「未就绪」时保留旧数据不落袋, 见下条守阵), 故断言形改为「归一结果才是落袋值」。
     fetch = re.search(r"async _fetchDrawerPeers\(.*?\) \{(.*?)\n    \},", store_js, re.S)
     assert fetch, "drawer_store.js 找不到 _fetchDrawerPeers(改名或挪走了? 同步本守阵)"
-    assert "this.drawer.peers = this._drawerNormPeers(r);" in fetch.group(1), \
+    fb = fetch.group(1)
+    assert "const norm = this._drawerNormPeers(r);" in fb and "this.drawer.peers = norm;" in fb, \
         "peers 落袋未过 _drawerNormPeers(直存 qB 原始响应 ⇒ 原始键名漏进消费点, 上下行恒 0)"
 
     # ③ 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
@@ -3698,3 +3701,42 @@ def test_drawer_peers_speed_keys_normalized():
         "ui_harness 合成 peer 的速度键必须用 qB 原始 dl_speed / up_speed(用 dlspeed/upspeed 即测假, 真机恒 0)"
     assert '"dlspeed": dlspeed,' not in harness and '"upspeed": upspeed,' not in harness, \
         "ui_harness 合成 peer 残留错误的速度键名(dlspeed/upspeed) —— 与真 qB 不同形, 冒烟测假"
+
+
+def test_drawer_peers_switch_empty_grace_wiring():
+    """抽屉 peers 软切换空态宽限守阵(2026-10-13 用户报障「切换种子时用户页闪『暂无已连接用户』」)。
+
+    软切换(FX-29)本意「保留旧数据撑几何 + 遮罩防串显」, 但换目标后 qB 对新种子的首个 /peers
+    常瞬时为空(连接/状态尚未就绪) —— 空响应直接落袋会覆盖旧数据渲染成一帧空态, 下一拍(5s)真实
+    对端到达再顶回表格 = 用户所报「闪一下」(坑档 drawer-switch-flicker 第九次形态)。修法 =
+    换目标窗口内**首个空响应视为「未就绪」**: 不落袋/不掀罩, 1s 后快速重拉一次, 仍空才接受。
+    行为回归由 e2e/drawer-peers.spec.mjs「切换种子首个空 peers 响应不得闪现空态」逐帧采样值守
+    (已红验: 拆掉宽限即 150 帧空态), 本守阵只钉静态接线与关键次序, 防机制被无声拆除。
+    """
+    store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
+
+    # ① 宽限分支: 空响应判据 + deferred 短路(不落袋/不通知/保持 loading) + 一次性重拉
+    fetch = re.search(r"async _fetchDrawerPeers\(.*?\) \{(.*?)\n    \},", store_js, re.S)
+    assert fetch, "drawer_store.js 找不到 _fetchDrawerPeers(改名或挪走了? 同步本守阵)"
+    fb = fetch.group(1)
+    assert "this._drawerPeerGrace && !this._drawerPeerCount(norm)" in fb, \
+        "peers 宽限判据缺失(换目标后首个空响应会被当空态渲染)"
+    assert "deferred = true;" in fb and "if (deferred) return;" in fb, \
+        "宽限丢弃未在 finally 短路(空响应仍会落袋/掀罩 ⇒ 空态闪现)"
+    assert "this._drawerPeerRetry = setTimeout(" in fb, "宽限方案缺一次性重拉(空响应后无补偿)"
+
+    # ② 宽限标记置位必须在 _loadDrawerTab 之后(其内 _startDrawerPoll→_stopDrawerPoll 会清零)
+    sw = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
+    assert sw, "drawer_store.js 找不到 _switchDrawerTarget(改名或挪走了? 同步本守阵)"
+    sb = sw.group(1)
+    i_load = sb.find("this._loadDrawerTab(this.drawer.tab);")
+    i_grace = sb.find("this._drawerPeerGrace = true;")
+    assert i_load >= 0 and i_grace >= 0, "宽限标记置位或 _loadDrawerTab 调用缺失"
+    assert i_grace > i_load, \
+        "宽限标记必须在 _loadDrawerTab 之后置位(其内 _startDrawerPoll→_stopDrawerPoll 会清零, 置前即静默失效)"
+
+    # ③ 待重拉 timer 必须由 _stopDrawerPoll 收口(换页签/换目标/关面板的共同收口点)
+    stop = re.search(r"_stopDrawerPoll\(\) \{(.*?)\n    \},", store_js, re.S)
+    assert stop, "drawer_store.js 找不到 _stopDrawerPoll(改名或挪走了? 同步本守阵)"
+    assert "clearTimeout(this._drawerPeerRetry)" in stop.group(1), \
+        "待重拉 timer 未在 _stopDrawerPoll 收口(换页签/换目标/关面板会泄漏 timer)"

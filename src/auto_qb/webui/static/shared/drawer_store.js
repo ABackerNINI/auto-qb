@@ -47,6 +47,15 @@ window.AQB_DRAWER_STORE = {
         clearInterval(this._drawerTimer);
         this._drawerTimer = null;
       }
+      // FX-29 软切换宽限(见 _fetchDrawerPeers)的收口: 页签切走/换目标/关面板即撤销待重拉与宽限
+      // 标记 —— 本方法正是这几条路径的共同收口(与下一句 _qbPollStop 同理由)。_switchDrawerTarget
+      // 在调本方法**之后**才重新置宽限标记, 故这里的清零不会误伤本次换目标; _loadDrawerTab 内的
+      // _startDrawerPoll→本方法 亦然(执行时标记尚未置位)。
+      if (this._drawerPeerRetry) {
+        clearTimeout(this._drawerPeerRetry);
+        this._drawerPeerRetry = null;
+      }
+      this._drawerPeerGrace = false;
       // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
       // _switchDrawerTarget/openTorrentDrawer 全走这里), 页签切走/换目标/关面板即停 —— 若新页签
       // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
@@ -143,15 +152,40 @@ window.AQB_DRAWER_STORE = {
     async _fetchDrawerPeers(silent = false, seq = 0) {
       const hash = this.drawer.hash;
       if (!silent) this.drawer.peersLoading = true;
+      let deferred = false;  // 软切换宽限丢弃(见下): 未落袋/未掀罩/保持 loading, 等重拉结果
       try {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.peers = this._drawerNormPeers(r);
+        const norm = this._drawerNormPeers(r);
+        /* FX-29 软切换宽限(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」,
+         * 坑档 drawer-switch-flicker 第九次形态): 换目标后 qB 对新种子的首个 /peers 常为瞬时**空**
+         * (连接/状态尚未就绪), 而软切换本意是"保留旧数据撑几何 + 遮罩防串显"。空响应若直接落袋,
+         * 会覆盖旧数据被渲染成一帧空态, 下一拍(5s)真实对端到达再顶回表格 = 用户所报的"闪一下"。
+         * 处置: 换目标窗口内的**首个空响应**视为「未就绪」—— 不落袋(保留旧数据)、不掀罩(不登记
+         * _drawerDone, 待到集合仍含 peers)、短延迟快速重拉一次; 重拉若仍空则接受(真没对端 —— 那时
+         * 宽限标记已清, 走正常落袋)。仅换目标窗口生效: 轮询(silent)与常态空列表照常如实渲染。 */
+        if (!silent && this._drawerPeerGrace && !this._drawerPeerCount(norm)) {
+          this._drawerPeerGrace = false;
+          deferred = true;
+          this._drawerPeerRetry = setTimeout(() => {
+            this._drawerPeerRetry = null;
+            // 重拉前复核: 面板仍开/仍是种子形态/目标未换(换目标时本 timer 已被 _stopDrawerPoll 撤销)
+            if (this.drawer.open && this.drawerIsSeed && this.drawer.hash === hash) {
+              this._fetchDrawerPeers(false, seq);  // 同代际重拉: 与首次同 seq, 换目标后旧代际响应仍被 stale 丢弃
+            }
+          }, 1000);
+          return;
+        }
+        this._drawerPeerGrace = false;
+        this.drawer.peers = norm;
         this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
+        this._drawerPeerGrace = false;
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
         if (!this._drawerStale(hash, seq)) this.drawer.peersError = e.message || "peer 列表获取失败";
       } finally {
+        // 宽限丢弃: 保持 peersLoading(旧数据撑几何)与遮罩, 不落袋/不登记/不通知 —— 等重拉结果
+        if (deferred) return;
         if (!this._drawerStale(hash, seq)) {
           this.drawer.peersLoading = false;
           this._dtNotify("peers");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
@@ -220,6 +254,11 @@ window.AQB_DRAWER_STORE = {
       // 页签拉详情, 其余页签在此补一发 —— seq 归 _loadDrawerTab 先 bump(页签数据走代际守卫),
       // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
       if (this.drawer.tab !== "general") this._fetchDrawerDetail();
+      /* FX-29 软切换宽限(第九次形态, 见 _fetchDrawerPeers): 换目标后首个空 peers 响应视为
+       * 「未就绪」。置位必须在 _loadDrawerTab **之后** —— 其内 _startDrawerPoll→_stopDrawerPoll
+       * 会清零本标记(那是页签轮询的收口); 而本方法开头的 _stopDrawerPoll 已清掉上一次换目标的
+       * 残留。生命周期严格限定在「本次换目标 -> 首个 peers 落袋/被打断」。 */
+      this._drawerPeerGrace = true;
     },
     /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项。
      * R2 S5(计划 26-10-09-2219): 合并生效时按**生效对**扩展 —— gc 对等 detail+files,
@@ -290,6 +329,13 @@ window.AQB_DRAWER_STORE = {
       else if (r.peers && typeof r.peers === "object")
         r.peers = Object.fromEntries(Object.entries(r.peers).map(([k, v]) => [k, fix(v)]));
       return r;
+    },
+    /* peers 响应的对端数(qB sync/torrentPeers 恒为 dict 以 "ip:port" 为键, 兼容数组形态, 同
+     * _drawerNormPeers) —— FX-29 软切换宽限判「响应是否为空」用(真机对端数 >0, 空即"未就绪")。 */
+    _drawerPeerCount(resp) {
+      const p = resp && resp.peers;
+      if (!p) return 0;
+      return Array.isArray(p) ? p.length : Object.keys(p).length;
     },
   },
 };
