@@ -182,18 +182,32 @@ class TaskQueue:
 
     # ---------- 到期执行 + 收尾 ----------
 
-    def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0) -> int:
+    def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0, defer_gate=None) -> int:
         """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回执行的任务数。
 
         先快照到期任务再逐个执行: 执行中途新入队的任务(如轮询子任务重新入队的
         规则任务)留到下一次 run_due, 避免同批重入导致未校验即误判失败。
         收尾: handler 返回 REQUEUE -> 按 interval 重入队(默认重置断点); FINISHED ->
         消亡(不入队, kind=="check" 释放在途登记)。
+
+        defer_gate(A 系 26-10-13-0540 S2 的 D-1 队列级闸门): 可选回调 task -> 原因字符串
+        (命中)/None(放行)。命中者**本轮不执行**, 以 next_run=now 重新入堆(下一次 run_due
+        立即再判, 不等任务自身 interval)—— 目标 hash/其组刚被自有停/起时, task 线全体消费
+        让位, 等快照回流后下一 tick 再决策。有界性由 own_writes 的逐出/TTL 给出(不依赖外部
+        条件): 逐出或 TTL 到期后 defer_gate 返回 None, 任务照常执行(不会饿死)。
         """
         now = time.time() if now is None else now
         due = self._pop_due(now, max_tasks)
         for task in due:
             task.state = RUNNING
+            if defer_gate is not None:
+                reason = defer_gate(task)
+                if reason:
+                    task.state = PENDING
+                    task.next_run = now  # 下一 run_due 再判(deferral 语义 = 让位下一 tick)
+                    heapq.heappush(self._fast, task)
+                    logger.debug(f"任务[{task.log_tag}] | deferral 让位(下一 tick 重判): {reason}")
+                    continue
             if self._run_one(task, dry_run):
                 self._requeue(task, now)
             elif task.kind == "check":

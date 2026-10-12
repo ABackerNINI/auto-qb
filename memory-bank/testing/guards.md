@@ -152,6 +152,23 @@
 | `test_traffic_sample.py::test_agg_reseal_merges_late_credit_keeps_full_coverage` | 已封小时被迟到补记重建再封时, 落批末行 = 合流行(cov 回到整小时), day 累计器同持合流行 —— 替换语义会让读侧末行只留残余 | 同上 + `_agg_merge_prev` 改 `return row`(实测红在 `assert 1762 == 3600`) |
 | `test_traffic_sample.py::test_agg_flush_all_isolates_series_error_and_resets` | 逐系列隔离: 单系列封口抛错只告警该系列(节流一次)+ 重置其累计器, 其余系列照常落盘 | 去掉 `_agg_flush_all` 的 try/except(实测红在注入的 `ValueError` 直接上抛) |
 
+## 种子状态 A 系批次守阵 (26-10-13-0540 S1 值层 / S2 deferral, 红验 26-10-13 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_sync.py::test_own_writes_evicted_on_state_sync` | 自有写登记在「同步应用到该 hash 新 state」时逐出; 状态未变**不**逐出(保守) | 去掉 `_apply` 的 `if "state" in changed` 分支里的 `own_writes.pop` ⇒ 断言红 |
+| `test_sync.py::test_own_writes_ttl_bounded` (D2) | 下限保证: `own_writes` 永不逐出时由 TTL 兜底丢弃(判据恢复 False) —— 不依赖「qB 缓存一定会前进」 | 去掉 `own_write_pending` 里的 `_evict_expired_own_writes()` ⇒ 超期判据恒真即红 |
+| `test_sync.py::test_own_writes_group_judgement` | deferral 判据含**组维度**: 同组任一成员在 `own_writes` 即让位(组级闸门 G6/决策链 1 读组状态) | 去掉 `own_write_pending` 的组分支 ⇒ `HC` 断言红 |
+| `test_sync.py::test_own_writes_not_persisted` (S2 静态) | `own_writes` 纯内存、不落盘(state.json 顶层无相关键) | 把 `own_writes` 绑进 `state.data` ⇒ 断言红 |
+| `test_taskqueue.py::test_run_due_defer_gate_defers_then_resumes` (D-1 机制) | `run_due(defer_gate=...)` 命中者本轮不执行、以 `next_run=now` 重入堆下一轮再判; 放行后执行(有界) | 去掉 `run_due` 的 defer_gate 分支 ⇒ 首次即执行, 断言红 |
+| `test_qbmanager.py::test_own_write_defer_gate_targets_group_members` (D-1 判据) | 队列级闸门: 目标 hash 或其组任一成员 ∈ `own_writes` 才让位; 无 hash 全局任务不拦 | 去掉组维度 ⇒ `HC` 断言红 |
+| `test_ops.py::test_skip_check_deferred_on_own_write` (D-2) | 跳检执行路径: 目标或其组刚被自有停/起(快照未回流) ⇒ 让位, 零副作用(WEB 路径不经 task 线, 靠此拦) | 去掉 `skip_check` 入口的 `own_write_pending` 闸门 ⇒ 走完四阶段, `calls == []` 红 |
+| `test_checking.py::test_checking_action_deferred_on_own_write` (D-3) | 决策链入口让位: 目标或其组刚被自有停/起 ⇒ 本轮不出决策(用 skip 非 pending, 避免丢任务) | 去掉 `CheckAction.execute` 入口的 `own_write_pending` 闸门 ⇒ 直接提交 recheck 红 |
+
+> A 系两批的语义主线见 [../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html](../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html);
+> 口径漂移(「qB 自带 WebUI 1500ms」→ 服务端 `RefreshInterval` 节流)见 [../systemPatterns/main-loop.md](../systemPatterns/main-loop.md)。
+> deferral 纪律(校验类不得对自写 hash 出决策 + 有界性双依据)见 [../pitfalls/backend/concurrency.md](../pitfalls/backend/concurrency.md)。
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

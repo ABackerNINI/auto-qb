@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-13
-**Updated:** 2026-10-13 06:26
+**Updated:** 2026-10-13 06:43
 **Topics:** seed-state-writeback
-**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化）。**A 系实施计划已另件立**（`plans/26-10-13-0540`，形态 A3，含 P1 可达性确认作为决定形态的第一步）。**S0 前置三件已实施**（26-10-13-0554）：P1 可达性确认按 **auto-qb 能力面**（非某份配置）判定 G6 **可达** ⇒ 形态定 **A3**（26-10-13-0601 方法论订正：首轮误用本机 `config.yml` 当能力边界，结论不变、理由重写）；P2 `qbmanager` 局部 `state_changed` 消歧改名 `cmd_changed_state`；P3 `FakeClient` 四暂停轴方法真实翻转 state。**S1 值层已实施**（26-10-13-0620）：删合成回写整段（`_sync_paused_state` + `update_torrent_fields(state=)`），快照语义收敛为「严格 = 最近一次同步的应用结果」⇒ 源无关发射天然获得；三条守阵按新契约重写（含一条契约翻面）、4 调用点迁移。基线见 `kb.baseline`（切片 `baselines/26-10-13-0554-…-s0.md` / `26-10-13-0620-…-s1.md`）。
+**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化）。**A 系实施计划已另件立**（`plans/26-10-13-0540`，形态 A3，含 P1 可达性确认作为决定形态的第一步）。**S0 前置三件已实施**（26-10-13-0554）：P1 可达性确认按 **auto-qb 能力面**（非某份配置）判定 G6 **可达** ⇒ 形态定 **A3**（26-10-13-0601 方法论订正：首轮误用本机 `config.yml` 当能力边界，结论不变、理由重写）；P2 `qbmanager` 局部 `state_changed` 消歧改名 `cmd_changed_state`；P3 `FakeClient` 四暂停轴方法真实翻转 state。**S1 值层已实施**（26-10-13-0620）：删合成回写整段（`_sync_paused_state` + `update_torrent_fields(state=)`），快照语义收敛为「严格 = 最近一次同步的应用结果」⇒ 源无关发射天然获得；三条守阵按新契约重写（含一条契约翻面）、4 调用点迁移。**S2 deferral 已实施**（26-10-13-0643）：新增 `own_writes`（含组维度判据）+ TTL 兜底 + D-1/D-2/D-3 三处闸门，收回 G4/G6「陈旧-放行」窗口。S1 副产物「整组停种经同步回流的二次触发」已入池（`issues/26-10-13-0626`）。基线见 `kb.baseline`（切片 `baselines/26-10-13-0554-…-s0.md` / `26-10-13-0620-…-s1.md` / `26-10-13-0643-…-s2.md`）。
 **Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html,memory-bank/activeContext/26-10-13-0538-seed-state-writeback.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html
 
 ## 原始请求
@@ -111,7 +111,7 @@
 
 1. **A 系计划立件**（`memory-bank/plans/`，单文件 HTML dark，沿用 doc-topic `seed-state-writeback`）：形态 = **A1 删合成回写 + 局部 deferral（可选叠 A2 `pending_writes`）**。
 2. **计划第一步须含三项前置**：① G4/G6 可达性确认（同 task 批次内是否真能出现「先起下载方 D → 再对同组成员 C 跳检」—— 证明不可达则 A1 即够）；② `state_changed` 同名消歧；③ 替身能力补齐（`FakeClient` 四方法真实翻转 state）。**（26-10-13-0554 已全部完成，见「思考过程与决策」§6）**
-3. **落地批次**：值层删除（`_sync_paused_state` + `state=` 形参 + 3 条守阵重写 + 4 个调用点迁移）**（26-10-13-0620 已完成，见下「S1 值层实施」）** → 自写集 `own_writes` + 局部 deferral 闸门 → 收尾（守阵/红验/坑档口径/基线切片）。
+3. **落地批次**：值层删除（`_sync_paused_state` + `state=` 形参 + 3 条守阵重写 + 4 个调用点迁移）**（26-10-13-0620 已完成）** → 自写集 `own_writes` + 局部 deferral 闸门 **（26-10-13-0643 已完成）** → 收尾（§8.3 余下守阵 / 可选取逆件 A2 / 状态流转）。
 
 ### S1 值层实施（26-10-13-0620）
 
@@ -139,6 +139,34 @@
 
 **未落项（按计划归 S3）**：§8.3 的全部新增守阵（静态 S1「`qbapi.py`/`store.py` 无 `state=` 落点」、V1/E1/E2/D1/D2/I1/S2）与可选件 A2 `pending_writes`；S1 只做「重写既有守阵 + 迁移调用点」。基线见 `kb.baseline`（切片 `baselines/26-10-13-0620-seed-state-writeback-s1.md`）。
 
+### S2 deferral 实施（26-10-13-0643）
+
+**判据源 `own_writes`（本轮新增）**：
+
+- `torrents/store.py`：`own_writes: Dict[str, float]`（hash → 登记时刻，供 TTL）+ `note_own_write` / `own_write_pending` / `_evict_expired_own_writes` + 模块常量 `_OWN_WRITE_TTL = 10.0`。**判据含组维度**：目标 hash **或其所在组任一成员** ∈ `own_writes` 即让位（组级闸门 G6/决策链 1 读的是组内状态）。
+- **登记**：`core/qbapi.py` 四入口 `start/stop/pause/resume` 在 raw client 调用**成功后** `note_own_write(hashes)`。
+- **逐出**：`_apply` 应用到该 hash 新 `state` 时 `own_writes.pop(h)`（切点在 `state_changed.append` 处）。**清理**：`remove_torrent`（种子删除）与 `reset_runtime`（热重载）。**纯内存不落盘**（state.json 无相关键，与 `state_snapshot` 同级）。
+- **有界性双依据（缺一不可）**：① 同步逐出（依赖 qB 缓存前进）；② **TTL 兜底**（不依赖外部条件）—— 命令在 qB 侧未生效时靠它解除让位，防任务饿死。
+
+**三处 deferral 闸门**（统一判据 `store.own_write_pending(hash)`）：
+
+| 编号 | 落点 | 形态 |
+|---|---|---|
+| **D-1** | `core/qbmanager.py` `_own_write_defer_gate` → `core/taskqueue.py` `TaskQueue.run_due(defer_gate=…)` | 队列级统一闸门，覆盖 **task 线全体消费**；命中者以 `next_run=now` 重排下一 tick（不执行、不入 interval）。 |
+| **D-2** | `core/modules/ops_mod.py` `skip_check` 执行路径入口 | 跳检让位，**零副作用**；WEB 命令路径不经 task 线（D-1 覆盖不到），靠此拦。 |
+| **D-3** | `rules/actions/checking.py` `CheckAction.execute` 决策链入口 | 校验决策让位；补拦事件即时分派等非队列路径。 |
+
+**两处相对计划字面的调整**（已在代码注释与计划 §12 写明）：
+
+1. **D-3 用 `skip` 而非 `pending`**：`pending` 需轮询子任务恢复 origin，本闸无此驱动，会把规则任务丢掉；task 线的「下一 tick 重排」由 D-1 承担，D-3 只补拦非队列路径。
+2. **D-2 落在 `skip_check` 执行路径而非 `_skip_gates_detail`**：后者同时服务只读预检 `skip_check_precheck`，其 cls 契约（blocked/force）不引入第四类；执行路径拦下即可（该注释同步更新于 test_ops.py 的 `wire_group` 段）。
+
+**守阵（S2 deferral 专属）**：`test_sync.py` 四条（逐出 / TTL / 组维度 / 不落盘）+ `test_taskqueue.py` D-1 机制 + `test_qbmanager.py` D-1 判据 + `test_ops.py` D-2 + `test_checking.py` D-3。既有 `test_checking_group_full_checking_serialized` 补「同步回流逐出」一步（auto_start 登记 → 下一轮同步逐出）。
+
+**文档**：`pitfalls/backend/concurrency.md` 新增「校验类决策不得对『自有写未回流』的 hash 出决策（deferral 纪律）」条目；`testing/guards.md` 新增「种子状态 A 系批次守阵」表。
+
+**未落项（按计划归 S3）**：§8.3 余下守阵（V1/V2 值域枚举、E1/E2 发射时机、I1 幂等）与可选件 A2 `pending_writes`。基线见 `kb.baseline`（切片 `baselines/26-10-13-0643-seed-state-writeback-s2.md`）。
+
 ## 子任务状态表
 
 | # | 子任务 | 状态 |
@@ -154,8 +182,8 @@
 | 9 | **A 系计划另件立** | **已完成** |
 | 10 | **S0 前置**（P1 可达性确认 → 定 A3 / P2 消歧改名 / P3 替身翻 state） | **已完成** |
 | 11 | S1 值层（删 `_sync_paused_state` + `state=` 形参 + 守阵重写 + 4 调用点迁移） | **已完成** |
-| 12 | S2 deferral（`own_writes` + TTL + D-1/D-2/D-3 闸门） | 待办 |
-| 13 | S3 收尾（§8.3 守阵 + 可选 A2 + 坑档口径 + 状态流转） | 待办 |
+| 12 | S2 deferral（`own_writes` + TTL + D-1/D-2/D-3 闸门） | **已完成** |
+| 13 | S3 收尾（§8.3 余下守阵 V1/V2/E1/E2/I1 + 可选 A2 + 状态流转） | 待办 |
 
 ## 进度日志
 
@@ -171,3 +199,4 @@
 - **2026-10-13 06:02** — **P1 方法论订正**（用户指出）：首轮 P1 误把本机 `config.yml` 当「真实规则集」，据以断言「自动流水线无起下载方任务」—— 口径错（`config.yml` 是临时配置、不代表能力边界）。改按 **auto-qb 能力面**重判：`start` 是一等规则动作（`schema/rules.py:227` + 示例 `test_yamls/test_actions/test_start.yml`）、`checking.auto_start` 是文档化选项（`schema/rules.py:185`）、`actions` 顺序执行 ⇒ 给出三个配置内可达 witness（W1 `[{start},{checking}]` 顺序保证；W2 `auto_start: true` 跨任务；W3 WEB 命令线跨相位），**结论不变（可达 ⇒ A3），且理由更强（W1/W2 纯配置触发、无需用户操作）**。档案 §6 与摘要、切片、计划 §12 同步重写。
 - **2026-10-13 06:22** — **S1 值层落地**（见「实现计划 / S1 值层实施」）：删 `_sync_paused_state` + `update_torrent_fields(state=)` + 两处 docstring/注释 + 两处连带注释；三条守阵按新契约重写（其一改名、契约翻面）、4 处 `state=` 调用点迁移、`test_grouping` 两条承认自触发回流一轮并收敛。首次 `test.quick` 8 红 → 全部按新契约迁移后全绿（用例数与上一基线持平）；`test.full` 全绿，语句/分支各降（= 删除量）。坑档 `concurrency` 补 `state` 例外、`guards.md` A-04 行按反转更新。基线切片 `baselines/26-10-13-0620-seed-state-writeback-s1.md`。**S1 未提交**（随本专题入库）。下一步 S2 deferral。
 - **2026-10-13 06:26** — 按用户指令把 `test_grouping` 的**二次触发**入池：`issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html`（type `question`、tier standard、topic `seed-state-writeback`、Open）。现象 = A 系 S1 后自有整组停种结果推迟到下一轮同步才可见，被停成员 `stalledUP→pausedUP` 再命中 `_handle_state_transitions` 谓词（`grouping_mod.py:206`）⇒ 追加一次缺文件扫描+停种；幂等、无害、一轮收敛，属无谓重复。待拍板：接受（源无关应有之义）/ 加跨轮去重（容器与 S2 `own_writes` 有合并空间）。计划 26-10-13-0540 与档案补反向 `doc-refs`；`kb.index`/`kb.check` 全绿。随后提交 S1 + 入池。
+- **2026-10-13 06:43** — **S2 deferral 落地**（见「实现计划 / S2 deferral 实施」）：新增 `TorrentStore.own_writes`（hash → 登记时刻，纯内存不落盘）+ `note_own_write`/`own_write_pending`（判据含**组维度**）+ TTL 兜底 `_OWN_WRITE_TTL=10s`；QbApi 四入口登记；`_apply` 状态变化时逐出（另种子删除 / 热重载两处清理）。三处闸门：**D-1** `TaskQueue.run_due(defer_gate=)` ← `qbmanager._own_write_defer_gate`（队列级，覆盖 task 线全体）；**D-2** `ops.skip_check` 执行路径；**D-3** `CheckAction.execute` 决策链入口。两处相对计划字面的调整均已写明：D-3 用 `skip` 而非 `pending`（避免丢任务）；D-2 落执行路径而非 `_skip_gates_detail`（保预检 cls 契约）。守阵：`test_sync.py` 四条 + `test_taskqueue.py`/`test_qbmanager.py`/`test_ops.py`/`test_checking.py` 各一条（D 系列）；既有组串行用例补「同步回流逐出」一步。文档：坑档 `concurrency` 新增「deferral 纪律」条目、`guards.md` 新增「种子状态 A 系批次」表。全绿（3184 passed / TOTAL 99%）；基线切片 `baselines/26-10-13-0643-seed-state-writeback-s2.md`。下一步 S3 收尾（§8.3 余下守阵 V1/V2/E1/E2/I1 + 可选 A2 + 状态流转）。

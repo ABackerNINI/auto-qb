@@ -20,6 +20,7 @@
 - test_drain_bumps_write_seq_before_writing_receipt: BUG-5 顺序——回执写入时写序号须已自增
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
+- test_own_write_defer_gate_targets_group_members: A 系 S2 D-1 队列闸门判据 —— 目标 hash 或其组任一成员 ∈ own_writes 即让位
 - test_run_connect_failure: 非托管首连失败抛 QbConnectError(fail-fast -> CLI 退出码 1), 不进入主循环
 - test_reconnect_backoff_and_reset: 重连指数退避(间隔翻倍、上限 30s、未到点不重试)且连接成功后归零
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
@@ -412,6 +413,27 @@ def test_run_due_dies():
         mgr.task_queue.add_task(task, now=now)
         assert mgr.task_queue.run_due(dry_run=False, now=now) == 1
         assert task.run_count == 0, "消亡任务不应重入队"
+
+
+def test_own_write_defer_gate_targets_group_members():
+    """守阵(A 系 S2 D-1): 队列级 deferral 闸门判据 —— 目标 hash 或其组任一成员 ∈ own_writes 即让位
+
+    红验: 去掉 _own_write_defer_gate 的组维度(只判 hash ∈ own_writes) -> `HC` 断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="HD"), FakeTorrent(hash="HC"), FakeTorrent(hash="HX")])
+        mgr.store.groups["K"] = ["HD", "HC"]
+        mgr.store.member_to_key["HD"] = "K"
+        mgr.store.member_to_key["HC"] = "K"
+        gate = mgr._own_write_defer_gate
+
+        assert gate(Task("rule", "r", hash="HX")) is None, "无登记时不拦"
+        assert gate(Task("rule", "r", hash="")) is None, "无 hash 全局任务不拦"
+        mgr.store.note_own_write("HD")
+        assert gate(Task("rule", "r", hash="HD")) is not None, "自身命中"
+        assert gate(Task("rule", "r", hash="HC")) is not None, "同组成员命中(组维度)"
+        assert gate(Task("rule", "r", hash="HX")) is None, "非同组不拦"
 
 
 def test_run_connect_failure():

@@ -726,9 +726,32 @@ class QbManager(
         """
         now = time.time()
 
-        self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
+        self.task_queue.run_due(
+            dry_run,
+            now=now,
+            max_tasks=self.config.max_tasks_per_tick,
+            defer_gate=self._own_write_defer_gate,
+        )
 
         self.host.run_task_line(force)
+
+    def _own_write_defer_gate(self, task) -> Optional[str]:
+        """D-1 队列级 deferral 闸门(A 系 26-10-13-0540 S2)
+
+        判据: 任务目标 hash(或其所在组任一成员)刚被自有停/起、qB 快照尚未回流 ⇒ 返回原因码,
+        该任务本轮不执行、重排下一 tick。无 hash 的全局任务不受影响(不依赖单个种子状态)。
+
+        这是「校验类不得对自写 hash 出决策」纪律的**队列级统一闸门**: 覆盖面兜住 task 线全体
+        消费(interval 规则动作 / ops 跳检与校验 / 维护 / 限速曲线), 不必逐消费点修补。
+        有界性由 store.own_writes 的逐出(同步应用到新 state)与 TTL 兜底共同给出 —— 不依赖
+        「qB 缓存一定会前进」这一隐藏假设(见 TorrentStore.own_write_pending)。
+        """
+        h = getattr(task, "hash", "")
+        if not h:
+            return None
+        if self.store.own_write_pending(h):
+            return f"自有停/起未回流({h[:8]})"
+        return None
 
     def _tick(self, dry_run: bool, force: bool = False):
         """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)

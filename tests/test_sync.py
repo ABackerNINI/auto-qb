@@ -21,6 +21,10 @@
 - test_record_defaults_are_qb_sentinels: 未提供字段保持 qB 哨兵默认值(老版本兼容)
 - test_record_to_dict_merges_raw: to_dict 快照全字段 + _raw 合并
 - test_record_state_enum_cached_and_invalidated: state_enum 有缓存, state 变化后失效
+- test_own_writes_evicted_on_state_sync: 自有写登记在同步应用到该 hash 新 state 时逐出(A 系 S2)
+- test_own_writes_ttl_bounded: own_writes 永不逐出时 TTL 兜底丢弃(判据恢复 False, 防饿死)(A 系 S2 D2)
+- test_own_writes_group_judgement: deferral 判据含组维度(同组任一成员命中即让位)(A 系 S2)
+- test_own_writes_not_persisted: own_writes 纯内存不落盘(state.json 顶层无相关键)(A 系 S2 静态)
 - test_store_apply_sync_full_update_first_round: 首轮全量 -> added 全部 + need_validate + 样本
 - test_validate_sample_includes_hash_for_sync_response: sync 值内不含 hash -> 样本需补齐(真机 bug 回归)
 - test_store_apply_sync_delta_only_changed: 增量轮只应用变化记录(其余对象身份保留)
@@ -53,6 +57,7 @@
 import logging
 import os
 import tempfile
+import time
 from io import StringIO
 from types import SimpleNamespace
 
@@ -451,6 +456,78 @@ def test_store_update_state_snapshot_from_by_hash():
     store.apply_sync(api)
     store.update_state_snapshot()
     assert store.state_snapshot["H1"].is_stopped, "下一轮同步落真值"
+
+
+# ---------- 自有写登记 own_writes(A 系 26-10-13-0540 S2: deferral 判据源) ----------
+
+
+def test_own_writes_evicted_on_state_sync():
+    """守阵(A 系 S2): 自有写登记在「同步应用到该 hash 新 state」时逐出 —— deferral 解除路径①
+
+    红验: 去掉 _apply 里 `if "state" in changed` 分支的 own_writes.pop -> 状态回流后登记残留, 断言红。
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledDL")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+
+    store.note_own_write("H1")
+    assert store.own_write_pending("H1") is True, "登记后判据为真"
+
+    store.apply_sync(api)  # 状态未变 -> 不逐出(保守: 仍视为未回流)
+    assert store.own_write_pending("H1") is True, "状态未变不应逐出"
+
+    client.torrents["H1"].state = "pausedDL"
+    store.apply_sync(api)  # 状态真变化 -> 应用即逐出
+    assert "H1" not in store.own_writes, "应用到新 state 应逐出登记"
+    assert store.own_write_pending("H1") is False
+
+
+def test_own_writes_ttl_bounded():
+    """守阵(A 系 S2 D2): own_writes 永不逐出时由 TTL 兜底丢弃(判据恢复 False) —— 防任务饿死
+
+    红验: 去掉 own_write_pending 里的 `_evict_expired_own_writes()` 调用 -> 超期登记永不清,
+    判据恒真, `own_write_pending("H1") is False` 断言红。
+    """
+    store = TorrentStore()
+    store.note_own_write("H1")
+    assert store.own_write_pending("H1") is True
+    # 模拟「命令下发后 qB 永不回流该 hash 的新 state」-> 登记超期未逐出
+    store.own_writes["H1"] = time.monotonic() - 999.0
+    assert store.own_write_pending("H1") is False, "TTL 兜底应丢弃超期登记(不依赖 qB 前进)"
+    assert "H1" not in store.own_writes
+
+
+def test_own_writes_group_judgement():
+    """守阵(A 系 S2): deferral 判据含**组维度** —— 同组任一成员在 own_writes 即让位
+
+    组级闸门(G6 / 决策链 1)读的是「组内状态」, 故同组任一成员刚被自有停/起时, 该组判定
+    同样建立在陈旧快照上。红验: 去掉 own_write_pending 的组分支 -> `HC` 断言红。
+    """
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="HD"), FakeTorrent(hash="HC"), FakeTorrent(hash="HX")])
+    store.groups["K"] = ["HD", "HC"]
+    store.member_to_key["HD"] = "K"
+    store.member_to_key["HC"] = "K"
+
+    store.note_own_write("HD")
+    assert store.own_write_pending("HD") is True, "自身命中"
+    assert store.own_write_pending("HC") is True, "同组成员 -> 组级判定命中"
+    assert store.own_write_pending("HX") is False, "非同组不受影响"
+    assert store.own_write_pending("HNONE") is False, "未归组不受影响"
+
+
+def test_own_writes_not_persisted():
+    """守阵(A 系 S2 静态): own_writes 纯内存态, 不落盘(state.json 顶层无相关键)
+
+    红验: 把 own_writes 绑进 state.data(如 StateService 收编) -> 断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.store.note_own_write("H1")
+        assert mgr.store.own_writes, "内存态已登记"
+        assert "own_writes" not in mgr.state, "纯内存态不得进 state.json 落盘载荷"
 
 
 # ---------- 降级与异常 ----------

@@ -57,7 +57,24 @@
 - **处置**: 写方法里调 `update_torrent_fields`(tags/category/save_path/限速等**非 state** 字段)
   或 `invalidate_*`。state 的「同 tick 新鲜」是**刻意放弃**的: 同 tick 二次停/起可能重发一次
   请求(qB 幂等, 无害); 要补回见计划 26-10-13-0540 §4.4 的 `pending_writes` 意图标记。
-  校验类决策若可能与自写撞窗, 走同计划 §4.3 的局部 deferral(不在本条目展开)。
+  校验类决策若可能与自写撞窗, 走同计划 §4.3 的局部 deferral(见下条)。
+
+### 校验类决策不得对「自有写未回流」的 hash 出决策（deferral 纪律）
+
+- **触发**: 新增/修改任何**读快照 `state` 或组内下载态**做放行/拒绝决策的消费点(跳检闸门、校验决策链、组级判定…)。
+- **判别**: 自有停/起下发后, qB 服务端状态按 `BitTorrent/Session/RefreshInterval`(默认 1.5s)节流,
+  快照**尚未**反映该变化。此时按陈旧快照决策 = 双错: 按陈旧值**放行** ⇒ 脏数据洗白(跳检把正在写入的
+  共享文件标全部块有效, 即 G4/G6); 按陈旧值**拒绝** ⇒ 误拒。
+- **处置**: 统一判据 `store.own_write_pending(hash)`(目标 hash **或其所在组任一成员** ∈ `own_writes`)。
+  已设三处闸门: **D-1** 队列级 `qbmanager._own_write_defer_gate` → `TaskQueue.run_due(defer_gate=)`
+  (覆盖 task 线全体消费, 命中者重排下一 tick); **D-2** `ops.skip_check` 执行路径(WEB 路径不经 task 线);
+  **D-3** `rules/actions/checking.py` `CheckAction.execute` 决策链入口(事件即时分派等非队列路径)。
+  **新增校验类消费点必须接同一判据并加守阵**, 否则该点对自写裸奔(A3 的「纪律性安全」代价, 见计划 §11)。
+- **有界性双依据(缺一不可)**: ① `own_writes` 在同步应用到该 hash 新 `state` 时逐出(依赖 qB 缓存前进);
+  ② **TTL 兜底** `_OWN_WRITE_TTL`(10s, 不依赖任何外部条件) —— 命令在 qB 侧未生效时靠它解除让位, 防任务饿死。
+  只留 ① 等于把「任务不饿死」押在「qB 一定会前进」上, 那是隐藏假设。
+- **登记点**: QbApi 四入口 `start/stop/pause/resume` 在 raw client 调用**成功后** `note_own_write`;
+  纯内存态(同 `state_snapshot`), **不落盘**, 热重载 `reset_runtime` 清空。
 
 ### 视图组装里**绝对不能**发 qB API (硬约束, 不是优化)
 

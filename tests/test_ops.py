@@ -43,6 +43,7 @@
 - test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言 + G7/G8 归类(G8 blocked 短路 filelist / G7 force 不短路)
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
+- test_skip_check_deferred_on_own_write: 跳检让位(A 系 26-10-13-0540 S2 D-2) —— 目标或其组刚被自有停/起(快照未回流) -> 让位不决策, 零副作用
 """
 import copy
 import inspect
@@ -746,6 +747,7 @@ def test_ops_clear_backup_noop_missing_path_and_oserror():
 # ============================================================
 # E. 跳检闸门扩展(plan 26-10-05-0314 S1b-1): 三分流 detail 单点 + force 语义 + 只读预检
 #    谓词单点在 ops._skip_gates_detail; 规则侧决策链 0/1 恒先于 ops 调用, 新闸门对规则源等价 no-op
+#    (A 系 26-10-13-0540 S2 起规则侧另有 D-3 让位闸门, 与执行路径的 D-2 同判据 store.own_write_pending)
 # ============================================================
 def wire_group(mgr, key, *hashes):
     """把若干 hash 直写进 store 分组索引(group_has_downloading 的判定数据源)"""
@@ -891,6 +893,40 @@ def test_skip_gates_allows_group_all_paused():
     assert ops._skip_gates_detail("HA", ha) == [], "组内全暂停/已完成应放行"
     assert ops._skip_gates_detail("HC", hc) == [], "未归组应放行"
     assert ops._skip_gates("HC", hc) is None, "执行路径全过应返回 None"
+
+
+def test_skip_check_deferred_on_own_write():
+    """守阵(A 系 S2 D-2): 目标或其组刚被自有停/起(快照未回流) -> 跳检让位, 不按陈旧快照出决策
+
+    WEB 命令路径不经 task 线(D-1 覆盖不到), 靠此闸拦下; 零副作用(未导出未删除)。
+    红验: 去掉 skip_check 入口的 own_write_pending 闸门 -> 走完四阶段, `client.calls == []` 断言红。
+    """
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ha = seed_paused(mgr, client, "HA")
+    hb = FakeTorrent(hash="HB", state="pausedDL", progress=0.0)
+    seed_store(mgr, [ha, hb])
+    client.torrents["HB"] = hb
+    wire_group(mgr, "K", "HA", "HB")
+
+    # ① 目标自身刚被自有停/起
+    mgr.store.note_own_write("HA")
+    r = mgr.ctx.ops.skip_check("HA", source="web")
+    assert r.is_skipped and "稍后" in r.message, f"自身命中应让位: {r}"
+    assert client.calls == [], f"让位零副作用: {client.calls}"
+
+    # ② 仅同组成员刚被自有停/起(组维度)
+    mgr.store.own_writes.clear()
+    mgr.store.note_own_write("HB")
+    r2 = mgr.ctx.ops.skip_check("HA", source="web")
+    assert r2.is_skipped and "稍后" in r2.message, f"同组成员命中应让位: {r2}"
+    assert client.calls == [], f"让位零副作用: {client.calls}"
+
+    # ③ 登记清除后不再让位(证明是 deferral 而非永久拒绝)
+    mgr.store.own_writes.clear()
+    r3 = mgr.ctx.ops.skip_check("HA", source="web")
+    assert not (r3.is_skipped and "稍后" in r3.message), f"登记清除后不应再让位: {r3}"
 
 
 def test_skip_check_rejects_inflight_recheck():

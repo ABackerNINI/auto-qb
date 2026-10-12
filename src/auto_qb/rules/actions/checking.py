@@ -81,6 +81,15 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
         # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
 
+        # S2 deferral 闸门(D-3, A 系 26-10-13-0540): 目标种子或**其所在组任一成员**刚被自有
+        # 停/起、qB 快照尚未回流 ⇒ 决策链 0(暂停中未完成)/链 1(组内有活跃下载)读到的状态陈旧,
+        # 本轮不出决策、让位下一 tick(收回陈旧-放行窗口)。
+        # 用 skip(而非 pending): pending 需轮询子任务恢复 origin, 本闸无此驱动, 会丢任务;
+        # task 线的「下一 tick 重排」由 D-1 队列级闸门承担(qbmanager._own_write_defer_gate),
+        # 本闸补拦事件即时分派等不经队列的路径。有界: own_writes 逐出/TTL 到期即恢复。
+        if manager.store.own_write_pending(ctx.hash):
+            return ActionResult.skip("本程序刚下发过停/起操作, 状态尚未从 qB 回流; 本轮校验决策让位下一 tick")
+
         # 决策链 0: 只校验"暂停中未完成"的种子(跨种添加后的典型状态), 其余状态一律跳过:
         # - 已完成(progress>=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
         # - 活跃中(downloading/uploading 等非暂停): 正在运行, 无需校验

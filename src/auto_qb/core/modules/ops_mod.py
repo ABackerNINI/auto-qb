@@ -407,6 +407,14 @@ class OpsModule(BaseModule):
         if tor is None:
             return ActionResult.skip(_SKIP_GONE_MSG)
 
+        # ---- S2 deferral 闸门(D-2, A 系 26-10-13-0540): 本程序刚对该种子或**其组任一成员**
+        # 下发过停/起、qB 快照尚未回流 ⇒ 闸门读到的 state 陈旧, 本轮不出决策(免 G4/G6 陈旧-放行
+        # ⇒ 脏数据洗白)。放置于执行路径入口(而非 _skip_gates_detail): 预检 skip_check_precheck
+        # 是只读预览、其 cls 契约(blocked/force)不引入第四类; 执行路径拦下即可, 预检照旧摊开闸门。
+        # WEB 命令路径不在 task 线(D-1 覆盖不到), 故在此单点补拦; 有界: own_writes 逐出/TTL 到期即恢复。
+        if self._ctx.store.own_write_pending(hash):
+            return ActionResult.skip("本程序刚下发过停/起操作, 状态尚未从 qB 回流(避免按陈旧快照误判); 请稍后重试")
+
         # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态(骨架单点 _live_recheck)
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
         live = self._live_recheck(hash, "跳检前", f"{prefix} {tor.log_repr} | 跳检放弃", _SKIP_GONE_MSG)

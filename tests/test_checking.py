@@ -53,6 +53,7 @@
 - test_checking_full_checking_giveup_condemns: 启动宽限耗尽(CHECK_START_GIVEUP)仍未见 checking -> 判败走冷却(防活锁保险丝)
 - test_checking_group_full_checking_serialized: 组内校验串行(决策链 1.5): B 让位等待, A 成功晋升参考后 B 重走决策链走跳检
 - test_checking_group_skip_on_same_data_fail: 组内校验失败推断(决策链 1.6): 文件映射一致 -> B 不再校验
+- test_checking_action_deferred_on_own_write: 决策链入口让位(A 系 S2 D-3): 目标或其组刚被自有停/起(快照未回流) -> 本轮不出决策
 - test_checking_group_fail_record_healed_when_member_completed: 1.6 假失败自愈: 记录指向已完成成员 -> 记录清除且不推断
 - test_checking_group_no_infer_when_sizes_differ: 组内文件映射不一致 -> 不推断, B 照常校验
 - test_checking_group_wait_external_entry_skip: 组内校验中且无任务驱动 -> skip
@@ -1465,6 +1466,12 @@ def test_checking_group_full_checking_serialized():
         run_queue(mgr, t0 + 20.0)
         assert mgr.store.verified_references == {"HA"}, "成功应晋升参考"
         assert mgr.task_queue.active_check_hashes() == set(), "轮询消亡应释放在途登记"
+        # !S2(26-10-13-0540): HA 成功后的 auto_start 走 QbApi.torrents_start -> 登记 own_writes[HA]
+        #   (自有写 deferral 判据)。生产里 HA 的新 state 于下一轮同步回流即逐出该登记; 本用例直写
+        #   store.by_hash(seed_store)绕过了 _apply 的「应用+逐出」, 故在此显式模拟同步副作用 ——
+        #   否则同组 B 的校验决策会被 deferral 让位(D-3 组级判据: 目标或其组任一成员 ∈ own_writes)。
+        seed_store(mgr, [make_target(hash="HA", state="stalledUP", progress=1.0), b])
+        mgr.store.own_writes.pop("HA", None)
         # B 的恢复重走发生在等待任务 resume 之后(下一批到期): 命中 verified 参考 -> with_reference 跳检
         run_queue(mgr, t0 + 90.0)
         assert mgr.task_queue.active_check_hashes() == set(), "等待任务不登记在途"
@@ -1474,6 +1481,33 @@ def test_checking_group_full_checking_serialized():
         assert "export" in names and "delete" in names, f"B 应走跳检流程: {client.calls}"
         add_call = [c for c in client.calls if c[0] == "add"][0]
         assert add_call[1]["is_skip_checking"] is True, "B 应以跳检方式重加"
+
+
+def test_checking_action_deferred_on_own_write():
+    """守阵(A 系 S2 D-3): 决策链入口让位 —— 目标或其组刚被自有停/起(快照未回流)则本轮不出决策
+
+    红验: 去掉 CheckAction.execute 入口的 own_write_pending 闸门 -> 直接提交 recheck, 断言红。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    ha = make_target(hash="HA")
+    hb = make_target(hash="HB")
+    seed_store(mgr, [ha, hb])
+    client.torrents["HA"] = ha
+    client.torrents["HB"] = hb
+    inject_group(mgr, "HA", "HB")
+
+    # ① 同组成员 HB 刚被自有停/起 -> HA 的校验决策让位(不提交 recheck)
+    mgr.store.note_own_write("HB")
+    process_rule(mgr, client, ha)
+    assert ("recheck", None) not in client.calls, f"让位不应提交 recheck: {client.calls}"
+
+    # ② 登记清除后照常提交 recheck(证明是 deferral 而非永久拒绝)
+    mgr.store.own_writes.clear()
+    process_rule(mgr, client, ha)
+    assert ("recheck", None) in client.calls, f"登记清除后应提交 recheck: {client.calls}"
 
 
 def test_checking_group_skip_on_same_data_fail():

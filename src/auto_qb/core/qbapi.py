@@ -95,9 +95,11 @@ class QbApi:
 
     def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_start(torrent_hashes=torrent_hashes, **kwargs)
+        self.store.note_own_write(torrent_hashes)
 
     def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
+        self.store.note_own_write(torrent_hashes)
 
     def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         """暂停(与 torrents_stop 同为暂停轴写操作, 纯透传)
@@ -109,12 +111,17 @@ class QbApi:
 
         代价(刻意): 同 tick 内 is_paused 仍为旧值 ⇒ 第二个同类动作可能重发一次请求(qB 侧
         幂等, 无功能错误, 只是重复 HTTP 与日志噪声); 需补回时见计划 §4.4 的可选件 pending_writes。
+
+        登记 own_writes(A 系 26-10-13-0540 S2): 停/起的**意图**要登记, 供 deferral 判据 ——
+        校验类决策(跳检闸门/决策链)在快照尚未回流时延迟到下一 tick, 收回 G4/G6 陈旧-放行窗口。
         """
         self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
+        self.store.note_own_write(torrent_hashes)
 
     def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         """恢复(与 torrents_pause 对称, 纯透传; 见 torrents_pause 注)"""
         self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
+        self.store.note_own_write(torrent_hashes)
 
     def torrents_set_upload_limit(
         self,

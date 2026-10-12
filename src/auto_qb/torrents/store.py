@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 import logging
+import time
 
 from qbittorrentapi import NotFound404Error, TorrentDictionary
 
@@ -16,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 # qB 不支持 sync/maindata(旧版本 / 测试替身缺方法)时的降级信号; 其它异常(网络等)照常上抛
 _SYNC_UNAVAILABLE = (AttributeError, NotFound404Error)
+
+# 自有写登记(own_writes)的 TTL 兜底(秒): 登记超过该时长仍未被同步逐出则丢弃。
+# 取值须 > qB 服务端状态节流上限(BitTorrent/Session/RefreshInterval 默认 1.5s)的数倍,
+# 给「命令下发 -> qB 缓存前进 -> 本侧同步应用 -> 逐出」这条正常链路留足余量;
+# 同时它给 deferral 的**有界性**提供不依赖 qB 的独立下限(见 own_write_pending)。
+_OWN_WRITE_TTL = 10.0
 
 
 class TorrentStore:
@@ -94,6 +101,12 @@ class TorrentStore:
         self.group_sizes: Dict[Any, Dict[str, Dict[str, int]]] = {}
         self.member_to_key: Dict[str, Any] = {}
         self.state_snapshot: Dict[str, Any] = {}
+        # 自有写登记(A 系 26-10-13-0540 S2): hash -> 登记时刻(monotonic)。**纯内存、不落盘**
+        # (与 state_snapshot 同级, state.json 无相关键)。语义 = 「本程序刚下发过停/起/暂停/恢复,
+        # qB 缓存尚未回流, 快照对暂停轴仍陈旧」—— 校验类决策(跳检闸门/决策链/D-1 队列闸门)据此
+        # 延迟到下一 tick, 收回 G4/G6 的「陈旧-放行 ⇒ 脏数据洗白」窗口。三处清理:
+        # ① 同步应用到该 hash 新 state 时逐出; ② 种子删除时清理; ③ TTL 兜底(_OWN_WRITE_TTL)。
+        self.own_writes: Dict[str, float] = {}
         self.download_conflict_warned: Set[Tuple[Any, str]] = set()
         # 跨组文件交叉检测的去重集合(plan 26-10-04-0107 S3): (组key_a, 组key_b) 规范序组对 ——
         # 软信号不落盘(纯内存, 重启即失忆, 方向是「更早恢复检测」, 保守); 热重载不清,
@@ -238,6 +251,8 @@ class TorrentStore:
                         view_changed = True
                     if "state" in changed:
                         state_changed.append((h, rec.state_enum))
+                        # 自有写逐出(S2): 该 hash 的新 state 已从 qB 回流应用 -> deferral 目的达成
+                        self.own_writes.pop(h, None)
                     if not self._CONFLICT_FIELDS.isdisjoint(changed):
                         key = member_to_key.get(h)
                         if key is not None:
@@ -267,6 +282,7 @@ class TorrentStore:
             # 已删种子的字段变化残留登记一并清掉(重加的同 hash 由后续轮重新检测)
             self.external_tag_changes.discard(h)
             self.self_caused_fields.pop(h, None)
+            self.own_writes.pop(h, None)  # 自有写登记同样清掉: 种子已删, deferral 不再有意义
         self.by_hash = by_hash
         self.delta_fields = delta_fields
         self.state_changed = state_changed
@@ -308,6 +324,49 @@ class TorrentStore:
         同步过的状态同样计入, 故下轮不会被误判为外部状态变化」整句前提已消失。
         """
         self.state_snapshot = {h: r.state_enum for h, r in self.by_hash.items()}
+
+    # ---------- 自有写登记(A 系 26-10-13-0540 S2: deferral 的判据来源) ----------
+
+    def note_own_write(self, torrent_hashes: Union[str, List[str], None]) -> None:
+        """登记自有停/起(QbApi 四入口在 raw client 调用成功后调用)
+
+        hash -> 当前时刻(monotonic); 同 hash 连续自写刷新时刻(判据只需「是否自写」布尔 + TTL)。
+        纯内存、不落盘; 有界性由「同步应用到新 state 时逐出」+「TTL 兜底」双保险给出。
+        """
+        hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
+        now = time.monotonic()
+        for h in hashes:
+            self.own_writes[h] = now
+
+    def own_write_pending(self, hash: str) -> bool:
+        """deferral 判据(S2): 目标 hash **或其所在组任一成员** ∈ own_writes ⇒ 本轮不出决策
+
+        组维度是必需的 —— 校验类闸门(G6/决策链 1/跳检 G6)读的是「组内是否有活跃下载成员」,
+        故同组任一成员刚被自有停/起时, 该组相关判定同样建立在陈旧快照上。
+        顺带惰性做 TTL 过期清理: 见 _evict_expired_own_writes(不依赖 qB 前进的有界下限)。
+        """
+        self._evict_expired_own_writes()
+        if hash in self.own_writes:
+            return True
+        key = self.member_to_key.get(hash)
+        if key is None:
+            return False
+        return any(m in self.own_writes for m in self.groups.get(key, ()))
+
+    def _evict_expired_own_writes(self) -> None:
+        """TTL 兜底: 登记超过 _OWN_WRITE_TTL 仍未逐出 ⇒ 丢弃 + warning(可观测)
+
+        必要件: 若命令在 qB 侧实际未生效(种子已删 / qB 拒收 / 状态本就没变), 该 hash 的登记
+        永不逐出 ⇒ 相关任务无限重排(活锁/饿死)。TTL 是这条链路的下限保证, 也是「deferral
+        有界」不依赖「qB 缓存一定会前进」的独立依据。
+        """
+        if not self.own_writes:
+            return
+        now = time.monotonic()
+        for h in [h for h, t in self.own_writes.items() if now - t > _OWN_WRITE_TTL]:
+            logger.warning(f"自有写登记超时(TTL {_OWN_WRITE_TTL:g}s)未逐出, 丢弃: {h[:8]} | "
+                           f"相关校验决策恢复执行(命令在 qB 侧可能未生效/状态未变)")
+            del self.own_writes[h]
 
     def update_field_snapshots(self) -> None:
         """轮末刷新字段变化基线(与 update_state_snapshot 并列, 仅主循环线程调用)
@@ -467,6 +526,7 @@ class TorrentStore:
         self.member_to_key.clear()
         self.state_snapshot.clear()
         self.verified_references.clear()
+        self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)
         self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
         # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):
         # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载重建
@@ -566,6 +626,7 @@ class TorrentStore:
         """种子删除后立即从快照移除, 并登记待报 removed(供下轮 added/removed 语义)"""
         if self.by_hash.pop(hash, None) is not None:
             self._pending_removed.add(hash)
+            self.own_writes.pop(hash, None)  # 自有写登记清理单点(S2): 种子已删, 不再有意义
 
     def restore_torrent(self, record: TorrentRecord) -> None:
         """跳检重加后恢复删除前记录(tracker_conf/惰性缓存保留); 幂等

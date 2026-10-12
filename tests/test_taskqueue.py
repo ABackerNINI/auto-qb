@@ -10,6 +10,7 @@
 - test_run_due_requeues_on_true: handler True -> 按 interval 重入队(run_count 累加)
 - test_run_due_dies_on_false: handler False -> 消亡不重入, check 在途登记释放
 - test_run_due_exception_caught: handler 异常被捕获, 视为 REQUEUE 重入队
+- test_run_due_defer_gate_defers_then_resumes: defer_gate 命中 -> 本轮不执行、重入堆下一轮再判; 放行后执行(A 系 S2 D-1)
 - test_add_task_resets_by_default: add_task 默认重置断点(下次从头执行)
 - test_add_task_keep_progress: keep_progress=True 显式保存进度(断点保留续跑)
 - test_run_due_requeue_resets: 周期收尾重入队默认重置(不携带上一轮断点)
@@ -136,6 +137,29 @@ def test_run_due_exception_caught():
     tq.add_task(t, now=now)
     assert tq.run_due(now=now) == 1
     assert t.run_count == 1, "异常任务应照常重入队"
+
+
+def test_run_due_defer_gate_defers_then_resumes():
+    """守阵(A 系 S2 D-1): defer_gate 命中 -> 本轮不执行、以 next_run=now 重入堆下一轮再判; 放行后执行
+
+    红验: 去掉 run_due 里的 defer_gate 分支(无条件执行) -> 首次 run_due 即执行, `ran == []` 断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    ran = []
+    t = Task("rule", "r", hash="H1", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED)
+    tq.add_task(t, now=now)
+    blocked = {"on": True}
+
+    def gate(task):
+        return "让位(测试)" if blocked["on"] else None
+
+    assert tq.run_due(now=now, defer_gate=gate) == 1, "本轮仍计入弹出数"
+    assert ran == [], "命中 defer_gate 本轮不执行"
+    assert t in tq._fast and t.state == PENDING, "命中者重入堆(下一轮再判), 不是消亡"
+    blocked["on"] = False
+    tq.run_due(now=now, defer_gate=gate)
+    assert ran == ["H1"], "判据放行后照常执行(有界: 不会永久让位)"
 
 
 def test_add_task_resets_by_default():
