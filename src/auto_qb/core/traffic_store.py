@@ -928,8 +928,9 @@ class TrafficV4Store:
 
     def series_day_dates(self, key: str, min_epoch: float) -> tuple:
         """系列目录内天文件日期串(升序), 仅保留 date 00:00 epoch >= min_epoch 的
-        (补算窗口过滤, §04.3 —— rollup_window 外的天文件已删/不读); 目录缺失 = 空表;
-        非日期杂物(agg.dat/.corrupt 等)跳过。"""
+        (min_epoch = 调用方传的读集下界; 恢复路径现传 agg 水位所在日 —— 按需口径
+        plan 26-10-12-2010, 读集与历史数据量/保留窗口解耦; 行为零改动, 仍按文件名
+        日期过滤); 目录缺失 = 空表; 非日期杂物(agg.dat/.corrupt 等)跳过。"""
         try:
             names = os.listdir(v4_series_dir(self._data_dir, key))
         except OSError:

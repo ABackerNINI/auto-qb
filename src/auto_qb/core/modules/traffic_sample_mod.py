@@ -100,10 +100,14 @@ qbmanager 的 finally 与 state.save 顺序不改。
   pending 可含多日, 翻日/翻月由入账时点级联封口兜底(先封前一日/月再开新累计器)。
 - 重启恢复与 catch-up(§4.3, 硬序: catch-up 必须先于裁剪): start() 逐系列扫 agg 文件尾
   一次 -> 恢复水位 + 从文件内行重建当日/当月累计器 -> catch-up 逐级补算 append:
-  hour <- 补算窗口内天文件 raw 逐槽前向记账(与在线记账同一口径)、day <- agg 内 hour 行、
-  month <- day 行。补算窗口 = rollup_window(默认 30d)= 天文件存活期(不是 raw_window);
-  停机超窗 -> 天文件已删 -> 对应 hour/day 行缺失跳过不标注(图上真空, 与块间 gap 语义
-  一致)。恢复末尾才做 hour 裁剪(硬序, 测试钉住: hour 到龄/day 未封 时 day 行不丢)。
+  hour <- 读集内天文件 raw 逐槽前向记账(与在线记账同一口径)、day <- agg 内 hour 行、
+  month <- day 行。恢复读集按需(plan 26-10-12-2010 D1, 与流量图数据方案同一契约):
+  读集下界 = agg 水位所在日(v4_day_epoch(wm_hour)), 水位封口小时不读不重算 —— 常态
+  1 个天文件、跨日界至多 2 个, 与 24h 流量图读侧同阶; rollup_window(默认 30d)只决定
+  保留(D2: 1000000D 永久保留不动), 不决定启动读集。agg 无可用水位(缺失/损坏/无 hour
+  行)时退回 now - rollup_window 全量兜底(D5: 诚实兜底不猜不静默, INFO 留痕)。停机超窗
+  -> 天文件已删 -> 对应 hour/day 行缺失跳过不标注(图上真空, 与块间 gap 语义一致)。
+  恢复末尾才做 hour 裁剪(硬序, 测试钉住: hour 到龄/day 未封 时 day 行不丢)。
 - 裁剪与淘汰(§4.5): hour 行按 rollup_window 裁剪, piggyback hour 封口时点, 判据用内存
   最老行(零常规文件读), 存在到龄行才重写 + 无到龄零写(same_content 语义), tmp+fsync+
   os.replace 仅存于此(v3 常规写路径无原子重写); day/month 行不按龄裁剪(D7 永久)。
@@ -353,6 +357,14 @@ class TrafficSampleModule(BaseModule):
         self._agg_states: dict = {}
         # 种子按龄淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
         self._last_evict_check: Optional[float] = None
+        # ---- 恢复埋点(§4.3, plan 26-10-12-2010: 消除静默, 读集有界可机检) ----
+        # 上次 _recover_aggregates 的读集计数: 逐系列 {key: {"day_dates": 读集日期串,
+        #   "bound": 下界来源("watermark" 水位日 / "fallback" 保留窗兜底), "new_hours":
+        #   补算小时数, "slots": 逐槽入账槽数}}; 汇总 {"series", "day_files", "hours",
+        #   "slots", "elapsed_s"}。供测试断言「读集有界」(机检事实, 不靠读日志目测);
+        #   None = 未启用/未恢复(dry_run 或流量模块关闭)
+        self.recovery_reads: Optional[dict] = None
+        self.recovery_stats: Optional[dict] = None
         # ---- 活尾快照(S6 验收追加) ----
         # 系列键 -> LiveTail(未落盘 buffer 记录 + 开放游程的当轮冻结副本): handler 末尾
         # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
@@ -1123,17 +1135,44 @@ class TrafficSampleModule(BaseModule):
 
     def _recover_aggregates(self) -> None:
         """重启恢复(§4.3): 扫现存系列, 逐系列恢复水位 + 重建累计器 + catch-up 补算
-        (硬序: 补算 append 全部完成后才裁剪)。单系列失败(OSError)不阻断其它系列。"""
+        (硬序: 补算 append 全部完成后才裁剪)。单系列失败(OSError)不阻断其它系列。
+
+        读集按需(plan 26-10-12-2010 D1): 逐系列读集下界 = agg 水位所在日, 常态 1 个
+        天文件、跨日界至多 2 个 —— 与 24h 流量图读侧契约同阶; 不打开流量图时的 0 文件
+        由读侧轮询门控保证, 恢复读的是写侧缺口。起止各一条 INFO(消除静默) + 计数落
+        self.recovery_reads / self.recovery_stats 供测试机检「读集有界」。"""
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._ctx.config.data_dir:
             return
-        now = time.time()
+        t0 = time.time()
         store = self._get_v4_store()
-        for key in store.series_keys():
+        keys = store.series_keys()
+        logger.info(f"流量采样 | 启动恢复开始: 启用态, {len(keys)} 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)")
+        reads: dict = {}
+        total_files = 0
+        total_hours = 0
+        total_slots = 0
+        for key in keys:
             try:
-                self._recover_series(key, store, now, conf.rollup_window)
+                reads[key] = self._recover_series(key, store, t0, conf.rollup_window)
+                total_files += len(reads[key]["day_dates"])
+                total_hours += reads[key]["new_hours"]
+                total_slots += reads[key]["slots"]
             except OSError as e:
                 logger.warning(f"流量采样 | {key} 聚合恢复失败(该系列按 agg 现状运行): {e}")
+        elapsed = time.time() - t0
+        self.recovery_reads = reads
+        self.recovery_stats = {
+            "series": len(keys),
+            "day_files": total_files,
+            "hours": total_hours,
+            "slots": total_slots,
+            "elapsed_s": elapsed,
+        }
+        logger.info(
+            f"流量采样 | 启动恢复完成: {len(keys)} 系列 / 读入天文件 {total_files} 个 / "
+            f"补算小时 {total_hours} 个 / 入账槽 {total_slots} 个 / 耗时 {elapsed:.2f}s"
+        )
 
     @staticmethod
     def _catch_up_level(children: list, bucket_epoch_of, cur_bucket: int, watermark: Optional[int], kind: str) -> tuple:
@@ -1155,12 +1194,23 @@ class TrafficSampleModule(BaseModule):
             out.append(v4_rollup_agg(kind, b, tuple(buckets[b])))
         return out, cur_epoch, cur_rows
 
-    def _recover_series(self, key: str, store: TrafficV4Store, now: float, window: float) -> None:
+    def _recover_series(self, key: str, store: TrafficV4Store, now: float, window: float) -> dict:
         """单系列恢复(§4.3/§4.4): 扫 agg 文尾 -> 水位(= 文件尾行, 不落内存不重 append)
-        + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 窗口内天文件
+        + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 读集内天文件
         raw 逐槽前向记账 / day <- agg 内 hour 行 / month <- day 行) -> 末尾才裁剪(硬序)。
-        补算窗口 = rollup_window = 天文件存活期: 停机超窗的天文件已删, 对应 hour/day 行
-        缺失跳过不标注(图上真空)。"""
+
+        读集按需(plan 26-10-12-2010 D1): 读集下界 = agg 水位所在日
+        [v4_day_epoch(wm_hour), 今日] —— 水位封口小时不读不重算(现判据 h <= wm_hour
+        已在过滤), 读集常态 1 个天文件、跨日界至多 2 个, 与 24h 流量图读侧契约同阶;
+        rollup_window 只决定保留(D2: 1000000D 永久保留不动), 不决定启动读集。为什么是
+        「所在日」而非时刻: series_day_dates 按文件名日期过滤, 传 day(wm_hour) 恰好纳入
+        水位当天天文件(水位之后的 raw 必落在该日或更晚文件 —— 天文件 00:00 硬切、块不跨天)。
+        agg 无可用水位(wm_hour is None: 缺失/损坏/无 hour 行)时退回 now - window 全量
+        兜底(D5: 无可信水位则不可判哪些小时已聚合, 全量重算 + INFO 留痕, 诚实兜底不猜)。
+        停机超窗的天文件已删 -> 对应 hour/day 行缺失跳过不标注(图上真空, 与块间 gap 同)。
+
+        返回读集埋点 {"day_dates", "bound", "new_hours", "slots"}(供 _recover_aggregates
+        汇总与测试机检读集有界)。"""
         parsed = store.read_agg(key)
         agg = self._agg_state(key)
         agg.earliest_hour = parsed.hours[0].epoch if parsed.hours else None
@@ -1169,16 +1219,29 @@ class TrafficSampleModule(BaseModule):
         wm_month = parsed.months[-1].epoch if parsed.months else None
         today = v4_day_epoch(now)
         cur_month = v4_month_epoch(now)
-        # --- hour catch-up: 补算窗口内天文件 raw 逐槽前向记账(与在线记账同一口径);
+        # --- hour catch-up: 读集内天文件 raw 逐槽前向记账(与在线记账同一口径);
         # --- 跨天文件末槽上下文接力(00:00 边界连续时条件结算, 缺文件断链) ---
         hour_samples: dict = {}
         day_tail: Optional[tuple] = None
-        for date in store.series_day_dates(key, now - window):
+        if wm_hour is not None:
+            lower = v4_day_epoch(wm_hour)  # 按需口径: 读集下界 = 水位所在日
+            bound = "watermark"
+        else:
+            lower = now - window  # 兜底(D5): 无可信水位, 退回保留窗全量
+            bound = "fallback"
+            logger.info(f"流量采样 | {key} agg 无可用水位(缺失/损坏/无 hour 行), "
+                        f"读集退回保留窗 now - rollup_window 全量兜底(D5)")
+        slot_counts: list = []
+        day_dates = store.series_day_dates(key, lower)
+        for date in day_dates:
             parsed_day = store.read_day(key, date)
             if parsed_day is not None:
-                day_tail = self._agg_credit_day_file(hour_samples, parsed_day, day_tail)
+                day_tail = self._agg_credit_day_file(hour_samples, parsed_day, day_tail, slot_counts)
             else:
                 day_tail = None  # 缺失文件: 结算上下文断链(其后间隙由 gap 判定兜底真空)
+        if len(day_dates) > 2:
+            src = f"水位日 {day_dates[0]} 陈旧(聚合持续未落盘?)" if bound == "watermark" else "fallback 保留窗全量"
+            logger.info(f"流量采样 | {key} 读集 {len(day_dates)} 天(>2): 下界来源 = {src}(不影响正确性, 正确性由逐小时重算判据保证)")
         new_hours = []
         for h in sorted(hour_samples):
             if wm_hour is not None and h <= wm_hour:
@@ -1201,9 +1264,20 @@ class TrafficSampleModule(BaseModule):
         if rows:
             self._agg_append(key, rows)  # catch-up 补算 append(幂等: 同 epoch 取最后一行)
         self._agg_trim(key, agg, now, window)  # 硬序: catch-up 全部落盘后才裁剪
+        return {
+            "day_dates": day_dates,
+            "bound": bound,
+            "new_hours": len(new_hours),
+            "slots": sum(slot_counts),
+        }
 
     @staticmethod
-    def _agg_credit_day_file(hour_samples: dict, parsed_day, prev_tail: Optional[tuple] = None) -> Optional[tuple]:
+    def _agg_credit_day_file(
+        hour_samples: dict,
+        parsed_day,
+        prev_tail: Optional[tuple] = None,
+        slot_counter: Optional[list] = None
+    ) -> Optional[tuple]:
         """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(块内相邻槽区间 [slot_k,
         slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 0 / n = null 不记), 与在线 _agg_feed
         结算区间信用同一口径。
@@ -1213,10 +1287,15 @@ class TrafficSampleModule(BaseModule):
         下一块首槽 - 上一块末槽, 连续(<= interval + DRIFT_TOL)则按上一槽速率把
         [末槽, 首槽) 结算进覆盖, 崩溃/停机间隙超容差为真空 —— 00:00 边界既有每天约 2s
         覆盖损失就此消除。prev_tail = (末槽 ts, obs) 或 None(无上下文/上文件缺链);
-        返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过)。"""
+        返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过)。
+
+        slot_counter 非 None(恢复埋点 §4.3, plan 26-10-12-2010)时按块追加各块槽数
+        (读集成本的量级单点, 供计数属性断言); 不传 = 零影响(既有调用不变)。"""
         tail = prev_tail
         for block in parsed_day.blocks:
             slots = v4_block_slots(block)
+            if slot_counter is not None:
+                slot_counter.append(len(slots))
             if not slots:
                 continue
             first = slots[0]

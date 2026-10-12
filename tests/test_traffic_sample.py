@@ -96,6 +96,20 @@
   零长区间 / 空桶不产行 / 跨日滞留级联封前一日 + 月级联 / agg append 与裁剪与淘汰扫描
   OSError 告警不上抛(连续失败只告警一次)
 
+启动恢复按需读集(plan 26-10-12-2010, 读集下界 now - rollup_window -> agg 水位所在日):
+- test_recovery_read_set_bounded_to_watermark_day: 读集有界(D1) —— 24 系列 x 30 天天文件 +
+  水位在昨日的 agg -> 逐系列只读 [水位日, 今日] 至多 2 个天文件(recovery_reads 计数机检),
+  不随 rollup_window=1000000D 放大; 封口小时不重算, 补算只覆盖水位之后; 二次重启零追加
+- test_recovery_fallback_full_read_when_agg_missing: 兜底(D5) —— agg.dat 缺失(无水位)->
+  退回保留窗全量读(诚实兜底不猜不静默), 读集 = 窗内全部天文件, hour 行照常补齐 + INFO 留痕
+- test_recovery_instrumentation_logs_counts: 埋点(§7-B4) —— 起止 INFO(系列数/天文件数/
+  补算小时数/耗时) + 读集 >2 天留下界来源; 计数落模块属性(机检面)
+- test_read_side_view_contract_table: 读侧契约逐档机检(§3.2, 表驱动 13 档 x 时钟冻结) ——
+  raw 段只开涉及日期天文件(窗外 decoy 零 open) / 3d+ 恒 1 个 agg.dat(天文件零 open) /
+  限速注解面 = [t0-86400, t1] 日期集
+- test_read_side_no_poll_when_traffic_tab_closed: 「不打开 = 0 请求」—— 前端轮询门控单点
+  (关抽屉/形态切换/登出 -> _qbPollStop clearInterval, 重开幂等不叠加)
+
 v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
 - test_v4_counter_reset_forces_block_reopen: ③ 计数器重置强制关块 —— 重置后块内负 delta 不出现,
   新块基线 = 重置后 totals(首记录 delta = 0)
@@ -116,8 +130,10 @@ import io
 import logging
 import os
 import threading
+import time
 from datetime import datetime, time as _time
 
+import pytest
 import yaml
 
 from auto_qb.config import QbTraffic, load_config
@@ -158,8 +174,10 @@ from auto_qb.core.traffic_store import (
     v4_month_epoch,
     v4_rollup_agg,
     v4_series_dir,
+    v4_window_dates,
 )
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+from webui_helpers import _enable_qb_traffic, _qb_v4
 
 
 # ---------- 构造辅助 ----------
@@ -2123,3 +2141,241 @@ def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
     assert len(parsed.hours) == 1 and parsed.hours[0].epoch == hour_epoch
     assert parsed.hours[0].cov_s == 2970  # 空闲段(10:00:30..10:10:00)真空缺失, 不虚记覆盖
     assert parsed.hours[0].dl_avg == 1024  # avg 无偏: 只按有效覆盖加权, 不被零速/缺覆盖稀释
+
+
+# ---------- 启动恢复按需读集(plan 26-10-12-2010, D1/D4/D5) ----------
+def test_recovery_read_set_bounded_to_watermark_day(tmp_path, monkeypatch):
+    """恢复读集按需(D1 验收): 24 系列 x 30 天天文件 + 水位在昨日的 agg -> start() 后逐系列
+    只读 [水位日, 今日] 至多 2 个天文件(recovery_reads 计数属性机检, 不随
+    rollup_window=1000000D 放大), agg.dat 按系列照读(D4); 水位封口小时不重算, 补算只
+    覆盖水位之后小时; 二次重启零追加(水位推进后读集缩到当日)"""
+    window = 1000000 * 86400.0  # 生产口径: 永久保留(恢复读集必须与它解耦, D2 不动)
+    now = _local_epoch(13, 0, 30)  # 今日 13:00:30(本地)
+    clock = _Clock(now=now)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, rollup_window=window))
+    st = TrafficV4Store(str(tmp_path))
+    today_str = v4_epoch_date_str(now)
+    y_str = v4_epoch_date_str(now - 86400)
+    wm = v4_date_str_epoch(y_str) + 10 * HOUR_SECONDS  # 昨日 10:00 封口水位(agg 文件尾)
+    keys = [GLOBAL_SERIES_KEY] + [f"torrent:K{i:02d}" for i in range(1, 24)]  # 24 系列
+    for key in keys:
+        st.append_agg_rows(key, (AggRow("hour", wm, 7, 9, 3, 4, 500, 600, 3600), ))
+        for i in range(30):  # 30 天天文件(今日-29d .. 今日): 更早日历文件在场, 但不该被读
+            d = v4_epoch_date_str(now - i * 86400)
+            if d == y_str:  # 水位日: 12:00 块(水位之后 -> 补算)
+                st.append_records(
+                    key,
+                    d,
+                    (v4_date_str_epoch(d) + 12 * HOUR_SECONDS + 10, 30),
+                    (V4Sample(100, 50, 1000, 2000), V4Sample(200, 60, 2000, 3000), V4Sample(300, 70, 3000, 4000)),
+                    (1000, 2000),
+                )
+            elif d == today_str:  # 今日: 00:30 块(已封口小时 -> 补算)
+                st.append_records(
+                    key,
+                    d,
+                    (v4_date_str_epoch(d) + 30 * 60 + 10, 30),
+                    (V4Sample(10, 5, 100, 200), V4Sample(20, 6, 200, 300)),
+                    (100, 200),
+                )
+            else:  # 更早日期: 空壳天文件(只占目录, 证明恢复不碰)
+                _write_day_file(tmp_path, key, d)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)  # 恢复 + catch-up(先于一切采样)
+    reads, stats = mod.recovery_reads, mod.recovery_stats
+    assert stats["series"] == 24
+    assert stats["day_files"] == 48  # 24 系列 x [水位日, 今日](旧口径此处为 ~29 x 24)
+    assert stats["hours"] == 48  # 每系列补算 2 个小时(昨日 12:00 + 今日 00:00)
+    assert stats["slots"] == 120  # 每系列 3 + 2 槽
+    for key in keys:
+        r = reads[key]
+        assert r["bound"] == "watermark"
+        assert r["day_dates"] == (y_str, today_str)  # 读集 = 水位日 -> 今日, 至多 2 个
+        assert r["new_hours"] == 2 and r["slots"] == 5
+    # 正确性: 水位行不重算 + 水位之后两个 hour 行补齐(逐系列)
+    for key in keys:
+        parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+        assert [h.epoch for h in parsed.hours] == [wm, wm + 2 * HOUR_SECONDS, v4_date_str_epoch(today_str)]
+        assert parsed.hours[1].cov_s == 60 and parsed.hours[2].cov_s == 30  # 昨日块 3 条记录 2 区间 60s / 今日块 2 条 30s(末槽待后续到达)
+    # 幂等: 二次重启零追加(字节级不变), 水位推进后读集缩到当日 1 个
+    text = _agg_text(tmp_path, GLOBAL_SERIES_KEY)
+    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, rollup_window=window))
+    mod2 = mgr2.host.get("qb_traffic")
+    mod2.start(mgr2.ctx, dry_run=False)
+    assert _agg_text(tmp_path, GLOBAL_SERIES_KEY) == text
+    assert mod2.recovery_reads[GLOBAL_SERIES_KEY]["day_dates"] == (today_str, )
+    assert mod2.recovery_stats["day_files"] == 24  # 每系列只读当日
+
+
+def test_recovery_fallback_full_read_when_agg_missing(tmp_path, monkeypatch):
+    """恢复兜底(D5, §5): agg.dat 缺失(无 hour 行 -> 无可用水位)-> 退回现口径
+    now - rollup_window 全量读(诚实兜底不猜不静默), 读集 = 窗内全部天文件, catch-up
+    补算与现行为照常(hour 行逐日补齐); bound=fallback 且 INFO 留痕"""
+    window = 3 * 86400.0
+    now = _local_epoch(13, 0, 30)
+    clock = _Clock(now=now)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, rollup_window=window))
+    st = TrafficV4Store(str(tmp_path))
+    key = GLOBAL_SERIES_KEY
+    dates = [v4_epoch_date_str(now - i * 86400) for i in range(3)]  # 今日-2d .. 今日, 全在窗内
+    for i, d in enumerate(dates):
+        st.append_records(
+            key,
+            d,
+            (v4_date_str_epoch(d) + 30 * 60 + 10, 30),
+            (V4Sample(10 + i, 5, 100, 200), V4Sample(20, 6, 200, 300)),
+            (100, 200),
+        )
+    with _ModuleLogCapture() as logs:
+        mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
+    r = mgr.host.get("qb_traffic").recovery_reads[key]
+    assert r["bound"] == "fallback"
+    assert set(r["day_dates"]) == set(dates)  # 全量兜底: 不收敛(与现口径逐字一致)
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    # 三日 hour 行照常补齐(new_hours 按 epoch 升序 append; 每日 2 条记录 -> 1 区间 30s)
+    assert [h.epoch for h in parsed.hours] == [v4_date_str_epoch(d) for d in reversed(dates)]
+    assert all(h.cov_s == 30 for h in parsed.hours)
+    text = logs.text
+    assert "agg 无可用水位(缺失/损坏/无 hour 行)" in text and "全量兜底(D5)" in text
+    assert f"读集 {len(dates)} 天(>2): 下界来源 = fallback 保留窗全量" in text
+
+
+def test_recovery_instrumentation_logs_counts(tmp_path, monkeypatch):
+    """埋点(报告 §7-B4 / plan 26-10-12-2010 §4.2): 恢复起止 INFO —— 开始行(启用态/系列数)
+    + 完成行(系列数/读入天文件数/补算小时数/耗时), 单系列读集 >2 天留下界来源说明;
+    启动死区从此不再静默(计数另落模块属性, 由读集守阵机检)"""
+    now = _local_epoch(13, 0, 30)
+    clock = _Clock(now=now)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    st = TrafficV4Store(str(tmp_path))
+    y_str, t_str = v4_epoch_date_str(now - 86400), v4_epoch_date_str(now)
+    # 系列 A: 水位昨日 + 昨日/今日两文件(读集 2, 不触 >2 行)
+    st.append_agg_rows(
+        "torrent:AA", (AggRow("hour",
+                              v4_date_str_epoch(y_str) + 10 * HOUR_SECONDS, 1, 1, 1, 1, 1, 1, 3600), )
+    )
+    _write_day_file(tmp_path, "torrent:AA", y_str)
+    _write_day_file(tmp_path, "torrent:AA", t_str)
+    # 系列 B: 无 agg -> fallback 全量 + 3 文件(读集 3 > 2 -> 留下界来源行)
+    for i in range(3):
+        _write_day_file(tmp_path, "torrent:BB", v4_epoch_date_str(now - i * 86400))
+    with _ModuleLogCapture() as logs:
+        mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
+    text = logs.text
+    assert "启动恢复开始: 启用态, 2 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)" in text
+    assert "启动恢复完成: 2 系列 / 读入天文件 5 个" in text  # A 2 + B 3
+    assert "补算小时 0 个 / 入账槽 0 个 / 耗时" in text  # 空壳文件零入账(计数形状齐全)
+    assert "agg 无可用水位(缺失/损坏/无 hour 行)" in text  # B 的 D5 兜底说明
+    assert "读集 3 天(>2): 下界来源 = fallback 保留窗全量" in text  # B 的下界来源
+    stats = mgr.host.get("qb_traffic").recovery_stats
+    assert stats == {"series": 2, "day_files": 5, "hours": 0, "slots": 0, "elapsed_s": stats["elapsed_s"]}
+
+
+def _v4_open_paths(monkeypatch):
+    """open 计数探针(读侧契约逐档机检 §3.2): 记录 qb-traffic-v4/ 下打开路径(正斜杠归一;
+    limits/ 目录属注解面单列, 不算系列数据面); 用完由 monkeypatch 自动收"""
+    import builtins
+
+    opened = []
+    real_open = builtins.open
+
+    def counting_open(file, *a, **k):
+        p = os.fspath(file).replace("\\", "/")
+        if "qb-traffic-v4/" in p:
+            opened.append(p)
+        return real_open(file, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", counting_open)
+    return opened
+
+
+@pytest.mark.parametrize("window", ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all"))
+def test_read_side_view_contract_table(web_env, monkeypatch, window):
+    """读侧契约逐档机检(§3.2, 表驱动 13 档, 端点时钟冻结): 一次 GET 的读集 —— raw 段
+    (1m-24h)只开窗口涉及日期天文件(集 = 窗首种子外扩后日期集, 窗外 decoy 零 open) /
+    hour/day/month 段(3d-all)恒恰 1 个 agg.dat + 天文件零 open / 限速注解面打开集 =
+    [grid.t0-86400, grid.t1] 日期集(与数据面分开计数); 「不打开 = 0 请求」由前端
+    轮询门控单点保证(all 档同用例静态钉住: 关抽屉/形态切换/登出 -> clearInterval)"""
+    from types import SimpleNamespace
+
+    from auto_qb.core import traffic_grid as tg
+    from auto_qb.core.traffic_limits import limits_day_path
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    frozen = float(int(time.time()))  # 冻结端点时钟: 期望集与请求同一 now(免午夜竞态)
+    monkeypatch.setattr("auto_qb.webui.server.traffic_qb.time", SimpleNamespace(time=lambda: frozen))
+    _enable_qb_traffic(mgr)  # sample_interval 缺省 30s(raw 段桶宽 = 30)
+    store = _qb_v4(mgr)
+    key = "global"
+    span, seg = tg.WINDOW_SPECS[window]
+    if seg == "month":
+        month_epochs = tuple(v4_month_epoch(frozen) - i * 28 * 86400 for i in range(6, 0, -1))
+        grid = tg.build_month_grid(month_epochs, frozen)
+    else:
+        grid = tg.build_grid(window, frozen, 30.0)
+    # decoy: 窗外天文件(昨日/3 日前/400 日前)与远古限速文件 —— 在场, 证明任何视图都不扫目录
+    decoys = [v4_epoch_date_str(frozen - d * 86400) for d in (1, 3, 400)]
+    lim_decoy = v4_epoch_date_str(frozen - 700 * 86400)
+    # 造数: 本档读集范围内的天/限速文件 + 本档消费的 agg 行
+    if seg == "raw":
+        involved = sorted(v4_window_dates(grid.t0 - grid.interval, grid.t1))  # 镜像端点窗首种子外扩
+        exp_days, exp_agg = involved, 0
+        for d in involved + decoys:
+            if not os.path.exists(v4_day_file_path(mgr.config.data_dir, key, d)):
+                _write_day_file(mgr.config.data_dir, key, d)
+    else:
+        exp_days = []
+        if seg == "hour":
+            rows = tuple(AggRow("hour", grid.t0 + i * HOUR_SECONDS, 1, 1, 1, 1, 1, 1, 3600) for i in range(72))
+        elif seg == "day":
+            rows = tuple(
+                AggRow("day", v4_date_str_epoch(d), 1, 1, 1, 1, 1, 1, 86400)
+                for d in sorted(v4_window_dates(grid.t0, grid.t1 - 1))
+            )
+        else:
+            rows = tuple(AggRow("month", e, 1, 1, 1, 1, 1, 1, 2419200) for e in month_epochs)
+        store.append_agg_rows(key, rows)
+        exp_agg = 1
+        for d in decoys:
+            if not os.path.exists(v4_day_file_path(mgr.config.data_dir, key, d)):
+                _write_day_file(mgr.config.data_dir, key, d)
+    lim_dates = sorted(v4_window_dates(grid.t0 - 86400, grid.t1))
+    for d in lim_dates + [lim_decoy]:
+        p = limits_day_path(mgr.config.data_dir, d)
+        if not os.path.exists(p):
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write("100,0,0\n")
+    opened = _v4_open_paths(monkeypatch)
+    body = client.get(f"/api/traffic/qb/{key}", headers=auth, params={"window": window})
+    assert body.status_code == 200 and body.json()["meta"]["window"] == window
+    got_days = sorted(
+        os.path.basename(p)[:-4] for p in opened if p.endswith(".dat") and "agg.dat" not in p and "/limits/" not in p
+    )
+    got_agg = len([p for p in opened if p.endswith("agg.dat")])
+    got_lim = sorted(os.path.basename(p)[:-4] for p in opened if "/limits/" in p)
+    assert got_days == exp_days, f"{window} 天文件读集: {got_days} != {exp_days}"
+    assert got_agg == exp_agg, f"{window} agg.dat 打开数: {got_agg} != {exp_agg}"
+    assert got_lim == lim_dates, f"{window} 限速面读集: {got_lim} != {lim_dates}"
+
+
+def test_read_side_no_poll_when_traffic_tab_closed():
+    """「不打开 = 0 请求」(§3.2 末行): 前端轮询只在流量页签打开期间挂 —— 关抽屉/形态切换/
+    登出经 _qbTeardown 单点收三挂点(_qbPollStop -> clearInterval), _qbPollStart 幂等
+    不叠加; 关闭后无任何请求路径(读侧零 open 的另一半契约由端点逐档机检钉住)"""
+    chart = open(
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared",
+            "qb_traffic_chart.js"
+        ),
+        encoding="utf-8",
+    ).read()
+    stop_body = chart.split("_qbPollStop(scope) {", 1)[1].split("},", 1)[0]
+    assert "clearInterval" in stop_body  # 停轮询单点: 定时器清零(关闭后零请求路径)
+    teardown = chart.split("_qbTeardown() {", 1)[1][:400]
+    assert "_qbPollStop(s)" in teardown  # 关抽屉/形态切换/登出 -> 三挂点轮询全收
+    assert "_qbPollStop(scope);" in chart.split("_qbPollStart(scope) {", 1)[1][:200]  # 重开幂等(不叠加)

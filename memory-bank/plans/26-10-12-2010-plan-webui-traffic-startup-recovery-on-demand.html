@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-traffic-startup-recovery-on-demand">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-12-2010">
-<meta name="doc-updated" content="26-10-12-2027">
+<meta name="doc-updated" content="26-10-12-2104">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-startup-recovery-on-demand.md">
 <title>计划 · 流量启动恢复改为按需读取口径</title>
 <style>
@@ -136,7 +136,7 @@
 
   <div class="meta">
     <span><b>Stamp</b> 26-10-12-2010</span>
-    <span><b>Status</b> Open(待实施确认)</span>
+    <span><b>Status</b> Done(26-10-12-2104 实施, W0-W2 全绿; 真机走查留待用户)</span>
     <span><b>Topic</b> webui-traffic-startup-recovery-on-demand</span>
     <span><b>依据</b> 报告 26-10-12-1923</span>
     <span><b>基线</b> 9548367d</span>
@@ -394,12 +394,13 @@
       <tr><th>时间</th><th>变更</th></tr>
       <tr><td>26-10-12-2010</td><td>初版。依据报告 26-10-12-1923 与用户本轮定调（D1 按需读取为既定契约 / D2 永久保留有意设定 / D3 保持同步恢复）成文：靶点收敛为「读集下界 = agg 水位所在日」+ B4 埋点；B2/B3/A1/C1 出局或另题。</td></tr>
       <tr><td>26-10-12-2027</td><td>按用户要求把<b>各视图读集一一钉死</b>：新增 §3.2 读集契约表（13 档 × 三类文件：raw 天文件 / <code>agg.dat</code> / 限速天文件；含跨日界规则、24h 恒 2·3 的原因、组作用域放大面、「不打开 = 0 文件」），并标注唯一随窗口/历史增长的项 = 限速注解面（1 文件/天、不淘汰，<code>all</code> 随保留无界，备选另题）。§6/§7 相应加「读侧契约逐档机检」验收项。</td></tr>
+      <tr><td>26-10-12-2104</td><td><b>实施完毕（W0-W2）</b>：①<code>_recover_series</code> 读集下界改 <code>v4_day_epoch(wm_hour)</code>（D1），<code>wm_hour is None</code> 退回 <code>now - window</code> 全量兜底 + INFO（D5）；②起止 INFO + <code>recovery_reads</code>/<code>recovery_stats</code> 计数属性（§4.2，读集有界可机检）；③读集 &gt;2 天留下界来源 INFO；④<code>series_day_dates</code> docstring 更新（行为零改动）；⑤新增 17 守阵（读集有界 24 系列×30 天 / fallback 不烂 / 埋点行 / 读侧契约 13 档逐档机检 / 前端轮询门控），注入红验通过（下界改回 <code>now - window</code> ⇒ 红，还原即绿）；⑥<code>test.full</code> 3164 passed + 4 skipped / 覆盖 99%（基线切片 26-10-12-2104）。计划外漂移（<code>config/models.py</code> docstring 旧「三义合一」）按范围守恒入池 issue 26-10-12-2104，未动。<b>真机走查（重启看 INFO 行与死区时长）留待用户。</b></td></tr>
     </table>
   </section>
 
   <div class="footer-meta">
     <span>auto-qb · memory-bank/plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html</span>
-    <span>topic: webui-traffic-startup-recovery-on-demand · status: Open</span>
+    <span>topic: webui-traffic-startup-recovery-on-demand · status: Done</span>
   </div>
 
 </div>
