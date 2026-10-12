@@ -260,6 +260,32 @@ const DRAWER_PEER_V09_COLUMNS = [
   { ...DRAWER_PEER_COLUMNS[5], label: "↑ 占用" }, DRAWER_PEER_COLUMNS[4],
   DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6], DRAWER_PEER_COLUMNS[8],
 ];
+/* ---------------- U3: Tracker 三变体列集(计划 26-10-12-0527, D2/D5) ----------------
+ * 04 状态卡片栅格 / 05 健康分组: 行 = 卡片/处置块(非列状数据), 引擎行容器走**单列满宽**;
+ * 列头在两变体无语义 → CSS 隐藏(.dt04-list/.dt05-list .group-head display:none)。
+ * 排序键不占列(引擎 sortedDrawer 只按 _raw[key] 取值, 不要求 key ∈ cols):
+ * 04 的分段钮(sev/tier 复合权值)经 dtSortSet 直设 dyn 键 —— 排序态仍归引擎单点。
+ * Q3 记档: 两变体无列头, 拖宽/右键隐藏/列偏好持久化**不适用**(非缺能力, 是无列可拖)。 */
+const DRAWER_TRACKER_V04_COLUMNS = [
+  { key: "card", label: "卡片", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+];
+const DRAWER_TRACKER_V05_COLUMNS = [
+  { key: "card", label: "行", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+];
+/* 06 增强表格: 8 列 = 原手搓 grid 逐列转声明(84px minmax(0,1fr) 44px 78px 78px 70px 122px 84px)。
+ * 「下次重新汇报」不可排(R7 记档: 行级 next_announce / 种子级回退 / 正在汇报 三态混合口径,
+ * 无单一排序原值, 不造假键); 其余可排; 默认序 sev 升序 = 原口径「异常置顶, 同档保 qB 原序」
+ * (引擎比较器同值返回 0, Array.sort 稳定)。 */
+const DRAWER_TRACKER_V06_COLUMNS = [
+  { key: "sev", label: "状态", tpl: "84px", sortable: true, align: "left" },
+  { key: "host", label: "Tracker", tpl: "minmax(0, 1fr)", sortable: true, align: "left" },
+  { key: "tier", label: "tier", tpl: "44px", sortable: true, align: "right" },
+  { key: "seeds", label: "种子", tpl: "78px", sortable: true, align: "right" },
+  { key: "leeches", label: "用户", tpl: "78px", sortable: true, align: "right" },
+  { key: "downloaded", label: "完成下载", tpl: "70px", sortable: true, align: "right" },
+  { key: "next", label: "下次重新汇报", tpl: "122px", sortable: false, align: "left" },
+  { key: "ops", label: "操作", tpl: "84px", sortable: false, align: "right" },
+];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -274,6 +300,9 @@ const TABLE_COLUMNS = {
   drawerPeerV07: DRAWER_PEER_V07_COLUMNS,
   drawerPeerV08: DRAWER_PEER_V08_COLUMNS,
   drawerPeerV09: DRAWER_PEER_V09_COLUMNS,
+  drawerTrackerV04: DRAWER_TRACKER_V04_COLUMNS,
+  drawerTrackerV05: DRAWER_TRACKER_V05_COLUMNS,
+  drawerTrackerV06: DRAWER_TRACKER_V06_COLUMNS,
 };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
@@ -462,6 +491,41 @@ const DRAWER_TABLE_DEFS = {
     sort: { dyn: true, defKey: "upspeed", defDir: -1 },
     variantTab: "peers", variantId: "09",
     rows: "dtTplRows", rowKey: "addr", rowModel: "dt09", rowProp: "p", rowCls: "_cls",
+  },
+  /* ---------------- U3: Tracker 三变体(04/05/06, 计划 26-10-12-0527; 同 U2 法) ----------------
+   * 04 状态卡片栅格: 行 = 卡片(引擎行容器单列满宽, 列头 CSS 隐藏 —— 卡片无列语义, D5);
+   *   手搓分段钮排序并引擎(R7): _raw 挂复合权值(sev*10+tier / tier*10+sev, 虚拟合并卡恒 95),
+   *   分段钮经 dtSortSet 直设 dyn 键(模式选择语义, 非 h-cell 三态循环), 默认 sev 升序 =
+   *   异常优先。筛选 pills 是版式语义 → rowsFn + anchTouch(同 07)。
+   * 05 健康分组: segs:true 五组(err/warn/upd/ok/off, 空组整段缺席), 组头/折叠留外壳
+   *   (分组是版式, 行是引擎表体); 无排序(dyn 空键 = 组内 qB 原序, 原口径); 行三形态
+   *   (失败处置块/普通行/off 组 chips 合成行)经 kind 分支 + rowCls, msg 展开态 rowsFn 读。
+   * 06 增强表格: 8 列引擎表头(拖宽/右键隐藏/偏好持久化首次落地), 默认 sev 升序(异常置顶);
+   *   「下次重新汇报」不可排(R7 记档: 三态混合口径无单一原值); onlyBad = 外壳容器类切换
+   *   (行不重装配, 与原口径同); msg 展开态 rowsFn 读(重建后恢复)。 */
+  drawerTrackerV04: {
+    columns: DRAWER_TRACKER_V04_COLUMNS, label: "Tracker 表·状态卡片栅格",
+    headRef: null, tableRef: null,
+    grid: "drawerTrackerV04Grid", cols: "visibleDrawerTrackerV04Cols", window: null,
+    sort: { dyn: true, defKey: "sev", defDir: 1 },
+    variantTab: "trackers", variantId: "04",
+    rows: "dtTplRows", rowKey: "k", rowModel: "dt04", rowProp: "p", rowCls: "_cls",
+  },
+  drawerTrackerV05: {
+    columns: DRAWER_TRACKER_V05_COLUMNS, label: "Tracker 表·健康分组",
+    headRef: null, tableRef: null,
+    grid: "drawerTrackerV05Grid", cols: "visibleDrawerTrackerV05Cols", window: null,
+    sort: { dyn: true, defKey: "", defDir: 1 },
+    variantTab: "trackers", variantId: "05", segs: true,
+    rows: "dtTplRows", rowKey: "k", rowModel: "dt05", rowProp: "p", rowCls: "_cls",
+  },
+  drawerTrackerV06: {
+    columns: DRAWER_TRACKER_V06_COLUMNS, label: "Tracker 表·增强表格",
+    headRef: null, tableRef: null,
+    grid: "drawerTrackerV06Grid", cols: "visibleDrawerTrackerV06Cols", window: null,
+    sort: { dyn: true, defKey: "sev", defDir: 1 },
+    variantTab: "trackers", variantId: "06",
+    rows: "dtTplRows", rowKey: "k", rowModel: "dt06", rowProp: "p", rowCls: "_cls",
   },
 };
 /* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
@@ -789,6 +853,9 @@ app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
 app.component("aq-dt07-cells", window.AQ_DT07_CELLS_COMPONENT);
 app.component("aq-dt08-cells", window.AQ_DT08_CELLS_COMPONENT);
 app.component("aq-dt09-cells", window.AQ_DT09_CELLS_COMPONENT);
+app.component("aq-dt04-cells", window.AQ_DT04_CELLS_COMPONENT);
+app.component("aq-dt05-cells", window.AQ_DT05_CELLS_COMPONENT);
+app.component("aq-dt06-cells", window.AQ_DT06_CELLS_COMPONENT);
 // 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
 // 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
 // W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。

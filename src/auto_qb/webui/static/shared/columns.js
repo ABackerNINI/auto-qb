@@ -855,5 +855,24 @@ window.AQB_COLUMNS = {
     visibleDrawerPeerV09Cols() {
       return this._visibleCols("drawerPeerV09");
     },
+    /* 变体表格体(U3): Tracker 04/05/06 三表, 同一条 _gridTemplate / _visibleCols 路径 */
+    drawerTrackerV04Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerTrackerV04") };
+    },
+    drawerTrackerV05Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerTrackerV05") };
+    },
+    drawerTrackerV06Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerTrackerV06") };
+    },
+    visibleDrawerTrackerV04Cols() {
+      return this._visibleCols("drawerTrackerV04");
+    },
+    visibleDrawerTrackerV05Cols() {
+      return this._visibleCols("drawerTrackerV05");
+    },
+    visibleDrawerTrackerV06Cols() {
+      return this._visibleCols("drawerTrackerV06");
+    },
   },
 };

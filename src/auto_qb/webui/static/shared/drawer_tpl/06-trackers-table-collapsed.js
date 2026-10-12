@@ -12,8 +12,16 @@
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 行语义按设计稿提到失败档。
  * 动作: 添加/删除(trackerAdd/Remove)、强制重新汇报(drawerCmd("reannounce")), 虚拟行无动作。
+ * !U3 重写(计划 26-10-12-0527, 同 U2 法): 表格体重写为**引擎消费面** —— 外壳只出锚槽
+ *   (anchFill 保活), 8 列表壳/行渲染器由 <aq-dt-bridge> Teleport 进锚(描述符
+ *   drawerTrackerV06: 原 grid 逐列转列声明 + 行模型 dt06 + dyn 排序 + rowCls 行态)。
+ *   手搓固定排序退役(Q4): 默认 sev 升序 = 原口径「异常置顶, 同档保 qB 原序」(引擎稳定排序),
+ *   其余列拖宽/右键隐藏/偏好持久化首次与主表同源; 「下次重新汇报」不可排(R7 记档:
+ *   行级真值/种子级回退/正在汇报三态混合口径, 无单一排序原值)。仅看异常 = 外壳容器类
+ *   切换(行不重装配, 与原口径同); msg 展开态 rowsFn 读取(重建后恢复)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 trackers + 汇报倒计时序列化比对)跳过重建, 滚动位置/过滤/msg 展开态自保。
+ * 原子换帧, 数据未变(整份 trackers + 汇报倒计时序列化比对)跳过重建, 锚元素跨帧保活(锚被
+ * 重建 = Teleport 重挂 = 行抖动), 滚动位置/过滤/msg 展开态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -22,7 +30,8 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const TABLE_ID = "drawerTrackerV06";
 
   /* 状态分桶 -> 文案与排序权值(异常置顶; 虚拟恒排最后) */
   const BUCKET = {
@@ -33,7 +42,8 @@
     off: { text: "禁用", sev: 9 },
   };
 
-  /* 视图偏好(跨重渲染与换种子保持): 仅看异常 / msg 展开集合; lastSig 供跳过重建 */
+  /* 视图偏好(跨重渲染与换种子保持): 仅看异常 / msg 展开集合; lastSig 供跳过重建。
+   * !排序态已并引擎(dtSortState.drawerTrackerV06, U3) —— 手搓固定排序退役。 */
   const ui = { onlyBad: false, openMsg: {}, lastSig: "" };
 
   const CSS = [
@@ -54,20 +64,23 @@
     "  color:var(--bg-card); font-size:11.5px; font-weight:600; cursor:pointer; user-select:none;",
     "  transition:background var(--dur) var(--ease), border-color var(--dur) var(--ease); }",
     ".drawer .dt06-add:hover { background:var(--accent-hi); border-color:var(--accent-hi); }",
-    /* 表格(grid 行制; 空态 / 表头 sticky 交给 .drawer-body 滚动容器) */
-    ".drawer .dt06-table { display:flex; flex-direction:column; }",
-    ".drawer .dt06-table.only-bad .dt06-r[data-benign=\"1\"] { display:none; }",
-    ".drawer .dt06-r { display:grid; grid-template-columns:84px minmax(0, 1fr) 44px 78px 78px 70px 122px 84px;",
-    "  gap:10px; align-items:center; min-height:38px; padding:4px 8px; border-bottom:1px solid var(--hairline);",
-    "  border-radius:var(--radius-sm); }",
-    ".drawer .dt06-r.head { min-height:30px; background:var(--bg-card); border-bottom:1px solid var(--border);",
-    "  color:var(--fg-dim); font-size:11.5px; }",
-    ".drawer .dt06-r:not(.head):hover { background:var(--bg-hover); }",
-    ".drawer .dt06-r.err { background:var(--error-soft); }",
-    ".drawer .dt06-r.err:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
-    ".drawer .dt06-r.off { opacity:.62; }",
-    ".drawer .dt06-r.off:hover { opacity:1; }",
-    ".drawer .dt06-num { text-align:right; }",
+    /* 表格体 = 引擎表壳 + 行渲染器经桥 Teleport 进锚(U3): 列宽/网格/排序表头归引擎,
+     * 本变体只保留行级观感(行距/发丝线/状态行底色)与表头对齐个性。 */
+    ".drawer .dt06-list { display:flex; flex-direction:column; }",
+    ".drawer .dt06-list.only-bad .group-row.benign { display:none; }",
+    ".drawer .dt06-list .group-head { min-height:30px; background:var(--bg-card);",
+    "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; }",
+    ".drawer .dt06-list .group-head .hc-tier, .drawer .dt06-list .group-head .hc-seeds,",
+    ".drawer .dt06-list .group-head .hc-leeches, .drawer .dt06-list .group-head .hc-downloaded,",
+    ".drawer .dt06-list .group-head .hc-ops { text-align:right; }",
+    ".drawer .dt06-list .group-row { min-height:38px; padding:4px 8px; gap:10px; align-items:center;",
+    "  background:transparent; border:0; border-bottom:1px solid var(--hairline);",
+    "  border-radius:var(--radius-sm); box-shadow:none; }",
+    ".drawer .dt06-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
+    ".drawer .dt06-list .group-row.err { background:var(--error-soft); }",
+    ".drawer .dt06-list .group-row.err:hover { background:var(--error-soft); box-shadow:inset 0 0 0 1px var(--error-line); }",
+    ".drawer .dt06-list .group-row.off { opacity:.62; }",
+    ".drawer .dt06-list .group-row.off:hover { opacity:1; }",
     /* 状态点 */
     ".drawer .dt06-st { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; white-space:nowrap; }",
     ".drawer .dt06-st i { width:7px; height:7px; border-radius:50%; flex:none; }",
@@ -78,22 +91,22 @@
     ".drawer .dt06-st.off { color:var(--fg-muted); font-weight:400; } .drawer .dt06-st.off i { background:var(--border-strong); }",
     ".drawer .dt06-st .pulse { animation:dt06-pulse 1.6s var(--ease) infinite; }",
     ".drawer .dt06-next-upd .pulse { animation:dt06-pulse 1.6s var(--ease) infinite; }",
-    /* host + msg 展开格 */
+    /* host + msg 展开格(呈现归渲染器 tpl-aq-dt06-cells) */
     ".drawer .dt06-cell { min-width:0; display:flex; flex-direction:column; gap:2px; }",
     ".drawer .dt06-host { font-family:var(--font-mono, ui-monospace, monospace); font-size:12.5px; color:var(--fg);",
     "  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
-    ".drawer .dt06-r.off .dt06-host { color:var(--fg-muted); }",
+    ".drawer .dt06-list .group-row.off .dt06-host { color:var(--fg-muted); }",
     ".drawer .dt06-msg { align-self:flex-start; max-width:100%; display:block; font-size:11px; line-height:1.6;",
     "  color:var(--fg-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;",
     "  border:1px dashed transparent; border-radius:var(--radius-sm); }",
     ".drawer .dt06-msg:hover { text-decoration:underline; text-underline-offset:2px; }",
     ".drawer .dt06-msg.open { white-space:normal; overflow:visible; cursor:default; padding:4px 9px; margin:1px 0 2px;",
     "  background:var(--bg-sunken); border-color:var(--border-soft); text-decoration:none; }",
-    ".drawer .dt06-r.warn .dt06-msg { color:var(--warn); }",
-    ".drawer .dt06-r.warn .dt06-msg.open { background:var(--warn-soft); border-color:var(--warn-line); }",
-    ".drawer .dt06-r.err .dt06-msg { color:var(--fg); font-family:var(--font-mono, ui-monospace, monospace); }",
-    ".drawer .dt06-r.err .dt06-msg.open { background:var(--bg-sunken); border-color:var(--error-line); }",
-    ".drawer .dt06-r.ok .dt06-msg { color:var(--fg-dim); }",
+    ".drawer .dt06-list .group-row.warn .dt06-msg { color:var(--warn); }",
+    ".drawer .dt06-list .group-row.warn .dt06-msg.open { background:var(--warn-soft); border-color:var(--warn-line); }",
+    ".drawer .dt06-list .group-row.err .dt06-msg { color:var(--fg); font-family:var(--font-mono, ui-monospace, monospace); }",
+    ".drawer .dt06-list .group-row.err .dt06-msg.open { background:var(--bg-sunken); border-color:var(--error-line); }",
+    ".drawer .dt06-list .group-row.ok .dt06-msg { color:var(--fg-dim); }",
     /* 数值列 */
     ".drawer .dt06-v { font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg);",
     "  min-width:0; white-space:nowrap; }",
@@ -101,6 +114,7 @@
     ".drawer .dt06-tier { font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; color:var(--fg-dim);",
     "  text-align:right; white-space:nowrap; }",
     /* 下次重新汇报列: 全局近似值 + 微条比例 */
+    ".drawer .dt06-nextcell { min-width:0; display:flex; justify-content:flex-end; }",
     ".drawer .dt06-next { display:flex; flex-direction:column; gap:3px; min-width:0; align-items:flex-end; }",
     ".drawer .dt06-next b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px; color:var(--fg); }",
     ".drawer .dt06-next .dt06-gb { font-size:10px; color:var(--fg-dim); border:1px solid var(--border-soft);",
@@ -111,8 +125,9 @@
     ".drawer .dt06-next-upd i { width:6px; height:6px; border-radius:50%; background:var(--blue); }",
     ".drawer .dt06-none { text-align:right; font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg-dim); }",
     /* 行内动作 */
+    ".drawer .dt06-opscell { min-width:0; display:flex; justify-content:flex-end; }",
     ".drawer .dt06-ops { display:flex; gap:2px; justify-content:flex-end; opacity:.5; transition:opacity var(--dur) var(--ease); }",
-    ".drawer .dt06-r:hover .dt06-ops { opacity:1; }",
+    ".drawer .dt06-list .group-row:hover .dt06-ops { opacity:1; }",
     ".drawer .dt06-act { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;",
     "  padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-dim); cursor:pointer;",
     "  transition:color var(--dur) var(--ease), background var(--dur) var(--ease); }",
@@ -151,69 +166,75 @@
    * per-tracker interval 不可得, 不画微条(不造假)。!epoch 是绝对时间不是倒计时, 必须先减 now。
    * 回退: 行缺 next_announce(qB < 5.2) → 种子级 detail.reannounce_in 全局近似 + 「全局」标 +
    * 种子级微条(即旧路径)。detail 未落袋显示「—」。更新中行显「正在汇报」, 虚拟/未启用行显「—」
-   * (后两者由调用方分流, 不进本函数)。 */
-  function nextHtml(ctx, t, nowSec) {
+   * (后两者由调用方分流, 不进本函数)。U3: 返回数据对象(渲染在分片), 判据不变。 */
+  function nextOf(ctx, t, nowSec) {
     const na = t ? t.next_announce : null;
     if (num(na) && na > 0) {
-      const rem = Math.max(0, Math.round(na - nowSec));
-      return T`<span class="dt06-next" title="该 tracker 的下次重新汇报倒计时(行级 next_announce 真值)">
-        <span><b>${ctx.fmtDuration(rem)}</b></span>
-      </span>`;
+      return { kind: "real", val: ctx.fmtDuration(Math.max(0, Math.round(na - nowSec))) };
     }
     const d = (ctx.drawer && ctx.drawer.detail) || null;
     if (!d || !(d.reannounce_in > 0)) {
-      return T`<span class="dt06-v z" title="汇报倒计时数据未落袋">—</span>`;
+      return { kind: "none", val: "—" }; /* 汇报倒计时数据未落袋 */
     }
     const bar = num(d.reannounce) && d.reannounce > 0 && d.reannounce_in <= d.reannounce
-      ? T`<span class="dt06-tbar" title="汇报周期剩余比例"><i style="width:${(d.reannounce_in / d.reannounce * 100).toFixed(1)}%"></i></span>`
-      : "";
-    return T`<span class="dt06-next" title="P-02 回退: qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似">
-      <span><b>${ctx.fmtDuration(d.reannounce_in)}</b> <span class="dt06-gb">全局</span></span>
-      ${R(bar)}
-    </span>`;
+      ? Number((d.reannounce_in / d.reannounce * 100).toFixed(1)) : 0;
+    return { kind: "global", val: ctx.fmtDuration(d.reannounce_in), bar };
   }
 
-  function rowHtml(ctx, t, order, nowSec) {
+  /* ---------------- 行装配(U3: 判据在这里, 呈现在渲染器分片) ----------------
+   * 行对象 = 显示值 + _raw 排序原值(sort.js _sortVal 消费) + 修饰字段 + _cls 行态。
+   * 排序由引擎做(默认 sev 升序 = 异常置顶, 同档稳定保 qB 原序); benign = 「仅看异常」
+   * 过滤的目标外行标记(正常 + 未启用)—— 行不重装配, 外壳容器类切换(原口径)。 */
+  function rowOf(ctx, t, i, nowSec, rGate) {
     const b = bucketOf(ctx, t);
     const bk = BUCKET[b];
     const virtual = b === "off" && ctx.drawerTrackerVirtual(t.url);
     const m = String(t.msg || "").trim();
-    const open = ui.openMsg[t.url] && m;
+    const open = !!(ui.openMsg[t.url] && m);
     const stText = b === "err" ? bk.text : ctx.drawerTrackerStatus(t.status) || bk.text;
-    /* P3-4(报告 26-10-07-0542): msg 展开行纯 span 模拟控件补键盘达(role=button + tabindex) */
-    const msg = m
-      ? T`<span class="dt06-msg${open ? " open" : ""}" role="button" tabindex="0"
-          aria-expanded="${open ? "true" : "false"}" data-msg="${t.url}"
-          title="tracker 返回的原始 msg, 点击展开 / 收起">${m}</span>`
-      : "";
     const sd = ctx.fmtPeersQb(t.num_seeds, t.num_complete);
     const lc = ctx.fmtPeersQb(t.num_leeches, t.num_incomplete);
-    /* benign = 「仅看异常」过滤的目标外行(正常 + 未启用) */
-    const benign = b === "ok" || b === "off" ? "1" : "0";
     const next = b === "upd"
-      ? T`<span class="dt06-next-upd"><i class="pulse"></i>正在汇报</span>`
-      : (b === "off" ? T`<span class="dt06-none">—</span>` : nextHtml(ctx, t, nowSec));
-    /* 重报钮置灰判据(非活跃种子禁汇报, qB 口径; 判据单点 = decorate.js::drawerReannounceGate) */
+      ? { kind: "upd" }
+      : (b === "off" ? { kind: "none" } : nextOf(ctx, t, nowSec));
+    return {
+      k: "t" + i,
+      url: String(t.url || ""),
+      urlTitle: String(t.url || ""),
+      host: virtual ? String(t.url) : hostOf(t.url),
+      dim: virtual,
+      b,
+      stText,
+      pulse: b === "upd",
+      m,
+      open,
+      tier: num(t.tier) ? String(t.tier) : "—",
+      seeds: { val: sd || "—", z: !sd },
+      leeches: { val: lc || "—", z: !lc },
+      downloaded: { val: num(t.num_downloaded) ? String(t.num_downloaded) : "—", z: !num(t.num_downloaded) },
+      next,
+      virtual,
+      gatedOk: rGate.ok,
+      gatedTitle: rGate.ok ? "强制重新汇报" : rGate.title,
+      _raw: {
+        sev: bk.sev,
+        host: hostOf(t.url),
+        tier: num(t.tier) ? Number(t.tier) : null,
+        seeds: num(t.num_seeds) ? Number(t.num_seeds) : (num(t.num_complete) ? Number(t.num_complete) : null),
+        leeches: num(t.num_leeches) ? Number(t.num_leeches) : (num(t.num_incomplete) ? Number(t.num_incomplete) : null),
+        downloaded: num(t.num_downloaded) ? Number(t.num_downloaded) : null,
+      },
+      _cls: [b, b === "ok" || b === "off" ? "benign" : ""].filter(Boolean).join(" ") || null,
+    };
+  }
+
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 全量行(仅看异常是容器类切换不裁行);
+   * 排序由引擎按 dyn 键做(默认 sev 升序), 这里不排。 */
+  function rowsFn(ctx) {
+    const ts = (ctx.drawer && ctx.drawer.trackers) || [];
+    const nowSec = Math.floor(Date.now() / 1000);
     const rGate = ctx.drawerReannounceGate();
-    const ops = virtual
-      ? T`<span class="dt06-ops dim">—</span>`
-      : T`<span class="dt06-ops">
-          <button type="button" class="dt06-act${rGate.ok ? "" : " is-gated"}" data-act="report" title="${rGate.ok ? "强制重新汇报" : rGate.title}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
-          <button type="button" class="dt06-act" data-act="del" data-url="${t.url}" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
-        </span>`;
-    return T`<div class="dt06-r ${b}" data-benign="${benign}" data-idx="${order}" title="${t.url}">
-      <span class="dt06-st ${b}"><i class="${b === "upd" ? "pulse" : ""}"></i>${stText}</span>
-      <div class="dt06-cell">
-        <span class="dt06-host">${virtual ? t.url : hostOf(t.url)}</span>
-        ${R(msg)}
-      </div>
-      <span class="dt06-tier">${num(t.tier) ? t.tier : "—"}</span>
-      <span class="dt06-v num${sd ? "" : " z"}">${sd || "—"}</span>
-      <span class="dt06-v num${lc ? "" : " z"}">${lc || "—"}</span>
-      <span class="dt06-v num${num(t.num_downloaded) ? "" : " z"}">${num(t.num_downloaded) ? t.num_downloaded : "—"}</span>
-      ${R(next)}
-      ${R(ops)}
-    </div>`;
+    return ts.map((t, i) => rowOf(ctx, t, i, nowSec, rGate));
   }
 
   function render(host, ctx) {
@@ -222,10 +243,11 @@
     const d = (ctx.drawer && ctx.drawer.detail) || null;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    /* 汇报倒计时基准(本机 epoch, 秒): 逐行 next_announce 是绝对时间, 减它得剩余(见 nextHtml)。
+    /* 汇报倒计时基准(本机 epoch, 秒): 逐行 next_announce 是绝对时间, 减它得剩余(见 nextOf)。
      * 计入 sig —— 时间每前进 1s 都该重算, 否则跳过重建会把倒计时冻在上一帧(粒度 = 5s 轮询)。 */
     const nowSec = Math.floor(Date.now() / 1000);
-    /* 数据未变跳过重建(含汇报倒计时: 逐行 next_announce / detail.reannounce_in / nowSec 变了都要刷) */
+    /* 数据未变跳过重建(含汇报倒计时: 逐行 next_announce / detail.reannounce_in / nowSec 变了都要刷);
+     * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
     const sig = JSON.stringify(ts) + "|" + String(!!loading)
       + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "")
       + "|" + nowSec
@@ -247,15 +269,12 @@
         T`<div class="dt06-empty"><span>暂无 tracker</span></div>`));
       return;
     }
-    /* 排序: 异常置顶(sev 升序), 同档保 qB 原序(稳定) */
-    const rows = ts.map((t, i) => ({ t, i, b: bucketOf(ctx, t) }))
-      .sort((a, b2) => BUCKET[a.b].sev - BUCKET[b2.b].sev || a.i - b2.i);
-    const rowsHtml = rows.map((r, k) => rowHtml(ctx, r.t, k, nowSec)).join("");
     /* 工具条注: 有任一行带 next_announce(qB 5.2+) = 真口径; 否则回退种子级全局近似 */
     const perTracker = ts.some((t) => num(t.next_announce) && t.next_announce > 0);
     const note = perTracker
       ? "汇报倒计时为逐 tracker 真值(qB next_announce) · 5s 自动刷新"
       : (d && d.reannounce_in > 0 ? "汇报倒计时为种子级全局值(qB 无 per-tracker 口径) · 5s 自动刷新" : "5s 自动刷新");
+    /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt06-wrap">
       <div class="dt06-toolbar">
         <span class="dt06-note">${note}</span>
@@ -264,49 +283,14 @@
         <span class="dt06-spacer"></span>
         <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>
       </div>
-      <div class="dt06-table${ui.onlyBad ? " only-bad" : ""}">
-        <div class="dt06-r head">
-          <span>状态</span>
-          <span>Tracker</span>
-          <span class="dt06-tier" title="tier: 汇报层级, 数值越小越优先">tier</span>
-          <span class="dt06-num" title="num_seeds (num_complete)">种子</span>
-          <span class="dt06-num" title="num_leeches (num_incomplete)">用户</span>
-          <span class="dt06-num" title="num_downloaded: 该 tracker 报告的累计完成下载次数">完成下载</span>
-          <span title="下次重新汇报倒计时(逐 tracker 真值 next_announce; qB 无该字段时回退种子级全局近似)">下次重新汇报</span>
-          <span class="dt06-num">操作</span>
-        </div>
-        ${R(rowsHtml)}
-      </div>
+      <div class="dt06-list${ui.onlyBad ? " only-bad" : ""}"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
      * 用户的横向滚动位打回最左) —— 单点 helper */
     H.withScroll(host, () => {
       host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, TABLE_ID);
     });
-  }
-
-  
-
-  function destroy(host) {
-    ui.lastSig = ""; /* 下次挂载强制整帧重建 */
-    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
-     * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
-    H.unwireEvents(host);
-  }
-
-  /* P3-4: 纯 span 模拟控件(msg 展开行 data-msg)的键盘触发 —— Enter/Space 转发 click 委托;
-   * 焦点在原生 button 等自身会发 click 的元素上时不接管(防 Enter 双重触发) */
-  function onKeyDown(ev) {
-    if (ev.key !== "Enter" && ev.key !== " ") return;
-    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
-    if (!ev.target.closest("[data-msg]")) return;
-    ev.preventDefault();
-    onClick(ev);
-  }
-
-  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
-  function wire(host) {
-    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
   }
 
   function onClick(ev) {
@@ -315,14 +299,15 @@
     if (toggle) {
       ui.onlyBad = !ui.onlyBad;
       toggle.classList.toggle("active", ui.onlyBad);
-      const table = h.querySelector(".dt06-table");
-      if (table) table.classList.toggle("only-bad", ui.onlyBad);
+      const list = h.querySelector(".dt06-list");
+      if (list) list.classList.toggle("only-bad", ui.onlyBad);
       return;
     }
     const sub = ev.target.closest("[data-msg]");
     if (sub) {
       const url = sub.getAttribute("data-msg");
       ui.openMsg[url] = !ui.openMsg[url];
+      /* 展开态只翻 class 不重建(重建会重置滚动), 与 ui.openMsg 同步供 5s 重渲染后恢复 */
       sub.classList.toggle("open");
       return;
     }
@@ -336,10 +321,44 @@
     if (act === "del") { ctx.trackerRemove(url); }
   }
 
+  /* 视图偏好变化后的强制重渲染(sig 不含偏好, 置空 lastSig 即可) */
+  function rerender(host) {
+    ui.lastSig = "";
+    const ctx = host.__dtCtx;
+    if (ctx) _render(host, ctx);
+  }
+
+  /* P3-4: 纯 span 模拟控件(msg 展开行 data-msg, 在引擎渲染的行容器内)的键盘触发 ——
+   * Enter/Space 转发 click 委托; 焦点在原生 button 等自身会发 click 的元素上时不接管
+   * (防 Enter 双重触发)。锚挂在宿主帧内, 事件委托照常命中。 */
+  function onKeyDown(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (ev.target.closest("button, input, select, textarea, a[href], summary")) return;
+    if (!ev.target.closest("[data-msg]")) return;
+    ev.preventDefault();
+    onClick(ev);
+  }
+
+  /* 事件委托挂宿主一次(宿主元素归 Vue 所有且跨重渲染复用; 挂摘成对纪律在核心 helper) */
+  function wire(host) {
+    H.wireEvents(host, { click: onClick, keydown: onKeyDown });
+  }
+
+  function destroy(host) {
+    ui.lastSig = ""; /* 下次挂载强制整帧重建 */
+    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
+     * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
+    H.unwireEvents(host);
+  }
+
   const _render = render;
   reg.register({
     id: "06", tab: "trackers",
     label: "增强表格",
+    /* 桥声明(U3): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerTrackerV06,
+     * rowsFn = 行装配(判据单点), 8 列表头/排序/拖宽/右键隐藏/偏好持久化归引擎。 */
+    tableId: TABLE_ID,
+    rowsFn: rowsFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

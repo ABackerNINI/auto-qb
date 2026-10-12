@@ -1362,27 +1362,29 @@ def test_drawer_tpl_trackers_card_uniform_height():
     """04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障) ——
     缺陷: 虚拟合并卡沿用设计稿 footer 的长描述后, 卡身比实体卡高出一截 —— 同一栅格里同为
     「未启用」的实体卡(真浏览器实测 69px)与虚拟卡(100px)高度不一致。口径(用户拍板「同排
-    等高」): 栅格 .dt04-grid 走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡
-    恒等高, 无需给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉
-    三件事: ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③virtualCardHtml
-    内不得再出现 dt04-vnote(实体『未启用』卡的同名短注是另一回事, 别顺手连类一起删)。"""
+    等高」): 栅格走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡恒等高, 无需
+    给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉三件事:
+    ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③虚拟合并卡装配
+    (virtualRowOf, U3 起为 rowsFn 合成行)内不得再出现 dt04-vnote(实体『未启用』卡的同名
+    短注是另一回事, 别顺手连类一起删)。U3 改版: 卡片 = 引擎行容器(.group-row 样成卡),
+    双列栅格落 .dt04-list .group-table(引擎 .group-table 基础是 flex 列, 变体覆盖为 grid)。"""
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     name = "04-trackers-status-cards-tall.js"
     text = open(os.path.join(vdir, name), encoding="utf-8").read()
 
-    # 1. 同排等高机制: .dt04-grid 必须 stretch(与 align-items:start 互斥)
-    grid = [l for l in text.splitlines() if ".dt04-grid {" in l]
-    assert grid, f"drawer_tpl/{name}: 缺 .dt04-grid 规则(形态漂移, 同步本守阵)"
-    assert "align-items:stretch" in grid[0].replace(" ", ""), \
-        f"drawer_tpl/{name}: .dt04-grid 必须 align-items:stretch(同排等高口径; 缺则虚拟卡与同排实体卡高度不一致复发)"
+    # 1. 同排等高机制: .dt04-list .group-table 必须 grid + stretch(与 align-items:start 互斥)
+    grid = [l for l in text.splitlines() if ".dt04-list.group-table{display:grid" in l.replace(" ", "")]
+    assert grid, f"drawer_tpl/{name}: 缺 .dt04-list .group-table 双列栅格规则(形态漂移, 同步本守阵)"
+    assert "align-items:stretch" in text.replace(" ", ""), \
+        f"drawer_tpl/{name}: 卡片栅格必须 align-items:stretch(同排等高口径; 缺则虚拟卡与同排实体卡高度不一致复发)"
     assert "align-items:start" not in text.replace(" ", ""), \
         f"drawer_tpl/{name}: 出现 align-items:start(卡片栅格等高机制被改回, 2026-10-10 报障复发)"
 
     # 2. 虚拟合并卡: 描述文案 + 描述行都不许回来
     assert "私有 tracker 种子" not in text, \
         f"drawer_tpl/{name}: 虚拟条目描述文案回潮(2026-10-10 用户要求移除)"
-    m = re.search(r"function virtualCardHtml\([^)]*\) \{(.*?)\n  \}", text, re.S)
-    assert m, f"drawer_tpl/{name}: virtualCardHtml 形态漂移(守阵正则失配, 同步本守阵)"
+    m = re.search(r"function virtualRowOf\([^)]*\) \{(.*?)\n  \}", text, re.S)
+    assert m, f"drawer_tpl/{name}: virtualRowOf 形态漂移(守阵正则失配, 同步本守阵)"
     assert "dt04-vnote" not in m.group(1), \
         f"drawer_tpl/{name}: 虚拟合并卡又挂 dt04-vnote 描述行(卡身再次高出实体卡)"
 
@@ -1490,25 +1492,35 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
     nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); ②「全局」标(dt06-gb)
     只许出现在回退分支 —— 真口径行不得带它; ③回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
     ④nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧); ⑤真口径分支不画微条(per-tracker interval
-    不可得, 分母不存在, 不造假); ⑥调用点 nextHtml 必须拿到行 t 与 nowSec。"""
+    不可得, 分母不存在, 不造假); ⑥调用点 nextOf 必须拿到行 t 与 nowSec。
+    U3(26-10-12-0527)改版: 判据(nextOf/rowOf/rowsFn)与 sig 口径仍在变体文件, 「全局」标与
+    微条的呈现随表格体重写迁渲染器分片(xtpl-cells-dt.html tpl-aq-dt06-cells) —— 呈现锚同轮
+    迁移, 判据锚不放宽。"""
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     text = open(os.path.join(vdir, "06-trackers-table-collapsed.js"), encoding="utf-8").read()
     # ① 真口径: 读行级 next_announce + 先减 now
     assert "t.next_announce" in text, "06 逐行倒计时未读行级 next_announce(P-02 真口径回退)"
     assert "Math.round(na - nowSec)" in text, "06 未以 epoch 减 nowSec 得剩余(epoch 当倒计时 = 事故根因)"
-    # 真口径分支 = nextHtml 里回退行(const d = ...)之前的那段
-    real_branch = text[text.index("function nextHtml"):text.index("const d = (ctx.drawer")]
-    # ②「全局」标只在回退分支
-    assert "dt06-gb" not in real_branch, "06 真口径行仍带「全局」标(真值不该标全局)"
-    # ③ 回退分支仍在
-    assert "dt06-gb" in text, "06 回退分支(全局近似)被删(qB < 5.2 无 next_announce 会整列空白)"
+    # 真口径分支 = nextOf 里回退行(const d = ...)之前的那段
+    real_branch = text[text.index("function nextOf"):text.index("const d = (ctx.drawer")]
+    # ②「全局」标只在回退分支(呈现已迁分片: 判据侧 nextOf 真口径分支不出「全局」字样;
+    #   .dt06-gb 的着色 CSS 留在变体注入层, 不在此限)
+    assert "全局" not in real_branch, "06 真口径行仍算「全局」标(真值不该标全局)"
+    # ③ 回退分支仍在(呈现侧在分片, 全局分支带 dt06-gb 且只此一处)
+    frag = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells-dt.html"), encoding="utf-8").read()
+    sec06 = frag.split('id="tpl-aq-dt06-cells"', 1)[-1].split("</script>", 1)[0]
+    assert "dt06-gb" in sec06, "06 回退分支(全局近似)被删(qB < 5.2 无 next_announce 会整列空白)"
+    real_frag = sec06[sec06.index("kind === 'real'"):sec06.index('v-else class="dt06-next"')]
+    assert "dt06-gb" not in real_frag, "06 真口径行仍带「全局」标(真值不该标全局)"
     assert "detail.reannounce_in" in text, "06 回退分支未用种子级 detail.reannounce_in"
     # ④ nowSec 计入 sig(否则跳过重建冻帧)
     assert re.search(r'"\|" \+ nowSec\b', text), "06 未把 nowSec 计入 sig(跳过重建会把倒计时冻在上一帧)"
-    # ⑤ 真口径分支不画微条
-    assert "dt06-tbar" not in real_branch, "06 真口径行仍画微条(per-tracker interval 不可得, 属造假)"
+    # ⑤ 真口径分支不画微条(变体判据侧不出 bar; 分片微条只随 global 分支)
+    assert "bar" not in real_branch, "06 真口径行仍算微条(per-tracker interval 不可得, 属造假)"
+    assert "dt06-tbar" in sec06 and "dt06-tbar" not in real_frag, \
+        "06 微条呈现漂移(只许在回退分支)"
     # ⑥ 调用点传参
-    assert "nextHtml(ctx, t, nowSec)" in text, "06 nextHtml 调用点未传行 t / nowSec(真口径拿不到数据)"
+    assert "nextOf(ctx, t, nowSec)" in text, "06 nextOf 调用点未传行 t / nowSec(真口径拿不到数据)"
 
 
 def test_drawer_tpl_a11y_and_fetch_error_states():
@@ -1561,10 +1573,11 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
                 f"drawer_tpl/{name}: 折叠组头缺 role=button(P3-4: 纯 div+click 键盘不可达)"
             assert 'aria-expanded="' in text, \
                 f"drawer_tpl/{name}: 折叠组头缺 aria-expanded(读屏不知道折叠态)"
-        if name in msg_variants:
-            assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', text.replace("\n", " ")), \
-                f"drawer_tpl/{name}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
-        assert 'tabindex="0"' in text, f"drawer_tpl/{name}: 模拟控件缺 tabindex=0(键盘不可聚焦)"
+        # U3(26-10-12-0527): 05/06 的 msg 展开行随表格体重写迁渲染器分片(件套在下方 2.1 钉),
+        # 变体侧只保留键盘转发/挂摘纪律 —— data-msg 行在引擎行容器内, 委托经宿主照常命中。
+        # 06 外壳已无任何纯 div 模拟控件(其 tabindex 随 msg 迁分片), 05 的折叠组头仍在
+        if name != "06-trackers-table-collapsed.js":
+            assert 'tabindex="0"' in text, f"drawer_tpl/{name}: 模拟控件缺 tabindex=0(键盘不可聚焦)"
         # keydown 委托与 click 委托成对挂宿主(纯 div 模拟无原生 click, Enter/Space 手动转发):
         # 挂摘纪律收口在核心 wireEvents/unwireEvents 单点(26-10-07-0845), 变体只声明事件表
         assert "click: onClick" in text and "keydown: onKeyDown" in text, \
@@ -1574,6 +1587,16 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         # 双重触发去重: 焦点在原生交互元素上时不转发(原生 Enter 本来就发 click)
         assert 'closest("button, input, select, textarea, a[href], summary")' in text, \
             f"drawer_tpl/{name}: keydown 转发未排除原生交互元素(Enter 会 click+keydown 双重触发)"
+
+    # 2.1 U3(26-10-12-0527): 05/06 msg 展开行的 P3-4 件套随载体迁 xtpl-cells-dt.html 分片
+    # (role=button + tabindex + aria-expanded + data-msg 逐段钉; 键盘 Enter/Space 转发仍在变体)
+    cells_dt = open(os.path.join(shared, "tpl", "xtpl-cells-dt.html"), encoding="utf-8").read()
+    for sec in ("tpl-aq-dt05-cells", "tpl-aq-dt06-cells"):
+        sec_txt = cells_dt.split(f'id="{sec}"', 1)[-1].split("</script>", 1)[0].replace("\n", " ")
+        assert re.search(r'data-msg[^>]*role="button"|role="button"[^>]*data-msg', sec_txt), \
+            f"xtpl-cells-dt/{sec}: msg 展开行缺 role=button(P3-4: 纯 span+click 键盘不可达)"
+        assert 'tabindex="0"' in sec_txt and "aria-expanded=" in sec_txt, \
+            f"xtpl-cells-dt/{sec}: msg 展开行缺 tabindex/aria-expanded(键盘不可聚焦/读屏不知展开态)"
 
     # 2.5 peers 三变体(U2 重写后)的 a11y/挂摘口径: 07/09 交互面只剩原生 <button> 筛选 chips
     # (键盘天然可达, 无模拟控件故无 role/tabindex/keydown 转发件套); 08 归上面 fold 组
@@ -2020,18 +2043,24 @@ def test_frontend_reannounce_inactive_gate_wiring():
         "键盘路径必须先拦再确认(先问「确定?」再回「不行」是坏体感)"
 
     # ④ 详情面板: 三变体的重报钮 + 各变体 .is-gated CSS + torrentCmd 兜底(W7 恢复注: 变体层
-    #    随 W5 越权退役曾一并退场, W7 恢复后该断言面原样回归)
+    #    随 W5 越权退役曾一并退场, W7 恢复后该断言面原样回归; U3(26-10-12-0527)改版: 置灰
+    #    绑定随表格体重写迁渲染器分片(`:class="{ 'is-gated': !p.gatedOk }"`), 判据单点
+    #    (rowsFn 装配读 drawerReannounceGate)与置灰 CSS 仍在变体文件)
     vdir = os.path.join(shared, "drawer_tpl")
-    for name, cls in (
-        ("04-trackers-status-cards-tall.js", "dt04-act"), ("05-trackers-health-groups-low.js", "dt05-act"),
-        ("06-trackers-table-collapsed.js", "dt06-act")
+    frag = open(os.path.join(shared, "tpl", "xtpl-cells-dt.html"), encoding="utf-8").read()
+    for name, sec, cls in (
+        ("04-trackers-status-cards-tall.js", "tpl-aq-dt04-cells", "dt04-act"),
+        ("05-trackers-health-groups-low.js", "tpl-aq-dt05-cells", "dt05-act"),
+        ("06-trackers-table-collapsed.js", "tpl-aq-dt06-cells", "dt06-act"),
     ):
         t = open(os.path.join(vdir, name), encoding="utf-8").read()
         assert "drawerReannounceGate()" in t, f"{name} 重报钮未接 drawerReannounceGate(详情面板绕行路径)"
         assert f".drawer .{cls}.is-gated" in t, f"{name} 缺 .{cls}.is-gated 置灰规则"
-        assert re.search(
-            rf'class="{cls}\$\{{rGate\.ok \? "" : " is-gated"\}}" data-act="report"', t), \
-            f"{name} 的 data-act=report 钮未按 rGate 置灰(仅删除钮该置灰=误伤)"
+        assert 'rGate.ok ? "强制重新汇报" : rGate.title' in t or 'rGate.ok ? "" : rGate.title' in t, \
+            f"{name} 的 rGate 判据未装配进行对象(gatedOk/gatedTitle 断供, 分片置灰失效)"
+        sec_txt = frag.split(f'id="{sec}"', 1)[-1].split("</script>", 1)[0]
+        assert ':class="{ \'is-gated\': !p.gatedOk }" data-act="report"' in sec_txt, \
+            f"{name} 的 data-act=report 钮未按 gatedOk 置灰(仅删除钮该置灰=误伤)"
     assert "_guardReannounce({ keys: [], hashes: [target] })" in drawer_js, \
         "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"  # 2026-10-10(S3): 目标形参 hash -> target(显式传参, 缺省回落 menu.hash)
 

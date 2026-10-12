@@ -56,6 +56,16 @@ window.AQB_SORT = {
       }
       this._resetSort(scope);
     },
+    /* dyn 表直设排序态(计划 26-10-12-0527 U3): 04 卡片变体的分段钮是**模式选择**语义
+     * (选「异常优先」或「按 tier」, 单击即生效), 不是 h-cell 的三态循环 —— 经此直设 key/dir。
+     * 仅 dyn 表开座(经典表 gk/gd 形态无此需求); 排序状态仍归 dtSortState 引擎单点。 */
+    dtSortSet(tableId, key, dir) {
+      const def = ALL_TABLE_DEFS[tableId];
+      if (!def || !def.sort || !def.sort.dyn) return;
+      const cell = this.dtSortCell(tableId);
+      cell.key = key;
+      cell.dir = dir;
+    },
     /* 恢复默认排序(三态第三击): 目标值随表走 —— 分组/种子 = 最近添加降序(DEFAULT_SORT),
      * 追剧 = 最近动静降序(后端同序), 明细 = 后端原序(空键)。见 TABLE_DEFS[*].sort.defKey/defDir */
     _resetSort(scope) {

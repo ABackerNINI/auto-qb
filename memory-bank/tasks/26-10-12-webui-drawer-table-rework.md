@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-10-12
 **Updated:** 2026-10-12
-**Summary:** 依据双计划联合审计（26-10-12-0455）修正计划的执行档案：U0 冻结 + 1722 P6 契约交付；U1 引擎 spike（列子集声明 / 排序 per-table-id 泛化 / Teleport 锚桥，stub 四路径 e2e 闸门通过）；U2 用户表三变体（07/08/09）表格体重写接引擎（锚保活/对账/触碰三件套 + 分段桥 + omitEmpty 渐进列，e2e 手势红绿双验）。U3（tracker 04/05/06）待开工。
+**Summary:** 依据双计划联合审计（26-10-12-0455）修正计划的执行档案：U0 冻结 + 1722 P6 契约交付；U1 引擎 spike（列子集声明 / 排序 per-table-id 泛化 / Teleport 锚桥，stub 四路径 e2e 闸门通过）；U2 用户表三变体（07/08/09）表格体重写接引擎（锚保活/对账/触碰三件套 + 分段桥 + omitEmpty 渐进列，e2e 手势红绿双验）；U3 tracker 三变体（04/05/06）表格体重写接引擎（04 分段钮 dtSortSet 直设并引擎、05 异构分组单列满宽行桥、06 八列引擎表头，reannounce 闸门等专属守阵逐条对账改锚，e2e 红绿双验）。U4（内容树 10/11）待开工。
 **Topics:** webui-drawer-table-rework
-**Refs:** memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0806-webui-drawer-table-rework-u2.md
+**Refs:** memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0806-webui-drawer-table-rework-u2.md,memory-bank/testing/baselines/26-10-12-0913-webui-drawer-table-rework-u3.md
 
 ## 原始请求
 
@@ -36,7 +36,7 @@ U0 冻结 + 1722 P6 契约 → U1 引擎 spike（stub 闸门）→ **U2 用户�
 | U2 守阵与扫描器改版 | Done | bridge_wiring 扩 U2 十二段；a11y 守阵随 D3 改版（引擎表头 a11y 缺口入 issue 池） |
 | U2 e2e：两 spec 改版 + 变体手势新 spec + 红验 | Done | anchTouch 红验：空操作注入 + 轮询冻结 → 4 红，还原即绿 |
 | U2 收口：文档回写 + 基线切片 | Done | 计划 §09 变更行 + 本档案 + activeContext + 基线切片 |
-| U3 tracker 04/05/06 表格体重写 | Open | 下波；reannounce 闸门等专属守阵逐条对账 |
+| U3 tracker 04/05/06 表格体重写 | Done | 04 分段钮 dtSortSet 直设 / 05 分段桥单列满宽行 / 06 八列引擎表头；专属守阵逐条对账改锚 |
 | U4 内容树 10/11 表格体重写 | Open | D4 树缩进格单份渲染器 |
 | U5 收口：Q1–Q5 终态 + 守阵定型 + 债务入账 | Open | 18/18 对账 + 红验两条 |
 
@@ -45,3 +45,5 @@ U0 冻结 + 1722 P6 契约 → U1 引擎 spike（stub 闸门）→ **U2 用户�
 - **2026-10-12 0746 前（U2 实施 + 守阵 + e2e）**：引擎侧 drawer_templates.js（dtSyncAnchors 单点对账 / anchFill 保活 / anchTouch 触碰 / register 收 rowsFn / 桥方法六件扩 Segs/RowCls/dtTplRows）、xtpl.html 分段桥模板、columns.js（omitEmpty 单点 + 三变体六 computed）、app.js（三列集 D2 裁剪 / DRAWER_TABLE_DEFS 三行 / 三组件注册）、table.js 三渲染器、xtpl-cells.html 三分片（压至 399 行守单分片上限）、三变体全量重写。守阵 `test_drawer_table_bridge_wiring` 扩 U2 十二段；修掉三个自检发现项（blk 提取在内层 `},` 截断、08 注释 data-sort 字面自撞、09 漏 `const R`）。a11y 守阵 `test_drawer_tpl_a11y_and_fetch_error_states` 随 D3 改版：07/08/09 手搓排序表头 aria-sort pin 退役（排序归引擎），07/09 chips 原生 button 口径、08 折叠组 P3-4 件套保留；引擎表头 role/aria-sort 缺口属引擎全域议题，入 issue 池。
 - **2026-10-12 0750（e2e）**：`drawer-peers-columns.spec` / `drawer-peers-sticky-flush.spec` 探针改引擎口径（`.group-head[data-table=drawerPeerV0X]` / `.group-row` / 分段锚），双皮肤全过；新增 `drawer-peers-variant-tables.spec`（07 手势三件套 + 默认序/引擎排序、07/09 chips、08 分段/折叠/只看在传/组内 dyn 排序），双皮肤全过。**红验闭环**：anchTouch 注入空操作 → chips 测试假绿（行靠 5s 轮询 tick 延迟刷新兜底）→ 手法修正为「初始落袋后 peers 端点挂起冻结」→ 07/09 × 双皮肤注入即红，还原即绿。全量 e2e 首轮失败全部为桩服务中途 CONNECTION_REFUSED（零断言失败，环境事故），清 8137 残留重跑通过。数字见基线切片（`commands run kb.baseline`）。
 - **2026-10-12 0800（收口）**：计划 §09 U2 变更行 + 本档案 + activeContext 切片 + 基线切片；引擎表头 a11y 缺口入 issue 池（计划外，不属本波修码面）。
+- **2026-10-12 0913 前（U3 实施 + 守阵 + e2e）**：引擎侧 app.js 三列集（04/05 单列满宽 card 列集 + 06 八列，next 列 sortable:false——行级/种子级/正在汇报三态混合口径无单一原值）+ DRAWER_TABLE_DEFS 三描述符（04 segs 模式排序 defKey sev、05 segs:true 空排序键保原序、06 sev 升序异常置顶）+ 三渲染器组件注册；sort.js 新增 dtSortSet 直设口（04 分段钮「模式选择」语义与引擎三态循环冲突的特例，Q3 记档，排序态仍归 dtSortState 单点）；columns.js 六 computed；xtpl-cells-dt.html 三分片新文件（xtpl-cells.html 已 399 行顶死单分片上限）+ 三份 index.html 清单挂载。变体侧 04/05/06 全量重写：04 卡片栅格覆盖引擎行容器为双列 grid、虚拟合并卡为 rowsFn 合成行、手搓分段排序退役；05 异构分组 = 分组头留外壳 + 单列满宽行桥，行三形态（fail 处置块 / row / chips 合成行），折叠与 msg 展开只翻 class 不触碰锚（行来源不变）；06 八列引擎表头 + onlyBad 外壳容器类切换（行不重装配原口径）。守阵四处计数锚红全部同轮改口径（R3 不放宽不删除）：reannounce 闸门④ 判据留变体、呈现锚迁分片；等高守阵改 grid+stretch 切片；per_tracker 探针（.dt06-next b / .dt06-gb）在分片中存活零改版全过；a11y msg 件套迁分片钉。e2e：reannounce spec 零改版全过 + 新增 tracker 变体 spec（三测试 × 双皮肤），红验两条闭环（dtSortSet 空操作注入 → 分段 active 失效即红；anchTouch 空操作注入 → 04 轮询冻结后行数失效即红，还原即绿）。
+- **2026-10-12 0913（收口）**：计划 §11 U3 变更行（Q1–Q5 对账 16/18，Q3 手搓清零记档三条，U4 停手点成立：10/11 未动、树数据契约零改动）+ 本档案 + activeContext 切片 + 基线切片。

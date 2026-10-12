@@ -1,10 +1,10 @@
-# 抽屉表格统一重写 · U2 用户表三变体落地（07/08/09 接引擎）
+# 抽屉表格统一重写 · U3 Tracker 三变体落地（04/05/06 接引擎）
 
-> 摘要: 计划 26-10-12-0527 U2 完成：07/08/09 三变体表格体重写接引擎——引擎侧锚保活三件套（dtSyncAnchors 单点对账 / H.anchFill 外壳重建保锚 / H.anchTouch 态翻动强制换代）+ segs 分段桥（08 五分组）+ columns.js 通用 omitEmpty 渐进列；变体外壳只留版式，行装配收进 rowsFn、渲染器分片零判据复制、行级个性经 rowCls 绑引擎行容器（D5）。守阵 bridge_wiring 扩 U2 十二段全绿；a11y 守阵随 D3 改版（引擎表头 role/aria-sort 缺口入 issue 池）；e2e 两 spec 探针改引擎口径 + 新增 drawer-peers-variant-tables（手势三件套/排序/chips/分段/折叠/只看在传）；anchTouch 红验闭环（空操作注入 + 轮询冻结 → 注入即红，还原即绿——红验设计要点：必须冻结 5s 轮询 tick，否则行靠 tick 重读假绿）。test.full 与 dev.e2e 全量通过（数字见基线切片）；Q1–Q5 对账第一步（13/18）。停手点成立：04/05/06/10/11 未动，**下一步 U3（tracker 04/05/06）**。dev.e2e 引擎超时随套件涨到 194 用例放宽 360s→600s。
+> 摘要: 计划 26-10-12-0527 U3 完成：04/05/06 三变体表格体重写接引擎——04 状态卡（单列满宽行 + 引擎行容器覆盖双列 grid、虚拟合并卡 = rowsFn 合成行、手搓分段排序退役并经 `dtSortSet` 直设口并引擎——「模式选择」语义与 h-cell 三态循环冲突的引擎特例，Q3 记档）；05 健康度分组（分组头留外壳 + 单列满宽行分段桥，行三形态，折叠/msg 展开只翻 class 不触碰锚）；06 增强表格（八列引擎表头，「下次重新汇报」不可排——三态混合口径无单一原值；onlyBad 外壳容器类切换行不重装配）。渲染分片另立 xtpl-cells-dt.html（xtpl-cells.html 顶死 400 行单分片上限）+ 三清单挂载。守阵四处计数锚同轮改锚不放宽（reannounce 闸门④ 判据留变体/呈现锚迁分片——reannounce spec 探针零改版全过）；e2e 新增 tracker 变体 spec × 双皮肤，红验两条闭环（dtSortSet / anchTouch 空操作注入即红，还原即绿）。test.full 与 dev.e2e 全量通过（数字见基线切片）；Q1–Q5 对账第二步（16/18），Q3 手搓清零记档三条。停手点成立：10/11 未动、树数据契约零改动，**下一步 U4（内容树 10/11）**。
 
-> 最后活动: 2026-10-12 08:02
+> 最后活动: 2026-10-12 09:13
 
-**Refs:** memory-bank/tasks/26-10-12-webui-drawer-table-rework.md,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0806-webui-drawer-table-rework-u2.md
+**Refs:** memory-bank/tasks/26-10-12-webui-drawer-table-rework.md,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0913-webui-drawer-table-rework-u3.md
 
 ## 遗留债务(需另开会话)
 

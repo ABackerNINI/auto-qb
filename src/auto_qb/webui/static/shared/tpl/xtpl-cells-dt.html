@@ -1,0 +1,124 @@
+<!-- Tracker 三变体格渲染器(计划 26-10-12-0527 U3) —— 与 xtpl-cells.html 同范式(纯消费方:
+     props = 可见列 cols + 行模型自然名 p, 按 col.key 查表, 行数据一律 p.xxx)。行对象由变体
+     注册条目的 rowsFn 装配(drawer_templates.js dtTplRows 回调): 显示值 + _raw 排序原值 +
+     修饰字段 —— 渲染器只做声明式呈现, 判据零复制。行级修饰类走描述符 rowCls 绑 .group-row。
+     本文件独立于 xtpl-cells.html 的原因: 后者已顶满 400 行单分片上限(守阵
+     test_frontend_template_split_wiring 逐清单文件钉 400), 三分片另立分片文件。
+     04/05 为单列满宽行(卡片/处置块非列状数据), 分片根 = 单根容器; 06 为 8 列引擎行。 -->
+
+<!-- dt04 状态卡片栅格: 卡片 = 引擎行容器(外壳 CSS 把 .group-row 样成卡), 分片只出卡内内容。
+     kind 虚拟合并卡(virtual)与实体卡(card)两形态 —— 虚拟卡由 rowsFn 合成(chips 聚合)。 -->
+<script type="text/x-template" id="tpl-aq-dt04-cells">
+  <template v-if="p.kind === 'virtual'">
+    <header class="dt04-head">
+      <span class="dt04-dot"></span>
+      <span class="dt04-st" title="由 qBittorrent 合成, 非真实 tracker">禁用 · 虚拟条目 ×{{ p.vcount }}</span>
+      <span class="dt04-host dim">由 qBittorrent 合成, 非真实 tracker</span>
+    </header>
+    <div class="dt04-vchips"><span v-for="c in p.chips" :key="c" class="dt04-vchip" title="qB 合成的虚拟条目">{{ c }}</span></div>
+  </template>
+  <template v-else>
+    <header class="dt04-head">
+      <span class="dt04-dot"></span>
+      <span class="dt04-st">{{ p.stText }}</span>
+      <span v-if="p.tier" class="dt04-tier" title="tier: 汇报层级, 数值越小越优先">{{ p.tier }}</span>
+      <span v-if="p.lan" class="dt04-tag" title="局域网 tracker, 不经过公网">内网</span>
+      <span class="dt04-host" :class="{ dim: p.dim }" :title="p.urlTitle">{{ p.host }}</span>
+      <span v-if="!p.dim" class="dt04-acts">
+        <button type="button" class="dt04-act" :class="{ 'is-gated': !p.gatedOk }" data-act="report"
+                :data-url="p.url" :title="p.gatedOk ? '强制重新汇报' : p.gatedTitle"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+        <button type="button" class="dt04-act" data-act="del" :data-url="p.url" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
+      </span>
+    </header>
+    <div v-if="p.stats.length" class="dt04-stats">
+      <span v-for="s in p.stats" :key="s.label" class="dt04-s" :title="s.title">{{ s.label }} <b :class="{ z: s.z }">{{ s.val }}</b><template v-if="s.suffix"> {{ s.suffix }}</template></span>
+    </div>
+    <div v-if="p.msg" class="dt04-msg" :class="p.msg.cls" title="tracker 返回的原始 msg">{{ p.msg.text }}</div>
+    <div v-if="p.offNote" class="dt04-vnote" title="status = 0">该 tracker 已被 qB 禁用(状态「禁用」), 不参与汇报</div>
+  </template>
+</script>
+
+<!-- dt05 健康分组: 行三形态(失败处置块 fail / 普通行 row / off 组 chips 合成行), kind 分支。
+     组头/折叠在外壳; 组色(dot/badge/msg)经祖先 .dt05-g-XX 后代选择器命中分片内元素。 -->
+<script type="text/x-template" id="tpl-aq-dt05-cells">
+  <div v-if="p.kind === 'fail'" class="dt05-fail" :title="p.urlTitle">
+    <div class="dt05-rtop">
+      <span class="dt05-dot"></span>
+      <span class="dt05-rhost">{{ p.host }}</span>
+      <span v-if="p.tier" class="dt05-tier" title="tier: 汇报层级, 数值越小越优先">{{ p.tier }}</span>
+      <button type="button" class="dt05-rbtn" :class="{ 'is-gated': !p.gatedOk }" data-act="report"
+              :title="p.gatedOk ? '' : p.gatedTitle"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报</button>
+      <span class="dt05-acts">
+        <button type="button" class="dt05-act" data-act="del" :data-url="p.url" title="删除失效 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
+      </span>
+    </div>
+    <div class="dt05-fmsg" title="tracker 返回的原始 msg">{{ p.msg }}</div>
+    <div class="dt05-hint"><b>处置建议:</b>{{ p.advice }}</div>
+  </div>
+  <div v-else-if="p.kind === 'chips'" class="dt05-offline">
+    <span v-for="c in p.chips" :key="c" class="dt05-vchip" title="qB 合成的虚拟条目">{{ c }}</span>
+    <span v-if="p.chips.length" class="dt05-offnote">虚拟条目由 qBittorrent 合成, 不参与汇报</span>
+  </div>
+  <div v-else class="dt05-rowin" :title="p.urlTitle">
+    <span class="dt05-dot" :class="{ pulse: p.pulse }"></span>
+    <div class="dt05-main">
+      <div class="dt05-line">
+        <span class="dt05-host">{{ p.host }}</span>
+        <span v-if="p.tier" class="dt05-tier" title="tier: 汇报层级, 数值越小越优先">{{ p.tier }}</span>
+      </div>
+      <span v-if="p.m" class="dt05-sub" :class="{ dim: p.dim, open: p.open }" role="button" tabindex="0"
+            :aria-expanded="p.open ? 'true' : 'false'" :data-msg="p.url"
+            title="tracker 返回的原始 msg, 点击展开 / 收起">{{ p.m }}</span>
+    </div>
+    <span v-if="p.stats.length" class="dt05-stats">
+      <span v-for="s in p.stats" :key="s.label" class="dt05-s" :title="s.title">{{ s.label }} <b :class="{ z: s.z }">{{ s.val }}</b></span>
+    </span>
+    <span class="dt05-acts">
+      <button type="button" class="dt05-act" :class="{ 'is-gated': !p.gatedOk }" data-act="report"
+              :title="p.gatedOk ? '强制重新汇报' : p.gatedTitle"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+      <button type="button" class="dt05-act" data-act="del" :data-url="p.url" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
+    </span>
+  </div>
+</script>
+
+<!-- dt06 增强表格: 8 列(状态 / Tracker / tier / 种子 / 用户 / 完成下载 / 下次重新汇报 / 操作),
+     与原手搓 grid 逐列同构。
+     「下次重新汇报」四态(upd 正在汇报 / none 无 / real 行级真值 / global 种子级回退+微条)。
+     msg 展开行 = 纯 span 模拟控件(role=button + tabindex + aria-expanded, P3-4 件套随载体
+     迁入分片 —— 键盘转发仍由外壳 keydown 委托兜, data-msg 锚不变)。 -->
+<script type="text/x-template" id="tpl-aq-dt06-cells">
+  <template v-for="col in cols" :key="col.key">
+    <div v-if="col.key === 'sev'" class="dt06-st" :class="p.b" :title="p.urlTitle">
+      <i :class="{ pulse: p.pulse }"></i>{{ p.stText }}
+    </div>
+    <div v-else-if="col.key === 'host'" class="dt06-cell">
+      <span class="dt06-host" :class="{ dim: p.dim }">{{ p.host }}</span>
+      <span v-if="p.m" class="dt06-msg" :class="{ open: p.open }" role="button" tabindex="0"
+            :aria-expanded="p.open ? 'true' : 'false'" :data-msg="p.url"
+            title="tracker 返回的原始 msg, 点击展开 / 收起">{{ p.m }}</span>
+    </div>
+    <div v-else-if="col.key === 'tier'" class="dt06-tier" title="tier: 汇报层级, 数值越小越优先">{{ p.tier }}</div>
+    <div v-else-if="col.key === 'seeds'" class="dt06-v num" :class="{ z: p.seeds.z }" title="num_seeds (num_complete)">{{ p.seeds.val }}</div>
+    <div v-else-if="col.key === 'leeches'" class="dt06-v num" :class="{ z: p.leeches.z }" title="num_leeches (num_incomplete)">{{ p.leeches.val }}</div>
+    <div v-else-if="col.key === 'downloaded'" class="dt06-v num" :class="{ z: p.downloaded.z }" title="num_downloaded: 该 tracker 报告的累计完成下载次数">{{ p.downloaded.val }}</div>
+    <div v-else-if="col.key === 'next'" class="dt06-nextcell">
+      <span v-if="p.next.kind === 'upd'" class="dt06-next-upd" title="该 tracker 正在汇报中"><i class="pulse"></i>正在汇报</span>
+      <span v-else-if="p.next.kind === 'none'" class="dt06-none" title="虚拟/未启用条目不参与汇报">—</span>
+      <span v-else-if="p.next.kind === 'real'" class="dt06-next" title="该 tracker 的下次重新汇报倒计时(行级 next_announce 真值)">
+        <span><b>{{ p.next.val }}</b></span>
+      </span>
+      <span v-else class="dt06-next" title="P-02 回退: qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似">
+        <span><b>{{ p.next.val }}</b> <span class="dt06-gb">全局</span></span>
+        <span v-if="p.next.bar" class="dt06-tbar" title="汇报周期剩余比例"><i :style="{ width: p.next.bar + '%' }"></i></span>
+      </span>
+    </div>
+    <div v-else-if="col.key === 'ops'" class="dt06-opscell">
+      <span v-if="p.virtual" class="dt06-ops dim">—</span>
+      <span v-else class="dt06-ops">
+        <button type="button" class="dt06-act" :class="{ 'is-gated': !p.gatedOk }" data-act="report"
+                :title="p.gatedOk ? '强制重新汇报' : p.gatedTitle"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></button>
+        <button type="button" class="dt06-act" data-act="del" :data-url="p.url" title="删除 tracker"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
+      </span>
+    </div>
+  </template>
+</script>

@@ -231,3 +231,34 @@ window.AQ_DT09_CELLS_COMPONENT = {
   },
   template: "#tpl-aq-dt09-cells",
 };
+
+/* ---------------- U3 变体格渲染器(计划 26-10-12-0527, Tracker 04/05/06) ----------------
+ *   dt04 状态卡片栅格 → <aq-dt04-cells>(卡片整体 = 单格满宽, 列头 CSS 隐藏)
+ *   dt05 健康分组     → <aq-dt05-cells>(行三形态: 失败处置块/普通行/off 组 chips 合成行)
+ *   dt06 增强表格     → <aq-dt06-cells>(8 列, 与经典用户列同范式) */
+window.AQ_DT04_CELLS_COMPONENT = {
+  name: "aq-dt04-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerTrackerV04"))
+    p: { type: Object, required: true },         // dt04 行(rowsFn 装配)
+  },
+  template: "#tpl-aq-dt04-cells",
+};
+
+window.AQ_DT05_CELLS_COMPONENT = {
+  name: "aq-dt05-cells",
+  props: {
+    cols: { type: Array, required: true },
+    p: { type: Object, required: true },
+  },
+  template: "#tpl-aq-dt05-cells",
+};
+
+window.AQ_DT06_CELLS_COMPONENT = {
+  name: "aq-dt06-cells",
+  props: {
+    cols: { type: Array, required: true },
+    p: { type: Object, required: true },
+  },
+  template: "#tpl-aq-dt06-cells",
+};
