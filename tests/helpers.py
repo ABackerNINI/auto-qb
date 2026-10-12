@@ -329,18 +329,57 @@ class FakeClient:
         self.category = category
         self.calls.append(("set_category", category))
 
+    def _apply_paused_state(self, torrent_hashes, *, paused):
+        """替身保真: 真实翻转客户端侧种子的暂停轴 state(plan 26-10-13-0540 S0-P3)。
+
+        旧替身四个暂停轴方法只记 calls、不翻 state ⇒ 「快照 == 真值」类守阵没有真值可断言
+        (A 系删掉合成回写后, 只能靠"下一轮同步读真值"验位)。本方法补齐该能力。
+
+        口径与生产 qbapi._sync_paused_state 同款: 停/暂停 -> pausedUP/pausedDL, 起/恢复 ->
+        stalledUP/stalledDL; 完成位由 state 后缀 UP 或 progress>=1.0 判定(不看 amount_left,
+        与 TorrentRecord 默认 amount_left=0 的口径保持一致)。torrent_hashes 为 None = 全体
+        (qB "不传 hash 即全体" 语义, 与 _FakeTorrents.info 的过滤语义对齐)。
+        """
+        if torrent_hashes is None:
+            hashes = list(self.torrents.keys())
+        elif isinstance(torrent_hashes, (list, tuple, set)):
+            hashes = list(torrent_hashes)
+        else:
+            hashes = [torrent_hashes]
+        for h in hashes:
+            tor = self.torrents.get(h)
+            if tor is None:
+                continue
+            if isinstance(tor, dict):
+                cur = tor.get("state")
+                progress = tor.get("progress", 0.0) or 0.0
+            else:
+                cur = getattr(tor, "state", None)
+                progress = getattr(tor, "progress", 0.0) or 0.0
+            complete = (isinstance(cur, str) and cur.endswith("UP")) or progress >= 1.0
+            want = ("pausedUP" if complete else "pausedDL") if paused else ("stalledUP" if complete else "stalledDL")
+            if isinstance(tor, dict):
+                tor["state"] = want
+            else:
+                tor.state = want
+                tor._state_enum = None  # 与 store.update_torrent_fields 同款: state 变更失效缓存
+
     def torrents_start(self, torrent_hashes=None):
         self.calls.append(("start", None))
+        self._apply_paused_state(torrent_hashes, paused=False)
 
     def torrents_stop(self, torrent_hashes=None):
         self.calls.append(("stop", None))
+        self._apply_paused_state(torrent_hashes, paused=True)
 
     def torrents_pause(self, torrent_hashes=None):
         # 与 start/stop 记 None 不同: 记 hash 列表(Web 命令测试需断言"整组/单种"作用范围)
         self.calls.append(("pause", torrent_hashes))
+        self._apply_paused_state(torrent_hashes, paused=True)
 
     def torrents_resume(self, torrent_hashes=None):
         self.calls.append(("resume", torrent_hashes))
+        self._apply_paused_state(torrent_hashes, paused=False)
 
     def torrents_recheck(self, torrent_hashes=None):
         self.calls.append(("recheck", None))

@@ -514,7 +514,11 @@ class QbManager(
                     # 命令表分发/回执/写序号/自投递判据归 webui 模块的 on_command_line hook
                     # (plan P2), 这里只取"本批是否改了 qB 种子状态"这一个语义结果(P0-5 判据)。
                     self._wake_event.clear()
-                    state_changed = self.host.run_command_line()
+                    # !命名消歧(S0-P2, plan 26-10-13-0540): 本局部变量语义 = 「本批命令是否改了 qB
+                    #   种子状态」(P0-5 判据), 与 store.state_changed(本轮 qB 上报的 state 变化集,
+                    #   类型是 [(hash, state_enum)])完全同名不同义, 且同处一个主循环体 —— 后续任何
+                    #   涉及「变化集」的改动极易串线。改名 cmd_changed_state 以示区分。
+                    cmd_changed_state = self.host.run_command_line()
                     if pause_event is not None and pause_event.is_set():
                         # 已暂停: 完全旁观; 等待保持对停止信号与命令的响应
                         if _wait_next(stop_event, self._wake_event, main_tick):
@@ -525,23 +529,23 @@ class QbManager(
                     # P0-5: 本批命令改了 qB 种子状态 -> 立即同步一次, 让真实状态在几十毫秒内
                     # 进快照(不必等下个节拍)。整批只补一次: sync_due 为真时本轮至多跑一次刷新。
                     # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
-                    sync_due = (now >= next_sync_at) or (state_changed and not dry_run)
+                    sync_due = (now >= next_sync_at) or (cmd_changed_state and not dry_run)
                     tick_due = now >= next_tick_at
                     # !必须在 try **之外**初始化: 兜底 flush 在 except 之后读它, 若异常发生在这行
                     # 之前, 名字未绑定会抛 NameError —— 它在 try 外面, 会直接把主循环打挂。
                     _flushed = False  # 本轮正常路径是否已落过回执(兜底据此跳过, 免得日志打两遍)
                     try:
-                        # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
+                        # 命令驱动(cmd_changed_state)的那一轮 force=True: 绕过"上一版是否被取走"门控,
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
                         # 有真值在**等落地**(见 WebUIRuntime.flush_truths): resume 后 qB
                         # 要过一会儿才翻状态, 紧跟着的那次补刷新读到的还是命令前的值。此时不能干等
                         # 下一个同步周期(真机大库 2s) —— 那正是用户看到的"点了要 2 秒才恢复正常"。
                         _wait_truth = bool(getattr(self.web, "truth_pending", None))
-                        cmd_forced = (bool(state_changed) or _wait_truth) and not dry_run
+                        cmd_forced = (bool(cmd_changed_state) or _wait_truth) and not dry_run
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
-                        _t_line = time.time() if (state_changed and not dry_run) else 0.0
+                        _t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0
                         if sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
                             next_sync_at = time.time() + sync_interval
