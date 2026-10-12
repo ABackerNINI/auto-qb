@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-10-13
-**Updated:** 2026-10-13 05:38
+**Updated:** 2026-10-13 05:42
 **Topics:** seed-state-writeback
-**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化），A 系计划待另件立。本轮零代码改动、未跑测试。
-**Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/activeContext/26-10-13-0538-seed-state-writeback.md
+**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化）。**A 系实施计划已另件立**（`plans/26-10-13-0540`，形态 A3，含 P1 可达性确认作为决定形态的第一步）。本轮零代码改动、未跑测试。
+**Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html,memory-bank/activeContext/26-10-13-0538-seed-state-writeback.md
 
 ## 原始请求
 
@@ -94,8 +94,8 @@
 | 6 | 报告 26-10-12-2148 抬 26-10-13-0441 修订 | 已完成 |
 | 7 | B2 计划置 Superseded | 已完成 |
 | 8 | 本专题立档 + 切片 | 已完成 |
-| 9 | **A 系计划另件立** | **待办** |
-| 10 | A 系计划实施（含三项前置） | 待办 |
+| 9 | **A 系计划另件立** | **已完成** |
+| 10 | A 系计划实施（S0 前置 → S1 值层 → S2 deferral → S3 收尾） | 待办 |
 
 ## 进度日志
 
@@ -105,3 +105,4 @@
 - **2026-10-13 04:13** — 按用户指令立 B2 实施计划 `plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html`（`doc-status=Open`）；报告侧补反向 `doc-refs`；`kb.index` 重建 21 个生成物；`kb.docmap --check` 认领链双向闭环。
 - **2026-10-13 04:41** — 回 qB 源码取证状态节流（见「思考过程与决策」§4）；**确认成立**，值层前提被证否。
 - **2026-10-13 05:38** — 按用户指令修正两处归因漂移、报告抬 26-10-13-0441 修订、B2 计划置 Superseded；本专题立档 + 切片；`kb.index` 重建、`kb.docmap --check` 通过（专题 `seed-state-writeback` 2 件·已完结：计划 Superseded ↔ 报告 Done）。用户指令「提交, 然后另立A系计划」——本轮回写随本专题入库，A 系计划随后另立。
+- **2026-10-13 05:42** — 提交完成（`caa40a7e`；同步时遇远端领先 2 笔分叉, rebase 重放本地 1 笔 `b5c0222c`→`caa40a7e`；推送成功）。随后按用户指令另立 **A 系计划** `plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html`（`doc-status=Open`，形态 A3 = A1 删合成回写 + 局部 deferral，幂等可选叠 A2）。相对报告 §6-A 清单新增/收紧五处：① **P1 G4/G6 可达性确认提为决定形态的第一步**（不可达取 A1、可达取 A3）；② `own_writes` 加 **TTL 兜底**并把「有界性不能只押 qB 缓存前进」写死；③ 发射时机按 0441 取证修正 —— **不得写「WEB 路径同 tick 必达」**（自家与外部变更完全对称，同受 qB 节流约束）；④ 补 `state_changed` 同名消歧与替身能力补齐两个前置；⑤ 明确 `pending_writes` 与 `own_writes` 须一次决定是否合并容器防双轨。
