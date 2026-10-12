@@ -1637,8 +1637,14 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
     /trackers 透传, Unix epoch 秒)减 now」。钉住: ①真口径分支读行级 t.next_announce 且先减
     nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); ②「全局」标(dt06-gb)
     只许出现在回退分支 —— 真口径行不得带它; ③回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
-    ④nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧); ⑤真口径分支不画微条(per-tracker interval
-    不可得, 分母不存在, 不造假); ⑥调用点 nextOf 必须拿到行 t 与 nowSec。
+    ④sig 只含结构态(加载/失败/空态), nowSec 与数据**不进** sig(U4 26-10-12-2253 复发根治:
+    旧口径 nowSec 进 sig ⇒ 5s 轮询每拍必整帧重建 ⇒ anchFill 换锚位时锚被移动(换父节点)
+    ⇒ Teleport 表格整树重排, 80 对端实测 56-75ms longtask/拍 = 用户所报「表格闪烁, 数据
+    随闪烁刷新」); 倒计时新鲜度改走桥响应式 —— nowSec 在 rowsFn 内现读, 每拍随
+    drawer.trackers 新数组引用重算, 粒度恒 5s 与旧设计一致(nowSec 进 sig 从来不产生更细
+    粒度: _dtNotify 只随数据落袋触发), 壳上工具条注走 paintHtml 原地回填; ⑤真口径分支
+    不画微条(per-tracker interval 不可得, 分母不存在, 不造假); ⑥调用点 nextOf 必须拿到行
+    t 与 nowSec。
     U3(26-10-12-0527)改版: 判据(nextOf/rowOf/rowsFn)与 sig 口径仍在变体文件, 「全局」标与
     微条的呈现随表格体重写迁渲染器分片(xtpl-cells-dt.html tpl-aq-dt06-cells) —— 呈现锚同轮
     迁移, 判据锚不放宽。"""
@@ -1659,14 +1665,76 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
     real_frag = sec06[sec06.index("kind === 'real'"):sec06.index('v-else class="dt06-next"')]
     assert "dt06-gb" not in real_frag, "06 真口径行仍带「全局」标(真值不该标全局)"
     assert "detail.reannounce_in" in text, "06 回退分支未用种子级 detail.reannounce_in"
-    # ④ nowSec 计入 sig(否则跳过重建冻帧)
-    assert re.search(r'"\|" \+ nowSec\b', text), "06 未把 nowSec 计入 sig(跳过重建会把倒计时冻在上一帧)"
+    # ④ sig 结构态(U4 26-10-12-2253): nowSec/数据不进 sig; 倒计时走 rowsFn 每拍现读 + 壳上回填
+    sig_lines = [l for l in text.splitlines() if l.strip().startswith("const sig =")]
+    assert len(sig_lines) == 1, "06 const sig 定位漂移(守阵按单行定位, 同步本守阵)"
+    for bad in ("nowSec", "Date.now", "reannounce", "next_announce"):
+        assert bad not in sig_lines[0], \
+            f"06 sig 含 {bad}(每拍整帧重建移动锚 = 表格重排 56-75ms longtask/拍, 复发根因)"
+    assert "const nowSec = Math.floor(Date.now() / 1000);" in text, \
+        "06 未在 rowsFn 内现读 nowSec(倒计时失去新鲜基准)"
+    assert text.index("const nowSec =") > text.index("function rowsFn"), \
+        "06 nowSec 不在 rowsFn 内(每拍重算路径断)"
+    assert 'H.paintHtml(host, ".dt06-toolbar", toolbarHtml(ctx, ts, d))' in text, \
+        "06 跳过重建分支未原地回填工具条(数据拍工具条注陈旧)"
     # ⑤ 真口径分支不画微条(变体判据侧不出 bar; 分片微条只随 global 分支)
     assert "bar" not in real_branch, "06 真口径行仍算微条(per-tracker interval 不可得, 属造假)"
     assert "dt06-tbar" in sec06 and "dt06-tbar" not in real_frag, \
         "06 微条呈现漂移(只许在回退分支)"
     # ⑥ 调用点传参
     assert "nextOf(ctx, t, nowSec)" in text, "06 nextOf 调用点未传行 t / nowSec(真口径拿不到数据)"
+
+
+def test_drawer_tpl_data_beat_no_anchor_move():
+    """抽屉轮询变体数据拍不整帧重建守阵(U4, 26-10-12-2253, 第八次复发根治) ——
+
+    用户报障「种子详情页所有表格闪烁, 数据不实时刷新而是随闪烁刷新」的病根链: 变体 sig 含
+    整包数据(旧 06 还含 nowSec 倒计时基准) ⇒ 5s 轮询每拍 sig 必变 ⇒ 每拍整帧重建 ⇒
+    anchFill 把保活锚换回 slot 位时锚被移动(换父节点) ⇒ Teleport 进锚的表格整树重排
+    —— 80 对端实测每拍 56-75ms longtask + 52-93ms 慢帧(经典表同数据量 0ms), 视觉即
+    「每 5s 全表卡顿闪烁」; 数据更新与整帧重建同拍发生, 即「随闪烁刷新」。
+
+    修复口径: sig 收窄为结构态(加载/失败/空态/在场分组集/折叠态), 数据拍 skipUnchanged
+    命中后只对**不含锚**的壳上子树原地回填, 行走桥响应式(rowsFn 每拍随 drawer.trackers
+    新数组引用重算)。守阵钉住六个轮询变体(04/05/06/07/08/09): ①sig 块不含数据口径标识
+    (nowSec/Date.now/reannounce/next_announce/JSON.stringify 整包序列化); ②原地回填先于
+    首个整帧重建调用点(file order —— 回填必须在"跳过"路径上); ③skip 路径含原地回填
+    (H.paintHtml 或受比对的 textContent/innerHTML 直写); ④核心 paintHtml 判空 + 同值
+    跳过(空选择器不炸, 同值不写)。"""
+    vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
+    # ④ 核心回填 helper: 判空 + 同值跳过
+    assert "paintHtml: function (host, sel, html)" in core, \
+        "核心缺 paintHtml helper(数据拍原地回填单点漂移)"
+    assert "if (el && el.innerHTML !== html) el.innerHTML = html;" in core, \
+        "核心 paintHtml 缺判空/同值跳过(空选择器会炸, 同值重写引入无谓抖动)"
+    for name in (
+        "04-trackers-status-cards-tall.js", "05-trackers-health-groups-low.js", "06-trackers-table-collapsed.js",
+        "07-peers-dashboard-tall.js", "08-peers-groups-low.js", "09-peers-density-collapsed.js"
+    ):
+        text = open(os.path.join(vdir, name), encoding="utf-8").read()
+        assert "H.skipUnchanged(host, ui, sig)" in text, \
+            f"drawer_tpl/{name}: 缺 skipUnchanged 跳过重建路径"
+        # ① sig 块 = const sig 起至首个分号结尾行(含续行)
+        lines = text.splitlines()
+        start = next(i for i, l in enumerate(lines) if l.strip().startswith("const sig ="))
+        sig_block = []
+        for l in lines[start:]:
+            sig_block.append(l)
+            if l.rstrip().endswith(";"):
+                break
+        sig_text = "\n".join(sig_block)
+        for bad in ("nowSec", "Date.now", "reannounce", "next_announce", "JSON.stringify"):
+            assert bad not in sig_text, \
+                f"drawer_tpl/{name}: sig 含数据口径 {bad}(每拍整帧重建移动锚 = 表格重排, 复发根因)"
+        # ③ skip 路径含原地回填(paintHtml 或受比对直写)
+        fill_at = min(
+            [text.index(m) for m in ("H.paintHtml(", ".textContent !== ", ".innerHTML !== ") if m in text] or [-1]
+        )
+        assert fill_at >= 0, f"drawer_tpl/{name}: 无原地回填手段(数据拍只能整帧重建)"
+        # ② 回填先于首个整帧重建调用点(在"跳过"路径上)
+        assert text.index("H.skipUnchanged") < fill_at < text.index("host.replaceChildren"), \
+            f"drawer_tpl/{name}: 原地回填不在 skip 分支与首个整帧重建之间(数据拍仍走重建)"
 
 
 def test_drawer_tpl_a11y_and_fetch_error_states():

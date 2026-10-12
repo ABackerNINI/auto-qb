@@ -225,14 +225,29 @@
     return filtered(list).map((p) => rowOf(ctx, p, upTotal));
   }
 
+  /* 筛选条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器 */
+  function barHtml(list) {
+    const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
+      T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
+    return chips + T`<span class="dt09-note">默认按「↑ 占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>`;
+  }
+
   function render(host, ctx) {
     const list = peerList(ctx);
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 锚元素由 anchFill 跨帧保活(U2 不变量) */
-    const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项(加载/失败/空态), **不含
+     * peers 数据本身**。数据拍(5s 轮询每拍必到)不整帧重建 —— 整帧重建会移动锚(=表格
+     * 整树重排, 80 对端实测 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报
+     * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 壳上 chips 计数走 paintHtml 原地回填。
+     * chips 显隐(bad 芯)/active 态全在 barHtml 里整块重画, 无需进 sig。 */
+    const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n");
+    if (H.skipUnchanged(host, ui, sig)) {
+      /* 数据拍: 筛选条原地回填(不含锚); 列表区(锚+Teleport 表体)不动 */
+      if (list.length && !loading && !err) H.paintHtml(host, ".dt09-bar", barHtml(list));
+      return;
+    }
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt09-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -253,9 +268,7 @@
       T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位(U2) */
     const html = T`<div class="dt09-wrap">
-      <div class="dt09-bar">${R(chips)}
-        <span class="dt09-note">默认按「↑ 占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>
-      </div>
+      <div class="dt09-bar">${R(barHtml(list))}</div>
       <div class="dt09-list"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把

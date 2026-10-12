@@ -410,15 +410,36 @@
   let _ctx = null; /* render 期只读引用(纯格式化; 动作链仍走 host.__dtCtx) */
   const fmtSizeOf = (v) => _ctx.fmtSize(v);
 
+  /* 卡值区 + 筛选条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器,
+   * 两条路输出逐字节一致(回填即"重建时这两块会长什么样") */
+  function cardsHtml(ctx, list) {
+    return card1Html(ctx, list) + card2Html(list) + card3Html(list) + card4Html(list);
+  }
+  function barHtml(ctx, list) {
+    const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
+      T`<button type="button" class="dt07-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
+    return chips + T`<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上传」降序</span>`;
+  }
+
   function render(host, ctx) {
     const list = peerList(ctx);
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 锚元素由 anchFill 跨帧保活 ——
-     * 锚被重建 = Teleport 重挂 = 行抖动(桥变体稳定 HTML 不变量, U2) */
-    const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项(加载/失败/空态), **不含
+     * peers 数据本身**。数据拍(5s 轮询每拍必到)不整帧重建 —— 整帧重建会移动锚(=表格
+     * 整树重排, 80 对端实测 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报
+     * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 壳上卡值/chips 走 paintHtml 原地回填。
+     * chips 的显隐(bad 芯)/active 态全在 barHtml 里整块重画, 无需进 sig。 */
+    const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n");
+    if (H.skipUnchanged(host, ui, sig)) {
+      /* 数据拍: 卡值区 + 筛选条原地回填(均不含锚); 列表区(锚+Teleport 表体)不动 */
+      if (list.length && !loading && !err) {
+        H.paintHtml(host, ".dt07-cards", cardsHtml(ctx, list));
+        H.paintHtml(host, ".dt07-bar", barHtml(ctx, list));
+      }
+      return;
+    }
     _ctx = ctx;
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
@@ -436,12 +457,10 @@
         T`<div class="dt07-empty"><span>暂无已连接用户</span></div>`));
       return;
     }
-    const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
-      T`<button type="button" class="dt07-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt07-wrap">
-      <div class="dt07-cards">${R(card1Html(ctx, list))}${R(card2Html(list))}${R(card3Html(list))}${R(card4Html(list))}</div>
-      <div class="dt07-bar">${R(chips)}<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上传」降序</span></div>
+      <div class="dt07-cards">${R(cardsHtml(ctx, list))}</div>
+      <div class="dt07-bar">${R(barHtml(ctx, list))}</div>
       <div class="dt07-list"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把

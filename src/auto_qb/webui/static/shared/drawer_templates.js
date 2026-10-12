@@ -158,6 +158,21 @@
         sc.scrollTop = top;
       }
     },
+    /* ---------------- 数据拍原地回填(计划 26-10-12 用户报障: 模板表格每 5s 闪) ----------------
+     * 病根(80 对端实测): 变体 render 的 sig 含整包列表数据 ⇒ 5s 轮询每拍必整帧重建
+     * (replaceChildren + anchFill 把锚换进新 slot = **锚移动**)。锚里 Teleport 着整张表,
+     * 锚移动 = 表格整树重排 —— 实测每拍 56-75ms longtask(经典表同数据量 0ms), 浏览器
+     * 卡顿近 5 帧, 用户观感即"表格每 5s 闪一下, 数据只随闪刷新"(经典表走纯 Vue 补丁故丝滑)。
+     * 正解: sig 只含**结构态**(加载/失败/空态/分组成员/UI 态), 数据拍不重建外壳 ——
+     * 行走桥自身响应式(drawer.peers 更替 → 根重渲染 → 行原地补丁), 壳上数据依赖值
+     * (卡值/chips 计数/组头聚合)由各变体把同一构建器的产出 paintHtml 进**不含锚**的
+     * 子树(卡区/筛选条/工具条), 列表区(锚+表)自始至终不动 ⇒ 无重排无闪。
+     * sel 命中不到(首帧/空态/结构刚变)时静默跳过 —— 调用方靠结构 sig 保证只在整帧态进场。
+     * innerHTML 相同则跳过写(内容没变的拍零 DOM 操作)。 */
+    paintHtml: function (host, sel, html) {
+      var el = host ? host.querySelector(sel) : null;
+      if (el && el.innerHTML !== html) el.innerHTML = html;
+    },
     wireEvents: function (host, map) {
       if (!host || host.__dtEvents) return;
       host.__dtEvents = map;

@@ -288,15 +288,54 @@
     </section>`;
   }
 
+  /* 计数条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器 */
+  function stripHtml(n, virtualN) {
+    return T`<span class="dt05-c"><i style="background:var(--green)"></i>工作 <b>${n.ok}</b></span>
+      <span class="dt05-c"><i style="background:var(--warn)"></i>未联系 <b>${n.warn}</b></span>
+      <span class="dt05-c"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
+      <span class="dt05-c"><i style="background:var(--error)"></i>未工作 <b>${n.err}</b></span>
+      <span class="dt05-c"><i style="background:var(--border-strong)"></i>禁用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
+      <span class="dt05-note">5s 自动刷新</span>
+      <span class="dt05-spacer"></span>`;
+  }
+
   function render(host, ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态, 组头聚合数随落袋数据刷新);
-     * 各组锚元素由 anchFill 跨帧保活(桥变体稳定 HTML 不变量, U2) */
-    const sig = JSON.stringify(ts) + "|" + String(!!loading) + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 分桶(计数条 + 分区, 与 rowsFn 同判据) */
+    const n = { ok: 0, warn: 0, upd: 0, err: 0, off: 0 };
+    const byKey = { err: [], warn: [], upd: [], ok: [], off: [] };
+    for (const t of ts) {
+      const b = bucketOf(ctx, t);
+      n[b]++;
+      byKey[b].push(t);
+    }
+    const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项 —— 加载/失败/空态/在场分组集
+     * (空组整节隐藏⇒锚离场, 组补⇒新锚进场); **不含 trackers 数据**。折叠态**不进** sig:
+     * 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂 —— 既有设计), 数据拍照常跳过。
+     * 数据拍不整帧重建的理由同 07: 整帧重建移动锚 = 表格整树重排(80 对端实测
+     * 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报"表格闪烁, 数据随闪烁刷新")。 */
+    const vis = GROUPS.filter((g) => byKey[g.key].length);
+    const sig = String(!!loading) + "|" + err + "|" + (ts.length ? "y" : "n")
+      + "|" + vis.map((g) => g.key).join(",");
+    if (H.skipUnchanged(host, ui, sig)) {
+      /* 数据拍: 计数条 + 各组头徽章计数原地回填 —— 组区含锚, 只改徽章, 锚不动 */
+      if (ts.length && !loading && !err) {
+        H.paintHtml(host, ".dt05-strip", stripHtml(n, virtualN));
+        for (const g of vis) {
+          const sec = host.querySelector('.dt05-group[data-grp="' + g.key + '"]');
+          const badge = sec && sec.querySelector(".dt05-badge");
+          if (badge) {
+            const bh = T`<i></i>${g.text} ${byKey[g.key].length}`;
+            if (badge.innerHTML !== bh) badge.innerHTML = bh;
+          }
+        }
+      }
+      return;
+    }
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -313,27 +352,10 @@
         T`<div class="dt05-empty"><span>暂无 tracker</span></div>`));
       return;
     }
-    /* 分桶(计数条 + 分区, 与 rowsFn 同判据) */
-    const n = { ok: 0, warn: 0, upd: 0, err: 0, off: 0 };
-    const byKey = { err: [], warn: [], upd: [], ok: [], off: [] };
-    for (const t of ts) {
-      const b = bucketOf(ctx, t);
-      n[b]++;
-      byKey[b].push(t);
-    }
-    const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
-    /* 计数条: 正常 / 警告 / 更新中 / 失败 / 未启用(虚拟 n) */
-    const strip = T`<span class="dt05-c"><i style="background:var(--green)"></i>工作 <b>${n.ok}</b></span>
-      <span class="dt05-c"><i style="background:var(--warn)"></i>未联系 <b>${n.warn}</b></span>
-      <span class="dt05-c"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
-      <span class="dt05-c"><i style="background:var(--error)"></i>未工作 <b>${n.err}</b></span>
-      <span class="dt05-c"><i style="background:var(--border-strong)"></i>禁用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
-      <span class="dt05-note">5s 自动刷新</span>
-      <span class="dt05-spacer"></span>`;
     /* 分区: 空分区整节隐藏(与 rowsFn 同判据) */
-    const secs = GROUPS.filter((g) => byKey[g.key].length).map((g) => groupHtml(g, byKey[g.key]));
+    const secs = vis.map((g) => groupHtml(g, byKey[g.key]));
     const html = T`<div class="dt05-wrap">
-      <div class="dt05-strip">${R(strip)}</div>
+      <div class="dt05-strip">${R(stripHtml(n, virtualN))}</div>
       ${R(secs.join(""))}
     </div>`;
     /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */

@@ -237,22 +237,39 @@
     return ts.map((t, i) => rowOf(ctx, t, i, nowSec, rGate));
   }
 
+  /* 工具条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器 */
+  function toolbarHtml(ctx, ts, d) {
+    /* 工具条注: 有任一行带 next_announce(qB 5.2+) = 真口径; 否则回退种子级全局近似 */
+    const perTracker = ts.some((t) => num(t.next_announce) && t.next_announce > 0);
+    const note = perTracker
+      ? "汇报倒计时为逐 tracker 真值(qB next_announce) · 5s 自动刷新"
+      : (d && d.reannounce_in > 0 ? "汇报倒计时为种子级全局值(qB 无 per-tracker 口径) · 5s 自动刷新" : "5s 自动刷新");
+    return T`<span class="dt06-note">${note}</span>
+        <button type="button" class="dt06-toggle${ui.onlyBad ? " active" : ""}" data-toggle
+          ><i></i>仅看异常</button>
+        <span class="dt06-spacer"></span>
+        <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>`;
+  }
+
   function render(host, ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
     const d = (ctx.drawer && ctx.drawer.detail) || null;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    /* 汇报倒计时基准(本机 epoch, 秒): 逐行 next_announce 是绝对时间, 减它得剩余(见 nextOf)。
-     * 计入 sig —— 时间每前进 1s 都该重算, 否则跳过重建会把倒计时冻在上一帧(粒度 = 5s 轮询)。 */
-    const nowSec = Math.floor(Date.now() / 1000);
-    /* 数据未变跳过重建(含汇报倒计时: 逐行 next_announce / detail.reannounce_in / nowSec 变了都要刷);
-     * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
-    const sig = JSON.stringify(ts) + "|" + String(!!loading)
-      + "|" + String(d ? d.reannounce_in : "") + "|" + String(d ? d.reannounce : "")
-      + "|" + nowSec
-      + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项(加载/失败/空态), **不含
+     * trackers 数据 / 倒计时基准 nowSec / 种子级 reannounce**。数据拍(5s 轮询每拍必到)
+     * 不整帧重建 —— 整帧重建移动锚 = 表格整树重排(80 对端实测 56-75ms longtask/拍 =
+     * 每 5s 全表卡顿闪烁, 即用户所报"表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 壳上
+     * 工具条注(真口径/全局口径随数据与 detail 变)走 paintHtml 原地回填。逐行倒计时
+     * 随根重渲染重算, 粒度仍是 5s 轮询 —— 与修复前一致(nowSec 进 sig 从来不产生更细
+     * 粒度: _dtNotify 只随数据落袋触发)。仅看异常的显隐是 class 直翻(onClick 自保),
+     * 不进 sig。 */
+    const sig = String(!!loading) + "|" + err + "|" + (ts.length ? "y" : "n");
+    if (H.skipUnchanged(host, ui, sig)) {
+      if (ts.length && !loading && !err) H.paintHtml(host, ".dt06-toolbar", toolbarHtml(ctx, ts, d));
+      return;
+    }
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -269,20 +286,9 @@
         T`<div class="dt06-empty"><span>暂无 tracker</span></div>`));
       return;
     }
-    /* 工具条注: 有任一行带 next_announce(qB 5.2+) = 真口径; 否则回退种子级全局近似 */
-    const perTracker = ts.some((t) => num(t.next_announce) && t.next_announce > 0);
-    const note = perTracker
-      ? "汇报倒计时为逐 tracker 真值(qB next_announce) · 5s 自动刷新"
-      : (d && d.reannounce_in > 0 ? "汇报倒计时为种子级全局值(qB 无 per-tracker 口径) · 5s 自动刷新" : "5s 自动刷新");
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt06-wrap">
-      <div class="dt06-toolbar">
-        <span class="dt06-note">${note}</span>
-        <button type="button" class="dt06-toggle${ui.onlyBad ? " active" : ""}" data-toggle
-          ><i></i>仅看异常</button>
-        <span class="dt06-spacer"></span>
-        <button type="button" class="dt06-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>
-      </div>
+      <div class="dt06-toolbar">${R(toolbarHtml(ctx, ts, d))}</div>
       <div class="dt06-list${ui.onlyBad ? " only-bad" : ""}"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把

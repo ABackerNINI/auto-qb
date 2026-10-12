@@ -278,10 +278,33 @@
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态, 组头聚合数随落袋数据刷新);
-     * 各组锚元素由 anchFill 跨帧保活(桥变体稳定 HTML 不变量, U2) */
-    const sig = JSON.stringify(ctx.drawer && ctx.drawer.peers) + "|" + String(!!loading) + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 五区分桶(空分区整节隐藏; 「只看在传数据」= quiet 分区整组隐藏) —— 与 rowsFn 同判据 */
+    const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
+    for (const p of list) buckets[bucketOf(p)].push(p);
+    const vis = GROUPS.filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet));
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项 —— 加载/失败/空态/只看在传/
+     * **在场分组集**(组空⇒整节隐藏⇒锚离场, 组补⇒新锚进场, 都是结构变化)/折叠态;
+     * **不含 peers 数据**。数据拍(5s 轮询每拍必到)不整帧重建 —— 整帧重建移动锚(=表格
+     * 整树重排, 80 对端实测 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报
+     * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数走原地回填。 */
+    const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n")
+      + "|" + String(!!ui.onlyMoving) + "|" + vis.map((g) => g.key).join(",")
+      + "|" + Object.keys(ui.folded).filter((k) => ui.folded[k]).join(",");
+    if (H.skipUnchanged(host, ui, sig)) {
+      /* 数据拍: 各组头的计数/聚合数原地回填 —— 组区含锚, 只改组头内两个跨度, 锚不动 */
+      if (list.length && !loading && !err) {
+        for (const g of vis) {
+          const sec = host.querySelector('.dt08-grp[data-grp="' + g.key + '"]');
+          if (!sec) continue;
+          const ms = buckets[g.key];
+          const cnt = sec.querySelector(".dt08-gcnt");
+          const agg = sec.querySelector(".dt08-gagg");
+          if (cnt && cnt.textContent !== String(ms.length)) cnt.textContent = String(ms.length);
+          if (agg) { const a = aggText(g.key, ms); if (agg.innerHTML !== a) agg.innerHTML = a; }
+        }
+      }
+      return;
+    }
     _ctx = ctx;
     if (loading && !list.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
@@ -299,12 +322,8 @@
         T`<div class="dt08-empty"><span>暂无已连接用户</span></div>`));
       return;
     }
-    /* 五区分桶(空分区整节隐藏; 「只看在传数据」= quiet 分区整组隐藏) —— 与 rowsFn 同判据 */
-    const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
-    for (const p of list) buckets[bucketOf(p)].push(p);
-    const groups = GROUPS
-      .filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet))
-      .map((g) => groupHtml(g, buckets[g.key]));
+    /* 五区在场分组(与结构 sig 的 vis 同一判据 —— 组头计数/聚合数在数据拍由原地回填更新) */
+    const groups = vis.map((g) => groupHtml(g, buckets[g.key]));
     const body = groups.length
       ? groups.join("")
       : T`<div class="dt08-empty"><span>该过滤下没有对端连接</span></div>`;

@@ -259,15 +259,44 @@
     return rows;
   }
 
+  /* 概览条 HTML(计数胶囊 + 排序分段 + 添加钮) —— 整帧重建与数据拍原地回填共用构建器 */
+  function overviewHtml(ctx, ts) {
+    const n = countsOf(ctx, ts);
+    const real = ts.filter((t) => !ctx.drawerTrackerVirtual(t.url)).length;
+    /* 计数胶囊: 全部 = 实体条目(虚拟单列未启用类) */
+    const pills = PILLS.map((p) => {
+      const cnt = p.f === "all" ? real : n[p.f];
+      const act = ui.filter === p.f ? " active" : "";
+      const dot = p.cls ? T`<span class="pdot ${p.cls}"></span>` : T`<span class="pdot" style="background:var(--fg-dim)"></span>`;
+      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${p.text} <b>${cnt}</b></button>`;
+    }).join("");
+    /* 排序分段钮(active 态读引擎 dyn 键): 手搓分段排序态退役, 直设走 dtSortSet */
+    const sortKey = ctx.dtSortCell(TABLE_ID).key || "sev";
+    const sortSegs = [["sev", "异常优先"], ["tier", "按 tier"]].map(([k, text]) =>
+      T`<button type="button" class="dt04-seg${sortKey === k ? " active" : ""}" data-sort="${k}">${text}</button>`).join("");
+    return T`${R(pills)}
+        <span class="dt04-note">5s 自动刷新</span>
+        <span class="dt04-spacer"></span>
+        <div class="dt04-sort" role="group" aria-label="卡片排序">${R(sortSegs)}</div>
+        <button type="button" class="dt04-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>`;
+  }
+
   function render(host, ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const loading = ctx.drawer && ctx.drawer.trackersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.trackersError) || "";
-    /* 数据未变跳过重建(5s 通知频度下不闪不丢态); 锚元素由 anchFill 跨帧保活 ——
-     * 锚被重建 = Teleport 重挂 = 行抖动(桥变体稳定 HTML 不变量, U2) */
-    const sig = JSON.stringify(ts) + "|" + String(!!loading) + "|" + err;
-    if (H.skipUnchanged(host, ui, sig)) return;
+    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项(加载/失败/空态), **不含
+     * trackers 数据本身**。数据拍(5s 轮询每拍必到)不整帧重建 —— 整帧重建会移动锚
+     * (=表格整树重排, 80 对端实测 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报
+     * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 壳上计数胶囊走 paintHtml 原地回填。
+     * 胶囊/排序段的 active 与显隐全在 overviewHtml 里整块重画, 无需进 sig。 */
+    const sig = String(!!loading) + "|" + err + "|" + (ts.length ? "y" : "n");
+    if (H.skipUnchanged(host, ui, sig)) {
+      /* 数据拍: 概览条原地回填(不含锚); 列表区(锚+Teleport 表体)不动 */
+      if (ts.length && !loading && !err) H.paintHtml(host, ".dt04-overview", overviewHtml(ctx, ts));
+      return;
+    }
     if (loading && !ts.length) {
       host.replaceChildren(document.createRange().createContextualFragment(
         T`<div class="dt04-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
@@ -284,28 +313,9 @@
         T`<div class="dt04-empty"><span>暂无 tracker</span></div>`));
       return;
     }
-    const n = countsOf(ctx, ts);
-    const real = ts.filter((t) => !ctx.drawerTrackerVirtual(t.url)).length;
-    /* 计数胶囊: 全部 = 实体条目(虚拟单列未启用类) */
-    const pills = PILLS.map((p) => {
-      const cnt = p.f === "all" ? real : n[p.f];
-      const act = ui.filter === p.f ? " active" : "";
-      const dot = p.cls ? T`<span class="pdot ${p.cls}"></span>` : T`<span class="pdot" style="background:var(--fg-dim)"></span>`;
-      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${p.text} <b>${cnt}</b></button>`;
-    }).join("");
-    /* 排序分段钮(active 态读引擎 dyn 键): 手搓分段排序态退役, 直设走 dtSortSet */
-    const sortKey = ctx.dtSortCell(TABLE_ID).key || "sev";
-    const sortSegs = [["sev", "异常优先"], ["tier", "按 tier"]].map(([k, text]) =>
-      T`<button type="button" class="dt04-seg${sortKey === k ? " active" : ""}" data-sort="${k}">${text}</button>`).join("");
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 卡片行由桥 Teleport 进锚 */
     const html = T`<div class="dt04-wrap">
-      <div class="dt04-overview">
-        ${R(pills)}
-        <span class="dt04-note">5s 自动刷新</span>
-        <span class="dt04-spacer"></span>
-        <div class="dt04-sort" role="group" aria-label="卡片排序">${R(sortSegs)}</div>
-        <button type="button" class="dt04-add" data-act="add"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 Tracker</button>
-      </div>
+      <div class="dt04-overview">${R(overviewHtml(ctx, ts))}</div>
       <div class="dt04-list"><div data-dt-anchor-slot=""></div></div>
     </div>`;
     /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */

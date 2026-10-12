@@ -337,7 +337,9 @@
       <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
                 :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
                 :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>
-      <div v-if="$root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows).length" class="group-table"
+      <!-- v-if 判空走 seg.rows.length 而非再排一次(sort 不减长度, 语义等价) ——
+           桥模板每拍对每段排序两次(v-if + v-for), 80 行量级下白排一遍约几 ms, 砍掉 -->
+      <div v-if="seg.rows.length" class="group-table"
            @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))"
            @vue:mounted="$root.dtRowAfter($root.dtBridgeTbl(tab), $event)">
         <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows)"
