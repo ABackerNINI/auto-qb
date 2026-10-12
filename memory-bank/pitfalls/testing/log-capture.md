@@ -25,3 +25,4 @@
   setup_logging(src/auto_qb/infra/logging.py:98)清空 root handlers, caplog.text 恒空, 均改临时 handler
   直挂模块 logger 才断言到(web.token 自愈 / 托盘 join 超时 WARNING 两条守阵); 为什么没命中(二次):
   认领轮按 issue 档案直接动码, 没走「动代码前先读 pitfalls/testing/ 索引」的路由。)
+- ⚠ **同症状异因(2026-10-12 补)**: 断言 `any(...)` 为 False 还有**第二种根因** —— 不是 caplog 没采到, 而是**生产代码压根没打那条日志**(如节流哨兵把首次告警吞了)。判别: 用 `capture_logs` / 直连 `logging.basicConfig` 复跑仍是空 ⇒ 问题在日志**产生侧**而非**采集侧** ⇒ 见 [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md)(本机绿、CI 全新 VM 红那一类)。

@@ -9,6 +9,7 @@
 - test_recorder_oserror_degrade: 失败降级 —— 追加 OSError 只 WARNING(节流)不上抛, 基线不推进, 恢复后事件补上
 - test_recorder_dry_run_silent: dry_run persistence_on=False 零文件零状态推进(恢复真实运行后由重启去重口径对齐)
 - test_recorder_patological_flip_guard: 病态翻转护栏 —— 单天事件超常量阈值只告警照记(节流), 数据不删
+- test_recorder_warn_first_fire_on_fresh_boot: 节流哨兵回归 —— monotonic() 起点=开机时刻, 开机时长 < 节流间隔(3600s)时两处首次告警仍必须发出(0.0 哨兵会吞掉首次告警)
 - test_limits_cache_stat_keyed: 解析缓存 —— mtime+size 键控命中零重解析(解析函数替换探针), 追加后失效重解析, 缺失文件恒 () 零 open
 - test_events_for_window_synthetic_first_and_dedup: 读侧装配 D3″/D5 —— 合成首事件(<= t0 最近值, 窗首前一天的 carry 窥得到) / 同值连续事件去重 / 记录起点晚于窗口起点不合成 / 无记录空表 / 跨天文件拼接
 - test_api_payload_limits_shape_and_same_source: payload 契约 D3″ —— 三端点响应恒带 limits 且同源同值(组/单种不另读文件), 空态未启用也恒在(= [])
@@ -182,6 +183,39 @@ def test_recorder_patological_flip_guard(tmp_path, caplog):
             rec.observe(_state(1024 + (i % 2), 2048), ts + i)
     assert any("超常" in r.message for r in caplog.records)
     assert _read_day(data_dir, date).count("\n") == tl._LIMITS_DAILY_EVENT_WARN + 30  # 照记
+
+
+def test_recorder_warn_first_fire_on_fresh_boot(tmp_path, caplog, monkeypatch):
+    """节流哨兵回归: monotonic() 起点 = 机器开机时刻(Linux CLOCK_MONOTONIC), 刚开机的
+    机器上 monotonic() 可小于节流间隔(3600s) —— 此时两处**首次**告警仍必须发出。
+
+    用 0.0 当「从未告警」哨兵会让 `now - 0.0 >= 3600` 判假, 首次告警被静默吞掉(本机
+    uptime > 1h 时看不出来, 只有 CI 全新 VM 会红)。哨兵须为「从未告警」语义(None)。
+    """
+    from auto_qb.core import traffic_limits as tl
+
+    monkeypatch.setattr(tl.time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟: < 3600
+    data_dir = str(tmp_path)
+    ts = int(time.time())
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
+        # 场景 A: 追加失败告警
+        rec = tl.SpeedLimitRecorder(data_dir)
+        rec.observe(_state(1024, 2048), ts)
+        import builtins
+
+        real_open = builtins.open
+        try:
+            builtins.open = lambda *a, **k: (_ for _ in ()).throw(OSError("disk gone"))
+            rec.observe(_state(0, 0), ts + 30)
+        finally:
+            builtins.open = real_open
+        # 场景 B: 病态翻转护栏告警
+        rec2 = tl.SpeedLimitRecorder(str(tmp_path / "guard"))
+        for i in range(tl._LIMITS_DAILY_EVENT_WARN + 5):
+            rec2.observe(_state(1024 + (i % 2), 2048), ts + i)
+    msgs = [r.message for r in caplog.records]
+    assert any("追加失败" in m for m in msgs)
+    assert any("超常" in m for m in msgs)
 
 
 def test_limits_cache_stat_keyed(tmp_path, monkeypatch):

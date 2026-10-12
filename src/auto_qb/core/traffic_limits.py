@@ -139,8 +139,12 @@ class SpeedLimitRecorder:
         self._last: Optional[tuple] = None
         self._last_date: Optional[str] = None
         self._bootstrapped = False
-        self._oswarn_ts = 0.0
-        self._guard_ts = 0.0
+        # 节流哨兵 None = 「从未告警」而非 0.0: time.monotonic() 起点是**机器开机时刻**
+        # (Linux CLOCK_MONOTONIC), 刚开机的机器上 monotonic() 可 < 节流间隔(3600s), 用 0.0
+        # 当哨兵会让 `now - 0.0 >= GAP` 判假 -> **首次告警被吞**(CI 全新 VM 实测)。对齐
+        # traffic_store._warn_bad_lines 的 `prev is not None` 判法(本模块 docstring 承诺同款)。
+        self._oswarn_ts: Optional[float] = None
+        self._guard_ts: Optional[float] = None
         self._day_events = 0
         self._day_events_date: Optional[str] = None
 
@@ -197,7 +201,7 @@ class SpeedLimitRecorder:
                 os.fsync(f.fileno())
         except OSError as exc:
             now = time.monotonic()
-            if now - self._oswarn_ts >= _LIMITS_WARN_GAP_S:
+            if self._oswarn_ts is None or now - self._oswarn_ts >= _LIMITS_WARN_GAP_S:
                 self._oswarn_ts = now
                 logger.warning(f"限速历史 | {date_str}.dat 追加失败(本轮不记, 下轮重试): {exc}")
             return False
@@ -212,7 +216,7 @@ class SpeedLimitRecorder:
         self._day_events += 1
         if self._day_events > _LIMITS_DAILY_EVENT_WARN:
             now = time.monotonic()
-            if now - self._guard_ts >= _LIMITS_GUARD_WARN_GAP_S:
+            if self._guard_ts is None or now - self._guard_ts >= _LIMITS_GUARD_WARN_GAP_S:
                 self._guard_ts = now
                 logger.warning(f"限速历史 | {date_str} 事件数 {self._day_events} 超常(疑似外部高频改限速), "
                                "照常记录(文件增速上界 = 采样率 x 行宽)")
