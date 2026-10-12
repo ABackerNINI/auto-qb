@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="webui-traffic-startup-recovery-on-demand">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-12-2010">
-<meta name="doc-updated" content="26-10-12-2010">
+<meta name="doc-updated" content="26-10-12-2027">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-startup-recovery-on-demand.md">
 <title>计划 · 流量启动恢复改为按需读取口径</title>
 <style>
@@ -193,6 +193,35 @@
       <tr><td>既有恢复等价守阵（停机数小时 catch-up 等价 / 硬序 catch-up 先于裁剪 / 空闲段 cov 无偏）</td><td><code class="path">tests/test_traffic_sample.py</code>:1482 / :1546 / :2114</td></tr>
     </table>
     <div class="note">报告 §4.2 已证明「调小 <code>rollup_window</code> 治不了本」：只要系列还在产数据，天文件就永不删（唯一删除点是整系列淘汰），30D 稳态仍是约 750 个天文件。所以本计划<b>不动配置</b>，只改恢复自己的读集口径——这正是「按需读取」与「保留多久」解耦的那一刀。</div>
+
+    <h3>3.2 各视图读集契约（本轮一一钉死）</h3>
+    <p>读侧一次请求只碰三类文件：<b>raw 天文件</b>（raw 段窗）、<b><code>agg.dat</code></b>（agg 段窗）、<b>限速天文件</b>（<code>qb-traffic-v4/limits/</code>，注解面，三作用域同源只读一次）。下表是<b>冷读</b>口径（首次请求或文件变更后）；重复轮询由解析缓存兜住（<code>V4DayCache</code> 4MB 文本预算 LRU · <code>LimitsCache</code> 4096 条目 LRU）。参数取生产配置 <code>sample_interval: 1.5S</code>（raw 桶宽 = <code>max(1, ceil(1.5), ceil(span/2880))</code>，只影响种子外扩的秒级量）。</p>
+    <table>
+      <tr><th>视图</th><th>消费段</th><th>流量数据面（单系列）</th><th>限速注解面（每请求一次）</th><th>组作用域（M 成员）</th></tr>
+      <tr><td>1m</td><td>raw</td><td>1 个天文件（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td>5m</td><td>raw</td><td>1 个（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td>30m</td><td>raw</td><td>1 个（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td>3h</td><td>raw</td><td>1 个（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td>6h</td><td>raw</td><td>1 个（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td>12h</td><td>raw</td><td>1 个（跨日界 2）</td><td>2 个（跨日界 3）</td><td>M × 天文件</td></tr>
+      <tr><td><b>24h</b></td><td>raw</td><td><b>2 个</b>（本地 00:00 后 30s 内 3）</td><td><b>3 个</b>（恒）</td><td>M × 天文件</td></tr>
+      <tr><td>3d</td><td>hour</td><td><b>1 个 <code>agg.dat</code></b></td><td>4~5 个</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td>7d</td><td>hour</td><td>1 个 <code>agg.dat</code></td><td>8~9 个</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td>30d</td><td>hour</td><td>1 个 <code>agg.dat</code></td><td>31~32 个</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td>6mo</td><td>day</td><td>1 个 <code>agg.dat</code></td><td>183~184 个</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td>1y</td><td>day</td><td>1 个 <code>agg.dat</code></td><td>366~367 个</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td>all</td><td>month</td><td>1 个 <code>agg.dat</code></td><td>首月起点前一天 → 今日（<b>随保留无界</b>）</td><td>M × <code>agg.dat</code></td></tr>
+      <tr><td><b>不打开</b></td><td>—</td><td colspan="3"><b>0 个文件</b>（前端只在页签打开期间轮询，关闭后无任何请求路径）</td></tr>
+    </table>
+    <ul>
+      <li><b>日期数公式</b>：涉及本地日期数 = <code>date(t1) - date(t0) + 1</code>。raw 段读集区间 = <code>[grid.t0 - grid.interval, grid.t1]</code>（种子外扩一个桶宽，D3）；限速面读集区间 = <code>[grid.t0 - 86400, grid.t1]</code>（<b>多看一天</b>：合成首事件要窥窗口起点之前最近的事件，它可能落在前一天文件末行）。</li>
+      <li><b>24h 恒 2/3 的原因</b>：区间长 = <code>86400 + 30s &gt; 86400</code> ⇒ 恒跨一个日界（2 个日期）；本地 00:00 后 30 秒内起点落到前一日、跨两个日界 ⇒ 3 个。</li>
+      <li><b>「跨日界」何时发生</b>：<code>now &lt; 本地 00:00 + 区间长</code>。故 12h 窗在每日前 12 小时是 2 个天文件，其余时间 1 个；限速面同理（前 12 小时 3 个）。</li>
+      <li><b>agg 段与窗口长度无关</b>：3d→all 一律 1 个 <code>agg.dat</code>/系列 —— 这正是 day/month 行永久保留、长窗不扫 raw 的设计意图。</li>
+      <li><b>组作用域放大只在数据面</b>：raw 段按成员各读窗口日期集、agg 段按成员各读 1 个 <code>agg.dat</code>；限速面三作用域同源共用一份（不乘 M）。</li>
+      <li><b>唯一随窗口/历史增长的项 = 限速注解面</b>（1 文件/天且不淘汰）：6mo/1y 上百、<code>all</code> 随保留无界。已由 mtime+size 缓存 + 单文件几十条兜住（不是性能问题），但它是本契约表里唯一「窗口越长读越多」的面。<b>备选（不在本计划）</b>：把限速事件 rollup 进 <code>agg.dat</code>、或给长窗按段裁剪读取范围 —— 属另一件事，需要时另立 issue。</li>
+      <li><b>与启动恢复的关系</b>：本计划把恢复读集收敛为「水位日 → 今日」（≤2 个天文件/系列 + 1 个 <code>agg.dat</code>/系列），即<b>与 24h 视图同阶</b>；「不打开流量图」的 0 文件契约由读侧轮询门控保证，恢复读的是写侧缺口（报告 §10）。</li>
+    </ul>
   </section>
 
   <!-- ================ 4 ================ -->
@@ -301,7 +330,7 @@
       </tr>
       <tr>
         <td><code class="path">tests/test_traffic_sample.py</code></td>
-        <td>新增守阵与测试（见 §7），并同步文件头「## 测试计划」清单。</td>
+        <td>新增守阵与测试（见 §7），并同步文件头「## 测试计划」清单；其中读侧契约按 §3.2 表<b>逐档机检</b>（表驱动：每档断言读入文件的类型与日期集）。</td>
       </tr>
     </table>
     <div class="note">不新增配置键、不动 <code>config/schema.py</code>（黄金法则 4 无涉）；不改 <code>config.yml</code>（红线）。</div>
@@ -320,7 +349,7 @@
       <tr>
         <td>W1 后端</td>
         <td>§6 的 <code>traffic_sample_mod.py</code> 改动（读集下界 + 埋点 + docstring）<br><code>traffic_store.py</code> docstring</td>
-        <td><b>读集有界</b>：构造 24 系列 × 30 天天文件 + 水位在昨日的 agg，<code>start()</code> 后断言读入天文件数 ≤ 2/系列且只发生在水位日与今日（计数属性断言）；<b>fallback 不烂</b>：agg.dat 缺失时全量兜底且行为与现状一致；<b>既有等价/硬序/空闲 cov 守阵全绿</b>；埋点行含系列数/天文件数/小时数/耗时；注入红验（下界改回 <code>now - window</code> ⇒ 读集守阵红；还原即绿）。</td>
+        <td><b>读集有界</b>：构造 24 系列 × 30 天天文件 + 水位在昨日的 agg，<code>start()</code> 后断言读入天文件数 ≤ 2/系列且只发生在水位日与今日（计数属性断言）；<b>fallback 不烂</b>：agg.dat 缺失时全量兜底且行为与现状一致；<b>读侧契约逐档机检</b>（§3.2 十三档：raw 段日期集 / agg 段恒 1 个 <code>agg.dat</code> / 限速面天数 / 不打开 = 0 请求）；<b>既有等价/硬序/空闲 cov 守阵全绿</b>；埋点行含系列数/天文件数/小时数/耗时；注入红验（下界改回 <code>now - window</code> ⇒ 读集守阵红；还原即绿）。</td>
       </tr>
       <tr>
         <td>W2 收尾</td>
@@ -364,6 +393,7 @@
     <table class="changelog">
       <tr><th>时间</th><th>变更</th></tr>
       <tr><td>26-10-12-2010</td><td>初版。依据报告 26-10-12-1923 与用户本轮定调（D1 按需读取为既定契约 / D2 永久保留有意设定 / D3 保持同步恢复）成文：靶点收敛为「读集下界 = agg 水位所在日」+ B4 埋点；B2/B3/A1/C1 出局或另题。</td></tr>
+      <tr><td>26-10-12-2027</td><td>按用户要求把<b>各视图读集一一钉死</b>：新增 §3.2 读集契约表（13 档 × 三类文件：raw 天文件 / <code>agg.dat</code> / 限速天文件；含跨日界规则、24h 恒 2·3 的原因、组作用域放大面、「不打开 = 0 文件」），并标注唯一随窗口/历史增长的项 = 限速注解面（1 文件/天、不淘汰，<code>all</code> 随保留无界，备选另题）。§6/§7 相应加「读侧契约逐档机检」验收项。</td></tr>
     </table>
   </section>
 

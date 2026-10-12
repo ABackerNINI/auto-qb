@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-10-12
-**Updated:** 2026-10-12 20:17
+**Updated:** 2026-10-12 20:27
 **Topics:** webui-traffic-startup-recovery-on-demand
 **Summary:** 报告 26-10-12-1923 取证「启动后 WEB UI 需数秒才正常」= **启动死区**: 装配序最后的 `TrafficSampleModule.start()` → `_recover_aggregates()` **静默**把 `qb-traffic-v4/` 全部历史天文件重读一遍并逐槽重算(实测恢复 7.09~7.28s / 死区 11.16s / 约 +1.5~2.0s/天 无界增长)。用户定调三条: ①流量图方案定调一直是**按需读取**(不打开不读历史文件; 打开 24h 图最多读 2 天), 启动恢复全量重读是**该定调的实施缺口**; ②`rollup_window: 1000000D` 永久保留是**有意设定**, 本场景理论上不应有性能问题; ③保持同步恢复。据此产出计划 26-10-12-2010(Open, 待拍板): 恢复读集下界 `now - rollup_window` → **agg 水位所在日**(常态 1 个、跨日界至多 2 个天文件), `agg.dat` 仍按系列照读, 保留口径与图表读侧零改动; B2(后台化)/B3(raw_window 删除)/A1(调小窗口)/C1(搜索索引首建) 出局或另题。报告同轮追加 §10 说明「恢复为什么必须读 raw」。**计划待拍板, 代码零改动。**
 **Refs:** memory-bank/plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html,memory-bank/reports/26-10-12-1923-report-webui-startup-latency.html,memory-bank/activeContext/26-10-12-2017-webui-traffic-startup-recovery-on-demand.md,memory-bank/testing/baselines/26-10-12-2019-webui-traffic-startup-recovery-on-demand.md
@@ -41,3 +41,4 @@
 - 2026-10-12 20:10 计划成文 [26-10-12-2010](../plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html)(Open, 待实施确认): 依据报告 + 用户三条定调收敛靶点, B2/B3/A1/C1 出局或另题。
 - 2026-10-12 20:17 用户追问「为什么还需要恢复读取? 不应该是打开时触发读取吗?」⇒ 论证写侧聚合链缺口(内存累计器随进程消失 / 未封口小时 raw 为唯一幸存源 / 不补则 hour·day·month 永久缺失且首 flush 即固化 / 读侧只读契约不容写), 并按用户指令把该说明**简单追加进报告 §10**(报告 `doc-updated` 抬至 26-10-12-2017)。
 - 2026-10-12 20:17 收尾入库: 纯文档轮(计划 + 报告 §10 + 本档案 + 活跃切片 + 基线切片), 零代码零测试改动; 数字见 `commands run kb.baseline`。
+- 2026-10-12 20:27 用户要求「其它视图需要读取多少历史文件, 需要一一定下来」⇒ 逐档核定读侧读集并钉进计划 **§3.2 契约表**(13 档 × 三类文件: raw 天文件 / `agg.dat` / 限速天文件; 含日期数公式、跨日界规则、24h 恒 2·3 的原因、组作用域放大只在数据面、「不打开 = 0 文件」)。**关键发现**: 唯一随窗口/历史增长的项 = **限速注解面**(1 文件/天且不淘汰 ⇒ 6mo 约 183 / 1y 约 366 / `all` 随保留无界; 已由 mtime+size 缓存 + 单文件几十条兜住), 备选(限速事件 rollup 进 `agg.dat` / 长窗按段裁剪)记为另题; §6/§7 加「读侧契约逐档机检」验收项(表驱动守阵)。
