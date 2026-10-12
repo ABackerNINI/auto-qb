@@ -1,11 +1,11 @@
 # 26-10-12-webui-drawer-table-rework — WEBUI 抽屉表格统一重写（U0–U5）
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-12
-**Updated:** 2026-10-12
-**Summary:** 依据双计划联合审计（26-10-12-0455）修正计划的执行档案：U0 冻结 + 1722 P6 契约交付；U1 引擎 spike（列子集声明 / 排序 per-table-id 泛化 / Teleport 锚桥，stub 四路径 e2e 闸门通过）；U2 用户表三变体（07/08/09）表格体重写接引擎（锚保活/对账/触碰三件套 + 分段桥 + omitEmpty 渐进列，e2e 手势红绿双验）；U3 tracker 三变体（04/05/06）表格体重写接引擎（04 分段钮 dtSortSet 直设并引擎、05 异构分组单列满宽行桥、06 八列引擎表头，reannounce 闸门等专属守阵逐条对账改锚，e2e 红绿双验）；U4 内容树两变体（10/11）表格体重写接引擎（D4=A 树缩进格进渲染器 + 桥模板行级键盘扩展 data-dt-key/rowTab/rowAfter，Q1–Q5 终态对账 18/18，e2e 红绿双验）。U5（收口：守阵定型 + 债务入账）待开工。
+**Updated:** 2026-10-12 18:00
+**Summary:** 依据双计划联合审计（26-10-12-0455）修正计划的执行档案：U0 冻结 + 1722 P6 契约交付；U1 引擎 spike（列子集声明 / 排序 per-table-id 泛化 / Teleport 锚桥，stub 四路径 e2e 闸门通过）；U2 用户表三变体（07/08/09）表格体重写接引擎（锚保活/对账/触碰三件套 + 分段桥 + omitEmpty 渐进列，e2e 手势红绿双验）；U3 tracker 三变体（04/05/06）表格体重写接引擎（04 分段钮 dtSortSet 直设并引擎、05 异构分组单列满宽行桥、06 八列引擎表头，reannounce 闸门等专属守阵逐条对账改锚，e2e 红绿双验）；U4 内容树两变体（10/11）表格体重写接引擎（D4=A 树缩进格进渲染器 + 桥模板行级键盘扩展 data-dt-key/rowTab/rowAfter，e2e 红绿双验）；U5 收口（交互单点守阵定型「声明即受检」+ 红验两条 + 债务「已清偿」入账 + 1722 P6 闭环 + 2106 回引 + Q1–Q5 终态 18/18 定格）。**U0–U5 全部完结**（计划 Status → Done），终态 = 新增变体表格表面 = 外壳一个锚 + 描述符一行 + 一个行渲染器，表壳/交互/持久化/对齐零改动。
 **Topics:** webui-drawer-table-rework
-**Refs:** memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0806-webui-drawer-table-rework-u2.md,memory-bank/testing/baselines/26-10-12-0913-webui-drawer-table-rework-u3.md,memory-bank/testing/baselines/26-10-12-1036-webui-drawer-table-rework-u4.md
+**Refs:** memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/testing/baselines/26-10-12-0806-webui-drawer-table-rework-u2.md,memory-bank/testing/baselines/26-10-12-0913-webui-drawer-table-rework-u3.md,memory-bank/testing/baselines/26-10-12-1036-webui-drawer-table-rework-u4.md,memory-bank/testing/baselines/26-10-12-1800-webui-drawer-table-rework-u5.md
 
 ## 原始请求
 
@@ -38,7 +38,7 @@ U0 冻结 + 1722 P6 契约 → U1 引擎 spike（stub 闸门）→ **U2 用户�
 | U2 收口：文档回写 + 基线切片 | Done | 计划 §09 变更行 + 本档案 + activeContext + 基线切片 |
 | U3 tracker 04/05/06 表格体重写 | Done | 04 分段钮 dtSortSet 直设 / 05 分段桥单列满宽行 / 06 八列引擎表头；专属守阵逐条对账改锚 |
 | U4 内容树 10/11 表格体重写 | Done | D4=A 树缩进格进渲染器；桥模板行级键盘扩展（data-dt-key/rowTab/rowAfter）；Q1–Q5 终态 18/18 |
-| U5 收口：Q1–Q5 终态 + 守阵定型 + 债务入账 | Open | 18/18 对账 + 红验两条 |
+| U5 收口：Q1–Q5 终态 + 守阵定型 + 债务入账 | Done | 定型守阵「声明即受检」+ 红验两条 + 债务已清偿入账 + 1722 P6 闭环 + 2106 回引；Q1–Q5 终态 18/18 定格 |
 
 ## 进度日志
 
@@ -49,3 +49,5 @@ U0 冻结 + 1722 P6 契约 → U1 引擎 spike（stub 闸门）→ **U2 用户�
 - **2026-10-12 0913（收口）**：计划 §11 U3 变更行（Q1–Q5 对账 16/18，Q3 手搓清零记档三条，U4 停手点成立：10/11 未动、树数据契约零改动）+ 本档案 + activeContext 切片 + 基线切片。
 - **2026-10-12 1036 前（U4 实施 + 守阵 + e2e）**：引擎侧 app.js 两列集（10 五列 / 11 七列含 omitEmpty 可用性列与 locked 勾选/折叠列）+ 两描述符（rowTab/rowAfter 声明位）+ 两渲染器组件（drawerFileTree 树缩进格两段同构单份口径）；columns.js 四 computed；桥模板 U4 扩展三件——行容器 data-dt-key 身份锚（rowKey 值单点输出）、rowTab 声明的行容器 tabindex=-1、.group-table @vue:mounted → dtRowAfter → 变体 rowAfterFn（锚换代重挂恰好一次，roving 锚点/回焦在行进 DOM 后跑——行级键盘 a11y 面在引擎行容器上的等价落地）；drawer_templates.js register 收 rowAfterFn + 两根方法。变体侧 10/11 全量重写：10 左树 = 引擎表体（无表头设计列头隐藏）、右详情/工具条/统计条留外壳、行选中联动右详情；11 七列引擎表头 + 拖宽/右键隐藏/偏好持久化落地（locked 列右键 = 必显提示）、行内勾选框三态经分片 :checked/:indeterminate 声明式（原 render 后补挂面收进分片）、批量条留外壳；树聚合/筛选/折叠/勾选判据全留变体 rowsFn；排序不适用（树序 = 树语义，Q3 不增项）。守阵两处同轮改锚：roving 守阵 10/11 段改钉（data-node → 桥三件 + 12 不变）；P3-6 折叠守阵 path_attr 改 data-act="fold"+data-path；skins ⑧⑨⑪ 扩至八描述符/八分片/八变体。e2e：dt11-sticky 探针改引擎口径双皮肤全过（吸顶补偿 CSS 个性不变）；新增 content 变体 spec（10 折叠/筛选/选中联动/行级键盘真机红验、11 勾选/子树三态/批量条/徽章循环 POST 载荷断言/拖宽落盘/locked 右键/刷新回放/omitEmpty 整列省略）。红验两条闭环（anchTouch 空操作 → 10 折叠/11 勾选即红；dtRowAfter 空操作 → roving 锚点缺失即红；还原即绿）。途中两处自检修正：e2e 断言撞 locked 必显文案子串（改钉隐藏动作项不存在）与 Esc 全局关抽屉快捷键（收层改点空白）。
 - **2026-10-12 1036（收口）**：计划 §11 U4 变更行（Q1–Q5 终态对账 18/18，U5 停手点成立：非表变体一行未动、树数据契约零改动）+ 本档案 + activeContext 切片 + 基线切片。
+- **2026-10-12 1800 前（U5 收口实施 + 红验 + 全量三道闸）**：① 定型守阵 `test_drawer_tpl_variant_interaction_single_point`（skins 文件新增独立测试函数 + 头注测试计划同步）——声明即受检（全目录零 ui.sort；tableId+rowsFn 双声明桥变体零表格容器列宽 grid，⑪ 同口径选择器族），已知八变体清单兜底防判据缩水；红验两条闭环（07 注入 ui.sort → 红 / 11 注入 .dt11-r 列宽 grid → 红，git checkout 还原 → 绿，探针未进仓库）。② 债务入账：模块文档「变体表格 8 份手搓」→「已清偿 + 新判据」；1722 档案 P6 已交付 → Done 闭环（Status → Done，P0–P6 全阶段完成）；2106 档案回引本计划（目标函数修正由 0527 承接收口 + Refs 补链）。③ 全量三道闸：test.full 首轮 3 failed = 1722 档案 Status 改动引发的 _index.md 生成物漂移（kb.index 重建后转绿，非代码问题）；终值 **3145 passed + 4 skipped**（U4 3144 → +1 = 定型守阵）；dev.e2e **196 passed + 0 failed + 10 skipped**（206 用例 359s，与 U4 基线逐位一致 = 本波零代码改动面的直接证据）。
+- **2026-10-12 1800（收口）**：计划 §11 U5 变更行 + 计划 Status → Done（U0–U5 全部完结）+ 本档案（Status → Done + Summary + 子任务表 + 本条目）+ activeContext 切片 + 基线切片 26-10-12-1800（Q1–Q5 终态表定格）。

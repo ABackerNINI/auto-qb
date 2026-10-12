@@ -1,8 +1,8 @@
 # 26-10-11-webui-table-component — WEBUI 表格公共组件(辅种表/追剧表抽公共表壳)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11
+**Updated:** 2026-10-12 18:00
 **Summary:** 用户「将种子页列表辅种表和追剧表提取为一个公共模板组件, 支持拖拽换位/拖拽调整宽度/点击排序/右键隐藏, 方便后续重构种子详情页用户列表/文件列表/设置中的各种表; 先写一个计划」→ 计划 [26-10-11-1722-plan-webui-table-component.html](../plans/26-10-11-1722-plan-webui-table-component.html)(topic `webui-table-component`, `In Progress`)出后, 用户定调「详情面板问题很多, 后续需要完全重构, 不考虑兼容」并按推荐开始实施。**盘点结论改变了落点**: 四项交互的**行为已单点**(`columns.js` + `sort.js`), **未单点的是模板**(表头块 5 份 / 单元格 `v-if` 分支 127 条 / 列选择器 4 段 / 横滚同步 3 份 / 页枚举硬编码 18+ 处) ⇒ 本轮重心 = 抽表壳 + 表注册表化, 行为层只在既有单点上参数化。**P0 已落地**(零行为变化): app.js 顶部新增表注册表 `TABLE_DEFS`, `TABLE_PAGES` 由它派生, `columns.js`/`sort.js` 里十处页字面量与 ref 名映射一律改为按 id 取; 新增守阵 `test_frontend_table_registry_single_point`。**P1/P2 已落地**: 表头块 5 份收敛为单份表壳组件 `<aq-table>`, 明细成员单元格 2 份收敛为单份行模型渲染器 `<aq-member-cells>`(辅种页/追剧页共用); 组件只贡献模板, 行为经 `$root` 回调根实例; `_headEl` 统一 unwrap 组件实例, 三个横滚同步单点与成员容器随之改走它; 新增守阵 `test_frontend_table_shell_single_point`, `_scan_column_cells_paired` 的明细列改扫渲染器。验收 = 真浏览器 A/B **DOM 逐字节等价**(17 项探针 × 2 皮肤, 差异 0)+ e2e 与基线逐位一致 + 全量守阵绿(数字见 `commands run kb.baseline`)。**P3/P4 已落地**: P3 = 行模型单元格渲染器按 group/torrent/show-ep 收敛(新增分片 `tpl/xtpl-cells.html`, 页面模板 127 条 `v-if` 链清零, 种子页表头同轮接入 `<aq-table>`); P4 = 列选择器四段按注册表 `v-for`(新增 `tableDefs` computed + 两个全表动作方法)/ 三个 `sync*HeadScroll` 收敛为 `columns.js::syncHeadScroll(ev,page)` 一份 / 排序键(P0 已完成, 零残留)。验收 = 真浏览器 A/B **DOM 逐字节等价**(20 项探针 × 2 皮肤 = 40 项, 差异 0)+ e2e 158 passed / 0 failed / 10 skipped(34 项存量红已由上游 `c2a723a3` 转绿)+ `test.full` 3126 passed / 4 skipped(四项覆盖率指标与上片逐位相同)。**P5 已落地**(口径经用户拍板「复用表壳 · th 模式」): `<aq-table>` 加 **thead 模式**(同一表壳的第二根 = 原生 `<table>` 表头行), HR 详情表表头借壳渲染 —— 关键机制是根模板 in-DOM、自定义元素放 `<thead>` 会被浏览器 foster-parent 移出表格, 占位必须写成 `<tr is="vue:aq-table" mode="thead">`; HR 三张表列定义单点进 `hr_status.js` 的 `HR_TABLE_DEFS`(与 `TABLE_DEFS` 同形但独立, 不进 `TABLE_PAGES`), 波次表表头改注册表 `v-for`, 排序仍走 `hrsSetSort`(D3=B), 死件 `hrsArrowHref` 退役; 守阵同轮改版 4 条(全红绿双验)。验收 = 真浏览器 A/B 表头 DOM 逐字节等价(表① outerHTML+骨架、表② outerHTML 与 HEAD 相同; 已知偏差: 表② v-for 引入 18 个零长文本锚点, Vue 片段不变量)+ e2e 与基线一致 + `test.full` 3127 passed / 4 skipped(数字见 `commands run kb.baseline`)。P6 待续。
 **Topics:** webui-table-component
 **Refs:** memory-bank/plans/26-10-11-1722-plan-webui-table-component.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html
@@ -40,7 +40,7 @@
 | P3 | 单元格渲染器收敛(127 条分支按行模型归拢) | **Done** |
 | P4 | 列选择器 / 横滚同步 / 排序键 三处重复收敛 | **Done** |
 | P5 | 设置页 HR 表接入(只借壳, D3=B) | **Done** |
-| P6 | 详情面板: 只留前向契约, 零代码迁移(D4=A) | **已交付**(26-10-12-0533, 计划 26-10-12-0527 U0: 契约全文写入 table.js 头注「对外契约(P6)」节 —— 描述符字段/表壳 props/行渲染器接口/变体表格体锚约定/接入 checklist) |
+| P6 | 详情面板: 只留前向契约, 零代码迁移(D4=A) | **Done**(26-10-12-0533 交付契约 → 26-10-12-1800 闭环: 承接方计划 26-10-12-0527 U0–U5 全部落地, Q1–Q5 终态 18/18 —— 契约承诺「新增表格表面 = 描述符一行 + 行渲染器 + 外壳锚」在抽屉侧 8 变体全部兑现并经守阵/e2e/红验收口) |
 
 ## 进度日志
 
@@ -131,6 +131,6 @@
 ### 下一步
 
 - P5 已完成(见上「P5」段)。**P5 与计划的偏差(需记两笔)**: ①表② 表头 `v-for` 引入零长文本锚点(18 个, Vue 片段不变量, `outerHTML` 不可见、不参与表格布局)—— 「DOM 逐字节等价」在骨架层面不可达, 除非放弃注册表化; 已记计划 §09 + 基线切片 + [pitfalls/web-ui/frontend-split.md](../pitfalls/web-ui/frontend-split.md)。②计划改动面写两文件, 实际扩到 `table.js`/`xtpl.html`(thead 模式本体)+ 4 条守阵。③顺带发现 `test_frontend_template_no_reserved_prefix_identifiers` 的**指令表达式分支是死的**(正则捕获组 1 是引号, 守阵读它当表达式 ⇒ `@click="_x()"` 从未被真正检出; docstring 宣称覆盖)—— 按「范围守恒」一行未改, **已入池** issue [26-10-11-2030-test-guard-reserved-prefix-directive-dead](../issues/26-10-11-2030-test-guard-reserved-prefix-directive-dead.html)(Open, 待认领)。
-- ~~P6: 详情面板只留前向契约(零代码迁移, D4=A)。~~ **已交付(26-10-12-0533)**: 契约全文落在 `shared/table.js` 头注「对外契约(P6)」节(描述符字段含变体扩展 rowModel/features/hostAnchor / 表壳 props 与 emit / 行渲染器「纯消费方」接口 / 变体表格体 Teleport 锚约定 `data-dt-table-anchor` / 接入 checklist); 承接方 = 修正计划 26-10-12-0527(抽屉变体表格体重写, 用户拍板 D1–D6 全推荐项)。
+- ~~P6: 详情面板只留前向契约(零代码迁移, D4=A)。~~ **已交付(26-10-12-0533)→ 闭环(26-10-12-1800)**: 契约全文落在 `shared/table.js` 头注「对外契约(P6)」节(描述符字段含变体扩展 rowModel/features/hostAnchor / 表壳 props 与 emit / 行渲染器「纯消费方」接口 / 变体表格体 Teleport 锚约定 `data-dt-table-anchor` / 接入 checklist); 承接方 = 修正计划 26-10-12-0527(抽屉变体表格体重写, 用户拍板 D1–D6 全推荐项)——该计划 U0–U5 六波已全部落地(十八表面 Q1–Q5 终态 18/18, 八变体全为引擎消费面, 债务条目在模块文档改「已清偿 + 新判据」), P6 至此闭环, 本计划全阶段(P0–P6)完成。
 - **2026-10-12 联合审计回引**: 本计划被纳入表格统一双计划联合审计(报告 26-10-12-0455)——P0–P5 判定正主完成(A+C 系统面, 10/18 表面), P6 前向契约判定**悬置未交付**且其条件性 DOM 适配(§03 ③b)经 W7 恢复变体后触发条件已成立; 重审计划的整改方向与 P6 契约交付强相关, 见报告 §7。
 - 本轮**未**新增 `test_*` 用例(只改既有 4 条守阵), 故 `test.full` 用例数不变; 若后续给「新增一张表 = 注册一行 + 一个渲染器」补端到端样例, 那是独立用例。

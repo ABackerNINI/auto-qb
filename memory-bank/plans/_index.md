@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-11-1722] [WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划](26-10-11-1722-plan-webui-table-component.html) — `webui-table-component`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
@@ -25,6 +24,7 @@
 
 ## Done
 
+- [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`
 - [26-10-11-2040] [批量跳检后「批量开始」状态脱节 · 修复方案](26-10-11-2040-plan-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
 - [26-10-09-2219] [计划 · 种子详情面板页签合并构想](26-10-09-2219-plan-webui-drawer-merge-tabs.html) — `webui-drawer-merge-tabs`

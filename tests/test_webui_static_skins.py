@@ -12,6 +12,7 @@
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复)
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)与右缘渐隐落影两个成分
+- test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 """
 import json
 import os
@@ -1084,6 +1085,54 @@ def test_drawer_table_bridge_wiring():
     for skin in ("atlas", "console", "prism"):
         idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
         assert idx.count("drawer_tpl/90-peers-stub-bridge.js") == 1, f"{skin} index.html stub 装载行失守"
+
+
+def test_drawer_tpl_variant_interaction_single_point():
+    """变体交互单点定型守阵(计划 26-10-12-0527 U5①)。
+
+    判据**按声明识别(声明即受检)**: drawer_tpl/*.js 全目录扫 ui.sort —— 手搓排序状态机
+    (ui.sortKey/ui.sortDir)不允许在任何变体复活; 凡声明 tableId+rowsFn(桥表格变体)的文件
+    另强制零表格容器列宽 grid —— 列宽唯一来源 = 引擎列集(columns.js computed), 变体 CSS
+    不得对表格容器(.group-head/.group-row/旧手搓容器命名族 .dtNN-h|r|head|row|gcols)写
+    grid-template-columns。版式 grid(卡片栅格/双栏/图例, 含 04 的 .group-table 双列卡片栅格
+    —— 卡片布局不是列宽, 等高由 test_drawer_tpl_trackers_card_uniform_height 另行钉住)是
+    D5 保留面, 不在禁令内。未来新变体接引擎(tableId+rowsFn 落地)即自动落入本守阵,
+    无需改守阵 —— 即「定型」之义; 已知八桥变体清单兜底(判据不得静默缩水)。
+    """
+    import os
+    import re
+    shared = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared"
+    )
+    tpl_dir = os.path.join(shared, "drawer_tpl")
+    # 已知八桥变体兜底: 每个都必须被「声明即受检」识别到(识别失灵 = 判据空转)
+    known_bridge = {
+        "07-peers-dashboard-tall.js",
+        "08-peers-groups-low.js",
+        "09-peers-density-collapsed.js",
+        "04-trackers-status-cards-tall.js",
+        "05-trackers-health-groups-low.js",
+        "06-trackers-table-collapsed.js",
+        "10-content-tree-detail-tall.js",
+        "11-content-treegrid-batch-low.js",
+    }
+    # 表格容器选择器族(⑪ 同口径): 引擎行/列头容器 + 旧手搓表格容器命名族(.dtNN-list 等版式
+    # 类不在此族 —— 04 的 .group-table 卡片栅格与 07 的 .group-table 表壳栅格是 D5 保留面)
+    colgrid_sel = re.compile(r"\.group-head|\.group-row|\.dt\d\d-(?:h|r|head|row|gcols)\b")
+
+    seen_bridge = set()
+    for fname in sorted(f for f in os.listdir(tpl_dir) if f.endswith(".js")):
+        text = open(os.path.join(tpl_dir, fname), encoding="utf-8").read()
+        # 全目录: 手搓排序状态机零残留(排序并引擎 D3, 任何变体不得复活)
+        assert "ui.sort" not in text, f"{fname} 残留手搓排序状态机 ui.sort(U5 定型: 排序归引擎单点)"
+        # 声明即受检: tableId+rowsFn 双声明 = 桥表格变体 → 列宽 grid 禁令生效
+        if re.search(r"\btableId\s*:", text) and re.search(r"\browsFn\s*:", text):
+            seen_bridge.add(fname)
+            for ln in text.splitlines():
+                if "grid-template-columns" in ln and colgrid_sel.search(ln):
+                    raise AssertionError(f"{fname} 表格容器残留列宽 grid 硬编码(U5 定型 Q4: 列宽归引擎): {ln.strip()[:80]}")
+    missing = known_bridge - seen_bridge
+    assert not missing, f"已知桥变体未被「声明即受检」识别到(判据空转或声明丢失): {sorted(missing)}"
 
 
 def _scan_progress_val_parity(problems):
