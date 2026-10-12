@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-startup-latency">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-12-1923">
+<meta name="doc-updated" content="26-10-12-1923">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1420;
+    --paper: #151c2c;
+    --paper2: #1a2234;
+    --ink: #dce4f4;
+    --dim: #9aa8c2;
+    --faint: #6b7a96;
+    --line: #2a3550;
+    --acc: #5aa2e8;
+    --ok: #4cc38a;
+    --warn: #e8b45a;
+    --bad: #e87a7a;
+    --code-bg: #0b101c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 0 16px 80px;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14.5px; line-height: 1.75;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.rpt { padding: 40px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  header.rpt h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .5px; }
+  header.rpt .sub { color: var(--dim); font-size: 13.5px; }
+  .metagrid { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 16px; font-size: 12.5px; color: var(--dim); }
+  .metagrid b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 19px; margin: 46px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--acc); margin-right: 8px; font-family: Consolas, monospace; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; color: var(--ink); }
+  h3::before { content: "\258D"; color: var(--acc); margin-right: 4px; }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--dim); }
+  p { margin: 8px 0; }
+  .lead { color: var(--dim); font-size: 13.5px; margin-top: 2px; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--paper2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td { color: var(--ink); }
+  td .sm, .sm { font-size: 12px; color: var(--dim); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  code, .mono {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.3px; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+    color: #a8c8f0; word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.65;
+    font-family: Consolas, "Cascadia Mono", monospace; color: #b9d2f2;
+  }
+  pre code { border: 0; padding: 0; background: none; }
+  .box { border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 8px; background: var(--paper); padding: 12px 16px; margin: 14px 0; }
+  .box.ok { border-left-color: var(--ok); }
+  .box.warn { border-left-color: var(--warn); }
+  .box.bad { border-left-color: var(--bad); }
+  .box .t { font-weight: 700; margin-bottom: 4px; }
+  .box.ok .t { color: var(--ok); }
+  .box.warn .t { color: var(--warn); }
+  .box.bad .t { color: var(--bad); }
+  .badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .b-fix { background: rgba(76,195,138,.14); color: var(--ok); border: 1px solid rgba(76,195,138,.4); }
+  .b-need { background: rgba(90,162,232,.14); color: var(--acc); border: 1px solid rgba(90,162,232,.4); }
+  .b-opt { background: rgba(154,168,194,.1); color: var(--dim); border: 1px solid rgba(154,168,194,.35); }
+  .b-warn { background: rgba(232,180,90,.12); color: var(--warn); border: 1px solid rgba(232,180,90,.4); }
+  .nc { color: var(--warn); font-weight: 600; }
+  .num { font-family: Consolas, monospace; color: var(--acc); font-weight: 600; }
+  .foot { margin-top: 60px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="rpt">
+  <h1>启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告</h1>
+  <div class="sub">「WEB UI 要好几秒才正常，之前 2 秒之内」—— 85 次启动日志趋势 × 真实数据实测 × 逐项排除</div>
+  <div class="metagrid">
+    <span>报告编号: <b>26-10-12-1923</b></span>
+    <span>日期: <b>2026-10-12</b></span>
+    <span>被查实例: <b>/d/Projects/auto-qb</b>（另一 clone，全程<b>只读</b>）</span>
+    <span>性质: <b>证据快照</b>（行号基于当前工作区文件）</span>
+  </div>
+  <div class="metagrid">
+    <span>取证手段: 日志趋势统计（85 次启动） + <b>真实数据副本上跑真实函数实测</b> + 候选逐项排除（含本机 qB 实测探针）</span>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<h2><span class="no">1</span>摘要</h2>
+
+<div class="box bad">
+  <div class="t">现象（用户报）</div>
+  启动 auto-qb 后，WEB UI 要<b>好几秒</b>才「正常」（能看种子、能搜）；以前在 <b>2 秒</b>之内。
+</div>
+
+<div class="box warn">
+  <div class="t">结论（一句话）</div>
+  <b>不是 WEB UI 慢</b> —— 服务本身 <code>0.07s</code> 就绪、HTTP 响应毫秒级（实测）。真正的问题是<b>主循环开始工作之前的「启动死区」</b>：装配序最后一个模块 <code>TrafficSampleModule.start()</code> 里的 <code>_recover_aggregates()</code>，<b>每一次启动都把 <code>qb-traffic-v4/</code> 的全部历史天文件重读一遍并逐槽重算</b>。它<b>完全静默</b>（无一行日志）、又恰好卡在「WEB 已监听」与「主循环第一拍」之间 —— 这段时间里 store 是空的，所以界面开着却没有数据。耗时随历史数据<b>无界增长</b>：实测 <span class="num">+1.5~2.0s/天</span>。
+</div>
+
+<div class="box bad">
+  <div class="t">实测数字（19:11:01 那次启动）</div>
+  启动死区 = <span class="num">11.16s</span>（<code>19:11:01.360</code> → <code>19:11:12.385</code>，中间<b>零日志</b>）。其中 <code>_recover_aggregates</code> 全量实测 = <span class="num">7.09 / 7.28 / 7.09s</span>（在真实数据的只读副本上跑<b>真实函数</b>，3 次）。
+</div>
+
+<h3>三条独立事实，合起来就是用户看到的「好几秒」</h3>
+<table>
+  <tr><th>#</th><th>事实</th><th>证据</th><th>时长</th></tr>
+  <tr>
+    <td>①</td>
+    <td><b>traffic-v4 启动恢复重读全部历史</b>（主因）</td>
+    <td>85 次启动趋势单调增长，与 v4 数据积累起点（10-06）严格对齐；真实数据实测 7.09~7.28s</td>
+    <td class="nc">≈ 7~11s</td>
+  </tr>
+  <tr>
+    <td>②</td>
+    <td><b>首次全量同步被死区挡在后面</b> ⇒ 界面空表</td>
+    <td>死区结束才 <code>加载规则</code>(12.385)，<code>检测到新增种子 165 个</code> 在 12.623</td>
+    <td>累计到 12.6s</td>
+  </tr>
+  <tr>
+    <td>③</td>
+    <td><b>搜索索引首建</b>：165 个种子一次拉 165 次 <code>/torrents/files</code>，独占主循环</td>
+    <td><code>SEARCH_INDEX_BUILD_BUDGET = 500</code> &gt; 165 ⇒ 一轮拉完；日志 13.425 → 15.079</td>
+    <td>≈ 1.7~2.5s</td>
+  </tr>
+</table>
+
+<p class="lead">⇒ 用户体感的「完全正常」= 进程起算 <span class="num">≈14s</span>（<code>init→搜索索引已构建</code> = 13.93s）。而 09-29~10-06 期间同一指标是 <span class="num">3~6s</span>。</p>
+
+<!-- ============================================================ 2 -->
+<h2><span class="no">2</span>现场时间线（19:11 那次启动，日志原文）</h2>
+
+<p>用户贴出的日志就是<b>完整</b>的启动段（已核对原始日志文件 <code>auto-qb-data/logs/auto-qb.log:89707-89726</code>，无省略）。把它按时间轴摊开，那个洞一目了然：</p>
+
+<pre><code>19:11:01,149  INFO  日志初始化完成
+19:11:01,166  INFO  启动 qB 管理器: 主循环 1.5s, 默认任务间隔 60.0s
+19:11:01,167  INFO  主动通知已启用: 最低级别 ERROR, ...
+19:11:01,223  INFO  WEB UI 已启动: http://localhost:38080        <-- 监听就绪, 仅用 0.07s
+19:11:01,223  INFO  HR 取数通道端点已启动 / 取数线程已启动 / 在线核实已启动
+19:11:01,223  INFO  创建全局任务: speed_limit_curve / delete_tags* / qb_traffic_sample
+19:11:01,360  INFO  HR 站点 tracker_carpt_net | reused: ...      <-- 死区前最后一行
+                 ......  11.02 秒，零日志  ......
+19:11:12,385  INFO  加载规则 5 条(启用 5 条)                        <-- 死区结束
+19:11:12,622  INFO  全量轮补建种子级任务 165 个(L2 重建后任务面恢复, ...)
+19:11:12,623  INFO  检测到新增种子 165 个, 创建内置+规则任务      <-- 种子数据这一刻才有
+19:11:13,425  INFO  限速曲线 | 累计上传/下载 ...
+19:11:15,079  INFO  WEB UI | 搜索索引已构建: 165 个种子            <-- 搜索这一刻才可用</code></pre>
+
+<table>
+  <tr><th>里程碑</th><th>时刻</th><th>相对进程启动</th><th>用户视角</th></tr>
+  <tr><td>WEB UI 开始监听</td><td>01.223</td><td class="num">0.07s</td><td>页面能打开（HTTP 毫秒级）</td></tr>
+  <tr><td>死区（无日志）</td><td>01.360 → 12.385</td><td class="num nc">11.16s</td><td><b>页面开着，种子列表空，搜索不可用</b></td></tr>
+  <tr><td>首次全量同步完成</td><td>12.623</td><td class="num">11.47s</td><td>种子列表出现（前端轮询自动填上）</td></tr>
+  <tr><td>搜索索引建成</td><td>15.079</td><td class="num">13.93s</td><td>搜索可用 ⇒「完全正常」</td></tr>
+</table>
+
+<div class="box">
+  <div class="t">为什么用户说「WEB UI 慢」而不是「同步慢」</div>
+  因为 WEB UI <b>确实先响应了</b>：页面 HTML/CSS/JS 秒开，但 <code>/api/state</code> 在 store 为空时返回 0 个种子，前端轮询要等第一拍同步完成（12.6s）才有内容。观感就是「界面开着但半天不动」。
+</div>
+
+<!-- ============================================================ 3 -->
+<h2><span class="no">3</span>取证手段与候选排除</h2>
+
+<h3>3.1 数据来源（全程只读）</h3>
+<ul>
+  <li>真实实例在 <b>另一个 clone</b>：<code>/d/Projects/auto-qb</code>（本次工作区是 <code>auto-qb-clone5</code>）。<b>只读</b>其日志与数据，未写入任何文件、未跑 git 命令。</li>
+  <li>日志：<code>auto-qb-data/logs/auto-qb.log</code>（5.3 MB，覆盖 09-29~10-12，含 <b>85 次</b>启动）。</li>
+  <li>数据：<code>auto-qb-data/qb-traffic-v4/</code>（14 MB / 121 个 <code>.dat</code> / 24 个系列）。</li>
+  <li>配置：<code>config.yml</code>（<code>qb_traffic.sample_interval: 1.5S</code>、<code>raw_window: 30D</code>、<b><code>rollup_window: 1000000D</code></b>）。</li>
+</ul>
+
+<h3>3.2 候选逐项排除</h3>
+<p>启动路径上「从进程起来到主循环第一拍」的全部环节，逐项实测：</p>
+<table>
+  <tr><th>候选</th><th>实测 / 判据</th><th>结论</th></tr>
+  <tr>
+    <td>qB 连接（<code>new_client</code> + <code>auth_log_in</code>）</td>
+    <td>本机 qB(<code>127.0.0.1:16585</code>) 登录 POST 实测 <code>204 / 1.7ms</code>（curl 现测）</td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td><code>state.json</code> 加载（<code>_reload_state</code>）</td>
+    <td>40 KB，读 <code>0.4ms</code> + <code>json.loads</code> <code>0.2ms</code></td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td><code>load_rules()</code>（5 条规则）</td>
+    <td>纯内存构造 5 个 <code>Rule</code>；其日志即死区结束点</td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td>其它模块 <code>start()</code></td>
+    <td><code>tracker</code>/<code>grouping</code>/<code>ops</code>/<code>rules</code> <b>无 start</b>（基类空实现）；<code>maintenance</code>/<code>speed_curve</code> 只注册任务，零 IO</td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td><code>materialize_schema_migration</code></td>
+    <td>日志在 <code>01.166</code> 之前（init→web 仅 0.07s）</td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td>进程启动 → 监听就绪（uvicorn bind）</td>
+    <td><code>init→web = 0.07s</code>（85 次一致）</td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td>WEB UI 服务本身</td>
+    <td>运行中实例 <code>GET /</code> 实测 <code>307 / 3.1ms</code></td>
+    <td><span class="badge b-opt">排除</span></td>
+  </tr>
+  <tr>
+    <td><b><code>TrafficSampleModule._recover_aggregates()</code></b></td>
+    <td><b>真实数据副本跑真实函数：7.09 / 7.28 / 7.09s</b>（3 次，稳定）</td>
+    <td><span class="badge b-warn">主因</span></td>
+  </tr>
+</table>
+
+<!-- ============================================================ 4 -->
+<h2><span class="no">4</span>根因：启动死区 = traffic-v4 全历史重读</h2>
+
+<h3>4.1 代码链（静默、且在关键路径上）</h3>
+<pre><code>ModuleHost.start_all(dry_run)                       # module.py:347  按装配序调各模块 start
+  └─ TrafficSampleModule.start(ctx, dry_run)        # traffic_sample_mod.py:371  ★装配序最后一位
+       └─ if not dry_run: _recover_aggregates()     # traffic_sample_mod.py:377 / :1124
+            └─ for key in store.series_keys()       # traffic_store.py:915  global + 每个有数据的种子
+                 └─ _recover_series(key, store, now, conf.rollup_window)   # :1158
+                      ├─ store.read_agg(key)        # 读 agg.dat
+                      └─ for date in store.series_day_dates(key, now - window):   # :1176  ★窗口 = rollup_window
+                           ├─ store.read_day(key, date)          # :944  读 + 解析整个天文件
+                           └─ _agg_credit_day_file(...)          # :1206 ★把游程展开成槽, 逐槽 Python 循环入账</code></pre>
+
+<div class="box bad">
+  <div class="t">两个致命属性叠在一起</div>
+  <b>① 静默</b>：<code>_recover_aggregates</code> / <code>_recover_series</code> / <code>_agg_credit_day_file</code> 全程<b>只在失败时</b>打 WARNING，正常路径<b>一行 INFO 都没有</b>。所以日志上就是一个 11s 的洞 —— 这是本次排查最大的障碍（见 §7 建议 B4）。<br>
+  <b>② 位置</b>：它在 <code>connect()</code> 之前、主循环第一拍之前。这段时间 store 里<b>一个种子都没有</b> ⇒ WEB UI 虽然能响应，但拿不到任何数据。
+</div>
+
+<h3>4.2 为什么会「无界」增长：rollup_window 三义合一 + raw_window 零消费方</h3>
+<p><code>rollup_window</code> 在本仓是<b>一个键三个含义</b>（<code>config/models.py:309</code>）：</p>
+<ol>
+  <li>hour 行保留窗；</li>
+  <li>系列淘汰龄；</li>
+  <li><b>catch-up 补算窗口（= 天文件存活期）</b> ← 启动恢复读多少文件由它决定。</li>
+</ol>
+<p>用户把它设成了 <code>1000000D</code>（≈ 2740 年，等效「永久保留」）⇒ 补算窗口覆盖<b>全部历史</b>，一个天文件都不会被跳过。</p>
+
+<div class="box warn">
+  <div class="t">并且：天文件目前<b>没有任何删除点</b></div>
+  <code>raw_window</code> 在配置里声明、在校验里检查、在文档里写着「raw 段 = 按天整文件存删」，但<b>代码里零消费方</b>（全仓仅注释提及：<code>traffic_store.py:66 / :817 / :1105</code>、<code>traffic_sample_mod.py:104</code>）。<br>
+  天文件唯一的删除路径是 <code>evict_expired_series()</code>（<code>traffic_store.py:973</code>）—— <b>整系列</b>按 <code>rollup_window</code> 淘汰。<br>
+  ⇒ 结论：<b>只要一个系列还在产数据，它的天文件就永远不删</b>。所以即使把 <code>rollup_window</code> 调回默认 30D，稳态仍是 30 × 25 ≈ <b>750 个天文件 ≈ 50s 启动</b>。这不是「配置没调好」，是<b>恢复策略本身与保留口径不匹配</b>。
+</div>
+
+<h3>4.3 实测证据（三条独立证据链）</h3>
+
+<h4>证据 A：85 次启动的趋势 —— 单调增长，且与 v4 数据起点严格对齐</h4>
+<p>指标 = <code>WEB UI 已启动</code> → <code>加载规则</code> 的间隔（即启动死区）。取自真实日志全部 85 次启动：</p>
+<table>
+  <tr><th>日期</th><th>死区间隔（该日多次启动）</th><th>当天累计天文件数</th><th>说明</th></tr>
+  <tr><td>09-29 ~ 10-06</td><td><span class="num">0.00 ~ 0.11s</span></td><td>—</td><td><b>健康基线</b>（traffic 采样尚无聚合/恢复）</td></tr>
+  <tr><td>10-07</td><td><span class="num">0.17 / 0.22 / 0.19 / 0.31 / 0.28s</span></td><td>2 + 6 = 8</td><td>v4 目录自 10-06 起积累，开始抬头</td></tr>
+  <tr><td>10-08</td><td><span class="num">0.48 / 0.72 / 0.92 / 0.92s</span></td><td>+11 = 19</td><td>线性增长</td></tr>
+  <tr><td>10-09</td><td><span class="num">2.10 / 2.24 / 2.35 / 2.39 / 2.38s</span></td><td>+15 = 34</td><td>跳档（系列数同时增加）</td></tr>
+  <tr><td>10-10</td><td><span class="num">3.88 / 4.04 / 4.19 / 4.63 / 4.69 / 4.87s</span></td><td>+17 = 51</td><td>同上</td></tr>
+  <tr><td>10-11</td><td><span class="num">4.88s</span></td><td>+21 = 72</td><td>—</td></tr>
+  <tr><td>10-12</td><td><span class="num">7.39 / 8.14 / 9.96 / <b>11.16</b>s</span></td><td>+25 = 97</td><td>同一天内三次启动仍在涨（当天文件持续变大）</td></tr>
+</table>
+<p class="lead">单调、无回退、约 <span class="num">+1.5~2.0s/天</span>。与 v4 数据开始积累的日期（10-06/10-07）严丝合缝 —— 这是「耗时正比于累积数据」的教科书形态。</p>
+
+<h4>证据 B：窗口敏感性 —— 耗时线性于「读了多少个天文件」</h4>
+<p>同一份真实数据，只改补算窗口（复刻 <code>_recover_series</code> 读侧，只读不写）：</p>
+<table>
+  <tr><th>补算窗口</th><th>读取天文件数</th><th>耗时</th><th>每文件</th></tr>
+  <tr><td>1D</td><td>24</td><td class="num">1.493s</td><td>62ms</td></tr>
+  <tr><td>2D</td><td>45</td><td class="num">2.962s</td><td>66ms</td></tr>
+  <tr><td>4D</td><td>77</td><td class="num">5.568s</td><td>72ms</td></tr>
+  <tr><td>7D</td><td>96</td><td class="num">6.701s</td><td>70ms</td></tr>
+  <tr><td>30D（默认）</td><td>96</td><td class="num">6.917s</td><td>72ms</td></tr>
+  <tr><td><b>1000000D（用户现值）</b></td><td>96</td><td class="num">6.959s</td><td>72ms</td></tr>
+</table>
+<p class="lead">完全线性 ⇒ <b>成本 = 天文件数 × ~72ms</b>。用它反推历史：10-09 时 34 个文件 → 预测 2.4s，<b>观测 2.10~2.39s ✓</b>；每天新增 ~24~25 个文件 → 预测 +1.7s/天，<b>观测 +1.5~2.0s/天 ✓</b>。模型与现场吻合。</p>
+
+<h4>证据 C：真实函数全量实测与耗时构成</h4>
+<p>把 <code>qb-traffic-v4/</code> 只读复制到本工作区临时目录（14 MB / 121 <code>.dat</code>），在其上调用<b>真实</b> <code>_recover_aggregates()</code>（含写侧），3 次：</p>
+<pre><code>run1: _recover_aggregates (full, incl. writes) =  7.151s
+run2: _recover_aggregates (full, incl. writes) =  7.278s
+run3: _recover_aggregates (full, incl. writes) =  7.085s</code></pre>
+<p>读侧构成（无额外开销的干净分解）：</p>
+<table>
+  <tr><th>环节</th><th>耗时</th><th>占比</th><th>说明</th></tr>
+  <tr><td><code>read_agg</code> × 24</td><td class="num">0.021s</td><td>0.3%</td><td>agg.dat 都很小（最大 11.5 KB）</td></tr>
+  <tr><td><code>read_day</code> × 96（读+解析）</td><td class="num">0.908s</td><td>13%</td><td>13.8 MB 文本解析</td></tr>
+  <tr><td><b><code>_agg_credit_day_file</code> × 96（逐槽入账）</b></td><td class="num nc">5.906s</td><td><b>85%</b></td><td><b>把游程展开成槽（本次共 430 万槽）再逐槽 Python 循环</b></td></tr>
+  <tr><td>其它（listdir 等）</td><td class="num">~0.12s</td><td>2%</td><td>—</td></tr>
+  <tr><td colspan="2"><b>TOTAL 6.957s</b></td><td colspan="2">对应 24 系列 / 96 天文件 / 430 万槽</td></tr>
+</table>
+
+<div class="box warn">
+  <div class="t">关于「11.16s 死区 vs 7.1s 实测」的差额（~4s）—— 诚实说明</div>
+  死区里除恢复之外的全部环节都已实测为亚毫秒级（qB 登录 1.7ms、state 加载 0.4ms、其余模块 start 零 IO），所以这 ~4s 只能归给<b>同一条恢复路径在真实启动条件下的开销</b>：本次复测在本机<b>热文件缓存 + CPU 空闲</b>下进行，而 19:11 那次是冷读 13.8 MB、且同时有 WEB 服务线程 / HR 取数线程 / 浏览器在跑。<b>结论不变</b>（恢复是唯一量级足够的项，且是唯一随数据增长而增长的项），但 7.1s 应视为<b>下界</b>。
+</div>
+
+<!-- ============================================================ 5 -->
+<h2><span class="no">5</span>次要因素（同一「不正常」窗口内的另两项）</h2>
+
+<h3>5.1 首次全量同步被死区推迟（12.62s）</h3>
+<p>主循环的 <code>next_sync_at = 0.0</code>，本意是「起来就同步」。但这一拍必须等 <code>start_all</code> → <code>connect</code> → <code>_reload_state</code> → <code>load_rules</code> 全部走完（<code>qbmanager.py:462 / 472 / 485 / 491</code>）。死区把它们整体推后 ⇒ <b>165 个种子直到 12.62s 才进快照</b>。</p>
+
+<h3>5.2 搜索索引首建独占主循环（1.7~2.5s）</h3>
+<p><code>SEARCH_INDEX_BUILD_BUDGET = 500</code>（<code>webui/views.py:31</code>）＞ 165 个种子 ⇒ 首轮<b>一次拉完 165 次 <code>/torrents/files</code></b>，全部在主循环线程内（<code>views.py:856</code>）。索引只存内存（<code>web.search_index</code>），<b>每次重启都要重建</b>。</p>
+<ul>
+  <li>日志证据：<code>13.425</code>（限速曲线任务）→ <code>15.079</code>（搜索索引已构建）= 1.65s，基本就是这 165 次 API。</li>
+  <li>这一项<b>不随历史增长</b>（受种子数封顶），所以它不是本次回归的主因，但它把「完全正常」又推后了近 2s。</li>
+</ul>
+
+<!-- ============================================================ 6 -->
+<h2><span class="no">6</span>影响与增长外推</h2>
+
+<table>
+  <tr><th>时间点</th><th>启动死区（实测）</th><th>「完全正常」（init→搜索索引）</th></tr>
+  <tr><td>10-07（v4 起步）</td><td class="num">0.17s</td><td class="num">4.27s</td></tr>
+  <tr><td>10-08</td><td class="num">0.92s</td><td class="num">6.44s</td></tr>
+  <tr><td>10-09</td><td class="num">2.39s</td><td class="num">4.85 ~ 6.24s</td></tr>
+  <tr><td>10-10</td><td class="num">4.87s</td><td class="num">7.17 ~ 7.88s</td></tr>
+  <tr><td>10-11</td><td class="num">4.88s</td><td class="num">13.36s</td></tr>
+  <tr><td>10-12 03:12</td><td class="num">7.39s</td><td class="num">9.98s</td></tr>
+  <tr><td>10-12 18:25</td><td class="num">9.96s</td><td class="num">12.73s</td></tr>
+  <tr><td><b>10-12 19:11（本次）</b></td><td class="num nc">11.16s</td><td class="num nc">13.93s</td></tr>
+</table>
+
+<div class="box bad">
+  <div class="t">外推（按 +1.7s/天，且系列数还会随种子增加而增加）</div>
+  <ul>
+    <li>约 <b>1 周后</b>：启动死区 <span class="num">≈ 22s</span>；</li>
+    <li>约 <b>1 个月后</b>：<span class="num">≈ 60s</span> —— 届时「启动后 WEB UI 多久正常」会变成分钟级问题。</li>
+    <li>更糟的形态：这是<b>启动期同步阻塞</b>，不是可后台化的慢 —— 期间 store 空、任务不跑、跳检/规则全部停摆。</li>
+  </ul>
+</div>
+
+<!-- ============================================================ 7 -->
+<h2><span class="no">7</span>修复方向（建议，本报告不落地）</h2>
+
+<p class="lead">按「收益 / 代价」排序。所有代码改动都属计划外工作，需先拍板（见 §9）。</p>
+
+<table>
+  <tr><th>#</th><th>方向</th><th>做法</th><th>预期</th><th>代价 / 风险</th></tr>
+  <tr>
+    <td>B1</td>
+    <td><b>恢复只补「缺的行」，不重读全部历史</b><br><span class="badge b-fix">推荐 · 根修</span></td>
+    <td>catch-up 的下界改成 <code>agg</code> 水位（<code>wm_hour</code>）而不是 <code>now - rollup_window</code>：水位之前的天文件<b>不读</b>（那些小时的 agg 行已经在文件里）。<code>traffic_sample_mod.py:1176</code> 一处窗口 + <code>store.series_day_dates</code> 调用口径。</td>
+    <td>96 个天文件 → <b>1~2 个</b>；死区 11s → <b>&lt;0.5s</b>，且不再随历史增长</td>
+    <td>需保证「水位之前的数据确实已聚合」这一前提（正常停机成立；崩溃窗口由撕裂尾/坏行口径兜底）；要补守阵</td>
+  </tr>
+  <tr>
+    <td>B2</td>
+    <td>把恢复挪出启动关键路径</td>
+    <td>恢复改为主循环后台任务（或 <code>start_all</code> 里放到最后并<b>先</b>让第一拍同步跑完），让 WEB UI 先有数据、恢复随后补。</td>
+    <td>用户体感：数据 1s 内可见</td>
+    <td>恢复与在线记账有并发/时序契约（<code>_agg_states</code>、水位），需仔细设计；改动面大于 B1</td>
+  </tr>
+  <tr>
+    <td>B3</td>
+    <td>补上 <code>raw_window</code> 的天文件删除</td>
+    <td>让文档承诺的「raw 段按天整文件存删」真的存在（现在<b>零消费方</b>）。</td>
+    <td>限制磁盘与恢复规模上限</td>
+    <td><b>数据保留口径变更</b>，必须用户确认（用户显然想永久保留，才设了 1000000D）</td>
+  </tr>
+  <tr>
+    <td>B4</td>
+    <td>给启动阶段加埋点</td>
+    <td><code>_recover_aggregates</code> 起止 + 系列数 / 天文件数 / 槽数落一条 INFO。</td>
+    <td>下次这类问题 5 分钟定位</td>
+    <td>几乎为零。<b>本次排查最大的障碍就是它完全静默</b></td>
+  </tr>
+  <tr>
+    <td>C1</td>
+    <td>搜索索引首建不独占主循环</td>
+    <td>首建分批跨拍（把 budget 调小）或移到后台线程；索引可考虑落盘复用。</td>
+    <td>省 1.7~2.5s</td>
+    <td>注意既有硬约束：<b>自投递命令不得唤醒主循环</b>（<code>commands.py:100-104</code>，会形成自激循环）</td>
+  </tr>
+  <tr>
+    <td>A1</td>
+    <td>配置层面临时缓解</td>
+    <td>把 <code>rollup_window</code> 从 <code>1000000D</code> 调回默认 <code>30D</code>。</td>
+    <td>短期（&lt;30 天）几乎无改善（见 §4.2：当前 97 个文件全在窗内）</td>
+    <td><b>会裁剪 hour 行、淘汰超龄系列</b> —— 属数据保留口径变更，且<b>不能治本</b>。不推荐单独使用</td>
+  </tr>
+</table>
+
+<div class="box ok">
+  <div class="t">建议的最小落地组合</div>
+  <b>B1 + B4</b>：一处窗口口径修正 + 一条 INFO 埋点，即可把启动死区从 11s 压回亚秒级并消除增长趋势；B2/B3/C1 作为后续（分别解决「恢复仍与首拍抢时间」「磁盘无界」「搜索首建」）。
+</div>
+
+<!-- ============================================================ 8 -->
+<h2><span class="no">8</span>复现方法</h2>
+
+<p>取证脚本留在本工作区 <code>tmp-analysis/</code>（该目录已 gitignore，不入库）：</p>
+<table>
+  <tr><th>脚本</th><th>作用</th></tr>
+  <tr><td><code>tmp-analysis/bench_recover.py</code></td><td>真实数据上复刻读侧恢复，出总耗时</td></tr>
+  <tr><td><code>tmp-analysis/bench_clean.py</code></td><td>干净分解：<code>read_agg</code> / <code>parse</code> / <code>credit</code> 三段</td></tr>
+  <tr><td><code>tmp-analysis/bench_window.py</code></td><td>窗口敏感性（1D→1000000D）</td></tr>
+  <tr><td><code>tmp-analysis/bench_full_recover.py</code></td><td>在数据<b>副本</b>上跑真实 <code>_recover_aggregates()</code>（含写侧）</td></tr>
+  <tr><td><code>tmp-analysis/v4copy/</code></td><td>真实 <code>qb-traffic-v4/</code> 的只读副本（14 MB），跑完可删</td></tr>
+</table>
+<pre><code># 全部为只读/副本操作, 不触碰 /d/Projects/auto-qb 的真实数据
+uv run python tmp-analysis/bench_window.py        # 窗口敏感性
+uv run python tmp-analysis/bench_full_recover.py  # 真实函数全量实测</code></pre>
+
+<h3>日志趋势统计（可复现）</h3>
+<pre><code># 从真实日志里抽出每次启动的 web->rules 间隔(85 次)
+cd /d/Projects/auto-qb &amp;&amp; python - &lt;&lt;'PY'
+import re
+from datetime import datetime
+pat = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3}) - \w+ - (.*)$")
+rows, cur = [], None
+for line in open("auto-qb-data/logs/auto-qb.log", encoding="utf-8", errors="replace"):
+    m = pat.match(line)
+    if not m: continue
+    ts, msg = m.group(1) + "." + m.group(2), m.group(3)
+    if "日志初始化完成" in msg:
+        if cur: rows.append(cur)
+        cur = {"start": ts}
+    if cur is None: continue
+    if "WEB UI 已启动" in msg and "web" not in cur: cur["web"] = ts
+    if "加载规则" in msg and "rules" not in cur: cur["rules"] = ts
+if cur: rows.append(cur)
+t = lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
+for r in rows:
+    if "web" in r and "rules" in r:
+        print(r["start"], f'{(t(r["rules"]) - t(r["web"])).total_seconds():6.2f}s')
+PY</code></pre>
+
+<!-- ============================================================ 9 -->
+<h2><span class="no">9</span>待用户决定</h2>
+<ol>
+  <li><b>要不要修</b>：本报告只做「当时现场是什么样」；按仓库形态，要不要修走 <code>issues/</code>（未入池，等指令）。</li>
+  <li><b>修哪个方向</b>：建议 <b>B1 + B4</b>（见 §7）；若认可，再立 <code>plans/</code> 定方案。</li>
+  <li><b>数据保留口径</b>：<code>rollup_window: 1000000D</code>（永久保留）是用户有意设定吗？<b>B3（补 raw_window 删除）与 A1（调小 rollup_window）都会改变保留口径</b>，需明确。</li>
+  <li><b>本报告与本轮取证产物</b>是否入库（<code>提交</code>）、是否要另立任务档案。</li>
+</ol>
+
+<!-- ============================================================ 附录 -->
+<h2><span class="no">A</span>附录：引用位置清单</h2>
+<table>
+  <tr><th>#</th><th>事实</th><th>位置</th></tr>
+  <tr><td>A1</td><td>模块装配序（traffic_sample 最后）</td><td><code>core/qbmanager.py:211-238</code></td></tr>
+  <tr><td>A2</td><td><code>start_all</code> 按装配序调 <code>start</code></td><td><code>core/module.py:347</code></td></tr>
+  <tr><td>A3</td><td><code>start()</code> → <code>_recover_aggregates()</code>（非 dry_run）</td><td><code>core/modules/traffic_sample_mod.py:371-377</code></td></tr>
+  <tr><td>A4</td><td>恢复入口：遍历 <code>series_keys()</code> 逐系列恢复</td><td><code>core/modules/traffic_sample_mod.py:1124-1136</code></td></tr>
+  <tr><td>A5</td><td>单系列恢复：读 agg + <b>窗口内全部天文件</b></td><td><code>core/modules/traffic_sample_mod.py:1158-1195</code>（窗口循环 :1176）</td></tr>
+  <tr><td>A6</td><td>逐槽入账（85% 耗时）</td><td><code>core/modules/traffic_sample_mod.py:1206-1236</code></td></tr>
+  <tr><td>A7</td><td>窗口 = <code>conf.rollup_window</code>（调用点）</td><td><code>core/modules/traffic_sample_mod.py:1134</code></td></tr>
+  <tr><td>A8</td><td><code>series_keys</code> / <code>series_day_dates</code> / <code>read_day</code></td><td><code>core/traffic_store.py:915 / :929 / :944</code></td></tr>
+  <tr><td>A9</td><td>唯一删除点 = 整系列淘汰（无天文件级删除）</td><td><code>core/traffic_store.py:973-999</code></td></tr>
+  <tr><td>A10</td><td><code>rollup_window</code> 三义合一（含补算窗口）</td><td><code>config/models.py:309-316</code> · <code>core/traffic_store.py:64-67 / :815-818</code></td></tr>
+  <tr><td>A11</td><td><code>raw_window</code> 零消费方（仅注释/校验/测试）</td><td><code>config/loaders.py:405-418</code> · <code>config/validation/sections.py:603-638</code></td></tr>
+  <tr><td>A12</td><td>主循环启动序：<code>start_all</code> → <code>connect</code> → <code>_reload_state</code> → <code>load_rules</code></td><td><code>core/qbmanager.py:462 / 472 / 485 / 491</code></td></tr>
+  <tr><td>A13</td><td>搜索索引预算与构建</td><td><code>webui/views.py:31 / :856-896</code></td></tr>
+  <tr><td>A14</td><td>自投递命令不得唤醒主循环（改 C1 时的硬约束）</td><td><code>webui/commands.py:100-104</code> · <code>core/qbmanager.py:414-428</code></td></tr>
+  <tr><td>A15</td><td>WEB UI 就绪日志（死区起点）</td><td><code>webui/server/lifecycle.py:188-191</code></td></tr>
+  <tr><td>A16</td><td>qB 客户端超时口径（连接 3s / 读 10s）</td><td><code>core/qbclient.py:21</code></td></tr>
+</table>
+
+<div class="foot">
+  <p>本报告为<b>证据快照</b>：结论来自 (a) 真实实例 85 次启动的日志趋势统计，(b) 真实数据副本上运行真实函数的实测，(c) 启动路径逐环节排除（含本机 qB 实测探针）。行号随代码演进可能漂移，引用时以符号名为准。</p>
+  <p>取证全程对 <code>/d/Projects/auto-qb</code> <b>只读</b>（未写入、未跑 git 命令）；实测写入只发生在 <code>tmp-analysis/</code> 下的数据副本，该目录已 gitignore。日志趋势统计覆盖 2026-09-29 ~ 2026-10-12 共 85 次启动。</p>
+  <p>后续动作（若要落地修复）：按仓库形态另立 <code>issues/</code>（要不要修）+ <code>plans/</code>（怎么修），修复过程与数字记入 <code>tasks/</code> —— 本报告只承担「当时现场是什么样」。</p>
+</div>
+
+</div>
+</body>
+</html>
