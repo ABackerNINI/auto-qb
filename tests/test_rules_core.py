@@ -285,9 +285,12 @@ def test_rule_interval():
         assert client.tags == {"HHan"}, f"add_site_tag 应仍执行: {client.tags}"
 
         # 60s 后: stop_low_ratio 到期再次执行
-        # (第 1 轮 stop 后 store 快照同步为 pausedUP -> stop 幂等; 模拟用户重新开始种子,
-        #  直接改种子对象状态即同步快照(store 内为同一对象身份))
+        # (模拟用户重新开始种子: 直接改种子对象状态即同步快照(store 内为同一对象身份)。
+        #  !A 系 S3(A2): 第 1 轮的 stop 已在 own_writes 登记「停/起未回流」; 本例用**模拟时钟**
+        #   推进 60s、期间并未跑同步, 故登记不会自动逐出(TTL 走真实单调钟)。生产里 sync 每 1.5s
+        #   一轮、状态回流即逐出, 不会拦到 60s 后的这次 stop —— 此处补清登记即等价于那次回流。)
         tor.state = "uploading"
+        mgr.store.own_writes.clear()
         client.calls.clear()
         assert tq.run_due(False, now=now + 60) >= 1, "stop_low_ratio 应到期"
         assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"

@@ -338,16 +338,24 @@ class TorrentStore:
         for h in hashes:
             self.own_writes[h] = now
 
-    def own_write_pending(self, hash: str) -> bool:
-        """deferral 判据(S2): 目标 hash **或其所在组任一成员** ∈ own_writes ⇒ 本轮不出决策
+    def own_write_pending(self, hash: str, group: bool = True) -> bool:
+        """自有写未回流判据(S2 deferral / S3 幂等共用同一容器, 禁双轨)
 
+        `group=True`(默认, deferral 用): 目标 hash **或其所在组任一成员** ∈ own_writes ⇒ 本轮不出决策。
         组维度是必需的 —— 校验类闸门(G6/决策链 1/跳检 G6)读的是「组内是否有活跃下载成员」,
         故同组任一成员刚被自有停/起时, 该组相关判定同样建立在陈旧快照上。
+
+        `group=False`(幂等门用, S3 可选件 A2): 只判**该 hash 自己**是否刚被下发过停/起。
+        幂等只关心同一 hash 的重复下发, 把同组成员的登记也算进来会误伤「组内不同成员各自起停」。
+        两种语义共用同一登记/清理单点(`note_own_write` / 同步逐出 / TTL), 故不存在双轨。
+
         顺带惰性做 TTL 过期清理: 见 _evict_expired_own_writes(不依赖 qB 前进的有界下限)。
         """
         self._evict_expired_own_writes()
         if hash in self.own_writes:
             return True
+        if not group:
+            return False
         key = self.member_to_key.get(hash)
         if key is None:
             return False

@@ -152,7 +152,7 @@
 | `test_traffic_sample.py::test_agg_reseal_merges_late_credit_keeps_full_coverage` | 已封小时被迟到补记重建再封时, 落批末行 = 合流行(cov 回到整小时), day 累计器同持合流行 —— 替换语义会让读侧末行只留残余 | 同上 + `_agg_merge_prev` 改 `return row`(实测红在 `assert 1762 == 3600`) |
 | `test_traffic_sample.py::test_agg_flush_all_isolates_series_error_and_resets` | 逐系列隔离: 单系列封口抛错只告警该系列(节流一次)+ 重置其累计器, 其余系列照常落盘 | 去掉 `_agg_flush_all` 的 try/except(实测红在注入的 `ValueError` 直接上抛) |
 
-## 种子状态 A 系批次守阵 (26-10-13-0540 S1 值层 / S2 deferral, 红验 26-10-13 @工作区)
+## 种子状态 A 系批次守阵 (26-10-13-0540 S1 值层 / S2 deferral / S3 收尾, 红验 26-10-13 @工作区)
 
 | 守阵 | 钉住的结论 | 红验 |
 |---|---|---|
@@ -164,6 +164,13 @@
 | `test_qbmanager.py::test_own_write_defer_gate_targets_group_members` (D-1 判据) | 队列级闸门: 目标 hash 或其组任一成员 ∈ `own_writes` 才让位; 无 hash 全局任务不拦 | 去掉组维度 ⇒ `HC` 断言红 |
 | `test_ops.py::test_skip_check_deferred_on_own_write` (D-2) | 跳检执行路径: 目标或其组刚被自有停/起(快照未回流) ⇒ 让位, 零副作用(WEB 路径不经 task 线, 靠此拦) | 去掉 `skip_check` 入口的 `own_write_pending` 闸门 ⇒ 走完四阶段, `calls == []` 红 |
 | `test_checking.py::test_checking_action_deferred_on_own_write` (D-3) | 决策链入口让位: 目标或其组刚被自有停/起 ⇒ 本轮不出决策(用 skip 非 pending, 避免丢任务) | 去掉 `CheckAction.execute` 入口的 `own_write_pending` 闸门 ⇒ 直接提交 recheck 红 |
+| `test_sync.py::test_no_synthetic_state_write_site` (S1 静态) | 全库无合成 state 写点: 剥注释扫描 `qbapi.py`/`store.py` —— ① `update_torrent_fields` 调用块内无 `state=` ② 无 `.state=` 直接赋值 ③ 无 `setattr(..., "state", ...)` | 还原任一一处合成回写 ⇒ ①或②红 |
+| `test_sync.py::test_value_layer_truth_only_via_sync` (V1 值层) | 停/起动作后快照 state **逐字不变**; 下一轮同步后 == 替身真值(含 `checkingUP` 等非四值枚举) | 残留合成写回 ⇒ 「逐字不变」红 |
+| `test_sync.py::test_state_domain_not_flattened` (V2 值域) | 值域未被压平: 快照可持有 `queued*/forced*/checking*/moving/missingFiles` 且 state_enum 可解析(非 UNKNOWN) | 注入四值压平逻辑 ⇒ 断言红 |
+| `test_grouping.py::test_own_stop_triggers_scan_on_next_sync` (E1 发射) | 自有停种经**下一轮同步回流**触发转移扫描(源无关, 与外暂停对称), 且不重复触发 | 屏蔽发射(谓词加「非自有」过滤) ⇒ 触发轮无 stop 即红 |
+| `test_grouping.py::test_pause_via_qb_webui_and_autoqb_webui_agree` (E2 一致性) | qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为**逐字一致**(都触发缺文件扫描) | 两条路径结果不同 ⇒ 断言红 |
+| `test_ops.py::test_g6_stale_snapshot_window_recovered_by_deferral` (D1 G6 端到端) | 三段式: ①陈旧快照下 G6 放行(**窗口存在**) ②`own_writes` 登记 ⇒ 跳检让位、零副作用 ③回流后 G6 恢复拦截(证明 deferral 是「推迟到新鲜时」而非「放弃保护」) | 去掉 `skip_check` 入口 deferral 闸门 ⇒ ②不再让位(且 G6 因陈旧放行) 红 |
+| `test_actions.py::test_start_stop_idempotent_within_same_tick` (I1 幂等, A2) | 同 tick 二次 stop/start 被 `own_writes` **意图标记**拦下, 且**不写任何假 state 值**(快照逐字不变) | 用假值实现幂等(如回写 `pausedUP`) ⇒ 「逐字不变」红; 去掉幂等门 ⇒ 第二次不 skip 红 |
 
 > A 系两批的语义主线见 [../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html](../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html);
 > 口径漂移(「qB 自带 WebUI 1500ms」→ 服务端 `RefreshInterval` 节流)见 [../systemPatterns/main-loop.md](../systemPatterns/main-loop.md)。

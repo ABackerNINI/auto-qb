@@ -1,8 +1,8 @@
-# 26-10-13-0538-seed-state-writeback — 种子状态双写通道：A 系 S0/S1/S2 已落地（形态 A3）
+# 26-10-13-0538-seed-state-writeback — 种子状态双写通道：A 系 S0/S1/S2/S3 全部落地（形态 A3）
 
 > 摘要: 专题 `seed-state-writeback`。承接报告 26-10-12-2148。先按用户令对比 A 系四形态（裁定：分水岭只在 G4/G6 安全窗，推荐 A3 = A1 删合成回写 + 局部 deferral，可叠 A2 `pending_writes`）与 B 系三支（裁定：实际候选只剩 B′ = 真值回写 + 显式发射，B1/B3 与 26-10-12-2229 的源无关语义冲突）；随后按用户指定立 B2 实施计划 26-10-13-0413。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新一次」→ 回 qB 源码（`D:/Projects/Else/qBittorrent`）**确认成立且更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 值层退化为 no-op，R4 是**默认粒度**而非边界竞态。用户定调 RefreshInterval 保持默认 ⇒ B2 计划置 Superseded；报告抬 26-10-13-0441 修订；另修正两处归因漂移。收尾提交（`caa40a7e`）后**另立 A 系实施计划 26-10-13-0540**（形态 A3）并提交（`3f742233`）。**本轮执行 S0 前置三件**：P1 可达性确认按 **auto-qb 能力面**（非某份配置）判定 **可达 ⇒ 形态定 A3**；P2 `state_changed` 消歧改名；P3 `FakeClient` 四方法真实翻转 state。**随后完成 S1 值层**：删合成回写整段（`_sync_paused_state` + `update_torrent_fields(state=)`），快照语义收敛为「严格 = 最近一次同步的应用结果」，源无关发射天然获得；三条守阵按新契约重写（含一条契约翻面）、4 调用点迁移。全绿（基线切片 `baselines/26-10-13-0554-seed-state-writeback-s0.md`）。S0 落地随本专题入库。**S2 deferral 亦已完成**（见「现在做到哪」）：`own_writes` + TTL + D-1/D-2/D-3 三闸门，收回 G4/G6「陈旧-放行」窗口；S1 副产物「二次触发」已入池（`issues/26-10-13-0626`）。
-> 最后活动: 2026-10-13 06:43
-> 状态: In Progress（S2 deferral 已完成，下一步 S3 收尾）
+> 最后活动: 2026-10-13 07:14
+> 状态: In Progress（S0–S3 四个批次全部完成，计划已转 Done；本轮随本专题入库）
 
 **Refs:** memory-bank/tasks/26-10-13-backend-seed-state-writeback.md
 
@@ -18,7 +18,9 @@
 
 **S2 deferral 已落地**（26-10-13-0643）：新增 `store.own_writes`（hash → 登记时刻，纯内存不落盘；判据**含组维度**：目标或其组任一成员命中即让位）+ `note_own_write`/`own_write_pending` + TTL 兜底 `_OWN_WRITE_TTL=10s`；QbApi 四入口登记；`_apply` 状态变化时逐出（另种子删除 / 热重载两处清理）。三处闸门：**D-1** 队列级 `qbmanager._own_write_defer_gate` → `TaskQueue.run_due(defer_gate=)`（覆盖 task 线全体，命中者重排下一 tick）；**D-2** `ops.skip_check` 执行路径（WEB 路径不经 task 线）；**D-3** `CheckAction.execute` 决策链入口。两处相对计划字面的调整（已在代码注释与计划 §12 写明）：D-3 用 `skip` 而非 `pending`（避免丢任务）；D-2 落执行路径而非 `_skip_gates_detail`（保预检 cls 契约）。有界性双依据：同步逐出 + TTL 兜底。G4/G6「陈旧-放行」窗口**收回**。
 
-**下一步 = S3 收尾**：§8.3 余下守阵（V1/V2 值域枚举、E1/E2 发射时机、I1 幂等）+ 可选件 A2 `pending_writes`（须一次决定与 `own_writes` 合并容器还是分列，防双轨）+ 坑档口径 + 计划状态流转。
+**S3 收尾已落地**（26-10-13-0714）：§8.3 余下七条守阵全部补齐 —— **S1 静态**（剥注释扫描 `qbapi.py`/`store.py` 无合成 state 写点，三条判据）/ **V1 值层**（动作后快照逐字不变 → 下一轮同步落替身真值，含 `checkingUP`）/ **V2 值域**（可持有 `queued*/forced*/checking*/moving/missingFiles`，未被压平）/ **E1 发射**（自有停种经同步回流触发转移扫描，源无关且不重复）/ **E2 一致性**（qB WebUI 暂停 与 auto-qb WebUI 暂停 行为逐字一致）/ **D1 G6 端到端**（陈旧快照窗口存在 → deferral 让位 → 回流后 G6 保护恢复，证明 deferral 是「推迟到新鲜时」而非「放弃保护」）/ **I1 幂等**（同 tick 二次 stop/start 被拦下且不写任何假 state 值）。**可选件 A2 采纳，且「一次决定」的答案是「不新增容器」**：幂等门复用 `own_writes`（新增 `group=False` 自身维度），与 deferral 共用登记/清理单点 ⇒ 从根上无双轨；并确立**方向自洽性**（快照不动 ⇒ 反向操作由传统 `is_stopped` 判据先拦，幂等门只管同向重复）⇒ 判据无需方向字段。
+
+**下一步 = 提交本轮**（需用户显式指令）。计划 26-10-13-0540 状态已流转 Open → Done。
 
 **S1 副产物已入池**：`issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html`（Open）—— 自有整组停种经下一轮同步回流，会再命中 `_handle_state_transitions` 的「上传转暂停」谓词（`grouping_mod.py:206`），追加一次缺文件扫描+停种。幂等、一轮收敛，属无谓重复；待拍板「接受 / 跨轮去重」，跨轮去重容器与 S2 `own_writes` 有合并空间。
 
@@ -32,7 +34,8 @@
 |---|---|---|
 | `reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html` | Done（doc-updated 26-10-13-0441） | 双写通道取证 + A/B 方案裁定；0441 修订上修 R4、修正 B/B′ 行 |
 | `plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html` | **Superseded** | B2（B′）实施计划；值层前提被 qB 服务端节流证否；**发射层结论仍有效**，可另件叠加 |
-| `plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html` | **Open** | A 系实施计划（形态 A3）；S0/S1/S2 已完成，待 S3 |
+| `plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html` | **Done** | A 系实施计划（形态 A3）；S0/S1/S2/S3 全部完成 |
+| `testing/baselines/26-10-13-0714-seed-state-writeback-s3.md` | 基线切片 | S3 收尾落地后的全量基线（数字见 `kb.baseline`，不手抄） |
 | `testing/baselines/26-10-13-0554-seed-state-writeback-s0.md` | 基线切片 | S0 落地后的全量基线（数字见 `kb.baseline`，不手抄） |
 | `testing/baselines/26-10-13-0620-seed-state-writeback-s1.md` | 基线切片 | S1 值层落地后的全量基线（数字见 `kb.baseline`，不手抄） |
 | `testing/baselines/26-10-13-0643-seed-state-writeback-s2.md` | 基线切片 | S2 deferral 落地后的全量基线（数字见 `kb.baseline`，不手抄） |

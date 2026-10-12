@@ -8,6 +8,7 @@
 - test_start_stop_idempotent: 开始/停止动作幂等(重复执行不报错)
 - test_stop_preserves_completeness: 暂停/恢复**不再**合成回写 state(A 系 26-10-13-0540 S1)——动作后快照不变, 完成位不可能被写坏(该类 bug 结构性消失)
 - test_pause_resume_no_same_tick_writeback: 契约变更(A 系 S1, 原 26-10-06-0028 A-04 守阵方向翻面)——QbApi pause/resume 不再写后同步 store 快照, 同 tick 读到旧值
+- test_start_stop_idempotent_within_same_tick: 同 tick 二次 stop/start 被 own_writes 意图标记拦下(A2), 且不写任何假 state 值
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
@@ -172,6 +173,10 @@ def test_start_stop_idempotent():
         tor.state = "pausedUP"
         assert StopAction("").execute(ctx).is_skipped
         tor.state = "stalledUP"
+        # !A 系 S3(A2): 上面的 start 已登记 own_writes, 本例手工把 state 改成"运行中"等价于
+        #   **已回流**的形态, 故同步清掉登记再测 stop; 生产里「同 tick 内 start 后再 stop」由
+        #   传统判据拦下(快照不动 ⇒ is_stopped 仍为真 ⇒ skip「已停止」), 轮不到幂等门。
+        mgr.store.own_writes.clear()
         assert StopAction("").execute(ctx).is_ok
         assert ("stop", None) in client.calls
 
@@ -190,21 +195,22 @@ def test_stop_preserves_completeness():
         client = FakeClient()
 
         # 未完成且下载中: 停不改写快照(此前会被合成写成 pausedDL)
-        tor = FakeTorrent(state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
+        # !各标的取不同 hash: A 系 S3(A2)起动作会登记 own_writes, 同 hash 会互相触发幂等门
+        tor = FakeTorrent(hash="HA", state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
         ctx = make_ctx(mgr, tor, client)
         assert StopAction("").execute(ctx).is_ok
         assert tor.state == "downloading", f"动作不再合成 state(A 系): {tor.state}"
         assert tor.state_enum.is_complete is False, "完成位不可能被写坏(无回写)"
 
         # 未完成且已暂停: 起不改写快照(此前会被合成写成 stalledDL)
-        tor2 = FakeTorrent(state="pausedDL", downloaded=10 * 1024**2, total_size=100 * 1024**2)
+        tor2 = FakeTorrent(hash="HB", state="pausedDL", downloaded=10 * 1024**2, total_size=100 * 1024**2)
         ctx2 = make_ctx(mgr, tor2, client)
         assert StartAction("").execute(ctx2).is_ok
         assert tor2.state == "pausedDL", f"动作不再合成 state(A 系): {tor2.state}"
         assert tor2.state_enum.is_complete is False
 
         # 已完成做种: 同理, 动作不改写快照
-        tor3 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
+        tor3 = FakeTorrent(hash="HC", state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
         ctx3 = make_ctx(mgr, tor3, client)
         assert StopAction("").execute(ctx3).is_ok
         assert tor3.state == "uploading", tor3.state
@@ -243,6 +249,42 @@ def test_pause_resume_no_same_tick_writeback():
 
         # 透传语义不变: 客户端侧仍收到 pause/resume 调用(替身真值亦已翻转, 见 S0-P3)
         assert ("pause", tor.hash) in client.calls and ("resume", tor.hash) in client.calls
+
+
+def test_start_stop_idempotent_within_same_tick():
+    """守阵(A 系 S3 I1): 同 tick 二次 stop/start 被 own_writes 意图标记拦下, 且不写任何假 state 值
+
+    A 系删回写后同 tick 的 is_stopped 仍是旧值 ⇒ 第二次同类动作会重发一次请求(qB 侧幂等、无功能
+    错误, 只是重复 HTTP 与日志噪声)。可选件 A2 用**意图标记**补回幂等: 只登记「刚发过停/起」,
+    不写任何假 state 值(那正是 R1–R6 的来源)。
+    红验: 用假值实现幂等(如回写 pausedUP) -> 「快照逐字不变」红; 去掉幂等门 -> 第二次不再 skip 红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        # 快照记录与客户端真值**分离**: 替身翻真值而快照不动, 才是 A 系同 tick 的真实形态
+        rec = FakeTorrent(hash="HA", state="stalledUP", progress=1.0)
+        client.torrents["HA"] = FakeTorrent(hash="HA", state="stalledUP", progress=1.0)
+        ctx = make_ctx(mgr, rec, client)
+
+        assert StopAction("").execute(ctx).is_ok, "首次 stop 应执行"
+        assert client.calls.count(("stop", None)) == 1
+        assert rec.state == "stalledUP", "动作后快照逐字不变(不写假 state 值)"
+
+        r2 = StopAction("").execute(ctx)
+        assert r2.is_skipped, f"同 tick 二次 stop 应被意图标记拦下: {r2}"
+        assert client.calls.count(("stop", None)) == 1, "不应重复下发"
+        assert rec.state == "stalledUP", "让位路径同样不写假值"
+
+        # 登记清除(模拟回流)后恢复执行: 证明是 deferral 而非永久拒绝
+        mgr.store.own_writes.clear()
+        rec.state = "pausedUP"  # 回流后快照落真值
+        assert StartAction("").execute(ctx).is_ok, "回流后 start 应执行"
+        assert client.calls.count(("start", None)) == 1
+        r3 = StartAction("").execute(ctx)
+        assert r3.is_skipped, f"同 tick 二次 start 应被拦下: {r3}"
+        assert client.calls.count(("start", None)) == 1, "不应重复下发"
 
 
 def test_move_to():

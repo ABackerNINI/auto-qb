@@ -25,6 +25,9 @@
 - test_own_writes_ttl_bounded: own_writes 永不逐出时 TTL 兜底丢弃(判据恢复 False, 防饿死)(A 系 S2 D2)
 - test_own_writes_group_judgement: deferral 判据含组维度(同组任一成员命中即让位)(A 系 S2)
 - test_own_writes_not_persisted: own_writes 纯内存不落盘(state.json 顶层无相关键)(A 系 S2 静态)
+- test_no_synthetic_state_write_site: 静态(A 系 S3 S1): qbapi.py/store.py 无任何合成 state 写点(剥注释扫描)
+- test_value_layer_truth_only_via_sync: 值层(A 系 S3 V1): 动作后快照逐字不变, 下一轮同步落替身真值(含非四值枚举)
+- test_state_domain_not_flattened: 值域(A 系 S3 V2): 快照可持有 queued*/forced*/checking*/moving/missingFiles(未被压平)
 - test_store_apply_sync_full_update_first_round: 首轮全量 -> added 全部 + need_validate + 样本
 - test_validate_sample_includes_hash_for_sync_response: sync 值内不含 hash -> 样本需补齐(真机 bug 回归)
 - test_store_apply_sync_delta_only_changed: 增量轮只应用变化记录(其余对象身份保留)
@@ -54,11 +57,15 @@
 - test_store_apply_sync_server_state_after_fallback_merges_from_empty: 降级置 None 后恢复 sync -> 从零合并(旧键不残留)
 - test_apply_delta_quantizes_eta_time_active_last_activity: 新量化字段(分钟桶); 负数哨兵不量化
 """
+import io
 import logging
 import os
+import re
 import tempfile
 import time
+import tokenize
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -528,6 +535,87 @@ def test_own_writes_not_persisted():
         mgr.store.note_own_write("H1")
         assert mgr.store.own_writes, "内存态已登记"
         assert "own_writes" not in mgr.state, "纯内存态不得进 state.json 落盘载荷"
+
+
+def _code_without_comments(rel_path: str) -> str:
+    """读源文件并剥掉注释(静态守阵用: 只看代码, 不受「说明已删除」的注释干扰)"""
+    src = (Path(__file__).resolve().parents[1] / rel_path).read_text(encoding="utf-8")
+    return "".join(
+        tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline) if tok.type != tokenize.COMMENT
+    )
+
+
+def test_no_synthetic_state_write_site():
+    """守阵(A 系 S3 S1 静态): qbapi.py / store.py 无任何合成 state 写点
+
+    三条判据(剥注释后扫描, 故「说明 _sync_paused_state 已删」的注释不算命中):
+      ① update_torrent_fields 调用块内不得出现 state= 关键字实参(该形参已删);
+      ② 不得出现 `.state =` 直接赋值(合成回写必然是给记录 state 赋值);
+      ③ 不得出现 setattr(..., "state", ...)(等价的间接赋值)。
+    红验: 还原任一一处合成回写 -> ①或②红。
+    """
+    for rel in ("src/auto_qb/core/qbapi.py", "src/auto_qb/torrents/store.py"):
+        code = _code_without_comments(rel)
+        for m in re.finditer(r"update_torrent_fields\s*\(", code):
+            i, depth = m.end() - 1, 0
+            while i < len(code):
+                if code[i] == "(":
+                    depth += 1
+                elif code[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                i += 1
+            block = code[m.start():i + 1]
+            assert not re.search(r"\bstate\s*=(?!=)", block), f"{rel}: update_torrent_fields 仍有 state= 实参"
+        assert not re.search(r"\.\s*state\s*=(?!=)", code), f"{rel}: 仍有 .state= 直接赋值"
+        assert not re.search(r"setattr\s*\([^)]*[\"']state[\"']", code), f"{rel}: 仍有 setattr 写 state"
+
+
+def test_value_layer_truth_only_via_sync():
+    """守阵(A 系 S3 V1 值层): 停/起动作后快照 state 逐字不变; 下一轮同步后 == 替身真值(含非四值枚举)
+
+    红验: 残留任一一处合成写回(如还原 _sync_paused_state) -> 「动作后快照逐字不变」红。
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledDL", progress=0.5)
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+    before = store.by_hash["H1"].state
+    assert before == "stalledDL", "前置: 同步落入真值"
+
+    api.torrents_stop("H1")
+    assert client.torrents["H1"].state == "pausedDL", "替身侧真值已翻(模拟 qB 缓存前进)"
+    assert store.by_hash["H1"].state == before, "动作后快照逐字不变(无合成回写)"
+    assert store.by_hash["H1"].state_enum.is_stopped is False, "同 tick 读到的是旧值(不新鲜, 已知代价)"
+
+    store.apply_sync(api)
+    assert store.by_hash["H1"].state == "pausedDL", "下一轮同步落真值"
+    assert store.by_hash["H1"].state_enum.is_stopped is True
+
+    # 真值为非四值枚举时同样原样落(合成回写只写得出四值, 会压平)
+    client.torrents["H1"].state = "checkingUP"
+    store.apply_sync(api)
+    assert store.by_hash["H1"].state == "checkingUP", "非四值真值应原样落"
+    assert store.by_hash["H1"].state_enum.is_checking is True
+
+
+def test_state_domain_not_flattened():
+    """守阵(A 系 S3 V2 值域): 快照可持有 queued*/forced*/checking*/moving/missingFiles
+
+    原合成回写只能写出 pausedUP/pausedDL/stalledUP/stalledDL 四值 —— 四值之外的 qB 细分态
+    一旦被回写覆盖即永久丢失(R1 值域压平)。A 系下 state 只由同步驱动 ⇒ 全值域可持有。
+    红验: 注入四值压平逻辑(把非四值 state 归到最接近的四值) -> 断言红。
+    """
+    for s in ("queuedUP", "queuedDL", "forcedUP", "forcedDL", "checkingDL", "moving", "missingFiles"):
+        client = FakeClient()
+        client.torrents["H1"] = FakeTorrent(hash="H1", state=s)
+        store = TorrentStore(client)
+        store.apply_sync(_api(client, store))
+        rec = store.by_hash["H1"]
+        assert rec.state == s, f"真值应原样持有: {rec.state} != {s}"
+        assert rec.state_enum is not TorrentState.UNKNOWN, f"{s} 应可解析(未被压平为未知态)"
 
 
 # ---------- 降级与异常 ----------

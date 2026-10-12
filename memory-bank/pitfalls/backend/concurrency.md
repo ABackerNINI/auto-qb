@@ -75,6 +75,24 @@
   只留 ① 等于把「任务不饿死」押在「qB 一定会前进」上, 那是隐藏假设。
 - **登记点**: QbApi 四入口 `start/stop/pause/resume` 在 raw client 调用**成功后** `note_own_write`;
   纯内存态(同 `state_snapshot`), **不落盘**, 热重载 `reset_runtime` 清空。
+- **同一容器供两种语义用, 禁双轨**: `own_write_pending(hash, group=True)` 走组维度(deferral);
+  `group=False` 只判自身(同 tick 幂等门, 见下条)。两者共用同一登记/清理单点, 不另起 `pending_writes`。
+- **方向自洽性**(故判据无需带方向): A 系下快照不动 ⇒ 反向操作由**传统判据**先拦 ——
+  `start(pausedUP)` 后同 tick `stop`: 快照仍 `pausedUP` ⇒ `is_stopped` 为真 ⇒ skip「已停止」;
+  `stop(stalledUP)` 后同 tick `start`: 快照仍 `stalledUP` ⇒ `is_stopped` 为假 ⇒ skip「已开始」。
+  落到幂等门的只有**同向重复**(stop 后再 stop / start 后再 start), 正是意图标记该管的事。
+
+### 停/起动作的同 tick 幂等靠「意图标记」, 不靠回写假值
+
+- **触发**: 增删/修改任何触发 `torrents_start/stop/pause/resume` 的动作或命令路径。
+- **判别**: A 系删合成回写后, 同 tick 内 `is_stopped` 仍是旧值 ⇒ 第二次同类动作会重发一次请求。
+  qB 侧幂等、无功能错误, 只是重复 HTTP 与日志噪声 —— 但**修法必须是意图标记, 不能是回写假 state 值**
+  (后者正是 R1–R6 值失真的来源: 假值会压平值域、伪造完成位、吞掉真实变化)。
+- **处置**: `rules/actions/basic.py` 的 `StartAction`/`StopAction` 在 dry_run 之外先查
+  `store.own_write_pending(ctx.hash, group=False)` ⇒ 命中则 skip(文案同 ops 侧「状态尚未回流」)。
+- **已知边界**: WEB 命令路径(`webui/commands.py`)直调 `api.torrents_start/stop` 不经动作,
+  故用户手动连点仍会重复下发(无害); 需要时把幂等门上移到 QbApi 四入口 —— 但那会让「写实意图」
+  与「让位」耦合, 属独立设计决策, 不在本批次范围。
 
 ### 视图组装里**绝对不能**发 qB API (硬约束, 不是优化)
 

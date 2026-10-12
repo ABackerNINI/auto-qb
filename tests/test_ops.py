@@ -37,6 +37,7 @@
 - test_skip_gates_rejects_group_downloading: T4 组内有活跃下载成员拒, 文案含「组内/下载」
 - test_skip_gates_allows_group_all_paused: T5 组内全暂停/未归组放行(放行面锁)
 - test_skip_check_rejects_inflight_recheck: T6 同 hash 校验在途拒, 文案含「校验中」, 零副作用
+- test_g6_stale_snapshot_window_recovered_by_deferral: G6 端到端(A 系 S3 D1): 陈旧快照窗口存在 + deferral 拦下 + 回流后保护恢复
 - test_skip_check_filelist_precondition_blocks: T7 文件缺失/路径不可判定拒(带 check_filelist 描述与 fs.path_map 出路), 未导出未删除
 - test_skip_gates_rejects_group_checking_inflight: T16 组内其它成员校验在途(G7, case 2)两半各一例: 队列登记 / 快照 is_checking(用户手动 recheck, G5 队列视野外); 在途清空后放行; 零副作用 (S1b-2)
 - test_skip_gates_rejects_group_check_failed: T17 组内成员校验失败推断(G8, case 1): 正样本文案带成员+出路; 负样本三例(映射不一致 / 记录指向已完成成员自愈不参与 / 非当日); 只读自愈不 pop; 零副作用 (S1b-2)
@@ -927,6 +928,47 @@ def test_skip_check_deferred_on_own_write():
     mgr.store.own_writes.clear()
     r3 = mgr.ctx.ops.skip_check("HA", source="web")
     assert not (r3.is_skipped and "稍后" in r3.message), f"登记清除后不应再让位: {r3}"
+
+
+def test_g6_stale_snapshot_window_recovered_by_deferral():
+    """守阵(A 系 S3 D1): G6「起下载方 D + 跳检同组成员 C」—— 陈旧快照窗口 + deferral 收回
+
+    P1 可达性 witness(W1/W2/W3)的机检。三段式:
+      ① **窗口存在**: A1 下 D 自有 resume 后快照仍停 pausedDL ⇒ group_has_downloading 读不到
+         下载方(pausedDL 是 is_stopped) ⇒ G6 放行 ⇒ C 被删重加而 D 正写同一物理文件 = 脏数据洗白;
+      ② **deferral 拦下**: own_writes 登记 D(同组) ⇒ skip_check(C) 让位, 零副作用;
+      ③ **保护恢复**: 快照回流落真值 stalledDL ⇒ G6 重新拦下 —— 证明 deferral 是「推迟到新鲜时」
+         而非「放弃保护」。
+    红验: 去掉 skip_check 入口的 deferral 闸门 -> ②不再让位(且 G6 因陈旧快照放行), 断言红。
+    """
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    # 快照侧(陈旧, A1 下的形态: D 仍显示暂停) 与 客户端真值侧(D 已在下载) 分离
+    d_snap = FakeTorrent(hash="HD", state="pausedDL", progress=0.3)
+    c_snap = FakeTorrent(hash="HC", state="pausedDL", progress=0.0)
+    seed_store(mgr, [d_snap, c_snap])
+    client.torrents["HD"] = FakeTorrent(hash="HD", state="stalledDL", progress=0.3)
+    client.torrents["HC"] = FakeTorrent(hash="HC", state="pausedDL", progress=0.0)
+    wire_group(mgr, "K", "HD", "HC")
+
+    # ① 窗口存在
+    assert mgr.store.group_has_downloading("HC") is False, "陈旧快照(pausedDL=is_stopped)读不到下载方"
+    assert not any(g.gate == "G6" for g in mgr.ctx.ops._skip_gates_detail("HC", c_snap)), "陈旧快照下 G6 放行(窗口)"
+
+    # ② 自有 resume D -> 登记 own_writes -> C 的跳检让位(零副作用)
+    mgr.api.torrents_resume(["HD"])
+    client.calls.clear()  # resume 自身是预期调用, 只断言其后零副作用
+    assert mgr.store.own_write_pending("HC") is True, "同组成员登记应让 C 命中判据"
+    r = mgr.ctx.ops.skip_check("HC", source="web")
+    assert r.is_skipped and "稍后" in r.message, f"G6 场景应让位: {r}"
+    assert client.calls == [], f"让位零副作用(未删未加): {client.calls}"
+
+    # ③ 回流后保护恢复
+    mgr.store.own_writes.clear()
+    mgr.store.by_hash["HD"].state = "stalledDL"  # 同步落真值
+    assert mgr.store.group_has_downloading("HC") is True, "回流后 G6 判据恢复"
+    assert any(g.gate == "G6" for g in mgr.ctx.ops._skip_gates_detail("HC", c_snap)), "回流后 G6 应拦下"
 
 
 def test_skip_check_rejects_inflight_recheck():

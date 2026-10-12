@@ -4,6 +4,8 @@
 - test_grouping_size_mismatch_pauses_group: 新增种子归组时文件大小不一致 -> 整组暂停
 - test_grouping_missing_files_pauses_group: 上传转暂停且文件丢失 -> 整组暂停 + MISSING
 - test_grouping_state_change_triggers_check: 仅上传转暂停触发缺文件检查
+- test_own_stop_triggers_scan_on_next_sync (A 系 S3 E1): 自有停种经下一轮同步回流触发转移扫描(源无关), 且不重复触发
+- test_pause_via_qb_webui_and_autoqb_webui_agree (A 系 S3 E2): qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为一致
 - test_grouping_deleted_torrent_triggers_check: 种子删除触发组内联动
 - test_grouping_no_global_task: 无分组配置不创建全局任务
 - test_grouping_replaces_per_torrent_missing_files: 归组替代逐种子缺文件检查
@@ -208,6 +210,80 @@ def test_grouping_state_change_triggers_check():
         client.calls.clear()
         mgr._refresh_torrents()
         assert _non_tag_calls(client) == [], f"状态不变不应重复触发: {client.calls}"
+
+
+def _scan_scenario(state_file):
+    """同组两成员(H1/H2)均 stalledUP 的场景: 首轮归组 + 建立状态快照, 调用记录已清空"""
+    cfg = _group_cfg(state_file)
+    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+    client = FakeClient()
+    mgr.client = client  # property setter 会把 api 重绑到该 client(生产路径同构)
+
+    t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+    t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+    client.torrents["H1"] = t1
+    client.torrents["H2"] = t2
+    client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+    client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+
+    mgr._refresh_torrents()  # 首轮: 归组 + 建立状态快照(上传中, 不触发)
+    assert _non_tag_calls(client) == [], f"首轮不应触发: {client.calls}"
+    client.calls.clear()
+    return mgr, client, t1, t2
+
+
+def test_own_stop_triggers_scan_on_next_sync():
+    """守阵(A 系 S3 E1 发射): 自有停种经下一轮同步回流触发转移扫描(源无关), 且不重复触发
+
+    A 系下自有动作不再写快照, 故自有停种的结果与**外部变更完全对称** —— 都在「qB 缓存前进
+    后的那一轮同步」才被转移检测看见。这正是 26-10-12-2229 裁定的源无关语义。
+    红验: 屏蔽发射(如把 state_changed 收集去掉/谓词加 `not self_caused`) -> 触发轮无 stop 即红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, t1, t2 = _scan_scenario(os.path.join(td, "state.json"))
+
+        # 自有停种(经 QbApi, 与 WEB 命令/规则动作同路径): 替身翻真值, 快照本轮不动(值层不回写)
+        mgr.api.torrents_stop(["H1"])
+        assert client.torrents["H1"].state == "pausedUP", "替身侧真值已翻"
+        assert mgr.store.by_hash["H1"].state == "stalledUP", "同 tick 快照不动(A 系值层)"
+        client.calls.clear()
+
+        mgr._refresh_torrents()  # 同步应用 -> state_changed 含 H1 -> 谓词命中 -> 触发扫描
+        assert client.calls.count(("stop", None)) >= 1, f"自有停种应在回流那一轮触发: {client.calls}"
+        assert "MISSING" in client.tags, f"应打缺文件标签: {client.tags}"
+
+        # 收敛轮(整组停种经回流再命中一次, 幂等) -> 之后不再重复触发
+        client.calls.clear()
+        mgr._refresh_torrents()
+        client.calls.clear()
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"状态不变不应重复触发: {client.calls}"
+
+
+def test_pause_via_qb_webui_and_autoqb_webui_agree():
+    """守阵(A 系 S3 E2 一致性): qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为一致(都触发扫描)
+
+    合成回写时代两条路径不对称(自家写快照 → 自家停种被转移检测吞掉; 外部暂停则被看见)。
+    A 系下 state 只由同步驱动 ⇒ 二者必须完全一致。
+    红验: 任一条路径不触发 / 触发结果不同 -> 断言红。
+    """
+    def trigger_result(state_file, own: bool):
+        mgr, client, t1, t2 = _scan_scenario(state_file)
+        if own:
+            mgr.api.torrents_pause(["H1"])  # auto-qb WebUI/命令路径(经 QbApi)
+        else:
+            t1.state = "pausedUP"  # qB 自身 WebUI 暂停(外部变更)
+        client.calls.clear()
+        mgr._refresh_torrents()
+        return client.calls.count(("stop", None)), sorted(client.tags)
+
+    with tempfile.TemporaryDirectory() as td:
+        external = trigger_result(os.path.join(td, "ext.json"), own=False)
+    with tempfile.TemporaryDirectory() as td:
+        own = trigger_result(os.path.join(td, "own.json"), own=True)
+
+    assert external[0] >= 1 and own[0] >= 1, f"两条路径都应触发扫描: 外部={external} 自有={own}"
+    assert external == own, f"两条路径行为应完全一致: 外部暂停={external} vs auto-qb 暂停={own}"
 
 
 def test_grouping_deleted_torrent_triggers_check():

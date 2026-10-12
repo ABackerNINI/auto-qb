@@ -8,6 +8,14 @@ from ..registry import register_action
 
 logger = logging.getLogger(__name__)
 
+# 同 tick 幂等门的让位文案(S3 可选件 A2): 与 ops 侧 deferral 文案同义(「状态尚未回流」), 措辞保持一致
+_OWN_WRITE_PENDING_MSG = "本程序刚下发过停/起操作, 状态尚未从 qB 回流(避免重复下发); 请稍后重试"
+#
+# 方向自洽性(故判据无需带方向): A 系下快照不动 ⇒ 反向操作由**传统判据**先拦 ——
+#   start(pausedUP) 后同 tick stop: 快照仍 pausedUP ⇒ is_stopped 为真 ⇒ skip「已停止」;
+#   stop(stalledUP)  后同 tick start: 快照仍 stalledUP ⇒ is_stopped 为假 ⇒ skip「已开始」。
+# 落到本幂等门的只有**同向重复**(stop 后再 stop / start 后再 start), 正是意图标记该管的事。
+
 
 @register_action
 class AddTagsAction(BaseAction):
@@ -113,6 +121,12 @@ class StartAction(BaseAction):
         if not ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("已开始")
         if not ctx.dry_run:
+            # !A 系 26-10-13-0540 S3(可选件 A2): 停/起不再回写快照 ⇒ 同 tick 内 is_stopped 仍是旧值,
+            #   第二次 start 会重发一次请求(qB 侧幂等、无功能错误, 只是重复 HTTP 与日志噪声)。
+            #   用 own_writes 的**意图标记**补回幂等(只带意图, 不写任何假 state 值 —— 那正是 R1–R6
+            #   的来源)。判据取 group=False: 幂等只关心本 hash, 同组成员各自起停不应互相误伤。
+            if ctx.manager is not None and ctx.manager.store.own_write_pending(ctx.hash, group=False):
+                return ActionResult.skip(_OWN_WRITE_PENDING_MSG)
             ctx.api.torrents_start(torrent_hashes=ctx.hash)
         return ActionResult.ok("开始")
 
@@ -126,6 +140,9 @@ class StopAction(BaseAction):
         if ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("已停止")
         if not ctx.dry_run:
+            # 同 tick 幂等门(与 StartAction 对称, 见其注释; 判据同为 own_writes 意图标记)
+            if ctx.manager is not None and ctx.manager.store.own_write_pending(ctx.hash, group=False):
+                return ActionResult.skip(_OWN_WRITE_PENDING_MSG)
             ctx.api.torrents_stop(torrent_hashes=ctx.hash)
         return ActionResult.ok("暂停")
 

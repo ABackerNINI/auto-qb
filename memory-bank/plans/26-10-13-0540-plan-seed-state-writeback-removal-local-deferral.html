@@ -6,9 +6,9 @@
 <title>种子状态双写通道重构 · A 系实施计划 — 删合成回写 + 局部 deferral</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="seed-state-writeback">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-13-0540">
-<meta name="doc-updated" content="26-10-13-0643">
+<meta name="doc-updated" content="26-10-13-0714">
 <meta name="doc-refs" content="memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/tasks/26-10-13-backend-seed-state-writeback.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html">
 <style>
   :root {
@@ -85,7 +85,7 @@
   <p class="lede">拆掉「照快照推一个合成值写进快照」这条第二回写通道，让快照严格等于最近一次 qB 同步的应用结果；只对会因陈旧状态导致误放行的校验类决策做局部延迟，收回安全窗口。</p>
   <div class="metagrid">
     <div class="it"><div class="k">编号</div><div class="v">26-10-13-0540</div></div>
-    <div class="it"><div class="k">状态</div><div class="v">Open（S0/S1/S2 已完成，待 S3 收尾）</div></div>
+    <div class="it"><div class="k">状态</div><div class="v">Done（S0/S1/S2/S3 四批次全部完成）</div></div>
     <div class="it"><div class="k">依据</div><div class="v">report 26-10-12-2148（0441 修订版）</div></div>
     <div class="it"><div class="k">形态</div><div class="v">A3 = A1 删回写 + 局部 deferral（S0-P1 已定）</div></div>
     <div class="it"><div class="k">前置</div><div class="v">P1 可达性确认 → <b>可达，取 A3</b>（按能力面判定，26-10-13-0602 订正）</div></div>
@@ -350,6 +350,13 @@
 
 <h2 id="s12"><span class="n">12</span>变更记录</h2>
 <ul>
+  <li><b>26-10-13-0714</b> — <b>S3 收尾完成</b>（本计划 <code>doc-status</code> 转 <b>Done</b>；§8.3 九条守阵至此全覆盖）。
+    <br>① <b>守阵补齐七条</b>：<b>S1 静态</b>（<code>tokenize</code> 剥注释后扫描 <code>qbapi.py</code>/<code>store.py</code>，三条判据：<code>update_torrent_fields</code> 调用块内无 <code>state=</code> / 无 <code>.state=</code> 直接赋值 / 无 <code>setattr(..., "state", ...)</code>）· <b>V1 值层</b>（动作后快照逐字不变 → 下一轮同步落替身真值，含 <code>checkingUP</code>）· <b>V2 值域</b>（可持有 <code>queued*/forced*/checking*/moving/missingFiles</code>，未被压平）· <b>E1 发射</b>（自有停种经同步回流触发转移扫描，源无关且不重复）· <b>E2 一致性</b>（qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为逐字一致）· <b>D1 G6 端到端</b>（陈旧快照下 G6 放行 = <b>窗口存在</b> → <code>own_writes</code> 登记 ⇒ 让位零副作用 → 回流后 G6 恢复拦截，证明 deferral 是「<b>推迟到新鲜时</b>」而非「放弃保护」）· <b>I1 幂等</b>。
+    <br>② <b>可选件 A2 采纳</b>，且「一次决定是否合并容器」的答案是 <b>不新增容器</b>：幂等门直接复用 <code>own_writes</code>（新增 <code>own_write_pending(hash, group=False)</code> 取自身维度），与 deferral 共用同一登记/清理单点 ⇒ <b>从根上不存在双轨</b>，不引入 <code>pending_writes</code>。
+    <br>③ <b>方向自洽性</b>（故判据无需带方向字段，已写进 <code>basic.py</code> 注释）：A 系下快照不动 ⇒ 反向操作由<b>传统判据</b>先拦（<code>start(pausedUP)</code> 后同 tick <code>stop</code> 读到 <code>is_stopped</code> 为真 ⇒ skip「已停止」；<code>stop(stalledUP)</code> 后同 tick <code>start</code> 读到 <code>is_stopped</code> 为假 ⇒ skip「已开始」）⇒ 落到幂等门的只有<b>同向重复</b>，正是意图标记该管的事。
+    <br>④ <b>两处既有用例适配</b>属新语义下的真实节奏、非掩盖：<code>test_start_stop_idempotent</code>（手工改 state 等价「已回流」⇒ 补清登记）、<code>test_stop_preserves_completeness</code>（三标的改显式不同 hash，避免 A2 登记互相污染）、<code>test_rule_interval</code>（该例用模拟时钟推进 60s 且期间不跑同步；生产里 sync 每 1.5s 必逐出 ⇒ 补清登记等价那次回流）。
+    <br>⑤ <b>已知边界</b>：WEB 命令路径（<code>webui/commands.py</code>）直调 <code>api.torrents_start/stop</code> 不经动作 ⇒ 用户手动连点仍会重复下发（qB 幂等、无害）；需要时把幂等门上移到 QbApi 四入口属独立设计决策，不在本批次。
+    <br>文档：坑档 <code>concurrency</code> 补「同一容器供两种语义用、禁双轨」与「幂等靠意图标记、不靠回写假值」两条；<code>testing/guards.md</code> 补 7 行。全绿（基线切片 <code>baselines/26-10-13-0714-seed-state-writeback-s3.md</code>，3191 passed / TOTAL 99%）。</li>
   <li><b>26-10-13-0643</b> — <b>S2 deferral 完成</b>（A3 完整形态，G4/G6 窗口收回）。新增 <code>TorrentStore.own_writes</code>（hash → 登记时刻，纯内存不落盘）+ <code>note_own_write</code>/<code>own_write_pending</code>（判据含 <b>组维度</b>：目标 hash 或其组任一成员命中即让位）+ TTL 兜底 <code>_OWN_WRITE_TTL=10s</code>；QbApi 四入口 <code>start/stop/pause/resume</code> 在 raw client 调用成功后登记；逐出单点 = <code>_apply</code> 应用到该 hash 新 <code>state</code> 时（另种子删除 / 热重载两处清理）。三处闸门：<b>D-1</b> 队列级 <code>qbmanager._own_write_defer_gate</code> → <code>TaskQueue.run_due(defer_gate=)</code>（命中者以 <code>next_run=now</code> 重排下一 tick，覆盖 task 线全体消费） / <b>D-2</b> <code>ops.skip_check</code> 执行路径（WEB 路径不经 task 线） / <b>D-3</b> <code>CheckAction.execute</code> 决策链入口（事件即时分派等非队列路径）。有界性双依据：同步逐出（依赖 qB 前进）+ TTL 兜底（不依赖外部条件）。
     <br><b>两处相对计划字面的调整</b>（已在代码注释写明）：① <b>D-3 用 <code>skip</code> 而非 <code>pending</code></b> —— <code>pending</code> 需轮询子任务恢复 origin，本闸无此驱动会丢任务；task 线的「下一 tick 重排」由 D-1 承担，D-3 只补拦非队列路径。② <b>D-2 落在 <code>skip_check</code> 执行路径而非 <code>_skip_gates_detail</code></b> —— 后者同时服务只读预检 <code>skip_check_precheck</code>，其 cls 契约（blocked/force）不引入第四类；执行路径拦下即可。
     <br>守阵（<b>S2 deferral 专属</b>，登记见 <code>testing/guards.md</code>「种子状态 A 系批次」）：<code>test_sync.py</code> 逐出 / TTL / 组维度 / 不落盘四条 + <code>test_taskqueue.py</code> D-1 机制 + <code>test_qbmanager.py</code> D-1 判据 + <code>test_ops.py</code> D-2 + <code>test_checking.py</code> D-3；既有组串行用例补「同步回流逐出」一步。文档：坑档 <code>concurrency</code> 新增「deferral 纪律」条目。全绿（基线切片 <code>baselines/26-10-13-0643-seed-state-writeback-s2.md</code>，3184 passed / TOTAL 99%）。<b>§8.3 余下守阵（V1/V2 值域 / E1/E2 发射 / I1 幂等）与可选件 A2 归 S3</b>。</li>
@@ -360,7 +367,7 @@
 </ul>
 
 <div class="foot">
-  auto-qb-clone3 · memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html · doc-type=plan · doc-topic=seed-state-writeback · doc-status=Open · doc-added=26-10-13-0540 · doc-updated=26-10-13-0554 · 依据 report 26-10-12-2148（0441 修订）· 行号基准 caa40a7e（S0 仅改 qbmanager 变量名与测试替身，行号不受影响）
+  auto-qb-clone3 · memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html · doc-type=plan · doc-topic=seed-state-writeback · doc-status=Done · doc-added=26-10-13-0540 · doc-updated=26-10-13-0714 · 依据 report 26-10-12-2148（0441 修订）· 行号基准 caa40a7e（S0 仅改 qbmanager 变量名与测试替身，行号不受影响）
 </div>
 
 </div>
