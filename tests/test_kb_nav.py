@@ -76,6 +76,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_pull_endpoint_requires_action_header: 缺 / 错 X-Nav-Action 头 → 403 (CSRF 护栏)
 - test_pull_endpoint_rejects_non_pull_routes: GET /api/pull 与 POST 未知路径 → 404
 - test_pull_endpoint_reports_result: 带头 → 200 + {ok, message} 原样回传
+- test_esc_retreat_chain_single_point: 全壳唯一 document-level Escape 链 (escRetreat 退四档齐) + gq/cq per-input 清词恰两处
+- test_esc_ime_guard: 链首 IME 守卫 (isComposing || keyCode === 229) 排在退档之前
+- test_esc_closes_overlay_first: 遮罩退档 (hideError) 在链里排先于 ctxMenu/drawer 档 + CSS z 序同视觉层叠
+- test_esc_closes_drawer: drawer 档判据 open 类 (可见性) 且清 S.sel + closeDrawer 同步, 后于 ctxMenu 档
 """
 
 from __future__ import annotations
@@ -638,6 +642,79 @@ def test_hidden_zone_reuses_ledger_columns_and_inline_svg() -> None:
     assert m and "<svg" in m.group(1), "恢复按钮必须是内联 SVG (UNHIDE_SVG 常量)"
     for ch in ("\U0001F504", "\u27F2", "\u21B6"):  # 循环箭头 / 逆时针箭头类图形字符
         assert ch not in text, f"壳里出现图形字符充当恢复按钮 (code-style 禁图形符号): {ch!r}"
+
+
+# --------------------------------------------------------------------------- Esc 退栈 (计划 26-10-13-0324)
+
+
+def test_esc_retreat_chain_single_point() -> None:
+    """Esc 管制单点 (计划 §05): 全壳只许**一处** document-level Escape 链 (escRetreat), 且它退
+    四档齐 (overlay / ctxMenu / drawer / sel) —— 既有两处 per-input 清词 (gq/cq) 之外, 别在别处
+    再写一份 document-level Esc 监听 (两处链即触发序竞乱, 26-10-06 同根: 退栈 order 靠注册序)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    doc_listeners = re.findall(r'document\.addEventListener\("keydown"[^)]*\)', text)
+    esc_doc = [s for s in doc_listeners if "Escape" in s or "escRetreat" in s]
+    assert len(esc_doc) == 1, f"document-level Escape 监听不止一处: {esc_doc}"
+    assert "escRetreat" in text, "缺退栈链函数 escRetreat (单点链是口径)"
+    chain = re.search(r"const escRetreat = \(e\) => \{(.*?)\n  \};", text, re.S)
+    assert chain, "escRetreat 链不见了? 结构搬家要同步本守阵"
+    body = chain.group(1)
+    for tier in ("hideError()", "closeCtx()", "closeDrawer()", 'querySelectorAll("tr.sel")'):
+        assert tier in body, f"退栈链缺档: {tier}"
+    per_input = re.findall(r'\$\("(?:gq|cq)"\)\.addEventListener\("keydown"', text)
+    assert len(per_input) == 2, "gq/cq per-input 清词 pair 必须恰两处 (拍板 P3 keep)"
+
+
+def test_esc_ime_guard() -> None:
+    """IME 组合期不劫 (拍板 P4, nav 搜索框中文输入 real): 链首须 IME 守卫 —— 中文输入组合期
+    Esc 属于输入法 (取消候选), 不退浮层 / 清词 (webui lifecycle.js 同款口径)."""
+    text = SHELL.read_text(encoding="utf-8")
+    chain = re.search(r"const escRetreat = \(e\) => \{(.*?)\n  \};", text, re.S)
+    assert chain, "escRetreat 链不见了? 同步本守阵"
+    body = chain.group(1)
+    assert "e.isComposing" in body and "keyCode === 229" in body, "链缺 IME 守卫 (isComposing || keyCode === 229)"
+    guard_at = body.index("isComposing")
+    assert guard_at < body.index("hideError()"), "IME 守卫必须排在退档之前 (组合期即不劫, 直接放行)"
+
+
+def test_esc_closes_overlay_first() -> None:
+    """退栈 order = visual z-order (红线照 pitfalls/web-ui): overlay 遮罩 (z-50) 压 ctxMenu (z-40)
+    与 drawer (z-30), 遮罩档**必先**收它 —— 否则 Esc 穿过遮罩去关被盖住的看不见层 (26-10-06
+    同根实测报障), 且拉取失败全屏锁 (doPull 失败弹 overlay, dismiss 原只 applyData 即 ≤30s 轮)
+    不消. 守: 遮罩档在链里且排先于 ctxMenu / drawer 档."""
+    text = SHELL.read_text(encoding="utf-8")
+    chain = re.search(r"const escRetreat = \(e\) => \{(.*?)\n  \};", text, re.S)
+    assert chain, "escRetreat 链不见了? 同步本守阵"
+    body = chain.group(1)
+    ov_at = body.index('$("overlay")')
+    assert 'hideError()' in body, "遮罩退档缺 hideError()"
+    assert ov_at < body.index("hideError()") < body.index("closeCtx()"), "遮罩档必须先于 ctxMenu 档"
+    assert body.index("hideError()") < body.index("closeDrawer()"), "遮罩档必须先于 drawer 档"
+    css = _shell_css()
+    z = {}
+    for sel in (".overlay", ".ctxmenu", ".drawer"):
+        m = re.search(r"z-index:\s*(\d+)", _rule(css, sel))
+        assert m, f"{sel} 缺 z-index? 层叠钉死同步本守阵"
+        z[sel] = int(m.group(1))
+    assert z[".overlay"] > z[".ctxmenu"] > z[".drawer"], (
+        f"CSS z 序 (overlay {z['.overlay']} / ctxmenu {z['.ctxmenu']} / drawer {z['.drawer']}) "
+        "与退栈档序钉 (遮罩先) 需同视觉层叠 —— 改层叠要同步链"
+    )
+
+
+def test_esc_closes_drawer() -> None:
+    """drawer 退档 (缺口实测: 详情抽屉原只 dclose 按钮无 Esc 路径): 链里清 S.sel + closeDrawer
+    —— 只收抽屉而不清选择 (或反之) 即下一 renderLedger 会把抽屉又弹 (renderLedger 里 S.sel 即 renderDrawer)."""
+    text = SHELL.read_text(encoding="utf-8")
+    chain = re.search(r"const escRetreat = \(e\) => \{(.*?)\n  \};", text, re.S)
+    assert chain, "escRetreat 链不见了? 同步本守阵"
+    body = chain.group(1)
+    drawer_branch = re.search(r'if \(drawer\.classList\.contains\("open"\)\) \{([^}]*)\}', body)
+    assert drawer_branch, "drawer 退档 (判据 open 类 = 可见性, 不状态位) 不见了"
+    branch = drawer_branch.group(1)
+    assert "S.sel = null" in branch and "closeDrawer()" in branch, "drawer 档必须清 S.sel 并收抽屉 (两处同步, 否则抽屉又弹)"
+    assert body.index("closeCtx()"
+                     ) < body.index('drawer.classList.contains("open")'), "drawer 档必须后于 ctxMenu 档 (z-30 < z-40)"
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)

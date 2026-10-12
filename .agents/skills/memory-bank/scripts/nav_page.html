@@ -1379,7 +1379,34 @@ function wire() {
     closeCtx();
   });
   document.addEventListener("click", e => { if (!e.target.closest("#ctxMenu")) closeCtx(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeCtx(); });
+  /* Esc 退栈 (计划 26-10-13-0324, 借鉴 webui lifecycle.js 退栈链): 一次按键退视觉最上档 ——
+     退栈 order = visual z-order: overlay 遮罩 (z-50) 先于 ctxMenu (z-40) 先于 drawer (z-30),
+     遮罩压其余两, 否则 Esc 穿过遮罩去关被盖住的看不见层 (26-10-06 同根实测报障). 遮罩档即消
+     拉取失败全屏锁 (doPull 失败弹 overlay, dismiss 原只 applyData 即 ≤30s 轮 —— 用户按 Esc 即收).
+     IME 组合期不劫 (中文输入组合期 Esc 属于输入法, 取消候选); 判据用可见性 (hidden / open 类),
+     不状态位. 兜档保守 (拍板 P2): 收展开态 + 清 selTopic only, 清筛选 NO (localStorage 持久 prefs);
+     门条件 = console view + 非输入态 —— gq/cq per-input 清词已先手, 兜档不得双清.
+     全壳唯一 document-level Escape 链 (gq/cq 两处 per-input 清词之外, 拍板 P3 keep). */
+  const escRetreat = (e) => {
+    if (e.key !== "Escape") return;
+    if (e.isComposing || e.keyCode === 229) return;   // IME 组合期: 不劫浮层 / 搜索词
+    const ov = $("overlay");
+    if (ov && !ov.hidden) { hideError(); return; }    // z-50 遮罩最上档: 收遮罩即恢复页面操作
+    const m = $("ctxMenu");
+    if (m && !m.hidden) { closeCtx(); return; }       // z-40 右键菜单
+    const drawer = $("drawer");
+    if (drawer.classList.contains("open")) { S.sel = null; closeDrawer(); return; }  // z-30 详情抽屉: 清选择 + 收
+    const selRows = $("aRows").querySelectorAll("tr.sel");
+    if (selRows.length) { selRows.forEach(r => r.classList.remove("sel")); return; }  // 行选择退档
+    const inInput = !!e.target.closest("input, textarea, select");
+    if (S.view === "console" && !inInput && (S.openRows.size || S.selTopic)) {
+      S.openRows.clear();
+      S.selTopic = null;
+      saveFilters();
+      renderConsole();   // 兜档: 收展开态 + 清专题选择 —— 可见状态变化即点名, 不静默
+    }
+  };
+  document.addEventListener("keydown", escRetreat);
   window.addEventListener("scroll", closeCtx, true);
   $("sort").addEventListener("change", e => { S.sort = e.target.value; saveFilters(); renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };

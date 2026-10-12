@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="kb-nav-esc">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-13-0324">
-<meta name="doc-updated" content="26-10-13-0333">
+<meta name="doc-updated" content="26-10-13-0434">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md">
 <title>方案 · kb.nav Esc 功能 · 借鉴 auto-qb Esc 退栈设计 · auto-qb</title>
+<meta name="doc-outcome" content="拍板默认保守全采纳 · 实施出厂 26-10-13-0434 (escRetreat 链 + 守阵 +4, test.full 3176 passed)">
 <style>
   :root {
     color-scheme: dark;
@@ -61,7 +62,7 @@
 <div class="sheet">
 
 <header class="cover">
-  <div class="kicker">Plan · kb-nav-esc · Open</div>
+  <div class="kicker">Plan · kb-nav-esc · Done</div>
   <h1>kb.nav 加 Esc 功能 —— 借鉴 auto-qb Esc 退栈设计</h1>
   <p class="lede">导航页 (<code>kb.nav</code>) 现 Esc 只覆盖两处 (搜索词清空、右键菜单收)。主 webui 把 Esc 做成<strong>逐层退栈</strong> (退栈): 一次按键退视觉最上一层, IME 组合期不劫劫, 兜底档有门条件。本方案移植该设计到 nav 壳, 适配其层集 (错误浮层 / 右键菜单 / 详情抽屉 / 行选择 / 搜索词), 改动面单文件.</p>
   <div class="panel">
@@ -70,7 +71,7 @@
   </div>
   <div class="meta-row">
     <div class="item"><div class="k">Topic</div><div class="v">kb-nav-esc</div></div>
-    <div class="item"><div class="k">Status</div><div class="v">Open (待拍板)</div></div>
+    <div class="item"><div class="k">Status</div><div class="v">Done (拍板全采纳 · 实施 0434)</div></div>
     <div class="item"><div class="k">Added</div><div class="v">26-10-13-0324</div></div>
     <div class="item"><div class="k">改动面</div><div class="v">nav_page.html + tests/test_kb_nav.py</div></div>
   </div>
@@ -132,12 +133,13 @@
 
 <section id="s04">
   <h2><span class="no">04</span>拍板点 (需 explicit 确认)</h2>
+  <p class="dim">26-10-13-0434 实施轮: 用户「实施计划」即拍板 —— 默认保守口径全采纳, 四点如下表 (✓ = 采纳默认).</p>
   <table>
-    <tr><th>#</th><th>点</th><th>默认 (保守)</th></tr>
-    <tr><td>P1</td><td>退栈 order overlay → ctxMenu → drawer → sel (z 50→40→30) —— 确认</td><td class="ok">as proposed</td></tr>
-    <tr><td>P2</td><td>兜档清筛选 (照 webui 兜档)?</td><td class="warn">NO —— 收展开态 + 清 selTopic only; toast 点名</td></tr>
-    <tr><td>P3</td><td>gq/cq Esc 清词: keep per-input, or fold into chain?</td><td class="ok">keep per-input (已对, 最小改动)</td></tr>
-    <tr><td>P4</td><td>IME 守卫: 加 (nav 搜索框中文输入 real)</td><td class="ok">yes</td></tr>
+    <tr><th>#</th><th>点</th><th>默认 (保守)</th><th>拍板</th></tr>
+    <tr><td>P1</td><td>退栈 order overlay → ctxMenu → drawer → sel (z 50→40→30) —— 确认</td><td class="ok">as proposed</td><td class="ok">✓ as proposed</td></tr>
+    <tr><td>P2</td><td>兜档清筛选 (照 webui 兜档)?</td><td class="warn">NO —— 收展开态 + 清 selTopic only; toast 点名</td><td class="ok">✓ NO (兜档收展开态+清 selTopic, 门 console+非输入态)</td></tr>
+    <tr><td>P3</td><td>gq/cq Esc 清词: keep per-input, or fold into chain?</td><td class="ok">keep per-input (已对, 最小改动)</td><td class="ok">✓ keep per-input</td></tr>
+    <tr><td>P4</td><td>IME 守卫: 加 (nav 搜索框中文输入 real)</td><td class="ok">yes</td><td class="ok">✓ yes</td></tr>
   </table>
 </section>
 
@@ -165,7 +167,7 @@
 </section>
 
 <div class="meta-row" style="border-top:1px solid var(--hair); margin-top:28px; padding-top:14px;">
-  <div class="item"><div class="k">变更记录</div><div class="v">26-10-13-0324 初版 (Open) · 26-10-13-0333 拉取失败全屏锁并入退栈 (overlay z-50 退栈档 + 守阵 +1)</div></div>
+  <div class="item"><div class="k">变更记录</div><div class="v">26-10-13-0324 初版 (Open) · 26-10-13-0333 拉取失败全屏锁并入退栈 (overlay z-50 退栈档 + 守阵 +1) · 26-10-13-0434 拍板全采纳 + 实施出厂 (escRetreat 单点链 + IME guard + 四档 + 兜档; 守阵 +4; test.full 3176 passed + 4 skipped, 基线切片 26-10-13-0434)</div></div>
 </div>
 
 </div>

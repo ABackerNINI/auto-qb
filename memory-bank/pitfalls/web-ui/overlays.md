@@ -10,6 +10,7 @@
 - **触发**: 错误/提示遮罩 (`position:fixed; inset:0` 全屏) 弹后, 用户"全屏无法操作一段时间"。
 - **判别**: 遮罩 dismiss 只在**下一数据轮**里跑 (kb.nav 实测: `hideError()` 只 `applyData()`, 轮 `POLL_MS=30000` ⇒ 拉取失败即整页 ≤30s 不可点击); 遮罩 z 值压其余浮层之上 (nav: overlay 50 > ctxMenu 40 > drawer 30) —— 按 Esc 或点其余层都吃遮罩。
 - **处置**: 遮罩退栈**最上档** + Esc 即收 (照 webui 26-10-06 口径: 退栈 order = visual z-order, 遮罩先于被盖住的层, 否则 Esc 穿过遮罩关被盖的**不见**层); 遮罩档判用 `hidden` 现 (屏幕上能看见的东西同名)。
+  - kb.nav 已修 (26-10-13-0434): `escRetreat()` 单点链里 overlay 档 (`hideError()`) 排先于 ctxMenu/drawer 档; 守阵 `test_esc_closes_overlay_first` 钉 (链档序 + CSS z 序同视觉层叠)。
 
 ### 浮层"点了没反应"首先查**定位祖先**
 
