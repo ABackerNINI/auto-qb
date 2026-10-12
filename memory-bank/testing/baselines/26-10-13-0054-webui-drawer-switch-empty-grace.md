@@ -28,3 +28,7 @@
 - `drawer-peers-sticky-flush` atlas 亚像素几何 flaky 仍在(既发, 与本波无关), 未入池。
 - 存量债务(同前, 未动): `modules/webui-static-contract.md` 超 evergreen cap(本波 +~200 字符); activeContext 切片数债务(> 70)。
 - 未 commit / 未 push(本波完成后待用户指令)。
+
+> ⚠ **已被取代(2026-10-13)**: 本条描述的「三列表宽限 + 1s 重拉」诊断与机制已被用户否掉并整体回退
+> (「种子的常态就是没有对端」—— 空响应不是"未就绪"); 诊断更正与最终修法见
+> `26-10-13-0148-webui-drawer-switch-no-flash.md` 与坑档 `drawer-switch-flicker.md` 第九次条目。

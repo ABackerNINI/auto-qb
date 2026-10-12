@@ -40,7 +40,7 @@
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
-- test_drawer_list_switch_empty_grace_wiring: 抽屉三列表(peers/trackers/files)软切换空态宽限守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」+ 同族 trackers/files) —— 软切换本意「保留旧数据撑几何 + 遮罩防串显」(FX-29), 但换目标后 qB 对新种子的首个列表响应常瞬时为空(连接/状态未就绪) ⇒ 空响应直接落袋会覆盖旧数据渲染成一帧空态, 下一拍(5s)真实数据到达再顶回表格 = 用户所报「闪一下」; 修法 = 换目标窗口内**首个空响应视为「未就绪」**(不落袋/不掀罩/短延迟重拉一次, 仍空才接受), 三列表共用单点 _drawerGraceHold。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-empty-grace.spec.mjs 三页签逐帧采样值守): ①_drawerGraceHold 标记守卫 + 一次性消费 + 「非空即正常落袋」+ 一次性重拉; ②三 fetcher 都接该单点且 finally `deferred` 短路; ③宽限标记 _drawerGrace 由 _switchDrawerTarget 置位且**在 _loadDrawerTab 之后**(其内 _startDrawerPoll→_stopDrawerPoll 会清空, 置前即静默失效); ④待重拉 timer 与标记由 _stopDrawerPoll 收口(换页签/换目标/关面板不得泄漏); ⑤e2e 覆盖缺口补记: 既有全部用例只 dblclick nth=0 单次打开, 且桩每种子恒有数据 —— 「切换种子 + 首拍空」这条真机路径此前零覆盖
+- test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): ①门抑制单点判据; ②三 fetcher 的 loading 置位都经该单点(直写即回潮); ③标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); ④_stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); ⑤_drawerSwitchEnd 必须清标记(否则粘住); ⑥旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
 """
 import json
 import os
@@ -3692,7 +3692,7 @@ def test_drawer_peers_speed_keys_normalized():
     fetch = re.search(r"async _fetchDrawerPeers\(.*?\) \{(.*?)\n    \},", store_js, re.S)
     assert fetch, "drawer_store.js 找不到 _fetchDrawerPeers(改名或挪走了? 同步本守阵)"
     fb = fetch.group(1)
-    assert "const norm = this._drawerNormPeers(r);" in fb and "this.drawer.peers = norm;" in fb, \
+    assert "this.drawer.peers = this._drawerNormPeers(r);" in fb, \
         "peers 落袋未过 _drawerNormPeers(直存 qB 原始响应 ⇒ 原始键名漏进消费点, 上下行恒 0)"
 
     # ③ 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
@@ -3703,55 +3703,62 @@ def test_drawer_peers_speed_keys_normalized():
         "ui_harness 合成 peer 残留错误的速度键名(dlspeed/upspeed) —— 与真 qB 不同形, 冒烟测假"
 
 
-def test_drawer_list_switch_empty_grace_wiring():
-    """抽屉三列表软切换空态宽限守阵(2026-10-13 用户报障「切换种子时用户页闪『暂无已连接用户』」+ 同族 trackers/files)。
+def test_drawer_list_switch_no_loading_flash_wiring():
+    """抽屉三列表软切换「不闪」守阵(2026-10-13 用户报障「切换种子时用户页闪『暂无已连接用户』」)。
 
-    软切换(FX-29)本意「保留旧数据撑几何 + 遮罩防串显」, 但换目标后 qB 对新种子的首个列表响应
-    常瞬时为空(连接/状态尚未就绪) —— 空响应直接落袋会覆盖旧数据渲染成一帧空态, 下一拍(5s)真实
-    数据到达再顶回表格 = 用户所报「闪一下」(坑档 drawer-switch-flicker 第九次形态)。修法 =
-    换目标窗口内**首个空响应视为「未就绪」**: 不落袋/不掀罩, 1s 后快速重拉一次, 仍空才接受;
-    三列表(peers/trackers/files)共用单点 _drawerGraceHold(peers 报障后用户要求同族一并修)。
-    行为回归由 e2e/drawer-switch-empty-grace.spec.mjs 三页签逐帧采样值守(peers 已红验: 拆掉
-    宽限即 150 帧空态), 本守阵只钉静态接线与关键次序, 防机制被无声拆除。
+    真根因(逐帧实测, 坑档 drawer-switch-flicker 第九次形态): 软切换(FX-29)保留的是**上一个目标的
+    已落袋结果**, 而**空列表(没有对端 / 没有 tracker)是种子的常态** —— 但三个列表 fetcher 一律
+    `loading = true`, 模板门 `loading && 无行` 就把这份既有的空态顶掉一帧换成「正在加载…」, 数据(空)
+    回来再换回 ⇒ 用户看到「『暂无已连接用户』闪烁」(临时探针实测序列 `E→L→E`)。
+    修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn`), 保留那份
+    旧结果直到被新结果取代。⚠ **不得**改成「空响应视为未就绪 → 延迟渲染/重拉」: 那会把常态的空推迟
+    (首版固定 1s 重拉被用户否掉 —— 「种子的常态就是没有对端」, 且后端对空响应还有 1s 短缓存)。
+    行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样值守(空态全程在 + 无「正在加载…」+ 无重试
+    请求); 本守阵只钉静态接线与关键次序, 防机制被无声拆除。
     """
     store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
 
-    # ① 单点 helper: 标记守卫 + 一次性消费 + 「非空即正常落袋」+ 短延迟重拉
-    hold = re.search(r"_drawerGraceHold\(src, hash, count, refetch\) \{(.*?)\n    \},", store_js, re.S)
-    assert hold, "drawer_store.js 找不到 _drawerGraceHold(三列表宽限单点; 改名或挪走了? 同步本守阵)"
-    hb = hold.group(1)
-    assert "if (!g || !g[src]) return false;" in hb, "宽限单点缺标记守卫(未换目标也生效会误伤常态空列表)"
-    assert "g[src] = false;" in hb, "宽限单点缺一次性消费(同窗口第二次响应仍被宽限)"
-    assert "if (count) return false;" in hb, "宽限单点缺「非空即正常落袋」分支"
-    assert "this._drawerGraceRetry[src] = setTimeout(" in hb, "宽限单点缺一次性重拉"
+    # ① 门抑制单点: 判据 = 非静默 且 不在软切换窗口
+    m = re.search(r"_drawerListLoadingOn\(silent\) \{(.*?)\n    \},", store_js, re.S)
+    assert m, "drawer_store.js 找不到 _drawerListLoadingOn(改名或挪走了? 同步本守阵)"
+    assert "return !silent && !this._drawerSoftSwitch;" in m.group(1), \
+        "门抑制判据不符(应 = 非静默 且 不在软切换窗口)"
 
-    # ② 三 fetcher 都走该单点, 且 finally 里 deferred 短路(不落袋/不通知/保持 loading)
-    for fn, src in (
-        ("_fetchDrawerPeers", "peers"), ("_fetchDrawerTrackers", "trackers"), ("_fetchDrawerFiles", "files")
+    # ② 三 fetcher 的 loading 置位必须都经该单点(直写 `if (!silent) xxxLoading = true` = 软切换时门会闪)
+    for fn, flag in (
+        ("_fetchDrawerPeers", "peersLoading"),
+        ("_fetchDrawerTrackers", "trackersLoading"),
+        ("_fetchDrawerFiles", "filesLoading"),
     ):
-        m = re.search(r"async %s\(.*?\) \{(.*?)\n    \}," % fn, store_js, re.S)
-        assert m, "drawer_store.js 找不到 %s(改名或挪走了? 同步本守阵)" % fn
-        fb = m.group(1)
-        assert 'this._drawerGraceHold("%s", hash,' % src in fb, \
-            "%s 未接入宽限单点(换目标后首个空响应会被当空态渲染)" % fn
-        assert "deferred = true;" in fb and "if (deferred) return;" in fb, \
-            "%s 宽限丢弃未在 finally 短路(空响应仍会落袋/掀罩 ⇒ 空态闪现)" % fn
+        fm = re.search(r"async %s\(.*?\) \{(.*?)\n    \}," % fn, store_js, re.S)
+        assert fm, "drawer_store.js 找不到 %s(改名或挪走了? 同步本守阵)" % fn
+        fb = fm.group(1)
+        assert "if (this._drawerListLoadingOn(silent)) this.drawer.%s = true;" % flag in fb, \
+            "%s 的 loading 置位未走 _drawerListLoadingOn(软切换时门会闪)" % fn
+        assert "if (!silent) this.drawer.%s = true;" % flag not in fb, \
+            "%s 回潮为直写 loading(软切换时会闪『正在加载…』)" % fn
 
-    # ③ 宽限标记置位必须在 _loadDrawerTab 之后(其内 _startDrawerPoll→_stopDrawerPoll 会清空标记)
+    # ③ 标记置位必须在 _loadDrawerTab **之前**(三 fetcher 在其内 await 前同步读它)
     sw = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
     assert sw, "drawer_store.js 找不到 _switchDrawerTarget(改名或挪走了? 同步本守阵)"
     sb = sw.group(1)
+    i_flag = sb.find("this._drawerSoftSwitch = true;")
     i_load = sb.find("this._loadDrawerTab(this.drawer.tab);")
-    i_grace = sb.find("this._drawerGrace = { peers: true, trackers: true, files: true };")
-    assert i_load >= 0 and i_grace >= 0, "宽限标记置位或 _loadDrawerTab 调用缺失"
-    assert i_grace > i_load, \
-        "宽限标记必须在 _loadDrawerTab 之后置位(其内 _startDrawerPoll→_stopDrawerPoll 会清空, 置前即静默失效)"
+    assert i_flag >= 0 and i_load >= 0, "软切换标记置位或 _loadDrawerTab 调用缺失"
+    assert i_flag < i_load, \
+        "软切换标记必须在 _loadDrawerTab **之前**置位(置后 = 本次 fetcher 读不到, 门照闪)"
 
-    # ④ 待重拉 timer 与宽限标记必须由 _stopDrawerPoll 收口(换页签/换目标/关面板的共同收口点)
+    # ④ _stopDrawerPoll **不得**清该标记(它在 _loadDrawerTab→_startDrawerPoll 途中被调用)
     stop = re.search(r"_stopDrawerPoll\(\) \{(.*?)\n    \},", store_js, re.S)
     assert stop, "drawer_store.js 找不到 _stopDrawerPoll(改名或挪走了? 同步本守阵)"
-    sb2 = stop.group(1)
-    assert "clearTimeout(this._drawerGraceRetry[src])" in sb2, \
-        "待重拉 timer 未在 _stopDrawerPoll 收口(换页签/换目标/关面板会泄漏 timer)"
-    assert "this._drawerGrace = null;" in sb2, \
-        "宽限标记未在 _stopDrawerPoll 清空(残留会误伤下一次换目标的第一个空列表)"
+    assert "this._drawerSoftSwitch =" not in stop.group(1), \
+        "_stopDrawerPoll 赋值/清空了 _drawerSoftSwitch —— 它会在 _loadDrawerTab→_startDrawerPoll 途中被调用, 等于置前失效, 门照闪"
+
+    # ⑤ 落定/打断必须清标记(否则标记粘住, 此后切页签不再置 loading); 且"延迟渲染空态"类机制不得回潮
+    end = re.search(r"_drawerSwitchEnd\(\) \{(.*?)\n    \},", store_js, re.S)
+    assert end, "drawer_store.js 找不到 _drawerSwitchEnd(改名或挪走了? 同步本守阵)"
+    assert "this._drawerSoftSwitch = false;" in end.group(1), \
+        "_drawerSwitchEnd 未清 _drawerSoftSwitch(标记会粘住, 后续切页签不再置 loading)"
+    for gone in ("_drawerGraceHold", "_DRAWER_GRACE_DELAYS", "_drawerPeerCount"):
+        assert gone not in store_js, \
+            "旧的『空响应视为未就绪→延迟重拉』机制(%s)不得回潮(会把常态空态推迟)" % gone
