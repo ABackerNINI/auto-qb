@@ -670,6 +670,27 @@ function _mkCtx2() {
   // 扫线步长恒定 8px(斜纹间距), 且每条线段水平跨度 = H(45 度硬约束)
   ok("每条斜纹线段跨度 = H(45 度)", segs.every((s) => Math.abs((s[1] - s[0]) - H) < 1e-6));
 })();
+
+(function () {
+  /* ---------- 限速分段(plan 26-10-12-0535 D4/D7)真跑: _qbLimitSegs/_qbLimitAt ----------
+   * 用真实的模块级纯函数断言: 每段几何(区间/末段到 tEnd)/退化段不画/悬停二分取值
+   * (含记录起点前 null)。若有人把分段改回单值画满整窗, 本电池立刻红。 */
+  ok("_qbLimitSegs 可取", typeof _qbLimitSegs === "function");
+  ok("_qbLimitAt 可取", typeof _qbLimitAt === "function");
+  const EV = [[100, 1024, 2048], [200, 0, 4096], [300, 512, 512]];
+  eq("分段几何: 每段 = 相邻事件区间", _qbLimitSegs(EV, 400),
+    [{ t0: 100, t1: 200, up: 1024, down: 2048 }, { t0: 200, t1: 300, up: 0, down: 4096 }, { t0: 300, t1: 400, up: 512, down: 512 }]);
+  eq("分段: 末段延伸到 tEnd", _qbLimitSegs(EV.slice(0, 1), 250), [{ t0: 100, t1: 250, up: 1024, down: 2048 }]);
+  eq("分段: 空事件空段", _qbLimitSegs([], 400), []);
+  eq("分段: 非法输入空段", _qbLimitSegs(null, 400), []);
+  eq("分段: tEnd 非法空段", _qbLimitSegs(EV, 0), []);
+  eq("分段: 越出右沿的退化段不画", _qbLimitSegs([[500, 1, 1]], 400), []);
+  eq("悬停二分: 取 <= ts 最近事件", _qbLimitAt(EV, 250), [0, 4096]);
+  eq("悬停二分: 精确命中", _qbLimitAt(EV, 200), [0, 4096]);
+  eq("悬停二分: 记录起点前 null(D5 不猜)", _qbLimitAt(EV, 50), null);
+  eq("悬停二分: 空事件 null", _qbLimitAt([], 100), null);
+  eq("悬停二分: 末事件之后仍取末值", _qbLimitAt(EV, 999), [512, 512]);
+})();
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -730,6 +751,9 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert lim, "缺 _qbGlobalLimit(全局限速单点)"
     lb = lim.group(1)
     assert "this.speedLimitBytes" in lb, "_qbGlobalLimit 必须取 speedLimitBytes 单点(与状态栏/速度染色同源)"
+    # 2026-10-08 版式改后常驻说明区退役; D4 文案挂在统计栏悬浮说明单点(qbCurSummaryHint)
+    assert "限速虚线 = 当时生效的 qB 全局限速" in js and "记录起点前不显示" in js, \
+        "缺 D4 文案(限速线取值口径 + 记录起点前不显示, qbCurSummaryHint 单点)"
     assert "up" in lb and "down" in lb and "best" in lb, \
         "全局限速必须取上下行**较大者**(纵轴上下行共用一条, 取大者两条曲线都落在上限内)"
 
@@ -749,8 +773,24 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
         assert member in js, f"缺画布注解层成员 {member}"
     assert "uPlot.pxRatio" in js, "画布注解层必须按 uPlot.pxRatio 换算设备像素(uPlot ctx 无 transform)"
     dl = re.search(r"_qbDrawLimits\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
-    assert dl and "lim.up < ymax" in dl.group(1) and "lim.down < ymax" in dl.group(1), \
-        "限速虚线必须只画落在可视值域内的限速(超顶沿的线不可见, 自动模式峰值未超限速即不画)"
+    assert dl, "缺 _qbDrawLimits(限速虚线注解)"
+    dlb = dl.group(1)
+    # D4(plan 26-10-12-0535)分段化: 取值改图记录上的事件序列(不再读 speedLimitBytes 单值),
+    # 段几何走纯函数, 可见性逐段(0 < v < ymax), 末段延伸到图右沿
+    assert "u._qbLimits" in dlb, "_qbDrawLimits 必须取图记录上的限速事件序列(u._qbLimits, D4 分段)"
+    assert "speedLimitBytes" not in dlb, "_qbDrawLimits 不得再读单点当前值(旧「单值画满整窗」回潮)"
+    assert "_qbLimitSegs(" in dlb, "限速段必须走 _qbLimitSegs 纯函数(段几何 node 电池同源)"
+    assert "seg.up < ymax" in dlb and "seg.down < ymax" in dlb, \
+        "限速虚线可见性必须逐段判(每段每方向 0 < v < ymax)"
+    assert "seg.up > 0" in dlb and "seg.down > 0" in dlb, "0(不限速)/缺值段不画"
+    # 快路/建图两路都要把 limits 暂存在图记录上(否则限速变更要等整图重建才可见)
+    assert js.count("prev._qbLimits =") == 1 and js.count("u._qbLimits =") == 1, \
+        "limits 暂存必须同时接在 setData 快路(prev._qbLimits)与整图重建(u._qbLimits)两路"
+    # D7: 悬停读数走纯函数 _qbLimitAt + 模板两支(正常/缺口)都接当时限速行
+    assert "_qbLimitAt(d.limits || [], ts)" in js, "悬停读数必须走 _qbLimitAt(当时值, D7)"
+    assert drawer_tpl.count('v-if="qbCurHover.lim"') == 2, \
+        "当时限速行必须在正常/缺口两支 tooltip 各接一处(限速是时间真值, 缺口也读)"
+    assert 'class="h-limit"' in drawer_tpl, "当时限速行缺 h-limit 类(样式挂点)"
 
     # 5b. 缺口斜纹**配色 + 几何**守阵(2026-10-08 两轮: 先修「颜色几乎不可分辨」, 再修「未落到
     # 正确区域 / 倾斜超出范围」)

@@ -1,11 +1,11 @@
 # 26-10-12-webui-traffic-limit-history — qB 流量图限速线按当时值分段
 
-**Status:** Open
+**Status:** Open(W1-W3 已实施, 待真机走查)
 **Added:** 2026-10-12
-**Updated:** 2026-10-12 06:19
+**Updated:** 2026-10-12 08:15
 **Topics:** webui-traffic-limit-history
-**Summary:** 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更改体现当时的限速, 先写计划, 使用 grilling 技能」。grilling 一轮七问收敛: 记生效值不记曲线目标 / 采样点变化才记 / 前端分段画(各段各区间, 末段到 now, 可见性判据逐段化) / 缺记录不画不回填 / 三挂点与变体维持现状 / 悬停读数增补; D3 用户两轮裁定终值 = **分天保存**(`qb-traffic-v4/limits/<日期>.dat`, 00:00 硬切 + 新天基线 carry, 不淘汰与 day/month 全保留对齐, 无配置键)。追问「不分天吗 / 缺数据区怎么界定 / 保存几年怎么办」推动补强: 读侧 mtime+size 解析缓存、缺数据区界定规则(阶梯函数恒有值, 唯一缺区 = 记录起点前; 停机时刻误差 ≤ 停机时长)、病态翻转常量告警护栏。计划 26-10-12-0535 Open, W1 后端 / W2 前端 / W3 收尾待实施; 纯文档轮零代码, 数字见 `commands run kb.baseline`。
-**Refs:** memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html,memory-bank/testing/baselines/26-10-12-0619-webui-traffic-limit-history-plan.md,memory-bank/activeContext/26-10-12-0619-webui-traffic-limit-history.md
+**Summary:** 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更改体现当时的限速, 先写计划, 使用 grilling 技能」。grilling 一轮七问收敛: 记生效值不记曲线目标 / 采样点变化才记 / 前端分段画(各段各区间, 末段到 now, 可见性判据逐段化) / 缺记录不画不回填 / 三挂点与变体维持现状 / 悬停读数增补; D3 用户两轮裁定终值 = **分天保存**(`qb-traffic-v4/limits/<日期>.dat`, 00:00 硬切 + 新天基线 carry, 不淘汰与 day/month 全保留对齐, 无配置键)。追问「不分天吗 / 缺数据区怎么界定 / 保存几年怎么办」推动补强: 读侧 mtime+size 解析缓存、缺数据区界定规则(阶梯函数恒有值, 唯一缺区 = 记录起点前; 停机时刻误差 ≤ 停机时长)、病态翻转常量告警护栏。计划 26-10-12-0535 Open, W1 后端 / W2 前端 / W3 收尾待实施; 纯文档轮零代码, 数字见 `commands run kb.baseline`。**W1-W3 已于 08:15 实施完成, 数字见基线 [26-10-12-0815](../testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md); 真机走查(改限速 → 看历史段)待用户。**
+**Refs:** memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html,memory-bank/testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md,memory-bank/activeContext/26-10-12-0815-webui-traffic-limit-history.md
 
 ## 原始请求
 
@@ -28,12 +28,15 @@
 
 | 波次 | 内容 | 状态 |
 |---|---|---|
-| W1 | 后端: 记录器 + 读侧 + payload 扩展 | 待做 |
-| W2 | 前端: 分段线 + 悬停读数 + 守阵 | 待做 |
-| W3 | 收尾: 回写 + 真机走查 | 待做 |
+| W1 | 后端: 记录器 + 读侧 + payload 扩展 | 完成(2026-10-12) |
+| W2 | 前端: 分段线 + 悬停读数 + 守阵 | 完成(2026-10-12) |
+| W3 | 收尾: 回写 + 真机走查 | 回写完成; 真机走查待用户 |
 
 ## 进度日志
 
 - 2026-10-12 05:35 计划成文(26-10-12-0535, Open), grilling 七问拍板记录入档(§2)。
 - 2026-10-12 06:13 D3 二次裁定分天保存, 计划同文件修订(读侧解析缓存 / 缺数据区界定 / 病态翻转护栏随轮补强, 验收判据扩充)。
 - 2026-10-12 06:19 收尾入库: 纯文档轮(计划 + 本档案 + 活跃切片), 零代码零测试改动, 实测数字见 `commands run kb.baseline`; 环境备忘: PowerShell 下 `git grep` 中文输出显示乱码(仅显示层, 文件无损), 查 CJK 内容改用 read 工具直读。
+- 2026-10-12 08:15 **W1 后端完成**: 新增 `core/traffic_limits.py`(SpeedLimitRecorder 变化才记 / 00:00 硬切 + carry / 重启去重 / OSError 降级不上抛 / 病态护栏 / LimitsCache mtime+size 键控 / limits_events_for_window 合成首事件 + 同值去重); 接线 `traffic_sample_mod._sample_global`(仅 qB 在线轮, dry_run 同门零写); `traffic_qb.py` 三 payload 统一附 `limits`(空态/全 null 也带, 组空态分支同源; last-good 快照含 limits)。新测试 `tests/test_traffic_limits.py` 12 条(红验两条注入即红/还原即绿); 既有 18 条端点测试扩 `_v4_opens` 排除 `limits/` 归类。
+- 2026-10-12 08:15 **W2 前端完成**: `_qbLimitSegs`/`_qbLimitAt` 模块级纯函数(node 电池 12 项真跑); `_qbDrawLimits` 分段化(读 `u._qbLimits`, 逐段可见性, 末段到图右沿); setData 快路/整图重建两路同步暂存 limits; 悬停 tooltip 「当时限速」行(正常/缺口两支, `h-limit`); 统计栏悬浮说明增补 D4 文案; 静态守阵更新(旧单值断言替换为分段锚 + 旧回潮反向断言)。变体 13 不自建 uPlot 图零回归(14/15 共享钩子自动生效)。
+- 2026-10-12 08:15 **W3 收尾**: `test.full` 3144 passed + 3 skipped(上基线 3132 + 12 新测试 = 3144, 逐条对账闭合; skip 4→3 同源环境变化在规划轮基线已核); 全量 e2e **166 passed + 10 skipped**(首轮两次 36/14 条失败全是连接拒绝 —— 另一 clone(auto-qb-clone3) 的会话在跑它自己的 e2e, 同抢 8137 单点端口且收尾兜底互杀对方的桩; 第三轮端口空闲后全绿, 零功能性断言失败); 文档回写 `conventions/webui.md`(注解层限速线条目) + `modules/core-runtime.md`(traffic_sample_mod 职责); 基线切片 [26-10-12-0815](../testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md)。**环境教训**: PowerShell 管道 `Set-Content -Encoding utf8` 写 CJK 会产生双锟乱码(已把本档案写成乱码一次, git 恢复) —— memory-bank CJK 文件一律走 edit/write 工具, 不走 PowerShell 管道改写。

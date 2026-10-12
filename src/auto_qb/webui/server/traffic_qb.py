@@ -39,6 +39,7 @@ import time
 from fastapi import HTTPException
 
 from ...core import traffic_grid as tg
+from ...core.traffic_limits import LimitsCache, limits_events_for_window
 from ...core.traffic_store import (
     GLOBAL_KEY,
     TORRENT_KEY_PREFIX,
@@ -72,6 +73,9 @@ class QbTrafficChartApi:
         # data_dir 缺字段(测试替身 config)时落空串 = 未启用防御语义, 用法仍由 _feature_on 兜底
         self._v4cache = V4DayCache(getattr(manager.config, "data_dir", ""))
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
+        # 限速历史读侧缓存(plan 26-10-12-0535 D3″): 构造期预建(同 issue 26-10-06-0028 时序
+        # 契约); data_dir 缺字段时落空串 = 未启用防御语义(read_day 恒空)
+        self._limitscache = LimitsCache(getattr(manager.config, "data_dir", ""))
 
     # ---------- 基础件 ----------
 
@@ -79,6 +83,21 @@ class QbTrafficChartApi:
     def v4cache(self) -> V4DayCache:
         """v4 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; 构造期预建, 只读引用)"""
         return self._v4cache
+
+    @property
+    def limitscache(self) -> LimitsCache:
+        """限速历史读侧缓存(plan 26-10-12-0535 D3″; 构造期预建, 只读引用)"""
+        return self._limitscache
+
+    def _limits_list(self, grid: tg.WindowGrid) -> list:
+        """窗口 -> 限速历史事件序列(D3″, 三作用域同源 26-10-08 拍板): 全局限速一份,
+        global/torrent/group 三个 payload 共用 —— 分组/单种不另读文件。无记录/读失败 =
+        [](事件缺口诚实缺线, 不冒充空态也不 500 —— limits 是注解面非数据面, 缺失前端
+        只是不画线)。"""
+        try:
+            return limits_events_for_window(self._limitscache, grid.t0, grid.t1)
+        except Exception:
+            return []
 
     def _conf(self):
         return self._manager.config.qb_traffic
@@ -114,32 +133,38 @@ class QbTrafficChartApi:
 
     def _empty(self, window: str) -> dict:
         """空态(§08): 未启用/无数据 —— points/totals 空数组 + meta(未启用空态先例:
-        /api/traffic/history 的 state=disabled + history=[])"""
-        return {"points": [], "totals": [], "meta": self._meta(self._grid(window), stale=False)}
+        /api/traffic/history 的 state=disabled + history=[]); limits 同样恒在(未启用 =
+        记录器同门关闭, 无文件恒 [], 契约形状三域一致)"""
+        return {"points": [], "totals": [], "limits": [], "meta": self._meta(self._grid(window), stale=False)}
 
     def _respond(self, grid: tg.WindowGrid, points: list, totals: list, degraded: bool) -> dict:
         """装配响应 + last-good 兜底(§08): 读取竞态降级时回上一份成功快照标 stale=true
 
         - degraded 且有 last-good -> 回 last-good(数据最多旧一个请求周期, 前端按 stale
-          提示), 不覆盖缓存;
+          提示), 不覆盖缓存; limits 同步回 last-good 的(同源快照, 避免限速段与数据
+          各自来自不同时刻的两份拼接);
         - degraded 且无 last-good -> 回本次现算(可能残缺/空), stale=true;
         - 全桶 null = 窗口内无任何观测 -> 空态(无数据, §08);
-        - 仅成功响应入 last-good(降级响应绝不覆盖上一份好快照)。
+        - 仅成功响应入 last-good(降级响应绝不覆盖上一份好快照);
+        - limits 字段(plan 26-10-12-0535 D3″)三作用域同源附加 —— 空态/全 null 响应同样
+          携带(数据真空 ≠ 限速未知, 记录起点在窗口内时图面仍可出限速段)。
         """
+        limits = self._limits_list(grid)
         if degraded:
             good = self._last_good.get(grid.name)
             if good is not None:
                 return {
                     "points": good["points"],
                     "totals": good["totals"],
+                    "limits": good["limits"],
                     "meta": {
                         **good["meta"], "stale": True
                     },
                 }
         if not any(p is not None for p in points):
-            payload = {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
+            payload = {"points": [], "totals": [], "limits": limits, "meta": self._meta(grid, stale=degraded)}
         else:
-            payload = {"points": points, "totals": totals, "meta": self._meta(grid, stale=degraded)}
+            payload = {"points": points, "totals": totals, "limits": limits, "meta": self._meta(grid, stale=degraded)}
         if not degraded:
             self._last_good[grid.name] = payload
         return payload
@@ -213,8 +238,14 @@ class QbTrafficChartApi:
                 tg.v4_earliest_row_ts(blocks, None) is None and not has_tail
                 for blocks, has_tail in zip(member_blocks, member_has_tail)
             ):
-                # 组从未产过流量(窗内无任何成员块且无成员活尾)-> 空态(§08); 降级时如实标 stale
-                return {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
+                # 组从未产过流量(窗内无任何成员块且无成员活尾)-> 空态(§08); 降级时如实标 stale;
+                # limits 仍同源附加(数据真空 ≠ 限速未知, 记录起点在窗口内时限速段照给)
+                return {
+                    "points": [],
+                    "totals": [],
+                    "limits": self._limits_list(grid),
+                    "meta": self._meta(grid, stale=degraded)
+                }
         else:
             aggs = []
             for h in members:
@@ -230,8 +261,14 @@ class QbTrafficChartApi:
                 return a.hours if seg == "hour" else a.days if seg == "day" else a.months
 
             if all(a is None or not (a.hours or a.days or a.months) for a in aggs):
-                # 组从未产过流量(成员无任何 agg 行)-> 空态(§08; v2 not p.zruns 判据的 v3 平移)
-                return {"points": [], "totals": [], "meta": self._meta(self._grid(window), stale=degraded)}
+                # 组从未产过流量(成员无任何 agg 行)-> 空态(§08; v2 not p.zruns 判据的 v3 平移);
+                # limits 同源附加(同上)
+                return {
+                    "points": [],
+                    "totals": [],
+                    "limits": self._limits_list(self._grid(window)),
+                    "meta": self._meta(self._grid(window), stale=degraded)
+                }
             if seg == "month":
                 # all 视图栅格由成员月行数据面的并集定(首末自然月逐月铺格, 缺失月 = null)
                 epochs = [r.epoch for a in aggs if a is not None for r in a.months]

@@ -143,8 +143,15 @@
                     <!-- 0 桶状态行(plan 26-10-04-0721 §05): z 派生空闲段是 (0,0) 真实观测点,
                          与 null 缺口可辨 —— 速率行照旧, 仅补一行状态语 -->
                     <span v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种</span>
+                    <!-- D7(plan 26-10-12-0535): 当时限速读数 —— 按悬停时刻取生效值(阶梯
+                         事件序列二分); lim == null = 记录起点前(当时值未知), 不给行 -->
+                    <span v-if="qbCurHover.lim" class="h-limit">当时限速 上{{ fmtSpeed(qbCurHover.lim[0]) }} / 下{{ fmtSpeed(qbCurHover.lim[1]) }}</span>
                   </template>
-                  <span v-else>无采样 · 程序未运行或 qB 断连</span>
+                  <template v-else>
+                    <span>无采样 · 程序未运行或 qB 断连</span>
+                    <!-- D7 缺口也读: 限速是时间真值, 独立于流量采样存在与否 -->
+                    <span v-if="qbCurHover.lim" class="h-limit">当时限速 上{{ fmtSpeed(qbCurHover.lim[0]) }} / 下{{ fmtSpeed(qbCurHover.lim[1]) }}</span>
+                  </template>
                 </div>
               </div>
               <!-- 2026-10-08 版式改: 上传/下载图例自图下独立一行并入统计栏(省一行高度 = 图更高);

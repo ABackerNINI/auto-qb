@@ -38,6 +38,14 @@
   ⚠ 速度组图标**不要**改全局 `.ico-up/.ico-down`(绿/蓝, 还喂顶栏「种子」等
   非流量位置), 只能按 `.sb-spd` 作用域覆盖。状态栏限速值(`.sb-spd .lim`)是**参考值**, 用中性灰 `--fg-dim`
   (与做种要求值 `.m-pair .req` 同款), 不随方向染色。
+- **画布注解层限速线(plan 26-10-12-0535)**: qB 流量图的限速虚线自 2026-10-12 起按**当时值分段**——
+  后端主循环采样点把 qB 全局限速生效值(上/下行分开, 0 = 不限速)按「有变化才记」落
+  `<data_dir>/qb-traffic-v4/limits/<日期>.dat`(分天, 00:00 硬切 + 新天首行基线 carry, 不淘汰对齐
+  day/month 全保留; 记录器在 `core/traffic_limits.py`, 挂点 `traffic_sample_mod._sample_global`),
+  三端点 payload 统一附 `limits: [[ts,up,down],...]`(首元素 = 窗口起点合成事件, 记录起点前无值);
+  前端 `_qbDrawLimits` 从图记录 `u._qbLimits` 走 `_qbLimitSegs` 纯函数构段(每段画各自区间, 末段到
+  图右沿; 逐段可见性 0 < v < ymax; 快路 setData 同步换 limits), 悬停 tooltip 增补「当时限速」行
+  (`_qbLimitAt` 二分, 记录起点前不给)。变体 13 无注解层照旧不显示; 14/15 走共享钩子自动生效。
 - **表面/底色族**: 状态栏用专用 `--statusbar-bg`(与页底形成可见层级); **不要改 `--glass`** —— 它同时管顶栏,
   改它会连带改顶栏。
 - **尺寸族**: 弹窗宽度取 `--modal-w-narrow/base/form/add`/`--modal-wide-w`(各套 UI 同值同族); 新增弹窗只选档,

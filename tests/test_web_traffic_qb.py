@@ -44,8 +44,9 @@ def _qb_open_spy(monkeypatch):
 
 
 def _v4_opens(opened):
-    """qb-traffic-v4/ 数据面的打开路径(请求链路会开无关文件, 只看 v4 读盘)"""
-    return [p for p in opened if "qb-traffic-v4/" in p]
+    """qb-traffic-v4/ 数据面的打开路径(请求链路会开无关文件, 只看 v4 读盘; 限速历史
+    limits/ 目录随 plan 26-10-12-0535 同根, 单独归类不算系列数据面)"""
+    return [p for p in opened if "qb-traffic-v4/" in p and "/limits/" not in p]
 
 
 def test_api_traffic_qb_disabled_empty_state(web_env):

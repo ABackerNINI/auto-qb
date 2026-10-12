@@ -141,6 +141,7 @@ from typing import Optional
 
 from ..module import AppContext, BaseModule
 from ..taskqueue import REQUEUE, Task
+from ..traffic_limits import SpeedLimitRecorder
 from ..traffic_store import (
     DRIFT_TOL_MS,
     HOUR_SECONDS,
@@ -357,6 +358,10 @@ class TrafficSampleModule(BaseModule):
         # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
         # 先例; 黄金法则 5 不破 —— 快照只读, 写仍单点在 handler 调用链内)
         self.live_tail: dict = {}
+        # ---- 限速历史记录器(plan 26-10-12-0535 D2) ----
+        # 主循环线程独占, _sample_global 顺带观测; data_dir 为空 = 禁用(observe 内防御);
+        # dry_run 经 observe 的 persistence_on 旗标短路(与落盘同门)
+        self._limits_rec = SpeedLimitRecorder(getattr(ctx.config, "data_dir", "") or "")
 
     def sections(self) -> tuple[str, ...]:
         return ("qb_traffic", )
@@ -510,6 +515,11 @@ class TrafficSampleModule(BaseModule):
             self._touch_null_run(GLOBAL_SERIES_KEY, ts)
             return
         dl_rate, up_rate, dl_total, up_total, _dl_session, _up_session = readings
+        # 限速历史观测(plan 26-10-12-0535 D2): 主循环采样点顺带对比, 有变化才追加 ——
+        # 零新增请求, 天然覆盖一切变化源(曲线模块/WebUI 手改/备用切换/qB 原生界面);
+        # 失败内部降级(WARNING 节流不上抛), 不影响本轮流量采样。qB 在线才到这, 字段
+        # 未知时记录器内部不猜不记(与 null 游程同理念)
+        self._limits_rec.observe(server_state, ts, self._persistence_on)
         if dl_rate == 0 and up_rate == 0:
             self._advance_run(GLOBAL_SERIES_KEY, ts, "z", dl_total, up_total)
             return

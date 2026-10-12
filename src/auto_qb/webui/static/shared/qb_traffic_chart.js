@@ -271,6 +271,41 @@ function _qbGapRuns(up, dl) {
   return out;
 }
 
+/* 限速事件 -> 绘图段(plan 26-10-12-0535 D4, 模块级纯函数供 node 单测)。
+ * events = [[ts, up, down], ...] 升序(后端装配产物, 首元素可为窗口起点的合成事件);
+ * 段 = 相邻事件对的时间区间, 末段延伸到 tEnd(图数据右沿 = 当前时刻) —— 限速是阶梯函数,
+ * 每段画在各自时间区间内。返回 [{t0, t1, up, down}, ...]。 */
+function _qbLimitSegs(events, tEnd) {
+  if (!events || !events.length || !(tEnd > 0)) return [];
+  const segs = [];
+  for (let i = 0; i < events.length; i++) {
+    const ts = events[i][0];
+    const next = i + 1 < events.length ? events[i + 1][0] : tEnd;
+    if (!(next > ts)) continue;  // 退化段(事件晚于图右沿等)不画
+    segs.push({ t0: ts, t1: next, up: events[i][1], down: events[i][2] });
+  }
+  return segs;
+}
+
+/* 悬停时刻的生效限速(D7, 模块级纯函数供 node 单测): events 升序, 二分取 <= ts 的
+ * 最近事件值; 记录起点晚于悬停时刻(无 <= ts 事件)返回 null —— 「当时值未知」不猜。 */
+function _qbLimitAt(events, ts) {
+  if (!events || !events.length) return null;
+  let lo = 0;
+  let hi = events.length - 1;
+  let ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid][0] <= ts) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans >= 0 ? [events[ans][1], events[ans][2]] : null;
+}
+
 window.AQB_QB_TRAFFIC = {
   computed: {
     /* 功能总门(P5 验收, fail-closed 单点): flags.qb_traffic_enabled(/api/webui/flags 下发,
@@ -356,7 +391,10 @@ window.AQB_QB_TRAFFIC = {
     qbCurSummaryHint() {
       const s = this.qbCurScope;
       const base = "累计为窗口内增量(断线期不计)";
-      return s === "group" ? base + " · 组口径 = 当前成员集聚合" : base;
+      const scoped = s === "group" ? base + " · 组口径 = 当前成员集聚合" : base;
+      // D4(plan 26-10-12-0535)文案: 限速线取值口径 + 记录起点前不显示(挂点 = 悬浮说明,
+      // 常驻说明区已随 2026-10-08 版式改退役)
+      return scoped + " · 限速虚线 = 当时生效的 qB 全局限速(记录起点前不显示)";
     },
     /* 窗口档位清单(模板 v-for 的唯一来源, 与前后切换/持久化校验同源 QB_WINDOW_NAMES) */
     qbWindowNames() {
@@ -632,11 +670,13 @@ window.AQB_QB_TRAFFIC = {
       const i = this[def.hoverIdx];
       if (!d || !d.points || i < 0 || i >= d.points.length) return null;
       const p = d.points[i];
-      const tip = this.fmtTime(this._qbBucketTs(scope, i));
+      const ts = this._qbBucketTs(scope, i);
+      const tip = this.fmtTime(ts);
       const W = (this._qbChartWs && this._qbChartWs[scope]) || 0;
       const flip = W > 0 && this[def.hoverLeft] > W * 0.62;
-      if (!p) return { tip, gap: true, left: this[def.hoverLeft], flip };
-      return { tip, up: p.up, dl: p.dl, left: this[def.hoverLeft], flip };
+      const lim = _qbLimitAt(d.limits || [], ts);  // D7: 悬停时刻生效的当时限速(缺口也给 —— 时间真值)
+      if (!p) return { tip, gap: true, lim, left: this[def.hoverLeft], flip };
+      return { tip, up: p.up, dl: p.dl, lim, left: this[def.hoverLeft], flip };
     },
     _qbSummaryOf(scope) {
       const def = _QB_SCOPES[scope];
@@ -770,31 +810,45 @@ window.AQB_QB_TRAFFIC = {
       }
       ctx.restore();
     },
-    /* 限速虚线(draw 钩子 = 画在系列**之上**): qB 全局限速上下载各一条水平虚线(色随方向, 与
-     * 系列同色义)。只画**落在可视值域内**的限速 —— 自动模式下峰值未超限速时该线在顶沿之上
-     * 不可见, 自然不画(用户拍板: 自动模式最大值超过限速才画); 固定模式下限速恒在顶沿之下,
-     * 恒画。0(不限速)/null(未知)一律不画。 */
+    /* 限速虚线(draw 钩子 = 画在系列**之上**): 按**当时值**分段(plan 26-10-12-0535 D4,
+     * 取代旧「拉取那一刻单值画满整窗」) —— 从图记录的 u._qbLimits(后端 limits 事件序列,
+     * 建图/快路同步暂存)构段 _qbLimitSegs, 每段画在各自时间区间(经 valToPos), 最后一段
+     * 延伸到图数据右沿; 缺口(无流量采样)处照画 —— 限速是时间真值, 独立于流量存在与否。
+     * 可见性判据逐段化(延续 2026-10-08 拍板的逐段版本): 每段每方向 0 < v < ymax 才画
+     * (0 = 不限速/缺值不画, 自动模式下峰值未超限速的段自然在顶沿之上不可见)。 */
     _qbDrawLimits(u, tk) {
       const ymax = u.scales && u.scales.y && u.scales.y.max;
       if (!(ymax > 0) || !u.bbox || !u.ctx) return;
-      const lim = this.speedLimitBytes || {};
-      const lines = [];
-      if (typeof lim.up === "number" && lim.up > 0 && lim.up < ymax) lines.push([lim.up, tk.up]);
-      if (typeof lim.down === "number" && lim.down > 0 && lim.down < ymax) lines.push([lim.down, tk.down]);
-      if (!lines.length) return;
+      const events = u._qbLimits || [];
+      const xs = u.data && u.data[0];
+      const tEnd = xs && xs.length ? xs[xs.length - 1] : 0;
+      const segs = _qbLimitSegs(events, tEnd);
+      if (!segs.length) return;
       const px = this._qbCanvasScale(u);
       const ctx = u.ctx;
-      const x0 = u.bbox.left / px;
-      const x1 = (u.bbox.left + u.bbox.width) / px;
+      const xL = u.bbox.left / px;
+      const xR = (u.bbox.left + u.bbox.width) / px;
+      const yTop = u.bbox.top / px;
       ctx.setLineDash([5, 4]);
       ctx.lineWidth = 1;
-      for (const [val, color] of lines) {
-        const y = u.bbox.top / px + u.valToPos(val, "y");
-        ctx.strokeStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x0, y);
-        ctx.lineTo(x1, y);
-        ctx.stroke();
+      for (const seg of segs) {
+        const dirLines = [];
+        if (seg.up > 0 && seg.up < ymax) dirLines.push([seg.up, tk.up]);
+        if (seg.down > 0 && seg.down < ymax) dirLines.push([seg.down, tk.down]);
+        if (!dirLines.length) continue;
+        let x0 = xL + u.valToPos(seg.t0, "x");
+        let x1 = xL + u.valToPos(seg.t1, "x");
+        x0 = Math.max(x0, xL);
+        x1 = Math.min(x1, xR);
+        if (!(x1 > x0)) continue;  // 段越出可视窗(防御)不画
+        for (const [val, color] of dirLines) {
+          const y = yTop + u.valToPos(val, "y");
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x1, y);
+          ctx.stroke();
+        }
       }
       ctx.restore();
     },
@@ -827,6 +881,7 @@ window.AQB_QB_TRAFFIC = {
       const prev = this._qbCharts[scope];
       if (prev && prev.root && prev.root.isConnected && prev.root.parentElement === host) {
         this._qbAnchors[scope] = data.anchor;  // 悬停取值锚随新数据换新
+        prev._qbLimits = (d && d.limits) || [];  // 限速事件随快路同步换(否则变更要等整图重建才可见)
         prev.setData([data.xs, data.up, data.dl]);
         return;
       }
@@ -895,6 +950,7 @@ window.AQB_QB_TRAFFIC = {
         },
       };
       const u = this._qbCharts[scope] = new uPlot(opts, [data.xs, data.up, data.dl], host);
+      u._qbLimits = (d && d.limits) || [];  // 限速事件暂存在图记录上(u.data 只有三列, D4 数据通路)
       // 容器尺寸自适应(便签 26-10-04-0134 + 高度跟随): 建图尺寸一次取定后画布不重算 —— 对宿主挂
       // ResizeObserver, 宽/高任一变化即 setSize 重画(抽屉拖拽调高 -> 宿主高变 -> 图跟着长);
       // 宿主 width:100%/height:100% 不依赖图内容(三主题 views.css .qb-chart-host), 观察不会成环。
