@@ -38,7 +38,7 @@
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: ①node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; ②静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
-- test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)
+- test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 """
 import json
@@ -1509,11 +1509,17 @@ def test_drawer_tpl_trackers_card_uniform_height():
     缺陷: 虚拟合并卡沿用设计稿 footer 的长描述后, 卡身比实体卡高出一截 —— 同一栅格里同为
     「未启用」的实体卡(真浏览器实测 69px)与虚拟卡(100px)高度不一致。口径(用户拍板「同排
     等高」): 栅格走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡恒等高, 无需
-    给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉三件事:
+    给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉四件事:
     ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③虚拟合并卡装配
     (virtualRowOf, U3 起为 rowsFn 合成行)内不得再出现 dt04-vnote(实体『未启用』卡的同名
-    短注是另一回事, 别顺手连类一起删)。U3 改版: 卡片 = 引擎行容器(.group-row 样成卡),
-    双列栅格落 .dt04-list .group-table(引擎 .group-table 基础是 flex 列, 变体覆盖为 grid)。"""
+    短注是另一回事, 别顺手连类一起删); ④卡片必须填满栅格格(width:auto 必配)——
+    2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器
+    被三皮肤经典表 CSS 继承 width:fit-content(与 min-width:100% 成对, 经典 flex 列容器里
+    靠 min-width 兜底成整行宽); 本栅格是 grid + min-width:0, fit-content 直接生效 ⇒ 卡片
+    收缩到内容宽(实测 ~330px / 695px 格) = 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移
+    (实体 330 vs 虚拟 378, 违反「宽度统一」)。grid 项 width:auto + 默认 justify-self:
+    stretch 才填格。U3 改版: 卡片 = 引擎行容器(.group-row 样成卡), 双列栅格落
+    .dt04-list .group-table(引擎 .group-table 基础是 flex 列, 变体覆盖为 grid)。"""
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     name = "04-trackers-status-cards-tall.js"
     text = open(os.path.join(vdir, name), encoding="utf-8").read()
@@ -1537,6 +1543,18 @@ def test_drawer_tpl_trackers_card_uniform_height():
     # 3. 实体「未启用」卡的短注(vnote 类)必须保留 —— 别把整个类连带删掉
     assert ".drawer .dt04-vnote {" in text, \
         f"drawer_tpl/{name}: .dt04-vnote 类被整体删除(实体『未启用』卡的短注仍用它)"
+
+    # 4. 卡片必须填满栅格格(2026-10-12 用户报障「真实卡与虚拟卡之间/虚拟卡后方有长空隙」根治):
+    #    引擎行容器被三皮肤经典表 CSS 继承 width:fit-content(配 min-width:100%, 经典 flex
+    #    列容器里靠 min-width 兜底 = 整行宽); 本栅格是 grid + min-width:0 ⇒ fit-content 直接
+    #    生效, 卡片收缩到内容宽(实测 ~330px / 695px 格)= 两列卡片间 ~700px 永久空洞 + 卡宽
+    #    随内容漂移(实体 330 vs 虚拟 378, 违反「宽度统一」)。grid 项 width:auto + 默认
+    #    justify-self:stretch 才填格 —— 显式声明缺失即回归。
+    rowline = [l for l in text.splitlines() if ".dt04-list.group-row{position:relative" in l.replace(" ", "")]
+    assert rowline, f"drawer_tpl/{name}: 缺 .dt04-list .group-row 卡片规则(形态漂移, 同步本守阵)"
+    assert "width:auto" in rowline[0].replace(" ", ""), \
+        (f"drawer_tpl/{name}: .group-row 必须显式 width:auto(引擎行容器继承三皮肤经典表 "
+         "width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间出现长空隙; 2026-10-12 报障复发)")
 
 
 def test_drawer_tpl_variant_field_icons():

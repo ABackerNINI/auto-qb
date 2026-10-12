@@ -16,7 +16,9 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * 手势清单(每条都是真手势, 不借道 vm):
  *   04: 分段排序并引擎(默认异常优先 → 按 tier, 次序真变) + 筛选 pills(anchTouch 桥换代,
- *       行子集真刷新; 轮询冻结手法排除 5s tick 假绿) + 虚拟合并卡(rowsFn 合成行);
+ *       行子集真刷新; 轮询冻结手法排除 5s tick 假绿) + 虚拟合并卡(rowsFn 合成行)
+ *       + 卡片填满栅格格(每卡 = 格宽且全部同宽; 2026-10-12 用户报障「真实卡与虚拟卡之间/
+ *       虚拟卡后方有长空隙」根治 —— width:fit-content 回潮即红);
  *   05: 分段锚五组 + 组内序(ok 组 tier 升序) + 折叠(class 翻转, 锚元素集合不变) + msg 展开;
  *   06: 引擎排序三态(默认异常置顶 → tier 降/升 → 回默认) + 拖宽落盘 + 右键隐藏落盘
  *       + 刷新偏好回放 + 仅看异常(容器类切换, benign 行隐藏) + msg 展开。
@@ -102,6 +104,25 @@ for (const skin of SKINS) {
       await expect(vcard, '虚拟合并卡 = rowsFn 合成行').toHaveCount(1);
       await expect(vcard).toContainText('虚拟条目 ×2');
       await expect(vcard.locator('.dt04-vchip')).toHaveCount(2);
+
+      // 卡片填满栅格格(2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治):
+      // 引擎行容器被三皮肤经典表 CSS 继承 width:fit-content, grid 下不参与 stretch ⇒ 卡片曾收缩到
+      // 内容宽(实测 ~330px / 695px 格), 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移(实体 330 vs
+      // 虚拟 378)。width:auto 后每张卡必须等于格宽(两列等宽)且全部同宽 —— fit-content 回潮即红。
+      const geom = await anchor.evaluate((root) => {
+        const tbl = root.querySelector('.group-table');
+        const gap = parseFloat(getComputedStyle(tbl).gap) || 0;
+        const cell = (tbl.getBoundingClientRect().width - gap) / 2;
+        const ws = [...root.querySelectorAll('.group-row')]
+          .map((r) => Math.round(r.getBoundingClientRect().width * 100) / 100);
+        return { cell: Math.round(cell * 100) / 100, ws };
+      });
+      expect(geom.ws, '卡片几何取样(6 实体 + 1 虚拟)').toHaveLength(7);
+      for (const w of geom.ws) {
+        expect(Math.abs(w - geom.cell),
+          `卡片须填满栅格格(格宽 ${geom.cell}px, 实测卡宽 ${w}px; width:fit-content 回潮 = 两列间长空隙复发)`).toBeLessThanOrEqual(1);
+      }
+      expect(new Set(geom.ws).size, '全部卡片同宽(虚拟卡与实体卡一致, 2026-10-09「宽度统一」口径)').toBe(1);
 
       // 分段钮排序并引擎(U3/R7): 「按 tier」单击 → dtSortSet 直设 dyn 键, 引擎响应式重排
       // sev 序次卡 = warn(tier2); tier 序次卡 = upd(tier0, tier*10+sev=2) —— 次序真变可断言

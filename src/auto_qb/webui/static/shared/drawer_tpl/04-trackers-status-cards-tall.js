@@ -86,12 +86,18 @@
     /* 卡片栅格(表格体 = 引擎行容器经桥 Teleport 进锚, U3): .group-table 变双列栅格,
      * .group-row 样成卡(只保留行级观感, 排序/换代归引擎)。align-items:stretch = 同排卡片
      * 自动等高(虚拟合并卡与其同排实体卡恒齐平; 2026-10-10 用户报障「虚拟条目卡片高度与其
-     * 它的不一致」, 改回 start 即回归, 守阵 test_drawer_tpl_trackers_card_uniform_height 钉住) */
+     * 它的不一致」, 改回 start 即回归, 守阵 test_drawer_tpl_trackers_card_uniform_height 钉住)
+     * !width:auto 必配(2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」
+     * 根治): 引擎行容器被三皮肤经典表 CSS 继承 width:fit-content(与 min-width:100% 成对,
+     * 经典 flex 列容器里靠 min-width 兜底成整行宽); 本栅格是 grid + min-width:0, fit-content
+     * 直接生效 ⇒ 卡片收缩到内容宽(实测 ~330px / 695px 格), 两列卡片之间留下 ~700px 永久
+     * 空洞, 且卡宽随内容漂移(实体 330 vs 虚拟 378, 违反「宽度统一」)。grid 项 width:auto
+     * + 默认 justify-self:stretch 才填满栅格格。守阵双扣(静态第 4 节 + e2e 几何)钉住。 */
     ".drawer .dt04-list { display:flex; flex-direction:column; }",
     ".drawer .dt04-list .group-head { display:none; }",
     ".drawer .dt04-list .group-table { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));",
     "  gap:10px; align-items:stretch; overflow:visible; padding-bottom:0; }",
-    ".drawer .dt04-list .group-row { position:relative; display:block; min-width:0; gap:0;",
+    ".drawer .dt04-list .group-row { position:relative; display:block; width:auto; min-width:0; gap:0;",
     "  padding:10px 12px 10px 16px; background:var(--bg-card); border:1px solid var(--border);",
     "  border-radius:var(--radius); box-shadow:var(--shadow-1); cursor:default;",
     "  transition:border-color var(--dur) var(--ease); }",
