@@ -239,6 +239,9 @@
           if (seg) el.setAttribute("data-dt-seg", seg);
         }
         slots[i].replaceWith(el);
+        /* 驻留态复位(dtHoldAnchors 持有期间置了 display:none): 归位即可见。
+         * 只在真被置过时写 —— 稳定路径(锚从未离场)零样式操作。 */
+        if (el.style && el.style.display === "none") el.style.display = "";
         keep[key] = el;
       }
       host.__dtAnchorKeep = keep;
@@ -415,6 +418,37 @@
       if (!seen[t2] && vm.dtBridge[t2]) vm.dtBridge[t2].on = false; /* 锚离场(空态/换变体): 摘 on, gen 保持单调 */
     }
     host.__dtAnchorEls = seen;
+  }
+
+  /* ---------------- 桥锚驻留(模板表格闪烁修复, 与 dtSyncAnchors/anchFill 同族) ----------------
+   * 病根: 变体早分支(正在加载 / 加载失败 / 暂无数据)用 replaceChildren 清掉整帧时, 宿主里
+   * 记账的锚元素(Teleport 表格体就挂在它里面)随之离场 → dtSyncAnchors 当场摘 on → 桥卸载;
+   * 数据回来整帧重建, 锚再现 → gen 自增 → 桥重挂。这一卸一挂在用户眼里就是**表格闪烁**,
+   * 且卸/挂两拍与根渲染批一旦错位(换代拍的 :key 净写在途), Teleport 内容会被抛进**游离旧锚**
+   * —— 表格直接消失且不恢复(本缺陷的两种面貌, 真机复现取证所见)。
+   * 驻留: 早分支清帧后把记账锚按原样接回宿主(display:none 隐藏持有)——
+   *   ·锚不离场 ⇒ dtSyncAnchors 不摘 on ⇒ 桥不卸载 ⇒ 零闪烁;
+   *   ·整帧回来时 anchFill 把**同一元素**换回 slot 位并复位 display, 元素身份不变 ⇒ 不换代
+   *     ⇒ 不重挂(行更新照走引擎响应式, 横滚位/列宽/排序态全保留)。
+   * 观感口径: 早分支文案(加载/失败/空态)原样呈现, 只是等待期不再拆掉旧表格 —— 与 FX-29
+   * 「拉新数据前先清空旧数据」坑档同向(快中间态本身就是闪)。多锚同 id(08 五分组)逐段驻留。
+   * 只认「整帧未渲染(无 slot)且记账非空」: 整帧路径锚归 anchFill 管, 不插手; 宿主从未出过
+   * 锚(首载 loading)时记账为空, 零操作。回落 catch 路径**不**驻留(变体已弃守, 桥须随摘)。 */
+  function dtHoldAnchors(host) {
+    if (!host || typeof host.querySelectorAll !== "function") return;
+    var book = host.__dtAnchorKeep;
+    if (!book) return;
+    if (host.querySelector("[data-dt-anchor-slot]")) return; /* 整帧在: 锚归 anchFill 管 */
+    for (var key in book) {
+      var el = book[key];
+      /* 判据是**离文档**(isConnected 假)而非"父节点不是宿主": 整帧渲染后锚在
+       * .dt07-list 里(父节点是列表容器不是宿主), 按父节点判会把已就位的锚每次
+       * 渲染后都挪走并隐藏 —— 表格反而被藏掉。早分支 replaceChildren 才真离文档。 */
+      if (el && !el.isConnected) {
+        if (el.style) el.style.display = "none";
+        host.appendChild(el);
+      }
+    }
   }
 
   /* ---------------- Vue mixin(app.js 末尾 app.mixin(window.AQB_DRAWER_TPL)) ----------------
@@ -689,6 +723,10 @@
       _dtRender(st) {
         try {
           st.entry.render(st.host, this);
+          /* 桥锚驻留(模板表格闪烁修复): 早分支(加载/错误/空态)清帧后把记账锚接回宿主
+           * 隐藏持有 —— 锚不离场 => 下面 dtSyncAnchors 不摘 on => 桥不卸载(表格不闪),
+           * 数据回来 anchFill 原元素归位不换代(不重挂)。node 探针环境无 DOM(函数内自守)。 */
+          dtHoldAnchors(st.host);
           /* 桥锚对账(U2 单点): 挂载拍 + 每次数据通知都过这里 —— 锚在场且元素身份未变不换代
            * (数据轮询下桥零重挂, 行更新走引擎响应式); 锚新现/重建 gen 单调自增; 锚离场摘 on。
            * node 探针环境无 DOM(函数内自守)。 */
