@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="seed-state-writeback">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-12-2148">
+<meta name="doc-updated" content="26-10-12-2315">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1420;
+    --paper: #151c2c;
+    --paper2: #1a2234;
+    --ink: #dce4f4;
+    --dim: #9aa8c2;
+    --faint: #6b7a96;
+    --line: #2a3550;
+    --acc: #5aa2e8;
+    --ok: #4cc38a;
+    --warn: #e8b45a;
+    --bad: #e87a7a;
+    --code-bg: #0b101c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 0 16px 80px;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14.5px; line-height: 1.75;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.rpt { padding: 40px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  header.rpt h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .5px; }
+  header.rpt .sub { color: var(--dim); font-size: 13.5px; }
+  .metagrid { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 16px; font-size: 12.5px; color: var(--dim); }
+  .metagrid b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 19px; margin: 46px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--acc); margin-right: 8px; font-family: Consolas, monospace; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; color: var(--ink); }
+  h3::before { content: "\25D8"; color: var(--acc); margin-right: 4px; }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--dim); }
+  p { margin: 8px 0; }
+  .lead { color: var(--dim); font-size: 13.5px; margin-top: 2px; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--paper2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td { color: var(--ink); }
+  td .sm, .sm { font-size: 12px; color: var(--dim); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  code, .mono {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.3px; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+    color: #a8c8f0; word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.65;
+    font-family: Consolas, "Cascadia Mono", monospace; color: #b9d2f2;
+  }
+  pre code { border: 0; padding: 0; background: none; }
+  .box { border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 8px; background: var(--paper); padding: 12px 16px; margin: 14px 0; }
+  .box.ok { border-left-color: var(--ok); }
+  .box.warn { border-left-color: var(--warn); }
+  .box.bad { border-left-color: var(--bad); }
+  .box .t { font-weight: 700; margin-bottom: 4px; }
+  .box.ok .t { color: var(--ok); }
+  .box.warn .t { color: var(--warn); }
+  .box.bad .t { color: var(--bad); }
+  .badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .b-fix { background: rgba(76,195,138,.14); color: var(--ok); border: 1px solid rgba(76,195,138,.4); }
+  .b-need { background: rgba(90,162,232,.14); color: var(--acc); border: 1px solid rgba(90,162,232,.4); }
+  .b-opt { background: rgba(154,168,194,.1); color: var(--dim); border: 1px solid rgba(154,168,194,.35); }
+  .b-warn { background: rgba(232,180,90,.12); color: var(--warn); border: 1px solid rgba(232,180,90,.4); }
+  .b-bad { background: rgba(232,122,122,.13); color: var(--bad); border: 1px solid rgba(232,122,122,.4); }
+  .nc { color: var(--warn); font-weight: 600; }
+  .foot { margin-top: 60px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="rpt">
+  <h1>种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析</h1>
+  <div class="sub">「qB 全量/增量同步（权威）」与「auto-qb 自有动作直接回写快照」两条通道的取证、不一致风险面、移除影响逐消费方分析、方案裁定</div>
+  <div class="metagrid">
+    <span>报告编号: <b>26-10-12-2148</b></span>
+    <span>日期: <b>2026-10-12</b></span>
+    <span>范围: <b>core/qbapi.py · torrents/store.py · torrents/record.py · core/qbmanager.py · core/modules/(grouping_mod · rules_mod · ops_mod) · rules/actions/basic.py · webui/commands.py · webui/runtime.py · torrents/view.py</b></span>
+    <span>性质: <b>证据快照</b>（行号基于 12033f27 工作区文件）</span>
+  </div>
+  <div class="metagrid">
+    <span>取证手段: <b>代码走查 + 全量引用检索</b>（全部结论落到 文件:行号；本轮零代码改动，未跑测试基线）</span>
+  </div>
+  <div class="metagrid">
+    <span>本轮修订: <b>26-10-12-2229</b> —— 用户质疑 §4.3「自家停的做种组下一轮被检出上传→暂停是误触发」后重审：该判据的理据（grouping_mod.py:184-185「做种中文件可能被外部删除，转暂停后不再主动读盘」）是<b>磁盘风险</b>而非<b>意图</b>，源无关；且存在具体不对称——经 qB 自身 WebUI 暂停会触发扫描，经 auto-qb WebUI 暂停被回写吸收<b>不触发</b>。裁定「源无关语义」为正确方向。§4.2/§4.3 由「回写保护的契约」<b>改判为「回写压制的信号」</b>；§5 补充方案 B′（真值回写 + 显式自写变更发射通道）并重排路径；§1 摘要、§6 验收要点同步。§2 取证、§3 风险面结论不变。</span>
+  </div>
+  <div class="metagrid">
+    <span>本轮修订: <b>26-10-12-2315</b> —— 用户意向选方案 A，追加「A + 延迟访问（把自写后的同 tick 状态访问延至下一 tick）」变体评估（新增 §4.9）：结构性事实（_tick = sync 线 + task 线，apply_sync 仅一拍开头一次；WEB 命令路径经 P0-5 本已新鲜）、分层可行性（task 线 run_due 单入口重排 / post 相位脏组跳过自愈）、逐项对账（幂等可解；G4/G6 安全闸门是 deferral 唯一不可替代的价值；deferral 不碰快照故不与下轮发射打架）、核心取舍（构造性安全 vs 纪律性安全）与结论（可行且完整，但必要性几乎全压在 G4/G6 ⇒ 推荐局部 deferral + 可选 <code>pending_writes</code> 诚实标记）。§5 裁定补 A 系落地路径；§1 摘要、§6 清单同步。</span>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<h2><span class="no">1</span>摘要</h2>
+
+<div class="box bad">
+  <div class="t">问题（用户命题）</div>
+  种子状态有<b>两条回写通道</b>：① qB 全量/增量同步（<code>sync/maindata</code> rid 增量 / 降级 <code>torrents_info</code> 全量，权威）；② auto-qb 自有动作（停/起/暂停/恢复）经 <code>QbApi._sync_paused_state</code> <b>直接把合成状态写进快照</b>。后者可能与 qB 实际状态不一致。需分析<b>移除后者</b>的可行性与影响。
+</div>
+
+<div class="box warn">
+  <div class="t">核心结论（一句话）</div>
+  直接回写<b>只有一个单点</b>（<code>qbapi.py:96-126</code> → <code>store.py:480-544</code> 的 <code>state=</code> 参数），且系统是单写线程 —— <b>「移除」在工程上完全可行</b>。当前它同时服务两个目标：<b>同 tick 值新鲜</b>（幂等/视图脏/组脏，正当需求）与<b>自写变更静默吸收</b>（防自触发，是<b>策略</b>而非正确性需求）。26-10-12-2229 重审后者：按「源无关语义」（暂停的磁盘风险与谁按下暂停键无关），吸收实为<b>信号压制</b>——自家停种后该做的缺文件扫描被吞（经 auto-qb WebUI 暂停的做种恰恰跳过该功能的核心场景）。因此正解不是「移除机制」，而是<b>把合成值换成真值、把隐式吸收换成显式发射</b>（方案 B′，§5）：写后立即查 <code>torrents_info</code> 写真值 + 登记动作前基线使下一轮照常发射状态变化 —— 不一致结构性消失，新鲜度保留，信号不再被吞。
+</div>
+
+<table>
+  <tr><th style="width:130px">议题</th><th>结论</th></tr>
+  <tr><td>移除可行性</td><td><b>高</b>。单点收口 + 单写线程，无并发竞态；<code>state</code> 不落盘，无迁移面。纯移除的真实代价收敛为：同 tick 幂等门失效（低）+ 冲突判定延迟一轮（低）+ 缺文件停种路径每次事件多一次冗余扫描（低，有界）。§4.2/§4.3 两项经重审<b>不是回归而是收益/语义正确</b>。</td></tr>
+  <tr><td>不一致是否真实存在</td><td><b>是</b>，6 类风险面（§3）：值域压平（4 值 vs qB 全枚举）、完成位推断陈旧、隐式吸收无登记、异步应用竞态、全量停种形态零覆盖、失配静默变「外部变化」。</td></tr>
+  <tr><td>推荐路径</td><td><b>用户意向方案 A；A 系推荐形态 = A + 局部 deferral</b>（§4.9）：删回写与合成值（R1-R6 全消），源无关发射天然获得；只对校验类决策（G4/G6 等，消费点可枚举）做局部延迟，收回 A 唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。<b>B′</b>（真值回写 + 显式发射）是「同 tick 全决策新鲜」优先时的替代路径。B 单独<b>不完整</b>：只修值失真，吸收盲点原样保留。</td></tr>
+  <tr><td>影响面（若执意 A）</td><td>规则 <code>on_torrent_state_enum_changed</code> 对自有停/起发射（<b>语义正确</b>：自家停种也是真实状态变化，用户规则应可感知；反馈环需显式 external-only 过滤而非静默隐藏）；分组「上传转暂停」检测对自家停种发射（<b>收益</b>：源无关检查；缺文件停种路径仅多一次冗余扫描，有界）；同 tick 幂等门失效（低）；冲突判定延迟一轮（低）；G4/G6 校验闸门陈旧-放行窗口（A 的唯一实质缺口，<b>局部 deferral 收口</b>，§4.9.3）；WebUI 显示延迟 ≤1 tick（低，P0-5 兜底且同 tick 补刷新）。</td></tr>
+  <tr><td>测试守阵</td><td>3 条直接守阵钉在「写后同步」契约上（<code>tests/test_actions.py:157/179/210</code>），任何方案都需按新契约重写；其余为权威通道仿真，不受影响。</td></tr>
+</table>
+
+<!-- ============================================================ 2 -->
+<h2><span class="no">2</span>现状取证：两条回写通道</h2>
+
+<h3>2.1 权威通道 —— qB 全量/增量同步</h3>
+<p>唯一以 qB 为真相的数据入口，全部经 <code>TorrentStore</code>：</p>
+<ul>
+  <li><b>增量</b>：<code>apply_sync(api)</code>（<code>store.py:118</code>）走 <code>sync/maindata?rid=</code> —— rid 一致只回<b>变化种子</b>的变化字段，删除走 <code>torrents_removed</code>；<code>full_update=true</code>（首轮/rid 失效）为全量。</li>
+  <li><b>降级全量</b>：旧版 qB / 替身缺方法时（<code>_SYNC_UNAVAILABLE</code>，<code>store.py:18/128-140</code>）降级 <code>torrents_info()</code> 一次性告警。</li>
+  <li><b>应用</b>：<code>_apply(patches, removed, full)</code>（<code>store.py:193</code>）对每个变化种子 <code>rec.apply_delta(src)</code>（<code>record.py:157</code>）拿变化字段集；其中 <code>state</code> 入 <code>state_changed</code>（<code>store.py:239-240</code>）；<code>state/amount_left/tags</code>（<code>_CONFLICT_FIELDS</code>，<code>store.py:191</code>）变化登记 <code>dirty_groups</code>（<code>store.py:241-244</code>）。</li>
+  <li><b>轮末固化</b>：<code>update_state_snapshot()</code>（<code>store.py:301-307</code>）把本轮 <code>by_hash</code> 的 <code>state_enum</code> 固化为「上一轮快照」，供下一轮对比。调用点在主循环 <code>_refresh_torrents</code> 收尾（<code>qbmanager.py:881-885</code>）。</li>
+  <li><b>节拍</b>：<code>sync_interval</code> 被钳制 ≤ <code>main_tick</code>（<code>qbmanager.py:505-511</code>，默认 1.5s）；WEB 命令改了状态的那轮强制补刷新一次（P0-5，<code>qbmanager.py:525-528</code>），即用户点击后真值在<b>同 tick</b> 落地。</li>
+</ul>
+<p class="lead">关键性质：权威通道是<b>唯一</b>产生 <code>state_changed</code>（本轮 state 变化集）的入口，而 <code>state_changed</code> 是规则状态事件与分组转移检测的唯一依据（§4.2/§4.3）。</p>
+
+<h3>2.2 直接回写通道 —— <code>_sync_paused_state</code>（单点）</h3>
+<p>全部 direct-write 收口在一个方法，全仓无第二处 <code>update_torrent_fields(state=...)</code>：</p>
+<pre><code>QbApi._sync_paused_state(hashes, paused)            # qbapi.py:96-126
+  buckets = {}                                        # 按「完成位」分两个桶
+  for h in hashes:
+      complete = enum.is_complete or rec.progress >= 1.0    # qbapi.py:115-119 快照自推
+      want = ("pausedUP" if complete else "pausedDL") if paused \
+        else ("stalledUP" if complete else "stalledDL")      # 只有 4 个合成值
+  store.update_torrent_fields(hs, state=state)         # qbapi.py:126 -> store.py:535-544</code></pre>
+<p>四个Facade 入口共用它（<code>qbapi.py:128-148</code>）：<code>torrents_start</code> / <code>torrents_stop</code> / <code>torrents_pause</code> / <code>torrents_resume</code>。写入 <code>store.update_torrent_fields</code> 时连带三件套副作用（<code>store.py:503-544</code>）：</p>
+<ol>
+  <li><b>值覆写</b>：<code>torrent.state = state</code> + <code>_state_enum</code> 缓存失效（<code>store.py:535-536/543-544</code>）—— 同 tick 读 <code>state_enum</code> 立即是新值；</li>
+  <li><b>视图脏</b>：<code>state</code> ∈ <code>_VIEW_FIELDS</code>（<code>view.py:13</code>）→ <code>view_changed=True</code>（<code>store.py:506</code>）→ WebUI 视图重建；</li>
+  <li><b>组脏</b>：登记 <code>dirty_groups</code>（<code>store.py:512-516</code>）→ 同 tick <code>post</code> 相位重算该组下载冲突（增量判据，<code>grouping_mod.py:406-408</code>）。</li>
+</ol>
+<div class="box">
+  <div class="t">隐式的第四用途：吸收下一轮 qB 上报</div>
+  合成值与 qB 下一轮增量上报的值<b>逐字相同</b>时，<code>apply_delta</code> 检不出 delta ⇒ 该 hash <b>不进</b> <code>state_changed</code> ⇒ ① 规则 <code>on_torrent_state_enum_changed</code> 不对自家动作触发；② 分组「上传转暂停」检测不误判。主循环注释把这层设计写死了：<i>「新增归组的大小一致性停种经快照同步会当场改写 by_hash 状态，放在后面会把自家停种误判为外部『上传转暂停』」</i>（<code>qbmanager.py:810-812</code>）。注意这是<b>隐式</b>吸收（值相等即吸收），与 tags/category 的显式 <code>self_caused_fields</code> 期望值登记（<code>store.py:346-387</code>）是两套机制。<b>（26-10-12-2229 改判：在「源无关语义」下，该吸收从「免误触发保护」重新定性为「信号压制」——自家停种同样应触发检查与事件，隐式吸收使这条信号对自有动作静默消亡，见 §4.2/§4.3/§5。）</b>
+</div>
+
+<h3>2.3 触发方全集（哪些操作会直接改状态）</h3>
+<table>
+  <tr><th>触发方</th><th>入口（文件:行）</th><th>动作</th><th>形态</th></tr>
+  <tr><td>规则动作</td><td><code>rules/actions/basic.py:116/129</code></td><td>start / stop（前置 <code>is_stopped</code> 幂等门，<code>basic.py:113/126</code>）</td><td>单 hash</td></tr>
+  <tr><td>分组-大小不一致</td><td><code>grouping_mod.py:248</code></td><td>整组暂停</td><td>组内全 hash</td></tr>
+  <tr><td>分组-缺文件</td><td><code>grouping_mod.py:388</code></td><td>整组暂停 + MISSING 标签</td><td>组内全 hash</td></tr>
+  <tr><td>分组-下载冲突</td><td><code>grouping_mod.py:461</code></td><td>整组暂停（multi-dl / mixed）</td><td>组内全 hash</td></tr>
+  <tr><td>分组-跨组文件交叉</td><td><code>grouping_mod.py:591</code></td><td>暂停涉事下载方</td><td>hash 列表</td></tr>
+  <tr><td>ops-校验成功</td><td><code>ops_mod.py:274</code></td><td>auto_start（recheck 路径）</td><td>单 hash</td></tr>
+  <tr><td>ops-跳检完成</td><td><code>ops_mod.py:471</code></td><td>auto_start（skip-check 路径）</td><td>单 hash</td></tr>
+  <tr><td>WEB UI</td><td><code>webui/commands.py:478/481/525/528</code></td><td>整组 / 单种 pause·resume（<code>_group_action</code>/<code>_torrent_action</code>，<code>commands.py:448-460</code>）</td><td>显式 hash 列表</td></tr>
+  <tr><td>WEB UI 批量</td><td><code>webui/commands.py:833/835</code></td><td>bulk pause·resume（<code>_BULK_ACTIONS</code>）</td><td>显式 hash 列表</td></tr>
+  <tr><td>全量形态</td><td>—</td><td><code>torrent_hashes=None</code>（语义=全部种子）时 <code>_to_list(None)==[]</code>（<code>qbapi.py:107</code>）⇒ <b>零回写</b>，快照对全库停留旧值</td><td>None</td></tr>
+</table>
+<p class="lead">执行线程：以上全部经主循环单线程（WEB 命令走 command line 由 <code>run_command_line</code> 在主循环线程执行，<code>qbmanager.py:512-517</code>）⇒ 双写不存在竞态，问题是纯语义问题。</p>
+
+<!-- ============================================================ 3 -->
+<h2><span class="no">3</span>不一致风险面：直接回写凭什么会与 qB 实际状态脱节</h2>
+<p>直接回写是「照快照推一个值写进快照」—— 推错的每一分，都会成为快照与 qB 真值之间的差。逐条列机理与严重度：</p>
+
+<table>
+  <tr><th style="width:52px">编号</th><th style="width:150px">风险</th><th>机理（证据）</th><th style="width:96px">严重度</th></tr>
+  <tr>
+    <td><b>R1</b></td><td>值域压平（4 值 vs qB 全枚举）</td>
+    <td>回写只会写 <code>pausedUP/pausedDL/stalledUP/stalledDL</code> 四值（<code>qbapi.py:120-123</code>），qB 真实状态空间还含 <code>queuedUP/queuedDL</code>、<code>forcedUP/forcedDL</code>、<code>checkingUP/checkingDL/checkingResumeData</code>、<code>moving</code>、<code>missingFiles</code>、<code>error</code> 等。<b>已知实例</b>：ops 校验成功 <code>auto_start</code> 后回写 <code>stalledUP</code>（<code>ops_mod.py:274</code>），而 qB 实际是 <code>checkingUP</code>（recheck 恢复）—— 到下一轮 sync 才被真值纠正。源码自认该取舍：<i>「stalled/queued/forced/检查中等细分由下轮 sync 校准（瞬态，不影响判定）」</i>（<code>qbapi.py:103-104</code>）—— 但「不影响判定」只对暂停轴成立，<code>is_checking</code> 恰是 ops/skip-gates/代表种判据（<code>ops_mod.py</code> 轮询、<code>grouping_mod.py:298</code>）的输入。</td>
+    <td><span class="badge b-warn">中</span></td>
+  </tr>
+  <tr>
+    <td><b>R2</b></td><td>完成位推断的陈旧性</td>
+    <td>「完成位」不是 qB 告知，而是照快照自推：<code>enum.is_complete or progress>=1.0</code>（<code>qbapi.py:115-119</code>）。快照陈旧（刚下完未上报、<code>.!qB</code> 改名窗口、缺文件 scanned 前）时，暂停一个即将完成的种子会写成 <code>pausedDL</code>（实为 <code>pausedUP</code>）—— 同 tick 的冲突重算按 <code>is_complete</code> 计 n_done（<code>grouping_mod.py:438</code>）、缺文件分组分支按完成位分流，全部按错位分类跑一格。<b>这不是假想</b>：该判据本身就加固过一次（report 26-10-11-2017 §4.2/§6.4 的「完成位联合判据」，见 <code>qbapi.py:111-114</code> 注释），说明此面反复出过问题。</td>
+    <td><span class="badge b-warn">中</span></td>
+  </tr>
+  <tr>
+    <td><b>R3</b></td><td>隐式吸收，无登记、无告警</td>
+    <td>tags/category 的自写有显式 <code>self_caused_fields</code> 期望值登记：上报值与期望一致 ⇒ 按自写处理并消费登记；<b>不一致 ⇒ 按外部变化放行</b>（<code>store.py:346-370</code>）。state 没有任何登记与告警 —— 吸收只靠「下一轮 qB 上报值 == 写入值」的偶然相等。失配时静默降级为「外部变化」，无任何日志线索。</td>
+    <td><span class="badge b-warn">中</span></td>
+  </tr>
+  <tr>
+    <td><b>R4</b></td><td>异步应用竞态（意图当成事实）</td>
+    <td>pause/start 下发后 qB 会话状态并非即时翻转（resume 尤其明显，WebUI 侧专为此建了 <code>truth_pending</code>/<code>TRUTH_RETRY_S</code> 重试机制，<code>qbmanager.py:536-538/568-572</code>；flush 注释原话：<i>「resume 后 qB 要过一会儿才翻状态」</i>）。直接回写在 API 返回后立刻把「意图」当「事实」落进快照，与真值机制并行双轨。同仓库的跳检重加流程刻意不采用回写，而是<b>「决定性时刻直查真值」</b>（<code>ops_mod.py:791-806</code>：用 <code>torrents_info</code> 刚确认的结果 <code>apply_delta</code>）—— 即项目内部已有相反方向的最佳实践。</td>
+    <td><span class="badge b-warn">中</span></td>
+  </tr>
+  <tr>
+    <td><b>R5</b></td><td>全量形态零覆盖（覆盖不对称）</td>
+    <td><code>torrent_hashes=None</code>（语义=全部种子）时 <code>_to_list</code> 返回空表（<code>qbapi.py:51-55/107</code>）⇒ buckets 空 ⇒ <b>一个种子都不回写</b>。同一个「暂停全部」的意图，单种/批量路径保鲜、全量路径不保鲜 —— 快照新鲜度取决于调用形态。</td>
+    <td><span class="badge b-opt">低-中</span></td>
+  </tr>
+  <tr>
+    <td><b>R6</b></td><td>静默部分应用</td>
+    <td>qB 对不存在的 hash 静默跳过（不报错），回写侧只对 <code>by_hash</code> 里有的记录生效（<code>store.py:509-510</code> skip 缺失）⇒ 单一机制内自洽；但「API 调用成功」与「qB 实际应用」之间没有回验通道（对比 R4 的 ops 模式）。</td>
+    <td><span class="badge b-opt">低</span></td>
+  </tr>
+</table>
+
+<div class="box warn">
+  <div class="t">风险面小结</div>
+  R1/R2/R4 的直接受害面是<b>同 tick 的判定链</b>（下载冲突 n_done、transfer 检测、checking 门、跳检参考种），不是显示层；窗口宽度 ≈ 到一个 sync 间隔（默认 ≤1.5s，钳制于 main_tick，<code>qbmanager.py:511</code>）。R3/R5/R6 是可观测性与一致性问题。全部六类在方案 B / B′（§5）下结构性消失。
+</div>
+
+<!-- ============================================================ 4 -->
+<h2><span class="no">4</span>移除影响分析：按消费方逐条对账</h2>
+<p>直接回写不是「只喂显示层」，它是四个同 tick 契约的承重墙。逐consumer 分析纯移除（方案 A）后的行为变化：</p>
+
+<h3>4.1 同 tick 动作幂等 <span class="badge b-opt">低</span></h3>
+<ul>
+  <li>契约：写后同步让同 tick 内二次停/起被 <code>is_stopped/is_paused</code> 门拦下（<code>qbapi.py:103-105</code> 自述：<i>「不写回的话，同一 tick 内第二个 stop 会因 is_paused 仍为假而再发一次请求」</i>；规则侧门在 <code>basic.py:113/126</code>）。</li>
+  <li>移除后：第二个 stop/start 在同 tick 再发一次 HTTP。qB 的 stop/start 本身幂等 ⇒ <b>无功能错误</b>，代价是重复请求与日志噪声；规则组合（多规则同 tick 作用于同种）从 skip 变 ok。</li>
+  <li>守阵：<code>test_actions.py:157 test_start_stop_idempotent</code> 直接钉这条（其注释明写依赖「经 QbApi 同步后 state 已为 stalledUP」）。</li>
+</ul>
+
+<h3>4.2 规则状态事件的自写发射 <span class="badge b-need">语义改判（26-10-12-2229）</span></h3>
+<ul>
+  <li>现状：合成值 == qB 上报值 ⇒ <code>apply_delta</code> 无 delta ⇒ 自有动作<b>不进</b> <code>state_changed</code> ⇒ <code>on_torrent_state_enum_changed</code> 规则不对自家动作触发（<code>rules_mod.py:330-338</code> 只消费 <code>state_changed</code>）。</li>
+  <li><b>改判：</b>「自家停种也是真实发生的状态变化」—— 用户完全可能写「auto-qb 暂停时通知我 / 打标 / 走后续流程」这类规则。静默吸收使这类规则<b>永远看不到 auto-qb 自己的停/起</b>，这是能力缺失，不是保护。发射的触发面（冲突暂停、缺文件暂停、大小不一致停组、规则自己的 stop、WebUI 用户暂停）按源无关语义<b>应当全量可见</b>。</li>
+  <li><b>残留的真实风险是反馈环</b>，且应显式治理而非隐藏：规则 R1「满足 X → stop」+ R2「on paused → 做 Y」，若 Y 使 X 重新成立则跨轮振荡（节拍 = sync 间隔）。正解是给事件规则提供<b>显式的 external-only 过滤选项</b>（或引擎级成环守卫），让用户自己选「只关心外部变化」—— 而不是把全部自有变更对全部用户静默吞掉。</li>
+  <li><b>机制张力</b>（实施时必须正视）：新鲜度与发射共用同一机制。回写让 tick N 快照新鲜 ⇒ 轮末固化后 tick N+1 的 <code>prev[h] == cur</code> 静默跳过（<code>rules_mod.py:333</code>）⇒ 即使强制把 hash 塞进 <code>state_changed</code> 也发不出。纯移除天然获得发射（不新鲜所以 prev≠cur）；真值回写方案必须配 <b>显式自写变更通道</b>（B′，§5/§6）—— 动作前登记基线，下一轮用动作前值强制发射后消费登记。</li>
+</ul>
+
+<h3>4.3 分组「上传转暂停」检测的源无关性 <span class="badge b-ok">改判为收益（26-10-12-2229）</span></h3>
+<ul>
+  <li><b>判据的理据是源无关的</b>：<code>cur.is_complete and cur.is_stopped and prev.is_uploading</code>（<code>grouping_mod.py:206</code>）命中即对该组跑缺文件扫描（<code>grouping_mod.py:180-212</code>）。其存在理由（<code>grouping_mod.py:184-185</code> 注释）：<i>「做种中文件可能被外部删除，转暂停后不再主动读盘，需扫描确认」</i> —— 这是<b>磁盘风险</b>信号而非<b>意图</b>信号：文件在不在盘上，与谁按下暂停键无关。自家停种后同样该查。</li>
+  <li><b>今天存在难以辩护的不对称</b>：用户在 <b>qB 自身 WebUI</b> 暂停一颗做种 → 下一轮 sync 检出 pausedUP ≠ stalledUP → 扫描发生 ✅；用户在 <b>auto-qb 的 WebUI</b> 暂停同一颗（<code>commands.py:525</code> → <code>torrents_pause</code> → 回写）→ 值逐字匹配被吸收 → <b>扫描被吞</b> ❌。被吞掉的恰是该功能的核心场景：做种中文件被外部删除、尚无 peer 点过那些片所以 qB 未报 missingFiles —— 暂停那一刻是唯一的廉价校验窗口。</li>
+  <li><b>按来源对账「下一轮检查」的性质</b>：缺文件停组（388）= <b>冗余但无害</b>（本 tick 刚扫过，重扫一次再确认，MISSING 标签已在）；大小不一致停组（248）/ 下载冲突停组（461 的完成成员）/ WebUI 暂停 / 规则 stop = <b>正当的首次磁盘校验</b>（size mismatch 是声明层分歧，磁盘真相此前从未验证过）；跨组交叉停（591）= 只停 <code>amount_left&gt;0</code> 的下载侧 → <code>pausedDL</code>，<code>is_complete=False</code>，<b>不命中判据</b>，无成本。没有任何来源会产生错误动作 —— 扫描结论只取决于磁盘真相与代表种选择。</li>
+  <li><b>真实代价的诚实量化</b>：① 缺文件停种路径每次事件多一次全文件 stat 扫描 + N 个幂等 <code>torrents_stop</code> 请求（<code>add_tags</code> 对已有 MISSING 标签零 API 调用，<code>maintenance_mod.py:169-170</code>）；<code>_missing_scanned_keys</code> 只做<b>轮内</b>去重（<code>grouping_mod.py:92</code> 每轮清零），跨轮不抑制；② <code>.!qB</code> 改名窗口内被其它来源停种会使 transitional 计数器 +1，连续 3 次（<code>TRANSITIONAL_SKIP_LIMIT</code>，<code>grouping_mod.py:38</code>）才升级为真缺失 —— 既有设计已容忍此边界；③ 扫描只在转换拍触发一次，不随暂停持续重复。</li>
+  <li><b>对纯移除的净影响：收益</b>。移除后转移检测变成均匀的源无关检查；WEB 暂停场景还因 P0-5 命令驱动补刷新（<code>qbmanager.py:525-528</code>）在<b>同一 tick</b> 内完成「qB 真值落地 + 转移扫描」，比外部暂停路径（下一轮）还快。</li>
+</ul>
+
+<h3>4.4 下载冲突判定延迟一轮 <span class="badge b-opt">低-中</span></h3>
+<ul>
+  <li>现状：回写同步登记 <code>dirty_groups</code>（<code>store.py:512-516</code>）⇒ 同 tick <code>post</code> 相位重算该组冲突集合（增量判据 <code>grouping_mod.py:406-421</code>）。</li>
+  <li>移除后：同 tick 登记消失，但下一轮 <code>_apply</code> 看到 qB 上报的 state 变化会经 <code>_CONFLICT_FIELDS</code> 补登记（<code>store.py:241-244</code>）⇒ <b>自愈，延迟 ≤1 sync 间隔</b>。同 tick <code>post</code> 相位按旧状态算：刚停下载方的那轮仍计 n_dl（但 warned 去重已拦重复暂停，<code>grouping_mod.py:450</code>）；刚恢复的一侧迟一轮解除冲突态。</li>
+</ul>
+
+<h3>4.5 WebUI 视图与真值 <span class="badge b-opt">低</span></h3>
+<ul>
+  <li><b>视图脏丢失</b>：state ∈ <code>_VIEW_FIELDS</code>（<code>view.py:13</code>），回写置 <code>view_changed</code> 走「纯命令源 full 重建」路径（<code>runtime.py:855-870</code> 的 <code>unkeyed_command_source</code>）。移除后 pause/resume 不再置脏 ⇒ 前端旧态显示到下一轮 sync；但下一轮 <code>delta_fields</code> 带<b>行级键</b>（增量归约，比 full 重建更精确），且用户点击场景本就有 P0-5 强制补刷新（<code>qbmanager.py:525-528</code>）+ <code>truth_pending</code> 重试兜底 ⇒ 真值同 tick 落地。净影响：显示延迟 ≤1 tick，机制更简单。</li>
+  <li><b>REANNOUNCE 竞态兜底变窄</b>：<code>_register_reannounce_pending</code> 的「注册时快照 <code>is_stopped</code> 直判」（<code>commands.py:563-565</code> 注释 (a)）依赖同 tick 新鲜度；移除后该竞态窗口（过滤判活跃→引擎执行前被外部暂停）大一个 tick。低频兜底路径，可接受。</li>
+</ul>
+
+<h3>4.6 ops / checking 链 <span class="badge b-opt">低</span></h3>
+<ul>
+  <li><code>auto_start</code> 后同 tick 的 <code>is_stopped</code> 读取（checking 决策链、<code>group_has_downloading</code> <code>store.py:411-418</code>）将旧一轮；但跳检/校验流程本身<b>不依赖合成值</b> —— 重加出现性靠 <code>torrents_info</code> 直查（<code>ops_mod.py:783</code>），真值靠 <code>apply_delta(live)</code> 回写（<code>ops_mod.py:803-805</code>），<code>seen_checking</code> 轮询有「无证据的 progress>=1.0 旧快照」结构性排除（<code>ops_mod.py:263-266</code>）。移除不破坏该链，只失去一点同 tick 新鲜度。</li>
+</ul>
+
+<h3>4.7 测试守阵面 <span class="badge b-need">需改造</span></h3>
+<ul>
+  <li>直接钉「写后同步」契约的三条：<code>test_actions.py:157</code>（start/stop 幂等 skip）、<code>:179 test_stop_preserves_completeness</code>（暂停/恢复只翻暂停位不翻完成位 —— 注释明写修复史：硬编码 <code>pausedUP</code> 的旧 bug）、<code>:210 test_pause_resume_sync_store_snapshot</code>（pause/resume 与 start/stop 对称同步，引坑档 concurrency「QbApi 写方法必须同步 store」）。</li>
+  <li>测试替身耦合：<code>tests/helpers.py:279</code> 的 FakeTorrent 默认 <code>state="pausedUP"/"stalledUP"</code> 构造。</li>
+  <li>不受影响：<code>test_grouping.py</code> 的状态转移测试（仿真权威通道的 <code>apply_delta</code> 上报）、<code>test_trigger_events.py</code> 的状态事件测试 —— 它们不走直接回写。</li>
+  <li>任何方案（A / B / B′ / C）都要重写这三条守阵的断言口径；真值回写类（B/B′）的改写最自然（断言「快照 == FakeClient 返回的真值」而非「== 合成四值」），A 则改为断言「快照在停/起后不变、下一轮 apply 后才翻位」。</li>
+</ul>
+
+<h3>4.8 明确无影响面</h3>
+<ul>
+  <li><b>持久化/迁移</b>：state 快照不落盘（<code>state.json</code> 只有 <code>field_snapshots</code> 存 watch 字段 = tags/category，<code>store.py:309-325</code>；<code>state_snapshot</code> 纯内存）⇒ 无状态迁移、无启动兼容问题。</li>
+  <li><b>并发</b>：单写线程（§2.3）⇒ 无双写竞态；移除不引入新的线程模型。</li>
+  <li><b>其他字段</b>：tags/category/limits/save_path/delete 的写后同步不在本议题，其显式 <code>self_caused_fields</code> 机制继续原样运行。</li>
+  <li><b>热重载</b>：<code>reset_runtime</code> 清 <code>state_snapshot</code>（<code>store.py:465</code>）与回写无耦合。</li>
+</ul>
+
+<h3>4.9 变体评估：A + 延迟访问（自写后同 tick 访问延至下一 tick） <span class="badge b-need">26-10-12-2315 追加</span></h3>
+<p><b>命题</b>：A 之下，同 tick 内除第一次访问（qB API 调用本身，直接对 qB 生效）算新鲜外，后续经 store 的状态访问都可能是脏的（读到动作前旧值）；提议把后续状态访问统一延迟到下一 tick。以下评估其可行性与问题覆盖度。</p>
+
+<h4>4.9.1 结构性事实：deferral 的真实对象比想象小</h4>
+<p>主循环一拍内的顺序是 <code>command line</code> →（P0-5 条件强制）<code>sync 线</code> → <code>task 线</code>，且 <code>apply_sync</code> <b>只在一拍开头跑一次</b>（<code>_tick</code> = sync 线 + task 线，<code>qbmanager.py:729-736</code>）。按自写发生的位置，A 之下的「脏窗口」分三类：</p>
+<table>
+  <tr><th>自写来源</th><th>位置</th><th>A 之下后续访问状态</th></tr>
+  <tr><td>WEB 暂停/开始/批量（最高频）</td><td>command line，sync 之前</td><td><b>本来就新鲜</b>：P0-5 在该轮强制补刷新（<code>qbmanager.py:525-528</code>），真值同迭代进快照，后续相位与 task 线看到的都是真值 ⇒ <b>无 deferral 对象</b></td></tr>
+  <tr><td>分组停种（248/388/461/591）、事件规则动作</td><td>sync 线中段（torrents_added / post / events 相位）</td><td>脏：污染同 tick 的 <code>post</code> 相位 + <b>整条 task 线</b></td></tr>
+  <tr><td>interval 规则动作、ops auto_start（274/471）</td><td>task 线（<code>run_due</code> 批次内）</td><td>脏：污染同 <code>run_due</code> 批次内的后续任务</td></tr>
+</table>
+<p class="lead">即 deferral 只需覆盖后两类；第一类（频率最高、用户最可感的来源）在 A 下已被 P0-5 解决——这是初判低估 A 的一点。</p>
+
+<h4>4.9.2 可行性：分层可行，且有现成机制可复用</h4>
+<ul>
+  <li><b>task 线（主战场）有单入口</b>：<code>TaskQueue.run_due(..., max_tasks)</code>（<code>qbmanager.py:725</code>）。执行每个任务前判「目标 hash ∈ 本轮自写集」⇒ 重排下一 tick，<b>一处覆盖全部 task 线消费</b>（interval 规则、ops 跳检/校验、维护、限速曲线）。重排机制已有先例：事件规则的 <code>add_task(origin, keep_progress=True)</code> 断点续跑（<code>rules_mod.py:312-315</code>）、ops 轮询的 <code>REQUEUE</code>（<code>ops_mod.py:266</code>）。</li>
+  <li><b>sync 线 post 相位</b>：判「组 ∩ 自写集 ≠ ∅」即跳过本轮冲突/跨组检查；下一轮 <code>_apply</code> 经 <code>_CONFLICT_FIELDS</code> 自动补登记重算（<code>store.py:241-244</code>），自愈路径现成。</li>
+  <li><b>事件同步分派</b>：<code>_dispatch_trigger_rules</code> 加同一判据即可，但与「事件即时分派、不排队」的文档口径冲突（窄面，需改口径）。</li>
+  <li><b>自写集生命周期</b>：<code>own_writes: {hash}</code>，apply_sync 应用该 hash 新值时逐出；失败轮保留（与 rid 归零后下轮全量的时序对齐）；单写线程 ⇒ 无并发问题。不落盘（与 state 快照一致，纯内存）。</li>
+</ul>
+
+<h4>4.9.3 能否解决问题：逐项对账</h4>
+<table>
+  <tr><th style="width:210px">问题</th><th>A + deferral 下</th></tr>
+  <tr><td>合成不一致 R1-R6</td><td>A 本身解决（快照无合成值）</td></tr>
+  <tr><td>信号压制（吸收）</td><td>A 解决；<b>deferral 不碰快照 ⇒ 不与下轮发射打架</b>。这是相对「mid-tick 补刷新」方案的关键优势：补刷新会让轮末快照记下新值、下一轮重新吸收（<code>prev==cur</code>），要再配一套快照延迟才能保发射</td></tr>
+  <tr><td>同 tick 幂等（二次停/起）</td><td>deferral 解决：第二次动作延到下 tick 看到真值后 skip。代价 = 一 tick 延迟 + 重排序</td></tr>
+  <tr><td>同 tick 决策正确性</td><td>被闸门覆盖处解决；见下条</td></tr>
+  <tr><td><b>安全闸门 G4/G6</b></td><td><b>deferral 唯一不可替代的价值</b>。事故序列：同一 task 批次内，任务 X 起下载方 D（auto_start 或规则 start），任务 Y 对同组成员 C 跑跳检——G6（<code>ops_mod.py:653-659</code>，注释原话「force 也救不回确定性脏数据」）读快照时 D 仍是「已停」⇒ <b>陈旧-放行</b> ⇒ C 被删重加（<code>is_skip_checking=True</code> 全部块标有效）而 D 正在写同一物理文件 ⇒ 脏数据洗白。同族判据：决策链 0/1（<code>checking.py:88/94</code>）、G4（<code>ops_mod.py:640</code>）。此窗口<b>今天对外部变更已存在</b>（sync 间隔级）；A 把它从「仅外部」扩大到「外部+自有」，deferral 正好收回</td></tr>
+  <tr><td>显示</td><td>≤1 tick，已接受（§4.5）</td></tr>
+</table>
+
+<h4>4.9.4 deferral 自身的成本与新风险（决策必须计入）</h4>
+<ul>
+  <li><b>核心取舍——构造性安全 vs 纪律性安全</b>：写回是构造性安全（值恒新，消费方无需守任何规矩）；deferral 是纪律性安全——「任何状态依赖消费方不得对自写 hash 出决策」是一条<b>跨切面不变量</b>：漏掉任一条现存消费方 = 静默的陈旧决策；未来新增消费方天然裸奔，只能靠守阵盯（新消费方未接判据即红）。</li>
+  <li>重排任务的活锁边界（有界、带原因码）、与失败轮/全量轮的交互、事件即时语义的口径修订、每个闸门的红验面。</li>
+  <li><code>update_state_snapshot</code> 的 docstring（「自有动作经 QbApi 同步过的状态同样计入，故下轮不会被误判为外部状态变化」，<code>store.py:303-305</code>）在 A 下前提消失；且源无关语义<b>要求</b>它对自写 hash 保持旧值以保发射——要跟着改。</li>
+</ul>
+
+<div class="box ok">
+  <div class="t">变体结论（26-10-12-2315）</div>
+  <b>可行，且能完整解决问题（含 G4/G6 安全面）</b>——但它的必要性几乎全部压在 G4/G6 这一类安全闸门上。因此不建议一上来就做全系统 deferral；推荐的落地形态是 <b>A + 局部 deferral</b>：只延迟<b>校验类</b>决策——G4/G5/G6/G7-8 与决策链 0/1/1.5 的消费点<b>可枚举收敛</b>（<code>ops_mod</code> 两处 + <code>checking.py</code> 两处 + 各自守阵），其余全部接受 ≤1 tick 滞后（与外部变更完全对称，本就是系统既有工作模式）。幂等层面要么接受重复 HTTP（qB 幂等、无害），要么加一个<b>诚实的小标记集</b> <code>pending_writes: {hash: 意图}</code>——只带「本 tick 发过停/起」的意图、不带假值，不犯 R1-R6 任何一条，仅供动作守卫查询。若把「同 tick 全决策新鲜」列为硬需求，才升级全系统 deferral，并把该不变量写成守阵。
+</div>
+
+<!-- ============================================================ 5 -->
+<h2><span class="no">5</span>方案对比与可行性裁定</h2>
+<table>
+  <tr>
+    <th style="width:140px">方案</th><th>形态</th><th>消除的不一致</th><th>保留的契约</th><th>新增成本 / 风险</th>
+  </tr>
+  <tr>
+    <td><b>A 纯透传移除</b><br><span class="sm">与 torrents_recheck 等同</span></td>
+    <td>删 <code>_sync_paused_state</code>，四个 Facade 入口只调 client，快照只等 sync</td>
+    <td>R1-R6 全部（快照不再有合成值）</td>
+    <td>不保留同 tick 新鲜度（幂等/视图脏/组脏一并失去）；转移检测与状态事件<b>按源无关语义照常发射</b>（26-10-12-2229 改判：这是收益，非回归，见 §4.2/§4.3）</td>
+    <td>真实代价收敛为：同 tick 二次停/起重复下发（低）；下载冲突判定延迟一轮（低）；缺文件停种路径每次事件多一次冗余扫描（低，有界）。<b>无需补偿设计</b>；WEB 暂停场景因 P0-5 同 tick 完成真值落地与转移扫描</td>
+  </tr>
+  <tr>
+    <td><b>A + 局部 deferral</b><br><span class="sm">A 的变体（26-10-12-2315 评估，见 §4.9）</span></td>
+    <td>A 的全部 + 只对<b>校验类</b>决策做局部延迟：<code>own_writes</code> 自写集（apply_sync 消费即清）+ G4/G5/G6/G7-8 与决策链 0/1/1.5 消费点判「目标/组成员 ∈ 自写集」⇒ 任务重排下一 tick（run_due 单入口）；幂等可选 <code>pending_writes</code> 意图标记（只带意图不带假值）</td>
+    <td>R1-R6 全部 + <b>G4/G6 陈旧-放行安全窗口收回</b>（A 单独实施时唯一实质缺口）</td>
+    <td>A 的全部（源无关发射）+ 校验类决策的同 tick 新鲜</td>
+    <td>消费点可枚举收敛（ops_mod 两处 + checking.py 两处 + 守阵）；其余面接受 ≤1 tick（与外部变更对称，系统既有工作模式）</td>
+  </tr>
+  <tr>
+    <td><b>B 真值回写</b><br><span class="sm">（单独实施<b>不完整</b>，须配 B′）</span></td>
+    <td>保留「写后同步」契约：调完 client 立即 <code>torrents_info(torrent_hashes=hashes)</code>，对返回逐条 <code>apply_delta</code> 写真值（仓库内先例：<code>ops_mod.py:798-805</code>）</td>
+    <td>R1/R2/R3/R6 结构性消除（值即 qB 真值，含 queued/forced/checking/moving 全枚举）。R4 收窄为与 sync 通道同级的异步窗口，由已有 <code>truth_pending</code> 重试兜底。R5 可选顺手补上（None 形态退化记日志）</td>
+    <td>同 tick 新鲜度全保留（幂等/视图脏/组脏）；<b>但吸收盲点原样保留</b>——真值与 qB 逐字一致 ⇒ 下一轮无 delta ⇒ 自家停种<b>仍不触发</b>转移扫描与状态事件（§4.2/§4.3 的信号压制未解除）</td>
+    <td>每个停/起动作 +1 次 info 调用（单 hash 与批量均为 1 次，qB 侧廉价）；info 失败 ⇒ 不写 + warning，下轮 sync 校准（fail-closed，对齐 <code>ops_mod.py:798-802</code> 口径）。<code>hashes=None</code> 跳过回写（全量查询太贵）</td>
+  </tr>
+  <tr>
+    <td><b>B′ 真值回写 +<br>显式自写变更发射</b><br><span class="badge b-fix">推荐</span></td>
+    <td>B 的全部，外加：动作前捕获 <code>state_enum</code> 登记 <code>pending_self_state: {hash: 动作前基线}</code>；下一轮 <code>transitions</code> 相位与 <code>on_torrent_state_enum_changed</code> 分派对登记 hash <b>用动作前基线强制发射</b>（绕过 <code>prev==cur</code> 静默跳过，<code>rules_mod.py:333</code>）后消费登记</td>
+    <td>B 的全部 + 解除信号压制：自有停/起按源无关语义触发缺文件扫描与状态事件</td>
+    <td><b>同 tick 新鲜度 + 源无关发射两者兼得</b></td>
+    <td>B 的成本 + store 一个 pending 登记（{hash: 基线}，随消费即清，量级 = 每轮停/起动作数）+ 两侧消费点配对修改；需防登记跨失败轮残留（登记在成功发射或轮末兜底清理）</td>
+  </tr>
+  <tr>
+    <td><b>C 显式自写登记</b><br><span class="sm">可单独或叠加 B/B′</span></td>
+    <td>给 state 建 tags/category 同款 <code>self_caused_fields</code> 期望值登记：下一轮 qB 上报 state 时比对期望，匹配 ⇒ 显式吸收（不进 <code>state_changed</code>），失配 ⇒ warning 放行</td>
+    <td>只治 R3（可观测化）+ 给吸收从「隐式」升「显式」；<b>不解除</b>信号压制（它的设计目的就是吸收）</td>
+    <td>四契约保留（靠登记而非值巧合）</td>
+    <td>合成值仍在 ⇒ R1/R2 未除；store 侧新增一套 state 登记/消费逻辑（改动面大于 B 的 Facade 内改动）；与 B′ 的 pending 登记 conceptually 同层，叠加时须合并设计防双轨</td>
+  </tr>
+</table>
+
+<div class="box ok">
+  <div class="t">可行性裁定（26-10-12-2315 修订）</div>
+  <b>移除可行；三条路径按取舍排序，用户意向 A。</b>26-10-12-2229 追加仓库主人侧裁定：<b>暂停的磁盘风险与来源无关，自家停种同样必须被检查、被事件感知</b>。26-10-12-2315 用户意向选 A，并考察「自写后同 tick 访问延至下一 tick」的 deferral 变体（§4.9 评估：可行且完整）。重排：<b>① A + 局部 deferral（用户意向下的推荐形态）</b> —— 删 <code>_sync_paused_state</code> 与合成值，源无关发射天然获得；只对校验类决策（G4/G5/G6/G7-8 + 决策链 0/1/1.5，消费点可枚举收敛）做局部延迟，收回 G4/G6 陈旧-放行这一 A 的唯一实质安全缺口；幂等可选 <code>pending_writes</code> 意图标记。其余面接受 ≤1 tick 滞后——与外部变更完全对称，本就是系统既有工作模式（且最高频的 WEB 命令路径经 P0-5 同 tick 已新鲜）。<b>② B′</b> —— 同 tick 全决策新鲜的替代路径（真值回写 + <code>pending_self_state</code> 显式发射），新鲜度优先时选它。<b>③ B 单独</b> —— 不完整：只修值失真，吸收盲点原样保留。<b>C</b> 定位为 R3 可观测化的可选叠加。
+</div>
+
+<div class="box">
+  <div class="t">什么情况下仍选 A / 何时升级（26-10-12-2315 修订）</div>
+  A + 局部 deferral 是语义最干净的形态：快照严格 = 最近一次 sync 的应用结果，转移检测与状态事件天然源无关，无合成值、无跨切面新鲜度不变量。升级到 B′ 的唯一理由是「同 tick 全决策新鲜」成为硬需求（规则密集、校验与动作高频同批交错的场景）；升级到全系统 deferral 的唯一理由是「同 tick 新鲜」且「不接受每动作一次 info 调用」——此时必须把「状态依赖消费方不得对自写 hash 出决策」写成守阵（新消费方未接判据即红），并把该不变量当作长期契约维护。若未来把「快照严格 = sync 应用结果」定为架构不变量（多写线程、快照外供审计），A 系是唯一形态。
+</div>
+
+<!-- ============================================================ 6 -->
+<h2><span class="no">6</span>落地清单（B′ 主清单 + 26-10-12-2315 追加 A 系清单）</h2>
+<ol>
+  <li><b>qbapi.py</b>：<code>_sync_paused_state</code>（96-126）改写为 <code>_sync_state_truth(hashes)</code>：<b>调用前</b>捕获各记录 <code>state_enum</code> 登记 <code>store.pending_self_state[hash] = 动作前基线</code>；调 client 成功后 <code>info = client.torrents_info(torrent_hashes=hashes)</code> → 逐条 <code>rec.apply_delta(t)</code>；任一记录变化即置 <code>store.view_changed</code> 并对含 <code>_CONFLICT_FIELDS</code> 的变化登记 <code>dirty_groups</code>（与 <code>_apply</code> 同口径，<code>store.py:239-244</code>）。四个入口（128-148）改调新方法。<code>hashes</code> 为空/None ⇒ 跳过 + debug 日志。info 抛异常 ⇒ warning，不写真值（pending 登记保留，下轮 sync 校准，fail-closed）。</li>
+  <li><b>store.py</b>：<code>update_torrent_fields</code> 的 <code>state=</code> 参数及 <code>_state_enum</code> 失效分支（535-544）如无其它调用方则删除（现仅 qbapi.py:126 一处）；新增 <code>pending_self_state: Dict[str, TorrentState]</code>（不落盘，消费即清，轮末兜底清理防跨失败轮残留）。</li>
+  <li><b>发射两侧配对</b>：<code>grouping_mod._handle_state_transitions</code>（180-212）与 <code>rules_mod._dispatch_events</code>（330-338）对 <code>pending_self_state</code> 中的 hash 用<b>动作前基线</b>作 <code>prev</code> 参与判定/发射（绕过 <code>rules_mod.py:333</code> 的 <code>prev==cur</code> 静默跳过），发射后消费登记；<code>update_state_snapshot</code>（301-307）对登记 hash 的处理需与发射语义对齐（发射成功再固化，否则下一轮重复发射）。</li>
+  <li><b>测试</b>：重写三条守阵（<code>test_actions.py:157/179/210</code>）为「快照 == FakeClient 返回真值」口径；<code>helpers.py</code> 的 FakeClient 需让 <code>torrents_info</code> 返回与 <code>stop/start</code> 相变的状态；新增 B′ 守阵：自有停组下一轮<b>触发</b>转移扫描与 <code>on_torrent_state_enum_changed</code>（登记消费后不重复触发）；红验（注入合成值断言即红 / 注入 info 失败即降级即绿 / 屏蔽 pending 登记即发射丢失即红）。</li>
+  <li><b>文档</b>：坑档 <code>pitfalls/backend/concurrency.md</code>「QbApi 写方法必须同步 store」补 state 特例口径（真值查询模式 + fail-closed + 源无关发射）；本报告 <code>doc-refs</code> 挂后续 plan；实施 plan 走 <code>memory-bank/plans/</code>（delivery-artifact，单文件 HTML，dark），doc-topic 沿用 <code>seed-state-writeback</code>。</li>
+  <li><b>可选 C</b>：B′ 的 <code>pending_self_state</code> 消费时若 qB 上报值与真值回写值不一致（异步窗口），记 warning 一行（R4 可观测化）——与 pending 登记同一容器，不另起双轨。</li>
+  <li><b>验收要点</b>：同 tick 二次 stop 仍 skip（真值新鲜）；自有停组下一轮<b>触发</b>转移扫描与状态事件（源无关语义）且不重复触发；Qb WebUI 暂停与 auto-qb WebUI 暂停行为一致（都扫描）；大小不一致停组后同 tick 冲突集合已更新；WEB 暂停后 ≤1 tick 前端翻态；全量测试基线数字入 <code>testing/baselines/</code> 新切片。</li>
+</ol>
+
+<h3>6-A A 系清单（用户意向路径：纯 A / A + 局部 deferral）</h3>
+<ol>
+  <li><b>qbapi.py</b>：<code>_sync_paused_state</code>（96-126）及四个入口（128-148）的写后同步整段删除，只调 client（与 <code>torrents_recheck</code> 等透传写操作同形态）；<code>store.py</code> 的 <code>update_torrent_fields</code> 的 <code>state=</code> 参数与 <code>_state_enum</code> 失效分支（535-544）随之删除（现仅 qbapi.py:126 一处调用）；<code>store.py:303-305</code> docstring「自有动作经 QbApi 同步过的状态同样计入……」整句作废（A 下无同步态；源无关语义要求快照对自写 hash 保持旧值以保发射）。</li>
+  <li><b>store.py 新增 <code>own_writes: Dict[str, int]</code></b>（hash → 写入 round 号，不落盘）：QbApi 四个入口 client 调用成功后登记；<code>_apply</code> 应用到该 hash 的新 state 时逐出；失败轮/rid 归零的全量轮保留（对齐 <code>reset_sync</code> 语义）。</li>
+  <li><b>局部 deferral（校验类安全面）</b>：新增任务级判据「目标 hash 或其组成员 ∈ own_writes ⇒ 本轮不决策，重排下一 tick」，落点三处——<code>TaskQueue.run_due</code> 前统一闸门（qbmanager.py:725 附近，覆盖 interval 规则/ops/维护/曲线全部 task 线消费）、<code>ops_mod._skip_gates_detail</code> 的 G4/G6（ops_mod.py:640/655，WEB 命令路径在 command line 执行，同样要过闸）、<code>checking.py</code> 决策链 0/1（88/94）。重排沿用既有机制（事件规则 <code>add_task(origin, keep_progress=True)</code>，rules_mod.py:312-315；ops <code>REQUEUE</code>，ops_mod.py:266），带原因码、有界（own_writes 清空后必执行，天然无饿死）。</li>
+  <li><b>幂等（可选）</b>：动作守卫（basic.py:113/126 等）查询 <code>is_stopped or hash in own_writes</code>；不加则接受同 tick 重复下发（qB 幂等、无害）。<b>不做</b>全系统 deferral（§4.9.4 的跨切面不变量），除非把该不变量写成守阵。</li>
+  <li><b>测试</b>：三条守阵（test_actions.py:157/179/210）改判为「停/起后快照不变、下一轮 apply 后才翻位」；新增 A 守阵：自有停组下一轮<b>触发</b>转移扫描与 <code>on_torrent_state_enum_changed</code>；同 tick 内「起下载方 D + 跳检成员 C」被闸门拦下并重排（G6 场景红验：不拦即红）；WEB 命令暂停与 qB WebUI 暂停行为一致（都扫描）。红验两条（屏蔽 own_writes 登记即 G6 场景回归即红 / own_writes 未逐出即任务饿死即红）。</li>
+  <li><b>验收要点</b>：全库无合成 state 值（静态守阵：qbapi/store 无 <code>state=</code> 落点）；自有停/起下一轮被转移检测与状态事件看到且不重复；同 tick 校验类决策全面延后；WEB 暂停 ≤1 tick 前端翻态（P0-5 路径同 tick）；全量测试基线数字入 <code>testing/baselines/</code> 新切片。</li>
+</ol>
+
+<!-- ============================================================ 7 -->
+<h2><span class="no">7</span>附录：代码索引</h2>
+<table>
+  <tr><th style="width:300px">位置</th><th>内容</th></tr>
+  <tr><td><code>core/qbapi.py:96-126</code></td><td>直接回写单点 <code>_sync_paused_state</code>（完成位推断 115-119 / 四值合成 120-123 / 落库 126）</td></tr>
+  <tr><td><code>core/qbapi.py:128-148</code></td><td>四个暂停轴入口 start/stop/pause/resume（均调回写单点）</td></tr>
+  <tr><td><code>torrents/store.py:480-544</code></td><td><code>update_torrent_fields</code>：state 覆写（535-536/543-544）+ view_changed（506）+ dirty_groups（512-516）</td></tr>
+  <tr><td><code>torrents/store.py:118-278</code></td><td>权威通道：apply_sync / refresh / _apply（state_changed 收集 239-240，_CONFLICT_FIELDS 登记 241-244）</td></tr>
+  <tr><td><code>torrents/store.py:301-325</code></td><td>轮末快照固化 update_state_snapshot / update_field_snapshots（均不落盘）</td></tr>
+  <tr><td><code>torrents/store.py:346-387</code></td><td>tags/category 显式自写登记 self_caused_fields（state 无对应机制）</td></tr>
+  <tr><td><code>core/qbmanager.py:774-885</code></td><td>主循环刷新相位表（transitions 早于自有动作 810-815；收尾固化 881-885）</td></tr>
+  <tr><td><code>core/qbmanager.py:505-528</code></td><td>sync_interval 钳制（511）+ P0-5 命令驱动补刷新（525-528）+ truth_pending 重试（536-538/568-572）</td></tr>
+  <tr><td><code>core/modules/grouping_mod.py:180-212</code></td><td>「上传转暂停/进 errored」检测（判据 206，唯一 transitions 消费者；理据 184-185 源无关）；轮内去重集合每轮清零（92）；<code>TRANSITIONAL_SKIP_LIMIT=3</code>（38）；transitional 容忍（365-376）</td></tr>
+  <tr><td><code>core/modules/grouping_mod.py:248/388/461/591</code></td><td>分组四个停种入口（大小不一致 / 缺文件 / 下载冲突 / 跨组交叉）</td></tr>
+  <tr><td><code>core/modules/grouping_mod.py:394-461</code></td><td>下载冲突检查（dirty_groups 增量判据 406-421；warned 去重 450）</td></tr>
+  <tr><td><code>core/modules/rules_mod.py:286-348</code></td><td><code>_dispatch_events</code>：on_torrent_state_enum_changed 分派（330-338，只吃 state_changed）；<code>prev[h]==cur</code> 静默跳过（333，B′ 发射通道须绕开它）</td></tr>
+  <tr><td><code>core/modules/maintenance_mod.py:164-178</code></td><td><code>add_tags</code> 幂等（169-170 过滤已有标签 ⇒ 重复打 MISSING 零 API 调用）</td></tr>
+  <tr><td><code>core/qbmanager.py:700-736</code></td><td>sync 线 / task 线 / <code>_tick</code> 结构（A+deferral 的时序依据：apply_sync 仅一拍开头一次；task 线 run_due 单入口 725）</td></tr>
+  <tr><td><code>core/modules/ops_mod.py:640/653-659</code></td><td>G4 / G6 闸门（陈旧-放行安全面：G6 读 <code>store.group_has_downloading</code>，局部 deferral 必须覆盖处）</td></tr>
+  <tr><td><code>rules/actions/checking.py:88/94</code></td><td>校验决策链 0/1（同族安全面；决策链 1 委托 <code>group_has_downloading</code> 单点）</td></tr>
+  <tr><td><code>core/modules/rules_mod.py:312-315</code></td><td>事件任务断点续跑先例（deferral 重排机制可复用的 <code>add_task(origin, keep_progress=True)</code>）</td></tr>
+  <tr><td><code>core/modules/ops_mod.py:274/471</code></td><td>auto_start 两入口（recheck 成功 / 跳检完成）</td></tr>
+  <tr><td><code>core/modules/ops_mod.py:791-806</code></td><td>「决定性时刻直查真值」模式先例（torrents_info → apply_delta，fail-closed）</td></tr>
+  <tr><td><code>rules/actions/basic.py:107-130</code></td><td>Start/Stop 动作（前置 is_stopped 幂等门 113/126）</td></tr>
+  <tr><td><code>webui/commands.py:448-460/478-481/525-528/831-852</code></td><td>WEB 停/起入口（整组 / 单种 / 批量，全部显式 hash）</td></tr>
+  <tr><td><code>webui/runtime.py:845-870</code></td><td>视图 flush：命令自写只置 view_changed → unkeyed_command_source full 重建（855-870）</td></tr>
+  <tr><td><code>torrents/view.py:9-13</code></td><td><code>state</code> ∈ _VIEW_FIELDS（视图脏依据）</td></tr>
+  <tr><td><code>tests/test_actions.py:157/179/210</code></td><td>三条「写后同步」守阵（任何方案需按新契约重写）</td></tr>
+  <tr><td><code>tests/helpers.py:279</code></td><td>FakeTorrent 默认 state 构造（pausedUP/stalledUP）</td></tr>
+</table>
+
+<div class="box">
+  <div class="t">本报告不做的事</div>
+  未跑测试基线（本轮零代码改动，无基线数字可记，按口径不手抄既有数字）；未改任何代码；未入池 issue / 未立档 / 未 commit。26-10-12-2229 完成 §4.2/§4.3/§5/§6 的源无关语义改判；26-10-12-2315 按用户意向（选 A）追加 §4.9「A + 延迟访问」变体评估与 A 系落地清单。后续若拍板实施（A 系或 B′），按 plans 工位单独立件（doc-topic 沿用 <code>seed-state-writeback</code> 串联）。
+</div>
+
+<div class="foot">
+  auto-qb-clone5 · memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html · doc-type=report · doc-status=Done · doc-added=26-10-12-2148 · doc-updated=26-10-12-2315（2229 源无关语义改判；2315 §4.9 A+延迟访问变体评估）· 行号基于 12033f27
+</div>
+
+</div>
+</body>
+</html>
