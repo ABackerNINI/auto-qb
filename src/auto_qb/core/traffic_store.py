@@ -62,13 +62,14 @@ gap = 新块 B.start - 上一块末槽; gap <= interval_s + DRIFT_TOL -> 连续,
 换代语义与保留窗(§01 换代语义 + §04.5/§06.1):
 - 目录 qb-traffic-v4/ 全新落点; 旧 qb-traffic-v3/ 原样留存不读不迁移(R2, 删留决定权在
   用户); 头行门闩 v4, 不设双读。
-- rollup_window 三义合一: hour 行保留窗 + 系列淘汰龄 + catch-up 补算窗口(= 天文件存活期);
-  raw_window 语义不变(raw 段 = 按天整文件存删)。
+- rollup_window 两义合一: hour 行保留窗 + 系列淘汰龄(原「catch-up 补算窗口(= 天文件存活
+  期)」一义已随 plan 26-10-12-2010 解耦 —— 启动恢复读集下界 = agg 水位所在日, 不由窗口
+  决定); raw_window 语义不变(raw 段 = 按天整文件存删)。
 - 淘汰: 系列最新天文件日期距 now 超 rollup_window -> 整目录删除(天文件 + agg.dat), 龄期
   由文件名日期直接算; frozen 照删; 全局结构性豁免。
-- catch-up(§04.3): 停机 < rollup_window 重启逐级补算(hour <- 窗口内天文件 raw / day <-
-  hour 行 / month <- day 行), 硬序 catch-up 先于裁剪; 停机超窗天文件已删, 缺失跳过不标注
-  (图上真空, 与块间 gap 语义一致)。
+- catch-up(§04.3): 重启逐级补算(hour <- 读集内天文件 raw, 下界 = agg 水位所在日(plan
+  26-10-12-2010) / day <- hour 行 / month <- day 行), 硬序 catch-up 先于裁剪; 停机超窗
+  天文件已删, 缺失跳过不标注(图上真空, 与块间 gap 语义一致)。
 
 写路径(§03, 仅主循环线程 —— 黄金法则 5, 本层无锁): 每系列每 flush_interval 单次
 open("a") 批量追加 + flush + fsync(正常期崩溃窗口 <= flush_interval); 尾字节查补每 flush
@@ -820,8 +821,9 @@ class TrafficV4Store:
     - evict_expired_series: 超龄系列整目录删除(天文件 + agg.dat), 龄期由天文件名日期
       直接算, frozen 照删, 全局豁免。淘汰/裁剪触发点都在采样模块的 flush 时点。
 
-    rollup_window 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 + catch-up 补算
-    窗口(= 天文件存活期)三义合一, 不再只是 v2 的 hour 段保留窗; raw_window 语义不变。
+    rollup_window 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 两义合一, 不再只是 v2 的
+    hour 段保留窗(原「catch-up 补算窗口(= 天文件存活期)」一义已随 plan 26-10-12-2010 解耦
+    —— 启动恢复读集下界 = agg 水位所在日, 不由本窗口决定); raw_window 语义不变。
     day/month 行永久(D7 不设上限键); 注意 §04.5 淘汰口径是删整目录(天文件 + agg.dat),
     被淘汰系列的月行随目录一并消失 —— 「月行永久」指不按龄裁剪, 非目录删除后仍可读。
 

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-traffic-startup-recovery-on-demand">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一">
 <meta name="issue-summary" content="本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移">
 <title>config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-12-2104-docs-traffic-rollup-window-docstring-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-12 21:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,9 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-12 21:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-13 07:31 — 用户指派认领（「认领并修复」），状态 <strong>Open</strong> → <strong>In Progress</strong>；复验：仍复现 —— <code>config/models.py</code> <code>QbTraffic</code> docstring 仍写「hour 段保留窗 + 系列淘汰龄 + 聚合补算窗口(= 天文件存活期)三义合一」（当时行 <code>309-310</code>），且同类漂移另见 <code>core/traffic_store.py:65</code> 与 <code>:824</code>（模块头 / <code>TrafficV4Store</code> 类 docstring）、<code>docs/configuration.md:425</code>（<code>qb_traffic</code> YAML 示例注释）。</li>
+      <li>2026-10-13 07:31 — 修完，状态 <strong>In Progress → Done</strong>。实际修法（<b>范围较建议扩大</b>：用户 2026-10-13 当场定调「一并修这 4 处」，属 scope-guard 例外 3「用户当场扩范围」；建议原文「把『聚合补算窗口(= 天文件存活期)』从三义里去掉, 改为两义, 并注解耦」本身已原样采纳，只是落到 4 处而非 1 处）：①<code>config/models.py</code> <code>QbTraffic.rollup_window</code> docstring 三义 → <b>两义</b>（hour 行保留窗 + 系列淘汰龄），并注「原『聚合补算窗口(= 天文件存活期)』一义已解耦 —— 启动恢复读集下界 = agg 水位所在日, 不由此窗口决定(plan 26-10-12-2010)」；②<code>core/traffic_store.py:65</code> 模块头「三义合一」→「两义合一」+ 同款解耦注；③同文件 <code>:68</code> catch-up 行的读集描述「停机 &lt; rollup_window … 窗口内天文件 raw」→「读集内天文件 raw, 下界 = agg 水位所在日(plan 26-10-12-2010)」；④同文件 <code>:823</code> <code>TrafficV4Store</code> 类 docstring「三义合一」→「两义合一」+ 解耦注；⑤<code>docs/configuration.md:425</code> YAML 注释去掉「+ 聚合补算窗口」。<b>纯 docstring / 注释改动，零行为面</b>（<code>grep -rn 三义合一 src/ docs/</code> 归零，仅余 .pyc 缓存）。</li>
+      <li>验证方式与数字：<code>commands run test.full</code> = <b>3185 passed + 4 skipped</b>（覆盖率 <code>TOTAL 16778 159 5714 140 99%</code>，与上一基线持平 —— 纯注释改动零测试影响，用例数差异来自本会话同步的 14 笔远端提交）；<code>commands run kb.check</code> 全绿（主键纪律 + 认领链 + 回写守卫 + 日期守卫）。实测数字单点见基线切片 <code>memory-bank/testing/baselines/26-10-13-0731-docs-rollup-window-two-meaning.md</code>。</li>
     </ul>
   </section>
 
