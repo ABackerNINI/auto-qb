@@ -257,13 +257,23 @@
   不落袋(保留旧数据)、不掀罩(finally 里 `deferred` 早退, 不 `_drawerDone`、保持 `peersLoading`)、
   1s 后**快速重拉一次**; 重拉仍空才接受(那时宽限标记已清, 走正常落袋 ⇒ 覆盖"真没对端")。
   收口: 待重拉 timer(`_drawerPeerRetry`)由 `_stopDrawerPoll` 统一撤销(换页签/换目标/关面板)。
-  仅换目标窗口生效 —— 轮询(silent)与常态空列表照常如实渲染(trackers/files 未纳入, 范围守恒)。
-- **验证**: 红验闭环(拆掉宽限 = e2e 新用例 150 帧空态红 / 还原即绿); 新增守阵
-  `test_drawer_peers_switch_empty_grace_wiring`(钉接线 + ②「宽限标记必须在 _loadDrawerTab 之后」
-  这一静默失效点); e2e 新增
-  `drawer-peers.spec.mjs::切换种子首个空 peers 响应不得闪现空态`(route 让切换目标首拍 /peers 返空,
-  逐帧 rAF 采样空态); 全量数字见 `commands run kb.baseline`。
+  仅换目标窗口生效 —— 轮询(silent)与常态空列表照常如实渲染。
+- **同族一并修(用户指令「提交后修复 trackers/files 的同族问题」)**: 该缺陷不止 peers ——
+  **三列表(trackers / peers / files)是同一个落袋语义**, 差别只在判空(peers 是 qB sync 整包 dict
+  取 `Object.keys(peers).length`; trackers/files 是数组取 `.length`)。修法从 peers 局部**上提为
+  三列表共用单点** `_drawerGraceHold(src, hash, count, refetch)`(一次性消费: 首次非 silent 落袋
+  即消费本 src 的标记, 非空 → 正常落袋, 空 → 宽限重拉), 标记 `_drawerGrace = {peers, trackers,
+  files}` 由 `_switchDrawerTarget` 同置; 「首个空响应」的**覆盖面**由此从用户页扩到三页签。
+- **验证**: 红验闭环(拆掉宽限置位 ⇒ e2e 三页签 × 双皮肤 **6/6 全红**, 逐条命中各自空态文案:
+  「暂无已连接用户」/「暂无 tracker」/「无文件列表」; 还原即绿 —— 这也正是 trackers/files 同病的
+  直接证据); 新增静态守阵 `test_drawer_list_switch_empty_grace_wiring`(钉单点语义 + 三 fetcher
+  接入 + 「宽限标记必须在 _loadDrawerTab 之后」这一静默失效点 + timer 收口); 新增 e2e
+  `drawer-switch-empty-grace.spec.mjs`(三页签各一用例, route 让切换目标首拍返空 + 逐帧 rAF 采样);
+  全量数字见 `commands run kb.baseline`。
 - **探针纪律(续, 本轮再添一条)**: ⑥**"恒非空"的桩数据本身是盲区制造机** —— 桩若对**所有**输入
   恒返回非空, 前端那条"空结果"分支(空态/空集/未就绪)就永远走不到; 凡被测对象有"空"这一合法
   取值, 桩必须能造出空(或让用例用 route 注入空), 否则"全绿"只证明非空路径。本条与前八次的
-  「量级不复刻」「身份探针全绿」并列, 都是**桩保真度**家族。
+  「量级不复刻」「身份探针全绿」并列, 都是**桩保真度**家族。⑦**修一族缺陷时先问「这一族的边界在哪」**
+  —— 本次 peers 报障即修 peers, 用户随后立刻要求 trackers/files 同款; 正确姿势是**先枚举同族面**
+  (本坑的「列表落袋」族 = peers/trackers/files 三张), 能一单点收口就一次收口, 别等第二次指令
+  再返工(上提为共用单点后, 三列表的差异被压缩到"判空表达式"一处)。

@@ -13,7 +13,8 @@
  *     (_drawerLoadSeq) 与竞态守卫(_drawerStale) · 软切换待到集合(_drawerWait/_drawerWaitSources/
  *     _drawerDone) · 遮罩延迟点亮(_drawerBusyArm/_drawerBusyDisarm/_drawerSwitchEnd) · 按页签取数
  *     单点(_loadDrawerTab) · 换目标软切换(_switchDrawerTarget) · 页签轮询(_startDrawerPoll/
- *     _stopDrawerPoll) · 合并双列数据补给(_drawerMergeSupply) · peers 键名适配(_drawerNormPeers)。
+ *     _stopDrawerPoll) · 合并双列数据补给(_drawerMergeSupply) · peers 键名适配(_drawerNormPeers) ·
+ *     软切换空态宽限(_drawerGraceHold; 与 peers 判空 helper _drawerPeerCount, 2026-10-13 第九次闪烁复发)。
  *   - 本层不拥有(留在 drawer.js): 面板开合/几何/拖高/持久化(_drawerClampHeight, drawerGrip*,
  *     drawerPanelStyle, persistDrawer*) · 跟随挂点(_kbFollowDrawer/_stopDrawerFollow) · 出入手
  *     过渡钩子 · 派生列表(drawerFileRows/drawerPeerRows/drawerGeneralSections)。
@@ -47,15 +48,17 @@ window.AQB_DRAWER_STORE = {
         clearInterval(this._drawerTimer);
         this._drawerTimer = null;
       }
-      // FX-29 软切换宽限(见 _fetchDrawerPeers)的收口: 页签切走/换目标/关面板即撤销待重拉与宽限
-      // 标记 —— 本方法正是这几条路径的共同收口(与下一句 _qbPollStop 同理由)。_switchDrawerTarget
-      // 在调本方法**之后**才重新置宽限标记, 故这里的清零不会误伤本次换目标; _loadDrawerTab 内的
-      // _startDrawerPoll→本方法 亦然(执行时标记尚未置位)。
-      if (this._drawerPeerRetry) {
-        clearTimeout(this._drawerPeerRetry);
-        this._drawerPeerRetry = null;
+      // FX-29 软切换宽限(见 _drawerGraceHold)的收口: 页签切走/换目标/关面板即撤销三列表(peers/
+      // trackers/files)的待重拉与宽限标记 —— 本方法正是这几条路径的共同收口(与下一句 _qbPollStop
+      // 同理由)。_switchDrawerTarget 在调本方法**之后**才重新置标记, 故这里的清空不会误伤本次换
+      // 目标; _loadDrawerTab 内的 _startDrawerPoll→本方法 亦然(执行时标记尚未置位)。
+      if (this._drawerGraceRetry) {
+        for (const src in this._drawerGraceRetry) {
+          if (this._drawerGraceRetry[src]) clearTimeout(this._drawerGraceRetry[src]);
+          this._drawerGraceRetry[src] = null;
+        }
       }
-      this._drawerPeerGrace = false;
+      this._drawerGrace = null;
       // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
       // _switchDrawerTarget/openTorrentDrawer 全走这里), 页签切走/换目标/关面板即停 —— 若新页签
       // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
@@ -112,10 +115,16 @@ window.AQB_DRAWER_STORE = {
     async _fetchDrawerTrackers(silent = false, seq = 0) {
       const hash = this.drawer.hash;
       if (!silent) this.drawer.trackersLoading = true;
+      let deferred = false;  // FX-29 宽限丢弃(见 _drawerGraceHold)
       try {
         const r = await this.api(`/api/torrents/${hash}/trackers`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.trackers = Array.isArray(r) ? r : [];
+        const rows = Array.isArray(r) ? r : [];
+        if (!silent && this._drawerGraceHold("trackers", hash, rows.length, () => this._fetchDrawerTrackers(false, seq))) {
+          deferred = true;
+          return;
+        }
+        this.drawer.trackers = rows;
         this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
@@ -123,6 +132,7 @@ window.AQB_DRAWER_STORE = {
         // 否则静默失败变体永远停在空态
         if (!this._drawerStale(hash, seq)) this.drawer.trackersError = e.message || "tracker 列表获取失败";
       } finally {
+        if (deferred) return;  // 宽限丢弃: 保持 trackersLoading(旧数据撑几何)与遮罩, 等重拉结果
         if (!this._drawerStale(hash, seq)) {
           this.drawer.trackersLoading = false;
           this._dtNotify("trackers");  // W7 恢复: 旧变体需通知才重渲染, 理由见 2026-10-07 报障
@@ -133,15 +143,22 @@ window.AQB_DRAWER_STORE = {
     async _fetchDrawerFiles(silent = false, seq = 0) {
       const hash = this.drawer.hash;
       if (!silent) this.drawer.filesLoading = true;
+      let deferred = false;  // FX-29 宽限丢弃(见 _drawerGraceHold)
       try {
         const r = await this.api(`/api/torrents/${hash}/files`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.files = Array.isArray(r) ? r : [];
+        const rows = Array.isArray(r) ? r : [];
+        if (!silent && this._drawerGraceHold("files", hash, rows.length, () => this._fetchDrawerFiles(false, seq))) {
+          deferred = true;
+          return;
+        }
+        this.drawer.files = rows;
         this.drawer.filesError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
         if (!this._drawerStale(hash, seq)) this.drawer.filesError = e.message || "文件列表获取失败";
       } finally {
+        if (deferred) return;  // 宽限丢弃: 保持 filesLoading(旧数据撑几何)与遮罩, 等重拉结果
         if (!this._drawerStale(hash, seq)) {
           this.drawer.filesLoading = false;
           this._dtNotify("files");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt10/11/12)
@@ -152,40 +169,22 @@ window.AQB_DRAWER_STORE = {
     async _fetchDrawerPeers(silent = false, seq = 0) {
       const hash = this.drawer.hash;
       if (!silent) this.drawer.peersLoading = true;
-      let deferred = false;  // 软切换宽限丢弃(见下): 未落袋/未掀罩/保持 loading, 等重拉结果
+      let deferred = false;  // FX-29 宽限丢弃(见 _drawerGraceHold): 未落袋/未掀罩/保持 loading
       try {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
         const norm = this._drawerNormPeers(r);
-        /* FX-29 软切换宽限(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」,
-         * 坑档 drawer-switch-flicker 第九次形态): 换目标后 qB 对新种子的首个 /peers 常为瞬时**空**
-         * (连接/状态尚未就绪), 而软切换本意是"保留旧数据撑几何 + 遮罩防串显"。空响应若直接落袋,
-         * 会覆盖旧数据被渲染成一帧空态, 下一拍(5s)真实对端到达再顶回表格 = 用户所报的"闪一下"。
-         * 处置: 换目标窗口内的**首个空响应**视为「未就绪」—— 不落袋(保留旧数据)、不掀罩(不登记
-         * _drawerDone, 待到集合仍含 peers)、短延迟快速重拉一次; 重拉若仍空则接受(真没对端 —— 那时
-         * 宽限标记已清, 走正常落袋)。仅换目标窗口生效: 轮询(silent)与常态空列表照常如实渲染。 */
-        if (!silent && this._drawerPeerGrace && !this._drawerPeerCount(norm)) {
-          this._drawerPeerGrace = false;
+        if (!silent && this._drawerGraceHold("peers", hash, this._drawerPeerCount(norm), () => this._fetchDrawerPeers(false, seq))) {
           deferred = true;
-          this._drawerPeerRetry = setTimeout(() => {
-            this._drawerPeerRetry = null;
-            // 重拉前复核: 面板仍开/仍是种子形态/目标未换(换目标时本 timer 已被 _stopDrawerPoll 撤销)
-            if (this.drawer.open && this.drawerIsSeed && this.drawer.hash === hash) {
-              this._fetchDrawerPeers(false, seq);  // 同代际重拉: 与首次同 seq, 换目标后旧代际响应仍被 stale 丢弃
-            }
-          }, 1000);
           return;
         }
-        this._drawerPeerGrace = false;
         this.drawer.peers = norm;
         this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
-        this._drawerPeerGrace = false;
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
         if (!this._drawerStale(hash, seq)) this.drawer.peersError = e.message || "peer 列表获取失败";
       } finally {
-        // 宽限丢弃: 保持 peersLoading(旧数据撑几何)与遮罩, 不落袋/不登记/不通知 —— 等重拉结果
-        if (deferred) return;
+        if (deferred) return;  // 宽限丢弃: 保持 peersLoading(旧数据撑几何)与遮罩, 等重拉结果
         if (!this._drawerStale(hash, seq)) {
           this.drawer.peersLoading = false;
           this._dtNotify("peers");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
@@ -254,11 +253,11 @@ window.AQB_DRAWER_STORE = {
       // 页签拉详情, 其余页签在此补一发 —— seq 归 _loadDrawerTab 先 bump(页签数据走代际守卫),
       // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
       if (this.drawer.tab !== "general") this._fetchDrawerDetail();
-      /* FX-29 软切换宽限(第九次形态, 见 _fetchDrawerPeers): 换目标后首个空 peers 响应视为
+      /* FX-29 软切换宽限(第九次形态, 见 _drawerGraceHold): 换目标后首个**空**列表响应视为
        * 「未就绪」。置位必须在 _loadDrawerTab **之后** —— 其内 _startDrawerPoll→_stopDrawerPoll
-       * 会清零本标记(那是页签轮询的收口); 而本方法开头的 _stopDrawerPoll 已清掉上一次换目标的
-       * 残留。生命周期严格限定在「本次换目标 -> 首个 peers 落袋/被打断」。 */
-      this._drawerPeerGrace = true;
+       * 会清空标记(那是页签轮询的收口); 而本方法开头的 _stopDrawerPoll 已清掉上一次换目标的残留。
+       * 三列表同置(本次实际只消费被拉的那张, 其余留到下次换目标/被打断时清)。 */
+      this._drawerGrace = { peers: true, trackers: true, files: true };
     },
     /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项。
      * R2 S5(计划 26-10-09-2219): 合并生效时按**生效对**扩展 —— gc 对等 detail+files,
@@ -330,8 +329,33 @@ window.AQB_DRAWER_STORE = {
         r.peers = Object.fromEntries(Object.entries(r.peers).map(([k, v]) => [k, fix(v)]));
       return r;
     },
+    /* ---------------- FX-29 软切换宽限(peers / trackers / files 三列表共用单点) ----------------
+     * 病根(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」, 坑档
+     * pitfalls/web-ui/drawer-switch-flicker.md 第九次形态): 软切换「保留旧数据撑几何 + 遮罩
+     * 防串显, 数据**全部到手**才掀罩」的「到手」只判"响应回来了" —— **空响应同样算**: 落袋即
+     * 覆盖旧数据、登记 _drawerDone 掀罩、渲染层判空 ⇒ 一帧空态; 而真机换目标后 qB 对新种子的
+     * 首个列表响应常瞬时为空(连接/状态尚未就绪) ⇒ 「表格 → 空态 →(下一拍)表格」的闪。
+     * 处置: 换目标窗口内(标记由 _switchDrawerTarget 置)某列表的**首个空响应**视为「未就绪」——
+     * 不落袋(保留旧数据)/不掀罩(不 _drawerDone)/短延迟重拉一次; 重拉仍空才接受(真没有 —— 那时
+     * 标记已消费, 走正常落袋)。仅换目标窗口生效: 轮询(silent)与常态空列表照常如实渲染。
+     * 一次性语义: 首次非 silent 落袋即消费本 src 的标记(非空 → 正常落袋; 空 → 宽限重拉)。
+     * 返回 true = 已接管 —— 调用方必须 `deferred` 短路 finally(不落袋/不通知/保持 loading)。 */
+    _drawerGraceHold(src, hash, count, refetch) {
+      const g = this._drawerGrace;
+      if (!g || !g[src]) return false;
+      g[src] = false;
+      if (count) return false;
+      if (!this._drawerGraceRetry) this._drawerGraceRetry = {};
+      this._drawerGraceRetry[src] = setTimeout(() => {
+        this._drawerGraceRetry[src] = null;
+        // 重拉前复核: 面板仍开/仍是种子形态/目标未换(换目标时本 timer 已被 _stopDrawerPoll 撤销)
+        if (this.drawer.open && this.drawerIsSeed && this.drawer.hash === hash) refetch();
+      }, 1000);
+      return true;
+    },
     /* peers 响应的对端数(qB sync/torrentPeers 恒为 dict 以 "ip:port" 为键, 兼容数组形态, 同
-     * _drawerNormPeers) —— FX-29 软切换宽限判「响应是否为空」用(真机对端数 >0, 空即"未就绪")。 */
+     * _drawerNormPeers) —— FX-29 软切换宽限判「响应是否为空」用(真机对端数 >0, 空即"未就绪")。
+     * trackers/files 响应恒为数组, 直接取 .length, 无需本 helper。 */
     _drawerPeerCount(resp) {
       const p = resp && resp.peers;
       if (!p) return 0;
