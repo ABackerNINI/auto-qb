@@ -19,6 +19,9 @@
  * 拖拽把手(.resizer)得以伸出格子右缘落进 grid 的 10px 列间距(见 components.css 的 .h-cell)。
  * 落 views.css 是遵「components.css 顶 700 行 cap, 新增规则入 views.css」的约定。 */
 .h-cell > .h-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 键盘聚焦可见(issue 26-10-12-0800 / 计划 26-10-12-2330): -2px 内缩, 避让列间 10px gap;
+ * 同 .h-cell > .h-label 落 views.css —— components.css 顶 700 行 cap(见上注) */
+.h-cell.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* 展开态的左侧强调已移除(第七轮分家: 左侧 accent 色条是选中态的专属语言);
  * 仅保留"已展开的行不再抬升"(视觉上保持"已定位") */
 .group-row.expanded:hover { transform: none; }  /* 已展开的行不再抬升(视觉上保持"已定位") */

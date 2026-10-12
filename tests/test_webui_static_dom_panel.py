@@ -1771,9 +1771,11 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
 
     # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
     # U2(计划 26-10-12-0527, D3): 07/08/09 手搓排序表头退役 —— 排序交互/表头/箭头全归引擎 aq-table
-    # (xtpl.html tpl-aq-table: col.sortable 点击走 $root.setSort 单点), 变体文件零手搓排序表头由
-    # test_drawer_table_bridge_wiring ⑪ 钉死。引擎 .h-cell 是 click 表头, 与主视图各表同款同形态;
-    # 引擎级表头 a11y 补课(role/aria-sort)属引擎全域议题不属本计划, 已入 issue 池另议。
+    # (xtpl.html tpl-aq-table: col.sortable 走激活单点 headActivate → $root.setSort), 变体文件零手搓
+    # 排序表头由 test_drawer_table_bridge_wiring ⑪ 钉死。引擎 .h-cell 是 click 表头, 与主视图各表同款
+    # 同形态; 引擎级表头 a11y 件套(role=columnheader / aria-sort / tabindex / keydown)已于 2026-10-12
+    # 补课 —— 计划 26-10-12-2330 方案 C(issue 26-10-12-0800), 落表壳组件单点, 守阵
+    # test_frontend_table_head_a11y(本段只盘变体侧模拟控件, 引擎侧归那条)。
     fold_variants = (
         "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
         "05-trackers-health-groups-low.js", "08-peers-groups-low.js"

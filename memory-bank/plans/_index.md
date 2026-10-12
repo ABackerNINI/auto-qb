@@ -24,6 +24,7 @@
 
 ## Done
 
+- [26-10-12-2330] [引擎表头 a11y 补课 — 可排序表头语义与键盘可达（方案 C）](26-10-12-2330-plan-webui-table-head-a11y.html) — `webui-drawer-table-rework`
 - [26-10-12-2010] [计划 · 流量启动恢复改为按需读取口径](26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html) — `webui-traffic-startup-recovery-on-demand`
 - [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`

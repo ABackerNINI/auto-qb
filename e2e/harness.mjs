@@ -21,8 +21,13 @@
  * —— memory-bank/pitfalls/testing/smoke.md 已记 3 次复发, 其中一次是"复用了别 clone 的服务,
  * 12 项探针在旧代码上照样通过"的假信心。撞上端口时宁可失败, 也不要静默验错对象。
  * 模式轮也**不改端口**: 串行人跑, 换端口反而破坏「撞残留服务宁可失败」的既有纪律。
+ *
+ * 默认恒为 **8137**(上述纪律不变)。仅**排障**时可用 `E2E_PORT=<n>` 临时换一个干净端口:
+ * 场景 = 8137 被别的 clone 残留桩占用、或残留桩把连通搞脏(ERR_CONNECTION_REFUSED 飘忽)时,
+ * 用 `E2E_PORT=8337 commands run dev.e2e` 在一片干净端口上复跑, 判定"是本轮代码还是环境"。
+ * 这不是常规路径 —— 常规一律 8137; global-teardown 读同一个 PORT, 换端口后收尾兜底自动跟随。
  */
-export const PORT = 8137;
+export const PORT = Number(process.env.E2E_PORT || 8137);
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 /* ------------------------------------------------------------------ *

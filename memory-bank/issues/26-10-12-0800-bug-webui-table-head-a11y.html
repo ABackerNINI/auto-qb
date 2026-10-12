@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-12-0800">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-drawer-table-rework">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-drawer-table-rework.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-drawer-table-rework.md,memory-bank/plans/26-10-12-2330-plan-webui-table-head-a11y.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移)">
 <meta name="issue-summary" content="D3 排序并引擎后, 旧手搓表头的 role=button+tabindex+aria-sort a11y 件套未随载体迁入引擎 .h-cell(click-only div), 全引擎表头键盘不可达、读屏不知排序态">
 <title>引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-12-0800-bug-webui-table-head-a11y</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-12 08:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -160,17 +160,23 @@
       <li><b>B 原生化</b>：<code>.h-cell.sortable</code> 改 <code>&lt;button&gt;</code> 载体 —— 键盘天然可达；代价：CSS 重写面大（grid 表头内嵌按钮的样式重置），且 resizer/右键的事件委托面要重核。</li>
     </ul>
     <p>建议 A；修法落点在引擎（主视图 + 抽屉同时受益），不属单变体波次。</p>
+    <p><b>实际采用（2026-10-12，方案 C，计划 <a href="../plans/26-10-12-2330-plan-webui-table-head-a11y.html">26-10-12-2330</a>）—— 改道 A/B：</b>A/B 用 <code>role="button"</code> 或 <code>&lt;button&gt;</code> 载体，而 <code>aria-sort</code> 只对 <code>role="columnheader"</code>（或 rowheader）生效 —— 挂 button 上读屏会<b>忽略</b>，"读屏不知排序态"那半个 bug 加完 A 依然存在，且列头语义降级成"按钮"。故语义载体改用 <code>role="columnheader"</code>；件套收进表壳组件两方法（<code>headAriaSort</code>/<code>headActivate</code>）单点，grid 与 thead 两模式同轮。建议 A 原文保留如上。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-12 08:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-12 19:28 — <strong>认领（用户指派）</strong>，状态 <strong>Open → In Progress</strong>；先确定最彻底方案（待拍板后立计划，届时回填 doc-refs 认领链）。</li>
+      <li>2026-10-12 23:30 — 用户裁定「按 C 出计划」；立计划 <a href="../plans/26-10-12-2330-plan-webui-table-head-a11y.html">26-10-12-2330-plan-webui-table-head-a11y</a>（<code>Open</code> 待拍板），认领链已双向回填（本件 <code>doc-refs</code> ↔ 计划 <code>doc-refs</code>）。</li>
+      <li>2026-10-12 23:52 — 用户「按推荐实施」，计划 W0–W3 全部落地（方案 C）；状态 <strong>In Progress → Done</strong>。实施细节见下「修复后补充」与计划 §08。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-12 19:28（同步后 <code>d428d080</code>）<strong>仍复现</strong>。重跑锚点 <code>grep -n "h-cell" src/auto_qb/webui/static/shared/tpl/xtpl.html</code>：<code>#tpl-aq-table</code> 的 grid 分支 <code>.h-cell</code>（当前行 222-236）仍为纯 click div，无 <code>role</code> / <code>tabindex</code> / <code>aria-sort</code>；thead 分支 <code>&lt;th class="sortable"&gt;</code>（当前行 214-219）同样无件套。守阵 <code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注（<code>tests/test_webui_static_dom_panel.py</code> 当前行 1705-1708）自述「引擎级表头 a11y 补课……已入 issue 池另议」—— 该面确为已记未做。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（方案 C，引擎单一落点）：</b>① <code>src/auto_qb/webui/static/shared/table.js</code> 的 <code>AQ_TABLE_COMPONENT</code> 加两方法 —— <code>headAriaSort(col)</code>（命中列 <code>sortKey === col.key</code> 时出 <code>ascending</code>/<code>descending</code>，与箭头 <code>v-if</code> 判据同源）与 <code>headActivate(col)</code>（grid → <code>$root.setSort(col.key, tableId)</code>；thead → <code>$emit('sort')</code>）。② <code>shared/tpl/xtpl.html</code>：grid 的 <code>.h-cell</code> 加 <code>role="columnheader"</code> + <code>:aria-sort</code> + <code>:tabindex="col.sortable ? 0 : null"</code> + <code>@click</code>/<code>@keydown.enter</code>/<code>@keydown.space</code> 全走 <code>headActivate</code>；<code>.group-head</code> 加 <code>role="row"</code>、<code>.col-drop-line</code> 加 <code>role="presentation"</code>；thead 的 <code>&lt;th&gt;</code> 同补件套。③ 三皮肤加 <code>.h-cell.sortable:focus-visible</code>（atlas 落 <code>css/views.css</code>，因 components.css 顶 700 行 cap；console 落 components.css / prism 落 views.css）。</p>
+    <p><b>验证方式：</b>新增静态守阵 <code>test_frontend_table_head_a11y</code>（钉件套单点、两模式 markup、三皮肤焦点样式）＋ 真浏览器 <code>e2e/table-head-a11y.spec.mjs</code>（主视图 + 抽屉：列头 <code>columnheader</code>、可排序列才进 Tab 序、Enter → <code>aria-sort=descending</code> 且箭头点亮、Space → <code>ascending</code>）。同轮改版 <code>test_frontend_table_registry_single_point</code> 的 <code>setSort</code> pin（模板字面串 → <code>headActivate</code> 单点）与 <code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注（「另议」→「已补」）。</p>
+    <p><b>测试数字（改动前 → 改动后）：</b><code>test.full</code> 由 3163 passed + 4 skipped（2 failed）→ <b>3164 passed + 4 skipped</b>（+1 = 新增守阵），覆盖率 <code>TOTAL 16718 165 5688 141 99%</code> 持平；两处 failed 为无关的跨零点 flaky（已入池 <a href="26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html">26-10-12-2338</a>）。真浏览器 e2e 换干净端口复跑 <code>E2E_PORT=8337 commands run dev.e2e</code> = <b>200 passed + 0 failed + 10 skipped</b>（含 4 条新用例；此前 8137 全量轮 81–98 failed 全为 <code>ERR_CONNECTION_REFUSED</code> 桩残留环境问题，与本改动无关）。e2e / 静态数字详见基线切片 <code>memory-bank/testing/baselines/26-10-13-0009-webui-table-head-a11y.md</code>。</p>
   </section>
 
   <footer>

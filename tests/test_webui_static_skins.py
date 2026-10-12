@@ -13,6 +13,7 @@
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
+- test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 三皮肤 .h-cell.sortable:focus-visible(atlas 落 views.css —— components.css 顶 700 行 cap); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
 """
 import json
 import os
@@ -712,6 +713,57 @@ def test_frontend_table_shell_single_point():
         assert 'class="h-cell"' not in text, (f"shared/{tpl} 又出现内联表头块(.h-cell) —— 表壳单点回潮, 应走 <aq-table>")
 
 
+def test_frontend_table_head_a11y():
+    """引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C)
+
+    D3「排序并引擎」后旧手搓表头的 P3-4 件套随载体退役, 而引擎 aq-table 表头**从未具备** ——
+    全域(主视图 4 + 抽屉 3 + 桥变体 8 + HR thead 1)表头键盘不可达、读屏不知排序态。方案 C 要点:
+    语义载体用 role="columnheader"(不是 button —— aria-sort 只对该 role 生效), 件套收进表壳组件
+    单点, grid / thead 两模式同轮。钉五条(缺一即静默退化):
+    ① 件套单点: AQ_TABLE_COMPONENT 有 headAriaSort/headActivate 两方法(散在模板即回潮);
+    ② grid 模式: .h-cell 有 role=columnheader + :aria-sort + :tabindex + Enter/Space keydown;
+       .group-head 有 role=row、.col-drop-line 有 role=presentation(容器语义);
+    ③ thead 模式: <th> 有 :aria-sort + :tabindex + keydown(原生 th 隐含 columnheader);
+    ④ 激活单点: click 与 keydown 同走 headActivate(grid→$root.setSort / thead→$emit('sort'));
+    ⑤ 三皮肤焦点可见: 各皮肤有 .h-cell.sortable:focus-visible(键盘能聚焦但看不见焦点 = 没做)。
+    """
+    table_js = open(os.path.join(STATIC_ROOT, "shared", "table.js"), encoding="utf-8").read()
+    comp = table_js[table_js.index("window.AQ_TABLE_COMPONENT"):]
+    comp = comp[:comp.index("\n};")]
+    assert "headAriaSort(col) {" in comp and "headActivate(col) {" in comp, \
+        "表壳组件缺 headAriaSort/headActivate 件套单点(a11y 属性/激活各写一份即回潮)"
+    assert re.search(r"headAriaSort\(col\) \{.*?sortDir === 1 \? \"ascending\" : \"descending\"", comp, re.S), \
+        "headAriaSort 未按 sortDir 出 ascending/descending(aria-sort 方向会与箭头分叉)"
+    assert re.search(r'headActivate\(col\) \{.*?this\.mode === "thead".*?\$emit\("sort", col\.key\)', comp, re.S), \
+        "headActivate 未按模式分派(thead 借壳须 emit, grid 走引擎单点)"
+    assert "this.$root.setSort(col.key, this.tableId)" in comp, \
+        "headActivate 的 grid 分支未调 $root.setSort(tableId 当 scope)"
+    xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
+    shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
+    shell = shell[:shell.index("</script>")]
+    thead_seg = shell.split("<tr v-if=\"mode === 'thead'\">", 1)[1].split("</tr>", 1)[0]
+    grid_seg = shell.split("<div v-else", 1)[1]
+    assert 'role="columnheader"' in grid_seg, \
+        "grid .h-cell 缺 role=columnheader(aria-sort 只对该 role 生效, 挂 button 上读屏忽略)"
+    assert ':aria-sort="headAriaSort(col)"' in grid_seg, "grid .h-cell 缺 :aria-sort 绑定"
+    assert ':tabindex="col.sortable ? 0 : null"' in grid_seg, "grid .h-cell 缺可排序列 tabindex(键盘不可聚焦)"
+    assert '@keydown.enter.prevent="headActivate(col)"' in grid_seg \
+        and '@keydown.space.prevent="headActivate(col)"' in grid_seg, \
+        "grid .h-cell 缺 Enter/Space 转发(键盘激活不触发排序)"
+    assert '@click="headActivate(col)"' in grid_seg, "grid .h-cell click 未走 headActivate 单点"
+    assert 'role="row"' in grid_seg, "表头容器 .group-head 缺 role=row"
+    assert 'role="presentation"' in grid_seg, "重排指示线 .col-drop-line 缺 role=presentation(污染 row 内容模型)"
+    assert ':aria-sort="headAriaSort(col)"' in thead_seg, "thead <th> 缺 :aria-sort(HR 详情表读屏不知排序态)"
+    assert '@keydown.enter.prevent="headActivate(col)"' in thead_seg, "thead <th> 缺 keydown 转发(键盘不可达)"
+    assert ":tabindex=" in thead_seg, "thead <th> 缺 tabindex(键盘不可聚焦)"
+    # atlas 落 views.css 而非 components.css: 后者顶 700 行 cap(views.css 首注有约定); console/prism
+    # 各按 .h-cell.sortable 现有落点。
+    for ui, rel in (("atlas", "views.css"), ("console", "components.css"), ("prism", "views.css")):
+        css = open(os.path.join(STATIC_ROOT, ui, "css", rel), encoding="utf-8").read()
+        assert ".h-cell.sortable:focus-visible" in css, \
+            f"{ui} 皮肤缺 .h-cell.sortable:focus-visible(键盘能聚焦但看不见焦点 = 等于没做)"
+
+
 def test_frontend_table_registry_single_point():
     """表注册表 TABLE_DEFS 是「表身份」单点(计划 26-10-11-1722 P0)
 
@@ -812,9 +864,14 @@ def test_frontend_table_registry_single_point():
     xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
     shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
     shell = shell[:shell.index("</script>")]
-    assert "$root.setSort(col.key, tableId)" in shell, \
-        ("表壳列头未把 tableId 当排序 scope 传下去 —— setSort 会按当前视图解析: 点抽屉列头排的是主视图, "
-         "本表箭头永不出现(静默)")
+    # 计划 26-10-12-2330: 列头 click 与 keydown 收进 headActivate 激活单点(2026-10-12), setSort 落
+    # table.js 组件方法体 —— 断言从「模板含字面串」改为「模板走 headActivate + 组件内传 tableId」。
+    table_js = open(os.path.join(STATIC_ROOT, "shared", "table.js"), encoding="utf-8").read()
+    assert "headActivate(col)" in shell, \
+        "表壳列头未走 headActivate 激活单点(click 与 keydown 须同路) —— 排序接线断了"
+    assert "setSort(col.key, this.tableId)" in table_js, \
+        ("表壳 headActivate 未把 tableId 当排序 scope 传下去 —— setSort 会按当前视图解析: "
+         "点抽屉列头排的是主视图, 本表箭头永不出现(静默)")
     assert "ALL_TABLE_DEFS[scope] ? scope" in sort_js, \
         "sort.js `_sortKeys` 未按表 id 解析 scope(抽屉三表各自独立的排序键靠它)"
     assert '.group-head[data-table="' in cols, \

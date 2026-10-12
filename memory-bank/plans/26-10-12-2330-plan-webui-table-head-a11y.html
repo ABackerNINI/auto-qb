@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-table-rework">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-12-2330">
+<meta name="doc-updated" content="26-10-12-2352">
+<meta name="doc-refs" content="memory-bank/issues/26-10-12-0800-bug-webui-table-head-a11y.html,memory-bank/tasks/26-10-12-webui-table-head-a11y.md">
+<title>引擎表头 a11y 补课 — 可排序表头语义与键盘可达（方案 C）</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012;
+    --paper:#15171b;
+    --paper-2:#191c21;
+    --ink:#e7e7e4;
+    --muted:#a2a8af;
+    --dim:#6f757c;
+    --line:rgba(255,255,255,.10);
+    --line-soft:rgba(255,255,255,.055);
+    --accent:#5cc0cf;
+    --accent-soft:rgba(92,192,207,.12);
+    --warn:#e0705f;
+    --ok:#86b46a;
+    --amber:#d8a657;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(92,192,207,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  code{color:#d7d2c4;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  pre{background:var(--paper-2);border:1px solid var(--line-soft);border-radius:6px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+  pre code{background:none;border:0;padding:0;color:#cfd6da;font-size:12.5px;line-height:1.6}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+  .cover{padding:88px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:42px;line-height:1.14;letter-spacing:-.022em;font-weight:600;margin:20px 0 0;max-width:22ch}
+  .sub{font-size:19px;color:var(--muted);margin-top:18px;max-width:62ch;line-height:1.5}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:38px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:14px 18px 2px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  .meta dd{margin:0;font-size:14px;color:var(--ink)}
+  .lede{margin-top:34px;font-size:16.5px;color:#cfd2d0;max-width:78ch}
+  .doc{display:grid;grid-template-columns:198px minmax(0,1fr);gap:60px;padding-top:52px;padding-bottom:96px}
+  nav.toc{position:sticky;top:34px;align-self:start;font-size:13px}
+  nav.toc .t-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px}
+  nav.toc a{display:block;color:var(--muted);border:0;padding:5px 0;line-height:1.35}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--dim);margin-right:9px}
+  nav.toc a:hover{color:var(--ink)}
+  main{min-width:0}
+  section{padding:38px 0 6px;border-top:1px solid var(--line)}
+  section:first-child{border-top:0;padding-top:0}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 6px}
+  h2 .idx{color:var(--accent)}
+  h3{font-size:23px;line-height:1.24;letter-spacing:-.014em;font-weight:600;margin:6px 0 18px}
+  h4{font-size:16px;font-weight:600;margin:30px 0 10px;letter-spacing:-.005em}
+  h4 .h4n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-right:8px}
+  p{margin:0 0 14px;max-width:78ch}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:78ch}
+  li{margin:5px 0}
+  li::marker{color:var(--dim)}
+  strong{font-weight:600;color:#f2f1ec}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  .small{font-size:13px}
+  hr.rule{border:0;border-top:1px solid var(--line-soft);margin:26px 0}
+  table{width:100%;border-collapse:collapse;margin:18px 0 26px;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  td.r{font-family:var(--mono);color:var(--accent)}
+  blockquote{margin:18px 0;padding:14px 20px;border-left:2px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0;max-width:78ch}
+  blockquote p{margin:0 0 8px}
+  blockquote p:last-child{margin:0}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:8px;padding:18px 22px;margin:18px 0}
+  .card .t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  .card.bad{border-color:rgba(224,112,95,.4)}
+  .card.bad .t{color:var(--warn)}
+  .card.warn{border-color:rgba(216,166,87,.4)}
+  .card.warn .t{color:var(--amber)}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+  .tag.ok{color:var(--ok);border-color:rgba(134,180,106,.4)}
+  .tag.warn{color:var(--warn);border-color:rgba(224,112,95,.4)}
+  .tag.amber{color:var(--amber);border-color:rgba(216,166,87,.4)}
+  footer{border-top:1px solid var(--line);padding:26px 0 60px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="cover">
+  <div class="kicker">Plan · Engine Table Head A11Y</div>
+  <h1>引擎表头 a11y 补课<br>可排序表头语义与键盘可达</h1>
+  <p class="sub">按方案 C：换对语义载体（<code>role="columnheader"</code> 而非 <code>button</code>），把 P3-4 件套收进表壳组件单点，grid / thead 两模式同轮闭环。</p>
+  <dl class="meta">
+    <div><dt>计划编号</dt><dd class="mono">26-10-12-2330</dd></div>
+    <div><dt>状态</dt><dd>Done（26-10-12 按推荐项 P1②/P2①/P3①/P4① 实施，W0–W3 落地；见 §08 变更记录）</dd></div>
+    <div><dt>认领 issue</dt><dd class="mono">26-10-12-0800-bug-webui-table-head-a11y</dd></div>
+    <div><dt>预期波次</dt><dd>W1–W3（三波，各带停手点）</dd></div>
+  </dl>
+  <p class="lede">问题是在 D3「排序并引擎」之后才全域暴露的：旧手搓表头（07/08/09）的 <code>role="button" + tabindex + aria-sort</code> 件套随载体退役，而引擎 <code>aq-table</code> 的表头从来没有这套件套 —— 于是抽屉三变体从「局部有」退化为「全域无」，且与主视图各表一起不可达。本计划把件套补回<b>引擎层</b>（一处受益全域），并顺手修正一个 issue 建议修法里的语义错误：<code>aria-sort</code> 挂在 <code>role="button"</code> 上读屏会忽略，必须挂在 <code>role="columnheader"</code> 上才生效。</p>
+</div>
+
+<div class="doc">
+<nav class="toc">
+  <div class="t-h">目录</div>
+  <a href="#s1"><span class="n">01</span>目标与边界</a>
+  <a href="#s2"><span class="n">02</span>现状与根因</a>
+  <a href="#s3"><span class="n">03</span>方案 C 详设</a>
+  <a href="#s4"><span class="n">04</span>分步实施 W1–W3</a>
+  <a href="#s5"><span class="n">05</span>风险与红线</a>
+  <a href="#s6"><span class="n">06</span>拍板点</a>
+  <a href="#s7"><span class="n">07</span>验收与基线</a>
+  <a href="#s8"><span class="n">08</span>变更记录</a>
+</nav>
+<main>
+
+<section id="s1">
+<h2><span class="idx">01</span> 目标与边界</h2>
+<h3>1.1 目标函数（与 issue 对账）</h3>
+<p>issue 26-10-12-0800 的诉求一句话是「引擎 aq-table 表头缺 role/aria-sort 与键盘可达」。拆成四条可验收的目标：</p>
+<table>
+  <thead><tr><th>#</th><th>目标（验收函数）</th><th>现状</th><th>终态</th></tr></thead>
+  <tbody>
+    <tr><td class="r">G1</td><td>键盘可达：可排序列头可 Tab 聚焦、Enter/Space 触发排序</td><td class="mono">0 / 全域</td><td class="mono"><b>全部可排序列头</b></td></tr>
+    <tr><td class="r">G2</td><td>读屏可播报：列头语义 + 当前排序方向（<code>aria-sort</code>）</td><td class="mono">无</td><td class="mono"><b>列头 <code>columnheader</code> + 命中列 <code>aria-sort</code></b></td></tr>
+    <tr><td class="r">G3</td><td>件套单点：一套实现，不散在各调用方</td><td class="mono">2 处模板裸写</td><td class="mono"><b>表壳组件内 1 组方法</b></td></tr>
+    <tr><td class="r">G4</td><td>全域覆盖：grid + thead 两模式、主视图 / 抽屉 / 桥变体 / HR 全表</td><td class="mono">0</td><td class="mono"><b>17 个表头实例</b></td></tr>
+  </tbody>
+</table>
+<h3>1.2 非目标（本轮明确不做，见 §06 拍板点）</h3>
+<ul>
+  <li><b>表体值格的 ARIA 表格语义</b>（<code>role="row"/"gridcell"</code> 全套）——值格散在行渲染器的 v-if 链里（group 49 / torrent 28 / show-ep / member 28 个分支），全量加 role 会触 100+ 处并破坏历来的「渲染 DOM 逐字节等价」验收口径，收益（读屏报「表格 N 行 M 列」）与代价不成比例。列作 P1 拍板点，默认不做、另立议题。</li>
+  <li><b>resizer 键鼠等价</b>（←/→ 调列宽）——拖宽把手是绝对定位 <code>span</code>，键盘化需新交互设计，列作 P2。</li>
+  <li><b>列头右键菜单的键盘入口</b>（Shift+F10 / ContextMenu 键）——列作 P2。</li>
+  <li><b>不动</b>：列宽 grid 契约、<code>colAlignCss</code> 对齐规则、列偏好持久化双轨模型、<code>COLS_STORE_KEY</code> 版本、排序状态机与比较器（<code>sort.js</code> 一行不改）。</li>
+</ul>
+<h3>1.3 与 issue 及前计划的关系</h3>
+<ul>
+  <li><b>对 issue 26-10-12-0800</b>：本计划是它的认领方。修完置 <code>Done</code>，并在 issue 报告写「实际修法 / 验证方式 / 测试数字」；与 issue 建议修法 A 的差异（C 用 <code>columnheader</code> 而非 <code>button</code>）按 skill 要求在 issue 里保留建议原文并说明改道原因。</li>
+  <li><b>对计划 26-10-12-0527（抽屉表格统一重写）</b>：那条线把排序交互并进了引擎（D3），本计划补的是它<em>有意留到 issue 池</em>的引擎侧 a11y 欠账（见守阵头注）。</li>
+  <li><b>立档</b>：本计划获拍板后、W1 落地时立任务档案 <span class="mono">tasks/26-10-12-webui-table-head-a11y.md</span>；本件 <code>doc-refs</code> 与 issue <code>doc-refs</code> 构成双向认领链。</li>
+</ul>
+</section>
+
+<section id="s2">
+<h2><span class="idx">02</span> 现状与根因</h2>
+<h3>2.1 引擎表头的两种模式（同一组件的两根）</h3>
+<p>表壳 <code>aq-table</code>（<span class="mono">shared/table.js</span> 的 <code>AQ_TABLE_COMPONENT</code>，模板 <span class="mono">shared/tpl/xtpl.html#tpl-aq-table</span>）只有一个，但有两个渲染根：</p>
+<table>
+  <thead><tr><th>模式</th><th>markup</th><th>排序接线</th><th>实例面</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">grid</td><td><code>div.h-cell</code>（纯 click div）</td><td><code>@click="col.sortable &amp;&amp; $root.setSort(col.key, tableId)"</code></td><td>主视图 5 实例（groups 2 · shows 2 · torrents 1）· 抽屉经典 3 · 桥变体 8</td></tr>
+    <tr><td class="mono">thead</td><td>原生 <code>&lt;th class="sortable"&gt;</code></td><td><code>@click="$emit('sort', col.key)"</code></td><td>设置页 HR 详情表 1（<code>hrDetail</code>）</td></tr>
+  </tbody>
+</table>
+<p class="small">合计 <b>17 个表头实例</b>，全部落在同一份模板里 —— 这正是「引擎一次受益全域」的落点。</p>
+<h3>2.2 现状取证（复验 2026-10-12 19:28，同步后 <code>d428d080</code>）</h3>
+<pre><code>&lt;!-- xtpl.html grid 分支(当前 222-236): 纯 click div, 无 role/tabindex/aria-sort --&gt;
+&lt;div v-for="col in cols" :key="col.key" class="h-cell"
+     :class="['hc-' + col.key, { sortable: col.sortable, ... }]"
+     @click="col.sortable &amp;&amp; $root.setSort(col.key, tableId)"
+     @mousedown="$root.startColDrag(...)"
+     @contextmenu.prevent.stop="$root.openHeadMenu(...)"&gt;
+  &lt;span class="h-label"&gt;{{ col.label }}&lt;/span&gt;
+  &lt;span v-if="col.sortable" class="arrow"&gt;...svg 箭头...&lt;/span&gt;
+  &lt;span class="resizer" ...&gt;&lt;/span&gt;
+&lt;/div&gt;
+
+&lt;!-- thead 分支(当前 214-219): 同样无件套 --&gt;
+&lt;th v-for="col in cols" :key="col.key" class="sortable" :class="{ num: col.num }"
+    @click="$emit('sort', col.key)"&gt;...&lt;/th&gt;</code></pre>
+<h3>2.3 根因</h3>
+<div class="card bad">
+  <div class="t">历史成因（issue §05 已排除「U2 新造缺陷」）</div>
+  <p>P3-4 件套（报告 26-10-07-0542）只盘点了抽屉变体的<em>模拟控件</em>，主视图引擎表头当时不在盘点面。D3 把排序表头并进引擎后，变体侧件套随载体退役、引擎侧缺口因此全域暴露。守阵 <code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注（<span class="mono">tests/test_webui_static_dom_panel.py</span> 1705-1708）自述「引擎级表头 a11y 补课属引擎全域议题，已入 issue 池另议」—— 该面确为已记未做。</p>
+</div>
+<h3>2.4 为什么 issue 建议的 A / B 都不够彻底</h3>
+<p>两者有一个共同硬伤：<b><code>aria-sort</code> 挂错宿主等于没加</b>。按 WAI-ARIA，<code>aria-sort</code> 只对 <code>role="columnheader"</code>（或 rowheader）生效 —— 挂到 <code>role="button"</code> 上读屏直接忽略，而这条正是 issue 摘要里「读屏不知排序态」那半个 bug。</p>
+<table>
+  <thead><tr><th>方案</th><th>键盘可达</th><th>读屏报排序态</th><th>列头语义</th><th>件套单点</th><th>改动面</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">A 最小件套(<code>role=button</code>+tabindex+aria-sort)</td><td><span class="tag ok">是</span></td><td><span class="tag warn">否·宿主非法</span></td><td><span class="tag warn">降级为按钮</span></td><td><span class="tag warn">两处手写</span></td><td>小</td></tr>
+    <tr><td class="mono">B 原生化(<code>&lt;button&gt;</code> 载体)</td><td><span class="tag ok">是</span></td><td><span class="tag warn">否·宿主非法</span></td><td><span class="tag warn">降级为按钮</span></td><td><span class="tag warn">两处手写</span></td><td><span class="tag warn">大</span>(CSS+事件冲突)</td></tr>
+    <tr><td class="mono">C 语义彻底(本计划)</td><td><span class="tag ok">是</span></td><td><span class="tag ok">是</span></td><td><span class="tag ok">保留</span></td><td><span class="tag ok">组件内单点</span></td><td>中</td></tr>
+  </tbody>
+</table>
+<p>B 的额外代价：<code>.h-cell</code> 内嵌 <code>.resizer</code>（绝对定位 span）+ <code>@mousedown</code> 拖拽排序 + <code>@contextmenu</code> 右键菜单，整格改 <code>&lt;button&gt;</code> 会与这三者冲突，三皮肤 CSS 与 e2e 手势（<span class="mono">column-prefs / drawer-*</span> 多处 <code>.h-cell .resizer</code>）全要重核 —— 成本最大、收益不比 A 多。</p>
+</section>
+
+<section id="s3">
+<h2><span class="idx">03</span> 方案 C 详设</h2>
+<h3>3.1 语义载体：<code>role="columnheader"</code> + <code>aria-sort</code></h3>
+<p>grid 模式的 <code>.h-cell</code> 从「裸 div」升级为 <code>role="columnheader"</code>：这是 <code>aria-sort</code> 的合法宿主，也是「列头」语义的正确载体（不是按钮）。thead 模式的 <code>&lt;th&gt;</code> 本身隐含 <code>columnheader</code>，<code>aria-sort</code> 直接合法、零语义补丁 —— 这是 C 相比 A/B 真正闭环的地方。</p>
+<p><b><code>aria-sort</code> 取值规则</b>（与现有箭头渲染判据同源，保证任一时刻二者一致）：</p>
+<pre><code>aria-sort = (col.sortable &amp;&amp; sortKey === col.key)
+              ? (sortDir === 1 ? "ascending" : "descending")
+              : null   // 未命中列不输出属性(Vue 对 null 不渲染), 与 arrow 的 v-if 判据同源</code></pre>
+<p class="small">三态排序的第一击是<em>降序</em>（<code>setSort</code> 首次点击 <code>dir = -1</code>），即首击后该列 <code>aria-sort="descending"</code>，与箭头指向一致。</p>
+<h3>3.2 键盘可达（与既有 P3-4 件套同构）</h3>
+<ul>
+  <li><code>.h-cell.sortable</code> 加 <code>tabindex="0"</code>，<code>@keydown.enter.prevent</code> / <code>@keydown.space.prevent</code> → 走与 click <b>同一个激活单点</b>。</li>
+  <li>thead 的 <code>&lt;th&gt;</code>（仅 <code>.sortable</code>）同样 <code>tabindex="0"</code> + keydown 转发。</li>
+  <li>不新造机制：这与项目 P3-4 件套（抽屉变体折叠组头 / msg 展开行）同一套语言。转发前排除原生交互元素的口径沿用 <code>closest("button, input, select, textarea, a[href], summary")</code> —— 本处 <code>.h-cell</code> 内只有非交互 <code>span</code>（label/arrow/resizer），实际不会双重触发，但保留口径一致以便未来扩展。</li>
+  <li>可访问名：<code>.h-cell</code> 子树文本即列名（<code>.h-label</code>，arrow 为空 span），<code>role=columnheader</code> 的 name 计算自然取到列名，<b>无需额外 <code>aria-label</code></b>。</li>
+</ul>
+<h3>3.3 件套单点：表壳组件内两方法</h3>
+<p>把 grid / thead 两处共同的属性产出与激活收进 <code>AQ_TABLE_COMPONENT</code>（<span class="mono">shared/table.js</span>），模板只调用 —— 未来新增任何表头模式只扩展这一处，不再各写一份：</p>
+<pre><code>// AQ_TABLE_COMPONENT.methods（新增）
+headAriaSort(col) {                       // 属性产出单点(grid / thead 共用)
+  if (!col.sortable || this.sortKey !== col.key) return null;
+  return this.sortDir === 1 ? "ascending" : "descending";
+},
+headActivate(col) {                       // 激活单点: click 与 keydown 同路
+  if (!col.sortable) return;
+  if (this.mode === "thead") this.$emit("sort", col.key);      // 借壳模式: 排序归调用方
+  else this.$root.setSort(col.key, this.tableId);              // grid: 直连引擎排序单点
+},</code></pre>
+<p>模板接线（两份分支同一调用）：<code>@click="headActivate(col)"</code> + <code>@keydown.enter.prevent="headActivate(col)"</code> + <code>@keydown.space.prevent="headActivate(col)"</code> + <code>:aria-sort="headAriaSort(col)"</code>。</p>
+<div class="card warn">
+  <div class="t">连带收益与同轮守阵改版</div>
+  <p>grid 分支原本的 <code>@click="col.sortable &amp;&amp; $root.setSort(col.key, tableId)"</code> 收进 <code>headActivate</code> 后，<b>模板里不再出现 <code>$root.setSort(col.key, tableId)</code> 字面串</b> —— 守阵 <code>test_frontend_table_registry_single_point</code> 中「表壳列头把 tableId 当 scope」那条 pin（<span class="mono">tests/test_webui_static_skins.py</span> ≈812）会转红，须同轮改版为「表壳走 <code>headActivate</code> 单点 + <code>setSort</code> 在组件内」。这是设计内的守阵迁移，不是回归。</p>
+</div>
+<h3>3.4 表头容器与外层语义</h3>
+<ul>
+  <li>grid 的 <code>.group-head</code> 加 <code>role="row"</code>（表头是「一行列头」），其子 <code>.col-drop-line</code>（重排指示线 span）加 <code>role="presentation"</code>，避免污染 row 的内容模型。</li>
+  <li>外层是否再补 <code>role="table</code>/<code>grid</code> 与表体行 role —— 属 §06 拍板点 P1，默认<b>不做</b>（值格全量补 role 的代价见 §1.2）。<span class="muted">诚实标注：缺祖先表格语义时，部分读屏对 <code>aria-sort</code> 的播报可能不完整 —— 这是本轮明确接受的收益边界，P1 若拍板做全套可补齐。</span></li>
+</ul>
+<h3>3.5 焦点可见（三皮肤 CSS）</h3>
+<p>键盘能聚焦但看不见焦点等于没做。三皮肤各加一条（<code>atlas/console/prism</code>）：</p>
+<pre><code>.h-cell.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }</code></pre>
+<p><code>outline-offset: -2px</code> 内缩，避让列间 10px gap 里相邻列 outline 互相挤压，也与项目既有 <code>.opt-pill</code> / <code>.pop-item</code> 的 <code>-2px</code> 先例一致。<code>.h-cell</code> 已 <code>overflow: visible</code>（为 resizer 伸出格子），outline 不会被裁。</p>
+</section>
+
+<section id="s4">
+<h2><span class="idx">04</span> 分步实施 W1–W3</h2>
+<table>
+  <thead><tr><th>波</th><th>动作</th><th>落点</th><th>停手点（不达即不推进）</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="r">W0</td>
+      <td>冻结基线（零代码）：跑 <code>test.full</code> + <code>dev.e2e</code> 记现状数字；对 17 个表头实例做 DOM 属性快照（改前）</td>
+      <td>基线切片 <span class="mono">testing/baselines/</span></td>
+      <td>数字与快照落档，作后续对账锚</td>
+    </tr>
+    <tr>
+      <td class="r">W1</td>
+      <td><b>语义载体 + 件套单点</b>：<code>table.js</code> 加 <code>headAriaSort</code>/<code>headActivate</code>；grid 的 <code>.h-cell</code> 加 <code>role="columnheader"</code>/<code>:aria-sort</code>/<code>:tabindex</code>/<code>@keydown</code>；<code>.group-head</code> 加 <code>role="row"</code>、<code>.col-drop-line</code> 加 <code>role="presentation"</code>；thead 的 <code>&lt;th&gt;</code> 加 <code>:aria-sort</code>/<code>:tabindex</code>/<code>@keydown</code></td>
+      <td><span class="mono">shared/table.js</span> · <span class="mono">shared/tpl/xtpl.html</span></td>
+      <td>新增静态守阵（钉件套单点 + 两模式 aria-sort/键盘）绿；同轮改版 <code>test_frontend_table_registry_single_point</code> 的 setSort pin；手工 DOM dump 核对 aria-sort 随 <code>setSort</code> 变化</td>
+    </tr>
+    <tr>
+      <td class="r">W2</td>
+      <td><b>焦点可见</b>：三皮肤加 <code>.h-cell.sortable:focus-visible</code></td>
+      <td><span class="mono">atlas/console/prism</span> 的 views.css / components.css（按各皮肤 <code>.h-cell.sortable</code> 现有落点）</td>
+      <td>真浏览器键盘 Tab 手验焦点可见（截图）；三皮肤文件成对改（无遗漏皮肤）</td>
+    </tr>
+    <tr>
+      <td class="r">W3</td>
+      <td><b>守阵改版与验收闭环</b>：改 <code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注（「另议」→「已补，件套在表壳」）；新增 e2e 键盘排序用例（Tab → Enter → 箭头点亮 + <code>aria-sort</code> 变化）；跑 <code>test.full</code> + <code>dev.e2e</code> + 覆盖率；写基线切片；回写坑档/模块文档；issue → <code>Done</code></td>
+      <td>守阵 / e2e / 坑档 / 模块文档 / 基线</td>
+      <td>全量与 W0 基线对账（覆盖率不得下降）；红验闭环（注入即红、还原即绿）</td>
+    </tr>
+  </tbody>
+</table>
+<p class="small"><b>守阵同轮纪律</b>：每波改码与改守阵同轮，不留「代码先行、守阵后补」的中间态；红验探针不进仓库（历史教训面见 <span class="mono">pitfalls/testing/</span>）。</p>
+</section>
+
+<section id="s5">
+<h2><span class="idx">05</span> 风险与红线</h2>
+<table>
+  <thead><tr><th>#</th><th>风险</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td class="r">R1</td><td><code>aria-sort</code> 与箭头判据漂移（两处各算，某刻不一致）</td><td>单一 <code>headAriaSort(col)</code> 产出，与 arrow 的 <code>v-if="sortKey === col.key"</code> 同源；守阵断言二者同条件</td></tr>
+    <tr><td class="r">R2</td><td><code>tabindex="0"</code> 让表头进 Tab 序，主视图多列表格 Tab 序变长</td><td>列头逐列 Tab 是标准表格可访问性做法；项目 roving 先例是针对<em>行</em>（大列表）的。本轮不做 roving（列数有限），列作 P4 观察项</td></tr>
+    <tr><td class="r">R3</td><td>Enter/Space 与 click 双重触发</td><td><code>.h-cell</code> 内无可聚焦原生交互元素，本无双重触发；保留 <code>closest</code> 排除口径以防未来在格内加原生控件</td></tr>
+    <tr><td class="r">R4</td><td><code>role="row"</code> 加在 <code>.group-head</code> 而表体无 row 语义 → 语义半套</td><td>与 P1 联动；默认只补表头侧，读屏对列头的识别已显著改善，值格语义列 P1</td></tr>
+    <tr><td class="r">R5</td><td>新增属性破坏既有「DOM 等价」类断言</td><td>已核对：现存断言（<span class="mono">test_frontend_table_shell_single_point</span> ③ 与全部 e2e）对 <code>.h-cell</code> 都是<em>类选择器 + 存在性</em>断言，加属性不破；唯一要改的是 W1 里那条 setSort 字面串 pin（见 §3.3）</td></tr>
+    <tr><td class="r">R6</td><td>三皮肤 CSS 特异性 / 遗漏某皮肤</td><td>W2 三皮肤成对改 + 手验截图；<code>.h-cell.sortable</code> 三皮肤同名类成对是既有纪律</td></tr>
+  </tbody>
+</table>
+<div class="card">
+  <div class="t">红线（触碰即停手重议）</div>
+  <ul>
+    <li>不改 <code>sort.js</code> 的排序状态机与比较器（本计划只接线，不改语义）。</li>
+    <li>不改列宽 grid 契约 / <code>colAlignCss</code> / 列偏好持久化；不升 <code>COLS_STORE_KEY</code>。</li>
+    <li>不改 <code>.h-cell</code> 的既有类名与事件骨架（<code>@mousedown</code> 拖拽 / <code>@contextmenu</code> 右键原样），只加属性与 keydown。</li>
+    <li>不为通过守阵而在行渲染器值格上批量加 role（那是 P1，另议）。</li>
+  </ul>
+</div>
+</section>
+
+<section id="s6">
+<h2><span class="idx">06</span> 拍板点</h2>
+<table>
+  <thead><tr><th>#</th><th>决策</th><th>选项</th><th>推荐</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="r">P1</td>
+      <td>是否补全表体 ARIA 表格语义（祖先 <code>role=table/grid</code> + 表体行 <code>role=row</code> + 值格 <code>role=gridcell</code>）</td>
+      <td>① 不做（另立议题）② 只补到表头侧（本计划默认）③ 全套</td>
+      <td><b>②</b>。③ 需触及行渲染器 100+ 分支、破坏 DOM 等价验收口径，收益与代价不成比例</td>
+    </tr>
+    <tr>
+      <td class="r">P2</td>
+      <td>resizer 键鼠等价 + 列菜单键盘入口</td>
+      <td>① 不做（另立）② 本轮一并</td>
+      <td><b>①</b>。二者都需新交互设计，超出本 issue「表头 a11y」范围</td>
+    </tr>
+    <tr>
+      <td class="r">P3</td>
+      <td>thead 模式（HR 详情表）是否同轮</td>
+      <td>① 同轮 ② 另立</td>
+      <td><b>①</b>。同一组件同一份模板，<code>&lt;th&gt;</code> 隐含 <code>columnheader</code>，成本极低、覆盖才完整</td>
+    </tr>
+    <tr>
+      <td class="r">P4</td>
+      <td>表头是否走 roving tabindex（整表头一个 tab stop + 左右键移动）</td>
+      <td>① 逐列 <code>tabindex=0</code>（本计划默认）② roving</td>
+      <td><b>①</b>。列数有限，逐列 Tab 是表格可访问性标准做法；roving 是行级（大列表）方案</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<section id="s7">
+<h2><span class="idx">07</span> 验收与基线</h2>
+<h3>7.1 静态守阵（新增 + 改版）</h3>
+<ul>
+  <li><b>新增</b>：钉表壳组件内件套单点（<code>headAriaSort</code>/<code>headActivate</code> 存在且被模板调用）· grid <code>.h-cell</code> 有 <code>role="columnheader"</code>/<code>aria-sort</code>/<code>tabindex</code>/<code>keydown</code> · thead <code>&lt;th&gt;</code> 有 <code>aria-sort</code>/<code>keydown</code> · <code>.group-head</code> 有 <code>role="row"</code>、<code>.col-drop-line</code> 有 <code>role="presentation"</code>。</li>
+  <li><b>改版</b>：<code>test_frontend_table_registry_single_point</code> 的 setSort pin（改为钉 <code>headActivate</code> 单点）；<code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注（§2.3）。</li>
+</ul>
+<h3>7.2 e2e（真浏览器）</h3>
+<ul>
+  <li>新增：Tab 聚焦可排序列头 → Enter → 箭头点亮 + <code>aria-sort</code> 属性变化；再按 Space → 方向翻转；不可排序列头不进 Tab 序。</li>
+  <li>回归：既有 <code>.h-cell</code> 单击排序 / 右键隐藏 / 拖宽手势全部保持绿（不得因新增属性而破）。</li>
+</ul>
+<h3>7.3 数字对账</h3>
+<ul>
+  <li><code>test.full</code> 与 <code>dev.e2e</code> 对 W0 基线对账；覆盖率四项不得下降。</li>
+  <li>新基线切片 <span class="mono">testing/baselines/&lt;stamp&gt;-webui-table-head-a11y.md</span>（一次全量一条，最新即事实源），其余文档一律引用不手抄。</li>
+</ul>
+<h3>7.4 收尾 DoD</h3>
+<ul>
+  <li>回写：坑档（若踩新坑按动作入 <span class="mono">pitfalls/web-ui/</span> 或 <span class="mono">pitfalls/testing/</span>）· 模块文档（<span class="mono">memory-bank/modules/webui-static-contract.md</span> 表壳契约补 a11y 件套一条）· issue 置 <code>Done</code> 并写实际修法/验证/数字。</li>
+  <li>立档：<span class="mono">tasks/26-10-12-webui-table-head-a11y.md</span>（W1 落地时）。</li>
+</ul>
+</section>
+
+<section id="s8">
+<h2><span class="idx">08</span> 变更记录</h2>
+<ul>
+  <li>2026-10-12 23:30 — 建计划（<code>Open</code>）。依 issue 26-10-12-0800 认领，用户裁定「按 C 出计划」。方案 C = 语义载体 <code>columnheader</code> + 件套单点 + 键盘可达 + 焦点可见 + 守阵同轮；P1–P4 拍板点待定，默认取推荐项。</li>
+  <li>2026-10-12 23:33 — 用户「按推荐实施」= 拍板 P1②（只补表头侧，不做表体值格语义）/ P2①（resizer 与列菜单键盘另立）/ P3①（thead 同轮）/ P4①（逐列 <code>tabindex</code>）。</li>
+  <li>2026-10-12 23:52 — <strong>W0–W3 落地，状态 → <code>Done</code></strong>。① W1 <code>shared/table.js</code> 加 <code>headAriaSort</code>/<code>headActivate</code> 两方法;<code>shared/tpl/xtpl.html</code> grid 的 <code>.h-cell</code> 改 <code>role="columnheader"</code> + <code>:aria-sort</code>/<code>:tabindex</code>/Enter·Space keydown、<code>.group-head</code> 加 <code>role="row"</code>、<code>.col-drop-line</code> 加 <code>role="presentation"</code>;thead 的 <code>&lt;th&gt;</code> 同补件套。② W2 三皮肤 <code>.h-cell.sortable:focus-visible</code> —— <b>有意偏差</b>: atlas 落 <code>css/views.css</code> 而非 components.css(后者改动前恰在 700 行 cap, views.css 首注即此约定), console 落 components.css / prism 落 views.css。③ W3 守阵:新增 <code>test_frontend_table_head_a11y</code>(静态)+ <code>e2e/table-head-a11y.spec.mjs</code>(键盘真按键 4 用例),<code>test_frontend_table_registry_single_point</code> 的 <code>setSort</code> pin 由「模板含字面串」改为「模板走 <code>headActivate</code> + 组件内传 tableId」,<code>test_drawer_tpl_a11y_and_fetch_error_states</code> 头注「另议」→「已补」。验收见基线切片。</li>
+  <li><b>实施期发现(计划外, 已入池)</b>: W0 跑 <code>test.full</code> 见 <code>tests/test_traffic_limits.py</code> 两条红, 定位为<b>跨零点 flaky</b>(循环 <code>ts+i</code> 跨天 → <code>_guard_count</code> 清零计数, 2000 阈值永不达), 与本次改动无关、按范围守恒一行未改 → 入池 <code>26-10-12-2338-test-traffic-limits-guard-midnight-flaky</code>。</li>
+</ul>
+</section>
+
+</main>
+</div>
+
+<footer>
+  26-10-12-2330-plan-webui-table-head-a11y.html · 认领 issue 26-10-12-0800-bug-webui-table-head-a11y · 专题 webui-drawer-table-rework
+</footer>
+</div>
+</body>
+</html>

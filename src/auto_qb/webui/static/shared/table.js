@@ -83,6 +83,21 @@ window.AQ_TABLE_COMPONENT = {
     mode: { type: String, default: "grid" },
   },
   emits: ["sort"],
+  /* 表头 a11y 件套单点(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— grid 与 thead 两模式
+   * 共用一份, 不散在各调用方。语义载体用 role="columnheader"(**不是** button): aria-sort 只对该
+   * role 生效, 挂 button 上读屏会忽略(那正是 issue 摘要里「读屏不知排序态」那一半的修法)。
+   * 取值与箭头渲染判据同源(sortKey === col.key 才出方向), 保证任一时刻属性与箭头一致。 */
+  methods: {
+    headAriaSort(col) {
+      if (!col.sortable || this.sortKey !== col.key) return null;   // 未命中列不输出(与 arrow 的 v-if 同源)
+      return this.sortDir === 1 ? "ascending" : "descending";
+    },
+    headActivate(col) {
+      if (!col.sortable) return;
+      if (this.mode === "thead") this.$emit("sort", col.key);       // 借壳模式: 排序归调用方(D3=B)
+      else this.$root.setSort(col.key, this.tableId);               // grid: 直连引擎排序单点
+    },
+  },
   template: "#tpl-aq-table",
 };
 

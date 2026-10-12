@@ -225,6 +225,8 @@
  * 旧规则(.hc-dlspeed…右对齐名单 + .hc-count/.hc-hr 居中)已删。 */
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
+/* 键盘聚焦可见(issue 26-10-12-0800 / 计划 26-10-12-2330): -2px 内缩, 避让列间 10px gap */
+.h-cell.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .h-cell .arrow { color: var(--accent); display: inline-block; animation: arrow-in .14s var(--ease-out); }
 .h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
 /* 拖拽把手: right:-5px = 跨在列边界上(一半在格子内、一半落进 grid 的 10px 列间距); .h-cell 已
