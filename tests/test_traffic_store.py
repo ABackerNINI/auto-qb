@@ -31,6 +31,9 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
   迟到补记重封桶的亚秒残余覆盖不再折 0, hour->day->month 逐级链恒可上卷(2026-10-13 真机
   「逐级聚合无有效覆盖」回归); 零覆盖(无观测)仍 fail-fast; avg 仍按 float cov 加权
 - test_v4_rollup_strict_level_by_level: 逐级派生 day/month
+- test_v4_merge_agg_same_epoch_reseal_keeps_coverage: 同 epoch 重封合流 —— 迟到补记把已封桶
+  重建再封时 cov 相加(非取残余), avg 按 cov 加权 / totals 取后封行 / 桶宽截断 / 异 kind-epoch
+  fail-fast(2026-10-13 真机「重封替换丢覆盖」回归)
 - test_v4_format_fail_fast_and_torn_tail: 序列化 fail-fast + 撕裂尾行豁免口径
 
 v4 写侧存储(S2a/S2b, TrafficV4Store):
@@ -127,6 +130,7 @@ from auto_qb.core.traffic_store import (
     v4_epoch_date_str,
     v4_hour_agg,
     v4_live_tail_slots,
+    v4_merge_agg,
     v4_month_epoch,
     v4_rel_dir_to_key,
     v4_rollup_agg,
@@ -711,6 +715,27 @@ def test_v4_hour_agg_subsecond_coverage_floors_cov_to_one():
     # 下限只兜「有覆盖」: 零覆盖(无观测)仍 fail-fast
     with pytest.raises(ValueError):
         v4_hour_agg(h0, (V4HourSample(1, 1, 1, 1, 0.0), ))
+
+
+def test_v4_merge_agg_same_epoch_reseal_keeps_coverage():
+    """同 epoch 重封合流(§04.2, 2026-10-13 真机「重封替换丢覆盖」回归): 迟到补记把已封桶
+    重建又再封一次时, 合流后 cov = 两段之和(不是「取残余」), avg 按各自 cov 加权 / max 取大
+    / totals 取后封行(时刻更晚的快照) / cov 截到行型桶宽; kind/epoch 不一致 fail-fast"""
+    prev = AggRow("hour", 100, 100, 200, 50, 80, 1000, 2000, 1838)  # 先到的那部分覆盖
+    late = AggRow("hour", 100, 300, 400, 90, 160, 1100, 2100, 1762)  # 24h 后才封口的空闲段补记
+    m = v4_merge_agg(prev, late)
+    assert m.cov_s == 1838 + 1762  # 真机形态: 两段相加恰满一小时(替换语义只留 1762)
+    assert m.dl_avg == int(round((100 * 1838 + 300 * 1762) / 3600))  # cov 加权, 非任一侧
+    assert m.dl_max == 400 and m.up_max == 160
+    assert (m.dl_total, m.up_total) == (1100, 2100)  # 后封行 = 时刻更晚的累计快照
+    assert v4_merge_agg(m, AggRow("hour", 100, 1, 1, 1, 1, 1200, 2200, 900)).cov_s == 3600  # 桶宽截断
+    d1 = AggRow("day", 86400, 100, 100, 100, 100, 1, 1, 40000)
+    d2 = AggRow("day", 86400, 200, 200, 200, 200, 2, 2, 46400)
+    assert v4_merge_agg(d1, d2).cov_s == 86400  # day 行同构(cov = 40000 + 46400 截到当日)
+    with pytest.raises(ValueError):
+        v4_merge_agg(prev, AggRow("day", 100, 1, 1, 1, 1, 1, 1, 1))
+    with pytest.raises(ValueError):
+        v4_merge_agg(prev, AggRow("hour", 200, 1, 1, 1, 1, 1, 1, 1))
 
 
 def test_v4_rollup_strict_level_by_level():

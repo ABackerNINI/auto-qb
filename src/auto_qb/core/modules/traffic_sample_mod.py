@@ -160,6 +160,7 @@ from ..traffic_store import (
     v4_day_epoch,
     v4_epoch_date_str,
     v4_hour_agg,
+    v4_merge_agg,
     v4_month_epoch,
     v4_rollup_agg,
     v4_block_gap_continuous,
@@ -355,6 +356,8 @@ class TrafficSampleModule(BaseModule):
         # ---- 聚合分层状态(S2b) ----
         # 单系列聚合累计器(§4.1): 系列键 -> SeriesAgg; 采样入账 lazily 建, start 恢复预建
         self._agg_states: dict = {}
+        # 封口失败已告警的系列键(节流: 同系列恢复前只告警一次; 见 _agg_reset_after_error)
+        self._agg_warned: set = set()
         # 种子按龄淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
         self._last_evict_check: Optional[float] = None
         # ---- 恢复埋点(§4.3, plan 26-10-12-2010: 消除静默, 读集有界可机检) ----
@@ -993,9 +996,34 @@ class TrafficSampleModule(BaseModule):
 
     def _agg_flush_all(self, now: float) -> None:
         """全系列聚合封口(§4.2 flush 时点; stop() 复用 —— 未完结层级留累计器, 重启经
-        catch-up 重建, 零丢失)"""
+        catch-up 重建, 零丢失)。
+
+        逐系列隔离(2026-10-13 真机取证): 单系列封口抛错只该影响该系列。此前异常一路上抛到
+        handler, 于是 ①其余系列本轮也不封口 ②`_agg_append` 永不执行 = 全系列 agg 静默停写
+        ③抛点在状态复位之前, 同一错每轮 flush 复现 —— 真机上一个系列抛「逐级聚合无有效
+        覆盖」, 全系列小时行一个多小时没落盘。现在逐系列 catch + 善后(见
+        _agg_reset_after_error), 单系列的问题不再放大成全局停写。"""
         for key in list(self._agg_states):
-            self._agg_flush_series(key, now)
+            try:
+                self._agg_flush_series(key, now)
+            except Exception as e:  # noqa: BLE001 —— 逐系列隔离即本函数职责(见 docstring)
+                self._agg_reset_after_error(key, e)
+            else:
+                self._agg_warned.discard(key)  # 恢复健康: 下次再错重新告警一次
+
+    def _agg_reset_after_error(self, key: str, err: Exception) -> None:
+        """单系列封口失败善后(见 _agg_flush_all): 告警(同系列恢复前只一次, 免 6 次/分钟刷屏)
+        + **重置该系列聚合累计器**。为什么重置: 抛点位于「本批行 append 之前」, 累计器里
+        已封未落盘的行再也送不出去, 不重置就会每轮 flush 重抛同一错(真机复现)。重置后
+        后续小时照常封口; 缺的那段由下次重启的 catch-up 从天文件重算补回(与「崩溃窗口丢
+        缓冲 = 真空」同一诚实口径: 不猜、不静默 —— 告警行写明缺口出处)。"""
+        if key not in self._agg_warned:
+            self._agg_warned.add(key)
+            logger.error(
+                f"流量采样 | {key} 聚合封口失败(该系列聚合累计器已重置, 后续小时照常封口; "
+                f"本段缺口待下次重启 catch-up 从天文件重算补回): {type(err).__name__}: {err}"
+            )
+        self._agg_states.pop(key, None)
 
     def _agg_flush_series(self, key: str, now: float) -> bool:
         """单系列聚合封口(§4.2): 完结整小时 -> hour 行 -> 完结本地日 -> day 行 ->
@@ -1028,9 +1056,9 @@ class TrafficSampleModule(BaseModule):
     @staticmethod
     def _ingest_acc(row, cur_epoch, cur_rows, bucket_epoch_of, cascade) -> tuple:
         """聚合累计器并入骨架单点(issue 26-10-11-0207 R10): hour/day 两级同构 —— 首桶开
-        累计器 / 同桶追加(同 epoch 重封替换) / 翻桶先级联封口(cascade)再开新累计器。
-        返回 (new_epoch, new_rows); 本行落批(rows_out.append)与 hour 的 earliest_hour
-        判据由调用方自理。"""
+        累计器 / 同桶追加(同 epoch 重封替换, 传入行已由 _agg_merge_prev 合流过) / 翻桶先
+        级联封口(cascade)再开新累计器。返回 (new_epoch, new_rows); 本行落批
+        (rows_out.append)与 hour 的 earliest_hour 判据由调用方自理。"""
         e = bucket_epoch_of(row.epoch)
         if cur_epoch is None:
             return e, [row]
@@ -1043,14 +1071,29 @@ class TrafficSampleModule(BaseModule):
         return e, [row]
 
     @staticmethod
+    def _agg_merge_prev(row, cur_epoch, cur_rows, bucket_epoch_of):
+        """同桶重封的入库行(§04.2): 该 epoch 已在累计器里(小时封口后被迟到的补记重建又再
+        封一次)时, 返回与已封行的**合流行**(v4_merge_agg), 否则原样返回本行。落批的必须是
+        这个返回值 —— 解析按「同 epoch 取最后一行」, 落残余行等于读侧也只看到残余
+        (2026-10-13 真机: 日行 cov_s 只留残余 44712 vs 全量 86400)。"""
+        if cur_epoch is None or bucket_epoch_of(row.epoch) != cur_epoch:
+            return row
+        for h in cur_rows:
+            if h.epoch == row.epoch:
+                return v4_merge_agg(h, row)
+        return row
+
+    @staticmethod
     def _agg_ingest_hour(agg: SeriesAgg, row, rows_out: list) -> None:
-        """完结 hour 行落批 + 并入 day 累计器(严格逐级): 本行先 append 进 rows_out 随本批
-        落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加行, 解析取最后一行);
-        同日追加; 同 epoch 重封替换累计器旧行; 翻日(暂停恢复跨多小时滞留)先级联封前一日
-        再开新累计器。顺带维护 earliest_hour 裁剪判据(§4.5): 运行期才开始产数据的系列
-        (全新安装 global / 新种子 / 热重载启用)不经 _recover_series, 判据只能在此初始化
-        + min 更新, 否则 _agg_trim 恒早退、agg.dat 无界增长(26-10-06-0028 C-01)。"""
-        rows_out.append(row)
+        """完结 hour 行落批 + 并入 day 累计器(严格逐级): 入库行(首封或与已封行合流的重封行)
+        随本批落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加**合流行**, 解析取
+        最后一行 —— 落批必须是合流行, 否则读侧末行仍是残余); 同日追加; 同 epoch 重封与
+        累计器旧行合流(v4_merge_agg); 翻日(暂停恢复跨多小时滞留)先级联封前一日再开新累计器。
+        顺带维护 earliest_hour 裁剪判据(§4.5): 运行期才开始产数据的系列(全新安装 global /
+        新种子 / 热重载启用)不经 _recover_series, 判据只能在此初始化 + min 更新, 否则
+        _agg_trim 恒早退、agg.dat 无界增长(26-10-06-0028 C-01)。"""
+        stored = TrafficSampleModule._agg_merge_prev(row, agg.day_epoch, agg.day_hours, v4_day_epoch)
+        rows_out.append(stored)
         if agg.earliest_hour is None or row.epoch < agg.earliest_hour:
             agg.earliest_hour = row.epoch
 
@@ -1059,21 +1102,22 @@ class TrafficSampleModule(BaseModule):
             TrafficSampleModule._agg_ingest_day(agg, v4_rollup_agg("day", close_epoch, tuple(close_rows)), rows_out)
 
         agg.day_epoch, agg.day_hours = TrafficSampleModule._ingest_acc(
-            row, agg.day_epoch, agg.day_hours, v4_day_epoch, cascade
+            stored, agg.day_epoch, agg.day_hours, v4_day_epoch, cascade
         )
 
     @staticmethod
     def _agg_ingest_day(agg: SeriesAgg, row, rows_out: list) -> None:
-        """完结 day 行落批 + 并入 month 累计器(严格逐级): 本行先 append 进 rows_out 随本批
-        落盘(§4.2 完结本地日 append day 行; 同 epoch 重封 = 追加行); 同月追加 / 同 epoch
-        替换 / 翻月级联封前一月(语义同 _agg_ingest_hour)。"""
-        rows_out.append(row)
+        """完结 day 行落批 + 并入 month 累计器(严格逐级): 入库行(首封, 或与已封行合流的
+        重封行)随本批落盘(§4.2 完结本地日 append day 行; 同 epoch 重封 = 追加合流行); 同月
+        追加 / 同 epoch 合流 / 翻月级联封前一月(语义同 _agg_ingest_hour)。"""
+        stored = TrafficSampleModule._agg_merge_prev(row, agg.month_epoch, agg.month_days, v4_month_epoch)
+        rows_out.append(stored)
 
         def cascade(close_epoch, close_rows) -> None:
             rows_out.append(v4_rollup_agg("month", close_epoch, tuple(close_rows)))
 
         agg.month_epoch, agg.month_days = TrafficSampleModule._ingest_acc(
-            row, agg.month_epoch, agg.month_days, v4_month_epoch, cascade
+            stored, agg.month_epoch, agg.month_days, v4_month_epoch, cascade
         )
 
     def _agg_append(self, key: str, rows: tuple) -> bool:

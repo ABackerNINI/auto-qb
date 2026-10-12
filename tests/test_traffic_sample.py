@@ -72,6 +72,11 @@
 - test_agg_flush_subsecond_hour_rolls_up_without_raise: 亚秒小时桶的日封口(2026-10-13 真机
   「逐级聚合无有效覆盖」回归)—— 迟到补记重建的小时桶只带亚秒残余覆盖时 cov_s 下限 1,
   day 封口不再抛异常(修复前 Σcov_s = 0 -> _agg_flush_series 每轮 flush 抛且整批 agg 行丢弃)
+- test_agg_reseal_merges_late_credit_keeps_full_coverage: 已封小时被迟到补记重建后再封走**合流**
+  (2026-10-13 真机「重封替换丢覆盖」回归)—— 末行 cov 回到整小时、avg 按两段 cov 加权,
+  day 累计器同持合流行; 修复前替换语义只留残余(真机日行 cov_s 44712 vs 全量 86400)
+- test_agg_flush_all_isolates_series_error_and_resets: 逐系列隔离与善后(单系列封口抛错只告警
+  该系列 + 重置其累计器, 其余系列照常落盘; 同系列恢复前只告警一次)
 - test_agg_z_n_runs_and_block_gap_vacuum: z 游程槽速率恒 0 + totals 行程快照; n 游程 null 期
   不贡献且清空信用; 新块首 gap 超容差(条件结算) —— 块间 gap = 真空不虚记覆盖
 - test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v4_rollup_agg;
@@ -1420,6 +1425,61 @@ def test_agg_flush_subsecond_hour_rolls_up_without_raise(tmp_path):
     assert parsed.hours == (AggRow("hour", day1, 100, 100, 50, 50, 1000, 2000, 1), )
     assert parsed.days == (AggRow("day", day1, 100, 100, 50, 50, 1000, 2000, 1), )
     assert mod._agg_states[key].month_epoch == v4_month_epoch(day1)  # day 行已并入 month 累计器(严格逐级)
+
+
+def test_agg_reseal_merges_late_credit_keeps_full_coverage(tmp_path):
+    """已封小时被迟到补记重建后再封时走合流(2026-10-13 真机「重封替换丢覆盖」回归): 长空闲
+    z 游程可延迟到 ZRUN_FLUSH_S 才封口, 其信用落在早已封口的小时桶上 —— 合流后小时行 cov
+    回到整小时、avg 按两段 cov 加权, 落批末行 = 合流行(解析取末行), day 累计器同持合流行。
+    修复前(替换语义): 末行只留残余(cov 1762), 真机日行 cov_s 44712 vs 全量 86400"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    h0 = _AGG_H0
+    mod._agg_feed(key, V4Sample(100, 50, 1000, 2000), h0, h0, True, 30.0)  # 块首 r: 开信用
+    mod._agg_feed(key, V4Sample(200, 60, 2000, 3000), h0, h0 + 1838, False, 30.0)  # 结算 [h0, h0+1838)
+    assert mod._agg_flush_series(key, now=h0 + HOUR_SECONDS) is True  # 小时封口(桶随即被弹出)
+    first = parse_v4_agg_text(_agg_text(tmp_path, key)).hours[0]
+    assert first.cov_s == 1838 and first.dl_avg == 100
+    # 迟到补记: 同一小时桶被重建(只带残余 1762s) -> 再封 = 与原行合流
+    mod._agg_feed(key, V4ZeroRun(1, 3000, 4000), h0 + 1838, h0 + HOUR_SECONDS, False, 30.0)
+    assert mod._agg_flush_series(key, now=h0 + HOUR_SECONDS + 30) is True
+    rows_text = _agg_text(tmp_path, key)
+    assert rows_text.count(f"hour,{h0},") == 2  # 文件里同 epoch 两行(首封行 + 重封合流行)
+    rows = parse_v4_agg_text(rows_text).hours
+    assert len(rows) == 1 and rows[0].cov_s == 3600  # 解析取末行 = 合流行(修复前 = 1762 残余)
+    assert rows[0].dl_avg == int(round((100 * 1838 + 200 * 1762) / 3600)) == 149  # cov 加权, 非任一侧
+    assert rows[0].dl_max == 200 and (rows[0].dl_total, rows[0].up_total) == (2000, 3000)
+    assert mod._agg_states[key].day_hours[0] == rows[0]  # day 累计器持合流行(逐级链覆盖完整)
+
+
+def test_agg_flush_all_isolates_series_error_and_resets(tmp_path, monkeypatch):
+    """逐系列隔离与善后(2026-10-13 真机「单系列异常阻断全批 agg 落盘」回归): 某系列封口抛错
+    只告警该系列 + 重置该系列累计器, 其余系列照常落盘(修复前异常上抛 -> 全系列 agg 静默停写,
+    且抛点在状态复位之前 -> 同一错每轮 flush 复现); 同系列恢复前只告警一次(免刷屏)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    bad, good = GLOBAL_SERIES_KEY, "torrent:" + "0" * 40
+    h0 = _AGG_H0
+    for k in (bad, good):
+        mod._agg_state(k).pending[h0] = [V4HourSample(100, 50, 1000, 2000, 3600.0)]
+    real = mod._agg_flush_series
+
+    def boom(key, now):
+        if key == bad:
+            raise ValueError("注入: 逐级聚合无有效覆盖")
+        return real(key, now)
+
+    monkeypatch.setattr(mod, "_agg_flush_series", boom)
+    with _ModuleLogCapture() as cap:
+        mod._agg_flush_all(now=h0 + HOUR_SECONDS)
+        mod._agg_state(bad).pending[h0] = [V4HourSample(1, 1, 1, 1, 3600.0)]  # 下一轮重试
+        mod._agg_flush_all(now=h0 + HOUR_SECONDS + 600)
+    # 隔离: 健康系列照常落盘(修复前异常一路上抛, 这里一行都不会有)
+    assert parse_v4_agg_text(_agg_text(tmp_path, good)).hours[0].cov_s == 3600
+    # 善后: 出错系列累计器已重置 + 告警只一次(节流)
+    assert bad not in mod._agg_states and bad in mod._agg_warned
+    assert cap.text.count("聚合封口失败") == 1
 
 
 def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):

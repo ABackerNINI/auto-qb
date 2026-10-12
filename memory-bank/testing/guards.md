@@ -142,6 +142,16 @@
 | `test_conditions.py::test_freespace_os_error` (G-03, P-07) | FreespaceCondition disk_usage 抛 OSError → ExprError("磁盘不可用"), 绝不降级成假值(与映射 miss / expr 形式 freespace() 同口径; 磁盘故障时规则显式停不静默失活) | 还原 `except OSError: return False`(实测红在 DID NOT RAISE) |
 | `test_expr_eval.py::test_torrent_count_no_full_copy` (G-06) | sys.torrent_count 无谓词直接 len(by_hash) O(1), 不做每求值全库浅拷贝(by_hash 换 values() 即炸的哨兵 dict) | 还原 `list(by_hash.values())` 先拷贝再 len(实测红在哨兵 AssertionError) |
 
+## 流量聚合封口批次守阵 (26-10-13, 红验 26-10-13 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_traffic_store.py::test_v4_hour_agg_subsecond_coverage_floors_cov_to_one` | 小时行 cov_s 下限 1(行存在即有覆盖): `(0, 0.5]` 亚秒桶不再折 0 —— day/month 封口的 v4_rollup_agg 恒有 Σcov_s > 0 可上卷; 零覆盖仍 fail-fast; avg 仍按 float cov 加权 | 还原 `cov_s=int(round(cov))`(实测红在 `assert 0 == 1`) |
+| `test_traffic_sample.py::test_agg_flush_subsecond_hour_rolls_up_without_raise` | 亚秒残余小时桶跨本地日封口时 hour + day 两行照常落盘(cov_s = 1) | 同上(实测红在 `ValueError: 逐级聚合无有效覆盖` —— 即真机报错原文) |
+| `test_traffic_store.py::test_v4_merge_agg_same_epoch_reseal_keeps_coverage` | 同 epoch 重封合流: cov = 两段之和(非取残余) / avg 按 cov 加权 / totals 取后封行 / 桶宽截断 / 异 kind-epoch fail-fast | 让 `v4_merge_agg` 直接 `return row`(实测红在 `assert 1762 == 1838 + 1762`) |
+| `test_traffic_sample.py::test_agg_reseal_merges_late_credit_keeps_full_coverage` | 已封小时被迟到补记重建再封时, 落批末行 = 合流行(cov 回到整小时), day 累计器同持合流行 —— 替换语义会让读侧末行只留残余 | 同上 + `_agg_merge_prev` 改 `return row`(实测红在 `assert 1762 == 3600`) |
+| `test_traffic_sample.py::test_agg_flush_all_isolates_series_error_and_resets` | 逐系列隔离: 单系列封口抛错只告警该系列(节流一次)+ 重置其累计器, 其余系列照常落盘 | 去掉 `_agg_flush_all` 的 try/except(实测红在注入的 `ValueError` 直接上抛) |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |
