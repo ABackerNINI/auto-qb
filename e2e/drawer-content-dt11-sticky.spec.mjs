@@ -12,11 +12,13 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * body 顶缘恒低 14px / footBottom 比 body 底缘恒高 20px)。修复 = 负 inset 抵消
  * (top:-14px / bottom:-20px, 见 11-content-treegrid-batch-low.js 内注释)。
  *
- * 断言口径: 预置 localStorage 选 11 为 content 页签模板 → page.route 桩掉
- * /api/torrents/{hash}/files(合成 90 个文件保证可滚) → 开抽屉切「内容」页签 →
- * 中途滚动 + 滚到底两档, 量 .dt11-head 顶缘 == .drawer-body 顶缘、.dt11-foot 底缘 ==
- * .drawer-body 底缘(±1px)。滚动容器 padding 一变(任一皮肤)或 inset 被改回 0, 本阵即红。
- * 桩服务的 FakeClient 默认 files=[](变体只会渲染「无文件列表」空态), 必须拦端点喂数据。
+ * 断言口径(U4 改锚: 表格体接引擎 —— 表头/行归 <aq-dt-bridge> Teleport 进变体锚
+ * drawerContentV11, 探针随载体迁移为引擎口径; 批量条仍在外壳): 预置 localStorage 选 11
+ * 为 content 页签模板 → page.route 桩掉 /api/torrents/{hash}/files(合成 90 个文件保证
+ * 可滚) → 开抽屉切「内容」页签 → 中途滚动 + 滚到底两档, 量引擎表头
+ * .group-head[data-table="drawerContentV11"] 顶缘 == .drawer-body 顶缘、.dt11-foot 底缘
+ * == .drawer-body 底缘(±1px)。滚动容器 padding 一变(任一皮肤)或吸顶补偿 inset 被改回 0,
+ * 本阵即红。桩服务的 FakeClient 默认 files=[](变体只会渲染「无文件列表」空态), 必须拦端点喂数据。
  */
 
 /** 合成文件树: 3 季 x 6 集 x 5 文件 = 90 行(目录行另计), 足够把 .drawer-body 滚出多屏。 */
@@ -67,11 +69,11 @@ for (const skin of SKINS) {
 
       const wrap = drawer.locator('.dt11-wrap');
       await expect(wrap).toBeVisible({ timeout: 5_000 });
-      await expect(drawer.locator('.dt11-r').first()).toBeVisible({ timeout: 5_000 });
+      await expect(drawer.locator('.dt11-list .group-row').first(), '行体归引擎(U4)').toBeVisible({ timeout: 5_000 });
 
       const geom = () => page.evaluate(() => {
         const body = document.querySelector('.drawer .drawer-body');
-        const head = document.querySelector('.drawer .dt11-head');
+        const head = document.querySelector('.drawer .group-head[data-table="drawerContentV11"]');
         const foot = document.querySelector('.drawer .dt11-foot');
         const b = body.getBoundingClientRect();
         const h = head.getBoundingClientRect();

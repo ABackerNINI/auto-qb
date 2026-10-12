@@ -122,3 +122,65 @@
     </div>
   </template>
 </script>
+
+<!-- dt10 树 + 详情(U4): 左树行 = 引擎行容器(.dt10-list .group-row, 列头 CSS 隐藏), 分片只出
+     行内格。树缩进格(name 列) = D4 拍板「树是行模型的一部分」: 折叠钮/缩进/图标/名称/徽章,
+     判据(树聚合/筛选/折叠/选中)全在变体 rowsFn —— 渲染器只做声明式呈现。
+     折叠钮 data-act="fold"、优先级徽章 data-act="prio-menu"(经典锚定小菜单, 判据在变体)。 -->
+<script type="text/x-template" id="tpl-aq-dt10-cells">
+  <span v-if="p.kind === 'empty'" class="dt10-blank"></span>
+  <template v-else v-for="col in cols" :key="col.key">
+    <button v-if="col.key === 'tgl' && p.dir" type="button" class="dt10-tgl" :class="{ closed: p.folded }"
+            data-act="fold" :data-path="p.path" :title="(p.folded ? '展开' : '折叠') + ' ' + p.name"><svg class="ico" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></button>
+    <span v-else-if="col.key === 'tgl'"></span>
+    <span v-else-if="col.key === 'name'" class="dt10-n" :style="{ paddingLeft: p.indent + 'px' }" :title="p.path">
+      <svg class="ico" viewBox="0 0 16 16"><use :href="p.dir ? '#i-folder' : '#i-list'"></use></svg>
+      <span class="dt10-nm">{{ p.name }}</span>
+      <span v-if="p.dir" class="dt10-meta" :title="p.metaTitle">{{ p.meta }}</span>
+      <span v-else-if="p.missTxt" class="dt10-miss" :title="p.missTitle">缺 {{ p.missTxt }}</span>
+    </span>
+    <span v-else-if="col.key === 'size'" class="dt10-sz" :title="p.dir ? '子树合计大小' : '文件大小'">{{ p.sizeTxt }}</span>
+    <span v-else-if="col.key === 'prog'" class="dt10-prog" :class="{ part: p.part }" :title="p.progTitle">
+      <span class="bar"><i :style="{ width: p.progW + '%' }"></i></span><em>{{ p.progTxt }}%</em>
+    </span>
+    <span v-else-if="col.key === 'prio'" class="dt10-priocell">
+      <span v-if="p.dir" class="dt10-pnone" title="目录本身无优先级; 选中后可在右侧整目录批量设置">—</span>
+      <button v-else type="button" class="dt10-pbadge" :class="p.badgeCls" data-act="prio-menu"
+              :data-idx="p.index" :title="p.badgeTitle">{{ p.badge }}</button>
+    </span>
+  </template>
+</script>
+
+<!-- dt11 树表批量(U4): 引擎行容器 7 列(勾选/折叠/树缩进格/大小/进度/[可用性]/优先级)。
+     行内勾选框三态经 :checked/:indeterminate 声明式(原生 property, Vue patch 直持 ——
+     目录 = 整棵子树三态, 判据在变体 rowsFn); 勾选集变更走 change 事件冒泡(变体委托)。
+     优先级徽章 data-act="prio-cycle"(点击循环, 逐次真实提交)。 -->
+<script type="text/x-template" id="tpl-aq-dt11-cells">
+  <span v-if="p.kind === 'empty'" class="dt11-empty">该筛选下没有文件</span>
+  <template v-else v-for="col in cols" :key="col.key">
+    <input v-if="col.key === 'ck' && p.dir" type="checkbox" class="dt11-ck" data-act="dirck"
+           :data-path="p.path" :checked="p.ckState === 2" :indeterminate="p.ckState === 1"
+           :title="'勾选 = 整棵子树(' + p.subFiles + ' 个文件)'">
+    <input v-else-if="col.key === 'ck'" type="checkbox" class="dt11-ck" data-act="ck"
+           :data-path="p.path" :checked="p.ckState === 2" title="勾选该文件">
+    <button v-else-if="col.key === 'tgl' && p.dir" type="button" class="dt11-tgl" :class="{ closed: p.folded }"
+            data-act="fold" :data-path="p.path" :title="(p.folded ? '展开' : '折叠') + ' ' + p.name"><svg class="ico" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></button>
+    <span v-else-if="col.key === 'tgl'"></span>
+    <span v-else-if="col.key === 'name'" class="dt11-n" :style="{ paddingLeft: p.indent + 'px' }" :title="p.path">
+      <svg class="ico" viewBox="0 0 16 16"><use :href="p.dir ? '#i-folder' : '#i-list'"></use></svg>
+      <span class="dt11-nm">{{ p.name }}</span>
+      <span v-if="p.dir" class="dt11-meta" :title="p.metaTitle">{{ p.meta }}</span>
+      <span v-else-if="p.missTxt" class="dt11-meta is-miss" :title="p.missTitle">缺 {{ p.missTxt }}</span>
+    </span>
+    <span v-else-if="col.key === 'size'" class="dt11-sz" :title="p.dir ? '子树合计大小' : '文件大小'">{{ p.sizeTxt }}</span>
+    <span v-else-if="col.key === 'prog'" class="dt11-prog" :class="{ part: p.part }" :title="p.progTitle">
+      <span class="bar"><i :style="{ width: p.progW + '%' }"></i></span><em>{{ p.progTxt }}%</em>
+    </span>
+    <span v-else-if="col.key === 'av'" class="dt11-av" :class="{ low: p.avLow }" :title="p.avTitle">{{ p.avTxt }}</span>
+    <span v-else-if="col.key === 'prio'" class="dt11-priocell">
+      <span v-if="p.dir" class="dt11-pnone" title="目录本身无优先级; 勾选目录后整棵子树批量设置">—</span>
+      <button v-else type="button" class="dt11-pbadge" :class="p.badgeCls" data-act="prio-cycle"
+              :data-path="p.path" :title="p.badgeTitle">{{ p.badge }}</button>
+    </span>
+  </template>
+</script>

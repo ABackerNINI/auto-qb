@@ -317,25 +317,34 @@
     </template>
   </script>
 
-<script type="text/x-template" id="tpl-aq-dt-bridge">
+  <script type="text/x-template" id="tpl-aq-dt-bridge">
   <!-- 变体表格体桥(计划 26-10-12-0527 U1/U2): 表壳 + 行渲染器经 Teleport 传送进变体外壳锚。
        全部引擎行为走 $root 既有单点; 描述符(app.js DRAWER_TABLE_DEFS 变体行)声明
        rows/rowKey/rowModel/rowProp(+可选 rowCls/segs)即接入 —— 外壳/引擎/本组件三方零特判。
        U2 分段化: dtBridgeSegs 归一返回 [{key, rows}](描述符 segs=true 时 rows 方法自带分段,
        如 08 五分组 —— 每组一个锚, 分组头留在外壳; 单锚段 key=""), 逐段 teleport + 逐段
        sortedDrawer(同 tableId 同一座排序键)。行修饰类(rowCls)绑 .group-row —— 变体行级
-       个性(红行/内网标/握手半透明)经引擎行容器保留(D5 口径)。 -->
+       个性(红行/内网标/握手半透明)经引擎行容器保留(D5 口径)。
+       U4 行级键盘面(issue 26-10-07-0846, content 树表 10/11 消费): 行容器输出
+       data-dt-key="<rowKey 值>"(变体键盘委托/roving 的行身份锚, 属性名固定不随表变) +
+       描述符 rowTab 声明的行容器 tabindex=-1(不进 Tab 序, 行内原生控件自然参与 Tab);
+       .group-table 挂 @vue:mounted → 描述符 rowAfter 声明的变体 rowAfterFn(锚每次换代重挂
+       恰好一次) —— roving 锚点/回焦在行进 DOM 后跑, 与原「replaceChildren 后 roving」
+       同语义(原子换帧时机的桥版等价物)。 -->
   <template v-for="seg in $root.dtBridgeSegs(tab)" :key="$root.dtBridgeKey(tab) + '#' + seg.key">
     <teleport :to="$root.dtBridgeTo(tab, seg.key)">
       <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
                 :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
                 :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>
       <div v-if="$root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows).length" class="group-table"
-           @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))">
+           @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))"
+           @vue:mounted="$root.dtRowAfter($root.dtBridgeTbl(tab), $event)">
         <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows)"
              :key="r[$root.dtBridgeRowKey(tab)]" class="group-row"
              :class="$root.dtBridgeRowCls(tab) ? r[$root.dtBridgeRowCls(tab)] : null"
-             :data-table="$root.dtBridgeTbl(tab)" :style="$root.gridStyle($root.dtBridgeTbl(tab))">
+             :data-table="$root.dtBridgeTbl(tab)" :data-dt-key="r[$root.dtBridgeRowKey(tab)]"
+             :tabindex="$root.dtBridgeRowTab(tab) ? -1 : null"
+             :style="$root.gridStyle($root.dtBridgeTbl(tab))">
           <component :is="'aq-' + $root.dtBridgeRowModel(tab) + '-cells'"
                      :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
                      v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>

@@ -1670,17 +1670,33 @@ def test_drawer_tpl_content_row_keyboard_roving():
     for fn in ("roving: function", "rowFocusKey: function", "rowRestore: function", "rowMove: function"):
         assert fn in core, f"核心 helpers 缺 {fn.split(':')[0]}(行级键盘单点被拆散/摘除)"
 
-    # 2. 三变体接入面: 行容器 tabindex=-1 + 锚点/回焦/移焦走核心单点 + keydown 委托挂宿主
+    # 2. 三变体接入面: 行/块容器 tabindex=-1 + 锚点/回焦/移焦走核心单点 + keydown 委托挂宿主
+    #    (U4 改锚: dt10/11 表格体接引擎(计划 26-10-12-0527) —— 行容器 tabindex=-1 与
+    #    data-dt-key 身份锚由桥模板单点输出(描述符 rowTab/rowKey 声明位), roving 锚点/回焦
+    #    经描述符 rowAfter → 变体 rowAfterFn 在锚换代重挂后跑(与原 replaceChildren 后
+    #    roving 同语义); 12 树图块仍是自管 DOM, 断言不变。)
+    bridge = open(os.path.join(shared, "tpl", "xtpl.html"), encoding="utf-8").read()
+    assert ':tabindex="$root.dtBridgeRowTab(tab) ? -1 : null"' in bridge, \
+        "桥行容器缺 tabindex=-1 输出(rowTab 声明位, 行容器混进 Tab 序)"
+    assert ':data-dt-key="r[$root.dtBridgeRowKey(tab)]"' in bridge, \
+        "桥行容器缺 data-dt-key 身份锚(变体键盘委托/roving 的行锚没了)"
+    appjs = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    assert "rowTab: true, rowAfter: true" in appjs, \
+        "app.js: drawerContentV10/V11 描述符缺 rowTab/rowAfter 声明位(U4 行级键盘面)"
     cases = {
-        "10-content-tree-detail-tall.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
-        "11-content-treegrid-batch-low.js": ["H.roving(host, \"data-node\"", "ev.target !== row"],
+        "10-content-tree-detail-tall.js": ["H.roving(el, \"data-dt-key\"", "ev.target !== row"],
+        "11-content-treegrid-batch-low.js": ["H.roving(el, \"data-dt-key\"", "ev.target !== row"],
         "12-content-space-treemap-collapsed.js":
             ["H.roving(mapEl, \"data-blk\"", "H.roving(host, \"data-row\"", "ev.target !== el"],
     }
     for name, hooks in cases.items():
         text = open(os.path.join(vdir, name), encoding="utf-8").read()
-        assert 'tabindex="-1"' in text, \
-            f"drawer_tpl/{name}: 行/块容器缺 tabindex=-1(roving 基线, 容器混进 Tab 序)"
+        if name[:2] in ("10", "11"):
+            assert "rowAfterFn" in text, \
+                f"drawer_tpl/{name}: 缺 rowAfterFn 接入点(锚换代重挂后的 roving/回焦被摘)"
+        else:
+            assert 'tabindex="-1"' in text, \
+                f"drawer_tpl/{name}: 行/块容器缺 tabindex=-1(roving 基线, 容器混进 Tab 序)"
         assert 'role="button"' not in text, \
             f"drawer_tpl/{name}: 整行加了 role=button(行内已含原生控件, 嵌套交互语义更糟 —— 入池根因段口径)"
         for hook in hooks:
@@ -1760,9 +1776,11 @@ def test_drawer_tpl_cross_seed_fold():
     vdir = os.path.join(shared, "drawer_tpl")
 
     # 1. P3-6: dt10/11/12 的换种子重置块不再清折叠记账, 且按 path 记账的容器仍在
+    #    (U4 改锚: dt10/11 表格体接引擎 —— 折叠钮迁渲染器分片(data-act="fold" +
+    #    :data-path), 变体侧按 path 落账的判据 = onClick 委托读 data-path; 12 不变。)
     fold_accounts = {
-        "10-content-tree-detail-tall.js": ("folded", 'data-tgl="${n.path}"'),
-        "11-content-treegrid-batch-low.js": ("folded", 'data-tgl="${r.path}"'),
+        "10-content-tree-detail-tall.js": ("folded", 'data-path'),
+        "11-content-treegrid-batch-low.js": ("folded", 'data-path'),
         "12-content-space-treemap-collapsed.js": ("colG", 'data-gh="${dir.path}"'),
     }
     for name, (fold_key, path_attr) in fold_accounts.items():

@@ -262,3 +262,28 @@ window.AQ_DT06_CELLS_COMPONENT = {
   },
   template: "#tpl-aq-dt06-cells",
 };
+
+/* ---------------- U4 变体格渲染器(计划 26-10-12-0527, 内容树 10/11) ----------------
+ * 新行模型 drawerFileTree(D4=A 树缩进格进渲染器)的落点: 树缩进格(折叠钮/勾选框/缩进/
+ * 图标/名称/徽章)两段同构单份口径 —— 列集 D2 各表声明, 分片按 col.key 查表(与经典
+ * 同范式)。行对象由变体 rowsFn 装配(树聚合判据全在变体, 判据零复制); 行级修饰类
+ * (dir/file/sel/is-chk/empty-row)走描述符 rowCls 绑 .group-row; 行级键盘(data-dt-key
+ * 身份锚 + tabindex)归桥模板 U4 扩展, 本组件不感知。
+ *   dt10 树 + 详情 → <aq-dt10-cells>   dt11 树表批量 → <aq-dt11-cells> */
+window.AQ_DT10_CELLS_COMPONENT = {
+  name: "aq-dt10-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerContentV10"))
+    p: { type: Object, required: true },         // dt10 行(rowsFn 装配)
+  },
+  template: "#tpl-aq-dt10-cells",
+};
+
+window.AQ_DT11_CELLS_COMPONENT = {
+  name: "aq-dt11-cells",
+  props: {
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerContentV11"))
+    p: { type: Object, required: true },         // dt11 行(rowsFn 装配)
+  },
+  template: "#tpl-aq-dt11-cells",
+};

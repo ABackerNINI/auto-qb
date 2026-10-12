@@ -8,13 +8,20 @@
  * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
  * 点击循环 不下载→正常→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
- * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位。
+ * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位(U4: 引擎 omitEmpty
+ * 通用机制接管, 原 hasav/noav 双 grid 手搓退役)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
  * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
  * 上一种子的勾选落到新种子文件上是真实的优先级误操作面); 批量条/汇总条 sticky 吸底不随行滚动。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 勾选(issue 26-10-07-0846;
  * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
+ * 桥声明(U4, 计划 26-10-12-0527, D4=A): 表格体走引擎 —— tableId 对应 app.js
+ * DRAWER_TABLE_DEFS.drawerContentV11, 外壳只留版式(工具条/批量条), 7 列引擎行容器 +
+ * 引擎表头(sticky 吸顶个性反压制), 拖宽/右键隐藏/偏好持久化首次落地(勾选/折叠列 locked
+ * —— 隐藏即废功能)。树聚合/筛选/折叠/勾选判据全在 rowsFn(判据零复制), 行来源含非响应式
+ * UI 态(checked/folded/filter) → anchTouch。排序不适用(树序 = 树语义, 原口径无排序,
+ * 全列 sortable:false + dyn 空键)。行内勾选框三态经分片 :indeterminate 声明式。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -23,17 +30,19 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘/锚保活 */
+  const TABLE_ID = "drawerContentV11";
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
-  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建 */
-  const ui = { filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "" };
+  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建;
+   * focusKey 供锚换代重挂后回焦(记账在 anchTouch 前, 恢复在 rowAfterFn) */
+  const ui = { filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "", focusKey: "" };
 
   const CSS = [
-    /* 骨架: 工具条 / 滚动行区(.drawer-body 本体滚动)/ 吸底条 */
+    /* 骨架: 工具条 / 行区(引擎行容器, .drawer-body 本体滚动)/ 吸底条 */
     ".drawer .dt11-tools { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }",
     ".drawer .dt11-chip { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px;",
     "  border-radius:999px; border:1px solid var(--border-soft); background:var(--surface-1);",
@@ -48,23 +57,25 @@
     "  font:12px/1 system-ui, sans-serif; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt11-ghost:hover { color:var(--fg); border-color:var(--border-soft); }",
     ".drawer .dt11-hint { margin-left:auto; font-size:11px; color:var(--fg-dim); }",
-    /* 行区: 表头吸顶 + 行 grid */
-    /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
+    /* 引擎表头 + 行(U4): 列宽/网格/拖宽/右键隐藏归引擎声明, 本变体只保留表头/行观感个性。
+     * 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
      * padding-top 之下, 中途滚动时行文字从那条 14px 缝里漏出来(实测 headTop 比 body 顶缘
      * 恒低 14px); -14px 抵消后表头贴到可见上缘。14px = 三皮肤 .drawer-body 的 padding-top
      * (atlas|console: 14px 18px 20px / prism: 14px 16px 20px), 与下方 .dt11-foot 的
      * margin:-16/-20 同一假设(改皮肤 padding 必须连这里一起核)。 */
-    ".drawer .dt11-head, .drawer .dt11-r { display:grid; gap:8px; align-items:center; padding:0 4px; }",
-    ".drawer .dt11-head.hasav, .drawer .dt11-r.hasav { grid-template-columns:26px 18px minmax(0, 1fr) 78px 130px 62px 64px; }",
-    ".drawer .dt11-head.noav, .drawer .dt11-r.noav { grid-template-columns:26px 18px minmax(0, 1fr) 78px 130px 64px; }",
-    ".drawer .dt11-head { position:sticky; top:-14px; z-index:1; height:28px; background:var(--bg-card);",
-    "  border-bottom:1px solid var(--border); color:var(--fg-dim); font-size:11.5px; white-space:nowrap; }",
-    ".drawer .dt11-head .num { text-align:right; }",
-    ".drawer .dt11-r { min-height:27px; border-bottom:1px solid var(--hairline); font-size:12px; cursor:default; }",
-    ".drawer .dt11-r:hover { background:var(--bg-hover); }",
-    ".drawer .dt11-r:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
-    ".drawer .dt11-r.is-chk { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
-    ".drawer .dt11-r.is-chk:hover { background:var(--sel-bg); }",
+    ".drawer .dt11-list .group-head { position:sticky; top:-14px; z-index:1; min-height:28px; height:28px;",
+    "  background:var(--bg-card); border-bottom:1px solid var(--border); color:var(--fg-dim);",
+    "  font-size:11.5px; white-space:nowrap; }",
+    ".drawer .dt11-list .group-head .hc-size, .drawer .dt11-list .group-head .hc-av { text-align:right; }",
+    ".drawer .dt11-list .group-row { min-height:27px; padding:0 4px; gap:8px; align-items:center;",
+    "  background:transparent; border:0; border-radius:0; box-shadow:none;",
+    "  border-bottom:1px solid var(--hairline); font-size:12px; }",
+    ".drawer .dt11-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
+    ".drawer .dt11-list .group-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
+    ".drawer .dt11-list .group-row.is-chk { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
+    ".drawer .dt11-list .group-row.is-chk:hover { background:var(--sel-bg); }",
+    ".drawer .dt11-list .group-row.empty-row { display:block; border:0; background:transparent; }",
+    /* 行内格(呈现归渲染器 tpl-aq-dt11-cells) */
     ".drawer .dt11-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
     "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt11-tgl:hover { color:var(--fg); }",
@@ -73,11 +84,12 @@
     ".drawer .dt11-ck { width:13px; height:13px; margin:0; accent-color:var(--accent); cursor:pointer; }",
     ".drawer .dt11-n { display:flex; align-items:center; gap:6px; min-width:0; }",
     ".drawer .dt11-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg); }",
-    ".drawer .dt11-r.dir .dt11-nm { font-weight:600; color:var(--fg-soft); }",
+    ".drawer .dt11-list .group-row.dir .dt11-nm { font-weight:600; color:var(--fg-soft); }",
     ".drawer .dt11-n .ico { width:13px; height:13px; flex:none; color:var(--fg-dim); }",
-    ".drawer .dt11-r.dir .dt11-n .ico { color:var(--accent); }",
+    ".drawer .dt11-list .group-row.dir .dt11-n .ico { color:var(--accent); }",
     ".drawer .dt11-meta { flex:none; font-size:10.5px; color:var(--fg-dim); border:1px solid var(--border-soft);",
     "  border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap; }",
+    ".drawer .dt11-meta.is-miss { color:var(--warn); border-color:var(--warn-line); }",
     ".drawer .dt11-sz { font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-soft); text-align:right; white-space:nowrap; }",
     ".drawer .dt11-prog { display:flex; align-items:center; gap:7px; min-width:0; }",
@@ -99,7 +111,7 @@
     ".drawer .dt11-pbadge.high { background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn); }",
     ".drawer .dt11-pbadge.max { background:var(--error-soft); border-color:var(--error-line); color:var(--error); }",
     ".drawer .dt11-pnone { font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; color:var(--fg-dim); }",
-    ".drawer .dt11-empty { padding:24px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
+    ".drawer .dt11-empty { display:block; padding:24px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
     /* 吸底条: 勾选 = 批量条, 未勾 = 汇总条(盖过 .drawer-body 的 padding) */
     /* 吸底补偿: 同吸顶, bottom:0 实际停在 padding-bottom 之上, 底缘漏出 20px 行文字
      * (实测 footBottom 比 body 底缘恒高 20px); -20px 抵消后统计条贴到可见下缘,
@@ -124,7 +136,7 @@
     ".drawer .dt11-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
-  /* ---------------- 派生: 行模型 + 目录聚合(路径前缀单遍扫描) ---------------- */
+  /* ---------------- 派生: 行模型 + 目录聚合(路径前缀单遍扫描; 判据单点, U4 保留) ---------------- */
   function fileList(ctx) {
     return (ctx.drawer && ctx.drawer.files) || [];
   }
@@ -184,62 +196,119 @@
     return true;
   }
 
-  /* ---------------- 行渲染 ---------------- */
+  /* render 期只读引用(纯格式化), 与 07 同口径 */
   let _ctx = null;
   const ctxOf = () => _ctx;
+
   function prioBadgeClass(p) {
     if (p === 0) return " skip";
     if (p === 7) return " max";
     if (p === 4 || p === 6) return " high";
     return "";
   }
-  function rowHtml(item, d, hasAv) {
+
+  /* ---------------- 行装配(U4: 判据在这里, 呈现在渲染器分片) ----------------
+   * 行对象 = 显示值 + 修饰字段 + _cls 行态(dir/file + is-chk); 行身份 k = path(引擎行容器
+   * data-dt-key 消费)。勾选三态(ckState 0/1/2)在装配时算好, 分片 :checked/:indeterminate
+   * 声明式直持(原生 property)。可用性: av 字段(有 availability 才非空串)供 omitEmpty
+   * 整列判据, avTxt 供显示(目录 "—"/文件真值或 "—")。 */
+  function dirRowOf(ctx, r, d) {
+    const s = d.stats.get(r.path);
+    const prog = statProg(s || { size: 0, done: 0 });
+    const paths = subtreeFiles(r.path, d.fileRows).map((it) => it.row.path);
+    return {
+      k: r.path,
+      kind: "row",
+      path: r.path,
+      dir: true,
+      name: r.name,
+      indent: Math.max(0, r.depth) * 14,
+      folded: ui.folded.has(r.path),
+      meta: (s ? s.files : 0) + " 文件",
+      metaTitle: "",
+      missTxt: "",
+      sizeTxt: ctx.fmtSize(s ? s.size : 0),
+      progTxt: prog.toFixed(1),
+      progW: Math.min(100, Math.max(0, prog)).toFixed(1),
+      part: prog < 100,
+      progTitle: "子树加权平均进度 " + prog.toFixed(1) + "%",
+      ckState: chkStateOf(paths),
+      subFiles: s ? s.files : 0,
+      av: undefined,
+      avTxt: s && s.hasAv ? s.minAv.toFixed(2) : "—",
+      avLow: false,
+      avTitle: s && s.hasAv ? "子树内最低可用性(最稀缺文件)" : "子树内暂无可用性数据",
+      badge: "",
+      badgeCls: "",
+      badgeTitle: "",
+      _cls: "dir" + (chkStateOf(paths) === 2 ? " is-chk" : ""),
+    };
+  }
+  function fileRowOf(ctx, item, d) {
     const r = item.row;
-    const folded = ui.folded.has(r.path);
-    const tgl = r.dir
-      ? T`<button type="button" class="dt11-tgl${folded ? " closed" : ""}" data-tgl="${r.path}"
-          title="${folded ? "展开" : "折叠"} ${r.name}"><svg class="ico" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></button>`
-      : T`<span></span>`;
-    const s = r.dir ? d.stats.get(r.path) : null;
-    const meta = r.dir
-      ? T`<span class="dt11-meta">${s ? s.files : 0} 文件</span>`
-      : (item.prog < 1
-        ? T`<span class="dt11-meta" title="按进度估算缺口约 ${ctxOf().fmtSize(item.size * (1 - item.prog))}" style="color:var(--warn); border-color:var(--warn-line)">缺 ${ctxOf().fmtSize(item.size * (1 - item.prog))}</span>`
-        : "");
-    const sizeTxt = r.dir ? ctxOf().fmtSize(s ? s.size : 0) : ctxOf().fmtSize(item.size);
-    const prog = r.dir ? statProg(s || { size: 0, done: 0 }) : item.prog * 100;
-    const part = prog < 100;
-    const avCell = hasAv
-      ? (r.dir
-        ? (s && s.hasAv
-          ? T`<span class="dt11-av" title="子树内最低可用性(最稀缺文件)">${s.minAv.toFixed(2)}</span>`
-          : T`<span class="dt11-av" title="子树内暂无可用性数据">—</span>`)
-        : (item.av !== undefined && item.av !== null
-          ? T`<span class="dt11-av${num(item.av) < 1 ? " low" : ""}" title="qB availability: 全 swarm 中该文件数据的份数">${num(item.av).toFixed(2)}</span>`
-          : T`<span class="dt11-av" title="qB 未返回该文件可用性">—</span>`))
-      : "";
-    const badge = r.dir
-      ? T`<span class="dt11-pnone" title="目录本身无优先级; 勾选目录后整棵子树批量设置">—</span>`
-      : T`<button type="button" class="dt11-pbadge${prioBadgeClass(item.prio)}" data-cyc="${r.path}"
-          title="优先级: ${PRIO_LABEL[item.prio] || "正常"} — 点击循环 不下载→正常→高→最高">${PRIO_LABEL[item.prio] || "正常"}</button>`;
-    const chk = r.dir
-      ? T`<input type="checkbox" class="dt11-ck" data-dirck="${r.path}" title="勾选 = 整棵子树(${s ? s.files : 0} 个文件)">`
-      : T`<input type="checkbox" class="dt11-ck" data-ck="${r.path}" title="勾选该文件">`;
-    const hl = r.dir
-      ? (chkStateOf(subtreeFiles(r.path, d.fileRows).map((it) => it.row.path)) === 2)
-      : ui.checked.has(r.path);
-    return T`<div class="dt11-r${r.dir ? " dir" : " file"}${hl ? " is-chk" : ""} ${hasAv ? "hasav" : "noav"}" data-node="${r.path}" tabindex="-1">
-      ${R(chk)}${R(tgl)}
-      <span class="dt11-n" style="padding-left:${r.depth * 14}px" title="${r.path}"><svg class="ico" viewBox="0 0 16 16"><use href="${r.dir ? "#i-folder" : "#i-list"}"></use></svg><span class="dt11-nm">${r.name}</span>${R(meta)}</span>
-      <span class="dt11-sz" title="${r.dir ? "子树合计大小" : "文件大小"}">${sizeTxt}</span>
-      <span class="dt11-prog${part ? " part" : ""}" title="${r.dir ? "子树加权平均进度" : "文件进度"} ${prog.toFixed(1)}%">
-        <span class="bar"><i style="width:${Math.min(100, Math.max(0, prog)).toFixed(1)}%"></i></span><em>${prog.toFixed(1)}%</em></span>
-      ${R(avCell)}
-      ${R(badge)}
-    </div>`;
+    const checked = ui.checked.has(r.path);
+    const avNum = item.av !== undefined && item.av !== null;
+    const missTxt = item.prog < 1 ? ctx.fmtSize(item.size * (1 - item.prog)) : "";
+    return {
+      k: r.path,
+      kind: "row",
+      path: r.path,
+      dir: false,
+      name: r.name,
+      indent: Math.max(0, r.depth) * 14,
+      folded: false,
+      meta: "",
+      metaTitle: "",
+      missTxt,
+      missTitle: missTxt ? "按进度估算缺口约 " + missTxt : "",
+      sizeTxt: ctx.fmtSize(item.size),
+      progTxt: (item.prog * 100).toFixed(1),
+      progW: Math.min(100, Math.max(0, item.prog * 100)).toFixed(1),
+      part: item.prog * 100 < 100,
+      progTitle: "文件进度 " + (item.prog * 100).toFixed(1) + "%",
+      ckState: checked ? 2 : 0,
+      subFiles: 0,
+      av: avNum ? num(item.av).toFixed(2) : undefined,
+      avTxt: avNum ? num(item.av).toFixed(2) : "—",
+      avLow: avNum && num(item.av) < 1,
+      avTitle: avNum ? "qB availability: 全 swarm 中该文件数据的份数" : "qB 未返回该文件可用性",
+      badge: PRIO_LABEL[item.prio] || "正常",
+      badgeCls: prioBadgeClass(item.prio).trim(),
+      badgeTitle: "优先级: " + (PRIO_LABEL[item.prio] || "正常") + " — 点击循环 不下载→正常→高→最高",
+      _cls: "file" + (checked ? " is-chk" : ""),
+    };
   }
 
-  /* 勾选集工具(全部按文件 path 记账) */
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平遍历(筛选 + 折叠判据)。
+   * 排序不适用(树序 = 树语义, dyn 空键 = 原序); 筛选空合成空态行(原文案口径)。 */
+  function rowsFn(ctx) {
+    const files = fileList(ctx);
+    if (!files.length) return [];
+    const d = derive(ctx);
+    const rows = [];
+    function isFolded(path) {
+      const segs = path.split("/");
+      for (let i = 1; i < segs.length; i++) {
+        if (ui.folded.has(segs.slice(0, i).join("/"))) return true;
+      }
+      return false;
+    }
+    for (const r of d.rows) {
+      const show = r.dir
+        ? (ui.filter === "all" ? true : dirMatch(r.path, ui.filter, d.stats))
+        : (ui.filter === "all" ? true
+          : ui.filter === "miss" ? r.progress < 100
+            : (files[r.index] ? num(files[r.index].priority) === 0 : false));
+      if (!show) continue;
+      /* 筛选态下无视折叠全部铺平(命中行可见); 全部态下被折叠目录的整棵子树不渲染 */
+      if (ui.filter === "all" && isFolded(r.path)) continue;
+      rows.push(r.dir ? dirRowOf(ctx, r, d) : fileRowOf(ctx, d.itemByPath.get(r.path) || { row: r, size: 0, prog: 0, prio: 1, av: undefined }, d));
+    }
+    if (!rows.length) rows.push({ k: "__empty", kind: "empty", _cls: "empty-row" });
+    return rows;
+  }
+
+  /* 勾选集工具(全部按文件 path 记账; 判据单点) */
   function chkStateOf(paths) {
     let n = 0;
     for (const p of paths) if (ui.checked.has(p)) n++;
@@ -277,7 +346,8 @@
       ui.checked = new Set();
       ui.filter = "all";
     }
-    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */
+    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); 锚元素由 anchFill 跨帧
+     * 保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
@@ -301,37 +371,8 @@
     /* 勾选集按现存文件 path 收敛(数据补拉后失效条目自动出清) */
     const alive = new Set(d.fileRows.map((it) => it.row.path));
     for (const p of Array.from(ui.checked)) if (!alive.has(p)) ui.checked.delete(p);
-
-    const htmlRows = [];
-    for (const r of d.rows) {
-      const show = r.dir
-        ? (ui.filter === "all" ? true : dirMatch(r.path, ui.filter, d.stats))
-        : (ui.filter === "all" ? true
-          : ui.filter === "miss" ? r.progress < 100
-            : (files[r.index] ? num(files[r.index].priority) === 0 : false));
-      if (!show) continue;
-      /* 筛选态下无视折叠全部铺平(命中行可见); 全部态下被折叠目录的整棵子树不渲染 */
-      if (ui.filter === "all" && isFolded(r.path)) continue;
-      if (r.dir) {
-        htmlRows.push(rowHtml({ row: r }, d, d.hasAv));
-        continue;
-      }
-      htmlRows.push(rowHtml(d.itemByPath.get(r.path) || { row: r, size: 0, prog: 0, prio: 1, av: undefined }, d, d.hasAv));
-    }
-    function isFolded(path) {
-      const segs = path.split("/");
-      for (let i = 1; i < segs.length; i++) {
-        if (ui.folded.has(segs.slice(0, i).join("/"))) return true;
-      }
-      return false;
-    }
-
     const allPaths = d.fileRows.map((it) => it.row.path);
-    const cnt = {
-      all: d.fileRows.length,
-      miss: d.total.missCnt,
-      skip: d.total.skipCnt,
-    };
+    const cnt = { all: d.fileRows.length, miss: d.total.missCnt, skip: d.total.skipCnt };
     const chips = [
       T`<button type="button" class="dt11-chip${ui.filter === "all" ? " active" : ""}" data-f="all">全部 <b>${cnt.all}</b></button>`,
       T`<button type="button" class="dt11-chip c-warn${ui.filter === "miss" ? " active" : ""}" data-f="miss" title="只显示存在缺口的文件">未完成 <b>${cnt.miss}</b></button>`,
@@ -360,6 +401,7 @@
           <span class="sp"></span>
           <span style="color:var(--fg-dim)">勾选后批量设优先级 · 点徽章循环单个</span>
         </div>`;
+    /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 树行由桥 Teleport 进锚 */
     const html = T`<div class="dt11-wrap">
       <div class="dt11-tools">
         <input type="checkbox" class="dt11-ck" data-ckmaster>
@@ -368,24 +410,12 @@
         <button type="button" class="dt11-ghost" data-fold="close">折叠</button>
         <span class="dt11-hint">勾选目录 = 整棵子树 · 批量条吸底</span>
       </div>
-      <div class="dt11-head${d.hasAv ? " hasav" : " noav"}">
-        <span></span><span></span><span>名称</span><span class="num">大小</span><span>进度</span>
-        ${R(d.hasAv ? T`<span class="num" title="qB availability: 全 swarm 中该数据的份数; 目录取子树最低值">可用性</span>` : "")}
-        <span title="点击徽章循环: 跳过 → 普通 → 高 → 最高">优先级</span>
-      </div>
-      <div class="dt11-body">${R(htmlRows.join(""))}${htmlRows.length ? "" : R(T`<div class="dt11-empty">该筛选下没有文件</div>`)}</div>
+      <div class="dt11-list"><div data-dt-anchor-slot=""></div></div>
       ${R(foot)}
     </div>`;
-    const focusKey = H.rowFocusKey(host, "data-node"); /* 重建前记账焦点行(原子换帧打断焦点链) */
     host.replaceChildren(document.createRange().createContextualFragment(html));
-    H.roving(host, "data-node", ""); /* 行级键盘锚点(首行, issue 26-10-07-0846; 勾选集无「选中行」语义) */
-    H.rowRestore(host, "data-node", focusKey);
-    /* 目录行 / 主勾选框三态(native indeterminate) */
-    host.querySelectorAll("input[data-dirck]").forEach((el) => {
-      const st = chkStateOf(subtreeFiles(el.getAttribute("data-dirck"), d.fileRows).map((it) => it.row.path));
-      el.checked = st === 2;
-      el.indeterminate = st === 1;
-    });
+    H.anchFill(host, TABLE_ID);
+    /* 主勾选框三态(native indeterminate; 行内勾选框三态已在分片声明式直持) */
     const master = host.querySelector("input[data-ckmaster]");
     if (master) {
       const st = chkStateOf(allPaths);
@@ -394,100 +424,125 @@
     }
   }
 
+  /* 变体 UI 态(勾选/折叠/筛选)翻动后的强制换代: 行来源含非响应式 ui 态 → anchTouch。
+   * 记账焦点行(换代重挂打断焦点链); foot/master 三态在外壳, 一并 rerender。 */
+  function touch(host, ctx) {
+    ui.focusKey = H.rowFocusKey(host, "data-dt-key");
+    H.anchTouch(host, ctx, TABLE_ID);
+  }
+
+  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
+   * roving 锚点(首行; 勾选集无「选中行」语义) + 回焦。 */
+  function rowAfterFn(el) {
+    if (!el || typeof el.querySelectorAll !== "function") return;
+    H.roving(el, "data-dt-key", "");
+    H.rowRestore(el, "data-dt-key", ui.focusKey);
+  }
+
   function onClick(ev) {
     const h = ev.currentTarget;
+    const ctx = h.__dtCtx;
     if (ev.target.closest(".dt11-ck")) return; /* 勾选走 change 事件, 点选框本身不按行处理 */
     /* 优先级徽章: 循环切换单文件(逐次真实提交) */
-    const badge = ev.target.closest("[data-cyc]");
+    const badge = ev.target.closest("[data-act=\"prio-cycle\"]");
     if (badge) {
       ev.stopPropagation();
-      const d = derive(_ctx);
-      const it = d.itemByPath.get(badge.getAttribute("data-cyc"));
+      const d = derive(ctx);
+      const it = d.itemByPath.get(badge.getAttribute("data-path"));
       if (!it) return;
       const cur = it.prio === 4 ? 6 : it.prio;
       const next = PRIO_CYCLE[(PRIO_CYCLE.indexOf(cur) + 1) % PRIO_CYCLE.length];
-      _ctx.setFilePriority(next, [it.row.index]);
+      ctx.setFilePriority(next, [it.row.index]);
       return;
     }
-    const tgl = ev.target.closest("[data-tgl]");
+    const tgl = ev.target.closest("[data-act=\"fold\"]");
     if (tgl) {
-      const p = tgl.getAttribute("data-tgl") || "";
+      const p = tgl.getAttribute("data-path") || "";
       if (ui.folded.has(p)) ui.folded.delete(p); else ui.folded.add(p);
-      rerender(h);
+      touch(h, ctx); /* 行集/折叠钮态都是行来源, anchTouch 换代重读 */
       return;
     }
     const foldBtn = ev.target.closest("[data-fold]");
     if (foldBtn) {
-      const d = derive(_ctx);
+      const d = derive(ctx);
       const dirs = [];
       for (const r of d.rows) if (r.dir && r.path) dirs.push(r.path);
       ui.folded = foldBtn.getAttribute("data-fold") === "close" ? new Set(dirs) : new Set();
-      rerender(h);
+      touch(h, ctx);
       return;
     }
     const chip = ev.target.closest("[data-f]");
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
-      rerender(h);
+      rerender(h); /* chip active 态在外壳 */
+      touch(h, ctx);
       return;
     }
     const bp = ev.target.closest("[data-bp]");
     if (bp) {
-      const d = derive(_ctx);
+      const d = derive(ctx);
       const idx = batchIndices(d.fileRows);
       if (!idx.length) return;
-      _ctx.setFilePriority(Number(bp.getAttribute("data-bp")), idx);
+      ctx.setFilePriority(Number(bp.getAttribute("data-bp")), idx);
       return;
     }
     if (ev.target.closest("[data-bclear]")) {
       ui.checked = new Set();
       rerender(h);
+      touch(h, ctx);
       return;
     }
-    /* 点行 = 勾选(目录 = 整棵子树; 与设计稿 11 同语义) */
-    const row = ev.target.closest("[data-node]");
-    if (row) toggleRow(row, h);
+    /* 点行 = 勾选(目录 = 整棵子树; 与设计稿 11 同语义); 行容器 = 引擎 .group-row[data-dt-key] */
+    const row = ev.target.closest("[data-dt-key]");
+    if (row && row.closest(".dt11-list")) toggleRow(row.getAttribute("data-dt-key"), h);
   }
-  function toggleRow(row, h) {
-    const d = derive(_ctx);
-    const r = d.rows.find((x) => x.path === row.getAttribute("data-node"));
-    if (!r) return;
+  function toggleRow(path, h) {
+    const ctx = h.__dtCtx;
+    const d = derive(ctx);
+    const r = d.rows.find((x) => x.path === path);
+    if (!r || path === "__empty") return;
     toggleSet(r.dir ? subtreeFiles(r.path, d.fileRows).map((it) => it.row.path) : [r.path]);
-    rerender(h);
+    rerender(h); /* foot/master 三态在外壳 */
+    touch(h, ctx); /* 行 is-chk/勾选框态在行来源 */
   }
   /* 行级键盘(issue 26-10-07-0846): roving tabindex + 方向键/Home/End 移焦 + Enter/Space
    * 转发行激活(= 勾选, 与 click 同口径)。焦点在行内原生控件(勾选框/折叠钮/优先级徽章)
-   * 上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持 */
+   * 上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持。
+   * 行身份锚 = 引擎行容器 data-dt-key(U4 桥单点输出)。 */
   function onKeyDown(ev) {
-    const row = ev.target.closest("[data-node]");
-    if (!row || ev.target !== row) return;
+    const row = ev.target.closest("[data-dt-key]");
+    if (!row || ev.target !== row || !row.closest(".dt11-list")) return;
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
-      toggleRow(row, ev.currentTarget);
+      toggleRow(row.getAttribute("data-dt-key") || "", ev.currentTarget);
       return;
     }
-    if (H.rowMove(ev.currentTarget, "data-node", row, ev.key)) ev.preventDefault();
+    if (H.rowMove(ev.currentTarget, "data-dt-key", row, ev.key)) ev.preventDefault();
   }
   function onChange(ev) {
     const h = ev.currentTarget;
-    const dirck = ev.target.closest("[data-dirck]");
+    const ctx = h.__dtCtx;
+    const dirck = ev.target.closest("[data-act=\"dirck\"]");
     if (dirck) {
-      const d = derive(_ctx);
-      toggleSet(subtreeFiles(dirck.getAttribute("data-dirck") || "", d.fileRows).map((it) => it.row.path));
+      const d = derive(ctx);
+      toggleSet(subtreeFiles(dirck.getAttribute("data-path") || "", d.fileRows).map((it) => it.row.path));
       rerender(h);
+      touch(h, ctx);
       return;
     }
-    const ck = ev.target.closest("[data-ck]");
+    const ck = ev.target.closest("[data-act=\"ck\"]");
     if (ck) {
-      const p = ck.getAttribute("data-ck") || "";
+      const p = ck.getAttribute("data-path") || "";
       if (ui.checked.has(p)) ui.checked.delete(p); else ui.checked.add(p);
       rerender(h);
+      touch(h, ctx);
       return;
     }
     if (ev.target.closest("[data-ckmaster]")) {
-      const d = derive(_ctx);
+      const d = derive(ctx);
       toggleSet(d.fileRows.map((it) => it.row.path));
       rerender(h);
+      touch(h, ctx);
     }
   }
 
@@ -504,16 +559,21 @@
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
-    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听 */
+    /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
+     * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
     H.unwireEvents(host);
   }
-
-  
 
   const _render = render;
   reg.register({
     id: "11", tab: "content",
     label: "树表批量",
+    /* 桥声明(U4): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerContentV11,
+     * rowsFn = 行装配(树聚合/筛选/折叠/勾选判据单点), 表头/拖宽/右键隐藏/偏好归引擎。
+     * rowAfterFn = 锚换代重挂后的 roving 锚点/回焦(行级键盘, issue 26-10-07-0846)。 */
+    tableId: TABLE_ID,
+    rowsFn: rowsFn,
+    rowAfterFn: rowAfterFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

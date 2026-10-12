@@ -316,6 +316,10 @@
          * 是版式语义(过滤 chips/只看在传/五区分桶), 单点回变体文件; 排序仍由引擎 sortedDrawer
          * 做。声明了 tableId 却无 rowsFn 的变体行恒空(守阵钉"桥变体必须配 rowsFn")。 */
         rowsFn: typeof entry.rowsFn === "function" ? entry.rowsFn : null,
+        /* U4 行级键盘面(issue 26-10-07-0846, content 树表 10/11): 锚每次换代重挂后的
+         * 行级键盘恢复回调(roving 锚点/rowRestore 回焦) —— 与 rowsFn 同法经根方法
+         * dtRowAfter 回调(描述符 rowAfter 声明位), 变体闭包不外泄。 */
+        rowAfterFn: typeof entry.rowAfterFn === "function" ? entry.rowAfterFn : null,
         /* 流量页签双宿主(图前/图后): slot = "pre" | "post"(缺省 post), 其余页签忽略 */
         slot: entry.slot === "pre" ? "pre" : "post",
         render: entry.render,
@@ -557,6 +561,23 @@
       dtBridgeRowProp(tab) {
         var def = this.dtBridgeDef(tab);
         return (def && def.rowProp) || "r";
+      },
+      /* U4 行级键盘面(issue 26-10-07-0846): 描述符 rowTab 声明的表, 行容器 tabindex=-1
+       * (不进 Tab 序, 行内原生控件自然参与 Tab; 锚点行由变体 rowAfterFn roving 设 0)。 */
+      dtBridgeRowTab(tab) {
+        var def = this.dtBridgeDef(tab);
+        return !!(def && def.rowTab);
+      },
+      /* U4: .group-table @vue:mounted 的回调(锚每次换代重挂恰好一次)。描述符 rowAfter
+       * 声明位 → 按归属变体反查注册条目 rowAfterFn(el)。异常吞掉不阻断渲染链。 */
+      dtRowAfter(tab, vnode) {
+        var def = this.dtBridgeDef(tab);
+        if (!def || !def.rowAfter) return;
+        var sel = (this.drawerTplSel || {})[tab] || "classic";
+        var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
+        if (!e || typeof e.rowAfterFn !== "function") return;
+        var el = vnode && vnode.el ? vnode.el : vnode;
+        try { e.rowAfterFn(el); } catch (err) { /* 渲染后回调不阻断渲染 */ }
       },
       /* 右键菜单模板选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略(守阵口径同
        * readSel); 合法即落盘 + 重挂, 并收菜单。菜单已开, 无「回落显示值」回写口(那是原生 select

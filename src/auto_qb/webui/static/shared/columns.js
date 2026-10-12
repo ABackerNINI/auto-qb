@@ -874,5 +874,19 @@ window.AQB_COLUMNS = {
     visibleDrawerTrackerV06Cols() {
       return this._visibleCols("drawerTrackerV06");
     },
+    /* U4 内容树两变体(10/11): 同一条 _gridTemplate / _visibleCols 路径(11 可用性列
+     * omitEmpty 渐进在 _colsOmitEmpty 单点生效 —— 原 hasav/noav 双 grid 手搓退役)。 */
+    drawerContentV10Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerContentV10") };
+    },
+    drawerContentV11Grid() {
+      return { gridTemplateColumns: this._gridTemplate("drawerContentV11") };
+    },
+    visibleDrawerContentV10Cols() {
+      return this._visibleCols("drawerContentV10");
+    },
+    visibleDrawerContentV11Cols() {
+      return this._visibleCols("drawerContentV11");
+    },
   },
 };

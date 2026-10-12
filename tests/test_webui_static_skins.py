@@ -918,7 +918,7 @@ def test_drawer_table_bridge_wiring():
     assert "_colsOmitEmpty(page, out)" in col and "c.omitEmpty" in col, \
         "_visibleCols 尾部缺 omitEmpty 单点(渐进列省略必须表头/行/grid/对齐同走一条路, 否则 nofiles 错位 bug 类回潮)"
 
-    # ⑧ app.js: stub + U2/U3 六描述符行 + 列子集 + 描述符导出口 + 渲染器注册
+    # ⑧ app.js: stub + U2/U3/U4 八描述符行 + 列子集 + 描述符导出口 + 渲染器注册
     app = read("app.js")
     assert "drawerStubV0: {" in app and "variantTab: \"peers\"" in app, \
         "app.js 缺 drawerStubV0 描述符行(U1 spike 的桥验证表)"
@@ -929,12 +929,19 @@ def test_drawer_table_bridge_wiring():
         ("drawerTrackerV04", False, "trackers"),
         ("drawerTrackerV05", True, "trackers"),
         ("drawerTrackerV06", False, "trackers"),
+        ("drawerContentV10", False, "content"),
+        ("drawerContentV11", False, "content"),
     ):
-        assert f"{tid}: {{" in app, f"app.js 缺 {tid} 描述符行(U2 用户表/U3 tracker 表变体接入)"
+        assert f"{tid}: {{" in app, f"app.js 缺 {tid} 描述符行(U2 用户表/U3 tracker 表/U4 内容树变体接入)"
         blk = app.split(f"{tid}: {{", 1)[1].split("\n  },", 1)[0]
         assert 'rows: "dtTplRows"' in blk and f'variantTab: "{vtab}"' in blk and "rowCls: \"_cls\"" in blk, \
-            f"{tid} 描述符缺 rows/variantTab/rowCls 三件(U2/U3 桥契约)"
+            f"{tid} 描述符缺 rows/variantTab/rowCls 三件(U2/U3/U4 桥契约)"
         assert ('segs: true' in blk) == segs, f"{tid} segs 声明与预期不符(08/05 分段桥, 其余单锚)"
+    # U4 行级键盘面: 10/11 行容器 tabindex/data-dt-key + rowAfter 回调的声明位
+    for tid in ("drawerContentV10", "drawerContentV11"):
+        blk = app.split(f"{tid}: {{", 1)[1].split("\n  },", 1)[0]
+        assert "rowTab: true" in blk and "rowAfter: true" in blk, \
+            f"{tid} 描述符缺 rowTab/rowAfter 声明位(行级键盘 roving 面, issue 26-10-07-0846)"
     assert "const DRAWER_STUB_V0_COLUMNS = [" in app and "DRAWER_PEER_COLUMNS[0]" in app, \
         "stub 列子集未以经典用户列集为底裁剪(D2 口径: 列个性 = 数据声明)"
     tbl_cols_blk = app.split("const TABLE_COLUMNS = {", 1)[1].split("\n};", 1)[0]
@@ -945,13 +952,18 @@ def test_drawer_table_bridge_wiring():
         ("DRAWER_TRACKER_V04_COLUMNS", "drawerTrackerV04"),
         ("DRAWER_TRACKER_V05_COLUMNS", "drawerTrackerV05"),
         ("DRAWER_TRACKER_V06_COLUMNS", "drawerTrackerV06"),
+        ("DRAWER_CONTENT_V10_COLUMNS", "drawerContentV10"),
+        ("DRAWER_CONTENT_V11_COLUMNS", "drawerContentV11"),
     ):
         assert f"const {cst} = [" in app, f"{cst} 未声明(变体列集 = 数据声明, D2)"
         assert f"{reg_key}: {cst}" in tbl_cols_blk, \
             f"{reg_key} 未注册进 TABLE_COLUMNS(_visibleCols 按 page 取列定义)"
     assert "omitEmpty: true" in app, "files 渐进列缺 omitEmpty 声明(无 files 时整列省略失守)"
-    for comp in ("aq-dt07-cells", "aq-dt08-cells", "aq-dt09-cells", "aq-dt04-cells", "aq-dt05-cells", "aq-dt06-cells"):
-        assert f'app.component("{comp}"' in app, f"app.js 未注册 {comp}(U2/U3 变体格渲染器没接线)"
+    for comp in (
+        "aq-dt07-cells", "aq-dt08-cells", "aq-dt09-cells", "aq-dt04-cells", "aq-dt05-cells", "aq-dt06-cells",
+        "aq-dt10-cells", "aq-dt11-cells"
+    ):
+        assert f'app.component("{comp}"' in app, f"app.js 未注册 {comp}(U2/U3/U4 变体格渲染器没接线)"
     # U3: 04 分段钮排序并引擎的直设口(模式选择语义, 非 h-cell 三态循环)
     assert "dtSortSet(tableId, key, dir)" in srt, "sort.js 缺 dtSortSet(04 分段钮排序并引擎的直设口)"
     assert "window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;" in app, \
@@ -964,7 +976,7 @@ def test_drawer_table_bridge_wiring():
     cells_dt = read("tpl", "xtpl-cells-dt.html")
     for comp in ("dt07", "dt08", "dt09"):
         assert f'id="tpl-aq-{comp}-cells"' in cells, f"xtpl-cells.html 缺 tpl-aq-{comp}-cells 分片"
-    for comp in ("dt04", "dt05", "dt06"):
+    for comp in ("dt04", "dt05", "dt06", "dt10", "dt11"):
         assert f'id="tpl-aq-{comp}-cells"' in cells_dt, f"xtpl-cells-dt.html 缺 tpl-aq-{comp}-cells 分片"
     app_keys = re.findall(r"\{ key: \"(\w+)\"", app)
     for comp, colconst, src in (
@@ -991,6 +1003,26 @@ def test_drawer_table_bridge_wiring():
         )
         assert tpl_blk and 'p.kind' in tpl_blk.group(1), \
             f"{comp} 渲染器缺 kind 分支(单列满宽行的形态分派: 卡片/虚拟卡、处置块/普通行/chips)"
+    # U4 内容树两分片: 列驱动(逐列 key 配对 —— 树缩进格/勾选/大小/进度/[可用性]/优先级),
+    # 空态合成行 kind 分支(筛选空 = 合成行, 非桥「暂无数据」泛化文案)
+    for comp, colconst in (
+        ("dt10", "DRAWER_CONTENT_V10_COLUMNS"),
+        ("dt11", "DRAWER_CONTENT_V11_COLUMNS"),
+    ):
+        m3 = re.search(r"const %s = \[(.*?)\];" % colconst, app, re.S)
+        assert m3, f"app.js 缺 {colconst}"
+        tpl_blk = re.search(
+            r'<script type="text/x-template" id="tpl-aq-%s-cells">(.*?)</script>' % comp, cells_dt, re.S
+        )
+        assert tpl_blk, f"xtpl-cells-dt.html 缺 {comp} 分片"
+        for k in re.findall(r'\{ key: "(\w+)"', m3.group(1)):
+            assert f"col.key === '{k}'" in tpl_blk.group(1), f"{comp} 渲染器缺 {k} 值格分支(表头在、值恒空)"
+        assert "p.kind === 'empty'" in tpl_blk.group(1), \
+            f"{comp} 渲染器缺空态合成行分支(筛选空态走变体原文案, 不落桥「暂无数据」泛化)"
+    # 11 勾选三态声明式(原生 property, Vue patch 直持 —— 原 render 后补挂目录三态的面收进分片)
+    m3 = re.search(r'<script type="text/x-template" id="tpl-aq-dt11-cells">(.*?)</script>', cells_dt, re.S)
+    assert ":indeterminate=" in m3.group(1) and ":checked=" in m3.group(1), \
+        "dt11 渲染器缺勾选框 :checked/:indeterminate 声明式(子树三态)"
 
     # ⑩ stub 变体: ?dtstub 门 + 桥声明 + 稳定 HTML 不变量
     stub = read("drawer_tpl", "90-peers-stub-bridge.js")
@@ -998,10 +1030,11 @@ def test_drawer_table_bridge_wiring():
     assert 'tableId: "drawerStubV0"' in stub, "stub 变体未声明 tableId(桥契约的声明侧)"
     assert "H.skipUnchanged" in stub, "stub 变体缺 skipUnchanged(桥变体的稳定 HTML 不变量: 锚不得随轮询重建)"
 
-    # ⑪ U2/U3 六变体: tableId/rowsFn 声明 + 锚保活/触碰 + 零手搓排序状态机 + 零列宽 grid + 零排序表头
-    # touch: 行来源含非响应式变体 UI 态的变体必须 anchTouch(04 筛选 pills/07 chips/08 分区+在传/09 chips);
-    # 05/06 的 ui 态(折叠/msg 展开)只翻 class 不改行来源, 无需触碰。data-sort: 04 分段钮是
-    # dtSortSet 直设的选择器属性(引擎单点消费), 非手搓状态机 —— 只对 U2 三行钉零残留。
+    # ⑪ U2/U3/U4 八变体: tableId/rowsFn 声明 + 锚保活/触碰 + 零手搓排序状态机 + 零列宽 grid + 零排序表头
+    # touch: 行来源含非响应式变体 UI 态的变体必须 anchTouch(04 筛选 pills/07 chips/08 分区+在传/
+    # 09 chips/10 选中+折叠+筛选/11 勾选+折叠+筛选); 05/06 的 ui 态(折叠/msg 展开)只翻 class
+    # 不改行来源, 无需触碰。data-sort: 04 分段钮是 dtSortSet 直设的选择器属性(引擎单点消费),
+    # 非手搓状态机 —— 只对 U2 三行钉零残留。
     for fname, tid, segkey, vtab, need_touch in (
         ("07-peers-dashboard-tall.js", "drawerPeerV07", "", "peers", True),
         ("08-peers-groups-low.js", "drawerPeerV08", "take", "peers", True),
@@ -1009,6 +1042,8 @@ def test_drawer_table_bridge_wiring():
         ("04-trackers-status-cards-tall.js", "drawerTrackerV04", "", "trackers", True),
         ("05-trackers-health-groups-low.js", "drawerTrackerV05", "err", "trackers", False),
         ("06-trackers-table-collapsed.js", "drawerTrackerV06", "", "trackers", False),
+        ("10-content-tree-detail-tall.js", "drawerContentV10", "", "content", True),
+        ("11-content-treegrid-batch-low.js", "drawerContentV11", "", "content", True),
     ):
         v = read("drawer_tpl", fname)
         # 声明形态两可: 字面(U2 三行)或模块常量 TABLE_ID(U3 三行 —— 文件内多处引用)

@@ -14,6 +14,13 @@
  * 选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542)。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 激活(issue 26-10-07-0846;
  * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
+ * 桥声明(U4, 计划 26-10-12-0527, D4=A): 左树表格体走引擎 —— tableId 对应 app.js
+ * DRAWER_TABLE_DEFS.drawerContentV10, 外壳只留版式(工具条/统计条/右详情), 树行由
+ * <aq-dt-bridge> Teleport 进锚(5 列引擎行容器, 列头 CSS 隐藏 —— 本变体无表头设计,
+ * 拖宽/右键隐藏不适用, Q3 记档); 树聚合/筛选/折叠/选中判据全在 rowsFn(判据零复制),
+ * 行来源含非响应式 UI 态(selPath/folded/filter) → anchTouch。排序不适用(树序 = 树语义,
+ * 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘: 行容器 tabindex/data-dt-key
+ * 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符 rowAfter → rowAfterFn(锚换代重挂后跑)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -22,14 +29,16 @@
   if (!reg) return; /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
   const T = reg.dtHtml;
   const R = reg.dtRaw;
-  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
+  const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘/锚保活 */
+  const TABLE_ID = "drawerContentV10";
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
   const PRIO_ORDER = [0, 1, 6, 7];
 
-  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建 */
-  const ui = { filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "" };
+  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建;
+   * focusKey 供锚换代重挂后回焦(记账在 anchTouch 前, 恢复在 rowAfterFn) */
+  const ui = { filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "", focusKey: "" };
 
   const CSS = [
     /* 主从双栏骨架(右栏 324px = 设计稿口径)。滚动容器是 .drawer-body 本身(overflow:auto),
@@ -53,14 +62,17 @@
     "  font:12px/1 system-ui, sans-serif; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt10-ghost:hover { color:var(--fg); border-color:var(--border-soft); }",
     ".drawer .dt10-hint { margin-left:auto; font-size:11px; color:var(--fg-dim); }",
-    /* 树行(grid 行制): 引导缩进 + 类型 + 名称 + 大小 + 进度 + 优先级 */
-    ".drawer .dt10-tree { min-height:0; }",
-    ".drawer .dt10-r { display:grid; grid-template-columns:18px minmax(0, 1fr) 78px 128px 62px;",
-    "  gap:8px; align-items:center; height:29px; padding-right:4px; border-bottom:1px solid var(--hairline);",
-    "  font-size:12px; cursor:default; }",
-    ".drawer .dt10-r:hover { background:var(--bg-hover); }",
-    ".drawer .dt10-r.sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
-    ".drawer .dt10-r:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
+    /* 树行(U4): 引擎行容器(5 列 grid, 列宽归引擎声明) —— 本变体只保留行观感个性。
+     * 无表头设计: 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏/列偏好不适用(Q3 记档)。 */
+    ".drawer .dt10-list { min-height:0; }",
+    ".drawer .dt10-list .group-head { display:none; }",
+    ".drawer .dt10-list .group-row { height:29px; padding:0 4px 0 0; gap:8px; align-items:center;",
+    "  background:transparent; border:0; border-radius:0; box-shadow:none;",
+    "  border-bottom:1px solid var(--hairline); font-size:12px; }",
+    ".drawer .dt10-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
+    ".drawer .dt10-list .group-row.sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
+    ".drawer .dt10-list .group-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
+    /* 行内格(呈现归渲染器 tpl-aq-dt10-cells) */
     ".drawer .dt10-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
     "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt10-tgl:hover { color:var(--fg); }",
@@ -68,9 +80,9 @@
     ".drawer .dt10-tgl.closed .ico { transform:rotate(-90deg); }",
     ".drawer .dt10-n { display:flex; align-items:center; gap:6px; min-width:0; }",
     ".drawer .dt10-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg); }",
-    ".drawer .dt10-r.dir .dt10-nm { font-weight:600; color:var(--fg-soft); }",
+    ".drawer .dt10-list .group-row.dir .dt10-nm { font-weight:600; color:var(--fg-soft); }",
     ".drawer .dt10-n .ico { width:13px; height:13px; flex:none; color:var(--fg-dim); }",
-    ".drawer .dt10-r.dir .dt10-n .ico { color:var(--accent); }",
+    ".drawer .dt10-list .group-row.dir .dt10-n .ico { color:var(--accent); }",
     ".drawer .dt10-meta { flex:none; font-size:10.5px; color:var(--fg-dim); border:1px solid var(--border-soft);",
     "  border-radius:999px; padding:0 6px; line-height:15px; white-space:nowrap; }",
     ".drawer .dt10-miss { flex:none; font-size:10.5px; color:var(--warn); background:var(--warn-soft);",
@@ -135,7 +147,7 @@
     ".drawer .dt10-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
-  /* ---------------- 树构建与子树聚合 ---------------- */
+  /* ---------------- 树构建与子树聚合(判据单点, U4 保留) ---------------- */
   function fileList(ctx) {
     return (ctx.drawer && ctx.drawer.files) || [];
   }
@@ -213,7 +225,7 @@
     return out;
   }
 
-  /* ---------------- 筛选 ---------------- */
+  /* ---------------- 筛选(判据单点) ---------------- */
   function leafMatch(n) {
     if (ui.filter === "miss") return !n.dir && n.prog < 100;
     if (ui.filter === "skip") return !n.dir && n.prio === 0;
@@ -226,43 +238,64 @@
     return false;
   }
 
-  /* ---------------- 行渲染 ---------------- */
+  /* render 期只读引用(纯格式化), 与 07 同口径 */
+  let _ctx = null;
+  const ctxOf = () => _ctx;
+
   function prioBadgeClass(p) {
     if (p === 0) return " skip";
     if (p === 6 || p === 4 || p === 7) return p === 7 ? " max" : " high";
     return "";
   }
-  function progHtml(n, dirLabel) {
-    const part = n.prog < 100;
-    return T`<span class="dt10-prog${part ? " part" : ""}" title="${dirLabel} ${n.prog.toFixed(1)}%">
-      <span class="bar"><i style="width:${Math.min(100, Math.max(0, n.prog)).toFixed(1)}%"></i></span>
-      <em>${n.prog.toFixed(1)}%</em></span>`;
-  }
-  function rowHtml(n) {
-    const folded = ui.folded.has(n.path);
-    const tgl = n.dir
-      ? T`<button type="button" class="dt10-tgl${folded ? " closed" : ""}" data-tgl="${n.path}"
-          title="${folded ? "展开" : "折叠"} ${n.name}"><svg class="ico" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></button>`
-      : T`<span></span>`;
-    const meta = n.dir
-      ? T`<span class="dt10-meta" title="目录内共 ${n.files} 个文件${n.dirs ? " · " + n.dirs + " 个子目录" : ""}">${n.files} 文件</span>`
-      : (n.prog < 100 ? T`<span class="dt10-miss" title="按进度估算缺口约 ${ctxOf().fmtSize(n.miss)}">缺 ${ctxOf().fmtSize(n.miss)}</span>` : "");
-    const badge = n.dir
-      ? T`<span class="dt10-pnone" title="目录本身无优先级; 选中后可在右侧整目录批量设置">—</span>`
-      : T`<button type="button" class="dt10-pbadge${prioBadgeClass(n.prio)}" data-prio="${n.index}"
-          title="优先级: ${PRIO_LABEL[n.prio] || "正常"} — 点击弹出优先级小菜单">${PRIO_LABEL[n.prio] || "正常"}</button>`;
-    return T`<div class="dt10-r${n.dir ? " dir" : " file"}${ui.selPath === n.path ? " sel" : ""}" data-node="${n.path}" tabindex="-1">
-      ${R(tgl)}
-      <span class="dt10-n" style="padding-left:${n.depth * 14}px" title="${n.path}"><svg class="ico" viewBox="0 0 16 16"><use href="${n.dir ? "#i-folder" : "#i-list"}"></use></svg><span class="dt10-nm">${n.name}</span>${R(meta)}</span>
-      <span class="dt10-sz" title="${n.dir ? "子树合计大小" : "文件大小"}">${ctxOf().fmtSize(n.size)}</span>
-      ${R(progHtml(n, n.dir ? "子树加权平均进度" : "文件进度"))}
-      ${R(badge)}
-    </div>`;
+
+  /* ---------------- 行装配(U4: 判据在这里, 呈现在渲染器分片) ----------------
+   * 行对象 = 显示值 + 修饰字段 + _cls 行态(dir/file + sel); 行身份 k = path(引擎行容器
+   * data-dt-key 消费 —— 行级键盘/点击委托的行锚)。 */
+  function rowOf(ctx, n) {
+    const dir = n.dir;
+    const sel = ui.selPath === n.path;
+    return {
+      k: n.path,
+      kind: "row",
+      path: n.path,
+      dir,
+      name: n.name,
+      indent: Math.max(0, n.depth) * 14,
+      folded: ui.folded.has(n.path),
+      meta: dir ? n.files + " 文件" : "",
+      metaTitle: dir ? "目录内共 " + n.files + " 个文件" + (n.dirs ? " · " + n.dirs + " 个子目录" : "") : "",
+      missTxt: (!dir && n.prog < 100) ? ctx.fmtSize(n.miss) : "",
+      missTitle: (!dir && n.prog < 100) ? "按进度估算缺口约 " + ctx.fmtSize(n.miss) : "",
+      sizeTxt: ctx.fmtSize(n.size),
+      progTxt: n.prog.toFixed(1),
+      progW: Math.min(100, Math.max(0, n.prog)).toFixed(1),
+      part: n.prog < 100,
+      progTitle: (dir ? "子树加权平均进度" : "文件进度") + " " + n.prog.toFixed(1) + "%",
+      badge: dir ? "" : (PRIO_LABEL[n.prio] || "正常"),
+      badgeCls: dir ? "" : prioBadgeClass(n.prio).trim(),
+      badgeTitle: dir ? "" : "优先级: " + (PRIO_LABEL[n.prio] || "正常") + " — 点击弹出优先级小菜单",
+      index: dir ? -1 : n.index,
+      _cls: (dir ? "dir" : "file") + (sel ? " sel" : ""),
+    };
   }
 
-  /* render 期只读引用(纯格式化), 与 07 同口径 */
-  let _ctx = null;
-  const ctxOf = () => _ctx;
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平 emit(筛选 + 折叠判据)。
+   * 排序不适用(树序 = 树语义, dyn 空键 = 原序)。 */
+  function rowsFn(ctx) {
+    const files = fileList(ctx);
+    if (!files.length) return [];
+    const tree = buildTree(files);
+    const rows = [];
+    (function emit(n) {
+      for (const c of n.children) {
+        if (!match(c)) continue;
+        rows.push(rowOf(ctx, c));
+        if (c.dir && (ui.filter !== "all" || !ui.folded.has(c.path))) emit(c);
+      }
+    })(tree);
+    if (!rows.length) rows.push({ k: "__empty", kind: "empty", _cls: "empty-row" });
+    return rows;
+  }
 
   function detailHtml(n, hasAv) {
     if (!n) {
@@ -330,7 +363,8 @@
       ui.selPath = "";
       ui.filter = "all";
     }
-    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知) */
+    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); 锚元素由 anchFill 跨帧
+     * 保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
@@ -353,14 +387,6 @@
     }
     const tree = buildTree(files);
     const sel = findNode(tree, ui.selPath);
-    const rows = [];
-    (function emit(n) {
-      for (const c of n.children) {
-        if (!match(c)) continue;
-        rows.push(rowHtml(c));
-        if (c.dir && (ui.filter !== "all" || !ui.folded.has(c.path))) emit(c);
-      }
-    })(tree);
     const cnt = { all: tree.files };
     const missCnt = countBy(tree, (x) => !x.dir && x.prog < 100);
     const skipCnt = countBy(tree, (x) => !x.dir && x.prio === 0);
@@ -370,6 +396,7 @@
       T`<button type="button" class="dt10-chip c-warn${ui.filter === "miss" ? " active" : ""}" data-f="miss" title="只显示存在缺口的文件">未完成 <b>${cnt.miss}</b></button>`,
       T`<button type="button" class="dt10-chip${ui.filter === "skip" ? " active" : ""}" data-f="skip" title="只显示优先级为不下载的文件">不下载 <b>${cnt.skip}</b></button>`,
     ].join("");
+    /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 树行由桥 Teleport 进锚 */
     const html = T`<div class="dt10-wrap">
       <section class="dt10-left">
         <div class="dt10-tools">${R(chips)}
@@ -377,17 +404,15 @@
           <button type="button" class="dt10-ghost" data-fold="close">折叠</button>
           <span class="dt10-hint">点行查看详情 · 点箭头折叠目录</span>
         </div>
-        <div class="dt10-tree">${R(rows.join(""))}</div>
+        <div class="dt10-list"><div data-dt-anchor-slot=""></div></div>
         <div class="dt10-foot">${tree.files} 个文件${tree.dirs ? " · " + tree.dirs + " 个目录" : ""} ·
           <b>${ctxOf().fmtSize(tree.size)}</b> · 总进度 <b>${tree.prog.toFixed(1)}%</b> ·
           未完成 <b class="w">${cnt.miss}</b></div>
       </section>
       <aside class="dt10-right">${R(detailHtml(sel, hasAv))}</aside>
     </div>`;
-    const focusKey = H.rowFocusKey(host, "data-node"); /* 重建前记账焦点行(原子换帧打断焦点链) */
     host.replaceChildren(document.createRange().createContextualFragment(html));
-    H.roving(host, "data-node", ui.selPath); /* 行级键盘锚点(选中行或首行, issue 26-10-07-0846) */
-    H.rowRestore(host, "data-node", focusKey);
+    H.anchFill(host, TABLE_ID); /* replaceChildren 后把保活锚塞回 slot 位(锚身份跨帧稳定) */
   }
   function countBy(n, pred) {
     let c = 0;
@@ -398,50 +423,71 @@
     return c;
   }
 
+  /* 变体 UI 态(选中/折叠/筛选)翻动后的强制换代: 行来源含非响应式 ui 态, 引擎无从感知
+   * → anchTouch 对在场锚自增一代, 桥重挂重读 rowsFn。记账焦点行(换代重挂打断焦点链)。 */
+  function touch(host, ctx) {
+    ui.focusKey = H.rowFocusKey(host, "data-dt-key");
+    H.anchTouch(host, ctx, TABLE_ID);
+  }
+
+  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
+   * roving 锚点(选中行或首行) + 回焦 —— 与原「replaceChildren 后 roving」同语义。 */
+  function rowAfterFn(el) {
+    if (!el || typeof el.querySelectorAll !== "function") return;
+    H.roving(el, "data-dt-key", ui.selPath);
+    H.rowRestore(el, "data-dt-key", ui.focusKey);
+  }
+
   function onClick(ev) {
     const h = ev.currentTarget;
+    const ctx = h.__dtCtx;
     /* 优先级徽章: 复用经典锚定小菜单(openFilePrio 读 currentTarget 定位, 委托下 currentTarget
      * 是宿主 —— 手工传入徽章元素; 先 stopPropagation, 防宿主外 window click 收层器立即关菜单) */
-    const badge = ev.target.closest("[data-prio]");
+    const badge = ev.target.closest("[data-act=\"prio-menu\"]");
     if (badge) {
       ev.stopPropagation();
-      const idx = Number(badge.getAttribute("data-prio"));
-      _ctx.openFilePrio({ target: ev.target, currentTarget: badge }, idx);
+      const idx = Number(badge.getAttribute("data-idx"));
+      ctx.openFilePrio({ target: ev.target, currentTarget: badge }, idx);
       return;
     }
     const seg = ev.target.closest("[data-setp]");
     if (seg) {
-      const sel = findNode(buildTree(fileList(_ctx)), ui.selPath);
+      const sel = findNode(buildTree(fileList(ctx)), ui.selPath);
       if (!sel) return;
       const p = Number(seg.getAttribute("data-setp"));
-      _ctx.setFilePriority(p, subtreeIndices(sel));
+      ctx.setFilePriority(p, subtreeIndices(sel));
       return;
     }
-    const tgl = ev.target.closest("[data-tgl]");
+    const tgl = ev.target.closest("[data-act=\"fold\"]");
     if (tgl) {
-      const p = tgl.getAttribute("data-tgl") || "";
+      const p = tgl.getAttribute("data-path") || "";
       if (ui.folded.has(p)) ui.folded.delete(p); else ui.folded.add(p);
-      rerender(h);
+      touch(h, ctx); /* 行集/折叠钮态都是行来源, anchTouch 换代重读 */
       return;
     }
     const foldBtn = ev.target.closest("[data-fold]");
     if (foldBtn) {
-      const all = collectDirs(buildTree(fileList(_ctx)));
+      const all = collectDirs(buildTree(fileList(ctx)));
       ui.folded = foldBtn.getAttribute("data-fold") === "close" ? new Set(all) : new Set();
-      rerender(h);
+      touch(h, ctx);
       return;
     }
     const chip = ev.target.closest("[data-f]");
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
-      rerender(h);
+      rerender(h); /* chip active 态在外壳 */
+      touch(h, ctx);
       return;
     }
-    const row = ev.target.closest("[data-node]");
-    if (row) {
-      const p = row.getAttribute("data-node") || "";
-      ui.selPath = ui.selPath === p ? "" : p; /* 再点同一行取消(与 classic fileRowSelect 同口径) */
-      rerender(h);
+    /* 点行 = 选中(再点同一行取消, 与 classic fileRowSelect 同口径); 行容器 = 引擎
+     * .group-row[data-dt-key](U4 桥单点输出), 锚内事件冒泡照常命中委托 */
+    const row = ev.target.closest("[data-dt-key]");
+    if (row && row.closest(".dt10-list")) {
+      const p = row.getAttribute("data-dt-key") || "";
+      if (p === "__empty") return;
+      ui.selPath = ui.selPath === p ? "" : p;
+      rerender(h); /* 右详情随选中重渲(外壳) */
+      touch(h, ctx); /* 行 sel 类在行来源 */
     }
   }
   function collectDirs(n) {
@@ -462,18 +508,21 @@
 
   /* 行级键盘(issue 26-10-07-0846): roving tabindex + 方向键/Home/End 移焦 + Enter/Space
    * 转发行激活(与 click 同口径: 再触发同路径取消)。焦点在行内原生控件(折叠钮/优先级
-   * 徽章)上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持 */
+   * 徽章)上时不接管 —— 只有 ev.target 是行容器自身才处理, 原生控件键盘行为自持。
+   * 行身份锚 = 引擎行容器 data-dt-key(U4 桥单点输出)。 */
   function onKeyDown(ev) {
-    const row = ev.target.closest("[data-node]");
-    if (!row || ev.target !== row) return;
+    const row = ev.target.closest("[data-dt-key]");
+    if (!row || ev.target !== row || !row.closest(".dt10-list")) return;
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
-      const p = row.getAttribute("data-node") || "";
+      const p = row.getAttribute("data-dt-key") || "";
+      if (p === "__empty") return;
       ui.selPath = ui.selPath === p ? "" : p;
       rerender(ev.currentTarget);
+      touch(ev.currentTarget, ev.currentTarget.__dtCtx);
       return;
     }
-    if (H.rowMove(ev.currentTarget, "data-node", row, ev.key)) ev.preventDefault();
+    if (H.rowMove(ev.currentTarget, "data-dt-key", row, ev.key)) ev.preventDefault();
   }
 
   function wire(host) {
@@ -486,12 +535,16 @@
     H.unwireEvents(host);
   }
 
-  
-
   const _render = render;
   reg.register({
     id: "10", tab: "content",
     label: "树 + 详情",
+    /* 桥声明(U4): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerContentV10,
+     * rowsFn = 行装配(树聚合/筛选/折叠/选中判据单点), 列头/拖宽/偏好归引擎(列头 CSS 隐藏)。
+     * rowAfterFn = 锚换代重挂后的 roving 锚点/回焦(行级键盘, issue 26-10-07-0846)。 */
+    tableId: TABLE_ID,
+    rowsFn: rowsFn,
+    rowAfterFn: rowAfterFn,
     css: CSS,
     render(host, ctx) {
       wire(host);

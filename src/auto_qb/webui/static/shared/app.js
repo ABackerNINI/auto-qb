@@ -286,6 +286,30 @@ const DRAWER_TRACKER_V06_COLUMNS = [
   { key: "next", label: "下次重新汇报", tpl: "122px", sortable: false, align: "left" },
   { key: "ops", label: "操作", tpl: "84px", sortable: false, align: "right" },
 ];
+/* ---------------- U4: 内容树两变体列集(计划 26-10-12-0527, D2/D4/D5) ----------------
+ * 10 树 + 详情 / 11 树表批量: 原 grid `18px minmax(0,1fr) 78px 128px 62px`(10) 与
+ * `26px 18px minmax(0,1fr) 78px 130px [62px] 64px`(11) 逐列转声明, 树缩进格(name 列) =
+ * D4 拍板「树是行模型的一部分」(折叠钮/勾选框/缩进/图标/名称/徽章都在格内, 判据在变体
+ * rowsFn)。排序不适用(树序 = 树语义, 原口径无排序 → 全列 sortable:false + dyn 空键,
+ * 非借壳 —— 本来就没有手搓排序状态机, Q3 不增项)。Q3 记档: 10 无表头设计 → 列头 CSS
+ * 隐藏(05 先例), 拖宽/右键隐藏/列偏好**不适用**; 11 表头保留, 拖宽/右键隐藏首次落地。
+ * 11 可用性列 omitEmpty(渐进, U2 通用机制; 判据字段 = 行 av 串, 有 availability 才非空)。 */
+const DRAWER_CONTENT_V10_COLUMNS = [
+  { key: "tgl", label: "", tpl: "18px", sortable: false, align: "left" },
+  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+  { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
+  { key: "prog", label: "进度", tpl: "128px", sortable: false, align: "left" },
+  { key: "prio", label: "优先级", tpl: "62px", sortable: false, align: "left" },
+];
+const DRAWER_CONTENT_V11_COLUMNS = [
+  { key: "ck", label: "", tpl: "26px", sortable: false, locked: true, align: "left" },
+  { key: "tgl", label: "", tpl: "18px", sortable: false, locked: true, align: "left" },
+  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+  { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
+  { key: "prog", label: "进度", tpl: "130px", sortable: false, align: "left" },
+  { key: "av", label: "可用性", tpl: "62px", sortable: false, omitEmpty: true, align: "right" },
+  { key: "prio", label: "优先级", tpl: "64px", sortable: false, align: "left" },
+];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -303,6 +327,8 @@ const TABLE_COLUMNS = {
   drawerTrackerV04: DRAWER_TRACKER_V04_COLUMNS,
   drawerTrackerV05: DRAWER_TRACKER_V05_COLUMNS,
   drawerTrackerV06: DRAWER_TRACKER_V06_COLUMNS,
+  drawerContentV10: DRAWER_CONTENT_V10_COLUMNS,
+  drawerContentV11: DRAWER_CONTENT_V11_COLUMNS,
 };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
@@ -526,6 +552,33 @@ const DRAWER_TABLE_DEFS = {
     sort: { dyn: true, defKey: "sev", defDir: 1 },
     variantTab: "trackers", variantId: "06",
     rows: "dtTplRows", rowKey: "k", rowModel: "dt06", rowProp: "p", rowCls: "_cls",
+  },
+  /* ---------------- U4: 内容树两变体(10/11, 计划 26-10-12-0527; D4=A 树缩进格进渲染器) ----------------
+   * 10 树 + 详情: 左树 = 引擎表体(行容器单行 grid), 右详情/工具条/foot 留外壳(版式);
+   *   无表头设计 → 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏不适用(Q3 记档)。行选中(selPath)
+   *   驱动右详情 + 行 _cls, 行来源含非响应式 UI 态 → anchTouch(同 04/07)。
+   * 11 树表批量: 7 列(勾选/折叠列 locked —— 隐藏即废勾选/折叠功能, 引擎 locked 消费);
+   *   可用性列 omitEmpty 渐进(原 hasAv 双 grid 手搓退役); 批量优先级条留外壳, 勾选集
+   *   (checked/子树三态)是版式语义 → rowsFn + anchTouch; 行内勾选框三态经分片
+   *   :indeterminate 声明式(原生 property, Vue patch 直持)。
+   * 两表行级键盘(issue 26-10-07-0846): rowTab = 行容器 tabindex=-1 声明位;
+   *   rowAfter = 锚换代重挂后回调变体 rowAfterFn(roving 锚点/回焦) —— 行身份锚 =
+   *   行容器 data-dt-key(rowKey 值, 桥模板单点输出)。排序不适用(树序 = 树语义)。 */
+  drawerContentV10: {
+    columns: DRAWER_CONTENT_V10_COLUMNS, label: "内容表·树 + 详情",
+    headRef: null, tableRef: null,
+    grid: "drawerContentV10Grid", cols: "visibleDrawerContentV10Cols", window: null,
+    sort: { dyn: true, defKey: "", defDir: 1 },
+    variantTab: "content", variantId: "10", rowTab: true, rowAfter: true,
+    rows: "dtTplRows", rowKey: "k", rowModel: "dt10", rowProp: "p", rowCls: "_cls",
+  },
+  drawerContentV11: {
+    columns: DRAWER_CONTENT_V11_COLUMNS, label: "内容表·树表批量",
+    headRef: null, tableRef: null,
+    grid: "drawerContentV11Grid", cols: "visibleDrawerContentV11Cols", window: null,
+    sort: { dyn: true, defKey: "", defDir: 1 },
+    variantTab: "content", variantId: "11", rowTab: true, rowAfter: true,
+    rows: "dtTplRows", rowKey: "k", rowModel: "dt11", rowProp: "p", rowCls: "_cls",
   },
 };
 /* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
@@ -856,6 +909,10 @@ app.component("aq-dt09-cells", window.AQ_DT09_CELLS_COMPONENT);
 app.component("aq-dt04-cells", window.AQ_DT04_CELLS_COMPONENT);
 app.component("aq-dt05-cells", window.AQ_DT05_CELLS_COMPONENT);
 app.component("aq-dt06-cells", window.AQ_DT06_CELLS_COMPONENT);
+/* U4 变体格渲染器(计划 26-10-12-0527): 内容树两变体 —— drawerFileTree 树缩进格口径
+ * (折叠钮/勾选框/缩进/图标/名称/徽章)两段同构单份, 列集 D2 各表声明(桥按 rowModel 解析) */
+app.component("aq-dt10-cells", window.AQ_DT10_CELLS_COMPONENT);
+app.component("aq-dt11-cells", window.AQ_DT11_CELLS_COMPONENT);
 // 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
 // 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
 // W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。
