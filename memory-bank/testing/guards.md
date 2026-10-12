@@ -127,7 +127,7 @@
 |---|---|---|
 | `test_module_host.py::test_exec_history_prune_bounded_and_active_kept` (A-03) | exec_history 键面有界: 超保留期(30 天)日期淘汰 + 超存量上限(2000)淘汰最旧**非当日**记录; 当日活跃键(同日窗口 daily/hourly 去重依据)即便 ts 最旧也不被误清 | 还原 record_execution 无 _prune_exec_history(键面只增不减) |
 | `test_speed_curve.py::test_curve_state_day_keys_pruned` (A-03) | speed_limit_curve 日键保 7 天: 写入时顺带淘汰保留期外旧日键(调试快照无正确性消费方), 保留期内与当日键不受影响 | 还原 _record_curve_state 直写不淘汰 |
-| `test_actions.py::test_pause_resume_sync_store_snapshot` (A-04) | QbApi pause/resume 写后同步 store 快照(与 start/stop 对称, 坑档 concurrency「写方法必须同步 store」): 同 tick 读 is_paused 为新值, 完成位不翻转 | 还原 torrents_pause/resume 纯透传(实测红在「pause 后 state 仍是 downloading」) |
+| `test_actions.py::test_pause_resume_no_same_tick_writeback` (A-04, !26-10-13-0540 S1 反转) | **契约已翻面**: QbApi pause/resume **不再**写后同步 store 快照(state 只由 qB 同步驱动, 源无关语义) —— 同 tick 读到**旧值**(不新鲜), 且动作后快照逐字不变 | 还原 `_sync_paused_state` 合成回写(实测红在「同 tick state 已被写成 pausedDL」) |
 | `test_qbmanager.py::test_a07_connect_non_api_error_transition_throttled` (A-07) | 非 API 类连接异常(凭据错 LoginError)与连接类同用 _last_conn_ok 转换节流: 失败态重复 connect 不重复 ERROR; 恢复后再失败重新报一次 | 还原 except Exception 无条件 logger.error |
 | `test_qbmanager.py::test_a07_managed_first_connect_retry_warns_once` (A-07) | 托管模式首连重试循环的 WARNING 只说明白一次, 停止信号仍即时响应(不抛 QbConnectError 干净返回) | 还原逐拍 logger.warning |
 | `test_hr_resolve.py::test_tie_*` 六条 (B2-02, P-04) | judge_record 双 hash 平局合并兑现 docstring: 同为放行取依据更强者(D 免罪>B>缺席), 同为管束取剩余时间更少(None 未知视为无穷大), 两态同为 SAFE 无判定翻转, 无证据平局保先到; C 终态未达标(failed 展示)恒保留不被洗成可删 | 还原 `_rank(res) > _rank(best)` 严格大于(平局恒取先到, 实测红在 D 免罪被缺席式放行压住) |

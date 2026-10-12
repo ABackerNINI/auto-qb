@@ -335,9 +335,11 @@ class FakeClient:
         旧替身四个暂停轴方法只记 calls、不翻 state ⇒ 「快照 == 真值」类守阵没有真值可断言
         (A 系删掉合成回写后, 只能靠"下一轮同步读真值"验位)。本方法补齐该能力。
 
-        口径与生产 qbapi._sync_paused_state 同款: 停/暂停 -> pausedUP/pausedDL, 起/恢复 ->
-        stalledUP/stalledDL; 完成位由 state 后缀 UP 或 progress>=1.0 判定(不看 amount_left,
-        与 TorrentRecord 默认 amount_left=0 的口径保持一致)。torrent_hashes 为 None = 全体
+        口径对齐 qB 自身: 停/暂停 -> pausedUP/pausedDL, 起/恢复 -> stalledUP/stalledDL; 完成位由
+        state 后缀 UP 或 progress>=1.0 判定(不看 amount_left, 与 TorrentRecord 默认
+        amount_left=0 的口径保持一致)。!A 系 26-10-13-0540 S1 后生产已无合成回写
+        (_sync_paused_state 已删), 本方法成为「客户端侧真值」的**唯一**来源 —— A 系守阵断言
+        「停/起后快照不变、下一轮同步才翻位」正依赖它。torrent_hashes 为 None = 全体
         (qB "不传 hash 即全体" 语义, 与 _FakeTorrents.info 的过滤语义对齐)。
         """
         if torrent_hashes is None:

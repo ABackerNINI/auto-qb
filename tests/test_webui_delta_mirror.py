@@ -397,11 +397,12 @@ def test_m5_hr_revision_wave_yields_full():
 
 
 def test_unkeyed_command_source_yields_full():
-    # a) 命令自写字段: QbApi Facade -> store.update_torrent_fields 原地写 state, 只置
+    # a) 命令自写字段: QbApi Facade -> store.update_torrent_fields 原地写 category, 只置
     #    view_changed, 无 last_added/last_removed/delta_fields —— 修复前落代为「空键集且
     #    full=False」, delta 客户端漏变更(命令轮真值要等下轮 qB 增量才可见)
+    #    !A 系 26-10-13-0540 S1: state 不再由写方法回写(只由同步驱动), 无键命令源改以 category 承载
     store, rt, m, ct, cg = _mirror(("H1", "H2"))
-    store.update_torrent_fields("H1", state="pausedUP")
+    store.update_torrent_fields("H1", category="cs")
     assert not store.last_added and not store.last_removed and not store.delta_fields  # 前置: 无键
     m.publish(force=True)  # 命令驱动轮: force 绕过门控(P0-5)
     assert rt._delta_timeline[-1]["full"] is True  # 纯命令源 -> 本代 full(R11)
@@ -409,7 +410,7 @@ def test_unkeyed_command_source_yields_full():
     resp = out["resps"][0]
     assert resp["full"] is True
     row = next(r for r in resp["torrents"] if r["hash"] == "H1")
-    assert row["state"] == "pausedUP"  # full 重放即见真值
+    assert row["category"] == "cs"  # full 重放即见真值
     # 对照(别误伤): store 驱动的常规轮照常行级增量, 不被误降 full
     _beat(store, "H2", dlspeed=700)
     m.publish()
@@ -757,10 +758,11 @@ def test_fuzz_random_operation_sequence():
         store._apply({h: patch}, [h], full=False)
 
     def op_unkeyed():  # 命令无键源 -> 本代 full(R11)
+        # !A 系 26-10-13-0540 S1: state 不再由写方法回写 -> 该分支改以 save_path(同为视图字段/无键)
         h = rand_hash()
         pick = rng.random()
         if pick < 0.4:
-            store.update_torrent_fields(h, state=rng.choice(states))
+            store.update_torrent_fields(h, save_path=f"R:\\P{rng.randint(0, 3)}")
         elif pick < 0.7:
             store.update_torrent_fields(h, tags_add=rng.sample(["x", "y", "z"], rng.randint(1, 2)))
         else:

@@ -8,8 +8,8 @@
 <meta name="doc-topic" content="seed-state-writeback">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-13-0540">
-<meta name="doc-updated" content="26-10-13-0602">
-<meta name="doc-refs" content="memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/tasks/26-10-13-backend-seed-state-writeback.md">
+<meta name="doc-updated" content="26-10-13-0620">
+<meta name="doc-refs" content="memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/tasks/26-10-13-backend-seed-state-writeback.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html">
 <style>
   :root {
     color-scheme: dark;
@@ -85,7 +85,7 @@
   <p class="lede">拆掉「照快照推一个合成值写进快照」这条第二回写通道，让快照严格等于最近一次 qB 同步的应用结果；只对会因陈旧状态导致误放行的校验类决策做局部延迟，收回安全窗口。</p>
   <div class="metagrid">
     <div class="it"><div class="k">编号</div><div class="v">26-10-13-0540</div></div>
-    <div class="it"><div class="k">状态</div><div class="v">Open（S0 已完成，待 S1 值层）</div></div>
+    <div class="it"><div class="k">状态</div><div class="v">Open（S0/S1 已完成，待 S2 deferral）</div></div>
     <div class="it"><div class="k">依据</div><div class="v">report 26-10-12-2148（0441 修订版）</div></div>
     <div class="it"><div class="k">形态</div><div class="v">A3 = A1 删回写 + 局部 deferral（S0-P1 已定）</div></div>
     <div class="it"><div class="k">前置</div><div class="v">P1 可达性确认 → <b>可达，取 A3</b>（按能力面判定，26-10-13-0602 订正）</div></div>
@@ -350,6 +350,7 @@
 
 <h2 id="s12"><span class="n">12</span>变更记录</h2>
 <ul>
+  <li><b>26-10-13-0620</b> — <b>S1 值层完成</b>（源无关发射落地）。删除第二回写通道整段：<code>qbapi.py</code> 的 <code>_sync_paused_state</code>（含完成位推断 + 四值合成）+ <code>store.update_torrent_fields</code> 的 <code>state=</code> 形参与相关分支（<code>state_changed</code> 局部量 / <code>_state_enum</code> 失效 / <code>view_changed</code> 的 state 半边），四入口只调 raw client；两处 docstring（<code>torrents_pause</code>、<code>update_state_snapshot</code>）与 <code>qbmanager</code> 的 <code>transitions</code> 相位注释、<code>grouping_mod</code>/<code>ops_mod</code> 两处连带注释重写。快照语义收敛为「严格 = 最近一次同步的应用结果」⇒ 自家停/起与外部变更<b>源无关</b>。守阵：<code>test_stop_preserves_completeness</code> 改钉「动作后快照逐字不变」；<code>test_pause_resume_sync_store_snapshot</code> <b>契约翻面</b>并改名 <code>test_pause_resume_no_same_tick_writeback</code>（同 tick 读<b>旧值</b>）；<code>test_start_stop_idempotent</code> 清过时注释；4 处 <code>state=</code> 调用点迁移（改以 <code>category</code>/<code>save_path</code> 承载无键命令源）；<code>test_grouping</code> 两条承认「整组停种经同步回流再触发一次（幂等，一轮即收敛）」—— 源无关的应有之义。文档：坑档 <code>concurrency</code> 补 <code>state</code> 例外、<code>guards.md</code> A-04 行按反转更新。全绿（基线切片 <code>baselines/26-10-13-0620-seed-state-writeback-s1.md</code>）。<b>§8.3 新增守阵与可选件 A2 按计划归 S3</b>。</li>
   <li><b>26-10-13-0602</b> — <b>P1 方法论订正</b>（用户指出）：首轮 P1 误把本机 <code>config.yml</code> 当「真实规则集 / 能力边界」，据以断言「自动流水线里没有任何起下载方的任务」—— <b>口径错</b>（该文件只是当前机器的一份临时配置）。改按 <b>auto-qb 提供的用户能力面</b>重判：<code>start</code> 是一等规则动作（<code>config/schema/rules.py:227</code>）、<code>checking.auto_start</code> 是文档化选项（<code>:185</code>）、规则 <code>actions</code> 顺序执行 ⇒ 给出 W1/W2/W3 三个可达 witness。<b>结论不变（可达 ⇒ A3），理由更强</b> —— W1/W2 <b>纯由配置触发、不需要任何用户手动操作</b>，窗口是能力面内的确定性路径，而非偶发巧合。</li>
   <li><b>26-10-13-0554</b> — <b>S0 前置完成</b>（形态定 <b>A3</b>）。</li><b>P1 可达性确认</b>：判据按 <b>auto-qb 的能力面</b>（任何合法配置都可能触发的路径），<b>不按某份配置文件</b>。能力面：<code>start</code> 是一等规则动作（<code>config/schema/rules.py:227</code> 的 <code>Plugin("start", …)</code>；示例 <code>test_yamls/test_actions/test_start.yml</code> 即 <code>actions: [{start: true}]</code>）、<code>checking.auto_start</code> 是文档化用户选项（<code>schema/rules.py:185</code>）、规则 <code>actions</code> 顺序执行 ⇒ 判定 <b>G6 可达</b> ⇒ 取 <b>A3</b>。三个 witness：<b>W1</b> <code>actions: [{start}, {checking(skip-checking)}]</code> 同一 handler 顺序执行（<b>顺序保证 · 纯配置</b>）：今日 <code>start</code> 的写回把 D 写成 <code>stalledDL</code> ⇒ 决策链 0 不过 ⇒ 跳过（受保护）；A1 下 D 快照停留 <code>pausedDL</code> ⇒ 链 0 通过 ⇒ G3–G6 全读陈旧快照 ⇒ 放行 ⇒ D 边下载边被跳检 ⇒ 脏数据洗白。<b>W2</b> <code>auto_start: true</code>（该选项设计用途）：D 的任务跳检完 auto_start D，C 的任务（同批次其后）跳检 C ⇒ G6 读陈旧 D（排序按 <code>next_run</code> 堆序，多轮必现 D 在前）——<b>纯配置</b>。<b>W3</b> WEB 命令线 resume D + 同 tick 任务线跳检组员 C——<b>用户触发</b>。结论：<b>A1 相对今日是回归</b>，A3 用 deferral 保住保护。对称性事实：qB-WebUI 的 resume 今天已走「无回写」路径（外部变更），窗口本已存在；A3 只按 <code>own_writes</code> 关掉自家那半。**§11「任务 hash 归属」未知项消解**（<code>Task.hash</code> 存在，`taskqueue.py:40/66`，D-1 判据可直接用）。<b>P2</b>：<code>qbmanager.py:517</code> 局部 <code>state_changed</code> → <code>cmd_changed_state</code>（连带 <code>:528/534/540/544</code>）。<b>P3</b>：<code>FakeClient</code> 新增 <code>_apply_paused_state</code>，四暂停轴方法真实翻转 state（UP/DL 完成位，<code>None</code> = 全体），<code>calls</code> 形状逐字不变。全绿（基线切片 <code>baselines/26-10-13-0554-seed-state-writeback-s0.md</code>）。S0 落地随本专题入库。</li>
   <li><b>26-10-13-0540</b> — 首版。依据 report <a href="../reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html">26-10-12-2148</a>（含 26-10-13-0441 修订）的 §5 裁定 ①（A 系 = A + 局部 deferral）。形态选定 <b>A3</b>，幂等可选叠 A2。取 B2 计划（<code>plans/26-10-13-0413</code>，已 <code>Superseded</code>）的反面：<b>不做任何真值回写</b>。相对报告 §6-A 清单新增/收紧五处：① 把 <b>P1 可达性确认</b>提为决定形态的第一步（而非可选项）；② <code>own_writes</code> 加 <b>TTL 兜底</b>，并把「有界性不能只押 qB 前进」写死；③ 发射时机按 0441 取证修正 —— <b>不得写「WEB 路径同 tick 必达」</b>；④ 补 <code>state_changed</code> 同名消歧与替身能力补齐两个前置；⑤ 明确 <code>pending_writes</code> 与 <code>own_writes</code> 须一次决定是否合并容器，防双轨。</li>

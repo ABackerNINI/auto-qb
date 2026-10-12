@@ -6,8 +6,8 @@
 - test_add_category_overwrite_semantics: 加分类动作的 overwrite 覆盖语义
 - test_remove_category: 移除分类动作
 - test_start_stop_idempotent: 开始/停止动作幂等(重复执行不报错)
-- test_stop_preserves_completeness: 暂停/恢复后快照 state 的**完成位**不得翻转(停一个正在下载的种子不能被写成 pausedUP ⇒ is_complete 变真)
-- test_pause_resume_sync_store_snapshot: 守阵(26-10-06-0028 A-04)——QbApi pause/resume 写后同步 store 快照(与 start/stop 对称), 同 tick 读 is_paused 为新值
+- test_stop_preserves_completeness: 暂停/恢复**不再**合成回写 state(A 系 26-10-13-0540 S1)——动作后快照不变, 完成位不可能被写坏(该类 bug 结构性消失)
+- test_pause_resume_no_same_tick_writeback: 契约变更(A 系 S1, 原 26-10-06-0028 A-04 守阵方向翻面)——QbApi pause/resume 不再写后同步 store 快照, 同 tick 读到旧值
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
@@ -167,8 +167,8 @@ def test_start_stop_idempotent():
         assert StartAction("").execute(ctx).is_ok
         assert ("start", None) in client.calls
         # stop: pausedUP 已停止 -> skip; stalledUP -> stop
-        # 注意: 上述 start 成功经 QbApi 同步后 state 已为 stalledUP(客户端语义),
-        # 验证幂等 skip 需把种子重置为暂停态再断言
+        # 注意: !A 系 26-10-13-0540 S1 起 start/stop **不再回写快照**(state 只由 qB 同步驱动),
+        # 故此处显式复位不再是为了抵消写回副作用, 只是把种子置回待测的暂停态
         tor.state = "pausedUP"
         assert StopAction("").execute(ctx).is_skipped
         tor.state = "stalledUP"
@@ -177,65 +177,71 @@ def test_start_stop_idempotent():
 
 
 def test_stop_preserves_completeness():
-    """暂停/恢复只翻"暂停位", 不得翻"完成位"
+    """暂停/恢复**不再**由客户端合成回写 state(A 系 26-10-13-0540 S1)
 
-    修复前 `QbApi.torrents_stop` 硬编码 `state="pausedUP"`、`torrents_start` 硬编码
+    历史: 修复前 `QbApi.torrents_stop` 硬编码 `state="pausedUP"`、`torrents_start` 硬编码
     `"stalledUP"` —— 停一个**正在下载**的种子会被记成"已完成 + 上传", `is_complete` 变真,
-    可能误触下载冲突与缺文件分组分支。反向同理: 恢复一个未完成的种子不能被记成 UP。
+    可能误触下载冲突与缺文件分组分支。S1 起该合成回写整段删除(state 只由 qB 同步驱动)⇒
+    **这一类「完成位被写坏」的 bug 结构性消失**。本守阵改钉新契约: 动作后快照**逐字不变**,
+    不产生任何合成值; 「暂停位/完成位」的真值语义由替身真值与下一轮同步承担。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
 
-        # 正在下载(未下完): 停 -> pausedDL, 恢复 -> stalledDL
+        # 未完成且下载中: 停不改写快照(此前会被合成写成 pausedDL)
         tor = FakeTorrent(state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
         ctx = make_ctx(mgr, tor, client)
         assert StopAction("").execute(ctx).is_ok
-        assert tor.state == "pausedDL", f"未完成种子暂停后应为 pausedDL: {tor.state}"
-        assert tor.state_enum.is_complete is False, "完成位被翻转 ⇒ is_complete 误真"
-        assert tor.state_enum.is_paused is True, "同 tick 幂等依赖暂停位即时生效"
-        assert StartAction("").execute(ctx).is_ok
-        assert tor.state == "stalledDL", f"未完成种子恢复后应为 stalledDL: {tor.state}"
-        assert tor.state_enum.is_complete is False
+        assert tor.state == "downloading", f"动作不再合成 state(A 系): {tor.state}"
+        assert tor.state_enum.is_complete is False, "完成位不可能被写坏(无回写)"
 
-        # 已完成做种: 停 -> pausedUP, 恢复 -> stalledUP(原行为在这条路径上是对的)
-        tor2 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
+        # 未完成且已暂停: 起不改写快照(此前会被合成写成 stalledDL)
+        tor2 = FakeTorrent(state="pausedDL", downloaded=10 * 1024**2, total_size=100 * 1024**2)
         ctx2 = make_ctx(mgr, tor2, client)
-        assert StopAction("").execute(ctx2).is_ok
-        assert tor2.state == "pausedUP", tor2.state
         assert StartAction("").execute(ctx2).is_ok
-        assert tor2.state == "stalledUP", tor2.state
+        assert tor2.state == "pausedDL", f"动作不再合成 state(A 系): {tor2.state}"
+        assert tor2.state_enum.is_complete is False
+
+        # 已完成做种: 同理, 动作不改写快照
+        tor3 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
+        ctx3 = make_ctx(mgr, tor3, client)
+        assert StopAction("").execute(ctx3).is_ok
+        assert tor3.state == "uploading", tor3.state
+        assert tor3.state_enum.is_complete is True
 
 
-def test_pause_resume_sync_store_snapshot():
-    """守阵(26-10-06-0028 A-04): QbApi pause/resume 写后同步 store 快照, 与 start/stop 对称
+def test_pause_resume_no_same_tick_writeback():
+    """契约变更(A 系 26-10-13-0540 S1): QbApi pause/resume **不再**写后同步 store 快照
 
-    修复前 torrents_pause/resume 纯透传不同步 store —— 同 tick 内读 is_paused 仍是旧值
-    (坑档 concurrency「QbApi 写方法必须同步 store」的对偶复查)。守阵: 调用后同 tick 读
-    is_paused 为新值, 且完成位不翻转(与 test_stop_preserves_completeness 同口径)。
+    原守阵为 26-10-06-0028 (A-04) `test_pause_resume_sync_store_snapshot`: 断言「写后同 tick
+    读 is_paused 为新值」。S1 起该写后同步整段删除 —— 断言方向**正好翻面**: 同 tick 读到的是
+    **旧值**(不新鲜), 真值须等下一轮同步。这不是回归而是刻意的源无关契约: 自家停/起与外部
+    变更一视同仁, 快照严格等于最近一次同步的应用结果(真值落地的守阵在 test_sync)。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
 
-        # 正在下载(未下完): pause -> pausedDL, resume -> stalledDL
+        # 未完成下载中: pause/resume 均不改写快照
         tor = FakeTorrent(state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
-        make_ctx(mgr, tor, client)
+        make_ctx(mgr, tor, client)  # tor 即 store 记录(对象身份直写)
         mgr.api.torrents_pause(tor.hash)
-        assert tor.state == "pausedDL", f"未完成种子暂停后应为 pausedDL: {tor.state}"
-        assert tor.state_enum.is_paused is True, "同 tick 幂等依赖暂停位即时生效"
-        assert tor.state_enum.is_complete is False, "完成位被翻转 ⇒ is_complete 误真"
+        assert tor.state == "downloading", f"同 tick 不应出现合成值(A 系): {tor.state}"
+        assert tor.state_enum.is_paused is False, "同 tick 读到旧值(不新鲜)"
         mgr.api.torrents_resume(tor.hash)
-        assert tor.state == "stalledDL", f"未完成种子恢复后应为 stalledDL: {tor.state}"
+        assert tor.state == "downloading", f"同 tick 不应出现合成值(A 系): {tor.state}"
         assert tor.state_enum.is_paused is False
 
-        # 已完成做种: pause -> pausedUP, resume -> stalledUP
+        # 已完成做种: 同样不改写快照
         tor2 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
         make_ctx(mgr, tor2, client)
         mgr.api.torrents_pause(tor2.hash)
-        assert tor2.state == "pausedUP" and tor2.state_enum.is_complete is True
+        assert tor2.state == "uploading" and tor2.state_enum.is_complete is True
         mgr.api.torrents_resume(tor2.hash)
-        assert tor2.state == "stalledUP" and tor2.state_enum.is_complete is True
+        assert tor2.state == "uploading" and tor2.state_enum.is_complete is True
+
+        # 透传语义不变: 客户端侧仍收到 pause/resume 调用(替身真值亦已翻转, 见 S0-P3)
         assert ("pause", tor.hash) in client.calls and ("resume", tor.hash) in client.calls
 
 

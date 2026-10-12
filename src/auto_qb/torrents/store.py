@@ -301,8 +301,11 @@ class TorrentStore:
     def update_state_snapshot(self) -> None:
         """本轮结束前更新状态快照(hash -> state_enum)
 
-        直接取本轮 by_hash 的状态(record.state_enum 有缓存, 与 qB 版本无关): 自有动作
-        经 QbApi 同步过的状态同样计入, 故下轮不会被误判为外部状态变化。
+        直接取本轮 by_hash 的状态(record.state_enum 有缓存, 与 qB 版本无关)。!本快照只记
+        **同步应用结果**(A 系 26-10-13-0540 S1 起): 自有动作不再当场改写快照, 故自家停/起的
+        状态变化与外部变更一样, 只能经下一轮真实 delta 出现在 `state_changed` 里、进而被
+        转移检测与状态事件看见 —— 这正是「源无关发射」的实现方式; 原「自有动作经 QbApi
+        同步过的状态同样计入, 故下轮不会被误判为外部状态变化」整句前提已消失。
         """
         self.state_snapshot = {h: r.state_enum for h, r in self.by_hash.items()}
 
@@ -484,7 +487,6 @@ class TorrentStore:
         tags_add: Optional[List[str]] = None,
         tags_remove: Optional[List[str]] = None,
         category: Optional[str] = None,
-        state: Optional[str] = None,
         up_limit: Optional[int] = None,
         dl_limit: Optional[int] = None,
         save_path: Optional[str] = None,
@@ -493,24 +495,29 @@ class TorrentStore:
 
         由 QbApi Facade调用: 调用客户端 API 后立即更新内存快照, 保证同 tick 内
         后续读取(如 tag_usage / 分类判断 / 限速幂等)读到最新值; 下轮 refresh 校准。
-        tags_add/tags_remove 合并式更新并失效 _tags_set, state 变化失效 _state_enum。
+        tags_add/tags_remove 合并式更新并失效 _tags_set。
         tags/category 的**实际变化**同步登记 self_caused_fields(计划 26-09-27-1438):
         下轮 qB 增量报告同字段变化时保守按自写处理 —— 事件不自触发、maintenance on_change
         不打重检标记(防自喂环, 单点收口在本方法)。
+
+        !**不含 `state`**(A 系 26-10-13-0540 S1): state 是唯一由 qB 同步权威驱动的字段,
+        不再由写方法合成回写 —— 自有停/起/暂停/恢复的 state 变化靠下一轮真实 delta 被看见
+        (`_apply` 的 `state_changed`/`dirty_groups`/`view_changed` 三条通路天然覆盖,
+        见 `:237-244`)。快照语义收敛为「严格 = 最近一次同步的应用结果」。口径见坑档
+        `pitfalls/backend/concurrency.md`「QbApi 写方法必须同步 store」的 state 特例。
         """
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
         tags_changed = tags_add is not None or tags_remove is not None
-        state_changed = state is not None
-        # state/save_path/tags/category 均为视图展示字段(组级共同标签/分类列): 写操作后视图需重建;
+        # save_path/tags/category 均为视图展示字段(组级共同标签/分类列): 写操作后视图需重建;
         # 限速(up_limit/dl_limit)不参与视图, 不置脏
-        if state_changed or save_path is not None or tags_changed or category is not None:
+        if save_path is not None or tags_changed or category is not None:
             self.view_changed = True
         for h in hashes:
             torrent = self.by_hash.get(h)
             if torrent is None:
                 continue
-            if state_changed or tags_changed:
-                # 自有停种/打标会改变组内冲突判定, 登记组级脏标记(下轮 qB 增量不会重报同样值)
+            if tags_changed:
+                # 自有打标会改变组内冲突判定, 登记组级脏标记(下轮 qB 增量不会重报同样值)
                 key = self.member_to_key.get(h)
                 if key is not None:
                     self.dirty_groups.add(key)
@@ -532,16 +539,12 @@ class TorrentStore:
                 if torrent.category != category:  # 同值写不登记(同上)
                     torrent.category = category
                     self.self_caused_fields.setdefault(h, {})["category"] = category
-            if state is not None:
-                torrent.state = state
             if up_limit is not None:
                 torrent.up_limit = up_limit
             if dl_limit is not None:
                 torrent.dl_limit = dl_limit
             if save_path is not None:
                 torrent.save_path = save_path
-            if state_changed:
-                torrent._state_enum = None
 
     def apply_tag_removal(self, tags: List[str]) -> None:
         """torrents_delete_tags 后从所有记录移除已删除标签(定义删除 = 所有种子移除)"""

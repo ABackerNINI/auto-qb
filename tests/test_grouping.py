@@ -199,6 +199,12 @@ def test_grouping_state_change_triggers_check():
         assert "MISSING" in client.tags
 
         # 状态不变 -> 不重复触发
+        # !A 系 26-10-13-0540 S1 语义变更: 上一轮的整组停种(H1+H2)不再当场改写快照, 其中 H2 的
+        #   stalledUP->pausedUP 于**下一轮同步**才可见、并再次满足「上传转暂停」谓词(:206)
+        #   ⇒ 追加一次扫描+停种(幂等)。这是「源无关」的应有之义(2229 裁定), 且一轮即收敛。
+        #   故先跑一个收敛轮, 再断言真正的「状态不变不重复触发」。
+        client.calls.clear()
+        mgr._refresh_torrents()  # 收敛轮: 承接整组停种经同步回流的 H2 状态变化
         client.calls.clear()
         mgr._refresh_torrents()
         assert _non_tag_calls(client) == [], f"状态不变不应重复触发: {client.calls}"
@@ -1189,6 +1195,10 @@ def test_grouping_errored_transition_pauses_group():
         assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
 
         # 持续 errored(状态不变) -> 不重复触发
+        # !A 系 26-10-13-0540 S1: 整组停种结果下一轮经同步回流, H2 的 stalledUP->pausedUP 会
+        #   再触发一次扫描(见 test_grouping_state_change_triggers_check 同款说明), 一轮即收敛
+        client.calls.clear()
+        mgr._refresh_torrents()  # 收敛轮: 承接整组停种经同步回流的 H2 状态变化
         client.calls.clear()
         mgr._refresh_torrents()
         assert _non_tag_calls(client) == [], f"持续 errored 不应重复触发: {client.calls}"
@@ -1735,8 +1745,9 @@ def test_cross_group_same_group_overlap_not_triggered():
 
 
 # ---------------- 跨组文件交叉检测 S3 (计划 26-10-04-0107 §05, 处置: 暂停 + 去重 + 消除, 2026-10-04) ----------------
-# 暂停断言一律 mock api.torrents_stop: 真实 stop 经 _sync_paused_state 同 tick 改写 store 快照,
-# 把「下载中」谓词打掉、污染去重断言(对齐 :472 同组四段式先例的注释口径)
+# 暂停断言一律 mock api.torrents_stop: 用于断言调用参数/作用范围(对齐 :472 同组四段式先例)。
+# !A 系 26-10-13-0540 S1 后真实 stop 不再回写 store 快照(原「同 tick 改写快照污染去重断言」
+# 的顾虑消失), 但替身仍会翻转客户端侧真值(S0-P3), mock 同时起隔离作用
 
 
 def test_cross_group_dispose_stops_downloader():
@@ -1745,8 +1756,9 @@ def test_cross_group_dispose_stops_downloader():
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
         pair = tuple(sorted((key_a, key_b), key=str))  # 组对规范序(与去重集合元素同形)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             grp._check_cross_group_file_conflicts(dry_run=False)
             assert stop_mock.call_count == 1, f"交叉在场应暂停涉事下载方: {stop_mock.call_count}"
@@ -1759,8 +1771,9 @@ def test_cross_group_dispose_dedup_no_repeat():
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             grp._check_cross_group_file_conflicts(dry_run=False)
             assert stop_mock.call_count == 1
@@ -1774,8 +1787,9 @@ def test_cross_group_dispose_clear_and_retrigger():
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
         pair = tuple(sorted((key_a, key_b), key=str))
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             grp._check_cross_group_file_conflicts(dry_run=False)
             assert stop_mock.call_count == 1
@@ -1801,8 +1815,9 @@ def test_cross_group_dispose_seeder_side_untouched():
         mgr.store.groups[key_a].append("HA2")
         mgr.store.member_to_key["HA2"] = key_a
         mgr.store.group_sizes[key_a]["HA2"] = dict(_OVERLAP_A)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             grp._check_cross_group_file_conflicts(dry_run=False)
             assert stop_mock.call_count == 1, f"应只调一次 stop: {stop_mock.call_count}"
@@ -1816,8 +1831,9 @@ def test_cross_group_dispose_dry_run_only_warns():
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             with _grab_cross_warnings() as cap:
                 grp._check_cross_group_file_conflicts(dry_run=True)
@@ -1831,8 +1847,9 @@ def test_cross_group_reset_runtime_keeps_warned():
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop"):
             grp._check_cross_group_file_conflicts(dry_run=False)
         assert len(mgr.store.cross_group_conflict_warned) == 1, "前置: 处置已登记去重"
@@ -1848,8 +1865,9 @@ def test_cross_group_single_side_dirty_still_detected():
         key_a, _key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
         mgr.store.rounds_applied = 1  # 增量基线已建立: 若误按 dirty 增量, 组 B 侧交叉将漏检
         mgr.store.dirty_groups.add(key_a)
-        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
-        # 污染去重断言(真实场景下轮 refresh 才校准)
+        # mock 掉 api.torrents_stop: 用于断言调用参数/作用范围, 并隔离替身的客户端侧翻转
+        # (S0-P3)。!A 系 26-10-13-0540 S1 起真实 stop **不再**回写 store 快照,
+        # 原「同 tick 改写快照污染去重断言」的顾虑已随 _sync_paused_state 删除而消失
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
             with _grab_cross_warnings() as cap:
                 grp._check_cross_group_file_conflicts(dry_run=False)

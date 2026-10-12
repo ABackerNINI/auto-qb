@@ -585,8 +585,9 @@ class GroupingModule(BaseModule):
                 continue  # dry-run 只报告: 不暂停、不记去重(故 dry_run 下本段不会置脏)
             warned.add((ka, kb))
             # 集合新增同样显式置 view_changed(与消除段同一兜底: 组视图 cross_group_conflict
-            # 标记由去重集合派生, 见上); 置在 stop 之前, api.torrents_stop 经 _sync_paused_state
-            # 改写快照本就带视图脏, 此行保证不依赖该副作用
+            # 标记由去重集合派生, 见上)。!A 系 26-10-13-0540 S1 后这行是**唯一**来源 ——
+            # api.torrents_stop 不再回写快照(原「本就带视图脏」的副作用随 _sync_paused_state
+            # 删除而消失), 删掉本行会让组视图失去这次刷新信号
             store.view_changed = True
             self._ctx.api.torrents_stop(torrent_hashes=dl_hashes)
 

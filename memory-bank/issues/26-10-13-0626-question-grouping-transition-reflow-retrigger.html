@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="grouping-transition-reflow-retrigger">
+<meta name="issue-stamp" content="26-10-13-0626">
+<meta name="issue-type" content="question">
+<meta name="doc-topic" content="seed-state-writeback">
+<meta name="doc-refs" content="memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html, memory-bank/tasks/26-10-13-backend-seed-state-writeback.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)">
+<meta name="issue-summary" content="A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP-&gt;pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。">
+<title>A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛) · question · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 question · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· question</div>
+    <h1>A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)</h1>
+    <p class="lede">A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP-&gt;pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-13-0626-question-grouping-transition-reflow-retrigger</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-13 06:26</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">grouping</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>
+      <strong>发现场景</strong>: 实施 A 系 S1 值层（计划 <a href="../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html">26-10-13-0540</a>，删合成回写）后跑 <code>test.quick</code>，两条 grouping 用例转红：<code>test_grouping_state_change_triggers_check</code> 与 <code>test_grouping_errored_transition_pauses_group</code>。逐行核对后确认二者<strong>不是实现缺陷</strong>，而是 S1 语义变化的显形 —— 用例原本断言「状态不变不重复触发」，在 A 系下该断言的前提（自有停种当场改快照）已不成立。
+    </p>
+    <p>
+      <strong>现象</strong>: A 系 S1 删掉 <code>_sync_paused_state</code> 后，自有「整组停种」不再于动作当轮改写 store 快照，被停成员的 <code>stalledUP → pausedUP</code> 变化要<strong>等到下一轮同步</strong>才进 <code>store.state_changed</code>。而 <code>grouping_mod._handle_state_transitions</code> 的触发谓词只看「本轮变化」（<code>cur.is_complete &amp;&amp; cur.is_stopped &amp;&amp; prev.is_uploading</code>），且它对同一物理停种事件<strong>没有跨轮去重</strong> —— 于是同一组会被判定两次「上传转暂停」：第一次在停种当轮（由外部/其他路径驱动），第二次在下一轮（由自有停种经同步回流驱动）⇒ <strong>追加一次缺文件扫描 + 停种</strong>。
+    </p>
+    <p>
+      <strong>与配置/平台无关</strong>: 只要存在「一次动作把整个做种组（含正在做种的成员）转入暂停」的路径即可触发。当前实现里至少两条：文件大小不一致整组暂停（<code>_check_size_consistency</code>）与缺文件扫描的组内停种（<code>_check_missing_files</code>）。<strong>幂等、无害、一轮即收敛</strong>（第二次扫描结果与第一次一致），故严重度低，但属无谓重复。
+    </p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>触发谓词（<code>grouping_mod.py:205-208</code>，取证 2026-10-13 06:26）—— 只按「本轮 state 变化」判定，无跨轮去重：</p>
+<pre><code>    for h, cur in store.state_changed:
+        prev = state_snapshot.get(h)  # 上一轮 state_enum 枚举
+        if prev is None:
+            continue
+        if not (
+            (cur.is_complete and cur.is_stopped and prev.is_uploading) or (cur.is_errored and not prev.is_errored)
+        ):
+            continue</code></pre>
+    <p>用例侧为迎合该语义而补的「收敛轮」断言（<code>test_grouping.py:201-210</code>，S1 迁移时新增）：</p>
+<pre><code>        # 状态不变 -> 不重复触发
+        # !A 系 26-10-13-0540 S1 语义变更: 上一轮的整组停种(H1+H2)不再当场改写快照, 其中 H2 的
+        #   stalledUP->pausedUP 于**下一轮同步**才可见、并再次满足「上传转暂停」谓词(:206)
+        #   ⇒ 追加一次扫描+停种(幂等)。这是「源无关」的应有之义(2229 裁定), 且一轮即收敛。
+        #   故先跑一个收敛轮, 再断言真正的「状态不变不重复触发」。
+        client.calls.clear()
+        mgr._refresh_torrents()  # 收敛轮: 承接整组停种经同步回流的 H2 状态变化
+        client.calls.clear()
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"状态不变不应重复触发: {client.calls}"</code></pre>
+    <p>同类第二处：<code>test_grouping.py:1198-1201</code>（<code>test_grouping_errored_transition_pauses_group</code>）加了同款「收敛轮」说明。S1 前这两条用例无此轮次、直接断言空调用集，说明该二次触发是 S1 引入的<strong>新</strong>现象。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>一次动作把「含正在做种成员的组」整组转入暂停（如大小不一致整组暂停 / 缺文件扫描组内停种），且该组 <code>check_missing_files</code> 未禁用。则下一轮同步会追加一次 <code>_handle_state_transitions</code> 命中。</td></tr>
+      <tr><td>影响范围</td><td>仅 grouping 缺文件扫描路径多跑一轮；状态机 / 快照正确性 / 视图均不受影响。停种与打标签在 qB 侧幂等，第二次扫描结果与第一次一致。</td></tr>
+      <tr><td>严重度</td><td>低（幂等、一轮收敛、无数据风险）。代价 = 每例一次冗余扫描 + 冗余停种调用 + 可能的重复日志。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号名 + grep 关键词 + 当时行号（行号会漂移，靠符号与 grep 重定位）。</p>
+    <ul>
+      <li><code>src/auto_qb/core/modules/grouping_mod.py:206</code>（取证 2026-10-13 06:26）· 触发谓词「上传转暂停」· grep <code>cur.is_complete and cur.is_stopped and prev.is_uploading</code></li>
+      <li><code>src/auto_qb/core/modules/grouping_mod.py:180-212</code> · <code>_handle_state_transitions</code>（逐 <code>store.state_changed</code> 判定，无跨轮去重）</li>
+      <li><code>src/auto_qb/core/modules/grouping_mod.py:236-248</code> · <code>_check_size_consistency</code>（整组暂停源）· grep <code>文件大小不一致, 暂停整组</code></li>
+      <li><code>src/auto_qb/core/modules/grouping_mod.py:133-141</code> · <code>_scan_triggered_groups</code>（轮内去重集合 <code>triggered</code> —— 注意它只做<strong>同轮</strong>去重，不跨轮）</li>
+      <li><code>tests/test_grouping.py:170</code> / <code>:1169</code> · 两条受影响的用例 · grep <code>def test_grouping_state_change_triggers_check</code></li>
+      <li>关联：<code>src/auto_qb/core/qbapi.py</code> 四入口（S1 已删 <code>_sync_paused_state</code>）· 计划 <a href="../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html">26-10-13-0540</a></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">
+      <strong>已基本定位（结构性副产物，非独立缺陷）</strong>：A 系 S1 使自有停种的可见性从「动作当轮」推迟到「下一轮同步」。<code>_handle_state_transitions</code> 只对<strong>本轮</strong> <code>store.state_changed</code> 判定，且去重只在轮内（<code>triggered</code> 集合，<code>_scan_triggered_groups</code>），<strong>无跨轮去重</strong>。同一物理停种事件因此在两个不同轮次各命中一次谓词 ⇒ 第二次为冗余触发。
+    </div>
+    <p class="hint">
+      待确认：该二次触发是否应在 A 系 S2（<code>own_writes</code> + 局部 deferral）或后续统一处理 —— 若采用「自有停种 hash 登记」的跨轮去重，其登记容器可能与 S2 的 <code>own_writes</code> 有交集，宜一并设计而非各造一套。<strong>已排除</strong>：不是测试替身保真度问题（<code>FakeClient</code> 四方法翻转 state 后现象仍在）、也不是快照错乱。
+    </p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p><strong>方向 A · 接受（零改动）</strong>：认定这是「源无关」语义的应有之义（2229 裁定），代价仅为一次幂等扫描，收敛明确。此时本 issue 可转 <code>Dropped</code>（写明理由）。</p>
+    <p><strong>方向 B · 跨轮去重</strong>：在 grouping 侧维护「已处理过的 (hash, 目标状态) 转换」跨轮去重集合（仿 <code>_missing_scanned_keys</code>，但需跨轮存活 + TTL/有界），或对自有停种的 hash 打登记标记，令 <code>_handle_state_transitions</code> 跳过「本进程自有停种回流」产生的命中。代价：新增状态 + 有界性维护；与 A 系 <code>own_writes</code> 存在合并空间（见 §05）。</p>
+    <p class="hint">结论待拍板，未在本报告实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-13 06:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-13-0626-question-grouping-transition-reflow-retrigger.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

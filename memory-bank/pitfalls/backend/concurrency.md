@@ -45,11 +45,19 @@
   事件规则任务作 origin 续跑后同样由**首行守卫**判死。
 - **处置**: 保持首行守卫; 要打印留档走 `RuleContext.snapshot`(`print_torrent_details` 就是这么做的)。
 
-### QbApi 写方法必须同步 store
+### QbApi 写方法必须同步 store（`state` 是例外: 不回写, 等同步）
 
 - **触发**: 加 / 改 QbApi 的写方法。
-- **判别**: 不同步 store ⇒ **同 tick 读到旧值**。
-- **处置**: 写方法里调 `update_torrent_fields` / `invalidate_*`。
+- **判别**: 不同步 store ⇒ **同 tick 读到旧值**。但 `state` 是**唯一例外** —— 它只由 qB 同步
+  权威驱动, 不由写方法合成回写(A 系 26-10-13-0540 S1 起: `_sync_paused_state` 与
+  `update_torrent_fields(state=)` 均已删除; 快照语义 = 严格等于最近一次同步的应用结果)。
+  理由: 原合成值只写 `pausedUP/pausedDL/stalledUP/stalledDL` 四值 —— 压平值域、可能在异步
+  窗口写错完成位, 且**吞掉「自家停种」这条信号**; 源无关语义要求自家停/起与外部变更一样被
+  转移检测与状态事件看见(26-10-12-2229 裁定)。
+- **处置**: 写方法里调 `update_torrent_fields`(tags/category/save_path/限速等**非 state** 字段)
+  或 `invalidate_*`。state 的「同 tick 新鲜」是**刻意放弃**的: 同 tick 二次停/起可能重发一次
+  请求(qB 幂等, 无害); 要补回见计划 26-10-13-0540 §4.4 的 `pending_writes` 意图标记。
+  校验类决策若可能与自写撞窗, 走同计划 §4.3 的局部 deferral(不在本条目展开)。
 
 ### 视图组装里**绝对不能**发 qB API (硬约束, 不是优化)
 

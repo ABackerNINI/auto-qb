@@ -841,7 +841,11 @@ def test_store_view_changed_consume():
 
 
 def test_store_update_fields_marks_view_changed():
-    """state/save_path/tags/category 写操作置脏(均为视图展示字段); 限速不置脏"""
+    """save_path/tags/category 写操作置脏(均为视图展示字段); 限速不置脏
+
+    !A 系 26-10-13-0540 S1 起 `state` 不再是写方法形参(合成回写删除, 视图脏由同步 delta 的
+    `_VIEW_FIELD_SET` 通路驱动), 故本用例的字段面收敛为 save_path/tags/category。
+    """
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1", state="stalledUP")])
     store.consume_view_changed()
@@ -851,10 +855,10 @@ def test_store_update_fields_marks_view_changed():
     assert store.consume_view_changed() is True  # 组级共同标签列
     store.update_torrent_fields("H1", category="cs")
     assert store.consume_view_changed() is True  # 组级共同分类列
-    store.update_torrent_fields("H1", state="pausedUP")
-    assert store.consume_view_changed() is True
     store.update_torrent_fields("H1", save_path=r"R:\Other")
     assert store.consume_view_changed() is True
+    store.update_torrent_fields("H1", dl_limit=2048)
+    assert store.consume_view_changed() is False  # 限速不参与视图
 
 
 def test_store_reset_runtime_marks_view_changed():

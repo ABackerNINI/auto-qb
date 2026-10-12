@@ -791,7 +791,7 @@ class OpsModule(BaseModule):
         # 回写真值再放回(report 26-10-11-2017 §4.1): 重加走 is_skip_checking=True ⇒ qB 把全部块
         # 视为有效(progress=1 / 本地统计清零 / 状态进 stoppedUP), 而删除前捕获的 tor 仍是"跳检前的
         # 暂停 0%" —— 直接 restore 等于把一份撒谎的快照放回, 且系统随后会拿它做判定(G5/G7 的
-        # is_checking、分组冲突、_sync_paused_state 的完成位), 不只是显示问题。
+        # is_checking、分组冲突的 _CONFLICT_FIELDS、跳检闸门 G3/G4/G6 的状态判定), 不只是显示问题。
         # 决定性时刻直查真值(pitfalls/backend/effect-confirmation.md): 用刚确认种子的同一个
         # torrents_info 结果回写, 把"跳检结果"立刻带进快照, 不等下轮 sync。
         # 失败 fail-closed: 记 warning 即可 —— 种子确已在 qB, 字段下轮 sync 也能跟上, 不改跳检结论。

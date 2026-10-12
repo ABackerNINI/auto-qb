@@ -427,18 +427,30 @@ def test_store_reset_sync():
 
 
 def test_store_update_state_snapshot_from_by_hash():
-    """状态快照由 by_hash 派生(缓存枚举); 自有动作同步过的状态同样计入"""
+    """状态快照由 by_hash 派生(缓存枚举); !只反映**同步应用结果** —— 自有写方法不改 state
+
+    A 系 26-10-13-0540 S1 起 `update_torrent_fields` 无 `state=` 形参(合成回写整段删除):
+    自家停/起的 state 只经下一轮真实 delta 进快照。本守阵钉住两侧契约:
+    ① 同步落地 -> 快照跟随; ② 客户端侧照常翻暂停轴 -> 同轮快照**不动**, 须等下一轮同步。
+    """
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledUP")
     store = TorrentStore(client)
-    store.apply_sync(_api(client, store))
+    api = _api(client, store)
+    store.apply_sync(api)
 
     store.update_state_snapshot()
     assert store.state_snapshot["H1"].is_uploading
 
-    store.update_torrent_fields("H1", state="pausedUP")  # 模拟自有动作停种
+    # 自有停种: 客户端真值翻为暂停(替身 P3), 但快照无回写 -> 同轮不动
+    client.torrents_stop(["H1"])
     store.update_state_snapshot()
-    assert store.state_snapshot["H1"].is_stopped
+    assert store.state_snapshot["H1"].is_uploading, "A 系: 自有动作不在同轮进快照"
+
+    # 下一轮同步: 真值进快照
+    store.apply_sync(api)
+    store.update_state_snapshot()
+    assert store.state_snapshot["H1"].is_stopped, "下一轮同步落真值"
 
 
 # ---------- 降级与异常 ----------

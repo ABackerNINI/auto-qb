@@ -93,59 +93,28 @@ class QbApi:
         self._client.torrents_set_category(category=category, torrent_hashes=torrent_hashes, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, category=category)
 
-    def _sync_paused_state(self, torrent_hashes: Optional[HashType], *, paused: bool) -> None:
-        """暂停/恢复后按各记录**当前是否已完成**写回 state(按完成状态分桶, 逐桶同步)
-
-        **不能硬编码** `stalledUP` / `pausedUP`: 那等于把"正在下载(pausedDL 语义)的种子"
-        标成"已完成 + 上传"—— `is_complete` 由 state 后缀 UP 判定, 一旦为真就会误触下载冲突
-        与缺文件分组分支(grouping.py 一带), 属于"静默的错误分类"而不是显示误差。
-
-        写回只覆盖**完成位 + 暂停位**两根轴: qB 的 stalled / queued / forced / 检查中等细分
-        由下轮 sync 校准(瞬态, 不影响判定)。保留写回本身是为了同 tick 的动作幂等 ——
-        不写回的话, 同一 tick 内第二个 stop 会因 `is_paused` 仍为假而再发一次请求。
-        """
-        hashes = self._to_list(torrent_hashes)
-        buckets: dict = {}
-        for h in hashes:
-            rec = self.store.by_hash.get(h)
-            # !完成位联合判据(加固, report 26-10-11-2017 §4.2/§6.4): 只看 state 后缀 UP 时, 一份
-            #   陈旧的 pausedDL 记录会把"已完成"写成 stalledDL —— p=1 的做种种子被显示成"下载"。
-            #   progress 与 state 同源同步, 任一为真即视为已完成。
-            #   (不并 amount_left: TorrentRecord 该 slot 默认就是 0, 单独成判必假阳性。)
-            enum = getattr(rec, "state_enum", None) if rec is not None else None
-            complete = bool(
-                (enum is not None and getattr(enum, "is_complete", False)) or
-                (rec is not None and getattr(rec, "progress", 0.0) >= 1.0)
-            )
-            if paused:
-                want = "pausedUP" if complete else "pausedDL"
-            else:
-                want = "stalledUP" if complete else "stalledDL"
-            buckets.setdefault(want, []).append(h)
-        for state, hs in buckets.items():
-            self.store.update_torrent_fields(hs, state=state)
-
     def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_start(torrent_hashes=torrent_hashes, **kwargs)
-        self._sync_paused_state(torrent_hashes, paused=False)
 
     def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
-        self._sync_paused_state(torrent_hashes, paused=True)
 
     def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
-        """暂停(issue A-04: 与 torrents_stop 同为暂停轴写操作, 同步 store 快照保持对称)
+        """暂停(与 torrents_stop 同为暂停轴写操作, 纯透传)
 
-        写后同步 _sync_paused_state(坑档 concurrency「QbApi 写方法必须同步 store」):
-        不写回的话, 同 tick 内读 is_paused 仍是旧值, 幂等判定会再发一次请求。
+        !不回写快照(A 系 26-10-13-0540 S1: 删除原 _sync_paused_state 合成回写)。state 是
+        **唯一**由 qB 同步权威驱动的字段 —— 快照语义收敛为「严格 = 最近一次同步的应用结果」；
+        自有停/起与外部变更因此**源无关**: 状态变化只经下一轮真实 delta 被转移检测与状态事件
+        看见(不再是「自家动作当场改写、外部变更等同步」的不对称)。
+
+        代价(刻意): 同 tick 内 is_paused 仍为旧值 ⇒ 第二个同类动作可能重发一次请求(qB 侧
+        幂等, 无功能错误, 只是重复 HTTP 与日志噪声); 需补回时见计划 §4.4 的可选件 pending_writes。
         """
         self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
-        self._sync_paused_state(torrent_hashes, paused=True)
 
     def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
-        """恢复(与 torrents_start 对称, 同步 store 快照; 见 torrents_pause 注)"""
+        """恢复(与 torrents_pause 对称, 纯透传; 见 torrents_pause 注)"""
         self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
-        self._sync_paused_state(torrent_hashes, paused=False)
 
     def torrents_set_upload_limit(
         self,
