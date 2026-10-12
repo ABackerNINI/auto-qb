@@ -11,7 +11,7 @@
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(P5 起 markup 收敛到表壳组件 thead 模式, 本守阵改钉 <tr is="vue:aq-table" mode="thead"> 接线 + HR_TABLE_DEFS 注册表十列键)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复)
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留
-- test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)与右缘渐隐落影两个成分
+- test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 """
 import json
@@ -2025,12 +2025,20 @@ def test_frontend_frozen_column_boundary_wiring():
        (scrollLeft>0 打 / 回 0 摘) —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现;
        三个滚动容器(辅种/种子/追剧)必须各自带表 id 调用它;
     2. CSS: 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格**成对**
-       (漏表头 = 列名残根仍裸露), 且含发丝线(边界)与右缘渐隐落影两个成分。
+       (漏表头 = 列名残根仍裸露), 且只含发丝线(边界)一个成分 —— 原第二条"右缘渐隐落影"
+       (`16px 0 14px -10px rgba(0,0,0,.55)`)已于 2026-10-12 按用户报障整条删除(下条)。
     3. CSS: 三皮肤 `.group-row > :first-child` 必须 `align-self: stretch` —— 行是
        align-items: center, 网格项默认不拉伸, 吸左首格只有单行内容高; 站点/标签等多 chip 格
        换行把行撑高时(小窗常态), 滑入首格下方的 chip 从首格上下两段露出来(2026-10-11 用户
        复报「小窗时站点的徽标不会被名称列挡住」)。真浏览器红验: 关掉 stretch 后名称格 22px
        vs 站点格 71px, chip 成排透出; stretch 后全盖。
+    4. CSS(2026-10-12): 三皮肤 `.is-hscrolled` 规则**不得**再带右缘落影 —— 用户报
+       「WEBUI 名称列后随机出现阴影」。根因不是接线错, 是落影的可见度随**首格高度**变:
+       box-shadow 的 spread -10 先从首格四周内缩 10px 再模糊 14px, 常态行首格仅 22px 高
+       ⇒ 落影矩形塌成 2px、只剩模糊尾巴(近不可见); 站点/标签多 chip 格换行把行撑高
+       (首格 46px+)时才显形 ⇒ 同一个"横滚"状态逐行深浅差 7 倍(桩服务截图实测 Δ 2.0 vs 13.7),
+       读成"随机出现的黑块"。发丝线无此问题(inset 阴影铺满首格, 与高度无关), 故保留。
+       本守阵把"删掉落影"钉成声明式契约(回潮即红)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     # 1. JS: 横滚同步单点 —— 计划 26-10-11-1722 P4 起 menu/selection/shows 三份收敛为
@@ -2064,7 +2072,11 @@ def test_frontend_frozen_column_boundary_wiring():
                     "(行吸左首格与表头吸左首格必须成对声明, 漏表头 = 列名残根仍裸露)")
         body = mo.group(1)
         assert "inset -1px 0 0" in body, f"{ui} 边界提示缺发丝线(inset -1px 0 0)成分 —— 残根无边界可依"
-        assert "rgba(0, 0, 0" in body, f"{ui} 边界提示缺右缘渐隐落影成分 —— 残根读感仍与名称粘连"
+        assert "rgba(0, 0, 0" not in body, (
+            f"{ui} 边界提示又带上了右缘落影(2026-10-12 用户报「名称列后随机出现阴影」已删) —— "
+            "落影可见度随首格高度变(常态行首格 22px 时塌成 2px 近不可见、高行才显形), "
+            "逐行深浅差 7 倍读成随机黑块; 要重新引入须先有「跨行一致」的画法"
+        )
         ms = re.search(r"\.group-row > :first-child \{([^}]*)\}", css)
         assert ms, f"{ui} views.css 缺 .group-row > :first-child 吸左首格规则"
         assert "align-self: stretch" in ms.group(1), (

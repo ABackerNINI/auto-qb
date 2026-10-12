@@ -231,11 +231,17 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
  * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
  * 省略号粘连的坏字, 被误读成渲染 bug。横滚非零时由 sync*HeadScroll 给 .group-table 与表头打
- * .is-hscrolled(三处单点: menu/selection/shows.js), 据此给吸左首格画右缘落影 + 发丝线:
- * 尾字在边界渐隐, "盖住"读成 pane 边界而非破版; 未滚动不画(无物可盖, 视觉保持安静)。 */
+ * .is-hscrolled(三处单点: menu/selection/shows.js), 据此给吸左首格画右缘发丝线:
+ * 尾字被一条列分隔线切开, "盖住"读成 pane 边界而非破版; 未滚动不画(无物可盖, 视觉保持安静)。
+ * !2026-10-12 用户报「名称列后随机出现阴影」⇒ 原规则里的右缘落影
+ *   (`16px 0 14px -10px rgba(0, 0, 0, .55)`)整条删除。根因: 落影可见度随**首格高度**变 ——
+ *   box-shadow 的 spread -10 先从首格四周内缩 10px 再模糊 14px, 常态行首格仅 22px 高 ⇒ 落影矩形
+ *   塌成 2px、只剩模糊尾巴(近不可见); 站点/标签多 chip 格换行把行撑高(首格 46px+)时才显形。
+ *   于是同一个"横滚"状态在逐行之间深浅差 7 倍(实测 Δ 2.0 vs 13.7), 读成"随机出现的黑块"。
+ *   发丝线无此问题(inset 阴影铺满首格, 与高度无关), 故只留发丝线。 */
 .group-table.is-hscrolled .group-row > :first-child,
 .group-head.is-hscrolled > .h-cell:first-child {
-  box-shadow: inset -1px 0 0 var(--border), 16px 0 14px -10px rgba(0, 0, 0, .55);
+  box-shadow: inset -1px 0 0 var(--border);
 }
 
 /* 删除类确认框加宽形态(R05: 560 -> 720; W2-FE-2 DLG-01 再调大一档 720 -> 840 并令牌化,

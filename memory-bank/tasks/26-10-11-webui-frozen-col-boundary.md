@@ -2,15 +2,17 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11 04:07
+**Updated:** 2026-10-12 18:34
 **Topics:** webui-frozen-col-boundary
 **Summary:** 用户报「WEBUI 向右滚动时状态栏会被名称栏遮挡」并附截图。取证(桩服务真浏览器探针 + 截图)确认不是 z 序/层叠 bug: 吸左首格(issue 26-10-06-1717)横滚时相邻列从其下方滑过是冻结列的正确行为, 但未盖满的尾字("做种"的"种"、"下载"的"载")紧贴首格右缘露出, 与名称省略号之间无任何分隔, 读成"名称后面多了个坏字"。修 = 横滚非零时给吸左首格画右缘落影 + 发丝线, 让残根读成 pane 边界: 三个横滚同步单点(`sync*HeadScroll`: menu/selection/shows.js)给 `.group-table` 与吸顶表头打 `.is-hscrolled`(scrollLeft>0 打 / 回 0 摘), 三皮肤 `css/views.css` 据此给行吸左首格与表头吸左首格成对落规则。**用户复报「小窗时站点的徽标不会被名称列挡住」**: 根因 = `.group-row { align-items: center }` 网格项不拉伸, 吸左首格只有单行内容高(实测 22px), 站点/标签多 chip 格换行撑高行(实测 71px)后 chip 从首格上下两段成排漏出; 修 = 首格 `align-self: stretch`(行 padding 14px ≥ 圆角半径, 方角不戳行缘)。机理入坑档 `pitfalls/web-ui/frozen-column.md`(第④⑤条)。test.full 全绿(见基线切片)。
-**Refs:** memory-bank/testing/baselines/26-10-11-0354-webui-frozen-col-boundary.md,memory-bank/pitfalls/web-ui/frozen-column.md,memory-bank/activeContext/26-10-11-0354-webui-frozen-col-boundary.md
+**S5–S7(2026-10-12 第三轮)**: 用户报「WEBUI 名称列后随机出现阴影, 移除阴影」并附截图, 自注「可能是上次修右滑名称遮挡问题时引入的, 或者新表格引擎引起的」。取证(截图逐行测像素 + 桩服务真浏览器复现)确认**是上轮那条边界提示里的右缘落影**(`16px 0 14px -10px rgba(0,0,0,.55)`), **不是**新表格引擎引起: 落影可见度是**首格高度的函数** —— `spread: -10px` 先从首格四周内缩 10px 再 `blur: 14px`, 常态行首格仅 22px 高 ⇒ 落影矩形塌成 2px、只剩模糊尾巴(实测该列最暗处只比行底低 Δ≈2.0/255); 多 chip 格换行把行撑高时首格 46px+ ⇒ 落影矩形 26px+ 完整显形(Δ≈13.7/255)。同一"横滚"状态逐行深浅差 **7 倍**, 只在"刚好被撑高的那几行"冒黑块 —— 正是用户描述的"随机"。修 = 三皮肤 `css/views.css` 删掉落影、只留与高度无关的发丝线(`inset -1px 0 0 var(--border)`); 守阵由"必须有落影成分"翻成"**不得**有 `rgba(0, 0, 0`"(注入回潮即红 / 还原即绿)。机理入坑档第④b条(并推广为"行高不齐的列表别用负 spread 画贴边提示")。test.full 全绿(见基线切片)。
+**Refs:** memory-bank/testing/baselines/26-10-11-0354-webui-frozen-col-boundary.md,memory-bank/testing/baselines/26-10-12-1833-webui-frozen-col-shadow.md,memory-bank/pitfalls/web-ui/frozen-column.md,memory-bank/activeContext/26-10-11-0354-webui-frozen-col-boundary.md
 
 ## 原始请求
 
 > 用户(2026-10-11): 「WEBUI向右滚动时状态栏会被名称栏遮挡, 修复」
 > 用户(2026-10-11, 追问答复): 「全部UI, 种子页+辅种页」「表格里的『状态』列被名称列盖住」「大小窗都触发」+ 截图(暗色, 横滚后名称省略号后露出孤字"截/种")
+> 用户(2026-10-12): 「WEBUI名称列后随机出现阴影, 移除阴影, 注: 可能是上次修右滑名称遮挡问题时引入的, 或者新表格引擎引起的」+ 截图(暗色, 名称列右缘被红框圈出一条暗带, 只在其中一个行高明显更高的行上可见)
 
 ## 思考过程与决策
 
@@ -18,6 +20,12 @@
 - **根因**: 横滚时相邻列滑进吸左首格下方属冻结列正确行为(首格不透明 + z2, 见坑档②), 但**边界没有任何视觉线索** —— 滑入过渡期未盖满的尾字紧贴首格右缘露出, 读成渲染错乱。用户列序"状态"紧跟"名称"时首当其冲(默认列序"大小"紧跟时同理, 探针截到".00 GiB"残根)。
 - **方案**: 不动冻结列行为本身(用户自请的特性), 补**边界落影 + 发丝线**(ag-grid/DataTables 同款处理): CSS 感知不了 scrollLeft, 借三个 `sync*HeadScroll` 单点打标; 行与表头首格成对(表头首格是 translateX 桥接, 不在滚动容器内, 必须单独打)。
 - **红验**: 新守阵 `test_frontend_frozen_column_boundary_wiring` 摘掉 shows.js 的表头打标即红、还原即绿。
+- **第三轮(2026-10-12)决策: 删落影、只留发丝线**, 而不是"把落影画得更一致" —— 落影的不一致来自
+  `box-shadow` 的负 `spread` 与**首格高度**的耦合(spread -10 把矩形内缩到 `首格高 − 20`), 想让它跨行一致
+  就得放弃 box-shadow 换 `::after` 渐变等另一套画法, 而落影本身的增量价值只是"边界更重一点";
+  发丝线(`inset`, 铺满首格, 与高度无关)已完整承担"残根读成 pane 边界"的职能 ⇒ 取"删"而非"重画"。
+  用户报障原文只要求"移除阴影", 故**未动**发丝线与 `.is-hscrolled` 打标接线(边界线索保留, 避免上轮
+  「状态列被名称列盖住」回归)。
 
 ## 实现计划
 
@@ -36,8 +44,12 @@
 | S2b | 吸左首格 align-self: stretch | Done |
 | S3 | 静态守阵 + 红验 | Done |
 | S4 | 验证 + 知识库收尾 | Done |
+| S5 | 三皮肤 views.css 删右缘落影(只留发丝线) | Done |
+| S6 | 守阵断言翻向(`in` → `not in`) + 红验 | Done |
+| S7 | 真浏览器复验 + 基线 / 坑档 / 切片 / 档案收尾 | Done |
 
 ## 进度日志
 
 - **2026-10-11 03:54** 全部落地。开工 sync 快进 8503f4d5→86138d33 → 字面理解"底部状态栏被盖"探针未复现 → 用户截图改判"状态列残根" → 复现(frozen-060: 名称后粘连".00 GiB") → JS 打标 ×3 + CSS 边界落影 ×3 皮肤 → 真浏览器暗/亮主题截图验证(残根渐隐、回 0 无绘制) → e2e fast 60 passed → test.full 全绿(基线切片 26-10-11-0354) → 坑档 frozen-column.md 补第④条 → kb.index 重建。
 - **2026-10-11 04:07** 用户复报「小窗时站点的徽标不会被名称列挡住」→ 真浏览器注入多 chip 复现(`.group-row { align-items: center }` 网格项不拉伸, 首格 22px vs 行 71px, chip 上下两段成排漏出) → 三皮肤吸左首格补 `align-self: stretch` → 骑线位置截图对比(修复前徽标透出/修复后全盖, 只剩骑线残根在落影内渐隐) → 守阵补 stretch 断言 → e2e fast 60 passed → test.full 3113 passed 持平(基线切片更新) → 坑档补第⑤条 → kb.index 重建。
+- **2026-10-12 18:34** 用户报「名称列后随机出现阴影」→ 开工 sync 快进 d01bcc27→b52b0ec4 → **先定位归属**: `git log -S"16px 0 14px -10px"` 命中 62bb3245(本专题上轮), 排除"新表格引擎"假设(表格统一 U0–U5 波未碰该规则) → 截图逐行测像素(13 行: 12 行 Δ1.3–2.0 / 唯一被撑高的那行 Δ13.7)+ 桩服务真浏览器读 computed `box-shadow` 确认**同一规则、同一次横滚** → 根因锁定 `spread: -10px` 让落影矩形随首格高度塌缩(22px 首格 → 2px 矩形) → 三皮肤删落影留发丝线 → 守阵翻向 + 注入红验(注入回 atlas 即红 / 还原即绿) + 真浏览器复验(修后只剩 `inset -1px` 一项, 截图该列与行底同值) → test.full 3146 passed + 4 skipped(基线切片 26-10-12-1833) → 坑档 ④ 改口径 + 新增 ④b 条 → 切片 / 档案回写 → kb.index 重建。
