@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (65)
+## Open (62)
 
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
 - [bug] [引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移)](../26-10-12-0800-bug-webui-table-head-a11y.html) — D3 排序并引擎后, 旧手搓表头的 role=button+tabindex+aria-sort a11y 件套未随载体迁入引擎 .h-cell(click-only div), 全引擎表头键盘不可达、读屏不知排序态
@@ -13,9 +13,6 @@
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](../26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_speed 与 fmt_size 同「单位表+>=div 格式化」骨架, 只差单位表与后缀
 - [refactor] [平台判定旁路 infra 单点](../26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html) — utils.is_windows/is_linux/is_mac 单点被 autostart.py(6处)+tray/app.py 裸 sys.platform.startswith 绕过
-- [refactor] [infra URL 分解口径两份(sanitize/mask)](../26-10-11-0352-refactor-infra-url-decompose-dup.html) — sanitize_tracker_url 与 mask_tracker_url 共享 netloc 去 userinfo/缺 scheme path 兜底/SANITIZE_FALLBACK 各写一遍
-- [refactor] [infra utils 小样板重复(host 收集 / 文件三态探针)](../26-10-11-0352-refactor-infra-utils-small-helper-dup.html) — match_tracker_confs 内 host 收集 与 extract_tracker_hostnames; file_access Local/Mapped 的 exists/isdir/isfile 三连
-- [refactor] [infra _win_user32 与 _win_kernel32 惰性绑定骨架重复](../26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup.html) — utils._win_user32 与 _win_kernel32 同「惰性取 DLL+逐个绑签名+缓存」骨架
 - [refactor] [icon.ico 路径推导 notify 与 tray 逐字同](../26-10-11-0352-refactor-notify-tray-icon-path-dup.html) — notify.ICON_ICO 与 tray/app.ICON_ICO 逐字同 os.path.join(dirname(dirname(__file__)), assets, icon.ico)
 - [refactor] [TorrentRecord HR 判定入口前置守卫重复](../26-10-11-0352-refactor-torrents-hr-entry-guard-dup.html) — check_hr_condition/hr_managed/check_hr_satisfied 三处逐字同「无 hr 返回 False + hr_excluded 返回 False」守卫
 - [refactor] [torrents 快照字段表与视图字段表各手抄一份](../26-10-11-0352-refactor-torrents-snapshot-view-field-dup.html) — compat._EXTENSION_FIELDS 与 view._VIEW_FIELDS 两处枚举同一批 qB 字段名(本面唯一 pylint R0801 命中)
@@ -78,11 +75,14 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (175)
+## Done (178)
 
 - [docs] [种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列](../26-10-12-1911-docs-webui-torrent-column-default-hidden.html) — TORRENT_COLUMNS 扩展段注释声明默认隐藏, 但 13 列均无 hide:true; loadColState 播种判据 filter(c=>c.hide) 因此不隐藏 ⇒ 种子页默认 28 列全显(与注释及文件头口径不一致)。
 - [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [docs] [三份基线切片缺三行头 > 摘要 致 kb.check 恒红](../26-10-11-1630-docs-baselines-missing-summary-header.html) — 26-10-10-2245/2306/2335 三份 webui 基线切片缺 `> 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦
+- [refactor] [infra URL 分解口径两份(sanitize/mask)](../26-10-11-0352-refactor-infra-url-decompose-dup.html) — sanitize_tracker_url 与 mask_tracker_url 共享 netloc 去 userinfo/缺 scheme path 兜底/SANITIZE_FALLBACK 各写一遍
+- [refactor] [infra utils 小样板重复(host 收集 / 文件三态探针)](../26-10-11-0352-refactor-infra-utils-small-helper-dup.html) — match_tracker_confs 内 host 收集 与 extract_tracker_hostnames; file_access Local/Mapped 的 exists/isdir/isfile 三连
+- [refactor] [infra _win_user32 与 _win_kernel32 惰性绑定骨架重复](../26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup.html) — utils._win_user32 与 _win_kernel32 同「惰性取 DLL+逐个绑签名+缓存」骨架
 - [refactor] [rules 表达式盘用量取数重复](../26-10-11-0352-refactor-rules-expr-disk-helper-dup.html) — env._freespace/_disk_total/_disk_used 三份逐字同 + FreespaceCondition.match 同构(取数+错误映射四处)
 - [refactor] [rules 数值谓词校验三处各写](../26-10-11-0352-refactor-rules-expr-numeric-predicate-dup.html) — env._num_unary/_min_max 与 eval._as_num 重复实现「参数必须是数值」校验(is_number 已存在)
 - [refactor] [rules/expr/parser 死件运算符常量与 types 重复](../26-10-11-0352-refactor-rules-parser-dead-op-constants-dup.html) — parser.py _ARITH_OPS/_ORDER_OPS/_EQ_OPS/_LOGIC_OPS 本文件从不使用, 与 types.py 逐字同

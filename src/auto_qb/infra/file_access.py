@@ -138,15 +138,28 @@ class FileAccess:
 
     存在性语义(exists/isdir/isfile)可能返回 UNDETERMINED; 取值语义(getsize/
     disk_usage/scandir/mkdir)失败抛 FileAccessError(子类可另有 NotSupported)。
+    存在性三连在基类经 `_probe` 单点实现(issue 26-10-11-0352-refactor-infra-utils-small-helper-dup):
+    子类只实现 `_probe_path` 给出 syscall 路径(None = 不可判定 => UNDETERMINED),
+    Local 直通与 Mapped 映射分支不再各写一遍 exists/isdir/isfile。
     """
-    def exists(self, path: str) -> bool:
+    def _probe_path(self, path: str) -> Optional[str]:
+        """存在性探测的 syscall 路径; None = 不可判定(映射 miss/逃逸) => UNDETERMINED"""
         raise NotImplementedError
+
+    def _probe(self, os_fn, path: str):
+        """三态探测单点: 取 syscall 路径后交 os_fn(os.path.exists 等)判定"""
+        p = self._probe_path(path)
+        return UNDETERMINED if p is None else os_fn(p)
+
+    def exists(self, path: str) -> bool:
+        """存在性三态: True/False; 不可判定为 UNDETERMINED(判定逻辑见 _probe)"""
+        return self._probe(os.path.exists, path)
 
     def isdir(self, path: str) -> bool:
-        raise NotImplementedError
+        return self._probe(os.path.isdir, path)
 
     def isfile(self, path: str) -> bool:
-        raise NotImplementedError
+        return self._probe(os.path.isfile, path)
 
     def getsize(self, path: str) -> int:
         """文件大小(字节); 不存在/不可判定抛 FileAccessError"""
@@ -184,14 +197,9 @@ class LocalFileAccess(FileAccess):
         """本地 syscall 用路径: 剥前缀(幂等)后统一加 Windows 长路径前缀(非 Windows 空操作)"""
         return utils.add_long_path_prefix_for_win(_strip_win_prefix(path))
 
-    def exists(self, path: str) -> bool:
-        return os.path.exists(self._pref(path))
-
-    def isdir(self, path: str) -> bool:
-        return os.path.isdir(self._pref(path))
-
-    def isfile(self, path: str) -> bool:
-        return os.path.isfile(self._pref(path))
+    def _probe_path(self, path: str) -> Optional[str]:
+        """本地实现: syscall 路径恒可得 —— Local 永远不产生 UNDETERMINED"""
+        return self._pref(path)
 
     def getsize(self, path: str) -> int:
         return os.path.getsize(self._pref(path))
@@ -293,17 +301,10 @@ class MappedFileAccess(FileAccess):
             raise FileAccessError(f"路径不可判定(未命中 fs.path_map 映射): '{path}'")
         return cp
 
-    def exists(self, path: str) -> bool:
-        cp = self.map_to_container(path)
-        return UNDETERMINED if cp is None else os.path.exists(cp)
-
-    def isdir(self, path: str) -> bool:
-        cp = self.map_to_container(path)
-        return UNDETERMINED if cp is None else os.path.isdir(cp)
-
-    def isfile(self, path: str) -> bool:
-        cp = self.map_to_container(path)
-        return UNDETERMINED if cp is None else os.path.isfile(cp)
+    def _probe_path(self, path: str) -> Optional[str]:
+        """容器实现: 映射 miss/逃逸返回 None => 存在性 UNDETERMINED(取值类访问才抛
+        FileAccessError) —— miss 绝不判「不存在」, 三态判定逻辑见基类 _probe"""
+        return self.map_to_container(path)
 
     def getsize(self, path: str) -> int:
         return os.path.getsize(self._require_mapped(path))

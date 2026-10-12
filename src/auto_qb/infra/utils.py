@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import time as dtime
 from functools import wraps
 from urllib.parse import urlparse
-from typing import List
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -272,11 +272,16 @@ def compare(op: str, left, right) -> bool:
     return left == right
 
 
-def extract_tracker_hostnames(trackers_info: list) -> set:
-    """从 tracker 信息列表提取去重的 hostname 集合"""
+def _hosts_of(urls) -> set:
+    """URL 可迭代对象 -> 去重小写 hostname 集合(取不出 host 的条目跳过)
+
+    host 收集口径单点(issue 26-10-11-0352-refactor-infra-utils-small-helper-dup):
+    `extract_tracker_hostnames`(条目 dict 列表)与 `match_tracker_confs`(URL 串列表)
+    原先各写一遍 `urlparse -> hostname -> lower -> set`, 改一处漏一处; 两者入参形态
+    不同, 由调用方适配成 URL 串可迭代对象后共用本函数。
+    """
     hosts = set()
-    for t in trackers_info:
-        url = t.get("url")
+    for url in urls:
         if not url:
             continue
         try:
@@ -288,8 +293,45 @@ def extract_tracker_hostnames(trackers_info: list) -> set:
     return hosts
 
 
+def extract_tracker_hostnames(trackers_info: list) -> set:
+    """从 tracker 信息列表提取去重的 hostname 集合"""
+    return _hosts_of(t.get("url") for t in trackers_info)
+
+
 # sanitize_tracker_url 解析失败时的占位串(与成功返回值同形状: 一眼能看出"这里本该有个地址")
 SANITIZE_FALLBACK = "<invalid-url>"
+
+
+def _split_url(url) -> Optional[Tuple[str, str, str, str]]:
+    """tracker URL 分解单点: (scheme, netloc, path, query); 取不出 host 一律 None
+
+    sanitize / mask 两个脱敏函数共用的分解口径(issue 26-10-11-0352-refactor-infra-url-decompose-dup)
+    —— 两者本就要求"同函数即比对一致", 口径分散两份必漂移:
+    - 非字符串 / 空 / 无法解析 -> None(调用方各自落地 SANITIZE_FALLBACK, 绝不抛异常);
+    - netloc 去 userinfo(`@` 之后), scheme 与 netloc 一律小写;
+    - 缺 scheme 时 urlparse 把 host 落进 path 首段, 取首段兜底为 netloc, 首段已消费
+      不再进 path(分隔符 "/" 由 rest 补回, 与 mask 的 path 语义对齐);
+    - 兜底后仍取不出 host -> None。
+    """
+    if not isinstance(url, str):
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    try:
+        parts = urlparse(raw)
+    except Exception:
+        return None
+    netloc = (parts.netloc or "").rsplit("@", 1)[-1]
+    path = parts.path or ""
+    if not netloc and path:
+        first, _, rest = path.partition("/")
+        netloc = first.rsplit("@", 1)[-1].split("?")[0]
+        # 首段已被当作 host 消费掉, 不再重复进 path; 分隔符 "/" 由 rest 补回
+        path = f"/{rest}" if rest else ""
+    if not netloc:
+        return None
+    return parts.scheme.lower(), netloc.lower(), path, parts.query or ""
 
 
 def sanitize_tracker_url(url) -> str:
@@ -300,27 +342,16 @@ def sanitize_tracker_url(url) -> str:
     (漏一个名字就等于漏一个站)。所以这里**不猜参数名**, 直接把 path 与 query 整段丢掉:
     排查只需要"哪个站"的信息(主地址已足够), 而任何形态、任何命名的凭据都在被丢弃的那一段里。
 
-    - 凭据也可能藏在 userinfo 里(`http://user:pass@host/announce`), 故 netloc 只取 `@` 之后的部分。
-    - 入参异常(空 / 非字符串 / 无法解析)一律返回 SANITIZE_FALLBACK, **绝不抛异常** —— 调用方都在
-      日志路径上, 脱敏失败不该把业务动作(qB 写操作)打断。
+    URL 分解(去 userinfo / 缺 scheme 首段兜底 / 失败哨兵)与 `mask_tracker_url` 共用 `_split_url`
+    单点(issue 26-10-11-0352-refactor-infra-url-decompose-dup) —— 两侧口径漂移即比对失真。
+    入参异常(空 / 非字符串 / 无法解析)一律返回 SANITIZE_FALLBACK, **绝不抛异常** —— 调用方都在
+    日志路径上, 脱敏失败不该把业务动作(qB 写操作)打断。
     """
-    if not isinstance(url, str):
+    parts = _split_url(url)
+    if parts is None:
         return SANITIZE_FALLBACK
-    raw = url.strip()
-    if not raw:
-        return SANITIZE_FALLBACK
-    try:
-        parts = urlparse(raw)
-    except Exception:
-        return SANITIZE_FALLBACK
-    # scheme 缺失时 urlparse 把 host 落进 path, 取首段兜底; 带 `@` 时取其后半(去 userinfo)
-    netloc = (parts.netloc or "").rsplit("@", 1)[-1]
-    if not netloc and parts.path:
-        netloc = parts.path.split("/", 1)[0].rsplit("@", 1)[-1].split("?")[0]
-    if not netloc:
-        return SANITIZE_FALLBACK
-    scheme = parts.scheme.lower()
-    return f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
+    scheme, netloc, _path, _query = parts
+    return f"{scheme}://{netloc}" if scheme else netloc
 
 
 # 虚拟 tracker 条目前缀(DHT/PeX/LSD 与 qB 内部 "**" 标记): 非真实站点, 没有可脱敏的凭据,
@@ -347,8 +378,9 @@ def mask_tracker_url(url) -> str:
       不依赖调用方过滤(sanitize 会把裸 "[DHT]" 小写破坏前缀识别, mask 不能踩同一个坑)。
     - R2 非字符串/空/解析不出 host -> SANITIZE_FALLBACK, 绝不抛异常(同 sanitize 口径:
       两侧同函数 => 比对一致; 多条不可解析 => 命中多条 => error 不猜)。
-    - R3 scheme 保留并小写; 缺 scheme 时从 path 首段兜底取 host(镜像 sanitize 的处理)。
-    - R4 netloc 去 userinfo(@ 之后), host 小写, 端口保留。
+    - R3/R4 分解口径与 sanitize 共用 `_split_url` 单点(issue 26-10-11-0352-refactor-infra-url-decompose-dup):
+      scheme 保留并小写; 缺 scheme 时从 path 首段兜底取 host(首段已消费, 不再进 path);
+      netloc 去 userinfo(@ 之后), host 小写, 端口保留。
     - R5 path 保留; 末段 >=16 位高熵(可能藏 path 凭据)整段替换为 hash16, 其余原样; fragment 丢弃。
     - R6 query 按 & 拆段, 有 = 的段改写为 名=hash16(原值)——值取原文子串, 不做百分号解码;
       裸名参数原样; 段序不变。铁律: **不按参数名挑**, 所有值一律 hash(同 sanitize 的动机:
@@ -359,39 +391,24 @@ def mask_tracker_url(url) -> str:
     # R1: 原样透传(在 strip 之前判, 裸 "[DHT]" 才不会被后续路径破坏)
     if url.startswith(VIRTUAL_TRACKER_PREFIXES):
         return url
-    raw = url.strip()
-    if not raw:
+    # R3/R4: 分解(去 userinfo / 缺 scheme 首段兜底 / 失败哨兵)与 sanitize 共用 _split_url
+    parts = _split_url(url)
+    if parts is None:
         return SANITIZE_FALLBACK
-    try:
-        parts = urlparse(raw)
-    except Exception:
-        return SANITIZE_FALLBACK
-    # R3/R4: netloc 取 @ 之后(去 userinfo); 缺 scheme 时 urlparse 把 host 落进 path,
-    # 取首段兜底, 且首段已被当作 host 消费掉, 不再重复进 path
-    netloc = (parts.netloc or "").rsplit("@", 1)[-1]
-    path = parts.path or ""
-    if not netloc and path:
-        first, _, rest = path.partition("/")
-        netloc = first.rsplit("@", 1)[-1].split("?")[0]
-        # 首段已被当作 host 消费掉, 不再重复进 path; 分隔符 "/" 由 rest 补回
-        path = f"/{rest}" if rest else ""
-    if not netloc:
-        return SANITIZE_FALLBACK
+    scheme, netloc, path, query = parts
     # R5: 末段高熵整段换 hash(端点名 announce/announce.php 不命中, 保留诊断价值)
     if path:
         head, _, last = path.rpartition("/")
         if _HIGH_ENTROPY_SEGMENT_RE.match(last):
             path = f"{head}/{_hash16(last)}"
     # R6: query 全值 hash(不按参数名挑), 裸名参数原样, 段序不变
-    query = parts.query or ""
     if query:
         segments = []
         for seg in query.split("&"):
             name, eq, value = seg.partition("=")
             segments.append(f"{name}={_hash16(value)}" if eq else seg)
         query = "&".join(segments)
-    scheme = parts.scheme.lower()
-    host_part = f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
+    host_part = f"{scheme}://{netloc}" if scheme else netloc
     return host_part + path + (f"?{query}" if query else "")
 
 
@@ -428,14 +445,8 @@ def display_host(host) -> str:
 
 def match_tracker_confs(trackers: dict, urls: list):
     """按 hostname 精确匹配 tracker 配置(含子域名), 返回所有匹配的 TrackerConfig"""
-    hosts = set()
-    for url in urls:
-        try:
-            host = urlparse(url).hostname
-            if host:
-                hosts.add(host.lower())
-        except Exception:
-            continue
+    # host 收集口径与 extract_tracker_hostnames 共用 _hosts_of(issue 26-10-11-0352-refactor-infra-utils-small-helper-dup)
+    hosts = _hosts_of(urls)
     result = []
     for conf in trackers.values():
         for domain in conf.domains:
@@ -906,6 +917,31 @@ _bound_user32 = None
 _bound_kernel32 = None
 
 
+def _win_dll(name: str, sigs):
+    """按 DLL 名惰性取句柄 + 逐个绑签名(骨架单点, issue 26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup)
+
+    `_win_user32` / `_win_kernel32`(及将来的新 DLL)共用「取句柄 -> 逐个 `_win_bind`
+    绑 argtypes/restype」流程, 只差 DLL 名与签名清单。取不到返回 None; is_windows
+    早退与缓存由调用方(`_win_*` getter)负责 —— 签名必须绑死的理由见 `_win_user32`。
+    """
+    try:
+        import ctypes
+
+        dll = getattr(ctypes.windll, name)
+    except (ImportError, AttributeError, OSError):
+        return None
+    for fn_name, argtypes, restype in sigs:
+        _win_bind(getattr(dll, fn_name, None), argtypes, restype)
+    return dll
+
+
+def _WIN_KERNEL32_SIGNATURES():
+    """kernel32 各 API 的 (名字, argtypes, restype) 清单 —— 同 _WIN_USER32_SIGNATURES 口径"""
+    from ctypes import wintypes
+
+    return (("GetCurrentThreadId", [], wintypes.DWORD), )
+
+
 def _win_user32():
     """user32 句柄(惰性取用 + **逐个绑签名** + 拿不到返回 None)
 
@@ -922,41 +958,28 @@ def _win_user32():
     —— 返回 None 让调用方早退, 而不是靠"恰好抛了异常"决定行为。
     测试可 monkeypatch 本函数注入假 user32(理由同 `_WIN_USER32_SIGNATURES` 的存在: 真调
     shell API 会把开发机窗口摆弄乱)。
+
+    ⚠ is_windows 早退必须在缓存判定**之前**: 非 Windows 上即便留有陈旧缓存也先返回 None
+    (守阵 test_win_user32_kernel32_non_windows_none 不重置 `_bound_*`, 靠该顺序保证)。
     """
     global _bound_user32
     if not is_windows():
         return None
     if _bound_user32 is not None:
         return _bound_user32
-    try:
-        import ctypes
-
-        u = ctypes.windll.user32
-    except (ImportError, AttributeError, OSError):
-        return None
-    for name, argtypes, restype in _WIN_USER32_SIGNATURES():
-        _win_bind(getattr(u, name, None), argtypes, restype)
-    _bound_user32 = u
-    return u
+    _bound_user32 = _win_dll("user32", _WIN_USER32_SIGNATURES())
+    return _bound_user32
 
 
 def _win_kernel32():
-    """kernel32 句柄(同上: 惰性 + 绑签名; 目前只需 `GetCurrentThreadId`)"""
+    """kernel32 句柄(同 `_win_user32`: 惰性 + 绑签名; 目前只需 `GetCurrentThreadId`)"""
     global _bound_kernel32
     if not is_windows():
         return None
     if _bound_kernel32 is not None:
         return _bound_kernel32
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        k = ctypes.windll.kernel32
-    except (ImportError, AttributeError, OSError):
-        return None
-    _win_bind(getattr(k, "GetCurrentThreadId", None), [], wintypes.DWORD)
-    _bound_kernel32 = k
-    return k
+    _bound_kernel32 = _win_dll("kernel32", _WIN_KERNEL32_SIGNATURES())
+    return _bound_kernel32
 
 
 def _win_explorer_hwnds() -> set:

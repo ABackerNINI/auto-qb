@@ -252,13 +252,15 @@ def test_fsmock_disk_usage_uses_recorded_free_space():
 # 26-09-27 文件访问层收编(plan 26-09-27-1407): 三个探测函数从 grouping/checking/env 收进
 # infra/file_access.py 单点 —— 消费方经 get_file_access() 间接调用; mock 按模块属性
 # (os.path.exists / os.path.getsize / shutil.disk_usage)打桩, 包装层内部仍是属性访问 ⇒ 覆盖不变。
+# 26-10-12 三态探针收编进基类(issue 26-10-11-0352-refactor-infra-utils-small-helper-dup): Local/Mapped
+# 只实现 _probe_path, exists/isdir/isfile 由基类 _probe(os.path.exists, ...) 以**属性引用**调用
+# —— mock 按模块属性打桩覆盖不变, 但不再是 `os.path.exists(` 调用形态, 计数归零故不再钉;
+# pathlib / os.stat 旁路仍由 _UNMOCKED_PATTERNS 抓(假绿防线不变)。
 _EXPECTED_PROBES = {
-    "infra/file_access.py":
-        {
-            "os.path.exists": 2,  # Local + Mapped 两实现各 1
-            "os.path.getsize": 2,
-            "shutil.disk_usage": 2,
-        },
+    "infra/file_access.py": {
+        "os.path.getsize": 2,
+        "shutil.disk_usage": 2,
+    },
 }
 # 不被 mock 覆盖的探测写法: 出现在上述文件里即视为守阵失败
 # (pathlib 由 "Path(" / "pathlib" 两个模式兜住 —— .is_dir(/.is_file( 会误伤 os.scandir 的

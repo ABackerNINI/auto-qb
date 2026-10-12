@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-12-2110-infra-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="infra utils 小样板重复(host 收集 / 文件三态探针)">
 <meta name="issue-summary" content="match_tracker_confs 内 host 收集 与 extract_tracker_hostnames; file_access Local/Mapped 的 exists/isdir/isfile 三连">
 <title>infra utils 小样板重复(host 收集 / 文件三态探针) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-infra-utils-small-helper-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-12 21:10 — 用户指派认领（「认领并修复」），状态 <strong>In Progress</strong>；复验：grep <code>extract_tracker_hostnames</code> / <code>map_to_container</code> 锚点在，两处小样板仍在（现象复现）</li>
+      <li>2026-10-12 21:25 — 已修并验证，状态 <strong>Done</strong>（test.full 3147 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-12-2125-infra-dup-code-fixes</code>）：①按建议抽 <code>_hosts_of(urls)</code>，条目 dict 列表经生成器适配后与 <code>match_tracker_confs</code> 共用；②探针单点形态与建议略有出入——os 判定三连收在基类 <code>FileAccess._probe(os_fn, path)</code>，Local/Mapped 只实现 <code>_probe_path</code> 给 syscall 路径（原建议「各类传自己的 fn」抽完后基类仍留三份 exists/isdir/isfile，收口不彻底）；行为不变，Mapped miss 仍 UNDETERMINED。连带 sim_fsmock 覆盖说明同步（exists 由调用变属性引用，mock 覆盖不变）</li>
     </ul>
   </section>
 

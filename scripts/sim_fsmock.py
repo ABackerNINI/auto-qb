@@ -4,7 +4,8 @@
 auto-qb 碰磁盘的入口经 `os.path.*` / `shutil.disk_usage`(2026-09-27 起收进
 infra/file_access.py 单点, plan 26-09-27-1407; grouping/checking/env 经 get_file_access() 间接调用):
 
-    infra/file_access.py  Local/Mapped 两实现   os.path.exists + os.path.getsize + shutil.disk_usage
+    infra/file_access.py  基类 FileAccess.exists 经 _probe 传 os.path.exists 属性引用 + getsize / disk_usage 直调
+    (Local/Mapped 只实现 _probe_path; 2026-10-12 三态探针收编单点)
     (消费方: 缺文件扫描 grouping.py / 跳检前检查 checking.py / 表达式 exists()·disk_*() env.py)
 
 三条硬条件(不满足就会出错):
@@ -41,9 +42,12 @@ __all__ = ["FsMock", "install", "MockCoverage"]
 
 # 本模块覆盖的 FS 调用点(静态守阵 CORPUS.fs_mock_coverage 的期望值)
 MockCoverage = {
-    "os.path.exists": "src/auto_qb/infra/file_access.py(Local.exists + Mapped.exists; 2026-09-27 收编单点)",
-    "os.path.getsize": "src/auto_qb/infra/file_access.py(Local.getsize + Mapped.getsize)",
-    "shutil.disk_usage": "src/auto_qb/infra/file_access.py(Local.disk_usage + Mapped.disk_usage)",
+    "os.path.exists":
+        "src/auto_qb/infra/file_access.py(基类 FileAccess.exists 经 _probe 传 os.path.exists 属性引用; 2026-10-12 三态探针收编单点)",
+    "os.path.getsize":
+        "src/auto_qb/infra/file_access.py(Local.getsize + Mapped.getsize)",
+    "shutil.disk_usage":
+        "src/auto_qb/infra/file_access.py(Local.disk_usage + Mapped.disk_usage)",
 }
 
 

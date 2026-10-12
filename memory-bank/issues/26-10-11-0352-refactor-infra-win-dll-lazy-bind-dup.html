@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-12-2110-infra-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="infra _win_user32 与 _win_kernel32 惰性绑定骨架重复">
 <meta name="issue-summary" content="utils._win_user32 与 _win_kernel32 同「惰性取 DLL+逐个绑签名+缓存」骨架">
 <title>infra _win_user32 与 _win_kernel32 惰性绑定骨架重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-12 21:10 — 用户指派认领（「认领并修复」），状态 <strong>In Progress</strong>；复验：grep <code>_bound_user32</code> / <code>_bound_kernel32</code> 锚点在（行号已漂移：入池时 836-886，现 909-959），骨架重复仍在（现象复现）</li>
+      <li>2026-10-12 21:25 — 已修并验证，状态 <strong>Done</strong>（test.full 3147 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-12-2125-infra-dup-code-fixes</code>）：按建议抽 <code>_win_dll(name, sigs)</code> 参数化骨架；<code>_bound_*</code> 全局与 <code>_win_user32</code> / <code>_win_kernel32</code> monkeypatch 注入点保留，<code>is_windows()</code> 早退在缓存判定之前（守阵顺序要求）；新增 <code>_WIN_KERNEL32_SIGNATURES()</code> 与 user32 版同口径。守阵 <code>test_win_user32_binds_signatures</code> / <code>test_win_user32_and_kernel32_bind_signatures</code> / <code>test_win_user32_kernel32_non_windows_none</code> 全绿</li>
     </ul>
   </section>
 
