@@ -3435,8 +3435,8 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     ):
         assert re.search(rf"\n    {re.escape(key)} \{{\n      {re.escape(guard)} this\._fitAddPop", dg), \
             f"dialogs.js 缺 {key} 的限高 watcher(meta 分类下拉与三下拉同族, 撑变形同样会犯)"
-    assert 'if (!this.addOpen && !this.metaOpen) return;' in at, \
-        "_fitAddPop 必须同时放行 meta 对话框(两处共用同一套限高, 只认 addOpen 会让 meta 侧恒不生效)"
+    assert 'if (!this.addOpen && !this.metaOpen && !this.moveOpen) return;' in at, \
+        "_fitAddPop 必须同时放行 meta 对话框与设定位置对话框(三处共用同一套限高, 只认 addOpen 会让 meta/move 侧恒不生效)"
 
     # 5. meta 分类下拉补失焦收层 + 进 window click 兜底名单(原本两处都漏 = 点对话框别处下拉不收)
     m = re.search(r'<input id="meta-category"(.*?)>', pv, re.S)
@@ -3480,6 +3480,85 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     meta_close = re.search(r"metaCatBlurClose\(\) \{(.*?)\n    \},", dg, re.S)
     assert meta_close and '_popBlurShouldHold(["meta-category"])' in meta_close.group(1), \
         "metaCatBlurClose 收层前没问守卫(meta 分类下拉与三下拉同族, 缺位同闪)"
+
+
+def test_frontend_move_dialog_combobox_wiring():
+    """设定位置对话框(2026-10-13)保存路径下拉接线守阵(静态防回潮)
+
+    单种子/单组/多选批量三入口统一改, 保存路径下拉候选按「最近使用」排序(与添加种子保存路径同口径)。
+    钉:
+      1. 三入口名/签名(editMove/editMoveMulti/editMoveGroup)与下游投递(editMove→_editPost,
+         editMoveMulti/editMoveGroup→_bulkEditPost)不变 —— 守阵 + 触发登记表钉这些;
+      2. 排序单点复用 _addOrderByRecent + _addRecencyMaps(跨视图取数, 与添加种子同口径);
+      3. combobox 收层/限高/悬同与添加种子三下拉 + meta 分类同套口径(@focusout + 40ms合帧 +
+         _popBlurShouldHold + watcher重限 + comboHoverIdx move 分支);
+      4. 对话框模板接线: moveOpen 遮罩 + move-path label @mousedown.prevent @click.stop +
+         @focusout收层 + @keydown键盘导航 + ref=movePathList + 三皮肤成对 CSS。
+    """
+    import re
+
+    shared = os.path.join(STATIC_ROOT, "shared")
+    dr = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    cmd = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    at = open(os.path.join(shared, "add_torrent.js"), encoding="utf-8").read()
+    lf = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    st = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    pv = open(os.path.join(shared, "tpl", "move-dialog.html"), encoding="utf-8").read()
+
+    # 1. 三入口名/签名 + 下游投递不变(与触发登记表/守阵钉)
+    assert re.search(r"\n    async editMove\(h = \"\"\)", dr), "drawer.js 缺 editMove(h) 单种子入口"
+    assert re.search(r"\n    async editMoveMulti\(targets = null", dr), "drawer.js 缺 editMoveMulti(targets = null) 多选入口"
+    assert re.search(r"\n    editMoveGroup\(\)", cmd), "commands.js 缺 editMoveGroup() 单组入口"
+    assert "this._editPost(this.moveSingleHash, \"location\"" in dr, "submitMoveDialog 单种子没走 _editPost"
+    assert "this._bulkEditPost(this.moveTargets, \"location\"" in dr, "submitMoveDialog 批量没走 _bulkEditPost"
+
+    # 2. 排序单点复用(与添加种子同口径, 跨视图取数)
+    assert "_addOrderByRecent(paths, recent.path)" in dr, "loadMoveOptions 没走 _addOrderByRecent 排序单点"
+    assert "this._addRecencyMaps()" in dr, "loadMoveOptions 没走跨视图取数单点 _addRecencyMaps"
+
+    # 3. combobox 收层/限高/悬同同套口径
+    blur = re.search(r"movePathBlurClose\(\) \{(.*?)\n    \},", dr, re.S)
+    assert blur and "setTimeout" in blur.group(1) and "clearTimeout" in blur.group(1), \
+        "movePathBlurClose 必须定时合帧(同步收层会被 label 转发回焦打断 = 闪烁)"
+    assert '_popBlurShouldHold(["move-path"])' in (blur.group(1) if blur else ""), \
+        "movePathBlurClose 收层前没问守卫(与三下拉 + meta 同族)"
+    open_move = re.search(r"openMovePathMenu\(\) \{(.*?)\n    \},", dr, re.S)
+    assert open_move and "_movePopBlurCancel()" in open_move.group(1), \
+        "openMovePathMenu 必须撤销挂起的失焦收层(焦点转回输入框时菜单不闪)"
+    for key, guard in (
+        ("movePathMenu(v)", "if (v)"), ("movePathInput()", "if (this.movePathMenu)"),
+        ("movePathOptions()", "if (this.movePathMenu)")
+    ):
+        assert re.search(rf"\n    {re.escape(key)} \{{\n      {re.escape(guard)} this\._fitAddPop", dr), \
+            f"drawer.js 缺 {key} 的限高 watcher(与三下拉 + meta 同族, 撑变形同样会犯)"
+    assert 'comboHoverIdx("move"' in at or "kind === \"move\"" in at, \
+        "comboHoverIdx 缺 move 分支(悬同接管走错 state 对象 = 上下键选中项闪烁)"
+
+    # 4. 对话框模板接线
+    assert 'v-if="moveOpen"' in pv, "move-dialog.html 缺 moveOpen 遮罩"
+    m = re.search(r'<label[^>]*for="move-path"[^>]*>', pv, re.S)
+    assert m and "@click.stop" in m.group(0) and "@mousedown.prevent" in m.group(0), \
+        "move-path label 缺 @click.stop + @mousedown.prevent(与三下拉 + meta 同因同修)"
+    mi = re.search(r'<input[^>]*id="move-path"(.*?)>', pv, re.S)
+    assert mi and '@focusout="movePathBlurClose"' in mi.group(1), "#move-path 缺 @focusout 收层"
+    assert mi and '@keydown="onMovePathKeydown' in mi.group(1), "#move-path 缺 @keydown 键盘导航"
+    assert 'ref="movePathList"' in pv, "move-dialog.html 缺 ref=movePathList(限高量拿不到容器)"
+    assert "@mouseup.self=\"maskCloseIfArmed(closeMove)\"" in pv, "move 遮罩没接 mousedown 记臂位 + mouseup.self 才关"
+
+    # 5. 三皮肤成对 CSS(漏一档 = 该皮肤对话框无样式)
+    for ui in _UI_ALL:
+        css_dir = os.path.join(STATIC_ROOT, ui, "css")
+        blob = "".join(
+            open(os.path.join(css_dir, f), encoding="utf-8").read()
+            for f in sorted(os.listdir(css_dir)) if f.endswith(".css")
+        )
+        assert ".modal.move-dialog" in blob, f"{ui} 缺 .modal.move-dialog 样式(对话框无宽度)"
+        assert ".move-targets" in blob, f"{ui} 缺 .move-targets 样式(目标行无排版)"
+
+    # 6. Esc 退栈链 + escBusy 同步(与 meta 同层)
+    assert "this.moveOpen) this.closeMove()" in lf, "lifecycle.js Esc 退栈链缺 moveOpen→closeMove"
+    assert "this.moveOpen" in lf and "movePathMenu = false" in lf, \
+        "lifecycle.js window click 兜底名单缺 movePathMenu(与三下拉同层)"
 
 
 def test_frontend_ctx_submenu_single_entry_and_hover_close():

@@ -599,6 +599,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal.meta-dialog { width: var(--modal-w-form); }
 .meta-targets { margin: 0 0 12px; color: var(--fg-dim); font-size: 12.5px; }
 .meta-targets b { color: var(--fg); }
+/* 设定位置对话框(2026-10-13): 复用 .add-dialog-combo/.add-input-row/.add-pop/.pop-* 视觉(与添加种子
+ * 三下拉 + meta 分类同套); 仅对话框宽度 + 目标/注意行为新增。成对定义见 atlas/console(css-perf-parity)。 */
+.modal.move-dialog { width: var(--modal-w-form); }
+.move-targets { margin: 0 0 10px; color: var(--fg-dim); font-size: 12.5px; }
+.move-targets b { color: var(--fg); }
+.move-note { margin: 0 0 12px; color: var(--fg-muted); font-size: 12px; overflow-wrap: anywhere; }
 .meta-tags { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto; margin: 2px 0 12px;
   overscroll-behavior: contain; }
 

@@ -258,8 +258,8 @@ window.AQB_ADD = {
      * 改为 @mousemove + 位移门限: 位移 <3px(静止 / 合成事件)不接管, 真实移动才把活动项交给光标;
      * 门限坐标按下拉分存(state.js *MouseAt), 开层单点复位(openAddCatMenu/openAddTagMenu/openMetaCatMenu) */
     comboHoverIdx(kind, i, ev) {
-      const atKey = kind === "cat" ? "addCatMouseAt" : kind === "tag" ? "addTagMouseAt" : "metaCatMouseAt";
-      const hiKey = kind === "cat" ? "addCatHi" : kind === "tag" ? "addTagHi" : "metaCatHi";
+      const atKey = kind === "cat" ? "addCatMouseAt" : kind === "tag" ? "addTagMouseAt" : kind === "move" ? "movePathMouseAt" : "metaCatMouseAt";
+      const hiKey = kind === "cat" ? "addCatHi" : kind === "tag" ? "addTagHi" : kind === "move" ? "movePathHi" : "metaCatHi";
       const x = ev.clientX, y = ev.clientY, at = this[atKey];
       if (at) {
         const dx = x - at.x, dy = y - at.y;
@@ -425,7 +425,7 @@ window.AQB_ADD = {
      * 复用本方法(它的输入行与 .add-dialog-body 结构一致, watcher 挂在 dialogs.js)。 */
     _fitAddPop(refName) {
       this.$nextTick(() => {
-        if (!this.addOpen && !this.metaOpen) return;  // meta 对话框(标签与分类)复用同一套限高
+        if (!this.addOpen && !this.metaOpen && !this.moveOpen) return;  // meta 对话框(标签与分类)/设定位置对话框复用同一套限高
         const inner = this.$refs[refName];
         if (!inner) return;
         const menu = inner.closest(".add-pop") || inner;

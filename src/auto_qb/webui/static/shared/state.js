@@ -380,6 +380,21 @@ window.AQB_STATE = {
       metaCatMouseAt: null,  // 悬停接管门限坐标(comboHoverIdx, 同 addCatMouseAt)
       metaNewTags: "",       // 新标签输入(逗号分隔可批量)
       metaBusy: false,       // 有命令在飞(防误关 + 防重复投递)
+      // 设定位置对话框(2026-10-13): 单种子/单组/多选批量三入口统一改, 保存路径下拉候选
+      // 按「最近使用」排序(与添加种子保存路径同口径, 复用 add_torrent.js 的 _addRecencyMaps/
+      // _addOrderByRecent/_addNormPath 单点)。下拉候选 = /api/paths 已知保存路径; 单种子预填
+      // 当前 save_path, 批量/单组无预填(各值不同, 预填误导)。目标集合打开时刻锁定(与 meta 同口径)。
+      moveOpen: false,
+      moveTargets: { groupKeys: [], memberHashes: [] },  // 打开时刻锁定的目标(URL 编码态, 与 meta 同)
+      moveCount: 0,          // 打开时刻目标种子数(展示用)
+      moveSingleHash: "",    // 单种子模式该 hash("" = 批量/单组); 提交按此分 _editPost / _bulkEditPost
+      moveScope: "",         // 文案 scope("" = 多选"选中的" / "该组的" / 单种子无)
+      movePathOptions: [],   // 保存路径候选(GET /api/paths, 按最近使用排序)
+      movePathInput: "",     // 新保存路径输入框(自由输入 + 下拉候选; 回车/候选点击应用)
+      movePathMenu: false,   // 保存路径下拉展开态
+      movePathHi: -1,        // 保存路径下拉键盘高亮
+      movePathMouseAt: null, // 悬停接管门限坐标(comboHoverIdx, 同 addCatMouseAt)
+      moveBusy: false,       // 有命令在飞(防误关 + 防重复投递)
     };
   },
   computed: {

@@ -79,6 +79,7 @@ window.AQB_LIFECYCLE = {
        * @focusout(2026-10-03 补)收, 这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂
        * @click.stop —— 否则点 label 走"window click 收层 → label 转发 click 重开" = 闪烁。 */
       this.metaCatMenu = false;
+      this.movePathMenu = false;  // 设定位置对话框(2026-10-13)保存路径下拉: 同族浮层, 与 meta 同套收层口径
       // 通知面板(S4): 非模态浮层同族 —— 点空白收层(面板根与入口钮 .sb-err 都已 @click.stop 拦截)
       this.errPanelOpen = false;
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
@@ -97,6 +98,7 @@ window.AQB_LIFECYCLE = {
       else if (this.speedOpen) this.closeSpeedDialog();  // 限速弹窗(SPD-04): 与统计面板同层
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
+      else if (this.moveOpen) this.closeMove();  // 设定位置对话框(2026-10-13): 与 meta 同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawerMenu.visible) this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 同为抽屉内浮层

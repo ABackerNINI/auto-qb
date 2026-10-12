@@ -608,23 +608,128 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "share-limits", body, "分享率限制已更新");
     },
-    /* 设定位置…: 新保存路径输入(确认文案注明离开辅种组) → POST location */
+    /* 设定位置…(2026-10-13): 单种子/单组/多选批量三入口统一改, 保存路径下拉候选按「最近使用」
+     * 排序(与添加种子保存路径同口径, 复用 add_torrent.js 的 _addRecencyMaps/_addOrderByRecent/_addNormPath
+     * 单点 —— 全局 mixin 合并, 跨模块互调与拆分前逐字等价)。下拉候选 = /api/paths 已知保存路径;
+     * 单种子预填当前 save_path, 批量/单组无预填(各值不同, 预填误导)。目标集合打开时刻锁定(与 meta 同口径)。
+     * combobox 收层/限高/悬停与添加种子三下拉 + meta 分类同套口径(见 pitfalls/web-ui/combobox-focusout-close)。
+     * 三入口名/签名(editMove/editMoveMulti/editMoveGroup)与下游投递(editMove→_editPost,
+     * editMoveMulti/editMoveGroup→_bulkEditPost)不变 —— 守阵 + 触发登记表钉这些。 */
     async editMove(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
-      const res = await this._openModal({
-        title: "设定位置",
-        body: "将种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。",
-        fields: [{ key: "location", label: "新保存路径", value: d ? d.save_path || "" : "", placeholder: "D:\\downloads\\target" }],
-        okText: "移动", cancelText: "取消",
+      return this.openMoveDialog({ groupKeys: [], memberHashes: [hash] }, "", hash, d ? d.save_path || "" : "");
+    },
+    /* ---------------- 设定位置对话框状态机(单种子/单组/多选批量共用) ---------------- */
+    openMoveDialog(targets, scope, singleHash, prefill) {
+      this.moveTargets = targets;
+      this.moveOpen = true;
+      this.moveSingleHash = singleHash;
+      this.moveScope = scope;
+      this.moveCount = targets.groupKeys.length + targets.memberHashes.length;
+      this.movePathMenu = false;
+      this.movePathHi = -1;
+      this.movePathMouseAt = null;
+      this.moveBusy = false;
+      this.movePathInput = prefill || "";
+      this.loadMoveOptions();
+      // 开对话框即聚焦输入框(与 _openModal 原行为): 键盘路径 Enter 即确认, 鼠标路径下拉候选展开
+      this.$nextTick(() => {
+        const el = this.$refs.movePathInputEl;
+        if (el) el.focus();
       });
-      if (!res) return;
-      if (!res.location) {
+    },
+    closeMove() {
+      if (this.moveBusy) return;  // 命令回执等待期不允许误关(与 meta 同口径)
+      this.moveOpen = false;
+    },
+    async loadMoveOptions() {
+      // 路径候选拉(与添加种子保存路径同端点); 单端点失败静默降级为空(不阻塞对话框, 照 loadAddOptions 先例)
+      let paths = [];
+      try {
+        paths = (await this.api("/api/paths")).paths || [];
+      } catch (e) {
+        paths = [];
+      }
+      if (this.moveOpen) {  // 仅对话框仍开着时回填(慢响应不得污染下一次打开)
+        // 「最近使用」排序单点复用(与添加种子保存路径同口径): 跨视图取数 _addRecencyMaps 现算
+        const recent = this._addRecencyMaps();
+        this.movePathOptions = _addOrderByRecent(paths, recent.path);
+      }
+    },
+    openMovePathMenu() {
+      this._movePopBlurCancel();  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
+      this.movePathMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
+      this.movePathHi = this.movePathOptions.indexOf(this.movePathInput.trim());
+      this.movePathMenu = true;
+      this._hiScroll("movePathList");
+    },
+    moveApplyPath(p) {
+      // 候选点击即回填 + 提交(对话框提交直接, 与添加种子回填态不同: 这里无后续"添加"步)
+      this.movePathInput = p;
+      this.movePathMenu = false;
+      this.movePathHi = -1;
+      this.submitMoveDialog();
+    },
+    onMovePathKeydown(e) {
+      // 与 meta 分类下拉(onMetaCatKeydown)同套: 上下循环高亮(开层即展开), 回车即回填+提交(菜单未开时提交当前输入),
+      // Esc 只收面板(阻断冒泡不关对话框)
+      const opts = this.movePathOptions;
+      const n = opts.length;
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
+        e.preventDefault();
+        if (!this.movePathMenu) {
+          this.movePathMenu = true;
+          this.movePathHi = e.key === "ArrowDown" ? -1 : 0;
+        }
+        this.movePathHi = (this.movePathHi + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+        this._hiScroll("movePathList");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const p = this.movePathMenu && this.movePathHi >= 0 ? opts[this.movePathHi] : this.movePathInput;
+        if (p && p.trim()) {
+          this.movePathInput = p;
+          this.movePathMenu = false;
+          this.movePathHi = -1;
+          this.submitMoveDialog();
+        }
+      } else if (e.key === "Escape" && this.movePathMenu) {
+        e.stopPropagation();
+        this.movePathMenu = false;
+        this.movePathHi = -1;
+      }
+    },
+    /* 失焦收层(与添加种子三下拉 + meta 分类同套口径, 见 pitfalls/web-ui/combobox-focusout-close):
+     * 40ms 合帧守卫是必需的 —— 点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框,
+     * 同步收层 = 关了又开; 焦点真回来由 openMovePathMenu 撤销。收层前问 _popBlurShouldHold(单点 add_torrent.js)。 */
+    movePathBlurClose() {
+      clearTimeout(this._movePopBlurT);
+      this._movePopBlurT = setTimeout(() => {
+        if (this._popBlurShouldHold(["move-path"])) return;
+        this.movePathMenu = false;
+        this.movePathHi = -1;
+      }, 40);
+    },
+    _movePopBlurCancel() {
+      clearTimeout(this._movePopBlurT);
+    },
+    async submitMoveDialog() {
+      if (this.moveBusy) return;
+      const location = String(this.movePathInput || "").trim();
+      if (!location) {
         this.toast("路径不能为空", "warn");
         return;
       }
-      await this._editPost(hash, "location", { location: res.location }, "已移动");
+      this.moveBusy = true;
+      let ok = false;
+      try {
+        if (this.moveSingleHash) ok = await this._editPost(this.moveSingleHash, "location", { location }, "已移动");
+        else ok = await this._bulkEditPost(this.moveTargets, "location", { location }, "批量移动");
+      } finally {
+        this.moveBusy = false;
+      }
+      if (ok) this.moveOpen = false;  // 成功即关(与添加种子同口径); 失败留对话框开着让用户改路径
     },
     /* ---------------- 批量编辑(多选右键, 计划 26-10-02-1955 W2): 批量限速 / 批量移动 ----------------
      * 与单选编辑同一家族, 但三处不同: 目标集合是整个选中集合(_bulkTargets 口径, 组键 + 成员 hash
@@ -665,26 +770,15 @@ window.AQB_DRAWER = {
       }
       await this._bulkEditPost(targets, "limits", body, "批量速度限制");
     },
-    /* 批量设定位置…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N。
-     * targets / scope 可覆盖: 单组右键(editMoveGroup)传该组成员 + scope="该组的"。 */
+    /* 批量设定位置…: 与单种子同对话框状态机(openMoveDialog), 多选无预填(各值不同, 预填误导)。
+     * targets / scope 可覆盖: 单组右键(editMoveGroup)传该组成员 + scope="该组的"; 缺省 = 多选右键。
+     * 提交走 _bulkEditPost(与单种子 _editPost 同链路, 由 submitMoveDialog 按 moveSingleHash 分). */
     async editMoveMulti(targets = null, scope = "选中的") {
       this.menu.visible = false;
       targets = targets || this._bulkTargets();
       const n = targets.groupKeys.length + targets.memberHashes.length;
       if (!n) return;
-      const raw = await this.promptDialog("批量移动", "", {
-        body: `将${scope} ${n} 个目标的文件移动到新路径。注意: 移动后相关种子将离开当前辅种组。`,
-        placeholder: "D:\\downloads\\target", okText: "下一步",
-      });
-      if (raw === null) return;
-      const location = String(raw || "").trim();
-      if (!location) {
-        this.toast("路径不能为空", "warn");
-        return;
-      }
-      const ok = await this.confirmDialog("确认设定位置", `将把 ${n} 个目标的保存路径移动到: ${location}`, { okText: "设定位置" });
-      if (!ok) return;
-      await this._bulkEditPost(targets, "location", { location }, "批量移动");
+      return this.openMoveDialog(targets, scope, "", "");
     },
     /* 批量跳检…(计划 26-10-02-1955 W3; S4 起确认框升级为预检对话框 26-10-05-0314):
      * 目标集合缺省 = _bulkTargets(多选右键), 单组右键(skipCheckGroup)传该组成员;
@@ -717,8 +811,10 @@ window.AQB_DRAWER = {
         const r = await this.waitCmd(resp.cmd_id);
         if (r.ok) this.toast(`已执行: ${okText}(${groupKeys.length + memberHashes.length} 个目标)`, "ok", 2500);
         else this.toast(`${okText}失败: ${r.error}`, "error", 8000);
+        return r.ok;
       } catch (e) {
         if (!e.auth) this.toast(`${okText}命令发送失败: ` + e.message, "error");
+        return false;
       }
     },
     /* 重命名…: 种子显示名(不改磁盘文件名) → POST rename */
@@ -1401,6 +1497,20 @@ window.AQB_DRAWER = {
     drawerTrackerVirtual(url) {
       const u = String(url || "");
       return u.startsWith("**") || ["[DHT]", "[PeX]", "[LSD]"].some((p) => u.startsWith(p));
+    },
+  },
+  watch: {
+    /* 设定位置下拉限高(与添加种子三下拉 + meta 分类同口径, add_torrent.js::_fitAddPop 注释):
+     * 开层(watcher movePathMenu)/候选到位(loadMoveOptions)/过滤词变化(movePathInput)三处都要重限,
+     * 少一处出现"删字后候选涨回全量把对话框撑变形"。 */
+    movePathMenu(v) {
+      if (v) this._fitAddPop("movePathList");
+    },
+    movePathInput() {
+      if (this.movePathMenu) this._fitAddPop("movePathList");
+    },
+    movePathOptions() {
+      if (this.movePathMenu) this._fitAddPop("movePathList");
     },
   },
 };

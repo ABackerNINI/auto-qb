@@ -1,0 +1,55 @@
+    <!-- 设定位置对话框(2026-10-13): 单种子/单组/多选批量三入口统一改, 保存路径下拉候选
+         按「最近使用」排序(与添加种子保存路径同口径, 复用 add_torrent.js 的 _addRecencyMaps/
+         _addOrderByRecent/_addNormPath 单点 —— 全局 mixin 合并, 跨模块互调与拆分前逐字等价)。
+         下拉候选 = /api/paths 已知保存路径; 单种子预填当前 save_path, 批量/单组无预填(各值不同,
+         预填误导)。目标集合打开时刻锁定(与 meta 同口径)。逻辑在 shared/drawer.js(AQB_DRAWER),
+         复用 .modal/.add-dialog 视觉体系(.move-dialog)。combobox 收层/限高/悬停与添加种子三下拉
+         + meta 分类同套口径(见 pitfalls/web-ui/combobox-focusout-close)。 -->
+    <div v-if="moveOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMove)">
+      <div class="modal add-dialog move-dialog" role="dialog" aria-modal="true" aria-label="设定位置">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+          <span>设定位置</span>
+          <button class="bt icon add-dialog-x" @click="closeMove">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <p class="move-targets">作用于 <b>{{ moveCount }}</b> 个种子(打开时锁定)</p>
+          <p class="move-note">将把种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。</p>
+          <div class="add-dialog-field add-dialog-combo">
+            <!-- label 必须 @mousedown.prevent + @click.stop(与添加种子三下拉 + meta 分类同因同修):
+                 @click.stop 挡 window click 收层; @mousedown.prevent 挡 mousedown 默认动作的 blur ——
+                 不挡则 movePathBlurClose 的 40ms 合帧定时器在按住期间先收层, 松手转发 refocus 再重开 = 闪烁。
+                 缺一即回归, 走查须 delay>=120ms。 -->
+            <label class="add-dialog-label" for="move-path" @mousedown.prevent @click.stop>新保存路径</label>
+            <div class="add-input-row">
+              <input ref="movePathInputEl" id="move-path" v-model="movePathInput" class="add-dialog-input" type="text"
+                     placeholder="下拉选择或自由输入, 如 D:\downloads\target" autocomplete="off" spellcheck="false"
+                     @focus="openMovePathMenu" @click.stop="openMovePathMenu"
+                     @input="movePathHi = -1; movePathMenu = true" @focusout="movePathBlurClose"
+                     @keydown="onMovePathKeydown($event)">
+              <transition name="pop">
+                <div v-if="movePathMenu" class="pop-menu add-pop" @click.stop ref="movePathList">
+                  <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ movePathOptions.length }}</span></div>
+                  <div class="add-pop-list">
+                    <div v-for="(p, i) in movePathOptions" :key="p" class="pop-item add-pop-item"
+                         :class="{ on: i === movePathHi }" :data-hi="i === movePathHi ? '1' : '0'"
+                         @mousedown.prevent="moveApplyPath(p)" @mousemove="comboHoverIdx('move', i, $event)">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                      <span class="pop-value">{{ p }}</span>
+                    </div>
+                    <p v-if="!movePathOptions.length" class="pop-empty">暂无历史位置, 可直接自由输入</p>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="bt ghost" @click="closeMove">取消</button>
+          <button class="bt primary" :disabled="moveBusy" @click="submitMoveDialog">设定位置</button>
+        </div>
+      </div>
+    </div>
