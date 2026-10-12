@@ -172,7 +172,10 @@ const _QB_SCOPES = {
     // 打开的种子详情其流量页签同样要拉要画。
     active: (t) => !!(t.drawerIsSeed && t.drawer.open && t.drawer.tab === "traffic"
       && t.page === "groups"),
-    stale: (t, h) => !!(t.qbTrafficOn && t.drawerIsSeed && t.drawer.open
+    // !stale 才是「可落袋」: 谓词 = **否定式**(响应此刻已不属于本图 = 丢弃)。W2–W6 机械改名
+    // 时这里被写成 `!!(...)`(把取反写成双重取反), 语义整个翻转 —— 恰在本图活跃时判「过期」,
+    // 数据永不落袋、loading 卡死不清 -> 种子流量页签恒停在「正在加载流量数据…」(2026-10-12 修)。
+    stale: (t, h) => !(t.qbTrafficOn && t.drawerIsSeed && t.drawer.open
       && t.drawer.tab === "traffic" && t.drawer.hash === h),
   },
   group: {
@@ -186,7 +189,8 @@ const _QB_SCOPES = {
     // page 守卫与 global 同(drawerVisible 单点): 非主内容页面板不在 DOM, 不拉不画
     active: (t) => t.drawerIsTraffic && t.drawer.open && t.page === "groups"
       && t.drawer.scope === "group",
-    stale: (t, k) => !!(t.qbTrafficOn && t.drawerIsTraffic && t.drawer.open
+    // 同 torrent: 谓词是否定式, 同一波改名里一并被写成 `!!(...)`(同一处缺陷, 一并修复)
+    stale: (t, k) => !(t.qbTrafficOn && t.drawerIsTraffic && t.drawer.open
       && t.drawer.scope === "group" && t.qbGroupKey === k),
   },
 };
