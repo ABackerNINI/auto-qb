@@ -37,6 +37,11 @@ const CASES = [
    * 修法 = --tbl-pad-x / --tbl-gap 变量, 列头与行同取, 变体只声明值。 */
   { tab: 'trackers', tpl: '06', tid: 'drawerTrackerV06', cols: 8 },
   { tab: 'content', tpl: '11', tid: 'drawerContentV11', cols: 7 },
+  /* W3 实测自洽面(探针 2026-10-13): 05 单列分段(列头 1 格 = 行 1 格); 07/08 十列
+   * (files 渐进列已删, 列常驻)。 */
+  { tab: 'trackers', tpl: '05', tid: 'drawerTrackerV05', cols: 1 },
+  { tab: 'peers', tpl: '07', tid: 'drawerPeerV07', cols: 10 },
+  { tab: 'peers', tpl: '08', tid: 'drawerPeerV08', cols: 10 },
 ];
 
 for (const skin of SKINS) {
@@ -97,5 +102,53 @@ for (const skin of SKINS) {
         expect(probe.alignDiff, '列头与值格 text-align 一致').toEqual([]);
       });
     }
+
+    /* 04 状态卡片栅格 —— 非网格形态, 不适用「三处计数」表格规格(W3 探针实测:
+     * 列头被变体有意隐藏, 容器两列卡片栅格, 行是 display:block 卡片)。本规格钉的是
+     * 卡片形态本身不回潮成表格、栅格不塌:
+     *   ① 列头 display:none(变体声明, 不许以「修对齐」之名复活);
+     *   ② 行容器 display:block(卡片), 不是 grid 行;
+     *   ③ 容器 .group-table 两列栅格(栅格数 = 变体声明, 塌成单列/三列即红);
+     *   ④ 卡内块结构 dt04-head/dt04-stats 存在(head 必须, stats 必须, msg 可选)。 */
+    test(`drawerTrackerV04 卡片形态规格: 列头隐藏 + 行是卡片 + 容器两列栅格 (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.addInitScript(
+        (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
+        { trackers: '04' },
+      );
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+      await page.dblclick('.torrent-row >> nth=0', { force: true });
+      const drawer = page.locator('.drawer-dock > .drawer');
+      await expect(drawer).toBeVisible({ timeout: 5_000 });
+      await drawer.locator('.drawer-tabs button', { hasText: 'Tracker' }).click();
+
+      const row = drawer.locator('.group-row[data-table="drawerTrackerV04"]').first();
+      await expect(row).toBeVisible({ timeout: 5_000 });
+
+      const probe = await page.evaluate(() => {
+        const head = document.querySelector('.group-head[data-table="drawerTrackerV04"]');
+        const table = document.querySelector('[data-dt-table-anchor="drawerTrackerV04"] .group-table');
+        const rowEl = document.querySelector('.group-row[data-table="drawerTrackerV04"]');
+        if (!head || !table || !rowEl) return null;
+        return {
+          headDisplay: getComputedStyle(head).display,
+          tableGTC: getComputedStyle(table).gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length,
+          rowDisplay: getComputedStyle(rowEl).display,
+          hasHead: !!rowEl.querySelector(':scope > .dt04-head'),
+          hasStats: !!rowEl.querySelector(':scope > .dt04-stats'),
+        };
+      });
+
+      expect(probe, '未找到 04 的表格面(改名/未挂载? 同步本 spec)').not.toBeNull();
+      expect(probe.headDisplay, '列头隐藏是卡片形态的声明(不许复活)').toBe('none');
+      expect(probe.tableGTC, '容器保持两列卡片栅格(塌成单列/三列即红)').toBe(2);
+      expect(probe.rowDisplay, '行是卡片(block), 不是网格行').toBe('block');
+      expect(probe.hasHead, '卡内有 dt04-head 块').toBe(true);
+      expect(probe.hasStats, '卡内有 dt04-stats 块').toBe(true);
+    });
   });
 }

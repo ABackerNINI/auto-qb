@@ -88,8 +88,11 @@ for (const skin of SKINS) {
       const drawer = await openPeersVariant(page, '07');
       const anchor = drawer.locator('[data-dt-table-anchor="drawerPeerV07"]');
 
-      // 列子集(D2): 无 files(桩不带) → omitEmpty 整列省略 → 9 列
-      await expect(anchor.locator('.group-head .h-cell')).toHaveCount(9);
+      // files 列常驻(26-10-13-0811 渐进已删): 无 files 数据仍 10 列, 值格出 — 占位
+      await expect(anchor.locator('.group-head .h-cell')).toHaveCount(10);
+      await expect(
+        anchor.locator('.group-row[data-table="drawerPeerV07"]').first().locator('.dt07-files'),
+      ).toHaveText('—');
 
       // 默认序 = upspeed 降序(D3 defKey/defDir): 首行 = 上传峰值的对端(i=2, 稳定序取首个)
       await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
@@ -111,10 +114,10 @@ for (const skin of SKINS) {
       const cols = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb_cols_v5') || '{}'));
       expect(cols?.pages?.drawerPeerV07?.w?.client, '拖宽必须按 table-id 持久化(引擎同一漏斗)').toBeTruthy();
 
-      // 右键隐藏: client 列头右键 → 隐藏「客户端」 → 9→8 列 + 落盘
+      // 右键隐藏: client 列头右键 → 隐藏「客户端」 → 10→9 列 + 落盘
       await anchor.locator('.h-cell.hc-client').click({ button: 'right' });
       await page.locator('.ctx-menu').locator('.ctx-item', { hasText: '隐藏「客户端」' }).click();
-      await expect(anchor.locator('.group-head .h-cell'), '右键隐藏即时生效').toHaveCount(8);
+      await expect(anchor.locator('.group-head .h-cell'), '右键隐藏即时生效').toHaveCount(9);
       const cols2 = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb_cols_v5') || '{}'));
       expect(cols2?.pages?.drawerPeerV07?.hidden, '隐藏必须按 table-id 持久化').toContain('client');
 
@@ -124,7 +127,7 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer2 = await openPeersVariant(page, '07');
       const anchor2 = drawer2.locator('[data-dt-table-anchor="drawerPeerV07"]');
-      await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(8 列)').toHaveCount(8);
+      await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(9 列)').toHaveCount(9);
     });
 
     /* 红验手法: 初始数据落袋后把 peers 端点**挂起不响应**(路由 hang, fetch 永远 pending,

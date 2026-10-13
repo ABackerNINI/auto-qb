@@ -1019,7 +1019,11 @@ def test_drawer_table_bridge_wiring():
         assert f"const {cst} = [" in app, f"{cst} 未声明(变体列集 = 数据声明, D2)"
         assert f"{reg_key}: {cst}" in tbl_cols_blk, \
             f"{reg_key} 未注册进 TABLE_COLUMNS(_visibleCols 按 page 取列定义)"
-    assert "omitEmpty: true" in app, "files 渐进列缺 omitEmpty 声明(无 files 时整列省略失守)"
+    # 2026-10-13(计划 26-10-13-0811 铁律): 抽屉侧 omitEmpty 渐进声明清零 —— 轨道数随数据
+    # 浮动是「多一格/少一列」类症状温床; 列常驻 + 渲染器 — 占位(avTxt / dt07·dt08-files)。
+    # 机制 _colsOmitEmpty 保留(主列表「文件」列等共有路径仍在用)。
+    assert "omitEmpty: true" not in app, \
+        "抽屉列定义残留 omitEmpty 声明(渐进列随数据整列消失, 轨道数浮动, 已废除)"
     for comp in (
         "aq-dt07-cells", "aq-dt08-cells", "aq-dt09-cells", "aq-dt04-cells", "aq-dt05-cells", "aq-dt06-cells",
         "aq-dt10-cells", "aq-dt11-cells"

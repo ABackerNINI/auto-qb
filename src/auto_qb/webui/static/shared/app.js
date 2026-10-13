@@ -240,11 +240,15 @@ const DRAWER_STUB_V0_COLUMNS = [
 /* 变体表格体列集(U2, 计划 26-10-12-0527 D2/D6): 每变体一份 —— 列子集/专属列/默认序/可排性
  * 都是**数据声明**(以经典用户列集为底裁剪/重排/追加)。omisEmpty = 渐进列(qB files 字段随
  * 版本浮动, 无任何对端携带时整列省略 —— 原变体口径; 引擎单点在 columns.js _colsOmitEmpty,
- * 省略态下表头/行/grid/对齐同走一条 _visibleCols, nofiles 9 列错位 bug 类结构性根除)。 */
+ * 省略态下表头/行/grid/对齐同走一条 _visibleCols, nofiles 9 列错位 bug 类结构性根除)。
+ * 2026-10-13(26-10-13-0811): files 渐进声明已删 —— 列常驻 + — 占位达成同款根除,
+ * 且轨道数不再随数据浮动。 */
+/* omitEmpty 已删(计划 26-10-13-0811): 渐进列轨道数随数据浮动, 是「多一格/少一列」类症状
+ * 温床; 列常驻, 缺值由渲染器出 — 占位(dt07/dt08-files 的 dimc 暗色)。 */
 const DRAWER_PEER_FILE_COLUMN = {
-  key: "files", label: "文件", tpl: "minmax(110px, 1fr)", sortable: false, align: "left", omitEmpty: true,
+  key: "files", label: "文件", tpl: "minmax(110px, 1fr)", sortable: false, align: "left",
 };
-/* 07 四卡仪表: 10 列(上传速度在下载速度之前 —— 变体惯例), files 渐进 */
+/* 07 四卡仪表: 10 列(上传速度在下载速度之前 —— 变体惯例), files 列常驻(渐进已删) */
 const DRAWER_PEER_V07_COLUMNS = [
   DRAWER_PEER_COLUMNS[0], DRAWER_PEER_COLUMNS[1], DRAWER_PEER_COLUMNS[2], DRAWER_PEER_FILE_COLUMN,
   DRAWER_PEER_COLUMNS[3], DRAWER_PEER_COLUMNS[5], DRAWER_PEER_COLUMNS[4],

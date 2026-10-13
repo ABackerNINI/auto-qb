@@ -90,7 +90,9 @@ for (const skin of SKINS) {
   test.describe(`详情抽屉 dt07/08 peers 列对齐 ${skin}`, () => {
     installRuntimeErrorGuard(test);
 
-    /* 报障路径: qB 不回 files —— 表头 9 列(nofiles), 行修复前仍走 10 列网格 ⇒ 「进度」起错位 */
+    /* 2026-10-13 行为变更(计划 26-10-13-0811): files 渐进(omitEmpty)已删, 列常驻 10 列。
+     * 本用例从「无 files → 9 列」改为「无 files → 仍 10 列且不错位」—— 原报障(nofiles 错位)
+     * 由列常驻结构性根除, 渲染器对空 files 出 — 占位。 */
     for (const v of VARIANTS) {
       test(`dt${v.id} ${v.label} 无 files(9 列): 列头与每行列左缘对齐 @fast (${skin})`, async ({ page }) => {
         collectRuntimeErrors(page);
@@ -119,7 +121,7 @@ for (const skin of SKINS) {
         const res = /** @type {any} */ (await page.evaluate(probeFn(v.id)));
 
         expect(res.fail, `列对齐探针: ${JSON.stringify(res)}`).toBeUndefined();
-        expect(res.cols, `无 files 时应为 9 列(nofiles 网格), 实际 ${res.cols}`).toBe(9);
+        expect(res.cols, `files 常驻应为 10 列(渐进已删), 实际 ${res.cols}`).toBe(10);
       });
     }
 
