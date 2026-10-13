@@ -217,15 +217,27 @@ for (const skin of SKINS) {
       const menu = page.locator('.ctx-menu');
       const noErr = (where) => expect(collectRuntimeErrors(page),
         `${where}: 合并态换代不得抛运行期错误(Teleport 目标缺失 ⇒ patch 中断 ⇒ 内容消失)`).toEqual([]);
-      const pick = async (target, label) => {
-        await target.click({ button: 'right' });
+      /* 2026-10-14(经典渲染链退役后同轮加固):
+       * ① 右键目标用**.dt-col-head**(列标签, 在变体宿主之外)而非列元素本身 —— 列中心在变体态
+       *    会命中桥表 `.group-head`(列头 @contextmenu.stop 独占右键)而弹出列菜单, 取不到模板项;
+       * ② 点完菜单项后等菜单**离场**(pop 过渡期间旧菜单仍在 DOM, 与下一次右键的新菜单并存会撞
+       *    strict mode violation: 两个 .ctx-menu)。 */
+      const settle = () => expect(page.locator('.ctx-menu')).toHaveCount(0, { timeout: 5_000 });
+      const pick = async (col, label) => {
+        await col.locator('.dt-col-head').click({ button: 'right' });
+        await expect(menu).toHaveCount(1);
         await expect(menu).toBeVisible();
         await menu.locator('.ctx-item', { hasText: label }).first().click();
+        await settle();
       };
       const toggleMerge = async () => {
-        await drawer.locator('.drawer-body').click({ button: 'right' });
+        /* 右键目标用页签栏(与正文同绑 openDrawerMenu, 但永不被变体表头覆盖 —— 单栏变体态
+         * 点 .drawer-body 中心会命中桥表 group-head 弹列菜单), 取当前页签 menu 即可。 */
+        await drawer.locator('.drawer-tabs').click({ button: 'right' });
+        await expect(menu).toHaveCount(1);
         await expect(menu).toBeVisible();
         await menu.locator(MERGE_ITEM).click();
+        await settle();
       };
 
       // ---- gc 对: 右列(内容)挂桥变体「树 + 详情」, 桥表行渲染出来
@@ -238,9 +250,11 @@ for (const skin of SKINS) {
       await noErr('gc 双列挂桥变体');
 
       // 关合并: 单栏回落当前页签(常规), 且不得抛错(patch 未中断)
+      // 2026-10-14(经典渲染链退役): 单栏常规页不再渲染经典 `.drawer-sec` 分组块(该 CSS 已随
+      // 死类清除) —— 改钉缺省变体 01 的根容器 `.dt01-wrap`(同段仍不借道 vm, 断言形态不变)。
       await toggleMerge();
       await expect(split).toHaveCount(0);
-      await expect(drawer.locator('.drawer-body .dt-host .drawer-sec').first()).toBeVisible();
+      await expect(drawer.locator('.drawer-body .dt-host .dt01-wrap').first()).toBeVisible();
       await noErr('gc 关合并');
 
       // 再开合并: 双列与右列桥表行都必须回来(内容不丢 = patch 未被打断的可见证据)
