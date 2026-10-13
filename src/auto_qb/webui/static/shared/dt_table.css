@@ -32,6 +32,9 @@
   background: var(--tbl-head-bg, var(--bg));
   border-bottom: 1px solid var(--border);
   border-radius: 0;
+  /* 症状2: skin 的 .group-head 自带 --shadow-1 落影 —— 那是主列表页面级吸顶的
+   * 「第二根导航」语义; 抽屉表头直接贴行区, 落影读作「速度列下方异常横条」。 */
+  box-shadow: none;
 }
 
 /* ---- 行板: 页面面板底(与列头同族, 表内无缝) + 发丝线分行, 去卡底语言 ---- */

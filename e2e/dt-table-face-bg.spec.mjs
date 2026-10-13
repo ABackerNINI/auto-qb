@@ -106,13 +106,20 @@ for (const skin of SKINS) {
           /* 取无状态修饰的普通行(err/bad/warn/off/is-chk 等状态底是变体个性, 不在族断言内) */
           const row = document.querySelector(
             `${listSel} .group-row:not(.err):not(.bad):not(.warn):not(.off):not(.is-chk):not(.empty-row)`);
-          return { head: bg(head), row: bg(row), body: bg(document.body) };
+          return {
+            head: bg(head),
+            row: bg(row),
+            body: bg(document.body),
+            headShadow: head && getComputedStyle(head).boxShadow,
+          };
         }, def.list);
 
         expect(colors.head, `面 ${faceId} 表头背景 == 页面底(--bg, 用户量化口径 242,246,251)`)
           .toBe(colors.body);
         expect(colors.row, `面 ${faceId} 行板背景 == 表头背景(表内无缝)`)
           .toBe(colors.head);
+        expect(colors.headShadow, `面 ${faceId} 表头零落影(症状2: skin 吸顶列头的 --shadow-1 在抽屉里 = 速度列下方异常横条)`)
+          .toBe('none');
       });
     }
   });

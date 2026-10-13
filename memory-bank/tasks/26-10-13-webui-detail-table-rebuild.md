@@ -136,3 +136,11 @@
 - **守阵**: 新 `e2e/dt-table-face-bg.spec.mjs`(四面 × 双皮肤 = 8 用例: 表头背景 == 页面底 --bg + 行板 == 表头表内无缝; 行取样避开状态修饰行); 静态守阵 `test_drawer_tpl_table_face_bg_single_point`(四变体表头零 --bg-card 回潮 + 密度令牌在位 + 共享层族选择器/令牌在位 + 三 index.html 恰挂载一次); shell 体量预算 210→212(W6 +2 留账)。
 - **红绿双验**: 量具首跑 8/8 真红(全中「表头 ≠ 页面底」目标断言); 实施后 8/8 绿。像素采样复核: 表头/行板/表头下缘全部 242,246,251, 面板 253,254,255 —— 色带消失, 表区读作页面面板。
 - **回归**: dt 相关 e2e 54 条(parity 22 + live-update 6 + sticky/变体手势)全绿; test.full 3198 passed / 4 skipped; 全量 e2e 241 passed / 10 skipped(1 红 = delta-sync atlas 行级语义直测, 复跑该 spec 8/8 绿 —— 偶发, 与本波改动面无交集)。
+
+### 2026-10-13 · W7 守阵对账 + 清理 + 坑档回写
+
+- **八症状守阵对账(全部归位)**: #1 表头异色 → face-bg 量具(红绿 8/8); #2 速度列下异常横条 → **W7 定性收口**: 三皮肤 `.group-head` 的 `box-shadow: var(--shadow-1)` 是主列表页面级吸顶「第二根导航」落影, 经类复用泄漏进抽屉表头(直接贴行区)= 那条横条 —— 共享层补 `box-shadow:none`(红验 8/8 红 → 绿); #3 计数/挤压 → assertLayout 内核电池 + parity; #4 对齐统一 → parity(W2); #5 速度实时 / #7 按钮不占列 / #8 勾选跳动 → dt-live-update(W5); #6 列名方向符 → test_dt_table_kernel_single_point ④ L3 静态扫描(W1)。
+- **范围守恒自动化**: 新 `test_drawer_tpl_no_table_variants_out_of_scope` —— 七个无表格变体(01/02/03/12/13/14/15)零引擎契约引用(tableId/rowsFn/dt-table-anchor/.group-head/.group-row/DT_TABLE/dt_table), 越界即红(计划 §10 承诺落地)。
+- **坑档回写(按动作归类, 三条新)**: ① `web-ui/surface-color-family-single-point.md`(表面底色族必须令牌单点 + 页面级观感语义随类复用泄漏进嵌入面, 像素采样取证法); ② `testing/red-verify-must-hit-behavior.md`(红验必须命中行为/几何, 假修复绿着放行 / 量具口径假红分账); ③ `testing/heredoc-cjk-punct-js-syntax.md`(变体批量编辑中文标点/切片偏移 → JS 语法坏, node --check 纪律)。kb.index 已重建(21 生成物)。
+- **终验**: 静态守阵(skins/dom_panel/dom_page/docs_forms)99 passed; 全量 e2e 242 passed / 10 skipped / 0 failed; test.full 3199 passed / 4 skipped。
+- **顺手修一个潜伏顺序依赖**: test_kb_active_render_respects_byte_budget 裸 `import gen_active_recent`(靠同 worker 别的用例先插 sys.path), W7 新增用例改变 xdist 分组后翻车 —— 补显式 sys.path 插入, 教训归入坑档②(确定性口径)。

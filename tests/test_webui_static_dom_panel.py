@@ -3962,3 +3962,29 @@ def test_dt_table_kernel_single_point():
         report = json.loads(proc.stdout.strip().splitlines()[-1])
         assert report["failed"] == [], \
             f"表格内核电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_drawer_tpl_no_table_variants_out_of_scope():
+    """范围守恒(计划 26-10-13-0811 §10/W0): 七个无表格变体一行不改的自动化断言。
+
+    01/02/03(常规页)/ 12(空间树图)/ 13/14/15(流量图)不 含表格体 —— 本轮重构的
+    改动面是「八个含表格变体的表格体 + 引擎侧列派生」, 这七个文件必须在引擎契约之外。
+    判据: 文件内零引擎表格契约引用(tableId / rowsFn / dt-table-anchor / .group-head /
+    .group-row / DT_TABLE / dt_table)—— 谁往后把表格体塞进这七个变体, 必须先来改本守阵
+    (把该文件挪进含表格名单), 不允许静默越界。
+    """
+    tpl_dir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
+    no_table = (
+        "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
+        "12-content-space-treemap-collapsed.js",
+        "13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js",
+        "15-traffic-adaptive-collapsed.js",
+    )
+    for name in no_table:
+        path = os.path.join(tpl_dir, name)
+        assert os.path.isfile(path), f"drawer_tpl/{name} 缺文件(变体失踪)"
+        txt = open(path, encoding="utf-8").read()
+        for marker in ("tableId", "rowsFn", "dt-table-anchor", "group-head", "group-row", "DT_TABLE", "dt_table"):
+            assert marker not in txt, \
+                f"drawer_tpl/{name} 引用了引擎表格契约 {marker!r} —— 无表格变体越界进改动面" \
+                "(范围守恒 §10; 若确要接表, 先把该文件挪进含表格名单并更新本守阵)"

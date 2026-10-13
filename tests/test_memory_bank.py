@@ -351,6 +351,12 @@ def test_kb_active_render_respects_byte_budget() -> None:
     """
     from datetime import datetime, timedelta
 
+    # 不能依赖别的用例先插过 sys.path —— xdist 分组随测试集变化(2026-10-13 W7 加了
+    # 一个 dom_panel 用例就翻出本潜伏依赖), 自带插入才是确定性口径。
+    import sys
+
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
     import gen_active_recent
 
     now = datetime(2026, 10, 2, 12, 0)
