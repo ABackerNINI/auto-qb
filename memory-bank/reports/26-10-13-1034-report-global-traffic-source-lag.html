@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全局流量数据源信息滞后 — 成熟方案调研与自写独立监视小工具可行性分析</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="global-traffic-source">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-13-1034">
+<meta name="doc-updated" content="26-10-13-1047">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-13-backend-global-traffic-source.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1420;
+    --paper: #151c2c;
+    --paper2: #1a2234;
+    --ink: #dce4f4;
+    --dim: #9aa8c2;
+    --faint: #6b7a96;
+    --line: #2a3550;
+    --acc: #5aa2e8;
+    --ok: #4cc38a;
+    --warn: #e8b45a;
+    --bad: #e87a7a;
+    --code-bg: #0b101c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 0 16px 80px;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14.5px; line-height: 1.75;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.rpt { padding: 40px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  header.rpt h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .5px; }
+  header.rpt .sub { color: var(--dim); font-size: 13.5px; }
+  .metagrid { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 16px; font-size: 12.5px; color: var(--dim); }
+  .metagrid b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 19px; margin: 46px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--acc); margin-right: 8px; font-family: Consolas, monospace; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; color: var(--ink); }
+  h3::before { content: "\25D8"; color: var(--acc); margin-right: 4px; }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--dim); }
+  p { margin: 8px 0; }
+  .lead { color: var(--dim); font-size: 13.5px; margin-top: 2px; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--paper2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td { color: var(--ink); }
+  td .sm, .sm { font-size: 12px; color: var(--dim); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  code, .mono {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.3px; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+    color: #a8c8f0; word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.65;
+    font-family: Consolas, "Cascadia Mono", monospace; color: #b9d2f2;
+  }
+  pre code { border: 0; padding: 0; background: none; }
+  .box { border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 8px; background: var(--paper); padding: 12px 16px; margin: 14px 0; }
+  .box.ok { border-left-color: var(--ok); }
+  .box.warn { border-left-color: var(--warn); }
+  .box.bad { border-left-color: var(--bad); }
+  .box .t { font-weight: 700; margin-bottom: 4px; }
+  .box.ok .t { color: var(--ok); }
+  .box.warn .t { color: var(--warn); }
+  .box.bad .t { color: var(--bad); }
+  .badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .b-fix { background: rgba(76,195,138,.14); color: var(--ok); border: 1px solid rgba(76,195,138,.4); }
+  .b-need { background: rgba(90,162,232,.14); color: var(--acc); border: 1px solid rgba(90,162,232,.4); }
+  .b-opt { background: rgba(154,168,194,.1); color: var(--dim); border: 1px solid rgba(154,168,194,.35); }
+  .b-warn { background: rgba(232,180,90,.12); color: var(--warn); border: 1px solid rgba(232,180,90,.4); }
+  .b-bad { background: rgba(232,122,122,.13); color: var(--bad); border: 1px solid rgba(232,122,122,.4); }
+  .nc { color: var(--warn); font-weight: 600; }
+  .foot { margin-top: 60px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+  .chain { display: block; margin: 12px 0; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 8px; background: var(--paper); }
+  .chain b { color: var(--acc); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="rpt">
+  <h1>全局流量数据源信息滞后 — 成熟方案调研与自写独立监视小工具可行性分析</h1>
+  <div class="sub">「项目里的全局流量从哪来、慢在哪」的逐层取证 · 三条技术路线（qB 计数器 / 操作系统网卡计数器 / 第三方工具）调研 · 「自写独立监视小工具」四形态可行性与推荐路线</div>
+  <div class="metagrid">
+    <span>报告编号: <b>26-10-13-1034</b></span>
+    <span>日期: <b>2026-10-13</b></span>
+    <span>性质: <b>调研 + 可行性快照</b>（行号基于 <code>cf08c358</code> 工作区文件）</span>
+  </div>
+  <div class="metagrid">
+    <span>取证手段: <b>代码走查 + 引用检索 + 上游源码核对</b>（TrafficMonitor master 源码经 grep.app 命中并原样引用）</span>
+    <span>本轮零代码改动；全量测试全绿（数字只进基线切片，见 <code>kb.baseline</code>）</span>
+  </div>
+  <div class="metagrid">
+    <span>问题前提（本报告的界定）: 「traffic monitor 全局流量来源信息滞后」= <b>项目内「全局流量」的数据源（外部程序 TrafficMonitor 的 <code>history_traffic.dat</code>）所提供的信息滞后</b>。若你指的是另一条链路，§3 的分层取证与 §4/§5 的方案对任何「全局流量源」同样适用。</span>
+  </div>
+  <div class="metagrid">
+    <span>本轮修订: <b>26-10-13-1047</b> —— 用户给出实测数据（TrafficMonitor 显示 40GB 下载 / auto-qb 顶栏 ↓ 显示 31GB，差 9GB）并质疑「按我的 config.yml，interval=60s，算上抖动最多 90s」解释不了。回查生产 <code>config.yml</code>：<b>曲线任务的节拍是 <code>global_speed_limit_curve.interval: 10M</code>（<code>config.yml:90-91</code>）</b>，而 <code>config.yml:17</code> 的 <code>interval: 60S</code> 是<b>主循环内置任务间隔</b>、不适用（<code>speed_curve_mod.py:120-125</code> 用 <code>gslc.interval or ctx.config.interval</code>，显式 10M 时不回退）。⇒ <b>快照滞后 = 10M + 任务耗时 + TM 落盘抖动 30s ≈ 10.5 分钟</b>；9 GiB ÷ 630s ≈ <b>15 MB/s</b>，滞后全额解释该差值，无需其他故障。另据 TM 源码确认 dat 字段序为 <code>&lt;上传&gt;/&lt;下载&gt;</code>（<code>HistoryTrafficFile.cpp:38-39</code>），与项目解析一致（<code>curves.py:62-72</code>）—— <b>链路无 up/down 互换</b>；用户确认所见为顶栏 ↓（下载），故本差值定性为 <b>L2 滞后</b>而非读数混淆。§3.2 补实测行与「自查三步」。</span>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<h2><span class="no">1</span>摘要</h2>
+
+<div class="box bad">
+  <div class="t">问题（用户命题）</div>
+  项目里「全局流量」（今日/本月上传下载、历史流量图、按流量分档的自动限速）都来自<b>外部程序 TrafficMonitor 的 <code>history_traffic.dat</code></b>。用户反馈这份<b>来源信息滞后</b>，希望：① 调研成熟解决方案；② 分析「自写一个独立监视全局流量的小工具」是否可行。
+</div>
+
+<div class="box warn">
+  <div class="t">核心结论（一句话）</div>
+  <b>真正的滞后不在 TrafficMonitor（它 ~30s 落一次盘），而在本项目自己的读侧节拍</b>：全项目<b>只有一处</b>读这个文件 —— 限速曲线任务，它的执行间隔 <code>global_speed_limit_curve.interval</code> 缺省回退主 <code>interval</code>（默认 <b>60s</b>，文档示例给的是 <b>10M=600s</b>），而且<b>「读文件 + 发布 WebUI 快照 + 应用限速」共用同一个节拍</b>。所以「今日流量」在 WebUI 上最多可旧 60s~600s。<b>最高性价比的一步不是另写工具，而是把这个「发布节拍」从「限速应用节拍」里拆出来</b>（方案 1，零依赖、零新进程）。若仍要脱离 TrafficMonitor，则项目里已有 80% 的现成基建（<code>traffic_sample_mod</code> 的 30s 采样 + 活尾 + 聚合分层 + 崩溃恢复），把它升级成「全局流量 provider」远优于另起一个游离进程。
+</div>
+
+<table>
+  <tr><th style="width:150px">议题</th><th>结论</th></tr>
+  <tr>
+    <td>滞后到底在哪一层</td>
+    <td><b>三层</b>（§3）：L1 TrafficMonitor 落盘 <span class="badge b-fix">≤ ~30s</span>；<b>L2 本项目读侧/发布节拍 <span class="badge b-bad">60s ~ 600s（主因）</span></b>；L3 WebUI 前端按需拉快照 <span class="badge b-opt">非瓶颈</span>。前端再快也追不上 L2。</td>
+  </tr>
+  <tr>
+    <td>实测复核（本机）</td>
+    <td>生产 <code>config.yml:90-91</code> 的 <code>global_speed_limit_curve.interval: <b>10M</b></code>（<code>config.yml:17</code> 的 <code>interval: 60S</code> 是主循环间隔、不适用）⇒ 顶栏「今日流量」最坏滞后 <b>≈ 10.5 分钟</b>。用户观测 TM 40GB vs 顶栏 ↓ 31GB（差 9GB）÷ 630s ≈ <b>15 MB/s</b>，滞后全额解释，无需其他故障（§3.2 实测复核）。</td>
+  </tr>
+  <tr>
+    <td>成熟方案有几条路</td>
+    <td><b>三条</b>（§4）：A. 复用 qB 自身计数器（<b>项目已实现</b>，30s 采样）；B. 操作系统网卡计数器（Windows IP Helper / PDH / psutil，机器全局含非 qB 流量）；C. 第三方/路由器 SNMP（最准的「整机」，非本机粒度）。</td>
+  </tr>
+  <tr>
+    <td>自写独立小工具可行吗</td>
+    <td><b>技术可行（高）</b>，但「独立进程」不是最优形态（§5）。四种形态里：<b>方案 1</b>（解耦发布节拍，改现有代码）<span class="badge b-fix">性价比最高</span>；<b>方案 3</b>（复用 qb_traffic 采样器 + provider 抽象）<span class="badge b-fix">最一致</span>；方案 2（游离小脚本写 TM 兼容文件）能跑但会重造日界/重置/恢复/单实例一整套已解难题。</td>
+  </tr>
+  <tr>
+    <td>口径陷阱</td>
+    <td>「全局流量」有三个互不等价的口径：<b>①整机总量（含所有应用）</b> / <b>②qB 进程流量</b> / <b>③指定网卡流量</b>。TrafficMonitor = ①③ 且<b>按当前选中网卡分账</b>；qB 计数器 = ②。<b>限速曲线的目的决定了该选哪个</b>（§4.4）——这是比「换不换工具」更关键的一步拍板。</td>
+  </tr>
+</table>
+
+<!-- ============================================================ 2 -->
+<h2><span class="no">2</span>现状界定：项目里的「全局流量」是什么、谁在消费</h2>
+
+<p class="lead">先把「来源」和「消费方」钉死，后面的滞后链才有落点。</p>
+
+<h3>2.1 数据源：一个外部程序拥有的只读文本文件</h3>
+<p>
+「全局流量」在本项目里<b>不是一个自有模块</b>，而是一份<b>外部文件</b>：TrafficMonitor（zhongyang219，Windows 任务栏网速/流量悬浮窗）写出的 <code>history_traffic.dat</code>。本程序对它<b>只读</b>，不做任何写入。
+</p>
+<ul>
+  <li>路径配置：<code>config.models.GlobalSpeedLimitCurve.dat_path</code>（<code>config/models.py:279-291</code>）—— 注释原样写明「history_traffic.dat 路径(每行 "YYYY/MM/DD &lt;上传KB&gt;/&lt;下载KB&gt;", 单位 KB=1024B)」。</li>
+  <li>格式与解析：<code>core/curves.py:1-73</code>（首行 <code>lines: "N"</code> 跳过；每行「日期 上传KB/下载KB」；坏行跳过计数；单位 ×1024 转字节）。</li>
+  <li>用户文档：<code>docs/configuration.md:355-412</code>（明确「目前本软件不支持监控设备全局流量，所以需配置外部流量数据来源」，并给出 TrafficMonitor 的 Gitee/GitHub 链接与取文件路径的操作步骤）。</li>
+</ul>
+<div class="box">
+  <div class="t">上游程序写的是什么</div>
+  TrafficMonitor 的 <code>history_traffic.dat</code> 是「<b>某日已累计上传/下载量</b>」的按日行（<b>当天行随流量增长，跨天重置</b>）——见 <code>curves.py:8</code> 原文。它是<b>日粒度累计</b>，不是时序采样；TrafficMonitor 另有 <code>history_traffic.dat.bak</code>（退出/关机时自动备份）。
+</div>
+
+<h3>2.2 消费方盘点（全项目四个）</h3>
+<table>
+  <tr><th style="width:190px">消费方</th><th>位置</th><th>读什么</th></tr>
+  <tr>
+    <td>① 全局限速曲线任务</td>
+    <td><code>core/modules/speed_curve_mod.py:129-238</code></td>
+    <td>读 dat → 逐 <code>period</code> 聚合 → 查档 → <b>写 qB 全局限速</b>（<code>merge_direction</code> 同向取最严）。</td>
+  </tr>
+  <tr>
+    <td>② 规则表达式</td>
+    <td><code>rules/expr/env.py:173-195</code>（<code>_traffic</code>）<br><code>env.py:344-351</code> / <code>:438</code></td>
+    <td><code>sys.upload_today</code> / <code>sys.download_today</code> / <code>sys.upload_month</code>；标 <code>expensive=True</code>，未配数据源时<b>报错而非返回 0</b>。</td>
+  </tr>
+  <tr>
+    <td>③ WebUI 历史流量弹层</td>
+    <td><code>webui/server/routes/state.py:124-133</code>（<code>/api/traffic/history</code>）<br>前端 <code>shared/dialogs.js:597-890</code></td>
+    <td>读限速任务发布的只读快照 <code>manager.web.traffic_view["history"]</code>（<b>不是直接读文件</b>）；天/月/年聚合柱状图。</td>
+  </tr>
+  <tr>
+    <td>④ WebUI 顶栏「今日流量」</td>
+    <td><code>shared/dialogs.js:698-707</code>（<code>periods</code> 取 <code>period === "day"</code>）</td>
+    <td>同源快照里的 <code>periods[].up|down</code>（字节）。</td>
+  </tr>
+</table>
+
+<div class="box ok">
+  <div class="t">关键结构事实：四个消费方共享「同一个快照」</div>
+  ②③④ <b>都不直接读文件</b>，而是读①（限速曲线任务）每轮发布的快照（<code>_publish_traffic</code>）。而 <code>_publish_traffic</code> <b>只在 <code>handle_speed_limit_curve</code> 里被调用</b>（引用检索确认：<code>speed_curve_mod.py:133/136/145/150/186/238</code> 六处，全部在该 handler 内）。<b>于是「读文件、发布快照、应用限速」被绑死在同一个任务节拍上</b> —— 这是 §3 滞后链的枢纽。
+</div>
+
+<!-- ============================================================ 3 -->
+<h2><span class="no">3</span>滞后链取证：三层，主因在中间那层</h2>
+
+<span class="chain">
+  <b>L1 上游</b> TrafficMonitor（NIC 采样 → 内存聚合 → 落盘 history_traffic.dat）<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;↓ 文件（外部只读）<br>
+  <b>L2 本项目</b> 限速曲线任务（读文件 → 聚合查档 → 写限速 → 发布快照）<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;↓ 内存快照 traffic_view<br>
+  <b>L3 WebUI</b> 顶栏今日流量 / 历史流量弹层（读快照）
+</span>
+
+<h3>3.1 L1 — TrafficMonitor 侧：~30s，不是主因</h3>
+<p>
+TrafficMonitor 是「<b>内存为主、落盘为界</b>」的设计：实时显示每秒刷新，历史按策略批量落盘。核对 master 源码（<code>TrafficMonitor/TrafficMonitorDlg.cpp</code>，经 grep.app 命中）：
+</p>
+<pre><code>// TrafficMonitorDlg.cpp:1313-1322（主窗口周期检查内）
+theApp.m_today_down_traffic += cur_in_speed;
+m_history_traffic.GetTodayTraffic().up_kBytes   = theApp.m_today_up_traffic / 1024u;
+m_history_traffic.GetTodayTraffic().down_kBytes = theApp.m_today_down_traffic / 1024u;
+//每隔30秒保存一次流量历史记录
+    static unsigned __int64 last_today_kbytes = 0;
+    static bool last_today_kbytes_initialized = false;
+    unsigned __int64 current_kbytes = m_history_traffic.GetTodayTraffic().kBytes();
+
+// TrafficMonitorDlg.cpp:693-702
+void CTrafficMonitorDlg::SaveHistoryTraffic() {
+    // 使用增量保存，只更新第一行和今天的记录，减少I/O操作
+    m_history_traffic.SaveTodayOnly();
+}
+void CTrafficMonitorDlg::SaveHistoryTrafficFull() {
+    // 完整保存，用于程序退出时确保所有数据都保存
+    m_history_traffic.Save();
+}</code></pre>
+<ul>
+  <li><b>采样节拍</b>：默认 1000ms（选项设置「监控时间间隔」，wiki 原文「默认为1000毫秒」）。</li>
+  <li><b>落盘节拍</b>：<b>每 30 秒一次</b>，且仅当「今日累计 KB 变化」才写；写的是<b>增量</b>（<code>SaveTodayOnly</code>：只改首行行数 + 今日行），退出时才 <code>SaveHistoryTrafficFull()</code> 全量。</li>
+  <li>⇒ <b>文件本身的滞后 ≤ ~30s</b>，且是日累计（不是时序），对「今日/本月总量」这类消费而言 30s 完全够用。</li>
+</ul>
+<div class="box warn">
+  <div class="t">历史包袱（老版本）</div>
+  旧版本（如 issue #2269 报告的 <b>v1.85.1</b>）每次保存是<b>整文件逐行重写</b>，行数越多年份越久写放大越严重（用户实测 6 年 ~2000 行「一次保存要刷 2000 次」）。当前 master 已改为增量保存。这不是滞后，但如果你在用的版本较老，<b>文件写入本身会拖慢</b>，值得顺手升级。
+</div>
+
+<h3>3.2 L2 — 本项目读侧：60s ~ 600s，<span class="nc">这才是主因</span></h3>
+<p>读文件的任务只有限速曲线任务，它的节拍定义在：</p>
+<pre><code>// speed_curve_mod.py:120-125（任务注册）
+if gslc is None: return
+self.register_global_tasks(ctx, [("speed_limit_curve", self.handle_speed_limit_curve,
+                                  gslc.interval or ctx.config.interval)])
+
+// config/models.py:285-290
+interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
+interval: Optional[float] = None            # 秒; None = 使用 config.interval
+
+// config/models.py:354（主 interval 默认）
+interval: float = 60.0  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
+</code></pre>
+<table>
+  <tr><th style="width:250px">情形</th><th>节拍</th><th>「今日流量」最坏滞后</th></tr>
+  <tr><td><b>本机实测</b>（生产 <code>config.yml:90-91</code>）<br><code>global_speed_limit_curve.interval: 10M</code></td><td><b>600s</b></td><td><b>≈ 10.5 分钟</b>（600s + 任务耗时 + L1 的 30s 落盘抖动）</td></tr>
+  <tr><td>未显式配置该键 → 回退主 <code>interval</code></td><td>本机 = <b>60s</b>（<code>config.yml:17</code>）</td><td>≈ 60s + L1 的 30s</td></tr>
+  <tr><td>按文档示例配 <code>interval: 10M</code></td><td>600s</td><td>≈ 10 分钟</td></tr>
+</table>
+<div class="box bad">
+  <div class="t">实测复核（26-10-13-1047）：差值 9GB 被滞后全额解释</div>
+  用户观测：TrafficMonitor 显示 <b>40GB 下载</b>，同一时刻 auto-qb 顶栏 ↓（下载）显示 <b>31GB</b>，差 <b>9GB</b>；并指出「按 config.yml，interval=60s，最多 90s」解释不了。<b>前提订正</b>：<code>config.yml:17</code> 的 <code>interval: 60S</code> 是<b>主循环内置任务间隔</b>；曲线任务的节拍是 <code>config.yml:90-91</code> 的 <code>global_speed_limit_curve.interval: 10M</code>（<code>speed_curve_mod.py:120-125</code> 读 <code>gslc.interval</code>，显式值不回退）。⇒ 真实滞后 ≈ <b>10.5 分钟</b>，9 GiB ÷ 630s ≈ <b>15 MB/s（≈123 Mbps）</b> —— 落在 PT 常态下载速率区间，差值由滞后全额解释，<b>不需要额外故障</b>。
+</div>
+<div class="box">
+  <div class="t">自查三步（下次再遇到「对不上」）</div>
+  <ol>
+    <li><b>先看对的那个 interval</b>：<code>config.yml</code> 的 <code>global_speed_limit_curve.interval</code>（曲线/发布节拍），不是顶层 <code>interval</code>（主任务节拍）。</li>
+    <li><b>算滞后秒数</b>：<code>(TM 今日下载 − 顶栏 ↓) ÷ 你的实时下载速度</code>；≈ 10.5 分钟即命中本报告的 L2 根因，≈ 30s 量级才需要考虑 L1/口径问题。</li>
+    <li><b>排除口径/字段混淆</b>：TM 的 dat 字段序是 <code>&lt;上传&gt;/&lt;下载&gt;</code>（TM 源码 <code>HistoryTrafficFile.cpp:38-39</code>），与项目解析一致（<code>curves.py:62-72</code>）—— 若顶栏 ↓ 与 TM 的<b>下载</b>对不上、却与 TM 的<b>上传</b>对得上，那才是读数混淆（本轮已排除：用户确认看的是 ↓）。</li>
+  </ol>
+</div>
+<div class="box bad">
+  <div class="t">根因：三个职责被耦合在同一个节拍上</div>
+  <code>handle_speed_limit_curve</code> 一轮里同时做：<b>①读文件</b>（<code>:140-156</code>）→ <b>②聚合查档</b>（<code>:158-181</code>）→ <b>③写 qB 限速</b>（<code>:189-238</code>）→ <b>④发布快照</b>（<code>_publish_traffic</code>）。<br>
+  写限速<b>应该</b>慢（10 分钟一次足够、且限速是低频动作）；但<b>发布「今日流量」到 WebUI 完全不需要跟它同频</b>。现在二者共用节拍 ⇒ 用户看到的「今日流量」被限速任务的节奏拖住。
+</div>
+
+<h3>3.3 L3 — WebUI 前端：非瓶颈</h3>
+<p>
+历史流量弹层在<b>打开时按需</b>拉 <code>/api/traffic/history</code>（<code>dialogs.js:606</code>），顶栏走主状态轮询；两者拿到的都是 L2 的快照。<b>前端无论多快，快照不更新它就看不到新值</b> —— 所以调前端轮询没有意义。
+</p>
+
+<h3>3.4 另外两个「同源但不属于滞后」的坑</h3>
+<table>
+  <tr><th style="width:200px">坑</th><th>说明</th><th>后果</th></tr>
+  <tr>
+    <td>按网卡分账，不合并</td>
+    <td>TrafficMonitor 的历史<b>按「当前选中的网络连接」统计，不做跨网卡合并</b>（trafficmonitor.org FAQ 原文：「Data is stored per network adapter, not combined across all connections」）。</td>
+    <td>换网卡（Wi-Fi↔有线↔VPN）会分账甚至漏计 —— 表现上很像「数据不对/滞后」。<b>这可能是你体感滞后的一部分。</b></td>
+  </tr>
+  <tr>
+    <td>外部文件静默失效</td>
+    <td>路径错 / 文件不存在 → 曲线整条不生效（<code>speed_curve_mod.py:143-151</code> 已发布 <code>stale</code> + 原因）。</td>
+    <td>限速「看起来没起作用」，容易误判为滞后。项目已有 stale 提示可自证。</td>
+  </tr>
+</table>
+
+<!-- ============================================================ 4 -->
+<h2><span class="no">4</span>成熟解决方案调研：三条技术路线</h2>
+
+<p class="lead">「监控全局流量」在 Windows 上有三层可选的数据获取面，粒度、延迟、依赖、口径各不相同。</p>
+
+<h3>4.1 路线 A — 复用 qB 自身的计数器 <span class="badge b-fix">项目已实现</span></h3>
+<p>
+qBittorrent WebAPI 本身就提供累计流量：<code>/api/v2/sync/maindata</code> 的 <code>server_state</code>（<code>alltime_dl</code> / <code>alltime_ul</code> / <code>dl_info_data</code> / <code>up_info_data</code> / <code>dl_info_speed</code> / <code>up_info_speed</code>），以及 <code>/api/v2/transfer/info</code>。
+</p>
+<div class="box ok">
+  <div class="t">项目里已经有一台「qB 口径全局流量采样器」</div>
+  <code>core/modules/traffic_sample_mod.py</code>（v4）已经在做这件事，而且做得相当完整：<b>30s 采样</b>（<code>sample_interval</code> 默认 30s）<b>、零新增 qB 请求</b>（读 1.5s 增量同步的 <code>server_state</code> 内存快照）、<b>活尾快照</b>（未落盘数据也能立刻上图）、<b>小时/日/月聚合分层 + 崩溃恢复 + 按龄淘汰</b>，落盘在 <code>qb-traffic-v4/global/</code>，供 <code>/api/traffic/qb/global</code> 十三档窗口消费。<br>
+  唯一「拦路虎」：<code>QbTraffic.enabled</code> <b>默认 False</b>（<code>models.py:314</code>，保守默认）—— <b>要显式打开才有数据</b>。
+</div>
+<p class="sm">口径 = <b>qB 进程流量</b>（不含其它应用）；粒度 = 时序（比 TM 的「日累计」信息量大得多）；延迟 = 30s（可配到 1s）。</p>
+
+<h3>4.2 路线 B — 操作系统网卡计数器（机器全局）</h3>
+<table>
+  <tr><th style="width:230px">方案</th><th>口径/粒度</th><th>依赖</th><th>说明</th></tr>
+  <tr>
+    <td>Windows IP Helper API<br><code>GetIfTable2</code> / <code>GetIfEntry2</code></td>
+    <td>逐网卡 64 位累计字节（<code>InOctets</code>/<code>OutOctets</code>）</td>
+    <td>纯 stdlib（<code>ctypes</code> 调 <code>iphlpapi.dll</code>）</td>
+    <td>最「零依赖」的整机口径；项目已有 <code>_win_user32</code> 惰性绑定 ctypes 模式可照抄（见 §5 风险）。</td>
+  </tr>
+  <tr>
+    <td>性能计数器 PDH<br><code>Network Interface\Bytes Received/sec</code> 等</td>
+    <td>逐网卡速率/累计</td>
+    <td>Windows PDH（ctypes）</td>
+    <td>与任务管理器同源；TrafficMonitor 自身也走类似路径。</td>
+  </tr>
+  <tr>
+    <td><code>psutil.net_io_counters(pernic=True)</code></td>
+    <td>逐网卡累计字节</td>
+    <td>第三方库 <code>psutil</code></td>
+    <td>跨平台、API 最省事；<code>nowrap</code> 可处理 32 位回绕。缺点是新增一个依赖。</td>
+  </tr>
+  <tr>
+    <td>ETW <code>Microsoft-Windows-Kernel-Network</code></td>
+    <td><b>进程/连接级</b>实时</td>
+    <td>ETW 消费端（较重）</td>
+    <td>能做到「哪个进程用了多少」；对「整机总量」是杀鸡用牛刀，实现成本最高。</td>
+  </tr>
+</table>
+<p class="sm">口径 = <b>整机（含所有应用）</b>，与 TrafficMonitor 同口径；粒度 = 逐网卡累计（需自己差分）；延迟 = 取决于轮询频率（可做到 1s）。</p>
+
+<h3>4.3 路线 C — 第三方工具 / 路由器 SNMP</h3>
+<ul>
+  <li><b>同类替代</b>：NetSpeedMonitor、NetWorx、GlassWire、DU Meter、Sniffnet、ntopng。大多也是「读网卡计数器 + 落一份历史」，换汤不换药 —— <b>除非它提供更友好的机器可读输出，否则换工具不解决本项目 L2 的滞后</b>。</li>
+  <li><b>路由器 / SNMP 侧统计</b>：最准的「全屋/整机」口径（运营商级），但<b>无法区分是哪台机器</b>，对单机自动限速场景不适用；仅当目标是「家庭总带宽」时才考虑。</li>
+</ul>
+
+<h3>4.4 三条路线对比（以及一个比选型更重要的拍板）</h3>
+<table>
+  <tr><th style="width:150px">维度</th><th>A · qB 计数器</th><th>B · 网卡计数器</th><th>C · 第三方/SNMP</th></tr>
+  <tr><td>覆盖口径</td><td>仅 qB 进程</td><td>整机（含所有应用）</td><td>整机 / 全屋</td></tr>
+  <tr><td>粒度</td><td><b>时序</b>（可出曲线）</td><td>逐网卡累计</td><td>日/小时汇总</td></tr>
+  <tr><td>可达延迟</td><td>30s（可到 1s）</td><td>1s（自定轮询）</td><td>分钟级</td></tr>
+  <tr><td>新增依赖</td><td><b>零</b>（已内建）</td><td>零（ctypes）或 psutil</td><td>需装/维护外部程序</td></tr>
+  <tr><td>跨平台</td><td>是（qB 在哪它就在哪）</td><td>需分平台实现</td><td>是</td></tr>
+  <tr><td>本项目现状</td><td><b>已实现，默认关</b></td><td>未实现</td><td>现用 TrafficMonitor</td></tr>
+  <tr><td>适合的用途</td><td>「按 qB 自己的用量自动限速」</td><td>「按整机用量限速 / 观察非 qB 流量」</td><td>「看家庭总用量」</td></tr>
+</table>
+<div class="box warn">
+  <div class="t">必须先拍板：你要的「全局流量」是哪一个口径？</div>
+  <ul>
+    <li><b>口径①整机总量</b>（TrafficMonitor 现在给的）：含浏览器/视频/系统更新等一切流量。用它驱动「qB 限速」，会出现「别的应用把额度吃光 → qB 被误限速」。</li>
+    <li><b>口径②qB 进程流量</b>（qB 计数器给的）：限速的对象就是 qB，用它驱动「qB 限速」语义最自洽 —— <b>也更符合限速曲线「按已用流量收紧 qB」的初衷</b>。</li>
+    <li><b>口径③指定网卡</b>：只在多网卡/分流/VPN 场景才有意义，且要处理「换网卡」的分账问题。</li>
+  </ul>
+  这个口径选择<b>直接决定选哪条路线</b>，比「用不用自写工具」重要得多。
+</div>
+
+<!-- ============================================================ 5 -->
+<h2><span class="no">5</span>「自写独立监视全局流量小工具」可行性分析</h2>
+
+<div class="box ok">
+  <div class="t">总判：技术可行（高），但「独立进程」未必是最优形态</div>
+  自写监视器要解决的「读计数器 → 差分 → 日界聚合 → 落盘 → 崩溃恢复 → 单实例」这一整套，<b>项目里的 <code>traffic_sample_mod</code> 已经全部解决过一遍</b>（v4 采样器）。所以真正的问题不是「能不能写」，而是「写在哪、复用谁」。
+</div>
+
+<h3>5.1 四种落地形态</h3>
+
+<h4>方案 1 — 解耦「发布节拍」与「限速应用节拍」<span class="badge b-fix">推荐先行</span></h4>
+<ul>
+  <li><b>做法</b>：把 <code>handle_speed_limit_curve</code> 里的「读文件 + 发布快照」拆成独立更快的节拍（如主 tick / 30s），「聚合查档 + 写限速」仍按原 <code>interval</code> 走。</li>
+  <li><b>改动面</b>：<code>speed_curve_mod.py</code> 单模块；<code>_publish_traffic</code> 的调用点重排。</li>
+  <li><b>收益</b>：直接把「今日流量」滞后从 60s~600s 压到 30s；<b>零新依赖、零新进程、零新配置键</b>。</li>
+  <li><b>风险</b>：极低。注意读文件是 I/O，节拍别压到主 tick（2s）级别——30s 已足够且与 TM 的落盘节拍同量级。</li>
+  <li><b>代价</b>：不解决「脱离 TrafficMonitor」；仍受 TM 的 30s + 按网卡分账约束。</li>
+</ul>
+
+<h4>方案 2 — 独立小脚本，写 TrafficMonitor 兼容文件 <span class="badge b-warn">能跑但不划算</span></h4>
+<ul>
+  <li><b>做法</b>：一个独立进程轮询 qB <code>transfer/info</code>（或网卡计数器），按 TM 格式写 <code>history_traffic.dat</code>（或另写自有文件 + 配 <code>dat_path</code> 指过去）。<b>对项目是零改动</b>（消费者只认路径）。</li>
+  <li><b>要自己造的轮子</b>：单实例锁、原子写、日界/时区/时钟回拨、计数器重置与回绕（32 位溢出、网卡重连清零、qB 重启 <code>session</code> 归零）、崩溃窗口与重启恢复。<b>这些 <code>traffic_sample_mod</code> 都已解决</b>（delta/reset 单点、<code>v4</code> 块化批量落盘、<code>_recover_aggregates</code> catch-up）。</li>
+  <li><b>结论</b>：作为「脱离主程序」的权宜可以，但会把项目里已收敛的健壮性难题<b>复制到程序外再解一遍</b>，且多一个需要守护的进程。</li>
+</ul>
+
+<h4>方案 3 — 把 qb_traffic 采样器升级为「全局流量 provider」 <span class="badge b-fix">最一致</span></h4>
+<ul>
+  <li><b>做法</b>：打开 <code>qb_traffic.enabled</code>，把 <code>qb-traffic-v4/global/</code> 的日累计导出/暴露成「全局流量源」，让限速曲线与 <code>sys.*</code> 表达式改从这里取数。</li>
+  <li><b>改动面</b>：新增一个「从 qb 采样器取当日/当月累计」的读取函数（等价于 <code>curves.aggregate</code> 的口径），改 <code>speed_curve_mod</code> 与 <code>env._traffic</code> 的数据来源。</li>
+  <li><b>收益</b>：复用全部既有健壮性基建（30s 采样、活尾、聚合分层、崩溃恢复、按龄淘汰）；口径改为「qB 进程流量」，与限速对象自洽；<b>可彻底不用 TrafficMonitor</b>。</li>
+  <li><b>风险</b>：口径变更属<b>语义变更</b>（整机 → qB），需用户明确认可；<code>enabled</code> 默认关，需改默认或在文档里引导开启。</li>
+</ul>
+
+<h4>方案 4 — 数据源抽象成多 provider <span class="badge b-need">最贴合既有设计</span></h4>
+<ul>
+  <li><b>做法</b>：把配置里的 <code>traffic_source: [traffic_monitor: ...]</code> 抽象成 provider 列表（<code>traffic_monitor</code> / <code>qb</code> / <code>nic</code> / 自写文件），按配置选择与回退。</li>
+  <li><b>证据</b>：配置注释已预留演进意图 ——「<code># 后续可能支持接入其它软件来源</code>」（<code>docs/configuration.md:370</code>）。</li>
+  <li><b>收益</b>：一劳永逸，未来接任何源都不用再动消费方。</li>
+  <li><b>风险</b>：新配置键<b>必须同步进 <code>validate_config</code> 与 <code>config/schema</code></b>（黄金法则 4，守卫测试会查），改动面最大。</li>
+</ul>
+
+<h3>5.2 可行性的硬约束清单（无论选哪个方案都要面对）</h3>
+<table>
+  <tr><th style="width:190px">约束</th><th>说明</th><th>项目里已有的对策</th></tr>
+  <tr><td>口径必须显式定义</td><td>qB / 整机 / 网卡三者不等价（§4.4）。</td><td>需新增文档口径段；<code>config-reference/keys.md</code> 补注。</td></tr>
+  <tr><td>计数器重置/回绕</td><td>32 位溢出、网卡重连清零、qB 重启 session 归零（alltime 不归零）。</td><td><code>traffic_sample_mod._delta</code>（判重置记 null）+ <code>v4</code> 块内负 delta 校验。</td></tr>
+  <tr><td>日界 / 时区 / 时钟回拨</td><td>按本地日 00:00 重置累计。</td><td><code>v4_day_epoch</code> / <code>v4_epoch_date_str</code> + 跨天硬切块。</td></tr>
+  <tr><td>崩溃窗口与持久化</td><td>TM 是内存先聚合；自写必须落盘 + 重启恢复。</td><td><code>flush_interval</code> 批量落盘 + <code>_recover_aggregates</code> catch-up。</td></tr>
+  <tr><td>单实例 / 单写线程</td><td>不引入并发写（黄金法则 5）。</td><td>采样 handler 在主循环线程执行，单引用快照发布给 Web 线程只读。</td></tr>
+  <tr><td>幂等 / 去重</td><td>重复执行无副作用（黄金法则 1）。</td><td>活尾与 flush 按 ts 精确去重、解析按同 epoch 取末行。</td></tr>
+  <tr><td>新配置键的校验</td><td>缺 <code>validate_config</code>/<code>schema</code> 即守卫红（黄金法则 4）。</td><td>照现有 <code>QbTraffic</code> 的注册路径补。</td></tr>
+  <tr><td>Windows 专属实现</td><td>IP Helper / PDH 是 Windows-only。</td><td>项目已有 <code>_win_user32</code> 惰性绑定 + <code>is_windows()</code> 早退模式可照抄。</td></tr>
+</table>
+
+<!-- ============================================================ 6 -->
+<h2><span class="no">6</span>结论与建议路线</h2>
+
+<h3>6.1 一句话结论</h3>
+<div class="box ok">
+  <div class="t">滞后主因是「本项目读侧节拍」，不是 TrafficMonitor</div>
+  TrafficMonitor 的文件 ~30s 就刷新一次，够快；真正拖住「今日流量/历史流量」的是本项目<b>把「读文件 + 发布快照」和「写限速」绑在了同一个 60s~600s 的任务节拍</b>上。所以<b>先做方案 1（解耦发布节拍）</b>——改一个模块、零新依赖，就能把滞后压到 ~30s。若还想要「脱离 TrafficMonitor + 更细粒度」，再做<b>方案 3/4</b>（复用 qb_traffic 采样器 + provider 抽象），而不是另起一个游离进程。
+</div>
+
+<h3>6.2 建议路线（按性价比排序）</h3>
+<ol>
+  <li><b>第 0 步（先拍板口径）</b>：确认「全局流量」要的是<b>整机总量</b>还是 <b>qB 进程流量</b>。这一步决定后面选 A 还是 B。</li>
+  <li><b>第 1 步（立竿见影）</b>：方案 1 —— 解耦 <code>speed_curve_mod</code> 的发布节拍。预期：今日流量滞后 600s → ~30s。</li>
+  <li><b>第 2 步（若仍要脱离 TM）</b>：方案 3/4 —— 打开 <code>qb_traffic</code>，加 provider 抽象，让限速曲线/表达式改从 qB 采样器取数；<code>traffic_monitor</code> 降为可选 provider。</li>
+  <li><b>第 3 步（仅当必须整机口径且不要 TM）</b>：在 <code>traffic_sample_mod</code> 同构地加一个「网卡计数器系列」（走 §4.2 的 IP Helper / psutil），复用其日界/重置/恢复基建。</li>
+  <li><b>顺带</b>：若在用的 TrafficMonitor 是旧版（整文件重写），升级到最新版（增量保存）以减轻写放大；并核对「当前选中网卡」是否就是你希望统计的那张（§3.4）。</li>
+</ol>
+
+<h3>6.3 验收要点（若拍板实施）</h3>
+<ul>
+  <li>「今日流量」在 WebUI 顶栏的刷新滞后实测 ≤ ~30s（可用 <code>TrafficMonitor</code> 的今日行做对照）。</li>
+  <li>限速「应用」节拍保持不变（不因拆节拍而提高写 qB 的频率 —— 黄金法则 2 保守默认）。</li>
+  <li>口径变更（若走方案 3）需在 <code>docs/configuration.md</code> 与 <code>config-reference/keys.md</code> 显式写明「全局流量 = qB 进程口径」，并同步 <code>validate_config</code>/<code>schema</code>。</li>
+  <li>新配置键（若走方案 4）必须过守卫测试；不新增绕开单写线程的并发路径。</li>
+</ul>
+
+<div class="box">
+  <div class="t">本报告不做的事</div>
+  未改任何代码；未入池 issue；全量测试全绿（数字只进基线切片，见 <code>kb.baseline</code>）。所有代码结论落到 <code>文件:行号</code>（基于 <code>cf08c358</code>）；TrafficMonitor 侧结论原样引用其 master 源码（经 grep.app 命中）。<b>「问题前提」是本报告自行界定的</b>（见页首 meta），若你指的「traffic monitor」另有其物，§3 的分层取证与 §4/§5 的方案对任何「全局流量源」同样成立。
+</div>
+
+<div class="foot">
+  auto-qb-clone4 · memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html · doc-type=report · doc-status=Done · doc-added=26-10-13-1034 · doc-updated=26-10-13-1047（实测复核：曲线任务节拍 = config.yml 的 global_speed_limit_curve.interval: 10M，非顶层 interval: 60S；40GB vs 31GB 差值 9GB 由 10.5 分钟滞后全额解释；TM dat 字段序确认为 &lt;上传&gt;/&lt;下载&gt;，链路无互换）· 行号基于 cf08c358 · 上游源码核对: TrafficMonitor master (TrafficMonitorDlg.cpp / HistoryTrafficFile.cpp)
+</div>
+
+</div>
+</body>
+</html>

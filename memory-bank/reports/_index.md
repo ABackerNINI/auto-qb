@@ -18,6 +18,7 @@
 
 ## Done
 
+- [26-10-13-1034] [全局流量数据源信息滞后 — 成熟方案调研与自写独立监视小工具可行性分析](26-10-13-1034-report-global-traffic-source-lag.html) — `global-traffic-source`
 - [26-10-12-2148] [种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析](26-10-12-2148-report-seed-state-writeback-removal-feasibility.html) — `seed-state-writeback`
 - [26-10-12-1923] [启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告](26-10-12-1923-report-webui-startup-latency.html) — `webui-startup-latency`
 - [26-10-12-1854] [WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)](26-10-12-1854-report-webui-column-picker-redesign.html) — `webui-column-picker`
