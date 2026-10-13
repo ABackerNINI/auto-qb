@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-10-13
-**Updated:** 2026-10-13 09:52
+**Updated:** 2026-10-14 01:39
 **Summary:** 用户报详情面板表格八项问题(表头异色背景 / 速度列异常横条 / 多列内容挤在一起 / 进度表头对齐与主表不一致 / 速度不实时更新 / 密度雷达占用列多一个箭头 / 内容表按钮被当作单独的列 / 勾选导致跳动), 定调「很多问题是修复过几次的, 删除后重构」; 初版计划主张整删 15 套变体, 被用户否掉 —— **拍板 D1 = 模板变体全部保留, 只重写其中的表格体**。计划 [26-10-13-0811](../plans/26-10-13-0811-plan-webui-detail-table-rebuild.html)(topic `webui-detail-table-rebuild`, Open)出厂并经两轮修订(0916 变体保留 / 0952 W0 复核修正)。
 **Topics:** webui-detail-table-rebuild
-**Refs:** memory-bank/plans/26-10-13-0811-plan-webui-detail-table-rebuild.html,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html
+**Refs:** memory-bank/plans/26-10-13-0811-plan-webui-detail-table-rebuild.html,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
 
 ## 原始请求
 
@@ -144,3 +144,5 @@
 - **坑档回写(按动作归类, 三条新)**: ① `web-ui/surface-color-family-single-point.md`(表面底色族必须令牌单点 + 页面级观感语义随类复用泄漏进嵌入面, 像素采样取证法); ② `testing/red-verify-must-hit-behavior.md`(红验必须命中行为/几何, 假修复绿着放行 / 量具口径假红分账); ③ `testing/heredoc-cjk-punct-js-syntax.md`(变体批量编辑中文标点/切片偏移 → JS 语法坏, node --check 纪律)。kb.index 已重建(21 生成物)。
 - **终验**: 静态守阵(skins/dom_panel/dom_page/docs_forms)99 passed; 全量 e2e 242 passed / 10 skipped / 0 failed; test.full 3199 passed / 4 skipped。
 - **顺手修一个潜伏顺序依赖**: test_kb_active_render_respects_byte_budget 裸 `import gen_active_recent`(靠同 worker 别的用例先插 sys.path), W7 新增用例改变 xdist 分组后翻车 —— 补显式 sys.path 插入, 教训归入坑档②(确定性口径)。
+
+- **2026-10-14 · 复查否定(本计划终态改写)**: 用户复查「内容页的几个表格仍有问题」→ 确认**所有模板都有问题**, 追加交互/呈现缺陷清单(点击乱选 / 选中态与按钮重叠 / 展开钮无层级 / 图标文字重叠 / 列前黑框 / 滚动条出现时表头长度异常 / 合并态切换内容消失 / 04 卡片异色背景), 并质问「这样的代码如何能过审核」。诊断定性: 四个修法映射错误(背景基准错锚 --bg vs 容器 --bg-card / 按钮列命题偷换 locked≠不占列 / 数据回路未纳入 L5 / 排序单方裁剪)+ 制度失效(判据全部自设、零截图 diff、零真实交互、零用户验收)。修正计划稿 26-10-14-0110 被用户移除回退。完整经过与实证见复查报告 **Refs:** `memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html` —— 后续重订计划以该报告为事实背景, 由用户主导。

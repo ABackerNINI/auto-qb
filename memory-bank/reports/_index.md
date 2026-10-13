@@ -18,6 +18,7 @@
 
 ## Done
 
+- [26-10-14-0136] [详情表格重构(26-10-13-0811)实施与复查经过 — 背景报告](26-10-14-0136-report-webui-detail-table-rebuild-review.html) — `webui-detail-table-rebuild`
 - [26-10-13-1034] [全局流量数据源信息滞后 — 成熟方案调研与自写独立监视小工具可行性分析](26-10-13-1034-report-global-traffic-source-lag.html) — `global-traffic-source`
 - [26-10-12-2148] [种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析](26-10-12-2148-report-seed-state-writeback-removal-feasibility.html) — `seed-state-writeback`
 - [26-10-12-1923] [启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告](26-10-12-1923-report-webui-startup-latency.html) — `webui-startup-latency`
