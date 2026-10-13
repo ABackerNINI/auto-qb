@@ -8,7 +8,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-13-0811">
 <meta name="doc-updated" content="26-10-13-0916">
-<meta name="doc-refs" content="memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html">
+<meta name="doc-refs" content="memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html,memory-bank/tasks/26-10-13-webui-detail-table-rebuild.md">
 <title>种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划</title>
 <style>
   :root{
@@ -182,7 +182,7 @@
   </div>
 
   <h3>表格面的清单（11 张）</h3>
-  <p>本轮的作业对象按下表计。<em>这份清单要在 W0 首日用一次代码复核钉死</em> —— 尤其是「经典三张是否与变体并存」这一点：若经典三表是变体选择之外的默认形态，它们同样要接内核。</p>
+  <p>本轮的作业对象按下表计。<strong>已于 W0 复核确认</strong>：经典三张确实存在（列定义在 <code>app.js</code> 的三个常量，模板在 <code>tpl/drawer-tabs.html</code>），与八个变体表并存 —— 一并接内核。</p>
   <table class="tbl">
     <thead><tr><th style="width:14ch">页签</th><th style="width:12ch">表格面</th><th style="width:18ch">形态</th><th>本轮处理</th></tr></thead>
     <tbody>
@@ -190,8 +190,9 @@
       <tr><td>用户</td><td class="num-c">07 / 08 / 09</td><td>四卡仪表 / 五区分组 / 密度雷达</td><td>表格体重写：08 走分段，09 的占用条只是一个条长渲染器</td></tr>
       <tr><td>内容</td><td class="num-c">10 / 11</td><td>树 + 详情 / 树表批量</td><td>表格体重写：树缩进是单元格，勾选是垫片</td></tr>
       <tr><td>三页签</td><td class="num-c">经典三张</td><td>标准网格表</td><td>一并接内核（复核确认其存在后）</td></tr>
-      <tr><td rowspan="2">无表格</td><td class="num-c">01 / 02 / 03</td><td>常规页（键值卡）</td><td class="dim">无表格体 —— 一行不改</td></tr>
-      <tr><td class="num-c">12 / 13 / 14 / 15</td><td>空间树图 / 流量图变体</td><td class="dim">无表格体 —— 一行不改</td></tr>
+      <tr><td rowspan="3">无表格</td><td class="num-c">01 / 02 / 03</td><td>常规页：多列键值栅格 / 卡片</td><td class="dim">无表头、无行语义 —— 一行不改</td></tr>
+      <tr><td class="num-c">13 / 14 / 15</td><td>流量页 KPI 与事件条目</td><td class="dim">非表格 —— 一行不改</td></tr>
+      <tr><td class="num-c">12</td><td>空间树图 + 自绘的「体积榜」网格列表</td><td class="dim"><strong>唯一边界</strong>：有五列网格行，但无表头、不接引擎。裁定为「非表格」—— 本轮不动，留档备查</td></tr>
     </tbody>
   </table>
 
@@ -303,9 +304,9 @@
   <table class="tbl">
     <thead><tr><th style="width:30ch">叠层</th><th style="width:9ch">现状</th><th>它带来什么</th></tr></thead>
     <tbody>
-      <tr><td>表格面的手写几何（网格 / 表头 / 列宽）</td><td class="num-c">每面一份</td><td>同一套轨道口径被重复实现；改一处，其余十处不知道</td></tr>
-      <tr><td>行与单元格的渲染实现</td><td class="num-c">每面一份</td><td>同一语义的列（如下载速度）在多个变体里各有一份实现</td></tr>
-      <tr><td>列字符集</td><td class="num-c">多套并存</td><td>同一列在多处登记：取值、宽度、可见性各在一处</td></tr>
+      <tr><td>单元格渲染器</td><td class="num-c">每变体一份</td><td>同一语义的列（如下载速度）在多个变体里各有一份实现，改一处漏一处</td></tr>
+      <tr><td>列字符集</td><td class="num-c">每表一套</td><td>同一列在多处登记：取值、宽度、可见性各在一处</td></tr>
+      <tr><td>几何是单一函数、但被两处二次覆写</td><td class="num-c">引擎 + 变体 CSS</td><td>引擎算出轨道之后，变体侧的 CSS 又改一次栅格 / 列头定位 / 列头显隐 —— 这才是不一致的真身</td></tr>
       <tr><td>连接层（传送 + 代数 + 空位锚）</td><td class="num-c">一整套</td><td>四条时序路径（初开 / 切页签 / 换目标 / 合并列）各有兜底，且处处依赖挂载顺序</td></tr>
       <tr><td>注入式对齐样式</td><td class="num-c">一份单例</td><td>按列序号生成规则 —— 列集一变即失配</td></tr>
     </tbody>
@@ -391,25 +392,41 @@ assertLayout(surfaceEl, cols) {
   <h2 class="ch">删除清单（只删表格部分）</h2>
   <p>删除面被限定在表格体。下列三类中，<strong>前两类删、第三类一行不改</strong>。</p>
 
-  <h3>一 · 每个含表格的变体文件内部</h3>
-<pre><span class="c">八个含表格的变体：04 05 06 07 08 09 10 11</span>
+  <h3>一 · 每个含表格的变体文件内部<span class="tag">W0 复核后修正</span></h3>
+  <div class="note">
+    <div class="h">复核推翻了初版的一个假设</div>
+    <p>初版以为每个变体里各有一套手搓的表头 / 行 / 网格。实测不成立 —— 上一轮已经把它们全部退役了：现在八个变体<strong>只输出一个空槽位</strong>（<code>data-dt-anchor-slot</code>），表格体由共享桥渲染。所以「每个变体各实现一遍」这句话对现状不成立，本节的删改面相应收窄。</p>
+  </div>
+<pre><span class="c">八个含表格的变体：04 05 06 07 08 09 10 11 —— 只动下面两类</span>
 
-<span class="del">手写的列表容器与行容器网格样式        每种变体一份 → 删除</span>
-<span class="del">手搓的表头（列名 / 排序箭头 / 列宽）    每种变体一份 → 删除</span>
-<span class="del">手搓的行与值格组装                    每种变体一份 → 删除</span>
-<span class="del">手搓的排序状态机与默认序              这套状态管理 → 删除</span>
-<span class="del">该变体专属的表格 / 网格 / 容差 CSS     仅表格相关部分 → 删除</span>
+<span class="del">覆盖表格几何的 CSS 片段 → 删除（几何归内核）</span>
+    例：04 把行容器覆写成两列栅格、10/04 隐藏列头、09/07/11 给列头改 sticky 定位
+    这些正是「表头异色背景」的落点：背景与定位由变体侧规则给出，与内核算出的几何脱节
+
+<span class="del">单元格类名里承担「列几何」的那部分 → 收回内核</span>
+    单元格观感（配色、徽章、条长样式）保留在变体；宽度与对齐不再由变体声明
 
 <span class="c">同一个文件里其余全部原样保留：</span>
-    标题栏 · 筛选 chips/pills · 摘要条 · KPI 区 · 仪表卡 · 雷达摘要
-    工具条 · 批量操作 · foot 汇总 · 内容树的右侧详情区 · aside · 版式与配色</pre>
+    槽位与装载逻辑 · 行数据装配 · 标题栏 · 筛选 chips/pills · 摘要条 · KPI 区
+    仪表卡 · 雷达摘要 · 工具条 · 批量操作 · foot 汇总 · 内容树的右侧详情区
+    aside · 行态修饰类（bad/lan/hand/is-chk/dir/file）· 版式与配色</pre>
 
-  <h3>二 · 共享层里属于表格的部分</h3>
-<pre><span class="del">传送甬道 / 空位锚 / 锚代数            整套删除（含支撑它的状态字段）</span>
-<span class="del">每个变体一份的单元格渲染器组件        由共享渲染器注册表取代</span>
-<span class="del">每张表一套的列字符集与描述符          由共享列池 + 变体子集声明取代</span>
-<span class="del">按列序号注入的对齐样式生成            删除</span>
-<span class="del">列集动态省略（渐进列）                删除 —— 缺值保留列并渲染占位符</span></pre>
+  <h3>二 · 共享层里属于表格的部分<span class="tag">真正的改写面</span></h3>
+  <p>W0 复核确认：重复不在变体里，在<strong>引擎侧的四处派生</strong> —— 而且这四处是主列表四表与面板表共用的同一份实现：</p>
+  <table class="tbl">
+    <thead><tr><th style="width:24ch">派生</th><th style="width:22ch">现状位置</th><th>本轮处理</th></tr></thead>
+    <tbody>
+      <tr><td>网格轨道</td><td class="num-c">columns.js · 单一函数</td><td>主列表继续走它；<strong>抽屉侧改由内核算</strong>，两路不许再互相依赖</td></tr>
+      <tr><td>可见列</td><td class="num-c">columns.js · 单一函数</td><td>同上；抽屉侧由列池 + 子集声明产出</td></tr>
+      <tr><td>按序号注入的对齐样式</td><td class="num-c">注入一份单例样式表</td><td><strong>抽屉侧退役</strong>：对齐随列对象输出，不再事后按 <code>nth-child</code> 补</td></tr>
+      <tr><td>渐进列（空则整列消失）</td><td class="num-c">columns.js · 可见列尾部</td><td>抽屉侧删除 —— 缺值保留列、渲染占位符 <code>—</code></td></tr>
+      <tr><td>传送甬道 / 空位锚 / 锚代数</td><td class="num-c">只服务变体表</td><td><strong>整条可摘</strong>，不波及主视图与经典三表（详见 D6）</td></tr>
+    </tbody>
+  </table>
+  <div class="note warn">
+    <div class="h">这四处是共有路径</div>
+    <p>主列表的辅种 / 明细 / 种子页 / 追剧四张表与面板表走的是<strong>同一份函数体</strong>。因此本轮的动作是<strong>「把抽屉侧拆出来交给内核」</strong>，不是删掉共有实现 —— 谁删谁让主列表一起塌。</p>
+  </div>
 
   <div class="note warn">
     <div class="h">渐进列必须删</div>
@@ -581,6 +598,7 @@ assertLayout(surfaceEl, cols) {
     <tbody>
       <tr><td class="num-c">26-10-13-0811</td><td>初版出厂</td><td>基于「现有技术完全抛弃」，主张整删 15 套变体重建。</td></tr>
       <tr><td class="num-c">26-10-13-0916</td><td>D1 拍板后重写</td><td><strong>模板变体全部保留</strong>（用户拍板）。删除面收窄到「每个变体内部的表格体」；新增 11 张表格面清单、外壳与表格的划界、D6（渲染通道）与 D7（列共享）、以及「变体观感回归」硬验收；无表格的 7 个变体改为一行不改。</td></tr>
+      <tr><td class="num-c">26-10-13-0952</td><td>W0 复核后修正</td><td>代码复核推翻初版一处假设：变体里<strong>已经没有手搓表格</strong>（只剩槽位，表格由共享桥渲染），重复实际在引擎侧的四处列派生 + 变体侧覆盖几何的 CSS。据此重写 §05 删除清单与 §03 叠层表；确认「经典三张存在」；12 号的体积榜裁定为非表格、不动。<strong>结论不变</strong>：八类症状仍归三个簇，只是「各算各的」的具体位置从变体里挪到了引擎与变体 CSS 之间。</td></tr>
     </tbody>
   </table>
 </section>

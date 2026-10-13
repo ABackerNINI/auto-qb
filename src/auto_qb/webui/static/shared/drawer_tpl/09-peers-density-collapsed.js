@@ -3,7 +3,7 @@
  * 设计稿: resources/detail-panel-templates/09-peers-density-collapsed.html(collapsed 档;
  * 矮/高 = 30px 行距密度表自适应滚动。收起档(头部 44px 雷达摘要: 构成比例条 + 上下载
  * 合计 + 吸血 / 连接计数, 本变体 summary() 供给)已随面板折叠状态整体移除(2026-10-09)。
- * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询); 「↑ 占用」列 = 该对端 upspeed 占
+ * 数据: /peers qB sync 透传整包(drawer.peers, 5s 轮询); 「占用」列 = 该对端 upspeed 占
  * 当前上传合计的比重(条长 + 数值), 默认按它降序 —— 第一行就是最吃上传的对端。
  * 动作: 悬停标记(展示, CSS :hover); 筛选 chips 为纯前端态。
  * 拍板 P-04: 悬停封禁钮 v1 省略(无后端端点), 设计稿「处置」列不落地; 迅雷红标 = client 名含
@@ -12,7 +12,7 @@
  * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
  *   表格体重写为**引擎消费面** —— 外壳只出锚槽(anchFill 保活), 表壳/行渲染器由
  *   <aq-dt-bridge> Teleport 进锚(描述符 drawerPeerV09: 列集 DRAWER_PEER_V09_COLUMNS,
- *   「↑ 占用」= upspeed 列改 label —— 排序键不变(R7), occ 条长由行装配预挂 occBar)。
+ *   「占用」= upspeed 列改 label —— 排序键不变(R7), occ 条长由行装配预挂 occBar)。
  *   手搓排序状态机/列宽 grid/表头拼装全部退役(Q4), 默认序 upspeed 降序由描述符
  *   sort.defKey/defDir 声明。行来源与筛选是版式语义, 单点在 rowsFn。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
@@ -119,7 +119,7 @@
     "  font-size:11.5px; color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt09-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt09-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px; color:var(--fg-dim); }",
-    /* 「↑ 占用」列: 条长 = 占当前上传合计的比重, 色随方向令牌; 嫌疑行红 */
+    /* 「占用」列: 条长 = 占当前上传合计的比重, 色随方向令牌; 嫌疑行红 */
     ".drawer .dt09-occ { display:flex; align-items:center; gap:8px; min-width:0; }",
     ".drawer .dt09-occ .track { flex:1; height:4px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; }",
     ".drawer .dt09-occ .track i { display:block; height:100%; border-radius:999px; background:var(--today-up); }",
@@ -229,7 +229,7 @@
   function barHtml(list) {
     const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
       T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
-    return chips + T`<span class="dt09-note">默认按「↑ 占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>`;
+    return chips + T`<span class="dt09-note">默认按「占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>`;
   }
 
   function render(host, ctx) {

@@ -41,6 +41,7 @@
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): ①门抑制单点判据; ②三 fetcher 的 loading 置位都经该单点(直写即回潮); ③标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); ④_stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); ⑤_drawerSwitchEnd 必须清标记(否则粘住); ⑥旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
+- test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— ①三份 manifest 都登记 shared/dt_table.js 且文件在盘上; ②window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); ③几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; ④L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); ⑤渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); ⑥L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 ③⑤⑥(无 node 静默跳过)
 """
 import json
 import os
@@ -3841,3 +3842,116 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     for gone in ("_drawerGraceHold", "_DRAWER_GRACE_DELAYS", "_drawerPeerCount"):
         assert gone not in store_js, \
             "旧的『空响应视为未就绪→延迟重拉』机制(%s)不得回潮(会把常态空态推迟)" % gone
+
+
+_NODE_DT_TABLE_PROBE = r"""
+const path = process.argv[1];
+global.window = {};
+require(path);
+const DT = global.window.DT_TABLE;
+const checks = [];
+const ck = (name, cond) => checks.push({ name: name, ok: !!cond });
+
+const cols = [{ key: "a", tpl: "10px", align: "right" }, { key: "b" }];
+const lay = DT.layout(cols);
+ck("count=列数", lay.count === 2);
+ck("缺宽回缺省轨道", lay.tracks[1] === DT.DEFAULT_TRACK);
+ck("gridTemplate=tracks 拼接", lay.gridTemplate === lay.tracks.join(" "));
+ck("aligns 随列出", lay.aligns[0] === "right" && lay.aligns[1] === "left");
+ck("keys 随列出", lay.keys.join(",") === "a,b");
+const lay2 = DT.layout(cols, { a: "99px" });
+ck("固化宽度覆盖", lay2.tracks[0] === "99px");
+ck("覆盖后仍单一出口", lay2.gridTemplate === lay2.tracks.join(" "));
+
+ck("hasArrow 认方向符", DT.hasArrow("↑ 占用") === true);
+ck("hasArrow 放过纯文案", DT.hasArrow("占用") === false);
+ck("checkLabels 命中违规列", DT.checkLabels([{ key: "x", label: "↑ 占用" }]).join() === "x");
+ck("checkLabels 干净列零报", DT.checkLabels(cols).length === 0);
+
+DT.registerCell("t", () => "T");
+ck("登记后取得到", DT.cellOf("t")() === "T");
+let threw = false;
+try { DT.cellOf("nope"); } catch (e) { threw = true; }
+ck("未登记即抛(不许渲染空白)", threw);
+
+/* assertLayout: 三处计数 —— 网格轨道 / 列头格 / 数据行子格 */
+global.window.getComputedStyle = () => ({ gridTemplateColumns: "10px 20px" });
+const head = { querySelectorAll: () => ({ length: 2 }) };
+ck("一致时零问题", DT.assertLayout(head, { children: { length: 2 } }, cols).length === 0);
+const bad = DT.assertLayout(head, { children: { length: 3 } }, cols);
+ck("多一格即报", bad.length === 1 && /子格数 3 != 列数 2/.test(bad[0]));
+const bad2 = DT.assertLayout({ querySelectorAll: () => ({ length: 1 }) }, { children: { length: 2 } }, cols);
+ck("少一列头即报", bad2.some((p) => /列头格数 1 != 列数 2/.test(p)));
+ck("未挂载不算不一致", DT.assertLayout(null, null, cols).length === 0);
+
+const failed = checks.filter((c) => !c.ok).map((c) => c.name);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_dt_table_kernel_single_point():
+    """详情面板表格内核守阵(计划 26-10-13-0811 W1)
+
+    用户报的八项表格症状归三个根因簇, 簇 A 是「一张表的几何与列被互不相识的几处各算一遍,
+    且没有任何一处做一致性校验」—— 表现是表头错位 / 多出的横带 / 内容挤成一堆 / 对齐不一致 /
+    列名自带方向符号再叠一个排序箭头。本守阵钉内核这条解:
+
+    ① 三份 manifest 都登记 dt_table.js 且文件在盘上(缺一份 = 该皮肤整块功能静默消失);
+    ② 四个对外口子齐全(layout / assertLayout / checkLabels / registerCell);
+    ③ 几何单一出口 —— 轨道串 / 对齐 / 列键**同一个返回值**里出来, 且 gridTemplate 恒等于
+       tracks.join(" ")(调用方不许再自己拼一次, 拼了就又是一处事实源);
+    ④ L3 守卫 —— 列名是纯文案, 方向符号只能由排序态单点渲染(表壳 .arrow); 全仓列定义的
+       label 字段零方向符, 用户报的「密度雷达占用表头前多一个箭头」不得回潮;
+    ⑤ 渲染即自查 —— assertLayout 三处计数(轨道 / 列头格 / 数据行子格)必须相等, 不相等就是
+       「多一格 / 少一列」, 而它的视觉表现正是「速度列下方有异常横带」与「多列内容挤在一起」;
+       未挂载/未渲染一律不算不一致(面板没开时不得满屏报错)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js_path = os.path.join(shared, "dt_table.js")
+    assert os.path.isfile(js_path), "shared/dt_table.js 不在盘上(内核失踪)"
+
+    # ① 三皮肤清单登记(与 qb_traffic_chart.js 同款纪律)
+    for ui in _UI_ALL:
+        mf = _ui_manifest(ui)
+        assert "/shared/dt_table.js" in mf["scripts"], f"{ui} 清单缺 dt_table.js(该皮肤无内核)"
+
+    js = open(js_path, encoding="utf-8").read()
+
+    # ② 对外口子
+    for port in ("layout:", "assertLayout:", "checkLabels:", "registerCell:", "cellOf:", "hasArrow:"):
+        assert port in js, f"dt_table.js 缺对外口子 {port}(内核契约不全)"
+    assert "window.DT_TABLE" in js, "dt_table.js 未挂 window.DT_TABLE(调用方取不到)"
+
+    # ④ L3: 列定义的 label 字段零方向符(扫列定义单点 app.js + 变体文件)
+    arrow_re = re.compile(r"[\u2190-\u21ff\u25b2\u25bc\u25c0-\u25ff\u2b00-\u2bff\u27a1\u2b05\u2b06\u2b07]")
+    app_js = _app_bundle_text()
+    for m in re.finditer(r'label:/s*"([^"]*)"', app_js):
+        assert not arrow_re.search(m.group(1)), \
+            f"列名 {m.group(1)!r} 自带方向符号 —— 方向只能由排序态单点渲染(表壳 .arrow), " \
+            "写在 label 里会与它叠加成两个箭头"
+    # 具体回潮钉: 只针对列定义书写形态(注释里提到旧名不算回潮, 但会被上面那条正则误伤, 故分开)
+    assert 'label: "\u2191 \u5360\u7528"' not in app_js, \
+        "09 密度雷达的列名不得回潮成「↑ 占用」(用户 2026-10-13 报障: 表头前多一个箭头)"
+    tpl_dir = os.path.join(shared, "drawer_tpl")
+    for name in sorted(os.listdir(tpl_dir)):
+        if not name.endswith(".js"):
+            continue
+        txt = open(os.path.join(tpl_dir, name), encoding="utf-8").read()
+        for m in re.finditer(r'label:/s*"([^"]*)"', txt):
+            assert not arrow_re.search(m.group(1)), \
+                f"{name} 的列名 {m.group(1)!r} 自带方向符号(与排序箭头叠加)"
+
+    # ③⑤ 有 node 时真跑电池(无 node 静默跳过, 不引入 skip)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_DT_TABLE_PROBE, js_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"dt_table node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"表格内核电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"

@@ -257,11 +257,13 @@ const DRAWER_PEER_V08_COLUMNS = [
   DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6],
   { ...DRAWER_PEER_COLUMNS[8], sortable: false },
 ];
-/* 09 密度雷达: 9 列, 「↑ 占用」= upspeed 列的变体语义(条长 = 占当前上传合计比重, 渲染器出),
+/* 09 密度雷达: 9 列, 「占用」= upspeed 列的变体语义(条长 = 占当前上传合计比重, 渲染器出),
  * 排序仍按 upspeed 原始值 —— 列个性 = 声明(改 label), 排序语义不换键(R7 口径) */
 const DRAWER_PEER_V09_COLUMNS = [
   DRAWER_PEER_COLUMNS[0], DRAWER_PEER_COLUMNS[1], DRAWER_PEER_COLUMNS[2], DRAWER_PEER_COLUMNS[3],
-  { ...DRAWER_PEER_COLUMNS[5], label: "↑ 占用" }, DRAWER_PEER_COLUMNS[4],
+  /* 列名是纯文案: 方向符号由排序态单点渲染(表壳的 .arrow), 写在 label 里会与它叠加 ——
+   * 用户报的「密度雷达占用表头前多了一个箭头」即此。详见计划 26-10-13-0811 L3。 */
+  { ...DRAWER_PEER_COLUMNS[5], label: "占用" }, DRAWER_PEER_COLUMNS[4],
   DRAWER_PEER_COLUMNS[7], DRAWER_PEER_COLUMNS[6], DRAWER_PEER_COLUMNS[8],
 ];
 /* ---------------- U3: Tracker 三变体列集(计划 26-10-12-0527, D2/D5) ----------------
@@ -512,7 +514,7 @@ const DRAWER_TABLE_DEFS = {
   /* ---------------- U2: 用户表三变体(07/08/09, 计划 26-10-12-0527; 拍板 D2/D3/D5/D6 = A) ----------------
    * rows: "dtTplRows" = 行来源与筛选(07/09 筛选 chips、08 五区分桶/只看在传)回变体注册条目的
    * rowsFn(版式语义); 排序/拖宽/右键隐藏/偏好持久化全走引擎(dyn 排序键 + table-id 偏好键)。
-   * 默认序按各变体原口径: upspeed 降序(07/08/09 一致 —— 09 的「↑ 占用」列也是 upspeed 键)。
+   * 默认序按各变体原口径: upspeed 降序(07/08/09 一致 —— 09 的「占用」列也是 upspeed 键)。
    * rowCls = 行装配预挂的修饰类串(红行/内网标/握手半透明 —— 行级个性经引擎行容器保留)。
    * 08 加 segs: true —— rowsFn 返回 [{key, rows}] 分段, 每组一个锚, 分组头留在外壳(D5:
    * 分组是版式, 行是引擎表体); 组内排序跨组共享一座键(与原手搓状态机同口径)。 */
