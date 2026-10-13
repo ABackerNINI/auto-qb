@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-detail-table-rebuild">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-13-0811">
+<meta name="doc-updated" content="26-10-13-0916">
+<meta name="doc-refs" content="memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html">
+<title>种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0e1013;
+    --paper:#14171b;
+    --paper-2:#191d22;
+    --ink:#e7e9e6;
+    --muted:#a2a8af;
+    --dim:#6e747b;
+    --line:rgba(255,255,255,.10);
+    --line-soft:rgba(255,255,255,.055);
+    --accent:#5fb3a6;
+    --warn:#dd8f66;
+    --bad:#d9736c;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --head:"Bahnschrift","DIN Alternate","Segoe UI Semibold","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:15px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+
+  .cover{padding:92px 0 34px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  h1{font-family:var(--head);font-size:44px;line-height:1.1;letter-spacing:-.024em;font-weight:600;margin:22px 0 0;max-width:22ch}
+  .sub{font-size:19px;color:var(--muted);margin-top:20px;max-width:62ch;line-height:1.52}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:40px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:14px 18px 6px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin:0 0 5px}
+  .meta dd{margin:0;font-size:13.5px;color:var(--ink);font-family:var(--mono)}
+  .meta dd.s{color:var(--warn)}
+  .meta dd.ok{color:var(--accent)}
+
+  .toc{padding:40px 0 12px}
+  .toc h2{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin:0 0 18px;font-weight:400}
+  .toc ol{margin:0;padding:0;list-style:none;columns:2;column-gap:48px}
+  .toc li{padding:5px 0;border-bottom:1px solid var(--line-soft);font-size:14px;break-inside:avoid}
+  .toc a{color:var(--ink);text-decoration:none;display:block}
+  .toc a:hover{color:var(--accent)}
+  .toc .n{font-family:var(--mono);color:var(--dim);margin-right:12px;font-size:12px}
+
+  section{padding:52px 0 8px;border-top:1px solid var(--line);margin-top:34px}
+  section:first-of-type{border-top:0}
+  .num{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--accent);text-transform:uppercase}
+  h2.ch{font-family:var(--head);font-size:31px;line-height:1.18;letter-spacing:-.018em;font-weight:600;margin:10px 0 0;max-width:28ch}
+  h3{font-family:var(--head);font-size:19px;line-height:1.3;letter-spacing:-.008em;font-weight:600;margin:38px 0 12px}
+  h4{font-size:15px;font-weight:600;margin:26px 0 8px;color:var(--ink)}
+  h4 .tag{font-family:var(--mono);font-size:11px;color:var(--dim);font-weight:400;letter-spacing:.06em;margin-left:8px}
+  p{margin:14px 0;max-width:74ch}
+  ul.body,ol.body{max-width:74ch;padding-left:20px}
+  li{margin:7px 0}
+  .lede{font-size:17px;color:var(--muted);max-width:70ch;line-height:1.56}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(95,179,166,.32)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.855em}
+  code{color:#d8d5c9;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  strong{font-weight:600}
+  em{font-style:normal;color:var(--ink);border-bottom:1px solid var(--line)}
+  .dim{color:var(--dim)}
+  .muted{color:var(--muted)}
+
+  .note{margin:24px 0;padding:16px 20px;background:var(--paper);border:1px solid var(--line);font-size:14px;max-width:82ch}
+  .note .h{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .note.warn .h{color:var(--warn)}
+  .note p:last-child{margin-bottom:0}
+  .note p:first-of-type{margin-top:0}
+  .note ul{color:var(--muted)}
+
+  .tbl{width:100%;border-collapse:collapse;margin:22px 0;font-size:13.5px}
+  .tbl th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--dim);font-weight:400;padding:8px 14px 8px 0;border-bottom:1px solid var(--line);
+  }
+  .tbl td{padding:11px 14px 11px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.5}
+  .tbl td:last-child,.tbl th:last-child{padding-right:0}
+  .tbl tr:hover td{background:rgba(255,255,255,.018)}
+  .tbl .k{font-family:var(--mono);color:var(--accent);white-space:nowrap;font-size:12.5px}
+  .tbl .bad{color:var(--bad)}
+  .tbl .num-c{font-family:var(--mono);color:var(--dim);white-space:nowrap}
+
+  pre{
+    margin:20px 0;padding:16px 18px;background:var(--paper);border:1px solid var(--line-soft);
+    overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;color:#cfd3cd;
+  }
+  pre .c{color:#6f757c}
+  pre .kw{color:var(--accent)}
+  pre .s{color:#c9b98a}
+  pre .del{color:var(--bad)}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:26px 0;border-top:1px solid var(--line)}
+  .grid3>div{padding:18px 22px 4px 0;border-right:1px solid var(--line-soft)}
+  .grid3>div:last-child{border-right:0}
+  .grid3 .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-bottom:9px}
+  .grid3 .val{font-family:var(--head);font-size:26px;line-height:1.1;letter-spacing:-.016em;color:var(--ink)}
+  .grid3 .dsc{font-size:13px;color:var(--muted);margin-top:9px;line-height:1.5}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:24px 0;border:1px solid var(--line)}
+  .split>div{padding:16px 20px}
+  .split>div:first-child{border-right:1px solid var(--line)}
+  .split .h{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+  .split ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+  .split li{margin:5px 0}
+
+  footer{margin-top:64px;padding:28px 0 60px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+  footer .row{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+
+  @media (max-width:900px){
+    .wrap{padding:0 22px}
+    h1{font-size:34px}
+    .meta{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .toc ol{columns:1}
+    .grid3,.split{grid-template-columns:1fr}
+    .grid3>div{border-right:0;border-bottom:1px solid var(--line-soft);padding-bottom:14px}
+    .split>div:first-child{border-right:0;border-bottom:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Plan · Webui · 26-10-13-0811</div>
+  <h1>种子详情表格：只重写表格</h1>
+  <p class="sub">模板变体全部保留 —— 15 个变体文件一个都不删。本轮只重写其中的表格体：11 个表格面共用一份列池和一个渲染内核；每个变体剩下的部分（标题栏、筛选、摘要、工具条、详情区、版式样式）原样不动。</p>
+  <dl class="meta">
+    <div><dt>状态</dt><dd class="s">Open · 待拍板</dd></div>
+    <div><dt>变体</dt><dd class="ok">全部保留</dd></div>
+    <div><dt>表格面</dt><dd>11 张</dd></div>
+    <div><dt>波次</dt><dd>W0 – W7</dd></div>
+  </dl>
+</header>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1"><span class="n">01</span>结论与范围界定</a></li>
+    <li><a href="#s2"><span class="n">02</span>八个症状，三个根因簇</a></li>
+    <li><a href="#s3"><span class="n">03</span>为什么补丁路线走到头</a></li>
+    <li><a href="#s4"><span class="n">04</span>新内核：一处算，多处分用</a></li>
+    <li><a href="#s5"><span class="n">05</span>删除清单（只删表格部分）</a></li>
+    <li><a href="#s6"><span class="n">06</span>已定与待拍板决策</a></li>
+    <li><a href="#s7"><span class="n">07</span>分波实施 W0 – W7</a></li>
+    <li><a href="#s8"><span class="n">08</span>验收：几何断言 + 变体观感回归</a></li>
+    <li><a href="#s9"><span class="n">09</span>风险与回滚</a></li>
+    <li><a href="#s10"><span class="n">10</span>范围之外</a></li>
+    <li><a href="#s11"><span class="n">11</span>变更记录</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <div class="num">01</div>
+  <h2 class="ch">结论与范围界定</h2>
+  <p class="lede">用户的一句话决定了本计划的全部走向：<em>「问题太多，其中很多问题是修复过几次的，删除后重构。」</em></p>
+  <p>「修复过几次」是这份计划唯一的、也是最硬的证据。一个缺陷能被修好两次以上，说明修的是表象而不是产生它的机制：每修一次，代码就多一层针对性补丁，下一次复发就换一副面孔。继续沿这条路走，第八次修复依然会成功，第九次症状依然会回来。</p>
+
+  <div class="note warn">
+    <div class="h">2026-10-13 拍板：模板变体全部保留</div>
+    <p>初版主张把 15 套版式变体整体删除，用户否掉了 —— <strong>变体要全部保留</strong>，本轮只针对其中的表格。删改面因此被限定在「表格体」之内：</p>
+    <ul class="body">
+      <li><strong>不动</strong>：15 个变体文件的存在，以及每个变体里除表格之外的所有内容。</li>
+      <li><strong>重写</strong>：11 个表格面 —— 表头、行网格、单元格，以及它们各自的几何与列定义。</li>
+      <li><strong>一行不改</strong>：其中 7 个不含表格的变体。</li>
+    </ul>
+  </div>
+
+  <h3>表格面的清单（11 张）</h3>
+  <p>本轮的作业对象按下表计。<em>这份清单要在 W0 首日用一次代码复核钉死</em> —— 尤其是「经典三张是否与变体并存」这一点：若经典三表是变体选择之外的默认形态，它们同样要接内核。</p>
+  <table class="tbl">
+    <thead><tr><th style="width:14ch">页签</th><th style="width:12ch">表格面</th><th style="width:18ch">形态</th><th>本轮处理</th></tr></thead>
+    <tbody>
+      <tr><td>Tracker</td><td class="num-c">04 / 05 / 06</td><td>卡片栅格 / 健康分组 / 增强表格</td><td>表格体重写：卡片即单列行，分组即分段的行分组</td></tr>
+      <tr><td>用户</td><td class="num-c">07 / 08 / 09</td><td>四卡仪表 / 五区分组 / 密度雷达</td><td>表格体重写：08 走分段，09 的占用条只是一个条长渲染器</td></tr>
+      <tr><td>内容</td><td class="num-c">10 / 11</td><td>树 + 详情 / 树表批量</td><td>表格体重写：树缩进是单元格，勾选是垫片</td></tr>
+      <tr><td>三页签</td><td class="num-c">经典三张</td><td>标准网格表</td><td>一并接内核（复核确认其存在后）</td></tr>
+      <tr><td rowspan="2">无表格</td><td class="num-c">01 / 02 / 03</td><td>常规页（键值卡）</td><td class="dim">无表格体 —— 一行不改</td></tr>
+      <tr><td class="num-c">12 / 13 / 14 / 15</td><td>空间树图 / 流量图变体</td><td class="dim">无表格体 —— 一行不改</td></tr>
+    </tbody>
+  </table>
+
+  <h3>划一条线：什么算表格区</h3>
+  <div class="split">
+    <div>
+      <div class="h">外壳保留（属于变体）</div>
+      <ul>
+        <li>标题栏、筛选 chips / pills、摘要条</li>
+        <li>KPI 区、仪表卡、雷达摘要、结论条</li>
+        <li>工具条、批量操作、foot 汇总</li>
+        <li>内容树的右侧详情区 / aside、预览区</li>
+        <li>变体自己的版式样式与配色</li>
+      </ul>
+    </div>
+    <div>
+      <div class="h">表格区（本轮重写）</div>
+      <ul>
+        <li>列头及其排序态、拖宽把手</li>
+        <li>行容器与网格、行级修饰类</li>
+        <li>每一个值单元格</li>
+        <li>列的几何：宽度、对齐、可见性</li>
+        <li>行内的勾选 / 折叠 / 动作（改为垫片）</li>
+      </ul>
+    </div>
+  </div>
+  <p>判据只有一句：<strong>凡是「排序列、拖列宽、右键隐藏、批量选中」要作用到的行，就是表格区</strong>。这也解释了为什么用户看到的八个问题全落在表格上 —— 它们同属这条线的内侧。</p>
+
+  <div class="note">
+    <div class="h">本计划的立场</div>
+    <p>下文出现的具体代码位置，是基于现状实现地图的<strong>结构性推断</strong>，用来定位「该删哪里」和「为什么删」，不是待修清单。每个推断在对应波次开工的头十分钟内做一次实证复核（见 <a href="#s7">§07</a> 各波的「首日复核」）。即便复核后发现某处推断不成立，表格重写这件事也不变 —— 依据是每个表格面都各自重复了一遍本该共享的几何与列逻辑。</p>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="num">02</div>
+  <h2 class="ch">八个症状，三个根因簇</h2>
+  <p>八个症状看上去互不相关（表头底色、多余的横条、内容挤成一堆、对齐不一致、数值不动、多一个箭头、按钮成列、勾选跳动）。按「由哪一种机制产生」重新分组，落到三个簇里 —— 每簇一个结构性根因，每簇一次修复，而不是八次。</p>
+
+  <table class="tbl">
+    <thead>
+      <tr><th style="width:4ch">#</th><th style="width:26ch">症状（用户原话）</th><th style="width:12ch">根因簇</th><th>机制</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num-c">1</td><td>表头 IP/地址下方有异色背景</td><td class="k">A · B</td>
+        <td>表头落在一个自带底色的宿体里，而列宽与对齐规则是按列序号（<code>:nth-child(n)</code>）注入的 —— 选择器依赖 DOM 层级与列序号，任一侧不同步，底色或边线就落到相邻列上。</td>
+      </tr>
+      <tr>
+        <td class="num-c">2</td><td>上传/下载速度列下方有异常横条</td><td class="k">A</td>
+        <td>网格轨道数与单元格数不一致时，溢出单元格被塞进<em>隐式行 / 隐式列</em>，视觉上就是一条没有内容的横带。那条横带不是装饰，是多出来的格子。</td>
+      </tr>
+      <tr>
+        <td class="num-c">3</td><td>上次更新后多列内容挤在一起</td><td class="k">A</td>
+        <td>与上一条同根。容器只声明了 N 条轨道，行里却输出 N+k 个值格 —— 多出来的挤进最后一条轨道。两条症状是同一个错判的两个方向。</td>
+      </tr>
+      <tr>
+        <td class="num-c">4</td><td>进度表头对齐方式未与主表统一</td><td class="k">A</td>
+        <td>对齐有两个出口：注入式 CSS 规则与行内类名。一个出口更新了、另一个没有，表头与数据行就各走一路。</td>
+      </tr>
+      <tr>
+        <td class="num-c">5</td><td>上传/下载速度不实时更新</td><td class="k">B · C</td>
+        <td>更新是「重建驱动」而非「值驱动」：轮询回来后可能被某个脏比较挡住，或重建压根没发生 —— 值更新走了一条要过闸门的路径。</td>
+      </tr>
+      <tr>
+        <td class="num-c">6</td><td>密度雷达「占用」表头前多一个箭头</td><td class="k">A</td>
+        <td>列名这一纯文案字段里混入了方向符号（<code>label: "↑&nbsp;占用"</code>），而排序态会在命中列再画一个箭头 —— 两个来源叠加。<strong>已确证</strong>：该列的 label 字符串里写死了 ↑。</td>
+      </tr>
+      <tr>
+        <td class="num-c">7</td><td>内容表按钮被当作单独的列</td><td class="k">A</td>
+        <td>勾选框 / 折叠钮 / 动作钮没有登记为列，却在行里占了一个格子 —— 不进网格声明，却占网格位置，于是「自成列」。这正是上一条里那个 <code>k</code> 的主要来源。</td>
+      </tr>
+      <tr>
+        <td class="num-c">8</td><td>点击勾选，元素变化导致跳动</td><td class="k">B · C</td>
+        <td>勾选改变的是行内 UI 态，而 UI 态不在驱动渲染的数据里 → 结果成了「通知一声、整段重渲染」而不是就地更新；重渲染期间行数与子节点数变化 → 行位偏移。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid3">
+    <div>
+      <div class="lbl">簇 A</div>
+      <div class="val">各算各的</div>
+      <div class="dsc">一张表的「几列、多宽、怎么对齐、渲染什么」落在互不相识的几处：列描述符、可见列派生、按序号注入的对齐样式、按列键查表的单元格分支链，没有任何一处做一致性校验。</div>
+    </div>
+    <div>
+      <div class="lbl">簇 B</div>
+      <div class="val">两条通道</div>
+      <div class="dsc">表格区一半由变体的字符串模板产出，另一半被传送进前者的空位，中间靠一个代数计数器协调挂载时序。表头与表身的祖先节点因此不由同一套样式作用域管理。</div>
+    </div>
+    <div>
+      <div class="lbl">簇 C</div>
+      <div class="val">重建当更新</div>
+      <div class="dsc">速度、进度、勾选这类高频小变量走「通知 → 重装配 → 重新渲染」，与低频结构更新抢同一扇门；任何防抖、脏比较、可见性门都会顺手把它们一起挡掉。</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="h">变体保留之后，诊断还成立吗</div>
+    <p>成立。三个簇都不在「版式」上，而在「表格」上：簇 A 的重复实现出现在每个变体的表格区里；簇 B 的双通道只在含表格的那 8 个变体上存在；簇 C 影响所有含高频列的表格 —— 包括变体内的表格（例如 09 的占用条、07 的速度卡）。<strong>保留变体不改变诊断。</strong></p>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="num">03</div>
+  <h2 class="ch">为什么补丁路线走到头</h2>
+  <p>把「表格」这一层的复杂度按来源拆开：<strong>几乎全部来自「同一件事被做了 11 遍」</strong> —— 而不是来自 11 张表彼此真有 11 种需求。</p>
+
+  <table class="tbl">
+    <thead><tr><th style="width:30ch">叠层</th><th style="width:9ch">现状</th><th>它带来什么</th></tr></thead>
+    <tbody>
+      <tr><td>表格面的手写几何（网格 / 表头 / 列宽）</td><td class="num-c">每面一份</td><td>同一套轨道口径被重复实现；改一处，其余十处不知道</td></tr>
+      <tr><td>行与单元格的渲染实现</td><td class="num-c">每面一份</td><td>同一语义的列（如下载速度）在多个变体里各有一份实现</td></tr>
+      <tr><td>列字符集</td><td class="num-c">多套并存</td><td>同一列在多处登记：取值、宽度、可见性各在一处</td></tr>
+      <tr><td>连接层（传送 + 代数 + 空位锚）</td><td class="num-c">一整套</td><td>四条时序路径（初开 / 切页签 / 换目标 / 合并列）各有兜底，且处处依赖挂载顺序</td></tr>
+      <tr><td>注入式对齐样式</td><td class="num-c">一份单例</td><td>按列序号生成规则 —— 列集一变即失配</td></tr>
+    </tbody>
+  </table>
+
+  <p>这些叠层每一个都有过正当的出现理由，但它们的笛卡尔积就是当前的实际复杂度。八个症状只是这个笛卡尔积的回声 —— 叠层数乘上状态组合数，表现就是无穷无尽的。</p>
+
+  <div class="note warn">
+    <div class="h">判断</div>
+    <p>在这种结构上做任何「针对性修复」都只是局部最优：它治好了 <code>A × B × C</code> 里的一个格子，别的格子照样出错，而且修复本身又给结构加厚一层。既然 <strong>「变体数量」不能动</strong>（用户已拍板），那就只能动<strong>「每个变体里表格部分的重复度」</strong> —— 把 11 份各自实现，换成 11 份各自声明。</p>
+  </div>
+
+  <p>一句话概括这个转向：<em>变体保留观感，表格交出主权。</em></p>
+
+  <div class="note">
+    <div class="h">与上一轮的关系</div>
+    <p>上一轮 <a href="26-10-12-0527-plan-webui-drawer-table-rework.html">抽屉表格统一重写</a>（状态 Done）做的是把每个变体的表格体迁到公共表引擎上。那一轮成功了 —— 但它<strong>保留了</strong>「每变体一套表格体实现 + 传送甬道 + 每表一套派生」这层结构，只是让大家共用一套工具。八个症状正是从这层结构里长出来的，所以那一轮结束之后它们还在。本轮要动的是表格体本身：不再让每个变体各实现一遍。</p>
+  </div>
+</section>
+
+<section id="s4">
+  <div class="num">04</div>
+  <h2 class="ch">新内核：一处算，多处分用</h2>
+  <p class="lede">目标一句：<strong>不管变体有多少，任何一个表格面的几何与渲染，只有一个地方算出来。</strong></p>
+
+  <h3>列池 + 子集：变体的差异变成数据</h3>
+  <p>变体之间的差异，绝大多数不是「某个列的渲染逻辑不同」，而是「要哪几列、什么顺序、宽一点还是窄一点、排序列是哪个」。这些<strong>全部是数据</strong>，应当从代码里拿出来 —— 列在一个共享<strong>列池</strong>里定义一次，变体只声明自己要哪几列。</p>
+
+<pre><span class="c">// ① 列池：一个列的完整定义，全仓库只此一处（含渲染器键、默认宽、对齐、可否参与排序）</span>
+COL_POOL.upspeed = { label: <span class="s">"上传速度"</span>, width: <span class="s">"minmax(96px, 1fr)"</span>, align: <span class="s">"right"</span>, cell: <span class="s">"speed"</span>, live: <span class="kw">true</span> }
+
+<span class="c">// ② 变体 09「密度雷达」：只声明取哪几列 + 改个列名 + 排序默认值</span>
+SURFACES.dt09 = {
+  host: <span class="s">"09 密度雷达"</span>,
+  rows: <span class="s">"dtPeers09"</span>, rowKey: <span class="s">"addr"</span>,
+  cols: [ <span class="s">"addr"</span>, <span class="s">"client"</span>, <span class="s">"flags"</span>, <span class="s">"progress"</span>,
+          { key: <span class="s">"upspeed"</span>, label: <span class="s">"占用"</span> },          <span class="c">// ← 列名不带方向符号</span>
+          <span class="s">"dlspeed"</span>, <span class="s">"uploaded"</span>, <span class="s">"downloaded"</span>, <span class="s">"relevance"</span> ],
+  sort: { defKey: <span class="s">"upspeed"</span>, defDir: <span class="s">-1</span> },
+  affix: { tail: <span class="s">"rowActions"</span> },
+}</pre>
+
+  <h3>五条铁律</h3>
+
+  <h4>L1 · 几何只有一个出口</h4>
+  <p>由上面这份声明，一个函数同时产出三样东西：<strong>网格轨道串、每列的对齐、每个单元格的渲染器</strong>。表头行与数据行读的是同一个返回值，物理上不可能出现两个答案。按序号拼接的 <code>:nth-child</code> 对齐样式整套退役 —— 对齐随列对象一起输出，不再事后注入。</p>
+
+  <h4>L2 · 单元格必须在注册表里，否则当场报错</h4>
+  <p>单元格渲染器按名字登记（文字 / 数值 / 速度 / 进度 / 条长 / 徽章 / 树缩进 / 按钮 ……）。查不到名字不是「渲染空白」，而是在页面上输出一条看得见的错误条并报错。<span class="dim">（症状 7 的终局：没登记过的格子，现在没法存在。）</span></p>
+
+  <h4>L3 · 表头文案就是文案</h4>
+  <p>任何列名里出现方向符号（↑ ↓ ⇅ ▸ 等）即为错误 —— 方向由<strong>排序态</strong>单点渲染，这是唯一出口。守卫极廉价：一条正则，谁也绕不过去。<span class="dim">（症状 6 的出处。）</span></p>
+
+  <h4>L4 · 交互件不进列网格</h4>
+  <p>勾选框、折叠钮、行动作按钮走<strong>垫片轨道</strong>（<code>affix.lead</code> / <code>affix.tail</code>）：它们有自己独立的轨道位，不参与可见列集合，也不参与拖宽 / 隐藏 / 排序。既不能被隐藏（隐藏了就没法勾选），也永远不会「莫名其妙占了一列」。<span class="dim">（症状 7。）</span></p>
+
+  <h4>L5 · 更新是写字段，不是重建</h4>
+  <p>行对象在其生命周期内引用稳定；轮询到来时是<strong>写字段</strong>，不是换数组。高频列（速度 / 进度）标 <code>live</code>，走独立轻量通路，不必排队过结构更新那扇门。<span class="dim">（症状 5、8。）</span></p>
+
+  <h3>四种「不太像表格」的表格，怎么用同一份声明表达</h3>
+  <p>关键在于：<strong>一种形态都不需要特殊分支</strong>。</p>
+  <ul class="body">
+    <li><strong>卡片栅格（04）</strong>：声明一列、占满宽度，渲染器输出整块卡片；列头无意义时按声明隐藏。</li>
+    <li><strong>健康分组（05）/ 五区分组（08）</strong>：行来源自带分段，每组分用<em>同一份列声明</em>；组头与分组折叠留在外壳（那是版式）。</li>
+    <li><strong>树（10 / 11）</strong>：树缩进是一个单元格渲染器；树的层级次序由行来源决定，不需要为它单开一列。</li>
+    <li><strong>条长列（09 占用 / 各处进度）</strong>：仍是同一个列，只是换用一个条长渲染器 —— 几何与对齐完全一致。</li>
+  </ul>
+
+  <h3>渲染即自查</h3>
+  <p>有了 L1，就可以在开发态做一次硬一致性校验 —— 每次渲染都验一遍：</p>
+<pre><span class="c">// 三处计数必须相等；不等就在页面上说出来，而不是让用户猜</span>
+assertLayout(surfaceEl, cols) {
+  tracks = computedStyle(surfaceEl).gridTemplateColumns.split(<span class="s">" "</span>).length
+  heads  = surfaceEl.querySelectorAll(<span class="s">":scope > .head > .cell"</span>).length
+  cells  = firstRow.children.length
+  <span class="kw">if</span> (new Set([tracks, heads, cells]).size !== 1) → 可见错误条 + console.error
+}</pre>
+  <p>症状 2 与 3 从「肉眼看见的横条 / 挤压」，变成「一进场就报错」。这是本计划里最便宜、也最值钱的一处设计：<strong>让不一致无法被忽略，而不是努力让它不发生。</strong></p>
+</section>
+
+<section id="s5">
+  <div class="num">05</div>
+  <h2 class="ch">删除清单（只删表格部分）</h2>
+  <p>删除面被限定在表格体。下列三类中，<strong>前两类删、第三类一行不改</strong>。</p>
+
+  <h3>一 · 每个含表格的变体文件内部</h3>
+<pre><span class="c">八个含表格的变体：04 05 06 07 08 09 10 11</span>
+
+<span class="del">手写的列表容器与行容器网格样式        每种变体一份 → 删除</span>
+<span class="del">手搓的表头（列名 / 排序箭头 / 列宽）    每种变体一份 → 删除</span>
+<span class="del">手搓的行与值格组装                    每种变体一份 → 删除</span>
+<span class="del">手搓的排序状态机与默认序              这套状态管理 → 删除</span>
+<span class="del">该变体专属的表格 / 网格 / 容差 CSS     仅表格相关部分 → 删除</span>
+
+<span class="c">同一个文件里其余全部原样保留：</span>
+    标题栏 · 筛选 chips/pills · 摘要条 · KPI 区 · 仪表卡 · 雷达摘要
+    工具条 · 批量操作 · foot 汇总 · 内容树的右侧详情区 · aside · 版式与配色</pre>
+
+  <h3>二 · 共享层里属于表格的部分</h3>
+<pre><span class="del">传送甬道 / 空位锚 / 锚代数            整套删除（含支撑它的状态字段）</span>
+<span class="del">每个变体一份的单元格渲染器组件        由共享渲染器注册表取代</span>
+<span class="del">每张表一套的列字符集与描述符          由共享列池 + 变体子集声明取代</span>
+<span class="del">按列序号注入的对齐样式生成            删除</span>
+<span class="del">列集动态省略（渐进列）                删除 —— 缺值保留列并渲染占位符</span></pre>
+
+  <div class="note warn">
+    <div class="h">渐进列必须删</div>
+    <p>「某一列在所有行为空时整列消失」让网格轨道数随数据浮动 —— 那是 L1 的天敌，等于把「多一格 / 少一列」重新请回来。缺值一律保留列、渲染占位符 <code>—</code>。</p>
+  </div>
+
+  <h3>三 · 一行不改</h3>
+  <ul class="body">
+    <li><strong>7 个不含表格的变体</strong>：01 / 02 / 03（常规页键值卡）、12（空间树图）、13 / 14 / 15（流量图）。</li>
+    <li><strong>每个变体的非表格内容</strong>：标题栏、筛选、摘要、KPI、工具条、详情区、aside 与版式配色（清单见 <a href="#s1">§01</a> 的划界表）。</li>
+    <li><strong>数据层与接口</strong>：详情页三个数据源的请求、装配与后端回路。</li>
+    <li><strong>列交互引擎的共有部分</strong>：拖列宽 / 拖列序 / 右键隐藏 / 偏好持久化 —— 主列表也在用，久经真机（详见 D3）。</li>
+    <li><strong>三个皮肤与主题令牌</strong>：暗色主题、配色令牌、<code>color-scheme: dark</code>。</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <div class="num">06</div>
+  <h2 class="ch">已定与待拍板决策</h2>
+
+  <table class="tbl">
+    <thead><tr><th style="width:6ch">项</th><th style="width:24ch">问题</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td class="k">D1</td><td>模板变体怎么处理？</td><td><strong>已拍板（2026-10-13）：15 个变体全部保留。</strong>本轮只重写其中的表格体。据此本计划已重写删除清单与波次。</td></tr>
+      <tr><td class="k">D2</td><td>内容树的树结构还留吗？</td><td><strong>推荐 A：留树</strong>，树缩进是单元格渲染器（不是列），勾选走垫片轨道；「树 + 详情」的版式完全不动。<br>选项 B：树改平表 —— 更省事，但丢掉目录语义。</td></tr>
+      <tr><td class="k">D3</td><td>要不要继续复用现有列交互引擎？</td><td><strong>推荐 A：复用「持久化 + 拖宽 + 拖序 + 隐藏」的行为实现，不复用它对详情表的派生逻辑。</strong>表格自己算几何（L1），行为仍调引擎单点。<br>选项 B：详情表完全自治 —— 独立性最高，但会与主列表形成偏好双轨。</td></tr>
+      <tr><td class="k">D4</td><td>旧的列偏好数据怎么办？</td><td><strong>推荐 A：新表用新 id，旧偏好自然隔离，不迁移、不清理。</strong>依据：历史上「升存储版本」曾把用户手调过的宽 / 隐 / 序清零。<br>选项 B：写一次性迁移 —— 收益低、风险高。</td></tr>
+      <tr><td class="k">D5</td><td>表格面多，一次改完风险大 —— 顺序？</td><td><strong>推荐 A：先用最接近标准网格的两张（06 / 09）跑通内核，再推到分段与卡片形态（08 / 04 / 05），最后做树（10 / 11）。</strong>理由：内核先在简单形态上被验证，复杂形态只是同一份声明的另一种取值。<br>选项 B：按页签整页推进 —— 一次覆盖一个页签，切换成本高。</td></tr>
+      <tr><td class="k">D6</td><td>表格到底由谁渲染？</td><td><strong>推荐：外壳提供容器位置，表格由内核在该位置内完成渲染 —— 单通道。</strong>理由：症状 1 / 8 与「卡死」的结构来源正是「两条通道拼一块画布」，只换一侧的工具不改变这一点。<br>备选：保留传送方案、仅替换表格组件 —— 迁移最省，但双通道的结构性问题会被保留。</td></tr>
+      <tr><td class="k">D7</td><td>变体之间要共享列吗？</td><td><strong>推荐 A：共享列池 + 变体声明子集。</strong>同一列的定义只有一处，改一次、十一处同时生效 —— 这是簇 A 的直接解药。<br>选项 B：每变体各自一份列 —— 现状的延续，改动最小但问题依旧。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s7">
+  <div class="num">07</div>
+  <h2 class="ch">分波实施</h2>
+  <p>八波。前几波在同一个分支上完成、不合主干 —— 中间态的表格区损坏是可接受的代价，但不允许被别人看见。<strong>每个表格面的改造各自独立成提交</strong>，便于单独回滚。</p>
+
+  <h3>W0 · 划界与冻结<span class="tag">先做</span></h3>
+  <ul class="body">
+    <li><strong>首日复核</strong>：确认 §01 的 11 张表格面清单，逐份标出「哪些节点属于表格区、哪些属于外壳」，写成一张对照表 —— 这是本轮唯一必须落到纸面的东西。</li>
+    <li>确认哪些地方引用了即将删除的共享件（尤其主列表与设置页），把共有路径摘干净。</li>
+    <li><strong>验收</strong>：对照表评审通过；应用可起；<code>test.quick</code> 无新增红。</li>
+  </ul>
+
+  <h3>W1 · 内核落地</h3>
+  <ul class="body">
+    <li>列池 + 渲染器注册表 + 「声明 → 轨道 / 对齐 / 单元格」的单一产出函数。</li>
+    <li>垫片轨道（L4）、列名守卫（L3）、一致性断言（L1）。</li>
+    <li><strong>停手点</strong>：内核先不接真实数据，用一张硬编码五列的演示面通过全部断言。</li>
+  </ul>
+
+  <h3>W2 · 打通两张<span class="tag">症状 1/2/3/4/5/6 的验收波</span></h3>
+  <ul class="body">
+    <li>接 06（Tracker 增强表格）与 09（密度雷达）—— 都是标准网格形态，且 09 自带症状 6。</li>
+    <li>改这两个文件时<strong>只动表格区的节点</strong>；外壳部分保留到不改一个字符。</li>
+    <li><strong>验收</strong>：肉眼八项逐条过；几何断言全绿；<strong>外壳 DOM 与改前逐节点等价</strong>。</li>
+  </ul>
+
+  <h3>W3 · 分段与卡片形态</h3>
+  <ul class="body">
+    <li>08（五区分组）、04（卡片栅格）、05（健康分组）—— 用它们证明「分段 / 单列卡片」只是同一份声明的不同取值，不需要任何特殊分支。</li>
+  </ul>
+
+  <h3>W4 · 树形态<span class="tag">症状 7/8 的验收波</span></h3>
+  <ul class="body">
+    <li>10（树 + 详情）、11（树表批量）：树缩进是单元格渲染器，勾选是垫片，且勾选态进驱动数据（不再是「通知一声」）。</li>
+    <li><strong>停手点</strong>：八个含表格的变体全部接通，此时第一版可以并回主干。</li>
+  </ul>
+
+  <h3>W5 · 经典三张与数据通路统一</h3>
+  <ul class="body">
+    <li>经典三表接入同一份内核（W0 复核确认其存在后再做）。</li>
+    <li>三个数据源收敛到同一套「引用稳定 + 写字段」更新协议；轮询周期与暂停策略单点。</li>
+  </ul>
+
+  <h3>W6 · 表格样式单点化</h3>
+  <ul class="body">
+    <li>表格自身的样式（列头、行、网格、垫片）抽到共享层；<strong>变体自己的版式与配色继续留在变体里</strong>。</li>
+    <li>密度三档：紧凑 / 标准 / 宽松，由单一令牌控制行高与内边距 —— 各变体保留自己的默认值。</li>
+  </ul>
+
+  <h3>W7 · 守阵、清理、回写</h3>
+  <ul class="body">
+    <li>八条症状各一条回归用例（见 <a href="#s8">§08</a>），每条都做<strong>红绿双验</strong>：故意把实现改坏 → 必须红；还原 → 必须绿。</li>
+    <li>变体观感回归：八个表格面各做一次改造前后对照，确认外壳与观感未被改动。</li>
+    <li>静态守阵：健康检查 + 列名正则 + 「列池与各面声明同步」扫描。</li>
+    <li>回写：把这一轮学到的机制性教训按动作归类写进坑档（不按波次排）。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <div class="num">08</div>
+  <h2 class="ch">验收：几何断言 + 变体观感回归</h2>
+  <p>这八个症状有一个共同点：<strong>肉眼可见、工具不可见</strong>。所以过去每一轮的验收都退化成「改完发截图给用户看」，所有争议都在最后一步爆发。本轮的验收原则：看代码不算验收，看截图不算验收，<em>量出来</em>才算。</p>
+  <p>第一部分在真浏览器里量真实 DOM，覆盖全部 11 个表格面（每种形态至少抽一张）：</p>
+
+  <table class="tbl">
+    <thead><tr><th style="width:5ch">#</th><th style="width:26ch">断言</th><th>量什么</th></tr></thead>
+    <tbody>
+      <tr><td class="num-c">1</td><td>表头单行、无错位底色</td><td>表头容器高度等于单行行高；各列头的 <code>getBoundingClientRect().top</code> 全部相等；表头背景与面板背景一致。</td></tr>
+      <tr><td class="num-c">2</td><td>无溢出横带</td><td>每行的直接子格数 == 网格轨道数 == 表头列数（三者必须相等；这一条同时是症状 3 的断言）。</td></tr>
+      <tr><td class="num-c">3</td><td>列不错位</td><td>第 <em>n</em> 个数据格的左边界 == 第 <em>n</em> 个列头的左边界（容差 0.5px 内），对所有列成立。</td></tr>
+      <tr><td class="num-c">4</td><td>对齐统一</td><td>同一列的表头与数据格 <code>text-align</code> 计算值相同；与主列表同名列的取值一致。</td></tr>
+      <tr><td class="num-c">5</td><td>速度实时</td><td>注入两次相邻轮询响应后 500ms 内速度格文本变化，且<strong>行 DOM 节点身份不变</strong>（同一节点，不是重建）。</td></tr>
+      <tr><td class="num-c">6</td><td>不多箭头</td><td>任一时刻每个列头内部的方向图标数量 ≤ 1；且所有列名文本不含方向符（静态扫描 + 运行时计数各一次）。</td></tr>
+      <tr><td class="num-c">7</td><td>按钮不占列</td><td>隐藏全部可选列后，行仍保留垫片，且<strong>网格轨道数 == 可见列数 + 垫片数</strong>；动作按钮不可被右键隐藏。</td></tr>
+      <tr><td class="num-c">8</td><td>勾选不跳动</td><td>勾选前后：行容器 <code>top</code> 偏移为 0、行数不变、行高不变；连续勾选十行，累计偏移为 0。</td></tr>
+      <tr><td class="num-c">+</td><td>一致性 fail-fast</td><td>人为在一份声明里多加一个值格 → 立刻呈现可见错误条（而不是静默错位）。</td></tr>
+      <tr><td class="num-c">+</td><td>性能</td><td>三百行连续十拍轮询，每拍主线程无超过 50ms 的长任务；切换种子时无「先塌一条再撑开」的形态。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>第二部分：变体必须还是原来那个变体</h3>
+  <p>这是本轮相对初版新增的一项硬验收 —— 既然变体保留，就不能「表格治好了、版式却变样了」：</p>
+  <ul class="body">
+    <li><strong>外壳等价</strong>：八个含表格的变体，其非表格区在改造前后逐节点对照，只允许表格容器内部不同。</li>
+    <li><strong>无表格变体零改动</strong>：01 / 02 / 03 / 12 / 13 / 14 / 15 七个文件，<code>git diff</code> 必须为空 —— 写成自动化断言钉住。</li>
+    <li><strong>逐面推进</strong>：每个表格面一个提交；任一面验收不过，只回滚那一个提交。</li>
+  </ul>
+
+  <div class="note">
+    <div class="h">为什么把 UI 症状写成量具</div>
+    <p>因为肉眼验收的争议只能在最后一步爆发，且无法复述。翻译成数字之后，问题可以被精确指代：<em>「第几条、哪个值没达标」</em>，而不是「我看着还是不太对」。</p>
+  </div>
+</section>
+
+<section id="s9">
+  <div class="num">09</div>
+  <h2 class="ch">风险与回滚</h2>
+  <table class="tbl">
+    <thead><tr><th style="width:18ch">风险</th><th style="width:8ch">等级</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr><td>动 8 个文件，一次做错就是 8 份返工</td><td class="bad">高</td><td>一个表格面一个提交；W2 先用两张跑通内核再铺开；任一面不过只回滚那一笔。</td></tr>
+      <tr><td>表格改好、变体观感被改坏</td><td class="bad">高</td><td>W0 的划界对照表 + W7 的外壳 DOM 等价断言；非表格节点不进改动面。</td></tr>
+      <tr><td>误伤无表格的 7 个变体或主列表</td><td>中</td><td>W0 首日复核跑一遍引用扫描；「七个文件零 diff」写成自动化断言。</td></tr>
+      <tr><td>表格区与外壳两侧不同源</td><td>中</td><td>D6 拍板为单通道；容器之内一律由内核产出。</td></tr>
+      <tr><td>列偏好丢失</td><td>低</td><td>新表用新 id，隔离而非迁移（D4=A）；不升存储版本。</td></tr>
+      <tr><td>三皮肤观感分叉</td><td>低</td><td>W6 抽共享样式，但<strong>只抽表格自身</strong>的样式，变体版式留在原地。</td></tr>
+      <tr><td>中间期表格区不可用</td><td>中</td><td>全程在分支上，主干始终可用。</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">回滚单位是「一个表格面一个提交」，不是半个文件。划界对照表（W0）是判断「改动有没有越界」的唯一依据。</p>
+</section>
+
+<section id="s10">
+  <div class="num">10</div>
+  <h2 class="ch">范围之外</h2>
+  <ul class="body">
+    <li><strong>7 个无表格的变体</strong>：01 / 02 / 03（常规页）、12（空间树图）、13 / 14 / 15（流量图）—— 一行不改。</li>
+    <li><strong>每个变体的非表格内容</strong>：版式、配色、KPI、摘要、工具条、详情区。</li>
+    <li><strong>主列表四张表</strong>（辅种 / 明细 / 种子页 / 追剧）：不动。</li>
+    <li><strong>设置页 HR 三张表</strong>：不动。若新内核在 W2 得到验证，可作为后续候选。</li>
+    <li><strong>流量页图表</strong>：不动。</li>
+    <li><strong>后端接口与字段</strong>：不改；新增字段的需求另行入池。</li>
+  </ul>
+  <div class="note">
+    <div class="h">范围守恒</div>
+    <p>执行途中若撞见不属于表格体的缺陷（相邻模块的历史债务、文案不一致、陈旧 TODO）：一律不修、不顺手改，按项目纪律入池，并在本文「范围之外」留下条目，由用户决定是否排期。</p>
+  </div>
+</section>
+
+<section id="s11">
+  <div class="num">11</div>
+  <h2 class="ch">变更记录</h2>
+  <table class="tbl">
+    <thead><tr><th style="width:14ch">时间</th><th style="width:20ch">改动</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="num-c">26-10-13-0811</td><td>初版出厂</td><td>基于「现有技术完全抛弃」，主张整删 15 套变体重建。</td></tr>
+      <tr><td class="num-c">26-10-13-0916</td><td>D1 拍板后重写</td><td><strong>模板变体全部保留</strong>（用户拍板）。删除面收窄到「每个变体内部的表格体」；新增 11 张表格面清单、外壳与表格的划界、D6（渲染通道）与 D7（列共享）、以及「变体观感回归」硬验收；无表格的 7 个变体改为一行不改。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <div class="row">
+    <div>auto-qb · memory-bank/plans · 26-10-13-0811-plan-webui-detail-table-rebuild</div>
+    <div>status: open · topic: webui-detail-table-rebuild</div>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>
