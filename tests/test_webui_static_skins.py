@@ -1095,12 +1095,15 @@ def test_drawer_table_bridge_wiring():
     assert 'tableId: "drawerStubV0"' in stub, "stub 变体未声明 tableId(桥契约的声明侧)"
     assert "H.skipUnchanged" in stub, "stub 变体缺 skipUnchanged(桥变体的稳定 HTML 不变量: 锚不得随轮询重建)"
 
-    # ⑪ U2/U3/U4 八变体: tableId/rowsFn 声明 + 锚保活/触碰 + 零手搓排序状态机 + 零列宽 grid + 零排序表头
-    # touch: 行来源含非响应式变体 UI 态的变体必须 anchTouch(04 筛选 pills/07 chips/08 分区+在传/
-    # 09 chips/10 选中+折叠+筛选/11 勾选+折叠+筛选); 05/06 的 ui 态(折叠/msg 展开)只翻 class
-    # 不改行来源, 无需触碰。data-sort: 04 分段钮是 dtSortSet 直设的选择器属性(引擎单点消费),
-    # 非手搓状态机 —— 只对 U2 三行钉零残留。
-    for fname, tid, segkey, vtab, need_touch in (
+    # ⑪ U2/U3/U4 八变体: tableId/rowsFn 声明 + 锚保活 + 零手搓排序状态机 + 零列宽 grid + 零排序表头
+    # react(W5, 计划 26-10-13-0811 L5「更新是写字段, 不是重建」): 行来源含交互 UI 态的变体
+    # (04 筛选 pills/07 chips/08 分区+在传/09 chips/10 选中+折叠+筛选/11 勾选+折叠+筛选)
+    # 必须 Vue.reactive —— 桥 keyed 写补丁原行更新, 行 DOM 身份恒定(勾选不跳动/速度格原节点
+    # 续用); 旧 anchTouch 强制换代 = 整表重挂(行抖动/焦点丢/大树卡死), 2026-10-13 已退役并
+    # 钉死不得回潮。05/06 的 ui 态(折叠/msg 展开)只翻 class 不改行来源, 无需反应式。
+    # data-sort: 04 分段钮是 dtSortSet 直设的选择器属性(引擎单点消费), 非手搓状态机 ——
+    # 只对 U2 三行钉零残留。
+    for fname, tid, segkey, vtab, need_react in (
         ("07-peers-dashboard-tall.js", "drawerPeerV07", "", "peers", True),
         ("08-peers-groups-low.js", "drawerPeerV08", "take", "peers", True),
         ("09-peers-density-collapsed.js", "drawerPeerV09", "", "peers", True),
@@ -1116,8 +1119,11 @@ def test_drawer_table_bridge_wiring():
         assert f'"{tid}"' in v, f"{fname} 缺 table-id 字面(锚保活/触碰的寻址侧)"
         assert "rowsFn: rowsFn" in v, f"{fname} 未声明 rowsFn(桥变体必须自带行装配, U2)"
         assert "H.anchFill(host," in v and f'"{tid}"' in v, f"{fname} 缺锚保活(锚被重建 = Teleport 重挂 = 行抖动)"
-        if need_touch:
-            assert "H.anchTouch(" in v, f"{fname} 缺锚触碰(筛选/分区翻动后桥必须换代重读 rowsFn)"
+        if need_react:
+            assert "Vue.reactive(" in v, \
+                f"{fname} 缺反应式 ui 态(W5/L5: 行来源读数必须 Vue 可跟踪, 交互更新走 keyed 写补丁)"
+            assert "H.anchTouch(" not in v, \
+                f"{fname} 残留 anchTouch(W5 已退役: 反应式 ui 下换代重挂 = 勾选跳动/行抖动回潮)"
         assert "ui.sortKey" not in v and "ui.sort" not in v, \
             f"{fname} 残留手搓排序状态机(U3/Q3: 排序并引擎, D3)"
         if vtab == "peers":

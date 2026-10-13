@@ -19,8 +19,8 @@
  * 桥声明(U4, 计划 26-10-12-0527, D4=A): 表格体走引擎 —— tableId 对应 app.js
  * DRAWER_TABLE_DEFS.drawerContentV11, 外壳只留版式(工具条/批量条), 7 列引擎行容器 +
  * 引擎表头(sticky 吸顶个性反压制), 拖宽/右键隐藏/偏好持久化首次落地(勾选/折叠列 locked
- * —— 隐藏即废功能)。树聚合/筛选/折叠/勾选判据全在 rowsFn(判据零复制), 行来源含非响应式
- * UI 态(checked/folded/filter) → anchTouch。排序不适用(树序 = 树语义, 原口径无排序,
+ * —— 隐藏即废功能)。树聚合/筛选/折叠/勾选判据全在 rowsFn(判据零复制), 行来源读反应式
+ * UI 态(checked/folded/filter, W5 起 Vue.reactive)。排序不适用(树序 = 树语义, 原口径无排序,
  * 全列 sortable:false + dyn 空键)。行内勾选框三态经分片 :indeterminate 声明式。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
@@ -38,8 +38,11 @@
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建;
-   * focusKey 供锚换代重挂后回焦(记账在 anchTouch 前, 恢复在 rowAfterFn) */
-  const ui = { filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "", focusKey: "" };
+   * focusKey 供真换代(数据帧)后的 rowAfterFn 回焦 —— W5 起交互态不再换代, 平时无人写它。
+   * W5(计划 26-10-13-0811 L5): 勾选/折叠/筛选是桥行来源 rowsFn 的读数, 必须**进反应式驱动
+   * 数据**(Vue.reactive)—— 点选后桥 keyed 写补丁原行更新, 不再 anchTouch 强制换代整表重挂
+   * (旧结构 = 每次点选行 DOM 全换 → 勾选跳动 + 大树点选卡死, 用户 2026-10-13 症状 7/8)。 */
+  const ui = Vue.reactive({ filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "", focusKey: "" });
 
   const CSS = [
     /* 骨架: 工具条 / 行区(引擎行容器, .drawer-body 本体滚动)/ 吸底条 */
@@ -425,12 +428,9 @@
     }
   }
 
-  /* 变体 UI 态(勾选/折叠/筛选)翻动后的强制换代: 行来源含非响应式 ui 态 → anchTouch。
-   * 记账焦点行(换代重挂打断焦点链); foot/master 三态在外壳, 一并 rerender。 */
-  function touch(host, ctx) {
-    ui.focusKey = H.rowFocusKey(host, "data-dt-key");
-    H.anchTouch(host, ctx, TABLE_ID);
-  }
+  /* W5(计划 26-10-13-0811 L5): 旧「UI 态翻动 → anchTouch 强制换代」已退役 —— ui 态已进
+   * 反应式驱动数据(Vue.reactive), 行更新走桥 keyed 写补丁(行 DOM 身份恒定, 勾选不跳动);
+   * 外壳件(foot/master/chips)仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
   /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
    * roving 锚点(首行; 勾选集无「选中行」语义) + 回焦。 */
@@ -460,7 +460,6 @@
     if (tgl) {
       const p = tgl.getAttribute("data-path") || "";
       if (ui.folded.has(p)) ui.folded.delete(p); else ui.folded.add(p);
-      touch(h, ctx); /* 行集/折叠钮态都是行来源, anchTouch 换代重读 */
       return;
     }
     const foldBtn = ev.target.closest("[data-fold]");
@@ -469,14 +468,12 @@
       const dirs = [];
       for (const r of d.rows) if (r.dir && r.path) dirs.push(r.path);
       ui.folded = foldBtn.getAttribute("data-fold") === "close" ? new Set(dirs) : new Set();
-      touch(h, ctx);
       return;
     }
     const chip = ev.target.closest("[data-f]");
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h); /* chip active 态在外壳 */
-      touch(h, ctx);
       return;
     }
     const bp = ev.target.closest("[data-bp]");
@@ -490,7 +487,6 @@
     if (ev.target.closest("[data-bclear]")) {
       ui.checked = new Set();
       rerender(h);
-      touch(h, ctx);
       return;
     }
     /* 点行 = 勾选(目录 = 整棵子树; 与设计稿 11 同语义); 行容器 = 引擎 .group-row[data-dt-key] */
@@ -504,7 +500,6 @@
     if (!r || path === "__empty") return;
     toggleSet(r.dir ? subtreeFiles(r.path, d.fileRows).map((it) => it.row.path) : [r.path]);
     rerender(h); /* foot/master 三态在外壳 */
-    touch(h, ctx); /* 行 is-chk/勾选框态在行来源 */
   }
   /* 行级键盘(issue 26-10-07-0846): roving tabindex + 方向键/Home/End 移焦 + Enter/Space
    * 转发行激活(= 勾选, 与 click 同口径)。焦点在行内原生控件(勾选框/折叠钮/优先级徽章)
@@ -528,7 +523,6 @@
       const d = derive(ctx);
       toggleSet(subtreeFiles(dirck.getAttribute("data-path") || "", d.fileRows).map((it) => it.row.path));
       rerender(h);
-      touch(h, ctx);
       return;
     }
     const ck = ev.target.closest("[data-act=\"ck\"]");
@@ -536,14 +530,12 @@
       const p = ck.getAttribute("data-path") || "";
       if (ui.checked.has(p)) ui.checked.delete(p); else ui.checked.add(p);
       rerender(h);
-      touch(h, ctx);
       return;
     }
     if (ev.target.closest("[data-ckmaster]")) {
       const d = derive(ctx);
       toggleSet(d.fileRows.map((it) => it.row.path));
       rerender(h);
-      touch(h, ctx);
     }
   }
 

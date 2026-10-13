@@ -17,7 +17,7 @@
  *   <aq-dt-bridge> Teleport 进锚(描述符 drawerPeerV07: 列集 DRAWER_PEER_V07_COLUMNS +
  *   行模型 dt07 + dyn 排序 + rowCls 行修饰)。手搓排序状态机/列宽 grid/表头拼装全部退役
  *   (Q4), 排序/拖宽/右键隐藏/偏好持久化与主视图同源(按 table-id 落盘)。行来源与筛选是
- *   版式语义, 单点在 rowsFn(register 声明) —— 筛选翻动经 anchTouch 强制桥换代重读。
+ *   版式语义, 单点在 rowsFn(register 声明) —— 筛选翻动走反应式行更新(W5, 不再换代)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
  * 重挂 = 行抖动), 滚动位置/筛选态自保。
@@ -67,7 +67,9 @@
 
   /* 视图偏好(跨重渲染与换种子保持): 筛选; lastSig 供跳过重建。
    * !排序态已并引擎(dtSortState.drawerPeerV07, U2) —— 手搓 sortKey/sortDir 退役。 */
-  const ui = { filter: "all", lastSig: "" };
+  /* W5(计划 26-10-13-0811 L5): 筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
+   * 不再 anchTouch 强制换代整表重挂(行抖动的旧结构)。 */
+  const ui = Vue.reactive({ filter: "all", lastSig: "" });
 
   const CSS = [
     /* 四卡仪表条 */
@@ -477,8 +479,7 @@
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h);
-      /* 行来源变了(筛选是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn */
-      H.anchTouch(h, h.__dtCtx, "drawerPeerV07");
+      /* W5: 筛选态已反应式, 桥行更新自动(keyed 写补丁); 外壳 chip active 由 rerender 同步 */
     }
   }
 

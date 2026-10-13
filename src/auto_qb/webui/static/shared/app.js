@@ -309,7 +309,7 @@ const DRAWER_CONTENT_V10_COLUMNS = [
   { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "128px", sortable: false, align: "left" },
-  { key: "prio", label: "优先级", tpl: "62px", sortable: false, align: "left" },
+  { key: "prio", label: "优先级", tpl: "62px", sortable: false, locked: true, align: "left" },  /* L4 双保险(10 无表头) */
 ];
 const DRAWER_CONTENT_V11_COLUMNS = [
   { key: "ck", label: "", tpl: "26px", sortable: false, locked: true, align: "left" },
@@ -320,13 +320,13 @@ const DRAWER_CONTENT_V11_COLUMNS = [
   /* omitEmpty 已删(计划 26-10-13-0811 L1 铁律: 渐进列轨道数随数据浮动, 是「多一格/少一列」
    * 类症状的温床); 列常驻, 缺值由渲染器 avTxt 出 — 占位。 */
   { key: "av", label: "可用性", tpl: "62px", sortable: false, align: "right" },
-  { key: "prio", label: "优先级", tpl: "64px", sortable: false, align: "left" },
+  { key: "prio", label: "优先级", tpl: "64px", sortable: false, locked: true, align: "left" },  /* L4: 徽章=行动作钮, 不可隐藏 */
 ];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "progress", label: "进度", tpl: "84px", sortable: true, align: "right" },
-  { key: "prio", label: "优先级", tpl: "104px", align: "left" },
+  { key: "prio", label: "优先级", tpl: "104px", align: "left", locked: true },  /* L4: 内含优先级菜单按钮, 隐藏即废功能 */
 ];
 /* ---------------- 主页三表(辅种/明细/种子)默认隐藏列单点 ----------------
  * 2026-10-12 issue 26-10-12-1911: 默认隐藏曾逐列写 hide:true, 三表各自演化 —— 种子页扩展段

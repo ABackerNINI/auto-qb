@@ -18,7 +18,7 @@
  * DRAWER_TABLE_DEFS.drawerContentV10, 外壳只留版式(工具条/统计条/右详情), 树行由
  * <aq-dt-bridge> Teleport 进锚(5 列引擎行容器, 列头 CSS 隐藏 —— 本变体无表头设计,
  * 拖宽/右键隐藏不适用, Q3 记档); 树聚合/筛选/折叠/选中判据全在 rowsFn(判据零复制),
- * 行来源含非响应式 UI 态(selPath/folded/filter) → anchTouch。排序不适用(树序 = 树语义,
+ * 行来源读反应式 UI 态(selPath/folded/filter, W5 起 Vue.reactive)。排序不适用(树序 = 树语义,
  * 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘: 行容器 tabindex/data-dt-key
  * 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符 rowAfter → rowAfterFn(锚换代重挂后跑)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -38,7 +38,9 @@
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建;
    * focusKey 供锚换代重挂后回焦(记账在 anchTouch 前, 恢复在 rowAfterFn) */
-  const ui = { filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "", focusKey: "" };
+  /* W5(计划 26-10-13-0811 L5): 选中/折叠/筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
+   * 不再 anchTouch 强制换代整表重挂(行抖动/焦点丢的旧结构)。 */
+  const ui = Vue.reactive({ filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "", focusKey: "" });
 
   const CSS = [
     /* 主从双栏骨架(右栏 324px = 设计稿口径)。滚动容器是 .drawer-body 本身(overflow:auto),
@@ -423,12 +425,8 @@
     return c;
   }
 
-  /* 变体 UI 态(选中/折叠/筛选)翻动后的强制换代: 行来源含非响应式 ui 态, 引擎无从感知
-   * → anchTouch 对在场锚自增一代, 桥重挂重读 rowsFn。记账焦点行(换代重挂打断焦点链)。 */
-  function touch(host, ctx) {
-    ui.focusKey = H.rowFocusKey(host, "data-dt-key");
-    H.anchTouch(host, ctx, TABLE_ID);
-  }
+  /* W5: 旧「UI 态翻动 → anchTouch 强制换代」退役(见 ui 处注); 外壳件(右详情/chip active)
+   * 仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
   /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
    * roving 锚点(选中行或首行) + 回焦 —— 与原「replaceChildren 后 roving」同语义。 */
@@ -462,21 +460,18 @@
     if (tgl) {
       const p = tgl.getAttribute("data-path") || "";
       if (ui.folded.has(p)) ui.folded.delete(p); else ui.folded.add(p);
-      touch(h, ctx); /* 行集/折叠钮态都是行来源, anchTouch 换代重读 */
       return;
     }
     const foldBtn = ev.target.closest("[data-fold]");
     if (foldBtn) {
       const all = collectDirs(buildTree(fileList(ctx)));
       ui.folded = foldBtn.getAttribute("data-fold") === "close" ? new Set(all) : new Set();
-      touch(h, ctx);
       return;
     }
     const chip = ev.target.closest("[data-f]");
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h); /* chip active 态在外壳 */
-      touch(h, ctx);
       return;
     }
     /* 点行 = 选中(再点同一行取消, 与 classic fileRowSelect 同口径); 行容器 = 引擎
@@ -487,7 +482,6 @@
       if (p === "__empty") return;
       ui.selPath = ui.selPath === p ? "" : p;
       rerender(h); /* 右详情随选中重渲(外壳) */
-      touch(h, ctx); /* 行 sel 类在行来源 */
     }
   }
   function collectDirs(n) {
@@ -519,7 +513,6 @@
       if (p === "__empty") return;
       ui.selPath = ui.selPath === p ? "" : p;
       rerender(ev.currentTarget);
-      touch(ev.currentTarget, ev.currentTarget.__dtCtx);
       return;
     }
     if (H.rowMove(ev.currentTarget, "data-dt-key", row, ev.key)) ev.preventDefault();

@@ -57,7 +57,9 @@
   /* 视图偏好(跨重渲染与换种子保持): 只看在传数据 / 组折叠(默认 idle/hand 收起);
    * lastSig 供跳过重建。!排序态已并引擎(dtSortState.drawerPeerV08, U2) —— 手搓
    * sortKey/sortDir/组内 maxUp/maxDown 退役(微条满刻度在 rowsFn 现算)。 */
-  const ui = { onlyMoving: false, folded: { idle: true, hand: true }, lastSig: "" };
+  /* W5(计划 26-10-13-0811 L5): 只看在传/分组折叠进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
+   * 不再 anchTouch 强制换代整表重挂(行抖动的旧结构)。 */
+  const ui = Vue.reactive({ onlyMoving: false, folded: { idle: true, hand: true }, lastSig: "" });
 
   const CSS = [
     /* 工具行 */
@@ -350,8 +352,7 @@
     if (toggle) {
       ui.onlyMoving = !ui.onlyMoving;
       rerender(h);
-      /* 行来源变了(分区过滤是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn 分段 */
-      H.anchTouch(h, h.__dtCtx, "drawerPeerV08");
+      /* W5: 过滤态已反应式, 桥行更新自动(keyed 写补丁); 外壳区头折叠态由 rerender 同步 */
       return;
     }
     const foldHead = ev.target.closest("[data-fold]");

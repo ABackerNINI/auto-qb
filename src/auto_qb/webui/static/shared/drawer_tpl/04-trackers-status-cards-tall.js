@@ -16,7 +16,7 @@
  *   直设引擎 dyn 键(R7: 模式选择语义, 非 h-cell 三态循环; 复合权值 sev*10+tier /
  *   tier*10+sev 在 _raw, 虚拟合并卡恒 95 = 原 order:95 口径), 默认 sev 升序 = 异常优先。
  *   卡片无列语义 → 列头 CSS 隐藏, 拖宽/右键隐藏不适用(Q3 记档); 筛选 pills 是版式语义
- *   → rowsFn + anchTouch(同 07)。
+ *   → rowsFn + 反应式行更新(W5, 不再 anchTouch 换代)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 trackers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
  * 重挂 = 行抖动), 滚动位置/筛选态自保。
@@ -52,7 +52,9 @@
 
   /* 视图偏好(跨重渲染与换种子保持): 计数筛选; lastSig 供数据未变跳过重建。
    * !排序态已并引擎(dtSortState.drawerTrackerV04, U3) —— 手搓分段排序态退役。 */
-  const ui = { filter: "all", lastSig: "" };
+  /* W5(计划 26-10-13-0811 L5): 筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
+   * 不再 anchTouch 强制换代整表重挂(行抖动的旧结构)。 */
+  const ui = Vue.reactive({ filter: "all", lastSig: "" });
 
   const CSS = [
     /* 总览行: 计数胶囊(即筛选) + 排序 + 添加 */
@@ -337,9 +339,7 @@
     const pill = ev.target.closest("[data-f]");
     if (pill) {
       ui.filter = pill.getAttribute("data-f");
-      rerender(h);
-      /* 行来源变了(筛选是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn */
-      H.anchTouch(h, ctx, TABLE_ID);
+      rerender(h); /* W5: 筛选态已反应式, 桥行更新自动; rerender 只为外壳 pill active 态 */
       return;
     }
     const seg = ev.target.closest("[data-sort]");

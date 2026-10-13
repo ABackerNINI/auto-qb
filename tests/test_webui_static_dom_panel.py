@@ -1937,8 +1937,11 @@ def test_drawer_tpl_content_row_keyboard_roving():
             f"drawer_tpl/{name}: 整行加了 role=button(行内已含原生控件, 嵌套交互语义更糟 —— 入池根因段口径)"
         for hook in hooks:
             assert hook in text, f"drawer_tpl/{name}: 缺接入点 {hook}(锚点/接管守卫被摘)"
-        assert "H.rowFocusKey(" in text and "H.rowRestore(" in text, \
-            f"drawer_tpl/{name}: 重建前记账/重建后回焦不成对(原子换帧打断焦点链, 一次激活就甩回文档头)"
+        # W5(计划 26-10-13-0811 L5): 交互态反应式化后 anchTouch 换代已退役(10/11 的
+        # rowFocusKey 记账随 touch() 退役 —— 交互不再重挂, 焦点不再被打断); rowRestore
+        # 仍在 rowAfterFn, 服务真换代(数据帧)后的回焦。
+        assert "H.rowRestore(" in text, \
+            f"drawer_tpl/{name}: 缺回焦接入点(rowAfterFn 的 rowRestore 被摘)"
         assert "H.rowMove(" in text, \
             f"drawer_tpl/{name}: 方向键移焦未走核心 rowMove(键盘用户无法在行间转移焦点)"
         assert "keydown: onKeyDown" in text, \
@@ -3772,8 +3775,12 @@ def test_drawer_peers_speed_keys_normalized():
     fetch = re.search(r"async _fetchDrawerPeers\(.*?\) \{(.*?)\n    \},", store_js, re.S)
     assert fetch, "drawer_store.js 找不到 _fetchDrawerPeers(改名或挪走了? 同步本守阵)"
     fb = fetch.group(1)
-    assert "this.drawer.peers = this._drawerNormPeers(r);" in fb, \
+    # W5(26-10-13-0811): 落袋改「norm → 引用稳定合并」两步 —— 归一仍是落袋前置单点,
+    # 合并(_dtMergeRows)保行对象引用稳定(写字段不重建, 行 DOM 身份恒定)。
+    assert "const norm = this._drawerNormPeers(r);" in fb, \
         "peers 落袋未过 _drawerNormPeers(直存 qB 原始响应 ⇒ 原始键名漏进消费点, 上下行恒 0)"
+    assert "_dtMergeRows(" in fb, \
+        "peers 落袋未走引用稳定合并(W5/L5: 整组换数组 = 行重建, 速度格节点身份不保)"
 
     # ③ 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
     harness = (Path(__file__).resolve().parents[1] / "scripts" / "ui_harness.py").read_text(encoding="utf-8")

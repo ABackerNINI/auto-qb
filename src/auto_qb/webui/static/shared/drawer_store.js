@@ -24,6 +24,29 @@
  *   的 _qbLoad 落袋处显式调 _drawerDone("traffic", hash, 0)), 与 _drawerWaitSources 的通用分支成对。
  *   拆掉任一边 = 软切换遮罩等一个永不到手的源, 永久挂死(2026-10-04 实测)。
  */
+/* W5(计划 26-10-13-0811 L5「更新是写字段, 不是重建」): 三个列表数据源(trackers/files/peers)
+ * 共用的引用稳定合并 —— 轮询/重拉到来时按行键对账: 旧行在 = **原对象写字段**(Object.assign,
+ * Vue 3 同值不触发 → 未变行零重渲), 新行追加, 失踪行剔除; 数组恒按服务端序重建(顺序不承载
+ * 语义, 与主循环 applyStateRows 同口径)。返回新数组实例(顶层引用变更保证 Vue 感知), 但行
+ * 对象生命周期内引用稳定 → keyed 补丁下行 DOM 身份恒定(速度格原节点续用, 勾选不跳动)。
+ * 行键单点: trackers=url / files=index(缺则 name) / peers=ip:port —— 与各表 rowKey 口径一致。 */
+function _dtMergeRows(oldRows, newRows, keyOf) {
+  if (!Array.isArray(newRows)) return [];
+  if (!Array.isArray(oldRows) || !oldRows.length) return newRows;  // 首轮: 直接用新数组
+  const oldByKey = new Map();
+  for (const r of oldRows) oldByKey.set(keyOf(r), r);
+  const out = [];
+  const seen = new Set();
+  for (const nw of newRows) {
+    const k = keyOf(nw);
+    seen.add(k);
+    const old = oldByKey.get(k);
+    if (old !== undefined) { Object.assign(old, nw); out.push(old); }
+    else out.push(nw);
+  }
+  return out;
+}
+
 window.AQB_DRAWER_STORE = {
   methods: {
     /* R2 S5: 合并开启/门跨越后的第二列数据补给(核心层 drawerMerge $watch 与 resize 回调共用;
@@ -110,7 +133,8 @@ window.AQB_DRAWER_STORE = {
       try {
         const r = await this.api(`/api/torrents/${hash}/trackers`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.trackers = Array.isArray(r) ? r : [];
+        /* W5: 引用稳定合并(行键 url) —— 写字段不重建, 行 DOM 身份恒定 */
+        this.drawer.trackers = _dtMergeRows(this.drawer.trackers, Array.isArray(r) ? r : [], (t) => String(t && t.url || ""));
         this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
@@ -131,7 +155,9 @@ window.AQB_DRAWER_STORE = {
       try {
         const r = await this.api(`/api/torrents/${hash}/files`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.files = Array.isArray(r) ? r : [];
+        /* W5: 引用稳定合并(行键 index, 缺则 name) */
+        this.drawer.files = _dtMergeRows(this.drawer.files, Array.isArray(r) ? r : [],
+          (f) => String(f && f.index !== undefined ? f.index : (f && f.name) || ""));
         this.drawer.filesError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
@@ -150,7 +176,12 @@ window.AQB_DRAWER_STORE = {
       try {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
-        this.drawer.peers = this._drawerNormPeers(r);
+        /* W5: 引用稳定合并(行键 ip:port, 与各 peer 表 rowKey=addr 同口径); 归一恒归数组形 */
+        const norm = this._drawerNormPeers(r);
+        const plist = Array.isArray(norm.peers) ? norm.peers : Object.values(norm.peers || {});
+        this.drawer.peers = { peers: _dtMergeRows(
+          Array.isArray(this.drawer.peers && this.drawer.peers.peers) ? this.drawer.peers.peers : [],
+          plist, (x) => String((x && x.ip || "?") + ":" + ((x && x.port) || ""))) };
         this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");

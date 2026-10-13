@@ -54,7 +54,9 @@
   /* 视图偏好(跨重渲染与换种子保持): 筛选; lastSig 供跳过重建。
    * !排序态已并引擎(dtSortState.drawerPeerV09, 默认 upspeed 降序 = 描述符声明);
    *   手搓 sortKey/sortDir/upTotal 退役(占用条分母在 rowsFn 现算)。 */
-  const ui = { filter: "all", lastSig: "" };
+  /* W5(计划 26-10-13-0811 L5): 筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
+   * 不再 anchTouch 强制换代整表重挂(行抖动的旧结构)。 */
+  const ui = Vue.reactive({ filter: "all", lastSig: "" });
 
   const CSS = [
     /* 筛选 chips 行 */
@@ -285,8 +287,7 @@
     if (chip) {
       ui.filter = chip.getAttribute("data-f") || "all";
       rerender(h);
-      /* 行来源变了(筛选是版式语义, 引擎无感知): 触碰锚换代 → 桥重挂重读 rowsFn */
-      H.anchTouch(h, h.__dtCtx, "drawerPeerV09");
+      /* W5: 筛选态已反应式, 桥行更新自动(keyed 写补丁); 外壳 chip active 由 rerender 同步 */
     }
   }
 
