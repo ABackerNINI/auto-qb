@@ -938,9 +938,15 @@ def test_drawer_table_bridge_wiring():
     # ③ 桥方法四件 + 取数六件(drawer.html 的 <aq-dt-bridge> 消费面; U2 加 Segs/RowCls/dtTplRows)
     for name in (
         "dtBridgeTbl", "dtBridgeOn", "dtBridgeTo", "dtBridgeKey", "dtBridgeDef", "dtBridgeRows", "dtBridgeRowKey",
-        "dtBridgeRowModel", "dtBridgeRowProp", "dtBridgeRowCls", "dtBridgeSegs", "dtTplRows"
+        "dtBridgeRowModel", "dtBridgeRowProp", "dtBridgeRowCls", "dtBridgeSegs", "dtTplRows", "dtBridgeTargetOn"
     ):
         assert f"      {name}(" in dt, f"drawer_templates.js 缺桥方法 {name}(桥消费面被拆即静默失效)"
+    # ③b Teleport 目标存在性判据(2026-10-14 合并态切换「内容消失」): 布局换代的 patch 顺序是
+    # 「先拆旧分支(旧锚离场) → 再挂新分支」, 而父级 v-if(dtBridgeOn) 在拆之前求值 —— 判据必须在
+    # **桥组件自己的渲染拍**(与 teleport mount 同拍)做, 否则那一窗里 teleport 挂到已消失的锚上:
+    # Vue 生产版静默不挂子节点, 卸载时对 null component 解构抛 TypeError ⇒ 整次 patch 中断。
+    assert "dtBridgeTargetOn(tab, seg)" in dt and "document.querySelector(sel)" in dt, \
+        "缺 Teleport 目标存在性判据 dtBridgeTargetOn(锚离场那一窗挂 teleport = patch 中断 + 内容消失)"
 
     # ④ drawer.html: 桥挂点恰两处(单栏 v-for + 合并列), :key 含锚代数(换代纪律)
     drh = read("tpl", "drawer.html")
@@ -960,6 +966,8 @@ def test_drawer_table_bridge_wiring():
     assert m2, "xtpl.html 缺桥 x-template 分片"
     btpl = m2.group(1)
     assert "$root.dtBridgeTo(tab" in btpl, "桥模板 teleport :to 未走 dtBridgeTo 单点(锚约定)"
+    assert btpl.count('v-if="$root.dtBridgeTargetOn(tab, seg.key)"') == 1, \
+        "桥模板 teleport 缺目标存在性 v-if(dtBridgeTargetOn) —— 锚离场那一窗挂 teleport = patch 中断 + 内容消失"
     assert "$root.dtBridgeSegs(tab)" in btpl, "桥模板未走分段取数 dtBridgeSegs(U2: 分组变体逐段 teleport)"
     assert "<aq-table" in btpl and "-cells" in btpl, "桥模板必须复用表壳 + 行渲染器(不许自拼表格)"
     assert "$root.sortedDrawer(" in btpl, "桥行序必须走 sortedDrawer 单点(dyn 分支) —— 手拼即第二份排序机"
@@ -1177,17 +1185,30 @@ def test_drawer_tpl_table_face_bg_single_point():
         return open(os.path.join(shared, *parts), encoding="utf-8").read()
 
     faces = {
-        "06-trackers-table-collapsed.js": {"head_minh": True, "row_minh": True},
-        "07-peers-dashboard-tall.js": {"head_minh": False, "row_minh": True},
-        "09-peers-density-collapsed.js": {"head_minh": False, "row_minh": True},
-        "11-content-treegrid-batch-low.js": {"head_minh": True, "row_minh": True},
+        "06-trackers-table-collapsed.js": {
+            "head_minh": True,
+            "row_minh": True
+        },
+        "07-peers-dashboard-tall.js": {
+            "head_minh": False,
+            "row_minh": True
+        },
+        "09-peers-density-collapsed.js": {
+            "head_minh": False,
+            "row_minh": True
+        },
+        "11-content-treegrid-batch-low.js": {
+            "head_minh": True,
+            "row_minh": True
+        },
     }
     for fname, need in faces.items():
         v = read("drawer_tpl", fname)
         for ln in v.splitlines():
             if ".group-head" in ln and "--bg-card" in ln:
                 raise AssertionError(
-                    f"{fname} 表头声明残留 --bg-card(W6 症状1: 底色归 shared/dt_table.css --bg 族): {ln.strip()[:80]}")
+                    f"{fname} 表头声明残留 --bg-card(W6 症状1: 底色归 shared/dt_table.css --bg 族): {ln.strip()[:80]}"
+                )
         if need["row_minh"]:
             assert "--tbl-row-minh:" in v, f"{fname} 缺行密度令牌 --tbl-row-minh(W6: 行高声明侧在变体)"
         if need["head_minh"]:

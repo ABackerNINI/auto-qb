@@ -341,7 +341,12 @@
        恰好一次) —— roving 锚点/回焦在行进 DOM 后跑, 与原「replaceChildren 后 roving」
        同语义(原子换帧时机的桥版等价物)。 -->
   <template v-for="seg in $root.dtBridgeSegs(tab)" :key="$root.dtBridgeKey(tab) + '#' + seg.key">
-    <teleport :to="$root.dtBridgeTo(tab, seg.key)">
+    <!-- !目标缺失不挂 teleport(dtBridgeTargetOn, 2026-10-14 合并态切换报障): 布局换代的
+         patch 顺序是「先拆旧分支(旧锚离场) → 再挂新分支」, 而父级 v-if(dtBridgeOn) 在拆之前
+         求值 —— 那一窗里 teleport 会挂到已消失的目标上; Vue 生产版对此**静默不挂子节点**,
+         之后卸载该 teleport 时对 null component 解构抛 TypeError, 整次 patch 中断, 抽屉停在
+         半渲染态(用户所见「内容消失」)。判据与 teleport 的 mount 同拍, 故为真值。 -->
+    <teleport v-if="$root.dtBridgeTargetOn(tab, seg.key)" :to="$root.dtBridgeTo(tab, seg.key)">
       <aq-table :table-id="$root.dtBridgeTbl(tab)" :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
                 :sort-key="$root.dtSortCell($root.dtBridgeTbl(tab)).key"
                 :sort-dir="$root.dtSortCell($root.dtBridgeTbl(tab)).dir" :drag="$root.colDrag"></aq-table>

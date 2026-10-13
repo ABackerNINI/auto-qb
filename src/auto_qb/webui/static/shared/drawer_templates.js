@@ -565,6 +565,19 @@
         var tid = this.dtBridgeTbl(tab);
         return !!tid && !!window.AQB_DRAWER_TPL_DEFS && !!window.AQB_DRAWER_TPL_DEFS[tid] && !!(this.dtBridge[tid] && this.dtBridge[tid].on);
       },
+      /* Teleport 目标是否**此刻真在文档里**(挂载拍判据, 2026-10-14 合并态切换报障)。
+       * 为什么必须由**桥组件自己的渲染拍**判, 不能并进 dtBridgeOn: 布局换代(合并开关/门跨越/
+       * 切页签/换目标)的 patch 顺序是「先拆旧分支(旧锚随之离场) → 再挂新分支」, 而父级 v-if 的
+       * dtBridgeOn 是**拆之前**求值的 —— 那一拍旧锚还在, 判真; 等桥组件真挂载时锚已消失。
+       * 目标不存在的 teleport, Vue 生产版**静默不挂子节点**(无警告), 之后卸载它时对 null
+       * component 解构而抛 TypeError, 整次 patch 中断 ⇒ 抽屉停在半渲染态(用户所见「合并态
+       * 切换后内容消失」)。本判据在桥组件渲染拍求值, 与 teleport 的 mount 同拍, 故为真值。
+       * 锚稍后由 _dtSync 挂变体时出现 ⇒ dtBridge 状态变更 ⇒ 桥重渲 ⇒ teleport 归位, 不缺内容。 */
+      dtBridgeTargetOn(tab, seg) {
+        var sel = this.dtBridgeTo(tab, seg);
+        if (!sel || typeof document === "undefined") return false;
+        return !!document.querySelector(sel);
+      },
       /* Teleport :to(锚选择器, 约定单点: data-dt-table-anchor="<tableId>"; 分段桥(U2, 08
        * 五分组)追 [data-dt-seg="<segKey>"] —— 同一 tableId 的多锚按段寻址, 单锚段 seg 恒 "") */
       dtBridgeTo(tab, seg) {
