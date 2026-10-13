@@ -71,11 +71,9 @@
     ".drawer .dt09-fchip.c-err.active { background:var(--error-soft); border-color:var(--error-line); }",
     ".drawer .dt09-note { margin-left:auto; font-size:11.5px; color:var(--fg-dim); }",
     /* 密度表容器(表格体 = 引擎表壳 + 行渲染器经桥 Teleport 进锚, U2) */
-    ".drawer .dt09-list { display:flex; flex-direction:column; }",
-    /* 引擎行容器的变体个性(D5): 30px 行距密度 + 发丝线 + 修饰行 */
-    ".drawer .dt09-list .group-row { min-height:30px; border-bottom:1px solid var(--hairline);",
-    "  border-radius:var(--radius-sm); font-size:12px; }",
-    ".drawer .dt09-list .group-row:hover { background:var(--bg-hover); }",
+    ".drawer .dt09-list { --tbl-row-minh:30px; display:flex; flex-direction:column; }",
+    /* 行级观感(W6 收编): 行板底/发丝线/悬停归 shared/dt_table.css, 行高走 --tbl-row-minh */
+    ".drawer .dt09-list .group-row { font-size:12px; }",
     ".drawer .dt09-list .group-row.bad { background:var(--error-soft); }",
     ".drawer .dt09-list .group-row.bad:hover { box-shadow:inset 0 0 0 1px var(--error-line); }",
     ".drawer .dt09-list .group-row.lan { box-shadow:inset 2px 0 0 var(--blue); }",
@@ -83,9 +81,9 @@
     /* 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
      * padding-top(14px)之下, 中途滚动时行文字从那条缝里漏出来; 与 dt11 同族(机理/判据单点
      * 见 pitfalls/web-ui/sticky-scrollpad-inset.md), -14px 抵消后表头贴到可见上缘。
-     * (引擎表头 .group-head 在抽屉内被皮肤置 static —— 变体在此恢复吸顶个性。) */
-    ".drawer .dt09-list .group-head { position:sticky; top:-14px; z-index:1; background:var(--bg-card);",
-    "  border-bottom:1px solid var(--border); }",
+     * (引擎表头 .group-head 在抽屉内被皮肤置 static —— 变体在此恢复吸顶个性;
+     *  底色/边框归 shared/dt_table.css --bg 族, 不在此声明 —— W6 症状1 单点。) */
+    ".drawer .dt09-list .group-head { position:sticky; top:-14px; z-index:1; }",
     /* 单元格 */
     ".drawer .dt09-addr { display:flex; align-items:center; gap:7px; min-width:0; }",
     ".drawer .dt09-cc { flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);",

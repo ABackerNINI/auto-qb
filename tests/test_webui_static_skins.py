@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤210 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
@@ -1157,6 +1157,56 @@ def test_drawer_table_bridge_wiring():
         assert idx.count("drawer_tpl/90-peers-stub-bridge.js") == 1, f"{skin} index.html stub 装载行失守"
 
 
+def test_drawer_tpl_table_face_bg_single_point():
+    """W6 表格面背景/密度族单点守阵(计划 26-10-13-0811 W6, 症状1)。
+
+    症状1 根因: 06/07/09/11 各自手写表头底 background:var(--bg-card), 行板又各算
+    (skin 卡底 --bg-row / 透明), frost 下表头 rgb(253,254,255) vs 页面底
+    rgb(242,246,251) 一块可见色带。修复: 背景族收口 shared/dt_table.css
+    (表头/行板默认 --bg, 与主列表吸顶列头「页面面板」语义同源), 变体只声明
+    密度令牌(--tbl-head-minh/--tbl-row-minh)与吸顶个性。
+    判据: ① 四变体的表头声明零 --bg-card 回潮; ② 密度令牌声明在位;
+    ③ 共享层文件存在且含族选择器/令牌; ④ 三皮肤 index.html 各挂载一次。
+    """
+    import os
+    shared = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared"
+    )
+
+    def read(*parts):
+        return open(os.path.join(shared, *parts), encoding="utf-8").read()
+
+    faces = {
+        "06-trackers-table-collapsed.js": {"head_minh": True, "row_minh": True},
+        "07-peers-dashboard-tall.js": {"head_minh": False, "row_minh": True},
+        "09-peers-density-collapsed.js": {"head_minh": False, "row_minh": True},
+        "11-content-treegrid-batch-low.js": {"head_minh": True, "row_minh": True},
+    }
+    for fname, need in faces.items():
+        v = read("drawer_tpl", fname)
+        for ln in v.splitlines():
+            if ".group-head" in ln and "--bg-card" in ln:
+                raise AssertionError(
+                    f"{fname} 表头声明残留 --bg-card(W6 症状1: 底色归 shared/dt_table.css --bg 族): {ln.strip()[:80]}")
+        if need["row_minh"]:
+            assert "--tbl-row-minh:" in v, f"{fname} 缺行密度令牌 --tbl-row-minh(W6: 行高声明侧在变体)"
+        if need["head_minh"]:
+            assert "--tbl-head-minh:" in v, f"{fname} 缺列头密度令牌 --tbl-head-minh(W6)"
+
+    dt_css = os.path.join(shared, "dt_table.css")
+    assert os.path.isfile(dt_css), "缺 shared/dt_table.css(W6 背景/密度族单点)"
+    css = open(dt_css, encoding="utf-8").read()
+    for sel in (".dt06-list", ".dt07-list", ".dt09-list", ".dt11-list"):
+        assert f".drawer-body {sel} .group-head" in css and f".drawer-body {sel} .group-row" in css, \
+            f"dt_table.css 缺族选择器 {sel}(四面背景族必须同点声明)"
+    for token in ("--tbl-head-bg", "--tbl-face-bg", "--tbl-head-minh", "--tbl-row-minh"):
+        assert token in css, f"dt_table.css 缺令牌 {token}"
+
+    for skin in ("atlas", "console", "prism"):
+        idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
+        assert idx.count('/shared/dt_table.css') == 1, f"{skin} index.html dt_table.css 挂载失守(须恰一次)"
+
+
 def test_drawer_tpl_variant_interaction_single_point():
     """变体交互单点定型守阵(计划 26-10-12-0527 U5①)。
 
@@ -1395,7 +1445,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤210 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -1405,11 +1455,12 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 210:
+        if n_shell > 212:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 210"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 212"
                 "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
-                "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4)"
+                "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4; "
+                "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []

@@ -66,15 +66,14 @@
      * 恒低 14px); -14px 抵消后表头贴到可见上缘。14px = 三皮肤 .drawer-body 的 padding-top
      * (atlas|console: 14px 18px 20px / prism: 14px 16px 20px), 与下方 .dt11-foot 的
      * margin:-16/-20 同一假设(改皮肤 padding 必须连这里一起核)。 */
-    ".drawer .dt11-list { --tbl-pad-x:4px; --tbl-gap:8px; }",
-    ".drawer .dt11-list .group-head { position:sticky; top:-14px; z-index:1; min-height:28px; height:28px;",
-    "  background:var(--bg-card); border-bottom:1px solid var(--border); color:var(--fg-dim);",
+    ".drawer .dt11-list { --tbl-pad-x:4px; --tbl-gap:8px; --tbl-head-minh:28px; --tbl-row-minh:27px; }",
+    /* 表头底/边框归 shared/dt_table.css --bg 族(W6 症状1 单点); 本变体留定高/字号/不换行个性 */
+    ".drawer .dt11-list .group-head { position:sticky; top:-14px; z-index:1; height:28px;",
     "  font-size:11.5px; white-space:nowrap; }",
     ".drawer .dt11-list .group-head .hc-size, .drawer .dt11-list .group-head .hc-av { text-align:right; }",
-    ".drawer .dt11-list .group-row { min-height:27px; padding:0 var(--tbl-pad-x, 4px); gap:var(--tbl-gap, 8px); align-items:center;",
-    "  background:transparent; border:0; border-radius:0; box-shadow:none;",
-    "  border-bottom:1px solid var(--hairline); font-size:12px; }",
-    ".drawer .dt11-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
+    ".drawer .dt11-list .group-row { padding:0 var(--tbl-pad-x, 4px); gap:var(--tbl-gap, 8px); align-items:center;",
+    "  font-size:12px; }",
+    ".drawer .dt11-list .group-row:hover { transform:none; border-color:transparent; }",
     ".drawer .dt11-list .group-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
     ".drawer .dt11-list .group-row.is-chk { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
     ".drawer .dt11-list .group-row.is-chk:hover { background:var(--sel-bg); }",

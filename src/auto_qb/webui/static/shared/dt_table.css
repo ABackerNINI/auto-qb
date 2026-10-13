@@ -1,0 +1,56 @@
+/* ====================================================================
+ * 抽屉表格面 · 背景/密度族单点(W6, 计划 26-10-13-0811)
+ * ====================================================================
+ * 范围: 抽屉内四个引擎表格面 —— 06 trackers / 07 peers 仪表 / 09 peers 密度 /
+ *       11 content 树表(症状1 实证落点)。05/08 的行观感是卡片/分组个性, 不在本族。
+ *
+ * 症状1(表头下方异色背景)的根因: 四面各自手写表头底色 background:var(--bg-card),
+ * 与行板(skin 卡底 --bg-row / 透明)三样各算 —— frost 主题下量得
+ * 表头 rgb(253,254,255) vs 页面底 rgb(242,246,251), 一块可见色带。
+ *
+ * 单点口径(2026-10-13 拍板):
+ *   · 表头底 = var(--tbl-head-bg, var(--bg)) —— 与主列表吸顶列头同一「页面面板」语义
+ *     (prism views.css .group-head 既有注释: 不透明页底色读作页面面板, 不透滚动内容);
+ *   · 行板底 = var(--tbl-face-bg, var(--bg)) —— 同一令牌族, 表内(表头/行板)零色缝;
+ *     skin 的 --bg-row 卡底在抽屉表格面退役(那是主列表的行语言, 不是抽屉的);
+ *   · 行高/列头高 = var(--tbl-row-minh / --tbl-head-minh) —— 密度令牌, 变体只声明值
+ *     (06: 30/38 · 07: -/35 · 09: -/30 · 11: 28/27), 未声明的面 min-height:0 不生效;
+ *   · 吸顶个性(07/09/11 的 position:sticky/top:-14px 补偿)仍是变体声明 —— 那是各面
+ *     滚动上下文的个性, 不是背景族(机理见 pitfalls/web-ui/sticky-scrollpad-inset.md)。
+ *
+ * 级联序: 本文件在三皮肤 dialogs.css 之后加载; 变体注入 CSS 在运行时更晚 ——
+ * 变体(0,3,0) > 本文件(0,3,0) > 皮肤(0,1,0/0,2,0), 变体个性(状态行底色等)
+ * 依旧赢得过本文件的族底色, 特异性按序无叹号。
+ * ==================================================================== */
+
+/* ---- 列头: 页面面板底 + 发丝分隔, 高度走密度令牌 ---- */
+.drawer-body .dt06-list .group-head,
+.drawer-body .dt07-list .group-head,
+.drawer-body .dt09-list .group-head,
+.drawer-body .dt11-list .group-head {
+  min-height: var(--tbl-head-minh, 0);
+  background: var(--tbl-head-bg, var(--bg));
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* ---- 行板: 页面面板底(与列头同族, 表内无缝) + 发丝线分行, 去卡底语言 ---- */
+.drawer-body .dt06-list .group-row,
+.drawer-body .dt07-list .group-row,
+.drawer-body .dt09-list .group-row,
+.drawer-body .dt11-list .group-row {
+  min-height: var(--tbl-row-minh, 0);
+  background: var(--tbl-face-bg, var(--bg));
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* ---- 行悬停: --bg-hover(四面旧声明同值, 收编入族) ---- */
+.drawer-body .dt06-list .group-row:hover,
+.drawer-body .dt07-list .group-row:hover,
+.drawer-body .dt09-list .group-row:hover,
+.drawer-body .dt11-list .group-row:hover {
+  background: var(--bg-hover);
+}
