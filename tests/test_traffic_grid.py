@@ -66,6 +66,7 @@ from auto_qb.core.traffic_grid import (
     rate_points,
     series_totals_points,
     v4_agg_obs,
+    v4_agg_obs_live,
     v4_earliest_row_ts,
     v4_grid_obs,
     v4_rate_from_totals,
@@ -688,6 +689,31 @@ def test_v4_agg_obs_direct_mapping():
         AggRow("month", m0, 7, 9, 8, 10, 700, 800, 2 * 86400), AggRow("month", m0 - 86400, 1, 1, 1, 1, 1, 1, 86400)
     )
     assert v4_agg_obs(mrows, gm) == {m0: BucketObs(7, 8, 700, 800)}
+
+
+def test_v4_agg_obs_live_merge_partial_and_residual():
+    """agg 行 + 活尾未封口部分行合流(S7, 2026-10-14; 3d+ 视图图尾真空修复): 磁盘无行的
+    桶(开放小时/当日/当月 —— 图尾桶)活尾部分行直映 —— 图尾不再停在最后一个封口桶;
+    磁盘已有行的同 epoch(已封桶迟到补记残余)走 v4_merge_agg 合流(cov 加权 avg / max
+    取大 / totals 取后封行 / cov 相加截到桶宽)—— 残余不双计不丢, 与写侧 _agg_merge_prev
+    同判据; 窗外 epoch(活尾行落在栅格外)不消费; 活尾空 = 退化为纯磁盘直映"""
+    g30 = build_grid("30d", NOW)
+    h_live = g30.last  # 活尾行 epoch 在栅格桶集内(磁盘无行 -> 直映)
+    h_disk = g30.last - 3600  # 磁盘封口行所在桶
+    disk = (AggRow("hour", h_disk, 100, 100, 50, 50, 1000, 2000, 1838), )
+    live = (AggRow("hour", h_live, 300, 300, 100, 100, 5000, 2500, 1800), )
+    obs = v4_agg_obs_live(disk, live, g30)
+    assert obs[h_live] == BucketObs(300, 100, 5000, 2500)  # 开放桶直映: 尾真空补齐
+    assert obs[h_disk] == BucketObs(100, 50, 1000, 2000)  # 无活尾冲突: 磁盘行原样
+    # 同 epoch 残余合流: 首封 1838s@100 + 残余 1762s@200 -> cov 加权 149(非任一侧, 也非 2x)
+    residual = (AggRow("hour", h_disk, 200, 200, 60, 60, 2000, 3000, 1762), )
+    obs2 = v4_agg_obs_live(disk, residual, g30)
+    assert obs2[h_disk] == BucketObs(149, 55, 2000, 3000)  # avg cov 加权 / totals 取后封行
+    # 活尾空元组: 与 v4_agg_obs 逐点一致(纯磁盘路径零变化)
+    assert v4_agg_obs_live(disk, (), g30) == v4_agg_obs(disk, g30)
+    # 活尾行 epoch 落在栅格窗外: 不消费(与磁盘窗外行同口径)
+    out = (AggRow("hour", g30.first - 3600, 9, 9, 9, 9, 9, 9, 3600), )
+    assert v4_agg_obs_live(disk, out, g30) == v4_agg_obs(disk, g30)
 
 
 def test_v4_earliest_row_ts_blocks_and_agg():

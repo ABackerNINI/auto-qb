@@ -23,7 +23,11 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
   不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏;
   活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续, 图尾桶同为区间平均(计划 26-10-07-2127 S2)。
-  agg 段窗(3d+)仍纯磁盘(未完结小时/日/月桶缺口的合流留待后续切片)。
+  agg 段窗(3d+)的活尾合流(S7 验收追加, 2026-10-14): 同一快照的 pending_agg 未封口
+  部分行(开放小时/当日/当月)按 epoch 与磁盘封口行合流(v4_merge_agg 口径, 与写侧
+  _agg_merge_prev 同判据)—— 补「图尾停在最后一个封口桶」的真空(用户报「3 天及以上
+  视图只显示到 14 日 0 点, 实际已到 1 点」); month 段(all)的数据面铺格因此计入活尾
+  当月行, 组端点逐成员合流且空态判据计入活尾。
 - 读取失败(Windows 竞态等瞬态 OSError)不以空态冒充「无数据」: 回退上一份成功响应并标
   meta.stale=true(§08「最坏返回上一秒快照 + stale」), 无历史快照才回本次现算结果。
   last-good 每端点每 window 仅存一份、每次成功现算后覆盖 —— 这是竞态兜底快照, 不是聚合
@@ -130,6 +134,15 @@ class QbTrafficChartApi:
         if mod is None:
             return None
         return getattr(mod, "live_tail", {}).get(key)
+
+    def _live_agg_rows(self, key: str, kind: str) -> tuple:
+        """活尾快照的未封口聚合部分行(S7, 2026-10-14; 按段 kind "hour"/"day"/"month"
+        过滤): 采样模块每轮随活尾发布的开放桶部分行(开放小时/当日/当月), agg 段窗读侧
+        按 epoch 与磁盘封口行合流补图尾真空。无快照/无该型行 = ()。"""
+        tail = self._live_tail(key)
+        if tail is None:
+            return ()
+        return tuple(r for r in getattr(tail, "pending_agg", ()) or () if r.kind == kind)
 
     def _empty(self, window: str) -> dict:
         """空态(§08): 未启用/无数据 —— points/totals 空数组 + meta(未启用空态先例:
@@ -248,21 +261,32 @@ class QbTrafficChartApi:
                 }
         else:
             aggs = []
+            live_tails = []
             for h in members:
                 try:
                     aggs.append(self.v4cache.read_agg(TORRENT_KEY_PREFIX + h))
                 except OSError:
                     degraded = True
                     aggs.append(None)
+                live_tails.append(self._live_tail(TORRENT_KEY_PREFIX + h))
 
             def _rows(a):
                 if a is None:
                     return ()
                 return a.hours if seg == "hour" else a.days if seg == "day" else a.months
 
-            if all(a is None or not (a.hours or a.days or a.months) for a in aggs):
-                # 组从未产过流量(成员无任何 agg 行)-> 空态(§08; v2 not p.zruns 判据的 v3 平移);
-                # limits 同源附加(同上)
+            def _live_rows(t):
+                # S7: 成员活尾未封口部分行(按段 kind)—— 与磁盘封口行按 epoch 合流
+                if t is None:
+                    return ()
+                return tuple(r for r in getattr(t, "pending_agg", ()) or () if r.kind == seg)
+
+            if all(
+                (a is None or not (a.hours or a.days or a.months)) and not _live_rows(t)
+                for a, t in zip(aggs, live_tails)
+            ):
+                # 组从未产过流量(成员无任何 agg 行且无活尾部分行)-> 空态(§08; v2 not p.zruns
+                # 判据的 v3 平移); limits 同源附加(同上)
                 return {
                     "points": [],
                     "totals": [],
@@ -270,12 +294,14 @@ class QbTrafficChartApi:
                     "meta": self._meta(self._grid(window), stale=degraded)
                 }
             if seg == "month":
-                # all 视图栅格由成员月行数据面的并集定(首末自然月逐月铺格, 缺失月 = null)
+                # all 视图栅格由成员月行数据面的并集定(首末自然月逐月铺格, 缺失月 = null);
+                # S7: 活尾当月部分行并入铺格面(否则当前月桶不在栅格内被合流丢弃)
                 epochs = [r.epoch for a in aggs if a is not None for r in a.months]
+                epochs += [r.epoch for t in live_tails for r in _live_rows(t)]
                 grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
             else:
                 grid = self._grid(window)
-            member_obs = [tg.v4_agg_obs(_rows(a), grid) for a in aggs]
+            member_obs = [tg.v4_agg_obs_live(_rows(a), _live_rows(t), grid) for a, t in zip(aggs, live_tails)]
         mask = tg.group_null_mask(member_obs, grid)
         points = tg.group_rate_points(member_obs, grid, mask)
         totals = tg.group_totals_points(member_obs, grid, mask)
@@ -286,7 +312,8 @@ class QbTrafficChartApi:
     def _payload_series(self, key: str, window: str) -> dict:
         """global/torrent 共用单系列装配: raw 段窗 = 天文件桶点(窗首外扩一个桶宽取差分种子,
         D3)-> v4_rate_from_totals 区间平均变换(计划 26-10-07-2127) -> 栅格展开; agg 段窗 =
-        agg 行直映栅格(all 的栅格由月行数据面定; dl_avg 已是真均值, 不做差分变换)。
+        agg 行直映栅格(all 的栅格由月行数据面定; dl_avg 已是真均值, 不做差分变换) +
+        活尾未封口部分行按 epoch 合流(S7, v4_agg_obs_live —— 补 3d+ 图尾真空)。
         OSError(读取竞态)-> degraded, 回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
         seg = tg.WINDOW_SPECS[window][1]
         if seg == "raw":
@@ -307,9 +334,14 @@ class QbTrafficChartApi:
         try:
             agg = self.v4cache.read_agg(key)
             rows = agg.hours if seg == "hour" else agg.days if seg == "day" else agg.months
+            # S7(2026-10-14): 活尾未封口部分行(开放小时/当日/当月)—— agg.dat 只有封口行,
+            # 不合流则 3d+ 视图图尾停在最后一个封口桶(用户报「真空: 只显示到 14 日 0 点」)
+            live_rows = self._live_agg_rows(key, seg)
             if seg == "month":
-                grid = tg.build_month_grid((r.epoch for r in rows), time.time()) if rows else self._grid(window)
-            obs = tg.v4_agg_obs(rows, grid)
+                # all 视图数据面铺格计入活尾当月行(否则当前月桶不在栅格内, 合流被窗外过滤丢弃)
+                epochs = [r.epoch for r in rows] + [r.epoch for r in live_rows]
+                grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
+            obs = tg.v4_agg_obs_live(rows, live_rows, grid)
             degraded = False
         except OSError:
             obs, degraded = {}, True

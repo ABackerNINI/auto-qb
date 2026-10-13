@@ -318,6 +318,59 @@ def _record_slots(rec, anchor: float, cursor: float, block_head: bool) -> tuple:
     return tuple(anchor + spacing * k for k in range(1, n + 1))
 
 
+def _pending_agg_rows(agg: "SeriesAgg", now: float) -> tuple:
+    """聚合累计器 -> 活尾未封口部分行(S7, 2026-10-14; 模块级纯函数供单测探针)。
+
+    agg.dat 只有**封口**行(hour 完结整小时 / day 完结本地日 / month 完结自然月才
+    append), 未封口的当前桶只活在写侧累计器 —— 不发布则 3d/7d/30d(hour)/6mo/1y(day)/
+    all(month)视图图尾停在最后一个封口桶(用户报「3 天及以上视图有真空: 只显示到
+    14 日 0 点, 实际已到 1 点」的根因)。本函数把累计器里的当前桶部分聚合成 AggRow
+    发布到活尾快照(LiveTail.pending_agg), 读侧按 epoch 与磁盘封口行合流。
+
+    口径与写侧封口同源(三层各自当前桶):
+    - hour: pending 各桶逐桶 v4_hour_agg(dt 加权); 含「已完成未 flush」的桶(flush
+      时点未到)与开放当前小时; 已封桶的迟到补记残余也在 pending(写侧重封时
+      _agg_merge_prev 合流, 读侧同样按 v4_merge_agg 合流, 两端口径一致);
+    - day: 开放日累计器(当日已封 hour 行)+ 当日 pending 部分行 -> v4_rollup_agg;
+      开放日 = agg.day_epoch(无封口小时时回落今日);
+    - month: 开放月累计器(当月已封 day 行)+ 当月 day 部分行 -> v4_rollup_agg;
+      开放月 = agg.month_epoch(无封口日时回落本月)。
+    跨桶边界(暂停跨日/月恢复)按 epoch 归属过滤, 旧桶残余不并进新桶行。无样本/无
+    有效覆盖的层级不出行(v4_hour_agg / v4_rollup_agg 的 ValueError 逐一跳过 ——
+    空桶 = null 语义, 与封口路径同)。day/month 两级的本地日界/月界换算对**人工
+    时钟**(测试把模块 time 钉在 1970 附近)在 Windows 上换出负 epoch -> OSError,
+    按「该级不出行」处理(生产时钟恒为正不受影响; 纯增益面, 缺该级只回到修复前
+    的形态)。
+    """
+    rows: list = []
+    hour_partials: list = []
+    for h in sorted(agg.pending):
+        samples = agg.pending[h]
+        if not samples:
+            continue  # 空桶不留(全 null 覆盖的小时不产行, 与 _agg_flush_series 同)
+        try:
+            hour_partials.append(v4_hour_agg(h, tuple(samples)))
+        except ValueError:
+            continue  # 无有效覆盖: 不出行(桶 = null)
+    rows.extend(hour_partials)
+    try:
+        day_epoch = agg.day_epoch if agg.day_epoch is not None else v4_day_epoch(now)
+        day_children = list(agg.day_hours) + [r for r in hour_partials if v4_day_epoch(r.epoch) == day_epoch]
+        if day_children:
+            rows.append(v4_rollup_agg("day", day_epoch, tuple(day_children)))
+    except (ValueError, OSError, OverflowError):
+        pass  # 无有效覆盖 / 人工时钟的本地界换算失败: 该级不出行(见 docstring)
+    try:
+        month_epoch = agg.month_epoch if agg.month_epoch is not None else v4_month_epoch(now)
+        month_children = list(agg.month_days
+                             ) + [r for r in rows if r.kind == "day" and v4_month_epoch(r.epoch) == month_epoch]
+        if month_children:
+            rows.append(v4_rollup_agg("month", month_epoch, tuple(month_children)))
+    except (ValueError, OSError, OverflowError):
+        pass  # 同上
+    return tuple(rows)
+
+
 class TrafficSampleModule(BaseModule):
     """qb_traffic 模块: internal 采样任务自注册 + 两系列采样 + v4 块化批量落盘(S2a)"""
 
@@ -443,15 +496,25 @@ class TrafficSampleModule(BaseModule):
         (head_pending 整块复用块内推算 / 否则从写侧游标倒推), 槽 ts 与这些记录落盘后
         v4_block_slots 重算恒等(写侧游标严格镜像读侧链), 端点按 ts 精确去重 —— 快照与
         flush 的先后竞态不重不漏。records 只在 block_open 时发布(block_open=False 时
-        读侧按块首游程形态定位开放游程, records 恒空)。"""
+        读侧按块首游程形态定位开放游程, records 恒空)。
+
+        S7(2026-10-14)追加 pending_agg: 聚合累计器的未封口当前桶部分行(开放 hour/
+        day/month)随同一快照发布 —— agg 段窗(3d+)读侧合流它补图尾真空(活尾口径的
+        agg 段平移)。发布面因此从 buffers|open_runs 扩到 _agg_states: flush 后
+        records 虽已清空(磁盘接管 raw 面), 只要小时未封口, pending_agg 照常发布
+        (agg 面)。部分行计算在主线程(纯函数读累计器, 无锁), AggRow 冻结不可变。
+        """
         tails: dict = {}
-        for key in set(self._buffers) | set(self._open_runs):
+        now = time.time()
+        for key in set(self._buffers) | set(self._open_runs) | set(self._agg_states):
             buf = self._buffers.get(key)
             run = self._open_runs.get(key)
             has_block = buf is not None and buf.start_epoch is not None
             records = tuple(buf.records) if has_block else ()
-            if run is None and not records:
-                continue  # 无待写记录无开放游程: 无活尾信息(shell 缓冲不留快照)
+            agg = self._agg_states.get(key)
+            pending_agg = _pending_agg_rows(agg, now) if agg is not None else ()
+            if run is None and not records and not pending_agg:
+                continue  # 无待写记录无开放游程无未封口聚合行: 无活尾信息(shell 缓冲不留快照)
             tails[key] = LiveTail(
                 block_open=has_block,
                 head_pending=has_block and not buf.header_written,
@@ -469,6 +532,7 @@ class TrafficSampleModule(BaseModule):
                         samples=run.samples,
                     ) if run is not None else None
                 ),
+                pending_agg=pending_agg,
             )
         self.live_tail = tails
 

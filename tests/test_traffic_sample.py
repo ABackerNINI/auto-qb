@@ -2017,6 +2017,72 @@ def test_live_tail_published_per_round_and_cleared_by_flush(tmp_path, monkeypatc
     assert mod.live_tail[GLOBAL_SERIES_KEY].open_run.kind == "n"  # 未被本轮改写
 
 
+def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypatch):
+    """(S7)活尾 pending_agg 发布(agg 段窗图尾真空修复, 2026-10-14 用户报「3 天及以上
+    视图只显示到 14 日 0 点, 实际已到 1 点」): 未封口当前小时部分行随快照发布(hour 行
+    dt 加权口径与封口行同函数); 开放日/月部分行随累计器层级产出(严格逐级); 小时封口后
+    该桶 hour 部分行消失(磁盘接管)而开放日部分行仍在; flush 清空 records 后系列凭
+    pending_agg 继续进快照(raw 面磁盘接管, agg 面继续增益 —— 修复前无记录无游程的
+    系列整个不进快照); 无累计器/空 pending 不出行; 跨日残余 pending 不进当日部分行"""
+    from auto_qb.core.modules.traffic_sample_mod import SeriesAgg, _pending_agg_rows
+    from auto_qb.core.traffic_store import V4HourSample
+
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    h0 = _AGG_H0
+    # 累计器直喂(与 handler 内 _agg_feed 同口径): r1 开信用 -> r2 结算 [h0, h0+1838)
+    # -> r3 结算 [h0+1838, h0+3600); now 落在小时界上(已完结未 flush)
+    mod._agg_feed(key, V4Sample(100, 50, 1000, 2000), h0, h0, True, 30.0)
+    mod._agg_feed(key, V4Sample(200, 60, 2000, 3000), h0, h0 + 1838, False, 30.0)
+    mod._agg_feed(key, V4Sample(300, 70, 3000, 4000), h0 + 1838, h0 + 3600, False, 30.0)
+    now = h0 + HOUR_SECONDS
+    rows = _pending_agg_rows(mod._agg_states[key], now)
+    hours = [r for r in rows if r.kind == "hour"]
+    assert hours == [AggRow("hour", h0, 149, 200, 55, 60, 2000, 3000, 3600)]  # dt 加权 + 级末快照
+    day = [r for r in rows if r.kind == "day"]
+    assert day == [AggRow("day", v4_day_epoch(h0), 149, 200, 55, 60, 2000, 3000, 3600)]  # 开放日 = 当日 pending
+    month = [r for r in rows if r.kind == "month"]
+    assert month == [AggRow("month", v4_month_epoch(h0), 149, 200, 55, 60, 2000, 3000, 3600)]  # 开放月逐级
+    # 小时封口: hour 部分行消失(磁盘接管), 开放日部分行仍在(日未封)
+    assert mod._agg_flush_series(key, now=now) is True
+    rows = _pending_agg_rows(mod._agg_states[key], now)
+    assert [r for r in rows if r.kind == "hour"] == []
+    assert [r for r in rows if r.kind == "day"] == day  # 日累计器持已封 hour 行, 部分行照发
+    # 无累计器/空 pending: 不出行
+    assert _pending_agg_rows(SeriesAgg(), h0) == ()
+    # 跨日残余: 前一日的 pending 小时不进当日 day 部分行(hour 部分行照发, 读侧与磁盘行合流)
+    agg2 = SeriesAgg()
+    prev_h = v4_day_epoch(h0) - HOUR_SECONDS
+    agg2.pending[prev_h] = [V4HourSample(100, 50, 1000, 2000, 1800.0)]
+    agg2.day_epoch = v4_day_epoch(h0)
+    rows2 = _pending_agg_rows(agg2, h0 + 1800)
+    assert [r.epoch for r in rows2 if r.kind == "hour"] == [prev_h]
+    assert [r for r in rows2 if r.kind == "day"] == []  # 当日无 pending 无已封小时 -> 不出日行
+
+    # 端到端发布面: handler 两轮后 pending_agg 非空; flush 清空 records 后系列仍在快照里
+    clock = _Clock(h0 + 1800)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    pub = tmp_path / "pub"
+    pub.mkdir()
+    mgr2 = _mgr_with_traffic(pub, QbTraffic(enabled=True, sample_interval=30, flush_interval=600))
+    mgr2.store.server_state = _ss(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
+    mod2 = mgr2.host.get("qb_traffic")
+    _run_sample(mgr2)  # t=h0+1800: r 开信用(pending 尚空)
+    clock.advance(30)
+    _run_sample(mgr2)  # t=h0+1830: 结算 [h0+1800, h0+1830) -> pending[h0] 有样本
+    tail = mod2.live_tail[GLOBAL_SERIES_KEY]
+    assert [r for r in tail.pending_agg if r.kind == "hour"] == [AggRow("hour", h0, 100, 100, 50, 50, 1000, 2000, 30)]
+    assert [r for r in tail.pending_agg if r.kind == "day"] == [
+        AggRow("day", v4_day_epoch(h0), 100, 100, 50, 50, 1000, 2000, 30)
+    ]
+    mod2._flush_all_series()  # raw 面落盘: records 清空 + 块复位(h0 未封口)
+    mod2._publish_live_tail()
+    tail = mod2.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.records == () and tail.block_open is False  # raw 面磁盘接管
+    assert [r for r in tail.pending_agg if r.kind == "hour"]  # agg 面未封口照常发布(修复前整个键消失)
+
+
 # ---------- v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地) ----------
 def test_v4_counter_reset_forces_block_reopen(tmp_path, monkeypatch):
     """③ 计数器重置强制关块(v4 §01 关块状态机): 重置(cur < 块内最近 totals)后块内负

@@ -82,7 +82,10 @@ mtime_ns+size 键控解析缓存; 3d+ 窗只读成员 agg.dat 单文件; OSError
 降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。raw 段窗另合流采样模块活尾快照
 (S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v4_live_tail_slots 复原绝对
 槽位(head_pending 整块重算 / 否则从写侧游标倒推)—— 镜像保证下槽 ts 与落盘重算恒等,
-读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。
+读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。agg 段窗(3d+)
+另合流同一快照的 pending_agg 未封口部分行(S7 验收追加, 2026-10-14): 开放小时/当日/
+当月只活在写侧累计器, 读侧按 epoch 与封口行合流(v4_merge_agg 口径), 图尾不再停在
+最后一个封口桶。
 """
 import logging
 import math
@@ -448,6 +451,14 @@ class LiveTail:
       快照与 flush 的先后竞态不重不漏。
     block_open=False 时 records 恒空(发布侧保证; 此时开放游程按块首封口形态定位
     —— 首槽 = int(run.start))。
+
+    pending_agg(S7 验收追加, 2026-10-14): 聚合累计器里**未封口**的当前桶部分行
+    (AggRow 元组, hour/day/month 三型混放, epoch 升序)—— agg.dat 只有封口行,
+    开放小时/当日/当月只活在写侧累计器, 不发布则 3d/7d/30d(小时)/6mo/1y(日)/
+    all(月)视图图尾停在最后一个封口桶(用户报「真空」)。读侧按 epoch 与磁盘封口行
+    合流(v4_merge_agg 口径: 磁盘无行的开放桶直映, 已封桶的迟到补记残余与封口行
+    合并 —— 与写侧 _agg_merge_prev 同判据)。与 records 独立: flush 后 records
+    清空(磁盘接管 raw 面), 只要小时未封口 pending_agg 照常发布(agg 面)。
     """
 
     block_open: bool  # 写侧是否存在开放块(start_epoch 非 None)
@@ -457,6 +468,7 @@ class LiveTail:
     projected_ts: float  # 写侧游标 = 最后一条记录的槽位锚点(block_open 才有语义)
     records: tuple  # 未落盘记录(V4Sample/V4ZeroRun/V4NullRun, 按槽序; block_open 才非空)
     open_run: Optional[LiveTailRun]  # 开放游程冻结副本(None = 无)
+    pending_agg: tuple = ()  # 未封口聚合部分行(S7; AggRow 元组, 缺省空 = 纯磁盘 agg 读)
 
 
 def v4_live_tail_slots(tail: LiveTail) -> tuple:

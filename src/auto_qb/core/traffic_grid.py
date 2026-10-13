@@ -42,6 +42,7 @@ from .traffic_store import (
     v4_block_slots,
     v4_bucket_width_s,
     v4_date_str_epoch,
+    v4_merge_agg,
     v4_next_month_epoch,
     v4_window_dates,
 )
@@ -523,6 +524,9 @@ def v4_rate_from_totals(points: tuple) -> tuple:
 # - raw 段窗(1m-24h): v4_series_points 桶点流 --v4_grid_obs--> 栅格桶(覆盖加权展开);
 # - agg 段窗(3d/7d/30d hour / 6mo/1y day / all month): agg 行 --v4_agg_obs--> 栅格桶
 #   (行 epoch 即桶键, 直映; 3d+ 窗只读成员 agg 文件, 组图 30d 由 M×31 -> M×1 次读取)。
+# - agg 段活尾合流(S7, 2026-10-14): 磁盘封口行 + 活尾未封口部分行(开放小时/当日/
+#   当月)--v4_agg_obs_live--> 栅格桶(按 epoch 合流, v4_merge_agg 口径)—— agg.dat
+#   只有封口行, 不合流则图尾停在最后一个封口桶(3d+ 视图尾真空)。
 # ======================================================================
 
 
@@ -595,6 +599,32 @@ def v4_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
     """
     buckets = set(grid.buckets)
     return {r.epoch: BucketObs(r.dl_avg, r.up_avg, r.dl_total, r.up_total) for r in rows if r.epoch in buckets}
+
+
+def v4_agg_obs_live(rows: tuple, live_rows: tuple, grid: WindowGrid) -> dict:
+    """agg 行 + 活尾未封口部分行 -> 栅格桶观测(S7, 2026-10-14; §05.3 活尾合流的 agg 段形态)
+
+    rows = 磁盘封口行(agg.dat 解析产物, 调用方已按段 kind 过滤); live_rows = 采样模块
+    活尾快照的 pending_agg 部分行(同为该段 kind; AggRow 元组)。按 epoch 合流后直映:
+    - 磁盘无该 epoch 行(开放桶: 当前小时/当日/当月常态) -> 活尾部分行直映, 图尾不再
+      停在最后一个封口桶(用户报「3 天及以上视图有真空」的修复点);
+    - 磁盘已有该 epoch 行(已封桶的迟到补记残余, 或 append 与发布同轮的竞态窗) ->
+      v4_merge_agg 合流(cov 加权 avg / max 取大 / totals 取后封行 / cov 相加截到桶宽),
+      与写侧 _agg_merge_prev 同判据 —— 残余段不双计、不丢;
+    - 窗外 epoch(不在栅格桶集)不消费, 对齐 v4_agg_obs; 缺行桶不进返回表 = null。
+    live_rows 与 rows 不同 kind 时 v4_merge_agg fail-fast(调用方按段过滤的义务)。
+    """
+    merged: dict = {}
+    for r in rows:
+        merged[r.epoch] = r
+    for r in live_rows:
+        prev = merged.get(r.epoch)
+        merged[r.epoch] = v4_merge_agg(prev, r) if prev is not None else r
+    buckets = set(grid.buckets)
+    return {
+        r.epoch: BucketObs(r.dl_avg, r.up_avg, r.dl_total, r.up_total)
+        for r in merged.values() if r.epoch in buckets
+    }
 
 
 def v4_earliest_row_ts(blocks: tuple, agg: Optional[V4ParsedAgg]) -> Optional[int]:

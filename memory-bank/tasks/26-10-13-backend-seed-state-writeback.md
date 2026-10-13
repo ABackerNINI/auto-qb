@@ -1,10 +1,10 @@
 # 26-10-13-backend-seed-state-writeback — 种子状态双写通道：B 系立件与证否，方向回 A 系
 
-**Status:** In Progress
-**Added:** 2026-10-13
-**Updated:** 2026-10-13 07:14
-**Topics:** seed-state-writeback
-**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化）。**A 系实施计划已另件立**（`plans/26-10-13-0540`，形态 A3，含 P1 可达性确认作为决定形态的第一步）。**S0 前置三件已实施**（26-10-13-0554）：P1 可达性确认按 **auto-qb 能力面**（非某份配置）判定 G6 **可达** ⇒ 形态定 **A3**（26-10-13-0601 方法论订正：首轮误用本机 `config.yml` 当能力边界，结论不变、理由重写）；P2 `qbmanager` 局部 `state_changed` 消歧改名 `cmd_changed_state`；P3 `FakeClient` 四暂停轴方法真实翻转 state。**S1 值层已实施**（26-10-13-0620）：删合成回写整段（`_sync_paused_state` + `update_torrent_fields(state=)`），快照语义收敛为「严格 = 最近一次同步的应用结果」⇒ 源无关发射天然获得；三条守阵按新契约重写（含一条契约翻面）、4 调用点迁移。**S2 deferral 已实施**（26-10-13-0643）：新增 `own_writes`（含组维度判据）+ TTL 兜底 + D-1/D-2/D-3 三处闸门，收回 G4/G6「陈旧-放行」窗口。S1 副产物「整组停种经同步回流的二次触发」已入池（`issues/26-10-13-0626`）。**S3 收尾已实施**（26-10-13-0714）：§8.3 余下七条守阵（S1 静态 / V1 值层 / V2 值域 / E1 发射 / E2 一致性 / D1 G6 端到端 / I1 幂等）全部落地；**可选件 A2 采纳且不新增容器**（幂等门复用 `own_writes` 的 `group=False` 自身维度，从根上避免双轨），并确立「方向自洽性」。基线见 `kb.baseline`（切片 `baselines/26-10-13-0554-…-s0.md` / `26-10-13-0620-…-s1.md` / `26-10-13-0643-…-s2.md` / `26-10-13-0714-…-s3.md`）。
+**Status:** In Progress  
+**Added:** 2026-10-13  
+**Updated:** 2026-10-13 07:14  
+**Topics:** seed-state-writeback  
+**Summary:** 承接报告 26-10-12-2148（种子状态双写通道调查）。用户先令对比 A 系四形态（A1 纯透传 / A2 +幂等标记 / A3 +局部 deferral / A4 +全系统 deferral），再令对比 B 系（B1 纯真值回写 / B2=B′ 真值回写+显式发射 / B3=B+C 显式登记），随后指定按 B2 立实施计划（26-10-13-0413）。立件后用户质疑「qB 返回信息并非实时、每 1.5s 才更新」，要求回源码确认（qB 源码 `D:/Projects/Else/qBittorrent`）——**确认成立且比质疑更硬**：qB 服务端 torrent 状态按 `BitTorrent/Session/RefreshInterval` 节流刷新（默认 1500ms），写后直查 `torrents_info` 读到的是写前值 ⇒ B/B′ 的值层退化为 no-op。用户定调 RefreshInterval 保持默认、暂不改 qB 设置 ⇒ B2 计划值层无救，置 Superseded；报告上修 §3 R4、修正 §5 B/B′ 行；另修正 `systemPatterns/main-loop.md` 与 `config-reference/keys.md` 两处「qB 自带 WebUI 1500ms」归因漂移。方向回到 **A 系 = A + 局部 deferral**（报告原推荐，且被该证据强化）。**A 系实施计划已另件立**（`plans/26-10-13-0540`，形态 A3，含 P1 可达性确认作为决定形态的第一步）。**S0 前置三件已实施**（26-10-13-0554）：P1 可达性确认按 **auto-qb 能力面**（非某份配置）判定 G6 **可达** ⇒ 形态定 **A3**（26-10-13-0601 方法论订正：首轮误用本机 `config.yml` 当能力边界，结论不变、理由重写）；P2 `qbmanager` 局部 `state_changed` 消歧改名 `cmd_changed_state`；P3 `FakeClient` 四暂停轴方法真实翻转 state。**S1 值层已实施**（26-10-13-0620）：删合成回写整段（`_sync_paused_state` + `update_torrent_fields(state=)`），快照语义收敛为「严格 = 最近一次同步的应用结果」⇒ 源无关发射天然获得；三条守阵按新契约重写（含一条契约翻面）、4 调用点迁移。**S2 deferral 已实施**（26-10-13-0643）：新增 `own_writes`（含组维度判据）+ TTL 兜底 + D-1/D-2/D-3 三处闸门，收回 G4/G6「陈旧-放行」窗口。S1 副产物「整组停种经同步回流的二次触发」已入池（`issues/26-10-13-0626`）。**S3 收尾已实施**（26-10-13-0714）：§8.3 余下七条守阵（S1 静态 / V1 值层 / V2 值域 / E1 发射 / E2 一致性 / D1 G6 端到端 / I1 幂等）全部落地；**可选件 A2 采纳且不新增容器**（幂等门复用 `own_writes` 的 `group=False` 自身维度，从根上避免双轨），并确立「方向自洽性」。基线见 `kb.baseline`（切片 `baselines/26-10-13-0554-…-s0.md` / `26-10-13-0620-…-s1.md` / `26-10-13-0643-…-s2.md` / `26-10-13-0714-…-s3.md`）。  
 **Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html,memory-bank/activeContext/26-10-13-0538-seed-state-writeback.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html
 
 ## 原始请求
@@ -56,22 +56,22 @@
 
 用户质疑「qB 返回信息并非实时、每 1.5s 才更新」。回 `D:/Projects/Else/qBittorrent` 取证，**确认成立且比质疑更硬**：
 
-| 事实 | 锚点 |
-|---|---|
-| 状态刷新间隔默认 **1500 ms**，配置键 `BitTorrent/Session/RefreshInterval` | `sessionimpl.cpp:575`（宏 `:481`） |
-| `enqueueRefresh()` 用 `QTimer::singleShot(refreshInterval(), …)` **延迟**投递 `post_torrent_updates()` + `post_session_stats()` | `sessionimpl.cpp:6009-6027` |
-| alert 侧每轮重挂 ⇒ 自维持 ~1500 ms 循环 | `sessionimpl.cpp:6557-6560`、`:6736-6739` |
-| `stop()/start()` **只翻 `m_isStopped`、不调 `updateState()`**；`setAutoManaged` 只动 flags、`handleQueueingModeChanged` 不在暂停路径 | `torrentimpl.cpp:2014-2060`（逐条排除即时路径） |
-| `m_state` 只在 alert 路径的 `updateStatus()` 里重算 | `torrentimpl.cpp:1289`、`:2690-2700` |
-| WebAPI 的 `state` = `torrentStateToString(torrent.state())`；`/sync/maindata` 同源 | `serialize_torrent.cpp:141`、`synccontroller.cpp:492` |
-| 可在 GUI 改：高级设置 “Refresh interval”，**最小 30 ms** | `advancedsettings.cpp:327/829-834` |
+| 事实                                                                                                                         | 锚点                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 状态刷新间隔默认 **1500 ms**，配置键 `BitTorrent/Session/RefreshInterval`                                                              | `sessionimpl.cpp:575`（宏 `:481`）                      |
+| `enqueueRefresh()` 用 `QTimer::singleShot(refreshInterval(), …)` **延迟**投递 `post_torrent_updates()` + `post_session_stats()` | `sessionimpl.cpp:6009-6027`                          |
+| alert 侧每轮重挂 ⇒ 自维持 ~1500 ms 循环                                                                                              | `sessionimpl.cpp:6557-6560`、`:6736-6739`             |
+| `stop()/start()` **只翻 `m_isStopped`、不调 `updateState()`**；`setAutoManaged` 只动 flags、`handleQueueingModeChanged` 不在暂停路径      | `torrentimpl.cpp:2014-2060`（逐条排除即时路径）                |
+| `m_state` 只在 alert 路径的 `updateStatus()` 里重算                                                                                | `torrentimpl.cpp:1289`、`:2690-2700`                  |
+| WebAPI 的 `state` = `torrentStateToString(torrent.state())`；`/sync/maindata` 同源                                             | `serialize_torrent.cpp:141`、`synccontroller.cpp:492` |
+| 可在 GUI 改：高级设置 “Refresh interval”，**最小 30 ms**                                                                              | `advancedsettings.cpp:327/829-834`                   |
 
 **结论**：写后 ≤1.5 s 内直查 `torrents_info` 读到的仍是**写前值** ⇒ 值层写回退化为 no-op，「同 tick 新鲜」在暂停轴上**结构性不可得**；R4 是**默认粒度**而非边界竞态。**该证据封顶所有「真值回写」类方案**，同时**强化 A 系**（真实「新鲜」在 qB 侧本就不存在，删合成回写不损失真实新鲜度，只损失自造的假新鲜；G4/G6 安全窗与 qB 节流无关）。
 
 ### 5. 修正与状态流转（用户指令）
 
 - 两处归因漂移修正：`systemPatterns/main-loop.md:59`、`config-reference/keys.md:12` 把服务端节流误述为「qB 自带 WebUI 1500ms 更新一次」。
-- 报告 26-10-12-2148 抬修订号 **26-10-13-0441**：新增头部修订记录；§1 摘要「推荐路径」补证；**§3 R4 上修为「默认粒度」**并补全证据链；**§5 B/B′ 两行删掉被证否的「同 tick 新鲜度全保留」**；§5 裁定框与升级条件框补记（推荐 ① 维持并加强）；尾注记明计划已立件并置 Superseded。
+- 报告 26-10-12-2148 抬修订号 **26-10-13-0441**：新增头部修订记录；§1 摘要「推荐路径」补证；**§3 R4 上修为「默认粒度」**&#x5E76;补全证据链；**§5 B/B′ 两行删掉被证否的「同 tick 新鲜度全保留」**；§5 裁定框与升级条件框补记（推荐 ① 维持并加强）；尾注记明计划已立件并置 Superseded。
 - 计划 26-10-13-0413 置 **Superseded**（`doc-status` + 顶部废弃横幅 + 变更记录 + footer），并明确保留有效部分：**发射层 `pending_self_state` 不依赖新鲜度，成立，可独立叠加在 A 系之上**。用户定调：`RefreshInterval` 保持默认、暂不考虑改 qB 设置。
 
 ### 6. S0 前置实施（26-10-13-0554）
@@ -97,12 +97,12 @@
 **批次语义 / 判据落点**：`run_due` = 到期任务按 `next_run` 最小堆顺序执行（`taskqueue.py:185-210`），任务携带 `hash`（`:40/66`）—— **§11「任务 hash 归属」未知项消解**（D-1 判据可直接用 `task.hash`）。消费点 `checking.py:94`（决策链 1，task 线）与 `ops_mod.py:655`（G6，WEB 路径）共用 `store.group_has_downloading` 单点（`store.py:402-418`）；A3 的 D-2/D-3 同时覆盖两条路径（§4.3 已预告「WEB 命令路径须过闸」）。
 
 - **结论：可达 ⇒ 形态定 A3。** 三种 witness 中 W1/W2 **纯由配置触发、不需要任何用户手动操作**，故窗口不是「偶发用户巧合」，而是**能力面内的确定性路径**。
-
 - **对称性事实**：qB-WebUI 的 resume 今天已走「无回写」路径（外部变更），窗口本已存在 ⇒ A1 只是把该窗口扩到自家路径；A3 关掉自家那半，外部那半仍开（A3 只按 `own_writes` 判定）。若团队判定这些窗口可接受，S2 可整省 ⇒ 回落 A1。
 
 **P2 · `state_changed` 消歧**：`qbmanager.py:517` 局部变量改名 `cmd_changed_state`（连带 `:528/534/540/544`），与 `store.state_changed`（本轮 qB 上报变化集）区分，附消歧注释。
 
 **P3 · 替身能力补齐**：`tests/helpers.py` 新增 `FakeClient._apply_paused_state`（完成位判据同生产 `_sync_paused_state`：state 后缀 UP 或 progress≥1.0），四方法 `start/stop/pause/resume` 调用它**真实翻转** `self.torrents[h].state`（`None` = 全体，与 qB 语义一致）；`calls` 记录形状**逐字不变**。自检：`resume→stalledDL/stalledUP`、`stop→pausedDL/pausedUP`。
+
 - 注：S0 阶段生产回写仍在，替身翻转值与生产写回值相同 ⇒ 同步 delta 中性、**零回归**（用例数与上一基线持平）。
 
 ## 实现计划
@@ -122,18 +122,19 @@
 - `core/qbmanager.py`：`transitions` 相位注释重写 —— 原「必须排在自有动作之前（否则自家停种被误判为外部上传转暂停）」理据在 A 系下消失（不再有当场改写快照的自有动作）；相位顺序按原样保留并注明「不再承重」。
 - 连带：`grouping_mod.py` / `ops_mod.py` 两处引用已删符号的注释重写（`grouping_mod` 的显式 `view_changed = True` 现在是**唯一**来源，不能删）。
 
+
 **守阵与调用点迁移**：
 
-| 落点 | 处理 |
-|---|---|
-| `test_actions.py:179 test_stop_preserves_completeness` | 改钉「动作后快照**逐字不变**」—— 该类「完成位被写坏」的 bug 结构性消失（无回写可写坏） |
-| `test_actions.py:210` | **契约翻面**：改名 `test_pause_resume_no_same_tick_writeback`，断言从「同 tick 读新值」改为「同 tick 读**旧值**（不新鲜）」 |
-| `test_actions.py:157 test_start_stop_idempotent` | 主体不变（原本靠手动复位），只改掉「start 经同步后 state 已为 stalledUP」的过时注释 |
-| `test_sync.py:439` | 改钉两侧：同步落地 → 快照跟随；客户端翻暂停轴 → 同轮快照**不动**，下一轮同步才落真值 |
-| `test_torrents.py:854` | 视图脏用例字段面收敛为 save_path/tags/category（state 不再是形参） |
-| `test_webui_delta_mirror.py:404 / :763` | 无键命令源改以 `category` / `save_path` 承载（同为视图字段、同样无键） |
-| `test_grouping.py` ×2 | 承认「整组停种经同步回流 → 下一轮再满足上传转暂停谓词 → 追加一次扫描+停种（幂等），**一轮即收敛**」；7 处 mock 缘由注释重写（真实 stop 不再写快照，mock 转为断言参数 + 隔离替身翻转） |
-| `helpers.py` | `_apply_paused_state` docstring 改口径（生产已无合成回写，它成为客户端侧真值的唯一来源） |
+| 落点                                                     | 处理                                                                                                          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `test_actions.py:179 test_stop_preserves_completeness` | 改钉「动作后快照**逐字不变**」—— 该类「完成位被写坏」的 bug 结构性消失（无回写可写坏）                                                           |
+| `test_actions.py:210`                                  | **契约翻面**：改名 `test_pause_resume_no_same_tick_writeback`，断言从「同 tick 读新值」改为「同 tick 读**旧值**（不新鲜）」               |
+| `test_actions.py:157 test_start_stop_idempotent`       | 主体不变（原本靠手动复位），只改掉「start 经同步后 state 已为 stalledUP」的过时注释                                                       |
+| `test_sync.py:439`                                     | 改钉两侧：同步落地 → 快照跟随；客户端翻暂停轴 → 同轮快照**不动**，下一轮同步才落真值                                                             |
+| `test_torrents.py:854`                                 | 视图脏用例字段面收敛为 save_path/tags/category（state 不再是形参）                                                            |
+| `test_webui_delta_mirror.py:404 / :763`                | 无键命令源改以 `category` / `save_path` 承载（同为视图字段、同样无键）                                                            |
+| `test_grouping.py` ×2                                  | 承认「整组停种经同步回流 → 下一轮再满足上传转暂停谓词 → 追加一次扫描+停种（幂等），**一轮即收敛**」；7 处 mock 缘由注释重写（真实 stop 不再写快照，mock 转为断言参数 + 隔离替身翻转） |
+| `helpers.py`                                           | `_apply_paused_state` docstring 改口径（生产已无合成回写，它成为客户端侧真值的唯一来源）                                                |
 
 **文档**：`pitfalls/backend/concurrency.md`「QbApi 写方法必须同步 store」补 `state` 例外（不回写、等同步 + 弃同 tick 新鲜的理由与出处）；`testing/guards.md` A-04 行按反转更新（并注明 !26-10-13-0540 S1 反转）。
 
@@ -150,11 +151,11 @@
 
 **三处 deferral 闸门**（统一判据 `store.own_write_pending(hash)`）：
 
-| 编号 | 落点 | 形态 |
-|---|---|---|
+| 编号      | 落点                                                                                                  | 形态                                                                        |
+| ------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | **D-1** | `core/qbmanager.py` `_own_write_defer_gate` → `core/taskqueue.py` `TaskQueue.run_due(defer_gate=…)` | 队列级统一闸门，覆盖 **task 线全体消费**；命中者以 `next_run=now` 重排下一 tick（不执行、不入 interval）。 |
-| **D-2** | `core/modules/ops_mod.py` `skip_check` 执行路径入口 | 跳检让位，**零副作用**；WEB 命令路径不经 task 线（D-1 覆盖不到），靠此拦。 |
-| **D-3** | `rules/actions/checking.py` `CheckAction.execute` 决策链入口 | 校验决策让位；补拦事件即时分派等非队列路径。 |
+| **D-2** | `core/modules/ops_mod.py` `skip_check` 执行路径入口                                                       | 跳检让位，**零副作用**；WEB 命令路径不经 task 线（D-1 覆盖不到），靠此拦。                            |
+| **D-3** | `rules/actions/checking.py` `CheckAction.execute` 决策链入口                                             | 校验决策让位；补拦事件即时分派等非队列路径。                                                    |
 
 **两处相对计划字面的调整**（已在代码注释与计划 §12 写明）：
 
@@ -171,15 +172,15 @@
 
 **§8.3 守阵补齐（7 条）**：
 
-| 编号 | 守阵 | 落点 |
-|---|---|---|
-| S1 静态 | 剥注释扫描 `qbapi.py`/`store.py`：① `update_torrent_fields` 调用块内无 `state=` ② 无 `.state=` 直接赋值 ③ 无 `setattr(..., "state", ...)` | `test_sync.py::test_no_synthetic_state_write_site`（新增 `_code_without_comments` 用 `tokenize` 剥 COMMENT，故「说明已删除」的注释不算命中） |
-| V1 值层 | 动作后快照逐字不变 → 下一轮同步 == 替身真值（含 `checkingUP`） | `test_sync.py::test_value_layer_truth_only_via_sync` |
-| V2 值域 | 快照可持有 `queued*/forced*/checking*/moving/missingFiles`，未被压平 | `test_sync.py::test_state_domain_not_flattened` |
-| E1 发射 | 自有停种经同步回流触发转移扫描（源无关），且不重复 | `test_grouping.py::test_own_stop_triggers_scan_on_next_sync` |
-| E2 一致性 | qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为逐字一致 | `test_grouping.py::test_pause_via_qb_webui_and_autoqb_webui_agree` |
-| D1 G6 端到端 | 三段式：陈旧快照下 G6 放行（**窗口存在**）→ `own_writes` 登记 ⇒ 让位零副作用 → 回流后 G6 恢复拦截 | `test_ops.py::test_g6_stale_snapshot_window_recovered_by_deferral` |
-| I1 幂等 | 同 tick 二次 stop/start 被意图标记拦下，且不写任何假 state 值 | `test_actions.py::test_start_stop_idempotent_within_same_tick` |
+| 编号        | 守阵                                                                                                                       | 落点                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| S1 静态     | 剥注释扫描 `qbapi.py`/`store.py`：① `update_torrent_fields` 调用块内无 `state=` ② 无 `.state=` 直接赋值 ③ 无 `setattr(..., "state", ...)` | `test_sync.py::test_no_synthetic_state_write_site`（新增 `_code_without_comments` 用 `tokenize` 剥 COMMENT，故「说明已删除」的注释不算命中） |
+| V1 值层     | 动作后快照逐字不变 → 下一轮同步 == 替身真值（含 `checkingUP`）                                                                                | `test_sync.py::test_value_layer_truth_only_via_sync`                                                                   |
+| V2 值域     | 快照可持有 `queued*/forced*/checking*/moving/missingFiles`，未被压平                                                               | `test_sync.py::test_state_domain_not_flattened`                                                                        |
+| E1 发射     | 自有停种经同步回流触发转移扫描（源无关），且不重复                                                                                                | `test_grouping.py::test_own_stop_triggers_scan_on_next_sync`                                                           |
+| E2 一致性    | qB 自身 WebUI 暂停 与 auto-qb WebUI 暂停 行为逐字一致                                                                                 | `test_grouping.py::test_pause_via_qb_webui_and_autoqb_webui_agree`                                                     |
+| D1 G6 端到端 | 三段式：陈旧快照下 G6 放行（**窗口存在**）→ `own_writes` 登记 ⇒ 让位零副作用 → 回流后 G6 恢复拦截                                                        | `test_ops.py::test_g6_stale_snapshot_window_recovered_by_deferral`                                                     |
+| I1 幂等     | 同 tick 二次 stop/start 被意图标记拦下，且不写任何假 state 值                                                                              | `test_actions.py::test_start_stop_idempotent_within_same_tick`                                                         |
 
 **可选件 A2：采纳，且「一次决定」的答案是不新增容器**。幂等门直接复用 `own_writes`（新增 `own_write_pending(hash, group=False)` 取自身维度），与 deferral 共用同一登记/清理单点 ⇒ **从根上不存在双轨**，不引入 `pending_writes`。
 
@@ -191,22 +192,22 @@
 
 ## 子任务状态表
 
-| # | 子任务 | 状态 |
-|---|---|---|
-| 1 | A 系四形态对比（对话内） | 已完成 |
-| 2 | B 系三支对比（对话内） | 已完成 |
-| 3 | B2 实施计划立件（26-10-13-0413） | 已完成 |
-| 4 | qB 源码取证：服务端状态节流（RefreshInterval 1500ms） | 已完成 |
-| 5 | 两处归因漂移修正（main-loop.md / keys.md） | 已完成 |
-| 6 | 报告 26-10-12-2148 抬 26-10-13-0441 修订 | 已完成 |
-| 7 | B2 计划置 Superseded | 已完成 |
-| 8 | 本专题立档 + 切片 | 已完成 |
-| 9 | **A 系计划另件立** | **已完成** |
-| 10 | **S0 前置**（P1 可达性确认 → 定 A3 / P2 消歧改名 / P3 替身翻 state） | **已完成** |
+| #  | 子任务                                                          | 状态      |
+| -- | ------------------------------------------------------------ | ------- |
+| 1  | A 系四形态对比（对话内）                                                | 已完成     |
+| 2  | B 系三支对比（对话内）                                                 | 已完成     |
+| 3  | B2 实施计划立件（26-10-13-0413）                                     | 已完成     |
+| 4  | qB 源码取证：服务端状态节流（RefreshInterval 1500ms）                      | 已完成     |
+| 5  | 两处归因漂移修正（main-loop.md / keys.md）                             | 已完成     |
+| 6  | 报告 26-10-12-2148 抬 26-10-13-0441 修订                          | 已完成     |
+| 7  | B2 计划置 Superseded                                            | 已完成     |
+| 8  | 本专题立档 + 切片                                                   | 已完成     |
+| 9  | **A 系计划另件立**                                                 | **已完成** |
+| 10 | **S0 前置**（P1 可达性确认 → 定 A3 / P2 消歧改名 / P3 替身翻 state）          | **已完成** |
 | 11 | S1 值层（删 `_sync_paused_state` + `state=` 形参 + 守阵重写 + 4 调用点迁移） | **已完成** |
-| 12 | S2 deferral（`own_writes` + TTL + D-1/D-2/D-3 闸门） | **已完成** |
-| 13 | S3 收尾（§8.3 余下守阵 S1/V1/V2/E1/E2/D1/I1 + 可选 A2 + 坑档口径 + 状态流转） | **已完成** |
-| 14 | S3 提交入库 | 随本专题入库 |
+| 12 | S2 deferral（`own_writes` + TTL + D-1/D-2/D-3 闸门）             | **已完成** |
+| 13 | S3 收尾（§8.3 余下守阵 S1/V1/V2/E1/E2/D1/I1 + 可选 A2 + 坑档口径 + 状态流转）  | **已完成** |
+| 14 | S3 提交入库                                                      | 随本专题入库  |
 
 ## 进度日志
 
