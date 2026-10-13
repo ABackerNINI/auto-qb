@@ -150,5 +150,57 @@ for (const skin of SKINS) {
       expect(probe.hasHead, '卡内有 dt04-head 块').toBe(true);
       expect(probe.hasStats, '卡内有 dt04-stats 块').toBe(true);
     });
+
+    /* 10 树 + 详情 —— 非网格形态(W4 探针实测: 列头声明隐藏, 行 5 格 5 轨道, 缩进 =
+     * name 格内 paddingLeft, 与「树缩进是单元格渲染器」的计划口径一致)。规格钉:
+     *   ① 列头 display:none(声明); ② 行轨道 5 段 + 5 格; ③ 树缩进存在(子层 paddingLeft>0);
+     *   ④ 关键格子类在(dt10-n/dt10-prog/dt10-priocell)。 */
+    test(`drawerContentV10 树形态规格: 列头隐藏 + 行 5 格 5 轨道 + 树缩进 (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.addInitScript(
+        (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
+        { content: '10' },
+      );
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+      await page.dblclick('.torrent-row >> nth=0', { force: true });
+      const drawer = page.locator('.drawer-dock > .drawer');
+      await expect(drawer).toBeVisible({ timeout: 5_000 });
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+
+      const row = drawer.locator('.group-row[data-table="drawerContentV10"]').first();
+      await expect(row).toBeVisible({ timeout: 5_000 });
+
+      const probe = await page.evaluate(() => {
+        const head = document.querySelector('.group-head[data-table="drawerContentV10"]');
+        const rows = Array.from(
+          document.querySelectorAll('.group-row[data-table="drawerContentV10"]'),
+        ).filter((r) => r.children.length > 1);
+        if (!head || !rows.length) return null;
+        const nameIndents = rows
+          .map((r) => r.querySelector('.dt10-n'))
+          .filter(Boolean)
+          .map((el) => parseFloat(getComputedStyle(el).paddingLeft) || 0);
+        return {
+          headDisplay: getComputedStyle(head).display,
+          tracks: (getComputedStyle(rows[0]).gridTemplateColumns || '').trim().split(/\s+/).filter(Boolean).length,
+          cells: rows[0].children.length,
+          maxIndent: Math.max(...nameIndents),
+          hasProg: !!rows[0].querySelector('.dt10-prog'),
+          hasPrio: !!rows[0].querySelector('.dt10-priocell'),
+        };
+      });
+
+      expect(probe, '未找到 drawerContentV10(改名/未挂载? 同步本 spec)').not.toBeNull();
+      expect(probe.headDisplay, '列头隐藏是树形态的声明(不许复活)').toBe('none');
+      expect(probe.tracks, '行轨道 5 段(多一条轨道 = 「横带」类症状)').toBe(5);
+      expect(probe.cells, '行 5 格').toBe(5);
+      expect(probe.maxIndent, '树缩进存在(子层 paddingLeft > 0)').toBeGreaterThan(0);
+      expect(probe.hasProg, '进度格在').toBe(true);
+      expect(probe.hasPrio, '优先级格在').toBe(true);
+    });
   });
 }
