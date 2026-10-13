@@ -722,18 +722,9 @@ window.AQB_COLUMNS = {
     showGrid() {
       return { gridTemplateColumns: this._gridTemplate("show") };
     },
-    /* 抽屉三表(W2): 与上面四张同一条 _gridTemplate 路径 —— 列宽/列序/隐藏任一变化即换引用 */
-    drawerTrackerGrid() {
-      return { gridTemplateColumns: this._gridTemplate("drawerTracker") };
-    },
-    drawerPeerGrid() {
-      return { gridTemplateColumns: this._gridTemplate("drawerPeer") };
-    },
-    drawerFileGrid() {
-      return { gridTemplateColumns: this._gridTemplate("drawerFile") };
-    },
-    /* 变体表格体(计划 26-10-12-0527 U1 stub): 与抽屉三表同一条 _gridTemplate 路径 ——
-     * 列宽/列序/隐藏任一变化即换引用; U2 起每变体表一行(声明式追加, 形态同此)。 */
+    /* 变体表格体(计划 26-10-12-0527 U1 stub): 与主视图同一条 _gridTemplate 路径 ——
+     * 列宽/列序/隐藏任一变化即换引用; U2 起每变体表一行(声明式追加, 形态同此)。
+     * (2026-10-14: 经典三表的 drawerTracker/Peer/FileGrid 随经典渲染链一并退役。) */
     drawerStubV0Grid() {
       return { gridTemplateColumns: this._gridTemplate("drawerStubV0") };
     },
@@ -820,17 +811,8 @@ window.AQB_COLUMNS = {
     visibleShowCols() {
       return this._visibleCols("show");
     },
-    // 抽屉三表的可见列(W2): 表壳 :cols 与单元格渲染器 :cols 同取本引用(列序天然一致)
-    visibleDrawerTrackerCols() {
-      return this._visibleCols("drawerTracker");
-    },
-    visibleDrawerPeerCols() {
-      return this._visibleCols("drawerPeer");
-    },
-    visibleDrawerFileCols() {
-      return this._visibleCols("drawerFile");
-    },
-    /* 变体表格体(26-10-12-0527 U1 stub): 同抽屉三表口径(表壳 :cols 与渲染器 :cols 同引用) */
+    /* 变体表格体(26-10-12-0527 U1 stub): 表壳 :cols 与渲染器 :cols 同引用(列序天然一致)
+     * (2026-10-14: 经典三表的 visibleDrawerTracker/Peer/FileCols 随经典渲染链一并退役。) */
     visibleDrawerStubV0Cols() {
       return this._visibleCols("drawerStubV0");
     },

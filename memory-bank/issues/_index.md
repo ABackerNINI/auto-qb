@@ -24,12 +24,13 @@
 | docs | 1 |
 | test | 4 |
 | refactor | 14 |
-| feat | 21 |
+| feat | 22 |
 | chore | 2 |
 | question | 5 |
 
 ## Open
 
+- [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-…
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成…
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply…

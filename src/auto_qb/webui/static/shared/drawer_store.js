@@ -248,8 +248,7 @@ window.AQB_DRAWER_STORE = {
       this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";
       this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));
       this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
-      this.filePrio.visible = false;  // 内容页签小菜单与行选中跨种子失效(与 drawerTab/closeDrawer 同口径)
-      this.drawerSelPath = "";
+      this.filePrio.visible = false;  // 内容页签小菜单跨种子失效(与 drawerTab/closeDrawer 同口径)
       /* FX-29 软切换标记(第九次形态, 见 _drawerListLoadingOn): 本次换目标保留**上一个目标的已落袋
        * 结果**(其中"空列表"= 没有对端/没有 tracker, 是种子的**常态**) ⇒ 期间三个列表 fetcher
        * 不置 loading 门 —— 否则模板门 `loading && 无行` 会把这份常态空态顶掉一帧换成「正在加载…」,

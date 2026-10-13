@@ -29,7 +29,6 @@
   color: var(--green); font-size: 10px; letter-spacing: .04em; }
 .speed-pop .speed-mode-line.alt .ico { color: var(--green); }
 
-
 /* ---------------- 列头拖动虚影(FX-25) ----------------
  * 跟随光标的列名胶囊。**不用 HTML5 draggable 的原生拖影**(它会与点击排序/列宽拖拽互相干扰),
  * 与已有的 mousedown 阈值手势完全解耦; pointer-events: none 不吃事件。
@@ -736,18 +735,6 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-busy { position: absolute; top: 8px; right: 14px; z-index: 3; padding: 2px 9px; pointer-events: none;
   border: 1px solid var(--border); border-radius: 999px; background: var(--bg-hover);
   color: var(--fg-muted); font-size: 11.5px; line-height: 1.6; }
-.drawer-hr { border: 1px solid var(--border); border-left: 2px solid var(--hr-pending, #c56a1a); padding: 8px 12px;
-  margin: 0 0 16px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
-.drawer-hr.done { border-left-color: var(--hr-done, #0e8574); }
-/* 未触发(安全放行 / 未核实): 既不是"未达标"也不是"已达标", 左侧色条保持中性, 免得把安全放行渲染成告警 */
-.drawer-hr.info { border-left-color: var(--fg-dim, #8b93a1); }
-.drawer-sec { margin: 0 0 18px; }
-.drawer-sec h4 { margin: 0 0 8px; font: 600 11px/1 var(--font-mono);
-  letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); }
-.drawer-rows { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 14px; font-size: 13px; }
-.drawer-rows .k { color: var(--fg-muted); }
-.drawer-rows .v { overflow-wrap: anywhere; min-width: 0; }
-.drawer-rows .v.mono { font-family: var(--font-mono); font-size: 12px; }
 .drawer-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .drawer-table th { text-align: left; font: 600 11px/1.4 var(--font-mono); letter-spacing: .08em;
   text-transform: uppercase; color: var(--fg-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -757,14 +744,11 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
 .drawer-table tr.virtual td { color: var(--fg-muted); }
 .drawer-table .mono-cell { font-family: var(--font-mono); font-size: 12px; }
-.drawer-table .dir-name { color: var(--fg-muted); }
-/* R10-15: 内容页目录/文件分色 —— 目录是**结构**(亮一档 + 加粗), 文件是内容(中间调),
- * 只引既有令牌族不散写色值; skipped(优先级=跳过)仍由 tr.skipped 统一弱化 */
-.drawer-table .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
+
 .drawer-table tr.skipped td { color: var(--fg-muted); }
 /* ---------------- HR 明细表①(计划 26-10-01-2216 阶段2, prism 侧) ----------------
  * 骨架复用 .drawer-table(模板同挂一类); 表头 chips 过滤栏在 components.css 的
- * drawer-table 命中处(.drawer-toolbar 旁), 本文件补表格内的 HR 专属件: 档位徽章色义
+ * drawer-table 命中处, 本文件补表格内的 HR 专属件: 档位徽章色义
  * (A=warn / B=green / C=error / D=blue, 计划 §5.4)+ 失踪行徽章 --paused 描边弱化(不铺底)。
  * 色值全取五主题既有令牌(各主题声明处), 不写死 hex; 三套 UI 成对改。 */
 .hr-detail-table .hr-lane { display: inline-block; padding: 0 7px; border-radius: 3px; border: 1px solid var(--fg-dim);
@@ -817,8 +801,6 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-hres.hr-hres-dim { border-color: var(--border-soft); color: var(--fg-dim); }
 .hr-hres.hr-hres-err { border-color: var(--error-line); color: var(--error); }
 .hr-hres.hr-hres-blue { border-color: var(--blue-line); color: var(--blue); }
-.drawer-raw { margin-top: 6px; }
-.drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 
 /* M4: HR 站点状态(2026-09-25 起并入 Console Hub「HR 在线核实」分区页尾) —— 这里只管内容排版 */
 .hrs-channel { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
@@ -964,43 +946,6 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
-/* 字段行: 图标 + 小字字段名 + 等宽值(超长值看下方 .wide 块行)
- * FX-22 重构三件: 1. 长值行升格为**块行**(标签一行, 值独占下一行) —— 旧写法所有行都是
- * "16px / 112px / 1fr" 三列 + anywhere 硬断, 长路径被切成两行且与邻行参差; 2. 图标按语义着色
- * (.ico-t-*, 不再是 48 行全灰); 3. 值区右侧可挂操作按钮(复制/打开目录)。 */
-.f-rows { display: flex; flex-direction: column; font-size: 13px; }
-.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr) auto; gap: 10px;
-  align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
-.f-row:last-child { border-bottom: 0; }
-.f-row .ico { margin-top: 2px; color: var(--fg-dim); }
-.f-row .k { color: var(--fg-muted); font-size: 11.5px; line-height: 1.7; }
-.f-row .v { min-width: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
-  overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-/* 长值块行(路径 / 哈希 / 备注): 图标+键一行, 值独占下一行, 3 行上限 + break-word 断行 */
-.f-row.wide { grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-areas:
-  "ico k act" "v v v"; row-gap: 2px; }
-.f-row.wide > .ico { grid-area: ico; }
-.f-row.wide > .k { grid-area: k; line-height: 1.5; }
-.f-row.wide > .v { grid-area: v; -webkit-line-clamp: 3; overflow-wrap: break-word; word-break: normal; }
-.f-row > .f-row-act { grid-area: act; align-self: center; width: 22px; height: 22px; }
-.f-row-act { width: 22px; height: 22px; opacity: .55;
-  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.f-row:hover .f-row-act { opacity: 1; }
-/* FX-22 图标语义色: 与右键菜单 CTX-01 彩图标集同语言(色值一律走主题令牌, 改色只改令牌) */
-.f-row .ico-t-io { color: var(--blue); }      /* 传输: 下载/上传/箭头 */
-.f-row .ico-t-cap { color: var(--teal); }     /* 容量: 大小/总大小/分块 */
-.f-row .ico-t-time { color: var(--indigo); }  /* 时间: 日历/时钟/计时/ETA */
-.f-row .ico-t-site { color: var(--cyan); }    /* 站点与连接: 地球/链接 */
-.f-row .ico-t-sw { color: var(--green); }     /* 开关与设置族 */
-.f-row .ico-t-id { color: var(--violet); }    /* 标识: 哈希/信息/标签/备注 */
-.f-row .ico-t-path { color: var(--accent-hi); }  /* 路径: 文件夹 */
-.f-row .ico-t-state { color: var(--pink); }   /* 状态与比率: 进度/分享率/校验/警示 */
-/* FX-22 分组层级: 组标题行右侧给一句汇总(组间节奏 + 一眼看重点); 卡片化与设置页 .ce-section 同语言 */
-.drawer-sec { padding: 10px 12px 6px; margin: 0 0 12px; border-radius: var(--radius);
-  background: var(--surface-1); border: 1px solid var(--border-soft); }
-.drawer-sec h4 { display: flex; align-items: baseline; gap: 10px; }
-.drawer-sec h4 .s-sum { margin-left: auto; font-family: var(--font-mono); font-size: 11px;
-  letter-spacing: 0; text-transform: none; color: var(--fg-dim); }
 
 /* ============ HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ============
  * 单例浮层由 Vue teleport 到 body 级(脱离列表容器的 overflow/特异性纠缠), 触发/定位/数据

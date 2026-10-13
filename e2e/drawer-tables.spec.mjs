@@ -27,15 +27,20 @@ import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
  * 静态守阵只查得到"成员行在不在光标链上", 查不到"按下去被不被吞" —— 只能真按键。若哪天有人
  * 顺手把 drawer.open 塞回浮层名单, 面板一开 ↑↓ 全哑、面板永远停在同一颗种子上, 本用例先红。
  *
- * 锚点口径: 全部落在接壳后的**经典**(= Vue)态网格上 —— 行容器 .group-table、行
- * `.group-row[data-table="drawerTracker"]`、表头 `.group-head[data-table="drawerTracker"]`。
- * data-table 是列对齐(colAlignCss)与行宽(gridStyle)的锚, 也是本 spec 认表的方式(与主视图
- * 四张表同名同源, 但 id 前缀 drawer* 区分)。
+ * 锚点口径: 全部落在变体桥渲染出的引擎网格上 —— 行容器 .group-table、行
+ * `.group-row[data-table="drawerTrackerV06"]`、表头 `.group-head[data-table="drawerTrackerV06"]`。
+ * data-table 是列对齐(colAlignCss)与行宽(gridStyle)的锚, 也是本 spec 认表的方式。
+ * !2026-10-14: 四内容页签的经典渲染链(drawerTracker/drawerPeer/drawerFile 三张经典表)已随
+ * 「移除四内容页签经典 UI」整体退役 —— 本 spec 的表交互用例改钉变体 06「增强表格」(Tracker
+ * 页签唯一带 8 列引擎表头的变体; 04 卡片/05 分段无表头, 列交互本就不适用)。
  */
 
 const WIDE = { width: 2560, height: 1200 };
 
-const HEAD = '.group-head[data-table="drawerTracker"]';
+const HEAD = '.group-head[data-table="drawerTrackerV06"]';
+
+/* 缺省进 Tracker 页签时先把变体钉到 06(缺省档是 04 卡片态, 无表头可交互) */
+const TPL06 = { trackers: '06' };
 
 async function openTrackerTab(page) {
   await page.click('nav.tabs [data-view="torrents"]');
@@ -51,9 +56,13 @@ for (const skin of SKINS) {
   test.describe(`抽屉三列表接表壳 ${skin}`, () => {
     installRuntimeErrorGuard(test);
 
-    test(`Tracker 列表: 拖宽 / 排序 / 右键隐藏 / 列偏好持久化 @fast (${skin})`, async ({ page }) => {
+    test(`Tracker 变体表(增强表格 06): 拖宽 / 排序 / 右键隐藏 / 列偏好持久化 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
+      await page.addInitScript(
+        (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
+        TPL06,
+      );
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
@@ -63,10 +72,10 @@ for (const skin of SKINS) {
       const head = drawer.locator(HEAD);
       await expect(head).toBeVisible({ timeout: 5_000 });
       const cells = head.locator('.h-cell');
-      // 列定义单点 = app.js 的 DRAWER_TRACKER_COLUMNS(URL/状态/种子/用户/消息/操作)
-      await expect(cells).toHaveCount(6);
+      // 列定义单点 = app.js 的 DRAWER_TRACKER_V06_COLUMNS(状态/Tracker/tier/种子/用户/完成下载/下次重新汇报/操作)
+      await expect(cells).toHaveCount(8);
 
-      // 表头在**页签组件内部**却不吸顶: .group-head 自带 position:sticky 是页面级口径(相对文档
+      // 表头在变体外壳里却不吸顶: .group-head 自带 position:sticky 是页面级口径(相对文档
       // 滚动), 面板里会盖住列表上方的工具条 —— 抽屉作用域把它改回 static(三皮肤成对)。
       expect(await head.evaluate((el) => getComputedStyle(el).position)).toBe('static');
 
@@ -82,31 +91,31 @@ for (const skin of SKINS) {
       await page.mouse.up();
       expect(await firstTrack(), `拖宽后首列轨道应加宽(拖前 ${before}px)`).toBeGreaterThan(before + 30);
 
-      // ② 排序: 点「状态」列头 → 该格出现排序箭头。箭头是 `v-if="sortKey === col.key"` 渲的, 而
-      // sortKey 来自**本表**的 dtrkSortKey(`${DRAWER_TABLE_DEFS}.sort.gk`) —— scope 若落回主视图,
-      // 本表箭头恒不出现(这条断言即失配)。
-      const statusCell = cells.nth(1);
-      await statusCell.click();
-      await expect(statusCell.locator('.arrow .ico'), '点列头后本表排序箭头必须出现').toHaveCount(1);
+      // ② 排序: 点「tier」列头 → 该格出现排序箭头。箭头是 `v-if="sortKey === col.key"` 渲的, 而
+      // sortKey 来自**本表**的 dyn 排序态(`${DRAWER_TABLE_DEFS}.sort.dyn`, dtSortState 映射) ——
+      // scope 若落回主视图, 本表箭头恒不出现(这条断言即失配)。
+      const tierCell = cells.nth(2);
+      await tierCell.click();
+      await expect(tierCell.locator('.arrow .ico'), '点列头后本表排序箭头必须出现').toHaveCount(1);
       // 箭头只此一处 = 排序键确实写进了本表, 没顺带改到别的列
       await expect(head.locator('.h-cell:has(.arrow .ico)')).toHaveCount(1);
-      // 行序也真的按它排(数据桩里状态值不唯一, 只断言"渲染出来了"以免绑死桩内容)
-      await expect(drawer.locator('.group-row[data-table="drawerTracker"]').first()).toBeVisible();
+      // 行序也真的按它排(数据桩里 tier 值不唯一, 只断言"渲染出来了"以免绑死桩内容)
+      await expect(drawer.locator('.group-row[data-table="drawerTrackerV06"]').first()).toBeVisible();
 
       // ③ 右键隐藏: 表头右键 → 菜单(逐列"隐藏「X」") → 点击 → 该列出表。
       // !表头**独占右键**: 面板把"模板选择"的右键入口挂在 .drawer-body 上, 表头在里面 —— 列头
-      // 若不拦冒泡就同时弹出模板菜单。故这里顺带钉住"模板菜单没被带出来"(「经典」是各页签
-      // 模板选项恒有的首位项, 足以判别)。
-      await cells.nth(4).click({ button: 'right' });
-      const hideItem = page.locator('.ctx-item', { hasText: '隐藏「消息」' });
+      // 若不拦冒泡就同时弹出模板菜单。故这里顺带钉住"模板菜单没被带出来"(变体候选是各页签
+      // 模板菜单才有的项, 足以判别)。
+      await cells.nth(2).click({ button: 'right' });
+      const hideItem = page.locator('.ctx-item', { hasText: '隐藏「tier」' });
       await expect(hideItem).toBeVisible({ timeout: 5_000 });
-      await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '经典' }),
+      await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '状态卡片栅格' }),
         '列头右键不得连带弹出模板选择菜单').toHaveCount(0);
       await hideItem.click();
-      await expect(head.locator('.h-cell.hc-msg')).toHaveCount(0);
-      await expect(cells).toHaveCount(5);
+      await expect(head.locator('.h-cell.hc-tier')).toHaveCount(0);
+      await expect(cells).toHaveCount(7);
 
-      // ④ 持久化: 刷新 → 重开抽屉 → 仍是 5 列(列偏好落在**与主视图同一份** v5 载荷的独立 page 子树
+      // ④ 持久化: 刷新 → 重开抽屉 → 仍是 7 列(列偏好落在**与主视图同一份** v5 载荷的独立 page 子树
       // 下 —— 新增 page 是向后兼容扩展, COLS_STORE_KEY 不升版本)
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
@@ -114,24 +123,22 @@ for (const skin of SKINS) {
       const drawer2 = await openTrackerTab(page);
       const head2 = drawer2.locator(HEAD);
       await expect(head2).toBeVisible({ timeout: 5_000 });
-      await expect(head2.locator('.h-cell')).toHaveCount(5);
-      await expect(head2.locator('.h-cell.hc-msg')).toHaveCount(0);
+      await expect(head2.locator('.h-cell')).toHaveCount(7);
+      await expect(head2.locator('.h-cell.hc-tier')).toHaveCount(0);
 
-      // ⑤ 恢复入口: 列选择器必须把抽屉三表也列成组(「Tracker 列表 / 用户列表 / 文件列表」)。
-      // 这是与计划 §07 括注的**有意偏差**(它说"不进 TABLE_PAGES 否则列选择器多出分组")—— 但右键
-      // 隐藏是不可逆动作, 选择器不给入口就只能改 localStorage 才能把列找回来。用户 26-10-11 拍板
-      // 「以与主视图一致为准则」, 计划 §11 变更记录已登记该偏差。
+      // ⑤ 恢复入口: 列选择器必须把**当前选中变体表**也列成组(「Tracker 表·增强表格」)。这是与
+      // 计划 §07 括注的**有意偏差**(它说"不进 TABLE_PAGES 否则列选择器多出分组")—— 但右键
+      // 隐藏是不可逆动作, 选择器不给入口就只能改 localStorage 才能把列找回来。变体表的过滤口径:
+      // 带 variantTab 的表只在对应变体被选中时进选择器(26-10-12-0527 U1)。
       await page.locator('.col-picker .table-tool').click();
       const colMenu = page.locator('.col-menu');
       await expect(colMenu).toBeVisible({ timeout: 5_000 });
-      await expect(colMenu.locator('.col-menu-title', { hasText: 'Tracker 列表' })).toHaveCount(1);
-      await expect(colMenu.locator('.col-menu-title', { hasText: '用户列表' })).toHaveCount(1);
-      await expect(colMenu.locator('.col-menu-title', { hasText: '文件列表' })).toHaveCount(1);
-      // 被隐藏的「消息」在选择器里呈**未勾选**态 —— 再点它即可恢复(round-trip)
-      await expect(colMenu.locator('.col-menu-item:has-text("消息")')).not.toHaveClass(/\bon\b/);
-      await colMenu.locator('.col-menu-item', { hasText: '消息' }).click();
-      await expect(head2.locator('.h-cell.hc-msg')).toHaveCount(1);
-      await expect(head2.locator('.h-cell')).toHaveCount(6);
+      await expect(colMenu.locator('.col-menu-title', { hasText: 'Tracker 表·增强表格' })).toHaveCount(1);
+      // 被隐藏的「tier」在选择器里呈**未勾选**态 —— 再点它即可恢复(round-trip)
+      await expect(colMenu.locator('.col-menu-item:has-text("tier")')).not.toHaveClass(/\bon\b/);
+      await colMenu.locator('.col-menu-item', { hasText: 'tier' }).click();
+      await expect(head2.locator('.h-cell.hc-tier')).toHaveCount(1);
+      await expect(head2.locator('.h-cell')).toHaveCount(8);
     });
 
     test(`面板开着行键盘仍可用并驱动面板跟随(W2 第四件: 键位不被面板夺走) @fast (${skin})`, async ({ page }) => {
@@ -173,13 +180,12 @@ for (const skin of SKINS) {
     });
 
     test(`单栏: 正文右键弹当前页签的模板选择(锚点解析回归) @fast (${skin})`, async ({ page }) => {
-      /* 2026-10-10 起右键锚点解析路径(W7 恢复注: _drawerMenuTab 宿主优先分支随变体层恢复):
-       * _drawerMenuTab 首选插件宿主 data-dt-host(经典组件态不存在 —— 宿主只在变体分支渲染),
-       * 落 closest("[data-dt-tab]")(合并列才有)再回落当前页签。单栏经典态两跳都落空, 菜单归属
-       * 只能靠**效果**判别 —— 在 Tracker 页签右键选变体, 必须落到 trackers 的记忆
-       * (localStorage trackers=<id>, general 不动)。若有人把菜单页签解析接错(比如固定
-       * "general"), 菜单照样弹出、不报错 —— 只有这条效果断言能抓到。选变体即走插件挂载机械
-       * (宿主加 .dt-tpl 类, 字符串 DOM 接管), 再选「经典」由 Vue 组件分支接管(双分支互斥)。 */
+      /* 2026-10-10 起右键锚点解析路径: _drawerMenuTab 首选宿主 data-dt-host(2026-10-14 起宿主 id
+       * 恒等于页签名 —— 流量双宿主已移除), 落 closest("[data-dt-tab]")(合并列才有)再回落当前
+       * 页签。四内容页签此后恒为变体态(经典渲染链已删, 宿主恒在), 故本用例的效果断言是: 在
+       * Tracker 页签右键选变体, 必须落到 trackers 的记忆(localStorage trackers=<id>, general 不动)。
+       * 若有人把菜单页签解析接错(比如固定 "general"), 菜单照样弹出、不报错 —— 只有这条效果断言
+       * 能抓到。菜单不再有「经典」项(2026-10-14): 四内容页签只有三个变体候选。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
@@ -187,38 +193,43 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
       const drawer = await openTrackerTab(page);
-      const grid = drawer.locator('.group-row[data-table="drawerTracker"]');
-      await expect(grid.first(), '经典正文即接壳后的网格').toBeVisible({ timeout: 5_000 });
-      // 经典态: 宿主不渲染(组件分支接管), data-dt-host 全 DOM 零个
-      await expect(drawer.locator('[data-dt-host]'), '经典组件态下插件宿主不得渲染').toHaveCount(0);
-      // 死类守阵(坑档 esc-attr-quote-dead-class): 经典(Vue :class)态全文档零「类名含引号」
-      await expectNoDeadClass(page, '经典态');
+      // 缺省档 = 该页签首个变体 04(状态卡片栅格); 宿主恒在且挂载态带 .dt-tpl(限宽作用域类)
+      const host = drawer.locator('.drawer-body .dt-host[data-dt-host="trackers"]');
+      await expect(host, '变体宿主恒在(经典渲染链已移除)').toHaveCount(1);
+      await expect(host).toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      const cardRow = drawer.locator('.group-row[data-table="drawerTrackerV04"]').first();
+      await expect(cardRow, '缺省变体 04 正文即接桥后的网格').toBeVisible({ timeout: 5_000 });
+      // 死类守阵(坑档 esc-attr-quote-dead-class): 变体(dtHtml 字符串 DOM)态全文档零「类名含引号」
+      await expectNoDeadClass(page, '变体 04 挂载态');
 
       // 右键**行**(不是表头 —— 表头 @contextmenu.prevent.stop 独占, 见用例一 ③)
-      await grid.first().click({ button: 'right' });
+      await cardRow.click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible({ timeout: 5_000 });
-      await expect(menu.locator('.ctx-item', { hasText: '经典' }), '右键须弹模板选择(经典恒在首位)').toBeVisible();
+      await expect(menu.locator('.ctx-item', { hasText: '经典' }),
+        '经典档已整体移除, 模板菜单不得再有该项').toHaveCount(0);
+      await expect(menu.locator('.ctx-item', { hasText: '增强表格' }),
+        'Tracker 页签菜单须出变体候选').toBeVisible();
 
       // 选变体「增强表格」→ 即时挂载且落 trackers 记忆(不是 general)
       await menu.locator('.ctx-item', { hasText: '增强表格' }).click();
-      await expect(drawer.locator('.drawer-body .dt-host:visible'), '选变体即挂插件宿主(.dt-tpl)')
-        .toHaveClass(/dt-tpl/, { timeout: 5_000 });
-      // 死类守阵: 变体 06(dtHtml 字符串 DOM)态全文档零「类名含引号」—— W7 复核注: 15 个变体
-      // 全源扫描零「整段属性进插值」形态, 该缺陷只在 W2 已删的旧经典页存在过; 此 pin 防回潮。
+      await expect(drawer.locator('.group-row[data-table="drawerTrackerV06"]').first(),
+        '选变体即挂新表(宿主仍带 .dt-tpl)').toBeVisible({ timeout: 5_000 });
+      // 死类守阵: 变体 06(dtHtml 字符串 DOM)态全文档零「类名含引号」—— 全源扫描零「整段属性进
+      // 插值」形态, 该缺陷只在 W2 已删的旧经典页存在过; 此 pin 防回潮。
       await expectNoDeadClass(page, '变体 06 挂载态');
       const store = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
       expect(store.trackers, '右键菜单必须落当前页签(trackers)的记忆').toBe('06');
-      expect(store.general, '不得落 general 的记忆(未动页签落 classic 默认)').toBe('classic');
+      expect(store.general, '不得落 general 的记忆(未动页签落其缺省档 = 首个变体 01)').toBe('01');
 
-      // 经典回切(反向过渡): 变体 DOM 内右键仍归 trackers(宿主分支命中 data-dt-host) ——
-      // 选「经典」由 Vue 组件分支接管, 表壳网格回归; 记忆回写 classic。
-      await drawer.locator('.drawer-body .dt-host[data-dt-host="trackers"]').click({ button: 'right' });
+      // 反向过渡: 变体 DOM 内右键仍归 trackers(宿主分支命中 data-dt-host) —— 换回 04 卡片态
+      await host.click({ button: 'right' });
       await expect(menu).toBeVisible({ timeout: 5_000 });
-      await menu.locator('.ctx-item', { hasText: '经典' }).first().click();
-      await expect(grid.first(), '回切经典后表壳网格回归').toBeVisible({ timeout: 5_000 });
+      await menu.locator('.ctx-item', { hasText: '状态卡片栅格' }).click();
+      await expect(drawer.locator('.group-row[data-table="drawerTrackerV04"]').first(),
+        '反向切换后 04 网格回归').toBeVisible({ timeout: 5_000 });
       const store2 = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
-      expect(store2.trackers, '回切经典落 trackers 记忆').toBe('classic');
+      expect(store2.trackers, '反向切换仍落 trackers 记忆').toBe('04');
     });
   });
 }

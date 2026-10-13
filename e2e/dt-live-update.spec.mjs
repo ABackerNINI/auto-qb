@@ -69,12 +69,17 @@ for (const skin of SKINS) {
 
       const drawer = await openTorrentDrawer(page);
       await drawer.locator('.drawer-tabs button', { hasText: '用户' }).click();
-      const firstRow = drawer.locator('.group-row[data-table="drawerPeer"]').first();
+      const firstRow = drawer.locator('.group-row[data-table="drawerPeerV07"]').first();
       await expect(firstRow).toBeVisible({ timeout: 10_000 });
 
-      // 首轮: 给第 0 行的 dlspeed 格(第 5 列)打身份戳, 记下首轮文案
-      const text0 = await firstRow.evaluate((row) => {
-        const cell = row.children[4];
+      // 2026-10-14: 经典对端表(未排序, 首行 = 桩的第 0 个对端)已删 —— 改钉缺省变体 07。
+      // 07 默认按 upspeed **降序**(与经典"后端原序"不同), 首行是 upspeed 最大的对端(桩里
+      // i=2/5/8/11 并列), 而桩只给**第 0 个对端**(ip 10.0.0.0)换 dl_speed —— 故必须按
+      // 地址定位那一行, 否则探到的那格两轮输入完全相同(经典版就是这么误报的)。
+      const row0 = drawer.locator('.group-row[data-table="drawerPeerV07"]', { hasText: '10.0.0.0:30000' }).first();
+      await expect(row0, '第 0 个对端(10.0.0.0)必须在 07 表里').toBeVisible({ timeout: 10_000 });
+      const text0 = await row0.evaluate((row) => {
+        const cell = row.querySelector('.dt07-spd.d');
         cell.setAttribute('data-live-probe', '1');
         return cell.textContent.trim();
       });
@@ -90,7 +95,7 @@ for (const skin of SKINS) {
       const changedAt = await (async () => {
         const t0 = Date.now();
         for (;;) {
-          const txt = await firstRow.evaluate((row) => row.children[4] && row.children[4].textContent.trim());
+          const txt = await row0.evaluate((row) => { const c = row.querySelector('.dt07-spd.d'); return c && c.textContent.trim(); });
           if (txt && txt !== text0) return Date.now();
           if (Date.now() - t0 > 8_000) return -1;
           await page.waitForTimeout(40);
@@ -98,7 +103,7 @@ for (const skin of SKINS) {
       })();
       expect(changedAt, '两轮注入后 dlspeed 格文案变化(速度实时更新)').toBeGreaterThan(0);
       expect(changedAt - fulfillAt, `响应落地→格子更新 <500ms(实测 ${changedAt - fulfillAt}ms)`).toBeLessThan(500);
-      await expect(firstRow.locator('[data-live-probe="1"]'),
+      await expect(row0.locator('[data-live-probe="1"]'),
         '速度更新后仍是同一 DOM 节点(行未重建 = L5 写字段)').toBeAttached();
     });
 

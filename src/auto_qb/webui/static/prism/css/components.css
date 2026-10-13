@@ -523,9 +523,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-field input { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); font-size: 13.5px; }
 .modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.drawer-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
-.drawer-toolbar .bt { display: inline-flex; align-items: center; gap: 6px; }
-.drawer-toolbar-hint { font-size: 11.5px; color: var(--fg-dim); }
 .drawer-table th.th-act { width: 1%; }
 .drawer-table td.cell-act { white-space: nowrap; text-align: right; padding-top: 4px; }
 .row-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
@@ -553,11 +550,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hr-diag-kv { margin-top: 6px; }
 .hr-diag-kv td:first-child { width: 1%; white-space: nowrap; color: var(--fg-dim); }
 .hr-wave-table { margin-top: 8px; }
-.prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.prio-btn:hover { border-color: var(--accent); color: var(--accent); }
-.prio-btn.skipped { color: var(--fg-dim); }
 
 /* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言(仅引用 tokens) =================
  * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右值用 mono 数据字体。
@@ -684,8 +676,3 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-body .group-row.skipped > * { color: var(--fg-muted); }
 .drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
 .drawer-body .mono-cell { font-family: var(--font-mono); font-size: 12px; }
-.drawer-body .dir-name { color: var(--fg-muted); }
-.drawer-body .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
-.drawer-body .dfile-name { cursor: pointer; }
-.drawer-body .dtrk-act, .drawer-body .dfile-prio { display: flex; justify-content: flex-end; }
-.drawer-body .dpeer-client, .drawer-body .dtrk-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

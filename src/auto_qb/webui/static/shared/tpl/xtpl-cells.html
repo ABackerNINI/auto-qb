@@ -237,66 +237,11 @@
     </template>
   </script>
 
-  <!-- ================================================================================
-       抽屉三表的行模型单元格渲染器(计划 26-10-11-2106 W2): tracker-row / peer-row / file-row。
-       原实现是 drawer_pages/<tab>-classic.js 里过程式拼的字符串 DOM(`<td>` 串), W2 接壳后与
-       主视图同一条路: 行容器 div.group-row(display:grid) + 本渲染器的单元格做**直接子元素**
-       (:nth-child 列对齐与 data-table 都依赖它, 故不包 wrapper), 表头由 <aq-table grid> 渲出。
-       !列名与值单元格共用同一个 col.key —— 列定义单点在 app.js 的 DRAWER_*_COLUMNS。
-       !行为一律 $root.xxx(根数据在根实例上; 组件实例直接 this.xxx 会读到 undefined)。
-       !行修饰类才第一次真正生效: 旧经典页把条件属性当整段**插值**拼进 dtHtml, 引号被 esc 转义
-         成 &quot; 再被 HTML 解析还原成"类名里的引号" -> .drawer-table tr.skipped/.sel/.virtual
-         三条规则从未命中(见 pitfalls/web-ui/esc-attr-quote-dead-class)。Vue 写的是不带引号的
-         真实类名, 于是"跳过态变灰 / 选中行高亮"首次可见 —— 这是**已报备的观感修复**, 不是回归。
-       ================================================================================ -->
+  <!-- 2026-10-14: 抽屉三表的经典行渲染器(tpl-aq-tracker-cells / tpl-aq-peer-cells /
+       tpl-aq-file-cells)随「移除四内容页签经典 UI」整体移除 —— 三个页签的表格体自
+       2026-10-12-0527 起已全部走变体桥(tpl-aq-dt-bridge + xtpl-cells-dt.html 的 dt04..dt11),
+       这三份只被已删的 drawer-tabs.html 引用。 -->
 
-  <!-- tracker 行模型: URL / 状态 / 种子 / 用户 / 消息 / 操作(动作槽) -->
-  <script type="text/x-template" id="tpl-aq-tracker-cells">
-    <template v-for="col in cols" :key="col.key">
-      <div v-if="col.key === 'url'" class="dtrk-url mono-cell" :title="t.url">{{ t.url }}</div>
-      <div v-else-if="col.key === 'status'" class="dtrk-status">{{ t.status }}</div>
-      <!-- "已连接 (总数)" 与主视图明细/种子页同口径(fmtPeersQb), 故数值格复用 .g-stat 的省略号口径 -->
-      <div v-else-if="col.key === 'num_seeds'" class="g-stat">{{ t.seeds }}</div>
-      <div v-else-if="col.key === 'num_leeches'" class="g-stat">{{ t.leeches }}</div>
-      <div v-else-if="col.key === 'msg'" class="dtrk-msg" :title="t.msg || ''">{{ t.msg || '—' }}</div>
-      <div v-else-if="col.key === 'act'" class="dtrk-act">
-        <button v-if="!t.virtual" class="row-btn danger" :data-dt-url="t.url"
-                @click.stop="$root.trackerRemove(t.url)"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg></button>
-      </div>
-    </template>
-  </script>
-
-  <!-- peer 行模型: 对端九列(IP/地址 · 客户端 · 标志 · 进度 · 速度 · 流量 · 文件关联) -->
-  <script type="text/x-template" id="tpl-aq-peer-cells">
-    <template v-for="col in cols" :key="col.key">
-      <div v-if="col.key === 'addr'" class="mono-cell">{{ p.addr }}</div>
-      <div v-else-if="col.key === 'client'" class="dpeer-client" :title="p.client">{{ p.client }}</div>
-      <div v-else-if="col.key === 'flags'" class="dpeer-flags">{{ p.flags }}</div>
-      <div v-else-if="col.key === 'progress'" class="g-stat">{{ p.progress }}%</div>
-      <div v-else-if="col.key === 'dlspeed'" class="g-stat">{{ p.dlspeed }}</div>
-      <div v-else-if="col.key === 'upspeed'" class="g-stat">{{ p.upspeed }}</div>
-      <div v-else-if="col.key === 'downloaded'" class="g-stat">{{ p.downloaded }}</div>
-      <div v-else-if="col.key === 'uploaded'" class="g-stat">{{ p.uploaded }}</div>
-      <div v-else-if="col.key === 'relevance'" class="g-stat">{{ p.relevance }}</div>
-    </template>
-  </script>
-
-  <!-- file 行模型: 文件(缩进树序) / 大小 / 进度 / 优先级(可点改的小菜单) -->
-  <script type="text/x-template" id="tpl-aq-file-cells">
-    <template v-for="col in cols" :key="col.key">
-      <!-- 名称格整格可点 = 选中该行(选中态渲染在**行**上: tr.sel -> .group-row.sel);
-           目录行不吃点击(旧经典页同口径: 只有 .clickable 的格挂 handler), 故本格用 div 而非 button -->
-      <div v-if="col.key === 'name'" class="dfile-name" @click="$root.fileRowSelect(f)">
-        <span class="dir-name" :class="{ dir: f.dir }" :style="{ paddingLeft: (f.depth * 16) + 'px' }">{{ f.name }}</span>
-      </div>
-      <div v-else-if="col.key === 'size'" class="mono-cell g-stat">{{ f.text }}</div>
-      <div v-else-if="col.key === 'progress'" class="g-stat">{{ f.dir ? '—' : f.progress + '%' }}</div>
-      <div v-else-if="col.key === 'prio'" class="dfile-prio">
-        <button v-if="!f.dir" class="prio-btn" @click.stop="$root.openFilePrio($event, f.index)">{{ f.prio }}</button>
-        <span v-else>—</span>
-      </div>
-    </template>
-  </script>
   <!-- U2 变体格渲染器(计划 26-10-12-0527, 用户表三变体): 桥 Teleport 进变体外壳锚的行体。
        行对象由变体注册条目的 rowsFn 预装配(显示值 + _raw 排序原值 + 修饰字段), 渲染器只做声明式
        呈现 —— 判据(吸血启发式/五桶/内网段/渐进字段)零复制, 单点在变体文件。多根片段: 单元格必须

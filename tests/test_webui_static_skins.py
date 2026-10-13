@@ -634,11 +634,13 @@ def test_frontend_table_shell_single_point():
     torrents.html 种子头); 行模型单元格曾是散在页面模板里的 **127 条 v-if 分支**。收敛为单点后,
     "又有人往页面模板里内联一份"是**静默**回潮: 页面照常工作, 单点却慢慢失效(改一处漏一处 ——
     正是本轮要消灭的维护点)。钉三层:
-    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与八个行模型
+    ① 组件注册单点: `app.component("aq-table", window.AQ_TABLE_COMPONENT)`(表壳) 与五个行模型
        渲染器 —— 主视图五个 `<aq-member-cells>`(member) / `<aq-group-cells>`(group) /
-       `<aq-torrent-cells>`(torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行),
-       加抽屉三表的 `<aq-tracker-cells>` / `<aq-peer-cells>` / `<aq-file-cells>`(计划
-       26-10-11-2106 W2「三列表接表壳」) —— 组件模板里的行为一律经 `$root` 回调根实例;
+       `<aq-torrent-cells>`(torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行);
+       组件模板里的行为一律经 `$root` 回调根实例。
+       (2026-10-14: 抽屉三表的 `<aq-tracker-cells>` / `<aq-peer-cells>` / `<aq-file-cells>`
+       随「移除四内容页签经典 UI」一并删除 —— 那三张经典表只由已删的 drawer-tabs.html 渲染,
+       四内容页签的表格体此后全部走变体桥。)
     ② 表壳模板唯一且内容齐备: tpl/xtpl.html 恰一份 `#tpl-aq-table`, 且四件交互把手
        (`.h-cell` / `.h-label` / `.arrow` / `.resizer` / `.col-drop-line`)都在里面 —— 把手丢了
        表现为"拖了没反应 / 右键没菜单", 无任何报错;
@@ -658,9 +660,6 @@ def test_frontend_table_shell_single_point():
         ("aq-torrent-cells", "AQ_TORRENT_CELLS_COMPONENT"),
         ("aq-show-cells", "AQ_SHOW_CELLS_COMPONENT"),
         ("aq-ep-cells", "AQ_EP_CELLS_COMPONENT"),
-        ("aq-tracker-cells", "AQ_TRACKER_CELLS_COMPONENT"),
-        ("aq-peer-cells", "AQ_PEER_CELLS_COMPONENT"),
-        ("aq-file-cells", "AQ_FILE_CELLS_COMPONENT"),
     )
     for name, glob in comps:
         assert re.search(r'app\.component\(\s*"%s"\s*,\s*window\.%s\s*\)' % (name, glob),
@@ -673,8 +672,10 @@ def test_frontend_table_shell_single_point():
         assert xtpl.count(f'id="{tid}"') == 1, f"shared/tpl/xtpl.html 的 {tid} 模板必须恰一份(表壳/渲染器单点)"
     xtpl_cells = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
     for tid in (
-        "tpl-aq-group-cells", "tpl-aq-torrent-cells", "tpl-aq-show-cells", "tpl-aq-ep-cells", "tpl-aq-tracker-cells",
-        "tpl-aq-peer-cells", "tpl-aq-file-cells"
+        "tpl-aq-group-cells",
+        "tpl-aq-torrent-cells",
+        "tpl-aq-show-cells",
+        "tpl-aq-ep-cells",
     ):
         assert xtpl_cells.count(f'id="{tid}"') == 1, \
             f"shared/tpl/xtpl-cells.html 的 {tid} 模板必须恰一份(行模型渲染器单点)"
@@ -700,9 +701,6 @@ def test_frontend_table_shell_single_point():
         ("tpl/groups.html", 2, ("aq-group-cells", )),
         ("tpl/shows.html", 2, ("aq-show-cells", "aq-ep-cells")),
         ("tpl/torrents.html", 1, ("aq-torrent-cells", )),
-        # W2(计划 26-10-11-2106): 抽屉三表各一张 —— 三页签的列表不再是自带 <table class="drawer-table">
-        # 的字符串 DOM(那是"面板里没有列模型"的根因: 拖宽/排序/右键隐藏一件都接不上)
-        ("tpl/drawer-tabs.html", 3, ("aq-tracker-cells", "aq-peer-cells", "aq-file-cells")),
     ):
         raw = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
         text = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
@@ -809,48 +807,46 @@ def test_frontend_table_registry_single_point():
     for probe in ('viewMode === "torrents"', 'viewMode === "shows"'):
         assert probe not in sort_js, (f"sort.js 又出现 {probe} 视图分派 —— 应走 TABLE_DEFS[id].sort(注册表单点)")
 
-    # ---------------- W2「三列表接表壳」(计划 26-10-11-2106) ----------------
-    # 抽屉三表的**表身份**必须独立于 TABLE_PAGES: 并进 TABLE_DEFS 会让 TABLE_PAGES 把它们当"页面"
+    # ---------------- 变体表格体接引擎(计划 26-10-12-0527; 2026-10-14 经典三表退役) ----------------
+    # 抽屉变体表的**表身份**必须独立于 TABLE_PAGES: 并进 TABLE_DEFS 会让 TABLE_PAGES 把它们当"页面"
     # 参与行窗口化与"全表"动作, 而它们没有视图、也没有 3000 行的窗口化需求。但列的**交互引擎**
     # (拖宽/拖序/右键隐藏/持久化/对齐注入)要覆盖它们 —— 故引擎侧另取 ALL_TABLE_PAGES 全集。
     m2 = re.search(r"const DRAWER_TABLE_DEFS = \{(.*?)\n\};", app, re.S)
-    assert m2, "app.js 缺 DRAWER_TABLE_DEFS(抽屉三表的表身份注册表) —— 形态变了请同步本守阵"
+    assert m2, "app.js 缺 DRAWER_TABLE_DEFS(抽屉变体表的表身份注册表) —— 形态变了请同步本守阵"
     dbody = m2.group(1)
-    drawer_tables = (
-        (
-            "drawerTracker", "DRAWER_TRACKER_COLUMNS", "drawerTrackerGrid", "visibleDrawerTrackerCols", "dtrkSortKey",
-            "dtrkSortDir"
-        ),
-        (
-            "drawerPeer", "DRAWER_PEER_COLUMNS", "drawerPeerGrid", "visibleDrawerPeerCols", "dpeerSortKey",
-            "dpeerSortDir"
-        ),
-        (
-            "drawerFile", "DRAWER_FILE_COLUMNS", "drawerFileGrid", "visibleDrawerFileCols", "dfileSortKey",
-            "dfileSortDir"
-        ),
+    # 2026-10-14: 经典三表(drawerTracker/drawerPeer/drawerFile)随「移除四内容页签经典 UI」删除
+    # —— 不得回潮; 回潮即列选择器多出一个永不渲染的表分组(且经典渲染器已不存在)。
+    for dead in ("drawerTracker", "drawerPeer", "drawerFile"):
+        assert not re.search(r"\n  %s: \{" % dead, dbody), \
+            (f"经典表 {dead} 的 def 不得回潮(2026-10-14 经典渲染链已删) —— "
+             f"回潮即列选择器多出一个永不渲染的表分组")
+    variant_tables = (
+        ("drawerPeerV07", "DRAWER_PEER_V07_COLUMNS"),
+        ("drawerPeerV08", "DRAWER_PEER_V08_COLUMNS"),
+        ("drawerPeerV09", "DRAWER_PEER_V09_COLUMNS"),
+        ("drawerTrackerV04", "DRAWER_TRACKER_V04_COLUMNS"),
+        ("drawerTrackerV05", "DRAWER_TRACKER_V05_COLUMNS"),
+        ("drawerTrackerV06", "DRAWER_TRACKER_V06_COLUMNS"),
+        ("drawerContentV10", "DRAWER_CONTENT_V10_COLUMNS"),
+        ("drawerContentV11", "DRAWER_CONTENT_V11_COLUMNS"),
     )
-    state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
-    for tid, const, grid, colsc, gk, gd in drawer_tables:
+    for tid, const in variant_tables:
         assert tid not in body, (
-            f"{tid} 混进了 TABLE_DEFS —— 抽屉表进了 TABLE_PAGES 就会被当成页面"
+            f"{tid} 混进了 TABLE_DEFS —— 变体表进了 TABLE_PAGES 就会被当成页面"
             f"(列选择器多一个'页面'/行窗口化多一个 kind); 表身份走 DRAWER_TABLE_DEFS"
         )
         seg = re.search(r"\n  %s: \{(.*?)\n  \}," % tid, dbody, re.S)
         assert seg, f"DRAWER_TABLE_DEFS 缺 {tid}(或段落格式变了, 同步本守阵)"
         s = seg.group(1)
         assert f"columns: {const}" in s, f"DRAWER_TABLE_DEFS.{tid}.columns 未指向 {const}(列定义单点断了)"
-        assert f'grid: "{grid}"' in s and f'cols: "{colsc}"' in s, \
-            f"DRAWER_TABLE_DEFS.{tid} 的 grid/cols computed 名不匹配(表壳行宽与可见列没锚点)"
-        assert f'gk: "{gk}"' in s and f'gd: "{gd}"' in s, \
-            f"DRAWER_TABLE_DEFS.{tid} 的排序字段名不匹配(表头点了排序会写到别的表上)"
-        assert "headRef: null" in s, ("抽屉表头渲染在页签组件内部, 根实例 $refs 取不到 —— "
+        assert "headRef: null" in s, ("抽屉表头渲染在变体外壳/桥模板内部, 根实例 $refs 取不到 —— "
                                       "headRef 必须是 null 走 _headEl 的 DOM 兜底")
+        assert "dyn: true" in s, \
+            f"DRAWER_TABLE_DEFS.{tid} 排序未走 dyn(变体表排序状态须进 dtSortState 映射, 按 table-id 通用存取)"
         assert f"const {const} = [" in app, f"app.js 缺列定义常量 {const}"
-        assert f"{grid}()" in cols, f"columns.js 缺 computed {grid} —— 行宽(gridStyle 消费)没有来源"
-        assert f"{colsc}()" in cols, f"columns.js 缺 computed {colsc} —— 可见列没有单点"
-        assert f"{gk}:" in state_js and f"{gd}:" in state_js, \
-            f"state.js 缺排序字段 {gk}/{gd} —— 表壳列头点一下会写进 undefined"
+    # 列定义常量仍保留 —— 变体列集(DRAWER_*_V*_COLUMNS)由它们派生, 不是随表删掉的
+    for const in ("DRAWER_TRACKER_COLUMNS", "DRAWER_PEER_COLUMNS", "DRAWER_FILE_COLUMNS"):
+        assert f"const {const} = [" in app, f"app.js 缺列定义常量 {const}(变体列集仍由它派生)"
     # TABLE_PAGES 仍由 TABLE_DEFS 派生(不是 ALL_TABLE_DEFS); 引擎侧全集另有一条
     assert re.search(r"const TABLE_PAGES = Object\.keys\(TABLE_DEFS\)", app), \
         "TABLE_PAGES 不再是 Object.keys(TABLE_DEFS) —— 上面那条'抽屉表不进 TABLE_PAGES'的独立性判据就失效了"

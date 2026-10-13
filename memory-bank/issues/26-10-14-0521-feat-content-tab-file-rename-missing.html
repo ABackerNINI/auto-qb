@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="content-tab-file-rename-missing">
+<meta name="issue-stamp" content="26-10-14-0521">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="content-tab-file-rename-missing">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="种子详情内容页签「重命名…」入口缺失">
+<meta name="issue-summary" content="经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案">
+<title>种子详情内容页签「重命名…」入口缺失 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>种子详情内容页签「重命名…」入口缺失</h1>
+    <p class="lede">经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-14-0521-feat-content-tab-file-rename-missing</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-14 05:21</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在「移除种子详情面板除流量页的 4 个经典 UI + 移除流量页/qB 流量页的非经典档」变更（档案
+    <code>memory-bank/tasks/26-10-14-webui-detail-classic-removal.md</code>）的收尾盘点中撞见：
+    内容页签的<strong>文件/目录重命名能力整体消失</strong> —— 全 UI 已无任何入口。</p>
+    <p>该能力此前只有一条实现路径：经典渲染链的内容页工具栏「重命名…」按钮 →
+    <code>renameFileRow()</code>（依赖行选中 <code>fileRowSelect</code>/<code>drawerSelPath</code>）。
+    经典链整体退役后按钮与方法一并删除，而内容页签现存的三个变体
+    <code>10-content-tree-detail-tall</code> / <code>11-content-treegrid-batch-low</code> /
+    <code>12-content-space-treemap-collapsed</code> 都不含重命名入口（10 头注原话：
+    「重命名不在本变体设计内 → 回 classic 用」）—— 而 <code>classic</code> 档已不存在，
+    这条指示现在指向空。</p>
+    <p>触发条件：打开任意种子的详情面板切到内容页签（含单文件种子，旧逻辑对单文件免选中直接改名）。
+    与平台/配置无关，三皮肤同现。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># ===== 取证 2026-10-14 05:21（工作区，变更已落地未提交） =====
+
+# ① 旧实现(HEAD 版)的完整方法——发令链与今天任何 _editPost 动作同构
+$ git show HEAD:src/auto_qb/webui/static/shared/drawer.js | sed -n '891,921p'
+    /* 文件/目录重命名(选中行; 单文件种子免选): POST rename-fs, new_path = 原目录前缀 + 新名 */
+    async renameFileRow() {
+      const hash = this.drawer.hash;
+      if (!hash) return;
+      const rows = this.drawerFileRows();
+      let row = rows.find((r) =&gt; r.path === this.drawerSelPath);
+      if (!row &amp;&amp; rows.length === 1) row = rows[0];  // 单文件种子: 免选中直接改
+      ...
+      await this._editPost(hash, "rename-fs", {
+        old_path: row.path, new_path: parent + nn, is_folder: !!row.dir,
+      }, row.dir ? "目录已重命名" : "文件已重命名");
+    },
+
+# ② 旧入口(HEAD 版 drawer-tabs.html 工具栏, 已随文件删除)
+$ git show HEAD:src/auto_qb/webui/static/shared/tpl/drawer-tabs.html | grep -n 重命名
+117:      &lt;button class="bt ghost sm" data-dt-act="rename" @click="$root.renameFileRow()"&gt;...重命名…&lt;/button&gt;
+
+# ③ 当前 src 已零 renameFileRow / rename-fs 前端引用(仅剩后端模块名)
+$ grep -rn "renameFileRow\|rename-fs" src/auto_qb/webui/static/
+(无命中)
+
+# ④ 后端能力完好, 前端只是够不到它
+src/auto_qb/webui/commands.py:810:    def _cmd_rename_fs(self, hash: str, old_path: str = "", ...)
+src/auto_qb/webui/server/routes/torrent_cmds.py:162:    @router.post("/api/torrents/{hash}/rename-fs")
+src/auto_qb/webui/static/shared/drawer.js:537:
+            else if (action === "files/priority" || action === "rename-fs") this._fetchDrawerFiles(true);
+# ^^ 轮询刷新分支仍给 rename-fs 留门(动作后补拉 files), 说明链只缺「发起」一环
+
+# ⑤ 变体 10 的提示已成孤儿文案(用户照着做会找不到「经典」档)
+src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:342:
+        : T`优先级徽章(左树)弹出小菜单; 此处分段直接生效。重命名请切回「经典」模板。`)}</p>`;</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>任意种子(含单文件种子)详情面板 → 内容页签, 需重命名文件/目录时。必现, 与数据量无关</td></tr>
+    <tr><td>影响范围</td><td>prism / atlas / console 三皮肤; 内容页签全部 3 个变体(10/11/12), 含合并双列形态</td></tr>
+    <tr><td>严重度</td><td><strong>中</strong> —— 功能缺失而非数据风险: 后端命令与校验完好, 用户可回退到 qB WebUI 操作; 但本产品内无任何入口, 且变体 10 的提示文案主动把用户导向一个已不存在的档位</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li>档制单点(回补要动的旋钮): <code>shared/drawer_templates.js:85</code> <code>CLASSIC_TABS</code> + <code>:383</code> <code>defaultSel</code> / <code>:391</code> <code>choices</code>(取证 2026-10-14 05:21) · grep <code>CLASSIC_TABS</code></li>
+      <li>重命名落点候选(三个变体的选中态各自不同): <code>drawer_tpl/10-content-tree-detail-tall.js:342</code>(右详情 <code>.dt10-note</code> 段, 勾选态走左树); <code>drawer_tpl/11-content-treegrid-batch-low.js</code>(行勾选 <code>.group-row.is-chk</code>, grep <code>is-chk</code>); <code>drawer_tpl/12-content-space-treemap-collapsed.js:79</code>(行选中 <code>.dt12-row.is-sel</code>, grep <code>is-sel</code>)</li>
+      <li>后端命令(勿动, 已在位): <code>src/auto_qb/webui/commands.py:810</code> <code>_cmd_rename_fs</code> · grep <code>rename_fs</code>; 路由 <code>src/auto_qb/webui/server/routes/torrent_cmds.py:162</code></li>
+      <li>前端发令链(部分在位, 缺发起一环): <code>shared/drawer.js:537</code> action 后补拉 files; <code>_editPost</code> 同文件通用; 提示框 <code>promptDialog</code></li>
+      <li>旧实现原文(回补直接参照): <code>git show HEAD:src/auto_qb/webui/static/shared/drawer.js</code> 的 891-921 行; 旧工具栏 <code>git show HEAD:src/auto_qb/webui/static/shared/tpl/drawer-tabs.html</code> 的 117 行</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><strong>已知, 非待查</strong> —— 经典渲染链是内容页签唯一的重命名实现载体, 它随用户批准的移除变更整体退役(删 <code>drawer_tabs.js</code> / <code>drawer-tabs.html</code> + <code>renameFileRow</code> / <code>fileRowSelect</code> / <code>drawerSelPath</code> / <code>.f-row.sel</code> 选中态 / <code>.drawer-toolbar</code> 及其死 CSS); 三个内容变体按试用期对照口径本就不含重命名(10 头注明示), 故移除后无入口。已排除: 后端命令缺失(④ 完好)、发令链不可达(<code>_editPost</code> 通用可用)、选择器机械故障。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向：把重命名作为<strong>变体自带动作</strong>回补(不复活经典档)，复用既有三段链
+    <code>promptDialog → _editPost(hash, "rename-fs", …) → _fetchDrawerFiles(true)</code>，零后端工作。</p>
+    <ul>
+      <li><strong>方案 A(推荐):</strong> 在三个内容变体各加一个「重命名…」入口 —— 10 放右详情头部(作用于左树选中节点); 11 放工具条(作用于勾选行, 单勾选时可用); 12 放体积榜行选中后的详情区。均走 onSelect 自管选中态取 <code>path</code>, 单文件种子免选中。同步删 10 的孤儿文案。</li>
+      <li><strong>方案 B:</strong> 右键菜单(内容页签行右键)挂「重命名…」项, 一处覆盖三变体; 但变体自带右键语义(10/12 行内有点选), 需逐个协调, 协调成本高于 A。</li>
+      <li>代价提示: 三个变体 = 三处 UI + 各自 e2e; 需补守阵断言「每变体重命名入口 ≥1」「rename-fs 回执后 files 重拉」。入池修时先确认在产品口径上是否接受变体自带 toolbar(当初移除就是把重量收回变体, 与该口径一致)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-14 05:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-14-0521-feat-content-tab-file-rename-missing.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

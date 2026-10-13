@@ -13,6 +13,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * W2 首日用一次性探针实测了 11 个表格面(数据已记任务档案 26-10-13-webui-detail-table-rebuild):
  *   达标: 经典三张(drawerTracker/drawerPeer/drawerFile)、09 密度雷达 —— 三处计数相等且零偏移
+ *     (2026-10-14: 经典三张随「移除四内容页签经典 UI」整体退役, 其用例从 CASES 摘除。)
  *   未达标(留给对应波次修好后纳入本守阵):
  *     04 卡片栅格  2 / 1 / 3  —— 变体 CSS 把行容器覆写成两列, 而列模型是单列, 行输出 3 格
  *     10 树+详情   6 / 5 / 5  —— 多出一条轨道(就是「多出来的横带」)
@@ -27,11 +28,10 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 
 const TAB_TEXT = { trackers: 'Tracker', peers: '用户', content: '内容' };
 
-/* 已达标面: 页签 + (变体 id | null = 经典) + 期望的表 id + 期望列数 */
+/* 已达标面: 页签 + 变体 id + 期望的表 id + 期望列数
+ * (2026-10-14: 经典三张 drawerTracker/drawerPeer/drawerFile 的行用例随经典渲染链移除退役 ——
+ *  四内容页签此后恒为变体态, 本表只列变体表格面。) */
 const CASES = [
-  { tab: 'trackers', tpl: null, tid: 'drawerTracker', cols: 6 },
-  { tab: 'peers', tpl: null, tid: 'drawerPeer', cols: 9 },
-  { tab: 'content', tpl: null, tid: 'drawerFile', cols: 4 },
   { tab: 'peers', tpl: '09', tid: 'drawerPeerV09', cols: 9 },
   /* W2 修复面: 偏移根因 = 变体覆写行几何时不带列头(06: 14-8=6px; 11: 14-4=10px + gap 8≠10 逐列累计)。
    * 修法 = --tbl-pad-x / --tbl-gap 变量, 列头与行同取, 变体只声明值。 */

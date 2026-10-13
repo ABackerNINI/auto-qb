@@ -78,8 +78,8 @@ window.AQB_SORT = {
       this[k.gk] = k.defKey;
       this[k.gd] = k.defDir;
     },
-    /* 抽屉列表的行序(计划 26-10-11-2106 W2): 三张表各按**自己的**排序键(表壳列头点击落到
-     * `dtrkSortKey` / `dpeerSortKey` / `dfileSortKey`, 见 DRAWER_TABLE_DEFS[*].sort)。
+    /* 抽屉列表的行序(计划 26-10-11-2106 W2): 每张变体表各按**自己的**排序键(见
+     * DRAWER_TABLE_DEFS[*].sort —— 变体表恒走 dyn, 排序状态进根 data 的 dtSortState 映射)。
      * 空键 = 后端原序(与明细表同口径): 三态排序第三击回到空键即"恢复原序", 故排序永远可逆。
      * !取值走 `_sortVal`: 抽屉行模型带"显示值 + 原始值"两份(dlspeed 是 `fmtSpeedOrDash` 出的
      *   字符串), 直接按显示值比会把 "1.2 MiB" 按字典序排成 "12 MiB" 之后 —— 静默的错序。

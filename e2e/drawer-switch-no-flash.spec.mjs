@@ -20,14 +20,16 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * (钉住"不准把空当未就绪去重拉" —— 用户明确否掉过这一取舍)。
  */
 
-/** 三页签: 标签 / 端点段 / 空态文案 / 恒空响应体(与真机同形)。 */
+/** 三页签: 标签 / 端点段 / 空态文案 / 空态容器 / 恒空响应体(与真机同形)。
+ * 2026-10-14: 四内容页签的经典渲染链移除后, 空态容器不再是通用的 `.empty` —— 变体各自带
+ * 自己的空态落点(dt07-empty / dt04-empty / dt10-load), 文案沿用经典的同一句, 故按页签给选择器。 */
 const TABS = [
   {
-    tab: 'peers', label: '用户', api: 'peers', empty: '暂无已连接用户',
+    tab: 'peers', label: '用户', api: 'peers', empty: '暂无已连接用户', sel: '.dt07-empty',
     body: { rid: 0, full_update: true, peers: {}, peers_removed: {} },
   },
-  { tab: 'trackers', label: 'Tracker', api: 'trackers', empty: '暂无 tracker', body: [] },
-  { tab: 'content', label: '内容', api: 'files', empty: '无文件列表', body: [] },
+  { tab: 'trackers', label: 'Tracker', api: 'trackers', empty: '暂无 tracker', sel: '.dt04-empty', body: [] },
+  { tab: 'content', label: '内容', api: 'files', empty: '无文件列表', sel: '.dt10-load', body: [] },
 ];
 
 for (const skin of SKINS) {
@@ -57,7 +59,7 @@ for (const skin of SKINS) {
         const drawer = page.locator('.drawer-dock > .drawer');
         await expect(drawer).toBeVisible({ timeout: 5_000 });
         await drawer.locator('.drawer-tabs button', { hasText: t.label }).click();
-        await expect(drawer.locator('.empty', { hasText: t.empty })).toBeVisible({ timeout: 5_000 });
+        await expect(drawer.locator(t.sel, { hasText: t.empty })).toBeVisible({ timeout: 5_000 });
 
         // 逐帧(rAF)采样: 总帧 / 空态在场帧 / 「正在加载…」帧
         await page.evaluate((txt) => {
@@ -94,7 +96,7 @@ for (const skin of SKINS) {
         const target = hashes[hashes.length - 1];   // 切换目标(后出现的 hash)
         expect(hits[target], '空响应不得触发重拉(用户明确否掉"把空当未就绪去等")').toBe(1);
 
-        await expect(drawer.locator('.empty', { hasText: t.empty })).toBeVisible({ timeout: 3_000 });
+        await expect(drawer.locator(t.sel, { hasText: t.empty })).toBeVisible({ timeout: 3_000 });
       });
     }
   });

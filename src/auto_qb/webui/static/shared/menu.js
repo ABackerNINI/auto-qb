@@ -180,17 +180,21 @@ window.AQB_MENU = {
     openDrawerMenu(event) {
       if (!this.drawer || !this.drawer.open) return;
       if (!this.drawerIsSeed && !this.drawerIsTraffic) return;
+      /* 2026-10-14: 流量页签变体(13/14/15)移除后只剩经典一档 —— 该页签已无可挑模板, 模板菜单
+       * 不弹(单选项菜单 = 半残 UI); 种子详情四页签恒有变体候选, 合并开关另计(dtMenuMergeOn)。 */
+      var tab = this._drawerMenuTab(event);
+      if (window.AQB_DRAWER_TPL_REG.choices(tab).length < 2 && !this.dtMenuMergeOn) return;
       event.preventDefault();
       this._markCtxSource(event);
       this.drawerMenu = {
         visible: true,
         ...this._menuPos(event),
-        tab: this._drawerMenuTab(event),
+        tab: tab,
       };
     },
     /* 右键命中区域 -> 目标页签: 变体宿主 data-dt-host 优先, 合并列 data-dt-tab 次之, 否则当前页签。
-     * W7: data-dt-host 挂载宿主随变体层原样恢复(W5 曾删; 命中宿主即宿主页签, 变体态右键
-     * 不得回落 —— 守阵/e2e 同轮恢复)。
+     * 2026-10-14: 流量变体(13/14/15)与图前/图后双宿主移除后, 宿主 id 恒等于页签名 ——
+     * 原先的 `-(pre|post)` 去后缀改写随之退役(无宿主再用带后缀的 id)。
      * !2026-10-10 用户报「合并后右侧右键弹左列模板」: 合并双列的**列间 24px 间隙**与分栏两侧
      * 留白(drawer-split 居中封顶 2400, 宽屏两侧可各空出数百 px)都不属于任何 .dt-col 元素 ——
      * 命不中时若直接回落当前页签, x 明明在右半区却拿到(常为左列的)当前页签模板选项。正文区内
@@ -200,7 +204,7 @@ window.AQB_MENU = {
       if (el && el.closest) {
         var host = el.closest("[data-dt-host]");
         if (host) {
-          var t = String(host.getAttribute("data-dt-host") || "").replace(/-(?:pre|post)$/, "");
+          var t = String(host.getAttribute("data-dt-host") || "");
           if (t) return t;
         }
         var col = el.closest("[data-dt-tab]");

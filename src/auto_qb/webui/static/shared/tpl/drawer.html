@@ -121,13 +121,10 @@
             <!-- S1(计划 26-10-06-0838): template v-else 转 div(唯一非加挂改动)带布局类
                  dt-traffic-main —— 核心注入的规则使其与原 fragment 直挂 .drawer-body.is-traffic
                  的 flex 纵列几何等价(FX-29 遮罩对 wrapper 生效, display:contents 会废掉 opacity);
-                 W7(恢复注): 图前/图后变体宿主(traffic-pre/post)原样恢复 —— 13 KPI 头行 /
-                 14 解读栏 / 15 自适应条落点; uPlot 图与其宿主 ref 保持 Vue 所有
-                 (qb_traffic_chart.js 零改动)。共用规则(.dt-traffic-main 布局等价层)自 W6 起在
-                 三皮肤 views.css(单一来源)。 -->
+                 流量形态自 2026-10-14 起**只有经典一档**(变体 13/14/15 与图前/图后双宿主一并移除),
+                 图本体与其宿主 ref 恒由 Vue 所有(qb_traffic_chart.js 零改动)。共用规则
+                 (.dt-traffic-main 布局等价层)自 W6 起在三皮肤 views.css(单一来源)。 -->
             <div v-else class="dt-traffic-main">
-              <!-- 图前宿主(变体 13 的 KPI 头行落点) -->
-              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-pre"></div>
               <p v-if="qbCurData.meta && qbCurData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
               <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽高, tooltip 为其兄弟绝对定位;
                    悬停 idx/px 由 uPlot setCursor 钩子写回(scope 化 hoverIdx/hoverLeft) -->
@@ -186,18 +183,15 @@
                   <aq-qb-ctl></aq-qb-ctl>
                 </div>
               </div>
-              <!-- 图后宿主(变体 14 解读栏 / 15 自适应条落点) -->
-              <div v-show="dtHostOn('traffic')" class="dt-host" data-dt-host="traffic-post"></div>
             </div>
           </template>
           <!-- ==================== 种子详情形态正文(五页签) ====================
-               R2 S1(计划 26-10-09-2219): 四页签经典链曾移植为页插件(drawer_pages/*-classic.js);
-               W2(计划 26-10-11-2106)把「经典」一档收回 Vue 组件(shared/drawer_tabs.js);
-               W7(恢复注): 变体层原样恢复 —— 正文按页签选择走 v-if="dtVueTab(tab)" 组件 /
-               v-else 插件宿主(data-dt-host)互斥双分支, 同一锚全 DOM 只存在一份
-               (_dtFindHost querySelector 定位); 显隐判据 dtHostOn 单点在 drawer_templates.js。
-               四处空态
-               (general 首载 loading 与 error 两条共享空态)仍归本模板。
+               2026-10-14(用户令「移除种子详情面板除流量页外的 4 个经典 UI」): 四内容页签的经典
+               渲染链**整体移除**(drawer_tabs.js 四个 Vue 组件 + tpl/drawer-tabs.html + 三个
+               经典单元格渲染器 + 经典表注册/排序字段/行装配方法全删) —— 正文**恒由变体宿主
+               (data-dt-host)承载**, 不再有 v-if="dtVueTab(tab)" / v-else 互斥双分支; 每页签
+               缺省档 = 该页签首个变体(drawer_templates.js defaultSel), 显隐判据 dtHostOn 单点。
+               四处空态(general 首载 loading 与 error 两条共享空态)仍归本模板。
                FX-22/截断族等 CSS 钩子随类名原样命中。 -->
           <template v-else>
             <!-- 首次进入的空态只归常规页签: 其余页签各有自己的行内加载态(在 classic 插件内);
@@ -212,39 +206,32 @@
               <span>{{ drawer.error }}</span>
             </div>
             <!-- R2 S2·R3: 合并双列(drawerMerge 开关 + 宽度门, dtSplitOn 单点判据) —— 列组由
-                 **当前页签所属的对**(dtPair)决定, 两列各由对应页签的 Vue 组件渲染(显隐走组件
-                 内 dtHostOn, 对内两列同显); 列序按对固定。
+                 **当前页签所属的对**(dtPair)决定, 两列各由对应页签的变体宿主渲染(显隐走
+                 dtHostOn, 对内两列同显); 列序按对固定。
                  W4(计划 26-10-11-2106): 列组由 dtPairCols(合并对单点 MERGE_PAIRS 的渲染面)
                  经 v-for 驱动 —— 模板不再硬编码 gc/tp 两个 <template> 分支(删「渲染列组 vs 命中」
-                 双份判据); general 列经 props 传详情, 其余列组件无 props。
+                 双份判据)。
                  !R3: 列组读 dtPair 而非 drawerMerge —— R2 按标志值渲染固定一对, 切到另一对页签
                  时列头在而两列宿主空(用户报障); 现与数据供给同源。
-                 W7(恢复注): 列内正文同样走 dtVueTab 双分支 —— 经典 = 组件 / 变体 = 宿主,
-                 两列可各自选档互不牵连。 -->
+                 2026-10-14: 经典渲染链移除后两列同为变体宿主, 两列可各自选档互不牵连。 -->
             <div v-if="dtSplitOn" class="drawer-split" :data-merge="dtPair">
               <div v-for="col in dtPairCols" :key="col.tab" class="dt-col" :data-dt-tab="col.tab">
                 <div class="dt-col-head">{{ col.label }}</div>
-                <component v-if="dtVueTab(col.tab)" :is="'aq-drawer-' + col.tab" v-bind="col.props"></component>
-                <div v-else class="dt-host" v-show="dtHostOn(col.tab)" :data-dt-host="col.tab"></div>
+                <div class="dt-host" v-show="dtHostOn(col.tab)" :data-dt-host="col.tab"></div>
                 <!-- 变体表格体桥(计划 26-10-12-0527 U1): 变体声明 tableId 时表格体经 Teleport
                      传送进外壳锚; :key 含锚代数 —— 宿主重建后强制重挂进当前锚(U1 四路径闸门)。 -->
                 <aq-dt-bridge v-if="dtBridgeOn(col.tab)" :key="dtBridgeKey(col.tab)" :tab="col.tab"></aq-dt-bridge>
               </div>
             </div>
-            <!-- W2(计划 26-10-11-2106): 四页签「经典」由 Vue 组件渲染(shared/drawer_tabs.js +
-                 tpl/drawer-tabs.html); W7(恢复注): 变体选择时 v-else 落插件宿主
-                 (data-dt-host, _dtSync 挂载), 双分支互斥保证宿主全 DOM 唯一。 -->
+            <!-- 2026-10-14: 四内容页签的正文**恒由变体宿主承载**(经典 Vue 组件已整体移除) ——
+                 每页签一个 data-dt-host 宿主, _dtSync 挂当前选中变体; 显隐走 dtHostOn(v-show)。 -->
             <template v-else>
-              <aq-drawer-general v-if="dtVueTab('general')" :d="drawer.detail"></aq-drawer-general>
-              <div v-else class="dt-host" v-show="dtHostOn('general')" data-dt-host="general"></div>
-              <aq-drawer-trackers v-if="dtVueTab('trackers')"></aq-drawer-trackers>
-              <div v-else class="dt-host" v-show="dtHostOn('trackers')" data-dt-host="trackers"></div>
-              <aq-drawer-peers v-if="dtVueTab('peers')"></aq-drawer-peers>
-              <div v-else class="dt-host" v-show="dtHostOn('peers')" data-dt-host="peers"></div>
-              <aq-drawer-content v-if="dtVueTab('content')"></aq-drawer-content>
-              <div v-else class="dt-host" v-show="dtHostOn('content')" data-dt-host="content"></div>
+              <div class="dt-host" v-show="dtHostOn('general')" data-dt-host="general"></div>
+              <div class="dt-host" v-show="dtHostOn('trackers')" data-dt-host="trackers"></div>
+              <div class="dt-host" v-show="dtHostOn('peers')" data-dt-host="peers"></div>
+              <div class="dt-host" v-show="dtHostOn('content')" data-dt-host="content"></div>
               <!-- 变体表格体桥(计划 26-10-12-0527 U1): 逐页签自点亮(锚代数 > 0 才渲染),
-                   classic / 无 tableId 声明 / 锚不在 DOM 恒不渲染 —— 生产零观感。 -->
+                   无 tableId 声明 / 锚不在 DOM 恒不渲染 —— 生产零观感。 -->
               <template v-for="t in ['general', 'trackers', 'peers', 'content']" :key="'dtb-' + t">
                 <aq-dt-bridge v-if="dtBridgeOn(t)" :key="dtBridgeKey(t)" :tab="t"></aq-dt-bridge>
               </template>

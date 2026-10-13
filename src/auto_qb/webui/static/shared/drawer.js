@@ -168,6 +168,9 @@ window.AQB_DRAWER = {
       clearTimeout(this._mergeResizeT);
       this._mergeResizeT = setTimeout(() => {
         this._mergeResizeT = null;
+        /* 2026-10-14: 与 dtToggleMerge 同口径 —— 门跨越前先熄桥(单独一帧卸桥), 否则
+         * dtSplitOn 同帧翻转时拆桥会撞上 Teleport 目标被移除, Vue 运行期崩溃。 */
+        if (this.dtSplitOn) this._dtBridgesOff();
         this.dtWinW = window.innerWidth;
         this.$nextTick(() => {
           this._dtSync();  /* v-if 换代后旧宿主 isConnected 已假, 卸旧重挂(W7 恢复) */
@@ -219,7 +222,13 @@ window.AQB_DRAWER = {
     dtToggleMerge() {
       if (!this.dtMergeGateOk()) return; /* 置灰项双保险: class 拦显示, 这里拦行为 */
       const v = this.dtMergeOn ? "off" : "on";
-      this.drawerMerge = v;
+      /* 2026-10-14: 先把所有变体表格体桥熄灯, **下一拍**再翻合并标志 ——
+       * 桥的 v-if 与所属 DOM 分支(v-if="dtSplitOn")同帧翻转时, Vue 拆桥会撞上“Teleport
+       * 目标正被同帧移除”, 报 `Cannot destructure property 'bum' of 'e' as it is null`
+       * (运行期崩溃, 合并开关/视口门跨越必现 —— 经典渲染链移除后四内容页签默认带桥才暴露)。
+       * 分两帧: 第一帧只卸桥(锚还在文档里), 第二帧才拆分支, 无桥可拆即无崩溃。 */
+      this._dtBridgesOff();
+      this.$nextTick(() => { this.drawerMerge = v; });
       try { localStorage.setItem(MERGE_STORE_KEY, JSON.stringify(v)); } catch (e) { /* 写失败本轮仍生效 */ }
       if (this.drawerMenu) this.drawerMenu.visible = false;
     },
@@ -858,11 +867,10 @@ window.AQB_DRAWER = {
       if (!ok) return;
       await this._editPost(hash, "trackers/remove", { url }, "tracker 已删除");
     },
-    /* ---------------- 抽屉内容页签编辑(D 轮): 行选中/优先级/文件重命名 ---------------- */
-    /* 行点击选中(文件/目录均可): 再点同一行取消 —— 顶部"重命名…"的作用对象 */
-    fileRowSelect(r) {
-      this.drawerSelPath = this.drawerSelPath === r.path ? "" : r.path;
-    },
+    /* ---------------- 抽屉内容页签编辑(D 轮): 优先级小菜单 ----------------
+     * 2026-10-14: 经典渲染链移除后, 行选中(fileRowSelect/drawerSelPath)与文件重命名
+     * (renameFileRow)随之退役 —— 二者只由已删的 drawer-tabs.html 工具栏/名称格消费,
+     * 内容页签变体(10/11/12)自管选中态且不含重命名(见 10 变体头注)。 */
     /* 文件优先级小菜单: 锚定单元格下方, 视口吸附(@click.stop 防止开菜单的点击立即被窗口关闭) */
     openFilePrio(ev, index) {
       this._markCtxSource(ev);
@@ -887,36 +895,6 @@ window.AQB_DRAWER = {
       const okText = Array.isArray(indices)
         ? `已将 ${idx.length} 个文件设为「${label}」` : `优先级已设为「${label}」`;
       await this._editPost(hash, "files/priority", { indices: idx, priority: p }, okText);
-    },
-    /* 文件/目录重命名(选中行; 单文件种子免选): POST rename-fs, new_path = 原目录前缀 + 新名 */
-    async renameFileRow() {
-      const hash = this.drawer.hash;
-      if (!hash) return;
-      const rows = this.drawerFileRows();
-      let row = rows.find((r) => r.path === this.drawerSelPath);
-      if (!row && rows.length === 1) row = rows[0];  // 单文件种子: 免选中直接改
-      if (!row) {
-        this.toast("请先点击选中要重命名的文件或目录", "warn");
-        return;
-      }
-      const res = await this.promptDialog(row.dir ? "重命名目录" : "重命名文件", row.name, {
-        body: `当前路径: ${row.path}`,
-        okText: "重命名",
-      });
-      if (res === null) return;
-      const nn = String(res || "").trim();
-      if (!nn) {
-        this.toast("名称不能为空", "warn");
-        return;
-      }
-      if (nn === row.name) {
-        this.toast("未作修改", "ok", 2000);
-        return;
-      }
-      const parent = row.path.includes("/") ? row.path.slice(0, row.path.lastIndexOf("/") + 1) : "";
-      await this._editPost(hash, "rename-fs", {
-        old_path: row.path, new_path: parent + nn, is_folder: !!row.dir,
-      }, row.dir ? "目录已重命名" : "文件已重命名");
     },
     /* 复制种子信息: 目标 hash 显式传入, 缺省回落 menu.hash(S3/M3: 键盘路径 _kbEditAct 传 (field, h),
      * 不再借道菜单状态) */
@@ -1029,7 +1007,6 @@ window.AQB_DRAWER = {
       this.drawer.open = false;
       this.filePrio.visible = false;
       this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3)随面板收
-      this.drawerSelPath = "";
       this._stopDrawerPoll();
       this._stopDrawerFollow();
       this._dtUnmountAll();     // 插件实例逐个 destroy + 清宿主(W7 恢复; 本体 drawer_templates.js)
@@ -1473,24 +1450,8 @@ window.AQB_DRAWER = {
         },
       }));
     },
-    /* Trackers tab 的行模型(W2 新增): 与上面两张同形 —— 显示值 + `_raw` 原始值。
-     * !移到这里而不是留在页签组件的 computed: 行装配是**数据层**职责(与渲染无关), 且这里是
-     *   "tracker 行长什么样"的唯一落点(变体若要用也有据可依; W2 之前它只在 classic 页里拼字符串)。 */
-    drawerTrackerRows() {
-      return (this.drawer.trackers || []).map((t) => ({
-        url: t.url,
-        status: this.drawerTrackerStatus(t.status),
-        seeds: this.fmtPeersQb(t.num_seeds, t.num_complete),
-        leeches: this.fmtPeersQb(t.num_leeches, t.num_incomplete),
-        msg: t.msg,
-        virtual: this.drawerTrackerVirtual(t.url),
-        _raw: {
-          url: t.url, status: t.status,
-          num_seeds: t.num_seeds || 0, num_leeches: t.num_leeches || 0,
-          msg: t.msg || "",
-        },
-      }));
-    },
+    /* 2026-10-14: drawerTrackerRows() 随经典 Tracker 表退役(变体 04/05/06 的行装配在各自
+     * rowsFn 里, 不再经根方法)。下面两条仍是变体消费的公共判定/翻译单点。 */
     drawerTrackerStatus(s) {
       return { 0: "禁用", 1: "未联系", 2: "工作", 3: "更新中", 4: "未工作" }[s] ?? "—";
     },

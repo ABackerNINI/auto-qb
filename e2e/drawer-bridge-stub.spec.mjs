@@ -38,9 +38,15 @@ async function openTorrentDrawer(page) {
 /* 打开抽屉 → 切用户页签 → 右键选 stub → 桥点亮; 返回 drawer 与锚 locator */
 async function selectStub(page, drawer) {
   await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
-  await expect(drawer.locator('.group-row[data-table="drawerPeer"]').first()).toBeVisible({ timeout: 10_000 });
-  await drawer.locator('.drawer-body').click({ button: 'right' });
+  await expect(drawer.locator('.group-row[data-table="drawerPeerV07"]').first()).toBeVisible({ timeout: 10_000 });
+  // 2026-10-14: 经典对端表已删, 用户页签默认变体 07 —— 右键必须点**行**(表头 @contextmenu.stop
+  // 独占右键, 点 .drawer-body 中心会命中 07 的表头而弹列菜单, 取不到 stub 项)。
+  await drawer.locator('.group-row[data-table="drawerPeerV07"]').first().click({ button: 'right' });
   await page.locator('.ctx-menu').locator(STUB_ITEM).click();
+  /* 2026-10-14: 等右键菜单**离场**再做后续鼠标手势 —— v-if + pop 过渡期间它仍留在原位,
+   * 盖住 stub 表头/把手, 拖宽/排序的 mousedown 全被它吃掉(表现: 拖了完全没反应且无报错)。
+   * 注意: 只点行(而非旧写法的 .drawer-body 中心)才不会命中 07 表头独占的列菜单。 */
+  await expect(page.locator('.ctx-menu')).toHaveCount(0, { timeout: 5_000 });
   const anchor = drawer.locator(ANCHOR);
   await expect(anchor.locator('.group-head[data-table="drawerStubV0"]'), '桥表头点亮(U1 闸门)')
     .toBeVisible({ timeout: 10_000 });
@@ -60,8 +66,9 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
       await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
-      await expect(drawer.locator('.group-row[data-table="drawerPeer"]').first()).toBeVisible({ timeout: 10_000 });
-      await drawer.locator('.drawer-body').click({ button: 'right' });
+      await expect(drawer.locator('.group-row[data-table="drawerPeerV07"]').first()).toBeVisible({ timeout: 10_000 });
+      // 同样点**行**(表头独占右键, 见 selectStub 注)
+      await drawer.locator('.group-row[data-table="drawerPeerV07"]').first().click({ button: 'right' });
       await expect(page.locator('.ctx-menu')).toBeVisible();
       await expect(page.locator('.ctx-menu').locator(STUB_ITEM), 'stub 必须被 ?dtstub 门挡在生产外').toHaveCount(0);
       await expect(drawer.locator(ANCHOR)).toHaveCount(0);
@@ -123,9 +130,9 @@ for (const skin of SKINS) {
       const anchor = await selectStub(page, drawer);
       await expect(anchor.locator('.group-head[data-table="drawerStubV0"]')).toBeVisible();
 
-      // 切走: peers 宿主卸载(锚清代数) → trackers 经典
+      // 切走: peers 宿主卸载(锚清代数) → trackers 变体 04(缺省档)
       await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
-      await expect(drawer.locator('.group-row[data-table="drawerTracker"]').first()).toBeVisible({ timeout: 10_000 });
+      await expect(drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()).toBeVisible({ timeout: 10_000 });
       await expect(drawer.locator(ANCHOR), '切走后锚随宿主卸载').toHaveCount(0);
 
       // 切回: 桥重挂进新锚(新代数) —— 手势仍通(再点排序)
@@ -168,15 +175,18 @@ for (const skin of SKINS) {
 
       // 开 tp 合并对: Tracker 页签右键 → 合并页签
       await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
-      await expect(drawer.locator('.group-row[data-table="drawerTracker"]').first()).toBeVisible({ timeout: 10_000 });
+      await expect(drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()).toBeVisible({ timeout: 10_000 });
       await drawer.locator('.drawer-body').click({ button: 'right' });
       await page.locator('.ctx-menu').locator('.ctx-item:has-text("合并页签")').click();
+      await expect(page.locator('.ctx-menu')).toHaveCount(0, { timeout: 5_000 });
       const split = drawer.locator('.drawer-split');
       await expect(split).toHaveAttribute('data-merge', 'tp', { timeout: 5_000 });
 
       // peers 列选 stub → 合并列内桥点亮 + 手势通(排序点击)
+      // 2026-10-14: 右键点**peers 列的行**(07 表头 @contextmenu.stop 独占右键; 点列中心可能命中
+      // 表头而弹列菜单, 取不到 stub 项 —— 与 selectStub 同口径)
       const peersCol = split.locator('.dt-col[data-dt-tab="peers"]');
-      await peersCol.click({ button: 'right' });
+      await peersCol.locator('.group-row').first().click({ button: 'right' });
       await page.locator('.ctx-menu').locator(STUB_ITEM).click();
       const anchor = peersCol.locator(ANCHOR);
       await expect(anchor.locator('.group-head[data-table="drawerStubV0"]'), '合并列桥点亮').toBeVisible({ timeout: 10_000 });

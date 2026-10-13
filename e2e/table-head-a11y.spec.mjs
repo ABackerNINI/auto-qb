@@ -11,7 +11,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 转发没接上激活单点, 静态守阵全绿而键盘用户按了毫无反应(纯静默)。三条:
  *   ① 语义与可达: 列头是 `columnheader`; 可排序列才进 Tab 序(`tabindex="0"`), Tab 进得去;
  *   ② 键盘触发: Enter → 该列 `aria-sort="descending"`(三态首击降序)+ 箭头点亮; Space → 翻 ascending;
- *   ③ 全域同源: 抽屉经典表(drawerTracker)同一组件, 键盘同样可用(引擎一处受益全域)。
+ *   ③ 全域同源: 抽屉变体表(drawerTrackerV06)同一组件, 键盘同样可用(引擎一处受益全域)。
  * thead 模式(设置页 HR 详情表)的 `<th>` 结构由静态守阵钉; 其 `$emit('sort')` 运行时路径随 HR 表
  * 既有 e2e/静态用例覆盖, 本 spec 不重复铺 HR 场景的长前置。
  */
@@ -50,9 +50,15 @@ for (const skin of SKINS) {
       await expect(target, 'Space 再点翻成 ascending').toHaveAttribute('aria-sort', 'ascending');
     });
 
-    test(`抽屉经典表表头: 键盘排序可用(引擎全域同源) @fast (${skin})`, async ({ page }) => {
+    test(`抽屉变体表表头: 键盘排序可用(引擎全域同源) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize({ width: 2560, height: 1200 });
+      // 2026-10-14: 经典 Tracker 表(drawerTracker)随经典渲染链退役 —— 改钉变体 06「增强表格」
+      // (Tracker 页签唯一带 8 列引擎表头的变体; 04 卡片/05 分段无表头)。引擎同源判据不变。
+      await page.addInitScript(
+        (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
+        { trackers: '06' },
+      );
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
@@ -65,10 +71,10 @@ for (const skin of SKINS) {
       await expect(drawer).toBeVisible({ timeout: 5_000 });
       await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
 
-      const head = drawer.locator('.group-head[data-table="drawerTracker"]');
+      const head = drawer.locator('.group-head[data-table="drawerTrackerV06"]');
       await expect(head).toBeVisible({ timeout: 5_000 });
       const sortable = head.locator('.h-cell.sortable');
-      expect(await sortable.count(), 'Tracker 表应有可排序列').toBeGreaterThan(0);
+      expect(await sortable.count(), 'Tracker 变体表应有可排序列').toBeGreaterThan(0);
 
       const target = sortable.nth(1);
       await target.focus();

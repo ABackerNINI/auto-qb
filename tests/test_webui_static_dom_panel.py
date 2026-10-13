@@ -1378,11 +1378,15 @@ def test_drawer_tpl_registry_wiring():
     m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
 
-    # 5. drawer.html 加挂面: 宿主 x6(单栏)+ x4(合并双列, v-if/v-else 与单栏互斥)
+    # 5. drawer.html 加挂面: 四内容页签各一个宿主(单栏 x4 + 合并双列 x4 共用同一模板)
     #    2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」): 头部 .dt-select 下拉退役,
     #    选择入口移到 openDrawerMenu 右键菜单; 合并双列各列带 data-dt-tab(右键按命中区域定页签)
-    for host in ("general", "trackers", "peers", "content", "traffic-pre", "traffic-post"):
+    #    2026-10-14: 流量变体(13/14/15)与图前/图后双宿主(traffic-pre/post)已移除 —— 流量正文
+    #    由模板内联的经典图渲染, 无变体宿主。
+    for host in ("general", "trackers", "peers", "content"):
         assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
+    assert "traffic-pre" not in drawer_tpl and "traffic-post" not in drawer_tpl, \
+        "drawer.html 又出现流量变体宿主(traffic-pre/post) —— 流量页签已无变体(2026-10-14)"
     assert 'class="dt-select"' not in drawer_tpl, \
         "drawer.html 仍残留 .dt-select 头部下拉(2026-10-10 模板选择已迁右键菜单)"
     assert "dtPick(" not in drawer_tpl and "dtTplOptions" not in drawer_tpl and "dtTplCurrent" not in drawer_tpl, \
@@ -1398,11 +1402,17 @@ def test_drawer_tpl_registry_wiring():
     # 互斥双分支(同一 data-dt-host 全 DOM 唯一), 显隐门 dtHostOn 在组件根与宿主上同源。
     assert not os.path.isdir(os.path.join(shared, "drawer_pages")), \
         "drawer_pages/ 不得复活(W2 经典链已收回 Vue 组件并接公共表壳)"
-    assert 'dtVueTab(col.tab)' in drawer_tpl and 'dtVueTab(\'general\')' in drawer_tpl, \
-        "drawer.html 缺 dtVueTab 双分支(W2 经典=组件/变体=宿主互斥)"
+    # 2026-10-14: 四内容页签的经典渲染链(drawer_tabs.js / drawer-tabs.html / aq-drawer-*)整体
+    # 移除 —— drawer.html 正文恒走变体宿主, 不得再有 dtVueTab 分支(注释不算, 先剥注释再判)。
+    tpl_code = re.sub(r"<!--.*?-->", "", drawer_tpl, flags=re.S)
+    assert "dtVueTab" not in tpl_code, \
+        "drawer.html 又出现 dtVueTab 分支 —— 经典渲染链已整体移除(2026-10-14), 正文恒走变体宿主"
+    assert "aq-drawer-general" not in tpl_code and "aq-drawer-trackers" not in tpl_code \
+        and "aq-drawer-peers" not in tpl_code and "aq-drawer-content" not in tpl_code, \
+        "drawer.html 又引用经典页签组件(aq-drawer-*) —— 四组件已删(2026-10-14)"
     for tab in ("general", "trackers", "peers", "content"):
         assert drawer_tpl.count(f'data-dt-host="{tab}"') == 1, \
-            f"drawer.html: data-dt-host={tab} 必须恰一份(v-else 互斥分支保证)"
+            f"drawer.html: data-dt-host={tab} 必须恰一份"
     # R2 S2/S3 接线 + R3 修订(计划 26-10-09-2219 R3): 合并开关显式建字段 + 双列宿主 + 右键单开关
     assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
     assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
@@ -1563,10 +1573,10 @@ def test_drawer_tpl_variant_field_icons():
     """详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)
     字段行必须消费 drawerGeneralSections() 自带的行级 icon 数据(sprite `<use href>` 静态引用,
     字符串拼 HTML 不走 Vue 绑定)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典选择器
-    .f-row .ico-t-* 在变体行不命中, 变体必须自带重定作用域的色表); traffic 三变体(13/14/15)
-    KPI/解读行必须含 sprite 图标引用; 全部六变体的 #i-* 引用都不得超出三皮肤 index.html
-    sprite 的既有 symbol 集合(三皮肤集合还必须两两相等, 防单边加图标), 且不得引入外部图标库
-    (<img / iconfont / fontawesome / material-icons)。"""
+    .f-row .ico-t-* 在变体行不命中, 变体必须自带重定作用域的色表); 全部变体的 #i-* 引用都不得
+    超出三皮肤 index.html sprite 的既有 symbol 集合(三皮肤集合还必须两两相等, 防单边加图标),
+    且不得引入外部图标库(<img / iconfont / fontawesome / material-icons)。
+    (2026-10-14: traffic 三变体(13/14/15)已随流量页签变体移除, 其 KPI 行图标断言同步退役。)"""
     shared = os.path.join(STATIC_ROOT, "shared")
     vdir = os.path.join(shared, "drawer_tpl")
 
@@ -1594,16 +1604,8 @@ def test_drawer_tpl_variant_field_icons():
             assert f".{tone} {{" in text, \
                 f"drawer_tpl/{name}: 缺 .{tone} 着色 CSS(经典 .f-row .ico-t-* 作用域在变体行不命中, 必须自带色表)"
 
-    # 3. traffic 三变体: KPI/解读行含 sprite 图标引用(上下行累计为基线, 任一变体缺即退化为纯文字)
-    for name in (
-        "13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js", "15-traffic-adaptive-collapsed.js"
-    ):
-        text = open(os.path.join(vdir, name), encoding="utf-8").read()
-        for icon in ("#i-upload", "#i-download"):
-            assert icon in text, \
-                f"drawer_tpl/{name}: KPI 行缺 sprite 图标 {icon}(Q2: traffic 变体零图标复发)"
-
-    # 4. 引用不越界 + 不引入外部图标库(全变体扫描, 含未来新增文件)
+    # 3. 引用不越界 + 不引入外部图标库(全变体扫描, 含未来新增文件)
+    #    (2026-10-14: 原第 3 节 traffic 三变体(13/14/15)的 KPI 行图标断言随流量变体移除而退役。)
     for name in sorted(os.listdir(vdir)):
         if not name.endswith(".js"):
             continue
@@ -2064,9 +2066,10 @@ def test_drawer_tpl_cross_seed_fold():
 def test_drawer_tpl_menu_right_click_selection():
     """详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键;
     合并时左边弹常规的模板选择, 右边弹内容的模板选择」) —— 头部 .dt-select 下拉退役; 右键命中区域
-    决定菜单目标页签: 变体/经典挂载宿主 data-dt-host(含 traffic-pre/post 去后缀)优先, 合并列
-    data-dt-tab 兜列头/列空白, 否则当前页签; 菜单 = 该页签模板选项(经典恒在首位, 勾选态 .ctx-tick)
-    + 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 流量形态无合并项、只出流量模板选项。
+    决定菜单目标页签: 变体宿主 data-dt-host 优先(2026-10-14 起宿主 id 恒等于页签名 ——
+    traffic-pre/post 双宿主已随流量变体移除), 合并列 data-dt-tab 兜列头/列空白, 否则当前页签;
+    菜单 = 该页签模板候选(注册表 choices: 有经典的页签「经典」在首位, 四内容页签只有变体, 勾选态
+    .ctx-tick)+ 分隔线 + 合并开关(仅种子详情形态 dtMenuMergeOn); 候选 < 2 的页签(流量)不弹菜单。
     2026-10-10 用户报「合并后右侧空白右键弹左列模板」: 命不中 host/col 时(列间隙/分栏两侧留白
     不落列元素上)不得直接回落当前页签, 正文区内按指针 x 归列(_drawerMenuColByX)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
@@ -2078,6 +2081,13 @@ def test_drawer_tpl_menu_right_click_selection():
     for member in ("dtMenuTab", "dtMenuTplOptions", "dtMenuTplCurrent", "dtMenuMergeOn"):
         assert re.search(rf"^      {member}\(\)", core, re.M), f"核心缺右键菜单 computed {member}"
     assert re.search(r"^      dtMenuPick\(id\) \{", core, re.M), "核心缺 dtMenuPick 落点方法"
+    # 注册表三件: 经典可用性 / 缺省档 / 菜单候选(2026-10-14 经典移除后的档制单点)
+    for api in ("hasClassic: function (tab)", "defaultSel: function (tab)", "choices: function (tab)"):
+        assert api in core, f"注册表缺 {api}(经典可用性/缺省档/候选集的单点)"
+    assert 'var CLASSIC_TABS = ["traffic"]' in core, \
+        "CLASSIC_TABS 不再是「只有流量页签有经典」(四内容页签经典 UI 已移除)"
+    assert "dtMenuTplOptions() {" in core and "choices(this.dtMenuTab)" in core, \
+        "dtMenuTplOptions 未走注册表 choices(菜单候选集单点断了)"
     for retired in ("dtTplOptions", "dtTplCurrent"):
         assert not re.search(rf"^      {retired}\(\)", core, re.M), f"核心仍定义退役的 computed {retired}"
     assert not re.search(r"^      dtPick\(", core, re.M), "核心仍定义退役方法 dtPick"
@@ -2090,8 +2100,13 @@ def test_drawer_tpl_menu_right_click_selection():
     assert "_drawerMenuTab(event)" in menu_js, "openDrawerMenu 未落目标页签(_drawerMenuTab)"
     assert 'closest("[data-dt-host]")' in menu_js and 'closest("[data-dt-tab]")' in menu_js, \
         "_drawerMenuTab 缺区域解析(宿主 data-dt-host / 合并列 data-dt-tab)"
-    assert 'replace(/-(?:pre|post)$/' in menu_js, \
-        "_drawerMenuTab 未剥离 traffic-pre/post 后缀(流量变体宿主右键取不到 traffic 页签)"
+    # 2026-10-14: 流量变体(13/14/15)移除后流量页签只剩经典一档 —— 模板菜单在该页签无内容,
+    # openDrawerMenu 必须按候选数 < 2 早退(单选项菜单 = 半残 UI); 原先的 traffic-pre/post
+    # 去后缀改写随双宿主移除一并退役。
+    assert "AQB_DRAWER_TPL_REG.choices(tab).length < 2" in menu_js, \
+        "openDrawerMenu 缺「候选 < 2 不弹菜单」早退(流量页签会弹出只有一个「经典」项的菜单)"
+    assert "replace(/-(?:pre|post)$/" not in menu_js, \
+        "menu.js 又出现 traffic-pre/post 去后缀改写 —— 流量双宿主已移除(2026-10-14)"
 
     # 2b. 合并双列兜底(2026-10-10 用户报「合并后右侧空白右键弹左列模板」): 列间隙/分栏两侧留白
     #     不属于任何 .dt-col, 命不中 host/col 时必须在正文区内按指针 x 归列, 不得直接回落当前页签。
@@ -2110,16 +2125,20 @@ def test_drawer_tpl_menu_right_click_selection():
         "ctx-menus 缺合并开关(条件渲染 dtMenuMergeOn)"
 
 
-def test_drawer_tpl_classic_default():
-    """详情面板模板 P-01 初装默认 classic 守阵(plan 26-10-06-0838 S1) —— 有 node 时真跑核心层
-    node 电池: 白名单脏值/未注册 id/坏 JSON 一律回落 classic; 注册 fail-fast 四分支; dtHtml 转义
-    与 dtRaw 豁免; classic 恒在切换器首位。无 node 静态兜底: app.js initialDrawerTpl 缺核心时
-    也必须返回全 classic 映射(不能返回空对象 —— 经典包裹层 v-show 读 drawerTplSel.<tab>, 缺键
-    会把经典正文藏掉, 与"零观感差异"验收门冲突)。"""
+def test_drawer_tpl_default_sel():
+    """详情面板模板**缺省档**守阵(原名 test_drawer_tpl_classic_default; 2026-10-14 经典渲染链
+    移除后缺省档按页签分化 —— 四内容页签 = 该页签首个变体, 流量页签 = classic)。有 node 时真跑
+    核心层 node 电池: 白名单脏值/未注册 id/坏 JSON 一律回落缺省档; 注册 fail-fast 四分支;
+    dtHtml 转义与 dtRaw 豁免; options 不含 classic。无 node 静态兜底: app.js initialDrawerTpl
+    缺核心时也必须返回**可用**映射(不能返回空对象 —— 宿主显隐门 dtHostOn 读 drawerTplSel.<tab>,
+    缺键会把正文藏掉), 且字面量须与 defaultSel 同口径(四内容页签 = 首个变体; 流量 = classic)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
-    for tab in ("general", "trackers", "peers", "content", "traffic"):
-        assert f'{tab}: "classic"' in app_js, f"initialDrawerTpl 兜底映射缺 {tab}(核心未载入时经典正文会被藏掉)"
+    for tab, dflt in (
+        ("general", "01"), ("trackers", "04"), ("peers", "07"), ("content", "10"), ("traffic", "classic")
+    ):
+        assert f'{tab}: "{dflt}"' in app_js, \
+            f"initialDrawerTpl 兜底映射缺 {tab} -> {dflt}(核心未载入时正文会被藏掉)"
     node = shutil.which("node")
     if not node:
         return
@@ -2154,6 +2173,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
 function makeCtx(sel) {
   const ctx = { drawerTplSel: Object.assign({}, sel), _dtMounted: null };
   ctx.dtPersistSel = M.dtPersistSel;
+  ctx._dtSel = M._dtSel;   /* 生效档取值口(dtPersistSel 走它: 缺键/脏值回落 defaultSel) */
   return ctx;
 }
 function makeHost() {
@@ -2165,11 +2185,13 @@ const errors = [];
 const realErr = console.error;
 console.error = (...a) => errors.push(a.map(String).join(" "));
 
+/* 先注册一个正常变体 ok —— 它是 general 的**首个**变体, 即 defaultSel(general)(回落目标) */
+window.AQB_DRAWER_TPL_REG.register({ id: "ok", tab: "general", label: "OK", render() {} });
 window.AQB_DRAWER_TPL_REG.register({ id: "boom", tab: "general", label: "B",
   render() { throw new Error("boom-render"); },
   destroy(h) { h.destroyed = true; } });
 
-/* 主场景: 变体渲染抛错 -> 该页签复位 classic + 落盘 + 摘挂载 + 清宿主 + destroy + 不吞栈 */
+/* 主场景: 变体渲染抛错 -> 该页签复位缺省档 + 落盘 + 摘挂载 + 清宿主 + destroy + 不吞栈 */
 const sel = { general: "boom", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
 const ctx = makeCtx(sel);
 const host = makeHost();
@@ -2177,23 +2199,23 @@ const st = { tab: "general", entry: window.AQB_DRAWER_TPL_REG.get("general", "bo
 ctx._dtMounted = st;
 M._dtRender.call(ctx, st);
 
-ok("渲染抛错后该页签复位 classic(经典层 v-show 接管)", ctx.drawerTplSel.general === "classic");
+ok("渲染抛错后该页签复位缺省档(该页签首个变体 ok)", ctx.drawerTplSel.general === "ok");
 ok("复位随 dtPersistSel 落盘(autoqb.ui.drawerTpl)",
-  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).general === "classic"; } catch (e) { return false; } })());
+  (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).general === "ok"; } catch (e) { return false; } })());
 ok("其它页签选择不受牵连",
   (() => { try { return JSON.parse(store["autoqb.ui.drawerTpl"]).trackers === "classic"; } catch (e) { return false; } })());
-ok("挂载态已摘除(后续 _dtNotify 按 classic 路径续走)", ctx._dtMounted === null);
+ok("挂载态已摘除(后续 _dtNotify 按缺省档路径续走)", ctx._dtMounted === null);
 ok("宿主子树已清空", host.cleared === true && host.children.length === 0);
 ok("变体 destroy 已回调(定时器/监听清理不丢)", host.destroyed === true);
 ok("console.error 未吞栈且带页签与变体 id",
   errors.length === 1 && errors[0].indexOf("boom") >= 0 && errors[0].indexOf("general") >= 0);
 
-/* 稳态: sel 已 classic(重复回落/经典渲染自身抛错路径不触及本函数, 但要稳) */
+/* 稳态: sel 已 = 缺省档(缺省档自身抛错路径不触及本函数, 但要稳) */
 errors.length = 0;
 delete store["autoqb.ui.drawerTpl"];
-const ctx2 = makeCtx({ general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" });
+const ctx2 = makeCtx({ general: "ok", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" });
 M._dtRender.call(ctx2, { tab: "general", entry: st.entry, host: makeHost() });
-ok("sel 已 classic 时稳态不重复复位不落盘", ctx2.drawerTplSel.general === "classic" && !("autoqb.ui.drawerTpl" in store));
+ok("sel 已缺省档时稳态不重复复位不落盘", ctx2.drawerTplSel.general === "ok" && !("autoqb.ui.drawerTpl" in store));
 
 console.error = realErr;
 const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
@@ -2202,12 +2224,13 @@ if (failed.length) process.exit(1);
 """
 
 
-def test_drawer_tpl_render_error_fallback_classic():
-    """变体渲染抛错自动回落经典层守阵(P2-1, 报告 26-10-07-0542) —— 旧实现 catch 里只清宿主:
-    经典包裹层因 drawerTplSel.<tab> !== 'classic' 仍被 v-show 藏住 + .dt-host:empty 把空宿主
-    藏住, 两条退路同时断掉 = 该页签整幅空白。有 node 时真跑 _dtRender 抛错电池钉住回落五件
-    (复位 classic + 落盘 / 不牵连其它页签 / 摘挂载态 / 清宿主 + destroy 回调 / console.error
-    带页签与变体 id); 无 node 静态兜底: catch 块四要素缺一即红(只清宿主的空白降级不得回潮)。"""
+def test_drawer_tpl_render_error_fallback_default():
+    """变体渲染抛错自动回落**缺省档**守阵(P2-1, 报告 26-10-07-0542; 原名 ..._fallback_classic)。
+    旧实现 catch 里只清宿主, 该页签整幅空白。有 node 时真跑 _dtRender 抛错电池钉住回落五件
+    (复位该页签缺省档 + 落盘 / 不牵连其它页签 / 摘挂载态 / 清宿主 + destroy 回调 / console.error
+    带页签与变体 id); 无 node 静态兜底: catch 块四要素缺一即红(只清宿主的空白降级不得回潮)。
+    !2026-10-14: 经典渲染链移除后兜底不再是 classic —— 四内容页签的缺省档 = 该页签首个变体
+    (defaultSel), 失败档恰为缺省档时不改写不落盘(宿主留空 + console.error 留痕)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     m = re.search(r"_dtRender\(st\) \{\n(.*?)\n      \},", core, re.S)
@@ -2216,12 +2239,12 @@ def test_drawer_tpl_render_error_fallback_classic():
     # R2 S1: 主列挂载态经 ownerKey 通道摘除(合并次列同式), 缺省键即主列 —— 语义等价旧直写
     assert 'this[st.ownerKey || "_dtMounted"] = null' in catch, \
         "回落必须摘挂载态(否则后续通知拿旧 st 重渲染已弃变体)"
-    assert 'this.drawerTplSel[st.tab] = CLASSIC' in catch and "this.dtPersistSel()" in catch, \
-        "回落必须复位该页签 drawerTplSel 并落盘(状态单点仍是 drawerTplSel, classic 插件接管)"
+    assert "window.AQB_DRAWER_TPL_REG.defaultSel(st.tab)" in catch and "this.dtPersistSel()" in catch, \
+        "回落必须复位该页签到 defaultSel(缺省档)并落盘(状态单点仍是 drawerTplSel)"
     assert 'st.entry.id' in catch and "console.error" in catch, \
         "回落必须 console.error 且带变体 id(不静默吞栈)"
     assert "st.entry.destroy" in catch and "replaceChildren" in catch, \
-        "回落必须按 classic 语义卸载变体(destroy + 清宿主)"
+        "回落必须按缺省档语义卸载变体(destroy + 清宿主)"
     node = shutil.which("node")
     if not node:
         return
@@ -2688,20 +2711,7 @@ def test_removed_redundant_tooltips_stay_removed():
             'title="优先级: 跳过"',
             'title="占总体积 ',
         )),
-        ("shared/drawer_tpl/13-traffic-chart-led-tall.js", ("前端派生自 points/totals", )),
-        ("shared/drawer_tpl/14-traffic-annotated-split-low.js", (
-            "窗口内上传字节累计",
-            "窗口内下载字节累计",
-            "上下行字节占比",
-        )),
-        (
-            "shared/drawer_tpl/15-traffic-adaptive-collapsed.js", (
-                "当前窗口累计上传",
-                "当前窗口累计下载",
-                "当前窗口上行峰值",
-                "前端派生自 points/totals",
-            )
-        ),
+        # 2026-10-14: 原 13/14/15(流量变体)的复述型 tooltip 断言随流量变体移除而退役。
     )
     for rel, needles in checks:
         text = open(os.path.join(STATIC_ROOT, *rel.split("/")), encoding="utf-8").read()
@@ -3965,20 +3975,21 @@ def test_dt_table_kernel_single_point():
 
 
 def test_drawer_tpl_no_table_variants_out_of_scope():
-    """范围守恒(计划 26-10-13-0811 §10/W0): 七个无表格变体一行不改的自动化断言。
+    """范围守恒(计划 26-10-13-0811 §10/W0): 四个无表格变体一行不改的自动化断言。
 
-    01/02/03(常规页)/ 12(空间树图)/ 13/14/15(流量图)不 含表格体 —— 本轮重构的
-    改动面是「八个含表格变体的表格体 + 引擎侧列派生」, 这七个文件必须在引擎契约之外。
+    01/02/03(常规页)/ 12(空间树图)不含表格体 —— 表格重写的改动面是「八个含表格变体的表格体
+    + 引擎侧列派生」, 这四个文件必须在引擎契约之外。
     判据: 文件内零引擎表格契约引用(tableId / rowsFn / dt-table-anchor / .group-head /
-    .group-row / DT_TABLE / dt_table)—— 谁往后把表格体塞进这七个变体, 必须先来改本守阵
+    .group-row / DT_TABLE / dt_table)—— 谁往后把表格体塞进这四个变体, 必须先来改本守阵
     (把该文件挪进含表格名单), 不允许静默越界。
+    (2026-10-14: 原列的 13/14/15(流量图)三变体已随流量页签变体移除, 从名单消失。)
     """
     tpl_dir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     no_table = (
-        "01-general-hero-tall.js", "02-general-cards-low.js", "03-general-dossier-collapsed.js",
+        "01-general-hero-tall.js",
+        "02-general-cards-low.js",
+        "03-general-dossier-collapsed.js",
         "12-content-space-treemap-collapsed.js",
-        "13-traffic-chart-led-tall.js", "14-traffic-annotated-split-low.js",
-        "15-traffic-adaptive-collapsed.js",
     )
     for name in no_table:
         path = os.path.join(tpl_dir, name)

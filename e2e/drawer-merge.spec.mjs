@@ -18,13 +18,11 @@ import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
  *      空白格区/列间隙不落在任何 .dt-col 元素上 —— 右键仍须归右列(不得回落当前/左列)。
  * 断言口径: 真实手势(右键 click button:'right'), 不借道 vm。
  *
- * !W7(计划 26-10-11-2106)恢复注: W5 曾把右键模板选择改声明式密度档、变体整体退役 —— 用户裁定
- * 越权, 变体与选择层已按 W4 期形态原样恢复, 本 spec 同轮恢复 W5 前口径:
- *   ·页签正文是「经典 Vue 组件 / 变体字符串 DOM」双实现: 经典组件根带 `.dt-host` 类但**不带**
- *    data-dt-host(互斥双分支保证同一锚全 DOM 唯一), 变体挂在 `[data-dt-host]` 宿主上(挂载态
- *    加 `.dt-tpl` 类);
- *   ·列表锚点: 经典走接壳后的表壳(.group-table + .group-row[data-table="drawer<Tab>"] + cells
- *    渲染器, 拖宽/排序/右键隐藏/列偏好与主视图同源), 变体自带模板 DOM。
+ * !2026-10-14(「移除四内容页签经典 UI」)后口径简化: 四内容页签**只有变体一档**(经典渲染链已删),
+ * 正文恒挂在 `[data-dt-host]` 宿主上(挂载态带 `.dt-tpl` 类), 缺省档 = 各页签首个变体
+ * (常规 01 / Tracker 04 / 用户 07 / 内容 10); 流量页签反过来只剩经典(无变体宿主)。
+ * 列表锚点: 变体桥渲染出的引擎表壳(.group-table + .group-row[data-table="drawer<Variant>"] + cells
+ * 渲染器, 拖宽/排序/右键隐藏/列偏好与主视图同源)。
  */
 
 const WIDE = { width: 2560, height: 1200 };
@@ -70,7 +68,8 @@ for (const skin of SKINS) {
       await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toBeVisible();
       await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toHaveCount(0);
 
-      // gc 双列: 列头 常规/内容; 两列正文都渲染出来(经典 = Vue 组件, 组件根 .dt-host)
+      // gc 双列: 列头 常规/内容; 两列正文都渲染出来(2026-10-14 起两列**同为变体宿主**, 缺省档 =
+      // 各页签首个变体: 常规 01 / 内容 10)
       const split = drawer.locator('.drawer-split');
       await expect(split).toBeVisible({ timeout: 5_000 });
       await expect(split).toHaveAttribute('data-merge', 'gc');
@@ -78,21 +77,23 @@ for (const skin of SKINS) {
       await expect(split.locator('.dt-col-head', { hasText: '内容' })).toBeVisible();
       const genCol = split.locator('.dt-col[data-dt-tab="general"]');
       const conCol = split.locator('.dt-col[data-dt-tab="content"]');
-      await expect(genCol.locator('.dt-host .drawer-sec').first()).toBeVisible();
-      await expect(conCol.locator('.dt-host .drawer-toolbar')).toBeVisible();
-      // 桩灌了文件数据: 内容列表格渲染出行(目录聚合行)
-      // !W2 起内容列表格已接表壳: 行容器 .group-table + 行 .group-row[data-table="drawerFile"]
-      // (不再是 <table class="drawer-table"><tbody><tr>)。
-      await expect(conCol.locator('.dt-host .group-row[data-table="drawerFile"]').first()).toBeVisible();
+      await expect(genCol.locator('.dt-host[data-dt-host="general"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      await expect(genCol.locator('.dt-host[data-dt-host="general"]')).not.toBeEmpty();
+      await expect(conCol.locator('.dt-host[data-dt-host="content"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      await expect(conCol.locator('.dt-host[data-dt-host="content"]')).not.toBeEmpty();
+      // 桩灌了文件数据: 内容列表格渲染出行(目录聚合行; 缺省变体 10 的表 id = drawerContentV10)
+      await expect(conCol.locator('.group-row[data-table="drawerContentV10"]').first()).toBeVisible();
 
       // R3 回归: 点 [Tracker&用户] 合并页签 → 列组换成 Tracker/用户 且两列有内容(不再空列)
       await drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' }).click();
       await expect(split).toHaveAttribute('data-merge', 'tp');
       await expect(split.locator('.dt-col-head', { hasText: 'Tracker' })).toBeVisible();
       await expect(split.locator('.dt-col-head', { hasText: '用户' })).toBeVisible();
-      // trackers 正文恒渲染工具栏(添加 tracker); peers 正文非空(表格或加载/空态)
-      await expect(split.locator('.dt-col[data-dt-tab="trackers"] .dt-host .drawer-toolbar')).toBeVisible();
-      await expect(split.locator('.dt-col[data-dt-tab="peers"] .dt-host')).not.toBeEmpty();
+      // trackers / peers 两列正文都非空(缺省变体: trackers 04 卡片态 / peers 07 四卡仪表)
+      await expect(split.locator('.dt-col[data-dt-tab="trackers"] .dt-host[data-dt-host="trackers"]'))
+        .toHaveClass(/dt-tpl/, { timeout: 5_000 });
+      await expect(split.locator('.dt-col[data-dt-tab="peers"] .dt-host[data-dt-host="peers"]'))
+        .not.toBeEmpty();
       await expect(split).not.toHaveAttribute('data-merge', 'gc');
 
       // 再右键 → 勾选态在 → 再点已开启项 = 关 → 双列消失, 页签栏回四页签(单栏宿主回归)
@@ -125,8 +126,8 @@ for (const skin of SKINS) {
       await expect(drawer.locator('.drawer-split')).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
-      // 单栏正文不受扰动(常规面板的分组键值仍在; 单栏下只有当前页签渲染正文)
-      await expect(drawer.locator('.drawer-body .dt-host .drawer-sec').first()).toBeVisible();
+      // 单栏正文不受扰动(缺省变体 01 的正文仍在; 单栏下只有当前页签渲染正文)
+      await expect(drawer.locator('.drawer-body .dt-host[data-dt-host="general"]')).not.toBeEmpty();
     });
 
     test(`门跨越: 窄视口无合并(标志保留) → 拉宽自动恢复 → 缩窗回落 @fast (${skin})`, async ({ page }) => {
@@ -154,7 +155,7 @@ for (const skin of SKINS) {
       await expect(split, '拉宽过门后双列必须自动恢复(门是暂态遮蔽, 标志未被撤销)').toBeVisible({ timeout: 5_000 });
       await expect(split).toHaveAttribute('data-merge', 'gc');
       await expect(split.locator('.dt-col-head', { hasText: '常规' })).toBeVisible();
-      await expect(split.locator('.dt-col[data-dt-tab="content"] .group-row[data-table="drawerFile"]').first())
+      await expect(split.locator('.dt-col[data-dt-tab="content"] .group-row[data-table="drawerContentV10"]').first())
         .toBeVisible({ timeout: 5_000 });
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toBeVisible();
 
@@ -297,8 +298,8 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
       await page.waitForTimeout(300);
-      // 死类守阵(坑档 esc-attr-quote-dead-class): 经典(Vue :class)态全文档零「类名含引号」
-      await expectNoDeadClass(page, '合并前经典态');
+      // 死类守阵(坑档 esc-attr-quote-dead-class): 变体(dtHtml 字符串 DOM)态全文档零「类名含引号」
+      await expectNoDeadClass(page, '合并前缺省变体态');
 
       // 开合并 -> gc 双列
       await drawer.locator('.drawer-body').click({ button: 'right' });
@@ -310,17 +311,17 @@ for (const skin of SKINS) {
       const leftCol = split.locator('.dt-col[data-dt-tab="general"]');
       const rightCol = split.locator('.dt-col[data-dt-tab="content"]');
       const leftItem = menu.locator('.ctx-item', { hasText: '英雄行·键值栅格' }); // general 变体 01
-      const rightItem = menu.locator('.ctx-item', { hasText: '树 + 详情' }); // content 变体 10
+      const rightItem = menu.locator('.ctx-item', { hasText: '树表批量' }); // content 变体 11
 
       // 左列右键 -> 菜单出常规变体, 不出内容变体
       await leftCol.click({ button: 'right' });
       await expect(menu).toBeVisible();
       await expect(leftItem).toBeVisible();
-      await expect(menu.locator('.ctx-item', { hasText: '树 + 详情' })).toHaveCount(0);
+      await expect(menu.locator('.ctx-item', { hasText: '树表批量' })).toHaveCount(0);
       await leftItem.click();
-      // 左列挂上变体(宿主加 .dt-tpl), 右列仍是经典(W2: 经典 = 组件分支, v-else 宿主不渲染)
+      // 左列换到变体 01(宿主恒在, 挂载态带 .dt-tpl); 右列仍是它自己的缺省档(内容 10), 不受牵连
       await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
-      await expect(split.locator('[data-dt-host="content"]')).toHaveCount(0);
+      await expect(split.locator('[data-dt-host="content"]')).toHaveClass(/dt-tpl/);
       // 死类守阵: 变体 01(dtHtml 字符串 DOM)挂载态全文档零「类名含引号」
       await expectNoDeadClass(page, '常规变体 01 挂载态');
 
@@ -331,10 +332,12 @@ for (const skin of SKINS) {
       await expect(menu.locator('.ctx-item', { hasText: '英雄行·键值栅格' })).toHaveCount(0);
       await rightItem.click();
       await expect(split.locator('[data-dt-host="content"]')).toHaveClass(/dt-tpl/, { timeout: 5_000 });
-      // 左列选择不受右列影响(两列各自记忆)
-      await expect(split.locator('[data-dt-host="general"]')).toHaveClass(/dt-tpl/);
-      // 死类守阵: 变体 10 挂载态 + 双变体并存态全文档零「类名含引号」
-      await expectNoDeadClass(page, '内容变体 10 挂载态');
+      // 死类守阵: 变体 11 挂载态 + 双变体并存态全文档零「类名含引号」
+      await expectNoDeadClass(page, '内容变体 11 挂载态');
+      // 两列各自记忆(左 01 / 右 11) —— 互不牵连是「按命中列定目标页签」的效果判据
+      const store = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb.ui.drawerTpl') || '{}'));
+      expect(store.general, '左列记忆 = 常规变体 01').toBe('01');
+      expect(store.content, '右列记忆 = 内容变体 11').toBe('11');
 
       // 2026-10-10 用户报「右侧空白右键弹左列模板」回归: 右列(内容)短于左列(常规), 右列下方
       // 空白格区不属于任何 .dt-col(align-items:start 不撑高) —— 右键该处仍须归右列(内容页签),

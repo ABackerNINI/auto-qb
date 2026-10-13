@@ -93,14 +93,8 @@ window.AQB_STATE = {
       // 追剧视图: 默认按最近动静降序(后端同序); 剧展开列表与集明细展开键(Vue 内存态)
       showSortKey: "latest",
       showSortDir: -1,
-      // 详情面板三张列表(W2 接壳, 计划 26-10-11-2106): 每张表一座独立排序键 —— 三表的列集互不
-      // 相同, 共用一份会出现"在 A 表排了 size, 切到 B 表没有 size 列"的静默空排。空键 = 原序。
-      dtrkSortKey: "",
-      dtrkSortDir: -1,
-      dpeerSortKey: "",
-      dpeerSortDir: -1,
-      dfileSortKey: "",
-      dfileSortDir: -1,
+      // 详情面板四页签的排序: 自 2026-10-14(经典渲染链移除)起**全部走变体表的 dyn 排序**
+      // (dtSortState 映射, 按 table-id 通用存取 —— 见 sort.js 的 dyn 分支), 不再每表两个字段。
       expandedShows: [],
       expandedShowEp: null,
       unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
@@ -177,7 +171,6 @@ window.AQB_STATE = {
       headMenu: { visible: false, x: 0, y: 0, page: "", key: "", label: "", sortable: false, locked: false },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
-      drawerSelPath: "",    // 内容页签选中行(文件/目录完整相对路径); 顶部"重命名…"的作用对象
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)

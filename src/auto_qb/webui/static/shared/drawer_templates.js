@@ -1,14 +1,18 @@
 /* auto-qb WEB UI · 种子详情面板模板核心层(计划 26-10-06-0838 S1; W7 恢复版)
  *
- * !W7(计划 26-10-11-2106)恢复注: W5/W6 曾退役本文件与 15 个变体(改声明式密度档) —— 用户
+ * !2026-10-14(用户令「移除种子详情面板除流量页外的 4 个经典 UI, 以及流量页/qB 流量页的除经典
+ * 外的 UI」): 本层是全仓「经典 / 变体」两档制的**唯一判据点** —— 四内容页签经典渲染链
+ * (drawer_tabs.js 四组件 + tpl/drawer-tabs.html + 三个经典单元格渲染器 + 经典表注册/排序字段/
+ * 行装配方法)已整体删除, 流量变体 13/14/15 亦已删除。终态: 四内容页签变体独档(缺省 = 首个
+ * 变体), 流量页签经典独档。CLASSIC_TABS / defaultSel / choices 三处即该口径的单点。
+ *
+ * !W7(计划 26-10-11-2106)恢复注(历史): W5/W6 曾退役本文件与 15 个变体(改声明式密度档) —— 用户
  * 裁定**越权**(计划目标只是「表格与主表能力统一」= W2 接壳, 从未授权动模板), 本文件与
  * drawer_tpl/ 全体按 W4 期形态原样恢复。相对 a05d35da 基座的三处适配(均为 W2-W4 已定案):
  *   ① 合并机械住 drawer.js(W4 收口), 本层只经 window.AQB_DRAWER_MERGE.pairOf 消费对结构;
- *   ② 「经典」住 Vue 组件(drawer_tabs.js, W2), classic 不再是注册表插件条目 —— 挂载取
- *      classic 条目自然落空(宿主不挂), 正文分支开关 dtVueTab 让 Vue 组件接管;
- *   ③ 00-core 注入只余变体专属的 .dt-tpl 限宽规则(合并/菜单/流量布局规则 W6 起在
+ *   ② 00-core 注入只余变体专属的 .dt-tpl 限宽规则(合并/菜单/流量布局规则 W6 起在
  *      三皮肤 views/components.css, 单一来源, 此处不重复注入);
- *   ④ dtMenuPick 落盘后 $nextTick 再 _dtSync(v-if/v-else 双分支下同步挂载扑空, W2 适配面)。
+ *   ③ dtMenuPick 落盘后 $nextTick 再 _dtSync(换变体要重建宿主子树, 同拍挂载会撞上未提交的渲染)。
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
@@ -19,7 +23,7 @@
  *   - 在 drawer.js 之后没有强约束(钩子经 this. 调用, 运行时才求值), 放同域便于阅读;
  *   - 在 state.js 之前是硬约束: state.js 的 data() 调 initialDrawerTpl()(app.js), 其白名单
  *     校验依赖注册表 —— 变体文件(自注册)也必须全部排在 state.js 之前, 否则已存的合法 id
- *     会被当成脏值回落 classic(静默, 不报错)。
+ *     会被当成脏值回落该页签缺省档(静默, 不报错)。
  *
  * ---------------- ctx 白名单契约(变体只许读/调下列成员) ----------------
  * 变体 render(host, ctx) 的 ctx 就是根组件实例(Vue mixin 方法域全在 this 上)。白名单面:
@@ -31,10 +35,9 @@
  *   调(格式化): fmtSpeed / fmtSpeedOrDash / fmtSize / fmtSizeOrDash / fmtDuration / fmtEta /
  *             fmtTs / fmtPeersQb / drawerFileRows / drawerPeerRows / drawerTrackerStatus /
  *             drawerTrackerVirtual / drawerGeneralSections / drawerTitle / icoTone /
- *             hrStateLine / hrSiteLine(classic 插件消费, R2 S1)。
+ *             hrStateLine / hrSiteLine。
  *   调(动作):   drawerCmd(action[, body, okText]) / trackerAdd / trackerRemove /
- *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow /
- *             fileRowSelect / renameFileRow(classic 插件消费, R2 S1);
+ *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow;
  *             需要详情原始字段(如 magnet_uri)时走 _editDetail(hash)(按需单发, 不进轮询载荷)。
  *   禁: 不触碰面板几何(dock/动画/高度/drawerPanelStyle)、轮询生命周期(_startDrawerPoll 族)、
  *       路由/视图状态; 不直接发请求(动作一律走现有方法链, 回执/toast 由其自带)。
@@ -72,6 +75,14 @@
   var TABS = ["general", "trackers", "peers", "content", "traffic"];
   var STORE_KEY = "autoqb.ui.drawerTpl";
   var CLASSIC = "classic";
+  /* ---------------- 「经典」档只存在于流量页签(2026-10-14 用户令) ----------------
+   * 移除种子详情面板除「流量」页外的 4 个经典 UI(常规/Tracker/用户/内容 —— 即 drawer_tabs.js
+   * 那四个 Vue 组件, 连同其模板/单元格渲染器/表注册一并删除), 同时移除「流量」页与 qB 流量页
+   * 的变体(13/14/15)。终态:
+   *   ·四内容页签 = **变体独档**(菜单无「经典」, 缺省与渲染失败回落都落该页签首个变体);
+   *   ·流量页签(含 qB 全局/分组挂点) = **经典独档**(无变体可选, 模板菜单随之无内容不弹)。
+   * 本常量是「哪些页签还有经典渲染」的单点判据(有经典才有「经典」候选与 classic 缺省)。 */
+  var CLASSIC_TABS = ["traffic"];
   /* ---------------- 页签合并(W4 起住 drawer.js; W7 恢复注) ----------------
    * 合并四判据(dtMergeOn/dtMergeTabsOn/dtPair/dtSplitOn)/四方法/两条监听/常量已整体收进
    * drawer.js(AQB_DRAWER_MERGE 跨文件单点), 本层只经 window.AQB_DRAWER_MERGE.pairOf 消费
@@ -338,8 +349,6 @@
          * 行级键盘恢复回调(roving 锚点/rowRestore 回焦) —— 与 rowsFn 同法经根方法
          * dtRowAfter 回调(描述符 rowAfter 声明位), 变体闭包不外泄。 */
         rowAfterFn: typeof entry.rowAfterFn === "function" ? entry.rowAfterFn : null,
-        /* 流量页签双宿主(图前/图后): slot = "pre" | "post"(缺省 post), 其余页签忽略 */
-        slot: entry.slot === "pre" ? "pre" : "post",
         render: entry.render,
         notify: typeof entry.notify === "function" ? entry.notify : null,
         destroy: typeof entry.destroy === "function" ? entry.destroy : null,
@@ -365,12 +374,33 @@
       });
       return out;
     },
+    /* 该页签是否仍有经典渲染(只有流量页签为真, 见 CLASSIC_TABS) */
+    hasClassic: function (tab) {
+      return CLASSIC_TABS.indexOf(tab) >= 0;
+    },
+    /* 该页签的缺省档: 有经典 → classic; 无经典(四内容页签) → **首个注册变体**
+     * (注册序 = manifest 装载序 = 设计稿编号序)。无变体可落时回 classic 兜底。 */
+    defaultSel: function (tab) {
+      if (CLASSIC_TABS.indexOf(tab) >= 0) return CLASSIC;
+      var m = TPL_BY_TAB[tab];
+      if (m && m.size) return m.keys().next().value;
+      return CLASSIC;
+    },
+    /* 模板菜单候选(经典在首位 + 变体注册序)。长度 < 2 = 该页签没有可挑的档
+     * (流量页签移除变体后只剩经典一档) —— openDrawerMenu 据此不弹菜单。 */
+    choices: function (tab) {
+      var out = [];
+      if (CLASSIC_TABS.indexOf(tab) >= 0) out.push({ id: CLASSIC, label: "经典" });
+      return out.concat(TPL_REG.options(tab));
+    },
     /* localStorage autoqb.ui.drawerTpl 读侧(initialDrawerTpl 的实现, app.js 薄封装):
-     * 按页签记 id, 白名单校验 —— 脏值/缺失/坏 JSON/读失败一律 classic(P-01: 升级零观感差异)。
-     * 与 initialDrawerTab 同口径: 不信任存储内容。 */
+     * 按页签记 id, 白名单校验 —— 脏值/缺失/坏 JSON/读失败一律回**该页签缺省档**(defaultSel:
+     * 四内容页签 = 首个变体, 流量页签 = classic; P-01 升级零观感差异语义不变)。
+     * 与 initialDrawerTab 同口径: 不信任存储内容。旧存值(四页签的 "classic"、流量页签的
+     * 13/14/15)在此自然失效回落缺省档 —— 无需迁移脚本。 */
     readSel: function () {
       var out = {};
-      for (var i = 0; i < TABS.length; i++) out[TABS[i]] = CLASSIC;
+      for (var i = 0; i < TABS.length; i++) out[TABS[i]] = TPL_REG.defaultSel(TABS[i]);
       try {
         var raw = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
         if (raw && typeof raw === "object") {
@@ -380,7 +410,7 @@
             if (typeof id === "string" && id !== CLASSIC && TPL_REG.has(tab, id)) out[tab] = id;
           }
         }
-      } catch (e) { /* 无存储/坏 JSON/隐私模式: 保持全 classic */ }
+      } catch (e) { /* 无存储/坏 JSON/隐私模式: 保持全缺省档 */ }
       return out;
     },
   };
@@ -433,6 +463,15 @@
       var old = prev[t] || {};
       var same = !!cur && !!cur.on;
       if (same) {
+        var emptyHost = true;
+        for (var _k in old) { emptyHost = false; break; }
+        /* 2026-10-14(四内容页签经典移除后 100% 暴露): **宿主是新的**时, 上一拍对账必为空
+         * (__dtAnchorEls 按宿主记账, 换宿主/重建宿主都从空开始)。此时"上拍没有这个 seg"不再
+         * 能推出"新段随 v-for 新挂进旧锚"—— 桥的 Teleport 目标还钉在**已离文档的旧锚**上,
+         * 而 :to 选择器串没变, Vue 不会重解析目标 ⇒ 表格体挂进游离节点, 新锚恒空、行恒 0。
+         * 判别 = 该 tid 在这台宿主上**从无记账**(old 空) ⇒ 锚元素对本宿主是新的, 必须换代
+         * 让桥重挂一次(重挂才会重解析 :to)。原判据保留(同宿主同元素不换代, 数据轮询零重挂;
+         * 同宿主**新增 seg** 仍不换代 —— 该段随桥自身 v-for 新挂进新锚)。 */
         for (var s in seen[t]) {
           /* 只问"这个 seg 上拍的锚还在不在、是不是同一个元素"; 上拍没有的 seg(新增)
            * 不构成换代理由 —— 新段随 v-for 新挂, 新锚就是它的首宿。 */
@@ -490,13 +529,15 @@
       dtMenuTab() {
         return (this.drawerMenu && this.drawerMenu.tab) || this._dtCurTab();
       },
-      /* 右键菜单模板选项(经典恒在首位): 注册表是 boot 期静态数据, 依赖目标页签变化即可 */
+      /* 右键菜单模板候选(注册表是 boot 期静态数据, 依赖目标页签变化即可): 有经典的页签
+       * (仅流量)「经典」在首位, 四内容页签只有变体 —— 长度 < 2 即无可挑, openDrawerMenu 不弹 */
       dtMenuTplOptions() {
-        return [{ id: "classic", label: "经典" }].concat(window.AQB_DRAWER_TPL_REG.options(this.dtMenuTab));
+        return window.AQB_DRAWER_TPL_REG.choices(this.dtMenuTab);
       },
-      /* 右键菜单当前模板选择(带勾项) */
+      /* 右键菜单当前模板选择(带勾项): 缺省回落该页签缺省档(四内容页签 = 首个变体) */
       dtMenuTplCurrent() {
-        return (this.drawerTplSel || {})[this.dtMenuTab] || "classic";
+        var tab = this.dtMenuTab;
+        return (this.drawerTplSel || {})[tab] || window.AQB_DRAWER_TPL_REG.defaultSel(tab);
       },
       /* 右键菜单是否含合并开关: 仅种子详情形态(traffic 形态无合并项, 只出流量模板选项)。
        * W3(计划 26-10-11-2106): 走形态判据单点 drawerIsSeed(drawer.js, 自带假实例守卫)。 */
@@ -525,24 +566,29 @@
       }
     },
     methods: {
+      /* 全部变体表格体桥熄灯(先落一帧, 再让 DOM 分支/合并标志翻转): 拆桥与"拆它的 Teleport
+       * 目标"同帧发生时 Vue 运行期崩溃(见 drawer.js dtToggleMerge 注), 故合并开关 / 视口门跨越
+       * 都调本方法先卸桥。gen 不动, 只摘 on —— 下一帧 dtSyncAnchors 会按在场锚重新点亮。 */
+      _dtBridgesOff() {
+        if (!this.dtBridge) return;
+        for (var t in this.dtBridge) {
+          if (this.dtBridge[t]) this.dtBridge[t].on = false;
+        }
+      },
       /* 当前模板归属页签: 流量形态(三挂点)归 traffic, 其余随 drawer.tab */
       _dtCurTab() {
         return this.qbTrafficActive ? "traffic" : this.drawer.tab;
       },
-      /* W2(计划 26-10-11-2106): 正文渲染分支开关 —— 选「经典」(或脏值回落)时由 Vue 组件
-       * (drawer_tabs.js)渲染正文, 选变体时模板走 v-else 渲染插件宿主。同一 data-dt-host
-       * 全 DOM 只存在一份(v-if/v-else 互斥), 核心 querySelector 定位永不撞两份。 */
-      dtVueTab(tab) {
-        var sel = (this.drawerTplSel || {})[tab] || CLASSIC;
-        return sel === CLASSIC || !window.AQB_DRAWER_TPL_REG.has(tab, sel);
+      /* 该页签生效档的**唯一取值口**: 选中表缺键/脏值 → 该页签缺省档(四内容页签 = 首个变体,
+       * 流量 = classic)。全层不再出现 `|| CLASSIC` 字面量 —— 缺省口径单点在注册表 defaultSel。 */
+      _dtSel(tab) {
+        return (this.drawerTplSel || {})[tab] || window.AQB_DRAWER_TPL_REG.defaultSel(tab);
       },
       /* 宿主显隐(模板 v-show 唯一入口 —— 变体与 Vue 争 DOM 红线: 显隐只走 host 自身):
-       * 错误态与 general 无详情时宿主让位(与经典渲染链的接管口径一致); 流量正文块
-       * 自管加载/错误/空态, 宿主在其非空分支内, 无需重复判断。
-       * R2 S1: classic 移植为页插件后宿主恒承载内容(classic 不再是「宿主隐 + Vue 包裹层显」),
-       * 选中态只决定挂哪个插件; R2 S2: 合并生效时对内两列宿主同显(不只当前页签)。 */
+       * 错误态与 general 无详情时宿主让位; 四内容页签自 2026-10-14 起**恒由变体宿主承载**
+       * (经典渲染链已整体移除, 不再有 v-if/v-else 双分支 —— 宿主是唯一正文载体, 故本门只
+       * 管"此刻该不该显示"); R2 S2: 合并生效时对内两列宿主同显(不只当前页签)。 */
       dtHostOn(tab) {  /* dtSplitOn/_dtPairOf 自 W4 起住 drawer.js mixin, 经 this 消费同源判据 */
-        if (tab === "traffic") return this._dtCurTab() === "traffic";
         if (this.drawer.error) return false;
         if (tab === "general" && !this.drawer.detail) return false;
         if (this.dtSplitOn) return this._dtPairOf(tab) === this._dtPairOf(this.drawer.tab);
@@ -554,9 +600,9 @@
        * _dtMountOne 每见一次锚自增(:key 含代数 → 宿主重建后 Teleport 强制重挂进**当前**锚,
        * 不重挂会残留进游离节点 —— Vue 3 Teleport 目标被移除后不会自行迁回), _dtUnmountOne
        * 清零(v-if 摘内容, 防死锚泄漏)。四件方法都是模板可达(不带下划线)。 */
-      /* 该页签当前选中变体的桥表 id; classic / 未声明 tableId / 未注册 → ""(无桥) */
+      /* 该页签当前选中变体的桥表 id; 经典/未声明 tableId/未注册 → ""(无桥) */
       dtBridgeTbl(tab) {
-        var sel = (this.drawerTplSel || {})[tab] || CLASSIC;
+        var sel = this._dtSel(tab);
         var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
         return e && e.tableId ? e.tableId : "";
       },
@@ -621,7 +667,7 @@
        * rowsFn(ctx)。行来源与筛选是版式语义(变体文件自管), 排序/列交互归引擎 —— 两层
        * 在桥模板会合。无 rowsFn 的条目返回 [](行恒空, 守阵钉"桥变体必须配 rowsFn")。 */
       dtTplRows(tab) {
-        var sel = (this.drawerTplSel || {})[tab] || "classic";
+        var sel = this._dtSel(tab);
         var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
         return e && typeof e.rowsFn === "function" ? e.rowsFn(this) : [];
       },
@@ -648,7 +694,7 @@
       dtRowAfter(tab, vnode) {
         var def = this.dtBridgeDef(tab);
         if (!def || !def.rowAfter) return;
-        var sel = (this.drawerTplSel || {})[tab] || "classic";
+        var sel = this._dtSel(tab);
         var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
         if (!e || typeof e.rowAfterFn !== "function") return;
         var el = vnode && vnode.el ? vnode.el : vnode;
@@ -659,14 +705,14 @@
        * 的 value 回写), 故脏值直接 return。 */
       dtMenuPick(id) {
         var tab = this.dtMenuTab;
-        id = String(id || "classic");
-        if (id !== "classic" && !window.AQB_DRAWER_TPL_REG.has(tab, id)) return;
+        id = String(id || "");
+        /* 合法档 = 该页签候选集内(四内容页签只有变体; 流量页签只有 classic) —— 集外脏值忽略 */
+        var ok = window.AQB_DRAWER_TPL_REG.choices(tab).some(function (o) { return o.id === id; });
+        if (!ok) return;
         this.drawerTplSel[tab] = id;
         this.dtPersistSel();
-        /* W2 适配(W7 补): 经典/变体是 v-if/v-else 双分支, 落盘后 Vue 先重渲染(宿主插入/拆除),
-         * 再走挂载机械 —— 同步 _dtSync 会扑空(旧分支仍在 DOM, 新分支未插入, _dtFindHost 查不到
-         * 宿主), 挂载静默失败只能等下一拍轮询兜底(general 无列表轮询 = 永不挂)。$nextTick 后
-         * 宿主就位, _dtSync 一次挂准。 */
+        /* 落盘后 $nextTick 再 _dtSync: 换变体要重建宿主子树(外壳 + 桥锚), 同拍挂载可能撞上
+         * Vue 尚未提交的渲染 —— 等一拍宿主就位再挂, 一次挂准(general 无列表轮询 = 不补挂)。 */
         var self = this;
         this.$nextTick(function () { self._dtSync(); });
         if (this.drawerMenu) this.drawerMenu.visible = false;
@@ -676,9 +722,9 @@
         try {
           var out = {};
           var tabs = window.AQB_DRAWER_TPL_REG.tabs;
-          for (var i = 0; i < tabs.length; i++) out[tabs[i]] = (this.drawerTplSel || {})[tabs[i]] || "classic";
+          for (var i = 0; i < tabs.length; i++) out[tabs[i]] = this._dtSel(tabs[i]);
           localStorage.setItem(STORE_KEY, JSON.stringify(out));
-        } catch (e) { /* 写入失败: 本轮仍生效, 刷新后回落 classic */ }
+        } catch (e) { /* 写入失败: 本轮仍生效, 刷新后回落缺省档 */ }
       },
       /* ---------------- 生命周期(drawer.js 一行式钩子的本体) ----------------
        * R2 S1: classic 移植为页插件 —— _dtMountActive 对 classic 也挂载(不再是「classic 不挂、
@@ -693,14 +739,13 @@
       /* 单实例挂载: 按选择取注册表条目; 变体挂载态给宿主加 .dt-tpl(限宽作用域类, R2 S1 ——
        * 经典链历史上恒满宽, 限宽只归变体), classic 摘除。挂载失败返回 null(未挂载语义)。 */
       _dtMountOne(tab, sel) {
-        var entry = window.AQB_DRAWER_TPL_REG.get(tab, sel || CLASSIC);
+        var entry = window.AQB_DRAWER_TPL_REG.get(tab, sel || this._dtSel(tab));
         if (!entry) return null;
-        var host = this._dtFindHost(tab, entry);
+        var host = this._dtFindHost(tab);
         if (!host) return null;
-        if (host.classList) {
-          if (entry.id !== CLASSIC) host.classList.add("dt-tpl");
-          else host.classList.remove("dt-tpl");
-        }
+        /* 挂载态给宿主加 .dt-tpl(变体专属限宽作用域类) —— 2026-10-14 起注册表里只剩变体
+         * (经典渲染链已删), 故挂载即变体, 恒加。 */
+        if (host.classList) host.classList.add("dt-tpl");
         var st = { tab: tab, entry: entry, host: host, ownerKey: "" };
         this._dtRender(st);
         /* 桥锚代数(U2 起)在 _dtRender 尾部统一对账(dtSyncAnchors) —— 挂载与数据通知共用
@@ -709,8 +754,7 @@
       },
       _dtMountActive(tab) {
         this._dtMounted = null;
-        var sel = (this.drawerTplSel || {})[tab] || CLASSIC;
-        var st = this._dtMountOne(tab, sel);
+        var st = this._dtMountOne(tab, this._dtSel(tab));
         if (st) {
           st.ownerKey = "_dtMounted";
           this._dtMounted = st;
@@ -722,8 +766,7 @@
         if (!this.dtSplitOn) return;
         var p = window.AQB_DRAWER_MERGE.pairOf(this.drawer.tab);  /* W4: 对结构单点在 drawer.js */
         var other = p.tabs[0] === this.drawer.tab ? p.tabs[1] : p.tabs[0];
-        var sel = (this.drawerTplSel || {})[other] || CLASSIC;
-        var st = this._dtMountOne(other, sel);
+        var st = this._dtMountOne(other, this._dtSel(other));
         if (st) {
           st.ownerKey = "_dtMounted2";
           this._dtMounted2 = st;
@@ -773,12 +816,13 @@
            * node 探针环境无 DOM(函数内自守)。 */
           dtSyncAnchors(st.host, this);
         } catch (e) {
-          /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落经典渲染层 —— 复位
-           * drawerTplSel.<tab>(状态单点仍是 drawerTplSel, 不新增并行标志)并按 classic 语义
-           * 卸载本变体(destroy + 清宿主 + 摘 .dt-tpl + 摘挂载态), 后续通知/换页签/重开面板
-           * 都按 classic 续走。复位随 dtPersistSel 落盘: 持续抛错的变体不跨会话钉死坏选择。
-           * W2 起「经典」= Vue 组件(dtVueTab 分支开关), 复位后 v-if 对 drawerTplSel 响应式
-           * 自翻接管正文 —— 本层不再重挂任何 classic 插件(W2 前的 R2 S1 语义随 drawer_pages 退役)。 */
+          /* 变体渲染抛错(P2-1, 报告 26-10-07-0542): 该页签自动回落到**缺省档** —— 复位
+           * drawerTplSel.<tab>(状态单点仍是 drawerTplSel, 不新增并行标志)并按缺省档语义卸载
+           * 本变体(destroy + 清宿主 + 摘 .dt-tpl + 摘挂载态), 后续通知/换页签/重开面板都按
+           * 缺省档续走。复位随 dtPersistSel 落盘: 持续抛错的变体不跨会话钉死坏选择。
+           * !2026-10-14: 经典渲染链已整体移除, 兜底不再是 classic —— 四内容页签的缺省档 =
+           * 该页签**首个变体**(defaultSel), 下一拍 _dtNotify 按新档重挂; 若失败档恰是缺省档
+           * 则不改写(不落盘空转), 宿主留空并由下方 console.error 留痕。 */
           if (st.entry.destroy) {
             try { st.entry.destroy(st.host, this); } catch (e2) { /* destroy 失败不阻断回落 */ }
           }
@@ -787,22 +831,21 @@
           try { dtSyncAnchors(st.host, this); } catch (e2) { /* node 探针环境假宿主 */ }
           if (st.host.classList) st.host.classList.remove("dt-tpl");
           this[st.ownerKey || "_dtMounted"] = null;
-          if (this.drawerTplSel && this.drawerTplSel[st.tab] !== CLASSIC) {
-            this.drawerTplSel[st.tab] = CLASSIC;
+          var def = window.AQB_DRAWER_TPL_REG.defaultSel(st.tab);
+          if (this.drawerTplSel && this.drawerTplSel[st.tab] !== def && window.AQB_DRAWER_TPL_REG.has(st.tab, def)) {
+            this.drawerTplSel[st.tab] = def;
             this.dtPersistSel();
           }
-          /* W2: classic 归 Vue 组件, 复位即完成回落(dtVueTab 响应式接管; 宿主清空归 v-else 拆除) */
           if (typeof console !== "undefined" && console.error) {
-            console.error("[dt] render failed, fallback to classic (tab=" + st.tab + ", variant=" + st.entry.id + "):", e);
+            console.error("[dt] render failed, fallback to " + def + " (tab=" + st.tab + ", variant=" + st.entry.id + "):", e);
           }
         }
       },
-      /* 宿主定位: 四页签 = data-dt-host="<tab>"; 流量页签双宿主 data-dt-host="traffic-pre|post" */
-      _dtFindHost(tab, entry) {
+      /* 宿主定位: 逐页签 data-dt-host="<tab>"(流量页签自 2026-10-14 起无变体, 不设宿主) */
+      _dtFindHost(tab) {
         var root = document.querySelector(".drawer");
         if (!root) return null;
-        var name = tab === "traffic" ? "traffic-" + entry.slot : tab;
-        return root.querySelector('.dt-host[data-dt-host="' + name + '"]');
+        return root.querySelector('.dt-host[data-dt-host="' + tab + '"]');
       },
       /* 关面板(drawer.js closeDrawer): 逐实例 destroy(定时器/监听清理) + 清空宿主子树 */
       _dtUnmountAll() {
@@ -817,12 +860,20 @@
           try { st.entry.destroy(st.host, this); } catch (e) { /* destroy 失败不阻断关闭 */ }
         }
         if (st.host.classList) st.host.classList.remove("dt-tpl");
-        /* 桥锚代数清零(26-10-12-0527): 先记账后清空 —— 清空后锚已不在 DOM, 查不到 */
+        /* 桥 on 全表摘除(2026-10-14 修运行期崩溃): 宿主要拆, 任何桥都不许继续点亮 ——
+         * 旧写法只按**当场扫到的锚**摘 on, 而锚可能已不在宿主里(变体早分支清帧 / dtHoldAnchors
+         * 挂到宿主尾 / 跨列重挂), 漏摘的桥会拖着一个已被 replaceChildren 摘掉的 Teleport 目标
+         * 活到下一拍, Vue 拆它时报 `Cannot destructure property 'bum' of 'e' as it is null`
+         * (合并开关 / 视口门跨越二连必现, 经典移除后四内容页签默认就带桥, 100% 暴露)。
+         * gen 保持单调, 只摘 on; 锚扫描保留(记账清零照旧)。 */
+        for (var bt in this.dtBridge) {
+          if (this.dtBridge[bt]) this.dtBridge[bt].on = false;
+        }
         try {
           var anchors = st.host.querySelectorAll("[data-dt-table-anchor]");
           for (var i = 0; i < anchors.length; i++) {
             var tid = anchors[i].getAttribute("data-dt-table-anchor");
-            if (tid && this.dtBridge[tid]) this.dtBridge[tid].on = false; /* gen 保持单调, 只摘 on */
+            if (tid && this.dtBridge[tid]) this.dtBridge[tid].on = false; /* 幂等, 与上同 */
           }
         } catch (e3) { /* node 探针环境假宿主 */ }
         st.host.__dtAnchorEls = null;   /* 桥锚对账记账清零(U2): 下次挂载按"全新锚"换代 */

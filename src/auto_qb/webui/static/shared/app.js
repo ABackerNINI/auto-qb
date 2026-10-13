@@ -348,8 +348,9 @@ const DEFAULT_HIDDEN_KEYS = new Set([
 ]);
 const TABLE_COLUMNS = {
   group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS,
-  drawerTracker: DRAWER_TRACKER_COLUMNS, drawerPeer: DRAWER_PEER_COLUMNS, drawerFile: DRAWER_FILE_COLUMNS,
-  /* 变体表格体列集(26-10-12-0527): 与 DRAWER_TABLE_DEFS 同步注册(声明即事实源) */
+  /* 变体表格体列集(26-10-12-0527): 与 DRAWER_TABLE_DEFS 同步注册(声明即事实源)。
+   * 2026-10-14: 经典三表(drawerTracker/drawerPeer/drawerFile)随经典渲染链退役 ——
+   * 列定义常量 DRAWER_*_COLUMNS 仍保留(变体列集由它们派生), 但不再各自登记一张表。 */
   drawerStubV0: DRAWER_STUB_V0_COLUMNS,
   drawerPeerV07: DRAWER_PEER_V07_COLUMNS,
   drawerPeerV08: DRAWER_PEER_V08_COLUMNS,
@@ -461,41 +462,24 @@ const TABLE_DEFS = {
 /* 视图模式 -> 表 id(排序 scope 解析单点; groups 是默认视图, 未知值回落 group) */
 const VIEW_TABLE = { groups: "group", torrents: "torrent", shows: "show" };
 
-/* ---------------- 详情面板三张列表的表身份(计划 26-10-11-2106 W2) ----------------
- * 与 TABLE_DEFS **同形但独立** —— 这是计划 §07 表 D 的口径: 三张抽屉表接公共表壳 <aq-table>,
- * 拖宽 / 拖序 / 右键隐藏 / 列偏好持久化与主视图**同源**(同一套 columns.js 引擎), 但**不进
- * TABLE_PAGES**(否则列选择器多出三个"页面"分组、行窗口化多出三个 kind)。
+/* ---------------- 详情面板变体表的表身份(计划 26-10-11-2106 W2; 2026-10-14 经典三表退役) ----------------
+ * 与 TABLE_DEFS **同形但独立** —— 拖宽 / 拖序 / 右键隐藏 / 列偏好持久化与主视图**同源**
+ * (同一套 columns.js 引擎), 但**不进 TABLE_PAGES**(否则列选择器多出"页面"分组、行窗口化多出 kind)。
+ * !2026-10-14(用户令「移除种子详情面板除流量页外的 4 个经典 UI」): 原经典三表
+ *   (drawerTracker / drawerPeer / drawerFile —— 由已删的 drawer_tabs.js 渲染)连同行装配方法
+ *   drawerTrackerRows 一并退役; 四内容页签的表格体此后**全部**走变体桥描述符(下表 variantTab 行)。
+ *   列定义常量 DRAWER_*_COLUMNS 保留 —— 变体列集(DRAWER_*_V*_COLUMNS)仍由它们派生。
  *
  * 与 TABLE_DEFS 的两处形态差异:
- *   headRef  恒为 null —— 抽屉表头渲染在**页签组件内部**(<aq-drawer-trackers> 等),
- *            子组件模板里的 ref 只登记在子组件上, 根实例的 $refs 取不到; 故走 columns.js
- *            `_headEl` 的 **DOM 兜底**(按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)。
- *            ⇒ 拖宽 / 拖序 / 双击自适应那三处 `closest(".group-head")` 一字不改就能命中。
+ *   headRef  恒为 null —— 抽屉表头渲染在变体外壳/桥模板内部, 子组件模板里的 ref 只登记在子
+ *            组件上, 根实例的 $refs 取不到; 故走 columns.js `_headEl` 的 **DOM 兜底**
+ *            (按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)。
  *   window   恒为 null —— 抽屉列表最多百级行, 远低于 ROW_WIN_MIN, 不开窗口化。
- *   grid/cols 走各自 computed(columns.js 里三对) —— 与主视图同一条 `_gridTemplate` 生成路径。
+ *   grid/cols 走各自 computed(columns.js 里每表一对) —— 与主视图同一条 `_gridTemplate` 生成路径。
  *
- * sort 描述符同 TABLE_DEFS: gk/gd = 根实例上的排序键/方向 data 字段名, defKey/defDir = 三态
- * 第三击的恢复目标(空键 = 后端原序, 与 detail 表同口径)。
+ * sort 描述符: 变体表恒走 dyn(排序状态进根 data 的 dtSortState 映射, 按 table-id 通用存取)。
  */
 const DRAWER_TABLE_DEFS = {
-  drawerTracker: {
-    columns: DRAWER_TRACKER_COLUMNS, label: "Tracker 列表",
-    headRef: null, tableRef: null,
-    grid: "drawerTrackerGrid", cols: "visibleDrawerTrackerCols", window: null,
-    sort: { gk: "dtrkSortKey", gd: "dtrkSortDir", defKey: "", defDir: -1 },
-  },
-  drawerPeer: {
-    columns: DRAWER_PEER_COLUMNS, label: "用户列表",
-    headRef: null, tableRef: null,
-    grid: "drawerPeerGrid", cols: "visibleDrawerPeerCols", window: null,
-    sort: { gk: "dpeerSortKey", gd: "dpeerSortDir", defKey: "", defDir: -1 },
-  },
-  drawerFile: {
-    columns: DRAWER_FILE_COLUMNS, label: "文件列表",
-    headRef: null, tableRef: null,
-    grid: "drawerFileGrid", cols: "visibleDrawerFileCols", window: null,
-    sort: { gk: "dfileSortKey", gd: "dfileSortDir", defKey: "", defDir: -1 },
-  },
   /* ---------------- 变体表格体(计划 26-10-12-0527, D1 Teleport 锚桥) ----------------
    * 变体表格体接入 = 这里注册一行 + 变体外壳 dtHtml 输出锚(`data-dt-table-anchor="<id>"`)
    * + (新行模型才需)一个渲染器 —— 表壳/交互/持久化/对齐零改动(对外契约见 table.js 头注)。
@@ -835,11 +819,12 @@ function initialDrawerHeight() {
 }
 
 /* 详情面板模板选择初值(计划 26-10-06-0838 S1, P-01): 读 autoqb.ui.drawerTpl(按页签记模板 id)。
- * 白名单校验(仅收 classic + 已注册变体 id)在核心层 readSel(drawer_templates.js, W7 恢复);
- * 这里薄封装 —— 核心未载入(清单序错)时也要返回全 classic 映射, 不能返回空对象/undefined:
- * 正文分支开关 dtVueTab / 宿主显隐门 dtHostOn 读 drawerTplSel.<tab>, 缺键会藏正文。 */
+ * 白名单校验与缺省档口径单点在核心层 readSel/defaultSel(drawer_templates.js); 这里薄封装 ——
+ * 核心未载入(清单序错)时也要返回**可用**映射, 不能返回空对象/undefined: 宿主显隐门 dtHostOn
+ * 读 drawerTplSel.<tab>, 缺键会藏正文。下方字面量是与 defaultSel 同口径的**防御副本**
+ * (四内容页签 = 首个变体; 流量 = classic), 只在核心层未载入这条坏路径上生效。 */
 function initialDrawerTpl() {
-  const out = { general: "classic", trackers: "classic", peers: "classic", content: "classic", traffic: "classic" };
+  const out = { general: "01", trackers: "04", peers: "07", content: "10", traffic: "classic" };
   const reg = window.AQB_DRAWER_TPL_REG;
   if (!reg) return out;
   return Object.assign(out, reg.readSel());
@@ -926,11 +911,6 @@ app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);
 app.component("aq-show-cells", window.AQ_SHOW_CELLS_COMPONENT);
 app.component("aq-ep-cells", window.AQ_EP_CELLS_COMPONENT);
-// 抽屉三表的行模型单元格渲染器(计划 26-10-11-2106 W2): 与上面五个同一份「渲染器注册表」单点,
-// 只是宿主换成了页签组件 —— 组件模板一律 $root 回调, 不复制实现。
-app.component("aq-tracker-cells", window.AQ_TRACKER_CELLS_COMPONENT);
-app.component("aq-peer-cells", window.AQ_PEER_CELLS_COMPONENT);
-app.component("aq-file-cells", window.AQ_FILE_CELLS_COMPONENT);
 /* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 → Teleport 表壳 + 行渲染器(见 table.js 尾注) */
 app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
 /* U2 变体格渲染器(计划 26-10-12-0527): 用户表三变体的行模型(桥模板按 rowModel 动态解析) */
@@ -944,13 +924,6 @@ app.component("aq-dt06-cells", window.AQ_DT06_CELLS_COMPONENT);
  * (折叠钮/勾选框/缩进/图标/名称/徽章)两段同构单份, 列集 D2 各表声明(桥按 rowModel 解析) */
 app.component("aq-dt10-cells", window.AQ_DT10_CELLS_COMPONENT);
 app.component("aq-dt11-cells", window.AQ_DT11_CELLS_COMPONENT);
-// 详情面板页签组件(计划 26-10-11-2106 W2): 四页签正文由 Vue 组件渲染(数据与动作经 $root
-// 回调根实例, 不复制实现)。W2 双实现期由 dtVueTab 判据 + v-if/v-else 与旧变体插件互斥;
-// W5(同计划)变体退役 —— 组件成为唯一渲染实现, 显隐归组件内 dtHostOn 门。
-app.component("aq-drawer-general", window.AQ_DRAWER_GENERAL_COMPONENT);
-app.component("aq-drawer-trackers", window.AQ_DRAWER_TRACKERS_COMPONENT);
-app.component("aq-drawer-peers", window.AQ_DRAWER_PEERS_COMPONENT);
-app.component("aq-drawer-content", window.AQ_DRAWER_CONTENT_COMPONENT);
 // 详情面板头部外壳与流量控件组(计划 26-10-11-2106 W3): 两形态此前各写一份 <header>, 标题块与
 // 关闭按钮逐字复写(表 B 问题 4 的温床); 现外壳一份 + 中部插槽, 形态差异只在调用点。控件组
 // <aq-qb-ctl> 是**多根片段**, 两挂点(流量形态头部 / 种子流量页签图下统计栏)共用同一份实现 ——

@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (59)
 
+- [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
