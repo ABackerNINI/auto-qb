@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (59)
+## Open (58)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -30,7 +30,6 @@
 - [feat] [抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)](../26-10-07-0149-feat-webui-drawer-open-state-restore.html) — 报告 26-10-06-0723 §5 补强一: 抽屉开合态持久化回读 —— 与 D1 拍板(首屏恒默认收起)冲突, 翻案需显式拍板, 只入池不实施
 - [feat] [09 变体 peer 悬停封禁钮(需后端端点, P-04 备选)](../26-10-07-0149-feat-webui-peer-ban-action.html) — 09 peers 变体悬停封禁钮: 后端现无 peer 封禁端点(routes 0 命中), 需新增端点 + qB 版本核查, 独立需求
 - [feat] [14 变体解读栏与图悬停联动(P-05 备选)](../26-10-07-0149-feat-webui-traffic-interpret-hover-link.html) — 14 traffic 变体静态解读栏升级为与图悬停联动: hover 事件通知变体重渲染, 权衡高频 setState 开销
-- [feat] [agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺](../26-10-05-1015-feat-qb-traffic-agg-live-buckets.html) — agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](../26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
 - [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](../26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](../26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查
@@ -72,7 +71,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (184)
+## Done (185)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -169,6 +168,7 @@
 - [bug] [qb_capture._sanitize_mapping 引用未定义的 seen, write_corpus 必经 —— 语料任何文件落盘前全灭](../26-10-06-0027-bug-qb-capture-sanitize-nameerror.html) — NameError 不可捕获, 一场 capture 采完数据即崩、全部产出丢失
 - [bug] [规则表达式跨容器类型 ==/!= 恒错: tor.tags/tracker.groups 对列表字面量永不匹配或全员误匹配](../26-10-06-0027-bug-rules-expr-cross-container-equality.html) — frozenset/list 与 ListLit 求值产物 tuple 永不相等; 编译期放行无报错, 规则静默失效或误放大
 - [feat] [WEBUI 错误信息历史: 右下角 toast 退场即销毁, 错过后无处可查](../26-10-05-2013-feat-webui-toast-error-history.html) — WEBUI 加错误历史功能: 全局错误反馈只有右下角 toast 一条通道, 8~9 秒自动消失且不留痕迹, 刷新/重连还清空; WEBUI 又不暴露后端日志, 错过 = 无处可查。建议 toast() 单点追加会话内错误环形缓冲 + 右下角小入口弹层
+- [feat] [agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺](../26-10-05-1015-feat-qb-traffic-agg-live-buckets.html) — agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7
 - [chore] [覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出](../26-10-05-0922-chore-pytest-cov-gate-test-one.html) — pytest.ini --cov-fail-under=98 对 test.one 部分文件运行同样生效, 用例全绿仍以覆盖率 FAIL 退出, 排障须手工 --no-cov
 - [docs] [测试文件头部「## 测试计划」清单与实际函数漂移(tests/ 全量: 11 文件 21 条幽灵条目)](../26-10-05-0922-docs-config-schema-docstring-drift.html) — 起点是 test_config_schema.py 头部清单列出已删用例; 扩面扫描 79 份带清单的测试文件后共 11 文件 21 条条目指向全仓不存在的函数, 违反新增测试同步清单硬约束
 - [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](../26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框

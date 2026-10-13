@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-05-1015">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="qb-traffic-storage-v3">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-04-backend-qb-traffic-storage-v3.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-04-backend-qb-traffic-storage-v3.md,memory-bank/tasks/26-10-14-webui-qb-traffic-agg-live-tail.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺">
 <meta name="issue-summary" content="agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7">
 <title>agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-1015-feat-qb-traffic-agg-live-buckets</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 10:15</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/traffic_* · webui/server/traffic_qb</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户(v3 真机验收)</div></div>
     </div>
@@ -162,17 +162,42 @@ rows = agg.hours if seg == "hour" else agg.days if seg == "day" else agg.months<
       <li>发布面扩大(每轮多拷贝 pending 桶), 量级仍小(常态只含当前小时);</li>
       <li>grouping 端点需逐成员合流后再 Σ; 测试面 = 时钟边界族(小时界/日界/月界) + 重封竞态。</li>
     </ul>
+    <p class="hint">实际修法与上述建议方向一致, 但 live 行的计算面从「端点现算」改道到「写侧现算」, 完整修法与改道原因见 §07「修复后补充」。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 10:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-14 05:40 — 用户指派认领（原话「认领该issue」），复验锚点：现象已随 S7 修复落库消失（commit <code>6f2c094e</code>，2026-10-14 入库——修复先于认领），状态 <strong>Open → In Progress</strong>（认领方任务档案：<a href="../tasks/26-10-14-webui-qb-traffic-agg-live-tail.md">tasks/26-10-14-webui-qb-traffic-agg-live-tail.md</a>）</li>
+      <li>2026-10-14 05:40 — 清偿完成，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下；修复代码 10-14 已入库，本轮只补认领链与状态，未再动修复代码）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>复验：2026-10-14 05:40 <strong>已消失</strong>（修复先于认领落库，重跑入池锚点以现场为准）。逐条对照：</p>
+    <ul>
+      <li>锚点 1（写侧封口判据，原 <code>traffic_sample_mod.py:871,877,880</code>）：封口逻辑原样在（现 <code>:1102-1103</code>，行号漂移 + v3→v4 改名潮）——修法本就不动封口，只在其上加桥；</li>
+      <li>锚点 2（读侧 agg 分支纯磁盘，原 <code>traffic_qb.py:255-256</code>）：磁盘读面原样在（现 <code>:336</code>，<code>agg.hours if seg == "hour"</code>），但其后已接活尾合流；</li>
+      <li>锚点 3（原 <code>v3_agg_obs</code> 无活数据入口）：已随改名潮变为 <code>v4_agg_obs</code>，且同文件新增 <code>v4_agg_obs_live</code>（<code>traffic_grid.py:604</code>）——活数据入口已补上；</li>
+      <li>锚点 4（组端点同构分支，原 <code>traffic_qb.py::payload_group</code>）：分支仍在（现 <code>:276</code>），逐成员 obs 已计入活尾；</li>
+      <li>活尾桥现状：<code>LiveTail.pending_agg</code> 发布（<code>traffic_sample_mod.py:515,535</code>）+ <code>v4_agg_obs_live</code> 读侧合流（<code>traffic_qb.py</code> 三端点 agg 分支）——「两个面之间没有活数据桥」的根因陈述已不成立。</li>
+    </ul>
+    <h3>修复后补充（2026-10-14 · S7）</h3>
+    <h4>① 实际修法（方向与建议一致，计算面改道：端点现算 → 写侧现算）</h4>
+    <p>建议修法的三个要点全部成立并已实施，但 live 行的计算面不在端点（Web 线程），而在写侧主循环线程：</p>
+    <ul>
+      <li><strong>发布</strong>：<code>traffic_sample_mod.py::_pending_agg_rows(agg, now)</code> 纯函数由累计器现算未封口部分行——开放小时行（<code>v4_hour_agg</code> dt 加权）+ 当日 day 行（<code>day_hours</code> ∪ 开放小时部分行，逐级 <code>v4_rollup_agg</code>）+ 当月 month 行；以冻结 <code>AggRow</code> 元组进 <code>LiveTail</code> 第 8 字段 <code>pending_agg</code>（缺省空 = 纯磁盘读，向后兼容既有 7 参构造）。改道原因：计算收在单一主线程，不破黄金法则 5；Web 线程只读不可变行、零现算，也不受请求频率影响。</li>
+      <li><strong>合流</strong>：<code>traffic_grid.py::v4_agg_obs_live(rows, live_rows, grid)</code> 按 epoch 合流——开放桶（磁盘无同行）直映；已封桶残余（flush 竞态窗 / 迟到补记产生的同 epoch 双行）走 <code>v4_merge_agg</code>：cov 加权 avg / max 取大 / totals 取后封行 / cov 相加截到桶宽。与写侧 <code>_agg_merge_prev</code> 同判据，竞态窗内不双计、不出尖峰——建议里担心的「重封竞态」由此落地。</li>
+      <li><strong>month 段铺格</strong>：<code>build_month_grid</code> 数据面计入活尾当月行——否则当前月桶整个不在栅格，合流结果被窗外过滤丢弃（all 窗修复前连 null 都没有，比 hour/day 段更重的形态）。</li>
+      <li><strong>组端点</strong>：空态判据（「组从未产过流量」）与逐成员 obs 均计入活尾——修复前成员仅活尾（零盘）会被误判空态返回 <code>points: []</code>；组尾桶 = Σ 成员观测（无行成员按 0 计），组口径不变。</li>
+      <li><strong>degraded 不融合</strong>：<code>read_agg</code> OSError 路径不融合活尾，保持 last-good / stale 兜底语义，不以空态冒充无数据。</li>
+      <li>前端零改动：points 末桶出值后 uPlot 数据驱动 x 轴自然延伸到当前桶，与 raw 段活尾同形态。</li>
+    </ul>
+    <h4>② 验证方式与测试数字</h4>
+    <ul>
+      <li>新增守阵 6 个（<code>test_traffic_sample.py</code> / <code>test_traffic_grid.py</code> / <code>test_web_longtail.py</code>），均带「修复前形态」对照断言（尾桶 null 真空 / 当月桶不在栅格 / 组误判空态）；时钟边界族（小时界 / 日界 / 月界）与重封竞态均已覆盖；</li>
+      <li>全量回归：<strong>3198 passed + 4 skipped</strong>，<code>TOTAL 99%</code>（提交一刻同树实测；权威数字与分项见基线切片 <a href="../testing/baselines/26-10-14-0528-webui-qb-traffic-agg-live-tail.md">26-10-14-0528-webui-qb-traffic-agg-live-tail</a>，正文不手抄）；</li>
+      <li>未验证项：<strong>真机走查待用户执行</strong>——重启后 3d/7d/30d 图尾应实时延伸到当前开放小时、6mo/1y 到当日、all 到当月（小于 3 天的 7 档本就正常，S6 已覆盖，见任务档案「原始请求」节）。</li>
+    </ul>
   </section>
 
   <footer>

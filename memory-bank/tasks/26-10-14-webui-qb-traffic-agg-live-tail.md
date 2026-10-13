@@ -4,8 +4,8 @@
 **Added:** 2026-10-14
 **Updated:** 2026-10-14
 **Topics:** webui-qb-traffic-agg-live-tail
-**Summary:** 用户报「3 天及以上的流量图视图有真空: 目前仅显示到 14 日 0 点, 实际上现在已经 14 日 1 点了」。根因 = agg.dat 只含封口行, 未封口的开放小时/当日/当月桶只活在采样写侧累计器, 读侧无通道(S6 活尾只接了 raw 段窗, 代码注释原写明「留待后续切片」)。修法 = S6 活尾口径平移到 agg 段: `LiveTail` 增第 8 字段 `pending_agg`(发布写侧累计器未封口部分行: 小时 dt 加权 + 当日/当月逐级 rollup), 读侧 `v4_agg_obs_live` 按 epoch 与磁盘封口行合流(开放桶直映 / 已封桶残余走 `v4_merge_agg`, 与写侧迟到补记同判据, 竞态窗不双计不出尖峰), month 段数据面铺格计入活尾当月行, 组端点空态判据与逐成员 obs 均计入活尾, degraded 路径不融合活尾。触及 5 源文件 + 3 测试文件, 新增守阵 6 个测试函数(均带修复前形态对照), 前端零改动。全量回归与实测数字见基线切片(引 `kb.baseline`)。KB 早有入池 issue 26-10-05-1015 记该缺口(候选 S7), 按请求边界未认领, 待用户确认。
-**Refs:** memory-bank/testing/baselines/26-10-14-0528-webui-qb-traffic-agg-live-tail.md,memory-bank/activeContext/26-10-14-0528-webui-qb-traffic-agg-live-tail.md,memory-bank/pitfalls/testing/win-fake-clock-timestamp-oserror.md
+**Summary:** 用户报「3 天及以上的流量图视图有真空: 目前仅显示到 14 日 0 点, 实际上现在已经 14 日 1 点了」。根因 = agg.dat 只含封口行, 未封口的开放小时/当日/当月桶只活在采样写侧累计器, 读侧无通道(S6 活尾只接了 raw 段窗, 代码注释原写明「留待后续切片」)。修法 = S6 活尾口径平移到 agg 段: `LiveTail` 增第 8 字段 `pending_agg`(发布写侧累计器未封口部分行: 小时 dt 加权 + 当日/当月逐级 rollup), 读侧 `v4_agg_obs_live` 按 epoch 与磁盘封口行合流(开放桶直映 / 已封桶残余走 `v4_merge_agg`, 与写侧迟到补记同判据, 竞态窗不双计不出尖峰), month 段数据面铺格计入活尾当月行, 组端点空态判据与逐成员 obs 均计入活尾, degraded 路径不融合活尾。触及 5 源文件 + 3 测试文件, 新增守阵 6 个测试函数(均带修复前形态对照), 前端零改动。全量回归与实测数字见基线切片(引 `kb.baseline`)。KB 入池 issue 26-10-05-1015-feat-qb-traffic-agg-live-buckets 早记该缺口(候选 S7); 2026-10-14 用户指派认领, 修复先于认领落库(commit 6f2c094e), 复验锚点确认现象已消失, issue 已置 Done 并补实际修法/验证数字(认领轮未再动修复代码)。
+**Refs:** memory-bank/testing/baselines/26-10-14-0528-webui-qb-traffic-agg-live-tail.md,memory-bank/activeContext/26-10-14-0528-webui-qb-traffic-agg-live-tail.md,memory-bank/pitfalls/testing/win-fake-clock-timestamp-oserror.md,memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html
 
 ## 原始请求
 
