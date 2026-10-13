@@ -209,7 +209,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * < 10(远低于可辨阈 20), 不会读成"两截色"。状态序与行一致(selected/partial 在 expanded 之后)。
  * 落在 views.css 而非 components.css: 后者的 700 行体量上限已用满(守阵 test_frontend_template_split_wiring)。
  * ! 表头 .group-head 在滚动容器**之外**(纵向 sticky 的前提), 首格改用反向 translateX 抵消容器
- *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 14px = 表头 padding-left(见 .group-head),
+ *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 --tbl-pad-x = 表头 padding-left(见 .group-head),
  *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
 .group-row > :first-child {
   position: sticky; left: 0; z-index: 2; background: var(--bg-row);
@@ -229,7 +229,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 }
 .group-head > .h-cell:first-child {
   z-index: 2; background: var(--bg);
-  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - 14px)));
+  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
 }
 /* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
  * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称

@@ -207,7 +207,7 @@ for (const skin of SKINS) {
       await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(6 列)').toHaveCount(6);
     });
 
-    test(`dt11 omitEmpty: 全部文件无 availability → 可用性整列省略(6 列, 原 hasav/noav 手搓退役) @fast (${skin})`, async ({ page }) => {
+    test(`dt11 可用性列常驻: 全部文件无 availability → 列不省略, 值出 — 占位(7 列; 26-10-13-0811 删 omitEmpty) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.route('**/api/torrents/*/files', (route) =>
@@ -220,9 +220,17 @@ for (const skin of SKINS) {
       const drawer = await openContentVariant(page, '11');
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
 
-      await expect(anchor.locator('.group-head .h-cell'), '整列省略(渐进列 omitEmpty 单点)').toHaveCount(6);
-      await expect(anchor.locator('.group-head .hc-av')).toHaveCount(0);
-      await expect(anchor.locator('.group-row .dt11-av')).toHaveCount(0);
+      /* 2026-10-13 行为变更(计划 26-10-13-0811 L1 铁律): 原 omitEmpty 渐进列随数据整列
+       * 消失 —— 轨道数浮动, 是「多一格/少一列」类症状的温床, 已删。列常驻(7 列),
+       * 缺值由渲染器 avTxt 出 — 占位。几何一致性另见 dt-table-layout-parity.spec.mjs。 */
+      await expect(anchor.locator('.group-head .h-cell'), '列常驻(渐进已删)').toHaveCount(7);
+      await expect(anchor.locator('.group-head .hc-av')).toHaveCount(1);
+      const avCells = anchor.locator('.group-row .dt11-av');
+      const n = await avCells.count();
+      expect(n, '值格与行数一致').toBeGreaterThan(0);
+      for (let i = 0; i < n; i++) {
+        await expect(avCells.nth(i), '缺 availability 出 — 占位').toHaveText('—');
+      }
     });
   });
 }

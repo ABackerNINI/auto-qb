@@ -162,7 +162,7 @@
  * "同色 linear-gradient 叠在不透明 --bg-row 上" 做合成 —— 与行自身(该色叠在页底上)逐通道差
  * < 10(远低于可辨阈 20), 不会读成"两截色"。状态序与行一致: selected/partial 排在 expanded 之后。
  * ! 表头 .group-head 在滚动容器**之外**(纵向 sticky 的前提), 首格改用反向 translateX 抵消容器
- *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 14px = 表头 padding-left(见 .group-head),
+ *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 --tbl-pad-x = 表头 padding-left(见 .group-head),
  *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
 .group-row > :first-child {
   position: sticky; left: 0; z-index: 2; background: var(--bg-row);
@@ -182,7 +182,7 @@
 }
 .group-head > .h-cell:first-child {
   z-index: 2; background: var(--bg);
-  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - 14px)));
+  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
 }
 /* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
  * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
@@ -206,7 +206,7 @@
  * FIX-03 防透缝: --head-h 是 JS Math.round(实测高度), 顶栏行高含小数时取整可偏差 ±0.5px,
  * 叠加设备像素取整仍可能现 1px 竖缝 —— top 在齐平值上多压 1px, 重叠部分藏在上方 .sticky-head
  * (z-index 更高)之下且与页底同色, 不遮挡内容也不产生横向滚动。 */
-.group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim);
+.group-head { display: grid; gap: var(--tbl-gap, 10px); padding: 7px var(--tbl-pad-x, 14px); color: var(--fg-dim);
   font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .06em;
   width: fit-content; min-width: 100%;
   position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 5;
@@ -243,8 +243,8 @@
 /* P1-2 行窗口化占位: 撑住"窗口外的行"所占的高度(滚动条长度/滚到底与全量渲染一致)。
    空盒 + 不吃事件: 只提供高度, 不参与行内 :nth-child 列对齐, 也不该被 hover/右键命中。 */
 .row-pad { flex: 0 0 auto; pointer-events: none; }
-.group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
-  border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px 14px;
+.group-row { position: relative; display: grid; gap: var(--tbl-gap, 10px); align-items: center; background: var(--bg-row);
+  border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px var(--tbl-pad-x, 14px);
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); transform: translateY(-1px); }

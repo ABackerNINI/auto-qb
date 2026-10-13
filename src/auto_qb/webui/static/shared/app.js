@@ -299,7 +299,7 @@ const DRAWER_TRACKER_V06_COLUMNS = [
  * rowsFn)。排序不适用(树序 = 树语义, 原口径无排序 → 全列 sortable:false + dyn 空键,
  * 非借壳 —— 本来就没有手搓排序状态机, Q3 不增项)。Q3 记档: 10 无表头设计 → 列头 CSS
  * 隐藏(05 先例), 拖宽/右键隐藏/列偏好**不适用**; 11 表头保留, 拖宽/右键隐藏首次落地。
- * 11 可用性列 omitEmpty(渐进, U2 通用机制; 判据字段 = 行 av 串, 有 availability 才非空)。 */
+ * 11 可用性列原 omitEmpty 渐进已删(26-10-13-0811): 轨道数随数据浮动, 列常驻 + — 占位。 */
 const DRAWER_CONTENT_V10_COLUMNS = [
   { key: "tgl", label: "", tpl: "18px", sortable: false, align: "left" },
   { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
@@ -313,7 +313,9 @@ const DRAWER_CONTENT_V11_COLUMNS = [
   { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "130px", sortable: false, align: "left" },
-  { key: "av", label: "可用性", tpl: "62px", sortable: false, omitEmpty: true, align: "right" },
+  /* omitEmpty 已删(计划 26-10-13-0811 L1 铁律: 渐进列轨道数随数据浮动, 是「多一格/少一列」
+   * 类症状的温床); 列常驻, 缺值由渲染器 avTxt 出 — 占位。 */
+  { key: "av", label: "可用性", tpl: "62px", sortable: false, align: "right" },
   { key: "prio", label: "优先级", tpl: "64px", sortable: false, align: "left" },
 ];
 const DRAWER_FILE_COLUMNS = [
@@ -582,7 +584,7 @@ const DRAWER_TABLE_DEFS = {
    *   无表头设计 → 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏不适用(Q3 记档)。行选中(selPath)
    *   驱动右详情 + 行 _cls, 行来源含非响应式 UI 态 → anchTouch(同 04/07)。
    * 11 树表批量: 7 列(勾选/折叠列 locked —— 隐藏即废勾选/折叠功能, 引擎 locked 消费);
-   *   可用性列 omitEmpty 渐进(原 hasAv 双 grid 手搓退役); 批量优先级条留外壳, 勾选集
+   *   可用性列常驻(omitEmpty 已删, 26-10-13-0811); 批量优先级条留外壳, 勾选集
    *   (checked/子树三态)是版式语义 → rowsFn + anchTouch; 行内勾选框三态经分片
    *   :indeterminate 声明式(原生 property, Vue patch 直持)。
    * 两表行级键盘(issue 26-10-07-0846): rowTab = 行容器 tabindex=-1 声明位;

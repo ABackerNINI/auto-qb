@@ -202,7 +202,7 @@
 .group-row > *, .group-head > *, .detail-head > *, .member-row > * { min-width: 0; }
 .g-stat, .g-count, .g-hr, .m-stat { overflow: hidden; text-overflow: ellipsis; }
 /* 表头: 纵向 sticky + mono 大写列头(仪表台读数语言) */
-.group-head { display: grid; gap: 10px; padding: 7px 14px;
+.group-head { display: grid; gap: var(--tbl-gap, 10px); padding: 7px var(--tbl-pad-x, 14px);
   font: 600 11px/1.4 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
   color: var(--fg-dim); width: fit-content; min-width: 100%;
   position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 5;
@@ -238,8 +238,8 @@
 /* P1-2 行窗口化占位: 空盒不吃事件 */
 .row-pad { flex: 0 0 auto; pointer-events: none; }
 /* 组行: 方角 + hairline 描边; hover 点亮(底色抬升 + 描边增强), 不再位移(仪表台的行是读数, 不飘) */
-.group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
-  border: 1px solid var(--border-soft); padding: 10px 14px;
+.group-row { position: relative; display: grid; gap: var(--tbl-gap, 10px); align-items: center; background: var(--bg-row);
+  border: 1px solid var(--border-soft); padding: 10px var(--tbl-pad-x, 14px);
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); }

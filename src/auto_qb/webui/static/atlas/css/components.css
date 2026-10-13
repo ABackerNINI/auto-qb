@@ -234,7 +234,7 @@
  * ±0.5px, 叠加设备像素取整仍可能现 1px 竖缝 —— top 在齐平值上多压 1px, 重叠部分藏在
  * 上方 .sticky-head(z-index 更高)之下且与页底同色, 不遮挡内容不生横向滚动。
  * FIX-06: 筛选行(.status-strip)高度随 --head-h 一起实测覆盖。 */
-.group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
+.group-head { display: grid; gap: var(--tbl-gap, 10px); padding: 7px var(--tbl-pad-x, 14px); color: var(--fg-dim); font-size: 11.5px;
   font-weight: 600; letter-spacing: .04em; width: fit-content; min-width: 100%;
   position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 5;
   background: var(--bg); border-bottom: 1px solid var(--border);
@@ -274,8 +274,8 @@
    也不该被 hover/右键命中。flex 列里的 flex: 0 0 <高度> 保证不被压缩(父容器是 flex column)。 */
 .row-pad { flex: 0 0 auto; pointer-events: none; }
 /* 列模板由 JS 内联提供(app.js gridStyle -> groupGrid), 此处不写 grid-template-columns 以免误导 */
-.group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
-  border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px 14px;
+.group-row { position: relative; display: grid; gap: var(--tbl-gap, 10px); align-items: center; background: var(--bg-row);
+  border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px var(--tbl-pad-x, 14px);
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); transform: translateY(-1px); }
