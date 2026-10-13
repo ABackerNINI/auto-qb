@@ -17,6 +17,11 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 默认每种子只有 1~7 个 peer, 滚不起来) → 预置 localStorage 选 07/09 为 peers 页签模板 →
  * 开抽屉切「用户」页签 → 中途滚动量齐平。文件列表端点的同款守阵见
  * drawer-content-dt11-sticky.spec.mjs(dt11 吸顶 + 吸底两档)。
+ *
+ * 轮询口径(2026-10-14 修 flaky): atlas/console 给 .group-head 挂 page-in 入场动画
+ * (translateY(4px)→0, 220ms; prism 无此规则) —— 表头刚落成时单次测量会吃到动画残影,
+ * gap 恒等于当前 translateY 残量(实测 0.8~1.4px 随测量时机抖), 动画退场后稳态 gap=0。
+ * 故与 dt11 守阵同构: expect.poll 轮询到稳再取终值, 不靠 sleep 硬等。
  */
 
 /** 合成 peer 列表: 40 行让 .drawer-body 滚出数屏。字段集与 qB sync/torrentPeers 同形
@@ -83,8 +88,7 @@ for (const skin of SKINS) {
         // U2: 行体是引擎表体(.group-row[data-table=drawerPeerV0X], 桥 Teleport 进变体锚)
         await expect(drawer.locator(`.group-row[data-table="drawerPeerV${v.id}"]`).first()).toBeVisible({ timeout: 5_000 });
 
-        await page.evaluate(() => { document.querySelector('.drawer .drawer-body').scrollTop = 300; });
-        const geom = await page.evaluate((id) => {
+        const measureGeom = (id) => page.evaluate((id) => {
           const body = document.querySelector('.drawer .drawer-body');
           return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
             const b = body.getBoundingClientRect();
@@ -97,6 +101,13 @@ for (const skin of SKINS) {
             });
           })));
         }, v.id);
+
+        await page.evaluate(() => { document.querySelector('.drawer .drawer-body').scrollTop = 300; });
+        // page-in 入场动画(见文件头)退场前 gap == translateY 残量, 轮询到稳再取终值(dt11 同款口径)
+        await expect
+          .poll(async () => Math.abs((await measureGeom(v.id)).gapAboveHead), { timeout: 5_000 })
+          .toBeLessThanOrEqual(1);
+        const geom = await measureGeom(v.id);
 
         expect(geom.scrollable, '合成 peer 应足以滚动(桩数据 40 行)').toBeGreaterThan(200);
         expect(geom.headSticky, '表头应为 sticky').toBe('sticky');
