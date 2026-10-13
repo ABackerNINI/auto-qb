@@ -1,7 +1,7 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
 > 摘要: cap 治理专题。守卫改造 2026-09-30 实施完成(除 AGENTS.md 外尺寸全降级为债务: 提交不拦、派生输出转告用户、清理另开会话; AGENTS.md 硬规定照拦), AGENTS.md 削薄已由 10-06 清理轮落地(6,853/8,000)。**2026-10-10 清理会话: 条数债务 125 > 70 清偿 —— 删 79 片留 46 片**(判据与覆盖去向见下), `SLICE_COUNT_LIMIT` 未抬、活跃片零删除。**2026-10-11 清理会话(用户令「清理 cap 债务」): 字符 cap 债务 5 项 → 0** —— 索引三件(issues 走**视图归档** `CLOSED_KEEP=60` + 全量归档索引落 `attachments/`; tasks / web-ui 类索引压渲染口径) + 手写两件按「切最老一半」外迁到 `attachments/`; 条数债务本就不超(64 ≤ 70)。判据与副产物见 [26-10-11-1745 切片](26-10-11-1745-memory-bank-cap-cleanup.md) 与坑档 [index-archive-view(索引条目数撑爆 → 视图归档)](../pitfalls/kb/index-archive-view.md)。
-> 最后活动: 2026-10-11 17:45
+> 最后活动: 2026-10-13 09:14
 
 ## 状态
 
@@ -25,6 +25,14 @@
   ②tasks / web-ui 侧无摘要口径仍 < cap ⇒ 压**渲染口径**; ③两件手写文档按「切最老一半」外迁。
   **未抬任何 cap、未调 `SLICE_COUNT_LIMIT`**。收口 `doc.caps` 0 债务 / `doc.links` 绿 / `kb.check` 全绿 /
   test.full **3124 passed + 4 skipped**(基线切片 `testing/baselines/26-10-11-1745-memory-bank-cap-cleanup.md`)。
+
+- **2026-10-13 清理轮(用户令「清理cap债务」; 字符 cap 债务 3 → 0)**: 开工 `doc.caps` 报 3 项 ——
+  `modules/webui-static-contract.md` 34,647 / `pitfalls/web-ui/drawer-switch-flicker.md` 16,813 /
+  `testing/guards.md` 24,174 (条数债务 94>70 本会话不修, 治理政策未拍板不调)。三件按「触顶外迁原文到
+  `attachments/` 留一行指针, 随迁相对链接整体上移一层」处置 —— 主档落 7,823 / 10,319 / 9,889 (≤ 50% 线);
+  另 kb-nav-page 切片 13,988 撞 slice cap 蒸馏跟进轮九~十七进 `progress/implemented-tooling.md` → 5,675。
+  收口 `doc.caps --strict` 0 债务 / `doc.links` 绿 / `kb.check` 全绿 / test.full **3192 passed + 4 skipped**
+  (基线切片 `testing/baselines/26-10-13-0914-memory-bank-cap-debt-cleanup.md`)。
 
 ## 债务判据速记(后续清理会话直接复用)
 
