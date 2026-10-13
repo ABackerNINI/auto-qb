@@ -63,6 +63,7 @@
 - test_win_topmost_once_toggles_and_clears: TOPMOST 挂一下立刻摘 + SWP_NOACTIVATE(只动顺序不抢焦)
 - test_win_force_foreground_retries_until_focus: 单次被拒后有封顶重试(不无限执念)
 - test_win_user32_kernel32_non_windows_none: 非 Windows 上句柄取用返回 None(靠早退而非"恰好抛异常")
+- test_win_dll_missing_windll_returns_none: 平台伪装 win32 但 ctypes 无 windll/WINFUNCTYPE(POSIX 实况)-> None 不抛错(签名工厂求值顺序守阵)
 - test_win_user32_binds_signatures: 每个 user32 API 必须绑死 argtypes —— 不绑时 x64 传参静默失效(本轮真根因的守阵)
 - test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open / _win_shell_enter 前置返回 False, 不碰 ctypes
 
@@ -1029,6 +1030,27 @@ def test_win_user32_kernel32_non_windows_none(monkeypatch):
         assert utils._win_kernel32() is None
         assert utils._win_force_foreground(42) is False
         assert utils._win_window_text(42) == ""
+
+
+def test_win_dll_missing_windll_returns_none(monkeypatch):
+    """平台伪装成 win32 但 ctypes 无 `windll` / `WINFUNCTYPE` 门面(POSIX 实况) -> 返回 None, 不抛错
+
+    守阵(2026-10-13 Linux CI 4 条红): 签名表构造会碰 `ctypes.WINFUNCTYPE`(POSIX 不存在) ——
+    它若在**实参位**被求值, 就发生在 `ctypes.windll` 探测**之前**, "取不到 -> 返回 None"
+    这层安全网被绕过, POSIX 上抛 `AttributeError`(与 is_windows 早退那条是两回事: 这条
+    `sys.platform` 已是 win32, 早退不生效)。本用例在**两平台**造出 Linux CI 的等价形态:
+    删掉 `windll` + `WINFUNCTYPE` 后断言返回 None。
+    红验: 调用点退回 `_win_dll("user32", _WIN_USER32_SIGNATURES())` 即红(实参求值早于探测)。
+    """
+    import ctypes
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(utils, "_bound_user32", None)
+    monkeypatch.setattr(utils, "_bound_kernel32", None)
+    monkeypatch.delattr(ctypes, "windll", raising=False)
+    monkeypatch.delattr(ctypes, "WINFUNCTYPE", raising=False)
+    assert utils._win_user32() is None
+    assert utils._win_kernel32() is None
 
 
 def test_win_explorer_hwnds_non_windows_empty(monkeypatch):

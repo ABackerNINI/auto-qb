@@ -917,12 +917,18 @@ _bound_user32 = None
 _bound_kernel32 = None
 
 
-def _win_dll(name: str, sigs):
+def _win_dll(name: str, sigs_of):
     """按 DLL 名惰性取句柄 + 逐个绑签名(骨架单点, issue 26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup)
 
     `_win_user32` / `_win_kernel32`(及将来的新 DLL)共用「取句柄 -> 逐个 `_win_bind`
     绑 argtypes/restype」流程, 只差 DLL 名与签名清单。取不到返回 None; is_windows
     早退与缓存由调用方(`_win_*` getter)负责 —— 签名必须绑死的理由见 `_win_user32`。
+
+    ⚠ `sigs_of` 是签名清单的**工厂(可调用)**, 不是现成元组 —— 别"顺手"改成直接传
+    `_WIN_USER32_SIGNATURES()`: 签名表构造会碰 `ctypes.WINFUNCTYPE`(POSIX 上不存在),
+    写成实参就在**进入本函数之前**求值, 于是"`ctypes.windll` 取不到 -> 返回 None"这层
+    安全网被绕过, POSIX 上直接抛 `AttributeError`(2026-10-13 Linux CI 4 条红即此;
+    见 pitfalls/testing/patching.md)。传工厂把构造推到 windll 探测**成功之后**。
     """
     try:
         import ctypes
@@ -930,7 +936,7 @@ def _win_dll(name: str, sigs):
         dll = getattr(ctypes.windll, name)
     except (ImportError, AttributeError, OSError):
         return None
-    for fn_name, argtypes, restype in sigs:
+    for fn_name, argtypes, restype in sigs_of():
         _win_bind(getattr(dll, fn_name, None), argtypes, restype)
     return dll
 
@@ -967,7 +973,7 @@ def _win_user32():
         return None
     if _bound_user32 is not None:
         return _bound_user32
-    _bound_user32 = _win_dll("user32", _WIN_USER32_SIGNATURES())
+    _bound_user32 = _win_dll("user32", _WIN_USER32_SIGNATURES)
     return _bound_user32
 
 
@@ -978,7 +984,7 @@ def _win_kernel32():
         return None
     if _bound_kernel32 is not None:
         return _bound_kernel32
-    _bound_kernel32 = _win_dll("kernel32", _WIN_KERNEL32_SIGNATURES())
+    _bound_kernel32 = _win_dll("kernel32", _WIN_KERNEL32_SIGNATURES)
     return _bound_kernel32
 
 
