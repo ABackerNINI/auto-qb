@@ -33,6 +33,7 @@
 - test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
 - test_refresh_error_reasons_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
 - test_refresh_error_reasons_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
+- test_token_resolve_single_point_in_infra: 守阵(issue hr-token-persist-convention-dup) token 生成/持久化口径单点在 infra.utils.resolve_or_create_token —— token_hex(32) 全仓唯一 + 两侧入口必须委托
 """
 import logging
 import os
@@ -218,8 +219,8 @@ def test_web_token_generated_atomic_and_readable(tmp_path):
 
 def test_web_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
     """已有合法 token 时不重写: 直接返回文件现值, 写盘路径一次都不触发(不重写不漂移)"""
+    from auto_qb.infra import utils as infra_utils
     from auto_qb.webui import ensure_web_token
-    from auto_qb.webui.server import common
 
     existing = "ab" * 32
     (tmp_path / "web.token").write_text(existing, encoding="ascii")
@@ -228,7 +229,7 @@ def test_web_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
     def _must_not_write(*_a, **_kw):
         raise AssertionError("已有合法 token 时不得触达写盘路径")
 
-    monkeypatch.setattr(common, "atomic_write", _must_not_write)
+    monkeypatch.setattr(infra_utils, "atomic_write", _must_not_write)
     assert ensure_web_token(mgr) == existing, "应复用文件现值而非重新生成"
     assert (tmp_path / "web.token").read_text(encoding="ascii") == existing
 
@@ -240,14 +241,14 @@ def test_web_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
     清理临时文件并重抛 —— 目标路径保持旧内容。若实现退回 O_TRUNC 直写, 同一时刻半截内容已落
     目标文件, 本条在 raises 处即红。
     """
+    from auto_qb.infra import utils as infra_utils
     from auto_qb.webui import ensure_web_token
-    from auto_qb.webui.server import common
 
     mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
     token_file = tmp_path / "web.token"
     token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
 
-    real_atomic_write = common.atomic_write
+    real_atomic_write = infra_utils.atomic_write
 
     def _crash_mid(path, write_fn, **kw):
         def _half(_f):
@@ -256,7 +257,7 @@ def test_web_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
 
         return real_atomic_write(path, _half, **kw)
 
-    monkeypatch.setattr(common, "atomic_write", _crash_mid)
+    monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
     with pytest.raises(RuntimeError):
         ensure_web_token(mgr)
     assert token_file.read_text(encoding="ascii") == "", "中断后不得留下非空半截 token"
@@ -1028,3 +1029,25 @@ def test_refresh_error_reasons_skips_when_disconnected(tmp_path):
     mgr.refresh_error_reasons()  # 不抛异常
 
     assert t.tracker_error_msg == "unregistered" and t.tracker_error_ts == 0.0
+
+
+def test_token_resolve_single_point_in_infra():
+    """守阵(issue hr-token-persist-convention-dup): token 生成/持久化口径单点在 infra.utils.resolve_or_create_token
+
+    此前 hr/channel.resolve_token 与 webui/server/common.ensure_web_token 两处逐字同
+    (显式优先 -> 读文件 -> token_hex(32) -> atomic_write -> INFO 只提示路径)。
+    静态: `token_hex(32)` 全仓只允许出现在 infra/utils.py(访问密钥生成唯一处;
+    webui/runtime 的 token_hex(8) 是 cmd_id 回执, 另一码事), 两侧入口必须引用单点。
+    红验: 任一侧改回自写生成(token_hex(32) 回潮)或摘掉委托即红。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "src" / "auto_qb"
+    hits = sorted(
+        p.relative_to(root).as_posix() for p in root.rglob("*.py") if "token_hex(32)" in p.read_text(encoding="utf-8")
+    )
+    assert hits == ["infra/utils.py"], f"token_hex(32) 只允许在 infra/utils.py 单点, 现分布: {hits}"
+    for rel in ("hr/channel.py", "webui/server/common.py"):
+        assert "resolve_or_create_token" in (root /
+                                             rel).read_text(encoding="utf-8"
+                                                           ), (f"{rel} 必须委托 infra.utils.resolve_or_create_token")

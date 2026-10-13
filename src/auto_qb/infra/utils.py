@@ -12,6 +12,7 @@ import tempfile
 import hashlib
 from functools import lru_cache
 import re
+import secrets
 import subprocess
 import sys
 import threading
@@ -99,6 +100,36 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
             except OSError:
                 pass
         raise
+
+
+def resolve_or_create_token(configured: str, path: str, *, what: str, logger: logging.Logger) -> str:
+    """访问密钥确定口径单点(issue hr-token-persist-convention-dup): 显式配置优先;
+    否则读已有文件; 无则随机生成并原子持久化(0600)。
+
+    web.token 与 hr.token 共用这套纪律, 此前 hr/channel.resolve_token 与
+    webui/server/common.ensure_web_token 两处逐字同 —— 改口径(权限/编码/日志措辞)
+    必须记得两处的坑收成一处:
+    - 原子写(atomic_write; issue 26-09-21-1347 / 26-10-01-2151): truncate 直写在写盘途中
+      被杀会留下非空半截密钥被持久化, 持旧密钥的一侧 401(密钥静默漂移); atomic_write 的
+      mkstemp 权限 0600 与原 os.open(..., 0o600) 等价; token 是纯 ASCII hex, utf-8 落盘与
+      原 ascii 编码逐字节相同, 读取侧(ascii 读回)不变, 目录创建也由其内建;
+    - 密钥内容**不进日志**: WARNING 以上会被 notify 处理器推到系统通知, 且落到日志文件后
+      /api/log 可读回 —— 拿到密钥即等于拿到对应能力。INFO 只提示文件路径;
+    - `what` 进日志措辞("WEB 访问" / "HR 取数通道"); logger 用调用方身份传入 —— 两侧守阵
+      (test_web_token_not_printed_in_logs / test_generated_token_not_in_logs)按 logger 名
+      钉死密钥不进日志, 迁移不得改掉 logger 身份。
+    """
+    if configured:
+        return configured
+    if os.path.exists(path):
+        with open(path, "r", encoding="ascii") as f:
+            token = f.read().strip()
+        if token:
+            return token
+    token = secrets.token_hex(32)
+    atomic_write(path, lambda f: f.write(token))
+    logger.info(f"{what}密钥已生成: {path}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
+    return token
 
 
 def parse_bool(value) -> bool:

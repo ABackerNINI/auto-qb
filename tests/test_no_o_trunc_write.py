@@ -2,9 +2,9 @@
 
 背景 (issue 26-10-02-0527): issue 26-09-21-1347 §06 悬置的「O_TRUNC 直写静态守阵」, 生效条件
 「全 src O_TRUNC 代码清零」已由 bc24631b (hr/channel.py 最后一处直写改 atomic_write) 达成,
-2026-10-05 认领落地。危害: 直写在写盘途中被杀会留下非空半截密钥/token 被持久化 —— 两处修复
-注释是锚点 (hr/channel.py / webui/server/common.py)。同族修法范式 5965cc07 (web.token) /
-bc24631b (hr.token); 唯一合法写盘单点 src/auto_qb/infra/utils.py `def atomic_write`。
+2026-10-05 认领落地。危害: 直写在写盘途中被杀会留下非空半截密钥/token 被持久化 —— 修复 rationale 现随口径单点
+`infra/utils.resolve_or_create_token` 的 docstring (两处调用点已收口委托, issue hr-token-persist-convention-dup);
+同族修法范式 5965cc07 (web.token) / bc24631b (hr.token); 唯一合法写盘单点 src/auto_qb/infra/utils.py `def atomic_write`。
 
 判定口径: tokenize 逐文件扫, 非 COMMENT token 的文本含 "O_TRUNC" 即红 —— NAME 覆盖
 `os.O_TRUNC` 属性访问, STRING 覆盖 `getattr(os, "O_TRUNC")` 绕行与 docstring 内嵌;

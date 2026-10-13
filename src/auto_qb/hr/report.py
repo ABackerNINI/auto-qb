@@ -69,19 +69,16 @@ def build_fetcher(html_dir: Optional[str]) -> HrFetcher:
     return NullFetcher("本实例未启用取数通道 (hr_check.channel.enabled=false 或取数通道未落地)")
 
 
-def _site_confs(config: Config) -> dict:
-    return {name: tc.hr_check for name, tc in config.trackers.items() if tc.hr_check is not None}
-
-
 def _gate_enabled_sites(config: Config, out, *, what: str) -> Optional[List[str]]:
     """三入口公共前置门: 总开关 + 「至少一个站点启用」; 不通过则打印并返回 None。
 
     `what` 只进提示文案(走查 / 查看), 让各入口的措辞保持不变。
+    站点接入视图派生单点在 Config.hr_site_confs(issue hr-site-derive-convention-dup)。
     """
     if not config.hr_check.enabled:
         print(f"hr_check.enabled=false: HR 在线核实未启用, 无可{what}内容。", file=out)
         return None
-    enabled = [name for name, conf in _site_confs(config).items() if conf.enabled]
+    enabled = [name for name, conf in config.hr_site_confs().items() if conf.enabled]
     if not enabled:
         print(f"没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可{what}内容。", file=out)
         return None
@@ -95,7 +92,7 @@ def _build_service(
     return HrRefreshService(
         data_dir=config.data_dir,
         global_conf=config.hr_check,
-        site_confs=_site_confs(config),
+        site_confs=config.hr_site_confs(),
         fetcher=fetcher,
         owner=instance_id(),
         persist=persist,

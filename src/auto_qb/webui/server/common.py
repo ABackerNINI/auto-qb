@@ -9,13 +9,12 @@ _group_key_param→group_key_param(factory 以别名引用, 端点体零改动)�
 import logging
 import os
 import re
-import secrets
 from urllib.parse import quote
 
 from fastapi import HTTPException
 
 from ...infra.file_access import get_file_access
-from ...infra.utils import atomic_write, decode_group_key
+from ...infra.utils import decode_group_key, resolve_or_create_token
 
 logger = logging.getLogger("auto_qb.web")
 
@@ -67,27 +66,18 @@ def state_dir(manager) -> str:
 
 
 def ensure_web_token(manager) -> str:
-    """确定 WEB 访问密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/web.token(0600)"""
-    if manager.config.web.token:
-        return manager.config.web.token
-    token_file = os.path.join(state_dir(manager), "web.token")
-    if os.path.exists(token_file):
-        with open(token_file, "r", encoding="ascii") as f:
-            token = f.read().strip()
-        if token:
-            return token
-    token = secrets.token_hex(32)
-    # 原子写(issue 26-09-21-1347): O_TRUNC 直写在写盘途中被杀会留下非空半截 token,
-    # 被读取侧当作有效密钥持久化 -> 已存浏览器密钥 401。atomic_write 的 mkstemp 权限 0600
-    # 与原 os.open(..., 0o600) 等价; token 是纯 ASCII hex, utf-8 落盘与原 ascii 编码逐字节相同,
-    # 读取侧(ascii 读回)不变。
-    atomic_write(token_file, lambda f: f.write(token))
-    # 密钥内容**不进日志**: 记 WARNING 及以上会被 notify 处理器(min_level 默认 ERROR,
-    # 排障调低后会更高频)推到系统通知, 且落到日志文件后 /api/log 可读回 ——
-    # 拿到密钥即等于拿到改配置/删种子的能力。
-    # 改为 INFO 只提示文件路径: 用户打开 web.token 即可, 或配置 web.token 使用固定密钥。
-    logger.info(f"WEB 访问密钥已生成: {token_file}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
-    return token
+    """确定 WEB 访问密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/web.token(0600)
+
+    生成/持久化口径单点在 infra.utils.resolve_or_create_token(issue hr-token-persist-convention-dup,
+    与 hr/channel.resolve_token 同一纪律); 密钥内容不进日志的纪律随单点走 —— 本模块 logger
+    显式取名 "auto_qb.web"(见包 __init__ K3), 身份经参数传入保持, 守阵按它钉死。
+    """
+    return resolve_or_create_token(
+        manager.config.web.token,
+        os.path.join(state_dir(manager), "web.token"),
+        what="WEB 访问",
+        logger=logger,
+    )
 
 
 def content_disposition(filename: str, fallback: str, ext: str = "") -> str:

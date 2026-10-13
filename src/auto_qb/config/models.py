@@ -402,3 +402,13 @@ class Config:
 
     # qB 口径流量采样(plan 26-10-03-0946 方案C): 全局/单种两系列周期采样, 供流量图消费
     qb_traffic: Optional[QbTraffic] = None  # None = 未启用(缺省; 键组整体缺省即功能未启用)
+
+    def hr_site_confs(self) -> Dict[str, SiteHrCheckConfig]:
+        """{站点名: 站点核实参数} —— 「哪些站点接入了 hr_check」的派生单点(issue hr-site-derive-convention-dup)
+
+        消费的是**绑定结果视图**(loaders 按域名交集派生填充, 配置源在 hr_check.sites.<档案 id>)。
+        此前 hr/runtime.site_confs 与 hr/report._site_confs 各抄一份逐字同, 派生口径改在配置
+        聚合根收口(runtime/report 已改从本单点取); webui routes/hr 的启用站点派生(webui 半)
+        归轮 15 合流 —— 合流时也改从本单点取, 不再各写。
+        """
+        return {name: tc.hr_check for name, tc in self.trackers.items() if tc.hr_check is not None}

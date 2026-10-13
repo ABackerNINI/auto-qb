@@ -59,6 +59,7 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_hr_check_range_endpoints: 频控三键闭区间**端点逐值** —— min_interval [5s,1D] 与日额/页上限 [1,100000] 的两端合法 + 端点外一档非法(旧用例只喂 1S/10/1.5)
 - test_hr_check_request_timeout_endpoints: channel.request_timeout [5s,3600s] 两端逐值(旧用例只给了 1S/2H 两个远离端点的非法值)
 - test_hr_site_interval_range_endpoints: sites 条目 refresh/idle 两键 [60s,30D] 的**未覆盖半边**; 并改用「完整路径+精确下限文案」断言(既有用例的 `须 >=` 松匹配被交叉校验文案顶替 = 假绿)
+- test_hr_site_confs_derivation_single_point: 守阵(issue hr-site-derive-convention-dup) 站点接入派生单点在 Config.hr_site_confs —— 推导全仓只许出现在 models.py 与 routes/hr.py(webui 半, 轮 15 合流)
 """
 import os
 
@@ -1364,3 +1365,25 @@ def test_hr_site_interval_range_endpoints():
     assert err({"refresh_interval": "30D", "idle_refresh_interval": "30D"}) == ""
     # --- idle 下界外一档 59S: 精确文案(松匹配被交叉校验顶替过的那一处)
     assert f"{w}.idle_refresh_interval: 须 >= 60s" in err({"idle_refresh_interval": "59S"})
+
+
+def test_hr_site_confs_derivation_single_point():
+    """守阵(issue hr-site-derive-convention-dup): 「哪些站点接入 hr_check」派生单点在 Config.hr_site_confs
+
+    此前 hr/runtime.site_confs 与 hr/report._site_confs 各抄一份逐字同推导。静态:
+    `hr_check is not None` 全仓只允许出现在 config/models.py(单点本体)与
+    webui/server/routes/hr.py(webui 半 —— 归轮 15 合流, 合流改走单点后从白名单移除)。
+    行为: 全默认 Config 派生空表(无站点接入)。
+    红验: 任何第三处重抄推导(哪怕换变量名)即红; runtime/report 改回自写同红。
+    """
+    from pathlib import Path
+
+    from auto_qb.config.models import Config
+
+    root = Path(__file__).resolve().parents[1] / "src" / "auto_qb"
+    hits = sorted(
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*.py") if "hr_check is not None" in p.read_text(encoding="utf-8")
+    )
+    assert hits == ["config/models.py", "webui/server/routes/hr.py"], (f"站点接入派生只允许在单点与 webui 半(轮 15 合流), 现分布: {hits}")
+    assert Config().hr_site_confs() == {}, "全默认配置应派生空表"

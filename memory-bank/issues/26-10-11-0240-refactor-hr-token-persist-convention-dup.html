@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0240">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="token 生成/持久化口径跨包重复">
 <meta name="issue-summary" content="hr/channel.resolve_token 与 webui/server/common.ensure_web_token 逐字同">
 <title>token 生成/持久化口径跨包重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0240-refactor-hr-token-persist-convention-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-13 21:37 — 用户指令「认领并修复hr相关的3个refactor issues」认领本件，状态 <strong>In Progress</strong>；复验成立：<code>hr/channel.resolve_token</code> ↔ <code>webui/server/common.ensure_web_token</code> 逐字同骨架仍在；认领方 <code>memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md</code>（本轮续档）</li>
+      <li>2026-10-13 21:50 — 修完置 <strong>Done</strong>。实际修法：抽 <code>infra.utils.resolve_or_create_token(configured, path, *, what, logger)</code>（口径与 rationale 注释随单点），<code>hr/channel.resolve_token</code> 与 <code>webui/server/common.ensure_web_token</code> 降为一行委托（公开名与签名不变）；<code>what</code> 承载日志措辞差异（WEB 访问 / HR 取数通道），logger 用调用方身份传入 —— 两侧按 logger 名钉密的守阵不变；4 条 monkeypatch 单测的 patch 地址随实现迁到 <code>infra.utils.atomic_write</code>。守阵 <code>test_token_resolve_single_point_in_infra</code>（静态：token_hex(32) 全仓唯一 + 两侧必须委托）。验证：test.quick 全绿；test.full 见基线切片 <code>baselines/26-10-13-2150-backend-hr-dup-code-fix.md</code></li>
     </ul>
   </section>
 

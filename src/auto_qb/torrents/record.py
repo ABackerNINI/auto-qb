@@ -323,8 +323,8 @@ class TorrentRecord:
         在 qB 里加/删排除标签, 下一轮判定即生效或恢复管束, 无需重启、无需记录置脏。
         匹配明细单点在 _hr_exclusion_hits(与 hr_excluded_by 共用)。
 
-        公开方法(webui/views.py 的 hr_view_fields 也要读排除态做展示); 本文件内四个
-        判定入口(hr_managed / check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
+        公开方法(webui/views.py 的 hr_view_fields 也要读排除态做展示); 本文件内判定入口
+        经 _hr_guard(三个布尔入口)与 hr_judgement 顶部(排除即 None)消费本短路。
         """
         tag_hit, cat_hit = self._hr_exclusion_hits()
         return tag_hit or cat_hit
@@ -370,6 +370,16 @@ class TorrentRecord:
             now=time.time(),
         )
 
+    def _hr_guard(self) -> bool:
+        """HR 判定入口公共前置守卫(True = 短路恒 False): 站点未配 hr 或命中排除表
+
+        check_hr_condition / hr_managed / check_hr_satisfied 三处顶部逐字同的两行守卫收成
+        一处(issue torrents-hr-entry-guard-dup): 「站点未配 hr 不判定」与「排除优先级最高」
+        的口径新增判定入口不再各抄一遍 —— 新入口先过本守卫。hr_judgement 不走它:
+        排除时返回 None(走本地字段逻辑), 语义不同。
+        """
+        return not self.tracker_conf.hr or self.hr_excluded()
+
     def check_hr_condition(self) -> bool:
         """纯本地下载触发判据(计划 26-09-30-0559): 只回答「本机下载条件满足吗」
 
@@ -384,9 +394,7 @@ class TorrentRecord:
 
         HR 排除(计划 26-09-28-1805)优先于本方法一切逻辑: 命中排除表恒 False。
         """
-        if not self.tracker_conf.hr:
-            return False
-        if self.hr_excluded():
+        if self._hr_guard():
             return False
         return self._local_hr_triggered()
 
@@ -401,9 +409,7 @@ class TorrentRecord:
 
         HR 排除优先: 命中排除表恒 False(与其它判定入口同构)。
         """
-        if not self.tracker_conf.hr:
-            return False
-        if self.hr_excluded():
+        if self._hr_guard():
             return False
         judged = self.hr_judgement()
         if judged is None:
@@ -437,9 +443,7 @@ class TorrentRecord:
         时长/分享率 —— 无触发门: 达标只看做种事实, 转移种(downloaded=0)做种满也算达标。
         HR 排除恒 False(显式短路, 不依赖 hr_managed 的传递)。
         """
-        if not self.tracker_conf.hr:
-            return False
-        if self.hr_excluded():
+        if self._hr_guard():
             return False
         judged = self.hr_judgement()
         if judged is not None:

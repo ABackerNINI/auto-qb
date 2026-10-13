@@ -56,6 +56,7 @@
 - test_store_apply_tag_removal: torrents_delete_tags 全库移除(空表直返 / 命中移除并置脏视图与所在组)
 - test_store_remove_torrent_pending_semantics: remove_torrent 已知 hash 登记 removed / 未知 hash 无操作
 - test_view_dirty_intersection: view_dirty 集合交集判定(触及视图字段 True / 无关字段 False)
+- test_hr_entry_guard_single_point: 守阵(issue torrents-hr-entry-guard-dup) HR 判定入口前置守卫单点在 _hr_guard —— record.py 里 not self.tracker_conf.hr 只许出现一次
 """
 from dataclasses import MISSING, fields as dc_fields
 
@@ -1146,3 +1147,17 @@ def test_view_dirty_intersection():
     assert view_dirty({"state", "ratio_limit"}) is True
     assert view_dirty({"ratio_limit"}) is False
     assert view_dirty(set()) is False
+
+
+def test_hr_entry_guard_single_point():
+    """守阵(issue torrents-hr-entry-guard-dup): HR 判定入口前置守卫单点在 TorrentRecord._hr_guard
+
+    check_hr_condition / hr_managed / check_hr_satisfied 三处顶部逐字同的
+    「未配 hr + 排除表」两行守卫收成一处。静态: record.py 里 `not self.tracker_conf.hr`
+    只允许出现一次(在 _hr_guard 内)。红验: 任一入口改回自抄两行守卫即红。
+    """
+    from pathlib import Path
+
+    record = (Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "torrents" /
+              "record.py").read_text(encoding="utf-8")
+    assert record.count("not self.tracker_conf.hr") == 1, ("HR 判定入口守卫必须在 _hr_guard 单点(出现 >1 次 = 又有人自抄)")

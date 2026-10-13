@@ -98,7 +98,7 @@ def test_token_generated_atomic_and_readable(tmp_path):
 
 def test_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
     """已有合法 token 时不重写: 直接返回文件现值, 写盘路径一次都不触发(不重写不漂移)"""
-    from auto_qb.hr import channel
+    from auto_qb.infra import utils as infra_utils
 
     existing = "ab" * 32
     (tmp_path / "hr.token").write_text(existing, encoding="ascii")
@@ -106,7 +106,7 @@ def test_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
     def _must_not_write(*_a, **_kw):
         raise AssertionError("已有合法 token 时不得触达写盘路径")
 
-    monkeypatch.setattr(channel, "atomic_write", _must_not_write)
+    monkeypatch.setattr(infra_utils, "atomic_write", _must_not_write)
     assert resolve_token("", str(tmp_path)) == existing, "应复用文件现值而非重新生成"
     assert (tmp_path / "hr.token").read_text(encoding="ascii") == existing
 
@@ -118,12 +118,12 @@ def test_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
     清理临时文件并重抛 —— 目标路径保持旧内容。若实现退回 O_TRUNC 直写, 同一时刻半截内容已落
     目标文件, 本条在 raises 处即红。
     """
-    from auto_qb.hr import channel
+    from auto_qb.infra import utils as infra_utils
 
     token_file = tmp_path / "hr.token"
     token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
 
-    real_atomic_write = channel.atomic_write
+    real_atomic_write = infra_utils.atomic_write
 
     def _crash_mid(path, write_fn, **kw):
         def _half(_f):
@@ -132,7 +132,7 @@ def test_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
 
         return real_atomic_write(path, _half, **kw)
 
-    monkeypatch.setattr(channel, "atomic_write", _crash_mid)
+    monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
     with pytest.raises(RuntimeError):
         resolve_token("", str(tmp_path))
     assert token_file.read_text(encoding="ascii") == "", "中断后不得留下非空半截 token"

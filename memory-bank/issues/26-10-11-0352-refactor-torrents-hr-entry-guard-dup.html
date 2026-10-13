@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="TorrentRecord HR 判定入口前置守卫重复">
 <meta name="issue-summary" content="check_hr_condition/hr_managed/check_hr_satisfied 三处逐字同「无 hr 返回 False + hr_excluded 返回 False」守卫">
 <title>TorrentRecord HR 判定入口前置守卫重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-torrents-hr-entry-guard-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-13 21:37 — 用户指令「认领并修复hr相关的3个refactor issues」认领本件，状态 <strong>In Progress</strong>；复验成立：三判定入口顶部逐字同两行守卫仍在（record.py，grep <code>if not self.tracker_conf.hr</code>）；认领方 <code>memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md</code>（本轮续档）</li>
+      <li>2026-10-13 21:50 — 修完置 <strong>Done</strong>。实际修法：抽 <code>TorrentRecord._hr_guard() -> bool</code>（True = 短路恒 False），三个判定入口（check_hr_condition / hr_managed / check_hr_satisfied）顶部两行守卫降为一行；<code>hr_judgement</code> 不并入（排除时返回 None 走本地逻辑，语义不同，docstring 已标）；<code>hr_excluded</code> docstring 的入口消费关系同步。守阵 <code>test_hr_entry_guard_single_point</code>（静态：record.py 里 <code>not self.tracker_conf.hr</code> 只许出现一次）。验证：test.quick 全绿；test.full 见基线切片 <code>baselines/26-10-13-2150-backend-hr-dup-code-fix.md</code></li>
     </ul>
   </section>
 

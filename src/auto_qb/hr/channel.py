@@ -17,14 +17,13 @@ import json
 import logging
 import os
 import re
-import secrets
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Tuple
 
 from ..config.models import SiteHrCheckConfig
 from ..infra.errors import AutoQbError
-from ..infra.utils import atomic_write
+from ..infra.utils import resolve_or_create_token
 from .model import _as_float, _as_int  # 数值强转单点在 model(此前 channel 另抄一份逐字同)
 
 logger = logging.getLogger(__name__)
@@ -92,25 +91,12 @@ def token_path(data_dir: str) -> str:
 
 
 def resolve_token(configured: str, data_dir: str) -> str:
-    """确定通道密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/hr.token(0600)(同 web.token 口径)"""
-    if configured:
-        return configured
-    path = token_path(data_dir)
-    if os.path.exists(path):
-        with open(path, "r", encoding="ascii") as f:
-            token = f.read().strip()
-        if token:
-            return token
-    token = secrets.token_hex(32)
-    # 原子写(issue 26-10-01-2151): O_TRUNC 直写在写盘途中被杀会留下非空半截密钥被持久化,
-    # 扩展侧持旧密钥 401(通道密钥静默漂移)。atomic_write 的 mkstemp 权限 0600 与原
-    # os.open(..., 0o600) 等价; token 是纯 ASCII hex, utf-8 落盘与原 ascii 编码逐字节相同,
-    # 读取侧(ascii 读回)不变 —— 与 web.token 修法(5965cc07)同范式, 目录创建也由其内建。
-    atomic_write(path, lambda f: f.write(token))
-    # 密钥内容**不进日志**: 日志会被 notify 处理器推到系统通知, 也被 /api/log 读回 ——
-    # 拿到密钥等于拿到「驱动本机浏览器带登录态请求站点」的能力。只提示文件路径。
-    logger.info(f"HR 取数通道密钥已生成: {path}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
-    return token
+    """确定通道密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/hr.token(0600)(同 web.token 口径)
+
+    生成/持久化口径单点在 infra.utils.resolve_or_create_token(issue hr-token-persist-convention-dup);
+    密钥内容不进日志的纪律随单点 —— logger 用本模块身份(auto_qb.hr.channel)传入, 守阵按它钉死。
+    """
+    return resolve_or_create_token(configured, token_path(data_dir), what="HR 取数通道", logger=logger)
 
 
 # ---------- 边界: origin 与 URL ----------
