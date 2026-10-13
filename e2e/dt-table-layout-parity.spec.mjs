@@ -36,7 +36,7 @@ const CASES = [
   /* W2 修复面: 偏移根因 = 变体覆写行几何时不带列头(06: 14-8=6px; 11: 14-4=10px + gap 8≠10 逐列累计)。
    * 修法 = --tbl-pad-x / --tbl-gap 变量, 列头与行同取, 变体只声明值。 */
   { tab: 'trackers', tpl: '06', tid: 'drawerTrackerV06', cols: 8 },
-  { tab: 'content', tpl: '11', tid: 'drawerContentV11', cols: 7 },
+  { tab: 'content', tpl: '11', tid: 'drawerContentV11', cols: 5 },
   /* W3 实测自洽面(探针 2026-10-13): 05 单列分段(列头 1 格 = 行 1 格); 07/08 十列
    * (files 渐进列已删, 列常驻)。 */
   { tab: 'trackers', tpl: '05', tid: 'drawerTrackerV05', cols: 1 },
@@ -151,11 +151,13 @@ for (const skin of SKINS) {
       expect(probe.hasStats, '卡内有 dt04-stats 块').toBe(true);
     });
 
-    /* 10 树 + 详情 —— 非网格形态(W4 探针实测: 列头声明隐藏, 行 5 格 5 轨道, 缩进 =
-     * name 格内 paddingLeft, 与「树缩进是单元格渲染器」的计划口径一致)。规格钉:
-     *   ① 列头 display:none(声明); ② 行轨道 5 段 + 5 格; ③ 树缩进存在(子层 paddingLeft>0);
-     *   ④ 关键格子类在(dt10-n/dt10-prog/dt10-priocell)。 */
-    test(`drawerContentV10 树形态规格: 列头隐藏 + 行 5 格 5 轨道 + 树缩进 (${skin})`, async ({ page }) => {
+    /* 10 树 + 详情 —— 非网格形态(W4 探针实测: 列头声明隐藏, 行 3 格 3 轨道, 缩进 =
+     * name 格内 paddingLeft, 与「树缩进是单元格渲染器」的计划口径一致)。2026-10-14 复查
+     * 修法(26-10-14-0136 §02): tgl/prio 两列已收编进 name 格(折叠钮在格首随缩进 = 层级,
+     * 徽章在格尾右对齐 = 不占列), 行由 5 轨变 3 轨。规格钉:
+     *   ① 列头 display:none(声明); ② 行轨道 3 段 + 3 格; ③ 树缩进存在(子层 paddingLeft>0);
+     *   ④ 交互件在 name 格内(dt10-tgl/dt10-pbadge 且是 .dt10-n 的后代)。 */
+    test(`drawerContentV10 树形态规格: 列头隐藏 + 行 3 格 3 轨道 + 树缩进 + 交互件在 name 格 (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.addInitScript(
         (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
@@ -184,23 +186,27 @@ for (const skin of SKINS) {
           .map((r) => r.querySelector('.dt10-n'))
           .filter(Boolean)
           .map((el) => parseFloat(getComputedStyle(el).paddingLeft) || 0);
+        const dirRow = rows.find((r) => r.querySelector('.dt10-tgl'));
+        const fileRow = rows.find((r) => r.querySelector('.dt10-pbadge')) || rows[0];
         return {
           headDisplay: getComputedStyle(head).display,
           tracks: (getComputedStyle(rows[0]).gridTemplateColumns || '').trim().split(/\s+/).filter(Boolean).length,
           cells: rows[0].children.length,
           maxIndent: Math.max(...nameIndents),
           hasProg: !!rows[0].querySelector('.dt10-prog'),
-          hasPrio: !!rows[0].querySelector('.dt10-priocell'),
+          tglInName: !!dirRow && !!dirRow.querySelector('.dt10-n .dt10-tgl'),
+          badgeInName: !!fileRow.querySelector('.dt10-n .dt10-pbadge'),
         };
       });
 
       expect(probe, '未找到 drawerContentV10(改名/未挂载? 同步本 spec)').not.toBeNull();
       expect(probe.headDisplay, '列头隐藏是树形态的声明(不许复活)').toBe('none');
-      expect(probe.tracks, '行轨道 5 段(多一条轨道 = 「横带」类症状)').toBe(5);
-      expect(probe.cells, '行 5 格').toBe(5);
+      expect(probe.tracks, '行轨道 3 段(多一条轨道 = 「横带」类症状; tgl/prio 独立列已删)').toBe(3);
+      expect(probe.cells, '行 3 格').toBe(3);
       expect(probe.maxIndent, '树缩进存在(子层 paddingLeft > 0)').toBeGreaterThan(0);
       expect(probe.hasProg, '进度格在').toBe(true);
-      expect(probe.hasPrio, '优先级格在').toBe(true);
+      expect(probe.tglInName, '折叠钮在 name 格内(随缩进 = 层级, 治「展开按钮没有层级」)').toBe(true);
+      expect(probe.badgeInName, '徽章在 name 格内(不占列, 治「操作按钮独立成列」)').toBe(true);
     });
   });
 }

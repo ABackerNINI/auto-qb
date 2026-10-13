@@ -303,24 +303,31 @@ const DRAWER_TRACKER_V06_COLUMNS = [
  * rowsFn)。排序不适用(树序 = 树语义, 原口径无排序 → 全列 sortable:false + dyn 空键,
  * 非借壳 —— 本来就没有手搓排序状态机, Q3 不增项)。Q3 记档: 10 无表头设计 → 列头 CSS
  * 隐藏(05 先例), 拖宽/右键隐藏/列偏好**不适用**; 11 表头保留, 拖宽/右键隐藏首次落地。
- * 11 可用性列原 omitEmpty 渐进已删(26-10-13-0811): 轨道数随数据浮动, 列常驻 + — 占位。 */
+ * 11 可用性列原 omitEmpty 渐进已删(26-10-13-0811): 轨道数随数据浮动, 列常驻 + — 占位。
+ *
+ * !2026-10-14 用户复查修法(背景报告 26-10-14-0136 §02 两项呈现缺陷):
+ *   「操作按钮独立成列」—— 优先级徽章曾是 prio 一条独立轨道(修的是「不可隐藏」的能力,
+ *     没解决「按钮占一列」的呈现); 徽章收编进 **name 格尾部**(margin-left:auto 右对齐,
+ *     仍在同一竖线对齐但不占轨道)。
+ *   「展开按钮没有层级」—— 折叠钮曾是 tgl 一条独立轨道: 全部展开钮钉在行首同一条竖线上,
+ *     树层级只由 name 格的 paddingLeft 表达; 折叠钮收编进 **name 格首部随缩进**(与节点
+ *     同层, 层级直接可视)。
+ *   tgl/prio 两列自此删除(终态: 10 = name/size/prog 三列; 11 = ck/name/size/prog/av 五列),
+ *   交互件随 name 格走 ⇒ **name 列 locked**(L4 续效: 隐藏 name = 一并废掉折叠钮与徽章
+ *   两个交互件; ck 列同口径)。用户已存列偏好按 key 求交, tgl/prio 陈旧键自然失效, 免迁移。 */
 const DRAWER_CONTENT_V10_COLUMNS = [
-  { key: "tgl", label: "", tpl: "18px", sortable: false, align: "left" },
-  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 折叠钮+徽章在格内, 隐藏即废 */
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "128px", sortable: false, align: "left" },
-  { key: "prio", label: "优先级", tpl: "62px", sortable: false, locked: true, align: "left" },  /* L4 双保险(10 无表头) */
 ];
 const DRAWER_CONTENT_V11_COLUMNS = [
   { key: "ck", label: "", tpl: "26px", sortable: false, locked: true, align: "left" },
-  { key: "tgl", label: "", tpl: "18px", sortable: false, locked: true, align: "left" },
-  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, align: "left" },
+  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 折叠钮+徽章在格内, 隐藏即废 */
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "130px", sortable: false, align: "left" },
   /* omitEmpty 已删(计划 26-10-13-0811 L1 铁律: 渐进列轨道数随数据浮动, 是「多一格/少一列」
    * 类症状的温床); 列常驻, 缺值由渲染器 avTxt 出 — 占位。 */
   { key: "av", label: "可用性", tpl: "62px", sortable: false, align: "right" },
-  { key: "prio", label: "优先级", tpl: "64px", sortable: false, locked: true, align: "left" },  /* L4: 徽章=行动作钮, 不可隐藏 */
 ];
 const DRAWER_FILE_COLUMNS = [
   { key: "name", label: "文件", tpl: "minmax(220px, 3fr)", sortable: true, locked: true, align: "left" },

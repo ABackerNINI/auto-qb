@@ -3,8 +3,9 @@
  *      —— 「写字段, 不是重建」(L5): keyed 补丁的原节点续用, 重建则 data-live-probe 失踪。
  *   #8 勾选不跳动(症状 8, 变体 11): 连续勾选三行, 行容器 offsetTop 累计偏移为 0、行数
  *      不变、行 DOM 身份不变 —— 勾选态进驱动数据(反应式), 不走 anchTouch 换代重挂。
- *   #7 按钮不占列(症状 7, 变体 11): 交互列(ck 勾选/tgl 折叠/prio 徽章)locked 声明,
- *      右键隐藏菜单不渲染其勾选框(columns.js:458 双保险) —— 按钮列不可被列管理删除。
+ *   #7 按钮不占列(症状 7, 变体 11): 交互件锁定不可被列管理删除 —— 2026-10-14 复查后交互件
+ *      已收编进 name 格(ck 勾选列 locked / name 列 locked), 右键隐藏菜单不渲染其勾选框
+ *      (columns.js:458 双保险) —— 折叠钮与徽章随 name 格走, 删除 name = 废掉两个交互件。
  * 数据口径沿用 drawer-peers-variant-tables / drawer-content-variant-tables 的桩。 */
 import { test, expect } from '@playwright/test';
 import { installRuntimeErrorGuard, collectRuntimeErrors } from './lib/errors.mjs';
@@ -153,7 +154,7 @@ for (const skin of SKINS) {
       await expect(anchor.locator('.dt11-ck[data-act="ck"]:checked')).toHaveCount(n);
     });
 
-    test(`#7 按钮不占列(不可被列管理删除): 交互列 locked 必显 @fast (${skin})`, async ({ page }) => {
+    test(`#7 按钮不占列(交互件收编 name 格): name 列 locked 必显, 三件交互格子仍在 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.route('**/api/torrents/*/files', (route) =>
@@ -169,23 +170,25 @@ for (const skin of SKINS) {
       const head = anchor.locator('.group-head[data-table="drawerContentV11"]');
       await expect(head).toBeVisible({ timeout: 10_000 });
 
-      // 右键「优先级」列头(徽章 = 行动作按钮) → 列头菜单: locked 列的隐藏项为 muted「必显」,
-      // 点击走 headMenuHide 的 locked 分支(只 toast 不隐藏, menu.js); ck/tgl 同口径。
-      const prioHeader = head.locator('.h-cell', { hasText: '优先级' });
-      await prioHeader.click({ button: 'right' });
+      // 2026-10-14 复查修法(26-10-14-0136 §02): 优先级徽章不再是独立列 —— 收编进 name 格
+      // (margin-left:auto 右对齐)。「按钮不可被列管理删除」的 L4 口径随之改挂 name 列:
+      // 右键「名称」列头 → 隐藏项为 muted「必显」, 点击走 headMenuHide 的 locked 分支
+      // (只 toast 不隐藏, menu.js); ck 列同口径(勾选三态同在格内)。
+      const nameHeader = head.locator('.h-cell', { hasText: '名称' });
+      await nameHeader.click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible({ timeout: 3_000 });
-      const hideItem = menu.locator('.ctx-item', { hasText: '优先级' }).first();
-      await expect(hideItem, '优先级列的隐藏项标必显(L4: 动作钮不可被列管理删除)').toHaveClass(/muted/);
+      const hideItem = menu.locator('.ctx-item', { hasText: '名称' }).first();
+      await expect(hideItem, 'name 列的隐藏项标必显(L4: 折叠钮/徽章在格内, 隐藏即废)').toHaveClass(/muted/);
       await hideItem.click(); // locked: headMenuHide 只 toast 不隐藏, 菜单自收
-      await expect(anchor.locator('.dt11-pbadge').first(), '点必显项后徽章列仍在').toBeAttached();
+      await expect(anchor.locator('.dt11-pbadge').first(), '点必显项后徽章仍在(name 格内)').toBeAttached();
       // !勿用 Esc 收菜单 —— lifecycle 的 Esc 链优先关抽屉(drawerVisible 分支先于 headMenu),
       // 会把面板整个关掉。headMenuHide 已自收菜单, 这里直接做终态断言。
 
-      // 终态不变量: 三类交互格子全部还在
+      // 终态不变量: 三类交互格子全部还在(勾选框 = ck 列; 折叠钮/徽章 = name 格内)
       await expect(anchor.locator('.dt11-ck').first()).toBeAttached();
-      await expect(anchor.locator('.dt11-tgl').first()).toBeAttached();
-      await expect(anchor.locator('.dt11-pbadge').first()).toBeAttached();
+      await expect(anchor.locator('.dt11-n .dt11-tgl').first(), '折叠钮在 name 格内(随缩进 = 层级)').toBeAttached();
+      await expect(anchor.locator('.dt11-n .dt11-pbadge').first(), '徽章在 name 格内(不占列)').toBeAttached();
     });
   });
 }

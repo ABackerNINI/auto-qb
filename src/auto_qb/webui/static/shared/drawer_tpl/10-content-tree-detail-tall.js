@@ -16,11 +16,13 @@
  * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 桥声明(U4, 计划 26-10-12-0527, D4=A): 左树表格体走引擎 —— tableId 对应 app.js
  * DRAWER_TABLE_DEFS.drawerContentV10, 外壳只留版式(工具条/统计条/右详情), 树行由
- * <aq-dt-bridge> Teleport 进锚(5 列引擎行容器, 列头 CSS 隐藏 —— 本变体无表头设计,
- * 拖宽/右键隐藏不适用, Q3 记档); 树聚合/筛选/折叠/选中判据全在 rowsFn(判据零复制),
- * 行来源读反应式 UI 态(selPath/folded/filter, W5 起 Vue.reactive)。排序不适用(树序 = 树语义,
- * 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘: 行容器 tabindex/data-dt-key
- * 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符 rowAfter → rowAfterFn(锚换代重挂后跑)。
+ * <aq-dt-bridge> Teleport 进锚(3 列引擎行容器 —— name(折叠钮/缩进/图标/名称/徽章在格内)
+ * /size/prog, 列头 CSS 隐藏 —— 本变体无表头设计, 拖宽/右键隐藏不适用, Q3 记档; tgl/prio
+ * 两条交互轨道 2026-10-14 已收编进 name 格, 见下); 树聚合/筛选/折叠/选中判据全在
+ * rowsFn(判据零复制), 行来源读反应式 UI 态(selPath/folded/filter, W5 起 Vue.reactive)。
+ * 排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘:
+ * 行容器 tabindex/data-dt-key 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符
+ * rowAfter → rowAfterFn(锚换代重挂后跑)。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -64,19 +66,23 @@
     "  font:12px/1 system-ui, sans-serif; color:var(--fg-dim); cursor:pointer; }",
     ".drawer .dt10-ghost:hover { color:var(--fg); border-color:var(--border-soft); }",
     ".drawer .dt10-hint { margin-left:auto; font-size:11px; color:var(--fg-dim); }",
-    /* 树行(U4): 引擎行容器(5 列 grid, 列宽归引擎声明) —— 本变体只保留行观感个性。
-     * 无表头设计: 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏/列偏好不适用(Q3 记档)。 */
+    /* 树行(U4): 引擎行容器(3 列 grid —— name/size/prog, 列宽归引擎声明) —— 本变体只保留
+     * 行观感个性。无表头设计: 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏/列偏好不适用(Q3 记档)。
+     * 2026-10-14 复查修法: tgl/prio 两列删除(折叠钮进 name 格首部随缩进 = 层级可视,
+     * 徽章进 name 格尾部右对齐 = 不占列), 行左补 4px 内边距顶替原 tgl 轨的左缘。 */
     ".drawer .dt10-list { min-height:0; }",
     ".drawer .dt10-list .group-head { display:none; }",
-    ".drawer .dt10-list .group-row { height:29px; padding:0 4px 0 0; gap:8px; align-items:center;",
+    ".drawer .dt10-list .group-row { height:29px; padding:0 4px; gap:8px; align-items:center;",
     "  background:transparent; border:0; border-radius:0; box-shadow:none;",
     "  border-bottom:1px solid var(--hairline); font-size:12px; }",
     ".drawer .dt10-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
     ".drawer .dt10-list .group-row.sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
     ".drawer .dt10-list .group-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
-    /* 行内格(呈现归渲染器 tpl-aq-dt10-cells) */
+    /* 行内格(呈现归渲染器 tpl-aq-dt10-cells) —— 2026-10-14 复查修法: tgl/prio 两列已删,
+     * 折叠钮(格首, 随缩进)与优先级徽章(格尾, margin-left:auto 右对齐)都收编进 name 格,
+     * 行只剩 name/size/prog 三轨; name 格 = flex, 名称可省略,  chips/钮 flex:none 不缩。 */
     ".drawer .dt10-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
-    "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; }",
+    "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; flex:none; }",
     ".drawer .dt10-tgl:hover { color:var(--fg); }",
     ".drawer .dt10-tgl .ico { width:11px; height:11px; transition:transform var(--dur) var(--ease); }",
     ".drawer .dt10-tgl.closed .ico { transform:rotate(-90deg); }",
@@ -100,13 +106,12 @@
     "  color:var(--fg-muted); width:44px; text-align:right; flex:none; }",
     ".drawer .dt10-pbadge { display:inline-flex; align-items:center; justify-content:center; height:17px; padding:0 7px;",
     "  border-radius:999px; font-size:10.5px; white-space:nowrap; border:1px solid transparent;",
-    "  background:var(--surface-2); color:var(--fg-muted); cursor:pointer;",
+    "  background:var(--surface-2); color:var(--fg-muted); cursor:pointer; flex:none; margin-left:auto;",
     "  transition:border-color var(--dur) var(--ease), color var(--dur) var(--ease); }",
     ".drawer .dt10-pbadge:hover { border-color:var(--border-strong); color:var(--fg); }",
     ".drawer .dt10-pbadge.skip { background:transparent; border-style:dashed; border-color:var(--border-strong); color:var(--fg-dim); }",
     ".drawer .dt10-pbadge.high { background:var(--warn-soft); border-color:var(--warn-line); color:var(--warn); }",
     ".drawer .dt10-pbadge.max { background:var(--error-soft); border-color:var(--error-line); color:var(--error); }",
-    ".drawer .dt10-pnone { font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; color:var(--fg-dim); }",
     ".drawer .dt10-foot { flex:none; margin-top:8px; font-size:11.5px; color:var(--fg-dim); }",
     ".drawer .dt10-foot b { font-family:var(--font-mono, ui-monospace, monospace); color:var(--fg-muted); font-weight:600; }",
     ".drawer .dt10-foot b.w { color:var(--warn); }",

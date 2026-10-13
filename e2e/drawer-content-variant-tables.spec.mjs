@@ -13,13 +13,19 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 排序不适用(树序 = 树语义, dyn 空键); 11 的拖宽/右键隐藏/偏好持久化首次落地
  * (勾选/折叠列 locked), 可用性列 omitEmpty 渐进(原 hasav/noav 双 grid 手搓退役)。
  *
+ * 2026-10-14 用户复查修法(报告 26-10-14-0136 §02「操作按钮独立成列 / 展开按钮没有层级」):
+ * tgl/prio 两条交互轨道删除 —— 折叠钮收编进 name 格首部(随缩进 = 层级可视), 徽章收编进
+ * name 格尾部(margin-left:auto 右对齐, 不占轨道); name 列 locked(交互件随格走)。终态:
+ * 10 = 3 列(name/size/prog), 11 = 5 列(ck/name/size/prog/av)。
+ *
  * 手势清单(每条都是真手势, 不借道 vm):
- *   10: 树渲染(目录聚合徽章/缩进层级) + 折叠(anchTouch 桥换代, 子树真收拢) + 筛选 chips
- *       + 行选中联动右详情(点行/取消) + 行级键盘(roving ArrowDown + Enter 激活, issue
- *       26-10-07-0846 真机红验) + 徽章点击不夺行选中;
- *   11: 7 列表头 + 勾选(点行 = 勾选/目录 = 子树三态, 批量条浮出) + 目录三态框 indeterminate
+ *   10: 树渲染(目录聚合徽章/缩进层级) + 交互件收编 name 格(折叠钮在格首/徽章在格尾, 3 列
+ *       行 = 不占列) + 折叠(子树真收拢) + 筛选 chips + 行选中联动右详情(点行/取消)
+ *       + 行级键盘(roving ArrowDown + Enter 激活, issue 26-10-07-0846 真机红验)
+ *       + 徽章点击不夺行选中;
+ *   11: 5 列表头 + 勾选(点行 = 勾选/目录 = 子树三态, 批量条浮出) + 目录三态框 indeterminate
  *       + 徽章循环真提交(POST files/priority 载荷断言) + 拖宽落盘 + 右键隐藏(locked 列无隐藏项)
- *       + 刷新偏好回放 + omitEmpty(无 availability 数据整列省略)。
+ *       + 刷新偏好回放 + 可用性列常驻(无 availability 数据值出 — 占位)。
  *
  * 数据口径: page.route 桩掉 /api/torrents/{hash}/files(裸数组, 同族 spec 手法) ——
  *   3 目录 4 文件覆盖: 完整/半程/未开始 × 优先级三档 × availability 有/无/低。
@@ -81,16 +87,23 @@ for (const skin of SKINS) {
       await expect(anchor.locator('.group-head[data-table="drawerContentV10"]'), '列头隐藏(无表头设计)').toBeHidden();
       await expect(rows).toHaveCount(6);
 
-      // 目录聚合徽章(树行为等价): Season 1 目录行 meta = 2 文件; 文件行缩进 = 目录层 × 14px
+      // 交互件收编 name 格(2026-10-14 复查: 按钮不占列 / 展开钮有层级): 行 = 3 格(name/size/prog),
+      // 折叠钮在 name 格首部(随缩进), 徽章在 name 格尾部 —— 不再有 tgl/prio 两条独立轨道
       const s1 = rows.filter({ hasText: 'Season 1' }).first();
       await expect(s1).toHaveClass(/dir/);
+      await expect(s1).toHaveJSProperty('children.length', 3);
+      await expect(s1.locator('.dt10-n .dt10-tgl'), '折叠钮在 name 格内(随缩进 = 层级)').toBeVisible();
+      await expect(s1.locator('.dt10-n .dt10-pbadge'), '目录行无徽章(优先级是文件动作)').toHaveCount(0);
+
+      // 目录聚合徽章(树行为等价): Season 1 目录行 meta = 2 文件; 文件行缩进 = 目录层 × 14px
       await expect(s1.locator('.dt10-meta')).toContainText('2 文件');
       const e1 = rows.filter({ hasText: 'E01 - intro.mkv' }).first();
       const e1Indent = await e1.locator('.dt10-n').evaluate((el) => parseInt(getComputedStyle(el).paddingLeft, 10));
       const s1Indent = await s1.locator('.dt10-n').evaluate((el) => parseInt(getComputedStyle(el).paddingLeft, 10));
       expect(e1Indent - s1Indent, '树缩进层级差 = 14px/层(D4: 缩进在渲染器)').toBe(14);
+      await expect(e1.locator('.dt10-n .dt10-pbadge'), '徽章在 name 格内(不占列)').toBeVisible();
 
-      // 折叠(anchTouch 桥换代): 子树真收拢, 再点展开
+      // 折叠: 子树真收拢, 再点展开
       await s1.locator('.dt10-tgl').click();
       await expect(rows.filter({ hasText: 'E01 - intro.mkv' }), '折叠后子树收拢').toHaveCount(0);
       await expect(rows).toHaveCount(4);
@@ -143,8 +156,8 @@ for (const skin of SKINS) {
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
       const rows = anchor.locator('.group-row[data-table="drawerContentV11"]');
 
-      // 7 列引擎表头(有 availability 数据 → 可用性列在座) + 行体 = 2 目录 + 4 文件
-      await expect(anchor.locator('.group-head .h-cell')).toHaveCount(7);
+      // 5 列引擎表头(有 availability 数据 → 可用性列在座) + 行体 = 2 目录 + 4 文件
+      await expect(anchor.locator('.group-head .h-cell')).toHaveCount(5);
       await expect(rows).toHaveCount(6);
 
       // 点行 = 勾选(目录 = 整棵子树): 点 Season 1 目录行 → 2 文件全勾 + 批量条浮出
@@ -187,7 +200,8 @@ for (const skin of SKINS) {
       const cols = JSON.parse(await page.evaluate(() => localStorage.getItem('autoqb_cols_v5') || '{}'));
       expect(cols?.pages?.drawerContentV11?.w?.name, '拖宽必须按 table-id 持久化(引擎同一漏斗)').toBeTruthy();
 
-      // 右键隐藏: 勾选/折叠列 locked(隐藏动作项变必显提示, 不可执行), 名称列可隐藏 + 落盘
+      // 右键隐藏: ck/name 两列 locked(交互件在格内: 勾选框/折叠钮/徽章 —— 隐藏动作项变必显提示,
+      // 不可执行); size 列可隐藏 + 落盘
       await anchor.locator('.h-cell.hc-ck').click({ button: 'right' });
       await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '为必显列' }),
         'locked 列(勾选)只出必显提示 —— 隐藏动作不可执行(隐藏即废勾选功能)').toHaveCount(1);
@@ -195,8 +209,12 @@ for (const skin of SKINS) {
         'locked 列无隐藏动作项').toHaveCount(0);
       await page.mouse.click(300, 60); // 点空白收层(Esc 是全局关抽屉快捷键, 不能用)
       await anchor.locator('.h-cell.hc-name').click({ button: 'right' });
-      await page.locator('.ctx-menu').locator('.ctx-item', { hasText: '隐藏「名称」' }).click();
-      await expect(anchor.locator('.group-head .h-cell'), '右键隐藏即时生效').toHaveCount(6);
+      await expect(page.locator('.ctx-menu').locator('.ctx-item', { hasText: '「名称」为必显列' }),
+        'name 列 locked: 折叠钮+徽章在格内, 隐藏 name = 废掉两个交互件(L4)').toHaveCount(1);
+      await page.mouse.click(300, 60);
+      await anchor.locator('.h-cell.hc-size').click({ button: 'right' });
+      await page.locator('.ctx-menu').locator('.ctx-item', { hasText: '隐藏「大小」' }).click();
+      await expect(anchor.locator('.group-head .h-cell'), '右键隐藏即时生效').toHaveCount(4);
 
       // 刷新偏好回放: 模板 + 列偏好都持久化
       await page.reload({ waitUntil: 'domcontentloaded' });
@@ -204,10 +222,10 @@ for (const skin of SKINS) {
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer2 = await openContentVariant(page, '11');
       const anchor2 = drawer2.locator('[data-dt-table-anchor="drawerContentV11"]');
-      await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(6 列)').toHaveCount(6);
+      await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(4 列)').toHaveCount(4);
     });
 
-    test(`dt11 可用性列常驻: 全部文件无 availability → 列不省略, 值出 — 占位(7 列; 26-10-13-0811 删 omitEmpty) @fast (${skin})`, async ({ page }) => {
+    test(`dt11 可用性列常驻: 全部文件无 availability → 列不省略, 值出 — 占位(5 列; 26-10-13-0811 删 omitEmpty) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.route('**/api/torrents/*/files', (route) =>
@@ -221,9 +239,9 @@ for (const skin of SKINS) {
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
 
       /* 2026-10-13 行为变更(计划 26-10-13-0811 L1 铁律): 原 omitEmpty 渐进列随数据整列
-       * 消失 —— 轨道数浮动, 是「多一格/少一列」类症状的温床, 已删。列常驻(7 列),
+       * 消失 —— 轨道数浮动, 是「多一格/少一列」类症状的温床, 已删。列常驻(5 列),
        * 缺值由渲染器 avTxt 出 — 占位。几何一致性另见 dt-table-layout-parity.spec.mjs。 */
-      await expect(anchor.locator('.group-head .h-cell'), '列常驻(渐进已删)').toHaveCount(7);
+      await expect(anchor.locator('.group-head .h-cell'), '列常驻(渐进已删)').toHaveCount(5);
       await expect(anchor.locator('.group-head .hc-av')).toHaveCount(1);
       const avCells = anchor.locator('.group-row .dt11-av');
       const n = await avCells.count();
