@@ -1,4 +1,4 @@
-/* W5 验收量具(计划 26-10-13-0811 §08 #5/#7/#8)—— 三条症状各一条真浏览器量化:
+/* W5 验收量具(计划 26-10-13-0811 §08 #5/#7/#8 + 26-10-14 四复查 #9)—— 四条症状各一条真浏览器量化:
  *   #5 速度实时(症状 5): 注入两轮相邻 peers 响应, 速度格文本变化且 DOM 节点身份不变
  *      —— 「写字段, 不是重建」(L5): keyed 补丁的原节点续用, 重建则 data-live-probe 失踪。
  *   #8 勾选不跳动(症状 8, 变体 11): 连续勾选三行, 行容器 offsetTop 累计偏移为 0、行数
@@ -8,6 +8,12 @@
  *      (columns.js:458 双保险) —— 折叠钮与徽章随 name 格走, 删除 name = 废掉两个交互件.
  *      !2026-10-14 二次复查: ck 勾选框亦收进 name 格(ck 列删除, 拖宽随 name 列), 三交互件
  *      随 name 格走, 删除 name = 废掉三个交互件.
+ *   #9 数据回路点击不跳动(26-10-14 四复查「点击跳动, 持续 0.x 秒后回位」, 变体 10/11):
+ *      优先级徽章点击走 POST→补拉→整帧换帧; 行选中点击走 rerender 整帧换帧。**跳动是瞬态**
+ *      (root cause: 抽屉表格体是长生命周期元素, anchFill 每帧摘插锚 = CSS 入场动画重播,
+ *      整表 translateY(4px) 后 ~0.22s 缓回) —— 点前/点后各拍一张的比对式量具(如 #8 的
+ *      before/after offsetTop)必然错过, 必须**逐帧采样**(rAF + 4ms 定时双路)覆盖整个
+ *      数据回路窗口, 取全程最大偏移。atlas/console 双皮肤都中过招(prism 无该动画规则)。
  * 数据口径沿用 drawer-peers-variant-tables / drawer-content-variant-tables 的桩. */
 import { test, expect } from '@playwright/test';
 import { installRuntimeErrorGuard, collectRuntimeErrors } from './lib/errors.mjs';
@@ -45,6 +51,23 @@ function makeFiles() {
     { name: 'Season 2/E01 - finale.mkv', size: 4_000_000, progress: 0, priority: 0, availability: 0.8 },
     { name: 'bonus.txt', size: 100_000, progress: 1, priority: 1, availability: undefined },
   ];
+}
+
+/* #9 专用: 40 文件 6 目录的高树 —— 表格必须高到可滚动(滚动位非 0 时, 内容塌陷/clamp/
+ * 动画位移才会在采样里现形); 目录/文件交错, nth(20)/nth(21) 落在视口中部(点击不触发
+ * Playwright 自动滚动污染基线)。 */
+function makeFilesTall(n = 40) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      name: `S${1 + (i % 6)}/sub${i % 3}/ep${String(i).padStart(2, '0')} - file.mkv`,
+      size: 1_000_000 + i * 777,
+      progress: (i % 5) / 5,
+      priority: [1, 6, 0, 1, 7][i % 5],
+      availability: i % 4 === 0 ? undefined : 0.3 + (i % 7) / 10,
+    });
+  }
+  return out;
 }
 
 async function openTorrentDrawer(page) {
@@ -191,6 +214,92 @@ for (const skin of SKINS) {
       await expect(anchor.locator('.dt11-n .dt11-ck').first(), '勾选框在 name 格内(不占列, 拖宽随 name)').toBeAttached();
       await expect(anchor.locator('.dt11-n .dt11-tgl').first(), '折叠钮在 name 格内(随缩进 = 层级)').toBeAttached();
       await expect(anchor.locator('.dt11-n .dt11-pbadge').first(), '徽章在 name 格内(不占列)').toBeAttached();
+    });
+
+    /* #9 数据回路点击不跳动(26-10-14 四复查「点击跳动, 持续 0.x 秒后回到原位」) ——
+     * 根因(探针实锤): 抽屉表格体(.group-table/.group-head)是**长生命周期元素**(桥 Teleport
+     * + 锚保活), anchFill 每次整帧换帧把锚**摘下再插回** slot 位 ⇒ CSS 动画重播(元素移除再
+     * 插入 = 动画重启) ⇒ atlas/console 的 page-in 入场动画(translateY(4px) + 淡入, .22s)每
+     * 次点击重渲都整表跳 4px 再缓回。修法 = 两皮肤 views.css 加 .drawer 作用域 animation:none
+     * (主列表表格随视图真重建才播, 不受影响)。**量具口径**: 跳动是瞬态且自回位, before/after
+     * 比对式量具(#8 那种)必然错过 —— 必须逐帧采样(rAF + 4ms 双路)覆盖整个点击窗口取全程最大
+     * 偏移; 这正是前三轮量具全绿而用户仍报跳动的盲区(只测勾选这类纯前端态, 没测数据回路)。
+     * 桩口径: POST 走**真实端点**(harness 命令泵回执 ok) —— 桩掉 POST 会断 waitCmd 链
+     * (无回执⇒不补拉⇒不换帧, 量具空转); GET 在 POST 后翻转 file0 优先级(模拟真后端数据
+     * 变化, 否则 sig 不变跳过换帧)。 */
+    test(`#9 数据回路点击不跳动: 逐帧采样下行/scrollTop 全程零偏移 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      let posted = false;
+      const base = makeFilesTall();
+      page.on('request', (r) => { if (r.url().includes('/files/priority')) posted = true; });
+      await page.route('**/api/torrents/*/files', (route) => {
+        const files = posted ? base.map((f, i) => (i === 0 ? { ...f, priority: 7 } : f)) : base;
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(files) });
+      });
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '10' })));
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+      const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV10"]');
+      await expect(anchor.locator('.group-row').first()).toBeVisible({ timeout: 10_000 });
+
+      // 滚到中部: 滚动位非 0 —— 内容塌陷→clamp 或动画位移都会在采样里现形
+      await drawer.locator('.drawer-body').evaluate((el) => {
+        el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) * 0.45);
+      });
+      await page.waitForTimeout(120);
+
+      // 逐帧采样器(rAF 每帧 + 4ms 定时双路): 钉两行(靠顶部 + 中部)的视口 rect 与 scrollTop
+      await page.evaluate(() => {
+        const sc = document.querySelector('.drawer-body');
+        const P = (window.__jumpProbe = { t0: performance.now(), s: [] });
+        const keys = Array.from(sc.querySelectorAll('.group-row[data-dt-key]'))
+          .map((r) => r.getAttribute('data-dt-key'));
+        const kTop = keys[2], kMid = keys[Math.floor(keys.length / 2)];
+        const rectOf = (k) => {
+          const el = sc.querySelector(`.group-row[data-dt-key="${CSS.escape(k)}"]`);
+          return el ? el.getBoundingClientRect().top : null;
+        };
+        const sample = () => P.s.push({ st: sc.scrollTop, rt: rectOf(kTop), rm: rectOf(kMid) });
+        const iv = setInterval(sample, 4);
+        const raf = () => { sample(); P.raf = requestAnimationFrame(raf); };
+        requestAnimationFrame(raf);
+        P.stop = () => { clearInterval(iv); cancelAnimationFrame(P.raf); };
+      });
+      await page.waitForTimeout(80); // 攒基线采样
+
+      // 点击①: 优先级徽章 → 小菜单 → 最高(POST files/priority → 静默补拉 → 整帧换帧)
+      const badge = anchor.locator('.group-row').nth(21).locator('.dt10-pbadge');
+      await expect(badge, '中部文件行徽章在视口内(点击不触发自动滚动)').toBeVisible();
+      await badge.click();
+      const menu = page.locator('.ctx-menu', { hasText: '最高' });
+      await expect(menu).toBeVisible({ timeout: 3_000 });
+      await menu.locator('.ctx-item', { hasText: '最高' }).click();
+      await page.waitForTimeout(300); // 数据回路窗口内持续采样
+
+      // 点击②: 行选中(rerender 整帧换帧 + 右详情变化)
+      await anchor.locator('.group-row').nth(22).click();
+      await page.waitForTimeout(1600); // 覆盖换帧后的全部余波
+
+      const dev = await page.evaluate(() => {
+        window.__jumpProbe.stop();
+        const s = window.__jumpProbe.s;
+        const b = s[0];
+        return {
+          st: Math.max(...s.map((x) => Math.abs(x.st - b.st))),
+          rt: Math.max(...s.map((x) => (x.rt == null ? 0 : Math.abs(x.rt - b.rt)))),
+          rm: Math.max(...s.map((x) => (x.rm == null ? 0 : Math.abs(x.rm - b.rm)))),
+          n: s.length,
+        };
+      });
+      expect(dev.n, '采样覆盖整个点击窗口(瞬态只有细间隔能抓住)').toBeGreaterThan(200);
+      expect(dev.rt, `数据回路+选中点击: 靠顶行全程零偏移(实测 ${dev.rt}px)`).toBeLessThanOrEqual(0.5);
+      expect(dev.rm, `数据回路+选中点击: 中部行全程零偏移(实测 ${dev.rm}px)`).toBeLessThanOrEqual(0.5);
+      expect(dev.st, `数据回路+选中点击: scrollTop 全程零偏移(实测 ${dev.st}px)`).toBeLessThanOrEqual(0.5);
     });
   });
 }

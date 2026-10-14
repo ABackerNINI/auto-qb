@@ -349,6 +349,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* 视图切换入场 + 弹层关闭淡出 */
 .group-head, .group-table { animation: page-in .22s var(--ease-out); }
+/* !抽屉内表格体不播(2026-10-14 四复查「点击跳动」根因, 与 atlas 同款): 抽屉表格体是长生命周期
+ * 元素(桥 Teleport + 锚保活), anchFill 每帧摘插锚 ⇒ CSS 动画重播 ⇒ 每次点击重渲整表
+ * translateY(4px) 跳动并淡入(~0.22s 回位)。主列表表格随视图真重建才播, 不受影响。 */
+.drawer .group-head, .drawer .group-table, .drawer .h-cell .arrow { animation: none; }
 .pop-leave-active { transition: opacity var(--dur-fast) var(--ease); }
 .pop-leave-to { opacity: 0; }
 

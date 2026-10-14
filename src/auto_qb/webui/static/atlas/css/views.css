@@ -449,6 +449,13 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* 视图切换/信息栏模式切换入场: 与 page-in 同族(只在元素重建时播一次, 数据轮询不重播) */
 .group-head, .group-table { animation: page-in .22s var(--ease-out); }
+/* !抽屉内表格体不播(2026-10-14 四复查「点击跳动」根因): 抽屉表格体是**长生命周期元素** ——
+ * 变体桥 Teleport + 锚保活(anchFill)让 .group-table/.group-head 跨整帧换帧存活, 而 anchFill
+ * 每次换帧把锚元素**摘下再插回** slot 位 ⇒ CSS 动画重播(元素移除再插入 = 动画重启) ⇒ 每次
+ * 点击重渲(行选中/筛选 chips/优先级数据回路 POST→补拉→整帧换)整表 translateY(4px) 跳动并淡入,
+ * ~0.22s 后回位 —— 用户所见「点击跳动, 持续 0.x 秒后回到原位」。主列表表格随视图 v-if 真重建
+ * 才播一次, 不受本条影响; 排序箭头同族(arrow-in 亦随摘插重播), 一并收口。 */
+.drawer .group-head, .drawer .group-table, .drawer .h-cell .arrow { animation: none; }
 
 /* 弹层关闭淡出(enter 仍走各弹层已有的 drop-in 动画; 配合 index.html 的 <transition name="pop">) */
 .pop-leave-active { transition: opacity var(--dur-fast) var(--ease); }
