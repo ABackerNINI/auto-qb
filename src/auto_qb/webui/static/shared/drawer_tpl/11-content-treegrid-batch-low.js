@@ -17,10 +17,10 @@
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 勾选(issue 26-10-07-0846;
  * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 桥声明(U4, 计划 26-10-12-0527, D4=A): 表格体走引擎 —— tableId 对应 app.js
- * DRAWER_TABLE_DEFS.drawerContentV11, 外壳只留版式(工具条/批量条), 5 列引擎行容器
- * (ck/name/size/prog/av —— 折叠钮与优先级徽章 2026-10-14 起收编进 name 格, tgl/prio
- * 两轨道已删, 见 rowsFn 注) + 引擎表头(sticky 吸顶个性反压制), 拖宽/右键隐藏/偏好持久化
- * 落地(ck/name 列 locked —— 隐藏即废功能: 勾选/折叠/徽章三个交互件都在格内)。树聚合/筛选/
+ * DRAWER_TABLE_DEFS.drawerContentV11, 外壳只留版式(工具条/批量条), 4 列引擎行容器
+ * (name/size/prog/av —— 勾选框/折叠钮/优先级徽章 2026-10-14 起收编进 name 格, ck/tgl/prio
+ * 三轨道已删, 见 rowsFn 注) + 引擎表头(sticky 吸顶个性反压制), 拖宽/右键隐藏/偏好持久化
+ * 落地(name 列 locked —— 隐藏即废功能: 勾选/折叠/徽章三个交互件都在格内). 树聚合/筛选/
  * 折叠/勾选判据全在 rowsFn(判据零复制), 行来源读反应式 UI 态(checked/folded/filter,
  * W5 起 Vue.reactive)。排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false +
  * dyn 空键)。行内勾选框三态经分片 :indeterminate 声明式。
@@ -82,13 +82,14 @@
     ".drawer .dt11-list .group-row.empty-row { display:block; border:0; background:transparent; }",
     /* 行内格(呈现归渲染器 tpl-aq-dt11-cells) —— 2026-10-14 复查修法: tgl/prio 两列已删,
      * 折叠钮(格首, 随缩进)与优先级徽章(格尾, margin-left:auto 右对齐)都收编进 name 格,
-     * 行只剩 ck/name/size/prog/av 五轨; name 格 = flex, 名称可省略, chips/钮 flex:none 不缩。 */
+     * 二次复查: ck 勾选框亦收进 name 格首(随缩进, flex:none 不缩), 行只剩 name/size/prog/av
+     * 四轨; name 格 = flex, 名称可省略, ck/chips/钮 flex:none 不缩. */
     ".drawer .dt11-tgl { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;",
     "  padding:0; background:none; border:0; color:var(--fg-dim); cursor:pointer; flex:none; }",
     ".drawer .dt11-tgl:hover { color:var(--fg); }",
     ".drawer .dt11-tgl .ico { width:11px; height:11px; transition:transform var(--dur) var(--ease); }",
     ".drawer .dt11-tgl.closed .ico { transform:rotate(-90deg); }",
-    ".drawer .dt11-ck { width:13px; height:13px; margin:0; accent-color:var(--accent); cursor:pointer; }",
+    ".drawer .dt11-ck { width:13px; height:13px; margin:0; accent-color:var(--accent); cursor:pointer; flex:none; }",
     ".drawer .dt11-n { display:flex; align-items:center; gap:6px; min-width:0; }",
     ".drawer .dt11-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg); }",
     ".drawer .dt11-list .group-row.dir .dt11-nm { font-weight:600; color:var(--fg-soft); }",

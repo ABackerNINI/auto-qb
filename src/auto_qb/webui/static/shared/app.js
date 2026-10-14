@@ -314,19 +314,22 @@ const DRAWER_TRACKER_V06_COLUMNS = [
  *     同层, 层级直接可视)。
  *   tgl/prio 两列自此删除(终态: 10 = name/size/prog 三列; 11 = ck/name/size/prog/av 五列),
  *   交互件随 name 格走 ⇒ **name 列 locked**(L4 续效: 隐藏 name = 一并废掉折叠钮与徽章
- *   两个交互件; ck 列同口径)。用户已存列偏好按 key 求交, tgl/prio 陈旧键自然失效, 免迁移。 */
+ *   两个交互件; ck 列同口径)。用户已存列偏好按 key 求交, tgl/prio 陈旧键自然失效, 免迁移。
+ *   !2026-10-14 用户二次复查(报告 26-10-14-0136 §02 续): ck 勾选框仍独立成列且拖宽可调 ——
+ *   勾选框收进 **name 格首部随缩进**(与节点同层, 不占轨道); ck 列自此删除(终态: 11 =
+ *   name/size/prog/av 四列), 勾选框随 name 格走 ⇒ name 列 locked 续效(隐藏 name = 一并废
+ *   掉勾选框/折叠钮/徽章三个交互件)。用户已存列偏好按 key 求交, ck 陈旧键自然失效, 免迁移。 */
 const DRAWER_CONTENT_V10_COLUMNS = [
   { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 折叠钮+徽章在格内, 隐藏即废 */
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "128px", sortable: false, align: "left" },
 ];
 const DRAWER_CONTENT_V11_COLUMNS = [
-  { key: "ck", label: "", tpl: "26px", sortable: false, locked: true, align: "left" },
-  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 折叠钮+徽章在格内, 隐藏即废 */
+  { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 勾选框+折叠钮+徽章在格内, 隐藏即废 */
   { key: "size", label: "大小", tpl: "78px", sortable: false, align: "right" },
   { key: "prog", label: "进度", tpl: "130px", sortable: false, align: "left" },
   /* omitEmpty 已删(计划 26-10-13-0811 L1 铁律: 渐进列轨道数随数据浮动, 是「多一格/少一列」
-   * 类症状的温床); 列常驻, 缺值由渲染器 avTxt 出 — 占位。 */
+   * 类症状的温床); 列常驻, 缺值由渲染器 avTxt 出 — 占位. */
   { key: "av", label: "可用性", tpl: "62px", sortable: false, align: "right" },
 ];
 const DRAWER_FILE_COLUMNS = [

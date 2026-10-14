@@ -153,21 +153,25 @@
   </template>
 </script>
 
-<!-- dt11 树表批量(U4): 引擎行容器 5 列(勾选/树缩进格/大小/进度/[可用性])。
+<!-- dt11 树表批量(U4): 引擎行容器 4 列(树缩进格/大小/进度/[可用性])。
      行内勾选框三态经 :checked/:indeterminate 声明式(原生 property, Vue patch 直持 ——
      目录 = 整棵子树三态, 判据在变体 rowsFn); 勾选集变更走 change 事件冒泡(变体委托)。
      2026-10-14 用户复查修法(报告 26-10-14-0136 §02): tgl/prio 两条独立轨道已删 —— 折叠钮
      收编进 name 格首部(随缩进 = 层级可视), 徽章收编进 name 格尾部(右对齐不占轨道);
-     name 列 locked(L4: 交互件随格走)。优先级徽章 data-act="prio-cycle"(点击循环, 逐次真实提交)。 -->
+     name 列 locked(L4: 交互件随格走)。优先级徽章 data-act="prio-cycle"(点击循环, 逐次真实提交)。
+     !2026-10-14 用户二次复查(报告 26-10-14-0136 §02 续): ck 勾选框仍独立成列且拖宽可调 ——
+     勾选框收进 name 格首部随缩进(与节点同层, 不占轨道); ck 列自此删除(终态: 11 =
+     name/size/prog/av 四列), 勾选框随 name 格走 ⇒ name 列 locked 续效(隐藏 name = 一并废
+     掉勾选框/折叠钮/徽章三个交互件)。 -->
 <script type="text/x-template" id="tpl-aq-dt11-cells">
   <span v-if="p.kind === 'empty'" class="dt11-empty">该筛选下没有文件</span>
   <template v-else v-for="col in cols" :key="col.key">
-    <input v-if="col.key === 'ck' && p.dir" type="checkbox" class="dt11-ck" data-act="dirck"
-           :data-path="p.path" :checked="p.ckState === 2" :indeterminate="p.ckState === 1"
-           :title="'勾选 = 整棵子树(' + p.subFiles + ' 个文件)'">
-    <input v-else-if="col.key === 'ck'" type="checkbox" class="dt11-ck" data-act="ck"
-           :data-path="p.path" :checked="p.ckState === 2" title="勾选该文件">
-    <span v-else-if="col.key === 'name'" class="dt11-n" :style="{ paddingLeft: p.indent + 'px' }" :title="p.path">
+    <span v-if="col.key === 'name'" class="dt11-n" :style="{ paddingLeft: p.indent + 'px' }" :title="p.path">
+      <input v-if="p.dir" type="checkbox" class="dt11-ck" data-act="dirck"
+             :data-path="p.path" :checked="p.ckState === 2" :indeterminate="p.ckState === 1"
+             :title="'勾选 = 整棵子树(' + p.subFiles + ' 个文件)'">
+      <input v-else type="checkbox" class="dt11-ck" data-act="ck"
+             :data-path="p.path" :checked="p.ckState === 2" title="勾选该文件">
       <button v-if="p.dir" type="button" class="dt11-tgl" :class="{ closed: p.folded }"
               data-act="fold" :data-path="p.path" :title="(p.folded ? '展开' : '折叠') + ' ' + p.name"><svg class="ico" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg></button>
       <svg class="ico" viewBox="0 0 16 16"><use :href="p.dir ? '#i-folder' : '#i-list'"></use></svg>

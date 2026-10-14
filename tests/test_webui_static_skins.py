@@ -1093,10 +1093,13 @@ def test_drawer_table_bridge_wiring():
     assert ":indeterminate=" in m3.group(1) and ":checked=" in m3.group(1), \
         "dt11 渲染器缺勾选框 :checked/:indeterminate 声明式(子树三态)"
     # 2026-10-14 用户复查修法(报告 26-10-14-0136 §02「操作按钮独立成列 / 展开按钮没有层级」):
-    # tgl/prio 两条交互轨道已删 —— 折叠钮收编进 name 格首部(随缩进 = 层级可视), 优先级徽章
+    # tgl/prio 两条交互轨道已删 —— 折叠钮收编进 name 格首部(随缩进 =层级可视), 优先级徽章
     # 收编进 name 格尾部(margin-left:auto 右对齐, 不占轨道); name 列 locked(L4 续效: 交互件
     # 随格走, 隐藏 name = 一并废掉折叠钮与徽章)。回潮判据三条: 列集无 tgl/prio 键 / name 列
     # locked / 两个交互件都在 name 分支里(整分片只有一处 fold 与一处徽章动作属性)。
+    # !2026-10-14 用户二次复查(报告 26-10-14-0136 §02 续): ck 勾选框仍独立成列且拖宽可调 ——
+    # 勾选框收进 name 格首(随缩进); ck 列删除(终态 11 = name/size/prog/av 四列), 回潮判据
+    # 续: 列集无 ck 键(dt11)/ 勾选框动作恰一次且 name 分支内.
     for comp, colconst, badge_act in (
         ("dt10", "DRAWER_CONTENT_V10_COLUMNS", "prio-menu"),
         ("dt11", "DRAWER_CONTENT_V11_COLUMNS", "prio-cycle"),
@@ -1107,9 +1110,13 @@ def test_drawer_table_bridge_wiring():
             f"{colconst} 的 tgl/prio 独立列回潮 —— 折叠钮/徽章须收编进 name 格(用户 2026-10-14 复查: "
             f"「操作按钮独立成列」「展开按钮没有层级」)"
         )
+        assert "ck" not in keys, (
+            f"{colconst} 的 ck 独立列回潮 —— 勾选框须收进 name 格(用户 2026-10-14 二次复查: "
+            f"「复选框仍然独立成列, 还能调整位置」)"
+        )
         name_col = re.search(r'\{ key: "name"[^{}]*\}', m3.group(1))
         assert name_col and "locked: true" in name_col.group(0), (
-            f"{colconst} 的 name 列必须 locked(折叠钮+徽章在格内, 隐藏 name = 废掉两个交互件, L4)"
+            f"{colconst} 的 name 列必须 locked(交互件在格内, 隐藏 name = 废掉交互件, L4)"
         )
         tpl_blk = re.search(
             r'<script type="text/x-template" id="tpl-aq-%s-cells">(.*?)</script>' % comp, cells_dt, re.S
@@ -1118,6 +1125,9 @@ def test_drawer_table_bridge_wiring():
             f"{comp} 渲染器折叠钮须恰一次且在 name 格内(独立列回潮 = 层级丢失)"
         assert tpl_blk.count(f'data-act="{badge_act}"') == 1, \
             f"{comp} 渲染器徽章动作须恰一次且在 name 格内(独立列回潮 = 按钮占列)"
+        if comp == "dt11":
+            assert tpl_blk.count('data-act="ck"') == 1 and tpl_blk.count('data-act="dirck"') == 1, \
+                f"{comp} 渲染器勾选框动作须恰一次(文件 ck + 目录 dirck)且收进 name 格内(独立列回潮 = 拖宽可调)"
 
     # ⑩ stub 变体: ?dtstub 门 + 桥声明 + 稳定 HTML 不变量
     stub = read("drawer_tpl", "90-peers-stub-bridge.js")

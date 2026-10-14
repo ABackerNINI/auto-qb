@@ -5,8 +5,10 @@
  *      不变、行 DOM 身份不变 —— 勾选态进驱动数据(反应式), 不走 anchTouch 换代重挂。
  *   #7 按钮不占列(症状 7, 变体 11): 交互件锁定不可被列管理删除 —— 2026-10-14 复查后交互件
  *      已收编进 name 格(ck 勾选列 locked / name 列 locked), 右键隐藏菜单不渲染其勾选框
- *      (columns.js:458 双保险) —— 折叠钮与徽章随 name 格走, 删除 name = 废掉两个交互件。
- * 数据口径沿用 drawer-peers-variant-tables / drawer-content-variant-tables 的桩。 */
+ *      (columns.js:458 双保险) —— 折叠钮与徽章随 name 格走, 删除 name = 废掉两个交互件.
+ *      !2026-10-14 二次复查: ck 勾选框亦收进 name 格(ck 列删除, 拖宽随 name 列), 三交互件
+ *      随 name 格走, 删除 name = 废掉三个交互件.
+ * 数据口径沿用 drawer-peers-variant-tables / drawer-content-variant-tables 的桩. */
 import { test, expect } from '@playwright/test';
 import { installRuntimeErrorGuard, collectRuntimeErrors } from './lib/errors.mjs';
 import { BASE_URL, SKINS } from './harness.mjs';
@@ -185,8 +187,8 @@ for (const skin of SKINS) {
       // !勿用 Esc 收菜单 —— lifecycle 的 Esc 链优先关抽屉(drawerVisible 分支先于 headMenu),
       // 会把面板整个关掉。headMenuHide 已自收菜单, 这里直接做终态断言。
 
-      // 终态不变量: 三类交互格子全部还在(勾选框 = ck 列; 折叠钮/徽章 = name 格内)
-      await expect(anchor.locator('.dt11-ck').first()).toBeAttached();
+      // 终态不变量: 三类交互件全部还在(勾选框/折叠钮/徽章 = 收进 name 格内, 2026-10-14 二次复查)
+      await expect(anchor.locator('.dt11-n .dt11-ck').first(), '勾选框在 name 格内(不占列, 拖宽随 name)').toBeAttached();
       await expect(anchor.locator('.dt11-n .dt11-tgl').first(), '折叠钮在 name 格内(随缩进 = 层级)').toBeAttached();
       await expect(anchor.locator('.dt11-n .dt11-pbadge').first(), '徽章在 name 格内(不占列)').toBeAttached();
     });

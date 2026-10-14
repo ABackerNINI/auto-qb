@@ -36,7 +36,7 @@ const CASES = [
   /* W2 修复面: 偏移根因 = 变体覆写行几何时不带列头(06: 14-8=6px; 11: 14-4=10px + gap 8≠10 逐列累计)。
    * 修法 = --tbl-pad-x / --tbl-gap 变量, 列头与行同取, 变体只声明值。 */
   { tab: 'trackers', tpl: '06', tid: 'drawerTrackerV06', cols: 8 },
-  { tab: 'content', tpl: '11', tid: 'drawerContentV11', cols: 5 },
+  { tab: 'content', tpl: '11', tid: 'drawerContentV11', cols: 4 },
   /* W3 实测自洽面(探针 2026-10-13): 05 单列分段(列头 1 格 = 行 1 格); 07/08 十列
    * (files 渐进列已删, 列常驻)。 */
   { tab: 'trackers', tpl: '05', tid: 'drawerTrackerV05', cols: 1 },
