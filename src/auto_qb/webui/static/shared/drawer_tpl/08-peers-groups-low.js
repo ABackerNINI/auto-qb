@@ -146,15 +146,13 @@
     "  font-size:11.5px; color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt08-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt08-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg-dim); }",
-    /* 速度微条: 上传 = --today-up / 下载 = --today-down(方向色令牌) */
+    /* 速度数值: 上传 = --today-up / 下载 = --today-down(方向色令牌) */
     ".drawer .dt08-spd { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }",
     ".drawer .dt08-spd b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px;",
     "  line-height:1; white-space:nowrap; }",
     ".drawer .dt08-spd.u b { color:var(--today-up); }",
     ".drawer .dt08-spd.d b { color:var(--today-down); }",
     ".drawer .dt08-spd b.z { color:var(--fg-dim); font-weight:400; }",
-    ".drawer .dt08-spd .track { width:100%; height:3px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; }",
-    ".drawer .dt08-spd .track i { display:block; height:100%; border-radius:999px; }",
     ".drawer .dt08-amt { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-soft); text-align:right; white-space:nowrap; }",
     ".drawer .dt08-amt.z { color:var(--fg-dim); }",
@@ -209,7 +207,7 @@
   const fmtSizeOf = (v) => _ctx.fmtSize(v);
 
   /* ---------------- 行装配(U2: 数据判据在这里, 呈现在渲染器分片; 分段 = 分桶) ---------------- */
-  function rowOf(ctx, p, maxUp, maxDown) {
+  function rowOf(ctx, p) {
     const f = flagTokens(p);
     const lan = isLanIp(p.ip);
     const up = num(p.upspeed), down = num(p.dlspeed);
@@ -233,8 +231,6 @@
       uploaded: num(p.uploaded) > 0 ? ctx.fmtSize(num(p.uploaded)) : "0",
       downloaded: num(p.downloaded) > 0 ? ctx.fmtSize(num(p.downloaded)) : "0",
       relevance: Math.round((p.relevance || 0) * 100) + "%",
-      upBar: up > 0 && maxUp > 0 ? Number((up / maxUp * 100).toFixed(1)) : 0,
-      downBar: down > 0 && maxDown > 0 ? Number((down / maxDown * 100).toFixed(1)) : 0,
       _raw: {
         addr, client: String(p.client || ""), flags: String(p.flags || ""),
         progress: p.progress || 0, dlspeed: down, upspeed: up,
@@ -248,13 +244,11 @@
    * 分桶判据与外壳 render 同一条(GROUPS × bucketOf × onlyMoving) —— 桥段与锚槽一一对应。 */
   function rowsFn(ctx) {
     const list = peerList(ctx);
-    const maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
-    const maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
     for (const p of list) buckets[bucketOf(p)].push(p);
     return GROUPS
       .filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet))
-      .map((g) => ({ key: g.key, rows: buckets[g.key].map((p) => rowOf(ctx, p, maxUp, maxDown)) }));
+      .map((g) => ({ key: g.key, rows: buckets[g.key].map((p) => rowOf(ctx, p)) }));
   }
 
   function groupHtml(g, ms) {

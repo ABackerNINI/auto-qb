@@ -268,11 +268,9 @@
       </div>
       <div v-else-if="col.key === 'upspeed'" class="dt07-spd u" title="我方发给该对端的即时速度(qB upspeed)">
         <b :class="{ z: !p._raw.upspeed }">{{ p.upspeed }}</b>
-        <span v-if="p.upBar" class="track"><i :style="{ width: p.upBar + '%' }"></i></span>
       </div>
       <div v-else-if="col.key === 'dlspeed'" class="dt07-spd d" title="我方从该对端收到的即时速度(qB dlspeed)">
         <b :class="{ z: !p._raw.dlspeed }">{{ p.dlspeed }}</b>
-        <span v-if="p.downBar" class="track"><i :style="{ width: p.downBar + '%' }"></i></span>
       </div>
       <div v-else-if="col.key === 'uploaded'" class="dt07-amt" :class="{ z: !p._raw.uploaded }" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
       <div v-else-if="col.key === 'downloaded'" class="dt07-amt" :class="{ z: !p._raw.downloaded }" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>
@@ -301,11 +299,9 @@
       </div>
       <div v-else-if="col.key === 'upspeed'" class="dt08-spd u" title="我方发给该对端的即时速度(qB upspeed)">
         <b :class="{ z: !p._raw.upspeed }">{{ p.upspeed }}</b>
-        <span v-if="p.upBar" class="track"><i :style="{ width: p.upBar + '%' }"></i></span>
       </div>
       <div v-else-if="col.key === 'dlspeed'" class="dt08-spd d" title="我方从该对端收到的即时速度(qB dlspeed)">
         <b :class="{ z: !p._raw.dlspeed }">{{ p.dlspeed }}</b>
-        <span v-if="p.downBar" class="track"><i :style="{ width: p.downBar + '%' }"></i></span>
       </div>
       <div v-else-if="col.key === 'uploaded'" class="dt08-amt" :class="{ z: !p._raw.uploaded }" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
       <div v-else-if="col.key === 'downloaded'" class="dt08-amt" :class="{ z: !p._raw.downloaded }" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>

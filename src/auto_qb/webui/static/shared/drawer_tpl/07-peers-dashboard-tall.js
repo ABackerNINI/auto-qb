@@ -186,15 +186,13 @@
     "  color:var(--fg-muted); width:40px; text-align:right; }",
     ".drawer .dt07-prog.zero em { color:var(--fg-dim); }",
     ".drawer .dt07-none { font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg-dim); }",
-    /* 速度微条: 上传 = --today-up(与卡 1 上传去向分段同色联动) / 下载 = --today-down */
+    /* 速度数值: 上传 = --today-up(与卡 1 上传去向分段同色联动) / 下载 = --today-down */
     ".drawer .dt07-spd { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }",
     ".drawer .dt07-spd b { font-family:var(--font-mono, ui-monospace, monospace); font-weight:600; font-size:12px;",
     "  line-height:1; white-space:nowrap; }",
     ".drawer .dt07-spd.u b { color:var(--today-up); }",
     ".drawer .dt07-spd.d b { color:var(--today-down); }",
     ".drawer .dt07-spd b.z { color:var(--fg-dim); font-weight:400; }",
-    ".drawer .dt07-spd .track { width:100%; height:3px; border-radius:999px; background:var(--bg-sunken); overflow:hidden; }",
-    ".drawer .dt07-spd .track i { display:block; height:100%; border-radius:999px; }",
     ".drawer .dt07-list .group-row.bad .dt07-spd.u b { color:var(--error); }",
     ".drawer .dt07-amt { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-soft); text-align:right; white-space:nowrap; }",
@@ -280,7 +278,6 @@
     }).join("");
     const tip = top.length
       ? "上传去向(按占比): " + top.map((k) => k + " " + (byClient[k] / denom * 100).toFixed(1) + "%").join(" · ")
-        + " — 与列表行内速度微条同色(--today-up)"
       : "当前无上传对端";
     return T`<div class="dt07-card">
       <div class="dt07-label"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pulse"></use></svg>实时流量</div>
@@ -363,7 +360,7 @@
     if (f === "all") return list;
     return list.filter((p) => countOf([p], f) > 0);
   }
-  function rowOf(ctx, p, maxUp, maxDown) {
+  function rowOf(ctx, p) {
     const f = flagTokens(p);
     const lan = isLanIp(p.ip);
     const up = num(p.upspeed), down = num(p.dlspeed);
@@ -387,8 +384,6 @@
       uploaded: num(p.uploaded) > 0 ? ctx.fmtSize(num(p.uploaded)) : "0",
       downloaded: num(p.downloaded) > 0 ? ctx.fmtSize(num(p.downloaded)) : "0",
       relevance: Math.round((p.relevance || 0) * 100) + "%",
-      upBar: up > 0 && maxUp > 0 ? Number((up / maxUp * 100).toFixed(1)) : 0,
-      downBar: down > 0 && maxDown > 0 ? Number((down / maxDown * 100).toFixed(1)) : 0,
       _raw: {
         addr, client: String(p.client || ""), flags: String(p.flags || ""),
         progress: p.progress || 0, dlspeed: down, upspeed: up,
@@ -398,12 +393,10 @@
         .filter(Boolean).join(" ") || null,
     };
   }
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 微条满刻度按全量列表算(与原口径一致) */
+  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows) */
   function rowsFn(ctx) {
     const list = peerList(ctx);
-    const maxUp = Math.max.apply(null, [1].concat(list.map((p) => num(p.upspeed))));
-    const maxDown = Math.max.apply(null, [1].concat(list.map((p) => num(p.dlspeed))));
-    return filtered(list).map((p) => rowOf(ctx, p, maxUp, maxDown));
+    return filtered(list).map((p) => rowOf(ctx, p));
   }
 
   let _ctx = null; /* render 期只读引用(纯格式化; 动作链仍走 host.__dtCtx) */
