@@ -81,9 +81,10 @@ window.AQB_DRAWER_STORE = {
     },
     _startDrawerPoll() {
       this._stopDrawerPoll();
-      // P1-4: 3s → 5s。抽屉是观察用途, peers/trackers 秒级变化对操作没有意义;
-      // 而每次轮询都要 Web 线程直连 qB(peers 走 sync/torrentPeers, 响应体随 peer 数增长),
-      // 在主循环之外额外占用 qB。5s 仍远快于人工观察节奏。
+      // 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 → 主节拍 currentPollMs()
+      // (种子页刷新间隔, 按种子量分档 1.5/2/3s) —— 实时速度与行数据同频观。旧 P1-4 把 5s 省 qB
+      // 直连成本但把速度滞后直接卖掉, 用户口径是同频; 服务端 peers 短缓存(1s)窗口仍窗口外,
+      // trackers 默认 2s 缓存把 1.5s 档里的白拉吸收。失败退背随 currentPollMs 同主轮退背。
       this._drawerTimer = setInterval(() => {
         if (!this.drawer.open || document.hidden) return;
         // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随主内容页 v-if 出入,
@@ -100,11 +101,11 @@ window.AQB_DRAWER_STORE = {
         }
         if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
-      }, 5000);
+      }, this.currentPollMs());
     },
     /* W2 请求代际纪律: 四个 fetcher 均带可选 seq(0 = 无代际约束, 走 hash 戳守卫) ——
      * 换 hash(跟随/显式打开)或换代际(切页签)后, 在途旧响应一律丢弃, 防止慢响应把新目标的
-     * 详情/列表覆盖成旧的。hash 戳另兜一路: 5s 轮询(seq=0)发出后恰逢跟随换目标, 响应也不落袋。 */
+     * 详情/列表覆盖成旧的。hash 戳另兜一路: 抽屉轮询(seq=0)发出后恰逢跟随换目标, 响应也不落袋。 */
     _drawerStale(hash, seq) {
       return this.drawer.hash !== hash || (!!seq && seq !== this._drawerLoadSeq);
     },
@@ -138,7 +139,7 @@ window.AQB_DRAWER_STORE = {
         this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
-        // P3-5: 失败标记落 state(过期响应不动它, 属于在途的新目标); 5s 轮询期(silent)也落,
+        // P3-5: 失败标记落 state(过期响应不动它, 属于在途的新目标); 抽屉轮询期(silent)也落,
         // 否则静默失败变体永远停在空态
         if (!this._drawerStale(hash, seq)) this.drawer.trackersError = e.message || "tracker 列表获取失败";
       } finally {

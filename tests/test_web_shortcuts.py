@@ -1123,8 +1123,10 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     # --- 前波移交观察项收口: 面板不可见(切走页面/视图)即停轮询拉取(定时器不拆, 回页自恢复) ---
     drawer_js = _read("drawer.js")
     store_js = _read("drawer_store.js")  # W1: 页签轮询收口在数据层
-    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", store_js, re.S)
-    assert poll, "drawer_store.js 找不到 trackers/peers 5s 轮询 tick(W1 起轮询收口在数据层)"
+    poll = re.search(
+        r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, this\.currentPollMs\(\)\);", store_js, re.S
+    )
+    assert poll, "drawer_store.js 找不到 trackers/peers 主节拍轮询 tick(W1 起轮询收口在数据层)"
     pb = poll.group(1)
     assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
     # 2026-10-08(计划 26-10-08-1217): 面板三视图共用, 轮询只挡非主内容页 —— 在辅种页/追剧页展开的

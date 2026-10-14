@@ -1886,9 +1886,9 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
             assert "自动重试" not in text and "自动刷新" not in text, \
                 f"drawer_tpl/{name}: content 组无轮询, 失败文案不得虚构自动重试承诺(P3-5 口径)"
         else:
-            # trackers/peers 组 5s 轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
+            # trackers/peers 组主节拍轮询真实存在(_startDrawerPoll): 可写「下次自动刷新时重试」
             assert "下次自动刷新时重试" in text, \
-                f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(5s 轮询真实)"
+                f"drawer_tpl/{name}: trackers/peers 组失败文案应带自动刷新重试口径(轮询真实)"
 
 
 def test_drawer_tpl_content_row_keyboard_roving():
@@ -2570,9 +2570,11 @@ def test_frontend_drawer_groups_shows_views():
     follow = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert follow and "viewMode" not in follow.group(1), \
         "_kbFollowDrawer 不得再挡视图(三视图共用: 辅种/追剧成员行光标同样要跟随)"
-    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", store_js, re.S)
+    poll = re.search(
+        r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, this\.currentPollMs\(\)\);", store_js, re.S
+    )
     assert poll and "viewMode" not in poll.group(1), \
-        "5s 轮询 tick 不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
+        "主节拍轮询 tick 不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
     tor = re.search(r"  torrent: \{(.*?)\n  \},", chart_js, re.S)
     assert tor, "qb_traffic_chart.js 缺 torrent 作用域(单种流量图)"
     assert "viewMode" not in tor.group(1), \

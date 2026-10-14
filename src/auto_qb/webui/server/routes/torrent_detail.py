@@ -74,7 +74,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         manager.web.touch()
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
-        # peers 是"活"数据: 窗口更短(1s), 抽屉 5s 轮询本就在窗口外
+        # peers 是"活"数据: 窗口更短(1s), 抽屉主节拍轮询(>=1.5s)仍窗口外
         return JSONResponse(
             content=_cached_read(
                 f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0

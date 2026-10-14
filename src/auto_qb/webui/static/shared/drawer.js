@@ -924,7 +924,7 @@ window.AQB_DRAWER = {
     },
     /* ---------------- 种子详情面板(R1B → 方案A 底部停靠, 计划 26-10-03-0917 W1/W2) ----------------
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
-     * trackers/peers 在对应 tab 激活期间 5s 轮询(页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
+     * trackers/peers 在对应 tab 激活期间主节拍轮询(2026-10-14 改, =currentPollMs; 页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
      * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。
      * 形态: 右缘浮层改为底部停靠面板(2026-10-04 起落点为 app 级 .drawer-dock, 可见性由 drawerVisible
      * 按形态把守) —— 无遮罩, open 只负责挂状态与拉数据; close 只收面板。
@@ -1033,7 +1033,7 @@ window.AQB_DRAWER = {
      *      在辅种页/追剧页同样命中, 三视图一体化: 计划 26-10-08-1217);
      *   2) 防抖 200ms —— 连发上下键不逐行拉详情, 停稳才发;
      *   3) 在途请求代际 seq —— _loadDrawerTab 每次 bump, 换 hash 后旧响应一律丢弃(见上);
-     *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内 5s 轮询(_startDrawerPoll)照旧, 互不打架。 */
+     *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内主节拍轮询(_startDrawerPoll)照旧, 互不打架。 */
     _kbFollowDrawer() {
       if (!this.drawer.open) return;
       if (this.page !== "groups") return;  // 主内容页守卫(面板停靠落点; 三视图共用)
