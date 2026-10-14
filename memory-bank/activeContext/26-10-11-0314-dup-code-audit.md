@@ -1,7 +1,7 @@
 # 全仓重复代码审查 · 轮 15–16(webui 全包)
 
 > 摘要: 用户「做 Phase 1 webui 部分」→ 按计划 `26-10-10-2333` 执行 **Phase 1 后端 webui 包 = 轮 15–16**(轮 15 路由层 factory·context·auth·lifecycle·common·static_ui·traffic_qb + routes/*, ~2282 行 · 20 文件; 轮 16 表现层 runtime·views·commands·module, ~3851 行 · 4 文件)。**纯审查轮, 零源码改动**: 滚动报告 `26-10-11-0033` 追加 §18–§19 + 累计计数 §20 + issue 表 §21; webui 24 项发现(A9/B2/C7/D6), 全局累计 122 项(A47/B10/C31/D34); 入池 **webui 10 条 refactor issue**(专题 `dup-code-audit`, 均 Open 未认领)。S2 提名实测: pylint R0801(=6) 对 webui 0 命中、jscpd python 0 clone —— 与 config/core/hr 同结论。
-> 最后活动: 2026-10-11 16:10
+> 最后活动: 2026-10-15 04:54
 
 **Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/tasks/26-10-11-webui-dup-code-fixes.md
 
@@ -11,6 +11,7 @@
 - **webui 10 条 refactor issue 已入池**(均 Open, 未认领): `webui-route-cmd-boilerplate-dup` / `webui-status-payload-dup` / `webui-hr-route-guard-dup` / `webui-sidecar-dir-convention-dup` / `webui-partial-publish-merge-dup` / `webui-cmd-pair-handlers-dup` / `webui-bulk-receipt-boilerplate-dup` / `webui-virtual-tracker-prefix-dup` / `webui-seed-view-restate-dup` / `webui-cross-layer-constant-convention-dup`。
 - **下一轮候选**: Phase 1 后端轮 17(rules/); 或按用户偏好调整顺序。每轮开工另立会话, 按 S1–S6 走。
 - **〔2026-10-11 16:10 修复轮〕** 用户「修复 webui 部分问题 + 相关 issue 一并认领」→ 认领方档案 [26-10-11-webui-dup-code-fixes](../tasks/26-10-11-webui-dup-code-fixes.md): 10 条中 **7 条已修完置 Done**(virtual-tracker-prefix / status-payload / sidecar-dir / hr-route-guard / cmd-pair-handlers / bulk-receipt / seed-view-restate), 行为逐字不变; **3 条按拍板留 Open**(partial-publish-merge 热路径 / cross-layer-constant 跨层常量 / route-cmd-boilerplate 表驱动)。5 条新守阵均过红验, test.full 数字见 `kb.baseline`。
+- **〔2026-10-15 04:54 partial-publish-merge 认领修〕** 用户显式指派「认领并修复 `26-10-11-0309-refactor-webui-partial-publish-merge-dup.html`」→ 上轮按拍板留 Open 的热路径项(「各自批次」到手): `runtime._publish_partial_locked` 四段(groups/singles/flat/shows)合并骨架抽 `_merge_rows` 静态单点(键名传字符串而非 key_of 可调用, 核心热路径不加 per-row 调用), 行为逐字不变; 既有 S5 镜子 + S6「局部==全量」双保险全绿, 另新增 2 守阵(合并契约直测 + 静态零重复, 红验过); test.full 数字见 `kb.baseline` 最新切片 `26-10-15-0454`; issue 置 `Done`(修法记录见档案 + issue 05 段)。webui 10 条 refactor 现状 **9 Done / 1 Open**(仅剩 route-cmd-boilerplate; cross-layer-constant 同日由 R2 续轮修完)。
 
 ## 关键结论(供后续执行参考)
 

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0309">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 局部发布四段『重建脏行/保留未脏/追加』骨架重复">
 <meta name="issue-summary" content="runtime._publish_partial_locked 的 groups/singles/flat/shows 四段同骨架">
 <title>webui 局部发布四段『重建脏行/保留未脏/追加』骨架重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0309-refactor-webui-partial-publish-merge-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,8 +95,16 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-15 — 修完并验证(实际修法见 05 段; 测试数字见 <code>commands run kb.baseline</code> 最新切片 <code>26-10-15-0454</code>), 状态 <strong>Done</strong></li>
+      <li>2026-10-15 — 认领(用户显式指派「认领并修复」, 即上轮修复轮按拍板留 Open 的「各自批次」; 认领方 <code>memory-bank/tasks/26-10-11-webui-dup-code-fixes.md</code> 追加), 状态 <strong>In Progress</strong></li>
       <li>2026-10-11 03:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（认领后补）</span></h2>
+    <p><b>修法:</b> <code>webui/runtime.py</code> 四段(groups/singles/flat/shows)合并骨架抽 <code>_merge_rows(old_view, key_field, rebuilt, removed)</code> 静态单点 —— 逐行只做一次 dict 取键 + 集合成员判定, 键名传字符串而非 key_of 可调用(核心热路径, 不为逐行多付一次函数调用); 引用稳定契约逐字不变(未脏行同一 dict 原样保留、脏行新对象、removed 键剔除、新增行追加尾部), 组段调用方传 encode 后的 <code>enc_rm</code> 键空间(与行键 <code>r["key"]</code> 同一空间)。行为零变化: 合并顺序、pop 语义、尾部追加与四段各自内联时逐字一致。</p>
+    <p><b>验证:</b> 双保险既有守阵全绿 —— S5 镜子(<code>tests/test_webui_delta_mirror.py</code> M1-M12 + fuzz) + S6「局部重算 == 全量重跑」单测(<code>tests/test_webui_delta.py</code>); 新增 2 条守阵: <code>test_merge_rows_single_point_semantics</code>(合并契约直测) + <code>test_publish_partial_merge_skeleton_single_point</code>(静态: 调用方 4 个调用点 + 内联骨架零残留 —— 红验 = 抄回一份内联骨架即判红)。收口 <code>test.full</code> 全绿(数字见 kb.baseline 最新切片 <code>26-10-15-0454</code>, 不手抄)。改动文件过 <code>dev.fmt</code>(yapf facebook / 列宽 120), 行尾 LF 复核 <code>w/lf</code>。</p>
   </section>
 
   <footer>

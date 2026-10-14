@@ -29,7 +29,10 @@
 - test_s9b_show_partial_rebuild_equal_and_reference_stable: S9b 局部重聚合(正确性边界 1-4 落位) —— 脏剧键整行重建与全量重跑逐行逐字段相等(频次众数/季级 gaps/状态归并/members), 未脏剧行引用原样、脏剧行必然新对象; 成员增/删(组键可解析)/迁移旧键清空转 removed/新剧追加尾部; 静止未识别种子(电影)速度抖动不触发折叠面 full
 - test_s9b_reduce_show_view_normal: S9b show 视图归约 —— delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 纯 show 键代照常归约不退化 full
 - test_s9b_show_unrecognized_downgrade_full: S9b 折叠面降级(R11) —— 未识别种子新增/改名进未识别区/删除 -> 本代 full 且下一拍恢复行级增量; 对照: 未识别种子字段抖动(分类不变)不触发 full
+- test_merge_rows_single_point_semantics: _merge_rows 合并骨架单点(issue 26-10-11-0309 认领修) —— removed 键剔除/脏行换新对象/未脏行同一 dict 原样复用/新增行追加尾部; key_field 参数化(hash 键空间); pop 清空无二次消费
+- test_publish_partial_merge_skeleton_single_point: 静态守阵 —— _publish_partial_locked 四段合并只走 _merge_rows 单点(4 调用点), 内联骨架(.pop(k) if k in 形态)零残留, 单点内恰一份
 """
+import inspect
 import json
 import time
 from collections import deque
@@ -742,6 +745,40 @@ def test_s6_solo_member_group_removal_no_stale_row():
     assert entry["full"] is False
     assert entry["upsert"]["group"] == {("R:\\Z", )} and entry["removed"]["group"] == set()
     assert rt.group_view == rt._host._build_group_view()
+
+
+# ---------- ⑨b _merge_rows 合并骨架单点(issue 26-10-11-0309 认领修) ----------
+
+
+def test_merge_rows_single_point_semantics():
+    """_merge_rows 合并骨架单点契约: removed 键剔除 / 脏行换新对象 / 未脏行同一 dict 原样
+    复用 / 新增行追加在尾部 —— 四段(groups/singles/flat/shows)共用的引用稳定契约直测
+
+    前端 S7 按行对象身份的 WeakMap 记忆化依赖「未脏行 is 恒等」: 该契约此前靠 S6 端到端
+    用例间接守, 抽单点后在此钉住合并语义本身(与四段各自内联时逐字一致)。
+    """
+    old_a, old_b, old_c = {"key": "a"}, {"key": "b"}, {"key": "c"}
+    new_b, new_d = {"key": "b", "v": 2}, {"key": "d"}
+    rebuilt = {"b": new_b, "d": new_d}
+    merged = WebUIRuntime._merge_rows([old_a, old_b, old_c], "key", rebuilt, {"c"})
+    assert merged == [old_a, new_b, new_d]  # 顺序: 旧视图序(跳过 c) + 新增行尾部
+    assert merged[0] is old_a  # 未脏行原样复用(引用稳定)
+    assert merged[1] is new_b  # 脏行换新对象
+    assert rebuilt == {"d": new_d}  # 替换过的键已 pop 清出; 残余(新增行)已 extend 追加尾部, 调用方随后即弃
+    # key_field 参数化: singles/flat 段按 hash 键空间合并(组段按 encode 后的 key)
+    h1, h2 = {"hash": "h1"}, {"hash": "h2"}
+    m = WebUIRuntime._merge_rows([h1, h2], "hash", {"h2": {"hash": "h2", "v": 1}}, {"h1"})
+    assert m == [{"hash": "h2", "v": 1}]  # h1 removed 剔除; h2 脏行替换
+
+
+def test_publish_partial_merge_skeleton_single_point():
+    """静态守阵: _publish_partial_locked 四段合并只走 _merge_rows 单点 —— 又抄一份内联
+    骨架(`.pop(k) if k in` 形态)即判红(issue 26-10-11-0309 的漂移点复发面)"""
+    caller = inspect.getsource(WebUIRuntime._publish_partial_locked)
+    assert caller.count("self._merge_rows(") == 4  # groups/singles/flat/shows 四段各一个调用点
+    assert ".pop(k) if k in" not in caller  # 调用方内联合并骨架零残留
+    helper = inspect.getsource(WebUIRuntime._merge_rows)
+    assert helper.count(".pop(k) if k in") == 1  # 骨架在单点里恰一份
 
 
 # ---------- ⑩ S8: 剧键等价映射(正确性边界 1 成员迁移的前置数据结构) ----------

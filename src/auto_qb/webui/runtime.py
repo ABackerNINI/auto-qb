@@ -1263,6 +1263,32 @@ class WebUIRuntime:
         elif not partial or hr.revision == self._hr_rev_at_build:
             self._hr_rev_at_build = hr.revision
 
+    @staticmethod
+    def _merge_rows(old_view: List[dict], key_field: str, rebuilt: dict, removed: set) -> List[dict]:
+        """行合并骨架单点(issue 26-10-11-0309 认领修): _publish_partial_locked 四段
+        (groups/singles/flat/shows)共用的「重建脏行/保留未脏/追加」骨架 —— 调用方只产
+        rebuilt(键 -> 新行 dict)与 removed(键集), 归并口径只此一份, 改合并语义不再四处同步。
+
+        契约(与四段各自内联时逐字一致):
+        - removed 键的行直接从视图剔除(与全量构建不产已删行/空组行/已删剧行对齐);
+        - rebuilt 命中的行换新对象(pop 顺带把替换过的键清出, 残余即新增行);
+        - 未命中 rebuilt 的行**原样复用同一 dict** —— 引用稳定是前端 S7 按行对象身份
+          WeakMap 记忆化的契约(脏行必然新对象, 未脏行一个字节都不动);
+        - rebuilt 残余(新增行)追加在尾部(前端排序不依赖数组顺序)。
+
+        key_field 与 rebuilt/removed 必须同一键空间(组段行键 = encode_group_key 后的字符串,
+        调用方传 enc_rm 而非原始组键)。**核心热路径**: 逐行只做一次 dict 取键 + 集合成员判定,
+        键名传字符串而非 key_of 可调用即为此——不为逐行多付一次函数调用。
+        """
+        out: List[dict] = []
+        for old in old_view:
+            k = old[key_field]
+            if k in removed:
+                continue
+            out.append(rebuilt.pop(k) if k in rebuilt else old)
+        out.extend(rebuilt.values())  # 新增行追加在尾部(前端排序不依赖数组顺序)
+        return out
+
     def _publish_partial_locked(self, upsert: dict, removed: dict, cross_keys: set) -> None:
         """局部重聚合(plan S6/S9b): 仅对本代 upsert/removed 行键重跑构建 —— **调用方必须持有 view_lock**
 
@@ -1271,6 +1297,8 @@ class WebUIRuntime:
           前端 S7 按行对象身份的 WeakMap 记忆化依赖这一点;
         - 「四视图同轮发布」硬约束(模块 docstring)不破: 数组仍整体一次性替换, 行对象按
           未脏/脏区别复用/新建, 不在调用点分批建;
+        - 四段(groups/singles/flat/shows)的合并骨架同一单点 `_merge_rows` —— 行对象复用/
+          替换/剔除/追加的口径只此一份, 改合并语义(如 removed 处理)不再四处同步;
         - 组行内嵌 members 数组随组行整行走(P-02 一期口径); singles/flat 脏行按 hash 逐行
           重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐); 组行
           重建为空且旧行在视图 -> 组键转 removed 剔除(S6 补, 与 show 分支同口径), 旧行本
@@ -1306,14 +1334,8 @@ class WebUIRuntime:
             # 逐字进时间线, 桩态下首代即此形态); 行不存在由归约的缺行防御性 full 兜住,
             # 客户端不可能持有该行(行退出视图必有 removed 记录), 无残留面。
         enc_rm = {_utils.encode_group_key(k) for k in removed["group"]}  # 含上面转入的键
-        group_view = []
-        for old in self.group_view:
-            k = old["key"]
-            if k in enc_rm:
-                continue
-            # 脏行换新对象(rebuilt.pop 顺带把替换过的键清出, 残余即新增组行)
-            group_view.append(rebuilt.pop(k) if k in rebuilt else old)
-        group_view.extend(rebuilt.values())  # 新组行追加在尾部(前端排序不依赖数组顺序)
+        # 合并骨架走四段共用单点(见 _merge_rows): 未脏组行同一 dict 原样保留
+        group_view = self._merge_rows(self.group_view, "key", rebuilt, enc_rm)
 
         # ---- singles: torrent 桶脏行中未归组的按 hash 逐行重建(_member_view 口径) ----
         # 归组判定与 _build_singles_view 同款(groups 值并集, 不用 member_to_key —— 与
@@ -1327,13 +1349,8 @@ class WebUIRuntime:
                 rec = store.by_hash.get(h)
                 if rec is not None:
                     new_singles[h] = host._member_view(rec)
-        singles_view = []
-        for old in self.singles_view:
-            h = old["hash"]
-            if h in removed["torrent"]:
-                continue
-            singles_view.append(new_singles.pop(h) if h in new_singles else old)
-        singles_view.extend(new_singles.values())  # 新落地 singles(如成员脱离组)追加在尾部
+        # 合并骨架走四段共用单点(见 _merge_rows): 新落地 singles(如成员脱离组)追加在尾部
+        singles_view = self._merge_rows(self.singles_view, "hash", new_singles, removed["torrent"])
 
         # ---- flat: torrent 桶脏行按 hash 逐行重建(_seed_view 口径) ----
         new_flat: dict = {}
@@ -1341,13 +1358,8 @@ class WebUIRuntime:
             rec = store.by_hash.get(h)
             if rec is not None:
                 new_flat[h] = host._seed_view(rec)
-        flat_view = []
-        for old in self.flat_view:
-            h = old["hash"]
-            if h in removed["torrent"]:
-                continue
-            flat_view.append(new_flat.pop(h) if h in new_flat else old)
-        flat_view.extend(new_flat.values())  # 新增种子行追加在尾部(全量构建同按入库序在尾)
+        # 合并骨架走四段共用单点(见 _merge_rows): 新增种子行追加在尾部(全量构建同按入库序在尾)
+        flat_view = self._merge_rows(self.flat_view, "hash", new_flat, removed["torrent"])
 
         # ---- shows: 脏剧键整行重建(plan S9b), 未脏剧行复用, 全删剧转 removed 剔除 ----
         show_up = upsert["show"]
@@ -1407,13 +1419,8 @@ class WebUIRuntime:
                 self.mark_shows_pending(True)
                 if self.search_index_dirty or self.search_index is None:
                     self.post_command("build_search_index")
-        shows_list = []
-        for old in self.shows_view["list"]:
-            k = old["key"]
-            if k in show_rm:
-                continue
-            shows_list.append(new_shows.pop(k) if k in new_shows else old)
-        shows_list.extend(new_shows.values())  # 新剧行追加在尾部(前端排序不依赖数组顺序)
+        # 合并骨架走四段共用单点(见 _merge_rows): 新剧行追加在尾部(前端排序不依赖数组顺序)
+        shows_list = self._merge_rows(self.shows_view["list"], "key", new_shows, show_rm)
         # 未识别折叠面原样保留: 折叠面变化已被 _publish_locked 的 show_unrecognized 检测
         # 拦为 full 代(R11, 协议无未识别桶), 走到这里的局部代折叠成员必与上一代一致
         shows_view = {"list": shows_list, "unrecognized": self.shows_view["unrecognized"]}

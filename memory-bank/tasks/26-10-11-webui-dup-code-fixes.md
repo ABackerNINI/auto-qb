@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-15 04:50
+**Updated:** 2026-10-15 04:54
 **Topics:** dup-code-audit
-**Summary:** 用户「修复 webui 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」; 追问拍板**新建本修复轮档案作认领方 + 先做低风险 7 条**。报告 §18(R15 路由层)/§19(R16 表现层)共入池 webui 10 条 refactor issue —— 本轮认领并修完 7 条(virtual-tracker-prefix / status-payload / sidecar-dir / hr-route-guard / cmd-pair-handlers / bulk-receipt / seed-view-restate), 3 条按拍板留 `Open`(partial-publish-merge 热路径抽 `_merge_rows` / cross-layer-constant 跨层常量 / route-cmd-boilerplate 表驱动)。全程**行为逐字不变**: 日志文案、HTTP 状态码与文案、响应字段集一字未改, 只收骨架; 5 条新守阵(静态 ast/源码 + 动态等值)全部过红验。test.full 实测见基线切片 `26-10-11-1610`(+5 = 新增守阵, 无回归信号)。 **2026-10-15 续轮(R2)**: 用户「认领并修复 memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html」—— 当期三条延后项之一的跨层常量批次落地, 走 issue 建议第一支「保持守阵 + 补全机械比对」(未触前端构建面): 四组常量对中 ② REANNOUNCE 已有逐项守阵不动; ① 补 STATE_RANK_LAST↔_SHOW_STATE_RANK_LAST 比对(views.py 表外兜底秩 9 提为命名常量); ③ 新增 ETA 哨兵全静态树扫描(`_ETA_SENTINEL` ↔ format.js + 3 处 tpl 比较点, 零命中即红); ④ 新增键位正则跨层逐字比对(`_KEYS_SERIAL_RE` ↔ `KB_DEF_RE`)并消 test_web_shortcuts.py 第三份手抄(改导入后端单点)。三条新守阵全部过红验(值漂移/声明缺失/零命中三类突变)+ 3 个活性探针; test.full 实测见基线切片 `26-10-15-0450`(仍零行为变化, 纯守阵增量 + 常量命名化 + 注释)。
-**Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/testing/baselines/26-10-11-1610-webui-dup-code-fixes.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/issues/26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-status-payload-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-sidecar-dir-convention-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-hr-route-guard-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cmd-pair-handlers-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-bulk-receipt-boilerplate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-seed-view-restate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html,memory-bank/testing/baselines/26-10-15-0450-webui-cross-layer-constant-guard.md,memory-bank/activeContext/26-10-15-0450-webui-cross-layer-constant-guard.md
+**Summary:** 用户「修复 webui 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」; 追问拍板**新建本修复轮档案作认领方 + 先做低风险 7 条**。报告 §18(R15 路由层)/§19(R16 表现层)共入池 webui 10 条 refactor issue —— 本轮认领并修完 7 条(virtual-tracker-prefix / status-payload / sidecar-dir / hr-route-guard / cmd-pair-handlers / bulk-receipt / seed-view-restate), 3 条按拍板留 `Open`(partial-publish-merge 热路径抽 `_merge_rows` / cross-layer-constant 跨层常量 / route-cmd-boilerplate 表驱动)。全程**行为逐字不变**: 日志文案、HTTP 状态码与文案、响应字段集一字未改, 只收骨架; 5 条新守阵(静态 ast/源码 + 动态等值)全部过红验。test.full 实测见基线切片 `26-10-11-1610`(+5 = 新增守阵, 无回归信号)。 **2026-10-15 续轮(R2)**: 用户「认领并修复 memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html」—— 当期三条延后项之一的跨层常量批次落地, 走 issue 建议第一支「保持守阵 + 补全机械比对」(未触前端构建面): 四组常量对中 ② REANNOUNCE 已有逐项守阵不动; ① 补 STATE_RANK_LAST↔_SHOW_STATE_RANK_LAST 比对(views.py 表外兜底秩 9 提为命名常量); ③ 新增 ETA 哨兵全静态树扫描(`_ETA_SENTINEL` ↔ format.js + 3 处 tpl 比较点, 零命中即红); ④ 新增键位正则跨层逐字比对(`_KEYS_SERIAL_RE` ↔ `KB_DEF_RE`)并消 test_web_shortcuts.py 第三份手抄(改导入后端单点)。三条新守阵全部过红验(值漂移/声明缺失/零命中三类突变)+ 3 个活性探针; test.full 实测见基线切片 `26-10-15-0450`(仍零行为变化, 纯守阵增量 + 常量命名化 + 注释)。 **2026-10-15 续轮(R3)**: 用户「认领并修复 memory-bank/issues/26-10-11-0309-refactor-webui-partial-publish-merge-dup.html」—— 当期三条延后项之二的热路径批次落地: `_publish_partial_locked` 四段(groups/singles/flat/shows)「重建脏行/保留未脏/追加」合并骨架抽 `_merge_rows` 静态单点(键名传字符串而非 key_of 可调用, 核心热路径逐行不多付函数调用), 引用稳定契约逐字不变; 既有 S5 镜子 + S6「局部重算 == 全量重跑」双保险全绿 + 新增 2 守阵(合并契约直测 + 静态零重复骨架, 均过红验); test.full 实测见基线切片 `26-10-15-0454`。10 条 refactor 现状 **9 Done / 1 Open**(route-cmd-boilerplate)。
+**Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/testing/baselines/26-10-11-1610-webui-dup-code-fixes.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/issues/26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-status-payload-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-sidecar-dir-convention-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-hr-route-guard-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cmd-pair-handlers-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-bulk-receipt-boilerplate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-seed-view-restate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html,memory-bank/testing/baselines/26-10-15-0450-webui-cross-layer-constant-guard.md,memory-bank/activeContext/26-10-15-0450-webui-cross-layer-constant-guard.md,memory-bank/issues/26-10-11-0309-refactor-webui-partial-publish-merge-dup.html,memory-bank/testing/baselines/26-10-15-0454-webui-partial-publish-merge-dup.md
 
 ## 原始请求
 
@@ -26,6 +26,10 @@
 
 按「低风险优先」串行 7 步, 每步改完跑 `test.one` 定向用例, 收口 `test.full`。改动面: `webui/commands.py` / `webui/views.py` / `webui/runtime.py` / `webui/server/common.py` / `webui/server/lifecycle.py` / `webui/server/routes/{state,hr,keys}.py` + 4 个测试文件的守阵与计划清单。
 
+## 后续批次: partial-publish-merge 热路径(2026-10-15 认领修)
+
+用户显式指派「认领并修复 `26-10-11-0309-refactor-webui-partial-publish-merge-dup.html`」—— 上轮留 Open 的三条中第一条到手(余 2 条仍 Open, 见「未做项」)。单步执行, 无新子任务拆分: `runtime._publish_partial_locked` 四段(groups/singles/flat/shows)「重建脏行/保留未脏/追加」合并骨架抽 `_merge_rows(old_view, key_field, rebuilt, removed)` 静态单点。**行为逐字不变**口径不变: 合并顺序/pop 语义/尾部追加与四段各自内联时逐字一致, 引用稳定契约(未脏行同一 dict 原样保留)不动 —— 前端 S7 WeakMap 记忆化不受影响。热路径取舍: 键名传字符串而非 key_of 可调用, 逐行不多付一次函数调用(issue 建议的 `key_of` 形态的保性能变体)。守阵双保险: 既有 S5 镜子 + S6「局部重算 == 全量重跑」单测全绿; 新增两条(合并契约直测 + 静态零重复骨架, 红验 = 抄回一份内联骨架即判红)。
+
 ## 子任务状态表
 
 | # | issue | 改动 | 守阵 | 状态 |
@@ -38,16 +42,17 @@
 | 6 | `webui-bulk-receipt-boilerplate-dup` | `commands.py` 抽 `_bulk_missing_msgs` + `_bulk_receipt`(有文案回 error 否则 ok 的收口形状), 两处调用点保留各自的分桶计数(recheck 计数 / 跳检按原因分桶)与日志文案; `runtime.py` 抽 `_judge_reannounce`(读 trackers → `_verdict_reannounce` 的判定处置单点), `check_pending` 与 `_advance_reannounce_background` 共用, 异常面仍各自处理 | 既有批量用例(日志串「批量跳检(成功 1, 跳过 1, 失败 2)」等)逐字断言 + 汇报确认用例 | Done |
 | 7 | `webui-seed-view-restate-dup` | `views._seed_view` 删 16 个与 `_member_view` 逐字同值的重述键(eta/completion_on/time_active/last_activity/availability/dl_limit/up_limit/tracker/num_*/downloaded/amount_left/seen_complete/infohash_v2), 只留平铺扩展段 | `test_seed_view_no_member_view_restatement`(ast 静态零交集 + 同名字段值等值) | Done |
 | 8 | `webui-cross-layer-constant-convention-dup`(R2 续轮) | `views.py` 表外兜底秩提命名常量 `_SHOW_STATE_RANK_LAST`; `test_webui_static_skins.py` 补 3 条跨层守阵(STATE_RANK_LAST 比对 / ETA 哨兵全树扫描 / 键位正则逐字)并注册 + 文档字符串同步; `test_web_shortcuts.py` 消第三份手抄正则(改导入后端单点); keys.py/shortcuts.js 注释补守阵指针 | `_scan_state_rank` 扩展 + `_scan_eta_sentinel` + `_scan_keys_serial_re`(值漂移/声明缺失/零命中三类突变红验 + 3 活性探针) | Done |
+| 9 | `webui-partial-publish-merge-dup`(R3 续轮, 2026-10-15 用户显式指派认领修) | `runtime._publish_partial_locked` 四段(groups/singles/flat/shows)合并骨架抽 `_merge_rows(old_view, key_field, rebuilt, removed)` 静态单点; 键名传字符串而非 key_of 可调用(核心热路径, 逐行不多付函数调用); 组段传 encode 后 enc_rm 键空间 | 既有 S5 镜子 + S6「局部==全量」单测全绿 + 新增 `test_merge_rows_single_point_semantics`(契约直测)/ `test_publish_partial_merge_skeleton_single_point`(静态零重复, 红验 = 抄回内联骨架即判红) | Done |
 
 ## 实测汇总
 
 - 收口 `test.full`: **3118 passed + 4 skipped / 覆盖率 TOTAL 99%(16586 语句 / 153 未覆盖 / 5696 分支 / 137 partial)/ 29.15s** —— 基线切片 `26-10-11-1610`(相对上基线 `26-10-11-0354`: passed +5 = 新增守阵, 无回归信号)。
+- 后续批次(2026-10-15 partial-publish-merge 认领修): 收口 `test.full` 全绿, 覆盖率 TOTAL 持平(语句面变大因两文件新增守阵; 数字见 `commands run kb.baseline` 最新切片 `26-10-15-0454`, 不手抄); 新增守阵两条(合并契约直测 + 静态零重复), 均过红验; 改动文件过 `dev.fmt`(yapf facebook / 列宽 120), 行尾归一 LF 后经 `git ls-files --eol` 复核 `w/lf`。
 - 新增守阵 5 个测试函数, **五条均过红验**(写回重述键 / 摘掉 status 字段 / keys.py 自写 dirname / 写回前缀字面量 / 复制一份站点派生式 —— 各半静态或动态判红, 还原即绿)。
 - 各改动文件过 `commands run dev.fmt`(yapf facebook / 列宽 120), 行尾归一 LF 后 `git ls-files --eol` 复核全部 `w/lf`。
 
 ## 未做项(保持 `Open`, 等各自批次)
 
-- `26-10-11-0309-refactor-webui-partial-publish-merge-dup` —— 热路径四段抽 `_merge_rows`, 需「局部重算 == 全量重跑」镜子守阵。
 - `26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup` —— 「路由→命令」表驱动改造, 须保金清单守阵 `test_web_route_manifest_frozen`。
 
 ## 进度日志
@@ -60,3 +65,8 @@
 - 落地: views.py `_SHOW_STATE_RANK_LAST` 命名常量; test_webui_static_skins.py 三支跨层守阵(STATE_RANK_LAST / ETA 哨兵全树 / 键位正则)注册 + 两处文档字符串同步; test_web_shortcuts.py 消第三份手抄; 三处注释指针。
 - 验证: 三类突变红验(format.js 哨兵值 / shortcuts.js 正则 / app.js 兜底秩)+ 3 活性探针(零命中/声明缺失)全过 → `test.one` 两文件 50 passed → `test.full` 3209 passed + 4 skipped(基线切片 `26-10-15-0450`)。
 - kb 回写: 本档案 R2 段(Summary/子任务表第 8 行/未做项出账/Refs/进度日志) + issue 置 `Done`(doc-refs 认领链) + activeContext 切片新建 + 基线切片 + `kb.index` 重建。
+
+### 2026-10-15 R3 — partial-publish-merge 热路径合并骨架抽单点(用户指名延后项之二)
+
+- 2026-10-15 04:36-04:54: 会话开工同步(已同步 a369c99a) → 用户显式指派「认领并修复」partial-publish-merge(上轮拍板留 Open 的热路径项, 即「各自批次」到手) → 读 issue + 坑档(web-ui/perf-cadence 热路径口径) + 上轮档案 → 抽 `_merge_rows` 静态单点(键名传字符串, 热路径不加 per-row 可调用) → 四段调用点改造 + 新增 2 守阵(契约直测 + 静态零重复, 均红验) → `test.one` 定向 + `test.full` 收口全绿 → 基线切片 `26-10-15-0454` + issue 置 `Done` + 本档案追加 → `kb.index` 重建。
+- 2026-10-15 05:06 提交合流: 推送遇远端 `6adf6282`(R2 续轮)前进, rebase 三冲突(两个生成物索引取侧重跑 + 本档案手写段双方追加)按「双方记录都留」合流: Summary 并 R2/R3 两段 + Refs 并集, 子任务表 R2 行保持 #8、本项顺延 #9, 未做项仅剩 route-cmd-boilerplate, 进度日志 R2/R3 两节并列; 合并树复跑 `test.full` 确认两侧改动共存无回归。
