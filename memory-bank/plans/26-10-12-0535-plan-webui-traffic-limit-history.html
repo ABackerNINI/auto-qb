@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-traffic-limit-history">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-12-0535">
-<meta name="doc-updated" content="26-10-12-0613">
+<meta name="doc-updated" content="26-10-15-0525">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-12-webui-traffic-limit-history.md">
 <title>计划 · qB 流量图限速线按当时值分段</title>
 <style>
@@ -135,7 +135,7 @@
 
   <div class="meta">
     <span><b>Stamp</b> 26-10-12-0535</span>
-    <span><b>Status</b> Open(待实施确认)</span>
+    <span><b>Status</b> Done(W1-W3 完成, 26-10-12)</span>
     <span><b>Topic</b> webui-traffic-limit-history</span>
     <span><b>决策方式</b> grilling 两轮收敛</span>
     <span><b>基线</b> 850d9c67</span>
@@ -305,12 +305,13 @@
       <tr><th>时间</th><th>变更</th></tr>
       <tr><td>26-10-12-0535</td><td>初版。grilling 一轮七问收敛后成文; D3 为用户修订项(独立文件 / 目录与流量数据一致 / 无配置键 / 保留对齐流量最大保存时间), 其余取推荐。</td></tr>
       <tr><td>26-10-12-0613</td><td>D3 二次裁定 → <b>分天保存</b>(<code>qb-traffic-v4/limits/&lt;日期&gt;.dat</code>, 00:00 硬切 + 新天基线 carry); 同轮补强: 读侧 mtime+size 解析缓存 / 缺数据区界定规则(阶梯函数恒有值 + 停机时刻误差边界) / 病态翻转常量告警护栏; W1 验收判据随行扩充。</td></tr>
+      <tr><td>26-10-15-0525</td><td>状态 Open → <b>Done</b>: 实施确认核到代码——W1 <code>core/traffic_limits.py</code> + <code>traffic_sample_mod</code>/<code>traffic_qb.py</code> 接线 + <code>tests/test_traffic_limits.py</code>; W2 <code>qb_traffic_chart.js</code> <code>_qbLimitSegs</code>/<code>_qbLimitAt</code> 分段化 + 快路暂存 + 悬停「当时限速」; W3 基线切片 26-10-12-0815/1806 + 回写 <code>conventions/webui.md</code>/<code>modules/core-runtime.md</code> 现档; 后续轮 CI 哨兵红修复(monotonic 0 点开机陷阱)已入 pitfalls。</td></tr>
     </table>
   </section>
 
   <div class="footer-meta">
     <span>auto-qb · memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html</span>
-    <span>topic: webui-traffic-limit-history · status: Open</span>
+    <span>topic: webui-traffic-limit-history · status: Done</span>
   </div>
 
 </div>

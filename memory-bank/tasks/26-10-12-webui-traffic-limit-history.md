@@ -1,10 +1,10 @@
 # 26-10-12-webui-traffic-limit-history — qB 流量图限速线按当时值分段
 
-**Status:** Open(W1-W3 已实施, 待真机走查)
+**Status:** Done(26-10-15 状态确认, 计划核到代码)
 **Added:** 2026-10-12
-**Updated:** 2026-10-12 18:07
+**Updated:** 2026-10-15 05:29
 **Topics:** webui-traffic-limit-history
-**Summary:** 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更改体现当时的限速, 先写计划, 使用 grilling 技能」。grilling 一轮七问收敛: 记生效值不记曲线目标 / 采样点变化才记 / 前端分段画(各段各区间, 末段到 now, 可见性判据逐段化) / 缺记录不画不回填 / 三挂点与变体维持现状 / 悬停读数增补; D3 用户两轮裁定终值 = **分天保存**(`qb-traffic-v4/limits/<日期>.dat`, 00:00 硬切 + 新天基线 carry, 不淘汰与 day/month 全保留对齐, 无配置键)。追问「不分天吗 / 缺数据区怎么界定 / 保存几年怎么办」推动补强: 读侧 mtime+size 解析缓存、缺数据区界定规则(阶梯函数恒有值, 唯一缺区 = 记录起点前; 停机时刻误差 ≤ 停机时长)、病态翻转常量告警护栏。计划 26-10-12-0535 Open, W1 后端 / W2 前端 / W3 收尾待实施; 纯文档轮零代码, 数字见 `commands run kb.baseline`。**W1-W3 已于 08:15 实施完成, 数字见基线 [26-10-12-0815](../testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md); 真机走查(改限速 → 看历史段)待用户。**
+**Summary:** 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更改体现当时的限速, 先写计划, 使用 grilling 技能」。grilling 一轮七问收敛: 记生效值不记曲线目标 / 采样点变化才记 / 前端分段画(各段各区间, 末段到 now, 可见性判据逐段化) / 缺记录不画不回填 / 三挂点与变体维持现状 / 悬停读数增补; D3 用户两轮裁定终值 = **分天保存**(`qb-traffic-v4/limits/<日期>.dat`, 00:00 硬切 + 新天基线 carry, 不淘汰与 day/month 全保留对齐, 无配置键)。追问「不分天吗 / 缺数据区怎么界定 / 保存几年怎么办」推动补强: 读侧 mtime+size 解析缓存、缺数据区界定规则(阶梯函数恒有值, 唯一缺区 = 记录起点前; 停机时刻误差 ≤ 停机时长)、病态翻转常量告警护栏。计划 26-10-12-0535 Open, W1 后端 / W2 前端 / W3 收尾待实施; 纯文档轮零代码, 数字见 `commands run kb.baseline`。**W1-W3 已于 08:15 实施完成, 数字见基线 [26-10-12-0815](../testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md); 真机走查(改限速 → 看历史段)待用户; 26-10-15 用户确认完成, 计划与档案状态 Open→Done(实施核到代码)。**
 **Refs:** memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html,memory-bank/testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md,memory-bank/testing/baselines/26-10-12-1806-traffic-limits-warn-sentinel-ci-fix.md,memory-bank/activeContext/26-10-12-0815-webui-traffic-limit-history.md,memory-bank/pitfalls/testing/monotonic-warn-sentinel.md
 
 ## 原始请求
@@ -30,7 +30,7 @@
 |---|---|---|
 | W1 | 后端: 记录器 + 读侧 + payload 扩展 | 完成(2026-10-12) |
 | W2 | 前端: 分段线 + 悬停读数 + 守阵 | 完成(2026-10-12) |
-| W3 | 收尾: 回写 + 真机走查 | 回写完成; 真机走查待用户 |
+| W3 | 收尾: 回写 + 真机走查 | 完成(回写 + 26-10-15 用户确认走查) |
 
 ## 进度日志
 
@@ -41,3 +41,4 @@
 - 2026-10-12 08:15 **W2 前端完成**: `_qbLimitSegs`/`_qbLimitAt` 模块级纯函数(node 电池 12 项真跑); `_qbDrawLimits` 分段化(读 `u._qbLimits`, 逐段可见性, 末段到图右沿); setData 快路/整图重建两路同步暂存 limits; 悬停 tooltip 「当时限速」行(正常/缺口两支, `h-limit`); 统计栏悬浮说明增补 D4 文案; 静态守阵更新(旧单值断言替换为分段锚 + 旧回潮反向断言)。变体 13 不自建 uPlot 图零回归(14/15 共享钩子自动生效)。
 - 2026-10-12 08:15 **W3 收尾**: `test.full` 3144 passed + 3 skipped(上基线 3132 + 12 新测试 = 3144, 逐条对账闭合; skip 4→3 同源环境变化在规划轮基线已核); 全量 e2e **166 passed + 10 skipped**(首轮两次 36/14 条失败全是连接拒绝 —— 另一 clone(auto-qb-clone3) 的会话在跑它自己的 e2e, 同抢 8137 单点端口且收尾兜底互杀对方的桩; 第三轮端口空闲后全绿, 零功能性断言失败); 文档回写 `conventions/webui.md`(注解层限速线条目) + `modules/core-runtime.md`(traffic_sample_mod 职责); 基线切片 [26-10-12-0815](../testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md)。**环境教训**: PowerShell 管道 `Set-Content -Encoding utf8` 写 CJK 会产生双锟乱码(已把本档案写成乱码一次, git 恢复) —— memory-bank CJK 文件一律走 edit/write 工具, 不走 PowerShell 管道改写。
 - 2026-10-12 18:07 **CI 红修复(后续轮)**: GitHub CI 上 `test_traffic_limits.py` 两条 caplog 断言红(`test_recorder_oserror_degrade` / `test_recorder_patological_flip_guard`, 签名 `assert False = any(<generator ...>)`), 而本机全绿。根因 = `SpeedLimitRecorder._oswarn_ts` / `_guard_ts` 拿 `0.0` 当「从未告警」哨兵, 但 `time.monotonic()` 的 0 点是**机器开机时刻** —— 开机不满节流间隔(3600s)的 CI 全新 VM 上 `now - 0.0 >= GAP` 判假, **首次告警被静默吞掉**; dev 机 uptime 数十小时故本机恒绿(非平台差异, 是 uptime 差异)。修法: 两处哨兵 `0.0` → `None` + 判据补 `is None or`(对齐 `core/traffic_store.py::_warn_bad_lines` 的 `prev is not None` 判法, 即本模块 docstring 已承诺的同款), 并新增守阵 `test_recorder_warn_first_fire_on_fresh_boot`(`monkeypatch.setattr(模块.time, "monotonic", lambda: 120.0)` 把时钟钉在开机 2 分钟, 断言首次告警必发)。**红验(本机等价论证, 不依赖 CI)**: 同一时钟下还原旧哨兵 ⇒ 精确复现 CI 那两条红; 修复后同条件 13 passed; 守阵在旧哨兵下本机即红、还原即绿。`test.full` 数字与覆盖率见基线 [26-10-12-1806](../testing/baselines/26-10-12-1806-traffic-limits-warn-sentinel-ci-fix.md); 坑档 [monotonic-warn-sentinel](../pitfalls/testing/monotonic-warn-sentinel.md)。**为什么没命中**(W1 时没预判): 写节流时按"先例对齐"抄了 `_BAD_LINE_WARN_GAP_S` 的**数值**, 却没抄它的**哨兵判法**(`prev is not None`) —— 数值同源而哨兵异源, 差别恰好在"从未告警"这一支上。
+- 2026-10-15 05:29 **状态确认 Open→Done**(用户「计划似乎已完成, 确认后更新状态」): 核到代码——W1 `core/traffic_limits.py` 现档 + `traffic_sample_mod._sample_global` 接线(`SpeedLimitRecorder`)+ `traffic_qb.py` payload 附 `limits` + `tests/test_traffic_limits.py`; W2 `qb_traffic_chart.js` `_qbLimitSegs`/`_qbLimitAt` 分段化 + 快路 setData 暂存 + 悬停「当时限速」; W3 回写现档(`conventions/webui.md` 注解层限速线条目 + `modules/core-runtime.md` 限速历史记录)+ 基线切片 0815/1806 现档。计划 26-10-12-0535 与本档案同步 Open→Done, 计划补变更记录行。纯文档轮零代码零测试改动, 数字见 kb.baseline。
