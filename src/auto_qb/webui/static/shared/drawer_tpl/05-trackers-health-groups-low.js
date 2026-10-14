@@ -354,10 +354,18 @@
     }
     /* 分区: 空分区整节隐藏(与 rowsFn 同判据) */
     const secs = vis.map((g) => groupHtml(g, byKey[g.key]));
-    const html = T`<div class="dt05-wrap">
+    /* !行容器必须是 .dt05-list(内层), 外层保持 .dt05-wrap —— 本变体全部 .group-row
+     * 版式规则(摘引擎卡底/行观感归 .dt05-rowin/失败区与 chips 合成行)都以 .dt05-list
+     * 为作用域前缀(U3 引擎化时写入), 而 2026-10-14 前外壳只有一层 dt05-wrap、行直接
+     * 挂在它下面 ⇒ 前缀全程不匹配, 六条规则空转, 行一直带着主表卡底(--bg-row + 描边
+     * + 圆角 + padding), 用户报「必现列背景与其他列不一致」诊断时逐面量计算样式才发现
+     * (inList=false/inWrap=true)。修法 = 补内层 .dt05-list 包住分区(与 04/06/07/09/
+     * 10/11 的 dtNN-wrap(外壳) + dtNN-list(行容器) 两层家族约定对齐; e2e 通用助手
+     * openTrackersVariant 也按 .dtNN-wrap 等外壳, 单层改名会打破它)。 */
+    const html = T`<div class="dt05-wrap"><div class="dt05-list">
       <div class="dt05-strip">${R(stripHtml(n, virtualN))}</div>
       ${R(secs.join(""))}
-    </div>`;
+    </div></div>`;
     /* 滚动位置自保(纵横成对): 滚动容器是宿主父级(.drawer-body, Vue 所有) —— 单点 helper */
     H.withScroll(host, () => {
       host.replaceChildren(document.createRange().createContextualFragment(html));

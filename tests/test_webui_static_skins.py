@@ -12,6 +12,7 @@
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复)
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
+- test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 三皮肤 .h-cell.sortable:focus-visible(atlas 落 views.css —— components.css 顶 700 行 cap); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
 """
@@ -1258,6 +1259,132 @@ def test_drawer_tpl_table_face_bg_single_point():
     for skin in ("atlas", "console", "prism"):
         idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
         assert idx.count('/shared/dt_table.css') == 1, f"{skin} index.html dt_table.css 挂载失守(须恰一次)"
+
+
+def test_frontend_pinned_first_cell_bg_per_face():
+    """必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」)
+
+    用户报障面: 主表(种子/辅种/追剧) + 种子详情面板全部变体表格。两层根因:
+    ① 皮肤 views.css 的 `.group-row > :first-child { background: var(--bg-row) }` 是
+       **主列表**行语言(不透明卡底 + stretch), 抽屉各引擎面复用 .group-row(外壳/桥零
+       特判, D5 口径) ⇒ 首格规则漏进抽屉, 与各面行板语言(族面 --tbl-face-bg→--bg /
+       04 卡 --bg-card / 05·10 透明 / 08 --bg-row)三样各算, 行内画出一条异色竖带
+       (实测 prism/frost: 行板 rgb(242,246,251) vs 首格 rgb(247,250,253); ocean 主题
+       --bg #0d1724 vs --bg-row #112034, Δ 达 16/255, 用户默认暗色主题下肉眼可辨);
+    ② 追剧表搜索命中行: 行底是「accent 渐层 over --bg-row」(components.css
+       .group-row.search-hit), 首格只有平铺 --bg-row —— 整条渐层丢失(实测首格
+       backgroundImage=none, 左缘渐层最强处 Δ≈18/14/9)。
+    修复: shared/dt_table.css 按面重锚(族面同 Token + err/bad/is-chk/sel 半透明 tint
+    一律合成在**不透明 --bg-card** 上 / 04·05 摘底摘吸左 / 10 取 --bg-card / 08 补 bad
+    合成 / 族表头同 --tbl-head-bg / empty-row 随行透明), 三皮肤 views.css 补
+    search-hit 首格镜像; 另修 05 变体接线 —— 补内层行容器 dt05-list(家族两层
+    dtNN-wrap + dtNN-list; 修前只有单层 dt05-wrap, 与 CSS 前缀不匹配致六条
+    .group-row 规则全程空转、行带主表卡底)。
+    真浏览器量具: e2e/dt-table-face-bg.spec.mjs(首格计算底 == 行板计算底)。
+    """
+    import os
+    import re
+    shared = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared"
+    )
+
+    # ① 三皮肤 search-hit 首格镜像: 行是「90deg accent 渐层 over --bg-row」, 首格必须
+    #    同款合成(渐变停靠点同行 46%) —— 只平铺 --bg-row 即丢整条渐层。
+    for ui in _UI_ALL:
+        css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
+        ms = re.search(r"\.group-row\.search-hit > :first-child \{([^}]*)\}", css)
+        assert ms, (
+            f"{ui} views.css 缺 .group-row.search-hit > :first-child 镜像规则"
+            "(2026-10-14 修「必现列背景与其他列不一致」: 首格只拿平铺 --bg-row 会丢整条 accent 渐层)"
+        )
+        body = ms.group(1)
+        assert "linear-gradient(90deg, var(--accent-soft), transparent 46%)" in body, (
+            f"{ui} search-hit 首格镜像缺同款 90deg 渐层(停靠点须同行 46%)"
+        )
+        assert "var(--bg-row)" in body, f"{ui} search-hit 首格镜像缺 --bg-row 基色(渐层 over 卡底)"
+
+    # ② dt_table.css 按面重锚(剥注释后按规则块取 body, 注释里的示例代码含花括号)
+    dt_css = os.path.join(shared, "dt_table.css")
+    assert os.path.isfile(dt_css), "缺 shared/dt_table.css(必现列按面重锚单点)"
+    css = re.sub(r"/\*[\s\S]*?\*/", "", open(dt_css, encoding="utf-8").read())
+
+    def body_of(sel):
+        for mo in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            if sel in [s.strip() for s in mo.group(1).split(",")]:
+                return mo.group(2)
+        return None
+
+    def need(sel, *fragments, forbid=()):
+        body = body_of(sel)
+        assert body is not None, f"dt_table.css 缺必现列重锚规则 {sel}(按面重锚单点被删/改名?)"
+        for frag in fragments:
+            assert frag in body, f"{sel} 缺成分 {frag}(现 body: {body.strip()[:100]})"
+        for frag in forbid:
+            assert frag not in body, f"{sel} 不得含 {frag}(半透明 tint 须合成在不透明基色上, 不得直接给半透明令牌/主表 --bg-row)"
+
+    # 族面 06/07/09/11: 行板首格与行板同 Token; 表头首格与表头同 Token
+    for face in ("06", "07", "09", "11"):
+        need(f".drawer-body .dt{face}-list .group-head > .h-cell:first-child", "var(--tbl-head-bg")
+        need(f".drawer-body .dt{face}-list .group-row > :first-child", "var(--tbl-face-bg")
+        need(f".drawer-body .dt{face}-list .group-row:hover > :first-child", "var(--bg-hover)")
+    # 06 err 行: 半透明 error-soft 合成在**抽屉卡底 --bg-card** 上(不是主表 --bg-row)
+    need(
+        ".drawer-body .dt06-list .group-row.err > :first-child",
+        "linear-gradient(var(--error-soft), var(--error-soft))",
+        "var(--bg-card)",
+        forbid=("var(--bg-row)", ),
+    )
+    need(
+        ".drawer-body .dt06-list .group-row.err:hover > :first-child", "var(--error-soft)"
+    )  # 变体 err:hover 保 error-soft
+    # 07/09 bad 行: 同款合成(bad+hover 行底是 --bg-hover, 由悬停规则覆盖, 不另写)
+    for face in ("07", "09"):
+        need(
+            f".drawer-body .dt{face}-list .group-row.bad > :first-child",
+            "linear-gradient(var(--error-soft), var(--error-soft))",
+            "var(--bg-card)",
+            forbid=("var(--bg-row)", ),
+        )
+    # 11 is-chk 行: sel-bg 合成; 空行随行透明
+    need(
+        ".drawer-body .dt11-list .group-row.is-chk > :first-child",
+        "linear-gradient(var(--sel-bg), var(--sel-bg))",
+        "var(--bg-card)",
+    )
+    need(".drawer-body .dt11-list .group-row.is-chk:hover > :first-child", "var(--sel-bg)")
+    need(".drawer-body .dt11-list .group-row.empty-row > :first-child", "transparent")
+    # 08 bad 行: 行板本就是引擎 --bg-row(基础态首格同语言无需重锚), bad 才合成
+    need(
+        ".drawer-body .dt08-rows .group-row.bad > :first-child",
+        "linear-gradient(var(--error-soft), var(--error-soft))",
+        "var(--bg-card)",
+    )
+    # 04 卡片 / 05 健康分组: 首格是内容根(卡头/rowin), 摘底摘吸左
+    for face in ("04", "05"):
+        need(f".drawer-body .dt{face}-list .group-row > :first-child", "transparent", "position: static")
+    need(".drawer-body .dt05-list .group-row.failrow > :first-child", "var(--error-soft)")
+    # 10 内容树: 保留吸左, 首格取承光底 --bg-card; sel 行合成
+    need(".drawer-body .dt10-list .group-row > :first-child", "var(--bg-card)", forbid=("var(--bg-row)", ))
+    need(".drawer-body .dt10-list .group-row:hover > :first-child", "var(--bg-hover)")
+    need(
+        ".drawer-body .dt10-list .group-row.sel > :first-child", "linear-gradient(var(--sel-bg), var(--sel-bg))",
+        "var(--bg-card)"
+    )
+
+    # ③ 05 变体接线: 外壳两层结构 dt05-wrap(外壳) + dt05-list(行容器) —— 六条 .group-row
+    #    版式规则以 .dt05-list 为前缀, 行必须活在它里面(U3 引擎化时只有单层 dt05-wrap,
+    #    前缀全程不匹配致规则空转、行带主表卡底); 判检剥块注释后判(注释里允许留旧类名沿革)。
+    v05 = open(os.path.join(shared, "drawer_tpl", "05-trackers-health-groups-low.js"), encoding="utf-8").read()
+    v05_code = re.sub(r"/\*[\s\S]*?\*/", "", v05)
+    assert 'class="dt05-wrap"' in v05_code, (
+        "05 变体外壳缺 dt05-wrap(家族约定 = dtNN-wrap 外壳 + dtNN-list 行容器两层;"
+        "e2e 通用助手 openTrackersVariant 按 .dtNN-wrap 等外壳)"
+    )
+    assert '<div class="dt05-wrap"><div class="dt05-list">' in v05_code, (
+        "05 变体未按家族两层结构渲染(<div class=\"dt05-wrap\"><div class=\"dt05-list\"> 相邻) —— "
+        "行容器必须是内层 dt05-list, 六条 .group-row 版式规则以 .dt05-list 为作用域前缀"
+    )
+    assert ".drawer .dt05-list .group-row" in v05_code, "05 变体 CSS 前缀未与行容器类名对齐(.drawer .dt05-list .group-row)"
 
 
 def test_drawer_tpl_variant_interaction_single_point():

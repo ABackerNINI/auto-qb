@@ -1,9 +1,9 @@
-# 首列吸左固定(冻结列)在本仓表格上的五处非显然约束
+# 首列吸左固定(冻结列)在本仓表格上的八处非显然约束
 
-> 摘要: 给 `.group-row` 加「首列 `position: sticky; left: 0`」时, 五件事不显然 —— ①**表头 `.group-head` 在滚动容器之外**(纵向 sticky 的前提), 首格拿不到 sticky 锚, 必须用反向 `translateX` 抵消, 且要减掉表头 `padding-left`(三皮肤均 14px), 否则比行首格恒右偏 14px; ②sticky 首格必须**不透明**才挡得住滑过的兄弟列, 而行的状态底(下沉/选中)是 rgba 令牌 —— 直接取令牌会**双重上色**(atlas 选中态实测逐通道差 17/18/33, 超可辨阈 20), 须用「同色 `linear-gradient` 叠不透明 `--bg-row`」做合成(差 ≤8); ③行的左侧色条 `.group-row.selected::before` 挂在**行**上, 横滚后随行滚出, 且**不能**顺手改成 sticky(行是 grid 容器, 绝对定位伪元素一变 sticky 就进流成为网格项, 破坏行布局); ④**吸左边界要有视觉提示** —— 横滚时滑入首格下方的列会留一段未盖满的尾字紧贴首格右缘, 无边界线索时被读成渲染 bug(2026-10-11 用户报「状态列被名称列盖住」), 须在横滚非零时画右缘**发丝线**; ④b**这条提示别用带负 `spread` 的 `box-shadow` 落影** —— 落影可见度是**首格高度的函数**(常态行首格 22px 时被内缩成 2px 近乎不可见, 高行 46px+ 才完整显形), 逐行深浅差 7 倍, 只在"刚好被撑高的那几行"冒黑块(2026-10-12 用户报「名称列后随机出现阴影」, 已删落影); ⑤**首格必须 `align-self: stretch`** —— 行是 `align-items: center`, 网格项默认不拉伸, 首格只有单行内容高, 站点/标签等多 chip 格换行把行撑高时(小窗常态)滑入的 chip 从首格上下两段漏出(2026-10-11 用户复报「小窗时站点的徽标不会被名称列挡住」)。
-> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度
+> 摘要: 给 `.group-row` 加「首列 `position: sticky; left: 0`」时, 八件事不显然 —— ①**表头 `.group-head` 在滚动容器之外**(纵向 sticky 的前提), 首格拿不到 sticky 锚, 必须用反向 `translateX` 抵消, 且要减掉表头 `padding-left`(三皮肤均 14px), 否则比行首格恒右偏 14px; ②sticky 首格必须**不透明**才挡得住滑过的兄弟列, 而行的状态底(下沉/选中)是 rgba 令牌 —— 直接取令牌会**双重上色**(atlas 选中态实测逐通道差 17/18/33, 超可辨阈 20), 须用「同色 `linear-gradient` 叠不透明 `--bg-row`」做合成(差 ≤8); ③行的左侧色条 `.group-row.selected::before` 挂在**行**上, 横滚后随行滚出, 且**不能**顺手改成 sticky(行是 grid 容器, 绝对定位伪元素一变 sticky 就进流成为网格项, 破坏行布局); ④**吸左边界要有视觉提示** —— 横滚时滑入首格下方的列会留一段未盖满的尾字紧贴首格右缘, 无边界线索时被读成渲染 bug(2026-10-11 用户报「状态列被名称列盖住」), 须在横滚非零时画右缘**发丝线**; ④b**这条提示别用带负 `spread` 的 `box-shadow` 落影** —— 落影可见度是**首格高度的函数**(常态行首格 22px 时被内缩成 2px 近乎不可见, 高行 46px+ 才完整显形), 逐行深浅差 7 倍, 只在"刚好被撑高的那几行"冒黑块(2026-10-12 用户报「名称列后随机出现阴影」, 已删落影); ⑤**首格必须 `align-self: stretch`** —— 行是 `align-items: center`, 网格项默认不拉伸, 首格只有单行内容高, 站点/标签等多 chip 格换行把行撑高时(小窗常态)滑入的 chip 从首格上下两段漏出(2026-10-11 用户复报「小窗时站点的徽标不会被名称列挡住」); ⑥**首格底色规则是「主列表行语言」, 会被复用 `.group-row` 的抽屉面带进去** —— 抽屉各引擎面行板语言各不相同(族面 `--tbl-face-bg`→`--bg` / 04 卡 `--bg-card` / 05·10 透明 / 08 引擎 `--bg-row`), 首格一律 `--bg-row` 就行内一条异色竖带(ocean 主题 Δ 16/255), 须**按面重锚**, 半透明 tint(err/bad/is-chk/sel)合成在**该面的承光底**上(抽屉是 `--bg-card`, 不是主表的 `--bg-row`); ⑦**search-hit 行底是方向渐层**(`90deg accent-soft→transparent 46%` over `--bg-row`), 首格镜像必须**同款渐层** —— 只给平铺基色会**丢整条渐层**(实测首格 `backgroundImage=none`, 追剧表命中行名称列读作异色竖带); ⑧**变体家族是「外层 `.dtNN-wrap` 外壳 + 内层 `.dtNN-list` 行容器」两层, 行必须活在 `.dtNN-list` 里** —— 变体 CSS 前缀以 `.dtNN-list .group-row` 为作用域, 05 修前只有单层 `dt05-wrap`、行直接挂下面 ⇒ 前缀不匹配, 六条 `.group-row` 规则全程空转, 行一直带主表卡底, 肉眼只看到「必现列和别的列不一样」(2026-10-14 用户报障, 逐面量计算样式才发现 `inList=false`); ⚠ 修它别把外层直接改名(会打破 e2e 通用助手 `.dt${variantId}-wrap` 与家族约定), 要补内层 list。
+> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器
 
-**Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md
+**Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
 
 ### 首列吸左固定(冻结列)的五处非显然约束
 
@@ -64,7 +64,47 @@
   - ⚠ **落点选文件**: 皮肤 CSS 有**单文件 700 行**上限(守阵 `test_frontend_template_split_wiring`,
     只查 atlas / console)。atlas 的 `css/components.css` 已顶满 ⇒ 新增规则一律放该皮肤的 `css/views.css`
     (prism 的表格规则本就在 `views.css`, 且不受该上限约束)。
+  - **⑥ 首格底色是「主列表行语言」, 抽屉面复用 `.group-row` 时会被带进去(2026-10-14 修「必现列背景与其他列不一致」)**:
+    皮肤 views.css 的 `.group-row > :first-child { background: var(--bg-row) }` 描述的是**主列表**三页
+    (种子/辅种/追剧)的行语言(不透明卡底)。抽屉各引擎表面复用 `.group-row`(外壳/桥零特判, D5 口径)
+    ⇒ 首格规则跟着漏进抽屉, 而各面**行板语言**各不相同: 族面 06/07/09/11 行板 `--tbl-face-bg`(→`--bg`)、
+    04 卡片行 `--bg-card`、05 健康分组与 10 内容树行板透明(承光底 = 抽屉卡底 `--bg-card`)、
+    08 行板本就是引擎 `--bg-row`。三样各算 ⇒ 行内画出一条异色竖带(实测 prism/frost 行板
+    rgb(242,246,251) vs 首格 rgb(247,250,253); ocean 主题 `--bg #0d1724` vs `--bg-row #112034`,
+    Δ 16/255, 用户默认暗色主题下肉眼可辨)。**判据 = 首格可见底 == 行板可见底**(半透明层逐层
+    alpha 合成后同 rgb; 裸计算样式相等覆盖不到摘底/透明行的面), 处置 = `shared/dt_table.css`
+    **按面重锚**: 族面首格同行板 Token(`--tbl-face-bg`)且悬停同 `--bg-hover`、err(06)/bad(07·09)/
+    is-chk(11)/sel(10) 的半透明 tint 用「同色 `linear-gradient` 叠**不透明 `--bg-card`**」合成
+    (**不是** `--bg-row` —— 抽屉的承光底是卡底, 见 ② 同法); 04/05 的首格不是「列」而是内容根
+    (卡头/`.dt05-rowin`, 单列或卡片栅格无兄弟列可挡) ⇒ 摘底 + `position: static`; 10 多列可横滚
+    ⇒ 保留吸左、取 `--bg-card`; 08 基础态同语言不重锚, 只补 bad 合成; 族表头首格显式同
+    `--tbl-head-bg`(皮肤规则给 `--bg` 只是回退值相同而侥幸对齐)。
+  - **⑦ search-hit 行底是方向渐层, 首格镜像别只给平铺基色**: 主表搜索命中行底是
+    `linear-gradient(90deg, var(--accent-soft), transparent 46%) over var(--bg-row)`(components.css),
+    而首格规则只有平铺 `--bg-row` ⇒ **整条渐层丢失**(实测追剧表命中行首格 `backgroundImage=none`,
+    左缘渐层最强处 Δ≈18/14/9, 名称列读作一条异色竖带)。修 = 三皮肤 views.css 补
+    `.group-row.search-hit > :first-child` 同款合成(停靠点同行 46%; 首格宽 << 行宽 ⇒ 格内衰减
+    更快, 残余差只落在渐层尾部, 远小于异色竖带)。**推广**: 行底一旦用**空间渐层**, 首格镜像
+    必须同款渐层 —— 「同色不同画法」在格/行宽度差巨大时就是可见竖带。
+  - **⑧ 变体外壳类名 ↔ CSS 前缀是运行时接线, 不匹配 = 整段规则空转(05 变体行容器坑)**:
+    drawer_tpl 变体的 CSS 以 `.drawer .dtNN-list .group-row` 为作用域前缀(U3 引擎化时写入),
+    家族结构 = **两层**: 外层 `.dtNN-wrap`(外壳, e2e 通用助手 `openTrackersVariant` 按它等)
+    + 内层 `.dtNN-list`(行容器, 锚槽/行活着里面)。05 修前只有单层 `dt05-wrap`、行直接
+    挂在它下面 ⇒ 前缀全程不匹配, 六条 `.group-row` 版式规则(摘引擎卡底/行观感归
+    `.dt05-rowin`/失败区与 chips 合成行)**全程不生效**, 行一直带着主表卡底(`--bg-row`
+    + 描边 + 圆角 + padding)。用户报障面是「必现列背景与其他列不一致」, 但逐面量计算样式时
+    05 的真实病症是 `inList=false/inWrap=true`(整面规则空转), 与首格底色是两件事。
+    **处置**: 补内层 `.dt05-list` 包住分区(`<div class="dt05-wrap"><div class="dt05-list">`)
+    —— ⚠ 首版修法是把外层直接改名 `dt05-list`, 当时"全仓搜 dt05-wrap 无引用"的判据**漏了
+    e2e 里动态拼的 `.dt${variantId}-wrap`**, 跑全量 @fast 才被抓到(2 例红); 家族两层结构
+    是硬约定, 新变体照抄, 守阵 `test_frontend_pinned_first_cell_bg_per_face` 钉 05 的
+    两层相邻结构与 CSS 前缀对齐。**推广**: "全仓搜旧类名无引用"对**动态拼接的选择器**
+    无效, 判据要连 `dt${`/模板字符串一起搜; 家族结构约定优先于单点改名。
 - **守阵**: `test_frontend_frozen_column_boundary_wiring`(静态钉 is-hscrolled 打标、三皮肤成对
   规则与首格 `align-self: stretch`);
-  几何行为静态判不出, 验证仍 = 桩服务真浏览器量 `getBoundingClientRect().left`
-  (横滚 400 后首格 == 容器左缘, 表头首格同值) + 残根边界与高行遮盖的截图目检。
+  `test_frontend_pinned_first_cell_bg_per_face`(静态钉 search-hit 首格镜像、dt_table.css 八面
+  按面重锚规则与合成基色 `--bg-card`、05 外壳 dt05-list 接线);
+  几何/可见底色静态判不出, 验证 = 桩服务真浏览器量具 `e2e/dt-table-face-bg.spec.mjs`
+  (首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行; 主表 search-hit 首格渐层镜像)。
+  ⚠ 多 clone  workspace 下先确认 8137 没有**别 clone 的残留桩**(本例撞上 auto-qb-clone5 的),
+  撞上宁可失败也不要静默验错对象 —— 换干净端口 `E2E_PORT=<n>` 复跑(见 pitfalls/testing/smoke.md)。

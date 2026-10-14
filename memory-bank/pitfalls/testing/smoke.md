@@ -51,6 +51,11 @@
   (多 clone 工作区下残留 harness serve 的是它自己 clone 的静态目录; 12 项探针在旧代码上照样大半通过, 假信心比超时更危险)。
   判据: 怀疑服务归属时 `page.evaluate` fetch 静态 JS 比对特征串(如刚加的方法名), 不在 ⇒ 服务不是本 clone 的。
   处置: 改代码验证类冒烟**一律自己起桩**(后台任务 + 新端口), 残留服务只读不验。
+  复发: 4 —— 2026-10-14 修「必现列背景不一致」时 8137 被 **auto-qb-clone5** 的残留 harness 占用(uvicorn 起不来只打
+  `[Errno 10048]` 一行, 三次后台起桩任务全 failed 但无一行有效日志); 且本环境有 HTTP_PROXY 透明代理,
+  `curl` 直连 8137 拿到的是代理的 502「upstream connect failed」, 而 node/Playwright 直连却 200 ——
+  **curl 通不通不能当判据**, 以 `Get-NetTCPConnection -LocalPort 8137 -State Listen` 现查归属为准
+  (PowerShell 查到 pid 20876, cmd 是 clone5 的 .venv)。换 `E2E_PORT=8237` 复跑即过, 未杀占用进程。
 
 ### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
 

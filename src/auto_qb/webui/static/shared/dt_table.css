@@ -3,6 +3,8 @@
  * ====================================================================
  * 范围: 抽屉内四个引擎表格面 —— 06 trackers / 07 peers 仪表 / 09 peers 密度 /
  *       11 content 树表(症状1 实证落点)。05/08 的行观感是卡片/分组个性, 不在本族。
+ * 2026-10-14 增补「必现列(吸左首格)底色按面重锚」段(修用户报「必现列背景与其他列
+ * 不一致」): 覆盖面扩到全部引擎表面(04/05/06/07/08/09/10/11)的首格与表头首格底色。
  *
  * 症状1(表头下方异色背景)的根因: 四面各自手写表头底色 background:var(--bg-card),
  * 与行板(skin 卡底 --bg-row / 透明)三样各算 —— frost 主题下量得
@@ -56,4 +58,102 @@
 .drawer-body .dt09-list .group-row:hover,
 .drawer-body .dt11-list .group-row:hover {
   background: var(--bg-hover);
+}
+
+/* ====================================================================
+ * 必现列(吸左首格)底色按面重锚(2026-10-14 修「必现列背景与其他列不一致」)
+ * ====================================================================
+ * 根因: 皮肤 views.css 的 `.group-row > :first-child { background: var(--bg-row) }`
+ * 是**主列表**行语言(不透明卡底 + align-self:stretch)。抽屉各引擎面复用 .group-row
+ * (外壳/桥零特判, D5 口径), 首格规则跟着漏进抽屉, 而行板语言各不相同 ⇒ 行内画出一条
+ * 异色竖带。实测(prism/frost): 族面行板 rgb(242,246,251)(--bg) vs 首格
+ * rgb(247,250,253)(--bg-row); ocean 主题差更大(--bg #0d1724 vs --bg-row #112034,
+ * Δ 达 16/255, 用户默认暗色主题下肉眼可辨)。
+ *
+ * 判据 = 首格计算底 == 行板计算底(同值或同幅合成), 按面重锚:
+ *   · 族面 06/07/09/11: 与行板同 Token(--tbl-face-bg); 悬停同 --bg-hover;
+ *     err(06)/bad(07/09) 行底 --error-soft、is-chk(11) 行底 --sel-bg 都是**半透明**
+ *     替换(不是层叠), 行的承光底是抽屉卡底 --bg-card ⇒ 首格用「同色 linear-gradient
+ *     叠不透明 --bg-card」合成(同主列表 selected 态法, 见 pitfalls/web-ui/frozen-column.md ②);
+ *     empty-row(11 空行)随行透明。
+ *   · 04 卡片 / 05 健康分组: 首格不是「列」而是内容根(卡头 .dt04-head / .dt05-rowin),
+ *     且两面都不横向滚动(04 group-table overflow:visible; 05 内容根即整行)——
+ *     无兄弟列可挡 ⇒ 摘掉不透明底与吸左, 行的卡底/内容根自底透出。
+ *   · 10 内容树: 多列且可横滚(窄轨) ⇒ 保留吸左; 行板透明, 承光底 = 抽屉卡底
+ *     --bg-card ⇒ 首格取 --bg-card; sel 行底 --sel-bg 半透明 ⇒ 同款合成。
+ *   · 08 用户分组: 行板本就是引擎 --bg-row(与首格同语言) ⇒ 只补 bad 行的
+ *     --error-soft 合成(err/bad 的承光底同为 --bg-card)。
+ *   · 族面表头首格: 与表头同 Token(--tbl-head-bg)。皮肤规则给的是 --bg, 仅因两处
+ *     回退值相同而侥幸对齐; 令牌一旦分家表头首格即异色, 故显式重锚。
+ *
+ * 特异性: 本段 (0,4,0)+  > 皮肤首格规则 (0,2,0); 变体注入 CSS 运行时更晚,
+ * 05 的 rowin 悬停(0,5,0)等版式规则依旧赢得过本段(同特异性时后来者胜)。
+ * 半透明 tint 一律合成在不透明基色上(不得直接给半透明令牌) —— 首格半透明则挡不住
+ * 滑过的兄弟列, 且与行「双重上色」。 */
+.drawer-body .dt06-list .group-head > .h-cell:first-child,
+.drawer-body .dt07-list .group-head > .h-cell:first-child,
+.drawer-body .dt09-list .group-head > .h-cell:first-child,
+.drawer-body .dt11-list .group-head > .h-cell:first-child {
+  background: var(--tbl-head-bg, var(--bg));
+}
+/* 族面行板首格: 与行板同 Token */
+.drawer-body .dt06-list .group-row > :first-child,
+.drawer-body .dt07-list .group-row > :first-child,
+.drawer-body .dt09-list .group-row > :first-child,
+.drawer-body .dt11-list .group-row > :first-child {
+  background: var(--tbl-face-bg, var(--bg));
+}
+/* 06 err 行: 变体 err:hover 仍保持 error-soft(特异性高于族悬停) ⇒ 首格成对保持 */
+.drawer-body .dt06-list .group-row.err > :first-child,
+.drawer-body .dt06-list .group-row.err:hover > :first-child {
+  background: linear-gradient(var(--error-soft), var(--error-soft)), var(--bg-card);
+}
+/* 07/09 bad 行: 族悬停(0,4,0)压过变体 bad(0,3,0) ⇒ bad+hover 行底是 --bg-hover,
+ * 首格随下面的悬停规则即可(悬停规则写在 bad 之后, 同特异性后来者胜) */
+.drawer-body .dt07-list .group-row.bad > :first-child,
+.drawer-body .dt09-list .group-row.bad > :first-child {
+  background: linear-gradient(var(--error-soft), var(--error-soft)), var(--bg-card);
+}
+/* 11 is-chk 行: 变体 is-chk:hover 保持 sel-bg ⇒ 首格成对保持 */
+.drawer-body .dt11-list .group-row.is-chk > :first-child,
+.drawer-body .dt11-list .group-row.is-chk:hover > :first-child {
+  background: linear-gradient(var(--sel-bg), var(--sel-bg)), var(--bg-card);
+}
+/* 11 空行: 随行透明(筛选无文件时的占位行) */
+.drawer-body .dt11-list .group-row.empty-row > :first-child { background: transparent; }
+/* 悬停(写在状态规则之后: 07/09 的 bad+hover 行底是 --bg-hover, 首格须跟着悬停而不是
+ * 留在 error-soft 合成上) */
+.drawer-body .dt06-list .group-row:hover > :first-child,
+.drawer-body .dt07-list .group-row:hover > :first-child,
+.drawer-body .dt09-list .group-row:hover > :first-child,
+.drawer-body .dt11-list .group-row:hover > :first-child {
+  background: var(--bg-hover);
+}
+/* 08 bad 行: 行板是引擎 --bg-row(基础态首格同语言, 无需重锚), bad 替换为半透明
+ * error-soft(承光底 --bg-card) ⇒ 首格合成; bad+hover 行底仍是 error-soft(变体内
+ * bad 规则后于 hover 声明), 故不必另写 hover 变体 */
+.drawer-body .dt08-rows .group-row.bad > :first-child {
+  background: linear-gradient(var(--error-soft), var(--error-soft)), var(--bg-card);
+}
+/* 04 卡片: 首格 = 卡头内容根, 摘底摘吸左(卡栅格不横滚; st-err/st-off 的卡底由行自绘) */
+.drawer-body .dt04-list .group-row > :first-child {
+  background: transparent;
+  position: static;
+}
+/* 05 健康分组: 首格 = 内容根(.dt05-rowin/.dt05-offline), 摘底摘吸左; 失败区内容根
+ * .dt05-fail 自有 error-soft 底, 显式重声明压过摘底(同特异性后来者胜); rowin 的悬停
+ * 底是变体自己的 (0,5,0) 规则, 赢得过本段 */
+.drawer-body .dt05-list .group-row > :first-child {
+  background: transparent;
+  position: static;
+}
+.drawer-body .dt05-list .group-row.failrow > :first-child {
+  background: var(--error-soft);
+}
+/* 10 内容树: 保留吸左(多列可横滚); 行板透明 ⇒ 首格取承光底 --bg-card; sel 行底
+ * --sel-bg 半透明 ⇒ 合成(sel 规则后于悬停声明: sel+hover 行底仍是 sel-bg) */
+.drawer-body .dt10-list .group-row > :first-child { background: var(--bg-card); }
+.drawer-body .dt10-list .group-row:hover > :first-child { background: var(--bg-hover); }
+.drawer-body .dt10-list .group-row.sel > :first-child {
+  background: linear-gradient(var(--sel-bg), var(--sel-bg)), var(--bg-card);
 }

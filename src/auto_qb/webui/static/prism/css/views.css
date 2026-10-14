@@ -179,6 +179,14 @@
 .group-row.partial > :first-child {
   background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
 }
+/* 搜索命中(2026-10-14 修「必现列背景与其他列不一致」): 行自身是「accent 渐层 over
+ * --bg-row」(见下方 .group-row.search-hit), 首格只拿平铺 --bg-row 会**丢整条渐层** ——
+ * 追剧表搜索命中行实测首格 backgroundImage=none, 名称列读作一条异色竖带(左缘渐层最强处
+ * Δ≈18/14/9)。首格补同款合成; 渐层的 transparent 停靠点同行(46%), 但首格宽 << 行宽 ⇒
+ * 格内渐层衰减更快, 残余差只落在渐层尾部(左缘逐通道一致), 远小于异色竖带。 */
+.group-row.search-hit > :first-child {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row);
+}
 .group-head > .h-cell:first-child {
   z-index: 2; background: var(--bg);
   transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
