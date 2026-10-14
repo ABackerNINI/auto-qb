@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0409-infra-fmt-ladder-dup-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="infra fmt_speed 与 fmt_size 阶梯循环逐字同">
 <meta name="issue-summary" content="utils.fmt_speed 与 fmt_size 同「单位表+&gt;=div 格式化」骨架, 只差单位表与后缀">
 <title>infra fmt_speed 与 fmt_size 阶梯循环逐字同 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-infra-fmt-ladder-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 04:09 — 用户指派认领（「认领并修复」），状态 <strong>In Progress</strong>；复验：grep <code>def fmt_speed</code> / <code>def fmt_size</code> 锚点在（<code>utils.py</code> 679/687 行，行号按取证 26-10-15 04:09），两阶梯循环仍逐字同（判据 <code>value &gt;= div</code> 与格式化行各写一遍，只差单位表 <code>/s</code> 后缀）（现象复现）</li>
+      <li>2026-10-15 04:14 — 已修并验证，状态 <strong>Done</strong>（test.full 3208 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-15-0414-infra-fmt-ladder-dup-fix</code>）：按建议抽阶梯骨架单点 <code>_fmt_ladder(value, units, suffix)</code> + 共享 <code>_SIZE_UNITS</code> 单位表（判据与格式化行各写一遍，<code>/s</code> 经 suffix 参数），<code>fmt_speed</code> / <code>fmt_size</code> 降为委托（<code>fmt_size</code> 的 int 强与 <code>"-"</code> 兜底保持在外），行为逐字不变；验证 = 定向 <code>test_utils.py</code> 93 绿（含新增行为用例：整数输入 <code>fmt_speed(v) == fmt_size(v) + "/s"</code> 跨 rung + 逐 rung 钉输出，与静态单点守阵 <code>if value &gt;= div:</code> 计数 == 1）+ 红验双验闭环（自抄阶梯回即守阵红 count 2、精度变异 <code>.2f</code>→<code>.1f</code> 即行为用例红，还原即绿）；改动面 1 源 + 1 测试文件，过 <code>dev.fmt</code></li>
     </ul>
   </section>
 

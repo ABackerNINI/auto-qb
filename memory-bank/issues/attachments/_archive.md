@@ -4,13 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (56)
+## Open (55)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
-- [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](../26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_speed 与 fmt_size 同「单位表+>=div 格式化」骨架, 只差单位表与后缀
 - [refactor] [平台判定旁路 infra 单点](../26-10-11-0352-refactor-infra-platform-detect-bypass-dup.html) — utils.is_windows/is_linux/is_mac 单点被 autostart.py(6处)+tray/app.py 裸 sys.platform.startswith 绕过
 - [refactor] [icon.ico 路径推导 notify 与 tray 逐字同](../26-10-11-0352-refactor-notify-tray-icon-path-dup.html) — notify.ICON_ICO 与 tray/app.ICON_ICO 逐字同 os.path.join(dirname(dirname(__file__)), assets, icon.ico)
 - [refactor] [torrents 快照字段表与视图字段表各手抄一份](../26-10-11-0352-refactor-torrents-snapshot-view-field-dup.html) — compat._EXTENSION_FIELDS 与 view._VIEW_FIELDS 两处枚举同一批 qB 字段名(本面唯一 pylint R0801 命中)
@@ -69,7 +68,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (187)
+## Done (188)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -78,6 +77,7 @@
 - [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [docs] [三份基线切片缺三行头 > 摘要 致 kb.check 恒红](../26-10-11-1630-docs-baselines-missing-summary-header.html) — 26-10-10-2245/2306/2335 三份 webui 基线切片缺 `> 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦
+- [refactor] [infra fmt_speed 与 fmt_size 阶梯循环逐字同](../26-10-11-0352-refactor-infra-fmt-ladder-dup.html) — utils.fmt_speed 与 fmt_size 同「单位表+>=div 格式化」骨架, 只差单位表与后缀
 - [refactor] [infra URL 分解口径两份(sanitize/mask)](../26-10-11-0352-refactor-infra-url-decompose-dup.html) — sanitize_tracker_url 与 mask_tracker_url 共享 netloc 去 userinfo/缺 scheme path 兜底/SANITIZE_FALLBACK 各写一遍
 - [refactor] [infra utils 小样板重复(host 收集 / 文件三态探针)](../26-10-11-0352-refactor-infra-utils-small-helper-dup.html) — match_tracker_confs 内 host 收集 与 extract_tracker_hostnames; file_access Local/Mapped 的 exists/isdir/isfile 三连
 - [refactor] [infra _win_user32 与 _win_kernel32 惰性绑定骨架重复](../26-10-11-0352-refactor-infra-win-dll-lazy-bind-dup.html) — utils._win_user32 与 _win_kernel32 同「惰性取 DLL+逐个绑签名+缓存」骨架

@@ -48,6 +48,8 @@
 - test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 - test_parse_bool_invalid: 非法布尔值 -> ValueError
+- test_fmt_speed_size_ladder_equivalence: fmt_speed/fmt_size 同阶梯单点(整数输入 fmt_speed(v)==fmt_size(v)+"/s" 跨 rung + 逐 rung 钉输出)
+- test_fmt_ladder_single_point: 守阵(issue infra-fmt-ladder-dup)——utils.py 里 `if value >= div:` 只出现一次(阶梯判单点)
 - test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(PIDL 不可用时 win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
 - test_open_path_windows_long_path_uses_shell_pidl: Windows 长路径"进入目录"(enter)/"定位选中"走 Shell PIDL, 绝不触达 os.startfile 与 explorer
 - test_open_path_windows_falls_back_to_string_route: PIDL 返回 False 时退回字符串路线(不静默什么都不做)
@@ -618,6 +620,27 @@ def test_fmt_size_invalid():
     """fmt_size: 非数字输入返回 '-'"""
     assert utils.fmt_size("not-a-number") == "-"
     assert utils.fmt_size(None) == "-"
+
+
+def test_fmt_speed_size_ladder_equivalence():
+    """fmt_speed/fmt_size 同阶梯单点: 整数输入 fmt_speed(v) == fmt_size(v) + "/s" 跨 rung; 逐 rung 钉输出防两函数同侧漂移"""
+    for v in (0, 512, 1023, 1024, 1024**2, 1024**3, 1024**4, 1024**5, 1024**6):
+        assert utils.fmt_speed(v) == utils.fmt_size(v) + "/s"
+    assert utils.fmt_size(1024**3) == "1.00 GiB"
+    assert utils.fmt_speed(1024**3) == "1.00 GiB/s"
+    assert utils.fmt_speed(1024**5) == "1.00 PiB/s"
+    assert utils.fmt_size(1023) == "1023 B"
+
+
+def test_fmt_ladder_single_point():
+    """守阵(issue infra-fmt-ladder-dup): 阶梯循环单点 _fmt_ladder —— utils.py 里 `if value >= div:` 只出现一次
+
+    fmt_speed / fmt_size 降为委托; 红验: 任一函数改回自抄阶梯即计数 >1 红。
+    """
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "infra" / "utils.py").read_text(encoding="utf-8")
+    assert src.count("if value >= div:") == 1, "阶梯判单点(出现 >1 次 = 又有人自抄)"
 
 
 def _fake_windows(monkeypatch):

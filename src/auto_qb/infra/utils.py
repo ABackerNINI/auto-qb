@@ -676,12 +676,21 @@ def is_manual_speed_limit(value_bytes: int) -> bool:
     return value_bytes > 0 and (value_bytes // 1024) % 2 == 1
 
 
+# 单位阶梯单点: fmt_speed / fmt_size 共用骨架与单位表, 只差 suffix —— 改单位或小数精度只此处
+_SIZE_UNITS = (("PiB", 1024**5), ("TiB", 1024**4), ("GiB", 1024**3), ("MiB", 1024**2), ("KiB", 1024))
+
+
+def _fmt_ladder(value: int, units: tuple, suffix: str = "") -> str:
+    """单位阶梯格式化骨架: 从高到低首个 rung 达值即 `X.XX unit<suffix>`, 未达任何即 `value B<suffix>`"""
+    for unit, div in units:
+        if value >= div:
+            return f"{value / div:.2f} {unit}{suffix}"
+    return f"{value} B{suffix}"
+
+
 def fmt_speed(value: int) -> str:
     """将字节/秒格式化为可读字符串"""
-    for unit, div in (("PiB/s", 1024**5), ("TiB/s", 1024**4), ("GiB/s", 1024**3), ("MiB/s", 1024**2), ("KiB/s", 1024)):
-        if value >= div:
-            return f"{value / div:.2f} {unit}"
-    return f"{value} B/s"
+    return _fmt_ladder(value, _SIZE_UNITS, "/s")
 
 
 def fmt_size(value) -> str:
@@ -690,10 +699,7 @@ def fmt_size(value) -> str:
         value = int(value)
     except (TypeError, ValueError):
         return "-"
-    for unit, div in (("PiB", 1024**5), ("TiB", 1024**4), ("GiB", 1024**3), ("MiB", 1024**2), ("KiB", 1024)):
-        if value >= div:
-            return f"{value / div:.2f} {unit}"
-    return f"{value} B"
+    return _fmt_ladder(value, _SIZE_UNITS)
 
 
 def replace_vars(text: str, tracker_conf) -> str:
