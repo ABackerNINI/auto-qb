@@ -177,3 +177,12 @@
 - **执行注意(供后续修复轮复用)**: 红验两判据互补拦面实证 —— 自抄阶梯回(行为不变)只静态守阵红, 精度变异(形态不变)只行为用例红; 单判族任一盲区另一, 配两判据的纪律在此 A 类抽单点体例已三轮(hr/webui/rules/core/infra)沿用。
 - **零改动确认**: 改动面 = infra 包 1 源文件 + 1 测试文件 + issue/切片/基线制品; 跨包零改动; `config.yml` / `auto-qb-data/` 未触碰。
 - **待办下一轮**: infra 余 1 条(`infra-platform-detect-bypass-dup`)仍 `Open`; 重复代码审查主线(Phase 2 前端轮 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。
+
+### 2026-10-15 R11 — 修复轮(torrents 视图字段表 issue 认领与修复)
+
+- **触发**: 用户「认领并修复 memory-bank/issues/26-10-11-0352-refactor-torrents-snapshot-view-field-dup.html」(torrents+tray 轮 R19 入池 3 条第 2 条, C01 快照字段表↔视图字段表双份; 上一回合卡于分析, 本回合继续修复)。
+- **范围与口径**: 单 issue, 改动源文件 1 + 测试文件 1 —— 未达立档阈值, **不新建修复轮档案**; 认领方为 activeContext 切片 `26-10-15-0501-torrents-snapshot-view-field-dup-fix`(issue doc-refs ↔ 切片 Refs 双向), 本档案仅记进度。
+- **产物**: `view.py` 按 issue 建议第一支派derive 落地 —— `_VIEW_EXCLUDED_FIELDS` 不展示缺口 9 项 frozenset(`hash`/`completed` + 重加 4 + 做种限制 3, 各带缘由注释)+ `_VIEW_FIELDS = _SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS`(compat 快照表单点借, 同包私有名 import 与 record.py 同口径), 61 项手抄 literal 退役; 改完前实测派derive 等价(view 61 项同 set, 脏判定同)行为不变, 漂移方向改(新增快照字段默认进脏判定, 多余重建无害; issue 记的「手抄漏→视图静默不重建」风险退役); 配守阵 `test_view_fields_derived_from_snapshot`(缺口 ⊆ 快照含 + 缺口字段不置脏 + 非缺口全进脏判定 + 静态接线 count == 1)+ 头部「测试计划」清单同步。issue 置 `Done`; 基线切片 `26-10-15-0512-torrents-view-field-dup-fix`(数字唯一权威, 看 `commands run kb.baseline`)。
+- **执行注意(供后续修复轮复用)**: ① 派derive 缺口方向钉 —— 展示表从快照表借减缺口(而非缺口从展示表补): 新增字段默认进脏判定即安全侧, 反方向即 issue 记的「手抄漏→视图静默不重建」风险; ② 红验三判据体例(自抄回即静态接线红 / 缺口拼不错即含红 / 手抄漏即行为红两判族含既有 `test_view_dirty_intersection`)—— 三 mutation 各红还原绿, 用 `commands run test.one` 而非裸 pytest(发包内 coverage gate 即 rc 非红验信号); ③ 收口首跑生成物守阵红(`issues/_index.md` 与 issue meta 改后漂移), `kb.index` 重建后复跑全绿 —— 生成物自指守阵, 处置=重跑生成器不回回改动。
+- **零改动确认**: 改动面 = torrents 包 1 源文件 + 1 测试文件 + issue/切片/基线制品; 跨包零改动; `config.yml` / `auto-qb-data/` 未触碰。
+- **待办下一轮**: torrents+tray 池 3 条全部 `Done`; 重复代码审查主线(Phase 2 前端轮 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。

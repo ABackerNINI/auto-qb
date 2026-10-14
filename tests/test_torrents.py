@@ -43,6 +43,7 @@
 - test_record_hr_anchor_carries_excluded_flag: 锚点快照带排除位(方案 B 的判据载体); 未命中恒 False, 标签/分类命中即带位
 - test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
+- test_view_fields_derived_from_snapshot: 守阵(issue 26-10-11-0352) _VIEW_FIELDS 派derive 快照表-不展示缺口, 缺口 ⊆ 快照且缺口字段不置脏
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
 - test_store_extension_fields_dirty_view_and_quantum: 视图纪律(缓存≠展示): 扩展字段已进平铺视图置脏; eta 分钟量化; 非展示字段不置脏
 - test_record_getattr_raw_fallback_and_missing: __getattr__ 前向兼容(_raw 命中 / 无键与 _raw 不可读均 AttributeError)
@@ -64,6 +65,7 @@ import pytest
 
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, view_dirty, view_field_value
 from auto_qb.torrents.compat import _SNAPSHOT_FIELDS
+from auto_qb.torrents.view import _VIEW_EXCLUDED_FIELDS
 
 from helpers import FakeClient, FakeTorrent
 
@@ -939,6 +941,25 @@ def test_snapshot_fields_match_record_slots():
     assert set(REQUIRED_TORRENT_FIELDS) <= snapshot
     no_default = [f.name for f in dc_fields(TorrentRecord) if f.default is MISSING and f.default_factory is MISSING]
     assert no_default == ["hash"]
+
+
+def test_view_fields_derived_from_snapshot():
+    """守阵(issue 26-10-11-0352): 视图展示表 = compat 快照全表 - 不展示缺口(派derive 单点, 手抄两份退役)
+
+    静态: view.py 里 `_SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS` 只允许出现一次(派derive 接线);
+    含: 缺口 ⊆ 快照(拼不错/陈旧即红)。行为: 缺口字段不置脏, 快照其余全进脏判定。
+    红验: ① 自抄 61 项 literal 回(行为不变)即静态红; ② 缺口拼不错即含红; ③ 手抄漏一字段即行为红。
+    """
+    from pathlib import Path
+
+    snapshot = set(_SNAPSHOT_FIELDS)
+    assert _VIEW_EXCLUDED_FIELDS <= snapshot, "缺口里有字段不在快照表(拼不错或陈旧)"
+    for f in _VIEW_EXCLUDED_FIELDS:
+        assert view_dirty({f}) is False, f"{f} 在缺口 yet view_dirty 真"
+    assert all(view_dirty({f}) for f in snapshot - _VIEW_EXCLUDED_FIELDS), "快照字段不在脏判定(手抄漏回归)"
+    view_src = (Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "torrents" /
+                "view.py").read_text(encoding="utf-8")
+    assert view_src.count("_SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS") == 1, "展示表须派derive 快照表-缺口(自抄回即接线消失)"
 
 
 def test_record_from_real_example_payload():

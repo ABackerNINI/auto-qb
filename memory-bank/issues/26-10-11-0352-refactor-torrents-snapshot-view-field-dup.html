@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0501-torrents-snapshot-view-field-dup-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="torrents 快照字段表与视图字段表各手抄一份">
 <meta name="issue-summary" content="compat._EXTENSION_FIELDS 与 view._VIEW_FIELDS 两处枚举同一批 qB 字段名(本面唯一 pylint R0801 命中)">
 <title>torrents 快照字段表与视图字段表各手抄一份 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-torrents-snapshot-view-field-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 05:01 — 用户指派认领（「认领并修复」，上一回合卡于分析、本回合继续修复），状态 <strong>In Progress</strong>；复验：grep <code>_EXTENSION_FIELDS</code> / <code>_VIEW_FIELDS</code> 锚点在（<code>compat.py</code> 56-106 / <code>view.py</code> 9-76，行号按取证 26-10-15 05:01），两字段表仍手抄同一批 qB 字段名（现码 view 61 项 ⊆ snapshot 70 项，<code>view - snapshot</code> 空，缺口恰 9 项）（现象复现）</li>
+      <li>2026-10-15 05:12 — 已修并验证，状态 <strong>Done</strong>（test.full 全绿，基线切片 <code>26-10-15-0512-torrents-view-field-dup-fix</code>）：按建议第一支派derive 落地 —— <code>view.py</code> 新增 <code>_VIEW_EXCLUDED_FIELDS</code> 不展示缺口 9 项 frozenset（<code>hash</code>/<code>completed</code> + 重加 4 + 做种限制 3，各带缘由注释）+ <code>_VIEW_FIELDS = _SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS</code>（<code>from .compat import _SNAPSHOT_FIELD_SET</code>，同包私有名 import 与 record.py 同口径），61 项手抄 literal 退役；改完前实测派derive 等价（61 项同 set，脏判定同）行为不变；配守阵 <code>test_view_fields_derived_from_snapshot</code>（缺口 ⊆ 快照含 + 缺口字段不置脏 + 非缺口全进脏判定 + 静态接线 count == 1）；红验三判据闭环（自抄 61 项回即静态红、缺口拼不错即含红、手抄漏字段即行为红两判族、还原绿）；改动面 1 源 + 1 测试文件，过 <code>dev.fmt</code>。漂移方向改：新增快照字段默认进脏判定（多余重建无害），issue 记的「手抄漏→视图静默不重建」风险退役</li>
     </ul>
   </section>
 

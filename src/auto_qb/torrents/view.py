@@ -2,78 +2,28 @@
 from collections.abc import Iterable
 from typing import Any, Dict
 
-# Web 视图展示字段: 仅这些字段变化才需重建视图(分组/平铺等所有 Web 视图的取值集合),
-# 避免种子库无变化时主循环空转重建; save_path 决定分组键, 故一并计入。
-# 前半段为分组视图展示字段; 后半段为种子平铺视图(SEED_ITEM, WEB UI 替代 qB 界面的种子页)
-# 扩展的原始数据字段 —— 平铺列表/详情抽屉要展示它们, 变化同样须触发重建。
-_VIEW_FIELDS = frozenset(
+from .compat import _SNAPSHOT_FIELD_SET
+
+# Web 视图展示字段: 仅这些字段变化才需重建视图(分组/平铺等所有 Web 视图的取值集合 ——
+# 分组展示字段 ∪ 种子平铺视图(SEED_ITEM, WEB UI 替代 qB 界面的种子页)原始数据字段,
+# 平铺列表/详情抽屉要展示它们, 变化同样须触发重建), 避免种子库无变化时主循环空转重建;
+# save_path 决定分组键, 故一并计入。
+# 派derive 而非手抄(issue 26-10-11-0352 修复): 展示表 = 快照全表(compat 单点) - 不展示缺口
+# —— 新增快照字段默认进脏判定(多余重建无害); 手抄漏则该字段变化不置脏, 视图静默不重建。
+_VIEW_EXCLUDED_FIELDS = frozenset(
     (
-        "name",
-        "save_path",
-        "state",
-        "dlspeed",
-        "upspeed",
-        "uploaded",
-        "size",
-        "progress",
-        "seeding_time",
-        "ratio",
-        # 标签/分类在组级以"成员共同值"展示(前端求交集), 变更须让视图重建
-        "tags",
-        "category",
-        # 添加时间: 组级默认排序键(几乎不变, 加入仅为了"新添加种子"时能即时反映)
-        "added_on",
-        # ---- 种子平铺视图(SEED_ITEM)扩展字段 ----
-        "downloaded",
-        "total_size",
-        "eta",
-        "time_active",
-        "last_activity",
-        "availability",
-        "num_seeds",
-        "num_leechs",
-        "num_complete",
-        "num_incomplete",
-        "tracker",
-        "trackers_count",
-        "dl_limit",
-        "up_limit",
-        "seq_dl",
-        "f_l_piece_prio",
-        "auto_tmm",
-        "force_start",
-        "super_seeding",
-        "priority",
-        "magnet_uri",
-        "infohash_v1",
-        "infohash_v2",
-        "private",
-        "comment",
-        "created_by",
-        "creation_date",
-        "has_metadata",
-        "piece_size",
-        "pieces_have",
-        "pieces_num",
-        "completion_on",
-        "seen_complete",
-        "total_wasted",
-        "popularity",
-        "connections_count",
-        "connections_limit",
-        "reannounce",
-        "reannounce_in",
-        "has_tracker_error",
-        "has_tracker_warning",
-        "has_other_announce_error",
-        "amount_left",
-        "content_path",
-        "download_path",
-        "root_path",
-        "downloaded_session",
-        "uploaded_session",
+        "hash",  # 主键: 变化即种子换, 增/删路径已置脏, 字段级脏判定不需
+        "completed",  # 展示用 progress/size 代替
+        "ratio_limit",  # 重加 4 件: 规则/跳检重加参数, 视图不展示
+        "seeding_time_limit",
+        "inactive_seeding_time_limit",
+        "share_limit_action",
+        "max_ratio",  # 做种限制 3 件: 视图展示实际值(ratio/seeding_time), 不展示上限
+        "max_seeding_time",
+        "max_inactive_seeding_time",
     )
 )
+_VIEW_FIELDS = _SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS
 
 # 视图字段量化步长: 该字段在 Web 视图中按此步长取整, 重建判定与展示值共用同一步长
 # (保证"视图内容"与"脏标记依据"一致, 否则前端展示会与实际重建时机脱钩)。
