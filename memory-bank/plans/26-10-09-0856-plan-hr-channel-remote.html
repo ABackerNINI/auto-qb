@@ -7,9 +7,10 @@
 <title>HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-channel-remote">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Superseded">
 <meta name="doc-added" content="26-10-09-0856">
-<meta name="doc-updated" content="26-10-09-0913">
+<meta name="doc-updated" content="26-10-14-1241">
+<meta name="doc-refs" content="memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html">
 <style>
   :root {
     --bg: #10151a;
@@ -104,7 +105,7 @@
       <div class="item"><div class="k">专题</div><div class="v">hr-channel-remote</div></div>
       <div class="item"><div class="k">上游</div><div class="v">issue 26-10-09-0855 · 用户实报</div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop · 2026-10-09</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Superseded · 已被联合计划吸收</span></div></div>
     </div>
   </header>
 
@@ -369,6 +370,7 @@
   <section id="s08">
     <h2><span class="no">08</span>变更记录</h2>
     <ul>
+      <li><b>26-10-14-1241 本计划转 Superseded(用户拍板后合并)</b>: 用户拍板「安全传输暂用 HTTP(T1 受信 LAN + token); 非局域网用户自行反代, 只写文档不实现; 路线选 A」。本计划的全部范围(S1–S6 目标)由<b>联合实施计划 <a href="26-10-14-1241-plan-hr-channel-portless-remote.html">26-10-14-1241-plan-hr-channel-portless-remote.html</a></b>(专题 <code>hr-channel-portless-remote</code>)吸收并扩充: 去端口路线 A(发现端口 + 随机数据端口 + token 自动分发 + 配对码)叠加在本计划路径 C 之上, 一并落地。本计划的 D1–D4 拍板点结论见联合计划 §01 拍板回执; §03.4 与 hr-fault-domain 的三处同步(C1/C2/C3)移入联合计划 S5。本件不再单独演进; 行号与事实以联合计划 §02(de83fbe8)为准。</li>
       <li><b>26-10-09-0913</b> 改版(用户口径⑤:「WebUI 在线而扩展不在线发告警、不静默, 无需判断是否同机」): <b>本计划因此减负</b>。① §03.4 <b>C1 重写</b>: 原「W-b 升级为来源地址交集」被<b>撤销</b>, 判据简化为「WebUI 是否活跃」单信号 —— 跨机<b>不再需要来源地址比对</b>。② <b>S5 改造</b>: 原「新增来源地址面」删除 —— 该步不再新增任何面, 只保留「被拒接触面」(服务「可定位故障」子类); 来源地址若有, 仅作展示、不进判据。③ V6 / R3 判据随之更新(活跃 ⇒ 告警 / 不活跃 ⇒ 静默)。④ §01 关系条目同步。⑤ <code>hr-fault-domain</code> 侧同步见其 0913 条。</li>
       <li><b>26-10-09-0856</b> 初版: 按用户口径(「扩展只能本机是设计缺陷, 未来须支持 NAS + 外部扩展形态」)出方案。① 立上游 issue <code>26-10-09-0855</code> 记录缺陷; ② §03.2 先给<b>四条达成路径矩阵</b>并点明 <b>SSH 隧道=A 零改码即时通路</b>、反代=B 后端零攻击面、直绑=C 本计划主角; ③ §03.3 给原生路径改造面(配置键 + 安全默认联动 + 扩展放开 + 传输三候选 + 401 节流); ④ §03.4 列与 <code>hr-fault-domain</code> 的口径同步; ⑤ §03.5 安全面重评(证明放开不引入 SSRF 新风险); ⑥ 列 D1–D4 拍板点、V1–V8 验收、R1–R5 风险。待拍板。</li>
     </ul>

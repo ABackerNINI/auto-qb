@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="hr-channel-portless-registration">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-14-1110">
+<meta name="doc-updated" content="26-10-14-1110">
+<title>HR 取数通道「去端口配置 + 后端主动注册」可行性分析 — 背景报告</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0e1013; --paper:#14171b; --paper-2:#191d22;
+    --ink:#e7e9e6; --muted:#a2a8af; --dim:#6e747b;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.055);
+    --accent:#5fb3a6; --warn:#dd8f66; --bad:#d9736c;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,Arial,sans-serif;
+    --head:"Bahnschrift","DIN Alternate","Segoe UI Semibold","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px}
+  .cover{padding:80px 0 30px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  h1{font-family:var(--head);font-size:36px;line-height:1.15;letter-spacing:-.02em;font-weight:600;margin:20px 0 0;max-width:26ch}
+  .sub{font-size:17px;color:var(--muted);margin-top:16px;max-width:66ch}
+  .meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:32px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:12px 18px 4px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin:0 0 4px}
+  .meta dd{margin:0;font-size:13px;color:var(--ink);font-family:var(--mono)}
+  section{padding:44px 0 8px;border-top:1px solid var(--line);margin-top:30px}
+  section:first-of-type{border-top:0}
+  .num{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--accent);text-transform:uppercase}
+  h2{font-family:var(--head);font-size:25px;line-height:1.2;font-weight:600;margin:8px 0 0}
+  h3{font-family:var(--head);font-size:17px;font-weight:600;margin:30px 0 10px}
+  p{margin:12px 0;max-width:76ch}
+  ul,ol{max-width:76ch;padding-left:20px}
+  li{margin:6px 0}
+  code{font-family:var(--mono);font-size:.86em;color:#d8d5c9;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  strong{font-weight:600}
+  em{font-style:normal;color:var(--ink);border-bottom:1px solid var(--line)}
+  .dim{color:var(--dim)} .muted{color:var(--muted)}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:400}
+  td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:1px solid var(--line)}
+  .note{margin:20px 0;padding:14px 18px;background:var(--paper);border:1px solid var(--line);font-size:14px;max-width:82ch}
+  .bad-note{border-left:3px solid var(--bad)}
+  .warn-note{border-left:3px solid var(--warn)}
+  .ok-note{border-left:3px solid var(--accent)}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:.1em .5em;border-radius:3px;border:1px solid var(--line);white-space:nowrap}
+  .tag-ok{color:var(--accent);border-color:rgba(95,179,166,.45)}
+  .tag-warn{color:var(--warn);border-color:rgba(221,143,102,.45)}
+  .tag-bad{color:var(--bad);border-color:rgba(217,115,108,.45)}
+  figure{margin:22px 0}
+  figcaption{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:10px}
+  .footer{padding:48px 0 72px;color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Feasibility Report</div>
+  <h1>HR 取数通道「去端口配置 + 后端主动注册」可行性分析</h1>
+  <p class="sub">用户提案: 扩展侧是被动连接, 能否去掉后端端口配置、改为随机端口, 由后端主动联系扩展完成注册, 甚至扩展也不需要固定端口、由后端主动探测。本报告只做<em>可行性与路线判断</em>, 不含实施设计; 事实取证截至 <code>de83fbe8</code>。</p>
+  <dl class="meta">
+    <div><dt>报告日期</dt><dd>2026-10-14</dd></div>
+    <div><dt>代码现状</dt><dd>de83fbe8 · 工作区干净</dd></div>
+    <div><dt>结论</dt><dd>部分可行 · 两条落地路线</dd></div>
+  </dl>
+</header>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">01 / 结论速览</div>
+  <h2>字面方案不可行, 底层目标可以达成</h2>
+  <p>提案包含三个诉求, 可行性各不相同。核心事实: <strong>Chrome 扩展没有监听端口的 API</strong>, 后端永远无法向扩展主动建链或「探测」扩展 —— 连接只能由扩展侧发起。因此「后端主动探测扩展」在纯扩展形态下<strong>不可行</strong>; 但「用户零配置 + 后端主动派发」在 <em>native messaging(原生消息)</em> 形态下可以完整达成。</p>
+  <table>
+    <tr><th style="width:34%">诉求</th><th style="width:12%">结论</th><th>达成形态</th></tr>
+    <tr>
+      <td>去掉后端端口配置, 改为随机端口</td>
+      <td><span class="tag tag-ok">可行</span></td>
+      <td>端口传 <code>0</code> 由 OS 分配; 寻址改由「发现端口」或「命名管道」补上, 用户不再接触端口。</td>
+    </tr>
+    <tr>
+      <td>后端主动联系扩展注册</td>
+      <td><span class="tag tag-warn">部分可行</span></td>
+      <td>HTTP 路线做不到(扩展不能被连); native messaging 路线在通道接通后可由后端主动推送任务、主动维护注册态。</td>
+    </tr>
+    <tr>
+      <td>扩展也不需要固定端口, 由后端主动探测</td>
+      <td><span class="tag tag-bad">字面不可行</span></td>
+      <td>扩展无监听套接字, 无可探测。两端皆无端口的形态只有 native messaging: 桥进程由浏览器拉起, 与后端走命名管道, 全程零端口。</td>
+    </tr>
+    <tr>
+      <td>顺带收益</td>
+      <td><span class="tag tag-ok">附带成立</span></td>
+      <td>「同机多实例端口必须各不相同、被占即启动报错」这条约束随随机端口/管道命名一起消失。</td>
+    </tr>
+  </table>
+  <div class="note ok-note"><strong>推荐</strong>: 以<strong>路线 A(发现端口 + 临时数据端口 + token 自动分发)</strong>先落地 —— 用户侧配置归零、改动面最小、安全模型与现状对齐; 若同时想消灭轮询时延、让后端真正主动派发, 再评估<strong>路线 B(native messaging 桥 + 命名管道)</strong>。两条路线都保留旧式固定端口配置作为兼容回退, 不搞断崖式切换。</div>
+
+  <figure>
+    <svg viewBox="0 0 680 316" xmlns="http://www.w3.org/2000/svg" font-family="Consolas,Menlo,monospace">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5fb3a6"/>
+        </marker>
+        <marker id="arrDim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6e747b"/>
+        </marker>
+      </defs>
+      <!-- column titles -->
+      <text x="112" y="18" fill="#a2a8af" font-size="12" text-anchor="middle">现状: 固定端口 + 手工配置</text>
+      <text x="340" y="18" fill="#a2a8af" font-size="12" text-anchor="middle">路线 A: 发现端口 + 临时端口</text>
+      <text x="568" y="18" fill="#a2a8af" font-size="12" text-anchor="middle">路线 B: 原生消息 + 命名管道</text>
+      <!-- ============ column 1: current ============ -->
+      <rect x="24" y="34" width="176" height="34" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="112" y="55" fill="#e7e9e6" font-size="11.5" text-anchor="middle">扩展 SW(MV3)</text>
+      <rect x="24" y="150" width="176" height="46" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="112" y="170" fill="#e7e9e6" font-size="11.5" text-anchor="middle">后端 HTTP 端点</text>
+      <text x="112" y="186" fill="#a2a8af" font-size="10.5" text-anchor="middle">127.0.0.1:18788(固定)</text>
+      <line x1="82" y1="68" x2="82" y2="148" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="90" y="104" fill="#a2a8af" font-size="10">GET /api/hr/tasks</text>
+      <text x="90" y="118" fill="#6e747b" font-size="10">每 60s 轮询</text>
+      <line x1="142" y1="148" x2="142" y2="70" stroke="#6e747b" stroke-width="1.4" marker-end="url(#arrDim)"/>
+      <text x="150" y="104" fill="#6e747b" font-size="10">POST /api/hr/result</text>
+      <text x="112" y="228" fill="#dd8f66" font-size="10.5" text-anchor="middle">用户抄端口 + 粘 token(选项页)</text>
+      <text x="112" y="244" fill="#6e747b" font-size="10" text-anchor="middle">多实例逐实例各配一份</text>
+      <!-- ============ column 2: route A ============ -->
+      <rect x="252" y="34" width="176" height="34" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="340" y="55" fill="#e7e9e6" font-size="11.5" text-anchor="middle">扩展 SW(MV3)</text>
+      <rect x="252" y="150" width="176" height="34" rx="4" fill="#14171b" stroke="rgba(95,179,166,.5)"/>
+      <text x="340" y="171" fill="#e7e9e6" font-size="11.5" text-anchor="middle">发现端口(固定·免配置)</text>
+      <rect x="252" y="236" width="176" height="46" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="340" y="256" fill="#e7e9e6" font-size="11.5" text-anchor="middle">后端数据端点</text>
+      <text x="340" y="272" fill="#a2a8af" font-size="10.5" text-anchor="middle">127.0.0.1:随机端口</text>
+      <line x1="300" y1="68" x2="300" y2="148" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="308" y="104" fill="#a2a8af" font-size="10">① GET /api/hr/discover</text>
+      <text x="308" y="118" fill="#6e747b" font-size="10">Origin 钉死扩展 id</text>
+      <line x1="380" y1="148" x2="380" y2="70" stroke="#6e747b" stroke-width="1.4" marker-end="url(#arrDim)"/>
+      <text x="388" y="104" fill="#6e747b" font-size="10">② {临时端口, token}</text>
+      <line x1="340" y1="184" x2="340" y2="234" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="348" y="210" fill="#a2a8af" font-size="10">③ 轮询(同现状)</text>
+      <text x="340" y="306" fill="#5fb3a6" font-size="10.5" text-anchor="middle">用户零配置; 注册表文件聚合多实例</text>
+      <!-- ============ column 3: route B ============ -->
+      <rect x="492" y="34" width="152" height="34" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="568" y="55" fill="#e7e9e6" font-size="11.5" text-anchor="middle">离屏文档(扩展内)</text>
+      <rect x="492" y="112" width="152" height="34" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="568" y="133" fill="#e7e9e6" font-size="11.5" text-anchor="middle">native 桥(浏览器拉起)</text>
+      <rect x="492" y="190" width="152" height="46" rx="4" fill="#14171b" stroke="rgba(255,255,255,.18)"/>
+      <text x="568" y="210" fill="#e7e9e6" font-size="11.5" text-anchor="middle">auto-qb 后端</text>
+      <text x="568" y="226" fill="#a2a8af" font-size="10.5" text-anchor="middle">命名管道(零端口)</text>
+      <line x1="540" y1="68" x2="540" y2="110" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="548" y="94" fill="#a2a8af" font-size="10">stdio(JSON 行)</text>
+      <line x1="596" y1="110" x2="596" y2="68" stroke="#6e747b" stroke-width="1.4" marker-end="url(#arrDim)"/>
+      <line x1="540" y1="146" x2="540" y2="188" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="548" y="170" fill="#a2a8af" font-size="10">命名管道</text>
+      <line x1="596" y1="188" x2="596" y2="148" stroke="#5fb3a6" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="500" y="258" fill="#5fb3a6" font-size="10.5">接通后后端主动推送任务</text>
+      <text x="500" y="274" fill="#6e747b" font-size="10">无轮询 · 无 request_timeout 耦合</text>
+      <text x="500" y="290" fill="#dd8f66" font-size="10">成本: 桥组件 + 一次性主机注册</text>
+    </svg>
+    <figcaption>图 1 · 三种拓扑对照: 现状(左) / 路线 A(中) / 路线 B(右)</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">02 / 现状事实</div>
+  <h2>当前连接模型与用户配置面</h2>
+  <p>先校正一处表述: 现状并非「扩展被动连接」——<strong>连接由扩展主动发起</strong>(MV3 service worker 每 60 秒轮询一次), 后端是被动监听方; 「被动」的是任务流(扩展只在后端派发了任务时才动作)。用户诉求的实质是<strong>把用户侧那两道手工配置(端口 + token)消掉, 并让后端能主动找到扩展</strong>。</p>
+
+  <h3>2.1 拓扑与协议(代码事实)</h3>
+  <table>
+    <tr><th style="width:26%">项</th><th>事实</th></tr>
+    <tr><td>端点</td><td><code>hr/server.py</code> 的 <code>HrChannelServer</code>: 标准库 <code>ThreadingHTTPServer</code> 绑 <code>127.0.0.1:&lt;port&gt;</code>; <code>allow_reuse_address=False</code>(Windows 上抢绑检测, 端口被占 ⇒ 启动 fail-fast)</td></tr>
+    <tr><td>四个 API</td><td><code>GET /api/hr/tasks</code>(拉任务清单) · <code>POST /api/hr/result</code>(回传) · <code>GET /api/hr/sites</code>(选项页授权清单) · <code>POST /api/hr/refresh</code>(立即拉取)</td></tr>
+    <tr><td>鉴权</td><td><code>X-Hr-Token</code> 常数时间比较(token 留空则自动生成并持久化到 <code>&lt;data_dir&gt;/hr.token</code>, 0600); Origin 白名单只放行 <code>chrome-extension://</code>(配了 <code>channel.extension_id</code> 则钉死单个 id, 属第二道防线)</td></tr>
+    <tr><td>其它边界</td><td><code>UrlPolicy</code> 在下发时卡死域名+路径(SSRF); 单请求体上限 12MiB; 无 Origin 放行(真鉴权是 token)</td></tr>
+    <tr><td>取数模型</td><td>取数线程把任务入队后<strong>阻塞等待</strong>回传(上限 <code>request_timeout</code>, 默认 180s); 扩展 60s 内轮询取走。硬约束: <strong>轮询周期必须小于 request_timeout</strong>(v2.6 前 5 分钟轮询导致约四成任务直接超时, 2026-09-25 实报后定为 1 分钟)</td></tr>
+    <tr><td>多实例</td><td>同机多实例必须各配不同 <code>hr_check.channel.port</code>(被占即启动报错); 扩展选项页持实例列表, 逐实例各配一份端点+token</td></tr>
+  </table>
+
+  <h3>2.2 用户侧配置面(即要被消掉的「一道配置」)</h3>
+  <ol>
+    <li>从后端启动日志抄端口(<code>HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;</code>);</li>
+    <li>打开 <code>&lt;data_dir&gt;/hr.token</code> 复制密钥;</li>
+    <li>在扩展选项页「① 连接本机端点」填 <code>127.0.0.1:&lt;端口&gt;</code> + token, 点「存入实例列表」——多实例重复三遍。</li>
+  </ol>
+  <p>此外站点授权(选项页 ②)是从后端 <code>/api/hr/sites</code> 自动拉的, 已属零配置, 不在本次范围。</p>
+
+  <h3>2.3 可复用的既有资产</h3>
+  <ul>
+    <li><strong>SSE 推送先例</strong>: WebUI 已有 <code>GET /api/events</code>(FastAPI/Starlette 原生), 证明「后端推送」在本仓有成熟形态; 但 HR 端点是标准库 <code>http.server</code>, 不共享该设施。</li>
+    <li><strong>手写 WebSocket 先例</strong>: <code>scripts/hr_fetch_experiment.py</code>(CDP 实验)有零依赖的手写帧/mask/ping-pong 客户端。</li>
+    <li><strong>CDP 路线已否决</strong>(2026-09-23~24): 后端驱动专用浏览器 profile 抓 cookie 的方案因「专用 profile 没有用户日常登录态」被否, 才选了扩展路线 —— 本次任何方案都不得退回该形态。</li>
+    <li><strong>扩展 manifest 已放行任意回环端口</strong>: <code>host_permissions</code> 含 <code>http://127.0.0.1/*</code>, 探测任意端口无需改 manifest。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">03 / 技术边界</div>
+  <h2>为什么「后端主动探测扩展」字面不可行</h2>
+  <div class="note bad-note"><strong>事实 1</strong>: Chrome 扩展(MV3)没有监听 TCP 端口的 API。历史上 <code>chrome.sockets.tcpServer</code> 属于已废弃的 Chrome Apps 平台, MV3 扩展只能当客户端。扩展没有「端口」可被固定, 也没有「端口」可被探测。</div>
+  <div class="note bad-note"><strong>事实 2</strong>: 因此后端<strong>永远无法向扩展主动建链</strong>。后端 → 扩展只有一条路: 在<em>扩展先拨号打开的通道</em>上推送。可选通道仅三种: native messaging(stdio, 由浏览器拉起宿主)、WebSocket、SSE。</div>
+  <div class="note warn-note"><strong>事实 3</strong>: native messaging 的宿主进程只能由<strong>浏览器</strong>启动并走 stdio, 后端也不能反向连浏览器。即便路线 B, 「后端主动」的准确含义也是: 传输层首次接通由扩展侧触发(浏览器启动时一次), <strong>此后后端随时可主动推送</strong>, 无需轮询。</div>
+  <p>推论: 提案第三句(后端主动探测扩展)不可行; 第二句(后端主动联系扩展注册)只有路线 B 能达成其精神; 第一句(去端口、随机化)两条路线都能达成, 且都必须补一个<strong>寻址机制</strong>来替代「用户抄端口」——要么是固定但免配置的发现端口(路线 A), 要么是命名管道(路线 B)。</p>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">04 / 路线 A</div>
+  <h2>发现端口 + 临时数据端口 + token 自动分发(推荐先行)</h2>
+  <p>保留现有轮询模型与全部安全边界, 只把「寻址」从用户手工搬运改为扩展自动发现。<strong>用户侧配置归零</strong>, 选项页降级为高级/手动模式。</p>
+
+  <h3>4.1 后端设计</h3>
+  <ul>
+    <li><strong>数据端口随机化</strong>: <code>hr_check.channel.port</code> 语义改为 <code>0</code>(默认)= 交 OS 分配; 显式非零值 = 旧式固定端口(完全兼容现有安装)。</li>
+    <li><strong>发现端点</strong>: 新增 <code>GET /api/hr/discover</code>, 监听在一个<strong>固定但永不需要用户配置</strong>的发现端口(建议默认 <code>18788</code>, 冷门口径; 可被配置覆盖)。免 token(它本身就是发 token 的), 靠 <strong>Origin 钉死</strong>(<code>chrome-extension://&lt;extension_id&gt;</code>)鉴权——与现状第二道防线同一机制; 普通网页 JS 打进来只有 403。</li>
+    <li><strong>多实例聚合</strong>: 每个 daemon 启动时把 <code>{id, name, endpoint, token, 心跳时间戳}</code> 写进本机注册表文件(建议 <code>%LOCALAPPDATA%\auto-qb-hr\instances.json</code>, 文件锁 + 临时文件原子替换); 发现端口「先绑先得」的归属者每次请求时读注册表、按心跳 TTL 过滤后聚包返回。多实例不再需要端口互斥。</li>
+    <li><strong>启动日志</strong>照旧打印实际端点(随机端口), 供人核对; 另打一行发现端口。</li>
+  </ul>
+
+  <h3>4.2 扩展设计</h3>
+  <ul>
+    <li>启动时 / 全部实例连不上时 / 每 N 分钟, 探测一次发现端口; 命中则把实例清单(含 token)落 <code>chrome.storage.local</code>, 后续轮询完全走现状逻辑。</li>
+    <li>选项页: 「自动发现的实例」只读展示 + 「重新发现」按钮; 保留手动添加作为回退(发现失败 = 今天的体验, 不更差)。</li>
+    <li>发现响应里带 <code>poll_hint</code> 与实例声明的 <code>extension_id</code>, 不一致时选项页亮警告(与现状 403 排障口径一致)。</li>
+  </ul>
+
+  <h3>4.3 安全论证与残留风险</h3>
+  <p>现状信任根 = <code>hr.token</code> 文件(0600, 只有 daemon 能写)经用户手工粘贴进入扩展。路线 A 的信任根 = 发现端口归属 + Origin 钉死, 是<strong>一次可感知的削弱</strong>: 同机恶意进程可抢占发现端口、伪装 daemon 钓鱼扩展, 收割带登录态的页面/种子字节(扩展只校验「任务是后端派发的」这一形式, URL 白名单在真后端侧, 伪装者不在其约束内)。</p>
+  <ul>
+    <li><strong>量级论证</strong>: 该威胁模型(同用户恶意进程)下现状也已失守——未打包扩展就是磁盘明文文件, 同用户进程可直接改 <code>background.js</code>; App-Bound Encryption 保护的 cookie 库不被直接读, 但改扩展文件等价。故增量风险小, 不建议为此付出结构性成本。</li>
+    <li><strong>可选硬化</strong>: 一次性配对码——daemon 在日志/WebUI 亮 6 位码, 用户选项页输入一次, 之后发现响应须带配对密钥的 HMAC 才被采信。一步手工换回完整信任根, 按需开启(保守默认关)。</li>
+    <li><strong>可用性风险</strong>: 发现端口被普通应用误占 ⇒ 扩展发现失败, 退手动配置(不静默、有日志)。注册表文件按项目既有口径不得放云同步盘。</li>
+  </ul>
+
+  <div class="note"><strong>改动面</strong>: 后端 <code>hr/server.py</code>(发现端点 + port 0) · <code>hr/runtime.py</code>(注册表写入) · <code>config/schema/hr.py</code> + <code>validate_config</code>(port 语义) · WebUI 设置页(端口项渲染「自动/固定」) · 扩展 <code>background.js</code>(发现探测) · <code>options.js</code>(实例展示) · 测试面 <code>tests/test_extension_proxy.py</code> 与端点单测。轮询语义、任务协议、安全边界全部不变。</div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">05 / 路线 B</div>
+  <h2>native messaging 桥 + 命名管道(完整形态, 零端口)</h2>
+  <p>唯一能同时兑现「零端口 + 后端主动派发」的路线。扩展不再轮询, 后端不再有 TCP 监听面。</p>
+
+  <h3>5.1 构成</h3>
+  <ul>
+    <li><strong>扩展侧</strong>: 用一个<strong>离屏文档(offscreen document)</strong>持有 <code>chrome.runtime.connectNative</code> 长连接(MV3 service worker 随时被回收, 长连接必须挂在离屏文档上; 该 API 自 Chrome 116 起可用, 与 manifest 的 <code>minimum_chrome_version</code> 一致); service worker 只做消息路由。协议 = Chrome 原生消息格式(4 字节长度前缀 + UTF-8 JSON 行), 任务/结果契约与现状 JSON 完全一致, <strong>零协议迁移成本</strong>。</li>
+    <li><strong>桥进程</strong>: 由浏览器按 native messaging 清单拉起(stdio), 只做「stdio ⇄ 命名管道」透传, 不解析业务; 连接目标 = <code>\\.\pipe\auto-qb-hr-&lt;实例标识&gt;</code>(Windows; 类 Unix 用 unix socket)。可用标准库 ctypes 实现, 不必引入新依赖。</li>
+    <li><strong>后端侧</strong>: 以命名管道服务器替代 <code>ThreadingHTTPServer</code>; 管道名含实例标识(由 <code>data_dir</code>派生), 多实例天然互斥, 无端口概念; 桥一连上即完成注册, 之后<strong>后端随时主动推送任务</strong>, 轮询、<code>request_timeout</code>、「轮询周期 &lt; 超时窗」这条硬约束一并消失, 任务时延从「最多 60s」降到亚秒级。</li>
+    <li><strong>信任链</strong>: native messaging 清单的 <code>allowed_origins</code> 钉死扩展 id(浏览器强制执行) + 命名管道 ACL(仅限本用户会话) + 管道上仍校验 <code>hr.token</code>。不比现状弱, 且没有可抢占的「发现端口」。</li>
+  </ul>
+
+  <h3>5.2 成本(这是它最大的问题)</h3>
+  <ul>
+    <li><strong>一次性主机注册</strong>: 每个浏览器要写自己的注册表项(Chrome: <code>HKCU\Software\Google\Chrome\NativeMessagingHosts\…</code>; Edge 另一键)。可做成 <code>auto-qb --install-native-host</code> 一键脚本(顺带按本机探测到的 chrome/edge 分别注册), 但这是<strong>新增的一个安装步骤</strong>, 与「减少配置」的初衷部分相悖——只是从「每次改端口都手工搬」变成「一次性装桥」。</li>
+    <li><strong>新组件</strong>: 桥进程的构建/分发/路径漂移(venv 迁移后清单里的绝对路径失效, 需重跑注册); 桥成为新的本地进程面(须最小化: 只透传)。</li>
+    <li><strong>扩展传输层重写</strong>: 轮询、实例列表、自测连通、降噪逻辑全部改写; 旧后端(无管道)时期降级 = 现状手动流程。</li>
+    <li>仅覆盖 Chromium 系桌面浏览器(与现状扩展的 Chrome/Edge 定位一致, 不算新增损失)。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">06 / 路线 C 与已否决项</div>
+  <h2>中间态与被淘汰的思路</h2>
+  <h3>6.1 路线 C: 发现 + WebSocket 推送(中间态)</h3>
+  <p>用路线 A 的发现机制寻址, 之后扩展开 WebSocket 长连接, 后端主动推送。可获得「亚秒级派发」而不引入 native messaging; 但要在标准库 <code>http.server</code> 上<strong>手写 WebSocket 服务端</strong>(帧/mask/ping-pong/分片, 仓内只有客户端先例), 或引入 <code>websockets</code> 新依赖(本仓此前刻意回避)。工作量大于 A、小于 B; 只有「不想上 native messaging、又想要推送」时才值得考虑。<strong>不推荐 SSE</strong>: <code>EventSource</code> 不能带自定义头, token 只能进 query string, 会泄进访问日志。</p>
+  <h3>6.2 已评估并否决</h3>
+  <table>
+    <tr><th style="width:24%">思路</th><th>否决理由</th></tr>
+    <tr><td>全端口段扫描(6.5 万端口)</td><td>随机端口落在临时段(~2.8 万个), 扩展侧扫描量不可接受; 且扫描与真实使用之间存在端口复用竞态, 误连普通应用</td></tr>
+    <tr><td>注册小端口块(如 100 个)让扩展扫块</td><td>比全段扫描可行, 但块大小 × 扫描成本 × 竞态窗口三者拉扯; 仍保留 polling 与 token 搬运问题, 不如发现端口干净</td></tr>
+    <tr><td>mDNS / Bonjour 广播</td><td>Chrome 扩展无 ServiceDiscovery API, 扩展侧无法参与</td></tr>
+    <tr><td><code>chrome.storage.managed</code> 经策略注入</td><td>需管理员级 GPO 部署 <code>StorageManagedSchema</code>, 家用场景过重; 且 daemon 以普通用户运行, 写不了 HKLM</td></tr>
+    <tr><td>扩展直读 <code>file://</code> 端点文件</td><td>需用户手动开「允许访问文件网址」开关; <code>data_dir</code> 路径对扩展不可知; MV3 SW 对 file:// 支持不稳</td></tr>
+    <tr><td>后端 CDP 驱动浏览器</td><td>2026-09-24 已否决: 专用 profile 无用户日常登录态, Chrome 136+ 禁默认目录调试端口</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">07 / 对比矩阵</div>
+  <h2>三条路线横评</h2>
+  <table>
+    <tr><th style="width:22%">维度</th><th>路线 A(发现端口)</th><th>路线 B(原生消息)</th><th>路线 C(发现+WS)</th></tr>
+    <tr><td>用户配置步骤</td><td>0(自动发现+自动 token)</td><td>0, 但多一个一次性主机注册</td><td>0</td></tr>
+    <tr><td>后端端口</td><td>数据端口随机; 残留 1 个固定发现端口(免配置)</td><td>零端口(命名管道)</td><td>同 A</td></tr>
+    <tr><td>扩展端口</td><td>不涉及(扩展本无端口)</td><td>不涉及</td><td>不涉及</td></tr>
+    <tr><td>后端主动派发</td><td>否(仍是 60s 轮询)</td><td><strong>是</strong>(接通后随时推)</td><td>是(长连接上推)</td></tr>
+    <tr><td>任务时延</td><td>≤60s(现状不变)</td><td>亚秒级</td><td>亚秒级</td></tr>
+    <tr><td>request_timeout 耦合</td><td>保留(硬约束不变)</td><td><strong>解除</strong></td><td>解除</td></tr>
+    <tr><td>多实例</td><td>注册表文件聚合(新增一个本机文件)</td><td>管道名天然区分(最干净)</td><td>同 A</td></tr>
+    <tr><td>新依赖</td><td>无</td><td>无(ctypes 足够), 但新增桥组件</td><td>手写 WS 服务端, 或 <code>websockets</code></td></tr>
+    <tr><td>改动面</td><td>中(后端+扩展各一小块)</td><td>大(桥+管道+扩展传输层重写+注册表)</td><td>中大</td></tr>
+    <tr><td>信任根</td><td>发现端口归属+Origin(可配对码硬化)</td><td>清单 origins+管道 ACL+token(不弱于现状)</td><td>同 A</td></tr>
+    <tr><td>主要风险</td><td>发现端口被占(退手动); 钓鱼(增量小)</td><td>注册表/路径漂移; 桥进程面; 一次性安装步骤</td><td>WS 服务端正确性; 同 A</td></tr>
+    <tr><td>结论</td><td><strong>推荐先行</strong></td><td>完整形态, 作为二期评估</td><td>仅在拒绝 B 且要推送时考虑</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">08 / 兼容与迁移</div>
+  <h2>不做断崖式切换</h2>
+  <ul>
+    <li><strong>旧扩展 + 新后端(路线 A/B)</strong>: <code>port</code> 显式配置即完全旧行为; 选项页手动加实例照旧可用。存量安装零感知。</li>
+    <li><strong>新扩展 + 旧后端</strong>: 发现无果(旧后端无发现端点) ⇒ 退手动配置, 即今天的流程; 日志给一句「未发现本机实例, 请手动配置」。</li>
+    <li><strong>配置语义</strong>: <code>hr_check.channel.port</code> 默认 <code>0</code>(自动); <code>validate_config</code> 与 schema 同步放开 0 值; WebUI 设置页端口项渲染为「自动(推荐)/ 固定端口(高级)」。</li>
+    <li><strong>token 口径不变</strong>: 仍自动生成到 <code>&lt;data_dir&gt;/hr.token</code>(0600); 路线 A 由发现响应携带, 路线 B 在管道握手时校验——文件始终是信任锚, 人也能打开核对。</li>
+    <li><strong>文档同步</strong>: <code>extensions/hr-fetch-proxy/README.md</code> 的配置章节、<code>docs/</code下通道说明、排障表(「Failed to fetch」清单收敛为「未发现实例」一条)需随实施更新。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">09 / 风险与缓解汇总</div>
+  <table>
+    <tr><th style="width:16%">路线</th><th style="width:40%">风险</th><th>缓解</th></tr>
+    <tr><td rowspan="3">A</td><td>恶意本地进程抢占发现端口钓鱼扩展</td><td>量级论证(同用户进程本可改未打包扩展); 可选一次性配对码 HMAC 硬化(默认关)</td></tr>
+    <tr><td>发现端口被普通应用误占</td><td>发现失败退手动 + 明确日志; 发现端口可配置覆盖</td></tr>
+    <tr><td>注册表文件并发写/损坏</td><td>文件锁 + 原子替换; 不放云同步盘(与 <code>shared_dir</code> 同口径); TTL 心跳清僵尸</td></tr>
+    <tr><td rowspan="3">B</td><td>每浏览器一份注册表项, 漏装则桥不起</td><td><code>--install-native-host</code> 按探测到的 chrome/edge 分别注册; 启动日志明示桥状态</td></tr>
+    <tr><td>清单内绝对路径随 venv/目录迁移失效</td><td>注册命令可随时重跑(幂等); 文档写明「移动仓库后重跑一次」</td></tr>
+    <tr><td>MV3 SW 回收杀掉长连接</td><td>长连接挂离屏文档(既有成熟形态); SW 只路由</td></tr>
+    <tr><td>C</td><td>手写 WS 服务端正确性(分片/掩码/心跳)</td><td>若选 C: 帧逻辑单测 + 用扩展侧真实浏览器对打; 否则回到 A</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">10 / 待拍板事项</div>
+  <h2>实施前需要用户决策的问题</h2>
+  <ol>
+    <li><strong>路线选择</strong>: A(零配置, 保留轮询) / B(零端口+主动派发, 多一次性安装) / C(中间态)?</li>
+    <li><strong>发现端口默认值</strong>(仅路线 A/C): 建议 <code>18788</code>(现产端口转正为发现端口, 数据端口让位给随机); 是否认可?</li>
+    <li><strong>配对码硬化</strong>(路线 A): 接受文档化残留风险(推荐, 威胁模型增量小), 还是要一次性配对码?</li>
+    <li><strong>多实例注册表落点</strong>(路线 A): <code>%LOCALAPPDATA%\auto-qb-hr\</code>(单用户场景)是否覆盖你的实际部署(所有实例同用户运行)?</li>
+    <li><strong>桥分发形态</strong>(仅路线 B): <code>.cmd</code> 包装 <code>python -m</code>(跟随仓库) 还是 PyInstaller 单文件(可独立分发)?</li>
+    <li><strong>轮询是否保留</strong>(路线 B): 管道为主通道后, 是否保留一条降级轮询作为管道不通时的兜底?</li>
+  </ol>
+  <p class="dim">以上拍板后, 实施设计(方案与取舍)另立计划文档(<code>memory-bank/plans/</code>), 不在本报告范围。</p>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">11 / 附录</div>
+  <h2>关键文件索引(取证来源)</h2>
+  <table>
+    <tr><th style="width:44%">文件</th><th>与本报告的关系</th></tr>
+    <tr><td><code>src/auto_qb/hr/server.py</code></td><td>端点实现: 线程池 HTTP、端口独占绑定、路由与鉴权、被拒接触记账</td></tr>
+    <tr><td><code>src/auto_qb/hr/channel.py</code></td><td>协议与边界: API 常量、token 解析、Origin 白名单、UrlPolicy、任务/结果契约</td></tr>
+    <tr><td><code>src/auto_qb/hr/runtime.py</code></td><td>装配: 端点/取数线程生命周期、监听身份(热重挂判据)、自检快照</td></tr>
+    <tr><td><code>src/auto_qb/hr/fetcher.py</code></td><td>阻塞等待回传 + <code>request_timeout</code> 语义 + 端点未监听快速失败</td></tr>
+    <tr><td><code>src/auto_qb/config/schema/hr.py</code></td><td><code>channel</code> 段字段(enabled/port/token/extension_id/request_timeout)</td></tr>
+    <tr><td><code>extensions/hr-fetch-proxy/background.js</code></td><td>轮询主流程、实例清单、降噪、硬上限(第二道闸)</td></tr>
+    <tr><td><code>extensions/hr-fetch-proxy/options.js</code> / <code>normalize.js</code></td><td>用户配置面: 实例表单、自测连通、端点归一化</td></tr>
+    <tr><td><code>extensions/hr-fetch-proxy/manifest.json</code></td><td>MV3 权限面: host_permissions 已含任意回环端口; minimum_chrome_version 116</td></tr>
+    <tr><td><code>memory-bank/tasks/attachments/26-09-22-backend-partial-hr-verify-log.md</code></td><td>通道选型史: 手工 cookie → CDP(否决)→ 扩展定稿; WS 客户端先例出处</td></tr>
+    <tr><td><code>scripts/hr_fetch_experiment.py</code></td><td>零依赖手写 WebSocket 客户端先例(CDP 实验遗物)</td></tr>
+  </table>
+</section>
+
+<div class="footer">
+  auto-qb · memory-bank/reports · doc-type=report · 出厂即冻结(快照) · 26-10-14-1110
+</div>
+
+</div>
+</body>
+</html>
