@@ -186,3 +186,11 @@
 - **执行注意(供后续修复轮复用)**: ① 派derive 缺口方向钉 —— 展示表从快照表借减缺口(而非缺口从展示表补): 新增字段默认进脏判定即安全侧, 反方向即 issue 记的「手抄漏→视图静默不重建」风险; ② 红验三判据体例(自抄回即静态接线红 / 缺口拼不错即含红 / 手抄漏即行为红两判族含既有 `test_view_dirty_intersection`)—— 三 mutation 各红还原绿, 用 `commands run test.one` 而非裸 pytest(发包内 coverage gate 即 rc 非红验信号); ③ 收口首跑生成物守阵红(`issues/_index.md` 与 issue meta 改后漂移), `kb.index` 重建后复跑全绿 —— 生成物自指守阵, 处置=重跑生成器不回回改动。
 - **零改动确认**: 改动面 = torrents 包 1 源文件 + 1 测试文件 + issue/切片/基线制品; 跨包零改动; `config.yml` / `auto-qb-data/` 未触碰。
 - **待办下一轮**: torrents+tray 池 3 条全部 `Done`; 重复代码审查主线(Phase 2 前端轮 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。
+
+### 2026-10-15 R12 — 修复轮(hr 恢复链与文件锁跨包收口, issue hr-store-recover-lock-family-dup 认领与修复)
+
+- **触发**: 用户「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」—— R6/R2/R3 三轮按「与轮 18 infra 合并考量」暂缓的跨包件, infra 轮(R18)收口。
+- **范围与口径**: hr/ + core/ + infra/ 三包 4 源文件, 达立档阈值 → 新建修复轮档案 [26-10-15-backend-store-recover-lock-dedup](26-10-15-backend-store-recover-lock-dedup.md)(认领方); 保守口径 = **行为逐位不变**(消息文案字节同, 仅编排/构造收口)。
+- **产物**: ① `infra/store_recovery.py` 新增 —— 「读坏 → (挪走)留证 → 读 `.bak`」编排单点 `recover_corrupt_file`(回调式: `read_backup` + 可选 `quarantine`, 不传 = 原地保留) + `quarantine_bad_file` 时间戳留证单点; hr `_recover` 与 state `load()` 损坏分支两处调用, 语义差异(hr 挪走留证/migrate/read_error 消息 vs state 原地保留/分级日志/立即自愈写回)全留调用方。② `infra/locking.py` 新增 `open_file_lock` / `release_file_lock` 构造/释放单点, hr 站点锁与 `SingleInstanceLock` 同族收口(hr/store 不再裸 import filelock)。③ 守阵 `tests/test_store_recovery.py` 10 条(编排顺序/回调缺失/透出 + 静态两判据: `.bad-{int(time.time())}` 与 `from filelock import` 全仓分布白名单), 双判据均过红验。
+- **执行注意(供后续修复轮复用)**: ① **回调式单点的 seam 纪律** —— 首版把「先留证」做进 infra 内部(按 path 直接挪), hr 两条例行 seam(`store.quarantine = lambda: ""` 模拟挪不动)被绕过即红; 处置动作必须经调用方传入的回调, 单点只保留编排与兜底实现。② filelock 3.32.6 已无 `_lock_file` 属性(句柄由库内 fd 生命周期自理), 旧 `_lock_file.close()` 仅作旧版兜底, `AttributeError` 静默吞掉即可 —— 别把它当"必须生效"的清理。③ `_recover` 的 message 拼接沿用 rec 字段逐字重组(坏文件已挪走/未能挪走/已从备份恢复/备份不可用四段), hr 的 status.py「读坏不抛」契约未动。
+- **零改动确认**: 改动面 = infra 2 源文件 + hr/store.py + core/state.py + 1 新测试文件 + issue/切片/基线/档案制品; 跨 webui/torrents 零改动; `config.yml` / `auto-qb-data/` 未触碰。

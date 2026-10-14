@@ -93,6 +93,6 @@
 
 ## 待办（下一轮）
 
-- 仍 `Open` 的 hr 相关 2 条: `hr-store-recover-lock-family-dup`(报告自标跨包风险中, 建议与轮 18 infra 合并考量) / `hr-fetchable-dead-config`(「接上强制 vs 删死字段」二选一待拍板)。
+- 仍 `Open` 的 hr 相关 1 条: `hr-fetchable-dead-config`(「接上强制 vs 删死字段」二选一待拍板)。〔2026-10-15 R12 续记〕`hr-store-recover-lock-family-dup` 已由 infra 轮(R18)合并考量收口 —— 恢复链与文件锁收 infra 单点, 见主档案 `26-10-10-backend-dup-code-audit.md` R12 与档案 `26-10-15-backend-store-recover-lock-dedup.md`。
 - webui 半合流: token(R15-C01) / 站点派生(R15-C03) 随 webui 轮 15 改走 infra/Config 单点(守阵白名单已预留)。
 - `hr-lane-transition-boilerplate-dup` 的 B 类子项(各档摘要串 service ↔ status, `(全深度)` vs `(全)`)仍未合 —— 需先钉文案差异点 + 回归保护, 本轮按报告口径只登记。

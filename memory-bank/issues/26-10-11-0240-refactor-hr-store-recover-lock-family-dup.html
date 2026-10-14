@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0240">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-15-backend-store-recover-lock-dedup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr store 锁与读坏恢复链同族两套">
 <meta name="issue-summary" content="hr/store 的 .bak 兜底+quarantine 恢复链与 core/state 同族; infra/locking 单点未被使用">
 <title>hr store 锁与读坏恢复链同族两套 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0240-refactor-hr-store-recover-lock-family-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 05:22 — 认领（用户指令「认领并修复」，infra 轮 R18 合并考量件），状态 <strong>In Progress</strong>；复验：<code>hr/store.py</code> 裸 <code>FileLock</code>（import+构造各一处）与「读坏→隔离→.bak 兜底」恢复链两套同族仍在（取证 2026-10-15 05:22）</li>
+      <li>2026-10-15 05:40 — 修复完成，状态 <strong>Done</strong>。<strong>实际修法</strong>（保守口径，行为逐位不变）：① 新增 <code>infra/store_recovery.py</code> 恢复链编排单点 —— <code>recover_corrupt_file</code>（回调式：<code>read_backup</code> + 可选 <code>quarantine</code>，不传 = 原地保留）+ <code>quarantine_bad_file</code>（<code>.bad-&lt;ts&gt;</code> 留证）；<code>hr/store.py</code> 的 <code>_recover</code> 与 <code>core/state.py</code> 的 <code>load()</code> 损坏分支两处调用。语义差异按建议保留在调用方：hr 挪走留证 + schema 迁移 + 结论拼 <code>read_error</code>（status.py「读坏不抛」契约）；state 原地保留 + <code>_CORRUPT</code> 三态 + future 版本 fail-fast + 分级日志 + 立即自愈写回（<code>keep_backup=False</code> 纪律未动）。② 锁收口 <code>infra/locking.py</code>：新增 <code>open_file_lock</code> / <code>release_file_lock</code>，hr 站点锁与 <code>SingleInstanceLock</code> 同族共用（Timeout→HrLockBusy / SingleInstanceLockError 的领域翻译留各自）。<strong>与建议的差异</strong>：未做「锁类统一」（meta 伴生/固定超时 0/CLI 通道与 per-site/可配超时/HrLockBusy 语义不同，强并类改错误语义）；state 的自愈写回未抽公共 helper（<code>test_load_state_recovered_writeback_failure_is_nonfatal</code> 按 <code>qb_state.utils.atomic_write</code> 打补丁，抽走打穿补丁面）。<strong>验证方式与数字</strong>：定向 test.one 六文件全绿（hr_store 55 / locking 7 / rule_engine 34 / hr_status 28 / hr_service 133 / store_recovery 10）；<code>test.full</code> 3221 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-15-0540-backend-store-recover-lock-dedup.md</code>；静态守阵两判据（<code>.bad-{int(time.time())}</code> 字面量分布 / <code>from filelock import</code> 分布）各过红验。改道记录：首版 infra 内置挪文件绕过 hr 例行 <code>store.quarantine</code> seam 双红 → 处置改回调注入。档案 <code>26-10-15-backend-store-recover-lock-dedup.md</code>。</li>
     </ul>
   </section>
 

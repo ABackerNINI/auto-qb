@@ -2,7 +2,8 @@
 
 由根目录平铺文件归拢而来（plan 26-09-22-2112 · 方案 C · W4a）:
 - errors.py    AutoQbError 错误根（CLI 单点捕获）+ ConfigError / SingleInstanceLockError / QbCompatError
-- locking.py   单实例锁（filelock + 伴生 meta.json）
+- locking.py   单实例锁（filelock + 伴生 meta.json）+ 全项目文件锁构造/释放单点（open_file_lock / release_file_lock）
+- store_recovery.py 「读坏 -> 留证 -> .bak 兜底」恢复链公共骨架（hr 站点文件与 state.json 共用）
 - versioning.py 落盘文件 schema 版本与逐级升级链（CURRENT_VERSIONS / MIGRATIONS / detect_version / migrate）
 - logging.py   日志配置（控制台 + RotatingFileHandler；WARN: 与 stdlib logging 同名，包内一律相对导入）
 - utils.py     通用工具（解析/匹配/路径/变量替换）

@@ -17,15 +17,14 @@
 import json
 import logging
 import os
-import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple
 
-from filelock import FileLock, Timeout
-
 from ..infra.errors import SchemaVersionError
+from ..infra.locking import Timeout, open_file_lock, release_file_lock
+from ..infra.store_recovery import quarantine_bad_file, recover_corrupt_file
 from ..infra.utils import BACKUP_SUFFIX, atomic_write
 from ..infra.versioning import CURRENT_VERSIONS, migrate
 from .model import HrSiteData
@@ -58,7 +57,9 @@ class HrSiteStore:
         self.path = self.dir / f"{site}.json"
         self.lock_path = self.dir / f"{site}.lock"
         self.owner = owner or instance_id()
-        self._lock = FileLock(str(self.lock_path), timeout=lock_timeout)
+        # 文件锁走 infra 单点(issue 26-10-11-0240): 构造/释放口径与 SingleInstanceLock 同源,
+        # 不再各自裸 import filelock
+        self._lock = open_file_lock(self.lock_path, timeout=lock_timeout)
         # 写者心跳自检基线(仅本进程内存): revision 回退 / 心跳被覆盖 => 锁在该共享目录上不生效
         self._last_write_rev = 0
         self._last_write_heartbeat = 0.0
@@ -84,10 +85,7 @@ class HrSiteStore:
         try:
             yield HrLockSession(self)
         finally:
-            try:
-                self._lock.release()
-            except Exception:  # pragma: no cover - filelock 释放失败不影响正确性
-                logger.debug(f"释放站点锁失败: {self.lock_path}", exc_info=True)
+            release_file_lock(self._lock, logger=logger, what=f"站点锁 {self.lock_path}")
 
     # ---------- 读 / 写(仅在 hold 内调用) ----------
 
@@ -166,18 +164,14 @@ class HrSiteStore:
     def quarantine(self) -> str:
         """把坏文件挪到 `<site>.json.bad-<ts>`(**保留现场**, 而不是让它被下一次写盘覆盖掉)
 
+        挪文件/取时间戳/失败只记 debug 的纪律收在 infra 单点 `quarantine_bad_file`
+        (infra.store_recovery, issue 26-10-11-0240); 本方法保留 HrSiteStore 公开面
+        (status.py 契约与测试面不变)。
+
         返回新路径; 挪不动(被其它程序占用等)返回空串 —— 那种情况下宁可继续跑, 但调用方须知悉,
         因为它决定后面写盘能不能安全地保留 `.bak`。
         """
-        if not self.path.exists():
-            return ""
-        target = f"{self.path}.bad-{int(time.time())}"
-        try:
-            os.replace(str(self.path), target)
-        except OSError as e:
-            logger.debug(f"HR 站点 {self.site} | 坏文件挪走失败(继续运行): {e}")
-            return ""
-        return target
+        return quarantine_bad_file(str(self.path), logger=logger, what=f"HR 站点 {self.site}")
 
     def read_backup(self) -> Tuple[HrSiteData, Optional[str]]:
         """读 `<site>.json.bak`(每次写盘前的上一版) → (数据, 不可用原因); 不抛"""
@@ -272,17 +266,28 @@ class HrLockSession:
         self.writable = store._check_lock_effective(self.data)
 
     def _recover(self, store: HrSiteStore) -> None:
-        """坏文件处置: 挪走留证 → 试备份 → 把结论写进 `read_error`(一条消息说清发生了什么)"""
-        moved = store.quarantine()
-        self.read_error += f"; 坏文件已挪走: {moved}" if moved else "; 坏文件未能挪走(它将被下次写盘覆盖)"
-        data, backup_err = store.read_backup()
-        if backup_err is None:
+        """坏文件处置: 挪走留证 → 试备份 → 把结论写进 `read_error`(一条消息说清发生了什么)
+
+        编排走 infra 单点 `recover_corrupt_file`(infra.store_recovery, issue 26-10-11-0240):
+        「先留证后读备份」的顺序纪律(备份也不可用时, 下一步写盘会覆盖现场)与 state.json
+        恢复链同族同源; hr 侧的消息拼装/心跳基线重置保留在此 —— 两处语义差异清单见
+        infra.store_recovery 模块 docstring。
+        """
+        rec = recover_corrupt_file(
+            read_backup=store.read_backup,
+            quarantine=store.quarantine,
+            logger=logger,
+            what=f"HR 站点 {store.site}",
+        )
+        self.read_error += f"; 坏文件已挪走: {rec.moved_to}" if rec.moved_to else "; 坏文件未能挪走(它将被下次写盘覆盖)"
+        if rec.recovered:
+            data = rec.data
             self.data = data
             self.recovered_from_backup = True
             store.rebaseline_after_recovery(data)
             self.read_error += f"; 已从备份(.bak)恢复: 索引 {len(data.index)} 条 / 放行 {len(data.verified)} 条"
         else:
-            self.read_error += f"; 备份不可用({backup_err}), 本轮按空数据处理(保守回落未核实)"
+            self.read_error += f"; 备份不可用({rec.backup_reason}), 本轮按空数据处理(保守回落未核实)"
 
     @property
     def site(self) -> str:

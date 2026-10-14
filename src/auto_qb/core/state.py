@@ -12,9 +12,10 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 from ..infra import utils
+from ..infra.store_recovery import recover_corrupt_file
 from ..infra.versioning import CURRENT_VERSIONS, migrate
 from ..torrents import TorrentStore
 
@@ -76,6 +77,10 @@ class StateService:
         落后则在内存完成迁移, 描述记入 migration_desc 供 run() 持锁后物化落盘; 版本
         比程序新 / 非法值 -> SchemaVersionError 直接放出去 fail-fast —— **不算** _CORRUPT:
         版本问题不是内容损坏, 混进三态模型会触发错误的 .bak 回退(备份里也是同一个新版本)。
+
+        损坏分支的「留证 -> 读 .bak」编排与 hr 站点文件恢复链走同一 infra 单点
+        (infra.store_recovery.recover_corrupt_file, issue 26-10-11-0240): state 侧不传
+        quarantine(坏文件原地保留待查), 结论的分级日志与自愈写回保留在本方法。
         """
         self.migration_desc = ""
         data = self._read_state_file(self.state_file)
@@ -84,14 +89,32 @@ class StateService:
 
         bak_path = self.state_file + utils.BACKUP_SUFFIX
         logger.warning(f"状态文件损坏, 无法解析(原样保留待查, 不删除): {self.state_file}")
-        bak = self._read_state_file(bak_path)
-        if isinstance(bak, dict):
-            logger.info(f"已用备份恢复状态: {bak_path}({len(bak)} 个键) —— 执行历史与跨日去重以备份为准")
-            bak = self._migrate_state_dict(bak)
+        rec = recover_corrupt_file(
+            read_backup=self._read_backup_dict,  # 不传 quarantine: state.json 口径, 坏文件原地保留待查
+            logger=logger,
+            what="状态文件",
+        )
+        if rec.recovered:
+            logger.info(f"已用备份恢复状态: {bak_path}({len(rec.data)} 个键) —— 执行历史与跨日去重以备份为准")
+            bak = self._migrate_state_dict(rec.data)
             self._write_back_recovered(bak)
             return bak
         logger.error(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
         return {}
+
+    def _read_backup_dict(self) -> Tuple[dict, str]:
+        """备份读法契约(给 infra 恢复链单点, issue 26-10-11-0240): (dict, None)=可用 /
+        (None, 原因)=不可用 —— 与 hr `HrSiteStore.read_backup` 同形状, 解析口径
+        (_CORRUPT 三态)封在本方法内。
+
+        注意本方法**不做** schema 迁移: 迁移统一在 load() 拿到可用内容后过链(与主文件同口径),
+        fail-fast 的 SchemaVersionError 因此照常放出去 —— 备份里也是同一个新版本时, 静默
+        "回退"没有意义。
+        """
+        bak = self._read_state_file(self.state_file + utils.BACKUP_SUFFIX)
+        if isinstance(bak, dict):
+            return bak, None
+        return None, "没有备份文件" if bak is None else "备份内容不可用"
 
     def _read_state_file(self, path: str):
         """读单个状态文件: dict(可用) / None(不存在) / _CORRUPT(存在但内容不是合法 dict)
