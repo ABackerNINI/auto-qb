@@ -22,13 +22,14 @@ from collections import deque
 
 from ..infra import autostart, utils
 from ..infra.errors import AutoQbError
-from ..infra.notify import WINDOWS_TOAST_APPID
+from ..infra.notify import ICON_ICO, WINDOWS_TOAST_APPID
 from ..core.qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
 
-ICON_PNG = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.png")
-ICON_ICO = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.ico")
+# 图标路径单点(26-10-11-0352): ICON_ICO 取自 infra.notify(包 assets 目录推导只此一处),
+# ICON_PNG 由同目录派生 —— 不再各写一遍两级 dirname 表达式
+ICON_PNG = os.path.join(os.path.dirname(ICON_ICO), "icon.png")
 UI_PORT_FILE_NAME = "ui.port"
 POLL_MS = 100
 LOG_VIEW_LINES = 200

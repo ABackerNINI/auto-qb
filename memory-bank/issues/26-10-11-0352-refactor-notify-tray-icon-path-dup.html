@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0412-notify-tray-icon-path-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="icon.ico 路径推导 notify 与 tray 逐字同">
 <meta name="issue-summary" content="notify.ICON_ICO 与 tray/app.ICON_ICO 逐字同 os.path.join(dirname(dirname(__file__)), assets, icon.ico)">
 <title>icon.ico 路径推导 notify 与 tray 逐字同 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-notify-tray-icon-path-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,7 +96,15 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 04:12 — 用户指派「认领并修复」，状态 <strong>In Progress</strong>（复验仍复现，见下方）</li>
+      <li>2026-10-15 04:23 — 修复落地，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下方）</li>
     </ul>
+    <h3>复验</h3>
+    <p>复验 2026-10-15 04:12 <strong>仍复现</strong>：源码已随包目录调整迁至 <code>src/auto_qb/</code> 下，行号未变 —— <code>src/auto_qb/infra/notify.py:48</code>（<code>ICON_ICO</code>）与 <code>src/auto_qb/tray/app.py:31-32</code>（<code>ICON_PNG</code>/<code>ICON_ICO</code>）仍是逐字同的 <code>os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", ...)</code>；grep <code>ICON_ICO</code> 确认全仓仅这三处定义点，无第四份表示。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>：取建议的第二支「notify 导出 ICON_ICO、tray 引用」—— <code>src/auto_qb/infra/notify.py</code> 的 <code>ICON_ICO</code>（表达式字节不动，注释升格为单点说明）成为包 assets 目录推导全仓唯一处；<code>src/auto_qb/tray/app.py</code> 删去两行逐字同表达式，改 <code>from ..infra.notify import ICON_ICO, WINDOWS_TOAST_APPID</code> + <code>ICON_PNG = os.path.join(os.path.dirname(ICON_ICO), "icon.png")</code>（与旧 ICON_PNG 字节同）。两级 dirname 表达式 3 处 → 1 处，包目录移动只需改 notify 一处。</p>
+    <p><strong>与建议修法改道原因</strong>：未走第一支「<code>infra/assets_dir()</code> 新单点函数」—— 那要多改一个源文件（infra/utils.py），且当前无常驻配置入口需要参数化 assets 目录，提前抽函数属过度设计；notify 导出 + tray 引用依赖方向不变（tray 本就已从 notify import），净收敛相同。若将来 assets 目录需参数化，再升级为函数单点。</p>
+    <p><strong>验证方式</strong>：① 运行期探针 —— <code>tray.ICON_ICO == notify.ICON_ICO</code> 且 <code>os.path.isfile</code> 为真，ICON_PNG 与改前字节同（零行为变化）；② 既有守阵 <code>tests/test_notify.py::test_notify_icon_ico_points_to_real_file</code> 及该文件全部用例先跑绿；③ 全量 <code>test.full</code> 全绿，数字见 <code>commands run kb.baseline</code>（基线切片 <code>memory-bank/testing/baselines/26-10-15-0423-notify-tray-icon-path-dup.md</code>）。首轮全量曾因认领链创建顺序误用红 1 条（先回填 doc-refs 后建认领方切片的悬空窗口），已在坑档 <code>pitfalls/kb/refs-rename.md</code> 记复发 6，非本修复缺陷。</p>
   </section>
 
   <footer>
