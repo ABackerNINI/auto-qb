@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0240">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-backend-hr-dup-code-fix.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr 线程生命周期样板重复">
 <meta name="issue-summary" content="worker 与 server 的 start/stop/join/timeout 骨架">
 <title>hr 线程生命周期样板重复 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0240-refactor-hr-thread-lifecycle-boilerplate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 02:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,7 +96,17 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 02:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 03:02 — 认领（用户指派「认领并修复」），复验：仍复现（worker.py 的 start/stop 骨架 ↔ server.py 的 stop + HrEndpointHandle.wait 各自写 join(timeout)/退出判定/退出与未退出日志 一各）；状态 <strong>In Progress</strong></li>
+      <li>2026-10-15 03:11 — 修完成，状态 <strong>Done</strong>：抽 <code>HrThreadHandle</code>（hr/threadlifecycle.py），worker/server 两调用点降为句柄调用，日志文案字节同，零行为变化；验证 = test.full 全绿（数字见基线切片）+ hr 两文件 101 passed</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充<span class="opt">（2026-10-15）</span></h2>
+    <p>抽 <code>HrThreadHandle</code>（<code>hr/threadlifecycle.py</code>，Hr 前缀按仓惯例而非建议的 <code>_ThreadHandle</code>）：骨架 = 幂等 start（线程已在跑则 no-op）+ stop（请求停 -> join(timeout) -> 按退出/未退出记日志 -> 退出清 / 未退出留句柄）+ started 判。机制差异（取数线程 Condition 置停止位 vs 端点 shutdown）经 <code>request_stop</code> 回调注入；告警文案差异经 <code>subject</code>/<code>stuck_note</code> 参数；logger 身份经参数传（守阵按 logger name 仍钉 worker/server 各自 logger）。</p>
+    <p>改面：<code>worker.py</code> start/stop/started 降为句柄调用；<code>server.py</code> <code>HrEndpointHandle</code> 持 <code>HrThreadHandle</code> 并 <code>stop(timeout)</code> 全收口（shutdown 注入 + 套 socket <code>server_close</code> 保持吞掉），<code>HrChannelServer.stop</code> 降为清句柄+委托。日志文案字节同（INFO/ERROR 四条不变）；零行为变化。测试同步：worker 5 用例 <code>_thread</code> 钉改 <code>_handle._thread</code>；server stub 用例改真 <code>HrEndpointHandle</code> 假 server + stuck thread（close-error containment 仍走真代码路径）。</p>
+    <p class="hint">与建议原文「收益低，可暂缓」保留上方（03 段）；改道原因：用户 2026-10-15 显式「认领并修复」lifted the deferral，抽执行。</p>
+    <p>验证方式：全量 <code>test.full</code> 全绿，数字见基线切片 <code>baselines/26-10-15-0311-backend-hr-dup-code-fix.md</code>；hr 两文件单跑 101 passed。</p>
   </section>
 
   <footer>

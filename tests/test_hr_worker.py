@@ -646,9 +646,9 @@ def test_start_twice_is_idempotent(tmp_path):
     service = _service(tmp_path, fetcher, clock=Clock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
     worker.start()
-    first_thread = worker._thread
+    first_thread = worker._handle._thread
     worker.start()
-    assert worker._thread is first_thread, "第二次 start 复用同一线程"
+    assert worker._handle._thread is first_thread, "第二次 start 复用同一线程"
     assert worker.stop(), "正常关停"
 
 
@@ -659,9 +659,9 @@ def test_stop_timeout_reports_error(tmp_path):
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=3600.0)
     stuck = threading.Thread(target=time.sleep, args=(30, ), name="stuck-hr-worker", daemon=True)
     stuck.start()  # join 需要线程已启动
-    worker._thread = stuck  # 注入一个不退出的线程, 验证超时分支的判定与返回值
+    worker._handle._thread = stuck  # 注入一个不退出的线程, 验证超时分支的判定与返回值
     assert worker.stop(timeout=0.05) is False
-    worker._thread = None
+    worker._handle._thread = None
 
 
 def test_request_refresh_site_filtering(tmp_path):
@@ -785,8 +785,8 @@ def test_start_message_and_thread_props(tmp_path):
     with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
         worker.start()
         try:
-            assert worker._thread.name == "auto-qb-hr-fetch"
-            assert worker._thread.daemon is True
+            assert worker._handle._thread.name == "auto-qb-hr-fetch"
+            assert worker._handle._thread.daemon is True
             assert worker._stopped is False
             assert worker._started_at is not None
             assert worker.last_run_ts > 0
@@ -844,7 +844,7 @@ def test_stop_clean_reports_and_clears_handle(tmp_path):
     with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
         assert worker.stop(timeout=5.0) is True
     assert "HR 取数线程已停止" in cap.messages, cap.messages
-    assert worker._thread is None, "干净退出后句柄要清掉"
+    assert worker._handle._thread is None, "干净退出后句柄要清掉"
     assert worker.started is False
 
 
@@ -864,7 +864,7 @@ def test_stop_keeps_thread_handle_when_not_exited(tmp_path, monkeypatch):
         assert entered.wait(10.0), "用例前提: 线程已进到阻塞的一轮里"
         with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
             assert worker.stop(timeout=0.05) is False, "线程还阻塞着 -> 未退出"
-        assert worker._thread is not None and worker.started, "没退出就得留着句柄(否则再也停不掉)"
+        assert worker._handle._thread is not None and worker.started, "没退出就得留着句柄(否则再也停不掉)"
         assert any("未退出" in m for m in cap.messages), cap.messages
     finally:
         release.set()

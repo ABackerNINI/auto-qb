@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (57)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -19,7 +19,6 @@
 - [refactor] [webui 局部发布四段『重建脏行/保留未脏/追加』骨架重复](../26-10-11-0309-refactor-webui-partial-publish-merge-dup.html) — runtime._publish_partial_locked 的 groups/singles/flat/shows 四段同骨架
 - [refactor] [webui 路由命令透传样板重复(routes handler 成对 + build_router 头样板 + 跳检门控)](../26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup.html) — routes/* 的 _enqueue 透传 handler 成对逐字同、11 份 build_router 头样板、跳检 403 门控两处重复
 - [refactor] [hr store 锁与读坏恢复链同族两套](../26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html) — hr/store 的 .bak 兜底+quarantine 恢复链与 core/state 同族; infra/locking 单点未被使用
-- [refactor] [hr 线程生命周期样板重复](../26-10-11-0240-refactor-hr-thread-lifecycle-boilerplate-dup.html) — worker 与 server 的 start/stop/join/timeout 骨架
 - [test] [hr/ 本地通道与服务端点变异存活(channel/server)](../26-10-10-1108-test-hr-mutation-channel-server.html) — hr 首轮: channel 126 + server 210 存活(URL 白名单/token/host 解析/端点鉴权/CORS), 零假存活
 - [test] [hr/ 展示导出变异存活(status/report)](../26-10-10-1108-test-hr-mutation-display.html) — hr 首轮: status 285 + report 276 存活(明细导出/人话映射/宽字符对齐), 零假存活
 - [feat] [HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立](../26-10-09-0855-feat-hr-channel-loopback-only.html) — 端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态
@@ -71,7 +70,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (185)
+## Done (186)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -98,6 +97,7 @@
 - [refactor] [hr model 序列化与强转助手重复](../26-10-11-0240-refactor-hr-model-serialize-helper-dup.html) — 9 个 dataclass 的 to_json/from_json 字段样板 + _as_int/_as_float 在 model/channel 逐字同
 - [refactor] [hr CLI 报告入口样板重复](../26-10-11-0240-refactor-hr-report-cli-boilerplate-dup.html) — run_hr_once/status/confirm_empty 三入口样板 + _scope_of 双份 + stamp_text_ts 死件
 - [refactor] [hr_check 站点派生口径多处](../26-10-11-0240-refactor-hr-site-derive-convention-dup.html) — runtime.site_confs 与 report._site_confs 逐字同, 且 webui routes/hr 四处同口径
+- [refactor] [hr 线程生命周期样板重复](../26-10-11-0240-refactor-hr-thread-lifecycle-boilerplate-dup.html) — worker 与 server 的 start/stop/join/timeout 骨架
 - [refactor] [token 生成/持久化口径跨包重复](../26-10-11-0240-refactor-hr-token-persist-convention-dup.html) — hr/channel.resolve_token 与 webui/server/common.ensure_web_token 逐字同
 - [refactor] [hr 告警去重与节流样板重复](../26-10-11-0240-refactor-hr-warn-dedup-throttle-dup.html) — 每站告警一次骨架(3 方法) + 波级异常收尾样板 + 节流窗口口径分散 4 处
 - [refactor] [qbmanager 连接状态节流/重连成功/状态加载样板各重复 2-3 份](../26-10-11-0207-refactor-core-conn-state-boilerplate-dup.html) — connect()/run() 的连接失败节流、重连成功处理、state 加载+bind 样板重复; 抽 _note_conn_failed/_note_conn_ok/_load_state (dup-code-audit R05)

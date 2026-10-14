@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from . import events
 from . import log as hr_log
+from .threadlifecycle import HrThreadHandle
 from .resolve import HrSiteView, HrViewSet
 from .service import (
     CHANNEL_SILENCE_WARN,
@@ -160,7 +161,7 @@ class HrWorker:
         self._cond = threading.Condition()
         self._wake_seq = 0
         self._stopped = False
-        self._thread: Optional[threading.Thread] = None
+        self._handle = HrThreadHandle()
         self._rounds = 0
         self._last_run_ts = 0.0
         self._last_results: List[HrRefreshResult] = []
@@ -181,17 +182,16 @@ class HrWorker:
     def start(self) -> None:
         """启动线程(幂等)"""
         with self._cond:
-            if self._thread is not None and self._thread.is_alive():
+            if self._handle.started:
                 return
             self._stopped = False
             self._started_at = self._now()
             self._last_run_ts = self._now()
-            self._thread = threading.Thread(target=self._loop, name=self._name, daemon=True)
-        self._thread.start()
-        logger.info(
-            f"HR 取数线程已启动: 每 {self.poll_interval:g}s 自唤醒检查一次站点"
-            f"(与主循环节拍无关); 站点: {', '.join(self.service.enabled_sites()) or '(无)'}"
-        )
+        if self._handle.start(self._loop, self._name):
+            logger.info(
+                f"HR 取数线程已启动: 每 {self.poll_interval:g}s 自唤醒检查一次站点"
+                f"(与主循环节拍无关); 站点: {', '.join(self.service.enabled_sites()) or '(无)'}"
+            )
 
     def stop(self, timeout: float = 10.0) -> bool:
         """请求停止并等线程退出; 返回是否已退出
@@ -206,18 +206,12 @@ class HrWorker:
         with self._cond:
             self._stopped = True
             self._cond.notify_all()
-            thread = self._thread
-        if thread is None:
-            return True
-        thread.join(timeout)
-        alive = thread.is_alive()
-        with self._cond:
-            self._thread = None if not alive else self._thread
-        if not alive:
-            logger.info("HR 取数线程已停止")
-        else:
-            logger.error(f"HR 取数线程在 {timeout:g}s 内未退出(可能仍在等扩展回传)")
-        return not alive
+        return self._handle.stop(
+            log=logger,
+            subject="HR 取数线程",
+            timeout=timeout,
+            stuck_note="(可能仍在等扩展回传)",
+        )
 
     def wake(self) -> None:
         """叫醒线程立刻检查一轮(**非阻塞**, 主循环绝不等它)"""
@@ -246,7 +240,7 @@ class HrWorker:
 
     @property
     def started(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
+        return self._handle.started
 
     @property
     def rounds(self) -> int:

@@ -59,7 +59,8 @@ import pytest
 
 from auto_qb.hr.channel import API_REFRESH, API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelBindError
 from auto_qb.hr.queue import HrTaskQueue
-from auto_qb.hr.server import HrChannelServer
+from auto_qb.hr.server import HrChannelServer, HrEndpointHandle
+from auto_qb.hr.threadlifecycle import HrThreadHandle
 
 TOKEN = "t" * 64
 ORIGIN = "chrome-extension://" + "a" * 32
@@ -522,22 +523,17 @@ def test_http_route_exception_maps_500(monkeypatch):
 
 
 def test_stop_timeout_and_close_error_are_contained():
-    """停机等待超时(线程未退) -> 返回 False + ERROR; 套接字关闭报错也吞掉(已停止是事实)"""
+    """停机等待超时(线程未退) -> 返回 False + ERROR; 套 socket 关闭报错也吞掉(已停止是事实)"""
     server = make_server()
     stalled = threading.Thread(target=time.sleep, args=(30, ), name="stalled-endpoint", daemon=True)
     stalled.start()
-
-    class _StuckHandle:
-        def __init__(self):
-            self.server = SimpleNamespace(server_close=lambda: (_ for _ in ()).throw(OSError(9, "bad fd")))
-
-        def stop(self):
-            pass
-
-        def wait(self, timeout=None):
-            return False
-
-    server._handle = _StuckHandle()
+    stuck_thread = HrThreadHandle()
+    stuck_thread._thread = stalled
+    server._handle = HrEndpointHandle(
+        SimpleNamespace(shutdown=lambda: None, server_close=lambda: (_ for _ in ()).throw(OSError(9, "bad fd"))),
+        stuck_thread,
+        0,
+    )
     ok = server.stop(timeout=0.05)
     assert ok is False, "线程没退出如实报告 False"
     server._handle = None  # 句柄已被 stop 置 None 前的兜底清理(stub 场景)

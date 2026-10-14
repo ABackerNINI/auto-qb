@@ -43,6 +43,7 @@ from .channel import (
     parse_results,
 )
 from .queue import HrTaskQueue
+from .threadlifecycle import HrThreadHandle
 
 logger = logging.getLogger(__name__)
 
@@ -75,25 +76,32 @@ class _LoopbackServer(ThreadingHTTPServer):
 
 
 class HrEndpointHandle:
-    """端点句柄: stop() 请求退出, wait() 等线程真正退出(重启同端口必须先 wait)"""
+    """端点句柄: 线程骨架在 HrThreadHandle; 本类只持监听 server/port 并注入 shutdown 的 request_stop"""
 
     __slots__ = ("server", "thread", "port")
 
-    def __init__(self, server: _LoopbackServer, thread: threading.Thread, port: int) -> None:
+    def __init__(self, server: _LoopbackServer, thread: HrThreadHandle, port: int) -> None:
         self.server = server
         self.thread = thread
         self.port = port
 
     @property
     def started(self) -> bool:
-        return self.thread.is_alive()
+        return self.thread.started
 
-    def stop(self) -> None:
-        self.server.shutdown()
-
-    def wait(self, timeout: Optional[float] = None) -> bool:
-        self.thread.join(timeout)
-        return not self.thread.is_alive()
+    def stop(self, timeout: float) -> bool:
+        """请求退出(shutdown)再等线程退出(按退出/未退出记日志); 无论套 socket 也落 server_close"""
+        ok = self.thread.stop(
+            log=logger,
+            subject="HR 取数通道端点",
+            timeout=timeout,
+            request_stop=self.server.shutdown,
+        )
+        try:
+            self.server.server_close()
+        except OSError:  # 关闭失败不影响"已停止服务"的事实
+            logger.debug("HR 取数通道端点关闭套 socket 时报错(忽略)", exc_info=True)
+        return ok
 
 
 class HrChannelServer:
@@ -148,8 +156,8 @@ class HrChannelServer:
                 f"HR 取数通道端点无法监听 {self.host}:{self.port} ({e}) —— 端口被占用? "
                 "同机多实例必须各用不同的 hr_check.channel.port"
             ) from e
-        thread = threading.Thread(target=server.serve_forever, name="auto-qb-hr-channel", daemon=True)
-        thread.start()
+        thread = HrThreadHandle()
+        thread.start(server.serve_forever, "auto-qb-hr-channel")
         self._handle = HrEndpointHandle(server, thread, server.server_address[1])
         # INFO 而非 WARNING: 本仓 WARNING 以上会被推成系统通知, 而「端点起来了」是预期内的事
         logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
@@ -161,17 +169,7 @@ class HrChannelServer:
         self._handle = None
         if handle is None:
             return True
-        handle.stop()
-        ok = handle.wait(timeout)
-        try:
-            handle.server.server_close()
-        except OSError:  # 关闭失败不影响"已停止服务"的事实
-            logger.debug("HR 取数通道端点关闭套接字时报错(忽略)", exc_info=True)
-        if ok:
-            logger.info("HR 取数通道端点已停止")
-        else:
-            logger.error(f"HR 取数通道端点在 {timeout:g}s 内未退出")
-        return ok
+        return handle.stop(timeout)
 
     @property
     def started(self) -> bool:

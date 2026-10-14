@@ -14,6 +14,7 @@
 - queue      任务队列(端点线程与取数线程之间的唯一交接面)
 - server     本地端点(127.0.0.1, 只入队)
 - worker     取数线程 + 只读视图发布(自唤醒, 不随主循环 tick)
+- threadlifecycle 线程生命周期骨架(幂 idempotent start + stop/join(timeout) + 退出/未退出日志), 取数线程与端点共用
 - runtime    运行时门面(端点 + 取数线程 + 热重载重挂)
 
 !本模块只读写 hr 文件与返回结果对象: **不碰 state_file / 任务队列 / store**

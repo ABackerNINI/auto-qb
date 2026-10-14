@@ -1,12 +1,12 @@
-# 26-10-11-backend-hr-dup-code-fix — hr 重复代码重构(两轮共 8 条 refactor issue 认领与修复)
+# 26-10-11-backend-hr-dup-code-fix — hr 重复代码重构(三轮共 9 条 refactor issue 认领与修复)
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-13
-**Summary:** 用户指令「修复 hr 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §14–§17(轮 11–14)对 hr 全包入池 **9 条 refactor issue**; 本轮按用户拍板**只做低风险高收益子集(5 条)+ 保守口径(只做无行为变化的收口)**: ① `hr-adapter-parse-boilerplate-dup`(parse_counters 上收 `parse_header_counters` / ADAPTERS 工厂抽 `_standard_kwargs` / URL 参数提取抽 `query_param`); ② `hr-report-cli-boilerplate-dup`(三入口抽 `_gate_enabled_sites` + `_build_service` / `_scope_of` 收单点 / 删死件 `stamp_text_ts`); ③ `hr-lane-transition-boilerplate-dup`(档位截断/失效骨架抽 `_settle_lane`); ④ `hr-warn-dedup-throttle-dup`(三个 `_warn_*` 抽 `_warn_once` / 波级异常收尾抽 `_abort_wave` / 节流窗口算法抽 `warn_gap_floor`); ⑤ `hr-model-serialize-helper-dup`(仅 `_as_int/_as_float` 收单点; to_json/from_json dataclass 驱动属评估型, 保守跳过)。**零行为变化**(仅表意等价的结构收口 + 删一处死件)。余下 4 条(`hr-store-recover-lock-family` / `hr-token-persist-convention` / `hr-site-derive-convention` / `hr-thread-lifecycle`)按用户口径**暂缓**, 留 `Open`。**2026-10-13 续轮(R2)**: 用户指令「认领并修复hr相关的3个refactor issues」, 认领并修复 ⑥ `hr-site-derive-convention-dup`(派生单点上收 `Config.hr_site_confs()`, runtime/report 改走单点; webui 半留轮 15) ⑦ `hr-token-persist-convention-dup`(抽 `infra.utils.resolve_or_create_token`, hr/webui 两端一行委托, logger 身份经参保持, 4 条 patch 地址随迁) ⑧ `torrents-hr-entry-guard-dup`(抽 `TorrentRecord._hr_guard`, 三判定入口守卫收口; `hr_judgement` 语义不同不并入), 各配 1 条静态守阵, 仍**零行为变化**。余 store-recover(与轮 18 合并)/thread-lifecycle(机制不同收益低)/fetchable(待拍板)留 `Open`。
+**Updated:** 2026-10-15
+**Summary:** 用户指令「修复 hr 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §14–§17(轮 11–14)对 hr 全包入池 **9 条 refactor issue**; 本轮按用户拍板**只做低风险高收益子集(5 条)+ 保守口径(只做无行为变化的收口)**: ① `hr-adapter-parse-boilerplate-dup`(parse_counters 上收 `parse_header_counters` / ADAPTERS 工厂抽 `_standard_kwargs` / URL 参数提取抽 `query_param`); ② `hr-report-cli-boilerplate-dup`(三入口抽 `_gate_enabled_sites` + `_build_service` / `_scope_of` 收单点 / 删死件 `stamp_text_ts`); ③ `hr-lane-transition-boilerplate-dup`(档位截断/失效骨架抽 `_settle_lane`); ④ `hr-warn-dedup-throttle-dup`(三个 `_warn_*` 抽 `_warn_once` / 波级异常收尾抽 `_abort_wave` / 节流窗口算法抽 `warn_gap_floor`); ⑤ `hr-model-serialize-helper-dup`(仅 `_as_int/_as_float` 收单点; to_json/from_json dataclass 驱动属评估型, 保守跳过)。**零行为变化**(仅表意等价的结构收口 + 删一处死件)。余下 4 条(`hr-store-recover-lock-family` / `hr-token-persist-convention` / `hr-site-derive-convention` / `hr-thread-lifecycle`)按用户口径**暂缓**, 留 `Open`。**2026-10-13 续轮(R2)**: 用户指令「认领并修复hr相关的3个refactor issues」, 认领并修复 ⑥ `hr-site-derive-convention-dup`(派生单点上收 `Config.hr_site_confs()`, runtime/report 改走单点; webui 半留轮 15) ⑦ `hr-token-persist-convention-dup`(抽 `infra.utils.resolve_or_create_token`, hr/webui 两端一行委托, logger 身份经参保持, 4 条 patch 地址随迁) ⑧ `torrents-hr-entry-guard-dup`(抽 `TorrentRecord._hr_guard`, 三判定入口守卫收口; `hr_judgement` 语义不同不并入), 各配 1 条静态守阵, 仍**零行为变化**。余 store-recover(与轮 18 合并)/thread-lifecycle(机制不同收益低)/fetchable(待拍板)留 `Open`。 **2026-10-15 续轮(R3)**: 用户「认领并修复」第 9 条 `hr-thread-lifecycle-boilerplate-dup` —— 抽 `HrThreadHandle`(`hr/threadlifecycle.py`) 骨架单点(幂等 start + stop/join(timeout) + 退出/未退出日志 + started), 机制差异(Condition vs shutdown)经 request_stop 回调, worker/server 两调用点降为句柄调用, 日志文案字节同零行为变化; 余 store-recover/fetchable 留 `Open`。
 **Topics:** dup-code-audit
 
-**Refs:** memory-bank/issues/26-10-11-0240-refactor-hr-adapter-parse-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-model-serialize-helper-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-lane-transition-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-warn-dedup-throttle-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-report-cli-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-site-derive-convention-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-token-persist-convention-dup.html,memory-bank/issues/26-10-11-0352-refactor-torrents-hr-entry-guard-dup.html,memory-bank/activeContext/26-10-11-1555-backend-hr-dup-code-fix.md,memory-bank/testing/baselines/26-10-11-1555-backend-hr-dup-code-fix.md,memory-bank/testing/baselines/26-10-13-2150-backend-hr-dup-code-fix.md
+**Refs:** memory-bank/issues/26-10-11-0240-refactor-hr-adapter-parse-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-model-serialize-helper-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-lane-transition-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-warn-dedup-throttle-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-report-cli-boilerplate-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-site-derive-convention-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-token-persist-convention-dup.html,memory-bank/issues/26-10-11-0352-refactor-torrents-hr-entry-guard-dup.html,memory-bank/issues/26-10-11-0240-refactor-hr-thread-lifecycle-boilerplate-dup.html,memory-bank/activeContext/26-10-11-1555-backend-hr-dup-code-fix.md,memory-bank/testing/baselines/26-10-11-1555-backend-hr-dup-code-fix.md,memory-bank/testing/baselines/26-10-13-2150-backend-hr-dup-code-fix.md,memory-bank/testing/baselines/26-10-15-0311-backend-hr-dup-code-fix.md
 
 ## 原始请求
 
@@ -48,6 +48,7 @@
 | hr-site-derive-convention-dup | Done | 派生单点上收 `Config.hr_site_confs()`; runtime/report 改走单点; webui 半留轮 15 |
 | hr-token-persist-convention-dup | Done | `infra.utils.resolve_or_create_token` 单点; 两端一行委托; logger 经参保持; 4 条 patch 地址随迁 |
 | torrents-hr-entry-guard-dup | Done | `TorrentRecord._hr_guard()`; 三入口守卫收口; `hr_judgement` 不并入(排除返回 None 语义不同) |
+| hr-thread-lifecycle-boilerplate-dup | Done | 抽 `HrThreadHandle`(hr/threadlifecycle.py); worker/server 降为句柄调用; 日志文案字节同(R3) |
 | 认领链 | Done | R1 5 条 + R2 3 条 issue `doc-refs` ↔ 本档案 `**Refs:**` 双向闭环 |
 | 收尾(测试 / 索引 / 基线) | Done | R1/R2 各有基线切片, 见进度日志 |
 
@@ -77,8 +78,21 @@
 - **验证**: test.quick 全绿后收口; test.full 见基线切片 `baselines/26-10-13-2150-backend-hr-dup-code-fix.md`。
 - **零改动确认**: 未触碰 `config.yml` / `auto-qb-data/`; webui 半(routes/hr.py)与 core/state 零改动。
 
+### 2026-10-15 R3 — hr 线程生命周期骨架抽(用户指名第 9 条)
+
+- **开工同步**: `commands run my-commit-flow.sync` → 已同步 `c2330fb0`.
+- **复验**: worker.py start/stop 骨架 ↔ server.py stop + HrEndpointHandle.wait 各自写 join(timeout)/退出判定/退出与未退出日志 —— 仍复现(取证 2026-10-15 03:02).
+- **改道说明**: R1/R2 按「保守口径」暂缓该条(机制不同, 收益低); 用户 2026-10-15 显式「认领并修复」lifted the deferral → 抽执行. 命名 `HrThreadHandle`(Hr 前缀仓惯例) not 建议 `_ThreadHandle`.
+- **抽面**: `hr/threadlifecycle.py` 新增 `HrThreadHandle`: 幂等 start(已在跑则 False) + stop(request_stop 回调 -> join(timeout) -> 按退出/未退出记 log -> 退出清/未退出留句柄) + started. 告口纪律(cancel_all/shutdown 先再 join) stays in caller stop per pitfalls/backend/concurrency.md —— 骨架里只 join+判定+日志.
+- **worker.py**: `_thread` 降为 `_handle = HrThreadHandle()`; start 置停止位复位+节拍基准 under cond then handle.start; stop cancel_all 先(告口纪律)→ cond 置停止位 notify → handle.stop(subject/stuck_note 承载文案); started 委托.
+- **server.py**: `HrEndpointHandle` 持 `HrThreadHandle` + `stop(timeout)` 全收口(request_stop=server.shutdown 注入, server_close 保持吞掉); `HrChannelServer.stop` 降为清句柄+委托. 日志文案字节同(已停止/未退出四条 + close debug).
+- **行为差审计(零行为变化 claim 的 two micro-diffs)**: ① server stop 日志 order: 原 shutdown→join→server_close→INFO/ERROR, 新 shutdown→join→INFO/ERROR→server_close —— close-error debug 与 exit-status 日志 swap order, 文案同; ② worker start 线程起 moved out of cond block (flags still reset under cond first) —— only main thread writes `_thread`(单写线程不变), loop thread never touches it, equivalent.
+- **测试同步**: worker 5 用例 `_thread` poke → `_handle._thread`(idempotent reuse / stuck inject / name+daemon / clean clear / not-exit keep); server `test_stop_timeout_and_close_error_are_contained` stub 改真 `HrEndpointHandle`(假 SimpleNamespace server + stuck `HrThreadHandle`) —— close-error containment 仍走真 code path(原 stub bypassed it).
+- **验证**: hr 两文件 101 passed; dev.fmt 6 files; full test.full 全绿见基线切片 `baselines/26-10-15-0311-backend-hr-dup-code-fix.md`.
+- **kb 回写**: 本档案 R3 段 + 第 9 条 issue 置 Done(doc-refs 认领链) + activeContext 切片更新 + kb.index 重建.
+
 ## 待办（下一轮）
 
-- 仍 `Open` 的 hr 相关 3 条: `hr-store-recover-lock-family-dup`(报告自标跨包风险中, 建议与轮 18 infra 合并考量) / `hr-thread-lifecycle-boilerplate-dup`(报告标收益低可暂缓; 机制不同 Condition vs shutdown, 强抽象违「宁少勿滥」) / `hr-fetchable-dead-config`(「接上强制 vs 删死字段」二选一待拍板)。
+- 仍 `Open` 的 hr 相关 2 条: `hr-store-recover-lock-family-dup`(报告自标跨包风险中, 建议与轮 18 infra 合并考量) / `hr-fetchable-dead-config`(「接上强制 vs 删死字段」二选一待拍板)。
 - webui 半合流: token(R15-C01) / 站点派生(R15-C03) 随 webui 轮 15 改走 infra/Config 单点(守阵白名单已预留)。
 - `hr-lane-transition-boilerplate-dup` 的 B 类子项(各档摘要串 service ↔ status, `(全深度)` vs `(全)`)仍未合 —— 需先钉文案差异点 + 回归保护, 本轮按报告口径只登记。
