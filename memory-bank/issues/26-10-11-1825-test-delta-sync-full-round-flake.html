@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="delta-sync">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿">
 <meta name="issue-summary" content="全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿">
 <title>e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-1825-test-delta-sync-full-round-flake</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 18:25</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -184,7 +184,13 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查。<strong>已排除</strong>：①本次文案漂移改动 —— <code>delta-sync.spec.mjs</code> 一个字没改(<code>git diff</code> 可证)，且它在文件序上排在被改的 4 个 spec 之前；②断言语义写错 —— 同一条断言隔离重跑恒绿，且在 CI 默认轮里也通过；③<code>applyStateRows</code> 的行级语义坏了 —— 同一用例前半段 11 项(upsert 替换 / 追加 / removed 剔除 / 数组新实例 / 未脏行引用恒等)全绿，只有收尾「等到一次全量轮」落空。<br>未定型方向(仅是猜测，不是结论)：探针装好后，由 <code>vm.lastRid = null; vm.refresh()</code> 踢出的那一轮在 8s 窗内没有走到被探针记录的路径上 —— 全量轮跑到该用例时，长驻桩已被前面一百多条用例连续消耗(请求堆叠 / 轮询错拍 / 上一轮还在飞行)，具体是哪一个没验。</div>
+    <div class="callout"><strong>已定案（2026-10-15，代码走读 + 确定性竞态探针双证）</strong>：断言语义与用例本身都没坏，坏在<strong>判据读的是「探针记录的最后一轮」，而轮次到达顺序在全量 e2e 顺序下不可控</strong>。链条四环：<br>
+① <code>polling.js refresh()</code>(<code>static/shared/polling.js:202-268</code>)按发送时刻读 <code>lastRid</code>，<code>lastRid !== null</code> 才带 <code>rid=</code>(:211)；轮询链 <code>scheduleNext()</code> 只在每轮 refresh 末尾续排(:106-110/:268)，<strong>手动踢一次不取消在飞请求</strong> ⇒ 踢出的无 rid 请求与在飞的旧 rid 请求并发，落袋先后不保证。<br>
+② 服务端 <code>runtime.py _reduce_delta</code>(<code>webui/runtime.py:1489-1514</code>)：rid 缺省/0 或 rid&gt;ver → 全量(:1509-1510)；<strong>0&lt;rid&lt;ver（在飞请求的 rid 被后来的 ver 超过）→ 增量载荷 full=false + updated=true</strong> ⇒ 该响应经 <code>applyStateRows</code> 落袋、被探针记为 full=false 轮。<br>
+③ ver 抬升来源 = 桩命令泵/回弹（<code>scripts/ui_harness.py</code> 的 <code>_apply_truth</code>/<code>_publish_with_delta</code>/<code>_restore_state</code>，真改 pause/resume 并 bump 版本）。全量 e2e 是<strong>串行</strong>（<code>playwright.config.mjs</code> <code>workers:1</code>）但共享同一长驻桩：前序用例（含本文件第 1 条的真暂停手势）的真值版本与回弹可在本用例收尾阶段附近落 ver bump ⇒ 本用例在飞的旧 rid 请求过期成增量轮；若它晚于全量轮落袋，「最后一轮」就停在 full=false。<br>
+④ 旧断言读 <code>window.__d.rounds[length-1].full</code>（最后一轮），只要 8s 窗内末轮是 full=false 即红。而踢出的请求不带 rid ⇒ <strong>全量轮必然落袋</strong> —— 末值判据把「必然发生的全量轮」与「可选的迟到增量轮」混进同一个读法。隔离重跑时窗内没有 ver bump（回弹已过窗），末值恒为 full=true ⇒ 恒绿。<br>
+<strong>探针实证</strong>（2026-10-15，一次性探针 spec，跑完已删）：等全量轮落袋后注入一次迟到增量轮 ⇒ <code>newRounds=2 lastFull=false someFull=true</code>，旧判据确定性假红、存在性判据不受影响。<br>
+<strong>已排除</strong>：①本次文案漂移改动 —— <code>delta-sync.spec.mjs</code> 一个字没改(<code>git diff</code> 可证)，且它在文件序上排在被改的 4 个 spec 之前；②断言语义写错 —— 同一条断言隔离重跑恒绿，且在 CI 默认轮里也通过；③<code>applyStateRows</code> 的行级语义坏了 —— 同一用例前半段 11 项(upsert 替换 / 追加 / removed 剔除 / 数组新实例 / 未脏行引用恒等)全绿，只有收尾「等到一次全量轮」落空。</div>
   </section>
 
   <section id="s6">
@@ -196,17 +202,22 @@
       <li><strong>或放宽观察窗</strong>：把 <code>8_000</code> 往上抬。代价是全量收口变慢、且掩盖真问题，所以优先级低于方案 2</li>
     </ol>
     <p class="hint">以上均为候选，未实施 —— 按 skill 口径，入池不改码。</p>
+    <div class="callout"><strong>实施说明（2026-10-15 认领后）</strong>：采纳方案 2 的<strong>强化版</strong>并说明改道原因 —— 方案 2 字面形式「先等 <code>rounds</code> 长度自增再读最后一轮」<strong>仍对到达顺序敏感</strong>：第一个新轮可能恰是那个迟到的增量轮(full=false)，末值照旧假红。实际落地为<strong>存在性判据</strong>：快照踢出前的轮数，轮询等待「踢出之后落过一次 <code>full=true</code>」—— 踢出的请求不带 rid，服务端恒回全量，该轮必然落袋；迟到增量轮落在它之前或之后都不影响判定。方案 3（抬 <code>8_000</code>）未采用：掩盖真问题且拖慢全量收口。方案 1 的统计被确定性探针替代（见根因段）。</div>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 18:25 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 03:03 — 用户显式指派「认领并修复」，置 <strong>In Progress</strong></li>
+      <li>2026-10-15 03:20 — 修复落地并验证，置 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-15 03:10 隔离重跑 <code>e2e/delta-sync.spec.mjs</code> 8/8 全绿（与入池证据一致，隔离不复现）；全量轮红未直接重演（入池时 1 次全量即观察到，红率低），改为**确定性竞态探针**复现机理：先等踢出的全量轮落袋（存在性判据必绿），再注入一次迟到的增量轮（full=false，模拟在飞旧 rid 请求晚于全量轮落袋）—— 探针输出 <code>newRounds=2 lastFull=false someFull=true</code>，即旧「末值」判据在该时序下确定性假红、存在性判据不受影响。机理定案见下方根因段。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法 2 的关系见 §06 实施说明）：<code>e2e/delta-sync.spec.mjs</code> 第 2 条用例收尾断言改<strong>存在性判据</strong> —— 踢出前快照轮数 <code>roundsBeforeFull</code>，轮询 <code>(await deltaRounds(page)).slice(roundsBeforeFull).some((r) => r.full === true)</code>，消息改「lastRid 置空后落过一次全量轮(full=true)」；断言处注释同步记录竞态四环与 issue 编号。改动 1 个测试文件，<strong>零生产代码改动</strong>。<br>
+    <strong>验证方式</strong>：①确定性竞态探针（一次性 spec，跑完已删）：等全量轮落袋后注入一次迟到增量轮 ⇒ <code>newRounds=2 lastFull=false someFull=true</code>，旧末值判据确定性假红、存在性判据绿；②修复后隔离重跑 <code>delta-sync.spec.mjs</code> ×2：均 8/8 绿；③全量 e2e（<code>commands run dev.e2e</code>，串行 250 条）：<strong>240 passed / 10 skipped / 0 failed</strong>（8.2m）；④<code>test.full</code> 全绿（数字见基线切片 <code>26-10-15-0321</code>，<code>commands run kb.baseline</code>）。<br>
+    <strong>测试数字</strong>：全量 e2e 240 passed / 10 skipped（修复前 2026-10-11 取证轮为 1 failed / 10 skipped / 157 passed）；test.full 见基线切片（最新一条为事实源，不在此手抄）。</p>
   </section>
 
   <footer>

@@ -207,11 +207,18 @@ for (const skin of SKINS) {
         if (v !== null) expect(v, `applyStateRows 行级语义: ${k}`).toBe(true);
       }
       /* 收尾(页内还原 + 顺带冒烟「lastRid 置空 ⇒ 恒全量」路径, 切视图同款):
-       * 先踢一次 refresh(只踢一次 —— 在轮询循环里反复踢会堆叠请求链), 再轮询读探针。 */
+       * 先踢一次 refresh(只踢一次 —— 在轮询循环里反复踢会堆叠请求链), 再轮询读探针。
+       * !判据读「踢出之后是否落过一次 full=true」而不是「最后一轮是不是 full=true」
+       * (issue 26-10-11-1825): 后者对轮次到达顺序敏感 —— 轮询链在飞的旧 rid 请求会被桩
+       * 命令泵/回弹抬高的 ver 变成过期 rid, 服务端回增量轮(full=false); 它若晚于全量轮
+       * 落袋(全量 e2e 顺序下, 前序用例的 ver bump 落入本窗时高发), 「最后一轮」就停在
+       * full=false, 断言假红。踢出的请求不带 rid ⇒ 全量轮必然落袋, 存在性判据既充分又
+       * 时序无关(迟到增量轮落在全量轮之前或之后都不影响)。 */
+      const roundsBeforeFull = (await deltaRounds(page)).length;
       await withVm(page, `(vm.lastRid = null, void vm.refresh(), true)`);
-      await expect.poll(async () => await readInst(page, `
-        (window.__d.rounds[window.__d.rounds.length - 1] || {}).full
-      `), { message: 'lastRid 置空后下一轮为全量(full=true)', timeout: 8_000 }).toBe(true);
+      await expect.poll(async () => (await deltaRounds(page))
+        .slice(roundsBeforeFull).some((r) => r.full === true),
+        { message: 'lastRid 置空后落过一次全量轮(full=true)', timeout: 8_000 }).toBe(true);
       expect(await readInst(page, `vm.torrents.some((x) => x.hash === ${JSON.stringify('f'.repeat(40))})`),
         '全量轮后注入的合成行被服务端真值覆盖').toBe(false);
     });
