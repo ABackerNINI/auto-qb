@@ -418,8 +418,13 @@
       </section>
       <aside class="dt10-right">${R(detailHtml(sel, hasAv))}</aside>
     </div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    H.anchFill(host, TABLE_ID); /* replaceChildren 后把保活锚塞回 slot 位(锚身份跨帧稳定) */
+    /* 滚动位自保(用户 26-10-14 三复查「点击跳动」): 与 01-09 同口径 —— 整帧换把宿主子树清,
+     * 内容页签滚动容器(.drawer-body, 宿主父)按新内容现算把 scrollTop 先落 0 再回; 徽章小菜单
+     * 提交/筛选/选中这类走 rerender 单点重渲后, 用户滚到中间再点后整列表跳. 成对恢复单点 helper. */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, TABLE_ID); /* replaceChildren 后把保活锚塞回 slot 位(锚身份跨帧稳定) */
+    });
   }
   function countBy(n, pred) {
     let c = 0;

@@ -420,8 +420,14 @@
       <div class="dt11-list"><div data-dt-anchor-slot=""></div></div>
       ${R(foot)}
     </div>`;
-    host.replaceChildren(document.createRange().createContextualFragment(html));
-    H.anchFill(host, TABLE_ID);
+    /* 滚动位自保(用户 26-10-14 三复查「点击跳动」): 与 01-09 变体同口径 —— 整帧换把宿主子树清,
+     * 内容页签滚动容器(.drawer-body, 宿主父)按新内容现算把 scrollTop 先落 0 再回 —— 徽章/批量/
+     * 勾选这类走 rerender 单点重渲后, 用户滚到中间再点徽章(数据回路重拉)时整列表跳 scrollTop 像素.
+     * 成对恢复单点 helper withScroll. */
+    H.withScroll(host, () => {
+      host.replaceChildren(document.createRange().createContextualFragment(html));
+      H.anchFill(host, TABLE_ID);
+    });
     /* 主勾选框三态(native indeterminate; 行内勾选框三态已在分片声明式直持) */
     const master = host.querySelector("input[data-ckmaster]");
     if (master) {
