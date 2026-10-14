@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="hr-channel-portless-remote-fit">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-14-1135">
+<meta name="doc-updated" content="26-10-14-1135">
+<title>HR 取数通道 · 去端口路线 × 跨机计划 联合适配分析</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0e1013; --paper:#14171b; --paper-2:#191d22;
+    --ink:#e7e9e6; --muted:#a2a8af; --dim:#6e747b;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.055);
+    --accent:#5fb3a6; --warn:#dd8f66; --bad:#d9736c;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,Arial,sans-serif;
+    --head:"Bahnschrift","DIN Alternate","Segoe UI Semibold","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px}
+  .cover{padding:80px 0 30px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  h1{font-family:var(--head);font-size:36px;line-height:1.15;letter-spacing:-.02em;font-weight:600;margin:20px 0 0;max-width:26ch}
+  .sub{font-size:17px;color:var(--muted);margin-top:16px;max-width:66ch}
+  .meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:32px;border-top:1px solid var(--line-soft)}
+  .meta div{padding:12px 18px 4px 0;border-right:1px solid var(--line-soft)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin:0 0 4px}
+  .meta dd{margin:0;font-size:13px;color:var(--ink);font-family:var(--mono)}
+  section{padding:44px 0 8px;border-top:1px solid var(--line);margin-top:30px}
+  section:first-of-type{border-top:0}
+  .num{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--accent);text-transform:uppercase}
+  h2{font-family:var(--head);font-size:25px;line-height:1.2;font-weight:600;margin:8px 0 0}
+  h3{font-family:var(--head);font-size:17px;font-weight:600;margin:30px 0 10px}
+  p{margin:12px 0;max-width:76ch}
+  ul,ol{max-width:76ch;padding-left:20px}
+  li{margin:6px 0}
+  code{font-family:var(--mono);font-size:.86em;color:#d8d5c9;background:var(--paper-2);border:1px solid var(--line-soft);border-radius:3px;padding:.06em .34em}
+  strong{font-weight:600}
+  em{font-style:normal;color:var(--ink);border-bottom:1px solid var(--line)}
+  .dim{color:var(--dim)} .muted{color:var(--muted)}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:400}
+  td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:1px solid var(--line)}
+  .note{margin:20px 0;padding:14px 18px;background:var(--paper);border:1px solid var(--line);font-size:14px;max-width:82ch}
+  .bad-note{border-left:3px solid var(--bad)}
+  .warn-note{border-left:3px solid var(--warn)}
+  .ok-note{border-left:3px solid var(--accent)}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:.1em .5em;border-radius:3px;border:1px solid var(--line);white-space:nowrap}
+  .tag-ok{color:var(--accent);border-color:rgba(95,179,166,.45)}
+  .tag-warn{color:var(--warn);border-color:rgba(221,143,102,.45)}
+  .tag-bad{color:var(--bad);border-color:rgba(217,115,108,.45)}
+  figure{margin:22px 0}
+  figcaption{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:10px}
+  .footer{padding:48px 0 72px;color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Joint Fit Analysis</div>
+  <h1>HR 取数通道 · 去端口路线 × 跨机计划 联合适配分析</h1>
+  <p class="sub">问题: 今早的去端口可行性报告(<code>26-10-14-1110</code>)给出路线 A / B, 跨机实施计划(<code>26-10-09-0856</code>)要放开的正是「NAS + 外部 PC」形态 —— <em>计划适合哪种路线</em>? 本报告只做适配判断与拍板建议, 不改两份文档、不动代码; 事实取证截至 <code>de83fbe8</code>。</p>
+  <dl class="meta">
+    <div><dt>分析对象</dt><dd>26-10-09-0856 计划 × 26-10-14-1110 报告</dd></div>
+    <div><dt>代码现状</dt><dd>de83fbe8 · 工作区干净</dd></div>
+    <div><dt>结论</dt><dd>路线 A 适配 · 路线 B 不适配跨机</dd></div>
+  </dl>
+</header>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">01 / 结论速览</div>
+  <h2>路线 A 适配且互相增强; 路线 B 不适配跨机目标</h2>
+  <p>两份文档在解两个不同轴的问题: 跨机计划解<strong>空间轴</strong>(端点绑哪个地址、扩展认不认非回环、传输与鉴权); 去端口报告解<strong>配置轴</strong>(用户零配置、端口随机化、token 自动分发、轮询还是推送)。两者的交集是<em>连接模型</em>——而跨机计划的数据流图本来就是「扩展拨后端」, 与去端口报告唯一的硬事实(<strong>只有扩展能发起连接</strong>)方向一致, 不构成冲突。</p>
+  <table>
+    <tr><th style="width:26%">路线</th><th style="width:16%">对跨机计划</th><th>一句话理由</th></tr>
+    <tr>
+      <td><strong>A</strong> · 发现端口 + 随机数据端口 + token 分发</td>
+      <td><span class="tag tag-ok">适配 · 推荐</span></td>
+      <td>保留计划全部不变项(轮询/token 文件/origin 白名单), 还把跨机配置面从「端点 URL + token」缩到「NAS 地址」一项。</td>
+    </tr>
+    <tr>
+      <td><strong>B</strong> · native messaging 桥 + 命名管道</td>
+      <td><span class="tag tag-bad">不适配</span></td>
+      <td>原生消息宿主只能由<em>本机</em>浏览器拉起, 结构上到不了 NAS; 对跨机配置面零缩减, 还多付桥组件 + 注册表注册, 并打破计划 §7.2「协议不变」不变项。</td>
+    </tr>
+    <tr>
+      <td><strong>C</strong> · 发现 + WebSocket 长连接(报告 §06)</td>
+      <td><span class="tag tag-warn">同 A 的子问题</span></td>
+      <td>寻址与配置面同 A; 是否上推送是独立决策, 不改变「选 A 不选 B」的结论。</td>
+    </tr>
+  </table>
+  <div class="note ok-note"><strong>联合结论</strong>: 跨机计划的落地路线 = <strong>计划自身的路径 C(端点直绑)作为产品化主体, 叠加去端口报告的路线 A 作为配置层</strong>; 传输拍板(D1)从「覆盖 1 个端点」扩为「覆盖发现 + 数据 2 个端点」; 路线 B 缓行, 不并入本计划。</div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">02 / 路线 × 部署形态</div>
+  <h2>一张矩阵看清三条路线各能覆盖哪种部署</h2>
+  <figure>
+    <svg viewBox="0 0 680 322" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif">
+      <rect x="0" y="0" width="680" height="322" fill="#14171b" rx="6"/>
+      <text x="20" y="26" fill="#a2a8af" font-size="12" font-family="'Cascadia Mono',Consolas,monospace" letter-spacing="2">路线 × 部署形态适配矩阵</text>
+      <text x="100" y="56" fill="#6e747b" font-size="11" text-anchor="middle" font-family="'Cascadia Mono',Consolas,monospace">路线</text>
+      <text x="295" y="56" fill="#e7e9e6" font-size="12.5" text-anchor="middle" font-weight="600">同机部署(默认形态)</text>
+      <text x="545" y="56" fill="#e7e9e6" font-size="12.5" text-anchor="middle" font-weight="600">跨机部署 · NAS + 外部 PC</text>
+      <line x1="200" y1="64" x2="640" y2="64" stroke="rgba(255,255,255,.10)"/>
+      <line x1="420" y1="64" x2="420" y2="262" stroke="rgba(255,255,255,.055)"/>
+
+      <!-- row 1: status quo -->
+      <text x="20" y="94" fill="#e7e9e6" font-size="12.5" font-weight="600">现状</text>
+      <text x="20" y="112" fill="#6e747b" font-size="10.5">固定端口 + 60s 短轮询</text>
+      <rect x="200" y="70" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(255,255,255,.10)"/>
+      <text x="212" y="92" fill="#dd8f66" font-size="12" font-weight="600">可跑</text>
+      <text x="212" y="110" fill="#a2a8af" font-size="10.5">端点 + token 两处手工配置</text>
+      <rect x="450" y="70" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(255,255,255,.10)"/>
+      <text x="462" y="92" fill="#d9736c" font-size="12" font-weight="600">不成立</text>
+      <text x="462" y="110" fill="#a2a8af" font-size="10.5">两端写死回环, 计划要放开</text>
+
+      <!-- row 2: route A -->
+      <text x="20" y="160" fill="#e7e9e6" font-size="12.5" font-weight="600">路线 A</text>
+      <text x="20" y="178" fill="#6e747b" font-size="10.5">发现端口 + 随机数据端口</text>
+      <rect x="200" y="136" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(95,179,166,.45)"/>
+      <text x="212" y="158" fill="#5fb3a6" font-size="12" font-weight="600">成立 · 用户零配置</text>
+      <text x="212" y="176" fill="#a2a8af" font-size="10.5">发现即得端口与 token</text>
+      <rect x="450" y="136" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(95,179,166,.45)"/>
+      <text x="462" y="158" fill="#5fb3a6" font-size="12" font-weight="600">成立 · 仅需 NAS 地址</text>
+      <text x="462" y="176" fill="#a2a8af" font-size="10.5">token 不再跨机器搬运</text>
+
+      <!-- row 3: route B -->
+      <text x="20" y="226" fill="#e7e9e6" font-size="12.5" font-weight="600">路线 B</text>
+      <text x="20" y="244" fill="#6e747b" font-size="10.5">原生消息桥 + 命名管道</text>
+      <rect x="200" y="202" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(95,179,166,.45)"/>
+      <text x="212" y="224" fill="#5fb3a6" font-size="12" font-weight="600">成立 · 零端口 + 推送</text>
+      <text x="212" y="242" fill="#a2a8af" font-size="10.5">代价: 桥进程 + 注册表注册</text>
+      <rect x="450" y="202" width="190" height="58" rx="4" fill="#191d22" stroke="rgba(217,115,108,.45)"/>
+      <text x="462" y="224" fill="#d9736c" font-size="12" font-weight="600">不成立</text>
+      <text x="462" y="242" fill="#a2a8af" font-size="10.5">宿主只能由本机浏览器拉起</text>
+
+      <line x1="20" y1="274" x2="640" y2="274" stroke="rgba(255,255,255,.10)"/>
+      <text x="20" y="294" fill="#a2a8af" font-size="11">跨机计划 §7.2 不变项核对: 路线 A 逐条保留(60s 轮询 / token 文件信任锚 / origin 白名单 / 端口独占守卫);</text>
+      <text x="20" y="310" fill="#a2a8af" font-size="11">路线 B 打破「协议不变: 60s 短轮询」(改离屏文档长连接 + 后端推送), 并新增桥进程与一次性注册面。</text>
+    </svg>
+    <figcaption>图 1 · 三条路线 × 两种部署形态。跨机列只有路线 A 成立 —— 这正是「计划适合哪种方案」的直接答案。</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">03 / 路线 B 为什么不入围</div>
+  <h2>原生消息桥结构上到不了 NAS</h2>
+  <ul>
+    <li><strong>宿主只能由本机浏览器拉起</strong>: native messaging 的桥进程由外部 PC 的 Chrome 按清单启动、走 stdio。NAS 上的后端无法被 PC 的浏览器拉起, PC 上的桥也替换不掉「经网络拨 NAS」这一跳 —— <em>NAS 地址、token、传输信任, 一项配置都少不了</em>, 却多付一个桥组件 + 一次性注册表主机注册。</li>
+    <li><strong>打破计划 §7.2 不变项</strong>: 路线 B 把「60s 短轮询」换成「离屏文档持长连接 + 后端主动推送」。计划的协议不变项是明文写着的; 换协议意味着 §03.5 的安全重评要重做(PC 侧的准入从 origin 白名单变成管道 ACL + 清单 origins), 而计划明确「不动三道安全资产」。</li>
+    <li><strong>独特收益只在同机内成立</strong>: 零端口、亚秒派发、<code>request_timeout</code> 约束消失 —— 这些都发生在「同一台机器」内部。跨机那一跳照旧是端口 + HTTP, B 相对 A 没有任何增量。</li>
+  </ul>
+  <div class="note bad-note"><strong>结论</strong>: 路线 B 与跨机计划<em>正交</em>——它回答的是计划没问的问题(同机端口清零), 对计划真正的问题(绑哪、怎么传、怎么鉴权)零贡献。不并入本计划; 若未来为同机推送时延重拾, 应另立计划, 并重新评估轮询不变项。</div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">04 / 路线 A 为什么适配</div>
+  <h2>零冲突, 且把跨机配置面砍掉一半</h2>
+  <h3>4.1 对同机形态(默认)</h3>
+  <ul>
+    <li>发现端口固定 18788(免配置、可覆盖) + 数据端口交 OS 随机 + token 由发现响应携带 ⇒ <strong>「抄端口 + 粘 token」两道手工配置归零</strong>。</li>
+    <li>发现端口默认绑回环 ⇒ 与计划「默认仍回环, 同机零感知」同一气质; 顺带消灭同机多实例端口撞车(注册表按心跳聚合)。</li>
+  </ul>
+  <h3>4.2 对跨机形态(计划目标)</h3>
+  <ul>
+    <li>发现端点<strong>继承计划的 <code>host</code> 可配性</strong>(这是 S1/S2 的直接产物): 扩展填 <code>http://&lt;nas-ip&gt;:18788</code> 一次, 发现响应带回 {随机数据端口, token, 实例清单}。NAS 地址是唯一不可消除的配置项——扩展必须知道 NAS 在哪, 没有任何机制能去掉它。</li>
+    <li>跨机配置面从「端点 URL + token」收缩为「NAS 地址」; <strong>token 不再经聊天/邮件在两台机器之间搬运</strong>(可用性 + 机密性双赢)。</li>
+    <li>附带安全增益: 数据端口每次启动随机 ⇒ LAN 端口扫描对数据端点失效, 可寻址的只剩发现端口(且 Origin 钉死)。相对计划路径 C 的固定端口暴露, 这是净改善。</li>
+  </ul>
+  <h3>4.3 计划 §7.2 不变项逐条核对</h3>
+  <table>
+    <tr><th style="width:44%">计划不变项</th><th style="width:14%">路线 A</th><th>说明</th></tr>
+    <tr><td>默认仍回环(<code>host</code> 缺省 127.0.0.1)</td><td><span class="tag tag-ok">保持</span></td><td>发现与数据两个端口都随 <code>host</code> 走, 缺省同绑回环。</td></tr>
+    <tr><td>URL 白名单 / 任务绑定 / origin 白名单逐字不变</td><td><span class="tag tag-ok">保持</span></td><td>发现端点同样只认 <code>chrome-extension://</code> origin; 普通网页 JS 打进来 403。</td></tr>
+    <tr><td>协议不变: 60s 短轮询 + token 鉴权</td><td><span class="tag tag-ok">保持</span></td><td>路线 A 本来就是轮询; 「轮询周期 &lt; request_timeout」硬约束不动。</td></tr>
+    <tr><td><code>allow_reuse_address=False</code> 独占端口守卫</td><td><span class="tag tag-ok">保持</span></td><td>两个端口都沿用; 发现端口被占 ⇒ 明确日志 + 退手动配置。</td></tr>
+    <tr><td><code>hr_check.shared_dir</code> 只读路径保留</td><td><span class="tag tag-ok">保持</span></td><td>与配置轴无关, 并列关系不变。</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">05 / 安全联动</div>
+  <h2>必须和计划一起拍板的三处</h2>
+  <h3>5.1 发现端点免 token ⇒ 非回环时配对码从「可选」升「强制」</h3>
+  <p>发现端口本身就是发 token 的, 不可能再要求 token(先有鸡还是先有蛋)。计划已立「非回环 + 空 token ⇒ 报错」的安全默认范式; 路线 A 按同一范式延伸: <strong>发现端点绑非回环 ⇒ 一次性配对码强制开启</strong>(daemon 在日志/WebUI 亮码, 选项页输入一次, 之后发现响应须带配对密钥 HMAC 才被采信)。今早报告里配对码默认关——联合分析建议把默认语义反转为「同机可选、非回环强制」。</p>
+  <div class="note warn-note"><strong>精度说明</strong>: 配对码只解决「谁可以拉取 token」(未授权发现), <em>不解决链路嗅探</em>——T1 明文 LAN 下嗅探者仍能直接读到 token 字节。链路机密性仍归计划的 D1 拍板, 两件事不能互相替代。</div>
+  <h3>5.2 D1 传输决策的覆盖面从 1 个端点扩为 2 个</h3>
+  <table>
+    <tr><th style="width:16%">D1 选项</th><th style="width:42%">对数据端点(同计划)</th><th>对发现端点(新增)</th></tr>
+    <tr><td><strong>T3 反代 TLS</strong></td><td>后端仍回环, 零攻击面</td><td>反代需同时暴露 18788; 或数据端口显式固定、只让发现走反代(token 自动分发仍可得)。</td></tr>
+    <tr><td><strong>T1 受信 LAN</strong></td><td>明文, token 可嗅探(文档警示)</td><td>同上也明文 ⇒ <strong>配对码成为必选项而非可选项</strong>, 且文档须明示「token 可被同网段获取」。</td></tr>
+    <tr><td><strong>T2 端点 TLS</strong></td><td>自签 + MV3 证书信任难题</td><td>两张证书管理, 复杂度 ×2; 更不推荐。</td></tr>
+  </table>
+  <h3>5.3 401 节流(S4)对两个端口都做; origin 钉死建议配 extension_id</h3>
+  <p>计划 S4 的 401 节流(状态变化报一次 + gap 提醒)天然覆盖两个端口, 一次改动两处受益。另: 发现端点在 <code>extension_id</code> 未配时只认「任意 chrome-extension:// origin」——<strong>跨机场景强烈建议配 <code>extension_id</code></strong>, 它是发现端点唯一的准入门槛。</p>
+  <h3>5.4 一处真实冲突(开放设计点, 不在本报告定案)</h3>
+  <p>随机数据端口与计划的路径 A(SSH 静态转发)/ 路径 B(反代静态上游)天然冲突: 转发规则写不死一个每次启动都变的端口。<strong>结论性口径</strong>: 隧道/反代用户保持<em>显式端口</em>(路线 A 定义的完全旧行为, 存量零感知), 不受随机化影响; 若也想让这类用户获得 token 自动分发, 需给发现响应一个「对外声明端点」覆盖键(如 <code>advertise</code>, 默认 = bind 地址, 隧道/反代场景显式覆盖)——列为开放设计点, 见 §09。</p>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">06 / 拍板点映射</div>
+  <h2>两份文档的决策项, 合并为一张表</h2>
+  <table>
+    <tr><th style="width:30%">决策项</th><th style="width:20%">来源</th><th>联合结论(建议)</th></tr>
+    <tr><td>路线选型</td><td>去端口报告 §10-①</td><td><strong>路线 A</strong>(本报告结论); B 缓行, C 视推送需求另议。</td></tr>
+    <tr><td>传输安全 T1/T2/T3</td><td>跨机计划 D1</td><td>仍推荐 T3 首选 / T1 轻量 / T2 备选; <strong>覆盖面扩到发现端点</strong>(§05.2); T1 ⇒ 配对码强制。</td></tr>
+    <tr><td>扩展放开范围</td><td>跨机计划 D2</td><td>不变: 回环 ∪ 私网段; 发现端点主机判据同一套(填 NAS 私网地址即通过)。</td></tr>
+    <tr><td><code>0.0.0.0</code> 是否允许</td><td>跨机计划 D3</td><td>允许 + 文档警示; 非回环 ⇒ 配对码强制(与 §5.1 同范)。</td></tr>
+    <tr><td>多扩展 / 多 PC</td><td>跨机计划 D4</td><td>协议层天然支持(各 PC 扩展各自发现同一实例、同一 token)。<strong>但有个坑</strong>: 本扩展 manifest 无 <code>key</code> 字段 ⇒ 未打包安装的扩展 id 随安装路径变化, 两台 PC 的 id 不同 ⇒ 钉单 <code>extension_id</code> 会挡住第二台。多 PC 推荐打包(固定 key)或留空 <code>extension_id</code>(发现端点仅靠配对码把关)。配对码需支持多次使用或按实例签发。</td></tr>
+    <tr><td>发现端口默认值</td><td>去端口报告 §10-②</td><td>认可 18788(现产端口转正为发现端口, 数据端口让位随机)。</td></tr>
+    <tr><td>配对码硬化</td><td>去端口报告 §10-③</td><td><strong>语义反转</strong>: 同机可选(默认关), 非回环强制(默认开)。</td></tr>
+    <tr><td>注册表落点 / 桥分发形态 / 降级轮询</td><td>去端口报告 §10-④⑤⑥</td><td>前三项仅属路线 B ⇒ <strong>随 B 一并缓行</strong>; 降级轮询对 A 不成问题(A 本就是轮询)。</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">07 / 实施次序</div>
+  <h2>先 host 键, 再发现层, 传输一次拍板覆盖两端</h2>
+  <ol>
+    <li><strong>先落跨机计划 S1/S2</strong>(<code>host</code> 配置键 + 接线): 这是路线 A 的前置——发现端口必须同样可配 <code>host</code>, 否则跨机发现无从谈起。</li>
+    <li><strong>路线 A 作为同一计划的快跟层</strong>: 发现端点 + <code>port: 0</code> 语义 + 实例注册表; 复用 S4 的 401 节流与 origin 白名单机制, 不新增安全件。</li>
+    <li><strong>D1 拍板时一并覆盖两个端点</strong>(§05.2), 避免传输方案落地后又为发现端点返工。</li>
+    <li><strong>路线 B 在去端口报告中标注「缓行/远期」</strong>, 不并入跨机计划; 若未来重拾, 另立计划并重评轮询不变项。</li>
+    <li><strong>旧兼容不变</strong>: 显式 <code>port</code> = 完全旧行为(存量零感知); 旧扩展遇新后端退手动配置; 新扩展遇旧后端同样退手动——不做断崖切换。</li>
+  </ol>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">08 / 若采纳, 两份文档的同步清单</div>
+  <h2>拍板后才动文档; 本报告只做建议</h2>
+  <ul>
+    <li><strong>跨机计划(26-10-09-0856, 当前 Open 待拍板)</strong>: ① §03.2 路径矩阵补一条「路线 A 叠加在路径 C 之上」; ② D1 扩面为发现 + 数据两端; ③ §03.5 攻击面表补「发现端口被占/被伪装」一行(缓解 = Origin 钉死 + 配对码); ④ §07.2 不变项补「发现端口默认随 host 绑回环」; ⑤ 变更记录追加 + 抬 <code>doc-updated</code>(计划文件禁止 -v2, 同文件内追加)。</li>
+    <li><strong>去端口报告(26-10-14-1110, 已 Done 冻结)</strong>: §10 六项决策收敛(路线=A、配对码=非回环强制、B 三项缓行); 与跨机计划互加反链。</li>
+    <li><strong>互链</strong>: 本报告成为两份文档的共同下游; 上游 issue <code>26-10-09-0855</code> 认领时 <code>doc-refs</code> 一并挂上本报告。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="num">09 / 仍然开放</div>
+  <h2>联合之后仍未定案的问题</h2>
+  <ol>
+    <li><code>advertise</code> 覆盖键(隧道/反代 + token 自动分发)要不要做? 不做则这类用户停留在显式端口 + 手工 token。</li>
+    <li>配对码多次使用 vs 按实例/按 PC 签发(多 PC 场景的撤销与轮换)。</li>
+    <li>发现响应是否带实例名/备注(NAS 上多 <code>data_dir</code> 实例时供人选择)?</li>
+    <li>多 PC 部署是否把「打包扩展(固定 key)」写成推荐安装方式?</li>
+    <li>数据端口每次启动随机 ⇒ 扩展侧缓存端点失效的重发现逻辑(报告 §04 已有「全部实例连不上时探测」, 确认覆盖重启场景即可)。</li>
+  </ol>
+</section>
+
+<div class="footer">
+  联合分析 · 只读文档轮, 未改代码、未动测试基线 ·
+  memory-bank/reports/26-10-14-1135-report-hr-channel-portless-remote-fit.html ·
+  上游: plans/26-10-09-0856(Open) × reports/26-10-14-1110(Done) · 拍板后按 §08 同步
+</div>
+
+</div>
+</body>
+</html>
