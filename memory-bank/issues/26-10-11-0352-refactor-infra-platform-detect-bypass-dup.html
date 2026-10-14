@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0352">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-12-2110-infra-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="平台判定旁路 infra 单点">
 <meta name="issue-summary" content="utils.is_windows/is_linux/is_mac 单点被 autostart.py(6处)+tray/app.py 裸 sys.platform.startswith 绕过">
 <title>平台判定旁路 infra 单点 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0352-refactor-infra-platform-detect-bypass-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 04:11 — 用户指派「认领并修复」认领，状态 <strong>Open → In Progress</strong>。复验：grep <code>sys.platform.startswith</code> 锚点均在（<code>infra/autostart.py</code> 6 处 <code>win32</code>/<code>darwin</code> + <code>tray/app.py:204</code> <code>win32</code>；单点 <code>infra/utils.py</code> 为 <code>"win"</code> 前缀口径），现象未消失。</li>
+      <li>2026-10-15 04:22 — 已修并验证，状态 <strong>Done</strong>（test.full 3207 passed + 4 skipped / TOTAL 99%，基线切片 <code>26-10-15-0422-infra-platform-detect-bypass-dup</code>）：按「建议」第一支修法，7 处旁路全改走单点 —— <code>infra/autostart.py</code> 6 处（<code>is_enabled</code>/<code>enable</code>/<code>disable</code> 的 win/darwin 分支）经包内相对导入 <code>from .utils import is_mac, is_windows</code> 改调 <code>is_windows()</code>/<code>is_mac()</code>（<code>is_windows</code> 匹配 <code>"win"</code> 前缀已覆盖 <code>win32</code>，语义逐字等价；<code>sys</code> 导入保留，<code>sys.executable</code> 仍用）; <code>tray/app.py:204</code> 改调 <code>utils.is_windows()</code> 并移除 <code>import sys</code>（该文件唯一用途）。未采纳「抽 <code>_platform()</code> 枚举」支：调用点改函数调用即收口，枚举是新抽象面，保守口径不扩。连带新增静态守阵 <code>tests/test_utils.py::test_platform_detect_single_point_static_guard</code>（src/ 全域禁裸 <code>sys.platform.startswith</code>，单点自身豁免；红验 = 临时注入旁路判红后删除），防旁路回潮。</li>
     </ul>
   </section>
 

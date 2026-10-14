@@ -25,6 +25,7 @@
 - test_qb_incomplete_twin_path: .!qB 后缀单点常量与孪生路径拼接(纯函数)
 - test_timer: 计时器
 - test_os_platform_helpers: 平台判定(is_windows/is_linux/is_mac/is_posix)
+- test_platform_detect_single_point_static_guard: 静态守阵(issue 26-10-11-0352-refactor-infra-platform-detect-bypass-dup)——src/ 全域禁止裸 sys.platform.startswith 另立判据, 平台判定只走 utils.is_* 单点(单点自身豁免)
 - test_parse_time_empty: 空串 -> 0
 - test_parse_time_invalid: 非法时间格式 -> ValueError
 - test_parse_fsize_invalid_format: 非法大小格式 -> ValueError
@@ -104,6 +105,7 @@ import os
 import pytest
 import sys
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -390,6 +392,28 @@ def test_os_platform_helpers(monkeypatch):
     monkeypatch.setattr(sys, "platform", "freebsd")
     assert not utils.is_windows()
     assert utils.is_posix()  # BSD 属 Unix 类
+
+
+def test_platform_detect_single_point_static_guard():
+    """静态守阵(issue 26-10-11-0352-refactor-infra-platform-detect-bypass-dup): 平台判定单点
+
+    `utils.is_windows/is_linux/is_mac/is_posix` 是「当前平台」事实的唯一口径 —— src/ 下
+    任何模块不得再裸写 `sys.platform.startswith(...)` 另立判据: autostart.py 曾 6 处 +
+    tray/app.py 1 处绕过单点, 且与单点的 "win" 前缀口径不一致(旁路写 "win32"), 新增平台
+    分支时各处判断不一致。本守阵扫 src/ 全部 .py, 仅豁免单点自身(infra/utils.py);
+    新旁路直接判红。notify.py 取 `sys.platform` 字符串值作平台标识(非 startswith 判据)不拦。
+    """
+    src_root = Path(__file__).resolve().parents[1] / "src"
+    single_point = src_root / "auto_qb" / "infra" / "utils.py"
+    offenders = []
+    for path in sorted(src_root.rglob("*.py")):
+        if path == single_point:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "sys.platform.startswith" in line:
+                rel = path.relative_to(src_root.parent)
+                offenders.append(f"{rel}:{lineno}")
+    assert not offenders, f"平台判定应走 utils.is_*() 单点, 发现裸 sys.platform.startswith: {offenders}"
 
 
 def test_parse_time_empty():

@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from .errors import AutoQbError
+from .utils import is_mac, is_windows
 
 APP_KEY = "auto-qb"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -37,7 +38,7 @@ def autostart_command(config_path: str) -> str:
 
 def is_enabled(config_path: str) -> bool:
     """当前是否已注册开机自启(存在即视为启用, 不比对命令内容)"""
-    if sys.platform.startswith("win32"):
+    if is_windows():
         import winreg
 
         try:
@@ -46,7 +47,7 @@ def is_enabled(config_path: str) -> bool:
                 return True
         except OSError:
             return False
-    if sys.platform.startswith("darwin"):
+    if is_mac():
         return MACOS_PLIST.exists()
     return LINUX_DESKTOP.exists()
 
@@ -55,12 +56,12 @@ def enable(config_path: str) -> None:
     """注册开机自启; 失败抛 AutoQbError(UI 提示, 不中断程序)"""
     command = autostart_command(config_path)
     try:
-        if sys.platform.startswith("win32"):
+        if is_windows():
             import winreg
 
             with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
                 winreg.SetValueEx(key, APP_KEY, 0, winreg.REG_SZ, command)
-        elif sys.platform.startswith("darwin"):
+        elif is_mac():
             MACOS_PLIST.parent.mkdir(parents=True, exist_ok=True)
             with open(MACOS_PLIST, "wb") as f:
                 plistlib.dump(
@@ -81,7 +82,7 @@ def enable(config_path: str) -> None:
 def disable() -> None:
     """注销开机自启; 未注册时为幂等 no-op"""
     try:
-        if sys.platform.startswith("win32"):
+        if is_windows():
             import winreg
 
             try:
@@ -89,7 +90,7 @@ def disable() -> None:
                     winreg.DeleteValue(key, APP_KEY)
             except OSError:
                 return  # 未注册: 幂等
-        elif sys.platform.startswith("darwin"):
+        elif is_mac():
             MACOS_PLIST.unlink(missing_ok=True)
         else:
             LINUX_DESKTOP.unlink(missing_ok=True)

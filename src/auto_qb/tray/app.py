@@ -15,7 +15,6 @@ UI 从不直接跨线程调用控件。
 import logging
 import os
 import queue
-import sys
 import threading
 import time
 import webbrowser
@@ -201,7 +200,7 @@ class TrayUi:
         self._icon_tk = self._tk.PhotoImage(file=ICON_PNG)  # 引用须保留, 否则被 GC
         # Windows 走 CTk 的 iconbitmap(BMP 帧 .ico, 含 16~256 多尺寸)—— 诊断对照实测
         # CTk 窗口上此方式标题栏/任务栏/alt-tab 均正确; 其它平台 iconphoto(PhotoImage 不支持 ico)
-        if sys.platform.startswith("win32"):
+        if utils.is_windows():
             # 仅 iconbitmap(BMP 帧 ico, 含 16~256 多尺寸): 与诊断对照 C 完全一致 ——
             # 实测 CTk 窗口上此方式标题栏/任务栏/alt-tab 均为 orbit; 此前叠加的
             # iconphoto/WM_SETICON(32px 单尺寸) 反而在高 DPI 下破坏任务栏图标(回退 python)
