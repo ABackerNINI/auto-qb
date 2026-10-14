@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11 16:10
+**Updated:** 2026-10-15 04:50
 **Topics:** dup-code-audit
-**Summary:** 用户「修复 webui 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」; 追问拍板**新建本修复轮档案作认领方 + 先做低风险 7 条**。报告 §18(R15 路由层)/§19(R16 表现层)共入池 webui 10 条 refactor issue —— 本轮认领并修完 7 条(virtual-tracker-prefix / status-payload / sidecar-dir / hr-route-guard / cmd-pair-handlers / bulk-receipt / seed-view-restate), 3 条按拍板留 `Open`(partial-publish-merge 热路径抽 `_merge_rows` / cross-layer-constant 跨层常量 / route-cmd-boilerplate 表驱动)。全程**行为逐字不变**: 日志文案、HTTP 状态码与文案、响应字段集一字未改, 只收骨架; 5 条新守阵(静态 ast/源码 + 动态等值)全部过红验。test.full 实测见基线切片 `26-10-11-1610`(+5 = 新增守阵, 无回归信号)。
-**Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/testing/baselines/26-10-11-1610-webui-dup-code-fixes.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/issues/26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-status-payload-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-sidecar-dir-convention-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-hr-route-guard-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cmd-pair-handlers-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-bulk-receipt-boilerplate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-seed-view-restate-dup.html
+**Summary:** 用户「修复 webui 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」; 追问拍板**新建本修复轮档案作认领方 + 先做低风险 7 条**。报告 §18(R15 路由层)/§19(R16 表现层)共入池 webui 10 条 refactor issue —— 本轮认领并修完 7 条(virtual-tracker-prefix / status-payload / sidecar-dir / hr-route-guard / cmd-pair-handlers / bulk-receipt / seed-view-restate), 3 条按拍板留 `Open`(partial-publish-merge 热路径抽 `_merge_rows` / cross-layer-constant 跨层常量 / route-cmd-boilerplate 表驱动)。全程**行为逐字不变**: 日志文案、HTTP 状态码与文案、响应字段集一字未改, 只收骨架; 5 条新守阵(静态 ast/源码 + 动态等值)全部过红验。test.full 实测见基线切片 `26-10-11-1610`(+5 = 新增守阵, 无回归信号)。 **2026-10-15 续轮(R2)**: 用户「认领并修复 memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html」—— 当期三条延后项之一的跨层常量批次落地, 走 issue 建议第一支「保持守阵 + 补全机械比对」(未触前端构建面): 四组常量对中 ② REANNOUNCE 已有逐项守阵不动; ① 补 STATE_RANK_LAST↔_SHOW_STATE_RANK_LAST 比对(views.py 表外兜底秩 9 提为命名常量); ③ 新增 ETA 哨兵全静态树扫描(`_ETA_SENTINEL` ↔ format.js + 3 处 tpl 比较点, 零命中即红); ④ 新增键位正则跨层逐字比对(`_KEYS_SERIAL_RE` ↔ `KB_DEF_RE`)并消 test_web_shortcuts.py 第三份手抄(改导入后端单点)。三条新守阵全部过红验(值漂移/声明缺失/零命中三类突变)+ 3 个活性探针; test.full 实测见基线切片 `26-10-15-0450`(仍零行为变化, 纯守阵增量 + 常量命名化 + 注释)。
+**Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/testing/baselines/26-10-11-1610-webui-dup-code-fixes.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/issues/26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-status-payload-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-sidecar-dir-convention-dup.html,memory-bank/issues/26-10-11-0309-refactor-webui-hr-route-guard-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cmd-pair-handlers-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-bulk-receipt-boilerplate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-seed-view-restate-dup.html,memory-bank/issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html,memory-bank/testing/baselines/26-10-15-0450-webui-cross-layer-constant-guard.md,memory-bank/activeContext/26-10-15-0450-webui-cross-layer-constant-guard.md
 
 ## 原始请求
 
@@ -37,6 +37,7 @@
 | 5 | `webui-cmd-pair-handlers-dup` | `commands.py` 抽 `_group_action` / `_torrent_action` / `_category_action` / `_tags_action` / `_speed_action` 五个 (method, verb) 参数化单点, 六对 `_cmd_*`(pause/resume 组、pause/resume 单种子、super_seeding/force_start、category create/edit、tags create/delete、speed override/alt)各缩成一行 | 既有命令用例全覆盖(调用形状/日志文案逐字不变); 分类尾部文案按形状差异作参数传入 | Done |
 | 6 | `webui-bulk-receipt-boilerplate-dup` | `commands.py` 抽 `_bulk_missing_msgs` + `_bulk_receipt`(有文案回 error 否则 ok 的收口形状), 两处调用点保留各自的分桶计数(recheck 计数 / 跳检按原因分桶)与日志文案; `runtime.py` 抽 `_judge_reannounce`(读 trackers → `_verdict_reannounce` 的判定处置单点), `check_pending` 与 `_advance_reannounce_background` 共用, 异常面仍各自处理 | 既有批量用例(日志串「批量跳检(成功 1, 跳过 1, 失败 2)」等)逐字断言 + 汇报确认用例 | Done |
 | 7 | `webui-seed-view-restate-dup` | `views._seed_view` 删 16 个与 `_member_view` 逐字同值的重述键(eta/completion_on/time_active/last_activity/availability/dl_limit/up_limit/tracker/num_*/downloaded/amount_left/seen_complete/infohash_v2), 只留平铺扩展段 | `test_seed_view_no_member_view_restatement`(ast 静态零交集 + 同名字段值等值) | Done |
+| 8 | `webui-cross-layer-constant-convention-dup`(R2 续轮) | `views.py` 表外兜底秩提命名常量 `_SHOW_STATE_RANK_LAST`; `test_webui_static_skins.py` 补 3 条跨层守阵(STATE_RANK_LAST 比对 / ETA 哨兵全树扫描 / 键位正则逐字)并注册 + 文档字符串同步; `test_web_shortcuts.py` 消第三份手抄正则(改导入后端单点); keys.py/shortcuts.js 注释补守阵指针 | `_scan_state_rank` 扩展 + `_scan_eta_sentinel` + `_scan_keys_serial_re`(值漂移/声明缺失/零命中三类突变红验 + 3 活性探针) | Done |
 
 ## 实测汇总
 
@@ -47,9 +48,15 @@
 ## 未做项(保持 `Open`, 等各自批次)
 
 - `26-10-11-0309-refactor-webui-partial-publish-merge-dup` —— 热路径四段抽 `_merge_rows`, 需「局部重算 == 全量重跑」镜子守阵。
-- `26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup` —— 跨层常量(STATE_RANK / REANNOUNCE_BLOCKED / ETA 哨兵 / 键位正则)触前端构建面, 现状已有静态守阵钉住。
 - `26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup` —— 「路由→命令」表驱动改造, 须保金清单守阵 `test_web_route_manifest_frozen`。
 
 ## 进度日志
 
 - 2026-10-11 15:40-16:10: 会话开工同步(快进 `727b72e2`→`c0038049`) → 读报告 §18/§19 与 10 条 issue → 追问拍板(认领载体 / 范围) → 7 条逐条改码 + 5 守阵(含红验) → `dev.fmt` + 行尾归一 → `test.full` 实测 → 立本档案 + 基线切片 + 7 条 issue 置 `Done`(补实际修法/验证/数字 + `doc-refs`) → `kb.index` 重建。
+
+### 2026-10-15 R2 — 跨层常量守阵补齐(用户指名延后项之一)
+
+- 开工同步(远端领先 1 笔, 快进 `22f34e13→a369c99a`) → 复验四组常量对均在(ETA 哨兵 tpl 处数 4→3 系 26-10-11-1722 计划单元格收敛, 非漂移) → 定案走 issue 建议第一支「保持守阵 + 补全机械比对」(第二支构建期注入触前端构建面, 留痕改道原因)。
+- 落地: views.py `_SHOW_STATE_RANK_LAST` 命名常量; test_webui_static_skins.py 三支跨层守阵(STATE_RANK_LAST / ETA 哨兵全树 / 键位正则)注册 + 两处文档字符串同步; test_web_shortcuts.py 消第三份手抄; 三处注释指针。
+- 验证: 三类突变红验(format.js 哨兵值 / shortcuts.js 正则 / app.js 兜底秩)+ 3 活性探针(零命中/声明缺失)全过 → `test.one` 两文件 50 passed → `test.full` 3209 passed + 4 skipped(基线切片 `26-10-15-0450`)。
+- kb 回写: 本档案 R2 段(Summary/子任务表第 8 行/未做项出账/Refs/进度日志) + issue 置 `Done`(doc-refs 认领链) + activeContext 切片新建 + 基线切片 + `kb.index` 重建。

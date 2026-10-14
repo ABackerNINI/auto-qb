@@ -93,6 +93,9 @@ _VIRTUAL_TRACKER_PREFIXES = VIRTUAL_TRACKER_PREFIXES
 #   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
 #   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对。
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "other": 5}
+# 表外 kind 的兜底秩(排最后): 与前端 `shared/app.js::STATE_RANK_LAST` 同值,
+# 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对(issue 26-10-11-0310 补钉)。
+_SHOW_STATE_RANK_LAST = 9
 
 # P1-1 按视图回传: 每个视图实际要用的数组。四视图共享同一版本号(rid), 所以"只回一部分"
 # 不会让别的视图停在旧数据上 —— 前端切视图时会把 lastRid 置空强制取一次全量。
@@ -123,7 +126,9 @@ def _ep_sort_key(nkey: tuple):
     return (1, 0, nkey[1])  # date
 
 
-# qB eta 哨兵: 8640000 = 无 ETA(与前端 format.js::fmtEta 口径一致); 时间点哨兵 -1/0 = 从未(fmtTs 空白)
+# qB eta 哨兵: 8640000 = 无 ETA(与前端 format.js::fmtEta 口径一致; 跨层一致由
+# tests/test_webui_static_skins.py::_scan_eta_sentinel 机械守阵, issue 26-10-11-0310);
+# 时间点哨兵 -1/0 = 从未(fmtTs 空白)
 _ETA_SENTINEL = 8640000
 
 
@@ -752,7 +757,7 @@ class WebviewMixin:
                     {
                         "key": list(nkey),
                         "count": len(node["members"]),
-                        "state": min(node["kinds"], key=lambda k: _SHOW_STATE_RANK.get(k, 9)),
+                        "state": min(node["kinds"], key=lambda k: _SHOW_STATE_RANK.get(k, _SHOW_STATE_RANK_LAST)),
                         "dlspeed": node["dlspeed"],
                         "upspeed": node["upspeed"],
                         "uploaded": node["uploaded"],

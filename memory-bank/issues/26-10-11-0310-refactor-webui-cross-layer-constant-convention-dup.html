@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0310">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 跨层单点常量多表示(STATE_RANK / REANNOUNCE_BLOCKED / ETA 哨兵 / 键位正则)">
 <meta name="issue-summary" content="Python 与前端 JS 各声明一份逐项同表, 靠守阵同步">
 <title>webui 跨层单点常量多表示(STATE_RANK / REANNOUNCE_BLOCKED / ETA 哨兵 / 键位正则) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:10</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,7 +99,15 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 04:40 — 用户指派认领，状态 <strong>In Progress</strong>。复验：四组常量对均在（ETA 哨兵 tpl 处数 4→3，系 26-10-11-1722 计划明细单元格收敛所致，非漂移）；守阵覆盖缺口 = ③ ETA 哨兵、④ 键位正则无跨层机械比对，且测试文件手抄了第三份正则；① 的 STATE_RANK_LAST=9 无守阵。② 已有逐项守阵。</li>
+      <li>2026-10-15 04:50 — 修复落地，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下方）</li>
     </ul>
+    <h3>复验</h3>
+    <p>复验 2026-10-15 04:40 <strong>仍复现</strong>（守阵缺口面）：① <code>views.py:95</code> <code>_SHOW_STATE_RANK</code> ↔ <code>app.js:873</code> <code>STATE_RANK</code> 表本体有守阵（<code>_scan_state_rank</code>），但 <code>STATE_RANK_LAST=9</code> ↔ 后端裸字面量 <code>.get(k, 9)</code> 无比对；② <code>commands.py:71</code> ↔ <code>decorate.js:64</code> 已有逐项守阵（<code>test_webui_static_dom_panel.py</code> 前后端键集比对）；③ <code>views.py:127</code> <code>_ETA_SENTINEL</code> ↔ <code>format.js:51</code> + tpl 3 处（xtpl-cells.html ×2 / xtpl.html ×1，issue 原记 4 处已被 26-10-11-1722 计划收敛）无任何跨层比对；④ <code>routes/keys.py:32</code> <code>_KEYS_SERIAL_RE</code> ↔ <code>shortcuts.js:160</code> <code>KB_DEF_RE</code> 无机械比对，且 <code>test_web_shortcuts.py:153</code> 手抄第三份同款正则。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>：取建议的第一支「保持守阵 + 补全机械比对」，四组常量对全部落到机械守阵（未触前端构建面）——① <code>views.py</code> 表外兜底秩提为命名常量 <code>_SHOW_STATE_RANK_LAST = 9</code>（集行聚合处改引它），<code>_scan_state_rank</code> 扩展 <code>STATE_RANK_LAST</code> ↔ <code>_SHOW_STATE_RANK_LAST</code> 比对；② 既有逐项守阵不动；③ 新增 <code>_scan_eta_sentinel</code>：按全静态树（.js/.html，除 vendor）抓每一处 <code>sec/eta >= &lt;数&gt;</code> 哨兵比较点与 <code>_ETA_SENTINEL</code> 逐一比对，<strong>零命中即红</strong>（"没扫到"与"没违规"可区分）；④ 新增 <code>_scan_keys_serial_re</code>：JS <code>KB_DEF_RE</code> 字面量剥定界符与 <code>_KEYS_SERIAL_RE.pattern</code> 逐字比对，同时 <code>test_web_shortcuts.py</code> 消第三份手抄（改 <code>from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE as KB_DEF_RE</code>）。三处源码注释（keys.py / shortcuts.js / views.py）补守阵位置指针。</p>
+    <p><strong>与建议修法改道原因</strong>：未走第二支「后端出常量、前端构建期注入/生成」—— 它触前端构建面（收益中/风险中，issue 原评），而守阵补全后"改一边必须改另一边"已从注释约定升级为即时判红，核心风险（静默漂移）已消除；前端无 JS 测试框架、运行期无往返判形态的两处消费场景（短键位录制、ETA 显示）也仍要求字面量在场。留待真有第二处跨层常量增长时再评估构建期注入，届时三个扫描函数可整体退役。</p>
+    <p><strong>验证方式</strong>：① 红绿双验 —— 三类突变各判红且报错带文件行号与两侧值对照（format.js 哨兵 8640000→8640001 / shortcuts.js 正则 <code>[A-Z]</code>→<code>[A-Za-z]</code> / app.js STATE_RANK_LAST 9→8），另 3 个活性探针（ETA 零命中 / KB_DEF_RE 声明缺失 / STATE_RANK_LAST 声明缺失）均报红，全部还原后复绿；② <code>test.one</code> 两个改动文件 50 passed；③ 全量 <code>test.full</code> 全绿，数字见 <code>commands run kb.baseline</code>（基线切片 <code>memory-bank/testing/baselines/26-10-15-0450-webui-cross-layer-constant-guard.md</code>）。认领链：doc-refs → 任务档案 <code>26-10-11-webui-dup-code-fixes</code>（R2 续轮段），双向闭合。</p>
   </section>
 
   <footer>

@@ -149,8 +149,11 @@ STATIC = ROOT / "src" / "auto_qb" / "webui" / "static"
 SHARED = STATIC / "shared"
 UIS = ("atlas", "prism", "console")
 
-# 归一化串合法形态(与 shortcuts.js KB_DEF_RE 同一正则, 改一边必须改另一边)
-KB_DEF_RE = re.compile(r"^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$")
+# 归一化串合法形态: 单一事实源在后端 routes/keys.py::_KEYS_SERIAL_RE(2026-10-15 消第三份手抄,
+# issue 26-10-11-0310) —— 与 shortcuts.js KB_DEF_RE 的跨层逐字一致由
+# tests/test_webui_static_skins.py::_scan_keys_serial_re 机械守阵
+from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE as KB_DEF_RE
+
 KB_SCOPES = {"global", "list", "drawer", "settings", "modal"}
 
 

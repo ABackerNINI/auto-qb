@@ -28,7 +28,8 @@ from ..context import WebContext
 logger = logging.getLogger("auto_qb.web")
 
 _KEYS_SCHEMA_VERSION = 1
-# 与 shortcuts.js KB_DEF_RE 同一正则(修饰键固定序 + 单个 e.code); 改一边必须改另一边
+# 与 shortcuts.js KB_DEF_RE 同一正则(修饰键固定序 + 单个 e.code); 改一边必须改另一边 ——
+# 两侧逐字一致由 tests/test_webui_static_skins.py::_scan_keys_serial_re 机械守阵(issue 26-10-11-0310)
 _KEYS_SERIAL_RE = re.compile(r"^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$")
 _KEYS_DEFAULT = {"schema_version": _KEYS_SCHEMA_VERSION, "template": "aqb-default", "overrides": {}}
 

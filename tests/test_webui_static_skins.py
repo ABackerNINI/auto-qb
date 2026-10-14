@@ -1,7 +1,7 @@
 """test_webui_static_skins 测试计划: webui 前端资产静态守阵: 皮肤清单 / CSS / 挂件类名
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
@@ -328,8 +328,12 @@ def _scan_state_rank(text, rel, problems):
     2. 乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
     实测曾漂移两处({downloading,checking} 与 {paused,seeding} 两组取值相反), 人眼不可能发现,
     故机械比对(改一边必须改另一边 —— 这正是本守阵要逼出来的动作)。
+
+    表外兜底秩(2026-10-15, issue 26-10-11-0310): 表里没有的 kind 排最后, 前端
+    `STATE_RANK_LAST` ↔ 后端 `_SHOW_STATE_RANK_LAST` 也必须同值 —— 它俩管的是同一件事
+    ("未知状态排多后"), 漂移的后果是某页把未知状态排到了已知状态中间。
     """
-    from auto_qb.webui.views import _SHOW_STATE_RANK
+    from auto_qb.webui.views import _SHOW_STATE_RANK, _SHOW_STATE_RANK_LAST
 
     m = re.search(r"const STATE_RANK = \{([^}]*)\}", text)
     if not m:
@@ -341,16 +345,85 @@ def _scan_state_rank(text, rel, problems):
             f"{rel} STATE_RANK 与后端 _SHOW_STATE_RANK 不一致"
             f"(前端 {front} / 后端 {_SHOW_STATE_RANK}) —— 同一批种子会在辅种页与追剧页显示成不同颜色"
         )
+    m_last = re.search(r"const STATE_RANK_LAST = (\d+)", text)
+    if not m_last:
+        problems.append(f"{rel} 找不到 `const STATE_RANK_LAST = <n>`(表外 kind 兜底秩单点, 见 decorate.js rankKind)")
+    elif int(m_last.group(1)) != _SHOW_STATE_RANK_LAST:
+        problems.append(
+            f"{rel} STATE_RANK_LAST({m_last.group(1)}) 与后端 _SHOW_STATE_RANK_LAST"
+            f"({_SHOW_STATE_RANK_LAST})不一致 —— 未知 kind 的兜底排序两页不同(某页会把未知状态排进已知状态中间)"
+        )
     # 顺序语义(2026-09-21): 做种必须排在**暂停之前** —— 组内"部分暂停部分做种中"取**做种色**。
     # 上面的逐项比对只能保证"两页同色", 保证不了"同成哪个色": 2026-09-19 的 BUG-7 把前端表整体
     # 对齐后端时, 顺手把 {paused,seeding} 也翻成 paused ⇒ 辅种页做种中的组整行变灰(用户报
     # "辅种页状态色错误, 以前是对的")。两表一起改才不会重蹈覆辙, 故此处单独钉住顺序。
-    if front and front.get("seeding", 9) >= front.get("paused", -1):
+    if front and front.get("seeding", _SHOW_STATE_RANK_LAST) >= front.get("paused", -1):
         problems.append(
             f"{rel} STATE_RANK 把 paused 排在 seeding 之前或同级(前端 {front}) —— "
             "组/集内\"部分暂停部分做种中\"会取暂停色(灰), 用户口径是取**做种色**(绿); "
             "见 app.js STATE_RANK 注释与 memory-bank/pitfalls.md"
         )
+
+
+def _scan_keys_serial_re(text, rel, problems):
+    """键位归一化正则跨层守阵: 后端 `_KEYS_SERIAL_RE` ↔ 前端 `KB_DEF_RE` 逐字同源(2026-10-15, issue 26-10-11-0310)
+
+    两端各一份是刻意的: 前端录制/保存自定义键位时要能在无往返时判形态(shortcuts.js),
+    后端读 webui-keys.json 时要能校验(routes/keys.py)。但两边正则只要差一个字符,
+    症状就是**单边静默**: 前端放行的串后端 422(自定义键位存不进去), 或后端放行的串
+    前端判非法(录完即被丢弃) —— 不报错, 只是"键位莫名其妙存不上/失效"。
+    故逐字比对两侧正则源(JS 字面量剥定界符后与 Python pattern 比); "找不到声明"同样报红
+    (判据被改名/搬走后不许空转, 见 pitfall guard-dead-branch)。
+    """
+    from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE
+
+    m = re.search(r"const KB_DEF_RE = /([^/\n]+)/;", text)
+    if not m:
+        problems.append(f"{rel} 找不到 `const KB_DEF_RE = /.../`(键位归一化正则单点被改名/删除? 见 routes/keys.py::_KEYS_SERIAL_RE)")
+        return
+    js_src = m.group(1)
+    if js_src != _KEYS_SERIAL_RE.pattern:
+        problems.append(
+            f"{rel} KB_DEF_RE 与后端 _KEYS_SERIAL_RE 不一致"
+            f"(JS /{js_src}/ vs Python {_KEYS_SERIAL_RE.pattern!r}) —— "
+            "前端放行的键位形态后端可能拒收(422), 或反向(录完即被前端判非法丢弃)"
+        )
+
+
+def _scan_eta_sentinel(problems):
+    """ETA 哨兵跨层守阵: 后端 `_ETA_SENTINEL` ↔ 前端全部 `sec/eta >= <数>` 比较点同值(2026-10-15, issue 26-10-11-0310)
+
+    同一事实(qB 协议"无 ETA"哨兵)有多处表示: 后端 views.py `_ETA_SENTINEL` 定聚合口径
+    (`_min_valid_eta` 只收 0<eta<哨兵), 前端 format.js `fmtEta` 与模板 `zero:` 类判据定
+    显示口径(>= 哨兵即空白/弱化)。任何一边改值另一边没跟, 症状是**静默**的: 后端已不把
+    某个 eta 当哨兵而前端还显示空白(或反向) —— 无报错, 只是"该有 ETA 的地方恒空"。
+    故按全静态树(.js/.html, 除 vendor)抓比较点逐个比对; **零命中即红** —— "没扫到"必须
+    与"没违规"可区分(判据被改名/删光时守阵不许空转, 见 pitfall guard-dead-branch)。
+    """
+    from auto_qb.webui.views import _ETA_SENTINEL
+
+    hits = []
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith((".js", ".html")):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            if "/vendor/" in f"/{rel}":
+                continue
+            with open(path, encoding="utf-8") as f:
+                for i, line in enumerate(f.read().splitlines(), 1):
+                    for m in re.finditer(r"\b(?:sec|eta) >= (\d+)", line):
+                        hits.append((rel, i, int(m.group(1))))
+    if not hits:
+        problems.append("静态树找不到任何 `sec/eta >= <数>` 哨兵比较点(fmtEta / 模板 zero 判据被改名或删除? 见 views._ETA_SENTINEL)")
+        return
+    for rel, i, v in hits:
+        if v != _ETA_SENTINEL:
+            problems.append(
+                f"{rel}:{i} ETA 哨兵 {v} 与后端 _ETA_SENTINEL({_ETA_SENTINEL})不一致 —— "
+                "前端空白/弱化判据与后端聚合口径分家(该显示 ETA 的行恒空, 或哨兵值被当成真 ETA 计时)"
+            )
 
 
 def _scan_pending_settle(text, rel, problems):
@@ -1522,9 +1595,19 @@ def _scan_frontend_assets():
        _scan_progress_val_parity) —— 条吃剩余空间, 数值盒不定宽时进度条长度随百分比
        文本宽度逐行漂移(2026-09-28 实测: 「100.0%」的行比「5.2%」的行条短)。
 
+    17. ETA 哨兵跨层一致(见 _scan_eta_sentinel, 2026-10-15 issue 26-10-11-0310):
+       后端 `_ETA_SENTINEL` ↔ 全静态树每一处 `sec/eta >= <数>` 比较点(format.js fmtEta
+       + 模板 zero 判据)必须同值 —— 聚合口径与显示口径分家是静默故障(该有 ETA 的行恒空);
+       零命中即红(判据被改名/删光不许空转)。
 
-    WARN: 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
-      拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
+    18. 键位归一化正则跨层一致(见 _scan_keys_serial_re, 2026-10-15 issue 26-10-11-0310):
+       后端 `_KEYS_SERIAL_RE` ↔ 前端 `KB_DEF_RE` 逐字同源 —— 差一个字符就是单边静默
+       (前端放的串后端 422 / 后端放的串前端录完即丢弃)。
+
+
+    WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
+      拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
+      17 按**全静态树**(含模板分片, 哨兵比较点在 tpl 里也有)扫描, 同样不按单文件。
     """
     problems = []
     js_files = []
@@ -1565,6 +1648,8 @@ def _scan_frontend_assets():
     rel = "shared/app.js(整包 %d 个文件)" % len(bundle)
     _scan_episode_member_hashes(bundle_text, rel, problems)
     _scan_state_rank(bundle_text, rel, problems)
+    _scan_keys_serial_re(bundle_text, rel, problems)
+    _scan_eta_sentinel(problems)
     _scan_pending_settle(bundle_text, rel, problems)
     _scan_filter_facets(bundle_text, rel, problems)
     _scan_mixin_wiring(problems)
