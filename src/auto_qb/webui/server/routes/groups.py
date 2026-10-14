@@ -19,6 +19,11 @@ def build_router(ctx: WebContext) -> APIRouter:
     _qb_traffic = _QbTrafficChartApi(manager)
     router = APIRouter()
 
+    def _cmd_key(cmd: str, key: str) -> dict:
+        """组命令透传单点(issue route-cmd-boilerplate-dup): pause / resume / reannounce
+        三端点此前逐字同一行(仅命令名不同)—— mechanics 收敛, 端点只剩路径 -> 命令声明。"""
+        return _enqueue(cmd, {"key": _group_key_param(key)})
+
     @router.get("/api/traffic/qb/group/{key}")
     def api_traffic_qb_group(key: str, window: str = "24h"):
         """分组 qB 口径流量时序(plan 26-10-03-0946 §08 + §04.1, P4; v3 翻转 S3b): 组不落盘,
@@ -34,15 +39,15 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/groups/{key}/pause")
     def api_pause(key: str):
-        return _enqueue("pause_group", {"key": _group_key_param(key)})
+        return _cmd_key("pause_group", key)
 
     @router.post("/api/groups/{key}/resume")
     def api_resume(key: str):
-        return _enqueue("resume_group", {"key": _group_key_param(key)})
+        return _cmd_key("resume_group", key)
 
     @router.post("/api/groups/{key}/reannounce")
     def api_reannounce(key: str):
-        return _enqueue("reannounce_group", {"key": _group_key_param(key)})
+        return _cmd_key("reannounce_group", key)
 
     @router.post("/api/groups/{key}/delete")
     def api_delete(key: str, body: dict = None):

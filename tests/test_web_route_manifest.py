@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog): 78 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
+- test_route_cmd_passthrough_single_point: 守阵(issue webui-route-cmd-boilerplate-dup) 「路由→命令」透传 mechanics 只存于形状单点 —— 8 个 helper 各定义恰好一次 + 21 个收敛端点体只剩一行 helper 调用 + 三种逐字透传形状零复发(AST 静态; 行为等值由既有表驱动用例逐端点钉 cmd/payload)
 """
 from auto_qb.webui import create_app
 
@@ -132,3 +133,103 @@ def test_create_app_is_thin_assembly():
     n = len(src.splitlines())
     assert n <= 150, f"create_app 长回 {n} 行(上限 150) —— 端点请进 routes/ 对应域模块, 别再塞回工厂"
     assert "@app." not in src, "组装壳里不得出现内联路由装饰器 —— 端点一律放 routes/ 模块"
+
+
+def test_route_cmd_passthrough_single_point():
+    """守阵(issue webui-route-cmd-boilerplate-dup): 「路由→命令」透传的 mechanics 只存于形状单点
+
+    routes/* 的单行透传端点此前成对逐字同(仅命令名 / 字段名不同): 载荷构造(取参 / 清洗 /
+    投递)收敛到形状 helper 后, 端点本身应只剩「路径 -> 命令」一行声明。
+    静态(AST, 三文件 routes/{torrent_cmds,groups,torrent_detail}.py):
+      ① 八个形状 helper 各定义恰好一次(torrent_cmds 四 + groups 一 + torrent_detail 三);
+      ② 21 个收敛端点的函数体(可带 docstring)必须恰是一行形状 helper 调用;
+      ③ 任何端点体不得再出现 issue 点名的三种逐字形状 —— `_enqueue(<str>, <行内 dict>)`
+         且 dict 为 {"hash": X} / {"hash": X, "enable": X} / {"key": _group_key_param(X)}。
+    行为等值不由本守阵保 —— 既有表驱动用例逐端点钉 (cmd, payload):
+    test_web_commands.py::test_api_torrent_write_endpoints_enqueue(15 端点)、
+    test_web_longtail.py::test_api_torrent_write_endpoints_extra_enqueue(pause/resume/delete/skip-check)、
+    test_web_admin.py(分类/标签/限速三对)、金清单本件 test_web_route_manifest_frozen。
+    红验: 任一端点写回逐字载荷构造 / 删一个 helper 定义 / 抄双份 helper, 三类突变均判红。
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "server" / "routes"
+    # 文件 -> (形状 helper 名集, 必须收敛为「一行 helper 调用」的端点名集)
+    plan = {
+        "torrent_cmds.py":
+            (
+                {"_cmd_hash", "_cmd_enable", "_cmd_field", "_cmd_str_list"},
+                {
+                    "api_t_pause",
+                    "api_t_resume",
+                    "api_t_reannounce",
+                    "api_t_recheck",
+                    "api_t_super_seeding",
+                    "api_t_force_start",
+                    "api_t_auto_tmm",
+                    "api_t_location",
+                    "api_t_rename",
+                    "api_t_queue",
+                    "api_t_trackers_add",
+                    "api_t_trackers_remove",
+                },
+            ),
+        "groups.py": ({"_cmd_key"}, {"api_pause", "api_resume", "api_reannounce"}),
+        "torrent_detail.py":
+            (
+                {"_cmd_category", "_cmd_tags", "_cmd_speed_limits"},
+                {
+                    "api_category_create",
+                    "api_category_edit",
+                    "api_tags_create",
+                    "api_tags_remove",
+                    "api_speed_override",
+                    "api_speed_alt",
+                },
+            ),
+    }
+    for fname, (helpers, endpoints) in plan.items():
+        tree = ast.parse((root / fname).read_text(encoding="utf-8"))
+        build = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "build_router")
+        nested = [n for n in build.body if isinstance(n, ast.FunctionDef)]
+        names = [n.name for n in nested]
+        by_name = {n.name: n for n in nested}
+        for h in sorted(helpers):
+            assert names.count(h) == 1, f"{fname}: 形状单点 {h} 应定义恰好一次(现 {names.count(h)} 次)"
+        for ep in sorted(endpoints):
+            assert ep in by_name, f"{fname}: 端点 {ep} 缺失(改名/删除须走金清单与调用方)"
+            body = by_name[ep].body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                body = body[1:]  # docstring
+            assert len(body) == 1 and isinstance(body[0], ast.Return), f"{fname}:{ep} 函数体应只剩一行 return(单点调用)"
+            call = body[0].value
+            assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in helpers, (
+                f"{fname}:{ep} 应调用形状单点 {sorted(helpers)}(现 {ast.dump(call)[:80]})—— mechanics 不得在端点体重抄"
+            )
+        # ③ 逐字形状 Ban: 端点(非 helper)return _enqueue(<str>, <行内 dict>) 且命中点名形状
+        for fn in nested:
+            if fn.name in helpers:
+                continue
+            for node in ast.walk(fn):
+                if not (isinstance(node, ast.Return) and isinstance(node.value, ast.Call)):
+                    continue
+                c = node.value
+                if not (isinstance(c.func, ast.Name) and c.func.id == "_enqueue" and len(c.args) == 2):
+                    continue
+                d = c.args[1]
+                if not isinstance(d, ast.Dict):
+                    continue
+                keys = [k.value for k in d.keys if isinstance(k, ast.Constant)]
+                if keys == ["hash"] and len(d.keys) == 1:
+                    shape = '{"hash": X}'
+                elif keys == ["hash", "enable"] and len(d.keys) == 2:
+                    shape = '{"hash": X, "enable": X}'
+                elif (
+                    keys == ["key"] and len(d.keys) == 1 and isinstance(d.values[0], ast.Call) and
+                    isinstance(d.values[0].func, ast.Name) and d.values[0].func.id == "_group_key_param"
+                ):
+                    shape = '{"key": _group_key_param(X)}'
+                else:
+                    continue
+                raise AssertionError(f"{fname}:{fn.name} 又出现逐字透传形状 {shape} —— mechanics 应收敛到形状单点")

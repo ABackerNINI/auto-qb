@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-0309">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-11-webui-dup-code-fixes.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 路由命令透传样板重复(routes handler 成对 + build_router 头样板 + 跳检门控)">
 <meta name="issue-summary" content="routes/* 的 _enqueue 透传 handler 成对逐字同、11 份 build_router 头样板、跳检 403 门控两处重复">
 <title>webui 路由命令透传样板重复(routes handler 成对 + build_router 头样板 + 跳检门控) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 03:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,10 +95,20 @@
     <p>评估把「路由→命令」对声明成表（method/path/cmd/payload 映射）由单一注册器生成 handler，至少对<b>成对</b>的抽 helper；跳检门控抽 <code>_require_skip_check(ctx)</code>。收益中/风险低-中（声明式改造，须保金清单守阵 <code>test_web_route_manifest_frozen</code>）。</p>
   </section>
 
+  <section id="s3b">
+    <h2><span class="no">03+</span>实际修法<span class="opt">（2026-10-15 认领修）</span></h2>
+    <p><b>① 跳检门控（已修）</b>：两处逐字 403 门控抽为模块级单点 <code>_require_skip_check(ctx)</code>（torrent_cmds.py），单发 skip-check 与批量预检两端点改走单点；仍读实时配置（热重载立即生效），403 状态码与 detail 文案逐字不变。</p>
+    <p><b>② 透传 handler 成对（已修，走「至少抽 helper」支）</b>：「路由→命令」的 mechanics（取参 / 构造载荷 / 投递）收敛为 8 个形状 helper，21 个端点缩为「路径→命令」一行声明 —— torrent_cmds.py 四个（<code>_cmd_hash</code> 收敛 pause/resume/reannounce/recheck；<code>_cmd_enable</code> 收敛 super_seeding/force_start/set_auto_tmm；<code>_cmd_field</code> 收敛 location/rename/queue/trackers-remove；<code>_cmd_str_list</code> 收敛 trackers/add）；groups.py <code>_cmd_key</code> 收敛 pause/resume/reannounce；torrent_detail.py 三个（<code>_cmd_category</code> 收敛分类 create/edit、<code>_cmd_tags</code> 收敛标签 create/remove、<code>_cmd_speed_limits</code> 收敛 speed override/alt）。差异项（命令名 / 字段名 / 空组 400 文案）作参数传入，与 R1 commands 层五单点同口径；日志文案、载荷键序、HTTP 状态码逐字不变。</p>
+    <p><b>③ build_router 头样板（复评：无可再安全收敛）</b>：2026-09-22 routes/ 拆分后头部已趋薄 —— 残留逐字重复的只有 <code>manager = ctx.manager</code>（9/11 文件）、<code>router = APIRouter()</code> 与 <code>return router</code>（11/11），均为 builder 契约本身（factory 按固定签名 include），其余别名（<code>_enqueue</code>/<code>_require_*</code>/<code>_cached_read</code>/<code>_qb_traffic</code>）各模块按需取子集，无逻辑重复。表驱动注册器（单一 registrar + <code>add_api_route</code> 循环）评估后不走：动态注册丢 handler 名（路由表可读性）且跨 3 文件改注册机制，收益仅是再消几行别名，与仓库「显式端点」文化（create_app 瘦壳守阵同旨）不合。</p>
+    <p><b>验证</b>：既有表驱动用例逐端点钉 (cmd, payload) 全绿（test_web_commands 15 端点 + test_web_longtail pause/resume/delete/skip-check + test_web_admin 分类/标签/限速 + 403 门控两端点）+ 金清单守阵 <code>test_web_route_manifest_frozen</code>（76 条 (method, path)）全绿；新增静态守阵 <code>test_route_cmd_passthrough_single_point</code>（AST：8 helper 各定义一次 + 21 端点体只剩 helper 调用 + 三种逐字形状零复发），四类突变红验（写回载荷构造 / 删 helper / 抄双份 helper / 新增端点照抄形状）全过；<code>test.full</code> 3212 passed + 4 skipped / 0 failed（基线切片 <code>26-10-15-0532</code>，相对上基线无回归信号）。</p>
+  </section>
+
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 03:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 05:22 — 用户指派「认领并修复」，状态 <strong>Open → In Progress</strong>；认领方 = 任务档案 <code>26-10-11-webui-dup-code-fixes</code>（追加不新建）。复验：三处重复均在（torrent_cmds.py 跳检门控逐字两处 + 12 个单行透传 handler；groups.py 三端点；torrent_detail.py 三对；build_router 头样板见下方「实际修法」的复评）</li>
+      <li>2026-10-15 05:40 — 修复完成，状态 <strong>In Progress → Done</strong>（实际修法 / 验证见下节；测试数字：<code>test.full</code> 3212 passed + 4 skipped / 0 failed，基线切片 <code>26-10-15-0532</code>）</li>
     </ul>
   </section>
 

@@ -95,6 +95,33 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     # ---- 管理端点(R2B: 分类/标签/限速覆盖/添加种子/导出/日志) ----
 
+    def _cmd_category(cmd: str, body: dict) -> dict:
+        """分类写透传单点(issue route-cmd-boilerplate-dup): create / edit 二端点此前逐字
+        同一形状(仅命令名不同)—— 校验文案与载荷构造收敛, 端点只剩路径 -> 命令声明。"""
+        b = body or {}
+        name = str(b.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="分类名不能为空")
+        return _enqueue(cmd, {"name": name, "save_path": str(b.get("save_path") or "").strip()})
+
+    def _cmd_tags(cmd: str, body: dict, empty_detail: str) -> dict:
+        """标签写透传单点: create / remove 二端点此前逐字同一形状(仅命令名与空组 400 文案
+        不同 —— 文案由调用方给, 单点只收「有文案回 error 否则入队」的形状)。"""
+        tags = [str(t).strip() for t in ((body or {}).get("tags") or []) if str(t).strip()]
+        if not tags:
+            raise HTTPException(status_code=400, detail=empty_detail)
+        return _enqueue(cmd, {"tags": tags})
+
+    def _cmd_speed_limits(cmd: str, body: dict) -> dict:
+        """全局限速值透传单点: speed/override 与 speed/alt 二端点此前逐字同一形状(仅命令名不同)"""
+        b = body or {}
+        return _enqueue(
+            cmd, {
+                "upload_kib": int(b.get("upload_kib") or 0),
+                "download_kib": int(b.get("download_kib") or 0)
+            }
+        )
+
     @router.get("/api/categories")
     def api_categories_list():
         """全部分类(name -> {save_path,...}, 读 store 缓存; 首次访问可能触发一次 qB 拉取)"""
@@ -116,19 +143,11 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/categories")
     def api_category_create(body: dict = None):
-        b = body or {}
-        name = str(b.get("name") or "").strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="分类名不能为空")
-        return _enqueue("create_category", {"name": name, "save_path": str(b.get("save_path") or "").strip()})
+        return _cmd_category("create_category", body)
 
     @router.post("/api/categories/edit")
     def api_category_edit(body: dict = None):
-        b = body or {}
-        name = str(b.get("name") or "").strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="分类名不能为空")
-        return _enqueue("edit_category", {"name": name, "save_path": str(b.get("save_path") or "").strip()})
+        return _cmd_category("edit_category", body)
 
     @router.post("/api/categories/remove")
     def api_category_remove(body: dict = None):
@@ -139,17 +158,11 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/tags")
     def api_tags_create(body: dict = None):
-        tags = [str(t).strip() for t in ((body or {}).get("tags") or []) if str(t).strip()]
-        if not tags:
-            raise HTTPException(status_code=400, detail="未提供要新建的标签")
-        return _enqueue("create_tags", {"tags": tags})
+        return _cmd_tags("create_tags", body, "未提供要新建的标签")
 
     @router.post("/api/tags/remove")
     def api_tags_remove(body: dict = None):
-        tags = [str(t).strip() for t in ((body or {}).get("tags") or []) if str(t).strip()]
-        if not tags:
-            raise HTTPException(status_code=400, detail="未提供要删除的标签")
-        return _enqueue("delete_tags", {"tags": tags})
+        return _cmd_tags("delete_tags", body, "未提供要删除的标签")
 
     @router.get("/api/speed/mode")
     def api_speed_mode():
@@ -192,24 +205,12 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.post("/api/speed/override")
     def api_speed_override(body: dict = None):
         """全局限速手动覆盖(D2 语义): 曲线启用时为临时覆盖(下一档位切换恢复), 停用即常态设置"""
-        b = body or {}
-        return _enqueue(
-            "speed_override", {
-                "upload_kib": int(b.get("upload_kib") or 0),
-                "download_kib": int(b.get("download_kib") or 0),
-            }
-        )
+        return _cmd_speed_limits("speed_override", body)
 
     @router.post("/api/speed/alt")
     def api_speed_alt(body: dict = None):
         """备用速度限制设置(ALT-01): app/setPreferences(alt_dl_limit/alt_up_limit), 两方向都必填, 0 = 不限"""
-        b = body or {}
-        return _enqueue(
-            "speed_alt_set", {
-                "upload_kib": int(b.get("upload_kib") or 0),
-                "download_kib": int(b.get("download_kib") or 0),
-            }
-        )
+        return _cmd_speed_limits("speed_alt_set", body)
 
     @router.post("/api/speed/alt/toggle")
     def api_speed_alt_toggle():

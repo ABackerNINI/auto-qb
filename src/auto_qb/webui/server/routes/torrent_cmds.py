@@ -1,6 +1,8 @@
 """种子写命令路由: /api/torrents/{hash}/*(POST 18 条)+ /api/torrents/bulk + /api/torrents/add.
 
 端点体逐字平移(plan 26-09-22-1857 W3); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
+单行透传端点的 mechanics 已收敛到 build_router 内四个形状 helper 与 _require_skip_check
+门控单点(issue route-cmd-boilerplate-dup), 复杂端点仍逐字平移。
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
 日志命名空间见包 __init__(K3)。"""
 from typing import List
@@ -13,21 +15,54 @@ from fastapi import APIRouter
 from ..context import WebContext
 
 
+def _require_skip_check(ctx: WebContext) -> None:
+    """跳检菜单 403 门控单点(fail-closed; 计划 26-10-02-1955 W1, D2=是)
+
+    issue route-cmd-boilerplate-dup: 单发 skip-check 与批量预检两端点此前逐字各写一遍
+    「配置关 -> 403(detail 注明键名)」—— 改文案 / 改键名要记得改两处, 是真实漂移点。
+    读实时配置(ctx.manager.config 引用现取, 热重载后立即生效, 不按值持有旧 Config)。
+    """
+    if not ctx.manager.config.web.skip_check_menu:
+        raise HTTPException(status_code=403, detail="跳检菜单未启用(配置键 web.skip_check_menu)")
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     _enqueue = ctx.enqueue
     router = APIRouter()
 
+    # ---- 「路由→命令」透传形状单点(issue route-cmd-boilerplate-dup) ----
+    # 下列端点体此前逐字重复(仅命令名 / 字段名不同): mechanics(取参 / 构造载荷 / 投递)
+    # 收敛到四个形状 helper, 端点本身只剩「路径 -> 命令」一行声明; 新增同类端点加一行
+    # 调用, 不再照抄载荷构造。行为逐字不变(既有表驱动用例逐端点钉 cmd / payload)。
+
+    def _cmd_hash(cmd: str, hash: str) -> dict:
+        """hash 单参透传: pause / resume / reannounce / recheck 四端点同一形状"""
+        return _enqueue(cmd, {"hash": hash})
+
+    def _cmd_enable(cmd: str, hash: str, body: dict) -> dict:
+        """enable 布尔透传: super_seeding / force_start / set_auto_tmm 三端点同一形状"""
+        enable = bool((body or {}).get("enable", False))
+        return _enqueue(cmd, {"hash": hash, "enable": enable})
+
+    def _cmd_field(cmd: str, hash: str, body: dict, field: str) -> dict:
+        """单字符串字段透传: location / rename / queue / trackers-remove 四端点同一形状"""
+        return _enqueue(cmd, {"hash": hash, field: str((body or {}).get(field) or "")})
+
+    def _cmd_str_list(cmd: str, hash: str, body: dict, field: str) -> dict:
+        """字符串列表字段透传: trackers/add(urls)"""
+        return _enqueue(cmd, {"hash": hash, field: [str(u) for u in ((body or {}).get(field) or []) if u]})
+
     @router.post("/api/torrents/{hash}/pause")
     def api_t_pause(hash: str):
-        return _enqueue("pause_torrent", {"hash": hash})
+        return _cmd_hash("pause_torrent", hash)
 
     @router.post("/api/torrents/{hash}/resume")
     def api_t_resume(hash: str):
-        return _enqueue("resume_torrent", {"hash": hash})
+        return _cmd_hash("resume_torrent", hash)
 
     @router.post("/api/torrents/{hash}/reannounce")
     def api_t_reannounce(hash: str):
-        return _enqueue("reannounce_torrent", {"hash": hash})
+        return _cmd_hash("reannounce_torrent", hash)
 
     @router.post("/api/torrents/{hash}/delete")
     def api_t_delete(hash: str, body: dict = None):
@@ -42,7 +77,7 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/recheck")
     def api_t_recheck(hash: str):
-        return _enqueue("recheck_torrent", {"hash": hash})
+        return _cmd_hash("recheck_torrent", hash)
 
     @router.post("/api/torrents/{hash}/skip-check")
     def api_t_skip_check(hash: str, body: dict = None):
@@ -57,8 +92,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         cls=force 的未过闸门(G5/G7 瞬态), cls=blocked 照旧硬拒 —— 服务端裁决, 前端绕不过;
         缺省不传(载荷不带 force 键, 队列形态与历史一致), ops 缺省 False 行为零变化。
         """
-        if not ctx.manager.config.web.skip_check_menu:
-            raise HTTPException(status_code=403, detail="跳检菜单未启用(配置键 web.skip_check_menu)")
+        _require_skip_check(ctx)
         payload = {"hash": hash}
         if (body or {}).get("force"):
             payload["force"] = True  # 提供才透传(真值才入载荷, 缺省队列形态不变)
@@ -77,8 +111,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         status=ok + truth={results: [{hash, name, cls, reasons}], summary: {ok, force, blocked}}
         (summary 按单 hash 总 cls 计数), 未知 hash 透传 ops 的 gone/blocked verdict。
         """
-        if not ctx.manager.config.web.skip_check_menu:
-            raise HTTPException(status_code=403, detail="跳检菜单未启用(配置键 web.skip_check_menu)")
+        _require_skip_check(ctx)
         hashes = [str(h) for h in ((body or {}).get("hashes") or []) if h]
         if not hashes:
             raise HTTPException(status_code=400, detail="未提供任何 hash(预检目标不能为空)")
@@ -86,13 +119,11 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/super-seeding")
     def api_t_super_seeding(hash: str, body: dict = None):
-        enable = bool((body or {}).get("enable", False))
-        return _enqueue("super_seeding", {"hash": hash, "enable": enable})
+        return _cmd_enable("super_seeding", hash, body)
 
     @router.post("/api/torrents/{hash}/force-start")
     def api_t_force_start(hash: str, body: dict = None):
-        enable = bool((body or {}).get("enable", False))
-        return _enqueue("force_start", {"hash": hash, "enable": enable})
+        return _cmd_enable("force_start", hash, body)
 
     @router.post("/api/torrents/{hash}/limits")
     def api_t_limits(hash: str, body: dict = None):
@@ -120,34 +151,28 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/location")
     def api_t_location(hash: str, body: dict = None):
-        location = str((body or {}).get("location") or "")
-        return _enqueue("set_torrent_location", {"hash": hash, "location": location})
+        return _cmd_field("set_torrent_location", hash, body, "location")
 
     @router.post("/api/torrents/{hash}/rename")
     def api_t_rename(hash: str, body: dict = None):
-        name = str((body or {}).get("name") or "")
-        return _enqueue("rename_torrent", {"hash": hash, "name": name})
+        return _cmd_field("rename_torrent", hash, body, "name")
 
     @router.post("/api/torrents/{hash}/queue")
     def api_t_queue(hash: str, body: dict = None):
-        action = str((body or {}).get("action") or "")
-        return _enqueue("queue_torrent", {"hash": hash, "action": action})
+        return _cmd_field("queue_torrent", hash, body, "action")
 
     @router.post("/api/torrents/{hash}/auto-tmm")
     def api_t_auto_tmm(hash: str, body: dict = None):
-        enable = bool((body or {}).get("enable", False))
-        return _enqueue("set_auto_tmm", {"hash": hash, "enable": enable})
+        return _cmd_enable("set_auto_tmm", hash, body)
 
     @router.post("/api/torrents/{hash}/trackers/add")
     def api_t_trackers_add(hash: str, body: dict = None):
-        urls = [str(u) for u in ((body or {}).get("urls") or []) if u]
-        return _enqueue("add_trackers", {"hash": hash, "urls": urls})
+        return _cmd_str_list("add_trackers", hash, body, "urls")
 
     @router.post("/api/torrents/{hash}/trackers/remove")
     def api_t_trackers_remove(hash: str, body: dict = None):
         # url = 前端所持 mask 值(详情 API 只回 mask); 后端 _cmd_remove_tracker 当场重取原文比对
-        url = str((body or {}).get("url") or "")
-        return _enqueue("remove_tracker", {"hash": hash, "url": url})
+        return _cmd_field("remove_tracker", hash, body, "url")
 
     @router.post("/api/torrents/{hash}/files/priority")
     def api_t_file_priority(hash: str, body: dict = None):

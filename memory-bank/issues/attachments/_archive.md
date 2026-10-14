@@ -4,13 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (50)
+## Open (49)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
-- [refactor] [webui 路由命令透传样板重复(routes handler 成对 + build_router 头样板 + 跳检门控)](../26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup.html) — routes/* 的 _enqueue 透传 handler 成对逐字同、11 份 build_router 头样板、跳检 403 门控两处重复
 - [refactor] [hr store 锁与读坏恢复链同族两套](../26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html) — hr/store 的 .bak 兜底+quarantine 恢复链与 core/state 同族; infra/locking 单点未被使用
 - [test] [hr/ 本地通道与服务端点变异存活(channel/server)](../26-10-10-1108-test-hr-mutation-channel-server.html) — hr 首轮: channel 126 + server 210 存活(URL 白名单/token/host 解析/端点鉴权/CORS), 零假存活
 - [test] [hr/ 展示导出变异存活(status/report)](../26-10-10-1108-test-hr-mutation-display.html) — hr 首轮: status 285 + report 276 存活(明细导出/人话映射/宽字符对齐), 零假存活
@@ -63,7 +62,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (193)
+## Done (194)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -90,6 +89,7 @@
 - [refactor] [webui 虚拟 tracker 前缀字面量绕过 infra 单点](../26-10-11-0310-refactor-webui-virtual-tracker-prefix-dup.html) — commands.py 3 处硬编码虚拟 tracker 前缀, infra/utils 已有 VIRTUAL_TRACKER_PREFIXES 单点
 - [refactor] [webui HR 路由前置守卫与启用站点派生样板重复](../26-10-11-0309-refactor-webui-hr-route-guard-dup.html) — hr.py 5 处 hr_check 前置守卫 + 4 处 enabled 站点派生(与 R14-S01 同源)
 - [refactor] [webui 局部发布四段『重建脏行/保留未脏/追加』骨架重复](../26-10-11-0309-refactor-webui-partial-publish-merge-dup.html) — runtime._publish_partial_locked 的 groups/singles/flat/shows 四段同骨架
+- [refactor] [webui 路由命令透传样板重复(routes handler 成对 + build_router 头样板 + 跳检门控)](../26-10-11-0309-refactor-webui-route-cmd-boilerplate-dup.html) — routes/* 的 _enqueue 透传 handler 成对逐字同、11 份 build_router 头样板、跳检 403 门控两处重复
 - [refactor] [webui 旁挂文件『与 state_file 同目录』寻址口径多处](../26-10-11-0309-refactor-webui-sidecar-dir-convention-dup.html) — web.token / webui-keys.json / 启动日志各写一遍 dirname(state_file), 跨包另有 4 处
 - [refactor] [webui status 子字典在 api_status 与 api_state 双份](../26-10-11-0309-refactor-webui-status-payload-dup.html) — state.py 两处各拼 connected/paused/torrents/groups/version/traffic
 - [refactor] [hr adapter 解析样板重复](../26-10-11-0240-refactor-hr-adapter-parse-boilerplate-dup.html) — parse_counters 双份逐字同 + ADAPTERS 工厂 lambda 样板 + URL 参数提取小助手
