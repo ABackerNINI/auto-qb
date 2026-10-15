@@ -1,6 +1,6 @@
 # 26-10-16-webui-hr-ext-connect-selfheal — HR 扩展连接自愈与手动优先(计划立档)
 
-**Status:** Open
+**Status:** Open(S1/S2 已实施, S3–S6 待指令)
 **Added:** 2026-10-16
 **Updated:** 2026-10-16
 **Summary:** 用户实报 HR 扩展「立即发现」报 `发现未命中(未知)`、「保存发现地址与配对码」后「自测端点连通」却说 `先在 1. 存入一个实例端点再自测`。经 grilling 11 问收敛, 根因是连接模型而非文案: 数据端口重启即变、发现结果被当一次性缓存(死端点永久堆积)、后台发现结果进不了选项页(静默)、无常驻可见信号。立计划 `plans/26-10-15-2357`(连接自愈 + 手动优先 + 不静默), 仅动扩展侧, 不碰后端与发现协议。
@@ -25,7 +25,7 @@
 
 ## 实现计划
 
-本轮只出计划(计划 §04 S1–S6), 实施待用户显式指令:
+实施按计划 §04 分步推进(用户 2026-10-16 指令「实施计划S1-2」⇒ S1/S2 已落地, S3–S6 待指令):
 
 S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空集不替换) → S2 `background.js`(失败即发现 + 周期 2min + 徽标四态 + 结构化 `lastDiscovery` + `instanceHealth` 台账) → S3 `options.js`(隐式保存 + 自动接自测 + 文案映射 + 实时刷新 + 空态指路 + 失效标记 + 顶部总览) → S4 `options.html`(布局合并为一个"连接后端"区 + 措辞翻"优先") → S5 `README.md` 口径同步 → S6 `tests/test_extension_proxy.py` 七条新守阵。
 
@@ -34,8 +34,8 @@ S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空�
 | # | 任务 | 状态 |
 |---|---|---|
 | S0 | grilling 收敛 + 计划落盘 + 认领链 + 收尾回写 | Done |
-| S1 | discovery.js 合并语义翻转 | Open |
-| S2 | background.js 自愈触发 + 徽标 + 台账 | Open |
+| S1 | discovery.js 合并语义翻转 | Done |
+| S2 | background.js 自愈触发 + 徽标 + 台账 | Done |
 | S3 | options.js 交互与文案 | Open |
 | S4 | options.html 布局合并 | Open |
 | S5 | README 口径同步 | Open |
@@ -45,3 +45,7 @@ S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空�
 
 - 2026-10-16 00:01 — S0 完成: 开工同步 `319555af`; grilling 三轮(Q1–Q11)收敛, 计划 `plans/26-10-15-2357-plan-hr-ext-connect-selfheal.html` 落盘(10 节, Open); 认领链双向(计划 ↔ 上游计划 26-10-14-1241 ↔ 本档案 ↔ activeContext 切片); 全量闸门数字见 `commands run kb.baseline`(本轮无代码/测试改动, 与上一基线同树)。实施未启动 —— 待用户显式指令。
 - 2026-10-16 00:05 — 新坑入档 `pitfalls/kb/doc-status-meta.md`: 计划首版 `doc-status` 写了 `Draft`(语义像状态但不在 5 词表) ⇒ `kb.index` **静默漏收**该件(仍报「已生成 21 个生成物」)、`kb.check`/`kb.docmap --check`/`doc.links` **全绿**, 只有 `test.full` 的 `test_status_vocabulary` 红; 改 `Open` 后重跑索引并 `grep` 确认已收录。
+- 2026-10-16 00:28 — **S1 完成**(用户指令「实施计划S1-2」): 开工同步 `b17c671d`。`discovery.js::mergeInstances` 语义翻转 —— 手动条目(`source !== 'discovered'`, 新增纯函数 `isManualEntry`)**整条胜 + 恒在前 + 原样保留**(Q8/Q1), 发现条目按租约**整批替换**旧发现集(死端点自然剪除, Q2), **空集不替换**(C1, 防后端重启瞬间自断连接); 缺 endpoint/token 的半条仍不收。既有守阵 `test_discovery_helpers_behave` 的合并断言随计划翻转(旧语义「同端点被发现覆盖 + 只增不减」被本计划废止, 属口径演进非守阵松动), 并把 `isManualEntry` 加进「禁本地副本」名单。验证: node 直跑 discovery.js 四组用例(手动胜含 token 保留 / 整批替换剪死端点 / 空集保留旧集 / 顺序稳定)全绿。
+- 2026-10-16 00:28 — **S2 完成**: `background.js` 五项 —— ① `DISCOVERY_EVERY_MINUTES` 10→2(Q3); ② `maybeDiscover` 触发面由「全部实例连败」改为**任一失败**(`failCount >= 1`, 60s 节流不变, 401 仍记 ok 不触发), 且**实例清单为空也走周期分支**(R1: 否则发现集为空时连「失败即发现」都不触发, 连接再也回不来); ③ 新增 `noteDiscoveryResult` 落结构化快照 `lastDiscovery = {at, ok, port, merged, reason, answered, candidates:[{url, note}]}`(`answered` = 候选表至少一个给出 HTTP 应答, 是 C4 徽标边界的判据; `candidates` 记 base URL 供选项页按端口报结论); ④ 新增 `badgeStateOf`(纯函数, 四态)+ `refreshBadge`(徽标 + 底色 + 悬停中文标题; 禁用清空)+ `chrome.action.onClicked → openOptionsPage`, 挂点 = `pollAll` 收尾 / 发现收尾 / `onInstalled` / `onStartup`; ⑤ 新增 `instanceHealth` 台账(按端点记 `ok/at/note/failStreak`, 内存累积 + `pollAll` 收尾**按轮整份落盘**并剪掉清单外端点, R3 不每请求写)。徽标文案走 ASCII(`OK` / `..` / `!`) —— 计划 §3.3 的 `✓/…` 是示意, code-style 明令代码禁图形符号(小字号下渲染成方框), 语义交给颜色 + 悬停标题; 另把 `onInstalled` 状态行里的「手动兜底…2. 手动端点」改为「手动指定…手动端点」(同 Q11 口径, 属 background.js 内的措辞同步)。验证: 新增 node 沙箱守阵 6 条(周期常量 / 失败即发现含 401 负例与同钟位正对照 / 结构化快照 / 健康台账累加与剪枝 / 徽标四态与点击 / 徽标 ASCII), 全绿。
+- 2026-10-16 00:28 — 全量闸门 `commands run test.full` 全绿(数字见 `commands run kb.baseline` 最新切片), `kb.check` 自洽。**S3–S6 未实施**: 计划 `doc-status` 仍为 `Open`; 选项页(`options.js`/`options.html`)与两份 README 的交互/布局/口径改动一律未动 —— 因此 `options.html:122` 的「手动端点(兜底…)」与 `README.md:71` 的「② 手动端点(兜底)」仍是旧口径, 与新后台语义(手动优先)暂不一致, 由 S4/S5 收口。
+

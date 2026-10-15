@@ -43,13 +43,27 @@
 - NORMALIZE_CASES 更新: 私网三段逐段放行 / 公网域名拒绝 / https 保留不折 / 新增 disc 类(发现地址缺端口补 18788)
   —— 旧断言「非回环即抛」「https 折 http」是被本计划翻转的旧语义, 随计划更新而非守阵松动
 - test_discovery_helpers_behave: 真跑 discovery.js —— 候选推导与后端 discovery_candidates 同源(65535 截断)/
-  合并语义(替换同端点条目 + 保留手填 + 标 source=discovered + 缺 token 半条不收)/ pairingNeeded 真值表 /
-  发现响应形态过滤(异形应答 = 非本服务)
+  合并语义(**手动优先**: 同端点手动整条胜 + 手动置顶且顺序稳定; **发现集整批替换**: 旧发现条目被剪除;
+  **空集不替换**(C1); 缺 token 半条不收)/ pairingNeeded 真值表 / 发现响应形态过滤(异形应答 = 非本服务)
 - test_background_discovery_flow: 真跑 background.js 发现流程 —— 三候选并行探测(命中次位, V11)/ 配对码随
   X-Hr-Pairing 上来 / 合并落盘 + 清 pairingNeeded / 401 pairing_required 置标记(选项页提示输入配对码)/
   全未命中明确报告(退手动, 不静默)
-- test_normalizers_are_shared_not_duplicated 扩: discovery.js 五个函数同样禁止本地副本, 两个消费方都载入它
+- test_normalizers_are_shared_not_duplicated 扩: discovery.js 六个函数(含 isManualEntry)同样禁止本地副本,
+  两个消费方都载入它
 - test_protocol_matches_backend 扩: API_DISCOVER 与缺省发现端口三处同源(后端 / discovery.js / normalize.js)
+### 连接自愈轮(计划 26-10-15-2357 S1/S2): 合并语义翻转 + 自愈触发 + 徽标 + 台账
+- 合并语义翻转(Q1/Q2/Q8/C1): 旧断言「同端点被发现覆盖 / 只增不减」是被本计划翻转的旧语义, 随计划更新
+  而非守阵松动 —— 手动条目 = 高优先级(整条胜 + 置顶 + 永不自动删), 发现集 = 租约(整批替换, 空集除外)。
+- test_discovery_period_is_two_minutes: 真跑 background.js —— 周期常量 = 2 分钟(Q3), 60s 节流不变
+- test_discovery_triggers_on_any_failure: 真跑 background.js —— **任一实例失败**即触发发现(1 死 1 活也触发)/
+  60s 内不重复 / 401 不算失败(端点有应答) / 同钟位正对照 / 实例清单为空也按周期发现(R1)
+- test_discovery_snapshot_is_structured: 真跑 background.js —— lastDiscovery 结构化快照(ok/port/merged/reason/
+  answered + 逐候选 url/note), 选项页顶部总览与逐候选结果的渲染源
+- test_instance_health_ledger_records_per_instance: 真跑 background.js —— 健康台账按端点落, 连续失败累加、
+  成功清零、清单外端点剪除(C3 的「疑似失效」阈值靠它, R3 不许每请求写 storage)
+- test_badge_reflects_connection_state: 真跑 background.js —— 徽标四态(未配置/正常/重连中/发现失败,
+  C4 边界)+ 禁用清空 + 点图标开选项页
+- test_badge_text_is_ascii_only: 徽标文案禁非 ASCII 图形符(code-style: 代码禁图形符号)
 - 降噪场景(_NODE_RUN_NOISE)显式 discoveryAddress 置空 —— 那条守阵钉「连接失败降噪」, 不混发现流日志
 """
 import json
@@ -199,7 +213,8 @@ def test_normalizers_are_shared_not_duplicated():
     for path in (BACKGROUND_JS, OPTIONS_JS):
         text = _read(path)
         for fn in (
-            "normalizeEndpoint", "normalizeOrigin", "normalizeDiscovery", "mergeInstances", "discoveryCandidates"
+            "normalizeEndpoint", "normalizeOrigin", "normalizeDiscovery", "mergeInstances", "isManualEntry",
+            "discoveryCandidates"
         ):
             assert not re.search(rf"(?m)^function {fn}", text), f"{path.name} 又定义了 {fn} 本地副本"
     assert "importScripts('normalize.js')" in _read(BACKGROUND_JS)
@@ -1000,7 +1015,7 @@ def test_connection_failure_logs_head_tail_only():
 _NODE_RUN_DISCOVERY_HELPERS = """
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const mod = new Function(src + '\\nreturn {API_DISCOVER, DISCOVERY_DEFAULT_PORT, discoveryCandidates, buildDiscoveryUrl, pairingNeeded, mergeInstances, validDiscoveryPayload};')();
+const mod = new Function(src + '\\nreturn {API_DISCOVER, DISCOVERY_DEFAULT_PORT, discoveryCandidates, buildDiscoveryUrl, pairingNeeded, mergeInstances, isManualEntry, validDiscoveryPayload};')();
 const out = {};
 out.apiDiscover = mod.API_DISCOVER;
 out.defaultPort = mod.DISCOVERY_DEFAULT_PORT;
@@ -1022,6 +1037,30 @@ out.merged = mod.mergeInstances(
     { name: 'half', endpoint: 'http://192.168.1.10:5003' },
   ]
 );
+// 整批替换: 旧的 discovered 条目(死端点)必须被剪除, 手动条目照旧
+out.replaced = mod.mergeInstances(
+  [
+    { name: 'hand', endpoint: 'http://127.0.0.1:8788', token: 'h' },
+    { name: 'dead', endpoint: 'http://192.168.1.10:5099', token: 'x', source: 'discovered' },
+  ],
+  [
+    { name: 'd1', endpoint: 'http://192.168.1.10:5001', token: 'new' },
+    { name: 'd2', endpoint: 'http://192.168.1.10:5002', token: 't2' },
+  ]
+);
+// 空集例外(C1): 发现返回空 ⇒ 保留旧发现集, 绝不清空
+out.emptyKept = mod.mergeInstances(
+  [
+    { name: 'hand', endpoint: 'http://127.0.0.1:8788', token: 'h' },
+    { name: 'stale', endpoint: 'http://192.168.1.10:5099', token: 'x', source: 'discovered' },
+  ],
+  []
+);
+out.manualFlags = [
+  mod.isManualEntry({ endpoint: 'http://a:1' }),
+  mod.isManualEntry({ endpoint: 'http://a:1', source: 'discovered' }),
+  mod.isManualEntry(null),
+];
 out.validOk = mod.validDiscoveryPayload({ instances: [{ endpoint: 'http://x:1', token: 't' }] });
 out.validNoArray = mod.validDiscoveryPayload({});
 out.validHalf = mod.validDiscoveryPayload({ instances: [{ endpoint: 'http://x:1' }] });
@@ -1048,9 +1087,30 @@ def test_discovery_helpers_behave():
         "http://192.168.1.10:5001",
         "http://127.0.0.1:8788",
         "http://192.168.1.10:5002",
-    ], "发现的替换同端点条目, 手填保留, 新发现追加, 缺 token 的半条不收"
-    assert merged[0]["token"] == "new" and merged[0]["source"] == "discovered"
+    ], "手动置顶且顺序稳定, 发现只补齐手动没覆盖的端点, 缺 token 的半条不收"
+    assert merged[0] == {"name": "m", "endpoint": "http://192.168.1.10:5001", "token": "old"}, \
+        "同端点**手动整条胜**(Q8): 手动的 name/token 都不被发现的 d1/new 覆盖"
     assert merged[1] == {"name": "hand", "endpoint": "http://127.0.0.1:8788", "token": "h"}, "手填条目原样保留(无 source 标)"
+    assert merged[2]["token"] == "t2" and merged[2]["source"] == "discovered", "补齐的发现条目标「自动」"
+    assert [e["endpoint"] for e in got["replaced"]] == [
+        "http://127.0.0.1:8788",
+        "http://192.168.1.10:5001",
+        "http://192.168.1.10:5002",
+    ], "发现集整批替换(Q2): 旧 discovered 条目(死端点 5099)必须被剪除, 不再永久堆积"
+    assert got["emptyKept"] == [
+        {
+            "name": "hand",
+            "endpoint": "http://127.0.0.1:8788",
+            "token": "h"
+        },
+        {
+            "name": "stale",
+            "endpoint": "http://192.168.1.10:5099",
+            "token": "x",
+            "source": "discovered"
+        },
+    ], "空集例外(C1): 发现返回空集**不得清空**发现集(后端重启瞬间清空 = 自断连接)"
+    assert got["manualFlags"] == [True, False, True], "旧数据无 source 字段判为手动(C8: 零迁移获优先语义)"
     assert got["validOk"] is True and got["validNoArray"] is False and got["validHalf"] is False
 
 
@@ -1136,6 +1196,245 @@ def test_background_discovery_flow():
     assert got["pair"]["ok"] is False and got["pair"]["reason"] == "pairing_required" and got["pairFlag"] is True
     assert got["weird"]["ok"] is False and got["weird"]["reason"] == "no-hit", "异形应答 = 非本服务, 忽略"
     assert got["down"]["ok"] is False and got["down"]["reason"] == "no-hit", "连接失败不静默(日志 + 状态行)"
+
+
+# ---------- 连接自愈轮(计划 26-10-15-2357 S2): 失败即发现 + 徽标四态 + 结构化快照 + 健康台账 ----------
+
+#: 真跑 background.js 的**自愈**场景(六轮 pollAll + 徽标四态), 一轮一断言点:
+#: 1. 1 死 1 活(旧口径「全部实例连败」不触发) ⇒ 任一失败即发现 + 落结构化快照 + 台账/徽标
+#: 2. 紧接着再跑一轮 ⇒ 60s 节流: 不重复发现
+#: 3. 全 401(端点有应答=连接是通的, 距上次 70s) ⇒ **不**触发发现
+#: 4. 同钟位正对照: 真失败 ⇒ 发现开火(证明第 3 轮的"没开火"不是被节流挡的)
+#: 5. 实例清单为空 + 距上次 130s ⇒ 仍按周期发现(R1: 否则发现集为空时连接再也回不来)
+#: 6. 徽标四态纯函数取值 + 禁用清空 + 图标点击开选项页
+_NODE_RUN_SELFHEAL = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const A = 'http://127.0.0.1:9001';   // 恒活
+const B = 'http://127.0.0.1:9002';   // 可坏
+const store = {
+  enabled: true, logLevel: 'debug', discoveryAddress: 'http://127.0.0.1:18788',
+  instances: [{ name: 'a', endpoint: A, token: 't1' }, { name: 'b', endpoint: B, token: 't2' }],
+};
+let bDown = true;
+let b401 = false;
+let fetches = [];
+let badge = { text: null, color: null, title: null };
+let opened = 0;
+let onClicked = null;
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: {
+    onInstalled: noop, onStartup: noop, onMessage: noop,
+    openOptionsPage: () => { opened += 1; return Promise.resolve(); },
+  },
+  permissions: { onAdded: noop },
+  action: {
+    onClicked: { addListener: (fn) => { onClicked = fn; } },
+    setBadgeText: (o) => { badge.text = o.text; return Promise.resolve(); },
+    setBadgeBackgroundColor: (o) => { badge.color = o.color; return Promise.resolve(); },
+    setTitle: (o) => { badge.title = o.title; return Promise.resolve(); },
+  },
+  storage: { onChanged: noop, local: {
+    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async (url) => {
+    const u = String(url);
+    fetches.push(u);
+    if (u.endsWith('/api/hr/discover')) {
+      // 首候选被普通应用占用(404), 次候选(18788)命中 —— 逐候选结果因此有内容可渲染
+      if (!u.includes(':18788')) return { status: 404, json: async () => ({}) };
+      return { status: 200, json: async () => ({ instances: [{ id: 'd', name: 'd', endpoint: 'http://127.0.0.1:9003', token: 'k3' }] }) };
+    }
+    if (u.startsWith(B) && bDown) throw new TypeError('Failed to fetch');
+    if (u.startsWith(B) && b401) return { status: 401, ok: false, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => ({ tasks: [] }) };
+  } };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+const discovers = () => fetches.filter((u) => u.endsWith('/api/hr/discover')).length;
+const snap = (v) => JSON.parse(JSON.stringify(v));
+(async () => {
+  const out = {};
+  out.period = vm.runInContext('DISCOVERY_EVERY_MINUTES', sandbox);
+  out.minGapMs = vm.runInContext('DISCOVERY_MIN_GAP_MS', sandbox);
+
+  await sandbox.pollAll('定时');                       // 1. 1 死 1 活
+  out.aDiscovers = discovers();
+  out.aSnapshot = snap(store.lastDiscovery || null);
+  out.aHealth = snap(store.instanceHealth || {});
+  out.aBadge = snap(badge);
+
+  await sandbox.pollAll('定时');                       // 2. 60s 节流
+  out.bDiscovers = discovers();
+  out.bHealth = snap(store.instanceHealth || {});
+
+  store.lastDiscoveryAt = Date.now() - 70000;          // 3. 全 401: 有应答 ⇒ 不算失败
+  bDown = false; b401 = true;
+  await sandbox.pollAll('定时');
+  out.cDiscovers = discovers();
+
+  b401 = false; bDown = true;                          // 4. 同钟位正对照: 真失败 ⇒ 开火
+  store.lastDiscoveryAt = Date.now() - 70000;
+  await sandbox.pollAll('定时');
+  out.dDiscovers = discovers();
+
+  store.instances = [];                                // 5. 实例为空也跑周期发现(R1)
+  store.lastDiscoveryAt = Date.now() - 130000;
+  await sandbox.pollAll('定时');
+  out.eDiscovers = discovers();
+  out.eHealth = snap(store.instanceHealth || {});
+
+  out.badgeStates = [                                  // 6. 徽标四态 + 禁用清空 + 点击
+    sandbox.badgeStateOf({ instances: [], discoveryAddress: '' }),
+    sandbox.badgeStateOf({
+      instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788', instanceHealth: { [A]: { ok: true } }
+    }),
+    sandbox.badgeStateOf({
+      instances: [], discoveryAddress: 'http://127.0.0.1:18788', instanceHealth: {},
+      lastDiscovery: { ok: false, answered: true }
+    }),
+    sandbox.badgeStateOf({
+      instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788', instanceHealth: {},
+      lastDiscovery: { ok: false, answered: false }
+    }),
+  ];
+  store.instances = [{ name: 'a', endpoint: A, token: 't1' }];
+  store.instanceHealth = { [A]: { ok: true, at: Date.now(), note: 'a: 无任务', failStreak: 0 } };
+  store.lastDiscovery = { ok: true, answered: true };
+  await sandbox.refreshBadge();
+  out.badgeOk = snap(badge);
+  store.enabled = false;
+  await sandbox.refreshBadge();
+  out.badgeDisabled = snap(badge);
+  out.hasOnClicked = typeof onClicked === 'function';
+  if (onClicked) await onClicked();
+  out.opened = opened;
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+_SELFHEAL_TRACE: dict = {}
+
+
+def selfheal_trace() -> dict:
+    """跑一次 node 拿自愈场景的全部断言点(缓存: 多条用例共用同一次 node 运行)"""
+    if _SELFHEAL_TRACE:
+        return _SELFHEAL_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [node, "-e", _NODE_RUN_SELFHEAL,
+         str(BACKGROUND_JS),
+         str(NORMALIZE_JS),
+         str(DISCOVERY_JS),
+         str(SITE_CAPS_JS)]
+    )
+    assert proc.returncode == 0, f"node 跑 background.js 的自愈场景失败: {proc.stderr.strip()}"
+    _SELFHEAL_TRACE.update(json.loads(proc.stdout))
+    return _SELFHEAL_TRACE
+
+
+def test_discovery_period_is_two_minutes():
+    """周期发现 = 2 分钟(Q3): 数据端口重启即变, 10 分钟的空窗期用户会当成「扩展坏了」
+
+    !这条必须与 background.js 的常量同源读取 —— 写死 2 会变成「改了常量但守阵不知道」。
+    """
+    trace = selfheal_trace()
+    if not trace:
+        return
+    assert trace["period"] == 2, f"周期发现应为 2 分钟(Q3), 实际 {trace['period']}"
+    assert trace["minGapMs"] == 60000, f"失败触发的 60s 节流不该被一起改掉: {trace['minGapMs']}"
+
+
+def test_discovery_triggers_on_any_failure():
+    """**任一实例拉取失败即触发一次发现**(Q3) —— 旧口径「全部实例连败」在 1 死 1 活时不触发,
+    只能干等周期; 60s 节流不变(发现只打本机 loopback, 但也不该变成第二轮询); 401 不算失败
+    (端点有应答 = 连接是通的, 属配置态); 实例清单为空也仍按周期发现(R1, 否则发现集为空时再也回不来)。
+    """
+    trace = selfheal_trace()
+    if not trace:
+        return
+    a, b, c, d, e = (trace[k] for k in ("aDiscovers", "bDiscovers", "cDiscovers", "dDiscovers", "eDiscovers"))
+    assert a == 3, f"1 死 1 活(旧口径不触发)也要跑一轮发现: {a}"
+    assert b == a, f"60s 内不重复发现(节流): {a} -> {b}"
+    assert c == b, f"全 401 不该触发发现(端点有应答, 距上次 70s: 误判为失败就会开火): {b} -> {c}"
+    assert d == c + 3, f"同钟位正对照: 真失败必须开火(否则上一轮的「没开火」说明不了什么): {c} -> {d}"
+    assert e == d + 3, f"实例清单为空也要按周期发现(R1): {d} -> {e}"
+
+
+def test_discovery_snapshot_is_structured():
+    """发现结果必须落**结构化快照**(S2): 选项页顶部总览与逐候选结果都从它渲染 —— 此前结果只进
+    状态栏最后一句与日志, 「后台发现了但页面看不见」正是用户实报的静默感来源。"""
+    trace = selfheal_trace()
+    if not trace:
+        return
+    got = trace["aSnapshot"]
+    assert got, "每次发现收尾都要落 lastDiscovery 快照"
+    assert got["ok"] is True and got["port"] == "18788" and got["merged"] == 3, got
+    assert got["reason"] == "" and got["answered"] is True and got["at"] > 0, got
+    cands = got["candidates"]
+    assert [c["url"] for c in cands] == [
+        "http://127.0.0.1:18788",
+        "http://127.0.0.1:18789",
+        "http://127.0.0.1:18790",
+    ], f"逐候选结果要按候选表顺序落(记 base 而非拼好路径的 URL: 选项页按端口报结论): {cands}"
+    assert cands[0]["note"] == "" and cands[1]["note"] == "HTTP 404" and cands[2]["note"] == "HTTP 404", \
+        f"每个候选都要带自己的结论(选项页据此渲染「18789 连接失败 / 18790 异形应答」这类文案): {cands}"
+
+
+def test_instance_health_ledger_records_per_instance():
+    """实例健康台账按端点落(S2) —— 选项页的「疑似失效」标记(C3 阈值 >=3 轮)靠它; 连续失败计数
+    必须真累加、成功必须清零, 且实例清单外的端点要被剪掉(防死端点台账堆积, R3)。"""
+    trace = selfheal_trace()
+    if not trace:
+        return
+    first = trace["aHealth"]
+    assert first["http://127.0.0.1:9001"]["ok"] is True, f"活的实例记 ok: {first}"
+    assert first["http://127.0.0.1:9001"]["failStreak"] == 0, first
+    assert first["http://127.0.0.1:9002"]["ok"] is False, f"坏的实例记 not-ok: {first}"
+    assert first["http://127.0.0.1:9002"]["failStreak"] == 1, f"首轮失败计数应为 1: {first}"
+    assert first["http://127.0.0.1:9002"]["note"], "台账要带一句结论(选项页提示里要显示)"
+    second = trace["bHealth"]
+    assert second["http://127.0.0.1:9002"]["failStreak"] == 2, f"连续失败要累加: {second}"
+    assert trace["eHealth"] == {}, f"实例清单为空时台账应剪空(不残留死端点): {trace['eHealth']}"
+
+
+def test_badge_reflects_connection_state():
+    """工具栏徽标四态(Q4「不静默」): 未配置 / 连接正常 / 重连中 / 发现失败 —— 判据见计划 §3.3,
+    「重连中 vs 发现失败」的边界是 C4(候选全无应答才叫发现失败)。禁用时必须清空, 否则用户会
+    盯着一个「看着正常」的图标排查; 点图标要能进选项页(那是报警后的第一动作)。"""
+    trace = selfheal_trace()
+    if not trace:
+        return
+    assert trace["badgeStates"] == ["unconfigured", "ok", "reconnecting", "discoveryFailed"], trace["badgeStates"]
+    ok = trace["badgeOk"]
+    assert ok["text"] == "OK" and ok["color"] == "#2e7d46", f"连接正常要落绿底 OK: {ok}"
+    assert "连接正常" in (ok["title"] or ""), f"悬停标题要给中文结论: {ok}"
+    assert trace["badgeDisabled"]["text"] == "", f"禁用时清空徽标: {trace['badgeDisabled']}"
+    assert trace["hasOnClicked"] is True, "要注册 chrome.action.onClicked(无 default_popup 才收得到)"
+    assert trace["opened"] == 1, f"点图标要打开选项页: {trace['opened']}"
+
+
+def test_badge_text_is_ascii_only():
+    """徽标文案只许 ASCII(code-style: 代码/配置禁 emoji 与图形符号)
+
+    徽标字号极小, 对勾/省略号这类图形符在部分平台渲染成方框; 语义交给颜色 + 悬停标题表达。
+    """
+    bg = _read(BACKGROUND_JS)
+    block = bg[bg.index("const BADGE = {"):bg.index("function badgeStateOf")]
+    texts = re.findall(r"text: '([^']*)'", block)
+    assert len(texts) == 4, f"徽标四态各有文案(改结构时这条一起改): {texts}"
+    for text in texts:
+        assert text.isascii(), f"徽标文案出现非 ASCII 字符 {text!r}(小字号下渲染成方框)"
 
 
 def test_log_ui_wiring_and_escape():

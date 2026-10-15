@@ -24,10 +24,13 @@ const ALARM_NAME = 'hr-poll';
 // (2026-09-25 实报「取 .torrent 失败: 等待浏览器扩展取数超时(180s)」)。1 分钟轮询只打本机
 // loopback 一次 GET, 成本可忽略; 后端才是站点频控的唯一权威 —— 空轮询不会碰到站点。
 const POLL_MINUTES = 1;
-// 自动发现(计划 26-10-14-1241 S4/C2): 周期触发间隔 10 分钟 —— 与 60s 轮询解耦, 免得发现流变成第二轮询。
-// 触发器: 启动时 / 全部实例连续失败时(1 分钟节流)/ 每 10 分钟 / 选项页「立即发现」(随时)。
-// !发现地址留空 = 用户显式关闭: 完全静默跳过, 不打一行日志(手动配置路径是完整退路)。
-const DISCOVERY_EVERY_MINUTES = 10;
+// 自动发现(计划 26-10-14-1241 S4/C2; 自愈节奏与触发面于计划 26-10-15-2357 S2/Q3 收紧):
+// 周期 2 分钟 —— 数据端口每次重启都可能变, 2 分钟是「端口换了但用户零操作」的上界; 与 60s 轮询解耦,
+// 免得发现流变成第二轮询。
+// 触发器: 启动时 / **任一实例拉取失败时**(1 分钟节流, 覆盖「1 死 1 活不算全失败」的漏网)/ 每 2 分钟 /
+// 选项页「立即发现」(随时)。
+// !发现地址留空 = 用户显式关闭: 完全静默跳过, 不打一行日志(手动指定路径是完整退路)。
+const DISCOVERY_EVERY_MINUTES = 2;
 const DISCOVERY_MIN_GAP_MS = 60 * 1000;
 const DEFAULT_DISCOVERY_ADDRESS = 'http://127.0.0.1:' + DISCOVERY_DEFAULT_PORT; // 端口常量与后端同源(discovery.js)
 const PAGE_LOAD_TIMEOUT_MS = 60000;
@@ -283,13 +286,15 @@ chrome.runtime.onInstalled.addListener(() => {
   // 把上限写进 storage: 选项页据此展示「两道闸的当前额度」, 免得两处各写一份阈值(必漂移)
   chrome.storage.local.set({ siteCaps: SITE_CAPS });
   log('info', '系统', `扩展安装/更新: v${(chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '?'}, 轮询周期 ${POLL_MINUTES} 分钟`);
-  noteStatus({ text: '已安装: 通常零配置 —— 自动发现会拿到端点与 token; 手动兜底见选项页「2. 手动端点」' });
+  noteStatus({ text: '已安装: 通常零配置 —— 自动发现会拿到端点与 token; 手动指定见选项页「手动端点」' });
+  refreshBadge(); // 徽标是常驻信号: 装上就有态(未配置也是态), 别等第一次轮询
   runDiscovery('启动').catch((e) => log('warn', '发现', `启动发现失败: ${e && e.message ? e.message : e}`));
 });
 
 chrome.runtime.onStartup.addListener(() => {
   schedule();
   log('info', '系统', '浏览器启动, 轮询已排程');
+  refreshBadge();
   runDiscovery('启动').catch((e) => log('warn', '发现', `启动发现失败: ${e && e.message ? e.message : e}`));
 });
 
@@ -392,12 +397,15 @@ chrome.permissions.onAdded.addListener(() => noteStatus({ text: '站点权限已
 // ---------- 主流程 ----------
 
 async function pollAll(trigger) {
+  let endpoints = null;
   try {
     const conf = await readConfig();
+    endpoints = conf.instances.map((e) => String((e && e.endpoint) || ''));
     log('info', '轮询', `轮询开始(${trigger || '定时'}): ${conf.instances.length} 个实例`, { 扩展启用: conf.enabled ? '是' : '否' });
     if (!conf.enabled) return;
     if (!conf.instances.length) {
       await noteStatus({ text: '未配置实例端点(打开选项页填写)' });
+      await maybeDiscover(0); // !实例为空也要跑周期发现(R1): 否则发现集为空时连接再也回不来
       return;
     }
     const lines = [];
@@ -412,13 +420,17 @@ async function pollAll(trigger) {
         const line = `${inst.name || inst.endpoint}: 失败 ${e}`;
         lines.push(line);
         failCount += 1;
+        await noteInstanceHealth(inst && inst.endpoint, false, line);
         log('error', '轮询', line);
       }
     }
     await noteStatus({ text: lines.join('; ') || '无事可做' });
-    await maybeDiscover(conf, failCount); // 发现触发器: 全部实例连败(节流)优先, 否则按周期(C2)
+    await maybeDiscover(failCount); // 发现触发器: 任一实例失败(节流)优先, 否则按周期(Q3)
   } finally {
-    await Promise.all([flushLogs(), flushEvents()]); // 本轮立刻落盘: 「立即拉取」一返回, 选项页日志与两表都新鲜
+    // 本轮立刻落盘: 「立即拉取」一返回, 选项页日志/两表都新鲜
+    await Promise.all([flushLogs(), flushEvents()]);
+    await flushInstanceHealth(endpoints); // !台账先落, 徽标才读得到本轮的结论(顺序有意义, 别并进上面那批)
+    await refreshBadge();
   }
 }
 
@@ -426,12 +438,13 @@ function headers(inst) {
   return { 'X-Hr-Token': inst.token || '' };
 }
 
-// ---------- 自动发现(计划 26-10-14-1241 S4) ----------
+// ---------- 自动发现(计划 26-10-14-1241 S4; 自愈/可见性于 26-10-15-2357 S2) ----------
 //
-// 触发器: 启动时(onInstalled/onStartup)/ 全部实例连续失败时(1 分钟节流)/ 每 10 分钟(C2)/
+// 触发器: 启动时(onInstalled/onStartup)/ **任一实例拉取失败时**(1 分钟节流, Q3)/ 每 2 分钟(Q3)/
 // 选项页「立即发现」。探测 = 对候选表(发现地址起连号 3 个)**并行 fetch**, 仅接受 200 + 合法
 // 发现响应形态 —— 普通应用误占端口的异形应答/404/连接拒绝一律按「非本服务」忽略, 多候选同时
-// 应答取最先成功者(命中端口记入状态行)。发现失败不静默(日志 + 状态行), 退路 = 手动配置不变。
+// 应答取最先成功者(命中端口记入状态行)。发现失败不静默(日志 + 状态行 + 结构化快照 + 徽标),
+// 退路 = 手动**指定**端点(不再是「兜底」口径, Q11)。
 
 async function readDiscoveryConfig() {
   const got = await chrome.storage.local.get({
@@ -446,15 +459,18 @@ async function readDiscoveryConfig() {
   };
 }
 
-/** 触发裁决: 全部实例连败(1 分钟节流)优先, 否则按周期(C2 每 10 分钟); 发现关闭时零日志静默 */
-async function maybeDiscover(conf, failCount) {
-  const total = Array.isArray(conf.instances) ? conf.instances.length : 0;
-  const allFailed = total > 0 && failCount >= total;
+/**
+ * 触发裁决(Q3): **任一实例拉取失败**即触发一次发现(1 分钟节流不变) —— 覆盖旧口径「全部实例连败」的
+ * 漏网(1 死 1 活时旧口径不触发, 只能干等周期)。否则按周期(2 分钟)。发现关闭时零日志静默。
+ * !实例清单为空也走周期分支(R1): 后端重启瞬间发现集可能为空, 此时连「失败即发现」都不触发,
+ * 若周期分支也跳过, 连接就再也回不来。
+ */
+async function maybeDiscover(failCount) {
   const now = Date.now();
   const dconf = await readDiscoveryConfig();
-  if (!dconf.discoveryAddress) return; // 用户显式关闭发现: 完全静默(手动路径是完整退路)
-  if (allFailed && now - dconf.lastDiscoveryAt >= DISCOVERY_MIN_GAP_MS) {
-    await runDiscovery('全部实例失败');
+  if (!dconf.discoveryAddress) return; // 用户显式关闭发现: 完全静默(手动指定路径是完整退路)
+  if (failCount >= 1 && now - dconf.lastDiscoveryAt >= DISCOVERY_MIN_GAP_MS) {
+    await runDiscovery('实例失败');
     return;
   }
   if (now - dconf.lastDiscoveryAt >= DISCOVERY_EVERY_MINUTES * 60 * 1000) {
@@ -463,8 +479,35 @@ async function maybeDiscover(conf, failCount) {
 }
 
 /**
+ * 落结构化发现快照(S2): 选项页顶部「连接状态」总览与逐候选结果都从它渲染 —— 此前发现结果只进
+ * 状态栏(最后一句)与日志, 选项页拿不到, 于是「后台发现了但页面看不见」(用户实报的静默感)。
+ * `answered` = 候选表**至少一个给出了 HTTP 应答** —— 徽标「重连中」与「发现失败」的边界靠它判(C4),
+ * 属徽标判据所需的附加字段。收尾顺手刷一次徽标(发现是连接态的变化点)。
+ */
+async function noteDiscoveryResult(patch) {
+  const candidates = Array.isArray(patch.candidates) ? patch.candidates : [];
+  const probes = Array.isArray(patch.probes) ? patch.probes : [];
+  const snapshot = {
+    at: Date.now(),
+    ok: Boolean(patch.ok),
+    port: String(patch.port || ''),
+    merged: Number(patch.merged) || 0,
+    reason: String(patch.reason || ''),
+    answered: Boolean(patch.answered),
+    candidates: candidates.map((url, i) => ({ url: String(url), note: String((probes[i] && probes[i].note) || '') })),
+  };
+  try {
+    await chrome.storage.local.set({ lastDiscovery: snapshot });
+  } catch (e) {
+    console.warn('发现快照落盘失败(下一轮再试):', e);
+  }
+  await refreshBadge();
+}
+
+/**
  * 跑一轮发现: 归一化发现地址 -> 候选表并行探测 -> 命中合并实例 / 401 pairing_required 标记 /
- * 全未命中明确报告(不静默)。lastDiscoveryAt 每次**尝试**后都更新(节流按尝试计)。
+ * 全未命中明确报告(不静默)。lastDiscoveryAt 每次**尝试**后都更新(节流按尝试计);
+ * 每次收尾都落结构化快照 + 刷徽标(选项页与工具栏都能看见这一轮的结论)。
  */
 async function runDiscovery(trigger) {
   const dconf = await readDiscoveryConfig();
@@ -478,6 +521,7 @@ async function runDiscovery(trigger) {
     const msg = `发现地址写法不对: ${e && e.message ? e.message : e}`;
     await noteStatus({ text: msg }, 'warn');
     log('warn', '发现', msg, { 地址: dconf.discoveryAddress });
+    await noteDiscoveryResult({ ok: false, reason: 'bad-address' });
     return { ok: false, reason: 'bad-address' };
   }
   const candidates = discoveryCandidates(base);
@@ -491,6 +535,9 @@ async function runDiscovery(trigger) {
     const msg = `自动发现命中(${hit.port}): 合并 ${hit.data.instances.length} 个实例, 共 ${merged.length} 条`;
     await noteStatus({ text: msg });
     log('info', '发现', msg, { 触发: trigger || '手动', 候选: candidates.join(' / '), 命中: hit.port });
+    await noteDiscoveryResult({
+      ok: true, port: hit.port, merged: merged.length, candidates: candidates, probes: probes, answered: true
+    });
     return { ok: true, merged: merged.length };
   }
   if (probes.some((p) => p.pairingRequired)) {
@@ -498,15 +545,23 @@ async function runDiscovery(trigger) {
     const msg = '发现端点要求配对码: 到选项页「自动发现」填入后端展示码(启动日志/HR 状态卡可见)';
     await noteStatus({ text: msg }, 'warn');
     log('warn', '发现', msg, { 触发: trigger || '手动' });
+    await noteDiscoveryResult({ ok: false, reason: 'pairing_required', candidates: candidates, probes: probes, answered: true });
     return { ok: false, reason: 'pairing_required' };
   }
-  const msg = '自动发现未命中(数据端点照常; 退路 = 选项页手动填端点)';
+  const msg = '自动发现未命中(数据端点照常; 退路 = 选项页「手动端点」显式指定实例)';
   await noteStatus({ text: msg });
   log('warn', '发现', msg, { 触发: trigger || '手动', 候选: candidates.join(' / '), 明细: probes.map((p) => p.note).join(' | ') });
+  await noteDiscoveryResult({
+    ok: false, reason: 'no-hit', candidates: candidates, probes: probes, answered: probes.some((p) => p.answered)
+  });
   return { ok: false, reason: 'no-hit' };
 }
 
-/** 单候选探测: 仅接受 200 + 合法发现响应形态; 401 pairing_required 单独带回(触发配对提示) */
+/**
+ * 单候选探测: 仅接受 200 + 合法发现响应形态; 401 pairing_required 单独带回(触发配对提示)。
+ * `answered` = 该候选**给出了 HTTP 应答**(哪怕 401/404/异形) —— 与「网络层连不上」区分开:
+ * 候选全无应答才叫「发现失败」, 有应答但无可用实例只是「重连中」(C4, 后者可自愈)。
+ */
 async function probeCandidate(url, pairingCode) {
   const t0 = Date.now();
   try {
@@ -514,20 +569,91 @@ async function probeCandidate(url, pairingCode) {
     if (res.status === 401) {
       const data = await res.json().catch(() => ({}));
       const err = String((data && data.error) || '');
-      return { ok: false, pairingRequired: pairingNeeded({ status: 401, error: err }), note: `401 ${err}` };
+      return {
+        ok: false,
+        answered: true,
+        pairingRequired: pairingNeeded({ status: 401, error: err }),
+        note: `401 ${err}`
+      };
     }
     if (res.status !== 200) {
-      return { ok: false, note: `HTTP ${res.status}` };
+      return { ok: false, answered: true, note: `HTTP ${res.status}` };
     }
     const data = await res.json().catch(() => null);
     if (!validDiscoveryPayload(data)) {
-      return { ok: false, note: '异形应答(非本服务?)' };
+      return { ok: false, answered: true, note: '异形应答(非本服务?)' };
     }
-    return { ok: true, data, port: new URL(url).port || '' };
+    return { ok: true, answered: true, data, port: new URL(url).port || '' };
   } catch (e) {
     log('debug', '发现', `候选探测失败: ${url}`, { 耗时: `${Date.now() - t0}ms` });
-    return { ok: false, note: '连接失败' };
+    return { ok: false, answered: false, note: '连接失败' };
   }
+}
+
+// ---------- 连接状态徽标(计划 26-10-15-2357 S2/Q4: 不静默) ----------
+//
+// !为什么需要: 连接失败此前只在「状态栏最后一句」与运行日志里可见 —— 不打开选项页就看不到, 用户对
+// 「扩展到底还连不连得上」零感知(实报「可能静默失败」)。徽标是**常驻可见信号**: 工具栏图标上就有
+// 四态, 点一下进选项页看细节(chrome.action.onClicked; manifest 无 default_popup 才能收到点击)。
+// !文案一律 ASCII: 徽标字号极小, 图形符号(对勾/省略号)在部分平台渲染成方框, 且 code-style 明令
+// 代码禁图形符号 —— 语义靠颜色 + 悬停标题表达。
+const BADGE = {
+  unconfigured: { text: '', color: '#5a6673', label: '未配置' },
+  ok: { text: 'OK', color: '#2e7d46', label: '连接正常' },
+  reconnecting: { text: '..', color: '#b8802f', label: '重连中' },
+  discoveryFailed: { text: '!', color: '#b0453d', label: '发现失败' },
+};
+
+/**
+ * 徽标态推导(纯函数, 守阵直测): 四态判据见计划 §3.3 ——
+ * 未配置(发现地址空**且**实例清单空) / 连接正常(最近一轮**至少一个实例成功**) /
+ * 发现失败(候选表全无应答 **且** 无任何可用实例, C4) / 重连中(其余: 有发现地址但当前无成功实例)。
+ */
+function badgeStateOf(cfg) {
+  const instances = Array.isArray(cfg.instances) ? cfg.instances : [];
+  const hasDiscovery = Boolean(String(cfg.discoveryAddress || '').trim());
+  if (!instances.length && !hasDiscovery) return 'unconfigured';
+  const health = cfg.instanceHealth && typeof cfg.instanceHealth === 'object' ? cfg.instanceHealth : {};
+  const anyOk = instances.some((e) => {
+    const h = health[String((e && e.endpoint) || '')];
+    return Boolean(h && h.ok);
+  });
+  if (anyOk) return 'ok';
+  const last = cfg.lastDiscovery;
+  if (hasDiscovery && last && last.ok === false && last.answered === false) return 'discoveryFailed';
+  return 'reconnecting';
+}
+
+/** 按四态落徽标 + 悬停标题; 禁用时清空(不显示一个"看着正常"的图标) */
+async function refreshBadge() {
+  let cfg;
+  try {
+    cfg = await chrome.storage.local.get({
+      enabled: true,
+      instances: [],
+      discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
+      instanceHealth: {},
+      lastDiscovery: null,
+    });
+  } catch (e) {
+    return; // 读不到就不动徽标: 状态信号不值得赌主流程
+  }
+  const state = cfg.enabled ? badgeStateOf(cfg) : 'unconfigured';
+  const spec = BADGE[state];
+  try {
+    await chrome.action.setBadgeText({ text: cfg.enabled ? spec.text : '' });
+    await chrome.action.setBadgeBackgroundColor({ color: spec.color });
+    await chrome.action.setTitle({ title: `auto-qb HR 取数代理 - ${cfg.enabled ? spec.label : '已停用'}` });
+  } catch (e) {
+    // 徽标 API 在个别平台/权限组合下不可用: 吞掉(连接态另有状态栏与日志, 不为此反噬主流程)
+  }
+}
+
+/** 图标点击(无 default_popup) -> 打开选项页: 徽标报警后用户的第一动作就该是「看一眼」 */
+if (chrome.action && chrome.action.onClicked) {
+  chrome.action.onClicked.addListener(() => {
+    chrome.runtime.openOptionsPage().catch((e) => log('warn', '系统', `打开选项页失败: ${e && e.message ? e.message : e}`));
+  });
 }
 
 /**
@@ -710,7 +836,78 @@ async function requireAllowance(kind, url) {
   throw new ExtQuotaError(`${got.reason}(host=${got.host})`, got.retryAfter);
 }
 
+// ---------- 实例健康台账(计划 26-10-15-2357 S2: 供选项页「疑似失效」标记) ----------
+//
+// !为什么需要: 实例列表此前只有 [自动] 徽标, 看不出**哪条在失败** —— 手动条目连续拉不通时用户既
+// 不知道, 也不知道该不该删(而计划明令「只提示不代删」)。台账按端点记最近一轮的成败与**连续失败轮数**,
+// 选项页据此打「疑似失效」标记(C3 阈值 >=3 轮, 免得瞬时抖动误报)。
+// !落盘纪律(R3): 内存累积、pollAll 收尾**按轮整份写一次**(不每请求写, 免 storage 写风暴);
+// 剪掉已不在实例清单里的端点, 防死端点台账堆积。MV3 的 SW 随时被回收 ⇒ 下一轮首写前先读回来。
+const HEALTH_KEY = 'instanceHealth';
+let healthBuf = null;
+let healthInitPromise = null;
+
+function initHealthBuffer() {
+  if (!healthInitPromise) {
+    healthInitPromise = chrome.storage.local
+      .get({ [HEALTH_KEY]: {} })
+      .then((got) => {
+        const all = got[HEALTH_KEY];
+        healthBuf = all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+      })
+      .catch(() => {
+        healthBuf = healthBuf || {}; // 读不到就当空: 丢一段健康台账可以接受, 取数主流程不能被它卡住
+      });
+  }
+  return healthInitPromise;
+}
+
+/** 记一轮实例健康(仅内存): 连续失败计数供 C3 的「疑似失效」阈值判定 */
+function noteInstanceHealth(endpoint, ok, note) {
+  const ep = String(endpoint || '');
+  if (!ep) return Promise.resolve(); // 端点写不对的条目没有可用的键, 由轮询文案自己报
+  return initHealthBuffer()
+    .then(() => {
+      const prev = healthBuf[ep] || {};
+      healthBuf[ep] = {
+        ok: Boolean(ok),
+        at: Date.now(),
+        note: String(note || ''),
+        failStreak: ok ? 0 : (Number(prev.failStreak) || 0) + 1,
+      };
+    })
+    .catch(() => {});
+}
+
+/** 整份落盘并剪掉已不在实例清单里的端点(endpoints 为 null 时不剪: 调用方没给出清单就别猜) */
+function flushInstanceHealth(endpoints) {
+  if (!healthInitPromise) return Promise.resolve();
+  return initHealthBuffer()
+    .then(() => {
+      if (Array.isArray(endpoints)) {
+        const allowed = new Set(endpoints.map((e) => String(e || '')));
+        for (const ep of Object.keys(healthBuf)) {
+          if (!allowed.has(ep)) delete healthBuf[ep];
+        }
+      }
+      return chrome.storage.local.set({ [HEALTH_KEY]: healthBuf }).catch((e) => {
+        console.warn('实例健康台账落盘失败(等下一轮再试):', e);
+      });
+    })
+    .catch(() => {});
+}
+
+/**
+ * 逐实例拉任务 + 记健康台账。拉取本身的实现见 pollInstanceOnce(全部失败路径都返回 ok/line,
+ * 台账直接取这份结论 —— 不另设一套成败判定, 免得两处口径漂移)。
+ */
 async function pollInstance(inst) {
+  const outcome = await pollInstanceOnce(inst);
+  await noteInstanceHealth(inst && inst.endpoint, outcome.ok, outcome.line);
+  return outcome;
+}
+
+async function pollInstanceOnce(inst) {
   const label = inst.name || inst.endpoint || '(未命名)';
   const base = safeEndpoint(inst.endpoint);
   if (!base) {

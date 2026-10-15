@@ -1,4 +1,7 @@
-// 发现协议纯函数(计划 26-10-14-1241 S4): 选项页 <script> / 后台 importScripts / pytest node 实跑。
+// 发现协议纯函数(计划 26-10-14-1241 S4; 合并语义于计划 26-10-15-2357 S1 翻转): 选项页 <script> /
+// 后台 importScripts / pytest node 实跑。
+// !合并语义 = **手动优先 + 发现集整批替换**(见 mergeInstances): 手动条目是不可被自动覆盖的用户显式
+// 指定; 发现是自愈通道, 只补齐手动没覆盖的端点 —— 旧实现「同端点被发现覆盖 + 只增不减」已废止。
 // 与后端 hr/discovery.py 同源(候选表推导 / 响应形态判定)—— 改一边必改另一边, 守阵双向钉住。
 // 纪律与 normalize.js 同款: 不引用 document / chrome, 归一化共用 normalize.js(不在此重复)。
 
@@ -54,40 +57,51 @@ function pairingNeeded(res) {
 }
 
 /**
- * 合并发现结果: 发现的**替换同端点条目**, 保留手填条目; 发现条目标 source:"discovered"。
- * 顺序: 手填在前(保持原顺序), 新发现的追加在后 —— 周期性重发现不抖动列表。
- * 缺 endpoint / 缺 token 的发现条目不收(不给半条 —— 半条会让轮询打出难排查的 401)。
+ * 手动条目判定: `source` 非 `'discovered'` 即手动 —— 含**缺 `source` 字段的旧数据**(C8):
+ * 旧条目零迁移即获「优先」语义, 行为等价于「用户显式指定」。
+ */
+function isManualEntry(e) {
+  return !(e && typeof e === 'object' && e.source === 'discovered');
+}
+
+/**
+ * 合并发现结果(计划 26-10-15-2357 S1 翻转语义): **手动优先 + 发现集整批替换**。
+ *
+ * - 手动条目(`isManualEntry`)**原样保留**、保持原顺序、恒在前 —— 用户显式指定的实例优先使用、
+ *   优先展示, 且**永不**被自动覆盖或删除(Q1/Q9/Q10)。同端点冲突时**手动整条胜**(Q8):
+ *   发现的同端点条目直接丢弃(连 name/token 都不取), 发现只负责「补齐手动没覆盖的端点」。
+ * - 发现条目按**租约**管理(Q2): 每次成功发现**整批替换**旧的发现集 —— 死端口的条目自然被剪除,
+ *   不再像旧实现那样只增不减、永久堆积。
+ * - **空集例外(C1)**: `discovered` 为空 ⇒ **不替换**(保留旧发现集)。后端重启瞬间注册表条目可能
+ *   已过 TTL 或心跳未落 ⇒ 发现会返回空集; 此时若清空发现集, 扩展就自断了连接(且实例为空时连
+ *   「失败即发现」都不触发, 只能干等周期)。此为 Q2「整批替换」的唯一例外。
+ * - 缺 endpoint / 缺 token 的发现条目不收(不给半条 —— 半条会让轮询打出难排查的 401)。
+ *
+ * 顺序: 手动在前(保持原顺序) + 发现追加在后 —— 周期性重发现不抖动列表。
  */
 function mergeInstances(current, discovered) {
   const cur = Array.isArray(current) ? current : [];
   const disc = Array.isArray(discovered) ? discovered : [];
-  const byEndpoint = new Map();
+  const manual = [];
+  const prevDiscovered = [];
+  for (const c of cur) {
+    if (!c || typeof c !== 'object') continue;
+    (isManualEntry(c) ? manual : prevDiscovered).push(c);
+  }
+  const manualEndpoints = new Set(manual.map((e) => String(e.endpoint || '')));
+  const fresh = [];
+  const seen = new Set();
   for (const d of disc) {
     if (!d || typeof d !== 'object') continue;
     const ep = String(d.endpoint || '');
     const tk = String(d.token || '');
-    if (ep && tk) byEndpoint.set(ep, d);
+    if (!ep || !tk) continue; // 半条不收
+    if (manualEndpoints.has(ep)) continue; // 手动整条胜(Q8): 同端点让位手动, 不碰它的 name/token
+    if (seen.has(ep)) continue; // 发现集内同端点去重(保首个)
+    seen.add(ep);
+    fresh.push({ name: String(d.name || ep), endpoint: ep, token: tk, source: 'discovered' });
   }
-  const used = new Set();
-  const out = [];
-  for (const c of cur) {
-    const ep = String((c && c.endpoint) || '');
-    if (byEndpoint.has(ep)) {
-      const d = byEndpoint.get(ep);
-      used.add(ep);
-      out.push({ name: String(d.name || c.name || ep), endpoint: ep, token: String(d.token || ''), source: 'discovered' });
-    } else {
-      out.push(c); // 手填条目原样保留(发现关闭/失败时的手动兜底路径不变)
-    }
-  }
-  for (const entry of byEndpoint) {
-    const ep = entry[0];
-    const d = entry[1];
-    if (!used.has(ep)) {
-      out.push({ name: String(d.name || ep), endpoint: ep, token: String(d.token || ''), source: 'discovered' });
-    }
-  }
-  return out;
+  return manual.concat(disc.length === 0 ? prevDiscovered : fresh);
 }
 
 /**

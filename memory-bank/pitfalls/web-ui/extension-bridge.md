@@ -1,7 +1,7 @@
 # 浏览器扩展 ↔ 本地端点
 
-> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错)。
-> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链
+> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错), 以及 2026-10-16 加的可见性信号(徽标)两条: 计划里的图形符号不能抄进代码、写台账与读台账不能并发。
+> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链, 徽标, badge, setBadgeText, setBadgeBackgroundColor, 图形符号, ASCII, 台账, instanceHealth, Promise.all 顺序
 
 ## 两条实测报错 → 根因 → 处置
 
@@ -44,15 +44,34 @@
   所以升级判据要加上「**页面里有密码输入框**」这条与站点无关的结构信号(守阵
   `test_page_fetch_renders_when_direct_fetch_hits_login_page`)。
 
+## 可见性信号: 徽标与台账(2026-10-16 加, 计划 26-10-15-2357 S1/S2)
+
+- **计划里的图形符号不能直接抄进代码**: 交付 HTML(计划/报告)允许 `✓ ✗ … ①` 这类符号, 而 code-style
+  明令**代码/配置一律 ASCII**(终端与小字号下图形符渲染成方框)。徽标(`chrome.action.setBadgeText`)
+  这类"极窄"位置尤其明显 ⇒ 语义交给**颜色 + 悬停标题**(`setBadgeBackgroundColor` / `setTitle`),
+  文案用 `OK` / `..` / `!`。守阵 `test_badge_text_is_ascii_only` 钉住这条。
+- **同一轮里「写台账」与「读台账渲染」不能并进一个 `Promise.all`**: 徽标态要从 `instanceHealth` 推导,
+  若台账落盘与徽标刷新并发, 徽标读到的是**上一轮**的结论(症状: 后端已恢复, 图标还停在"重连中",
+  下一轮才对得上)。写法: 先 `await` 台账落盘, 再刷徽标 —— 顺序有意义, 别图省事并批。
+- **健康/状态类台账的落盘节奏 = 按轮整份写, 且剪掉清单外的键**: 每请求写一次 storage 在多实例多任务下
+  就是写风暴; 不剪旧键则死端点的台账永久堆积 —— 与发现集"只增不减"是同一个病, 同一个处置。
+- **禁用态必须清空徽标**: 用户会盯着一个"看着正常"的图标排查半天 —— `enabled:false` 时
+  `setBadgeText({ text: '' })`。
+- **徽标四态要有唯一推导函数**: 判据散在 `pollAll` / 发现收尾两处必然漂移; 抽成纯函数
+  (`badgeStateOf(cfg)`)既让守阵能直测四态取值, 也让"哪一态"只有一处定义。
+
 ## 守阵
 
-`tests/test_extension_proxy.py`(**14 条**): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
+`tests/test_extension_proxy.py`(条数见 `commands run kb.baseline`): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
 **真跑** `normalize.js`(裸域名 / localhost / https / 非法输入) · 归一化只有一份且载入顺序正确 ·
 **与后端协议常量对照**(端点路径 / 鉴权头 / 回传字段名, 用 `HrResult.from_json` 实测) ·
 调用顺序(归一化先于权限/存储 API) · 不得留裸拒绝 ·
 **用假 chrome API 真跑** `background.js` 的四个场景(直取零界面 / 内容不像页面时用离屏 popup / 登录页也得升级 /
 焦点被抢后还回去) · **运行日志**(分级阈值丢 debug / 环形上限丢最旧 / 超长字段截断 / 清空落盘空数组;
-选项页 clear-logs 协议两边一致 + innerHTML 前必须 esc 转义 + 限渲染 3000 行)。
+选项页 clear-logs 协议两边一致 + innerHTML 前必须 esc 转义 + 限渲染 3000 行) ·
+**发现与自愈**(合并语义 = 手动优先 + 发现集整批替换 + 空集不替换 / 周期 2 分钟 / 任一实例失败即触发且 60s 内不重复 /
+401 不算失败 / 实例清单为空也按周期发现 / 结构化 `lastDiscovery` 逐候选结果 / `instanceHealth` 连续失败累加与剪枝 /
+徽标四态 + 禁用清空 + 点图标开选项页)。
 
 ⚠ 红验过: 去掉“补 scheme”那行 ⇒ `test_normalizers_behave` 当场变红;
 强制走渲染通道 ⇒ `test_page_fetch_is_headless_when_html_looks_fine` 当场变红。
