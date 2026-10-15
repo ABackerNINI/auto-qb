@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-delta-sync">
 <meta name="doc-refs" content="memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加">
 <meta name="issue-summary" content="增量同步落地后 pending_ver 门控的保护对象从「全量重建成本」缩水成「一次键集追加成本」, 已按计划 P-03 定案保留(黄金法则 2); 若未来实测确认纯冗余可另立小步移除, 但移除会改变现有节拍行为, 须单独拍板">
 <title>pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-1420-refactor-webui-pending-ver-gate-redundancy</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 14:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 14:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 12:07 — 拍板 <strong>Dropped</strong>（不实施移除步，门控保留不动）。理由（只读复验 2026-10-15, 锚点 <code>runtime.py:193/883/1248/1469</code>）: 跳拍成本已缩水(R4 每拍排空不丢)但门控所救工作未——full 代仍七降级理由且 full 重建 @3000 ~93.8ms, 门折叠连续脏拍进一次 full; 移除会 worsen 滞后客户端 40 代窗口(<code>_DELTA_TIMELINE_MAX=40</code>)的 R10 回落 full 概率与突发下 ver 事件/前端轮 traffic; 本条触发条件「实测确认纯冗余」未 met(baselines 里无门开/关对照压测); 移除需重写门控钉用例(<code>test_qbmanager.py::test_view_rebuild_waits_for_client_consume</code> 两边界 + <code>test_webui_delta.py</code> 四处 <code>pending_ver=999</code> 跳拍模拟, 后者是 R4 跨拍累积的验证场景本身)且与 <code>pitfalls/web-ui/perf-cadence.md</code>「别给 rebuild_views 单独配节拍」处置单点冲突。拍板条件翻转仅 if 未来实测: full 降级率≈0 且客户端消费 never lags。</li>
     </ul>
   </section>
 

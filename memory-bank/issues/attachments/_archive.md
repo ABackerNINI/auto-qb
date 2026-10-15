@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (46)
+## Open (45)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -14,7 +14,6 @@
 - [test] [变异测试定期审计(常驻排期锚)](../26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分), 机器提名+手工确认存活变异, 真洞各自入池; 指导见 mutation-testing skill, 命令走 mutants 包
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](../26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](../26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种子全量回包 6.3 MiB 主体), 任意成员速度抖动脏整条组行; hash 引用式可把组行增量粒度降到成员级, 但波及前端筛选器计数与列模型数据源, 独立立项级改动(计划 P-02 选项 B)
-- [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](../26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保护对象从「全量重建成本」缩水成「一次键集追加成本」, 已按计划 P-03 定案保留(黄金法则 2); 若未来实测确认纯冗余可另立小步移除, 但移除会改变现有节拍行为, 须单独拍板
 - [feat] [抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)](../26-10-07-0149-feat-webui-drawer-open-state-restore.html) — 报告 26-10-06-0723 §5 补强一: 抽屉开合态持久化回读 —— 与 D1 拍板(首屏恒默认收起)冲突, 翻案需显式拍板, 只入池不实施
 - [feat] [09 变体 peer 悬停封禁钮(需后端端点, P-04 备选)](../26-10-07-0149-feat-webui-peer-ban-action.html) — 09 peers 变体悬停封禁钮: 后端现无 peer 封禁端点(routes 0 命中), 需新增端点 + qB 版本核查, 独立需求
 - [feat] [14 变体解读栏与图悬停联动(P-05 备选)](../26-10-07-0149-feat-webui-traffic-interpret-hover-link.html) — 14 traffic 变体静态解读栏升级为与图悬停联动: hover 事件通知变体重渲染, 权衡高频 setState 开销
@@ -259,8 +258,9 @@
 - [bug] [sync_interval 与前端分档轮询错配: >3000 种子时约一半视图重建无人消费](../26-09-19-1900-bug-webui-poll-cadence-mismatch.html) — 服务端固定 1.5s 重建四视图, 前端 >3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向
 - [perf] [/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)](../26-09-19-1900-perf-webui-hot-endpoints-jsonable-encoder.html) — /api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改
 
-## Dropped (4)
+## Dropped (5)
 
+- [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](../26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保护对象从「全量重建成本」缩水成「一次键集追加成本」, 已按计划 P-03 定案保留(黄金法则 2); 若未来实测确认纯冗余可另立小步移除, 但移除会改变现有节拍行为, 须单独拍板
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](../26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
 - [question] [WEBUI 流量历史图做不做(待取舍)](../26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](../26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
