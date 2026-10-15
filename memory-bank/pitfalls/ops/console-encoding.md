@@ -1,7 +1,7 @@
 # 管道下按错的编码出/解中文 = 乱码但静默(子进程 + 引擎自身)
 
 > 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。再一变体(2026-10-02): AI 工具壳大输出落盘预览在截断点切进多字节字符时整段按 GBK 重解 —— 数据无损, 读落盘日志即真值。
-> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出
+> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出, netstat, 表头本地化, 解析恒 0, 探针假 0, 外部命令表头, 测量脚本零值自检
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
@@ -80,7 +80,26 @@
 - **处置**: ①预览乱不丢数据 —— 直接 Read 落盘的 `*-stdout.log` 即原文; ②要内联可读就把输出压到 30,000 字节以内(≈9,900 汉字); ③天然大输出的命令(kb.active 类)加截断/精简, 或接受落盘读文件; ④引擎/工具侧无可修也不许回退(同上节口径); 后台任务 persistOutput=always 与大小无关必落盘。
   ③已落地(2026-10-02 当日): `gen_active_recent.py`(kb.active)默认按 20,000 字节预算取最近 K 条, 总数/待归档/省略数进页脚, `--all` / `-n N` 逃生 —— 守阵 `tests/test_memory_bank.py::test_kb_active_render_respects_byte_budget`。同族大输出命令若再中招, 照此模式办。
 
-## 同族旧账(互补, 别只修一处)
+## 测量探针变体: 表头被本地化 + 解析器按英文字面匹配 ⇒ 读数静默为 0(2026-10-15 补)
+
+- **触发**: 探针脚本解析 Windows 原生命令输出做**测量**(实测: `netstat -e` 的字节计数行、`netstat -ano` 的连接表),
+  Python 侧 `subprocess.run(..., capture_output=True, text=True)`。
+- **判别**: 两个方向都中, 且都可**不报错**:
+  ① 按 UTF-8 收 GBK 字节 → `UnicodeDecodeError` 抛在 `subprocess._readerthread` 后台线程(本族旧例,
+    实测连带表现为 `AttributeError: 'NoneType' object has no attribute 'splitlines'`, 因为 stdout 是 None);
+  ② **更阴的一层**: 解码侥幸通过, 但解析器写的是 `p[0] == 'Bytes'` / `'Interface'` 这类**英文字面**,
+    中文 Windows 的表头是「字节」「接口统计」⇒ 匹配失败 → 计数器初值保持 0 → **两次采样相减得 0 B/s,
+    看上去就是「这个接口没有流量」**。2026-10-15 的 qB 流量取证中, 这条一度支撑出「alltime 在涨而网卡零流量
+    ⇒ 纯记账幻觉」的错误中间结论; 改成按「行内两个 6 位以上整数」取值后, 真相是该机 rx 227 KB/s / tx 271 KB/s
+    真实存在(= 结论被反转)。
+- **处置**: ① 收外部命令输出**显式指定码页**(`encoding="gbk", errors="replace"`), 不靠 locale 也不假定 UTF-8;
+  ② 解析**不按表头文字定位** —— 按结构(字段数 / 纯数字列), 或直接换结构化来源(`Get-NetAdapterStatistics`、
+  `Get-NetTCPConnection` 返回对象, 与码页无关; 若走 PowerShell 工具而非从 Bash 里 spawn);
+  ③ **测量脚本必须做零值/量级自检**: 某计数器连续两次为 0, 或与预期量级差 3 个数量级 ⇒ 先当**解析失败**查,
+  不得当结论用; ④ 结论若是否定命题(「没有 X 流量」), 至少两条独立路径交叉(netstat + 进程连接表 + 应用日志)。
+- **守阵**: 属探针/环境侧, 常规守阵无可挂; 复验方式 = 同一命令同时跑「结构化来源」与「解析文本」两路, 数字应吻合。
+
+
 
 - **崩在打印层**: [../git/message.md](../git/message.md)「流水线脚本在 GBK 控制台打印 emoji 直接崩」—— 那类是 `UnicodeEncodeError` **抛出来**, 反而容易被发现; 本条是**静默**的那种。
 - **写盘方向**: [../git/editing-traps.md](../git/editing-traps.md)「合并冲突处理不要把 UTF-8 当 GBK 写入」—— 那类会**不可逆**地写坏文件, 检测要按 `U+FFFD` 计数, 别用 Git Bash 管道下结论。

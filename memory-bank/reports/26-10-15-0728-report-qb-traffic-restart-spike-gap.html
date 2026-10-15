@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="qb-traffic-restart-spike-gap">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-15-0728">
+<meta name="doc-updated" content="26-10-15-0808">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1420;
+    --paper: #151c2c;
+    --paper2: #1a2234;
+    --ink: #dce4f4;
+    --dim: #9aa8c2;
+    --faint: #6b7a96;
+    --line: #2a3550;
+    --acc: #5aa2e8;
+    --ok: #4cc38a;
+    --warn: #e8b45a;
+    --bad: #e87a7a;
+    --code-bg: #0b101c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 0 16px 80px;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14.5px; line-height: 1.75;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.rpt { padding: 40px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  header.rpt h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .5px; }
+  header.rpt .sub { color: var(--dim); font-size: 13.5px; }
+  .metagrid { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 16px; font-size: 12.5px; color: var(--dim); }
+  .metagrid b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 19px; margin: 46px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--acc); margin-right: 8px; font-family: Consolas, monospace; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; color: var(--ink); }
+  h3::before { content: "\25D8"; color: var(--acc); margin-right: 4px; }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--dim); }
+  p { margin: 8px 0; }
+  .lead { color: var(--dim); font-size: 13.5px; margin-top: 2px; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--paper2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td { color: var(--ink); }
+  td .sm, .sm { font-size: 12px; color: var(--dim); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  code, .mono {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.3px; background: var(--code-bg);
+    padding: 1px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,.06);
+    word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 12px 14px; overflow-x: auto; font-size: 12.3px; line-height: 1.6;
+    font-family: Consolas, "Cascadia Mono", monospace; color: var(--ink);
+    margin: 10px 0 16px;
+  }
+  pre .c { color: var(--faint); }
+  pre .b { color: var(--acc); }
+  pre .g { color: var(--ok); }
+  pre .r { color: var(--bad); }
+  pre .y { color: var(--warn); }
+  .box { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .box.warn { border-color: rgba(232,180,90,.4); }
+  .box.bad { border-color: rgba(232,122,122,.4); }
+  .box.ok { border-color: rgba(76,195,138,.35); }
+  .box .t { font-weight: 600; margin-bottom: 6px; }
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); margin-right: 6px; }
+  .tag.ok { color: var(--ok); border-color: rgba(76,195,138,.4); }
+  .tag.bad { color: var(--bad); border-color: rgba(232,122,122,.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(232,180,90,.4); }
+  .chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin: 14px 0; }
+  .chain .step { flex: 1 1 200px; min-width: 190px; background: var(--paper); border: 1px solid var(--line); padding: 10px 12px; position: relative; font-size: 12.8px; }
+  .chain .step + .step { border-left: none; }
+  .chain .step .n { color: var(--acc); font-family: Consolas, monospace; font-size: 11.5px; display: block; margin-bottom: 4px; }
+  .chain .step b { display: block; margin-bottom: 4px; font-size: 13px; }
+  .chain .step .sm { color: var(--dim); }
+  .num { font-family: Consolas, monospace; color: var(--warn); }
+  .good { color: var(--ok); }
+  .badc { color: var(--bad); }
+  .dimc { color: var(--dim); }
+  .foot { margin-top: 60px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="rpt">
+  <h1>WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告</h1>
+  <div class="sub">qB 口径流量图（qb-traffic v4）· 2026-10-15 06:36 重启事故 · 只读取证（未改任何代码与数据）</div>
+  <div class="metagrid">
+    <div><b>类型</b> 故障取证报告</div>
+    <div><b>状态</b> Done</div>
+    <div><b>取证时间</b> 2026-10-15 07:28 (UTC+8)</div>
+    <div><b>数据源</b> 运行实例 <code>D:/Projects/auto-qb/auto-qb-data/</code>（只读）+ 本 clone 源码（只读）</div>
+    <div><b>相关前作</b> <code>26-10-07-2031-report-qb-traffic-rate-basis</code>（delta/w 速率口径立项）</div>
+  </div>
+</header>
+
+<div class="box ok">
+  <div class="t">本版更新（26-10-15-0808，同一只读取证续做）</div>
+  <p>按用户指令，用外部源码库 <code>D:/Projects/Else/{qBittorrent, libtorrent}</code> 与运行实例的只读探针，把 §04.4 的「细流最可能解释（待 qB 侧确认）」升级为 <b>计数器级定位</b>（新增 §04.5）。<b>三项既有猜测被排除</b>：DHT / PeerExchange（本实例全局关闭 + 全部私有种子，per-torrent 亦禁用）、uTP 报文开销（uTP 报文字节不进这两个计数器）、tracker 字节（走独立计数器，不参与 alltime 合成）。同时修正 §02.1「速率字段恒 0」的语义（WebUI 暴露的本就是 payload 速率），并回答 §07 遗留的「qB 口径」问题。<b>§02 / §03 的峰值与无采样区结论不受影响</b>——本版只把「隐形增长量里装的是什么」这件事从推测改写为证据。</p>
+</div>
+
+<h2><span class="no">00</span>结论摘要</h2>
+
+<div class="box bad">
+  <div class="t">一句话根因</div>
+  <p>qB 的 all-time 计数器在<b>瞬时速率字段恒读 0</b> 的情况下持续增长（已实锤：当前 ~550 B/s 双向，且不落在任何现存种子的 payload 上）；采样器以速率字段 (0,0) 为判据开启 <b>z 游程</b>，而 z 游程的 totals 快照<b>冻结在开启时刻</b> —— 于是 10-15 凌晨 6.6 小时的计数器增长（<span class="num">+15.3 MB</span> 下行 / <span class="num">+16.5 MB</span> 上行）在磁盘上零痕迹；进程重启后新实例首个采样读入新鲜 totals，读侧 <code>rate = delta/w</code> 口径把整个陈旧差打进接缝处的单个桶，形成 <span class="num">6.9 MB/s</span> 的幻影尖峰；同一接缝（末样 06:36:00.5 → 首样 ~06:36:10，约 10s）在 raw 视图呈现为 null 桶游程（无采样区斜纹），叠加旧 WEBUI 死亡到新活尾落袋的投递黑障，用户看到无采样区「延伸到观察时刻」。</p>
+</div>
+
+<table>
+  <tr><th style="width:130px">问题</th><th>结论</th><th style="width:210px">关键量化</th></tr>
+  <tr>
+    <td><b>异常峰值</b></td>
+    <td>非真实流量。z 游程快照冻结 + 读侧 delta/w 在进程重启缝的单桶归因。隐藏增长量 ÷ 桶宽 = 峰高（窗越细峰越尖）。</td>
+    <td>30m 窗 2s 桶 06:36:08：<span class="num">dl 6,896,545</span> / <span class="num">up 7,438,824</span> B/s；真实夜均速率仅 ~630 B/s（幻影 ~11,000 倍）</td>
+  </tr>
+  <tr>
+    <td><b>无采样区</b></td>
+    <td>两层叠加：① 重启缝本身 ~10s（末样 06:36:00.5 → 新实例首样 ~06:36:10，2s 视图 3 个 null 桶）；② 投递黑障（旧服务 06:36:01.5 死 → 新服务 06:36:08.1 起 → ~06:36:10 首个含活尾响应）期间图表末帧序列止于 06:36:00，null 区视觉上延伸到轴右沿（= 观察时刻）。</td>
+    <td>缝宽 ~9.5s；黑障 ~8.5s；当前活尾健康（滞后 2.98s，尾部仅 1 个活边 null 桶）</td>
+  </tr>
+  <tr>
+    <td><b>隐形增长</b></td>
+    <td>qB 5.2.3 的 alltime_dl/alltime_ul 以 ~0.5–6.5 KB/s 双向持续增长，同一时刻 transfer/info 速率恒 0、会话计数器冻结、全部 180 个种子计数器零增长 —— 不是 payload。该增长此前一直存在（10-13 全天 dl_max=0 而 alltime_dl +537 MB），只因当天有上行 payload 把游程保持在 r 模式、增量被 delta 列记录，图面正常。</td>
+    <td>60s 实测：dl <span class="num">+32,692</span>（≈545 B/s）/ up <span class="num">+35,281</span>（≈588 B/s），同期所有 payload 计数器 +0</td>
+  </tr>
+  <tr>
+    <td><b>细流来源</b><br><span class="sm">本版新增（§04.5）</span></td>
+    <td>已定位到计数器级。<code>alltime_dl = net.recv_bytes + net.recv_ip_overhead_bytes</code>：前者把 <b>除 piece 块数据以外的所有 peer 字节</b>（握手、bitfield、扩展握手…）以 <code>payload=0</code> 计入，后者是模型化 IP/TCP 头开销且<b>每次 socket 收发同时给收发两侧记账</b>。细流的实体 = <b>短命 peer 连接的握手/协议字节 + IP 开销</b>：本实例 180 个种子全部已完成（纯做种），对端若也是 seed，libtorrent 在握手后按 <code>upload_upload_connection</code> 断开 —— 连接存活 &lt;1s、从不进 peer 表，只剩握手字节落进 alltime。</td>
+    <td>实测 0.23 个新出站连接/s × ≈2.2 KB/连接 ≈ 500 B/s；四次实测 dl/up = <span class="num">487–602</span> / <span class="num">532–614</span> B/s，dl/ul ≈ 0.92–1.00</td>
+  </tr>
+</table>
+
+<div class="box warn">
+  <div class="t">当前仍在累积</div>
+  <p>新实例自 06:36:10 起同样处于 z 游程（速率读 0），细流正在以 ~550 B/s 继续累积隐藏差。<b>下一次 auto-qb 重启时，同型尖峰会再现</b>（幅度 = 两次重启间隔 × 细流速率）。这不是一次性事件，是口径缺陷的周期性显形。</p>
+</div>
+
+<h2><span class="no">01</span>时间线（日志级，全部只读取自运行实例）</h2>
+
+<table>
+  <tr><th style="width:150px">时刻</th><th>事件</th><th style="width:300px">出处 / 备注</th></tr>
+  <tr><td class="mono">10-14 06:14 → 07:27</td><td>停机 73 分钟（当天多次重启之一）</td><td>auto-qb.log；qB 未停，期间流量整体丢失，24h 视图呈现诚实 null 区</td></tr>
+  <tr><td class="mono">10-14 07:51 → 10:32</td><td>停机 161 分钟</td><td>同上；与 06:14 段共同构成 24h 视图仅有的两条长 null 区</td></tr>
+  <tr><td class="mono">10-14 12:36 / 14:24 / 15:36 / 16:21</td><td>当天另有 4 次短重启（6s / 6s / 10s / ~30s）</td><td>当天用户反复重启 auto-qb（日志可见 6 次停止→启动对）</td></tr>
+  <tr><td class="mono">10-14 ~16:22</td><td><b>旧实例（事故实例）启动</b>，之后连续运行至 10-15 06:36</td><td>夜间日志零 ERROR/WARNING，进程健康</td></tr>
+  <tr><td class="mono">10-14 23:45:51</td><td>当日最后一个 r 记录；开 z 游程（546 槽，dt 828,844ms，23:45:51→23:59:39.8，被 00:00 跨天规则封口）</td><td><code>2026-10-14.dat</code> 尾部：<code>B,1791992771,1.5,3694464101423,1869312182201</code> + <code>z,546,0,0,828844</code></td></tr>
+  <tr><td class="mono">10-15 00:00:01.5</td><td><b>z 游程开启，totals 快照冻结</b>：dl 3,694,464,618,757 / up 1,869,312,739,353</td><td><code>2026-10-15.dat</code>：<code>B,1791993601,1.5,3694464618757,1869312739353</code></td></tr>
+  <tr><td class="mono">10-15 00:02:16</td><td>限速曲线日志行「今日 508KiB/973KiB」——数据源是 TrafficMonitor 系统级网卡 dat，与 qB 流量无关，排除</td><td><code>speed_curve_mod.py</code> 读 <code>history_traffic.dat</code></td></tr>
+  <tr><td class="mono">10-15 06:36:01.538</td><td><b>旧实例停止</b>；stop() 全量落盘，z 游程封口为 <code>z,15518,0,0,23759025</code>（00:00:01.5→06:36:00.5，速率恒 (0,0)，快照仍冻结在 00:00:01.5）</td><td>旧 WEBUI 随进程死亡，浏览器轮询开始失败</td></tr>
+  <tr><td class="mono">10-15 06:36:08.022</td><td>新进程启动（主循环 1.5s，生产配置 <code>main_tick: 1.5S</code>）</td><td>新进程 <code>_last_good</code> 为空（每进程内存态兜底缓存）</td></tr>
+  <tr><td class="mono">10-15 06:36:08.128</td><td>WEBUI 起（127.0.0.1:38080）</td><td>浏览器恢复连通，但此刻尚无活尾可发</td></tr>
+  <tr><td class="mono">10-15 06:36:09.210</td><td>流量采样启动恢复完成：28 系列 / 读入天文件 28 / 补算小时 0 / 入账槽 434,477 / 1.07s</td><td>恢复只重建 agg，raw 面仍只有磁盘链（止于 06:36:00.5）</td></tr>
+  <tr><td class="mono">10-15 ~06:36:10</td><td><b>新实例首个采样</b>：读入新鲜 alltime（dl ≈ 3,694,479,27x,xxx）→ 开新 z 游程（快照 = 新鲜值）；首个含活尾的响应落袋，图表缝闭合</td><td>接缝差 ≈ 13.8–14.7 MB 在此刻产生</td></tr>
+  <tr><td class="mono">10-15 06:36:11.988</td><td>搜索索引构建完成，启动流程结束</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">02</span>现象一定位：异常峰值</h2>
+
+<h3>2.1 机理链（四环相扣）</h3>
+
+<div class="chain">
+  <div class="step"><span class="n">环 1 · qB 侧</span><b>速率字段恒 0</b><span class="sm">alltime 计数器在涨，但 dl_info_speed / up_info_speed 读 0。本版修正语义：该字段是 <code>payloadDownloadRate</code>（payload 口径），读 0 只表示「没有载荷」，<b>不是</b>「qB 算不出总速率」—— session 级总速率 <code>m_status.downloadRate</code>（= alltime 差分）存在，但 WebUI 不暴露它</span></div>
+  <div class="step"><span class="n">环 2 · 采样器</span><b>z 游程 + 快照冻结</b><span class="sm"><code>_sample_global</code> 以速率 (0,0) 为判据开 z 游程；z 游程 totals 快照冻结在开启时刻（00:00:01.5），此后每轮读到的 totals 被丢弃</span></div>
+  <div class="step"><span class="n">环 3 · 落盘</span><b>磁盘链陈旧</b><span class="sm">stop() 封口的 z 行只带 (0,0) 与开启快照；6.6 小时增长在 <code>2026-10-15.dat</code> 上零痕迹</span></div>
+  <div class="step"><span class="n">环 4 · 读侧</span><b>delta/w 单桶归因</b><span class="sm">新实例首样新鲜 totals 与磁盘链末点的差，被 <code>v4_rate_from_totals</code>（rate = delta/w）整个打进接缝桶</span></div>
+</div>
+
+<h3>2.2 峰值量化（同一接缝差在不同窗口的呈现）</h3>
+
+<table>
+  <tr><th>窗口</th><th>桶宽</th><th>尖峰桶</th><th>dl (B/s)</th><th>up (B/s)</th><th>等效承担差</th></tr>
+  <tr><td>30m</td><td>2s</td><td class="mono">06:36:08</td><td class="num">6,896,545</td><td class="num">7,438,824</td><td>≈13.8 MB / 14.9 MB</td></tr>
+  <tr><td>3h</td><td>4s</td><td class="mono">06:36:08</td><td class="num">3,448,272</td><td class="num">3,719,412</td><td>≈13.8 MB / 14.9 MB</td></tr>
+  <tr><td>24h</td><td>30s</td><td class="mono">06:36:00</td><td class="num">492,610</td><td class="num">531,345</td><td>≈14.8 MB / 15.9 MB</td></tr>
+</table>
+
+<p>三个窗口是<b>同一个差</b>（磁盘链末点快照与新鲜 alltime 之差）按各自桶宽除出来的：桶宽 2s → 6.9 MB/s，桶宽 30s → 0.49 MB/s。<b>窗越细，峰越尖</b>；这是 delta/w 口径在接缝点的固有行为，不是采样错误。作为对照，该差对应的真实过程是 6.6 小时、平均 ~630 B/s 的细流 —— 单桶幻影速率放大了约 <span class="num">11,000</span> 倍（2s 桶口径）。</p>
+
+<h3>2.3 前作口径的边界缺口</h3>
+<p><code>26-10-07-2031-report-qb-traffic-rate-basis</code>（delta/w 口径立项）对边界语义的判研是「<b>qB 重启 = all-time 计数器经 fastresume 持久，通常无缝</b>」——那覆盖的是 <b>qB 进程重启</b>（计数器不丢）。本次事故是 <b>auto-qb 进程重启</b>：磁盘链末点是 z 游程的陈旧快照，而 qB 计数器在 auto-qb 停机期间照常增长 —— 两类重启的接缝语义不同，前作未覆盖此情形。</p>
+
+<h2><span class="no">03</span>现象二定位：无采样区</h2>
+
+<h3>3.1 重启缝（数据层，~10s）</h3>
+<p>旧实例最后一样 06:36:00.5（z 游程 dt 23,759,025ms 覆盖 00:00:01.5→06:36:00.5），新实例首样 ~06:36:10，中间约 <span class="num">9.5s</span> 无任何采样。raw 视图 null 桶（无采样区斜纹）结构：</p>
+<table>
+  <tr><th>视图</th><th>null 桶</th><th>随后</th></tr>
+  <tr><td>30m（2s 桶）</td><td class="mono">06:36:02 / 06:36:04 / 06:36:06</td><td>06:36:08 尖峰桶，之后连续 (0,0) 至观察时刻</td></tr>
+  <tr><td>3h（4s 桶）</td><td class="mono">06:36:04</td><td>06:36:08 尖峰桶</td></tr>
+</table>
+<p class="sm">注：z 游程 15,518 槽 vs 标称 15,839（~2% 拍点被任务线竞争跳过），读侧按 dt/(n−1) 等距重建，自洽无用户可见影响。</p>
+
+<h3>3.2 投递黑障（呈现层，用户所见「延伸到观察时刻」）</h3>
+<p>06:36:01.538 旧 WEBUI 随进程死亡 → 06:36:08.128 新 WEBUI 才起 → ~06:36:10 首个含活尾的响应落袋。这 ~8.5s 里图表没有 06:36:00 之后的任何数据源：</p>
+<ul>
+  <li><b>轮询失败期</b>（06:36:01.5–06:36:08.1）：连接被拒，前端保持末帧 —— 序列止于 06:36:00，而横轴右沿是「现在」，未绘制区域按 null 桶游程渲染为斜纹，<b>视觉上延伸到观察时刻</b>；</li>
+  <li><b>无活尾期</b>（06:36:08.1–06:36:10）：新服务已起，但活尾快照要等首个采样才发布，此间响应只含磁盘链（同样止于 06:36:00），呈现同上；</li>
+  <li>前端失败重试保持 <code>meta.interval_s</code> 节拍（2s/30s），30s 兜底仅在成功响应缺 interval_s 时生效，不放大黑障。</li>
+</ul>
+<p>用户报告「无采样区超出重启时间、观察时刻也显示无采样区（此时程序已重启完毕一段时间）、一段时间才恢复」与该窗口吻合：程序 06:36:11 启动完毕，图表在首个含活尾响应落袋（~06:36:10–12）后才闭合。<b>当前数据中该缝仅 ~10s</b>（活尾滞后实测 2.98s、尾部仅 1 个活边 null 桶，健康）—— 即「缝本身」与「黑障期的视觉延伸」是两回事，后者无法在当前数据中复现（浏览器渲染时序无日志），但机理已定位。</p>
+
+<h2><span class="no">04</span>根因实锤：夜间隐形增长</h2>
+
+<h3>4.1 60 秒盯盘（07:24–07:25，此刻仍在持续）</h3>
+<table>
+  <tr><th>观测面</th><th>60s 内的变化</th><th>结论</th></tr>
+  <tr><td><code>sync/maindata</code> alltime_dl / alltime_ul</td><td class="num">+32,692 / +35,281</td><td>≈545 / 588 B/s 双向持续增长</td></tr>
+  <tr><td><code>transfer/info</code> dl_info_speed / up_info_speed</td><td>12 次采样恒 <b>0 / 0</b></td><td>该字段本就是 <b>payload 速率</b>（<code>synccontroller.cpp:164-167</code>），恒 0 = 无载荷，非 auto-qb sync 假象、也非「qB 认为速率是 0」</td></tr>
+  <tr><td>会话计数器 dl_info_data / up_info_data</td><td>每个 5s 窗口 +0</td><td>payload 通道完全静止</td></tr>
+  <tr><td>全部 180 个种子的 downloaded / uploaded</td><td>每个窗口零增长</td><td>不落在任何现存种子的 payload 上</td></tr>
+</table>
+
+<h3>4.2 qB 增量同步的键省略行为（探针实录）</h3>
+<pre><span class="c"># 07:21 连续两次 sync/maindata（rid 链）</span>
+call1 (rid=1)  full_update=None  server_state keys = <span class="b">[alltime_dl, alltime_ul, free_space_on_disk, total_peer_connections]</span>
+              <span class="c">→ 无 dl_info_speed / up_info_speed（未变化=0 被省略），alltime_dl 已比 2 分钟前 +63,213</span>
+call2 (rid=2)  server_state keys = <span class="b">[]</span>  <span class="c">（3s 内无变化）</span></pre>
+<p>qB 5.2.3 的增量响应<b>只回变化的键</b>。auto-qb 的合并语义（<code>torrents/store.py:166-168</code>）在键缺席时保留旧值 —— 本次事故中该语义不是根因（transfer/info 证明 qB 侧速率真值为 0），但它意味着<b>速率字段的新鲜度完全依赖 qB 选择是否回该键</b>：一旦 qB 侧速率长时间不变（0），合并值可以无限期停留在旧值。</p>
+
+<h3>4.3 为什么白天不漏、夜间全漏</h3>
+<p>采样器的 z/r 判据是<b>速率字段</b>而非计数器（<code>traffic_sample_mod.py:602-605</code>）：</p>
+<pre><span class="g">if dl_rate == 0 and up_rate == 0:</span>
+    self._advance_run(GLOBAL_SERIES_KEY, ts, <span class="b">"z"</span>, dl_total, up_total)   <span class="c"># z 游程：快照冻结在开启时刻</span>
+    <span class="g">return</span>
+self.sample_series(...)                                            <span class="c"># r 记录：带 totals 快照，delta 相对块基线</span></pre>
+<ul>
+  <li><b>白天（真实 payload）</b>：速率非零 → r 记录 → totals 快照逐样更新 → 差分链完整。10-13 捕获率 99.3%/99.7%，10-14 捕获 99.5%(dl)/88.7%(up)；缺口来自当天两次停机的流量丢失（图表以 null 区诚实呈现），不是隐形。</li>
+  <li><b>10-13 的特例</b>：全天 <code>dl_max=0</code> 而 alltime_dl <span class="num">+537,198,143</span>（≈6.5 KB/s 均值）—— 细流全天在跑，只因当天有上行 payload 把游程保持在 r 模式，dl 的零速增长被 delta 列照常记录，图面正常。<b>这证明「两个速率都读 0」才是隐形条件</b>，细流本身不是新现象。</li>
+  <li><b>夜间（双向零速）</b>：10-14 23:45:51 最后一个 r 记录之后双速率皆 0 → z 游程 → 快照冻结 → 6.6 小时增长全隐。</li>
+</ul>
+
+<h3>4.4 细流的性质判定（本版：由推测升级为定位）</h3>
+<div class="box ok">
+  <p><b>已实锤（不变）</b>：不是任何现存种子的 payload（4.1 全部计数器冻结）；10-13 全天已在跑（速率随时段在 ~0.5–6.5 KB/s 间波动）。</p>
+  <p><b>本版新增定位</b>：原「最可能解释」列的四条里，<b>DHT / PeerExchange / uTP 开销三条已被排除</b>，tracker 一条口径不同（其字节根本不进 alltime）。精确来源是 <b>peer 连接在「建链—握手」阶段产生的非载荷字节 + libtorrent 的模型化 IP/TCP 头开销</b>，由「已完成 → 对端也是 seed → 握手后即断开」的短命连接持续供给。<b>完整判据、源码出处与量级闭环见 §04.5</b>。</p>
+  <p class="sm">对流量图口径的意义不变、且更准确：qb-traffic 的「流量图 = alltime 差分」里一直含有一个<b>非 payload 的握手/开销成分</b>（正常时段几百 B/s，白天 swarm 活跃时可达 ~6.5 KB/s），它平时被 delta 列照常记录、只有接缝处才会被 delta/w 放大成幻影尖峰。</p>
+</div>
+
+<h3>4.5 细流的 qB 侧精确来源（源码级定位 · 本版新增）</h3>
+<p class="lead">出处：外部源码库 <code>D:/Projects/Else/qBittorrent</code>（qB master 分支）与 <code>D:/Projects/Else/libtorrent</code>（v2.1.2）+ 运行实例（qB v5.2.3，<code>127.0.0.1:16585</code>）只读探针。所有结论都同时有「源码出处」和「实测数据」两侧支撑。</p>
+
+<h4>4.5.1 计数器链：alltime 到底由什么合成</h4>
+<table>
+  <tr><th style="width:230px">环节</th><th>事实</th><th style="width:250px">出处</th></tr>
+  <tr>
+    <td><b>qB 的 alltime 合成式</b></td>
+    <td><code>allTimeDownload = 历史持久值 + m_status.totalDownload</code>，而 <code>totalDownload = stats[net.recv_bytes] + stats[net.recv_ip_overhead_bytes]</code>；<code>totalUpload</code> 对称用 <code>sent_*</code>。</td>
+    <td><code>sessionimpl.cpp:6569-6572</code><br><code>sessionimpl.cpp:6625-6626</code></td>
+  </tr>
+  <tr>
+    <td><b>WebUI 的 payload 字段</b></td>
+    <td><code>dl_info_speed = payloadDownloadRate</code>、<code>dl_info_data = totalPayloadDownload</code>（= <code>net.recv_payload_bytes</code>）。<b>与 alltime 是两套口径</b>，所以「payload 全 0」与「alltime 在涨」可以同时成立。</td>
+    <td><code>synccontroller.cpp:164-167</code><br><code>sessionstatus.h:39-71</code></td>
+  </tr>
+  <tr>
+    <td><b>net.recv_bytes 的自增点</b></td>
+    <td>唯一入口 <code>session_impl::received_bytes(payload, protocol)</code>：<code>recv_bytes += payload + protocol</code>，<code>recv_payload_bytes += payload</code>。BT 协议里<b>只有 piece 块数据</b>走 payload 分支（<code>received_bytes(received, 0)</code>），其余 <b>43 处</b>全部是 <code>received_bytes(0, received)</code> —— <b>握手、keep-alive、bitfield/have、choke/interested、request/reject、扩展握手（ut_metadata/ut_pex）、DHT-port 等一律以 payload=0 记入 recv_bytes</b>。</td>
+    <td><code>session_impl.cpp:3454-3464</code><br><code>bt_peer_connection.cpp:1078/1087</code>（仅此两处带 payload）<br>其余 43 处 payload=0</td>
+  </tr>
+  <tr>
+    <td><b>net.recv_ip_overhead_bytes 是模型量</b></td>
+    <td><code>trancieve_ip_packet(bytes)</code>：<code>overhead = max(1, ceil(bytes/1460)) * 40</code>，<b>同一次调用同时加到 sent 与 recv 两侧</b>（TCP 假定每个数据包都带回一个 ACK）；出站建链另有 <code>sent_syn()</code> +40（仅 sent 侧）与 <code>received_synack()</code> +40/+40（双向）。宿主私有种子下 DHT 关闭，故 DHT 的 +28/48 项为 0。</td>
+    <td><code>session_impl.cpp:3466-3483</code><br><code>session_impl.cpp:3485-3503</code><br><code>peer_connection.cpp:451 / 6384</code><br><code>dht_tracker.cpp:493/718</code></td>
+  </tr>
+  <tr>
+    <td><b>「双向近似对称」由此而来</b></td>
+    <td>IP 开销对每个收发动作<b>双向各记一次</b>，握手数据本身也近似对称 → dl≈ul；每连接多一次「SYN 只记 sent」的 +40，故 dl 恒略小于 ul。与四次实测的 dl/ul = 0.92–1.00 完全吻合。</td>
+    <td>同上；实测见 §4.5.4</td>
+  </tr>
+</table>
+
+<h4>4.5.2 被排除的既有猜测（本版实测 + 源码双向否证）</h4>
+<table>
+  <tr><th style="width:150px">原猜测</th><th>否证依据</th></tr>
+  <tr>
+    <td><b>DHT / PeerExchange</b></td>
+    <td>实测 prefs：<code>dht=false</code>、<code>pex=false</code>、<code>lsd=false</code>；且 180 个种子全是私有种子，tracker 列表里 DHT/PeX/LSD 三条均显示「这是私有 torrent」（per-torrent 亦禁用）。另注：即使开启，DHT 也只有 <b>IP 开销</b>（+28/48 per datagram）会进 alltime，报文本体走 <code>dht.bytes_in/out</code>。</td>
+  </tr>
+  <tr>
+    <td><b>tracker 开销</b></td>
+    <td>tracker 字节走<b>独立计数器</b> <code>net.recv_tracker_bytes</code> / <code>sent_tracker_bytes</code>，<b>不参与 alltime 合成</b>（qB 只取 recv_bytes + recv_ip_overhead）。实测实例确实在正常 announce（4 个 PT tracker 状态均 = 2「Working」，其中一个返回 4 个 peer），但它对 alltime 零贡献。<b>修正 §04.4 原表述。</b></td>
+  </tr>
+  <tr>
+    <td><b>uTP 报文开销</b></td>
+    <td>uTP 虽在启用（<code>bittorrent_protocol=0</code> = TCP+uTP，日志可见 <code>端口:UTP/61323</code>），但入站 UDP 包在 <code>session_impl::on_udp_packet</code> 里直接交给 uTP 管理器，<b>不做 net.* 记账</b>；uTP 的包计数落在 <code>utp.*</code> 独立计数器，纯 ACK 包不会变成 alltime 的字节。</td>
+  </tr>
+  <tr>
+    <td><b>「被丢弃的载荷」</b></td>
+    <td>redundant/failed 字节是 <b>payload 的子集</b>（<code>net.recv_redundant_bytes</code> + <code>recv_failed_bytes</code> → <code>total_wasted</code>）；payload 全平即证明细流里没有这类字节。</td>
+  </tr>
+</table>
+
+<h4>4.5.3 机制：为什么「有字节、无 payload、无 peer」能同时成立</h4>
+<div class="chain">
+  <div class="step"><span class="n">前提</span><b>全部完成、纯做种</b><span class="sm">180 个种子：120 stalledUP / 36 stoppedDL / 24 missingFiles，<code>is_finished()</code> 为真；announce 正常、swarm 里有 peer（tracker 返回 0–4 个）</span></div>
+  <div class="step"><span class="n">建链</span><b>出站连接尝试</b><span class="sm">libtorrent 对被 announce 回来的 peer 持续发起连接；<code>sent_syn()</code> 记账（+40 sent），建链成功再 <code>received_synack()</code>（+40/+40）</span></div>
+  <div class="step"><span class="n">握手</span><b>非载荷字节</b><span class="sm">MSE 加密握手（<code>encryption</code> 非关闭）+ BT 握手 68B + 扩展握手/bitfield —— 全部 payload=0 → 进 <code>recv_bytes</code>；每笔 socket 收发再按模型加 IP 开销</span></div>
+  <div class="step"><span class="n">立刻断开</span><b>seed↔seed 冗余</b><span class="sm">两端都是 seed 时 libtorrent 主动断开：<code>errors::upload_upload_connection</code>（<code>close_redundant_connections</code> 默认 true）→ 连接存活 &lt;1s、<b>从不进 peer 表</b>，故 <code>total_peer_connections</code> 恒 0、payload 恒 0，只剩握手字节</span></div>
+</div>
+<p class="sm">断开判据出处：<code>bt_peer_connection.cpp:2123-2129</code>（<code>t-&gt;is_finished() &amp;&amp; upload_only() &amp;&amp; close_redundant_connections</code> → <code>disconnect(upload_upload_connection)</code>）与 <code>peer_connection.cpp:2344-2350</code>；开关默认值见 <code>settings_pack.cpp:150</code>（<code>SET(close_redundant_connections, true, nullptr)</code>），qB 未覆盖它。</p>
+
+<h4>4.5.4 量级闭环（本轮实测，全部只读）</h4>
+<table>
+  <tr><th style="width:200px">观测</th><th>数值</th><th>推论</th></tr>
+  <tr><td>alltime 增速（4 次独立 60–90s 窗）</td><td class="num">dl 487–602 / ul 532–614 B/s</td><td>与 07:24 盯盘的 545/588 B/s 同量级，跨 1 小时稳定</td></tr>
+  <tr><td>同期 payload 增速</td><td class="num">dl 0 / ul 0（每次）</td><td>细流不含任何载荷</td></tr>
+  <tr><td>新出站连接速率（75.1s 内 473 次抓样，统计不同本地端口）</td><td class="num">17 个 / 75.1s = 0.23 连接/s</td><td>出站端口确落在 qB 配置的 <code>outgoing_ports 61234–65000</code> 区间</td></tr>
+  <tr><td>折合单连接字节数</td><td class="num">37,397 / 17 ≈ 2.2 KB（下行）</td><td>正是「MSE 握手 + BT 握手 + 扩展握手/bitfield」的量级；<b>0.23 × 2.2 KB ≈ 500 B/s = 实测增速</b>，闭环</td></tr>
+  <tr><td>连接形态（netstat 抓样）</td><td class="mono">8×SYN_SENT 持续 18–21s（不可达 peer，超时回收）<br>若干 ESTABLISHED → FIN_WAIT_1（本端先关，存活 ≤1 个采样）</td><td>出站尝试 churn：既有连不上的（只记 sent 侧开销），也有连上即断的（记双向握手字节）</td></tr>
+  <tr><td>日志</td><td>反复 <code>performance warning: too few ports allowed for outgoing connections</code></td><td>libtorrent 对 <code>outgoing_ports</code> 范围过窄导致出站绑定 <code>address in use</code> 的告警（<code>performance_alert::too_few_outgoing_ports</code>，<code>alert_types.hpp:486-490</code>）→ 佐证「出站连接尝试频繁且大量失败/回收」</td></tr>
+</table>
+<div class="box warn">
+  <div class="t">两项边界（避免过度断言）</div>
+  <p>① 单连接 2.2 KB 里「MSE 握手 / BT 握手 / 扩展握手 / bitfield」各占多少，本报告无法拆分——WebUI 不暴露 libtorrent 原始计数器（<code>session_stats</code> 全套），要拆到字节级需在受控环境抓 <code>net.*</code> 计数器或抓包。</p>
+  <p>② 细流是<b>真实 socket 收发字节</b>（记账点就在 socket 读/写路径上，非纯计数幻觉），但幅度太小，无法在本机 NIC 总量里分离验证（同期整机 rx/tx 达 227/271 KB/s，来自其它进程）。</p>
+</div>
+
+<h4>4.5.5 版本口径注记</h4>
+<p class="sm">本版引用的行号取自 <code>D:/Projects/Else/qBittorrent</code>（master）与 <code>D:/Projects/Else/libtorrent</code>（<b>2.1.2</b>），运行实例是 qB <b>5.2.3</b>（内置 libtorrent 2.0.x 分支）。本报告依赖的记账结构（<code>session_stats_metrics</code> 键名、<code>received_bytes</code>/<code>trancieve_ip_packet</code>/<code>sent_syn</code> 三处自增点、<code>upload_upload_connection</code> 断开判据）在两个版本上是同一套；差异点仅有告警枚举名（2.1.2 为 <code>too_few_outgoing_ports</code>，其字符串即本实例日志中的那句），不影响结论。</p>
+
+<h2><span class="no">05</span>同类问题谱系（不是一次性）</h2>
+
+<table>
+  <tr><th style="width:150px">情形</th><th>机理</th><th>呈现</th></tr>
+  <tr><td><b>午夜跨天缝</b><br><span class="sm">10-14 23:45:51 → 10-15 00:00:01.5</span></td><td>z 游程跨天封口，快照冻结 830s 的细流（+517,334 dl ≈ 623 B/s）</td><td>24h 视图 00:00:00 桶 dl=6,807 / up=7,331（前后皆 0）—— 同机理小号版，30s 桶稀释后无人注意</td></tr>
+  <tr><td><b>进程重启缝</b><br><span class="sm">本次 06:36</span></td><td>同上，但隐藏 6.6 小时 / ~15 MB</td><td>2s 桶 6.9 MB/s 幻影尖峰 + 3 个 null 桶</td></tr>
+  <tr><td><b>计数器重置缝</b></td><td>写侧已兜底（关块重立基线 + 读侧 cur&lt;last→null）</td><td>前作已覆盖，本次未触发</td></tr>
+  <tr><td><b>停机洞</b><br><span class="sm">10-14 两段</span></td><td>进程停机，qB 照常跑</td><td>null 区长呈现（诚实），流量整体丢失 —— 与本次「隐形」性质不同</td></tr>
+  <tr><td><b>agg 视图</b></td><td>00:00–06:00 小时行全部携带冻结快照 + 零速率</td><td>细流在 agg 视图同样不可见；接缝差摊到 06:00 小时桶 ≈4.2 KB/s 无可见尖峰；但 07:00 小时行封口时 totals 线会有一次 +15 MB 台阶</td></tr>
+</table>
+
+<h2><span class="no">06</span>影响面</h2>
+<ul>
+  <li><b>图面</b>：raw 段窗（1m–24h）在每次 auto-qb 重启后出现单桶巨峰（幅度 = 隐藏增长量 ÷ 桶宽，与窗宽成反比）；24h 窗 ~0.5 MB/s 已足够醒目；1m/5m 窗可达数十 MB/s。</li>
+  <li><b>计量</b>：agg 的 hour/day 行速率均值被细流稀释（不可见），但 totals 台阶会在小时/日封口时出现；日对账（B 基线差 vs r 记录捕获）在活跃期误差 &lt;1%，低载期误差 = 隐藏增长量。</li>
+  <li><b>频率</b>：细流持续存在 ⇒ 每次 auto-qb 重启都会复发（10-14 当天重启 6 次，只是前几次隐藏量小、无人留意）；用户重启越频繁，尖峰越密。</li>
+  <li><b>不涉</b>：qB 本体未重启（session dl 186.58 GB / 180 种子连续）；数据无损坏（z 行坏行校验未触发）；agg 恢复口径正确（补算小时 0）。</li>
+</ul>
+
+<h2><span class="no">07</span>修复方向建议（仅建议，本轮未动任何代码）</h2>
+
+<table>
+  <tr><th style="width:110px">层级</th><th>建议</th><th style="width:240px">收益 / 代价</th></tr>
+  <tr><td><b>写侧</b><br><span class="sm">最近根因</span></td><td>z 游程封口时把 totals 快照刷新为 <code>last_seen</code>（或对「totals 已增长而速率读 0」的游程补一条显式 r 记录），把隐藏增长写进磁盘链，接缝差归零。</td><td>尖峰从「整个隐藏量」降为「封口到重启间的真实增长」；改一行封口逻辑 + 配套用例</td></tr>
+  <tr><td><b>读侧</b></td><td><code>v4_rate_from_totals</code> 对接缝点（相邻点时间差超阈值 / 跨块跨天边界）按<b>真实时间跨度</b>摊配（rate = delta/Δt_segment）而非桶宽；超长接缝（如 &gt;60s）宁可标 null（诚实断线）。</td><td>消除单桶归因的放大效应；纯读侧，旧数据即受益</td></tr>
+  <tr><td><b>同步层</b></td><td>速率键连续 N 轮缺席记 WARNING（可观测性）；或定期（如每 60s）一次 rid=0 全量刷新强制取回速率键。</td><td>成本一次全量 maindata/分钟；让「速率可能陈旧」可见</td></tr>
+  <tr><td><b>呈现层</b></td><td>meta 带 <code>server_started_at</code> / 接缝标记，前端对重启缝给「数据接缝中」提示而非纯 null 区。</td><td>消除「无采样区延伸到观察时刻」的误读</td></tr>
+  <tr><td><b>qB 口径</b><br><span class="sm">本版已由源码回答</span></td><td>结论：<code>alltime_dl/ul</code> <b>确实含非 payload 字节</b>，精确构成 = <code>net.recv_bytes</code>（payload + BT 协议字节）+ <code>net.recv_ip_overhead_bytes</code>（模型化 IP 开销）；<b>不含</b> tracker 字节与 DHT 报文本体（仅含 DHT 的 IP 开销）。建议把这条口径写进 qb-traffic 文档（流量图 = alltime 差分，含握手/协议/开销成分），避免后续再把「几百 B/s 基线」当成读数噪声。</td><td>消除口径歧义；不改代码</td></tr>
+  <tr><td><b>配置侧</b><br><span class="sm">本版新增</span></td><td>出站端口范围被限制在 <code>61234–65000</code>（<code>outgoing_ports_min/max</code>）＋ <code>connection_speed=30</code>，libtorrent 因此反复报 <code>too_few_outgoing_ports</code>（address in use）并进入「尝试失败→回收→重试」的 churn。建议评估是否放开该范围（或让 libtorrent 自选），可减少失败尝试与日志噪声。</td><td>降低 churn 与日志噪声；对细流总量影响有限（细流主体是「连上即断」的握手字节，不是失败尝试）</td></tr>
+</table>
+<p class="sm">优先级建议：写侧快照刷新（消尖峰）+ 读侧接缝摊配（防放大）两步即可闭环本事故；同步层与呈现层是加固；qB 口径（本版已答）与配置侧出站端口是长期清理项。注意：<b>细流本身不建议「治」</b>——它是 seed↔seed 冗余连接的握手开销，属 libtorrent 正常行为，且幅度只有几百 B/s；要治的是它在接缝处的放大方式（写侧/读侧两条）。</p>
+
+<h2><span class="no">08</span>验证方法（可复跑探针）</h2>
+<ol>
+  <li><b>接缝差</b>：<code>head -3 qb-traffic-v4/global/2026-10-15.dat</code>（B 行基线）对比 <code>curl -b &lt;sid&gt; "http://127.0.0.1:16585/api/v2/sync/maindata?rid=0"</code> 的 alltime_dl/alltime_ul。</li>
+  <li><b>细流在场</b>：每 5s 采 transfer/info + torrents/info(limit=200) + sync/maindata?rid=0，60s 内 alltime 涨而 payload 全平（本次 +32,692/+35,281 vs 全 0）。</li>
+  <li><b>键省略</b>：同 rid 链连打两次 sync/maindata，比对 server_state 键集（本次第一次 4 键无速率、第二次空）。</li>
+  <li><b>尖峰与缝</b>：<code>curl "http://127.0.0.1:38080/api/traffic/qb/global?window=30m|3h|24h"</code>，看 06:36:08 桶与 06:36:02/04/06 null 桶（24h 窗另可核对 00:00:00 午夜小包）。</li>
+  <li><b>对账</b>：按块解析天文件（B 基线 + r/z 行 delta 相对基线），Σ(块末绝对值 − 块基线) vs 相邻日 B 基线差（10-13/10-14 捕获率见表）。</li>
+  <li><b>出站连接速率（本版新增，判「细流=短命连接」的关键）</b>：先取 qB PID（<code>netstat -ano -p TCP | findstr LISTENING | findstr &lt;listen_port&gt;</code>），然后每 ~0.5s 抓一次该 PID 的非回环 TCP 行，统计<b>不同本地端口数 / 时长</b>＝新出站连接速率；同时读 <code>sync/maindata</code> 的 alltime 增速 → 单连接字节数 = 增速 ÷ 连接速率。本轮实测 0.23 连接/s × 2.2 KB ≈ 500 B/s。</li>
+  <li><b>排除项快照（本版新增）</b>：<code>GET /api/v2/app/preferences</code> 看 <code>dht</code>/<code>pex</code>/<code>lsd</code>/<code>bittorrent_protocol</code>/<code>encryption</code>/<code>outgoing_ports_min|max</code>；<code>GET /api/v2/torrents/info</code> 看 state 分布；<code>GET /api/v2/torrents/trackers?hash=</code> 看 DHT/PeX/LSD 是否「这是私有 torrent」与 announce 状态。</li>
+  <li><b>连接形态（本版新增）</b>：<code>netstat -ano -p TCP</code> 过滤 qB PID，看 <code>SYN_SENT</code>（连不上的尝试，寿命≈21s）与 <code>ESTABLISHED→FIN_WAIT_1</code>（连上即被本端关闭的 seed↔seed 冗余连接）；后者与 <code>GET /api/v2/log/main</code> 的 <code>too few ports allowed for outgoing connections</code> 告警互为佐证。</li>
+</ol>
+
+<h2><span class="no">09</span>未决与待确认</h2>
+<ul>
+  <li><b>细流的 qB 侧精确来源</b> —— <span class="tag ok">本版已定位</span>：计数器链、自增点、被排除项与量级闭环见 §04.5。剩余未拆分项只有一处：单连接约 2.2 KB 里「MSE 握手 / BT 握手 / 扩展握手 / bitfield」各占多少<b>无法从 WebUI 观测面拆分</b>（qB 不暴露 libtorrent <code>session_stats</code> 原始计数器）；要拆到字节级需受控环境抓 <code>net.*</code> 计数器或抓包，属可选深挖，不影响本事故的修复结论。</li>
+  <li><b>用户观察时刻的精确对应</b>：浏览器渲染时序无日志；「延伸到观察时刻」已由投递黑障机理解释，但用户实际观察窗与黑障窗的秒级对应无法复盘。</li>
+  <li><b>拍点跳过 ~2%</b>（15,518 vs 15,839 槽）：任务线竞争的次要注记，读侧等距重建自洽，建议另案评估是否需要在槽位密度上显式化。</li>
+</ul>
+
+<h2><span class="no">10</span>证据附件（原始数据片段，只读）</h2>
+
+<h4>qb-traffic-v4/global/2026-10-15.dat（事故天文件，101 字节，全文）</h4>
+<pre><span class="c"># auto-qb qb-traffic v4</span>
+<span class="c">key,global</span>
+<span class="b">B,1791993601,1.5,3694464618757,1869312739353</span>
+<span class="y">z,15518,0,0,23759025</span></pre>
+
+<h4>qb-traffic-v4/global/2026-10-14.dat（尾部）</h4>
+<pre><span class="b">B,1791992771,1.5,3694464101423,1869312182201</span>   <span class="c">← 23:45:51 开块，基线 = 当日最后真实快照</span>
+<span class="y">z,546,0,0,828844</span>                              <span class="c">← 546 槽零速游程，跨天封口（23:45:51→23:59:39.8）</span></pre>
+
+<h4>三日 B 基线（alltime 真值增长对照）</h4>
+<pre>10-13 00:00:01   B,1791820801,1.5,<span class="b">3599640017554</span>,1847435985517
+10-14 00:00:01   B,1791907201,1.5,<span class="b">3600177215697</span>,1858180050083     <span class="c">全天 dl +537,198,143 / up +10,744,064,566</span>
+10-15 00:00:01.5 B,1791993601,1.5,<span class="b">3694464618757</span>,1869312739353     <span class="c">全天 dl +94,287,403,060 / up +11,132,689,270</span>
+当前 (07:2x)     alltime_dl=<span class="r">3694479905139</span>  alltime_ul=<span class="r">1869329236976</span>   <span class="c">夜间+凌晨隐藏 +15,286,382 / +16,497,623（仍在涨）</span></pre>
+
+<h4>agg.dat hour 行（10-15，新实例启动恢复重建）</h4>
+<pre><span class="y">hour,1791997200,0,0,0,0,3694464618757,1869312739353,3600</span>   <span class="c">00:00 全零速，totals = 冻结快照</span>
+<span class="y">hour,1792008000,0,0,0,0,3694464618757,1869312739353,3600</span>   <span class="c">04:00 同上</span>
+<span class="y">hour,1792015200,0,0,0,0,3694464618757,1869312739353,2160</span>   <span class="c">06:00 开放小时（cov 2160s，自 06:36:10 起由活尾合流）</span></pre>
+
+<h4>日对账（捕获率）</h4>
+<pre>10-13  真增 dl  537,198,143 / up 10,744,064,566   捕获 dl  533,540,028 / up 10,717,214,863   <span class="g">99.3% / 99.7%</span>
+10-14  真增 dl   94,287,403,060 / up 11,132,689,270   捕获 dl   93,824,611,951 / up  9,872,928,127   <span class="g">99.5% / 88.7%</span>
+        <span class="c">10-14 缺口 ≈ 当天两段停机（06:14–07:27 + 07:51–10:32，共 ~3.9h）的真实流量，图表以 null 区诚实呈现</span></pre>
+
+<h4>本版新增：细流四次实测（只读，全部 B/s）</h4>
+<pre>窗 1  67.3s   alltime dl <span class="r">+40,528</span> / ul <span class="r">+41,372</span>  ->  <span class="num">602 / 614</span>    payload dl/ul = 0 / 0   peers 0
+窗 2  63.5s   alltime dl +37,019 / ul +37,045        ->  <span class="num">583 / 583</span>    payload dl/ul = 0 / 0   peers 0
+窗 3  66.4s   alltime dl +32,337 / ul +35,341        ->  <span class="num">487 / 532</span>    payload dl/ul = 0 / 0   peers 1->1
+窗 4  75.1s   alltime dl +37,397 / ul +41,667        ->  <span class="num">498 / 555</span>    payload dl/ul = 0 / 0   peers 0->1
+              <span class="c">dl/ul 恒在 0.92–1.00 —— 与「IP 开销对每次收发双向各记一次」的模型一致</span>
+窗 4 附：473 次抓样内非回环不同本地端口 <span class="num">17</span> 个 / 75.1s = <span class="num">0.23 连接/s</span>
+        -> 单连接下行字节 = 37,397 / 17 ≈ <span class="num">2.2 KB</span>；0.23 × 2.2 KB ≈ 500 B/s（闭环）</pre>
+
+<h4>本版新增：netstat 连接形态（qB PID，非回环）</h4>
+<pre>192.168.1.122:63277  223.66.205.147:34567   SYN_SENT     <span class="c">┐</span>
+192.168.1.122:63278  219.152.0.255:26881    SYN_SENT     <span class="c">│</span>
+192.168.1.122:63279  221.219.96.199:9171    SYN_SENT     <span class="c">│ 8 个连不上的出站尝试</span>
+192.168.1.122:63280  117.189.17.39:26881    SYN_SENT     <span class="c">│ 连续 18–21s 同批存在</span>
+192.168.1.122:63281  59.39.225.10:34567     SYN_SENT     <span class="c">│ （Windows SYN 重传超时后回收）</span>
+192.168.1.122:63282  14.122.149.145:34567   SYN_SENT     <span class="c">│</span>
+192.168.1.122:63283  116.18.90.212:34567    SYN_SENT     <span class="c">│</span>
+192.168.1.122:63284  180.115.188.70:34567   SYN_SENT     <span class="c">┘</span>
+192.168.1.122:63251  168.70.116.16:51636    ESTABLISHED -> FIN_WAIT_1   <span class="c">← 连上后本端立即关闭（seed↔seed 冗余）</span>
+192.168.1.122:63257  144.225.43.90:47878    ESTABLISHED -> FIN_WAIT_1   <span class="c">← 同上，存活 ≤1 个采样</span>
+192.168.1.122:63264-63270  36.212.34.164:55032  ESTABLISHED ×3            <span class="c">← 同一 peer 反复建链/断开</span>
+<span class="c">TIME_WAIT 归属在本机 netstat 中不可靠（不计入判断）；本地端口均落在 qB 配置的 61234–65000 区间内</span></pre>
+
+<h4>本版新增：qB prefs 排除项快照（GET /api/v2/app/preferences）</h4>
+<pre>dht = <span class="r">False</span>   pex = <span class="r">False</span>   lsd = <span class="r">False</span>          <span class="c">← DHT/PeX/LSD 全关（私有种子，per-torrent 亦显示「这是私有 torrent」）</span>
+bittorrent_protocol = 0            <span class="c">← TCP + uTP（uTP 报文不进 net.recv_bytes）</span>
+encryption = 1                     <span class="c">← 协议加密开启（握手字节非 payload）</span>
+listen_port = 61323   connection_speed = 30   max_connec = 100
+outgoing_ports_min = <span class="r">61234</span>  outgoing_ports_max = <span class="r">65000</span>   <span class="c">← 出站端口被限死在小区间 → too_few_outgoing_ports 告警</span>
+max_active_uploads = 3   max_active_torrents = 5   queueing_enabled = False</pre>
+
+<h4>本版新增：种子状态与 tracker 状态（GET /api/v2/torrents/info | trackers）</h4>
+<pre>state 分布：stalledUP <span class="num">120</span> / stoppedDL <span class="num">36</span> / missingFiles <span class="num">24</span>   （n=180，无一个在下载/上传）
+tracker：DHT / PeX / LSD 三条均 = 「这是私有 torrent」(status 0)
+         http://kufirc.com:7456/&lt;passkey 略&gt;/announce            status 2 (Working)  peers 0
+         https://crabpt.vip/announce.php?passkey=&lt;略&gt;           status 2 (Working)  peers 0
+         https://t.hdhome.org/announce.php?passkey=&lt;略&gt;         status 2 (Working)  peers <span class="num">4</span>
+         https://pt.btschool.club/announce.php?passkey=&lt;略&gt;     status 2 (Working)  peers 0
+         <span class="c">→ announce 正常、swarm 里有 peer 可连；但连接建起来即因 seed↔seed 冗余被断开</span></pre>
+
+<h4>本版新增：qB 日志佐证（GET /api/v2/log/main）</h4>
+<pre><span class="y">W</span> 性能警报：Jade.The.Last.Steep.Ascent...: performance warning: <span class="r">too few ports allowed for outgoing connections</span>
+<span class="y">W</span> 性能警报：纵横古今！我靠神秘古井逆袭人生...: performance warning: <span class="r">too few ports allowed for outgoing connections</span>
+<span class="y">W</span> 性能警报：Spider-Man.Brand.New.Day...: performance warning: <span class="r">too few ports allowed for outgoing connections</span>
+<span class="y">W</span> 性能警报：Jade.Good.Cheap.Eats.S03...: performance warning: <span class="r">too few ports allowed for outgoing connections</span>
+<span class="y">W</span> 成功监听 IP。IP：“2409:...:4a0a”。端口：“TCP/61323” / “<span class="r">UTP</span>/61323”      <span class="c">← uTP 确实在启用</span>
+<span class="c">I</span> 已更新 RSS 订阅 'https://hhanclub.net/torrentrss.php?passkey=&lt;略&gt;'   <span class="c">← 每 30 分钟一次（qB 侧 HTTP，与 libtorrent 计数器无关）</span>
+<span class="c">I</span> WebAPI 登录成功。IP：192.168.1.122                                          <span class="c">← 每 5 分钟一次（auto-qb/浏览器轮询）</span>
+<span class="c">N</span> Couldn't save torrent resume data to '...\BT_backup\&lt;hash&gt;.fastresume'. Error: …   <span class="c">← 与细流无关，附记</span>
+<span class="g">判据出处</span>：libtorrent <code>performance_alert::too_few_outgoing_ports</code> 的注释即「outgoing_ports 范围太小导致出站绑定 address in use」（alert_types.hpp:486-490）</pre>
+
+<div class="foot">
+  <p>本报告为只读取证产物：未修改任何源码、配置与运行数据；未入池 issue / 未立档 / 未提交。修复建议见 §07，待用户拍板后另走 plan 工位。</p>
+  <p>取证基线：clone <code>auto-qb-clone3</code> @ 8d089678（开工同步快进 9b7ec767→8d089678）；运行实例 auto-qb（生产）06:36:08 重启后版本，qBittorrent v5.2.3（127.0.0.1:16585，180 种子，PID 5976，BT 监听 61323）。</p>
+  <p><b>本版（26-10-15-0808）增补</b>：按用户指令引入外部源码库 <code>D:/Projects/Else/qBittorrent</code>（master）与 <code>D:/Projects/Else/libtorrent</code>（2.1.2）做源码级定位，并在 07:47–08:05 对运行实例补做只读探针（WebUI API / netstat / qB 日志；<b>未写任何文件、未改任何配置、未 stop/start 任何组件</b>）。取证快照仍是一次性的，仅就地抬 <code>doc-updated</code>，未新建同题材文件（遵循 doc-forms 的「计划/报告改版同文件 + 抬 doc-updated」口径）。</p>
+</div>
+
+</div>
+</body>
+</html>

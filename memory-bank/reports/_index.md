@@ -18,6 +18,7 @@
 
 ## Done
 
+- [26-10-15-0728] [WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告](26-10-15-0728-report-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-14-1135] [HR 取数通道 · 去端口路线 × 跨机计划 联合适配分析](26-10-14-1135-report-hr-channel-portless-remote-fit.html) — `hr-channel-portless-remote-fit`
 - [26-10-14-1110] [HR 取数通道「去端口配置 + 后端主动注册」可行性分析 — 背景报告](26-10-14-1110-report-hr-channel-portless-registration.html) — `hr-channel-portless-registration`
 - [26-10-14-0136] [详情表格重构(26-10-13-0811)实施与复查经过 — 背景报告](26-10-14-0136-report-webui-detail-table-rebuild-review.html) — `webui-detail-table-rebuild`
