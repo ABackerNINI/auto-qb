@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-1422">
+<meta name="doc-updated" content="26-10-15-1502">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247)<br>P4 已实施(1422) · P5–P6 待拍板</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247)<br>P4 已实施(1422)<br>P5 已实施(1502) · P6 已评估(1502)</div>
 </nav>
 
 <header class="cover">
@@ -136,7 +136,7 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4 已完成 · P1 暂缓 · P5–P6 待拍板</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4/P5/P6 已完成 · P1 暂缓</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
@@ -333,7 +333,7 @@
     <div class="step">
       <div class="sid">P5</div>
       <div class="sbody">
-        <div class="st">文档口径:把「alltime 差分含握手/开销」写进单点 <span class="pill p3">零改码</span></div>
+        <div class="st">文档口径:把「alltime 差分含握手/开销」写进单点 <span class="pill p3">零改码</span> <span class="pill p3">已完成 26-10-15-1502 · 结论见下方实施记录</span></div>
         <ul>
           <li><b>落点</b>:<span class="k">memory-bank/progress/implemented-webui-history.md</span>(「qB 口径流量图三图」段)。</li>
           <li><b>做法</b>:记录口径 -- <code>qb-traffic</code> 的流量 = qB alltime 差分 = <code>net.recv_bytes</code>(payload + BT 协议字节)+ <code>net.recv_ip_overhead_bytes</code>(模型化 IP 开销);<b>不含</b> tracker 字节与 DHT 报文本体;基线几百 B/s(白天 swarm 活跃可达 ~6.5 KB/s)<b>不是读数噪声</b>。引报告 §04.5。</li>
@@ -345,7 +345,7 @@
     <div class="step">
       <div class="sid">P6</div>
       <div class="sbody">
-        <div class="st">配置侧评估:出站端口范围与连接 churn <span class="pill p3">不改本仓码</span></div>
+        <div class="st">配置侧评估:出站端口范围与连接 churn <span class="pill p3">不改本仓码</span> <span class="pill p3">已完成 26-10-15-1502 · 结论见下方实施记录</span></div>
         <ul>
           <li><b>落点</b>:qB 侧 <code>outgoing_ports_min/max</code>(实例为 61234-65000)+ <code>connection_speed=30</code>;libtorrent <code>performance_alert::too_few_outgoing_ports</code>。</li>
           <li><b>做法</b>:评估放开端口范围(或让 libtorrent 自选)以减少失败尝试与日志噪声;<b>只出结论与理由,不改 auto-qb 代码</b>。注意对细流总量影响有限(细流主体是「连上即断」的握手字节,不是失败尝试)。</li>
@@ -505,6 +505,50 @@
       <li><b>#5 立档:本轮触 5 源文件(≥3)→ 已立档</b> <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(阈值 #2;计划 §07.5 预授权路径,doc-refs 已互挂)。</li>
       <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#3 已按 P3 定案(只做①);#4 已按 P2 定案(P2 单独实施闭环)。P5/P6 仍待拍板(与 P4 无依赖,可独立实施)。</li>
     </ul>
+  </div>
+
+  <h3 id="p5-record"><span class="tag2">REC</span>实施记录 · P5 文档口径写入单点(26-10-15-1502 · clone @ 98e14de2)</h3>
+  <p class="lead">零改码文档轮:改动 1 个 KB 文件 —— <code>memory-bank/progress/implemented-webui-history.md</code>「qB 口径流量图三图」条目追加「2026-10-15 口径文档化(P5)」段(P2 段的一句话口径注记升级为完整公式);未触源码/配置/运行数据。</p>
+  <table>
+    <thead><tr><th style="width:190px">决策点</th><th>定案与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>写入的口径</b></td>
+        <td>qb-traffic 三图的「流量」= qB alltime 计数器差分 = <code>net.recv_bytes</code>(payload + 全部 BT 协议字节 —— 握手/bitfield/扩展握手/keep-alive 等 43 处以 payload=0 记账)+ <code>net.recv_ip_overhead_bytes</code>(模型化 IP/TCP 开销,每次收发双向各记一次);<b>不含</b> tracker 字节(独立计数器,不参与 alltime 合成)与 DHT 报文本体(仅 DHT 的 IP 开销计入)。基线几百 B/s(夜间 ~0.5 KB/s,白天 swarm 活跃可达 ~6.5 KB/s)是<b>真实 socket 收发</b>,不是读数噪声 —— 实体 = seed↔seed 冗余短命连接的握手/协议字节(0.23 新出站连接/s × ~2.2 KB ≈ 500 B/s,量级闭环)。</td>
+      </tr>
+      <tr>
+        <td><b>证据链与判据</b></td>
+        <td>计数器级证据单点 = 报告 §04.5(R2 轮已对 D:/Projects/Else 源码核验);量级闭环 = 报告 §04.5.4。口径写入 progress 实施权威条目后,后续读图/排障不再把基线当噪声或误当 payload 缺口 —— 计划判据「口径写入单点」达成。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="p6-record"><span class="tag2">REC</span>实施记录 · P6 出站端口范围与连接 churn 评估(26-10-15-1502 · clone @ 98e14de2)</h3>
+  <p class="lead">评估轮:零改码 —— 未改本仓任何代码/配置,<b>未改 qB 侧 prefs</b>(计划非目标:只出结论与理由,改与不改都只是结论)。事实基础 = 报告 §04.5.4/§07 配置侧 + 运行实例判据快照(outgoing_ports 61234-65000 / connection_speed=30 / 日志反复 <code>performance warning: too few ports allowed for outgoing connections</code> / netstat 8×SYN_SENT 存活 18-21s + ESTABLISHED→FIN_WAIT_1)。</p>
+  <table>
+    <thead><tr><th style="width:190px">决策点</th><th>定案与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>结论:建议改(低优先级)</b></td>
+        <td>收益 = 消除 <code>too_few_outgoing_ports</code>(<code>performance_alert</code> 级,非错误)日志噪声 + 解除出站 bind 阶段失败(address in use)的边际建链损失;改动入口在 qB 侧手工(工具-选项-高级),auto-qb 零涉及。不改也无正确性风险,忽略的代价仅日志噪声与边际建链损失 —— 故定级「低优先级清理项」而非缺陷。</td>
+      </tr>
+      <tr>
+        <td><b>首选形态:两键归 0(OS 自选)</b></td>
+        <td>qB 高级设置「Outgoing ports (Min)/(Max)」两键归 0 = 取消专用段限制,出站端口回落 OS 临时端口自选(Windows 默认动态池 49152-65535,16384 个)。若需保留专用段(防火墙/QoS 按段放行 BT 出站时),则把范围给足余量(如整体 49152-65535):现配 61234-65000 仅 3,767 个,在 0.23 新连接/s + 失败重试 + TIME_WAIT 未释放端口的叠加下不敷分配,libtorrent 据此反复告警。改后建议重启 qB 一次,确保存量出站 socket 不再按旧段绑定。</td>
+      </tr>
+      <tr>
+        <td><b>不动 connection_speed=30</b></td>
+        <td>调低它只能压 bind 失败率,却拖慢建链节奏 —— 收益面被「放开范围」完全覆盖且无此副作用,不作建议;维持现值。</td>
+      </tr>
+      <tr>
+        <td><b>影响面界定(对齐计划预设)</b></td>
+        <td>放开范围治的是 <b>bind 阶段失败</b>与日志噪声;<b>治不了</b> connect 阶段失败(不可达对端的 SYN_SENT 18-21s 由 tracker 回包质量决定,churn 主体保留);细流主体(连上即断的握手字节)不受影响。诚实注记:bind 失败解除后,原被挡掉的尝试可能转化为成功建链 ⇒ 细流或有<b>边际上升</b>(量级仍在几百 B/s~KB/s,图面无感)。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box ok">
+    <div class="t">P5/P6 判定 + 计划状态收口</div>
+    <p>P5 判据「口径写入单点」达成;P6 判据「结论入档(改 / 不改 + 理由)」达成 —— 是否实际改 qB prefs 由用户手工决定。待拍板项(§07):#2/#3/#4 已按前轮定案,#5 已按 P4 落地,#1(P1 形态)随 P1 暂缓后置,本轮无新拍板项。计划 Open 状态仅余:P1 暂缓 + E2E5 真机人工验收。零改码轮无测试面变化,P4 基线仍为当前事实源(未跑全量、未新建基线切片)。</p>
   </div>
 </section>
 
@@ -673,6 +717,7 @@
   <p>26-10-15-1145 — 用户拍板「P1 暂缓, 提交」:P1 步骤标记与待拍板状态更新,其余不动。</p>
   <p>26-10-15-1247 — P3 实施完成:§03 追加「实施记录 · P3」,状态栏与 P3 步骤标记更新;范围拍板 = 只做①缺席告警(§07 #3),做法②不实施;全量数字见基线切片 <code>testing/baselines/26-10-15-1247-qb-traffic-restart-spike-gap-p3.md</code>。</p>
   <p>26-10-15-1422 — P4 实施完成:§03 追加「实施记录 · P4」,状态栏与 P4 步骤标记更新;meta 新键 server_started_at(模块级进程出生锚点)+ 前端 _qbSeamHint 判据 + drawer.html 提示行,断线语义零改动;E2E5 留真机人工验收;全量数字见基线切片 <code>testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md</code>;触 5 源文件 ≥3 已立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(§07 #5 更新);连带 _auth 单点收敛(写入判据误报处置,用户拍板①,坑档 pitfalls/testing/credential-shape-write-guard.md)。</p>
+  <p>26-10-15-1502 — P5/P6 实施完成(零改码轮):§03 追加「实施记录 · P5」「实施记录 · P6」,状态栏与步骤标记更新;P5 = 口径写入 <code>progress/implemented-webui-history.md</code> 单点(引报告 §04.5);P6 = 出站端口评估结论「建议改(低优先级):首选 qB 侧两键归 0(OS 自选)或给足余量,不动 connection_speed」入档,qB prefs 与本仓均未动。零改码无测试面变化(P4 基线仍为当前事实源)。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

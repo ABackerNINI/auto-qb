@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-15
 **Updated:** 2026-10-15
-**Summary:** 取证报告 26-10-15-0728 的实施专题立档(P4 轮触 5 源文件命中立档阈值 #2, 计划 §07.5 预授权路径)。分步实施按计划 26-10-15-0829 推进: P0 只读定位 / P2 读侧摊配 / P3 速率键新鲜度 / P4 呈现层接缝标记已完成, P1 用户拍板暂缓, P5/P6 待拍板。
+**Summary:** 取证报告 26-10-15-0728 的实施专题立档(P4 轮触 5 源文件命中立档阈值 #2, 计划 §07.5 预授权路径)。分步实施按计划 26-10-15-0829 推进: P0 只读定位 / P2 读侧摊配 / P3 速率键新鲜度 / P4 呈现层接缝标记 / P5 口径文档化 / P6 出站端口评估已完成, P1 用户拍板暂缓。
 **Refs:** memory-bank/plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html, memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md
 **Topics:** qb-traffic-restart-spike-gap
 
@@ -36,9 +36,10 @@
 | P1 写侧封口真值 | 暂缓 | 用户拍板 26-10-15-1145(治不到活尾期尖峰, 降级可选) |
 | P3 同步层速率键新鲜度 | Done | 计划 §03 实施记录 P3(只做①缺席告警); 基线切片 26-10-15-1247 |
 | P4 呈现层接缝标记 | Done | 本档案进度日志 R7; 基线切片 26-10-15-1418; E2E5 待真机人工验收 |
-| P5 口径文档化 | Open | 待拍板(零改码) |
-| P6 出站端口 churn 评估 | Open | 待拍板(不改本仓码) |
+| P5 口径文档化 | Done | 计划 §03 实施记录 P5; progress 单点「qB 口径流量图三图」口径段(引报告 §04.5) |
+| P6 出站端口 churn 评估 | Done | 计划 §03 实施记录 P6; 结论 = 建议改·低优先级·qB 侧手工, qB prefs 与本仓均未动 |
 
 ## 进度日志
 
 - **R7(2026-10-15 14:18, 本轮)**: 用户「实施计划P4」→ P4 落地(呈现层接缝标记)。改动 5 文件: `traffic_qb.py`(meta 加 `server_started_at`, 模块级进程出生锚点) / `qb_traffic_chart.js`(`_qbSeamHint` 纯函数 + `qbCurSeamHint` computed) / `drawer.html`(「数据接缝中」提示行, 三挂点共用块一处) / `test_web_traffic_qb.py`(meta 契约断言折入既有用例 + 17 处 `_auth(mgr)` 收敛, 用户拍板①) / `test_webui_static_dom_panel.py`(node 电池 +12 用例 + 第 6 节静态守阵)。守阵红绿双验 5 类突变判红(后端键删除 2 红 / 尾区判据删除 / 链内误报面放开 / 新键判据删除 / 模板行删除各 1 红)后还原复绿 61 passed; 全量 3363 passed + 4 skipped(基线切片 `testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md`, 与 P3 基线同数 —— 断言扩展无新测试函数)。触 5 源文件 ≥3 立档(本档案); 新坑档 1 条(`pitfalls/testing/credential-shape-write-guard.md`); 计划 doc P4 实施记录 + activeContext R7。E2E5(重启后人工观察不再误读)留真机兑现; 未入池 issue(无计划外缺陷); 随本专题入库。
+- **R8(2026-10-15 15:02)**: 用户「实施计划P5 P6」→ **零改码轮**(未触源码/配置/运行数据/qB prefs): **P5** = 口径写入 progress 单点(implemented-webui-history.md「qB 口径流量图三图」条目) —— 流量 = alltime 差分 = net.recv_bytes(payload + BT 协议字节) + net.recv_ip_overhead_bytes(模型化 IP 开销, 双向各记); 不含 tracker 字节与 DHT 报文本体; 基线几百 B/s 是真实 socket 收发(seed↔seed 短命连接握手/协议字节)非噪声, 证据单点 = 报告 §04.5。**P6** = 出站端口评估结论入档: **建议改(低优先级)** —— 首选 qB 高级设置 outgoing_ports 两键归 0(OS 自选临时端口, Windows 默认池 49152-65535)或保留专用段则给足余量(现配 61234-65000 仅 3,767 端口, 0.23 新连接/s + 失败重试 + TIME_WAIT 叠加下不敷分配 ⇒ libtorrent 反复 too_few_outgoing_ports); 不动 connection_speed; 治 bind 失败与日志噪声, 治不了不可达对端的 connect 失败, 细流量级不变(或有边际上升)。改动面: 计划 HTML(P5/P6 实施记录 + 状态栏 + 变更记录, doc-updated=1502) + progress 单点 + 本档案 + activeContext 切片; 零改码无测试面变化(P4 基线仍为当前事实源, 未跑全量未新建切片); 无新坑; 未入池 issue; 随本专题入库。
