@@ -56,10 +56,11 @@
 - test_store_apply_sync_fallback_clears_server_state: 降级全量置 None(前端空态)
 - test_store_apply_sync_server_state_after_fallback_merges_from_empty: 降级置 None 后恢复 sync -> 从零合并(旧键不残留)
 - test_apply_delta_quantizes_eta_time_active_last_activity: 新量化字段(分钟桶); 负数哨兵不量化
-- test_store_rate_keys_absent_rounds_warn_once: 速率键连续缺席 -> 恰一次 WARNING 携带合并读数(P3; 合并行为不变)
-- test_store_rate_keys_below_threshold_no_warning: 缺席 N-1 轮不告警(阈值边界)
-- test_store_rate_keys_streak_resets_on_report_then_warns_again: 恢复上报复位计数; 新缺席段重新计数再告警
-- test_store_rate_keys_missing_server_state_counts_absent: 整包缺 server_state 亦计缺席(合并仍保留旧值)
+- test_store_rate_keys_absent_rounds_warn_once: 速率键连续无读数(从未上报) -> 恰一次 WARNING(P3; 合并行为不变)
+- test_store_rate_keys_full_snapshot_missing_warns_keeps_merged: 全量轮快照缺速率键 -> 告警且合并保留旧值
+- test_store_rate_keys_pure_seeding_no_warning: 回归: 纯做种 dl_info_speed 恒 0 长期缺席不告警(值未变非陈旧)
+- test_store_rate_keys_missing_server_state_after_seen_no_warning: 回归: 已收键+增量轮整包缺 server_state 不告警
+- test_store_rate_keys_streak_resets_on_report_then_warns_again: 恢复上报复位; 新无读数段重新计数再告警
 - test_store_rate_key_threshold_frozen: 阈值常量钉值(调整须显式改断言)
 - test_store_reset_sync_clears_rate_freshness: reset_sync 清新鲜度追踪
 """
@@ -837,78 +838,113 @@ def test_store_apply_sync_server_state_missing_keeps_previous():
     assert store.server_state == {"dht_nodes": 7}
 
 
-# ---------- 速率键新鲜度追踪(plan 26-10-15-0829 P3) ----------
+# ---------- 速率键新鲜度追踪(plan 26-10-15-0829 P3; 26-10-16 per-key 语义修订) ----------
+#
+# 判据(qB sync/maindata 增量轮逐键 diff, src/webui/api/synccontroller.cpp):
+#   已收到过的键在增量轮缺席 = 值未变 = 合并旧值即当前值 -> 不计无读数;
+#   全量轮快照缺速率键 / 该键从未收到过 -> 无读数, 连续 N 轮告警一次(恢复前节流)。
+
+
+def _force_full_round(store: TorrentStore) -> None:
+    """制造下一轮全量(rid 归零): qB 重启 / 本侧未知异常后的形态"""
+    store.rid = 0
 
 
 def test_store_rate_keys_absent_rounds_warn_once(caplog):
-    """速率键连续 N 轮未上报 -> 恰一次 WARNING(携带合并读数); 合并语义不受影响(缺席保留旧值)"""
+    """速率键连续 N 轮无读数(从未上报) -> 恰一次 WARNING; 合并语义不受影响"""
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"alltime_ul": 100}  # 首轮全量即无速率键: 全量快照缺键
+    store.apply_sync(api)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
+        for _ in range(_RATE_FRESH_WARN_ROUNDS + 2):  # 增量轮继续无速率键: 从未收到 -> 无读数
+            client.server_state = {"alltime_ul": 200}
+            store.apply_sync(api)
+    warns = [r.getMessage() for r in caplog.records if "速率键" in r.getMessage()]
+    assert len(warns) == 1, warns
+    assert f"连续 {_RATE_FRESH_WARN_ROUNDS} 轮" in warns[0]  # 首次告警 = 达到阈值的当轮
+    assert "从未上报 dl_info_speed,up_info_speed" in warns[0]
+    assert "dl=None" in warns[0] and "up=None" in warns[0]  # 从未收到: 合并读数为空
+    assert store._rate_absent_streak == 6  # 1(全量缺键)+5(增量从未收到); 节流后继续计数
+
+
+def test_store_rate_keys_full_snapshot_missing_warns_keeps_merged(caplog):
+    """全量轮快照缺速率键(rid 反复失效形态) -> 计数告警; 合并仍保留旧值(FIX-04a)"""
     client = FakeClient()
     store = TorrentStore()
     api = _api(client, store)
     client.server_state = {"dl_info_speed": 100, "up_info_speed": 50, "dht_nodes": 3}
     store.apply_sync(api)  # 全量轮: 键集完整(基线)
     with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
-        for _ in range(5):  # 连续 5 轮增量只带其它键(速率键缺席; 5 > N 足够触发节流)
+        for _ in range(_RATE_FRESH_WARN_ROUNDS):  # 连续全量轮缺速率键(每次 rid 归零)
+            _force_full_round(store)
             client.server_state = {"alltime_ul": 2500}
             store.apply_sync(api)
     assert store.server_state["dl_info_speed"] == 100  # 合并行为不变: 缺席保留旧值
     assert store.server_state["up_info_speed"] == 50
-    warns = [r.getMessage() for r in caplog.records if "未上报" in r.getMessage()]
+    warns = [r.getMessage() for r in caplog.records if "速率键" in r.getMessage()]
     assert len(warns) == 1, warns
-    assert "连续 3 轮" in warns[0]  # 首次告警 = 达到阈值的当轮
+    assert "全量快照缺 dl_info_speed,up_info_speed" in warns[0]
     assert "dl=100" in warns[0] and "up=50" in warns[0]  # 告警携带当前合并读数
 
 
-def test_store_rate_keys_below_threshold_no_warning(caplog):
-    """缺席 N-1 轮不告警(阈值边界): 单轮/少数轮缺席是增量语义的正常形态"""
+def test_store_rate_keys_pure_seeding_no_warning(caplog):
+    """回归(误报根因): 纯做种稳态 dl_info_speed 恒 0 长期缺席 -> 不告警(值未变非陈旧)
+
+    26-10-15 P3 原判据「两键同现」下, 每进程启动后第 3 个增量轮必误报一条;
+    per-key 语义: dl 键已收过(值 0), 增量轮缺席 = 值未变, up 键随变化持续上报。
+    """
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"dl_info_speed": 0, "up_info_speed": 538951, "dht_nodes": 3}
+    store.apply_sync(api)  # 启动全量轮: 两键齐报(基线)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
+        for i in range(12):  # 增量轮: 仅 up 变化上报, dl 恒 0 全程缺席
+            client.server_state = {"up_info_speed": 500000 + i * 1000}
+            store.apply_sync(api)
+    assert not [r for r in caplog.records if "速率键" in r.getMessage()]
+    assert store._rate_absent_streak == 0
+    assert store.server_state["dl_info_speed"] == 0  # 合并读数保持真值
+
+
+def test_store_rate_keys_missing_server_state_after_seen_no_warning(caplog):
+    """回归: 已收过的键 + 增量轮整包缺 server_state(两键值均未变) -> 不告警; 合并保留旧值"""
     client = FakeClient()
     store = TorrentStore()
     api = _api(client, store)
     client.server_state = {"dl_info_speed": 100, "up_info_speed": 50}
     store.apply_sync(api)
     with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
-        for _ in range(_RATE_FRESH_WARN_ROUNDS - 1):
-            client.server_state = {"dht_nodes": 9}
+        for _ in range(_RATE_FRESH_WARN_ROUNDS * 2):
+            client.server_state = None  # 无任何键变化: qB 整键缺席 server_state
             store.apply_sync(api)
-    assert not [r for r in caplog.records if "未上报" in r.getMessage()]
+    assert not [r for r in caplog.records if "速率键" in r.getMessage()]
+    assert store._rate_absent_streak == 0
+    assert store.server_state == {"dl_info_speed": 100, "up_info_speed": 50}
 
 
 def test_store_rate_keys_streak_resets_on_report_then_warns_again(caplog):
-    """未达阈值时键恢复上报 -> 计数复位; 再次缺席重新计数(新一段缺席期再告警一次)"""
+    """未达阈值时键恢复上报 -> 计数复位; 新一段无读数(全量缺键)重新计数再告警一次"""
     client = FakeClient()
     store = TorrentStore()
     api = _api(client, store)
-    client.server_state = {"dl_info_speed": 100, "up_info_speed": 50}
+    client.server_state = {"alltime_ul": 100}  # 首轮全量即缺速率键: 无读数 1 轮(未达阈值)
     store.apply_sync(api)
     with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
-        for _ in range(_RATE_FRESH_WARN_ROUNDS - 1):  # 缺席但未达阈值
-            client.server_state = {"dht_nodes": 9}
-            store.apply_sync(api)
-        client.server_state = {"dl_info_speed": 200, "up_info_speed": 60}  # 恢复上报
+        client.server_state = {"dl_info_speed": 100, "up_info_speed": 50}  # 恢复上报
+        _force_full_round(store)
         store.apply_sync(api)
-        assert store._rate_absent_streak == 0  # 恢复轮复位计数(缺席段不跨恢复残留)
-        for _ in range(_RATE_FRESH_WARN_ROUNDS):  # 新一段缺席达阈值
-            client.server_state = {"dht_nodes": 9}
+        assert store._rate_absent_streak == 0  # 恢复轮复位计数(无读数段不跨恢复残留)
+        assert store._rate_stale_warned is False
+        for _ in range(_RATE_FRESH_WARN_ROUNDS):  # 新一段全量缺键达阈值
+            _force_full_round(store)
+            client.server_state = {"alltime_ul": 200}
             store.apply_sync(api)
-    warns = [r.getMessage() for r in caplog.records if "未上报" in r.getMessage()]
+    warns = [r.getMessage() for r in caplog.records if "速率键" in r.getMessage()]
     assert len(warns) == 1, warns  # 第二段只告警一次
-    assert store.server_state["dl_info_speed"] == 200  # 恢复轮的合并读数已被看见
-
-
-def test_store_rate_keys_missing_server_state_counts_absent(caplog):
-    """响应整包缺 server_state 亦计缺席(速率键未上报); 合并行为仍钉「保留旧值」"""
-    client = FakeClient()
-    store = TorrentStore()
-    api = _api(client, store)
-    client.server_state = {"dl_info_speed": 100, "up_info_speed": 50}
-    store.apply_sync(api)
-    with caplog.at_level(logging.WARNING, logger="auto_qb.torrents.store"):
-        for _ in range(_RATE_FRESH_WARN_ROUNDS):
-            client.server_state = None  # 整包缺席(异常替身/老版本)
-            store.apply_sync(api)
-    warns = [r.getMessage() for r in caplog.records if "未上报" in r.getMessage()]
-    assert len(warns) == 1, warns
-    assert store.server_state == {"dl_info_speed": 100, "up_info_speed": 50}
+    assert store.server_state["dl_info_speed"] == 100  # 恢复轮的合并读数已被看见
 
 
 def test_store_rate_key_threshold_frozen():
@@ -917,17 +953,15 @@ def test_store_rate_key_threshold_frozen():
 
 
 def test_store_reset_sync_clears_rate_freshness():
-    """reset_sync 清新鲜度追踪(重连后下轮全量, 缺席段不跨重连残留)"""
+    """reset_sync 清新鲜度追踪(重连后下轮全量, 无读数段不跨重连残留)"""
     client = FakeClient()
     store = TorrentStore()
     api = _api(client, store)
-    client.server_state = {"dl_info_speed": 1, "up_info_speed": 1}
+    client.server_state = {"alltime_ul": 1}  # 首轮全量缺速率键: 无读数
     store.apply_sync(api)
-    client.server_state = {"dht_nodes": 9}
+    client.server_state = {"alltime_ul": 2}  # 增量轮仍无速率键: 从未收到 -> 无读数
     store.apply_sync(api)
-    client.server_state = None
-    store.apply_sync(api)
-    assert store._rate_absent_streak == 2  # 前置: 两轮缺席已计数
+    assert store._rate_absent_streak == 2  # 前置: 两轮无读数已计数
     store.reset_sync()
     assert store._rate_absent_streak == 0
     assert store._rate_stale_warned is False

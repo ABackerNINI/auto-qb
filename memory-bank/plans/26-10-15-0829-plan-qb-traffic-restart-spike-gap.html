@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-16-0020">
+<meta name="doc-updated" content="26-10-16-0454">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -467,6 +467,12 @@
       <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#3 已按 P3 定案(只做①);#4 已按 P2 定案(P2 单独实施闭环);#5 本轮触 2 源文件(&lt; 3)不另立档案。</li>
     </ul>
   </div>
+  <div class="box warn">
+    <div class="t">P3 判据修订(26-10-16-0454 · 纯做种启动误报修复, 用户指令「按推荐修复警告的问题」)</div>
+    <p><b>根因</b>: 原判据「两键同现才算新鲜」与 qB sync/maindata 增量轮的<b>逐键 diff</b> 语义错配 —— 仅值发生变化的键才出现在响应里(src/webui/api/synccontroller.cpp), 纯做种时 <code>dl_info_speed</code> 恒 0(值不变)⇒ 增量轮该键永远缺席 ⇒ 缺席计数每进程启动后第 3 个增量轮必达阈值, 误报一条(运行实例 26-10-15 22:50 / 26-10-16 01:25 / 01:30 三次重启各一条, 已被只读取证实锤; 合并读数实际新鲜)。且同专题 R2 已实锤「速率恒 0 而 alltime 在涨」是 payload 口径 vs 计数器口径的<b>设计使然</b>(报告 §04.5)非陈旧 —— 原判据想抓的事故签名, 用「两键同现」根本抓不到。</p>
+    <p><b>修订</b>: 判据改为 <b>per-key 语义</b> —— 已收到过的键在增量轮缺席 = 值未变 = 合并保留的旧值就是当前值(语义正确, 不计); 只有「全量轮(full_update)快照缺速率键」与「该键从未收到过」两类才是真正的无读数(旧值/空值无锚可查), 连续 3 轮告警一次。阈值、节流、复位语义均不变, <b>合并语义零改动</b>(FIX-04a 不动)。</p>
+    <p><b>验证</b>: <code>tests/test_sync.py</code> rate 键用例 6 → 7 条(含纯做种稳态、整包缺 server_state 两条误报回归); 守阵红绿双验 3 类突变判红(丢全量判据 / 丢从未收到判据 / 退回旧行为各 2 红)还原复绿; 全量数字见基线切片 <code>testing/baselines/26-10-16-0454-qb-traffic-restart-spike-gap-p3-rev.md</code>(新当前事实源)。</p>
+  </div>
 
   <h3 id="p4-record"><span class="tag2">REC</span>实施记录 · P4 呈现层接缝标记(26-10-15-1422 · clone @ da45dd57)</h3>
   <p class="lead">实施轮:改动 5 个源文件 —— <code>webui/server/traffic_qb.py</code>(meta 新键) + <code>static/shared/qb_traffic_chart.js</code>(判据纯函数 + computed) + <code>static/shared/tpl/drawer.html</code>(提示行) + <code>tests/test_web_traffic_qb.py</code> + <code>tests/test_webui_static_dom_panel.py</code>;未触配置/运行数据/采样器。§01 落点开工复核:<code>_meta</code> 在 :125(计划记 :124-125,一致);前端缺口渲染区行号随 2026-10-08 注解层改动已漂移,P4 以「纯函数 + computed + 模板行」三件套新落,不依赖旧行号。触 5 源文件 ≥3 → 立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(阈值 #2,计划 §07.5 预授权路径)。</p>
@@ -763,6 +769,7 @@
   <p>26-10-15-1422 — P4 实施完成:§03 追加「实施记录 · P4」,状态栏与 P4 步骤标记更新;meta 新键 server_started_at(模块级进程出生锚点)+ 前端 _qbSeamHint 判据 + drawer.html 提示行,断线语义零改动;E2E5 留真机人工验收;全量数字见基线切片 <code>testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md</code>;触 5 源文件 ≥3 已立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(§07 #5 更新);连带 _auth 单点收敛(写入判据误报处置,用户拍板①,坑档 pitfalls/testing/credential-shape-write-guard.md)。</p>
   <p>26-10-15-1502 — P5/P6 实施完成(零改码轮):§03 追加「实施记录 · P5」「实施记录 · P6」,状态栏与步骤标记更新;P5 = 口径写入 <code>progress/implemented-webui-history.md</code> 单点(引报告 §04.5);P6 = 出站端口评估结论「建议改(低优先级):首选 qB 侧两键归 0(OS 自选)或给足余量,不动 connection_speed」入档,qB prefs 与本仓均未动。零改码无测试面变化(P4 基线仍为当前事实源)。</p>
   <p>26-10-16-0020 — P1 收益评估与形态裁决(<b>纯文档轮</b>,三轮:26-10-15 23:11 / 23:58 / 26-10-16 00:16;未改任何代码 / 配置 / 运行数据):§03 追加「实施记录 · P1 收益评估与形态裁决」;<b>§07 #1 关闭为「不实施」</b> —— 四个形态逐个裁决(1A 否决 · 1B 不实施 · 1B' 派生速率不实施 · 封口粒度调整用户否决),理由、判据与源码锚点(clone @ <code>b17c671d</code>)见该记录;状态栏与 P1 步骤标记同步改为「不实施」。评估期派生发现两条 agg 面计划外缺陷已入池(<code>issues/26-10-16-0020-bug-agg-hour-totals-frozen-run</code> · <code>issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes</code>,均 Open 未认领、不影响 raw 面);§附 Refs 追加该两条以闭合认领链入口。用户明示本轮不另出报告,故全部结论落在本文内。</p>
+  <p>26-10-16-0454 — P3 判据修订(纯做种启动误报修复, 用户指令「按推荐修复警告的问题」): 原「两键同现」判据与 qB 增量轮逐键 diff 语义错配(纯做种 dl_info_speed 恒 0 ⇒ 永远缺席 ⇒ 每进程启动必误报; 运行实例三次重启各一条已实证) ⇒ <code>torrents/store.py</code> <code>_track_rate_key_freshness</code> 重写为 per-key 语义(已收键增量轮缺席=值未变不计; 仅全量快照缺键/从未收到计无读数), 阈值与节流不变, 合并语义零改动; <code>tests/test_sync.py</code> rate 键用例 6 → 7 条(含两条误报回归), 守阵 3 类突变判红还原复绿; §03 P3 记录追加修订注记; 全量数字见基线切片 <code>testing/baselines/26-10-16-0454-qb-traffic-restart-spike-gap-p3-rev.md</code>。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 
