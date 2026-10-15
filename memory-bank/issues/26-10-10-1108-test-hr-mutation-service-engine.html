@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ service.py 波次引擎变异存活(604 条)缺守阵">
 <meta name="issue-summary" content="hr 首轮变异审计: service.py 604 存活(停翻三条件/防伪下载/预算截断/放行与释放/历史), 零假存活">
 <title>hr/ service.py 波次引擎变异存活(604 条)缺守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-10-1108-test-hr-mutation-service-engine</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-10 11:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,6 +93,7 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-15 09:22 — <b>第二批实施(余量函数)</b>，状态 <strong>In Progress → Done</strong>。按本件「余量」清单续做其余 12+ 函数(<code>_run_pages</code> / <code>_do_wave</code> / <code>_refresh_locked</code> / <code>_append_history</code> / <code>_lanes_summary_from</code> / <code>_build_objects</code> / <code>refresh_site</code> / <code>_process_rows</code> / <code>_freeze_terminal</code> / <code>_sign_releases</code> / <code>_advance_observation</code> / <code>_absence_proven_all</code> …): 读 R14 带 diff 清单(前态 491 条)按函数三分类 → 补 <b>29 新守阵</b>(<code>tests/test_hr_service.py</code> 新增 R22 节, 测试数 145 → 184) → 红验 <b>38/62 KILLED</b>(首轮 33/62 暴露 <b>5 条真洞</b>: <code>_sign_releases</code> 命中首条 break 漏签 / <code>_freeze_terminal</code> 失效档 break 漏退役 / <code>_advance_observation</code> 出口 streak 未断等 → 补 <b>3 测试</b> + 加强 <b>1 测试</b> → 复验 5/5 KILLED; 余 24 条逐条判<b>等价</b>, 理由归 6 类)。S6 同池单模块复跑(目标 <code>**/hr/service.py</code> · R14 同一份 15 文件池 · <code>--no-refresh</code>): <b>2102 变异 / 杀 1794 / 存活 308 / 杀死率 85.35%</b>(墙时 27m12s); 对 R14 的 service.py 存活(491)**逐 id 对差 491 → 308**(净 −183 = 新杀 187 / 新增存活 4, 4 条新增存活经全套件手工复验确为<b>真存活</b>)。全套件 <b>3274 passed + 4 skipped / 99%</b>。<b>零 <code>src/</code> 改动</b>。切片 <code>baselines/26-10-15-0922-mutants-hr-service.md</code>; 档案 R22; 常驻锚 <code>26-10-08-0642-test-mutation-audit-standing.html</code> §07/§08/§09 已更。<b>本件存活已从 604 降至 308, 余量 12+ 函数全数覆盖, 故置 <code>Done</code></b>(若后续再开轮次可另立新件)。</li>
       <li>2026-10-10 14:08 — <b>第一批实施(三函数)</b>，状态 <strong>Open → In Progress</strong>。按本件「建议」的批次先做 <code>_stop_condition</code>(停翻三条件) / <code>_run_downloads</code>(防伪下载) / <code>_finish_wave</code>(放行与释放): 读带 diff 清单三分类 → 补 <b>30 新守阵</b>(<code>tests/test_hr_service.py</code> 新增 R16 节) + <b>4 处既有用例补断言</b>(<code>retention_ratio</code> / <code>alerted</code> 三态) → 红验 <b>85/85 KILLED</b>。S6 同池单模块复跑(目标 <code>**/hr/service.py</code> · R14 同一份 15 文件池 · <code>--no-refresh</code>): <b>2098 变异 / 杀 1596 / 存活 502 / 杀死率 76.07%</b>(墙时 26m08s); 对 R14 的 service.py 存活(604)**逐 id 对差 604 → 502**(净 −102 = 新杀 103 / 新增存活 1, 三目标函数占 93)。<b>零 <code>src/</code> 改动</b>。切片 <code>baselines/26-10-10-1408-mutants-hr-service.md</code>; 档案 R16。<b>余量</b>: 其余 12+ 函数(<code>_run_pages</code> 68 · <code>_do_wave</code> 61 · <code>_refresh_locked</code> 38 · <code>_append_history</code> 30 · <code>_lanes_summary_from</code> 28 …)未覆盖, 留后续轮 —— 故本件留 <code>In Progress</code> 而非 <code>Done</code>。</li>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>

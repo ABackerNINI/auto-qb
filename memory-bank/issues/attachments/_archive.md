@@ -53,13 +53,12 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (3)
+## In Progress (2)
 
-- [test] [hr/ service.py 波次引擎变异存活(604 条)缺守阵](../26-10-10-1108-test-hr-mutation-service-engine.html) — hr 首轮变异审计: service.py 604 存活(停翻三条件/防伪下载/预算截断/放行与释放/历史), 零假存活
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (197)
+## Done (198)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -119,6 +118,7 @@
 - [test] [hr/ 判定内核与边界变异存活(resolve/bencode/ratelimit/parse)](../26-10-10-1108-test-hr-mutation-judgment-core.html) — hr 首轮: resolve 126 + bencode 89 + ratelimit 38 + parse 39 存活(判定表/边界/频控窗口/数值容错), 零假存活
 - [test] [hr/ 运行时与取数线程变异存活(runtime/worker/fetcher/events/adapters)](../26-10-10-1108-test-hr-mutation-runtime-worker.html) — hr 首轮: runtime 147 + worker 126 + fetcher 39 + events 41 + adapters 43 存活(热重载/revision/取数通道), 零假存活
 - [test] [hr/ 序列化与持久化变异存活(model/store/queue)](../26-10-10-1108-test-hr-mutation-serialization.html) — hr 首轮: model 185 + store 45 + queue 41 存活(from_json/to_json 往返/原子写/锁/队列), 零假存活
+- [test] [hr/ service.py 波次引擎变异存活(604 条)缺守阵](../26-10-10-1108-test-hr-mutation-service-engine.html) — hr 首轮变异审计: service.py 604 存活(停翻三条件/防伪下载/预算截断/放行与释放/历史), 零假存活
 - [perf] [HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)](../26-10-08-1304-perf-hr-exclude-terminal-download.html) — 被排除 HR 的种子在 B/C/D 终态行按名称粗配命中时会触发一次身份下载, 而排除种子既不管束也无需身份 ⇒ 纯浪费站点日额/频控。建议在 _process_rows 的下载触发器上对「命中排除表的本地种子」短路。源自计划 26-10-08-1249 拍板点 D2, 本批未做。
 - [test] [config 校验器闭区间端点缺逐值守阵](../26-10-08-0903-test-config-mutation-boundary-guards.html) — port/log.max_bytes/notify.max_per_hour/max_tasks_per_tick/qb_traffic 采样·落盘·保留窗/曲线阈值 的端点位移类变异全套件仍杀不掉(池内用例取远离边界的值): sections _validate_log/_validate_web/_validate_hr_check/_validate_qbittorrent/_validate_qb_traffic/_validate_notify, curves _validate_curve_points, core validate_config
 - [test] [config loaders 关键字默认值/实参删除缺守阵](../26-10-08-0903-test-config-mutation-loader-defaults.html) — _get(spec, KEY, d.<field>) 的默认值换成 None、或整个关键字实参被删, 全套件仍杀不掉: loaders load_tracker_config/load_tracker_hr/_resolve_hr_site_bindings/load_global_speed_limit_curve/load_config
