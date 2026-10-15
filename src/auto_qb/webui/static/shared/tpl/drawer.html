@@ -26,19 +26,12 @@
              计划 26-10-11-2106 W3: 此前两形态**各写一份** <header class="drawer-head"> —— 标题块
              (图标 + 标题)与关闭按钮逐字复写, 复写件里只有**中部**是真不同的: 流量形态(全局/分组)
              放「时间档位 + 纵轴设置」, 种子详情放五页签导航。外壳因此收进组件 <aq-drawer-head>
-             (tone/icon/text/statusTitle/textTitle 五个入参 + 默认插槽), 中部由本处按形态给 —— 于是
-             「控件从正文上提到头部」这类版式改**只可能接一处**(坑档 pitfalls/web-ui/
-             drawer-multi-form-hosts 的根因正是: 旧写法改版式只接了流量形态头部, 种子形态那组控件
-             整块消失, 而守阵钉的恰恰是「控件落在流量形态头部内」= 断言为真而缺陷不在断言面内)。
+             (tone/icon/text/statusTitle/textTitle 五个入参 + 默认插槽), 中部由本处按形态给。
              形态判据走单点 drawerIsTraffic(drawer.js), 模板里不再写字面量比较。
-             !两形态仍然**不共用中部**: 流量形态中部只有档位 + 纵轴控件; 种子形态中部只有五页签导航,
-             **不得**再出现档位/纵轴控件组 —— 2026-10-09 第 2 轮用户拍板:「种子头部已承载五页签导航,
-             13 档再并进去太挤、窄视口下会变形」, 改落图下统计栏(见 .hist-summary 段注释)。
-             两形态的档位/纵轴控件现由**同一个组件** <aq-qb-ctl> 渲染(单点) —— 旧实现是两处逐字
-             复写 + 守阵钉「内层逐字同源」, 现在是只有一处实现(单点强于同源)。 -->
-        <aq-drawer-head v-if="drawerIsTraffic" tone="other" icon="#i-chart" :text="qbTrafficTitle">
-          <aq-qb-ctl></aq-qb-ctl>
-        </aq-drawer-head>
+             2026-10-16 版式改(用户动议): 流量形态头部**不再**挂档位/纵轴控件 —— 全局/分组与种子
+             流量图对齐, 控件组统一落图下统计栏(.hist-summary 内 .qb-statctl, 见正文段)。
+             两形态的档位/纵轴控件由**同一个组件** <aq-qb-ctl> 渲染(单点), 现只剩统计栏一个挂点。 -->
+        <aq-drawer-head v-if="drawerIsTraffic" tone="other" icon="#i-chart" :text="qbTrafficTitle"></aq-drawer-head>
         <!-- 种子详情形态(五页签): 徽标/标题的入参口径收在 drawer.js 的 drawerMember(对象, 给
              stateText 读 error_reason)/ drawerMemberKind(k-<kind> 类与图标)两个单点上 ——
              旧模板把那段 `(memberByHash.get(drawer.hash) || {}).kind || 'other'` 手抄三遍。
@@ -97,8 +90,8 @@
                  代价 = 五页签里第四个(流量)的正文不住组件层 —— 但它是**共用**的一段(三挂点同一块),
                  不存在「多形态各一份」的复写, 与问题 4 无关; 登记见计划 §05 W3「落地」与 §11。 -->
           <template v-if="qbTrafficActive">
-            <!-- 2026-10-08 版式改: 窗口档位(.qb-tabs)与纵轴控件(.qb-tools)已上提到头部标题栏,
-                 正文不再有工具条行 —— 图直接吃满抽屉可用高。 -->
+            <!-- 2026-10-08 版式改(2026-10-16 再改): 窗口档位(.qb-tabs)与纵轴控件(.qb-tools)落
+                 图下统计栏(.qb-statctl), 正文头部不再有工具条行 —— 图直接吃满抽屉可用高。 -->
             <!-- 静默续拉(2026-10-04 修「每隔几秒闪一次」+ 2026-10-05 修「空态也闪」): 已有结果时
                  loading 不接管正文 —— 整块 v-if 换成加载空态 = 每个轮询周期正文 DOM 被拆装一次
                  (闪的根源, 同 drawer-switch-flicker 的「快中间态本身就是闪」)。判据 qbCurPending
@@ -159,14 +152,14 @@
               </div>
               <!-- 2026-10-08 版式改: 上传/下载图例自图下独立一行并入统计栏(省一行高度 = 图更高);
                    原图下那行的说明文字(口径 + 悬停提示)已按用户要求移除, 信息在悬停 tooltip 里给。
-                   2026-10-09 第 2 轮(用户动议): 种子「流量」页签的档位/纵轴控件组**也落进本统计栏**
-                   (排在「下载累计」之后) —— 种子头部已承载五页签导航 + 模板切换器, 13 档再并进去
-                   太挤、窄视口下会变形; 落到图下统计栏既有行里, 不新占图高。控件组内层与流量形态
-                   头部同源(守阵钉逐字一致), 门 = qbCurScope === 'torrent'(种子形态 + 流量页签 +
-                   功能开启的单点派生, fail-closed)。
-                   统计栏本体的门因此放宽一档(有汇总 **或** 本门): 首载/错误态没有汇总时控件仍要在
-                   —— 否则「数据取不到 ⇒ 连换档位都点不到」(与 2026-10-08 之前正文工具条恒可见同义)。 -->
-              <div v-if="qbCurSummary || qbCurScope === 'torrent'" class="hist-summary">
+                   2026-10-09 第 2 轮(用户动议): 种子「流量」页签的档位/纵轴控件组落进本统计栏
+                   (排在「下载累计」之后)。
+                   2026-10-16 版式改(用户动议): **三挂点对齐** —— 流量形态(全局/分组)头部不再挂
+                   控件组, 与种子流量图一样落图下统计栏; 统计栏与控件组因此**恒渲染**(不再按
+                   scope 分叉), 首载/错误态没有汇总时控件同样可见(否则「数据取不到 ⇒ 连换档位都
+                   点不到」)。控件组内层与旧头部实现同源(守阵钉单点)。
+                   统计栏本体门随之放宽: 本段整体在 qbTrafficActive 内, 恒渲染即可。 -->
+              <div class="hist-summary">
                 <template v-if="qbCurSummary">
                   <span class="hs-leg"><i class="sw up"></i>上传</span>
                   <span class="hs-leg"><i class="sw down"></i>下载</span>
@@ -179,13 +172,13 @@
                   <span :title="qbCurSummaryHint">上传累计 <b class="h-up">{{ fmtSize(qbCurSummary.up) }}</b></span>
                   <span :title="qbCurSummaryHint">下载累计 <b class="h-down">{{ fmtSize(qbCurSummary.down) }}</b></span>
                 </template>
-                <!-- 种子「流量」页签的档位(13)+纵轴控件组(门见上注); 排在「下载累计」之后。
-                     W3(计划 26-10-11-2106): 控件组本体收进 <aq-qb-ctl> —— 与流量形态头部**同一个
-                     组件**(旧实现是两处逐字复写 + 守阵钉「内层逐字同源」, 现只有一处实现)。
+                <!-- 档位(13)+纵轴控件组(2026-10-16 起三挂点统一落这里, 不再按 scope 分叉)。
+                     W3(计划 26-10-11-2106): 控件组本体收进 <aq-qb-ctl> —— 全站**唯一实现**(旧实现
+                     是两处逐字复写 + 守阵钉「内层逐字同源」, 现只有一处实现, 且只剩本挂点)。
                      该组件是**多根片段**(不留 wrapper), 故 .qb-tabs / .qb-tools 仍是 .qb-statctl
                      的**直接子元素** —— 三皮肤 CSS 的 `.qb-statctl > .qb-tabs` / `> .qb-tools`
-                     与 `.hist-summary > .qb-statctl` 原样命中(本波 CSS 零改动)。 -->
-                <div v-if="qbCurScope === 'torrent'" class="qb-statctl">
+                     与 `.hist-summary > .qb-statctl` 原样命中。 -->
+                <div class="qb-statctl">
                   <aq-qb-ctl></aq-qb-ctl>
                 </div>
               </div>

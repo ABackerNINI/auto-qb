@@ -30,3 +30,13 @@
   「 · 组口径 = 当前成员集聚合」尾注。
 - 未验证面: ①15 个 `drawer_tpl/` 变体下统计栏的观感未逐变体走查; ②折叠态(`drawer.collapsed`)与统计栏同屏时
   的观感未走查(2026-10-09 起**不再适用** —— 折叠状态已整体移除, 见档案 26-10-09-webui-drawer-collapse-removal); ③tooltip 在抽屉贴近屏幕底缘时的弹层避让未专项走查(全站 tooltip 共用同一避让实现)。
+
+## R4(2026-10-16) 三挂点对齐: 流量形态头部控件退役 + 上限读数移除 + 统计栏贴底
+
+> 摘要: 用户动议「全局流量图的视图/纵轴按钮改到下方, 与种子流量图对齐; 调小统计栏与下方元素的间隔; 移除纵轴上限字样(全局同样跟进)」。落地: ①`tpl/drawer.html` 流量形态头部调用点摘掉 `<aq-qb-ctl>`(头部回归纯标题), 统计栏 `.hist-summary` 与 `.qb-statctl` 去掉 scope 门(恒渲染, 三挂点统一, 旧「torrent 专属门」口径作废); ②上限读数整链退役 —— `qb_traffic_chart.js` 删 `qbYAxisCapText` computed、`tpl/drawer-head.html` 删 `.qb-tools-hint` span、三皮肤 CSS 删该规则; ③三皮肤 CSS: 删头部挂点四条死规则(`.drawer-head:has(> .qb-tabs)` 族), `.drawer-body.is-traffic` 加 `padding-bottom: 8px`(原 20px)收紧统计栏与抽屉底缘的间隔; ④守阵同步改写(traffic head 调用点改钉「不得含 aq-qb-ctl」+ `<aq-qb-ctl>` 挂点数 2→1 + 上限读数反回潮锚 + statctl 恒渲染), 零新增测试函数。
+> 最后活动: 2026-10-16 00:55
+
+- 落地面(9 文件): `shared/tpl/drawer.html` / `shared/tpl/drawer-head.html` / `shared/qb_traffic_chart.js` / 三皮肤 `views.css` ×3 / atlas+console `dialogs.css`(`.drawer-body.is-traffic` 各住一处) / `tests/test_webui_static_dom_panel.py`。
+- 关键判据变更(覆盖 R1–R3 的③②①): ①控件组**唯一挂点** = 统计栏, 头部**不得**再接 `<aq-qb-ctl>`; ②`<aq-qb-ctl></aq-qb-ctl>` 在 drawer.html 恰 1 处; ③统计栏与 statctl 均**恒渲染**(不得再门 `qbCurScope === 'torrent'`); ④上限读数(`qbYAxisCapText` / `.qb-tools-hint`)反回潮 —— ⚠源码注释里也不能再写该标识符(反回潮锚按字面量扫全文本, 见 pitfalls/testing/guard-literal-comment-trip)。
+- 截图验收桩: 旗标与流量数据用 Playwright route 拦截 `/api/webui/flags` + `/api/traffic/qb/**` 造出(桩服务 FakeConfig 无 qb_traffic 段, 天然空态)—— 截图脚手架在仓外临时目录, 未入库。
+- 实测: `test.full` 全绿 + `npm run test:e2e:fast` 全绿 + 包内脚本零触碰(数字见 `commands run kb.baseline` 最新切片); prism 皮肤全局/种子两形态截图比对: 控件同排同位、上限字样消失、统计栏贴底。

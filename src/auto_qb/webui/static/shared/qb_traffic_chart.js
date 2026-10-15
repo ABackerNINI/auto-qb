@@ -362,8 +362,8 @@ window.AQB_QB_TRAFFIC = {
       return !!this.qbCurScope;
     },
     /* 流量形态头部标题(kind === "traffic" 时用; 单种走种子详情头部, 不消费本值)。
-     * 2026-10-08 用户要求标题缩短为「qB流量图」—— 头部同排要容纳 13 档窗口档位与纵轴控件,
-     * 长标题会把档位挤出去。分组/种子保留各自名称(它们本就短, 且要区分对象)。 */
+     * 2026-10-08 用户要求标题缩短为「qB流量图」(原「qB 口径流量图 · 全局」太长)。分组/种子
+     * 保留各自名称(它们本就短, 且要区分对象)。 */
     qbTrafficTitle() {
       const s = this.qbCurScope;
       if (s === "global") return "qB流量图";
@@ -455,18 +455,8 @@ window.AQB_QB_TRAFFIC = {
       const y = this.qbCurYAxis;
       return y ? y.manual : 0;
     },
-    /* 工具条读数(当前生效上限, 自解释): 固定模式报上限值; 缺值/自动报回退说明 */
-    qbYAxisCapText() {
-      const s = this.qbCurScope;
-      if (!s) return "";
-      const mode = this[_QB_SCOPES[s].yaxis].mode;
-      const cap = this._qbYCapOf(s);
-      if (mode === "limit") {
-        return cap > 0 ? "上限 " + this.fmtSpeed(cap) + "(全局限速 ×1.2)" : "无全局限速 · 按自动";
-      }
-      if (mode === "manual") return cap > 0 ? "上限 " + this.fmtSpeed(cap) : "未设值 · 按自动";
-      return "自动(随数据峰值)";
-    },
+    /* 注: 纵轴工具条的「上限 …(全局限速 ×1.2)」常驻读数已于 2026-10-16 随 UI 移除
+     * (用户要求去掉上限字样, 图面自解释), computed 与 .qb-tools-hint 一并退役。 */
   },
   /* 限速值变化(首次到手 / qB 重连 / 运行中改限速)时重排一次 y 轴 —— 长窗轮询间隔可夹到
    * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与各 AQB_* 片段同款):

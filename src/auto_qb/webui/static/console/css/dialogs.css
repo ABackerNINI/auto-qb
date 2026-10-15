@@ -57,8 +57,10 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; position: relative; }
 /* 流量形态正文(2026-10-04 三挂点并入抽屉): 图高撑满抽屉可用高 —— 正文转 flex 纵列,
    图容器 flex:1 吸收余量, 宿主 height:100% 给 uPlot 量高(qb_traffic_chart.js 建图量 clientHeight
-   + ResizeObserver 宽高双观察); 抽屉顶缘拖拽调高 -> 宿主高变 -> 图实时跟着长 */
-.drawer-body.is-traffic { display: flex; flex-direction: column; }
+   + ResizeObserver 宽高双观察); 抽屉顶缘拖拽调高 -> 宿主高变 -> 图实时跟着长。
+   2026-10-16(用户动议): 底部内边距 20 -> 8px —— 收紧统计栏(上传/下载图例那栏)与下方元素
+   (抽屉底缘/状态栏方向)的间隔, 统计栏更贴底。 */
+.drawer-body.is-traffic { display: flex; flex-direction: column; padding-bottom: 8px; }
 .drawer-body.is-traffic .qb-chart { flex: 1 1 auto; min-height: 100px; }
 .drawer-body.is-traffic .qb-chart-host { height: 100%; }
 /* FX-29 软切换遮罩: 换目标时旧数据不清空(撑住面板几何, 免"内容消失 -> 面板抽成一条 -> 撑回"的

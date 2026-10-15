@@ -13,16 +13,15 @@
      pitfalls/web-ui/drawer-multi-form-hosts 的根因(版式改只接了一个形态宿主, 另一形态整组消失)。
 
      !<aq-qb-ctl> 必须是**多根片段**(.qb-tabs 与 .qb-tools 两个平级节点, 不留 wrapper): 三皮肤
-     CSS 靠**直接子选择器**定位它们 —— `.drawer-head:has(> .qb-tabs)` / `.drawer-head > .qb-tabs` /
-     `.drawer-head > .qb-tools`(流量形态头部内)与 `.hist-summary > .qb-statctl` /
-     `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools`(种子「流量」页签的图下统计栏内)。
-     多包一层 div 会让这些规则**全部静默落空**(头部换行、控件错位)—— pytest 扫源码看得见控件,
-     只有真浏览器量布局才现形, 故由 e2e/drawer-traffic.spec.mjs 按「直接子元素」钉住。
+     CSS 靠**直接子选择器**定位它们 —— `.hist-summary > .qb-statctl` /
+     `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools`(图下统计栏内; 2026-10-16 起这是
+     **唯一**挂点 —— 流量形态头部不再挂控件组, 全局/分组/单种三挂点对齐)。
+     多包一层 div 会让这些规则**全部静默落空**(控件错位)—— pytest 扫源码看得见控件,
+     只有真浏览器量布局才现形, 故由 e2e 按「直接子元素」钉住。
 
-     !两挂点单点化是本组件的全部意义: 旧实现是两处**逐字复写** + 守阵钉「内层逐字同源」
-     (坑档 drawer-multi-form-hosts 的处置条: 无 partial 机制只能复写, 复写必须逐字同源并加守阵)。
-     本仓库现在有 partial 机制了(Vue 组件), 故收敛为**只有一处实现**, 守阵口径随之从「同源」升级为
-     「单点」: 模板里只有一份 .qb-tabs/.qb-tools, 两个挂点都写 <aq-qb-ctl>(单点强于同源)。 -->
+     !单点化是本组件的意义: 旧实现是两处**逐字复写**, 后经 Vue 组件收敛为**只有一处实现**
+     (单点强于同源); 2026-10-16 版式改后头部挂点退役, 只剩统计栏一个挂点 —— 组件壳保留
+     (多根片段的「不留 wrapper」结构约束与 $root 回调口径仍由它承载)。 -->
 <script type="text/x-template" id="tpl-aq-drawer-head">
   <header class="drawer-head">
     <div class="drawer-title">
@@ -31,7 +30,7 @@
       </span>
       <strong :title="textTitle || null">{{ text }}</strong>
     </div>
-    <!-- 形态中部: 流量形态 = <aq-qb-ctl>(档位 + 纵轴); 种子详情 = 五页签导航 nav.drawer-tabs -->
+    <!-- 形态中部: 流量形态 = 空(2026-10-16 起控件组统一落图下统计栏); 种子详情 = 五页签导航 -->
     <slot></slot>
     <button class="drawer-close" aria-label="关闭详情面板" @click="$root.closeDrawer()">
       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
@@ -56,6 +55,5 @@
     <input v-if="$root.qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
            min="0" step="any" :value="$root.qbYAxisManual || ''" placeholder="MiB/s"
            @change="$root.qbSetYAxisManual($event.target.value)" title="纵轴最大值(MiB/s)">
-    <span class="qb-tools-hint">{{ $root.qbYAxisCapText }}</span>
   </div>
 </script>

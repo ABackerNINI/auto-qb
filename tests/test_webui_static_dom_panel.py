@@ -34,7 +34,7 @@
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
-- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + qbYAxisCapText 读数 + CSS 三皮肤成对 + **两处控件组**(流量形态头部 + 种子「流量」页签头部, 2026-10-09 修版式改回归: 种子流量图走种子形态头部, 版式改漏接 ⇒ 档位/纵轴控件消失; 内层标记守阵钉逐字同源) + P4 重启缝提示(plan 26-10-15-0829): _qbSeamHint 判据纯函数 node 真跑(尾区含重启->提示/链接续或链内或旧后端->null, 边界含尾区起点与右沿) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
+- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829): _qbSeamHint 判据纯函数 node 真跑(尾区含重启->提示/链接续或链内或旧后端->null, 边界含尾区起点与右沿) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: ①node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; ②静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
@@ -81,9 +81,9 @@ def _tpl_top_level_tags(body: str):
 
     为什么需要它(而不是数类名出现次数): W3(计划 26-10-11-2106)把档位/纵轴控件组收进**多根**
     片段 <aq-qb-ctl>(tpl/drawer-head.html), 其两根 `.qb-tabs` / `.qb-tools` 是**直接子元素**这件事
-    被三皮肤 CSS 依赖 —— `.drawer-head > .qb-tabs` / `.drawer-head > .qb-tools` /
-    `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools`(atlas prism views.css / console
-    dialogs.css)全是**直接子选择器**。一旦有人给片段包一层 wrapper(哪怕只是"顺手加个容器"),
+    被三皮肤 CSS 依赖 —— `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools` 与
+    `.hist-summary > .qb-statctl`(atlas prism views.css / console dialogs.css)全是**直接子选择器**。
+    一旦有人给片段包一层 wrapper(哪怕只是"顺手加个容器"),
     这些规则全部**静默**不命中: 类名 count 一个不变, 观感却错版。故这里按**结构**判根数 ——
     单个根 = 有人加了 wrapper, 立刻判红。
     """
@@ -443,16 +443,16 @@ def test_frontend_qb_traffic_chart_wiring():
     assert "缺口 = 无采样" not in drawer_tpl and "悬停查看详情" not in drawer_tpl, \
         "图例 hint 两处(工具条 + 图例)已按用户要求全部移除(2026-10-08 版式改), 不得复现"
     assert "断线处不连线" not in drawer_tpl, "旧图例 hint「断线处不连线」必须退场"
-    # 版式改结构钉住: ①时间档位与纵轴控件在流量形态头部(标题栏)内, 不在正文; ②图例(上行/下行)
-    # 在统计栏 .hist-summary 内, 不再是独立的 .hist-legend 行
-    # W3(计划 26-10-11-2106): 头部外壳收进 <aq-drawer-head>, 档位/纵轴控件收进 <aq-qb-ctl> ——
-    # 版式口径一字不变(控件仍在流量形态头部内), 但「在头部内」现在由**调用点的插槽位置**保证:
-    # 流量形态那次调用把 <aq-qb-ctl> 放进 <aq-drawer-head> 的默认插槽里(而不是各写一份 div)。
+    # 版式改结构钉住: ①图例(上行/下行)在统计栏 .hist-summary 内, 不再是独立的 .hist-legend 行;
+    # ②档位/纵轴控件在图下统计栏 .qb-statctl 内(2026-10-16 版式改: 流量形态头部不再挂控件,
+    # 全局/分组与种子流量图对齐 —— 头部调用点必须**不再**接 <aq-qb-ctl>)
+    # W3(计划 26-10-11-2106): 头部外壳收进 <aq-drawer-head>; 2026-10-16 起控件组唯一挂点 =
+    # 统计栏, 头部调用点退回空插槽(仅标题 + 关闭钮)。
     traffic_call = re.search(r'<aq-drawer-head v-if="drawerIsTraffic"[^>]*>(.*?)</aq-drawer-head>', drawer_tpl, re.S)
-    assert traffic_call and '<aq-qb-ctl></aq-qb-ctl>' in traffic_call.group(1), \
-        "时间档位/纵轴控件必须落在流量形态头部标题栏内(2026-10-08 版式改: 自正文上提, 把高度还给图)"
+    assert traffic_call and '<aq-qb-ctl>' not in traffic_call.group(1), \
+        "流量形态头部不得再挂档位/纵轴控件组(2026-10-16 版式改: 与种子流量图对齐, 控件统一落图下统计栏)"
     assert 'class="qb-tabs"' in head_tpl and 'class="qb-tools"' in head_tpl, \
-        "<aq-qb-ctl> 缺 .qb-tabs/.qb-tools(两挂点共用的唯一实现)"
+        "<aq-qb-ctl> 缺 .qb-tabs/.qb-tools(控件组的唯一实现)"
     # 2026-10-09 第 2 轮(用户动议): 种子流量图(kind === "seed" + tab === "traffic")的档位/纵轴
     # 控件组**从种子头部挪走** —— 头部已承载五页签导航 + 模板切换器, 13 档再并进去太挤、窄视口下
     # 会变形; 改落**图下统计栏** .hist-summary, 排在「下载累计」之后(用户: 「即『下载累计』后」)。
@@ -462,13 +462,12 @@ def test_frontend_qb_traffic_chart_wiring():
         "种子头部不得再挂流量档位/纵轴控件组(2026-10-09 第 2 轮: 已改落图下统计栏, 头部保持单行 44px)"
     stat_blk = drawer_tpl[drawer_tpl.index('class="hist-summary"'):drawer_tpl.index('种子详情形态正文(五页签)')]
     assert 'class="qb-statctl"' in stat_blk and '<aq-qb-ctl></aq-qb-ctl>' in stat_blk, \
-        "种子「流量」页签的档位/纵轴控件组必须落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮; W3 起经 <aq-qb-ctl>)"
-    assert "v-if=\"qbCurScope === 'torrent'\"" in stat_blk, \
-        "统计栏内的档位/纵轴控件组必须门在 qbCurScope === 'torrent'(种子形态 + 流量页签 + 功能开启的单点派生)"
-    # 统计栏本体的门放宽一档(有汇总 **或** 种子流量形态): 首载/错误态没有汇总, 控件仍必须可见 ——
-    # 否则「数据取不到 ⇒ 连换档位都点不到」; 与 2026-10-08 之前正文工具条恒可见的语义对齐。
-    assert 'v-if="qbCurSummary || qbCurScope === \'torrent\'"' in drawer_tpl, \
-        "统计栏本体必须门在「有汇总 或 种子流量形态」上(否则首载/错误态控件整组消失)"
+        "档位/纵轴控件组必须落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮; 2026-10-16 起为唯一挂点; W3 起经 <aq-qb-ctl>)"
+    # 2026-10-16 版式改: 控件组不再按 scope 分叉 —— 三挂点(全局/分组/单种)统一落统计栏且恒渲染
+    # (本段整体已在 qbTrafficActive 正文内), 「torrent 专属门」不得回潮。
+    assert '<div v-if="qbCurScope === \'torrent\'" class="qb-statctl">' not in drawer_tpl \
+        and '<div class="qb-statctl">' in stat_blk, \
+        "统计栏控件组必须恒渲染(2026-10-16 三挂点统一), 不得再门在 qbCurScope === 'torrent'"
     # 落点次序(用户口径「即『下载累计』后」): 图例 → 窗口 N 桶 → 上传累计 → 下载累计 → 控件组
     _order = [stat_blk.index(k) for k in ("hs-leg", "窗口", "上传累计", "下载累计", "qb-statctl")]
     assert _order == sorted(_order), \
@@ -485,14 +484,15 @@ def test_frontend_qb_traffic_chart_wiring():
     # W3(计划 26-10-11-2106): 「两处控件组逐字同源」升级为「只有一处实现」—— 旧写法是两份复写
     # + 本处的字符串比对守阵(坑档 drawer-multi-form-hosts 的处置条: 无 partial 机制只能复写,
     # 复写必须逐字同源并加守阵); 本仓库现在有 partial 了(Vue 组件), 故改钉单点: 控件组标记在
-    # 面板模板层只出现一次(在 tpl/drawer-head.html 的 <aq-qb-ctl> 里), drawer.html 只剩两个挂点 ——
+    # 面板模板层只出现一次(在 tpl/drawer-head.html 的 <aq-qb-ctl> 里), drawer.html 只剩一个挂点
+    # (图下统计栏; 2026-10-16 起头部挂点退役)——
     # 谁把控件抄回 drawer.html(复写回潮)即红, 覆盖强度不降反升(单点强于同源)。
     assert drawer_tpl.count('class="qb-tabs"') == 0 and drawer_tpl.count('class="qb-tools"') == 0, \
         "drawer.html 仍手写档位/纵轴控件组(复写回潮: 控件组只有 <aq-qb-ctl> 一份实现)"
     assert head_tpl.count('class="qb-tabs"') == 1 and head_tpl.count('class="qb-tools"') == 1, \
-        "<aq-qb-ctl> 模板必须恰一份 .qb-tabs 与 .qb-tools(两挂点共用的唯一实现)"
-    assert drawer_tpl.count("<aq-qb-ctl></aq-qb-ctl>") == 2, \
-        "两个挂点(流量形态头部中部 / 种子流量页签图下统计栏)都必须接 <aq-qb-ctl>"
+        "<aq-qb-ctl> 模板必须恰一份 .qb-tabs 与 .qb-tools(控件组的唯一实现)"
+    assert drawer_tpl.count("<aq-qb-ctl></aq-qb-ctl>") == 1, \
+        "控件组唯一挂点(图下统计栏)必须接 <aq-qb-ctl>(2026-10-16 起头部挂点退役, 恰此一处)"
     assert 'class="hist-legend"' not in drawer_tpl, \
         "独立的图例行(.hist-legend)必须退场: 上行/下行图例已并入统计栏 .hist-summary"
     assert '暂无该种子的 qB 口径流量数据(从未有传输记录)' in js, \
@@ -1065,31 +1065,35 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
         'qbGroupYAxis: qbInitialYAxis("group")'
     ):
         assert field in state_js, f"state.js 缺 {field}(根选项显式建字段)"
-    for comp in ("qbCurYAxis()", "qbYAxisMode()", "qbYAxisManual()", "qbYAxisCapText()"):
+    for comp in ("qbCurYAxis()", "qbYAxisMode()", "qbYAxisManual()"):
         assert comp in js, f"缺纵轴 computed {comp}"
+    # 2026-10-16(用户动议): 工具条上限读数 qbYAxisCapText(「上限 …(全局限速 ×1.2)」)随 UI 移除,
+    # computed 退役不得回潮(图面自解释, 不再要常驻读数)。
+    assert "qbYAxisCapText" not in js, "qbYAxisCapText 已随 2026-10-16 上限字样移除退役, 不得回潮"
 
-    # 9. 模板控件(2026-10-08 版式改: 自正文上提到流量形态头部标题栏) + 生效上限读数
-    # W3(计划 26-10-11-2106): 控件组收进 <aq-qb-ctl>(两挂点共用的**唯一实现**), 故旧口径
-    # 「三态 × 2 处 = 6」改为「实现里三态各一(3) + drawer.html 零复写 + 两个挂点都接它」——
+    # 9. 模板控件(2026-10-16 版式改: 三挂点统一落图下统计栏 .qb-statctl, 头部不再挂控件)
+    # W3(计划 26-10-11-2106): 控件组收进 <aq-qb-ctl>(**唯一实现**), 故旧口径
+    # 「三态 × 2 处 = 6」改为「实现里三态各一(3) + drawer.html 零复写 + 唯一挂点接它」——
     # 覆盖强度不降反升(单点强于同源): 谁把按钮抄回 drawer.html, 下面的 == 0 与挂点断言同时判红。
     assert head_tpl.count("qbSetYAxisMode(") == 3, \
         "<aq-qb-ctl> 里纵轴三态必须各一个按钮(自动/限速+20%/手动)"
     assert drawer_tpl.count("qbSetYAxisMode(") == 0, \
         "drawer.html 仍手写纵轴按钮(复写回潮: 控件组只有 <aq-qb-ctl> 一份实现)"
     traffic_call = re.search(r'<aq-drawer-head v-if="drawerIsTraffic"[^>]*>(.*?)</aq-drawer-head>', drawer_tpl, re.S)
-    assert traffic_call and '<aq-qb-ctl></aq-qb-ctl>' in traffic_call.group(1), \
-        "纵轴控件必须落在流量形态头部内(2026-10-08 版式改上提: 控件组挂进头部那次的插槽)"
+    assert traffic_call and '<aq-qb-ctl>' not in traffic_call.group(1), \
+        "纵轴控件不得落在流量形态头部内(2026-10-16 版式改: 三挂点统一落图下统计栏)"
     assert 'class="qb-tools"' in head_tpl and 'class="qb-seg"' in head_tpl, \
         "<aq-qb-ctl> 缺纵轴控件本体(.qb-tools/.qb-seg)"
     # 9b. **结构**守阵(数类名探不到 wrapper): <aq-qb-ctl> 必须恰两根(.qb-tabs / .qb-tools), 无 wrapper。
-    # 三皮肤 CSS 的 `.drawer-head > .qb-tabs` / `.drawer-head > .qb-tools` 与
-    # `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools` 全是**直接子选择器** —— 片段被包一层
+    # 三皮肤 CSS 的 `.qb-statctl > .qb-tabs` / `.qb-statctl > .qb-tools` 与
+    # `.hist-summary > .qb-statctl` 全是**直接子选择器**(2026-10-16 起统计栏是唯一挂点,
+    # 头部侧的 `.drawer-head > .qb-*` 选择器已随挂点退役删除) —— 片段被包一层
     # (任何理由的容器)即全部静默失配(类名 count 不变, 观感错版)。Vue 3 片段不留 wrapper 元素,
     # 唯二会破坏它的就是源模板里自己写一个, 故此处在源文本上钉根数。
     ctl_roots = _tpl_top_level_tags(_tpl_body(head_tpl, "tpl-aq-qb-ctl"))
     assert len(ctl_roots) == 2, (
         f"<aq-qb-ctl> 必须是**多根**片段(恰两根), 实测 {len(ctl_roots)} 根 —— "
-        "包 wrapper 会隔开 .drawer-head > .qb-tabs / .qb-statctl > .qb-tabs 这些直接子选择器, "
+        "包 wrapper 会隔开 .qb-statctl > .qb-tabs 这些直接子选择器, "
         "三皮肤下控件错版且无报错(静默失效)"
     )
     assert [t for t, _ in ctl_roots] == ["div", "div"], \
@@ -1105,11 +1109,13 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert "v-if=\"$root.qbYAxisMode === 'manual'\"" in head_tpl \
         and "$root.qbSetYAxisManual($event.target.value)" in head_tpl, \
         "<aq-qb-ctl> 手动模式必须给输入框且 @change 走 qbSetYAxisManual(经 $root 回调根实例)"
-    assert "{{ $root.qbYAxisCapText }}" in head_tpl, "缺生效上限读数(qbYAxisCapText)"
-    # 2026-10-09 第 2 轮: 种子「流量」页签同款控件组改落图下统计栏(.qb-statctl, qbCurScope === 'torrent' 门)
+    # 2026-10-16(用户动议): 生效上限读数(qb-tools-hint / qbYAxisCapText)已随 UI 移除, 不得回潮。
+    assert "qb-tools-hint" not in head_tpl and "$root.qbYAxisCapText" not in head_tpl, \
+        "纵轴工具条的上限读数字样已移除(2026-10-16), 不得回潮"
+    # 2026-10-09 第 2 轮: 种子「流量」页签同款控件组改落图下统计栏(.qb-statctl; 2026-10-16 起为唯一挂点)
     stat_hdr = drawer_tpl[drawer_tpl.index('class="hist-summary"'):drawer_tpl.index('种子详情形态正文(五页签)')]
     assert 'class="qb-statctl"' in stat_hdr and '<aq-qb-ctl></aq-qb-ctl>' in stat_hdr, \
-        "纵轴/档位控件组必须同时落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮; W3 起经 <aq-qb-ctl>)"
+        "纵轴/档位控件组必须落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮; 2026-10-16 起为唯一挂点; W3 起经 <aq-qb-ctl>)"
 
     # 10. CSS 三皮肤成对(纵轴控件 + 图下统计栏控件组版式)
     for css, name in (
