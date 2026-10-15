@@ -23,5 +23,6 @@
   3. 更稳的做法: 该轮跑完(或任何中断后)**主动** `git checkout -f -- src/` 复位一次, 不把「工作树干净」当作默认前提。
 
 - **同源风险面**: 任何「就地改源码再还原」的工具(`mutants.verify` 逐条 `apply` → 跑 → 还原; 红验脚本)在**中断**时都会留残留; 中断途径包括 `mutants.run` 撞 timeout、`TaskStop`、shell 崩。红验脚本宜把「原字节还原」放进 `try/finally`(本轮实测: 被 `TaskStop` 硬杀时 `finally` **没跑**, 主仓 `src/` 留了变异体 —— 只能事后 `git checkout -- src/` 复位)。
+- **同族第二面(测试执行层)**: 同一「等长替换让缓存比对失效」家族还发生在 **Python 的 `.pyc` 缓存**上 —— 红验逐条 apply 时相邻条等长 + 秒级 mtime 碰撞 ⇒ import 复用上一条变异体的字节码 ⇒ **假 SURVIVED**(不是工作树脏, 而是跑的代码不是当前文件)。见 [redverify-pycache-stale-verdict](redverify-pycache-stale-verdict.md)。
 
 **复发**: 1 —— 2026-10-10 hr serialization 轮(未造成实际错数: 开跑前 sha1 核对时发现并复位)。

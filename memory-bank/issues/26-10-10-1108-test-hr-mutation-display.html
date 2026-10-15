@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ 展示导出变异存活(status/report)">
 <meta name="issue-summary" content="hr 首轮: status 285 + report 276 存活(明细导出/人话映射/宽字符对齐), 零假存活">
 <title>hr/ 展示导出变异存活(status/report) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-10-1108-test-hr-mutation-display</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-10 11:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,6 +94,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 08:46 — 实施完成（R20），状态 <strong>Done</strong>：两文件一次做全 —— 读带 diff 存活清单三分类 → 补 <b>54 新守阵</b>（<code>test_hr_status.py</code> 31 / <code>test_hr_report.py</code> 23，含此前零守阵的 <code>_print_status_site</code> 现状段逐行）→ 红验按条同构变异复验 <b>481/540 KILLED</b>（余 59 条逐条判等价，0 ANCHOR-MISS）→ 同池逐文件复跑 <b>status 733/存活 18（97.54%）</b> · <b>report 691/存活 41（94.07%）</b>，两文件存活 <b>540 → 59</b>（净 −481），存活 id 与红验逐条吻合。零 <code>src/</code> 改动；切片 <code>testing/baselines/26-10-15-0846-mutants-hr-display.md</code></li>
+      <li>2026-10-15 06:22 — 认领并实施（R20），状态 <strong>In Progress</strong>：复验锚点仍在（<code>status.py</code>/<code>report.py</code> 符号面未漂移；R14 dump 已被清，改用同款收窄复跑取当前存活基线）→ 两文件一次做全：读带 diff 清单三分类 → 补守阵 → 红验按条同构变异复验 → 同池复跑</li>
     </ul>
   </section>
 
