@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-1502">
+<meta name="doc-updated" content="26-10-16-0020">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247)<br>P4 已实施(1422)<br>P5 已实施(1502) · P6 已评估(1502)</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 不实施(1016)<br>P3 已实施(1247)<br>P4 已实施(1422)<br>P5 已实施(1502) · P6 已评估(1502)</div>
 </nav>
 
 <header class="cover">
@@ -136,7 +136,7 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4/P5/P6 已完成 · P1 暂缓</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4/P5/P6 已完成 · P1 不实施</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
@@ -287,7 +287,7 @@
     <div class="step">
       <div class="sid">P1</div>
       <div class="sbody">
-        <div class="st">写侧:z 游程在盘上携带末端真值(消接缝差的来源) <span class="pill p2">核心</span> <span class="pill p1">暂缓(用户拍板 26-10-15-1145)</span></div>
+        <div class="st">写侧:z 游程在盘上携带末端真值(消接缝差的来源) <span class="pill p2">核心</span> <span class="pill p1">不实施 26-10-16 · 四形态裁决见下方实施记录</span></div>
         <p class="lead">让「增长发生在哪一段时间内」在磁盘链上可判 -- 当前快照冻结使接缝差没有任何时间锚点。本步会改变 z 行的 totals 语义,风险高于 P2,故排在 P2 之后并需评估。</p>
         <ul>
           <li><b>落点</b>:<span class="k">traffic_sample_mod.py</span> -- <code>OpenRun</code>(:231) / <code>_advance_run</code>(:730) / <code>_seal_run</code>(:758)。</li>
@@ -550,6 +550,43 @@
     <div class="t">P5/P6 判定 + 计划状态收口</div>
     <p>P5 判据「口径写入单点」达成;P6 判据「结论入档(改 / 不改 + 理由)」达成 —— 是否实际改 qB prefs 由用户手工决定。待拍板项(§07):#2/#3/#4 已按前轮定案,#5 已按 P4 落地,#1(P1 形态)随 P1 暂缓后置,本轮无新拍板项。计划 Open 状态仅余:P1 暂缓 + E2E5 真机人工验收。零改码轮无测试面变化,P4 基线仍为当前事实源(未跑全量、未新建基线切片)。</p>
   </div>
+
+  <h3 id="p1-record"><span class="tag2">REC</span>实施记录 · P1 收益评估与形态裁决(26-10-16-0020 · clone @ b17c671d)</h3>
+  <p class="lead">三轮<b>纯文档轮</b>(26-10-15 23:11 起),未改任何代码 / 配置 / 运行数据。<b>结论:P1 全形态不实施</b> —— P0 已定 P1「可选」(治不到活尾期尖峰),本记录把它从「暂缓」推进到「不实施」,并把评估期发现的两个 agg 面计划外缺陷另行入池。</p>
+  <p class="lead">重新看 P1 收益的起点是 P2 已落地:raw 面(≤24h)的主症状已由 P2 接缝摊配闭环(E2E1 三窗 PASS),于是问题不再是「P1 该不该做」,而是「<b>P2 之后 P1 还能拿到什么</b>」。四形态逐个读过,落点与判据均由 <code>traffic_grid.py</code> / <code>traffic_sample_mod.py</code> / <code>traffic_store.py</code> 在 clone @ <code>b17c671d</code> 的源码读码得出(未跑真机复现)。</p>
+  <table>
+    <thead><tr><th style="width:210px">形态</th><th style="width:110px">裁决</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>1A · z 行 totals 改存末端值</b></td>
+        <td><span class="pill p1">否决</span></td>
+        <td>把 raw 面差分链的台阶从「游程末端(身后有整段等值 z 槽可供摊配)」搬到「游程首桶」。而 <code>v4_totals_points</code> 的摊配判据要求 <code>run[2]</code>(锚点之后的等值观测点表)非空 —— 首桶触发时它必为空 ⟹ 台阶全额落单桶,每次空闲段开始都产出一颗新的 artifacts。<b>比现状更糟</b>,不再是「二选一」里的候选。</td>
+      </tr>
+      <tr>
+        <td><b>1B · 封口补显式 r 记录</b></td>
+        <td><span class="pill p1">不实施</span></td>
+        <td>它声称的收益拿不到:<code>_agg_feed</code> 是<b>逐记录即时</b>入账(<code>traffic_sample_mod.py:911</code>,在 per-record 循环里而非 flush 批处理),处理 z 行那一刻内部槽区间已按「速率 0 + 冻结快照」记完(<code>:1034-1037</code>);事后到达的尾部记录只能写 <code>open_credit</code>、覆盖游程<b>之后</b>那一段,追溯不到游程内部。raw 面则与现状逐位等价(不是互补品)。</td>
+      </tr>
+      <tr>
+        <td><b>1B' · 尾部记录带派生速率</b><br><span class="k">Δtotals/Δt</span></td>
+        <td><span class="pill p1">不实施</span></td>
+        <td>修 agg rate lane 的方向对,但同样落到游程<b>之后</b>的覆盖里 —— 不是修复而是<b>时间错位</b>:该显示 0 的桶还是 0,之后的桶凭空多一段几百 B/s。要真正落在游程内部,必须「处理 z 行时已知末端值」,而这只剩三条路 —— 依赖已否决的 1A、给 <code>_agg_feed</code> 加挂起结算态(与「崩溃丢纯零信息」现行口径冲突、在线与离线 <code>_agg_credit_day_file</code> 须同步改造)、或不可行(只用现有字段推不出)。</td>
+      </tr>
+      <tr>
+        <td><b>封口粒度调整</b><br><span class="k">z 游程定期封口</span></td>
+        <td><span class="pill p2">用户否决</span></td>
+        <td>评估中途追加的第四形态:语义与行格式都不动,仅让 z 游程每跨一个周期封一次口,就能让每个小时行拿到本段的真实起点,同时把 <code>_V4_SEAM_LOOKBACK_S = 86400</code> 那个「依赖 <code>ZRUN_FLUSH_S</code> 不变」的跨层耦合降到一个周期。<b>用户 2026-10-16 否决</b>:代价在行数(几千种子时放大),且会撕开「空闲期主文件零写入」这条不变式、引入「按 key 走不同口径」的特例。<b>仍是所有候选里改动面最小的一个</b>,日后若重开它是首选。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box warn">
+    <div class="t">评估期的两个派生发现(已入池,不在本计划范围)</div>
+    <ul>
+      <li><b>agg 行 totals 归属错位</b>(<a href="../issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html">26-10-16-0020-bug-agg-hour-totals-frozen-run</a>,Open):跨小时界的 z 游程让游程内的 hour 行 totals 全部等于冻结快照,增长被推到下一个封口点 —— 报告 §05 实测的「07:00 小时行 totals 线一次 +15 MB 台阶」即此。<b>读侧结构性够不到</b>(<code>v4_agg_obs</code> 对 agg 行直映不上差分),是唯一只有写侧能治的一条。</li>
+      <li><b>agg rate lane 低载期低估</b>(<a href="../issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html">26-10-16-0020-question-agg-rate-lane-invisible-bytes</a>,Open):hour 行 avg 只按记录的瞬时速率加权(<code>v4_hour_agg:807</code>),游程期间入账速率恒 0 ⟹ 隐形字节从未进入任何 hour 的 avg(报告实测某天全天 <code>dl_max=0</code> 而 alltime 实增数百 MB)。<b>本质是口径判断题</b>(速率图要不要含握手字节与模型化 IP 开销),与 P5 写进单点的「基线几百 B/s 不是读数噪声」是同一件事的两面,需另一次拍板。</li>
+    </ul>
+    <p>两条都<b>不影响 raw 面(1m–24h)</b> —— 日常主要看的那一面已由 P2 修好,故默认不修、留池待排期。</p>
+  </div>
 </section>
 
 <!-- ============================================================ -->
@@ -658,7 +695,7 @@
   <h3>回滚</h3>
   <ul>
     <li><b>P2 纯读侧</b>:回退即恢复旧口径,无数据影响、无迁移成本。</li>
-    <li><b>P1 写侧</b>:若采用 1B(补显式 r),回退只影响新写入文件的接缝形态;若采用 1A(改 z 行语义),需保留旧快照语义的开关或回到旧版本 -- 这是把 P1 排在 P2 之后、并优先评审 1B 的理由之一。</li>
+    <li><b>P1 写侧</b>(<span class="pill p1">已不实施 · 仅存档</span>):若采用 1B(补显式 r),回退只影响新写入文件的接缝形态;若采用 1A(改 z 行语义),需保留旧快照语义的开关或回到旧版本 —— 这曾是「把 P1 排在 P2 之后、并优先评审 1B」的理由之一。<b>26-10-16 已定四个形态全不实施</b>,理由见 <a href="#p1-record">§03 P1 裁决记录</a>;本条不再作为选型输入。</li>
     <li>上线前建议先在有代表性的本地数据上回放(E2E1),确认无对账缺口后再真机。</li>
   </ul>
 </section>
@@ -667,7 +704,7 @@
 <section id="s7">
   <h2><span class="no">07</span>待拍板项</h2>
   <ol>
-    <li><b>P1 形态二选一</b>:1A 改 z 行 totals 语义(更彻底,动格式语义)vs 1B 补显式 r 记录(更保守,不动既有行语义)。</li>
+    <li><b><span class="pill p1">已关闭</span>P1 形态二选一</b>:原「1A 改 z 行 totals 语义 vs 1B 补显式 r 记录」二选一 —— <b>26-10-16 拍板:四个形态全不实施</b>(1A 否决 / 1B 不实施 / 1B' 派生速率不实施 / 封口粒度调整用户否决)。裁决、判据与派生发现见 <a href="#p1-record">§03「实施记录 · P1 收益评估与形态裁决」</a>;两个 agg 面计划外缺陷已另行入池(见该记录)。本计划不再为此步排期。</li>
     <li><b>P2 阈值与兜底</b>:摊配下限(默认 2×标称 interval,兜底 60s)与超长接缝标 null 的上限(默认 60s)-- 常量取值是否配置化。</li>
     <li><b>P3 范围</b>:只做「缺席告警」还是叠加「定期 rid=0 全量刷新」(后者成本 = 一次全量 maindata/分钟)。</li>
     <li><b>实施批次</b>:P2 单独先行(先拿收益)还是 P1+P2 同批(报告口径的「两步闭环」)。</li>
@@ -676,7 +713,7 @@
 
   <div class="box warn">
     <div class="t">本计划的状态</div>
-    <p>Open · 待用户拍板。<b>本轮为纯文档轮</b>:未改任何代码、配置与运行数据;未入池 issue、未立档、未提交。拍板后按 §03 顺序开工,收尾按 DoD 更新 activeContext / 立档 / 基线切片 / 回写 progress。</p>
+    <p><b>Open</b> · §07 五项拍板项<b>已全部关闭</b>(#1 已于 26-10-16 关闭为「不实施」,#2/#3/#4 按前轮定案,#5 按 P4 落地)。剩余未决只有 <b>E2E5 真机人工验收</b>(P4 接缝提示需一次真实的 auto-qb 重启肉眼确认)。<b>本 supplement 为纯文档轮</b>:未改任何代码 / 配置 / 运行数据;入池 2 条 agg 面计划外缺陷、未认领、未立档。</p>
   </div>
 </section>
 
@@ -703,6 +740,13 @@
         <td>本计划的形态与 meta 协议(plan 工位、状态词、命名、改版规则)。</td>
       </tr>
       <tr>
+        <td>
+          <a href="../issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html">issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html</a><br>
+          <a href="../issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html">issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html</a>
+        </td>
+        <td><b>本计划的派生件</b>(均 Open、未认领):P1 收益评估期发现的两个 agg 面计划外缺陷 —— 前者是 totals 归属错位(确定该修),后者是 rate lane 口径待拍板。均<b>不影响 raw 面</b>,默认不修,详见 <a href="#p1-record">§03 P1 裁决记录</a>。</td>
+      </tr>
+      <tr>
         <td><a href="../testing/baseline.md">testing/baseline.md</a></td>
         <td>测试基线的口径与写入口径单点(数字只在 baselines/ 落一处)。</td>
       </tr>
@@ -718,6 +762,7 @@
   <p>26-10-15-1247 — P3 实施完成:§03 追加「实施记录 · P3」,状态栏与 P3 步骤标记更新;范围拍板 = 只做①缺席告警(§07 #3),做法②不实施;全量数字见基线切片 <code>testing/baselines/26-10-15-1247-qb-traffic-restart-spike-gap-p3.md</code>。</p>
   <p>26-10-15-1422 — P4 实施完成:§03 追加「实施记录 · P4」,状态栏与 P4 步骤标记更新;meta 新键 server_started_at(模块级进程出生锚点)+ 前端 _qbSeamHint 判据 + drawer.html 提示行,断线语义零改动;E2E5 留真机人工验收;全量数字见基线切片 <code>testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md</code>;触 5 源文件 ≥3 已立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(§07 #5 更新);连带 _auth 单点收敛(写入判据误报处置,用户拍板①,坑档 pitfalls/testing/credential-shape-write-guard.md)。</p>
   <p>26-10-15-1502 — P5/P6 实施完成(零改码轮):§03 追加「实施记录 · P5」「实施记录 · P6」,状态栏与步骤标记更新;P5 = 口径写入 <code>progress/implemented-webui-history.md</code> 单点(引报告 §04.5);P6 = 出站端口评估结论「建议改(低优先级):首选 qB 侧两键归 0(OS 自选)或给足余量,不动 connection_speed」入档,qB prefs 与本仓均未动。零改码无测试面变化(P4 基线仍为当前事实源)。</p>
+  <p>26-10-16-0020 — P1 收益评估与形态裁决(<b>纯文档轮</b>,三轮:26-10-15 23:11 / 23:58 / 26-10-16 00:16;未改任何代码 / 配置 / 运行数据):§03 追加「实施记录 · P1 收益评估与形态裁决」;<b>§07 #1 关闭为「不实施」</b> —— 四个形态逐个裁决(1A 否决 · 1B 不实施 · 1B' 派生速率不实施 · 封口粒度调整用户否决),理由、判据与源码锚点(clone @ <code>b17c671d</code>)见该记录;状态栏与 P1 步骤标记同步改为「不实施」。评估期派生发现两条 agg 面计划外缺陷已入池(<code>issues/26-10-16-0020-bug-agg-hour-totals-frozen-run</code> · <code>issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes</code>,均 Open 未认领、不影响 raw 面);§附 Refs 追加该两条以闭合认领链入口。用户明示本轮不另出报告,故全部结论落在本文内。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

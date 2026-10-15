@@ -19,17 +19,19 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
-| question | 5 |
+| question | 6 |
 
 ## Open
 
+- [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 ag…
+- [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-…
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成…

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="agg-hour-totals-frozen-run">
+<meta name="issue-stamp" content="26-10-16-0020">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="qb-traffic-restart-spike-gap">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="agg 行 totals 归属错位: 游程内部小时行共用冻结快照">
+<meta name="issue-summary" content="空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行">
+<title>agg 行 totals 归属错位: 游程内部小时行共用冻结快照 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>agg 行 totals 归属错位: 游程内部小时行共用冻结快照</h1>
+    <p class="lede">空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-0020-bug-agg-hour-totals-frozen-run</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 00:20</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在<a href="../plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">计划 26-10-15-0829</a> 的 P1（写侧 z 游程在盘上携带末端真值）收益评估中读码发现：一个<b>跨越小时界</b>的空闲 z 游程，其覆盖的那几小时的 agg hour 行 <code>dl_total/up_total</code> 全部等于<b>游程开启时刻的冻结快照</b> —— 游程期间真实增长的字节既不进这些行的累计 lane、也不进它们的速率 lane（后者另见 <code>26-10-16-0020-question-agg-rate-lane-invisible-bytes</code>），只在游程结束后的第一段覆盖才开始体现。</p>
+    <p>2026-10-15 事故实例上的可见表现是「07:00 小时行封口时 totals 线一次 +15 MB 台阶」（见<a href="../reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html">报告 26-10-15-0728</a> §05「agg 视图」行）。</p>
+    <p><b>触发条件</b>：任一 z 游程（两侧速率读数同时为 0 的连续段）跨越小时界 / 自然日界，且游程期间 qB alltime 计数器仍在增长（细流，机理见报告 §04.5）。低载实例上是常态而非异常。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p>写侧 agg 入账：z 游程内部每个槽区间都以<b>冻结快照</b>记账（取证 2026-10-16 00:20 · clone @ <code>b17c671d</code>）：</p>
+<pre><code># src/auto_qb/core/modules/traffic_sample_mod.py:1034-1037
+        if isinstance(rec, V4ZeroRun):
+            # 游程内部槽区间: 速率恒 0, totals 恒快照(逐槽均摊折叠为逐区间, 聚合值等价)
+            for k in range(len(slots) - 1):
+                self._agg_credit_hours(agg.pending, slots[k], slots[k + 1], 0, 0, rec.dl_total, rec.up_total)</code></pre>
+    <p>这个快照固定在游程<b>开启</b>时刻，游程内从不刷新（同一文件 OpenRun 字段注释，取证同上）：</p>
+<pre><code># src/auto_qb/core/modules/traffic_sample_mod.py:232-233
+    buffer 记录(_seal_run)。主循环线程独占(黄金法则 5), 随进程消失(崩溃丢 <= ZRUN_FLUSH_S
+    纯零信息); totals 快照固定在开启时刻(首个零样本的 all-time 对), 后续零样本不刷新。</code></pre>
+    <p>hour 行的 totals 取该小时<b>末记录</b>的快照 —— 于是游程内的小时把它写成游程起点值（取证同上）：</p>
+<pre><code># src/auto_qb/core/traffic_store.py:803, 811-812
+    last = samples[-1]
+        dl_total=int(last.dl_total),
+        up_total=int(last.up_total),</code></pre>
+    <p>而 agg 段窗到响应的映射是<b>直映不上差分</b>（<code>traffic_grid.py:686</code>，取证同上），读侧手里没有任何「增长发生在哪一刻」的信息可以翻案：</p>
+<pre><code># src/auto_qb/core/traffic_grid.py:686
+    return {r.epoch: BucketObs(r.dl_avg, r.up_avg, r.dl_total, r.up_total) for r in rows if r.epoch in buckets}</code></pre>
+    <p>报告侧的实测描述（<code>reports/26-10-15-0728</code> §05 表格「agg 视图」行，原文）：</p>
+<pre><code>agg 视图 | 00:00–06:00 小时行全部携带冻结快照 + 零速率 |
+细流在 agg 视图同样不可见；接缝差摊到 06:00 小时桶 ≈4.2 KB/s 无可见尖峰；
+但 07:00 小时行封口时 totals 线会有一次 +15 MB 台阶</code></pre>
+    <p class="hint">注：上面四条代码证据均来自<b>读码</b>（clone @ <code>b17c671d</code>），本次未跑真机复现 —— 认领时先复跑锚点。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>z 游程跨小时界 / 自然日界，且游程期间 alltime 计数器仍在增长（细流）。低载实例（多数种子已完成、靠冗余连接握手维持几百 B/s）上为常态。</td></tr>
+      <tr><td>影响范围</td><td>全部 agg 段窗的<b>累计（totals）lane</b>：3d/7d/30d（hour 行）/ 6mo/1y（day 行）/ all（month 行），并逐级上卷（day 行 totals 取当日 hour 行末值）；依赖 agg 行 totals 的日对账同样受影响。<b>不影响 rate lane</b>，<b>不影响 raw 段窗（1m–24h）</b> —— 后者已由同期计划 26-10-15-0829 的 P2 修复。</td></tr>
+      <tr><td>严重度</td><td><b>低</b>。raw 面（日常主要看的面）无影响；agg 累计 lane 的绝对值与单调性在低载期失真，量级受限于封口粒度内的隐藏增长。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>traffic_sample_mod.py:1034-1037</code>（取证 2026-10-16 00:20 · clone @ <code>b17c671d</code>）· 符号 <code>_agg_feed</code> 的 V4ZeroRun 分支 · grep <code>速率恒 0, totals 恒快照</code></li>
+      <li><code>traffic_sample_mod.py:232-233</code>（取证同上）· 符号 <code>OpenRun</code> docstring · grep <code>totals 快照固定在开启时刻</code></li>
+      <li><code>traffic_store.py:803, 811-812</code>（取证同上）· 符号 <code>v4_hour_agg</code> · grep <code>dl_total=int(last.dl_total)</code></li>
+      <li><code>traffic_grid.py:686</code>（取证同上）· 符号 <code>v4_agg_obs</code> · grep <code>BucketObs(r.dl_avg</code> —— 证明读侧无从追溯</li>
+      <li>❗<b>离线恢复路径同源</b>：<code>traffic_sample_mod.py:1383</code> 符号 <code>_agg_credit_day_file</code>（恢复时对天文件逐槽前向记账）与在线 <code>_agg_feed</code> 同口径 —— 任一修法都必须两路一起改，否则 catch-up 重建的行与在线写入的行不一致</li>
+      <li>❗<code>_agg_feed</code> 的调用点在 <code>traffic_sample_mod.py:911</code>（<b>逐记录即时</b>，在 per-record 循环里，不是 flush 时批处理）—— 「事后补一条记录」类修法追溯不到已记账的区间</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">机理已读码确认（<b>未经真机复现</b>，认领时先复跑 §04 锚点）：写侧 z 游程的 totals 快照冻结在<b>开启</b>时刻且游程内不刷新（刻意不为，免每样本重读），<code>_agg_feed</code> 把该常量按槽区间原样记账进 <code>agg.pending</code>，而 <code>v4_hour_agg</code> 取 samples[-1] 作为该小时行的 totals ⟹ 游程内部的每个小时，其「小时末应有的累计值」被写成「游程起点值」；增长只能从游程结束后第一条记录的覆盖开始体现，于是差额在下一个封口点一次性出现。<br><br><b>已排除</b>：不是读侧判据问题 —— <code>v4_agg_obs</code> 对 agg 行是直映、不建差分链，磁盘上没有「增长发生在哪一刻」的任何信息，读侧结构上无从追溯。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>候选已在 <a href="../plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">计划 26-10-15-0829</a> 的 P1 收益评估（2026-10-15 晚 ~ 2026-10-16 00:20）里逐个读过，<b>结论录此以免重复劳动</b>：</p>
+    <ol>
+      <li><b>读侧修</b> —— <b>不可行</b>。<code>v4_agg_obs</code> 对 agg 行直映不上差分，磁盘上没有锚点。</li>
+      <li><b>写侧 1A：z 行 totals 改存末端值</b> —— <b>已否决</b>。会把 raw 面差分链的台阶从「游程末端（身后有整段等值 z 槽可供 P2 摊配）」搬到「游程首桶」，而 <code>v4_totals_points</code> 的摊配判据要求 <code>run[2]</code>（锚点之后的等值观测点表）非空，首桶触发时它必为空 ⟹ 每次空闲段开始都会产出一颗新的单桶 artifacts。治好 agg 面、弄坏 raw 面。</li>
+      <li><b>写侧补尾部记录（1B / 带派生速率的 1B'）</b>（本计划原本的建议形态）—— <b>已否决，且它拿不到本条收益</b>。<code>_agg_feed</code> 逐记录即时入账（<code>:911</code>），处理 z 行那一刻内部区间已经记完；事后到达的尾部记录只能写 <code>open_credit</code>、覆盖游程<b>之后</b>那一段，追溯不到游程内部。</li>
+      <li><b>z 游程定期封口（如每整点）</b> —— 语义与格式都不动，就能让每个小时拿到本段的真实起点，且顺带把 <code>_V4_SEAM_LOOKBACK_S = 86400</code> 那个「依赖 ZRUN_FLUSH_S 不变」的跨层耦合降到一个周期。<b>用户在 2026-10-16 已否决</b>：代价在行数（几千种子时放大），且会撕开「空闲期主文件零写入」这条不变式。<b>仍是所有候选里改动面最小的一个</b>，若日后重开它是首选。</li>
+      <li><b>挂起结算</b>（<code>_agg_feed</code> 先不记游程内部区间，等末端值到达再补记）—— <b>未评估，成本最高</b>。会引入新的待结算态，与现有「崩溃丢 ≤ ZRUN_FLUSH_S 纯零信息」的口径冲突（变成丢真实字节），且在线路与离线 <code>_agg_credit_day_file</code> 必须同步改造。</li>
+    </ol>
+    <p class="hint">本条 2026-10-16 入池时未被认领，<b>默认不修</b>：raw 面（日常主用）不受影响，agg 累计 lane 的失真量级受限于封口粒度内的隐藏增长。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 00:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 00:20 — 来源：计划 26-10-15-0829 的 P1 收益评估（读码三轮，未跑真机复现）；候选 1A / 尾部记录 / 定期封口的裁决理由见 §06</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-16-0020-bug-agg-hour-totals-frozen-run.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
