@@ -5,7 +5,7 @@
 - `GET /api/hr/discover`: 返回本机全部存活实例的数据端点与 token —— 扩展只配一个发现地址
   就能拿到全部实例(「token 自动分发」); 它本身就是发 token 的, 所以**免 token**,
   两道关是 origin 白名单(与数据端点第二道防线同一机制) + 配对码(仅非回环可达时强制, S3);
-- `InstanceRegistry`: 本机实例注册表(平台 app-data 的 instances.json), 心跳 + TTL 聚合;
+- `InstanceRegistry`: 本机实例注册表(平台 app-data 的 instances.json), 心跳 upsert(写时剪枝超龄) + TTL 聚合;
 - 候选表先绑先得(discovery_port 起 +0/+1/+2, C7)+ 绑定失败后台退避重试(占用者退出自动
   接管, 翻转旧「归属者退出不接管」限制 —— R6)+ 校验期临时端口段告警(S1 ⑥, 在 config 层);
 - 发现不可用**永不**影响数据端点: 三个候选全占 ⇒ 明确日志 + 数据端点照常服务(扩展退手动)。
@@ -86,6 +86,20 @@ def default_registry_path() -> str:
     return os.path.join(base, REGISTRY_DIRNAME, REGISTRY_FILENAME)
 
 
+def _entry_fresh(entry: Dict[str, Any], *, now: float, ttl: float) -> bool:
+    """条目是否落在 TTL 窗口内(ts 可解析且未超龄)
+
+    !读路径(`alive` 的过滤)与写路径(`upsert` 的剪枝)**共用这一条判据** —— 两处各写一份必然
+    漂移, 而漂移的后果正是「读时看不见、写时不剪」: 文件仍无界增长(2026-10-16 用户实报
+    「发现产生很多无关条目」的成因之一, 累积到 684 条)。
+    ts 缺失 / 非数值 ⇒ 不可判活, 一律当超龄 —— 与「不给扩展半条」同口径。
+    """
+    try:
+        return now - float(entry.get("ts") or 0) <= ttl
+    except (TypeError, ValueError):
+        return False
+
+
 class InstanceRegistry:
     """本机实例注册表(跨进程共享文件): 心跳 upsert + TTL 过滤聚合(S2 ①)
 
@@ -94,15 +108,24 @@ class InstanceRegistry:
     os.replace 的原子性兜底(瞬时互覆盖由 30s 心跳自愈, 聚合侧再过 TTL)。
     条目形态: {"id", "name", "endpoint", "token", "ts"}; id = sha1(data_dir)[:12](runtime 算)
     —— 同 data_dir 重启复用同一条目, 天然 upsert; ts 是该条目最近一次心跳时刻。
+    !upsert 顺手剪掉超龄条目(见该方法): 注册表是**长期**文件, 只增不减会让死实例永久堆积。
     """
     def __init__(self, path: str) -> None:
         self.path = path
         self._lock = threading.Lock()
 
-    def upsert(self, *, entry_id: str, name: str, endpoint: str, token: str, ts: float) -> None:
-        """登记/刷新本实例条目(启动期与心跳线程都走这里; 同 id 覆盖)"""
+    def upsert(
+        self, *, entry_id: str, name: str, endpoint: str, token: str, ts: float, ttl: float = INSTANCE_TTL_S
+    ) -> None:
+        """登记/刷新本实例条目(启动期与心跳线程都走这里; 同 id 覆盖)
+
+        !顺手剪掉超龄条目 —— 写路径是**唯一**的写入口, 剪枝放这里最省(有活实例心跳就一定有
+        剪枝; 全死时文件留着也无害, 没人读它)。只读时过滤(alive)不够: 那样死实例只是
+        「看不见」, 文件仍无界增长, 且每次心跳都要整份读 + 整份写。
+        剪枝基准 = 本次 upsert 的 ts(生产所有写者都用 time.time())。
+        """
         with self._lock:
-            entries = [e for e in self._load() if e.get("id") != entry_id]
+            entries = [e for e in self._load() if e.get("id") != entry_id and _entry_fresh(e, now=ts, ttl=ttl)]
             entries.append({"id": entry_id, "name": name, "endpoint": endpoint, "token": token, "ts": ts})
             self._save(entries)
 
@@ -110,15 +133,7 @@ class InstanceRegistry:
         """TTL 过滤后的存活实例(缺 endpoint / 缺 token 的残条目一并剔除, 不给扩展半条)"""
         with self._lock:
             entries = self._load()
-        out: List[Dict[str, Any]] = []
-        for e in entries:
-            try:
-                fresh = now - float(e.get("ts") or 0) <= ttl
-            except (TypeError, ValueError):
-                continue
-            if fresh and e.get("endpoint") and e.get("token"):
-                out.append(e)
-        return out
+        return [e for e in entries if _entry_fresh(e, now=now, ttl=ttl) and e.get("endpoint") and e.get("token")]
 
     def _load(self) -> List[Dict[str, Any]]:
         """读注册表(容忍: 缺文件 / 坏 JSON / 非列表 ⇒ 空表, 不抛 —— R5; 下次心跳自愈)"""

@@ -1,7 +1,8 @@
 """pytest 全局夹具: 测试期禁止**真实系统副作用**。
 
-覆盖三件事, 都是会话级 autouse 夹具 —— 拦在"真实副作用入口"之前:
-1. 系统通知: 通知器进程不启动; 2. AUMID 注册表键: 不落盘; 3. 全程记账: 越界副作用直接让本次运行失败。
+覆盖四件事, 都是会话级 autouse 夹具 —— 拦在"真实副作用入口"之前:
+1. 系统通知: 通知器进程不启动; 2. AUMID 注册表键: 不落盘; 3. 全程记账: 越界副作用直接让本次运行失败;
+4. HR 实例注册表: 不写用户真实 app-data(测试的 `data_dir` 每例唯一 ⇒ 不隔离就是每例一条死条目)。
 
 ## 1. 真实系统通知 (2026-09-18 实测)
 
@@ -46,6 +47,24 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 
 放行清单与判定策略见 [sidefx.py](sidefx.py) 模块 docstring; 策略本身有单测
 (`tests/test_sidefx.py`), 改清单时同步。
+
+## 4. HR 实例注册表 (2026-10-16 用户实报「发现产生很多无关条目」)
+
+**背景**: `hr.runtime._build_discovery()` 经 `InstanceRegistry(default_registry_path())` 把本实例
+心跳登记进**用户真实 app-data**(`%LOCALAPPDATA%/auto-qb-hr/instances.json`)。条目 id 是
+`sha1(config.data_dir)[:12]`, 而测试的 `data_dir` 是**每个用例唯一的 `tmp_path`** ⇒ 每个用例都算
+「一个全新实例」, upsert 的去重键对不上, 只能新增 —— 实测跑一次 `test_hr_runtime.py` 就往真实
+文件追加 **24 条**死条目(端口随机 / token 随机 / 永不再心跳)。累积到 684 条后, 扩展「立即发现」
+在 `INSTANCE_TTL_S`(120s)窗口内把整批死条目当存活实例整批采纳: 列表里全是无关条目, 且后端按
+文件序(最后心跳升序)返回 ⇒ `instances[0]` 恒为最旧的死实例 ⇒ 主实例自测报 `Failed to fetch`。
+旧形态只有 `test_hr_discovery._isolate_registry` 一个文件做了隔离, 其余文件全部漏网。
+
+**处置**: 会话级把 `auto_qb.hr.runtime` 命名空间里的 `default_registry_path` 指向临时目录。
+**只 patch runtime 的引用**, 不动 `hr.discovery.default_registry_path` 本身 —— 所以
+`test_default_registry_path_platform_shape` 仍能断言真实平台形态; 需要**逐用例**独立文件的用例
+(如 `test_hr_discovery._isolate_registry`)照旧 monkeypatch, 会自然覆盖本夹具。
+
+**不拦什么**: 生产路径照旧; 用户真实注册表与 `auto-qb-data/` 一个字节都不写。
 """
 import os
 import re
@@ -195,6 +214,24 @@ def _no_real_aumid_registry_write():
     finally:
         winreg.CreateKeyEx = real_create_key_ex
         winreg.SetValueEx = real_set_value_ex
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_hr_registry(tmp_path_factory):
+    """会话级: HR 实例注册表重定向到临时目录(详见模块 docstring 4.); 返回该路径供守阵断言
+
+    !只 patch `auto_qb.hr.runtime` 命名空间里的引用 —— `hr.discovery.default_registry_path` 本身
+    不动, 否则 `test_default_registry_path_platform_shape`(断言真实平台形态)会跟着被改掉。
+    """
+    from auto_qb.hr import runtime as hr_runtime
+
+    path = str(tmp_path_factory.mktemp("hr-registry") / "instances.json")
+    real = hr_runtime.default_registry_path
+    hr_runtime.default_registry_path = lambda: path
+    try:
+        yield path
+    finally:
+        hr_runtime.default_registry_path = real
 
 
 from webui_helpers import _make_web_manager

@@ -1,7 +1,9 @@
 """test_hr_discovery 测试计划: 发现服务 + 实例注册表 + 配对码(计划 26-10-14-1241 S2/S3/S6)
 
 分四层:
-1. 候选表与注册表(纯逻辑/文件): 连号候选与 65535 截断 / upsert+TTL 过滤 / 缺文件与坏文件容忍;
+1. 候选表与注册表(纯逻辑/文件): 连号候选与 65535 截断 / upsert+TTL 过滤 / 写路径剪枝超龄条目
+   (死实例不永久堆积, 边界与 alive 同判据) / 缺文件与坏文件容忍 / 测试期路径隔离守阵
+   (runtime 的注册表路径必须被 conftest 重定向到临时目录, 不许写用户真实 app-data);
 2. 发现路由(纯逻辑): origin 门 403 / OPTIONS / 404 / 配对三门(缺=pairing_required,
    错=pairing_invalid, 对=200+no-store) / auto 生效分叉(回环免码, 非回环强制) / 凭证等价形态 /
    聚合与 TTL / 0.0.0.0 的 Host 头替换(只影响响应文本);
@@ -129,6 +131,41 @@ def test_default_registry_path_platform_shape():
     p = default_registry_path()
     assert os.path.basename(p) == "instances.json"
     assert "auto-qb-hr" in p
+
+
+def test_registry_prunes_expired_on_upsert(tmp_path):
+    """写路径剪枝(2026-10-16 用户实报「发现产生很多无关条目」的成因之一)
+
+    只读时过滤(alive)不够: 死实例只是「看不见」, 文件仍无界增长(实报时累积到 684 条),
+    且每次心跳都要整份读 + 整份写。upsert 顺手剪掉超龄条目, 边界与 alive 用同一条判据。
+    """
+    reg = InstanceRegistry(str(tmp_path / "instances.json"))
+    now = 1000.0
+    reg.upsert(entry_id="old" * 4, name="dead", endpoint="http://127.0.0.1:1", token="k1", ts=now - INSTANCE_TTL_S - 1)
+    assert reg.alive(ttl=INSTANCE_TTL_S, now=now) == [], "超龄条目读时本就看不见"
+    reg.upsert(entry_id="new" * 4, name="live", endpoint="http://127.0.0.1:2", token="k2", ts=now)
+    raw = json.loads((tmp_path / "instances.json").read_text(encoding="utf-8"))
+    assert [e["id"] for e in raw] == ["new" * 4], "写路径把它从文件里剪掉了(不只是读时过滤)"
+    # 边界: 恰好等于 TTL 的条目仍在窗口内(与 alive 同判据, 不许差一)
+    reg.upsert(entry_id="edge" * 3, name="edge", endpoint="http://127.0.0.1:3", token="k3", ts=now - INSTANCE_TTL_S)
+    assert [e["id"] for e in reg.alive(ttl=INSTANCE_TTL_S, now=now)] == ["new" * 4, "edge" * 3]
+
+
+def test_hr_registry_path_is_isolated_from_real_file(_isolated_hr_registry):
+    """守阵: 测试期 runtime 用的注册表路径必须被 conftest 重定向到临时目录
+
+    !为什么: 真实注册表在用户 `%LOCALAPPDATA%/auto-qb-hr/instances.json` 且**无界增长** ——
+    条目 id 是 `sha1(data_dir)[:12]` 而测试的 data_dir 是每例唯一的 tmp_path ⇒ 每个用例都算
+    「一个全新实例」, 实测跑一次 test_hr_runtime.py 就往真实文件追加 24 条死条目; 累积后被扩展
+    「立即发现」整批采纳(列表全是无关实例、主实例指向死端口)。本守阵钉住「测试永不写真实注册表」
+    这条纪律 —— 删掉或改坏 conftest 的 `_isolated_hr_registry` 夹具, 它就会红。
+    """
+    import auto_qb.hr.runtime as hr_runtime
+
+    from auto_qb.hr.discovery import default_registry_path as real_path
+
+    assert hr_runtime.default_registry_path() == _isolated_hr_registry
+    assert _isolated_hr_registry != real_path(), "临时路径不得与真实 app-data 路径重合"
 
 
 # ---------- 2. 发现路由 ----------
