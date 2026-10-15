@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-1145">
+<meta name="doc-updated" content="26-10-15-1247">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145) · P3–P6 待拍板</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247) · P4–P6 待拍板</div>
 </nav>
 
 <header class="cover">
@@ -136,7 +136,7 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2 已完成 · P1 暂缓 · P3–P6 待拍板</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3 已完成 · P1 暂缓 · P4–P6 待拍板</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
@@ -307,7 +307,7 @@
     <div class="step">
       <div class="sid">P3</div>
       <div class="sbody">
-        <div class="st">同步层:速率键新鲜度可观测 <span class="pill p3">加固</span></div>
+        <div class="st">同步层:速率键新鲜度可观测 <span class="pill p3">加固</span> <span class="pill p3">已完成 26-10-15-1247 · 结论见下方实施记录</span></div>
         <ul>
           <li><b>落点</b>:<span class="k">torrents/store.py:164-168</span>(合并语义)+ 采样侧字段读取路径。</li>
           <li><b>做法(二选一或并存)</b>:1 速率键(<code>dl_info_speed / up_info_speed</code>)连续 N 轮缺席记 WARNING(同一系列节流,恢复前只告警一次,对齐既有「封口失败节流」先例);2 可选:每 ~60s 一次 <code>rid=0</code> 全量 maindata 强制取回速率键。</li>
@@ -434,6 +434,37 @@
       <li><b>#4 实施批次</b>:P2 单独实施已闭环主症状(E2E1);<b>P1 暂缓(用户拍板 26-10-15-1145)</b> —— 维持 P0 定案的「可选」定位(治不到活尾期尖峰),待重启后观测面复核再议。</li>
       <li><b>#5 立档</b>:本轮触及 2 个源文件(&lt; 3),按本计划 §07.5 不另立任务档案,专题记录由本计划 + activeContext 切片承载;如需立档请显式说。</li>
       <li>#1(P1 形态)/#3(P3 范围)不受本轮影响,仍待拍板。</li>
+    </ul>
+  </div>
+
+  <h3 id="p3-record"><span class="tag2">REC</span>实施记录 · P3 同步层速率键新鲜度可观测(26-10-15-1247 · clone @ d09a87ed)</h3>
+  <p class="lead">实施轮:改动 <code>src/auto_qb/torrents/store.py</code> + <code>tests/test_sync.py</code> 两个源文件;未触配置/运行数据/前端/采样器。范围拍板:用户选「只做①缺席告警」(§07 #3)—— 做法②(定期 rid=0 全量刷新)不实施,判据「全量刷新不改变稳态行为」随②一并搁置。<code>store.py</code> 自计划基线 8d089678 字节级零漂移(git diff 为空);§01 的 <code>:164-168</code> 即 FIX-04a 合并区段,本轮改动后合并块现位于 <code>:184-186</code>(移位来自本轮自身新增代码)。</p>
+  <table>
+    <thead><tr><th style="width:190px">决策点</th><th>定案与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>观测点与判据单位</b></td>
+        <td>追踪单点 <code>_track_rate_key_freshness</code> 挂 <code>apply_sync</code> 合并时刻之后 —— 「键缺席」这一事实只在合并时刻可观测(合并完成后「未变化键缺席」与「收到了同值」不可区分),早于 <code>_apply</code>(早退轮也计数)。判据单位 = <b>键对</b>(<code>dl_info_speed/up_info_speed</code> 两键齐报才算新鲜,缺任一或整包缺 <code>server_state</code> 都计缺席)—— 缺席的那一键正被「合并保留旧值」喂着。全量轮键集完整恒复位;降级全量路径(无 <code>server_state</code> 可言)不计数,已有独立降级告警。</td>
+      </tr>
+      <tr>
+        <td><b>阈值与节流</b></td>
+        <td><code>_RATE_FRESH_WARN_ROUNDS = 3</code>(模块常量非配置键,P2 <code>test_v4_seam_constants_frozen</code> 同族钉值;main_tick 默认 2s ⇒ 缺席 ~6s 内可见;单轮/少数轮缺席是增量语义正常形态,不误报)。节流对齐 <code>traffic_sample_mod._agg_warned</code> 封口失败先例:同一段缺席期恢复前只告警一次,告警携带当前合并读数(dl/up)与「速率读数可能陈旧」提示;恢复上报(全量轮/速率变化轮)复位计数与节流记忆,<code>reset_sync</code>(重连/热重载)一并复位。</td>
+      </tr>
+      <tr>
+        <td><b>纪律:合并语义零改动</b></td>
+        <td>只加观测,不改合并:缺席保留旧值(FIX-04a)、server_state 键集稳定、无「键被移除」语义、不引入陈旧键 —— 既有 server_state 用例(captures / partial_delta / first_round_partial / missing_keeps_previous 等)逐字不动全绿;采样器与 Web 消费方读数行为不变。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box ok">
+    <div class="t">P3 判定:验收达成(①范围内)</div>
+    <p>「速率可能陈旧」在日志可见(WARNING 携带缺席轮数与合并读数);<code>tests/test_sync.py</code> 新增 6 条 rate 键用例全绿,守阵红绿双验三类突变判红(阈值失效 3 红 / 节流失效 1 红 / 恢复不复位 1 红)后还原复绿;全量 <code>test.full</code> 3363 passed + 4 skipped(基线切片 <code>testing/baselines/26-10-15-1247-qb-traffic-restart-spike-gap-p3.md</code>;对 P2 基线 3307+3 的 +56+1 差值已对账:102ed6c6 hr 波次第二批守阵 51 条(含 1 skip)经 P2 提交 rebase 入树 + 本轮 6 条)。</p>
+  </div>
+  <div class="box">
+    <div class="t">待拍板项状态(§07)</div>
+    <ul>
+      <li><b>#3 P3 范围:已拍板已实施</b>(用户 26-10-15-1247 选「只做①缺席告警」)—— 做法②未实施;若后续观测面显示「仅可见」不够(需要主动限陈旧),②可与①独立后补,无需返工。</li>
+      <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#4 已按 P2 定案(P2 单独实施闭环);#5 本轮触 2 源文件(&lt; 3)不另立档案。</li>
     </ul>
   </div>
 </section>
@@ -601,6 +632,7 @@
   <p><b>变更记录</b>:26-10-15-0945 — P0 实施完成(只读轮,未改码/配置/数据):§03 追加「实施记录 · P0」,状态栏与 P0 步骤标记更新;按实施记录改写 P1(降级可选)/P2(升级唯一必要环、落点扩为两缝)的相对定位,§07 待拍板项正文不动、影响见实施记录。</p>
   <p>26-10-15-1135 — P2 实施完成:§03 追加「实施记录 · P2」,状态栏与 P2 步骤标记更新;落点扩展(v4_series_points 窗界有界回看)与 _V4_NULL_FLOOR_S 退役见实施记录;E2E1 三窗 PASS;全量数字见基线切片 <code>testing/baselines/26-10-15-1135-qb-traffic-restart-spike-gap-p2.md</code>。</p>
   <p>26-10-15-1145 — 用户拍板「P1 暂缓, 提交」:P1 步骤标记与待拍板状态更新,其余不动。</p>
+  <p>26-10-15-1247 — P3 实施完成:§03 追加「实施记录 · P3」,状态栏与 P3 步骤标记更新;范围拍板 = 只做①缺席告警(§07 #3),做法②不实施;全量数字见基线切片 <code>testing/baselines/26-10-15-1247-qb-traffic-restart-spike-gap-p3.md</code>。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

@@ -24,13 +24,25 @@ _SYNC_UNAVAILABLE = (AttributeError, NotFound404Error)
 # 同时它给 deferral 的**有界性**提供不依赖 qB 的独立下限(见 own_write_pending)。
 _OWN_WRITE_TTL = 10.0
 
+# 速率键新鲜度告警阈值(plan 26-10-15-0829 P3, 模块常量非配置键): server_state 的速率键
+# (dl_info_speed/up_info_speed, 流量采样 z 判据与 Web 统计窗的读数源)连续 N 轮未出现在
+# sync 响应时记 WARNING —— 增量轮 qB 只报变化键, 速率长期不变即长期缺席, 而合并语义
+# (FIX-04a「缺席保留旧值」)使消费方读到的是「上次上报时刻」的速率, 新鲜度不可观测;
+# 本告警把「读数可能陈旧」变成日志可见的事实, 不改变任何合并行为。判据单位 = 键对
+# (两键齐报才算新鲜, 缺任一即计缺席 —— 缺席的那一键正被合并旧值喂着)。节流: 同一段
+# 缺席期恢复前只告警一次(对齐 traffic_sample_mod._agg_warned 封口失败节流先例);
+# 键恢复上报(全量轮/变化轮)即复位, 再次缺席重新计数。
+_RATE_FRESH_WARN_ROUNDS = 3
+
 
 class TorrentStore:
     """种子信息数据层: 主索引 + 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
 
     增量同步态(qB /api/v2/sync/maindata rid 语义, 见 apply_sync):
       - rid: 上次响应 ID(0 = 下轮需全量); need_validate: 本轮是否全量(校验闸门);
-      - using_fallback: 已降级全量(旧版 qB, 告警去重); validate_sample: 全量轮校验样本。
+      - using_fallback: 已降级全量(旧版 qB, 告警去重); validate_sample: 全量轮校验样本;
+      - 速率键新鲜度(P3): _rate_absent_streak/_rate_stale_warned —— 速率键连续缺席轮数
+        与节流告警记忆(纯内存, 见 _track_rate_key_freshness)。
     分组相关结构(供 GroupingModule 直接读写, 保持增量语义):
       - groups:        key=(save_path, 排序文件路径元组) -> [hash...]
       - group_sizes:   key -> {hash: {规范化相对路径: 大小}}
@@ -62,6 +74,10 @@ class TorrentStore:
         self.need_validate: bool = True
         self.using_fallback: bool = False
         self.validate_sample: Optional[Any] = None
+        # 速率键新鲜度追踪(P3, 纯内存): 连续未上报轮数 + 本段缺席期是否已告警(节流);
+        # 见 _track_rate_key_freshness, reset_sync 随同步态一并复位
+        self._rate_absent_streak: int = 0
+        self._rate_stale_warned: bool = False
         # qB 全局状态(sync/maindata 响应的 server_state: 会话/累计流量/DHT 节点等)
         # 每轮合并为新 dict 后原子替换引用(增量轮部分键不丢旧值), 供 Web /api/stats 透出;
         # 降级全量路径置 None(前端空态)
@@ -137,6 +153,8 @@ class TorrentStore:
             删除的种子列在 torrents_removed。
         端点不可用(旧版 qB / 测试替身缺方法)时降级为全量 torrents_info(一次性告警);
         其它异常 rid 归零后原样上抛(由调用方兜底, 不掩盖断连/鉴权问题)。
+        速率键(dl_info_speed/up_info_speed)连续 N 轮未上报 -> WARNING 一次(P3 新鲜度
+        可观测, 见 _track_rate_key_freshness; 不改变合并语义)。
         """
         try:
             md = api.sync_maindata(rid=self.rid)
@@ -166,6 +184,9 @@ class TorrentStore:
         if "server_state" in md:
             ss = md["server_state"]
             self.server_state = {**(self.server_state or {}), **dict(ss)} if isinstance(ss, Mapping) else ss
+        # 速率键新鲜度追踪(P3): 挂在合并时刻之后 —— 缺席这一事实只在本处可观测
+        # (合并完成后「未变化键缺席」与「收到了同值」不可区分), 早于 _apply(早退轮也计数)
+        self._track_rate_key_freshness(md)
         patches = md.get("torrents") or {}
         # 校验样本: 仅全量轮提供。注意 qB sync 响应的 **hash 是 torrents 字典的键**, 值内不含
         # hash(与 torrents/info 的数组元素不同) -> 校验前需补齐, 否则必报缺 'hash' 字段
@@ -175,6 +196,32 @@ class TorrentStore:
         else:
             self.validate_sample = None
         return self._apply(patches, list(md.get("torrents_removed") or []), full=full)
+
+    def _track_rate_key_freshness(self, md: Mapping) -> None:
+        """速率键新鲜度追踪(P3): 连续 N 轮未上报 -> WARNING 一次(恢复前节流, 不改合并行为)
+
+        增量轮 qB 只报变化键 —— 速率长期不变即长期缺席, 合并语义(FIX-04a)保留旧值, 消费方
+        (流量采样 z 判据 / Web 统计窗)读到的是「上次上报时刻」的速率。本告警把「读数可能
+        陈旧」变成日志可见的事实(取证价值: 本案 26-10-15 事故的速率字段恒 0 曾无锚可查),
+        不改变任何合并行为。判据单位 = 键对(两键齐报才算新鲜, 缺任一或整包缺 server_state
+        都计缺席); 全量轮键集完整恒复位。节流: 同一段缺席期恢复前只告警一次(对齐
+        traffic_sample_mod._agg_warned 封口失败节流先例), 恢复上报后再次缺席重新计数。
+        """
+        ss = md.get("server_state")
+        if isinstance(ss, Mapping) and "dl_info_speed" in ss and "up_info_speed" in ss:
+            self._rate_absent_streak = 0
+            self._rate_stale_warned = False
+            return
+        self._rate_absent_streak += 1
+        if self._rate_absent_streak < _RATE_FRESH_WARN_ROUNDS or self._rate_stale_warned:
+            return
+        self._rate_stale_warned = True
+        merged = self.server_state if isinstance(self.server_state, Mapping) else {}
+        logger.warning(
+            f"速率键已连续 {self._rate_absent_streak} 轮未上报(dl_info_speed/up_info_speed 至少一键缺席, "
+            f"合并保留旧值: dl={merged.get('dl_info_speed')!r} up={merged.get('up_info_speed')!r}) | "
+            f"速率读数可能陈旧(新鲜度不可观测); 恢复上报前不重复本告警"
+        )
 
     def refresh(self, tors: List[TorrentDictionary]) -> Tuple[List[str], List[str]]:
         """全量刷新入口(测试/降级路径): 以给定种子列表为全集, 返回 (added, removed)
@@ -189,11 +236,13 @@ class TorrentStore:
         return self._apply(patches, [], full=True)
 
     def reset_sync(self) -> None:
-        """重置增量同步态(重连 / 热重载后旧 rid 失效, 下轮强制全量重建)"""
+        """重置增量同步态(重连 / 热重载后旧 rid 失效, 下轮强制全量重建); 速率键新鲜度追踪一并复位"""
         self.rid = 0
         self.need_validate = True
         self.using_fallback = False
         self.validate_sample = None
+        self._rate_absent_streak = 0
+        self._rate_stale_warned = False
         self.delta_fields = {}
         self.state_changed = []
         self.dirty_groups = set()
