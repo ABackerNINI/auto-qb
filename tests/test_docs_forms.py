@@ -12,6 +12,10 @@
 - test_plans_reports_have_no_md: `plans/` 与 `reports/` 里除 `_index.md` 外没有 `.md` (制品一律单文件 HTML)
 - test_artifacts_meta_complete: 每份计划/报告的 `doc-*` meta 齐且 `doc-type` 与所在目录一致
 - test_status_vocabulary: `doc-status` ∈ 5 词表 (`Open` / `In Progress` / `Done` / `Dropped` / `Superseded`)
+- test_docs_index_rejects_unknown_status: 表外状态让 `gen_docs_index.build` fail-fast (不再静默漏收, 根因修复)
+- test_docs_index_indexes_valid_status: 合法状态正常入索引 (防 fail-fast 过严)
+- test_doc_map_flags_unknown_status: `gen_doc_map.check_status_vocabulary` 表外值退码 1 / 合法值与空值放行
+- test_status_vocabulary_is_single_point: 生成器与守卫引用同一份 `_common.DOC_STATUSES` (不手抄副本)
 - test_new_artifact_naming: `doc-added ≥ 26-09-24` 的新件必须带 type token (`YY-MM-DD-HHMM-<type>-<topic>.html`)
 - test_artifacts_are_dark: 每份计划/报告都含 `color-scheme: dark` (dark 口径从人眼变机检)
 - test_docs_index_is_regenerated: `plans|reports/_index.md` == `gen_docs_index.build()`
@@ -28,6 +32,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 MB = ROOT / "memory-bank"
 PLANS = MB / "plans"
@@ -35,7 +41,12 @@ REPORTS = MB / "reports"
 ISSUES = MB / "issues"
 SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
 
-STATUSES = ("Open", "In Progress", "Done", "Dropped", "Superseded")
+# 5 词表单点在 skill 的 `_common.DOC_STATUSES` (生成器与守卫同源, 不手抄) —— 见 pitfalls/kb/doc-status-meta.md
+if str(SKILL_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SKILL_SCRIPTS))
+import _common  # noqa: E402
+from _common import DOC_STATUSES as STATUSES  # noqa: E402
+
 META_RE = re.compile(r'<meta name="(doc-[a-z]+)" content="([^"]*)">')
 # 命名协议从 2026-09-24 起对新件生效; 存量 51 份豁免 (改名引用面远超收益 —— 见计划 §03)
 NAMING_FROM = "26-09-24"
@@ -179,3 +190,62 @@ def test_claim_chain_missing_target_hints_separator() -> None:
     problems = gen.check_claim_chain([plain_item], ROOT, MB)
     assert len(problems) == 1, f"普通断链 case 应恰好报一条: {problems}"
     assert "视觉分隔符" not in problems[0], problems[0]
+
+
+# --------------------------------------------------------------------------- 状态词表 fail-fast 守阵
+
+_ARTIFACT_TMPL = (
+    "<html><head>"
+    '<meta name="doc-type" content="{kind}">'
+    '<meta name="doc-topic" content="t">'
+    '<meta name="doc-status" content="{status}">'
+    '<meta name="doc-added" content="26-10-16-0021">'
+    '<meta name="doc-updated" content="26-10-16-0021">'
+    "<title>t</title></head><body></body></html>"
+)
+
+
+def _fake_artifact(mb: Path, kind: str, status: str) -> Path:
+    directory = mb / f"{kind}s"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"26-10-16-0021-{kind}-x.html"
+    path.write_text(_ARTIFACT_TMPL.format(kind=kind, status=status), encoding="utf-8")
+    return path
+
+
+def test_docs_index_rejects_unknown_status(tmp_path: Path) -> None:
+    """表外状态不再静默漏收: `gen_docs_index.build` fail-fast (根因修复, 见 pitfalls/kb/doc-status-meta.md)。"""
+    gen = _load_generator("gen_docs_index")
+    mb = tmp_path / "memory-bank"
+    _fake_artifact(mb, "plan", "Draft")
+    with pytest.raises(gen.StatusVocabularyError):
+        gen.build(tmp_path, mb)
+
+
+def test_docs_index_indexes_valid_status(tmp_path: Path) -> None:
+    """合法状态正常入索引 —— 防 fail-fast 过严把好件也拦下。"""
+    gen = _load_generator("gen_docs_index")
+    mb = tmp_path / "memory-bank"
+    _fake_artifact(mb, "plan", "Open")
+    rendered = gen.build(tmp_path, mb)
+    assert "26-10-16-0021-plan-x.html" in rendered["plans"]
+
+
+def test_doc_map_flags_unknown_status() -> None:
+    """提交闸门侧的词表校验 (B 补强): 表外值退码 1, 合法值与空值放行。"""
+    gen = _load_generator("gen_doc_map")
+    ok = {"form": "plan", "status": "Open", "link": "plans/a.html", "topic": "t"}
+    blank = {"form": "plan", "status": "", "link": "plans/a.html", "topic": "t"}
+    draft = {"form": "plan", "status": "Draft", "link": "plans/a.html", "topic": "t"}
+    fixed = {"form": "issue", "status": "Fixed", "link": "issues/b.html", "topic": "t"}
+    assert gen.check_status_vocabulary([ok]) == 0
+    assert gen.check_status_vocabulary([blank]) == 0
+    assert gen.check_status_vocabulary([draft]) == 1
+    assert gen.check_status_vocabulary([fixed]) == 1
+
+
+def test_status_vocabulary_is_single_point() -> None:
+    """5 词表只有 `_common.DOC_STATUSES` 一处 —— 生成器与守卫 import 同一对象, 不手抄副本。"""
+    assert _load_generator("gen_docs_index").DOC_STATUSES is _common.DOC_STATUSES
+    assert _load_generator("gen_doc_map").DOC_STATUSES is _common.DOC_STATUSES
+    assert STATUSES is _common.DOC_STATUSES

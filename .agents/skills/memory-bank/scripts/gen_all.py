@@ -19,7 +19,7 @@
     python <skill-dir>/scripts/gen_all.py --check             只比对, 不一致则退出码 1
     python <skill-dir>/scripts/gen_all.py --safety            只回答冒烟安全性, 不碰文件
     python <skill-dir>/scripts/gen_all.py --root <dir> --mb-dir <dir>   覆盖探测
-退出码: 0 成功 / 1 校验漂移 / 2 环境缺失(定位不到 create-issue skill 等)
+退出码: 0 成功 / 1 校验漂移或 `doc-status` 表外值 / 2 环境缺失(定位不到 create-issue skill 等)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import find_root, gen_cmd, rel_posix, resolve_mb_dir  # noqa: E402
+from _common import StatusVocabularyError, find_root, gen_cmd, rel_posix, resolve_mb_dir  # noqa: E402
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 
@@ -155,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         sys.stderr.write(f"{exc}\n")
         return 2
+    except StatusVocabularyError as exc:
+        # gen_docs_index.build() 的表外状态 fail-fast —— 让它从"静默漏收"变成响亮报错,
+        # kb.index / kb.check 两条入口都在这里接住 (见 pitfalls/kb/doc-status-meta.md)。
+        sys.stderr.write(f"{exc}\n")
+        return 1
 
     if args.list:
         for path in sorted(outputs, key=lambda p: rel_posix(p, root)):

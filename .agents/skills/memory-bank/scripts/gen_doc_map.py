@@ -16,7 +16,7 @@ pitfalls/kb/cap-counting.md「生成式跨形态视图」条的收口注记), �
     python <skill-dir>/scripts/gen_doc_map.py                   默认: 活跃多件专题全行, 完结/单件专题只列名
     python <skill-dir>/scripts/gen_doc_map.py --topic <key>     单专题全行 (出件前先查主键是否已有)
     python <skill-dir>/scripts/gen_doc_map.py --all             全量全行 (等价退役的物化视图, 审计用)
-    python <skill-dir>/scripts/gen_doc_map.py --check           主键纪律 + 认领链双向: 任一违规退码 1 (挂 kb.check 与提交闸门)
+    python <skill-dir>/scripts/gen_doc_map.py --check           主键纪律 + 状态词表 + 认领链双向: 任一违规退码 1 (挂 kb.check 与提交闸门)
     python <skill-dir>/scripts/gen_doc_map.py --forks           近似主键提示 (子串包含), 只提示不判红
 
 轮转口径 (「生成器内轮转完结专题」): 状态 ∈ TERMINAL_STATUSES 为完结。默认视图只给**活跃多件
@@ -33,11 +33,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import find_root, resolve_mb_dir  # noqa: E402
+from _common import DOC_STATUSES, TERMINAL_DOC_STATUSES, find_root, resolve_mb_dir  # noqa: E402
 
 FORM_ORDER = ("issue", "plan", "report", "task")
 FORM_CN = {"issue": "issue", "plan": "计划", "report": "报告", "task": "档案"}
-TERMINAL_STATUSES = frozenset({"Done", "Dropped", "Superseded"})
 NO_KEY = "(无主键)"
 META_RE = re.compile(r'<meta name="([a-z-]+)" content="([^"]*)">')
 TITLE_RE = re.compile(r"<title>(.*?)</title>", re.MULTILINE | re.DOTALL)
@@ -156,7 +155,7 @@ def group_by_topic(items: list[dict]) -> dict[str, list[dict]]:
 
 def is_live(group: list[dict]) -> bool:
     """专题是否活跃: 有任一条目未完结 (未知 / 缺失状态按活跃算, 宁可多展示)。"""
-    return any(i["status"] not in TERMINAL_STATUSES for i in group)
+    return any(i["status"] not in TERMINAL_DOC_STATUSES for i in group)
 
 
 def _segments(group: list[dict]) -> str:
@@ -253,6 +252,30 @@ def check_topics(items: list[dict]) -> int:
     return 0
 
 
+def check_status_vocabulary(items: list[dict]) -> int:
+    """状态词表校验: `doc-status` / `issue-status` 不在 5 词表 (`_common.DOC_STATUSES`) 即退码 1。
+
+    表外值 (如 `Draft`) 会让 `gen_docs_index` **静默漏收**该件 (不落任何分区) —— 2026-10-16 自
+    pitfalls/kb/doc-status-meta.md 的教训**下沉到提交闸门**: 机检若只活在 pytest, 纯文档轮
+    (`test.quick` 闸门 match 只盯 `src/` `tests/`) 会一路绿灯入库 (与 2026-10-03 认领链下沉同款)。
+    tasks 的 `**Status:**` 是**另一张 4 词表**, 不在此校验范围; 空值 (缺 meta) 由别的守卫管, 跳过。
+    """
+    bad = [
+        f"{i['form']}: {i['link']} → status={i['status']!r}"
+        for i in items if i["form"] in ("plan", "report", "issue") and i["status"] and i["status"] not in DOC_STATUSES
+    ]
+    if bad:
+        sys.stderr.write(
+            f"doc-status / issue-status 不在 5 词表 ({' / '.join(DOC_STATUSES)}) 内 —— "
+            "gen_docs_index 会静默漏收该件 (见 pitfalls/kb/doc-status-meta.md):\n"
+        )
+        for b in bad:
+            sys.stderr.write(f"  {b}\n")
+        return 1
+    print("状态词表 OK: doc-status / issue-status 全部在 5 词表内")
+    return 0
+
+
 def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
     """认领链双向校验: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明本件。
 
@@ -315,6 +338,8 @@ def main() -> int:
 
     if args.check:
         rc = check_topics(items)
+        if check_status_vocabulary(items):
+            rc = 1
         problems = check_claim_chain(items, root, mb)
         if problems:
             sys.stderr.write(

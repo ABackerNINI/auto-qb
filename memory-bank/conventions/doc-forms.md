@@ -53,13 +53,19 @@
 
 映射: issue `Fixed`→Done · `WontFix`→Dropped · `Duplicate`→Superseded; 档案 `Pending`→Open · `Completed`→Done · `Abandoned`→Dropped; plan 待拍板 = Open / 实施中 = In Progress / 被新版取代 = Superseded; report 恒 `Done` (快照完成即终态)。
 
+> **单点**: 5 词表定义在 `_common.DOC_STATUSES`(生成器 `gen_docs_index` / `gen_doc_map` 与守卫
+> `test_docs_forms` import 同源, 不手抄)。表外值会让 `gen_docs_index` **静默漏收**该件 ⇒ 生成器
+> fail-fast + `gen_doc_map --check` 同源校验 (2026-10-16, 见 [pitfalls/kb/doc-status-meta.md](../pitfalls/kb/doc-status-meta.md))。
+> 与档案的 4 词表 (`**Status:**` = In Progress/Open/Done/Dropped) **不同**, 别互相套用。
+
 ## 索引与专题视图 (生成物 / 查询, 不要手改)
 
-- `plans/_index.md` · `reports/_index.md` —— `gen_docs_index.py` 按状态分区生成 (行 = 类型 · 简述 · 链接)。
+- `plans/_index.md` · `reports/_index.md` —— `gen_docs_index.py` 按状态分区生成 (行 = 类型 · 简述 · 链接);
+  遇 `doc-status` 表外值 **fail-fast**(不再静默漏收, 见 [pitfalls/kb/doc-status-meta.md](../pitfalls/kb/doc-status-meta.md))。
 - 跨形态专题视图 —— `commands run kb.docmap` **查询现算, 不落盘** (2026-09-29 起 `_doc-map.md` 物化退役,
   写热点 + `index-auto` cap 反复触顶): **一行一专题**, 列出该专题名下的 issue / 计划 / 报告 / 档案及状态。
   默认只展**活跃**专题全行 (有任一未完结件), 全完结专题轮转成名录; `--topic <key>` 单专题下钻
-  (出件前先查主键), `--all` 全量, `--check` 缺主键 / 单向认领链判红, `--forks` 分叉提示。
+  (出件前先查主键), `--all` 全量, `--check` 缺主键 / 状态词表越界 / 单向认领链判红, `--forks` 分叉提示。
 - `issues/_index.md` · `tasks/_index.md` —— 各自生成器; 合并冲突的解法一律是**重跑脚本**。
 
 ## 认领链

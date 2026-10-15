@@ -6,6 +6,9 @@
 单点定义 (守卫 import 这里, 不手抄):
 - `CAP_POLICY`: 角色 → 字符上限 (方案 §03「cap 分级」); 改 cap 只改这里
 - `PITFALL_CLASSES`: pitfalls 的类枚举 (扩类须三处同步: 本常量 / 新建目录 / README 细路由)
+- `DOC_STATUSES` / `TERMINAL_DOC_STATUSES`: 计划 / 报告 / issue 共用的 5 词表与其完结子集
+  (gen_docs_index 分区 / gen_doc_map 轮转 / test_docs_forms 校验都 import 这里); `StatusVocabularyError`
+  是生成器遇表外值时的 fail-fast 异常 (见 pitfalls/kb/doc-status-meta.md)
 - `find_root()`: 仓库根探测 (向上找 `.git`, 而非按 skill 安装深度反推 `parents[n]`)
 - `resolve_mb_dir()`: memory-bank 目录探测 (`--mb-dir` 显式指定优先)
 - `read_meta()`: 主题文件三行头元数据 (`# 标题` / `> 摘要:` / `> 触发:`)
@@ -68,6 +71,30 @@ TRIM_KEEP = 1 / 2
 # 70 = 14 天蒸馏窗口 × 日均 ~5 篇(2026-09-29 二次校准: 56 打满且窗口内 57/57 全部活跃;
 # 实测 14 天 57 篇 ≈ 4.1/天, 取整 5/天留余量; 首次校准 48→56 见 git 历史)
 SLICE_COUNT_LIMIT = 70
+
+# --------------------------------------------------------------------------- 文档形态状态词
+
+# 计划 / 报告 (`doc-status`) 与 issue (`issue-status`) 共用的 5 词表 —— **单点定义**
+# (gen_docs_index 分区 / gen_doc_map 轮转 / test_docs_forms 校验都 import 这里, 不手抄)。
+# ⚠ 表外值 (如 `Draft`) 会让 gen_docs_index 不落任何分区 ⇒ 索引**静默漏收**该件 —— 仍打印
+#   「已生成 N 个生成物」、零警告, 且 kb.check / kb.docmap --check / doc.links 全绿, 只有
+#   test.full 才红 (见 pitfalls/kb/doc-status-meta.md)。故生成器遇表外值 **fail-fast**
+#   (`StatusVocabularyError`), 提交闸门 (`gen_doc_map --check`) 也挂同源校验。
+# ⚠ 与 tasks/ 档案的 4 词表 (`**Status:**` = In Progress/Open/Done/Dropped) **不同**, 别互相套用。
+DOC_STATUSES = ("In Progress", "Open", "Done", "Dropped", "Superseded")
+
+# 完结态 (`DOC_STATUSES` 子集): gen_doc_map 轮转用 —— 专题「有未完结件」才算活跃。
+TERMINAL_DOC_STATUSES = frozenset({"Done", "Dropped", "Superseded"})
+
+
+class StatusVocabularyError(ValueError):
+    """`doc-status` / `issue-status` 不在 5 词表 —— 生成器会静默漏收, 故 fail-fast。
+
+    由 `gen_docs_index.build()` 抛出 (聚合两份制品目录的全部表外值); `gen_docs_index` 与
+    `gen_all` 的 CLI 入口捕获后打印干净报错并 rc=1。这样 kb.index / kb.check / 提交闸门 /
+    pytest 全在**同一处**判红 (根因单点, 见 pitfalls/kb/doc-status-meta.md)。
+    """
+
 
 # --------------------------------------------------------------------------- 结构枚举
 
