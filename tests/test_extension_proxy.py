@@ -66,6 +66,14 @@
   C4 边界)+ 禁用清空 + 点图标开选项页
 - test_badge_text_is_ascii_only: 徽标文案禁非 ASCII 图形符(code-style: 代码禁图形符号)
 - 降噪场景(_NODE_RUN_NOISE)显式 discoveryAddress 置空 —— 那条守阵钉「连接失败降噪」, 不混发现流日志
+### 连接自愈轮 · S6 守阵补强(计划 26-10-15-2357 S6)
+- test_merge_instances_manual_priority: 手动条目同端点**整条胜**(含 token 保留)+ 恒在前且顺序稳定(Q1/Q8/Q9)
+- test_merge_instances_discovered_set_replaced: 旧发现条目**整批替换**剪除(死端点不堆积)+ **空集不替换**(C1)
+- test_no_opaque_reason_leaks: 选项页无 `未知` 字面量 + 后台每个 reason 都有中文结论映射(§3.4/Q5)
+- test_options_listens_instances_changes: storage.onChanged 监听 instances/instanceHealth/lastDiscovery(S3④)
+- test_conn_state_judgement_matches_badge: **跨层机械比对** —— 徽标态(background.js::badgeStateOf)与顶部
+  总览态(options.js::connStateOf)是同一判据的两个展示面, 切出函数体真跑同一张真值表逐输入一致 +
+  四态键集(BADGE vs CONN_STATE_TEXT)同源 + 徽标图例(options.html)与 BADGE label 同源
 """
 import json
 import pathlib
@@ -369,6 +377,64 @@ def test_options_swiss_wiring():
         "风格已选定 A(瑞士网格), 三档共存机制不该再回来"
     # 两表数据源是后台双写的结构化事件环, 不是解析日志文案
     assert "events" in js and "siteLedger" in js
+
+
+def _balanced_block(text: str, start: int) -> str:
+    """从 start(须指向 '{')起取到配平的 '}' —— 切出 JS 回调/函数体(本文件的块内无含花括号的字符串)"""
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    raise AssertionError("花括号不配平")
+
+
+def _js_object_block(text: str, decl: str) -> str:
+    """切出 `const X = { ... };` 的块体(首个 `};` 收尾)"""
+    start = text.index(decl)
+    return text[start:text.index("};", start)]
+
+
+def _js_object_keys(block: str) -> list:
+    """取对象字面量的顶层键名(保序; 键可带引号, 如 'no-hit')"""
+    return re.findall(r"(?m)^\s*'?([A-Za-z_][\w-]*)'?\s*:", block)
+
+
+def test_no_opaque_reason_leaks():
+    """失败码不再外泄(计划 §3.4/Q5): 选项页不得出现 `未知` 字面量; 后台能给出的**每一个** reason 都要有
+    中文结论 —— 否则用户又会看到 `发现未命中(no-hit)` / `发现未命中(未知)` 这种要自己猜的原始码
+    (后者正是用户 2026-10-15 实报的形态)。映射值必须是真·中文结论, 不能把码抄一遍。
+    """
+    js = _read(OPTIONS_JS)
+    assert "未知" not in js, "`未知` 字面量必须从选项页消失(实报的「发现未命中(未知)」就是它)"
+    block = _js_object_block(js, "const DISCOVERY_REASON_TEXT = {")
+    mapped = _js_object_keys(block)
+    assert mapped, "选项页要有 DISCOVERY_REASON_TEXT(失败码 -> 中文结论)映射表"
+    reasons = sorted(set(re.findall(r"reason: '([^']+)'", _read(BACKGROUND_JS))))
+    assert reasons, "后台应能给出失败码(改用别的键名时这条一起改)"
+    for reason in reasons:
+        assert reason in mapped, f"后台会报 reason={reason}, 选项页却没有中文映射(会原样外泄给用户)"
+    for value in re.findall(r":\s*'([^']*)'", block):
+        assert re.search(r"[\u4e00-\u9fff]", value), f"映射值必须是中文结论(不是把码抄一遍): {value!r}"
+
+
+def test_options_listens_instances_changes():
+    """连接面实时刷新(计划 §S3-④): storage.onChanged 必须监听 instances / instanceHealth / lastDiscovery
+
+    此前只监听 logs/events/siteLedger, 后台发现并入的实例要**重开页面**才看得见 —— 这正是用户实报
+    「操作逻辑混乱」的一半: 点了发现, 页面上的实例列表纹丝不动。监听面必须覆盖连接面并触发重渲染。
+    """
+    js = _read(OPTIONS_JS)
+    i = js.index("chrome.storage.onChanged.addListener(")
+    body = _balanced_block(js, js.index("{", i))
+    for key in ("instances", "instanceHealth", "lastDiscovery"):
+        # !词边界: `changes.instancesX` 里也含 `changes.instances` 子串, 不加边界会漏判(红验实测)
+        assert re.search(rf"\bchanges\.{key}\b", body), \
+            f"storage.onChanged 回调没监听 {key}(后台改了页面不知道, 要重开页面才刷新)"
+    assert "scheduleConnRender" in body, "连接面变更要触发重渲染(防抖), 不能只改内存不刷新"
 
 
 # ---------- 页面取数: 不打扰用户(实报两轮: 先「开新标签」后「开新窗口」) ----------
@@ -1088,15 +1154,27 @@ out.validHalf = mod.validDiscoveryPayload({ instances: [{ endpoint: 'http://x:1'
 process.stdout.write(JSON.stringify(out));
 """
 
+_DISCOVERY_HELPERS_TRACE: dict = {}
+
+
+def discovery_helpers_trace() -> dict:
+    """跑一次 node 拿 discovery.js 纯函数的全部断言点(缓存: 合并语义的多条用例共用同一次 node 运行)"""
+    if _DISCOVERY_HELPERS_TRACE:
+        return _DISCOVERY_HELPERS_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node([node, "-e", _NODE_RUN_DISCOVERY_HELPERS, str(DISCOVERY_JS)])
+    assert proc.returncode == 0, f"node 执行 discovery.js 失败: {proc.stderr.strip()}"
+    _DISCOVERY_HELPERS_TRACE.update(json.loads(proc.stdout))
+    return _DISCOVERY_HELPERS_TRACE
+
 
 def test_discovery_helpers_behave():
     """真跑 discovery.js —— 候选推导与后端同源(65535 截断)/ 合并语义(替换同端点+保留手填+标自动)/ 配对判定 / 形态过滤"""
-    node = _node()
-    if not node:
+    got = discovery_helpers_trace()
+    if not got:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_DISCOVERY_HELPERS, str(DISCOVERY_JS)])
-    assert proc.returncode == 0, f"node 执行 discovery.js 失败: {proc.stderr.strip()}"
-    got = json.loads(proc.stdout)
     assert got["apiDiscover"] == API_DISCOVER and got["defaultPort"] == DISCOVERY_DEFAULT_PORT
     assert got["cands"] == ["http://192.168.1.10:18788", "http://192.168.1.10:18789", "http://192.168.1.10:18790"]
     assert got["candsCap"] == ["http://192.168.1.10:65534", "http://192.168.1.10:65535"], "上限 65535 截断(与后端同源)"
@@ -1133,6 +1211,59 @@ def test_discovery_helpers_behave():
     ], "空集例外(C1): 发现返回空集**不得清空**发现集(后端重启瞬间清空 = 自断连接)"
     assert got["manualFlags"] == [True, False, True], "旧数据无 source 字段判为手动(C8: 零迁移获优先语义)"
     assert got["validOk"] is True and got["validNoArray"] is False and got["validHalf"] is False
+
+
+def test_merge_instances_manual_priority():
+    """合并语义 · **手动优先**(Q1/Q8/Q9): 手动条目 = 高优先级的用户显式指定 —— 同端点冲突时**手动整条胜**
+    (连 name/token 都不取发现的), 且恒在前、保持原顺序; 发现只负责「补齐手动没覆盖的端点」。
+
+    !旧语义是「同端点被发现覆盖」, 被计划 26-10-15-2357 S1 翻转(用户更正 Q1: 手动是高优先级而非兜底)。
+    """
+    got = discovery_helpers_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    merged = got["merged"]
+    assert [e["endpoint"] for e in merged[:2]] == [
+        "http://192.168.1.10:5001",
+        "http://127.0.0.1:8788",
+    ], f"手动条目恒在前且保持原顺序(不因周期性重发现抖动): {merged}"
+    assert merged[0] == {"name": "m", "endpoint": "http://192.168.1.10:5001", "token": "old"}, \
+        "同端点手动整条胜(Q8): 发现给的 d1/new 不得覆盖手动的 name/token"
+    assert merged[1] == {"name": "hand", "endpoint": "http://127.0.0.1:8788", "token": "h"}, \
+        "手动条目原样保留(不带 source 标 = 判手动)"
+    assert merged[2]["endpoint"] == "http://192.168.1.10:5002" and merged[2]["source"] == "discovered", \
+        "发现只补齐手动没覆盖的端点(这条 5002 手动没指定)"
+    assert got["manualFlags"] == [True, False, True], \
+        "isManualEntry: 缺 source 字段的旧数据判为手动(C8 零迁移获优先语义)"
+
+
+def test_merge_instances_discovered_set_replaced():
+    """合并语义 · **发现集租约**(Q2/C1): 每次成功发现**整批替换**旧发现集 —— 死端口的条目自然被剪除,
+    不再像旧实现那样「只增不减、永久堆积」; 但**空集不替换**: 后端重启瞬间注册表可能还没心跳(发现返回
+    空集), 此时清空发现集 = 自断连接(且实例为空时连「失败即发现」都不触发, 只能干等周期)。
+    """
+    got = discovery_helpers_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    assert [e["endpoint"] for e in got["replaced"]] == [
+        "http://127.0.0.1:8788",
+        "http://192.168.1.10:5001",
+        "http://192.168.1.10:5002",
+    ], f"发现集整批替换(Q2): 旧 discovered 条目(死端点 5099)必须被剪除, 不再永久堆积: {got['replaced']}"
+    assert all(e.get("source") == "discovered" for e in got["replaced"][1:]), "替换进来的发现条目都标「自动」"
+    assert got["emptyKept"] == [
+        {
+            "name": "hand",
+            "endpoint": "http://127.0.0.1:8788",
+            "token": "h"
+        },
+        {
+            "name": "stale",
+            "endpoint": "http://192.168.1.10:5099",
+            "token": "x",
+            "source": "discovered"
+        },
+    ], "空集例外(C1): 发现返回空集**不得清空**发现集(后端重启瞬间清空 = 自断连接)"
 
 
 #: 真跑 background.js 的发现流程: 三候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 /
@@ -1456,6 +1587,92 @@ def test_badge_text_is_ascii_only():
     assert len(texts) == 4, f"徽标四态各有文案(改结构时这条一起改): {texts}"
     for text in texts:
         assert text.isascii(), f"徽标文案出现非 ASCII 字符 {text!r}(小字号下渲染成方框)"
+
+
+#: 跨层机械比对(计划 26-10-15-2357 S6 + 档案「机械比对缺口」): 徽标态(background.js::badgeStateOf)与
+#: 顶部总览态(options.js::connStateOf)是**同一条判据的两个展示面** —— 两份实现分头演化就会出现
+#: 「徽标报警但页面说正常」这类最危险的静默漂移(用户最怕的正是这个)。这里把两个函数体各自从文件里
+#: **切出来真跑**同一张真值表逐输入比对; 另钉四态键集(BADGE vs CONN_STATE_TEXT)与徽标图例文案同源。
+_NODE_RUN_CROSS_LAYER_STATE = """
+const fs = require('fs');
+function grab(src, name) {
+  const i = src.indexOf('function ' + name + '(');
+  if (i < 0) throw new Error('未找到函数 ' + name);
+  let depth = 0;
+  let seen = false;
+  for (let k = i; k < src.length; k += 1) {
+    const ch = src[k];
+    if (ch === '{') { depth += 1; seen = true; }
+    else if (ch === '}') { depth -= 1; if (seen && depth === 0) return src.slice(i, k + 1); }
+  }
+  throw new Error('函数体花括号不配平: ' + name);
+}
+function objKeys(src, name) {
+  const i = src.indexOf('const ' + name + ' = {');
+  if (i < 0) throw new Error('未找到常量 ' + name);
+  const body = src.slice(i, src.indexOf('};', i));
+  return (body.match(/^\\s*([A-Za-z_][\\w]*):/gm) || []).map((s) => s.trim().replace(':', ''));
+}
+const bg = fs.readFileSync(process.argv[1], 'utf8');
+const opt = fs.readFileSync(process.argv[2], 'utf8');
+const badgeFn = new Function(grab(bg, 'badgeStateOf') + '\\nreturn badgeStateOf;')();
+const connFn = new Function(grab(opt, 'connStateOf') + '\\nreturn connStateOf;')();
+const A = 'http://127.0.0.1:9001';
+const cases = [
+  { instances: [], discoveryAddress: '' },
+  { instances: [], discoveryAddress: 'http://127.0.0.1:18788' },
+  { instances: [{ endpoint: A }], discoveryAddress: '', instanceHealth: { [A]: { ok: true } } },
+  {
+    instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: { [A]: { ok: false } }, lastDiscovery: { ok: false, answered: false }
+  },
+  {
+    instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: {}, lastDiscovery: { ok: false, answered: true }
+  },
+  { instances: [{ endpoint: A }], discoveryAddress: '', instanceHealth: {}, lastDiscovery: null },
+  {
+    instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: { [A]: { ok: true } }, lastDiscovery: { ok: false, answered: false }
+  },
+];
+const badgeBlock = bg.slice(bg.indexOf('const BADGE = {'), bg.indexOf('function badgeStateOf'));
+const labels = (badgeBlock.match(/label: '([^']*)'/g) || []).map((s) => s.replace("label: '", '').replace("'", ''));
+process.stdout.write(JSON.stringify({
+  badgeOut: cases.map((c) => badgeFn(c)),
+  connOut: cases.map((c) => connFn(c)),
+  badgeKeys: objKeys(bg, 'BADGE'),
+  connKeys: objKeys(opt, 'CONN_STATE_TEXT'),
+  labels: labels,
+}));
+"""
+
+
+def test_conn_state_judgement_matches_badge():
+    """**跨层机械比对**: 徽标态(background.js)与顶部总览态(options.js)必须逐输入一致
+
+    两者是同一条判据的两个展示面(计划 §3.3/Q4②), 此前是两份实现、只靠注释互指 —— 一旦分头演化,
+    「徽标报警但页面说正常」这类漂移就没有任何机械拦阻。这里把两个函数体各自从文件里切出来真跑同一张
+    真值表(含 C4 边界: 有应答无可用实例 = 重连中 vs 候选全无应答 = 发现失败), 并把四态键集与徽标图例
+    文案一起钉住(改判据必须三处一起改)。
+    """
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_CROSS_LAYER_STATE, str(BACKGROUND_JS), str(OPTIONS_JS)])
+    assert proc.returncode == 0, f"node 跨层比对失败: {proc.stderr.strip()}"
+    got = json.loads(proc.stdout)
+    assert got["badgeOut"] == got["connOut"], \
+        f"徽标态与顶部总览态对同一配置给出了不同结论(同一条判据的两份实现漂移了): {got}"
+    assert got["badgeOut"] == [
+        "unconfigured", "reconnecting", "ok", "discoveryFailed", "reconnecting", "reconnecting", "ok"
+    ], f"四态判据(计划 §3.3, C4 边界)取值不符: {got['badgeOut']}"
+    assert got["badgeKeys"] == got["connKeys"] == ["unconfigured", "ok", "reconnecting", "discoveryFailed"], \
+        f"四态键集必须同源: BADGE={got['badgeKeys']} CONN_STATE_TEXT={got['connKeys']}"
+    html = _read(OPTIONS_HTML)
+    legend = html[html.index('id="badgeLegend"'):]
+    for label in got["labels"]:
+        assert label in legend, f"徽标图例没写全四态(与 background.js 的 BADGE label 同源): 缺 {label}"
 
 
 def test_log_ui_wiring_and_escape():

@@ -1,6 +1,6 @@
 # 26-10-16-webui-hr-ext-connect-selfheal — HR 扩展连接自愈与手动优先(计划立档)
 
-**Status:** Open(S1–S4 已实施, S5/S6 待指令)
+**Status:** Done(S0–S6 全部落地)
 **Added:** 2026-10-16
 **Updated:** 2026-10-16
 **Summary:** 用户实报 HR 扩展「立即发现」报 `发现未命中(未知)`、「保存发现地址与配对码」后「自测端点连通」却说 `先在 1. 存入一个实例端点再自测`。经 grilling 11 问收敛, 根因是连接模型而非文案: 数据端口重启即变、发现结果被当一次性缓存(死端点永久堆积)、后台发现结果进不了选项页(静默)、无常驻可见信号。立计划 `plans/26-10-15-2357`(连接自愈 + 手动优先 + 不静默), 仅动扩展侧, 不碰后端与发现协议。
@@ -25,7 +25,7 @@
 
 ## 实现计划
 
-实施按计划 §04 分步推进(用户 2026-10-16 指令「实施计划S1-2」⇒ S1/S2 已落地; 指令「实施计划S3-4」⇒ S3/S4 已落地; S5/S6 待指令):
+实施按计划 §04 分步推进(用户 2026-10-16 指令「实施计划S1-2」⇒ S1/S2 已落地; 指令「实施计划S3-4」⇒ S3/S4 已落地; 指令「实施计划S5-6」⇒ S5/S6 已落地, 计划转 Done):
 
 S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空集不替换) → S2 `background.js`(失败即发现 + 周期 2min + 徽标四态 + 结构化 `lastDiscovery` + `instanceHealth` 台账) → S3 `options.js`(隐式保存 + 自动接自测 + 文案映射 + 实时刷新 + 空态指路 + 失效标记 + 顶部总览) → S4 `options.html`(布局合并为一个"连接后端"区 + 措辞翻"优先") → S5 `README.md` 口径同步 → S6 `tests/test_extension_proxy.py` 七条新守阵。
 
@@ -38,8 +38,8 @@ S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空�
 | S2 | background.js 自愈触发 + 徽标 + 台账 | Done |
 | S3 | options.js 交互与文案 | Done |
 | S4 | options.html 布局合并 | Done |
-| S5 | README 口径同步 | Open |
-| S6 | 守阵测试 | Open |
+| S5 | README 口径同步 | Done |
+| S6 | 守阵测试 | Done |
 
 ## 进度日志
 
@@ -57,10 +57,16 @@ S1 `discovery.js` 合并语义翻转(手动优先 + 发现集整批替换 + 空�
 - 2026-10-16 00:48 — **越界改动披露 1(范围守卫例外「阻塞」)**: 首次全量跑红 2 条 —— `tests/test_memory_bank.py::test_wording_guard_is_green_on_current_kb` / `::test_number_guard_is_green_on_current_kb`, 根因**不在本专题**: 另一会话的 `activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md:3`(R6 段, 由 `da45dd57` 引入)手抄了一处测试数字, 使判据族 B 实测 395 > 冻结 394。判据表第一列「不修则本次交付跑不起来 / 测试红」成立(全量红 ⇒ 基线数字与提交闸门都拿不到), 故按例外 1 **就地改一行**(`3363 passed + 4 skipped` → 「全绿」, 数字仍由基线切片承载), 未动该文件其它任何字; 改后族 B = 394 达标、全量复绿。
 - 2026-10-16 00:48 — **复发 +1 记档**: 本轮踩到**已记的坑** `pitfalls/git/editing-traps.md`「编辑导致整文件行尾归一」—— 用 Edit 往 `pitfalls/testing/node-guards-silent-skip.md` 追加一节, 把该件从 `LF=28/CRLF=0` 写成 `CRLF=44/LF=0`(同轮其它 6 个被 Edit 的文件都仍是 LF)。**为什么没命中**: ①路由只走到顶层 `pitfalls/_index.md`(其「主题」表是空的 `(暂无)`, 没有指向 `git/editing-traps.md` 的细路由), 而 git 类行被读成「**跑 git 命令前**必读」, 本轮动作是「编辑文档」不在该判据内 ⇒ 没进 `pitfalls/git/_index.md`(触发词「行尾」明写在顶层 git 行里却没被识别); ②`git status`/`git diff` 末尾的 `warning: … CRLF will be replaced by LF` **看到了却当成无害噪声**, 定式要求「见到即按字节归一」而我只做到「见到」。已按字节归一回 LF 并把复发条目写进该坑档(附定式强化: 收尾逐文件核 CRLF/LF 计数, 不靠肉眼扫警告)。
 
+- 2026-10-16 01:13 — **S5 完成**(用户指令「实施计划S5-6」): 开工同步 `4611372f`。`extensions/hr-fetch-proxy/README.md` 口径同步 —— ① §2 布局块由「① 自动发现 + ② 手动端点(兜底) + 底部工具栏」改写为 S4 实际的**「① 连接后端(自动发现自愈; 手动指定优先)」单区**(总览行 → 自动发现 → 实例列表「优先/自动」徽标 → 折叠的手动端点 → 自测/拉取), 手动端点口径翻「**优先**」并写明「发现只**补齐**手动没覆盖的端点, 绝不覆盖或删除手动条目」; ② 新增「**连接自愈 + 不静默(2026-10-16)**」段(徽标四态常驻 + 点图标回本页 / 顶部总览 / 失败即发现(60s 节流)+ 2 分钟周期 / 逐候选结果); ③ 排障表「自动发现未命中」行补「逐候选探测结果 + 徽标转红」, 「退手动配置」改「退**手动指定**」(Q11④); ④ 「怎么确认它在工作」补徽标与顶部总览两条。**连带修两处随 S4 失效的引用**(越界披露 2, 见下)。验证: `commands run doc.links` 无死链。
+- 2026-10-16 01:13 — **S6 完成**: `tests/test_extension_proxy.py` 补 **5 条新守阵**(计划 §S6 清单里周期/失败即发现/徽标四态/结构化快照/健康台账五条已随 S2 落地, 本轮补齐余下与跨层): ① `test_merge_instances_manual_priority`(手动整条胜含 token 保留 + 恒在前顺序稳定, Q1/Q8/Q9); ② `test_merge_instances_discovered_set_replaced`(旧发现条目整批替换剪死端点 + **空集不替换** C1); ③ `test_no_opaque_reason_leaks`(选项页无 `未知` 字面量 + 后台**每个** `reason` 都有中文映射且映射值是真中文结论); ④ `test_options_listens_instances_changes`(`storage.onChanged` 监听面覆盖 `instances/instanceHealth/lastDiscovery` 并触发重渲染); ⑤ **`test_conn_state_judgement_matches_badge`**(跨层机械比对: 从两文件切出 `badgeStateOf`/`connStateOf` 函数体真跑同一张真值表逐输入一致 + 四态键集 `BADGE` vs `CONN_STATE_TEXT` 同源 + `options.html` 徽标图例与 `BADGE.label` 同源)。配套: 把 `_NODE_RUN_DISCOVERY_HELPERS` 抽成缓存 `discovery_helpers_trace()` 供三条合并用例共用一次 node; 新增静态切块小工具 `_balanced_block`/`_js_object_block`/`_js_object_keys`; 文件头「## 测试计划」加 S6 小节。
+- 2026-10-16 01:13 — **守阵红绿双验**(5 类突变判红后还原复绿): ① `connStateOf` 的 C4 分支(`answered === false`→`true`)→ 跨层用例红; ② 选项页引入 `未知` 字面量 → 红; ③ 删一个 `DISCOVERY_REASON_TEXT` 映射键 → 红; ④ 监听面去掉 `instances` → 红 —— **首版用子串判据 `"changes.instances" in body` 漏判** `changes.instancesX`(红验当场抓到), 改词边界 `\b` 后通过, 已把该教训写进用例注释; ⑤ `discovery.js` 空集不替换分支删除 → 红。还原后 `test.one -- tests/test_extension_proxy.py` 36 passed。
+- 2026-10-16 01:13 — **越界改动披露 2(范围守卫例外「阻塞/同源」)**: S5 连带改 README 三处**随 S4 失效的引用**, 属计划 §S5 四条之外的改动 —— ① 跨机「发现与配对上手」第 2 步原写「填地址 → **保存** → 点立即发现」, 但 S4 已删「保存发现地址与配对码」按钮(隐式保存) ⇒ 改为「点立即发现(地址与配对码随这次点击一起保存)」; ② 「运行日志」节原写「选项页**④区**是扩展自己的运行日志」, 而 S4 重编号后 ④ = 最近取数明细、日志在折叠区 ⇒ 改为按名引用「折叠区的运行日志」; ③ 事件环说明原写「**④⑤** 的数据源」, 同一重编号下应为 ③④ ⇒ 改正。三处都是**本次口径同步所依赖的同一份 README 内部一致性**(不改则本次编辑自相矛盾), 故就地改; 未动其它任何字。
+- 2026-10-16 01:13 — **收尾 DoD**: `commands run test.full` 全绿(数字见基线切片 `baselines/26-10-16-0113-hr-ext-connect-selfheal-s5s6.md`, +5 差值已在切片内对账 = 本轮 5 条新守阵); 计划 `doc-status` Open → **Done**、`doc-updated` 抬至 26-10-16-0113 并补变更记录; 本档案状态转 Done; activeContext 切片更新; `commands run kb.index` 重建索引。
+
 ## 遗留与下一步
 
-- **S5**(`extensions/hr-fetch-proxy/README.md` 口径同步): `README.md:71` 仍是「② 手动端点(兜底)」; 另需补「连接状态徽标四态」「失败即发现 / 2 分钟周期」「逐候选结果」说明 —— 计划 §S5 四条。
-- **S6**(`tests/test_extension_proxy.py` 七条新守阵): 见计划 §S6 清单 + 上面那条跨层机械比对缺口; 写 options.js 的 node 沙箱用例前先读 `pitfalls/testing/node-guards-silent-skip.md` 的新增段 —— 顶层 `let` 状态(`instancesState` 等)**喂不进沙箱全局**, 必须走 `refreshConnFromStorage()` 这类入口驱动。
-- 计划 `doc-status` 仍为 `Open`(S5/S6 未完成, 按 §S9 收尾第 4 条应在全部实施完成后转 `Done`)。
+- **S0–S6 全部落地, 计划转 Done**; 收尾 DoD 已完成(档案 / activeContext / 计划状态 / 基线切片 / 索引)。
+- **真机验收待兑现**(计划 §06 判据为真机观察, 本机无法完成): V1 端口变化零操作自愈 / V4 后端停三处一致报警且恢复自动转正常 / V6 改地址后一次点击闭环 / V7 手动失效只提示不代删 —— 待用户在真机(装了扩展 + 起后端)上走一遍。
 - 现场不一致(范围外, 待用户对齐): 仓库 `config.yml` 的 `channel.port: 18788` 与发现默认端口相撞, 而运行日志显示数据端口 7031。
+- 可选项(计划 §07 R4 记录): 若用户确需「只存地址不探测」, 可后续按需加回独立保存入口。
 

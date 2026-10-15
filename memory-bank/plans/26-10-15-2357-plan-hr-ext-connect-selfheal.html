@@ -7,9 +7,9 @@
 <title>HR 扩展「连接自愈 + 手动优先 + 不静默」修改计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-ext-connect-selfheal">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-15-2357">
-<meta name="doc-updated" content="26-10-15-2357">
+<meta name="doc-updated" content="26-10-16-0113">
 <meta name="doc-refs" content="memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html,memory-bank/tasks/26-10-16-webui-hr-ext-connect-selfheal.md">
 <style>
   :root {
@@ -107,7 +107,7 @@
       <div class="item"><div class="k">专题</div><div class="v">hr-ext-connect-selfheal</div></div>
       <div class="item"><div class="k">上游</div><div class="v">用户实报 · plan 26-10-14-1241</div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待实施</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done · 已实施</span></div></div>
     </div>
   </header>
 
@@ -375,6 +375,7 @@
     <table>
       <tr><th>日期</th><th>变更</th></tr>
       <tr><td class="num">2026-10-15 23:57</td><td>首版: grilling 11 问(Q1–Q11)收敛后成稿。范围 = 仅扩展侧; 核心 = 连接自愈 + 手动优先 + 不静默。</td></tr>
+      <tr><td class="num">2026-10-16 01:13</td><td>实施完成, 状态转 <b>Done</b>。S1/S2(<code>discovery.js</code> 合并语义翻转 + <code>background.js</code> 失败即发现/周期 2min/徽标四态/结构化快照/健康台账)、S3/S4(<code>options.js</code> 隐式保存 + 自动接自测 + 中文映射 + 实时刷新 + 失效标记 + 顶部总览; <code>options.html</code> 合并为「① 连接后端」一区)、S5(<code>README.md</code> 口径翻「优先」+ 自愈/徽标说明)、S6(5 条新守阵 + 跨层机械比对)全部落地。实施期裁量点按 §05 C1–C8 执行(空集不替换 / 部分集替换 / 失效阈值 ≥3 轮 / 徽标边界 / 总览随轮询刷新 / 手动区折叠 / 手动失败也触发发现 / 旧数据零迁移)。真机验收 V1–V8 待用户兑现。数字见 <code>commands run kb.baseline</code>。</td></tr>
     </table>
   </section>
 
