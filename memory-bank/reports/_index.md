@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-10-12-0455] [WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)](26-10-12-0455-report-webui-drawer-table-unification-audit.html) — `webui-drawer-table-unification`
 - [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–19: 准备 + config + core + hr + webui + rules + infra + torrents)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 
 ## Open
@@ -26,6 +25,7 @@
 - [26-10-12-2148] [种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析](26-10-12-2148-report-seed-state-writeback-removal-feasibility.html) — `seed-state-writeback`
 - [26-10-12-1923] [启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告](26-10-12-1923-report-webui-startup-latency.html) — `webui-startup-latency`
 - [26-10-12-1854] [WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)](26-10-12-1854-report-webui-column-picker-redesign.html) — `webui-column-picker`
+- [26-10-12-0455] [WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)](26-10-12-0455-report-webui-drawer-table-unification-audit.html) — `webui-drawer-table-unification`
 - [26-10-11-2017] [批量跳检后批量开始 · UI 与 qB 状态脱节 · 原因分析报告](26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
 - [26-10-10-2237] [WEBUI 全量文案对齐 qB · 排查报告 · auto-qb](26-10-10-2237-report-webui-wording-unify.html) — `webui-wording-unify`
 - [26-10-09-2136] [WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb](26-10-09-2136-report-webui-dialog-keyboard-accessibility.html) — `webui-dialog-keyboard-accessibility`

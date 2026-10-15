@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-detail-table-rebuild">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-13-0811">
-<meta name="doc-updated" content="26-10-13-0916">
+<meta name="doc-updated" content="26-10-15-2323">
 <meta name="doc-refs" content="memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html,memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-11-1722-plan-webui-table-component.html,memory-bank/tasks/26-10-13-webui-detail-table-rebuild.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html">
 <title>种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划</title>
 <style>
@@ -141,7 +141,7 @@
   <h1>种子详情表格：只重写表格</h1>
   <p class="sub">模板变体全部保留 —— 15 个变体文件一个都不删。本轮只重写其中的表格体：11 个表格面共用一份列池和一个渲染内核；每个变体剩下的部分（标题栏、筛选、摘要、工具条、详情区、版式样式）原样不动。</p>
   <dl class="meta">
-    <div><dt>状态</dt><dd class="s">Open · 待拍板</dd></div>
+    <div><dt>状态</dt><dd class="ok">Done · W0–W7 全波完成</dd></div>
     <div><dt>变体</dt><dd class="ok">全部保留</dd></div>
     <div><dt>表格面</dt><dd>11 张</dd></div>
     <div><dt>波次</dt><dd>W0 – W7</dd></div>
@@ -599,6 +599,7 @@ assertLayout(surfaceEl, cols) {
       <tr><td class="num-c">26-10-13-0811</td><td>初版出厂</td><td>基于「现有技术完全抛弃」，主张整删 15 套变体重建。</td></tr>
       <tr><td class="num-c">26-10-13-0916</td><td>D1 拍板后重写</td><td><strong>模板变体全部保留</strong>（用户拍板）。删除面收窄到「每个变体内部的表格体」；新增 11 张表格面清单、外壳与表格的划界、D6（渲染通道）与 D7（列共享）、以及「变体观感回归」硬验收；无表格的 7 个变体改为一行不改。</td></tr>
       <tr><td class="num-c">26-10-13-0952</td><td>W0 复核后修正</td><td>代码复核推翻初版一处假设：变体里<strong>已经没有手搓表格</strong>（只剩槽位，表格由共享桥渲染），重复实际在引擎侧的四处列派生 + 变体侧覆盖几何的 CSS。据此重写 §05 删除清单与 §03 叠层表；确认「经典三张存在」；12 号的体积榜裁定为非表格、不动。<strong>结论不变</strong>：八类症状仍归三个簇，只是「各算各的」的具体位置从变体里挪到了引擎与变体 CSS 之间。</td></tr>
+      <tr><td class="num-c">26-10-15-2323</td><td>状态转 Done</td><td>W0–W7 全波实施完成并关单（事实经过见复查报告 <code>26-10-14-0136</code>）；成果经用户 2026-10-14 复查否定，重订计划由用户主导、另立新计划。</td></tr>
     </tbody>
   </table>
 </section>
