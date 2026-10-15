@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-0829">
+<meta name="doc-updated" content="26-10-15-0945">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -114,17 +114,17 @@
 <nav class="toc">
   <div class="toc-label">分步实施计划</div>
   <a href="#s0"><span class="no">00</span>目的 · 范围 · 口径</a>
-  <a href="#s1"><span class="no">01</span>现状锚点（源码单点）</a>
+  <a href="#s1"><span class="no">01</span>现状锚点(源码单点)</a>
   <a href="#s2"><span class="no">02</span>目标与非目标</a>
   <a href="#s3"><span class="no">03</span>分步实施</a>
   <a href="#s4"><span class="no">04</span>测试与守阵计划</a>
-  <a href="#s5"><span class="no">05</span>验收判据（端到端）</a>
+  <a href="#s5"><span class="no">05</span>验收判据(端到端)</a>
   <a href="#s6"><span class="no">06</span>风险 · 取舍 · 回滚</a>
   <a href="#s7"><span class="no">07</span>待拍板项</a>
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · 未拍板<br>未动码 · 未入池 issue</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P1–P6 待拍板 · 未入池 issue</div>
 </nav>
 
 <header class="cover">
@@ -132,13 +132,13 @@
   <h1>qB 流量图重启缝幻影尖峰与无采样区<br>分步实施计划</h1>
   <p class="lede">把故障取证报告
     <a href="../reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html">26-10-15-0728-report-qb-traffic-restart-spike-gap</a>
-    的 §07 修复建议，转成可执行、可验收的分步计划。本计划只回答「怎么修、为什么这么修」，
-    不重述取证结论（证据快照的权威在报告侧）。</p>
+    的 §07 修复建议,转成可执行、可验收的分步计划。本计划只回答「怎么修、为什么这么修」,
+    不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> 待拍板</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0 已完成 · P1–P6 待拍板</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
-    <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728（doc-updated 0808）</div></div>
+    <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">纯文档轮 · 未改代码/配置/数据</div></div>
   </div>
 </header>
@@ -147,25 +147,25 @@
 <section id="s0">
   <h2><span class="no">00</span>目的 · 范围 · 口径</h2>
 
-  <p>报告已把两件事从「现象」推进到「机理」：<b>异常峰值</b>是 z 游程快照冻结与读侧 <code>delta/w</code> 在进程重启缝上的单桶归因；<b>无采样区</b>是数据层 ~10s 缝与呈现层 ~8.5s 投递黑障的叠加。报告 §07 给了六层修复方向，但只停留在「建议」。本计划把它拆成有落点、有验证、有验收判据的步骤。</p>
+  <p>报告已把两件事从「现象」推进到「机理」:<b>异常峰值</b>是 z 游程快照冻结与读侧 <code>delta/w</code> 在进程重启缝上的单桶归因;<b>无采样区</b>是数据层 ~10s 缝与呈现层 ~8.5s 投递黑障的叠加。报告 §07 给了六层修复方向,但只停留在「建议」。本计划把它拆成有落点、有验证、有验收判据的步骤。</p>
 
   <div class="box">
     <div class="t">一句话范围界定</div>
-    <p>要治的是<b>接缝处的放大方式</b>（写侧快照语义 + 读侧归因口径），不是细流本身。细流是 seed↔seed 冗余连接的握手/协议字节与模型化 IP 开销，属 libtorrent 正常行为、幅度仅几百 B/s —— <b>本计划明确不「治」细流</b>。</p>
+    <p>要治的是<b>接缝处的放大方式</b>(写侧快照语义 + 读侧归因口径),不是细流本身。细流是 seed↔seed 冗余连接的握手/协议字节与模型化 IP 开销,属 libtorrent 正常行为、幅度仅几百 B/s -- <b>本计划明确不「治」细流</b>。</p>
   </div>
 
-  <h3>三件不变的事（任何步骤都不得破坏）</h3>
+  <h3>三件不变的事(任何步骤都不得破坏)</h3>
   <ol>
-    <li><b>诚实性优先</b>：没有数据就是没有数据。停机洞、断连期的呈现必须仍是 null（斜纹/断线），不得为了让曲线好看而用摊配值填出伪数据。</li>
-    <li><b>格式不动</b>：v4 天文件（5 列 B/r/z/n）与 <code>agg.dat</code>（9 列 hour/day/month）行格式保持兼容，旧数据无需迁移、新代码可读旧文件。</li>
-    <li><b>口径守恒</b>：<code>qb-traffic</code> 的读数始终等于 qB alltime 计数器的差分（含握手/协议/IP 开销成分）——修复改变的是「差在哪个时间粒度上呈现」，不改变总量。</li>
+    <li><b>诚实性优先</b>:没有数据就是没有数据。停机洞、断连期的呈现必须仍是 null(斜纹/断线),不得为了让曲线好看而用摊配值填出伪数据。</li>
+    <li><b>格式不动</b>:v4 天文件(5 列 B/r/z/n)与 <code>agg.dat</code>(9 列 hour/day/month)行格式保持兼容,旧数据无需迁移、新代码可读旧文件。</li>
+    <li><b>口径守恒</b>:<code>qb-traffic</code> 的读数始终等于 qB alltime 计数器的差分(含握手/协议/IP 开销成分)--修复改变的是「差在哪个时间粒度上呈现」,不改变总量。</li>
   </ol>
 </section>
 
 <!-- ============================================================ -->
 <section id="s1">
-  <h2><span class="no">01</span>现状锚点（源码单点）</h2>
-  <p class="lead">下表是本计划所有改动的落点清单，行号取自本 clone @ 8d089678。实施前应逐条复核（源码可能已漂移），漂移以代码为准。</p>
+  <h2><span class="no">01</span>现状锚点(源码单点)</h2>
+  <p class="lead">下表是本计划所有改动的落点清单,行号取自本 clone @ 8d089678。实施前应逐条复核(源码可能已漂移),漂移以代码为准。</p>
 
   <table>
     <thead>
@@ -175,47 +175,47 @@
       <tr>
         <td>环 1 · 判据</td>
         <td><span class="k">traffic_sample_mod.py:602-604</span></td>
-        <td><code>if dl_rate == 0 and up_rate == 0: _advance_run(..., "z", dl_total, up_total)</code> —— 以「速率字段」为 z 判据，而 totals 在同一轮已读到新鲜值却<b>只用于开启游程</b>。</td>
+        <td><code>if dl_rate == 0 and up_rate == 0: _advance_run(..., "z", dl_total, up_total)</code> -- 以「速率字段」为 z 判据,而 totals 在同一轮已读到新鲜值却<b>只用于开启游程</b>。</td>
       </tr>
       <tr>
         <td>环 2 · 快照冻结</td>
         <td><span class="k">traffic_sample_mod.py:231-240</span><br><span class="k">:730-756</span></td>
-        <td><code>OpenRun</code> 文档串明写「totals 快照固定在开启时刻，后续零样本不刷新」；<code>_advance_run</code> 对已开游程<b>只推进 <code>last_seen</code> / <code>samples</code></b>，忽略传入的 totals。</td>
+        <td><code>OpenRun</code> 文档串明写「totals 快照固定在开启时刻,后续零样本不刷新」;<code>_advance_run</code> 对已开游程<b>只推进 <code>last_seen</code> / <code>samples</code></b>,忽略传入的 totals。</td>
       </tr>
       <tr>
         <td>环 3 · 磁盘链</td>
         <td><span class="k">traffic_sample_mod.py:758-769</span></td>
-        <td><code>_seal_run</code> 以游程开启快照写 <code>V4ZeroRun(run_len, dl_total, up_total)</code> —— 6.6 小时的增长在盘上零痕迹。</td>
+        <td><code>_seal_run</code> 以游程开启快照写 <code>V4ZeroRun(run_len, dl_total, up_total)</code> -- 6.6 小时的增长在盘上零痕迹。</td>
       </tr>
       <tr>
         <td>环 4 · 读侧</td>
         <td><span class="k">traffic_grid.py:388-409</span><br><span class="k">:469-487</span> · <span class="k">:205-235</span><br><span class="k">:490-515</span></td>
-        <td>z 槽 obs = <code>(0, 0, 冻结快照)</code>；<code>v4_totals_points</code> 相邻桶快照差分；<code>_bucket_delta</code> 判重置；<code>v4_rate_from_totals</code> 重写 <code>rate = delta / w</code>（w = 接收桶的桶宽）。</td>
+        <td>z 槽 obs = <code>(0, 0, 冻结快照)</code>;<code>v4_totals_points</code> 相邻桶快照差分;<code>_bucket_delta</code> 判重置;<code>v4_rate_from_totals</code> 重写 <code>rate = delta / w</code>(w = 接收桶的桶宽)。</td>
       </tr>
       <tr>
         <td>环 4b · 真空判定</td>
         <td><span class="k">traffic_grid.py:411-420</span></td>
-        <td>块间 gap 超首槽桶宽 → 出 null 点断链；<b>但活尾合流分支（<code>is_tail</code>，:412-415）显式跳过真空判定</b> —— 接缝的 delta 是否被 null 断链，取决于它走的是哪条路径。<span class="pill p1">P0 必查</span></td>
+        <td>块间 gap 超首槽桶宽 → 出 null 点断链;<b>但活尾合流分支(<code>is_tail</code>,:412-415)显式跳过真空判定</b> -- 接缝的 delta 是否被 null 断链,取决于它走的是哪条路径。<span class="pill p1">P0 必查</span></td>
       </tr>
       <tr>
         <td>同步层</td>
         <td><span class="k">torrents/store.py:164-168</span><br><span class="k">torrents/compat.py:31-32</span></td>
-        <td>qB 增量响应只回变化键；合并语义「键缺席保留旧值」⇒ 速率键一旦长期不变，合并值可无限期停在旧值（速率的新鲜度不可观测）。</td>
+        <td>qB 增量响应只回变化键;合并语义「键缺席保留旧值」⇒ 速率键一旦长期不变,合并值可无限期停在旧值(速率的新鲜度不可观测)。</td>
       </tr>
       <tr>
         <td>呈现层</td>
         <td><span class="k">webui/server/traffic_qb.py:124-125</span><br><span class="k">static/shared/qb_traffic_chart.js:261-269</span></td>
-        <td><code>_meta</code> 仅 4 键（<code>window / interval_s / source / stale</code>），无「服务何时启动/是否在接缝期」的标记；前端把连续 null 桶铺成斜纹游程 —— 无法区分「停机洞」与「重启缝」。</td>
+        <td><code>_meta</code> 仅 4 键(<code>window / interval_s / source / stale</code>),无「服务何时启动/是否在接缝期」的标记;前端把连续 null 桶铺成斜纹游程 -- 无法区分「停机洞」与「重启缝」。</td>
       </tr>
       <tr>
         <td>测试面</td>
         <td><span class="k">tests/test_traffic_sample.py</span><br><span class="k">tests/test_traffic_grid.py</span><br><span class="k">tests/test_traffic_store.py</span><br><span class="k">tests/test_web_traffic_qb.py</span></td>
-        <td>四个文件覆盖写侧/读侧/存储/端点；新用例必须同步各文件头部 docstring 的「## 测试计划」清单（AGENTS.md 硬约束）。</td>
+        <td>四个文件覆盖写侧/读侧/存储/端点;新用例必须同步各文件头部 docstring 的「## 测试计划」清单(AGENTS.md 硬约束)。</td>
       </tr>
       <tr>
         <td>口径文档</td>
         <td><span class="k">memory-bank/progress/implemented-webui-history.md</span></td>
-        <td>「qB 口径流量图三图」段的落点（口径沉淀单点），当前未记录「alltime 差分含握手/开销成分」。</td>
+        <td>「qB 口径流量图三图」段的落点(口径沉淀单点),当前未记录「alltime 差分含握手/开销成分」。</td>
       </tr>
     </tbody>
   </table>
@@ -228,21 +228,21 @@
   <table>
     <thead><tr><th style="width:64px">编号</th><th style="width:230px">目标</th><th>可判据的形态</th></tr></thead>
     <tbody>
-      <tr><td>G1</td><td>接缝处不再出现与桶宽成反比的幻影尖峰</td><td>同一接缝在 30m/3h/24h 三窗的峰值同量级，且不超过真实夜均速率（~630 B/s）的合理倍数；窗越细不再越尖。</td></tr>
-      <tr><td>G2</td><td>重启缝与停机洞仍诚实呈现</td><td>无观测区间仍为 null（断线/斜纹）；不引入任何凭空的非 null 桶。</td></tr>
-      <tr><td>G3</td><td>字节守恒</td><td>任意窗口 <code>Σ(rate × w)</code> 与对应区间的 alltime 真增一致（摊配只改分布，不改总量）。</td></tr>
-      <tr><td>G4</td><td>格式与旧数据兼容</td><td>v4 天文件 5 列 / agg 9 列不变；旧天文件不经迁移即可读。</td></tr>
-      <tr><td>G5</td><td>不破既有黄金法则</td><td>幂等（重复执行无副作用）· 单写线程 · 保守默认 · fail-fast（新配置键必须进 <code>validate_config</code> + <code>config/schema.py</code>）。</td></tr>
+      <tr><td>G1</td><td>接缝处不再出现与桶宽成反比的幻影尖峰</td><td>同一接缝在 30m/3h/24h 三窗的峰值同量级,且不超过真实夜均速率(~630 B/s)的合理倍数;窗越细不再越尖。</td></tr>
+      <tr><td>G2</td><td>重启缝与停机洞仍诚实呈现</td><td>无观测区间仍为 null(断线/斜纹);不引入任何凭空的非 null 桶。</td></tr>
+      <tr><td>G3</td><td>字节守恒</td><td>任意窗口 <code>Σ(rate × w)</code> 与对应区间的 alltime 真增一致(摊配只改分布,不改总量)。</td></tr>
+      <tr><td>G4</td><td>格式与旧数据兼容</td><td>v4 天文件 5 列 / agg 9 列不变;旧天文件不经迁移即可读。</td></tr>
+      <tr><td>G5</td><td>不破既有黄金法则</td><td>幂等(重复执行无副作用)· 单写线程 · 保守默认 · fail-fast(新配置键必须进 <code>validate_config</code> + <code>config/schema.py</code>)。</td></tr>
     </tbody>
   </table>
 
   <div class="box no">
-    <div class="t">非目标（明确不做）</div>
+    <div class="t">非目标(明确不做)</div>
     <ul>
-      <li><b>不消除细流</b>：seed↔seed 握手开销是 libtorrent 正常行为；本计划不通过关连接/改协议去「治」它。</li>
-      <li><b>不改 qB 本体</b>：不重启、不改 qB 侧 prefs（P6 只做评估与文档，改与不改都只是结论）。</li>
-      <li><b>不改前端断线语义</b>：null 不连线（<code>spanGaps:false</code>）与斜纹缺口保持；P4 只加「接缝提示」，不改断线呈现。</li>
-      <li><b>不引入跨仓库操作</b>：全部改动只落在当前 clone。</li>
+      <li><b>不消除细流</b>:seed↔seed 握手开销是 libtorrent 正常行为;本计划不通过关连接/改协议去「治」它。</li>
+      <li><b>不改 qB 本体</b>:不重启、不改 qB 侧 prefs(P6 只做评估与文档,改与不改都只是结论)。</li>
+      <li><b>不改前端断线语义</b>:null 不连线(<code>spanGaps:false</code>)与斜纹缺口保持;P4 只加「接缝提示」,不改断线呈现。</li>
+      <li><b>不引入跨仓库操作</b>:全部改动只落在当前 clone。</li>
     </ul>
   </div>
 </section>
@@ -250,107 +250,107 @@
 <!-- ============================================================ -->
 <section id="s3">
   <h2><span class="no">03</span>分步实施</h2>
-  <p class="lead">阶段按「先确认机理 → 先拿纯读侧收益 → 再动写侧语义 → 加固与清理」排序。每阶段都给出落点、做法、验证与判据；<b>P1 与 P2 必须同批验收</b>（单独任一都不闭环 —— 只做写侧仍会在边界留下单桶台阶，只做读侧在没有时间锚点时会摊错跨度）。</p>
+  <p class="lead">阶段按「先确认机理 → 先拿纯读侧收益 → 再动写侧语义 → 加固与清理」排序。每阶段都给出落点、做法、验证与判据;<b>P1 与 P2 必须同批验收</b>(单独任一都不闭环 -- 只做写侧仍会在边界留下单桶台阶,只做读侧在没有时间锚点时会摊错跨度)。</p>
 
   <div class="steps">
 
     <div class="step">
       <div class="sid">P0</div>
       <div class="sbody">
-        <div class="st">只读复现与放大路径定位 <span class="pill p1">前置 · 必做</span></div>
-        <p class="lead">不改任何代码。先用报告 §08 的探针与读侧纯函数，把「尖峰由哪条路径产生」钉死 —— 这是 P1/P2 落点的前提。</p>
+        <div class="st">只读复现与放大路径定位 <span class="pill p1">前置 · 必做</span> <span class="pill p3">已完成 26-10-15-0945 · 结论见下方实施记录</span></div>
+        <p class="lead">不改任何代码。先用报告 §08 的探针与读侧纯函数,把「尖峰由哪条路径产生」钉死 -- 这是 P1/P2 落点的前提。</p>
         <ul>
-          <li>对 <code>auto-qb-data/qb-traffic-v4/global/2026-10-15.dat</code>（只读）走 <code>v4_series_points → v4_rate_from_totals → v4_grid_obs</code>，复现 06:36:08 尖峰；</li>
-          <li>判定关键分支：接缝 delta 走的是<b>块间真空判定</b>（<span class="k">traffic_grid.py:411-420</span>，本应出 null 断链）还是<b>活尾合流分支</b>（<span class="k">:412-415</span>，显式跳过真空判定）？若走后者，则「磁盘缝本不该有尖峰、尖峰来自活尾合流」—— 这直接改写 P2 的落点；</li>
-          <li>同时确认 deltas 链：从末个 z 桶（冻结快照）到首个新鲜快照之间，<code>v4_totals_points</code> 是否因 null 点而断链（当前行为与报告的「单桶承担全部陈旧差」是否一致）。</li>
+          <li>对 <code>auto-qb-data/qb-traffic-v4/global/2026-10-15.dat</code>(只读)走 <code>v4_series_points → v4_rate_from_totals → v4_grid_obs</code>,复现 06:36:08 尖峰;</li>
+          <li>判定关键分支:接缝 delta 走的是<b>块间真空判定</b>(<span class="k">traffic_grid.py:411-420</span>,本应出 null 断链)还是<b>活尾合流分支</b>(<span class="k">:412-415</span>,显式跳过真空判定)?若走后者,则「磁盘缝本不该有尖峰、尖峰来自活尾合流」-- 这直接改写 P2 的落点;</li>
+          <li>同时确认 deltas 链:从末个 z 桶(冻结快照)到首个新鲜快照之间,<code>v4_totals_points</code> 是否因 null 点而断链(当前行为与报告的「单桶承担全部陈旧差」是否一致)。</li>
         </ul>
-        <p><b>产出</b>：一页「路径定位」结论（写进本计划 §03 实施记录或任务档案），明确尖峰的产生路径与 null 断链的真实行为。<b>判据</b>：能用一个只读脚本精确报出尖峰桶的 <code>delta</code> 来源点（前驱桶快照 vs 前驱链断点）。</p>
+        <p><b>产出</b>:一页「路径定位」结论(写进本计划 §03 实施记录或任务档案),明确尖峰的产生路径与 null 断链的真实行为。<b>判据</b>:能用一个只读脚本精确报出尖峰桶的 <code>delta</code> 来源点(前驱桶快照 vs 前驱链断点)。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P2</div>
       <div class="sbody">
-        <div class="st">读侧：快照台阶按真实发生跨度摊配（消放大） <span class="pill p2">核心</span></div>
-        <p class="lead">落在纯读侧、零格式影响、旧数据即受益，故排在写侧之前先拿收益。</p>
+        <div class="st">读侧:快照台阶按真实发生跨度摊配(消放大) <span class="pill p2">核心</span></div>
+        <p class="lead">落在纯读侧、零格式影响、旧数据即受益,故排在写侧之前先拿收益。</p>
         <ul>
-          <li><b>落点</b>：<span class="k">traffic_grid.py</span> —— <code>v4_totals_points</code>(:469) / <code>_bucket_delta</code>(:205) / <code>v4_rate_from_totals</code>(:490) / <code>v4_grid_obs</code>(:533)。</li>
-          <li><b>做法</b>：给「快照台阶」加真实时间锚。当相邻两个<b>变化点</b>之间的跨度 Δt 明显大于单桶宽（阈值常量，默认取 2×标称 <code>interval_s</code>，兜底下限如 <code>60s</code>）时：<br>
-            <code>rate = delta / Δt_span</code>（真实发生跨度），并把这个 delta 按覆盖秒摊到跨越的栅格桶（<code>v4_grid_obs</code> 已按重叠秒加权，天然可摊），而不是按接收桶的桶宽 <code>delta / w</code>；</li>
-          <li><b>诚实兜底</b>：Δt 超上限（常量 <code>SEAM_NULL_S</code>，默认 <code>60s</code>）时该段宁可标 null（= 承认「这段跨越太长，速率不可归因」），而不是摊出一个看似精确的平均值 —— 对齐 G2；</li>
-          <li><b>不新增配置键</b>：阈值取模块常量（如 <code>_V4_SEAM_SPREAD_MIN_S</code> / <code>_V4_SEAM_NULL_S</code>，与 <code>_V4_NULL_FLOOR_S</code> 同族）。若评审要求配置化，则必须同步 <code>validate_config</code> 与 <code>config/schema.py</code>（黄金法则 4，守阵会查）。</li>
+          <li><b>落点</b>:<span class="k">traffic_grid.py</span> -- <code>v4_totals_points</code>(:469) / <code>_bucket_delta</code>(:205) / <code>v4_rate_from_totals</code>(:490) / <code>v4_grid_obs</code>(:533)。</li>
+          <li><b>做法</b>:给「快照台阶」加真实时间锚。当相邻两个<b>变化点</b>之间的跨度 Δt 明显大于单桶宽(阈值常量,默认取 2×标称 <code>interval_s</code>,兜底下限如 <code>60s</code>)时:<br>
+            <code>rate = delta / Δt_span</code>(真实发生跨度),并把这个 delta 按覆盖秒摊到跨越的栅格桶(<code>v4_grid_obs</code> 已按重叠秒加权,天然可摊),而不是按接收桶的桶宽 <code>delta / w</code>;</li>
+          <li><b>诚实兜底</b>:Δt 超上限(常量 <code>SEAM_NULL_S</code>,默认 <code>60s</code>)时该段宁可标 null(= 承认「这段跨越太长,速率不可归因」),而不是摊出一个看似精确的平均值 -- 对齐 G2;</li>
+          <li><b>不新增配置键</b>:阈值取模块常量(如 <code>_V4_SEAM_SPREAD_MIN_S</code> / <code>_V4_SEAM_NULL_S</code>,与 <code>_V4_NULL_FLOOR_S</code> 同族)。若评审要求配置化,则必须同步 <code>validate_config</code> 与 <code>config/schema.py</code>(黄金法则 4,守阵会查)。</li>
         </ul>
-        <p><b>验证</b>：<span class="k">tests/test_traffic_grid.py</span> 新增用例 —— ①构造「长零速游程 + 末端大台阶」桶点流，断言不再单桶尖峰；②断言 <code>Σ(rate × w) == delta</code>（字节守恒）；③断言超 <code>SEAM_NULL_S</code> 段标 null。<b>判据</b>：真实数据回放后 06:36 桶峰消失/降至真实量级，且总量不变（见 §05 E2E1）。</p>
+        <p><b>验证</b>:<span class="k">tests/test_traffic_grid.py</span> 新增用例 -- 1构造「长零速游程 + 末端大台阶」桶点流,断言不再单桶尖峰;2断言 <code>Σ(rate × w) == delta</code>(字节守恒);3断言超 <code>SEAM_NULL_S</code> 段标 null。<b>判据</b>:真实数据回放后 06:36 桶峰消失/降至真实量级,且总量不变(见 §05 E2E1)。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P1</div>
       <div class="sbody">
-        <div class="st">写侧：z 游程在盘上携带末端真值（消接缝差的来源） <span class="pill p2">核心</span></div>
-        <p class="lead">让「增长发生在哪一段时间内」在磁盘链上可判 —— 当前快照冻结使接缝差没有任何时间锚点。本步会改变 z 行的 totals 语义，风险高于 P2，故排在 P2 之后并需评估。</p>
+        <div class="st">写侧:z 游程在盘上携带末端真值(消接缝差的来源) <span class="pill p2">核心</span></div>
+        <p class="lead">让「增长发生在哪一段时间内」在磁盘链上可判 -- 当前快照冻结使接缝差没有任何时间锚点。本步会改变 z 行的 totals 语义,风险高于 P2,故排在 P2 之后并需评估。</p>
         <ul>
-          <li><b>落点</b>：<span class="k">traffic_sample_mod.py</span> —— <code>OpenRun</code>(:231) / <code>_advance_run</code>(:730) / <code>_seal_run</code>(:758)。</li>
-          <li><b>形态（二选一，评审拍板）</b>：
+          <li><b>落点</b>:<span class="k">traffic_sample_mod.py</span> -- <code>OpenRun</code>(:231) / <code>_advance_run</code>(:730) / <code>_seal_run</code>(:758)。</li>
+          <li><b>形态(二选一,评审拍板)</b>:
             <ul>
-              <li><b>1A · 封口刷新快照</b>：让全局系列的 z 游程在推进时记录末端观测，<code>_seal_run</code> 以末端值写 <code>V4ZeroRun</code>（z 行 totals 语义由「开启快照」改为「末端真值」）；</li>
-              <li><b>1B · 封口补显式 r 记录</b>：封口时若末端 − 开启 &gt; 阈值，则不改 z 行语义，而是在游程尾部补一条显式 r 记录（totals = 末端、速率 0），把增长标注为「游程尾部一次性补齐」。<span class="pill p3">语义更保守</span></li>
+              <li><b>1A · 封口刷新快照</b>:让全局系列的 z 游程在推进时记录末端观测,<code>_seal_run</code> 以末端值写 <code>V4ZeroRun</code>(z 行 totals 语义由「开启快照」改为「末端真值」);</li>
+              <li><b>1B · 封口补显式 r 记录</b>:封口时若末端 - 开启 &gt; 阈值,则不改 z 行语义,而是在游程尾部补一条显式 r 记录(totals = 末端、速率 0),把增长标注为「游程尾部一次性补齐」。<span class="pill p3">语义更保守</span></li>
             </ul>
           </li>
-          <li><b>只对全局系列做</b>：单种系列零速时<b>不重读 totals</b>（<span class="k">_sample_torrents:624-632</span>，性能设计），且本事故即全局系列 —— 不在 P1 扩到单种，避免引入额外读。</li>
-          <li><b>连带评估（不可省）</b>：z 行末端真值会改变 <code>agg</code> 的 totals 台阶与日对账口径（报告 §05/§06 已列）—— 需同轮评估 hour/day 封口时的台阶行为，必要时在 agg 汇总侧同步（<b>不</b>改行格式）。</li>
+          <li><b>只对全局系列做</b>:单种系列零速时<b>不重读 totals</b>(<span class="k">_sample_torrents:624-632</span>,性能设计),且本事故即全局系列 -- 不在 P1 扩到单种,避免引入额外读。</li>
+          <li><b>连带评估(不可省)</b>:z 行末端真值会改变 <code>agg</code> 的 totals 台阶与日对账口径(报告 §05/§06 已列)-- 需同轮评估 hour/day 封口时的台阶行为,必要时在 agg 汇总侧同步(<b>不</b>改行格式)。</li>
         </ul>
-        <p><b>验证</b>：<span class="k">tests/test_traffic_sample.py</span> 新增「零速但 totals 增长」游程用例 —— 断言封口产物的 totals 等于末端读数（1A）或尾部存在补齐记录（1B）；断言「totals 缺失不开 z 游程」等既有分支行为逐字不变。<b>判据</b>：真机 dry-run 制造一次重启，新天文件接缝差 ≈ 0（见 §05 E2E2）。</p>
+        <p><b>验证</b>:<span class="k">tests/test_traffic_sample.py</span> 新增「零速但 totals 增长」游程用例 -- 断言封口产物的 totals 等于末端读数(1A)或尾部存在补齐记录(1B);断言「totals 缺失不开 z 游程」等既有分支行为逐字不变。<b>判据</b>:真机 dry-run 制造一次重启,新天文件接缝差 ≈ 0(见 §05 E2E2)。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P3</div>
       <div class="sbody">
-        <div class="st">同步层：速率键新鲜度可观测 <span class="pill p3">加固</span></div>
+        <div class="st">同步层:速率键新鲜度可观测 <span class="pill p3">加固</span></div>
         <ul>
-          <li><b>落点</b>：<span class="k">torrents/store.py:164-168</span>（合并语义）+ 采样侧字段读取路径。</li>
-          <li><b>做法（二选一或并存）</b>：① 速率键（<code>dl_info_speed / up_info_speed</code>）连续 N 轮缺席记 WARNING（同一系列节流，恢复前只告警一次，对齐既有「封口失败节流」先例）；② 可选：每 ~60s 一次 <code>rid=0</code> 全量 maindata 强制取回速率键。</li>
-          <li><b>纪律</b>：不得破坏既有合并语义（server_state 键集稳定、无「键被移除」语义、不引入陈旧键）。</li>
+          <li><b>落点</b>:<span class="k">torrents/store.py:164-168</span>(合并语义)+ 采样侧字段读取路径。</li>
+          <li><b>做法(二选一或并存)</b>:1 速率键(<code>dl_info_speed / up_info_speed</code>)连续 N 轮缺席记 WARNING(同一系列节流,恢复前只告警一次,对齐既有「封口失败节流」先例);2 可选:每 ~60s 一次 <code>rid=0</code> 全量 maindata 强制取回速率键。</li>
+          <li><b>纪律</b>:不得破坏既有合并语义(server_state 键集稳定、无「键被移除」语义、不引入陈旧键)。</li>
         </ul>
-        <p><b>验证</b>：单测构造连续缺席轮次，断言日志与合并结果；<b>判据</b>：「速率可能陈旧」在日志里可见，且全量刷新不改变稳态行为。</p>
+        <p><b>验证</b>:单测构造连续缺席轮次,断言日志与合并结果;<b>判据</b>:「速率可能陈旧」在日志里可见,且全量刷新不改变稳态行为。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P4</div>
       <div class="sbody">
-        <div class="st">呈现层：接缝标记，消除「无采样区延伸到观察时刻」的误读 <span class="pill p3">加固</span></div>
+        <div class="st">呈现层:接缝标记,消除「无采样区延伸到观察时刻」的误读 <span class="pill p3">加固</span></div>
         <ul>
-          <li><b>落点</b>：<span class="k">webui/server/traffic_qb.py:124-125</span>（<code>_meta</code>）+ <span class="k">static/shared/qb_traffic_chart.js</span>（缺口渲染 :261-269）。</li>
-          <li><b>做法</b>：<code>meta</code> 增加 <code>server_started_at</code>（或 <code>seam</code> 标记）；前端在「数据链末点早于右沿且期间服务重启」时给「数据接缝中」提示，而不是把它与「停机洞」混为一谈的纯 null 区。</li>
-          <li><b>纪律</b>：不改断线语义（null 不连线、斜纹保留）；<code>meta</code> 新键对既有消费方必须向后兼容（旧前端忽略新键）。</li>
+          <li><b>落点</b>:<span class="k">webui/server/traffic_qb.py:124-125</span>(<code>_meta</code>)+ <span class="k">static/shared/qb_traffic_chart.js</span>(缺口渲染 :261-269)。</li>
+          <li><b>做法</b>:<code>meta</code> 增加 <code>server_started_at</code>(或 <code>seam</code> 标记);前端在「数据链末点早于右沿且期间服务重启」时给「数据接缝中」提示,而不是把它与「停机洞」混为一谈的纯 null 区。</li>
+          <li><b>纪律</b>:不改断线语义(null 不连线、斜纹保留);<code>meta</code> 新键对既有消费方必须向后兼容(旧前端忽略新键)。</li>
         </ul>
-        <p><b>验证</b>：<span class="k">tests/test_web_traffic_qb.py</span> 断言 <code>meta</code> 新键存在且旧键不变；前端缺口判据 node 单测不回归。<b>判据</b>：人工验收（重启后观测）不再出现「无采样区延伸到右沿」的误读。</p>
+        <p><b>验证</b>:<span class="k">tests/test_web_traffic_qb.py</span> 断言 <code>meta</code> 新键存在且旧键不变;前端缺口判据 node 单测不回归。<b>判据</b>:人工验收(重启后观测)不再出现「无采样区延伸到右沿」的误读。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P5</div>
       <div class="sbody">
-        <div class="st">文档口径：把「alltime 差分含握手/开销」写进单点 <span class="pill p3">零改码</span></div>
+        <div class="st">文档口径:把「alltime 差分含握手/开销」写进单点 <span class="pill p3">零改码</span></div>
         <ul>
-          <li><b>落点</b>：<span class="k">memory-bank/progress/implemented-webui-history.md</span>（「qB 口径流量图三图」段）。</li>
-          <li><b>做法</b>：记录口径 —— <code>qb-traffic</code> 的流量 = qB alltime 差分 = <code>net.recv_bytes</code>（payload + BT 协议字节）+ <code>net.recv_ip_overhead_bytes</code>（模型化 IP 开销）；<b>不含</b> tracker 字节与 DHT 报文本体；基线几百 B/s（白天 swarm 活跃可达 ~6.5 KB/s）<b>不是读数噪声</b>。引报告 §04.5。</li>
+          <li><b>落点</b>:<span class="k">memory-bank/progress/implemented-webui-history.md</span>(「qB 口径流量图三图」段)。</li>
+          <li><b>做法</b>:记录口径 -- <code>qb-traffic</code> 的流量 = qB alltime 差分 = <code>net.recv_bytes</code>(payload + BT 协议字节)+ <code>net.recv_ip_overhead_bytes</code>(模型化 IP 开销);<b>不含</b> tracker 字节与 DHT 报文本体;基线几百 B/s(白天 swarm 活跃可达 ~6.5 KB/s)<b>不是读数噪声</b>。引报告 §04.5。</li>
         </ul>
-        <p><b>判据</b>：口径写入单点，后续不再把基线当噪声。零代码改动。</p>
+        <p><b>判据</b>:口径写入单点,后续不再把基线当噪声。零代码改动。</p>
       </div>
     </div>
 
     <div class="step">
       <div class="sid">P6</div>
       <div class="sbody">
-        <div class="st">配置侧评估：出站端口范围与连接 churn <span class="pill p3">不改本仓码</span></div>
+        <div class="st">配置侧评估:出站端口范围与连接 churn <span class="pill p3">不改本仓码</span></div>
         <ul>
-          <li><b>落点</b>：qB 侧 <code>outgoing_ports_min/max</code>（实例为 61234–65000）+ <code>connection_speed=30</code>；libtorrent <code>performance_alert::too_few_outgoing_ports</code>。</li>
-          <li><b>做法</b>：评估放开端口范围（或让 libtorrent 自选）以减少失败尝试与日志噪声；<b>只出结论与理由，不改 auto-qb 代码</b>。注意对细流总量影响有限（细流主体是「连上即断」的握手字节，不是失败尝试）。</li>
+          <li><b>落点</b>:qB 侧 <code>outgoing_ports_min/max</code>(实例为 61234-65000)+ <code>connection_speed=30</code>;libtorrent <code>performance_alert::too_few_outgoing_ports</code>。</li>
+          <li><b>做法</b>:评估放开端口范围(或让 libtorrent 自选)以减少失败尝试与日志噪声;<b>只出结论与理由,不改 auto-qb 代码</b>。注意对细流总量影响有限(细流主体是「连上即断」的握手字节,不是失败尝试)。</li>
         </ul>
-        <p><b>判据</b>：结论入档（改 / 不改 + 理由）。</p>
+        <p><b>判据</b>:结论入档(改 / 不改 + 理由)。</p>
       </div>
     </div>
 
@@ -358,8 +358,43 @@
 
   <div class="box warn">
     <div class="t">实施顺序建议</div>
-    <p><b>P0 → P2 → P1 → P3 → P4 → P5 → P6</b>。报告 §07 的优先级是「写侧 + 读侧两步闭环」，本计划与之一致，只把<b>纯读、零格式影响</b>的 P2 提到 P1 之前：先拿到「单桶放大被消除」的收益且不触碰格式语义，再动写侧。若 P0 定位出「尖峰来自活尾合流路径」，则 P1 可能降级为可选（写侧不再是必要环）。</p>
+    <p><b>P0 → P2 → P1 → P3 → P4 → P5 → P6</b>。报告 §07 的优先级是「写侧 + 读侧两步闭环」,本计划与之一致,只把<b>纯读、零格式影响</b>的 P2 提到 P1 之前:先拿到「单桶放大被消除」的收益且不触碰格式语义,再动写侧。若 P0 定位出「尖峰来自活尾合流路径」,则 P1 可能降级为可选(写侧不再是必要环)。</p>
   </div>
+
+  <h3 id="p0-record"><span class="tag2">REC</span>实施记录 · P0 只读复现与放大路径定位(26-10-15-0945 · clone @ ff438d0b)</h3>
+  <p class="lead">只读轮:未改任何代码/配置/运行数据。探针对真实事故天文件(运行实例 <code>auto-qb-data/qb-traffic-v4/global/2026-10-15.dat</code>,mtime 06:36:01、101B、<b>仍只有块 1</b>)走本仓真实读侧管线 <code>v4_series_points → v4_totals_points → v4_rate_from_totals → v4_grid_obs</code>;活尾按写侧发布语义(块开放 + head_pending + 开放 z 游程)以报告 §10 实测快照重建。§01 落点行号已按本 clone 复核:逐条一致,零漂移。</p>
+  <table>
+    <thead><tr><th style="width:158px">接缝形态</th><th style="width:224px">分支(本 clone 行号)</th><th style="width:96px">null 标记</th><th>差分链与结果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>实际</b>(观测时刻至今的生产形态):磁盘块 1 + 活尾</td>
+        <td>活尾合流分支 <code>traffic_grid.py:412-415</code> —— 仅 <code>ts &gt; prev_chain_end</code> 去重,<b>显式跳过真空判定</b></td>
+        <td>无</td>
+        <td>链不断:首活尾桶(06:36:08,w=2s)delta = F0−S0 全额入账(dl +15,286,382 / up +16,497,623)→ <code>v4_rate_from_totals</code> 打成 delta/w = <b>7.64 MB/s 点速率,2s 视图出图 5.10 MB/s,放大 ~12,000×</b>。尖峰复现;delta 来源点 = <b>前驱桶快照</b>(末 z 桶冻结 S0 @ 06:35:59),非前驱链断点</td>
+      </tr>
+      <tr>
+        <td><b>反事实</b>:块 2 封口落盘(纯磁盘缝)</td>
+        <td>块间真空判定 <code>traffic_grid.py:417-420</code>:ceil(首槽 06:36:08)−2 = 06:36:06 &gt; 06:36:00.025 → 触发</td>
+        <td>有 @ 06:36:00</td>
+        <td>链断(<code>:479</code> null 断链):首鲜桶 delta = None(D4 0 线)→ <b>无尖峰</b>;但陈旧差被<b>静默丢弃</b>(窗内入账 0 / 15,286,382,totals 通道少计)</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box ok">
+    <div class="t">P0 判定(§03 顺序框预设的「若走后者」支成立)</div>
+    <p><b>尖峰来自活尾合流分支;磁盘缝本身诚实(null)。</b>判据达成:只读脚本能精确报出尖峰桶的 delta 来源点。生产现状:重启后速率字段恒 0 → 块 2 为开放 z 游程 → 关块谓词 <code>flush ∧ has_r_row</code> 永不满足 → 活尾自 06:36:10 起持续承载整条接缝(<b>尖峰至今仍在图中</b> —— 不是「再现」,是从未消失)。</p>
+  </div>
+  <div class="box warn">
+    <div class="t">对 P1/P2 落点的改写</div>
+    <ul>
+      <li><b>P1 降级为可选</b>:写侧封口语义只治「封口后」的盘面台阶,碰不到活尾期(未封口)的尖峰 —— 本次事故的尖峰全部发生在活尾期。</li>
+      <li><b>P2 升级为唯一必要环,落点扩为两缝</b>:①活尾缝需时间锚(磁盘链末槽 06:36:00.025 → 首活尾槽 ≈06:36:09.5,缝跨度 ~9.5s,陈旧差累积 6.6h);②磁盘缝当前的「null 断链丢弃」把 15.29MB 静默丢出 totals 通道 —— P2 摊配若让接缝差保持可见并按真实跨度摊配,两缝一并治理,G3 字节守恒与 E2E4 对账同时受益;③诚实兜底(超 SEAM_NULL_S 标 null)口径不变。</li>
+      <li><b>agg 侧连带观察</b>(P1 连带评估输入):agg.dat mtime 07:06:13,07:00 起无新 hour 行;hour 06:00 行(启动恢复重建)cov=2160、totals=冻结 S0 —— 开放 z 期的 agg 封口行为待查,与本缝同族。</li>
+      <li><b>亚秒相位注记</b>:活尾首槽(≈06:36:09.5)与封口后块首槽(06:36:08.0)差一个 spacing(~1.5s,LiveTail「亚桶宽级近似」),封口后首鲜桶将移到 06:36:06;报告观测 6.9 MB/s ↔ 其观察时刻 F0−S0≈13.8MB(≈07:0x),本记录用 07:2x 快照(15.29MB)→ 7.64 MB/s,同路径同机理。</li>
+      <li><b>§07 待拍板项影响</b>:「实施批次」建议改写为 P2 单独实施即闭环主症状;「P1 形态二选一」随 P1 降级后置;其余不变。</li>
+    </ul>
+  </div>
+  <p class="lead">探针:只读脚本(会话 scratch <code>.openclaw/tmp/probe_p0_seam_path.py</code>,未入库),关键输出已全部内联于上表;复跑条件 = 本 clone 源码 + 运行实例天文件只读可访问。</p>
 </section>
 
 <!-- ============================================================ -->
@@ -370,61 +405,61 @@
   <table>
     <thead><tr><th style="width:270px">文件</th><th style="width:80px">阶段</th><th>新增内容</th></tr></thead>
     <tbody>
-      <tr><td><span class="k">tests/test_traffic_grid.py</span></td><td>P2</td><td>长游程 + 末端台阶 → 无单桶尖峰 / 字节守恒 / 超长段标 null；边界：Δ < 阈值时行为逐字不变。</td></tr>
-      <tr><td><span class="k">tests/test_traffic_sample.py</span></td><td>P1</td><td>零速 + totals 增长游程 → 封口产物语义断言（1A/1B 按拍板形态）；既有 z/n 分支行为回归。</td></tr>
+      <tr><td><span class="k">tests/test_traffic_grid.py</span></td><td>P2</td><td>长游程 + 末端台阶 → 无单桶尖峰 / 字节守恒 / 超长段标 null;边界:Δ < 阈值时行为逐字不变。</td></tr>
+      <tr><td><span class="k">tests/test_traffic_sample.py</span></td><td>P1</td><td>零速 + totals 增长游程 → 封口产物语义断言(1A/1B 按拍板形态);既有 z/n 分支行为回归。</td></tr>
       <tr><td><span class="k">tests/test_web_traffic_qb.py</span></td><td>P4</td><td><code>meta</code> 新键存在 + 旧 4 键不变 + 空态分支不回归。</td></tr>
-      <tr><td><span class="k">tests/test_traffic_store.py</span></td><td>P1</td><td>（如改动触及封口/agg 台阶）行格式兼容与同 epoch 合流不回归。</td></tr>
+      <tr><td><span class="k">tests/test_traffic_store.py</span></td><td>P1</td><td>(如改动触及封口/agg 台阶)行格式兼容与同 epoch 合流不回归。</td></tr>
     </tbody>
   </table>
 
-  <h3>机械守阵（防回退）</h3>
+  <h3>机械守阵(防回退)</h3>
   <ul>
-    <li><b>接缝摊配不得回退成单桶归因</b>：静态判据 + 行为判据（构造长游程接缝，断言峰值不随桶宽反比变化）。</li>
-    <li><b>诚实性守阵</b>：断言读侧不产生「无观测区间的非 null 桶」（摊配不得凭空造数据）。</li>
-    <li><b>格式守阵</b>：v4 天文件列数与 <code>agg.dat</code> 9 列不因本次改动而变。</li>
+    <li><b>接缝摊配不得回退成单桶归因</b>:静态判据 + 行为判据(构造长游程接缝,断言峰值不随桶宽反比变化)。</li>
+    <li><b>诚实性守阵</b>:断言读侧不产生「无观测区间的非 null 桶」(摊配不得凭空造数据)。</li>
+    <li><b>格式守阵</b>:v4 天文件列数与 <code>agg.dat</code> 9 列不因本次改动而变。</li>
   </ul>
 
   <div class="box">
-    <div class="t">纪律（AGENTS.md 硬约束）</div>
+    <div class="t">纪律(AGENTS.md 硬约束)</div>
     <ul>
       <li>新增测试必须同步对应测试文件头部 docstring 的「## 测试计划」清单。</li>
-      <li>每个守阵必须<b>红绿双验</b>（至少一类突变判红 + 一个活性探针）。</li>
-      <li>全量数字只落基线切片（<span class="k">memory-bank/testing/baselines/</span>），本计划与正文一律引用、不手抄（见 <code>commands run kb.baseline</code>）。</li>
+      <li>每个守阵必须<b>红绿双验</b>(至少一类突变判红 + 一个活性探针)。</li>
+      <li>全量数字只落基线切片(<span class="k">memory-bank/testing/baselines/</span>),本计划与正文一律引用、不手抄(见 <code>commands run kb.baseline</code>)。</li>
     </ul>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="s5">
-  <h2><span class="no">05</span>验收判据（端到端）</h2>
+  <h2><span class="no">05</span>验收判据(端到端)</h2>
 
   <table>
     <thead><tr><th style="width:70px">编号</th><th style="width:250px">场景</th><th>通过判据</th></tr></thead>
     <tbody>
       <tr>
         <td>E2E1</td>
-        <td><b>真实数据回放</b><br>对既有 <span class="k">2026-10-15.dat</span>（只读）走读侧</td>
-        <td>30m/3h/24h 三窗在 06:36 接缝处无幻影尖峰（峰值降至真实夜均速率量级）；<code>Σ(rate × w)</code> 与 B 基线差一致（字节守恒）；午夜跨天小包（00:00 桶）同机理一并改善。</td>
+        <td><b>真实数据回放</b><br>对既有 <span class="k">2026-10-15.dat</span>(只读)走读侧</td>
+        <td>30m/3h/24h 三窗在 06:36 接缝处无幻影尖峰(峰值降至真实夜均速率量级);<code>Σ(rate × w)</code> 与 B 基线差一致(字节守恒);午夜跨天小包(00:00 桶)同机理一并改善。</td>
       </tr>
       <tr>
         <td>E2E2</td>
         <td><b>真机 dry-run 制造重启</b><br><code>commands run dev.run -- config.yml --dry-run</code></td>
-        <td>P1 生效后，新写入天文件的接缝差 ≈ 0（停机前最后读数与重启后首个 z 行末端值之差 &lt; 一个采样窗）。<b>一律先 --dry-run</b>，不动生产配置。</td>
+        <td>P1 生效后,新写入天文件的接缝差 ≈ 0(停机前最后读数与重启后首个 z 行末端值之差 &lt; 一个采样窗)。<b>一律先 --dry-run</b>,不动生产配置。</td>
       </tr>
       <tr>
         <td>E2E3</td>
         <td><b>诚实性回归</b><br>停机洞 / 断连期</td>
-        <td>停机洞仍为 null 区（不被摊配填成伪值）；断线期仍 null 不连线。这是 G2 的守门判据。</td>
+        <td>停机洞仍为 null 区(不被摊配填成伪值);断线期仍 null 不连线。这是 G2 的守门判据。</td>
       </tr>
       <tr>
         <td>E2E4</td>
         <td><b>对账回归</b><br>日捕获率</td>
-        <td>10-13/10-14 量级（99.3%/99.7%、99.5%/88.7%）不下降；缺口仍只来自停机段的真实流量丢失。</td>
+        <td>10-13/10-14 量级(99.3%/99.7%、99.5%/88.7%)不下降;缺口仍只来自停机段的真实流量丢失。</td>
       </tr>
       <tr>
         <td>E2E5</td>
         <td><b>观测面验收</b><br>重启后人工观察</td>
-        <td>P4 生效后，重启缝呈现「数据接缝中」提示，不再出现「无采样区延伸到观察时刻」的误读。</td>
+        <td>P4 生效后,重启缝呈现「数据接缝中」提示,不再出现「无采样区延伸到观察时刻」的误读。</td>
       </tr>
     </tbody>
   </table>
@@ -440,36 +475,36 @@
       <tr>
         <td>R1</td>
         <td>P1 改变 z 行 totals 语义 → agg 台阶与日对账口径随之变化</td>
-        <td>形态 1B（补显式 r）比 1A（改 z 行语义）更保守；两形态都必须同轮评估 agg 封口台阶。P2 纯读侧、零格式影响，先做以隔离风险。</td>
+        <td>形态 1B(补显式 r)比 1A(改 z 行语义)更保守;两形态都必须同轮评估 agg 封口台阶。P2 纯读侧、零格式影响,先做以隔离风险。</td>
       </tr>
       <tr>
         <td>R2</td>
-        <td>P2 摊配阈值选得不当 → 把真实短缝也摊平，掩盖真实抖动</td>
-        <td>阈值取模块常量（默认 2×标称 interval，兜底 60s）+ 单测钉边界（Δ &lt; 阈值行为逐字不变）。阈值是拍板项。</td>
+        <td>P2 摊配阈值选得不当 → 把真实短缝也摊平,掩盖真实抖动</td>
+        <td>阈值取模块常量(默认 2×标称 interval,兜底 60s)+ 单测钉边界(Δ &lt; 阈值行为逐字不变)。阈值是拍板项。</td>
       </tr>
       <tr>
         <td>R3</td>
         <td>P2 超长接缝标 null → 用户看到更长的诚实断线</td>
-        <td>可接受且符合 G2「诚实性优先」。以「宁缺勿伪」为原则，不为了曲线连续而摊出伪值。</td>
+        <td>可接受且符合 G2「诚实性优先」。以「宁缺勿伪」为原则,不为了曲线连续而摊出伪值。</td>
       </tr>
       <tr>
         <td>R4</td>
         <td>P4 新 meta 键破坏既有消费方</td>
-        <td>只增不改；旧前端忽略未知键；断言旧 4 键不变。</td>
+        <td>只增不改;旧前端忽略未知键;断言旧 4 键不变。</td>
       </tr>
       <tr>
         <td>R5</td>
-        <td>P0 定位与预期不符（尖峰来自活尾合流而非磁盘缝）</td>
-        <td>这正是 P0 存在的意义：先钉路径再定落点。若结论不同，P1/P2 的落点按 P0 结论调整（P1 可能降级为可选）。</td>
+        <td>P0 定位与预期不符(尖峰来自活尾合流而非磁盘缝)</td>
+        <td>这正是 P0 存在的意义:先钉路径再定落点。若结论不同,P1/P2 的落点按 P0 结论调整(P1 可能降级为可选)。</td>
       </tr>
     </tbody>
   </table>
 
   <h3>回滚</h3>
   <ul>
-    <li><b>P2 纯读侧</b>：回退即恢复旧口径，无数据影响、无迁移成本。</li>
-    <li><b>P1 写侧</b>：若采用 1B（补显式 r），回退只影响新写入文件的接缝形态；若采用 1A（改 z 行语义），需保留旧快照语义的开关或回到旧版本 —— 这是把 P1 排在 P2 之后、并优先评审 1B 的理由之一。</li>
-    <li>上线前建议先在有代表性的本地数据上回放（E2E1），确认无对账缺口后再真机。</li>
+    <li><b>P2 纯读侧</b>:回退即恢复旧口径,无数据影响、无迁移成本。</li>
+    <li><b>P1 写侧</b>:若采用 1B(补显式 r),回退只影响新写入文件的接缝形态;若采用 1A(改 z 行语义),需保留旧快照语义的开关或回到旧版本 -- 这是把 P1 排在 P2 之后、并优先评审 1B 的理由之一。</li>
+    <li>上线前建议先在有代表性的本地数据上回放(E2E1),确认无对账缺口后再真机。</li>
   </ul>
 </section>
 
@@ -477,16 +512,16 @@
 <section id="s7">
   <h2><span class="no">07</span>待拍板项</h2>
   <ol>
-    <li><b>P1 形态二选一</b>：1A 改 z 行 totals 语义（更彻底，动格式语义）vs 1B 补显式 r 记录（更保守，不动既有行语义）。</li>
-    <li><b>P2 阈值与兜底</b>：摊配下限（默认 2×标称 interval，兜底 60s）与超长接缝标 null 的上限（默认 60s）—— 常量取值是否配置化。</li>
-    <li><b>P3 范围</b>：只做「缺席告警」还是叠加「定期 rid=0 全量刷新」（后者成本 = 一次全量 maindata/分钟）。</li>
-    <li><b>实施批次</b>：P2 单独先行（先拿收益）还是 P1+P2 同批（报告口径的「两步闭环」）。</li>
-    <li><b>是否入池 issue / 立档</b>：本计划落地时若触及 ≥3 个源文件，按 memory-bank skill 立档阈值另立任务档案（本计划不代立）。</li>
+    <li><b>P1 形态二选一</b>:1A 改 z 行 totals 语义(更彻底,动格式语义)vs 1B 补显式 r 记录(更保守,不动既有行语义)。</li>
+    <li><b>P2 阈值与兜底</b>:摊配下限(默认 2×标称 interval,兜底 60s)与超长接缝标 null 的上限(默认 60s)-- 常量取值是否配置化。</li>
+    <li><b>P3 范围</b>:只做「缺席告警」还是叠加「定期 rid=0 全量刷新」(后者成本 = 一次全量 maindata/分钟)。</li>
+    <li><b>实施批次</b>:P2 单独先行(先拿收益)还是 P1+P2 同批(报告口径的「两步闭环」)。</li>
+    <li><b>是否入池 issue / 立档</b>:本计划落地时若触及 ≥3 个源文件,按 memory-bank skill 立档阈值另立任务档案(本计划不代立)。</li>
   </ol>
 
   <div class="box warn">
     <div class="t">本计划的状态</div>
-    <p>Open · 待用户拍板。<b>本轮为纯文档轮</b>：未改任何代码、配置与运行数据；未入池 issue、未立档、未提交。拍板后按 §03 顺序开工，收尾按 DoD 更新 activeContext / 立档 / 基线切片 / 回写 progress。</p>
+    <p>Open · 待用户拍板。<b>本轮为纯文档轮</b>:未改任何代码、配置与运行数据;未入池 issue、未立档、未提交。拍板后按 §03 顺序开工,收尾按 DoD 更新 activeContext / 立档 / 基线切片 / 回写 progress。</p>
   </div>
 </section>
 
@@ -498,31 +533,32 @@
     <tbody>
       <tr>
         <td><a href="../reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html">reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html</a></td>
-        <td><b>本计划的唯一依据</b>（故障取证，Done）。§07 给方向，§08 给可复跑探针，§04.5 给细流计数器级定位，§09 给未决项。</td>
+        <td><b>本计划的唯一依据</b>(故障取证,Done)。§07 给方向,§08 给可复跑探针,§04.5 给细流计数器级定位,§09 给未决项。</td>
       </tr>
       <tr>
         <td><a href="../plans/26-10-07-2127-plan-qb-traffic-rate-basis.html">plans/26-10-07-2127-plan-qb-traffic-rate-basis.html</a></td>
-        <td><code>delta/w</code> 区间平均口径的来源（方案 B）。其边界判研只覆盖「qB 进程重启」（计数器持久、通常无缝），<b>未覆盖「auto-qb 进程重启」</b> —— 本案正是该缺口。</td>
+        <td><code>delta/w</code> 区间平均口径的来源(方案 B)。其边界判研只覆盖「qB 进程重启」(计数器持久、通常无缝),<b>未覆盖「auto-qb 进程重启」</b> -- 本案正是该缺口。</td>
       </tr>
       <tr>
         <td><a href="../plans/26-10-04-1957-plan-qb-traffic-storage-v3.html">plans/26-10-04-1957-plan-qb-traffic-storage-v3.html</a> · <a href="../plans/26-10-05-2200-plan-qb-traffic-v4-delta.html">plans/26-10-05-2200-plan-qb-traffic-v4-delta.html</a></td>
-        <td>v4 存储（块头基线 delta + 按落盘切块 + z 行）与后续 v4 细节；写侧「块状态机 / 基线立点」的权威。</td>
+        <td>v4 存储(块头基线 delta + 按落盘切块 + z 行)与后续 v4 细节;写侧「块状态机 / 基线立点」的权威。</td>
       </tr>
       <tr>
         <td><a href="../conventions/doc-forms.md">conventions/doc-forms.md</a></td>
-        <td>本计划的形态与 meta 协议（plan 工位、状态词、命名、改版规则）。</td>
+        <td>本计划的形态与 meta 协议(plan 工位、状态词、命名、改版规则)。</td>
       </tr>
       <tr>
         <td><a href="../testing/baseline.md">testing/baseline.md</a></td>
-        <td>测试基线的口径与写入口径单点（数字只在 baselines/ 落一处）。</td>
+        <td>测试基线的口径与写入口径单点(数字只在 baselines/ 落一处)。</td>
       </tr>
     </tbody>
   </table>
 </section>
 
 <div class="foot">
-  <p>本计划为纯文档轮产物：未修改任何源码、配置与运行数据；未入池 issue、未立档、未提交。实施落点行号取自 clone <code>auto-qb-clone3</code> @ <code>8d089678</code>（开工同步 <code>my-commit-flow.sync</code> 结果「已同步 8d089678」）；实施前应逐条复核源码漂移。</p>
-  <p>改版规则：本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>，禁止再堆 <code>-v2</code> 新文件。</p>
+  <p>本计划为纯文档轮产物:未修改任何源码、配置与运行数据;未入池 issue、未立档、未提交。实施落点行号取自 clone <code>auto-qb-clone3</code> @ <code>8d089678</code>(开工同步 <code>my-commit-flow.sync</code> 结果「已同步 8d089678」);实施前应逐条复核源码漂移。</p>
+  <p><b>变更记录</b>:26-10-15-0945 — P0 实施完成(只读轮,未改码/配置/数据):§03 追加「实施记录 · P0」,状态栏与 P0 步骤标记更新;按实施记录改写 P1(降级可选)/P2(升级唯一必要环、落点扩为两缝)的相对定位,§07 待拍板项正文不动、影响见实施记录。</p>
+  <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 
 </div>
