@@ -1,4 +1,4 @@
-// 选项页: 读/写 chrome.storage.local, 申请站点权限, 自测端点连通性, 手动触发一次拉取。
+// 选项页: 读/写 chrome.storage.local, 申请站点权限, 逐实例重测连通性, 手动触发一次拉取。
 //
 // !这里是**唯一**能替用户挡住"格式写错"的地方 —— 浏览器 API 对格式极其严格且报错难懂:
 //   · chrome.permissions.request 只吃**匹配模式**(必须带 scheme), 裸域名报
@@ -437,7 +437,7 @@ async function fetchSites(manual) {
       );
     }
   } catch (e) {
-    if (manual) setStatus(`x 连不上端点(${e.message || e}) — 先点「自测端点连通」按提示排查`);
+    if (manual) setStatus(`x 连不上端点(${e.message || e}) — 先点「重测全部」按提示排查`);
   }
 }
 
@@ -718,8 +718,8 @@ async function save() {
 }
 
 /**
- * 探一次**主实例**(instances[0])的连通性, 返回结构化结论 —— 「自测端点连通」按钮与「发现命中后
- * 自动接自测」共用同一份判据(计划 S3: 免得两处各自演化出两套"通没通"的说法)。
+ * 探一次**主实例**(instances[0])的连通性, 返回结构化结论 —— 「发现命中后自动接自测」共用这份判据
+ * (计划 S3: 免得两处各自演化出两套"通没通"的说法)。逐实例探测统一走后台 probe-all(C1 单一写入口)。
  * 返回 {state, text, hint}, state ∈ ok / 401 / 403 / http / down / no-instance; 本函数不碰 UI。
  */
 async function probeMainInstance() {

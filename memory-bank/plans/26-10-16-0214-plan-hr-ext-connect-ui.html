@@ -7,9 +7,9 @@
 <title>HR 扩展「连接后端」区重排 + 实例状态入表 修改计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-ext-connect-ui">
-<meta name="doc-status" content="Open">
-<meta name="doc-added" content="26-10-16-0214">
-<meta name="doc-updated" content="26-10-16-0306">
+  <meta name="doc-status" content="Done">
+  <meta name="doc-added" content="26-10-16-0214">
+  <meta name="doc-updated" content="26-10-16-0426">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-hr-ext-connect-ui.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
   <a href="#s09"><span class="no">09</span>候选模板与选型</a>
   <a href="#s10"><span class="no">10</span>同步清单</a>
   <a href="#s11"><span class="no">11</span>变更记录</a>
-  <div class="toc-foot">专题 hr-ext-connect-ui<br>候选稿, 实施待用户指令</div>
+  <div class="toc-foot">专题 hr-ext-connect-ui<br>S1–S6 全部实施完成(26-10-16-0426)</div>
 </nav>
 
 <header class="cover">
@@ -90,7 +90,7 @@
   <h1>HR 扩展「连接后端」区重排<br>+ 实例状态入表</h1>
   <p class="lede">上一轮(26-10-15-2357)把连接模型修对了(自愈 / 手动优先 / 不静默), 但①区排版仍是七类信息垂直堆叠、实例健康台账只用了「疑似失效」一角、「自测端点连通」只测 instances[0]。本计划把<b>状态直接铺进实例表</b>, 把<b>机制长文收进折叠区</b>, 把<b>徽标图例的"工具栏"歧义修掉</b>, 并给出三份可交互候选模板供选型。</p>
   <div class="meta-row">
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge" style="background:#1d2b22;color:#8fc98f;border-color:#2e4a38">Done</span></div></div>
     <div class="item"><div class="k">范围</div><div class="v">仅扩展侧 · ①区 + ③④表样式微调</div></div>
     <div class="item"><div class="k">上游</div><div class="v">26-10-15-2357(连接自愈, Done)</div></div>
     <div class="item"><div class="k">模板</div><div class="v">3 份候选稿(§09)</div></div>
@@ -306,10 +306,11 @@
     <li><b>26-10-16-0238</b> —— 模板评审二轮拍板(R1–R3)入册: token 列改「前 32 位指纹 + 悬停完整值」、自动条目显「-」; 来源徽标「优先」废止改「手动」(行为不变, 上游 Q11② 徽标措辞翻案, 守阵期望随 S5 翻转); 操作列收窄为「手动条目只有删 / 自动条目留空」, 「载入」「测」删除, 探测统一走「重测全部」(probe-one 消息取消)。§03.1 / §03.4 / §04 S3 / §05 C4 / §06 V1 / §08 同步改写; 三份候选模板同步更新。计划状态维持 Open。</li>
     <li><b>26-10-16-0247</b> —— 补记排序口径: 实例表<b>手动组在前、自动组在后</b>(上游 26-10-15-2357 Q9「手动恒在前」既有语义, 非新增行为); §03.1 示例行序与三份候选模板同步修正。</li>
     <li><b>26-10-16-0306</b> —— 第三轮拍板 R4(工具栏徽标外框)入册: 徽标挡图标的根源 = 浏览器固定渲染 + manifest 无 <code>default_icon</code>; 拍板「状态色外框(路径 A: 预生成 4 态 × 2 尺寸 PNG + <code>setIcon({path})</code>)+ 折中文字通道(仅发现失败态追加红色 <code>!</code> 徽标)」。新增 §3.5 / §04 S6 / §05 C8 / §06 V7 / §08 迁移条目 / S5 守阵⑦; 三模板徽标图例同步「框式」色样。计划状态维持 Open。</li>
+  <li><b>26-10-16-0426</b> —— S4–S6 实施完成(用户指令「实施计划S4-6」+「完成后启动桩服务让我验收」): S4 README 全量口径同步(布局块/排障表/徽标描述 R4 框式); S6 <code>scripts/gen_ext_icons.py</code> 生成 8 PNG 入库 <code>icons/</code> + manifest <code>default_icon</code> + <code>refreshBadge</code> 改 <code>setIcon</code> 换图(徽标文字折中: 平时清空, 仅发现失败态红 <code>!</code>); S5 守阵七项落地(6 新用例 + 接线清单更新 + badge 用例随 R4 翻转; 上游 <code>[优先]</code> 断言经核查历史不存在, 无需翻转)。test.full 全绿(数字见基线切片 <code>testing/baselines/26-10-16-0420-hr-ext-connect-ui-s4s6.md</code>), 红绿双验三类突变判红。验收桩 <code>scripts/hr_ext_stub.py</code> 已启动(发现端点 18788 + 双数据端点, <code>/control</code> 实时翻转), 真机验收 V1/V2/V7 待用户。计划状态 Done(实施完成; 真机验收待用户, 与上游 26-10-15-2357 同口径)。</li>
   </ul>
 </section>
 
-<footer>26-10-16-0214 · plan · hr-ext-connect-ui · Open —— 候选稿, 实施与立档待用户指令(更新 26-10-16-0306)</footer>
+<footer>26-10-16-0214 · plan · hr-ext-connect-ui · Done —— S1–S6 全部实施完成, 真机验收 V1/V2/V7 待用户(更新 26-10-16-0426)</footer>
 </div>
 </body>
 </html>

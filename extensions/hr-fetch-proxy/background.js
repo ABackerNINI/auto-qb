@@ -602,14 +602,17 @@ async function probeCandidate(url, pairingCode) {
 // ---------- 连接状态徽标(计划 26-10-15-2357 S2/Q4: 不静默) ----------
 //
 // !为什么需要: 连接失败此前只在「状态栏最后一句」与运行日志里可见 —— 不打开选项页就看不到, 用户对
-// 「扩展到底还连不连得上」零感知(实报「可能静默失败」)。徽标是**常驻可见信号**: 工具栏图标上就有
-// 四态, 点一下进选项页看细节(chrome.action.onClicked; manifest 无 default_popup 才能收到点击)。
+// 「扩展到底还连不连得上」零感知(实报「可能静默失败」)。图标是**常驻可见信号**: 浏览器工具栏图标
+// 上就有四态, 点一下进选项页看细节(chrome.action.onClicked; manifest 无 default_popup 才能收到点击)。
 // !文案一律 ASCII: 徽标字号极小, 图形符号(对勾/省略号)在部分平台渲染成方框, 且 code-style 明令
 // 代码禁图形符号 —— 语义靠颜色 + 悬停标题表达。
+// !R4(计划 26-10-16-0214 S6): 徽标文字由浏览器固定渲染, 挡住图标且无 API 可调 —— 唯一路径是
+// setIcon 重画图标本体(状态色外框, 预生成 PNG 见 scripts/gen_ext_icons.py)。文字通道折中:
+// 平时徽标文本清空(纯外框零遮挡), 仅「发现失败」态追加红色 `!`(故障时恢复文字报警 + 色觉冗余)。
 const BADGE = {
   unconfigured: { text: '', color: '#5a6673', label: '未配置' },
-  ok: { text: 'OK', color: '#2e7d46', label: '连接正常' },
-  reconnecting: { text: '..', color: '#b8802f', label: '重连中' },
+  ok: { text: '', color: '#2e7d46', label: '连接正常' },
+  reconnecting: { text: '', color: '#b8802f', label: '重连中' },
   discoveryFailed: { text: '!', color: '#b0453d', label: '发现失败' },
 };
 
@@ -633,7 +636,21 @@ function badgeStateOf(cfg) {
   return 'reconnecting';
 }
 
-/** 按四态落徽标 + 悬停标题; 禁用时清空(不显示一个"看着正常"的图标) */
+// 四态 -> 图标基础名(R4: 8 个 PNG 入库, 基础无框 = 未配置态与安装初始态共用; 判据仍是 badgeStateOf)
+const BADGE_ICON = {
+  unconfigured: 'icon',
+  ok: 'icon-ok',
+  reconnecting: 'icon-warn',
+  discoveryFailed: 'icon-bad',
+};
+
+/** 四态 -> {16, 32} 两档图标路径(纯函数, 守阵直测): 未知态回落基础图 */
+function badgeIconOf(state) {
+  const base = BADGE_ICON[state] || BADGE_ICON.unconfigured;
+  return { '16': `icons/${base}16.png`, '32': `icons/${base}32.png` };
+}
+
+/** 按四态落图标外框 + 悬停标题; 徽标文本仅「发现失败」态非空(红 `!`); 禁用时清空(不显示"看着正常"的图标) */
 async function refreshBadge() {
   let cfg;
   try {
@@ -649,9 +666,11 @@ async function refreshBadge() {
   }
   const state = cfg.enabled ? badgeStateOf(cfg) : 'unconfigured';
   const spec = BADGE[state];
+  const alarmed = cfg.enabled && state === 'discoveryFailed';
   try {
-    await chrome.action.setBadgeText({ text: cfg.enabled ? spec.text : '' });
-    await chrome.action.setBadgeBackgroundColor({ color: spec.color });
+    await chrome.action.setBadgeText({ text: alarmed ? spec.text : '' });
+    if (alarmed) await chrome.action.setBadgeBackgroundColor({ color: spec.color });
+    await chrome.action.setIcon({ path: badgeIconOf(state) });
     await chrome.action.setTitle({ title: `auto-qb HR 取数代理 - ${cfg.enabled ? spec.label : '已停用'}` });
   } catch (e) {
     // 徽标 API 在个别平台/权限组合下不可用: 吞掉(连接态另有状态栏与日志, 不为此反噬主流程)
