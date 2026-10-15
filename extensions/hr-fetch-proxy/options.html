@@ -55,20 +55,28 @@
     #hint { color: #97a2aa; font-size: 12px; margin-top: 6px; white-space: pre-wrap; }
     details { margin-top: 16px; max-width: 860px; }
     summary { font-size: 12px; letter-spacing: .04em; color: #7d8a92; cursor: pointer; }
-    .inst-row {
-      display: flex; align-items: center; gap: 10px; padding: 6px 2px; font-size: 13px;
-      border-bottom: 1px solid rgba(255,255,255,.07); max-width: 620px;
-    }
-    .inst-row .ep { font: 13px Consolas, monospace; }
-    .inst-row .tk { color: #6d7880; font-size: 12px; }
-    .inst-row .grow { flex: 1; }
-    .inst-row button { padding: 4px 10px; font-size: 11.5px; }
-    .inst-row .stale { color: #e8590c; font-size: 11.5px; }
+    /* 状态卡(计划 26-10-16-0214 S1): 大状态字 + 指标; 告警态整卡描边(C6) */
     .conn-state {
-      font: 13px/1.6 Consolas, "Courier New", monospace; color: #eceff1;
-      background: rgba(255,255,255,.04); border-left: 2px solid #e8590c;
-      padding: 8px 10px; margin: 0 0 14px; max-width: 860px; white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,.16); border-left: 3px solid #5a6673;
+      background: rgba(255,255,255,.03); padding: 10px 14px; margin: 0 0 14px; max-width: 860px;
     }
+    .conn-state.st-ok { border-left-color: #8fc98f; }
+    .conn-state.st-warn { border-left-color: #e2a86e; border-color: rgba(226,168,110,.55); }
+    .conn-state.st-bad { border-left-color: #d98a8a; border-color: rgba(217,138,138,.6); }
+    .conn-state .cs-main { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 650; }
+    .conn-state .cs-meta { font: 12.5px/1.6 Consolas, "Courier New", monospace; color: #97a2aa; margin-top: 3px; }
+    /* 四态色点(实例表状态列 + ③④两表微调, 计划 §3.2/S1 C5) */
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+    .dot-ok { background: #8fc98f; } .dot-warn { background: #e2a86e; }
+    .dot-bad { background: #d98a8a; } .dot-none { background: #5a6673; }
+    table.swtab tbody tr:hover { background: rgba(255,255,255,.04); }
+    table.swtab .src-tag { font-size: 11px; color: #97a2aa; }
+    table.swtab .inst-token { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; color: #97a2aa; }
+    table.swtab .tk-missing { color: #d98a8a; }
+    table.swtab td.ep, table.swtab th.ep { white-space: nowrap; }
+    /* 徽标图例四态色样(框式, R4) */
+    .sw-frame { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin: 0 4px -1px 0; border: 2px solid; background: #101214; }
+    .sw-none { border-color: #5a6673; } .sw-ok { border-color: #8fc98f; } .sw-warn { border-color: #e2a86e; } .sw-bad { border-color: #d98a8a; }
     details.attn > summary { color: #e8590c; }
     label.row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; }
     select, input[type=number] {
@@ -114,15 +122,34 @@
   <div class="step">
     <div class="stepno">1</div>
     <h4>连接后端(自动发现自愈; 手动指定优先)</h4>
-    <div class="conn-state" id="connState">(读取中…)</div>
+    <div class="conn-state" id="connState">
+      <div class="cs-main"><span class="dot dot-none" id="connStateDot"></span><span id="connStateText">(读取中…)</span></div>
+      <div class="cs-meta" id="connStateMeta"></div>
+    </div>
     <div class="field"><label>发现地址</label><input type="text" id="discEndpoint" placeholder="http://127.0.0.1:18788"></div>
     <div class="field"><label>配对码</label><input type="text" id="discPairing" placeholder="仅跨机/开启配对时需要: 后端启动日志或 HR 状态卡里的 6 位展示码"></div>
     <div class="btnrow">
       <button class="primary" id="discNow">立即发现</button>
     </div>
-    <p class="sub" id="discStatus" style="margin-top:8px">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延 18789/18790, 本扩展会并行探测整张候选表); 命中后实例自动并入下方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
-    <div id="instList"></div>
-    <p class="sub" style="margin-top:8px">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
+    <p class="sub" id="discStatus" style="margin-top:8px">点一次 = 保存 + 发现 + 自测; 同机零配置, 跨机填后端地址。</p>
+    <table class="swtab inst-tab">
+      <thead><tr><th>来源</th><th class="ep">端点</th><th>token(前 32 位指纹)</th><th>状态</th><th>最近联系</th><th>操作</th></tr></thead>
+      <tbody id="instList"></tbody>
+    </table>
+    <div class="btnrow">
+      <button class="ghost" id="test">重测全部</button>
+      <button class="ghost" id="poll">立即拉取一次</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div id="hint"></div>
+    <details id="helpTroubleshoot">
+      <summary>说明与排障(端口机制 / 配对码 / 徽标图例 / 排查指路)</summary>
+      <p class="sub" id="badgeLegend" style="margin-top:8px"><b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): <span class="sw-frame sw-none"></span>未配置(无外框) · <span class="sw-frame sw-ok"></span>连接正常(绿框) · <span class="sw-frame sw-warn"></span>重连中(橙框) · <span class="sw-frame sw-bad"></span>发现失败(红框, 图标角标补 <code>!</code>) —— 悬停图标有中文结论, 点图标即回本页。</p>
+      <p class="sub">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延 18789/18790, 本扩展会并行探测整张候选表); 命中后实例自动并入上方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
+      <p class="sub">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
+      <p class="sub">配对码: 仅跨机/开启配对时需要 —— 取后端启动日志或 HR 状态卡里的 6 位展示码; 同机零配置不需要。</p>
+      <p class="sub">排查指路: 实例表「状态」列悬停可见逐实例结论(色点: 绿=正常 / 橙=连败中 / 红=token 或来源被拒 / 灰=还没轮过), 点「重测全部」立即探一遍; 更多细节见底部折叠区「运行日志」。</p>
+    </details>
     <details id="manualEndpoints">
       <summary>手动端点(优先: 你显式指定的实例, 永远优先使用, 不会被自动发现覆盖或删除)</summary>
       <div class="field"><label>地址</label><input type="text" id="instEndpoint" placeholder="http://127.0.0.1:8788"></div>
@@ -132,13 +159,6 @@
         <button class="ghost" id="newInstance">再填一个</button>
       </div>
     </details>
-    <p class="sub" id="badgeLegend" style="margin-top:8px">工具栏图标徽标四态: 未配置(空) · 连接正常(绿) · 重连中(橙) · 发现失败(红) —— 悬停图标有中文结论, 点图标即回本页。</p>
-    <div class="status" id="status"></div>
-    <div id="hint"></div>
-    <div class="btnrow">
-      <button class="ghost" id="test">自测端点连通</button>
-      <button class="ghost" id="poll">立即拉取一次</button>
-    </div>
   </div>
 
   <hr class="rule">

@@ -7,7 +7,9 @@
 // 所以本页一律"先归一化、再落盘", 并把失败逐条翻译成中文可操作提示; 绝不让 Promise 裸抛。
 //
 // 页面形态(2026-09-26 定稿, 风格选型 A「瑞士网格」, 见 memory-bank/plans/26-09-26-0031;
-// 2026-10-16 计划 26-10-15-2357 S4 合并为「① 连接后端」一区):
+// 2026-10-16 计划 26-10-15-2357 S4 合并为「① 连接后端」一区; 26-10-16-0214 S1 重排为:
+// 状态卡 → 发现操作行(一句短说明) → 实例表(真 table, 状态列) → 动作行(重测全部/拉取) + 反馈区
+// → 「说明与排障」折叠区(机制长文) → 手动端点折叠表单):
 //   1. 连接后端(顶部状态总览 → 自动发现 → 当前实例列表 → 折叠的手动端点 → 自测/拉取 + 状态行)
 //   → 2. 站点权限(后端拉清单勾选 + 一键授权, GET /api/hr/sites 与后端 hr/channel.API_SITES 同源)
 //   → 3. 站点现状表 → 4. 最近取数明细表 → 折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。
@@ -22,7 +24,6 @@ const $ = (id) => document.getElementById(id);
 // 与后端 hr/channel.py 的 API_SITES 同步(改一边必改另一边, 守阵在 test_extension_proxy)
 const API_SITES = "/api/hr/sites";
 
-const DEFAULT_ENDPOINT = "127.0.0.1:8788";
 const EVENT_RENDER_CAP = 50; // 与后台事件环上限一致: 再多也只显示最近这些
 
 function setStatus(text) {
@@ -84,12 +85,12 @@ function parseOrigins() {
 // ---------- 实例端点: 表单 + 列表 ----------
 
 let instancesState = []; // 实例清单(唯一事实源仍是 chrome.storage)
-let instanceHealthState = {}; // 实例健康台账(后台按轮落盘): 列表的「疑似失效」标记与顶部总览都读它
-const STALE_FAIL_STREAK = 3; // C3: 手动条目连续失败 >=3 轮才标「疑似失效」(免得瞬时抖动误报)
+let instanceHealthState = {}; // 实例健康台账(后台按轮/探测落盘): 表格状态列与顶部总览都读它
 
-function fillForm(item) {
-  $('instEndpoint').value = item ? item.endpoint : DEFAULT_ENDPOINT;
-  $('instToken').value = item ? item.token : '';
+/** 手动端点表单初始化(R3): 只做空态 —— 「载入」按钮已删除, 改 token 走「删除重加」唯一路径 */
+function fillForm() {
+  $('instEndpoint').value = '';
+  $('instToken').value = '';
 }
 
 async function persistInstances() {
@@ -127,29 +128,62 @@ async function addInstance() {
   }
 }
 
+/**
+ * 行级四态判据(计划 §3.2, 纯函数供守阵直测): 数据源 = instanceHealth 台账条目(键 = 端点)。
+ * !红(401/403)优先于 ok —— 401 在轮询/探测口径里记 ok:true(端点有应答, 配置态), 但表格必须标红
+ * (要人改 token / extension_id); 旧台账无 state 字段按 C2 降级(ok→绿, 否则橙), 不做迁移。
+ * 四色语义与工具栏徽标族同源: 绿=通 / 橙=可自愈的故障 / 红=要人动手 / 灰=暂无数据。
+ */
+function rowHealthOf(h) {
+  // ok === undefined = 无有效台账条目(刚添加 / 停用中 / SW 刚醒来): 灰
+  if (!h || typeof h !== 'object' || h.ok === undefined) return { level: 'none', text: '还没轮过' };
+  if (h.state === '401' || h.state === '403') return { level: 'bad', text: 'token / 来源被拒' };
+  if (h.ok) return { level: 'ok', text: '正常' };
+  const streak = Number(h.failStreak) || 0;
+  return { level: 'warn', text: streak >= 2 ? `连败 ${streak} 轮` : '连不上' };
+}
+
+/**
+ * 实例表渲染(计划 26-10-16-0214 S3): 真 table.swtab, 表头 + 状态列。
+ * - 来源徽标只有「手动 / 自动」两值(R2, 「优先」徽标已废止; 行为不变 —— 手动恒在前, 由
+ *   discovery.js::mergeInstances 保证, 这里按清单顺序渲染不重排);
+ * - token 列(R1): 手动 = 前 32 位指纹 + 悬停完整值, 未填标红; 自动 = 「-」;
+ * - 状态列(§3.2): 四态色点 + 短语, 悬停 title = note 全文 + 最近联系时间;
+ * - 操作列(R3): 手动只有「删」; 自动留空(悬停说明由发现租约自动管理);「载入」「测」已删除。
+ */
 function renderInstList() {
   const box = $('instList');
   if (!instancesState.length) {
-    box.innerHTML = '<div class="inst-row"><span class="tk">(还没有实例 —— 点上面「立即发现」自动接入, 或展开「手动端点」显式指定)</span></div>';
+    box.innerHTML =
+      '<tr><td class="empty" colspan="6">(还没有实例 —— 点上面「立即发现」自动接入, 或展开「手动端点」显式指定)</td></tr>';
     return;
   }
   box.innerHTML = instancesState
     .map((item, i) => {
-      const tk = item.token ? `${item.token.slice(0, 8)}…` : '(未填 token)';
-      // 手动条目 = 高优先级(Q11②: 「优先」徽标); 发现条目 = 租约管理的自动补充(Q11②: 「自动」徽标)
       const manual = isManualEntry(item); // discovery.js 纯函数(与后台共用同一份判定, 不在此抄一份)
-      const badge = manual ? '<span class="tk">[优先]</span>' : '<span class="tk">[自动]</span>';
-      // 疑似失效标记(Q10/C3): 手动条目连续失败 >= STALE_FAIL_STREAK 轮才提示 —— **只提示不代删**
+      const badge = manual ? '<span class="src-tag">手动</span>' : '<span class="src-tag">自动</span>';
+      let tk;
+      if (!manual) {
+        tk = '<span class="dim">-</span>'; // 自动条目 token 免手抄(R1)
+      } else if (!item.token) {
+        tk = '<span class="tk-missing">未填</span>';
+      } else {
+        tk = `<span class="inst-token" title="${esc(item.token)}">${esc(item.token.slice(0, 32))}…</span>`;
+      }
       const h = instanceHealthState[String(item.endpoint || '')];
-      const stale = manual && h && !h.ok && (Number(h.failStreak) || 0) >= STALE_FAIL_STREAK;
-      const staleTag = stale
-        ? `<span class="stale">疑似失效(连续 ${Number(h.failStreak) || 0} 轮拉不通; 发现到的端点已自动补入, 确认后可删)</span>`
-        : '';
+      const health = rowHealthOf(h);
+      const title = h && h.note
+        ? `${h.note}${h.at ? ` · 最近联系 ${shortTime(h.at)}` : ''}`
+        : health.text === '还没轮过'
+          ? '等待下一轮轮询, 或点「重测全部」立即探一次'
+          : '';
+      const act = manual
+        ? `<button class="ghost" data-act="del" data-i="${i}">删</button>`
+        : `<span title="由发现租约自动管理, 删除后下轮发现会重新补入"></span>`;
       return (
-        `<div class="inst-row">${badge}<span class="ep">${esc(item.endpoint)}</span><span class="tk">${esc(tk)}</span>${staleTag}` +
-        '<span class="grow"></span>' +
-        `<button class="ghost" data-act="edit" data-i="${i}">载入</button>` +
-        `<button class="ghost" data-act="del" data-i="${i}">删除</button></div>`
+        `<tr><td>${badge}</td><td class="ep">${esc(item.endpoint)}</td><td>${tk}</td>` +
+        `<td><span class="dot dot-${health.level}"></span>${health.text}</td>` +
+        `<td class="num">${h && h.at ? shortTime(h.at) : '<span class="dim">—</span>'}</td><td>${act}</td></tr>`
       );
     })
     .join('');
@@ -157,15 +191,11 @@ function renderInstList() {
 
 async function instListClick(ev) {
   const btn = ev.target.closest('button[data-act]');
-  if (!btn) return;
+  if (!btn || btn.dataset.act !== 'del') return; // R3: 操作列只有「删」(「载入」已删除)
   const i = Number(btn.dataset.i);
   if (!Number.isInteger(i) || !instancesState[i]) return;
-  if (btn.dataset.act === 'edit') {
-    fillForm(instancesState[i]);
-    return;
-  }
   const removed = instancesState.splice(i, 1)[0];
-  fillForm(null);
+  fillForm();
   await persistInstances();
   renderInstList();
   syncAdvancedView();
@@ -317,7 +347,10 @@ function lastDiscoveryText(last) {
   return `${shortTime(last.at)} ${why}${cands ? ` · ${cands}` : ''}`;
 }
 
-/** 渲染顶部总览; 发现失败态顺手展开手动端点区(C6: 降低用户下一步的操作成本) */
+/**
+ * 渲染顶部状态卡(计划 26-10-16-0214 S3③): 大状态字 + 指标两行, 数据与判据不变(connStateOf 同源)。
+ * C6: 重连中/发现失败整卡描边高亮(与 manualEndpoints 的 attn 联动保留)。
+ */
 function renderConnOverview(cfg) {
   const enabled = cfg.enabled !== false;
   const state = enabled ? connStateOf(cfg) : 'unconfigured';
@@ -327,16 +360,21 @@ function renderConnOverview(cfg) {
     const h = health[String((e && e.endpoint) || '')];
     return Boolean(h && h.ok);
   }).length;
+  const box = $('connState');
   // C5: 同文不重排(反复赋同一个串不会闪烁); textContent 不用 innerHTML —— 端口/地址来自用户输入
-  $('connState').textContent = [
-    `连接状态: ${enabled ? CONN_STATE_TEXT[state] : '已停用'}`,
+  const dotLevel = state === 'ok' ? 'ok' : state === 'discoveryFailed' ? 'bad' : state === 'reconnecting' ? 'warn' : 'none';
+  box.className = 'conn-state' + (state === 'discoveryFailed' ? ' st-bad' : state === 'reconnecting' ? ' st-warn' : state === 'ok' ? ' st-ok' : '');
+  const dotEl = $('connStateDot');
+  if (dotEl) dotEl.className = 'dot dot-' + dotLevel;
+  $('connStateText').textContent = enabled ? CONN_STATE_TEXT[state] : '已停用';
+  $('connStateMeta').textContent = [
     insts.length ? `实例 ${insts.length} 个(${okCount} 个可用)` : '还没有实例',
     `上次发现: ${lastDiscoveryText(cfg.lastDiscovery)}`,
   ].join(' · ');
-  const box = $('manualEndpoints');
-  if (box) {
-    if (state === 'discoveryFailed') box.open = true; // C6: 发现失败态自动展开(已展开则不动)
-    box.classList.toggle('attn', state === 'discoveryFailed');
+  const manBox = $('manualEndpoints');
+  if (manBox) {
+    if (state === 'discoveryFailed') manBox.open = true; // C6: 发现失败态自动展开(已展开则不动)
+    manBox.classList.toggle('attn', state === 'discoveryFailed');
   }
 }
 
@@ -522,12 +560,14 @@ function renderSiteStatus(events, ledger) {
     }
     const tag = ev ? ev.tag || 'error' : 'ok';
     const cls = tag === 'ok' ? '' : 'warn';
+    // S1 样式微调(C5): 状态列与「最近动作 · 结果」列加色点 —— 纯展示, 数据面不变
+    const dotCls = tag === 'ok' ? 'dot-ok' : tag === 'error' ? 'dot-bad' : 'dot-warn';
     return {
       t: ev ? ev.t || 0 : 0,
       html:
         `<tr><td>${esc(host)}</td><td class="num">${ev ? shortTime(ev.t) : '—'}</td>` +
-        `<td class="num">${ev ? esc(eventPhrase(ev)) : '<span class="dim">尚无取数</span>'}</td>` +
-        `<td class="num">${esc(usage)}</td><td class="${cls}">${TAG_TEXT[tag] || '正常'}</td></tr>`,
+        `<td class="num"><span class="dot ${dotCls}"></span>${ev ? esc(eventPhrase(ev)) : '<span class="dim">尚无取数</span>'}</td>` +
+        `<td class="num">${esc(usage)}</td><td class="${cls}"><span class="dot ${dotCls}"></span>${TAG_TEXT[tag] || '正常'}</td></tr>`,
     };
   });
   rows.sort((a, b) => b.t - a.t);
@@ -543,6 +583,7 @@ function renderEvents(events) {
       .map((ev) => {
         if (!ev) return '';
         const cls = ev.tag === 'ok' ? 'num' : 'warn';
+        const dotCls = ev.tag === 'ok' ? 'dot-ok' : ev.tag === 'error' ? 'dot-bad' : 'dot-warn'; // S1 样式微调(C5)
         const result =
           ev.tag === 'ok'
             ? `[x] ${ev.status || 200}${ev.note ? `(${esc(ev.note)})` : ''}`
@@ -553,7 +594,7 @@ function renderEvents(events) {
                 : `x ${esc((ev.note || '失败').slice(0, 40))}`;
         return (
           `<tr><td class="num">${shortTime(ev.t)}</td><td>${esc(ev.host || '—')}</td>` +
-          `<td>${KIND_TEXT[ev.kind] || esc(ev.kind || '—')}</td><td class="${cls}">${result}</td>` +
+          `<td>${KIND_TEXT[ev.kind] || esc(ev.kind || '—')}</td><td class="${cls}"><span class="dot ${dotCls}"></span>${result}</td>` +
           `<td class="num">${ev.ms ? `${ev.ms}ms` : '—'}</td><td class="num">${ev.bytes ? `${(ev.bytes / 1024).toFixed(ev.bytes >= 1024 ? 0 : 1)}KB` : '—'}</td></tr>`
         );
       })
@@ -619,7 +660,7 @@ async function load() {
   renderCaps(got.siteLedger || {});
   $('logMax').value = String(got.logMax);
   $('logLevel').value = got.logLevel;
-  fillForm(instancesState.length ? instancesState[0] : null);
+  fillForm(); // R3: 表单只做空态初始化(「载入」已删除, 改 token 走删除重加)
   $('discEndpoint').value = String(got.discoveryAddress || DEFAULT_DISCOVERY_ADDRESS);
   $('discPairing').value = String(got.pairingCode || '');
   if (got.pairingNeeded) {
@@ -725,18 +766,47 @@ async function probeMainInstance() {
   }
 }
 
-/** 直连后端端点自测: 把"通了/401/连不上"分清楚, 并给出下一步该查什么 */
-async function testEndpoint() {
-  const inst = currentInstances()[0];
-  if (!inst) {
-    setStatus('还没有实例端点 —— 先在上面点「立即发现」自动接入, 或展开「手动端点」显式指定一个, 再来自测');
+// C4: 「重测全部」10s 禁用窗(防手抖连点刷台账时间戳; 行内「测」已随 R3 取消, 无此问题)
+let retestCooldownUntil = 0;
+
+/**
+ * 「重测全部」(计划 26-10-16-0214 S3②/R3): 探测统一由后台承载(sendMessage probe-all) ——
+ * 选项页不再直接 fetch(单一写入口 C1), 逐实例只读 GET, 结论落台账后经 storage.onChanged
+ * 自动刷进实例表状态列。无实例时给指路空态(V2)。
+ */
+async function retestAll() {
+  const now = Date.now();
+  if (now < retestCooldownUntil) {
+    setStatus('刚重测过, 10 秒后再点(防手抖连点刷新台账时间戳)');
     return;
   }
-  setStatus(`正在自测 ${inst.endpoint} …`);
+  const insts = currentInstances();
+  if (!insts.length) {
+    setStatus('还没有实例端点 —— 先在上面点「立即发现」自动接入, 或展开「手动端点」显式指定一个, 再重测');
+    return;
+  }
+  retestCooldownUntil = now + 10000;
+  setStatus(`正在重测 ${insts.length} 个实例 …`);
   hint('');
-  const got = await probeMainInstance();
-  setStatus(got.text);
-  hint(got.hint);
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'probe-all' });
+    const results = res && Array.isArray(res.results) ? res.results : [];
+    if (res && res.ok) {
+      const bad = results.filter((r) => !r.ok);
+      setStatus(
+        bad.length
+          ? `重测完成: ${results.length - bad.length}/${results.length} 个可达 —— ${bad.map((r) => r.line).join('; ')}`
+          : `重测完成: ${results.length} 个实例全部可达`
+      );
+      hint(bad.length ? '逐实例结论已同步进实例表「状态」列(悬停看详情); 排查指路见「说明与排障」。' : '');
+    } else {
+      setStatus(`重测失败: ${(res && res.error) || '后台未给出原因'}(详见折叠区里的运行日志)`);
+    }
+  } catch (e) {
+    // SW 未就绪/已休眠时会走到这里 —— 别让红字裸奔
+    setStatus(`与服务线程通信失败: ${e.message || e}`);
+    hint('重开一次选项页再试; 若仍失败, 到 chrome://extensions 看本扩展的「Service Worker」控制台。');
+  }
 }
 
 async function poll() {
@@ -872,7 +942,7 @@ $('grantChecked').addEventListener('click', () => grant().catch((e) => setStatus
 $('siteChecks').addEventListener('change', () => siteChecksChange().catch((e) => setStatus(String(e))));
 $('discNow').addEventListener('click', () => discoverNow().catch((e) => setDiscStatus(String(e))));
 $('save').addEventListener('click', () => save().catch((e) => setStatus(String(e))));
-$('test').addEventListener('click', () => testEndpoint().catch((e) => setStatus(String(e))));
+$('test').addEventListener('click', () => retestAll().catch((e) => setStatus(String(e))));
 $('poll').addEventListener('click', () => poll().catch((e) => setStatus(String(e))));
 $('enabled').addEventListener('change', () => save().catch((e) => setStatus(String(e))));
 $('logMax').addEventListener('change', () => applyLogSettings().catch((e) => setStatus(String(e))));

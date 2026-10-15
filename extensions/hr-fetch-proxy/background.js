@@ -330,6 +330,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg && msg.type === 'probe-all') {
+    // 重测全部(计划 26-10-16-0214 S2/R3): 逐实例只读探测, 结论落台账后选项页表格自动刷新;
+    // probe-one 已随 R3 取消(逐实例探测统一由本消息承载)
+    log('info', '命令', '收到命令: 重测全部实例(来自选项页)');
+    probeAll()
+      .then((results) => sendResponse({ ok: true, results }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg && msg.type === 'clear-logs') {
     // 清空必须走后台: 后台内存里留着环形缓冲, 选项页直接改 storage 会在下一次落盘时被盖回去
     clearLogs()
@@ -420,7 +429,7 @@ async function pollAll(trigger) {
         const line = `${inst.name || inst.endpoint}: 失败 ${e}`;
         lines.push(line);
         failCount += 1;
-        await noteInstanceHealth(inst && inst.endpoint, false, line);
+        await noteInstanceHealth(inst && inst.endpoint, false, line, 'http');
         log('error', '轮询', line);
       }
     }
@@ -862,8 +871,8 @@ function initHealthBuffer() {
   return healthInitPromise;
 }
 
-/** 记一轮实例健康(仅内存): 连续失败计数供 C3 的「疑似失效」阈值判定 */
-function noteInstanceHealth(endpoint, ok, note) {
+/** 记一轮实例健康(仅内存): 连续失败计数供「疑似失效」阈值判定; state 为结构化态(计划 26-10-16-0214 S2) */
+function noteInstanceHealth(endpoint, ok, note, state) {
   const ep = String(endpoint || '');
   if (!ep) return Promise.resolve(); // 端点写不对的条目没有可用的键, 由轮询文案自己报
   return initHealthBuffer()
@@ -873,6 +882,8 @@ function noteInstanceHealth(endpoint, ok, note) {
         ok: Boolean(ok),
         at: Date.now(),
         note: String(note || ''),
+        // state ∈ ok / 401 / 403 / http / down / bad-endpoint; 旧条目无此键按 C2 降级(ok 布尔)
+        state: state ? String(state) : '',
         failStreak: ok ? 0 : (Number(prev.failStreak) || 0) + 1,
       };
     })
@@ -903,7 +914,7 @@ function flushInstanceHealth(endpoints) {
  */
 async function pollInstance(inst) {
   const outcome = await pollInstanceOnce(inst);
-  await noteInstanceHealth(inst && inst.endpoint, outcome.ok, outcome.line);
+  await noteInstanceHealth(inst && inst.endpoint, outcome.ok, outcome.line, outcome.state);
   return outcome;
 }
 
@@ -912,7 +923,7 @@ async function pollInstanceOnce(inst) {
   const base = safeEndpoint(inst.endpoint);
   if (!base) {
     log('warn', '请求', `${label}: 端点写法不对, 本实例跳过`, { 端点: inst.endpoint });
-    return { ok: false, line: `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正` };
+    return { ok: false, state: 'bad-endpoint', line: `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正` };
   }
   const tasksUrl = `${base}/api/hr/tasks`;
   const t0 = Date.now();
@@ -930,7 +941,7 @@ async function pollInstanceOnce(inst) {
     } else {
       log('debug', '请求', `拉任务清单失败(已连续 ${streak} 轮, 降噪: 排查清单见首报)`, detail);
     }
-    return { ok: false, line: `${label}: ${reason}` };
+    return { ok: false, state: 'down', line: `${label}: ${reason}` };
   }
   // 端点给了应答(含 401/5xx —— 应答即连接已通): 关故障期; 之前挂着故障就补一句恢复
   const prevFail = await clearNetFailStreak(tasksUrl);
@@ -940,17 +951,18 @@ async function pollInstanceOnce(inst) {
   if (res.status === 401) {
     // 该实例没启用取数通道 / token 不匹配 —— 属正常路径, **不重试**(后端会自己告警)
     log('warn', '请求', '端点拒绝(401, token 或 channel.enabled 未开)', reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '401' }));
-    // 401 = 端点有应答(连接是通的), 属配置态而非连接失败 —— ok:true, 不触发「全失败」发现
-    return { ok: true, line: `${label}: 端点拒绝(401, token 或 channel.enabled 未开)` };
+    // 401 = 端点有应答(连接是通的), 属配置态而非连接失败 —— ok:true, 不触发「全失败」发现;
+    // state:'401' 供选项页行级标红(要人改 token/extension_id), 徽标判据不受影响(S2: 自愈逻辑不动)
+    return { ok: true, state: '401', line: `${label}: 端点拒绝(401, token 或 channel.enabled 未开)` };
   }
   if (!res.ok) {
     log('error', '请求', `拉清单失败 HTTP ${res.status}`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: String(res.status) }));
-    return { ok: false, line: `${label}: 拉清单失败 HTTP ${res.status}` };
+    return { ok: false, state: 'http', line: `${label}: 拉清单失败 HTTP ${res.status}` };
   }
   const data = await res.json();
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
   log('info', '命令', `任务清单到手: ${tasks.length} 条`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '200' }));
-  if (!tasks.length) return { ok: true, line: `${label}: 无任务` }; // 与旧行为一致: 无任务**不回传**(不打后端的 result 端点)
+  if (!tasks.length) return { ok: true, state: 'ok', line: `${label}: 无任务` }; // 与旧行为一致: 无任务**不回传**(不打后端的 result 端点)
   const results = [];
   const rendered = [];
   for (const task of tasks) {
@@ -970,7 +982,7 @@ async function pollInstanceOnce(inst) {
     });
   } catch (e) {
     log('error', '请求', `回传失败: ${explainFetchError(base, e)}`, reqDetail('回传结果', resultUrl, pt0, { 实例: label, 条数: results.length }));
-    return { ok: false, line: `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}` };
+    return { ok: false, state: 'http', line: `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}` };
   }
   // 「返回后端结果」: 响应体也留一份截断快照 —— 对账「扩展说发了, 后端说没收到」就靠它
   const respText = await post.text().catch(() => '');
@@ -984,7 +996,73 @@ async function pollInstanceOnce(inst) {
   );
   const how = rendered.length ? `其中 ${rendered.length} 条走渲染` : '全部直取(无界面)';
   const blocked = quotaCount ? `; 扩展侧硬上限挡下 ${quotaCount} 条(后端频控可能失效)` : '';
-  return { ok: true, line: `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}` };
+  return { ok: true, state: 'ok', line: `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}` };
+}
+
+/**
+ * 单实例**只读探测**(计划 26-10-16-0214 S2/R3): 复用 pollInstanceOnce 的「拉任务清单」一步
+ * (GET /api/hr/tasks, 只读, 不执行任务 —— C3), 判成败/结构化 state 的口径与轮询完全一致,
+ * 结论经 noteInstanceHealth 落台账 —— 选项页实例表「状态」列的单一数据源。
+ * !不碰 netFailStreak / 不触发发现 / 不动徽标: 探测是用户手势下的即时诊断, 不是轮询替代品。
+ */
+async function probeInstance(inst) {
+  const label = inst.name || inst.endpoint || '(未命名)';
+  const base = safeEndpoint(inst.endpoint);
+  if (!base) {
+    const line = `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式)`;
+    await noteInstanceHealth(inst && inst.endpoint, false, line, 'bad-endpoint');
+    return { ok: false, state: 'bad-endpoint', line };
+  }
+  const tasksUrl = `${base}/api/hr/tasks`;
+  const t0 = Date.now();
+  let res;
+  try {
+    res = await fetch(tasksUrl, { headers: headers(inst) });
+  } catch (e) {
+    const line = `${label}: 连不上端点(${e && e.message ? e.message : e})`;
+    log('debug', '请求', `探测失败: ${tasksUrl}`, reqDetail('探测', tasksUrl, t0, { 实例: label }));
+    await noteInstanceHealth(inst && inst.endpoint, false, line, 'down');
+    return { ok: false, state: 'down', line };
+  }
+  if (res.status === 401) {
+    // 与轮询同口径: 401 = 端点有应答, 记 ok(配置态, 不触发发现); state 供选项页标红
+    const line = `${label}: 端点拒绝(401, token 或 channel.enabled 未开)`;
+    log('debug', '请求', '探测: 端点拒绝(401)', reqDetail('探测', tasksUrl, t0, { 实例: label, HTTP: '401' }));
+    await noteInstanceHealth(inst && inst.endpoint, true, line, '401');
+    return { ok: true, state: '401', line };
+  }
+  if (!res.ok) {
+    const line = `${label}: 拉清单失败 HTTP ${res.status}`;
+    log('debug', '请求', `探测失败 HTTP ${res.status}`, reqDetail('探测', tasksUrl, t0, { 实例: label, HTTP: String(res.status) }));
+    await noteInstanceHealth(inst && inst.endpoint, false, line, 'http');
+    return { ok: false, state: 'http', line };
+  }
+  const data = await res.json().catch(() => ({}));
+  const n = Array.isArray(data.tasks) ? data.tasks.length : 0;
+  const line = `${label}: 探测可达(本批 ${n} 条任务)`;
+  log('debug', '请求', `探测可达(本批 ${n} 条任务)`, reqDetail('探测', tasksUrl, t0, { 实例: label, HTTP: '200' }));
+  await noteInstanceHealth(inst && inst.endpoint, true, line, 'ok');
+  return { ok: true, state: 'ok', line };
+}
+
+/**
+ * 「重测全部」(选项页 probe-all): 逐实例只读探测, 收尾整份落台账 —— 选项页经 storage.onChanged
+ * 即时刷新实例表状态列(C1 单一写入口: 台账唯一写者是后台, 选项页只读 + 消息触发)。
+ * probe-one 已随计划 R3 取消(逐实例探测统一由本消息承载)。
+ */
+async function probeAll() {
+  const conf = await readConfig();
+  const endpoints = conf.instances.map((e) => String((e && e.endpoint) || ''));
+  const results = [];
+  for (const inst of conf.instances) {
+    try {
+      results.push(await probeInstance(inst));
+    } catch (e) {
+      results.push({ ok: false, state: 'http', line: `${inst.name || inst.endpoint}: 探测异常 ${e}` });
+    }
+  }
+  await flushInstanceHealth(endpoints); // !立刻落盘: 选项页 onChanged 通道要读得到本轮结论
+  return results;
 }
 
 /**

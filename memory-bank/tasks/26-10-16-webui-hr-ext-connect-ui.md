@@ -28,7 +28,12 @@
 | # | 任务 | 状态 |
 |---|---|---|
 | S0 | grilling 收敛 + 计划落盘 + 三模板落盘 + 认领链 + 收尾回写 | Done |
-| S1–S5 | 实施五步(计划 §04) | Pending(待模板选型) |
+| S1 | options.html ①区重构(纵向流基准 = §03.1 规格, 模板 A 形态) | Done |
+| S2 | background.js 台账 state + probeInstance/probeAll + probe-all 消息 | Done |
+| S3 | options.js 实例表表格化(rowHealthOf/重测全部/状态卡) | Done |
+| S4 | README §2 与徽标口径同步 | Pending |
+| S5 | 守阵七项(含「优先/载入/自测端点连通」反向断言、`[优先]` 期望随 R2 翻转) | Pending |
+| S6 | 工具栏图标状态色外框(R4: gen_ext_icons.py + setIcon) | Pending |
 
 ## 进度日志
 
@@ -36,6 +41,7 @@
 - 2026-10-16 02:38 — 模板评审二轮拍板(R1–R3)入册: token 32 位指纹+悬停全值 / 徽标「手动」废止「优先」/ 操作列收窄(删仅手动, 载入与行内测删除, probe-one 取消); 计划 §03/§04/§05/§06/§08 同步改写 + §11 变更记录; 三模板同步。
 - 2026-10-16 02:47 — 排序补记: 实例表手动组在前、自动组在后(上游 26-10-15-2357 Q9 既有语义); §03.1 与三模板行序修正并核验。
 - 2026-10-16 03:06 — 第三轮拍板 R4(徽标外框)入册: 用户实报工具栏徽标太大挡住图标, 问「能否改状态色外框」; 可行性分析(问答轮)结论 = 无现成 API, 唯一路径 setIcon 重画图标本体。拍板「路径 A 预生成 4 态 × 2 尺寸 PNG + setIcon({path})」+ 折中「仅发现失败态追加红色 ! 徽标」(平时零遮挡 + 色觉冗余)。计划新增 §3.5/§04 S6/§05 C8/§06 V7/S5 守阵⑦; 三模板图例改框式色样。代码未动, 待实施。
+- 2026-10-16 04:00 — S1–S3 实施(用户指令「实施计划S1-3」; 模板选型未记录, 布局按计划 §03.1 纵向流规格 = 模板 A 形态落地, 裁量已记): S1 options.html ①区重排(状态卡 → 发现行短句 → 实例表真 table → 动作行+反馈区 → 说明与排障折叠(收编三段长文 + 徽标图例改「浏览器工具栏」+ 四态框式色样) → 手动端点折叠; ③④两表色点+行 hover, C5 纯展示); S2 background.js(noteInstanceHealth 第四参 state, pollInstanceOnce 全路径带 state, probeInstance 只读探测, probeAll + probe-all 消息, probe-one 随 R3 取消, 徽标/发现/自愈零改动); S3 options.js(renderInstList 表格化: rowHealthOf 四态纯函数/token 前 32 位指纹+悬停/「手动/自动」徽标 R2/删仅手动 R3, testEndpoint→retestAll 走 probe-all + C4 10s 节流, 状态卡拆大状态字+指标 C6, fillForm 空态化)。test.full 3405 passed + 4 skipped 全绿(既有守阵未改一字); rowHealthOf 真值表与 probe-all 沙箱另验。基线切片 `testing/baselines/26-10-16-0400-hr-ext-connect-ui-s1s3.md`。遗留: S4 README / S5 守阵七项 / S6 图标外框; 验收 V1/V2/V7 待真机。
 
 ## 遗留与下一步
 
