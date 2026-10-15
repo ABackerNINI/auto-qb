@@ -791,7 +791,9 @@ def test_print_channel_lines_exact(tmp_path):
     _print_channel(cfg, service, out)
     lines = out.getvalue().splitlines()
     assert lines[0] == "取数通道: 启用"
-    assert lines[1] == "    端点: http://127.0.0.1:18765/api/hr/tasks   轮询节奏: 60s(常量)   等回传上限: 45s"
+    assert lines[
+        1
+    ] == "    端点: http://127.0.0.1:18765/api/hr/tasks   轮询节奏: 60s(常量)   等回传上限: 45s   发现端口: 18788(0 = 关闭发现)", "去端口+跨机(计划 26-10-14-1241): 自述行带发现端口"
     assert lines[2] == f"    密钥来源: config({token_path(cfg.data_dir)})   只放行扩展 ext123"
     assert lines[3] == (f"    共享目录: 未配置 ⇒ 站点文件落 {service.dir}; 多实例共享同一账号时需指向同一目录(云同步盘不可用)"), "共享目录未配置分支逐字(含云同步盘告警)"
     # 未启用 + 未配扩展 + 配了共享目录的分支

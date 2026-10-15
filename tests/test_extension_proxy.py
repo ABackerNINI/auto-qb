@@ -38,6 +38,19 @@
   storage.onChanged 自动刷新、日志容器在脚本之前
 - test_options_poll_label_matches_background: 选项页「启用轮询(每 N 分钟…)」文案与 background.js 的
   POLL_MINUTES 同步(漂移史: 文案停在 5 分钟, 实际 v2.6 起已改 1 分钟, 用户照文案理解行为必对不上)
+
+### 去端口+跨机轮(计划 26-10-14-1241 S4): 判据放开与自动发现
+- NORMALIZE_CASES 更新: 私网三段逐段放行 / 公网域名拒绝 / https 保留不折 / 新增 disc 类(发现地址缺端口补 18788)
+  —— 旧断言「非回环即抛」「https 折 http」是被本计划翻转的旧语义, 随计划更新而非守阵松动
+- test_discovery_helpers_behave: 真跑 discovery.js —— 候选推导与后端 discovery_candidates 同源(65535 截断)/
+  合并语义(替换同端点条目 + 保留手填 + 标 source=discovered + 缺 token 半条不收)/ pairingNeeded 真值表 /
+  发现响应形态过滤(异形应答 = 非本服务)
+- test_background_discovery_flow: 真跑 background.js 发现流程 —— 三候选并行探测(命中次位, V11)/ 配对码随
+  X-Hr-Pairing 上来 / 合并落盘 + 清 pairingNeeded / 401 pairing_required 置标记(选项页提示输入配对码)/
+  全未命中明确报告(退手动, 不静默)
+- test_normalizers_are_shared_not_duplicated 扩: discovery.js 五个函数同样禁止本地副本, 两个消费方都载入它
+- test_protocol_matches_backend 扩: API_DISCOVER 与缺省发现端口三处同源(后端 / discovery.js / normalize.js)
+- 降噪场景(_NODE_RUN_NOISE)显式 discoveryAddress 置空 —— 那条守阵钉「连接失败降噪」, 不混发现流日志
 """
 import json
 import pathlib
@@ -48,26 +61,37 @@ import subprocess
 import pytest
 
 from auto_qb.hr.channel import API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelError, HrResult
+from auto_qb.hr.discovery import API_DISCOVER, DISCOVERY_DEFAULT_PORT
 
 EXT_DIR = pathlib.Path(__file__).resolve().parents[1] / "extensions" / "hr-fetch-proxy"
 MANIFEST = EXT_DIR / "manifest.json"
 NORMALIZE_JS = EXT_DIR / "normalize.js"
+DISCOVERY_JS = EXT_DIR / "discovery.js"
 SITE_CAPS_JS = EXT_DIR / "site-caps.js"
 BACKGROUND_JS = EXT_DIR / "background.js"
 OPTIONS_JS = EXT_DIR / "options.js"
 OPTIONS_HTML = EXT_DIR / "options.html"
-JS_FILES = (NORMALIZE_JS, SITE_CAPS_JS, BACKGROUND_JS, OPTIONS_JS)
+JS_FILES = (NORMALIZE_JS, DISCOVERY_JS, SITE_CAPS_JS, BACKGROUND_JS, OPTIONS_JS)
 
 #: 归一化的行为钉死表 —— **含用户 2026-09-24 实际踩到的两种写法**。
 #: (kind, 输入, 期望输出或 None=应当报错)
+#: 去端口+跨机(计划 26-10-14-1241 S4/V5)翻转的两条旧语义: 私网放行(原「非回环即抛」)、
+#: https 保留(原「一律折 http」); 新增 disc 类 = normalizeDiscovery(缺端口补 18788)。
 NORMALIZE_CASES = [
     ("ep", "127.0.0.1:8788", "http://127.0.0.1:8788"),
     ("ep", "  http://127.0.0.1:8788/  ", "http://127.0.0.1:8788"),
     ("ep", "http://localhost:8788/", "http://127.0.0.1:8788"),
-    ("ep", "https://127.0.0.1:8788", "http://127.0.0.1:8788"),
+    ("ep", "https://127.0.0.1:8788", "https://127.0.0.1:8788"),
     ("ep", "127.0.0.1", None),
-    ("ep", "192.168.1.9:8788", None),
+    ("ep", "192.168.1.9:8788", "http://192.168.1.9:8788"),
+    ("ep", "10.0.0.5:8788", "http://10.0.0.5:8788"),
+    ("ep", "172.16.31.5:8788", "http://172.16.31.5:8788"),
+    ("ep", "pt.example.com:8788", None),
+    ("ep", "http://pt.example.com:8788", None),
     ("ep", "", None),
+    ("disc", "192.168.1.10", "http://192.168.1.10:18788"),
+    ("disc", "http://192.168.1.10:18788/", "http://192.168.1.10:18788"),
+    ("disc", "nas.local", None),
     ("og", "pt.btschool.club", "https://pt.btschool.club/*"),
     ("og", "https://pt.btschool.club/", "https://pt.btschool.club/*"),
     ("og", "pt.btschool.club/myhr.php", "https://pt.btschool.club/*"),
@@ -80,11 +104,12 @@ NORMALIZE_CASES = [
 _NODE_RUN_NORMALIZERS = """
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const mod = new Function(src + '\\nreturn {normalizeEndpoint, normalizeOrigin};')();
+const mod = new Function(src + '\\nreturn {normalizeEndpoint, normalizeOrigin, normalizeDiscovery};')();
 const out = [];
 for (const [kind, input] of JSON.parse(process.argv[2])) {
   try {
-    out.push({ kind, input, got: kind === 'ep' ? mod.normalizeEndpoint(input) : mod.normalizeOrigin(input) });
+    const fn = kind === 'ep' ? mod.normalizeEndpoint : kind === 'disc' ? mod.normalizeDiscovery : mod.normalizeOrigin;
+    out.push({ kind, input, got: fn(input) });
   } catch (e) {
     out.push({ kind, input, err: String(e.message) });
   }
@@ -170,13 +195,17 @@ def test_normalizers_behave():
 
 
 def test_normalizers_are_shared_not_duplicated():
-    """归一化只能有一份 —— 两份分头演化的症状是「配了不生效」; 选项页与后台都必须载入它"""
+    """归一化与发现协议函数只能有一份 —— 两份分头演化的症状是「配了不生效」; 选项页与后台都载入同一份"""
     for path in (BACKGROUND_JS, OPTIONS_JS):
         text = _read(path)
-        assert not re.search(r"(?m)^function normalizeEndpoint", text), f"{path.name} 又定义了本地副本"
-        assert not re.search(r"(?m)^function normalizeOrigin", text), f"{path.name} 又定义了本地副本"
+        for fn in (
+            "normalizeEndpoint", "normalizeOrigin", "normalizeDiscovery", "mergeInstances", "discoveryCandidates"
+        ):
+            assert not re.search(rf"(?m)^function {fn}", text), f"{path.name} 又定义了 {fn} 本地副本"
     assert "importScripts('normalize.js')" in _read(BACKGROUND_JS)
-    assert _read(OPTIONS_HTML).index("normalize.js") < _read(OPTIONS_HTML).index("options.js"), "载入顺序: 归一化在前"
+    assert "importScripts('discovery.js')" in _read(BACKGROUND_JS), "后台要载入发现协议单点(discovery.js)"
+    html = _read(OPTIONS_HTML)
+    assert html.index("normalize.js") < html.index("discovery.js") < html.index("options.js"), "载入顺序: 归一化/发现在选项页脚本之前"
 
 
 def test_site_caps_are_shared_single_source():
@@ -199,9 +228,16 @@ def test_site_caps_are_shared_single_source():
 
 
 def test_protocol_matches_backend():
-    """扩展与后端的线上格式钉在一处: 常量取 `hr.channel`, 字段名取 `HrResult.from_json` 的实测行为"""
+    """扩展与后端的线上格式钉在一处: 常量取 `hr.channel`/`hr.discovery`, 字段名取实测行为(双向守阵)"""
     background = _read(BACKGROUND_JS)
     assert API_TASKS in background and API_RESULT in background, "端点路径必须与 hr.channel 一致"
+    assert "buildDiscoveryUrl(" in background and "runDiscovery(" in background, \
+        "发现流程必须经 discovery.js 的单点拼 URL(路径常量只在 discovery.js 一处)"
+    discovery_js = _read(DISCOVERY_JS)
+    normalize_js = _read(NORMALIZE_JS)
+    assert f"const API_DISCOVER = '{API_DISCOVER}'" in discovery_js, "discovery.js 的发现路径常量要与后端同源"
+    assert str(DISCOVERY_DEFAULT_PORT) in discovery_js and str(DISCOVERY_DEFAULT_PORT) in normalize_js, \
+        "缺省发现端口(18788)三处同源: 后端 / discovery.js / normalize.js 补端口"
     assert TOKEN_HEADER in background and TOKEN_HEADER in _read(OPTIONS_JS), "鉴权头名必须两边一致"
     # 扩展实际发出去的两条结果形态(见 background.js::runTask)必须能被后端解析
     for payload in (
@@ -281,14 +317,15 @@ def test_options_swiss_wiring():
     for el in (
         "siteTable", "eventTable", "siteChecks", "fetchSites", "selectAllSites", "grantChecked", "instList",
         "addInstance", "newInstance", "manualOrigins", "origins", "instances", "advLogs", "logView", "logMax",
-        "logLevel", "logFilter", "caps", "status", "enabled"
+        "logLevel", "logFilter", "caps", "status", "enabled", "discEndpoint", "discPairing", "discNow", "discSave",
+        "discStatus"
     ):
         assert el in html, f"选项页缺 {el}"
     for el in ("siteTable", "eventTable", "advLogs", "logView", "origins", "instances"):
         assert html.index(el) < html.index("options.js"), f"{el} 容器要在脚本之前"
     for el in (
         "refreshTables", "renderSiteStatus", "renderEvents", "scheduleTablesRender", "fetchSites", "grantChecked",
-        "API_SITES", "SITE_CAPS"
+        "API_SITES", "SITE_CAPS", "saveDiscovery", "discoverNow", "DEFAULT_DISCOVERY_ADDRESS"
     ):
         assert el in js, f"options.js 缺 {el} 的落点(按钮点了没反应)"
     # 单一风格定案: 三档共存的机制(uiTemplate/模板切换)不得回潮
@@ -368,6 +405,7 @@ const sandbox = {
   fetch: async () => ({ ok: true, status: 200, text: async () => nextPage, json: async () => ({}) }),
 };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(默认发现端口常量; 模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 async function scenario(name, page, steal) {
@@ -403,6 +441,7 @@ def page_fetch_trace() -> dict:
                 "__CHALLENGE_LIKE__", json.dumps(CHALLENGE_LIKE)
             ).replace("__LOGIN_LIKE__", json.dumps(LOGIN_LIKE)),
             str(BACKGROUND_JS),
+            str(DISCOVERY_JS),
             str(SITE_CAPS_JS),
         ]
     )
@@ -535,6 +574,7 @@ const sandbox = {
   },
 };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(默认发现端口常量; 模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 const LEDGER = vm.runInContext('SITE_LEDGER_KEY', sandbox);
@@ -584,6 +624,7 @@ def quota_trace() -> dict:
             node, "-e",
             _NODE_RUN_QUOTA.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)),
             str(BACKGROUND_JS),
+            str(DISCOVERY_JS),
             str(SITE_CAPS_JS)
         ]
     )
@@ -662,6 +703,7 @@ const sandbox = {
   },
 };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(默认发现端口常量; 模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 (async () => {
@@ -676,7 +718,7 @@ def test_extension_torrent_login_page_detected():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_LOGIN_PAGE, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_LOGIN_PAGE, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的登录页场景失败: {proc.stderr.strip()}"
     payload = json.loads(proc.stdout)["payload"]
     assert payload.get("ok") is False
@@ -726,6 +768,7 @@ const sandbox = {
   },
 };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(默认发现端口常量; 模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 (async () => {
@@ -755,7 +798,7 @@ def test_background_events_ring_dual_write():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_EVENTS, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_EVENTS, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的事件环场景失败: {proc.stderr.strip()}"
     out = json.loads(proc.stdout)
     assert out["quotaPayload"].get("kind") == "ext-quota", "页面访问超限那次要被扩展侧硬上限挡下(场景前提)"
@@ -797,6 +840,7 @@ const chrome = {
 };
 const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(默认发现端口常量; 模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 (async () => {
@@ -836,7 +880,7 @@ def test_logger_levels_ring_truncation_and_clear():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_LOGGER, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_LOGGER, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的日志场景失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
     assert got["byLevel"] == ["info", "warn", "error"], f"低于记录级别(debug)要直接丢弃: {got['byLevel']}"
@@ -859,7 +903,8 @@ const vm = require('vm');
 const noop = { addListener() {} };
 const EP = 'http://127.0.0.1:18788';
 const TASKS_URL = EP + '/api/hr/tasks';
-const store = { enabled: true, logLevel: 'debug', instances: [{ name: '本机', endpoint: EP, token: 't' }] };
+// discoveryAddress 置空 = 显式关闭发现: 本用例钉的是「连接失败降噪」, 不让发现流的日志混进计数
+const store = { enabled: true, logLevel: 'debug', discoveryAddress: '', instances: [{ name: '本机', endpoint: EP, token: 't' }] };
 let down = true;
 const chrome = {
   alarms: { create() {}, onAlarm: noop },
@@ -881,7 +926,8 @@ const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTim
   } };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js(safeEndpoint 要用)
-vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(与 importScripts 同序)
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 const delta = async (fn) => {   // 只取本轮新增的日志行(级别|类别|文案)
   const before = (store.logs || []).length;
@@ -914,7 +960,13 @@ def test_connection_failure_logs_head_tail_only():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_NOISE, str(BACKGROUND_JS), str(NORMALIZE_JS), str(SITE_CAPS_JS)])
+    proc = _run_node(
+        [node, "-e", _NODE_RUN_NOISE,
+         str(BACKGROUND_JS),
+         str(NORMALIZE_JS),
+         str(DISCOVERY_JS),
+         str(SITE_CAPS_JS)]
+    )
     assert proc.returncode == 0, f"node 跑 background.js 的降噪场景失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
 
@@ -940,6 +992,150 @@ def test_connection_failure_logs_head_tail_only():
     assert has(got["rOk"], "info|状态|本机: 无任务"), got["rOk"]
     # 恢复后再挂: 重新首报全量
     assert any(l.startswith("error|请求|拉任务清单失败: 连不上") and "逐条确认" in l for l in got["rAgain"]), got["rAgain"]
+
+
+# ---------- 去端口+跨机(计划 26-10-14-1241 S4): discovery.js 纯函数 + 后台发现流程 ----------
+
+#: 真跑 discovery.js —— 候选推导 / 合并语义 / 配对判定 / 形态过滤(纯函数, node 直接 eval)。
+_NODE_RUN_DISCOVERY_HELPERS = """
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const mod = new Function(src + '\\nreturn {API_DISCOVER, DISCOVERY_DEFAULT_PORT, discoveryCandidates, buildDiscoveryUrl, pairingNeeded, mergeInstances, validDiscoveryPayload};')();
+const out = {};
+out.apiDiscover = mod.API_DISCOVER;
+out.defaultPort = mod.DISCOVERY_DEFAULT_PORT;
+out.cands = mod.discoveryCandidates('http://192.168.1.10:18788');
+out.candsCap = mod.discoveryCandidates('http://192.168.1.10:65534');
+out.candsBad = mod.discoveryCandidates('not-a-url');
+out.url = mod.buildDiscoveryUrl('http://192.168.1.10:18788/');
+out.pairYes = mod.pairingNeeded({ status: 401, error: 'pairing_required' });
+out.pairNoStatus = mod.pairingNeeded({ status: 403, error: 'pairing_required' });
+out.pairNoError = mod.pairingNeeded({ status: 401, error: 'unauthorized' });
+out.merged = mod.mergeInstances(
+  [
+    { name: 'm', endpoint: 'http://192.168.1.10:5001', token: 'old' },
+    { name: 'hand', endpoint: 'http://127.0.0.1:8788', token: 'h' },
+  ],
+  [
+    { name: 'd1', endpoint: 'http://192.168.1.10:5001', token: 'new' },
+    { name: 'd2', endpoint: 'http://192.168.1.10:5002', token: 't2' },
+    { name: 'half', endpoint: 'http://192.168.1.10:5003' },
+  ]
+);
+out.validOk = mod.validDiscoveryPayload({ instances: [{ endpoint: 'http://x:1', token: 't' }] });
+out.validNoArray = mod.validDiscoveryPayload({});
+out.validHalf = mod.validDiscoveryPayload({ instances: [{ endpoint: 'http://x:1' }] });
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_discovery_helpers_behave():
+    """真跑 discovery.js —— 候选推导与后端同源(65535 截断)/ 合并语义(替换同端点+保留手填+标自动)/ 配对判定 / 形态过滤"""
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_DISCOVERY_HELPERS, str(DISCOVERY_JS)])
+    assert proc.returncode == 0, f"node 执行 discovery.js 失败: {proc.stderr.strip()}"
+    got = json.loads(proc.stdout)
+    assert got["apiDiscover"] == API_DISCOVER and got["defaultPort"] == DISCOVERY_DEFAULT_PORT
+    assert got["cands"] == ["http://192.168.1.10:18788", "http://192.168.1.10:18789", "http://192.168.1.10:18790"]
+    assert got["candsCap"] == ["http://192.168.1.10:65534", "http://192.168.1.10:65535"], "上限 65535 截断(与后端同源)"
+    assert got["candsBad"] == []
+    assert got["url"] == f"http://192.168.1.10:18788{API_DISCOVER}", "去尾斜杠拼路径(不出现双斜杠)"
+    assert got["pairYes"] is True and got["pairNoStatus"] is False and got["pairNoError"] is False
+    merged = got["merged"]
+    assert [e["endpoint"] for e in merged] == [
+        "http://192.168.1.10:5001",
+        "http://127.0.0.1:8788",
+        "http://192.168.1.10:5002",
+    ], "发现的替换同端点条目, 手填保留, 新发现追加, 缺 token 的半条不收"
+    assert merged[0]["token"] == "new" and merged[0]["source"] == "discovered"
+    assert merged[1] == {"name": "hand", "endpoint": "http://127.0.0.1:8788", "token": "h"}, "手填条目原样保留(无 source 标)"
+    assert got["validOk"] is True and got["validNoArray"] is False and got["validHalf"] is False
+
+
+#: 真跑 background.js 的发现流程: 三候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 /
+#: 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动, 不静默)。
+_NODE_RUN_DISCOVERY_FLOW = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const store = { enabled: true, logLevel: 'debug', discoveryAddress: 'http://192.168.1.10:18788', pairingCode: '123456' };
+let mode = 'ok-second';   // 首候选被普通应用占用(404), 次候选命中
+let calls = [];
+const DISCOVER_BODY = { instances: [
+  { id: 'a1', name: 'nas', endpoint: 'http://192.168.1.10:5001', token: 'k1' },
+  { id: 'a2', name: 'nas2', endpoint: 'http://192.168.1.10:5002', token: 'k2' },
+] };
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { onChanged: noop, local: {
+    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async (url, opts) => {
+    calls.push([String(url), opts && opts.headers ? opts.headers['X-Hr-Pairing'] : undefined]);
+    if (mode === 'down') throw new TypeError('Failed to fetch');
+    if (mode === 'pairing') return { status: 401, json: async () => ({ error: 'pairing_required' }) };
+    if (mode === 'weird') return { status: 200, json: async () => ({ html: '<html>not-us</html>' }) };
+    if (mode === 'ok-second' && Number(new URL(url).port) === 18788) return { status: 404, json: async () => ({}) };
+    return { status: 200, json: async () => DISCOVER_BODY };
+  } };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+(async () => {
+  const out = {};
+  out.hit = await sandbox.runDiscovery('测试');
+  out.hitCalls = calls.slice();
+  out.instances = JSON.parse(JSON.stringify(store.instances || []));
+  out.pairingCleared = store.pairingNeeded;
+  calls = []; mode = 'pairing';
+  store.pairingNeeded = false;
+  out.pair = await sandbox.runDiscovery('测试');
+  out.pairFlag = store.pairingNeeded;
+  mode = 'weird';
+  out.weird = await sandbox.runDiscovery('测试');
+  mode = 'down';
+  out.down = await sandbox.runDiscovery('测试');
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+def test_background_discovery_flow():
+    """真跑 background.js 的发现流程 —— 三候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 +
+    清等待标记 / 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动)"""
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node(
+        [
+            node, "-e", _NODE_RUN_DISCOVERY_FLOW,
+            str(BACKGROUND_JS),
+            str(NORMALIZE_JS),
+            str(DISCOVERY_JS),
+            str(SITE_CAPS_JS)
+        ]
+    )
+    assert proc.returncode == 0, f"node 跑 background.js 的发现流程失败: {proc.stderr.strip()}"
+    got = json.loads(proc.stdout)
+    assert got["hit"]["ok"] is True and got["hit"]["merged"] == 2, got["hit"]
+    discover_calls = [c for c in got["hitCalls"] if c[0].endswith(API_DISCOVER)]
+    assert len(discover_calls) == 3, f"三个候选并行探测: {got['hitCalls']}"
+    assert all(c[1] == "123456" for c in discover_calls), "配对码随 X-Hr-Pairing 上来"
+    assert [e["endpoint"] for e in got["instances"]] == ["http://192.168.1.10:5001", "http://192.168.1.10:5002"]
+    assert all(e["source"] == "discovered" for e in got["instances"]), "合并条目标「自动」"
+    assert got["pairingCleared"] is False, "命中后清配对等待标记"
+    assert got["pair"]["ok"] is False and got["pair"]["reason"] == "pairing_required" and got["pairFlag"] is True
+    assert got["weird"]["ok"] is False and got["weird"]["reason"] == "no-hit", "异形应答 = 非本服务, 忽略"
+    assert got["down"]["ok"] is False and got["down"]["reason"] == "no-hit", "连接失败不静默(日志 + 状态行)"
 
 
 def test_log_ui_wiring_and_escape():

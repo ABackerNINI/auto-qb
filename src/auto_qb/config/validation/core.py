@@ -41,7 +41,7 @@ MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 
 def _try_port(value, where: str, errors: List[str]) -> None:
-    """端口校验单点(issue 26-10-11-0032): 可解析为整数 + 1..65535(qbittorrent/web/hr_check.channel 三处共用)"""
+    """端口校验单点(issue 26-10-11-0032): 可解析为整数 + 1..65535(qbittorrent/web 共用)"""
     try:
         port = int(value)
     except (TypeError, ValueError):
@@ -49,6 +49,21 @@ def _try_port(value, where: str, errors: List[str]) -> None:
         return
     if not 1 <= port <= 65535:
         errors.append(f"{where}: 超出范围 1-65535: {port}")
+
+
+def _try_port_or_zero(value, where: str, errors: List[str]) -> None:
+    """hr_check.channel 端口校验(计划 26-10-14-1241 S1): {0} ∪ [1,65535]
+
+    0 是合法值(语义 = 交 OS 随机 / 关闭发现), 与 _try_port(qbittorrent/web 的 1..65535)
+    不同域, 不复用; 消息里写明 0 的语义, 免得用户把它当「关掉」或「默认 8788」理解。
+    """
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        errors.append(f"{where}: 必须是整数: {value}")
+        return
+    if not 0 <= port <= 65535:
+        errors.append(f"{where}: 超出范围 0-65535(0 = 随机/关闭): {port}")
 
 
 def _try_time_window(value, where: str, errors: List[str]) -> None:

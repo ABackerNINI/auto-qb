@@ -1,9 +1,11 @@
 """config 各段校验器: 顶层简单段(log/qbittorrent/hr/grouping/web/notify 等)"""
+import ipaddress
 import logging
 import re
-from typing import List
+import sys
+from typing import List, Tuple
 
-from ...infra.utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
+from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
 from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
 from .core import (
@@ -14,10 +16,13 @@ from .core import (
     _try,
     _try_number,
     _try_port,
+    _try_port_or_zero,
     _try_time,
     _try_time_window,
 )
 from .rules import _check_rule_refs
+
+logger = logging.getLogger(__name__)
 
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 
@@ -44,7 +49,55 @@ FLUSH_INTERVAL_MIN_S = 60.0
 FLUSH_INTERVAL_MAX_S = 3600.0
 
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
-KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
+# channel 段 8 键(去端口+跨机, 计划 26-10-14-1241 S1): host / port(0=随机) / discovery_port(0=关) / pairing 新增
+KNOWN_HR_CHANNEL_KEYS = {
+    "enabled",
+    "host",
+    "port",
+    "discovery_port",
+    "pairing",
+    "token",
+    "extension_id",
+    "request_timeout",
+}
+
+#: channel.pairing 取值域(计划 §04 S3): auto = host 非回环时强制; on = 恒要; off = 恒不要(校验拦危险组合)
+CHANNEL_PAIRING_MODES = ("auto", "on", "off")
+
+
+def _channel_ephemeral_port_range() -> Tuple[int, int]:
+    """OS 临时端口段(计划 §04 S1 ⑥): Windows 49152-65535 / 类 Unix(Linux) 32768-60999
+
+    只用作 discovery_port 的告警判据(V12): 落入段内 = 易与系统临时端口分配相撞
+    (Windows 还有 Hyper-V/WSL2 动态排除段, 无监听者也绑不上、随重启漂移)。
+    做成函数而非常量: 测试要按平台参数化(monkeypatch), 判据以本仓实际运行平台为准。
+    """
+    if sys.platform == "win32":
+        return (49152, 65535)
+    return (32768, 60999)
+
+
+#: 回环判据单点在 infra.utils.is_loopback_host(config 校验与 hr 配对门共用, 不得各写一份)
+_is_loopback_host = is_loopback_host
+
+
+def _validate_channel_host(value, where: str, errors: List[str]) -> None:
+    """channel.host 校验(S1 ①): 非空且为合法 IPv4/IPv6 字面量或 localhost
+
+    不支持主机名: 扩展侧 normalize 按字面量判私网段, 主机名无法分类(计划 §01 派生口径);
+    NAS 部署请直接填 NAS 的内网 IP。
+    """
+    host = str(value if value is not None else "").strip()
+    if not host:
+        errors.append(f"{where}: 不能为空(留空请直接删掉该键, 走默认 127.0.0.1)")
+        return
+    if host.lower() == "localhost":
+        return
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        errors.append(f"{where}: 须为 IPv4/IPv6 字面量或 localhost(不支持主机名): {host}")
+
 
 KNOWN_HR_CHECK_KEYS = {
     "enabled",
@@ -200,8 +253,19 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
             _check_unknown_keys(channel, KNOWN_HR_CHANNEL_KEYS, "config.hr_check.channel", errors)
             if "enabled" in channel:
                 _try(parse_bool, channel["enabled"], "config.hr_check.channel.enabled", errors)
+            if "host" in channel:
+                _validate_channel_host(channel["host"], "config.hr_check.channel.host", errors)
             if "port" in channel:
-                _try_port(channel["port"], "config.hr_check.channel.port", errors)
+                _try_port_or_zero(channel["port"], "config.hr_check.channel.port", errors)
+            if "discovery_port" in channel:
+                _try_port_or_zero(channel["discovery_port"], "config.hr_check.channel.discovery_port", errors)
+            if "pairing" in channel:
+                mode = str(channel["pairing"]).strip().lower()
+                if mode not in CHANNEL_PAIRING_MODES:
+                    errors.append(
+                        f"config.hr_check.channel.pairing: 取值非法: '{channel['pairing']}', "
+                        f"可选: {'/'.join(CHANNEL_PAIRING_MODES)}"
+                    )
             if "token" in channel and not isinstance(channel["token"], str):
                 errors.append("config.hr_check.channel.token: 必须是字符串")
             if "extension_id" in channel:
@@ -220,6 +284,47 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
                     min_s=5,
                     max_s=3600
                 )
+
+            # ---- 交叉规则(S1 ③⑤⑥): 各键自身格式已由上面各自己报, 这里只在两侧解析成功时比较 ----
+
+            def _chan_int(key: str, default: int):
+                if key not in channel:
+                    return default
+                try:
+                    return int(channel[key])
+                except (TypeError, ValueError):
+                    return None  # 已由端口校验报过
+
+            port_v = _chan_int("port", 0)
+            dport_v = _chan_int("discovery_port", 18788)
+            raw_host = str(channel.get("host") or "").strip()
+            host_v = raw_host if raw_host else "127.0.0.1"
+            pairing_v = str(channel.get("pairing") or "auto").strip().lower()
+            token_v = str(channel.get("token") or "").strip()
+            # ③ 两端口相撞(计划 §01 派生口径 + §08 迁移): 用户现产 port:18788 + 默认 discovery 18788 即此形态
+            if port_v and dport_v and port_v == dport_v:
+                errors.append(
+                    f"config.hr_check.channel.port: 与 discovery_port({dport_v})相同 —— 两端口不能相同; "
+                    "把 port 改 0(推荐: 本端口转作发现端口、数据端口随机), 或把 discovery_port 显式改成别的端口"
+                )
+            # ⑤ 非回环 + 永不配对 + 未配置密钥 = LAN 上无人工关口的密钥分发器, 一道都不许少(V4)
+            if pairing_v == "off" and not _is_loopback_host(host_v) and not token_v:
+                errors.append(
+                    f"config.hr_check.channel: host={host_v} 非回环且 pairing=off 且未配置 token —— "
+                    "三选一: pairing 改 on/auto、显式配置 token、或把 host 改回回环"
+                )
+            # ⑥ discovery_port 落入 OS 临时端口段 => 告警不阻断(V12; 默认 18788 在段外)
+            if dport_v:
+                lo, hi = _channel_ephemeral_port_range()
+                if lo <= dport_v <= hi:
+                    logger.warning(
+                        "config.hr_check.channel.discovery_port: %s 落入本机临时端口段(%s-%s) —— "
+                        "易与系统临时端口分配相撞(Windows 还需排查 Hyper-V/WSL2 动态排除段); "
+                        "本条为告警不阻断, 建议改用段外端口(默认 18788 在段外)",
+                        dport_v,
+                        lo,
+                        hi,
+                    )
     if "sites" in spec:
         # 站点接入(计划 26-09-27-1318 REV2): 键必须是已登记的内置档案 id, 未登记 = 该站
         # 没有 adapter 支撑, 放行到运行期只会「静默跳过」, 必须配置期拦下并给出已支持清单

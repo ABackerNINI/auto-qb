@@ -1298,21 +1298,26 @@ def test_validate_exact_boundaries():
     """闭区间端点逐值钉住 —— 池内既有用例取的都是**远离边界**的值, 端点位移类变异
     (`<=` -> `<`、闭区间端点 +1/-1)因此全部存活。本用例把每个闭区间两端都走一遍。
 
-    覆盖: 端口 [1,65535] 三处(qbittorrent/web/hr_check.channel) · log.max_bytes [1MiB,1GiB] ·
+    覆盖: 端口 [1,65535] 两处(qbittorrent/web) + hr_check.channel [0,65535](0=随机/关闭, 计划 26-10-14-1241) ·
+    log.max_bytes [1MiB,1GiB] ·
     notify.max_per_hour [1,100] · max_tasks_per_tick [1,500] · main_tick 下限 0.5s ·
     sync_interval [1,600]s · qb_traffic 采样/落盘/保留窗端点 · 曲线阈值 >0 且严格递增。
     """
     with tempfile.TemporaryDirectory() as td:
-        # --- 端口闭区间: 1 与 65535 合法, 0 与 65536 非法(三处同款判据)
+        # --- 端口闭区间: qbittorrent/web 为 [1,65535]; hr_check.channel 为 [0,65535](0 = 随机/关闭)
         for head in (
             "config:\n  qbittorrent:\n    port: %s\n",
             "config:\n  web:\n    port: %s\n",
-            "config:\n  hr_check:\n    channel:\n      port: %s\n",
         ):
             assert _load_errors(td, head % 1) == "", head
             assert _load_errors(td, head % 65535) == "", head
             assert "超出范围 1-65535" in _load_errors(td, head % 0), head
             assert "超出范围 1-65535" in _load_errors(td, head % 65536), head
+        channel_head = "config:\n  hr_check:\n    channel:\n      port: %s\n"
+        assert _load_errors(td, channel_head % 0) == "", "channel.port 0 = 随机(合法, 计划 26-10-14-1241)"
+        assert _load_errors(td, channel_head % 65535) == "", channel_head
+        assert "超出范围 0-65535" in _load_errors(td, channel_head % 65536), channel_head
+        assert "超出范围 0-65535" in _load_errors(td, channel_head % -1), channel_head
 
         def log_mb(v):
             return _load_errors(td, "config:\n  log:\n    max_bytes: %s\n" % v)

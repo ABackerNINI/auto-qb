@@ -345,9 +345,12 @@ def _print_channel(config: Config, service: HrRefreshService, out) -> None:
     channel = conf.channel
     state = "启用" if channel.enabled else "未启用(本实例无取数能力, 只会读共享数据)"
     print(f"取数通道: {state}", file=out)
+    # 去端口+跨机(计划 26-10-14-1241): host 可配(默认回环), port 0 = 随机(实绑经发现自动分发)
+    port_text = f"{channel.port}(0 = 交 OS 随机, 实绑端口经发现端点自动分发)" if channel.port == 0 else str(channel.port)
+    disc_text = f"   发现端口: {channel.discovery_port}(0 = 关闭发现)" if channel.enabled else ""
     print(
-        f"    端点: http://127.0.0.1:{channel.port}{API_TASKS}   轮询节奏: 60s(常量)   "
-        f"等回传上限: {channel.request_timeout:g}s",
+        f"    端点: http://{channel.host}:{port_text}{API_TASKS}   轮询节奏: 60s(常量)   "
+        f"等回传上限: {channel.request_timeout:g}s{disc_text}",
         file=out
     )
     origin = f"只放行扩展 {channel.extension_id}" if channel.extension_id else "放行任意扩展 origin(靠 token 鉴权)"

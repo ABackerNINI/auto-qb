@@ -106,7 +106,20 @@
   <hr class="rule">
   <div class="step">
     <div class="stepno">1</div>
-    <h4>连接本机端点</h4>
+    <h4>自动发现(推荐: 同机零配置, 跨机只填 NAS 地址)</h4>
+    <div class="field"><label>发现地址</label><input type="text" id="discEndpoint" placeholder="http://127.0.0.1:18788"></div>
+    <div class="field"><label>配对码</label><input type="text" id="discPairing" placeholder="仅跨机/开启配对时需要: 后端启动日志或 HR 状态卡里的 6 位展示码"></div>
+    <div class="btnrow">
+      <button class="primary" id="discNow">立即发现</button>
+      <button class="ghost" id="discSave">保存发现地址与配对码</button>
+    </div>
+    <p class="sub" id="discStatus" style="margin-top:8px">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延 18789/18790, 本扩展会并行探测整张候选表); 命中后实例自动并入下方列表, token 免手抄。</p>
+  </div>
+
+  <hr class="rule">
+  <div class="step">
+    <div class="stepno">2</div>
+    <h4>手动端点(兜底: 发现关闭/失败时用, 与旧版完全相同)</h4>
     <div class="field"><label>地址</label><input type="text" id="instEndpoint" placeholder="http://127.0.0.1:8788"></div>
     <div class="field"><label>TOKEN</label><input type="text" id="instToken" placeholder="粘贴 &lt;data_dir&gt;/hr.token 的内容整串"></div>
     <div class="btnrow">
@@ -114,12 +127,12 @@
       <button class="ghost" id="newInstance">再填一个</button>
     </div>
     <div id="instList"></div>
-    <p class="sub" style="margin-top:8px">多实例端口必须不同; 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:8788」—— 端口以那行为准。</p>
+    <p class="sub" style="margin-top:8px">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
   </div>
 
   <hr class="rule">
   <div class="step">
-    <div class="stepno">2</div>
+    <div class="stepno">3</div>
     <h4>站点权限(从后端获取, 默认全勾)</h4>
     <div id="siteChecks" class="sites"></div>
     <div class="btnrow">
@@ -137,7 +150,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
 
   <hr class="rule">
   <div class="step">
-    <div class="stepno">3</div>
+    <div class="stepno">4</div>
     <h4>站点现状(一眼看全部触过的站点)</h4>
     <table class="swtab">
       <thead><tr><th>站点</th><th>最近活动</th><th>最近动作 · 结果</th><th>用量 本时 · 本日(访问/下种)</th><th>状态</th></tr></thead>
@@ -147,7 +160,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
 
   <hr class="rule">
   <div class="step">
-    <div class="stepno">4</div>
+    <div class="stepno">5</div>
     <h4>最近取数明细(环形最近 50 条)</h4>
     <table class="swtab">
       <thead><tr><th>时间</th><th>站点</th><th>类型</th><th>结果</th><th>耗时</th><th>大小</th></tr></thead>
@@ -197,6 +210,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
   </details>
 
   <script src="normalize.js"></script>
+  <script src="discovery.js"></script>
   <script src="site-caps.js"></script>
   <script src="options.js"></script>
 </body>

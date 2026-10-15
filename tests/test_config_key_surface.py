@@ -298,7 +298,10 @@ _LOADER_PROBES = {
     "hr_check.shared_dir": ("/probe-hr-shared", "/probe-hr-shared"),
     "hr_check.reuse_window": ("3H", 10800.0),
     "hr_check.channel.enabled": ("true", True),
+    "hr_check.channel.host": ("192.168.1.10", "192.168.1.10"),
     "hr_check.channel.port": ("18788", 18788),
+    "hr_check.channel.discovery_port": ("18790", 18790),
+    "hr_check.channel.pairing": ("on", "on"),
     "hr_check.channel.token": ("probe-ch-token", "probe-ch-token"),
     "hr_check.channel.extension_id": ("a" * 32, "a" * 32),  # 32 位 Chrome 扩展 id(a~p)
     "hr_check.channel.request_timeout": ("240S", 240.0),

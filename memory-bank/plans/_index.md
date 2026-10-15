@@ -17,7 +17,6 @@
 ## Open
 
 - [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
-- [26-10-14-1241] [HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb](26-10-14-1241-plan-hr-channel-portless-remote.html) — `hr-channel-portless-remote`
 - [26-10-13-0811] [种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划](26-10-13-0811-plan-webui-detail-table-rebuild.html) — `webui-detail-table-rebuild`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
@@ -25,6 +24,7 @@
 
 ## Done
 
+- [26-10-14-1241] [HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb](26-10-14-1241-plan-hr-channel-portless-remote.html) — `hr-channel-portless-remote`
 - [26-10-13-0540] [种子状态双写通道重构 · A 系实施计划 — 删合成回写 + 局部 deferral](26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html) — `seed-state-writeback`
 - [26-10-13-0324] [方案 · kb.nav Esc 功能 · 借鉴 auto-qb Esc 退栈设计 · auto-qb](26-10-13-0324-plan-kb-nav-esc.html) — `kb-nav-esc`
 - [26-10-12-2330] [引擎表头 a11y 补课 — 可排序表头语义与键盘可达（方案 C）](26-10-12-2330-plan-webui-table-head-a11y.html) — `webui-drawer-table-rework`

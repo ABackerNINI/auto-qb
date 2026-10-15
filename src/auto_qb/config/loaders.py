@@ -142,8 +142,14 @@ def load_hr_check_config(spec) -> HrCheckConfig:
     channel = HrChannelConfig(
         enabled=_get(channel_spec, "enabled", channel_default.enabled, parse_bool)
         if isinstance(channel_spec, dict) else channel_default.enabled,
+        host=_get(channel_spec, "host", channel_default.host)
+        if isinstance(channel_spec, dict) else channel_default.host,
         port=_get(channel_spec, "port", channel_default.port, int)
         if isinstance(channel_spec, dict) else channel_default.port,
+        discovery_port=_get(channel_spec, "discovery_port", channel_default.discovery_port, int)
+        if isinstance(channel_spec, dict) else channel_default.discovery_port,
+        pairing=_get(channel_spec, "pairing", channel_default.pairing)
+        if isinstance(channel_spec, dict) else channel_default.pairing,
         token=_get(channel_spec, "token", channel_default.token)
         if isinstance(channel_spec, dict) else channel_default.token,
         extension_id=_get(channel_spec, "extension_id", channel_default.extension_id)

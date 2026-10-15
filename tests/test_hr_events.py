@@ -135,8 +135,10 @@ def test_channel_silent_evidence_branches():
     ), rejected
 
     web = events.channel_silent(1.0, "启动以来", ["a"], evidence="web_active")
-    assert ("| **有人在看 WebUI, 但端点未收到任何联系** ⇒ 扩展可能被停用 / 卸载 / 未启用, "
-            "或跨机隧道与网络不通" in web), web
+    assert (
+        "| **有人在看 WebUI, 但端点未收到任何联系** ⇒ 扩展可能被停用 / 卸载 / 未启用, "
+        "或跨机部署时网络不可达(依次查: 扩展所在机器到后端主机的连通性 / 防火墙 / 隧道与反代)" in web
+    ), web
 
     none = events.channel_silent(1.0, "启动以来", ["a"])
     assert ("| 端点未收到任何联系: 浏览器可能未运行, **或** 扩展未启用 / 未安装"

@@ -2,17 +2,23 @@
 
 三段职责(端点线程 / 取数线程 / 浏览器扩展)靠本模块对齐:
 
-- `HrTask` / `HrResult` —— 后端与扩展之间的**唯一**数据契约(JSON 往返, 只经 127.0.0.1 loopback);
+- `HrTask` / `HrResult` —— 后端与扩展之间的**唯一**数据契约(JSON 往返, 默认只经回环;
+  host 配到私网即内网直绑, 计划 26-10-14-1241);
 - `resolve_token` / `origin_allowed` / `UrlPolicy` —— 三道边界。**真鉴权是 token**, origin 白名单
   只是第二道(扩展形态不影响能力, 但 id 未必定得住), URL 白名单(SSRF)保证端点不会退化成
   「带登录态的任意站代理」;
-- 纯函数、零网络 I/O(只有 token 落盘), 便于 pytest 直接钉死。
+- `pairing_*`(计划 26-10-14-1241 S3) —— 配对码族: 非回环可达的发现端点是 LAN 上的 token
+  分发器, 必须有一道人工关口; 密钥持久化到 `<data_dir>/hr.pairing`(0600), 展示码/凭证均由它
+  现导(无额外状态), 删除文件即吊销;
+- 纯函数、零网络 I/O(只有密钥落盘), 便于 pytest 直接钉死。
 
 !**凭据面归零**(计划 §6): 协议里没有 cookie / passkey 字段 —— 后端既不接收也不转发浏览器凭据,
   登录态只存在于浏览器上下文; 扩展取到的只有「HTML 文本」与「.torrent 二进制」。
 """
 import base64
 import binascii
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -23,7 +29,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from ..config.models import SiteHrCheckConfig
 from ..infra.errors import AutoQbError
-from ..infra.utils import resolve_or_create_token
+from ..infra.utils import is_loopback_host, resolve_or_create_token
 from .model import _as_float, _as_int  # 数值强转单点在 model(此前 channel 另抄一份逐字同)
 
 logger = logging.getLogger(__name__)
@@ -97,6 +103,50 @@ def resolve_token(configured: str, data_dir: str) -> str:
     密钥内容不进日志的纪律随单点 —— logger 用本模块身份(auto_qb.hr.channel)传入, 守阵按它钉死。
     """
     return resolve_or_create_token(configured, token_path(data_dir), what="HR 取数通道", logger=logger)
+
+
+# ---------- 配对码(计划 26-10-14-1241 S3) ----------
+
+
+def pairing_path(data_dir: str) -> str:
+    """配对密钥文件路径(与 hr.token 同处境, 便于用户一处管理; **删除 = 吊销全部配对**)"""
+    return os.path.join(data_dir, "hr.pairing")
+
+
+def resolve_pairing_secret(data_dir: str, *, logger: logging.Logger) -> str:
+    """配对密钥: 首次需要时生成并持久化(0600, 走 resolve_or_create_token 单点口径)
+
+    只在配对确实生效时调用(同机默认不需要, 不建文件); 删除文件即吊销 —— 全部配对方
+    下次重新配, 旧展示码/凭证一并失效(无额外状态, 展示码与凭证都由密钥现导)。
+    """
+    return resolve_or_create_token("", pairing_path(data_dir), what="HR 配对", logger=logger)
+
+
+def pairing_display_code(secret: str) -> str:
+    """展示码: HMAC(密钥, "display") 截 6 位十进制(跨重启稳定 —— 密钥持久化)
+
+    给**人**看的形态: 启动日志与 WebUI 报它, 用户在扩展选项页手输一次。
+    """
+    digest = hmac.new(secret.encode("utf-8"), b"display", hashlib.sha256).digest()
+    return f"{int.from_bytes(digest[:8], 'big') % 10**6:06d}"
+
+
+def pairing_credential(secret: str) -> str:
+    """凭证: HMAC(密钥, "cred").hex()(给机器比对的等价形态; 无额外状态, 由密钥现导)"""
+    return hmac.new(secret.encode("utf-8"), b"cred", hashlib.sha256).hexdigest()
+
+
+def pairing_needed(mode: str, host: str) -> bool:
+    """配对码是否强制(S3 生效逻辑): on 恒要; off 恒不要; auto = host 非回环时强制
+
+    「非回环 + off + 未配 token」的危险组合由 config 校验在配置期拦下(S1 ⑤), 这里不重复判;
+    回环判据单点在 infra.utils.is_loopback_host(与 config 校验共用)。
+    """
+    if mode == "on":
+        return True
+    if mode == "off":
+        return False
+    return not is_loopback_host(host)
 
 
 # ---------- 边界: origin 与 URL ----------

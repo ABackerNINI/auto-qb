@@ -1,8 +1,8 @@
-"""本地取数端点(计划 §6/§8 · M2): 扩展 ⇄ 后端 的唯一网络面, **只听 127.0.0.1**。
+"""本地取数端点(计划 §6/§8 · M2; 去端口+跨机 = 计划 26-10-14-1241): 扩展 ⇄ 后端 的唯一数据面。
 
 职责与边界(硬约束):
 
-- 四个端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传,
+- 四个数据端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传,
   `GET /api/hr/sites` 给选项页「需要授权的站点清单」(只读辅助, 同样过 token + origin 两道关),
   `POST /api/hr/refresh` 给选项页「立即拉取一次」(计划 26-09-30-0240);
 - 端点线程**只入队 + 置一次性 force 旗标并唤醒取数线程** —— 除了内存队列与 force 旗标它
@@ -12,7 +12,10 @@
   只能污染一条待解析的结果, 而那条结果还得先通过「任务 id 确实派发过 + 域名一致」两道关;
 - 鉴权: 无 token / token 不符 ⇒ **401 且不写任何状态**; 非扩展 origin ⇒ 403(纵深防御);
   真鉴权是 token —— origin 白名单只是第二道(扩展 id 未必定得住, 见计划 §6);
-- URL 白名单(SSRF)在**下发任务时**卡死(见 channel.UrlPolicy), 端点本身不接受任何 URL 入参。
+- URL 白名单(SSRF)在**下发任务时**卡死(见 channel.UrlPolicy), 端点本身不接受任何 URL 入参;
+- 监听身份可配(host/port; 计划 26-10-14-1241 S1/S2): 默认仍只听 127.0.0.1(同机零感知);
+  host 配私网 = 内网直绑(NAS 形态), token 鉴权 + 发现层配对码兜人工关口(见 discovery.py);
+  port=0(默认)= 交 OS 随机, 实绑端口回填日志与 status(), 扩展经发现端点自动拿到。
 
 !`allow_reuse_address = False`: Windows 上 `SO_REUSEADDR` 允许**抢绑**已在监听的端口, 会让
   「同机多实例配了同一个 port ⇒ 启动 fail-fast」这条守卫失效; 关掉它才是真的独占。
@@ -26,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+from ..infra.utils import is_loopback_host
 from .channel import (
     API_REFRESH,
     API_RESULT,
@@ -40,6 +44,7 @@ from .channel import (
     HrChannelError,
     decode_json,
     origin_allowed,
+    pairing_needed,
     parse_results,
 )
 from .queue import HrTaskQueue
@@ -56,8 +61,12 @@ _JSON = "application/json; charset=utf-8"
 REJECT_WARN_GAP = 6 * 3600.0
 
 
-class _LoopbackServer(ThreadingHTTPServer):
-    """单机端点: 线程池处理 + 严格独占端口(见模块 docstring)"""
+class _EndpointServer(ThreadingHTTPServer):
+    """端点服务器: 线程池处理 + 严格独占端口(见模块 docstring)
+
+    旧名 `_LoopbackServer` 随 host 可配退役(计划 26-10-14-1241 S2): 绑定口径两项逐字保留。
+    """
+
     daemon_threads = True
     #: !关掉地址复用: Windows 上它会允许第二个进程抢绑同一端口, 端口占用就检测不出来了
     allow_reuse_address = False
@@ -66,7 +75,7 @@ class _LoopbackServer(ThreadingHTTPServer):
         """只绑地址, **不查 FQDN**
 
         HTTPServer.server_bind 会调 socket.getfqdn(可能触发一次 DNS 解析/反向查询);
-        本端点只服务 127.0.0.1, 不需要主机名, 而那次查询在无网/弱网机器上会抱几秒 ——
+        本端点只服务回环或内网直绑地址, 不需要主机名, 而那次查询在无网/弱网机器上会抱几秒 ——
         启动期不应为它付出代价。
         """
         TCPServer.server_bind(self)
@@ -75,12 +84,112 @@ class _LoopbackServer(ThreadingHTTPServer):
         self.server_port = port
 
 
+class RejectThrottle:
+    """被拒接触(401/403)记账 + 节流单点(计划 26-10-14-1241 S2 从 server 提取, discovery 复用)
+
+    为什么必须记: 「浏览器未运行」与「扩展未启用」在后端观测面上同形(都是没人联系), 而
+    「有人在敲门但被拒」是**唯一**能证明前端在跑的证据 —— 它把「扩展配错」从「日志里的一行」
+    变成「状态上的一个事实」, 通道静默文案才有资格指名根因(计划 §03.6)。
+    为什么节流: 扩展每 60s 敲一次, 配错 token 就是**每分钟一条** —— 那是把持续配置态按最高
+    量级刷屏(原实现在此用 `logger.error`, 直通前端错误历史 + 系统通知; 计划 26-10-09-0821 P4)。
+    行为逐字不变: 状态变化报一次 + 每 REJECT_WARN_GAP 提醒一次, 级别 WARNING(配置态档)。
+    """
+    def __init__(self, now_fn: Callable[[], float] = time.time) -> None:
+        self._now = now_fn
+        self._lock = threading.Lock()
+        self._contacts = 0
+        self._last_ts = 0.0
+        self._warn_key = ""
+        self._warn_at = 0.0
+
+    def note(self, kind: str, detail: str) -> None:
+        """记一次被拒的敲门: 计数/时刻总是更新, 日志按「状态变化 + 长周期」节流"""
+        with self._lock:
+            self._contacts += 1
+            self._last_ts = self._now()
+        now = self._now()
+        if kind != self._warn_key or now - self._warn_at >= REJECT_WARN_GAP:
+            self._warn_key = kind
+            self._warn_at = now
+            # 级别定为**配置态**档(WARNING): ERROR 应留给真故障
+            logger.warning(f"HR 取数通道 | {detail}(持续期间不再逐条记, 每 {REJECT_WARN_GAP / 3600:.0f}h 提醒一次)")
+        else:
+            logger.debug(f"HR 取数通道 | {detail}(已告警过, 不重复)")
+
+    def snapshot(self) -> Tuple[int, float]:
+        """(累计次数, 最近一次时刻) —— 供 status/报告读取, 不暴露内部锁"""
+        with self._lock:
+            return self._contacts, self._last_ts
+
+
+def make_endpoint_handler(route_fn: Callable, *, banner: str, access_log_prefix: str, error_tag: str = "HR 取数通道"):
+    """端点 HTTP 薄适配层单点(server 与 discovery 共用; 计划 26-10-14-1241 S2)
+
+    头解析 / 体上限 / 单请求异常兜底(端点线程绝不因单请求退出) / 每请求关闭连接 ——
+    路由与鉴权全在 route_fn(纯逻辑可单测), 这里只做字节与套接字的事。
+    route_fn 签名: (method, path, headers, body, source) -> (status, headers, payload)。
+    """
+    class _Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        server_version = banner
+
+        def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003 (基类签名)
+            logger.debug("%s %s - %s", access_log_prefix, self.address_string(), fmt % args)
+
+        def do_GET(self) -> None:  # noqa: N802 (基类签名)
+            self._dispatch("GET")
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._dispatch("POST")
+
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            self._dispatch("OPTIONS")
+
+        def _dispatch(self, method: str) -> None:
+            length = _content_length(self.headers)
+            if length > MAX_BODY_BYTES:
+                self._safe_respond(413, {}, _json({"error": "body too large"}))
+                return
+            body = self.rfile.read(length) if length else b""
+            try:
+                status, headers, payload = route_fn(
+                    method, self.path, self.headers, body, source=self.client_address[0]
+                )
+            except Exception as e:  # 端点线程绝不因单请求异常退出
+                logger.error(f"{error_tag} | 处理 {method} {self.path} 异常: {e}", exc_info=True)
+                status, headers, payload = 500, {}, _json({"error": "internal error"})
+            self._safe_respond(status, headers, payload)
+
+        def _safe_respond(self, status: int, headers: Dict[str, str], payload: bytes) -> None:
+            """写响应; 客户端半路断开(BrokenPipe)不该冒泡成 traceback —— 那是常态不是故障"""
+            try:
+                self._respond(status, headers, payload)
+            except (ConnectionError, OSError) as e:
+                logger.debug(f"{error_tag} | 响应写失败(客户端已断开): {e}")
+
+        def _respond(self, status: int, headers: Dict[str, str], payload: bytes) -> None:
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.send_header("Content-Type", _JSON)
+            self.send_header("Content-Length", str(len(payload)))
+            # 每请求关闭: 端点每 5 分钟才被拉一次, 长连接没有收益, 却会在监听套接字上
+            # 留下半开连接(影响重启时的独占绑定)
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            if payload:
+                self.wfile.write(payload)
+
+    return _Handler
+
+
 class HrEndpointHandle:
     """端点句柄: 线程骨架在 HrThreadHandle; 本类只持监听 server/port 并注入 shutdown 的 request_stop"""
 
     __slots__ = ("server", "thread", "port")
 
-    def __init__(self, server: _LoopbackServer, thread: HrThreadHandle, port: int) -> None:
+    def __init__(self, server: _EndpointServer, thread: HrThreadHandle, port: int) -> None:
         self.server = server
         self.thread = thread
         self.port = port
@@ -111,13 +220,16 @@ class HrChannelServer:
         *,
         queue: HrTaskQueue,
         token: str,
-        port: int = 8788,
+        port: int = 0,
         host: str = "127.0.0.1",
         extension_id: str = "",
         poll_hint: float = DEFAULT_POLL_HINT,
         now_fn: Callable[[], float] = time.time,
         sites_fn: Optional[Callable[[], List[Tuple[str, str]]]] = None,
         force_fn: Optional[Callable[[], dict]] = None,
+        discovery_port: int = 0,
+        pairing: str = "auto",
+        discovery_bound_fn: Optional[Callable[[], int]] = None,
     ) -> None:
         self.queue = queue
         self.token = token
@@ -131,17 +243,21 @@ class HrChannelServer:
         #: 「立即拉取」回调(计划 26-09-30-0240, runtime 注入 HrRuntime.request_refresh):
         #: 端点线程调它只是置 worker 内存里的一次性 force 旗标 + 唤醒, 不碰任何持久状态。
         self.force_fn = force_fn
+        #: 发现端口与配对策略(计划 26-10-14-1241 S2): 只服务于启动日志与 status().note 的
+        #: 「可定位故障」面; 真正的发现服务在 hr.discovery.HrDiscoveryServer(runtime 另行构造),
+        #: 本类不持有它 —— 两服务同 host, 但生命周期各自独立(发现不可用不影响数据端点)。
+        self.discovery_port = int(discovery_port)
+        self.pairing = pairing
+        #: 实绑发现端口读取器(runtime 注入): note 里写实绑候选(非首位也能看出来, 计划 C6)
+        self.discovery_bound_fn = discovery_bound_fn
         self._now = now_fn
         self._state_lock = threading.Lock()
         self._last_contact_ts = 0.0
         self._origins: Set[str] = set()
-        #: 「被拒接触」面(计划 §03.6 的落点): 401/403 也记一下 —— 它证明**有人在敲门**
+        #: 被拒接触面(计划 §03.6 的落点): 401/403 也记一下 —— 它证明**有人在敲门**
         #: (浏览器在跑 / 扩展在跑), 是区分「扩展配错」与「没人联系」的唯一硬证据。
         #: !与 `_last_contact_ts` 分开: 那个语义是「**成功**联系」, 不能被被拒的敲门污染。
-        self._rejected_contacts = 0
-        self._last_rejected_ts = 0.0
-        self._reject_warn_key = ""
-        self._reject_warn_at = 0.0
+        self._reject = RejectThrottle(now_fn=now_fn)
         self._handle: Optional[HrEndpointHandle] = None
 
     # ---------- 生命周期 ----------
@@ -150,17 +266,25 @@ class HrChannelServer:
         """启动监听; 端口被占 ⇒ 抛 HrChannelBindError(不静默降级, 见计划 §7)"""
         handler = self._make_handler()
         try:
-            server = _LoopbackServer((self.host, self.port), handler)
+            server = _EndpointServer((self.host, self.port), handler)
         except OSError as e:
+            nic = "" if is_loopback_host(self.host) else "(地址不在本机网卡? 检查 hr_check.channel.host 拼写与本机 IP)"
             raise HrChannelBindError(
                 f"HR 取数通道端点无法监听 {self.host}:{self.port} ({e}) —— 端口被占用? "
-                "同机多实例必须各用不同的 hr_check.channel.port"
+                f"同机多实例必须各用不同的 hr_check.channel.port{nic}"
             ) from e
         thread = HrThreadHandle()
         thread.start(server.serve_forever, "auto-qb-hr-channel")
         self._handle = HrEndpointHandle(server, thread, server.server_address[1])
         # INFO 而非 WARNING: 本仓 WARNING 以上会被推成系统通知, 而「端点起来了」是预期内的事
-        logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
+        if is_loopback_host(self.host):
+            logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
+        else:
+            disc = f"; 发现端口 {self.discovery_port}" if self.discovery_port else ""
+            logger.info(
+                f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}"
+                f"(监听 {self.host}, 已暴露到内网, 需 token 鉴权{disc})"
+            )
         return self._handle
 
     def stop(self, timeout: float = ENDPOINT_STOP_TIMEOUT) -> bool:
@@ -176,6 +300,16 @@ class HrChannelServer:
         return self._handle is not None and self._handle.started
 
     @property
+    def bound_port(self) -> int:
+        """实际绑定的端口(port=0 时与配置端口不同; 未启动 = 0)"""
+        return self._handle.port if self._handle is not None else 0
+
+    @property
+    def pairing_required(self) -> bool:
+        """配对码是否生效(生效逻辑单点在 channel.pairing_needed, 这里按构造参数现算)"""
+        return pairing_needed(self.pairing, self.host)
+
+    @property
     def last_contact_ts(self) -> float:
         with self._state_lock:
             return self._last_contact_ts
@@ -183,21 +317,30 @@ class HrChannelServer:
     @property
     def rejected_contacts(self) -> int:
         """被拒接触累计次数(401/403) —— >0 证明「有人在敲门」(计划 §03.6 可分辨判据)"""
-        with self._state_lock:
-            return self._rejected_contacts
+        return self._reject.snapshot()[0]
 
     @property
     def last_rejected_ts(self) -> float:
-        with self._state_lock:
-            return self._last_rejected_ts
+        return self._reject.snapshot()[1]
 
     def status(self, *, enabled: bool = True) -> ChannelStatus:
-        """自检快照(不含密钥内容)"""
+        """自检快照(不含密钥内容); 监听中 note 携带发现端口/配对态/实绑端口(C6 可定位故障)"""
         with self._state_lock:
             contact, origins = self._last_contact_ts, sorted(self._origins)
-            rejected, rejected_ts = self._rejected_contacts, self._last_rejected_ts
+        rejected, rejected_ts = self._reject.snapshot()
         listening = self.started
         bound_port = self._handle.port if self._handle is not None else self.port
+        note = "" if listening else "端点未在监听"
+        if listening:
+            disc = "发现 关"
+            if self.discovery_bound_fn is not None:
+                try:
+                    disc_port = int(self.discovery_bound_fn() or 0)
+                except Exception:
+                    disc_port = 0
+                if disc_port:
+                    disc = f"发现 {disc_port}"
+            note = f"{disc} · 配对 {'开' if self.pairing_required else '关'} · 数据 {bound_port}"
         return ChannelStatus(
             enabled=enabled,
             listening=listening,
@@ -208,13 +351,23 @@ class HrChannelServer:
             extensions_seen=origins,
             rejected_contacts=rejected,
             last_rejected_ts=rejected_ts,
-            note="" if listening else "端点未在监听",
+            note=note,
         )
 
     # ---------- 路由(纯逻辑, 不碰 socket) ----------
 
-    def route(self, method: str, path: str, headers: Any, body: bytes = b"") -> Tuple[int, Dict[str, str], bytes]:
-        """HTTP 请求 -> (状态码, 响应头, 响应体)。鉴权与白名单全在这里, 便于直接钉死。"""
+    def route(self,
+              method: str,
+              path: str,
+              headers: Any,
+              body: bytes = b"",
+              source: str = "") -> Tuple[int, Dict[str, str], bytes]:
+        """HTTP 请求 -> (状态码, 响应头, 响应体)。鉴权与白名单全在这里, 便于直接钉死。
+
+        `source` 是与发现端点共用 HTTP 适配层的同形签名: 数据端点的被拒面按**全局**节流,
+        不按来源分桶 —— 分流的排障价值低, 还会引入「每来源状态谁清理」的新问题。
+        """
+        del source
         origin = _header(headers, ORIGIN_HEADER)
         cors: Dict[str, str] = {}
         if not origin_allowed(origin, self.extension_id):
@@ -325,25 +478,8 @@ class HrChannelServer:
         return bool(given) and bool(self.token) and secrets.compare_digest(given, self.token)
 
     def _note_rejected(self, kind: str, detail: str) -> None:
-        """记一次**被拒**的敲门(401 / 403), 并按状态变化 + 长周期节流地报一次日志
-
-        为什么必须记: 「浏览器未运行」与「扩展未启用」在后端观测面上同形(都是没人联系), 而
-        「有人在敲门但被拒」是**唯一**能证明前端在跑的证据 —— 它把「扩展配错」从「日志里的一行」
-        变成「状态上的一个事实」, 通道静默文案才有资格指名根因(计划 §03.6)。
-        为什么要节流: 扩展每 60s 敲一次, 配错 token 就是**每分钟一条** —— 那是把持续配置态按最高
-        量级刷屏(原实现在此用 `logger.error`, 直通前端错误历史 + 系统通知; 计划 P4)。
-        """
-        with self._state_lock:
-            self._rejected_contacts += 1
-            self._last_rejected_ts = self._now()
-        now = self._now()
-        if kind != self._reject_warn_key or now - self._reject_warn_at >= REJECT_WARN_GAP:
-            self._reject_warn_key = kind
-            self._reject_warn_at = now
-            # 级别定为**配置态**档(WARNING): ERROR 应留给真故障
-            logger.warning(f"HR 取数通道 | {detail}(持续期间不再逐条记, 每 {REJECT_WARN_GAP / 3600:.0f}h 提醒一次)")
-        else:
-            logger.debug(f"HR 取数通道 | {detail}(已告警过, 不重复)")
+        """记一次**被拒**的敲门(401 / 403) —— 逻辑单点在 RejectThrottle(server/discovery 同口径)"""
+        self._reject.note(kind, detail)
 
     def _note_contact(self, origin: str) -> None:
         """记一次通道接触(静默告警的判据); 只成功鉴权的请求会走到这里"""
@@ -353,59 +489,13 @@ class HrChannelServer:
                 self._origins.add(origin)
 
     def _make_handler(self):
-        outer = self
-
-        class _Handler(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-            server_version = "auto-qb-hr/1.0"
-
-            def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003 (基类签名)
-                logger.debug("HR 端点 %s - %s", self.address_string(), fmt % args)
-
-            def do_GET(self) -> None:  # noqa: N802 (基类签名)
-                self._dispatch("GET")
-
-            def do_POST(self) -> None:  # noqa: N802
-                self._dispatch("POST")
-
-            def do_OPTIONS(self) -> None:  # noqa: N802
-                self._dispatch("OPTIONS")
-
-            def _dispatch(self, method: str) -> None:
-                length = _content_length(self.headers)
-                if length > MAX_BODY_BYTES:
-                    self._safe_respond(413, {}, _json({"error": "body too large"}))
-                    return
-                body = self.rfile.read(length) if length else b""
-                try:
-                    status, headers, payload = outer.route(method, self.path, self.headers, body)
-                except Exception as e:  # 端点线程绝不因单请求异常退出
-                    logger.error(f"HR 取数通道 | 处理 {method} {self.path} 异常: {e}", exc_info=True)
-                    status, headers, payload = 500, {}, _json({"error": "internal error"})
-                self._safe_respond(status, headers, payload)
-
-            def _safe_respond(self, status: int, headers: Dict[str, str], payload: bytes) -> None:
-                """写响应; 客户端半路断开(BrokenPipe)不该冒泡成 traceback —— 那是常态不是故障"""
-                try:
-                    self._respond(status, headers, payload)
-                except (ConnectionError, OSError) as e:
-                    logger.debug(f"HR 取数通道 | 响应写失败(客户端已断开): {e}")
-
-            def _respond(self, status: int, headers: Dict[str, str], payload: bytes) -> None:
-                self.send_response(status)
-                for key, value in headers.items():
-                    self.send_header(key, value)
-                self.send_header("Content-Type", _JSON)
-                self.send_header("Content-Length", str(len(payload)))
-                # 每请求关闭: 端点每 5 分钟才被拉一次, 长连接没有收益, 却会在监听套接字上
-                # 留下半开连接(影响重启时的独占绑定)
-                self.send_header("Connection", "close")
-                self.end_headers()
-                self.close_connection = True
-                if payload:
-                    self.wfile.write(payload)
-
-        return _Handler
+        # 经 self 现取 route(不绑死方法对象): 测试期 monkeypatch 实例属性才拦得住
+        return make_endpoint_handler(
+            lambda *args, **kwargs: self.route(*args, **kwargs),
+            banner="auto-qb-hr/1.0",
+            access_log_prefix="HR 端点",
+            error_tag="HR 取数通道"
+        )
 
 
 def _header(headers: Any, name: str) -> str:
@@ -439,4 +529,10 @@ def _json(payload: Dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-__all__ = ["ENDPOINT_STOP_TIMEOUT", "HrChannelServer", "HrEndpointHandle"]
+__all__ = [
+    "ENDPOINT_STOP_TIMEOUT",
+    "HrChannelServer",
+    "HrEndpointHandle",
+    "RejectThrottle",
+    "make_endpoint_handler",
+]

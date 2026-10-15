@@ -15,6 +15,7 @@
 // 地址归一化共用 normalize.js(选项页用 <script> 载入, 这里用 importScripts —— 同一份代码)。
 
 importScripts('normalize.js');
+importScripts('discovery.js');
 importScripts('site-caps.js');
 
 const ALARM_NAME = 'hr-poll';
@@ -23,6 +24,12 @@ const ALARM_NAME = 'hr-poll';
 // (2026-09-25 实报「取 .torrent 失败: 等待浏览器扩展取数超时(180s)」)。1 分钟轮询只打本机
 // loopback 一次 GET, 成本可忽略; 后端才是站点频控的唯一权威 —— 空轮询不会碰到站点。
 const POLL_MINUTES = 1;
+// 自动发现(计划 26-10-14-1241 S4/C2): 周期触发间隔 10 分钟 —— 与 60s 轮询解耦, 免得发现流变成第二轮询。
+// 触发器: 启动时 / 全部实例连续失败时(1 分钟节流)/ 每 10 分钟 / 选项页「立即发现」(随时)。
+// !发现地址留空 = 用户显式关闭: 完全静默跳过, 不打一行日志(手动配置路径是完整退路)。
+const DISCOVERY_EVERY_MINUTES = 10;
+const DISCOVERY_MIN_GAP_MS = 60 * 1000;
+const DEFAULT_DISCOVERY_ADDRESS = 'http://127.0.0.1:' + DISCOVERY_DEFAULT_PORT; // 端口常量与后端同源(discovery.js)
 const PAGE_LOAD_TIMEOUT_MS = 60000;
 const PAGE_SETTLE_MS = 800; // 页面 complete 后再等一小会儿(部分站点是 XHR 填表)
 const OFFSCREEN_X = -32000; // 离屏坐标: 渲染兜底用的窗口放在屏幕外(Windows 允许完全离屏)
@@ -33,11 +40,15 @@ async function readConfig() {
     enabled: true,
     instances: [],
     siteOrigins: [],
+    discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
+    pairingCode: '',
   });
   return {
     enabled: Boolean(got.enabled),
     instances: Array.isArray(got.instances) ? got.instances : [],
     siteOrigins: Array.isArray(got.siteOrigins) ? got.siteOrigins : [],
+    discoveryAddress: String(got.discoveryAddress || '').trim(),
+    pairingCode: String(got.pairingCode || '').trim(),
   };
 }
 
@@ -272,12 +283,14 @@ chrome.runtime.onInstalled.addListener(() => {
   // 把上限写进 storage: 选项页据此展示「两道闸的当前额度」, 免得两处各写一份阈值(必漂移)
   chrome.storage.local.set({ siteCaps: SITE_CAPS });
   log('info', '系统', `扩展安装/更新: v${(chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '?'}, 轮询周期 ${POLL_MINUTES} 分钟`);
-  noteStatus({ text: '已安装: 请在选项页填实例端点与 token, 并授予站点权限' });
+  noteStatus({ text: '已安装: 通常零配置 —— 自动发现会拿到端点与 token; 手动兜底见选项页「2. 手动端点」' });
+  runDiscovery('启动').catch((e) => log('warn', '发现', `启动发现失败: ${e && e.message ? e.message : e}`));
 });
 
 chrome.runtime.onStartup.addListener(() => {
   schedule();
   log('info', '系统', '浏览器启动, 轮询已排程');
+  runDiscovery('启动').catch((e) => log('warn', '发现', `启动发现失败: ${e && e.message ? e.message : e}`));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -302,6 +315,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     requestBackendRefresh()
       .then((requested) => pollAll('手动(选项页)').then(() => requested))
       .then((requested) => sendResponse({ ok: true, requested }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg && msg.type === 'discover-now') {
+    log('info', '命令', '收到命令: 立即发现(来自选项页)');
+    runDiscovery('手动(选项页)')
+      .then((r) => sendResponse({ ok: Boolean(r && r.ok), reason: r && r.reason, merged: r && r.merged }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
@@ -381,17 +401,22 @@ async function pollAll(trigger) {
       return;
     }
     const lines = [];
+    let failCount = 0;
     for (const inst of conf.instances) {
       try {
-        lines.push(await pollInstance(inst));
+        const outcome = await pollInstance(inst);
+        lines.push(outcome.line);
+        if (!outcome.ok) failCount += 1;
       } catch (e) {
         // pollInstance 内部错误都自己消化了, 走到这是意外异常(如响应 JSON 解析炸了) —— 原样记下来
         const line = `${inst.name || inst.endpoint}: 失败 ${e}`;
         lines.push(line);
+        failCount += 1;
         log('error', '轮询', line);
       }
     }
     await noteStatus({ text: lines.join('; ') || '无事可做' });
+    await maybeDiscover(conf, failCount); // 发现触发器: 全部实例连败(节流)优先, 否则按周期(C2)
   } finally {
     await Promise.all([flushLogs(), flushEvents()]); // 本轮立刻落盘: 「立即拉取」一返回, 选项页日志与两表都新鲜
   }
@@ -399,6 +424,110 @@ async function pollAll(trigger) {
 
 function headers(inst) {
   return { 'X-Hr-Token': inst.token || '' };
+}
+
+// ---------- 自动发现(计划 26-10-14-1241 S4) ----------
+//
+// 触发器: 启动时(onInstalled/onStartup)/ 全部实例连续失败时(1 分钟节流)/ 每 10 分钟(C2)/
+// 选项页「立即发现」。探测 = 对候选表(发现地址起连号 3 个)**并行 fetch**, 仅接受 200 + 合法
+// 发现响应形态 —— 普通应用误占端口的异形应答/404/连接拒绝一律按「非本服务」忽略, 多候选同时
+// 应答取最先成功者(命中端口记入状态行)。发现失败不静默(日志 + 状态行), 退路 = 手动配置不变。
+
+async function readDiscoveryConfig() {
+  const got = await chrome.storage.local.get({
+    discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
+    pairingCode: '',
+    lastDiscoveryAt: 0,
+  });
+  return {
+    discoveryAddress: String(got.discoveryAddress || '').trim(),
+    pairingCode: String(got.pairingCode || '').trim(),
+    lastDiscoveryAt: Number(got.lastDiscoveryAt) || 0,
+  };
+}
+
+/** 触发裁决: 全部实例连败(1 分钟节流)优先, 否则按周期(C2 每 10 分钟); 发现关闭时零日志静默 */
+async function maybeDiscover(conf, failCount) {
+  const total = Array.isArray(conf.instances) ? conf.instances.length : 0;
+  const allFailed = total > 0 && failCount >= total;
+  const now = Date.now();
+  const dconf = await readDiscoveryConfig();
+  if (!dconf.discoveryAddress) return; // 用户显式关闭发现: 完全静默(手动路径是完整退路)
+  if (allFailed && now - dconf.lastDiscoveryAt >= DISCOVERY_MIN_GAP_MS) {
+    await runDiscovery('全部实例失败');
+    return;
+  }
+  if (now - dconf.lastDiscoveryAt >= DISCOVERY_EVERY_MINUTES * 60 * 1000) {
+    await runDiscovery('定期');
+  }
+}
+
+/**
+ * 跑一轮发现: 归一化发现地址 -> 候选表并行探测 -> 命中合并实例 / 401 pairing_required 标记 /
+ * 全未命中明确报告(不静默)。lastDiscoveryAt 每次**尝试**后都更新(节流按尝试计)。
+ */
+async function runDiscovery(trigger) {
+  const dconf = await readDiscoveryConfig();
+  if (!dconf.discoveryAddress) {
+    return { ok: false, reason: 'disabled' }; // 显式关闭: 连手动触发也不打日志(选项页状态行会说明)
+  }
+  let base;
+  try {
+    base = normalizeDiscovery(dconf.discoveryAddress);
+  } catch (e) {
+    const msg = `发现地址写法不对: ${e && e.message ? e.message : e}`;
+    await noteStatus({ text: msg }, 'warn');
+    log('warn', '发现', msg, { 地址: dconf.discoveryAddress });
+    return { ok: false, reason: 'bad-address' };
+  }
+  const candidates = discoveryCandidates(base);
+  const probes = await Promise.all(candidates.map((c) => probeCandidate(buildDiscoveryUrl(c), dconf.pairingCode)));
+  await chrome.storage.local.set({ lastDiscoveryAt: Date.now() });
+  const hit = probes.find((p) => p.ok);
+  if (hit) {
+    const cur = await chrome.storage.local.get({ instances: [] });
+    const merged = mergeInstances(cur.instances, hit.data.instances);
+    await chrome.storage.local.set({ instances: merged, pairingNeeded: false });
+    const msg = `自动发现命中(${hit.port}): 合并 ${hit.data.instances.length} 个实例, 共 ${merged.length} 条`;
+    await noteStatus({ text: msg });
+    log('info', '发现', msg, { 触发: trigger || '手动', 候选: candidates.join(' / '), 命中: hit.port });
+    return { ok: true, merged: merged.length };
+  }
+  if (probes.some((p) => p.pairingRequired)) {
+    await chrome.storage.local.set({ pairingNeeded: true });
+    const msg = '发现端点要求配对码: 到选项页「自动发现」填入后端展示码(启动日志/HR 状态卡可见)';
+    await noteStatus({ text: msg }, 'warn');
+    log('warn', '发现', msg, { 触发: trigger || '手动' });
+    return { ok: false, reason: 'pairing_required' };
+  }
+  const msg = '自动发现未命中(数据端点照常; 退路 = 选项页手动填端点)';
+  await noteStatus({ text: msg });
+  log('warn', '发现', msg, { 触发: trigger || '手动', 候选: candidates.join(' / '), 明细: probes.map((p) => p.note).join(' | ') });
+  return { ok: false, reason: 'no-hit' };
+}
+
+/** 单候选探测: 仅接受 200 + 合法发现响应形态; 401 pairing_required 单独带回(触发配对提示) */
+async function probeCandidate(url, pairingCode) {
+  const t0 = Date.now();
+  try {
+    const res = await fetch(url, { headers: { 'X-Hr-Pairing': pairingCode || '' } });
+    if (res.status === 401) {
+      const data = await res.json().catch(() => ({}));
+      const err = String((data && data.error) || '');
+      return { ok: false, pairingRequired: pairingNeeded({ status: 401, error: err }), note: `401 ${err}` };
+    }
+    if (res.status !== 200) {
+      return { ok: false, note: `HTTP ${res.status}` };
+    }
+    const data = await res.json().catch(() => null);
+    if (!validDiscoveryPayload(data)) {
+      return { ok: false, note: '异形应答(非本服务?)' };
+    }
+    return { ok: true, data, port: new URL(url).port || '' };
+  } catch (e) {
+    log('debug', '发现', `候选探测失败: ${url}`, { 耗时: `${Date.now() - t0}ms` });
+    return { ok: false, note: '连接失败' };
+  }
 }
 
 /**
@@ -586,7 +715,7 @@ async function pollInstance(inst) {
   const base = safeEndpoint(inst.endpoint);
   if (!base) {
     log('warn', '请求', `${label}: 端点写法不对, 本实例跳过`, { 端点: inst.endpoint });
-    return `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正`;
+    return { ok: false, line: `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正` };
   }
   const tasksUrl = `${base}/api/hr/tasks`;
   const t0 = Date.now();
@@ -604,7 +733,7 @@ async function pollInstance(inst) {
     } else {
       log('debug', '请求', `拉任务清单失败(已连续 ${streak} 轮, 降噪: 排查清单见首报)`, detail);
     }
-    return `${label}: ${reason}`;
+    return { ok: false, line: `${label}: ${reason}` };
   }
   // 端点给了应答(含 401/5xx —— 应答即连接已通): 关故障期; 之前挂着故障就补一句恢复
   const prevFail = await clearNetFailStreak(tasksUrl);
@@ -614,16 +743,17 @@ async function pollInstance(inst) {
   if (res.status === 401) {
     // 该实例没启用取数通道 / token 不匹配 —— 属正常路径, **不重试**(后端会自己告警)
     log('warn', '请求', '端点拒绝(401, token 或 channel.enabled 未开)', reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '401' }));
-    return `${label}: 端点拒绝(401, token 或 channel.enabled 未开)`;
+    // 401 = 端点有应答(连接是通的), 属配置态而非连接失败 —— ok:true, 不触发「全失败」发现
+    return { ok: true, line: `${label}: 端点拒绝(401, token 或 channel.enabled 未开)` };
   }
   if (!res.ok) {
     log('error', '请求', `拉清单失败 HTTP ${res.status}`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: String(res.status) }));
-    return `${label}: 拉清单失败 HTTP ${res.status}`;
+    return { ok: false, line: `${label}: 拉清单失败 HTTP ${res.status}` };
   }
   const data = await res.json();
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
   log('info', '命令', `任务清单到手: ${tasks.length} 条`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '200' }));
-  if (!tasks.length) return `${label}: 无任务`; // 与旧行为一致: 无任务**不回传**(不打后端的 result 端点)
+  if (!tasks.length) return { ok: true, line: `${label}: 无任务` }; // 与旧行为一致: 无任务**不回传**(不打后端的 result 端点)
   const results = [];
   const rendered = [];
   for (const task of tasks) {
@@ -643,7 +773,7 @@ async function pollInstance(inst) {
     });
   } catch (e) {
     log('error', '请求', `回传失败: ${explainFetchError(base, e)}`, reqDetail('回传结果', resultUrl, pt0, { 实例: label, 条数: results.length }));
-    return `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}`;
+    return { ok: false, line: `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}` };
   }
   // 「返回后端结果」: 响应体也留一份截断快照 —— 对账「扩展说发了, 后端说没收到」就靠它
   const respText = await post.text().catch(() => '');
@@ -657,7 +787,7 @@ async function pollInstance(inst) {
   );
   const how = rendered.length ? `其中 ${rendered.length} 条走渲染` : '全部直取(无界面)';
   const blocked = quotaCount ? `; 扩展侧硬上限挡下 ${quotaCount} 条(后端频控可能失效)` : '';
-  return `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}`;
+  return { ok: true, line: `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}` };
 }
 
 /**

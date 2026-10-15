@@ -47,10 +47,10 @@
 
 ### R20 变异审计轮: 端点契约与适配层守阵
 - test_started_endpoint_identity_and_thread_name: 启动期身份钉(server_bind 现填 name/port, 线程现名且真起)
-- test_default_port_and_extension_id_defaults: 默认端口 8788 与默认 extension_id 空(任意扩展 origin 放行)
+- test_default_port_and_extension_id_defaults: 默认端口 0(交 OS 随机, 计划 26-10-14-1241)+ 默认 host 回环 + 默认 extension_id 空(任意扩展 origin 放行)
 - test_never_started_stop_returns_true: 未启动的 stop 幂真(未启动把「已停止」是事实)
 - test_fresh_reject_counters_are_zero: 新端点被拒接触现 0 计数/0.0 时刻
-- test_status_snapshot_full_contract: 快照全契约(enabled 真/pending 现值/note 两方向/endpoint 拼)
+- test_status_snapshot_full_contract: 快照全契约(enabled 真/pending 现值/note 三段组合(发现/配对/数据, C6)与未监听兜文本/endpoint 拼)
 - test_route_403_401_and_options_wire_contracts: 403/401 体与头逐键(WWW-Authenticate)+ OPTIONS 头全键值
 - test_route_query_and_method_boundaries: 查询串原原路由 / GET refresh 不受理 / 404·413 体 / 上限边界不 413
 - test_tasks_server_time_rounded_to_ms: 任务清单 server_time 原 round 3 位(假时钟钉)
@@ -595,9 +595,9 @@ def test_started_endpoint_identity_and_thread_name():
 
 
 def test_default_port_and_extension_id_defaults():
-    """默认端口 8788 与默认 extension_id 空(任意扩展 origin 放行)"""
+    """默认端口 0(交 OS 随机, 计划 26-10-14-1241)+ 默认 host 回环 + 默认 extension_id 空(任意扩展 origin 放行)"""
     server = HrChannelServer(queue=HrTaskQueue(), token=TOKEN)
-    assert server.port == 8788 and server.extension_id == ""
+    assert server.port == 0 and server.host == "127.0.0.1" and server.extension_id == ""
     status, _h, _b = server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN, "Origin": "chrome-extension://" + "b" * 32})
     assert status == 200, "空 extension_id 把任意扩展 origin 放行"
 
@@ -631,7 +631,7 @@ def test_status_snapshot_full_contract():
         assert st.port == handle.port
         assert st.endpoint == f"http://127.0.0.1:{handle.port}{API_TASKS}", "endpoint 拼逐字"
         assert st.pending == 2, "pending 现值"
-        assert st.note == "", "监听时无 note"
+        assert st.note == f"发现 关 · 配对 关 · 数据 {handle.port}", "note 三段组合(发现/配对/数据, 计划 C6)"
     finally:
         server.stop()
     st = server.status()

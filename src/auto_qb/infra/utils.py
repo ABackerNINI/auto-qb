@@ -4,6 +4,7 @@
 避免各模块重复实现。
 """
 import base64
+import ipaddress
 import json
 import math
 import os
@@ -130,6 +131,23 @@ def resolve_or_create_token(configured: str, path: str, *, what: str, logger: lo
     atomic_write(path, lambda f: f.write(token))
     logger.info(f"{what}密钥已生成: {path}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
     return token
+
+
+def is_loopback_host(host: str) -> bool:
+    """回环地址判据(计划 26-10-14-1241): localhost 或 IPv4/IPv6 回环字面量(127/8、::1)
+
+    config 校验(S1 ⑤ 危险组合)与 hr 配对门(pairing=auto 的生效逻辑)共用 —— 单点在此,
+    两处不得各写一份; 无法解析为地址字面量的输入一律按非回环处理(保守)。
+    """
+    h = str(host or "").strip().lower()
+    if not h:
+        return False
+    if h == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
 
 
 def parse_bool(value) -> bool:

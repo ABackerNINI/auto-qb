@@ -6,11 +6,13 @@
 - `hr_check.enabled=true` 且至少一个站点 `sites.<id>.enabled=true` ⇒ 建立服务与取数线程;
 - 再满足 `channel.enabled=true` 才起**端点**(能力即角色) —— 没装扩展的实例仍然跑取数线程,
   但它 `allow_fetch=False`: 只读共享站点文件(别人抓的), 顺手把视图发布出来给主循环消费。
-  这正是多实例分工(who 有浏览器谁抓), 也是「跨机器实例只能只读」的落地形态。
+  这正是多实例分工(who 有浏览器谁抓); 跨机器实例经 host 直绑 + 发现端点同样可驱动
+  (去端口+跨机, 计划 26-10-14-1241), 「跨机只能只读」的旧边界已随通道可配取消。
 
 !共享目录引导(计划 §7): 功能开启但 `shared_dir` 为空 ⇒ 记一条 INFO —— 程序**无法可靠判断
   「我是不是多实例」**, 故只引导不强求, 不阻断启动, 由用户决定是否配置。
 """
+import hashlib
 import logging
 import threading
 import time
@@ -22,9 +24,14 @@ from .channel import (
     ChannelStatus,
     describe_token_source,
     host_of,
+    pairing_display_code,
+    pairing_needed,
+    pairing_path,
+    resolve_pairing_secret,
     resolve_token,
     token_path,
 )
+from .discovery import HrDiscoveryServer, InstanceRegistry, default_registry_path
 from .fetcher import HrChannelStopped, HrFetcher, NullFetcher, build_channel_fetcher, is_available
 from .queue import HrTaskQueue
 from .resolve import HrAnchor, HrJudgement, HrViewSet, judge_record
@@ -66,6 +73,7 @@ class HrRuntime:
         self.publisher = HrViewPublisher()
         self.queue: Optional[HrTaskQueue] = None
         self.endpoint: Optional[HrChannelServer] = None
+        self.discovery: Optional[HrDiscoveryServer] = None
         self.worker: Optional[HrWorker] = None
         self.service: Optional[HrRefreshService] = None
         self.fetcher: HrFetcher = NullFetcher("HR 在线核实未启动")
@@ -113,6 +121,11 @@ class HrRuntime:
             self._advise_endpoint_depth()
             assert self.endpoint is not None
             self.endpoint.start()
+            if self.discovery is not None:
+                # 绑定失败不抛(内部明确日志 + 后台退避重试, 占用者退出自动接管): 发现不可用
+                # 永不影响数据端点, 扩展退手动配置(计划 26-10-14-1241 S2/R2)
+                self.discovery.start()
+            self._advise_pairing()
         if self.worker is not None:
             self.worker.start()
         sites = ", ".join(self.service.enabled_sites()) if self.service else ""
@@ -154,6 +167,9 @@ class HrRuntime:
         if self.endpoint is not None:
             self.endpoint.stop()
             self.endpoint = None
+        if self.discovery is not None:
+            self.discovery.stop()
+            self.discovery = None
         self.service = None
 
     def apply(self, old: HrCheckConfig) -> None:
@@ -305,14 +321,22 @@ class HrRuntime:
                     queue=self.queue,
                     token=self.token,
                     port=conf.channel.port,
+                    host=conf.channel.host,
                     extension_id=conf.channel.extension_id,
+                    discovery_port=conf.channel.discovery_port,
+                    pairing=conf.channel.pairing,
+                    # 发现实绑端口现读(status note 组合用): 发现对象可能先建/后建, 闭包读当下那一个
+                    discovery_bound_fn=lambda: self.discovery.bound_port if self.discovery is not None else 0,
                     sites_fn=self._site_origins,
                     # 立即拉取(计划 26-09-30-0240): 端点只调本方法置一次性旗标 + 唤醒,
                     # 不碰站点文件 / state_file / 队列结构(单一写线程假设不变)
                     force_fn=self.request_refresh,
                 )
+            if not (keep_endpoint and self.discovery is not None):
+                self.discovery = self._build_discovery()
         elif not keep_endpoint:
             self.endpoint = None
+            self.discovery = None
             self.token = ""
         self.worker = HrWorker(
             service=self.service,
@@ -373,6 +397,62 @@ class HrRuntime:
             out.append((name, f"{scheme}://{host}/*"))
         return out
 
+    # ---------- 发现服务与配对码(计划 26-10-14-1241 S2/S3) ----------
+
+    def _build_discovery(self) -> Optional[HrDiscoveryServer]:
+        """发现服务: channel.enabled + discovery_port != 0 才建(与数据端点同 host 同线程模型)
+
+        发现不可用不影响数据端点: 绑定失败 = 明确日志 + 后台退避重试(占用者退出自动接管);
+        三个候选全占 ⇒ 数据端点照常服务, 扩展退手动配置(R2/S2)。
+        """
+        conf = self.global_conf.channel
+        if conf.discovery_port == 0:
+            return None
+        return HrDiscoveryServer(
+            host=conf.host,
+            port=conf.discovery_port,
+            entry_id=self._registry_entry_id(),
+            entry_name=instance_id(),
+            endpoint_fn=self._data_endpoint_url,
+            token=self.token,
+            registry=InstanceRegistry(default_registry_path()),
+            pairing=conf.pairing,
+            pairing_secret=self._pairing_secret(),
+            extension_id=conf.extension_id,
+        )
+
+    def _registry_entry_id(self) -> str:
+        """注册表条目 id = sha1(data_dir)[:12](计划 S2 ②): 同 data_dir 重启复用同一条目(upsert)"""
+        return hashlib.sha1(self.config.data_dir.encode("utf-8")).hexdigest()[:12]
+
+    def _data_endpoint_url(self) -> str:
+        """本实例数据端点的自述 URL(心跳用; 未监听 = 空串, 聚合侧会剔除残条目)"""
+        ep = self.endpoint
+        if ep is None or not ep.started:
+            return ""
+        return f"http://{ep.host}:{ep.bound_port}"
+
+    def _pairing_secret(self) -> str:
+        """配对密钥(只在配对生效时解析/生成; 同机默认不需要, 不建 hr.pairing 文件)"""
+        conf = self.global_conf.channel
+        if not pairing_needed(conf.pairing, conf.host):
+            return ""
+        return resolve_pairing_secret(self.config.data_dir, logger=logger)
+
+    def _advise_pairing(self) -> None:
+        """配对生效提示(S3 展示面): INFO 一行带展示码(不推通知 —— 本仓 WARNING 以上才推)
+
+        展示码跨重启稳定(密钥持久化), 用户在扩展选项页手输一次即可; 删除 hr.pairing = 吊销。
+        """
+        conf = self.global_conf.channel
+        if not pairing_needed(conf.pairing, conf.host):
+            return
+        secret = resolve_pairing_secret(self.config.data_dir, logger=logger)
+        logger.info(
+            f"HR 取数通道配对已生效: 展示码 {pairing_display_code(secret)}"
+            f"(扩展选项页「配对码」填一次即可); 密钥文件 {pairing_path(self.config.data_dir)}(删除即吊销)"
+        )
+
     def _anchors(self) -> Mapping[str, Mapping[str, object]]:
         """本地种子锚点: {站点: {infohash: HrAnchor}} —— 供取数线程提前作废「本实例又下载了」的放行
 
@@ -418,10 +498,16 @@ class HrRuntime:
 
     @staticmethod
     def _identity(conf: HrCheckConfig) -> Tuple:
-        """端点监听身份: 只有这些变了才需要重绑端口(与 web 段的 enabled/host/port 同款)"""
+        """端点监听身份: 只有这些变了才需要重绑端口(与 web 段的 enabled/host/port 同款)
+
+        去端口+跨机(计划 26-10-14-1241 §08): host/port/discovery_port/pairing 同属监听身份,
+        改后需重启生效 —— 热重载从不重绑端点, 与现状口径一致。
+        """
         return (
-            bool(conf.enabled), bool(conf.channel.enabled), conf.channel.port, conf.channel.extension_id,
-            conf.channel.token, conf.shared_dir
+            bool(conf.enabled), bool(
+                conf.channel.enabled
+            ), conf.channel.host, conf.channel.port, conf.channel.discovery_port, conf.channel.pairing,
+            conf.channel.extension_id, conf.channel.token, conf.shared_dir
         )
 
     # ---------- 自检 ----------

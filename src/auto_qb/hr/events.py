@@ -157,8 +157,10 @@ def channel_silent(hours: float, where: str, sites: Sequence[str], note: str = "
         action = ("扩展**在联系但被拒**(401/403) ⇒ 请核对 hr_check.channel.token 与 origin 白名单"
                   "(这是配置态问题, 不是浏览器没开)")
     elif evidence == "web_active":
-        action = ("**有人在看 WebUI, 但端点未收到任何联系** ⇒ 扩展可能被停用 / 卸载 / 未启用, "
-                  "或跨机隧道与网络不通")
+        action = (
+            "**有人在看 WebUI, 但端点未收到任何联系** ⇒ 扩展可能被停用 / 卸载 / 未启用, "
+            "或跨机部署时网络不可达(依次查: 扩展所在机器到后端主机的连通性 / 防火墙 / 隧道与反代)"
+        )
     else:
         action = ("端点未收到任何联系: 浏览器可能未运行, **或** 扩展未启用 / 未安装"
                   "(二者后端不可分辨, 请自行核对)")

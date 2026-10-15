@@ -4,13 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (45)
+## Open (44)
 
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
-- [feat] [HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立](../26-10-09-0855-feat-hr-channel-loopback-only.html) — 端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态
 - [test] [变异测试定期审计(常驻排期锚)](../26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分), 机器提名+手工确认存活变异, 真洞各自入池; 指导见 mutation-testing skill, 命令走 mutants 包
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](../26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](../26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种子全量回包 6.3 MiB 主体), 任意成员速度抖动脏整条组行; hash 引用式可把组行增量粒度降到成员级, 但波及前端筛选器计数与列模型数据源, 独立立项级改动(计划 P-02 选项 B)
@@ -57,7 +56,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (198)
+## Done (199)
 
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
@@ -118,6 +117,7 @@
 - [test] [hr/ 运行时与取数线程变异存活(runtime/worker/fetcher/events/adapters)](../26-10-10-1108-test-hr-mutation-runtime-worker.html) — hr 首轮: runtime 147 + worker 126 + fetcher 39 + events 41 + adapters 43 存活(热重载/revision/取数通道), 零假存活
 - [test] [hr/ 序列化与持久化变异存活(model/store/queue)](../26-10-10-1108-test-hr-mutation-serialization.html) — hr 首轮: model 185 + store 45 + queue 41 存活(from_json/to_json 往返/原子写/锁/队列), 零假存活
 - [test] [hr/ service.py 波次引擎变异存活(604 条)缺守阵](../26-10-10-1108-test-hr-mutation-service-engine.html) — hr 首轮变异审计: service.py 604 存活(停翻三条件/防伪下载/预算截断/放行与释放/历史), 零假存活
+- [feat] [HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立](../26-10-09-0855-feat-hr-channel-loopback-only.html) — 端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态
 - [perf] [HR 排除种子在终态档按名称粗配命中时仍下载 .torrent(无谓请求)](../26-10-08-1304-perf-hr-exclude-terminal-download.html) — 被排除 HR 的种子在 B/C/D 终态行按名称粗配命中时会触发一次身份下载, 而排除种子既不管束也无需身份 ⇒ 纯浪费站点日额/频控。建议在 _process_rows 的下载触发器上对「命中排除表的本地种子」短路。源自计划 26-10-08-1249 拍板点 D2, 本批未做。
 - [test] [config 校验器闭区间端点缺逐值守阵](../26-10-08-0903-test-config-mutation-boundary-guards.html) — port/log.max_bytes/notify.max_per_hour/max_tasks_per_tick/qb_traffic 采样·落盘·保留窗/曲线阈值 的端点位移类变异全套件仍杀不掉(池内用例取远离边界的值): sections _validate_log/_validate_web/_validate_hr_check/_validate_qbittorrent/_validate_qb_traffic/_validate_notify, curves _validate_curve_points, core validate_config
 - [test] [config loaders 关键字默认值/实参删除缺守阵](../26-10-08-0903-test-config-mutation-loader-defaults.html) — _get(spec, KEY, d.<field>) 的默认值换成 None、或整个关键字实参被删, 全套件仍杀不掉: loaders load_tracker_config/load_tracker_hr/_resolve_hr_site_bindings/load_global_speed_limit_curve/load_config

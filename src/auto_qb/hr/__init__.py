@@ -10,9 +10,10 @@
 - fetcher    取数通道抽象(后端零 cookie、零直连站点; 取数由浏览器扩展完成)
 - resolve    三态判定(受管束 / 放行 / 无证据本地兜底)+ 不可变只读视图
 - service    波次引擎(持锁 → 对象集 → A/B/C 轮流翻页 → 行处理 → 防伪 → 放行/观察期 → 释放)
-- channel    通道协议与安全边界(token / origin 白名单 / URL 白名单)
+- channel    通道协议与安全边界(token / origin 白名单 / URL 白名单 / 配对码族)
+- discovery  发现服务(发现端点 + 实例注册表 + 配对门; 去端口+跨机, 计划 26-10-14-1241)
 - queue      任务队列(端点线程与取数线程之间的唯一交接面)
-- server     本地端点(127.0.0.1, 只入队)
+- server     本地数据端点(host 可配, 默认回环; 只入队)
 - worker     取数线程 + 只读视图发布(自唤醒, 不随主循环 tick)
 - threadlifecycle 线程生命周期骨架(幂 idempotent start + stop/join(timeout) + 退出/未退出日志), 取数线程与端点共用
 - runtime    运行时门面(端点 + 取数线程 + 热重载重挂)
@@ -32,7 +33,21 @@ from .channel import (
     HrChannelBindError,
     HrChannelError,
     UrlPolicy,
+    pairing_credential,
+    pairing_display_code,
+    pairing_needed,
+    pairing_path,
+    resolve_pairing_secret,
     resolve_token,
+)
+from .discovery import (
+    API_DISCOVER,
+    PAIRING_HEADER,
+    HrDiscoveryServer,
+    HrDiscoveryStatus,
+    InstanceRegistry,
+    default_registry_path,
+    discovery_candidates,
 )
 from .fetcher import (
     ChannelFetcher,
@@ -155,9 +170,11 @@ __all__ = [
     "is_available",
     "ChannelFetcher",
     "build_channel_fetcher",
-    # 取数通道: 协议 / 队列 / 端点 / 取数线程 / 运行时门面
+    # 取数通道: 协议 / 队列 / 端点 / 发现 / 取数线程 / 运行时门面
+    "API_DISCOVER",
     "API_RESULT",
     "API_TASKS",
+    "PAIRING_HEADER",
     "TASK_PAGE",
     "TASK_TORRENT",
     "TOKEN_HEADER",
@@ -165,13 +182,23 @@ __all__ = [
     "HrChannelBindError",
     "HrChannelError",
     "HrChannelServer",
+    "HrDiscoveryServer",
+    "HrDiscoveryStatus",
     "HrEndpointHandle",
     "HrRuntime",
     "HrRuntimeStatus",
     "HrTaskQueue",
     "HrViewPublisher",
     "HrWorker",
+    "InstanceRegistry",
     "UrlPolicy",
+    "default_registry_path",
+    "discovery_candidates",
+    "pairing_credential",
+    "pairing_display_code",
+    "pairing_needed",
+    "pairing_path",
+    "resolve_pairing_secret",
     "resolve_token",
     # 判定
     "HrAnchor",

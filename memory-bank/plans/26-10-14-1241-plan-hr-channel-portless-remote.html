@@ -7,10 +7,10 @@
 <title>HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-channel-portless-remote">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-14-1241">
-<meta name="doc-updated" content="26-10-15-1034">
-<meta name="doc-refs" content="memory-bank/issues/26-10-09-0855-feat-hr-channel-loopback-only.html,memory-bank/plans/26-10-09-0856-plan-hr-channel-remote.html">
+<meta name="doc-updated" content="26-10-15-1317">
+<meta name="doc-refs" content="memory-bank/issues/26-10-09-0855-feat-hr-channel-loopback-only.html,memory-bank/plans/26-10-09-0856-plan-hr-channel-remote.html,memory-bank/tasks/26-10-15-backend-hr-channel-portless-remote.md">
 <style>
   :root {
     --bg: #10151a;
@@ -107,7 +107,7 @@
       <div class="item"><div class="k">专题</div><div class="v">hr-channel-portless-remote</div></div>
       <div class="item"><div class="k">上游</div><div class="v">issue 26-10-09-0855 · 用户实报</div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop · de83fbe8</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 已拍板待开工</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done · 已实施</span></div></div>
     </div>
   </header>
 
@@ -393,6 +393,7 @@ hr_check:
     <ul>
       <li><b>26-10-14-1241</b> 初版: 合并跨机(0856)与去端口(1110 路线 A)两个专题, 用户拍板「安全暂用 HTTP, 非局域网自行反代(只文档)」写入 §01; S0–S7 分步(配置面 / 端点接线 + 发现服务 / 配对码 / 扩展侧 / 观测衔接 / 测试 / 文档收尾); V1–V10 验收、R1–R8 风险、迁移矩阵(含用户 18788 撞车具体步骤)。原 0856 计划同刻转 Superseded 并互挂 doc-refs。</li>
       <li><b>26-10-15-1034</b> 补写(R2 零人工缓解, 用户问答轮拍板采纳): R2 缓解升级为三件套 —— S1 校验加 ⑥(<code>discovery_port</code> 落入 OS 临时端口段告警不阻断); S2 发现端口改「候选表先绑先得」(连号 3 个, 全占退手动)+ 绑定失败后台退避重试(占用者退出自动接管, R6 翻转); S4 扩展对候选表并行探测、仅接受合法发现响应形态; S6/S7 补测试与排障口径(netsh excludedportrange); 新增 §05 C7/C8、§06 V11/V12、§01 拍板行; §03 数据流与 3.2 变化表同步。mDNS/SSDP 一族维持 1110 §6.2 否决。另: §08.2 示例中历史转义损坏的 token 行改为不列值并注明(过写入守卫; 值为损坏片段非真实凭据)。仅计划文本, 未动代码。</li>
+      <li><b>26-10-15-1317</b> 实施完成(S0–S7 全部落盘, 状态 Open → In Progress → Done): 实测数字与裁量点落定见任务档案 <a href="../tasks/26-10-15-backend-hr-channel-portless-remote.md">26-10-15-backend-hr-channel-portless-remote</a>(基线数字单点在 <code>memory-bank/testing/baselines/</code> 最新切片, 正文不抄)。S5 复核说明: 计划所列四份回写件在当前 HEAD 已无「NAS + 外部扩展形态不成立」旧句(行号漂移), 按代码事实变更回写口径改在 <code>progress/implemented-core.md</code>、<code>modules/overview.md</code>、<code>pitfalls/ops/alert-levels.md</code> 与 <code>hr/events.py</code> 静默文案(C3 跨机不可达分支)落地; <code>pitfalls/backend/fault-domain-classification.md</code> 无需改。issue 26-10-09-0855 同步转 Done(带实测数字指针)。</li>
     </ul>
   </section>
 

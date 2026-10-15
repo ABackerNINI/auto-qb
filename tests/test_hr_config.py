@@ -4,7 +4,8 @@
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
 
 v3 收敛: 判定语义硬编码(四行判定表), 配置只留「用户身份类」事实 —— 全局 6 键 +
-channel 5 键 + sites 条目 4 键(enabled/tracker/refresh_interval/idle_refresh_interval,
+channel 8 键(26-10-14-1241 去端口+跨机: host/port:0/discovery_port/pairing 三新键) +
+sites 条目 4 键(enabled/tracker/refresh_interval/idle_refresh_interval,
 末者为稳态降频间隔, 计划 26-10-05-0555 S1, 拍板默认 24H 默认启用)。旧 v2 键 26 个由
 config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻兼容层。绑定机制不变
 (26-09-27-1930 映射制): 默认绑定 = 档案已知 announce 域在用户 domains 查表, 未命中/歧义
@@ -110,7 +111,10 @@ def test_defaults_when_absent(tmp_path):
     assert cfg.hr_check.shared_dir == ""
     assert cfg.hr_check.reuse_window == 2 * 3600.0
     assert cfg.hr_check.channel.enabled is False
-    assert cfg.hr_check.channel.port == 8788
+    assert cfg.hr_check.channel.host == "127.0.0.1"
+    assert cfg.hr_check.channel.port == 0, "去端口(计划 26-10-14-1241): 默认交 OS 随机"
+    assert cfg.hr_check.channel.discovery_port == 18788
+    assert cfg.hr_check.channel.pairing == "auto"
     assert cfg.hr_check.sites == {}
     assert cfg.trackers["s"].hr_check is None
 
@@ -1218,7 +1222,10 @@ def test_channel_partial_section_uses_channel_defaults(tmp_path):
     ch = cfg.hr_check.channel
     assert ch.token == "tok-abc"  # 显式给的键照常解析
     assert ch.enabled is False  # 保守默认
-    assert ch.port == 8788
+    assert ch.host == "127.0.0.1"
+    assert ch.port == 0
+    assert ch.discovery_port == 18788
+    assert ch.pairing == "auto"
     assert ch.extension_id == ""
     assert ch.request_timeout == 180.0
 

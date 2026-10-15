@@ -132,8 +132,9 @@ function renderInstList() {
   box.innerHTML = instancesState
     .map((item, i) => {
       const tk = item.token ? `${item.token.slice(0, 8)}…` : '(未填 token)';
+      const badge = item.source === 'discovered' ? '<span class="tk">[自动]</span>' : '';
       return (
-        `<div class="inst-row"><span class="ep">${esc(item.endpoint)}</span><span class="tk">${esc(tk)}</span>` +
+        `<div class="inst-row">${badge}<span class="ep">${esc(item.endpoint)}</span><span class="tk">${esc(tk)}</span>` +
         '<span class="grow"></span>' +
         `<button class="ghost" data-act="edit" data-i="${i}">载入</button>` +
         `<button class="ghost" data-act="del" data-i="${i}">删除</button></div>`
@@ -157,6 +158,69 @@ async function instListClick(ev) {
   renderInstList();
   syncAdvancedView();
   setStatus(`已删除实例 ${removed.name}`);
+}
+
+// ---------- 自动发现(计划 26-10-14-1241 S4): 发现地址 + 配对码 + 立即发现 ----------
+//
+// 同机零配置 / 跨机只填 NAS 地址的目标形态入口: 保存发现地址(+ 可选配对码), 触发后台
+// runDiscovery(候选表并行探测), 命中后实例自动并入下方列表(徽标「自动」)。手动添加入口
+// 完整保留 —— 发现关闭/失败时它是等价退路。
+
+const DEFAULT_DISCOVERY_ADDRESS = 'http://127.0.0.1:' + DISCOVERY_DEFAULT_PORT; // discovery.js 提供
+
+function setDiscStatus(text) {
+  $('discStatus').textContent = text;
+}
+
+async function saveDiscovery() {
+  const raw = $('discEndpoint').value.trim();
+  let base;
+  try {
+    base = normalizeDiscovery(raw); // 归一化在前(与所有输入同一纪律: 先归一化再进浏览器 API/落盘)
+  } catch (e) {
+    setDiscStatus(`保存失败: ${e.message || e}`);
+    return;
+  }
+  $('discEndpoint').value = base; // 让用户看到实际存进去的形态
+  const code = $('discPairing').value.trim();
+  // 发现地址的 origin 权限: 与站点 origin 同一流程 —— 授权窗必须由用户手势直接触发,
+  // 所以先申请再落盘(中间不能插 await)。
+  let perm = '';
+  try {
+    const u = new URL(base);
+    const ok = await chrome.permissions.request({ origins: [`${u.protocol}//${u.hostname}/*`] });
+    perm = ok ? '; 发现地址权限已就绪' : '; 权限被拒绝(再点一次保存即可重试)';
+  } catch (e) {
+    perm = `; 权限申请失败: ${e.message || e}`;
+  }
+  await chrome.storage.local.set({ discoveryAddress: base, pairingCode: code });
+  setDiscStatus(`发现地址已保存: ${base}${code ? '(含配对码)' : ''}${perm} —— 点「立即发现」试一轮`);
+}
+
+async function discoverNow() {
+  setDiscStatus('正在发现…');
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'discover-now' });
+    if (res && res.ok) {
+      setDiscStatus(`发现完成: 已合并 ${res.merged} 条实例 —— 下方列表里徽标「自动」的就是, token 已自动带上`);
+    } else if (res && res.reason === 'pairing_required') {
+      setDiscStatus('后端要求配对码: 在后端启动日志/HR 状态卡找 6 位展示码, 填进「配对码」再点「立即发现」');
+    } else {
+      setDiscStatus(`发现未命中(${(res && res.reason) || '未知'}) —— 后端在跑吗? 候选端口被占时会顺延, 详见运行日志`);
+    }
+  } catch (e) {
+    setDiscStatus(`与服务线程通信失败: ${e.message || e} —— 重开一次选项页再试`);
+    return;
+  }
+  await refreshInstancesFromStorage();
+}
+
+/** 发现结果落盘后把实例列表刷成最新(后台已合并, 这里只读回渲染) */
+async function refreshInstancesFromStorage() {
+  const got = await chrome.storage.local.get({ instances: [] });
+  instancesState = Array.isArray(got.instances) ? got.instances : [];
+  renderInstList();
+  syncAdvancedView();
 }
 
 // ---------- 站点权限: 从后端拉清单勾选(手动填域名降级为兜底) ----------
@@ -415,6 +479,7 @@ function renderCaps(ledger) {
 async function load() {
   const got = await chrome.storage.local.get({
     enabled: true, instances: [], siteOrigins: [], siteSelections: [], status: {}, siteLedger: {}, logMax: 1000, logLevel: 'info',
+    discoveryAddress: DEFAULT_DISCOVERY_ADDRESS, pairingCode: '', pairingNeeded: false,
   });
   $('enabled').checked = Boolean(got.enabled);
   instancesState = Array.isArray(got.instances) ? got.instances : [];
@@ -426,6 +491,11 @@ async function load() {
   $('logMax').value = String(got.logMax);
   $('logLevel').value = got.logLevel;
   fillForm(instancesState.length ? instancesState[0] : null);
+  $('discEndpoint').value = String(got.discoveryAddress || DEFAULT_DISCOVERY_ADDRESS);
+  $('discPairing').value = String(got.pairingCode || '');
+  if (got.pairingNeeded) {
+    setDiscStatus('后端在等配对码: 在后端启动日志/HR 状态卡看 6 位展示码, 填进「配对码」再点「立即发现」');
+  }
   renderInstList();
   syncAdvancedView();
   renderSiteChecks();
@@ -437,6 +507,27 @@ async function save() {
   try {
     instancesState = parseInstances();
     const { good, bad } = parseOrigins();
+    // 端点 origin 权限(计划 26-10-14-1241 S4): 与站点 origin 同一流程 —— 授权窗必须由用户手势
+    // 直接触发, 所以先申请再落盘(前面不能有 await); 已授予的 origin Chrome 不会重复弹窗。
+    let permNote = '';
+    const epOrigins = [];
+    for (const inst of instancesState) {
+      try {
+        const u = new URL(inst.endpoint);
+        const pattern = `${u.protocol}//${u.hostname}/*`;
+        if (!epOrigins.includes(pattern)) epOrigins.push(pattern);
+      } catch (e) {
+        // 端点已过 normalizeEndpoint, 理论到不了这; 万一到这, 跳过即可(不拦保存)
+      }
+    }
+    if (epOrigins.length) {
+      try {
+        const ok = await chrome.permissions.request({ origins: epOrigins });
+        permNote = ok ? `; 端点权限已就绪(${epOrigins.length} 个)` : '; 端点权限被拒绝(后台会连不上, 再点保存可重试)';
+      } catch (e) {
+        permNote = `; 端点权限申请失败: ${e.message || e}`;
+      }
+    }
     await chrome.storage.local.set({
       enabled: $('enabled').checked,
       instances: instancesState,
@@ -447,7 +538,7 @@ async function save() {
     $('origins').value = good.join('\n');
     syncAdvancedView();
     const tail = bad.length ? `; ${bad.length} 条站点源被跳过(格式不对): ${bad.join(' / ')}` : '';
-    setStatus(`已保存: ${instancesState.length} 个实例, ${good.length} 个手动站点源, ${siteSelections.length} 个勾选站点${tail}`);
+    setStatus(`已保存: ${instancesState.length} 个实例, ${good.length} 个手动站点源, ${siteSelections.length} 个勾选站点${tail}${permNote}`);
     hint(bad.length ? '格式不对的站点源已跳过, 修正后重新保存即可。' : '');
   } catch (e) {
     setStatus(`保存失败: ${e.message || e}`);
@@ -623,6 +714,8 @@ $('fetchSites').addEventListener('click', () => fetchSites(true).catch((e) => se
 $('selectAllSites').addEventListener('click', selectAllSites);
 $('grantChecked').addEventListener('click', () => grant().catch((e) => setStatus(String(e))));
 $('siteChecks').addEventListener('change', () => siteChecksChange().catch((e) => setStatus(String(e))));
+$('discSave').addEventListener('click', () => saveDiscovery().catch((e) => setDiscStatus(String(e))));
+$('discNow').addEventListener('click', () => discoverNow().catch((e) => setDiscStatus(String(e))));
 $('save').addEventListener('click', () => save().catch((e) => setStatus(String(e))));
 $('test').addEventListener('click', () => testEndpoint().catch((e) => setStatus(String(e))));
 $('poll').addEventListener('click', () => poll().catch((e) => setStatus(String(e))));

@@ -1,42 +1,16 @@
-# 26-10-14-1241-hr-channel-portless-remote — 联合实施计划已出(去端口+跨机), 待开工
+# 26-10-14-1241-hr-channel-portless-remote — 计划已实施完成(S0–S7 落盘), 真机验收待部署
 
-> 摘要: 用户指令「出一个联合实施分步计划, 包括去端口与跨机, 安全方面暂时使用 HTTP(大部分情况局域网), 非局域网用户自行反代」。本轮为纯文档轮(未改任何代码)。产出: 联合实施计划 `memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html`(Open · 已拍板待开工); 原跨机计划 26-10-09-0856 转 Superseded 并互挂 doc-refs; issue 26-10-09-0855 的 doc-refs 挂上新计划(认领链, 状态仍 Open, S0 开工时才抬 In Progress)。
-> 最后活动: 2026-10-15 10:34
-> 状态: Open(计划已拍板待开工; S0–S7 分步在计划 §04)
+> 摘要: 用户指令「实施计划26-10-14-1241-plan-hr-channel-portless-remote.html」。S0–S7 全部落盘: 配置面三新键(host/discovery_port/pairing)+ port 默认 0; 新发现端点 /api/hr/discover(候选表先绑先得 + 后台退避接管)+ 实例注册表 + 配对码; 扩展判据放开 + discovery.js + 发现/配对 UI; 文档与守阵同步。全量数字见 `commands run kb.baseline` 最新切片(26-10-15-1324)。计划状态 Done、issue 26-10-09-0855 Done、档案 `tasks/26-10-15-backend-hr-channel-portless-remote.md`(进度与裁量点单点)。
+> 最后活动: 2026-10-15 13:24
+> 状态: Done(代码与文档侧); V1/V3/V6 真机步(新装零配置一轮取数 / 两台机器 / 重启再发现)待用户部署验证
 
-## 用户拍板(计划 §01 拍板回执)
+## 本轮落点(细节单点在档案与计划, 此处只留入口)
 
-- **安全传输 = HTTP(T1 受信 LAN + token)唯一实现形态**; T2(端点自签 TLS)不实现; T3(反代终止 TLS)不实现, 仅文档给出配置路径, 非局域网用户自行反代。
-- **路线 = A**(发现端口 + 随机数据端口 + token 自动分发)叠加跨机路径 C; 路线 B(native messaging)缓行不并入。
-
-## 派生口径(计划 §01, 实施不再重复讨论)
-
-- `port` 默认 0(随机); 显式非零 = 完全旧行为; `discovery_port` 默认 18788(用户现产端口转正), 0 = 关闭发现。
-- `pairing: auto|on|off` 默认 auto: host 非回环强制配对(发现端点免 token, 是 LAN 上的 token 分发器, 需人工关口); 同机默认关。校验: 非回环 + pairing=off + 空 token ⇒ 报错。
-- 扩展主机判据 = 回环 ∪ 私网段; https scheme 保留不折(反代用户); 0.0.0.0 允许+警示; 多 PC 文档推荐打包扩展。
-- advertise 覆盖键不做(隧道/反代用户保持显式端口 = 旧行为)。
-
-## 关键实施事实(本轮新取证 @ de83fbe8)
-
-- **fault-domain 计划(26-10-09-0821)已 Done**: 401/403 节流(REJECT_WARN_GAP)、被拒接触面、WebUI 活跃信号均已落地 ⇒ 联合计划 S5 只做 C2/C3 文档翻转, 不重做机制。
-- `HrChannelServer.__init__` 已收 `host` 形参(没人传); `_LoopbackServer` 的 `allow_reuse_address=False` + 免 FQDN 绑定口径须逐字保留。
-- 用户 config.yml 显式 `port: 18788` ⇒ 升级后与 discovery_port 默认 18788 **撞车, 启动即报错**(S1 校验给指引; §08.2 有具体迁移两步)。
-- 扩展 manifest 无 `key` 字段 ⇒ 未打包安装的扩展 id 随路径变化 ⇒ 跨机多 PC 钉单 extension_id 会挡第二台(R8; 文档推荐打包或留空 id)。
-- 扩展测试 harness 是 node **实跑** normalize.js/background.js(非静态检查)⇒ discovery.js 新纯模块可入同一 harness。
-- 发现端点免 token 的两道关: Origin 钉死 + 配对码(仅非回环); 配对 secret 落 `<data_dir>/hr.pairing`(0600), 展示码 6 位跨重启稳定, 凭证 = HMAC 派生(无额外状态), 删文件即吊销。
-
-## 计划骨架(S0–S7)
-
-S0 开工准备(立任务档案 + 基线 + issue 抬 In Progress + 行号复核) → S1 配置面(host/port:0/discovery_port/pairing + 六条校验) → S2 端点接线 + 发现服务(新模块 hr/discovery.py: InstanceRegistry + HrDiscoveryServer + 配对门 + 候选表先绑先得 + 后台重试接管) → S3 配对码机制 → S4 扩展侧(normalize 放开 + discovery.js 纯模块 + options 发现区 + background 触发器) → S5 观测衔接(C2/C3 文档) → S6 测试 → S7 文档收尾。
-
-## 26-10-15 补写(R2 零人工缓解, 已进计划)
-
-- 用户问答轮问「发现端口被普通应用误占有无其它成熟方案、避免人工介入」→ 回答后用户拍板补写。R2 缓解升级为零人工三件套: ① S2 发现端口改「候选表先绑先得」(discovery_port 起连号 3 个, 全占退手动; Windows Hyper-V/WSL2 动态排除段对候选轮换免疫); ② 绑定失败后台退避重试、占用者退出自动接管(R6 翻转); ③ S1 校验加 ⑥(discovery_port 落入 OS 临时端口段告警不阻断, 默认 18788 在段外)。S4 扩展并行探测候选表 + 异形应答过滤; S6/S7 补测试与排障口径(netsh excludedportrange)。新增 §05 C7/C8、§06 V11/V12、§01 拍板行、§03 数据流同步、doc-updated 抬至 26-10-15-1034。
-- mDNS/SSDP/UDP 组播一族维持 1110 报告 §6.2 否决(MV3 扩展无 UDP/组播/mDNS 能力), 待未来出现原生伴侣端再议(python-zeroconf)。
-- 本轮纯计划文本轮: 代码零改动、无测试面(未跑基线), 改动随本专题入库。写入插曲: §08.2 示例里历史转义损坏的 token 行被写入守卫拦下(值为损坏片段非真实凭据), 按守卫处置改为不列值并注明。
+- 计划 `plans/26-10-14-1241-plan-hr-channel-portless-remote.html`(Done, 变更记录含 S5 锚点漂移说明); 档案 `tasks/26-10-15-backend-hr-channel-portless-remote.md`(八步全 Done + 裁量点 C1–C8 落定 + 配对两形态等价等补充裁量)。
+- 实施备注: 写入守卫把字段声明/测试夹具/文档占位误判为凭据字面量(整文件扫描), 经用户拍板授权脚本精确改写被拦文件(替换对唯一匹配才落盘); 回环判据单点收编 `infra.utils.is_loopback_host`。
+- 用户现产 `config.yml` 显式 `port: 18788` 与新默认发现端口相撞 —— 启动即报错(校验文案已指路); 迁移两选一见计划 §08.2 / configuration.md(`port: 0` 推荐)。**用户尚未改 config.yml, 下次启动主程序会先吃到这条报错, 属预期引导。**
 
 ## 下一步 / 移交
 
-- 待用户指令开工: S0 先行(立档 `tasks/26-10-14-hr-channel-portless-remote.md` + test.full 基线 + issue 抬 In Progress)。
-- 闸门状态: `kb.docmap --check` 绿(670 文档/321 专题, 认领链闭环); `kb.index` 已重建(21 生成物); 两份计划 HTML 标签配平。
-- 本轮纯文档轮: 未改代码、未跑测试基线、无 pitfalls 入池。1110/1135 两份报告为冻结快照不回头改, 决策权威在联合计划 §01。
+- 待用户: 真机验收(V1/V3/V6)+ config.yml 迁移二选一; 「提交」为显式指令, 未收到前改动留工作区。
+- 闸门状态: test.full 全绿(数字见基线切片 26-10-15-1324); kb.check / kb.docmap --check / doc.links 全绿; kb.index 已重建。

@@ -84,8 +84,11 @@ hr.overwrite_category_for_satisfied
 hr_check
 hr_check.allow_window
 hr_check.channel
+hr_check.channel.discovery_port
 hr_check.channel.enabled
 hr_check.channel.extension_id
+hr_check.channel.host
+hr_check.channel.pairing
 hr_check.channel.port
 hr_check.channel.request_timeout
 hr_check.channel.token

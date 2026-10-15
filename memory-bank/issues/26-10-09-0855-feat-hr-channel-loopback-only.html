@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-09-0855">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="hr-channel-remote">
-<meta name="doc-refs" content="memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html,memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html">
+<meta name="doc-refs" content="memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html,memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html,memory-bank/tasks/26-10-15-backend-hr-channel-portless-remote.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立">
 <meta name="issue-summary" content="端点恒绑 127.0.0.1 且配置面不可改 + 扩展 normalize.js 硬拒非回环主机 ⇒ 「auto-qb 在 NAS、扩展在外部 PC」无法取数; 用户判定为设计缺陷, 要求未来支持跨机形态">
 <title>HR 取数通道两端锁死回环: NAS + 外部扩展部署形态不成立 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-09-0855-feat-hr-channel-loopback-only</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-09 08:55</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -130,7 +130,7 @@ enabled / port / token / extension_id / request_timeout   # ← 没有 host
 KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
 
 # hr/runtime.py:305-308 —— 构造端点时不传 host(走默认)
-HrChannelServer(queue=..., token=..., port=conf.channel.port, extension_id=..., ...)
+HrChannelServer(queue=..., &lt;token 形参略&gt;, port=conf.channel.port, extension_id=..., ...)
 
 # hr/server.py:143 —— 启动日志自述
 "HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;(仅监听本机回环, 需 token 鉴权)"</code></pre>
@@ -206,11 +206,13 @@ return `http://${host}:${url.port}`;</code></pre>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-09 08:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 11:16 — 认领（实施计划 26-10-14-1241 S0，档案 26-10-15-backend-hr-channel-portless-remote），状态 <strong>In Progress</strong></li>
+      <li>2026-10-15 13:17 — 实施完成（计划 S0–S7 全部落盘），状态 <strong>Done</strong>：两端写死回环已随 host 可配 + 发现端点 + 扩展判据放开取消；实测数字见 <code>commands run kb.baseline</code> 最新切片（正文不抄）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-15 11:16 @ <code>develop 2d9e4313</code> 仍复现 —— §04 全部锚点逐个在位(后端四处 + 扩展两条,行号零漂移); 修复路径 = 实施计划 26-10-14-1241 的 S1–S4。另: 本节 §02 证据块中 runtime 构造行原引「token 形参实值」的旧写法已改为占位表述(写入守卫误判凭据,经用户拍板改写,证据语义不变)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法: 按实施计划 26-10-14-1241 S1–S4 落地 —— 后端 <code>hr_check.channel</code> 新增 <code>host</code>/<code>discovery_port</code>/<code>pairing</code> 三键且 <code>port</code> 默认改 0(OS 随机)；新发现端点 <code>GET /api/hr/discover</code>(候选表先绑先得 + 后台退避接管 + 实例注册表心跳聚合)；配对码门(HMAC 展示码/凭证, 非回环默认强制)；扩展 <code>normalize.js</code> 主机判据改为「回环 ∪ 私网三段」且 https 保留，新增 <code>discovery.js</code> 与发现/配对 UI，后台发现触发器三路。验证方式: 计划 §06 V1–V12 的单测面全部落成守阵(新文件 <code>tests/test_hr_discovery.py</code> + 扩展守阵扩充)，全量与覆盖率见最新基线切片；真机步(V1/V3/V6 真机两台/重启再发现)待用户部署验证。与建议修法的差异: 传输安全按用户拍板走「仅受信内网 + HTTP」，反代只写文档不实现 —— 与计划 §01 拍板一致。</p>
   </section>
 
   <footer>
