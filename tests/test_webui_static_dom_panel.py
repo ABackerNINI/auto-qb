@@ -1130,6 +1130,13 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
             ".hist-summary > .qb-statctl {",
         ):
             assert rule in css, f"{name} 缺 {rule}(纵轴控件/图下统计栏控件组三套 UI 必须成对改)"
+        # 2026-10-16(用户动议「统计栏未对齐」): 统计栏 .hist-summary 各子项必须**垂直居中**。
+        # 判据: flex 默认 align-items:stretch 把纯文本读数(「窗口 N 桶」/上下载累计)拉到与
+        # 控件组同高、文字贴顶(实测比中线高 3.7px), 而图例(.hs-leg)与控件组(.qb-statctl)
+        # 自带 align-items:center 使内容居中 —— 三族文字因此落成三条线, 真浏览器量布局才现形
+        # (类名/结构断言全绿)。三皮肤成对钉住, 只改一处即判红。
+        assert re.search(r"\.hist-summary\s*\{[^}]*align-items:\s*center", css), \
+            f"{name} 的 .hist-summary 缺 align-items:center(统计栏子项错行: 文本贴顶 vs 图例/控件居中)"
 
 
 def test_frontend_drawer_form_judge_single_point():

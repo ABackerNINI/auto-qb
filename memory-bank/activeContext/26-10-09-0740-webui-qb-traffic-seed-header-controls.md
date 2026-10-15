@@ -7,9 +7,9 @@
 > 走全局断供管道 → `data-aq-tip`)。第 3 轮顺带把统计栏从两行收回**单行**(33px), 图由 235px 回到 259px ——
 > 第 2 轮「图少约 31px」的代价随之消失。**全局/分组流量形态全程零改动**; 零 JS 改动; 守阵只改写既有断言
 > 口径(零新增测试函数); 真浏览器三皮肤 + 四档窄视口实测不越界、tooltip 正常、零 pageerror。已闭环。
-> 最后活动: 2026-10-09 12:07
+> 最后活动: 2026-10-16 03:00
 
-**Refs:** memory-bank/tasks/26-10-09-webui-qb-traffic-seed-header-controls.md,memory-bank/testing/baselines/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md
+**Refs:** memory-bank/tasks/26-10-09-webui-qb-traffic-seed-header-controls.md,memory-bank/testing/baselines/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md,memory-bank/testing/baselines/26-10-16-0300-webui-qb-traffic-statbar-align.md
 
 - 任务档案: [26-10-09-webui-qb-traffic-seed-header-controls](../tasks/26-10-09-webui-qb-traffic-seed-header-controls.md) —— 三轮的根因/取舍/实测数字都在档案, 本切片只留指针。
 - 落地(纯前端静态层 + 测试侧, Python 产品代码零改动): `shared/tpl/drawer.html` —— 种子头部不挂控件组;
@@ -40,3 +40,14 @@
 - 关键判据变更(覆盖 R1–R3 的③②①): ①控件组**唯一挂点** = 统计栏, 头部**不得**再接 `<aq-qb-ctl>`; ②`<aq-qb-ctl></aq-qb-ctl>` 在 drawer.html 恰 1 处; ③统计栏与 statctl 均**恒渲染**(不得再门 `qbCurScope === 'torrent'`); ④上限读数(`qbYAxisCapText` / `.qb-tools-hint`)反回潮 —— ⚠源码注释里也不能再写该标识符(反回潮锚按字面量扫全文本, 见 pitfalls/testing/guard-literal-comment-trip)。
 - 截图验收桩: 旗标与流量数据用 Playwright route 拦截 `/api/webui/flags` + `/api/traffic/qb/**` 造出(桩服务 FakeConfig 无 qb_traffic 段, 天然空态)—— 截图脚手架在仓外临时目录, 未入库。
 - 实测: `test.full` 全绿 + `npm run test:e2e:fast` 全绿 + 包内脚本零触碰(数字见 `commands run kb.baseline` 最新切片); prism 皮肤全局/种子两形态截图比对: 控件同排同位、上限字样消失、统计栏贴底。
+
+## R5(2026-10-16) 统计栏子项垂直对齐(三挂点)
+
+> 摘要: 用户动议「流量图统计栏未对齐, 比如『上传/下载图例』与『窗口 xxx桶』后者更高; 还有后面的视图切换按钮与纵轴切换按钮; 所有流量图都对齐」。根因(真浏览器量布局, 非推断): `.hist-summary` 是 flex 但**没写** `align-items` ⇒ 默认 `stretch` —— 纯文本读数(窗口 N 桶/两个累计)被拉长到与控件组同高、文字**贴顶**(墨迹 y=832), 而自带 `align-items:center` 的图例 `.hs-leg`(y=835.7)与控件组 `.qb-statctl` 的档位/纵轴按钮(y=836)内容居中 ⇒ 三族文字落成两条线。修法 = 三皮肤 `.hist-summary` 显式 `align-items: center`; 三挂点(全局/分组/单种)共用同一段模板, 一处规则全覆盖, 顺带修好 `popovers.html` 今日流量弹层的同款统计栏。
+> 最后活动: 2026-10-16 03:00
+
+- 落地面(4 文件): 三皮肤 `views.css`(`.hist-summary` 各一行 + 口径注释) / `tests/test_webui_static_dom_panel.py`(CSS 三皮肤成对段 +1 条断言)。
+- 关键判据(易被后人改坏): ①`.hist-summary` 必须 `align-items: center` —— 删掉即回到「文本贴顶 vs 图例/控件居中」的两条线, 而**类名/结构/模板守阵全绿**(只有真浏览器量文字墨迹 y 才现形); ②三皮肤**成对改**(已有断言钉住, 只改一处判红); ③不要改用 `align-items: baseline` 替代 —— 档位/纵轴按钮组是带边框胶囊, 基线对齐会把整组按钮框抬上去, 跑出另一种错位。
+- 实测(真浏览器 1440x900, 三皮肤 × 三挂点 × 纵轴 auto/manual = 18 组): 图例 / 窗口桶 / 两个累计四族文字墨迹 y **逐组同值**(prism·atlas 835.7); 档位按钮与纵轴按钮同线(prism·atlas 836 = 差 0.3px 子像素, console 838 全等); manual 模式输入框出现后统计栏行高仍 33px(不串行、不换行)。修前同量: 文本 832 / 图例 835.7 / 按钮 836。
+- 取证脚手架(未入库, `tmp-analysis/` 已 gitignore): 桩服务 FakeConfig 无 `qb_traffic` 段 ⇒ 流量图天然空态, 故用 Playwright `route` 拦截 `/api/webui/flags`(放行 `qb_traffic_enabled`) + `/api/traffic/qb/**`(回同形人造响应体), 之后走**真实入口**(`openDrawerTraffic` / `openTorrentDrawer` + 流量页签)与真实模板/CSS —— 与 R4 同一套桩法。
+- 实测数字见 `commands run kb.baseline` 最新切片; 新坑(静态守阵全绿而版式错行)已记 `pitfalls/web-ui/layout-css.md`。

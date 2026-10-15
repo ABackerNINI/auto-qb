@@ -267,7 +267,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hs-leg .sw.up { background: var(--today-up); }
 .hs-leg .sw.down { background: var(--today-down); }
 .hist-hint { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
-.hist-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; padding-top: 6px;
+/* 2026-10-16 版式改(用户动议「统计栏未对齐」): 各子项**垂直居中**对齐 —— flex 默认
+ * align-items:stretch 把纯文本读数拉到与控件组同高、文字贴顶(实测文字比中线高 3.7px),
+ * 而图例(.hs-leg)与控件组(.qb-statctl)自带 align-items:center 使内容居中, 两族文字因此
+ * 错开成两条线; 统一 center 后文本项收缩为内容高, 与图例/档位/纵轴控件同中线。 */
+.hist-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 6px; padding-top: 6px;
   border-top: 1px solid var(--border-soft); font: 500 12px/1.5 var(--font-mono); color: var(--fg-dim); }
 .hist-summary b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .hist-summary .h-up { color: var(--today-up); }
