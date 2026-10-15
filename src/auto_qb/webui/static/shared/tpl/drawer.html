@@ -126,6 +126,12 @@
                  (.dt-traffic-main 布局等价层)自 W6 起在三皮肤 views.css(单一来源)。 -->
             <div v-else class="dt-traffic-main">
               <p v-if="qbCurData.meta && qbCurData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
+              <!-- P4(plan 26-10-15-0829): 重启缝提示 —— 数据链末点早于右沿且期间服务重启时给接缝
+                   提示, 不与停机洞混读(报告 §3.2 投递黑障: 尾区斜纹视觉延伸到观察时刻的误读面)。
+                   判据单点 _qbSeamHint(纯函数, node 单测), 文案只此一处(守阵按字面量计数);
+                   断线语义不变(null 照旧断线不连线 + 斜纹)。样式复用 .qb-stale 状态行
+                   (三皮肤同源零新增 CSS), .qb-seam 仅作判据/守阵锚点类。 -->
+              <p v-if="qbCurSeamHint" class="qb-stale qb-seam">数据接缝中 · 服务于 {{ fmtTime(qbCurSeamHint.startedAt) }} 重启, 之后无采样</p>
               <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽高, tooltip 为其兄弟绝对定位;
                    悬停 idx/px 由 uPlot setCursor 钩子写回(scope 化 hoverIdx/hoverLeft) -->
               <div class="qb-chart">

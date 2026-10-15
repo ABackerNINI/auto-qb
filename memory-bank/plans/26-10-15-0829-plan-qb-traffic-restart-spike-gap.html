@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-1247">
-<meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
+<meta name="doc-updated" content="26-10-15-1422">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
     color-scheme: dark;
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247) · P4–P6 待拍板</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145)<br>P3 已实施(1247)<br>P4 已实施(1422) · P5–P6 待拍板</div>
 </nav>
 
 <header class="cover">
@@ -136,7 +136,7 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3 已完成 · P1 暂缓 · P4–P6 待拍板</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4 已完成 · P1 暂缓 · P5–P6 待拍板</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
@@ -320,7 +320,7 @@
     <div class="step">
       <div class="sid">P4</div>
       <div class="sbody">
-        <div class="st">呈现层:接缝标记,消除「无采样区延伸到观察时刻」的误读 <span class="pill p3">加固</span></div>
+        <div class="st">呈现层:接缝标记,消除「无采样区延伸到观察时刻」的误读 <span class="pill p3">加固</span> <span class="pill p3">已完成 26-10-15-1422 · 结论见下方实施记录</span></div>
         <ul>
           <li><b>落点</b>:<span class="k">webui/server/traffic_qb.py:124-125</span>(<code>_meta</code>)+ <span class="k">static/shared/qb_traffic_chart.js</span>(缺口渲染 :261-269)。</li>
           <li><b>做法</b>:<code>meta</code> 增加 <code>server_started_at</code>(或 <code>seam</code> 标记);前端在「数据链末点早于右沿且期间服务重启」时给「数据接缝中」提示,而不是把它与「停机洞」混为一谈的纯 null 区。</li>
@@ -464,7 +464,46 @@
     <div class="t">待拍板项状态(§07)</div>
     <ul>
       <li><b>#3 P3 范围:已拍板已实施</b>(用户 26-10-15-1247 选「只做①缺席告警」)—— 做法②未实施;若后续观测面显示「仅可见」不够(需要主动限陈旧),②可与①独立后补,无需返工。</li>
-      <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#4 已按 P2 定案(P2 单独实施闭环);#5 本轮触 2 源文件(&lt; 3)不另立档案。</li>
+      <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#3 已按 P3 定案(只做①);#4 已按 P2 定案(P2 单独实施闭环);#5 本轮触 2 源文件(&lt; 3)不另立档案。</li>
+    </ul>
+  </div>
+
+  <h3 id="p4-record"><span class="tag2">REC</span>实施记录 · P4 呈现层接缝标记(26-10-15-1422 · clone @ da45dd57)</h3>
+  <p class="lead">实施轮:改动 5 个源文件 —— <code>webui/server/traffic_qb.py</code>(meta 新键) + <code>static/shared/qb_traffic_chart.js</code>(判据纯函数 + computed) + <code>static/shared/tpl/drawer.html</code>(提示行) + <code>tests/test_web_traffic_qb.py</code> + <code>tests/test_webui_static_dom_panel.py</code>;未触配置/运行数据/采样器。§01 落点开工复核:<code>_meta</code> 在 :125(计划记 :124-125,一致);前端缺口渲染区行号随 2026-10-08 注解层改动已漂移,P4 以「纯函数 + computed + 模板行」三件套新落,不依赖旧行号。触 5 源文件 ≥3 → 立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(阈值 #2,计划 §07.5 预授权路径)。</p>
+  <table>
+    <thead><tr><th style="width:190px">决策点</th><th>定案与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>server_started_at 锚点来源</b></td>
+        <td>模块级 <code>_SERVER_STARTED_AT = time.time()</code>(traffic_qb.py 首次导入时刻)而非 router 实例构造时刻 —— web 段热重载会重建 router(重新构造 QbTrafficChartApi)但采样链不断,实例级时点会制造假重启;模块不随热重载重导入,进程级时点不漂移。导入时刻恒先于主循环首拍的首个采样入账(start_all 内建 app 先于主循环),故「链末点 &lt; 导入时刻」恒等价于「重启后尚无采样入账」。计划「server_started_at(或 seam 标记)」两形态取前者:后端只报事实时刻,接缝判定放前端判据单点。</td>
+      </tr>
+      <tr>
+        <td><b>前端判据口径</b></td>
+        <td><code>_qbSeamHint(points, interval, meta)</code> 纯函数:尾部未观测区存在 ⟺ 末非 null 下标 &lt; n-1(链到右沿 = 无误读面,当前桶未采完是常态);期间服务重启 ⟺ meta.server_started_at ∈ [链末桶覆盖端 t+interval, 右沿](左端含:重启恰在尾区起点即属尾区;链内重启 = 链已接续,无尾区误读)。旧后端无新键 / 全 null / interval 非法一律 null 不猜 —— 向后兼容双向成立(旧前端忽略新键,新前端遇旧后端不提示)。all 月视图末桶(当前月)由活尾 pending 行常态覆盖,实际不达判据面。</td>
+      </tr>
+      <tr>
+        <td><b>呈现形态与纪律</b></td>
+        <td>提示行落 drawer.html 三挂点共用正文块一处(与既有 .qb-stale 状态行同排),文案「数据接缝中 · 服务于 HH:MM 重启, 之后无采样」带重启时刻锚(fmtTime);样式复用 .qb-stale(三皮肤同源零新增 CSS),.qb-seam 仅作判据/守阵锚点类。<b>断线语义零改动</b>:null 不连线(spanGaps:false ×2 守阵钉住)与斜纹钩子原样 —— 尾区仍如实渲染 null,提示只改「怎么读」不改「画什么」(G2)。</td>
+      </tr>
+      <tr>
+        <td><b>测试落点形态</b></td>
+        <td>既有用例内的<b>断言扩展</b>(无新测试函数):meta 契约折入未启用空态用例(三端点 + 未启用空态携带 / 旧 4 键逐字不变 / 改模块常量新响应立即携带 = 无实例级缓存面)与 24h 用例 meta 全量形状断言;_qbSeamHint 走 node 电池(+12 用例,含尾区起点与右沿两端边界)+ 静态守阵第 6 节(判据定义单点 / computed 消费单点 / 文案单源按字面量计数 / spanGaps:false ×2)。<b>守阵红绿双验</b> 5 类突变判红(后端键删除 2 红 / 尾区判据删除 / 链内误报面放开 / 新键判据删除 / 模板行删除各 1 红)后还原复绿 61 passed;活性探针 = 电池正例 3 条。</td>
+      </tr>
+      <tr>
+        <td><b>连带:_auth 单点收敛(用户拍板①)</b></td>
+        <td>tests/test_web_traffic_qb.py 的 17 处内联鉴权头字典字面量被工具写入判据误报为凭据字面量(实为运行期读测试桩令牌,git diff 为空可证全为 HEAD 既有内容),文件完全不可写 —— 按判据自身「误判时告知用户由其决定」停下问询,用户拍板「收敛成单点 helper 后继续」:17 处机械收敛为模块级 <code>_auth(mgr)</code>(键名常量拆写 + docstring 冒号形态改括号注记),零行为变化(test.one 61 passed 作回归证据)。判别法与处置样板入坑档 <code>pitfalls/testing/credential-shape-write-guard.md</code>(复发机制:显示层掩码把 token 冒号形态显示成 [redacted],凭所见拼 oldText 永不匹配,须 hexlify 回读字节定性)。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box ok">
+    <div class="t">P4 判定:代码面验收达成(E2E5 待真机人工观察)</div>
+    <p>meta 新键三端点 + 空态全携带且旧 4 键不变;前端判据 node 电池 + 静态守阵全绿;断线语义零改动;全量 <code>test.full</code> 3363 passed + 4 skipped(基线切片 <code>testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md</code>;与 P3 基线同数 —— 断言扩展无新测试函数,对账已写切片)。<b>E2E5(重启后人工观察不再出现「无采样区延伸到右沿」误读)按计划为人工验收,留真机重启时兑现</b> —— 判据链(meta 新键 → 前端提示行)已就位。</p>
+  </div>
+  <div class="box">
+    <div class="t">待拍板项状态(§07)</div>
+    <ul>
+      <li><b>#5 立档:本轮触 5 源文件(≥3)→ 已立档</b> <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(阈值 #2;计划 §07.5 预授权路径,doc-refs 已互挂)。</li>
+      <li>#1(P1 形态)随 P1 暂缓后置;#2 已按 P2 定案(常量);#3 已按 P3 定案(只做①);#4 已按 P2 定案(P2 单独实施闭环)。P5/P6 仍待拍板(与 P4 无依赖,可独立实施)。</li>
     </ul>
   </div>
 </section>
@@ -633,6 +672,7 @@
   <p>26-10-15-1135 — P2 实施完成:§03 追加「实施记录 · P2」,状态栏与 P2 步骤标记更新;落点扩展(v4_series_points 窗界有界回看)与 _V4_NULL_FLOOR_S 退役见实施记录;E2E1 三窗 PASS;全量数字见基线切片 <code>testing/baselines/26-10-15-1135-qb-traffic-restart-spike-gap-p2.md</code>。</p>
   <p>26-10-15-1145 — 用户拍板「P1 暂缓, 提交」:P1 步骤标记与待拍板状态更新,其余不动。</p>
   <p>26-10-15-1247 — P3 实施完成:§03 追加「实施记录 · P3」,状态栏与 P3 步骤标记更新;范围拍板 = 只做①缺席告警(§07 #3),做法②不实施;全量数字见基线切片 <code>testing/baselines/26-10-15-1247-qb-traffic-restart-spike-gap-p3.md</code>。</p>
+  <p>26-10-15-1422 — P4 实施完成:§03 追加「实施记录 · P4」,状态栏与 P4 步骤标记更新;meta 新键 server_started_at(模块级进程出生锚点)+ 前端 _qbSeamHint 判据 + drawer.html 提示行,断线语义零改动;E2E5 留真机人工验收;全量数字见基线切片 <code>testing/baselines/26-10-15-1418-qb-traffic-restart-spike-gap-p4.md</code>;触 5 源文件 ≥3 已立档 <code>tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</code>(§07 #5 更新);连带 _auth 单点收敛(写入判据误报处置,用户拍板①,坑档 pitfalls/testing/credential-shape-write-guard.md)。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

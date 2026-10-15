@@ -1,10 +1,10 @@
 """test_web_traffic_qb 测试计划: qB 口径流量图三 GET 端点
 
 ## 测试计划(每个测试函数一条)
-- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
-- test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
+- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)+ P4 meta 契约(plan 26-10-15-0829): server_started_at = 后端进程出生时刻, 未启用空态与三端点都携带(同一 _meta 装配单点), 旧 4 键逐字不变(只增不改, 旧前端忽略未知键), 改模块常量新响应立即携带 = 无实例级缓存面
+- test_api_traffic_qb_requires_token (三 GET 端点沿用全局 token 鉴权单点, 无凭证 401; 冒号键值形态会被写入侧凭据判据误报, 故用括号注记)
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
-- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale
+- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale + meta 全量形状含 P4 新键 server_started_at
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w —— 已知 totals 序列逐桶断言 + 瞬时直采值零上图 + totals 通道逐字节不变(窗首基线缺失/相邻差分照旧) + 活尾桶跨盘/尾接缝差分(图尾同为区间平均)
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (S2/D3)窗首种子: read_window/v4_series_points t0 外扩一个响应桶宽取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(非 0 线非瞬时值), 种子点被 v4_grid_obs 窗外过滤不外发
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (S2/D3)种子跨真空: 真空 null 点断链 —— 恢复首桶 rate 派不出(D4 0 线)且离线期字节不进速率与 totals, 次桶基线恢复 delta/w
@@ -26,6 +26,18 @@ import time
 from auto_qb.infra.utils import encode_group_key
 
 from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_host
+
+#: 鉴权头键名(拆写拼装): 该键名字面量会触发写入侧凭据判据的「凭据键名 + 值不回显」误报 ——
+#: 本文件全部用法都是测试桩令牌的运行期读取(夹具 manager.web.token), 文件内无字面凭据;
+#: 拆写仅为通过写入判据(用户 26-10-15 拍板: auth idiom 收敛成单点 + 形态调整消误报)
+_AUTH_HEADER_KEY = "Auth" + "orization"
+
+
+def _auth(mgr) -> dict:
+    """三端点鉴权头单点(P4 轮 26-10-15 收敛, 用户拍板): 原本文件 17 处内联鉴权头字典字面量
+    会被写入侧凭据判据误报, 收敛成单点既消重也消除误报形态; 值 = 夹具 manager 的测试桩
+    令牌运行期读取, 文件内无字面凭据。"""
+    return {_AUTH_HEADER_KEY: "Bearer {}".format(mgr.web.token)}
 
 
 def _qb_open_spy(monkeypatch):
@@ -49,10 +61,14 @@ def _v4_opens(opened):
     return [p for p in opened if "qb-traffic-v4/" in p and "/limits/" not in p]
 
 
-def test_api_traffic_qb_disabled_empty_state(web_env):
-    """未启用空态(qb_traffic None / enabled=false): 三端点 200 空数组 + meta, 与 /api/traffic/history 未启用分支同构"""
+def test_api_traffic_qb_disabled_empty_state(web_env, monkeypatch):
+    """未启用空态(qb_traffic None / enabled=false): 三端点 200 空数组 + meta, 与 /api/traffic/history 未启用分支同构;
+    P4(plan 26-10-15-0829)meta 契约: 新键 server_started_at(后端进程出生时刻)未启用空态也携带, 旧 4 键不变,
+    值随模块常量现读(改常量新响应立即携带, 无实例级缓存面)"""
+    from auto_qb.webui.server import traffic_qb as tq
+
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     paths = ("/api/traffic/qb/global", f"/api/traffic/qb/torrent/HA", f"/api/traffic/qb/group/{encode_group_key(KEY)}")
     for p in paths:  # qb_traffic = None(缺省): 200 空态(不 500 不 404)
         r = client.get(p, headers=auth)
@@ -60,12 +76,18 @@ def test_api_traffic_qb_disabled_empty_state(web_env):
         body = r.json()
         assert body["points"] == [] and body["totals"] == []
         assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False and body["meta"]["window"] == "24h"
+        # P4: 新键未启用空态同样携带(空态与正常响应同一 _meta 装配单点), 旧 4 键之外只增不改
+        assert body["meta"]["server_started_at"] == tq._SERVER_STARTED_AT > 0, p
     # 与未启用空数组先例同构: /api/traffic/history 同样 200 + 空数组
     assert client.get("/api/traffic/history", headers=auth).status_code == 200
     _enable_qb_traffic(mgr, enabled=False)  # 段存在但 enabled=false: 同空态
     for p in paths:
         body = client.get(p, headers=auth).json()
         assert body["points"] == [] and body["meta"]["stale"] is False
+        assert body["meta"]["server_started_at"] == tq._SERVER_STARTED_AT, p
+    # 锚点现读无缓存: 模拟「进程重启」(改模块常量)后新响应立即携带新值
+    monkeypatch.setattr(tq, "_SERVER_STARTED_AT", 1234567890.0)
+    assert client.get(paths[0], headers=auth).json()["meta"]["server_started_at"] == 1234567890.0
 
 
 def test_api_traffic_qb_requires_token(web_env):
@@ -81,7 +103,7 @@ def test_api_traffic_qb_window_validation(web_env):
     from auto_qb.webui.server.traffic_qb import WINDOW_NAMES
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     windows = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all")
     assert WINDOW_NAMES == windows  # D4 档位映射: 10 -> 13 档(6mo/1y/all 上, 90d 延后不上)
@@ -103,9 +125,10 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     缺失 D4 豁免 0 线) + totals 相邻桶快照差分(重置 null / 断连断链, 口径不受速率变换
     影响) + 读取竞态降级: 回上一份成功快照标 stale=true, 不以空态冒充无数据(§08)"""
     from auto_qb.core.traffic_store import V4Block, V4DayCache, V4NullRun, V4Sample, v4_epoch_date_str
+    from auto_qb.webui.server import traffic_qb as _tq_meta
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -146,7 +169,14 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     r = client.get("/api/traffic/qb/global", headers=auth)
     assert r.status_code == 200
     body = r.json()
-    assert body["meta"] == {"window": "24h", "interval_s": 30, "source": "qb", "stale": False}
+    # meta 全量形状(P4 新键 server_started_at 一并钉住; 值语义/兼容面由未启用空态用例专测)
+    assert body["meta"] == {
+        "window": "24h",
+        "interval_s": 30,
+        "source": "qb",
+        "stale": False,
+        "server_started_at": _tq_meta._SERVER_STARTED_AT,
+    }
     assert 2880 <= len(body["points"]) <= 2881  # 满窗栅格(窗首对齐时恰 2880)
     assert point_at(body, base) == {"t": base, "dl": 0, "up": 0}  # 窗内首点无基线: D4 豁免 0 线(非 null)
     assert point_at(body, base + 30) == {"t": base + 30, "dl": 33, "up": 10}  # 区间平均: delta(1000,300)/30
@@ -192,7 +222,7 @@ def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
     from auto_qb.core.traffic_store import LiveTail, V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -250,7 +280,7 @@ def test_api_traffic_qb_raw_seed_extension_window_start_baseline(web_env):
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -282,7 +312,7 @@ def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -327,7 +357,7 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
     from auto_qb.webui.server import traffic_qb as tq
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     fixed = 1_800_000_000.0  # 30 的整倍 -> 5m 窗栅格对齐(确定性几何)
@@ -372,7 +402,7 @@ def test_api_traffic_qb_global_30d_hour_segment(web_env):
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -403,7 +433,7 @@ def test_api_traffic_qb_global_6mo_1y_day_segment(web_env):
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -444,7 +474,7 @@ def test_api_traffic_qb_global_all_month_segment(web_env):
     from auto_qb.core.traffic_store import AggRow, v4_month_epoch
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -479,7 +509,7 @@ def test_api_traffic_qb_torrent_endpoint(web_env):
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -509,7 +539,7 @@ def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -545,7 +575,7 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str, v4_window_dates
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -576,7 +606,7 @@ def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):
     from auto_qb.core.traffic_store import V4Sample, V4ZeroRun, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -654,7 +684,7 @@ def test_api_traffic_qb_group_30d_reads_member_agg_only(web_env, monkeypatch):
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
@@ -675,7 +705,7 @@ def test_api_traffic_qb_group_30d_reads_member_agg_only(web_env, monkeypatch):
 def test_api_traffic_qb_group_never_transferred_empty_state(web_env):
     """组从未有成员产过流量(成员文件全缺) -> 空态(§08 分组端点); 不渲染全 0 线"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth).json()
     assert body["points"] == [] and body["totals"] == [] and body["meta"]["stale"] is False
@@ -688,7 +718,7 @@ def test_api_traffic_qb_group_member_only_zruns_not_empty(web_env):
     from auto_qb.core.traffic_store import V4ZeroRun, v4_epoch_date_str
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())

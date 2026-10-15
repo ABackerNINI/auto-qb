@@ -5,7 +5,8 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 一个实例(一域恰一端点, last-good 快照按 window 分键互不串扰):
 
 - 响应形状三域一致: {"points": [...], "totals": [...], "meta": {...}}(§08); points/totals
-  为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/source/stale。
+  为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/source/stale +
+  server_started_at(P4, plan 26-10-15-0829: 本进程出生时刻, 前端据此区分重启缝与停机洞)。
   interval_s = 桶宽: raw 段窗 = 采样间隔, 3d/7d/30d = 3600, 6mo/1y = 86400(本地日界),
   all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
@@ -57,6 +58,16 @@ from .common import group_key_param
 #: + 3d/7d/30d 消费 agg hour 行 + 6mo/1y 消费 day 行 + all 消费 month 行, 共 13 档;
 #: 90d 拍板延后不上); 其余一律 400
 WINDOW_NAMES = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all")
+
+#: 本进程出生时刻(P4 接缝标记锚点, plan 26-10-15-0829): 取模块首次导入时刻 ≈ 进程启动后
+#: webui 装配期 —— host.start_all 内 webui 模块建 app 时经 routes 导入本模块, 恒先于主循环
+#: 首拍的第一个采样入账; web 段热重载会重建 router(重新构造本类)但**不重新导入**本模块,
+#: 时刻不随热重载漂移 —— 锚点必须钉在进程级而非 router 实例级(web 热重载不重启采样链,
+#: 不构成数据接缝)。语义 = 「当前服务进程何时开始」: 前端把「数据链末点早于右沿且本时刻
+#: 落在尾部未观测区」的尾区读成重启缝(「数据接缝中」)而非停机洞(判据单点在
+#: static/shared/qb_traffic_chart.js _qbSeamHint, node 单测钉住)。模块常量非配置键
+#: (与 P2 seam 常量同族, 无 validate_config 面)。
+_SERVER_STARTED_AT = time.time()
 
 
 def parse_window(window: str) -> str:
@@ -122,7 +133,15 @@ class QbTrafficChartApi:
         return tg.build_grid(window, time.time(), sample)
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
-        return {"window": grid.name, "interval_s": grid.interval, "source": "qb", "stale": stale}
+        """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
+        未知键, 降级 last-good 分支按键展开同样携带)"""
+        return {
+            "window": grid.name,
+            "interval_s": grid.interval,
+            "source": "qb",
+            "stale": stale,
+            "server_started_at": _SERVER_STARTED_AT,
+        }
 
     def _live_tail(self, key: str):
         """采样模块活尾快照(S6 验收追加): 未落盘 buffer 记录 + 开放游程的当轮冻结副本,
