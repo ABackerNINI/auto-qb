@@ -180,12 +180,12 @@
     <details id="explain">
       <summary>说明与排障(端口机制 · 配对码 · 徽标图例 · 手动端点表单)</summary>
       <div class="explain">
-        <p><b style="color:#eceff1">浏览器工具栏的扩展图标徽标</b>与顶部状态条同源, 四态: 悬停有中文结论, 点图标即回本页。</p>
+        <p><b style="color:#eceff1">浏览器工具栏的扩展图标状态色外框</b>与顶部状态条同源: 悬停有中文结论, 点图标即回本页; 仅发现失败态在图标角标补「!」文字徽标。</p>
         <div class="legend">
-          <span class="chip"><i style="background:#5a6673"></i>未配置(空)</span>
-          <span class="chip"><i style="background:#2e7d46"></i>连接正常(OK)</span>
-          <span class="chip"><i style="background:#b8802f"></i>重连中(..)</span>
-          <span class="chip"><i style="background:#b0453d"></i>发现失败(!)</span>
+          <span class="chip"><i style="border:1.5px solid #5a6673;background:transparent"></i>未配置(无外框)</span>
+          <span class="chip"><i style="border:1.5px solid #2e7d46;background:transparent"></i>连接正常(绿框)</span>
+          <span class="chip"><i style="border:1.5px solid #b8802f;background:transparent"></i>重连中(橙框)</span>
+          <span class="chip"><i style="border:1.5px solid #b0453d;background:transparent"></i>发现失败(红框+!)</span>
         </div>
         <p>发现端口默认 18788, 被占自动顺延 18789/18790; 数据端口配 0(默认)时随机, 经发现自动分发, 端口变了自愈机制自动补入。</p>
         <p>手动端点(优先): <code>地址 + token</code> 表单收在这里 —— 你显式指定的实例永远优先, 不会被自动发现覆盖或删除。</p>

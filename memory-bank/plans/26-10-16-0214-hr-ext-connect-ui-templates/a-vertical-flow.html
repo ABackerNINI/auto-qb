@@ -193,12 +193,12 @@
     <details id="explain">
       <summary>说明与排障(端口机制 · 配对码 · 徽标图例)</summary>
       <div class="explain">
-        <p><b style="color:#eceff1">浏览器工具栏的扩展图标徽标</b>(常驻, 非本页元素)四态: 悬停图标有中文结论, 点图标即回本页。</p>
+        <p><b style="color:#eceff1">浏览器工具栏的扩展图标状态色外框</b>(常驻, 非本页元素): 悬停有中文结论, 点图标即回本页; 仅发现失败态在图标角标补「!」文字徽标。</p>
         <div class="legend">
-          <span class="chip"><i style="background:#5a6673"></i>未配置(空)</span>
-          <span class="chip"><i style="background:#2e7d46"></i>连接正常(OK)</span>
-          <span class="chip"><i style="background:#b8802f"></i>重连中(..)</span>
-          <span class="chip"><i style="background:#b0453d"></i>发现失败(!)</span>
+          <span class="chip"><i style="border:1.5px solid #5a6673;background:transparent"></i>未配置(无外框)</span>
+          <span class="chip"><i style="border:1.5px solid #2e7d46;background:transparent"></i>连接正常(绿框)</span>
+          <span class="chip"><i style="border:1.5px solid #b8802f;background:transparent"></i>重连中(橙框)</span>
+          <span class="chip"><i style="border:1.5px solid #b0453d;background:transparent"></i>发现失败(红框+!)</span>
         </div>
         <p>后端 <code>hr_check.channel.discovery_port</code> 默认 18788, 被占自动顺延 18789/18790, 本扩展并行探测整张候选表; 命中后实例自动入列, token 免手抄。后端 <code>port</code> 配 0(默认)时数据端口随机且经发现自动分发 —— 端口变了不用管, 自愈机制会自动补入新端点。</p>
         <p>跨机/开启配对时, 把后端启动日志或 HR 状态卡里的 6 位展示码填进「配对码」再点一次「立即发现」。</p>

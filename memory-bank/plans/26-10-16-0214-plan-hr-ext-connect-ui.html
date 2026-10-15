@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-ext-connect-ui">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0214">
-<meta name="doc-updated" content="26-10-16-0247">
+<meta name="doc-updated" content="26-10-16-0306">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-hr-ext-connect-ui.md">
 <style>
   :root {
@@ -120,6 +120,13 @@
       <tr><td class="num">R3</td><td>操作列最终形态</td><td><b>手动条目只有「删」; 自动条目操作列留空</b>(悬停单元格可见「由发现租约自动管理」)。「载入」删除 —— 改 token 走「删除重加」唯一路径; 行内「测」删除 —— 探测由「重测全部」统一承载(逐实例只读 GET, 快速无副作用)。</td></tr>
     </tbody>
   </table>
+  <h3>第三轮拍板(工具栏徽标外框, 2026-10-16 03:04)</h3>
+  <table>
+    <thead><tr><th>#</th><th>决策点</th><th>拍板</th></tr></thead>
+    <tbody>
+      <tr><td class="num">R4</td><td>徽标太大挡住图标</td><td><b>改状态色外框(路径 A: 预生成图标)</b>: 脚本一次生成 4 态 × 2 尺寸(16/32px)共 8 个 PNG 入库, 状态变化 <code>setIcon({path})</code> 换图。文字通道折中: <b>平时纯外框零遮挡(徽标文本清空), 仅「发现失败」态追加红色 <code>!</code> 徽标</b>(故障时恢复文字报警 + 色觉障碍冗余)。细节见 §3.5。</td></tr>
+    </tbody>
+  </table>
   <h3>事实澄清(用户两问, 实施随 Q4 措辞修复落地)</h3>
   <ul>
     <li><b>「工具栏」指什么</b>: 指<b>浏览器工具栏右上角的扩展图标</b>(<code>chrome.action</code> 徽标, <code>background.js</code> 的 <code>badgeStateOf</code>+<code>refreshBadge</code> 实现, 空/<code>OK</code>/<code>..</code>/<code>!</code> 四态), 不是实例表、不在本页里。<code>options.html:135</code> 的图例写在本页内却没说"浏览器"二字, 读者无法不误解 —— 属措辞缺陷, S1 重写为「浏览器工具栏的扩展图标徽标(常驻, 非本页元素)」并配四态色样。</li>
@@ -186,12 +193,19 @@
   </ul>
   <h3>3.4 文案与操作列纪律</h3>
   <ul>
-    <li>徽标图例改写: 「<b>浏览器工具栏</b>的扩展图标徽标(常驻, 非本页元素): 未配置(空) · 连接正常(绿) · 重连中(橙) · 发现失败(红); 悬停图标有中文结论, 点图标即回本页。」四态各配色样小方块。</li>
+    <li>徽标图例改写: 「<b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): 未配置(无外框) · 连接正常(绿框) · 重连中(橙框) · 发现失败(红框, 图标角标补 <code>!</code>); 悬停图标有中文结论, 点图标即回本页。」四态各配色样(框式)。</li>
     <li>来源徽标一律「手动 / 自动」(R2); 手动条目 token 列 = 前 32 位指纹 + 悬停完整值, 未填标红「未填」; 自动条目 token 列 = 「-」(R1)。</li>
     <li>操作列: 手动条目只有「删」; 自动条目留空, 悬停可见「由发现租约自动管理, 删除后下轮发现会重新补入」(R3)。「载入」与行内「测」不回潮 —— 改 token 走删除重加, 探测走「重测全部」。</li>
     <li>排序: <b>手动组在前、自动组在后</b> —— 沿用上游 26-10-15-2357 Q9/S1 的「手动恒在前」语义(<code>discovery.js::mergeInstances</code> 已保证, 渲染不重排, 只按清单顺序); 模板示例行序与实施同此口径。</li>
     <li>每次进页必读的信息只有: 状态卡 + 实例表; 机制解释(端口顺延 / port:0 随机 / 配对码安全口径 / 排障表指路)全部进「说明与排障」折叠区。</li>
     <li>按钮口径: 「自测端点连通」更名「重测全部」。<code>#status</code>/<code>#hint</code> 保留为动作反馈区, 紧贴动作按钮行。</li>
+  </ul>
+  <h3>3.5 工具栏图标外框(R4, 路径 A)</h3>
+  <ul>
+    <li>现状事实: <code>manifest.json</code> 的 <code>action</code> 无 <code>default_icon</code>(工具栏显示 Chrome 默认字母图标), 徽标的字号/占地/位置由浏览器固定渲染、无任何 API 可调 —— 这是「挡住大半图标」的根源。徽标没有「加外框」的形态, 唯一路径是 <code>chrome.action.setIcon</code> 重画图标本体。</li>
+    <li>资源: 新增 <code>extensions/hr-fetch-proxy/icons/</code> 8 个 PNG(基础无框 + 绿/橙/红框 × 16/32px), 由入库脚本(如 <code>scripts/gen_ext_icons.py</code>)一次生成 —— 零运行时绘制、像素级可控(色框外加暗色描边保证与图形分离)、SW 被回收无重建负担、Edge 同样支持。运行时 <code>OffscreenCanvas</code> 绘制(路径 B)已评估并放弃(缓存/重建成本高, 16px 观感不可控)。</li>
+    <li>态映射(判据仍是 <code>badgeStateOf</code>, 跨层守阵继续有效): 未配置→基础无框图; 连接正常→绿框; 重连中→橙框; 发现失败→红框 + <code>setBadgeText('!')</code>(<b>唯一</b>非空徽标文本, 其余态一律清空)。触发点(pollAll 收尾 / 发现收尾 / onInstalled / onStartup)不变; <code>setTitle</code> 悬停中文结论不变; <code>setIcon</code> 失败沿现有 try/catch 静默降级(title / 选项页总览兜底)。</li>
+    <li>对比度: 基础图形取中性深色底(不随浏览器主题变), 框色 = 徽标四态既定色(#2e7d46 / #b8802f / #b0453d), 具体字形实施期定(C8)。</li>
   </ul>
 </section>
 
@@ -205,7 +219,8 @@
       <tr><td class="num">S2</td><td><code>background.js</code></td><td>① <code>noteInstanceHealth(endpoint, ok, note, state)</code> 增第四参, 台账条目补 <code>state</code>(既有调用点随 <code>pollInstanceOnce</code> 的 outcome 传入; outcome 增带 <code>state ∈ {ok,401,403,http,down,bad-endpoint}</code>, 其内部分支本已区分这些情形, 只是把分类显式化); ② 新增 <code>probeInstance(inst)</code> = 复用「拉任务清单」一步(只读), 结论走 <code>noteInstanceHealth</code> 落台账; ③ 消息面增 <code>probe-all</code> / <code>probe-one {endpoint}</code>, 处理完即 <code>flushInstanceHealth</code> 并回传结论。徽标 / 发现 / 自愈逻辑<b>一律不动</b>。</td></tr>
       <tr><td class="num">S3</td><td><code>options.js</code></td><td>① <code>renderInstList</code> 重写为表格渲染: 来源徽标(「手动/自动」, R2) + token 列(手动 = 前 32 位指纹 + 悬停完整值, 未填标红; 自动 = 「-」, R1) + 状态列(§3.2 判据, 纯函数 <code>rowHealthOf(h)</code> 供守阵直测) + 最近联系(<code>shortTime(h.at)</code>) + 悬停 title + 操作列(手动只有「删」; 自动留空 + 悬停说明, R3; 「载入」「测」删除); ② <code>testEndpoint</code> 改「重测全部」(sendMessage <code>probe-all</code>), <code>addInstance</code> 的「载入/编辑回填」路径随 <code>fillForm</code> 只保留表单空态初始化; 选项页不再直接 <code>fetch</code> 探测 —— <code>probeMainInstance</code> 保留仅供 <code>discoverNow</code> 命中后的即时结论(其结果同源入台账亦可, 见 C3); ③ 状态卡渲染微调(<code>renderConnOverview</code> 输出拆成大状态字 + 指标, 数据不变); ④ 行级状态的 storage 监听复用既有 <code>changes.instanceHealth</code> 通道。</td></tr>
       <tr><td class="num">S4</td><td><code>README.md</code></td><td>§2 布局块与「怎么确认它在工作」按新形态同步; 「自测端点连通」→「重测全部 + 行内重测」; 排障表相应行补「实例表状态列」指路; 徽标描述统一「浏览器工具栏的扩展图标」。</td></tr>
-      <tr><td class="num">S5</td><td><code>tests/test_extension_proxy.py</code></td><td>守阵: ① <code>rowHealthOf</code> 四态真值表(含旧台账无 <code>state</code> 字段的降级输入); ② 消息面存在性(<code>probe-all</code> 且处理走 <code>noteInstanceHealth</code>; <code>probe-one</code> 已随 R3 取消, 不得出现); ③ 选项页无直接探测 <code>fetch</code> 残留(反向断言); ④ 图例措辞守阵(「浏览器工具栏」须在 <code>options.html</code>, 裸「工具栏图标徽标」开头句不得回潮); ⑤ 来源徽标措辞守阵: 实例徽标只有「手动/自动」两值, 「优先」徽标不得回潮 —— 上游 26-10-15-2357 断言 <code>[优先]</code> 的既有用例期望随本轮翻转(口径演进, 非守阵松动); ⑥ <code>test_options_swiss_wiring</code> 元素清单随 S1 更新 + 「自测端点连通」与「载入」字面量不得回潮的反向断言。</td></tr>
+      <tr><td class="num">S5</td><td><code>tests/test_extension_proxy.py</code></td><td>守阵: ① <code>rowHealthOf</code> 四态真值表(含旧台账无 <code>state</code> 字段的降级输入); ② 消息面存在性(<code>probe-all</code> 且处理走 <code>noteInstanceHealth</code>; <code>probe-one</code> 已随 R3 取消, 不得出现); ③ 选项页无直接探测 <code>fetch</code> 残留(反向断言); ④ 图例措辞守阵(「浏览器工具栏」须在 <code>options.html</code>, 裸「工具栏图标徽标」开头句不得回潮); ⑤ 来源徽标措辞守阵: 实例徽标只有「手动/自动」两值, 「优先」徽标不得回潮 —— 上游 26-10-15-2357 断言 <code>[优先]</code> 的既有用例期望随本轮翻转(口径演进, 非守阵松动); ⑥ <code>test_options_swiss_wiring</code> 元素清单随 S1 更新 + 「自测端点连通」与「载入」字面量不得回潮的反向断言; ⑦ 图标映射守阵(随 S6 落地): 四态→图标路径映射纯函数直测 + 「仅发现失败态徽标文本非空且为 <code>!</code>」+ 旧 <code>OK/..</code> 徽标文案不得回潮。</td></tr>
+      <tr><td class="num">S6</td><td>图标外框(R4)</td><td>① 新增 <code>scripts/gen_ext_icons.py</code>: 生成 8 个 PNG 到 <code>extensions/hr-fetch-proxy/icons/</code>(基础无框 + 绿/橙/红框 × 16/32px, 色框外带暗色描边), 生成物入库; manifest <code>action</code> 补 <code>default_icon</code>(基础图标, 未配置态与安装初始态共用); ② <code>background.js::refreshBadge</code> 改造: <code>badgeStateOf</code> 判据不变 —— 未配置/连接正常/重连中 → <code>setIcon({path})</code> + <code>setBadgeText('')</code>, 发现失败 → 红框图 + <code>setBadgeText('!')</code> + <code>setBadgeBackgroundColor</code>, <code>setTitle</code> 悬停结论不变, try/catch 静默降级保留; ③ <code>README.md</code> 徽标描述同步(「状态色外框」口径, S4 一并)。</td></tr>
     </tbody>
   </table>
 </section>
@@ -220,6 +235,7 @@
     <li><b>C5 ③④微调边界</b>: 只加 <code>.dot</code> 色点与行 hover 两项 CSS; 若发现需要动渲染函数才能落色点, 以「入池不修」处理。</li>
     <li><b>C6 状态卡告警高亮</b>: 重连中 / 发现失败态整卡描边(橙 / 红), 与 <code>manualEndpoints</code> 的 <code>attn</code> 联动保留(发现失败自动展开手动区, 现状 C6/26-10-15-2357)。</li>
     <li><b>C7 模板取舍</b>: 三模板均为候选稿; 选型后按其布局实施, 模板内的假数据 / 假交互一律不进真代码。</li>
+    <li><b>C8 基础图形裁量(R4)</b>: Chrome 无「还原默认图标」API —— <code>setIcon</code> 之后回不去, 所以外框方案必须自带基础图标。字形/底色实施期定, 硬约束只有: 中性深色底(不随主题变)、四态框色用徽标既定色、暗色外圈描边; <code>default_icon</code> 与「未配置」态共用基础图标。</li>
   </ul>
 </section>
 
@@ -234,6 +250,7 @@
       <tr><td class="num">V4</td><td>③④两表状态列出现色点, 与实例表同语言; 渲染数据面无变化</td><td>目检 + 既有守阵全绿</td></tr>
       <tr><td class="num">V5</td><td><code>test.full</code> 全绿; 新守阵红绿双验(至少一类突变判红)</td><td>commands run test.full</td></tr>
       <tr><td class="num">V6</td><td>旧 storage(无 state 字段的台账)打开选项页不报错、状态按 C2 降级显示</td><td>node 沙箱(构造旧结构输入)</td></tr>
+      <tr><td class="num">V7</td><td>工具栏图标四态外框肉眼可辨(绿/橙/红/无框), 徽标文字仅发现失败态出现且为红色「!」; 悬停结论与点击进本页不变</td><td>真机</td></tr>
     </tbody>
   </table>
 </section>
@@ -255,6 +272,7 @@
     <li>「自测端点连通」按钮文案与语义变更: 选项页内无其它引用; README 同步(S4); 旧快捷入口无(按钮本就在页面内)。「载入」与行内「测」随 R3 删除 —— 改 token 走删除重加, 探测走重测全部, 选项页内均无其它引用面。</li>
     <li><code>badgeLegend</code> id 迁入折叠区, id 保留 → 接线与守阵引用不断。</li>
     <li>manifest 权限面不变(探测目标端点已在实例 origin 授权内, 与轮询同一批)。</li>
+    <li>manifest 新增 <code>action.default_icon</code> + <code>icons/</code> 目录(R4): 装已解压扩展的用户在 <code>chrome://extensions</code> 点一次「重新加载」即生效; 无 storage 迁移。</li>
   </ul>
 </section>
 
@@ -287,10 +305,11 @@
   <ul>
     <li><b>26-10-16-0238</b> —— 模板评审二轮拍板(R1–R3)入册: token 列改「前 32 位指纹 + 悬停完整值」、自动条目显「-」; 来源徽标「优先」废止改「手动」(行为不变, 上游 Q11② 徽标措辞翻案, 守阵期望随 S5 翻转); 操作列收窄为「手动条目只有删 / 自动条目留空」, 「载入」「测」删除, 探测统一走「重测全部」(probe-one 消息取消)。§03.1 / §03.4 / §04 S3 / §05 C4 / §06 V1 / §08 同步改写; 三份候选模板同步更新。计划状态维持 Open。</li>
     <li><b>26-10-16-0247</b> —— 补记排序口径: 实例表<b>手动组在前、自动组在后</b>(上游 26-10-15-2357 Q9「手动恒在前」既有语义, 非新增行为); §03.1 示例行序与三份候选模板同步修正。</li>
+    <li><b>26-10-16-0306</b> —— 第三轮拍板 R4(工具栏徽标外框)入册: 徽标挡图标的根源 = 浏览器固定渲染 + manifest 无 <code>default_icon</code>; 拍板「状态色外框(路径 A: 预生成 4 态 × 2 尺寸 PNG + <code>setIcon({path})</code>)+ 折中文字通道(仅发现失败态追加红色 <code>!</code> 徽标)」。新增 §3.5 / §04 S6 / §05 C8 / §06 V7 / §08 迁移条目 / S5 守阵⑦; 三模板徽标图例同步「框式」色样。计划状态维持 Open。</li>
   </ul>
 </section>
 
-<footer>26-10-16-0214 · plan · hr-ext-connect-ui · Open —— 候选稿, 实施与立档待用户指令(更新 26-10-16-0238)</footer>
+<footer>26-10-16-0214 · plan · hr-ext-connect-ui · Open —— 候选稿, 实施与立档待用户指令(更新 26-10-16-0306)</footer>
 </div>
 </body>
 </html>
