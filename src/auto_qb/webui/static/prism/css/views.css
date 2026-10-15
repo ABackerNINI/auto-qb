@@ -191,6 +191,12 @@
   z-index: 2; background: var(--bg);
   transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
 }
+/* 首列 hover 高亮(2026-10-16 用户报「部分列 hover 未高亮」): 上面 background:var(--bg) 为吸左
+ * 遮住滑入的相邻列而必须**不透明**, 其特异性 (0,3,0) 压过 .h-cell:hover 的 (0,2,1) ⇒ 首列永不亮。
+ * 补法: 不动 background-color(吸左遮罩能力不减), 用 background-image 叠一层半透明高亮上来 ——
+ * 多重背景里 image 层天然叠在 color 层之上, 是合法语法(`background: A, B` 那种两层都带颜色则非法,
+ * 整条会被丢弃 ⇒ 千万别那么写)。 */
+.group-head > .h-cell:first-child:hover { background-image: linear-gradient(var(--surface-2), var(--surface-2)); }
 /* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
  * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
  * 省略号粘连的坏字, 被误读成渲染 bug。横滚非零时由 sync*HeadScroll 给 .group-table 与表头打
@@ -236,12 +242,17 @@
 .h-cell.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .h-cell .arrow { color: var(--accent); display: inline-block; animation: arrow-in .14s var(--ease-out); }
 .h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-/* 拖拽把手: right:-5px = 跨在列边界上(一半在格子内、一半落进 grid 的 10px 列间距); .h-cell 已
- * overflow:visible(省略号下移到 .h-label), 伸出的半边不再被裁(2026-10-06 解耦把手槽与文字排版)。 */
-.h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
-.h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%;
+/* 拖拽把手(2026-10-16 二轮): 可见线改落**列间间隙(gap)中央** —— 2026-10-06 去掉 padding-right 后
+ * 右对齐列的表头文字紧贴格子右缘, 压在边界上的线会盖住文字右 1px(实测 11 个右对齐数字列全重叠);
+ * 移到 gap 中央后线距两侧文字各 4px。热区仍跨边界, 抓握手感不变(right:calc(-1*var(--tbl-gap,10px)/2 - 3px)
+ * + width:10px, ::after left:6px → 线恒落 gap 正中: 默认 10px gap → right:-8px 线 [R+4,R+6];
+ * 抽屉 dt11 把 --tbl-gap 改 8px → right:-7px 线 [R+3,R+5], 两侧各 3px)。.h-cell 已 overflow:visible,
+ * 伸出的半边不被裁。可见反馈(hover): 整格底色(--surface-2)承担主视觉 + 2px 实色位置指示线(方案 C)。 */
+.h-cell .resizer { position: absolute; right: calc(-1 * var(--tbl-gap, 10px) / 2 - 3px); top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+.h-cell .resizer::after { content: ""; position: absolute; left: 6px; top: 15%; width: 2px; height: 70%;
   background: transparent; border-radius: 2px; }
-.h-cell:hover .resizer::after { background: var(--accent); }
+.h-cell:hover { background: var(--surface-2); }  /* 整列高亮 = 可拖拽的主视觉; 与行 hover 同变量 */
+.h-cell:hover .resizer::after { background: var(--accent); }  /* hover 列头时点亮位置指示线 */
 
 /* P0-3 乐观 UI: pending 行 = 本地已按预期改过、还没拿到服务端确认。
    半透明 + 轻微动效表示"进行中"; 回执失败会回滚原值(见 app.js resolveOptimistic),

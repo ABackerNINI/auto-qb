@@ -221,12 +221,18 @@
 .h-cell.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .h-cell .arrow { color: var(--accent); }
 .h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-/* 拖拽把手: right:-5px = 跨在列边界上(一半在格子内、一半落进 grid 的 10px 列间距); .h-cell 已
- * overflow:visible(省略号下移到 .h-label), 伸出的半边不再被裁(2026-10-06 解耦把手槽与文字排版)。 */
-.h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
-.h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%;
+/* 拖拽把手(2026-10-16 二轮): 可见线落**列间间隙(gap)中央**而非压在列边界上 —— 2026-10-06 去掉
+ * padding-right 后右对齐列表头文字紧贴格子右缘, 压在边界上的线会盖住文字右 1px(实测 11 个右对齐
+ * 数字列全重叠); 移到 gap 中央后线距两侧文字各 4px。热区 [R-2, R+8] 仍跨边界, 抓握手感不变
+ * 不变(right:calc(-1*var(--tbl-gap,10px)/2 - 3px) + width:10px, ::after left:6px → 线恒落 gap 正中:
+ * 默认 10px gap → right:-8px 线 [R+4,R+6]; 抽屉 dt11 把 --tbl-gap 改 8px → right:-7px 线 [R+3,R+5],
+ * 两侧各 3px)。.h-cell 已 overflow:visible, 伸出的半边不被裁。可见反馈(hover): 整格底色(--surface-2)
+ * 承担主视觉 + 2px 实色位置指示线(方案 C; 亚像素相位差实测无法靠线宽根治, 故让"面"承担主视觉)。 */
+.h-cell .resizer { position: absolute; right: calc(-1 * var(--tbl-gap, 10px) / 2 - 3px); top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+.h-cell .resizer::after { content: ""; position: absolute; left: 6px; top: 15%; width: 2px; height: 70%;
   background: transparent; border-radius: 0; }
-.h-cell:hover .resizer::after { background: var(--accent); }
+.h-cell:hover { background: var(--surface-2); }  /* 整列高亮 = 可拖拽的主视觉; 与行 hover 同变量 */
+.h-cell:hover .resizer::after { background: var(--accent); }  /* hover 列头时点亮可拖拽提示线 */
 .detail-head { position: relative; }
 .h-cell.drag-src { opacity: .45; }
 .group-head.col-dragging .h-cell, .detail-head.col-dragging .h-cell { cursor: col-resize; }

@@ -160,6 +160,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
   z-index: 2; background: var(--bg);
   transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
 }
+/* 首列 hover 高亮(2026-10-16 用户报「部分列 hover 未高亮」): 上面 background:var(--bg) 为吸左
+ * 遮住滑入的相邻列而必须**不透明**, 其特异性 (0,3,0) 压过 .h-cell:hover 的 (0,2,1) ⇒ 首列永不亮。
+ * 补法: 不动 background-color(吸左遮罩能力不减), 用 background-image 叠一层半透明高亮上来 ——
+ * image 层天然叠在 color 层之上, 合法语法(prism 同口径)。 */
+.group-head > .h-cell:first-child:hover { background-image: linear-gradient(var(--surface-2), var(--surface-2)); }
 /* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
  * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
  * 省略号粘连的坏字, 被误读成渲染 bug。横滚非零时由 sync*HeadScroll 给 .group-table 与表头打
