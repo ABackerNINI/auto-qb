@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-15-0945">
+<meta name="doc-updated" content="26-10-15-1145">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P1–P6 待拍板 · 未入池 issue</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 暂缓(1145) · P3–P6 待拍板</div>
 </nav>
 
 <header class="cover">
@@ -136,10 +136,10 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0 已完成 · P1–P6 待拍板</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2 已完成 · P1 暂缓 · P3–P6 待拍板</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
-    <div class="item"><div class="k">本轮形态</div><div class="v">纯文档轮 · 未改代码/配置/数据</div></div>
+    <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
   </div>
 </header>
 
@@ -271,7 +271,7 @@
     <div class="step">
       <div class="sid">P2</div>
       <div class="sbody">
-        <div class="st">读侧:快照台阶按真实发生跨度摊配(消放大) <span class="pill p2">核心</span></div>
+        <div class="st">读侧:快照台阶按真实发生跨度摊配(消放大) <span class="pill p2">核心</span> <span class="pill p3">已完成 26-10-15-1135 · 结论见下方实施记录</span></div>
         <p class="lead">落在纯读侧、零格式影响、旧数据即受益,故排在写侧之前先拿收益。</p>
         <ul>
           <li><b>落点</b>:<span class="k">traffic_grid.py</span> -- <code>v4_totals_points</code>(:469) / <code>_bucket_delta</code>(:205) / <code>v4_rate_from_totals</code>(:490) / <code>v4_grid_obs</code>(:533)。</li>
@@ -287,7 +287,7 @@
     <div class="step">
       <div class="sid">P1</div>
       <div class="sbody">
-        <div class="st">写侧:z 游程在盘上携带末端真值(消接缝差的来源) <span class="pill p2">核心</span></div>
+        <div class="st">写侧:z 游程在盘上携带末端真值(消接缝差的来源) <span class="pill p2">核心</span> <span class="pill p1">暂缓(用户拍板 26-10-15-1145)</span></div>
         <p class="lead">让「增长发生在哪一段时间内」在磁盘链上可判 -- 当前快照冻结使接缝差没有任何时间锚点。本步会改变 z 行的 totals 语义,风险高于 P2,故排在 P2 之后并需评估。</p>
         <ul>
           <li><b>落点</b>:<span class="k">traffic_sample_mod.py</span> -- <code>OpenRun</code>(:231) / <code>_advance_run</code>(:730) / <code>_seal_run</code>(:758)。</li>
@@ -395,6 +395,47 @@
     </ul>
   </div>
   <p class="lead">探针:只读脚本(会话 scratch <code>.openclaw/tmp/probe_p0_seam_path.py</code>,未入库),关键输出已全部内联于上表;复跑条件 = 本 clone 源码 + 运行实例天文件只读可访问。</p>
+
+  <h3 id="p2-record"><span class="tag2">REC</span>实施记录 · P2 读侧接缝摊配(26-10-15-1135 · clone @ 28c7ed27)</h3>
+  <p class="lead">实施轮:改动 <code>src/auto_qb/core/traffic_grid.py</code> + <code>tests/test_traffic_grid.py</code> 两个源文件;未触配置/运行数据/前端。§01 落点行号开工复核:逐条一致,零漂移。全量数字见基线切片 <code>testing/baselines/26-10-15-1135-qb-traffic-restart-spike-gap-p2.md</code>(3307 passed + 3 skipped,不手抄)。</p>
+  <table>
+    <thead><tr><th style="width:190px">决策点</th><th>定案与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>SEAM_NULL_S 的约束对象</b></td>
+        <td>计划原文「Δt 超上限标 null」若按<b>变化点跨度</b>解读,本事故 6.6h 陈旧差永不可摊,与 P0 定案的「两缝一并治理」直接矛盾 —— 实施定为约束<b>观测覆盖缝</b>(相邻两观测桶点的覆盖缝 gap &gt; 60s = 停机洞,断链丢弃对齐 G2/E2E3;≤ 60s = 重启缝,摊配回收)。摊配分母(变化点跨度)与洞判定分母(观测缝)两量分离,理由已写进常量注释(语义锚定 P0 实施记录)。</td>
+      </tr>
+      <tr>
+        <td><b>摊配判据(防误摊)</b></td>
+        <td>三条件同时满足才摊:①台阶 step = cur − 游程值 &gt; 0;②锚点之后的等值游程<b>全部 z 形</b>(rate 双零 —— 写侧不变式「速率字段双零 ⟺ z 槽」,真 flat-r 游程有非零速率,不误摊 —— 反例守阵 <code>test_v4_seam_flat_r_run_not_spread</code>);③跨度 span &gt; max(2×接收桶宽, 60s)。份额 ∝ 覆盖秒,余额归接收桶 —— 份额级(delta 通道)严格守恒;速率级逐桶 round(份额/w) 整数粒度偏差 ≤ 每桶 1 字节(实测 0.11%,文档容差「余数按 round 落桶」同族)。</td>
+      </tr>
+      <tr>
+        <td><b>落点扩展:窗界有界回看</b></td>
+        <td><b>计划 §03 P2 落点未含 <code>v4_series_points</code>,实施期扩入</b>:首版仅摊配时,窄窗的摊配分母被窗界截断回窗内残余跨度(30m 窗实测接缝桶 10.1 KB/s,真值 ~643 B/s,15 倍重放大),E2E1「三窗峰值降至真实夜均速率量级」不达。修法 = 块内槽点与 null 标记的保留下界放宽到 <code>t0 − _V4_SEAM_LOOKBACK_S</code>(86400s = 写侧游程强制封口上限 ZRUN_FLUSH_S 同值 —— 陈旧跨度物理上不可能超过它;超界只可能是前缀,链在保留首点重锚无中断风险);渲染不受影响(窗外槽点由 v4_grid_obs 栅格覆盖过滤承载),D3 窗首种子语义不变(被完整链自然包含)。回看后三窗接缝桶逐位一致(见 E2E1)。</td>
+      </tr>
+      <tr>
+        <td><b>连带:_V4_NULL_FLOOR_S 退役</b></td>
+        <td>标记过滤与点过滤同界后,issue 26-10-08-0141 的 1 秒带整段被回看界包含;且标记窄于点界会在窗外重建该 issue 的断链失效假尖峰(带外标记被丢而种子点因回看保留,链误接)—— <code>_V4_NULL_FLOOR_S</code> 删除,<code>_V4_SEAM_LOOKBACK_S</code> 接替,边界带用例改写为「带内带外均断链」双形态钉住。坑档 <code>pitfalls/backend/traffic-window-edge-floor.md</code> 已补取代注记。</td>
+      </tr>
+      <tr>
+        <td><b>既有用例期望更新(3 条)</b></td>
+        <td><code>test_v4_d1_cross_bucket_coverage</code> / <code>test_v4_totals_diff_reset_baseline_and_zchain</code> / <code>test_v4_rate_from_totals_zchain_vacuum_null_passthrough</code> 的接缝形态断言原钉的是<b>被修复的单桶归因语义</b>,按新语义更新并注记;另 window_filter / seed_vacuum_edge_band 两条按回看契约更新(窗前槽点与标记保留)。「Δ &lt; 阈值行为逐字不变」由 <code>test_v4_seam_below_threshold_unchanged</code> 钉住。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box ok">
+    <div class="t">E2E1 判定:三窗 PASS(P2 验收判据达成)</div>
+    <p>只读探针(会话 scratch <code>.openclaw/tmp/e2e1_replay_p2.py</code>,未入库)对运行实例 <code>2026-10-15.dat</code> + P0 实测活尾重建走真实读侧管线:30m/3h/24h 三窗接缝桶 <b>(1068, 1526) B/s 逐位一致</b>(修复前单桶 delta/w = 7,643,191 / 8,248,811 B/s,消除 7157×);夜均平线 (492, 532) B/s(真值 ~643 B/s,逐记录桶宽 ceil 取整偏差,与既有口径同族);份额级守恒 dl 15,286,382 / up 16,497,623 精确;无观测缝栅格桶 0 可见(G2);午夜跨天缝同机理一并改善(24h 窗内可见)。守阵红绿双验三类突变判红(摊配关 5 红 / 签名关 1 红 / 洞判关 1 红)后还原复绿。</p>
+  </div>
+  <div class="box">
+    <div class="t">待拍板项状态(§07)</div>
+    <ul>
+      <li><b>#2 阈值与兜底</b>:按计划 P2 默认落为模块常量(<code>_V4_SEAM_SPREAD_MIN_S = 60</code> / <code>_V4_SEAM_NULL_S = 60</code>,另加 <code>_V4_SEAM_LOOKBACK_S = 86400</code>),未配置化 —— 守阵 <code>test_v4_seam_constants_frozen</code> 钉值;若拍板改配置化须同步 validate_config 与 config/schema.py(黄金法则 4)。</li>
+      <li><b>#4 实施批次</b>:P2 单独实施已闭环主症状(E2E1);<b>P1 暂缓(用户拍板 26-10-15-1145)</b> —— 维持 P0 定案的「可选」定位(治不到活尾期尖峰),待重启后观测面复核再议。</li>
+      <li><b>#5 立档</b>:本轮触及 2 个源文件(&lt; 3),按本计划 §07.5 不另立任务档案,专题记录由本计划 + activeContext 切片承载;如需立档请显式说。</li>
+      <li>#1(P1 形态)/#3(P3 范围)不受本轮影响,仍待拍板。</li>
+    </ul>
+  </div>
 </section>
 
 <!-- ============================================================ -->
@@ -558,6 +599,8 @@
 <div class="foot">
   <p>本计划为纯文档轮产物:未修改任何源码、配置与运行数据;未入池 issue、未立档、未提交。实施落点行号取自 clone <code>auto-qb-clone3</code> @ <code>8d089678</code>(开工同步 <code>my-commit-flow.sync</code> 结果「已同步 8d089678」);实施前应逐条复核源码漂移。</p>
   <p><b>变更记录</b>:26-10-15-0945 — P0 实施完成(只读轮,未改码/配置/数据):§03 追加「实施记录 · P0」,状态栏与 P0 步骤标记更新;按实施记录改写 P1(降级可选)/P2(升级唯一必要环、落点扩为两缝)的相对定位,§07 待拍板项正文不动、影响见实施记录。</p>
+  <p>26-10-15-1135 — P2 实施完成:§03 追加「实施记录 · P2」,状态栏与 P2 步骤标记更新;落点扩展(v4_series_points 窗界有界回看)与 _V4_NULL_FLOOR_S 退役见实施记录;E2E1 三窗 PASS;全量数字见基线切片 <code>testing/baselines/26-10-15-1135-qb-traffic-restart-spike-gap-p2.md</code>。</p>
+  <p>26-10-15-1145 — 用户拍板「P1 暂缓, 提交」:P1 步骤标记与待拍板状态更新,其余不动。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

@@ -35,9 +35,16 @@
   —— 重置桶的后继对其快照差分仍有基线(链永不被 rate 缺失打断)
 - test_v4_rate_from_totals_zchain_vacuum_null_passthrough: z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点原样透传且断链;
   断链后基线缺失 rate=None 而 totals 保留(观测面缺口不吞快照)
-- test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141)窗首种子 1 秒边界带 —— 停机落在 (t0-1, t0) 时真空 null 点取整后 = t0-1 落窗外,
-  窗过滤下界放宽 _V4_NULL_FLOOR_S 后保留并正确断链(恢复首桶 rate 派不出, 非跨停机假尖峰); 带外(种子点亦被滤)无假尖峰路径
+- test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141, P2 回看后强化)窗首种子边界带 —— 停机标记与点同界(_V4_SEAM_LOOKBACK_S)后带内带外均保留并断链
+  (恢复首桶 rate 派不出, 离线字节不误归; 标记窄于点界会在窗外重建断链失效假尖峰)
 - test_v4_rate_from_totals_wide_bucket_byte_conservation: 宽桶 rate = delta/w —— 逐桶 rate×w = delta 且 Σ(rate×w) = Σ delta 字节守恒(整除构造)
+- test_v4_seam_spread_live_tail_restart_no_spike: (plan 26-10-15-0829 P2)活尾缝摊配 —— 磁盘长 z 形等值游程(快照冻结)+ 活尾新鲜快照:
+  接缝差按真实跨度摊配, 接收桶无单桶尖峰, 游程桶+接收桶均匀 step/ΣW, Σ(rate×w) = delta 守恒; 缝内栅格桶仍无观测(G2)
+- test_v4_seam_spread_disk_vacuum_recovers_delta: (P2)磁盘缝摊配 —— 真空标记 present 但缝 <= 60s 时台阶跨标记摊配回收(修复前静默丢弃), 标记桶仍 null
+- test_v4_seam_hole_over_threshold_drops_delta: (P2 诚实兜底)观测缝 > 60s = 停机洞: delta=None 断链不摊配(活尾长缝与块间真空两形态同判)
+- test_v4_seam_below_threshold_unchanged: (P2 边界)跨度 <= 阈值行为逐字不变: 无标记短游程恢复桶仍单桶 delta/w / 有标记短缝仍断链 None
+- test_v4_seam_flat_r_run_not_spread: (P2 反例守阵)真 flat-r 游程(上行非零)不摊配 —— z 形签名(速率双零)是摊配必要条件
+- test_v4_seam_constants_frozen: (P2 守阵)阈值常量冻结(摊配下限/洞阈值各 60s, 模块常量非配置键)
 - test_v4_grid_obs_rate_null_totals_valid_exemption: (D4 豁免)rate=None 但 totals 有效的桶点只更新覆盖末端与快照链(rate 权重记 0, 逐向独立)
   —— 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线不断); 混合覆盖按速率覆盖秒加权; 真 null 点仍不参与
 - test_group_rate_points_over_transformed_obs_unchanged: 组求和口径不变(S1 钉住)—— group_null_mask/group_rate_points 消费变换后 obs
@@ -58,6 +65,7 @@ from auto_qb.core.traffic_grid import (
     MAX_RAW_BUCKETS,
     V4PointEntry,
     WINDOW_SPECS,
+    WindowGrid,
     build_grid,
     build_month_grid,
     group_null_mask,
@@ -73,6 +81,8 @@ from auto_qb.core.traffic_grid import (
     v4_series_points,
     v4_series_slots,
     v4_totals_points,
+    _V4_SEAM_NULL_S,
+    _V4_SEAM_SPREAD_MIN_S,
 )
 from auto_qb.core.traffic_store import (
     AggRow,
@@ -428,7 +438,8 @@ def test_v4_points_known_sequence_end_to_end():
 def test_v4_d1_cross_bucket_coverage():
     """跨桶覆盖(D1 定稿): z 游程单记录按均摊槽展开多桶 —— 每桶 rate 同值 (0,0) + totals
     同快照 + 非 null(覆盖语义的字面形态); r 记录暂停(显式大 dt)由宽桶整段承载 —— 暂停区间
-    无 null 点不伪断(v2 一刀切栅格会出成片空桶伪洞), totals 增量落在恢复记录一桶"""
+    无 null 点不伪断(v2 一刀切栅格会出成片空桶伪洞)。totals 增量原单桶落在恢复记录
+    (P2 接缝摊配后, 长 z 游程冻结期的台阶按真实发生跨度摊配到游程桶+恢复桶, 见断言)"""
     b = V4Block(
         1000,
         30,
@@ -453,11 +464,11 @@ def test_v4_d1_cross_bucket_coverage():
     totals = v4_totals_points(points)
     assert [(e.t, e.dl, e.up) for e in totals] == [
         (970, None, None),
-        (1000, 0, 0),  # 空闲段 delta=0 链不断
-        (1040, 0, 0),
-        (1080, 0, 0),
-        (1120, 0, 0),
-        (1160, 200, 200),  # 恢复桶有基线(由游程快照续上)
+        (1000, 40, 40),  # (P2 接缝摊配)160s z 游程冻结期 +200/+200 按覆盖秒摊配(份额 40/桶)
+        (1040, 40, 40),
+        (1080, 40, 40),
+        (1120, 40, 40),
+        (1160, 40, 40),  # 接收桶 = 余额; Σ = 200/200 守恒(修复前恢复桶单桶 200/200)
     ]
     # r 记录暂停: 2s 块内一记录显式 dt=20s -> 宽桶 [2000,2020) 整段承载(= 10 个标称 2s 桶)
     b2 = V4Block(
@@ -538,10 +549,10 @@ def test_v4_totals_diff_reset_baseline_and_zchain():
         (1151, 100, 100),
         (1181, None, None),  # 块间真空
         (4970, None, None),  # 真空断链后基线缺失
-        (5000, 0, 0),  # 基线由 4970 桶快照续上
-        (5030, 0, 0),  # z 快照(1000,500)恒定 -> 空闲段 delta=0 链不断
-        (5060, 0, 0),
-        (5090, 200, 60),  # 后继活跃桶恢复有基线(由 z 快照续上)
+        (5000, 50, 15),  # (P2 接缝摊配)z 游程冻结期 +200/+60 按覆盖秒摊配(份额 50/15)
+        (5030, 50, 15),
+        (5060, 50, 15),
+        (5090, 50, 15),  # 接收桶 = 余额; Σ = 200/60 守恒(修复前恢复桶单桶 200/60)
     ]
 
 
@@ -590,21 +601,25 @@ def test_v4_vacuum_and_disconnect_distinct():
 
 
 def test_v4_window_filter_and_empty():
-    """窗口切片: ts >= t1 槽不消费 / 覆盖桶触及 t0 才保留(桶首允许略早于 t0, 上界一个
-    桶宽, 行照收对齐 v2 窗首口径) / null 点按窗口过滤 / 无块 = 空元组(停机天然真空)"""
-    b1 = V4Block(500, 30, 1, 1, (V4Sample(1, 1, 1, 1), V4Sample(1, 1, 1, 1)))  # @500/@530(窗前)
+    """窗口切片: ts >= t1 槽不消费 / 窗口左界侧保留全部块内槽点(P2 回看: 差分链需完整
+    陈旧跨度, 渲染由 v4_grid_obs 栅格覆盖过滤承载) / null 点按同界过滤 / 无块 = 空元组
+    (停机天然真空)"""
+    b1 = V4Block(500, 30, 1, 1, (V4Sample(1, 1, 1, 1), V4Sample(1, 1, 1, 1)))  # @500/@530(窗前, 回看保留)
     b2 = V4Block(1000, 30, 2, 2, (V4Sample(2, 2, 2, 2), V4Sample(3, 3, 3, 3), V4NullRun(2)))  # @1000/@1030/n
     b3 = V4Block(2000, 30, 4, 4, (V4Sample(4, 4, 4, 4), ))  # @2000(t1 之后)
     points = v4_series_points((b1, b2, b3), 1000, 1100)
     assert [_p(p) for p in points] == [
-        (970, 2, 2, 2, 2),  # 桶 [970,1000) 触及 t0: 照收(桶首略早于 t0)
+        (470, 1, 1, 1, 1),  # (P2 回看)块首槽保留: 差分链完整(渲染由栅格覆盖过滤, 不进响应)
+        (500, 1, 1, 1, 1),
+        (530, None, None, None, None),  # b1->b2 块间真空标记(t = int(530)), 同界保留(旧窗界下被丢)
+        (970, 2, 2, 2, 2),
         (1000, 3, 3, 3, 3),
         (1060, None, None, None, None),  # n 槽 null 点
         (1090, None, None, None, None),  # b2->b3 真空标记(t=1090 < t1)
     ]
     assert v4_series_points((), 0, 1000) == ()  # 无块 = 天然真空
     assert v4_series_points((V4Block(1000, 30, None, None, ()), ), 0, 1000) == ()  # 空块(解析器不产, 防御直构)跳过
-    assert v4_series_points((b3, ), 0, 1000) == ()  # 全部槽在窗外
+    assert v4_series_points((b3, ), 0, 1000) == ()  # 全部槽在窗尾之后(ts >= t1 不消费)
 
 
 def test_v4_series_slots_seam():
@@ -834,57 +849,73 @@ def test_v4_rate_from_totals_reset_per_direction_chain_unbroken():
 
 
 def test_v4_rate_from_totals_zchain_vacuum_null_passthrough():
-    """z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点(rate/totals 全 None)原样透传
-    且断链 —— 后继基线缺失 rate=None 而 totals 原样保留(观测面缺口不吞快照)"""
+    """z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点(rate/totals 全 None)原样透传;
+    观测面缺口不吞快照(totals 保留)。P2 接缝摊配改写短缝后继: 30s 真空缝 <= 60s = 重启缝,
+    台阶跨标记按真实跨度摊配回收(修复前断链 None); 长缝(>60s)仍断链, 见
+    test_v4_seam_hole_over_threshold_drops_delta"""
     pts = (
         V4PointEntry(1000, 0, 0, 1000, 500, w=30),  # z 形态
         V4PointEntry(1030, 0, 0, 1000, 500, w=30),  # delta 0 续链
         V4PointEntry(1060, None, None, None, None, w=0),  # 真空/断连 null 点
-        V4PointEntry(1090, 5, 5, 1100, 600, w=30),  # 断链后基线缺失
+        V4PointEntry(1090, 5, 5, 1100, 600, w=30),  # 短缝后继: 台阶跨标记摊配
         V4PointEntry(1120, 5, 5, 1700, 900, w=30),  # 对 1090 快照差分恢复: +600/+300 -> 20/10
     )
     out = v4_rate_from_totals(pts)
     assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
         (1000, None, None),  # 窗首无种子: 基线缺失(z 形态桶也无基线可差)
-        (1030, 0, 0),  # z 形态桶对前驱差分 delta=0 -> 0 线续链
-        (1060, None, None),  # null 点透传
-        (1090, None, None),  # 断链后基线缺失
-        (1120, 20, 10),
+        (1030, 2, 2),  # (P2 接缝摊配)台阶 100/100 跨标记摊到 1030/1090(份额 50, rate=round(50/30))
+        (1060, None, None),  # null 点透传(标记桶仍 null, 摊配不凭空造数据)
+        (1090, 2, 2),  # 接收桶 = 余额(修复前断链 None)
+        (1120, 20, 10),  # 摊配后游程重锚于 1090: 本桶差分照旧
     ]
     assert out[2] == pts[2]  # null 点原样透传(恒等)
-    assert (out[3].dl_total, out[3].up_total) == (1100, 600)  # 断链不吞快照(totals 保留)
+    assert (out[3].dl_total, out[3].up_total) == (1100, 600)  # 摊配不吞快照(totals 保留)
 
 
 def test_v4_seed_vacuum_null_t0_edge_band_chain_break():
-    """(issue 26-10-08-0141)窗首种子 1 秒边界带: 停机时刻落在 (t0-1, t0) 时, 真空 null 点
-    t = int(prev_chain_end) 取整后 = t0-1 恰落窗外 —— 窗过滤下界放宽 _V4_NULL_FLOOR_S 后
-    标记保留(修复前被丢), 种子点(key = t0-w, 覆盖桶触及 t0 照收)与恢复首点之间差分链正确
-    断开: 恢复首桶 rate 派不出(None)且离线期字节不被误归(修复前链误接 -> 恢复首桶 delta 跨
-    停机 = 假尖峰), 次桶基线恢复 delta/w。带外(停机再早 1 秒)种子点亦不满足覆盖被滤,
-    恢复首点本就无基线 —— 无假尖峰路径, 钉住边界带恰为 (t0-1, t0)"""
+    """(issue 26-10-08-0141)窗首种子 1 秒边界带(P2 回看后语义强化): 停机标记与点同界
+    (_V4_SEAM_LOOKBACK_S)后, (t0-1, t0) 带内与带外的停机标记均保留 —— 差分链均正确
+    断开: 恢复首桶 rate 派不出(None)且离线期字节不被误归(修复前链误接 -> 恢复首桶
+    delta 跨停机 = 假尖峰), 次桶基线恢复 delta/w。原带外对照(标记 998 被丢)在旧窗界下
+    靠「种子点亦被滤」免于误接, 回看保留种子点后标记同界保留才维持断链 —— 两形态现在
+    同构, 假尖峰路径在带内外均不存在"""
     # 种子块末槽 @999.5 ∈ (t0-1, t0)(t0 = seed_t0 = 1000); 恢复块首点 @1030 -> 桶 1000
     seed = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=29500)))
     recover = V4Block(1030, 30, 10600, 5300, (V4Sample(9, 9, 10600, 5300), V4Sample(8, 8, 11200, 5600)))
     pts = v4_series_points((seed, recover), 1000, 1200)
     assert [(p.t, p.dl_rate, p.dl_total) for p in pts] == [
+        (940, 1, 1000),  # (P2 回看)种子块首槽保留: 差分链完整(渲染由栅格覆盖过滤)
         (970, 2, 1600),  # 种子点: key = ceil(999.5)-30 = 970, 覆盖桶触及 t0 照收(不外发, 供差分基线)
-        (999, None, None),  # 真空 null 点: t = int(999.5) = t0-1, 下界放宽后保留(修复前被丢)
+        (999, None, None),  # 真空 null 点: t = int(999.5) = t0-1, 同界保留(修复前被丢)
         (1000, 9, 10600),  # 恢复首点: 断链后基线缺失
         (1030, 8, 11200),
     ]
     out = v4_rate_from_totals(pts)
     assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
-        (970, None, None),  # 种子自身基线缺失(不外发)
+        (940, None, None),  # 链首基线缺失(不外发)
+        (970, 20, 10),  # 种子次槽 delta(600,300)/30(修复前被窗界滤掉, 链首 = 970 基线缺失)
         (999, None, None),
         (1000, None, None),  # 恢复首桶: 断链 -> 派不出(修复前 = (10600-1600)/30 = 300 假尖峰)
         (1030, 20, 10),  # 次桶基线恢复 delta(600,300)/30
     ]
-    # 带外对照: 停机再早 1 秒(末槽 @998.5 -> 取整 998 < t0-1)时种子点亦不满足覆盖
-    # (ceil(998.5)-30 = 969, 覆盖桶 [969,999) 不触及 t0=1000) -> 被滤, 恢复首点本就无基线
+    # 带外对照: 停机再早 1 秒(末槽 @998.5 -> 取整 998)—— 旧窗界下标记被丢且种子点亦被滤
+    # (免于误接); 回看后两者均保留, 标记同界保留 -> 断链同样成立, 无假尖峰路径不变
     seed2 = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=28500)))
     pts2 = v4_series_points((seed2, recover), 1000, 1200)
-    assert [(p.t, p.dl_rate) for p in pts2] == [(1000, 9), (1030, 8)]  # 种子/null 均在窗外: 无标记无种子点
-    assert [(p.t, p.dl_rate) for p in v4_rate_from_totals(pts2)] == [(1000, None), (1030, 20)]  # 无假尖峰
+    assert [(p.t, p.dl_rate) for p in pts2] == [
+        (940, 1),
+        (970, 2),  # key = ceil(998.5) - w29(逐记录桶宽 ceil(28.5)) = 970
+        (998, None),  # 带外标记: t = int(998.5) = 998, 同界保留(旧窗界下被丢)
+        (1000, 9),
+        (1030, 8),
+    ]
+    assert [(p.t, p.dl_rate) for p in v4_rate_from_totals(pts2)] == [
+        (940, None),
+        (970, 21),  # delta(600)/w29 = 20.7 -> 21(逐记录桶宽 ceil(28.5) = 29)
+        (998, None),
+        (1000, None),  # 断链 -> 派不出(无假尖峰)
+        (1030, 20),
+    ]
 
 
 def test_v4_rate_from_totals_wide_bucket_byte_conservation():
@@ -948,3 +979,157 @@ def test_group_rate_points_over_transformed_obs_unchanged():
     pts = group_rate_points([m1, m2], g, mask)
     assert pts[100] == {"t": b0, "dl": 130, "up": 80}
     assert pts[101] == {"t": b1, "dl": 20, "up": 10}  # m1 豁免桶按 0 计(无行同款)
+
+
+# ---------- 接缝摊配(plan 26-10-15-0829 P2: 快照台阶按真实发生跨度摊配, 消除单桶反比放大) ----------
+
+
+def test_v4_seam_spread_live_tail_restart_no_spike():
+    """(P2 主形态, P0 实施记录)活尾缝摊配: 磁盘链长 z 形等值游程(快照冻结)+ 活尾开放
+    z 游程(新鲜快照 F0)—— 接缝差按真实跨度摊配: 接收桶无单桶尖峰(修复前 delta/w,
+    本事故 2s 桶 ~12,000 倍), 游程桶+接收桶均匀 step/ΣW 平线, 逐点 Σ(rate x w) = delta
+    字节守恒; 无观测缝栅格桶仍无观测(摊配不凭空造非 null 桶, G2/E2E3)"""
+    interval = 2
+    disk = V4Block(
+        1000,
+        interval,
+        1000,
+        500,
+        (V4Sample(1, 1, 1000, 500), V4ZeroRun(60, 1000, 500, dt_ms=120000)),
+    )  # z 游程 60 槽 x 2s = 120s, 快照冻结 (1000,500); 末槽 @1120 -> 桶 1118
+    # 活尾 = 重启后开放 z 游程(head_pending 无落盘记录): F0 = 冻结期真实增长 +244/+122
+    run = LiveTailRun(kind="z", start=1129.0, last_seen=1141.0, dl_total=1244, up_total=622, samples=6)
+    tail = LiveTail(
+        block_open=True,
+        head_pending=True,
+        start_epoch=1129,
+        interval_s=interval,
+        projected_ts=1129.0,
+        records=(),
+        open_run=run,
+    )
+    points = v4_series_points((disk, ), 900, 2000, tail_slots=v4_live_tail_slots(tail))
+    assert len(points) == 67  # 1 r 点 + 60 游程桶 + 6 活尾桶
+    assert not any(p.dl_rate is None for p in points)  # 活尾合流不产 null 标记(S6 既有口径)
+    out = v4_rate_from_totals(points)
+    # 摊配: step=244/122, 接收者 = 60 游程桶(w=2) + 接收桶(w=2), ΣW=122 -> 份额 4/2, 余额 4/2
+    assert all(p.dl_rate == 2 and p.up_rate == 1 for p in out[1:62])  # 游程 60 桶+接收桶 = 均匀平线
+    assert all(p.dl_rate == 0 and p.up_rate == 0 for p in out[62:])  # 接收桶之后等值延续 delta=0
+    assert out[0].dl_rate is None and out[0].up_rate is None  # 窗首基线缺失
+    assert sum(p.dl_rate * p.w for p in out[1:62]) == 244  # 字节守恒(点级, 整除构造)
+    assert sum(p.up_rate * p.w for p in out[1:62]) == 122
+    totals = v4_totals_points(points)
+    assert [(e.dl, e.up) for e in totals[1:62]] == [(4, 2)] * 61
+    assert [(e.dl, e.up) for e in totals[62:]] == [(0, 0)] * 5
+    # 栅格诚实性: 无观测缝(1120..1126)栅格桶无观测; 接收覆盖 [1129,1131) 奇键跨界:
+    # 1128 桶得 1s(rate 2); 1130 桶 = 接收桶 1s(rate 2) + 后继等值点 1s(rate 0) 加权 = 1
+    g = WindowGrid("5m", 900, 2000, 2, "raw", tuple(range(900, 2000, 2)))
+    obs = v4_grid_obs(out, g)
+    assert all(b not in obs for b in (1120, 1122, 1124, 1126))  # 缝内桶仍 null(不凭空造数据)
+    assert obs[1128].dl_rate == 2 and obs[1130].dl_rate == 1  # 接收覆盖跨界分摊(与后继 0 线加权)
+
+
+def test_v4_seam_spread_disk_vacuum_recovers_delta():
+    """(P2)磁盘缝摊配(P0 实施记录 ② 反事实形态): 块间真空 null 标记 present(渲染
+    断线)但缝 <= _V4_SEAM_NULL_S 时台阶跨标记按真实跨度摊配回收 —— 修复前陈旧差被
+    静默丢出 totals 通道; 标记桶自身仍 null(摊配不凭空造数据)"""
+    b1 = V4Block(
+        1000,
+        2,
+        1000,
+        500,
+        (V4Sample(1, 1, 1000, 500), V4ZeroRun(60, 1000, 500, dt_ms=120000)),
+    )
+    b2 = V4Block(1129, 2, 1244, 622, (V4Sample(9, 9, 1244, 622), ))  # 重启后新块(封口形态)
+    points = v4_series_points((b1, b2), 900, 2000)
+    assert any(p.t == 1120 and p.dl_rate is None for p in points)  # 真空标记 present @1120
+    out = v4_rate_from_totals(points)
+    marks = [p for p in out if p.dl_rate is None and p.up_rate is None and p.w == 0]
+    assert [p.t for p in marks] == [1120]  # 恰一个 null 点(标记)
+    spread = [p for p in out if not (p.dl_rate is None and p.up_rate is None and p.w == 0)]
+    assert all(p.dl_rate == 2 and p.up_rate == 1 for p in spread[1:])  # 游程+接收桶均匀平线
+    assert sum(p.dl_rate * p.w for p in spread[1:]) == 244  # 跨缝回收: Σ = 接缝差守恒
+    assert sum(p.up_rate * p.w for p in spread[1:]) == 122
+
+
+def test_v4_seam_hole_over_threshold_drops_delta():
+    """(P2 诚实兜底)观测缝 > _V4_SEAM_NULL_S(60s)= 停机洞: delta=None 断链, 不摊配
+    不回收(E2E3: 停机洞不被摊配填成伪值); 活尾长缝(无标记)与块间真空(有标记)
+    两形态同判"""
+    disk = V4Block(
+        1000,
+        2,
+        1000,
+        500,
+        (V4Sample(1, 1, 1000, 500), V4ZeroRun(60, 1000, 500, dt_ms=120000)),
+    )
+    # 活尾长缝: 进程停机 300s 后重启采样(B.start=1429), 开放游程 150 样本 x 2s;
+    # 首活尾槽 @1431 -> 覆盖缝 = 1429-1120 = 309s > 60s(洞; 游程均摊不吸收停机段)
+    run = LiveTailRun(kind="z", start=1429.0, last_seen=1729.0, dl_total=1244, up_total=622, samples=150)
+    tail = LiveTail(
+        block_open=True,
+        head_pending=True,
+        start_epoch=1429,
+        interval_s=2,
+        projected_ts=1429.0,
+        records=(),
+        open_run=run,
+    )
+    out = v4_rate_from_totals(v4_series_points((disk, ), 900, 2000, tail_slots=v4_live_tail_slots(tail)))
+    z_part = out[1:61]
+    assert all(p.dl_rate == 0 and p.up_rate == 0 for p in z_part)  # 游程桶不摊配(0 线照旧)
+    assert out[61].t == 1429 and out[61].dl_rate is None and out[61].up_rate is None  # 洞后接收桶断链 None
+    # 块间真空长缝: 新块首槽 @1183 -> 覆盖缝 61s > 60s
+    b2 = V4Block(1183, 2, 1244, 622, (V4Sample(9, 9, 1244, 622), ))
+    out2 = v4_rate_from_totals(v4_series_points((disk, b2), 900, 2000))
+    assert any(p.t == 1120 and p.dl_rate is None for p in out2)  # 真空标记 present
+    assert out2[-1].t == 1181 and out2[-1].dl_rate is None and out2[-1].up_rate is None  # 洞后断链, 不摊配
+
+
+def test_v4_seam_below_threshold_unchanged():
+    """(P2 边界)变化点跨度 <= max(2 x 桶宽, 60s): 行为逐字不变 —— 无标记短游程恢复桶
+    仍单桶 delta/w; 有标记短缝仍断链 None(既有口径零回归)"""
+    # 块内短游程(2 槽 4s)+ 邻接恢复: span=9s < 60s -> 恢复桶单桶归因(旧口径)
+    b = V4Block(
+        2000,
+        2,
+        1000,
+        500,
+        (V4Sample(1, 1, 1000, 500), V4ZeroRun(2, 1000, 500, dt_ms=4000), V4Sample(2, 2, 1020, 510, dt_ms=5000)),
+    )
+    out = v4_rate_from_totals(v4_series_points((b, ), 1990, 3000))
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1998, None, None),
+        (2000, 0, 0),
+        (2002, 0, 0),
+        (2004, 4, 2),  # 恢复桶 delta(20,10)/w5(显式 dt 5s -> 桶宽 ceil(5)=5, 桶 [2004,2009)) 单桶归因
+    ]
+    # 有标记短缝(块间 gap 1s): 断链 None(旧口径)
+    b1 = V4Block(1000, 2, 1000, 500, (V4Sample(1, 1, 1000, 500), V4ZeroRun(2, 1000, 500, dt_ms=4000)))
+    b2 = V4Block(1007, 2, 1020, 510, (V4Sample(9, 9, 1020, 510), ))
+    out2 = v4_rate_from_totals(v4_series_points((b1, b2), 900, 2000))
+    assert out2[-1].t == 1005 and out2[-1].dl_rate is None  # 短缝 + 未触发摊配 = 断链照旧
+
+
+def test_v4_seam_flat_r_run_not_spread():
+    """(P2 反例守阵)非 z 形等值游程(r 记录、上行速率非零、dl totals 真 flat)不摊配:
+    游程 delta 恒 0, 台阶按接收桶 delta/w 单桶归因 —— z 形签名(速率双零)是摊配必要
+    条件, 防「真 flat + 一次真实增长」被错误摊平稀释"""
+    pts = tuple(V4PointEntry(1000 + 30 * k, 0, 5, 1000, 500 + 30 * k, w=30) for k in range(5))
+    pts += (V4PointEntry(1150, 3, 5, 1100, 650, w=30), )  # dl 台阶 +100(真单间隔增长)
+    out = v4_rate_from_totals(pts)
+    assert [(p.dl_rate, p.up_rate) for p in out] == [
+        (None, None),
+        (0, 1),
+        (0, 1),
+        (0, 1),
+        (0, 1),  # dl 游程 0 线 / up 正常区间平均
+        (3, 1),  # 接收桶 dl delta(100)/30 单桶归因(未摊配)
+    ]
+
+
+def test_v4_seam_constants_frozen():
+    """(P2 守阵)阈值常量冻结(计划默认: 摊配下限 60s / 洞阈值 60s, 模块常量非配置键)
+    —— 无意漂移即红; 调整阈值须同步本用例与计划 §07 拍板项"""
+    assert _V4_SEAM_SPREAD_MIN_S == 60
+    assert _V4_SEAM_NULL_S == 60
