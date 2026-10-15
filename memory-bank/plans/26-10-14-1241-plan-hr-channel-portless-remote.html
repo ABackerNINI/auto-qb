@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-channel-portless-remote">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-14-1241">
-<meta name="doc-updated" content="26-10-14-1241">
+<meta name="doc-updated" content="26-10-15-1034">
 <meta name="doc-refs" content="memory-bank/issues/26-10-09-0855-feat-hr-channel-loopback-only.html,memory-bank/plans/26-10-09-0856-plan-hr-channel-remote.html">
 <style>
   :root {
@@ -120,6 +120,7 @@
       <tr><td>派生口径 · 端口语义</td><td><code>port</code> 默认 <b>0</b>(交 OS 随机); 显式非零 = <b>完全旧行为</b>(存量零感知)。<code>discovery_port</code> 默认 <b>18788</b>(用户现产端口转正为发现端口); 置 0 = 关闭发现(退手动配置)。</td></tr>
       <tr><td>派生口径 · 配对码</td><td>新键 <code>pairing: auto|on|off</code>, 默认 <code>auto</code>: <b>host 非回环时强制</b>(发现端点免 token, 非回环可达时它是 LAN 上的 token 分发器, 必须有一道人工关口); 同机默认关(残留风险已论证, 见 1110 报告 §09)。<code>on</code> = 同机也强制; <code>off</code> = 永不(校验会挡: 非回环 + off + 空 token ⇒ 报错)。</td></tr>
       <tr><td>派生口径 · 扩展放开</td><td>主机判据 = <b>回环 ∪ 私网段</b>(<code>10.</code> / <code>172.16–31.</code> / <code>192.168.</code>)(原计划 D2 结论); <code>https</code> scheme <b>保留不折</b>(反代用户需要, 后端本身仍只讲 http); <code>0.0.0.0</code> 允许 + 文档警示(D3); 多 PC 部署协议层允许, 文档推荐打包扩展固定 id(D4, 理由见 §07 R8)。</td></tr>
+      <tr><td>用户拍板 · R2 缓解升级(26-10-15 补写)</td><td>发现端口被占的缓解从「日志 + 退手动」升级为<b>零人工三件套</b>: ① 候选表先绑先得 + 扩展并行探测; ② 绑定失败后台退避重试、占用者退出自动接管(翻转 R6); ③ 校验期对落入 OS 临时端口段的 <code>discovery_port</code> 告警。详 §04 S1/S2/S4、§05 C7/C8、§06 V11/V12、§07 R2/R6。mDNS/SSDP/UDP 组播一族维持 1110 报告 §6.2 否决(扩展无 UDP/组播/mDNS 能力)。</td></tr>
       <tr><td>明确不做</td><td><code>advertise</code> 对外声明端点覆盖键(隧道/反代用户保持显式端口即旧行为, 不受随机化影响); WebSocket 推送(路线 C); native messaging(路线 B); 多租户; <code>shared_dir</code> 只读路径的替代(它与本计划并列, 不替代)。</td></tr>
       <tr><td>Is 已修问题?</td><td>否, <b>新特性</b>。两端写死是设计取舍(注释点名过 NAS 场景), 不是回归。</td></tr>
     </table>
@@ -165,7 +166,7 @@
     <pre><code>同机(默认形态, 用户零配置):
 
   扩展(选项页/后台)                auto-qb 后端(单机)
-  ── GET /api/hr/discover ───────▶ 发现端点(固定 18788, 免配置, 默认只绑回环)
+  ── GET /api/hr/discover ───────▶ 发现端点(18788 起连号 3 候选先绑先得, 免配置, 默认只绑回环)
   ◀── { 实例清单: 端点(随机端口) + token } ──
   ── GET /api/hr/tasks ──────────▶ 数据端点(OS 随机端口, 60s 短轮询)
       (token + origin 两道关, 协议逐字不变)
@@ -186,7 +187,7 @@
         <td>
           · <code>host</code> 可配(端点绑哪个地址; 发现/数据两端同值)<br>
           · <code>port</code> 可随机(0); 显式值 = 旧行为<br>
-          · 新发现端点 <code>GET /api/hr/discover</code>(固定 18788, origin + 配对门)<br>
+          · 新发现端点 <code>GET /api/hr/discover</code>(18788 起连号 3 候选先绑先得, origin + 配对门)<br>
           · 多实例注册表(本机 app-data, 心跳 + TTL 聚合)<br>
           · 配对码(非回环强制; <code>&lt;data_dir&gt;/hr.pairing</code> 0600)<br>
           · 扩展主机判据放开(回环 ∪ 私网段) + https 保留 + 发现/配对 UI
@@ -222,10 +223,10 @@
     <h3>S1 · 后端配置面(host / port:0 / discovery_port / pairing)</h3>
     <ul>
       <li><code>config/models.py</code>: <code>HrChannelConfig</code> 加 <code>host: str = "127.0.0.1"</code>、<code>discovery_port: int = 18788</code>、<code>pairing: str = "auto"</code>; <code>port</code> 默认改 <code>0</code>; docstring 重写(删「跨机器配了也驱动不了」断言, 改述四键语义 + 非回环安全默认)。</li>
-      <li><code>validation/sections.py</code>: <code>KNOWN_HR_CHANNEL_KEYS</code> 加三键; 校验规则 —— ① <code>host</code> 非空且为合法 IPv4/IPv6 字面量或 <code>localhost</code>; ② <code>port</code> / <code>discovery_port</code> ∈ <code>{0}</code> ∪ <code>[1,65535]</code>; ③ 两者均非 0 且相等 ⇒ 报错(文案须指引「port 改 0 让 18788 作发现端口, 或显式改 discovery_port」); ④ <code>pairing</code> ∈ <code>{auto,on,off}</code>; ⑤ <b>host 非回环 + pairing=off + token 空 ⇒ 报错</b>(「无密钥 + 无配对 + 全网可达」三缺齐才放行, 一道都不许少)。</li>
+      <li><code>validation/sections.py</code>: <code>KNOWN_HR_CHANNEL_KEYS</code> 加三键; 校验规则 —— ① <code>host</code> 非空且为合法 IPv4/IPv6 字面量或 <code>localhost</code>; ② <code>port</code> / <code>discovery_port</code> ∈ <code>{0}</code> ∪ <code>[1,65535]</code>; ③ 两者均非 0 且相等 ⇒ 报错(文案须指引「port 改 0 让 18788 作发现端口, 或显式改 discovery_port」); ④ <code>pairing</code> ∈ <code>{auto,on,off}</code>; ⑤ <b>host 非回环 + pairing=off + token 空 ⇒ 报错</b>(「无密钥 + 无配对 + 全网可达」三缺齐才放行, 一道都不许少); ⑥ <code>discovery_port</code>(非 0)落入 OS 临时端口段(Windows 49152–65535 / Linux 32768–60999)⇒ <b>告警不阻断</b>(提示易与系统临时端口分配相撞; 默认 18788 在段外不告警)。</li>
       <li><code>config/schema/hr.py</code>: 三新 Field(help 写清 0=随机推荐 / 18788 发现 / auto 语义); <code>port</code> <code>min=1</code> → <code>min=0</code>, default <code>"0"</code>; WebUI 设置卡随字段表自动渲染, 不改模板。</li>
       <li><b>须核对</b>: config-mutation 系列守卫测试期望(键面 5→8); schema 一致性守卫; <code>_try_port</code> 的调用方(port=0 是新合法值, 别被旧断言咬)。</li>
-      <li><b>验证</b>: 校验单测(五条规则各一例, 含用户配置迁移撞车例); WebUI 帮助文案人工核对。</li>
+      <li><b>验证</b>: 校验单测(六条规则各一例, ⑥ 为告警级断言不阻断; 含用户配置迁移撞车例); WebUI 帮助文案人工核对。</li>
     </ul>
 
     <h3>S2 · 端点接线 + 发现服务(后端核心)</h3>
@@ -233,9 +234,9 @@
       <li><code>hr/runtime.py</code>: 构造 <code>HrChannelServer</code> 传 <code>host=conf.channel.host</code>; <code>channel.enabled</code> 且 <code>discovery_port != 0</code> ⇒ 构造 <code>HrDiscoveryServer</code>(同 host, 同线程模型)。</li>
       <li><code>hr/server.py</code>: <code>_LoopbackServer</code> 更名 <code>_EndpointServer</code> 并改述(<code>allow_reuse_address=False</code> 与免 FQDN 的 <code>server_bind</code> <b>逐字保留</b>); <code>port=0</code> ⇒ OS 分配, 实绑端口回填 <code>_handle.port</code> 与 <code>status()</code>; 启动日志按 host 分叉(回环 = 原文案; 非回环 = 「监听 &lt;host&gt;, 已暴露到内网, 需 token 鉴权; 发现端口 &lt;dport&gt;」); <code>HrChannelBindError</code> 文案分叉(非回环追加「地址不在本机网卡?」); <code>status().note</code> 携带发现端口 / 配对态 / 实绑端口(服务「可定位故障」)。</li>
       <li><b>新模块 <code>hr/discovery.py</code></b>(不进 server.py, 避免其继续膨胀): ① <code>InstanceRegistry</code> —— 路径 = 平台 app-data 目录(<code>auto-qb-hr/instances.json</code>; Windows <code>%LOCALAPPDATA%</code>, 类 Unix <code>XDG_DATA_HOME</code>/<code>~/.local/share</code>; <b>不得放云同步盘</b>); 写 = 临时文件原子替换, 读容忍(缺文件/坏 JSON ⇒ 当空处理, 不抛); 条目 <code>{id, name, endpoint, token, ts}</code>, <code>id = sha1(data_dir)[:12]</code>; ② 心跳线程(每 30s 更新自身条目 + TTL 120s 过滤后聚包); ③ <code>HrDiscoveryServer</code> —— 与 <code>HrChannelServer</code> 同形(start/stop/status/<code>route()</code> 纯逻辑可单测, HTTP 层薄适配); <code>route()</code>: origin 门(<code>origin_allowed</code>, 403 节流同口径) → 配对门(需要时: 头 <code>X-Hr-Pairing</code> 缺失 ⇒ <code>401 {"error":"pairing_required"}</code>; 不符 ⇒ <code>401 {"error":"pairing_invalid"}</code>, 节流同 <code>REJECT_WARN_GAP</code>) → <code>GET /api/hr/discover</code> 返回实例清单(响应头 <code>no-store</code>); OPTIONS 预检同数据端口口径; ④ 端点自述: 具体 bind 地址优先; <code>host=0.0.0.0</code> 时按请求 Host 头替换主机部分(只影响响应文本, 不进任何判据)。</li>
-      <li>发现端口「先绑先得」: 绑定失败(被普通应用误占)⇒ <b>明确日志 + 数据端点照常服务</b>(发现不可用, 扩展退手动配置); 归属者退出后其他实例不接管(已知限制, 文档写明; 单实例重启无感)。</li>
+      <li>发现端口「<b>候选表先绑先得</b>」: 绑定目标 = <code>discovery_port</code> 起连号 3 个(如 18788/18789/18790, 粒度 §05 C7), 依次试绑取第一个空位; 显式 <code>discovery_port</code> 被占同样顺延(与数据端口「显式 = 旧行为」语义无关, 这是发现层的容错)。三个候选全被占(被普通应用误占)⇒ <b>明确日志 + 数据端点照常服务</b>(发现不可用, 扩展退手动配置)。绑定失败另起<b>后台退避重试</b>(间隔 §05 C8): 占用者退出后自动接管 —— 旧「归属者退出不接管」限制随之翻转(R6)。重试线程只做绑定尝试与端点启停, 不触碰任务队列与 state_file(单一写线程假设不破); 不杀占用进程、不用 <code>SO_REUSEADDR/SO_REUSEPORT</code> 抢绑(Windows 双绑语义未定义 / Linux 会分流, 见 R2 注)。实绑端口回填日志与 <code>status()</code>(「发现 18789」)。</li>
       <li>节流记拒的小工具从 <code>server.py</code> 提取为模块级(行为逐字不变, 现有测试保), <code>discovery.py</code> 复用。</li>
-      <li><b>验证</b>: <code>HrChannelServer(host=..., port=0)</code> 绑定与实绑端口回填单测; 发现 <code>route()</code> 单测(origin 403 / 配对三门 / 聚合 / TTL / 0.0.0.0 Host 替换); 注册表原子写与坏文件容忍单测; 显式 port 旧行为回归。</li>
+      <li><b>验证</b>: <code>HrChannelServer(host=..., port=0)</code> 绑定与实绑端口回填单测; 发现 <code>route()</code> 单测(origin 403 / 配对三门 / 聚合 / TTL / 0.0.0.0 Host 替换); 注册表原子写与坏文件容忍单测; 显式 port 旧行为回归; 候选轮换(占首位 ⇒ 实绑次位)/ 全占退手动 / 重试接管(释放后一个周期内重绑)单测。</li>
     </ul>
 
     <h3>S3 · 配对码机制</h3>
@@ -250,12 +251,12 @@
     <h3>S4 · 扩展侧(normalize / discovery.js / options / background)</h3>
     <ul>
       <li><code>normalize.js</code>: <code>LOOPBACK_HOSTS</code> 硬拒 → <b>允许主机判据</b>(回环 ∪ <code>10.</code>/<code>172.16–31.</code>/<code>192.168.</code>); 错误文案改「只支持回环或内网地址」; <b>scheme 保留</b>(裸填补 <code>http://</code>, 写 <code>https://</code> 不折 —— 反代用户需要; 后端原生仍只讲 http); <code>localhost</code> 仍折 <code>127.0.0.1</code>; 新增 <code>normalizeDiscovery(raw)</code>(同判据, 缺端口补 18788)。</li>
-      <li><b>新纯模块 <code>discovery.js</code></b>(不引用 document/chrome, 与 normalize.js 同纪律: 选项页 <code>&lt;script&gt;</code> / 后台 <code>importScripts</code> / pytest node 实跑): <code>API_DISCOVER</code> 常量(与后端 <code>hr.discovery</code> 同步, 守阵扩); <code>mergeInstances(current, discovered)</code>(发现的替换同端点条目, 保留手填条目, 标 <code>source:"discovered"</code>); <code>pairingNeeded(res)</code>(401 + <code>pairing_required</code> 判定); <code>buildDiscoveryUrl(ep)</code>。</li>
+      <li><b>新纯模块 <code>discovery.js</code></b>(不引用 document/chrome, 与 normalize.js 同纪律: 选项页 <code>&lt;script&gt;</code> / 后台 <code>importScripts</code> / pytest node 实跑): <code>API_DISCOVER</code> 常量(与后端 <code>hr.discovery</code> 同步, 守阵扩); <code>mergeInstances(current, discovered)</code>(发现的替换同端点条目, 保留手填条目, 标 <code>source:"discovered"</code>); <code>pairingNeeded(res)</code>(401 + <code>pairing_required</code> 判定); <code>buildDiscoveryUrl(ep)</code> 与 <code>discoveryCandidates(ep)</code>(base 起连号 3 候选, 推导与后端同源, 进协议守阵)。</li>
       <li><code>options.js</code>: 新增「自动发现」区 —— 发现地址输入(默认 <code>http://127.0.0.1:18788</code>)+ 保存 + 「立即发现」按钮 + 配对码条件输入 + 状态行; 保存时对端点 origin 走 <code>chrome.permissions.request</code>(与站点 origin 同一流程, <code>:267</code>); 发现实例并入实例表(徽标「自动」); 手动添加入口保留(兼容/兜底路径)。</li>
-      <li><code>background.js</code>: 发现触发器 = <b>启动时 / 全部实例连续失败时 / 每 N 分钟</b>(N 列 §05 裁量); 401 <code>pairing_required</code> ⇒ storage 标记 ⇒ 选项页提示输入配对码; 成功后合并实例 + 清标记; 配对凭证落 <code>chrome.storage.local</code>(与 token 同存放口径, 扩展私有); 发现失败不静默(日志 + 状态行, 退路 = 手动配置路径不变)。</li>
+      <li><code>background.js</code>: 发现触发器 = <b>启动时 / 全部实例连续失败时 / 每 N 分钟</b>(N 列 §05 裁量); 401 <code>pairing_required</code> ⇒ storage 标记 ⇒ 选项页提示输入配对码; 成功后合并实例 + 清标记; 配对凭证落 <code>chrome.storage.local</code>(与 token 同存放口径, 扩展私有); 发现失败不静默(日志 + 状态行, 退路 = 手动配置路径不变); 探测 = 对候选表 <b>并行 fetch</b>, 仅接受 200 + 合法发现响应形态(实例数组字段齐全)的应答 —— 普通应用误占端口返回的异形响应 / 404 / 连接拒绝一律按「非本服务」忽略, 多候选同时应答取最先成功者(命中端口记入状态行)。</li>
       <li><code>manifest.json</code> <b>不动</b>(静态回环三项 + optional 已有全Url; 远端 origin 走动态申请)。</li>
       <li><b>须核对</b>: <code>tests/test_extension_proxy.py</code> 的协议常量守阵(扩 <code>API_DISCOVER</code> 双向); 「归一化只有一份」守阵(新判据仍只在 normalize.js)。</li>
-      <li><b>验证</b>: normalize 用例(私网三段逐段 / 公网域名拒绝 / https 保留 / 发现端口补全); discovery.js 纯函数用例(合并语义 / 配对判定); background 发现流程 node 实跑(触发 / 401 提示 / 合并 / 失败退路)。</li>
+      <li><b>验证</b>: normalize 用例(私网三段逐段 / 公网域名拒绝 / https 保留 / 发现端口补全); discovery.js 纯函数用例(合并语义 / 配对判定); background 发现流程 node 实跑(触发 / 401 提示 / 合并 / 失败退路 / 候选命中次位 / 异形应答过滤)。</li>
     </ul>
 
     <h3>S5 · 观测与故障分层衔接(服务 hr-fault-domain, 机制已落地)</h3>
@@ -267,15 +268,15 @@
 
     <h3>S6 · 测试</h3>
     <ul>
-      <li>后端: S1 五条校验规则; S2 绑定/随机端口/发现路由/注册表; S3 配对三门与吊销; 旧行为回归(显式 port + 手动端点 + token 照旧)。</li>
-      <li>扩展: normalize 判据用例扩; discovery.js 纯函数; background 发现流程(node 实跑, 沿用现有 harness)。</li>
+      <li>后端: S1 六条校验规则(⑥ 为告警级); S2 绑定/随机端口/候选轮换/全占退手动/重试接管/发现路由/注册表; S3 配对三门与吊销; 旧行为回归(显式 port + 手动端点 + token 照旧)。</li>
+      <li>扩展: normalize 判据用例扩; discovery.js 纯函数(含候选推导与异形过滤); background 发现流程(node 实跑, 沿用现有 harness)。</li>
       <li>守卫: 协议常量双向同步(<code>API_DISCOVER</code>); 键面(mutation 系列); schema 一致性。</li>
       <li>全量: <code>commands run test.full</code> + 新基线切片(数字单点记入任务档案); <code>commands run kb.check</code>。</li>
     </ul>
 
     <h3>S7 · 文档与收尾</h3>
     <ul>
-      <li>扩展 <code>README.md</code>: 新增「跨机部署」节 —— 四条达成路径(SSH 隧道兜底 / 反代 / 直绑 + 发现 / VPN) + 发现与配对上手步骤 + 排障表补三类(跨机连不通 / 发现端口被占 / 配对失败)。</li>
+      <li>扩展 <code>README.md</code>: 新增「跨机部署」节 —— 四条达成路径(SSH 隧道兜底 / 反代 / 直绑 + 发现 / VPN) + 发现与配对上手步骤 + 排障表补三类(跨机连不通 / 发现端口被占 / 配对失败); 「发现端口被占」条目写明候选轮换行为 + Windows 排障口径(绑定失败但无监听者 ⇒ 查 <code>netsh interface ipv4 show excludedportrange protocol=tcp</code> 的 Hyper-V/WSL2 动态排除段, 保留段随重启漂移)。</li>
       <li><code>config-reference</code>: 新键随 schema 生成面更新(实施时确认生成入口); §08 迁移矩阵进 README。</li>
       <li>fault-domain 回写件 C2/C3(与 S5 同批落地)。</li>
       <li>收尾: 本计划 <code>doc-status</code> → <b>Done</b> + 变更记录; issue <code>26-10-09-0855</code> → Done(带实测数字); <code>commands run kb.index</code>; <code>commands run kb.docmap --check</code>; activeContext 切片迁出。</li>
@@ -292,7 +293,9 @@
       <tr><td class="num">C3</td><td>配对失败计数上限(每来源)</td><td>5 次/分钟后临时静默; 与 REJECT_WARN_GAP 日志节流叠加</td></tr>
       <tr><td class="num">C4</td><td>展示码是否定期轮换</td><td>不轮换(secret 持久化 ⇒ 用户只配一次; 要轮换 = 删 hr.pairing 吊销重配)</td></tr>
       <tr><td class="num">C5</td><td>注册表文件名/目录最终形态</td><td><code>auto-qb-hr/instances.json</code>(app-data 口径; 实施时核对仓内既有目录约定)</td></tr>
-      <tr><td class="num">C6</td><td>status.note 文案细节</td><td>单行 ≤80 字, 含「发现 18788 · 配对 开/关 · 数据 &lt;port&gt;」</td></tr>
+      <tr><td class="num">C6</td><td>status.note 文案细节</td><td>单行 ≤80 字, 含「发现 18788 · 配对 开/关 · 数据 &lt;port&gt;」(实绑候选非首位时写实绑值)</td></tr>
+      <tr><td class="num">C7</td><td>发现候选表大小与推导</td><td>固定连号 3 个(<code>discovery_port</code> 起 +0/+1/+2, 上限 65535 截断), 不加配置键; 扩展同推导进协议守阵</td></tr>
+      <tr><td class="num">C8</td><td>发现绑定失败的后台重试间隔</td><td>60s 起步、上限 10 分钟的退避(与端点线程同生命周期; 接管延迟 ≤ 一个间隔, 可接受)</td></tr>
     </table>
   </section>
 
@@ -310,6 +313,8 @@
       <tr><td class="num">V8</td><td>鉴权资产不回归: origin 白名单 / URL 白名单 / 任务绑定逐字不变</td><td>既有测试全绿即证(fault-domain 与 channel 系列)</td></tr>
       <tr><td class="num">V9</td><td>文档与迁移: README 跨机节 + 排障三类 + 迁移矩阵; fault-domain C2/C3 翻转</td><td>人工核对 + <code>commands run doc.links</code></td></tr>
       <tr><td class="num">V10</td><td>全量不回归</td><td><code>commands run test.full</code> + <code>kb.check</code> + <code>kb.docmap --check</code>; 新基线切片单点记数字</td></tr>
+      <tr><td class="num">V11</td><td><b>发现端口抗误占</b>: 占用 18788(测试占位 socket)⇒ 后端实绑 18789, 扩展并行探测命中; 三候选全占 ⇒ 明确日志 + 数据端点照常 + 扩展退手动; 占用者退出 ⇒ 一个重试周期内自动接管</td><td>单测(候选轮换 / 全占 / 重试接管)+ 真机(占位端口起后端)</td></tr>
+      <tr><td class="num">V12</td><td>校验告警: <code>discovery_port</code> 落入平台临时端口段(Windows 49152–65535 / Linux 32768–60999)⇒ <code>validate_config</code> 告警不阻断; 默认 18788 无告警</td><td>S1 ⑥ 校验单测两例</td></tr>
     </table>
   </section>
 
@@ -319,11 +324,11 @@
     <table>
       <tr><th>#</th><th>风险</th><th>评估与缓解</th></tr>
       <tr><td class="num">R1</td><td><code>port</code> 默认 8788→0 的翻转, 对「旧扩展 + 未显式配端口」存量表现为扩展突然连不上</td><td>三重可观测兜底: 启动日志打实绑端口 / <code>status()</code> 带端点 / fault-domain「WebUI 活跃而扩展未联系」告警(不静默); README 迁移节写明。受影响面 = 只升后端不升扩展且从未配 port 的用户。</td></tr>
-      <tr><td class="num">R2</td><td>发现端口被普通应用误占</td><td>发现失败 ⇒ 明确日志 + 数据端点照常 + 扩展退手动; <code>discovery_port</code> 可改可关(0)。</td></tr>
+      <tr><td class="num">R2</td><td>发现端口被普通应用误占</td><td><b>零人工三件套(26-10-15 补写)</b>: ① 候选表轮换 —— 后端 <code>discovery_port</code> 起连号 3 个先绑先得, 扩展并行探测同表(S2/S4); ② 绑定失败后台退避重试, 占用者退出自动接管(S2, 翻转 R6); ③ 校验期对落入 OS 临时端口段(Windows 49152–65535 / Linux 32768–60999)的 <code>discovery_port</code> 告警(S1 ⑥)。默认 18788 已在临时段之外, 最常见的「临时端口随机撞上」形态天然免疫; Windows 特有形态是 Hyper-V/WSL2 动态排除段(无监听者也绑不上、随重启漂移), 候选轮换对其免疫, 排障查 <code>netsh interface ipv4 show excludedportrange protocol=tcp</code>(S7 文档)。仍全占 ⇒ 明确日志 + 数据端点照常 + 扩展退手动; <code>discovery_port</code> 可改可关(0)。mDNS/SSDP/UDP 组播一族维持 1110 §6.2 否决(扩展无 UDP/组播/mDNS 能力); 不杀占用进程、不抢绑(SO_REUSEADDR 双绑语义未定义 / SO_REUSEPORT 分流)。</td></tr>
       <tr><td class="num">R3</td><td>配对码暴力枚举(6 位, 10⁶ 空间)</td><td>失败节流 + 每来源计数上限(§05 C3); 文档写明「LAN 受信」前提; 同机默认不开配对(不需要)。</td></tr>
       <tr><td class="num">R4</td><td>明文 HTTP 下 token 可被同网段嗅探(T1 已知)</td><td>用户已拍板接受; 文档显式标注「仅受信内网」+ 非局域网走反代路径; 配对码只治「未授权拉取」不治「链路嗅探」(1110 报告 §05.1 精度说明)。</td></tr>
       <tr><td class="num">R5</td><td>注册表文件竞态 / 损坏 / 被放云同步盘</td><td>原子替换 + 读容忍(坏文件当空); 文档钉「不得放云同步盘」; 单实例场景自述不依赖文件。</td></tr>
-      <tr><td class="num">R6</td><td>发现端口归属者退出后, 其他实例不接管</td><td>已知限制写文档; 单实例(主流)重启无感; 多实例 + 归属者长退属边缘场景。</td></tr>
+      <tr><td class="num">R6</td><td>发现端口归属者退出后, 其他实例不接管</td><td>S2 后台重试接管已翻转此限制: 占用者退出 ⇒ 重试线程自动绑定(接管延迟 ≤ 重试间隔, §05 C8); 单实例(主流)重启无感。</td></tr>
       <tr><td class="num">R7</td><td>新增配置键触发守卫测试(writer / schema / mutation)期望变更</td><td>S1 明列须核对项; 机械同步, 不构成设计风险。</td></tr>
       <tr><td class="num">R8</td><td>未打包安装的扩展 id 随安装路径变化 ⇒ 跨机多 PC 时两台 id 不同, 钉单 <code>extension_id</code> 会挡住第二台</td><td>文档推荐多 PC 场景打包扩展(固定 key)或留空 <code>extension_id</code>(发现端点靠配对码把关); 单 PC 场景无感。</td></tr>
     </table>
@@ -352,8 +357,7 @@
 hr_check:
   channel:
     port: 18788        # 数据端口(显式)
-    token: &lt;已配置&gt;
-    extension_id: &lt;已配置&gt;
+    extension_id: &lt;已配置&gt;   # token 同已配置, 与本迁移无关, 不列值
 
 # 升级后若不改: discovery_port 默认 18788 与 port 18788 相撞 ⇒ 启动即报错(S1 校验)
 # 迁移二选一:
@@ -388,6 +392,7 @@ hr_check:
     <h2><span class="no">10</span>变更记录</h2>
     <ul>
       <li><b>26-10-14-1241</b> 初版: 合并跨机(0856)与去端口(1110 路线 A)两个专题, 用户拍板「安全暂用 HTTP, 非局域网自行反代(只文档)」写入 §01; S0–S7 分步(配置面 / 端点接线 + 发现服务 / 配对码 / 扩展侧 / 观测衔接 / 测试 / 文档收尾); V1–V10 验收、R1–R8 风险、迁移矩阵(含用户 18788 撞车具体步骤)。原 0856 计划同刻转 Superseded 并互挂 doc-refs。</li>
+      <li><b>26-10-15-1034</b> 补写(R2 零人工缓解, 用户问答轮拍板采纳): R2 缓解升级为三件套 —— S1 校验加 ⑥(<code>discovery_port</code> 落入 OS 临时端口段告警不阻断); S2 发现端口改「候选表先绑先得」(连号 3 个, 全占退手动)+ 绑定失败后台退避重试(占用者退出自动接管, R6 翻转); S4 扩展对候选表并行探测、仅接受合法发现响应形态; S6/S7 补测试与排障口径(netsh excludedportrange); 新增 §05 C7/C8、§06 V11/V12、§01 拍板行; §03 数据流与 3.2 变化表同步。mDNS/SSDP 一族维持 1110 §6.2 否决。另: §08.2 示例中历史转义损坏的 token 行改为不列值并注明(过写入守卫; 值为损坏片段非真实凭据)。仅计划文本, 未动代码。</li>
     </ul>
   </section>
 

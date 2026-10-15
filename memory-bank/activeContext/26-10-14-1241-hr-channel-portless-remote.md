@@ -1,7 +1,7 @@
 # 26-10-14-1241-hr-channel-portless-remote — 联合实施计划已出(去端口+跨机), 待开工
 
 > 摘要: 用户指令「出一个联合实施分步计划, 包括去端口与跨机, 安全方面暂时使用 HTTP(大部分情况局域网), 非局域网用户自行反代」。本轮为纯文档轮(未改任何代码)。产出: 联合实施计划 `memory-bank/plans/26-10-14-1241-plan-hr-channel-portless-remote.html`(Open · 已拍板待开工); 原跨机计划 26-10-09-0856 转 Superseded 并互挂 doc-refs; issue 26-10-09-0855 的 doc-refs 挂上新计划(认领链, 状态仍 Open, S0 开工时才抬 In Progress)。
-> 最后活动: 2026-10-14 12:41
+> 最后活动: 2026-10-15 10:34
 > 状态: Open(计划已拍板待开工; S0–S7 分步在计划 §04)
 
 ## 用户拍板(计划 §01 拍板回执)
@@ -27,7 +27,13 @@
 
 ## 计划骨架(S0–S7)
 
-S0 开工准备(立任务档案 + 基线 + issue 抬 In Progress + 行号复核) → S1 配置面(host/port:0/discovery_port/pairing + 五条校验) → S2 端点接线 + 发现服务(新模块 hr/discovery.py: InstanceRegistry + HrDiscoveryServer + 配对门) → S3 配对码机制 → S4 扩展侧(normalize 放开 + discovery.js 纯模块 + options 发现区 + background 触发器) → S5 观测衔接(C2/C3 文档) → S6 测试 → S7 文档收尾。
+S0 开工准备(立任务档案 + 基线 + issue 抬 In Progress + 行号复核) → S1 配置面(host/port:0/discovery_port/pairing + 六条校验) → S2 端点接线 + 发现服务(新模块 hr/discovery.py: InstanceRegistry + HrDiscoveryServer + 配对门 + 候选表先绑先得 + 后台重试接管) → S3 配对码机制 → S4 扩展侧(normalize 放开 + discovery.js 纯模块 + options 发现区 + background 触发器) → S5 观测衔接(C2/C3 文档) → S6 测试 → S7 文档收尾。
+
+## 26-10-15 补写(R2 零人工缓解, 已进计划)
+
+- 用户问答轮问「发现端口被普通应用误占有无其它成熟方案、避免人工介入」→ 回答后用户拍板补写。R2 缓解升级为零人工三件套: ① S2 发现端口改「候选表先绑先得」(discovery_port 起连号 3 个, 全占退手动; Windows Hyper-V/WSL2 动态排除段对候选轮换免疫); ② 绑定失败后台退避重试、占用者退出自动接管(R6 翻转); ③ S1 校验加 ⑥(discovery_port 落入 OS 临时端口段告警不阻断, 默认 18788 在段外)。S4 扩展并行探测候选表 + 异形应答过滤; S6/S7 补测试与排障口径(netsh excludedportrange)。新增 §05 C7/C8、§06 V11/V12、§01 拍板行、§03 数据流同步、doc-updated 抬至 26-10-15-1034。
+- mDNS/SSDP/UDP 组播一族维持 1110 报告 §6.2 否决(MV3 扩展无 UDP/组播/mDNS 能力), 待未来出现原生伴侣端再议(python-zeroconf)。
+- 本轮纯计划文本轮: 代码零改动、无测试面(未跑基线), 改动随本专题入库。写入插曲: §08.2 示例里历史转义损坏的 token 行被写入守卫拦下(值为损坏片段非真实凭据), 按守卫处置改为不列值并注明。
 
 ## 下一步 / 移交
 
