@@ -438,6 +438,9 @@ def test_runtime_non_loopback_pairing_full_flow(tmp_path, caplog, monkeypatch):
     """
     cfg = make_config(tmp_path, enabled=True, channel=True)
     cfg.hr_check.channel.host = "192.168.1.10"
+    # 显式给发现端口: make_config 默认 discovery_port=0(发现关, issue 26-10-16-0348),
+    # 本用例要的是「发现对象已就绪」—— _build() 只建不绑, 取个空闲基底即可
+    cfg.hr_check.channel.discovery_port = _free_port()
     runtime = HrRuntime(_FakeManager(cfg))
     runtime._build()  # 只建不绑: 发现服务与配对密钥在此就绪, 端口尚未监听
     try:

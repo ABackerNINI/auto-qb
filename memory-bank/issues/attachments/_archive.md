@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (47)
+## Open (46)
 
-- [test] [HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红](../26-10-16-0348-test-hr-runtime-channel-port-race.html) — 疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](../26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -59,8 +58,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (199)
+## Done (200)
 
+- [test] [HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红](../26-10-16-0348-test-hr-runtime-channel-port-race.html) — 疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
 - [docs] [种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列](../26-10-12-1911-docs-webui-torrent-column-default-hidden.html) — TORRENT_COLUMNS 扩展段注释声明默认隐藏, 但 13 列均无 hide:true; loadColState 播种判据 filter(c=>c.hide) 因此不隐藏 ⇒ 种子页默认 28 列全显(与注释及文件头口径不一致)。

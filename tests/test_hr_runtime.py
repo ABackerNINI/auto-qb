@@ -65,6 +65,10 @@
 - test_request_refresh_accepts_only_named_sites: 指定站点只受理该站(不是全量)
 - test_request_refresh_note_is_precise: 受理回执 note 精确
 - test_site_origins_skips_without_stopping: 授权清单逐条跳过 disabled / 无 host 的站点(不是遇阻即停)
+
+### 端口隔离守卫(issue 26-10-16-0348)
+- test_channel_runtime_leaves_discovery_unbound: 本文件 channel 用例默认关发现(discovery_port=0),
+  不绑共享固定端口 18788-18790 —— 防「并行占满 ⇒ 发现 WARNING 污染 INFO 断言」复发
 """
 import logging
 import socket
@@ -105,6 +109,12 @@ def make_config(
     enabled=True,
     channel=False,
     port=0,
+    # !discovery_port 默认 0(发现关)而不是模型默认 18788: 候选端口 18788-18790 是**固定**的,
+    # 并行(-n 8)下多个 worker 与用户真实实例(实测正占着 18788)会把它们占满 ⇒
+    # HrDiscoveryServer.start() 记 WARNING「全部被占」⇒ 污染本文件「生命周期消息只记 INFO」
+    # 一族断言(issue 26-10-16-0348 实报偶发判红)。发现服务的行为单测在 test_hr_discovery.py
+    # (自选 _free_port 基底); 本文件没有一条用例测发现, 不该碰共享固定端口。
+    discovery_port=0,
     shared_dir="",
     site_enabled=True,
     request_timeout=180.0,
@@ -117,7 +127,13 @@ def make_config(
     config.state_file = str(tmp_path / "state.json")
     config.hr_check = HrCheckConfig(
         enabled=enabled,
-        channel=HrChannelConfig(enabled=channel, port=port, request_timeout=request_timeout, extension_id=extension_id),
+        channel=HrChannelConfig(
+            enabled=channel,
+            port=port,
+            discovery_port=discovery_port,
+            request_timeout=request_timeout,
+            extension_id=extension_id,
+        ),
         shared_dir=shared_dir,
     )
     config.trackers = {
@@ -1122,3 +1138,20 @@ def test_site_origins_skips_without_stopping(tmp_path):
             ),
     }
     assert runtime._site_origins() == [("pt.example.com", "https://pt.example.com/*")]
+
+
+def test_channel_runtime_leaves_discovery_unbound(tmp_path):
+    """本文件的 channel 用例必须默认关发现: 不绑共享固定端口 18788-18790(issue 26-10-16-0348)
+
+    发现候选端口是固定连号(discovery_candidates): 并行(-n 8)下多个 worker 加上用户真实实例
+    (实测正占着 18788)会把三个候选占满 ⇒ HrDiscoveryServer.start() 记 WARNING「全部被占」
+    ⇒ 污染「生命周期/热重载消息只记 INFO」一族断言(该 issue 的两条偶发判红即此)。
+    发现服务的行为单测在 test_hr_discovery.py(自选 _free_port 基底), 本文件没有一条测发现。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    runtime.start()
+    try:
+        assert runtime.discovery is None, "测试配置必须关发现: make_config 的 discovery_port 默认 0"
+        assert runtime.endpoint is not None and runtime.endpoint.started, "数据端点不受影响(照常监听)"
+    finally:
+        runtime.stop()

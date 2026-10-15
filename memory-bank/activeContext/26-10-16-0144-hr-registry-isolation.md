@@ -21,3 +21,7 @@
 
 - 待用户真机确认: 扩展「立即发现」列表应只剩真实例。存量 684 条死条目**已全部超 TTL**(对发现不可见), 下一个活实例心跳会由剪枝清掉 —— **无需手工清理**。
 - 立档阈值判定: 本轮改动 = 1 个源文件 + 2 个测试文件、单会话指令 <5 轮 ⇒ **未命中阈值**, 按 memory-bank skill 只写本切片, 不建 tasks 档案。若后续要接扩展侧排序 / TTL 收紧, 那时再立档。
+
+## 同族补记(2026-10-16 04:10, issue 26-10-16-0348 已修)
+
+同一测试隔离族的**第二个面**——固定端口碰撞(上一个面是写文件): `test_hr_runtime.make_config` 曾沿用模型默认 `discovery_port=18788`(**固定**), 候选 18788/18789/18790 连号三个也是固定的 ⇒ `-n 8` 并行下多 worker + 用户真实实例(netstat 实测常驻占 18788)占满候选 ⇒ `HrDiscoveryServer.start()` 记 WARNING「全部被占」⇒ 污染「生命周期消息只记 INFO」断言(两条用例偶发判红, 曾误拦 ship.commit 闸门; 单跑/重跑皆绿所以一度被疑为 `_free_port` TOCTOU)。修法 = `make_config` 默认 `discovery_port=0`(本文件无一条测发现) + 守卫用例 `test_channel_runtime_leaves_discovery_unbound`; 连带 `test_hr_discovery.py::test_runtime_non_loopback_pairing_full_flow` 显式自选端口。教训与两个既有面的关系: **测试只要 start() 真实服务, 固定端口/共享路径/写用户数据三件事都别留模型默认**。报告: `memory-bank/issues/26-10-16-0348-test-hr-runtime-channel-port-race.html`(Done)。

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="test-timing-tolerance">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红">
 <meta name="issue-summary" content="疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门">
 <title>HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0348-test-hr-runtime-channel-port-race</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 03:48</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">test</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -164,29 +164,38 @@ $ commands run test.quick
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查。<br>已排除：① 本轮 CSS 改动（<code>static/{prism,atlas,console}/css/views.css</code> 与 <code>test_webui_static_dom_panel.py</code>）—— 与 HR 运行时无关；② 合并进来的远端那笔 <code>3c5fcf04</code> —— 仅落盘 memory-bank 计划与候选模板 HTML，零代码；③ 并行 worker 间日志串扰 —— xdist 是独立进程，<code>caplog</code> 不跨进程。<br>疑似（未证实）：<code>_free_port()</code> 的 TOCTOU 窗口在多 worker 并行时被抢，端点 bind 失败 ⇒ 打 WARNING ⇒ 命中断言。</div>
+    <div class="callout"><strong>已证实(2026-10-16 04:02 认领后复验)</strong>: 不是 <code>_free_port()</code> 的 TOCTOU, 而是 <strong>发现服务候选端口被占满 ⇒ <code>HrDiscoveryServer.start()</code> 记 WARNING「全部被占」</strong>。<br>
+    链路: <code>make_config</code> 未指定 <code>discovery_port</code> ⇒ 沿用模型默认 <strong>18788(固定)</strong>, 候选表 <code>discovery_candidates</code> = 18788/18789/18790 连号三个 ⇒ 本文件每条 <code>channel=True</code> 用例启动都去绑这套<strong>固定端口</strong>。并行(-n 8)下多个 worker 同时绑, 加上本机真实实例(netstat 实测 PID 19168 = <code>D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe</code> 常驻占着 18788) ⇒ 三个候选被占满 ⇒ 第 N 个 <code>start()</code> 触发 discovery.py:273 的 WARNING, 落进 <code>auto_qb.hr</code> logger 树 ⇒ 两条「不得用 WARNING」断言判红。<br>
+    <strong>决定性反证</strong>(排除 _free_port 假说): <code>test_start_stop_messages_are_info_not_warning</code> 用 <code>port=0</code>(OS 现取, 无 TOCTOU 窗口)、全程不调 <code>_free_port()</code>, 却同样断言失败 —— 它能吐 WARNING 的唯一路径就是发现端点。<br>
+    <strong>确定性复现</strong>(不靠并行运气): 会话级占住 18789/18790(18788 已被真实实例占)后串行跑两条用例, <code>test_apply_remount_message_is_info</code> 必红, 报错原文即「HR 发现端点候选端口 18788/18789/18790 全部被占 —— 发现不可用…」。修复后同复验转绿。<br>
+    产品行为无误: 发现全占时「明确日志 + 后台退避重试, 数据端点照常」是设计口径(R2/S2, 有单测钉着); 缺陷在<strong>测试隔离</strong>——不测发现的用例不该绑共享固定端口。<br>
+    已排除: ① 本轮 CSS 改动 —— 与 HR 运行时无关; ② 合并进来的远端那笔 <code>3c5fcf04</code> —— 仅落盘 memory-bank 计划与候选模板 HTML, 零代码; ③ 并行 worker 间日志串扰 —— xdist 是独立进程, caplog 不跨进程。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p>待定。候选方向（只列方案，不在本报告实施）：</p>
+    <p>入池时的候选方向（原文保留）：</p>
     <ul>
       <li><strong>A</strong>：<code>_free_port()</code> 改为带重试的取端口（撞了重取），或「先占句柄、把已绑定的 socket 交给端点」，消灭 TOCTOU 窗口 —— 最治本，但要动 <code>_free_port</code> 与调用面</li>
       <li><strong>B</strong>：把这两条用例归入 xdist 串行组（<code>@pytest.mark.serial</code> / <code>--dist loadgroup</code>），避开同组并行 —— 最省事，但只是回避竞态</li>
       <li><strong>C</strong>：端点 bind 失败降级为 ERROR + 重试而非 WARNING —— 见效快，但会掩盖真实绑定故障</li>
     </ul>
+    <p><strong>实际修法（改道 D，测试侧隔离）</strong>：三条候选都没采用 —— 根因不是 <code>_free_port</code> TOCTOU（见「根因」的决定性反证），A 修的是个概率约 1e-6/run 的理论残余窗口，为它改产品 API（预绑 socket 交接）代价不成比例；B 只把两条用例摘出来，同文件其余三十多条 <code>channel=True</code> 用例仍在抢固定端口，别的 INFO 断言（如 <code>test_apply_remount_message_is_precise</code> 一族）下次照样可能被污染；C 是改产品口径去迁就测试，方向反了。真正该修的是<strong>测试配置不碰共享固定端口</strong>：<code>make_config</code> 默认 <code>discovery_port=0</code>（发现关），发现服务的行为单测留在 <code>test_hr_discovery.py</code>（自选 <code>_free_port</code> 基底，本来就与固定端口无关）。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-16 03:48 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 04:02 — 用户指派认领，状态 <strong>In Progress</strong>；复验仍复现（且拿到了确定性复现办法，见「根因」）</li>
+      <li>2026-10-16 04:10 — 修复完成并验证，状态 <strong>Done</strong>（测试侧隔离：make_config 默认 discovery_port=0 + 守卫用例）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-16 04:02 仍复现</strong>（且升级为确定性复现）——会话级占住发现候选 18789/18790（18788 已被本机真实实例占着）后串跑，<code>test_apply_remount_message_is_info</code> 必红，报错原文「HR 发现端点候选端口 18788/18789/18790 全部被占 —— 发现不可用…」。修复后同法复验转绿（2 passed）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（改道 D，见「建议修法」）：<code>tests/test_hr_runtime.py</code> 的 <code>make_config</code> 新增 <code>discovery_port=0</code> 默认参数（发现关）——本文件没有一条用例测发现服务，不该绑共享固定端口 18788-18790；连带把 <code>tests/test_hr_discovery.py::test_runtime_non_loopback_pairing_full_flow</code>（唯一依赖该默认值的用例，只 <code>_build()</code> 不绑）改为显式 <code>_free_port()</code>；新增守卫用例 <code>test_channel_runtime_leaves_discovery_unbound</code>（钉死「channel 用例下 discovery is None」防回流）。产品代码零改动。</p>
+    <p><strong>验证方式</strong>：① 确定性复验（占光候选端口）修复前 1 红 / 修复后 2 绿；② <code>uv run pytest tests/test_hr_runtime.py tests/test_hr_discovery.py -q -n 0</code>：<strong>87 passed</strong>（25.5s，副作用台账越界 0）；③ 出过问题的原始命令 <code>commands run test.quick</code>（-n 8 并行全量）：<strong>3405 passed, 4 skipped</strong>（38.3s）——唯一先红的索引守卫在 <code>commands run kb.index</code> 重建后转绿。</p>
   </section>
 
   <footer>
