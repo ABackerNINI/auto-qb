@@ -17,7 +17,8 @@
 - test_options_normalizes_before_browser_api: 站点源与端点先归一化再进权限/存储 API(本次报错的形态)
 - test_options_rejections_are_always_handled: 选项页不得留下裸 Promise 拒绝(兜底 unhandledrejection + 逐个 catch)
 - test_options_site_fetch_matches_backend: 站点授权清单走 GET /api/hr/sites, 路径/鉴权头与 hr.channel 同源
-- test_options_swiss_wiring: 瑞士网格终态(风格选型 A)接线齐全(两表/表单授权/折叠排障区), 三档共存机制不回潮
+- test_options_swiss_wiring: 瑞士网格终态(风格选型 A)接线齐全(两表/表单授权/折叠排障区/连接后端一区),
+  三档共存机制不回潮; 2026-10-16 S4 合并布局后判据随之更新(删「保存发现地址与配对码」按钮)
 - test_background_events_ring_dual_write: 真跑 background.js —— 六类场景双写结构化事件环, tag/host/kind/ms/bytes 契约钉死
 - test_page_fetch_is_headless_when_html_looks_fine: 直取能拿到页面时**不得开任何窗口/标签**(用户实报两轮)
 - test_page_fetch_renders_offscreen_only_when_needed: 只在内容不像页面时才升级, 且用**离屏 popup 窗口**
@@ -326,21 +327,41 @@ def test_options_swiss_wiring():
 
     2026-09-26 用户澄清「三模板」是三套独立风格选一套实施(非共存)—— 选定 A 后本条守阵随之改钉
     单一风格终态, 并钉住「共存实现不回潮」(三档切换机制不得再出现)。
+    2026-10-16 计划 26-10-15-2357 S4 把「连接端点 + 手动端点 + 底部工具栏」合并为**一个「① 连接
+    后端」区**并删掉「保存发现地址与配对码」按钮(隐式保存)—— 被删的 id/落点随口径更新, 属口径
+    演进非守阵松动; 新布局的判据(总览行/折叠手动区/徽标图例)在此一并钉住。
     """
     html = _read(OPTIONS_HTML)
     js = _read(OPTIONS_JS)
     for el in (
         "siteTable", "eventTable", "siteChecks", "fetchSites", "selectAllSites", "grantChecked", "instList",
         "addInstance", "newInstance", "manualOrigins", "origins", "instances", "advLogs", "logView", "logMax",
-        "logLevel", "logFilter", "caps", "status", "enabled", "discEndpoint", "discPairing", "discNow", "discSave",
-        "discStatus"
+        "logLevel", "logFilter", "caps", "status", "enabled", "discEndpoint", "discPairing", "discNow", "discStatus",
+        "connState", "manualEndpoints", "badgeLegend", "test", "poll", "hint", "save", "instEndpoint", "instToken"
     ):
         assert el in html, f"选项页缺 {el}"
+    assert "discSave" not in html, "S4 已删「保存发现地址与配对码」按钮(发现隐式保存), 别让它回潮"
     for el in ("siteTable", "eventTable", "advLogs", "logView", "origins", "instances"):
         assert html.index(el) < html.index("options.js"), f"{el} 容器要在脚本之前"
     for el in (
-        "refreshTables", "renderSiteStatus", "renderEvents", "scheduleTablesRender", "fetchSites", "grantChecked",
-        "API_SITES", "SITE_CAPS", "saveDiscovery", "discoverNow", "DEFAULT_DISCOVERY_ADDRESS"
+        "refreshTables",
+        "renderSiteStatus",
+        "renderEvents",
+        "scheduleTablesRender",
+        "fetchSites",
+        "grantChecked",
+        "API_SITES",
+        "SITE_CAPS",
+        "discoverNow",
+        "DEFAULT_DISCOVERY_ADDRESS",
+        # S3 落点: 顶部总览 + 隐式保存的授权序 + 自动接自测 + 失败码中文映射 + 实时刷新
+        "renderConnOverview",
+        "connStateOf",
+        "DISCOVERY_REASON_TEXT",
+        "candidateSummary",
+        "probeMainInstance",
+        "scheduleConnRender",
+        "isManualEntry"
     ):
         assert el in js, f"options.js 缺 {el} 的落点(按钮点了没反应)"
     # 单一风格定案: 三档共存的机制(uiTemplate/模板切换)不得回潮

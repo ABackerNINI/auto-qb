@@ -117,6 +117,20 @@
   **"改完任何文本文件就跑一次 `git status` 扫 CRLF 警告"**, 与改的是哪个目录无关。处置照旧按字节归一回 LF
   (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
 
+- **复发 +1 (2026-10-16)**: 触发换成 **Edit 工具改 KB 文档** —— 计划 26-10-15-2357 S3/S4 收尾时用 Edit
+  往 `pitfalls/testing/node-guards-silent-skip.md` 追加一节, 整份从 `LF=28 / CRLF=0` 写成
+  `CRLF=44 / LF=0`(同轮用 Edit 改的 `options.js` / `options.html` / 两份 activeContext / 档案 / 新基线切片
+  都仍是 LF ⇒ 又一次印证"哪个文件会被写坏不可预测")。暴露方式与前几次同款: `git status` / `git diff`
+  末尾的 `warning: … CRLF will be replaced by LF`。
+  **为什么没命中**: ①路由只走到**顶层** `pitfalls/_index.md` —— 它的「主题」表是空的(`(暂无)`), 没有指向
+  `git/editing-traps.md` 的细路由; 而 git 类行的判据被读成「**跑 git 命令前**必读」, 本轮动作是"编辑文档"
+  不在该判据内, 于是没进 `pitfalls/git/_index.md`(触发词「行尾」就明写在顶层 git 行里, 没被识别成
+  "编辑纯文本也适用"); ②更直接的是**警告行看到了却当成无害噪声** —— 定式要求的是"见到即按字节归一",
+  本轮只做到"见到", 直到收尾才发现。处置照旧按字节归一回 LF
+  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`), 并逐文件核 CRLF/LF 计数。
+  **定式强化**: 改完任何文本文件, 收尾必跑一次
+  `python -c "…count(b'\r\n')…"` 逐文件复核(不靠肉眼扫 git 警告), 见到警告行**立即**归一, 不推迟到收尾。
+
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 
 - **触发**: 在 `core.autocrlf=true` 的仓库里编辑文件。

@@ -7,7 +7,7 @@
 > site-caps.js 是硬耦合, 改一边必改另一边); ②「全绿」要区分真绿与跳过绿, 收尾怀疑守阵没真跑时先确认
 > node 在不在; ③本机没有 node 时可下载便携版 zip 到临时目录只给当次命令配 PATH(零安装零持久态)。
 > 触发: node, nodejs, 静默跳过, 假绿, 全绿, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy,
-> VM 沙箱, 便携, portable, PATH, 阈值漂移, 配额双桶
+> VM 沙箱, 便携, portable, PATH, 阈值漂移, 配额双桶, options.js 沙箱, 顶层 let, 词法绑定, 喂不进状态
 
 ### 3 条配额守阵漂移红了一天没人看见 (2026-09-28)
 
@@ -26,3 +26,19 @@
   守阵从「跳过绿」回到「真绿」; ③若换无 node 的机器, 便携 zip
   `https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip` 解压后当次命令前
   `export PATH="<目录>:$PATH"` 即可, 跑完即弃。
+
+### options.js 沙箱探针: 顶层 `let` 状态不在沙箱全局上, 直接赋值**静默无效** (2026-10-16)
+
+- **触发**: 计划 26-10-15-2357 S3/S4 实施期写临时探针(未入库, 落 `/tmp/probe_s3.js`)真跑 `options.js` 验
+  「疑似失效标记 / 顶部总览」时, 最自然的写法 `sandbox.instancesState = [...]` / `sandbox.instanceHealthState = {...}`
+  **读到的仍是空** —— `vm.createContext` 里只有顶层 `function` / `var` 会成为沙箱全局对象的属性; `let` /
+  `const` / `class` 是**词法绑定**, 既不在 `sandbox` 上、也无法从外部赋值(赋值只是给全局对象挂了个同名
+  属性, 脚本内部解析到的仍是自己那份词法绑定)。
+- **判别**: 症状 = 「喂了数据但被测函数读到初始值」, **且不报错** —— 与「函数真有 bug」长得一模一样(假红);
+  反过来, 若断言只查「不崩」就变成假绿。options.js 的 `instancesState` / `instanceHealthState` / `logAll`
+  全是这类状态, 后台 `background.js` 的 `healthBuf` 同款。
+- **处置**: 驱动内部状态**走被测代码自己的入口** —— 把 `chrome.storage.local.get` 桩喂上数据后调
+  `refreshConnFromStorage()`(本轮回填路径), 不要直接给沙箱对象赋状态名; 只有 `function` 声明
+  (`connStateOf` / `renderConnOverview` / `probeMainInstance` / `discoverNow` 等)能直接 `sandbox.<fn>()` 调。
+  另: options.js 顶层就注册事件与读 DOM, 沙箱必须给 `document.getElementById` 桩(返回可复用元素对象,
+  带 `value/textContent/innerHTML/classList/open/addEventListener`), 否则加载即抛。

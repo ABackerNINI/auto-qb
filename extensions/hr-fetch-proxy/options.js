@@ -6,11 +6,13 @@
 //   · fetch 的 URL 必须带 scheme 与回环主机, 否则报一句 "TypeError: Failed to fetch"(什么都看不出来)。
 // 所以本页一律"先归一化、再落盘", 并把失败逐条翻译成中文可操作提示; 绝不让 Promise 裸抛。
 //
-// 页面形态(2026-09-26 定稿, 风格选型 A「瑞士网格」, 见 memory-bank/plans/26-09-26-0031):
-//   1. 连接端点(表单, 存入即生效) → 2. 站点权限(后端拉清单勾选 + 一键授权, GET /api/hr/sites 与
-//   后端 hr/channel.API_SITES 同源) → 3. 站点现状表 → 4. 最近取数明细表 → 状态行 →
-//   折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。3.4. 的数据源是后台与日志同源双写的
-//   结构化事件环(chrome.storage `events`) + `siteLedger` 用量台账 —— 解析日志文案做表太脆。
+// 页面形态(2026-09-26 定稿, 风格选型 A「瑞士网格」, 见 memory-bank/plans/26-09-26-0031;
+// 2026-10-16 计划 26-10-15-2357 S4 合并为「① 连接后端」一区):
+//   1. 连接后端(顶部状态总览 → 自动发现 → 当前实例列表 → 折叠的手动端点 → 自测/拉取 + 状态行)
+//   → 2. 站点权限(后端拉清单勾选 + 一键授权, GET /api/hr/sites 与后端 hr/channel.API_SITES 同源)
+//   → 3. 站点现状表 → 4. 最近取数明细表 → 折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。
+//   3.4. 的数据源是后台与日志同源双写的结构化事件环(chrome.storage `events`) + `siteLedger` 用量
+//   台账 —— 解析日志文案做表太脆。
 //
 // 策略与频控判断**不在这里** —— 那唯一权威在后端。
 // 地址归一化共用 normalize.js(与后台同一份, 免得两条路径各自演化)。
@@ -82,6 +84,8 @@ function parseOrigins() {
 // ---------- 实例端点: 表单 + 列表 ----------
 
 let instancesState = []; // 实例清单(唯一事实源仍是 chrome.storage)
+let instanceHealthState = {}; // 实例健康台账(后台按轮落盘): 列表的「疑似失效」标记与顶部总览都读它
+const STALE_FAIL_STREAK = 3; // C3: 手动条目连续失败 >=3 轮才标「疑似失效」(免得瞬时抖动误报)
 
 function fillForm(item) {
   $('instEndpoint').value = item ? item.endpoint : DEFAULT_ENDPOINT;
@@ -126,15 +130,23 @@ async function addInstance() {
 function renderInstList() {
   const box = $('instList');
   if (!instancesState.length) {
-    box.innerHTML = '<div class="inst-row"><span class="tk">(还没有实例 —— 上面填好地址与 token 后点「存入实例列表」)</span></div>';
+    box.innerHTML = '<div class="inst-row"><span class="tk">(还没有实例 —— 点上面「立即发现」自动接入, 或展开「手动端点」显式指定)</span></div>';
     return;
   }
   box.innerHTML = instancesState
     .map((item, i) => {
       const tk = item.token ? `${item.token.slice(0, 8)}…` : '(未填 token)';
-      const badge = item.source === 'discovered' ? '<span class="tk">[自动]</span>' : '';
+      // 手动条目 = 高优先级(Q11②: 「优先」徽标); 发现条目 = 租约管理的自动补充(Q11②: 「自动」徽标)
+      const manual = isManualEntry(item); // discovery.js 纯函数(与后台共用同一份判定, 不在此抄一份)
+      const badge = manual ? '<span class="tk">[优先]</span>' : '<span class="tk">[自动]</span>';
+      // 疑似失效标记(Q10/C3): 手动条目连续失败 >= STALE_FAIL_STREAK 轮才提示 —— **只提示不代删**
+      const h = instanceHealthState[String(item.endpoint || '')];
+      const stale = manual && h && !h.ok && (Number(h.failStreak) || 0) >= STALE_FAIL_STREAK;
+      const staleTag = stale
+        ? `<span class="stale">疑似失效(连续 ${Number(h.failStreak) || 0} 轮拉不通; 发现到的端点已自动补入, 确认后可删)</span>`
+        : '';
       return (
-        `<div class="inst-row">${badge}<span class="ep">${esc(item.endpoint)}</span><span class="tk">${esc(tk)}</span>` +
+        `<div class="inst-row">${badge}<span class="ep">${esc(item.endpoint)}</span><span class="tk">${esc(tk)}</span>${staleTag}` +
         '<span class="grow"></span>' +
         `<button class="ghost" data-act="edit" data-i="${i}">载入</button>` +
         `<button class="ghost" data-act="del" data-i="${i}">删除</button></div>`
@@ -160,11 +172,12 @@ async function instListClick(ev) {
   setStatus(`已删除实例 ${removed.name}`);
 }
 
-// ---------- 自动发现(计划 26-10-14-1241 S4): 发现地址 + 配对码 + 立即发现 ----------
+// ---------- 连接后端(计划 26-10-14-1241 S4 立; 26-10-15-2357 S3 收口) ----------
 //
-// 同机零配置 / 跨机只填 NAS 地址的目标形态入口: 保存发现地址(+ 可选配对码), 触发后台
-// runDiscovery(候选表并行探测), 命中后实例自动并入下方列表(徽标「自动」)。手动添加入口
-// 完整保留 —— 发现关闭/失败时它是等价退路。
+// 同机零配置 / 跨机只填 NAS 地址的目标形态入口。「立即发现」= **隐式保存 + 发现**的一次点击闭环:
+// 先归一化输入框**当前值**、授权、落盘, 再触发后台 runDiscovery(候选表并行探测), 命中后实例自动
+// 并入下方列表(徽标「自动」)。手动端点入口完整保留, 但口径是「优先」(用户显式指定的实例) 而非
+// 「兜底」—— 见 Q1/Q11。发现失败一律给中文结论 + 逐候选结果(Q5), 不再把后台失败码原样丢给用户猜。
 
 const DEFAULT_DISCOVERY_ADDRESS = 'http://127.0.0.1:' + DISCOVERY_DEFAULT_PORT; // discovery.js 提供
 
@@ -172,55 +185,169 @@ function setDiscStatus(text) {
   $('discStatus').textContent = text;
 }
 
-async function saveDiscovery() {
+/** 发现失败码 → 中文结论 + 下一步(计划 §3.4; Q5: 失败码不再直接外泄) */
+const DISCOVERY_REASON_TEXT = {
+  'no-hit': '发现端点全无应答 —— 后端在跑吗? 若改过 hr_check.channel.discovery_port, 请同步上面的发现地址',
+  pairing_required: '后端要求配对码 —— 把启动日志 / HR 状态卡里的 6 位展示码填进「配对码」再点一次「立即发现」',
+  'bad-address': '发现地址写法不对 —— 按上面的提示修正后重试',
+  disabled: '发现已关闭(发现地址为空) —— 展开下面的「手动端点」显式指定实例',
+};
+
+/** 逐候选结论(如 `18788 连接失败 · 18789 HTTP 404`): 从后台落的结构化快照渲染, 不解析日志文案 */
+function candidateSummary(last) {
+  const cands = last && Array.isArray(last.candidates) ? last.candidates : [];
+  return cands
+    .map((c) => {
+      let port;
+      try {
+        port = new URL(String(c.url)).port || String(c.url);
+      } catch (e) {
+        port = String(c.url);
+      }
+      return `${port} ${c.note || '无应答'}`;
+    })
+    .join(' · ');
+}
+
+/**
+ * 「立即发现」: 隐式保存(归一化 -> 授权 -> 落盘) + 触发后台发现 + 命中后自动接一次自测(Q5/V6)。
+ * !顺序是硬约束: chrome.permissions.request 必须是**本手势内的第一个 await**(前面只许同步代码),
+ * 否则 Chrome 报 "not during a user gesture"; 所以归一化与写回输入框都在它之前同步做完。
+ * !发现必须用**输入框当前值**: 旧形态读的是 storage 里的旧地址 —— 用户改完地址直接点发现等于白改。
+ */
+async function discoverNow() {
   const raw = $('discEndpoint').value.trim();
   let base;
   try {
-    base = normalizeDiscovery(raw); // 归一化在前(与所有输入同一纪律: 先归一化再进浏览器 API/落盘)
+    base = normalizeDiscovery(raw); // 先归一化: 裸域名 / 缺端口都补成合法发现地址(与所有输入同一纪律)
   } catch (e) {
-    setDiscStatus(`保存失败: ${e.message || e}`);
+    setDiscStatus(`发现地址写法不对: ${e.message || e} —— 修好后重试`);
     return;
   }
-  $('discEndpoint').value = base; // 让用户看到实际存进去的形态
+  $('discEndpoint').value = base; // 让用户看到实际用的形态
   const code = $('discPairing').value.trim();
-  // 发现地址的 origin 权限: 与站点 origin 同一流程 —— 授权窗必须由用户手势直接触发,
-  // 所以先申请再落盘(中间不能插 await)。
   let perm = '';
   try {
     const u = new URL(base);
     const ok = await chrome.permissions.request({ origins: [`${u.protocol}//${u.hostname}/*`] });
-    perm = ok ? '; 发现地址权限已就绪' : '; 权限被拒绝(再点一次保存即可重试)';
+    perm = ok ? '' : '(发现地址权限被拒绝, 再点一次可重试)';
   } catch (e) {
-    perm = `; 权限申请失败: ${e.message || e}`;
+    perm = `(发现地址权限申请失败: ${e.message || e})`;
   }
-  await chrome.storage.local.set({ discoveryAddress: base, pairingCode: code });
-  setDiscStatus(`发现地址已保存: ${base}${code ? '(含配对码)' : ''}${perm} —— 点「立即发现」试一轮`);
-}
-
-async function discoverNow() {
+  await chrome.storage.local.set({ discoveryAddress: base, pairingCode: code }); // 隐式保存: 与发现同一次点击
   setDiscStatus('正在发现…');
+  let res = null;
   try {
-    const res = await chrome.runtime.sendMessage({ type: 'discover-now' });
-    if (res && res.ok) {
-      setDiscStatus(`发现完成: 已合并 ${res.merged} 条实例 —— 下方列表里徽标「自动」的就是, token 已自动带上`);
-    } else if (res && res.reason === 'pairing_required') {
-      setDiscStatus('后端要求配对码: 在后端启动日志/HR 状态卡找 6 位展示码, 填进「配对码」再点「立即发现」');
-    } else {
-      setDiscStatus(`发现未命中(${(res && res.reason) || '未知'}) —— 后端在跑吗? 候选端口被占时会顺延, 详见运行日志`);
-    }
+    res = await chrome.runtime.sendMessage({ type: 'discover-now' });
   } catch (e) {
     setDiscStatus(`与服务线程通信失败: ${e.message || e} —— 重开一次选项页再试`);
     return;
   }
-  await refreshInstancesFromStorage();
+  const got = await refreshConnFromStorage(true); // 后台已合并实例并落了快照, 这里读回渲染
+  const last = got.lastDiscovery || null;
+  if (res && res.ok) {
+    // 发现命中 = 主实例刚换过: 替用户接一次自测, 直接给「到底能不能用」的结论(V6 一次点击闭环)
+    const probe = await probeMainInstance();
+    const head = `发现命中 ${(last && last.port) || ''}: 已合并 ${res.merged} 条实例`;
+    setDiscStatus(
+      probe.state === 'ok' ? `${head}; 主实例${probe.text}${perm}` : `${head}; 但主实例暂不可用 —— ${probe.text}${perm}`
+    );
+  } else if (res && res.reason) {
+    const cands = candidateSummary(last);
+    setDiscStatus(
+      `发现未命中: ${DISCOVERY_REASON_TEXT[res.reason] || res.reason}${cands ? `(逐候选: ${cands})` : ''}${perm}`
+    );
+  } else {
+    setDiscStatus(`发现未完成: ${(res && res.error) || '后台没有给出结论'}${perm}`);
+  }
 }
 
-/** 发现结果落盘后把实例列表刷成最新(后台已合并, 这里只读回渲染) */
-async function refreshInstancesFromStorage() {
-  const got = await chrome.storage.local.get({ instances: [] });
+/** 把 storage 里的连接面(实例 / 健康台账 / 最近发现)读回内存并重渲染列表 + 顶部总览 */
+async function refreshConnFromStorage(syncJson) {
+  const got = await chrome.storage.local.get({
+    enabled: true, instances: [], instanceHealth: {}, lastDiscovery: null,
+    discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
+  });
   instancesState = Array.isArray(got.instances) ? got.instances : [];
+  instanceHealthState = got.instanceHealth && typeof got.instanceHealth === 'object' ? got.instanceHealth : {};
+  if (syncJson) syncAdvancedView(); // !外部变更(后台发现)不刷 JSON 文本域: 会盖掉用户正在编辑的内容
   renderInstList();
-  syncAdvancedView();
+  renderConnOverview(got);
+  return got;
+}
+
+// ---------- 顶部「连接状态」总览(计划 26-10-15-2357 S3/Q4②: 不静默) ----------
+//
+// !为什么需要: 连接失败此前只在「状态栏最后一句」与运行日志里可见 —— 用户不打开页面就零感知(实报
+// 「可能静默失败」)。总览是**常驻一行**: 态 + 实例数 + 上次发现时间/命中端口 + 最近一次发现结果。
+
+const CONN_STATE_TEXT = {
+  unconfigured: '未配置',
+  ok: '连接正常',
+  reconnecting: '重连中',
+  discoveryFailed: '发现失败',
+};
+
+/**
+ * 连接态推导(纯函数)。
+ * !判据与 background.js 的 badgeStateOf(计划 §3.3)是**同一条**: 徽标与顶部总览是同一条判据的两个
+ * 展示面 —— 改判据必须两边一起改, 否则会出现「徽标报警但页面说正常」, 那正是用户最怕的静默。
+ */
+function connStateOf(cfg) {
+  const instances = Array.isArray(cfg.instances) ? cfg.instances : [];
+  const hasDiscovery = Boolean(String(cfg.discoveryAddress || '').trim());
+  if (!instances.length && !hasDiscovery) return 'unconfigured';
+  const health = cfg.instanceHealth && typeof cfg.instanceHealth === 'object' ? cfg.instanceHealth : {};
+  const anyOk = instances.some((e) => {
+    const h = health[String((e && e.endpoint) || '')];
+    return Boolean(h && h.ok);
+  });
+  if (anyOk) return 'ok';
+  const last = cfg.lastDiscovery;
+  if (hasDiscovery && last && last.ok === false && last.answered === false) return 'discoveryFailed';
+  return 'reconnecting';
+}
+
+/** 最近一次发现的短句(总览用): 命中端口 / 失败结论 + 逐候选都在这里露一次 */
+function lastDiscoveryText(last) {
+  if (!last || !last.at) return '还没跑过';
+  if (last.ok) return `${shortTime(last.at)} 命中 ${last.port}(合并 ${last.merged} 条)`;
+  const why = last.reason === 'no-hit' ? '未命中' : DISCOVERY_REASON_TEXT[last.reason] || '未命中';
+  const cands = candidateSummary(last);
+  return `${shortTime(last.at)} ${why}${cands ? ` · ${cands}` : ''}`;
+}
+
+/** 渲染顶部总览; 发现失败态顺手展开手动端点区(C6: 降低用户下一步的操作成本) */
+function renderConnOverview(cfg) {
+  const enabled = cfg.enabled !== false;
+  const state = enabled ? connStateOf(cfg) : 'unconfigured';
+  const insts = Array.isArray(cfg.instances) ? cfg.instances : [];
+  const health = cfg.instanceHealth && typeof cfg.instanceHealth === 'object' ? cfg.instanceHealth : {};
+  const okCount = insts.filter((e) => {
+    const h = health[String((e && e.endpoint) || '')];
+    return Boolean(h && h.ok);
+  }).length;
+  // C5: 同文不重排(反复赋同一个串不会闪烁); textContent 不用 innerHTML —— 端口/地址来自用户输入
+  $('connState').textContent = [
+    `连接状态: ${enabled ? CONN_STATE_TEXT[state] : '已停用'}`,
+    insts.length ? `实例 ${insts.length} 个(${okCount} 个可用)` : '还没有实例',
+    `上次发现: ${lastDiscoveryText(cfg.lastDiscovery)}`,
+  ].join(' · ');
+  const box = $('manualEndpoints');
+  if (box) {
+    if (state === 'discoveryFailed') box.open = true; // C6: 发现失败态自动展开(已展开则不动)
+    box.classList.toggle('attn', state === 'discoveryFailed');
+  }
+}
+
+/** 后台落盘连接面后自动重渲染(防抖, 与日志/两表同款纪律) */
+let connRenderTimer = null;
+function scheduleConnRender() {
+  if (connRenderTimer) return;
+  connRenderTimer = setTimeout(() => {
+    connRenderTimer = null;
+    refreshConnFromStorage(false).catch((e) => setStatus(`刷新连接状态失败: ${e.message || e}`));
+  }, 300);
 }
 
 // ---------- 站点权限: 从后端拉清单勾选(手动填域名降级为兜底) ----------
@@ -244,7 +371,7 @@ async function fetchSites(manual) {
   if (!inst) {
     backendSites = [];
     renderSiteChecks();
-    if (manual) setStatus('先在 1. 把实例端点存入列表, 再来获取站点');
+    if (manual) setStatus('还没有实例端点 —— 先在上面「连接后端」区点「立即发现」自动接入, 或展开「手动端点」指定实例, 再来获取站点');
     return;
   }
   try {
@@ -280,7 +407,7 @@ async function fetchSites(manual) {
 function renderSiteChecks() {
   const box = $('siteChecks');
   if (!backendSites.length) {
-    box.innerHTML = '<label class="row"><span class="tk">(还没有站点清单 — 配好实例端点后点「重新获取站点」; 后端起来且站点 hr_check.mode 非 off 才会有)</span></label>';
+    box.innerHTML = '<label class="row"><span class="tk">(还没有站点清单 — 在上面「连接后端」区配好实例后点「重新获取站点」; 后端起来且站点 hr_check.mode 非 off 才会有)</span></label>';
     return;
   }
   box.innerHTML = backendSites
@@ -480,9 +607,11 @@ async function load() {
   const got = await chrome.storage.local.get({
     enabled: true, instances: [], siteOrigins: [], siteSelections: [], status: {}, siteLedger: {}, logMax: 1000, logLevel: 'info',
     discoveryAddress: DEFAULT_DISCOVERY_ADDRESS, pairingCode: '', pairingNeeded: false,
+    instanceHealth: {}, lastDiscovery: null,
   });
   $('enabled').checked = Boolean(got.enabled);
   instancesState = Array.isArray(got.instances) ? got.instances : [];
+  instanceHealthState = got.instanceHealth && typeof got.instanceHealth === 'object' ? got.instanceHealth : {};
   siteSelections = Array.isArray(got.siteSelections) ? got.siteSelections : [];
   $('origins').value = got.siteOrigins.join('\n');
   const st = got.status || {};
@@ -497,6 +626,7 @@ async function load() {
     setDiscStatus('后端在等配对码: 在后端启动日志/HR 状态卡看 6 位展示码, 填进「配对码」再点「立即发现」');
   }
   renderInstList();
+  renderConnOverview(got); // 顶部「连接状态」总览: 常驻可见, 不打开页面也知道连不连得上(Q4②)
   syncAdvancedView();
   renderSiteChecks();
   await Promise.all([refreshLogs(), refreshTables()]); // 首次进页面就出日志与两表; 之后后台落盘经 onChanged 自动刷
@@ -546,41 +676,67 @@ async function save() {
   }
 }
 
-/** 直连后端端点自测: 把"通了/401/连不上"分清楚, 并给出下一步该查什么 */
-async function testEndpoint() {
+/**
+ * 探一次**主实例**(instances[0])的连通性, 返回结构化结论 —— 「自测端点连通」按钮与「发现命中后
+ * 自动接自测」共用同一份判据(计划 S3: 免得两处各自演化出两套"通没通"的说法)。
+ * 返回 {state, text, hint}, state ∈ ok / 401 / 403 / http / down / no-instance; 本函数不碰 UI。
+ */
+async function probeMainInstance() {
   const inst = currentInstances()[0];
-  if (!inst) {
-    setStatus('先在 1. 存入一个实例端点再自测');
-    return;
-  }
+  if (!inst) return { state: 'no-instance', text: '还没有实例端点', hint: '' };
   const url = `${inst.endpoint}/api/hr/tasks`;
-  setStatus(`正在自测 ${url} …`);
-  hint('');
   try {
     const res = await fetch(url, { headers: { 'X-Hr-Token': inst.token } });
     if (res.status === 200) {
       const data = await res.json();
-      setStatus(`[x] 端点可达: 本批 ${(data.tasks || []).length} 条任务, 建议轮询间隔 ${data.next_poll_s}s`);
-      hint('后端与扩展的端口/token 一致 ⇒ 保持浏览器开着即可。');
-    } else if (res.status === 401) {
-      setStatus('端点可达, 但 token 不对(HTTP 401)');
-      hint('打开后端数据目录下的 hr.token, 把内容整串粘到 token 字段再「存入实例列表」。');
-    } else if (res.status === 403) {
-      setStatus('端点拒绝来源(HTTP 403) —— 若后端配了 channel.extension_id, 要填成与本扩展一致的 id');
-    } else {
-      setStatus(`端点可达但返回 HTTP ${res.status}`);
+      return {
+        state: 'ok',
+        text: `端点可达: 本批 ${(data.tasks || []).length} 条任务, 建议轮询间隔 ${data.next_poll_s}s`,
+        hint: '后端与扩展的端口/token 一致 ⇒ 保持浏览器开着即可。',
+      };
     }
+    if (res.status === 401) {
+      return {
+        state: '401',
+        text: '端点可达, 但 token 不对(HTTP 401)',
+        hint: '打开后端数据目录下的 hr.token, 把内容整串粘到 token 字段再「存入实例列表」。',
+      };
+    }
+    if (res.status === 403) {
+      return {
+        state: '403',
+        text: '端点拒绝来源(HTTP 403) —— 若后端配了 channel.extension_id, 要填成与本扩展一致的 id',
+        hint: '',
+      };
+    }
+    return { state: 'http', text: `端点可达但返回 HTTP ${res.status}`, hint: '' };
   } catch (e) {
     // fetch 对网络层失败只会给一句 TypeError: Failed to fetch —— 这里替用户展开成排查清单
-    setStatus(`x 连不上端点(${e.message || e})`);
-    hint(
-      '逐条确认: 1. 后端正在运行吗(auto-qb 主程序, 不是 --hr-once 走查); ' +
-      '2. config.yml 里 hr_check.enabled=true、至少一个站点 trackers.<站点>.hr_check.mode != off、' +
-      '且 hr_check.channel.enabled=true —— 三者缺一, 端点**根本不会启动**; ' +
-      `3. 端口对不对(现在是 ${inst.endpoint} , 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:<端口>」); ` +
-      '4. 同机多实例是否端口撞车(被占则后端启动即报错)。'
-    );
+    return {
+      state: 'down',
+      text: `连不上端点(${e.message || e})`,
+      hint:
+        '逐条确认: 1. 后端正在运行吗(auto-qb 主程序, 不是 --hr-once 走查); ' +
+        '2. config.yml 里 hr_check.enabled=true、至少一个站点 trackers.<站点>.hr_check.mode != off、' +
+        '且 hr_check.channel.enabled=true —— 三者缺一, 端点**根本不会启动**; ' +
+        `3. 端口对不对(现在是 ${inst.endpoint} , 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:<端口>」); ` +
+        '4. 同机多实例是否端口撞车(被占则后端启动即报错)。',
+    };
   }
+}
+
+/** 直连后端端点自测: 把"通了/401/连不上"分清楚, 并给出下一步该查什么 */
+async function testEndpoint() {
+  const inst = currentInstances()[0];
+  if (!inst) {
+    setStatus('还没有实例端点 —— 先在上面点「立即发现」自动接入, 或展开「手动端点」显式指定一个, 再来自测');
+    return;
+  }
+  setStatus(`正在自测 ${inst.endpoint} …`);
+  hint('');
+  const got = await probeMainInstance();
+  setStatus(got.text);
+  hint(got.hint);
 }
 
 async function poll() {
@@ -595,7 +751,7 @@ async function poll() {
       const head = n === null ? '' : `已受理 ${n} 个站点; `;
       setStatus(head + (got.status.text || '完成'));
     } else {
-      setStatus(`拉取失败: ${(res && res.error) || '未知'}(详见折叠区里的运行日志)`);
+      setStatus(`拉取失败: ${(res && res.error) || '后台未给出原因'}(详见折叠区里的运行日志)`);
     }
   } catch (e) {
     // SW 未就绪/已休眠时会走到这里 —— 别让红字裸奔
@@ -691,7 +847,7 @@ async function applyLogSettings() {
 async function clearLogsClick() {
   try {
     const res = await chrome.runtime.sendMessage({ type: 'clear-logs' });
-    if (!(res && res.ok)) setStatus(`清空失败: ${(res && res.error) || '未知原因'}`);
+    if (!(res && res.ok)) setStatus(`清空失败: ${(res && res.error) || '后台未给出原因'}`);
   } catch (e) {
     // 后台没应答(多半刚被回收): 直接落 storage —— 后台醒来初始化时会读到这份空数组
     await chrome.storage.local.set({ logs: [] });
@@ -714,7 +870,6 @@ $('fetchSites').addEventListener('click', () => fetchSites(true).catch((e) => se
 $('selectAllSites').addEventListener('click', selectAllSites);
 $('grantChecked').addEventListener('click', () => grant().catch((e) => setStatus(String(e))));
 $('siteChecks').addEventListener('change', () => siteChecksChange().catch((e) => setStatus(String(e))));
-$('discSave').addEventListener('click', () => saveDiscovery().catch((e) => setDiscStatus(String(e))));
 $('discNow').addEventListener('click', () => discoverNow().catch((e) => setDiscStatus(String(e))));
 $('save').addEventListener('click', () => save().catch((e) => setStatus(String(e))));
 $('test').addEventListener('click', () => testEndpoint().catch((e) => setStatus(String(e))));
@@ -732,5 +887,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.logs) scheduleLogRender();
   if (changes.events || changes.siteLedger) scheduleTablesRender(); // 两表随后台落盘自动刷新
+  // 连接面(S3): 后台的发现/轮询结果实时进页面 —— 此前不监听 instances, 后台并入的实例要重开页面才看得见
+  if (changes.instances || changes.instanceHealth || changes.lastDiscovery || changes.enabled) scheduleConnRender();
 });
 load().catch((e) => setStatus(`读取配置失败: ${e.message || e}`));
