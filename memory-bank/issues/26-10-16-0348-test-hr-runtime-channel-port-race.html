@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="hr-runtime-channel-port-race">
+<meta name="issue-stamp" content="26-10-16-0348">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="test-timing-tolerance">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红">
+<meta name="issue-summary" content="疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门">
+<title>HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红</h1>
+    <p class="lede">疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-0348-test-hr-runtime-channel-port-race</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 03:48</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">test</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在做「qB 流量图统计栏对齐」的收尾提交时，<code>commands run ship.commit</code> 的内联闸门在合并远端后复跑 <code>test.quick</code>（xdist 并行）报红，两条用例失败：</p>
+    <ul>
+      <li><code>tests/test_hr_runtime.py::test_start_stop_messages_are_info_not_warning</code></li>
+      <li><code>tests/test_hr_runtime.py::test_apply_remount_message_is_info</code></li>
+    </ul>
+    <p>两条都断言「HR 生命周期消息不得打 WARNING」（本仓 WARNING 以上会被推成系统通知）。同一份内容单独跑（不加 <code>-n</code>）通过，随后原样重跑 <code>test.quick</code> 全绿 ⇒ 判为<strong>并行下的偶发不确定性失败</strong>。</p>
+    <p>两条用例都会真实启动本机回环 HR 端点，端口由 <code>_free_port()</code> 现取 —— 触发条件疑似与端口有关（见「定位锚点」「根因」）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># ① 闸门复跑 test.quick（并行）判红 —— 取证 2026-10-16 03:30（ship.commit 失败行内转述）
+FAILED tests/test_hr_runtime.py::test_start_stop_messages_are_info_not_warning
+FAILED tests/test_hr_runtime.py::test_apply_remount_message_is_info - Asserti...
+2 failed, 3403 passed, 4 skipped in 49.86s
+
+# ② 两条用例单跑（无并行）通过 —— 取证 2026-10-16 03:31
+$ uv run pytest tests/test_hr_runtime.py::test_start_stop_messages_are_info_not_warning tests/test_hr_runtime.py::test_apply_remount_message_is_info -q
+2 passed in 12.79s
+#   注: 同次还有 "FAIL Required test coverage of 98% not reached. Total coverage: 22.10%"
+#   —— 那是覆盖率门槛（单文件跑必然不达），与本问题无关。
+
+# ③ 原样重跑 test.quick（并行）全绿 —— 取证 2026-10-16 03:32
+$ commands run test.quick
+3405 passed, 4 skipped in 44.86s</code></pre>
+    <p class="hint">①与③是同一份代码、同一台机、同一并行度，一红一绿 ⇒ 非确定性。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>xdist 并行跑全量（<code>test.quick</code> / <code>test.full</code>）时偶发；非必现（同一内容连跑两次，一红一绿）。疑与并行 worker 争抢本机回环端口有关</td></tr>
+      <tr><td>影响范围</td><td><code>test.quick</code> 是提交闸门（<code>ship.commit</code> 内联）—— 红即 STOP，导致提交已入库但<strong>推送被挡</strong>，需人工复跑判定真伪后才补推</td></tr>
+      <tr><td>严重度</td><td>低（非产品缺陷、非确定性；代价 = 误拦一次推送 + 一次人工复跑）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/test_hr_runtime.py:143</code> <code>_free_port()</code> —— <code>bind(("127.0.0.1", 0))</code> → <code>getsockname()</code> → <code>close()</code>：取到端口后到端点真正 bind 之间有窗口。grep <code>_free_port</code>（取证 2026-10-16 03:48）</li>
+      <li><code>tests/test_hr_runtime.py:220</code> <code>test_start_stop_messages_are_info_not_warning</code>（取证 2026-10-16 03:48）</li>
+      <li><code>tests/test_hr_runtime.py:237</code> <code>test_apply_remount_message_is_info</code>（取证 2026-10-16 03:48）</li>
+      <li>断言点：两条都是「<code>[r.getMessage() for r in caplog.records if r.levelno &gt;= logging.WARNING]</code> 必须为空」</li>
+      <li>复现/兜底命令：<code>commands run test.quick</code>（并行全量）；单文件 <code>uv run pytest tests/test_hr_runtime.py -q</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查。<br>已排除：① 本轮 CSS 改动（<code>static/{prism,atlas,console}/css/views.css</code> 与 <code>test_webui_static_dom_panel.py</code>）—— 与 HR 运行时无关；② 合并进来的远端那笔 <code>3c5fcf04</code> —— 仅落盘 memory-bank 计划与候选模板 HTML，零代码；③ 并行 worker 间日志串扰 —— xdist 是独立进程，<code>caplog</code> 不跨进程。<br>疑似（未证实）：<code>_free_port()</code> 的 TOCTOU 窗口在多 worker 并行时被抢，端点 bind 失败 ⇒ 打 WARNING ⇒ 命中断言。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>待定。候选方向（只列方案，不在本报告实施）：</p>
+    <ul>
+      <li><strong>A</strong>：<code>_free_port()</code> 改为带重试的取端口（撞了重取），或「先占句柄、把已绑定的 socket 交给端点」，消灭 TOCTOU 窗口 —— 最治本，但要动 <code>_free_port</code> 与调用面</li>
+      <li><strong>B</strong>：把这两条用例归入 xdist 串行组（<code>@pytest.mark.serial</code> / <code>--dist loadgroup</code>），避开同组并行 —— 最省事，但只是回避竞态</li>
+      <li><strong>C</strong>：端点 bind 失败降级为 ERROR + 重试而非 WARNING —— 见效快，但会掩盖真实绑定故障</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 03:48 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-16-0348-test-hr-runtime-channel-port-race.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

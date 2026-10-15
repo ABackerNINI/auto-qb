@@ -22,7 +22,7 @@
 | bug | 7 |
 | perf | 5 |
 | docs | 1 |
-| test | 1 |
+| test | 2 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红](26-10-16-0348-test-hr-runtime-channel-port-race.html) — 疑似 _free_por…
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 ag…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…

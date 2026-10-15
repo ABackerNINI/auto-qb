@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (46)
+## Open (47)
 
+- [test] [HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红](../26-10-16-0348-test-hr-runtime-channel-port-race.html) — 疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](../26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
