@@ -25,6 +25,16 @@
 - test_url_policy_skips_sites_without_page_url: 无 host 站点不进白名单; download_path 无路径不添; 未登记站点拒绝
 - test_absolute_download_without_base_returns_path_verbatim: 无页面地址时下载路径原样返回 + _scheme_of 边界
 - test_result_to_json_carries_optional_fields: to_json 按需带 error/retry_after/kind
+
+### R20 变异审计轮: 通道协议与 URL 边界守阵
+- test_site_of_and_require_reject_schemeless: 无 scheme 的 URL site_of 原空串且 require 拒
+- test_absolute_download_pins_scheme_root_and_path: 拼下载 URL 逐字符钉(https/http/无 scheme 兜三形态)
+- test_host_of_rejects_repeated_separators: host_of 冒重复 : ? # / 与占分隔各现原值
+- test_path_of_schemeless_and_repeated_separators: path_of 无 scheme 原空串, 重复 # ? / 原路径
+- test_hr_task_to_json_wire_contract: 任务线上格式键逐字(id/kind/url/site 必, scope/tid 按需)
+- test_hr_result_to_json_wire_keys: 结果线上格式键逐字(id/ok/status/url/body_b64)
+- test_result_from_json_pins_status_url_error: from_json 带 status/url/error 原值; 缺键原空串
+- test_result_from_json_rejects_non_alphabet_b64: body_b64 非 alphabet 的 "!!!!" 必拒(validate 单点)
 """
 import logging
 import re
@@ -37,6 +47,7 @@ from auto_qb.hr.channel import (
     KIND_EXT_QUOTA,
     HrChannelError,
     HrResult,
+    HrTask,
     UrlPolicy,
     decode_json,
     describe_token_source,
@@ -339,3 +350,72 @@ def test_result_to_json_carries_optional_fields():
         task_id="t2", ok=False, status=0, url="https://x", body=b"", error="boom", retry_after=12.0, kind="ext-quota"
     ).to_json()
     assert full["error"] == "boom" and full["retry_after"] == 12.0 and full["kind"] == "ext-quota"
+
+
+# ==================== R20 变异审计轮: 通道协议与 URL 边界守阵 ====================
+
+
+def test_site_of_and_require_reject_schemeless():
+    """无 scheme 的 URL: site_of 原空串(占文本把未登记站放行)且 require 拒"""
+    policy = _policy()
+    assert policy.site_of("/no-scheme") == "", "无 scheme 原空串"
+    with pytest.raises(HrChannelError):
+        policy.require("/no-scheme")
+
+
+def test_absolute_download_pins_scheme_root_and_path():
+    """拼出的下载 URL 逐字符钉: https 原 / http 原不升级 / 无 scheme 兜 https 三形态各现红"""
+    from auto_qb.hr.channel import _absolute_download
+
+    assert _absolute_download(site_conf()) == "https://pt.example.com/download.php?id={id}"
+    http = _absolute_download(site_conf(hr_page_url="http://pt.example.com/myhr.php"))
+    assert http == "http://pt.example.com/download.php?id={id}", "http 页面原 http 不升级"
+    schemeless = _absolute_download(site_conf(hr_page_url="pt.example.com/myhr.php"))
+    assert schemeless == "https://pt.example.com/download.php?id={id}", "无 scheme 兜 https"
+
+
+def test_host_of_rejects_repeated_separators():
+    """host_of 只原首个 / ? # : 的段: 重复分隔与占分隔各现原值(白名单看的就是它)"""
+    assert host_of("https://x.com:80:443/p") == "x.com", "端口冒只原首(冒后段不进)"
+    assert host_of("https://x.com#a#b") == "x.com", "# 只原首"
+    assert host_of("https://x.com?a?b") == "x.com", "? 只原首"
+    assert host_of("https://x.com/a/b") == "x.com", "/ 只原首"
+    assert host_of("https://x.com?a=1") == "x.com", "? 现原原(占分隔把把查询串进 host)"
+    assert host_of("https://x.com#f") == "x.com", "# 现原原"
+
+
+def test_path_of_schemeless_and_repeated_separators():
+    """path_of 无 scheme 原空串; 重复 # ? / 原原路径(占分隔把把尾进路径)"""
+    assert path_of("/no-scheme") == "", "无 scheme 原空串"
+    assert path_of("https://x.com/p#frag#2") == "/p", "# 只原首"
+    assert path_of("https://x.com/p?a?b") == "/p", "? 只原首"
+    assert path_of("https://x.com/a/b") == "/a/b", "/ 不原尾段"
+    assert path_of("https://x.com/p#frag") == "/p", "# 现原原"
+
+
+def test_hr_task_to_json_wire_contract():
+    """任务线上格式键逐字: id/kind/url/site 必现, scope/tid 按需(扩展侧读键现名)"""
+    plain = HrTask(task_id="t1", kind="page", url="https://u", site="s").to_json()
+    assert plain == {"id": "t1", "kind": "page", "url": "https://u", "site": "s"}
+    full = HrTask(task_id="t2", kind="torrent", url="https://d", site="s", scope="A", tid=7).to_json()
+    assert full == {"id": "t2", "kind": "torrent", "url": "https://d", "site": "s", "scope": "A", "tid": 7}
+
+
+def test_hr_result_to_json_wire_keys():
+    """结果线上格式键逐字: id/ok/status/url/body_b64 必现(键现名是扩展⇄后端契约)"""
+    wire = HrResult(task_id="t1", ok=True, status=200, url="https://u", body=b"x").to_json()
+    assert wire == {"id": "t1", "ok": True, "status": 200, "url": "https://u", "body_b64": "eA=="}
+
+
+def test_result_from_json_pins_status_url_error():
+    """from_json 强转键原值钉: status 现原原 0 / url·error 现原原空 / 缺键原空串(占文本不注入)"""
+    r = HrResult.from_json({"id": "t", "ok": False, "status": 404, "url": "https://u", "error": "boom"})
+    assert r.status == 404 and r.url == "https://u" and r.error == "boom"
+    bare = HrResult.from_json({"id": "t", "ok": False})
+    assert bare.url == "" and bare.error == "", "缺键原空串"
+
+
+def test_result_from_json_rejects_non_alphabet_b64():
+    """body_b64 非 alphabet 的 "!!!!" 必拒 —— validate=True 单点(不原静空体)"""
+    with pytest.raises(HrChannelError):
+        HrResult.from_json({"id": "t", "ok": False, "body_b64": "!!!!"})

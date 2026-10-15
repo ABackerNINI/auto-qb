@@ -44,6 +44,23 @@
 - test_http_route_exception_maps_500: 路由异常 -> 500 且线程不死, 后续请求照常
 - test_stop_timeout_and_close_error_are_contained: 停机超时返回 False; 套接字关闭报错吞掉
 - test_header_and_content_length_units: 头解析兼容 dict/Message/异常形状 + Content-Length 容错
+
+### R20 变异审计轮: 端点契约与适配层守阵
+- test_started_endpoint_identity_and_thread_name: 启动期身份钉(server_bind 现填 name/port, 线程现名且真起)
+- test_default_port_and_extension_id_defaults: 默认端口 8788 与默认 extension_id 空(任意扩展 origin 放行)
+- test_never_started_stop_returns_true: 未启动的 stop 幂真(未启动把「已停止」是事实)
+- test_fresh_reject_counters_are_zero: 新端点被拒接触现 0 计数/0.0 时刻
+- test_status_snapshot_full_contract: 快照全契约(enabled 真/pending 现值/note 两方向/endpoint 拼)
+- test_route_403_401_and_options_wire_contracts: 403/401 体与头逐键(WWW-Authenticate)+ OPTIONS 头全键值
+- test_route_query_and_method_boundaries: 查询串原原路由 / GET refresh 不受理 / 404·413 体 / 上限边界不 413
+- test_tasks_server_time_rounded_to_ms: 任务清单 server_time 原 round 3 位(假时钟钉)
+- test_sites_error_log_carries_traceback: sites_fn 抛记带堆栈 + server_time 假时钟钉
+- test_result_batch_counts_and_bodies: 2+2 混合批分开计数 / 全拒 400 体 / 畸形 400 记+体
+- test_refresh_response_full_contract: refresh 全契约(自定义 note 原原/缺 note 兜文本/raise 200+error+堆栈/404 体)
+- test_reject_throttle_boundaries_and_text: 节流边界(GAP-1 不提醒/现 GAP 提醒)+ 文案逐字 + kind 键现名
+- test_http_wire_headers_and_server_banner: 线头 Server/Content-Type/Content-Length 现原值
+- test_http_dispatch_boundaries_and_500: 线 413 体/上限边界不 413/路由异常 500 体+记带堆栈+访问日志
+- test_json_wire_encoding_compact_and_literal_cjk: _json 紧凑分隔与 CJK 原原(不转 uXXXX 形)
 """
 import json
 import logging
@@ -57,7 +74,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from auto_qb.hr.channel import API_REFRESH, API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelBindError
+from auto_qb.hr.channel import (
+    API_REFRESH,
+    API_RESULT,
+    API_SITES,
+    API_TASKS,
+    MAX_BODY_BYTES,
+    TOKEN_HEADER,
+    HrChannelBindError,
+)
 from auto_qb.hr.queue import HrTaskQueue
 from auto_qb.hr.server import HrChannelServer, HrEndpointHandle
 from auto_qb.hr.threadlifecycle import HrThreadHandle
@@ -550,3 +575,301 @@ def test_header_and_content_length_units():
     assert _content_length({"Content-Length": "12"}) == 12
     assert _content_length({"Content-Length": "abc"}) == 0
     assert _content_length({}) == 0
+
+
+# ==================== R20 变异审计轮: 端点契约与适配层守阵 ====================
+
+
+def test_started_endpoint_identity_and_thread_name():
+    """启动期身份钉: server_bind 现填 name/port 逐字 + 线程现名且真起(各身份突变现红)"""
+    server = make_server()
+    handle = server.start()
+    try:
+        assert handle.thread._thread.name == "auto-qb-hr-channel", "线程现名"
+        assert handle.thread._thread.is_alive(), "serve_forever 线程真起"
+        assert handle.thread.started is True
+        assert handle.server.server_name == "127.0.0.1", "server_bind 现填 host(不查 FQDN)"
+        assert handle.server.server_port == handle.port, "server_bind 现填 port"
+    finally:
+        server.stop()
+
+
+def test_default_port_and_extension_id_defaults():
+    """默认端口 8788 与默认 extension_id 空(任意扩展 origin 放行)"""
+    server = HrChannelServer(queue=HrTaskQueue(), token=TOKEN)
+    assert server.port == 8788 and server.extension_id == ""
+    status, _h, _b = server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN, "Origin": "chrome-extension://" + "b" * 32})
+    assert status == 200, "空 extension_id 把任意扩展 origin 放行"
+
+
+def test_never_started_stop_returns_true():
+    """未启动的 stop 幂真(未启动把「已停止」是事实)"""
+    server = make_server()
+    assert server.started is False
+    assert server.stop() is True, "未启动把已停止是事实"
+    assert server.stop() is True, "幂: 二次 stop 照常真"
+
+
+def test_fresh_reject_counters_are_zero():
+    """新端点被拒接触现 0 计数/0.0 时刻; 成功接触不进被拒面"""
+    server = make_server()
+    assert server.rejected_contacts == 0 and server.last_rejected_ts == 0.0
+    server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN})
+    assert server.rejected_contacts == 0 and server.last_rejected_ts == 0.0, "成功接触不进被拒面"
+
+
+def test_status_snapshot_full_contract():
+    """快照全契约(enabled 真/pending 现值/note 两方向/endpoint 拼逐字)"""
+    queue = HrTaskQueue()
+    queue.put("pt.example.com", "page", URL)
+    queue.put("pt.example.com", "torrent", DL)
+    server = make_server(queue=queue)
+    handle = server.start()
+    try:
+        st = server.status()
+        assert st.enabled is True and st.listening is True
+        assert st.port == handle.port
+        assert st.endpoint == f"http://127.0.0.1:{handle.port}{API_TASKS}", "endpoint 拼逐字"
+        assert st.pending == 2, "pending 现值"
+        assert st.note == "", "监听时无 note"
+    finally:
+        server.stop()
+    st = server.status()
+    assert st.listening is False and st.note == "端点未在监听", "未监听兜文本"
+    assert st.port == server.port, "未监听把配置端口兜"
+
+
+def test_route_403_401_and_options_wire_contracts():
+    """403/401 体与头逐键(WWW-Authenticate)+ OPTIONS 头全键值"""
+    server = make_server()
+    status, headers, body = server.route("GET", API_TASKS, {"Origin": "https://evil.com"})
+    assert status == 403 and headers == {} and body == b'{"error":"origin not allowed"}'
+    status, headers, body = server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+    assert status == 401 and body == b'{"error":"unauthorized"}'
+    assert headers == {"WWW-Authenticate": "X-Hr-Token"}
+    status, headers, body = server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong", "Origin": ORIGIN})
+    assert status == 401
+    assert headers == {"Access-Control-Allow-Origin": ORIGIN, "Vary": "Origin", "WWW-Authenticate": "X-Hr-Token"}
+    status, headers, body = server.route("OPTIONS", API_TASKS, {"Origin": ORIGIN})
+    assert status == 204 and body == b""
+    assert headers == {
+        "Access-Control-Allow-Origin": ORIGIN,
+        "Vary": "Origin",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+        "Access-Control-Max-Age": "600",
+    }
+
+
+def test_route_query_and_method_boundaries():
+    """查询串原原路由 / GET refresh 不受理 / 404·413 体 / 上限边界不 413"""
+    server = make_server()
+    status, _h, _b = server.route("GET", API_TASKS + "?probe=1", {TOKEN_HEADER: TOKEN})
+    assert status == 200, "查询串被路由前原原"
+    assert server.route("GET", API_REFRESH, {TOKEN_HEADER: TOKEN})[0] == 404, "refresh 只 POST 受理"
+    assert server.route("POST", API_TASKS, {TOKEN_HEADER: TOKEN})[0] == 404, "tasks 只 GET 受理"
+    assert server.route("GET", "/nope", {TOKEN_HEADER: TOKEN})[2] == b'{"error":"not found"}'
+    exact = b"{" * MAX_BODY_BYTES
+    status, _h, body = server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, exact)
+    assert status == 400 and b"body too large" not in body, "现上限不 413(畸形 JSON 400)"
+
+
+def test_tasks_server_time_rounded_to_ms():
+    """任务清单 server_time 原 round 3 位(假时钟钉把 round 位与假时钟各现红)"""
+    server = make_server(now_fn=lambda: 1234.5678901)
+    _status, _h, body = server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN})
+    payload = json.loads(body)
+    assert payload["server_time"] == 1234.568, "round 3 位"
+    assert payload["next_poll_s"] == 60.0
+
+
+def test_sites_error_log_carries_traceback(caplog):
+    """sites_fn 抛记带堆栈(exc_info)+ error 文本与 server_time 假时钟钉"""
+    def boom():
+        raise RuntimeError("热重载窗口")
+
+    server = make_server(sites_fn=boom, now_fn=lambda: 55.5)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.server"):
+        _status, _h, body = server.route("GET", API_SITES, {TOKEN_HEADER: TOKEN})
+    payload = json.loads(body)
+    assert payload["sites"] == [] and payload["error"] == "站点清单生成失败: 热重载窗口"
+    assert payload["server_time"] == 55.5
+    errs = [r for r in caplog.records if "生成站点授权清单失败" in r.getMessage()]
+    assert len(errs) == 1 and errs[0].levelno == logging.ERROR
+    assert errs[0].exc_info is not None, "记带堆栈"
+
+
+def test_result_batch_counts_and_bodies(caplog):
+    """2+2 混合批分开计数 / 全拒 400 体逐键 / 畸形 400 记+体原错文本"""
+    queue = HrTaskQueue()
+    t1 = queue.put("pt.example.com", "page", URL)
+    t2 = queue.put("pt.example.com", "torrent", DL)
+    server = make_server(queue=queue)
+    server.queue.take_batch()
+    payload = json.dumps(
+        {
+            "results":
+                [
+                    {
+                        "id": t1.task_id,
+                        "ok": True,
+                        "url": URL,
+                        "text": "a"
+                    },
+                    {
+                        "id": t2.task_id,
+                        "ok": True,
+                        "url": DL,
+                        "body_b64": "eH=="
+                    },
+                    {
+                        "id": "ghost-1",
+                        "ok": True,
+                        "url": URL,
+                        "text": "x"
+                    },
+                    {
+                        "id": "ghost-2",
+                        "ok": False,
+                        "error": "e"
+                    },
+                ]
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.server"):
+        status, _h, body = server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, payload.encode())
+    assert status == 200 and json.loads(body) == {"accepted": 2, "rejected": 2}
+    assert [r for r in caplog.records if "不匹配任务" in r.getMessage()], "混合批记条数"
+    all_ghost = json.dumps(
+        {"results": [{
+            "id": "ghost-3",
+            "ok": True,
+            "url": URL,
+            "text": "x"
+        }, {
+            "id": "ghost-4",
+            "ok": False
+        }]}
+    )
+    status, _h, body = server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, all_ghost.encode())
+    assert status == 400
+    assert json.loads(body) == {"accepted": 0, "rejected": 2, "error": "no matching task"}
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.server"):
+        status, _h, body = server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, b"{oops")
+    assert status == 400 and json.loads(body)["error"].startswith("请求体不是合法 JSON")
+    assert [r for r in caplog.records if "回传体无法解析" in r.getMessage()], "畸形记一条"
+
+
+def test_refresh_response_full_contract(caplog):
+    """refresh 全契约(自定义 note 原原/缺 note 兜文本/raise 200+error+堆栈/404 体)"""
+    server = make_server(force_fn=lambda: {"requested": ["s1", "s2"], "note": "自定义文本"})
+    _status, _h, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN})
+    assert json.loads(body) == {"requested": ["s1", "s2"], "note": "自定义文本"}
+
+    bare = make_server(force_fn=lambda: {})
+    _status, _h, body = bare.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN})
+    assert json.loads(body) == {"requested": [], "note": "已受理, 取数由取数线程执行"}
+
+    none_req = make_server(force_fn=lambda: {"requested": None})
+    _status, _h, body = none_req.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN})
+    assert json.loads(body)["requested"] == [], "None 清单原空"
+
+    def boom():
+        raise RuntimeError("force boom")
+
+    server = make_server(force_fn=boom)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.server"):
+        _status, _h, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN})
+    assert json.loads(body) == {"requested": [], "error": "受理失败: force boom"}
+    errs = [r for r in caplog.records if "立即拉取受理失败" in r.getMessage()]
+    assert len(errs) == 1 and errs[0].levelno == logging.ERROR and errs[0].exc_info is not None
+
+    server = make_server()
+    status, _h, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN})
+    assert status == 404 and json.loads(body) == {"error": "refresh not available"}
+
+
+def test_reject_throttle_boundaries_and_text(caplog):
+    """节流边界(GAP-1 不提醒/现 GAP 提醒)+ 文案逐字 + kind 键现名(origin 另一条)"""
+    clock = [1000.0]
+    server = make_server(now_fn=lambda: clock[0])
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.server"):
+        server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+        warns = [r for r in caplog.records if "鉴权失败" in r.getMessage()]
+        assert len(warns) == 1 and warns[0].levelno == logging.WARNING
+        assert warns[0].getMessage() == ("HR 取数通道 | 鉴权失败(GET /api/hr/tasks), 已拒绝(持续期间不再逐条记, 每 6h 提醒一次)")
+        caplog.clear()
+        clock[0] = 1000.0 + 6 * 3600.0 - 1  # GAP-1: 未到提醒周期
+        server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+        assert not [r for r in caplog.records if "鉴权失败" in r.getMessage() and r.levelno >= logging.WARNING], "GAP-1 不提醒"
+        dbg = [r for r in caplog.records if "已告警过" in r.getMessage()]
+        assert len(dbg) == 1 and dbg[0].levelno == logging.DEBUG
+        caplog.clear()
+        clock[0] = 1000.0 + 6 * 3600.0  # 现 GAP: 再提醒
+        server.route("GET", API_TASKS, {TOKEN_HEADER: "wrong"})
+        assert [r for r in caplog.records if "鉴权失败" in r.getMessage() and r.levelno >= logging.WARNING], "现 GAP 提醒"
+        caplog.clear()
+        clock[0] = 1000.0 + 60.0
+        server.route("GET", API_TASKS, {TOKEN_HEADER: TOKEN, "Origin": "https://evil.com"})
+        origin_warns = [r for r in caplog.records if "非白名单 origin" in r.getMessage()]
+        assert len(origin_warns) == 1 and origin_warns[0].levelno == logging.WARNING, "kind 键现名: origin 另一条"
+
+
+def test_http_wire_headers_and_server_banner():
+    """线头 Server/Content-Type/Content-Length 现原值(banner 与头名各突变现红)"""
+    server = make_server()
+    handle = server.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=5)
+        conn.request("GET", API_TASKS, headers={TOKEN_HEADER: TOKEN})
+        resp = conn.getresponse()
+        body = resp.read()
+        assert resp.status == 200
+        assert resp.getheader("Server").startswith("auto-qb-hr/1.0"), "banner 现原值(基类只补 Python 版本后缀)"
+        assert resp.getheader("Content-Type") == "application/json; charset=utf-8"
+        assert resp.getheader("Content-Length") == str(len(body))
+        assert resp.getheader("Connection") == "close"
+        conn.close()
+    finally:
+        server.stop()
+
+
+def test_http_dispatch_boundaries_and_500(monkeypatch, caplog):
+    """线 413 体逐字/上限边界不 413/路由异常 500 体+记带堆栈+访问日志"""
+    server = make_server()
+    handle = server.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=10)
+        conn.request("POST", API_RESULT, headers={TOKEN_HEADER: TOKEN, "Content-Length": str(MAX_BODY_BYTES + 1)})
+        resp = conn.getresponse()
+        assert resp.status == 413 and resp.read() == b'{"error":"body too large"}'
+        conn.close()
+
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=10)
+        exact = b"{" * MAX_BODY_BYTES
+        conn.request("POST", API_RESULT, headers={TOKEN_HEADER: TOKEN, "Content-Length": str(len(exact))}, body=exact)
+        resp = conn.getresponse()
+        assert resp.status == 400 and b"body too large" not in resp.read(), "现上限不 413"
+        conn.close()
+
+        monkeypatch.setattr(server, "route", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.server"):
+            conn = HTTPConnection("127.0.0.1", handle.port, timeout=5)
+            conn.request("GET", API_TASKS, headers={TOKEN_HEADER: TOKEN})
+            resp = conn.getresponse()
+            assert resp.status == 500 and resp.read() == b'{"error":"internal error"}'
+            conn.close()
+        errs = [r for r in caplog.records if "处理 GET" in r.getMessage()]
+        assert errs and errs[0].levelno == logging.ERROR and errs[0].exc_info is not None, "记带堆栈"
+        assert [r for r in caplog.records if "HR 端点" in r.getMessage()], "访问日志照常记"
+    finally:
+        server.stop()
+
+
+def test_json_wire_encoding_compact_and_literal_cjk():
+    """_json 紧凑分隔与 CJK 原原(不转 uXXXX 形)"""
+    from auto_qb.hr.server import _json
+
+    assert _json({"a": 1, "b": [2, 3]}) == b'{"a":1,"b":[2,3]}', "紧凑分隔"
+    assert _json({"note": "已受理"}) == '{"note":"已受理"}'.encode("utf-8"), "CJK 原原"

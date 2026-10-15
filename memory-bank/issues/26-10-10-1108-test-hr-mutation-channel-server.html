@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/ 本地通道与服务端点变异存活(channel/server)">
 <meta name="issue-summary" content="hr 首轮: channel 126 + server 210 存活(URL 白名单/token/host 解析/端点鉴权/CORS), 零假存活">
 <title>hr/ 本地通道与服务端点变异存活(channel/server) · test · 计划外问题（便签）</title>
@@ -94,6 +94,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-10 11:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-15 09:27 — <strong>R21 实施</strong>（认领 + 修复，状态 <strong>Done</strong>）: 同池复跑基线 channel 121 + server 200 条存活三分类（真洞 60 + 122 / 等价 61 + 77 + 超时 1）; 补 <b>23 新守阵</b>（<code>test_hr_channel.py</code> 11 · <code>test_hr_server.py</code> 12, 各文件头部测试计划同步）, 红验 <b>195/321 KILLED</b>（channel 63/121 含 2 条双命中手工复验 · server 132/200; 余 126 条逐 id 判等价: 单分隔符 split/rsplit/maxsplit 变体同值 · 文案/注释/docstring 变体 · <code>encoding</code> 大小写变同 · 死默认与恒-真分支恒等）; S6 同池 <code>--no-refresh</code> 复跑 <b>channel 540 变异/杀 483/存活 57（89.44%）· server 550/482/67+超时 1（87.64%）</b>, 两文件存活 <b>321 → 125</b>（净 −196）; <b>零 <code>src/</code> 改动</b>; 坑 <code>redverify-anchor-lineendings</code> 复发 +1（形态九: 续行缩进复原按 <code>min</code> 位移, docstring 续行少位移失复原 ⇒ 伪 SURVIVED）+ 坑档 <code>mutants-shared-mirror.md</code> 补「按目标跑 meta 只末目标存」事实</li>
     </ul>
   </section>
 
