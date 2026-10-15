@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>模板 A · 纵向流 · HR 扩展「连接后端」区候选稿</title>
+<meta name="color-scheme" content="dark">
+<style>
+  /* 候选稿 A: 单列纵向流 —— 状态卡 -> 发现操作 -> 实例表 -> 动作行 -> 折叠说明。
+     假数据 + 轻交互(顶部四态切换/悬停详情/行内假重测/折叠), 不代表最终实现。 */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 36px 40px 64px;
+    background: #101214; color: #eceff1;
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  .cap { font: 11px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .12em; color: #7d8a92; margin: 0 0 4px; }
+  h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0 0 4px; font-weight: 650; }
+  .sub { color: #97a2aa; margin: 0 0 8px; font-size: 13px; }
+  .demo-bar {
+    display: flex; gap: 6px; align-items: center; margin: 18px 0 26px; padding: 10px 12px;
+    border: 1px dashed #3a444d; font-size: 12px; color: #97a2aa; flex-wrap: wrap;
+  }
+  .demo-bar b { color: #e8590c; font-weight: 650; }
+  .demo-bar button {
+    font: 12px inherit; background: transparent; color: #b9c3ca;
+    border: 1px solid #3a444d; padding: 5px 12px; cursor: pointer;
+  }
+  .demo-bar button.on { border-color: #e8590c; color: #e8590c; }
+  .rule { border: 0; border-top: 1px solid rgba(255,255,255,.16); margin: 24px 0; }
+  .stepno { float: left; font-size: 30px; font-weight: 300; color: #e8590c; line-height: 1; margin: 2px 16px 0 0; }
+  .step { overflow: hidden; }
+  .step h4 { margin: 0 0 14px; font-size: 14px; font-weight: 650; letter-spacing: .02em; }
+
+  /* -- 状态卡 -- */
+  .statuscard {
+    display: grid; grid-template-columns: 168px 1fr; max-width: 860px;
+    border: 1px solid rgba(255,255,255,.16); border-left: 3px solid #2e7d46; margin: 0 0 18px;
+  }
+  .statuscard.warn { border-left-color: #b8802f; }
+  .statuscard.fail { border-left-color: #b0453d; }
+  .statuscard.idle { border-left-color: #5a6673; }
+  .statuscard .big { padding: 16px 18px; border-right: 1px solid rgba(255,255,255,.1); }
+  .statuscard .big .dot { width: 10px; height: 10px; display: inline-block; margin-right: 8px; background: #2e7d46; }
+  .statuscard.fail .big .dot { background: #b0453d; }
+  .statuscard.warn .big .dot { background: #b8802f; }
+  .statuscard.idle .big .dot { background: #5a6673; }
+  .statuscard .big .word { font: 650 20px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .02em; }
+  .statuscard .big .word.fail { color: #e08a80; }
+  .statuscard .big .word.warn { color: #e2b06e; }
+  .statuscard .big .word.idle { color: #97a2aa; }
+  .statuscard .metrics { display: flex; align-items: center; gap: 0; }
+  .statuscard .m { padding: 10px 18px; border-right: 1px solid rgba(255,255,255,.08); }
+  .statuscard .m:last-child { border-right: 0; }
+  .statuscard .m .k { font-size: 10.5px; letter-spacing: .08em; color: #7d8a92; }
+  .statuscard .m .v { font: 13.5px Consolas, monospace; margin-top: 3px; }
+  .statuscard .m .v em { font-style: normal; color: #97a2aa; }
+
+  /* -- 发现操作行 -- */
+  .discrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; max-width: 860px; }
+  .discrow input {
+    background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.3);
+    color: #eceff1; font: 13px Consolas, monospace; padding: 5px 2px;
+  }
+  .discrow input:focus { outline: none; border-bottom-color: #e8590c; }
+  .discrow .f { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; }
+  .discrow .f label { font-size: 12px; color: #97a2aa; }
+  .discrow input.ep { width: 240px; } .discrow input.pc { width: 110px; }
+  button.primary {
+    font: 12.5px inherit; letter-spacing: .04em; background: #e8590c; color: #101214;
+    border: 0; padding: 9px 18px; cursor: pointer;
+  }
+  button.ghost {
+    font: 12.5px inherit; background: transparent; color: #eceff1;
+    border: 1px solid rgba(255,255,255,.3); padding: 9px 16px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: #e8590c; color: #e8590c; }
+  .oneline { color: #7d8a92; font-size: 12px; margin: 8px 0 0; max-width: 860px; }
+
+  /* -- 实例表 -- */
+  table.swtab { border-collapse: collapse; width: 100%; margin: 18px 0 0; font-size: 12.5px; max-width: 860px; }
+  table.swtab th {
+    text-align: left; font-size: 10.5px; letter-spacing: .09em; color: #7d8a92;
+    font-weight: 650; padding: 6px 10px 5px; border-bottom: 1px solid rgba(255,255,255,.28); white-space: nowrap;
+  }
+  table.swtab td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+  table.swtab tbody tr:hover td { background: rgba(255,255,255,.03); }
+  table.swtab td.ep { font: 12.5px Consolas, monospace; }
+  table.swtab .src { font-size: 10.5px; letter-spacing: .06em; padding: 1px 7px; border: 1px solid #3a444d; color: #97a2aa; }
+  table.swtab .src.pri { border-color: #e8590c; color: #e8590c; }
+  .hcell { display: inline-flex; align-items: center; gap: 7px; cursor: default; }
+  .hcell .dot { width: 8px; height: 8px; flex: none; }
+  .hcell.ok .dot { background: #2e7d46; } .hcell.ok { color: #9ecf9e; }
+  .hcell.stale .dot { background: #b8802f; } .hcell.stale { color: #e2b06e; }
+  .hcell.auth .dot { background: #b0453d; } .hcell.auth { color: #e08a80; }
+  .hcell.idle .dot { background: #5a6673; } .hcell.idle { color: #7d8a92; }
+  .hcell .when { color: #7d8a92; font: 11.5px Consolas, monospace; }
+  table.swtab td.tk { color: #6d7880; font: 12px Consolas, monospace; }
+  table.swtab td.op button { padding: 3px 9px; font-size: 11.5px; margin-right: 4px; }
+  .feedback { font-size: 12.5px; color: #97a2aa; min-height: 20px; margin: 10px 0 0; max-width: 860px; }
+  .feedback b { color: #e8590c; font-weight: 650; }
+  .btnrow { display: flex; gap: 0; margin-top: 12px; flex-wrap: wrap; }
+
+  /* -- 折叠说明 -- */
+  details { margin-top: 18px; max-width: 860px; }
+  summary { font-size: 12px; letter-spacing: .04em; color: #7d8a92; cursor: pointer; }
+  summary:hover { color: #e8590c; }
+  details.attn > summary { color: #e8590c; }
+  .explain { padding: 12px 2px 0; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 0 12px; }
+  .legend .chip { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #b9c3ca; }
+  .legend .chip i { width: 10px; height: 10px; display: inline-block; }
+  .explain p { color: #97a2aa; font-size: 12.5px; margin: 0 0 10px; }
+  .explain code { color: #e8590c; font-family: Consolas, monospace; }
+  .field { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: center; margin: 0 0 10px; max-width: 560px; }
+  .field label { font-size: 12px; color: #97a2aa; }
+  input[type=text] {
+    background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.3);
+    color: #eceff1; font: 13px Consolas, monospace; padding: 5px 2px; width: 100%;
+  }
+  input[type=text]:focus { outline: none; border-bottom-color: #e8590c; }
+</style>
+</head>
+<body>
+  <p class="cap">候选模板 A / HR-FETCH-PROXY 选项页 · 假数据演示</p>
+  <h1>① 连接后端 · 纵向流</h1>
+  <p class="sub">单列自上而下: 状态卡 → 发现操作 → 实例表 → 动作行 → 折叠说明。与现有页面节奏一致, 改动最克制。</p>
+
+  <div class="demo-bar">
+    <b>演示:</b> 点切连接总态, 观察状态卡与手动区联动 ——
+    <button data-st="ok" class="on">连接正常</button>
+    <button data-st="reconnecting">重连中</button>
+    <button data-st="discoveryFailed">发现失败</button>
+    <button data-st="unconfigured">未配置</button>
+  </div>
+
+  <div class="step">
+    <div class="stepno">1</div>
+    <h4>连接后端(自动发现自愈; 手动指定优先)</h4>
+
+    <div class="statuscard" id="card">
+      <div class="big">
+        <span class="dot"></span><span class="word" id="cardWord">连接正常</span>
+      </div>
+      <div class="metrics">
+        <div class="m"><div class="k">实例</div><div class="v">3 <em>个</em></div></div>
+        <div class="m"><div class="k">可用</div><div class="v" id="cardOk">2 <em>个</em></div></div>
+        <div class="m"><div class="k">上次发现</div><div class="v" id="cardDisc">10-16 01:40 命中 18788</div></div>
+      </div>
+    </div>
+
+    <div class="discrow">
+      <div class="f"><label>发现地址</label><input class="ep" type="text" value="http://127.0.0.1:18788"></div>
+      <div class="f"><label>配对码</label><input class="pc" type="text" placeholder="跨机才需要"></div>
+      <button class="primary">立即发现</button>
+    </div>
+    <p class="oneline">点一次 = 保存 + 发现 + 自测; 同机零配置, 跨机填后端地址。</p>
+
+    <table class="swtab">
+      <thead><tr><th>来源</th><th>端点</th><th>token</th><th>状态 · 最近联系</th><th>操作</th></tr></thead>
+      <tbody id="instBody">
+        <tr data-h="ok">
+          <td><span class="src pri">手动</span></td>
+          <td class="ep">127.0.0.1:8788</td>
+          <td class="tk" title="9f2e4a17b3c05d82a1f6e7d4c2b8a0935f6e1d7c4b2a8f60">9f2e4a17b3c05d82a1f6e7d4c2b8a093…</td>
+          <td><span class="hcell ok" title="HTTP 200 · 本批 0 条任务, 建议轮询间隔 60s (10-16 01:56:02)"><span class="dot"></span>正常<span class="when">3 秒前</span></span></td>
+          <td class="op"><button class="ghost">删</button></td>
+        </tr>
+        <tr data-h="auth">
+          <td><span class="src pri">手动</span></td>
+          <td class="ep">192.168.1.10:18788</td>
+          <td class="tk" title="b7c0d94e8a2f1635c7e9b0d4a8f21e7635c4d9b8e2a17f55">b7c0d94e8a2f1635c7e9b0d4a8f21e76…</td>
+          <td><span class="hcell auth" title="端点可达, 但 token 不对(HTTP 401) —— 删掉这条, 把 hr.token 内容整串粘进手动表单重新存入 (10-16 01:50:47)"><span class="dot"></span>token 不对<span class="when">6 分钟前</span></span></td>
+          <td class="op"><button class="ghost">删</button></td>
+        </tr>
+        <tr data-h="stale">
+          <td><span class="src">自动</span></td>
+          <td class="ep">127.0.0.1:7031</td>
+          <td class="tk">-</td>
+          <td><span class="hcell stale" title="连不上端点(TypeError: Failed to fetch) · 连败 5 轮 —— 后端主程序在跑吗? 三个开关缺一端点不会启动 (10-16 01:52:11)"><span class="dot"></span>连败 5 轮<span class="when">4 分钟前</span></span></td>
+          <td class="op" title="自动条目由发现租约管理: 删除后下一轮发现会重新补入, 无需手动操作"></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="oneline">悬停「状态」格可看失败详情与改法 —— 状态由后台每轮轮询自动落账, 不必手动刷新。</p>
+
+    <div class="feedback" id="feedback"></div>
+    <div class="btnrow">
+      <button class="ghost" id="retestAll">重测全部</button>
+      <button class="ghost">立即拉取一次</button>
+    </div>
+
+    <details id="explain">
+      <summary>说明与排障(端口机制 · 配对码 · 徽标图例)</summary>
+      <div class="explain">
+        <p><b style="color:#eceff1">浏览器工具栏的扩展图标徽标</b>(常驻, 非本页元素)四态: 悬停图标有中文结论, 点图标即回本页。</p>
+        <div class="legend">
+          <span class="chip"><i style="background:#5a6673"></i>未配置(空)</span>
+          <span class="chip"><i style="background:#2e7d46"></i>连接正常(OK)</span>
+          <span class="chip"><i style="background:#b8802f"></i>重连中(..)</span>
+          <span class="chip"><i style="background:#b0453d"></i>发现失败(!)</span>
+        </div>
+        <p>后端 <code>hr_check.channel.discovery_port</code> 默认 18788, 被占自动顺延 18789/18790, 本扩展并行探测整张候选表; 命中后实例自动入列, token 免手抄。后端 <code>port</code> 配 0(默认)时数据端口随机且经发现自动分发 —— 端口变了不用管, 自愈机制会自动补入新端点。</p>
+        <p>跨机/开启配对时, 把后端启动日志或 HR 状态卡里的 6 位展示码填进「配对码」再点一次「立即发现」。</p>
+      </div>
+    </details>
+
+    <details id="manual">
+      <summary>手动端点(优先: 你显式指定的实例, 永远优先使用, 不会被自动发现覆盖或删除)</summary>
+      <div class="explain">
+        <div class="field"><label>地址</label><input type="text" placeholder="http://127.0.0.1:8788"></div>
+        <div class="field"><label>TOKEN</label><input type="text" placeholder="粘贴 hr.token 的内容整串"></div>
+        <div class="btnrow"><button class="primary">存入实例列表</button><button class="ghost">再填一个</button></div>
+      </div>
+    </details>
+  </div>
+
+<script>
+  // 假交互: 四态切换 / 行内假重测 / 发现失败态联动。仅演示, 不代表实现。
+  var CARD = {
+    ok:              { cls: '',     word: '连接正常', wordCls: '',      ok: '2 <em>个</em>', disc: '10-16 01:40 命中 18788' },
+    reconnecting:    { cls: 'warn', word: '重连中',   wordCls: 'warn',  ok: '0 <em>个</em>', disc: '10-16 01:56 未命中 · 18788 连接失败 · 18789 HTTP 404' },
+    discoveryFailed: { cls: 'fail', word: '发现失败', wordCls: 'fail',  ok: '0 <em>个</em>', disc: '10-16 01:56 候选全无应答 · 18788 连接失败 · 18789 连接失败' },
+    unconfigured:    { cls: 'idle', word: '未配置',   wordCls: 'idle',  ok: '—',            disc: '还没跑过' }
+  };
+  var manual = document.getElementById('manual');
+  var explain = document.getElementById('explain');
+  document.querySelectorAll('.demo-bar button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.demo-bar button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var s = CARD[b.dataset.st];
+      var card = document.getElementById('card');
+      card.className = 'statuscard ' + s.cls;
+      var w = document.getElementById('cardWord');
+      w.textContent = s.word; w.className = 'word ' + s.wordCls;
+      document.getElementById('cardOk').innerHTML = s.ok;
+      document.getElementById('cardDisc').textContent = s.disc;
+      // 发现失败态: 自动展开手动区并高亮(C6 联动演示)
+      if (b.dataset.st === 'discoveryFailed') { manual.open = true; manual.classList.add('attn'); }
+      else { manual.classList.remove('attn'); }
+      explain.classList.toggle('attn', b.dataset.st === 'discoveryFailed');
+    });
+  });
+  function rowHtml(tr, state, when, title) {
+    var h = tr.querySelector('.hcell');
+    h.className = 'hcell ' + state;
+    h.title = title;
+    h.innerHTML = '<span class="dot"></span>' +
+      ({ ok: '正常', stale: '连败中', auth: 'token 不对', idle: '还没轮过' }[state]) +
+      '<span class="when">' + when + '</span>';
+  }
+  document.getElementById('retestAll').addEventListener('click', function () {
+    var rows = document.querySelectorAll('#instBody tr');
+    rows.forEach(function (tr) { rowHtml(tr, 'idle', '探测中…', '正在探测 ' + tr.querySelector('.ep').textContent + ' …'); });
+    feedback('正在重测全部 3 个实例…');
+    setTimeout(function () {
+      rows.forEach(function (tr) { rowHtml(tr, 'ok', '刚刚', 'HTTP 200 · 本批 0 条任务, 建议轮询间隔 60s (刚刚)'); });
+      feedback('重测完成: 3 个实例全部可达, 台账已更新。');
+    }, 1100);
+  });
+  function feedback(t) { document.getElementById('feedback').textContent = t; }
+</script>
+</body>
+</html>

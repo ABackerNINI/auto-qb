@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 扩展「连接后端」区重排 + 实例状态入表 修改计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-ext-connect-ui">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-16-0214">
+<meta name="doc-updated" content="26-10-16-0247">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-hr-ext-connect-ui.md">
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d;
+    --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119;
+    --ok: #8fc98f; --no: #d98a8a; --code-bg: #171e26; --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; }
+  p { margin-bottom: 12px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .ok { color: var(--ok); } .gap { color: var(--warn); } .bad { color: var(--no); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+  @media (max-width: 900px) { .sheet { grid-template-columns: 1fr; padding: 32px 20px 60px; gap: 24px; } nav.toc { display: none; } header.cover, section, footer { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">目录</div>
+  <a href="#s01"><span class="no">01</span>拍板回执</a>
+  <a href="#s02"><span class="no">02</span>现状锚点</a>
+  <a href="#s03"><span class="no">03</span>目标形态</a>
+  <a href="#s04"><span class="no">04</span>分步实施</a>
+  <a href="#s05"><span class="no">05</span>裁量点</a>
+  <a href="#s06"><span class="no">06</span>验收</a>
+  <a href="#s07"><span class="no">07</span>风险</a>
+  <a href="#s08"><span class="no">08</span>迁移与兼容</a>
+  <a href="#s09"><span class="no">09</span>候选模板与选型</a>
+  <a href="#s10"><span class="no">10</span>同步清单</a>
+  <a href="#s11"><span class="no">11</span>变更记录</a>
+  <div class="toc-foot">专题 hr-ext-connect-ui<br>候选稿, 实施待用户指令</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">auto-qb / hr-fetch-proxy / plan</div>
+  <h1>HR 扩展「连接后端」区重排<br>+ 实例状态入表</h1>
+  <p class="lede">上一轮(26-10-15-2357)把连接模型修对了(自愈 / 手动优先 / 不静默), 但①区排版仍是七类信息垂直堆叠、实例健康台账只用了「疑似失效」一角、「自测端点连通」只测 instances[0]。本计划把<b>状态直接铺进实例表</b>, 把<b>机制长文收进折叠区</b>, 把<b>徽标图例的"工具栏"歧义修掉</b>, 并给出三份可交互候选模板供选型。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+    <div class="item"><div class="k">范围</div><div class="v">仅扩展侧 · ①区 + ③④表样式微调</div></div>
+    <div class="item"><div class="k">上游</div><div class="v">26-10-15-2357(连接自愈, Done)</div></div>
+    <div class="item"><div class="k">模板</div><div class="v">3 份候选稿(§09)</div></div>
+  </div>
+</header>
+
+<section id="s01">
+  <h2><span class="no">01</span>拍板回执</h2>
+  <p>grilling 两轮(首轮选择卡故障, 改纯文字重问; 用户拍板「按推荐」+ 两项显式选择)。决策权威如下, 实施不得偏离:</p>
+  <table>
+    <thead><tr><th>#</th><th>决策点</th><th>拍板</th></tr></thead>
+    <tbody>
+      <tr><td class="num">Q1</td><td>改造范围</td><td><b>①区重排 + ③④两张表样式微调</b>(不加功能); ②站点权限不动。</td></tr>
+      <tr><td class="num">Q2</td><td>实例表状态粒度</td><td><b>四态色点 + 短语 + 悬停详情</b>(绿=正常 / 橙=连败中 / 红=凭证或权限错 / 灰=还没轮过), 悬停显示 note 全文与最近联系时间; 语义与工具栏徽标同源。</td></tr>
+      <tr><td class="num">Q3</td><td>「自测端点连通」按钮</td><td><b>改「重测全部」+ 每行行内「测」按钮</b>; 探测经后台消息执行(单一写入口), 修掉只测 <code>instances[0]</code> 的缺陷。<b>〔已随 R3 修订: 行内「测」取消, 仅存「重测全部」〕</b></td></tr>
+      <tr><td class="num">Q4</td><td>大段文字收敛</td><td><b>状态卡 + 行内短句 + 折叠说明区</b>: 顶部换状态卡(大状态字 + 三指标); 机制长文(端口顺延 / 配对码 / 徽标图例 / 排障)全部收进一个「说明与排障」折叠区。</td></tr>
+      <tr><td class="num">Q5</td><td>模板维度</td><td><b>两布局 + 一激进方案</b>: A 纵向流 / B 双栏台账 / C 常驻顶部状态条(激进)。瑞士网格 dark 语言保留。</td></tr>
+      <tr><td class="num">Q6</td><td>模板落盘形态</td><td><b>3 个独立文件 + 计划引用</b>, 放 <code>memory-bank/plans/26-10-16-0214-hr-ext-connect-ui-templates/</code>。</td></tr>
+    </tbody>
+  </table>
+  <h3>第二轮拍板(模板评审, 2026-10-16 02:30)</h3>
+  <table>
+    <thead><tr><th>#</th><th>决策点</th><th>拍板</th></tr></thead>
+    <tbody>
+      <tr><td class="num">R1</td><td>token 列显示</td><td><b>前 32 位指纹 + 悬停完整值</b>; 未填显示「未填」并标红。自动条目显示「-」(原「(免抄)」废止)。</td></tr>
+      <tr><td class="num">R2</td><td>来源徽标措辞</td><td><b>「手动 / 自动」</b>。「优先」字样废止(用户: 来源列显示「优先」本来就是错误的); 行为不变 —— 手动条目仍置顶、主实例、不可被覆盖删除。上游 26-10-15-2357 Q11② 的徽标措辞随本轮翻案, 相关守阵期望随 S5 更新(口径演进)。</td></tr>
+      <tr><td class="num">R3</td><td>操作列最终形态</td><td><b>手动条目只有「删」; 自动条目操作列留空</b>(悬停单元格可见「由发现租约自动管理」)。「载入」删除 —— 改 token 走「删除重加」唯一路径; 行内「测」删除 —— 探测由「重测全部」统一承载(逐实例只读 GET, 快速无副作用)。</td></tr>
+    </tbody>
+  </table>
+  <h3>事实澄清(用户两问, 实施随 Q4 措辞修复落地)</h3>
+  <ul>
+    <li><b>「工具栏」指什么</b>: 指<b>浏览器工具栏右上角的扩展图标</b>(<code>chrome.action</code> 徽标, <code>background.js</code> 的 <code>badgeStateOf</code>+<code>refreshBadge</code> 实现, 空/<code>OK</code>/<code>..</code>/<code>!</code> 四态), 不是实例表、不在本页里。<code>options.html:135</code> 的图例写在本页内却没说"浏览器"二字, 读者无法不误解 —— 属措辞缺陷, S1 重写为「浏览器工具栏的扩展图标徽标(常驻, 非本页元素)」并配四态色样。</li>
+    <li><b>「自测与计划不符」属实</b>: <code>instanceHealth</code> 台账(<code>background.js:846-898</code>)早已按轮落盘 <code>ok/at/note/failStreak</code>, 但 <code>options.js</code> 只拿 <code>failStreak&gt;=3</code> 做手动条目「疑似失效」提示(Q10), 没把状态铺进表格 —— 状态数据躺在 storage 里没人看。上一计划只覆盖到"不静默", 未覆盖"状态入表", 本计划补齐。</li>
+  </ul>
+</section>
+
+<section id="s02">
+  <h2><span class="no">02</span>现状锚点</h2>
+  <table>
+    <thead><tr><th>位置</th><th>现状</th><th>问题</th></tr></thead>
+    <tbody>
+      <tr><td class="num"><code>options.html:117</code></td><td><code>#connState</code> 等宽字块, 一行塞「态 · 实例数 · 上次发现」三件事</td><td>无层级, 与下方长文混在一起</td></tr>
+      <tr><td class="num"><code>options.html:123</code></td><td><code>#discStatus</code> 段落: 发现端口机制说明(约 100 字)</td><td>机制长文常驻, 每次进页都要扫一遍</td></tr>
+      <tr><td class="num"><code>options.html:125</code></td><td>段落: 端口随机 / 显式端口说明(约 80 字)</td><td>同上</td></tr>
+      <tr><td class="num"><code>options.html:135</code></td><td><code>#badgeLegend</code> 段落「工具栏图标徽标四态…」</td><td>「工具栏」歧义(实为浏览器工具栏, 见 §01)</td></tr>
+      <tr><td class="num"><code>options.html:136-141</code></td><td><code>#status</code> / <code>#hint</code> 两个纯文本区 + 「自测端点连通」「立即拉取一次」按钮</td><td>反馈区与动作按钮散在区尾, 无视觉归属</td></tr>
+      <tr><td class="num"><code>options.html:124</code> + <code>options.js:130-156</code></td><td><code>#instList</code> flex 行列表: 徽标 / 端点 / token 截断 / 疑似失效 / 载入 / 删除</td><td>不是表格、无表头、<b>无状态列</b>; 健康状态只有手动条目连败 ≥3 轮才露头</td></tr>
+      <tr><td class="num"><code>options.js:729-740</code></td><td><code>testEndpoint()</code> 只探 <code>currentInstances()[0]</code></td><td>与多实例 + 自愈模型不符; 手动触发之外台账不更新(停用轮询时状态变哑)</td></tr>
+      <tr><td class="num"><code>background.js:866-880</code></td><td><code>noteInstanceHealth</code> 落 <code>{ok, at, note, failStreak}</code></td><td><code>note</code> 是人读文案, <b>无结构化 state</b>, 选项页想分「红=凭证错」还是「橙=连败」没有可靠判据</td></tr>
+      <tr><td class="num"><code>background.js:307-339</code></td><td>消息面: <code>poll-now</code> / <code>refresh-now</code> / <code>discover-now</code> / <code>clear-logs</code></td><td>无探测类消息; 选项页想触发单实例探测没有入口</td></tr>
+      <tr><td class="num"><code>options.html:166-180</code></td><td>③④两张 <code>.swtab</code> 表</td><td>结构尚可; 状态列纯文字无色点, 与新实例表的色点语言不一致(仅样式微调)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s03">
+  <h2><span class="no">03</span>目标形态</h2>
+  <h3>3.1 ①区结构(纵向流基准, 布局以选定模板为准)</h3>
+  <pre><code>┌ ① 连接后端(自动发现自愈; 手动指定优先) ──────────────────────┐
+│ ┌ 状态卡 ────────────────────────────────────────────────┐ │
+│ │ ● 连接正常        实例 3 个(2 可用) · 上次发现 10-16 01:40 命中 18788 │ │
+│ │   (大状态字, 四态同源 connStateOf; 告警态整卡描边高亮)   │ │
+│ └────────────────────────────────────────────────────────┘ │
+│ 发现地址 [http://127.0.0.1:18788]  配对码 [______] [立即发现] │
+│   ↳ 一句短说明: 点一次 = 保存 + 发现 + 自测; 同机零配置, 跨机填后端地址 │
+│ ┌ 实例表(表头) ──────────────────────────────────────────┐ │
+│ │ 来源 | 端点            | token(32位指纹)          | 状态        | 最近联系 | 操作 │ │
+│ │ 手动 | 127.0.0.1:8788 | 9f2e4a17b3c05d82a1f6e7…(悬停全值) | ● 正常 | 3 秒前 | 删 │ │
+│ │ 手动 | 192.168.1.10:18788 | b7c0d94e8a2f1635c7e9b…(悬停全值) | ● token 不对 | 6 分钟前 | 删 │ │
+│ │ 自动 | 127.0.0.1:7031  | -                       | ● 连败 5 轮 | 4 分钟前 | (空) │ │
+│ └────────────────────────────────────────────────────────┘ │
+│ [重测全部] [立即拉取一次]     状态行(#status) + 提示行(#hint)  │
+│ ▸ 说明与排障(折叠): 徽标图例 / 端口机制 / 配对码 / 排障指路    │
+│ ▸ 手动端点(优先: …) 折叠表单(现状保留; 发现失败态自动展开)     │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+
+  <h3>3.2 行级状态判据(新)</h3>
+  <p>数据源 = <code>instanceHealth</code> 台账(后台每轮轮询后整份落盘, 键 = 端点)。S2 给台账条目补结构化 <code>state</code> 字段后, 选项页按下表渲染; 四色语义与工具栏徽标族同源(绿=通 / 橙=可自愈的故障 / 红=要人动手的故障 / 灰=暂无数据):</p>
+  <table>
+    <thead><tr><th>色</th><th>短语</th><th>判据</th><th>悬停 title</th></tr></thead>
+    <tbody>
+      <tr><td class="ok">● 绿</td><td>正常</td><td><code>h.ok === true</code></td><td><code>note</code> + 最近联系时间</td></tr>
+      <tr><td class="bad">● 红</td><td>token / 来源被拒</td><td><code>state ∈ {401, 403}</code> —— 要人改 token 或 extension_id</td><td><code>note</code> + 改法指路</td></tr>
+      <tr><td class="gap">● 橙</td><td>连败 N 轮 / 连不上</td><td><code>!ok</code> 且 <code>state ∈ {down, http, bad-endpoint}</code></td><td><code>note</code>(含排查清单) + 连败轮数</td></tr>
+      <tr><td style="color:#5a6673">● 灰</td><td>还没轮过</td><td>无台账条目(刚添加 / 停用中 / SW 刚醒来)</td><td>「等待下一轮轮询, 或点行内『测』立即探一次」</td></tr>
+    </tbody>
+  </table>
+  <h3>3.3 数据流(单一写入口)</h3>
+  <ul>
+    <li>选项页<b>不直写</b> <code>instanceHealth</code> —— 后台是唯一写者(轮询路径与探测路径都经 <code>noteInstanceHealth</code>), 选项页只读 + <code>storage.onChanged</code> 自动重渲染(既有 <code>scheduleConnRender</code> 通道复用)。</li>
+    <li>新消息: <code>probe-all</code>(无参, 逐实例探测)与 <code>probe-one {endpoint}</code>。后台处理函数复用轮询的「拉任务清单」一步(GET /api/hr/tasks, 只读, 不执行任务), 探测结果照常进台账 → 选项页经 onChanged 自动刷出新状态。</li>
+    <li>总览状态卡沿用 <code>connStateOf</code>(<code>options.js:296</code>)四态, 不新增第五态; 行级四态是<b>每实例</b>粒度, 与总览(实例集合粒度)分层不混用。</li>
+  </ul>
+  <h3>3.4 文案与操作列纪律</h3>
+  <ul>
+    <li>徽标图例改写: 「<b>浏览器工具栏</b>的扩展图标徽标(常驻, 非本页元素): 未配置(空) · 连接正常(绿) · 重连中(橙) · 发现失败(红); 悬停图标有中文结论, 点图标即回本页。」四态各配色样小方块。</li>
+    <li>来源徽标一律「手动 / 自动」(R2); 手动条目 token 列 = 前 32 位指纹 + 悬停完整值, 未填标红「未填」; 自动条目 token 列 = 「-」(R1)。</li>
+    <li>操作列: 手动条目只有「删」; 自动条目留空, 悬停可见「由发现租约自动管理, 删除后下轮发现会重新补入」(R3)。「载入」与行内「测」不回潮 —— 改 token 走删除重加, 探测走「重测全部」。</li>
+    <li>排序: <b>手动组在前、自动组在后</b> —— 沿用上游 26-10-15-2357 Q9/S1 的「手动恒在前」语义(<code>discovery.js::mergeInstances</code> 已保证, 渲染不重排, 只按清单顺序); 模板示例行序与实施同此口径。</li>
+    <li>每次进页必读的信息只有: 状态卡 + 实例表; 机制解释(端口顺延 / port:0 随机 / 配对码安全口径 / 排障表指路)全部进「说明与排障」折叠区。</li>
+    <li>按钮口径: 「自测端点连通」更名「重测全部」。<code>#status</code>/<code>#hint</code> 保留为动作反馈区, 紧贴动作按钮行。</li>
+  </ul>
+</section>
+
+<section id="s04">
+  <h2><span class="no">04</span>分步实施</h2>
+  <p>布局按<b>选定模板</b>落地(§09 三选一, 选型前不实施); 以下步骤中 S2/S3 与布局无关, 可先行。</p>
+  <table>
+    <thead><tr><th>#</th><th>落点</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td class="num">S1</td><td><code>options.html</code></td><td>①区按选定模板重构: 状态卡 / 发现操作行(短句) / 实例表(真 <code>&lt;table class="swtab"&gt;</code>, 表头 + 状态列) / 动作行 + 反馈区 / 「说明与排障」折叠区(收编 :123 :125 :135 三段长文并按 §3.4 改写图例)。既有 id 全保留(<code>connState/instList/discEndpoint/discPairing/discNow/status/hint/test/poll/manualEndpoints</code>), <code>badgeLegend</code> 迁入折叠区。<b>③④表样式微调</b>: 状态列与「最近动作·结果」列加色点(同一套 <code>.dot</code> 样式), 行 hover, 不动渲染函数的数据面。</td></tr>
+      <tr><td class="num">S2</td><td><code>background.js</code></td><td>① <code>noteInstanceHealth(endpoint, ok, note, state)</code> 增第四参, 台账条目补 <code>state</code>(既有调用点随 <code>pollInstanceOnce</code> 的 outcome 传入; outcome 增带 <code>state ∈ {ok,401,403,http,down,bad-endpoint}</code>, 其内部分支本已区分这些情形, 只是把分类显式化); ② 新增 <code>probeInstance(inst)</code> = 复用「拉任务清单」一步(只读), 结论走 <code>noteInstanceHealth</code> 落台账; ③ 消息面增 <code>probe-all</code> / <code>probe-one {endpoint}</code>, 处理完即 <code>flushInstanceHealth</code> 并回传结论。徽标 / 发现 / 自愈逻辑<b>一律不动</b>。</td></tr>
+      <tr><td class="num">S3</td><td><code>options.js</code></td><td>① <code>renderInstList</code> 重写为表格渲染: 来源徽标(「手动/自动」, R2) + token 列(手动 = 前 32 位指纹 + 悬停完整值, 未填标红; 自动 = 「-」, R1) + 状态列(§3.2 判据, 纯函数 <code>rowHealthOf(h)</code> 供守阵直测) + 最近联系(<code>shortTime(h.at)</code>) + 悬停 title + 操作列(手动只有「删」; 自动留空 + 悬停说明, R3; 「载入」「测」删除); ② <code>testEndpoint</code> 改「重测全部」(sendMessage <code>probe-all</code>), <code>addInstance</code> 的「载入/编辑回填」路径随 <code>fillForm</code> 只保留表单空态初始化; 选项页不再直接 <code>fetch</code> 探测 —— <code>probeMainInstance</code> 保留仅供 <code>discoverNow</code> 命中后的即时结论(其结果同源入台账亦可, 见 C3); ③ 状态卡渲染微调(<code>renderConnOverview</code> 输出拆成大状态字 + 指标, 数据不变); ④ 行级状态的 storage 监听复用既有 <code>changes.instanceHealth</code> 通道。</td></tr>
+      <tr><td class="num">S4</td><td><code>README.md</code></td><td>§2 布局块与「怎么确认它在工作」按新形态同步; 「自测端点连通」→「重测全部 + 行内重测」; 排障表相应行补「实例表状态列」指路; 徽标描述统一「浏览器工具栏的扩展图标」。</td></tr>
+      <tr><td class="num">S5</td><td><code>tests/test_extension_proxy.py</code></td><td>守阵: ① <code>rowHealthOf</code> 四态真值表(含旧台账无 <code>state</code> 字段的降级输入); ② 消息面存在性(<code>probe-all</code> 且处理走 <code>noteInstanceHealth</code>; <code>probe-one</code> 已随 R3 取消, 不得出现); ③ 选项页无直接探测 <code>fetch</code> 残留(反向断言); ④ 图例措辞守阵(「浏览器工具栏」须在 <code>options.html</code>, 裸「工具栏图标徽标」开头句不得回潮); ⑤ 来源徽标措辞守阵: 实例徽标只有「手动/自动」两值, 「优先」徽标不得回潮 —— 上游 26-10-15-2357 断言 <code>[优先]</code> 的既有用例期望随本轮翻转(口径演进, 非守阵松动); ⑥ <code>test_options_swiss_wiring</code> 元素清单随 S1 更新 + 「自测端点连通」与「载入」字面量不得回潮的反向断言。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s05">
+  <h2><span class="no">05</span>裁量点(实施期裁定, 不回改本计划)</h2>
+  <ul>
+    <li><b>C1 单一写入口</b>: 选项页任何路径都不得写 <code>instanceHealth</code>; 若 <code>discoverNow</code> 命中后的 <code>probeMainInstance</code> 结论也想入台账, 走「让后台顺手记」(<code>discover-now</code> 处理链内), 不在选项页落盘。</li>
+    <li><b>C2 state 缺失降级</b>: 旧台账条目无 <code>state</code> 字段时, 行色按 <code>ok</code> 布尔降级(绿 / 橙), 红态等下一轮或手动重测后自然收敛 —— 不做迁移脚本。</li>
+    <li><b>C3 probe 的副作用</b>: 探测复用「拉任务清单」(GET, 只读, 不执行任务); 若实施发现该步在后端侧有计数/频控影响, 降级为「探测 = 发 HEAD/401 探针」并在 README 记口径差异。</li>
+    <li><b>C4 重测全部的节流</b>: 「重测全部」加 10s 禁用窗(防手抖连点刷台账时间戳); 行内「测」已随 R3 取消, 不存在节流问题。</li>
+    <li><b>C5 ③④微调边界</b>: 只加 <code>.dot</code> 色点与行 hover 两项 CSS; 若发现需要动渲染函数才能落色点, 以「入池不修」处理。</li>
+    <li><b>C6 状态卡告警高亮</b>: 重连中 / 发现失败态整卡描边(橙 / 红), 与 <code>manualEndpoints</code> 的 <code>attn</code> 联动保留(发现失败自动展开手动区, 现状 C6/26-10-15-2357)。</li>
+    <li><b>C7 模板取舍</b>: 三模板均为候选稿; 选型后按其布局实施, 模板内的假数据 / 假交互一律不进真代码。</li>
+  </ul>
+</section>
+
+<section id="s06">
+  <h2><span class="no">06</span>验收</h2>
+  <table>
+    <thead><tr><th>#</th><th>判据</th><th>验证方式</th></tr></thead>
+    <tbody>
+      <tr><td class="num">V1</td><td>实例表每行可见状态色点与短语; 停用某实例的后端后 ≤1 轮(或点「重测全部」后即刻)变橙/红, 悬停可见 note 与排查指路</td><td>真机</td></tr>
+      <tr><td class="num">V2</td><td>「重测全部」对全部实例各探一次, 台账与表格同步刷新; 无实例时按钮给出指路空态</td><td>真机 + node 沙箱</td></tr>
+      <tr><td class="num">V3</td><td>①区除折叠区外无超过一行的说明文字; 图例写明「浏览器工具栏」并配四态色样</td><td>目检 + 守阵④</td></tr>
+      <tr><td class="num">V4</td><td>③④两表状态列出现色点, 与实例表同语言; 渲染数据面无变化</td><td>目检 + 既有守阵全绿</td></tr>
+      <tr><td class="num">V5</td><td><code>test.full</code> 全绿; 新守阵红绿双验(至少一类突变判红)</td><td>commands run test.full</td></tr>
+      <tr><td class="num">V6</td><td>旧 storage(无 state 字段的台账)打开选项页不报错、状态按 C2 降级显示</td><td>node 沙箱(构造旧结构输入)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s07">
+  <h2><span class="no">07</span>风险</h2>
+  <ul>
+    <li><b>探测被误读为轮询</b>: probe 与 poll 共用「拉清单」一步, 后端侧无区分 —— 频率由 C4 节流与手势触发兜底; 若后端日志侧造成困扰, 后端日志已有「来源」可查(不动后端)。</li>
+    <li><b>表格化破坏既有守阵</b>: <code>test_options_swiss_wiring</code> 等接线用例断言元素存在, S1 重构会红 —— 属口径演进, 随 S5 更新并保留反向断言。</li>
+    <li><b>红/橙判据漂移</b>: 行级四态与徽标四态是两个粒度, 守阵只钉 <code>rowHealthOf</code> 自身真值表 + §3.2 判据文本, 不做跨层比对(总览判据已有 26-10-15-2357 S6 的跨层守阵, 不重复覆盖)。</li>
+    <li><b>模板与实施漂移</b>: 模板是示意, 实施以本计划 §03 判据与 §04 步骤为准; 布局细节(间距/字号)实施期可按真实页面微调。</li>
+  </ul>
+</section>
+
+<section id="s08">
+  <h2><span class="no">08</span>迁移与兼容</h2>
+  <ul>
+    <li>台账条目新增 <code>state</code> 字段为<b>增量</b>, 旧条目无该键 → C2 降级显示, 无迁移脚本、无 storage 版本号。</li>
+    <li>「自测端点连通」按钮文案与语义变更: 选项页内无其它引用; README 同步(S4); 旧快捷入口无(按钮本就在页面内)。「载入」与行内「测」随 R3 删除 —— 改 token 走删除重加, 探测走重测全部, 选项页内均无其它引用面。</li>
+    <li><code>badgeLegend</code> id 迁入折叠区, id 保留 → 接线与守阵引用不断。</li>
+    <li>manifest 权限面不变(探测目标端点已在实例 origin 授权内, 与轮询同一批)。</li>
+  </ul>
+</section>
+
+<section id="s09">
+  <h2><span class="no">09</span>候选模板与选型</h2>
+  <p>三份候选稿均为<b>单文件 HTML、dark 主题、假数据、轻交互</b>(四态切换演示 / 悬停详情 / 折叠展开 / 重测全部演示), 双击即开。选型回复「模板 A/B/C」即可; 也可指定「A 的布局 + C 的状态条」这类组合。</p>
+  <table>
+    <thead><tr><th>模板</th><th>布局</th><th>差异化看点</th><th>适合</th></tr></thead>
+    <tbody>
+      <tr><td class="num"><a href="26-10-16-0214-hr-ext-connect-ui-templates/a-vertical-flow.html">A 纵向流</a></td><td>单列自上而下: 状态卡 → 发现操作 → 实例表 → 动作行 → 折叠说明</td><td>与现有页面节奏一致, 改动最克制; 状态卡是新增焦点</td><td>想最小改动、快速验收</td></tr>
+      <tr><td class="num"><a href="26-10-16-0214-hr-ext-connect-ui-templates/b-two-col-ledger.html">B 双栏台账</a></td><td>左栏连接操作与说明, 右栏实例健康台账常驻</td><td>操作与观测分离; 台账(状态/最近联系/连败)一眼全览</td><td>常开页面盯着连接状况</td></tr>
+      <tr><td class="num"><a href="26-10-16-0214-hr-ext-connect-ui-templates/c-top-status-bar.html">C 顶部状态条(激进)</a></td><td>连接状态压缩为页面<b>常驻顶部状态条</b>(sticky, 四态 + 实例数 + 上次发现), ①区只剩发现与实例表</td><td>滚动到②③④也始终可见连接状况; 「不静默」的极致形态</td><td>接受整页结构变化、要全局可见性</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s10">
+  <h2><span class="no">10</span>同步清单</h2>
+  <ul>
+    <li>认领链: 本计划 <code>doc-refs</code> 暂空; 随任务档案立档时双向建立(档案 <code>**Refs:**</code> ↔ 本件 meta)。</li>
+    <li><code>commands run kb.index</code> 重建索引(新件收录核验)。</li>
+    <li>S4 落地时 <code>extensions/hr-fetch-proxy/README.md</code> 口径同步; S5 落地时 <code>tests/test_extension_proxy.py</code> 文件头「## 测试计划」补本计划小节。</li>
+    <li>③④表微调若触发渲染函数改动 → 按 C5 入池不修。</li>
+    <li>实施指令口径: 「实施计划S1-2」式逐波推进, 与上游计划同一节奏。</li>
+  </ul>
+</section>
+
+<section id="s11">
+  <h2><span class="no">11</span>变更记录</h2>
+  <ul>
+    <li><b>26-10-16-0238</b> —— 模板评审二轮拍板(R1–R3)入册: token 列改「前 32 位指纹 + 悬停完整值」、自动条目显「-」; 来源徽标「优先」废止改「手动」(行为不变, 上游 Q11② 徽标措辞翻案, 守阵期望随 S5 翻转); 操作列收窄为「手动条目只有删 / 自动条目留空」, 「载入」「测」删除, 探测统一走「重测全部」(probe-one 消息取消)。§03.1 / §03.4 / §04 S3 / §05 C4 / §06 V1 / §08 同步改写; 三份候选模板同步更新。计划状态维持 Open。</li>
+    <li><b>26-10-16-0247</b> —— 补记排序口径: 实例表<b>手动组在前、自动组在后</b>(上游 26-10-15-2357 Q9「手动恒在前」既有语义, 非新增行为); §03.1 示例行序与三份候选模板同步修正。</li>
+  </ul>
+</section>
+
+<footer>26-10-16-0214 · plan · hr-ext-connect-ui · Open —— 候选稿, 实施与立档待用户指令(更新 26-10-16-0238)</footer>
+</div>
+</body>
+</html>

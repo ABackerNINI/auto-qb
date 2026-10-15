@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>模板 C · 常驻顶部状态条 · HR 扩展「连接后端」区候选稿</title>
+<meta name="color-scheme" content="dark">
+<style>
+  /* 候选稿 C(激进): 连接状态压缩为整页常驻顶部状态条(sticky), ①区只剩发现操作与实例表;
+     滚到页面任何位置都能看见连接状况 —— 「不静默」的极致形态。 */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 40px 64px;
+    background: #101214; color: #eceff1;
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 10; margin: 0 -40px 26px; padding: 0 40px;
+    display: flex; align-items: center; gap: 0;
+    background: #16191c; border-bottom: 1px solid rgba(255,255,255,.16);
+    border-top: 2px solid #2e7d46;
+  }
+  .topbar.warn { border-top-color: #b8802f; }
+  .topbar.fail { border-top-color: #b0453d; }
+  .topbar.idle { border-top-color: #5a6673; }
+  .topbar .dot { width: 11px; height: 11px; margin-right: 10px; background: #2e7d46; flex: none; }
+  .topbar.fail .dot { background: #b0453d; }
+  .topbar.warn .dot { background: #b8802f; }
+  .topbar.idle .dot { background: #5a6673; }
+  .topbar .word { font: 650 15px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .02em; margin-right: 22px; }
+  .topbar .word.fail { color: #e08a80; }
+  .topbar .word.warn { color: #e2b06e; }
+  .topbar .word.idle { color: #97a2aa; }
+  .topbar .meta { color: #97a2aa; font-size: 12px; margin-right: 22px; white-space: nowrap; }
+  .topbar .meta b { color: #b9c3ca; font-weight: 650; }
+  .topbar .grow { flex: 1; }
+  .topbar .brand { font: 11px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .12em; color: #5a666e; }
+  .cap { font: 11px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .12em; color: #7d8a92; margin: 6px 0 4px; }
+  h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0 0 4px; font-weight: 650; }
+  .sub { color: #97a2aa; margin: 0 0 8px; font-size: 13px; }
+  .demo-bar {
+    display: flex; gap: 6px; align-items: center; margin: 0 0 24px; padding: 10px 12px;
+    border: 1px dashed #3a444d; font-size: 12px; color: #97a2aa; flex-wrap: wrap;
+  }
+  .demo-bar b { color: #e8590c; font-weight: 650; }
+  .demo-bar button {
+    font: 12px inherit; background: transparent; color: #b9c3ca;
+    border: 1px solid #3a444d; padding: 5px 12px; cursor: pointer;
+  }
+  .demo-bar button.on { border-color: #e8590c; color: #e8590c; }
+
+  .stepno { float: left; font-size: 30px; font-weight: 300; color: #e8590c; line-height: 1; margin: 2px 16px 0 0; }
+  .step { overflow: hidden; max-width: 860px; }
+  .step h4 { margin: 0 0 14px; font-size: 14px; font-weight: 650; letter-spacing: .02em; }
+  .rule { border: 0; border-top: 1px solid rgba(255,255,255,.16); margin: 26px 0; }
+
+  .discrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .discrow input {
+    background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.3);
+    color: #eceff1; font: 13px Consolas, monospace; padding: 5px 2px;
+  }
+  .discrow input:focus { outline: none; border-bottom-color: #e8590c; }
+  .discrow .f { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; }
+  .discrow .f label { font-size: 12px; color: #97a2aa; }
+  .discrow input.ep { width: 240px; } .discrow input.pc { width: 110px; }
+  button.primary {
+    font: 12.5px inherit; letter-spacing: .04em; background: #e8590c; color: #101214;
+    border: 0; padding: 9px 18px; cursor: pointer;
+  }
+  button.ghost {
+    font: 12.5px inherit; background: transparent; color: #eceff1;
+    border: 1px solid rgba(255,255,255,.3); padding: 7px 14px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: #e8590c; color: #e8590c; }
+  .oneline { color: #7d8a92; font-size: 12px; margin: 8px 0 0; }
+
+  table.swtab { border-collapse: collapse; width: 100%; margin: 16px 0 0; font-size: 12.5px; max-width: 860px; }
+  table.swtab th {
+    text-align: left; font-size: 10.5px; letter-spacing: .09em; color: #7d8a92;
+    font-weight: 650; padding: 6px 10px 5px; border-bottom: 1px solid rgba(255,255,255,.28); white-space: nowrap;
+  }
+  table.swtab td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+  table.swtab tbody tr:hover td { background: rgba(255,255,255,.03); }
+  table.swtab td.ep { font: 12.5px Consolas, monospace; }
+  table.swtab .src { font-size: 10.5px; letter-spacing: .06em; padding: 1px 7px; border: 1px solid #3a444d; color: #97a2aa; }
+  table.swtab .src.pri { border-color: #e8590c; color: #e8590c; }
+  .hcell { display: inline-flex; align-items: center; gap: 7px; cursor: default; }
+  .hcell .dot2 { width: 8px; height: 8px; flex: none; }
+  .hcell.ok .dot2 { background: #2e7d46; } .hcell.ok { color: #9ecf9e; }
+  .hcell.stale .dot2 { background: #b8802f; } .hcell.stale { color: #e2b06e; }
+  .hcell.auth .dot2 { background: #b0453d; } .hcell.auth { color: #e08a80; }
+  .hcell.idle .dot2 { background: #5a6673; } .hcell.idle { color: #7d8a92; }
+  .hcell .when { color: #7d8a92; font: 11.5px Consolas, monospace; }
+  table.swtab td.tk { color: #6d7880; font: 12px Consolas, monospace; }
+  table.swtab td.op button { padding: 3px 9px; font-size: 11.5px; margin-right: 4px; }
+  .feedback { font-size: 12.5px; color: #97a2aa; min-height: 20px; margin: 10px 0 0; }
+  .btnrow { display: flex; gap: 0; margin-top: 12px; }
+
+  details { margin-top: 18px; max-width: 860px; }
+  summary { font-size: 12px; letter-spacing: .04em; color: #7d8a92; cursor: pointer; }
+  summary:hover { color: #e8590c; }
+  details.attn > summary { color: #e8590c; }
+  .explain p { color: #97a2aa; font-size: 12.5px; margin: 10px 0; }
+  .explain code { color: #e8590c; font-family: Consolas, monospace; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0; }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #b9c3ca; }
+  .legend .chip i { width: 9px; height: 9px; display: inline-block; }
+  .later { color: #5f6a72; font-size: 13px; padding: 8px 0 30px; }
+</style>
+</head>
+<body>
+
+  <div class="topbar" id="topbar">
+    <span class="dot"></span>
+    <span class="word" id="tbWord">连接正常</span>
+    <span class="meta">实例 <b>3</b> · 可用 <b id="tbOk">2</b></span>
+    <span class="meta" id="tbDisc">上次发现 01:40 命中 18788</span>
+    <span class="meta">徽标与工具栏图标同源 · 悬停见详情</span>
+    <span class="grow"></span>
+    <span class="brand">AUTO-QB / HR-FETCH-PROXY</span>
+  </div>
+
+  <p class="cap">候选模板 C / HR-FETCH-PROXY 选项页 · 假数据演示</p>
+  <h1>① 连接后端 · 常驻状态条</h1>
+  <p class="sub">连接状态整页常驻(滚动到任何区都可见), ①区只剩发现操作与实例表。往下滚动体验状态条的常驻性。</p>
+
+  <div class="demo-bar">
+    <b>演示:</b> 点切连接总态(注意顶部状态条与左缘色条) ——
+    <button data-st="ok" class="on">连接正常</button>
+    <button data-st="reconnecting">重连中</button>
+    <button data-st="discoveryFailed">发现失败</button>
+    <button data-st="unconfigured">未配置</button>
+  </div>
+
+  <div class="step">
+    <div class="stepno">1</div>
+    <h4>连接后端(自动发现自愈; 手动指定优先)</h4>
+
+    <div class="discrow">
+      <div class="f"><label>发现地址</label><input class="ep" type="text" value="http://127.0.0.1:18788"></div>
+      <div class="f"><label>配对码</label><input class="pc" type="text" placeholder="跨机才需要"></div>
+      <button class="primary">立即发现</button>
+    </div>
+    <p class="oneline">点一次 = 保存 + 发现 + 自测; 同机零配置, 跨机填后端地址。</p>
+
+    <table class="swtab">
+      <thead><tr><th>来源</th><th>端点</th><th>token</th><th>状态 · 最近联系</th><th>操作</th></tr></thead>
+      <tbody id="instBody">
+        <tr data-h="ok">
+          <td><span class="src pri">手动</span></td>
+          <td class="ep">127.0.0.1:8788</td>
+          <td class="tk" title="9f2e4a17b3c05d82a1f6e7d4c2b8a0935f6e1d7c4b2a8f60">9f2e4a17b3c05d82a1f6e7d4c2b8a093…</td>
+          <td><span class="hcell ok" title="HTTP 200 · 本批 0 条任务, 建议轮询间隔 60s (01:56:02)"><span class="dot2"></span>正常<span class="when">3 秒前</span></span></td>
+          <td class="op"><button class="ghost">删</button></td>
+        </tr>
+        <tr data-h="auth">
+          <td><span class="src pri">手动</span></td>
+          <td class="ep">192.168.1.10:18788</td>
+          <td class="tk" title="b7c0d94e8a2f1635c7e9b0d4a8f21e7635c4d9b8e2a17f55">b7c0d94e8a2f1635c7e9b0d4a8f21e76…</td>
+          <td><span class="hcell auth" title="端点可达, 但 token 不对(HTTP 401) —— 删掉这条, 把 hr.token 内容整串粘进手动表单重新存入 (01:50:47)"><span class="dot2"></span>token 不对<span class="when">6 分钟前</span></span></td>
+          <td class="op"><button class="ghost">删</button></td>
+        </tr>
+        <tr data-h="stale">
+          <td><span class="src">自动</span></td>
+          <td class="ep">127.0.0.1:7031</td>
+          <td class="tk">-</td>
+          <td><span class="hcell stale" title="连不上端点(TypeError: Failed to fetch) · 连败 5 轮 —— 后端主程序在跑吗? 三个开关缺一端点不会启动 (01:52:11)"><span class="dot2"></span>连败 5 轮<span class="when">4 分钟前</span></span></td>
+          <td class="op" title="自动条目由发现租约管理: 删除后下一轮发现会重新补入, 无需手动操作"></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="oneline">悬停「状态」格看失败详情与改法; 状态由后台每轮轮询自动落账。</p>
+
+    <div class="feedback" id="feedback"></div>
+    <div class="btnrow">
+      <button class="ghost" id="retestAll">重测全部</button>
+      <button class="ghost">立即拉取一次</button>
+    </div>
+
+    <details id="explain">
+      <summary>说明与排障(端口机制 · 配对码 · 徽标图例 · 手动端点表单)</summary>
+      <div class="explain">
+        <p><b style="color:#eceff1">浏览器工具栏的扩展图标徽标</b>与顶部状态条同源, 四态: 悬停有中文结论, 点图标即回本页。</p>
+        <div class="legend">
+          <span class="chip"><i style="background:#5a6673"></i>未配置(空)</span>
+          <span class="chip"><i style="background:#2e7d46"></i>连接正常(OK)</span>
+          <span class="chip"><i style="background:#b8802f"></i>重连中(..)</span>
+          <span class="chip"><i style="background:#b0453d"></i>发现失败(!)</span>
+        </div>
+        <p>发现端口默认 18788, 被占自动顺延 18789/18790; 数据端口配 0(默认)时随机, 经发现自动分发, 端口变了自愈机制自动补入。</p>
+        <p>手动端点(优先): <code>地址 + token</code> 表单收在这里 —— 你显式指定的实例永远优先, 不会被自动发现覆盖或删除。</p>
+      </div>
+    </details>
+  </div>
+
+  <hr class="rule">
+  <h2 style="font-size:16px;margin:0 0 10px">② 站点权限</h2>
+  <p class="later">(示意占位 —— 滚到这里时顶部状态条仍然可见, 连接状况全程在视野内。)</p>
+  <h2 style="font-size:16px;margin:0 0 10px">③ 站点现状</h2>
+  <p class="later">(示意占位。)</p>
+  <h2 style="font-size:16px;margin:0 0 10px">④ 最近取数明细</h2>
+  <p class="later">(示意占位。)</p>
+
+<script>
+  var TB = {
+    ok:              { cls: '',     word: '连接正常', wordCls: '',      ok: '2', disc: '上次发现 01:40 命中 18788' },
+    reconnecting:    { cls: 'warn', word: '重连中',   wordCls: 'warn',  ok: '0', disc: '上次发现 01:56 未命中 · 18788 连接失败' },
+    discoveryFailed: { cls: 'fail', word: '发现失败', wordCls: 'fail',  ok: '0', disc: '上次发现 01:56 候选全无应答' },
+    unconfigured:    { cls: 'idle', word: '未配置',   wordCls: 'idle',  ok: '—', disc: '还没跑过发现' }
+  };
+  var explain = document.getElementById('explain');
+  document.querySelectorAll('.demo-bar button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.demo-bar button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var s = TB[b.dataset.st];
+      var tb = document.getElementById('topbar');
+      tb.className = 'topbar ' + s.cls;
+      var w = document.getElementById('tbWord');
+      w.textContent = s.word; w.className = 'word ' + s.wordCls;
+      document.getElementById('tbOk').textContent = s.ok;
+      document.getElementById('tbDisc').textContent = s.disc;
+      explain.classList.toggle('attn', b.dataset.st === 'discoveryFailed');
+    });
+  });
+  function rowHtml(tr, state, when, title) {
+    var h = tr.querySelector('.hcell');
+    h.className = 'hcell ' + state;
+    h.title = title;
+    h.innerHTML = '<span class="dot2"></span>' +
+      ({ ok: '正常', stale: '连败中', auth: 'token 不对', idle: '还没轮过' }[state]) +
+      '<span class="when">' + when + '</span>';
+  }
+  document.getElementById('retestAll').addEventListener('click', function () {
+    var rows = document.querySelectorAll('#instBody tr');
+    rows.forEach(function (tr) { rowHtml(tr, 'idle', '探测中…', '正在探测 ' + tr.querySelector('.ep').textContent + ' …'); });
+    feedback('正在重测全部 3 个实例…');
+    setTimeout(function () {
+      rows.forEach(function (tr) { rowHtml(tr, 'ok', '刚刚', 'HTTP 200 · 本批 0 条任务, 建议轮询间隔 60s (刚刚)'); });
+      feedback('重测完成: 3 个实例全部可达, 台账已更新。');
+    }, 1100);
+  });
+  function feedback(t) { document.getElementById('feedback').textContent = t; }
+</script>
+</body>
+</html>
