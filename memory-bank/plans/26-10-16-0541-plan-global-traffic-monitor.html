@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="global-traffic-monitor">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-16-0541">
+<meta name="doc-updated" content="26-10-16-0541">
+<meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #16202a;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  .sheet { max-width: 880px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  /* header */
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; max-width: 62ch; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 30px 0 6px; }
+  h3 .sid { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); margin-right: 8px; letter-spacing: 0.06em; }
+  p { margin: 10px 0; max-width: 72ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; max-width: 72ch; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+  .kw { color: var(--accent-ink); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td:first-child { color: var(--dim); white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+
+  .exit { border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; margin: 10px 0 0; color: var(--dim); font-size: 13.5px; max-width: 72ch; }
+  .exit b { color: var(--ink); font-weight: 600; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--mono); display: block; margin-bottom: 2px; }
+  .note { background: var(--mark); border: 1px solid var(--hair-soft); padding: 12px 16px; margin: 14px 0; font-size: 13.5px; color: var(--dim); max-width: 72ch; }
+  .note b { color: var(--ink); }
+  .fig { margin: 20px 0 8px; border: 1px solid var(--hair-soft); border-radius: 4px; background: #0d1218; padding: 18px 10px 10px; }
+  .fig svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .figcap { font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: center; margin-top: 8px; letter-spacing: 0.04em; }
+  .rule { border: none; border-top: 1px solid var(--hair-soft); margin: 40px 0; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } .sheet { padding: 32px 20px 64px; } }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; padding: 1px 7px; border: 1px solid var(--hair); border-radius: 3px; color: var(--dim); margin-right: 6px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">auto-qb · memory-bank / plans</div>
+<h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
+<p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
+<div class="meta">
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(待拍板后实施)<br>
+  <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
+</div>
+
+<h2><span class="no">01</span>拍板结论(grilling 收敛)</h2>
+<p>三轮拍板形成的全部决策,后续实施不得再自行变更;确需变更按「计划改版 = 同文件内变更记录 + 抬 doc-updated」处理。</p>
+<table>
+  <tr><th style="width:130px">议题</th><th>结论</th></tr>
+  <tr><td>监控口径</td><td>整机网卡流量(全适配器合计,排除回环与 down 网卡),与 TrafficMonitor 同口径 —— 工具是 TM 的<strong>替代</strong>,仅记录整机流量历史,不参与限速联动</td></tr>
+  <tr><td>进程形态</td><td><code>tools/global-traffic-monitor/</code> 独立 Python 包(多模块,非单脚本),自带 venv,不 import auto-qb</td></tr>
+  <tr><td>自启</td><td>跨平台:Windows 计划任务(登录时触发)/ Linux systemd --user / macOS launchd;由 auto-qb WebUI 开关幂等注册/卸载</td></tr>
+  <tr><td>采集库</td><td>psutil(<code>net_io_counters(pernic=True)</code>),三平台统一;除 psutil + filelock 外零第三方依赖(HTTP 用 stdlib)</td></tr>
+  <tr><td>落盘格式</td><td>TrafficMonitor 兼容 <code>history_traffic.dat</code>(每行「YYYY/MM/DD 上传KB/下载KB」),auto-qb 读侧 <code>curves.py</code> 零改动;日累计起步,格式预留扩展位</td></tr>
+  <tr><td>控制面</td><td>工具自带本地 HTTP 服务(127.0.0.1 + token 文件):<code>GET /status</code> · <code>PUT /config</code> · 订阅/心跳/注销;last-writer-wins</td></tr>
+  <tr><td>通知</td><td>累计上下行合计变化 ≥ 阈值(默认 100 MiB)→ 向所有存活订阅者推送(带单调事件号);启动/崩溃恢复后首帧落盘补发一次;订阅方慢轮询兜底</td></tr>
+  <tr><td>配置主权</td><td>工具自有 config.yml(工具数据目录),auto-qb WebUI 设置页经控制面代理读写;auto-qb 自身集成参数在其 config.yml 新段</td></tr>
+  <tr><td>多实例</td><td>工具 = 唯一写者 + 服务端;多个 auto-qb 实例各自注册订阅(端点 + token + 心跳租约)、各自冷却去重、各自刷新自己的 WebUI</td></tr>
+  <tr><td>auto-qb 收到通知后</td><td>冷却检查 → 主循环线程重读历史文件 → 重发流量快照 → 前端历史流量图刷新(经既有 SSE/轮询通道)</td></tr>
+  <tr><td>过渡</td><td><code>dat_path</code> 双支持:可指向工具输出,也可指回 TM;并行对照 24h 一致后再摘 TM</td></tr>
+</table>
+
+<h2><span class="no">02</span>目标与非目标</h2>
+<div class="cols">
+<div>
+<h3 style="margin-top:0">目标</h3>
+<ul>
+  <li>独立进程记录整机流量日历史,TM 兼容格式落盘</li>
+  <li>开机自启(三平台),崩溃自恢复(停机窗口 ≤ 采样间隔)</li>
+  <li>Δ ≥ 阈值主动通知,auto-qb 收到即刷新历史流量图(目标滞后 ≤ 通知链路本身,约秒级)</li>
+  <li>工具配置与自启开关进 auto-qb WebUI 设置页</li>
+  <li>多 auto-qb 实例并发接入,互不干扰</li>
+</ul>
+</div>
+<div>
+<h3 style="margin-top:0">非目标(范围外)</h3>
+<ul>
+  <li>小时级粒度采样(日累计起步,后续演进位)</li>
+  <li>provider 抽象、限速联动、qB 口径取数</li>
+  <li>进程级流量(ETW)、SNMP/路由器口径</li>
+  <li>改动 TM 读侧 <code>curves.py</code> 与既有 qB 流量采样器 <code>traffic_sample_mod</code></li>
+  <li>工具的独立 WebUI(状态经 auto-qb 设置页可见即可)</li>
+</ul>
+</div>
+</div>
+
+<h2><span class="no">03</span>总体架构</h2>
+<div class="fig">
+<svg viewBox="0 0 680 400" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <!-- tool box -->
+  <rect x="20" y="30" width="360" height="300" rx="3" fill="#141b23" stroke="#26313a"/>
+  <text x="36" y="52" fill="#8fd0e0" font-size="11" font-family="Consolas, monospace" letter-spacing="1">tools/global-traffic-monitor/ (独立 venv)</text>
+  <!-- sampler -->
+  <rect x="40" y="66" width="150" height="52" rx="3" fill="#0f141a" stroke="#2c3944"/>
+  <text x="52" y="86" fill="#e4eaef" font-size="12" font-weight="600">sampler</text>
+  <text x="52" y="104" fill="#a2b0bd" font-size="10.5">psutil 全适配器 · 5s</text>
+  <!-- storage -->
+  <rect x="40" y="140" width="150" height="52" rx="3" fill="#0f141a" stroke="#2c3944"/>
+  <text x="52" y="160" fill="#e4eaef" font-size="12" font-weight="600">storage</text>
+  <text x="52" y="178" fill="#a2b0bd" font-size="10.5">单写线程 · 原子写 · 日界</text>
+  <!-- notifier -->
+  <rect x="40" y="214" width="150" height="52" rx="3" fill="#0f141a" stroke="#2c3944"/>
+  <text x="52" y="234" fill="#e4eaef" font-size="12" font-weight="600">notifier</text>
+  <text x="52" y="252" fill="#a2b0bd" font-size="10.5">Δ≥100MiB → 推订阅者</text>
+  <!-- server -->
+  <rect x="40" y="288" width="150" height="30" rx="3" fill="#0f141a" stroke="#2c3944"/>
+  <text x="52" y="307" fill="#e4eaef" font-size="12" font-weight="600">server</text>
+  <text x="108" y="307" fill="#a2b0bd" font-size="10.5">127.0.0.1:8099 · token</text>
+  <!-- files -->
+  <rect x="225" y="140" width="135" height="24" rx="3" fill="#151d25" stroke="#2c3944"/>
+  <text x="235" y="156" fill="#8fd0e0" font-size="10.5" font-family="Consolas, monospace">history_traffic.dat</text>
+  <rect x="225" y="172" width="135" height="24" rx="3" fill="#151d25" stroke="#2c3944"/>
+  <text x="235" y="188" fill="#8fd0e0" font-size="10.5" font-family="Consolas, monospace">state.json · config.yml</text>
+  <!-- arrows inside tool -->
+  <line x1="115" y1="118" x2="115" y2="140" stroke="#2c3944" stroke-width="1.2"/>
+  <line x1="115" y1="192" x2="115" y2="214" stroke="#2c3944" stroke-width="1.2"/>
+  <line x1="190" y1="166" x2="225" y2="152" stroke="#2c3944" stroke-width="1.2"/>
+  <line x1="190" y1="166" x2="225" y2="184" stroke="#2c3944" stroke-width="1.2"/>
+
+  <!-- auto-qb instances -->
+  <rect x="440" y="66" width="220" height="120" rx="3" fill="#141b23" stroke="#26313a"/>
+  <text x="454" y="88" fill="#e4eaef" font-size="12" font-weight="600">auto-qb 实例 A</text>
+  <text x="454" y="108" fill="#a2b0bd" font-size="10.5">WebUI 设置页 → 代理 PUT 工具 config</text>
+  <text x="454" y="126" fill="#a2b0bd" font-size="10.5">通知端点 /api/traffic/monitor/notify</text>
+  <text x="454" y="144" fill="#a2b0bd" font-size="10.5">dat_path → 工具输出(读)</text>
+  <text x="454" y="164" fill="#a2b0bd" font-size="10.5">订阅 + 心跳 60s</text>
+  <rect x="440" y="210" width="220" height="100" rx="3" fill="#141b23" stroke="#26313a" stroke-dasharray="4 3"/>
+  <text x="454" y="232" fill="#a2b0bd" font-size="12" font-weight="600">auto-qb 实例 B(可选)</text>
+  <text x="454" y="252" fill="#6f7d8a" font-size="10.5">独立 data_dir / 端口</text>
+  <text x="454" y="270" fill="#6f7d8a" font-size="10.5">各自订阅 · 各自冷却去重</text>
+  <!-- cross arrows -->
+  <line x1="440" y1="140" x2="190" y2="303" stroke="#6db3c9" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <text x="252" y="330" fill="#6db3c9" font-size="10.5" font-family="Consolas, monospace">subscribe / heartbeat</text>
+  <line x1="190" y1="240" x2="440" y2="120" stroke="#e2a86e" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <text x="252" y="228" fill="#e2a86e" font-size="10.5" font-family="Consolas, monospace">notify push (事件号)</text>
+  <line x1="440" y1="180" x2="362" y2="152" stroke="#8fc98f" stroke-width="1.2"/>
+  <text x="380" y="196" fill="#8fc98f" font-size="10.5" font-family="Consolas, monospace">read dat</text>
+  <line x1="440" y1="270" x2="190" y2="310" stroke="#2c3944" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="470" y="330" fill="#6f7d8a" font-size="10" font-family="Consolas, monospace">B 同链路(虚线示意)</text>
+</svg>
+<div class="figcap">图 1 · 单写者共享服务 + N 订阅者:文件始终在写(兜底),通知只加速</div>
+</div>
+<p>核心不变量:<strong>工具是历史文件的唯一写者</strong>,写入用「临时文件 + <code>os.replace</code>」原子替换,任意时刻读者(任意数量)看到完整一致的文件;通知推送与文件落盘解耦 —— 推送失败不影响落盘,订阅者丢失通知也可靠慢轮询兜底,两条通道互为冗余。</p>
+
+<h2><span class="no">04</span>实施步骤</h2>
+<p>共 11 步(S0–S10)。每步给出改动面、要点与出口判据;建议顺序见 §06。所有「默认值」可经 WebUI 设置页调整(§05)。</p>
+
+<h3><span class="sid">S0</span>包骨架与依赖隔离</h3>
+<p>新建 <code>tools/global-traffic-monitor/</code>:<code>pyproject.toml</code>(包名 <code>global-traffic-monitor</code>,入口命令 <code>gtm</code>)、<code>src/gtm/</code>(sampler / storage / server / notifier / installer / config 六个模块)、<code>README.md</code>、<code>tests/</code>。独立 venv(uv 管理),依赖仅 <code>psutil</code> + <code>filelock</code>;HTTP 服务与客户端全部 stdlib(<code>http.server</code> / <code>urllib.request</code>),保证三平台 <code>pip install</code>即装、auto-qb 依赖变动不影响工具。</p>
+<div class="exit"><b>出口</b>空包可安装可起(<code>gtm --version</code>),独立 venv 与 auto-qb 环境互不污染(装/卸 psutil 验证隔离)。</div>
+
+<h3><span class="sid">S1</span>采样器 sampler</h3>
+<p>每 <code>sample_interval</code>(默认 5s)读 <code>psutil.net_io_counters(pernic=True)</code>,按适配器过滤(默认排除 loopback 与 down 状态,可配 include/exclude 正则)后全适配器合计 up/down。维护上次读数快照:<strong>本次 &lt; 上次 → 判定计数器重置</strong>(网卡重连/重启),delta 记 0 并 WARNING,不产生负流量。按本地日界维护当日累计,跨天 00:00 硬切写新行。崩溃恢复:启动读 <code>state.json</code> 恢复上次快照与当日累计;state 缺失/损坏时当日累计从 dat 末行恢复(若有),计数器基线取当前值(停机窗口丢流量,WARNING 说明)。</p>
+<div class="exit"><b>出口</b>单测覆盖:正常 delta、重置归零、跨天切换、state 缺失降级;手工跑 10 分钟与任务管理器网速页量级吻合。</div>
+
+<h3><span class="sid">S2</span>落盘 storage</h3>
+<p>单写线程(与采样同一线程)内写 TM 兼容文件:首行总行数 N,每行 <code>YYYY/MM/DD 上传KB/下载KB</code>(整数 KB,与项目 <code>curves.py</code> 解析一致)。写 = 临时文件 → <code>os.replace</code> 原子替换。落盘节流:日累计变化 ≥ 1 MiB 或距上次落盘 ≥ 30s(对齐 TM 落盘节拍),内存活尾随时可服务。<code>state.json</code>(上次快照/当日累计/事件号/租约表)同法原子写。filelock 保证工具单实例,二次启动 fail-fast 报错。</p>
+<div class="exit"><b>出口</b>并发读守阵(读进程只见到完整文件,无半行/截断);kill -9 后重启日累计接续不丢不重(丢失窗口 ≤ 采样间隔);产出的 dat 文件直接被 <code>curves.py</code> 解析通过(复用现有解析测试)。</div>
+
+<h3><span class="sid">S3</span>控制面 server</h3>
+<p>stdlib <code>ThreadingHTTPServer</code>,强制绑定 127.0.0.1(端口默认 8099,可配;占用即 fail-fast)。鉴权 Bearer token:首次启动原子生成 <code>monitor.token</code>(<code>compare_digest</code> 比对,照 auto-qb <code>auth.py</code> 模式)。端点:</p>
+<ul>
+  <li><code>GET /status</code> — 采样状态、当日累计、末事件号、订阅者数、文件路径</li>
+  <li><code>PUT /config</code> — 全量校验 → 原子写 config.yml → 热重载(last-writer-wins;文档注明多实例盲写风险,设置页「读后写」缓解)</li>
+  <li><code>POST /subscribe</code> {endpoint, token} / <code>POST /heartbeat</code> {id} / <code>POST /unsubscribe</code> {id} — 注册表落 state.json</li>
+</ul>
+<p>租约:<code>last_heartbeat + lease_ttl</code>(默认 180s)过期剔除;订阅方每 60s 心跳。</p>
+<div class="exit"><b>出口</b>鉴权拒绝(无 token/错 token)单测;租约剔除单测;端口冲突 fail-fast 实测;config 热重载不丢采样。</div>
+
+<h3><span class="sid">S4</span>通知 notifier</h3>
+<p>采样循环内累计「距上次事件的上下行合计变化」,≥ 阈值(默认 100 MiB)时:①先确保文件已落盘(读者届时必读到新值)→ ②事件号 +1,构造事件体 <code>{event_id, day, up_bytes, down_bytes, total_bytes, ts}</code> → ③向所有存活订阅者 POST(超时 3s,失败记 WARNING 不阻断)。启动/崩溃恢复后首帧落盘补发一次(事件号接续)。订阅方以事件号去重 + 冷却(§05)收敛。</p>
+<div class="exit"><b>出口</b>阈值触发/启动补发/重复投递去重单测;两订阅者(含一个假死端点)场景推送不阻塞采样循环(&gt;10s 压测)。</div>
+
+<h3><span class="sid">S5</span>自启 installer</h3>
+<p><code>gtm install-autostart</code> / <code>gtm uninstall-autostart</code>,幂等:Windows 用 <code>schtasks</code>(/SC ONLOGON,当前用户,TR 指向 venv python);Linux 生成 <code>~/.config/systemd/user/gtm.service</code> 并 <code>systemctl --user enable --now</code>;macOS 写 <code>~/Library/LaunchAgents/</code> plist 并 <code>launchctl bootstrap</code>。注册前检查存在则跳过,卸载反向;均先探测平台再执行,不支持的平台给出明确提示。该命令由 auto-qb WebUI 开关调用(S6),也可命令行直接跑。</p>
+<div class="exit"><b>出口</b>三平台注册/卸载/重复注册(幂等)测试(平台命令层 mock);真机重启后工具自起、<code>GET /status</code> 正常。</div>
+
+<h3><span class="sid">S6</span>auto-qb 配置面</h3>
+<p>新增 <code>global_traffic_monitor:</code> 配置段(models.py dataclass + loaders + validation 的 <code>KNOWN_CONFIG_KEYS</code> / 段校验 + schema 表单元数据,四处同步,黄金法则 4),键位:</p>
+<pre><code><span class="cm"># config.yml</span>
+<span class="kw">global_traffic_monitor</span>:
+  enabled: <span class="kw">false</span>            <span class="cm"># 联动总开关(保守默认)</span>
+  tool_url: <span class="kw">"http://127.0.0.1:8099"</span>
+  tool_token_path: <span class="kw">""</span>     <span class="cm"># 工具 token 文件路径;空 = 默认 data/monitor.token</span>
+  subscribe: <span class="kw">true</span>           <span class="cm"># 启动时注册订阅 + 心跳</span>
+  notify_cooldown_s: <span class="kw">600</span>   <span class="cm"># 通知冷却(秒),事件号去重另算</span>
+  autostart: <span class="kw">false</span>         <span class="cm"># WebUI 开关:调工具 installer</span></code></pre>
+<p>WebUI 设置页新增「全局流量监视器」区:经新代理端点读写工具 config(设置项 = §05 工具侧参数表)、显示 <code>/status</code>、自启开关(幂等调 <code>gtm install-autostart</code>)。前端复用既有设置页表单框架,不新开页面。</p>
+<div class="exit"><b>出口</b>新配置键过 validate_config 守卫(缺校验/缺 schema 即红);设置页读写工具参数真机可见;未知键仍被拒。</div>
+
+<h3><span class="sid">S7</span>auto-qb 接收面</h3>
+<p>新增路由 <code>POST /api/traffic/monitor/notify</code>(复用 <code>make_require_token</code> 鉴权):校验 → 事件号/冷却去重 → <code>_enqueue</code> 主循环命令(黄金法则 5,不绕开单写线程)→ 重读 <code>dat_path</code> 指向的历史文件(现有解析路径)→ 重发流量快照(<code>_publish_traffic</code> 等价逻辑)→ 既有 SSE/轮询通道自然推前端,历史流量图与顶栏刷新。启动时若 <code>enabled</code> 且 <code>subscribe</code>:向工具注册订阅 + 起心跳;停止时注销。</p>
+<div class="exit"><b>出口</b>端点鉴权/冷却/重复事件单测;真机:工具发事件 → WebUI 历史图与顶栏 ≤ 数秒内刷新(对照 E2)。</div>
+
+<h3><span class="sid">S8</span>集成与过渡</h3>
+<p>文档:<code>docs/configuration.md</code> 新段(工具定位、三平台自启、迁移步骤、并行对照方法、双写者禁令)+ <code>config-reference/keys.md</code> 新键注释。<code>dat_path</code> 指向工具输出即完成切换;并存期 TM 仅作对照读,不得与工具同写一文件。</p>
+<div class="exit"><b>出口</b>文档与 schema 一致;迁移检查单可执行;并行对照 24h 差异 ≤ 容差(见 E1)。</div>
+
+<h3><span class="sid">S9</span>守阵测试</h3>
+<p>工具侧 <code>tests/</code>:采样(delta/重置/日界)、落盘原子性、恢复、通知(阈值/事件号/补发/假死端点)、租约、config 校验、installer 幂等(平台命令 mock)。auto-qb 侧新增守阵:新配置键 validate/schema 同步、notify 端点鉴权 + 冷却 + 幂等、订阅生命周期、dat_path 指向工具文件时解析兼容。全量 <code>commands run test.full</code> 全绿并新建基线切片。</p>
+<div class="exit"><b>出口</b>两类突变判红(阈值失效/鉴权绕过等)后还原复绿;基线切片数字只进 <code>testing/baselines/</code>。</div>
+
+<h3><span class="sid">S10</span>真机验收</h3>
+<p>按 §08 E1–E6 逐条实测,记录数字进计划 §04 实施记录(同文件内更新,不新建)。</p>
+
+<h2><span class="no">05</span>默认参数</h2>
+<table>
+  <tr><th>参数</th><th>默认</th><th>说明</th></tr>
+  <tr><td>sample_interval</td><td>5s</td><td>采样周期;丢失窗口 ≤ 此值</td></tr>
+  <tr><td>flush</td><td>Δ≥1MiB 或 30s</td><td>落盘节流,对齐 TM 落盘节拍</td></tr>
+  <tr><td>notify_threshold</td><td>100 MiB</td><td>上下行合计累计变化,可调</td></tr>
+  <tr><td>http</td><td>127.0.0.1:8099</td><td>控制面;占用即 fail-fast</td></tr>
+  <tr><td>lease_ttl / heartbeat</td><td>180s / 60s</td><td>订阅租约与心跳周期</td></tr>
+  <tr><td>notify_timeout</td><td>3s</td><td>推送单订阅者超时</td></tr>
+  <tr><td>adapters</td><td>排除 loopback/down</td><td>适配器过滤,可配正则</td></tr>
+  <tr><td>notify_cooldown_s</td><td>600s</td><td>auto-qb 侧冷却;事件号去重另算</td></tr>
+  <tr><td>enabled / autostart</td><td>false</td><td>保守默认,WebUI 开启</td></tr>
+</table>
+
+<h2><span class="no">06</span>顺序与依赖</h2>
+<pre><code>S0 ─▶ S1 ─▶ S2 ──────────▶ S3 ─▶ S4 ─▶ S7 ─▶ S6 ─▶ S5 ─▶ S8 ─▶ S9 ─▶ S10
+ <span class="cm">包   采样   落盘(记录闭环)   控制面  通知  接收面  配置面  自启  过渡  守阵  验收</span></code></pre>
+<ul>
+  <li>S0–S2 先出「记录 + 落盘」闭环(手动跑即可验证,不等任何 auto-qb 改动)</li>
+  <li>S3/S4 完成后即可与 S7 联调(协议两端先立);S6(设置页)依赖控制面;S5(自启)依赖 S6 的开关入口</li>
+  <li>S8 过渡、S9 守阵、S10 验收收口;每步可独立授权实施(见 §07 范围守恒)</li>
+</ul>
+
+<h2><span class="no">07</span>黄金法则映射</h2>
+<table>
+  <tr><th style="width:110px">法则</th><th>落实</th></tr>
+  <tr><td>幂等</td><td>事件号单调 + 订阅方冷却去重;installer 幂等;配置 PUT 全量覆盖无副作用</td></tr>
+  <tr><td>保守默认</td><td><code>enabled=false</code>、<code>autostart=false</code>、阈值 100MiB;联动动作仅「刷新图」,不做限速/暂停</td></tr>
+  <tr><td>状态持久化</td><td>state.json 原子写(快照/日累计/事件号/租约);恢复 ≤ 采样间隔的丢失窗口</td></tr>
+  <tr><td>fail-fast</td><td>工具 config 全量校验;端口占用/token 缺失/单实例冲突即报错;auto-qb 新键四处同步过守卫</td></tr>
+  <tr><td>单写线程</td><td>工具内采样-落盘-通知同一线程;auto-qb 侧通知经 <code>_enqueue</code> 主循环处理</td></tr>
+  <tr><td>范围守恒</td><td>只碰:新 tools/ 目录 + auto-qb 配置面/接收面/设置页 + 文档;TM 读侧与既有采样器零改动;计划外缺陷入池不顺手改</td></tr>
+  <tr><td>请求边界</td><td>本计划为文档产出;S0–S10 逐步实施需逐项显式授权,「继续」不算</td></tr>
+</table>
+
+<h2><span class="no">08</span>验收判据</h2>
+<table>
+  <tr><th style="width:52px">编号</th><th>判据</th></tr>
+  <tr><td>E1</td><td>工具与 TM 并行 24h,日累计差异 ≤ 容差(量级吻合,排除适配器过滤差异说明)</td></tr>
+  <tr><td>E2</td><td>产生 ≥100MiB 流量变化 → auto-qb WebUI 历史图与顶栏数秒内刷新;低于阈值不推</td></tr>
+  <tr><td>E3</td><td>kill -9 工具 → 重启 → 日累计接续,不丢不重(丢失 ≤ 采样间隔),补发一次通知</td></tr>
+  <tr><td>E4</td><td>两个 auto-qb 实例(独立 data_dir/端口)同订阅,阈值事件后双双收到并各自刷新</td></tr>
+  <tr><td>E5</td><td>注销/重启(或重启用户会话)后工具自起,<code>GET /status</code> 正常</td></tr>
+  <tr><td>E6</td><td>同一事件重复投递不重复刷新;突发连续事件按冷却收敛(刷新次数 ≤ 预期)</td></tr>
+</table>
+
+<h2><span class="no">09</span>风险与对策</h2>
+<table>
+  <tr><th style="width:200px">风险</th><th>对策</th></tr>
+  <tr><td>口径差异:psutil 全适配器 vs TM 按选中网卡</td><td>设计上工具全适配器合计(排回环/down),E1 并行对照验证量级;过渡期 TM 仅对照读</td></tr>
+  <tr><td>双写者竞态(TM 与工具同写一文件)</td><td>文档硬规则:工具是唯一写者;并存期 <code>dat_path</code> 指向工具输出</td></tr>
+  <tr><td>配置 last-writer-wins,多实例互覆</td><td>文档注明;设置页读后写(展示当前值),降低盲写</td></tr>
+  <tr><td>控制面端口占用</td><td>端口可配;占用 fail-fast 并提示</td></tr>
+  <tr><td>自启权限差异(systemd --user 需会话)</td><td>文档说明各平台前置条件;Windows 登录时任务最稳</td></tr>
+  <tr><td>停机窗口丢流量(state 缺失)</td><td>常态 state 原子落盘,丢失窗口 ≤ 采样间隔;当日累计从 dat 末行接续;WARNING 可见</td></tr>
+  <tr><td>令牌文件读竞争</td><td>首次原子生成(tmp+rename);工具单写,读者只读</td></tr>
+</table>
+
+<hr class="rule">
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,实施前逐条复核漂移。本计划未改任何代码与配置;实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+
+</div>
+</body>
+</html>
