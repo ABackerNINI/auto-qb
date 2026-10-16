@@ -71,6 +71,12 @@ v4 定约专测(B1 用例, 批 2 回归):
 - test_v4_negative_delta_bad_row_non_propagating: 负 delta 判坏行(整行跳过、游标不推进)+
   坏行不传播(中段坏行后后续行 totals 复原仍精确, delta-vs-基线逐行独立)+ 序列化侧负
   delta fail-fast + 撕裂尾半行豁免口径沿用
+- test_v4_z_end_pair_shapes_legacy_compat: 形态 D z 行末端对(plan 26-10-16-1509 §04)——
+  新 6/7 列(末端对在 dt 之前)与旧 4/5 列同文件并存; 旧行末端 = None(向后兼容); raw 槽
+  obs 仍为冻结列(末端对仅 agg 车道); 新列显式退化(末端 = 冻结)roundtrip
+- test_v4_z_totals_ramp_endpoints_monotone_and_conservation: 摊配纯函数(形态 D)—— 端点精确
+  (v_0 = S0, v_{n-1} = S1)/逐分量单调不减/区间累加严格守恒(取整余量归末端槽)/逐向独立/
+  n = 1 与无末端与末端低于开启降档恒快照
 - test_v4_no_baseline_block_n_only_guard: n-only 无基线块(3 列 B + 纯 n 合法, roundtrip);
   无基线块内 r/z 判坏行(解析守卫, 后续 n 照常收); 序列化侧同源守卫 fail-fast; n-only
   前缀块 -> 恢复传输基线块两块接续
@@ -120,6 +126,7 @@ from auto_qb.core.traffic_store import (
     parse_v4_agg_text,
     parse_v4_day_text,
     v4_agg_file_path,
+    v4_block_agg_totals,
     v4_block_slots,
     v4_bucket_width_s,
     v4_date_str_epoch,
@@ -136,6 +143,7 @@ from auto_qb.core.traffic_store import (
     v4_root_dir,
     v4_series_dir,
     v4_window_dates,
+    v4_z_totals_ramp,
 )
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
@@ -443,6 +451,9 @@ def test_v4_parse_bad_line_family_cursor_not_advanced():
         "z,0,1,1",  # run_len < 1
         "z,2,1",  # z 3 列
         "z,2,1,1,0",  # z dt_ms = 0
+        "z,2,1,1,-5,6",  # z 末端 delta 负(形态 D 免费校验)
+        "z,2,1,1,5,6,0",  # z 7 列 dt_ms = 0
+        "z,2,1,1,5,6,7,8",  # z 8 列(超形状)
         "n,0",  # n run_len < 1
         "n,2,1,1",  # n 4 列
         f"n,2,{DT_MS_MAX + 1}",  # n dt_ms 超上界
@@ -453,7 +464,7 @@ def test_v4_parse_bad_line_family_cursor_not_advanced():
     good_tail = ["r,2,2,2,2", "B,2000,60,3,4", "r,3,3,3,3,45000"]
     text = _v4_day_text(good_head + ["r,1,1,1,1"] + bad_lines + good_tail)
     parsed = parse_v4_day_text(text)
-    assert parsed.key == "global" and parsed.bad_lines == len(bad_lines) and parsed.data_lines == 22
+    assert parsed.key == "global" and parsed.bad_lines == len(bad_lines) and parsed.data_lines == 25
     # 坏行不落 records 且游标不推进: 块 1 = B(1000,30) + r@1000 + r@1030(坏 B 未开新块)
     assert len(parsed.blocks) == 2
     assert [len(b.records) for b in parsed.blocks] == [2, 1]
@@ -763,12 +774,16 @@ def test_v4_format_fail_fast_and_torn_tail():
     解析侧撕裂尾半行豁免口径(完整末行无换行不算 torn, 残缺末行记 torn_tail 且坏行计数)"""
     assert format_v4_r_row(V4Sample(1, 2, 3, 4, dt_ms=DT_MS_MAX), 0, 0) == f"r,1,2,3,4,{DT_MS_MAX}"  # 上界合法
     assert format_v4_n_row(V4NullRun(2)) == "n,2" and format_v4_n_row(V4NullRun(2, dt_ms=5000)) == "n,2,5000"
-    assert format_v4_z_row(V4ZeroRun(2, 3, 4), 0, 0) == "z,2,3,4"  # delta = 绝对值 - 基线(基线 0,0 即原值)
+    assert format_v4_z_row(V4ZeroRun(2, 3, 4), 0, 0) == "z,2,3,4,3,4"  # delta = 绝对值 - 基线; 末端缺省写冻结列同值(显式退化)
+    assert format_v4_z_row(V4ZeroRun(2, 3, 4, dl_total_end=9, up_total_end=10), 0, 0) == "z,2,3,4,9,10"  # 形态 D 末端对
+    assert format_v4_z_row(V4ZeroRun(2, 3, 4, dt_ms=9000), 0, 0) == "z,2,3,4,3,4,9000"  # 末端对位次在 dt 之前(定约)
     for bad_dt in (0, -1, DT_MS_MAX + 1, True, 1.5, "3"):
         with pytest.raises(ValueError):
             format_v4_r_row(V4Sample(1, 1, 1, 1, dt_ms=bad_dt), 0, 0)
         with pytest.raises(ValueError):
             format_v4_z_row(V4ZeroRun(2, 1, 1, dt_ms=bad_dt), 0, 0)
+    with pytest.raises(ValueError):
+        format_v4_z_row(V4ZeroRun(2, 20, 4, dl_total_end=5), 10, 0)  # 末端相对基线负 delta(免费校验)
     # interval_s >= 1 数值(允许小数秒); 非数值/越界/非有限 fail-fast
     assert format_v4_b_row(1000, 30) == "B,1000,30"  # 整值不带小数点(与历史文件形态一致)
     assert format_v4_b_row(1000, 30.0) == "B,1000,30"
@@ -798,7 +813,7 @@ def test_v4_store_append_records_day_file_shape(tmp_path):
     text = _read_text(st.series_day_path("global", date))
     lines = text.splitlines()
     assert lines[0] == HEADER_LINE_V4 and lines[1] == "key,global" and lines[2] == f"B,{H1},30,3,4"
-    assert lines[3:] == ["r,1,2,0,0", "z,2,2,2", "n,3"]  # r/z 存相对块基线(3,4)的 delta
+    assert lines[3:] == ["r,1,2,0,0", "z,2,2,2,2,2", "n,3"]  # r/z 存相对块基线(3,4)的 delta; z 末端列缺省 = 显式退化同值
     parsed = parse_v4_day_text(text)
     assert parsed.key == "global" and len(parsed.blocks) == 1 and len(parsed.blocks[0].records) == 3
     # 全空调用: 零操作(不建文件不建目录, 惰性创建纪律)
@@ -1336,8 +1351,9 @@ def test_v4_day_roundtrip_with_drift_rows():
         V4Sample(10, 20, 1000, 2000),  # 块首 r: 基线 = 该快照, delta = 0
         V4Sample(11, 21, 1100, 2100, dt_ms=30400),  # r1 @1030.4, delta 100/100
         V4Sample(12, 22, 1200, 2200, dt_ms=30400),  # r2 @1060.8
-        # z 游程 3 槽 @1091.6/1122.4/1153.2(空闲 totals 恒定): delta = 200/200 相对块基线
-        V4ZeroRun(3, 1200, 2200, dt_ms=92400),
+        # z 游程 3 槽 @1091.6/1122.4/1153.2(空闲 totals 恒定): delta = 200/200 相对块基线;
+        # 形态 D 末端对带真实值(delta 215/212)一并 roundtrip
+        V4ZeroRun(3, 1200, 2200, dt_ms=92400, dl_total_end=1215, up_total_end=2212),
         V4NullRun(2, dt_ms=61600),
         V4Sample(13, 23, 1300, 2300, dt_ms=30800),  # r3 @1245.6, delta 300/300
         V4Sample(14, 24, 1400, 2400, dt_ms=30800),  # r4
@@ -1351,10 +1367,12 @@ def test_v4_day_roundtrip_with_drift_rows():
     assert lines[0] == HEADER_LINE_V4 and lines[1] == "key,global"
     assert lines[2] == "B,1000,30,1000,2000"  # 5 列基线块
     assert lines[3] == "r,10,20,0,0" and lines[4] == "r,11,21,100,100,30400"  # delta = 绝对值 - 基线
-    assert lines[5] == "r,12,22,200,200,30400" and lines[6] == "z,3,200,200,92400"  # 空闲 z: delta 持平非 0
+    assert lines[5] == "r,12,22,200,200,30400" and lines[6] == "z,3,200,200,215,212,92400"  # 空闲 z: delta 持平非 0; 末端对在后
     parsed = parse_v4_day_text(text)
     assert parsed.key == "global" and parsed.bad_lines == 0 and parsed.data_lines == 11 and not parsed.torn_tail
     assert len(parsed.blocks) == 1 and parsed.blocks[0] == block  # 解析还原 == 原始内存形态(逐点)
+    # 形态 D: agg 摊配序列由末端对派生(端点精确 + 单调; raw obs 不变见下)
+    assert v4_block_agg_totals(parsed.blocks[0])[3:6] == ((1200, 2200), (1208, 2206), (1215, 2212))
     # dt 链槽位推算与实测序列逐一相等(delta 复原后槽位数学与基线无关)
     slots = v4_block_slots(parsed.blocks[0])
     assert len(slots) == 12  # 7 r 槽 + 3 z 槽 + 2 n 槽
@@ -1467,6 +1485,72 @@ def test_v4_negative_delta_bad_row_non_propagating():
     assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 6
 
 
+def test_v4_z_end_pair_shapes_legacy_compat():
+    """形态 D z 行末端对(plan 26-10-16-1509 §04): 新 6/7 列(末端对在 dt 之前)与旧 4/5 列
+    同文件并存; 旧行解析末端 = None(agg 摊配按开启快照退化, 向后兼容); 末端对 delta 以块
+    基线复原绝对值; 末端对仅 agg 车道 —— raw 槽 obs 仍为冻结列(逐字不变)"""
+    head = [HEADER_LINE_V4, "key,global", "B,1000,30,100,200", "r,1,1,0,0"]
+    rows = [
+        "z,2,10,20",  # 旧 4 列: 无末端列
+        "z,2,30,40,50,60",  # 新 6 列: 末端对(块基线 + 列 delta), 无 dt
+        "z,2,70,80,90,100,9000",  # 新 7 列: 末端对 + dt
+        "z,2,110,120,110,120",  # 新列显式退化(末端 = 冻结列)
+    ]
+    parsed = parse_v4_day_text(_v4_day_text(head + rows))
+    assert parsed.bad_lines == 0 and len(parsed.blocks) == 1
+    z0, z1, z2, z3 = parsed.blocks[0].records[1:5]
+    assert z0.dl_total_end is None and z0.up_total_end is None  # 旧行: 无末端列
+    assert (z1.dl_total, z1.up_total, z1.dl_total_end, z1.up_total_end) == (130, 240, 150, 260)
+    assert z1.dt_ms is None
+    assert (z2.dl_total_end, z2.up_total_end, z2.dt_ms) == (190, 300, 9000)
+    assert (z3.dl_total_end, z3.up_total_end) == (z3.dl_total, z3.up_total)  # 显式退化
+    # raw 车道不变: z 槽 obs 仍为冻结列(末端对不参与)
+    slots = v4_block_slots(parsed.blocks[0])
+    assert slots[1].obs == (0, 0, 110, 220) and slots[3].obs == (0, 0, 130, 240)
+    assert slots[5].obs == (0, 0, 170, 280) and slots[7].obs == (0, 0, 210, 320)
+    # agg 车道: 逐槽摊配序列(旧行/退化行 → 恒快照; 有末端行 → 端点内插)
+    assert v4_block_agg_totals(parsed.blocks[0]) == (
+        None,
+        (110, 220),
+        (110, 220),
+        (130, 240),
+        (150, 260),
+        (170, 280),
+        (190, 300),
+        (210, 320),
+        (210, 320),
+    )
+    # 平行序列长度口径与 v4_block_slots 一致(改任一处需同步)
+    assert len(v4_block_agg_totals(parsed.blocks[0])) == len(slots) == 9
+
+
+def test_v4_z_totals_ramp_endpoints_monotone_and_conservation():
+    """形态 D 摊配纯函数(plan 26-10-16-1509 §04/§05 判据 1/2/4): 端点精确(v_0 = S0,
+    v_{n-1} = S1)/ 逐分量单调不减 / 区间累加严格守恒(Σ 相邻差 = S1 - S0, 取整余量归
+    末端槽; 每步与精确均值偏差 <= 1 字节)/ 逐向独立; n = 1 与无末端与末端低于开启降档"""
+    s0, s1 = (1_000_000, 2_000_000), (15_999_000, 18_000_000)
+    ramp = v4_z_totals_ramp(s0[0], s0[1], s1[0], s1[1], 121)
+    assert ramp[0] == s0 and ramp[-1] == s1  # 端点精确
+    assert all(ramp[k][0] <= ramp[k + 1][0] and ramp[k][1] <= ramp[k + 1][1] for k in range(len(ramp) - 1))
+    inc = [ramp[k + 1][0] - ramp[k][0] for k in range(len(ramp) - 1)]
+    assert sum(inc) == s1[0] - s0[0]  # 守恒
+    exact = (s1[0] - s0[0]) / (len(ramp) - 1)
+    assert max(abs(i - exact) for i in inc) <= 1.0  # 逐步取整偏差 <= 1 字节
+    # 半上取整钉住(.5 边界逐槽进; 余量随步进自然归末端槽)
+    assert v4_z_totals_ramp(0, 0, 10, 0, 5) == ((0, 0), (3, 0), (5, 0), (8, 0), (10, 0))
+    # 逐向独立(仅 dl / 仅 up 增长各摊各的)
+    dl_only = v4_z_totals_ramp(10, 20, 1000, 20, 5)
+    assert [p[1] for p in dl_only] == [20] * 5 and dl_only[-1] == (1000, 20)
+    up_only = v4_z_totals_ramp(10, 20, 10, 900, 5)
+    assert [p[0] for p in up_only] == [10] * 5 and up_only[-1] == (10, 900)
+    # n = 1(跨度退化)/ 无末端列 / 末端低于开启(游程内重置): 恒快照(逐向独立)
+    assert v4_z_totals_ramp(5, 6, 99, 99, 1) == ((5, 6), )
+    assert set(v4_z_totals_ramp(5, 6, None, None, 4)) == {(5, 6)}
+    assert set(v4_z_totals_ramp(5, 6, 4, 3, 4)) == {(5, 6)}  # 两向都低于开启 -> 全降档
+    mixed = v4_z_totals_ramp(5, 6, 4, 906, 4)  # 仅 dl 低于开启: 该向降档, up 照常摊配
+    assert [p[0] for p in mixed] == [5] * 4 and mixed[-1] == (5, 906)
+
+
 def test_v4_no_baseline_block_n_only_guard():
     """n-only 无基线块(v4 §01 基线立点: 块首 n 游程 -> 写侧拆 3 列 B 无基线块): 3 列 B +
     纯 n 合法(roundtrip); 无基线块内 r/z 判坏行(解析守卫, 整行跳过、后续 n 照常收);
@@ -1509,7 +1593,14 @@ def test_v4_cumsum_restore_pointwise():
         V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[0], base_up + u_deltas[0]),  # 块首 r 立基线
         V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[1], base_up + u_deltas[1], dt_ms=2001),
         V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[2], base_up + u_deltas[2]),
-        V4ZeroRun(10, base_dl + d_deltas[3], base_up + u_deltas[3], dt_ms=20005),  # 空闲: delta 持平
+        V4ZeroRun(
+            10,
+            base_dl + d_deltas[3],
+            base_up + u_deltas[3],
+            dt_ms=20005,
+            dl_total_end=base_dl + d_deltas[3],
+            up_total_end=base_up + u_deltas[3],
+        ),  # 空闲: delta 持平; 末端列显式退化(= 冻结列)roundtrip
         V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[4], base_up + u_deltas[4]),
     )
     block = V4Block(1000, 2, base_dl, base_up, recs)
@@ -1517,7 +1608,7 @@ def test_v4_cumsum_restore_pointwise():
     lines = text.splitlines()
     assert lines[2] == f"B,1000,2,{base_dl},{base_up}"
     assert lines[3] == "r,100000000,10000000,0,0" and lines[4] == "r,100000000,10000000,200000000,20000000,2001"
-    assert lines[6] == "z,10,500000000,50000000,20005"
+    assert lines[6] == "z,10,500000000,50000000,500000000,50000000,20005"
     parsed = parse_v4_day_text(text)
     assert parsed.bad_lines == 0 and parsed.blocks[0] == block
     # 逐行复原 == 原始绝对值(基线 + 本行 delta, 逐点)
@@ -1525,7 +1616,14 @@ def test_v4_cumsum_restore_pointwise():
     assert restored == list(zip(d_deltas, u_deltas))
     # 块首 z 立基线(delta = 0)+ 多块基线独立
     b2 = V4Block(
-        9000, 2, 7_000_000, 8_000_000, (V4ZeroRun(5, 7_000_000, 8_000_000), V4Sample(1, 1, 7_000_100, 8_000_100))
+        9000,
+        2,
+        7_000_000,
+        8_000_000,
+        (
+            V4ZeroRun(5, 7_000_000, 8_000_000, dl_total_end=7_000_000, up_total_end=8_000_000),
+            V4Sample(1, 1, 7_000_100, 8_000_100),
+        ),
     )
     parsed2 = parse_v4_day_text(format_v4_day_text("global", (block, b2)))
     assert parsed2.blocks[1] == b2

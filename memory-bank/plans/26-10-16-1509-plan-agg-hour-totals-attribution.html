@@ -7,9 +7,9 @@
 <title>agg 行 totals 归属错位 · 修法三形态对照 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-16-1509">
-<meta name="doc-updated" content="26-10-16-1509">
+<meta name="doc-updated" content="26-10-16-1621">
 <meta name="doc-refs" content="memory-bank/issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md, memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -122,10 +122,11 @@
   <a href="#s6"><span class="no">06</span>残余边界矩阵</a>
   <a href="#s7"><span class="no">07</span>风险 · 取舍 · 回滚</a>
   <a href="#s8"><span class="no">08</span>待拍板项</a>
+  <a href="#s9"><span class="no">09</span>实施记录 · 形态 D</a>
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · 待拍板(形态 A/B/D)<br>本轮纯文档轮(未改码)</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Done · 已实施(形态 D, 26-10-16)<br>实施记录见 §09</div>
 </nav>
 
 <header class="cover">
@@ -137,10 +138,10 @@
     当时形态裁决的权威在<a href="#ref">计划 26-10-15-0829 §03</a>)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> 待拍板 · 未动码</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done</span> 已实施(形态 D)</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-16-1509</div></div>
     <div class="item"><div class="k">复验</div><div class="v">clone @ d58ad0c5 · 两路仍复现</div></div>
-    <div class="item"><div class="k">本轮形态</div><div class="v">纯文档轮(未改源码/配置/运行数据)</div></div>
+    <div class="item"><div class="k">本轮形态</div><div class="v">立件:纯文档轮 / 26-10-16:形态 D 实施轮</div></div>
   </div>
 </header>
 
@@ -531,16 +532,57 @@
   <h2><span class="no">08</span>待拍板项</h2>
   <ol>
     <li><b>形态选择:A / B / D</b>(§04 对照表 + §06 残余矩阵)。建议取向:要「低载实例的日对账也正确」就排除 A;
-      不愿碰行格式就取 B;愿意为「盘上可判 + 离线零前视」付格式代价则取 D。</li>
+      不愿碰行格式就取 B;愿意为「盘上可判 + 离线零前视」付格式代价则取 D。
+      <br><b>→ 已拍板: D</b>(用户 2026-10-16 指令「选择方案D」); 实施记录见 §09。</li>
     <li><b>若取 B:③④⑤三条路径是否也放宽为「用封口时手里的末零样本值」</b> —— 放宽会带来与离线侧的亚刻度锚点偏差
-      (§04 B 残余二)。本件默认<b>不放宽</b>(两路一致优先于覆盖率)。</li>
+      (§04 B 残余二)。本件默认<b>不放宽</b>(两路一致优先于覆盖率)。
+      <br><b>→ 不适用</b>(未取 B)。</li>
     <li><b>是否连带处理 rate lane</b>(另一件 <code>26-10-16-0020-question-agg-rate-lane-invisible-bytes</code>):
-      本件建议<b>不连带</b> —— 那是口径判断题(速率图要不要含非 payload 成分),需要单独拍板,且与本件无实现依赖。</li>
+      本件建议<b>不连带</b> —— 那是口径判断题(速率图要不要含非 payload 成分),需要单独拍板,且与本件无实现依赖。
+      <br><b>→ 不连带</b>(按建议执行; 另一件独立保留)。</li>
     <li><b>是否设最小跨度门槛</b>(例如游程跨度 <code>&lt; 2 × 采样间隔</code> 时不插值,避免把正常抖动当陈旧增长):
-      倾向设,取值与是否配置化随形态一起定(配置化须同步校验层与 schema 单点)。</li>
+      倾向设,取值与是否配置化随形态一起定(配置化须同步校验层与 schema 单点)。
+      <br><b>→ 不设</b>(实施定): 形态 D 的末端锚点取自封口时刻, 天然有界 —— 增长 = 同一块内 S0 → S1 的真实计数器差,
+      不存在「拿远处观测当陈旧增长」的路径(那是 A/B 的右锚点前视问题); 短游程由摊配函数退化处理(n = 1 恒取开启快照),
+      再加门槛只会重新制造一个「增长静默归错桶」的盲区。配置键零新增。</li>
     <li><b>实施批次与立档</b>:A 预计触 1 个源文件、B 预计 1 个源文件(离线遍历在采样模块内)、D 预计 2 个源文件 ——
-      均低于「≥3 源文件」阈值;专题档案已在(<code>tasks/26-10-15-*</code>),按惯例追加而不新建。</li>
+      均低于「≥3 源文件」阈值;专题档案已在(<code>tasks/26-10-15-*</code>),按惯例追加而不新建。
+      <br><b>→ 已照此执行</b>(触 2 源文件 + 2 测试文件, 追加档案不新建)。</li>
   </ol>
+</section>
+
+<!-- ============================================================ -->
+<section id="s9">
+  <h2><span class="no">09</span>实施记录 · 形态 D(26-10-16 · clone @ b0d467e7)</h2>
+  <p class="lead">用户 2026-10-16 拍板形态 D(指令「选择方案D」); 本轮实施落地。记录只写「与 §04 D 的差异与细化」, 机制不复述。</p>
+
+  <h3>落点(实装形态)</h3>
+  <ul>
+    <li><b>行格式</b>(<code>traffic_store.py</code> 格式单点): <code>z,&lt;run_len&gt;,&lt;dl_delta&gt;,&lt;up_delta&gt;,&lt;dl_end_delta&gt;,&lt;up_end_delta&gt;[,&lt;dt_ms&gt;]</code> —— 末端对插在 delta 与可选尾列 <code>dt_ms</code> <b>之前</b>: 列数 {6,7} = 携带末端对, {4,5} = 旧文件(解析为 None → 退化冻结, 向后兼容)。位次如此定的理由 —— 追加在可选尾列之后会产生歧义列数(6 列既可读成 dt + 半对、也可读成无 dt 的整对), 插在 dt 前则列数唯一可判。</li>
+    <li><b>写出侧</b>: 封口恒写末端对; 拿不到时写冻结列同值 = 显式退化(解析侧两端等价); 负 delta 免费校验扩展到末端两列。</li>
+    <li><b>摊配</b>(<code>v4_z_totals_ramp</code>, 在线与离线共用纯函数): v_k = S0 + round((S1 − S0) × k / (n − 1)), 整数半上取整、端点精确(v_0 = S0, v_{n−1} = S1)、逐向独立; n = 1 / 无末端列 / 末端低于开启 → 恒取 S0。游程尾部信用(区间 [末槽, 下一首槽))相应从冻结值改为 ramp[-1] = 末端快照。</li>
+    <li><b>末端锚点来源</b>(封口五路径, 单点 <code>_resolve_run_end</code>): ① 实测样本 / ② 00:00 硬切样本 / ⑤ 保险闸 = 调用方手上的实测读数传入; ③ stop / ④ 改间隔关块 = 游程内最后一条零样本读数(<code>OpenRun.last_*</code> 跟踪字段, 只随「带 totals 的零样本推进」刷新 —— 已开游程免重读字段的既有路径不刷新它, 封口时它仍是「封口时刻已知的最后观测」); 全拿不到 = 开启快照; 低于开启按开启钳制(游程内计数器重置的落差不是增长)。</li>
+    <li><b>离线侧</b>(<code>_agg_credit_day_file</code>): 经 <code>v4_block_agg_totals</code> 取与 <code>v4_block_slots</code> 等长同序的逐槽摊配值, z 槽以 (0, 0, dl, up) 入账; 跨块/跨文件 tail 同源。不引入前视、不改造遍历。</li>
+    <li><b>raw 面零触碰</b>: <code>V4Slot.obs</code> 与冻结列语义未动 —— 末端对只进 agg 车道(守阵钉住 raw 槽 obs 仍为冻结值)。</li>
+  </ul>
+
+  <h3>判据兑现(对照 §05)</h3>
+  <ul>
+    <li>① 逐小时单调且右端对齐 / ② 增长守恒 / ③ 消除单桶台阶: 合成几何用例(跨小时界游程逐小时摊配、右端小时 = 末端快照、剩余增长只余末段) + 摊配纯函数专测(端点精确 / 单调 / 守恒 / 逐步取整偏差 ≤ 1 字节)。</li>
+    <li>④ 两路同口径: 同一 z 行在线 <code>_agg_feed</code> 与离线 <code>_agg_credit_day_file</code> 小时桶逐样本逐位一致。</li>
+    <li>⑤ 不回归面: <code>cov_s</code> / rate lane / raw 面 obs 与冻结列逐字不变; 「旧文件无新列 → 退化冻结」兼容用例 + 显式退化 roundtrip。</li>
+  </ul>
+
+  <h3>红绿双验(5 类突变逐类判红 · 还原后四文件 SHA256 逐位自证)</h3>
+  <ul>
+    <li>关插值 → 5 红; 离线侧不读摊配列 → 1 红; 末端列写回冻结值 → 5 红; 路径 ① 不传末端值 → 1 红; 取整口径改截断 → 3 红。</li>
+  </ul>
+
+  <h3>回滚与兼容</h3>
+  <ul>
+    <li>不认识末端对的旧解析器会把 6/7 列 z 行<b>整行判坏</b>(列数不匹配) ⇒ 回滚到旧版本前必须先剥离 z 行末端对(6/7 → 4/5 列)或保留兼容解析; 约束已写进格式定约注释。已落盘末端对不回补不删除; 已封 <code>agg.dat</code> 行不追溯重算(与「历史坏行不回补」同口径)。</li>
+  </ul>
+  <p class="hint">测试数字只写基线切片一处, 本件不手抄 —— 见 <code>commands run kb.baseline</code>。</p>
 </section>
 
 <!-- ============================================================ -->
@@ -582,10 +624,10 @@
 </section>
 
 <div class="foot">
-  <p>26-10-16-1509-plan-agg-hour-totals-attribution.html · 本轮为<b>纯文档轮</b>:未修改任何源码、配置与运行数据,
-  未跑全量测试(零改码无测试面变化),未新建基线切片;实测数字只出现在 §01(复验读数,合成几何,内存内直驱真实聚合路径)。</p>
+  <p>26-10-16-1509-plan-agg-hour-totals-attribution.html · 立件轮为<b>纯文档轮</b>(未修改任何源码、配置与运行数据; 实测数字只出现在 §01, 合成几何内存内直驱); 26-10-16 实施轮(形态 D)的改动与验证见 §09。</p>
   <p><b>变更记录</b>:26-10-16-1509 — 立件。认领复验(§01,两路仍复现)+ 新证据(§03 第四条路径)+ 三形态对照(§04)+ 判据与守阵计划(§05)+
-  残余矩阵(§06)+ 待拍板 5 项(§08)。形态 A/B/D 均未实施,等拍板。</p>
+  残余矩阵(§06)+ 待拍板 5 项(§08)。形态 A/B/D 均未实施,等拍板。<br>26-10-16-1621 — <b>形态 D 已实施</b>(用户拍板「选择方案D」): 落点/判据兑现/红绿双验/回滚约束见 §09;
+  待拍板 5 项状态就地补注(§08); doc-status → Done。</p>
 </div>
 
 </div>

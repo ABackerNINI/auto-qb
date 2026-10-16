@@ -413,6 +413,45 @@ def v4_block_slots(block) -> tuple:
     return tuple(slots)
 
 
+def v4_z_totals_ramp(dl_open: int, up_open: int, dl_end: Optional[int], up_end: Optional[int], n: int) -> tuple:
+    """z 游程 agg 累计快照逐槽摊配(形态 D, plan 26-10-16-1509 §04; 在线 _agg_feed 与
+    离线 _agg_credit_day_file 共用同一纯函数 —— 镜像靠同源)。
+
+    游程内部第 k 槽(k = 0..n-1)的 agg totals = 开启快照 -> 末端快照按槽序线性插值:
+    v_k = S0 + round((S1 - S0) x k / (n-1))(整数四舍五入, 端点精确: v_0 = S0, v_{n-1} = S1;
+    取整余量归末端槽, 区间累加严格守恒)。n == 1(单槽, 跨度退化)恒取 S0; dl_end/up_end
+    为 None(旧文件无末端列)或低于开启快照(游程内计数器重置的落盘形态 —— 重置落差不是
+    增长)时按开启快照退化(恒快照 = 旧语义)。逐向独立(dl/up 各摊各的)。
+
+    返回 Tuple[(dl_total, up_total), ...](长度 = n, 与 v4_block_slots 同段槽序一一对应)。
+    raw 面不消费本函数(raw 差分链仍用冻结列)。"""
+    dl1 = dl_open if dl_end is None or dl_end < dl_open else dl_end
+    up1 = up_open if up_end is None or up_end < up_open else up_end
+    if n <= 1:
+        return ((dl_open, up_open), ) * max(n, 0)
+    gd, gu = dl1 - dl_open, up1 - up_open
+    half = (n - 1) // 2
+    return tuple((dl_open + (gd * k + half) // (n - 1), up_open + (gu * k + half) // (n - 1)) for k in range(n))
+
+
+def v4_block_agg_totals(block) -> tuple:
+    """块内 z 游程的 agg 摊配逐槽序列(与 v4_block_slots 等长, 槽序一致; 离线侧消费者 =
+    _agg_credit_day_file): z 槽 = v4_z_totals_ramp 的 (dl_total, up_total); r 槽 / n 槽 =
+    None(agg 侧 r 用自身 obs、n 不贡献)。raw 车道(V4Slot.obs)不受本函数影响 —— 两者对
+    「每记录槽数」的口径必须一致(r=1 / 游程=run_len), 改任一处需同步。"""
+    out: list = []
+    for rec in block.records:
+        if isinstance(rec, V4ZeroRun):
+            out.extend(v4_z_totals_ramp(rec.dl_total, rec.up_total, rec.dl_total_end, rec.up_total_end, rec.run_len))
+        elif isinstance(rec, V4Sample):
+            out.append(None)
+        elif isinstance(rec, V4NullRun):
+            out.extend((None, ) * rec.run_len)
+        else:
+            raise TypeError(f"未知块记录型: {type(rec).__name__}")
+    return tuple(out)
+
+
 def v4_bucket_width_s(dt_s: float) -> int:
     """逐记录桶宽(秒): max(1, ceil(有效dt))(§02.3/§05.1 —— S3 归桶的纯函数层)"""
     return max(1, math.ceil(dt_s))
@@ -1241,7 +1280,11 @@ def _write_text_payload(path: str, payload: str) -> bool:
 #     B,<start_epoch>,<interval_s>                      3 列 = 无基线块(仅 n 游程合法)
 #     B,<start_epoch>,<interval_s>,<dl_base>,<up_base>  5 列 = 基线 = 块内首个带 totals 观测的快照
 #     r,<dl_rate>,<up_rate>,<dl_delta>,<up_delta>[,<dt_ms>]  delta 相对块基线; 负值 = 坏行(免费校验)
-#     z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>]        块首 z 的 delta = 0
+#     z,<run_len>,<dl_delta>,<up_delta>,<dl_endd>,<up_endd>[,<dt_ms>]  块首 z 的 delta = 0;
+#         末端对(形态 D, plan 26-10-16-1509 §04)= 封口时刻已知的末端快照相对同一块基线的
+#         delta(记录无末端值时写冻结列同值 = 显式退化); 旧文件 4/5 列无末端对 -> 解析为
+#         None -> agg 摊配按开启快照退化(向后兼容)。raw 差分链只消费 delta 列/冻结列,
+#         末端对仅 agg 车道(两路摊配共用 v4_z_totals_ramp)。
 #     n,<run_len>[,<dt_ms>]                              不变
 #
 # 核心不变式: delta 只存在于线格式 —— 内存结构(V4Sample/V4ZeroRun/V4NullRun/V4Block)
@@ -1253,6 +1296,9 @@ def _write_text_payload(path: str, payload: str) -> bool:
 # 做不到的免费校验 —— 计数器回落由写侧「重置强制关块重立基线」排除, 批 2 状态机)。
 # dt 链 / 撕裂尾 / 损坏占比口径原样沿用 v3(dt 列语义与 v3 完全一致, 辅助函数共用;
 # dt 链定约见文件头「纯函数区」头注释, 此处不复写)。
+# 形态 D 回滚约束(plan 26-10-16-1509 §07): 本版本写出的 z 行为 6/7 列, 不认识末端对的旧
+# 解析器(列数不匹配)会把整行判坏 -> 回滚到旧版本前必须先剥离 z 行末端对(6/7 -> 4/5 列)
+# 或保留兼容解析; 已落盘的末端对不回补不删除(与「历史坏行不回补」同口径)。
 # ======================================================================
 
 #: 头行 v4(每文件一次; v4 读侧对 v1/v2/v3 旧头行整文件不匹配, 不设双读 —— R2 换代语义)
@@ -1278,12 +1324,19 @@ class V4Sample:
 @dataclass(frozen=True)
 class V4ZeroRun:
     """v4 零速游程(z 行): 占 run_len 个采样槽, 速率恒 (0,0); totals 快照为绝对值(delta
-    相对块基线只在行文本); dt_ms 语义同 v3"""
+    相对块基线只在行文本); dt_ms 语义同 v3。
+
+    dl_total_end/up_total_end = 封口时刻已知的末端快照(形态 D, plan 26-10-16-1509 §04):
+    封口时随 z 行末端列一起落盘(拿不到时写与冻结列同值 = 显式退化); None = 记录未携带
+    末端对(旧文件解析结果/手工合成记录), agg 摊配按开启快照退化。raw 面差分链只消费
+    dl_total/up_total(冻结列), 末端对仅供 agg 车道(见 v4_z_totals_ramp)。"""
 
     run_len: int
     dl_total: int
     up_total: int
     dt_ms: Optional[int] = None
+    dl_total_end: Optional[int] = None
+    up_total_end: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -1356,15 +1409,23 @@ def format_v4_r_row(rec: V4Sample, dl_base: Optional[int], up_base: Optional[int
 
 
 def format_v4_z_row(rec: V4ZeroRun, dl_base: Optional[int], up_base: Optional[int]) -> str:
-    """零速游程行文本(v4 §01): z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>](delta 相对
-    块基线; 块首 z 的 delta = 0 —— 基线 = 该快照); 其余纪律同 format_v4_r_row"""
+    """零速游程行文本(v4 §01 + 形态 D): z,<run_len>,<dl_delta>,<up_delta>,<dl_end_delta>,
+    <up_end_delta>[,<dt_ms>](delta 相对块基线; 块首 z 的 delta = 0 —— 基线 = 该快照)。
+    末端对(形态 D, plan 26-10-16-1509 §04) = 封口时刻已知的末端快照相对同一块基线的
+    delta; 记录未携带末端值(None)时写冻结列同值 = 显式退化(解析侧两端等价)。其余纪律同
+    format_v4_r_row。"""
     if dl_base is None or up_base is None:
         raise ValueError("z 行须基线块(无基线块仅 n 游程合法)")
     dlt = int(rec.dl_total) - int(dl_base)
     upt = int(rec.up_total) - int(up_base)
-    if dlt < 0 or upt < 0:
-        raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}")
-    return f"z,{_fmt_int(rec.run_len)},{_fmt_int(dlt)},{_fmt_int(upt)}{_fmt_dt_tail(rec.dt_ms)}"
+    dle = int(rec.dl_total_end if rec.dl_total_end is not None else rec.dl_total) - int(dl_base)
+    upe = int(rec.up_total_end if rec.up_total_end is not None else rec.up_total) - int(up_base)
+    if min(dlt, upt, dle, upe) < 0:
+        raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}, dl_end={dle}, up_end={upe}")
+    return (
+        f"z,{_fmt_int(rec.run_len)},{_fmt_int(dlt)},{_fmt_int(upt)},{_fmt_int(dle)},{_fmt_int(upe)}"
+        f"{_fmt_dt_tail(rec.dt_ms)}"
+    )
 
 
 def format_v4_n_row(rec: V4NullRun) -> str:
@@ -1482,13 +1543,23 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
                     )
                 )
                 continue
-            if parts[0] == "z" and len(parts) in (4, 5):
+            if parts[0] == "z" and len(parts) in (4, 5, 6, 7):
+                # 形态 D(plan 26-10-16-1509 §04): 6/7 列 = 携带末端快照对(块基线 + 列 delta);
+                # 4/5 列 = 旧文件无末端列 -> None(agg 摊配按开启快照退化, 向后兼容)
+                if len(parts) >= 6:
+                    dl_end, up_end = cur_dl_base + _parse_nn_int(parts[4]), cur_up_base + _parse_nn_int(parts[5])
+                    dt_ms = _parse_dt_ms(parts[6]) if len(parts) == 7 else None
+                else:
+                    dl_end, up_end = None, None
+                    dt_ms = _parse_dt_ms(parts[4]) if len(parts) == 5 else None
                 cur_records.append(
                     V4ZeroRun(
                         run_len=_parse_pos_int(parts[1]),
                         dl_total=cur_dl_base + _parse_nn_int(parts[2]),
                         up_total=cur_up_base + _parse_nn_int(parts[3]),
-                        dt_ms=_parse_dt_ms(parts[4]) if len(parts) == 5 else None,
+                        dt_ms=dt_ms,
+                        dl_total_end=dl_end,
+                        up_total_end=up_end,
                     )
                 )
                 continue

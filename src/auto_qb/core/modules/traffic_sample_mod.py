@@ -44,7 +44,9 @@ delta = 0) —— 块内绝不出现负 delta(_append_record 单点)。
   = 真空, avg/totals/max 无偏。
 - 非零样本到达封任意型开放游程(同轮先游程后 r, 文件序 = 时间序); null 到达先封口再记 n
   (z 覆盖不得横跨断连期, R2); 00:00 跨天样本到达先封游程(块不跨天 —— 封 [start, 天界前
-  末样本], 跨天样本开新游程)。保险闸(N4, 防溢出非常态): 行程时长 >= ZRUN_FLUSH_S(86400s)
+  末样本], 跨天样本开新游程)。封口时把「调用方手上的实测样本 > 游程内最后一条零样本
+  读数 > 开启快照」作为 z 行末端锚点(形态 D, plan 26-10-16-1509 §04; 单点见 _resolve_run_end)。
+  保险闸(N4, 防溢出非常态): 行程时长 >= ZRUN_FLUSH_S(86400s)
   或样本数 >= ZRUN_CAP_SAMPLES(86400, = ceil(86400/interval) 在 interval >= 1s 下的上界)
   —— 正常空闲段任何路径都不应触闸。
 - 游程 dt_ms(§09.2 S1 定约): dt 基准 = 链上锚点(上一记录槽位时刻 = 写侧游标; 块首游程
@@ -54,7 +56,8 @@ delta = 0) —— 块内绝不出现负 delta(_append_record 单点)。
 
 单种数据门(§3.2, v2 index 条目门退役): 「种子目录存在且含 >=1 个 .dat」(目录判定) +
   本进程已有缓冲/已确认有数据的系列缓存(零稳态 IO) —— 零样本仅在已有数据或已开游程时
-  开启/延长游程, 从未传输种子零文件零游程。totals 快照固定在游程开启时刻(§3.4 沿用)。
+  开启/延长游程, 从未传输种子零文件零游程。totals 快照固定在游程开启时刻(§3.4 沿用 ——
+  raw 冻结列语义不变; 形态 D 的末端快照另落 z 行末端列, 见下「聚合分层」段)。
 
 累积漂移触发 dt_ms(§2.3 写侧, 最易踩坑处 —— 判据必须用「累积漂移」):
 - 写侧游标 projected_ts 严格镜像读侧 dt 链(上一记录槽位锚点); 每记录判
@@ -94,8 +97,10 @@ qbmanager 的 finally 与 state.save 顺序不改。
   槽位/跨度取写侧游标推进的同一计算结果(与落盘 dt 链严格同源); 块首信用经
   v4_block_gap_continuous 条件结算(连续边界把 [上一块末槽, 本块首槽) 按上一记录速率
   结算进覆盖, 崩溃/停机间隙真空 —— 00:00 边界既有每天约 2s 覆盖损失就此消除)。
-  z 游程内部槽区间速率恒 0/totals 恒快照, 逐槽均摊折叠为逐区间记账(聚合值等价); n 游程
-  不贡献(null 期无观测, 信用清空)。hour 桶: 区间按小时界拆分入账, cov_s = Σ桶内覆盖
+  z 游程内部槽区间速率恒 0/totals 按「开启快照 -> 末端快照」逐槽线性摊配(形态 D,
+  plan 26-10-16-1509 §04: 末端快照随 z 行末端列落盘, 在线/离线两路共用 v4_z_totals_ramp;
+  无末端列(旧文件)或单槽游程 = 显式退化, 恒快照 = 旧语义), 逐槽均摊折叠为逐区间记账(聚合值
+  等价); n 游程不贡献(null 期无观测, 信用清空)。hour 桶: 区间按小时界拆分入账, cov_s = Σ桶内覆盖
   (≤3600, v4_hour_agg), avg = dt 加权 —— dt_i ≡ interval_s 时严格退化为 v2 纯活跃桶公式
   (对照钉住), max 逐记录取大, totals 取级末快照(桶内最后入账区间的观测快照); 只有 null
   覆盖的小时不产 hour 行(空桶 = null)。day/month 累计器严格逐级(§4.1): hour 行封口并入
@@ -170,6 +175,8 @@ from ..traffic_store import (
     LiveTail,
     LiveTailRun,
     TrafficV4Store,
+    v4_block_agg_totals,
+    v4_block_gap_continuous,
     v4_block_slots,
     v4_day_epoch,
     v4_epoch_date_str,
@@ -177,7 +184,7 @@ from ..traffic_store import (
     v4_merge_agg,
     v4_month_epoch,
     v4_rollup_agg,
-    v4_block_gap_continuous,
+    v4_z_totals_ramp,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,6 +249,9 @@ class OpenRun:
     """开放游程(v3 §3.2, 内存态每系列至多一个): 连续零速或 null 观测段, 封口 = 成为
     buffer 记录(_seal_run)。主循环线程独占(黄金法则 5), 随进程消失(崩溃丢 <= ZRUN_FLUSH_S
     纯零信息); totals 快照固定在开启时刻(首个零样本的 all-time 对), 后续零样本不刷新。
+    last_dl_total/last_up_total = 游程内最后一条零样本的读数(形态 D 封口末端锚点候选,
+    plan 26-10-16-1509 §04: 封口时落进 z 行末端列); 只随「带 totals 的零样本推进」刷新
+    —— 已开游程免重读字段的既有路径不刷新它, 封口时它仍是「封口时刻已知的最后观测」。
     """
 
     kind: str  # "z" | "n"(z = 零速游程, n = null 游程; 同系列同时至多一个, 换型先封口)
@@ -250,6 +260,8 @@ class OpenRun:
     dl_total: int  # all-time 下载累计快照(开启时刻, 恒定不刷新; n 游程恒 0 不落盘)
     up_total: int  # all-time 上传累计快照(同上)
     samples: int  # 游程内样本计数(触发 (4) 判据 = 落盘 run_len)
+    last_dl_total: int  # 游程内最后一条零样本的 all-time 下载读数(末端锚点候选; n 游程恒 0 不用)
+    last_up_total: int  # 同上(上传)
 
 
 @dataclass
@@ -693,12 +705,13 @@ class TrafficSampleModule(BaseModule):
         """单系列单轮非零采样点产出(plan §03.3「每系列每轮产出采样点」的单一出口)
 
         触发 (1): 非零样本到达先封开放游程(任意型)再出 r 记录 —— 同轮两记录, 文件序 =
-        时间序。差分基线推进 + 增量计算(§03.4): 基线为空(重启后首样)只立基线不出增量;
+        时间序; 封口把本样本读数作为 z 游程末端锚点交下去(形态 D, plan 26-10-16-1509 §04:
+        「处理 z 行时已知末端值」 = 调用方手里这个值)。差分基线推进 + 增量计算(§03.4): 基线为空(重启后首样)只立基线不出增量;
         cur < last 判计数器重置(该点增量记 null + INFO 记录), 绝不产负增量。
         r 记录进 BlockBuffer(v3 §3.1), 随批量 flush 落盘; latest 镜像照常推进。
         """
         self._round_keys.add(key)
-        self._seal_run(key)
+        self._seal_run(key, dl_total, up_total)
         base = self._baselines.get(key)
         if base is None:
             dl_inc = None  # 基线为空: 首个采样只立基线不出增量(首窗 null, §03.4)
@@ -751,12 +764,15 @@ class TrafficSampleModule(BaseModule):
         """零/null 样本推进/开启开放游程(§3.2): 零样本只动内存(不出记录/不动 baselines/
         latest), 封口判据 = 非 z 事件(换型/跨天, v4 §01「空闲封口」)与天级保险闸 (3)(4)
         (N4 —— 正常空闲段不应触闸); 已开游程只推进 last_seen 与 samples(无需重读 totals);
+        带 totals 的零样本顺带刷新末端锚点候选(run.last_*, 形态 D); 坐拥实测样本的封口
+        路径把手上的 totals 作为末端锚点交 _seal_run(拿不到的形态由游程跟踪值兜底);
         开 z 游程需要 totals 快照(缺失不开, 空闲不出 null 槽), n 游程无此要求。
         """
         run = self._open_runs.get(key)
         if run is not None:
             if run.kind != kind or v4_epoch_date_str(ts) != v4_epoch_date_str(run.last_seen):
-                self._seal_run(key)  # 换型(触发 (2) R2)或 00:00 硬切: 游程不跨型不跨天
+                # 换型(触发 (2) R2)或 00:00 硬切: 游程不跨型不跨天; 封口用本轮样本读数兜底锚点
+                self._seal_run(key, dl_total, up_total)
                 run = None
         if run is None:
             if kind == "z" and (dl_total is None or up_total is None):
@@ -768,25 +784,55 @@ class TrafficSampleModule(BaseModule):
                 dl_total=int(dl_total) if dl_total is not None else 0,
                 up_total=int(up_total) if up_total is not None else 0,
                 samples=1,
+                last_dl_total=int(dl_total) if dl_total is not None else 0,
+                last_up_total=int(up_total) if up_total is not None else 0,
             )
             return
         run.last_seen = ts
         run.samples += 1
+        if dl_total is not None and up_total is not None:
+            run.last_dl_total = int(dl_total)  # 形态 D: 末端锚点候选随实测零样本刷新
+            run.last_up_total = int(up_total)
         if run.samples >= ZRUN_CAP_SAMPLES or ts - run.start >= ZRUN_FLUSH_S:
-            self._seal_run(key)
+            self._seal_run(key, dl_total, up_total)
 
-    def _seal_run(self, key: str) -> None:
+    def _seal_run(self, key: str, end_dl: Optional[int] = None, end_up: Optional[int] = None) -> None:
         """封口开放游程(v3 §3.2, 各触发共同出口): 封口 = 成为 buffer 记录(不单独落盘;
         跨 flush 滞留内存, 随下次封口或 stop() 落盘)。dt 基准在 _append_record 按块头/
-        非块头解析(链上锚点定约, §09.2)。无开放游程零操作。"""
+        非块头解析(链上锚点定约, §09.2)。无开放游程零操作。
+
+        形态 D(plan 26-10-16-1509 §04): z 记录的末端锚点(end_dl/end_up)按「调用方手上
+        的实测样本 > 游程内最后一条零样本读数 > 开启快照」解析(见 _resolve_run_end), 随
+        记录落盘进 z 行末端列并供 agg 摊配; 封口触发共五条路径, 不传参的路径(stop() /
+        改间隔关块等)走游程跟踪值兜底。n 游程无观测不携带。"""
         run = self._open_runs.pop(key, None)
         if run is None:
             return
         if run.kind == "n":
             rec = V4NullRun(run_len=run.samples)
         else:
-            rec = V4ZeroRun(run_len=run.samples, dl_total=run.dl_total, up_total=run.up_total)
+            dl_end, up_end = self._resolve_run_end(run, end_dl, end_up)
+            rec = V4ZeroRun(
+                run_len=run.samples,
+                dl_total=run.dl_total,
+                up_total=run.up_total,
+                dl_total_end=dl_end,
+                up_total_end=up_end,
+            )
         self._append_record(key, rec, run.start, run.last_seen)
+
+    @staticmethod
+    def _resolve_run_end(run: OpenRun, end_dl: Optional[int], end_up: Optional[int]) -> tuple:
+        """z 游程封口末端锚点解析(形态 D 单点): 显式传入(触发封口的实测样本) > 游程内
+        最后一条零样本读数 > 开启快照(显式退化)。末端值低于开启快照时按开启快照钳制 ——
+        游程内计数器重置的落差不是增长(随后的重置关块逻辑会另立基线), 且保证 z 行末端列
+        delta 非负(与冻结列的免费校验同源); 单槽游程(跨度退化)由摊配函数恒取开启快照。"""
+        dl0, up0 = run.dl_total, run.up_total
+        if end_dl is None or end_up is None:
+            end_dl, end_up = run.last_dl_total, run.last_up_total
+        if end_dl is None or end_up is None:
+            end_dl, end_up = dl0, up0
+        return (max(int(end_dl), dl0), max(int(end_up), up0))
 
     def _seal_all_runs(self) -> None:
         """封全部开放游程(stop() 钩子 / S2b 聚合封口接缝): 逐系列封口成 buffer 记录。"""
@@ -1052,13 +1098,17 @@ class TrafficSampleModule(BaseModule):
             if not block_head or v4_block_gap_continuous(credit[0], slots[0], interval_s):
                 self._agg_credit_hours(agg.pending, credit[0], slots[0], credit[1], credit[2], credit[3], credit[4])
         if isinstance(rec, V4ZeroRun):
-            # 游程内部槽区间: 速率恒 0, totals 恒快照(逐槽均摊折叠为逐区间, 聚合值等价)
+            # 游程内部槽区间: 速率恒 0; totals 按「开启快照 -> 末端快照」逐槽线性摊配
+            # (形态 D, plan 26-10-16-1509 §04: 与离线 _agg_credit_day_file 共用同一纯函数;
+            # 无末端列/末端低于开启 = 显式退化 -> 恒快照 = 旧语义)
+            ramp = v4_z_totals_ramp(rec.dl_total, rec.up_total, rec.dl_total_end, rec.up_total_end, len(slots))
             for k in range(len(slots) - 1):
-                self._agg_credit_hours(agg.pending, slots[k], slots[k + 1], 0, 0, rec.dl_total, rec.up_total)
+                self._agg_credit_hours(agg.pending, slots[k], slots[k + 1], 0, 0, ramp[k][0], ramp[k][1])
         if isinstance(rec, V4Sample):
             agg.open_credit = (float(cursor), rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total)
         elif isinstance(rec, V4ZeroRun):
-            agg.open_credit = (float(cursor), 0, 0, rec.dl_total, rec.up_total)
+            # 游程尾部信用 = 末端摊配值(ramp[-1] = v_{n-1} = 末端快照; 退化时 = 开启快照)
+            agg.open_credit = (float(cursor), 0, 0, ramp[-1][0], ramp[-1][1])
         else:
             agg.open_credit = None  # n 游程: null 期无观测, 信用清空(其后区间不记)
 
@@ -1400,6 +1450,17 @@ class TrafficSampleModule(BaseModule):
         }
 
     @staticmethod
+    def _slot_agg_obs(slot, agg_totals: Optional[tuple]) -> Optional[tuple]:
+        """单槽的 agg 入账观测(离线恢复用, 形态 D 单点): z 槽 = (0, 0, 摊配 dl, 摊配 up)
+        (v4_block_agg_totals 的逐槽值 —— 无末端列/单槽游程时 = 开启快照, 与旧语义逐位一致);
+        r 槽 = 原 obs(速率 + 冻结 totals); n 槽 = None(null 期不贡献)。"""
+        if slot.obs is None:
+            return None
+        if agg_totals is None:
+            return slot.obs
+        return (0, 0, agg_totals[0], agg_totals[1])
+
+    @staticmethod
     def _agg_credit_day_file(
         hour_samples: dict,
         parsed_day,
@@ -1407,21 +1468,24 @@ class TrafficSampleModule(BaseModule):
         slot_counter: Optional[list] = None
     ) -> Optional[tuple]:
         """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(块内相邻槽区间 [slot_k,
-        slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 0 / n = null 不记), 与在线 _agg_feed
-        结算区间信用同一口径。
+        slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 摊配值(v4_block_agg_totals) / n =
+        null 不记), 与在线 _agg_feed 结算区间信用同一口径(槽位两路同源, z 的 agg totals
+        两路共用 v4_z_totals_ramp)。
 
         跨块覆盖结算(v4 计划 §01「覆盖结算」, 与在线路复用判定单点 v4_block_gap_continuous):
         块间(含跨天文件 —— prev_tail 由 _recover_series 传入上一文件末槽上下文)gap =
         下一块首槽 - 上一块末槽, 连续(<= interval + DRIFT_TOL)则按上一槽速率把
         [末槽, 首槽) 结算进覆盖, 崩溃/停机间隙超容差为真空 —— 00:00 边界既有每天约 2s
         覆盖损失就此消除。prev_tail = (末槽 ts, obs) 或 None(无上下文/上文件缺链);
-        返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过)。
+        返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过;
+        z 末槽的 obs 为摊配末端值 —— 与在线 z 记录的尾部信用同值)。
 
         slot_counter 非 None(恢复埋点 §4.3, plan 26-10-12-2010)时按块追加各块槽数
         (读集成本的量级单点, 供计数属性断言); 不传 = 零影响(既有调用不变)。"""
         tail = prev_tail
         for block in parsed_day.blocks:
             slots = v4_block_slots(block)
+            agg_totals = v4_block_agg_totals(block)  # 形态 D: z 槽摊配值(与 slots 等长同序)
             if slot_counter is not None:
                 slot_counter.append(len(slots))
             if not slots:
@@ -1433,11 +1497,11 @@ class TrafficSampleModule(BaseModule):
                     TrafficSampleModule._agg_credit_hours(hour_samples, tail[0], first.ts, dl, up, dlt, upt)
             for k in range(len(slots) - 1):
                 cur, nxt = slots[k], slots[k + 1]
-                if cur.obs is None:
+                obs = TrafficSampleModule._slot_agg_obs(cur, agg_totals[k])
+                if obs is None:
                     continue  # n 槽: null 期不贡献
-                dl, up, dlt, upt = cur.obs
-                TrafficSampleModule._agg_credit_hours(hour_samples, cur.ts, nxt.ts, dl, up, dlt, upt)
-            tail = (slots[-1].ts, slots[-1].obs)
+                TrafficSampleModule._agg_credit_hours(hour_samples, cur.ts, nxt.ts, *obs)
+            tail = (slots[-1].ts, TrafficSampleModule._slot_agg_obs(slots[-1], agg_totals[-1]))
         return tail
 
     # ---------- 优雅退出 stop() 钩子(§3.4) ----------

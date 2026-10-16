@@ -31,6 +31,10 @@
   [26-10-06-0132](../testing/baselines/26-10-06-0132-qb-traffic-v4-delta-b3.md), test.full 2632
   passed + 4 skipped / 98% / 27.8s)。格式契约单点 = traffic_store.py 模块 docstring。档案
   [tasks/26-10-05-backend-qb-traffic-v4-delta](../tasks/26-10-05-backend-qb-traffic-v4-delta.md)。
+  - **追加(2026-10-16): z 行扩「末端快照对」列(形态 D)** —— 修空闲 z 游程期 agg hour 行 totals 归属错位: 封口把已知
+    末端观测写进 z 行末端列(`z,<run_len>,<dlt>,<upt>,<dl_end>,<up_end>[,<dt_ms>]`; 旧 4/5 列兼容 → 退化冻结), 在线/
+    离线两路按共享纯函数 `v4_z_totals_ramp` 逐槽摊配「开启快照 → 末端快照」; raw 面零触碰。细节见 issue
+    26-10-16-0020-bug「修复后补充」与坑档 pitfalls/backend/traffic-row-format-extension.md。
 
 - **recheck 轮询生效确认整体重设计: 证据门控判定 (2026-10-04, 计划
   [plans/26-10-04-1824](../plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html) 全段, issue
