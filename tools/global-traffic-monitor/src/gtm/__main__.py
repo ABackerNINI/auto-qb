@@ -12,6 +12,7 @@ import argparse
 import logging
 import sys
 import threading
+from typing import Optional
 
 from gtm import __version__
 from gtm.config import Config, ConfigHolder, load_config
@@ -19,7 +20,7 @@ from gtm.installer import AutostartError, UnsupportedPlatformError, build_instal
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
-from gtm.storage import SingleInstanceLockError, Storage, default_data_dir
+from gtm.storage import SingleInstanceLockError, Storage, default_data_dir, migrate_legacy_data_dir
 
 logger = logging.getLogger("gtm")
 
@@ -42,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--data-dir",
         default=None,
         metavar="DIR",
-        help=f"工具数据目录 (dat/state/lock/config 落点); 默认 {default_data_dir()!r} 或环境变量 GTM_DATA_DIR",
+        help=f"工具数据目录 (dat/state/lock/config 落点); 默认 {default_data_dir()!r} 或环境变量 GLOBAL_TRAFFIC_MONITOR_DATA_DIR",
     )
     install = sub.add_parser("install-autostart", help="注册开机自启 (三平台, 幂等)")
     install.add_argument(
@@ -53,6 +54,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     uninstall = sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
     return parser
+
+
+def _resolve_data_dir(explicit: Optional[str]) -> str:
+    """解析实际数据目录: --data-dir 显式优先 (不搬迁); 否则默认目录 + 旧用户目录一次性搬迁 (D12)。
+
+    搬迁只对「用了新默认目录」的场景生效 —— 用户显式给了目录就按他说的来, 不擅自从
+    旧位置搬数据进去。搬迁失败只 WARNING 不阻断启动 (migrate_legacy_data_dir 内部容错)。
+    """
+    if explicit:
+        return explicit
+    target = default_data_dir()
+    msg = migrate_legacy_data_dir(target)
+    if msg:
+        print(f"gtm: {msg}", file=sys.stderr)
+    return target
 
 
 def _build_adapter_filter(config: Config) -> AdapterFilter:
@@ -110,7 +126,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    data_dir = args.data_dir or default_data_dir()
+    data_dir = _resolve_data_dir(args.data_dir)
     # 配置加载: 校验失败 fail-fast 并聚合报错 (黄金法则 4; 不静默用默认值继续)
     config, _ = _load_config_or_fail(data_dir)
     if config is None:
@@ -191,7 +207,7 @@ def cmd_autostart(args: argparse.Namespace, *, install: bool) -> int:
     条件缺失 · 2 = 平台不支持 (非 Windows/Linux/macOS)。
     卸载不需要数据目录 (注册项按固定名称定位), 故 uninstall-autostart 无 --data-dir。
     """
-    data_dir = getattr(args, "data_dir", None) or default_data_dir()
+    data_dir = _resolve_data_dir(getattr(args, "data_dir", None))
     try:
         backend = build_installer(data_dir)
     except UnsupportedPlatformError as e:

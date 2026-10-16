@@ -20,7 +20,10 @@
 - 跨天: day_rolled 封存旧日最终值 (未达阈值也落盘) + 新日行懒写 + 节流基线重置
 - 单实例锁: 进程内二次获取 fail-fast (含持有者 PID); 跨进程 (真·二次启动) 同样
   fail-fast; 释放后可再获取; release 幂等; 伴生 meta 随释放删除
-- default_data_dir: 环境变量优先, 平台形状末段为 gtm
+- 目录定位 (S11): resolve_tool_root 源码态由 __file__ 上溯到工具根 (含 pyproject.toml) /
+  冻结态 (sys.frozen) 取 sys.executable 所在目录; default_data_dir 默认 = <工具根>/data
+  且 GLOBAL_TRAFFIC_MONITOR_DATA_DIR 优先; 旧用户目录一次性搬迁 (旧有
+  history_traffic.dat 且目标空才搬, 幂等可重入, 显式 --data-dir 不触发)
 """
 
 from __future__ import annotations
@@ -50,6 +53,8 @@ from gtm.storage import (
     Storage,
     atomic_write_text,
     default_data_dir,
+    migrate_legacy_data_dir,
+    resolve_tool_root,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -634,11 +639,99 @@ def test_lock_release_idempotent_and_meta_removed(tmp_path):
     # 锁文件残留按平台语义 (Windows 删 / POSIX flock 残留), 不断言其存在性
 
 
-# ---- 数据目录默认值 ----
+# ---- 目录定位 / 数据默认落点 / 旧数据搬迁 (S11) ----
+
+
+def test_resolve_tool_root_source_mode_is_tool_dir():
+    """源码态 (D11): 由 __file__ 上溯到仓库内工具根 (即含 pyproject.toml 的目录)."""
+    root = resolve_tool_root()
+    assert root.name == "global-traffic-monitor"
+    assert (root / "pyproject.toml").is_file()
+
+
+def test_resolve_tool_root_frozen_mode_uses_executable_dir(tmp_path, monkeypatch):
+    """冻结态 (D11): onefile 的 __file__ 指向 _MEIPASS 临时解包目录, 故取 sys.executable 所在目录."""
+    fake_exe = tmp_path / "dist" / "global-traffic-monitor.exe"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    assert resolve_tool_root() == fake_exe.parent
+    monkeypatch.delenv("GLOBAL_TRAFFIC_MONITOR_DATA_DIR", raising=False)
+    assert default_data_dir() == str(fake_exe.parent / "data")  # 冻结态数据落 <exe 目录>/data
+
+
+def test_default_data_dir_is_install_dir_data(monkeypatch):
+    """默认数据目录 = <工具安装目录>/data (D12), 不再是平台用户目录."""
+    monkeypatch.delenv("GLOBAL_TRAFFIC_MONITOR_DATA_DIR", raising=False)
+    assert default_data_dir() == str(resolve_tool_root() / "data")
 
 
 def test_default_data_dir_env_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("GTM_DATA_DIR", str(tmp_path / "custom"))
+    monkeypatch.setenv("GLOBAL_TRAFFIC_MONITOR_DATA_DIR", str(tmp_path / "custom"))
     assert default_data_dir() == str(tmp_path / "custom")
-    monkeypatch.delenv("GTM_DATA_DIR", raising=False)
-    assert Path(default_data_dir()).name == "gtm"  # 平台形状: 末段为 gtm
+    monkeypatch.delenv("GLOBAL_TRAFFIC_MONITOR_DATA_DIR", raising=False)
+    assert Path(default_data_dir()) == resolve_tool_root() / "data"
+
+
+def _write_legacy(legacy: Path) -> None:
+    legacy.mkdir(parents=True, exist_ok=True)
+    (legacy / "history_traffic.dat").write_text('lines: "1"\n2026/10/16 1/1\n', encoding="utf-8")
+    (legacy / "state.json").write_text("{}\n", encoding="utf-8")
+
+
+def test_migrate_legacy_data_dir_moves_when_target_empty(tmp_path, monkeypatch):
+    """旧目录有 dat 且目标空: 数据文件搬进目标 (搬走, 非复制)."""
+    legacy = tmp_path / "legacy"
+    _write_legacy(legacy)
+    target = tmp_path / "new" / "data"
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    msg = migrate_legacy_data_dir(str(target))
+    assert msg and "搬迁完成" in msg
+    assert (target / "history_traffic.dat").is_file() and (target / "state.json").is_file()
+    assert not (legacy / "history_traffic.dat").exists()
+
+
+def test_migrate_legacy_data_dir_skips_when_target_nonempty(tmp_path, monkeypatch):
+    """目标已有数据 -> 不搬 (幂等; 不覆盖新数据)."""
+    legacy = tmp_path / "legacy"
+    _write_legacy(legacy)
+    target = tmp_path / "data"
+    target.mkdir()
+    (target / "state.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    assert migrate_legacy_data_dir(str(target)) is None
+    assert (legacy / "history_traffic.dat").is_file()  # 旧文件未动
+
+
+def test_migrate_legacy_data_dir_skips_without_legacy_dat(tmp_path, monkeypatch):
+    """旧目录无 history_traffic.dat -> 不搬 (无旧数据可言)."""
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / "state.json").write_text("{}\n", encoding="utf-8")
+    target = tmp_path / "data"
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    assert migrate_legacy_data_dir(str(target)) is None
+    assert not target.exists()
+
+
+def test_migrate_legacy_data_dir_idempotent(tmp_path, monkeypatch):
+    """幂等: 第一次搬迁后目标非空, 再跑即 no-op."""
+    legacy = tmp_path / "legacy"
+    _write_legacy(legacy)
+    target = tmp_path / "data"
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    assert migrate_legacy_data_dir(str(target)) is not None
+    assert migrate_legacy_data_dir(str(target)) is None
+
+
+def test_resolve_data_dir_explicit_override_skips_migration(tmp_path, monkeypatch):
+    """显式 --data-dir: 按用户所指目录, 不擅自从旧位置搬数据 (只默认路径才搬迁)."""
+    from gtm import __main__ as cli
+
+    legacy = tmp_path / "legacy"
+    _write_legacy(legacy)
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    explicit = tmp_path / "explicit"
+    assert cli._resolve_data_dir(str(explicit)) == str(explicit)
+    assert (legacy / "history_traffic.dat").is_file()  # 未触发搬迁

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -64,13 +65,39 @@ DEFAULT_FLUSH_INTERVAL_S = 30.0
 DAT_HEADER = 'lines: "{n}"'
 
 
+def resolve_tool_root() -> Path:
+    """工具安装根目录单点 (S11 / D11): 所有「找自己」的地方 (数据目录/启动器位置/
+    自启注册路径) 一律经本函数, 禁止散落 __file__。
+
+    双模: 冻结 (PyInstaller 等) 用 sys.executable 所在目录 —— onefile 的 __file__
+    指向 sys._MEIPASS 临时解包目录, 源码位置定位不了编译后的 exe; 源码态由 __file__
+    上溯 (src/gtm/storage.py -> 仓库内的工具根, 即含 pyproject.toml 的目录)。
+
+    ⚠ 源码态假定 src-layout 且以可编辑方式安装 (uv run / uv sync 的默认行为), 此时
+    __file__ 即真实源码路径; 非可编辑安装会让上溯落到 site-packages (本工具的自启/
+    拉起身份都从工具目录跑, 不覆盖该形态)。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
+
+
 def default_data_dir() -> str:
-    """工具数据目录默认值 (dat/state/lock/config 落点): 环境变量 GTM_DATA_DIR 优先,
-    否则按平台惯例 —— Windows %LOCALAPPDATA%/gtm, macOS ~/Library/Application
-    Support/gtm, Linux ~/.local/share/gtm (XDG_DATA_HOME 优先)。"""
-    env = os.environ.get("GTM_DATA_DIR")
+    """工具数据目录默认值 (dat/state/config/token 落点): 环境变量
+    GLOBAL_TRAFFIC_MONITOR_DATA_DIR 优先 (D16), 否则 <工具安装目录>/data (D12)。
+
+    不落 shell 的 PWD: 自启/被拉起时 Windows 的 cwd 常为 %Windir%\\system32, PWD
+    不可信。--data-dir / GLOBAL_TRAFFIC_MONITOR_DATA_DIR 仍可覆盖; D19 启动器不传
+    --data-dir (落点全由工具自解析)。
+    """
+    env = os.environ.get("GLOBAL_TRAFFIC_MONITOR_DATA_DIR")
     if env:
         return env
+    return str(resolve_tool_root() / "data")
+
+
+def legacy_data_dir() -> str:
+    """S11 之前的数据目录默认值 (平台用户目录 .../gtm) —— 仅供一次性搬迁探测 (D12)。"""
     if sys.platform.startswith("win"):
         base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
         return os.path.join(base, "gtm")
@@ -78,6 +105,43 @@ def default_data_dir() -> str:
         return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "gtm")
     base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
     return os.path.join(base, "gtm")
+
+
+# 搬迁文件集 (D12): 旧用户目录里的工具数据文件 (锁不搬 —— S12 起锁锚点移出数据目录)
+_LEGACY_MIGRATE_FILES = ("history_traffic.dat", "state.json", "config.yml", "monitor.token")
+
+
+def migrate_legacy_data_dir(target_dir: str) -> Optional[str]:
+    """旧用户目录数据一次性搬迁 (D12): 仅当旧目录有 history_traffic.dat 且目标目录为空时,
+    把工具数据文件搬进 target_dir; 幂等、可重入; 失败只 WARNING 不阻断启动。
+
+    返回人读结论供调用方日志可见 (无需搬迁 -> None)。空目录判据 = 目标目录不存在或
+    无任何条目 —— 目标已有数据就不搬 (幂等); 中途失败记 WARNING, 余下文件留在旧目录,
+    已搬的不回滚 (下次启动因目标非空而跳过)。
+    """
+    legacy = legacy_data_dir()
+    if os.path.abspath(legacy) == os.path.abspath(target_dir):
+        return None
+    if not os.path.isfile(os.path.join(legacy, "history_traffic.dat")):
+        return None
+    if os.path.isdir(target_dir) and os.listdir(target_dir):
+        return None
+    moved: list[str] = []
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        for name in _LEGACY_MIGRATE_FILES:
+            src = os.path.join(legacy, name)
+            if not os.path.isfile(src):
+                continue
+            dst = os.path.join(target_dir, name)
+            if os.path.exists(dst):
+                continue
+            shutil.move(src, dst)
+            moved.append(name)
+    except OSError as e:
+        logger.warning("旧数据目录搬迁中断 (不阻断启动): %s", e)
+        return f"旧数据目录搬迁中断: {e} (已搬 {', '.join(moved) or '无'})"
+    return f"旧数据目录搬迁完成: {legacy} -> {target_dir} (已搬 {', '.join(moved)})"
 
 
 # Windows os.replace 遇读者持句柄 (WinError 5) 的退避重试参数: 读者开-读-关只
