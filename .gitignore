@@ -31,6 +31,7 @@ logs/
 
 # Trae相关文件
 .trae/
+.trae-html-share-packages/
 
 # Awesome-Copilot 列表文件
 awesome-copilot-llms.txt
