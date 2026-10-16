@@ -375,6 +375,8 @@ const AQB_SHORTCUT_DEFS = [
  * 当前模板基准; 空串 = 显式禁用。
  * 语义: load() 保持**同步快照**(引擎在 keydown 里现取, 不 await); 服务端真值由 reload() 异步
  * 拉进来后由调用方失效 _kbTableCache; save() 整份 PUT, 失败返回 {ok:false} 由调用方本地回滚。
+ * !两处请求走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒
+ *   reload 恒不返回 false(启动拉取卡住)、save 恒不返回 {ok:false}(面板永不复位)—— 无提示也不自愈。
  * (先 const 后挂 window: 它是被本文件 _kbTable 直接消费的适配器单例, 不是 Vue mixin 片段 ——
  *  不走 app.mixin, 也别写成 `window.X = {` 字面量形态, 那会被片段接线守阵当漏注入。) */
 const AQB_KEYS_DEFAULT = () => ({ schema_version: 1, template: "aqb-default", overrides: {} });
@@ -393,7 +395,7 @@ const AQB_KEYS_ADAPTER = {
     try {
       const headers = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const r = await fetch("/api/keys", { headers });
+      const r = await aqbFetch("/api/keys", { headers });
       if (!r.ok) return false;
       this._doc = this._sanitize(await r.json());
       return true;
@@ -406,7 +408,7 @@ const AQB_KEYS_ADAPTER = {
     try {
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const r = await fetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
+      const r = await aqbFetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
       if (!r.ok) {
         const detail = await r.json().catch(() => ({}));
         return { ok: false, error: detail.detail || `HTTP ${r.status}` };

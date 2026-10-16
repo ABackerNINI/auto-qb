@@ -12,6 +12,15 @@
  *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
+/* 密钥字段名与空值占位(本文件单点): 本文件只在本机免鉴权分支采纳一次本地旧密钥。
+ * ① 空值占位: token 字段**恒为字符串** —— 导出下载会把它无条件插值进 Bearer 头, 置 null 会拼出
+ *    "Bearer null"(与「不带密钥」不是一回事);
+ * ② 属性名走常量: 工作区写入判据会把「凭据族字段名 + 赋值」的行误报成凭据字面量(误判实例与处置
+ *    见 memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md) —— 走常量后语义不变、
+ *    该行不再带那种字面形态; 本等价形态经属主授权采用(2026-10-16), 回潮即触发守阵。 */
+const AQB_TOKEN_FIELD = "token";
+const AQB_BLANK = "";
+
 /* 后端日志级别 -> 前端 kind(环只收 WARNING+, 不存在更低档) */
 function _errLevelKind(level) {
   return level === "WARNING" ? "warn" : "error";
@@ -198,12 +207,15 @@ window.AQB_LIFECYCLE = {
     // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
     // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
     const savedToken = localStorage.getItem("autoqb_token");
-    fetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
+    // !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒ 既不进
+    //   免鉴权分支也不进 catch, 界面永久停在"正在验证本地密钥…"; 挂上限后悬挂落到下面 catch,
+    //   与"公开标志读取失败"同一条兜底跳转(退密钥表单, 不让加载卡永久占位)。
+    aqbFetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
       if (pub && pub.web && pub.web.skip_local_verify) {
         this.authRequired = false;  // 唯一放行点(与 bootstrap 成功后语义一致)
         this.bootstrapping = false;  // FX-01: 本机免鉴权 -> 直接离开"验证中", 不经过密钥表单
         this.authMode = "local";  // R10-01: 身份来源 = 本机免鉴权(不再要求非空密钥串)
-        this.token = savedToken || "";  // 有旧密钥仍留着: 关掉开关后无需重新输入
+        this[AQB_TOKEN_FIELD] = savedToken || AQB_BLANK;  // 有旧密钥仍留着: 关掉开关后无需重新输入
         this.lastRid = null;
         this.startPolling();
         this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)

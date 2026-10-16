@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-1303">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-polling">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md,memory-bank/tasks/26-10-16-webui-raw-fetch-timeout.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写">
 <meta name="issue-summary" content="boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面">
 <title>前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 13:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -190,11 +190,20 @@ const r = await fetch("/api/keys", { method: "PUT", headers, body: JSON.stringif
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-16 13:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 13:26 — 认领（用户指派「认领并修复」），状态 <strong>In Progress</strong>；认领方档案 <code>memory-bank/tasks/26-10-16-webui-raw-fetch-timeout.md</code>（认领链双向）。复验：仍复现。</li>
+      <li>2026-10-16 14:02 — 修完并验证，状态 <strong>Done</strong>；实际修法 / 验证方式见下「修复后补充」，测试数字见基线切片。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>复验：2026-10-16 13:26 仍复现</b>（clone 工作树，两条锚点逐条重放）——①静态清点：全仓 <code>shared/</code> 内 <code>fetch(</code> 调用点共 5 处（<code>boot.js</code> / <code>lifecycle.js</code> / <code>commands.js</code> / <code>shortcuts.js</code> x2），逐处核对：<b>零 AbortSignal、零超时定时器</b>，与入池时的取证一致；②行为探针（node 加载真实 <code>boot.js</code> + 只被 abort 才 reject 的悬挂 fetch）：<code>#app</code> 恒空白、无任何失败占位 —— 白屏可达（探针读数 0/6 项通过）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（2026-10-16 14:02）</b>：走建议修法 <b>#1 + #3</b>；<b>#2（五处各自加超时）否掉</b>：五份重复且无单点，后续再添调用点还会重演本条。与建议不同的两处已在下文「改道说明」。</p>
+    <ul>
+      <li><b>低层单点</b>：新增 <code>src/auto_qb/webui/static/shared/fetch_low.js</code> —— <code>aqbFetch(path, opts)</code>：<code>AbortController</code> + 15s（<code>AQB_FETCH_LOW_TIMEOUT_S/MS</code>，与 <code>auth.js::_request</code> 同值，守阵钉相等）、外部 <code>signal</code> 链接（不顶掉）、<code>AbortError</code> 翻译（「请求超时(15s)」/「请求已取消」+ <code>timeout</code> 标记）、<code>finally</code> 清定时器；返回<b>原始 Response</b>（不解析 JSON / 不判 401 语义 / 不加请求头，各家收口照旧）。三份 <code>tpl-manifest</code> 第 3 项登记。</li>
+      <li><b>四处旁路改线</b>：<code>lifecycle.js</code> 免鉴权判定 / <code>commands.js</code> 导出下载 / <code>shortcuts.js</code> 密钥读写 x2 改调单点；<code>boot.js</code> 在清单脚本之前执行（用不了单点），自带等价内联超时 <code>BOOT_PART_TIMEOUT_MS</code> = 10s（阻塞整个首屏 ⇒ 早失败更重要），悬挂落到既有 <code>fail()</code> 可读占位 + 重新加载按钮（不再白屏）。</li>
+      <li><b>验证方式</b>：守阵 <code>test_frontend_raw_fetch_timeout_single_point</code> —— 五层静态锚（单点常量同值 / <b>裸 fetch 零回潮</b>（只允许 <code>fetch_low.js</code>/<code>auth.js</code>/<code>boot.js</code> 三文件出现调用点）/ boot 内联件齐 / 四旁路改线 / 采纳行等价格式）+ 两份 node 行为电池（单点七型与 boot 悬挂四项）。<b>红绿双验</b> 5 类突变逐类判红（含两处旁路回潮），还原后五个文件 SHA256 与注入前逐字一致；<b>复验先于改动</b>（node 探针读数 0/6 → 修复后 6/6）。</li>
+      <li><b>测试数字</b>：见基线切片 <code>memory-bank/testing/baselines/26-10-16-1402-webui-raw-fetch-timeout.md</code>（<code>commands run kb.baseline</code> 现列）。</li>
+      <li><b>改道说明</b>：①启动两处按建议 #3 单独定夺 —— boot 取 10s（更短、失败可读），lifecycle 用单点默认 15s（不另设 per-call 旋钮）；②<code>lifecycle.js</code> 的写入曾被工作区「凭据字面量」判据<b>整文件</b>拦下（误判一条既有行，与本处改动无关），经属主授权做<b>形态等价改写</b>（属性名走 <code>AQB_TOKEN_FIELD</code> 常量 + 空值占位走 <code>AQB_BLANK</code> 空串；语义不变）后落盘 —— 该文件随之恢复可写。</li>
+    </ul>
   </section>
 
   <footer>

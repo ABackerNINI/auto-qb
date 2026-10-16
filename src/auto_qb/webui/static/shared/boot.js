@@ -2,12 +2,28 @@
  *
  * shell(index.html)只保留 sprite + #app 内联段(登录遮罩) + 分片清单(tpl-manifest) + 本脚本;
  * 页面区模板拆在 tpl/*.html, 由这里按清单顺序 fetch 后注入, 全部成功才按序放行逻辑脚本
- * (app.js 末尾 createApp().mount("#app") 执行时模板已完整)。任何一步失败: 显式错误占位 + 停止,
- * 不放行任何逻辑脚本 —— 与「配置加载失败 + 重试」同风格, 不留半挂状态。
+ * (app.js 末尾 createApp().mount("#app") 执行时模板已完整)。任何一步失败(含请求悬挂被请求级
+ * 超时兜住, issue 26-10-16-1303): 显式错误占位 + 停止, 不放行任何逻辑脚本 —— 与「配置加载失败
+ * + 重试」同风格, 不留半挂状态。
  * 时序纪律: 动态插入的 <script> 默认 async=true, 必须 async=false + onload 链保序。
  */
 (function () {
   "use strict";
+
+  /* 分片装载的请求级超时(issue 26-10-16-1303): 裸 fetch 没有超时 —— 连接静默失效(服务端不响应 /
+   * TCP 半开 / 中间设备丢包)时 await 永不返回, 装载链停在当前片、后续 then/catch 一个都不执行,
+   * 应用永久停在白屏(v-cloak 前)且无提示。挂上限后悬挂变成一次**可报的失败**: catch -> fail()
+   * 给可读占位 + 重新加载按钮(与分片 404 同一路径)。
+   * !值比低层单点 aqbFetch(shared/fetch_low.js, 15s)短: 本链阻塞整个首屏, 早失败更重要。
+   * !本文件在清单脚本之前执行(装载链本身是放行它们的前提), 用不了那个单点(定义还没跑到),
+   *   故内联一份等价逻辑; 两处文案同款, 值各自守阵钉住。 */
+  var BOOT_PART_TIMEOUT_MS = 10000;
+
+  /* AbortError 的原始文案("The operation was aborted")对用户没有信息量 —— 与低层单点同款翻译 */
+  function partErrText(err) {
+    if (err && err.name === "AbortError") return "请求超时(" + (BOOT_PART_TIMEOUT_MS / 1000) + "s)";
+    return (err && err.message || err);
+  }
 
   /* UI 皮肤 cookie(autoqb_ui): 三套 UI 共用本脚本 = 唯一写入口 —— 打开任一 UI 就把它的
    * 目录段记进 cookie(1 年), 之后从根路径 / 进入时服务端读 cookie 直达上次用的 UI
@@ -60,7 +76,9 @@
     }
     var part = mf.parts[partIdx++];
     var into = part.into === "body" || part.into === "app" ? part.into : "";  // 其余值 = 自定义选择器
-    fetch(part.src, { credentials: "same-origin" }).then(function (res) {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, BOOT_PART_TIMEOUT_MS);
+    fetch(part.src, { credentials: "same-origin", signal: ctl.signal }).then(function (res) {
       if (!res.ok) throw new Error(part.src + " HTTP " + res.status);
       return res.text();
     }).then(function (text) {
@@ -68,7 +86,9 @@
       else slots.push({ sel: part.into, text: text });
       nextPart();
     }).catch(function (err) {
-      fail("分片加载失败: " + (err && err.message || err));
+      fail("分片加载失败: " + partErrText(err));
+    }).finally(function () {
+      clearTimeout(timer);  // 成功/失败/悬挂都清掉(不留悬挂定时器)
     });
   }
 

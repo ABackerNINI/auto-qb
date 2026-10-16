@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (47)
+## Open (46)
 
-- [bug] [前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写](../26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html) — boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](../26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -59,8 +58,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (205)
+## Done (206)
 
+- [bug] [前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写](../26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html) — boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面
 - [bug] [重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线](../26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html) — full_round 补建数百个立即到期任务占满 20 个/tick 配额; 采样首轮后 next_run 恒晚于补建批次, 七次重启全部复现 37~55s 静默
 - [bug] [P4 接缝提示判据把「链末桶晚于重启时刻」当作链已接续: 重启后首采落入长零游程时提示不显示](../26-10-16-0954-bug-traffic-seam-hint-missed-after-first-sample.html) — 判据要求 server_started_at >= 链末桶覆盖端; 首采总在重启后 1s 内而桶宽 2s, 故活尾期恒不触发 —— 04:45:40 帧右侧整片斜纹零提示
 - [bug] [重启缝 <=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝](../26-10-16-0954-bug-traffic-seam-short-gap-spike.html) — 重启缝 7.6s(<60s) 不满足 P2 摊配判据 span>max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s

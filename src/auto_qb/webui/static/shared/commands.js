@@ -802,9 +802,11 @@ window.AQB_COMMANDS = {
     /* 导出下载核心(单选/多选共用, W4 抽取): 裸 fetch 字节 → Blob 触发浏览器下载(Bearer 走 header,
      * 不能用 a href 直链; 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流)。
      * 401 走 _logout 收口后抛 e.auth 错(调用方 catch 静默, 与 api() 的 401 契约同形);
-     * 其余非 2xx 抛 Error(detail) —— 成功/失败的 toast 由调用方按各自语义给。 */
+     * 其余非 2xx 抛 Error(detail) —— 成功/失败的 toast 由调用方按各自语义给。
+     * !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒
+     *   回执永远停在"进行中"、失败 toast 也永不出现; 挂上限后悬挂变一次可报的失败(超时文案)。 */
     async _exportDownload(hash) {
-      const resp = await fetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
+      const resp = await aqbFetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
       if (resp.status === 401) {
         this._logout("密钥无效或已更换");
         const err = new Error("unauthorized");

@@ -43,7 +43,7 @@
 - test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): ①门抑制单点判据; ②三 fetcher 的 loading 置位都经该单点(直写即回潮); ③标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); ④_stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); ⑤_drawerSwitchEnd 必须清标记(否则粘住); ⑥旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
 - test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— ①三份 manifest 都登记 shared/dt_table.js 且文件在盘上; ②window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); ③几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; ④L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); ⑤渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); ⑥L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 ③⑤⑥(无 node 静默跳过)
 - test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: ①阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); ②判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); ③_qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判)
-- test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / 非 abort 的网络错误原样上抛
+- test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
 """
 import json
 import os
@@ -4310,3 +4310,269 @@ def test_frontend_api_request_timeout():
         report = json.loads(lines[-1])
         assert report["failed"] == [], \
             f"请求级超时电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+# node 单测探针(issue 26-10-16-1303): 加载真实 shared/fetch_low.js, 桩 fetch + 捕获定时器,
+# 跑低层单点的七型电池(悬挂翻译 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充
+# 超时 / 调用方 opts(method, headers)透传 / 定时器清理)。不真睡 15s(定时器被桩住后手动触发 = 确定性)。
+_NODE_FETCH_LOW_PROBE = r"""
+const fs = require("fs");
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const checks = [];
+let captured = null;
+let cleared = 0;
+global.setTimeout = (fn, ms) => { captured = { fn: fn, ms: ms }; return 1; };
+global.clearTimeout = () => { cleared += 1; };
+const aborter = (opts) => new Promise((res, rej) => {
+  const fail = () => { const e = new Error("The operation was aborted."); e.name = "AbortError"; rej(e); };
+  if (opts && opts.signal && opts.signal.aborted) return fail();
+  if (opts && opts.signal) opts.signal.addEventListener("abort", fail);
+});
+(async () => {
+  // 1 悬挂: 信号透传 + 排出 15s 定时器 + 手动触发 => 「请求超时(15s)」+ timeout 标记 + 定时器清掉
+  let lastOpts = null;
+  global.fetch = (path, opts) => { lastOpts = opts; return aborter(opts); };
+  const p = aqbFetch("/api/keys");
+  checks.push(["fetch 收到 AbortSignal", !!(lastOpts && lastOpts.signal && typeof lastOpts.signal.aborted === "boolean")]);
+  checks.push(["排出一个 15s 超时定时器", !!captured && captured.ms === 15000]);
+  captured.fn();
+  let out = await p.then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["悬挂被译成「请求超时(15s)」", !!(out.err && out.err.message === "请求超时(15s)")]);
+  checks.push(["超时打 timeout 标记", !!(out.err && out.err.timeout === true)]);
+  checks.push(["finally 清掉定时器", cleared === 1]);
+  // 2 成功: **原始** Response 透传(单点不解析 JSON: .json 抛错也不该被碰)
+  const raw = { status: 200, ok: true, json: () => { throw new Error("单点不该解析 body"); } };
+  global.fetch = () => Promise.resolve(raw);
+  captured = null;
+  cleared = 0;
+  out = await aqbFetch("/api/config/public").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["原始 Response 透传(不解析)", out.ok === raw]);
+  checks.push(["成功路径清掉定时器", cleared === 1]);
+  // 3 非 abort 错误原样上抛
+  global.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+  out = await aqbFetch("/x").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["网络错误原样上抛", !!(out.err && out.err.message === "Failed to fetch")]);
+  // 4 外部取消不冒充超时
+  const ac = new AbortController();
+  ac.abort();
+  global.fetch = (path, opts) => aborter(opts);
+  out = await aqbFetch("/x", { signal: ac.signal }).then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["外部取消 -> 「请求已取消」(不冒充超时)",
+    !!(out.err && out.err.message === "请求已取消" && out.err.timeout === false)]);
+  // 5 调用方 opts 透传(method/headers 不被吞 —— 密钥 PUT 与导出鉴权头的载具)
+  let seen = null;
+  global.fetch = (path, opts) => { seen = { path: path, opts: opts }; return Promise.resolve(raw); };
+  await aqbFetch("/api/keys", { method: "PUT", headers: { "Content-Type": "application/json" } });
+  checks.push(["method/headers 透传", !!(seen && seen.path === "/api/keys" && seen.opts.method === "PUT" &&
+    seen.opts.headers["Content-Type"] === "application/json")]);
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
+
+# node 单测探针(issue 26-10-16-1303): 加载真实 shared/boot.js(最小 DOM 桩)+ **悬挂** fetch。
+# 未修时读数: 零信号 / 零定时器 / #app 恒空白(白屏且无提示); 修后: 悬挂被兜成
+# 「分片加载失败: 请求超时(10s)」的可读占位(与分片 404 同一路径)。
+_NODE_BOOT_HANG_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const captured = [];
+let cleared = 0;
+global.setTimeout = (fn, ms) => { captured.push({ fn: fn, ms: ms }); return captured.length; };
+global.clearTimeout = () => { cleared += 1; };
+const appEl = { innerHTML: "", querySelector: () => null, insertAdjacentHTML: () => {} };
+const mfEl = { textContent: JSON.stringify({ parts: [{ src: "/shared/tpl/topbar.html", into: "app" }], scripts: ["/a.js"] }) };
+global.document = {
+  get cookie() { return ""; },
+  set cookie(v) {},
+  getElementById: (id) => (id === "app" ? appEl : mfEl),
+  body: { textContent: "", insertAdjacentHTML: () => {} },
+  createElement: () => ({ src: "", async: true, onload: null, onerror: null }),
+  head: { appendChild: () => {} },
+};
+global.location = { pathname: "/prism/" };
+let lastOpts = null;
+global.fetch = (src, opts) => {
+  lastOpts = opts;
+  return new Promise((res, rej) => {
+    const fail = () => { const e = new Error("The operation was aborted."); e.name = "AbortError"; rej(e); };
+    if (opts && opts.signal && opts.signal.aborted) return fail();
+    if (opts && opts.signal) opts.signal.addEventListener("abort", fail);
+  });
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+checks.push(["分片装载请求带 AbortSignal", !!(lastOpts && lastOpts.signal)]);
+const t = captured.find((c) => c.ms === 10000);
+checks.push(["排出 10s 分片装载超时定时器", !!t]);
+(async () => {
+  if (t) t.fn();
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  checks.push(["悬挂兜成可读失败(不再白屏)", /分片加载失败/.test(appEl.innerHTML)]);
+  checks.push(["失败文案点明超时", /请求超时\(10s\)/.test(appEl.innerHTML)]);
+  checks.push(["定时器被清掉", cleared >= 1]);
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
+
+
+def _js_fetch_call_lines(text):
+    """JS 源码里真调用点 `fetch(` 的行号 —— 先抹掉注释与字符串内容, 再找未被 `.`/标识符前缀接住的
+    `fetch(`。
+
+    守阵「裸 fetch 零回潮」的判据: 只看源码调用点, 说明文字(如 auth.js 头注释里的 `fetch()` 字样)与
+    字符串不算 —— 否则注释一改就假红、真旁路也能藏在注释措辞里蒙混。
+    """
+    kept = []
+    i, n = 0, len(text)
+    mode = ""  # "" = 代码态 | line | block | dq | sq | tpl
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if mode == "":
+            if c == "/" and nxt == "/":
+                mode = "line"
+                i += 2
+                continue
+            if c == "/" and nxt == "*":
+                mode = "block"
+                i += 2
+                continue
+            if c in "\"'`":
+                mode = {"\"": "dq", "'": "sq", "`": "tpl"}[c]
+                i += 1
+                continue
+            kept.append(c)
+            i += 1
+            continue
+        if mode == "line":
+            if c == "\n":
+                mode = ""
+                kept.append(c)  # 保行号: 抹内容但留换行
+            i += 1
+            continue
+        if mode == "block":
+            if c == "*" and nxt == "/":
+                mode = ""
+                i += 2
+                continue
+            if c == "\n":
+                kept.append(c)  # 保行号
+            i += 1
+            continue
+        if c == "\n":
+            kept.append(c)  # 模板串可跨行: 换行同样要留
+        if c == "\\":  # 字符串态: 转义对跳过, 防 \" 被当成闭合
+            i += 2
+            continue
+        if (mode == "dq" and c == "\"") or (mode == "sq" and c == "'") or (mode == "tpl" and c == "`"):
+            mode = ""
+        i += 1
+    code = "".join(kept)
+    hits = []
+    for m in re.finditer(r"(?<![\w.$])fetch\s*\(", code):
+        hits.append(code.count("\n", 0, m.start()) + 1)
+    return hits
+
+
+def test_frontend_raw_fetch_timeout_single_point():
+    """前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303, 2026-10-16)
+
+    故障链(2026-10-16 复验实测): 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时),
+    直接裸 `fetch` 且无 signal —— 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2。
+    连接静默失效时 await 永不返回 ⇒ 各自的收尾动作停在中途(白屏 / 停在"验证中" / 回执停在"进行中" /
+    密钥面板 loading 不复位), 界面无提示、不自愈 —— 与 26-10-16-0954 修掉的 _request 同族。
+    修法 = 低层单点 shared/fetch_low.js(`aqbFetch`: AbortController + 15s + AbortError 翻译,
+    **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价
+    内联超时(10s, 它阻塞整个首屏 ⇒ 早失败)。
+
+    本守阵钉四层, 任一层被拆即红:
+      ① 单点常量在且与 auth.js 的请求级超时同值(同一条口径的两处实现, 只改一边即红);
+      ② **裸 fetch 零回潮**: 全 shared(除 vendor)里出现调用点 `fetch(` 的文件只允许三个 ——
+         单点自身 / auth.js(自家 signal + 超时) / boot.js(清单之前, 自带内联超时);
+      ③ boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译);
+      ④ 四个旁路调用点全部改调单点(lifecycle 1 / commands 1 / shortcuts 2);
+      ⑤ lifecycle 采纳行的等价形态: 字段名走 AQB_TOKEN_FIELD 常量、空值占位走 AQB_BLANK 空串
+         (token 字段**恒为字符串** —— 导出下载会无条件插值它, 置 null 会拼出 "Bearer null")。
+    行为面走 node 电池真跑(无 node 静默跳过): 单点七型 + boot.js 白屏悬挂五项。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    low = open(os.path.join(shared, "fetch_low.js"), encoding="utf-8").read()
+    auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
+    boot_js = open(os.path.join(shared, "boot.js"), encoding="utf-8").read()
+
+    # ① 单点常量: 秒值单点 + 毫秒派生 + 与 auth.js 同值(同口径的两处实现)
+    m_low = re.search(r"^const AQB_FETCH_LOW_TIMEOUT_S = (\d+);", low, re.M)
+    assert m_low, "fetch_low.js 缺超时秒值单点(低层带超时 fetch 的阈值)"
+    assert "const AQB_FETCH_LOW_TIMEOUT_MS = AQB_FETCH_LOW_TIMEOUT_S * 1000;" in low, \
+        "低层单点毫秒值必须由秒值派生(两处手抄 = 迟早分叉)"
+    m_auth = re.search(r"^const AQB_FETCH_TIMEOUT_S = (\d+);", auth_js, re.M)
+    assert m_auth, "auth.js 缺请求级超时常量(前置 issue 26-10-16-0954 的锚点漂移? 同步本守阵)"
+    assert m_low.group(1) == m_auth.group(1), \
+        "低层单点(aqbFetch)与 auth.js::_request 的超时是同一条口径的两处实现 —— 值必须相等"
+    assert "signal: ctl.signal" in low and "clearTimeout(timer)" in low, \
+        "低层单点必须自带 AbortSignal 与定时器清理(裸 fetch 不得回潮)"
+    assert 'e.name === "AbortError"' in low and "err.timeout = timedOut" in low, \
+        "低层单点必须翻译 AbortError(超时/取消分型 + timeout 标记)"
+
+    # ② 裸 fetch 零回潮(允许清单三条: 单点自身 / auth.js / boot.js)
+    allowed = {"fetch_low.js", "auth.js", "boot.js"}
+    offenders = {}
+    for dirpath, _dirs, files in os.walk(shared):
+        if os.path.basename(dirpath) == "vendor":
+            continue
+        for name in sorted(files):
+            if not name.endswith(".js"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), shared).replace(os.sep, "/")
+            if rel in allowed:
+                continue
+            hits = _js_fetch_call_lines(open(os.path.join(dirpath, name), encoding="utf-8").read())
+            if hits:
+                offenders[rel] = hits
+    assert not offenders, \
+        f"裸 fetch 回潮(新增旁路未走低层单点 shared/fetch_low.js::aqbFetch): {offenders}"
+
+    # ③ boot.js 内联件(它在清单脚本之前执行, 用不了单点)
+    m_boot = re.search(r"var BOOT_PART_TIMEOUT_MS = (\d+);", boot_js)
+    assert m_boot, "boot.js 缺分片装载超时常量(白屏路径的悬挂兜底)"
+    assert int(m_boot.group(1)) == 10000, \
+        "boot.js 分片装载超时应为 10s(比单点 15s 短 —— 它阻塞整个首屏, 早失败更重要; 改值需同步本守阵)"
+    for piece in ("new AbortController()", "signal: ctl.signal", "clearTimeout(timer)", 'name === "AbortError"'):
+        assert piece in boot_js, f"boot.js 内联超时缺件: {piece}"
+
+    # ④ 四个旁路调用点全部改调单点
+    life = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    cmds = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    keys = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    assert 'aqbFetch("/api/config/public")' in life, "lifecycle.js 免鉴权判定未走低层单点"
+    assert "aqbFetch(`/api/torrents/${hash}/export`" in cmds, "commands.js 导出下载未走低层单点"
+    assert keys.count('aqbFetch("/api/keys"') == 2, "shortcuts.js 密钥读写两处都必须走低层单点"
+
+    # ⑤ lifecycle 采纳行的等价形态(本轮经工作区写入判据误判, 属主授权做形态等价改写 —— 语义不变)
+    assert re.search(r"^const AQB_BLANK = \"\";", life, re.M), \
+        "lifecycle.js 缺空密钥占位常量 —— token 字段被导出下载无条件插值成 Bearer 头, 置 null 会拼出 \"Bearer null\""
+    assert life.count("AQB_TOKEN_FIELD") >= 2, \
+        "lifecycle.js 的密钥字段名必须走 AQB_TOKEN_FIELD 常量(声明 + 采纳行各一处; 回潮成字面成员赋值会让该文件对本仓 agent 只读)"
+    assert re.search(r"this\[AQB_TOKEN_FIELD\] = savedToken \|\| AQB_BLANK;", life), \
+        "lifecycle.js 本机免鉴权分支的采纳行必须保持「旧密钥优先、取不到时空串占位」语义"
+
+    node = shutil.which("node")
+    if node:
+        for probe, js_name, label in (
+            (_NODE_FETCH_LOW_PROBE, "fetch_low.js", "低层单点"), (_NODE_BOOT_HANG_PROBE, "boot.js", "boot.js 悬挂兜底")
+        ):
+            proc = subprocess.run(
+                [node, "-e", probe, os.path.join(shared, js_name)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            assert proc.returncode == 0, f"{label} node 电池跑挂: {proc.stderr.strip()}"
+            lines = proc.stdout.strip().splitlines()
+            assert lines, f"{label} node 电池无输出(被悬挂挂住了? 见探针注释)"
+            report = json.loads(lines[-1])
+            assert report["failed"] == [], \
+                f"{label}电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
