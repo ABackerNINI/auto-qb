@@ -1,10 +1,9 @@
 """gtm 命令行入口.
 
-后续步骤逐步补充子命令:
-  S2:    run            采样-落盘主循环 (单写线程)
-  S3:    run            控制面随 run 启动 (127.0.0.1:8099)
-  S4:    run            通知接入主循环 (阈值事件 -> 订阅者推送; 首帧补发一次)
-  S5:    install-autostart / uninstall-autostart   三平台自启幂等注册/卸载
+子命令:
+  run                             采样-落盘-通知主循环 (单写线程; 控制面随 run 启动)
+  install-autostart               三平台自启幂等注册 (S5)
+  uninstall-autostart             三平台自启幂等卸载 (S5)
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ import threading
 
 from gtm import __version__
 from gtm.config import Config, ConfigHolder, load_config
+from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
@@ -44,6 +44,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help=f"工具数据目录 (dat/state/lock/config 落点); 默认 {default_data_dir()!r} 或环境变量 GTM_DATA_DIR",
     )
+    install = sub.add_parser("install-autostart", help="注册开机自启 (三平台, 幂等)")
+    install.add_argument(
+        "--data-dir",
+        default=None,
+        metavar="DIR",
+        help="写进注册项的数据目录 (解析成绝对路径写死; 自启拉起不依赖环境变量)",
+    )
+    uninstall = sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
     return parser
 
 
@@ -176,11 +184,40 @@ def _load_config_or_fail(data_dir: str) -> tuple[Config | None, tuple[str, ...]]
     return config, errors
 
 
+def cmd_autostart(args: argparse.Namespace, *, install: bool) -> int:
+    """自启注册/卸载 (S5): 幂等, 结果打到 stdout, 退出码供 S6 设置页判成败.
+
+    退出码: 0 = 达成期望态 (含 skipped/absent 两种 no-op) · 1 = 平台命令失败/前置
+    条件缺失 · 2 = 平台不支持 (非 Windows/Linux/macOS)。
+    卸载不需要数据目录 (注册项按固定名称定位), 故 uninstall-autostart 无 --data-dir。
+    """
+    data_dir = getattr(args, "data_dir", None) or default_data_dir()
+    try:
+        backend = build_installer(data_dir)
+    except UnsupportedPlatformError as e:
+        print(f"gtm: {e}", file=sys.stderr)
+        return 2
+    except AutostartError as e:
+        print(f"gtm: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
+        return 1
+    try:
+        result = backend.register() if install else backend.unregister()
+    except AutostartError as e:
+        print(f"gtm: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
+        return 1
+    print(f"gtm: {result.message}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
         return cmd_run(args)
-    # 无子命令: 打印帮助 (run 等子命令随 S2-S5 逐步落地)
+    if args.command == "install-autostart":
+        return cmd_autostart(args, install=True)
+    if args.command == "uninstall-autostart":
+        return cmd_autostart(args, install=False)
+    # 无子命令: 打印帮助
     build_parser().print_help()
     return 0
 

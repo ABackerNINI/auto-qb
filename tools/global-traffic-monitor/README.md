@@ -29,14 +29,14 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (gtm): run 采样-落盘-通知主循环 (S2/S4)
+  __main__.py   CLI 入口 (gtm): run 主循环 (S2/S4) + install/uninstall-autostart (S5)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
   server.py     本地控制面 127.0.0.1:8099 (S3)
   notifier.py   阈值事件推送订阅者 (S4)
-  installer.py  三平台自启注册/卸载 (S5)
-tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; 随 S5-S9 逐步扩充)
+  installer.py  三平台自启幂等注册/卸载 (S5)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; test_installer.py S5; 随 S6-S9 逐步扩充)
 ```
 
 ## 运行 (S2-S4)
@@ -105,10 +105,36 @@ uv run gtm --version    # 验证安装与入口
 uv run pytest -q        # 运行测试
 ```
 
-## 自启 (S5 落地后)
+## 自启 (S5)
 
-Windows 计划任务 (登录时触发) / Linux systemd --user / macOS launchd, 由
-auto-qb WebUI 设置页开关幂等注册, 也可命令行 `gtm install-autostart` 直接跑。
+```bash
+gtm install-autostart [--data-dir DIR]   # 注册开机自启 (幂等)
+gtm uninstall-autostart                  # 卸载开机自启 (幂等)
+```
+
+| 平台 | 机制 | 注册项 |
+|---|---|---|
+| Windows | `schtasks /SC ONLOGON`(当前用户, 登录时触发) | 计划任务 `gtm-autostart` |
+| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/gtm.service` |
+| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.gtm.autostart.plist` |
+
+- **注册什么**: 一条 `gtm run --data-dir <DIR>` 守护命令; 解释器取**调用本命令的那个
+  python** (`sys.executable`) —— 它按定义就是装了 gtm 的 venv。`data_dir` 解析成绝对路径
+  **写死进注册项**(自启拉起时是登录会话, `GTM_DATA_DIR` 不可控), 故 `--data-dir` 要与
+  `gtm run` 用的同一个。
+- **幂等**: 重复注册/重复卸载都是成功 no-op。判据是**期望态是否已达成** —— Windows 看计划
+  任务是否存在; Linux/macOS 看单元/plist 文件内容是否一致**且**已启用/已加载, 未达成则收敛
+  (文件漂移就重写, 服务被 disable 就重新启用)。只查「文件存在」会把「文件在但服务被停」误判
+  成已注册。
+- **退出码** (供 auto-qb 设置页开关判成败): `0` = 达成期望态(含 skipped/absent) ·
+  `1` = 平台命令失败/前置条件缺失(如解释器不存在) · `2` = 平台不支持。
+- **不解析平台命令输出**: schtasks / systemctl / launchctl 的输出随系统语言本地化, 本模块
+  **只信退出码**; 输出仅作失败时的附注(解码走 UTF-8 -> 本地码页兜底链)。
+- **Windows 注意**: 计划任务查询输出本地化, 故**不比对已注册任务的命令内容** —— 换了 venv
+  或数据目录后想刷新注册项, 先 `uninstall-autostart` 再 `install-autostart`。另外若本机
+  命令安全策略把 `schtasks.exe` 拉黑, `install-autostart` 会 fail-fast 报「找不到命令」。
+- 由 auto-qb WebUI 设置页开关调用 (S6), 也可命令行直接跑。Linux `systemctl --user` 需登录
+  会话 (SSH 裸连需 `loginctl enable-linger`)。
 
 ## 设计单点
 

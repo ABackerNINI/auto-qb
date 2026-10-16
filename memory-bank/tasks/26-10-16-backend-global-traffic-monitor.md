@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 10:16
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知已落地。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md
+**Updated:** 2026-10-16 11:09
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启已落地。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -28,7 +28,7 @@
 | S2 | 落盘 storage | Done (26-10-16-0855) |
 | S3 | 控制面 server | Done (26-10-16-0946) |
 | S4 | 通知 notifier | Done (26-10-16-1016) |
-| S5 | 自启 installer | Open |
+| S5 | 自启 installer | Done (26-10-16-1109) |
 | S6 | auto-qb 配置面 | Open |
 | S7 | auto-qb 接收面 | Open |
 | S8 | 集成与过渡 | Open |
@@ -112,4 +112,23 @@
 **行号基准**: S4 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
 
 **另(用户 26-10-16-1029 指令「直接修复文档缺陷, 然后提交」)**: 计划 §05 参数表末尾混入 S3 实施记录行(S3 行本应落在 §04 R0 表)—— 计划外文档缺陷已搬回 §04 R0(行序 S0/S1/S2/S3/S4), §05 恢复为纯参数表, 脚注相应改写, doc-updated 抬至 26-10-16-1029。搬移走 bytes 层脚本(先断言 LF 约定未破 + 块唯一, 搬后校验 §05 段内无 S3 行)。
+
+
+### R6 · S5 实施 (2026-10-16 11:09)
+
+用户指令「实施计划S5:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S5 的显式授权(S6–S10 不动)。开工同步 5654b778(快进)。
+
+**落点**(改 3 文件 + 1 新文件, 零 auto-qb 触碰): `src/gtm/installer.py` 占位 -> 全量实现(~460 行) + `src/gtm/__main__.py` 两子命令 + `cmd_autostart` + `tests/test_installer.py` 新文件 44 条守阵 + README「自启 (S5)」节 + `__init__`/`__main__` 进度注记。
+
+**设计要点**: ①注册项 = 一条 `gtm run --data-dir <DIR>` 守护命令, 解释器取 `sys.executable`(调用本命令的那个 python 按定义就是装了 gtm 的 venv, 不猜路径不靠 PATH), data_dir 解析绝对路径**写死**进注册项(登录会话里 `GTM_DATA_DIR` 不可控)。②三后端: `WindowsTaskBackend`(`schtasks /Create /TN gtm-autostart /SC ONLOGON /TR "<python>" -m gtm run --data-dir "<dir>"`, 当前用户、默认 LeastPrivilege) / `SystemdUserBackend`(`~/.config/systemd/user/gtm.service` 生成物, `ExecStart` 逐段引号, `Restart=on-failure`; daemon-reload + `enable --now`) / `LaunchdBackend`(stdlib `plistlib` 生成 plist, `ProgramArguments` = 守护 argv, `RunAtLoad`+`KeepAlive`; `bootstrap gui/<uid>`)。③**幂等判据严格化**(计划原文「存在则跳过」-> 期望态判据): Windows 只看 `schtasks /Query` 退出码(输出本地化, 不解析); Linux/macOS 看**文件内容一致 且 已启用/已加载**, 未达成则收敛(漂移重写 / 被 disable 重新 enable)。只查「文件存在」会把「单元文件在但服务被 disable」误判成已注册 —— 守阵 `test_linux_register_reenables_when_disabled` 专钉此分支。④`Runner` 依赖注入承载平台命令层(生产路径 `default_runner` = subprocess 收字节 + `_decode` 兜底链 UTF-8 -> 本地码页 -> replace, **只信退出码不解析本地化输出** —— 坑档 console-encoding 那条「表头本地化 -> 读数静默为 0」)。⑤CLI 退出码 0 达成期望态 / 1 平台命令失败或前置条件缺失 / 2 平台不支持(供 S6 设置页开关判成败); `uninstall-autostart` 不带 `--data-dir`(注册项按固定名定位, 卸载不读它 —— 不做「为对称而对称」的参数面)。
+
+**出口判据全过**: ①三平台注册/卸载/重复注册幂等 44/44(工具 166/166 = 122 + 44); ②红验 7 条锚点突变全判 RED —— 幂等跳过失效(`if self.is_registered():` -> `if False:`) / 平台探测恒真(`startswith("win")` -> `True`) / 命令构造(`ONLOGON` -> `ONSTART`) / 卸载反向失效(未注册也发 `/Delete`) / Linux 判据退化(`if same and self._is_enabled():` -> `if same:`) / macOS plist 内容(`KeepAlive` True -> False) / CLI 退出码(`return 2` -> `return 1`), 字节恒等还原后 44 passed 复绿(脚本 `H:/Temp/gtm-s5-redverify.py`: 全程 bytes 层、锚点 count==1 兜底、解释器钉死 venv 绝对路径、突变前先跑无变异基线、子进程 90s 超时且接住 `TimeoutExpired`、apply 后 `ast.parse` 自检、收尾先还原再复跑)。③真机冒烟(Windows, 见下)全 PASS。
+
+**真机冒烟(降级形态 —— 环境拦截)**: 本会话命令安全策略把 `schtasks.exe` 列入 Program Blacklist(报错第一层是 `PermissionError: [WinError 5]` 落在 `CreateProcess` 上, 真判据是 stderr 的 `PROGRAM BLOCKED BY SECURITY POLICY ... cannot be approved or bypassed`, 且明令禁止换壳重试)⇒ **计划任务真注册 + 登录自起这一段真机未跑**。改为验证「除 schtasks 调用之外」的全部真机事实(脚本 `H:/Temp/gtm-s5-smoke.py`, 临时 data_dir + 空闲端口, 全程后清理): ①`build_installer` 真路径给出注册项(平台=windows / 任务名 gtm-autostart / 解释器=工具 venv python)与 TR 字符串; ②该 TR 字符串经 `cmd.exe` 真跑(等价计划任务拉起命令行解析)-> `monitor.token` 生成 -> `GET /status` 200 且可解析、回显 dat 路径落在临时目录、`history_traffic.dat` + `state.json` 落盘; ③无 token 请求 401; ④`taskkill` 按锁 meta PID 停进程后端口释放、临时目录清理 —— 全部 PASS。缺口明写进计划 §04 S5 行与基线切片, **不静默当验过**; 解锁路径 = 用户从 Security Center -> Command Security -> Program Blacklist 移除该项后重跑, 或用户在自己终端手动跑 `gtm install-autostart`(用户终端不经本会话策略)。新坑档 `pitfalls/ops/session-program-blacklist.md`(含「WinError 5 双重误导」判别: 有 `PROGRAM BLOCKED` 行 = 策略拦截, 无则回 `platform-fs.md` 的原子写/句柄族)。
+
+**顺序注记**: 计划 §06 记「S5(自启)依赖 S6 的开关入口」; 本轮按用户显式授权先落 S5 —— 命令面独立可用、真机可跑, S6 落地后由设置页开关消费它, 不构成依赖倒挂。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1109, 状态行 S0–S5, §04 R0 增 S5 行, 脚注补 S5 与降级冒烟说明) · 本档案 R6 · activeContext 切片 R6 · 工具 README「自启 (S5)」节 / `__init__` 进度注记 · 新坑档 `pitfalls/ops/session-program-blacklist.md` + `kb.index` 重建 · 基线切片 `baselines/26-10-16-1109-global-traffic-monitor-s5.md`。未提交(待用户「提交」指令)。
+
+**行号基准**: S5 为纯新目录内文件(工具包), 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
 
