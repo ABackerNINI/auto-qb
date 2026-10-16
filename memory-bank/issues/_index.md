@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 8 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔)](26-10-16-1523-bug-ship-commit-omitted-note.html) — commit.py 的子…
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 ag…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…

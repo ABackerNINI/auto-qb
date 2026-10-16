@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="ship-commit-omitted-note">
+<meta name="issue-stamp" content="26-10-16-1523">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="ship-commit-omitted-note">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔)">
+<meta name="issue-summary" content="commit.py 的子集模式只限制 git add 清单, git commit 提交的是整个索引 —— 脚本却把未传路径打印成「未纳入, 确认这是有意的」。实测 2026-10-16: 该提示列了 10 个 .zcode-tmp 撤跟踪项, 它们实际都在同一笔提交里(远端=本地一致), 读者(尤其是 agent)易据此以为要再补一笔或以为撤跟踪没生效">
+<title>ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔)</h1>
+    <p class="lede">commit.py 的子集模式只限制 git add 清单, git commit 提交的是整个索引 —— 脚本却把未传路径打印成「未纳入, 确认这是有意的」。实测 2026-10-16: 该提示列了 10 个 .zcode-tmp 撤跟踪项, 它们实际都在同一笔提交里(远端=本地一致), 读者(尤其是 agent)易据此以为要再补一笔或以为撤跟踪没生效</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-1523-bug-ship-commit-omitted-note</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 15:23</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-10-16 收尾一笔仓库卫生变更时撞见: 该笔要把 <code>.zwork/</code> 与 <code>.zcode-tmp/</code> 补进 <code>.gitignore</code> 并撤出 10 个已入库的临时证据(属既有档 <code>pitfalls/git/ship-commit-staged-delete.md</code> 的「变体」所述形态: 忽略规则一生效, 被撤路径对 <code>git add</code> 不再是合法目标)。于是按那一档的处方走**子集提交**: <code>commands run ship.commit -- .gitignore &lt;两份记忆文件&gt;</code>。</p>
+    <p>脚本末行打印: <code>…(子集提交: 另有 10 个改动未纳入(.zcode-tmp/a-04-all.png、… ) —— 确认这是有意的)</code> —— 字面意思是「这 10 个没进本笔」。实际相反: 紧接着的 <code>git show --stat HEAD</code> 里 10 条 <code>Bin … -&gt; 0 bytes</code> 删除项都在, 推完后远端与本地也一致(见 §02)。<strong>触发条件</strong>: 任何子集提交, 且工作区里还有**已暂存**的、未传给脚本的其他改动 —— 此时提示与「实际提交内容」恰好相反。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">原文照贴, 取证时间 2026-10-16 15:0x~15:2x(本机, 仓库根)。</p>
+<pre><code># ① 子集提交的末尾输出(2026-10-16 15:0x)
+[ok] ship.commit (18.3s)
+  …(子集提交: 另有 10 个改动未纳入(.zcode-tmp/a-04-all.png、.zcode-tmp/a-04-err.png、.zcode-tmp/a-04-ok.png…) —— 确认这是有意的)
+  提交成功 0b98a1fd
+
+# ② 同一笔的真实内容(同上) —— 提示里的 10 项全在
+$ git show --stat --oneline HEAD
+0b98a1fd 🙈 补 .gitignore 忽略平台工作目录 + 撤出误入库的临时证据
+ .gitignore                                         |   6 ++
+ .zcode-tmp/a-04-all.png                            | Bin 7153 -&gt; 0 bytes
+ .zcode-tmp/a-04-err.png                            | Bin 4695 -&gt; 0 bytes
+ .zcode-tmp/a-04-ok.png                             | Bin 4725 -&gt; 0 bytes
+ …(另 7 个同类删除项)
+
+# ③ 跟踪面与远端复核(15:2x) —— 撤跟踪确实生效
+$ git ls-files .zcode-tmp .zwork
+(空)
+$ git ls-remote origin develop
+0b98a1fdccd50bd534666afc5cf74ef45c431df6	refs/heads/develop
+$ git status --porcelain
+(空)</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>子集提交(<code>ship.commit -- &lt;paths&gt;</code>)且存在「已暂存但未传参」的其他改动时必现 —— 计数与列表都按「未传参」算, 与「是否进了本笔」无关。</td></tr>
+      <tr><td>影响范围</td><td>只影响**提示可读性**, 提交内容与推送结果都是对的(本件实测: 删除项已落笔并推到位)。但会直接误导操作者: 以为「要再补一笔」或「撤跟踪没生效」(本轮确实为此多做了排查); 反向风险也存在 —— 即将某个**真正未暂存**的改动读成「已进提交」。</td></tr>
+      <tr><td>严重度</td><td>低(无数据 / 正确性损失)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号名 + grep 关键词 + 当时的行号（标取证时间）—— 代码会漂移，靠符号与 grep 重新定位。</p>
+    <ul>
+      <li><code>.commands/my-commit-flow/scripts/commit.py:245-247</code>(取证 2026-10-16 15:23)· <code>omitted</code> 的计算与那行 <code>print(&quot;…(子集提交: 另有 …&quot;)</code> · grep 关键词 <code>子集提交</code> / <code>omitted</code></li>
+      <li><code>.commands/my-commit-flow/scripts/commit.py:227-237</code>(同上)· 逐路径暂存三分支(工作区存在 -&gt; <code>git add</code>; 索引有而工作区无 -&gt; <code>git rm --cached</code>; 都不在 -&gt; 跳过) —— 删除项一旦「跳过」, 它仍在索引里, 因而会随 <code>git commit</code> 落进同一笔。</li>
+      <li>同族既有记录: <code>memory-bank/pitfalls/git/ship-commit-staged-delete.md</code>(「变体」节已写「那个 <code>D </code> 删除条目不用 add, 会随 git commit 落进同一笔」)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p>机制已定位(读源 + 实测核对, 非推测): 子集模式只把**传入路径**放进 <code>to_stage</code> 去逐路径 <code>git add</code>, 而 <code>omitted</code> 是「相对全部改动」算出来的清单 —— 两者都不等于「提交面」: 该笔的 <code>git commit</code> 提交的是**整个索引**, 所以已暂存的其他改动照样落笔。提示文案「未纳入 …… 确认这是有意的」描述的是「未参与 add」, 却读起来像「未进本笔」。</p>
+    <p class="hint">已排除: ①不是 add 失败 / 被忽略路径导致的静默跳过 —— 该笔里删除项确实进了提交(§02 ②); ②不是推送环节补写 —— <code>git show --stat HEAD</code> 在推送前就已包含它们; ③与 <code>--no-push</code> / 网线无关。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">只给方向与代价, 不在本报告里实施。</p>
+    <p><strong>方向 A(最小, 推荐先评估)</strong>: 把措辞与语义对齐 —— 打印前按索引状态把 <code>omitted</code> 分成两组: 「已暂存(仍会随整索引进本笔)」与「未暂存(不会进本笔)」, 各自给计数与示例; 或直接把那句改成「未参与 add(其中已暂存的仍会在本笔里)」。代价: 改一段打印逻辑, 不动提交行为。</p>
+    <p><strong>方向 B(更彻底, 代价高)</strong>: 子集模式改成**真正路径限定的提交**(<code>git commit -- &lt;paths&gt;</code> / <code>--only</code>), 让提示与行为天然一致。代价: 会推翻「已暂存删除项随整索引落笔」这一既有便利(该行为已被坑档与实测依赖: 忽略规则生效后没法再 <code>git add</code> 那条路径, 只能靠整索引带走), 改前须逐条评估影响。</p>
+    <p>取舍建议: 现状不影响正确性 —— 选 A 即可; 若维护者想要「提示=行为」的强一致, 再议 B。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 15:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-16-1523-bug-ship-commit-omitted-note.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
