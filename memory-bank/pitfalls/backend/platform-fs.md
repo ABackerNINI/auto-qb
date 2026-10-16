@@ -1,7 +1,7 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 退避重试, taskkill, MSYS pid
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
 
@@ -114,10 +114,21 @@
   `FILE_SHARE_DELETE`); ②**读侧** —— replace 事务窗口内, 读者的 `open()` 被瞬时
   拒绝。两者都是开-读-关的微秒~毫秒级窗口, **不是持久故障**。
 - **处置**: 写侧把 `os.replace` 包进退避重试 (仅 PermissionError, 5 次 × 50ms;
-  耗尽抛错, 由调用方在下一节流轮容错), 单点见
-  `tools/global-traffic-monitor/src/gtm/storage.py::_replace_retry`; 读侧打开失败
-  **重试**, 不要当内容损坏 —— 看不到内容 ≠ 看到半截内容。POSIX 上 replace 不受
+  耗尽抛错, 由调用方在下一周期容错) —— **两个独立单点、常量必须同值**: gtm 工具
+  `tools/global-traffic-monitor/src/gtm/storage.py::_replace_retry` 与主仓
+  `src/auto_qb/infra/utils.py::_replace_retry`(主仓这层 2026-10-16 复发后补齐, 见下「复发」)。
+  读侧打开失败**重试**, 不要当内容损坏 —— 看不到内容 ≠ 看到半截内容, **也 ≠ 读到空表**:
+  主仓 HR 注册表 `hr/discovery.py::_read_registry_text` 重试耗尽按「读不到」返回 `None`
+  (upsert 本轮不写, 免得把别家实例条目静默抹掉; 只读面当空列表)。POSIX 上 replace 不受
   读者影响, 不触发重试。
+- **复发 +1 (2026-10-16, 主仓单点)**: 用户实报 HR 心跳 `PermissionError: [WinError 5] ...:
+  'instances.json.o7e7o6ed.tmp' -> 'instances.json'` —— 本坑当天已在 gtm 侧记档并实现重试,
+  但**主仓 `infra/utils.atomic_write` 没同步这层**, 同一根因换到 HR 心跳的写侧又打了一次
+  (单次、下一周期自愈; 切片 `activeContext/26-10-16-0935-atomic-write-replace-retry.md`)。
+  **为什么没命中**: 处置当初被写成「某个实现的指针」(gtm 的工具内函数), 而不是「必须全覆盖的
+  模式」—— 记了没做的是「主仓同一模式还有哪些写点」这一步, 属「读了没照做」。
+  **下沉**: 重试进了主仓 `atomic_write` 单点(所有原子写受益, 含 state.json), 守阵 3 条
+  (`test_utils`)+ 读侧分档 2 条(`test_hr_discovery`)。
 
 ### Git Bash 两个会骗人的环境事实 (MSYS pid / grep 行尾计数)
 

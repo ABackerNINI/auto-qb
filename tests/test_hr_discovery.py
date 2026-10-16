@@ -2,7 +2,9 @@
 
 分四层:
 1. 候选表与注册表(纯逻辑/文件): 连号候选与 65535 截断 / upsert+TTL 过滤 / 写路径剪枝超龄条目
-   (死实例不永久堆积, 边界与 alive 同判据) / 缺文件与坏文件容忍 / 测试期路径隔离守阵
+   (死实例不永久堆积, 边界与 alive 同判据) / 缺文件与坏文件容忍 / **读侧瞬时拒绝**(退避重试
+   成功; 重试耗尽 = 「读不到 ≠ 空表」: upsert 本轮不写以免覆盖别家条目, alive 当空列表) /
+   测试期路径隔离守阵
    (runtime 的注册表路径必须被 conftest 重定向到临时目录, 不许写用户真实 app-data);
 2. 发现路由(纯逻辑): origin 门 403 / OPTIONS / 404 / 配对三门(缺=pairing_required,
    错=pairing_invalid, 对=200+no-store) / auto 生效分叉(回环免码, 非回环强制) / 凭证等价形态 /
@@ -17,9 +19,11 @@
 真绑定用例一律用**动态空闲端口**当候选表基底 —— 全量并行(-n 8)下固定 18788 会被其它
 worker 的同族用例占住, 候选轮换是特性而非碰撞。
 """
+import builtins
 import json
 import logging
 import os
+import pytest
 import re
 import socket
 import time
@@ -29,6 +33,7 @@ from auto_qb.hr.discovery import (
     API_DISCOVER,
     PAIRING_HEADER,
     INSTANCE_TTL_S,
+    REGISTRY_READ_ATTEMPTS,
     HrDiscoveryServer,
     InstanceRegistry,
     default_registry_path,
@@ -48,6 +53,34 @@ def _free_port() -> int:
     port = sock.getsockname()[1]
     sock.close()
     return port
+
+
+def _simulate_read_denial(monkeypatch, path, *, times=None):
+    """把对 `path` 的 `open()` 前 `times` 次(默认无限次)伪造成 Windows 的瞬时拒绝(WinError 5)
+
+    复现读侧的竞态: 写者的替换事务窗口内, 读者的 `open()` 被瞬时拒绝(Python 的 open 不含
+    FILE_SHARE_DELETE)。只拦**目标文件**、且只拦 `builtins.open`(discovery 的读取走的正是它) ——
+    其余路径与 `Path.read_text`(走 io.open)原样放行, 断言侧读文件因此不受影响。返回逐次记下的
+    拒绝列表(供断言重试次数), 并把退避 sleep 置空(不真等)。
+    """
+    real_open = builtins.open
+    target = os.path.abspath(str(path))
+    denials = []
+    left = {"n": times}
+
+    def denied(file, *args, **kwargs):
+        if os.path.abspath(str(file)) == target and (left["n"] is None or left["n"] > 0):
+            if left["n"] is not None:
+                left["n"] -= 1
+            denials.append(str(file))
+            raise PermissionError(13, "拒绝访问", str(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", denied)
+    import auto_qb.hr.discovery as discovery_mod
+
+    monkeypatch.setattr(discovery_mod.time, "sleep", lambda _s: None)
+    return denials
 
 
 def _hold_ports(ports):
@@ -125,6 +158,40 @@ def test_registry_tolerates_missing_and_corrupt(tmp_path):
     reg.upsert(entry_id="a" * 12, name="n", endpoint="http://x:1", token="k", ts=1.0)
     data = json.loads((tmp_path / "none.json").read_text(encoding="utf-8"))
     assert [e["id"] for e in data] == ["a" * 12]
+
+
+def test_registry_read_transient_denial_is_not_empty_table(tmp_path, monkeypatch):
+    """读侧瞬时拒绝(重试耗尽)按「**读不到**」处理 —— 绝不等于「空表」
+
+    坑档 platform-fs「Windows 原子写与并发读者的双向瞬时拒绝」要求读侧失败要重试, 不要当内容
+    损坏; 本用例钉住更进一步的一条: 重试耗尽后仍读不到时, upsert **本轮不写** —— 拿不到别家
+    条目却写回只含自己的表, 等于静默抹掉其它实例(要等对端 30s 心跳才回来)。只读面(alive)当空
+    列表, 一次空响应比中断发现安全(2026-10-16 心跳实报的同族写侧失败)。
+    """
+    p = tmp_path / "instances.json"
+    reg = InstanceRegistry(str(p))
+    now = 1000.0
+    reg.upsert(entry_id="other" * 4, name="other", endpoint="http://127.0.0.1:1", token="k1", ts=now)
+    before = p.read_text(encoding="utf-8")
+
+    denials = _simulate_read_denial(monkeypatch, p)
+    with pytest.raises(RuntimeError):
+        reg.upsert(entry_id="self" * 3, name="self", endpoint="http://127.0.0.1:2", token="k2", ts=now)
+    assert len(denials) == REGISTRY_READ_ATTEMPTS, "读被拒必须退避重试(次数按单点常量)"
+    assert p.read_text(encoding="utf-8") == before, "读不到时绝不写回(否则抹掉别家条目)"
+    assert reg.alive(ttl=INSTANCE_TTL_S, now=now) == [], "只读面当空列表, 不抛错"
+
+
+def test_registry_read_retries_transient_denial(tmp_path, monkeypatch):
+    """读侧退避重试: 首次被拒(写者正持目标文件)后重试成功, 不误判为损坏/空表"""
+    p = tmp_path / "instances.json"
+    reg = InstanceRegistry(str(p))
+    now = 1000.0
+    reg.upsert(entry_id="a" * 12, name="one", endpoint="http://127.0.0.1:1", token="k1", ts=now)
+
+    denials = _simulate_read_denial(monkeypatch, p, times=1)
+    assert [e["id"] for e in reg.alive(ttl=INSTANCE_TTL_S, now=now)] == ["a" * 12], "退避重试后照常读到"
+    assert len(denials) == 1, "只被拒一次, 第二次必须真的读"
 
 
 def test_default_registry_path_platform_shape():

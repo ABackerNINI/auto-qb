@@ -53,6 +53,11 @@ REGISTRY_FILENAME = "instances.json"
 #: 心跳间隔 / 条目 TTL(C1): 发现失败有手动退路, 不需要更激进的 TTL
 HEARTBEAT_INTERVAL_S = 30.0
 INSTANCE_TTL_S = 120.0
+#: 注册表**读取**的退避重试: 读者与写者(含别的进程)在 Windows 上会互相瞬时拒绝, 而「读不到」
+#: 必须与「内容损坏」「空表」分开对待(坑档 pitfalls/backend/platform-fs「Windows 原子写与
+#: 并发读者的双向瞬时拒绝」; 2026-10-16 心跳实报)。数字与 utils.REPLACE_RETRY_* 同口径。
+REGISTRY_READ_ATTEMPTS = 5
+REGISTRY_READ_RETRY_DELAY_S = 0.05
 #: 绑定失败的后台重试退避(C8): 60s 起步、上限 10 分钟; 接管延迟 <= 一个间隔, 可接受
 RETRY_MIN_S = 60.0
 RETRY_MAX_S = 600.0
@@ -100,6 +105,29 @@ def _entry_fresh(entry: Dict[str, Any], *, now: float, ttl: float) -> bool:
         return False
 
 
+def _read_registry_text(path: str) -> str:
+    """读注册表**原文**: 打开被瞬时拒绝时退避重试, 重试耗尽才把原异常抛给调用方
+
+    !为什么单独一层: Windows 的替换事务窗口内, 读者的 `open()` 会被瞬时拒绝(`WinError 5/32`),
+    而 `open()` 失败既不是「内容损坏」也不是「空表」—— 坑档 `pitfalls/backend/platform-fs.md`
+    的处置是**读侧也要重试**, 「看不到内容 ≠ 看到半截内容」。缺文件(`FileNotFoundError`)不重试:
+    它是有明确语义的稳定状态。POSIX 上不会触发。
+    """
+    last: Optional[OSError] = None
+    for attempt in range(REGISTRY_READ_ATTEMPTS):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            raise
+        except PermissionError as e:
+            last = e
+            if attempt < REGISTRY_READ_ATTEMPTS - 1:
+                time.sleep(REGISTRY_READ_RETRY_DELAY_S)
+    assert last is not None
+    raise last
+
+
 class InstanceRegistry:
     """本机实例注册表(跨进程共享文件): 心跳 upsert + TTL 过滤聚合(S2 ①)
 
@@ -122,27 +150,52 @@ class InstanceRegistry:
         !顺手剪掉超龄条目 —— 写路径是**唯一**的写入口, 剪枝放这里最省(有活实例心跳就一定有
         剪枝; 全死时文件留着也无害, 没人读它)。只读时过滤(alive)不够: 那样死实例只是
         「看不见」, 文件仍无界增长, 且每次心跳都要整份读 + 整份写。
-        剪枝基准 = 本次 upsert 的 ts(生产所有写者都用 time.time())。
+        剪枝基准 = 本次 upsert 的 ts(生产所有写者都用 time.time()); 读不到(读侧瞬时拒绝且重试
+        耗尽)时**本轮不写**并抛 RuntimeError —— 拿不到别家条目却写回只含自己的表, 等于静默抹掉
+        其它实例(只靠对端 30s 心跳才回来); 心跳线程容错为「下一周期重试」, 与写侧一致。
         """
         with self._lock:
-            entries = [e for e in self._load() if e.get("id") != entry_id and _entry_fresh(e, now=ts, ttl=ttl)]
+            loaded = self._load()
+            if loaded is None:
+                raise RuntimeError(
+                    f"HR 实例注册表当前读不到(瞬时拒绝, 已退避重试 {REGISTRY_READ_ATTEMPTS} 次), "
+                    f"本轮不写以免覆盖其它实例条目: {self.path}"
+                )
+            entries = [e for e in loaded if e.get("id") != entry_id and _entry_fresh(e, now=ts, ttl=ttl)]
             entries.append({"id": entry_id, "name": name, "endpoint": endpoint, "token": token, "ts": ts})
             self._save(entries)
 
     def alive(self, *, ttl: float, now: float) -> List[Dict[str, Any]]:
-        """TTL 过滤后的存活实例(缺 endpoint / 缺 token 的残条目一并剔除, 不给扩展半条)"""
+        """TTL 过滤后的存活实例(缺 endpoint / 缺 token 的残条目一并剔除, 不给扩展半条)
+
+        读不到(瞬时拒绝且重试耗尽)时当**空列表**: 只读面, 一次空响应比中断发现安全 ——
+        扩展下一轮再问即可(S2 ③「发现不可用不影响数据端点」)。
+        """
         with self._lock:
-            entries = self._load()
+            entries = self._load() or []
         return [e for e in entries if _entry_fresh(e, now=now, ttl=ttl) and e.get("endpoint") and e.get("token")]
 
-    def _load(self) -> List[Dict[str, Any]]:
-        """读注册表(容忍: 缺文件 / 坏 JSON / 非列表 ⇒ 空表, 不抛 —— R5; 下次心跳自愈)"""
+    def _load(self) -> Optional[List[Dict[str, Any]]]:
+        """读注册表; `None` = **读不到**(与"空表"两件事), 其余容忍口径不变
+
+        - 缺文件 → `[]`;坏 JSON / 非列表 → WARNING + `[]`(R5: 注册表是尽力而为的发现面,
+          任何损坏都不该打断数据端点, 下次心跳写回合法内容即自愈);
+        - **瞬时拒绝**(`PermissionError`, 退避重试耗尽)→ `None`: 看不到内容 ≠ 看到坏内容,
+          调用方按"不知道别家有什么"处理(upsert 本轮不写, alive 当空列表)。
+        """
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            text = _read_registry_text(self.path)
         except FileNotFoundError:
             return []
-        except (OSError, ValueError):
+        except PermissionError as e:
+            logger.warning(f"HR 实例注册表读取被瞬时拒绝(退避重试耗尽), 本轮按读不到处理: {self.path} ({e})")
+            return None
+        except OSError as e:
+            logger.warning(f"HR 实例注册表无法读取, 按空表处理(下次心跳自愈): {self.path} ({e})")
+            return []
+        try:
+            data = json.loads(text)
+        except ValueError:
             logger.warning(f"HR 实例注册表无法解析, 按空表处理(下次心跳自愈): {self.path}")
             return []
         if not isinstance(data, list):

@@ -34,6 +34,12 @@ BACKUP_SUFFIX = ".bak"
 # atomic_write 的临时文件后缀(写侧与启动清理侧共用同一常量, 理由同 BACKUP_SUFFIX)
 TMP_SUFFIX = ".tmp"
 
+# os.replace 的退避重试(仅 PermissionError; 理由见 _replace_retry 与 pitfalls/backend/platform-fs
+# 「Windows 原子写与并发读者的双向瞬时拒绝」)。数字与 tools/global-traffic-monitor 的
+# storage._replace_retry 一致(5 次 × 50ms): 该窗口是开-读-关的微秒~毫秒级, 不是持久故障。
+REPLACE_RETRY_ATTEMPTS = 5
+REPLACE_RETRY_DELAY_S = 0.05
+
 # 匹配语法常量(用户配置的统一匹配语法, 解析唯一入口见 MatchPattern)
 REGEX_PREFIX = "regex:"
 IGNORE_CASE_SUFFIX = ":ignore_case"
@@ -62,12 +68,44 @@ def time_in_range(now: dtime, spec: str) -> bool:
     return now >= t_start or now <= t_end  # 跨午夜: 不在 start-24:00 即在 00:00-end
 
 
+def _replace_retry(tmp_path: str, path: str) -> None:
+    """`os.replace` 的退避重试(仅 PermissionError; 其它 OSError 原样抛)
+
+    !Windows 上目标文件被**任何**不含 `FILE_SHARE_DELETE` 的句柄持着时, `MoveFileEx` 拒绝替换
+    并抛 WinError 5(Python 的 `open()` 正是这种句柄) —— 这类持有时长是「开-读-关」的微秒~毫秒
+    窗口, 重试即可穿过; 对手是杀软/索引器/另一进程时同理。2026-10-16 用户实报 HR 注册表心跳
+    一次性失败(`instances.json.o7e7o6ed.tmp` -> `instances.json`)即此坑的写侧; 坑档与同款实现在
+    `memory-bank/pitfalls/backend/platform-fs.md` /
+    `tools/global-traffic-monitor/src/gtm/storage.py::_replace_retry`(工具独立, 不 import 本模块,
+    两处常量必须同值)。
+
+    只对 PermissionError 重试: 磁盘满 / 路径非法 / 被杀软持续锁死重试都不解决, 早抛给调用方。
+    POSIX 上 replace 不受读者影响, 本函数不会触发(合法权限错误会被重试 5 次, 是唯一的代价)。
+    """
+    last: Optional[OSError] = None
+    for attempt in range(REPLACE_RETRY_ATTEMPTS):
+        try:
+            os.replace(tmp_path, path)
+            return
+        except PermissionError as e:
+            last = e
+            if attempt < REPLACE_RETRY_ATTEMPTS - 1:
+                time.sleep(REPLACE_RETRY_DELAY_S)
+    assert last is not None
+    raise last
+
+
 def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
     """原子写盘: 同目录临时文件 -> fsync -> os.replace(Windows 上为原子替换)
 
     直接 `open(path, "w")` 会先 truncate 旧文件: 写盘途中被杀 / 磁盘满 / 序列化抛异常都会留下
     **半截文件**, 而 state.json 无备份 ⇒ 执行历史与去重记录全丢(规则重放)。本函数保证
     目标路径要么完全是旧内容, 要么完全是新内容。
+
+    最后的换名走 `_replace_retry`(仅 PermissionError 退避重试): Windows 上并发读者/杀软/另一
+    进程的瞬时句柄会让 `os.replace` 抛 WinError 5, 那是毫秒级窗口而非持久故障 —— 见坑档
+    `pitfalls/backend/platform-fs.md`「Windows 原子写与并发读者的双向瞬时拒绝」(2026-10-16
+    HR 心跳实报)。重试耗尽仍抛, 由调用方决定容错口径(如心跳下一周期重试)。
 
     keep_backup=True 时先把当前文件复制为 `<path>.bak`(仅在写盘前存在旧文件时), 用于
     兜住"新内容本身是错的"这类非截断型损坏。临时文件与失败清理都由本函数负责。
@@ -93,7 +131,7 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
             write_fn(f)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        _replace_retry(tmp_path, path)
     except BaseException:
         if os.path.exists(tmp_path):  # os.replace 已成功时临时文件不存在, 不该再删
             try:

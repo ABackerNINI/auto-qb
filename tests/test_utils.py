@@ -36,6 +36,9 @@
 - test_atomic_write_creates_file: 原子写生成目标文件且不残留临时文件
 - test_atomic_write_rejects_empty_path: 空路径直接 ValueError(否则临时文件落到 CWD 的父目录)
 - test_atomic_write_failure_keeps_old_content: 写盘回调抛异常时旧内容不变(直写 open("w") 会先 truncate 成半截文件), 临时文件被清理
+- test_atomic_write_replace_retries_transient_denial: 换名被瞬时拒绝(WinError 5, 读者/杀软持句柄)时退避重试可穿过, 到成功即止
+- test_atomic_write_replace_retry_exhausted_raises_and_keeps_old: 重试耗尽仍抛不吞(次数按单点常量), 旧内容完好 + 临时文件清理
+- test_atomic_write_replace_only_retries_permission_error: 只重试 PermissionError, 其它 OSError(磁盘满)一次即抛不白等
 - test_atomic_write_keep_backup: keep_backup=True 写盘前复制 .bak; 无旧文件时不凭空造备份
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
 - test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
@@ -1178,6 +1181,67 @@ def test_atomic_write_failure_keeps_old_content(tmp_path):
         atomic_write(str(p), _boom)
     assert p.read_text(encoding="utf-8") == "OLD", "失败时旧内容必须完好"
     assert sorted(c.name for c in tmp_path.iterdir()) == ["state.json"], "失败的临时文件必须清理"
+
+
+def test_atomic_write_replace_retries_transient_denial(tmp_path, monkeypatch):
+    """换名被**瞬时拒绝**时退避重试 —— Windows 上读者持目标文件即抛 WinError 5
+
+    坑档 `pitfalls/backend/platform-fs.md`「Windows 原子写与并发读者的双向瞬时拒绝」: 读者
+    (含杀软/索引器/另一进程)开-读-关的微秒~毫秒窗口内 `MoveFileEx` 拒绝替换, 不是持久故障。
+    2026-10-16 用户实报 HR 实例注册表心跳一次性失败(`instances.json.o7e7o6ed.tmp` ->
+    `instances.json`)即此坑的写侧 —— 主仓当时的 `atomic_write` 没有这层重试(gtm 工具侧已有)。
+    """
+    attempts = []
+    real_replace = os.replace
+
+    def flaky_replace(src, dst):
+        attempts.append(1)
+        if len(attempts) <= 2:
+            raise PermissionError(13, "拒绝访问", dst)
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(utils.os, "replace", flaky_replace)
+    monkeypatch.setattr(utils.time, "sleep", lambda _s: None)  # 不真等退避
+
+    p = tmp_path / "state.json"
+    utils.atomic_write(str(p), lambda f: f.write("NEW"))
+    assert p.read_text(encoding="utf-8") == "NEW", "两次被拒后第三次必须落地"
+    assert len(attempts) == 3, "重试到成功即止(不白跑满次数)"
+
+
+def test_atomic_write_replace_retry_exhausted_raises_and_keeps_old(tmp_path, monkeypatch):
+    """重试耗尽仍抛 PermissionError(不吞)、旧内容不变、临时文件清理 —— 容错口径留给调用方"""
+    attempts = []
+
+    def always_denied(src, dst):
+        attempts.append(1)
+        raise PermissionError(13, "拒绝访问", dst)
+
+    monkeypatch.setattr(utils.os, "replace", always_denied)
+    monkeypatch.setattr(utils.time, "sleep", lambda _s: None)
+
+    p = tmp_path / "state.json"
+    p.write_text("OLD", encoding="utf-8")
+    with pytest.raises(PermissionError):
+        utils.atomic_write(str(p), lambda f: f.write("NEW"))
+    assert len(attempts) == utils.REPLACE_RETRY_ATTEMPTS, "重试次数按单点常量(改常量即改行为)"
+    assert p.read_text(encoding="utf-8") == "OLD", "失败时旧内容必须完好(半截文件是原子写存在的全部理由)"
+    assert sorted(c.name for c in tmp_path.iterdir()) == ["state.json"], "耗尽后临时文件必须清理"
+
+
+def test_atomic_write_replace_only_retries_permission_error(tmp_path, monkeypatch):
+    """只重试 PermissionError: 其它 OSError(磁盘满/路径非法)重试不解决, 一次即抛(不白等 250ms)"""
+    attempts = []
+
+    def other_oserror(src, dst):
+        attempts.append(1)
+        raise OSError(28, "磁盘空间不足")
+
+    monkeypatch.setattr(utils.os, "replace", other_oserror)
+    monkeypatch.setattr(utils.time, "sleep", lambda _s: pytest.fail("非 PermissionError 不该退避"))
+    with pytest.raises(OSError):
+        utils.atomic_write(str(tmp_path / "state.json"), lambda f: f.write("x"))
+    assert len(attempts) == 1, "非瞬时错误必须早抛"
 
 
 def test_atomic_write_rejects_empty_path():
