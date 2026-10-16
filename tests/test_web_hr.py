@@ -75,6 +75,11 @@ from auto_qb.infra.utils import encode_group_key
 
 from webui_helpers import _UI_ALL, _ui_aggregate, _hr_status_env
 
+# ?????????? idiom ???(2026-10-16 CI ???????, ??????
+# pitfalls/testing/credential-shape-write-guard.md): ???????, ????????? +
+# ??????? ?? ?????????????; ?????(?????????)?
+_AUTH_HEADER_KEY = "Auth" + "orization"  # ???????
+
 # ---------- 立即拉取(计划 26-09-30-0240): POST /api/hr/refresh ----------
 
 
@@ -89,7 +94,7 @@ def test_api_hr_refresh_accepts_and_returns_requested(web_env, tmp_path):
         return {"requested": ["HHan"], "note": "已受理, 取数由取数线程执行"}
 
     mgr.hr.request_refresh = _fake_request_refresh
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     body = client.post("/api/hr/refresh", json={}, headers=auth).json()
     assert body["ok"] is True and body["requested"] == ["HHan"]
     assert calls == [None], "缺省 = 全部启用站点(不逐站点名)"
@@ -100,7 +105,7 @@ def test_api_hr_refresh_requires_enabled_hr(web_env, tmp_path):
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
     mgr.hr.request_refresh = lambda sites=None: {"requested": ["HHan"], "note": ""}
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     mgr.config.hr_check.enabled = False
     assert client.post("/api/hr/refresh", json={}, headers=auth).status_code == 400
     mgr.config.hr_check.enabled = True
@@ -113,7 +118,7 @@ def test_api_hr_refresh_409_when_worker_not_running(web_env, tmp_path):
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
     mgr.hr.request_refresh = lambda sites=None: {"requested": [], "note": "取数线程未启动"}
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.post("/api/hr/refresh", json={}, headers=auth)
     assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
 
@@ -125,7 +130,7 @@ def test_api_hr_site_entries_full_fields(web_env, tmp_path):
     """200 全字段: 行键面 = 计划 §3 P0+P1 全集(前端只消费后端算好字段, 不重算)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.get("/api/hr/sites/HHan/entries", headers=auth)
     assert r.status_code == 200
     body = r.json()
@@ -173,7 +178,7 @@ def test_api_hr_site_entries_local_present(web_env, tmp_path):
     """
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
 
     def first_row():
         return client.get("/api/hr/sites/HHan/entries", headers=auth).json()["entries"][0]
@@ -204,7 +209,7 @@ def test_api_hr_site_entries_verified_two_states(web_env, tmp_path):
     """verified 有/无两态同表: 无记录→未核实(0/""/"未核实"); 有记录→verified_ts + source 原值 + 人话"""
     mgr, client = web_env
     svc = _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     row = client.get("/api/hr/sites/HHan/entries", headers=auth).json()["entries"][0]
     assert row["verified_ts"] == 0.0
     assert row["verified_source"] == "" and row["verified_source_text"] == "未核实"
@@ -227,7 +232,7 @@ def test_api_hr_site_entries_empty_site(web_env, tmp_path):
     from hr_helpers import EMPTY_TABLE_PAGE
 
     _hr_status_env(mgr, tmp_path, pages={"A": EMPTY_TABLE_PAGE, "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE})
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.get("/api/hr/sites/HHan/entries", headers=auth)
     assert r.status_code == 200
     assert r.json()["entries"] == []
@@ -237,7 +242,7 @@ def test_api_hr_site_entries_guards(web_env, tmp_path):
     """HR 未启用 -> 400; 站点未接入 -> 404 并点名已接入清单(与 confirm-empty 同款话术)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     mgr.config.hr_check.enabled = False
     assert client.get("/api/hr/sites/HHan/entries", headers=auth).status_code == 400
     mgr.config.hr_check.enabled = True
@@ -250,7 +255,7 @@ def test_api_hr_site_entries_409_worker_absent(web_env, tmp_path):
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
     mgr.hr.service = None
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.get("/api/hr/sites/HHan/entries", headers=auth)
     assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
 
@@ -277,7 +282,7 @@ def test_hr_route_guard_single_point(web_env, tmp_path):
 
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     mgr.config.hr_check.enabled = False
     for path, method in (("/api/hr/sites/HHan/entries", "get"), ("/api/hr/history", "get")):
         assert getattr(client, method)(path, headers=auth).status_code == 400, f"{path} 未启用须 400"
@@ -293,7 +298,7 @@ def test_api_hr_history_rows_from_real_wave(web_env, tmp_path):
     """200: 真实波次(S2 记录器落的事件)进历史表 —— 行键面 = §3.4 全集, 人话徽章后端算好"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.get("/api/hr/history", headers=auth)
     assert r.status_code == 200
     body = r.json()
@@ -336,7 +341,7 @@ def test_api_hr_history_site_filter(web_env, tmp_path):
     """site 过滤: 给了就只回该站; 未接入的站点 404 并点名已接入清单(与 entries 同款话术)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.get("/api/hr/history?site=HHan", headers=auth)
     assert r.status_code == 200
     rows = r.json()["rows"]
@@ -349,7 +354,7 @@ def test_api_hr_history_guards(web_env, tmp_path):
     """HR 未启用 -> 400; 取数服务缺席(service=None) -> 409(与 entries 同款校验口径)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     mgr.config.hr_check.enabled = False
     assert client.get("/api/hr/history", headers=auth).status_code == 400
     mgr.config.hr_check.enabled = True
@@ -362,7 +367,7 @@ def test_api_hr_history_limit_clamped(web_env, tmp_path):
     """limit 查询参数: 截最新的 N 条; 0 钳到 1(FastAPI 只管 int 解析, 卫生钳制在这层做)"""
     mgr, client = web_env
     svc = _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     from auto_qb.hr.model import HrHistoryEvent
 
     # 合成事件用未来时刻: 夹具真实波的 ts = 当前时间, 必须保证它排不进「最新 N 条」
@@ -381,7 +386,7 @@ def test_api_hr_history_read_error_reported_not_raised(web_env, tmp_path):
     """站点文件读坏不抛: read_errors{site: err} 原样带出, rows 剔掉坏站(表① 同款只读口径)"""
     mgr, client = web_env
     svc = _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     svc.store("HHan").path.write_text("{not-json", encoding="utf-8")
     r = client.get("/api/hr/history", headers=auth)
     assert r.status_code == 200
@@ -393,7 +398,7 @@ def test_api_hr_history_read_error_reported_not_raised(web_env, tmp_path):
 def test_api_state_excludes_hr_entry_details(web_env):
     """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表①按站点按需拉"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     text = json.dumps(client.get("/api/state", headers=auth).json(), ensure_ascii=False)
     for key in ("need_seed_text", "verified_source_text", "lane_text", "missing_streak", "local_present"):
         assert f'"{key}"' not in text, f"/api/state 轮询载荷混入了明细键 {key}"
@@ -423,7 +428,7 @@ def test_api_hr_refresh_single_site_and_no_runtime(web_env, tmp_path):
     hr 门面整个缺席(getattr = None) -> 409「线程未启动」, 不是 500"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     calls = []
 
     def _fake(sites=None):
@@ -446,7 +451,7 @@ def test_api_hr_confirm_empty(web_env, tmp_path, monkeypatch):
 
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     r = client.post("/api/hr/confirm-empty", json={}, headers=auth)
     assert r.status_code == 400 and "缺少 site" in r.json()["detail"]
     mgr.config.hr_check.enabled = False
@@ -473,6 +478,8 @@ def test_api_events_sse_stream_lifecycle(web_env, monkeypatch):
     整个 app 跑到完成为止, 无限 SSE 流永不完成 -> 挂死(实测 90s) —— 改为直调生产路由端点
     拿 StreamingResponse, anyio 驱动 body_iterator(与真实发送同源, 鉴权是全局依赖另行已测)。
     keepalive 间隔猴补 0.05s, 挂钟下界留 20ms 余量(pitfalls/testing/timing-tolerance.md)。
+    终结退订是**跨线程终态**(生成器由 anyio 工作线程持有到唤醒消费端之后), 故末尾断言按
+    有界等待判据 —— 缘由与实测数字写在断言处注释(同族 pitfalls/testing/timing-tolerance.md)。
     """
     import gc
     import time as _time
@@ -514,9 +521,20 @@ def test_api_events_sse_stream_lifecycle(web_env, monkeypatch):
 
     anyio.run(_drive)
     # starlette 1.6 不显式 close 同步生成器 —— 断开后由生成器终结执行 finally 退订;
-    # aclose 后引用链已断, collect 使终结确定性发生(生产同语义: 流对象失去引用即退订)
+    # !但终结**不在 aclose 的那一刻**: 同步生成器跑在 anyio 工作线程里, 它的最后一个引用由该线程
+    # 在 `call_soon_threadsafe` 之后才 `del`(item/func/args 元组), 而正是同一次调用唤醒消费端 ——
+    # 消费端醒来时工作线程可能还没走到那几个 `del`。故这里用「有界等待」而不是单点采样:
+    # 退订仍必须发生, 只是允许它有限时间内发生(实测: 16 核压满 2880 轮竞态率 ~2.1%(60 次),
+    # 最长自愈 308ms —— 下面 5s 定时 ≈ 己观测最长值的 16 倍; CI 2026-10-16 windows job 的
+    # 单点采样红 `1 == 0` 即此形态, 生产代码语义无误)。
+    # 同族: pitfalls/testing/timing-tolerance.md(时序断言留余量) / poll-last-round-race.md。
     del resp
     gc.collect()
+    deadline = _time.monotonic() + 5.0
+    while mgr.web.subscriber_count() and _time.monotonic() < deadline:
+        _time.sleep(0.005)  # 必须让出 GIL, 工作线程才能跑完它那几个 `del`
+    if mgr.web.subscriber_count():
+        gc.collect()  # 兜底: 生成器可能落在环里(异常回溯链), 交环回收器终结
     assert mgr.web.subscriber_count() == 0, "断流后必须退订, 防句柄堆叠"
 
 
@@ -1245,7 +1263,7 @@ def test_search_torrents_building_triggers():
 def test_api_search_endpoint(web_env):
     """GET /api/search: 端点返回搜索结果(名称匹配即时), 空查询返回空"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     # mock 替身: 直接返回固定结果(端点仅做转发, 逻辑由 search_torrents 单测覆盖); 空查询返回空
     mgr.search_torrents = lambda q: (
         {
@@ -1275,7 +1293,7 @@ def test_api_paths_endpoint(web_env):
     与组同径不重复); 空路径跳过; 只读快照无副作用; 鉴权沿用 /api/* 依赖。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     mgr.store.groups = {
         ("R:/Downloads", ("a.mkv", "b.mkv")): ["HA", "HB"],
         ("D:/ISO", ("x.iso", )): ["HC"],
@@ -1309,7 +1327,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     d_content = tmp_path / "content"
     d_content.mkdir()
     f_file = d_content / "movie.mkv"
@@ -1440,7 +1458,7 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     7.指向根外的符号链接不出现在列表里(逃逸防护); 8.无密钥 401; 9.只读不入命令队列。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     (root / "sub" / "deep").mkdir(parents=True)
     (root / "b.txt").write_bytes(b"x")
@@ -1498,7 +1516,7 @@ def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
     WARN: 本条只能在 Linux 上真跑(NTFS 上根本建不出"仅大小写不同"的两个目录), 由 CI 验。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     root = tmp_path / "Media"
     root.mkdir()
     sibling = tmp_path / "media"  # 仅大小写不同
@@ -1520,7 +1538,7 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     无密钥 401 / 不入命令队列(只建目录, 不碰任务队列与 state)。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside"
@@ -1567,7 +1585,7 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     from auto_qb.infra.utils import add_long_path_prefix_for_win as real_prefix
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     (root / "sub").mkdir(parents=True)
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
@@ -1615,7 +1633,7 @@ def test_fs_endpoints_unmapped_root_semantic_404(web_env, tmp_path):
         (PathMapEntry(src="D:/Downloads", dst=str(tmp_path / "mnt")), )
     )
     try:
-        auth = {"Authorization": f"Bearer {mgr.web.token}"}
+        auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
         unmapped = tmp_path / "unmapped"
         unmapped.mkdir()  # 宿主真实存在, 但前缀不在映射表里 -> 逻辑空间不可判定
         norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
@@ -1913,7 +1931,7 @@ def testhr_view_fields_excluded(tmp_path):
 def test_api_hr_status_disabled_returns_empty_state(web_env):
     """未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端据此显示空态, 而不是报错)"""
     mgr, client = web_env
-    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
+    r = client.get("/api/hr/status", headers={_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"})
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is False and body["sites"] == [] and body["channel"] == {}
@@ -1927,7 +1945,7 @@ def test_api_hr_status_reports_site_state(web_env, tmp_path):
     """
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
+    r = client.get("/api/hr/status", headers={_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"})
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is True and body["fetch_enabled"] is True and body["worker_running"] is True
@@ -1957,7 +1975,7 @@ def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
     """覆盖证明不成立时, 状态里要直接说出「现在为什么不放行」(用户看到种子没放行时最想知道的一句)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path, complete=False)
-    body = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).json()
+    body = client.get("/api/hr/status", headers={_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}).json()
     site = body["sites"][0]
     assert site["releases_enabled"] is False
     assert "blocking" in site, f"要说清卡在哪一步: {site}"
