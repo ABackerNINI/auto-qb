@@ -17,3 +17,8 @@
     指到仓内目录 —— 实测那样做会因沙箱拦子进程 unlink 而**多出 7 条无关失败**
     (atomic_write 残留 / lock meta 未删 / uninstaller 删除), 看着像回归实为沙箱拦截;
   ③要彻底消除, 把该测试用到的临时目录加进沙箱白名单(Settings → Permission & Approval)。
+
+- **复发**: 1 —— 2026-10-17 S13 再踩(同日, 同专题): 裸跑工具侧套件(未设 `TMPDIR`)后工具目录又留下
+  9 个随机名文件 + `pytest-of-11059/`, 提交前手工清理。**为什么没命中: 路由没到** —— 开工只读了
+  `AGENTS.md` 与 memory-bank skill, **未读 `pitfalls/testing/_index.md`**(AGENTS「改代码前先读 pitfalls 索引」
+  那条没照做); 且工具侧测试口径不在根 `test.*` 包内, 没有别的入口提示这条存在。

@@ -19,14 +19,14 @@ from gtm.config import (
 
 def test_defaults_match_plan_section_05() -> None:
     """默认值与计划 §05 参数表逐项一致 (sample 5s / flush 1MiB+30s / notify 100MiB /
-    8099 / lease 180s / heartbeat 60s / notify_timeout 3s / 适配器空列表)."""
+    http_port 0 随机 (S13/D9) / lease 180s / heartbeat 60s / notify_timeout 3s / 适配器空列表)."""
     c = Config()
     assert c.sample_interval == 5.0
     assert c.flush_delta_bytes == 1024 * 1024
     assert c.flush_interval_s == 30.0
     assert c.notify_threshold_bytes == 100 * 1024 * 1024
     assert c.http_host == "127.0.0.1"
-    assert c.http_port == 8099
+    assert c.http_port == 0
     assert c.lease_ttl_s == 180.0
     assert c.heartbeat_interval_s == 60.0
     assert c.notify_timeout_s == 3.0
@@ -98,8 +98,10 @@ def test_validate_non_positive_rejected() -> None:
 
 
 def test_validate_port_range() -> None:
-    assert validate_payload({"http_port": 0})[0] is None
+    """端口区间 0-65535: 0 合法 = 内核分配随机端口 (S13/D9); 负/超上限拒绝."""
+    assert validate_payload({"http_port": 0})[0] is not None  # 0 合法 (随机端口)
     assert validate_payload({"http_port": 65536})[0] is None
+    assert validate_payload({"http_port": -1})[0] is None
     assert validate_payload({"http_port": 8099})[0] is not None
 
 

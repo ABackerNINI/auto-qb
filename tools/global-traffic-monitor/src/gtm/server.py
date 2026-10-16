@@ -1,7 +1,7 @@
 """控制面: 本地 HTTP 服务 (S3 实现).
 
-stdlib ThreadingHTTPServer, 强制绑定 127.0.0.1 (端口默认 8099, 可配; 占用即
-fail-fast)。鉴权 Bearer token: 首次启动原子生成 monitor.token (临时文件 +
+stdlib ThreadingHTTPServer, 强制绑定 127.0.0.1 (端口默认 0 = 内核分配随机端口, 可配;
+占用即 fail-fast)。鉴权 Bearer token: 首次启动原子生成 monitor.token (临时文件 +
 重命名), 比对用 compare_digest (照 auto-qb auth.py 模式)。
 
 端点:
@@ -131,7 +131,7 @@ class ControlServer:
         token_manager: TokenManager,
         *,
         host: str = "127.0.0.1",
-        port: int = 8099,
+        port: int = 0,
         started_at: Optional[float] = None,
         installer_factory: Optional[Callable[[str], Any]] = None,
         endpoint_file: Optional[str] = None,

@@ -29,11 +29,11 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (gtm): run 主循环 (S2/S4) + install/uninstall-autostart (S5)
+  __main__.py   CLI 入口 (gtm): run 主循环 (S2/S4) + install/uninstall-autostart (S5) + endpoint (S13)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
-  server.py     本地控制面 127.0.0.1:8099 (S3)
+  server.py     本地控制面 127.0.0.1:<随机端口> (S3/S13)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启幂等注册/卸载 (S5)
 tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; test_installer.py S5; 随 S6-S9 逐步扩充)
@@ -43,6 +43,7 @@ tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage
 
 ```bash
 gtm run [--data-dir DIR]     # 前台采样-落盘主循环 + 控制面 (自启机制拉起的前台服务)
+gtm endpoint                 # 读发现指针打印当前端点 host:port / token_path / data_dir (S13)
 ```
 
 数据目录默认按平台 (`%LOCALAPPDATA%/gtm` · `~/Library/Application Support/gtm` ·
@@ -55,7 +56,8 @@ PUT /config 热重载 last-writer-wins) + `monitor.token`(控制面密钥, 首�
 
 ## 控制面 (S3)
 
-`http://127.0.0.1:8099` (可配; 占用即 fail-fast), 全部端点需 `Authorization:
+`http://127.0.0.1:<随机端口>` (默认 `http_port: 0` = 内核分配随机端口, S13/D9; 占用即
+fail-fast), 全部端点需 `Authorization:
 Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 
 | 端点 | 说明 |

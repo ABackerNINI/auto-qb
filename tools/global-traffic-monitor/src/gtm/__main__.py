@@ -4,11 +4,14 @@
   run                             采样-落盘-通知主循环 (单写线程; 控制面随 run 启动)
   install-autostart               三平台自启幂等注册 (S5)
   uninstall-autostart             三平台自启幂等卸载 (S5)
+  endpoint                        读发现指针打印当前端点 host:port / token_path / data_dir
+                                  (S13/D9: 端口随机后用户无从得知端口, 此命令回告)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import threading
@@ -20,7 +23,14 @@ from gtm.installer import AutostartError, UnsupportedPlatformError, build_instal
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
-from gtm.storage import SingleInstanceLockError, Storage, default_data_dir, migrate_legacy_data_dir
+from gtm.storage import (
+    ENDPOINT_SCHEMA,
+    SingleInstanceLockError,
+    Storage,
+    default_data_dir,
+    endpoint_path,
+    migrate_legacy_data_dir,
+)
 
 logger = logging.getLogger("gtm")
 
@@ -53,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="写进注册项的数据目录 (解析成绝对路径写死; 自启拉起不依赖环境变量)",
     )
     uninstall = sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
+    sub.add_parser("endpoint", help="读发现指针打印当前端点 (host:port / token_path / data_dir; 端口随机后手工调试用)")
     return parser
 
 
@@ -227,6 +238,42 @@ def cmd_autostart(args: argparse.Namespace, *, install: bool) -> int:
     return 0
 
 
+def cmd_endpoint(args: argparse.Namespace) -> int:
+    """读发现指针 endpoint.json 打印当前端点 (S13/D9): host:port + token_path + data_dir。
+
+    端口随机后端口不对用户可见, 此命令是手工调试的出口: 工具在跑 -> 指针存在, 解析后
+    打印三字段。未运行/指针缺失/损坏 -> 报错退出 1。指针 schema 非本版本已知值只告警
+    (§05: 不猜字段), 已知字段仍打印。
+    """
+    path = endpoint_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = f.read()
+    except FileNotFoundError:
+        print(f"gtm: 未找到发现指针 {path} (工具似乎未在运行)", file=sys.stderr)
+        return 1
+    except OSError as e:
+        print(f"gtm: 读取发现指针失败 {path}: {e}", file=sys.stderr)
+        return 1
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"gtm: 发现指针损坏 {path}: {e}", file=sys.stderr)
+        return 1
+    if not isinstance(payload, dict):
+        print(f"gtm: 发现指针格式非法 (顶层非对象): {path}", file=sys.stderr)
+        return 1
+    if payload.get("schema") != ENDPOINT_SCHEMA:
+        print(
+            f"gtm: 发现指针 schema={payload.get('schema')!r} 与本版本 ({ENDPOINT_SCHEMA}) 不符, 字段或有变 (仅供参考)",
+            file=sys.stderr,
+        )
+    print(f"http://{payload.get('host')}:{payload.get('port')}")
+    print(f"token_path: {payload.get('token_path')}")
+    print(f"data_dir: {payload.get('data_dir')}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
@@ -235,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_autostart(args, install=True)
     if args.command == "uninstall-autostart":
         return cmd_autostart(args, install=False)
+    if args.command == "endpoint":
+        return cmd_endpoint(args)
     # 无子命令: 打印帮助
     build_parser().print_help()
     return 0

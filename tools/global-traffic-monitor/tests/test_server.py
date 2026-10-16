@@ -1,6 +1,7 @@
 """S3 控制面守阵: 鉴权 / 端点 / 租约 / 配置热重载 / 端口冲突 fail-fast.
 + S6 自启开关端点 POST /autostart (工具进程内跑 installer, 替身注入).
 + S12 发现指针: bind 成功后写 endpoint.json (字段/删除) + 抢输锁不占端口.
++ S13 随机端口 (config http_port 0 -> 回填真实端口并记指针) + endpoint 子命令 (读指针).
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -27,7 +28,7 @@ from gtm.config import Config, ConfigHolder, load_config
 from gtm.installer import AutostartError, AutostartResult, UnsupportedPlatformError
 from gtm.sampler import Sampler
 from gtm.server import ControlServer, TokenManager
-from gtm.storage import ENDPOINT_SCHEMA, Storage
+from gtm.storage import ENDPOINT_SCHEMA, Storage, write_endpoint
 
 # ---- 替身 ----
 
@@ -469,6 +470,96 @@ def test_losing_instance_locks_out_before_binding_port(tmp_path, monkeypatch, ca
     assert start_calls == []  # 未绑端口 = 端口零占用
     assert not (ptr / "endpoint.json").exists()  # 未写发现指针
     holder.release_lock()
+
+
+# ---- 随机端口与 endpoint 子命令 (S13 / D9) ----
+
+
+def test_random_port_two_starts_differ_and_recorded_in_pointer(tmp_path) -> None:
+    """S13/D9: 连续两次启动端口不同 (内核分配), 且各自被发现指针正确记录."""
+    s1, *_ = make_server(tmp_path / "a")
+    s2, *_ = make_server(tmp_path / "b")
+    try:
+        assert s1.port != 0 and s2.port != 0  # 回填了真实端口 (非请求值 0)
+        assert s1.port != s2.port
+        p1 = json.loads((tmp_path / "a" / "endpoint.json").read_text(encoding="utf-8"))
+        p2 = json.loads((tmp_path / "b" / "endpoint.json").read_text(encoding="utf-8"))
+        assert p1["port"] == s1.port and p1["host"] == s1.host
+        assert p2["port"] == s2.port and p2["host"] == s2.host
+    finally:
+        s1.stop()
+        s2.stop()
+
+
+def test_endpoint_subcommand_prints_pointer_fields(tmp_path, monkeypatch, capsys) -> None:
+    """S13: endpoint 子命令读发现指针打印 host:port + token_path + data_dir, 输出与实际一致."""
+    from gtm import __main__ as cli
+
+    ptr = tmp_path / "ptr"
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    write_endpoint(
+        {
+            "schema": ENDPOINT_SCHEMA,
+            "version": "9.9.9",
+            "pid": 4242,
+            "started_at": "2026-10-17T03:39:00+08:00",
+            "host": "127.0.0.1",
+            "port": 51234,
+            "data_dir": "D:/gtm/data",
+            "token_path": "D:/gtm/data/monitor.token",
+            "exe_path": "D:/gtm/gtm.exe",
+            "autostart_registered": True,
+        }
+    )
+    assert cli.main(["endpoint"]) == 0
+    captured = capsys.readouterr()
+    assert "http://127.0.0.1:51234" in captured.out
+    assert "token_path: D:/gtm/data/monitor.token" in captured.out
+    assert "data_dir: D:/gtm/data" in captured.out
+    assert captured.err == ""  # schema 已知 -> 无告警
+
+
+def test_endpoint_subcommand_missing_pointer_exits_1(tmp_path, monkeypatch, capsys) -> None:
+    """S13: 工具未运行 (指针缺失) -> 报错退出 1, 不猜端口."""
+    from gtm import __main__ as cli
+
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(tmp_path / "nope"))
+    assert cli.main(["endpoint"]) == 1
+    err = capsys.readouterr().err
+    assert "未找到发现指针" in err and "未在运行" in err
+
+
+def test_endpoint_subcommand_corrupt_pointer_exits_1(tmp_path, monkeypatch, capsys) -> None:
+    """S13: 指针损坏 (坏 JSON) -> 报错退出 1 (不静默打印空字段)."""
+    from gtm import __main__ as cli
+
+    ptr = tmp_path / "ptr"
+    ptr.mkdir()
+    (ptr / "endpoint.json").write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    assert cli.main(["endpoint"]) == 1
+    assert "损坏" in capsys.readouterr().err
+
+
+def test_endpoint_subcommand_unknown_schema_warns_but_prints(tmp_path, monkeypatch, capsys) -> None:
+    """S13/§05: 未知 schema 只告警 (不猜字段), 已知字段仍照常打印."""
+    from gtm import __main__ as cli
+
+    ptr = tmp_path / "ptr"
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    write_endpoint(
+        {
+            "schema": 99,
+            "host": "127.0.0.1",
+            "port": 50000,
+            "token_path": "D:/x/monitor.token",
+            "data_dir": "D:/x",
+        }
+    )
+    assert cli.main(["endpoint"]) == 0
+    captured = capsys.readouterr()
+    assert "schema=99" in captured.err and "不符" in captured.err
+    assert "http://127.0.0.1:50000" in captured.out
 
 
 # ---- 热重载不丢采样 (计划 S3 出口: 真循环 + 并发 PUT) ----

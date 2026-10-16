@@ -6,8 +6,9 @@
 flush 节流参数热生效; http host/port 改动需重启生效 (改绑监听地址无法热切换)。
 
 默认参数 (计划 §05): sample_interval=5s / flush=Δ>=1MiB 或 30s /
-notify_threshold=100MiB / http=127.0.0.1:8099 / lease_ttl=180s / heartbeat=60s /
-notify_timeout=3s / adapters 排除 loopback 与 down。全部可经 WebUI 设置页调整。
+notify_threshold=100MiB / http=127.0.0.1 (http_port=0 由内核分配随机端口, S13/D9) /
+lease_ttl=180s / heartbeat=60s / notify_timeout=3s / adapters 排除 loopback 与 down。
+全部可经 WebUI 设置页调整。
 
 校验 (黄金法则 4): fail-fast 全量校验并**聚合**所有错误 (未知键/类型不符/越界
 一次性报齐, 不是见第一个错就停); 布尔陷阱: bool 是 int 子类, 数值字段显式拒
@@ -33,7 +34,9 @@ DEFAULT_FLUSH_DELTA_MIB = 1
 DEFAULT_FLUSH_INTERVAL_S = 30.0
 DEFAULT_NOTIFY_THRESHOLD_MIB = 100
 DEFAULT_HTTP_HOST = "127.0.0.1"
-DEFAULT_HTTP_PORT = 8099
+# S13/D9: 端口默认 0 = 请内核分配随机空闲端口 (server.start 回填真实端口并写发现指针);
+# 随机端口后用户无从得知端口, 由 `endpoint` 子命令读指针告知 (见 __main__)。
+DEFAULT_HTTP_PORT = 0
 DEFAULT_LEASE_TTL_S = 180.0
 DEFAULT_HEARTBEAT_INTERVAL_S = 60.0
 DEFAULT_NOTIFY_TIMEOUT_S = 3.0
@@ -78,9 +81,10 @@ _STR_FIELDS = ("http_host", )
 _LIST_FIELDS = ("adapter_include", "adapter_exclude")
 _KNOWN_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS + _STR_FIELDS + _LIST_FIELDS)
 
-# 正数下限 (含): 这些字段必须 > 0 (时间/字节/端口)
+# 正数下限 (含): 这些字段必须 > 0 (时间/字节) —— http_port 不在内 (0 合法)
 _POSITIVE_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS) - {"http_port"}
-_PORT_RANGE = (1, 65535)
+# 端口区间 (S13/D9): 0 合法 = 内核分配随机端口; 下限从 1 放开到 0
+_PORT_RANGE = (0, 65535)
 
 
 def _reject_bool(name: str, value: Any) -> Optional[str]:
@@ -102,7 +106,7 @@ def _check_int(name: str, value: Any, errors: list[str]) -> Optional[int]:
         errors.append(f"{name}: 期望正数 (>0), 收到 {value}")
         return None
     if name == "http_port" and not (_PORT_RANGE[0] <= value <= _PORT_RANGE[1]):
-        errors.append(f"{name}: 期望端口 1-65535, 收到 {value}")
+        errors.append(f"{name}: 期望端口 0-65535 (0 = 内核分配随机端口), 收到 {value}")
         return None
     return value
 

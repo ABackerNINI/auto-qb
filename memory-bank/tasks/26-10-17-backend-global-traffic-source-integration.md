@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 06:23
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); S11(工具侧目录定位/数据落点/旧数据搬迁/启动器)/S12(发现指针 endpoint.json + 单实例锁锚点)已实施。
+**Updated:** 2026-10-17 07:21
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); S11(工具侧目录定位/数据落点/旧数据搬迁/启动器)/S12(发现指针 endpoint.json + 单实例锁锚点)已实施; S13(随机端口 + `endpoint` 子命令)已实施。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -28,7 +28,7 @@
 |---|---|---|
 | S11 | 工具侧目录定位契约 + 数据落点 + 旧数据搬迁 + 启动器 | Done (26-10-17-0534) |
 | S12 | 发现指针与锁锚点 | Done (26-10-17-0623) |
-| S13 | 随机端口与 `endpoint` 子命令 | Open |
+| S13 | 随机端口与 `endpoint` 子命令 | Done (26-10-17-0721) |
 | S14 | 启动器自启意图/改名/gitignore | Open |
 | S15 | auto-qb 配置面与升级链 | Open |
 | S16 | 探测-拉起-订阅编排(可注入单点) | Open |
@@ -67,3 +67,19 @@
 **未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md` 与工具 README 的旧 env 名 / 平台默认目录 / 锁位置文案 → S14 改名面 + S18 文档回写; `--autostart` 布尔开关与 `data/`、`run/` 的 gitignore → S14; 随机端口与 `endpoint` 子命令 → S13。
 
 **滚动面**: 本档案(S12 段 + 状态表 + Updated 0613) · activeContext 切片(S12 已实施段 + 待办) · 基线切片新建 · 坑档新增 · kb.index 重建。随本专题「提交」入库。
+
+### R3 · S13 实施 (2026-10-17 07:21)
+
+用户指令「实施计划S13: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S13 的显式授权(S14–S19 不动), 随后「提交」。开工同步至 2be19e86。
+
+**落点**(改 5 文件, 纯工具侧、零 auto-qb 触碰): `tools/global-traffic-monitor/src/gtm/config.py`(`DEFAULT_HTTP_PORT` 8099 → `0`; `_PORT_RANGE` 从 `(1,65535)` 放开为 `(0,65535)` —— 0 合法 = 内核分配随机端口, `http_port` 不在 `_POSITIVE_FIELDS` 内故不受 >0 约束, 错误文案同步改「期望端口 0-65535」) · `src/gtm/server.py`(`ControlServer` 构造默认端口 `8099` → `0`, 与配置默认对齐; 回填实际端口的绑定逻辑本已就绪, 未动) · `src/gtm/__main__.py`(新增 `endpoint` 子命令 `cmd_endpoint`: 读发现指针打印 `http://<host>:<port>` + `token_path` + `data_dir`; 指针缺失/损坏/schema 未知分别报错或告警——未知 schema 只告警不猜字段 (§05)、已知字段仍打印, 缺失/损坏退出 1) · `tests/test_config.py`(默认值 `http_port == 0` + 端口区间 `0` 由拒改收、负值拒) · `tests/test_server.py`(新增 5 条: 连续两次启动端口不同且各自指针记录一致 · `endpoint` 子命令三字段输出与实际一致 · 指针缺失退出 1 · 指针损坏退出 1 · 未知 schema 告警但仍打印; 头文档测试计划清单同步)。
+
+**设计要点**: 端口默认 `0` 让内核分配随机空闲端口, 随机化后端口对用户不可见 ⇒ `endpoint` 子命令成为手工调试的唯一回告出口(与 D9 呼应, 也是 S16 auto-qb 探测前的自证工具)。`endpoint` 读的是**同一个**发现指针(与 S12 单点一致), 不新增状态。
+
+**出口判据全过**: ①连续启动两次端口不同且均被指针正确记录(守阵); ②`endpoint` 子命令输出与实际一致(URL/`token_path`/`data_dir` 三字段断言); ③工具侧全量套件绿(较 S12 基线 +5 条用例)。根套件无代码改动 ⇒ 回归数字与 S12 基线同量级; 实测数字只记入基线切片 `baselines/26-10-17-0721-global-traffic-source-integration-s13.md`(见 kb.baseline)。
+
+**未动(属计划内后续步骤, 非遗漏)**: CLI 脚本名与 `prog`、env 名、指针/锁文件名、用户级目录名、文案(「另一 … 实例已持有锁」) 的全称改名 + `run --autostart` 布尔开关 + `data/`、`run/` 的 gitignore → S14; 工具 `README.md`/`docs/configuration.md` 旧文案 → S14/S18。
+
+**复发坑**: `pitfalls/testing/sandbox-tempfile-cwd-fallback.md` `复发` **+1** —— 裸跑工具侧套件(未设 TMPDIR)又在工具目录留下 9 个随机名文件 + `pytest-of-11059/`, 提交前手工清理。**为什么没命中: 路由没到** —— 开工只读 `AGENTS.md` 与 memory-bank skill, 未读 `pitfalls/testing/_index.md`。
+
+**滚动面**: 本档案(S13 段 + 状态表 + Updated 0721) · activeContext 切片(S13 已实施段 + 待办) · 工具 README 端口口径两处 + `endpoint` 命令行 · 基线切片新建 · 坑档 `sandbox-tempfile-cwd-fallback.md` 复发+1 · kb.index 重建。随本专题「提交」入库。
