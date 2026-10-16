@@ -65,6 +65,7 @@ Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 | `POST /subscribe` | `{endpoint, token}` 注册订阅, 返回 id + 租约参数 |
 | `POST /heartbeat` | `{id}` 心跳续租 (订阅方每 60s; 未知 id 404) |
 | `POST /unsubscribe` | `{id}` 注销 (幂等, 未知 id 404) |
+| `POST /autostart` | `{action: install\|uninstall}` 幂等注册/卸载开机自启 (S6 设置页开关; 在工具进程内跑 installer, `sys.executable` 即自启项要指向的解释器; 平台不支持 501 / 命令失败 500 / 载荷非法 400) |
 
 租约: `last_heartbeat + lease_ttl` (默认 180s) 过期剔除 (懒剔除, 每个已鉴权
 请求入口先 prune)。注册表落 state.json, 重启续存。配置键与默认值见计划 §05;

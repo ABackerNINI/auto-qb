@@ -1,9 +1,9 @@
 # 拆分与统一后的前端守阵口径
 
 > 摘要: 模板/样式/内核三层拆分 + 单一语义模板收敛(2026-09-27)后, 找前端内容与加守阵的固定口径 —— 一律读「聚合」, 模板级 UI 差异只走「差异口」, data/生命周期不许进 app.mixin。
-> 触发: 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红
+> 触发: 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红, v-if 链跨分片, 新分区, settings.html 上限
 
-**Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md
+**Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md
 
 ### 找模板/CSS/JS 内容: 一律读「聚合」, 别单读拆分前的文件
 
@@ -124,4 +124,21 @@
   漏改"的检出能力**, 是这类守阵最常见的失效方式。另: 模板里的方法调用带 `$root.` 前缀后, 按裸名
   匹配的 pattern 会全部落空 —— 改成兼容两种形态的正则, 别把断言删了。
 - **守阵**: `test_frontend_hr_safety_wiring` · `test_sel_visual_parity_and_site_cell`(本轮同轮改版)。
+- **复发**: 0
+
+### 设置页分区模板: `v-if/v-else-if` 链**跨分片**延续 —— 新分区只能作链尾 `v-else-if`, 且 settings.html 逼近 400 行上限
+
+- **触发**: 给设置页加一个新分区(新 schema Group 的二级页)。
+- **判别**: 二级页分支是一条 `v-if`(trackers) / `v-else-if`(rules) / … / `v-else` 的**连续链**, 起点在
+  `tpl/settings.html`、中途在 `tpl/settings-detail.html`(链的 `v-else-if speed/keys` 与收尾 `v-else` 都在后者;
+  后者还自带 `</main>`)。分片按清单顺序拼进 `#app`, 于是**链跨文件延续**:
+  - 想在**链中**插分支(settings.html 末尾与 settings-detail.html 之间插一个 `v-else-if`)会**打断链** ——
+    其后所有 `v-else-if` 立刻失配(整块静默不渲染, pytest 全绿);
+  - 想插在**链尾之后**又落在 `</main>` 之外(`hub.view` 是持久化值, 面板会在非设置页也渲染)。
+- **处置**: 新分区一律作 `v-else-if="hub.view === '<key>'"` 加在 **settings.html 末尾**(rules 分支之后、
+  settings-detail.html 的 `v-else-if speed` 之前), 与链自然续接。该分支若要渲染本段通用键(通用 `v-else`
+  分支不再命中), 用 `<hub-field>` + 一个返回叶子字段的 helper(`cfgFlatten` 同源)显式渲染 —— 别抄通用块模板。
+  ⚠ 体量: `settings.html` 单分片上限 400 行, S6(计划 26-10-16-0541)加分区后已到 **392** —— 下次再加内容前
+  先把某个视图拆成独立分片(sanctioned 路径), 别硬塞。
+- **守阵**: `test_frontend_template_split_wiring`(shell ≤212 / 单分片 ≤400 / 聚合标签配平)+ `test_webui_static_dom_page`。
 - **复发**: 0

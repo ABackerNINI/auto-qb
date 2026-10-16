@@ -454,6 +454,62 @@ GROUPS: Tuple[Group, ...] = (
         icon="i-monitor",
     ),
     Group(
+        "global_traffic_monitor",
+        "全局流量监视器",
+        "整机流量历史(独立工具 gtm)的联动: 订阅通知、参数读写与开机自启",
+        fields=(
+            Field(
+                "global_traffic_monitor",
+                "全局流量监视器",
+                "object",
+                help="独立的整机流量历史记录小工具(TrafficMonitor 替代): auto-qb 作为其配置方与消费者之一接入。"
+                "工具自有参数(采样间隔/通知阈值/控制面地址等)在分区页的「工具参数」里读写; 本组是 auto-qb 侧的联动开关",
+                fields=(
+                    Field(
+                        "enabled",
+                        "启用联动",
+                        "bool",
+                        default="false",
+                        help="总开关; 关闭(缺省)时 auto-qb 不订阅工具通知、不因流量事件刷新历史图(零开销)"
+                    ),
+                    Field(
+                        "tool_url",
+                        "工具地址",
+                        "str",
+                        default="http://127.0.0.1:8099",
+                        placeholder="http://127.0.0.1:8099",
+                        help="工具控制面基地址(工具与 WebUI 同机部署的缺省形态); 工具端口若改过请同步"
+                    ),
+                    Field(
+                        "tool_token_path",
+                        "工具密钥文件",
+                        "path",
+                        default="",
+                        help="工具 monitor.token 文件路径; 留空 = <data_dir>/monitor.token(工具数据目录下的缺省位置)"
+                    ),
+                    Field("subscribe", "注册订阅", "bool", default="true", help="启用联动时, 启动即向工具注册订阅并定时心跳; 关闭则只被动读历史文件不接收推送"),
+                    Field(
+                        "notify_cooldown_s",
+                        "刷新冷却",
+                        "time",
+                        default="10M",
+                        unit_default="M",
+                        help="收到工具事件后刷新历史图的冷却间隔(秒): 突发连续事件按此收敛, 事件号去重另算。0S = 不冷却"
+                    ),
+                    Field(
+                        "autostart",
+                        "开机自启",
+                        "bool",
+                        default="false",
+                        help="由工具侧幂等注册/卸载开机自启(Windows 计划任务 / Linux systemd --user / macOS launchd); "
+                        "开关状态即期望态, 工具已注册则该值为真。⚠ 工具与 WebUI 必须同机"
+                    ),
+                ),
+            ),
+        ),
+        icon="i-traffic",
+    ),
+    Group(
         "rules",
         "规则集",
         "条件 + 动作的自动化规则",

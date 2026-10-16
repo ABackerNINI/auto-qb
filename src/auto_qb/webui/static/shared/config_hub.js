@@ -44,6 +44,11 @@ const HUB_GROUP_META = {
     desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；启用方式：本分区站点接入卡片点选；页面地址/解析器等由内置站点档案自动处理；分区页尾附各站点取数现状。",
     lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启总开关后在下方「站点接入」卡片点选启用站点（零 URL/路径/参数填写，页面地址、解析器、下载路径、翻页参数由内置站点档案自动处理，只需站点域名能对上）；取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
   },
+  global_traffic_monitor: {
+    title: "全局流量监视器",
+    desc: "独立工具 gtm 记录整机流量历史（TrafficMonitor 替代）；本页联动：订阅通知、读写工具参数、开机自启。",
+    lede: "整机流量历史由一个独立小工具（gtm，TrafficMonitor 替代）记录：它独立于 auto-qb 进程、开机自启，把全适配器上下行流量按日写进 history_traffic.dat，流量变化超过阈值时主动通知 auto-qb 刷新历史图。本分区是 auto-qb 侧的联动开关（订阅/冷却/工具地址），页尾的「工具状态」显示工具当前读数，并可直接读写工具参数、开关开机自启 —— 工具必须与 WebUI 同机。",
+  },
 };
 
 /* 富说明(样张第 4 节的五段结构: 它是什么 / 默认值 / 什么时候需要改 / 注意 / 容易和它搞混的)
@@ -106,6 +111,7 @@ const HUB_TONE = {
 const HUB_OFF_KEYS = {
   maintenance: ["config", "grouping", "enabled"],
   hr_check: ["config", "hr_check", "enabled"],
+  global_traffic_monitor: ["config", "global_traffic_monitor", "enabled"],
 };
 
 /* 站点搜索(计划 26-09-27-1852): 键 -> 字段组(chip 上的中文标签), 不在表里的键不搜
@@ -381,6 +387,8 @@ window.CONFIG_HUB = {
       if (key === "hr_check") this.hrsOpen = false;
       // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
       if (key === "keys") this.kbPanelEnter();
+      // 全局流量监视器分区(S6): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
+      if (key === "global_traffic_monitor") this.tmLoad();
       window.scrollTo({ top: 0 });
     },
     hubBack() {
@@ -949,6 +957,132 @@ window.CONFIG_HUB = {
       const value = ev.target.value;
       if (value) this.cfgPluginAdd(groupKey, ruleName, listName, value);
       ev.target.value = "";
+    },
+
+    /* ------------------------------------------------ 全局流量监视器工具面板 (计划 26-10-16-0541 S6)
+     * 工具控制面经 /api/traffic/monitor/* 代理: 只读状态 + 工具参数读写 + 自启开关。
+     * 参数表单「读后写」—— 工具 PUT /config 是**全量覆盖**(last-writer-wins), 只发要改的键
+     * 会把其余键打回默认值; 故先取 /status 的 config 回显, 改字段后整体提交。 */
+    async tmLoad() {
+      this.tm.loading = true;
+      this.tm.saveMsg = "";
+      this.tm.saveErr = "";
+      this.tm.autoMsg = "";
+      this.tm.autoErr = "";
+      try {
+        const r = await this.api("/api/traffic/monitor/status");
+        this.tm.enabled = !!r.enabled;
+        this.tm.toolUrl = r.tool_url || "";
+        this.tm.tokenPath = r.token_path || "";
+        this.tm.reachable = !!r.reachable;
+        this.tm.error = r.error || "";
+        this.tm.status = r.status || null;
+        if (r.reachable && r.status && r.status.config) {
+          this.tm.form = this.tmNormalizeForm(r.status.config);
+        }
+      } catch (e) {
+        this.tm.reachable = false;
+        this.tm.status = null;
+        this.tm.error = (e && e.message) || "读取失败";
+      } finally {
+        this.tm.loading = false;
+        this.tm.loaded = true;
+      }
+    },
+    /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样 */
+    tmNormalizeForm(cfg) {
+      const out = {};
+      for (const k of Object.keys(cfg || {})) {
+        const v = cfg[k];
+        out[k] = Array.isArray(v) ? v.join(", ") : v;
+      }
+      return out;
+    },
+    /* 表单 -> 工具配置载荷: 数值字段转 number, 列表字段逗号串转数组(空串 -> []) */
+    tmBuildPayload() {
+      const f = this.tm.form;
+      const num = (x) => (x === "" || x === null || x === undefined ? 0 : Number(x));
+      const list = (x) => String(x || "").split(",").map((s) => s.trim()).filter(Boolean);
+      return {
+        sample_interval: num(f.sample_interval),
+        flush_delta_bytes: num(f.flush_delta_bytes),
+        flush_interval_s: num(f.flush_interval_s),
+        notify_threshold_bytes: num(f.notify_threshold_bytes),
+        http_host: String(f.http_host || ""),
+        http_port: num(f.http_port),
+        lease_ttl_s: num(f.lease_ttl_s),
+        heartbeat_interval_s: num(f.heartbeat_interval_s),
+        notify_timeout_s: num(f.notify_timeout_s),
+        adapter_include: list(f.adapter_include),
+        adapter_exclude: list(f.adapter_exclude),
+      };
+    },
+    async tmSave() {
+      this.tm.saving = true;
+      this.tm.saveMsg = "";
+      this.tm.saveErr = "";
+      try {
+        const r = await this.api("/api/traffic/monitor/config", {
+          method: "PUT",
+          body: JSON.stringify({ config: this.tmBuildPayload() }),
+        });
+        if (r && r.config) this.tm.form = this.tmNormalizeForm(r.config);
+        this.tm.saveMsg = "已保存（工具侧已热重载）";
+      } catch (e) {
+        this.tm.saveErr = (e && e.message) || "保存失败";
+      } finally {
+        this.tm.saving = false;
+      }
+    },
+    async tmAutostart(action) {
+      this.tm.autoBusy = true;
+      this.tm.autoMsg = "";
+      this.tm.autoErr = "";
+      try {
+        const r = await this.api("/api/traffic/monitor/autostart", {
+          method: "POST",
+          body: JSON.stringify({ action: action }),
+        });
+        this.tm.autoMsg = (r && r.message) || "已处理";
+      } catch (e) {
+        this.tm.autoErr = (e && e.message) || "操作失败";
+      } finally {
+        this.tm.autoBusy = false;
+      }
+    },
+    tmFmtBytes(n) {
+      return this.fmtSize(n);
+    },
+    /* auto-qb 联动段的叶子字段(供本分区模板用 <hub-field> 渲染) —— 与通用块同源(cfgFlatten),
+     * 因本分区走独立分支(v-else-if), 通用 hubBlocks 不参与渲染 */
+    tmLinkageItems() {
+      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "global_traffic_monitor");
+      if (!g) return [];
+      const out = [];
+      const walk = (items) => {
+        for (const it of items || []) {
+          if (it.type === "field") out.push(it);
+          else walk(it.items);
+        }
+      };
+      walk(this.cfgFlatten(g.fields, ["config"], 0));
+      return out;
+    },
+    /* 工具参数表(§05 工具侧参数): 键/标签/控件形态; 模板按此 v-for 渲染, 避免 11 行硬编码 */
+    tmParams() {
+      return [
+        { key: "sample_interval", label: "采样间隔(秒)", kind: "number", step: "0.1" },
+        { key: "flush_delta_bytes", label: "落盘阈值", kind: "number", bytes: true },
+        { key: "flush_interval_s", label: "落盘间隔(秒)", kind: "number", step: "0.1" },
+        { key: "notify_threshold_bytes", label: "通知阈值", kind: "number", bytes: true },
+        { key: "http_host", label: "控制面监听地址", kind: "text" },
+        { key: "http_port", label: "控制面端口", kind: "number" },
+        { key: "lease_ttl_s", label: "订阅租约(秒)", kind: "number" },
+        { key: "heartbeat_interval_s", label: "心跳周期(秒)", kind: "number" },
+        { key: "notify_timeout_s", label: "推送超时(秒)", kind: "number", step: "0.1" },
+        { key: "adapter_include", label: "适配器白名单", kind: "list", hint: "逗号分隔正则, 留空 = 全部" },
+        { key: "adapter_exclude", label: "适配器黑名单", kind: "list", hint: "逗号分隔正则, 留空 = 不排除" },
+      ];
     },
   },
   mounted() {

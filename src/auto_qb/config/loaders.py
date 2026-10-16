@@ -19,6 +19,7 @@ from .models import (
     CurvePoint,
     FsConfig,
     GlobalSpeedLimitCurve,
+    GlobalTrafficMonitorConfig,
     GroupingConfig,
     HRRule,
     HrChannelConfig,
@@ -426,6 +427,25 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     )
 
 
+def load_global_traffic_monitor_config(spec) -> GlobalTrafficMonitorConfig:
+    """解析 config.global_traffic_monitor 段(全局流量监视器工具联动, 计划 26-10-16-0541 S6)
+
+    仅转换, 合法性由 validate_config._validate_global_traffic_monitor 保证。段缺省 = 全默认
+    (enabled=false, 保守默认)。工具自有 config.yml 不在此 —— 它经工具控制面代理读写。
+    """
+    d = GlobalTrafficMonitorConfig()
+    if not isinstance(spec, dict):
+        return d
+    return GlobalTrafficMonitorConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        tool_url=_get(spec, "tool_url", d.tool_url),
+        tool_token_path=_get(spec, "tool_token_path", d.tool_token_path),
+        subscribe=_get(spec, "subscribe", d.subscribe, parse_bool),
+        notify_cooldown_s=_get(spec, "notify_cooldown_s", d.notify_cooldown_s, parse_time),
+        autostart=_get(spec, "autostart", d.autostart, parse_bool),
+    )
+
+
 def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:
     """解析 upload_curve/download_curve 列表 -> CurvePoint 列表(仅转换, 合法性由校验阶段保证)
 
@@ -570,6 +590,7 @@ def load_config(config_path: str) -> Config:
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
         qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),
+        global_traffic_monitor=load_global_traffic_monitor_config(_get(cfg, "global_traffic_monitor", {})),
     )
 
 

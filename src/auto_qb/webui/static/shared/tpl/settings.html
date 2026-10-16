@@ -309,3 +309,84 @@
               </template>
 
               <!-- 限速: 阶梯图 + 档位(每一档是「流量低于 X → 限速 Y」一个整体) -->
+
+              <!-- 全局流量监视器(计划 26-10-16-0541 S6): 本分支在 v-if 链内(经 settings-detail.html
+                   之前的 rules 分支续接), 内容落在 <main> 内。auto-qb 联动键走 hub-field(与通用表单同源),
+                   工具侧面板(状态/参数/自启)经 /api/traffic/monitor/* 代理外部进程; 行为层见 config_hub.js
+                   的 tm* 方法。参数保存 = 全量覆盖(读后写), 工具不可达时只显示原因不渲染参数表单。 -->
+              <template v-else-if="hub.view === 'global_traffic_monitor'">
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">auto-qb 联动</span>
+                    <span class="bh-n">本实例如何接入工具(总开关 / 工具地址 / 订阅 / 冷却)</span>
+                  </div>
+                  <hub-field v-for="row in tmLinkageItems()" :key="hubKey(row.path)" :item="row"></hub-field>
+                </div>
+
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">工具状态</span>
+                    <span class="bh-n">{{ tm.reachable ? '工具在跑' : '未连接' }}</span>
+                    <span class="bh-r">
+                      <button class="hb-btn ghost sm" :disabled="tm.loading" @click="tmLoad()">{{ tm.loading ? '读取中…' : '刷新' }}</button>
+                    </span>
+                  </div>
+                  <p v-if="tm.loading && !tm.loaded" class="hb-hp" style="padding:12px 14px">正在读取工具状态…</p>
+                  <p v-else-if="!tm.reachable" class="hb-hp" style="padding:12px 14px">
+                    {{ tm.error || '工具未运行' }}。请确认工具已启动(gtm run), 且与 WebUI 同机。
+                  </p>
+                  <template v-else>
+                    <div class="hb-row">
+                      <div class="hb-lb">当日流量</div>
+                      <div class="hb-ct">上行 {{ tmFmtBytes(tm.status.day_up_bytes) }} · 下行 {{ tmFmtBytes(tm.status.day_down_bytes) }} · 合计 {{ tmFmtBytes(tm.status.day_total_bytes) }}</div>
+                    </div>
+                    <div class="hb-row">
+                      <div class="hb-lb">订阅 / 事件</div>
+                      <div class="hb-ct">{{ tm.status.subscriber_count }} 个订阅 · 末事件号 {{ tm.status.last_event_id }} · 已运行 {{ Math.round(tm.status.uptime_s) }} 秒</div>
+                    </div>
+                    <div class="hb-row">
+                      <div class="hb-lb">历史文件</div>
+                      <div class="hb-ct" style="font-family:var(--hb-font-mono)">{{ tm.status.paths && tm.status.paths.dat }}</div>
+                    </div>
+                  </template>
+                </div>
+
+                <div v-if="tm.reachable" class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">工具参数</span>
+                    <span class="bh-n">读写工具自有配置; 保存 = 全量覆盖并热重载</span>
+                  </div>
+                  <div v-for="p in tmParams()" :key="p.key" class="hb-row">
+                    <div class="hb-lb">{{ p.label }}</div>
+                    <div class="hb-ct">
+                      <input v-if="p.kind === 'list'" class="hb-input" type="text" v-model="tm.form[p.key]" :placeholder="p.hint || ''">
+                      <input v-else class="hb-input" :type="p.kind === 'text' ? 'text' : 'number'" :step="p.step || 'any'" v-model="tm.form[p.key]">
+                      <span v-if="p.bytes" class="bh-n">= {{ tmFmtBytes(Number(tm.form[p.key]) || 0) }}</span>
+                    </div>
+                  </div>
+                  <div class="hb-row">
+                    <div class="hb-lb"></div>
+                    <div class="hb-ct">
+                      <button class="hb-btn" :disabled="tm.saving" @click="tmSave()">{{ tm.saving ? '保存中…' : '保存到工具' }}</button>
+                      <span v-if="tm.saveMsg" class="bh-n">{{ tm.saveMsg }}</span>
+                      <span v-if="tm.saveErr" class="hb-hp risk">{{ tm.saveErr }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="tm.reachable" class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">开机自启</span>
+                    <span class="bh-n">由工具侧幂等注册/卸载(工具与 WebUI 必须同机)</span>
+                  </div>
+                  <div class="hb-row">
+                    <div class="hb-lb">开机自启</div>
+                    <div class="hb-ct">
+                      <button class="hb-btn ghost sm" :disabled="tm.autoBusy" @click="tmAutostart('install')">注册</button>
+                      <button class="hb-btn ghost sm" :disabled="tm.autoBusy" @click="tmAutostart('uninstall')">卸载</button>
+                      <span v-if="tm.autoMsg" class="bh-n">{{ tm.autoMsg }}</span>
+                      <span v-if="tm.autoErr" class="hb-hp risk">{{ tm.autoErr }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>

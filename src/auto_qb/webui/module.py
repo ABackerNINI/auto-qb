@@ -30,7 +30,9 @@ class WebUIModule(BaseModule):
         self._manager = manager
 
     def sections(self) -> tuple[str, ...]:
-        return ("web", )
+        # web: 本模块的监听/鉴权段; global_traffic_monitor: 设置页代理路由读它(计划 26-10-16-0541 S6)
+        # —— 段认领面(claim completeness 守阵)要求每个配置顶层段至少被一个模块认领
+        return ("web", "global_traffic_monitor")
 
     # ---------- 生命周期 ----------
 

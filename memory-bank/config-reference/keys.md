@@ -31,6 +31,7 @@
 | `hr_check` | 默认关闭 | **HR 在线核实** (v3 波次模型, 计划 26-09-28-1932 §6.1 + 26-09-30-0240 三参数解耦, 全局 9 键 = 7 个标量键 + `channel` + `sites`): `{enabled(false), min_interval("90S"; 相邻请求最小间隔, 页面+.torrent 统一, 抖动只向上 +0~25%), max_requests_per_day(240; 站点级日额保险, 全部请求合计, 零点重置), max_pages_per_wave(30; 单波页数上限安全阀, 到顶该档截断), allow_window(""), shared_dir(""), reuse_window("2H"; 数据复用窗 —— 波后窗内直接复用不取数, 生效=min(本值, 拉取间隔)), channel{enabled, host("127.0.0.1"), port(0; **0 = 交 OS 随机**, 显式非零 = 旧行为), discovery_port(18788; 0 = 关闭发现, 被占自动顺延 18788/18789/18790), pairing("auto"; auto=仅非回环强制/on/off), token, extension_id(""), request_timeout("180S")}, sites{...}}`。判定语义硬编码(四行判定表: 命中考察中→管束 / 终态档 B·C·D 与移出未列出→放行(永续) / 无证据→本地兜底: 达标放行·未达标管束), **无撤退路径配置**。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」)。旧 v2 键 26 个(min_torrent_interval/max_torrents_per_hour/failure_*/unknown_policy/verified_ttl/quota_model 双桶六键/poll_interval 等)已随 **config v2→v3 迁移**删除或常量化; `shared_dir` 与 `channel` 是仅有的两个 L1 字段(需重挂端点/重建服务), 其余全 L0。**取数通道**(去端口+跨机, 计划 26-10-14-1241): 端点默认听回环(host 可配私网 IP = 跨机直绑/NAS); port 默认 0 = 随机, 实绑端口经发现端点(默认 18788)自动分发给扩展; 无 token ⇒ 401 **且不写任何状态**; 同机多实例显式 port 必须错开(被占 = 启动即报错); 非回环 + pairing=off + 未配 token 会被校验拒绝。人工对账戳: `--hr-confirm-empty <站点>`(清单为 0 的一次性确认, 非零行自动失效)。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `qb_traffic` | 默认关闭 | 见下 |
+| `global_traffic_monitor` | 默认关闭 | 见下(全局流量监视器工具联动) |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |
 
@@ -93,6 +94,23 @@ global_speed_limit_curve:
 | `rollup_window` | time / `30D` | 7D~无上限 | 小时均值保留窗: 小时封口行(均值/峰值)的保留时长, hour 段视图(3d/7d/30d)从它取数; 也是已删种子文件的淘汰龄 |
 
 整段缺省 = 未启用。启用后按 `sample_interval` 周期读内存快照采样(零新增 qB 请求): 全局系列恒采(qB 速度/累计), 单种系列仅采活跃种子(`dlspeed>0 or upspeed>0`; 空闲期不产 raw 点, 已有数据文件者记零值行程行(z 行, plan 26-10-04-0721 v2), 从未传输者无文件)。数据供 WEB UI 流量图(1m/5m/30m/3h/6h/12h/24h 对齐 qB 速度图 + 3d/7d/30d 共十视图, 2026-10-04)消费; 空闲在图上表现为 0 平线, 停机/断连/计数器重置表现为断线(null), 不补 0 不回填。
+
+## global_traffic_monitor 段 (全局流量监视器工具联动)
+
+计划 26-10-16-0541 S6。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」。
+本段只承载 **auto-qb 侧联动参数**; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml,
+由 WebUI 设置页经工具控制面代理读写。
+
+| 键 | 类型/默认 | 校验边界 | 说明 |
+|----|-----------|----------|------|
+| `enabled` | bool / `false` | — | 联动总开关; false(缺省) = 不订阅不通知刷新历史图(保守默认) |
+| `tool_url` | str / `"http://127.0.0.1:8099"` | 须为带主机名的 http(s) URL | 工具控制面基地址(工具与 WebUI 同机部署的缺省形态); 工具端口若改过请同步 |
+| `tool_token_path` | str / `""` | — | 工具 `monitor.token` 文件路径; 留空 = `<data_dir>/monitor.token` |
+| `subscribe` | bool / `true` | — | 启用联动时, 启动即向工具注册订阅 + 定时心跳(S7 接收面消费) |
+| `notify_cooldown_s` | time / `10M` | `0S` ~ 24H | 收到工具事件后刷新历史图的冷却(秒); 事件号去重另算, 两者互补。`0S` = 不冷却 |
+| `autostart` | bool / `false` | — | WebUI 开关: 由工具侧幂等注册/卸载开机自启(Windows 计划任务 / Linux systemd --user / macOS launchd); 开关状态即期望态 |
+
+整段缺省 = 走默认值(enabled=false)。`PUT /config` 的**全量覆盖**语义由设置页「读后写」缓解(先取工具 `/status` 回显再整体提交)。
 
 ## 规则集段 (`*_rules`)
 

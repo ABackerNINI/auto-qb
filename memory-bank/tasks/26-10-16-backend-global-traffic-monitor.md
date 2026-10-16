@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 11:09
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启已落地。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md
+**Updated:** 2026-10-16 11:45
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面已落地(含用户拍板改版: 工具控制面加 POST /autostart)。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -29,7 +29,7 @@
 | S3 | 控制面 server | Done (26-10-16-0946) |
 | S4 | 通知 notifier | Done (26-10-16-1016) |
 | S5 | 自启 installer | Done (26-10-16-1109) |
-| S6 | auto-qb 配置面 | Open |
+| S6 | auto-qb 配置面 | Done (26-10-16-1145) |
 | S7 | auto-qb 接收面 | Open |
 | S8 | 集成与过渡 | Open |
 | S9 | 守阵测试 | Open |
@@ -132,3 +132,20 @@
 
 **行号基准**: S5 为纯新目录内文件(工具包), 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
 
+
+
+### R7 · S6 实施 (2026-10-16 11:45)
+
+用户指令「实施计划S6:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S6 的显式授权(S7–S10 不动)。开工同步 3473aa9a(快进)。**首个触碰 auto-qb 的步骤**。
+
+**计划改版(用户拍板, 计划 HTML 同文件内记录)**: S6 原文「自启开关幂等调 `gtm install-autostart`」未定调用路径 —— auto-qb 与工具是两个 venv, auto-qb 无法定位该 CLI(计划 6 键里也无解释器/命令路径键)。向用户提出 A(新增 tool_command 键)/B(工具控制面加端点)/C(本轮不做自启开关)三案, 用户取 **B 案**: 工具控制面新增 `POST /autostart`, auto-qb 经 HTTP 代理调用 —— 与「auto-qb 只经控制面与工具通信」的架构一致。S6 范围因此含一处工具包改动(原表述仅「auto-qb 配置面」)。
+
+**落点**(4 处): ①**配置段 4 点同步**(黄金法则 4): `models.py` `GlobalTrafficMonitorConfig`(enabled/tool_url/tool_token_path/subscribe/notify_cooldown_s/autostart)+ `Config` 字段; `loaders.py` `load_global_traffic_monitor_config` + 接线; `validation`(`KNOWN_CONFIG_KEYS` + `KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS` + `_validate_global_traffic_monitor`/`_validate_tool_url`: 未知键/bool/tool_url 形状/冷却 0S~24H 聚合校验); `schema/groups.py` 新分组「全局流量监视器」(i-traffic, 排「流量图」之后)。②**工具控制面** `POST /autostart`(`{action: install|uninstall}`; 200 达成期望态含 no-op / 501 平台不支持 / 500 命令失败 / 400 载荷非法; data_dir 取进程自身**不信任请求体**; 注入式 `installer_factory` 供 hermetic 测试)。③**auto-qb 代理路由**(新 `routes/traffic_monitor.py` + 注册进 `ROUTE_BUILDERS` + 金清单): `GET /api/traffic/monitor/status`(展示端点, 恒 200 + 结构化空态 reachable/error) / `PUT .../config`(写端点: 工具 400 逐条透传, 不可达/5xx 收口 502) / `POST .../autostart`(501 透传); token 解析单点(显式 tool_token_path 优先, 否则镜像工具平台默认数据目录; 平台判定走 `utils.is_windows/is_mac` 单点)。④**设置页新分区**(schema 分组自动出卡 + `settings.html` 链尾 `v-else-if` 分支): 联动键走 `hub-field`(与通用表单同源), 工具状态/参数表单/自启开关经代理; 参数表单**读后写**(工具 PUT /config 全量覆盖)。
+
+**出口判据全过**: ①新配置键过 `test_config_schema`(顶层 + 对象段键集合)+ `test_config_key_surface`(键面基线 160→167 + 6 条 loader 回读探针 + keys.md 出处)守卫; ②设置页读写工具参数(以代理路由守阵钉契约, 端到端可见性待 S7 联调复核); ③未知键仍被拒。工具 173/173; 新增守阵 `tests/test_config_traffic_monitor.py`(12 条)+ `tests/test_web_traffic_monitor.py`(15 条); 红验 7 条锚点突变全判 RED(键集合漂移 / 段校验未接线 / loader 漏读 / schema 键名漂移 / status 缺 token 不报错 / PUT 代理路径漂移 / 工具 action 闸失效), 字节恒等还原后基线复绿(脚本 `H:/Temp/gtm-s6-redverify.py`)。
+
+**实施期发现(3)**: ①`utils.parse_time` 只认带单位串("0" 非法, "0S" 合法) —— 冷却键「0 = 不冷却」YAML 里须写 `0S`, 已同步 keys.md/schema help(写测试时暴露)。②前端 `v-if/v-else-if` 链**跨分片延续**(settings.html → settings-detail.html): 新分区只能作 `v-else-if` 插在**链尾**(settings.html 内), 插分片边界会断链(后续 v-else-if 静默失配)、插链尾之后会落 `</main>` 外(`hub.view` 持久化 → 非设置页也渲染); settings.html 加分区后 392/400 行, 下次加内容前须先拆视图分片。已记坑档 `pitfalls/web-ui/frontend-split.md`(新条目)。③**四处结构性守阵首跑全量时判红**(均为「新增配置段/路由/前端 POST 点必须同步登记」的既有网): 平台判定单点(`sys.platform.startswith` 旁路 → 改 `utils.is_windows/is_mac`)、段认领完整性(`WebUIModule.sections()` 加 `global_traffic_monitor`)、schema 端点分组序(`test_config_schema_endpoint` 期望表加新分组)、前端 POST 触发点登记(`triggers.js` calls 加 `config_hub.js::tmAutostart`)。坑: `pitfalls/testing/single-file-coverage-gate.md` 复发+1(红验 harness 裸跑单文件被覆盖率闸假红 —— 未命中原因: 照抄 S5 脚本只搬了「钉死解释器/字节层」, 漏了「单文件跑必须绕覆盖率闸」; 处置 = auto-qb 侧加 `--no-cov -n 0`)。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1145, 状态行 S0–S6, §04 R0 增 S6 行 + 改版记录, 脚注补 S6 与 /autostart 改版) · 本档案 R7 + 子任务表 S6→Done · activeContext 切片 R7 · `memory-bank/config-reference/keys.md` 新段 · 工具 README 端点表 · 坑档 `pitfalls/testing/single-file-coverage-gate.md` 复发+1 + `pitfalls/web-ui/frontend-split.md` 新增条目 · kb.index 重建 · 基线切片 `baselines/26-10-16-1145-global-traffic-monitor-s6.md`。未提交(待用户「提交」指令)。
+
+**行号基准**: S6 首次触碰 auto-qb —— 配置四处(models/loaders/validation/schema)+ 路由注册表 + 设置页模板逐条复核, 未发现漂移。S7(接收面)仍按计划脚注逐条复核。

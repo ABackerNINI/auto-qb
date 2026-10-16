@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-1109">
+<meta name="doc-updated" content="26-10-16-1145">
 <meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S5 已实施;S6–S10 待逐项授权)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S6 已实施;S7–S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -277,6 +277,12 @@
   <strong>环境缺口(未验项, 不许静默当验过)</strong>: 本会话命令安全策略把 <code>schtasks.exe</code> 列入 Program Blacklist(消息明令「cannot be approved or bypassed」, 禁止换壳重试), 故<strong>计划任务真注册 + 登录自起</strong>这一段真机未跑, 待解锁后补验(坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。注册/卸载语义由命令层 mock 覆盖 —— 计划 S5 出口原文即「平台命令层 mock」。<br>
   <strong>顺序注记</strong>: 计划 §06 记「S5(自启)依赖 S6 的开关入口」—— 本轮按用户显式授权先落 S5(命令面独立可用、真机可跑), S6 落地后由设置页开关消费它, 不构成依赖倒挂。<br>
   根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md</code>。行号基准 3ba069d7 与 S5 无关(纯新目录内文件); S6/S7 触碰 auto-qb 前按本文件脚注逐条复核漂移。</td></tr>
+  <tr><td>S6</td><td><strong>Done</strong> · 26-10-16-1145 · @ 3473aa9a(开工同步后)。<br>
+  <strong>计划改版(用户 26-10-16 拍板, 同文件内变更记录)</strong>: S6 原文「自启开关幂等调 <code>gtm install-autostart</code>」未定调用路径 —— auto-qb 与工具是两个 venv, auto-qb 无法定位该 CLI(计划 6 键里也无解释器/命令路径键)。用户拍板取 <strong>B 案</strong>: 给工具控制面新增 <code>POST /autostart</code> 端点(工具进程内跑 installer, <code>sys.executable</code> 恰是自启项要指向的解释器), auto-qb 经 HTTP 代理调用 —— 与「auto-qb 只经控制面与工具通信」的架构一致。S6 范围因此含一处<strong>工具包改动</strong>(原表述仅「auto-qb 配置面」)。<br>
+  改动面(首个触碰 auto-qb 的步骤): ①<strong>配置段 4 点同步</strong>(黄金法则 4) —— <code>models.py</code> <code>GlobalTrafficMonitorConfig</code>(enabled / tool_url / tool_token_path / subscribe / notify_cooldown_s / autostart) + <code>Config</code> 字段; <code>loaders.py</code> <code>load_global_traffic_monitor_config</code>; <code>validation</code>(<code>KNOWN_CONFIG_KEYS</code> + <code>KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS</code> + <code>_validate_global_traffic_monitor</code>: 未知键 / bool / tool_url 形状 / 冷却 0S~24H 聚合校验); <code>schema/groups.py</code> 新分组「全局流量监视器」(i-traffic, 排在「流量图」之后)。②<strong>工具控制面</strong> <code>POST /autostart</code>(<code>{action: install|uninstall}</code>; 200 达成期望态含 no-op / 501 平台不支持 / 500 命令失败 / 400 载荷非法; data_dir 取进程自身, 注入式 <code>installer_factory</code> 供 hermetic 测试)。③<strong>auto-qb 代理路由</strong>(新 <code>routes/traffic_monitor.py</code>, 注册进 <code>ROUTE_BUILDERS</code> + 金清单): <code>GET /api/traffic/monitor/status</code>(展示端点, 恒 200 + 结构化空态 reachable/error) / <code>PUT .../config</code>(写端点: 工具 400 逐条透传, 不可达/5xx 收口 502) / <code>POST .../autostart</code>(501 透传); token 解析单点(显式 tool_token_path 优先, 否则镜像工具平台默认数据目录的 monitor.token)。④<strong>设置页新分区</strong>(schema 分组自动出卡 + <code>settings.html</code> 链尾 <code>v-else-if</code> 分支): auto-qb 联动键走 <code>hub-field</code>(与通用表单同源), 工具状态/参数表单/自启开关经代理读写; 参数表单<strong>读后写</strong>(工具 PUT /config 全量覆盖)。<br>
+  出口判据全过: ①新配置键过 <code>test_config_schema</code>(对象段键集合)+ <code>test_config_key_surface</code>(键面基线 160→167 + loader 消费探针 + keys.md 出处)守卫; ②设置页读写工具参数真机可见(S7 联调时复核, 本轮以代理路由守阵钉住契约); ③未知键仍被拒(<code>test_config_traffic_monitor</code>)。工具 173/173; auto-qb 新增守阵 <code>test_config_traffic_monitor</code>(13 条)+ <code>test_web_traffic_monitor</code>(15 条)。红验 7 条锚点突变全判 RED(键集合漂移 / 段校验未接线 / loader 漏读 / schema 键名漂移 / status 缺 token 不报错 / PUT 代理路径漂移 / 工具 action 闸失效), 字节恒等还原后基线复绿。<br>
+  实施期发现(3): ①<code>utils.parse_time</code> 只认带单位串("0" 非法, "0S" 合法) —— 冷却键「0 = 不冷却」在 YAML 里须写 <code>0S</code>, 已同步 keys.md / schema help; ②前端 <code>v-if/v-else-if</code> 链<strong>跨分片延续</strong>(settings.html → settings-detail.html), 新分区只能作 <code>v-else-if</code> 插在链尾(settings.html 内, 392/400 行) —— 插分片边界会断链、插链尾之后会落 <code>&lt;/main&gt;</code> 外, 已记坑档 <code>pitfalls/web-ui/frontend-split.md</code>; ③四处结构性守阵(平台判定单点 / 段认领完整性 / schema 端点分组序 / 前端 POST 触发点登记)在首跑全量时判红 —— 均为「新增配置段/路由/前端 POST 点必须同步登记的既有网」, 已按各自口径补齐(utils.is_windows / WebUIModule.sections 加认领 / 分组序断言 / triggers.js calls 加行)。<br>
+  根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md</code>。行号基准 3ba069d7 的 auto-qb 侧落点(S6 首次触碰)已逐条复核: 配置四处 + 路由注册表 + 设置页模板, 未发现漂移。</td></tr>
 </table>
 
 <h2><span class="no">05</span>默认参数</h2>
@@ -338,7 +344,7 @@
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778、S6(auto-qb 配置面)于 26-10-16-1145 @ 3473aa9a(含用户拍板改版: 工具控制面加 <code>POST /autostart</code>, 见 S6 行)(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5/S6)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
 
 </div>
 </body>

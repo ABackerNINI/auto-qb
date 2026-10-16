@@ -1,6 +1,7 @@
 """S3 控制面守阵: 鉴权 / 端点 / 租约 / 配置热重载 / 端口冲突 fail-fast.
++ S6 自启开关端点 POST /autostart (工具进程内跑 installer, 替身注入).
 
-设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3).
+设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
 不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络。
 """
@@ -20,6 +21,7 @@ import pytest
 
 from gtm.__main__ import _run_loop
 from gtm.config import Config, ConfigHolder, load_config
+from gtm.installer import AutostartError, AutostartResult, UnsupportedPlatformError
 from gtm.sampler import Sampler
 from gtm.server import ControlServer, TokenManager
 from gtm.storage import Storage
@@ -51,11 +53,18 @@ def make_stats() -> dict:
     return {"eth0": SimpleNamespace(isup=True)}
 
 
-def make_server(tmp_path, *, port: int = 0, config: Optional[Config] = None, counters_start: int = 1_000_000):
+def make_server(
+    tmp_path,
+    *,
+    port: int = 0,
+    config: Optional[Config] = None,
+    counters_start: int = 1_000_000,
+    installer_factory=None,
+):
     """完整控制面装配 (锁已持有; 返回 (server, storage, sampler, holder, token)).
 
     sampler 挂注入计数器替身 (每次 +1024 up / +512 down) 与固定时钟 —— 全部
-    用例 hermetic, 不碰真实网卡。
+    用例 hermetic, 不碰真实网卡。installer_factory 注入自启后端替身 (S6 /autostart).
     """
     storage = Storage(str(tmp_path))
     storage.acquire_lock()
@@ -63,7 +72,7 @@ def make_server(tmp_path, *, port: int = 0, config: Optional[Config] = None, cou
     sampler = Sampler(clock=lambda: FIXED_NOW, counters_provider=counters, stats_provider=make_stats)
     holder = ConfigHolder(config or Config())
     token = TokenManager(str(tmp_path / "monitor.token"))
-    server = ControlServer(storage, sampler, holder, token, port=port)
+    server = ControlServer(storage, sampler, holder, token, port=port, installer_factory=installer_factory)
     server.start()
     return server, storage, sampler, holder, token
 
@@ -405,3 +414,133 @@ def test_hot_reload_does_not_drop_sampling(tmp_path) -> None:
         loop.join(timeout=3)
         server.stop()
         storage.release_lock()
+
+
+# ---- POST /autostart (S6: 自启开关; 工具进程内跑 installer, 替身注入) ----
+
+
+class FakeBackend:
+    """替身自启后端: 记录 register/unregister 调用; 返回可配结果或抛可配异常."""
+    def __init__(self, result: Optional[AutostartResult] = None, exc: Optional[Exception] = None):
+        self._result = result
+        self._exc = exc
+        self.calls: list[str] = []
+
+    def register(self) -> AutostartResult:
+        self.calls.append("register")
+        if self._exc is not None:
+            raise self._exc
+        assert self._result is not None
+        return self._result
+
+    def unregister(self) -> AutostartResult:
+        self.calls.append("unregister")
+        if self._exc is not None:
+            raise self._exc
+        assert self._result is not None
+        return self._result
+
+
+def _factory_recording(backend: FakeBackend):
+    """返回 (factory, seen): factory 记录收到的 data_dir, 恒返回同一 backend 替身."""
+    seen: list[str] = []
+
+    def factory(data_dir: str) -> FakeBackend:
+        seen.append(data_dir)
+        return backend
+
+    return factory, seen
+
+
+def test_autostart_install_calls_register_with_process_data_dir(tmp_path) -> None:
+    """install -> backend.register(); factory 收到的 data_dir = 本进程 storage.data_dir
+    (不信任请求体 —— 注册项写死的就是进程数据目录)."""
+    backend = FakeBackend(result=AutostartResult("registered", "已注册计划任务 gtm-autostart"))
+    factory, seen = _factory_recording(backend)
+    server, storage, sampler, holder, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        status, payload = http(
+            server,
+            "POST",
+            "/autostart",
+            body={
+                "action": "install",
+                "data_dir": "/evil/elsewhere"
+            },
+            token=token.token()
+        )
+        assert status == 200 and payload == {"ok": True, "action": "registered", "message": "已注册计划任务 gtm-autostart"}
+        assert backend.calls == ["register"]
+        assert seen == [storage.data_dir]  # 请求体里的 data_dir 被忽略
+    finally:
+        server.stop()
+
+
+def test_autostart_uninstall_calls_unregister(tmp_path) -> None:
+    backend = FakeBackend(result=AutostartResult("unregistered", "已卸载"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        status, payload = http(server, "POST", "/autostart", body={"action": "uninstall"}, token=token.token())
+        assert status == 200 and payload["action"] == "unregistered"
+        assert backend.calls == ["unregister"]
+    finally:
+        server.stop()
+
+
+def test_autostart_idempotent_noop_is_success(tmp_path) -> None:
+    """幂等 no-op (skipped / absent) 也是 200 —— 期望态已达成, 开关不该报错."""
+    for act, action_name in (("install", "skipped"), ("uninstall", "absent")):
+        backend = FakeBackend(result=AutostartResult(action_name, "no-op"))
+        factory, _ = _factory_recording(backend)
+        server, *_rest, token = make_server(tmp_path / act, installer_factory=factory)
+        try:
+            status, payload = http(server, "POST", "/autostart", body={"action": act}, token=token.token())
+            assert status == 200 and payload["action"] == action_name
+        finally:
+            server.stop()
+
+
+def test_autostart_unsupported_platform_501(tmp_path) -> None:
+    backend = FakeBackend(exc=UnsupportedPlatformError("当前平台不支持自启"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        status, payload = http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())
+        assert status == 501 and "不支持" in payload["error"]
+    finally:
+        server.stop()
+
+
+def test_autostart_command_failure_500(tmp_path) -> None:
+    backend = FakeBackend(exc=AutostartError("schtasks 失败 (rc=1)"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        status, payload = http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())
+        assert status == 500 and "schtasks" in payload["error"]
+    finally:
+        server.stop()
+
+
+def test_autostart_bad_action_400(tmp_path) -> None:
+    backend = FakeBackend(result=AutostartResult("registered", "x"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        assert http(server, "POST", "/autostart", body={"action": "bogus"}, token=token.token())[0] == 400
+        assert http(server, "POST", "/autostart", body={}, token=token.token())[0] == 400
+        assert backend.calls == []  # 载荷非法 -> 不触后端
+    finally:
+        server.stop()
+
+
+def test_autostart_requires_token(tmp_path) -> None:
+    backend = FakeBackend(result=AutostartResult("registered", "x"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest = make_server(tmp_path, installer_factory=factory)
+    try:
+        assert http(server, "POST", "/autostart", body={"action": "install"}, token=None)[0] == 401
+        assert backend.calls == []
+    finally:
+        server.stop()

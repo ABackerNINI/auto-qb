@@ -294,6 +294,10 @@ const TRIGGER_DEFS = {
     {
       "file": "polling.js", "fn": "startEvents", "ep": "/api/events/ticket",
       "scope": "none", "why": "SSE 订阅票据: 非动作"
+    },
+    {
+      "file": "config_hub.js", "fn": "tmAutostart", "ep": "/api/traffic/monitor/autostart",
+      "scope": "none", "why": "全局流量监视器工具自启开关(计划 26-10-16-0541 S6): 非种子目标, 作用于外部工具进程"
     }
   ]
 };

@@ -10,6 +10,9 @@ fail-fast)。鉴权 Bearer token: 首次启动原子生成 monitor.token (临时
   POST /subscribe    {endpoint, token} 注册订阅 (租约 last_heartbeat + lease_ttl)
   POST /heartbeat    {id} 心跳续租 (订阅方每 60s)
   POST /unsubscribe  {id} 注销
+  POST /autostart    {action: install|uninstall} 幂等注册/卸载开机自启 (S6: 供
+                     auto-qb 设置页开关; 在工具进程内跑 installer, sys.executable
+                     = 装了 gtm 的 venv python, 即自启项要指向的解释器)
 
 租约: last_heartbeat + lease_ttl (默认 180s) 过期剔除 —— 懒剔除 (每个已鉴权
 请求入口先 prune; S4 notifier 迭代前同样先 prune), 无后台清扫线程: 请求驱动
@@ -31,10 +34,11 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
 from gtm.config import Config, ConfigHolder, config_to_payload, save_config, validate_payload
+from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.sampler import Sampler
 from gtm.storage import Storage, atomic_write_text
 
@@ -121,6 +125,7 @@ class ControlServer:
         host: str = "127.0.0.1",
         port: int = 8099,
         started_at: Optional[float] = None,
+        installer_factory: Optional[Callable[[str], Any]] = None,
     ) -> None:
         self.storage = storage
         self.sampler = sampler
@@ -129,6 +134,8 @@ class ControlServer:
         self.host = host
         self.port = port
         self._started_at = started_at if started_at is not None else time.time()
+        # 自启后端工厂 (S6 /autostart): 默认 = 真 installer; 单测注入替身以 hermetic
+        self._installer_factory = installer_factory or build_installer
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -198,6 +205,8 @@ class ControlServer:
             return self._heartbeat(handler)
         if handler.command == "POST" and path == "/unsubscribe":
             return self._unsubscribe(handler)
+        if handler.command == "POST" and path == "/autostart":
+            return self._autostart(handler)
         self._send(handler, 404, {"error": f"unknown endpoint: {handler.command} {path}"})
 
     def _prune_leases(self) -> tuple[str, ...]:
@@ -314,6 +323,39 @@ class ControlServer:
         self._send(handler, 200, {"ok": True})
 
     # ---- 工具 ----
+
+    def _autostart(self, handler: "_Handler") -> None:
+        """自启开关 (S6): 幂等注册/卸载开机自启 (供 auto-qb 设置页开关消费).
+
+        action: install -> register(); uninstall -> unregister()。data_dir 取本进程
+        的 storage.data_dir (与 run 一致) —— **不信任请求体**: 注册项里写死的就是它,
+        外部传别的目录只会让注册项与真实运行目录不一致。
+
+        在工具进程内跑 installer, sys.executable 即装了 gtm 的 venv python (自启项
+        要指向的解释器), 无需调用方知道该路径。
+
+        错误映射 (供设置页开关判成败): 载荷非法 400 / 平台不支持 501 / 平台命令失败
+        或前置条件缺失 500; 幂等 no-op 也是 200 (结果 action 区分 registered/skipped/
+        unregistered/absent)。
+        """
+        body, err = self._read_json(handler)
+        if err is not None:
+            return self._send(handler, 400, {"error": err})
+        assert body is not None
+        if not isinstance(body, dict):
+            return self._send(handler, 400, {"error": "自启载荷必须是 JSON 对象"})
+        action = str(body.get("action") or "").strip()
+        if action not in ("install", "uninstall"):
+            return self._send(handler, 400, {"error": "action 必须是 install 或 uninstall"})
+        try:
+            backend = self._installer_factory(self.storage.data_dir)
+            result = backend.register() if action == "install" else backend.unregister()
+        except UnsupportedPlatformError as e:
+            return self._send(handler, 501, {"error": str(e)})
+        except AutostartError as e:
+            return self._send(handler, 500, {"error": str(e)})
+        logger.info("自启 %s: %s", action, result.message)
+        self._send(handler, 200, {"ok": True, "action": result.action, "message": result.message})
 
     def _read_json(self, handler: "_Handler") -> tuple[Optional[Any], Optional[str]]:
         """读请求体并解析 JSON (上限 _MAX_BODY_BYTES; 坏 JSON -> (None, 错误))."""

@@ -67,6 +67,13 @@ fs.path_map
 fs.path_map.*.from
 fs.path_map.*.to
 global_speed_limit_curve
+global_traffic_monitor
+global_traffic_monitor.autostart
+global_traffic_monitor.enabled
+global_traffic_monitor.notify_cooldown_s
+global_traffic_monitor.subscribe
+global_traffic_monitor.tool_token_path
+global_traffic_monitor.tool_url
 grouping
 grouping.check_missing_files
 grouping.cross_group_conflict_check
