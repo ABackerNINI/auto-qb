@@ -29,17 +29,17 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (gtm): run 采样-落盘主循环 (S2)
+  __main__.py   CLI 入口 (gtm): run 采样-落盘-通知主循环 (S2/S4)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
   server.py     本地控制面 127.0.0.1:8099 (S3)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启注册/卸载 (S5)
-tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; 随 S4-S9 逐步扩充)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; 随 S5-S9 逐步扩充)
 ```
 
-## 运行 (S2-S3)
+## 运行 (S2-S4)
 
 ```bash
 gtm run [--data-dir DIR]     # 前台采样-落盘主循环 + 控制面 (自启机制拉起的前台服务)
@@ -69,6 +69,33 @@ Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 租约: `last_heartbeat + lease_ttl` (默认 180s) 过期剔除 (懒剔除, 每个已鉴权
 请求入口先 prune)。注册表落 state.json, 重启续存。配置键与默认值见计划 §05;
 非法键/类型/范围/正则一次性聚合拒绝 (黄金法则 4), 拒绝不落盘不换配置。
+
+⚠ `PUT /config` 是**全量覆盖** (last-writer-wins): 载荷必须带全部键, 只发要改的键
+会把其余键静默打回默认值 (冒烟实测: 只发 `notify_threshold_bytes` 会让
+`sample_interval` 从 0.05 变回 5)。设置页须「读后写」(先 GET /status 取 `config`
+回显, 改字段后整体 PUT)。
+
+## 通知 (S4)
+
+采样循环内累计「距上次事件的当日上下行合计变化」, >= `notify_threshold_bytes`
+(默认 100 MiB) 时向所有存活订阅者推送一个事件 (事件体六键, 计划 §04 S4):
+
+```json
+{"event_id": 7, "day": "2026-10-16", "up_bytes": 123, "down_bytes": 456, "total_bytes": 579, "ts": 1760587200.123}
+```
+
+- 顺序: **先落盘** (dat 节流窗口内的活尾即时封口 —— 订阅者收到事件时文件必已含新值)
+  -> 事件号 +1 且落 state.json (**重启接续**, 订阅方按事件号单调去重) -> 派发。
+- **不占采样循环**: 派发在独立守护线程里做, 且**每订阅者一线程** —— 假死端点只占满
+  自己的 `notify_timeout_s` 超时窗口, 既不拖慢采样节拍也不拖慢其它订阅者; 推送失败
+  只记 WARNING 不重试 (订阅者靠慢轮询兜底); 在途线程达上限 (32) 则跳过本轮派发并告警。
+- **启动/崩溃恢复后首帧补发一次** (`catch_up`, 不看阈值): 让重启后仍持旧视图的订阅者
+  立即刷新; 事件号接续 (不是从 1 重来)。
+- 阈值累计基数 = **上次事件时刻**的当日合计, 只在事件派发成功后推进 (随样本推进会
+  把「累计变化」退化成单样本 delta); 跨天/累计回退只重置基数, 不产伪事件。
+- 推送以 `Authorization: Bearer <订阅时登记的 token>` POST JSON 到订阅端点
+  (auto-qb 侧 `/api/traffic/monitor/notify`, S7); 订阅方侧冷却 `notify_cooldown_s`
+  (默认 600s) 另算, 与事件号去重互补。
 
 ## 开发
 

@@ -1,8 +1,9 @@
 """gtm 命令行入口.
 
 后续步骤逐步补充子命令:
-  S2:    run            采样-落盘主循环 (单写线程; 控制面与通知随 S3/S4 接入)
-  S3-S4: run            控制面随 run 启动 (127.0.0.1:8099), 通知接入主循环
+  S2:    run            采样-落盘主循环 (单写线程)
+  S3:    run            控制面随 run 启动 (127.0.0.1:8099)
+  S4:    run            通知接入主循环 (阈值事件 -> 订阅者推送; 首帧补发一次)
   S5:    install-autostart / uninstall-autostart   三平台自启幂等注册/卸载
 """
 
@@ -15,6 +16,7 @@ import threading
 
 from gtm import __version__
 from gtm.config import Config, ConfigHolder, load_config
+from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
 from gtm.storage import SingleInstanceLockError, Storage, default_data_dir
@@ -63,12 +65,18 @@ def _run_loop(
     sampler: Sampler,
     holder: ConfigHolder,
     stop_event: threading.Event,
+    notifier: Notifier | None = None,
 ) -> None:
-    """采样-落盘主循环 (每轮读 holder.current: PUT /config 热重载即时生效).
+    """采样-落盘-通知主循环 (每轮读 holder.current: PUT /config 热重载即时生效)。
 
     stop_event.wait 替代 time.sleep: 停止信号即时响应 (不空等一个采样间隔)。
     单轮异常只记 ERROR 不杀循环 (与「通知失败不阻断落盘」对称)。
+
+    通知 (S4): 阈值参数每轮现读 (热重载生效); **首个成功帧**走 catch_up 补发一次
+    —— 启动/崩溃恢复后订阅者的视图可能已陈旧 (计划 §04 S4)。catch_up 只在派发
+    成功后才算完成 (notify 抛错时保持待补发, 下一轮重试)。
     """
+    first_frame = True
     while not stop_event.is_set():
         cfg = holder.current
         try:
@@ -77,10 +85,14 @@ def _run_loop(
             storage.set_flush_params(cfg.flush_delta_bytes, cfg.flush_interval_s)
             result = sampler.sample_once()
             storage.record(result, sampler.snapshot())
+            if notifier is not None:
+                notifier.notify(result, catch_up=first_frame)
+                first_frame = False
         except Exception:
-            # 单轮采样/落盘失败 (Windows replace 竞态耗尽重试/磁盘满等) 不杀守护
-            # 进程: ERROR 可见, 下一轮重试自愈 (与「通知失败不阻断落盘」对称)
-            logger.exception("采样/落盘本轮失败, 下一轮重试")
+            # 单轮采样/落盘/通知失败 (Windows replace 竞态耗尽重试/磁盘满/state 写失败
+            # 等) 不杀守护进程: ERROR 可见, 下一轮重试自愈 (与「通知失败不阻断落盘」
+            # 对称)
+            logger.exception("采样/落盘/通知本轮失败, 下一轮重试")
         stop_event.wait(cfg.sample_interval)
 
 
@@ -122,21 +134,27 @@ def cmd_run(args: argparse.Namespace) -> int:
         storage.release_lock()
         return 1
     stop_event = threading.Event()
+    notifier = Notifier(storage, holder)
     try:
         for w in storage.recover(sampler):
             logger.warning("恢复告警 | %s", w)
         logger.info(
-            "gtm 启动 | data_dir=%s dat=%s sample_interval=%ss 控制面=%s",
+            "gtm 启动 | data_dir=%s dat=%s sample_interval=%ss 通知阈值=%dMiB 控制面=%s",
             data_dir,
             storage.dat_path,
             config.sample_interval,
+            config.notify_threshold_bytes // (1024 * 1024),
             server.url(),
         )
-        _run_loop(storage, sampler, holder, stop_event)
+        _run_loop(storage, sampler, holder, stop_event, notifier)
     except KeyboardInterrupt:
         logger.info("收到中断, 优雅退出 (最终落盘 + 释放锁 + 停控制面)")
     finally:
         stop_event.set()
+        try:
+            notifier.close()  # 有界等待在途推送 (守护线程, 超时即弃)
+        except Exception:
+            logger.exception("通知器收尾失败")
         try:
             server.stop()
         except Exception:

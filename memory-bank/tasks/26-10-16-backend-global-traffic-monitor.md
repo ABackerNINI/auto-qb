@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 09:46
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面已落地。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md
+**Updated:** 2026-10-16 10:16
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知已落地。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -27,7 +27,7 @@
 | S1 | 采样器 sampler | Done (26-10-16-0815) |
 | S2 | 落盘 storage | Done (26-10-16-0855) |
 | S3 | 控制面 server | Done (26-10-16-0946) |
-| S4 | 通知 notifier | Open |
+| S4 | 通知 notifier | Done (26-10-16-1016) |
 | S5 | 自启 installer | Open |
 | S6 | auto-qb 配置面 | Open |
 | S7 | auto-qb 接收面 | Open |
@@ -93,4 +93,23 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0946, 状态行 S0–S3, §04 R0 增 S3 行) · 本档案 R4 · activeContext 切片 R4 · 工具 README/__init__ 进度注记与控制面端点表 · pitfalls/testing/redverify-anchor-lineendings.md 复发+1(形态三第二例) + 形态十一 · kb.index 重建 · 基线切片 `baselines/26-10-16-0946-global-traffic-monitor-s3.md`。未提交(待用户「提交」指令)。
 
 **行号基准**: S3 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
+
+
+### R5 · S4 实施 (2026-10-16 10:16)
+
+用户指令「实施计划S4:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S4 的显式授权(S5–S10 不动)。开工同步 a3ec82ef(快进)。
+
+**落点**(改 3 文件 + 1 新文件, 零 auto-qb 触碰): `notifier.py` 占位 -> 全量实现(~230 行: `Notifier` 阈值累计 + catch_up 补发 + 守护线程派发[每订阅者一线程, 在途上限 32] + `http_push` 生产推送单点 + `close`/`wait_idle`) + `storage.py` `bump_event_id`(事件号 +1 且落盘) + `__main__.py` `_run_loop` 接通知(首帧 catch_up; 派发抛错保持待补发下一轮重试) + cmd_run 接线(启动日志含通知阈值, 退出时 `notifier.close`) + `tests/test_notifier.py` 新文件 24 条守阵 + 工具 README(新增「通知 (S4)」节)/`__init__` 进度注记。
+
+**设计要点**: 阈值累计基数 = **上次事件时刻**的当日合计, 只在派发成功后推进(随样本推进会把「累计变化」退化成单样本 delta —— 首版即踩, 单测立刻暴露已修); 跨天/累计回退只重置基数不产伪事件; `catch_up` 首帧补发不看阈值(事件号接续, 不从 1 重来); 推送顺序 = 先落盘(dat 节流窗口内活尾即时封口)→ 事件号 +1 落盘 → 派发; 派发在独立守护线程且每订阅者一线程(假死端点既不拖慢采样循环也不拖慢其它订阅者), 失败只记 WARNING 不重试(慢轮询兜底); `http_push` = stdlib urllib POST JSON + `Authorization: Bearer <订阅 token>`; 事件体严格六键 {event_id, day, up_bytes, down_bytes, total_bytes, ts}。
+
+**出口判据全过**: ①阈值触发/启动补发/重复投递去重单测(六字段事件体 / 事件号单调且持久化 / 同累计窗口不重发 / 跨天不产伪事件 / 阈值热重载 / 事件号重启接续); ②两订阅者(含假死端点)推送不阻塞采样循环 —— 单测真 `_run_loop` 10s 压测(帧数下界 60 断言通过) + 真机 12s 窗口实测 193 帧(16.1/s) 而假死推送每次占满 3s 超时; 工具 122/122(98 + 24); 红验 7 条锚点突变全判 RED(阈值失效 / 跨天不重置基数 / 事件号不落盘 / 鉴权头写错 / 派发同步化[守阵挂起, 按未绿计] / 推送前不落盘 / 通知前不剔除租约), 字节恒等还原后基线复绿; 真机冒烟: 真 HTTP 订阅者收到事件且 Bearer token 与 monitor.token 一致、假死端点(accept 不回包)只出 WARNING 不阻断、kill -9 重启事件号 5->6(首帧补发)->7 且订阅者续存 2。
+
+**实施期发现**: ①阈值基数推进纪律(实现缺陷, 单测暴露已修); ②红验 M2 未判红 —— 跨天用例首版选「前日合计 > 新日首样本」形态, 被 `total < _last_total` 回退检查替 `day_rolled` 兜底, 突变逃过守阵; 改选「前日合计 < 新日首样本」后判红(坑档 red-verify-must-hit-behavior 新增形态「兜底分支掩盖」); ③`PUT /config` 全量覆盖语义冒烟实锤(只发要改的键会把其余键静默打回默认值 —— sample_interval 0.05 -> 5), S6 设置页「读后写」是硬要求。坑: `pitfalls/testing/redverify-anchor-lineendings.md` 复发+1 + 形态十二(设了子进程超时却没接住 `TimeoutExpired` -> 脚本崩在突变循环中途、收尾基线复跑被跳过)。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1016, 状态行 S0–S4, §04 R0 增 S4 行) · 本档案 R5 · activeContext 切片 R5 · 工具 README/`__init__` 进度注记 · pitfalls/testing/redverify-anchor-lineendings.md 复发+1 + 形态十二 · pitfalls/testing/red-verify-must-hit-behavior.md 新增形态 · kb.index 重建 · 基线切片 `baselines/26-10-16-1016-global-traffic-monitor-s4.md`。未提交(待用户「提交」指令)。
+
+**行号基准**: S4 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
+
+**另(用户 26-10-16-1029 指令「直接修复文档缺陷, 然后提交」)**: 计划 §05 参数表末尾混入 S3 实施记录行(S3 行本应落在 §04 R0 表)—— 计划外文档缺陷已搬回 §04 R0(行序 S0/S1/S2/S3/S4), §05 恢复为纯参数表, 脚注相应改写, doc-updated 抬至 26-10-16-1029。搬移走 bytes 层脚本(先断言 LF 约定未破 + 块唯一, 搬后校验 §05 段内无 S3 行)。
 

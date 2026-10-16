@@ -14,7 +14,11 @@ sampler.DAT_ROW_RE, 读写两侧共用防漂移)。写 = 临时文件 -> fsync -
 S3 扩展: 订阅注册表 (subscribe/heartbeat/unsubscribe 经控制面 HTTP 线程驱动)
 与末事件号并入 state.json 载荷 —— HTTP 线程与采样线程**并发**读-改-写同一
 载荷, 由 _state_lock (RLock) 串行化: 每次写盘都是"最近快照 + 当前注册表 +
-事件号"的完整镜像 (快照由 record 更新; 注册表由 HTTP 变更更新)。订阅方 token
+事件号"的完整镜像 (快照由 record 更新; 注册表由 HTTP 变更更新)。
+
+S4 扩展: bump_event_id —— 通知事件号 +1 且**落盘** (订阅方按事件号单调去重,
+重启必须接续); 通知前置落盘复用 flush (dat 节流窗口内的活尾即时封口, 读者届时
+必读到新值)。订阅方 token
 落盘明文 (数据目录本地可达, 与 auto-qb config.yml 内 token 同风险面; 工具
 不提供跨机访问面 —— 控制面强制绑定 127.0.0.1)。
 
@@ -443,8 +447,19 @@ class Storage:
 
     @property
     def last_event_id(self) -> int:
-        """末事件号 (S4 通知序号; S3 仅读取与透传)."""
+        """末事件号 (S4 通知序号)."""
         with self._state_lock:
+            return self._last_event_id
+
+    def bump_event_id(self) -> int:
+        """事件号 +1 并落盘, 返回新号 (S4 通知; 采样线程调用)。
+
+        落盘使事件号**跨重启接续** (订阅方按事件号单调去重, 重启回到 0 会让
+        去重判据失效)。与采样/注册表同锁同载荷路径 —— 写盘恒为完整镜像。
+        """
+        with self._state_lock:
+            self._last_event_id += 1
+            self._persist_state_locked()
             return self._last_event_id
 
     def upsert_subscriber(self, sub_id: str, endpoint: str, token: str) -> None:
