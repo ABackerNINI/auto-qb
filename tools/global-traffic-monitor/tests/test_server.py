@@ -1,15 +1,18 @@
 """S3 控制面守阵: 鉴权 / 端点 / 租约 / 配置热重载 / 端口冲突 fail-fast.
 + S6 自启开关端点 POST /autostart (工具进程内跑 installer, 替身注入).
++ S12 发现指针: bind 成功后写 endpoint.json (字段/删除) + 抢输锁不占端口.
 
-设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6).
+设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
-不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络。
+不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络; 锁路径与发现指针注入 tmp
+(不碰真实用户级指针目录), installer 替身注入 (不跑真实 schtasks/systemctl).
 """
 
 from __future__ import annotations
 
 import datetime
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -24,7 +27,7 @@ from gtm.config import Config, ConfigHolder, load_config
 from gtm.installer import AutostartError, AutostartResult, UnsupportedPlatformError
 from gtm.sampler import Sampler
 from gtm.server import ControlServer, TokenManager
-from gtm.storage import Storage
+from gtm.storage import ENDPOINT_SCHEMA, Storage
 
 # ---- 替身 ----
 
@@ -53,6 +56,16 @@ def make_stats() -> dict:
     return {"eth0": SimpleNamespace(isup=True)}
 
 
+class _NoAutostartBackend:
+    """替身自启后端 (S12): 未注册 —— start() 写发现指针探测 autostart_registered 时不碰真实 installer."""
+    def is_registered(self) -> bool:
+        return False
+
+
+def _no_autostart_factory(data_dir: str) -> _NoAutostartBackend:
+    return _NoAutostartBackend()
+
+
 def make_server(
     tmp_path,
     *,
@@ -64,15 +77,25 @@ def make_server(
     """完整控制面装配 (锁已持有; 返回 (server, storage, sampler, holder, token)).
 
     sampler 挂注入计数器替身 (每次 +1024 up / +512 down) 与固定时钟 —— 全部
-    用例 hermetic, 不碰真实网卡。installer_factory 注入自启后端替身 (S6 /autostart).
+    用例 hermetic, 不碰真实网卡。installer_factory 注入自启后端替身 (S6 /autostart);
+    S12 起 start() 写发现指针会探测 autostart_registered, 默认也走替身 (不跑真 schtasks)。
+    锁路径与发现指针均注入 tmp_path (S12/D8): 不碰真实用户级指针目录。
     """
-    storage = Storage(str(tmp_path))
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
     storage.acquire_lock()
     counters, calls = make_counters(counters_start)
     sampler = Sampler(clock=lambda: FIXED_NOW, counters_provider=counters, stats_provider=make_stats)
     holder = ConfigHolder(config or Config())
     token = TokenManager(str(tmp_path / "monitor.token"))
-    server = ControlServer(storage, sampler, holder, token, port=port, installer_factory=installer_factory)
+    server = ControlServer(
+        storage,
+        sampler,
+        holder,
+        token,
+        port=port,
+        installer_factory=installer_factory or _no_autostart_factory,
+        endpoint_file=str(tmp_path / "endpoint.json"),
+    )
     server.start()
     return server, storage, sampler, holder, token
 
@@ -306,7 +329,7 @@ def test_unknown_endpoint_404(tmp_path) -> None:
 
 def test_lease_prune_expired_and_keep_fresh(tmp_path) -> None:
     """注入 now: 超租约的剔除, 未超的保留 (Storage 层直接验剔除逻辑)."""
-    storage = Storage(str(tmp_path))
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
     storage.acquire_lock()
     storage.upsert_subscriber("old", "http://h/1", "t")
     storage.upsert_subscriber("fresh", "http://h/2", "t")
@@ -340,11 +363,11 @@ def test_lease_prune_lazy_on_status_request(tmp_path) -> None:
 
 def test_registry_survives_restart(tmp_path) -> None:
     """注册表落 state.json: 重启 (新 Storage 实例) 后订阅仍在 (计划 S3: 注册表落 state.json)."""
-    storage = Storage(str(tmp_path))
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
     storage.acquire_lock()
     storage.upsert_subscriber("s1", "http://h/1", "t")
     storage.release_lock()
-    storage2 = Storage(str(tmp_path))
+    storage2 = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
     storage2.acquire_lock()
     try:
         storage2.recover(Sampler())
@@ -364,16 +387,88 @@ def test_port_conflict_fails_fast(tmp_path) -> None:
         # 第二个实例直接抢 server_a 已占端口 -> 绑定即 OSError (fail-fast)
         with pytest.raises(OSError):
             ControlServer(
-                Storage(str(tmp_path / "c")),
+                Storage(str(tmp_path / "c"), lock_path=str(tmp_path / "c.lock")),
                 Sampler(),
                 ConfigHolder(Config()),
                 TokenManager(str(tmp_path / "c" / "monitor.token")),
                 host=server_a.host,
                 port=server_a.port,
+                endpoint_file=str(tmp_path / "c" / "endpoint.json"),
             ).start()
     finally:
         server_a.stop()
         server_b.stop()
+
+
+# ---- 发现指针 (S12): bind 后写 endpoint.json / 退出删除 / 抢输不占端口 ----
+
+
+def test_endpoint_written_on_start_with_fields(tmp_path) -> None:
+    """S12/D6: bind 成功后原子写 endpoint.json, 字段见计划 §05."""
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        pointer = tmp_path / "endpoint.json"
+        assert pointer.is_file()
+        payload = json.loads(pointer.read_text(encoding="utf-8"))
+        assert payload["schema"] == ENDPOINT_SCHEMA
+        assert payload["port"] == server.port
+        assert payload["host"] == "127.0.0.1"
+        assert payload["pid"] == os.getpid()
+        assert payload["data_dir"] == os.path.abspath(str(tmp_path))
+        assert payload["token_path"] == os.path.abspath(str(tmp_path / "monitor.token"))
+        assert payload["autostart_registered"] is False
+        assert payload["version"] and payload["exe_path"] and payload["started_at"]
+    finally:
+        server.stop()
+
+
+def test_endpoint_removed_on_stop(tmp_path) -> None:
+    """S12/D6: 优雅退出 (stop) 删发现指针 —— 退出后指针消失."""
+    server, *_rest = make_server(tmp_path)
+    pointer = tmp_path / "endpoint.json"
+    assert pointer.is_file()
+    server.stop()
+    assert not pointer.exists()
+
+
+def test_endpoint_autostart_registered_reflects_backend(tmp_path) -> None:
+    """S12: autostart_registered 反映 installer 现货态 (已注册 -> true, 供 auto-qb 设置页)."""
+    class _Registered:
+        def is_registered(self) -> bool:
+            return True
+
+    server, *_rest = make_server(tmp_path, installer_factory=lambda data_dir: _Registered())
+    try:
+        payload = json.loads((tmp_path / "endpoint.json").read_text(encoding="utf-8"))
+        assert payload["autostart_registered"] is True
+    finally:
+        server.stop()
+
+
+def test_losing_instance_locks_out_before_binding_port(tmp_path, monkeypatch, capsys) -> None:
+    """S12/D8: 抢输锁的第二个进程 fail-fast —— 不绑端口 (端口零占用)、不写发现指针."""
+    from gtm import __main__ as cli
+
+    ptr = tmp_path / "ptr"
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    data_dir = tmp_path / "data"
+    holder = Storage(str(data_dir))
+    holder.acquire_lock()  # 模拟已运行实例占锁 (锁锚点已被 monkeypatch 指到 tmp)
+
+    start_calls: list[int] = []
+    real_start = ControlServer.start
+
+    def spy_start(self) -> None:  # noqa: ANN001 - 替身签名
+        start_calls.append(1)
+        real_start(self)
+
+    monkeypatch.setattr(ControlServer, "start", spy_start)
+    rc = cli.cmd_run(SimpleNamespace(data_dir=str(data_dir)))
+    assert rc == 1
+    assert "已持有锁" in capsys.readouterr().err  # 确证走的是抢输锁路径 (非更早返回)
+    assert start_calls == []  # 未绑端口 = 端口零占用
+    assert not (ptr / "endpoint.json").exists()  # 未写发现指针
+    holder.release_lock()
 
 
 # ---- 热重载不丢采样 (计划 S3 出口: 真循环 + 并发 PUT) ----
@@ -471,7 +566,9 @@ def test_autostart_install_calls_register_with_process_data_dir(tmp_path) -> Non
         )
         assert status == 200 and payload == {"ok": True, "action": "registered", "message": "已注册计划任务 gtm-autostart"}
         assert backend.calls == ["register"]
-        assert seen == [storage.data_dir]  # 请求体里的 data_dir 被忽略
+        # factory 另被 start() 写发现指针时探 autostart_registered 调过一次; 两次都收进程 data_dir,
+        # 请求体里的 /evil/elsewhere 从未出现 (被忽略)
+        assert set(seen) == {storage.data_dir}
     finally:
         server.stop()
 

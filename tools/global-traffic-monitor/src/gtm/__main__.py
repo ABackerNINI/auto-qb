@@ -139,6 +139,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     try:
         storage.acquire_lock()  # fail-fast: 二次启动即报错 (单实例)
+        # 顺序不变式 (S12/D8): 锁必须早于 server.start() (绑端口) 与采样循环 ——
+        # 抢输的第二个进程在此 fail-fast, 不绑任何端口、不写发现指针、不采样。
     except SingleInstanceLockError as e:
         print(f"gtm: {e}", file=sys.stderr)
         return 1

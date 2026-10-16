@@ -22,10 +22,16 @@ Windows 绑定语义 (坑档 platform-fs / web): HTTPServer 默认 allow_reuse_a
 = 1 在 Windows 映射为**抢占式** SO_REUSEADDR —— 端口被别的进程监听时 bind 仍
 会成功 (静默双监听, 流量随机分流) ⇒ Windows 上必须关掉才能「占用即 fail-fast」;
 POSIX 上 SO_REUSEADDR 只绕 TIME_WAIT 不抢监听 ⇒ 保留 True 便于重启。
+
+发现指针 (S12 / D6): bind 成功后把 {schema, version, pid, started_at, host, port,
+data_dir, token_path, exe_path, autostart_registered} (字段见计划 §05) 原子写进
+用户级指针目录 endpoint.json, 优雅退出 (stop / atexit) 删除 —— auto-qb 据此发现
+工具 (免配端口、免端口漂移); 写入失败只 WARNING 不阻断服务 (§09)。
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
@@ -33,14 +39,16 @@ import secrets
 import sys
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
+from gtm import __version__
 from gtm.config import Config, ConfigHolder, config_to_payload, save_config, validate_payload
 from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.sampler import Sampler
-from gtm.storage import Storage, atomic_write_text
+from gtm.storage import ENDPOINT_SCHEMA, Storage, atomic_write_text, endpoint_path, remove_endpoint, write_endpoint
 
 logger = logging.getLogger("gtm.server")
 
@@ -126,6 +134,7 @@ class ControlServer:
         port: int = 8099,
         started_at: Optional[float] = None,
         installer_factory: Optional[Callable[[str], Any]] = None,
+        endpoint_file: Optional[str] = None,
     ) -> None:
         self.storage = storage
         self.sampler = sampler
@@ -136,6 +145,8 @@ class ControlServer:
         self._started_at = started_at if started_at is not None else time.time()
         # 自启后端工厂 (S6 /autostart): 默认 = 真 installer; 单测注入替身以 hermetic
         self._installer_factory = installer_factory or build_installer
+        # 发现指针路径 (S12/D6): 默认用户级目录; 单测注入 tmp 路径保持 hermetic
+        self._endpoint_file = endpoint_file or endpoint_path()
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -166,6 +177,7 @@ class ControlServer:
         self.port = self._httpd.server_address[1]  # port=0 时取实际绑定端口
         self._thread = threading.Thread(target=self._httpd.serve_forever, name="gtm-http", daemon=True)
         self._thread.start()
+        self._write_endpoint()  # bind 成功后写发现指针 (S12/D6)
         logger.info("控制面已监听 http://%s:%d (鉴权 Bearer token)", self.host, self.port)
 
     def stop(self) -> None:
@@ -176,6 +188,53 @@ class ControlServer:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
+        self._remove_endpoint()  # 优雅退出删发现指针 (幂等)
+
+    # ---- 发现指针 (S12 / D6) ----
+
+    def _write_endpoint(self) -> None:
+        """bind 成功后原子写发现指针 endpoint.json (字段见计划 §05)。
+
+        写入失败只 WARNING 不 fail-fast (§09): 指针目录不可写时工具仍服务,
+        auto-qb 侧退化为「直接探默认端口」; 指针是发现便利, 不是运行前提。
+        成功后注册 atexit —— 硬退出 (未走 stop) 也尽力删指针 (D6/D7)。
+        """
+        payload = {
+            "schema": ENDPOINT_SCHEMA,
+            "version": __version__,
+            "pid": os.getpid(),
+            "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "host": self.host,
+            "port": self.port,
+            "data_dir": os.path.abspath(self.storage.data_dir),
+            "token_path": os.path.abspath(self.token_manager.path),
+            "exe_path": sys.executable,
+            "autostart_registered": self._autostart_registered(),
+        }
+        try:
+            written = write_endpoint(payload, path=self._endpoint_file)
+        except OSError as e:
+            logger.warning("发现指针写入失败 (不阻断服务): %s", e)
+            return
+        atexit.register(self._remove_endpoint)
+        logger.info("发现指针已写: %s (pid=%d, port=%d)", written, payload["pid"], self.port)
+
+    def _remove_endpoint(self) -> None:
+        remove_endpoint(path=self._endpoint_file)
+
+    def _autostart_registered(self) -> bool:
+        """自启是否已注册 (§05 指针字段): 现货态探测, 供 auto-qb 设置页读开关 (D13/D19)。
+
+        平台不支持 / 查询失败 / 替身后端无该能力一律按未注册 (该字段是诊断便利,
+        不能反过来影响服务启动)。自启意图的裁决 (工具 config autostart) 由后续步骤落定。
+        """
+        try:
+            backend = self._installer_factory(self.storage.data_dir)
+            probe = getattr(backend, "is_registered", None)
+            return bool(probe()) if callable(probe) else False
+        except Exception as e:  # noqa: BLE001 - 动态探测, 任何失败都必须降级而非拖垮启动
+            logger.debug("自启注册状态查询失败 (按未注册): %s", e)
+            return False
 
     def url(self) -> str:
         return f"http://{self.host}:{self.port}"

@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 05:34
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); S11(工具侧目录定位/数据落点/旧数据搬迁/启动器)已实施。
+**Updated:** 2026-10-17 06:23
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); S11(工具侧目录定位/数据落点/旧数据搬迁/启动器)/S12(发现指针 endpoint.json + 单实例锁锚点)已实施。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -27,7 +27,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S11 | 工具侧目录定位契约 + 数据落点 + 旧数据搬迁 + 启动器 | Done (26-10-17-0534) |
-| S12 | 发现指针与锁锚点 | Open |
+| S12 | 发现指针与锁锚点 | Done (26-10-17-0623) |
 | S13 | 随机端口与 `endpoint` 子命令 | Open |
 | S14 | 启动器自启意图/改名/gitignore | Open |
 | S15 | auto-qb 配置面与升级链 | Open |
@@ -51,3 +51,19 @@
 **未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md` 与工具 README 的旧 env 名 / 平台默认目录文案 → S14 改名面 + S18 文档回写; `data/`、`run/` 的 gitignore 与 `--autostart` 布尔开关 → S14。
 
 **滚动面**: 计划 HTML(本专题计划, 未在本轮改动) · 本档案新建(立档阈值命中: 跨会话 + ≥3 源文件 + 有计划文档) · activeContext 切片 `26-10-17-0339-traffic-source-integration.md`(S11 已实施段 + 待办) · 基线切片新建 · 坑档 `pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(新增) 与 `pitfalls/kb/discipline.md`(R1 改版教训) · kb.index 重建。随本专题「提交」入库。
+
+### R2 · S12 实施 (2026-10-17 06:23)
+
+用户指令「实施计划S12: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S12 的显式授权(S13–S19 不动); 开工同步至 e7d89021。
+
+**落点**(改 6 文件, 纯工具侧、零 auto-qb 触碰): `tools/global-traffic-monitor/src/gtm/storage.py`(新增 `_platform_data_home()` 平台用户目录单点 + `pointer_dir()`/`endpoint_path()`/`instance_lock_path()` + `ENDPOINT_SCHEMA=1`[D6] + `write_endpoint()`[原子写] / `remove_endpoint()`[幂等删]; `Storage` 锁锚点从 `data_dir` 迁到 `lock_path` 注入, 默认 = 指针目录 `instance.lock`[D8]) · `src/gtm/server.py`(`ControlServer` 增 `endpoint_file` 注入; `start()` bind 成功后原子写 §05 十字段 + 注册 atexit; `stop()` 删指针; `_autostart_registered()` 探现货态、失败降级 False; 写失败只 WARNING[§09]) · `src/gtm/__main__.py`(标注「锁 acquire 早于 bind/采样」顺序不变式) · `tests/test_storage.py` / `tests/test_server.py` / `tests/test_notifier.py`(装配注入锁路径 + 指针路径 + 自启替身, 新增指针与锁锚点用例 + 「抢输进程不占端口」守阵; 头文档清单同步)。
+
+**设计要点**: 发现指针与单实例锁**都锚在用户级指针目录**(与 `--data-dir` 解耦, 整机一个工具、指针无并发写); 指针写失败不阻断服务(auto-qb 退化为直探默认端口); 协议版本 `schema` 随指针写出(auto-qb 读未知 schema 只告警不猜字段 = S16 消费侧)。
+
+**出口判据全过**: ①第二个实例 fail-fast(锁抢输)、端口零占用(守阵断言 `ControlServer.start` 未被调用 + stderr 含「已持有锁」)、不写指针; ②退出(stop)后指针消失; ③指针 `schema`/`port`/`data_dir`/`token_path` 等十字段齐备且与运行态一致。根 `test.full` 与工具侧套件的实测数字只记入基线切片 `baselines/26-10-17-0623-global-traffic-source-integration-s12.md`(见 kb.baseline; 工具侧较 S11 基线净增 11 条用例)。
+
+**新坑**: `pitfalls/testing/test-lock-path-injection.md`(锁锚点迁出 data_dir 后, 未注入 `lock_path` 的测试会去锁真实用户目录 → 沙箱 `PermissionError` / 沙箱外污染)。
+
+**未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md` 与工具 README 的旧 env 名 / 平台默认目录 / 锁位置文案 → S14 改名面 + S18 文档回写; `--autostart` 布尔开关与 `data/`、`run/` 的 gitignore → S14; 随机端口与 `endpoint` 子命令 → S13。
+
+**滚动面**: 本档案(S12 段 + 状态表 + Updated 0613) · activeContext 切片(S12 已实施段 + 待办) · 基线切片新建 · 坑档新增 · kb.index 重建。随本专题「提交」入库。

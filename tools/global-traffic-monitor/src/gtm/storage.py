@@ -22,7 +22,9 @@ S4 扩展: bump_event_id —— 通知事件号 +1 且**落盘** (订阅方按�
 落盘明文 (数据目录本地可达, 与 auto-qb config.yml 内 token 同风险面; 工具
 不提供跨机访问面 —— 控制面强制绑定 127.0.0.1)。
 
-filelock 保证工具单实例, 二次启动 fail-fast 报错 (含持有者信息)。
+filelock 保证工具单实例, 二次启动 fail-fast 报错 (含持有者信息); 单实例锁与发现指针
+(endpoint.json, S12 / D8) 锚在用户级平台目录, 与 --data-dir 解耦 —— 数据目录只决定
+"数据放哪", 不决定"怎么找到工具"(整机多 auto-qb 实例共享同一指针)。
 
 模块边界: 唯一运行时 import 为 sampler 的 dat 行格式单点 DAT_ROW_RE (读侧
 restore_from_dat 与本模块写侧共用防漂移; 依赖方向 storage -> sampler, 不反向)。
@@ -96,15 +98,69 @@ def default_data_dir() -> str:
     return str(resolve_tool_root() / "data")
 
 
+def _platform_data_home() -> str:
+    """用户级数据根目录 (平台惯例) 单点: Windows %LOCALAPPDATA% /
+    macOS ~/Library/Application Support / Linux $XDG_DATA_HOME 或 ~/.local/share。
+
+    发现指针 (D6) 与旧数据目录 (D12) 共享这一个根 —— 两者只差叶名, 不重写三份平台分支。
+    """
+    if sys.platform.startswith("win"):
+        return os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+    if sys.platform == "darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    return os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+
+
 def legacy_data_dir() -> str:
     """S11 之前的数据目录默认值 (平台用户目录 .../gtm) —— 仅供一次性搬迁探测 (D12)。"""
-    if sys.platform.startswith("win"):
-        base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
-        return os.path.join(base, "gtm")
-    if sys.platform == "darwin":
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "gtm")
-    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    return os.path.join(base, "gtm")
+    return os.path.join(_platform_data_home(), "gtm")
+
+
+# 发现指针 (S12 / D6): 用户级平台目录, 与 --data-dir 解耦 —— 只放"怎么找到工具"。
+POINTER_DIR_NAME = "global-traffic-monitor"
+ENDPOINT_FILE_NAME = "endpoint.json"
+INSTANCE_LOCK_FILE_NAME = "instance.lock"
+
+# 指针格式版本 (S12 / §05): auto-qb 读到未知 schema 只告警不猜字段 —— 不改写、不臆断。
+ENDPOINT_SCHEMA = 1
+
+
+def pointer_dir() -> str:
+    """发现指针所在用户级平台目录 (S12 / D6) 单点: 见 _platform_data_home(), 叶名固定
+    global-traffic-monitor。整机共享一处 (多 auto-qb 实例发现同一工具)。
+    """
+    return os.path.join(_platform_data_home(), POINTER_DIR_NAME)
+
+
+def endpoint_path() -> str:
+    """发现指针 endpoint.json 的绝对路径 (S12 / D6)。"""
+    return os.path.join(pointer_dir(), ENDPOINT_FILE_NAME)
+
+
+def instance_lock_path() -> str:
+    """单实例锁路径 (S12 / D8): 锚在指针旁的用户级目录 —— 整机一个工具、指针无并发写。"""
+    return os.path.join(pointer_dir(), INSTANCE_LOCK_FILE_NAME)
+
+
+def write_endpoint(payload: Mapping[str, object], *, path: Optional[str] = None) -> str:
+    """原子写发现指针 (S12 / D6): 控制面 bind 成功后调用, 字段见计划 §05。
+
+    走 atomic_write_text (临时文件 -> fsync -> os.replace), 读者任意时刻见完整一致内容;
+    目录不可写等失败原样抛 OSError, 由调用方容错 (§09: 指针写失败只告警不阻断服务)。
+    """
+    target = path or endpoint_path()
+    atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    return target
+
+
+def remove_endpoint(*, path: Optional[str] = None) -> None:
+    """删发现指针 (S12 / D6): 优雅退出路径调用, 幂等 (缺失即 no-op), 删除失败不抛。"""
+    try:
+        os.remove(path or endpoint_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning("发现指针删除失败 (忽略): %s", e)
 
 
 # 搬迁文件集 (D12): 旧用户目录里的工具数据文件 (锁不搬 —— S12 起锁锚点移出数据目录)
@@ -394,7 +450,9 @@ class SingleInstanceLock:
 class Storage:
     """落盘编排 + 订阅注册表 (S3): 采样线程与 HTTP 线程并发驱动同一 state.json.
 
-    - acquire_lock/release_lock: 单实例 (fail-fast), data_dir 自动创建
+    - acquire_lock/release_lock: 单实例 (fail-fast), data_dir 自动创建; 锁锚在用户级
+      指针目录 (instance_lock_path(), S12/D8) 而非 data_dir —— 数据目录可自定义,
+      「整机一个工具」不随之漂移 (测试经 lock_path 显式注入保持 hermetic)
     - load/recover: 启动恢复 —— state.json 权威 (sampler.restore + 注册表加载),
       缺失/损坏降级时当日累计从 dat 末行兜底 (sampler.restore_from_dat)
     - record(result, snapshot): 单次采样后落盘编排 —— 跨天封存旧日最终值 ->
@@ -411,7 +469,7 @@ class Storage:
         *,
         dat_name: str = "history_traffic.dat",
         state_name: str = "state.json",
-        lock_name: str = "gtm.lock",
+        lock_path: Optional[str] = None,
         flush_delta_bytes: int = DEFAULT_FLUSH_DELTA_BYTES,
         flush_interval_s: float = DEFAULT_FLUSH_INTERVAL_S,
         clock: Optional[Callable[[], float]] = None,
@@ -419,7 +477,8 @@ class Storage:
         self.data_dir = data_dir
         self.dat_path = os.path.join(data_dir, dat_name)
         self.state_path = os.path.join(data_dir, state_name)
-        self.lock_path = os.path.join(data_dir, lock_name)
+        # 锁锚点 (S12/D8): 默认在用户级指针目录 (与 data_dir 解耦); 测试显式传 lock_path。
+        self.lock_path = lock_path or instance_lock_path()
         self._dat = DatStore(self.dat_path)
         self._state = StateStore(self.state_path)
         self._lock = SingleInstanceLock(self.lock_path)
@@ -436,6 +495,8 @@ class Storage:
 
     def acquire_lock(self) -> None:
         os.makedirs(self.data_dir, exist_ok=True)
+        # 锁在用户级指针目录 (可能与 data_dir 不同): 首次启动该目录可能还不存在。
+        os.makedirs(os.path.dirname(os.path.abspath(self.lock_path)), exist_ok=True)
         self._lock.acquire()
 
     def release_lock(self) -> None:

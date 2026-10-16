@@ -137,7 +137,7 @@ def make_env(
     max_inflight: int = 32,
 ) -> tuple[Storage, ConfigHolder, Notifier]:
     """装配 (storage, holder, notifier); 锁已持有, 数据目录 = tmp_path。"""
-    storage = Storage(str(tmp_path))
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))  # S12: 锁锚点注入 tmp
     storage.acquire_lock()
     holder = ConfigHolder(config or Config())
     notifier = Notifier(
@@ -620,7 +620,7 @@ def test_http_push_raises_on_error_status() -> None:
 def test_notifier_default_pusher_reaches_real_subscriber(tmp_path) -> None:
     """通知器默认 pusher (= http_push) 端到端: 真 HTTP 接收端收到事件体 + Bearer token."""
     receiver = Receiver()
-    storage = Storage(str(tmp_path))
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))  # S12: 锁锚点注入 tmp
     storage.acquire_lock()
     holder = ConfigHolder(Config(notify_threshold_bytes=1))
     notifier = Notifier(storage, holder)  # 不注入 pusher -> 走生产 http_push

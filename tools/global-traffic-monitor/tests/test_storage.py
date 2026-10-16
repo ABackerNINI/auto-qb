@@ -24,6 +24,10 @@
   冻结态 (sys.frozen) 取 sys.executable 所在目录; default_data_dir 默认 = <工具根>/data
   且 GLOBAL_TRAFFIC_MONITOR_DATA_DIR 优先; 旧用户目录一次性搬迁 (旧有
   history_traffic.dat 且目标空才搬, 幂等可重入, 显式 --data-dir 不触发)
+- 发现指针与锁锚点 (S12): 指针目录按平台用户目录 (Windows LOCALAPPDATA / macOS
+  Application Support / Linux XDG) 解析, 与 data_dir 解耦; endpoint.json / instance.lock
+  落在指针目录; Storage 默认锁锚在指针目录 (非 data_dir, 测试经 lock_path 注入);
+  write_endpoint 原子落盘 + remove_endpoint 幂等; 旧数据目录叶名 gtm 不受重构影响
 """
 
 from __future__ import annotations
@@ -53,8 +57,14 @@ from gtm.storage import (
     Storage,
     atomic_write_text,
     default_data_dir,
+    endpoint_path,
+    instance_lock_path,
+    legacy_data_dir,
     migrate_legacy_data_dir,
+    pointer_dir,
+    remove_endpoint,
     resolve_tool_root,
+    write_endpoint,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -105,7 +115,8 @@ def make_sampler(clock: Optional[FakeWall] = None, counters: Optional[FakeCounte
 
 
 def make_storage(tmp_path: Path, mono: Optional[FakeMono] = None) -> Storage:
-    storage = Storage(str(tmp_path), clock=mono or FakeMono())
+    # S12: 锁锚在用户级指针目录 —— 单测注入 tmp 锁路径, 保持 hermetic 且不碰真实用户目录
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"), clock=mono or FakeMono())
     storage.acquire_lock()
     return storage
 
@@ -597,22 +608,23 @@ def test_day_roll_seals_old_day_and_new_day_is_lazy(tmp_path):
 
 
 def test_single_instance_lock_blocks_second_in_process(tmp_path):
+    lock = str(tmp_path / "instance.lock")
     st1 = make_storage(tmp_path)
-    st2 = Storage(str(tmp_path))
+    st2 = Storage(str(tmp_path), lock_path=lock)
     with pytest.raises(SingleInstanceLockError) as excinfo:
         st2.acquire_lock()
     msg = str(excinfo.value)
     assert "另一 gtm 实例已持有锁" in msg
     assert "PID" in msg and str(os.getpid()) in msg
     st1.release_lock()
-    st3 = Storage(str(tmp_path))
+    st3 = Storage(str(tmp_path), lock_path=lock)
     st3.acquire_lock()  # 释放后可再获取
     st3.release_lock()
 
 
 def test_single_instance_lock_blocks_second_process(tmp_path):
     held = make_storage(tmp_path)  # 持锁实例必须存活 (GC 会关 fd 释放 msvcrt 锁)
-    lock_path = str(tmp_path / "gtm.lock")
+    lock_path = str(tmp_path / "instance.lock")
     code = (
         "from gtm.storage import SingleInstanceLock, SingleInstanceLockError\n"
         f"lk = SingleInstanceLock({lock_path!r})\n"
@@ -631,7 +643,7 @@ def test_single_instance_lock_blocks_second_process(tmp_path):
 
 def test_lock_release_idempotent_and_meta_removed(tmp_path):
     storage = make_storage(tmp_path)
-    meta = tmp_path / "gtm.lock.meta.json"
+    meta = tmp_path / "instance.lock.meta.json"
     assert meta.exists()
     storage.release_lock()
     assert not meta.exists()
@@ -735,3 +747,72 @@ def test_resolve_data_dir_explicit_override_skips_migration(tmp_path, monkeypatc
     explicit = tmp_path / "explicit"
     assert cli._resolve_data_dir(str(explicit)) == str(explicit)
     assert (legacy / "history_traffic.dat").is_file()  # 未触发搬迁
+
+
+# ---- 发现指针 / 锁锚点 (S12) ----
+
+
+def test_legacy_data_dir_still_platform_user_leaf_gtm(monkeypatch):
+    """重构 (_platform_data_home) 不改 D12 契约: 旧数据目录仍 = 平台用户目录/gtm."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\LA")
+    assert legacy_data_dir() == os.path.join(r"C:\LA", "gtm")
+
+
+def test_pointer_dir_platform_windows(monkeypatch):
+    """D6: Windows 指 %LOCALAPPDATA%\\global-traffic-monitor (无 LOCALAPPDATA 时回退 ~\\AppData\\Local)."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\LA")
+    assert pointer_dir() == os.path.join(r"C:\LA", "global-traffic-monitor")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: r"C:\Users\x")
+    assert pointer_dir() == os.path.join(r"C:\Users\x", "AppData", "Local", "global-traffic-monitor")
+
+
+def test_pointer_dir_platform_macos(monkeypatch):
+    """D6: macOS 指 ~/Library/Application Support/global-traffic-monitor."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "/Users/x")
+    assert pointer_dir() == os.path.join("/Users/x", "Library", "Application Support", "global-traffic-monitor")
+
+
+def test_pointer_dir_platform_linux_xdg(monkeypatch):
+    """D6: Linux 指 $XDG_DATA_HOME/global-traffic-monitor (无则 ~/.local/share)."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", "/home/x/.xdg")
+    assert pointer_dir() == os.path.join("/home/x/.xdg", "global-traffic-monitor")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "/home/x")
+    assert pointer_dir() == os.path.join("/home/x", ".local", "share", "global-traffic-monitor")
+
+
+def test_endpoint_and_lock_live_under_pointer_dir(tmp_path, monkeypatch):
+    """D6/D8: endpoint.json 与 instance.lock 都落在指针目录 (与 data_dir 无关)."""
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(tmp_path / "ptr"))
+    assert endpoint_path() == str(tmp_path / "ptr" / "endpoint.json")
+    assert instance_lock_path() == str(tmp_path / "ptr" / "instance.lock")
+
+
+def test_storage_default_lock_anchored_at_pointer_not_data_dir(tmp_path, monkeypatch):
+    """D8: 默认锁锚在指针目录 —— 数据目录可自定义, 「整机一个工具」不随之漂移."""
+    ptr = tmp_path / "ptr"
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    storage = Storage(str(tmp_path / "data"))
+    assert Path(storage.lock_path) == ptr / "instance.lock"
+    assert not Path(storage.lock_path).is_relative_to(tmp_path / "data")
+    storage.acquire_lock()
+    assert (ptr / "instance.lock").exists()  # 锁目录被自动创建
+    assert not (tmp_path / "data" / "instance.lock").exists()
+    storage.release_lock()
+
+
+def test_write_endpoint_atomic_and_remove_idempotent(tmp_path, monkeypatch):
+    """D6/S12: write_endpoint 原子落盘 (JSON 可读); remove_endpoint 幂等 (缺失即 no-op)."""
+    ptr = tmp_path / "ptr"
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    written = write_endpoint({"schema": 1, "port": 8099, "port_again": 8099})
+    assert Path(written) == ptr / "endpoint.json"
+    assert json.loads(Path(written).read_text(encoding="utf-8"))["port"] == 8099
+    remove_endpoint()
+    assert not Path(written).exists()
+    remove_endpoint()  # 幂等: 已删再删不抛
