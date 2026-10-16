@@ -184,7 +184,12 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     assert point_at(body, base + 150) is None  # 断连段: 连续空桶 = null(不连线)
     assert point_at(body, base + 180) is None
     assert point_at(body, base + 210) is None
-    assert point_at(body, base + 240) == {"t": base + 240, "dl": 0, "up": 0}  # 断链后基线缺失: D4 0 线
+    assert point_at(body, base + 240) == {
+        "t": base + 240,
+        "dl": None,
+        "up": None
+    }  # 洞后(缝 90s > 60)基线缺失: 断链未知 -> null 不造数
+    #   (issue 26-10-16-0954 修复语义: 修复前出 D4 0 线 -> 全窗只剩它一个非 null 值时前端孤点/值域塌)
     # totals: 桶 base 窗内首个有观测桶 -> 基线缺失 null; 相邻桶差分; 重置逐向独立; 断链后基线缺失
     assert total_at(body, base) == {"t": base, "dl": None, "up": None}
     assert total_at(body, base + 30) == {"t": base + 30, "dl": 1000, "up": 300}
@@ -305,10 +310,11 @@ def test_api_traffic_qb_raw_seed_extension_window_start_baseline(web_env):
 
 
 def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
-    """(计划 26-10-07-2127 S2/D3)种子跨真空: 窗首前种子块与窗内恢复块之间程序停机 ——
-    v4_series_points 既有真空判定出 null 点断链, 恢复首桶 rate 派不出(D4 豁免 0 线, 非
-    null 非尖峰), 离线期 qB 自行传输的字节既不进速率也不进 totals(恢复首桶 totals 基线
-    缺失 null), 次桶起基线恢复 delta/w"""
+    """(计划 26-10-07-2127 S2/D3; issue 26-10-16-0954 修复轮改口径)种子跨真空: 窗首前种子
+    块与窗内恢复块之间程序停机(缝恰 60s = 重启缝) —— v4_series_points 既有真空判定出
+    null 点断链, 恢复首桶按真实跨度摊配回收(覆盖份额口径: step 9600/4800 x 30 // span 90
+    = 3200/1600 -> rate 107/53, 离线期字节不再单桶放大; 误接旧值 = 9600/30 = 320 可判红),
+    次桶起基线恢复 delta/w; 离线字节不进 totals(恢复首桶 totals 基线缺失 null)"""
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
@@ -338,7 +344,7 @@ def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
 
     assert body["meta"]["stale"] is False
     assert pt("points", first) is None and pt("points", first + 30) is None  # 真空段断线(不连线)
-    assert pt("points", first + 60) == {"t": first + 60, "dl": 0, "up": 0}  # 恢复首桶 D4 0 线(非 null 非尖峰)
+    assert pt("points", first + 60) == {"t": first + 60, "dl": 107, "up": 53}  # 重启缝按真实跨度回收(误接旧值 320)
     assert pt("points", first + 90) == {"t": first + 90, "dl": 20, "up": 10}  # 基线恢复
     assert pt("points", first + 120) == {"t": first + 120, "dl": 20, "up": 10}
     assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 瞬时垃圾值零上图
@@ -348,11 +354,13 @@ def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
 
 
 def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
-    """(issue 26-10-08-0141)窗首种子 1 秒边界带: 停机时刻落在 (seed_t0-1, seed_t0) 时真空
-    null 点 t = int(prev_chain_end) 取整后 = seed_t0-1 恰落窗外 —— 修复前被丢弃, 种子点
-    (覆盖桶触及窗首照收)与恢复首点之间差分链误接, 离线期 qB 自行传输的字节被误归恢复首桶
-    出假尖峰(rate 300 / totals 9000); 修复后标记保留并断链, 恢复首桶 rate 派不出(D4 0 线)
-    且离线字节不进速率与 totals。时钟钉死(1 秒带需确定性 now; 端点 _grid 走 traffic_qb.time.time)"""
+    """(issue 26-10-08-0141; issue 26-10-16-0954 修复轮改口径)窗首种子 1 秒边界带: 停机时刻
+    落在 (seed_t0-1, seed_t0) 时真空 null 点 t = int(prev_chain_end) 取整后 = seed_t0-1
+    恰落窗外 —— 修复前被丢弃, 种子点(覆盖桶触及窗首照收)与恢复首点之间差分链误接,
+    离线期 qB 自行传输的字节被误归恢复首桶出假尖峰(rate 300 / totals 9000); 修复后标记
+    保留并断链, 恢复首桶按真实跨度摊配回收(覆盖份额 9000/4500 x 30 // span 60 = 4500/2250
+    -> rate 150/75, 误接旧值 300 可判红), 离线字节不进 totals。时钟钉死(1 秒带需确定性
+    now; 端点 _grid 走 traffic_qb.time.time)"""
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
     from auto_qb.webui.server import traffic_qb as tq
 
@@ -389,9 +397,9 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
     assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
-    assert pt("points", g_t0) == {"t": g_t0, "dl": 0, "up": 0}  # 恢复首桶 D4 0 线(修复前 = 假尖峰 300)
+    assert pt("points", g_t0) == {"t": g_t0, "dl": 150, "up": 75}  # 重启缝按真实跨度回收(误接旧值 300)
     assert pt("points", g_t0 + 30) == {"t": g_t0 + 30, "dl": 20, "up": 10}  # 次桶基线恢复 delta/w
-    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 离线字节零上图
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 离线字节不单桶放大
     assert pt("totals", g_t0) == {"t": g_t0, "dl": None, "up": None}  # 离线字节不进 totals(修复前 = 9000)
     assert pt("totals", g_t0 + 30) == {"t": g_t0 + 30, "dl": 600, "up": 300}
 
@@ -596,7 +604,11 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
     dat_opens = sorted(os.path.basename(p) for p in _v4_opens(opened))
     assert dat_opens == sorted(d + ".dat" for d in involved)  # 只开涉及日期(含种子外扩), 更早日期/agg.dat 不触
     assert 2 <= len(involved) <= 3  # 常态恰 2; 窗首种子外扩跨本地午夜边界时至多 3(S2/D3)
-    assert next(p for p in body["points"] if p and p["t"] == base) == {"t": base, "dl": 0, "up": 0}  # D4 0 线
+    assert next(p for p in body["points"] if p and p["t"] == base) == {
+        "t": base,
+        "dl": None,
+        "up": None
+    }  # 跨日长洞: 断链未知 -> null(issue 26-10-16-0954 修复语义)
 
 
 def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):

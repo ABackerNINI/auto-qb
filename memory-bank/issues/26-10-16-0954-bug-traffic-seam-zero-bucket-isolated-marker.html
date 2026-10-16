@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-0954">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1]">
 <meta name="issue-summary" content="缝首桶 totals 有效但 delta=None, D4 豁免出 0 线; 前端判孤点会在斜纹区中央打一个贴底线的点, 把一片无采样区一分为二">
 <title>重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1] · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug</div>
     <h1>重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1]</h1>
     <p class="lede">缝首桶 totals 有效但 delta=None, D4 豁免出 0 线; 前端判孤点会在斜纹区中央打一个贴底线的点, 把一片无采样区一分为二</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -190,11 +190,14 @@ function _qbIsolatedIdxs(u, sIdx) {
     <ul>
       <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-16 09:54 — 来源：用户首张 1m 窗截图（真实时间 04:45:40）「有异常点将无采样区分割」；本轮只读复现（真实天文件走读侧管线 + 前端判据读码）</li>
+      <li>2026-10-16 10:57 — 认领（本 clone，与同批 <code>26-10-16-0954-bug-traffic-seam-short-gap-spike</code> 同轮修复）；状态 <strong>In Progress</strong></li>
+      <li>2026-10-16 10:57 — 修复完成，状态 <strong>Done</strong>（读侧断链首桶 <code>None</code> 语义；见下「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>2026-10-16 10:57 — 锚点仍复现（读码 + 合成复现）</b>：修复前洞后首桶 <code>rate=None</code> 而 <code>totals</code> 有效 → <code>v4_grid_obs</code> 的 D4 豁免出 <code>BucketObs(0, 0, 快照)</code> → <code>rate_points</code> 落成 <code>{"dl": 0, "up": 0}</code>（非 null）—— 与本节证据逐字一致。<b>复现走合成几何</b>：真实运行天文件在另一 clone（跨 clone 不读），故按证据行（停机 26.5 分钟、首采 <code>r,0,60875,0,0</code>、其后 <code>z,27</code> 均摊）重建同构块序走真实读侧管线，得同一形式：该栅格桶 <code>BucketObs(dl_rate=None, up_rate=None, dl_total=…, up_total=…)</code>、<code>rate_points</code> 该桶为 <code>null</code>、次桶 <code>totals</code> 差分照旧（快照链不断）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（读侧，即建议修法 1 的最小闭环；未采用 2/3）</b>：<code>core/traffic_grid.py</code> 的 <code>v4_grid_obs</code> 归桶时跟踪「本桶覆盖起点晚于上一观测点覆盖末端」（观测缝 / 停机洞 / 块界真空），该向无速率覆盖时出 <code>None</code> 而非 <code>0</code>（<code>BucketObs.dl_rate/up_rate</code> 放宽为 <code>Optional</code>）；<b>快照照记</b>（差分链基线不断 —— 次桶 <code>delta</code> 仍为真实值），<code>rate_points</code> 的逐向 <code>None</code> 落成 JSON null（前端与空桶同语义：缺口斜纹）。<b>「程序启动窗首桶」的 0 线保留</b>（无观测缝的链路首点，1/N 缺口视觉无感）—— 与建议修法 1 的「区分两者」一致，且判别信号不需要从 <code>v4_totals_points</code> 透传（覆盖缝几何在栅格层即可判，活尾路径无真空标记时同样成立）。前端孤点判据 / 值域口径零改动（null 天然被 <code>_qbGapRuns</code> / <code>_qbIsolatedIdxs</code> 当缺口）。组面同规则：成员速率未知按 0 计入和，但该桶有观测而全成员该向皆未知时出 null。</p>
+    <p><b>验证</b>：新增守阵 <code>tests/test_traffic_grid.py::test_v4_grid_obs_break_bucket_rate_null_snapshot_kept</code>（断链桶 null + 快照链 + 无观测缝 0 线对照 + 组面）；既有 D4 豁免用例改钉「无观测缝 0 线」面；端点面 4 条期望同步（<code>test_web_traffic_qb.py</code>）。红绿双验：该向改回 <code>0</code> → 新守阵判红，还原复绿。全量数字见基线切片 <code>memory-bank/testing/baselines/26-10-16-1057-qb-traffic-seam-fixes.md</code>。</p>
 </section>
 
   <footer>

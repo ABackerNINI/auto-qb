@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-0954">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝">
 <meta name="issue-summary" content="重启缝 7.6s(&lt;60s) 不满足 P2 摊配判据 span&gt;max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s">
 <title>重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug</div>
     <h1>重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝</h1>
     <p class="lede">重启缝 7.6s(&lt;60s) 不满足 P2 摊配判据 span&gt;max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-seam-short-gap-spike</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -194,11 +194,15 @@ _V4_SEAM_NULL_S = 60</code></pre>
     <ul>
       <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-16 09:54 — 来源：用户报告「重启后又出现重启峰值」+ 1m 窗截图；本轮只读复现（真实天文件走读侧管线 + 截图像素标定，未跑用例）</li>
+      <li>2026-10-16 10:57 — 认领（本 clone，与同批 <code>26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker</code> 同轮修复）；状态 <strong>In Progress</strong></li>
+      <li>2026-10-16 10:57 — 修复完成，状态 <strong>Done</strong>（接缝摊配判据与覆盖份额口径，见下「修复后补充」）</li>
+      <li>2026-10-16 11:26 — 残余边界补修（用户「修复残余边界」）：覆盖连续（<code>span == cov</code>）且带块界真空标记的缝，活尾组此前不判真空 ⇒ 同一几何磁盘摊配回收 / 活尾单桶归因（且 <code>span &lt;= 60s</code> 时磁盘走 <code>elif marked</code> 断链丢弃）取值不同；现活尾与磁盘块<strong>同判块间真空</strong>，两路径同一标记同一取值。状态维持 <strong>Done</strong>（同一修复的收口，非新件）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>2026-10-16 10:57 — 锚点仍复现（读码 + 合成复现）</b>：<code>_V4_SEAM_NULL_S</code> 与 <code>_V4_SEAM_SPREAD_MIN_S</code> 均 60s、两条判据方向相反仍在（常量注释互相矛盾仍未改）。合成复现（真实天文件在另一 clone，跨 clone 不读）按证据行重建同构块序：旧块末样 → 新块首样（<code>r,0,270269,0,0</code> + 单槽长游程 <code>z,1,…,54356</code> + 次记录），走真实读侧管线得<b>缝后首桶 up 146,872 B/s</b> = <code>step / 真实跨度 17s</code> —— 即修复前 <code>delta/w = 2,496,825 / 2 = 1,248,412</code> 的 8.5 倍放大已消除；同一几何的磁盘路径（有真空标记）与活尾路径（无标记）取值逐位一致；次记录桶 <code>up = 122,818</code>（其自身 delta/w，覆盖 == 跨度不受影响）与本节「数分钟后再拉接口同一桶变平线（up=122,818）」证据行吻合，另证合成几何与运行实例同构。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（建议修法 1 的落地；未采用 2/3）</b>：<code>core/traffic_grid.py</code> 的 <code>v4_totals_points</code> 摊配判据不再依赖「变化点跨度 > max(2×桶宽, 60s)」单一门槛，改为三条同判：①本点前有 null 标记（磁盘路径重启缝）；②未覆盖段存在（<code>span > cov</code>，活尾路径同几何由此同判 —— 两路径取值一致）；③陈旧长跨度（P2 原门槛面，阈值行为不变的保守支）。<b>覆盖份额口径</b>：<code>step_w = span > cov ? step × cov // span : step</code>（未覆盖秒不归因，只回收覆盖份额；<code>span == cov</code> 时与 P2 原式逐字一致）；份额按累计比例取整（每桶偏差 ≤ 1 字节，不把取整余数堆到接收桶成残留尖峰），余额归接收桶。常量仍为模块常量、值仍 60/60（计划 §07 #2 拍板面不变，未配置化）。</p>
+    <p><b>验证</b>：新增守阵 <code>tests/test_traffic_grid.py::test_v4_seam_short_gap_two_paths_agree_no_spike</code>（证据行几何 + 两路径一致 + 近洞 60s 缝不放大 + 缝内栅格桶仍 null）；既有 4 条守阵（zchain_vacuum / edge_band / below_threshold / 两条 P2 摊配）按新口径重钉（脚本已按定稿语义重算并逐条核对）。红绿双验：摘掉新判据 → 3 条判红；摊配基准改回 <code>step</code>（不缩放）→ 6 条判红；均还原复绿。全量数字见基线切片 <code>memory-bank/testing/baselines/26-10-16-1057-qb-traffic-seam-fixes.md</code>。<b>残余边界补修（2026-10-16 11:26）</b>：上条「残余边界」所指的形态（接收桶宽度恰好覆盖整条缝 ⇒ 覆盖连续、跨度判据不达，唯一缝信号是块界真空标记）已修 —— <code>v4_series_points</code> 的<strong>活尾组改为与磁盘块同判块间真空</strong>（首槽覆盖桶抵达不了磁盘链末槽即出 null 标记；旧假设「磁盘链末槽与活尾首槽之间是一次标称采样间隔」只对同块续链成立，<code>head_pending</code> 的活尾首槽是块首记录 B.start，重启后可隔一整段停机）。效果：残余几何下磁盘与活尾<strong>同一标记同一取值</strong>（实测同几何两路径逐位一致；修复前 span &lt;= 60s 时磁盘 <code>elif marked</code> 丢出 <code>None</code>、活尾把整块台阶按桶宽打入接收桶），同标记也顺带修掉了「同一桶在刷盘前后取值不同」的最后一处。守阵：新增 <code>tests/test_traffic_grid.py::test_v4_seam_covered_span_mark_two_paths_agree</code>（残余几何两路径同值 + 覆盖份额守恒），活尾相关 3 条既有用例同步改钉「同标记」口径；红绿双验：活尾真空判定摘除 → 4 条判红，还原复绿。全量数字见基线切片 <code>memory-bank/testing/baselines/26-10-16-1126-qb-traffic-seam-fixes-r2.md</code>。<b>与建议修法的差异</b>：建议 2（降门槛值）未采用（丢失「跨度明显大于桶宽才算台阶」的保守性）；建议 3（在栅格层重算）未采用（栅格层拿不到缝跨度，而 <code>v4_totals_points</code> 处 <code>span</code>/<code>cov</code> 天然可得）。</p>
 </section>
 
   <footer>
