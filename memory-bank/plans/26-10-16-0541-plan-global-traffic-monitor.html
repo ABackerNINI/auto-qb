@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-0601">
+<meta name="doc-updated" content="26-10-16-0815">
 <meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0 已实施;S1–S10 待逐项授权)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S1 已实施;S2–S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -254,6 +254,10 @@
   出口判据全过: ①独立 venv(<code>uv sync</code>;psutil 7.2.2 / filelock 4.2.0 / pytest 9.1.1 仅入工具 <code>.venv</code>)下 <code>gtm --version</code> 输出 <code>gtm 0.1.0</code>;②隔离验证: 仓库根 <code>uv run python -c "import psutil"</code> 仍 ModuleNotFoundError —— 装/卸验证两环境互不污染;③工具冒烟 4 条全过(版本一致性/模块可导入/--version/骨架提示)。根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md</code>(工具测试不在根 testpaths 内,根集数字不变)。<br>
   实施期发现并修掉环境陷阱: 工具目录内 <code>uv run pytest</code> 会向上拾取仓库根 <code>pytest.ini</code>(rootdir 上移,addopts 的 <code>-n</code>/<code>--cov</code> 在工具 venv 不可用 → unrecognized arguments)——已在工具 pyproject 增补 <code>[tool.pytest.ini_options]</code>(更近的配置优先),坑档 <code>memory-bank/pitfalls/testing/nested-pytest-config.md</code>。<br>
   行号基准 3ba069d7 与 S0 无关(纯新目录);S6/S7 触碰 auto-qb 前按本文件脚注逐条复核漂移。</td></tr>
+  <tr><td>S1</td><td><strong>Done</strong> · 26-10-16-0815 · @ febac58e(开工同步后)。<br>
+  改动 5 个文件、零 auto-qb 触碰: <code>src/gtm/sampler.py</code> 全量实现(~430 行: <code>AdapterFilter</code> 固定顺序过滤 include→exclude→loopback→down + <code>is_loopback</code> 三名形态 lo/lo0/Loopback Pseudo-Interface 1; <code>Sampler.sample_once</code> 读→过滤→合计→delta(单侧/双侧重置归零+告警, 不产负流量)→当日累计(跨天 00:00 硬切清零); <code>restore(snapshot)</code> state 载荷恢复(今天接续/昨天清零基线续/未来与损坏走降级, 空快照自洽放行)+ <code>restore_from_dat</code> 今天行 KB→字节兜底(行序不敏感, 与 <code>curves.py</code> 解析正则逐字一致); <code>snapshot()</code> 载荷 round-trip)、<code>tests/test_sampler.py</code> 新文件 29 条守阵、README/<code>__init__</code> 进度注记。<br>
+  出口判据全过: ①单测 33/33(4 条 S0 冒烟 + 29 条 S1: 正常 delta/三态重置/跨天/过滤全形态/state 恢复七态/dat 兜底/round-trip);②红验 4 条单行锚点突变(重置归零失效/跨天不清零/loopback 不过滤/dat 兜底失效)全部判红后字节还原复绿;③真机只读冒烟: 4 网卡在册(以太网+VMnet1+VMnet8+Loopback 伪接口), loopback 正确排除, 2s 窗 delta up 0.67–1.08 MB / down 33–67 kB 量级吻合, <code>snapshot()</code> 载荷字段正确。休眠主循环与 state.json/dat 的原子落盘按计划属 S2, 本模块以 <code>SampleResult</code> 上报(<code>day_rolled</code>/<code>counter_reset</code>/<code>baseline</code>/<code>warnings</code>)供其消费。<br>
+  坑: <code>memory-bank/pitfalls/testing/redverify-anchor-lineendings.md</code> 复发+1(形态十: LF 约定仓库里 <code>write_text()</code> 在 Windows 把源码写成 CRLF 反向污染行尾 + <code>read_text()</code> 探针归一化洗白暗点; 未命中原因=临时红验脚本照抄了形态四的文本模式读写旧例, 处置=全程 bytes 层 + 还原后字节恒等校验)。根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md</code>。行号基准 3ba069d7 与 S1 无关(纯新目录)。</td></tr>
 </table>
 
 <h2><span class="no">05</span>默认参数</h2>

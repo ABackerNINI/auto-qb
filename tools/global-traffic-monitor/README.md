@@ -35,7 +35,7 @@ src/gtm/
   server.py     本地控制面 127.0.0.1:8099 (S3)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启注册/卸载 (S5)
-tests/          模块守阵 (随 S1-S9 逐步扩充; 当前仅 S0 冒烟)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; 随 S2-S9 逐步扩充)
 ```
 
 ## 开发

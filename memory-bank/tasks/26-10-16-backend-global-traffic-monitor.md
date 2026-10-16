@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 06:01
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架已落地。
+**Updated:** 2026-10-16 08:15
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器已落地。
 **Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md
 **Topics:** global-traffic-monitor
 
@@ -24,7 +24,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S0 | 包骨架与依赖隔离 | Done (26-10-16-0601) |
-| S1 | 采样器 sampler | Open |
+| S1 | 采样器 sampler | Done (26-10-16-0815) |
 | S2 | 落盘 storage | Open |
 | S3 | 控制面 server | Open |
 | S4 | 通知 notifier | Open |
@@ -50,3 +50,18 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0601, §04 增 R0 实施记录, 补 CSS color-scheme: dark 过 dark 守卫, doc-refs 补本档案) · activeContext 切片追加 R1 · 本档案新建(立档阈值 #4 命中: 已产出计划) · kb.index 重建 · 基线切片新建。
 
 **行号基准**: S0 为纯新目录, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。未提交(待用户「提交」指令)。
+
+
+### R2 · S1 实施 (2026-10-16 08:15)
+
+用户指令「实施计划S1:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S1 的显式授权(S2–S10 不动)。开工同步快进至 febac58e。
+
+**落点**(改 5 文件, 零 auto-qb 触碰): `src/gtm/sampler.py` S1 占位 -> 全量实现(~430 行) + `tests/test_sampler.py` 新文件 29 条守阵 + 工具 README/`__init__.py` 进度注记。设计要点: AdapterFilter 固定顺序(include 白名单 → exclude 黑名单 → exclude_loopback → exclude_down, include 不翻案后两个开关, 保守默认); 回环判别覆盖 lo/lo0/Loopback Pseudo-Interface 1 三平台名; sample_once 单次纯计算(休眠循环按计划属 S2 run), 上下行独立判定重置(本次 < 上次 -> delta 记 0 + WARNING, 不产负流量); 跨天 00:00 硬切累计清零(SampleResult.day_rolled 上报, 旧行落盘属 S2); restore 覆盖今天接续/昨天清零基线续/未来判损坏/六变体损坏降级/未采样空快照自洽; restore_from_dat 今天行 KB->字节兜底(行序不敏感, 解析正则与 curves.py 一致, 不 import auto-qb); snapshot() 六字段载荷 round-trip。
+
+**出口判据全过**: ①工具 33/33(4 条 S0 冒烟 + 29 条 S1, 全替身 hermetic); ②红验 4 条单行锚点突变(重置归零失效/跨天不清零/loopback 不过滤/dat 兜底失效)全部判红, 字节还原后复绿; ③真机只读冒烟: 4 网卡在册(以太网/VMnet1/VMnet8/Loopback 伪接口), 默认过滤正确排除 loopback, 2s 窗 delta up 0.68–1.08 MB / down 33–67 kB 量级吻合, snapshot 载荷字段正确。
+
+**实施期坑**: 临时红验脚本照抄形态四旧例用文本模式读写 —— `Path.write_text()` 在 Windows 把 LF 源码写成 CRLF(apply 后整文件被静默转行尾), 之后 LF 锚点全失配; 且排查用的 `read_text()` 探针走 universal newlines 把 CRLF 归一化洗白, 与脚本内 read_bytes 结果互相矛盾藏住暗点。已按形态十补进 `pitfalls/testing/redverify-anchor-lineendings.md`(复发+1; 未命中原因: 本轮红验非 mutmut 链路, 读该坑时把「写侧污染」只关联到 mutmut dump 场景, 没迁移到「LF 约定仓库 + 临时脚本」场景)。另: 脚本把基线复跑放在 finally 还原之前, 误报一次假红(逻辑坑, 非行尾)。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0815, 状态行 S0–S1, §04 R0 增 S1 行) · 本档案 R2 · activeContext 切片 R2 · 基线切片 `baselines/26-10-16-0815-global-traffic-monitor-s1.md`(根 test.full 3413 passed + 4 skipped / 99%, 与 S0 切片逐位一致) · kb.index 重建。未提交(待用户「提交」指令)。
+
+**行号基准**: S1 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。

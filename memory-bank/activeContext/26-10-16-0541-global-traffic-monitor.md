@@ -2,8 +2,8 @@
 summary: 全局流量监视小工具(TM 替代)分步实施计划 — grilling 三轮收敛 + 计划产出 + S0 包骨架已落地
 ---
 
-> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1–S10 待逐项授权
-> 最后活动: 2026-10-16 06:01
+> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1 采样器已实施(26-10-16-0815), S2–S10 待逐项授权
+> 最后活动: 2026-10-16 08:15
 
 # activeContext · global-traffic-monitor(26-10-16-0541)
 
@@ -15,4 +15,6 @@ grilling 三轮 16 问全部按推荐拍板(口径=整机全适配器排回环;t
 
 **R1 · S0 已实施(2026-10-16-0601,clone @ 46d2ea11)**: 用户指令「实施计划S0」= 对 S0 的显式授权(S1–S10 不动)。新建 tools/global-traffic-monitor/ 完整骨架 11 文件(pyproject[hatchling/src 布局/入口 gtm/依赖仅 psutil+filelock/dev 组 pytest/自带 pytest 配置]、src/gtm/ 八文件[六个模块为 S1–S5 占位]、README、tests/test_smoke.py),零 auto-qb 文件触碰。出口判据全过: 独立 venv 下 `gtm --version`=gtm 0.1.0;根环境 import psutil 仍 ModuleNotFoundError(隔离验证);工具冒烟 4 条全过。坑: 工具目录内 uv run pytest 会拾取仓库根 pytest.ini → 已在工具 pyproject 补 [tool.pytest.ini_options],坑档 pitfalls/testing/nested-pytest-config.md。档案 tasks/26-10-16-backend-global-traffic-monitor.md(立档阈值 #4 命中: 已产出计划)。基线切片 testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md(根 test.full 回归)。未提交(待用户「提交」指令)。
 
-**待办**:S1(采样器 sampler)待用户显式授权实施。
+**R2 · S1 已实施(2026-10-16-0815,clone @ febac58e,开工同步后)**: 用户指令「实施计划S1:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S1 的显式授权(S2–S10 不动)。sampler.py 全量实现(~430 行, AdapterFilter 固定顺序过滤 include→exclude→loopback→down; sample_once delta/单侧双侧重置归零告警不产负流量/跨天 00:00 硬切; restore state 载荷恢复[今天接续/昨天清零基线续/未来与损坏降级/空快照自洽] + restore_from_dat 今天行 KB→字节兜底[行序不敏感, 与 curves.py 解析正则逐字一致, 不 import auto-qb]; snapshot() 载荷 round-trip; SampleResult 上报 day_rolled/counter_reset/baseline/warnings 供 S2 消费; 休眠主循环与原子落盘按计划属 S2)。新增 tests/test_sampler.py 29 条守阵(全替身 hermetic), 改 5 文件零 auto-qb 触碰。出口判据全过: 工具 33/33(4 S0+29 S1); 红验 4 条单行锚点突变(重置归零/跨天不清零/loopback 不过滤/dat 兜底)全判红后字节还原复绿; 真机只读冒烟 loopback 正确排除、2s 窗 delta 量级吻合、snapshot 六字段正确。坑: pitfalls/testing/redverify-anchor-lineendings.md 复发+1 形态十(LF 仓库 write_text 反向污染行尾 + read_text 探针洗白; 未命中原因=临时红验照抄形态四文本模式旧例, 已用 bytes 层+还原字节恒等处置)。基线切片 testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md(根 test.full 3413+4 skip, 与 S0 逐位一致)。未提交(待用户「提交」指令)。
+
+**待办**:S2(落盘 storage: TM 兼容 history_traffic.dat + state.json 原子写 + 单实例锁 + run 主循环)待用户显式授权实施。
