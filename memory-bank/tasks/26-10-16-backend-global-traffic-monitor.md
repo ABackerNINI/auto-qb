@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 17:37
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面 + S7 auto-qb 接收面 + S8 集成与过渡已落地(含用户拍板改版: 工具控制面加 POST /autostart); S9–S10 待逐项授权。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md, memory-bank/testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md, memory-bank/testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md
+**Updated:** 2026-10-16 18:24
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面 + S7 auto-qb 接收面 + S8 集成与过渡 + S9 守阵测试已落地(含用户拍板改版: 工具控制面加 POST /autostart); S10 待逐项授权。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md, memory-bank/testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md, memory-bank/testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md, memory-bank/testing/baselines/26-10-16-1824-global-traffic-monitor-s9.md, memory-bank/pitfalls/testing/no-uv-fallback.md, memory-bank/pitfalls/testing/mutation-pool-artifact.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -32,7 +32,7 @@
 | S6 | auto-qb 配置面 | Done (26-10-16-1145) |
 | S7 | auto-qb 接收面 | Done (26-10-16-1404) |
 | S8 | 集成与过渡 | Done (26-10-16-1737) |
-| S9 | 守阵测试 | Open |
+| S9 | 守阵测试 | Done (26-10-16-1824) |
 | S10 | 真机验收 | Open |
 
 ## 进度日志
@@ -181,3 +181,23 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1737, 状态行 S0–S8, §04 R0 增 S8 行, 脚注补 S8; 改后跑 HTMLParser 标签平衡机检 —— 未闭合 0 / 乱序 0)· 本档案 R9 + 子任务表 S7/S8 → Done · activeContext 切片 R9 · 坑档复发并入 · kb.index 重建 · 基线切片 `baselines/26-10-16-1737-global-traffic-monitor-s8.md`。
 
 **行号基准**: S8 为文档轮, 无代码落点; 计划脚注的 clone 基准(3ba069d7)与 S8 无关。随本专题入库。
+
+### R10 · S9 实施 (2026-10-16 18:24)
+
+用户指令「实施S9:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S9 的显式授权(S10 不动)。开工同步 f8db7019(已是最新, 无 HEAD 改写步骤)。
+
+**范围判定(先逐项核对再动手)**: 按 S9 清单盘点两侧已有守阵 —— 工具侧七类(采样 delta/重置/日界 · 落盘原子性 · 崩溃恢复 · 通知阈值/事件号/补发/假死端点 · 租约 · config 校验 · installer 幂等[平台命令 mock])与 auto-qb 侧三类(配置键 validate/schema 同步 · notify 鉴权+冷却+幂等 · 订阅生命周期)随 S1–S7 已落地; 缺的只有第四项「`dat_path` 指向工具文件时解析兼容」—— 现有夹具是手搭的 TM 文本(auto-qb 侧)与「真写者 × 真 curves.py」oracle(工具侧, 独立部署时跳过), 两侧按同一种错法漂移时两份守阵都保持绿。
+
+**落点**(1 新文件 + 1 既有测试文件 +2 行): ① `tests/test_traffic_monitor_dat.py`(新, 2 条) —— 跨侧契约: 工具真写者 `gtm.storage.DatStore`(load/upsert/flush 原子写)产出的 dat 设为 `dat_path` → 只读刷新 `refresh_traffic_view` 读回(历史行升序 + KB 向下取整后逐日一致 + day/month 累计重算 + 更早月份只进历史), 加格式单点同值断言(两侧 KB 常量 / `lines: "N"` 表头与数据行数 / 新日在前 / 读侧 bad==0)。**写法上的一处结构性选择**: 根测试的副作用守阵(`tests/sidefx.py`)对 POPEN 只放行 node 与临时 wrapper ⇒ 不能起子进程跑工具 venv, 故按源码路径**进程内**加载工具写者(`monkeypatch.syspath_prepend` + 只替 `import psutil` —— 根环境刻意无 psutil 是 S0 的隔离判据, 而写者路径一次不用它; 真被用到会以 AttributeError 立刻变红, 不静默)。② `tests/test_web_traffic_monitor_notify.py` 的 `test_notify_requires_auth` 补「错 Bearer 也 401」(键名走既有拆写常量, 规避写入判据误报)。
+
+**红验(4 条突变, 全判 RED, 字节恒等还原后基线复绿)**: harness `.openclaw/tmp/redverify_s9.py`(未入库) —— 阈值失效(工具 notifier: 5 条红) / 鉴权绕过(auto-qb 接收面: 1 条红) / 单位漂移(工具 KB=1000: 新守阵 2 条红) / 表头漂移(`lines:`→`rows:`: 只打红格式单点那条 —— 与「值断言抓不到表头层」的设计预期一致)。harness 纪律照坑档全形态: bytes 层读写、锚点 count==1 兜底、钉死两侧 venv 解释器绝对路径、突变前先跑无变异基线、捕获 TimeoutExpired、还原后再复跑基线(全程 ALL-RED-AND-GREEN-AFTER-RESTORE)。
+
+**实施期发现(3)**: ① 上述「跨侧守阵不能起子进程」是全局结构约束(副作用守阵只罩根套件, 工具侧套件在它之外才允许子进程); ② 包内 `test.*` 在本 clone 又踩「无 uv on PATH」—— 首跑 `test.full` 即 FAIL(`'uv' is not recognized`), 处置照坑档首选(调用前把 uv 目录前置进 PATH + `TEMP`/`TMP` 指 C 盘临时区), 坑档复发+1; ③ **窄池假存活**: M2「鉴权绕过」在 notify 单文件池里 SURVIVED(该文件只测「没带 Bearer」, 突变打在它未覆盖的比较分支上), 拿全量池复验才定性 —— 被 `tests/test_web_auth.py::test_api_requires_token` 等 3 条杀死; 据此给 notify 守阵补了错密钥分支(补后本池即可判红)。坑档 `pitfalls/testing/mutation-pool-artifact.md` 复发+1。
+
+**出口判据全过**: ① 全量 `test.full` 全绿(覆盖率门槛达成) + 工具套件全绿, 数字见 kb.baseline 与基线切片; ② 红验 4 条突变判红且还原自证; ③ 基线切片只进 `testing/baselines/`。
+
+**未闭合项(诚实标注)**: S10 真机验收(E1–E6)未动 —— 需真机 TM / 工具进程 / 浏览器, 待逐项授权。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1824, 状态行 S0–S9, §04 R0 增 S9 行, 脚注补 S9; HTMLParser 机检未闭合 0 / 乱序 0)· 本档案 R10 + 子任务表 S9→Done · activeContext 切片 R10 · 坑档 (no-uv-fallback / mutation-pool-artifact) 复发+1 · kb.index 重建 · 基线切片 `baselines/26-10-16-1824-global-traffic-monitor-s9.md`。随本专题入库。
+
+**行号基准**: S9 无 `src/` 代码落点(纯测试面 + 一处测试文件); 计划脚注的 clone 基准 3ba069d7 与之无关。

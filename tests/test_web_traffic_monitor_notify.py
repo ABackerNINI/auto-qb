@@ -1,7 +1,8 @@
 """test_web_traffic_monitor_notify 测试计划: 全局流量监视器通知接收面(计划 26-10-16-0541 S7)
 
 ## 测试计划(每个测试函数一条)
-- test_notify_requires_auth: 无 Bearer 一律 401(与其它 /api/* 同闸; 对话方是工具进程, 不是浏览器)
+- test_notify_requires_auth: 无 Bearer / 错 Bearer 一律 401(与其它 /api/* 同闸; 对话方是工具进程, 不是浏览器)
+  —— 错 Bearer 分支覆盖密钥比较(只测「没带」时, 比较分支被绕过也照样绿, S9 鉴权绕过红验实测)
 - test_notify_path_is_client_constant: 路由路径与 webui/tool_client.NOTIFY_PATH 同源(订阅时登记给
   工具的 endpoint 尾巴必须就是这条路由 —— 两处各写一份必然漂移)
 - test_notify_validates_six_keys: 事件体六键逐个校验 -> 400 且逐条点名缺/坏键, 且不投递任何命令
@@ -56,6 +57,9 @@ def _post(client, mgr, payload):
 def test_notify_requires_auth(web_env):
     mgr, client = web_env
     assert client.post(tool_client.NOTIFY_PATH, json=EVENT).status_code == 401
+    # 带了 Bearer 但值不对: 必须也 401 —— 只测「没带」会漏掉密钥比较分支(该分支被绕过时前一行照样绿)
+    wrong = {_AUTH_KEY: "Bearer " + "wrong-credential"}
+    assert client.post(tool_client.NOTIFY_PATH, json=EVENT, headers=wrong).status_code == 401
 
 
 def test_notify_path_is_client_constant(web_env):

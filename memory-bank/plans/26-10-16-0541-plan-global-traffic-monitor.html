@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-1737">
+<meta name="doc-updated" content="26-10-16-1824">
 <meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S8 已实施;S9–S10 待逐项授权)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S9 已实施;S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -295,6 +295,11 @@
   <strong>未闭合项(诚实标注)</strong>: 出口原文的<strong>并行对照 24h 差异 ≤ 容差(E1)</strong>本会话无法完成 —— 需真实 Traffic Monitor 与 24h 挂机(本环境连 TM 数据目录所在的盘都不存在), 属 S10 真机验收; 本轮交付 = 方法(口径差异排除 / 容差口径)与已实跑验证的对照脚本。检查单第 3 步的 <strong>自启注册</strong>仍受本会话命令安全策略拦截(与 S5 同一缺口, 解锁路径见坑档 <code>pitfalls/ops/session-program-blacklist.md</code>), 第 5—8 步涉及真机 auto-qb 与浏览器(留 S10)。<br>
   <strong>实施期发现(写入判据)</strong>: 三个文档文件(<code>docs/configuration.md</code> / 根 <code>README.md</code> / <code>config-reference/keys.md</code>)被工作区写入判据<strong>整文件</strong>拦下 —— 命中既有示例占位行 5 处(尖括号口令占位 / 传令牌键旁空串字面量), 与本次改动无关; 属主授权后按「形态等价改写」落 5 行(语义零变化), 改写后 <code>git diff</code> 恰为预期 5 行、行尾字节无损; 新增「整文件级探针」手法(既有文件整份拷进 scratch 再改写, 一次判定「改哪几行即可恢复可写」), 并入坑档 <code>pitfalls/ops/agent-write-guard-secret-false-positive.md</code>。<br>
   根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md</code>。</td></tr>
+  <tr><td>S9</td><td><strong>Done</strong> · 26-10-16-1824 · @ f8db7019(开工同步后)。<br>
+  <strong>逐项核对后只补缺口</strong>(S1–S8 随各步落下的守阵本体不动): ① <strong>auto-qb 侧新增跨侧契约守阵</strong> <code>tests/test_traffic_monitor_dat.py</code>(新文件 2 条)—— S9 清单里唯一未被前序步骤覆盖的一项「<code>dat_path</code> 指向工具文件时解析兼容」: 工具真写者(<code>gtm.storage.DatStore</code> 的 load/upsert/flush 原子写)产出的 dat 设为 <code>dat_path</code> → 只读刷新读回(历史行按日升序 / KB 向下取整后逐日一致 / day·month 累计重算 / 更早月份的行只进历史不进当月累计), 另加格式单点同值断言(两侧 KB 常量 / <code>lines: "N"</code> 表头与数据行数 / 新日在前 / 读侧 <code>bad==0</code>)。写作形态: 工具写者按源码路径<strong>进程内</strong>加载(<code>syspath_prepend</code> + 只替 <code>import psutil</code> —— 根环境刻意无 psutil 是 S0 的隔离判据, 而写者路径一次不用它), <strong>不起子进程</strong>(根测试副作用守阵的 POPEN 白名单只放行 node 与临时 wrapper)。② <strong>notify 鉴权守阵补错密钥分支</strong>(<code>tests/test_web_traffic_monitor_notify.py</code> +2 行): 红验实测暴露 —— 原守阵只测「没带 Bearer」, 把密钥比较分支突变掉后<strong>该文件照样全绿</strong>(该突变在全量池由 <code>test_web_auth.py</code> 杀死 = 窄池假存活); 补「错 Bearer 也 401」后本文件即可判红。<br>
+  <strong>出口判据全过</strong>: ① 工具侧七类(采样 delta/重置/日界 · 落盘原子性 · 崩溃恢复 · 通知阈值/事件号/补发/假死端点 · 租约 · config 校验 · installer 幂等[平台命令 mock])与 auto-qb 侧四类(配置键 validate/schema 同步 · notify 鉴权+冷却+幂等 · 订阅生命周期 · <code>dat_path</code> 兼容)逐项有守阵(工具侧套件与 auto-qb 侧全量数字见 kb.baseline); ② <strong>红验 4 条突变全判 RED</strong>(阈值失效 · 鉴权绕过 · 单位漂移 KB=1000 · 表头漂移 <code>lines:</code>→<code>rows:</code>), 字节恒等还原后基线复绿(harness <code>.openclaw/tmp/redverify_s9.py</code> 未入库; 表头突变只打红格式单点那条 —— 与「值断言抓不到表头层」的设计预期一致); ③ 全量 <code>test.full</code> 全绿。<br>
+  <strong>实施期发现</strong>: ① 跨侧(工具写者 × auto-qb 读侧)守阵的写法由根测试的副作用守阵决定 —— 全局 POPEN 白名单不许起子进程跑工具 venv, 故改进程内加载工具源码 + 只替那一个 import; ② 包内 <code>test.*</code> 在本 clone 又踩「无 uv on PATH」(坑档 <code>testing/no-uv-fallback.md</code> 复发+1, 处置照首选: 调用前把 uv 目录前置进 PATH 并把 TEMP/TMP 指到 C 盘); ③ 窄池 SURVIVED 一律拿全量池复验才定性(坑档 <code>testing/mutation-pool-artifact.md</code> 复发+1)。<br>
+  行号基准 3ba069d7 与本步无关(新增测试文件 + 一处测试文件改 2 行); S10 真机验收待逐项授权。</td></tr>
 </table>
 
 <h2><span class="no">05</span>默认参数</h2>
@@ -356,7 +361,7 @@
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778、S6(auto-qb 配置面)于 26-10-16-1145 @ 3473aa9a(含用户拍板改版: 工具控制面加 <code>POST /autostart</code>, 见 S6 行)、S7(auto-qb 接收面)于 26-10-16-1404 @ fd26c4e7(见 S7 行)、S8(集成与过渡)于 26-10-16-1737 @ 1ae16235(纯文档轮; 并行对照 24h 属 S10 真机验收, 见 S8 行)(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5/S6)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778、S6(auto-qb 配置面)于 26-10-16-1145 @ 3473aa9a(含用户拍板改版: 工具控制面加 <code>POST /autostart</code>, 见 S6 行)、S7(auto-qb 接收面)于 26-10-16-1404 @ fd26c4e7(见 S7 行)、S8(集成与过渡)于 26-10-16-1737 @ 1ae16235(纯文档轮; 并行对照 24h 属 S10 真机验收, 见 S8 行)、S9(守阵测试)于 26-10-16-1824 @ f8db7019(见 S9 行)(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5/S6)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
 
 </div>
 </body>
