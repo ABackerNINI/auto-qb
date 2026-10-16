@@ -1,0 +1,53 @@
+[project]
+name = "global-traffic-monitor"
+version = "0.1.0"
+description = "整机流量历史记录小工具 (TrafficMonitor 替代): 独立进程采样全适配器流量, TM 兼容格式落盘, 阈值变化主动通知订阅的 auto-qb 实例"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "ABacker" }]
+requires-python = ">=3.12"
+keywords = ["traffic-monitor", "psutil", "trafficmonitor", "auto-qb"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+]
+
+# 直接依赖: 仅 psutil (采集) + filelock (单实例锁)。
+# HTTP 控制面与客户端全部 stdlib (http.server / urllib.request) —— 除这两者外零第三方依赖,
+# 保证三平台 pip install 即装、auto-qb 依赖变动不影响工具。
+# 版本精确锁定由 uv.lock 承担 (本文件不写死版本号)。
+dependencies = [
+    "psutil",
+    "filelock",
+]
+
+[project.scripts]
+gtm = "gtm.__main__:main"
+
+# 开发/测试依赖 (PEP 735 依赖组) —— 仅测试用, 运行时零依赖
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gtm"]
+
+# 自带 pytest 配置: 工具目录内 `uv run pytest` 必须命中本文件而非仓库根 pytest.ini
+# (仓库根 pytest.ini 在父目录, pytest rootdir 上移会拾取它, 其 addopts 含 -n/--cov
+# 在本工具 venv 中不可用 → unrecognized arguments 报错)。更近的配置文件优先, 见
+# memory-bank/pitfalls/testing/nested-pytest-config.md。
+[tool.pytest.ini_options]
+testpaths = ["tests"]

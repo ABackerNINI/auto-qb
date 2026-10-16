@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-0541">
-<meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html">
+<meta name="doc-updated" content="26-10-16-0601">
+<meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
     --bg: #10151a;
@@ -33,7 +33,7 @@
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
   * { box-sizing: border-box; }
-  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
   .sheet { max-width: 880px; margin: 0 auto; padding: 56px 40px 96px; }
 
   /* header */
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(待拍板后实施)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0 已实施;S1–S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -246,6 +246,16 @@
 <h3><span class="sid">S10</span>真机验收</h3>
 <p>按 §08 E1–E6 逐条实测,记录数字进计划 §04 实施记录(同文件内更新,不新建)。</p>
 
+<h3><span class="sid">R0</span>实施记录(就地更新于本文件 §04,不新建 -v2 文件)</h3>
+<table>
+  <tr><th style="width:80px">步</th><th>状态 · 日期 · clone · 落点与实测</th></tr>
+  <tr><td>S0</td><td><strong>Done</strong> · 26-10-16-0601 · @ 46d2ea11(开工同步后)。<br>
+  新建 <code>tools/global-traffic-monitor/</code> 完整骨架(11 文件): <code>pyproject.toml</code>(hatchling、src 布局、包名 <code>global-traffic-monitor</code>、入口 <code>gtm = gtm.__main__:main</code>、运行时依赖仅 <code>psutil</code>+<code>filelock</code>、dev 组 pytest、自带 <code>[tool.pytest.ini_options]</code>)、<code>src/gtm/</code> 八文件(<code>__init__</code>/<code>__main__</code> + config/sampler/storage/server/notifier/installer 六个模块,均为 S1–S5 占位)、<code>README.md</code>、<code>tests/test_smoke.py</code>。零 auto-qb 文件触碰。<br>
+  出口判据全过: ①独立 venv(<code>uv sync</code>;psutil 7.2.2 / filelock 4.2.0 / pytest 9.1.1 仅入工具 <code>.venv</code>)下 <code>gtm --version</code> 输出 <code>gtm 0.1.0</code>;②隔离验证: 仓库根 <code>uv run python -c "import psutil"</code> 仍 ModuleNotFoundError —— 装/卸验证两环境互不污染;③工具冒烟 4 条全过(版本一致性/模块可导入/--version/骨架提示)。根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md</code>(工具测试不在根 testpaths 内,根集数字不变)。<br>
+  实施期发现并修掉环境陷阱: 工具目录内 <code>uv run pytest</code> 会向上拾取仓库根 <code>pytest.ini</code>(rootdir 上移,addopts 的 <code>-n</code>/<code>--cov</code> 在工具 venv 不可用 → unrecognized arguments)——已在工具 pyproject 增补 <code>[tool.pytest.ini_options]</code>(更近的配置优先),坑档 <code>memory-bank/pitfalls/testing/nested-pytest-config.md</code>。<br>
+  行号基准 3ba069d7 与 S0 无关(纯新目录);S6/S7 触碰 auto-qb 前按本文件脚注逐条复核漂移。</td></tr>
+</table>
+
 <h2><span class="no">05</span>默认参数</h2>
 <table>
   <tr><th>参数</th><th>默认</th><th>说明</th></tr>
@@ -305,7 +315,7 @@
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,实施前逐条复核漂移。本计划未改任何代码与配置;实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地(见 §04 实施记录 R0);其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
 
 </div>
 </body>
