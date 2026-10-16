@@ -1,9 +1,9 @@
 ---
-summary: 全局流量监视小工具(TM 替代)分步实施计划 — grilling 三轮收敛 + 计划产出 + S0 包骨架已落地
+summary: 全局流量监视小工具(TM 替代)分步实施计划 — grilling 三轮收敛 + 计划产出 + S0 包骨架 / S1 采样器 / S2 落盘已落地
 ---
 
-> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1 采样器已实施(26-10-16-0815), S2–S10 待逐项授权
-> 最后活动: 2026-10-16 08:15
+> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1 采样器已实施(26-10-16-0815), S2 落盘已实施(26-10-16-0855), S3–S10 待逐项授权
+> 最后活动: 2026-10-16 08:55
 
 # activeContext · global-traffic-monitor(26-10-16-0541)
 
@@ -17,4 +17,6 @@ grilling 三轮 16 问全部按推荐拍板(口径=整机全适配器排回环;t
 
 **R2 · S1 已实施(2026-10-16-0815,clone @ febac58e,开工同步后)**: 用户指令「实施计划S1:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S1 的显式授权(S2–S10 不动)。sampler.py 全量实现(~430 行, AdapterFilter 固定顺序过滤 include→exclude→loopback→down; sample_once delta/单侧双侧重置归零告警不产负流量/跨天 00:00 硬切; restore state 载荷恢复[今天接续/昨天清零基线续/未来与损坏降级/空快照自洽] + restore_from_dat 今天行 KB→字节兜底[行序不敏感, 与 curves.py 解析正则逐字一致, 不 import auto-qb]; snapshot() 载荷 round-trip; SampleResult 上报 day_rolled/counter_reset/baseline/warnings 供 S2 消费; 休眠主循环与原子落盘按计划属 S2)。新增 tests/test_sampler.py 29 条守阵(全替身 hermetic), 改 5 文件零 auto-qb 触碰。出口判据全过: 工具 33/33(4 S0+29 S1); 红验 4 条单行锚点突变(重置归零/跨天不清零/loopback 不过滤/dat 兜底)全判红后字节还原复绿; 真机只读冒烟 loopback 正确排除、2s 窗 delta 量级吻合、snapshot 六字段正确。坑: pitfalls/testing/redverify-anchor-lineendings.md 复发+1 形态十(LF 仓库 write_text 反向污染行尾 + read_text 探针洗白; 未命中原因=临时红验照抄形态四文本模式旧例, 已用 bytes 层+还原字节恒等处置)。基线切片 testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md(根 test.full 3413+4 skip, 与 S0 逐位一致)。未提交(待用户「提交」指令)。
 
-**待办**:S2(落盘 storage: TM 兼容 history_traffic.dat + state.json 原子写 + 单实例锁 + run 主循环)待用户显式授权实施。
+**R3 · S2 已实施(2026-10-16-0855,clone @ b688437c,开工同步后)**: 用户指令「实施计划S2:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S2 的显式授权(S3–S10 不动)。storage.py 全量实现(~430 行: atomic_write_text 原子写单点[tmp+fsync+os.replace, Windows 读者持句柄 WinError 5/32 退避重试 5×50ms]/DatStore[TM 兼容 lines 头+新日在前+KB 向下取整+坏行跳过]/StateStore[每次采样必写, 丢失窗口 ≤ 采样间隔; 缺失/坏 -> None]/FlushPolicy[Δ≥1MiB 或 ≥30s, 首帧必落盘, 跨天 reset 新日基线]/SingleInstanceLock[filelock 0 超时+meta 持有者 PID, fail-fast]/Storage 编排[record: 跨天封存旧日 -> upsert -> dat 节流 -> state 必写; recover: state 权威、缺失/损坏/降级 -> dat 兜底]) + __main__.py run 子命令(default_data_dir 三平台, 单轮落盘失败 ERROR 可见下一轮重试不杀守护进程) + sampler.py _DAT_ROW_RE -> 公共 DAT_ROW_RE(dat 行格式工具内单点) + tests/test_storage.py 27 条守阵 + test_smoke.py CLI 断言更新, 改 4 文件+1 新文件零 auto-qb 触碰。出口判据全过: 工具 60/60; 红验 6 条单行锚点突变全判红字节恒等还原复绿; 并发读守阵(线程+子进程)只见完整文件; curves.py oracle bad==0; 真机冒烟 kill -9 后 state 快照双恢复、双实例 fail-fast 带 PID。坑: platform-fs.md 新增两节(Windows os.replace 读者双向瞬时拒绝; Git Bash $! 是 MSYS pid + grep 行尾退化计数)。基线切片 testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md。未提交(待用户「提交」指令)。
+
+**待办**:S3(控制面 server: 127.0.0.1:8099 + token 鉴权 + /status/PUT /config/订阅心跳租约)待用户显式授权实施; 记录+落盘闭环(S0–S2)已可手动 `gtm run` 验证。

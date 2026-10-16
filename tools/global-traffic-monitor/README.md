@@ -28,15 +28,27 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (gtm)
+  __main__.py   CLI 入口 (gtm): run 采样-落盘主循环 (S2)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
   server.py     本地控制面 127.0.0.1:8099 (S3)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启注册/卸载 (S5)
-tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; 随 S2-S9 逐步扩充)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; 随 S3-S9 逐步扩充)
 ```
+
+## 运行 (S2)
+
+```bash
+gtm run [--data-dir DIR]     # 前台采样-落盘主循环 (自启机制拉起的前台服务)
+```
+
+数据目录默认按平台 (`%LOCALAPPDATA%/gtm` · `~/Library/Application Support/gtm` ·
+`~/.local/share/gtm`, 环境变量 `GTM_DATA_DIR` 优先), 落 `history_traffic.dat`(TM 兼容) +
+`state.json`(每次采样原子写, kill -9 丢失窗口 ≤ 采样间隔) + `gtm.lock`(单实例, 二次启动
+fail-fast 报错含持有者 PID)。单轮落盘失败记 ERROR 并在下一轮重试, 不杀守护进程;
+Ctrl+C 优雅退出(最终落盘 + 释放锁)。
 
 ## 开发
 

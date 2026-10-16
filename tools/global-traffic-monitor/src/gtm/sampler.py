@@ -48,9 +48,9 @@ SNAPSHOT_VERSION = 1
 # 回环网卡名判别: Linux "lo" / macOS "lo0" / Windows "Loopback Pseudo-Interface 1"
 _LOOPBACK_RE = re.compile(r"^(lo|lo\d+|loopback\b.*)$", re.IGNORECASE)
 
-# dat 行格式 (与 auto-qb curves.py parse_history_dat 的正则逐字一致):
-# "YYYY/MM/DD 上传KB/下载KB", 单位 KB=1024B
-_DAT_ROW_RE = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d+)/(\d+)$")
+# dat 行格式单点 (本模块 restore_from_dat 与 storage.DatStore.load 共用):
+# "YYYY/MM/DD 上传KB/下载KB", 与 auto-qb curves.py parse_history_dat 的正则逐字一致
+DAT_ROW_RE = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d+)/(\d+)$")
 
 # dat 数值单位: KB, 按 1024 字节换算 (与 curves.py 的 KB 常量同值)
 _KB = 1024
@@ -297,7 +297,7 @@ class Sampler:
             line = raw.strip()
             if not line or line.lower().startswith("lines:"):
                 continue
-            m = _DAT_ROW_RE.match(line)
+            m = DAT_ROW_RE.match(line)
             if not m:
                 continue
             y, mo, d, up_kb, down_kb = m.groups()

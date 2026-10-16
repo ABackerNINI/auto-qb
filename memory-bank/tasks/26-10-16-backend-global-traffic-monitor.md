@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 08:15
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器已落地。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md
+**Updated:** 2026-10-16 08:55
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘已落地。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -25,7 +25,7 @@
 |---|---|---|
 | S0 | 包骨架与依赖隔离 | Done (26-10-16-0601) |
 | S1 | 采样器 sampler | Done (26-10-16-0815) |
-| S2 | 落盘 storage | Open |
+| S2 | 落盘 storage | Done (26-10-16-0855) |
 | S3 | 控制面 server | Open |
 | S4 | 通知 notifier | Open |
 | S5 | 自启 installer | Open |
@@ -65,3 +65,18 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0815, 状态行 S0–S1, §04 R0 增 S1 行) · 本档案 R2 · activeContext 切片 R2 · 基线切片 `baselines/26-10-16-0815-global-traffic-monitor-s1.md`(根 test.full 3413 passed + 4 skipped / 99%, 与 S0 切片逐位一致) · kb.index 重建。未提交(待用户「提交」指令)。
 
 **行号基准**: S1 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
+
+
+### R3 · S2 实施 (2026-10-16 08:55)
+
+用户指令「实施计划S2:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S2 的显式授权(S3–S10 不动)。开工同步至 b688437c。
+
+**落点**(改 4 文件 + 1 新文件, 零 auto-qb 触碰): `src/gtm/storage.py` 占位 -> 全量实现(~430 行: atomic_write_text 原子写单点[同目录 tmp+fsync+os.replace, Windows 读者持句柄 WinError 5/32 退避重试 5×50ms]/DatStore[TM 兼容 lines 头+新日在前+KB 向下取整+坏行跳过+加载保留既有日]/StateStore[每次采样必写, 缺失/坏/非对象 -> None]/FlushPolicy[Δ≥1MiB 或 ≥30s, 首帧必落盘, 跨天 reset 新日基线]/SingleInstanceLock[filelock 0 超时+meta 持有者 PID, fail-fast]/Storage 编排[record: 跨天封存旧日 -> upsert -> dat 节流 -> state 必写; recover: state 权威、缺失/损坏/降级 -> dat 兜底; dat_text 内存活尾]) + `__main__.py` run 子命令(--data-dir + default_data_dir 三平台路径策略, acquire_lock fail-fast, recover, 采样-落盘循环, 单轮失败 ERROR 可见下一轮重试不杀守护进程, Ctrl+C 优雅退出最终落盘+释放锁) + `sampler.py` _DAT_ROW_RE -> 公共 DAT_ROW_RE(dat 行格式工具内单点, 读写两侧共用防漂移) + `tests/test_storage.py` 新文件 27 条守阵 + `tests/test_smoke.py` CLI 默认行为断言更新。
+
+**出口判据全过**: ①工具 60/60(4 冒烟 + 29 S1 + 27 S2, 含并发读守阵双形态[线程 + 子进程握手]与 curves.py 真解析器 oracle[importlib 加载, bad==0 值逐日一致]); ②红验 6 条单行锚点突变(原子写失效/replace 重试失效/节流阈值失效/state 不写/锁不竞争[锚点取唯一上下文行偏移, 形态三: self._lock.acquire() 两处出现]/dat 加载丢失)全部判红, 字节恒等还原后复绿(临时脚本 bytes 层, 形态一/十); ③真机冒烟(Windows 临时 data_dir): 第二实例 fail-fast 含持有者 PID/启动时间; taskkill /F kill -9 后重启 state 快照恢复(累计+计数器基线双恢复); dat 首帧落盘值与会话流量逐项吻合。
+
+**实施期坑**: `pitfalls/backend/platform-fs.md` 新增两节 —— ①Windows os.replace 遇读者持句柄的双向瞬时 PermissionError(写侧重试/读侧重试打开, 看不到内容 ≠ 半截内容); ②Git Bash 环境事实($! 是 MSYS pid 不是 Windows pid; grep -c $'\r' 可能退化计数, 行尾事实用 python bytes 层)。冒烟 harness 两轮才跑通: 首轮 Bash 调用间 shell 状态不保持($! 丢失)+pgrep 不存在; 次轮 $! 是 MSYS pid —— 均 harness 问题非工具缺陷, 用 fail-fast 消息提取 Windows pid 解决。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0855, 状态行 S0–S2, §04 R0 增 S2 行) · 本档案 R3 · activeContext 切片 R3 · 工具 README/__init__ 进度注记 · pitfalls/backend/platform-fs.md 新增两节 · pitfalls/testing/redverify-anchor-lineendings.md 复发+1(形态三第二例: self._lock.acquire() 两函数重复被 count!=1 兜底) · kb.index 重建 · 基线切片 `baselines/26-10-16-0855-global-traffic-monitor-s2.md`。随用户「提交」指令一并入库。
+
+**行号基准**: S2 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。

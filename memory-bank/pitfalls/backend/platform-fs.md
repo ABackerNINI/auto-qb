@@ -1,7 +1,7 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 退避重试, taskkill, MSYS pid
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
 
@@ -103,3 +103,30 @@
   得出"三套空间 API 互相矛盾"的结论 —— **完全错误**; 同刻复核三口径**逐字节相同**
   (`GetDiskFreeSpaceExW` / `shutil` / `df`)。
 - **处置**: 涉及"环境事实"的结论必须**同刻取样**, 否则会把两次状态差当成工具不一致。
+
+### Windows 原子写 (`os.replace`) 与并发读者的双向瞬时拒绝 (WinError 5/32)
+
+- **触发**: 「同目录临时文件 + fsync + `os.replace`」的原子写模式, 且有**并发读者**
+  周期性打开目标文件 —— gtm 工具写 `history_traffic.dat` / `state.json`, auto-qb
+  多实例经 `curves.py` 解析读 dat(2026-10-16 S2 实测, 热读循环下每次写都撞)。
+- **判别**: 两个方向的瞬时 `PermissionError` (errno 13): ①**写侧** —— 读者正持目标
+  文件打开时 (`MoveFileEx` 拒绝替换: Python `open()` 的 share mode 不含
+  `FILE_SHARE_DELETE`); ②**读侧** —— replace 事务窗口内, 读者的 `open()` 被瞬时
+  拒绝。两者都是开-读-关的微秒~毫秒级窗口, **不是持久故障**。
+- **处置**: 写侧把 `os.replace` 包进退避重试 (仅 PermissionError, 5 次 × 50ms;
+  耗尽抛错, 由调用方在下一节流轮容错), 单点见
+  `tools/global-traffic-monitor/src/gtm/storage.py::_replace_retry`; 读侧打开失败
+  **重试**, 不要当内容损坏 —— 看不到内容 ≠ 看到半截内容。POSIX 上 replace 不受
+  读者影响, 不触发重试。
+
+### Git Bash 两个会骗人的环境事实 (MSYS pid / grep 行尾计数)
+
+- **触发**: 在 Bash 工具里对 Windows 原生进程做生命周期管理, 或检查文件行尾。
+- **判别**: ①后台 `"$PY" ... &` 的 `$!` 是 **MSYS pid**, 拿它去 `taskkill //PID`
+  永远「没有找到进程」—— 要 Windows pid (可从 filelock meta / fail-fast 消息里的
+  `PID nnnnn` 提取); ②`grep -c $'\r' file` 在该 shell 里可能**不展开成 CR**, 退化
+  成数全部行数, 输出恰好等于文件行数, 极易误判「全 CRLF」。
+- **处置**: 行尾事实一律用 python bytes 层 (`read_bytes().count(b"\r\n")`), 不信
+  grep 计数; 杀 Windows 进程先拿到真 Windows pid。
+
+**Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md
