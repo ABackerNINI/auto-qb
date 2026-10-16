@@ -76,6 +76,14 @@ const _QB_POLL_MIN_MS = 1500;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
 
+/* 在途悬挂兜底(2026-10-16, issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout; 与 auth.js 的
+ * 请求级超时 AQB_FETCH_TIMEOUT_MS 互补): loading 是**单向「请求在途」标志** —— 入口无条件置 true,
+ * 唯一复位路径是 _qbLoad 的 finally; 一旦请求不让出控制权(悬挂), finally 不执行 ⇒ 轮询守卫
+ * (this[def.loading]) 把之后每一拍都挡掉, 图表永久停在旧帧且无任何提示(不自愈)。
+ * 取值 30s = 请求级超时(15s)的两倍余量: 正常在途请求(哪怕正好被请求级超时兜到)不会触发本兜底 ——
+ * 只有「连 abort 都没能让 finally 跑起来」才走这里, 它是兜底的兜底, 不是主路径。 */
+const _QB_LOAD_STALL_MS = 30000;
+
 /* 窗口档位(13 档, 顺序即展示序: 短窗 -> 长窗; 与后端 webui/server/traffic_qb.py 的
  * WINDOW_NAMES 逐字一致) —— 展示(drawer.html v-for 走 qbWindowNames computed)、前后切换
  * (qbCycleWindow)、持久化校验(qbInitialWindow)三处共用同一份, 不再各自硬编码。 */
@@ -658,6 +666,11 @@ window.AQB_QB_TRAFFIC = {
       if (!this.qbTrafficOn) return;  // P5 验收: enabled=false 不发请求(入口 v-if 已门, 这里兜底)
       const ctx = def.ctx ? def.ctx(this) : "";
       this[def.loading] = true;
+      // 悬挂兜底计时起点(见 _QB_LOAD_STALL_MS): 置位处写、**finally 不擦** —— 换目标场景下旧请求的
+      // finally 晚于新请求的置位到达(stale 分支故意不复位 loading), 擦一次就把新请求的计时抹成 0,
+      // 兜底从此永不触发。不擦是安全的: loading 为假时守卫不读它, 每次置位都重写。
+      if (!this._qbLoadAt) this._qbLoadAt = {};
+      this._qbLoadAt[scope] = Date.now();
       // error **不在此清空**(2026-10-05 修「空态/错误态每隔一个轮询周期闪一次」): 请求前清错误 =
       // 续拉把错误文案换成一帧 loading/空态再换回, 与「清空旧数据把等待渲染成空态」同型; 错误态
       // 改由**下一次成功落袋**清除(见下), 期间的旧文案由 FX-29 遮罩在换目标时兜住(160ms 延迟点亮)。
@@ -731,6 +744,11 @@ window.AQB_QB_TRAFFIC = {
       if (!(s > 0)) return _QB_POLL_FALLBACK_MS;
       return Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000));
     },
+    /* 在途悬挂判据(见 _QB_LOAD_STALL_MS): loading 置位时刻距今超过阈值即认定该请求已悬挂。 */
+    _qbLoadStalled(scope) {
+      const at = this._qbLoadAt && this._qbLoadAt[scope];
+      return !!at && Date.now() - at > _QB_LOAD_STALL_MS;
+    },
     _qbPollStart(scope) {
       this._qbPollStop(scope);
       if (!this._qbPollTimers) this._qbPollTimers = {};
@@ -741,7 +759,14 @@ window.AQB_QB_TRAFFIC = {
       // _startDrawerPoll 先例); 在途请求未落袋前不叠加(loading 在 _qbLoad finally 归位)
       this._qbPollTimers[scope] = setInterval(() => {
         const def = _QB_SCOPES[scope];
-        if (!def.active(this) || document.hidden || this[def.loading]) return;
+        if (!def.active(this) || document.hidden) return;
+        // 在途互斥(loading)照旧, 只加悬挂兜底(issue 26-10-16-0954): loading 卡死不再永久挡拍 ——
+        // 置位超过 _QB_LOAD_STALL_MS 即视为上一拍已悬挂, 强制续拉 + 留一次警告痕(新一拍同步重写
+        // 计时起点, 故下一拍照常挡拍, 警告每段悬挂只出一条)。
+        if (this[def.loading]) {
+          if (!this._qbLoadStalled(scope)) return;
+          console.warn(`[qb-traffic] ${scope}: 上一拍请求在途超过 ${Math.round(_QB_LOAD_STALL_MS / 1000)}s, 视为悬挂, 强制续拉`);
+        }
         this._qbLoad(scope);
       }, ms);
     },

@@ -1,7 +1,7 @@
 # 本 clone 工具 shell 无 uv / 无 R 盘时跑测试的兜底
 
-> 摘要: 包内 `test.*` 任务单点写着 `uv run pytest`, 但**本 clone 的工具 shell 里 `uv` 不可用**(PATH 无 uv), 且 `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机不存在** ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`)。兜底 = 用仓库 venv 的 python 直跑 pytest, 并把 `TMPDIR` 指到坑档已认可的 C 盘临时区。
-> 触发: 跑测试, uv, command not found, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp
+> 摘要: 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`), 闸门同理; `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机也不存在**。首选处置 = **本次调用前把该目录前置进 PATH**(包内 task/闸门全线恢复, 实测), 次选 = 用仓库 venv 的 python 直跑 pytest + `TMPDIR` 指到 C 盘临时区。
+> 触发: 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp
 
 **Refs:** memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md
 
@@ -11,7 +11,14 @@
 - **判别**: 两层叠加 ——
   · **uv 缺席**: `Get-Command uv` 无输出; `commands.cmd` 因此回退 `python run.py`(它能定位引擎并把 task 跑起来), 但 **task 体自身写死 `uv run pytest`** ⇒ 输出 `[FAIL] test.one (0.0s)` + `'uv' is not recognized as an internal or external command`。
   · **R 盘缺席**: `New-Item R:/Temp/...` 报 `DriveNotFoundException`(名为"R"的驱动器不存在) ⇒ 即便有 uv, 照抄 task 体的 `TMPDIR=R:/Temp/auto-qb/tests` 也落在不存在的盘上。这是**机器差异**不是仓库缺陷 —— 坑档 `testing/tmpdir.md` 同时列了 `C:/Users/<用户>/AppData/Local/Temp` 作为认可替代。
-- **处置**: ❌ 不要改 `.commands/*/config.toml`(全体 clone 共享的单点, 改它 = 把本机差异写进仓库); ❌ 也不要裸跑 pytest 而不设 `TMPDIR`(工具 shell 默认 `H:\Temp` 的重解析点会让收尾崩, 点号全过也判红)。**用仓库 venv + C 盘临时区复刻 task 体的其余部分**(实测跑通全量含覆盖率闸门):
+- **处置**: ①**首选: 本次调用前把 uv 所在目录前置进 PATH**(实测一次修复全线 —— dev.fmt 1.1s 过 / test.quick 过 / 整个 ship.commit 329.5s 成功推送; uv 未触碰 uv.lock / pyproject):
+
+  ```powershell
+  $env:PATH = "C:\Users\<用户>\.local\bin;$env:PATH"   # uv.exe 常在这(uv 自身安装器的默认落点), 只是没进工具 shell 的 PATH
+  uv --version   # 实测 0.12.18, 项目 requires-python >=3.12, 直接复用仓库 .venv, 不重建
+  ```
+
+  ②**兜底(不前置 uv 时)**: ❌ 不要改 `.commands/*/config.toml`(全体 clone 共享的单点, 改它 = 把本机差异写进仓库); ❌ 也不要裸跑 pytest 而不设 `TMPDIR`(工具 shell 默认 `H:\Temp` 的重解析点会让收尾崩, 点号全过也判红)。用仓库 venv + C 盘临时区复刻 task 体的其余部分:
 
   ```powershell
   cd <仓库根>
@@ -23,4 +30,5 @@
 
   单文件 / 筛选用例: 把 `tests` 换成目标文件并补 `-n 0 --no-cov`(与 `test.one` 口径一致; 单文件跑并行反而慢在 worker 启动, 覆盖率门槛只对全量收集面有意义, 见 `single-file-coverage-gate.md`)。全量判据看**末行**: `N passed, M skipped in …` + `Required test coverage of 98% reached`(exit=0)。
   ⚠ 另一条易踩: `| Select-Object -Last N` 接 pytest 会缓冲到结束才出输出(看着像卡死) —— 重定向到文件再读尾部(`> <log> 2>&1`), 或耐心等汇总行。
+  ⚠ 兜底路径下的闸门替代: 包内闸门里 `TMPDIR=R:/Temp/...`(R 盘不存在)会自然回落到 `TEMP`/`TMP` —— 调用前把这两个也指向 C 盘临时区, 否则回落 `H:\Temp` 撞同一条收尾崩。
 - **与既有坑档的关系**: `tmpdir.md`(TMPDIR / 临时目录 / 收尾崩)只覆盖临时目录面, 本条补的是「包内 task 依赖 uv, 而本机无 uv」这一层入口差异; `sandbox-full-run.md`(沙箱拒写 R:\Temp ⇒ 回落 H:\Temp 收尾崩)同属环境面假红。

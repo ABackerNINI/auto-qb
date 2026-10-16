@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-raw-fetch-bypass-no-timeout">
+<meta name="issue-stamp" content="26-10-16-1303">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-polling">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写">
+<meta name="issue-summary" content="boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面">
+<title>前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写</h1>
+    <p class="lede">boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 13:03</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><b>怎么撞见的</b>：修复 <a href="26-10-16-0954-bug-webui-chart-fetch-no-timeout.html">26-10-16-0954</a>（前端 <code>_request</code> 加 15s 请求级超时）时按范围守恒清点「还有谁在直接用裸 <code>fetch</code>」—— 全仓（排除 vendor）除已修的 <code>auth.js::_request</code> 外，另有 <b>4 文件 5 处</b>直接 <code>fetch</code>，全部无 <code>signal</code>／无超时，也不走 <code>_request</code> 的 401 / 错误态契约。</p>
+    <p><b>机制（与已修 issue 同族）</b>：连接静默失效（服务端不响应 / TCP 半开 / 中间设备丢包）时 <code>await</code> 永不返回 ⇒ 调用方的 <code>then/catch/finally</code> 整条不执行 ⇒ 各自的收尾动作（装载链的下一片、登录判定的放行、导出回执的结算、密钥保存的 busy 复位）全部停在中途，界面无提示、不自愈。</p>
+    <p><b>发现方式</b>：纯读码（grep <code>fetch(</code>），未做悬挂复现；各调用点的具体观感属<b>推理</b>（下面逐条标注），认领后请先复验。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（逐字摘录；含凭据的那段出网头不在本报告复制，见源码原文），附取证时间。</p>
+    <p><b>一、启动分片装载（取证 2026-10-16 13:03 · clone 工作树）</b>：</p>
+<pre><code>// src/auto_qb/webui/static/shared/boot.js:63
+fetch(part.src, { credentials: "same-origin" }).then(function (res) {
+  if (!res.ok) throw new Error(part.src + " HTTP " + res.status);
+  return res.text();
+}).then(function (text) { ... nextPart(); })
+// 顺序装载链: 悬挂即停当前片, 后续 then 永不执行(应用停在 v-cloak 前)</code></pre>
+    <p><b>二、本机免鉴权判定（登录遮罩前）</b>：</p>
+<pre><code>// src/auto_qb/webui/static/shared/lifecycle.js:201
+fetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
+  if (pub && pub.web && pub.web.skip_local_verify) { /* 唯一放行点: 直接进主界面 */ }
+  ...
+});
+// 无 signal / 无超时 / 无 catch 兜底: 悬挂 ⇒ 停在"验证中"(bootstrapping)</code></pre>
+    <p><b>三、导出下载（二进制流, 有意绕开 <code>api()</code>）</b>：</p>
+<pre><code>// src/auto_qb/webui/static/shared/commands.js:807  (符号 _exportDownload(hash))
+const resp = await fetch(`/api/torrents/${hash}/export`, { headers: { ...出网头(见源码) } });
+// 该行上方既有注释写明为何不能走 this.api(): api() 固定 resp.json(), 而这里是二进制流;
+// 401 分支与 _logout 契约自带, 但无超时: 悬挂 ⇒ 导出回执停在"进行中"</code></pre>
+    <p><b>四、密钥读写（设置页「快捷键」编辑器）</b>：</p>
+<pre><code>// src/auto_qb/webui/static/shared/shortcuts.js:396  (符号 reload(token))
+const r = await fetch("/api/keys", { headers });
+// src/auto_qb/webui/static/shared/shortcuts.js:409  (符号 save(doc, token))
+const r = await fetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
+// 两处 catch 只兜"已抛出的错": 悬挂永不抛 ⇒ reload 恒不返回 false / save 恒不返回 {ok:false}</code></pre>
+<pre><code># 复现 / 输出原文
+    <p class="hint">（上四段为逐字摘录；行号取证 2026-10-16 13:03 · clone 工作树）</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>任一次请求悬挂。与后端是否健康无关 —— 只需连接层静默失效。</td></tr>
+      <tr><td>影响范围</td><td><b>启动路径两处</b>（分片装载 / 免鉴权判定）+ <b>两个功能入口</b>（导出下载 / 快捷键密钥读写）。前两处悬挂会让整页停在启动态/验证态，后两处只影响各自功能。</td></tr>
+      <tr><td>严重度</td><td><b>中</b>。停止刷新与卡死对用户不可区分、无提示、不自愈；<code>_request</code> 侧的同类症状已由 26-10-16-0954 修掉，这几处是<b>同族仅剩的悬挂可达面</b>。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/boot.js:63</code>（取证 2026-10-16 13:03）· 符号 <code>nextPart()</code> · grep <code>fetch(part.src</code> —— 启动分片装载链</li>
+      <li><code>src/auto_qb/webui/static/shared/lifecycle.js:201</code>（同上）· grep <code>/api/config/public</code> —— 本机免鉴权判定</li>
+      <li><code>src/auto_qb/webui/static/shared/commands.js:807</code>（同上）· 符号 <code>_exportDownload</code> · grep <code>/export</code> —— 导出下载（二进制流）</li>
+      <li><code>src/auto_qb/webui/static/shared/shortcuts.js:396 / :409</code>（同上）· 符号 <code>reload(token)</code> / <code>save(doc, token)</code> · grep <code>/api/keys</code></li>
+      <li>同类前科：<code>26-10-16-0954</code>（已 Done：<code>_request</code> 请求级超时 15s + 流量图 loading 悬挂兜底）—— 本条的来源就是它「未做 / 残留」节里那两条旁路，清点后实际是 5 处</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><b>待查（入池不填单，未做深度分析）</b>。已知事实两条：①这 5 处<b>要么有意、要么历史地</b>绕开 <code>_request</code> —— 导出是二进制流（<code>_request</code> 固定 <code>resp.json()</code>），启动两处在鉴权就绪之前（走不了 <code>api()</code> 的「无凭证不出网」门）；②因此「给 <code>_request</code> 加超时」并不覆盖它们 —— 需要一条**与鉴权/解析解耦的低层带超时 fetch** 才是治本面。<br><b>已排除</b>：不是后端接口挂起（后端有独立路由超时与降级返回，见 26-10-16-0954 §05）；不是 <code>_request</code> 漏改（它已修并带守阵）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><b>抽低层单点（推荐）</b>：在 <code>shared/</code> 加一个带 <code>AbortController</code> + 超时的 <code>aqbFetch(path, opts)</code>（返回原始 <code>Response</code>：不做 JSON 解析、不判 401 语义），5 处改调它；<code>_request</code> 内部也可复用它（保留自家 401/JSON 契约）。代价：新单点，需在守阵里钉住「裸 <code>fetch</code> 零回潮」。</li>
+      <li><b>就地各自加超时</b>：5 处各写 <code>AbortController</code>。代价：五份重复、无单点，后续再添调用点还会重演本条。</li>
+      <li><b>启动两处另议</b>：<code>boot.js</code> 装载链与 <code>lifecycle.js</code> 免鉴权判定在鉴权就绪之前，语义与「用户请求」不同 —— 超时值与失败兜底（如装载失败给可读的启动失败提示而非白屏）需单独定夺，别照搬 15s。</li>
+    </ol>
+    <p class="hint">仅方案，不在本报告实施。方向 1 + 3 组合最干净；若只做 1，启动两处仍需各自的失败兜底。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 13:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

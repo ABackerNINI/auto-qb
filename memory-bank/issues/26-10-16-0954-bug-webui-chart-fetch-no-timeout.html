@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-0954">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-polling">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端 api 调用无超时: 请求悬挂时流量图永久停在旧帧, 无提示也不自愈">
 <meta name="issue-summary" content="_request 对裸 fetch 无 AbortController; loading 标志只在 finally 复位, 一次悬挂即永久挡住轮询 tick: 10-12 修过同族卡锁但根因仍在">
 <title>前端 api 调用无超时: 请求悬挂时流量图永久停在旧帧, 无提示也不自愈 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-webui-chart-fetch-no-timeout</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -201,11 +201,21 @@ async _request(path, options, token) {
     <ul>
       <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-16 09:54 — 来源：排查本次流量图异常时读前端取数链发现（纯读码，未做悬挂复现）</li>
+      <li>2026-10-16 11:49 — 认领，状态 <strong>In Progress</strong>（用户指派「认领并修复」；认领方 = 任务档案 <code>memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md</code>，本件 <code>doc-refs</code> 已填）</li>
+      <li>2026-10-16 12:56 — 修完并验证，状态 <strong>Done</strong>（#2 本会话落盘 + #1 经人工应用交接件后由本会话复核；见下「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>复验（2026-10-16 11:49，node 探针重放，用本 tree 真实源码）：仍复现。</b>探针（scratch，未入库）以「永不 settle 的 fetch」重放两条锚点，读数：①请求层 <code>fetch 收到 signal = false</code>、<code>_request 排出的定时器数 = 0</code>、400ms 后请求状态 <code>pending</code>（悬挂可达且无任何超时路径）；②消费层把 <code>loading</code> 置真并连打 8 拍轮询 tick，<code>续拉次数 = 0</code>（守卫永久挡掉每一拍）。锚点行号复核：<code>auth.js:23</code> 仍为裸 <code>fetch(path, { ...options, headers })</code>；<code>qb_traffic_chart.js</code> 的 <code>_qbLoad</code> 置位行与 <code>_qbPollStart</code> 守卫行（<code>!def.active(this) || document.hidden || this[def.loading]</code>）与本报告取证时一致，零漂移。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法 = 建议修法 #1 + #2（原样采纳其取值），#3 未做。落点与报告建议一致，故 §06 原文保留不改。</b></p>
+    <ul>
+      <li><b>#1 请求级超时（<code>shared/auth.js</code>）</b>：新增模块级常量 <code>AQB_FETCH_TIMEOUT_S = 15</code> / <code>AQB_FETCH_TIMEOUT_MS = AQB_FETCH_TIMEOUT_S * 1000</code>；<code>_request</code> 每次请求挂 <code>AbortController</code> + <code>setTimeout</code>，fetch 带上 <code>signal: ctl.signal</code>，外部 <code>options.signal</code> 用<b>链接</b>（已 aborted 立即转发）而非覆盖，<code>AbortError</code> 翻译成「请求超时(15s)」/「请求已取消」并打 <code>timeout</code> 标记，定时器在 <code>finally</code> 清掉。<b>认领时确认的结论</b>：§06 问「<code>AbortController</code> 是否已在使用」—— 全仓 grep 为零，属本次<b>引入</b>（10-12 那次修的是同链另一入口 stale 谓词，没引入它）。</li>
+      <li><b>#2 loading 悬挂兜底（<code>shared/qb_traffic_chart.js</code>）</b>：新增 <code>_QB_LOAD_STALL_MS = 30000</code>（请求级超时的两倍余量）与判据单点 <code>_qbLoadStalled</code>；轮询 tick 的三判据拆开（<code>!def.active(this) || document.hidden</code> 早退照旧，<code>loading</code> 单独经悬挂判据）；<code>_qbLoad</code> 置位处写计时起点 <code>_qbLoadAt[scope]</code>，<b>finally 不擦</b>（换目标场景下旧请求的 finally 晚于新请求置位，擦会把新计时抹成 0）。</li>
+      <li><b>#3 未做（有意）</b>：既有错误空态（<code>qbCurError</code> + warn 图标，成功落袋才清）已承担「数据更新失败」的提示面 —— 超时被翻译成可读文案后直接显示在那里，零新增 UI 就有提示；再新增一个状态会与 P4 接缝提示占同一位置。若后续仍要独立的「连续 N 拍未落袋」提示，须先定它与接缝提示/空态的优先级。</li>
+    </ul>
+    <p><b>验证方式：</b>① 复验（改前）：node 探针用本 tree 真实源码重放，读出「fetch 无 signal / 零定时器 / 400ms 仍 pending」+「loading 卡死后 8 拍零续拉」；② 修复后同一探针：② 读数 0 → 8；③ 守阵：<code>test_frontend_qb_traffic_load_stall_fallback</code>（三层静态锚 + 8 项行为电池）与 <code>test_frontend_api_request_timeout</code>（四层静态锚 + 六型行为电池：悬挂 / 成功 / 401 / 非 2xx / 外部取消 / 网络错误）；④ 红绿双验各三类突变逐类判红、还原复绿（#1 侧经副本注入 —— 该文件写入被工作区判据拦下，见下）。测试数字唯一权威见基线切片 <code>memory-bank/testing/baselines/26-10-16-1256-webui-chart-fetch-timeout-r2.md</code>（本件不手抄）。</p>
+    <p><b>过程事实（与建议修法无关，但影响复现）：</b>#1 的两处改动<b>无法由 agent 落盘</b> —— 本工作区的写入判据（<code>artifact_secret_detected</code>）整文件扫描命中本文件一条<b>既有行</b>并拒写（误判，报出的行号与磁盘内容还对不上），按判据口径交用户手工应用后由 agent 只读复核；已记坑档 <code>memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md</code>。</p>
+    <p><b>同类未处置（范围守恒）：</b>另有两条<b>裸 fetch 旁路</b>绕过 <code>_request</code>、同样没有超时 —— <code>shared/commands.js</code> 的导出下载与 <code>shared/shortcuts.js</code> 的 <code>/api/keys</code> 读写；不在本件定位锚点内，本轮一行未动，是否入池待拍板。</p>
 </section>
 
   <footer>

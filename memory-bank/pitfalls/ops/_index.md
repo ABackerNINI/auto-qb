@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [agent-write-guard-secret-false-positive.md](agent-write-guard-secret-false-positive.md) | 本工作区的写入判据(`artifact_secret_detected`)对**整文件**扫描「形如凭据赋值的字面量」, 命中即拒绝**整个写入** —— 而命中项可能是**既有行**(不在本次改动里)。实测: `src/auto_qb/webui/static/shared/a… | artifact_secret_detected, 写入被拦, 凭据字面量, 误判, 文件写不进去, edit 失败, 安全判据, 明文密钥, 工作区写入, 不要绕过 |
 | [alert-levels.md](alert-levels.md) | 本仓把 WARNING 以上**推成系统通知**(2026-09-27 起 min_level 默认 ERROR, 只有真正危险才弹窗, WARNING 收窄为纯排障等级 —— 口径单点见 `conventions/code-style.md`「日志规范」), 而取数/后台线程是… | 通知太多, 弹窗, 告警疲劳, WARNING, 日志刷屏, 每分钟一条, 节流, 限速, 未到可取时刻, partial, 启动日志, 后台线程日志, notify 推送, 轮询, 重复告警, 两条通知 |
 | [console-encoding.md](console-encoding.md) | Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Pytho… | 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subproce… |
 | [docker-host-features.md](docker-host-features.md) | 程序读的是 **qB 报回来的宿主保存路径**(如 `D:\Downloads\x`), 而容器里没有这块盘 ⇒ `os.path.exists` 恒 False、`realpath` 被拼成 `/app/D:/Downloads`; slim 镜像又缺 `xdg-open` /… | docker, 容器, compose, 打开目标文件夹, open-path, 目录浏览, fs/dirs, mkdir, 缺文件, MISSING 标签, 跳检, check_filelist, exists(), disk_total… |

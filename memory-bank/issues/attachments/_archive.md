@@ -6,7 +6,7 @@
 
 ## Open (47)
 
-- [bug] [前端 api 调用无超时: 请求悬挂时流量图永久停在旧帧, 无提示也不自愈](../26-10-16-0954-bug-webui-chart-fetch-no-timeout.html) — _request 对裸 fetch 无 AbortController; loading 标志只在 finally 复位, 一次悬挂即永久挡住轮询 tick: 10-12 修过同族卡锁但根因仍在
+- [bug] [前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写](../26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html) — boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面
 - [bug] [agg 行 totals 归属错位: 游程内部小时行共用冻结快照](../26-10-16-0020-bug-agg-hour-totals-frozen-run.html) — 空闲 z 游程期间 agg 按冻结快照记账, 游程内小时行 totals 全部偏低, 增长被推到下一个小时行
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -59,12 +59,13 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (204)
+## Done (205)
 
 - [bug] [重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线](../26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html) — full_round 补建数百个立即到期任务占满 20 个/tick 配额; 采样首轮后 next_run 恒晚于补建批次, 七次重启全部复现 37~55s 静默
 - [bug] [P4 接缝提示判据把「链末桶晚于重启时刻」当作链已接续: 重启后首采落入长零游程时提示不显示](../26-10-16-0954-bug-traffic-seam-hint-missed-after-first-sample.html) — 判据要求 server_started_at >= 链末桶覆盖端; 首采总在重启后 1s 内而桶宽 2s, 故活尾期恒不触发 —— 04:45:40 帧右侧整片斜纹零提示
 - [bug] [重启缝 <=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝](../26-10-16-0954-bug-traffic-seam-short-gap-spike.html) — 重启缝 7.6s(<60s) 不满足 P2 摊配判据 span>max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s
 - [bug] [重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1]](../26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker.html) — 缝首桶 totals 有效但 delta=None, D4 豁免出 0 线; 前端判孤点会在斜纹区中央打一个贴底线的点, 把一片无采样区一分为二
+- [bug] [前端 api 调用无超时: 请求悬挂时流量图永久停在旧帧, 无提示也不自愈](../26-10-16-0954-bug-webui-chart-fetch-no-timeout.html) — _request 对裸 fetch 无 AbortController; loading 标志只在 finally 复位, 一次悬挂即永久挡住轮询 tick: 10-12 修过同族卡锁但根因仍在
 - [test] [HR 端点两条 WARNING 断言用例在 test.quick 并行下偶发判红](../26-10-16-0348-test-hr-runtime-channel-port-race.html) — 疑似 _free_port 取端口到真正 bind 之间的 TOCTOU 竞态; 单跑与重跑皆绿, 曾误拦一次 ship.commit 闸门
 - [test] [限速护栏两条用例跨零点 flaky: 循环 ts+i 跨天重置 _day_events 致「超常」告警永不触发](../26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html) — test_recorder_patological_flip_guard / test_recorder_warn_first_fire_on_fresh_boot 在距零点约 34 分钟内跑必红: 用例循环 ts+i 跨天, SpeedLimitRecorder._guard_count 见日期变化把 _day_events 清零, 2000 阈值永不达
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移

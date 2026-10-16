@@ -42,6 +42,8 @@
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)四入口接线守阵(2026-10-10) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles 且**读 qB 原始 state**(kind 只 6 档, 排队被归进 downloading/seeding ⇒ 单看 kind 判不出); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): ①门抑制单点判据; ②三 fetcher 的 loading 置位都经该单点(直写即回潮); ③标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); ④_stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); ⑤_drawerSwitchEnd 必须清标记(否则粘住); ⑥旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
 - test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— ①三份 manifest 都登记 shared/dt_table.js 且文件在盘上; ②window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); ③几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; ④L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); ⑤渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); ⑥L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 ③⑤⑥(无 node 静默跳过)
+- test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: ①阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); ②判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); ③_qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判)
+- test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / 非 abort 的网络错误原样上抛
 """
 import json
 import os
@@ -377,8 +379,14 @@ def test_frontend_qb_traffic_chart_wiring():
         "轮询间隔常量漂移(30s 兜底 / [1.5s,600s] 夹取界 = §06 配置校验边界, A4: 15000 -> 1500)"
     assert "Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000))" in js, \
         "轮询间隔必须经 [1.5s,600s] 夹取(agg 段窗 meta.interval_s=3600 是桶宽, 直拉 = 一小时不刷新)"
-    assert "if (!def.active(this) || document.hidden || this[def.loading]) return;" in js, \
-        "轮询 tick 缺 document.hidden / 不活跃 / 在途未落袋跳过(先例 _startDrawerPoll)"
+    # 三判据(不活跃 / 页面隐藏 / 在途未落袋)语义不变, 但 2026-10-16 起**书写形态变了**: 「在途」判据
+    # 从合体式早退里拆出来接悬挂兜底(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout —— 合体式下
+    # loading 卡死即永久挡拍, 图表停在旧帧且不自愈)。故这里改按语义钉: 该在的判据都在 + 兜底在;
+    # 细分行为(未悬挂挡拍 / 悬挂放行)由 test_frontend_qb_traffic_load_stall_fallback 逐拍钉住。
+    assert "if (!def.active(this) || document.hidden) return;" in js, \
+        "轮询 tick 缺 document.hidden / 不活跃跳过(先例 _startDrawerPoll)"
+    assert "if (this[def.loading]) {" in js and "if (!this._qbLoadStalled(scope)) return;" in js, \
+        "轮询 tick 缺在途未落袋跳过, 或该判据被退回合体式早退(loading 卡死即永久挡拍, 见 issue 26-10-16-0954)"
     assert js.count("clearInterval(") == 1, \
         "组件内 clearInterval 只允许在 _qbPollStop 单点(轮询停止收口)"
     # 关闭路径统一收口(2026-10-04): closeDrawer 收抽屉即 _qbTeardown(停三挂点轮询 + 销毁三挂点图)
@@ -4065,3 +4073,240 @@ def test_drawer_tpl_no_table_variants_out_of_scope():
             assert marker not in txt, \
                 f"drawer_tpl/{name} 引用了引擎表格契约 {marker!r} —— 无表格变体越界进改动面" \
                 "(范围守恒 §10; 若确要接表, 先把该文件挪进含表格名单并更新本守阵)"
+
+
+# node 单测探针(issue 26-10-16-0954 方案 #2): 加载真实 qb_traffic_chart.js, 用**真 _qbLoad** 驱动
+# 轮询 tick 的「在途悬挂」兜底路线 —— api 桩返回永不 settle 的 promise(悬挂), 断言: 在途未悬挂照旧
+# 挡拍 / 悬挂(超 _QB_LOAD_STALL_MS)放行且只留一条警告 / 新一拍重写计时起点故后续照常挡拍 /
+# 图不活跃与页面隐藏照旧跳过 / 判据边界。无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+_NODE_QB_POLL_STALL_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false };
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const M = window.AQB_QB_TRAFFIC.methods;
+const checks = [];
+let tick = null;
+global.setInterval = (fn) => { tick = fn; return 1; };  // 捕获节拍回调, 不真跑定时器
+const warns = [];
+console.warn = (...a) => { warns.push(a.join(" ")); };
+const mk = (over) => {
+  const t = Object.assign({
+    qbTrafficOn: true,
+    drawerIsTraffic: true,
+    drawer: { open: true, scope: "global" },
+    page: "groups",
+    qbHistData: { meta: { interval_s: 30 } },
+    qbHistLoading: false,
+    _qbLoadAt: {},
+    apiCalls: 0,
+    _qbPollTimers: null,
+    _qbPollPeriods: null,
+  }, over || {});
+  t.api = () => { t.apiCalls += 1; return new Promise(() => {}); };  // 悬挂: await 永不返回
+  t._qbPollStop = M._qbPollStop;
+  t._qbPollMs = M._qbPollMs;
+  t._qbLoad = M._qbLoad;
+  t._qbLoadStalled = M._qbLoadStalled;
+  return t;
+};
+// ① 在途未悬挂(1s 前置位): 照旧挡拍
+let t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 1000 } });
+M._qbPollStart.call(t, "global");
+tick();
+checks.push(["在途未悬挂照旧挡拍", t.apiCalls === 0]);
+// ② 悬挂(60s 前置位): 放行 + 一条警告; 真 _qbLoad 重写起点 => 后续拍照常挡
+t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 } });
+warns.length = 0;
+M._qbPollStart.call(t, "global");
+tick();
+checks.push(["悬挂放行(强制续拉)", t.apiCalls === 1 && warns.length === 1 && t.qbHistLoading === true]);
+for (let i = 0; i < 5; i++) tick();
+checks.push(["新起点生效: 后续照常挡拍且警告只一条", t.apiCalls === 1 && warns.length === 1]);
+// ③ 图不活跃(切走页面) / 页面隐藏: 照旧跳过(兜底不越界)
+t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 }, page: "settings" });
+M._qbPollStart.call(t, "global");
+tick();
+checks.push(["图不活跃跳过", t.apiCalls === 0]);
+global.document.hidden = true;
+t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 } });
+M._qbPollStart.call(t, "global");
+tick();
+checks.push(["页面隐藏跳过", t.apiCalls === 0]);
+global.document.hidden = false;
+// ④ 判据本身: 边界与缺省
+checks.push(["29s 不判悬挂", M._qbLoadStalled.call({ _qbLoadAt: { global: Date.now() - 29000 } }, "global") === false]);
+checks.push(["31s 判悬挂", M._qbLoadStalled.call({ _qbLoadAt: { global: Date.now() - 31000 } }, "global") === true]);
+checks.push(["无计时起点不判悬挂", M._qbLoadStalled.call({ _qbLoadAt: {} }, "global") === false]);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_traffic_load_stall_fallback():
+    """流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2)
+
+    故障链(2026-10-16 复验实测): loading 是单向「请求在途」标志 —— `_qbLoad` 入口无条件置 true,
+    唯一复位路径是它的 finally; 请求悬挂时 finally 不执行 ⇒ 轮询 tick 的守卫(`this[def.loading]`)
+    把之后每一拍都挡掉, 图表永久停在旧帧、无提示也不自愈(10-12 修的是同链另一入口: stale 谓词取反)。
+
+    本守阵钉三层, 任一层被拆即红:
+      ① 阈值常量 `_QB_LOAD_STALL_MS` 在(30s = 请求级超时 15s 的两倍余量: 正常在途请求不会命中);
+      ② 判据单点 `_qbLoadStalled` 在, 且 tick 的跳过判据必须经它(`document.hidden || this[def.loading]`
+         合体写法不得回潮 —— 那种写法下 loading 卡死即永久挡拍);
+      ③ `_qbLoad` 置位处写计时起点 `_qbLoadAt[scope]`, 且 finally 不擦(擦会把换目标场景下新请求的
+         起点抹成 0, 兜底从此永不触发)。
+    行为面走 node 电池真跑(无 node 静默跳过): 真 `_qbLoad` + 永不 settle 的 api 桩。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js_path = os.path.join(shared, "qb_traffic_chart.js")
+    js = open(js_path, encoding="utf-8").read()
+
+    m = re.search(r"^const _QB_LOAD_STALL_MS = (\d+);", js, re.M)
+    assert m, "qb_traffic_chart.js 缺 _QB_LOAD_STALL_MS 常量(悬挂兜底阈值)"
+    assert int(m.group(1)) == 30000, \
+        "兜底阈值应 = 请求级超时(15s)的两倍余量 30000 —— 改它必须同步本守阵与常量注释里的依据"
+    assert "document.hidden || this[def.loading]" not in js, \
+        "tick 跳过判据回潮成 loading 合体式 —— loading 卡死即永久挡拍(issue 26-10-16-0954 的成因)"
+    blk = re.search(r"_qbPollTimers\[scope\] = setInterval\(\(\) => \{\n(.*?)\n      \}, ms\);", js, re.S)
+    assert blk, "qb_traffic_chart.js 缺 _qbPollStart 的 tick 落点(结构漂移? 同步本守阵)"
+    body = blk.group(1)
+    assert "this[def.loading]" in body and "this._qbLoadStalled(scope)" in body, \
+        "tick 必须在 loading 为真时经 _qbLoadStalled 判悬挂(未悬挂才挡拍)"
+    assert "this._qbLoadAt[scope] = Date.now();" in js, "缺置位处计时起点(_qbLoad)"
+    fin = re.search(r"async _qbLoad\(scope\) \{\n(.*?)\n    \},\n", js, re.S)
+    assert fin and "_qbLoadAt[scope] = 0" not in fin.group(1), \
+        "_qbLoad 的 finally 不得擦计时起点(换目标场景会把新请求的起点抹成 0 => 兜底永不触发)"
+
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_QB_POLL_STALL_PROBE, js_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"悬挂兜底 node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"悬挂兜底电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+# node 单测探针(issue 26-10-16-0954 方案 #1): 加载真实 auth.js, 用**桩 fetch + 手动触发定时器**跑
+# 请求级超时的六型电池(悬挂翻译 / 成功透传 / 401 照旧 / HTTP 错误照旧 / 外部取消不冒充超时 /
+# 非 abort 错误原样上抛) + 定时器清理。不真睡 15s(定时器被桩住后手动触发 = 确定性)。
+# 无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+_NODE_API_TIMEOUT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const A = window.AQB_AUTH.methods;
+const checks = [];
+const mkInst = () => ({ loggedOut: false, authError: "", _logout(m) { this.loggedOut = true; this.authError = m || ""; } });
+// 定时器捕获: 不真跑, 由探针手动触发
+let captured = null;
+let cleared = 0;
+global.setTimeout = (fn, ms) => { captured = { fn: fn, ms: ms }; return 1; };
+global.clearTimeout = () => { cleared += 1; };
+const aborter = (opts) => new Promise((res, rej) => {  // 悬挂桩: 被 abort 才 reject(AbortError)
+  const fail = () => { const e = new Error("aborted"); e.name = "AbortError"; rej(e); };
+  if (opts && opts.signal && opts.signal.aborted) return fail();
+  if (opts && opts.signal) opts.signal.addEventListener("abort", fail);
+});
+(async () => {
+  // ① 悬挂: 信号透传 + 排出 15s 定时器 + 手动触发 => 「请求超时(15s)」+ timeout 标记 + 定时器清掉
+  let lastOpts = null;
+  global.fetch = (path, opts) => { lastOpts = opts; return aborter(opts); };
+  const p = A._request.call(mkInst(), "/api/state", {}, "");
+  checks.push(["fetch 收到 AbortSignal", !!(lastOpts && lastOpts.signal && typeof lastOpts.signal.aborted === "boolean")]);
+  checks.push(["排出一个请求级超时定时器(15s)", !!captured && captured.ms === 15000]);
+  captured.fn();
+  let out = await p.then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["悬挂被兜成「请求超时(15s)」", !!(out.err && out.err.message === "请求超时(15s)")]);
+  checks.push(["超时打 timeout 标记", !!(out.err && out.err.timeout === true)]);
+  checks.push(["finally 清掉定时器", cleared === 1]);
+  // ② 成功路径: 值透传 + 定时器清掉
+  global.fetch = () => Promise.resolve({ status: 200, ok: true, json: async () => ({ hello: 1 }) });
+  captured = null;
+  cleared = 0;
+  out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["成功路径值透传", !!(out.ok && out.ok.hello === 1)]);
+  checks.push(["成功路径清掉定时器", cleared === 1]);
+  // ③ 401 照旧: _logout + auth 标记(不被超时翻译吞掉)
+  global.fetch = () => Promise.resolve({ status: 401, ok: false, json: async () => ({}) });
+  const inst = mkInst();
+  out = await A._request.call(inst, "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["401 仍走 auth 分支(_logout + auth 标记)", !!(out.err && out.err.auth === true && inst.loggedOut)]);
+  // ④ 非 2xx 照旧: 带 detail 的错误文案
+  global.fetch = () => Promise.resolve({ status: 500, ok: false, json: async () => ({ detail: "boom" }) });
+  out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["HTTP 错误文案照旧", !!(out.err && out.err.message === "boom" && out.err.timeout !== true)]);
+  // ⑤ 外部取消: 已 abort 的 signal 不冒充超时
+  const ac = new AbortController();
+  ac.abort();
+  global.fetch = (path, opts) => aborter(opts);
+  out = await A._request.call(mkInst(), "/api/state", { signal: ac.signal }, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["外部取消 → 「请求已取消」(不冒充超时)", !!(out.err && out.err.message === "请求已取消" && out.err.timeout === false)]);
+  // ⑥ 非 abort 的网络错误原样上抛
+  global.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+  out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
+  checks.push(["网络错误原样上抛", !!(out.err && out.err.message === "Failed to fetch")]);
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
+
+
+def test_frontend_api_request_timeout():
+    """前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16)
+
+    旧实现是裸 `fetch(path, { ...options, headers })` —— **没有超时**: 连接静默失效(服务端不响应 /
+    TCP 半开 / 中间设备丢包)时 `await` 永不返回, 调用方的 `finally` 整条失效(流量图 loading 卡死 ⇒
+    轮询守卫把自己挡死; `polling.js::refresh` 更是永久停表), 且界面上没有任何提示。修法 =
+    AbortController + 15s 上限, 悬挂被翻译成一次**可报的失败**, `finally` / 错误态路径照常执行。
+
+    本守阵钉四层, 任一层被拆即红:
+      ① 常量单点 `AQB_FETCH_TIMEOUT_S/MS`(毫秒值由秒值派生, 两处手抄迟早分叉);
+      ② fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮 —— 那正是本 issue 的根因形态);
+      ③ AbortError 必须翻译(超时 / 取消分型 + `timeout` 标记), 否则用户看到的是
+         "The operation was aborted";
+      ④ `finally` 必须 `clearTimeout(timer)`; 且跨文件不变式: 流量图悬挂兜底阈值不得早于请求级超时
+         (`_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`) —— 否则正常在途请求会被当成悬挂。
+    行为面走 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
+    chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+
+    assert "const AQB_FETCH_TIMEOUT_S = 15;" in auth_js, "缺请求级超时常量(秒值单点)"
+    assert "const AQB_FETCH_TIMEOUT_MS = AQB_FETCH_TIMEOUT_S * 1000;" in auth_js, \
+        "超时毫秒值必须由秒值派生(两处手抄 = 迟早分叉)"
+    assert "await fetch(path, { ...options, headers });" not in auth_js, \
+        "裸 fetch 回潮 —— 无超时的请求就是本 issue 的根因"
+    assert "signal: ctl.signal" in auth_js, "fetch 必须带上本请求的 AbortSignal"
+    assert "clearTimeout(timer)" in auth_js, "finally 必须清掉请求级定时器(不留悬挂定时器)"
+    assert 'e.name === "AbortError"' in auth_js and "err.timeout = timedOut" in auth_js, \
+        'AbortError 必须翻译(超时/取消分型 + timeout 标记), 否则用户只会看到 "The operation was aborted"'
+    timeout_s = re.search(r"^const AQB_FETCH_TIMEOUT_S = (\d+);", auth_js, re.M)
+    stall = re.search(r"^const _QB_LOAD_STALL_MS = (\d+);", chart_js, re.M)
+    assert timeout_s and stall and int(stall.group(1)) >= int(timeout_s.group(1)) * 1000, \
+        "流量图悬挂兜底阈值(_QB_LOAD_STALL_MS)不得早于请求级超时(AQB_FETCH_TIMEOUT_MS) —— 否则正常在途请求会被当成悬挂"
+
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_API_TIMEOUT_PROBE, os.path.join(shared, "auth.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"请求级超时 node 电池跑挂: {proc.stderr.strip()}"
+        lines = proc.stdout.strip().splitlines()
+        # !悬挂路径的失败形态是「探针永远等不到 abort ⇒ 从不打印汇总行」(见 M1 突变: 裸 fetch 时
+        # 电池无输出而 rc 仍为 0) —— 先拦空输出, 否则下面会以 IndexError 的面目报错, 定位成本高。
+        assert lines, "请求级超时 node 电池无输出(探针未跑到汇总行 —— 被悬挂挂住了? 见探针注释)"
+        report = json.loads(lines[-1])
+        assert report["failed"] == [], \
+            f"请求级超时电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"

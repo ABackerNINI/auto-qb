@@ -1,5 +1,17 @@
 /* auth.js — HTTP 与鉴权域(api/_request/_logout/bootstrap/saveToken/retryAuth):
  * W2b 自 app.js 拆出, 全局 mixin 方法域(与既有 AQB_* 同范式, this 同一实例)。 */
+/* 请求级超时(2026-10-16, issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout):
+ * 裸 `fetch()` **没有超时** —— 连接静默失效(服务端不响应 / TCP 半开 / 中间设备丢包)时 await
+ * 永不返回, 调用方的 finally 整条失效: 流量图的 loading 恒真 ⇒ 轮询守卫把自己挡死(图表永久停在
+ * 旧帧、无提示); polling.js 的 refresh 更彻底 —— 它 await 之后才 scheduleNext(), 悬挂即永久停表。
+ * 给每次请求挂 AbortController + 上限, 把「悬挂」变成一次**可报的失败**, finally / 错误态路径照常走。
+ * 取值 15s: 本机 WEBUI 直连(127.0.0.1)正常响应亚秒级, 后端路由另有自身超时与降级返回(meta.stale),
+ * 全仓最重的 /api/state 全量轮也是秒级 —— 15s 只兜「连接层静默失效」这一类, 不误杀慢查询。
+ * !不做 per-call 覆盖: 重活都走 waitCmd 的异步命令回执(POST 立即返回 cmd_id, 40s 是**前端等待
+ * 上限**而非单次请求时长), 60 余个 api() 调用点无一需要更长预算。
+ * 顶层只声明常量, 不碰 DOM/BOM(本文件会被测试的 node 探针 eval)。 */
+const AQB_FETCH_TIMEOUT_S = 15;  // 秒; 定时器与超时文案同源(改一处两处生效, 不手抄两份)
+const AQB_FETCH_TIMEOUT_MS = AQB_FETCH_TIMEOUT_S * 1000;
 window.AQB_AUTH = {
   methods: {
     async api(path, options = {}) {
@@ -20,18 +32,46 @@ window.AQB_AUTH = {
       // 每次请求记一条 WARNING(噪音); 带上真实密钥时后端也是忽略, 两种都不如干脆不发。
       const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const resp = await fetch(path, { ...options, headers });
-      if (resp.status === 401) {
-        this._logout("密钥无效或已更换");
-        const err = new Error("unauthorized");
-        err.auth = true;
-        throw err;
+      // 请求级超时(见 AQB_FETCH_TIMEOUT_MS): 超时与外部 signal 都收敛到同一个 controller;
+      // 定时器无论成功/失败都在 finally 清掉(不留悬挂定时器)。外部 signal 用**链接**而不是覆盖 ——
+      // 今天全仓无人传 signal, 这层是防「将来加取消时被本函数的 signal 静默顶掉」。
+      const ctl = new AbortController();
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        ctl.abort();
+      }, AQB_FETCH_TIMEOUT_MS);
+      const ext = options.signal;
+      if (ext) {
+        if (ext.aborted) ctl.abort();
+        else ext.addEventListener("abort", () => ctl.abort(), { once: true });
       }
-      if (!resp.ok) {
-        const detail = await resp.json().catch(() => ({}));
-        throw new Error(detail.detail || `HTTP ${resp.status}`);
+      try {
+        const resp = await fetch(path, { ...options, headers, signal: ctl.signal });
+        if (resp.status === 401) {
+          this._logout("密钥无效或已更换");
+          const err = new Error("unauthorized");
+          err.auth = true;
+          throw err;
+        }
+        if (!resp.ok) {
+          const detail = await resp.json().catch(() => ({}));
+          throw new Error(detail.detail || `HTTP ${resp.status}`);
+        }
+        return await resp.json();
+      } catch (e) {
+        // AbortError 的原始文案("The operation was aborted")对用户没有信息量, 也分不出超时与取消:
+        // 统一翻译成中文短句(超时带秒数)并打标记 —— 调用方的错误态直接显示它, 零新增 UI 就有提示。
+        // fetch 与 body 读取都可能被中止, 两类都在这一处判定。
+        if (e && e.name === "AbortError") {
+          const err = new Error(timedOut ? "请求超时(" + AQB_FETCH_TIMEOUT_S + "s)" : "请求已取消");
+          err.timeout = timedOut;
+          throw err;
+        }
+        throw e;
+      } finally {
+        clearTimeout(timer);
       }
-      return resp.json();
     },
     _logout(message = "") {
       // 鉴权失败唯一收口: 遮罩、凭证、定时器与所有已加载的受保护数据一并清空——
