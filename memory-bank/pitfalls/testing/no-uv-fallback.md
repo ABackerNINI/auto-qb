@@ -32,3 +32,6 @@
   ⚠ 另一条易踩: `| Select-Object -Last N` 接 pytest 会缓冲到结束才出输出(看着像卡死) —— 重定向到文件再读尾部(`> <log> 2>&1`), 或耐心等汇总行。
   ⚠ 兜底路径下的闸门替代: 包内闸门里 `TMPDIR=R:/Temp/...`(R 盘不存在)会自然回落到 `TEMP`/`TMP` —— 调用前把这两个也指向 C 盘临时区, 否则回落 `H:\Temp` 撞同一条收尾崩。
 - **与既有坑档的关系**: `tmpdir.md`(TMPDIR / 临时目录 / 收尾崩)只覆盖临时目录面, 本条补的是「包内 task 依赖 uv, 而本机无 uv」这一层入口差异; `sandbox-full-run.md`(沙箱拒写 R:\Temp ⇒ 回落 H:\Temp 收尾崩)同属环境面假红。
+- **复发 +1 (2026-10-16 15:09, 本 clone)**: 认领轮开工时又踩。会话首个动作按协议跑了开工同步(它走纯 python, 不触 uv), 随后**直接调 `uv run python .agents/skills/commands/scripts/install_wrapper.py`**(装 wrapper 的正规写法)而没先走 task id ⇒ 第一条即 `'uv' is not recognized`。
+  - **为什么没命中(路由没到)**: `pitfalls/_index.md` 是在这条失败**之后**才读的, 而 `testing/` 类索引(本条所在类)直到跑测试前才轮到 —— 「先读 pitfalls 再动手」的次序被「协议硬步骤 + 直调 uv」这两步绕过了。走向 task id 的写法则会在 task 体里当场暴露同一句话, 这是本条的判别面没被用上的原因。
+  - **处置(按本条首选)**: `$env:PATH = "C:\Users\<用户>\.local\bin;$env:PATH"` ⇒ 实测 uv 0.12.18 立即可用, `commands` 引擎随之自动走 `uv run` 分支, 包内 task 全线恢复(无需改 `.commands/*/config.toml`)。**R 盘仍不存在** ⇒ 跑 `test.*` 时 task 体的 `TMPDIR=R:/Temp/...` 会自然回落; 调用前把 `TEMP`/`TMP` 指向 C 盘临时区以固定回落目标。

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>agg 行 totals 归属错位 · 修法三形态对照 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="qb-traffic-restart-spike-gap">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-16-1509">
+<meta name="doc-updated" content="26-10-16-1509">
+<meta name="doc-refs" content="memory-bank/issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md, memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.62; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 96px; display: grid; grid-template-columns: 216px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 44px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-sep { margin: 12px 0 8px; padding-left: 14px; font-family: var(--display); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 33px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 68ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 30px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.go { background: #16241a; color: var(--ok); border-color: #2f4a33; }
+  .badge.hold { background: #1a2029; color: var(--dim); border-color: var(--hair); }
+  section { grid-column: 2; margin-top: 46px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 16px; font-weight: 600; margin: 30px 0 8px; }
+  h3 .tag2 { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); margin-right: 8px; }
+  h4 { font-size: 13.5px; color: var(--dim); margin: 18px 0 6px; letter-spacing: 0.02em; }
+  p { margin: 9px 0; max-width: 82ch; }
+  ul, ol { margin: 9px 0; padding-left: 22px; max-width: 82ch; }
+  li { margin: 5px 0; }
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid #2b444a; }
+  a:hover { border-bottom-color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: 12.4px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--hair-soft); color: #cfe6ec; }
+  pre { background: var(--code-bg); border: 1px solid var(--hair); border-radius: 4px; padding: 13px 15px; overflow-x: auto; font-size: 12.3px; line-height: 1.62; font-family: var(--mono); color: var(--ink); margin: 12px 0 18px; }
+  pre .c { color: var(--faint); }
+  pre .b { color: var(--accent-ink); }
+  pre .g { color: var(--ok); }
+  pre .r { color: var(--no); }
+  pre .y { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13px; }
+  th, td { border: 1px solid var(--hair); padding: 8px 10px; vertical-align: top; text-align: left; }
+  th { background: var(--mark); font-family: var(--display); font-weight: 600; letter-spacing: 0.02em; color: var(--ink); white-space: nowrap; }
+  td .k { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  tbody tr:hover td { background: #141b22; }
+  .box { border-left: 2px solid var(--accent); background: var(--mark); padding: 12px 16px; margin: 16px 0; }
+  .box.warn { border-left-color: var(--warn); }
+  .box.no { border-left-color: var(--no); }
+  .box.ok { border-left-color: var(--ok); }
+  .box .t { font-family: var(--display); font-size: 12.5px; letter-spacing: 0.04em; margin-bottom: 5px; color: var(--ink); }
+  .box p:last-child { margin-bottom: 0; }
+  .steps { display: grid; gap: 0; margin: 18px 0; border: 1px solid var(--hair); border-radius: 4px; overflow: hidden; }
+  .step { display: grid; grid-template-columns: 74px 1fr; border-top: 1px solid var(--hair-soft); }
+  .step:first-child { border-top: none; }
+  .step .sid { padding: 13px 14px; background: var(--mark); font-family: var(--mono); font-size: 12px; color: var(--accent-ink); border-right: 1px solid var(--hair); }
+  .step .sbody { padding: 13px 16px; }
+  .step .sbody .st { font-family: var(--display); font-weight: 600; margin-bottom: 4px; }
+  .step .sbody ul { margin: 6px 0 0; }
+  .step .sbody li { margin: 3px 0; font-size: 13.5px; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border: 1px solid var(--hair); border-radius: 10px; color: var(--dim); margin-right: 6px; }
+  .pill.p1 { color: var(--no); border-color: #4a2f2f; }
+  .pill.p2 { color: var(--warn); border-color: #4a3a2c; }
+  .pill.p3 { color: var(--ok); border-color: #2f4a33; }
+  .lead { color: var(--dim); font-size: 13.5px; }
+  .foot { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  .foot p { max-width: none; }
+  @media (max-width: 900px) {
+    .sheet { grid-template-columns: 1fr; gap: 0; padding: 40px 20px 72px; }
+    nav.toc { position: static; margin-bottom: 26px; }
+    header.cover, section, .foot { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">修法对照件</div>
+  <a href="#s0"><span class="no">00</span>目的 · 范围 · 口径</a>
+  <a href="#s1"><span class="no">01</span>复验(认领前置)</a>
+  <a href="#s2"><span class="no">02</span>机理</a>
+  <a href="#s3"><span class="no">03</span>与既有裁决的关系</a>
+  <a href="#s4"><span class="no">04</span>三形态对照</a>
+  <a href="#s5"><span class="no">05</span>判据与守阵计划</a>
+  <a href="#s6"><span class="no">06</span>残余边界矩阵</a>
+  <a href="#s7"><span class="no">07</span>风险 · 取舍 · 回滚</a>
+  <a href="#s8"><span class="no">08</span>待拍板项</a>
+  <div class="toc-sep">依据</div>
+  <a href="#ref">前作与文档单点</a>
+  <div class="toc-sep">状态</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · 待拍板(形态 A/B/D)<br>本轮纯文档轮(未改码)</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">auto-qb · qB 口径流量图 · 计划工位</div>
+  <h1>agg 行 totals 归属错位<br>修法三形态对照</h1>
+  <p class="lede">认领 <a href="../issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html">26-10-16-0020-bug-agg-hour-totals-frozen-run</a>
+    后的复验与形态对照。本件只回答「三种修法各自的落点、判据与残余边界是什么、选哪一支」,
+    不复述取证结论(证据快照的权威在<a href="../reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html">报告 26-10-15-0728</a>,
+    当时形态裁决的权威在<a href="#ref">计划 26-10-15-0829 §03</a>)。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> 待拍板 · 未动码</div></div>
+    <div class="item"><div class="k">立档</div><div class="v">26-10-16-1509</div></div>
+    <div class="item"><div class="k">复验</div><div class="v">clone @ d58ad0c5 · 两路仍复现</div></div>
+    <div class="item"><div class="k">本轮形态</div><div class="v">纯文档轮(未改源码/配置/运行数据)</div></div>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<section id="s0">
+  <h2><span class="no">00</span>目的 · 范围 · 口径</h2>
+
+  <p>本件为该 issue 的<b>形态选择件</b>:把三种候选修法并排写成可拍板的对照 —— 各自改哪一行、覆盖哪几条封口路径、
+  两路(在线 / 离线)能否逐位重建、留下什么残余、要动几个文件。拍板前不动码。</p>
+
+  <div class="box warn">
+    <div class="t">为什么另开一件(而不是就地改计划 26-10-15-0829)</div>
+    <p>该 issue 是那份计划的<b>派生件</b>,但计划自己的 §03 P1 裁决记录已把当时可见的四形态逐个裁决完毕
+    (1A 否决 / 1B 与 1B' 不实施 / 定期封口用户否决),计划 §07 #1 已收口为「四形态全不实施」。
+    本轮认领复验时找到一条此前未被枚举的路径(§03),形态面因此重开 —— 于是新件而非改版:
+    计划那一节是「当时为什么不做」的快照,本件是「现在怎么做」的新方案面。</p>
+  </div>
+
+  <h3>范围(三形态共有的性质)</h3>
+  <ul>
+    <li>只改 <b>agg 入账用的 totals</b> —— 即 <code>_agg_feed</code> / <code>_agg_credit_day_file</code>
+      写进小时桶的累计快照。游程内部各小时按「开启快照 → 末端真值」<b>按覆盖秒线性插值</b>
+      (与 raw 面 P2 摊配同一口径:把隐形增长摊回游程)。</li>
+    <li><b>不动</b> rate lane(游程区间速率仍恒 0)、<b>不动</b> raw 面差分链与 <code>v4_totals_points</code> 的摊配输入、
+      <b>不加</b>写盘次数、<b>不新增</b>跨 flush 的待结算态、<b>不扩大</b>崩溃丢失窗口。</li>
+    <li>z/n/r 行格式:形态 A / B 完全不碰;形态 D 明确扩列(见 §04)。</li>
+  </ul>
+
+  <h3>非目标</h3>
+  <ul>
+    <li><b>rate lane</b>(游程内隐形字节是否该进 hour <code>avg</code>)—— 同批入池的另一件
+      <a href="../issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html">26-10-16-0020-question-agg-rate-lane-invisible-bytes</a>
+      是口径判断题,需另一次拍板,与本件可各自独立推进。</li>
+    <li><b>raw 面(1m–24h)</b> —— 同症状已由计划 26-10-15-0829 的 P2 读侧摊配修好,本件不回头动它。</li>
+    <li><b>历史行不回补</b> —— 已写进 agg.dat 的冻结行是既成事实,修法与既有「历史坏行不回补」口径一致。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="s1">
+  <h2><span class="no">01</span>复验(认领前置)</h2>
+  <p class="lead">issue §07 的认领前置是「先重跑锚点」。本节所有读数取自 2026-10-16 15:09 · clone @ <code>d58ad0c5</code>;
+  探针为本轮内存内直驱真实聚合路径(未落盘、未新建文件、未读运行实例数据 —— 本 clone 无 <code>auto-qb-data/</code> 流量目录)。</p>
+
+  <h3><span class="tag2">A</span>锚点复核(issue 取证 @ <code>b17c671d</code> → 本轮实测 @ <code>d58ad0c5</code>)</h3>
+  <table>
+    <thead><tr><th style="width:290px">锚点(符号 + grep 关键词)</th><th style="width:150px">取证行号</th><th style="width:120px">本轮行号</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>_agg_feed</code> 的 V4ZeroRun 分支 ·「速率恒 0, totals 恒快照」</td>
+        <td>:1034-1037</td><td>:1055 起</td>
+        <td>仍在(行号漂移 +18,判据原文逐字未变)</td>
+      </tr>
+      <tr>
+        <td><code>OpenRun</code> docstring ·「totals 快照固定在开启时刻」</td>
+        <td>:232-233</td><td>:244</td>
+        <td>仍在(漂移 +11;实现见 <code>_advance_run</code> <span class="k">:750</span> —— 已开游程只推进 <code>last_seen</code>/<code>samples</code>)</td>
+      </tr>
+      <tr>
+        <td><code>v4_hour_agg</code> ·「<code>dl_total=int(last.dl_total)</code>」</td>
+        <td>:803, 811-812</td><td>:783 定义 / :811 取值</td>
+        <td>仍在(取值行未漂移:totals = 桶内<b>末样本</b>快照)</td>
+      </tr>
+      <tr>
+        <td><code>v4_agg_obs</code> 直映 ·「<code>BucketObs(r.dl_avg</code>」</td>
+        <td>:686</td><td>:744 定义 / :753 直映</td>
+        <td>仍在(漂移 +58;读侧对 agg 行不建差分链的结论不变)</td>
+      </tr>
+      <tr>
+        <td>❗离线同源 <code>_agg_credit_day_file</code>(逐槽前向记账)</td>
+        <td>:1383</td><td>:1403</td>
+        <td>仍在(漂移 +20;与在线<b>同一口径</b>的结论在 §01B 行为面复验)</td>
+      </tr>
+      <tr>
+        <td>❗<code>_agg_feed</code> 调用点(逐记录即时,非 flush 批处理)</td>
+        <td>:911</td><td>:931</td>
+        <td>仍在(漂移 +20;仍在 <code>_append_record</code> 的 per-record 尾部)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3><span class="tag2">B</span>行为复验:几何 = 3 小时 z 游程跨小时界</h3>
+  <p>构造(合成几何,规模与量纲取报告 §04.5 的细流量级):游程开启快照 <code>S0 = (1,000,000, 2,000,000)</code>,
+  游程末端实测真值 <code>S1 = (15,999,000, 18,000,000)</code>(游程期间增长 dl = <b>14,999,000 B</b>),
+  游程跨度 3 小时(采样间隔 30s)。</p>
+  <table>
+    <thead><tr><th style="width:200px">产出面</th><th>hour +0</th><th>hour +3600</th><th>hour +7200</th><th>hour +10800(游程结束)</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>在线 <code>_agg_feed</code> → <code>v4_hour_agg</code></td>
+        <td><code>dl_total=1,000,000</code><br><span class="k">cov 3600</span></td>
+        <td><code>dl_total=1,000,000</code><br><span class="k">cov 3600</span></td>
+        <td><code>dl_total=1,000,000</code><br><span class="k">cov 3600</span></td>
+        <td class="mono" style="color:var(--no)">dl_total=15,999,000<br><span class="k">cov 仅 30</span></td>
+      </tr>
+      <tr>
+        <td>离线 <code>_agg_credit_day_file</code><br><span class="k">同几何天文件重放</span></td>
+        <td>末样本 <code>(1,000,000, 2,000,000)</code></td>
+        <td>末样本 <code>(1,000,000, 2,000,000)</code></td>
+        <td>末样本 <code>(1,000,000, 2,000,000)</code></td>
+        <td>—(后继 r 记录另起封口)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>判读:<b>游程内部的每个小时行都带冻结快照</b>,而游程期间的真实增长(<code>dl +14,999,000</code> / <code>up +16,000,000</code>)
+  整块压在「游程结束所落的那一个小时行」上 —— 而那一行自身的<b>覆盖只有 30 秒</b>。<b>两条路径逐字同形</b>,离线侧的 ❗ 同源约束成立。</p>
+
+  <div class="box no">
+    <div class="t">复验结论:仍复现(2026-10-16 15:09)</div>
+    <p>五条代码锚点全部仍在(仅行号漂移),两条路径的行为读数与 issue §02 的描述逐条吻合。issue 维持 Open → 认领。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s2">
+  <h2><span class="no">02</span>机理</h2>
+  <p class="lead">三条链叠加造成归属错位;三形态都只动第 2 环。</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="sid">链 1</div>
+      <div class="sbody">
+        <div class="st">合成槽 + 冻结快照</div>
+        <p class="lead"><code>_record_slots</code>(<span class="k">:315</span>)把一条 z 记录的 <code>run_len</code> 个槽
+        <b>回填分布在 [开启, 末端] 之间</b> —— 这些槽是<b>合成</b>的观测点,不是采样时刻。而它们的
+        totals 是游程<b>开启</b>时刻的那一对快照(盘上语义由 <code>OpenRun</code> 冻结,raw 面差分链依赖它)。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sid">链 2</div>
+      <div class="sbody">
+        <div class="st">逐槽常量入账</div>
+        <p class="lead"><code>_agg_feed</code> 的 V4ZeroRun 分支(<span class="k">:1055</span>)把这一对常量按槽区间原样记进
+        <code>agg.pending</code> —— 于是「游程内部每个槽的真值」被写成一个常数。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sid">链 3</div>
+      <div class="sbody">
+        <div class="st">小时行取桶内末样本</div>
+        <p class="lead"><code>v4_hour_agg</code>(<span class="k">:811</span>)的 totals = <code>samples[-1]</code> —— 游程内部的小时,
+        其「小时末应有的累计值」被写成「游程起点值」;增长只能从游程结束后的覆盖开始体现,
+        于是差额在下一个封口点一次性出现(真机表现即报告 §05 的「07:00 小时行 totals 线一次 +15 MB 台阶」)。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="t">读侧为什么够不到(issue §05 已排除项,本轮复核维持)</div>
+    <p><code>v4_agg_obs</code>(<span class="k">:753</span>)对 agg 行是<b>直映</b>、不建差分链,而天文件里游程内部的槽本身
+    就是同值合成槽 —— 磁盘上没有任何字段记录「增长发生在哪一刻」。所以这不是读侧判据的问题,
+    是写侧入账时就丢掉了时间锚点。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s3">
+  <h2><span class="no">03</span>与既有裁决的关系(新证据改变了什么)</h2>
+
+  <p>计划 26-10-15-0829 §03「P1 收益评估与形态裁决」已逐条记过当时四个形态的裁决与理由
+  (<b>此处引而不抄</b>,见 <a href="26-10-15-0829-plan-qb-traffic-restart-spike-gap.html#p1-record">计划 §03 P1 裁决记录</a>):
+  1A 改 z 行 totals 语义 = 把 raw 面台阶搬到游程首桶、<code>run[2]</code> 为空致 P2 判据失效 ⇒ 比现状更糟,<b>否决</b>;
+  1B 补尾部记录 / 1B' 带派生速率 = <code>_agg_feed</code> 逐记录即时入账,事后记录追溯不到游程内部 ⇒ <b>不实施</b>;
+  z 游程定期封口 = <b>用户否决</b>(行数代价 + 撕开「空闲期主文件零写入」不变式);
+  挂起结算 = <b>未评估,成本最高</b>。</p>
+
+  <div class="box ok">
+    <div class="t">本轮新证据:存在第四条路径 —— 末端值不需要新增态就能拿到</div>
+    <p>1B' 的裁决里写「要真正落在游程内部,必须『处理 z 行时已知末端值』,而这只剩三条路:依赖已否决的 1A、
+    给 <code>_agg_feed</code> 加挂起结算态、或不可行(只用现有字段推不出)」。本轮读码 + 复验发现三条路之外的第四条:</p>
+    <ul>
+      <li>z 记录<b>不是逐样本入账的</b> —— 它是游程<b>封口那一刻</b>才成为一条记录、才走到 <code>_agg_feed</code>
+        (<code>_seal_run</code> <span class="k">:778</span> → <code>_append_record</code> <span class="k">:804</span> →
+        <code>_agg_feed</code> <span class="k">:931</span>)。</li>
+      <li>而在最主流的封口路径上,<b>触发封口的实测样本与它的 totals 就在调用方手里</b>:非零样本到达时同轮先
+        <code>_seal_run</code> 再出 r 记录(触发 (1))。也就是说<br>
+        <span class="mono">「处理 z 行时已知末端值」= 调用方手里那个值,传一手即可</span> ——
+        <b>不改盘面(不触 1A)、不引入跨 flush 态(不触挂起结算)、不扩大崩溃窗口</b>(游程内部信用本来就只在封口时结算一次)。</li>
+    </ul>
+  </div>
+
+  <div class="box warn">
+    <div class="t">但新路径带来一个新约束面:两路可复原性</div>
+    <p>这条路径把「末端值从哪来」压在了<b>在线路径的内存</b>上,而 issue §04 的 ❗ 要求在线写入的行与
+    离线 catch-up 从天文件重建的行<b>同口径</b> —— 否则重启后补算的段与在线段会在同一个系列里口径分叉,
+    totals 线上出现一个来源不明的接缝。于是形态分野的真正判据是:</p>
+    <p><b>末端锚点(时刻 + 快照)在不在盘上、离线能不能读回来?</b> —— §04 的三形态正是这条判据下的三个答案。</p>
+    <p class="lead">另注:形态的覆盖能力只取决于「封口路径有几条能拿到锚点」。游程的封口触发源共五条 ——
+    ① 非零实测样本到达;② 00:00 硬切(游程不跨天);③ <code>stop()</code> 优雅退出;④ 采样间隔热重载关块;
+    ⑤ 天级保险闸(<code>ZRUN_CAP_SAMPLES</code> / <code>ZRUN_FLUSH_S</code>)。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s4">
+  <h2><span class="no">04</span>三形态对照</h2>
+
+  <table>
+    <thead><tr><th style="width:96px">形态</th><th>一句话</th><th style="width:150px">右锚点来源</th><th style="width:120px">改动面</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>A</b><br><span class="pill p3">最小闭环</span></td>
+        <td>只在<b>同一天文件内</b>找右锚点:游程末槽之后的首个带 totals 观测的记录(实测 r 或新 z)。找不到就保持现状。</td>
+        <td>盘上可见<br><span class="k">同文件后继记录</span></td>
+        <td>1 源文件 + 测试</td>
+      </tr>
+      <tr>
+        <td><b>B</b><br><span class="pill p2">全路径</span></td>
+        <td>A + 允许右锚点<b>跨日文件</b>(00:00 硬切那条路径也拿到锚点),离线恢复改为先解析读集再遍历。</td>
+        <td>盘上可见<br><span class="k">跨日文件后继记录</span></td>
+        <td>1 源文件 + 测试<br><span class="k">离线遍历结构改造</span></td>
+      </tr>
+      <tr>
+        <td><b>D</b><br><span class="pill p1">扩行格式</span></td>
+        <td>把末端快照<b>写进盘上的 z 行</b>(新列),raw 链仍消费原冻结列 ⇒ 离线直接读列,无需前视。</td>
+        <td>盘上显式<br><span class="k">z 行新列</span></td>
+        <td>2 源文件 + 测试<br><span class="k">+ 格式定约单点</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3><span class="tag2">A</span>同天锚点插值</h3>
+  <h4>做法</h4>
+  <p>游程内部第 k 个槽(时刻 <code>t_k ∈ [t0, t1]</code>)的 totals 由两端实测锚点线性插值:
+  <code>v(t) = S0 + round((S1 - S0) × (t - t0) / (t1 - t0))</code>,<code>t0/S0</code> = 游程开启槽与开启快照,
+  <code>t1/S1</code> = 右锚点(同文件内游程之后的首个 totals 观测)的时刻与快照。逐槽取整、余额归右锚点所在桶,
+  保证 <code>Σ 小时增量 = S1 - S0</code> 严格守恒(与 P2 摊配的取整口径一致)。</p>
+  <h4>落点</h4>
+  <ul>
+    <li>在线:<code>_seal_run</code>(<span class="k">:778</span>)→ <code>_append_record</code>(<span class="k">:804</span>)→
+      <code>_agg_feed</code>(<span class="k">:931</span> / V4ZeroRun 分支 <span class="k">:1055</span>)多带一个「右锚点」入参;
+      非零样本封口时由触发封口的实测样本提供,其余封口路径缺省(None)= 不插值。</li>
+    <li>离线:<code>_agg_credit_day_file</code>(<span class="k">:1403</span>)在展开块内槽序列时,对每个 z 记录向后定位
+      同块内首个 totals 观测,作为右锚点走<b>同一个插值函数</b>。</li>
+    <li>两路共用同一纯函数(时刻/快照进、逐槽值出)—— 镜像靠同源而非靠巧合。</li>
+  </ul>
+  <h4>覆盖 / 残余</h4>
+  <ul>
+    <li>覆盖:①非零实测样本封口(真机事故的形态)。</li>
+    <li>残余:②00:00 硬切封口的游程右锚点在<b>下一日文件</b>里 ⇒ 保持冻结 —— 而低载实例上「整夜不开一口、
+      只在午夜封一次」恰恰是常态,于是夜间段的小时行与当日 day 行仍偏低。</li>
+    <li>③④⑤三条路径(A 与 B 同):<code>stop()</code> 封口后进程消失、改间隔封口会关块、保险闸封口没有后继实测样本 ——
+      右锚点要么不在盘上、要么在块/文件边界之外,两路一律回退冻结(<b>这是刻意的保守支</b>,见 §07 风险节)。</li>
+  </ul>
+  <h4>可复原性</h4>
+  <p><b>逐位可复原</b>:右锚点两侧取的是同一个盘上记录,时刻与快照都不含在线独有信息(在线用的就是那条 r 记录的
+  <code>ts</code> 与 totals)。</p>
+
+  <h3><span class="tag2">B</span>全路径插值(含跨午夜)</h3>
+  <h4>做法</h4>
+  <p>同 A,但右锚点允许落在<b>下一日文件</b>:00:00 硬切时,触发切日的零样本同时是「新游程的开启快照」,
+  它与下一日文件里新 z 记录携带的快照<b>是同一个值</b>;时刻取块首口径(<code>int(ts)</code>= <code>B.start</code>),
+  两路因此仍可取到同一对 <code>(t1, S1)</code>。</p>
+  <h4>落点</h4>
+  <ul>
+    <li>在线:00:00 硬切那条封口路径(<code>_advance_run</code> <span class="k">:750</span> 内换型/跨天分支)把当前零样本的
+      <code>(int(ts), totals)</code> 作为右锚点一并交下去;<code>stop()</code> / 改间隔 / 保险闸三条仍不传(见残余)。</li>
+    <li>离线:<code>_recover_series</code> 的「边读边遍历」改为「<b>先解析读集内日文件、再按序遍历</b>」,
+      为每个日文件提供「下一日文件的首个 totals 观测」作为右锚点。<b>读集不变</b>(仍 = agg 水位所在日 → 今日,
+      常态 1 个、跨日界至多 2 个),所以 <code>recovery_reads</code> / <code>recovery_stats</code> 的计数口径不变 ——
+      变的只是解析时机(先全部解析再遍历)。</li>
+  </ul>
+  <h4>覆盖 / 残余</h4>
+  <ul>
+    <li>覆盖:① + ②两条主路径 —— 覆盖低载实例的实际形态。</li>
+    <li>残余一(③④⑤):<code>stop()</code> 封口后进程消失,右锚点在盘上<b>不存在</b>;改间隔封口会关块;
+      保险闸封口没有后继实测样本。这三条两路一律回退冻结。</li>
+    <li>残余二(③④⑤的次生形态,仅当放宽判别时才会遇到):若把这三条也做成「在线用手里的末零样本值」,
+      则该值<b>不在盘上</b>,离线只能取到「下一个 totals 观测」(可能是很久之后的记录)⇒ 锚点时刻/快照出现
+      <b>亚刻度偏差</b>(差 ≤ 一个采样间隔的流量)。本形态<b>不采用</b>该放宽,故残余一保持为「冻结」而非「近似」。</li>
+    <li>残余三:跨午夜锚点要求在线侧用块首口径 <code>int(ts)</code> 与离线对齐 —— 若新游程恰好不是块首记录
+      (极端组合),两路锚点时刻会差一个亚刻度;插值到小时粒度上远低于取整门槛,但仍属「非逐位」,
+      需在实施轮写进口径注释与守阵(见 §05 判据 4)。</li>
+  </ul>
+  <h4>可复原性</h4>
+  <p>主路径<b>逐位可复原</b>;残余三处为「同口径但亚刻度可能不同」,由判据 4 的守阵钉住(不是靠约定)。</p>
+
+  <h3><span class="tag2">D</span>z 行扩列(末端快照落盘)</h3>
+  <h4>做法</h4>
+  <p>给 z 行加一对「末端快照」列,封口时把当时已知的末端值写进去(拿不到就写成与冻结列相同的值 = 显式退化)。
+  raw 面差分链<b>仍消费原来的 delta 列/冻结列</b>,故 raw 面逐字不变;agg 面(在线与离线)都改读新列。</p>
+  <h4>落点</h4>
+  <ul>
+    <li><code>traffic_store.py</code>:z 行格式化与解析(<code>format_v4_z_row</code> / <code>parse_v4_*</code>)、
+      以及文件尾「v4 行型定约」那一段注释(格式单点)。</li>
+    <li><code>traffic_sample_mod.py</code>:<code>_seal_run</code> 写末端值;离线 <code>_agg_credit_day_file</code> 直接读列。</li>
+    <li>格式位次需定约:现有 z 行是 <code>z,&lt;run_len&gt;,&lt;dl_delta&gt;,&lt;up_delta&gt;[,&lt;dt_ms&gt;]</code> ——
+      可选尾列 <code>dt_ms</code> 的存在使「追加两列」的位次必须显式拍板(插在 delta 与 dt_ms 之间按列数分支,
+      或把末端对作为最末可选尾列),且旧文件无新列时必须解析为 None → 退化冻结(<b>向后兼容</b>)。</li>
+  </ul>
+  <h4>覆盖 / 残余</h4>
+  <ul>
+    <li>覆盖:①—⑤<b>全部五条封口路径</b>,且不再依赖「后继记录是否在盘上」——离线不需要前视、不需要遍历改造。</li>
+    <li>残余:③④⑤三条路径的末端值来自「运行中最后一条零样本的读数」而非日后实测点,属于<b>游程内部信用本来就采用的口径</b>
+      (它与「开启快照」同源同级),不是新引入的近似;但它是<b>盘上新增的证据</b>,须在口径段写明它表达的是
+      「封口时刻已知的末端观测」而不是「游程末槽时刻的真值」。</li>
+  </ul>
+  <h4>可复原性</h4>
+  <p><b>逐位可复原且两路同源</b>(离线读的就是在线写入的那两列),三形态里唯一不需要「两路各推一次」的一支。</p>
+
+  <h3>对照总表</h3>
+  <table>
+    <thead><tr><th style="width:190px">维度</th><th>A 同天锚点</th><th>B 全路径</th><th>D 扩列</th></tr></thead>
+    <tbody>
+      <tr><td>覆盖封口路径</td><td>①</td><td>① ②</td><td><b>① ② ③ ④ ⑤</b></td></tr>
+      <tr><td>两路可复原性</td><td>逐位</td><td>逐位(主路径);残余三处亚刻度</td><td><b>逐位(全部)</b></td></tr>
+      <tr><td>碰 z 行格式</td><td>否</td><td>否</td><td><b>是(扩列)</b></td></tr>
+      <tr><td>离线端改造</td><td>块内向后定位</td><td><b>先解析再遍历</b></td><td>只多读一列</td></tr>
+      <tr><td>raw 面影响</td><td>零</td><td>零</td><td>零(但格式面需回归)</td></tr>
+      <tr><td>写盘次数 / 行数</td><td>不变</td><td>不变</td><td>不变</td></tr>
+      <tr><td>新增待结算态</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>崩溃丢失窗口</td><td>不变</td><td>不变</td><td>不变</td></tr>
+      <tr><td>主要代价</td><td>夜间段与 day 行仍偏低</td><td>离线遍历结构改造 + 回归面更宽</td><td>触碰格式定约(含可选尾列位次)</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">三形态都不触碰:rate lane、raw 面差分链与 P2 摊配、写盘次数、行数、崩溃口径、历史行。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s5">
+  <h2><span class="no">05</span>判据与守阵计划</h2>
+
+  <h3>验收判据(三形态共用)</h3>
+  <ol>
+    <li><b>逐小时单调且右端对齐</b>:游程内部各小时行 totals 单调不减,游程结束所落小时行的 totals 等于右锚点快照
+      (A/B)或盘上末端列(D)。</li>
+    <li><b>增长守恒</b>:游程内各小时增量之和 = <code>S1 - S0</code>(逐小时取整偏差 ≤ 1 字节;余额归右锚点桶)。</li>
+    <li><b>消除单桶台阶</b>:同一游程下,「游程结束所落小时行」的 totals 增量不再等于游程全量增长 ——
+      与 raw 面 P2 摊配后的区间速率量级一致(报告 §05 的「+15 MB 台阶」不再出现)。</li>
+    <li><b>两路同口径</b>:在线产出的 hour/day 行,与离线 catch-up 从同一天文件重算的行,<b>逐列相同</b>
+      (A 逐位; B 主路径逐位、残余三处按声明口径; D 逐位)。</li>
+    <li><b>不回归面</b>:游程内部小时行仍存在、<code>cov_s</code> 不变、rate lane 逐字不变(游程区间仍恒 0)、
+      天文件字节与 raw 面读侧取值逐字不变(A/B);D 另加「旧文件无新列 → 退化冻结」的兼容用例。</li>
+  </ol>
+
+  <h3>测试面(以 A 为例;B/D 在此之上各加一节)</h3>
+  <ul>
+    <li>新增:跨小时界 z 游程 → 逐小时 totals 插值;游程后首小时仍取真值;右锚点缺失(游程在文件末)→ 回退冻结;
+      逐向独立(仅 dl 增长 / 仅 up 增长);取整余额归右锚点桶(守恒)。</li>
+    <li>新增(两路面):同一几何分别走在线 <code>_agg_feed</code> 与离线 <code>_agg_credit_day_file</code>,断言逐列相同。</li>
+    <li>既有用例需按新口径重钉:<code>test_agg_z_n_runs_and_block_gap_vacuum</code>(它现钉「totals 行程快照」);
+      <code>test_agg_reseal_merges_late_credit_keeps_full_coverage</code>(游程迟到信用与合流)。</li>
+    <li><b>不需要改</b>:<code>test_torrent_idle_run_snapshot_fixed_at_open</code>(钉的是<b>盘上记录</b>的冻结语义)——
+      形态 A/B 不动盘面,该条原样保留;形态 D 才需要按新列重钉。</li>
+    <li>红绿双验(突变逐类判红):关插值 / 右锚点取成冻结值 / 取整余额堆到右锚点桶 / 离线侧不插值。</li>
+  </ul>
+  <p class="hint" style="color:var(--faint);font-size:13px">测试数字(全量 passed/skipped)只在基线切片里写一条,本件与档案一律引用不手抄。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s6">
+  <h2><span class="no">06</span>残余边界矩阵(封口路径 × 形态)</h2>
+  <table>
+    <thead><tr><th style="width:230px">封口路径</th><th style="width:150px">锚点在盘上?</th><th style="width:80px">A</th><th style="width:80px">B</th><th style="width:80px">D</th></tr></thead>
+    <tbody>
+      <tr><td>① 非零实测样本到达(事故形态)</td><td>在(同块后继 r)</td><td class="mono" style="color:var(--ok)">覆盖</td><td class="mono" style="color:var(--ok)">覆盖</td><td class="mono" style="color:var(--ok)">覆盖</td></tr>
+      <tr><td>② 00:00 硬切(低载常态)</td><td>在(下一日文件首条 totals 观测)</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--ok)">覆盖</td><td class="mono" style="color:var(--ok)">覆盖</td></tr>
+      <tr><td>③ <code>stop()</code> 优雅退出</td><td>不在(进程消失)</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--ok)">覆盖(封口时刻已知值)</td></tr>
+      <tr><td>④ 采样间隔热重载关块</td><td>后继在新块(不同 interval)</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--ok)">覆盖(同上)</td></tr>
+      <tr><td>⑤ 天级保险闸</td><td>不一定有后继实测样本</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--no)">冻结</td><td class="mono" style="color:var(--ok)">覆盖(同上)</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">三态读法:「覆盖」= 两路都能拿到锚点并按插值入账;「冻结」= 保持今天的现状(游程内部行程快照),
+  不是新缺陷、也不需要额外处理 —— 只是这一段的归属错位未被修。**残余的可见后果集中在形态 A**:低载实例上占比最大的
+  夜间段小时行与当日 day 行(日对账用的就是它)仍偏低。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s7">
+  <h2><span class="no">07</span>风险 · 取舍 · 回滚</h2>
+  <ul>
+    <li><b>「模型化数值」的张力(三形态共有)</b>:插值出来的小时末 totals 不是任何一次实测读数。
+      权衡:agg 面磁盘上没有更细的锚点可用,而 raw 面在同一问题上已经采用同一口径(P2 摊配按覆盖秒摊回游程),
+      区别只在落点(读侧 / 写侧)。<b>不做插值就等于默认把增长全部归给游程结束那一小时</b> —— 那是另一种、更差的模型。</li>
+    <li><b>均匀假设</b>:游程期间的增长实际由握手字节的随机到达构成,插值假定它沿时间均匀。
+      量级正确、逐小时位置是近似;落在「按覆盖秒摊配」这条既有口径内,不引入新的近似族。</li>
+    <li><b>B 的离线改造面</b>:把恢复读集从「边读边遍历」改成「先解析再遍历」,读的文件集合不变但内存驻留变多、
+      相关守阵(读集有界 / <code>recovery_stats</code>)需要复验;这是 B 相对 A 的主要代价。</li>
+    <li><b>D 的格式代价</b>:z 行扩列要动「v4 行型定约」这条格式单点,且可选尾列 <code>dt_ms</code> 的位次必须显式定约;
+      好处是彻底摆脱「前视 / 两路各推一次」,并且把「增长发生在哪一段」变成盘上可判的事实。</li>
+    <li><b>回滚</b>:三形态都只改 agg 入账逻辑,回退即恢复冻结口径;已写入 agg.dat 的行不回补(与既有口径一致),
+      因此回滚无数据迁移成本。形态 D 若已落盘新列,旧解析器会把该列当坏行处理 ⇒ 回滚前需保留一段兼容解析(实施轮必须一并设计)。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="s8">
+  <h2><span class="no">08</span>待拍板项</h2>
+  <ol>
+    <li><b>形态选择:A / B / D</b>(§04 对照表 + §06 残余矩阵)。建议取向:要「低载实例的日对账也正确」就排除 A;
+      不愿碰行格式就取 B;愿意为「盘上可判 + 离线零前视」付格式代价则取 D。</li>
+    <li><b>若取 B:③④⑤三条路径是否也放宽为「用封口时手里的末零样本值」</b> —— 放宽会带来与离线侧的亚刻度锚点偏差
+      (§04 B 残余二)。本件默认<b>不放宽</b>(两路一致优先于覆盖率)。</li>
+    <li><b>是否连带处理 rate lane</b>(另一件 <code>26-10-16-0020-question-agg-rate-lane-invisible-bytes</code>):
+      本件建议<b>不连带</b> —— 那是口径判断题(速率图要不要含非 payload 成分),需要单独拍板,且与本件无实现依赖。</li>
+    <li><b>是否设最小跨度门槛</b>(例如游程跨度 <code>&lt; 2 × 采样间隔</code> 时不插值,避免把正常抖动当陈旧增长):
+      倾向设,取值与是否配置化随形态一起定(配置化须同步校验层与 schema 单点)。</li>
+    <li><b>实施批次与立档</b>:A 预计触 1 个源文件、B 预计 1 个源文件(离线遍历在采样模块内)、D 预计 2 个源文件 ——
+      均低于「≥3 源文件」阈值;专题档案已在(<code>tasks/26-10-15-*</code>),按惯例追加而不新建。</li>
+  </ol>
+</section>
+
+<!-- ============================================================ -->
+<section id="ref">
+  <h2>前作与文档单点</h2>
+  <table>
+    <thead><tr><th style="width:280px">件</th><th>本件引用它的什么</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><a href="../issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html">issues/26-10-16-0020-bug-agg-hour-totals-frozen-run.html</a></td>
+        <td>被认领的本体:现象、证据、影响面、五条候选与既有裁决理由。「要不要修」的答案在 issue 侧。</td>
+      </tr>
+      <tr>
+        <td><a href="26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html</a></td>
+        <td>母计划:§03 P1 裁决记录(四形态逐条理由)、P2 摊配口径(本件三形态的参照口径)、§07 待拍板项的收口状态。<b>本件不重写其结论</b>。</td>
+      </tr>
+      <tr>
+        <td><a href="../reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html">reports/26-10-15-0728-report-qb-traffic-restart-spike-gap.html</a></td>
+        <td>证据快照:§04.5 细流机理(量级 ~550 B/s)、§05 「07:00 小时行 +15 MB 台阶」的实测描述。</td>
+      </tr>
+      <tr>
+        <td><a href="../issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html">issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html</a></td>
+        <td>同源同症状的另一半(rate lane) —— 本件明确列为非目标。</td>
+      </tr>
+      <tr>
+        <td><a href="../tasks/26-10-15-webui-qb-traffic-restart-spike-gap.html">tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md</a></td>
+        <td>认领链另一端(执行与验证数字的权威):本件拍板后由该档案承接实施与实测记录。</td>
+      </tr>
+      <tr>
+        <td><a href="../activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md">activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md</a></td>
+        <td>会话滚动状态切片(本专题的「做到哪了」与关键坐标)。</td>
+      </tr>
+      <tr>
+        <td><a href="../pitfalls/backend/traffic-agg-reseal.md">pitfalls/backend/traffic-agg-reseal.md</a> · <a href="../pitfalls/backend/traffic-window-edge-floor.md">traffic-window-edge-floor.md</a></td>
+        <td>动 agg 封口 / 读侧窗过滤前必读的两条坑:迟到信用的合流语义、null 标记取整下偏。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="foot">
+  <p>26-10-16-1509-plan-agg-hour-totals-attribution.html · 本轮为<b>纯文档轮</b>:未修改任何源码、配置与运行数据,
+  未跑全量测试(零改码无测试面变化),未新建基线切片;实测数字只出现在 §01(复验读数,合成几何,内存内直驱真实聚合路径)。</p>
+  <p><b>变更记录</b>:26-10-16-1509 — 立件。认领复验(§01,两路仍复现)+ 新证据(§03 第四条路径)+ 三形态对照(§04)+ 判据与守阵计划(§05)+
+  残余矩阵(§06)+ 待拍板 5 项(§08)。形态 A/B/D 均未实施,等拍板。</p>
+</div>
+
+</div>
+</body>
+</html>
