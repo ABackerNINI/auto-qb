@@ -7,9 +7,9 @@
 <title>qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-16-1204">
+<meta name="doc-updated" content="26-10-17-0444">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -124,7 +124,7 @@
   <div class="toc-sep">依据</div>
   <a href="#ref">前作与文档单点</a>
   <div class="toc-sep">状态</div>
-  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Open · P0 已定位(0945)<br>P2 已实施(1135)<br>P1 不实施(1016)<br>P3 已实施(1247)<br>P4 已实施(1422)<br>P5 已实施(1502) · P6 已评估(1502)</div>
+  <div style="padding-left:14px;color:var(--faint);line-height:1.6">Done · 26-10-17-0444 收口<br>P0 已定位(0945)<br>P2 已实施(1135)<br>P1 不实施(1016)<br>P3 已实施(1247)<br>P4 已实施(1422)<br>P5 已实施(1502) · P6 已评估(1502)</div>
 </nav>
 
 <header class="cover">
@@ -136,7 +136,7 @@
     不重述取证结论(证据快照的权威在报告侧)。</p>
   <div class="meta-row">
     <div class="item"><div class="k">主题 (doc-topic)</div><div class="v">qb-traffic-restart-spike-gap</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span> P0/P2/P3/P4/P5/P6 已完成 · P1 不实施</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Done</span> P0/P2/P3/P4/P5/P6 已完成 · P1 不实施 · E2E5 待真机兑现</div></div>
     <div class="item"><div class="k">立档</div><div class="v">26-10-15-0829</div></div>
     <div class="item"><div class="k">依据报告</div><div class="v">26-10-15-0728(doc-updated 0808)</div></div>
     <div class="item"><div class="k">本轮形态</div><div class="v">立档/P0 纯文档只读 · P2 实施轮已动码</div></div>
@@ -745,9 +745,10 @@
     <li><b>是否入池 issue / 立档</b>:本计划落地时若触及 ≥3 个源文件,按 memory-bank skill 立档阈值另立任务档案(本计划不代立)。</li>
   </ol>
 
-  <div class="box warn">
+  <div class="box ok">
     <div class="t">本计划的状态</div>
-    <p><b>Open</b> · §07 五项拍板项<b>已全部关闭</b>(#1 已于 26-10-16 关闭为「不实施」,#2/#3/#4 按前轮定案,#5 按 P4 落地)。剩余未决只有 <b>E2E5 真机人工验收</b>(P4 接缝提示需一次真实的 auto-qb 重启肉眼确认)。<b>26-10-16-1057 追加</b>: 计划外缺陷修复轮(两条 26-10-16-0954 issue)已落地, 见 §03「实施记录 · 计划外缺陷修复轮」—— 修的是 P2 同一决策面的边界形态(短缝摊配与断链首桶 null), §07 拍板项状态不受影响。<b>本 supplement 为纯文档轮</b>:未改任何代码 / 配置 / 运行数据;入池 2 条 agg 面计划外缺陷、未认领、未立档。</p>
+    <p><b>Done</b>(26-10-17-0444 收口, 纯文档轮)。实施面全部落地: P0/P2/P3/P4/P5/P6 完成(P3 判据 26-10-16-0454 修订 / P4 判据 26-10-16-1204 修订), P1 四形态全不实施(26-10-16-0020 裁决), §07 五项拍板项全闭; 派生链全部闭合 —— 三条 26-10-16-0954 issue(短缝尖峰 / 断链首桶孤点 / 提示左端漏判)已修复 Done, agg 面派生缺陷两条中 <code>26-10-16-0020-bug</code>(totals 归属错位)已按形态 D 修复 Done(派生计划 <code>plans/26-10-16-1509-plan-agg-hour-totals-attribution.html</code> 同收口), <code>26-10-16-0020-question</code>(rate lane 口径判断)仍 Open 留池(不影响 raw 面, 与 P5 口径单点同面, 待独立拍板)。</p>
+    <p><b>唯一未兑现项 = E2E5 真机人工验收</b>: P4 接缝提示需一次真实的 auto-qb 重启肉眼确认(记录中未兑现)—— 判据链(meta 新键 → 前端提示行)已就位且经实测帧回归守阵(17 条 node 用例含 26-10-16 04:45 重启帧), 留待下次真实重启时观察兑现并就地补记。本收口轮未改任何代码 / 配置 / 运行数据, 未入池 issue。</p>
   </div>
 </section>
 
@@ -801,6 +802,7 @@
   <p>26-10-16-0454 — P3 判据修订(纯做种启动误报修复, 用户指令「按推荐修复警告的问题」): 原「两键同现」判据与 qB 增量轮逐键 diff 语义错配(纯做种 dl_info_speed 恒 0 ⇒ 永远缺席 ⇒ 每进程启动必误报; 运行实例三次重启各一条已实证) ⇒ <code>torrents/store.py</code> <code>_track_rate_key_freshness</code> 重写为 per-key 语义(已收键增量轮缺席=值未变不计; 仅全量快照缺键/从未收到计无读数), 阈值与节流不变, 合并语义零改动; <code>tests/test_sync.py</code> rate 键用例 6 → 7 条(含两条误报回归), 守阵 3 类突变判红还原复绿; §03 P3 记录追加修订注记; 全量数字见基线切片 <code>testing/baselines/26-10-16-0454-qb-traffic-restart-spike-gap-p3-rev.md</code>。</p>
   <p>26-10-16-1126 — <b>残余边界补修轮</b>(用户「修复残余边界」):§03 修复记录追加残余边界补修段。改动 <code>v4_series_points</code>(活尾组与磁盘块同判块间真空)+ <code>tests/test_traffic_grid.py</code>(新增 1 条守阵 + 活尾相关 3 条改口径);红绿双验 1 类突变(摘除活尾真空判定)判 4 红后还原复绿;全量数字见基线切片 <code>testing/baselines/26-10-16-1126-qb-traffic-seam-fixes-r2.md</code>;issue <code>...short-gap-spike</code> 补记残余边界修复(状态维持 Done)。</p>
   <p>26-10-16-1204 — P4 判据左端修订(issue <code>26-10-16-0954-bug-traffic-seam-hint-missed-after-first-sample</code> 认领与修复): 左端从「链末桶覆盖端 t+interval」放宽到「链末桶前一桶起点 t-interval」(两端含), 修「重启后首采即链末桶」形态零提示; node 电池 11 → 17 条 + 静态守阵补左端整行活性锚, 红绿双验 2 类突变判红还原复绿; §03 P4 记录追加修订注记; 全量数字见基线切片 <code>testing/baselines/26-10-16-1204-qb-traffic-restart-spike-gap-p4-rev.md</code>; 改动 3 源文件, 随本专题入库(issue Open→Done, 认领链双向)。</p>
+  <p>26-10-17-0444 — <b>状态收口(纯文档轮, 用户「确认后更新文档状态」)</b>:核实实施记录与代码锚点(P0–P6 完成 / P1 四形态裁决不实施 / §07 五项拍板全闭 / 派生 issue 三条与 agg bug 均 Done / 派生计划 26-10-16-1509 Done; 代码锚点本 clone 现查在位), doc-status Open → Done(状态徽章 / §07 状态框 / 侧栏同步)。唯一未决 E2E5(真机人工验收)留记待下次真实重启兑现。未改任何代码 / 配置 / 运行数据, 未入池 issue, 未提交。</p>
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 

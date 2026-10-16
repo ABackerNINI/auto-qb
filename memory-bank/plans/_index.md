@@ -17,7 +17,6 @@
 
 - [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
-- [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 - [26-10-09-1459] [hr/ 包变异测试审计 · 分步执行计划](26-10-09-1459-plan-mutation-hr.html) — `mutation-audit`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
@@ -27,6 +26,7 @@
 - [26-10-16-1509] [agg 行 totals 归属错位 · 修法三形态对照 · auto-qb](26-10-16-1509-plan-agg-hour-totals-attribution.html) — `qb-traffic-restart-spike-gap`
 - [26-10-16-0214] [HR 扩展「连接后端」区重排 + 实例状态入表 修改计划 · auto-qb](26-10-16-0214-plan-hr-ext-connect-ui.html) — `hr-ext-connect-ui`
 - [26-10-15-2357] [HR 扩展「连接自愈 + 手动优先 + 不静默」修改计划 · auto-qb](26-10-15-2357-plan-hr-ext-connect-selfheal.html) — `hr-ext-connect-selfheal`
+- [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-14-1241] [HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb](26-10-14-1241-plan-hr-channel-portless-remote.html) — `hr-channel-portless-remote`
 - [26-10-13-0811] [种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划](26-10-13-0811-plan-webui-detail-table-rebuild.html) — `webui-detail-table-rebuild`
 - [26-10-13-0540] [种子状态双写通道重构 · A 系实施计划 — 删合成回写 + 局部 deferral](26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html) — `seed-state-writeback`
