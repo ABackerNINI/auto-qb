@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="traffic-sample-starved-by-task-backlog">
+<meta name="issue-stamp" content="26-10-16-0954">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="taskqueue-periodic-starvation">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线">
+<meta name="issue-summary" content="full_round 补建数百个立即到期任务占满 20 个/tick 配额; 采样首轮后 next_run 恒晚于补建批次, 七次重启全部复现 37~55s 静默">
+<title>重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线</h1>
+    <p class="lede">full_round 补建数百个立即到期任务占满 20 个/tick 配额; 采样首轮后 next_run 恒晚于补建批次, 七次重启全部复现 37~55s 静默</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-sample-starved-by-task-backlog</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><b>怎么撞见的</b>：分析 08:16 重启峰值时发现，新块第二条记录是 <code>z,1,341664,6754972,54356</code> —— <b>只有 1 个零槽，却跨 54.356 秒</b>。按写侧口径（<code>run_len</code> = 连续零轮次数，<code>dt_ms</code> = 实测跨度），这意味着采样器重启后只转了 1 轮，下一轮迟至约 54 秒后才发生。</p>
+    <p><b>现象</b>：把全部天文件按「块首第二条记录是大 dt 的 z」筛，得到 <b>7 处</b>，<b>全部紧接一次进程重启</b>，静默时长（去掉 run_len 均摊后的真实停滞 <code>D = dt − (run_len−1)×1.5s</code>）集中在 <b>37.2 ~ 54.7 秒</b>，且随种子库规模增长（种子数 177→180→183）。</p>
+    <p><b>后果</b>：这 54 秒的流量增长被压进一条记录，读侧按 P2 接缝摊配打成一条平线 —— 用户看到的「重启后恢复期约 1 分钟」就是从这来的。<b>静默被伪装成了正常速率</b>，而且无告警、无 stale 标记。</p>
+</section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p><b>一、写侧原始记录</b>（取证 2026-10-16 09:56 · 只读打开天文件；<code>auto-qb-data/qb-traffic-v4/global/2026-10-16.dat</code>）：</p>
+<pre><code>12814 B,1792109766,1.5,3782833517685,1897553112760
+12815 r,0,270269,0,0            &lt;-- 首采 08:16:06（本轮唯一跑成的一轮）
+12816 z,1,341664,6754972,54356  &lt;-- run_len=1 但 dt=54.356s
+12817 r,0,185691,354684,7047279 &lt;-- 下一轮：54.356 秒之后</code></pre>
+    <p><b>二、全部天文件的同类事件</b>（同一脚本，筛选条件 = 块首第二条为 z 且 dt ≥ 20s；D = dt − (run_len−1)×1.5s）：</p>
+<pre><code>file            block              z record                         dt(s)    D(s)
+2026-10-07.dat  10-07 05:12:38     z,1,53953,808895,37198          37.198   37.198
+2026-10-10.dat  10-10 18:11:57     z,4,510355,11118883,46435       46.435   41.935
+2026-10-14.dat  10-14 07:27:30     z,1,109979,1584824,53558        53.558   53.558
+2026-10-14.dat  10-14 16:21:44     z,4,156150,2716873,59179        59.179   54.679
+2026-10-16.dat  10-16 01:30:14     z,1,1091257,22593836,53202      53.202   53.202
+2026-10-16.dat  10-16 04:45:02     z,27,26371,174228,93543         93.543   54.543
+2026-10-16.dat  10-16 08:16:06     z,1,341664,6754972,54356        54.356   54.356
+（另有 4 处「块首第一条即为大 dt 零游程」同族形态，dt 41~58s，未逐条核对日志）</code></pre>
+    <p><b>三、启动序列</b>（<code>auto-qb-data/logs/auto-qb.log</code> 原文，取证同上）：</p>
+<pre><code>2026-10-16 08:15:59,040 - INFO - 停止
+2026-10-16 08:16:04,957 - INFO - 日志初始化完成
+2026-10-16 08:16:04,974 - INFO - 启动 qB 管理器: 主循环 1.5s, 默认任务间隔 60.0s
+2026-10-16 08:16:05,045 - INFO - 创建全局任务 1 个: ['internal:speed_limit_curve']
+2026-10-16 08:16:05,045 - INFO - 创建全局任务 2 个: ['internal:delete_tags', 'internal:delete_tags_if_has_no_torrents']
+2026-10-16 08:16:05,045 - INFO - 创建全局任务 1 个: ['internal:qb_traffic_sample']
+2026-10-16 08:16:05,792 - INFO - 流量采样 | 启动恢复完成: 33 系列 / 入账槽 404840 个 / 耗时 0.75s
+2026-10-16 08:16:06,018 - INFO - 全量轮补建种子级任务 183 个(L2 重建后任务面恢复, issue 26-10-01-2147)
+2026-10-16 08:16:06,018 - INFO - 检测到新增种子 183 个, 创建内置+规则任务
+</code></pre>
+    <p><b>四、「主循环活着、只有任务线被占满」的铁证</b>：04:45 与 01:30 两次重启都在<b>补建后约 5.3 秒</b>打出同一条 WARNING，而它的计数器按<b>同步线</b>轮次（主循环 1.5s/轮）累计 —— 3 轮 × 1.5s = 4.5s，与实测 5.3s 吻合，说明这段时间主循环一直在正常转：</p>
+<pre><code>2026-10-16 04:45:01,865 - INFO - 全量轮补建种子级任务 183 个(...)
+2026-10-16 04:45:07,136 - WARNING - 速率键已连续 3 轮未上报(dl_info_speed/up_info_speed 至少一键缺席,
+    合并保留旧值: dl=0 up=0) | 速率读数可能陈旧(新鲜度不可观测); 恢复上报前不重复本告警
+（01:30 同形态：补建 01:30:13,285 -> 告警 01:30:18,639，差 5.354s）</code></pre>
+    <p><b>五、配置节拍</b>（<code>auto-qb-data</code> 同级 <code>config.yml</code> 实读）：</p>
+<pre><code>main_tick: 1.5S
+max_tasks_per_tick: 20
+interval: 60S
+qb_traffic:
+    sample_interval: 1.5S      &lt;-- 与 main_tick 同值（硬校验下限）</code></pre>
+</section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td><b>每一次进程重启</b>（7/7 复现，且历史 8 次「全量轮补建」日志全部伴随）。种子库越大静默越长；本次 183 种子 ⇒ 约 54s。热重载（L2 重建）触发同一条路径，不必是崩溃重启。</td></tr>
+      <tr><td>影响范围</td><td>qb_traffic 采样（1.5s 周期）在静默期内<b>一次都不执行</b>，本次约丢 36 轮；这段真实增长被写进单条记录的 dt，读侧 P2 摊配后成一条平线。raw 段窗全部受影响（平线落在重启后的窗口内），agg 段窗同样被摊配。无告警、无 stale 标记。</td></tr>
+      <tr><td>严重度</td><td><b>中-高</b>。是本轮五个问题中唯一<b>每次重启必然复现</b>、且会<b>持续产出虚假平线</b>的一条（其余四条要么是瞬态、要么只影响单点/单个桶）。</td></tr>
+    </table>
+    <h3>同结构任务清单（本轮排查：队列里还有谁会被同一机制饿死）</h3>
+    <p>判别式很简单：<b>任务 interval &lt; 积压清空窗口（≈静默时长）⇒ 必然被饿死</b>。把队列内的周期任务逐条排开：</p>
+    <table>
+      <tr><th>任务（kind:name）</th><th>注册点</th><th>interval</th><th>与窗口(~55s)的关系</th></tr>
+      <tr><td><code>internal:qb_traffic_sample</code></td><td><code>traffic_sample_mod.py</code>（日志实证 08:16:05,045）</td><td><b>1.5s</b>（<code>qb_traffic.sample_interval</code>）</td><td>🔴 <b>必然饿死</b>（本次实证，丢 ~36 轮）</td></tr>
+      <tr><td><code>check:check-checking-result</code> / <code>check-wait:check-group-wait</code></td><td><code>ops_mod.py</code> / <code>rules/actions/full_checking.py</code></td><td><b>2.0s</b>（<code>CHECK_RESULT_INTERVAL</code>，按需建）</td><td>🔴 <b>同样会饿死</b>：若在重启窗口内发起校验，结果轮询将停滞约 55s（未实测，形态同构）</td></tr>
+      <tr><td><code>internal:delete_tags</code> / <code>internal:delete_tags_if_has_no_torrents</code></td><td><code>maintenance_mod.py</code>（日志实证 08:16:05,045）</td><td>60s（<code>config.interval</code>）</td><td>🟡 <b>临界</b>：余量仅约 5s。种子库再长 ~10% 或 <code>max_tasks_per_tick</code> 调小，立刻落入同一陷阱</td></tr>
+      <tr><td>种子级 <code>internal:maintenance</code></td><td><code>rules_mod._create_torrent_tasks</code></td><td>60s（<code>config.interval</code>）</td><td>🟡 同上（它同时是积压的<b>制造者</b>：183 种子各 1 条）</td></tr>
+      <tr><td>种子级 <code>rule:&lt;规则名&gt;</code></td><td><code>rules_mod</code>（skip_checking / hhan_checking 等）</td><td>1800s / 300s（规则自身 interval）</td><td>🟢 远超窗口，暂不受影响</td></tr>
+      <tr><td><code>internal:speed_limit_curve</code></td><td><code>speed_curve_mod.py</code>（日志实证 08:16:05,045）</td><td>600s（<code>global_speed_limit_curve.interval: 10M</code>）</td><td>🟢 同上；且它每次读 TM dat + 写 qB 限速，饿死后果是限速切换延迟（本例未触发）</td></tr>
+    </table>
+    <p class="hint">结论：<b>当前配置下真正被饿死的只有采样</b>（1.5s）；<code>delete_tags</code>（60s）余量最小、<code>check</code> 轮询（2s）同构但未被实测触发。它们不是「安全」，而是「侥幸」—— 判据只取决于窗口与 interval 的相对大小。</p>
+</section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/taskqueue.py:130-155</code>（取证 2026-10-16 09:5x）· 符号 <code>add_task</code> / <code>add_tasks</code> · grep <code>next_run</code> —— 入队默认 <code>now</code>（立即到期）</li>
+      <li><code>src/auto_qb/core/taskqueue.py:217-224</code>（取证同上）· 符号 <code>_pop_due</code> · grep <code>max_tasks</code> —— 严格按 <code>next_run</code> 升序弹、只受计数上限约束</li>
+      <li><code>src/auto_qb/core/taskqueue.py:235-240</code>（取证同上）· 符号 <code>_requeue</code> · grep <code>next_run = now + interval</code> —— 周期任务重入队</li>
+      <li><code>src/auto_qb/core/taskqueue.py:36-50, 77-78</code>（取证同上）· 符号 <code>Task.__slots__</code> / <code>__lt__</code> · grep <code>priority</code> —— <b>无 priority 字段，排序键只有 next_run</b>（即：无任何 kind 公平性机制）</li>
+      <li><code>src/auto_qb/core/qbmanager.py:729-734</code>（取证同上）· 符号 <code>_task_line</code> · grep <code>max_tasks=self.config.max_tasks_per_tick</code></li>
+      <li><code>src/auto_qb/core/modules/rules_mod.py</code> · 符号 <code>_on_full_round</code> · grep <code>全量轮补建种子级任务</code> —— 补建源头（日志原文已带此串）</li>
+      <li><code>src/auto_qb/core/modules/maintenance_mod.py:104-109</code> / <code>speed_curve_mod.py:116-125</code> / <code>traffic_sample_mod.py:441-460</code>（取证同上）· 三处全局任务注册，均经 <code>BaseModule.register_global_tasks</code>（<code>core/module.py:176-195</code>）立即到期入队</li>
+      <li>❗<b>相关既有 issue</b>：<code>26-10-01-2218-perf-mainloop-max-tasks-adaptive</code>（主循环掉拍 / max_tasks_per_tick 非有效旋钮）—— 同一条配额面，但那条讲「渐进灌入期掉拍」，本条讲「重启后积压饿死周期任务」，<b>成因不同</b>；<code>26-10-01-2147-bug-webui-hotreload-newsite-maintenance</code>（全量轮补建的 issue 源头，日志里已直接引用其编号）</li>
+    </ul>
+</section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（日志 + 数据 + 读码三方互证）：<code>TaskQueue</code> 是一条<b>严格按 <code>next_run</code> 升序</b>的最小堆，没有优先级、没有按 kind 的限额、没有独立的 internal 队列，每 tick 只弹 <code>max_tasks_per_tick = 20</code> 个。进程启动时 <code>full_round</code> 补建 183 个种子级任务（每种子 1 条 maintenance + 若干规则），<b>全部打上「重启那一刻」的时间戳</b>，且注释明说「补建任务立即到期」。采样任务注册得更早（日志实证 05,045 注册 / 06,018 补建），所以它<b>首轮能抢在补建批次之前执行</b>；但跑完这一轮后 <code>next_run</code> 变成 <code>now + 1.5s</code>，从此<b>恒晚于整批补建任务</b> —— 只要积压未清空，它一次都轮不到。<br><br>清空耗时 = ⌈任务数 / 20⌉ 个 tick × 1.5s。183 种子下任务数数百，算得 40~55s，与 7 处实测（37.2~54.7s）吻合；种子数从 177 涨到 183 时静默同步变长，也吻合。<br><br><b>已排除</b>：①不是主循环卡死 —— 04:45/01:30 两次的「速率键已连续 3 轮未上报」在补建后 5.3s 准时出现，说明同步线按 1.5s 节拍正常运转；②不是采样器自身抛错或休眠 —— 块首那条 <code>r</code> 记录证明首轮正常执行；③不是文件 IO 阻塞 —— 启动恢复本身只花 0.75s。</div>
+</section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><b>把采样从队列拿出来（最干净）</b>：流量采样本质是传感器，不是一个该被 <code>max_tasks_per_tick</code> 限流的作业 —— 挂到「时钟线」上（与同步线同款、每轮循环按节拍直采，例如 <code>on_sync_line</code> 一路）。代价：采样器的生命周期与模块钩子绑定，需评估与「启动恢复 / L2 重建」的时序关系。</li>
+      <li><b>给队列加公平性（改动小）</b>：<code>_pop_due</code> 每 tick <b>先保证各 kind 各取一次</b>（尤其 <code>internal</code> 全局任务），再按 <code>next_run</code> 填满剩余名额。代价：会改变既有的「严格 FIFO」语义，需要论证不会让补建任务被无限推迟（可能引入饿死的反向问题）。</li>
+      <li><b>治本但需评估</b>：补建任务的 <code>next_run</code> 按索引<b>均摊到未来一个 interval</b>，不再同一毫秒全部到期 —— 保留「首轮收敛」语义。代价：<code>external_tag_changes</code> 的「首轮全量收敛」契约依赖「立即到期」，需一并论证（日志里那条 <code>issue 26-10-01-2147</code> 的 L2 重建语义也在同一面上）。</li>
+    </ol>
+    <p class="hint">建议优先级：本条是本轮五个问题里唯一<b>每次重启必然复现、且持续产出虚假平线</b>的一条，建议标 P1。</p>
+</section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 09:54 — 来源：分析 08:16 重启峰值时发现 <code>z,1,...,54356</code>；本轮只读取证（全部天文件扫描 + 日志 + 读码三方互证，未跑用例）</li>
+      <li>2026-10-16 09:54 — 同轮排查结论：队列内其余周期任务的 interval 均 ≥ 60s，当前未被饿死（<code>delete_tags</code> 余量最小、<code>check</code> 轮询同构未实测），清单见 §03</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+  <footer>
+    26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

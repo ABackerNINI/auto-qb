@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="traffic-seam-short-gap-spike">
+<meta name="issue-stamp" content="26-10-16-0954">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="qb-traffic-restart-spike-gap">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝">
+<meta name="issue-summary" content="重启缝 7.6s(&lt;60s) 不满足 P2 摊配判据 span&gt;max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s">
+<title>重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>重启缝 &lt;=60s 时接缝增量全额倒进首桶成尖峰: P2 摊配门槛覆盖不到短缝</h1>
+    <p class="lede">重启缝 7.6s(&lt;60s) 不满足 P2 摊配判据 span&gt;max(2w,60), 死亡期增量整块落首个 2s 桶: 实测 up 1,248,412 B/s</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-seam-short-gap-spike</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><b>怎么撞见的</b>：用户报告「WEBUI 流量图重启后出现重启峰值」，给出 1m 窗截图（<code>屏幕截图 2026-10-16 081655.png</code> / <code>081707.png</code>）。本轮为只读复现：对运行实例天文件走本仓真实读侧管线（<code>v4_series_points → v4_totals_points → v4_rate_from_totals → v4_grid_obs</code>），并对照截图做像素标定。</p>
+    <p><b>现象</b>：08:16 重启后，1m 窗（2s 桶）在 <code>08:16:04</code> 桶出现一颗上行尖峰，达 <b>~1.25 MB/s</b>，持续一个桶后立即回落；数分钟后再拉接口，<b>同一桶已变成平线</b>（<code>up=122,818</code>）。对照 04:45 那次重启，缝首桶没有尖峰，只有一颗 0 值孤点（另见 <code>26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker</code>）。</p>
+    <p><b>触发条件</b>：进程在两次采样之间重启，且重启缝同时满足两点 —— 观测覆盖缝 ≤ <code>_V4_SEAM_NULL_S</code>(60s)（判为「重启缝」而不是停机洞），且<b>变化点跨度</b> ≤ <code>_V4_SEAM_SPREAD_MIN_S</code>(60s)。此时接缝差两头落空：不被断链丢弃、也不被摊配回收，只能整块落进缝后第一个桶。</p>
+</section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p>运行实例天文件 <code>auto-qb-data/qb-traffic-v4/global/2026-10-16.dat</code> 原文（取证 2026-10-16 09:56 · 只读打开）：</p>
+<pre><code># 旧块（末记录后进程被停机，块未封口，直接接下一块）
+12798 B,1792109719,1.5,3782833206353,1897547120090
+...
+12813 r,0,67307,183011,3495845
+# 新块（重启后）
+12814 B,1792109766,1.5,3782833517685,1897553112760
+12815 r,0,270269,0,0            &lt;-- 首采 08:16:06
+12816 z,1,341664,6754972,54356  &lt;-- 单槽零游程却跨 54.356s（另见采样饿死 issue）
+12817 r,0,185691,354684,7047279</code></pre>
+    <p>接缝差可两次减法复算（读者可自行核对）：</p>
+<pre><code>旧块末记录时刻的 alltime = 块 base + 该记录 delta
+  up: 1897547120090 + 3495845 = 1897550615935
+新块首采时刻的 alltime   = 新块 base + 0
+  up: 1897553112760
+接缝差 up = 2,496,825 B   (dl = 3783283517685 - 3782833389364 = 128,321 B)
+整块落进首个 2s 桶 -> up rate = 2,496,825 / 2 = 1,248,412 B/s</code></pre>
+    <p>旧块末记录的时刻可用 dt 链还原：块 base 08:15:19 + 逐条 dt 累计 = <b>08:15:59.0</b> —— 与同实例日志 <code>08:15:59,040 - INFO - 停止</code> 秒级吻合，即用户在那一刻优雅停机。</p>
+    <p>截图 y 轴标定亦一致（938×486，网格 57.2px = 200,000 单位，峰值实测落在 y=50~53 ↔ 复算 1,248,412 B/s）。</p>
+    <p>读侧两条门槛的原文注释（取证同日 · clone 工作树）：</p>
+<pre><code># src/auto_qb/core/traffic_grid.py:347-350
+#: 接缝摊配触发下限(秒, plan 26-10-15-0829 P2): 快照台阶的变化点跨度超过
+#: max(2 x 接收桶宽, 本值) 才按真实跨度摊配
+_V4_SEAM_SPREAD_MIN_S = 60
+
+# src/auto_qb/core/traffic_grid.py:353-358
+#: 本值 = 停机洞 -&gt; 差分断链(delta=None); &lt;= 本值 = 重启缝 -&gt; 接缝差按真实跨度摊配回收
+_V4_SEAM_NULL_S = 60</code></pre>
+    <p class="hint">注：两条注释的语义互相矛盾 —— <code>NULL_S</code> 说「≤60s 就摊配回收」，<code>SPREAD_MIN_S</code> 说「跨度 &gt;60s 才摊配」。短缝恰好卡在两条门槛之间。</p>
+</section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>进程重启，且<b>观测覆盖缝与变化点跨度都 ≤ 60s</b>。注意方向是反直觉的：停机越久（&gt;60s）反而走洞判、被诚实丢弃，<b>不出尖峰</b>；几分钟内的正常重启才是尖峰高发形态。</td></tr>
+      <tr><td>影响范围</td><td>raw 段窗全部（1m/5m/15m/30m/1h/3h/6h/12h/24h）的<b>缝后第一个桶</b>；agg 段窗（3d+）直映不上差分，不受影响。且是<b>瞬态</b>的：块头刷盘后接缝差被真空标记丢弃，同一桶会变成 0/0。</td></tr>
+      <tr><td>严重度</td><td><b>中</b>。尖峰把「进程不在的那几秒里的真实增长」渲染成瞬时高速，放大倍数 = 缝宽/桶宽（本例 7s 缝打到 2s 桶 ⇒ ~3.5 倍，且绝对值达 1.25 MB/s）；叠加瞬态性后，同一桶在刷盘前后取值不同，用户无法判断哪个是真的。</td></tr>
+    </table>
+</section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/traffic_grid.py:347-350</code>（取证 2026-10-16 09:56）· 符号 <code>_V4_SEAM_SPREAD_MIN_S</code> · grep <code>接缝摊配触发下限</code></li>
+      <li><code>src/auto_qb/core/traffic_grid.py:353-358</code>（取证同上）· 符号 <code>_V4_SEAM_NULL_S</code> · grep <code>按真实跨度摊配回收</code> —— 设计意图与上一条门槛冲突</li>
+      <li><code>src/auto_qb/core/traffic_grid.py:507-516</code>（取证同上）· 符号 <code>v4_totals_points</code> docstring「摊配判据」· grep <code>变化点跨度 span</code></li>
+      <li><code>src/auto_qb/core/traffic_grid.py:526-540</code>（取证同上）· 摊配实现段 · grep <code>hole = last_obs is not None</code></li>
+      <li>❗<b>同专题前作</b>：<a href="../plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">计划 26-10-15-0829</a> 的 P0 实施记录已把尖峰来源定位到「活尾合流分支」（<code>traffic_grid.py:412-415</code>：仅按 ts 去重、显式跳过真空判定），并把 P2 定为唯一必要环。本条是该计划<b>未覆盖的形态</b>：P0 观测的是 6.6h 长陈旧跨度，而 P2 的 60s 门槛对 ≤60s 短缝不生效。</li>
+      <li>❗守阵：<code>test_v4_seam_below_threshold_unchanged</code> 钉的正是「阈内不摊、行为逐字不变」，<code>test_v4_seam_constants_frozen</code> 钉常量值 —— 修本条必然要改写它们，别当成回归。</li>
+    </ul>
+</section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（读码 + 真实天文件复算，<b>未跑自动化用例</b>）：<code>v4_totals_points</code> 用<b>两个不同的分母</b>判两件事 —— 用「观测覆盖缝」（相邻观测桶点的覆盖间隔）判是不是停机洞，用「变化点跨度」（接缝锚点到接收点的距离）判要不要摊配。两个常量都写成 60s，而两个判据的方向相反：洞判定是 <code>gap &gt; 60</code>，摊配门槛是 <code>span &gt; max(2×桶宽, 60)</code>。当两者都短（本例 gap 5.5s、跨度 &lt; 60s）时接缝差两头落空 —— 不被丢弃（非洞）、也不被摊配（跨度不够），于是整块 delta 落进缝后第一个桶，2s 桶吃到 2,496,825 B 的增长，按 <code>delta/w</code> 打成 1,248,412 B/s。<br><br><b>已排除</b>：①不是摊配判据②（「锚点之后等值游程全 z 形」）不成立 —— 本例游程确为 z 形；②不是前端渲染放大 —— 后端接口对该桶直接给出尖峰值；③不是写侧记录错误 —— 两条记录的 totals 各自自洽，差值是真实的停机期增长。</div>
+</section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><b>让两条门槛一致（推荐）</b>：摊配判据改为「观测覆盖缝 ≤ <code>_V4_SEAM_NULL_S</code> 时无条件摊配」，<code>_V4_SEAM_SPREAD_MIN_S</code> 只保留给「锚点远在窗外」的保守场景。代价：需同步改 <code>test_v4_seam_below_threshold_unchanged</code> 与 <code>test_v4_seam_constants_frozen</code>，并论证「短缝摊配」不会把本可忽略的亚秒抖动摊成可见平线。</li>
+      <li><b>降门槛</b>：把 <code>_V4_SEAM_SPREAD_MIN_S</code> 从 60 降到 <code>2×接收桶宽</code>（2s 桶 ⇒ 4s）。改动最小，但丢了「跨度明显大于桶宽才算台阶」的保守性，抖动场景有误摊风险。</li>
+      <li><b>换层兜底</b>：在 <code>v4_grid_obs</code> 对「缝后首个桶」按缝宽重算速率（缝宽 &lt; 桶宽时不改）。代价：栅格层拿不到缝信息，需要把标记透传下来。</li>
+    </ol>
+    <p class="hint">三条都只影响 raw 段窗的缝后首桶。<b>动手前请先与专题计划的拍板面对齐</b>：<a href="../plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">计划 26-10-15-0829</a> §07 待拍板 #2 已定「阈值与兜底落为模块常量、未配置化，守阵钉值」—— 改值属于该拍板面的扩大，宜先征得同意。</p>
+</section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 09:54 — 来源：用户报告「重启后又出现重启峰值」+ 1m 窗截图；本轮只读复现（真实天文件走读侧管线 + 截图像素标定，未跑用例）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+  <footer>
+    26-10-16-0954-bug-traffic-seam-short-gap-spike.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

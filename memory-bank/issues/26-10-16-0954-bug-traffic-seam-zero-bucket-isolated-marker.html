@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="traffic-seam-zero-bucket-isolated-marker">
+<meta name="issue-stamp" content="26-10-16-0954">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="qb-traffic-restart-spike-gap">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1]">
+<meta name="issue-summary" content="缝首桶 totals 有效但 delta=None, D4 豁免出 0 线; 前端判孤点会在斜纹区中央打一个贴底线的点, 把一片无采样区一分为二">
+<title>重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1] · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>重启缝首桶「非 null 却零速率」被当有效点: 孤点标记切分无采样斜纹区, 峰值 0 致值域塌到 [0,1]</h1>
+    <p class="lede">缝首桶 totals 有效但 delta=None, D4 豁免出 0 线; 前端判孤点会在斜纹区中央打一个贴底线的点, 把一片无采样区一分为二</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><b>怎么撞见的</b>：用户第一张 1m 窗截图（真实时间 04:45:40）上，无采样区被<b>一个孤立的点</b>从中间切开 —— 用户原话「有异常点将无采样区分割」。</p>
+    <p><b>现象</b>：04:45 重启的缝首桶取值 <code>(0, 0)</code> —— <b>不是 null，但速率字段在语义上是「未知」而非「零」</b>。它的左右两侧都是 null 桶，于是三件事同时发生：①前端孤点判据命中，给它打上一个点标；②全窗唯一非 null 值就是 0，峰值 0 使 y 轴值域回落到 <code>[0, 1]</code>，该点被贴在图底；③两侧 null 被铺成 45° 斜纹。叠加的观感就是「一个异常点把无采样区切成两半」。</p>
+    <p><b>触发条件</b>：停机洞（观测覆盖缝 &gt; <code>_V4_SEAM_NULL_S</code>）之后的第一个桶 —— 也就是任何停机超过 1 分钟的重启。本例停机 26.5 分钟（04:18:30 旧进程被外部误杀 → 04:45:01 重启）。</p>
+</section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p>读侧 D4 豁免的原文（<code>v4_grid_obs</code> docstring，取证 2026-10-16 09:56 · clone 工作树）：</p>
+<pre><code># src/auto_qb/core/traffic_grid.py  （v4_grid_obs docstring）
+- D4 豁免(计划 26-10-07-2127 S1): rate=None 但 totals 有效的桶点(区间平均口径下
+  重置/基线缺失派不出的桶)仍参与归桶 —— 只更新覆盖末端与快照链, rate 权重记 0
+  (逐向独立), 使后续桶差分基线不断; 桶完全无速率覆盖时出 0 线 + 快照照记(程序刚
+  启动的窗首桶, 1/N 缺口视觉无感);</code></pre>
+    <p>前端孤点判据原文（同 clone 工作树）：</p>
+<pre><code>// src/auto_qb/webui/static/shared/qb_traffic_chart.js:243-250
+function _qbIsolatedIdxs(u, sIdx) {
+  const v = u.data[sIdx];
+  const out = [];
+  for (let i = 0; i &lt; v.length; i++) {
+    if (v[i] != null &amp;&amp; (i === 0 || v[i - 1] == null) &amp;&amp; (i === v.length - 1 || v[i + 1] == null)) out.push(i);
+  }
+  return out;
+}</code></pre>
+    <p>y 轴值域口径原文（同文件 :252-254 注释）：</p>
+<pre><code>/* y 轴值域(模块级纯函数, 供 node 单测探针): 默认 [0, peak*1.05](无数据回落 1);
+ * 固定上限 cap&gt;0 时取 max(cap, peak*1.05) —— 峰值超出固定上限**按峰值显示**</code></pre>
+    <p>当天写侧原文（04:45:02 块，取证 2026-10-16 09:56 · 只读打开天文件）：</p>
+<pre><code>5415 B,1792097102,1.5,3782625098911,1893260676412
+5416 r,0,60875,0,0            &lt;-- 缝后首采 04:45:02（块首基线, delta 全 0）
+5417 z,27,26371,174228,93543  &lt;-- 27 槽零游程跨 93.543s</code></pre>
+    <p>截图标定：孤点落在缝首桶处（紧随重启）、y 贴图底；其左为停机洞的整片斜纹（04:44:40~04:45:00），其右为开放零游程未交付形成的整片斜纹（04:45:04 起）。</p>
+</section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>停机洞（观测缝 &gt; 60s）之后的第一个桶。停机越久越容易触发（越可能整窗只剩它一个非 null 值）。</td></tr>
+      <tr><td>影响范围</td><td>raw 段窗全部，但只影响<b>缝后首桶这一个点</b>；agg 段窗（3d+）不受影响。表现强度取决于该窗内是否还有其它有效点：<b>若全窗只有它一个非 null 值</b>（窄窗 + 长停机），值域会塌成 <code>[0,1]</code>，点贴底、视觉上把斜纹区一分为二。</td></tr>
+      <tr><td>严重度</td><td><b>低-中</b>。不产生错误数据（0 速率对该桶确实是「未知」而非「零」），但读图体验上等价于「图中多了一个假数据点」，并打断了「斜纹 = 无采样」这条视觉语义 —— 用户会拿它当异常点去追问。</td></tr>
+    </table>
+</section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/traffic_grid.py</code> · 符号 <code>v4_grid_obs</code> docstring · grep <code>D4 豁免</code>（取证 2026-10-16 09:56，当时行号约 <code>:618-645</code>）</li>
+      <li><code>src/auto_qb/core/traffic_grid.py</code> · 同一函数的归桶循环 · grep <code>桶完全无速率覆盖时出 0 线</code></li>
+      <li><code>src/auto_qb/core/traffic_grid.py:526-536</code>（取证同上）· 符号 <code>v4_totals_points</code> · grep <code>if value is None or hole or cur is None or cur &lt; value</code> —— 洞判在这里把 delta 置 None</li>
+      <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:243-250</code> · 符号 <code>_qbIsolatedIdxs</code> · grep <code>v[i - 1] == null</code></li>
+      <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:252-254</code> · 符号 <code>_qbYRange</code> · grep <code>无数据回落 1</code></li>
+      <li>❗<b>与 P4 的关系</b>：<a href="../plans/26-10-15-0829-plan-qb-traffic-restart-spike-gap.html">计划 26-10-15-0829</a> 的 P4 只兜「尾部未观测区」（链末桶到右沿），判据面不含「窗中部的缝桶」—— 本条不在 P4 覆盖范围内</li>
+      <li>❗<b>与 D4 豁免的关系</b>：豁免本身是为「程序刚启动的窗首桶」设计的（注释原文），缝首桶被顺带卷进来了；修法必须能把这两者区分开，否则会打坏启动期正常形态</li>
+    </ul>
+</section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">机理已定（读码 + 真实数据复算，<b>未跑用例</b>）：<code>(0,0)</code> 这个取值由<b>两个各自正确的决定</b>叠出来 —— 读侧「停机洞后差分链断开 ⟹ delta=None」是诚实的（G2 口径）；<code>v4_grid_obs</code> 的 D4 豁免「有快照无速率 ⟹ 照常出桶、权重记 0」也是对的（为程序启动窗首桶设计）。但两者相交时产出一个「非 null 却无速率语义」的桶，而下游再也无法把它与「真实零速率」区分开：前端孤点判据只看 null 邻接，值域只看峰值。<br><br><b>已排除</b>：不是写侧把停机期增长记成了 0 —— 该桶的 totals 是有效快照、delta 才是 None，两者语义不同；也不是渲染层涂错色 —— 后端接口对该桶确实返回 0/0。</div>
+</section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><b>读侧（推荐）</b>：让 D4 豁免区分「程序启动窗首桶」与「停机洞后首桶」—— 后者不应出 0 线，直接出 null，与两侧斜纹同语义。代价：需要把「洞后首桶」这一事实从 <code>v4_totals_points</code> 传到 <code>v4_grid_obs</code>（标记可能已在，属复用面）。</li>
+      <li><b>前端值域兜底</b>：<code>_qbYRange</code> 在「峰值 == 0 且存在非 null 点」时不要回落到 <code>[0,1]</code>，按「无有效数据」处理或抬高下限。代价：只遮症状，孤点标记仍在。</li>
+      <li><b>前端孤点判据收紧</b>：点标条件加上「该桶速率权重 &gt; 0」，权重为 0 的桶不打点标。代价：需要后端把权重透出（当前前端只看得到聚合后的速率值）。</li>
+    </ol>
+    <p class="hint">三条可叠加；最小闭环是 1 或 3。</p>
+</section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-16 09:54 — 来源：用户首张 1m 窗截图（真实时间 04:45:40）「有异常点将无采样区分割」；本轮只读复现（真实天文件走读侧管线 + 前端判据读码）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+  <footer>
+    26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
