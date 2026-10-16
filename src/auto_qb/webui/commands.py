@@ -316,6 +316,7 @@ class WebCommandsMixin:
             "add_torrents": self._cmd_add_torrents,
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
+            "refresh_traffic": self._cmd_refresh_traffic,
         }
 
     def _set_web_result(
@@ -1091,6 +1092,23 @@ class WebCommandsMixin:
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)
+
+    def _cmd_refresh_traffic(self, event_id=None, day: str = ""):
+        """WEB UI 命令: 重读历史流量文件并重发流量快照(计划 26-10-16-0541 S7 接收面)
+
+        触发方是**工具进程**的阈值事件(经 POST /api/traffic/monitor/notify 投递), 不是用户
+        点击 —— 这里只写日志, 无回执/通知需求(端点已即时回 200, 不阻塞工具侧 3s 推送超时)。
+
+        为什么经命令队列而不在端点里直接读盘: 读盘 + 快照发布归主循环线程(黄金法则 5),
+        端点只投递意图; 命令带上事件号与日键只为日志可追。
+
+        刷新体在 speed_curve 模块(`refresh_traffic_view`): 它与该快照同源 —— dat_path 配置,
+        历史行口径、各 period 累计都在那边; 本 handler 只取模块句柄转发。「刷新图」是通知链路
+        的**唯一**联动动作(不查档、不写 qB 限速, 黄金法则 2)。
+        """
+        mod = self.host.get("speed_curve")
+        refreshed = bool(mod is not None and mod.refresh_traffic_view())
+        logger.info(f"WEB UI | 监视器通知刷新历史流量: 事件 #{event_id}({day or '-'}), 状态={'已刷新' if refreshed else '跳过'}")
 
     # ---------- 管理命令(R2B: 分类/标签/限速覆盖/添加种子) ----------
 

@@ -896,6 +896,14 @@ window.AQB_DIALOGS = {
     },
   },
   watch: {
+    /* 历史流量弹层开着时, 数据源快照一变就重拉(计划 26-10-16-0541 S7 接收面):
+     * `traffic.ts` 变化 = 主循环重读了 dat(TM / 监视器工具输出)并重发了快照 —— 通知链
+     * (工具阈值事件 -> /api/traffic/monitor/notify -> 主循环命令 -> 快照)的终点就在这行。
+     * !只在弹层开着时才拉: 关着时多打一个 GET 只为刷一块看不见的图, 而弹层打开本来就会
+     * loadHistory(openHistory); 顶栏 pill 不吃这条(它读 /api/state 的 traffic.periods, 主轮询自会带上)。 */
+    "status.traffic.ts"(v) {
+      if (this.historyOpen && v) this.loadHistory();
+    },
     /* 分类下拉限高: 与添加种子三下拉同口径(add_torrent.js::_fitAddPop 的注释), 只是锚点是
      * meta 对话框自己的输入行 —— 开层(watcher metaCatMenu)/候选到位/过滤词变化三处都要重限,
      * 少一处就会出现"删字后候选涨回全量把对话框撑变形"。 */

@@ -23,6 +23,8 @@ Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin
 - 数据源文件缺失/整体无法解析 -> warning, 本轮不动限速(任务保留);
   dat 有行但当前 period 窗口内无数据(如今天行尚未写入) -> 累计视为 0, 自动回落放宽
 - dry_run: 只计算并输出日志, 不读当前、不写 qB
+- 监视器通知(S7): `refresh_traffic_view` 只重读数据源并重发快照(历史行 + 各曲线累计),
+  不查档、不写限速 —— 「刷新图」是通知链路的唯一联动动作(黄金法则 2)
 """
 import logging
 import time
@@ -83,6 +85,53 @@ def _fmt_global_limit(kib: Optional[int]) -> str:
     return f"{kib}KiB/s"
 
 
+def _history_rows(rows: List[Tuple[date, int, int]]) -> List[dict]:
+    """dat 行 -> 历史流量快照行(按日升序): Web UI 历史流量图的数据源
+
+    随快照发布, Web 端经 /api/traffic/history 读取(不进轮询响应, 避免每轮回传几百行)。
+    """
+    return [{"date": d.isoformat(), "up": up, "down": down} for d, up, down in rows]
+
+
+def _period_rows(period_stats: List[Tuple[str, int, int]]) -> List[dict]:
+    """各曲线周期累计 -> 快照 periods 行(顶栏「今日流量」pill 的数据源, period == "day")"""
+    return [
+        {
+            "period": period,
+            "label": _period_label(period),
+            "up": up,
+            "down": down
+        } for period, up, down in period_stats
+    ]
+
+
+def _read_source_rows(conf) -> Tuple[List[Tuple[date, int, int]], int, Optional[dict]]:
+    """读流量数据源(dat) -> (按日行, 无法解析行数, 失败 | None)
+
+    读法与失败判据的**单点**(任务轮与监视器通知刷新轮共用 —— 同一条判据不许两处各实现一遍,
+    见 pitfalls/backend/verdict-scope-parity.md)。失败形状:
+      {"code": stale 快照的 reasons.code, "text": 快照文案, "log": 日志文案}
+    调用方各自决定怎么用: 任务轮落 `stale` 快照, 通知刷新轮只记一条日志(不发布)。
+    """
+    try:
+        with open(conf.dat_path, "r", encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+    except OSError as e:
+        return [], 0, {
+            "code": "dat_missing",
+            "text": f"流量数据读取失败: {e}",
+            "log": f"读取流量数据失败({conf.dat_path}): {e}",
+        }
+    rows, bad = curves.parse_history_dat(text)
+    if not rows:
+        return [], bad, {
+            "code": "dat_empty",
+            "text": "流量数据无有效记录",
+            "log": f"流量数据无有效记录({conf.dat_path})",
+        }
+    return rows, bad, None
+
+
 class SpeedCurveModule(BaseModule):
     """speed_curve 模块: 曲线任务自注册 + 流量快照经 ctx.web 服务方法推送"""
 
@@ -136,24 +185,15 @@ class SpeedCurveModule(BaseModule):
             self._publish_traffic("disabled")
             return REQUEUE
 
-        # 1. 读取数据源
-        try:
-            with open(conf.dat_path, "r", encoding="utf-8", errors="ignore") as f:
-                text = f.read()
-        except OSError as e:
-            logger.warning(f"限速曲线 | 读取流量数据失败({conf.dat_path}): {e}, 本轮不动")
-            self._publish_traffic("stale", reasons=[{"dir": "", "code": "dat_missing", "text": f"流量数据读取失败: {e}"}])
-            return REQUEUE
-        rows, bad = curves.parse_history_dat(text)
-        if not rows:
-            logger.warning(f"限速曲线 | 流量数据无有效记录({conf.dat_path}), 本轮不动")
-            self._publish_traffic("stale", reasons=[{"dir": "", "code": "dat_empty", "text": "流量数据无有效记录"}])
+        # 1. 读取数据源(读法与失败判据单点在 _read_source_rows)
+        rows, bad, fail = _read_source_rows(conf)
+        if fail is not None:
+            logger.warning(f"限速曲线 | {fail['log']}, 本轮不动")
+            self._publish_traffic("stale", reasons=[{"dir": "", "code": fail["code"], "text": fail["text"]}])
             return REQUEUE
         if bad:
             logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
-        # 历史流量按日行(dat 原始数据, 升序): Web UI 历史流量图的数据源, 随快照发布,
-        # Web 端经 /api/traffic/history 请求时读取(不进轮询响应, 避免每轮回传几百行)
-        history = [{"date": d.isoformat(), "up": up, "down": down} for d, up, down in rows]
+        history = _history_rows(rows)
 
         # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
         today = date.today()
@@ -171,14 +211,7 @@ class SpeedCurveModule(BaseModule):
         upload_kib = curves.bytes_to_kib(curves.merge_direction(up_speeds)) if up_speeds else None
         download_kib = curves.bytes_to_kib(curves.merge_direction(down_speeds)) if down_speeds else None
         # 各周期累计流量(Web 顶栏展示“今日上传/下载”的数据源)
-        periods = [
-            {
-                "period": period,
-                "label": _period_label(period),
-                "up": up,
-                "down": down
-            } for period, up, down in period_stats
-        ]
+        periods = _period_rows(period_stats)
         target = {"up": upload_kib, "down": download_kib}
 
         if dry_run:
@@ -247,6 +280,46 @@ class SpeedCurveModule(BaseModule):
             history=history,
         )
         return REQUEUE
+
+    def refresh_traffic_view(self) -> bool:
+        """重读数据源并重发限速/流量快照(**只读**: 不读不写 qB 限速; 计划 26-10-16-0541 S7)
+
+        监视器通知到达时由 WEB 命令触发(主循环线程执行, 黄金法则 5), 把「盘上已经变了的数据」
+        重新读一遍并发出去: 历史行 + 各曲线 period 累计**重算**, 其余字段(state / limit /
+        target / actual / reasons)沿用上一次发布的快照 —— 本次不重新查档、不覆盖手动限速、
+        不改任何限速决策(§07 黄金法则 2: 联动动作仅「刷新图」)。
+
+        跳过(返回 False, 不发布)两种情形都只记一条 INFO, 路径人是排障而不是告警:
+        - 段缺失 / enabled=false —— 保守默认: `disabled` 快照的语义是「不渲染流量/限速 pill」,
+          不得被通知面绕过(曲线关了就不该因为监视器通知而冒出一个今日流量 pill);
+        - 数据源不可用(缺文件 / 无有效行) —— 没有新数据可发。
+        """
+        conf = self._ctx.config.global_speed_limit_curve
+        if conf is None or not conf.enabled:
+            logger.info("限速曲线 | 监视器通知刷新跳过: 限速曲线未启用(快照保持 disabled)")
+            return False
+        rows, bad, fail = _read_source_rows(conf)
+        if fail is not None:
+            logger.info(f"限速曲线 | 监视器通知刷新跳过: {fail['log']}")
+            return False
+        if bad:
+            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
+        today = date.today()
+        period_stats = [(pc.period, *curves.aggregate(rows, pc.period, today)) for pc in conf.curves]
+        history = _history_rows(rows)
+        # 整体替换引用(Web 线程只读单引用无锁): 从上一份快照复制后改三键, 保留 state / limit
+        view = dict(self._ctx.web.traffic_view)
+        view["periods"] = _period_rows(period_stats)
+        view["history"] = history
+        view["ts"] = time.time()
+        view["date"] = today.isoformat()
+        self._ctx.web.set_traffic_view(view)
+        day = next((r for r in history if r["date"] == today.isoformat()), None)
+        logger.info(
+            f"限速曲线 | 监视器通知刷新历史流量: {len(history)} 行" +
+            (f", 今日 上传 {_fmt_bytes(day['up'])}/下载 {_fmt_bytes(day['down'])}" if day else "")
+        )
+        return True
 
     # ---------- 内部 ----------
 

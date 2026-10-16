@@ -13,10 +13,15 @@ WebUIRuntime 仍是表现层门面(状态/判据/命令编排单点), 本模块�
 
 !门面对象经 manager.web **现取**(不缓存引用): manager.web 是单一真相属性, 测试与外围
   都可能整体替换单个门面 —— 模块只固定「从 manager 取 webui 门面」这一件事。
+
+S7 追加: 全局流量监视器的**订阅生命周期**也内聚在本模块 —— 订阅的回调端点就是本实例的
+  `POST /api/traffic/monitor/notify`, 凭证就是本实例的 WEB 访问密钥, 因此订阅随「监听身份」
+  一起生灭: start 后 sync / 热重载 apply 后 sync / stop 前注销(见 tool_client 的客户端)。
 """
 import logging
 
 from ..core.module import AppContext, ApplyResult, BaseModule
+from .tool_client import TrafficMonitorSubscriber
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +33,13 @@ class WebUIModule(BaseModule):
 
     def __init__(self, manager) -> None:
         self._manager = manager
+        # 监视器订阅客户端(S7): 线程与注册状态内聚在它自己身上, 本模块只负责在
+        # 启动/热重载/关停三个时刻调它的两个非阻塞口(sync/stop)
+        self._subscriber = TrafficMonitorSubscriber(manager)
 
     def sections(self) -> tuple[str, ...]:
-        # web: 本模块的监听/鉴权段; global_traffic_monitor: 设置页代理路由读它(计划 26-10-16-0541 S6)
+        # web: 本模块的监听/鉴权段; global_traffic_monitor: 既是设置页代理路由读的段(S6),
+        # 也是本模块的订阅生命周期现读的段(S7: enabled/subscribe/tool_url/冷却)
         # —— 段认领面(claim completeness 守阵)要求每个配置顶层段至少被一个模块认领
         return ("web", "global_traffic_monitor")
 
@@ -45,8 +54,14 @@ class WebUIModule(BaseModule):
             # start 幂等(黄金法则 1): 已在跑不重复拉起(与 LoggingModule 的 _configured 闸同款)
             return None
         web.start_server()
+        # 监视器订阅按期望态收敛(S7): 未启用/关订阅 -> 无操作, 零线程零请求(黄金法则 2)
+        # 放在 start_server 之后: 回调端点要监听身份, 凭证也要 ensure_token 先落到位
+        self._subscriber.sync()
 
     def stop(self) -> None:
+        # 先注销订阅再停服务(顺序反了就是「端点已死还要跟工具多跑一轮心跳」);
+        # 两段都是非阻塞口径: 订阅注销在有界超时内完成, 服务只置退出位
+        self._subscriber.stop()
         self._manager.web.stop_server()
 
     # ---------- 热重载(_apply_web_config 语义迁入, plan P2) ----------
@@ -69,17 +84,24 @@ class WebUIModule(BaseModule):
         if want == have:
             if web.handle is not None:
                 web.ensure_token()  # 鉴权每请求实时读 token, 即时刷新无需重启
-            return ApplyResult(self.name)
-        from . import stop_web_server
+            action = "none"
+        else:
+            from . import stop_web_server
 
-        if web.handle is not None:
-            stop_web_server(web.handle)
-            web.handle = None
-        if new_web.enabled:
-            web.start_server()
-            return ApplyResult(self.name, "restarted")
-        logger.info("WEB UI 已停止(web.enabled=false)")
-        return ApplyResult(self.name, "stopped")
+            if web.handle is not None:
+                stop_web_server(web.handle)
+                web.handle = None
+            if new_web.enabled:
+                web.start_server()
+                action = "restarted"
+            else:
+                logger.info("WEB UI 已停止(web.enabled=false)")
+                action = "stopped"
+        # 监视器订阅按新配置收敛(S7, 幂等非阻塞): 联动开关/订阅开关/工具地址/回调端点任一变化,
+        # 都由客户顿现读配置重新判定 —— 与上面「仅监听身份变化才重启服务器」无耦合(改冷却秒数
+        # 不该拆服务器, 但该让心跳轮读到新值)
+        self._subscriber.sync()
+        return ApplyResult(self.name, action)
 
     # ---------- loop hooks(主循环按装配序调用) ----------
 

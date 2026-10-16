@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 11:45
+**Updated:** 2026-10-16 14:04
 **Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面已落地(含用户拍板改版: 工具控制面加 POST /autostart)。
 **Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md
 **Topics:** global-traffic-monitor
@@ -101,7 +101,7 @@
 
 **落点**(改 3 文件 + 1 新文件, 零 auto-qb 触碰): `notifier.py` 占位 -> 全量实现(~230 行: `Notifier` 阈值累计 + catch_up 补发 + 守护线程派发[每订阅者一线程, 在途上限 32] + `http_push` 生产推送单点 + `close`/`wait_idle`) + `storage.py` `bump_event_id`(事件号 +1 且落盘) + `__main__.py` `_run_loop` 接通知(首帧 catch_up; 派发抛错保持待补发下一轮重试) + cmd_run 接线(启动日志含通知阈值, 退出时 `notifier.close`) + `tests/test_notifier.py` 新文件 24 条守阵 + 工具 README(新增「通知 (S4)」节)/`__init__` 进度注记。
 
-**设计要点**: 阈值累计基数 = **上次事件时刻**的当日合计, 只在派发成功后推进(随样本推进会把「累计变化」退化成单样本 delta —— 首版即踩, 单测立刻暴露已修); 跨天/累计回退只重置基数不产伪事件; `catch_up` 首帧补发不看阈值(事件号接续, 不从 1 重来); 推送顺序 = 先落盘(dat 节流窗口内活尾即时封口)→ 事件号 +1 落盘 → 派发; 派发在独立守护线程且每订阅者一线程(假死端点既不拖慢采样循环也不拖慢其它订阅者), 失败只记 WARNING 不重试(慢轮询兜底); `http_push` = stdlib urllib POST JSON + `Authorization: Bearer <订阅 token>`; 事件体严格六键 {event_id, day, up_bytes, down_bytes, total_bytes, ts}。
+**设计要点**: 阈值累计基数 = **上次事件时刻**的当日合计, 只在派发成功后推进(随样本推进会把「累计变化」退化成单样本 delta —— 首版即踩, 单测立刻暴露已修); 跨天/累计回退只重置基数不产伪事件; `catch_up` 首帧补发不看阈值(事件号接续, 不从 1 重来); 推送顺序 = 先落盘(dat 节流窗口内活尾即时封口)→ 事件号 +1 落盘 → 派发; 派发在独立守护线程且每订阅者一线程(假死端点既不拖慢采样循环也不拖慢其它订阅者), 失败只记 WARNING 不重试(慢轮询兜底); `http_push` = stdlib urllib POST JSON + Bearer 鉴权头(凭据取订阅时登记的订阅方凭证); 事件体严格六键 {event_id, day, up_bytes, down_bytes, total_bytes, ts}。
 
 **出口判据全过**: ①阈值触发/启动补发/重复投递去重单测(六字段事件体 / 事件号单调且持久化 / 同累计窗口不重发 / 跨天不产伪事件 / 阈值热重载 / 事件号重启接续); ②两订阅者(含假死端点)推送不阻塞采样循环 —— 单测真 `_run_loop` 10s 压测(帧数下界 60 断言通过) + 真机 12s 窗口实测 193 帧(16.1/s) 而假死推送每次占满 3s 超时; 工具 122/122(98 + 24); 红验 7 条锚点突变全判 RED(阈值失效 / 跨天不重置基数 / 事件号不落盘 / 鉴权头写错 / 派发同步化[守阵挂起, 按未绿计] / 推送前不落盘 / 通知前不剔除租约), 字节恒等还原后基线复绿; 真机冒烟: 真 HTTP 订阅者收到事件且 Bearer token 与 monitor.token 一致、假死端点(accept 不回包)只出 WARNING 不阻断、kill -9 重启事件号 5->6(首帧补发)->7 且订阅者续存 2。
 
@@ -149,3 +149,17 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1145, 状态行 S0–S6, §04 R0 增 S6 行 + 改版记录, 脚注补 S6 与 /autostart 改版) · 本档案 R7 + 子任务表 S6→Done · activeContext 切片 R7 · `memory-bank/config-reference/keys.md` 新段 · 工具 README 端点表 · 坑档 `pitfalls/testing/single-file-coverage-gate.md` 复发+1 + `pitfalls/web-ui/frontend-split.md` 新增条目 · kb.index 重建 · 基线切片 `baselines/26-10-16-1145-global-traffic-monitor-s6.md`。未提交(待用户「提交」指令)。
 
 **行号基准**: S6 首次触碰 auto-qb —— 配置四处(models/loaders/validation/schema)+ 路由注册表 + 设置页模板逐条复核, 未发现漂移。S7(接收面)仍按计划脚注逐条复核。
+
+### R8 · S7 实施 (2026-10-16 14:04)
+
+用户指令「实施S7:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S7 的显式授权(S8–S10 不动)。开工同步 16d66653→fd26c4e7(快进)。
+
+**落点**(改 7 文件 + 3 新文件 + 3 文档, 含 1 处接收面新组件): `webui/server/routes/traffic_monitor.py`(通知接收面端点 + 事件号/冷却双闸 + 六键事件体校验) · `webui/tool_client.py` **新文件**(控制面客户端上移为共享件 —— S6 守阵的打桩点逐字不变 + 订阅客户端 `TrafficMonitorSubscriber`) · `webui/module.py`(订阅生命周期三时刻接线) · `webui/commands.py`(`refresh_traffic` 命令) · `core/modules/speed_curve_mod.py`(数据源读法单点 `_read_source_rows` + 只读刷新入口 `refresh_traffic_view`) · `webui/static/shared/dialogs.js`(历史弹层开着时快照 ts 变化即重拉) · `tests/test_traffic_monitor_client.py`(新, 15 条)+ `tests/test_web_traffic_monitor_notify.py`(新, 8 条)。
+
+**设计要点**: 「刷新图」是通知链路的唯一联动动作(不查档、不读不写 qB 限速); 订阅注册 / 心跳 / 注销的**全部控制面 I/O 只在订阅线程**, 主循环侧只置期望态并唤醒(主循环不会因工具假死卡在超时上); 期望态每轮现读配置(热重载即时生效, 不引入跨线程状态传递); 接收闸状态 per app 实例(与 auth 的「只记一次」同款); 端点响应语义按「对话方是工具进程」定: 闸门拦下 / 联动未启用一律 200 + action, 只有事件体非法才 400(工具侧把非 2xx 记成推送失败, 闸门拦下的通知不该伪装成故障)。
+
+**出口判据(单测面全过)**: 23 条新守阵全绿, 其中端到端(进程内)一条打通「真端点 → 命令队列 → 真 handler → 真模块重发快照 → /api/state 与 /api/traffic/history 两取数位」; **红验 6 条锚点突变全判 RED**(事件号去重失效 / 冷却窗口失效 / 曲线未启用也刷新 / 期望态整体退回真值判 / 订阅载荷丢回调凭证 / 命令表漏注册), 字节恒等还原后基线复绿。**未闭合项**: 出口原文的真机联调(真工具进程 → 浏览器看历史图/顶栏刷新)留待 S10 或工具在跑时补; 本轮以进程内端到端钉住同一条链路。
+
+**实施期发现(4)**: ①注销寻址必须用注册时的「工具地址 + 密钥路径」—— 首版按现读配置寻址, 单测第一轮即暴露(配置一改就注销到新地址、拿不到密钥, 订阅留在旧工具上直到租约过期)。②期望态三开关改按**恒等 True** 判: 热重载守阵用 MagicMock 当新配置, 真值判会让桩段被当成「已启用且要订阅」而真起一条常驻订阅线程(实测污染后续用例的线程清点; 同族形态 pitfalls/testing/hot-reload-mock-sections.md)。③`stop()` 超时后**不摘线程引用**: 摘了就没人能 join, 而下一次 sync() 会因「看不到线程」再起一条 = 双订阅。④写入判据连带拦下四处**既有**文件(测试夹具 / 路由金清单 / 计划 HTML / 本档案): 因历史内容里的鉴权字样被判整文件拒写, agent 侧 edit/apply_patch/write 三条路径全拒; 用户拍板取「形态等价改写命中行 + agent 自己写回」(改写仅形态、行为零变化), 并把「范围比代码文件大得多 + 处置优先级」补进坑档 `pitfalls/ops/agent-write-guard-secret-false-positive.md`。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1404, 状态行 S0–S7, §04 R0 增 S7 行, 脚注补 S7)· 本档案 R8 · 坑档 `agent-write-guard-secret-false-positive.md` 扩写 · activeContext 切片 R8 · 基线切片 `baselines/26-10-16-1404-global-traffic-monitor-s7.md`。未提交(待用户「提交」指令)。

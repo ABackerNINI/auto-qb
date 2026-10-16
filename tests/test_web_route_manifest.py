@@ -1,7 +1,7 @@
 """test_web_route_manifest 测试计划: W0 结构守阵 + 路由金清单
 
 ## 测试计划(每个测试函数一条)
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor): 80 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor, 26-10-16-0541 S7 增 1 条 traffic/monitor/notify): 81 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_route_cmd_passthrough_single_point: 守阵(issue webui-route-cmd-boilerplate-dup) 「路由→命令」透传 mechanics 只存于形状单点 —— 8 个 helper 各定义恰好一次 + 21 个收敛端点体只剩一行 helper 调用 + 三种逐字透传形状零复发(AST 静态; 行为等值由既有表驱动用例逐端点钉 cmd/payload)
 """
@@ -32,7 +32,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/config/public"),
     ("GET", "/api/config/schema"),
     ("GET", "/api/events"),
-    ("POST", "/api/events/ticket"),  # SSE 换票(26-10-02 加固: ?ticket= 取代 ?token= 查询串)
+    ("POST", "/api/events/ticket"),  # SSE 换票(26-10-02 加固: ?ticket= 取代长期密钥查询串)
     ("POST", "/api/expr/eval"),
     ("GET", "/api/fs/dirs"),
     ("POST", "/api/fs/mkdir"),
@@ -98,14 +98,16 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/traffic/monitor/status"),  # 全局流量监视器工具联动(计划 26-10-16-0541 S6): 工具 /status 代理(只读, 恒 200 空态)
     ("PUT", "/api/traffic/monitor/config"),  # 同上: 工具 /config 代理(全量覆盖 -> 前端读后写)
     ("POST", "/api/traffic/monitor/autostart"),  # 同上: 工具 /autostart 代理(幂等注册/卸载自启)
+    ("POST", "/api/traffic/monitor/notify"),  # S7 接收面: 工具推送的累计流量阈值事件(鉴权同全局; 路径与 webui/tool_client.NOTIFY_PATH 同源)
 }
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 80 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 81 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76;
-     2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理)
+     2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理;
+     2026-10-16-0541 S7: 增 1 条 /api/traffic/monitor/notify —— 工具通知接收面)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

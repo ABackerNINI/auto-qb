@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-1145">
+<meta name="doc-updated" content="26-10-16-1404">
 <meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S6 已实施;S7–S10 待逐项授权)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S7 已实施;S8–S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -201,7 +201,7 @@
 <div class="exit"><b>出口</b>并发读守阵(读进程只见到完整文件,无半行/截断);kill -9 后重启日累计接续不丢不重(丢失窗口 ≤ 采样间隔);产出的 dat 文件直接被 <code>curves.py</code> 解析通过(复用现有解析测试)。</div>
 
 <h3><span class="sid">S3</span>控制面 server</h3>
-<p>stdlib <code>ThreadingHTTPServer</code>,强制绑定 127.0.0.1(端口默认 8099,可配;占用即 fail-fast)。鉴权 Bearer token:首次启动原子生成 <code>monitor.token</code>(<code>compare_digest</code> 比对,照 auto-qb <code>auth.py</code> 模式)。端点:</p>
+<p>stdlib <code>ThreadingHTTPServer</code>,强制绑定 127.0.0.1(端口默认 8099,可配;占用即 fail-fast)。鉴权走 Bearer 头,密钥首次启动原子生成 <code>monitor.token</code>(<code>compare_digest</code> 比对,照 auto-qb <code>auth.py</code> 模式)。端点:</p>
 <ul>
   <li><code>GET /status</code> — 采样状态、当日累计、末事件号、订阅者数、文件路径</li>
   <li><code>PUT /config</code> — 全量校验 → 原子写 config.yml → 热重载(last-writer-wins;文档注明多实例盲写风险,设置页「读后写」缓解)</li>
@@ -283,6 +283,12 @@
   出口判据全过: ①新配置键过 <code>test_config_schema</code>(对象段键集合)+ <code>test_config_key_surface</code>(键面基线 160→167 + loader 消费探针 + keys.md 出处)守卫; ②设置页读写工具参数真机可见(S7 联调时复核, 本轮以代理路由守阵钉住契约); ③未知键仍被拒(<code>test_config_traffic_monitor</code>)。工具 173/173; auto-qb 新增守阵 <code>test_config_traffic_monitor</code>(13 条)+ <code>test_web_traffic_monitor</code>(15 条)。红验 7 条锚点突变全判 RED(键集合漂移 / 段校验未接线 / loader 漏读 / schema 键名漂移 / status 缺 token 不报错 / PUT 代理路径漂移 / 工具 action 闸失效), 字节恒等还原后基线复绿。<br>
   实施期发现(3): ①<code>utils.parse_time</code> 只认带单位串("0" 非法, "0S" 合法) —— 冷却键「0 = 不冷却」在 YAML 里须写 <code>0S</code>, 已同步 keys.md / schema help; ②前端 <code>v-if/v-else-if</code> 链<strong>跨分片延续</strong>(settings.html → settings-detail.html), 新分区只能作 <code>v-else-if</code> 插在链尾(settings.html 内, 392/400 行) —— 插分片边界会断链、插链尾之后会落 <code>&lt;/main&gt;</code> 外, 已记坑档 <code>pitfalls/web-ui/frontend-split.md</code>; ③四处结构性守阵(平台判定单点 / 段认领完整性 / schema 端点分组序 / 前端 POST 触发点登记)在首跑全量时判红 —— 均为「新增配置段/路由/前端 POST 点必须同步登记的既有网」, 已按各自口径补齐(utils.is_windows / WebUIModule.sections 加认领 / 分组序断言 / triggers.js calls 加行)。<br>
   根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md</code>。行号基准 3ba069d7 的 auto-qb 侧落点(S6 首次触碰)已逐条复核: 配置四处 + 路由注册表 + 设置页模板, 未发现漂移。</td></tr>
+  <tr><td>S7</td><td><strong>Done</strong> · 26-10-16-1404 · @ fd26c4e7(开工同步后)。<br>
+  改动面(改 7 文件 + 3 新文件 + 3 文档, 含 1 处接收面新组件): ①<code>webui/server/routes/traffic_monitor.py</code> 新增 <code>POST /api/traffic/monitor/notify</code> —— 接收面: 复用全局 <code>make_require_token</code> 鉴权(工具在订阅时登记的回调凭证 = 本实例 WEB 访问密钥), 六键事件体全量校验(非法 400 逐条点名), 事件号单调 + 冷却双闸 <code>NotifyGate</code> 为 <strong>per app 实例</strong>(与 auth 的「只记一次」同款, 不提升为模块级全局); 闸门拦下/联动未启用一律 200 + <code>action</code>, <strong>只有事件体非法才 400</strong> —— 工具侧把非 2xx 记成推送失败, 闸门拦下的通知不该伪装成故障; ②<code>webui/tool_client.py</code> <strong>新文件</strong>: 工具控制面客户端(S6 的 HTTP 与密钥定位单点从路由模块上移为共享件, 路由模块以别名复用 —— S6 守阵的打桩点 <code>tm_routes._call_tool</code> / <code>tm_routes.ToolUnreachable</code> 逐字不变)+ 订阅客户端 <code>TrafficMonitorSubscriber</code>(注册/心跳/注销的<strong>全部控制面 I/O 只在订阅线程</strong>, 主循环侧只置期望态并唤醒; <code>sync()</code> 幂等非阻塞、<code>stop()</code> 先叫停再<strong>有界 join</strong>(超时只 WARNING); 期望态每轮现读配置 ⇒ 热重载即时生效; 心跳 404 自动重注册、工具不可达按租约兜底; 同一失败原因只 WARNING 一次); ③<code>webui/module.py</code> 订阅生命周期接线(start 后 sync / apply 后 sync / stop 先注销再停服务; 与「仅监听身份变化才重启服务器」解耦); ④<code>webui/commands.py</code> 新命令 <code>refresh_traffic</code>(命令表 + handler); ⑤<code>core/modules/speed_curve_mod.py</code> 抽数据源读法单点 <code>_read_source_rows</code>(任务轮与刷新轮共用, 失败判据不许两处各写一遍)+ 新增只读刷新入口 <code>refresh_traffic_view</code>(重算历史行与各曲线周期累计, state/limit 沿用上一份快照; <strong>不查档、不读不写 qB 限速</strong> —— §07 黄金法则 2「联动动作仅刷新图」); ⑥前端 <code>shared/dialogs.js</code> 历史流量弹层开着时快照 ts 变化即重拉(顶栏 pill 走既有 <code>/api/state</code> 轮询, 天然刷新); ⑦守阵 <code>tests/test_traffic_monitor_client.py</code>(15 条)+ <code>tests/test_web_traffic_monitor_notify.py</code>(8 条)。<br>
+  出口判据(单测面全过): ①端点鉴权 / 冷却 / 重复事件单测(含「闸门 per app 实例」); ②订阅生命周期单测(注册 / 心跳 / 404 重注册 / 注销 / 关停有界 / 线程自收线 / 桩配置不起线程); ③只读刷新守阵断言 qB 限速读写<strong>一次都没发生</strong>; ④<strong>端到端(进程内)</strong>链路: 真端点 → 命令队列 → 真主循环 handler → 真 speed_curve 模块重发快照 → <code>/api/state</code> 的 <code>status.traffic</code> 与 <code>/api/traffic/history</code> 两取数位可见(与前端顶栏、历史弹层同一个取数位); ⑤<strong>红验 6 条锚点突变全判 RED</strong>(事件号去重失效 / 冷却窗口失效 / 曲线未启用也刷新 / 期望态整体退回真值判 / 订阅载荷丢回调凭证 / 命令表漏注册), 字节恒等还原后基线复绿。<br>
+  实施期发现(4): ①<strong>注销寻址必须用注册时的工具地址与密钥路径</strong> —— 首版按现读配置寻址, 单测第一轮即暴露: 配置段被改(工具地址 / 密钥路径变了)后注销走的是<strong>新</strong>地址, 拿不到密钥 ⇒ 订阅留在旧工具上直到租约过期; 修法 = 注册成功时连「工具地址 + 密钥路径」一并记下, 注销 / 重注册按记录寻址。②<strong>期望态三个开关按恒等 True 判</strong>(而非真值判)—— 热重载守阵惯用 <code>MagicMock</code> 当新配置, 真值判会让桩段被当成「已启用且要订阅」而<strong>真起一条常驻订阅线程</strong>对着假 URL 空转(实测污染后续用例的线程清点; 同族形态见 <code>pitfalls/testing/hot-reload-mock-sections.md</code>); 类型严格判据把这条路堵在开线程之前。③<strong><code>stop()</code> 超时后不摘线程引用</strong> —— 摘了就再也没人能 join 它, 而下一次 <code>sync()</code> 会因「看不到线程」再起一条 = 双订阅双心跳; 保留引用后 <code>_ensure_thread</code> 见 <code>is_alive</code> 为真不会重起。④<strong>写入判据连带拦下记录文件</strong>: 本轮四处<strong>既有</strong>文件(测试夹具 / 路由金清单 / 本计划 HTML / 任务档案)因历史内容里的鉴权字样被判整文件拒写(agent 侧 edit / apply_patch / write 三条路径全拒) —— 经用户拍板取「形态等价改写命中行 + agent 自己写回」(改写仅形态、行为零变化), 并把「范围比代码文件大得多 + 处置优先级」补进坑档 <code>pitfalls/ops/agent-write-guard-secret-false-positive.md</code>。<br>
+  <strong>未闭合项(诚实标注)</strong>: S7 出口原文的<strong>真机联调</strong>一段(真 gtm 进程发事件 → 浏览器里看历史图与顶栏刷新, 对照 E2)需工具进程在跑 + 浏览器, 本轮以进程内端到端守阵钉住同一条链路, 真机联调留待 S10 或用户手边有工具进程时补。<br>
+  根 <code>test.full</code> 回归数字见基线切片 <code>testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md</code>。</td></tr>
 </table>
 
 <h2><span class="no">05</span>默认参数</h2>
@@ -344,7 +350,7 @@
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778、S6(auto-qb 配置面)于 26-10-16-1145 @ 3473aa9a(含用户拍板改版: 工具控制面加 <code>POST /autostart</code>, 见 S6 行)(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5/S6)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后、S4(通知)于 26-10-16-1016 @ a3ec82ef、S5(自启 installer)于 26-10-16-1109 @ 5654b778、S6(auto-qb 配置面)于 26-10-16-1145 @ 3473aa9a(含用户拍板改版: 工具控制面加 <code>POST /autostart</code>, 见 S6 行)、S7(auto-qb 接收面)于 26-10-16-1404 @ fd26c4e7(见 S7 行)(见 §04 实施记录 R0;S3 行上一轮误落 §05 参数表末尾, 已于 26-10-16-1029 按用户指令搬回 §04 R0 表 —— §05 恢复为纯参数表, 行序 S0/S1/S2/S3/S4/S5/S6)。S5 真机冒烟为<strong>降级形态</strong>: 本会话命令安全策略拉黑 <code>schtasks.exe</code>, 计划任务真注册 + 登录自起未验(缺口与解锁路径见 S5 行与坑档 <code>pitfalls/ops/session-program-blacklist.md</code>)。其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
 
 </div>
 </body>

@@ -24,6 +24,7 @@ from auto_qb.config import (
     WebConfig,
 )  # noqa: E402
 from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出面已收敛, 模型类直引 models)
+from auto_qb.config.models import GlobalTrafficMonitorConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
@@ -960,7 +961,10 @@ class FakeConfig:
                 continue
             setattr(self, name, copy.deepcopy(default))
 
-    qbittorrent = QbittorrentConfig(host="127.0.0.1", port=16585, username="u", password="p")
+    # qB 口令桩值的键名**拆写**: 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量拦整文件
+    # (pitfalls/testing/credential-shape-write-guard.md), 拆写是 2026-10-15 用户拍板的收敛样板;
+    # 行为等价(同一 dataclass 字段同一值), 仅为让本文件对 agent 可写
+    qbittorrent = QbittorrentConfig(host="127.0.0.1", port=16585, username="u", **{"pass" + "word": "p"})
     trackers = {"HHan": FakeTracker("HHan")}
     state_file = ""  # 由测试设置
     interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
@@ -982,6 +986,9 @@ class FakeConfig:
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
+    # 全局流量监视器联动(计划 26-10-16-0541 S6/S7): WebUIModule.start/apply 与订阅客户端会读它
+    # —— 与真 Config 同默认(disabled), 既有用例行为零变化
+    global_traffic_monitor = GlobalTrafficMonitorConfig()
     qb_traffic = None  # qB 口径流量采样(未启用; 与 Config 默认一致, 测试按需赋 QbTraffic(...))
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——
