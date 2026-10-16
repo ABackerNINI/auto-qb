@@ -6,7 +6,7 @@
 ### TestClient 缺省形态不是 loopback, 跨站闸下必被拒
 
 - **触发**: 写/改 `webui/server/auth.py` 鉴权相关测试(2026-10-02, issue 26-09-21-1408 跨站闸落地时)。
-- **判别**: starlette TestClient 缺省 `Host: testserver`、`client=("testclient", ...)` —— 前者不在 Host 白名单(loopback 变体 + 自配 web.host), 后者非 loopback 免鉴权不生效。skip_local_verify 开启时用缺省形态打请求, 无凭证请求拿到的是跨站闸 403 而不是预期的 200/401; 显式传 `headers={"Host": "127.0.0.1:8080"}` 即可(httpx 透传显式 Host, 缺省才从 base_url 推)。
+- **判别**: starlette TestClient 缺省 `Host: testserver`、`client=("testclient", ...)` —— 前者不在 Host 白名单(loopback 变体 + 自配 web.host + `*.localhost` 子域), 后者非 loopback 免鉴权不生效。skip_local_verify 开启时用缺省形态打请求, 无凭证请求拿到的是跨站闸 403 而不是预期的 200/401; 显式传 `headers={"Host": "127.0.0.1:8080"}` 即可(httpx 透传显式 Host, 缺省才从 base_url 推)。
 - **处置**: 鉴权测试一律显式 `TestClient(app, client=("127.0.0.1", 50000))` + 显式 Host 头; 断言「远端仍要鉴权」时同样带合法 Host 头(白名单不看对端地址, 只看头)。
 
 ### loopback 免鉴权是短路放行, 错密钥也 200

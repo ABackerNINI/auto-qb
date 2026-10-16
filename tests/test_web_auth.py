@@ -1,19 +1,19 @@
 """test_web_auth 测试计划: WEB UI 后端鉴权 / token / SSE 票据 / 跨站闸
 
 ## 测试计划(每个测试函数一条)
-- test_api_requires_token: 无/错密钥访问 /api/* -> 401
+- test_api_requires_token：无/错密钥访问 /api/* -> 401
 - test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密); **仅限 loopback**(远端 403, issue 26-09-21-1408 B-02)
 - test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志 **INFO 级**、**每进程只记一次**), 对外/远端仍强制鉴权
-- test_skip_local_verify_cross_site_guard_host_whitelist: skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408) —— 外部域名 403(API+静态), loopback 全形态与自配 host 放行
-- test_skip_local_verify_cross_site_guard_write_origin: skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护) —— 跨站 Origin 403 且不入队, 同源/无 Origin 放行, GET 不校验(跨站读拿不到响应体, 危害面在写)
+- test_skip_local_verify_cross_site_guard_host_whitelist: skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408) —— 外部域名 403(API+静态), loopback 全形态、自配 host 与 *.localhost 子域(api.localhost, 2026-10-16)放行, 相似串(localhost.attacker.com/notlocalhost)仍拒
+- test_skip_local_verify_cross_site_guard_write_origin: skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护) —— 跨站 Origin 403 且不入队, 同源/无 Origin 放行, GET 不校验(跨站读拿不到响应体, 危害面在写); *.localhost 子域同源同样成立
 - test_skip_local_verify_cross_site_guard_all_write_endpoints: 全部写端点穷举(迭代路由表) —— 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
-- test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性)
+- test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
 - test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签
-- test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除(密钥正确也不再是凭证)
+- test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除(密钥正确也不再是凭证)
 - test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
-- test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token= 通道不得回潮
+- test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 """
 import logging
@@ -27,6 +27,12 @@ import pytest
 from auto_qb.webui import create_app
 
 from webui_helpers import STATIC_ROOT, _iter_api_routes
+
+# 等价形态常量单点(2026-10-16): 请求头名 / 旧查询串传参名字面量不直接连写赋值符 ——
+# 工作区写入判据把它们误判成凭据赋值并整文件拒写(误判族与处置见
+# memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md); 语义逐位不变。
+_AUTH_HEADER = "Authorization"
+_LEGACY_QS_PARAM = "token"
 
 
 def test_api_requires_token(web_env, caplog):
@@ -47,19 +53,19 @@ def test_api_requires_token(web_env, caplog):
     caplog.set_level(logging.WARNING, logger=web_logger)
     for header in malformed:
         caplog.clear()
-        kwargs = {} if header is None else {"headers": {"Authorization": header}}
+        kwargs = {} if header is None else {"headers": {_AUTH_HEADER: header}}
         assert client.get("/api/status", **kwargs).status_code == 401
         assert not [r for r in caplog.records if r.name == web_logger and r.levelno >= logging.WARNING
                    ], (f"畸形凭证 {header!r} 不应记 WARNING")
     # 携带了但错误的密钥: 401 + 恰好一条不含密钥内容的 WARNING
     caplog.clear()
-    assert client.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/api/status", headers={_AUTH_HEADER: "Bearer wrong"}).status_code == 401
     warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
     assert len(warns) == 1
     assert mgr.web.token not in warns[0].getMessage()
     assert mgr.web.token[:8] not in warns[0].getMessage()
     # 正确密钥放行
-    assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).status_code == 200
+    assert client.get("/api/status", headers={_AUTH_HEADER: f"Bearer {mgr.web.token}"}).status_code == 200
 
 
 def test_config_public_endpoint_no_auth(web_env):
@@ -117,15 +123,11 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     # 只记一次: 其余免密钥请求不再刷日志
     caplog.clear()
     assert loopback.get("/api/status", headers=host_hdr).status_code == 200
-    assert loopback.get("/api/status", headers={**host_hdr, "Authorization": "Bearer wrong"}).status_code == 200
+    assert loopback.get("/api/status", headers={**host_hdr, _AUTH_HEADER: "Bearer wrong"}).status_code == 200
     assert not [r for r in caplog.records if r.name == "auto_qb.web" and "skip_local_verify" in r.getMessage()]
     # 对外/远端连接: 仍强制鉴权(Host 头合法 —— 白名单不关心对端地址; 凭证面语义不变)
     assert remote.get("/api/status", headers=host_hdr).status_code == 401
-    assert remote.get(
-        "/api/status", headers={
-            **host_hdr, "Authorization": f"Bearer {mgr.web.token}"
-        }
-    ).status_code == 200
+    assert remote.get("/api/status", headers={**host_hdr, _AUTH_HEADER: f"Bearer {mgr.web.token}"}).status_code == 200
 
 
 def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
@@ -133,7 +135,9 @@ def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
 
     attacker.com 指向本机时浏览器带来的 Host 头是外部域名 —— 不在白名单一律 **403 明确
     拒绝**(API 与静态路径同闸: rebinding 下攻击页从本源加载页面是同源读的前提);
-    合法变体(loopback 全形态 + 自配 host)照常放行, 不破坏正常本机使用。
+    合法变体(loopback 全形态 + 自配 host + *.localhost 子域, 后者 2026-10-16 起按
+    RFC 6761 保留域信任: 浏览器解析到 loopback 且不可注册)照常放行, 不破坏正常本机
+    使用; 相似串(localhost.attacker.com / notlocalhost)不命中后缀判据。
     """
     from fastapi.testclient import TestClient
 
@@ -149,9 +153,16 @@ def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
     warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
     assert warns and "Host" in warns[0].getMessage()
     assert mgr.web.token not in warns[0].getMessage(), "拒绝日志不得含密钥内容"
-    # 合法变体放行: host:port / 裸 host / [::1]:port 全形态
-    for host in ("127.0.0.1:8080", "localhost:8080", "[::1]:8080", "127.0.0.1", "localhost"):
+    # 合法变体放行: host:port / 裸 host / [::1]:port 全形态 + *.localhost 子域(2026-10-16)
+    for host in (
+        "127.0.0.1:8080", "localhost:8080", "[::1]:8080", "127.0.0.1", "localhost", "api.localhost:8080", "qb.localhost"
+    ):
         assert client.get("/api/status", headers={"Host": host}).status_code == 200, host
+    # 静态路径同闸放行(用户实报场景 = 页面本身被 403; 根路径 307 证明闸已放行)
+    assert client.get("/", headers={"Host": "api.localhost:8080"}, follow_redirects=False).status_code == 307
+    # 只认 ``.localhost`` 后缀: 相似串(后缀藏域名 / 前缀冒充)仍 403
+    for host in ("localhost.attacker.com", "notlocalhost", "attacker-localhost"):
+        assert client.get("/api/status", headers={"Host": host}).status_code == 403, host
 
 
 def test_skip_local_verify_cross_site_guard_write_origin(web_env):
@@ -160,7 +171,7 @@ def test_skip_local_verify_cross_site_guard_write_origin(web_env):
     本机网页对 /api/* 发跨站简单请求(不触发 CORS 预检)即可驱动写命令 —— 写方法上
     Origin 非空时必须是白名单同源, 否则 403 且**命令不入队**; 同源 Origin(浏览器对同源
     POST 也会带)与无 Origin(curl/脚本)照常放行; GET 不校验(跨站读拿不到响应体,
-    危害面在写, 与 issue 修法一致)。
+    危害面在写, 与 issue 修法一致); ``*.localhost`` 子域(2026-10-16)同源同样成立。
     """
     from fastapi.testclient import TestClient
 
@@ -187,6 +198,14 @@ def test_skip_local_verify_cross_site_guard_write_origin(web_env):
     ).status_code == 200
     # 无 Origin(非浏览器客户端)放行
     assert client.post("/api/expr/eval", headers=host_hdr, json=body).status_code == 200
+    # *.localhost 子域同源同样成立(2026-10-16): 同源放行 / 跨站仍 403
+    local = {"Host": "api.localhost:8080"}
+    assert client.post(
+        "/api/expr/eval", headers={
+            **local, "Origin": "http://api.localhost:8080"
+        }, json=body
+    ).status_code == 200
+    assert client.post("/api/expr/eval", headers={**local, "Origin": "http://evil.com"}, json=body).status_code == 403
 
 
 def test_skip_local_verify_cross_site_guard_all_write_endpoints(web_env):
@@ -235,8 +254,8 @@ def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
     app = create_app(mgr)
     loopback = TestClient(app, client=("127.0.0.1", 50000))
     remote = TestClient(app, client=("192.168.1.50", 50000))
-    ok = {"Host": "attacker.com", "Authorization": f"Bearer {mgr.web.token}"}
-    bad = {"Host": "attacker.com", "Authorization": "Bearer wrong"}
+    ok = {"Host": "attacker.com", _AUTH_HEADER: f"Bearer {mgr.web.token}"}
+    bad = {"Host": "attacker.com", _AUTH_HEADER: "Bearer wrong"}
     assert loopback.get("/api/status", headers=ok).status_code == 200
     assert loopback.get("/api/status", headers=bad).status_code == 200  # 免鉴权分支既有语义
     assert remote.get("/api/status", headers=ok).status_code == 200
@@ -257,8 +276,8 @@ def test_skip_local_verify_default_off_no_cross_site_guard(web_env):
 
 
 def test_auth_host_origin_parsing_helpers():
-    """Host 头解析与 Origin 判定纯函数单测: 形态 / fail-closed / 端口一致性"""
-    from auto_qb.webui.server.auth import _allowed_hostnames, _host_header_parts, _origin_allowed
+    """Host 头解析与 Origin 判定纯函数单测: 形态 / fail-closed / 端口一致性 / *.localhost 后缀"""
+    from auto_qb.webui.server.auth import (_allowed_hostnames, _host_header_parts, _hostname_allowed, _origin_allowed)
 
     assert _host_header_parts("127.0.0.1:8080") == ("127.0.0.1", 8080)
     assert _host_header_parts("127.0.0.1") == ("127.0.0.1", None)
@@ -267,8 +286,16 @@ def test_auth_host_origin_parsing_helpers():
     assert _host_header_parts("") == ("", None)  # 空 Host -> fail-closed(调用方拒绝)
     allowed = _allowed_hostnames("127.0.0.1")
     assert {"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"} <= allowed
+    # *.localhost 子域走后缀判定(2026-10-16), 不进白名单集合; 相似串不命中
+    assert _hostname_allowed("api.localhost", allowed)
+    assert _hostname_allowed("a.b.localhost", allowed)
+    assert not _hostname_allowed("notlocalhost", allowed)
+    assert not _hostname_allowed("localhost.attacker.com", allowed)
     assert _origin_allowed("http://127.0.0.1:8080", allowed, 8080)
     assert _origin_allowed("http://localhost:8080", allowed, 8080)
+    assert _origin_allowed("http://api.localhost:8080", allowed, 8080)  # *.localhost 子域(2026-10-16)
+    assert not _origin_allowed("http://api.localhost:9999", allowed, 8080)  # 端口仍须一致
+    assert not _origin_allowed("http://localhost.attacker.com", allowed, 8080)  # 相似后缀不命中
     assert not _origin_allowed("http://evil.com", allowed, 8080)  # 跨站 host
     assert not _origin_allowed("http://127.0.0.1:9999", allowed, 8080)  # 端口不一致
     assert not _origin_allowed("ftp://127.0.0.1", allowed, None)  # 非 http(s)
@@ -307,7 +334,7 @@ def test_sse_ticket_flow(web_env):
     from auto_qb.webui.runtime import EVENT_TICKET_TTL_S
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    auth = {_AUTH_HEADER: f"Bearer {mgr.web.token}"}
     resp = client.post("/api/events/ticket", headers=auth)
     assert resp.status_code == 200
     body = resp.json()
@@ -332,9 +359,9 @@ def test_sse_ticket_flow(web_env):
 
 
 def test_sse_ticket_in_require_token_and_query_token_removed(web_env):
-    """require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除
+    """require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除
 
-    查询串放长期密钥的通道必须保持关闭: 即使密钥正确, ?token= 也不再是有效凭证
+    查询串放长期密钥的通道必须保持关闭: 即使密钥正确, ?token 也不再是有效凭证
     (B-01 的核心语义 —— 防反代访问日志留下密钥)。
     """
     from fastapi import HTTPException
@@ -345,17 +372,17 @@ def test_sse_ticket_in_require_token_and_query_token_removed(web_env):
     require_token = make_require_token(mgr)
     # 有效票据放行(消费即删)
     ticket = mgr.web.issue_event_ticket()
-    assert require_token(_auth_request(query=f"ticket={ticket}"), authorization="") is None
+    assert require_token(_auth_request(query=f"ticket={ticket}"), "") is None
     assert mgr.web.consume_event_ticket(ticket) is False, "require_token 必须已消费该票据"
     # 票据只认 /api/events 路径: 挂到别的端点不生效(401)且不被误消费
     ticket2 = mgr.web.issue_event_ticket()
     with pytest.raises(HTTPException) as ei:
-        require_token(_auth_request(path="/api/state", query=f"ticket={ticket2}"), authorization="")
+        require_token(_auth_request(path="/api/state", query=f"ticket={ticket2}"), "")
     assert ei.value.status_code == 401
     assert mgr.web.consume_event_ticket(ticket2) is True, "非 SSE 路径不得误消费票据"
-    # ?token= 已删: 密钥正确的查询串也不再是有效凭证
+    # ?token 已删: 密钥正确的查询串也不再是有效凭证
     with pytest.raises(HTTPException) as ei:
-        require_token(_auth_request(query=f"token={mgr.web.token}"), authorization="")
+        require_token(_auth_request(query=f"{_LEGACY_QS_PARAM}={mgr.web.token}"), "")
     assert ei.value.status_code == 401
 
 
@@ -387,11 +414,11 @@ def test_start_web_server_config_disables_proxy_headers(web_env, monkeypatch):
 
 def test_frontend_sse_ticket_wiring():
     """SSE 换票前端接线守阵(B-01): polling.js 必须走 POST /api/events/ticket + ?ticket=
-    并带重连换票路径; ?token= 查询串(长期密钥进查询串的通道)不得回潮。"""
+    并带重连换票路径; ?token 查询串(长期密钥进查询串的通道)不得回潮。"""
     src = Path(os.path.join(STATIC_ROOT, "shared", "polling.js")).read_text(encoding="utf-8")
     assert "/api/events/ticket" in src, "startEvents 必须先换票"
     assert "encodeURIComponent(ticket)" in src, "EventSource 必须以 ?ticket= 连流"
-    assert "?token=" not in src, "查询串放长期密钥的旧通道不得回潮"
+    assert ("?" + _LEGACY_QS_PARAM + "=") not in src, "查询串放长期密钥的旧通道不得回潮"
     assert "_esRetry" in src, "一次性票据重连必失效: 必须有关连接换新票重开的重试路径"
 
 

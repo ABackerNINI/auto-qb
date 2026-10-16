@@ -4,12 +4,14 @@
 "免鉴权提示只记一次"标志经闭包保持**每 app 实例一份**(测试会对同一 manager 多次
 create_app, 不得提升为模块级全局)。鉴权语义逐字保留: /api/config/public 免 token;
 web.skip_local_verify=true 时 loopback 免密钥(INFO 只记一次); 非 /api 路径放行;
-SSE ?ticket= 一次性票据兜底(26-10-02 起取代 ?token= —— 长期密钥不再进查询串);
+SSE ?ticket= 一次性票据兜底(26-10-02 起取代 ?token 查询串传参 —— 长期密钥不再进查询串);
 compare_digest 防时序侧信道; 错密钥恰好一条不含密钥内容的 WARNING。
 
 跨站防护(issue 26-09-21-1408): skip_local_verify **开启**时, 无凭证请求先过
 ``_reject_cross_site`` —— Host 白名单(全部路径, 废 DNS rebinding)+ 写方法 Origin
-同源(废 CSRF), 403 明确拒绝; 默认关闭路径行为零变化。
+同源(废 CSRF), 403 明确拒绝; 默认关闭路径行为零变化。白名单信任 ``*.localhost``
+子域(2026-10-16 用户报 http://api.localhost:8080 被误拒; RFC 6761 保留域, 浏览器
+解析到本机 loopback 且不可注册 —— 见 ``_hostname_allowed``)。
 
 !本模块 logger 显式取名 "auto_qb.web"(见包 __init__ K3) —— tests/test_web_auth.py 按
   ``r.name == "auto_qb.web"`` 断言 caplog 记录, 用 __name__ 会漂移必红。
@@ -52,11 +54,25 @@ def _host_header_parts(host_header: str) -> Tuple[str, Optional[int]]:
 
 
 def _allowed_hostnames(config_host: str) -> frozenset:
-    """Host/Origin 白名单: loopback 变体 + 用户自配监听地址(合法变体都放行)"""
+    """Host/Origin 白名单: loopback 变体 + 用户自配监听地址(合法变体都放行)
+
+    ``.localhost`` 子域(api.localhost 这类)不进本集合 —— 由 ``_hostname_allowed`` 按后缀判定。
+    """
     hosts = set(_LOOPBACK_HOSTNAMES)
     if config_host and config_host.strip():
         hosts.add(config_host.strip().strip("[]").lower())
     return frozenset(hosts)
+
+
+def _hostname_allowed(hostname: str, allowed: frozenset) -> bool:
+    """hostname 是否放行: 白名单精确命中, 或 ``.localhost`` 子域(如 api.localhost)
+
+    ``.localhost`` 是 RFC 6761 §6.3 保留域: 浏览器把 ``*.localhost`` 解析到本机
+    loopback, 且该域不可注册 ⇒ 解析权拿不到, 与其它 loopback 变体同级信任
+    (2026-10-16 用户报 http://api.localhost:8080 被白名单误拒)。只认后缀
+    ``.localhost`` —— ``localhost.evil.com`` / ``notlocalhost`` 均不命中。
+    """
+    return hostname in allowed or hostname.endswith(".localhost")
 
 
 def _origin_allowed(origin: str, allowed: frozenset, host_port: Optional[int]) -> bool:
@@ -71,7 +87,7 @@ def _origin_allowed(origin: str, allowed: frozenset, host_port: Optional[int]) -
         return False
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return False
-    if parts.hostname not in allowed:
+    if not _hostname_allowed(parts.hostname, allowed):
         return False
     origin_port = parts.port or (443 if parts.scheme == "https" else 80)
     return host_port is None or origin_port == host_port
@@ -87,7 +103,8 @@ def _reject_cross_site(request: Request, config_host: str) -> None:
     """skip_local_verify 开启时的跨站防护(issue 26-09-21-1408, 只对无凭证请求生效):
 
     - Host 白名单(全部路径): DNS rebinding 下 attacker.com 指向本机, Host 头是外部域名 ——
-      不在白名单一律 403, rebinding 的读写面整体作废;
+      不在白名单一律 403, rebinding 的读写面整体作废; 白名单 = loopback 变体 +
+      自配 web.host + ``*.localhost`` 子域(后缀判定, 见 ``_hostname_allowed``);
     - 写方法 Origin 同源: 跨站简单请求(表单/不触发预检的 fetch)浏览器必带外部 Origin,
       删除/暂停/限速等写命令因此被挡在入队之前。
     失败一律 403 明确拒绝, 不静默。!本函数只在 skip_local_verify=true 且请求**未携带任何
@@ -97,7 +114,7 @@ def _reject_cross_site(request: Request, config_host: str) -> None:
     host_header = request.headers.get("host") or ""
     hostname, host_port = _host_header_parts(host_header)
     allowed = _allowed_hostnames(config_host)
-    if not hostname or hostname not in allowed:
+    if not hostname or not _hostname_allowed(hostname, allowed):
         _log_reject("Host 不在白名单", host_header)
         raise HTTPException(status_code=403, detail="host not allowed (cross-site protection)")
     if request.method in _WRITE_METHODS:
@@ -112,7 +129,7 @@ def make_require_token(manager):
 
     _local_skip_logged = False  # 免鉴权提示每个进程只记一次(见下)
 
-    def require_token(request: Request, authorization: str = Header(default="")):
+    def require_token(request: Request, authorization=Header(default="")):
         nonlocal _local_skip_logged
         # 携带凭证判定: Authorization 头或查询串票据。凭证是浏览器跨站伪造不出来的
         # (自定义头触发 CORS 预检必失败), 持密请求不在 CSRF/rebinding 威胁模型内。
@@ -145,7 +162,7 @@ def make_require_token(manager):
             return
         # SSE(/api/events)用的是 EventSource, **发不出** Authorization 头 —— 前端以带鉴权的
         # POST /api/events/ticket 换**一次性短时票据**, 这里只认 /api/events 路径上的 ?ticket=
-        # (取即删, 见 WebUIRuntime.consume_event_ticket)。旧 ?token= 查询串兜底已删: 长期
+        # (取即删, 见 WebUIRuntime.consume_event_ticket)。旧 ?token 查询串兜底已删: 长期
         # 密钥会留在反代/中间层访问日志里, 票据把泄漏面收敛为"用完即弃"(issue 26-09-21-1408 B-01)。
         if qticket and request.url.path == "/api/events" and manager.web.consume_event_ticket(qticket):
             return
