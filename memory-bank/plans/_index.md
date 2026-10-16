@@ -10,7 +10,6 @@
 ## In Progress
 
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
-- [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
 ## Open
@@ -42,6 +41,7 @@
 - [26-10-09-1243] [06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划](26-10-09-1243-plan-webui-per-tracker-reannounce.html) — `webui-detail-panel-templates`
 - [26-10-09-1057] [HR 排除种子终态行身份下载短路 · 分步实施计划 · auto-qb](26-10-09-1057-plan-hr-exclude-terminal-download.html) — `hr-steady-throttle`
 - [26-10-09-0821] [HR 故障归属分层拆分 · 分步实施计划 · auto-qb](26-10-09-0821-plan-hr-fault-domain.html) — `hr-fault-domain`
+- [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
 - [26-10-08-1217] [计划 · 辅种页/追剧页支持种子详情面板](26-10-08-1217-plan-webui-drawer-groups-shows.html) — `webui-detail-panel-redesign`
 - [26-10-08-0720] [config/ 包变异测试审计 · 分步执行计划](26-10-08-0720-plan-mutation-config.html) — `mutation-audit`
 - [26-10-07-2336] [tests/test_web.py 拆分实施计划](26-10-07-2336-plan-test-web-split.html) — `test-web-split`

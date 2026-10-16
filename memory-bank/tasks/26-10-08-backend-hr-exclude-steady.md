@@ -1,8 +1,8 @@
 # 26-10-08-backend-hr-exclude-steady — HR 排除在取数侧未生效 (稳态降频失效)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-08
-**Updated:** 2026-10-08 13:05
+**Updated:** 2026-10-17 05:27
 **Topics:** hr-steady-throttle
 **Summary:** 用户报「按标签/分类排除 HR 管理的种子似乎打破稳态触发拉取 (稳态设为 24H)」。取证结论: HR 排除的判据单点 `TorrentRecord.hr_excluded()` 只被判定侧 (hr_judgement / check_hr_condition / hr_managed) 与 WebUI 展示侧消费, **取数/对账侧从不读它** —— `HrRuntime._anchors` (runtime.py:358-383) 按站点接入无差别采集本地种子, `_build_objects` (service.py:1375-1413) 的排除链只有 终态/放行/超额 三档。后果: 被排除种子仍进对账对象集 ⇒ 稳态条件 (对象集为空) 恒不成立 ⇒ 间隔闸永远取 refresh_interval (5H), idle_refresh_interval (24H) 永不生效。日志侧证: 相邻两波间隔 16h55m < 24H。报告见 reports/26-10-08-1235; 修复方向 (A 锚点剔除 / B 锚点带排除位 / C 站点开关, 倾向 B) 待拍板, **本轮只出报告, 零代码改动**。
 **Refs:** memory-bank/reports/26-10-08-1235-report-hr-exclude-steady.html,memory-bank/plans/26-10-08-1249-plan-hr-exclude-steady.html
@@ -40,11 +40,12 @@
 | S2 | 修复方案拍板 | Done (方案 B, 2026-10-08 用户指令) |
 | S3 | 出实施计划 (方案 B) | Done (plans/26-10-08-1249) |
 | S4 | 实施 + 守阵 (计划 S1–S4) | Done (源码 3 文件 + 守阵 4 条, 3 条红验) |
-| S5 | 真机复核稳态降频生效 | Open (用户侧真机跑) |
+| S5 | 真机复核稳态降频生效 | Done (26-10-17 用户确认: `wave.idle_mode=true` / 日志「稳态降频」/ 稳态期请求量下降) |
 | S6 | D2 入池 issue | Done (26-10-08-1304 perf) |
 
 ## 进度日志
 
+- **2026-10-17 05:27** 用户确认 **S5 真机复核生效**(`wave.idle_mode` 翻 true / 日志出现「未到拉取时刻(拉取间隔·稳态降频, 还差 Ns)」/ 稳态期请求量下降) ⇒ 计划 [26-10-08-1249](../plans/26-10-08-1249-plan-hr-exclude-steady.html) S1–S6 全部闭环, 本档案 → Done。§06 验收: V1–V3 守阵承载, V4 兑现, V5 的全量套件证据取**最终代码态**(下游计划 1057 落地后)基线切片 [26-10-09-1124](../testing/baselines/26-10-09-1124-hr-exclude-terminal-download.md)(数字单点在该切片; 此后 hr 域零改动, 未重复跑全量)。闭环纪要蒸馏进 progress/implemented-core.md; kb.index 重建。
 - **2026-10-08 13:05** 用户下达「D2 进 issue, D1 按建议, 开始实施」⇒ **实施轮 S1–S4 落地**(源码 3 文件 3 处改动): S1 `resolve.HrAnchor` 末尾加 `excluded: bool = False` + `record.hr_anchor()` 透传 `self.hr_excluded()`; S2 `service._build_objects` 循环顶部加第四档排除 + docstring 补档; S3 守阵 4 条(`test_build_objects_skips_hr_excluded_anchor` / `test_hr_excluded_anchor_does_not_break_idle` / `test_excluded_anchor_still_counts_as_local_hit` / `test_record_hr_anchor_carries_excluded_flag`)—— **红验**: 临时关掉两处源码钩子(`if False and ...` / `excluded=False`)后 3 条转红, 还原复绿(第 4 条是设计锁, 不随本改动红); S4 文档回写 `config-reference/keys.md` 的 `hr` 行与 `modules/overview.md` 的 HR 行(原「取数管道零感知」表述已过时, 改「取数/对账侧同源」)。**D1 采纳建议**: 不清理被排除种子既有 `verified` / `index` 行(零代码); **D2 入池** [26-10-08-1304-perf-hr-exclude-terminal-download](../issues/26-10-08-1304-perf-hr-exclude-terminal-download.html)(perf · Open · doc-refs 指向本计划)。计划 meta → In Progress。**S5 真机复核待用户侧**; 未提交。
 - **2026-10-08 12:49** 用户拍板「按方案 B 出实施计划」⇒ 计划 [26-10-08-1249-plan-hr-exclude-steady](../plans/26-10-08-1249-plan-hr-exclude-steady.html) 入库 (状态 Open, S1–S6)。**实施前的口径更正**: 复核 `_process_rows` 后确认报告 §08 关于「方案 A 会多触发一次 .torrent 下载」的说法不成立 (缺 infohash 的 A 档行无论 A/B 都下载; 带 infohash 的行不下载) ⇒ A/B 对「对象集是否为空」结果等价, 选 B 的理由修正为「爆炸半径最小」; 已回写报告 §11 后记 (doc-updated 抬 26-10-08-1249)。认领链三向闭环 (计划 ↔ 报告 ↔ 本档案)。**仍未改任何源码**; 实施动作另行开轮。
 - **2026-10-08 12:35** 取证轮完成, 报告 [26-10-08-1235-report-hr-exclude-steady](../reports/26-10-08-1235-report-hr-exclude-steady.html) 入库 (基线 develop @ fcc3cd69, 只读核对 config.yml)。定性: 排除判据缺取数/对账侧消费点 (`runtime._anchors` 358-383 / `service._build_objects` 1375-1413), 稳态 `steady = anchors_known and not objects` (service.py:497) 恒假 ⇒ 间隔恒取 refresh_interval。**零代码改动 / 未入池 / 未提交**; 修复方案与后续动作待拍板。
