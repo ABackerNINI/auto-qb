@@ -12,16 +12,16 @@
 - test_qb_traffic_sample_interval_multiple_mismatch_not_an_error: 裁决 D5 —— 非 main_tick 整数倍校验层不报错
 - test_qb_traffic_flush_interval_bounds: flush_interval —— dataclass 缺省 600 /
   60~3600s 整数秒压线收 / 越界与非整数秒与坏格式聚合报错
-- test_sample_task_registered_when_enabled: enabled=true -> start 创建 qb_traffic_sample 全局任务(interval=采样间隔)
-- test_sample_task_not_registered_when_disabled: enabled=false 与键组缺省(None)两种情形均不建任务
-- test_sample_task_reregisters_on_queue_rebuilt: L2 队列重建 -> 按新配置重入队(换 interval/启用/停用三向)
-- test_sampling_runs_on_caller_thread: 采样在调用 run_due 的线程(主循环线程)内同步执行, 模块不建线程(单写线程不变式)
+- test_sample_task_registered_when_enabled: enabled=true -> **队列零任务** + 时钟线钩子首拍即采(issue 26-10-16-0954)
+- test_sample_not_starved_by_immediate_task_backlog: 数百立即到期任务占满队列(重启补建同形)时采样节拍不中断(回归主判据)
+- test_sample_clock_line_gate_and_hot_reload_enable: 未到 effective interval 不重复采; 停用零采样零任务; 热重载 enabled=true 不经队列重建即开采
+- test_sampling_runs_on_caller_thread: 采样在调用任务线钩子的线程(主循环线程)内同步执行, 模块不建线程(单写线程不变式)
 - test_first_sample_only_establishes_baseline: 首个采样只立基线不出增量(首窗 null), 次轮出正常增量
 - test_counter_rollback_records_reset_no_negative: 模拟 qB 重启(计数器回落) -> 不产负增量、增量记 null、基线更新为 cur、INFO 记重置
 - test_disconnect_produces_null_point: qB 断连(store.client None) -> 全局 n 游程槽 + latest 镜像 null 点、单种本轮不采样、基线不动
 - test_missing_fields_produce_null_point_not_zero: server_state 关键字段缺失/空值 -> null 处理(不写 0)且基线不推进
 - test_torrent_active_filter_zero_rows_when_idle: 活跃种子照常产 r; 空闲种子零 r(零样本按游程纪律压缩, 从未传输者无游程)
-- test_disabled_at_runtime_handler_noop: 任务已注册后运行期关闭 -> handler 短路不采样(任务保留)
+- test_disabled_at_runtime_handler_noop: 运行期关闭 -> 采样体短路不采样不动内存(队列无关)
 - test_enabled_false_creates_zero_files_or_dirs: enabled=false/键组缺省 -> start+采样全程零文件零目录(保守默认验收)
 - test_enabled_true_persists_under_data_dir: enabled=true -> v4 天文件 <data_dir>/qb-traffic-v4/<系列>/<date>.dat
   (头行 v4 + key 行 + B 块头携块基线 + r 行 delta 形态零 dt); 会话快照不落盘
@@ -48,12 +48,12 @@
   自然复位 / 稳态小漂移(150ms/行)退化周期写 / 空载(等间隔)零 dt 行; 单块全序列 roundtrip 与实测一致
   (v4 关块谓词下块随 flush 关闭会重锚游标, 故中途断言读缓冲、末尾一次 flush 落盘)
 - test_clock_rollback_clamped_dt_min_1: 时钟回拨单调钳制 dt_ms = max(1, 实测) >= 1
-- test_interval_change_hot_reload_new_block_and_task_interval: 热重载改采样率即时生效(§3.5):
-  task.interval 回写 + 旧块落盘(旧 interval) + 新块带新 interval(新旧数据分块各有 interval)
-- test_interval_mismatch_ceils_and_warns_once: 运行期失配(D5): 向上取整到下一倍数(task.interval=取整值) +
+- test_interval_change_hot_reload_new_block_and_effective_interval: 热重载改采样率即时生效(§3.5):
+  _effective_interval 更新 + 旧块落盘(旧 interval) + 新块带新 interval(新旧数据分块各有 interval)
+- test_interval_mismatch_ceils_and_warns_once: 运行期失配(D5): 向上取整到下一倍数(_effective_interval=取整值) +
   告警一次(防重复), 配置再变记忆复位; 不拒采
 - test_interval_decimal_match_kept_not_ceiled: 整数倍匹配的小数档(1.5 配 main_tick=1.5)原样生效 ——
-  task.interval/_effective_interval/块头 B 行均 1.5, 失配告警不触发, 同块零漂移(2026-10-05 修复)
+  _effective_interval/块头 B 行均 1.5, 失配告警不触发, 同块零漂移(2026-10-05 修复)
 - test_day_boundary_cut: 跨天切块(00:00 硬切, §3.3): 23:59 块落旧日期文件 + 00:00 新块新日期文件, 各带正确块头
 - test_day_boundary_seals_open_run: 跨天封游程: 游程不跨天(00:00 样本先封旧游程); 块首单槽游程不写 dt
 - test_buffer_slot_cap_3600_early_flush: Q3 保险闸: 缓冲槽 >= 3600 提前单独 flush(v4 带 r 行的块随闸值关闭)
@@ -150,13 +150,12 @@ from auto_qb.core.modules import traffic_sample_mod as ts_mod
 from auto_qb.core.modules.traffic_sample_mod import (
     EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
-    TASK_NAME,
     V4_BUFFER_SLOT_CAP,
     ZRUN_CAP_SAMPLES,
     ZRUN_FLUSH_S,
     TrafficSampleModule,
 )
-from auto_qb.core.taskqueue import Task, TaskQueue
+from auto_qb.core.taskqueue import Task
 from auto_qb.core.traffic_store import (
     AggRow,
     HEADER_LINE_V4,
@@ -223,11 +222,10 @@ def _mgr_with_traffic(tmp_path, qb_traffic) -> object:
     return mgr
 
 
-def _run_sample(mgr, dry_run: bool = False, task: Task = None) -> bool:
-    """直调采样 handler(与 test_speed_curve._run_curve 同款, 不经队列); 可传 task 断言回写"""
-    mod = mgr.host.get("qb_traffic")
-    task = task or Task("internal", TASK_NAME, interval=30, handler=mod.handle_traffic_sample)
-    return mod.handle_traffic_sample(task, dry_run=dry_run)
+def _run_sample(mgr, dry_run: bool = False) -> None:
+    """直调一轮采样(时钟线钩子的执行体, 与 test_speed_curve._run_curve 同款: 不经队列,
+    也不经到期闸门 —— 闸门/节拍由 test_sample_clock_line_* 两条专测钉住)"""
+    mgr.host.get("qb_traffic").handle_traffic_sample(dry_run=dry_run)
 
 
 def _flush(mod) -> None:
@@ -433,59 +431,105 @@ def test_qb_traffic_flush_interval_bounds():
     assert any("config.qb_traffic.flush_interval" in e for e in bad), bad
 
 
-# ---------- 任务注册(P1 验收: enabled=false 不注册任务) ----------
+# ---------- 时钟线挂载(issue 26-10-16-0954: 采样移出队列, 挂任务线钩子) ----------
+def _add_backlog(mgr, n: int) -> list:
+    """模拟重启/热重载的种子级补建: n 个立即到期的种子级任务占满队列(interval 60s)。
+    返回执行记录列表 —— 积压被弹走一份就会 requeue(不再是「队列剩多少」), 故判「排水
+    是否完成」只看执行计数。"""
+    now = time.time()
+    done = []
+
+    def handler(task, dry_run):
+        done.append(task.hash)
+        return True  # REQUEUE: 回到队列等下一个 interval(本用例不推进真实时钟 -> 不再到期)
+
+    for i in range(n):
+        mgr.task_queue.add_task(
+            Task("internal", "maintenance", hash=f"h{i:04d}", interval=60.0, handler=handler), now=now
+        )
+    return done
+
+
+def _spy_sample_rounds(monkeypatch, clock) -> list:
+    """给「一轮采样落定」的单点(活尾发布, 采样体两条出口各一次)挂 spy, 返回每轮时刻列表"""
+    rounds = []
+    orig = TrafficSampleModule._publish_live_tail
+
+    def spy(self):
+        rounds.append(clock.now)
+        return orig(self)
+
+    monkeypatch.setattr(TrafficSampleModule, "_publish_live_tail", spy)
+    return rounds
+
+
 def test_sample_task_registered_when_enabled(tmp_path):
-    """enabled=true -> start 创建 qb_traffic_sample 全局任务, interval = 采样间隔"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=45))
-    mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
-    tasks = [t for t in mgr.task_queue._fast if t.name == TASK_NAME]
-    assert len(tasks) == 1
-    assert tasks[0].kind == "internal" and tasks[0].interval == 45
-    # 黄金法则 1: 重复 start 幂等(has_named), 不重复入队
-    mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
-    assert len([t for t in mgr.task_queue._fast if t.name == TASK_NAME]) == 1
-
-
-def test_sample_task_not_registered_when_disabled(tmp_path):
-    """enabled=false 与键组缺省(None)两种情形 -> start 均不建任务(零开销)"""
-    for qb in (QbTraffic(enabled=False), None):
+    """采样**不进队列**: enabled=true / enabled=false / 键组缺省(None) 三种情形启动后队列零任务"""
+    for qb in (QbTraffic(enabled=True, sample_interval=45), QbTraffic(enabled=False), None):
         mgr = _mgr_with_traffic(tmp_path, qb)
         mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
-        assert all(t.name != TASK_NAME for t in mgr.task_queue._fast), qb
+        assert mgr.task_queue._fast == [], (qb, [t.name for t in mgr.task_queue._fast])
 
 
-def test_sample_task_reregisters_on_queue_rebuilt(tmp_path):
-    """L2 队列整体重建 -> queue_rebuilt 相位按新配置重入队: 换 interval / 停用 / 启用三向"""
-    # 已启用 -> 重建后 interval 取新值(新任务对象)
+def test_sample_not_starved_by_immediate_task_backlog(tmp_path, monkeypatch):
+    """回归主判据(issue 26-10-16-0954): 数百个立即到期任务占满队列(重启/热重载补建同形,
+    配额 20 个/拍)时, 采样**每拍照常产样** —— 修复前它排在队列里, 排水窗内一次都轮不到
+    (实测 7/7 复现 37~55s 静默, 1.5s 档丢约 36 轮)。判据走真实任务线入口, 排水未完成期间
+    每一拍都必须采到。"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.config.main_tick = 30.0  # 采样节拍 = 1 个主循环拍(每拍都该采到)
+    mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    old = next(t for t in mgr.task_queue._fast if t.name == TASK_NAME)
-    mgr.config.qb_traffic.sample_interval = 60
-    mgr.task_queue = TaskQueue()  # 模拟 L2: 队列整体替换(setter 落回 ctx)
-    mgr.events.emit("queue_rebuilt")
-    tasks = [t for t in mgr.task_queue._fast if t.name == TASK_NAME]
-    assert len(tasks) == 1 and tasks[0].interval == 60 and tasks[0] is not old
-    # 停用 -> 重建后不回到新队列
+    rounds = _spy_sample_rounds(monkeypatch, clock)
+    executed = _add_backlog(mgr, 500)  # 500 个立即到期任务: 20/拍 -> 25 拍才排空
+    for _ in range(20):  # 排水窗全程(20 拍只排掉 400 个)
+        clock.advance(30)
+        mgr._task_line(dry_run=False)
+    assert len(rounds) == 20, f"排水窗内采样被饿死: 只采到 {len(rounds)} 轮(期望 20)"
+    # 判据自检: 积压确实尚未排空(否则本用例没落在被饿死的窗口里)
+    assert len(executed) == 400, f"本拍排空量偏离配额: {len(executed)}"
+
+
+def test_sample_clock_line_gate_and_hot_reload_enable(tmp_path, monkeypatch):
+    """时钟线到期闸门 + 启停: 未到 effective interval 不重复采; 停用零采样; 热重载
+    enabled=true **不经 queue_rebuilt 相位**即开采(采样已与队列解耦)"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.config.main_tick = 2.0  # 时钟线每 2s 一拍, 采样间隔 30s -> 闸门只在到点放行
+    mgr.store.server_state = _ss()
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    rounds = _spy_sample_rounds(monkeypatch, clock)
+    mod.on_task_line(False)
+    assert len(rounds) == 1 and mod._effective_interval == 30  # 首拍即采(启动语义)
+    mod.on_task_line(False)  # 同秒再拍两次: 未到点
+    mod.on_task_line(False)
+    assert len(rounds) == 1
+    clock.advance(30)
+    mod.on_task_line(False)
+    assert len(rounds) == 2  # 到点再采
+    # 停用: 零采样(到期点不动 -> 重新启用后首拍即采)
     mgr.config.qb_traffic.enabled = False
-    mgr.task_queue = TaskQueue()
-    mgr.events.emit("queue_rebuilt")
-    assert all(t.name != TASK_NAME for t in mgr.task_queue._fast)
-    # 未启用 -> 重建后起任务(热重载改 enabled=true 后经相位自然启用, plan §03.1)
-    mgr2 = _mgr_with_traffic(tmp_path, None)
-    mgr2.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30)
-    mgr2.task_queue = TaskQueue()
-    mgr2.events.emit("queue_rebuilt")
-    assert [t.name for t in mgr2.task_queue._fast] == [TASK_NAME]
+    clock.advance(30)
+    mod.on_task_line(False)
+    assert len(rounds) == 2 and mgr.task_queue._fast == []
+    # 热重载启用: 直接改配置即开采(不依赖队列重建相位)
+    mgr.config.qb_traffic.enabled = True
+    mod.on_task_line(False)
+    assert len(rounds) == 3
 
 
 # ---------- 采样语义(P1 验收判据) ----------
 def test_sampling_runs_on_caller_thread(tmp_path, monkeypatch):
-    """单写线程不变式: 采样在调用 run_due 的线程(= 主循环线程)内同步完成, 模块不创建线程"""
+    """单写线程不变式: 采样在调用时钟线钩子的线程(= 主循环线程)内同步完成, 模块不创建线程"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    mod.start(mgr.ctx, dry_run=False)  # 新任务立即到期
+    mod.start(mgr.ctx, dry_run=False)
     seen = {}
     orig = TrafficSampleModule.sample_series
 
@@ -495,8 +539,8 @@ def test_sampling_runs_on_caller_thread(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TrafficSampleModule, "sample_series", spy)
     threads_before = threading.active_count()
-    assert mgr.task_queue.run_due(max_tasks=10) == 1
-    assert seen["ident"] == threading.get_ident()  # 采样点产出线程 == 跑队列的线程
+    mod.on_task_line(force=False)  # 宿主经任务线钩子调采样(首拍即采)
+    assert seen["ident"] == threading.get_ident()  # 采样点产出线程 == 跑钩子的线程
     assert threading.active_count() == threads_before  # 模块未创建任何线程
 
 
@@ -505,8 +549,7 @@ def test_first_sample_only_establishes_baseline(tmp_path):
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    p1 = _run_sample(mgr)
-    assert p1 is True
+    _run_sample(mgr)  # 采样体无返回值(已非队列 handler; issue 26-10-16-0954)
     g1 = mod.latest[GLOBAL_SERIES_KEY]
     assert g1.dl_inc is None and g1.up_inc is None  # 首窗 null
     assert g1.dl_rate == 1024 and g1.up_rate == 2048  # 速率直采
@@ -602,13 +645,13 @@ def test_torrent_active_filter_zero_rows_when_idle(tmp_path):
 
 
 def test_disabled_at_runtime_handler_noop(tmp_path):
-    """运行期关闭(L0 换对象, 队列未重建): handler 短路不采样不动内存, 任务保留"""
+    """运行期关闭(L0 换对象): 采样体入口现读判据 -> 短路不采样不动内存(与队列无关)"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     mgr.config.qb_traffic = QbTraffic(enabled=False)
-    assert _run_sample(mgr) is True  # 任务保留(REQUEUE)
+    _run_sample(mgr)
     assert mod.latest == {} and mod._baselines == {}  # 零采样零内存变更
 
 
@@ -951,14 +994,13 @@ def test_restart_loses_at_most_one_open_run(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)  # t0+60: 推进(未封口, 随进程消失)
     mod2 = TrafficSampleModule(mgr.ctx)  # 重启: 新实例, buffers/_open_runs 全空
-    task2 = Task("internal", TASK_NAME, interval=30, handler=mod2.handle_traffic_sample)
     for _ in range(3):  # t0+90..t0+150: 零样本重新开游程(跨 flush 时点不封 —— 空闲块不关)
         clock.advance(30)
-        mod2.handle_traffic_sample(task2, dry_run=False)
+        mod2.handle_traffic_sample(dry_run=False)
     assert GLOBAL_SERIES_KEY in mod2._open_runs
     mgr.store.server_state = _ss(alltime_dl=10_000_100, alltime_ul=20_000_100)  # 恢复传输(非 z 事件)
     clock.advance(30)  # t0+180: 封 z(4 槽) + r
-    mod2.handle_traffic_sample(task2, dry_run=False)
+    mod2.handle_traffic_sample(dry_run=False)
     mod2._flush_all_series()
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert len(parsed.blocks) == 2  # 重启前后各一块(重启 = 新块首)
@@ -1103,25 +1145,27 @@ def test_clock_rollback_clamped_dt_min_1(tmp_path, monkeypatch):
 
 
 # ---------- C1 热重载联动 + 跨天切块 + 缓冲闸 + stop 钩子(§3.4/§3.5) ----------
-def test_interval_change_hot_reload_new_block_and_task_interval(tmp_path, monkeypatch):
-    """热重载改采样率即时生效(§3.5): handler 现读 -> task.interval 回写 + 旧块落盘(旧
-    interval) + 新块带新 interval —— 新旧数据分块各有 interval(A3 根因闭合)"""
+def test_interval_change_hot_reload_new_block_and_effective_interval(tmp_path, monkeypatch):
+    """热重载改采样率即时生效(§3.5): 采样体现读 -> _effective_interval 更新 + 旧块落盘(旧
+    interval) + 新块带新 interval —— 新旧数据分块各有 interval(A3 根因闭合)。
+    !节拍表达已随 issue 26-10-16-0954 从「回写 task.interval」改为时钟线自持
+    (_next_sample_at), 故断言 _effective_interval(节拍与块头共用同一单点)"""
     clock = _Clock()
     monkeypatch.setattr(ts_mod, "time", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    task = Task("internal", TASK_NAME, interval=30, handler=mod.handle_traffic_sample)
-    mod.handle_traffic_sample(task, dry_run=False)  # t0: r 进缓冲(interval 30)
+    mod.handle_traffic_sample(dry_run=False)  # t0: r 进缓冲(interval 30)
     clock.advance(30)
     mgr.config.qb_traffic.sample_interval = 10
-    mod.handle_traffic_sample(task, dry_run=False)  # t0+30: 检测变化 -> 关旧块 + 回写 task.interval
-    assert task.interval == 10  # A3: 直接改运行中任务的间隔
+    mod.handle_traffic_sample(dry_run=False)  # t0+30: 检测变化 -> 关旧块 + 记新节拍
+    assert mod._effective_interval == 10  # A3: 现读生效
+    assert mod._next_sample_at == clock.now + 10  # 下一到期点随新节拍推进
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 30  # 旧块随关块落盘(旧 interval)
     assert [type(r) for r in parsed.blocks[0].records] == [V4Sample]
     clock.advance(10)
-    mod.handle_traffic_sample(task, dry_run=False)  # t0+40: 新块(新 interval)
+    mod.handle_traffic_sample(dry_run=False)  # t0+40: 新块(新 interval)
     _flush(mod)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert len(parsed.blocks) == 2
@@ -1131,44 +1175,42 @@ def test_interval_change_hot_reload_new_block_and_task_interval(tmp_path, monkey
 
 
 def test_interval_mismatch_ceils_and_warns_once(tmp_path, monkeypatch):
-    """运行期失配(D5): 向上取整到下一倍数(main_tick=2 配 3s -> 4s, task.interval=取整值) +
-    告警一次(防重复); 配置再变记忆复位; 不拒采"""
+    """运行期失配(D5): 向上取整到下一倍数(main_tick=2 配 3s -> 4s, _effective_interval=取整值)
+    + 告警一次(防重复); 配置再变记忆复位; 不拒采"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=3))
     mgr.config.main_tick = 2.0  # FakeConfig 缺省 1.0; 显式置 2 构造失配场景
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    task = Task("internal", TASK_NAME, interval=3, handler=mod.handle_traffic_sample)
     with _ModuleLogCapture() as cap:
-        assert mod.handle_traffic_sample(task, dry_run=False) is True  # 不拒采
-    assert task.interval == 4  # ceil(3/2) x 2 = 4(颗粒变粗不断线)
+        mod.handle_traffic_sample(dry_run=False)  # 不拒采
+    assert mod._effective_interval == 4  # ceil(3/2) x 2 = 4(颗粒变粗不断线)
     assert "取整" in cap.text and "整数倍" in cap.text  # 恰一次告警
     with _ModuleLogCapture() as cap2:
-        mod.handle_traffic_sample(task, dry_run=False)
+        mod.handle_traffic_sample(dry_run=False)
     assert "取整" not in cap2.text  # 同一失配不重复告警
     # 配置变化 -> 记忆复位: 新失配再告警一次
     mgr.config.qb_traffic.sample_interval = 5  # ceil(2.5) x 2 = 6
     with _ModuleLogCapture() as cap3:
-        mod.handle_traffic_sample(task, dry_run=False)
-    assert task.interval == 6 and "取整" in cap3.text
+        mod.handle_traffic_sample(dry_run=False)
+    assert mod._effective_interval == 6 and "取整" in cap3.text
 
 
 def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
-    """整数倍匹配的小数档原样生效(2026-10-05 修复): main_tick=1.5 配 1.5s -> task.interval
-    == 1.5(不再被整数秒口径静默抬到 2), 块头 interval_s == 1.5(B 行写 1.5), 失配告警不
-    触发; 同块两记录标称 1.5s 推进零漂移(r 行不写显式 dt)"""
+    """整数倍匹配的小数档原样生效(2026-10-05 修复): main_tick=1.5 配 1.5s ->
+    _effective_interval == 1.5(不再被整数秒口径静默抬到 2), 块头 interval_s == 1.5(B 行写
+    1.5), 失配告警不触发; 同块两记录标称 1.5s 推进零漂移(r 行不写显式 dt)"""
     clock = _Clock()
     monkeypatch.setattr(ts_mod, "time", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=1.5))
     mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式对齐构造匹配小数档
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    task = Task("internal", TASK_NAME, interval=1.5, handler=mod.handle_traffic_sample)
     with _ModuleLogCapture() as cap:
-        mod.handle_traffic_sample(task, dry_run=False)  # t0: 块首 r
-    assert task.interval == 1.5 and mod._effective_interval == 1.5
+        mod.handle_traffic_sample(dry_run=False)  # t0: 块首 r
+    assert mod._effective_interval == 1.5
     assert "取整" not in cap.text  # 整数倍匹配: 失配告警不触发
     clock.advance(1.5)
-    mod.handle_traffic_sample(task, dry_run=False)  # t0+1.5: 同块续写
+    mod.handle_traffic_sample(dry_run=False)  # t0+1.5: 同块续写
     _flush(mod)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 1.5
@@ -1249,10 +1291,9 @@ def test_buffer_slot_cap_3600_early_flush(tmp_path, monkeypatch):
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=1, flush_interval=10**9))
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    task = Task("internal", TASK_NAME, interval=1, handler=mod.handle_traffic_sample)
     for _ in range(V4_BUFFER_SLOT_CAP):  # 3600 轮活跃: 第 3600 槽触发提前 flush(驱动永不触发)
         clock.advance(1)
-        mod.handle_traffic_sample(task, dry_run=False)
+        mod.handle_traffic_sample(dry_run=False)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert parsed is not None and len(parsed.blocks) == 1
     assert len(parsed.blocks[0].records) == V4_BUFFER_SLOT_CAP  # 恰在闸值落盘
@@ -1260,7 +1301,7 @@ def test_buffer_slot_cap_3600_early_flush(tmp_path, monkeypatch):
     assert buf.records == [] and buf.start_epoch is None  # v4: 带 r 行的块随闸值 flush 关闭
     for _ in range(3):
         clock.advance(1)
-        mod.handle_traffic_sample(task, dry_run=False)
+        mod.handle_traffic_sample(dry_run=False)
     _flush(mod)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
     assert len(parsed.blocks) == 2 and len(parsed.blocks[1].records) == 3  # 新块续采(自带新块头)
@@ -1902,7 +1943,6 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
     mgr.store.server_state = _ss(dl_info_speed=1024, up_info_speed=512)
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    task = Task("internal", TASK_NAME, interval=sample_interval, handler=mod.handle_traffic_sample)
     counts = {"day0": 0, "day1": 0, "agg": 0}
     day0_suffix = v4_epoch_date_str(day0) + ".dat"
     real_open = open
@@ -1922,7 +1962,7 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
     monkeypatch.setattr("builtins.open", counting_open)
     for i in range(86400 // sample_interval + 1):  # 含午夜样本(t = day0+86400, 属次日)
         t["now"] = day0 + i * sample_interval
-        assert mod.handle_traffic_sample(task, dry_run=False) is True
+        mod.handle_traffic_sample(dry_run=False)
     return mod, counts
 
 

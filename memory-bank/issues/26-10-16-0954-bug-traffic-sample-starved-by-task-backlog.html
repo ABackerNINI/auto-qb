@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-0954">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="taskqueue-periodic-starvation">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-16-backend-taskqueue-sample-starvation.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线">
 <meta name="issue-summary" content="full_round 补建数百个立即到期任务占满 20 个/tick 配额; 采样首轮后 next_run 恒晚于补建批次, 七次重启全部复现 37~55s 静默">
 <title>重启补建积压饿死 qb_traffic 采样约 54 秒: 1.5s 采样丢约 36 轮, P2 摊配把静默粉饰成平线 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-sample-starved-by-task-backlog</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -209,6 +209,7 @@ qb_traffic:
       <li><b>治本但需评估</b>：补建任务的 <code>next_run</code> 按索引<b>均摊到未来一个 interval</b>，不再同一毫秒全部到期 —— 保留「首轮收敛」语义。代价：<code>external_tag_changes</code> 的「首轮全量收敛」契约依赖「立即到期」，需一并论证（日志里那条 <code>issue 26-10-01-2147</code> 的 L2 重建语义也在同一面上）。</li>
     </ol>
     <p class="hint">建议优先级：本条是本轮五个问题里唯一<b>每次重启必然复现、且持续产出虚假平线</b>的一条，建议标 P1。</p>
+    <p><b>实修期对建议修法 #2 的纠正（2026-10-16 认领后）</b>：按字面「<b>各 kind 各取一次</b>」<b>修不好本例</b> —— 采样（<code>kind=internal</code>，无 hash）与补建的内置 maintenance（<code>kind=internal</code>，带 hash）<b>同属一个 kind</b>，保底的那 1 个 internal 名额会被 <code>next_run</code> 更早的补建任务拿走，采样仍轮不到。要生效必须细化成「<b>无 hash 的全局任务</b>保底」（全队列仅 ≈6 条：采样/删标/限速曲线）。原文保留于此，实际走 #1。</p>
 </section>
 
   <section id="s7">
@@ -217,12 +218,26 @@ qb_traffic:
       <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-16 09:54 — 来源：分析 08:16 重启峰值时发现 <code>z,1,...,54356</code>；本轮只读取证（全部天文件扫描 + 日志 + 读码三方互证，未跑用例）</li>
       <li>2026-10-16 09:54 — 同轮排查结论：队列内其余周期任务的 interval 均 ≥ 60s，当前未被饿死（<code>delete_tags</code> 余量最小、<code>check</code> 轮询同构未实测），清单见 §03</li>
+      <li>2026-10-16 10:20 — 用户指派「认领并修复」→ 状态 <strong>In Progress</strong>；开工同步 <code>2f56cc4d</code>，复验见下</li>
+      <li>2026-10-16 10:51 — 修复完成、全量测试与红绿双验通过 → 状态 <strong>Done</strong>；实际修法/验证方式见「修复后补充」，测试数字唯一权威在基线切片 <code>memory-bank/testing/baselines/26-10-16-1051-*</code>（见 <code>commands run kb.baseline</code>）</li>
+      <li>2026-10-16 10:51 — 修法方向经用户拍板取 §06 #1（采样移出队列挂时钟线）；§06 #2 按字面不成立已就地纠正（原文保留）；§03 点名的同族任务（<code>check</code> 轮询 / <code>delete_tags</code>）本轮范围守恒未动，残留待拍板</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>2026-10-16 10:20 — 复验（develop @ <code>2f56cc4d</code>，未动码）：现象仍复现，机理逐位吻合。</b>
+    只读探针 <code>.openclaw/tmp/probe_verify_starvation.py</code>（未入库）用<b>真源码 <code>TaskQueue</code></b> 重放启动场景：主循环 1.5s/拍、<code>max_tasks_per_tick=20</code>，先注册 1.5s 周期任务并让它跑成首轮，同 tick 再补建 400 个立即到期任务（<code>interval=60s</code>，内置 maintenance 同形）⇒ <b>周期任务首轮后静默 31.500s、丢 21 轮</b>（公式 <code>⌈400/20⌉×1.5s = 30s</code> + 1 轮补位）；映射到 issue 记的 183 种子（任务数数百）即 37~55s，量级与现场一致。
+    锚点复核（行号零漂移）：<code>taskqueue.py</code> <code>add_task</code>（:130 入队即 <code>next_run=now</code>）/ <code>_pop_due</code>（:217 严格 <code>next_run</code> 升序 + <code>max_tasks</code> 计数）/ <code>_requeue</code>（:235 <code>next_run = now + interval</code>）与 <code>Task.__slots__</code>（:36-50，<b>无 priority 字段</b>）—— 全部原样在。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
-</section>
+    <p><b>实际修法（走建议修法 #1）</b>：<code>src/auto_qb/core/modules/traffic_sample_mod.py</code> —— 采样<b>从 <code>TaskQueue</code> 移出</b>，改挂<b>时钟线钩子</b> <code>on_task_line</code>（任务线节拍，每 <code>main_tick</code> 一次，<b>不受 <code>max_tasks_per_tick</code> 约束、不参与队列排序</b>）：</p>
+    <ul>
+      <li>钩子只做<b>到期闸门</b>（<code>_next_sample_at is None or now &gt;= _next_sample_at</code> 才放行），采样体 <code>handle_traffic_sample(dry_run)</code> 收尾自持下一到期点 <code>_next_sample_at = now + effective</code>；</li>
+      <li>删除全局任务注册 <code>_register_task</code> / <code>queue_rebuilt</code> 订阅 / <code>TASK_NAME</code> 常量；<code>_apply_interval(conf, task) -&gt; _apply_interval(conf) -&gt; float</code>（去掉 <code>task.interval</code> 回写，节拍改由 <code>_next_sample_at</code> 表达）；</li>
+      <li>启停与热重载不再依赖队列重建相位（采样体入口现读 <code>conf.enabled</code>，<code>enabled=true</code> 即时开采）；<code>enabled=false</code> 仍零文件零目录零请求（黄金法则 2）；</li>
+      <li><b>量化口径逐字不变</b>：<code>effective = ceil(sample_interval/main_tick)×main_tick</code>，块头 <code>interval_s</code> 与读侧消费口径不受影响（坑档 <code>pitfalls/backend/task-interval-tick-quantization.md</code> 条目①仍成立，同文件新增条目②记本条）；</li>
+      <li>为什么挂任务线而非同步线：同步线节拍可能细于 <code>main_tick</code>（默认 1.5s &lt; 2s），会把采样节拍量化到 3s，与块头 <code>interval_s</code> 语义冲突；采样节拍的单位本就是 <code>main_tick</code>（配置硬校验 <code>sample_interval &gt;= main_tick</code>）。</li>
+    </ul>
+    <p><b>验证方式</b>：①回归主判据 <code>test_sample_not_starved_by_immediate_task_backlog</code> —— 500 个立即到期任务占满队列，走<b>真实 <code>_task_line</code> 入口</b>连打 20 拍：采样 <b>20/20 轮全采到</b>，且积压按配额原速排水（断言 <code>executed == 400</code>，证明采样不再占作业配额）；②<code>test_sample_clock_line_gate_and_hot_reload_enable</code>（未到点不重复采 / 停用零采样 / 热重载启用不经队列重建）；③<code>test_sample_task_registered_when_enabled</code> 改为断言<b>队列零任务</b>；④红绿双验三类突变判红后字节恒等还原复绿 —— 钩子不驱动采样(4 红) / 闸门失效(1 红) / <b>采样注册回队列的修复前形态</b>(1 红)。测试数字见 <code>commands run kb.baseline</code>（基线切片），不在此手抄。</p>
+    <p><b>残留（本轮有意未动，待拍板）</b>：§03 点名的 <code>check:check-checking-result</code> / <code>check-wait</code>(2.0s) 与 <code>delete_tags</code>(60s) 仍在队列里，理论上可被同一机制饿死 —— 判据（「传感器」还是「作业」）已写进坑档条目②，是否跟进由用户定。</p>
+  </section>
 
   <footer>
     26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕

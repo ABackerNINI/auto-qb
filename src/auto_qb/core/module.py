@@ -174,12 +174,15 @@ class BaseModule:
         return ApplyResult(self.name, status)
 
     def register_global_tasks(self, ctx: "AppContext", specs: list) -> int:
-        """全局任务自注册样板单点: speed_curve / maintenance / traffic_sample 三处同骨架
+        """全局任务自注册样板单点: speed_curve / maintenance 两处同骨架
+
+        (traffic_sample 原为第三处, 已按 issue 26-10-16-0954 移出队列改挂时钟线钩子
+        on_task_line —— 采样零 qB 请求, 不该占 max_tasks_per_tick 的请求预算面。)
 
         队列引用现取 ctx.task_queue(L2 重建后 manager 委托落回 ctx, 不存在旧队列);
         已在当前队列的同名任务幂等跳过(黄金法则 1, 判据单点 TaskQueue.has_named);
         「未启用不建任务」判定留给调用方(各模块配置形状不同)。specs = (任务名, handler,
-        interval) 序列, 实际入队数返回; 有入队记一条「创建全局任务 N 个」日志(三处原
+        interval) 序列, 实际入队数返回; 有入队记一条「创建全局任务 N 个」日志(两处原
         日志格式一致, maintenance 双任务聚一条由本单点统一承载)。
         """
         queue = ctx.task_queue

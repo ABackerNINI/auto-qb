@@ -93,8 +93,7 @@ import pytest
 
 import auto_qb.core.traffic_store as traffic_store_module
 from auto_qb.config import QbTraffic
-from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY, TASK_NAME
-from auto_qb.core.taskqueue import Task
+from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY
 from auto_qb.core.traffic_store import (
     DRIFT_TOL_MS,
     DT_MS_MAX,
@@ -179,10 +178,9 @@ def _mgr(tmp_path, qb_traffic, data_dir=True) -> object:
     return mgr
 
 
-def _run_sample(mgr, dry_run=False) -> bool:
-    mod = mgr.host.get("qb_traffic")
-    task = Task("internal", TASK_NAME, interval=30, handler=mod.handle_traffic_sample)
-    return mod.handle_traffic_sample(task, dry_run=dry_run)
+def _run_sample(mgr, dry_run=False) -> None:
+    """直调一轮采样(时钟线钩子的执行体; issue 26-10-16-0954 起采样不在队列里)"""
+    mgr.host.get("qb_traffic").handle_traffic_sample(dry_run=dry_run)
 
 
 def _write_dat(path, lines) -> None:
@@ -245,10 +243,10 @@ def test_handler_writes_v4_only_no_legacy_side_effects(tmp_path, monkeypatch):
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    assert _run_sample(mgr) is True
+    assert _run_sample(mgr) is None
     mgr.client = None  # 断连轮: 照常记 n 槽(生命周期判定已退役, 无 stale 快照误判面)
     t["now"] = H1 + 130.0
-    assert _run_sample(mgr) is True
+    _run_sample(mgr)
     assert mod._open_runs[GLOBAL_SERIES_KEY].kind == "n"
     assert not (tmp_path / "qb-traffic").exists()  # 旧目录零文件零目录
     mod.stop()  # 优雅收尾: 封 n 游程 + 落 v4
@@ -265,7 +263,7 @@ def test_handler_dry_run_persists_nothing(tmp_path):
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
-    assert _run_sample(mgr, dry_run=True) is True
+    _run_sample(mgr, dry_run=True)
     assert mod.latest != {}  # 采样照常进内存
     assert not (tmp_path / "qb-traffic").exists() and not (tmp_path / TRAFFIC_V4_DIR_NAME).exists()
 
@@ -278,20 +276,20 @@ def test_empty_data_dir_persists_nothing(tmp_path, monkeypatch):
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    assert _run_sample(mgr) is True
+    _run_sample(mgr)
     assert mod.latest != {}
     assert sorted(str(p) for p in tmp_path.rglob("*")) == []
 
 
 def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
-    """单写线程不变式: 全部 v4 批量落盘(TrafficV4Store.append_records)发生在调用 run_due
+    """单写线程不变式: 全部 v4 批量落盘(TrafficV4Store.append_records)发生在调时钟线钩子
     的线程(= 主循环线程)内, 模块不建线程(黄金法则 5)"""
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    mod._last_flush = time.time() - 601  # 预置过期: 本轮 handler 内 flush 驱动即触发
+    mod._last_flush = time.time() - 601  # 预置过期: 本轮采样内 flush 驱动即触发
     seen = []
     real = TrafficV4Store.append_records
 
@@ -301,7 +299,7 @@ def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TrafficV4Store, "append_records", spy)
     threads_before = threading.active_count()
-    assert mgr.task_queue.run_due(max_tasks=10) == 1
+    mod.on_task_line(force=False)  # 宿主经任务线钩子调采样(首拍即采)
     assert {k for k, _ in seen} == {"global", "torrent:HASH123"}
     assert all(ident == threading.get_ident() for _, ident in seen)
     assert threading.active_count() == threads_before
@@ -349,7 +347,7 @@ def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
     # 同 hash 重加(活跃, 计数器推进) -> 续写
     seed_store(mgr, [_active_torrent(downloaded=6_000_000, uploaded=4_000_000)])
     t["now"] = H1 + 220.0
-    assert _run_sample(mgr) is True
+    _run_sample(mgr)
     mod._flush_all_series()
     recs = parse_v4_day_text(_read_text(tpath)).blocks[0].records
     assert len(recs) == 2 and all(isinstance(r, V4Sample) for r in recs)  # 历史保留 + 续写
@@ -367,7 +365,7 @@ def test_handler_dry_run_skips_store_construction(tmp_path, monkeypatch):
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
     mgr.store.by_hash.pop("HASH123")
-    assert _run_sample(mgr, dry_run=True) is True
+    _run_sample(mgr, dry_run=True)
     assert mod._v4store is None  # v4 存储层未构造
     assert not (tmp_path / TRAFFIC_V4_DIR_NAME).exists()  # v4 侧零文件
     assert not (tmp_path / "qb-traffic").exists()  # 旧目录零动作(R2 留存不读)

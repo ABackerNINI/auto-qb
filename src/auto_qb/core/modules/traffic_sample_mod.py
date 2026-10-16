@@ -6,6 +6,14 @@
   会话累计对); 速率非零 -> r 记录, (0,0) -> z 游程, 断连/缺字段 -> n 游程;
 - 单种(活跃过滤): record 六字段, 仅 dlspeed>0 or upspeed>0 才产 r; 零速/断连进 z/n 游程。
 
+调度位置(issue 26-10-16-0954 实修): 采样是**传感器, 不是作业** —— 全程只读内存快照、零 qB
+请求, 故不占任务队列(队列按 max_tasks_per_tick 限流的是 qB 请求预算面)。原先它作为
+internal 全局任务与种子级任务同队, 到期判据是严格的 next_run 升序: 重启/热重载的种子级
+任务补建(数百条立即到期)会把队列占满数十秒, 这期间 1.5s 采样一次都轮不到(实测 7/7 复现
+37~55s 静默), 真实增长被压进单条记录的 dt, 读侧摊配成平线。改为挂**时钟线钩子**
+on_task_line(任务线节拍, 每 main_tick 一次, 不受配额约束、不参与队列排序), 到期判定自持:
+_next_sample_at = 上次采样时刻 + effective interval, 节拍口径与原先队列 interval 逐字一致。
+
 写侧(§03 + v4 §01): 采样点不再逐行落盘, 进内存 BlockBuffer(每系列一个), 每 flush_interval
 (默认 600s, handler 内计时)批量追加落盘到 <data_dir>/qb-traffic-v4/<系列>/<YYYY-MM-DD>.dat
 (v4 块头基线 delta 格式: B 行携带块基线, r/z 行存相对基线的 delta, 内存 totals 恒绝对值;
@@ -118,23 +126,30 @@ qbmanager 的 finally 与 state.save 顺序不改。
 - dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
   stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
-C1 生效与热重载联动(§3.5): handler 每轮现读 sample_interval 与 main_tick, 失配向上取整
+C1 生效与热重载联动(§3.5): 采样体每轮现读 sample_interval 与 main_tick, 失配向上取整
 到 main_tick 下一倍数 + 告警一次(D5: logger.warning + 已告警记忆防重复, 配置变化时记忆
 复位), 不拒采; 整数倍匹配的小数档(1.5s 配 main_tick=1.5s)原样生效 —— 块头 interval_s
 允许小数秒(2026-10-05 起; 修复小数档被整数秒口径静默抬到下一整秒)。
-检测 sample_interval 变化 -> 直接改 task.interval + 关闭全部现块(旧块落盘, 新块带新
+检测 sample_interval 变化 -> 记新的 effective interval + 关闭全部现块(旧块落盘, 新块带新
 interval —— 新旧数据分块各有 interval); main_tick 每轮现读无需联动。
+!issue 26-10-16-0954: 节拍不再靠「回写 task.interval」表达(采样已不在队列里), 改由时钟线
+钩子按 effective interval 自持到期判定 —— 量化口径(ceil 到 main_tick 倍数)与块头 interval_s
+语义逐字不变, 故读侧消费口径(栅格桶宽/窗口切分, 见 pitfalls/backend/task-interval-tick-
+quantization.md)不受影响。
 
 生命周期判定(S3 的 v2 注册表面)已随 S5 删除: v3 冻结语义 = 删种即不再产新块(不在
 by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
 
-线程模型(黄金法则 5): handler 由 TaskQueue 在主循环线程执行, buffers/baselines/latest/
-游程全部只在该线程读写, 无锁; 模块自身不创建任何线程; 全部落盘写在 handler 调用链内。
-活尾快照 live_tail(S6 验收追加)每轮 handler 末尾构建不可变 LiveTail 表整体替换引用,
-Web 线程只读单引用无锁(ctx.web.set_traffic_view 同款快照发布先例)。
+线程模型(黄金法则 5): 采样体由时钟线钩子 on_task_line 在主循环线程执行(任务线节拍内,
+队列 run_due 之后), buffers/baselines/latest/游程全部只在该线程读写, 无锁; 模块自身不
+创建任何线程; 全部落盘写在采样调用链内。
+活尾快照 live_tail(S6 验收追加)每轮采样末尾构建不可变 LiveTail 表整体替换引用, Web 线程
+只读单引用无锁(ctx.web.set_traffic_view 同款快照发布先例; 读侧 traffic_qb 按请求现取该
+引用, 故与视图发布先后无关)。
 
-配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。任务自注册仿 speed_curve;
-热重载 enabled=true 经 queue_rebuilt 相位自然起任务; 运行期关闭 handler 短路。
+配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。启用/停用与热重载全由采样体入口
+现读判据承担(enabled=true 即时开采、运行期关闭即时短路), 不依赖队列重建相位; 未启用零
+文件零目录零请求(每 main_tick 一次配置现读后短路)。
 """
 import logging
 import math
@@ -144,7 +159,6 @@ from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from ..module import AppContext, BaseModule
-from ..taskqueue import REQUEUE, Task
 from ..traffic_limits import SpeedLimitRecorder
 from ..traffic_store import (
     DRIFT_TOL_MS,
@@ -167,9 +181,6 @@ from ..traffic_store import (
 )
 
 logger = logging.getLogger(__name__)
-
-#: 全局任务名(与模块名区分: 任务是采样动作, 模块是功能域)
-TASK_NAME = "qb_traffic_sample"
 
 #: 全局系列键(对应流量存储 global/ 目录的系列标识)
 GLOBAL_SERIES_KEY = "global"
@@ -398,6 +409,9 @@ class TrafficSampleModule(BaseModule):
         self._last_flush: Optional[float] = None
         # 当前生效采样间隔(浮点秒, C1 失配归倍数后; 块头 interval 列口径, 允许小数秒)
         self._effective_interval: Optional[float] = None
+        # 下一次采样到期点(时钟线钩子 on_task_line 的闸门判据; None = 首拍即采)
+        # issue 26-10-16-0954: 采样已不在队列里, 到期判定自持(原先由 TaskQueue.next_run 承担)
+        self._next_sample_at: Optional[float] = None
         # 失配告警记忆键(sample_interval, main_tick): 配置对变化时复位(同配对只告警一次, D5)
         self._interval_signature: Optional[tuple] = None
         self._ratio_warned: bool = False
@@ -424,7 +438,7 @@ class TrafficSampleModule(BaseModule):
         # ---- 活尾快照(S6 验收追加) ----
         # 系列键 -> LiveTail(未落盘 buffer 记录 + 开放游程的当轮冻结副本): handler 末尾
         # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
-        # 先例; 黄金法则 5 不破 —— 快照只读, 写仍单点在 handler 调用链内)
+        # 先例; 黄金法则 5 不破 —— 快照只读, 写仍单点在采样调用链内)
         self.live_tail: dict = {}
         # ---- 限速历史记录器(plan 26-10-12-0535 D2) ----
         # 主循环线程独占, _sample_global 顺带观测; data_dir 为空 = 禁用(observe 内防御);
@@ -434,43 +448,48 @@ class TrafficSampleModule(BaseModule):
     def sections(self) -> tuple[str, ...]:
         return ("qb_traffic", )
 
-    # ---------- 生命周期与相位 ----------
+    # ---------- 生命周期 ----------
 
     def start(self, ctx: AppContext, dry_run: bool) -> None:
         self._persistence_on = not dry_run  # dry_run 全程零落盘(含 stop 钩子短路)
-        self._register_task(ctx)
+        self._next_sample_at = None  # 进程首拍即采(对齐原先「任务注册即到期」的启动语义)
         if not dry_run:
             # 聚合恢复 + catch-up(§4.3, 先于任何采样/flush; 含恢复末尾的 hour 裁剪 ——
             # 硬序: catch-up 先于裁剪)。dry_run 跳过(catch-up 有写, 恢复无内存意义)。
             self._recover_aggregates()
 
-    def subscribe(self, phases) -> None:
-        phases.on("queue_rebuilt", self._on_queue_rebuilt)
+    # ---------- 时钟线(任务线节拍): 采样驱动 ----------
 
-    def _on_queue_rebuilt(self, event) -> None:
-        """L2 热重载整体重建队列后重新入队: 新队列按新配置起任务(含 enabled=true 后自然启用)"""
-        self._register_task(self._ctx)
+    def on_task_line(self, force: bool) -> None:
+        """时钟线钩子(可选扩展点, 见 module.Module 契约): 每 main_tick 一拍被宿主调用,
+        只做一件事 —— 到期闸门(未到 _next_sample_at 直接返回), 到点交采样体。
 
-    def _register_task(self, ctx: AppContext) -> None:
-        """采样任务自注册(骨架走 BaseModule.register_global_tasks 单点): enabled=false
-        (含段缺省 None)不建任务零开销(黄金法则 2) —— 判定在调用方。"""
-        conf = ctx.config.qb_traffic
-        if conf is None or not conf.enabled:  # 未启用: 不建任务不建目录零文件
+        !与同线其它钩子(webui 视图发布)无先后依赖: 本钩子只更新内存态(buffers/游程/
+        live_tail), 读侧按请求现取 live_tail 引用, 视图何时发布都不影响采样可见性。
+        异常口径与其余 loop hooks 一致(无隔离, 异常上抛主循环兜底)。
+        """
+        now = time.time()
+        if self._next_sample_at is not None and now < self._next_sample_at:
             return
-        self.register_global_tasks(ctx, [(TASK_NAME, self.handle_traffic_sample, conf.sample_interval)])
+        self.handle_traffic_sample(dry_run=not self._persistence_on)
 
-    # ---------- 全局任务执行体 ----------
+    # ---------- 采样体 ----------
 
-    def handle_traffic_sample(self, task: Task, dry_run: bool) -> bool:
-        """一轮采样: C1 间隔联动 + 两系列采样(游程纪律) + flush 驱动, 全在调用线程内"""
+    def handle_traffic_sample(self, dry_run: bool) -> None:
+        """一轮采样(时钟线到点调用; 测试可直调, 直调不受到期闸门约束): C1 间隔联动 +
+        两系列采样(游程纪律) + flush 驱动 + 活尾发布, 全在调用线程内。收尾把下一次到期点
+        推为 now + effective interval —— 时钟线据此把采样节拍量化到 main_tick 整数倍。
+        """
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled:
-            # 未启用/运行期被热重载关闭: 本轮不采样不动内存不落盘(任务保留, L2 重建时按新配置重注册)
-            return REQUEUE
+            # 未启用/运行期被热重载关闭: 本轮不采样不动内存不落盘零请求(黄金法则 2);
+            # 到期点不动 —— 重新启用后首拍即采
+            return
         self._persistence_on = not dry_run  # dry_run 同口径不落盘(观测写盘属真实副作用)
         now = time.time()
         self._round_keys.clear()
-        self._apply_interval(conf, task)  # C1(§3.5): 失配取整告警 + 采样率变化关块改 task.interval
+        effective = self._apply_interval(conf)  # C1(§3.5): 现读间隔 -> effective(失配告警 + 变化关块)
+        self._next_sample_at = now + effective
         store = self._ctx.store
         if store.client is None:
             # qB 断连(重连退避期, qbmanager 置 client=None): 快照 stale —— 全局出 n 游程槽
@@ -480,12 +499,11 @@ class TrafficSampleModule(BaseModule):
             logger.debug("流量采样 | qB 断连, 本轮全局记 n 游程槽")
             self._maybe_flush_all(conf, now)
             self._publish_live_tail()
-            return REQUEUE
+            return
         self._sample_global(store.server_state, now)
         self._sample_torrents(store, now)
         self._maybe_flush_all(conf, now)
         self._publish_live_tail()
-        return REQUEUE
 
     # ---------- 活尾快照发布(S6 验收追加) ----------
 
@@ -538,12 +556,15 @@ class TrafficSampleModule(BaseModule):
 
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
-    def _apply_interval(self, conf, task: Optional[Task]) -> None:
-        """采样间隔现读与联动(C1, §3.5): 失配向上取整到 main_tick 下一倍数 + 告警一次(D5),
-        不拒采; 整数倍匹配的小数档(如 1.5s 配 main_tick=1.5s)原样生效不取整 —— 块头
-        interval_s 允许小数秒(2026-10-05 起; 修复 1.5/1.5 被整数秒口径静默抬到 2s)。
-        sample_interval 变化 -> 直接改 task.interval + 关闭全部现块(旧块落盘, 新块带新
-        interval —— 新旧数据分块各有 interval, A3 根因闭合); main_tick 每轮现读。"""
+    def _apply_interval(self, conf) -> float:
+        """采样间隔现读与联动(C1, §3.5): 返回本轮生效间隔(失配向上取整到 main_tick 下一倍数
+        + 告警一次(D5), 不拒采; 整数倍匹配的小数档(如 1.5s 配 main_tick=1.5s)原样生效不
+        取整 —— 块头 interval_s 允许小数秒(2026-10-05 起; 修复 1.5/1.5 被整数秒口径静默
+        抬到 2s)。
+        sample_interval 变化 -> 关闭全部现块(旧块落盘, 新块带新 interval —— 新旧数据分块各有
+        interval, A3 根因闭合)+ 记新 effective; main_tick 每轮现读。调用方(采样体)据此把
+        下一次到期点推为 now + 返回值 —— issue 26-10-16-0954 起节拍由时钟线自持, 不再经
+        「回写 task.interval」表达(采样已不在队列里), 量化口径逐字不变。"""
         main_tick = float(getattr(self._ctx.config, "main_tick", 0.0) or 0.0)
         sample_interval = float(conf.sample_interval)
         if main_tick > 0:
@@ -568,8 +589,7 @@ class TrafficSampleModule(BaseModule):
             logger.info(f"流量采样 | 采样率变化 -> {effective:g}s: 关闭全部现块, 新数据分块带新 interval")
             self._effective_interval = effective
             self._close_blocks_for_interval_change()
-        if task is not None:
-            task.interval = effective  # 直接改运行中任务的间隔(A3: 注册时定死不跟 的修复点)
+        return effective
 
     def _close_blocks_for_interval_change(self) -> None:
         """采样率变化关块(§3.5): 开放块内游程先封口(记录入旧块), 旧块全量落盘并复位 ——
