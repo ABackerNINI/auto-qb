@@ -69,9 +69,16 @@
     ".drawer .dt05-group.folded .dt05-chev { transform:rotate(-90deg); }",
     ".drawer .dt05-group.folded .dt05-gbody { display:none; }",
     ".drawer .dt05-gbody { padding:3px 0 2px; }",
+    /* !表格几何变量(W2 口径, 06/11 先例): 本面行是**整宽容器** —— 横向内距 0, 行观感(8px
+     * 内缩 + 悬停带)由内容根 .dt05-rowin 自己承担 ⇒ 引擎列头必须同取该值。不声明
+     * --tbl-pad-x 时列头落到皮肤默认 14px, 而行内距在下面那条规则里是 0 ⇒ 列头首格比行内容根
+     * **右移 14px**(几何守阵 e2e/dt-table-layout-parity.spec.mjs「列头与值格同缘」2026-10-16
+     * CI 实测; 同一处偏移在 Windows 侧精确复现)。单点在此声明值, 行与列头都读它 ——
+     * 以后要改内距只动这一处, 不会再出现「只改行、列头留在旧值」。 */
+    ".drawer .dt05-list { --tbl-pad-x:0px; }",
     /* 行容器(引擎 .group-row)的变体个性(D5): 去引擎卡底, 行观感归内容根(.dt05-rowin) */
     ".drawer .dt05-list .group-row { display:block; gap:0; background:transparent; border:0;",
-    "  box-shadow:none; padding:2px 0; cursor:default; }",
+    "  box-shadow:none; padding:2px var(--tbl-pad-x, 0px); cursor:default; }",
     ".drawer .dt05-list .group-row:hover { background:transparent; transform:none; border-color:transparent; }",
     ".drawer .dt05-list .group-row.failrow, .drawer .dt05-list .group-row.chipsrow { padding:0; }",
     /* 分区行(警告 / 更新中 / 正常 / 未启用实体)—— 呈现归渲染器分片, 布局类留本变体 */
