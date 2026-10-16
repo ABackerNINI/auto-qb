@@ -57,7 +57,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (207)
+## Done (208)
 
 - [bug] [ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔)](../26-10-16-1523-bug-ship-commit-omitted-note.html) — commit.py 的子集模式只限制 git add 清单, git commit 提交的是整个索引 —— 脚本却把未传路径打印成「未纳入, 确认这是有意的」。实测 2026-10-16: 该提示列了 10 个 .zcode-tmp 撤跟踪项, 它们实际都在同一笔提交里(远端=本地一致), 读者(尤其是 agent)易据此以为要再补一笔或以为撤跟踪没生效
 - [bug] [前端旁路裸 fetch 无超时(4 文件 5 处, 绕过 _request): 启动模板装载 / 公开标志 / 导出下载 / 密钥读写](../26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html) — boot.js 模板装载 + lifecycle.js 公开标志 + commands.js 导出下载 + shortcuts.js 密钥读写共 5 处直接 fetch, 无 signal 无超时; _request 加 15s 超时后, 这几处成为同族仅剩的悬挂可达面
