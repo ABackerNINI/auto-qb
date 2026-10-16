@@ -50,6 +50,12 @@ IDENTITY.md
 SOUL.md
 TOOLS.md
 USER.md
+# 平台侧会话工作区: .zwork/ = 后台命令日志, .zcode-tmp/ = 临时证据(截图/results.json/探针脚本)
+# —— 2026-10-16 实锤误入库: ship 闸门把「未跟踪且未忽略」的文件一并暂存, .zcode-tmp/ 下
+# 9 张截图 + results.json 混进了两次提交(本仓另有 `勿入库` 的档案口径: 截图属临时证据)。
+# 加忽略防复发; 已入库的那批同轮 git rm --cached 撤出跟踪(磁盘副本保留)
+.zwork/
+.zcode-tmp/
 
 # WorkBuddy AI 相关文件(会话记忆/技能数据目录)
 .workbuddy-ai/
