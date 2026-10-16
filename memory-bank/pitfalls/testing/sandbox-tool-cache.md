@@ -1,7 +1,7 @@
 # 沙箱里的工具写不了自己的缓存目录 → 不报错, 而是紧循环烧 CPU + 刷磁盘 + 挂住
 
-> 摘要: agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**: CPython `tempfile._mkstemp_inner` 在 Windows 上把 `PermissionError` 当成"重名"继续换名重试 ⇒ 命令**挂住 + 100% 单核 + 持续写磁盘**, 且**全程没有任何报错**。
-> 触发: 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑
+> 摘要: agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**: CPython `tempfile._mkstemp_inner` 在 Windows 上把 `PermissionError` 当成"重名"继续换名重试 ⇒ 命令**挂住 + 100% 单核 + 持续写磁盘**, 且**全程没有任何报错**。姊妹形态(2026-10-16): 沙箱把 `LOCALAPPDATA` 裁成空串时, `uv python list` 之类的托管命令会把缓存目录解析成 **CWD 相对路径** —— 仓库根落 45MB 部分下载垃圾, 且该命令本身先挂住 120s。
+> 触发: 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑, LOCALAPPDATA 为空, uv python list 挂住, 仓库根 Python 目录, 缓存落 CWD, 部分下载垃圾
 
 ### 判别与处置
 
@@ -45,5 +45,12 @@
 - **守阵**: `.agents/skills/commands/scripts/test_engine.py::test_shell_kills_process_tree_on_timeout`
   (超时路径必须走 `_kill_tree(pid)`, 且不得只 `kill()` 直接子进程 —— 红验过: 抽掉该行即红)。
 - **复发**: 1(2026-10-08 首记)
+
+### 变体(2026-10-16): `LOCALAPPDATA` 为空时, 工具的缓存目录会解析成 CWD 相对路径 → 仓库根落垃圾
+
+- **触发**: 在工具 shell 里跑**会自建缓存/托管目录**的命令, 且环境被沙箱裁剪 —— 本会话实测: 该 shell 的 `$env:LOCALAPPDATA` 为**空串**(`TMP` 也为空, `TEMP` 正常), 此时 `uv python list --only-installed`(只想看装了哪些 python)在 120s 超时被杀前, 把 `%LOCALAPPDATA%\Python` 的解析结果落成了 **`<仓库根>\Python\_cache\`**(`BITAC52.tmp` 45MB 部分下载 + `last_welcome.txt` + `pythoncore-3.15-64-*.job` 任务档) —— 未跟踪文件污染工作树, 且没有任何提示。
+- **判别**: `git status` 出现意料外的 `?? Python/`(或其它单段名目录); 目录 `CreationTime` 就在报错/超时命令的**同一分钟**; 内容 = `_cache` + `*.tmp/.job` 这类下载/托管缓存。`uv run <项目命令>` 本身**不中招**(venv 已存在, 不碰托管 python 目录) —— 中招的是 `uv python` 管理子命令, 以及任何以「已知文件夹」或 `$LOCALAPPDATA` 为根的工具。
+- **处置**: ①别在工具 shell 里跑 `uv python list/install` 这类托管命令(要看 python 直接读 `.venv\pyvenv.cfg` 与 `AppData\Local\Python\` 目录清单); ②中招后 `Remove-Item -Recurse -Force .\Python` 清掉即可(纯本会话垃圾, 不碰仓库内容); ③对照: 本机 `AppData\Local\Python\` 只有 `pythoncore-3.14-64` 一个版本、五个 clone 的 venv 全是 3.14.7 —— 「只装 3.14」的结论用**读目录**得出, 不需要 `uv python list`。
+- **复发**: 1(2026-10-16 首记)
 
 **Refs:** memory-bank/tasks/26-10-08-deps-sandbox-yapf-hang.md

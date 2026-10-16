@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-16-0954">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="P4 接缝提示判据把「链末桶晚于重启时刻」当作链已接续: 重启后首采落入长零游程时提示不显示">
 <meta name="issue-summary" content="判据要求 server_started_at &gt;= 链末桶覆盖端; 首采总在重启后 1s 内而桶宽 2s, 故活尾期恒不触发 —— 04:45:40 帧右侧整片斜纹零提示">
 <title>P4 接缝提示判据把「链末桶晚于重启时刻」当作链已接续: 重启后首采落入长零游程时提示不显示 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-16-0954-bug-traffic-seam-hint-missed-after-first-sample</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-16 09:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -181,6 +181,7 @@ server_started_at -&gt; 2026-10-16 08:16:04</code></pre>
       <li><b>放宽左端</b>：条件从 <code>started &gt;= chainCoverEnd</code> 改为 <code>started &gt;= 链末观测点时刻</code>（而非桶覆盖端）。改动一行，但要论证不会把「缝在链中且确已接续」的正常情况变成误报。</li>
       <li><b>后端直接报事实</b>：写侧已发布 LiveTail（<code>block_open</code> / <code>head_pending</code> / 开放游程，见 <code>traffic_store.v4_live_tail_slots</code>），可把「当前存在开放零游程」作为 meta 字段透出，前端不猜。代价：新增契约键，需同步 P4 的双向兼容守阵（旧前端忽略新键 / 新前端遇旧后端不提示）。</li>
     </ol>
+    <p><b>实修期落点（2026-10-16 认领后）</b>：实际走 <b>#2 的放宽方向，但左端落为「链末桶前一桶起点 <code>t - interval</code>」</b>（两端含），而非 #2 字面写的「链末观测点时刻」—— 字面形式经实测帧代入<b>仍不够</b>：<code>started = 04:45:01 ≥ 链末观测点 04:45:02</code> 不成立，判据照旧返回 null。放宽量取一整个桶宽的内因：<b>「链在重启处断」与「重启后首个观测桶即链末」在桶粒度上本就不可分</b>（首采恒落在重启后 ≤ 一个 main_tick，桶宽即最细窗口的判据精度）；反方向（链末桶起点晚于重启 + 1 个桶宽以上 = 链确已接续）不提示。#1 未采纳 —— 「成片 null 游程 ≥ K 桶」的阈值与既有「尾区存在（≥1 桶）」在实测帧（尾区 18 桶）同真，缺的是<b>左端</b>不是阈值，且新增 K 常量对「链确已接续」反例也无甄别力；#3 未实施（本轮范围守恒，「开放游程为何读侧不可见」按本报告 §03/§07 认定为独立未解问题）。</p>
 </section>
 
   <section id="s7">
@@ -189,11 +190,23 @@ server_started_at -&gt; 2026-10-16 08:16:04</code></pre>
       <li>2026-10-16 09:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-16 09:54 — 来源：用户首张 1m 窗截图（真实时间 04:45:40）右侧整片斜纹且无提示；本轮只读复现（前端判据读码 + 真实帧参数代入 + meta 实测）</li>
       <li>2026-10-16 09:54 — 与 D1 的原始提法差异：原记为「活尾开放游程未交付（成因未定）」，本轮把症状精确定位到 P4 提示判据的覆盖缺口；<b>「开放游程为何读侧不可见」仍是独立未解问题</b>，若后续定位到读侧，应另开一条</li>
+      <li>2026-10-16 11:35 — 用户指派「认领并修复」→ 状态 <strong>In Progress</strong>；开工同步 <code>c9af94ad→3473aa9a</code>（快进 261 笔），复验见下</li>
+      <li>2026-10-16 11:44–11:46 — 复验（仍复现）→ 修复与守阵红绿双验完成（左端放宽一桶宽）；详见「复验」与「修复后补充」</li>
+      <li>2026-10-16 12:04 — 修复完成、全量测试通过 → 状态 <strong>Done</strong>；测试数字唯一权威在基线切片 <code>memory-bank/testing/baselines/26-10-16-1204-*</code>（见 <code>commands run kb.baseline</code>）；修法方向取 §06 #2 放宽方向、左端落为 <code>t - interval</code>（#2 字面形式不足，已在 §06 就地说明）；「开放游程读侧不可见」未动，留独立件</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>2026-10-16 11:44 — 复验（develop @ <code>3473aa9a</code>，未动码）：现象仍复现，机理逐位吻合。</b>
+    锚点复核：<code>_qbSeamHint</code> 定义在 <code>qb_traffic_chart.js:288</code>、消费点 <code>qbCurSeamHint</code> 在 <code>:416-419</code>（与报告记录一致，零漂移）；判据左端仍为 <code>started &lt; chainCoverEnd</code>。
+    只读探针（<code>.openclaw/tmp/probe1.js</code>，未入库）以真源码重建实测帧（1m 窗 interval=2s：04:45:00 记 100 / 重启 04:45:01 记 101 / 全窗唯一非 null 桶 = 首采桶 04:45:02 记 102 / 右沿 140）代入 ⇒ <code>started=101</code>（实测帧）→ <b>null（零提示）</b>；<code>started=104</code>（= 链末桶覆盖端）→ 提示 —— 「左端条件恒不触发、只在 ≥ 覆盖端 才提示」与报告 §02 判断逐位一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（走 §06 #2 放宽方向，左端取「链末桶前一桶起点」）</b>：<code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code> <code>_qbSeamHint</code> ——</p>
+    <ul>
+      <li>左端定义行由 <code>chainCoverEnd = points[last].t + interval</code> 改为 <code>chainPrevStart = points[last].t - interval</code>（链末桶前一桶起点），判据比较行同步为 <code>if (started &lt; chainPrevStart || started &gt; rightEdge) return null;</code>（两端含；右沿防御不变）；</li>
+      <li>为什么是一整个桶宽：首采恒落在重启后 ≤ 一个 main_tick，总归进「链末桶」——「链在重启处断」与「重启后首个观测桶即链末」在桶粒度上不可分；放宽一桶宽即把「重启与链末相邻」的整条带都判为缝，反方向（链末起点晚于重启 + 1 桶宽以上）仍判「链确已接续」；</li>
+      <li>函数 docstring / <code>qbCurSeamHint</code> 注释 / <code>drawer.html</code> 提示行注释同步口径；<b>断线语义零改动</b>（<code>spanGaps:false</code> ×2 与斜纹钩子原样，G2）。</li>
+    </ul>
+    <p><b>验证方式</b>：① node 电池 <code>_qbSeamHint</code> 用例 11 → 17 条 —— 原「重启在链内→null」反例按修订语义翻为「重启落在链末桶覆盖窗→提示」，新增左端两点边界（恰在链末前一桶起点→提示 / 早一桶宽→null）、远早于链末→null、以及<b>实测帧重建回归三条</b>（1m 窗 interval=2s：04:45:01 重启 / 首采桶 04:45:02 / 全窗唯一非 null）；② 静态守阵第 6 节补<b>左端整行活性锚</b>（<code>if (started &lt; chainPrevStart || started &gt; rightEdge) return null;</code> 整行匹配，退回旧口径即红）；③ 红绿双验 2 类突变判红后字节恒等还原复绿 —— 左端退回旧口径 4 红 / 去掉左端 3 红（电池 50/50 复绿）；④ 复验探针同帧对照：修复前 <code>started=101</code> → null，修复后 → 提示（<code>started=100</code> 亦提示、<code>started=99</code> 不提示）。测试数字见 <code>commands run kb.baseline</code>（基线切片 <code>26-10-16-1204-*</code>），不在此手抄。</p>
+    <p><b>残留（有意未动）</b>：同帧另一症状（缝首桶孤点，<code>26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker</code>）与「≤60s 短缝尖峰」（<code>26-10-16-0954-bug-traffic-seam-short-gap-spike</code>）均仍 Open；「开放游程为何读侧不可见」按本报告 §07 认定，待另开条。</p>
 </section>
 
   <footer>

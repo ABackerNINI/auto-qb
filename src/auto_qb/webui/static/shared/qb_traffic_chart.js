@@ -275,15 +275,20 @@ function _qbGapRuns(up, dl) {
   return out;
 }
 
-/* 重启缝提示判据(plan 26-10-15-0829 P4, 模块级纯函数供 node 单测):
- * 「数据链末点早于右沿且期间服务重启」 -> 返回 { startedAt }, 否则 null。
+/* 重启缝提示判据(plan 26-10-15-0829 P4, 模块级纯函数供 node 单测; 左端口径修订 26-10-16,
+ * issue 26-10-16-0954): 「数据链末点早于右沿且重启贴近链末」 -> 返回 { startedAt }, 否则 null。
  * - 数据链末点 = 最后一个非 null 桶; 尾部未观测区存在 ⟺ 末非 null 下标 < n-1(链已到
  *   右沿 = 无尾区, 不提示 —— 正常尾桶观测/当前桶未采完都不是缝);
- * - 期间服务重启 ⟺ meta.server_started_at(后端进程出生时刻, traffic_qb._SERVER_STARTED_AT)
- *   落在尾部未观测区 [链末桶覆盖端 t+interval, 右沿] 内 —— 重启在最后观测桶之前 = 缝在链中
- *   (链已接续, 无误读面); 重启晚于右沿不可能(右沿 = 响应构建时刻, 防御);
+ * - 重启贴近链末 ⟺ meta.server_started_at(后端进程出生时刻, traffic_qb._SERVER_STARTED_AT)
+ *   ∈ [链末桶前一桶起点 t-interval, 右沿] 内(左端含)。原口径左端 = 链末桶覆盖端 t+interval,
+ *   其隐含前提「链末桶晚于重启时刻 ⟹ 链已接续、无误读面」在「重启后首采已入账、随后立即
+ *   进入开放零游程」形态下不成立(实测帧: 重启 04:45:01 -> 首采桶 04:45:02, 04:45:04 起整片
+ *   斜纹到右沿却零提示): 首采(恒落在重启后 <= 一个 main_tick)总归进链末桶, 但尾区仍在 ——
+ *   「链在重启处断」与「重启后首采桶即链末」在桶粒度上不可分, 左端须放宽一桶宽; 反方向
+ *   链末桶起点晚于重启 + 1 个桶宽以上 = 链确已接续, 不提示。重启晚于右沿不可能(右沿 = 响应
+ *   构建时刻, 防御);
  * - meta 无新键(旧后端)/全 null/interval 非法 -> null(不猜, 向后兼容: 旧前端忽略新键,
- *   新前端遇旧后端也不提示)。all 月视图非等距, 末桶覆盖端用标称月长近似 —— 但月视图
+ *   新前端遇旧后端也不提示)。all 月视图非等距, 端点用标称月长近似 —— 但月视图
  *   末桶(当前月)由活尾 pending 行常态覆盖(last == n-1), 实际不达判据面。 */
 function _qbSeamHint(points, interval, meta) {
   if (!meta || !(Number(meta.server_started_at) > 0) || !(interval > 0)) return null;
@@ -297,9 +302,9 @@ function _qbSeamHint(points, interval, meta) {
   }
   if (last < 0 || last >= n - 1) return null;  // 全 null(空态面)/链已到右沿: 无尾部未观测区
   const started = Number(meta.server_started_at);
-  const chainCoverEnd = points[last].t + interval;  // 链末桶覆盖端 = 尾区起点
+  const chainPrevStart = points[last].t - interval;  // 链末桶前一桶起点 = 判据左端(重启与链末不可分带下界)
   const rightEdge = points[last].t + (n - last) * interval;  // 末桶覆盖端 = 右沿(等距栅格)
-  if (started < chainCoverEnd || started > rightEdge) return null;
+  if (started < chainPrevStart || started > rightEdge) return null;
   return { startedAt: started };
 }
 
@@ -409,9 +414,10 @@ window.AQB_QB_TRAFFIC = {
       return s ? this._qbHoverOf(s) : null;
     },
     /* 窗口内累计(totals 非空桶求和; 断线/重置桶本就 null 不计 —— §5.1 差分语义) */
-    /* 重启缝提示(P4, plan 26-10-15-0829): 数据链末点早于右沿且期间服务重启(meta 新键
-     * server_started_at 落在尾部未观测区)时给「数据接缝中」提示, 不与停机洞混读;
-     * 判据单点 _qbSeamHint(纯函数, node 单测), null = 非缝(纯停机洞/链已接续/旧后端)。
+    /* 重启缝提示(P4, plan 26-10-15-0829; 左端口径修订 26-10-16, issue 26-10-16-0954):
+     * 数据链末点早于右沿且重启贴近链末(meta 新键 server_started_at ∈ [链末桶前一桶起点, 右沿])
+     * 时给「数据接缝中」提示, 不与停机洞混读; 判据单点 _qbSeamHint(纯函数, node 单测),
+     * null = 非缝(纯停机洞/链确已接续/旧后端)。
      * 断线语义不变: null 桶照旧断线不连线 + 斜纹, 提示只是追加一行状态注解。 */
     qbCurSeamHint() {
       const d = this.qbCurData;

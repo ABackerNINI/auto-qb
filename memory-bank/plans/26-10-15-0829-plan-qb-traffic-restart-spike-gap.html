@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="qb-traffic-restart-spike-gap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-15-0829">
-<meta name="doc-updated" content="26-10-16-1126">
+<meta name="doc-updated" content="26-10-16-1204">
 <meta name="doc-refs" content="memory-bank/activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md">
 <style>
   :root {
@@ -513,6 +513,13 @@
     </ul>
   </div>
 
+  <div class="box warn">
+    <div class="t">P4 判据修订(26-10-16-1204 · issue 26-10-16-0954 认领与修复)</div>
+    <p><b>根因</b>: 原判据左端「重启晚于链末桶覆盖端(<code>t+interval</code>)」的隐含前提「链末桶晚于重启时刻 ⟹ 链已接续、无误读面」在<b>「重启后首采已入账、随后立即进入开放零游程」</b>形态下不成立 —— 首采(恒落在重启后 ≤ 一个 main_tick)总归进链末桶, 但尾区仍在: 「链在重启处断」与「重启后首个观测桶即链末」在桶粒度上不可分。实测帧(1m 窗 interval=2s): 重启 04:45:01 → 首采桶 04:45:02 → 04:45:04 起整片斜纹到右沿却零提示(旧判据在 <code>started &lt; chainCoverEnd</code> 处恒返回 null)。</p>
+    <p><b>修订</b>: 左端放宽为「<b>链末桶前一桶起点 <code>t-interval</code></b>」(两端含); 反方向链末桶起点晚于重启 + 1 个桶宽以上 = 链确已接续, 不提示。§06 #2「放宽左端」原字面形式(改 <code>started &gt;= 链末观测点时刻</code>)经实测帧代入<b>仍不够</b> —— 落点说明见 issue §06; #1/#3 未采纳(理由见 issue)。<b>断线语义零改动</b>(G2): 尾区仍如实渲染 null/斜纹, 提示只改「怎么读」不改「画什么」; <code>spanGaps:false</code> ×2 与斜纹钩子原样。</p>
+    <p><b>验证</b>: node 电池 <code>_qbSeamHint</code> 11 → 17 条(含实测帧重建回归) + 静态守阵第 6 节补左端整行活性锚; 红绿双验 2 类突变判红(退出旧左端 4 红 / 去掉左端 3 红)后还原复绿 50/50; 改动 3 源文件(<code>qb_traffic_chart.js</code> / <code>drawer.html</code> 注释 / <code>test_webui_static_dom_panel.py</code>), 全量数字见基线切片 <code>testing/baselines/26-10-16-1204-qb-traffic-restart-spike-gap-p4-rev.md</code>(新当前事实源)。E2E5 仍待真机人工观察(判据链已在现场形态下可触发)。</p>
+  </div>
+
   <h3 id="p5-record"><span class="tag2">REC</span>实施记录 · P5 文档口径写入单点(26-10-15-1502 · clone @ 98e14de2)</h3>
   <p class="lead">零改码文档轮:改动 1 个 KB 文件 —— <code>memory-bank/progress/implemented-webui-history.md</code>「qB 口径流量图三图」条目追加「2026-10-15 口径文档化(P5)」段(P2 段的一句话口径注记升级为完整公式);未触源码/配置/运行数据。</p>
   <table>
@@ -793,6 +800,7 @@
   <p>26-10-16-1057 — <b>计划外缺陷修复轮</b>(用户「认领并修复」两条 26-10-16-0954 issue):§03 追加「实施记录 · 计划外缺陷修复轮」;P2 步骤标记与本节同步补注。改动 <code>traffic_grid.py</code> 的摊配判据/覆盖份额口径与 <code>v4_grid_obs</code> 断链桶语义 + 两个测试文件;新增 2 条守阵、6 条既有守阵重钉;红绿双验 4 类突变判红后还原复绿;全量数字见基线切片 <code>testing/baselines/26-10-16-1057-qb-traffic-seam-fixes.md</code>;两 issue 状态 → Done,认领链经档案闭合。<b>§07 #2 不变</b>(仍常量非配置),E2E1 的字节守恒口径细化为「覆盖份额守恒」(见该记录)。</p>
   <p>26-10-16-0454 — P3 判据修订(纯做种启动误报修复, 用户指令「按推荐修复警告的问题」): 原「两键同现」判据与 qB 增量轮逐键 diff 语义错配(纯做种 dl_info_speed 恒 0 ⇒ 永远缺席 ⇒ 每进程启动必误报; 运行实例三次重启各一条已实证) ⇒ <code>torrents/store.py</code> <code>_track_rate_key_freshness</code> 重写为 per-key 语义(已收键增量轮缺席=值未变不计; 仅全量快照缺键/从未收到计无读数), 阈值与节流不变, 合并语义零改动; <code>tests/test_sync.py</code> rate 键用例 6 → 7 条(含两条误报回归), 守阵 3 类突变判红还原复绿; §03 P3 记录追加修订注记; 全量数字见基线切片 <code>testing/baselines/26-10-16-0454-qb-traffic-restart-spike-gap-p3-rev.md</code>。</p>
   <p>26-10-16-1126 — <b>残余边界补修轮</b>(用户「修复残余边界」):§03 修复记录追加残余边界补修段。改动 <code>v4_series_points</code>(活尾组与磁盘块同判块间真空)+ <code>tests/test_traffic_grid.py</code>(新增 1 条守阵 + 活尾相关 3 条改口径);红绿双验 1 类突变(摘除活尾真空判定)判 4 红后还原复绿;全量数字见基线切片 <code>testing/baselines/26-10-16-1126-qb-traffic-seam-fixes-r2.md</code>;issue <code>...short-gap-spike</code> 补记残余边界修复(状态维持 Done)。
+  <p>26-10-16-1204 — P4 判据左端修订(issue <code>26-10-16-0954-bug-traffic-seam-hint-missed-after-first-sample</code> 认领与修复): 左端从「链末桶覆盖端 t+interval」放宽到「链末桶前一桶起点 t-interval」(两端含), 修「重启后首采即链末桶」形态零提示; node 电池 11 → 17 条 + 静态守阵补左端整行活性锚, 红绿双验 2 类突变判红还原复绿; §03 P4 记录追加修订注记; 全量数字见基线切片 <code>testing/baselines/26-10-16-1204-qb-traffic-restart-spike-gap-p4-rev.md</code>; 改动 3 源文件, 随本专题入库(issue Open→Done, 认领链双向)。
   <p>改版规则:本计划后续修订一律<b>同文件内追加「变更记录」并抬 <code>doc-updated</code></b>,禁止再堆 <code>-v2</code> 新文件。</p>
 </div>
 
