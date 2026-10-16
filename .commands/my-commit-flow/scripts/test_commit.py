@@ -2,12 +2,14 @@
 闸门 / push 一律替身; 同步在编排语义用例里替身, 在真仓场景用例里真跑(见 2026-10-04 提交先行节)。
 
 ## 测试计划
-- test_stage_plan_*                       暂存计划: 全量 / 子集(omitted 可见) / 拒批量 / 红线 / 空改动
+- test_stage_plan_*                       暂存计划: 全量 / 子集(omitted 去重可见) / 拒批量 / 红线 / 空改动
+- test_omitted_note_*                     子集提示按索引状态分组(issue 26-10-16-1523): 已暂存仍随整索引进本笔 / 未暂存不进本笔 / 示例截断且空组不列
 - test_message_default_path               约定消息路径 = <root>/.git/COMMIT_MSG_AI.txt
 - test_message_missing_fails_early        消息缺失 → 提交失败一行, 不碰 git 写操作
 - test_full_commit_push_one_line          全流程无合流 → 零步骤行, 结果独占一行「提交成功 <hash>」; 消息文件消费即删
 - test_staged_delete_skips_add            已暂存的删除: 逐路径 add 不再撞 pathspec 落空(issue 26-09-28-0128)
 - test_unstaged_delete_uses_rm_cached     未暂存的删除: 工作区无而索引有 → rm --cached 登记删除(issue 26-09-28-0128)
+- test_subset_note_matches_committed_content  真仓: 子集提示与提交面逐条对齐(已暂存组真在 HEAD, 未暂存组真不在; issue 26-10-16-1523)
 - test_sync_offline_after_commit_partial  提交先行: 同步失败(离线)在提交落稳之后 → 推送未完成, 退出码 0
 - test_sync_conflict_line_passthrough     冲突类失败行原样透传(约定模板无缝拼接), 不再附死锁护栏
 - test_remote_moved_rebases_before_push   真仓: 远端前移 → 提交后 rebase 保线性, 结果行报改写后的新 hash(上方留 rebase 步骤行)
@@ -140,6 +142,30 @@ def test_stage_plan_subset_reports_omitted():
     assert refuse is None and to_stage == ["src/a.py"] and omitted == ["src/b.py"]
 
 
+def test_stage_plan_subset_omitted_dedup():
+    """MM 文件(staged / unstaged 两份清单都在)在 omitted 里只算一次 ——
+    旧口径按拼接清单取, 该文件会翻倍出现在计数与示例里(issue 26-10-16-1523 同族: 计数要可信)。"""
+    to_stage, omitted, refuse = commit_mod.resolve_stage_plan(["src/a.py"], RED, ["src/b.py"], ["src/b.py"])
+    assert refuse is None and to_stage == ["src/a.py"] and omitted == ["src/b.py"]
+
+
+def test_omitted_note_splits_staged_and_unstaged():
+    """子集提示按索引状态分组(issue 26-10-16-1523): 已暂存的仍会随整索引进本笔, 未暂存的不会 ——
+    旧文案「未纳入」把两者混成"没进本笔", 与实际提交面相反。"""
+    note = commit_mod.omitted_note(["a.py", "b.py", "c.py"], staged=["b.py"])
+    assert "另有 3 个改动未参与 add" in note
+    assert "已暂存 1 个(仍会随整索引进本笔: b.py)" in note
+    assert "未暂存 2 个(不会进本笔: a.py、c.py)" in note
+    assert "确认这是有意的" in note
+
+
+def test_omitted_note_sample_truncated_and_single_group():
+    """示例 3 个后省略; 某组为空时该组整段不出现(不打印「0 个」的空组)。"""
+    note = commit_mod.omitted_note(["a", "b", "c", "d"], staged=["a", "b", "c", "d"])
+    assert "已暂存 4 个(仍会随整索引进本笔: a、b、c…)" in note
+    assert "未暂存" not in note
+
+
 def test_stage_plan_bulk_refused():
     for token in ("-A", ".", "*"):
         _, _, refuse = commit_mod.resolve_stage_plan([token], RED, ["src/a.py"], [])
@@ -214,6 +240,26 @@ def test_unstaged_delete_uses_rm_cached(repo, monkeypatch, capsys):
     assert rc == 0 and "提交成功" in out
     assert not msg.exists()
     assert _git(repo, "show", "--stat", "--name-status", "HEAD").count("D") >= 1  # 删除经 rm --cached 进了提交
+
+
+def test_subset_note_matches_committed_content(repo, monkeypatch, capsys):
+    """issue 26-10-16-1523 实例化: 子集提示必须与提交面逐条对齐 ——
+    「已暂存」组(未传参的 D 删除)真在 HEAD 里, 「未暂存」组(未传参的新文件)真不在。"""
+    _patch_ok_flow(monkeypatch)
+    _git(repo, "rm", "base.txt")  # 已暂存删除(D ) —— 未传参, 仍会随整索引进本笔
+    (repo / "loose.txt").write_text("loose\n", encoding="utf-8")  # 未暂存(??) —— 未传参, 不会进本笔
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")  # 本次子集要提交的
+    _write_msg(repo)
+    rc = commit_mod.main(["x.txt"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "另有 2 个改动未参与 add" in out
+    assert "已暂存 1 个(仍会随整索引进本笔: base.txt)" in out
+    assert "未暂存 1 个(不会进本笔: loose.txt)" in out
+    assert "未纳入" not in out  # 旧误导文案零回潮
+    names = _git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    assert "base.txt" in names and "x.txt" in names  # 「已暂存」组与提交面一致(删除真落笔)
+    assert "loose.txt" not in names  # 「未暂存」组确实没进
 
 
 # ------------------------------------------------------------------ 同步失败 = 推送未完成(2026-10-04 提交先行)

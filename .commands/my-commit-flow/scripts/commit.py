@@ -19,7 +19,9 @@
   1. 闸门(auto = true 真跑, 全过即静默; 失败给闸门名 + 末 20 行) —— 按本地改动清单
   2. 暂存计划: 缺省 = changed_files() 全量; 红线拦; 拒 -A / . / *(逐路径纪律)
   3. 逐路径 add —— 工作区已不存在的路径: 在索引里走 `rm --cached`, 都不在(已暂存的删除)则无事可做
-     (修 issue 26-09-28-0128: 逐路径 add 撞「已暂存删除」的 pathspec 落空)
+     (修 issue 26-09-28-0128: 逐路径 add 撞「已暂存删除」的 pathspec 落空); 子集提交另打一行提示:
+     未参与 add 的改动按索引状态分组(已暂存的仍随整索引进本笔 / 未暂存的不进本笔) —— git commit
+     提交的是整个索引, 旧文案「未纳入」与事实相反(修 issue 26-10-16-1523)
   4. git commit -F <消息文件>; 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt
   5. ref 三处核对(提交命令成功 ≠ ref 落稳 —— 本环境 ref 写入会被静默丢弃, 必须赶在同步前拦下:
      同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交) → 落稳即消费消息文件
@@ -138,8 +140,10 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
                        unstaged: list[str]) -> tuple[list[str], list[str], str | None]:
     """算暂存计划, 返回 (to_stage, omitted, refuse); refuse 非 None 即拒绝执行。
 
-    paths 为空 → 全量改动(权威单点 changed_files); 传路径 → 子集, omitted = 改动了
-    但没被纳入的文件(把"漏传"从静默变成可见)。红线按既有的子串口径匹配。
+    paths 为空 → 全量改动(权威单点 changed_files); 传路径 → 子集, omitted = 未传给脚本的其余改动
+    (去重 —— MM 文件同时在 staged / unstaged 两份清单里, 不去重计数与示例会翻倍)。
+    omitted 与「是否进了本笔」的关系由 omitted_note 按索引状态分组说明 —— 子集只限制 add 清单,
+    git commit 提交的是整个索引(issue 26-10-16-1523)。红线按既有的子串口径匹配。
     """
     bulk = [p for p in paths if p in BULK]
     if bulk:
@@ -147,7 +151,7 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
     all_changed = staged + unstaged
     if paths:
         to_stage = list(paths)
-        omitted = [p for p in all_changed if p not in set(paths)]
+        omitted = [p for p in dict.fromkeys(all_changed) if p not in set(paths)]
     else:
         to_stage = all_changed
         omitted = []
@@ -157,6 +161,32 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
     if red:
         return [], [], f"红线文件不得提交: {' '.join(red)} —— 移出提交范围后重跑(见 AGENTS.md「红线」节)"
     return to_stage, omitted, None
+
+
+def _sample(files: list[str], limit: int = 3) -> str:
+    """示例清单: 前 limit 个路径 + 省略号(与旧提示同口径 —— 3 个后省略)。"""
+    return "、".join(files[:limit]) + ("…" if len(files) > limit else "")
+
+
+def omitted_note(omitted: list[str], staged: list[str]) -> str:
+    """子集提交的「另有 N 个改动未参与 add」提示行 —— 按索引状态分组, 让提示与提交面一致。
+
+    为什么分组(issue 26-10-16-1523): 子集模式只限制 git add 清单, 而 git commit 提交的是
+    **整个索引** —— 已暂存的其他改动照样随它落进同一笔。旧文案「未纳入」把这些也读成"没进",
+    与事实相反(实测: 撤跟踪的 `D ` 删除项被列成「未纳入」, 却全在同一笔提交里)。
+    - 已暂存(在 staged 清单里): 仍会随整索引进本笔 —— 没传给脚本也一样;
+    - 未暂存(只在 unstaged 清单里): 不会进本笔 —— 想带上就得重跑并把路径补进参数。
+    同一路径同时有已暂存与未暂存改动(MM)时归「已暂存」组: 其暂存快照确实落笔(未暂存部分不动)。
+    """
+    staged_set = set(staged)
+    in_commit = [p for p in omitted if p in staged_set]
+    out_commit = [p for p in omitted if p not in staged_set]
+    parts = []
+    if in_commit:
+        parts.append(f"已暂存 {len(in_commit)} 个(仍会随整索引进本笔: {_sample(in_commit)})")
+    if out_commit:
+        parts.append(f"未暂存 {len(out_commit)} 个(不会进本笔: {_sample(out_commit)})")
+    return f"…(子集提交: 另有 {len(omitted)} 个改动未参与 add —— {'; '.join(parts)} —— 确认这是有意的)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -243,8 +273,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
     if omitted:
-        shown = "、".join(omitted[:3]) + ("…" if len(omitted) > 3 else "")
-        print(f"…(子集提交: 另有 {len(omitted)} 个改动未纳入({shown}) —— 确认这是有意的)")
+        print(omitted_note(omitted, staged))
 
     # 3 提交
     proc = git_run("commit", "-F", str(msg_file))

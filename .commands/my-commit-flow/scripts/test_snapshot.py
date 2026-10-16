@@ -11,7 +11,7 @@
 ## 测试计划
 - SnapshotUnitTest       `_pack_dir` / `_find_repo_root` / `_sweep_old` 的纯函数行为
 - RespawnGuardTest       已在快照里 / 纯信息入口 → 不复制; 四个入口脚本都装了守卫
-- SnapshotEndToEndTest   真子进程: 重入用副本 · 免疫 · 采纳 · 退出码透传 · import 不重入
+- SnapshotEndToEndTest   真子进程: 重入用副本 · 免疫 · 采纳 · 退出码透传 · import 不重入 · 存在性比较限定在用例私有临时根(`-n 8` 并行安全)
 - RootInjectionTest      `_ship_config.find_root()` 认 `COMMAND_FLOW_REPO_ROOT`
 - StopgapRetiredTest     治标机制(热刷新 / 配置重取)已从生产脚本里删净
 """
@@ -105,8 +105,20 @@ def _write_entry(pack: Path, marker: str, rc: int = 0) -> None:
     (pack / "scripts" / "entry.py").write_text(ENTRY.format(marker=marker, rc=rc), encoding="utf-8")
 
 
-def _snap_dirs() -> set[Path]:
-    return set(Path(tempfile.gettempdir()).glob(_snapshot.SNAPSHOT_PREFIX + "*"))
+def _private_tmp(root: Path) -> Path:
+    """本用例专属的临时根 —— TMPDIR 指到这里, 前后存在性比较也只看这里。
+
+    为什么隔离(2026-10-16): 旧写法比较**全局** `tempfile.gettempdir()`, 等于假设"只有我在用这个根" ——
+    `-n 8` 并行下兄弟用例的临时快照目录会落进同一根, 逐位比较被搅成假红(连续多次复现)。隔离后各
+    用例只观察自己的根, 断言意图不变(该操作不得新增 / 遗留快照目录)。
+    """
+    private = root / "snap-tmp"
+    private.mkdir()
+    return private
+
+
+def _snap_dirs(root: Path) -> set[Path]:
+    return set(root.glob(_snapshot.SNAPSHOT_PREFIX + "*"))
 
 
 class SnapshotUnitTest(unittest.TestCase):
@@ -195,19 +207,21 @@ class SnapshotEndToEndTest(unittest.TestCase):
         self.assertEqual(_field(proc.stdout, "REPO_ROOT="), str(self.repo), "真根经 env 注入(副本向上找不到 .git)")
 
     def test_snapshot_is_removed_after_run(self) -> None:
-        before = _snap_dirs()
-        proc = _run([str(self.pack / "scripts" / "entry.py")], self.repo)
+        tmp_root = _private_tmp(Path(self.tmp.name))
+        before = _snap_dirs(tmp_root)
+        proc = _run([str(self.pack / "scripts" / "entry.py")], self.repo, env={"TMPDIR": str(tmp_root)})
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(_snap_dirs(), before, "正常路径子进程退出即删临时副本(不留垃圾)")
+        self.assertEqual(_snap_dirs(tmp_root), before, "正常路径子进程退出即删临时副本(不留垃圾)")
 
     def test_import_does_not_respawn(self) -> None:
         """守卫在 `__main__` 下 ⇒ `import` 不复制(否则测试 / 复用方每 import 一次就多一份副本)。"""
-        before = _snap_dirs()
+        tmp_root = _private_tmp(Path(self.tmp.name))
+        before = _snap_dirs(tmp_root)
         scripts = self.pack / "scripts"
         code = "import sys; sys.path.insert(0, r'%s'); import entry; print('IMPORTED')" % scripts
-        proc = _run(["-c", code], self.repo)
+        proc = _run(["-c", code], self.repo, env={"TMPDIR": str(tmp_root)})
         self.assertIn("IMPORTED", proc.stdout, proc.stderr)
-        self.assertEqual(_snap_dirs(), before, "import 不该触发重入")
+        self.assertEqual(_snap_dirs(tmp_root), before, "import 不该触发重入")
 
     def test_snapshot_is_immune_and_new_call_adopts(self) -> None:
         """核心证据: 原包被改写后, **旧副本输出不变**(免疫), **新调用采用新版**(采纳)。"""
