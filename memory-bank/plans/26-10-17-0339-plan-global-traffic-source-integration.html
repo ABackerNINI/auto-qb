@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="global-traffic-source-integration">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-17-0339">
+<meta name="doc-updated" content="26-10-17-0429">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #16202a;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  .sheet { max-width: 880px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; max-width: 62ch; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 30px 0 6px; }
+  h3 .sid { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); margin-right: 8px; letter-spacing: 0.06em; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 22px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; max-width: 72ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; max-width: 72ch; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+  .kw { color: var(--accent-ink); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td:first-child { color: var(--dim); white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+
+  .exit { border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; margin: 10px 0 0; color: var(--dim); font-size: 13.5px; max-width: 72ch; }
+  .exit b { color: var(--ink); font-weight: 600; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--mono); display: block; margin-bottom: 2px; }
+  .note { background: var(--mark); border: 1px solid var(--hair-soft); padding: 12px 16px; margin: 14px 0; font-size: 13.5px; color: var(--dim); max-width: 72ch; }
+  .note b { color: var(--ink); }
+  .fig { margin: 20px 0 8px; border: 1px solid var(--hair-soft); border-radius: 4px; background: #0d1218; padding: 18px 10px 10px; }
+  .fig svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .figcap { font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: center; margin-top: 8px; letter-spacing: 0.04em; }
+  .rule { border: none; border-top: 1px solid var(--hair-soft); margin: 40px 0; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } .sheet { padding: 32px 20px 64px; } }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; padding: 1px 7px; border: 1px solid var(--hair); border-radius: 3px; color: var(--dim); margin-right: 6px; }
+  .tag.warn { color: var(--warn); border-color: #4a3a29; }
+  .tag.ok { color: var(--ok); border-color: #2f4230; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">auto-qb · memory-bank / plans</div>
+<h1>全局流量来源:一键切换与自动拉起 · 集成层改版计划</h1>
+<p class="lede">把「全局流量来源」收成一处一键切换的开关;auto-qb 能自动发现并一次性拉起整机共享的流量监视器(免配端口与密钥),同时不削减工具的开机自启与多实例共享定位。</p>
+<div class="meta">
+  <b>编号</b> 26-10-17-0339 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 五轮收敛 + R1 就地改版,全部按推荐/用户拍板) &nbsp;·&nbsp; <b>状态</b> Open(待逐步骤授权)<br>
+  <b>行号基准</b> 本 clone @ 88e7e4ee(实施前需逐条复核漂移) &nbsp;·&nbsp; <b>提交</b> 各步骤独立提交, 收尾按 DoD<br>
+  <b>产生方式</b> 会话内 grilling 五轮:第一轮 7 问 → 第二轮 9 问 → 第三轮 6 问(发现层推翻重画) → 第四轮 8 问(指针/数据分居 + 编译态) → 第五轮 6 问
+</div>
+
+<h2><span class="no">01</span>变更记录与承接</h2>
+<h3 style="margin-top:0">变更记录</h3>
+<p>本文件按仓库约定<b>就地改版</b>(<a style="color:var(--dim)" href="../conventions/doc-forms.md">doc-forms.md</a> 第 33 行:同文件内变更记录 + 抬 <code>doc-updated</code>),不堆 <code>-v2</code>/<code>-roundN</code> 新文件。</p>
+<table>
+  <tr><th style="width:70px">版本</th><th style="width:110px">时间</th><th>变更</th></tr>
+  <tr><td>R0</td><td>26-10-17-0339</td><td>初版:grilling 五轮 36 问收敛,拍板 D1–D18(单一来源开关 / 发现指针 / 随机端口 / 数据落点 / 自启触发 / 设置页合并 …)</td></tr>
+  <tr><td>R1</td><td>26-10-17-0429</td><td><b>拉起与自启契约改版</b>:D10 改写为「工具侧启动器契约」并新增 <b>D19</b>;D13 收敛为「启动器恒定携带自启意图 + 工具 config 唯一裁决」,<b>删掉 auto-qb 的条件传参</b>;D2/D17/S17/§05 随之删掉 auto-qb 侧的 <code>autostart</code> 键(开关状态回归工具侧单点);§03/S11/S14/S16/§08/§09/§10 同步</td></tr>
+</table>
+<div class="note"><b>R1 的起因:</b>原设计让 auto-qb 在拉起时条件计算 <code>--autostart true|false</code>(provider = 工具来源且用户未关过 ⇒ 真)。「把该旗标固化进启动器以解耦 CLI 形态」这一改法会与 D13 冲突 —— 它的<b>取值是可变的</b>,而 <code>false</code> 那一支正是「用户显式关过 ⇒ 不被装回」的防复活闸,固化成常量等于把闸门焊死。故改判为:<b>启动器只携带"顺带注册"这一个恒定意图,是否真注册由工具侧 config <code>autostart</code> 裁决</b> —— 判断权下放给状态的持有者,auto-qb 侧既不持有也不计算该状态。</div>
+
+<h3>为什么与旧计划分属两份,而不是就地改旧计划</h3>
+<p>仓库约定「计划改版 = 同文件内 <code>## 变更记录</code> + 抬 <code>doc-updated</code>」(<a style="color:var(--dim)" href="../conventions/doc-forms.md">doc-forms.md</a>)。本轮 <b>用户拍板「新写计划」</b>,且改判面不止是参数微调 —— 它推翻了 <a style="color:var(--dim)" href="./26-10-16-0541-plan-global-traffic-monitor.html">26-10-16-0541</a> §01 中「配置主权与落点 / 发现机制 / 自启触发方式 / 用户可见命名」四组核心拍板。故本计划用**独立 doc-topic**(<code>global-traffic-source-integration</code>)承接集成层,避免与旧计划同专题分叉。</p>
+<h3>旧计划哪些仍有效</h3>
+<table>
+  <tr><th>范围</th><th>归属</th></tr>
+  <tr><td>工具本体 S0–S9</td><td>全有效(包骨架/采样器/落盘/控制面/通知/自启/守阵测试),本计划只做增量,不追改</td></tr>
+  <tr><td>旧 S6/S7/S8(配置面/接收面/集成过渡)</td><td><b>被本计划 S15–S17 取代</b></td></tr>
+  <tr><td>旧 S10(真机验收)</td><td><b>并入本计划 §04 的 S19</b></td></tr>
+  <tr><td>旧 §03 架构图 / §05 默认参数</td><td>被本计划 §03 / §05 取代</td></tr>
+</table>
+<div class="note"><b>给未来读者的提示:</b>两份 Open 计划分属两个 doc-topic,不是分叉;旧计划描述「工具怎么造」,本计划描述「auto-qb 怎么找到它、怎么切换来源、怎么免配拉起」。</div>
+
+<h2><span class="no">02</span>拍板结论(grilling 收敛)</h2>
+<p>以下 19 条为五轮 grilling 与 R1 改版的全部决策(<b>D19</b> 为 26-10-17-0429 增补),实施不得再自行变更;确需变更按「同文件内变更记录 + 抬 doc-updated」处理。</p>
+<table>
+  <tr><th>#</th><th>决策</th></tr>
+  <tr><td>D1</td><td><b>单一来源开关</b>:新建顶层 <code>traffic_source</code> 段,<code>provider: traffic_monitor | global_traffic_monitor</code>;<b>严格单选互斥</b>(两来源参数可并存,但只有一个生效);<b>不静默回退</b>。</td></tr>
+  <tr><td>D2</td><td><b>配置落点</b>:<code>traffic_source.traffic_monitor.dat_path</code> 与 <code>traffic_source.global_traffic_monitor.{tool_dir,tool_exe,data_dir,notify_cooldown_s}</code>(<b>不含 <code>autostart</code></b> —— 自启状态与裁决都在工具侧,见 D13/D19);顶层 <code>global_traffic_monitor</code> 段退休;<code>global_speed_limit_curve</code> 只留 <code>curves/interval/enabled</code>。<b>工具自身参数</b>(采样间隔/通知阈值/适配器过滤)不进 auto-qb 配置,仍经控制面读写、默认即用、高级项折叠。</td></tr>
+  <tr><td>D3</td><td><b>迁移走配置升级路线</b>:用既有迁移链新增 <code>MIGRATIONS["config"][4]</code>(v4→v5) —— 旧段下移 + 删四键 + <code>dat_path</code> 迁移 + provider 推导;逐键 note → WARNING;沿用启动物化单点的原子写回 + 备份。</td></tr>
+  <tr><td>D4</td><td><b>工具进程形态不削减</b>:独立进程 + <b>开机自启</b> + 多 auto-qb <b>共享服务</b>;自启绝对支持,不可移除。</td></tr>
+  <tr><td>D5</td><td><b>auto-qb 的角色</b>:只做「探测 → 缺席时一次性引导拉起 → 之后走控制面订阅」;<b>不是守护者</b>,不管工具死活、不接管其生命周期。</td></tr>
+  <tr><td>D6</td><td><b>发现机制</b>:指针文件 <code>endpoint.json</code> 落在<b>用户级平台目录</b>(Windows <code>%LOCALAPPDATA%\global-traffic-monitor\</code> / macOS <code>~/Library/Application Support/global-traffic-monitor/</code> / Linux <code>~/.local/share/global-traffic-monitor/</code>),<b>与 <code>--data-dir</code> 解耦、只此一处</b>;控制面 bind 成功后原子写;优雅退出删;字段见 §05。<b>不含密钥本体</b>(只给 <code>token_path</code>)。</td></tr>
+  <tr><td>D7</td><td><b>就绪判据只认探活</b>:用指针里的 host/port 发 <code>GET /status</code>(带 token),200 才算在跑;<b>残留指针文件不算就绪、不阻止拉起</b>;pid 仅作展示。</td></tr>
+  <tr><td>D8</td><td><b>单实例锁锚在指针旁</b>(用户级目录),而非 <code>data_dir</code> ⇒ <b>整机一个工具</b>、指针无并发写;锁必须在<b>绑端口/采样之前</b> acquire,<b>抢输的进程 fail-fast 且不占端口</b>。</td></tr>
+  <tr><td>D9</td><td><b>随机端口</b>:工具 <code>http_port</code> 默认 <code>0</code>(内核分配),校验放开 0;指针记<b>真实绑定端口</b>;新增 <code>global-traffic-monitor endpoint</code> 子命令打印当前端点;<b>自启项不烧端口</b>(只写 data_dir)。</td></tr>
+  <tr><td>D10</td><td><b>拉起解析顺序</b>:①<code>tool_exe</code> 非空 → 直接执行该可执行文件(显式覆盖 / 编译态逃生门);②否则 <code>tool_dir</code>(空 = 仓库内相对路径 <code>&lt;repo&gt;/tools/global-traffic-monitor</code>)→ 执行目录内的 <b>D19 启动器</b>;③启动器与 <code>tool_exe</code> 都找不到 → UI 报「未安装」+ 文件选择器引导写 <code>tool_exe</code>。<b>auto-qb 不拼 <code>uv</code>、不认识入口名与子命令</b> —— 这些全部沉进工具侧启动器(D19)。</td></tr>
+  <tr><td>D11</td><td><b>双模目录定位契约</b>:<code>resolve_tool_root()</code> = <code>getattr(sys,"frozen",False)</code> ? <code>Path(sys.executable).parent</code> : 由 <code>__file__</code> 推导的安装目录。<b>源码位置定位不了编译后的 exe</b>(onefile 的 <code>__file__</code> 指向 <code>sys._MEIPASS</code> 临时解包目录),故必须双模。</td></tr>
+  <tr><td>D12</td><td><b>数据默认落点</b>:<code>&lt;工具安装目录&gt;/data</code>(<b>不是</b> shell 的 PWD —— 自启时 Windows 的 cwd 常为 <code>%Windir%\system32</code>);<code>--data-dir</code>/<code>GTM_DATA_DIR</code> 仍可覆盖但<b>指针不随之移动</b>;旧用户目录数据在「目标空」时<b>一次性自动搬迁</b>(幂等);D19 启动器<b>不传</b> <code>--data-dir</code> —— 落点全由工具自解析(PWD 在被拉起/自启时不可信)。</td></tr>
+  <tr><td>D13</td><td><b>自启触发与裁决</b>:auto-qb 拉起工具时<b>不传任何自启参数</b> —— 自启意图只有一个恒定值,写死在工具侧启动器里(D19);<b>是否真注册由工具自己裁决</b>:工具 config <code>autostart</code>(默认 <code>true</code>)被用户显式改为 <code>false</code> ⇒ 本次注册 <code>no-op</code>,<b>不会被自动装回</b>;设置页开关变更走 <code>POST /autostart</code>(<code>install</code>/<code>uninstall</code>,幂等)并回写该 config;auto-qb <b>不保留 autostart 配置键</b>,UI 开关状态读指针 <code>autostart_registered</code>(§05)。</td></tr>
+  <tr><td>D14</td><td><b>多实例竞争</b>:探测失败才拉起;拉起后短等待探活;失败按<b>固定退避 30s</b> 重试;探活成功但 pid 非我所起 ⇒ 别的实例已拉起,直接订阅、不重复拉;<b>不做实例间通信</b>。</td></tr>
+  <tr><td>D15</td><td><b>设置页合并</b>:两处并成<b>一张卡「全局流量来源」</b> —— 顶部 provider 单选,选中谁展开谁,底部工具状态区 + 「立即拉起/重试」+「打开工具设置」;限速曲线卡<b>删掉来源字段</b>。</td></tr>
+  <tr><td>D16</td><td><b>改名只限用户可见面</b>:CLI 命令 <code>global-traffic-monitor</code>、env <code>GLOBAL_TRAFFIC_MONITOR_DATA_DIR</code>、配置键全称、UI 文案、指针/锁/用户级目录名;<b>Python 包 <code>gtm</code>、import、内部注释、内部文档继续用 <code>gtm</code></b>。</td></tr>
+  <tr><td>D17</td><td><b>键面清理</b>:删 <code>tool_url</code>/<code>tool_token_path</code>/<code>subscribe</code>/<code>autostart</code>;工具子块只留 D2 列的四键。</td></tr>
+  <tr><td>D18</td><td><b>非目标</b>:<code>qb_traffic</code> 不进 provider 菜单;auto-qb 不守护工具;不改工具落盘格式与采样语义;不要求用户配置端口/密钥。</td></tr>
+  <tr><td>D19</td><td><b>启动器契约(工具侧拥有「怎么起」)</b>:工具根目录(<code>resolve_tool_root()</code>,D11)预置平台启动器 —— Windows <code>launch.cmd</code> / POSIX <code>launch.sh</code>;<b>编译态同一条路径</b>(启动器内容退化为调用同目录的可执行文件)。内容由工具自己维护:优先用工具自带 venv 解释器(装依赖时已建),缺失才兜底 <code>uv run --project &lt;本目录&gt;</code>;恒定携带自启意图常量(D13);不传 <code>--data-dir</code>(D12)。auto-qb 侧只做「<code>resolve_tool_root()</code> → 找启动器 → Windows <code>cmd.exe /c</code> / POSIX <code>/bin/sh &lt;脚本&gt;</code> detached 执行」——<b>不认识 <code>uv</code>、不认识入口名与子命令</b>;工具升级换命令形态只改启动器内容,auto-qb 零改动。<code>tool_exe</code> 显式覆盖仍在(先于启动器,逃生门);就绪判据仍是探活(D7),不看启动器退出码(detached 拿不到)。</td></tr>
+</table>
+
+<h2><span class="no">03</span>总体架构</h2>
+<p>三层事实:<b>工具写指针 → auto-qb 读指针探活 → 缺席则引导拉起</b>。指针是发现层的唯一事实源,数据目录只影响「数据放哪」,不影响「怎么找到工具」。</p>
+
+<div class="fig">
+<svg viewBox="0 0 800 340" width="800" height="340" role="img" aria-label="发现与拉起拓扑图">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#6db3c9"/>
+    </marker>
+  </defs>
+  <style>
+    .bx { fill: #131b23; stroke: #26313a; }
+    .t  { fill: #e4eaef; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+    .s  { fill: #a2b0bd; font-family: "Consolas", monospace; font-size: 11px; }
+    .a  { fill: #8fd0e0; font-family: "Segoe UI", sans-serif; font-size: 12px; }
+    .ln { stroke: #6db3c9; stroke-width: 1.2; fill: none; marker-end: url(#ar); }
+    .ln2 { stroke: #3c4a56; stroke-width: 1.2; fill: none; }
+    .wk { stroke: #e2a86e; stroke-width: 1.2; fill: none; marker-end: url(#ar); }
+  </style>
+
+  <rect class="bx" x="16" y="20" width="230" height="86" rx="3"/>
+  <text class="t" x="30" y="44">auto-qb 实例 A</text>
+  <text class="s" x="30" y="64">订阅线程: 探测 → 拉起 → 订阅</text>
+  <text class="s" x="30" y="82">设置页: provider 单选</text>
+  <text class="s" x="30" y="100">traffic_source 段</text>
+
+  <rect class="bx" x="16" y="174" width="230" height="60" rx="3"/>
+  <text class="t" x="30" y="198">auto-qb 实例 B</text>
+  <text class="s" x="30" y="218">同一套逻辑, 各自独立订阅</text>
+
+  <rect class="bx" x="300" y="20" width="230" height="86" rx="3"/>
+  <text class="a" x="314" y="44">用户级目录(指针)</text>
+  <text class="s" x="314" y="64">endpoint.json  {pid, host, port,</text>
+  <text class="s" x="314" y="80">data_dir, token_path, exe_path …}</text>
+  <text class="s" x="314" y="98">instance.lock  (整机单实例)</text>
+
+  <rect class="bx" x="300" y="174" width="230" height="86" rx="3"/>
+  <text class="a" x="314" y="198">工具安装目录(数据)</text>
+  <text class="s" x="314" y="218">data/history_traffic.dat</text>
+  <text class="s" x="314" y="234">data/monitor.token / config.yml</text>
+  <text class="s" x="314" y="252">launch.cmd/.sh · 可执行文件</text>
+
+  <rect class="bx" x="586" y="96" width="198" height="86" rx="3"/>
+  <text class="t" x="600" y="120">流量监视器进程</text>
+  <text class="s" x="600" y="140">控制面 HTTP 127.0.0.1:&lt;随机端口&gt;</text>
+  <text class="s" x="600" y="158">开机自启注册(工具自己维护)</text>
+  <text class="s" x="600" y="176">多实例共享 · 唯一写者</text>
+
+  <path class="ln" d="M246 52 L294 52"/>
+  <text class="s" x="248" y="44">① 读指针</text>
+  <path class="ln" d="M246 200 L294 200" stroke-dasharray="4 3"/>
+  <text class="s" x="248" y="192">(不读数据目录)</text>
+  <path class="wk" d="M416 60 C416 110, 470 120, 580 120"/>
+  <text class="s" x="440" y="106">② 探活 GET /status</text>
+  <path class="ln" d="M416 250 C416 200, 470 170, 580 152"/>
+  <text class="s" x="432" y="238">③ 缺席则拉起(detached)</text>
+  <path class="ln2" d="M684 96 C684 60, 600 40, 416 36" stroke-dasharray="3 3"/>
+  <text class="s" x="486" y="32">④ bind 成功后写指针</text>
+</svg>
+<div class="figcap">图 1 · 发现与拉起拓扑:指针是唯一事实源,数据目录不参与发现</div>
+</div>
+
+<h3>目录与文件布局(改版后)</h3>
+<pre><code><span class="cm"># 用户级目录(平台惯例; 用户可见名用全称) —— 只放"怎么找到工具"</span>
+&lt;user&gt;/AppData/Local/global-traffic-monitor/          <span class="cm"># Windows</span>
+    endpoint.json     <span class="cm"># 发现指针(D6): 原子写, 优雅退出删</span>
+    instance.lock     <span class="cm"># 整机单实例锁(D8)</span>
+
+<span class="cm"># 工具安装目录 —— 只放"数据与配置"</span>
+tools/global-traffic-monitor/                         <span class="cm"># 源码态; 编译态 = exe 所在目录</span>
+    data/history_traffic.dat
+    data/monitor.state.json
+    data/monitor.token
+    data/config.yml
+    launch.cmd / launch.sh                            <span class="cm"># 启动器(D19): 工具侧唯一知道"怎么起"的地方</span>
+    run/                                              <span class="cm"># 运行期临时物(须 gitignore)</span>
+</code></pre>
+<div class="note"><b>必须同步 gitignore:</b>工具数据默认落进仓库后,<code>tools/global-traffic-monitor/data/</code> 与 <code>run/</code> 必须进 <code>.gitignore</code> —— 否则运行态会污染 <code>git status</code>,踩本仓的 git 纪律红线。</div>
+
+<h2><span class="no">04</span>实施步骤</h2>
+
+<h3><span class="sid">S11</span>工具侧:目录定位契约与数据默认落点</h3>
+<ul>
+  <li>新增单点 <code>resolve_tool_root()</code>(D11):frozen 分支用 <code>sys.executable</code>,否则用 <code>__file__</code> 推导;<b>所有</b>「找自己」的地方(数据目录、自启注册路径、指针目录计算)一律经它,禁止散落 <code>__file__</code>。</li>
+  <li><code>default_data_dir()</code> 语义改为「工具安装目录下的 <code>data/</code>」(<a style="color:var(--dim)" href="../../tools/global-traffic-monitor/src/gtm/storage.py">storage.py</a> 现为平台用户目录,须改);<code>GTM_DATA_DIR</code> → <code>GLOBAL_TRAFFIC_MONITOR_DATA_DIR</code>(D16)仍优先。</li>
+  <li>旧用户目录数据一次性搬迁(D12):仅当旧目录有 <code>history_traffic.dat</code> 且新目录为空时搬迁;幂等、可重入;失败只 WARNING 不阻断启动。</li>
+  <li>新增<b>启动器</b> <code>launch.cmd</code> / <code>launch.sh</code>(D19):恒定携带自启意图、优先工具自带 venv 解释器、<code>uv</code> 仅兜底、<b>不传 <code>--data-dir</code></b>;随包发布,编译态内容退化为调用同目录可执行文件。<b>语义单点</b>:入口名与子命令只在这里出现一次 —— auto-qb 侧不认识它们。</li>
+</ul>
+<div class="exit"><b>出口</b>源码态与模拟 frozen 态下,数据目录都解析到「安装目录/data」;搬迁幂等测试通过。</div>
+
+<h3><span class="sid">S12</span>工具侧:发现指针与单实例锁</h3>
+<ul>
+  <li>控制面 <code>start()</code> 绑定成功后原子写 <code>endpoint.json</code> 到用户级目录(D6;字段见 §05);注册 <code>atexit</code>/退出路径删除。</li>
+  <li><code>SingleInstanceLock</code> 锁路径从 <code>data/</code> 迁到指针旁用户级目录(D8),并核验 acquire 早于 bind/采样(<a style="color:var(--dim)" href="../../tools/global-traffic-monitor/src/gtm/__main__.py">__main__.py</a>);补一条「抢输进程不占端口」的测试。</li>
+  <li>指针含 <code>schema</code> 版本号:auto-qb 读到未知 schema 只告警不猜字段。</li>
+</ul>
+<div class="exit"><b>出口</b>双实例启动:第二个 fail-fast、端口零占用、日志有明确原因;退出后指针消失。</div>
+
+<h3><span class="sid">S13</span>工具侧:随机端口与 endpoint 子命令</h3>
+<ul>
+  <li>工具 config <code>http_port</code> 默认改 <code>0</code>,并放开 <code>0</code> 的校验(现被判非法,见 <a style="color:var(--dim)" href="../../tools/global-traffic-monitor/tests/test_config.py">test_config.py</a>);<code>server.py</code> 已支持回填真实端口,无需改绑定逻辑。</li>
+  <li>新增 <code>global-traffic-monitor endpoint</code> 子命令:读指针打印 <code>host:port</code> + <code>token_path</code> + <code>data_dir</code>,供手工调试(随机端口后用户无从得知端口)。</li>
+</ul>
+<div class="exit"><b>出口</b>连续启动两次,端口不同且均被指针正确记录;<code>endpoint</code> 子命令输出与实际一致。</div>
+
+<h3><span class="sid">S14</span>工具侧:启动器自启意图、改名与 gitignore</h3>
+<ul>
+  <li><code>run</code> 增<b>布尔开关</b> <code>--autostart</code>(D13/D19):仅表示「本次拉起顺带幂等注册」,<b>不再承载 true|false 取值</b>;真正裁决看工具 config <code>autostart</code>(默认 <code>true</code>,由 <code>POST /autostart</code> 写)—— 显式 <code>false</code> 时本次 <code>no-op</code>,用户关过后不被装回;不带该开关的拉起(如自启项自己那条 <code>run --data-dir</code>)不做任何注册尝试。</li>
+  <li>用户可见面全称改名(D16):CLI 脚本名与 <code>prog</code>、env 名、指针/锁文件名、用户级目录名、文案(「另一 … 实例已持有锁」);<b>包名与 import 不动</b>。</li>
+  <li>仓库 <code>.gitignore</code> 增 <code>tools/global-traffic-monitor/data/</code> 与 <code>run/</code>。</li>
+</ul>
+<div class="exit"><b>出口</b>工具侧全量测试绿;<code>git status</code> 在工具跑起来后依然干净。</div>
+
+<h3><span class="sid">S15</span>auto-qb 侧:配置面合并与升级链</h3>
+<ul>
+  <li><a style="color:var(--dim)" href="../../src/auto_qb/config/models.py">models.py</a> 新增 <code>TrafficSourceConfig</code>;<code>GlobalSpeedLimitCurve</code> 删 <code>traffic_source</code>;<code>GlobalTrafficMonitorConfig</code> 退役。</li>
+  <li><a style="color:var(--dim)" href="../../src/auto_qb/config/schema/groups.py">schema/groups.py</a> 增 <code>traffic_source</code> 组;旧两组收缩;help 文案写「一键切换来源」。</li>
+  <li><a style="color:var(--dim)" href="../../src/auto_qb/config/validation/curves.py">validation/curves.py</a> + <a style="color:var(--dim)" href="../../src/auto_qb/config/validation/sections.py">sections.py</a>:新段校验(provider 枚举、按 provider 校验所需字段、dat_path 非空);<b>必须在 <code>validate_config</code> 全量聚合</b>。</li>
+  <li><a style="color:var(--dim)" href="../../src/auto_qb/config/migrations.py">migrations.py</a> 新增 <code>MIGRATIONS["config"][4]</code>(v4→v5,D3):段下移、删 <code>enabled/tool_url/tool_token_path/subscribe</code>、<code>dat_path</code> 迁移、provider 推导(有 dat_path 且无工具段 ⇒ <code>traffic_monitor</code>);逐键 note。</li>
+  <li>取数侧:曲线模块与 <code>sys.*</code> 门控改读 <code>traffic_source</code> 段;provider=工具时数据源 = 工具 dat,与 TM 文件互斥(D1)。</li>
+</ul>
+<div class="exit"><b>出口</b>旧生产配置经迁移链自动升级为 v5 且行为等价(仍读 TM 文件);键面基线更新到位;校验聚合报错。</div>
+
+<h3><span class="sid">S16</span>auto-qb 侧:探测 → 引导拉起 → 订阅编排</h3>
+<ul>
+  <li>新增联动单点(建议 <code>core/traffic_source/agent.py</code>):<code>probe()</code> 读指针 + 探活;<code>ensure_running()</code> 缺席时按 D10 <b>执行启动器</b>(D19)并 detached 拉起 —— <b>零参数</b>(自启意图已在启动器里),失败按 D14 退避;<code>status()</code> 供 UI 读四态。</li>
+  <li><b>「启动工具」必须做成可注入的单一动作</b>(一个模块级函数/hook),以满足 <a style="color:var(--dim)" href="../../tests/sidefx.py">tests/sidefx.py</a> 的 POPEN 白名单(现仅放行 <code>node</code> 与临时 wrapper);测试中注入假动作,生产走真 Popen(Windows <code>DETACHED_PROCESS</code>)。</li>
+  <li>编排挂在<b>已有订阅线程</b>(S7 遗留):每轮期望态为真时,先确保可达(探测/拉起),再注册订阅;<b>不占主循环</b>(单一写线程法则)。</li>
+  <li>密钥与端口全部来自指针(D6):删除 <code>tool_url</code>/<code>tool_token_path</code> 读路径。</li>
+</ul>
+<div class="exit"><b>出口</b>工具未跑时 auto-qb 能自动拉起并订阅成功;工具在跑时零拉起;探活失败按退避重试且不刷日志。</div>
+
+<h3><span class="sid">S17</span>auto-qb 侧:设置页合并</h3>
+<ul>
+  <li>新增一张卡「全局流量来源」(D15):provider 单选 + 选中面展开(TM 仅 <code>dat_path</code>;工具面 <code>tool_dir</code>/<code>tool_exe</code>/<code>data_dir</code>/<code>notify_cooldown_s</code>)。自启开关<b>不是配置键</b>:状态读指针 <code>autostart_registered</code>,拨动走 <code>POST /autostart</code>(D13)。</li>
+  <li>卡片底部状态区(§05 五态字段)+「立即拉起/重试」+「打开工具设置」;找不到工具时给文件选择器写 <code>tool_exe</code>(D10 ③)。</li>
+  <li>限速曲线卡删来源字段;工具自身参数(采样间隔/阈值/适配器)保持经控制面读写、高级折叠(D2)。</li>
+</ul>
+<div class="exit"><b>出口</b>「配置来源」只在设置页一处;切换 / 拉起 / 状态展示三种交互实测可用。</div>
+
+<h3><span class="sid">S18</span>守阵、基线与文档</h3>
+<ul>
+  <li>测试:auto-qb 侧(新段校验、迁移链、探测/拉起可注入路径、provider 互斥、键面基线)+ 工具侧(指针写删、锁前置、随机端口、frozen 分支、搬迁幂等);新增用例同步测试文件头「测试计划」清单。</li>
+  <li>基线:按 <a style="color:var(--dim)" href="../testing/baseline.md">testing/baseline.md</a> 口径跑 <code>commands run test.full</code>,新建基线切片记实测数字(全仓一条)。</li>
+  <li>回写:<code>docs/configuration.md</code>(新段与新键)、根 <code>README.md</code>、<code>memory-bank/</code> 配置参考与踩坑(发现/指针/gitignore 三条新坑)、<code>commands run kb.index</code>。</li>
+</ul>
+<div class="exit"><b>出口</b>全量测试绿且新基线数字实测;文档四处无漂移。</div>
+
+<h3><span class="sid">S19</span>真机验收(并入旧 S10)</h3>
+<ul>
+  <li>真机跑 <code>dev.run -- config.yml --dry-run</code> 起步,再真实运行:①工具未跑 → 自动拉起 → 订阅成功;②工具自启后重启机器 → auto-qb 探测到在跑、零拉起;③双 auto-qb 实例共享同一工具;④切回 TM 文件来源后工具参数保留但不参与取数。</li>
+</ul>
+<div class="exit"><b>出口</b>四条实测通过,并把实测数字写进基线切片与任务档案。</div>
+
+<h2><span class="no">05</span>默认参数与契约字段</h2>
+<h4>endpoint.json 字段(D6)</h4>
+<table>
+  <tr><th>字段</th><th>含义</th></tr>
+  <tr><td>schema</td><td>指针格式版本(未知值 ⇒ auto-qb 只告警不猜字段)</td></tr>
+  <tr><td>version</td><td>工具版本, 供状态区展示与排障</td></tr>
+  <tr><td>pid / started_at</td><td>诊断用(存活判据是探活, 不是 pid)</td></tr>
+  <tr><td>host / port</td><td>控制面真实绑定地址(随机端口的唯一出口)</td></tr>
+  <tr><td>data_dir / token_path</td><td>数据目录与密钥文件路径(密钥本体不落指针)</td></tr>
+  <tr><td>exe_path</td><td>当前进程的可执行文件路径(诊断「上次从哪起的」)</td></tr>
+  <tr><td>autostart_registered</td><td>自启是否已注册(工具 config <code>autostart</code> 裁决后的结果;UI 开关状态读此字段 · D13/D19)</td></tr>
+</table>
+<h4>默认参数</h4>
+<table>
+  <tr><th>项</th><th>默认</th></tr>
+  <tr><td>provider</td><td>traffic_monitor(保持既有行为)</td></tr>
+  <tr><td>工具 config <code>autostart</code></td><td>true(未显式关过即注册;用户关过 ⇒ <code>false</code> 且不被装回)</td></tr>
+  <tr><td>启动器</td><td><code>&lt;工具根&gt;/launch.cmd</code>(Windows) / <code>launch.sh</code>(POSIX);恒定携带自启意图、不带 <code>--data-dir</code></td></tr>
+  <tr><td>notify_cooldown_s</td><td>600S(工具侧已有默认, 配置侧沿用)</td></tr>
+  <tr><td>工具 http_port</td><td>0(内核分配随机端口)</td></tr>
+  <tr><td>探活超时</td><td>首次引导 120s(含 uv 装依赖) / 常态 10s</td></tr>
+  <tr><td>拉起失败退避</td><td>固定 30s</td></tr>
+  <tr><td>工具数据目录</td><td><code>&lt;工具安装目录&gt;/data</code></td></tr>
+  <tr><td>指针目录</td><td>用户级平台目录 <code>global-traffic-monitor/</code></td></tr>
+</table>
+<h4>状态区五态(D15/S17)</h4>
+<table>
+  <tr><th>态</th><th>展示</th></tr>
+  <tr><td>未安装</td><td>tool_dir/tool_exe 均未解析到 → 文件选择器引导</td></tr>
+  <tr><td>未运行</td><td>指针缺失或探活失败(含最近错误原因与时间)</td></tr>
+  <tr><td>拉起中</td><td>已 Popen, 等探活(含剩余超时)</td></tr>
+  <tr><td>已就绪</td><td>端口 · PID · 版本 · 数据目录 · 自启是否已注册</td></tr>
+  <tr><td>拉起失败</td><td>失败原因 + 退避剩余 + 「立即重试」</td></tr>
+</table>
+
+<h2><span class="no">06</span>顺序与依赖</h2>
+<pre><code>S11 ─┬─ S12 ── S13        <span class="cm"># 工具侧发现面(可并行推进)</span>
+     └─ S14
+            │
+S15 ────────┴─ S16 ── S17   <span class="cm"># auto-qb 侧: 先配置面, 再编排, 再 UI</span>
+                      │
+                     S18 ── S19
+</code></pre>
+<p>硬依赖:<b>S15 必须先于 S16</b>(编排读新段);<b>S12/S13 必须先于 S16</b>(指针与随机端口是探测前提);S18 收尾不早于 S17。工具侧 S11–S14 与 auto-qb 侧 S15 可并行(不同包,互不阻塞)。</p>
+
+<h2><span class="no">07</span>黄金法则映射</h2>
+<table>
+  <tr><th>法则</th><th>本计划落点</th></tr>
+  <tr><td>幂等性</td><td>拉起、自启注册、数据搬迁、指针写入全部幂等;「谁在跑」由探活判定,不依赖轮询频率</td></tr>
+  <tr><td>保守默认</td><td>provider 默认 traffic_monitor(行为不变);拉起重试有上限与退避;不静默回退来源</td></tr>
+  <tr><td>状态持久化</td><td>指针文件即跨进程状态(等价于 state_file 的角色);非优雅终止的残留由探活兜底</td></tr>
+  <tr><td>fail-fast</td><td>新段进 <code>validate_config</code> 全量聚合报错;指针 <code>schema</code> 未知即告警不猜;锁抢输即退出</td></tr>
+  <tr><td>单一写线程</td><td>探测/拉起/订阅编排全在订阅线程,主循环不新增写入</td></tr>
+  <tr><td>范围守恒</td><td>工具本体 S0–S9 已有实现与记录不追改;本计划只做增量与改判面</td></tr>
+  <tr><td>请求边界</td><td>S11–S19 逐步骤显式授权后再动代码;本文件本身只作方案</td></tr>
+</table>
+
+<h2><span class="no">08</span>验收判据</h2>
+<table>
+  <tr><th>判据</th><th>怎么验</th></tr>
+  <tr><td>来源真正互斥</td><td>provider=traffic_monitor 时工具参数不参与取数;反之 TM 文件不参与,断言取数源唯一</td></tr>
+  <tr><td>免配端口/密钥</td><td>配置里不含 url/token 键,联动仍能成立;随机端口经指针被正确发现</td></tr>
+  <tr><td>自动拉起</td><td>工具未跑:auto-qb 拉起 → 探活成功 → 订阅;工具在跑:零拉起(断言 Popen 未被调用)</td></tr>
+  <tr><td>多实例共享</td><td>第二个 auto-qb 实例探测到在跑即跳过拉起;两个实例各自订阅互不干扰</td></tr>
+  <tr><td>抢输进程不占端口</td><td>同时启动两个工具:fail-fast 者不产生监听端口,日志有明确原因</td></tr>
+  <tr><td>编译态可定位</td><td>模拟 <code>sys.frozen</code>:目录解析到 exe 所在目录,数据落 <code>&lt;exe 目录&gt;/data</code></td></tr>
+  <tr><td>迁移等价</td><td>旧配置(仅 TM dat_path)经迁移链升 v5,取数行为与升级前一致,notes 逐键可读</td></tr>
+  <tr><td>守阵不受污染</td><td>工具跑起来后 <code>git status</code> 干净(data/run 已 ignore);<code>tests/sidefx.py</code> 全绿</td></tr>
+  <tr><td>拉起不依赖 auto-qb 侧 uv</td><td>断言 auto-qb 的拉起动作只有「执行启动器」一步、<b>无 <code>uv</code>/入口名/子命令拼装</b>;模拟工具升级(改启动器内容)后拉起仍成立、auto-qb 零改动</td></tr>
+  <tr><td>自启不被装回</td><td>工具 config <code>autostart=false</code>(用户关过)后再走引导拉起:断言注册后端<b>未被调用</b>,注册项仍不存在</td></tr>
+</table>
+
+<h2><span class="no">09</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>对策</th></tr>
+  <tr><td>用户级指针目录被别的用户/权限挡</td><td>指针目录按用户隔离(多用户各自一套)属预期;写入失败只告警,回退「直接探默认端口」并提示</td></tr>
+  <tr><td>仓库内 data/ 被 git 误纳</td><td>S14 强制补 gitignore + S18 验收项;已有 git 纪律守卫兜底</td></tr>
+  <tr><td>uv 不在 PATH(部署机)</td><td>启动器内部<b>优先工具自带 venv 解释器</b>(装依赖时已建),<code>uv</code> 只作兜底;auto-qb 侧不拼 <code>uv</code> —— 最坏情况也只剩 UI 引导写 <code>tool_exe</code>(D10 ①)</td></tr>
+  <tr><td>部署机挡启动器 / 无执行权限</td><td>Windows 经 <code>cmd.exe /c</code>、POSIX 经 <code>/bin/sh &lt;脚本&gt;</code> 调用(<b>不依赖 exec 位</b>与 noexec 挂载);失败落「拉起失败」态 + 退避重试,不阻塞主流程</td></tr>
+  <tr><td>编译版首次冷启动不知 exe 在哪</td><td>默认仓库相对路径;找不到时设置页文件选择器(D10 ③),状态区区分「编译版/源码版」</td></tr>
+  <tr><td>探活超时被误判为「未运行」</td><td>首次引导 120s 容忍 uv 装依赖;超时只 WARNING + 退避重试,不阻塞主流程、不改来源</td></tr>
+  <tr><td>迁移把生产 config 改坏</td><td>沿用既有「备份 + 原子写回」机制;<code>config.yml</code> 属生产红线文件,迁移由程序自身在启动物化单点完成,不由 agent 手改</td></tr>
+</table>
+
+<h2><span class="no">10</span>文件定位(行号基准 @ 88e7e4ee)</h2>
+<table>
+  <tr><th>文件</th><th>本计划落点</th></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/models.py">src/auto_qb/config/models.py</a></td><td><code>GlobalSpeedLimitCurve</code>(含 <code>traffic_source</code>)与 <code>GlobalTrafficMonitorConfig</code> 的取代表</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/migrations.py">src/auto_qb/config/migrations.py</a></td><td>新增 <code>MIGRATIONS["config"][4]</code></td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/schema/groups.py">src/auto_qb/config/schema/groups.py</a></td><td>新组与 help 文案</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/validation/curves.py">src/auto_qb/config/validation/curves.py</a></td><td>来源校验迁出</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/webui/tool_client.py">src/auto_qb/webui/tool_client.py</a></td><td>url/token 解析 → 指针发现</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/webui/static/shared/config_editor.js">src/auto_qb/webui/static/shared/config_editor.js</a></td><td>曲线卡来源字段删除、新卡接线</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../tools/global-traffic-monitor/src/gtm/storage.py">tools/.../src/gtm/storage.py</a></td><td><code>default_data_dir</code> / <code>SingleInstanceLock</code></td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../tools/global-traffic-monitor/src/gtm/server.py">tools/.../src/gtm/server.py</a></td><td><code>port=0</code> 回填(已有);指针写入时机</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../tools/global-traffic-monitor/src/gtm/__main__.py">tools/.../src/gtm/__main__.py</a></td><td><code>run</code> 流程、锁 acquire 时机、<code>--autostart</code>、<code>endpoint</code> 子命令</td></tr>
+  <tr><td><a style="color:var(--dim)" href="../../tests/sidefx.py">tests/sidefx.py</a></td><td>POPEN 白名单:启动动作须可注入</td></tr>
+  <tr><td>tools/global-traffic-monitor/launch.cmd · launch.sh</td><td><b>新建</b>(D19):启动器契约;工具侧唯一一处知道「怎么起」</td></tr>
+</table>
+
+<hr class="rule">
+<p style="color:var(--faint);font-family:var(--mono);font-size:11.5px">本计划经 grilling 五轮收敛 + 26-10-17-0429 就地改版(R1),全部决策见 §02;实施按 S11→S19 逐步骤授权推进。</p>
+
+</div>
+</body>
+</html>

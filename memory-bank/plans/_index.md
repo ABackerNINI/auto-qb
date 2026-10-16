@@ -15,6 +15,7 @@
 
 ## Open
 
+- [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
 - [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
