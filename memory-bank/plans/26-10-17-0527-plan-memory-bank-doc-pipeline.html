@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-doc-pipeline">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-17-0527">
+<meta name="doc-updated" content="26-10-17-0527">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 880px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; max-width: 64ch; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; max-width: 74ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; max-width: 74ch; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; max-width: 74ch; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-doc-pipeline</div>
+<h1>memory-bank 文档流水线:统一模板 × 命令化创建/更新</h1>
+<p class="lede">双目标改造:①统一风格——机器可检的面(元数据/命名/状态词/必备章节)由模板渲染 + 守卫拦新增;②压缩 agent 步数——核心原则「<b>一次逻辑动作 = 一条命令 + 一次填空,一切派生面零手写</b>」。命令是既有单点的执行器,不是第二套规范。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-17-0527 · <b>doc-updated</b> 26-10-17-0714 · <b>doc-status</b> Open(已拍板待实施) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(用户两次纠正:①工具展示不全改文本问答 ②「目标二=减少 agent 修改步骤,首版设计只着重了统一风格,重新设计」);R1 拍板 D1–D6 锁定 + 剩余人工步骤量化裁定
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>两个目标,两条主线</h3>
+<table>
+  <tr><th>目标</th><th>主线</th><th>判据</th></tr>
+  <tr><td>① 统一风格</td><td>机器面强制(命令自动填 + 守卫拦新增),正文行文完全自由(余地)</td><td>新建件头字段/命名/状态词 100% 合规且由命令产出;守卫对新增面判红可机检</td></tr>
+  <tr><td>② 减少修改步骤</td><td>一次逻辑动作 = 一条命令 + 一次填空;时间戳、命名、meta、索引重建、Refs、状态行等<b>派生面一律由命令派生</b>,agent 零手写</td><td>§04 步数对照表:高频工作流机械步数下降 ≥ 60%</td></tr>
+</table>
+<h3>设计底线(不新增规范单点)</h3>
+<ul>
+  <li>命令是<b>既有单点的执行器</b>:时间取 <code>timekit</code>(UTC+8 钉死)、状态词表取 <code>_common.DOC_STATUSES</code>(HTML 5 词)与档案 4 词表、cap 取 <code>_common.CAP_POLICY</code>、命名与认领链口径遵 <code>conventions/doc-forms.md</code>——命令与模板里<b>不出现第二份词表/命名规则</b>,全部 import。</li>
+  <li>模板是规范的<b>渲染器</b>:模板产出的头部字段与 doc-forms 定义逐字一致;守卫钉住「模板头 ↔ 单点定义」同源(先例:<code>test_skill_cap_table_matches_cap_policy</code> 钉 cap 表)。</li>
+  <li>余地边界:强制面 = 元数据头、文件命名、必备章节<b>存在性</b>;骨架段落可删可留空;正文句式、口吻、详略零约束。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>步数盘点(今日 agent 实际要走的)</h3>
+<table>
+  <tr><th>高频工作流</th><th>今日步数</th><th>其中纯机械步(可派生)</th></tr>
+  <tr><td>新建计划(含立档)</td><td class="bad">≈9</td><td>取时 / 回忆命名与 meta(或开样本抄 CSS)/ 写 HTML 骨架 / 更新切片 / 双 clone 查重 / 写档案骨架 / 双向 Refs / kb.index / kb.check —— 7 步</td></tr>
+  <tr><td>计划改版/实施记录</td><td class="bad">≈6</td><td>取时 / 抬 doc-updated + 写变更记录行 / 切片最后活动 / 档案 Updated / kb.index —— 4~5 步</td></tr>
+  <tr><td>翻转状态</td><td class="bad">≈4</td><td>取时 / 改 meta 或 Status 行(词表靠记忆)/ kb.index / 闸门自查 —— 3 步</td></tr>
+  <tr><td>立档</td><td class="bad">≈7</td><td>本 clone ls 查重 / 跨 clone ls 查重 / 取日 / 写状态行+必备章节骨架 / Refs 双向 / kb.index —— 6 步</td></tr>
+  <tr><td>收尾(纯文档轮)</td><td class="bad">≈6</td><td>切片最后活动+摘要 / 档案 Updated+进度日志 / kb.index / kb.check / 债务转告 —— 4~5 步</td></tr>
+</table>
+<h3>风格漂移实证</h3>
+<ul>
+  <li>切片头部两种形态并存:YAML frontmatter(<code>26-10-17-0339</code>)vs 纯三行头(多数)——创建动作全凭记忆,没有渲染器。</li>
+  <li><code>plans/</code> 存量旧命名(<code>-v2</code>/<code>-v3</code>/<code>-round9</code>/<code>wave3</code>)——已被「守卫只拦新增」杀死(51 份存量豁免),证明<b>防漂移靠守卫,不靠模板</b>;但正文骨架与创建流程至今无守卫、无命令。</li>
+  <li>切片规模债(模板治不了,机制面补):132 条 &gt; 70 阈值;两条切片超 12,000 cap(<code>26-10-15-0728</code> 19,037 / <code>26-10-16-0541</code> 13,905)。按债务制本计划不动存量,清理另开会话(<code>commands run doc.caps</code> 现算)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览:四条命令 + 模板资产</h2>
+<h3>命令面(kb 包新增,走 add 收录协议)</h3>
+<table>
+  <tr><th>命令</th><th>签名</th><th>自动派生(零手写)</th><th>替代的手工步</th></tr>
+  <tr><td><code>kb.new</code></td><td><code>kb.new &lt;family&gt; --title &lt;t&gt; [--topic &lt;k&gt;] [--refs p1,p2] [--total ..]</code></td><td>时间戳(timekit)/ 文件名(含查重)/ 头部字段全量 / HTML 族内联 dark CSS / 骨架段落 + SLOT 标记 / 建后自动重跑索引生成器 / 末尾打印「剩余人工步骤」清单(三分类:判断/条件/可选,<b>机械剩余恒 0</b>,量化见 §05)</td><td>取时·命名·抄 CSS·写头·查重·建索引 ≈6 步 → 1 步</td></tr>
+  <tr><td><code>kb.status</code></td><td><code>kb.status &lt;path&gt; &lt;to&gt;</code></td><td>按族探测载体并校验词表(HTML 5 词表 / 档案 4 词表,单点 import)/ 翻转并自动抬 doc-updated 或 Updated / 重跑索引 / 终态提示(Done → 切片迁出提醒)/ 切片无状态 → 拒绝并指路迁出流程</td><td>取时·改 meta·词表校验·建索引 ≈4 步 → 1 步</td></tr>
+  <tr><td><code>kb.bump</code></td><td><code>kb.bump &lt;path&gt; --note "&lt;一句&gt;"</code></td><td>HTML:抬 doc-updated + <code>## 变更记录</code>追加一行「&lt;stamp&gt; &lt;note&gt;」;切片:抬最后活动;档案:抬 Updated;重跑索引。note 随参数带入,<b>不为 bump 再开一次编辑</b></td><td>取时·改戳·写变更记录·建索引 ≈5 步 → 1 步</td></tr>
+  <tr><td><code>kb.wrap</code></td><td><code>kb.wrap --topic &lt;slug&gt; --did "&lt;一句&gt;"</code></td><td>切片:不存在则按模板建、存在则抬最后活动 + 追加 did 行;tasks/ 有同专题档案则追加进度日志日期行 + 抬 Updated;重跑索引;输出剩余收尾清单(基线?新坑?债务转告?)——收尾知识内嵌,不必重读 DoD</td><td>切片与档案 4~5 步机械 → 1 步</td></tr>
+</table>
+<div class="aside">幂等与 fail-fast(黄金法则):目标文件已存在即 rc=1 拒绝(tasks 档案撞名 = 同专题已存在,提示「追加不新建」并给出路径);命令不改写未声明目标;失败不落半文件(先渲染后落盘,渲染失败即停)。多 clone 查重内置在 <code>kb.new task</code>(本 clone ls + <code>../auto-qb-*/memory-bank/tasks/</code> 只读 ls,按 slug 比对)。</div>
+<h3>落点(不另起炉灶)</h3>
+<ul>
+  <li>脚本:memory-bank skill <code>scripts/</code>(<code>new_doc.py</code> / <code>flip_status.py</code> / <code>bump_doc.py</code> / <code>wrap_session.py</code>),全部 import <code>_common.py</code>。</li>
+  <li>模板资产:skill <code>templates/</code>(每族一件,内含 SLOT 标记与默认正确骨架)。</li>
+  <li>task id:<code>.commands/kb/config.toml</code> 四条,经 add 协议收录(判据命中:反复要跑 + 难拼 + 易错);<code>confirmed</code> 包沿用。</li>
+  <li>规范面:<code>conventions/doc-forms.md</code> 增「创建/更新方式」一节,<b>只放 task id 链接,不抄命令</b>(<code>doc.drift</code> 判红手抄);根 AGENTS.md 仅改会话协议两行路由(注意 8,000 cap,路由手术式改动)。</li>
+</ul>
+
+<h2><span class="no">§04</span>SLOT 填空机制与七族模板</h2>
+<h3>机制:模板 = 默认正确的骨架 + 填空标记</h3>
+<ul>
+  <li>模板内需要 agent 写内容的位置放 <code>&lt;!-- SLOT: 说明 --&gt;</code>(md 族用 HTML 注释同款,可 grep)。agent 的动作从「回忆规范→从头写」变成「<b>替换标记、删多余段</b>」——删比写快,且删不出来错。</li>
+  <li><code>kb.new</code> 建完即打印 SLOT 清单(带说明),agent 不必打开模板源文件;守卫对新增面校验「无残留 SLOT」——没填完过不了检查。</li>
+  <li>骨架段落标注「可删」:模板给的段是<b>默认存在</b>,不是强制存在;守卫只查头部字段与必备章节存在性,不查段落齐全(Q1 推荐 A:机器面强制 + 骨架可裁)。</li>
+</ul>
+<h3>七族模板与自动填写字段</h3>
+<table>
+  <tr><th>family(期)</th><th>文件名(自动)</th><th>自动填的头部</th><th>骨架与 SLOT</th></tr>
+  <tr><td><code>plan</code>(一期)</td><td><code>&lt;stamp&gt;-plan-&lt;topic&gt;.html</code></td><td>doc-type/topic/status=<code>Open</code>/added/updated + dark CSS 整套 + 标题排版</td><td>背景与目标 / 拍板决策表(D 编号) / 实施步骤(含验收) / 待拍板清单 / 风险 / 变更记录(R0 行预填)</td></tr>
+  <tr><td><code>task</code>(一期)</td><td><code>&lt;date&gt;-&lt;领域&gt;-&lt;专题&gt;.md</code></td><td>Status=<code>In Progress</code>/Added/Updated/Topics/Refs(--refs) + 双 clone 查重</td><td>原始请求 / 思考过程与决策 / 实现计划 / 子任务状态表(表头预填) / 进度日志(首行预填日期)</td></tr>
+  <tr><td><code>slice</code>(一期)</td><td><code>&lt;stamp&gt;-&lt;slug&gt;.md</code></td><td>标题 / 最后活动;头部<b>归一为三行头</b>(去 YAML,见 §08 D5)</td><td>摘要 SLOT / 用户诉求 / 过程 / 关键事实 / 产出 / 下一步(段均可删)</td></tr>
+  <tr><td><code>pitfall</code>(二期)</td><td><code>pitfalls/&lt;类&gt;/&lt;主题&gt;.md</code></td><td>三行头(摘要/触发词)/ <code>--class</code> 选类并校验 7 类枚举</td><td>Refs 行 / 触发·判别·处置三必填 / 守阵·复发选填</td></tr>
+  <tr><td><code>report</code>(二期)</td><td><code>&lt;stamp&gt;-report-&lt;topic&gt;.html</code></td><td>doc-type=report/status=<code>Done</code>(出厂即终态)+ dark CSS</td><td>结论 / 证据快照 / 方法与局限</td></tr>
+  <tr><td><code>baseline</code>(二期)</td><td><code>&lt;stamp&gt;-&lt;slug&gt;.md</code></td><td><code># &lt;TOTAL&gt; — &lt;标题&gt;</code>(--total 参数)/ 基线时间 / Refs</td><td>验收数字 / 本改动面(固定小节)</td></tr>
+  <tr><td><code>progress</code>(二期)</td><td><code>progress/&lt;主题&gt;.md</code></td><td>三行头</td><td>叙述段(迁出蒸馏的落点件,<code>kb.wrap</code> 提示引用)</td></tr>
+</table>
+<p>issues 不入列:已有 create-issue 生成器在管,流程不动(只受益于同源词表)。范围分期默认「一期三族」(plan/task/slice 最高频、漂移最重;§08 D2,可翻案)。</p>
+
+<h2><span class="no">§05</span>步数对照与剩余人工步骤的量化裁定</h2>
+<h3>5.1 口径与判据</h3>
+<p>步 = 一次命令调用或一次「打开文件做编辑」;SLOT 段落数<b>不</b>计步(一次编辑可填完全部段)。<b>机械剩余</b> = 本可派生却仍需人工的确定性动作,目标恒 0。一个动作能进命令的判据(三条缺一即留人工):①输入已在命令参数或系统事实中(时间/路径/词表/查重) ②执行确定性、无判断 ③失败可整件回滚(渲染后一次落盘)。</p>
+<h3>5.2 对照表(R1 修正)</h3>
+<table>
+  <tr><th>工作流</th><th>今日</th><th>改造后</th><th>构成</th></tr>
+  <tr><td>新建计划(制品+配套面)</td><td class="bad">≈9</td><td class="good">2</td><td><code>kb.new plan</code>(1)+ 正文填空(1)</td></tr>
+  <tr><td>立档</td><td class="bad">≈7</td><td class="good">2</td><td><code>kb.new task</code>(1)+ 填原始请求等(1);Summary 由 --title 预填(裁定 A1)</td></tr>
+  <tr><td><b>新专题开工合计</b></td><td class="bad">≈16</td><td class="good">4</td><td>上两行合计(2 命令 + 2 填空)</td></tr>
+  <tr><td>计划改版</td><td class="bad">≈6</td><td class="good">2~3</td><td>编辑内容(1)+ <code>kb.bump --note</code>(1)(+ 收尾 <code>kb.wrap</code>)</td></tr>
+  <tr><td>翻转状态</td><td class="bad">≈4</td><td class="good">1</td><td><code>kb.status</code> 一条,零人工剩余</td></tr>
+  <tr><td>收尾(纯文档轮)</td><td class="bad">≈6</td><td class="good">1</td><td><code>kb.wrap --did</code> 一条;涉码轮 +2(<code>test.full</code> 与基线数字誊写,裁定 A4)</td></tr>
+</table>
+<p class="aside">R0 表曾写「立档场景 + <code>kb.new task</code> = 3」——漏计档案正文填空,R1 修正为 <b>4</b>(2 命令 + 2 填空)。这次修正本身就是量化口径的价值:不可判定的数字不能当验收。</p>
+<h3>5.3 逐命令剩余步骤表(R2 补录,与拍板答复对齐)</h3>
+<table>
+  <tr><th>命令</th><th>命令步</th><th>判断剩余</th><th>条件剩余</th><th>机械剩余</th></tr>
+  <tr><td><code>kb.new plan</code></td><td>1</td><td>1(正文填空:背景/拍板/步骤/待拍板/风险)</td><td>立档阈值命中 → +<code>kb.new task</code></td><td class="good">0</td></tr>
+  <tr><td><code>kb.new task</code></td><td>1</td><td>1(原始请求 + 思考过程;Summary 已由 --title 预填,裁定 A1)</td><td>—</td><td class="good">0</td></tr>
+  <tr><td><code>kb.status</code></td><td>1</td><td>0</td><td>终态提醒(切片迁出 / Summary 收口)</td><td class="good">0</td></tr>
+  <tr><td><code>kb.bump</code></td><td>1</td><td>0</td><td>—</td><td class="good">0</td></tr>
+  <tr><td><code>kb.wrap</code></td><td>1</td><td>0</td><td>涉码轮 → test.full + 基线誊写(A4);踩坑 → 新坑档</td><td class="good">0</td></tr>
+</table>
+<p>逐命令<b>机械剩余恒 0</b> —— 本表是 §5.4「机械 0」收录断言的数据源;任何命令实现后若做不到,收录时当场拒绝。</p>
+<h3>5.4 剩余清单的输出契约(量化后的硬格式)</h3>
+<p>每条命令末尾固定输出三分类清单与计数行;<b>「机械 0」是收录断言</b>——做不到的命令不许收进包(收录协议增补判据):</p>
+<pre><code>剩余人工 N 项(判断 a · 条件 b · 机械 0)
+【判断】SLOT: 背景与目标 / 拍板决策表 / 实施步骤 / 待拍板 / 风险
+【条件】立档阈值命中 → commands run kb.new task --title .. --topic ..
+【可选】Summary 精修(当前 = 标题预填)</code></pre>
+<h3>5.5 边界项裁定(逐条)</h3>
+<table>
+  <tr><th>#</th><th>边界项</th><th>裁定</th><th>依据</th></tr>
+  <tr><td>A1</td><td>档案 Summary(索引摘要)</td><td><code>--title</code> 预填,首次追加进度时精修(可选,不计步)</td><td>输入已在参数中;空摘要比糙摘要更伤索引</td></tr>
+  <tr><td>A2</td><td>初次填空后的 doc-updated</td><td>不要求 bump:added==updated 合法(同坐填空 = 一次落盘语义);R1+ 改版必须 <code>kb.bump</code></td><td>强推 bump 是空转步;时间守卫查格式不查新鲜度</td></tr>
+  <tr><td>A3</td><td>创建后才出现的后补 Refs</td><td>留人工编辑,不新增 <code>kb.refs</code> 命令</td><td>低频,收录三判据不命中;<code>gen_doc_map --check</code> 单向链兜底</td></tr>
+  <tr><td>A4</td><td>基线切片数字</td><td>不自动化:<code>kb.new baseline</code> 只给骨架,<code>--total</code> 由 agent 从 test.full 实测输出誊写</td><td>命令编造数字违反「未跑过的不交付」——这是判断,不是派生</td></tr>
+  <tr><td>A5</td><td>档案进度日志逐行日期</td><td>轮内不逐行写;收尾 <code>kb.wrap --did</code> 统一带日期追加一行</td><td>日期属派生面;消除轮内取时步</td></tr>
+  <tr><td>A6</td><td>切片摘要精编</td><td><code>kb.wrap --did</code> 预填即合法;复杂会话可选精编,不计步</td><td>摘要 = 一行事实,--did 已是事实</td></tr>
+  <tr><td>A7</td><td>坑档触发词表</td><td>二期:<code>--triggers</code> 参数或 SLOT 填(P3 定)</td><td>触发词是路由判断,不可派生</td></tr>
+</table>
+<p>守卫配套:检查器断言「SLOT 只出现在正文区、头部区零 SLOT」(渲染正确性),与「机械 0」收录断言共同钉住本节口径。</p>
+
+<h2><span class="no">§06</span>守卫与验收</h2>
+<ul>
+  <li><b>新增检查器</b>(并入 <code>check_kb_structure.py</code> 或新 <code>check_doc_templates.py</code>,挂 <code>kb.check</code> + 提交闸门):对「冻结线之后新建」的族文件校验——头部字段齐全且与单点定义同源 / 命名正则 / 无残留 SLOT 标记 / 状态词在表内(已有,沿用)。冻结线 = 实施日 stamp 常量,<b>存量一律豁免</b>(先例:doc-forms 51 份旧命名、check_wording FROZEN 常数)。</li>
+  <li><b>守阵</b>:<code>tests/test_memory_bank.py</code> 扩展(进程内 import 检查器,遵守 sidefx 禁子进程),新增文件头 docstring「测试计划」清单同步。</li>
+  <li><b>红绿双验</b>:三类突变判红——删状态行 / 留 SLOT / 词表外值;每条命令冒烟:真建 plan·task·slice 各一件 → 填 → <code>kb.check</code> 绿 → 临时件不入库。</li>
+  <li><b>收尾闸门</b>:实施轮跑 <code>commands run test.full</code> 并新建基线切片(数字只写那一处)。</li>
+</ul>
+
+<h2><span class="no">§07</span>实施分期(每期独立可验、独立提交)</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收</th></tr>
+  <tr><td>P1 骨架</td><td><code>_common.py</code> 增族注册表(family→命名/模板/词表/索引动作);<code>templates/</code> 三族; <code>new_doc.py</code> + <code>wrap_session.py</code>; <code>kb.new</code> 与 <code>kb.wrap</code> 收录; 检查器 + 守阵</td><td>三族各真建一件冒烟;红绿三突变判红;kb.check 全绿;两命令输出含「机械 0」断言行</td></tr>
+  <tr><td>P2 状态与改版</td><td><code>flip_status.py</code> / <code>bump_doc.py</code> → <code>kb.status</code> / <code>kb.bump</code> 收录;反向认领自动补链(§08 D4)</td><td>对 P1 临时件全链演练;认领链双向机检绿</td></tr>
+  <tr><td>P3 收尾与二期族</td><td><code>wrap_session.py</code> → <code>kb.wrap</code>;pitfall/report/baseline/progress 模板;回写:doc-forms「创建/更新方式」节、根 AGENTS.md 会话协议两行、README 细路由、memory-bank skill SKILL.md 收尾 DoD 措辞</td><td>全量 test.full 基线切片;文档回写后 doc.drift / doc.caps 绿</td></tr>
+</table>
+
+<h2><span class="no">§08</span>拍板记录(2026-10-17)</h2>
+<p><b>D1–D6 全部按推荐锁定</b>(用户拍板「这些按推荐」)。同轮补充拍板:命令粒度 = 单职责四条(否决工作流复合);<code>kb.new</code> 不预建切片(切片统一由 <code>kb.wrap</code> 收尾处理);<code>kb.wrap</code> 并入 P1 交付;剩余人工步骤按 §05 量化与裁定(A1–A7)。</p>
+<table>
+  <tr><th>#</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>统一边界</td><td>机器面强制 + 骨架可裁,行文自由</td><td>骨架段落也强制 / 连文风统一</td></tr>
+  <tr><td>D2</td><td>范围分期</td><td>一期 plan/task/slice;pitfall 等二期;issues 流程不动</td><td>全族一把抓 / 只做 HTML 制品</td></tr>
+  <tr><td>D3</td><td>存量处置</td><td>冻结只拦新增(冻结线常数);cap 债务另会话清理</td><td>批量补头 / 全量迁移</td></tr>
+  <tr><td>D4</td><td>反向认领补链</td><td>做:<code>--refs</code> 自动在目标件补/并 <code>doc-refs</code>·<code>**Refs:**</code> 行(只动元数据行,合并为英文逗号列表),杀掉「单向链闸门红」整类问题</td><td>只写己侧 + 打印反向行(人工粘贴)</td></tr>
+  <tr><td>D5</td><td>切片头部归一</td><td>去 YAML frontmatter,统一三行头(生成器契约原本就认它)</td><td>保留 YAML 为合法变体</td></tr>
+  <tr><td>D6</td><td>kb.wrap 范围</td><td>只做机械面(切片/档案/索引/清单),蒸馏与判断仍是 agent 的活</td><td>扩展到基线切片创建等</td></tr>
+</table>
+<p class="aside">立档注记:本轮已命中立档阈值 #3/#4(产出计划文档),任务档案 <code>memory-bank/tasks/2026-10-17-memory-bank-doc-pipeline.md</code> 已备好思路但<b>未创建</b>——按请求边界,新建文件待用户显式确认,确认后随本专题入库。</p>
+
+<h2><span class="no">§09</span>风险与对策</h2>
+<ul>
+  <li><b>agent 绕过命令手写</b> → 守卫拦新增面 + 命令输出引导;模板文件本身不进知识库路由,没有「照抄模板」的替代路径。</li>
+  <li><b>模板与规范两处漂移</b> → 守卫钉「模板头字段 ↔ <code>_common</code> 单点」同源;改词表/命名必须两处同改才绿(先例:cap 表守阵)。</li>
+  <li><b>反向补链误改冻结件</b> → 只追加/合并元数据行,正文零触碰;D4 未拍板前不实施。</li>
+  <li><b>Windows 控制台编码</b> → 脚本输出按 <code>pitfalls/ops/console-encoding.md</code> 处置(命令经 commands 引擎全文透传,已有先例)。</li>
+  <li><b>AGENTS.md 8,000 cap</b> → 回写只动会话协议两行(命令入口指针),超限即路由手术,不扩写。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-17-0527</span> 初版。grilling 两轮:Q1–Q6 以文本列出后,用户未逐项作答,给出方向性纠正——「目标一是统一风格,二是尽量减少 agent 的修改步骤,当前设计只着重第一点,重新设计」;本版以「一次逻辑动作 = 一条命令 + 一次填空」为轴重排,原问答中的推荐答案转为 §08 待拍板默认值。</li>
+  <li><span class="tag">R1 · 26-10-17-0607</span> 用户拍板:D1–D6 锁定;单职责四条;不预建切片;<code>kb.wrap</code> 并入 P1。新增 §05.1–05.4:剩余人工步骤量化(口径判据/对照修正/输出契约/边界裁定 A1–A7),修正 R0 立档步数漏计(含立档开工 16→4,= 2 命令 + 2 填空)。复盘注记:R0 曾在用户方向性纠正后未续 grilling 轮即动笔,属协议偏离;本轮按用户裁定问题补齐量化轮。</li>
+  <li><span class="tag">R2 · 26-10-17-0714</span> 用户指令「写入文档中」:对账发现 R1 答复里的<b>逐命令剩余步骤表</b>(命令步/判断/条件/机械四列)只在会话回复、未进文档——补录为 §5.3,原 5.3/5.4 顺延为 5.4/5.5;并声明该表为「机械 0」收录断言的数据源。其余内容与 R1 答复已逐项对齐(口径/工作流合计/A1–A7/守卫配套均在 §05)。</li>
+</ul>
+
+</div>
+</body>
+</html>
