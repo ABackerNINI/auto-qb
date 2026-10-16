@@ -54,3 +54,9 @@
   ❗改完环境变量**必须新开终端 / 重启 VS Code** 才生效 —— 旧终端拿的是旧环境块, 不会回灌。
 - **口径**: 报「命令 not recognized」按此序判: ①`Get-Command <名> -All` 看解析 ②按绝对路径看文件在不在
   (在 ⇒ 目录没进 PATH; 不在 ⇒ 真没装) ③再数 PATH 项数, 排除上面那条环境块截断的坑。
+
+## 同类第三坑: `uv` 装在 `~/.local/bin`, 会话 PATH 无该项 ⇒ 所有 `commands run <task>` 全线失败(2026-10-16 实测)
+
+- **触发**: 执行 `commands run my-commit-flow.sync`(或任何 task)返回 `[FAIL]` + `'uv' is not recognized as an internal or external command` —— 看着像 wrapper / 引擎坏了, 实际是引擎内部要调 `uv run python`, 而本会话 PATH 里没有 `uv`。
+- **判别**: `Get-Command uv` 解析不到, 而 `$env:USERPROFILE\.local\bin\uv.exe` **存在**(uv 默认安装落点之一); `$env:PATH -split ';'` 里没有 `~/.local/bin`。与「同类第二坑」同族: 工具在用户 bin 目录, 而该目录不在会话 PATH。
+- **处置**: 会话内先手拼一次(PowerShell): `$env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"` —— 之后再 `commands run <task>` 即恢复; 想跨会话生效按上节把 `~/.local/bin` 写进**用户级** PATH 并新开终端。别误判成「uv 没装」去重装(重装也落在同一目录, 症状不变)。

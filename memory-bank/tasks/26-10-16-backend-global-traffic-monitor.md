@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 14:04
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面已落地(含用户拍板改版: 工具控制面加 POST /autostart)。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md
+**Updated:** 2026-10-16 17:37
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面 + S7 auto-qb 接收面 + S8 集成与过渡已落地(含用户拍板改版: 工具控制面加 POST /autostart); S9–S10 待逐项授权。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md, memory-bank/testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md, memory-bank/testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -30,8 +30,8 @@
 | S4 | 通知 notifier | Done (26-10-16-1016) |
 | S5 | 自启 installer | Done (26-10-16-1109) |
 | S6 | auto-qb 配置面 | Done (26-10-16-1145) |
-| S7 | auto-qb 接收面 | Open |
-| S8 | 集成与过渡 | Open |
+| S7 | auto-qb 接收面 | Done (26-10-16-1404) |
+| S8 | 集成与过渡 | Done (26-10-16-1737) |
 | S9 | 守阵测试 | Open |
 | S10 | 真机验收 | Open |
 
@@ -163,3 +163,21 @@
 **实施期发现(4)**: ①注销寻址必须用注册时的「工具地址 + 密钥路径」—— 首版按现读配置寻址, 单测第一轮即暴露(配置一改就注销到新地址、拿不到密钥, 订阅留在旧工具上直到租约过期)。②期望态三开关改按**恒等 True** 判: 热重载守阵用 MagicMock 当新配置, 真值判会让桩段被当成「已启用且要订阅」而真起一条常驻订阅线程(实测污染后续用例的线程清点; 同族形态 pitfalls/testing/hot-reload-mock-sections.md)。③`stop()` 超时后**不摘线程引用**: 摘了就没人能 join, 而下一次 sync() 会因「看不到线程」再起一条 = 双订阅。④写入判据连带拦下四处**既有**文件(测试夹具 / 路由金清单 / 计划 HTML / 本档案): 因历史内容里的鉴权字样被判整文件拒写, agent 侧 edit/apply_patch/write 三条路径全拒; 用户拍板取「形态等价改写命中行 + agent 自己写回」(改写仅形态、行为零变化), 并把「范围比代码文件大得多 + 处置优先级」补进坑档 `pitfalls/ops/agent-write-guard-secret-false-positive.md`。
 
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1404, 状态行 S0–S7, §04 R0 增 S7 行, 脚注补 S7)· 本档案 R8 · 坑档 `agent-write-guard-secret-false-positive.md` 扩写 · activeContext 切片 R8 · 基线切片 `baselines/26-10-16-1404-global-traffic-monitor-s7.md`。未提交(待用户「提交」指令)。
+
+### R9 · S8 实施 (2026-10-16 17:37)
+
+用户指令「实施S8:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S8 的显式授权(S9–S10 不动)。开工同步 22f0dad8→1ae16235(快进)。**纯文档轮**(零代码/配置/数据改动)。
+
+**落点**(改 3 个文档): ① `docs/configuration.md` 新增「全局流量监视器工具（gtm）」段 —— 定位与边界(唯一写者 / 整机口径 / 只刷新图不参与限速 / 多实例订阅)· 安装运行与三平台数据目录(默认路径表 + 目录内文件用途)· 工具参数表(含配置写入的全量覆盖语义)· 三平台自启(注册项表 + 幂等判据 + 退出码 0/1/2)· auto-qb 侧 6 键联动配置(含两条易踩: enabled 与 dat_path 独立; 曲线未启用时通知只记 INFO 不刷新)· **迁移检查单**(9 步 + 回退路径)· **并行对照(24h, E1)方法**(口径差异先排除 / 容差 ≤5% / 可执行对照脚本)· **双写者禁令**; 另在文档摘要行与「流量数据来源: Traffic Monitor」小节各补一处交叉指针。② `memory-bank/config-reference/keys.md` 的 `global_traffic_monitor` 段补「过渡与迁移」注记。③ 根 `README.md` 配置参考清单补一行条目。
+
+**出口判据**: ① 文档与 schema 一致 —— `test_config_schema`(docs↔代码漂移守卫) + `test_config_key_surface`(键面 + keys.md 反引号出处) + `test_docs_forms` 快跑全绿; `doc.links` / `doc.drift`(无手抄) / `doc.caps` 全过。② 迁移检查单可执行 —— 已实跑其可跑部分(见下)。③ 对照脚本从文档原文抽出即可执行且判读有效。
+
+**沙箱实跑**(临时数据目录, 全程后清理, 零触碰生产文件): ① 工具 venv `uv sync`(本 clone 此前未建 venv, 顺带验证检查单第 1 步) → `gtm --version` = `gtm 0.1.0`; ② 前台 `gtm run --data-dir <tmp>` 45s: `history_traffic.dat`(`lines: "1"` + 当日行 `2026/10/16 2115/5530` KB; 首帧 0/0 → 30s 时间面节流刷新)/ `state.json`(当日累计 up 2,166,638 / down 5,663,252 B, 每帧推进)/ `monitor.token`(43 字符)/ `gtm.lock`(+ 伴生 meta) 齐备; ③ 控制面: 无凭据 `GET /status` → 401, 带凭据 → 200(payload 含 day / day_up_bytes / day_down_bytes / day_total_bytes / last_event_id / subscriber_count / paths{dat,state,config,token} / config / uptime_s); ④ 对照脚本: **从 `docs/configuration.md` 正则抽出代码块原文**执行, 合成 TM 侧(up +3%+100KB / down -2%+100KB)与工具侧真 dat 比较 → `2026-10-16 CHECK up 2.2 vs 2.1 MiB (7.16%) | down 5.4 vs 5.4 MiB (0.20%)`(单侧超 5% 给 CHECK, 判读符合设计); ⑤ terminate 后端口释放、临时目录清理。
+
+**未闭合项(诚实标注)**: S8 出口原文的 **24h 并行对照(差异 ≤ 容差, E1)** 本会话无法完成 —— 需真实 Traffic Monitor 与 24h 挂机(本环境连 TM 数据目录所在盘都不存在); 本轮交付 = 方法(口径差异先排除 + 容差口径)与已实跑验证的对照脚本, 实测数字留 S10 真机验收。检查单第 3 步的 schtasks 自启注册仍受本会话命令安全策略拦截(S5 同一缺口, 解锁路径见坑档); 第 5—8 步涉及真机 auto-qb 与浏览器, 留 S10。
+
+**实施期发现(写入判据整文件拦下 3 个文档文件)**: `docs/configuration.md` / 根 `README.md` / `config-reference/keys.md` 被工作区写入判据**整文件**拒写(命中既有示例占位行 5 处: 口令键旁尖括号占位 ×2、传令牌键旁空串字面量 ×3; 与本次改动无关, 值均为占位符)。按坑档口径不绕过 —— 先做「整文件级探针」(三文件整份拷进 `.openclaw/tmp/` 再在拷贝上改候选形态, 一次判定「改哪几行即可恢复可写」), 再向属主报告; **属主授权形态等价改写**后落 5 行(尖括号占位 → 括号占位 / 空串字面量 → 括号占位), 语义零变化; 写回后 `git diff` 恰为预期 5 行、LF 行尾字节无损(与 HEAD 逐文件对照 crlf=0)。坑档 `pitfalls/ops/agent-write-guard-secret-false-positive.md` 复发 +1 并补「整文件级探针」手法与文档类影响面。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1737, 状态行 S0–S8, §04 R0 增 S8 行, 脚注补 S8; 改后跑 HTMLParser 标签平衡机检 —— 未闭合 0 / 乱序 0)· 本档案 R9 + 子任务表 S7/S8 → Done · activeContext 切片 R9 · 坑档复发并入 · kb.index 重建 · 基线切片 `baselines/26-10-16-1737-global-traffic-monitor-s8.md`。
+
+**行号基准**: S8 为文档轮, 无代码落点; 计划脚注的 clone 基准(3ba069d7)与 S8 无关。随本专题入库。

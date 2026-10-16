@@ -1,6 +1,6 @@
 # 配置参考
 
-> auto-qb 的完整配置手册：通用约定、完整 YAML 示例、全局限速曲线与规则系统。
+> auto-qb 的完整配置手册：通用约定、完整 YAML 示例、全局限速曲线与规则系统、全局流量监视器工具（gtm）。
 > 无论用 Web UI 图形化编辑（推荐）还是直接编辑 YAML，**字段与语义完全一致**。功能总览见 [README](../README.md)。
 
 ## 两种配置方式
@@ -31,7 +31,7 @@ config:
         host: 127.0.0.1
         port: 8080
         username: <USERNAME>
-        password: <PASSWORD>
+        password: (你的 qB 口令)
 
     # 运行时数据主目录: 状态/单实例锁/日志/跳检备份默认均存其下; 默认 auto-qb-data, 多实例请用不同路径
     data_dir: "auto-qb-data"
@@ -60,7 +60,7 @@ config:
         enabled: false           # 启用后随主程序启动(--dry-run 不启动)
         host: "127.0.0.1"        # 监听地址, 默认仅本机; 改 0.0.0.0 会暴露管理接口
         port: 8080               # 监听端口
-        token: ""                # 访问密钥; 留空首启随机生成 -> <data_dir>/web.token
+        token: (留空)            # 访问密钥; 留空首启随机生成 -> <data_dir>/web.token
         skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
         # skip_check_menu: false  # 右键菜单显示跳检(单选/单组/多选): 默认关闭 = 菜单不显示且 web 端点拒绝; 规则源跳检不受影响
 
@@ -418,7 +418,150 @@ lines: "30"
 ...
 ```
 
-> 希望接入其它流量监控软件可提Issue。
+> 希望接入其它流量监控软件可提Issue。若不想依赖外部软件，也可直接用随仓的 **gtm** 工具自己记录整机流量历史 —— 见下文「全局流量监视器工具（gtm）」。
+
+## 全局流量监视器工具（gtm）
+
+> 本软件自身不监控整机流量。全局限速曲线的「外部流量数据来源」除了 Traffic Monitor，还可以改用随仓的独立小工具 **gtm**（源码 `tools/global-traffic-monitor/`，TrafficMonitor 替代）：它常驻记录整机流量历史，并在流量变化超阈值时通知 auto-qb 刷新流量图。
+
+### 定位与边界
+
+- **口径**：整机全适配器合计，默认排除回环（loopback）与 down 状态的网卡，可用 `adapter_include` / `adapter_exclude` 正则再圈定（匹配网卡名）。
+- **落盘**：Traffic Monitor 兼容格式 —— 每行 `YYYY/MM/DD 上传KB/下载KB`（KB = 1024B，向下取整），首行 `lines: "N"`；与既有 dat 解析器完全兼容，`traffic_source.dat_path` 可直接指过来。
+- **唯一写者**：工具是历史文件的唯一写者，落盘用「临时文件 + 原子替换」，任意数量读者在任意时刻都看到完整一致的文件（见下方「双写者禁令」）。
+- **与 auto-qb 的关系**：auto-qb 是它的「配置方 + 消费者之一」—— 设置页经控制面读写工具参数、开关开机自启；工具在当日累计变化 ≥ 阈值（默认 100 MiB）时，向所有存活订阅的 auto-qb 实例推送通知，实例重读历史文件并**仅刷新流量图**（不查档、不改任何限速决策）。多个 auto-qb 实例（各自 `data_dir` / 端口）可以同时订阅。
+- 工具**不参与限速联动**：限速仍由 auto-qb 按 `global_speed_limit_curve` 的曲线决定。
+
+### 安装、运行与数据目录
+
+```bash
+cd tools/global-traffic-monitor
+uv sync                      # 独立 venv，与主项目环境互不污染
+uv run gtm --version         # 打印版本，验证安装
+
+uv run gtm run               # 前台运行（自启机制拉起的就是这条命令）
+```
+
+数据目录（存 dat / state / config / 锁 / 密钥）默认按平台，`--data-dir` 或环境变量 `GTM_DATA_DIR` 可覆盖：
+
+| 平台 | 默认数据目录 |
+|---|---|
+| Windows | `%LOCALAPPDATA%\gtm` |
+| macOS | `~/Library/Application Support/gtm` |
+| Linux | `$XDG_DATA_HOME/gtm`（缺省 `~/.local/share/gtm`） |
+
+目录里的文件与用途：`history_traffic.dat`（TM 兼容历史，`dat_path` 指它）、`state.json`（快照 / 当日累计 / 订阅注册表，每次采样原子写）、`gtm.lock`（单实例锁，二次启动直接报错并带持有者 PID）、`monitor.token`（控制面密钥，首次启动自动生成）、`config.yml`（工具参数，首次经设置页保存后出现）。
+
+控制面 = `http://127.0.0.1:8099`（端口可配，被占用即启动失败）。**全部端点都要请求头 `Authorization`**，其值由 `Bearer` 前缀加一个空格再加 `monitor.token` 文件内容拼成（缺 / 错返回 401）；浏览器操作走 auto-qb 设置页即可，不必手拼。
+
+### 工具参数
+
+工具参数存在工具数据目录的 `config.yml`，日常经 auto-qb 设置页「全局流量监视器」区读写；也可以直接编辑 YAML 后重启工具（控制面配置写入是**全量覆盖**语义，设置页按「读后写」提交）：
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `sample_interval` | 5 | 采样间隔（秒）；非优雅终止的丢失窗口 ≤ 此值 |
+| `flush_delta_bytes` / `flush_interval_s` | 1 MiB / 30 | 落盘节流：日累计变化 ≥ 1 MiB 或距上次落盘 ≥ 30s 才写盘（首帧必写） |
+| `notify_threshold_bytes` | 100 MiB | 通知阈值（当日上下行合计变化） |
+| `http_host` / `http_port` | 127.0.0.1 / 8099 | 控制面绑定（只建议听回环）；改绑定需重启工具 |
+| `lease_ttl_s` / `heartbeat_interval_s` | 180 / 60 | 订阅租约与心跳周期 |
+| `notify_timeout_s` | 3 | 单个订阅者推送超时 |
+| `adapter_include` / `adapter_exclude` | 空 | 网卡名正则白 / 黑名单（include 先于 exclude；回环与 down 恒排除） |
+
+### 开机自启（三平台）
+
+```bash
+uv run gtm install-autostart --data-dir <数据目录>   # 注册（幂等）
+uv run gtm uninstall-autostart                      # 卸载（幂等）
+```
+
+| 平台 | 机制 | 注册项 |
+|---|---|---|
+| Windows | `schtasks /SC ONLOGON`（当前用户） | 计划任务 `gtm-autostart` |
+| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/gtm.service` |
+| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.gtm.autostart.plist` |
+
+- 注册的是一条 `gtm run --data-dir <数据目录>` 守护命令：解释器取执行安装命令时用的那个 python（装了 gtm 的 venv），数据目录解析成绝对路径写死进注册项（登录会话里环境变量不可控）。**换了 venv 或数据目录**，先卸载再注册。
+- 幂等判据 = 期望态是否达成（Windows 看计划任务是否存在；Linux / macOS 看单元文件或 plist 内容一致且已启用）；退出码 `0` = 达成（含无需动作）、`1` = 命令失败、`2` = 平台不支持。
+- 设置页「全局流量监视器」的自启开关走同一条路径（经工具控制面代跑安装器），可与命令行混用。
+
+### auto-qb 侧联动配置（global_traffic_monitor）
+
+```yaml
+config:
+    global_traffic_monitor:
+        enabled: true              # 联动总开关；缺省 false = 不订阅、不响应通知
+        tool_url: "http://127.0.0.1:8099"
+        tool_token_path: ""        # 留空 = <工具平台默认数据目录>/monitor.token
+        subscribe: true            # 启用时启动即订阅 + 定期心跳
+        notify_cooldown_s: 10M     # 通知冷却（0S = 不冷却）；与事件号去重互补
+        autostart: false           # 设置页自启开关的持久值
+```
+
+两点容易踩：
+
+- `enabled` 只管「订阅 + 响应通知」；**限速曲线的取数**由 `global_speed_limit_curve.traffic_source` 的 `dat_path` 决定，两者独立 —— 只开 `enabled` 不改 `dat_path`，曲线读的还是 Traffic Monitor 的文件。
+- 通知到达时，若限速曲线段未启用，只记一条 INFO 不刷新（快照保持 `disabled`，不会被通知面绕过）。
+
+逐键校验边界见 [配置键速查](../memory-bank/config-reference/keys.md)；工具侧完整说明见 [工具 README](../tools/global-traffic-monitor/README.md)。
+
+### 迁移：从 Traffic Monitor 切到 gtm（检查单）
+
+前置：记下当前 `traffic_source.dat_path`（回退要改回来）。并存期 Traffic Monitor **继续照跑、只作对照读**。
+
+1. **装工具** —— 上面「安装、运行与数据目录」三条命令；`gtm --version` 有输出即过。
+2. **试跑核对落盘** —— `uv run gtm run --data-dir <临时目录>` 前台跑 1~2 分钟，Ctrl+C 退出；该目录应出现 `history_traffic.dat`（首行 `lines: "1"`）、`state.json`、`monitor.token`；`state.json` 里的当日累计每帧都在涨，dat 行按落盘节流（变化 ≥ 1 MiB 或 ≥ 30s）刷新。
+3. **正式起工具** —— 注册自启（`install-autostart --data-dir <正式目录>`），或在终端 / 服务里前台跑 `gtm run --data-dir <正式目录>`。
+4. **核对控制面活着** —— 访问 `http://127.0.0.1:8099/status`：不带凭据应返回 401；带上凭据（见上文拼法）返回 JSON，含当日累计 / 末事件号 / 订阅者数 / 文件路径。
+5. **auto-qb 侧开联动** —— 设置页「全局流量监视器」开启（或 YAML 写上面那段）：状态卡应显示工具可达与当日累计；`subscribe: true` 时订阅者数 +1。
+6. **切换数据源** —— `global_speed_limit_curve.traffic_source` 的 `dat_path` 指向 `<工具数据目录>/history_traffic.dat`（Windows 路径用 `/`）；WebUI 保存热重载或重启程序。
+7. **确认取数换轨** —— 限速曲线任务下一轮从新文件读；顶栏 / 历史流量弹层会在工具推送通知后刷新（阈值默认 100 MiB）—— 也可能先被前端既有轮询刷新，两者都属正常。
+8. **并行对照 24h** —— 见下节；未达标不要摘 TM。
+9. **摘 TM** —— 停用 Traffic Monitor 的开机自启或退出它（它的历史文件留着不动）。此后整机流量历史只有 gtm 一个写者。
+
+回退（任一环节不对）：把 `dat_path` 改回 TM 的历史文件，设置页关掉联动开关；需要时 `gtm uninstall-autostart` 并停掉工具进程。
+
+### 并行对照（24h，对照验收判据 E1）
+
+- **做法**：迁移前让 TM 与 gtm **并存各写各的文件**（互不干扰），跑满 24h 后比较同一天的日累计；差异达标再按上节第 9 步摘 TM。
+- **口径差异先排除**：gtm 是「整机全适配器合计，排回环 / down」；TM 记录的是你勾选的网卡。机器上有虚拟网卡 / VPN / 多网卡时两者天然有差 —— 想严格对照，把 gtm 的 `adapter_include` 正则收窄到与 TM 相同的网卡集合再比。
+- **容差**：同日同方向相对偏差 ≤ 5% 视为吻合（要求两侧都覆盖全天；任一侧当天晚启动 / 中途退出，该日不可比）。
+- **对照脚本**（Python，只读两份 dat；把两个参数换成实际路径）：
+
+```python
+import re
+import sys
+from pathlib import Path
+
+ROW = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d+)/(\d+)$")
+
+
+def load(path):
+    days = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        m = ROW.match(line.strip())
+        if m:
+            y, mo, d, up, down = m.groups()
+            days[f"{y}-{int(mo):02d}-{int(d):02d}"] = (int(up) * 1024, int(down) * 1024)
+    return days
+
+
+tm, gtm = load(sys.argv[1]), load(sys.argv[2])
+for day in sorted(set(tm) & set(gtm)):
+    cells, same = [], True
+    for name, a, b in (("up", tm[day][0], gtm[day][0]), ("down", tm[day][1], gtm[day][1])):
+        rel = abs(a - b) / max(a, b) if max(a, b) else 0.0
+        same = same and rel <= 0.05
+        cells.append(f"{name} {a / 1048576:.1f} vs {b / 1048576:.1f} MiB ({rel * 100:.2f}%)")
+    print(day, "PASS" if same else "CHECK", " | ".join(cells))
+```
+
+### 双写者禁令
+
+- **同一份历史文件永远只能有一个写者**：要么 TM、要么 gtm —— 并存期各写各的文件，绝不能让两者写同一路径（后写者会把对方的日累计覆盖成自己的读数，历史直接错乱，且两边都察觉不到）。
+- 并存期 TM **只作对照读**：不要把 `dat_path` 指到 TM 正在写的文件上之后再让 gtm 也写它；反过来，也不要把 TM 的输出目录设成 gtm 的数据目录。
+- gtm 自身单实例：数据目录被占用时二次启动直接报错（`gtm.lock`），无需担心两个 gtm 抢写。
+- `dat_path` 指向谁，auto-qb 的取数就以谁为准；迁移完成后建议停掉 TM 的记录，避免两个来源被误引用。
 
 ## qB 流量采样（qb_traffic）
 
