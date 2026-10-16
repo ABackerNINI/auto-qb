@@ -477,6 +477,33 @@ def test_restart_continuity_day_cumulative(tmp_path):
     assert sampler2.day_up_bytes == 7 * MIB and sampler2.day_down_bytes == 3 * MIB  # 不丢不重
 
 
+# ---- S3: 注册表并入 state 载荷 (HTTP 线程与采样线程同锁写盘) ----
+
+
+def test_record_merges_subscribers_into_state_payload(tmp_path):
+    """record 写盘 = 快照 + 注册表 + 事件号 完整镜像 (注册表不被采样快照覆盖)."""
+    storage = make_storage(tmp_path)
+    sampler = make_sampler()
+    storage.recover(sampler)
+    storage.upsert_subscriber("s1", "http://h/1", "t")
+    counters = FakeCounters()
+    sample_record(storage, sampler, counters, 2 * MIB, 1 * MIB)
+    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state["subscribers"]["s1"]["endpoint"] == "http://h/1"  # 采样写盘保留注册表
+    assert state["day_up_bytes"] == 0  # 首帧 baseline
+    assert state["last_event_id"] == 0
+
+
+def test_subscriber_mutation_before_first_sample_persists(tmp_path):
+    """首帧采样前的订阅变更: state.json 落控制字段 (无采样字段, 与全新安装等价,
+    recover 自然降级, 不污染采样恢复)."""
+    storage = make_storage(tmp_path)
+    storage.upsert_subscriber("s1", "http://h/1", "t")
+    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state["subscribers"]["s1"]["endpoint"] == "http://h/1"
+    assert "day_up_bytes" not in state  # 尚未采样
+
+
 def test_recover_fallback_to_dat_when_state_missing(tmp_path):
     atomic_write_text(
         str(tmp_path / "history_traffic.dat"),

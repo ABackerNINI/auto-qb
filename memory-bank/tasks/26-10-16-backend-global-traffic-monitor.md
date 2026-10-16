@@ -2,9 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 08:55
-**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘已落地。
-**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md
+**Updated:** 2026-10-16 09:46
+**Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面已落地。
+**Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md
 **Topics:** global-traffic-monitor
 
 ## 原始请求
@@ -26,7 +26,7 @@
 | S0 | 包骨架与依赖隔离 | Done (26-10-16-0601) |
 | S1 | 采样器 sampler | Done (26-10-16-0815) |
 | S2 | 落盘 storage | Done (26-10-16-0855) |
-| S3 | 控制面 server | Open |
+| S3 | 控制面 server | Done (26-10-16-0946) |
 | S4 | 通知 notifier | Open |
 | S5 | 自启 installer | Open |
 | S6 | auto-qb 配置面 | Open |
@@ -80,3 +80,17 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0855, 状态行 S0–S2, §04 R0 增 S2 行) · 本档案 R3 · activeContext 切片 R3 · 工具 README/__init__ 进度注记 · pitfalls/backend/platform-fs.md 新增两节 · pitfalls/testing/redverify-anchor-lineendings.md 复发+1(形态三第二例: self._lock.acquire() 两函数重复被 count!=1 兜底) · kb.index 重建 · 基线切片 `baselines/26-10-16-0855-global-traffic-monitor-s2.md`。随用户「提交」指令一并入库。
 
 **行号基准**: S2 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
+### R4 · S3 实施 (2026-10-16 09:46)
+
+用户指令「继续S3」= 对 S3 的显式授权(S4–S10 不动)。开工同步 9d9ec930(S2 提交已推送)。
+
+**落点**(改 4 文件 + 2 新文件 + 1 依赖, 零 auto-qb 触碰): `config.py` 占位 -> 全量实现(~240 行) + `server.py` 占位 -> 全量实现(~360 行) + `storage.py` S3 扩展(~+160 行) + `__main__.py` _run_loop 抽出可测循环 + cmd_run 接线 + `pyproject.toml` 依赖 +pyyaml 6.0.3(与主仓同版本) + `tests/test_config.py` 新文件 17 条 + `tests/test_server.py` 新文件 21 条 + `tests/test_storage.py` +2 条 + README/`__init__` 进度注记与控制面端点表。设计要点: 鉴权 Bearer token(monitor.token 启动即原子生成 urlsafe(32), compare_digest 比对, 缺/错 401); 控制面 ThreadingHTTPServer 强制 127.0.0.1(Windows 关抢占式 allow_reuse_address 才 fail-fast, POSIX 保留 True 绕 TIME_WAIT); 端点 GET /status(采样状态/当日累计/末事件号/订阅者数/路径/配置回显/uptime) / PUT /config(全量聚合校验 -> 原子写 config.yml -> ConfigHolder 热重载 last-writer-wins) / subscribe+heartbeat+unsubscribe(租约 last_heartbeat+lease_ttl 默认 180s 懒剔除, 请求体上限 1MiB); state.json 载荷并入 subscribers+last_event_id, RLock 串行化采样线程与 HTTP 线程的读-改-写(每次写盘为「最近快照+注册表+事件号」完整镜像); 配置热生效范围: sample_interval/适配器过滤/flush 参数即时, http host/port 需重启(文档注明)。
+
+**出口判据全过**: ①鉴权拒绝(无 token/错 token 401)单测 + 写端点同闸; ②租约剔除单测(注入 now: 超租约剔除/未超保留; HTTP 层拨钟后 /status 计数 1->0); ③端口冲突 fail-fast 实测(Windows: 第二实例绑定即 WinError 10048, `gtm: 控制面启动失败 (端口 8099 被占用?)` exit 1); ④config 热重载不丢采样(真 _run_loop + 并发 PUT /config 集成: 改 sample_interval 与 adapter_exclude 后循环线程存活、采样帧数持续增长)。工具 98/98(4 冒烟 + 29 S1 + 27 S2 + 17 S3 配置 + 21 S3 控制面, 全 hermetic: tmp_path + 端口 0 + 注入计数器); 红验 6 条单行锚点突变(鉴权绕过/租约不剔除/未知键不拒/心跳未知 id 放行/热重载失效/注册表丢失)全判红, 字节恒等还原后复绿; 根 test.full 回归数字与前序切片逐位一致(见基线切片)。真机冒烟(Windows 临时 data_dir, 全程后清理): 首启 monitor.token 原子生成(43 字符) -> 带 token /status 全字段 -> subscribe(id + lease 180s) -> PUT /config 热重载(5.0->2.0 即时 + config.yml 落盘) -> kill -9 重启: state 快照恢复 + 注册表续存(subscriber_count 1) + 配置跨重启保留。
+
+**实施期坑(两处真缺陷, 均由测试/冒烟暴露已修)**: ①**热重载静默杀循环** —— AdapterFilter 收单正则串(include/exclude: Optional[str]), config 的模式列表误传 list 致 `re.compile(list)` TypeError, _run_loop 线程猝死(正是出口判据「不丢采样」要防的形态, 首版测试只验帧数增长没验线程存活才漏); 修为模式列表 `|` 并入单正则 + 非法正则在 config 校验层聚合拒绝(黄金法则 4) + 过滤器重建进 try(纵深防御) + 测试加 loop.is_alive() 断言。②**token 惰性生成鸡生蛋** —— 首版只在首个带凭证请求触发生成, 而订阅方(WebUI)需先读文件才能带凭证; 真机冒烟暴露(全部 401, token 文件不存在), 修为 start 即生成/加载 + 补守阵。坑档: `pitfalls/testing/redverify-anchor-lineendings.md` 复发+1 + 形态十一(红验脚本解释器漂移致假红: 临时脚本用 sys.executable=系统 python 无 pytest -> rc!=0 被按「守阵杀变异」判 KILLED, 首跑 6/6 全假红, 基线复跑假红才暴露; 处置=钉死目标 venv 解释器绝对路径 + 突变循环前先跑无变异基线)。另: 本轮**知识库文档回写**又踩形态十(Windows 上 python `write_text()` 把 5 个改动文件静默转 CRLF, HEAD 里全是纯 LF), 提交前 `git status` 全量 bytes 复查发现并 bytes 层修回 —— 该坑已补注「KB 回写同样适用, 一律 read_bytes/write_bytes」。根 test.full 回归数字见基线切片 `baselines/26-10-16-0946-global-traffic-monitor-s3.md`。
+
+**滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-0946, 状态行 S0–S3, §04 R0 增 S3 行) · 本档案 R4 · activeContext 切片 R4 · 工具 README/__init__ 进度注记与控制面端点表 · pitfalls/testing/redverify-anchor-lineendings.md 复发+1(形态三第二例) + 形态十一 · kb.index 重建 · 基线切片 `baselines/26-10-16-0946-global-traffic-monitor-s3.md`。未提交(待用户「提交」指令)。
+
+**行号基准**: S3 为纯新目录内文件, 与计划基准 3ba069d7 无关; S6/S7 触碰 auto-qb 前按计划脚注逐条复核漂移。
+

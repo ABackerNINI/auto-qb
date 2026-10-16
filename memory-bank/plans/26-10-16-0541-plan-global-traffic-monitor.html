@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-monitor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-16-0541">
-<meta name="doc-updated" content="26-10-16-0855">
+<meta name="doc-updated" content="26-10-16-0946">
 <meta name="doc-refs" content="memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md">
 <style>
   :root {
@@ -82,7 +82,7 @@
 <h1>全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划</h1>
 <p class="lede">一个独立于 auto-qb 主进程、开机自启的整机流量历史记录工具;累计流量变化超过阈值时主动通知 auto-qb,后者即时刷新 WebUI 历史流量图。工具配置与自启开关进入 auto-qb WebUI 设置页,支持多个 auto-qb 实例同时接入。</p>
 <div class="meta">
-  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S2 已实施;S3–S10 待逐项授权)<br>
+  <b>编号</b> 26-10-16-0541 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 三轮 16 问收敛,全部按推荐拍板) &nbsp;·&nbsp; <b>状态</b> Open(S0–S3 已实施;S4–S10 待逐项授权)<br>
   <b>前置</b> <a style="color:var(--dim)" href="../reports/26-10-13-1034-report-global-traffic-source-lag.html">26-10-13-1034-report-global-traffic-source-lag.html</a>(可行性报告) &nbsp;·&nbsp; <b>行号基准</b> 本 clone @ 3ba069d7(实施前需逐条复核漂移)
 </div>
 
@@ -276,6 +276,10 @@
   <tr><td>adapters</td><td>排除 loopback/down</td><td>适配器过滤,可配正则</td></tr>
   <tr><td>notify_cooldown_s</td><td>600s</td><td>auto-qb 侧冷却;事件号去重另算</td></tr>
   <tr><td>enabled / autostart</td><td>false</td><td>保守默认,WebUI 开启</td></tr>
+  <tr><td>S3</td><td><strong>Done</strong> · 26-10-16-0946 · @ 9d9ec930(开工同步后)。<br>
+  改动 4 文件 + 2 新文件 + 1 依赖, 零 auto-qb 触碰: <code>config.py</code> 占位 -&gt; 全量实现(~240 行: Config frozen dataclass §05 全参数; validate_payload 全量<strong>聚合</strong>校验[未知键/类型/bool 陷阱/正数/端口范围/有限数值/非法正则]; load_config[缺失/空文件-&gt;默认]; save_config[yaml.safe_dump+atomic_write_text]; ConfigHolder 热重载持有者) + <code>server.py</code> 占位 -&gt; 全量实现(~360 行: TokenManager[urlsafe(32) 原子生成/加载, compare_digest 验, <strong>start 即生成</strong>]; ControlServer[ThreadingHTTPServer 强制 127.0.0.1, Windows 关抢占式 allow_reuse_address 才 fail-fast, 端口占用 OSError]; 端点 GET /status[采样状态/当日累计/末事件号/订阅者数/路径/配置回显/uptime] / PUT /config[校验-&gt;原子写-&gt;热重载] / POST subscribe+heartbeat+unsubscribe[租约懒剔除]) + <code>storage.py</code> 扩展(~+160 行: state.json 载荷并入 subscribers+last_event_id, RLock 串行化采样线程与 HTTP 线程读-改-写, _persist_state_locked 完整镜像[最近快照+注册表+事件号], upsert/touch/remove_subscriber, prune_expired_subscribers, set_flush_params) + <code>__main__.py</code> _run_loop 抽出可测循环(stop_event.wait 可中断; 每轮读 holder.current 热生效; 过滤器重建进 try) + cmd_run 接线(配置 fail-fast 聚合报错 -&gt; 锁 -&gt; recover -&gt; 控制面启动[端口占用 exit 1] -&gt; 循环 -&gt; 优雅退出) + <code>pyproject.toml</code> 依赖 +pyyaml 6.0.3(与主仓同版本, 与 WebUI 同格式同解析器, 拒手搓 YAML 子集) + <code>tests/test_config.py</code> 新文件 17 条 + <code>tests/test_server.py</code> 新文件 21 条(全 hermetic: 端口 0 + 注入计数器) + <code>tests/test_storage.py</code> +2 条 + README/<code>__init__</code> 进度注记与控制面端点表。<br>
+  出口判据全过: ①鉴权拒绝(无 token/错 token 401, compare_digest)单测 + 写端点同闸; ②租约剔除单测(注入 now: 超租约剔除/未超保留; HTTP 层拨钟后 /status 计数 1-&gt;0); ③端口冲突 fail-fast 实测(Windows: 第二实例绑定即 WinError 10048, stderr 报错 exit 1); ④config 热重载不丢采样(真 _run_loop + 并发 PUT 集成: 改间隔+适配器后循环线程存活、帧数持续增长)。工具 98/98(4+29+27+17+21); 红验 6 条单行锚点突变(鉴权绕过/租约不剔除/未知键不拒/心跳未知 id/热重载失效/注册表丢失)全判红, 字节恒等还原后复绿; 根 test.full 3413 passed + 4 skipped 与前序切片逐位一致。<br>
+  实施期坑(两处真缺陷, 均由测试/冒烟暴露已修): ①<strong>热重载静默杀循环</strong> —— AdapterFilter 收单正则串, config 模式列表误传 list 致线程猝死(正是出口判据「不丢采样」要防的形态); 修为模式列表 <code>|</code> 并入 + 非法正则在 config 校验层聚合拒绝 + 过滤器重建进 try。②<strong>token 惰性生成鸡生蛋</strong> —— 首版只在首个带凭证请求触发生成, 而 WebUI 需先读文件才能带凭证; 修为 start 即生成/加载。坑档: <code>pitfalls/testing/redverify-anchor-lineendings.md</code> 复发+1 + 形态十一(红验脚本解释器漂移致假红: 系统 python 无 pytest -&gt; rc!=0 被按「守阵杀变异」判 KILLED, 6/6 全假红; 处置=钉死目标 venv 解释器 + 突变循环前先跑无变异基线)。根 test.full 回归数字见基线切片 <code>testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md</code>。行号基准 3ba069d7 与 S3 无关(纯新目录); S6/S7 触碰 auto-qb 前按本文件脚注逐条复核漂移。</td></tr>
 </table>
 
 <h2><span class="no">06</span>顺序与依赖</h2>
@@ -323,7 +327,7 @@
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c(见 §04 实施记录 R0);其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
+<p style="color:var(--faint); font-size:12.5px; max-width:72ch">行号与事实基准:本 clone @ 3ba069d7;auto-qb 侧落点(webui 生命周期/鉴权/配置路由/校验/schema、主循环单写线程、SSE 通道)取自 26-10-16 开工探查,S6/S7 实施前逐条复核漂移。S0(包骨架)已于 26-10-16-0601 在 clone @ 46d2ea11 落地、S1(采样器)于 26-10-16-0815 @ febac58e、S2(落盘)于 26-10-16-0855 @ b688437c、S3(控制面)于 26-10-16-0946 @ 开工同步后(见 §04 实施记录 R0);其余步骤的实施记录将就地更新于本文件 §04(抬 doc-updated,不新建 -v2 文件)。</p>
 
 </div>
 </body>

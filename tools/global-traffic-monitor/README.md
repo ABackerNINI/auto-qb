@@ -19,8 +19,9 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 
 ## 依赖与隔离
 
-- 运行时依赖仅 psutil + filelock; HTTP 控制面与客户端全部 stdlib
-  (`http.server` / `urllib.request`) —— 三平台 pip install 即装。
+- 运行时依赖 psutil (采集) + filelock (单实例锁) + pyyaml (config.yml 解析, 与
+  auto-qb 同族); HTTP 控制面与客户端全部 stdlib (`http.server` /
+  `urllib.request`) —— 三平台 pip install 即装。
 - 自带独立 venv (uv 管理, 落在本目录 `.venv/`), 与 auto-qb 主项目环境互不污染。
 
 ## 目录结构
@@ -35,20 +36,39 @@ src/gtm/
   server.py     本地控制面 127.0.0.1:8099 (S3)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启注册/卸载 (S5)
-tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; 随 S3-S9 逐步扩充)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; 随 S4-S9 逐步扩充)
 ```
 
-## 运行 (S2)
+## 运行 (S2-S3)
 
 ```bash
-gtm run [--data-dir DIR]     # 前台采样-落盘主循环 (自启机制拉起的前台服务)
+gtm run [--data-dir DIR]     # 前台采样-落盘主循环 + 控制面 (自启机制拉起的前台服务)
 ```
 
 数据目录默认按平台 (`%LOCALAPPDATA%/gtm` · `~/Library/Application Support/gtm` ·
 `~/.local/share/gtm`, 环境变量 `GTM_DATA_DIR` 优先), 落 `history_traffic.dat`(TM 兼容) +
-`state.json`(每次采样原子写, kill -9 丢失窗口 ≤ 采样间隔) + `gtm.lock`(单实例, 二次启动
-fail-fast 报错含持有者 PID)。单轮落盘失败记 ERROR 并在下一轮重试, 不杀守护进程;
-Ctrl+C 优雅退出(最终落盘 + 释放锁)。
+`state.json`(每次采样原子写, 含订阅注册表, kill -9 丢失窗口 ≤ 采样间隔) +
+`gtm.lock`(单实例, 二次启动 fail-fast 报错含持有者 PID) + `config.yml`(配置,
+PUT /config 热重载 last-writer-wins) + `monitor.token`(控制面密钥, 首启原子生成)。
+单轮落盘失败记 ERROR 并在下一轮重试, 不杀守护进程; Ctrl+C 优雅退出(最终落盘 +
+释放锁 + 停控制面)。
+
+## 控制面 (S3)
+
+`http://127.0.0.1:8099` (可配; 占用即 fail-fast), 全部端点需 `Authorization:
+Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
+
+| 端点 | 说明 |
+|---|---|
+| `GET /status` | 采样状态 (当日累计/末事件号/订阅者数/文件路径/配置回显/uptime) |
+| `PUT /config` | 全量校验 (聚合报错) -> 原子写 config.yml -> 热重载 |
+| `POST /subscribe` | `{endpoint, token}` 注册订阅, 返回 id + 租约参数 |
+| `POST /heartbeat` | `{id}` 心跳续租 (订阅方每 60s; 未知 id 404) |
+| `POST /unsubscribe` | `{id}` 注销 (幂等, 未知 id 404) |
+
+租约: `last_heartbeat + lease_ttl` (默认 180s) 过期剔除 (懒剔除, 每个已鉴权
+请求入口先 prune)。注册表落 state.json, 重启续存。配置键与默认值见计划 §05;
+非法键/类型/范围/正则一次性聚合拒绝 (黄金法则 4), 拒绝不落盘不换配置。
 
 ## 开发
 

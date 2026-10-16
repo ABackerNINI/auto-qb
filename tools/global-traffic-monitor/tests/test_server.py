@@ -1,0 +1,407 @@
+"""S3 控制面守阵: 鉴权 / 端点 / 租约 / 配置热重载 / 端口冲突 fail-fast.
+
+设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3).
+全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
+不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络。
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+import threading
+import time
+import urllib.error
+import urllib.request
+from types import SimpleNamespace
+from typing import Optional
+
+import pytest
+
+from gtm.__main__ import _run_loop
+from gtm.config import Config, ConfigHolder, load_config
+from gtm.sampler import Sampler
+from gtm.server import ControlServer, TokenManager
+from gtm.storage import Storage
+
+# ---- 替身 ----
+
+TODAY = datetime.date(2026, 10, 16)
+FIXED_NOW = datetime.datetime(2026, 10, 16, 12, 0, 0)
+
+
+class FakeNic(SimpleNamespace):
+    pass
+
+
+def make_counters(start: int = 1_000_000):
+    """单调递增计数器替身 (每次读 +1024 字节 up, +512 down)."""
+    state = {"v": start}
+    calls = {"n": 0}
+
+    def counters() -> dict:
+        calls["n"] += 1
+        state["v"] += 1024
+        return {"eth0": FakeNic(bytes_sent=state["v"], bytes_recv=state["v"] // 2)}
+
+    return counters, calls
+
+
+def make_stats() -> dict:
+    return {"eth0": SimpleNamespace(isup=True)}
+
+
+def make_server(tmp_path, *, port: int = 0, config: Optional[Config] = None, counters_start: int = 1_000_000):
+    """完整控制面装配 (锁已持有; 返回 (server, storage, sampler, holder, token)).
+
+    sampler 挂注入计数器替身 (每次 +1024 up / +512 down) 与固定时钟 —— 全部
+    用例 hermetic, 不碰真实网卡。
+    """
+    storage = Storage(str(tmp_path))
+    storage.acquire_lock()
+    counters, calls = make_counters(counters_start)
+    sampler = Sampler(clock=lambda: FIXED_NOW, counters_provider=counters, stats_provider=make_stats)
+    holder = ConfigHolder(config or Config())
+    token = TokenManager(str(tmp_path / "monitor.token"))
+    server = ControlServer(storage, sampler, holder, token, port=port)
+    server.start()
+    return server, storage, sampler, holder, token
+
+
+def http(server: ControlServer, method: str, path: str, body=None, token: Optional[str] = None):
+    """真实 HTTP 请求 (urllib); 返回 (status, payload_dict)."""
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(server.url() + path, method=method, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+# ---- TokenManager ----
+
+
+def test_token_first_start_generates_file(tmp_path) -> None:
+    tm = TokenManager(str(tmp_path / "monitor.token"))
+    tok = tm.token()
+    assert len(tok) >= 32  # urlsafe(32) -> 43 字符
+    assert (tmp_path / "monitor.token").read_text(encoding="utf-8").strip() == tok
+
+
+def test_token_reload_same_across_restart(tmp_path) -> None:
+    p = str(tmp_path / "monitor.token")
+    first = TokenManager(p).token()
+    second = TokenManager(p).token()
+    assert first == second  # 重启不换密钥 (订阅方缓存不失效)
+
+
+def test_token_verify() -> None:
+    """verify 语义: 对 -> True; 错/空/None -> False (不走落盘路径)."""
+    tm = TokenManager.__new__(TokenManager)  # 只验比对逻辑, 不触发生成落盘
+    tm._token = "abc123"
+    assert tm.verify("abc123") is True
+    assert tm.verify("wrong") is False
+    assert tm.verify("") is False
+    assert tm.verify(None) is False
+
+
+def test_token_generated_at_startup_before_any_request(tmp_path) -> None:
+    """启动即生成密钥 (非惰性): 监听前 monitor.token 已存在 —— 订阅方读文件取密钥
+    再来鉴权, 惰性生成会鸡生蛋 (S3 真机冒烟实测坑)."""
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        assert (tmp_path / "monitor.token").exists()
+        assert token.token() == (tmp_path / "monitor.token").read_text(encoding="utf-8").strip()
+    finally:
+        server.stop()
+
+
+# ---- 鉴权闸 (计划 S3 出口: 无 token/错 token 单测) ----
+
+
+def test_status_without_token_401(tmp_path) -> None:
+    server, *_ = make_server(tmp_path)
+    try:
+        assert http(server, "GET", "/status", token=None)[0] == 401
+    finally:
+        server.stop()
+
+
+def test_status_wrong_token_401(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        assert http(server, "GET", "/status", token="wrong-token")[0] == 401
+        assert http(server, "GET", "/status", token=token.token())[0] == 200
+    finally:
+        server.stop()
+
+
+def test_auth_required_on_all_write_endpoints(tmp_path) -> None:
+    server, *_ = make_server(tmp_path)
+    try:
+        assert http(server, "PUT", "/config", body={}, token=None)[0] == 401
+        assert http(server, "POST", "/subscribe", body={}, token=None)[0] == 401
+    finally:
+        server.stop()
+
+
+# ---- GET /status ----
+
+
+def test_status_fields(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        # 先采两帧: 首帧 baseline (delta 0), 次帧 up +1024 / down +512
+        result = sampler.sample_once()
+        storage.record(result, sampler.snapshot())
+        result = sampler.sample_once()
+        storage.record(result, sampler.snapshot())
+        status, payload = http(server, "GET", "/status", token=token.token())
+        assert status == 200 and payload["ok"] is True
+        assert payload["day"] == "2026-10-16"
+        assert payload["day_up_bytes"] == 1024 and payload["day_down_bytes"] == 512
+        assert payload["day_total_bytes"] == 1536
+        assert payload["last_event_id"] == 0
+        assert payload["subscriber_count"] == 0
+        assert payload["paths"]["dat"] == storage.dat_path
+        assert payload["paths"]["state"] == storage.state_path
+        assert payload["config"]["sample_interval"] == 5.0  # 配置回显
+    finally:
+        server.stop()
+
+
+# ---- PUT /config (热重载) ----
+
+
+def test_put_config_valid_hot_reload(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        status, payload = http(
+            server, "PUT", "/config", body={
+                "sample_interval": 2.5,
+                "http_port": 9100
+            }, token=token.token()
+        )
+        assert status == 200 and payload["ok"] is True
+        assert holder.current.sample_interval == 2.5  # 热重载即时生效
+        assert holder.current.http_port == 9100
+        # 落盘: 重载验证 (last-writer-wins)
+        reloaded, errors = load_config(str(tmp_path / "config.yml"))
+        assert errors == () and reloaded is not None
+        assert reloaded.sample_interval == 2.5
+        # /status 回显也已是新值
+        assert http(server, "GET", "/status", token=token.token())[1]["sample_interval"] == 2.5
+    finally:
+        server.stop()
+
+
+def test_put_config_invalid_aggregates_and_keeps_old(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        status, payload = http(
+            server,
+            "PUT",
+            "/config",
+            body={
+                "sample_interval": True,
+                "unknown_key": 1,
+                "http_port": 99999
+            },
+            token=token.token(),
+        )
+        assert status == 400 and payload["ok"] is False
+        assert len(payload["errors"]) == 3  # 聚合一次报齐
+        assert holder.current == Config()  # 旧配置不动
+        assert not (tmp_path / "config.yml").exists()  # 无效载荷不落盘
+    finally:
+        server.stop()
+
+
+def test_put_config_bad_json_400(tmp_path) -> None:
+    server, *_ = make_server(tmp_path)
+    try:
+        req = urllib.request.Request(
+            server.url() + "/config",
+            method="PUT",
+            data=b"{not json",
+            headers={
+                "Authorization": f"Bearer {server.token_manager.token()}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                status = resp.status
+        except urllib.error.HTTPError as e:
+            status = e.code
+        assert status == 400
+    finally:
+        server.stop()
+
+
+# ---- 订阅生命周期 ----
+
+
+def test_subscribe_heartbeat_unsubscribe(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        tok = token.token()
+        status, payload = http(
+            server, "POST", "/subscribe", body={
+                "endpoint": "http://127.0.0.1:9000/n",
+                "token": "t"
+            }, token=tok
+        )
+        assert status == 200 and payload["id"]
+        assert payload["lease_ttl_s"] == 180.0 and payload["heartbeat_interval_s"] == 60.0
+        sub_id = payload["id"]
+        assert len(storage.subscribers) == 1
+        # 心跳续租
+        assert http(server, "POST", "/heartbeat", body={"id": sub_id}, token=tok)[0] == 200
+        # 未知 id
+        assert http(server, "POST", "/heartbeat", body={"id": "nope"}, token=tok)[0] == 404
+        assert http(server, "POST", "/unsubscribe", body={"id": "nope"}, token=tok)[0] == 404
+        # 注销
+        assert http(server, "POST", "/unsubscribe", body={"id": sub_id}, token=tok)[0] == 200
+        assert len(storage.subscribers) == 0
+    finally:
+        server.stop()
+
+
+def test_subscribe_validates_payload(tmp_path) -> None:
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        tok = token.token()
+        assert http(server, "POST", "/subscribe", body={"endpoint": "not-a-url", "token": "t"}, token=tok)[0] == 400
+        assert http(server, "POST", "/subscribe", body={"endpoint": "http://h/x", "token": ""}, token=tok)[0] == 400
+        assert http(server, "POST", "/nope", body={}, token=tok)[0] == 404
+        assert len(storage.subscribers) == 0
+    finally:
+        server.stop()
+
+
+def test_unknown_endpoint_404(tmp_path) -> None:
+    server, *_ = make_server(tmp_path)
+    try:
+        assert http(server, "GET", "/nope", token=server.token_manager.token())[0] == 404
+    finally:
+        server.stop()
+
+
+# ---- 租约剔除 (计划 S3 出口单测) ----
+
+
+def test_lease_prune_expired_and_keep_fresh(tmp_path) -> None:
+    """注入 now: 超租约的剔除, 未超的保留 (Storage 层直接验剔除逻辑)."""
+    storage = Storage(str(tmp_path))
+    storage.acquire_lock()
+    storage.upsert_subscriber("old", "http://h/1", "t")
+    storage.upsert_subscriber("fresh", "http://h/2", "t")
+    # 把 old 的 last_heartbeat 拨回过去
+    storage._subscribers["old"]["last_heartbeat"] = 0.0  # noqa: SLF001 - 测试拨钟
+    removed = storage.prune_expired_subscribers(now=10_000.0, lease_ttl_s=180.0)
+    assert removed == ("old", )
+    assert set(storage.subscribers) == {"fresh"}
+    # 无过期时零写盘: 文件 mtime 不变语义由下一次写盘体现, 此处验返回空
+    assert storage.prune_expired_subscribers(now=10_001.0, lease_ttl_s=180.0) == ()
+
+
+def test_lease_prune_lazy_on_status_request(tmp_path) -> None:
+    """懒剔除: 过期订阅在下一个 /status 请求入口被剔除 (计数即时准确)."""
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        tok = token.token()
+        status, payload = http(server, "POST", "/subscribe", body={"endpoint": "http://h/1", "token": "t"}, token=tok)
+        sub_id = payload["id"]
+        assert http(server, "GET", "/status", token=tok)[1]["subscriber_count"] == 1
+        # 拨回心跳时间 -> 超过租约
+        storage._subscribers[sub_id]["last_heartbeat"] = 0.0  # noqa: SLF001 - 测试拨钟
+        assert http(server, "GET", "/status", token=tok)[1]["subscriber_count"] == 0
+        assert storage.subscribers == {}
+    finally:
+        server.stop()
+
+
+# ---- 注册表重启续存 ----
+
+
+def test_registry_survives_restart(tmp_path) -> None:
+    """注册表落 state.json: 重启 (新 Storage 实例) 后订阅仍在 (计划 S3: 注册表落 state.json)."""
+    storage = Storage(str(tmp_path))
+    storage.acquire_lock()
+    storage.upsert_subscriber("s1", "http://h/1", "t")
+    storage.release_lock()
+    storage2 = Storage(str(tmp_path))
+    storage2.acquire_lock()
+    try:
+        storage2.recover(Sampler())
+        assert set(storage2.subscribers) == {"s1"}
+        assert storage2.subscribers["s1"]["endpoint"] == "http://h/1"
+    finally:
+        storage2.release_lock()
+
+
+# ---- 端口冲突 fail-fast (计划 S3 出口实测点; 单测用端口 0 分配后的实占端口) ----
+
+
+def test_port_conflict_fails_fast(tmp_path) -> None:
+    server_a, *_ = make_server(tmp_path / "a")
+    server_b, *_ = make_server(tmp_path / "b")
+    try:
+        # 第二个实例直接抢 server_a 已占端口 -> 绑定即 OSError (fail-fast)
+        with pytest.raises(OSError):
+            ControlServer(
+                Storage(str(tmp_path / "c")),
+                Sampler(),
+                ConfigHolder(Config()),
+                TokenManager(str(tmp_path / "c" / "monitor.token")),
+                host=server_a.host,
+                port=server_a.port,
+            ).start()
+    finally:
+        server_a.stop()
+        server_b.stop()
+
+
+# ---- 热重载不丢采样 (计划 S3 出口: 真循环 + 并发 PUT) ----
+
+
+def test_hot_reload_does_not_drop_sampling(tmp_path) -> None:
+    """真 _run_loop + 并发 PUT /config: 重载前后采样持续 (无丢帧/无死循环/线程存活)."""
+    server, storage, sampler, holder, token = make_server(tmp_path, config=Config(sample_interval=0.02))
+    counters, calls = make_counters()
+    sampler._counters_provider = counters  # noqa: SLF001 - 独立计数替身, 断言采样帧数
+    stop = threading.Event()
+    loop = threading.Thread(target=_run_loop, args=(storage, sampler, holder, stop), daemon=True)
+    loop.start()
+    try:
+        time.sleep(0.15)
+        before = calls["n"]
+        assert before >= 3  # 循环真的在跑
+        # 热重载: 改采样间隔 + 适配器过滤 (loop 下轮即生效)
+        status, _ = http(
+            server,
+            "PUT",
+            "/config",
+            body={
+                "sample_interval": 0.05,
+                "adapter_exclude": ["vmnet.*"]
+            },
+            token=token.token()
+        )
+        assert status == 200
+        assert holder.current.sample_interval == 0.05
+        time.sleep(0.3)
+        after = calls["n"]
+        assert after > before  # 重载后继续采样, 没丢
+        assert loop.is_alive()  # 循环线程没被重载杀掉 (非法过滤器曾致线程猝死, 已修)
+        assert sampler.day_total_bytes > 0
+    finally:
+        stop.set()
+        loop.join(timeout=3)
+        server.stop()
+        storage.release_lock()

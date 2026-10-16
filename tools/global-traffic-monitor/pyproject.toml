@@ -20,13 +20,16 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 
-# 直接依赖: 仅 psutil (采集) + filelock (单实例锁)。
-# HTTP 控制面与客户端全部 stdlib (http.server / urllib.request) —— 除这两者外零第三方依赖,
-# 保证三平台 pip install 即装、auto-qb 依赖变动不影响工具。
+# 直接依赖: psutil (采集) + filelock (单实例锁) + pyyaml (config.yml 解析)。
+# HTTP 控制面与客户端全部 stdlib (http.server / urllib.request) —— 除这三者外零第三方
+# 依赖, 保证三平台 pip install 即装、auto-qb 依赖变动不影响工具。
+# YAML 解析与 auto-qb 主仓同族 (PyYAML): 工具 config.yml 与 auto-qb WebUI 设置页
+# (S6 经 PUT /config 代理读写) 同格式同解析器, 杜绝"手搓 YAML 子集"的格式漂移。
 # 版本精确锁定由 uv.lock 承担 (本文件不写死版本号)。
 dependencies = [
     "psutil",
     "filelock",
+    "pyyaml",
 ]
 
 [project.scripts]

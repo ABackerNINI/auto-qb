@@ -7,9 +7,16 @@ sampler.DAT_ROW_RE, 读写两侧共用防漂移)。写 = 临时文件 -> fsync -
 推送失败不影响落盘, 订阅者丢失通知可靠慢轮询兜底。
 
 落盘节流: 日累计变化 >= 1 MiB 或距上次落盘 >= 30s (对齐 TM 落盘节拍), 内存活尾
-随时可服务 (render 当前值)。state.json (上次快照/当日累计; S3/S4 将扩展事件号/
-租约表, 顶层键向后兼容) **每次采样必写** (原子写), 保证 kill -9 后丢失窗口
-<= 采样间隔; dat 可按节流懒写, 恢复时 state 权威、dat 仅兜底。
+随时可服务 (render 当前值)。state.json (上次快照/当日累计/末事件号/订阅注册表,
+顶层键向后兼容) **每次采样必写** (原子写), 保证 kill -9 后丢失窗口 <= 采样
+间隔; dat 可按节流懒写, 恢复时 state 权威、dat 仅兜底。
+
+S3 扩展: 订阅注册表 (subscribe/heartbeat/unsubscribe 经控制面 HTTP 线程驱动)
+与末事件号并入 state.json 载荷 —— HTTP 线程与采样线程**并发**读-改-写同一
+载荷, 由 _state_lock (RLock) 串行化: 每次写盘都是"最近快照 + 当前注册表 +
+事件号"的完整镜像 (快照由 record 更新; 注册表由 HTTP 变更更新)。订阅方 token
+落盘明文 (数据目录本地可达, 与 auto-qb config.yml 内 token 同风险面; 工具
+不提供跨机访问面 —— 控制面强制绑定 127.0.0.1)。
 
 filelock 保证工具单实例, 二次启动 fail-fast 报错 (含持有者信息)。
 
@@ -25,6 +32,7 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 import time
 from datetime import date, datetime
 from pathlib import Path
@@ -186,10 +194,11 @@ class DatStore:
 
 
 class StateStore:
-    """state.json: 采样快照载荷的原子读写 (S3/S4 将扩展事件号/租约表, 顶层键向后兼容).
+    """state.json: 采样快照载荷 + 订阅注册表 + 末事件号的原子读写 (S3 扩展).
 
     read() 仅在文件缺失/JSON 解析失败/顶层非对象时返回 None (由调用方走降级恢复);
-    字段级校验归 sampler.restore (版本不符/字段非法 -> 告警降级)。
+    字段级校验归 sampler.restore (版本不符/字段非法 -> 告警降级) 与 Storage 的
+    注册表加载 (坏条跳过, 局部损坏不拖垮恢复)。
     """
     def __init__(self, path: str) -> None:
         self.path = path
@@ -315,14 +324,18 @@ class SingleInstanceLock:
 
 
 class Storage:
-    """落盘编排 (单写线程内使用, 非线程安全 —— 并发读者只见磁盘文件):
+    """落盘编排 + 订阅注册表 (S3): 采样线程与 HTTP 线程并发驱动同一 state.json.
 
     - acquire_lock/release_lock: 单实例 (fail-fast), data_dir 自动创建
-    - load/recover: 启动恢复 —— state.json 权威 (sampler.restore), 缺失/损坏
-     降级时当日累计从 dat 末行兜底 (sampler.restore_from_dat, 计数器基线取当前值)
+    - load/recover: 启动恢复 —— state.json 权威 (sampler.restore + 注册表加载),
+      缺失/损坏降级时当日累计从 dat 末行兜底 (sampler.restore_from_dat)
     - record(result, snapshot): 单次采样后落盘编排 —— 跨天封存旧日最终值 ->
-      upsert 当日 -> dat 按节流 -> state 每次必写
+      upsert 当日 -> dat 按节流 -> state 每次必写 (载荷 = 快照 + 注册表 + 事件号)
+    - upsert/touch/remove_subscriber: 控制面 HTTP 线程驱动的注册表变更
+      (同锁路径, 每次写盘为完整镜像)
+    - prune_expired_subscribers: 租约剔除 (last_heartbeat + lease_ttl < now)
     - flush/close: 强制落盘 dat (优雅退出最终落盘)
+    - set_flush_params: 热重载 flush 节流参数 (PUT /config)
     """
     def __init__(
         self,
@@ -344,6 +357,12 @@ class Storage:
         self._lock = SingleInstanceLock(self.lock_path)
         self._policy = FlushPolicy(delta_bytes=flush_delta_bytes, interval_s=flush_interval_s, clock=clock)
         self._current_total = 0
+        # S3: state.json 载荷并发写保护 (采样线程 record + HTTP 线程注册表变更)
+        # 与最近快照缓存 (HTTP 变更写盘时合并, 不丢采样字段)
+        self._state_lock = threading.RLock()
+        self._last_snapshot: Optional[Mapping[str, object]] = None
+        self._subscribers: dict[str, dict] = {}
+        self._last_event_id = 0
 
     # ---- 单实例锁 ----
 
@@ -376,15 +395,118 @@ class Storage:
 
         返回恢复告警 (调用方负责日志可见; sampler.restore 的语义见 S1)。
         有效载荷 (今天接续/昨天清零基线续) 不触发兜底 —— state 权威, dat 仅兜底。
+        S3: 注册表 (subscribers) 与末事件号 (last_event_id) 随本调用从 state
+        提取入内存; 坏条跳过 (端点缺失/时间戳非数值), 局部损坏不拖垮恢复。
         """
         self._ensure_loaded()
         state = self._state.read()
-        warnings = list(sampler.restore(state))
-        if state is None or not sampler.has_baseline:
-            # 降级路径 (计划 S1 口径: state 缺失/损坏 -> 当日累计从 dat 末行恢复,
-            # 计数器基线仍取当前值, 停机窗口丢流量)
-            sampler.restore_from_dat(self._dat.render())
+        with self._state_lock:
+            if isinstance(state, dict):
+                self._load_registry(state)
+            warnings = list(sampler.restore(state))
+            if state is None or not sampler.has_baseline:
+                # 降级路径 (计划 S1 口径: state 缺失/损坏 -> 当日累计从 dat 末行恢复,
+                # 计数器基线仍取当前值, 停机窗口丢流量)
+                sampler.restore_from_dat(self._dat.render())
         return tuple(warnings)
+
+    def _load_registry(self, state: Mapping[str, object]) -> None:
+        """从 state 载荷提取订阅注册表与末事件号 (调用方须持 _state_lock).
+
+        逐条校验: 端点字符串 + 数值时间戳缺一不可, 坏条跳过并告警 —— 注册表
+        局部损坏不影响采样恢复 (黄金法则: 单点失败不级联)。
+        """
+        subs = state.get("subscribers")
+        if isinstance(subs, dict):
+            loaded: dict[str, dict] = {}
+            for sub_id, entry in subs.items():
+                if (
+                    isinstance(sub_id, str) and isinstance(entry, dict) and isinstance(entry.get("endpoint"), str) and
+                    isinstance(entry.get("last_heartbeat"),
+                               (int, float)) and not isinstance(entry.get("last_heartbeat"), bool)
+                ):
+                    loaded[sub_id] = dict(entry)
+                else:
+                    logger.warning("state.json 订阅条目损坏已跳过: id=%r", sub_id)
+            self._subscribers = loaded
+        ev = state.get("last_event_id")
+        if isinstance(ev, int) and not isinstance(ev, bool) and ev >= 0:
+            self._last_event_id = ev
+
+    # ---- 订阅注册表 (S3; 控制面 HTTP 线程驱动, 同锁路径) ----
+
+    @property
+    def subscribers(self) -> dict[str, dict]:
+        """注册表快照副本 (调用方迭代/计数安全; 条项形态: endpoint/token/last_heartbeat)."""
+        with self._state_lock:
+            return {sid: dict(entry) for sid, entry in self._subscribers.items()}
+
+    @property
+    def last_event_id(self) -> int:
+        """末事件号 (S4 通知序号; S3 仅读取与透传)."""
+        with self._state_lock:
+            return self._last_event_id
+
+    def upsert_subscriber(self, sub_id: str, endpoint: str, token: str) -> None:
+        """注册/更新订阅 (POST /subscribe): 同 id 重复注册 = 刷新 (幂等)."""
+        with self._state_lock:
+            self._subscribers[sub_id] = {
+                "endpoint": endpoint,
+                "token": token,
+                "last_heartbeat": time.time(),
+            }
+            self._persist_state_locked()
+
+    def touch_subscriber(self, sub_id: str) -> bool:
+        """心跳续租 (POST /heartbeat): 更新 last_heartbeat 并落盘; 未知 id -> False."""
+        with self._state_lock:
+            entry = self._subscribers.get(sub_id)
+            if entry is None:
+                return False
+            entry["last_heartbeat"] = time.time()
+            self._persist_state_locked()
+            return True
+
+    def remove_subscriber(self, sub_id: str) -> bool:
+        """注销 (POST /unsubscribe): 移除并落盘; 未知 id -> False (幂等语义)."""
+        with self._state_lock:
+            if self._subscribers.pop(sub_id, None) is None:
+                return False
+            self._persist_state_locked()
+            return True
+
+    def prune_expired_subscribers(self, now: float, lease_ttl_s: float) -> tuple[str, ...]:
+        """租约剔除: last_heartbeat + lease_ttl < now 的订阅移除并落盘 (有剔除才写盘).
+
+        返回被剔除的 id 元组 (调用方日志可见); 无过期时零写盘 (心跳节拍 60s 下
+        不放大写盘)。
+        """
+        with self._state_lock:
+            expired = [sid for sid, e in self._subscribers.items() if e.get("last_heartbeat", 0.0) + lease_ttl_s < now]
+            for sid in expired:
+                del self._subscribers[sid]
+            if expired:
+                self._persist_state_locked()
+            return tuple(expired)
+
+    def _persist_state_locked(self) -> None:
+        """state.json 全量载荷原子写 (调用方须持 _state_lock).
+
+        载荷 = 最近采样快照 (record 更新; 尚未采样则不写采样字段, 载荷仅含
+        注册表+事件号 —— 与全新安装等价, recover 自然降级) + 当前注册表 +
+        末事件号。HTTP 线程与采样线程都经本路径写盘, 单锁串行化读-改-写。
+        """
+        payload: dict[str, object] = {}
+        if self._last_snapshot is not None:
+            payload.update(self._last_snapshot)
+        payload["last_event_id"] = self._last_event_id
+        payload["subscribers"] = self._subscribers
+        self._state.write(payload)
+
+    def set_flush_params(self, delta_bytes: int, interval_s: float) -> None:
+        """热重载 flush 节流参数 (PUT /config; 采样循环每轮应用)."""
+        self._policy.delta_bytes = delta_bytes
+        self._policy.interval_s = interval_s
 
     # ---- 采样后落盘编排 ----
 
@@ -401,8 +523,11 @@ class Storage:
         self._current_total = result.day_total_bytes
         if self._policy.due(result.day_total_bytes):
             self.flush()
-        # state 每次采样必写: kill -9 后丢失窗口 <= 采样间隔 (黄金法则 3)
-        self._state.write(snapshot)
+        # state 每次采样必写: kill -9 后丢失窗口 <= 采样间隔 (黄金法则 3);
+        # 载荷 = 快照 + 注册表 + 事件号 (注册表由 HTTP 线程同锁更新)
+        with self._state_lock:
+            self._last_snapshot = dict(snapshot)
+            self._persist_state_locked()
 
     def flush(self) -> None:
         """强制落盘 dat 当前镜像并标记节流基线."""

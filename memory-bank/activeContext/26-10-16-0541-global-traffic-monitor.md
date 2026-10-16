@@ -1,9 +1,9 @@
 ---
-summary: 全局流量监视小工具(TM 替代)分步实施计划 — grilling 三轮收敛 + 计划产出 + S0 包骨架 / S1 采样器 / S2 落盘已落地
+summary: 全局流量监视小工具(TM 替代)分步实施计划 — grilling 三轮收敛 + 计划产出 + S0 包骨架 / S1 采样器 / S2 落盘 / S3 控制面已落地
 ---
 
-> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1 采样器已实施(26-10-16-0815), S2 落盘已实施(26-10-16-0855), S3–S10 待逐项授权
-> 最后活动: 2026-10-16 08:55
+> 摘要: grilling 三轮 16 问收敛(用户两次纠正需求范围: TM 替代定位、多实例共享服务), 产出计划 26-10-16-0541(Open); S0 包骨架已实施(26-10-16-0601), S1 采样器已实施(26-10-16-0815), S2 落盘已实施(26-10-16-0855), S3 控制面已实施(26-10-16-0946), S4–S10 待逐项授权
+> 最后活动: 2026-10-16 09:46
 
 # activeContext · global-traffic-monitor(26-10-16-0541)
 
@@ -19,4 +19,6 @@ grilling 三轮 16 问全部按推荐拍板(口径=整机全适配器排回环;t
 
 **R3 · S2 已实施(2026-10-16-0855,clone @ b688437c,开工同步后)**: 用户指令「实施计划S2:26-10-16-0541-plan-global-traffic-monitor.html」= 对 S2 的显式授权(S3–S10 不动)。storage.py 全量实现(~430 行: atomic_write_text 原子写单点[tmp+fsync+os.replace, Windows 读者持句柄 WinError 5/32 退避重试 5×50ms]/DatStore[TM 兼容 lines 头+新日在前+KB 向下取整+坏行跳过]/StateStore[每次采样必写, 丢失窗口 ≤ 采样间隔; 缺失/坏 -> None]/FlushPolicy[Δ≥1MiB 或 ≥30s, 首帧必落盘, 跨天 reset 新日基线]/SingleInstanceLock[filelock 0 超时+meta 持有者 PID, fail-fast]/Storage 编排[record: 跨天封存旧日 -> upsert -> dat 节流 -> state 必写; recover: state 权威、缺失/损坏/降级 -> dat 兜底]) + __main__.py run 子命令(default_data_dir 三平台, 单轮落盘失败 ERROR 可见下一轮重试不杀守护进程) + sampler.py _DAT_ROW_RE -> 公共 DAT_ROW_RE(dat 行格式工具内单点) + tests/test_storage.py 27 条守阵 + test_smoke.py CLI 断言更新, 改 4 文件+1 新文件零 auto-qb 触碰。出口判据全过: 工具 60/60; 红验 6 条单行锚点突变全判红字节恒等还原复绿; 并发读守阵(线程+子进程)只见完整文件; curves.py oracle bad==0; 真机冒烟 kill -9 后 state 快照双恢复、双实例 fail-fast 带 PID。坑: platform-fs.md 新增两节(Windows os.replace 读者双向瞬时拒绝; Git Bash $! 是 MSYS pid + grep 行尾退化计数)。基线切片 testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md。未提交(待用户「提交」指令)。
 
-**待办**:S3(控制面 server: 127.0.0.1:8099 + token 鉴权 + /status/PUT /config/订阅心跳租约)待用户显式授权实施; 记录+落盘闭环(S0–S2)已可手动 `gtm run` 验证。
+**R4 · S3 已实施(2026-10-16-0946,开工同步 9d9ec930 后)**: 用户指令「继续S3」= 对 S3 的显式授权(S4–S10 不动)。config.py 全量实现(~240 行: Config frozen dataclass §05 全参数; validate_payload 全量聚合校验[未知键/类型/bool 陷阱/正数/端口/有限数值/非法正则]; load/save[atomic_write_text]; ConfigHolder 热重载持有者) + server.py 全量实现(~360 行: TokenManager[urlsafe(32) 启动即原子生成, compare_digest]; ControlServer[ThreadingHTTPServer 强制 127.0.0.1, Windows 关抢占式 allow_reuse_address 才 fail-fast, 端口占用 OSError]; GET /status[采样状态/当日累计/末事件号/订阅者数/路径/配置回显/uptime] / PUT /config[聚合校验->原子写->热重载] / subscribe+heartbeat+unsubscribe[租约 180s 懒剔除]) + storage.py 扩展(state.json 载荷并入 subscribers+last_event_id, RLock 串行化采样线程与 HTTP 线程读-改-写, 每次写盘完整镜像[最近快照+注册表+事件号]) + __main__.py _run_loop 抽出可测循环(stop_event.wait 可中断; 每轮读 holder.current 热生效) + pyproject +pyyaml 6.0.3(与主仓同版本) + tests/test_config.py 17 条 + tests/test_server.py 21 条(全 hermetic: 端口 0+注入计数器) + test_storage.py +2 条, 改 4 文件+2 新文件+1 依赖零 auto-qb 触碰。出口判据全过: 鉴权 401 双形态/租约剔除/端口冲突 fail-fast 实测(WinError 10048 exit 1)/热重载不丢采样(真循环+并发 PUT, 线程存活+帧数增长); 工具 98/98; 红验 6 条突变全判红字节恒等还原复绿; 根 test.full 3413+4 skip 与前序逐位一致; 真机冒烟: token 首启生成(43 字符)->鉴权全端点->热重载 5.0->2.0->kill -9 重启注册表续存+配置跨重启保留。两处真缺陷(测试/冒烟暴露已修): ①热重载静默杀循环(AdapterFilter 收单正则串, 模式列表误传 list 致线程猝死; 修为 | 并入+非法正则校验层拒+重建进 try+线程存活断言); ②token 惰性生成鸡生蛋(修为 start 即生成)。坑: pitfalls/testing/redverify-anchor-lineendings.md 复发+1 形态三 + 形态十一(红验脚本解释器漂移致假红: 系统 python 无 pytest 被按守阵杀判 KILLED, 6/6 全假红; 处置=钉死 venv 解释器+突变前先跑基线)。基线切片 testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md。未提交(待用户「提交」指令)。
+
+**待办**:S4(通知 notifier: Δ≥100MiB 阈值触发 + 事件号 + 假死端点不阻塞采样 + 启动补发)待用户显式授权实施; S3/S4 完成后即可与 S7 联调(协议两端先立)。
