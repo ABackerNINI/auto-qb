@@ -37,9 +37,9 @@ doc     = "../../memory-bank/pitfalls/testing/harness-is-stub-server.md"
 
 [tasks."dev.e2e"]
 run     = ["npx playwright test <args>"]
-timeout = 600
+timeout = 1200
 when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 全量集; 桩服务由 webServer 自动起）"
-note    = "timeout=600s: 默认轮 2026-10-06 实测 164s, U2 后套件涨到 194 用例实测 ~356s 顶满旧 360s 预算(引擎到点强杀, 2026-10-12 放宽)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
+note    = "timeout=1200s: 2026-10-16 全量套件 280 例实测 10.9m ≈ 654s —— 旧 600s 预算被引擎到点强杀(历史: 2026-10-06 默认轮 164s; U2 后 194 用例 ~356s 顶满旧 360s, 2026-10-12 放宽到 600s) ⇒ 再放宽到 1200s(≈1.8× 实测, 留慢机器的余量; 套件再涨就该重估 —— 拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
 doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"
 
 [tasks."dev.port-kill"]
