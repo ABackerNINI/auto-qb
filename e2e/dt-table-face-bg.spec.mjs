@@ -92,8 +92,10 @@ const PLAIN_ROW =
 async function openFace(page, drawer, faceId) {
   const def = FACES[faceId];
   await drawer.locator('.drawer-tabs button', { hasText: def.tab }).first().click();
-  const anchor = drawer.locator(`[data-dt-table-anchor="${def.anchor}"]`).first();
-  await expect(anchor.locator('.group-row').first()).toBeVisible({ timeout: 10_000 });
+  /* 2026-10-18: 等**表格体的首行可见**(按 data-table 取), 不等「首座锚」——
+   * 分段变体空组锚无行(隐藏段), 按锚等会超时(锚在但行不在) */
+  await expect(drawer.locator(`.group-row[data-table="${def.anchor}"]`).first())
+    .toBeVisible({ timeout: 10_000 });
   return def;
 }
 
@@ -149,10 +151,11 @@ async function probeFirstVsRow(page, listSel, rowSel) {
         for (let i = layers.length - 2; i >= 0; i--) acc = over(layers[i], acc);
         return `rgb(${Math.round(acc[0])}, ${Math.round(acc[1])}, ${Math.round(acc[2])})`;
       };
-      const list = document.querySelector(listSel);
-      if (!list) return { error: 'no list ' + listSel };
-      const row = list.querySelector(rowSel);
-      if (!row) return { error: 'no row ' + rowSel };
+      /* 2026-10-18: 分段变体(08 五区 / 05 健康分组)空组改**原地 hidden 类**后, listSel 匹配的
+       * 首个容器可能是空组的 .dtNN-rows(display:none, 无行) —— 直接按后代组合选择器取首行,
+       * 天然落到第一个**有行**的组(与「折叠组跳过」同向: 无行即无量测对象)。 */
+      const row = document.querySelector(listSel + ' ' + rowSel);
+      if (!row) return { error: 'no row ' + listSel + ' ' + rowSel };
       const first = row.firstElementChild;
       if (!first) return { error: 'no first cell' };
       const fcs = getComputedStyle(first);

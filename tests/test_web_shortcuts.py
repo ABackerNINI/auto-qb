@@ -755,13 +755,19 @@ def test_drawer_height_w3() -> None:
     assert move and "_drawerClampHeight(" in move.group(1), "move 实时改高必须过夹取函数"
     up = re.search(r"drawerGripUp\(e\) \{(.*?)\n    \},", drawer_js, re.S)
     assert up and "persistDrawerHeight()" in up.group(1), "松手才落盘(拖拽过程不写 localStorage)"
-    # 面板内联样式: 高度只在开且有记忆时生效, height 与 max-height 同锁(CSS 默认 42vh 上限要能被拖拽突破)
+    # 面板内联样式: 高度只在开态生效, height 与 max-height 同锁(CSS 默认 42vh 上限要能被拖拽突破);
+    # 2026-10-18 用户硬约束(报障「五区分组握手中组进出场导致详情面板高度跳动」): **展开恒锁确定
+    # 高度** —— 未拖拽过也回落默认 42vh, 不得返回 {} 走 CSS 内容自适应(任何元素进出场都会改实高)
     style = re.search(r"drawerPanelStyle\(\) \{(.*?)\n    \},", drawer_js, re.S)
     assert style, "drawer.js 找不到 drawerPanelStyle(面板高度应用单点)"
     stb = style.group(1)
     assert stb.index("this.drawer.open") < stb.index("this.drawerHeightPx"
                                                     ), ("内联高度必须守卫 开态(dashboardPanelStyle 高度不该挂在关闭态)")
     assert '"maxHeight"' in stb or "maxHeight" in stb, "内联样式必须同时锁 max-height(拖过 42vh 后 CSS 默认上限要被覆盖)"
+    assert "|| Math.round(window.innerHeight * 0.42)" in stb and "return {};" not in stb.replace(
+        "if (!this.drawer.open) return {};", ""), (
+        "未拖拽过也必须回落确定高度(默认 42vh) —— 返回 {} 走 CSS 内容自适应即「面板高度自己跳」复发"
+    )
     # --- §3.5 持久化: 两键与 drawerTab 同族 try/catch; D1 = drawerOpen 只写不回读 ---
     for fn, key in (("persistDrawerHeight", "autoqb.ui.drawerHeight"), ("persistDrawerOpen", "autoqb.ui.drawerOpen")):
         body = re.search(rf"{fn}\(\) \{{(.*?)\n    \}},", drawer_js, re.S)

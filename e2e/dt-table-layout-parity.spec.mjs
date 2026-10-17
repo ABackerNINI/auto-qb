@@ -72,9 +72,14 @@ for (const skin of SKINS) {
         await expect(row).toBeVisible({ timeout: 5_000 });
 
         const probe = await page.evaluate((tid) => {
-          const head = document.querySelector('.group-head[data-table="' + tid + '"]');
+          /* 取**行所在段**的表头配对(2026-10-18 分段变体空组改原地 hidden 类后, 帧内首座
+           * 表头可能属于 display:none 的空组 section, rect 恒 0 —— 与可见行配对必假红;
+           * 列头与行本就在同一座锚里(aq-table + .group-table 同段 teleport), 按行反查即真值) */
           const rowEl = document.querySelector('.group-row[data-table="' + tid + '"]');
-          if (!head || !rowEl) return null;
+          if (!rowEl) return null;
+          const anchor = rowEl.closest('[data-dt-table-anchor]');
+          const head = anchor && anchor.querySelector('.group-head[data-table="' + tid + '"]');
+          if (!head) return null;
           const cs = getComputedStyle(head);
           const tracks = (cs.gridTemplateColumns || '').trim().split(/\s+/).filter(Boolean).length;
           const headCells = head.querySelectorAll(':scope > .h-cell').length;

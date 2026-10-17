@@ -3,7 +3,8 @@
  * 设计稿: resources/detail-panel-templates/05-trackers-health-groups-low.html(low 档;
  * 收起/矮/高三档语义全部收进本变体 —— 收起 = 核心内置摘要条, 矮/高 = 分区列表自适应滚动)。
  * 数据: /trackers qB 透传(drawer.trackers, 5s 轮询); 分区顺序即处理顺序:
- * 失败 -> 警告 -> 更新中 -> 正常 -> 未启用(空分区整节隐藏); 失败区 msg 全文铺开 +
+ * 失败 -> 警告 -> 更新中 -> 正常 -> 未启用(空分区整节隐藏, 2026-10-18 起改**原地 hidden 类**
+ * 切换, 不再整节缺席, 见下段根治注); 失败区 msg 全文铺开 +
  * 处置建议文案(变体内置映射, 按 msg 关键词分派); 备注类 msg 点击展开全文。
  * 状态分桶(纯数值判据, 不复刻经典链文案单点): status 2=正常 3=更新中 4=失败 1=警告(未连接)
  * 0/虚拟=未启用 —— qB 的 4(not working)在经典链只显「未连接」, 分组语义按设计稿提到失败档。
@@ -14,9 +15,18 @@
  *   留在外壳(分组是版式), 行是引擎表体**(失败处置块/普通行/off 组 chips 合成行三形态,
  *   kind 分支经渲染器分片 tpl-aq-dt05-cells); 无排序(dyn 空键 = 组内 qB 原序, 原口径);
  *   msg 展开态 rowsFn 读取(重建后恢复), 折叠仍 classList 翻转不重挂(锚元素集合不变)。
+ * !2026-10-18(用户报障「详情面板跳动」根治, 与 08 同口径): 病根两层 —— ①面板高度内容自适应
+ *   (未拖拽过时 drawerPanelStyle 返回 {} 走 CSS max-height 上限), 任何元素进出场都改面板实高,
+ *   已在 drawer.js 单点修掉(展开恒锁高度); ②本变体结构 sig 含在场分组集 ⇒ 组空⇒整节隐藏
+ *   (锚离场)、组补⇒新锚进场, tracker 状态每翻动一次(失败⇄警告⇄正常…)就整帧 replaceChildren
+ *   + anchFill + Teleport 重挂 = 全组表格抖动。修法: **五组恒在场** —— 空组不进 sig, 只切
+ *   hidden 类(.dt05-hide, display:none); rowsFn 保留空段 ⇒ 桥 v-for 段集合不变 ⇒ teleport
+ *   不卸不重挂; 数据拍(render 的 skip 分支内)原地切隐藏类 + 回填组头徽章计数。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 trackers 序列化比对)跳过重建, 各组锚元素跨帧保活(锚被重建 =
- * Teleport 重挂 = 行抖动), 滚动位置/分区折叠/msg 展开态自保。
+ * 原子换帧, **结构态**(加载/失败/空态/折叠/msg 展开)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
+ * 组 membership 随 tracker 状态翻动是常态)不整帧重建; 行走桥响应式, 计数条/组头徽章/空组
+ * 隐藏类走原地回填(不含锚的子树), 各组锚元素跨帧保活(锚被重建 = Teleport 重挂 =
+ * 行抖动), 滚动位置/分区折叠/msg 展开态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -52,6 +62,9 @@
     ".drawer .dt05-spacer { flex:1; }",
     /* 分区(组头/折叠留外壳 —— 分组是版式, 行是引擎表体, U3) */
     ".drawer .dt05-group { margin-top:10px; }",
+    /* 2026-10-18(用户报障根治): 空组整节隐藏改**原地类切换** —— 五组恒在场(锚/表格体不卸不
+     * 重挂), 空组只切 dt05-hide。tracker 状态随 5s 轮询翻动时零整帧重建 */
+    ".drawer .dt05-group.dt05-hide { display:none; }",
     ".drawer .dt05-ghead { display:flex; align-items:center; gap:8px; height:26px; cursor:pointer; user-select:none; }",
     ".drawer .dt05-badge { flex:none; display:inline-flex; align-items:center; gap:5px; height:19px; padding:0 8px;",
     "  border-radius:var(--radius-sm); font-size:11px; font-weight:600; background:var(--tg-soft);",
@@ -254,13 +267,16 @@
   }
 
   /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 描述符 segs=true → 返回 [{key, rows}] 分段。
-   * 分桶判据与外壳 render 同一条(GROUPS × bucketOf) —— 桥段与锚槽一一对应; 空组整段缺席。 */
+   * 分桶判据与外壳 render 同一条(GROUPS × bucketOf) —— 桥段与锚槽一一对应。
+   * !2026-10-18(用户报障根治, 与 08 同口径): **空段不撤** —— 恒返回全部五组, 空组给 [] 行。
+   * 段集合不变 ⇒ 桥 v-for 的 :key 稳定 ⇒ teleport 不卸载不重挂: tracker 在组间移动时各组行
+   * 原地补丁; 旧口径撤空段, 再现即整表重挂 = 面板内容整块抖动。 */
   function rowsFn(ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
     const rGate = ctx.drawerReannounceGate();
     const byKey = { err: [], warn: [], upd: [], ok: [], off: [] };
     ts.forEach((t, i) => byKey[bucketOf(ctx, t)].push({ t, i }));
-    return GROUPS.filter((g) => byKey[g.key].length).map((g) => {
+    return GROUPS.map((g) => {
       let rows;
       if (g.key === "err") {
         rows = byKey[g.key].map((x) => failRowOf(ctx, x.t, x.i, rGate));
@@ -279,9 +295,16 @@
     });
   }
 
-  function groupHtml(g, ms) {
+  /* 组的可见性单点(2026-10-18): 空组整节隐藏改**原地切 .dt05-hide 类** —— 可见性不进结构
+   * sig, tracker 状态翻动(组空⇒组补)不整帧重建; 锚元素与表格体全程在场(display:none 不
+   * 影响 Teleport 目标寻址)。 */
+  function groupHidden(ms) {
+    return !ms.length;
+  }
+
+  function groupHtml(g, ms, hidden) {
     const folded = ui.folded[g.key] ? " folded" : "";
-    return T`<section class="dt05-group dt05-g-${g.key}${folded}" data-grp="${g.key}">
+    return T`<section class="dt05-group dt05-g-${g.key}${folded}${hidden ? " dt05-hide" : ""}" data-grp="${g.key}">
       <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt05-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
            data-fold title="点击折叠 / 展开">
@@ -320,23 +343,25 @@
       byKey[b].push(t);
     }
     const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
-    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项 —— 加载/失败/空态/在场分组集
-     * (空组整节隐藏⇒锚离场, 组补⇒新锚进场); **不含 trackers 数据**。折叠态**不进** sig:
-     * 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂 —— 既有设计), 数据拍照常跳过。
-     * 数据拍不整帧重建的理由同 07: 整帧重建移动锚 = 表格整树重排(80 对端实测
-     * 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报"表格闪烁, 数据随闪烁刷新")。 */
-    const vis = GROUPS.filter((g) => byKey[g.key].length);
-    const sig = String(!!loading) + "|" + err + "|" + (ts.length ? "y" : "n")
-      + "|" + vis.map((g) => g.key).join(",");
+    /* 结构 sig(2026-10-18 用户报障根治收口, 与 08 同口径): 只含"外壳形状"决定项 —— 加载/失败/
+     * 空态; **不再含在场分组集**(旧口径组空⇒整节隐藏⇒锚离场, 组补⇒新锚进场, tracker 状态每翻
+     * 动一次就整帧重建 + Teleport 重挂 = 全组表格抖动)。折叠态**不进** sig: 折叠只翻 class 不
+     * 重建(锚元素集合不变, 桥零重挂 —— 既有设计), 数据拍照常跳过。
+     * **不含 trackers 数据**: 数据拍不整帧重建, 行走桥响应式 + 数据拍原地回填。 */
+    const sig = String(!!loading) + "|" + err + "|" + (ts.length ? "y" : "n");
     if (H.skipUnchanged(host, ui, sig)) {
-      /* 数据拍: 计数条 + 各组头徽章计数原地回填 —— 组区含锚, 只改徽章, 锚不动 */
+      /* 数据拍: 计数条 + 各组头徽章计数 + 空组隐藏类原地回填 —— 组区含锚, 只改徽章/切类,
+       * 锚不动(桥零重挂)。空组由 dt05-hide 隐藏(2026-10-18: 组空不进 sig, 不进整帧)。 */
       if (ts.length && !loading && !err) {
         H.paintHtml(host, ".dt05-strip", stripHtml(n, virtualN));
-        for (const g of vis) {
+        for (const g of GROUPS) {
           const sec = host.querySelector('.dt05-group[data-grp="' + g.key + '"]');
+          if (!sec) continue;
+          const ms = byKey[g.key];
+          sec.classList.toggle("dt05-hide", groupHidden(ms));
           const badge = sec && sec.querySelector(".dt05-badge");
           if (badge) {
-            const bh = T`<i></i>${g.text} ${byKey[g.key].length}`;
+            const bh = T`<i></i>${g.text} ${ms.length}`;
             if (badge.innerHTML !== bh) badge.innerHTML = bh;
           }
         }
@@ -359,8 +384,9 @@
         T`<div class="dt05-empty"><span>暂无 tracker</span></div>`));
       return;
     }
-    /* 分区: 空分区整节隐藏(与 rowsFn 同判据) */
-    const secs = vis.map((g) => groupHtml(g, byKey[g.key]));
+    /* 五组恒在场(2026-10-18: 空组以 dt05-hide 隐藏, 不进 sig 不整帧重建; 徽章计数/隐藏类
+     * 在数据拍由原地回填更新) */
+    const secs = GROUPS.map((g) => groupHtml(g, byKey[g.key], groupHidden(byKey[g.key])));
     /* !行容器必须是 .dt05-list(内层), 外层保持 .dt05-wrap —— 本变体全部 .group-row
      * 版式规则(摘引擎卡底/行观感归 .dt05-rowin/失败区与 chips 合成行)都以 .dt05-list
      * 为作用域前缀(U3 引擎化时写入), 而 2026-10-14 前外壳只有一层 dt05-wrap、行直接

@@ -817,8 +817,10 @@ function initialDrawerTab() {
 }
 
 /* 种子详情面板高度初值(方案A W3 持久化, 与 initialDrawerTab 同口径): 用户拖拽调高后记录 px。
- * null = 从未拖拽过, 面板走 CSS 默认(内容自适应, 上限 42vh)。读侧只挡明显脏值(非数字/出界);
- * 视口夹取 [240px, 70vh] 在应用时做(窗口尺寸跨刷新可能变), 见 drawer.js::_drawerClampHeight。 */
+ * null = 从未拖拽过 —— 面板回落默认 42vh 并**锁死**(2026-10-18 用户硬约束: 高度绝不随内容
+ * 自行调整, 内容超高由 .drawer-body 内部滚动消化, 见 drawer.js drawerPanelStyle)。
+ * 读侧只挡明显脏值(非数字/出界); 视口夹取 [240px, 70vh] 在应用时做(窗口尺寸跨刷新可能变),
+ * 见 drawer.js::_drawerClampHeight。 */
 function initialDrawerHeight() {
   try {
     const n = parseInt(localStorage.getItem("autoqb.ui.drawerHeight"), 10);

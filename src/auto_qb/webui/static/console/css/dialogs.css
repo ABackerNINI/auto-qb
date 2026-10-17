@@ -12,7 +12,8 @@
 .drawer { position: relative; display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
   box-shadow: var(--shadow-3); }
-/* W3 高度治理: 内联 height/max-height(拖拽值, drawer.js drawerPanelStyle)覆盖这里的默认上限 */
+/* W3 高度治理: 内联 height/max-height(drawer.js drawerPanelStyle, 展开恒锁 —— 2026-10-18
+ * 用户硬约束「高度绝不随内容自行调整」)覆盖这里的默认上限; 42vh 只作 JS 失效时的兜底 */
 .drawer-grip { position: absolute; top: 0; left: 0; right: 0; height: 8px; z-index: 2;
   cursor: ns-resize; touch-action: none; }
 .drawer-grip::after { content: ""; position: absolute; left: 50%; top: 2px; transform: translateX(-50%);

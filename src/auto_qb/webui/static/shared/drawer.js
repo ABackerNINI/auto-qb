@@ -939,10 +939,11 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       /* FX-29 家族纪律(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」): 面板已开着(种子
        * 形态)不得再走下面的整体重建 —— 重建把 peers/trackers/files 清成空列表且 loading=false,
-       * 详情在途的整个等待期被渲染成一帧空态(空态 -> 加载态 -> 数据三连闪, 高度自适应面板还会
-       * 塌一下; pitfalls/web-ui/drawer-switch-flicker「拉新数据前先清空旧数据」)。已开 = 有旧
-       * 数据可保留, 归软切换语义: 换目标交棒 _switchDrawerTarget(保留旧数据 + 160ms 延迟遮罩,
-       * 与键盘跟随同链路); 同目标重入零副作用(重建把旧数据连 loading 各闪一遍 —— 同坑档
+       * 详情在途的整个等待期被渲染成一帧空态(空态 -> 加载态 -> 数据三连闪; pitfalls/web-ui/
+       * drawer-switch-flicker「拉新数据前先清空旧数据」—— 其中"高度自适应面板还会塌一下"那半,
+       * 面板高度已于 2026-10-18 起恒锁(见 drawerPanelStyle), 不再随内容塌陷, 但内容三连闪仍在)。
+       * 已开 = 有旧数据可保留, 归软切换语义: 换目标交棒 _switchDrawerTarget(保留旧数据 + 160ms
+       * 延迟遮罩, 与键盘跟随同链路); 同目标重入零副作用(重建把旧数据连 loading 各闪一遍 —— 同坑档
        * 「打开入口的重入语义」, 与 openDrawerTraffic 同目标短路同口径)。 */
       if (this.drawer.open && this.drawerIsSeed) {
         if (this.drawer.hash === hash) return;  // 同目标重入: 短路(重建 = 对同一目标再闪一遍)
@@ -1083,15 +1084,18 @@ window.AQB_DRAWER = {
       const min = Math.min(240, max);
       return Math.round(Math.min(Math.max(px, min), Math.max(max, min)));  // 取整, 落盘值不带亚像素尾数
     },
-    /* 面板内联样式: 展开且有高度记忆/拖拽值时, height 与 max-height 同锁一个 px
-     * (CSS 默认 max-height:42vh 只管未拖拽过的内容自适应态; 拖到 42vh 以上必须放开);
-     * 流量形态必须给确定高度 —— 图高 = 宿主高(撑满抽屉可用高), 无确定高度时 flex 无解,
-     * 故未拖拽过时回落 42vh(与 CSS 默认上限同值); 与种子详情共用同一 drawerHeightPx(高度复用);
-     * 关闭态交给 CSS(面板不渲染) */
+    /* 面板内联样式: **展开即锁死高度**, height 与 max-height 同锁一个 px。
+     * !2026-10-18(用户报障根治 · 硬约束): 面板高度**绝不随内容自行调整** —— 旧口径未拖拽过时
+     * 返回 {} 走 CSS 内容自适应(无 height, max-height:42vh 只兜底), 详情正文里任何元素的
+     * 进出场都会改变面板实高: 五区分组「握手中」组随握手连接消失/出现(每 5s 轮询都可能翻动)、
+     * 组头计数涨落、摘要行显隐…… 用户所见即「详情面板高度自己跳」。用户裁定: 高度是用户调整的
+     * 固定值(拖拽值 autoqb.ui.drawerHeight, 跨会话记忆), 未拖拽过也恒锁默认档 42vh(与 CSS
+     * 默认上限同值, 视口跨刷新变同步夹取); 内容超高一律由 .drawer-body(overflow:auto)
+     * 内部滚动消化, 面板几何全程不动。与种子详情共用同一 drawerHeightPx(高度复用);
+     * 关闭态交给 CSS(面板不渲染); 窄屏全屏态 D3 由 CSS !important 压过(高度记忆失效)。 */
     drawerPanelStyle() {
       if (!this.drawer.open) return {};
-      const px = this.drawerHeightPx || (this.qbTrafficActive ? Math.round(window.innerHeight * 0.42) : 0);
-      if (!px) return {};
+      const px = this.drawerHeightPx || Math.round(window.innerHeight * 0.42);
       const h = this._drawerClampHeight(px, window.innerHeight);
       return { height: h + "px", maxHeight: h + "px" };
     },

@@ -10,7 +10,8 @@
  * 吸血嫌疑 = client 名含 "XL/迅雷" 启发式, 纯展示红标(与 07/09 同判据)。
  * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— files 列在列定义声明 omitEmpty
  * (无任何对端携带时整列省略, 引擎单点 columns.js _colsOmitEmpty); cc 徽章逐行省略;
- * 关联度列设计稿未纳入(分区语义已隐含, 列定义 sortable:false), 空分区整节隐藏。
+ * 关联度列设计稿未纳入(分区语义已隐含, 列定义 sortable:false), 空分区整节隐藏(2026-10-18
+ * 起改**原地 hidden 类**切换, 不再整节缺席, 见下段根治注)。
  * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
  *   表格体重写为**引擎消费面**, 分段桥(segs)形态 —— 分组头留在外壳(分组是版式), 每组的
  *   行体是引擎表体: 每组一个锚槽(data-dt-anchor-slot="<组key>"), 桥按段 teleport
@@ -18,9 +19,21 @@
  *   组内排序走引擎 dyn 键且**跨组共享一座键**(与原手搓状态机同口径)。描述符
  *   drawerPeerV08: 列集 DRAWER_PEER_V08_COLUMNS + 行模型 dt08 + rowCls 行修饰。
  *   手搓排序状态机/列宽 grid/每组列头拼装全部退役(Q4)。
+ * !2026-10-18(用户报障「五区分组中『握手中』的组消失与出现导致详情模板高度跳动」根治):
+ *   病根两层: ①面板高度内容自适应 —— 未拖拽过时 drawerPanelStyle 返回 {} 走 CSS max-height
+ *   上限(无确定 height), 组进出场即改面板实高(已在 drawer.js 单点修掉: 展开恒锁高度,
+ *   内容超高由 .drawer-body 内部滚动消化); ②本变体结构 sig 含在场分组集 ⇒ 组空⇒整节隐藏
+ *   (锚离场)、组补⇒新锚进场, 每翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂
+ *   = 全组表格抖动。修法: **五区恒在场** —— 空组不进 sig, 只切 hidden 类(.dt08-hide,
+ *   display:none); rowsFn 保留空段 ⇒ 桥 v-for 段集合不变 ⇒ teleport 不卸不重挂, 握手中组
+ *   再现时行原地补丁进场; 数据拍(render 的 skip 分支内)原地切隐藏类 + 回填组头计数/聚合数。
+ *   「只看在传数据」是用户显式动作, 维持整组离场口径(quiet 组不进 DOM, 单次 rebuild 可接受)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 各组锚元素跨帧保活(锚被重建 =
- * Teleport 重挂 = 行抖动), 滚动位置/折叠/筛选态自保。
+ * 原子换帧, **结构态**(加载/失败/空态/只看在传/折叠)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
+ * 组 membership 随握手翻动是常态)不整帧重建(整帧重建 = 56-75ms longtask/拍 = 用户所报
+ * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数/空组隐藏类走 paintTick 原地
+ * 回填(不含锚的子树), 各组锚元素跨帧保活(锚被重建 = Teleport 重挂 = 行抖动), 滚动位置/
+ * 折叠/筛选态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -82,6 +95,9 @@
     ".drawer .dt08-grp.g-idle { box-shadow:inset 2px 0 0 var(--border-strong); }",
     ".drawer .dt08-grp.g-choke { box-shadow:inset 2px 0 0 var(--warn); }",
     ".drawer .dt08-grp.g-hand { box-shadow:inset 2px 0 0 var(--fg-dim); }",
+    /* 2026-10-18(用户报障根治): 空组整节隐藏改**原地类切换** —— 五区恒在场(锚/表格体不卸不
+     * 重挂), 空组只切 dt08-hide。组 membership 随 5s 轮询翻动(握手动不动进出场)时零整帧重建 */
+    ".drawer .dt08-grp.dt08-hide { display:none; }",
     ".drawer .dt08-ghead { display:flex; align-items:center; gap:8px; min-height:36px; padding:0 12px;",
     "  cursor:pointer; user-select:none; }",
     ".drawer .dt08-ghead:hover { background:var(--surface-1); }",
@@ -159,6 +175,10 @@
     ".drawer .dt08-rel { display:block; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-muted); text-align:right; }",
     ".drawer .dt08-empty { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
+    /* 「只看在传数据」过滤到空场合的提示: 恒在帧内(不进结构 sig), 由 render 的数据拍回填段切
+     * on 类 —— 显隐本身不触发整帧重建(2026-10-18 同口径) */
+    ".drawer .dt08-none { display:none; }",
+    ".drawer .dt08-none.on { display:block; }",
   ].join("\n");
 
   /* ---------------- 派生(与 07/09 同判据) ---------------- */
@@ -241,19 +261,35 @@
     };
   }
   /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 描述符 segs=true → 返回 [{key, rows}] 分段。
-   * 分桶判据与外壳 render 同一条(GROUPS × bucketOf × onlyMoving) —— 桥段与锚槽一一对应。 */
+   * 分桶判据与外壳 render 同一条(GROUPS × bucketOf × onlyMoving) —— 桥段与锚槽一一对应。
+   * !2026-10-18(用户报障根治): **空段不撤** —— 恒返回只看在传过滤后的全部五区, 空区给 [] 行。
+   * 段集合不变 ⇒ 桥 v-for 的 :key 稳定 ⇒ teleport 不卸载不重挂: 握手中组随握手进出场时,
+   * 该组行原地补丁进场(v-if seg.rows.length 翻 div), 其余组的行/横滚位/列宽/排序态全不动。
+   * 旧口径撤空段, 再现即整表重挂 = 面板内容整块抖动(与面板高度跳动的报障同源)。 */
   function rowsFn(ctx) {
     const list = peerList(ctx);
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
     for (const p of list) buckets[bucketOf(p)].push(p);
     return GROUPS
-      .filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet))
+      .filter((g) => !(ui.onlyMoving && g.quiet))
       .map((g) => ({ key: g.key, rows: buckets[g.key].map((p) => rowOf(ctx, p)) }));
   }
 
-  function groupHtml(g, ms) {
+  /* 组的可见性单点(空组整节隐藏 + 只看在传送 quiet 区进隐藏口径):
+   * !2026-10-18 起可见性**不进结构 sig** —— 组空/组补只切 .dt08-hide 类(数据拍原地切),
+   * 不整帧重建; 锚元素与表格体全程在场(display:none 不影响 Teleport 目标寻址)。
+   * 「只看在传数据」例外: quiet 区由 render 的整组离场口径处理(用户显式动作, 单次 rebuild)。 */
+  function groupHidden(g, ms) {
+    return !ms.length || (ui.onlyMoving && g.quiet);
+  }
+  /* 帧内至少一组可见(驱动「该过滤下没有对端连接」提示的 on 类; 整帧与数据拍共用) */
+  function anyVisible(buckets) {
+    return GROUPS.some((g) => !(ui.onlyMoving && g.quiet) && buckets[g.key].length);
+  }
+
+  function groupHtml(g, ms, hidden) {
     const folded = ui.folded[g.key] ? " folded" : "";
-    return T`<section class="dt08-grp g-${g.key}${folded}" data-grp="${g.key}">
+    return T`<section class="dt08-grp g-${g.key}${folded}${hidden ? " dt08-hide" : ""}" data-grp="${g.key}">
       <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt08-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
            data-fold title="${g.tip} · 点击折叠 / 展开">
@@ -269,35 +305,44 @@
     </section>`;
   }
 
+  /* ---------------- 数据拍原地回填(2026-10-18 用户报障根治) ----------------
+   * 组头计数/聚合数 + 空组隐藏类 + 过滤空态提示, 全部落在**不含锚**的子树上, 锚元素与表格体
+   * 零接触(桥零重挂)。组空⇒该组 section 切 dt08-hide(display:none), 组补⇒摘类原地进场;
+   * 5s 轮询每拍必到, 只在真变时写 DOM(classList.toggle 带 force 幂等, 文本先比后写)。
+   * 与整帧同一条判据(groupHidden) —— 组 membership 翻动(握手动不动进出场)零整帧重建。 */
   function render(host, ctx) {
     const list = peerList(ctx);
     const loading = ctx.drawer && ctx.drawer.peersLoading;
     /* P3-5(报告 26-10-07-0542): fetch 失败标记 —— 失败与「真没有」在变体里不同形态 */
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
-    /* 五区分桶(空分区整节隐藏; 「只看在传数据」= quiet 分区整组隐藏) —— 与 rowsFn 同判据 */
+    /* 五区分桶(空分区不缺席, 由 hidden 类隐藏; 判据与 rowsFn / 数据拍回填同一条) */
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
     for (const p of list) buckets[bucketOf(p)].push(p);
-    const vis = GROUPS.filter((g) => buckets[g.key].length && !(ui.onlyMoving && g.quiet));
-    /* 结构 sig(26-10-12 用户报障根治): 只含"外壳形状"决定项 —— 加载/失败/空态/只看在传/
-     * **在场分组集**(组空⇒整节隐藏⇒锚离场, 组补⇒新锚进场, 都是结构变化)/折叠态;
-     * **不含 peers 数据**。数据拍(5s 轮询每拍必到)不整帧重建 —— 整帧重建移动锚(=表格
-     * 整树重排, 80 对端实测 56-75ms longtask/拍 = 每 5s 全表卡顿闪烁, 即用户所报
-     * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数走原地回填。 */
+    /* 结构 sig(2026-10-18 用户报障根治收口): 只含**帧形态**决定项 —— 加载/失败/空态/只看在传/
+     * 折叠态; **不再含在场分组集**。旧口径组空⇒整节隐藏(锚离场)、组补⇒新锚进场都算结构变化
+     * ⇒ 握手连接翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂(全组表格抖动);
+     * 现五区恒在场, 组的进出场走 paintTick 原地切类, 不触发任何重建。
+     * **不含 peers 数据**: 数据拍(5s 轮询每拍必到)不整帧重建, 行走桥响应式。 */
     const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n")
-      + "|" + String(!!ui.onlyMoving) + "|" + vis.map((g) => g.key).join(",")
-      + "|" + Object.keys(ui.folded).filter((k) => ui.folded[k]).join(",");
+      + "|" + String(!!ui.onlyMoving) + "|" + Object.keys(ui.folded).filter((k) => ui.folded[k]).join(",");
     if (H.skipUnchanged(host, ui, sig)) {
-      /* 数据拍: 各组头的计数/聚合数原地回填 —— 组区含锚, 只改组头内两个跨度, 锚不动 */
+      /* 数据拍: 各组头的计数/聚合数 + 空组隐藏类 + 过滤空态提示原地回填 —— 锚全程不动。
+       * quiet 区在「只看在传数据」下整组离场(无 section), 原地查询天然跳过。 */
       if (list.length && !loading && !err) {
-        for (const g of vis) {
+        let vis = false;
+        for (const g of GROUPS) {
           const sec = host.querySelector('.dt08-grp[data-grp="' + g.key + '"]');
           if (!sec) continue;
           const ms = buckets[g.key];
+          if (!groupHidden(g, ms)) vis = true;
+          sec.classList.toggle("dt08-hide", groupHidden(g, ms));
           const cnt = sec.querySelector(".dt08-gcnt");
           const agg = sec.querySelector(".dt08-gagg");
           if (cnt && cnt.textContent !== String(ms.length)) cnt.textContent = String(ms.length);
           if (agg) { const a = aggText(g.key, ms); if (agg.innerHTML !== a) agg.innerHTML = a; }
         }
+        const none = host.querySelector(".dt08-none");
+        if (none) none.classList.toggle("on", !vis);
       }
       return;
     }
@@ -318,11 +363,13 @@
         T`<div class="dt08-empty"><span>暂无已连接用户</span></div>`));
       return;
     }
-    /* 五区在场分组(与结构 sig 的 vis 同一判据 —— 组头计数/聚合数在数据拍由原地回填更新) */
-    const groups = vis.map((g) => groupHtml(g, buckets[g.key]));
-    const body = groups.length
-      ? groups.join("")
-      : T`<div class="dt08-empty"><span>该过滤下没有对端连接</span></div>`;
+    /* 五区恒在场(quiet 区在「只看在传数据」下整组离场, 其余区空组以 dt08-hide 隐藏)——
+     * 组头计数/聚合数在数据拍由 paintTick 原地回填, 隐藏类随组 membership 翻动原地切换 */
+    const body = GROUPS
+      .filter((g) => !(ui.onlyMoving && g.quiet))
+      .map((g) => groupHtml(g, buckets[g.key], groupHidden(g, buckets[g.key])))
+      .join("");
+    const noneOn = anyVisible(buckets) ? "" : " on";
     const html = T`<div class="dt08-wrap">
       <div class="dt08-bar">
         <span class="dt08-note">按「这条连接此刻在干什么」分五区 · 点击组头折叠 / 展开 · 组头聚合数随 5s 轮询刷新</span>
@@ -331,6 +378,7 @@
           title="收起「闲置同伴 / 握手中」等无流量分区, 只看正在传输数据的连接"><i></i>只看在传数据</button>
       </div>
       ${R(body)}
+      <div class="dt08-empty dt08-none${noneOn}"><span>该过滤下没有对端连接</span></div>
     </div>`;
     /* 纵横滚动位成对自保(表格定宽 grid 窄窗口下必有横向滚动, 整帧重建只还 scrollTop 会把
      * 用户的横向滚动位打回最左) —— 单点 helper */
