@@ -17,7 +17,7 @@ user-invocable: true
    - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看 `AGENTS.md`/`conventions/`/`pitfalls/` —— 走 `memory-bank/README.md` 细路由。
 3. 按任务深入主题文档 —— **读哪份看根 `AGENTS.md`「知识库路由」表(路由单点)**; 动代码前必读 `pitfalls.md` 与 `conventions.md`。
 4. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。
-5. **建件前先取时**: 任何带日期的文件 (切片 / 档案 / 计划 / 报告 / issue) 的时间戳一律取自 `commands run kb.time`, **禁用上下文里的日期与手工推算** —— 见下方「时间口径与取时」。
+5. **建件前先取时**: 任何带日期的文件 (切片 / 档案 / 计划 / 报告 / issue) 的时间戳一律取自 `commands run kb.time`, **禁用上下文里的日期与手工推算** —— 见下方「时间口径与取时」。(走 `kb.new` / `kb.wrap` 的件时间戳由命令经 timekit 单点派生, 本步针对手写件。)
 
 ## 时间口径与取时 (2026-10-06)
 
@@ -56,8 +56,8 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 > **由「提交」触发时**：直接按下面各步回写 —— 与远端的合流由 `ship.commit` **提交后 rebase** 完成（2026-10-04 起提交先行：各 `_index` 撞车由生成物自动化解兜底，手写件冲突才停下要人; 单点: my-commit-flow [pipeline.md](../../../.commands/my-commit-flow/references/pipeline.md)）。回写件仍是全体 clone 的最热写点, **随主提交一并暂存**, 不推完再补一笔。
 
-1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。文件名与「最后活动」的时刻一律取 `commands run kb.time`。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
-2. **tasks/**: 命中阈值 → 按下方「任务档案规范」定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
+1. **activeContext 切片 (机械面走命令)**: `commands run kb.wrap --topic <slug> --did "一句话"` —— 抬「最后活动」+ 追加 R 行(编号 = 现有最大 + 1); 同专题档案抬 `**Updated:**` + 进度日志追加带日期行(裁定 A5: 日期属派生面, 轮内不逐行写); 动了档案即重建 `tasks/_index.md`。**只做机械面 (D6)** —— 蒸馏与判断仍是 agent 的活: **同一专题跨会话沿用同一个 slug**、已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**、超 14 天没动 → 蒸馏后删除、摘要与档案 `Summary` 精编。切片不存在时 kb.wrap 按模板建(零 SLOT 即合规, 裁定 A6)。体例 (`# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`) 与四条约定见 [references/kb-structure.md](references/kb-structure.md); 文件名与「最后活动」的时刻由 kb.wrap 经 timekit 单点派生。
+2. **tasks/**: 命中阈值 → `commands run kb.new task --title ".." --topic <领域>-<专题>` 建档(命名/头部字段/SLOT 清单/查重全派生 —— 查重含跨 clone, 同专题已存在即拒绝并给路径; 建后填「原始请求」等 SLOT), 续作既有档案直接编辑(**进度日志的日期行由 kb.wrap 追加**, 追加进度时精修 `Summary`, 裁定 A1), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。建/更新件的体例与必备章节见下方「任务档案规范」。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。**切片正文只写自己的 TOTAL**: 「相对上基线的逐位对比」不写(要看差值 `commands run kb.baseline -n 2` 现列) —— 卫兵 `check_wording.py` 判据族 B 扫 `tasks/`+`activeContext/` 的裸测试数字, 存量已冻结、只拦新增。
 4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论(裸数字**只进这一处**, 档案/切片正文引它而不抄它); 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
 5. **收录命令**: 遇到**反复要跑/难拼/有"看起来正常但不生效"写法**的命令 → 自己 `add` 进 `.commands/` 的对应包, 别在文档里抄(手抄会被 `commands run doc.drift` 判红)。判据见 [commands skill](../commands/SKILL.md)「收录协议」。

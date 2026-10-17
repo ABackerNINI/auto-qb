@@ -16,7 +16,8 @@
 完整规程(会话开始/收尾DoD 5步/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank.py`。本节只留入口。
 
 - **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
-- **收尾**:按skill的5步DoD——更新activeContext切片(已完成条目**迁出**到progress)/达阈值则立档+`commands run kb.index`重建索引/代码事实变更回写`memory-bank/`与根README/跑`commands run test.full`并新建基线切片记实测数字(`testing/baselines/`,体例见`testing/baseline.md`口径段)/**新坑按动作写进`pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
+- **建件与改版**:新建计划/档案/报告/基线切片/坑档/进展件走`commands run kb.new <族>`(时间戳/命名/头部/SLOT/索引全派生,头部区零手写),翻转状态`kb.status`,改版落盘`kb.bump`,收尾机械面`kb.wrap`——一次逻辑动作=一条命令+一次填空,剩余人工只填SLOT;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
+- **收尾**:按skill的5步DoD——机械面一条`commands run kb.wrap --topic <slug> --did ".."`(抬切片最后活动+R行/档案Updated+进度日志/重建索引;蒸馏与判断仍是agent的活:已完成条目**迁出**到progress、精修摘要自己来)/达阈值则立档(`commands run kb.new task`)/代码事实变更回写`memory-bank/`与根README/跑`commands run test.full`并新建基线切片记实测数字(`kb.new baseline --total ..`从实测输出誊写,体例见`testing/baseline.md`口径段)/**新坑按动作写进`pitfalls/<类>/<主题>.md`(`kb.new pitfall --class .. --triggers ..`)并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
 
 ## 产出口径

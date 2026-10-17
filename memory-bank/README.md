@@ -25,6 +25,7 @@
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
 | **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) · **人的导航页 `kb.nav`(本地服务现算, 顶栏含仅快进拉取)** |
+| **建制品 / 翻状态 / 改版 / 收尾** | 命令化(一次逻辑动作 = 一条命令 + 一次填空): `kb.new <族>`(计划/档案/报告/基线/坑档/进展件)· `kb.status` · `kb.bump` · `kb.wrap` —— 口径与族清单见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
 | **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 | **定期做变异测试审计(测试够不够硬)** | 怎么做 = skill `.agents/skills/mutation-testing/`(四段流程 / 三分类 / 派生计划模板); 命令 = `.commands/mutants/`; 证据 = [reports/26-10-08-0231](reports/26-10-08-0231-report-mutation-testing-feasibility.html); 排期锚 = [issues/26-10-08-0642](issues/26-10-08-0642-test-mutation-audit-standing.html) |
 

@@ -7,9 +7,10 @@
 <title>memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="memory-bank-doc-pipeline">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-17-0527">
-<meta name="doc-updated" content="26-10-17-0844">
+<meta name="doc-updated" content="26-10-17-1007">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-17-memory-bank-doc-pipeline.md">
 <style>
   :root {
     --bg: #10151a;
@@ -70,7 +71,7 @@
 <h1>memory-bank 文档流水线:统一模板 × 命令化创建/更新</h1>
 <p class="lede">双目标改造:①统一风格——机器可检的面(元数据/命名/状态词/必备章节)由模板渲染 + 守卫拦新增;②压缩 agent 步数——核心原则「<b>一次逻辑动作 = 一条命令 + 一次填空,一切派生面零手写</b>」。命令是既有单点的执行器,不是第二套规范。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-17-0527 · <b>doc-updated</b> 26-10-17-0844 · <b>doc-status</b> In Progress(P1/P2 已实施验收, P3 待启动) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-17-0527 · <b>doc-updated</b> 26-10-17-1007 · <b>doc-status</b> Done(P1/P2/P3 已实施验收) · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(用户两次纠正:①工具展示不全改文本问答 ②「目标二=减少 agent 修改步骤,首版设计只着重了统一风格,重新设计」);R1 拍板 D1–D6 锁定 + 剩余人工步骤量化裁定
 </div>
 
@@ -182,7 +183,7 @@
   <tr><td>A4</td><td>基线切片数字</td><td>不自动化:<code>kb.new baseline</code> 只给骨架,<code>--total</code> 由 agent 从 test.full 实测输出誊写</td><td>命令编造数字违反「未跑过的不交付」——这是判断,不是派生</td></tr>
   <tr><td>A5</td><td>档案进度日志逐行日期</td><td>轮内不逐行写;收尾 <code>kb.wrap --did</code> 统一带日期追加一行</td><td>日期属派生面;消除轮内取时步</td></tr>
   <tr><td>A6</td><td>切片摘要精编</td><td><code>kb.wrap --did</code> 预填即合法;复杂会话可选精编,不计步</td><td>摘要 = 一行事实,--did 已是事实</td></tr>
-  <tr><td>A7</td><td>坑档触发词表</td><td>二期:<code>--triggers</code> 参数或 SLOT 填(P3 定)</td><td>触发词是路由判断,不可派生</td></tr>
+  <tr><td>A7</td><td>坑档触发词表</td><td><b>P3 定: 走 <code>--triggers</code> 参数</b> —— 头部区零 SLOT 契约(SLOT 只允许在正文区, 机器字段由命令填); 触发词是路由判断不可派生, 由建件方在参数里给</td><td>SLOT 填(违反头部零 SLOT 契约)</td></tr>
 </table>
 <p>守卫配套:检查器断言「SLOT 只出现在正文区、头部区零 SLOT」(渲染正确性),与「机械 0」收录断言共同钉住本节口径。</p>
 
@@ -199,7 +200,7 @@
   <tr><th>期</th><th>内容</th><th>验收</th></tr>
   <tr><td>P1 骨架 <b>✅ 已实施验收</b>(R3 · 26-10-17-0752)</td><td><code>_common.py</code> 增族注册表(family→命名/模板/词表/索引动作);<code>templates/</code> 三族; <code>new_doc.py</code> + <code>wrap_session.py</code>; <code>kb.new</code> 与 <code>kb.wrap</code> 收录; 检查器 + 守阵</td><td>三族各真建一件冒烟;红绿三突变判红;kb.check 全绿;两命令输出含「机械 0」断言行 <b>—— 全部达成(详见 §10 R3)</b></td></tr>
   <tr><td>P2 状态与改版 <b>✅ 已实施验收</b>(R4 · 26-10-17-0844)</td><td><code>flip_status.py</code> / <code>bump_doc.py</code> → <code>kb.status</code> / <code>kb.bump</code> 收录;反向认领自动补链(§08 D4)</td><td>对 P1 临时件全链演练;认领链双向机检绿</td></tr>
-  <tr><td>P3 收尾与二期族</td><td>pitfall/report/baseline/progress 模板(族注册表扩行);回写:doc-forms「创建/更新方式」节、根 AGENTS.md 会话协议两行、README 细路由、memory-bank skill SKILL.md 收尾 DoD 措辞(<code>kb.wrap</code> 已于 P1 交付, D6 拍板并入)</td><td>全量 test.full 基线切片;文档回写后 doc.drift / doc.caps 绿</td></tr>
+  <tr><td>P3 收尾与二期族 <b>✅ 已实施验收</b>(R5 · 26-10-17-0941)</td><td>pitfall/report/baseline/progress 模板(族注册表扩行);回写:doc-forms「创建/更新方式」节、根 AGENTS.md 会话协议两行、README 细路由、memory-bank skill SKILL.md 收尾 DoD 措辞(<code>kb.wrap</code> 已于 P1 交付, D6 拍板并入)</td><td>全量 test.full 基线切片;文档回写后 doc.drift / doc.caps 绿</td></tr>
 </table>
 
 <h2><span class="no">§08</span>拍板记录(2026-10-17)</h2>
@@ -213,7 +214,7 @@
   <tr><td>D5</td><td>切片头部归一</td><td>去 YAML frontmatter,统一三行头(生成器契约原本就认它)</td><td>保留 YAML 为合法变体</td></tr>
   <tr><td>D6</td><td>kb.wrap 范围</td><td>只做机械面(切片/档案/索引/清单),蒸馏与判断仍是 agent 的活</td><td>扩展到基线切片创建等</td></tr>
 </table>
-<p class="aside">立档注记:本轮已命中立档阈值 #3/#4(产出计划文档),任务档案 <code>memory-bank/tasks/2026-10-17-memory-bank-doc-pipeline.md</code> 已备好思路但<b>未创建</b>——按请求边界,新建文件待用户显式确认,确认后随本专题入库。</p>
+<p class="aside">立档注记:本轮已命中立档阈值 #3/#4(产出计划文档),任务档案 <code>memory-bank/tasks/26-10-17-memory-bank-doc-pipeline.md</code> 已于用户「建档」显式确认后 <b>落盘并翻 Done</b>(R0 进度日志 + 子任务表 + D1–D6/A 裁定全收录,doc-refs 双向闭环)——本计划 doc-refs 已由 kb.new D4 反向认领指向该档案。</p>
 
 <h2><span class="no">§09</span>风险与对策</h2>
 <ul>
@@ -231,6 +232,8 @@
   <li><span class="tag">R2 · 26-10-17-0714</span> 用户指令「写入文档中」:对账发现 R1 答复里的<b>逐命令剩余步骤表</b>(命令步/判断/条件/机械四列)只在会话回复、未进文档——补录为 §5.3,原 5.3/5.4 顺延为 5.4/5.5;并声明该表为「机械 0」收录断言的数据源。其余内容与 R1 答复已逐项对齐(口径/工作流合计/A1–A7/守卫配套均在 §05)。</li>
   <li><span class="tag">R3 · 26-10-17-0752</span> <b>P1 骨架实施落地并验收</b>(§07 首行,状态 Open→In Progress):①族登记表 <code>_common.FAMILIES</code>——plan/task/slice 三族单点(命名正则/模板/词表/索引动作全 import 既有单点 <code>DOC_STATUSES</code>/<code>TASK_STATUSES</code>/timekit,<code>gen_tasks_index</code> 本地 4 词表副本删除);②三族模板落 <code>skill templates/</code>(SLOT 填空机制);③<code>kb.new</code>(plan/task 建档:戳/命名/头部/SLOT 清单/索引全派生)+ <code>kb.wrap</code>(切片零 SLOT 即建即合规 + 抬最后活动/追加 R 行/档案 Updated + 进度日志日期行派生,只做机械面 D6),经 add 协议落 <code>.commands/kb</code>,占位符解析实测通过;④守卫 <code>check_doc_templates.py</code>(冻结线 26-10-17-0736,存量豁免)双处接线(kb.check + commit 门禁,<code>test_commit_gate_covers_kb_check</code> 守接线不漂);⑤守阵 7 条全绿(三突变红绿双验/冻结线精确到件/族登记与模板对账)。冒烟三族各真建一件(plan/task 残留 SLOT 判红=拦「没填完」,slice 零 SLOT 即过),两命令输出均含「机械 0」断言行。收口:<code>test.full</code> 3492 passed + 4 skipped / 98%(数字只誊写进基线切片,裁定 A4);<code>kb.check</code> 全绿;冒烟落 /tmp 未提交已删。范围守恒:P2/P3 未动(<code>--refs</code> 判拒留位);任务档案未建(§08 待用户显式确认);cap 债务 3 项转告。踩坑:MSYS2 heredoc 反斜杠吞转(候选坑档,触发词二期)。</li>
   <li><span class="tag">R4 · 26-10-17-0844</span> <b>P2 状态与改版落地并验收</b> —— kb.status(载体探测单点 DOC_KIND_*: 计划/报告 doc-status 5 词表翻转 + 抬 doc-updated, 档案 **Status:** 4 词表翻转 + 抬 Updated, 同状态幂等不抬戳不重建, 终态条件提醒(同专题切片迁出/Summary 收口), 切片/issue/未知载体拒绝指路, 词表单点 import 表外值 fail-fast) + kb.bump(R 行追加编号=段内最大+1 只追加已有行零触碰 note 自动 HTML 转义, 无变更记录段 fail-fast 指路, 档案抬 Updated 切片抬最后活动) + D4 反向认领自动补链(new_doc --refs 从拒绝改实现: 本件写 doc-refs/**Refs:**, 目标件四类载体自动反向声明, 幂等合并英文逗号, 坏 refs(不存在/库外/生成物)fail-fast 不落半文件; 元数据读写单点 html_set_refs/md_set_refs/sync_body_meta 落 _common, gen_doc_map 的 _split_refs 收敛为 split_refs); 守阵 5 条(flip/bump/refs/全链演练含红绿双验/注册)全绿。范围守恒: P3 未动; 任务档案未建(§08 待用户显式确认); 开工同步失败(未推送分支 ship 死锁, 新坑档 git/unpushed-branch-sync.md); 提交/推送待用户显式触发</li>
+  <li><span class="tag">R5 · 26-10-17-0944</span> P3 收尾与二期族落地并验收 —— ①族注册表扩四族(_common.FAMILIES: pitfall[--class 7 类枚举+--triggers, 子目录第二段] / report[出厂 Done] / baseline[--total 誊写, 无索引] / progress[三行头]; 命名正则 REPORT_FILE_RE 新增, 基线复用 SLICE_FILE_RE; rebuild_index 扩 gen_kb_index 分支) ②四族模板落 skill templates/(SLOT 只在正文区, 头部机器字段全派生: 摘要=--title 预填[A1 口径], 触发词=--triggers[A7 参数分支——P3 定], 基线 TOTAL=--total[A4]) ③kb.new 接入四族分派(参数 fail-fast; 剩余人工契约; D4 双向补链对坑档形态实测) ④守卫扩面(validate_file 增四族; 扫描面增 reports 与 testing/baselines; 坑档/进展件命名无时间戳按既有口径跳过; MD_HEADER_SPLIT_RE 改 ##+ 使坑档 ### 条目正确结束头部区) ⑤文档回写(doc-forms「创建/更新方式」节[只放 task id]; 根 AGENTS.md 会话协议两行[7,282/8,000]; README 细路由; SKILL.md DoD 并入 kb.wrap[D6]) ⑥守阵 4 条全绿 + 注册表同源守阵扩展(含头部区零 SLOT)。范围守恒: 任务档案仍未建(§08 待用户显式确认); cap 债务 2 项转告(存量)</li>
+  <li><span class="tag">R6 · 26-10-17-1007</span> 立档落地: §08 注记更新为档案已建并翻 Done; 档案经 kb.new task 落盘(R0 日志+子任务表+D1-D6/A 裁定), D4 双向闭环</li>
 </ul>
 
 </div>

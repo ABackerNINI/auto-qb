@@ -1,7 +1,7 @@
 # 文档形态与制品协议 (四工位 + 一套协议)
 
 > 摘要: 计划 / 报告 / issue / 任务档案四类制品的「放哪、叫什么、状态怎么流转、索引谁生成」—— 记一件事之前先读这张决策树。
-> 触发: 写计划, 写报告, 入池, 立档, 制品放哪, 文档形态, doc-topic, 状态词, 计划入库, 报告入库, 认领链, 计划改版
+> 触发: 写计划, 写报告, 入池, 立档, 制品放哪, 文档形态, doc-topic, 状态词, 计划入库, 报告入库, 认领链, 计划改版, 创建方式, kb.new, 命令化创建
 
 ## 四工位 (类型 token = 新件文件名的第二段)
 
@@ -76,3 +76,28 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
 - **声明方式**: HTML 用 `<meta name="doc-refs">`, md (任务档案 / activeContext 切片 / 基线切片 / 坑档) 用正文 `**Refs:**` 行 —— 生成器对任何 md 只认**首个** `**Refs:**` 行; 值 = **仓库根相对路径**, **多目标一律英文逗号、全部目标写在这一行** —— `·`/`、`/`;`/`|` 等视觉分隔符会把整串当成单一路径, 判「目标不存在」。只校验**声明过**的件, 未声明天然豁免。
 - **合法目标**: 任何能反向声明的文件 —— 四形态件、基线切片、坑档、activeContext 切片都合法。**反向声明 = 在目标件里写一行 `**Refs:** <引用方的仓库根相对路径>`** (md 建议放三行头/状态行之后); 引向无法反向声明的文件即单向链, 判红。
 - **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 `kb.check`, 纯文档轮也覆盖; 2026-10-03 自 tests/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。
+
+## 创建/更新方式 (命令化, 2026-10-17)
+
+一次逻辑动作 = **一条命令 + 一次填空**: 时间戳 / 命名 / 头部字段 / 索引重建等**派生面零手写** ——
+命令是上面各节规范单点的**执行器**, 不是第二套规范 (词表 / 命名 / cap 仍以本节与 `_common` 为准;
+计划 [26-10-17-0527](../plans/26-10-17-0527-plan-memory-bank-doc-pipeline.html), `commands run kb.new` 等四条
+已随 P1/P2/P3 落地)。文档里**只写 task id, 不抄命令本体** (`commands run doc.drift` 判红手抄)。
+
+| 动作 | 命令 (task id) | 派生 (零手写) |
+|---|---|---|
+| 新建计划 | `commands run kb.new plan --title ".." --topic <kebab>` | 戳 / 命名 / 头部 / SLOT / 索引 |
+| 新建任务档案 | `commands run kb.new task --title ".." --topic <领域>-<专题>` | 同上 + Summary 预填 (裁定 A1) + 查重 (含跨 clone) |
+| 新建报告 | `commands run kb.new report --title ".." --topic <kebab>` | 同上; **出厂即 Done** (快照终态) |
+| 新建坑档 | `commands run kb.new pitfall --class <7 类之一> --title ".." --topic <slug> --triggers "词, 词"` | 三行头 (摘要预填; **触发词走参数** —— 路由判断不可派生, 裁定 A7 参数分支) |
+| 新建基线切片 | `commands run kb.new baseline --title ".." --topic <slug> --total "N passed + M skipped"` | 戳 / 基线时间 / 命名; **`--total` 由 test.full 实测誊写** (裁定 A4: 命令不编造数字) |
+| 新建进展件 | `commands run kb.new progress --title ".." --topic <slug> --triggers "词, 词"` | 三行头 |
+| 翻转状态 | `commands run kb.status <path> <to>` | 词表校验 (单点 import) / 抬 doc-updated 或 Updated / 重建索引 |
+| 改版落盘 | `commands run kb.bump <path> --note ".."` | 抬 doc-updated + 变更记录追加 R 行 (档案抬 Updated / 切片抬最后活动) |
+| 收尾机械面 | `commands run kb.wrap --topic <slug> --did ".."` | 切片抬活动 + R 行 / 档案 Updated + 进度日志日期行 / 索引 (D6: 蒸馏与判断仍是 agent 的活) |
+
+- 命令建后留 `<!-- SLOT: -->` 填空标记 (判断面), **头部区零 SLOT** (机器字段由命令填); 填完前
+  新增面守卫 (冻结线之后新建件) 判红 (坑档 / 进展件命名无时间戳, 不在扫描面, 由既有守卫兜底)。
+- `--refs` 走 D4 双向补链: 目标件自动反向声明, 只动元数据行, 幂等 (见上「认领链」)。
+- **切片不由 `kb.new` 建** (拍板: 统一 `kb.wrap` 收尾处理); issues 仍走 create-issue skill。
+- 剩余人工步骤的量化口径 (判断 / 条件 / **机械 0**) 与输出契约: 计划 §05。

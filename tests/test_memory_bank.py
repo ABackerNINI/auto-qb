@@ -80,6 +80,27 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_kb_status_and_bump_are_registered: kb.status / kb.bump 已收录进 .commands/kb (收录
   协议; 不接线 = 没人跑)
 
+二期四族 pitfall/report/baseline/progress 与守卫扩面 (2026-10-17 P3, 计划 26-10-17-0527;
+实现 = `_common.FAMILIES` 扩行 + `templates/` 四件 + new_doc 分派 + check_doc_templates
+扩扫描面, 进程内 import; 验收: 计划 §07 P3 行):
+
+- test_new_doc_creates_phase2_families: 四族真建冒烟 (tmp 夹具) —— 坑档 `--class` 7 类 +
+  `--triggers`(A7 参数分支, 头部零 SLOT)/ 报告出厂 Done / 基线 `--total` 誊写 + 基线时间
+  排序键 / 进展件三行头; 建后残留 SLOT 判红、填完判绿; 扫描面恰 2 件 (report+baseline);
+  stdout 含「机械 0」收录断言
+- test_new_doc_phase2_family_params_fail_fast: 四族参数校验 —— 坑档缺/坏 `--class`、缺
+  `--triggers`; 进展件缺 `--triggers`; 基线缺 `--total` 全 fail-fast (之后假定输入合法)
+- test_pitfall_refs_chain_bidirectionally: D4 反向认领对坑档形态 (md 锚点链的三行头
+  分支) —— 坑档正向 `**Refs:**` + 档案目标反向声明, 幂等
+- test_checker_report_mutations_judged_red: 报告族红绿双验 —— 删 doc-status / 词表外值
+  / 留 SLOT 三类突变逐类判红, 还原复绿 (状态承载族第二例, HTML 面)
+- test_family_registry_matches_templates (扩展): 报告出厂 Done + doc-type 同源; 坑档/
+  进展件模板触发词占位; 基线模板 TOTAL 与基线时间占位; 坑档族 subdir 单点身份断言;
+  **全族模板头部区零 SLOT** (渲染正确性契约, §05 守卫配套)
+- test_checker_freeze_line_exempts_stock (扩展): report (doc-added 精确到分) 与
+  baseline (stamp 前缀) 两个新扫描面 —— 线前豁免、线后判红; 坑档/进展件不在扫描面
+  (命名无时间戳, 不可判定新旧, 由既有守卫兜底)
+
 时间守卫 (检查器 memory-bank skill 的 `scripts/timekit.py`, 2026-10-06 加):
 
 - test_timekit_now_is_utc_plus_8_naive: 取时是 UTC+8 naive 墙钟 (与本地时区无关, 无 tzinfo)
@@ -1343,11 +1364,15 @@ def test_checker_freeze_line_exempts_stock(tmp_path: Path) -> None:
 
     档案族命名只到天 (YY-MM-DD), 文件名分不出当天线前/线后 —— 口径取「日期 ≥ 冻结日」
     入检查面 (既有当天档案均合规); HTML 族按 doc-added 精确到分。
+    P3 扩两个扫描面: report (doc-added 精确到分, 同 plan 判据) 与 baseline (stamp
+    前缀, 同切片判据) —— 坑档/进展件命名无时间戳, 不在扫描面 (既有守卫兜底)。
     """
     checker = _doc_templates()
     mb = tmp_path / "memory-bank"
     (mb / "tasks").mkdir(parents=True)
     (mb / "plans").mkdir(parents=True)
+    (mb / "reports").mkdir(parents=True)
+    (mb / "testing" / "baselines").mkdir(parents=True)
 
     defective_md = "# 缺状态行的档案\n\n**Added:** 2026-01-01\n"
     (mb / "tasks" / "26-10-16-backend-old.md").write_text(defective_md, encoding="utf-8")
@@ -1364,13 +1389,28 @@ def test_checker_freeze_line_exempts_stock(tmp_path: Path) -> None:
     (mb / "plans" / "26-10-17-0735-plan-old.html").write_text(defective_plan, encoding="utf-8")
     (mb / "plans" / "26-10-17-0740-plan-new.html").write_text(new_plan, encoding="utf-8")
 
+    # report: doc-type=report + doc-status 表外值 Draft (出厂应为 Done, 但判红的是词表越界)
+    defective_report = defective_plan.replace('content="plan"', 'content="report"')
+    new_report = defective_report.replace("0735", "0740")
+    (mb / "reports" / "26-10-17-0735-report-old.html").write_text(defective_report, encoding="utf-8")
+    (mb / "reports" / "26-10-17-0740-report-new.html").write_text(new_report, encoding="utf-8")
+
+    # baseline: 缺 `> 摘要:` 与 `> 基线时间:` (头部字段判红), 命名带时分
+    defective_baseline = "# 3498 passed —— 缺字段的基线\n\n## 验收数字\n\nx\n"
+    (mb / "testing" / "baselines" / "26-10-17-0735-base-old.md").write_text(defective_baseline, encoding="utf-8")
+    (mb / "testing" / "baselines" / "26-10-17-0740-base-new.md").write_text(defective_baseline, encoding="utf-8")
+
     problems, checked = checker.check_new_faces(tmp_path, mb)
 
-    assert checked == 2, f"检查面应恰好 2 件 (当天档案 + 线后 plan): {checked}"
+    assert checked == 4, f"检查面应恰好 4 件 (档案/plan/report/baseline 各线后一件): {checked}"
     assert not any("backend-old" in p for p in problems), "冻结线之前的缺陷档案必须豁免 (存量)"
     assert not any("plan-old" in p for p in problems), "doc-added 在线之前的 plan 必须豁免 (存量)"
+    assert not any("report-old" in p for p in problems), "doc-added 在线之前的 report 必须豁免 (存量)"
+    assert not any("base-old" in p for p in problems), "stamp 在线之前的 baseline 必须豁免 (存量)"
     assert any("backend-new" in p for p in problems), "线后档案的缺陷必须判红"
     assert any("plan-new" in p for p in problems), "线后 plan 的缺陷必须判红"
+    assert any("report-new" in p for p in problems), "线后 report 的词表外值必须判红"
+    assert any("base-new" in p for p in problems), "线后 baseline 的缺头部字段必须判红"
 
 
 def test_family_registry_matches_templates() -> None:
@@ -1395,10 +1435,39 @@ def test_family_registry_matches_templates() -> None:
     task_tpl = (templates / fams["task"].template).read_text(encoding="utf-8")
     assert f"**Status:** {fams['task'].default_status}" in task_tpl, "task 模板的 Status 行必须 == 注册表出厂状态"
 
+    # P3: report 出厂即终态 (doc-forms 状态词节: report 恒 Done —— 快照完成即冻结)
+    report_tpl = (templates / fams["report"].template).read_text(encoding="utf-8")
+    assert f'content="{fams["report"].default_status}"' in report_tpl, "report 模板的 doc-status 必须 == 注册表出厂状态 (Done)"
+    assert 'content="report"' in report_tpl, "report 模板的 doc-type 必须与族名一致"
+
+    # P3: 三行头族的触发词走 --triggers 参数 (裁定 A7 参数分支; 头部区零 SLOT 契约)
+    for fam in ("pitfall", "progress"):
+        tpl = (templates / fams[fam].template).read_text(encoding="utf-8")
+        assert "> 触发: @@TRIGGERS@@" in tpl, f"{fam} 模板必须留触发词占位 (由 --triggers 填, 头部区不留 SLOT)"
+
+    # P3: baseline 模板 H1 含 --total 占位 + 基线时间占位 (排序键, 回退用文件名前缀)
+    baseline_tpl = (templates / fams["baseline"].template).read_text(encoding="utf-8")
+    assert "# @@TOTAL@@ —— @@TITLE@@" in baseline_tpl, "baseline 模板 H1 必须含 --total 占位 (裁定 A4)"
+    assert "> 基线时间: @@" in baseline_tpl, "baseline 模板必须留基线时间占位 (排序键)"
+
     # 词表单点: 族的 statuses 就是那两个单点**本身** (is, 不是副本)
     assert fams["plan"].statuses is _common.DOC_STATUSES
     assert fams["task"].statuses is _common.TASK_STATUSES
+    assert fams["report"].statuses is _common.DOC_STATUSES, "report 与 plan 共用 5 词表单点"
     assert fams["slice"].statuses == (), "切片族无状态词 (三行头不带状态)"
+    for fam in ("pitfall", "baseline", "progress"):
+        assert fams[fam].statuses == (), f"{fam} 族无状态词"
+
+    # 坑档族的子目录选择器 = 7 类枚举单点 (is 身份断言, 同 statuses 纪律)
+    assert fams["pitfall"].subdir_values is _common.PITFALL_CLASSES, "坑档类枚举必须 import 单点, 不造副本"
+    assert fams["pitfall"].subdir_flag == "class", "坑档子目录选择器 = --class"
+
+    # 头部区零 SLOT (计划 §05 渲染正确性契约): 机器字段由命令填, SLOT 只允许出现在正文区
+    checker = _doc_templates()
+    for name, spec in fams.items():
+        head = checker._head_region((templates / spec.template).read_text(encoding="utf-8"))
+        head_slots = re.findall(r"<!--\s*SLOT:", head)
+        assert not head_slots, f"{name} 模板头部区不得有 SLOT 标记 (机器字段必须由命令填): {len(head_slots)} 处"
 
 
 def test_doc_templates_checker_is_wired() -> None:
@@ -1806,3 +1875,188 @@ def test_kb_status_and_bump_are_registered() -> None:
         assert script in body.group(1), f"{task_id} 的 run 必须指到 {script}"
         assert 'when    = "' in body.group(1), f"{task_id} 缺 when (收录协议必填: 下次能被发现的唯一线索)"
         assert 'note    = "' in body.group(1), f"{task_id} 缺 note (收录协议必填: 环境陷阱的判据)"
+
+
+# ---------------------------------------------------------------------------
+# 二期四族 pitfall/report/baseline/progress 与守卫扩面 (2026-10-17 P3, 计划 26-10-17-0527)
+#
+# 实现 = `_common.FAMILIES` 扩行 + `templates/` 四件 + new_doc 分派 +
+# check_doc_templates 扩扫描面; 进程内 import, 同 P1 口径。
+# 验收: 计划 §07 P3 行 —— 四族模板(族注册表扩行) + 文档回写; §06 红绿双验口径。
+# ---------------------------------------------------------------------------
+
+
+def _p3_family_paths(mb: Path) -> dict[str, Path]:
+    """P3 冒烟四件的落点 (同 build 顺序)。"""
+    return {
+        "pitfall": mb / "pitfalls" / "kb" / "smoke-pitfall.md",
+        "report": next((mb / "reports").glob("*-report-smoke-report.html")),
+        "baseline": next((mb / "testing" / "baselines").glob("*-smoke-baseline.md")),
+        "progress": mb / "progress" / "smoke-progress.md",
+    }
+
+
+def test_new_doc_creates_phase2_families(tmp_path: Path) -> None:
+    """P3 四族真建冒烟 (计划 §06): 坑档 (`--class` 7 类 + `--triggers`, 头部零 SLOT 契约) /
+    报告 (出厂即 Done 终态) / 基线 (`--total` 誊写 + 基线时间排序键) / 进展件 (三行头)。
+
+    每族: rc=0 + 「机械 0」收录断言 + 头部字段由参数/时间戳派生; 建后残留 SLOT 判红、
+    填完判绿; 扫描面恰 2 件 (report + baseline —— 坑档/进展件命名无时间戳, 不在冻结线
+    扫描面, 直接 validate_file)。
+    """
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def build(family: str, **kw) -> str:
+        argv = ["--root", str(tmp_path), "--mb-dir", str(mb), family]
+        for key, value in kw.items():
+            argv += [f"--{key}", value]
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = new_doc.main(argv)
+        assert rc == 0, f"{family} 建件必须成功: {err.getvalue()}"
+        assert "机械 0" in out.getvalue(), f"{family} 输出缺「机械 0」收录断言: {out.getvalue()}"
+        return out.getvalue()
+
+    build("pitfall", **{"class": "kb"}, title="冒烟坑标题", topic="smoke-pitfall", triggers="触发词1, 触发词2")
+    build("report", title="冒烟报告", topic="smoke-report")
+    build("baseline", title="冒烟基线", topic="smoke-baseline", total="3498 passed + 4 skipped(根)")
+    build("progress", title="冒烟进展", topic="smoke-progress", triggers="触发词1")
+
+    paths = _p3_family_paths(mb)
+
+    # 坑档: 三行头由参数/标题派生 (摘要 = --title 预填, 裁定 A1 口径); 触发词来自 --triggers
+    pitfall_text = paths["pitfall"].read_text(encoding="utf-8")
+    assert pitfall_text.startswith("# 冒烟坑标题\n\n> 摘要: 冒烟坑标题\n> 触发: 触发词1, 触发词2\n")
+
+    # 报告: 出厂即 Done 终态 (doc-forms 状态词节: report 恒 Done) + dark CSS
+    report_text = paths["report"].read_text(encoding="utf-8")
+    assert '<meta name="doc-type" content="report">' in report_text
+    assert '<meta name="doc-status" content="Done">' in report_text
+    assert "color-scheme: dark" in report_text
+
+    # 基线: H1 = TOTAL —— 标题; 基线时间 = 排序键 (严格 YYYY-MM-DD HH:MM)
+    baseline_text = paths["baseline"].read_text(encoding="utf-8")
+    assert baseline_text.startswith("# 3498 passed + 4 skipped(根) —— 冒烟基线")
+    assert re.search(r"^> 基线时间: \d{4}-\d{2}-\d{2} \d{2}:\d{2}$", baseline_text, re.MULTILINE)
+
+    # 建后: 残留 SLOT 判红 (坑档/进展件不在扫描面 —— 直接 validate_file)
+    assert checker.validate_file(paths["pitfall"], "pitfall"), "坑档建后应残留 SLOT (待填)"
+    assert checker.validate_file(paths["progress"], "progress"), "进展件建后应残留 SLOT (待填)"
+    problems, checked = checker.check_new_faces(tmp_path, mb)
+    assert checked == 2, f"扫描面应恰好 2 件 (线后 report + baseline): {checked}"
+    assert len(problems) == 2, f"report 与 baseline 建后残留 SLOT 应判红: {problems}"
+
+    # 填完: 四族 validate_file 全绿 + 扫描面全绿
+    for family, path in paths.items():
+        _fill_slots(path)
+        assert checker.validate_file(path, family) == [], f"{family} 填完必须绿: {checker.validate_file(path, family)}"
+    problems, checked = checker.check_new_faces(tmp_path, mb)
+    assert problems == [] and checked == 2, f"填完扫描面必须全绿: {problems}"
+
+
+def test_new_doc_phase2_family_params_fail_fast(tmp_path: Path) -> None:
+    """四族参数 fail-fast (黄金法则: 之后假定输入合法): 坑档缺/坏 `--class`、缺
+    `--triggers`; 进展件缺 `--triggers`; 基线缺 `--total`。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def run(family: str, **kw) -> tuple[int, str]:
+        argv = ["--root", str(tmp_path), "--mb-dir", str(mb), family]
+        for key, value in kw.items():
+            argv += [f"--{key}", value]
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            rc = new_doc.main(argv)
+        return rc, err.getvalue()
+
+    rc, err = run("pitfall", title="x", topic="y", triggers="t")
+    assert rc == 1 and "--class" in err, f"坑档缺 --class 必须拒: {err}"
+    rc, err = run("pitfall", **{"class": "nope"}, title="x", topic="y", triggers="t")
+    assert rc == 1 and "7 类" in err, f"坑档坏 --class 必须拒: {err}"
+    rc, err = run("pitfall", **{"class": "kb"}, title="x", topic="y")
+    assert rc == 1 and "--triggers" in err, f"坑档缺 --triggers 必须拒 (头部零 SLOT 契约): {err}"
+    rc, err = run("progress", title="x", topic="y")
+    assert rc == 1 and "--triggers" in err, f"进展件缺 --triggers 必须拒: {err}"
+    rc, err = run("baseline", title="x", topic="y")
+    assert rc == 1 and "--total" in err, f"基线缺 --total 必须拒 (裁定 A4): {err}"
+
+
+def test_pitfall_refs_chain_bidirectionally(tmp_path: Path) -> None:
+    """D4 反向认领对坑档形态 (md 锚点链的三行头分支 —— 三行头最后一个 `>` 行后插
+    `**Refs:**`): 坑档正向声明 + 档案目标反向声明本坑档, 幂等。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def run(argv: list[str]) -> int:
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            rc = new_doc.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        assert rc == 0, err.getvalue()
+        return rc
+
+    run(["task", "--title", "认领目标档案", "--topic", "backend-refs-tgt"])
+    task = next((mb / "tasks").glob("*-backend-refs-tgt.md"))
+    run(
+        [
+            "pitfall", "--class", "git", "--title", "带链坑档", "--topic", "chained-pitfall", "--triggers", "词", "--refs",
+            f"memory-bank/tasks/{task.name}"
+        ]
+    )
+    pitfall = mb / "pitfalls" / "git" / "chained-pitfall.md"
+
+    assert f"**Refs:** memory-bank/tasks/{task.name}" in pitfall.read_text(encoding="utf-8"), \
+        "坑档必须正向声明 Refs (锚点链: 三行头最后一个 `>` 行后)"
+    assert f"memory-bank/pitfalls/git/chained-pitfall.md" in task.read_text(encoding="utf-8"), \
+        "档案目标必须反向声明本坑档"
+
+
+def test_checker_report_mutations_judged_red(tmp_path: Path) -> None:
+    """报告族红绿双验 (计划 §06 三类突变, 状态承载族第二例): 填完 = 基准绿;
+    删 doc-status / 词表外值 / 留 SLOT 逐类判红, 每类还原后复绿。"""
+    new_doc = _new_doc()
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        assert new_doc.main(
+            ["--root",
+             str(tmp_path), "--mb-dir",
+             str(mb), "report", "--title", "突变报告", "--topic", "mutant-report"]
+        ) == 0
+    report = next((mb / "reports").glob("*-report-mutant-report.html"))
+    _fill_slots(report)
+    original = report.read_text(encoding="utf-8")
+    assert checker.validate_file(report, "report") == [], "填完必须绿 —— 否则红绿双验失去基准"
+
+    mutations = {
+        "删 doc-status":
+            lambda t: "\n".join(line for line in t.split("\n") if 'name="doc-status"' not in line),
+        "词表外值":
+            lambda t: t.replace('<meta name="doc-status" content="Done">', '<meta name="doc-status" content="Draft">'),
+        "留 SLOT":
+            lambda t: t.replace("已填内容", "<!-- SLOT: 又留了一个 -->", 1),
+    }
+    for name, mutate in mutations.items():
+        report.write_text(mutate(original), encoding="utf-8")
+        problems = checker.validate_file(report, "report")
+        assert problems, f"突变「{name}」必须判红: {problems}"
+        report.write_text(original, encoding="utf-8")
+        assert checker.validate_file(report, "report") == [], f"还原「{name}」后必须复绿"

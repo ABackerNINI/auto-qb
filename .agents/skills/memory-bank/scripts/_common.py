@@ -11,8 +11,9 @@
   是生成器遇表外值时的 fail-fast 异常 (见 pitfalls/kb/doc-status-meta.md)
 - `TASK_STATUSES` / `TASK_DOMAINS` / `TASK_FILE_RE`: 任务档案的 4 词表 / 领域枚举 / 命名正则
   (`gen_tasks_index` 与 `kb.new` / `check_doc_templates` 同源)
-- `FAMILIES`: 文档族注册表 (plan/task/slice → 命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` /
-  `check_doc_templates` 与模板的同一份注册表 (计划 26-10-17-0527 P1)
+- `FAMILIES`: 文档族注册表 (plan/task/slice + P3 二期 pitfall/report/baseline/progress →
+  命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` / `check_doc_templates` 与模板的同一份注册表
+  (计划 26-10-17-0527 P1/P3)
 - `detect_doc_kind` / `DOC_KIND_*`: 载体探测 (**改面**: plans|reports HTML · tasks · slices · issues) ——
   `kb.status` / `kb.bump` 的同一份; 与建面的 `FAMILIES` 分工 (那边管「建」, 这里管「改」)
 - `html_meta` / `set_html_meta` / `md_field` / `set_md_field` / `set_last_active`: 元数据行读写单点
@@ -136,6 +137,8 @@ SLICE_DIR = "activeContext"
 # 模板落点: skill 的 `templates/<spec.template>`; 状态词表 import 既有单点
 # (HTML 制品 5 词 `DOC_STATUSES` / 档案 4 词 `TASK_STATUSES`); 建后由命令按
 # `index_script` 重建**该族受影响的那份索引**(与 `gen_all` 的集合单点同一实现, 不另建)。
+# P3 扩四族 (计划 §04/§07): pitfall (子目录选类) / report (出厂即 Done) / baseline
+# (`--total` 誊写, 无索引) / progress (三行头)。
 
 # 任务档案的领域枚举 (文件名首段; 不足用先扩枚举再建档 —— 口径见 SKILL.md「任务档案规范」)
 TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config")
@@ -161,7 +164,10 @@ TASK_STATUSES = ("In Progress", "Open", "Done", "Dropped")
 # 命名正则 (单点: `new_doc` 建件 / `check_doc_templates` 判新增面都 import 这里, 不手抄)。
 # ⚠ 切片用的 `SLICE_FILE_RE` 已在上方 (带时分避撞名); 档案用 `TASK_FILE_RE` (不带时分、
 # 同天同专题必撞同路径 = 靠撞名暴露重复)。两者意图相反, 必须分目录, 别混。
+# 基线切片与切片同款命名 (带时分), 所以直接用 `SLICE_FILE_RE` —— 同一份正则两种载体,
+# 目录不同 (testing/baselines/ vs activeContext/) 即不混。
 PLAN_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-plan-[a-z0-9]+(?:-[a-z0-9]+)*\.html$")
+REPORT_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-report-[a-z0-9]+(?:-[a-z0-9]+)*\.html$")
 TASK_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 
 # 模板里的填空标记 (`new_doc` 建后据此打印 SLOT 清单; `check_doc_templates` 判「无残留」)
@@ -173,7 +179,7 @@ class FamilySpec:
     """一族文档的命名 / 模板 / 词表 / 索引动作 —— 命令与守卫的同一份注册表。"""
 
     name: str
-    dir: str  # memory-bank 下的子目录 (切片族是 `activeContext`)
+    dir: str  # memory-bank 下的子目录 (切片族是 `activeContext`; 可多段如 `testing/baselines`)
     ext: str  # ".html" | ".md"
     template: str  # skill `templates/` 下的文件名
     statuses: tuple  # 状态词表 (切片族无状态, 空元组)
@@ -181,6 +187,8 @@ class FamilySpec:
     index_script: str  # 建后重建哪个生成器 (切片族无索引, 空串)
     naming_re: object  # 文件名正则 (从上面的单点来)
     domain_first: bool  # `--topic` 领域段须 ∈ `TASK_DOMAINS` (最长前缀匹配, 仅档案族)
+    subdir_flag: str = ""  # 第二段子目录的 CLI 参数名 (坑档 = `class`; 其余族空)
+    subdir_values: tuple = ()  # 子目录允许值 (坑档 = `PITFALL_CLASSES`; 其余族空)
 
 
 FAMILIES: dict[str, FamilySpec] = {
@@ -218,6 +226,57 @@ FAMILIES: dict[str, FamilySpec] = {
             default_status="",
             index_script="",
             naming_re=SLICE_FILE_RE,
+            domain_first=False,
+        ),
+    # ---- P3 二期四族 (计划 §04/§07): 模板/命名/索引动作都在这里单点定义
+    "pitfall":
+        FamilySpec(
+            name="pitfall",
+            dir="pitfalls",
+            ext=".md",
+            template="pitfall.md",
+            statuses=(),
+            default_status="",
+            index_script="gen_kb_index",  # pitfalls/<class>/_index.md + pitfalls/_index.md 类指针
+            naming_re=TOPIC_FILE_RE,
+            domain_first=False,
+            subdir_flag="class",  # `--class` 选 7 类之一 (单点 PITFALL_CLASSES)
+            subdir_values=PITFALL_CLASSES,
+        ),
+    "report":
+        FamilySpec(
+            name="report",
+            dir="reports",
+            ext=".html",
+            template="report.html",
+            statuses=DOC_STATUSES,
+            default_status="Done",  # 出厂即终态: 快照完成即冻结 (doc-forms 状态词节同款口径)
+            index_script="gen_docs_index",
+            naming_re=REPORT_FILE_RE,
+            domain_first=False,
+        ),
+    "baseline":
+        FamilySpec(
+            name="baseline",
+            dir="testing/baselines",
+            ext=".md",
+            template="baseline.md",
+            statuses=(),
+            default_status="",
+            index_script="",  # 基线切片无索引 (时间戳文件名即索引, 口径见 gen_baseline_recent)
+            naming_re=SLICE_FILE_RE,  # 与切片同款带时分命名 (目录不同即不混, 见上)
+            domain_first=False,
+        ),
+    "progress":
+        FamilySpec(
+            name="progress",
+            dir="progress",
+            ext=".md",
+            template="progress.md",
+            statuses=(),
+            default_status="",
+            index_script="gen_kb_index",  # progress/_index.md
+            naming_re=TOPIC_FILE_RE,
             domain_first=False,
         ),
 }
@@ -403,6 +462,8 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
 
     按 `DOC_KIND_INDEX_SCRIPT` 的值调对应生成器的 `build()` —— 与 `gen_all` 的集合单点
     同一实现; 空串 (切片族无索引) → 空表。索引文件一律 LF (`newline="\\n"`, 同生成器口径)。
+    `gen_kb_index` 走全量 build_all (坑档/进展件入索引; 与 `commands run kb.index` 同一实现,
+    确定性幂等) —— 不是"只重建受影响目录", 集合单点不按调用点分裂。
     """
     if not script:
         return []
@@ -419,6 +480,11 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(module.build(root, mb), encoding="utf-8", newline="\n")
         written.append(path)
+    elif script == "gen_kb_index":
+        for path, text in module.build_all(root, mb).items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+            written.append(path)
     return written
 
 

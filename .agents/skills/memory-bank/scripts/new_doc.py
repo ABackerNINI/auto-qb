@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`kb.new` —— 按族注册表新建文档制品 (计划 memory-bank/plans/26-10-17-0527 P1)。
+"""`kb.new` —— 按族注册表新建文档制品 (计划 memory-bank/plans/26-10-17-0527 P1/P3)。
 
 设计轴: **一次逻辑动作 = 一条命令 + 一次填空, 一切派生面零手写** —— 时间戳(timekit 单点)、
 文件名(含查重)、头部字段全量、HTML 族 dark CSS、骨架段落 + SLOT 标记、建后重建该族索引,
@@ -15,12 +15,19 @@
   `**Refs:**` 行 (md) —— 只动元数据行, 合并为英文逗号列表, 幂等; 杀「单向链闸门红」整类问题。
   目标必须存在且在 memory-bank 内 (fail-fast; 生成物 `_` 前缀文件不作目标)
 - `slice` 族不由本命令建 (拍板: 切片统一由 `kb.wrap` 收尾处理) —— 传了即拒绝并指路
+- **P3 二期四族** (计划 §04): pitfall (`--class` 7 类枚举 + `--triggers`, 头部零 SLOT 契约 ——
+  触发词是路由判断不可派生, 走参数, 裁定 A7 参数分支) / report (出厂即 Done 终态) /
+  baseline (`--total` 由 test.full 实测誊写, 裁定 A4 —— 命令不编造数字) / progress (三行头)
 - 建后末尾固定输出「剩余人工 N 项(判断 a · 条件 b · **机械 0**)」契约 (§5.4 收录断言)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/new_doc.py plan --title ".." --topic <kebab> [--refs p1,p2]
     python <skill-dir>/scripts/new_doc.py task --title ".." --topic <领域>-<专题> [--refs p1,p2]
-    python <skill-dir>/scripts/new_doc.py --root <dir> --mb-dir <dir> plan ...   # 覆盖探测
+    python <skill-dir>/scripts/new_doc.py report --title ".." --topic <kebab> [--refs p1,p2]
+    python <skill-dir>/scripts/new_doc.py pitfall --class <7 类之一> --title ".." --topic <slug> --triggers "词, 词"
+    python <skill-dir>/scripts/new_doc.py baseline --title ".." --topic <slug> --total "3498 passed + 4 skipped(根)"
+    python <skill-dir>/scripts/new_doc.py progress --title ".." --topic <slug> --triggers "词, 词"
+    python <skill-dir>/scripts/new_doc.py --root <dir> --mb-dir <dir> <family> ...   # 覆盖探测
 退出码: 0 成功 / 1 拒绝或校验失败 (原因与下一步打在输出里)
 """
 
@@ -36,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import timekit  # noqa: E402  (时间单点: UTC+8 naive 墙钟, 与 kb.time 同源)
 from _common import (  # noqa: E402
     FAMILIES,
+    PITFALL_CLASSES,
     SKILL_DIR,
     SLOT_RE,
     TASK_DOMAINS,
@@ -179,22 +187,56 @@ def _print_remaining(family: str, slots: list[str]) -> None:
         print("剩余人工 2 项(判断 1 · 条件 1 · 机械 0)")
         print(f"【判断】SLOT: {slot_text} (一次编辑填完)")
         print('【条件】立档阈值命中 → commands run kb.new task --title ".." --topic <领域>-<专题>')
-    else:  # task
+    elif family == "task":
         print("剩余人工 1 项(判断 1 · 条件 0 · 机械 0)")
         print(f"【判断】SLOT: {slot_text} (一次编辑填完; Summary 已由 --title 预填, 可精修)")
+    else:  # P3 二期四族: pitfall / report / baseline / progress (计划 §04, §5.3 口径)
+        hints = {
+            "pitfall": "条目按「触发/判别/处置」三必填写 (守阵/复发选填); "
+                       "触发词已由 --triggers 填入三行头 (裁定 A7 参数分支, 头部零 SLOT)",
+            "report": "报告出厂即 Done (快照完成即终态); 改版直接编辑正文 —— "
+                      "kb.bump 对无变更记录段的件 fail-fast 指路",
+            "baseline": "--total 已由 test.full 实测誊写 (裁定 A4, 命令不编造数字); "
+                        "裸数字只写基线切片这一处 (相对上基线逐位对比不写, 看 kb.baseline -n 2)",
+            "progress": "迁出蒸馏的落点件; 分节与详略自定, 骨架段可裁可增",
+        }
+        print("剩余人工 1 项(判断 1 · 条件 0 · 机械 0)")
+        print(f"【判断】SLOT: {slot_text} (一次编辑填完)")
+        print(f"【可选】{hints[family]}")
 
 
 def main(argv: list[str] | None = None) -> int:
     _utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("family", choices=sorted(FAMILIES), help="文档族 (plan / task; slice 走 kb.wrap)")
+    parser.add_argument(
+        "family",
+        choices=sorted(FAMILIES),
+        help="文档族 (plan / task / pitfall / report / baseline / progress; slice 走 kb.wrap)",
+    )
     parser.add_argument("--title", required=True, help="制品标题 (档案族的 Summary 预填, 裁定 A1)")
-    parser.add_argument("--topic", required=True, help="专题主键: plan=kebab; task=<领域>-<专题>")
+    parser.add_argument("--topic", required=True, help="专题主键: plan/report=kebab; task=<领域>-<专题>; 其余族=<slug>")
     parser.add_argument(
         "--refs",
         default="",
         help="引用目标 (英文逗号分隔; 绝对/仓库根相对/mb 相对三形态) —— D4 自动双向补链: "
         "本件写 doc-refs / **Refs:**, 目标件反向声明本件 (只动元数据行, 幂等)"
+    )
+    parser.add_argument(
+        "--class",
+        dest="doc_class",
+        default="",
+        help=f"坑档类 (7 类枚举之一, 单点 _common.PITFALL_CLASSES: {' / '.join(PITFALL_CLASSES)}; 仅 pitfall 族)",
+    )
+    parser.add_argument(
+        "--triggers",
+        default="",
+        help="触发词 (英文逗号分隔) —— 三行头族的 `> 触发:` 行: 路由判断不可派生, 走参数 "
+        "(裁定 A7 参数分支; 头部区零 SLOT 契约); 仅 pitfall / progress 族",
+    )
+    parser.add_argument(
+        "--total",
+        default="",
+        help='基线数字 (test.full 实测输出誊写, 如 "3498 passed + 4 skipped(根)"; 仅 baseline 族, 裁定 A4)',
     )
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
@@ -216,6 +258,29 @@ def main(argv: list[str] | None = None) -> int:
     moment = timekit.now()
     if not SLUG_RE.match(args.topic):
         return _fail(f"--topic 必须是 kebab (小写英文数字 + 短横线): {args.topic!r}")
+
+    # --- P3 二期族参数校验 (fail-fast, 之后假定输入合法)
+    if family == "pitfall":
+        if not args.doc_class:
+            return _fail(f"pitfall 族必须带 --class (坑档目录第二段; 7 类枚举单点: {' / '.join(PITFALL_CLASSES)})")
+        if args.doc_class not in PITFALL_CLASSES:
+            return _fail(
+                f"--class 必须是 7 类之一 ({' / '.join(PITFALL_CLASSES)}): 现为 {args.doc_class!r} —— "
+                "扩类先改 _common.PITFALL_CLASSES (三处同步: 常量/目录/README 细路由)"
+            )
+        if not args.triggers:
+            return _fail(
+                "pitfall 族必须带 --triggers (触发词是路由判断不可派生, 走参数 —— 裁定 A7 参数分支; "
+                "头部区零 SLOT 契约: 三行头的 `> 触发:` 行由命令填, 不留 SLOT)"
+            )
+    if family == "progress" and not args.triggers:
+        return _fail("progress 族必须带 --triggers (三行头必填; 触发词是路由判断不可派生, 裁定 A7 参数分支)")
+    if family == "baseline" and not args.total:
+        return _fail(
+            'baseline 族必须带 --total (test.full 实测输出誊写, 如 "3498 passed + 4 skipped(根)"; '
+            "裁定 A4: 命令不编造数字 —— 未跑过的不交付)"
+        )
+
     if family == "plan":
         filename = f"{moment.strftime('%y-%m-%d-%H%M')}-plan-{args.topic}.html"
         values = {
@@ -223,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             "TOPIC": _html_escape(args.topic),
             "STAMP": moment.strftime("%y-%m-%d-%H%M"),
         }
-    else:  # task
+    elif family == "task":
         # 领域段 = 最长前缀匹配 (`_common.match_domain` 单点): 枚举含短横线项
         # (`memory-bank`), 首段切分会让它永远不可达 (P1 缺陷, P2 补)
         domain = match_domain(args.topic)
@@ -236,8 +301,32 @@ def main(argv: list[str] | None = None) -> int:
             "DATE": moment.strftime("%Y-%m-%d"),
             "TOPIC": args.topic,
         }
+    elif family == "pitfall":
+        filename = f"{args.topic}.md"
+        values = {"TITLE": args.title, "TRIGGERS": args.triggers}
+    elif family == "report":
+        filename = f"{moment.strftime('%y-%m-%d-%H%M')}-report-{args.topic}.html"
+        values = {
+            "TITLE": _html_escape(args.title),
+            "TOPIC": _html_escape(args.topic),
+            "STAMP": moment.strftime("%y-%m-%d-%H%M"),
+        }
+    elif family == "baseline":
+        filename = f"{moment.strftime('%y-%m-%d-%H%M')}-{args.topic}.md"
+        values = {
+            "TOTAL": args.total,
+            "TITLE": args.title,
+            "TIME": moment.strftime("%Y-%m-%d %H:%M"),  # `> 基线时间:` 排序键 (回退用文件名前缀)
+        }
+    else:  # progress
+        filename = f"{args.topic}.md"
+        values = {"TITLE": args.title, "TRIGGERS": args.triggers}
 
-    target = mb / spec.dir / filename
+    # --- 目标路径 (坑档带 `--class` 第二段子目录; 其余族单段)
+    if family == "pitfall":
+        target = mb / spec.dir / args.doc_class / filename
+    else:
+        target = mb / spec.dir / filename
     if target.exists():
         return _fail(f"目标文件已存在: {rel_posix(target, root)} —— 幂等拒绝; 改版请直接编辑该文件")
 
