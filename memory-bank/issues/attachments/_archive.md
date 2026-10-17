@@ -57,8 +57,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (210)
+## Done (211)
 
+- [test] [test_memory_bank 两例把「今天」写死, 跨零点必红](../26-10-18-0608-test-memory-bank-test-hardcoded-today.html) — bump/flip 用例硬编码 2026-10-17 断言, 次日跑即失败; 与业务无关的时间炸弹
 - [bug] [WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)](../26-10-17-1703-bug-webui-delete-reannounce-paused.html) — 删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)
 - [bug] [全局流量监视器开机自启注册需管理员权限，非提权下静默失败](../26-10-17-1455-bug-gtm-autostart-elevation.html) — schtasks /SC ONLOGON 在非提权进程下返回「拒绝访问」，工具只 WARNING 忽略，用户看到「未注册」却不知原因
 - [bug] [ship.commit 子集提交打印「另有 N 个改动未纳入 —— 确认这是有意的」与实际行为不符(那些改动仍随整索引进了同一笔)](../26-10-16-1523-bug-ship-commit-omitted-note.html) — commit.py 的子集模式只限制 git add 清单, git commit 提交的是整个索引 —— 脚本却把未传路径打印成「未纳入, 确认这是有意的」。实测 2026-10-16: 该提示列了 10 个 .zcode-tmp 撤跟踪项, 它们实际都在同一笔提交里(远端=本地一致), 读者(尤其是 agent)易据此以为要再补一笔或以为撤跟踪没生效

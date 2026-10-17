@@ -65,6 +65,9 @@ window.AQB_STATE = {
         autoMsg: "",
         autoErr: "",
         relaunching: false,
+        shutting: false,           // 「关闭工具」在途(保存 enabled=false -> 停工具 -> 轮询收敛)
+        shutdownMsg: "",           // 关闭结果反馈(成功一句话)
+        shutdownErr: "",           // 关闭失败原因(来源已保存但工具没停下等)
         advancedOpen: false,    // 「工具参数(高级)」折叠态
         pollGen: 0,             // 拉起后轮询收敛的代际守卫
         pick: { open: false, loading: false, error: "", path: "", parent: "", dirs: [], name: "" },

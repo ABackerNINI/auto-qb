@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="memory-bank-test-hardcoded-today">
+<meta name="issue-stamp" content="26-10-18-0608">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="memory-bank-test-clock">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-18-0615-global-traffic-source-fixes-s4-s5.md,memory-bank/testing/baselines/26-10-18-0626-test-memory-bank-clock.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="test_memory_bank 两例把「今天」写死, 跨零点必红">
+<meta name="issue-summary" content="bump/flip 用例硬编码 2026-10-17 断言, 次日跑即失败; 与业务无关的时间炸弹">
+<title>test_memory_bank 两例把「今天」写死, 跨零点必红 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>test_memory_bank 两例把「今天」写死, 跨零点必红</h1>
+    <p class="lede">bump/flip 用例硬编码 2026-10-17 断言, 次日跑即失败; 与业务无关的时间炸弹</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-18-0608-test-memory-bank-test-hardcoded-today</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 06:08</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">memory-bank</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>实施计划 <code>26-10-17-1737</code> 的 S4/S5 收尾跑 <code>commands run test.full</code> 时撞见：全量 3549 passed / 3 failed，其中两例属本件（第三例 <code>test_webui_trigger_registry</code> 是当轮真实漏登记，已当场修）。</p>
+    <p>触发条件：<b>运行日期 ≠ 2026-10-17</b> 即必红（用例把「今天」写成字面量，而实现取的是真实墙钟）。与平台、配置、并行度无关。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-10-18 06:05 · uv run pytest tests/test_memory_bank.py -q
+tests\test_memory_bank.py:1667: AssertionError
+&gt;   assert "**Status:** Done" in ttext and "**Updated:** 2026-10-17" in ttext
+E   AssertionError: assert ('**Status:** Done' in '# 26-10-17-backend-p2 — P2 冒烟档案
+
+**Status:** Done
+**Added:** 2026-10-17
+**Updated:** 2026-10-18
+...
+
+tests\test_memory_bank.py:1714: AssertionError
+&gt;   assert "**Updated:** 2026-10-17" in task.read_text(encoding="utf-8")
+E   AssertionError: assert '**Updated:** 2026-10-17' in '...**Updated:** 2026-10-18...'
+
+2 failed, 3549 passed, 4 skipped in 42.95s</code></pre>
+    <p>文件被正确抬到 <code>2026-10-18</code>（实现行为正确），红的是断言。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>任何非 2026-10-17 的日子跑 <code>test.full</code> / <code>test_memory_bank.py</code> —— 每天必现</td></tr>
+      <tr><td>影响范围</td><td>仅这两个用例（<code>kb.bump</code> / <code>kb.flip</code> 的档案抬 <code>Updated</code>、切片抬「最后活动」三处断言）；业务代码与 memory-bank 数据无影响</td></tr>
+      <tr><td>严重度</td><td>中 —— 不阻塞功能，但让「全量回归绿」这条验收判据永久失效，后续批次无法用基线判红</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/test_memory_bank.py:1667</code>（取证 2026-10-18 06:08）· 用例 <code>test_flip_status_flips_bumps_and_fails_fast</code> · grep <code>**Updated:** 2026-10-17</code></li>
+      <li><code>tests/test_memory_bank.py:1714</code> 与 <code>:1717</code>（同刻）· 用例 <code>test_bump_doc_appends_changelog_and_fails_fast</code> · grep <code>最后活动: 2026-10-17</code></li>
+      <li>实现侧时间单点：<code>.agents/skills/memory-bank/scripts/timekit.py::now</code>（<code>datetime.now(timezone(+8))</code> 真实墙钟）· grep <code>def now</code></li>
+      <li>夹具里 <code>**Added:** 2026-10-17</code> / <code>最后活动: 2026-10-17 09:00</code> 是<em>输入</em>，不用改；只有「抬到今天」那几处断言要改</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（非「待查」）：用例把运行当天的日期写成字面量 <code>2026-10-17</code>，脚本按 <code>timekit.now()</code> 真实墙钟写入 → 次日必红。已排除：时区换算错误（<code>timekit</code> 对 TZ 无关性另有守阵）、脚本行为回归（写入值正是当天）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>首选：断言值从时间单点派生，与实现同源 —— 测试侧 <code>from scripts.timekit import now</code>（或复用 <code>commands run kb.time date</code>），把三处字面量换成 <code>now().strftime("%Y-%m-%d")</code>。代价 2~3 行，零新机制。</p>
+    <p>次选：给 <code>timekit.now()</code> 加可注入 clock（模块级 <code>_NOW</code> 或环境变量），测试固定成 <code>2026-10-17 09:00</code> —— 更彻底（也顺带能测「抬日期」本身），但要动实现单点。</p>
+    <p>不建议：把断言放宽成「含 <code>**Updated:**</code> 即可」—— 会丢掉「确实抬到今天」这条唯一的守阵能力。</p>
+    <h3>实际修法（2026-10-18 06:24，用户指派）</h3>
+    <p>走<b>首选</b>：新增模块内 helper <code>_kb_clock()</code>（延迟 import <code>timekit</code>，与 <code>_flip_status()</code>/<code>_bump_doc()</code> 同一条 sys.path 注入路子），三处断言改成对 <code>_kb_clock().strftime(...)</code> 的 f-string 比对 —— 期望值与 <code>kb.status</code>/<code>kb.bump</code> 取自同一个 <code>timekit.now()</code>，换日不再红。夹具里的 <code>**Added:**</code> / <code>最后活动:</code> 作为受测输入保持原样不动。</p>
+    <p>验证：<code>uv run pytest tests/test_memory_bank.py</code> 全绿；<code>commands run test.full</code> 不再出现这两例（数字见 <code>commands run kb.baseline</code> 最新切片）。未改任何实现代码，只动测试。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-18 06:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-18 06:22 — 用户指派「修失败用例」，置 <strong>In Progress</strong></li>
+      <li>2026-10-18 06:24 — 三处断言改与 <code>timekit.now()</code> 同源取时，62 例全绿；置 <strong>Done</strong></li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-18-0608-test-memory-bank-test-hardcoded-today.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration-fixes">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-17-1737">
-<meta name="doc-updated" content="26-10-17-2117">
+<meta name="doc-updated" content="26-10-18-0610">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>全局流量来源联动缺陷修复 (Phase 1)</h1>
 <p class="lede">逐条修掉「全局流量来源」联动上线后暴露的 9 个缺陷。设计主轴：把"数据来源"提成一个有<b>一等总开关</b>（<code>traffic_source.enabled</code>）的显式功能——关闭即停取数 / 停订阅 / 停自动拉起；并让设置页如实反映"来源 ↔ 工具 ↔ 限速曲线"的依赖关系。快照解耦与设置页合并卡属重构，另立 Phase 2。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-17-2117 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-18-0610 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话内 grilling（用户逐条订正：Q4 整块隐藏 / Q7a 删按钮 / Q9 统一 <code>30S</code>·<code>10MiB</code> 复合串 / <code>enabled</code> 提顶层 <code>traffic_source.enabled</code> / 关闭必提醒加确认框 …）；事实基线＝前序计划 <code>26-10-17-0339</code>（集成层 S15/D1）
 </div>
 

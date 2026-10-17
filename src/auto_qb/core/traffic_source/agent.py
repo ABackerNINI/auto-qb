@@ -11,7 +11,7 @@
 
 「启动工具」是可注入的**模块级单点** `launch_tool` —— tests/sidefx.py 的 POPEN 白名单只放行
 `node` 与临时 wrapper, 测试一律注入假动作(`monkeypatch.setattr(agent, "launch_tool", fake)`),
-生产走真 Popen(Windows `DETACHED_PROCESS` / POSIX 新会话)。
+生产走真 Popen(Windows `CREATE_NO_WINDOW` / POSIX 新会话)。
 
 HTTP 与密钥读取复用 `webui.tool_client` 的单点(`call_tool` / `read_token`): 工具控制面契约只在
 那里定义一次; 函数内延迟 import 规避与 tool_client 的循环依赖(它要 import 本模块用订阅编排)。
@@ -201,6 +201,11 @@ def launch_tool(target: LaunchTarget) -> None:
 
     D19: Windows `cmd.exe /c <启动器>` / POSIX `/bin/sh <启动器>`; `tool_exe` 直接执行。
     就绪判据是探活(D7), 不看退出码(detached 拿不到); 自启意图恒定, 故不传任何参数(D13)。
+
+    窗口形态(26-10-17-1737 S5/D7): Windows 用 `CREATE_NO_WINDOW` 而**不是**
+    `DETACHED_PROCESS` —— 后者让 console 子进程(cmd.exe / python.exe)自己去
+    `AllocConsole`, 于是弹一个可见黑框; 前者给子进程一个**无窗口**的控制台, 既不闪窗,
+    又不与 auto-qb 共享控制台(关掉 auto-qb 不会被连带带走)。两者互斥, 不能叠加。
     """
     if target.is_exe:
         args = [target.path]
@@ -216,8 +221,9 @@ def launch_tool(target: LaunchTarget) -> None:
         "close_fds": True,
     }
     if is_windows():
-        # DETACHED_PROCESS: 不继承本进程控制台(关掉 auto-qb 不带走工具)
-        kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        # CREATE_NO_WINDOW: console 子进程跑在不可见控制台上(闪窗的对症解法); 别换回
+        # DETACHED_PROCESS —— 它不做窗口抑制, 反而让子进程重建可见控制台。
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     else:
         kwargs["start_new_session"] = True
     subprocess.Popen(args, **kwargs)

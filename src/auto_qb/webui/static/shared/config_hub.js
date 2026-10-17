@@ -113,6 +113,16 @@ const HUB_OFF_KEYS = {
   hr_check: ["config", "hr_check", "enabled"],
 };
 
+/* 「关闭工具」确认框的受影响功能文案(D4, 计划 26-10-17-1737 S1/S4): schema 字段
+ * affects 元数据(功能 id) -> 该功能被连带的后果。id 集合的单一事实源在 schema
+ * (config/schema/fields.py 的 Field.affects), 本表只补人话; 漏一个 id 就原样退回
+ * id 本身, 由 test_web_traffic_monitor 的接线守阵盯着不丢。 */
+const TM_AFFECT_LABELS = {
+  global_speed_limit_curve: "全局限速曲线将暂停取数",
+  rules: "expr 流量条件(规则)将显式报错",
+  history_chart: "历史流量图将关闭",
+};
+
 /* 站点搜索(计划 26-09-27-1852): 键 -> 字段组(chip 上的中文标签), 不在表里的键不搜
  * (remove_similar_tags 是布尔无可读文本; hr_check 是旧键, 值以 HR 档案为准) */
 const TRACKER_FIELD_GROUPS = {
@@ -965,7 +975,9 @@ window.CONFIG_HUB = {
      * (auto-qb 侧探测指针); 「立即拉起/重试」促订阅线程立刻重跑; 自启开关**不是配置键** —— 状态读
      * 指针 autostart_registered, 拨动走 POST /autostart(D13); 工具自身参数(采样/阈值/适配器)经
      * 工具控制面读写, 折叠在「工具参数(高级)」—— 工具 PUT /config 是全量覆盖(last-writer-wins),
-     * 参数表单必须「读后写」(先取 /status 回显整体提交)。 */
+     * 参数表单必须「读后写」(先取 /status 回显整体提交)。
+     * 「关闭工具」(S4, 计划 26-10-17-1737): 确认框(受影响清单取自 schema affects 元数据) ->
+     * 先保存 enabled=false -> 再 POST /shutdown; 不切 provider, 「启用」一键恢复。 */
     tmProvider() {
       return this.cfgText(["config", "traffic_source", "provider"], "traffic_monitor");
     },
@@ -1073,6 +1085,62 @@ window.CONFIG_HUB = {
     /* 「打开工具设置」= 新标签打开工具控制面根地址(tool_url); 工具未提供 HTML 页面时显示 JSON */
     tmOpenToolSettings() {
       if (this.tm.reachable && this.tm.toolUrl) window.open(this.tm.toolUrl, "_blank", "noopener");
+    },
+    /* 「关闭工具」(S4/D3/D4, 计划 26-10-17-1737): 确认框列出受影响功能(清单取自 schema
+     * 字段 enabled 的 affects 元数据, 不另写一份) -> 先保存 enabled=false(热重载即停订阅 /
+     * 停拉起, 关闭可逆) -> 再 POST /shutdown 停工具进程; 不切 provider。 */
+    tmAffectLabels() {
+      const root = this.tmSourceRoot();
+      const f = root && (root.fields || []).find((x) => x.key === "enabled");
+      return ((f && f.affects) || []).map((id) => TM_AFFECT_LABELS[id] || id);
+    },
+    async tmShutdownTool() {
+      if (this.tm.shutting) return;
+      const items = this.tmAffectLabels();
+      let body = "将停止工具进程, 并关闭整个流量来源功能: " + (items.join("; ") || "取数将全部暂停") +
+        "; 开机自启注册不受影响。";
+      if (this.cfgDirty) body += "当前还有其它未保存改动, 也会一并保存。";
+      body += "之后打开上方「启用」即可恢复。";
+      const ok = await this.confirmDialog("关闭工具", body, { okText: "关闭工具", danger: true });
+      if (!ok) return;
+      this.tm.shutting = true;
+      this.tm.shutdownMsg = "";
+      this.tm.shutdownErr = "";
+      try {
+        // 次序(D3): 先落盘 enabled=false 并热重载(订阅线程随之停), 再停工具进程 ——
+        // 反序会让停工具的瞬间又被订阅线程抢拉起来。
+        this.cfgSetBool(["config", "traffic_source", "enabled"], false);
+        const saved = await this.cfgSave();
+        if (!saved) {
+          // 保存失败: 内存态回滚成 true 与磁盘一致(工具继续跑, 用户可重试; 不留「内存关了
+          // 盘没关」的错位——那会让下次普通保存把关闭静默写进去)。
+          this.cfgSetBool(["config", "traffic_source", "enabled"], true);
+          this.tm.shutdownErr = "保存失败, 未停止工具(可重试)";
+          return;
+        }
+        try {
+          await this.api("/api/traffic/monitor/shutdown", { method: "POST" });
+          this.tm.shutdownMsg = "已关闭工具进程";
+        } catch (e) {
+          this.tm.shutdownErr = "来源已关闭并保存; 停止工具失败: " + ((e && e.message) || "未知错误");
+        }
+        await this.tmLoad();
+        this.tmPollShutdown(0);
+      } finally {
+        this.tm.shutting = false;
+      }
+    },
+    /* 停止后轮询收敛(有界): 每 1s 重读状态, 直到工具离开 ready(指针删除即 not_running)或到
+     * 上限; pollGen 代际守卫与 tmPollSettle 共用(两条轮询链不叠加)。 */
+    tmPollShutdown(n) {
+      const gen = ++this.tm.pollGen;
+      setTimeout(async () => {
+        if (gen !== this.tm.pollGen) return;
+        await this.tmLoad();
+        if (this.tm.state === "ready" && n < 10) {
+          this.tmPollShutdown(n + 1);
+        }
+      }, 1000);
     },
     /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样 */
     tmNormalizeForm(cfg) {

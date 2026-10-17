@@ -302,6 +302,10 @@ const TRIGGER_DEFS = {
     {
       "file": "config_hub.js", "fn": "tmRelaunch", "ep": "/api/traffic/monitor/relaunch",
       "scope": "none", "why": "全局流量来源: 立即拉起/重试外部工具进程(计划 26-10-17-0339 S17): 非种子目标"
+    },
+    {
+      "file": "config_hub.js", "fn": "tmShutdownTool", "ep": "/api/traffic/monitor/shutdown",
+      "scope": "none", "why": "全局流量来源: 关闭工具进程(26-10-17-1737 S4): 作用于外部工具进程, 与选中无关; 配置落盘另走 /api/config"
     }
   ]
 };

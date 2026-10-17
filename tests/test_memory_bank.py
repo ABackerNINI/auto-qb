@@ -1522,6 +1522,19 @@ def _gen_doc_map():
     return gen_doc_map
 
 
+def _kb_clock():
+    """实现侧的时间单点(`timekit.now()`, UTC+8 墙钟 —— `kb.status`/`kb.bump` 都取自它)。
+
+    断言必须与实现**同源取时**, 不能写死日期: 本文件曾把运行当天 (2026-10-17) 写成字面量,
+    过零点必红, 与业务无关 (issue 26-10-18-0608-test-memory-bank-test-hardcoded-today)。
+    """
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import timekit
+
+    return timekit.now()
+
+
 def _p2_fixture(tmp_path: Path) -> Path:
     """P2 夹具: 最小可跑的 memory-bank (plans / tasks / activeContext / issues)。"""
     mb = tmp_path / "memory-bank"
@@ -1664,7 +1677,8 @@ def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
     rc, out, err = run("tasks/26-10-17-backend-p2.md", "Done")
     assert rc == 0 and "Status In Progress → Done" in out and "Summary 收口" in out, out
     ttext = task.read_text(encoding="utf-8")
-    assert "**Status:** Done" in ttext and "**Updated:** 2026-10-17" in ttext
+    today = _kb_clock().strftime("%Y-%m-%d")  # 与实现同源取时(见 _kb_clock)
+    assert "**Status:** Done" in ttext and f"**Updated:** {today}" in ttext
     rc, _, err = run("tasks/26-10-17-backend-p2.md", "Archived")
     assert rc == 1 and "词表" in err, f"档案 4 词表外值必须拒绝: {err}"
 
@@ -1708,13 +1722,13 @@ def test_bump_doc_appends_changelog_and_fails_fast(tmp_path: Path) -> None:
     assert rc == 0, err
     assert "修 a&lt;b &amp; c&gt;d" in plan.read_text(encoding="utf-8")
 
-    # 档案抬 Updated / 切片抬最后活动
+    # 档案抬 Updated / 切片抬最后活动 (期望值取自实现的时间单点, 不写死日期)
     rc, out, err = run("tasks/26-10-17-backend-p2.md", "进展一句")
     assert rc == 0 and "Updated" in out, out
-    assert "**Updated:** 2026-10-17" in task.read_text(encoding="utf-8")
+    assert f"**Updated:** {_kb_clock().strftime('%Y-%m-%d')}" in task.read_text(encoding="utf-8")
     rc, out, err = run("activeContext/26-10-17-0900-p2-topic.md", "进展一句")
     assert rc == 0 and "最后活动" in out, out
-    assert "> 最后活动: 2026-10-17" in slice_.read_text(encoding="utf-8")
+    assert f"> 最后活动: {_kb_clock().strftime('%Y-%m-%d %H:%M')}" in slice_.read_text(encoding="utf-8")
 
     # 无变更记录段的件 → fail-fast 指路 (多数报告无段, 不猜位置硬塞)
     # (reports/ 目录可能已被索引重建创建 —— mkdir(exist_ok=True))

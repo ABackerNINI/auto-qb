@@ -19,7 +19,8 @@
 - test_status_reports_states: ready / not_running 两态与端点字段读数(launching / launch_failed /
   not_installed 由拉起用例覆盖)
 - test_launch_tool_builds_platform_command: 启动器 -> 平台命令(detached, 零参数); 可执行文件 ->
-  直执行; Windows `cmd.exe /c` + DETACHED_PROCESS / POSIX `/bin/sh` + 新会话
+  直执行; Windows `cmd.exe /c` + CREATE_NO_WINDOW / POSIX `/bin/sh` + 新会话
+- test_launcher_prefers_pythonw: 工具侧启动器优先 pythonw.exe(去黑框第二道保险), 且保留回退
 - test_launch_path_has_no_uv_or_entry_names (S18/§08): agent.py 非 docstring 字符串里不含
   uv / gtm / -m / run / --autostart / --data-dir —— 「怎么起工具」的知识只在工具侧启动器里
 - test_pointer_constants_mirror_tool_side (S18): 指针目录名 / 文件名 / schema 版本与工具侧
@@ -396,18 +397,25 @@ def test_launch_tool_builds_platform_command(tmp_path, monkeypatch):
         def __init__(self, args, **kwargs):
             calls.append((list(args), dict(kwargs)))
 
-    fake = SimpleNamespace(DEVNULL="DEVNULL", Popen=_FakePopen, DETACHED_PROCESS=0x00000008)
+    fake = SimpleNamespace(
+        DEVNULL="DEVNULL",
+        Popen=_FakePopen,
+        DETACHED_PROCESS=0x00000008,
+        CREATE_NO_WINDOW=0x08000000,
+    )
     monkeypatch.setattr(agent, "subprocess", fake)
 
     launcher = str(tmp_path / _LAUNCHER)
     exe = str(tmp_path / "gtm-exe")
 
-    # Windows 支: cmd.exe /c 启动器 + DETACHED_PROCESS
+    # Windows 支: cmd.exe /c 启动器 + CREATE_NO_WINDOW(不弹控制台窗口)
     monkeypatch.setattr(agent, "is_windows", lambda: True)
     agent.launch_tool(agent.LaunchTarget(launcher, False, "启动器"))
     args, kw = calls[-1]
     assert args == ["cmd.exe", "/c", launcher]
-    assert kw["creationflags"] == 0x00000008
+    assert kw["creationflags"] == 0x08000000
+    # 回归哨(26-10-17-1737 S5): DETACHED_PROCESS 会让 console 子进程重建可见控制台 -> 黑框
+    assert kw["creationflags"] != 0x00000008
     assert kw["cwd"] == str(tmp_path)
     assert kw["stdin"] == "DEVNULL" and kw["stdout"] == "DEVNULL" and kw["stderr"] == "DEVNULL"
     assert kw["close_fds"] is True
@@ -425,8 +433,23 @@ def test_launch_tool_builds_platform_command(tmp_path, monkeypatch):
     assert args == [exe]
 
 
-# ---------- 守阵: 拉起不携带「怎么起工具」的知识 (§08 判据 9) ----------
+def test_launcher_prefers_pythonw():
+    """工具侧启动器优先 pythonw.exe(去黑框第二道保险), python.exe / uv 逐级回退
 
+    auto-qb 侧 CREATE_NO_WINDOW 只覆盖「由 auto-qb 拉起」这条路; 双击启动器与开机自启
+    不经过它 —— 那些路径靠启动器自己选 GUI 子系统的 pythonw。回退必须留着: 有的 venv
+    没建 pythonw(非 Windows 打包 / 精简安装), 直接硬要 pythonw 会让工具起不来。
+    """
+    script = (_REPO_ROOT / "tools" / "global-traffic-monitor" / "launch.cmd").read_text(encoding="utf-8")
+    i_w = script.index(r".venv\Scripts\pythonw.exe")
+    i_c = script.index(r".venv\Scripts\python.exe")
+    i_uv = script.index("uv run")
+    assert i_w < i_c < i_uv, "启动器次序必须是 pythonw -> python -> uv"
+    # 起法仍是启动器独有的知识(D19), 三类回退跑同一条命令
+    assert script.count("-m gtm run --autostart") == 2
+
+
+# ---------- 守阵: 拉起不携带「怎么起工具」的知识 (§08 判据 9) ----------
 #: 只允许出现在工具侧启动器(D19)里的 token: 包管理 / 包名 / 入口 / 子命令 / 参数
 _LAUNCH_FORBIDDEN = ("uv", "gtm", "-m", "run", "--autostart", "--data-dir")
 

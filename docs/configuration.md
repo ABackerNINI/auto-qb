@@ -373,6 +373,7 @@ python src/auto-qb.py config.yml --hr-confirm-empty btschool
 ---
 config:
     traffic_source: # 全局流量来源: 限速曲线与 expr 流量条件共用, 换来源只改 provider
+        enabled: true   # 段级总开关(缺省 true); false = 停一切取数(曲线发 off 快照, 不自动拉起工具)
         provider: traffic_monitor
         traffic_monitor:
             dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
@@ -523,7 +524,8 @@ config:
 - **没有数据目录这个键**：工具的数据目录由它自己报在发现指针 `endpoint.json` 里，auto-qb 直接取 `<指针.data_dir>/history_traffic.dat` —— 换目录不用改配置，也不会出现"配置写的是旧目录"这种漂移。设置页状态区的「数据目录」显示的就是指针值（只读展示，不可编辑）。
 - **严格互斥、不静默回退**：两边的参数可以并存（切来源不必重填），但只有 `provider` 指向的那个参与取数；工具没在跑（指针缺失）时取数为空并报「数据源不可得」，**不会**偷偷回退到 TM 文件。
 - 工具的采样间隔 / 通知阈值 / 网卡过滤**不在 auto-qb 配置里**：它们属于工具，经控制面读写、默认即用、设置页高级项折叠。
-- 设置页把「来源选择 + 工具状态 + 立即拉起 + 打开工具设置」收在**一张卡「全局流量来源」**里；限速曲线卡只剩曲线本身。状态区五态：未安装 / 未运行 / 拉起中 / 已就绪 / 拉起失败。
+- 设置页把「**启用** 总开关 + 来源选择 + 工具状态 + 立即拉起 + 关闭工具 + 打开工具设置」收在**一张卡「全局流量来源」**里；限速曲线卡只剩曲线本身。状态区五态：未安装 / 未运行 / 拉起中 / 已就绪 / 拉起失败。
+- **「启用」与「关闭工具」是两件事**：`enabled: false` 只停取数（曲线发 `off` 快照、不查档、不动 qB，也**不再拉起**工具），工具进程原地留着 —— 适合临时掐掉取数；「关闭工具」则进一步把工具进程停掉：先落盘 `enabled: false`，再 `POST /api/traffic/monitor/shutdown`（**先停订阅再停进程**，否则停的瞬间会被订阅线程抢拉）。**不切 `provider`**，开机自启注册也不动 —— 想恢复就打开「启用」，工具会按需重新拉起。确认框会列出受影响的功能（限速曲线 / expr 流量条件 / 历史流量图），清单来自 schema 字段的依赖元数据。
 
 逐键校验边界见 [配置键速查](../memory-bank/config-reference/keys.md)；工具侧完整说明见 [工具 README](../tools/global-traffic-monitor/README.md)。
 

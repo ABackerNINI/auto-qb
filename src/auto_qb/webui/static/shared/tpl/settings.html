@@ -310,9 +310,9 @@
 
               <!-- 限速: 阶梯图 + 档位(每一档是「流量低于 X → 限速 Y」一个整体) -->
 
-              <!-- 全局流量来源(计划 26-10-17-0339 S17/D15; 26-10-17-1737 S1 总开关): 一张卡合并「总开关
-                   + 来源单选 + 工具状态」。enabled 关 = 停一切取数; 关源时来源单选与子参数区按 D14 灰显不隐藏
-                   (后端允许关源后仍改配置); 底部状态区五态 + 拉起/重试 + 自启; 工具参数(高级)经控制面读写。 -->
+              <!-- 全局流量来源(0339 S17/D15; 1737 S1 总开关 + S4 关闭工具): 一张卡合并「总开关 + 来源单选 + 工具状态」。
+                   enabled 关 = 停一切取数; 关源时来源单选与子参数区按 D14 灰显不隐藏(后端允许关源后仍改配置); 状态区五态
+                   + 拉起/重试 + 自启 + 关闭工具(确认框 -> 先存 enabled=false -> 再 /shutdown, 不切 provider); 工具参数(高级)经控制面读写。 -->
               <template v-else-if="hub.view === 'traffic_source'">
                 <div class="hb-blk hb-cut">
                   <div class="hb-blk-hd"><span class="bh-t">数据来源</span><span class="bh-n">二选一, 只有选中的来源参与取数</span></div>
@@ -348,7 +348,7 @@
                     <div v-else class="hb-row"><div class="hb-lb">就绪异常</div><div class="hb-ct">{{ tm.error || '工具可达但状态读取异常' }}</div></div>
                     <div class="hb-row">
                       <div class="hb-lb"></div>
-                      <div class="hb-ct"><button class="hb-btn" :disabled="tm.relaunching" @click="tmRelaunch()">{{ tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button class="hb-btn ghost sm" :disabled="!tm.reachable || !tm.toolUrl" @click="tmOpenToolSettings()">打开工具设置</button></div>
+                      <div class="hb-ct"><button class="hb-btn" :disabled="tm.relaunching" @click="tmRelaunch()">{{ tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button v-if="tmProvider() === 'global_traffic_monitor' && !tmSourceOff() && tm.reachable" class="hb-btn ghost sm" :disabled="tm.shutting" @click="tmShutdownTool()">关闭工具</button><button class="hb-btn ghost sm" :disabled="!tm.reachable || !tm.toolUrl" @click="tmOpenToolSettings()">打开工具设置</button><span v-if="tm.shutdownMsg" class="bh-n">{{ tm.shutdownMsg }}</span><span v-if="tm.shutdownErr" class="hb-hp risk">{{ tm.shutdownErr }}</span></div>
                     </div>
                   </template>
                 </div>

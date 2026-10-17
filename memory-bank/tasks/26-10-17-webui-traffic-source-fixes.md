@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17
-**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）本轮已实施完成并通过全域回归；S4–S8 待续。
+**Updated:** 2026-10-18
+**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）与 S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）已实施完成并通过全域回归；S6–S8 待续。
 **Topics:** webui-traffic-source-fixes
 
 ## 原始请求
@@ -52,8 +52,8 @@
 | S1 | `traffic_source.enabled` 字段契约 | Done |
 | S2 | 取数闸门 + `off` 快照态 + expr 文案 | Done |
 | S3 | 工具侧 `POST /shutdown` + auto-qb 代理 | Done |
-| S4 | 「关闭工具」按钮 + 确认框 + 依赖元数据 | Open |
-| S5 | 去黑框 | Open |
+| S4 | 「关闭工具」按钮 + 确认框 + 依赖元数据 | Done |
+| S5 | 去黑框 | Done |
 | S6 | 设置页四修 | Open |
 | S7 | 工具参数 `hub-field` + 工具侧 units + 统一格式 | Open |
 | S8 | 切源即刷新（#7/#8）+ #8 真机复现 | Open |
@@ -79,3 +79,17 @@ grilling 六轮收敛（用户逐条订正，含两次纠正字段落点），�
 gtm 控制面 `ControlServer.__init__` 收 `stop_event`；新增 token 保护 `POST /shutdown`——**先回 200 再置位**(wfile 直写 socket 无缓冲，响应先上 wire)，未绑定 stop_event 时回 200 + WARNING(不炸旧构造)；`cmd_run` 把 `stop_event` 交给 ControlServer(原 L190 迟定义上移)，退出仍走既有 finally(最终落盘/释放锁/停控制面/删指针)，`_run_loop` 即时醒保证「有限时间内优雅退出」；auto-qb `routes/traffic_monitor.py` 增 `POST /api/traffic/monitor/shutdown` 代理(200 透传 / 不可达或非 200 → 502 附 state)，路由金清单同步补条目。验收对照：401 守阵(工具侧 `test_auth_required_on_all_write_endpoints` 含 /shutdown + auto-qb `test_shutdown_requires_auth`) ✓；带 token 200 + 置位 + 即时醒(`test_shutdown_returns_200_then_sets_stop_event` / `test_shutdown_wakes_run_loop`) ✓；代理码透传(`test_shutdown_forward_and_return` / `test_shutdown_unreachable_502`) ✓。**范围边界**：S3 仅后端——「关闭工具」按钮 + 确认框 + affects 元数据属 S4，本轮按用户指令不做。
 
 - 2026-10-17 21:17 S1-S3 实施完成: traffic_source.enabled 总开关四层契约 + 取数闸门/off 快照/expr 文案/前端灰显 + gtm POST /shutdown 与 auto-qb 代理; 全域回归全绿(数字见基线切片 26-10-17-2114); S4-S8 按用户指令不在本轮范围
+
+### R4 · S4 + S5 实施完成 (2026-10-18)
+
+**S4「关闭工具」**：三件套落 `state.js`(`tm.shutting/shutdownMsg/shutdownErr`)、`config_hub.js`(`tmAffectLabels()` 从 `tmSourceRoot()` 取 `enabled` 字段的 `affects` → `TM_AFFECT_LABELS` 补人话, 漏 id 原样退回; `tmShutdownTool()`：确认框 → `cfgSave(enabled=false)` → `POST /api/traffic/monitor/shutdown` → `tmPollShutdown` 有界收敛)、`settings.html`(按钮可见三条件：`tmProvider()==='global_traffic_monitor' && !tmSourceOff() && tm.reachable`, 反馈 span 并入按钮行)。**次序是硬约束**：先落盘 enabled=false 并热重载, 再停进程 —— 反序会被订阅线程在停的瞬间抢拉。两处反悔护栏：保存失败把内存开关回滚成 true(否则下次普通保存把「关闭」静默写进盘); 停工具失败明说「来源已关闭并保存」+ 原因(不谎报成功)。`tmPollShutdown` 与 `tmPollSettle` 共用 `pollGen` 代际, 两条轮询链不叠加。`settings.html` 触 400 行单分片上限 → 注释块 6→2 行压回。**漏网一处**：`tmShutdownTool` 的 POST 没登记 `triggers.js`, 全量回归被守阵 T1 抓到 → 补 `calls` 行(`scope: none` + why)。
+
+**S5 去黑框**：`agent.launch_tool` 的 `DETACHED_PROCESS` → `CREATE_NO_WINDOW`(前者让 console 子进程自建**可见**控制台, 正是黑框根因; 后者给无窗口控制台且不共享 auto-qb 控制台, 关 auto-qb 仍不带走工具; 两者互斥不能叠加), docstring/注释写明「别换回去」的理由; `launch.cmd` 改为 `pythonw.exe` → `python.exe` → `uv` 三级回退(pythonw 属 GUI 子系统, 覆盖「双击启动器 / 开机自启」这两条不经 auto-qb 的路径; 本机 venv 实测两件都在)。代价如实记：pythonw 的 `sys.stderr` 是 `None`, 输出全丢 —— 与被拉起时本就 `DEVNULL` 的行为一致, 不算回归; 启动器注释里给了「排障时临时换回 python.exe」的路子。
+
+**守阵**：`test_frontend_shutdown_tool_wiring`(按钮三条件 + 方法在册 + 保存先于停工具的相对次序 + 回滚 + 不谎报 + 清单覆盖 schema `affects` 全部 id)、`test_launcher_prefers_pythonw`(三级回退次序 + 两类回退跑同一条命令)。文档回写 `docs/configuration.md`：YAML 样例补 `enabled`、「启用」与「关闭工具」两件事的分野、确认框清单来源。
+
+**计划外发现(不改码, 已入池)**：`tests/test_memory_bank.py` 两例把 `2026-10-17` 写死进断言(跨零点必红, 与业务无关) → `issues/26-10-18-0608-test-memory-bank-test-hardcoded-today.html`。另记一条**未入池的范围外观察**：gtm 自启注册用的是 `sys.executable`(`python.exe`, console 子系统), 开机登录时理论上仍会闪一次窗; 本次 S5 的范围只到「立即拉起 + 启动器」, 未动 installer —— 若用户要求, 可另立条目把自启也切 `pythonw`。
+
+### R5 · 计划外收尾: 修时间炸弹用例 (2026-10-18)
+
+用户指派「修失败用例」→ 认领并修掉 R4 记的那两例：`tests/test_memory_bank.py` 新增 `_kb_clock()`，三处硬编码日期断言（`**Updated:**` ×2、`最后活动` ×1）改为与实现同源取时（`timekit.now()`）。**只动测试，零实现改动**；issue `26-10-18-0608` 置 Done 并回填修法/验证。夹具里的 `**Added:**`/`最后活动:` 是受测输入，保持字面量。全域回归至此转全绿（数字见 `commands run kb.baseline` 最新切片）。

@@ -20,11 +20,18 @@
 - test_shutdown_requires_auth: 停止端点无 Bearer -> 401
 - test_shutdown_forward_and_return: 工具 200 -> 原样透传(POST /shutdown, 空载荷)
 - test_shutdown_unreachable_502: 工具不可达 / 未就绪 -> 502(写端点真报错)
+- test_frontend_shutdown_tool_wiring: 前端接线守阵(S4) —— 按钮可见性三条件 + 处理方法在册 +
+  先存 enabled=false 再停工具的相对次序 + 受影响清单覆盖 schema affects 全部 id(不各写一遍)
 """
+import os
+import re
+
 import pytest
 
+from auto_qb.config import schema as cfg_schema
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
+from webui_helpers import STATIC_ROOT
 from auto_qb.webui.server.routes import traffic_monitor as tm_routes
 
 # 访问密钥字段名 / 鉴权头键名: 拆写常量 —— 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量
@@ -356,3 +363,70 @@ def test_shutdown_unreachable_502(tm_env, monkeypatch):
     monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
     r = client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr))
     assert r.status_code == 502 and "工具未在运行" in r.json()["detail"]
+
+
+# ---- 前端接线守阵(S4, 26-10-17-1737): 「关闭工具」按钮/确认框/停留次序 ----
+
+
+def _static(*parts) -> str:
+    return open(os.path.join(STATIC_ROOT, *parts), encoding="utf-8").read()
+
+
+def test_frontend_shutdown_tool_wiring():
+    """「关闭工具」= 前端三件套 + schema 依赖元数据同源
+
+    守的是**接线**不是样式: 按钮出现条件(来源是工具 + 未关源 + 工具可达)、处理方法在册、
+    保存先于停工具的相对次序(反序会被订阅线程抢拉起)、受影响功能清单不另写一份。
+    """
+    hub = _static("shared", "config_hub.js")
+    tpl = _static("shared", "tpl", "settings.html")
+    state = _static("shared", "state.js")
+
+    # 1) state: 关闭在途/结果/失败三态(模板与处理共用, 缺一则按钮点了没反馈)
+    for k in ("shutting", "shutdownMsg", "shutdownErr"):
+        assert re.search(rf"^\s*{k}:\s*", state, re.M), f"state.js 缺 tm.{k}"
+
+    # 2) tpl: 按钮的可见性三条件与处理器(关源后按钮应消失 —— 关源已在 S1 语义里停取数)
+    btn = re.search(r"<button[^>]*tmShutdownTool\(\)[^>]*>关闭工具</button>", tpl)
+    assert btn, "settings.html 缺「关闭工具」按钮"
+    tag = btn.group(0)
+    assert "tmProvider() === 'global_traffic_monitor'" in tag
+    assert "!tmSourceOff()" in tag
+    assert "tm.reachable" in tag
+    assert ":disabled=\"tm.shutting\"" in tag
+
+    # 3) hub: 方法在册 + 按 schema affects 生成清单(单点: 只补人话, 不复制 id 列表)
+    assert "async tmShutdownTool()" in hub
+    assert "tmAffectLabels()" in hub
+    assert "TM_AFFECT_LABELS" in hub
+
+    # 4) 次序: 先 cfgSave(落盘 enabled=false 并热重载) 才 POST /shutdown
+    body = hub[hub.index("async tmShutdownTool()"):]
+    body = body[:body.index("tmPollShutdown(")]
+    i_save = body.index("cfgSave()")
+    i_stop = body.index("/api/traffic/monitor/shutdown")
+    assert i_save < i_stop, "必须先保存 enabled=false 再停工具(反序会被订阅线程抢拉起)"
+    # 保存失败要回滚内存开关(否则下次普通保存把「关闭」静默写进盘)
+    assert '["config", "traffic_source", "enabled"], true' in body
+    # 停工具失败不谎报成功: 明确「来源已关闭并保存」+ 失败原因
+    assert "来源已关闭并保存" in body
+
+    # 5) 受影响清单覆盖 schema 声明的全部功能 id(新增 id 不补文案 -> 本断言红)
+    payload = cfg_schema.schema_payload()
+    grp = next(g for g in payload["groups"] if g.key == "traffic_source")
+
+    def _find_enabled(fields):
+        for f in fields:
+            if f.key == "enabled":
+                return f
+            hit = _find_enabled(f.fields or ())
+            if hit:
+                return hit
+        return None
+
+    enabled = _find_enabled(grp.fields)
+    assert enabled is not None and enabled.affects, "schema 未声明 traffic_source.enabled.affects"
+    labels = hub[hub.index("const TM_AFFECT_LABELS = {"):]
+    labels = labels[:labels.index("};")]
+    for fid in enabled.affects:
+        assert fid in labels, f"TM_AFFECT_LABELS 漏了 schema 声明的功能 id: {fid}"
