@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 10:07
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施, S16–S19 待逐项授权。
+**Updated:** 2026-10-17 11:13
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施, S17–S19 待逐项授权。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -31,7 +31,7 @@
 | S13 | 随机端口与 `endpoint` 子命令 | Done (26-10-17-0721) |
 | S14 | 启动器自启意图/改名/gitignore | Done (26-10-17-0825) |
 | S15 | auto-qb 配置面与升级链 | Done (26-10-17-1007) |
-| S16 | 探测-拉起-订阅编排(可注入单点) | Open |
+| S16 | 探测-拉起-订阅编排(可注入单点) | Done (26-10-17 11:13) |
 | S17 | 设置页合并 | Open |
 | S18 | 守阵/基线/文档 | Open |
 | S19 | 真机验收(并入旧 S10) | Open |
@@ -117,3 +117,20 @@
 **未动(属计划内后续步骤, 非遗漏)**: `webui/tool_client.py` / `routes/traffic_monitor.py` / 前端 JS·设置模板仍读过渡 stub → S16/S17; `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**; 真机验收 → S19。
 
 **滚动面**: 本档案(S15 段 + 状态表 + Updated 1007) · activeContext 切片(S15 已实施段 + 待办) · 基线切片新建 · 坑档新增 · kb.index 重建。随本专题「提交」入库。
+
+### R6 · S16 实施 (2026-10-17 11:13)
+
+用户指令「实施计划S16: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S16 的显式授权(S17–S19 不动)。开工同步至 14bfae19(快进 4434f365→14bfae19)。
+
+**落点**(新 2 文件 + 改 2 文件, 纯 auto-qb 侧、零行工具侧触碰 —— 计划 §S16 四条 bullet):
+- 新增 `src/auto_qb/core/traffic_source/__init__.py`(包 docstring: 只放 agent) 与 `agent.py`(**联动单点**): `_platform_data_home()`(Windows `%LOCALAPPDATA%` / macOS `~/Library/Application Support` / 其余 `$XDG_DATA_HOME` 或 `~/.local/share`) → `pointer_dir()`/`endpoint_path()`(镜像工具侧 `global-traffic-monitor/endpoint.json`, **不 import 工具包**) + `default_tool_dir()`(`<仓库根>/tools/global-traffic-monitor`) + `ToolEndpoint`/`LaunchTarget` 数据类 + `read_pointer()`/`parse_pointer()`(schema 未知或缺 host/port/token_path **只告警不猜字段**[D6]) + `discover()` + `probe()`(延迟 import `webui.tool_client`, 读密钥 → `GET /status`, **只认 200**[D7]) + `resolve_launch_target()`(`tool_exe` 存在优先 → `tool_dir` 启动器, 空则兜底默认工具目录[D10/D19]) + `launch_tool()`(模块级**可注入单一动作** —— `is_exe` 直执行; Windows `cmd.exe /c` + `DETACHED_PROCESS`, POSIX `/bin/sh` **新会话**; stdin/out/err=DEVNULL, cwd=脚本目录, **零参数**[D13]) + `TrafficSourceAgent`(状态机: `ensure_running()` 探活成功直返; 缺席按 D10 拉起一次, **首次引导窗口 120s / 常态 10s**, 窗口耗尽记失败 + **固定 30s 退避**[D14]; `status()` 供 UI 读**五态**; `_note_error`/`_clear_error` 同因只首报 WARNING 之后 DEBUG[不刷屏])。
+- 改 `src/auto_qb/webui/tool_client.py`(**订阅方向重接指针**): `TrafficMonitorSubscriber` 增 `self._agent`; `_pass()` 重写为四步 —— 期望态为真 → `agent.ensure_running()` 确保可达(探活/缺席拉起) → 注册键未变则心跳、变了/未注册则注销重注册; 工具未就绪时短轮询(`_NOT_READY_POLL_S=3.0`); `_conf()` → `traffic_source.global_traffic_monitor`; `_desired()` 首闸改判 `traffic_source.provider != "global_traffic_monitor"`; `_register/_heartbeat/_unregister` 全改用 `endpoint.base_url`/`endpoint.token_path`、注册键含工具基地址(**端口随机变则重注册**); **删除 `tool_url`/`tool_token_path` 读路径**(`resolve_token_path`/`tool_default_data_dir` 只剩 S17 代理路由在用)。
+- 改 `tests/test_traffic_monitor_client.py`(订阅客户端用例改到指针 + provider 契约; `sub_env` 写指针 + 注入假拉起动作) + 新增 `tests/test_traffic_source_agent.py`(agent 单测 11 条: 指针路径/parse schema 闸/探活/拉起解析序/默认工具目录与启动器/拉起+退避/未安装/状态/命令构造; 头文档「测试计划」清单同步)。
+
+**设计要点**: 「拉起工具」做成**模块级可注入单点** `agent.launch_tool` —— 生产走真 `subprocess.Popen`(Windows `DETACHED_PROCESS`), 测试 monkeypatch 成假动作, 以绕开 `tests/sidefx.py` 的 POPEN 白名单(现仅放行 `node` 与临时 wrapper, 判据见 `pitfalls/testing/side-effects.md`)。core→webui 用**函数内延迟 import** 规避循环依赖。auto-qb **不做守护**(D5): `ensure_running()` 是「探测 → 缺席一次性引导拉起」, 别的实例已拉起则不重复拉(D14)。
+
+**出口判据全过**: ①工具未跑时 auto-qb 能自动拉起并订阅成功(探活失败 → 拉起一次 → 播下窗口 → 后续轮探活成功即注册); ②工具在跑时零拉起(探活 200 直返); ③探活失败按固定退避重试且**不刷日志**(同因首报 WARNING 之后 DEBUG)。根 `test.full` 实测数字只记入基线切片 `baselines/26-10-17-1113-global-traffic-source-integration-s16.md`(见 kb.baseline)。
+
+**未动(属计划内后续步骤, 非遗漏)**: 过渡 stub `GlobalTrafficMonitorConfig` 与 `routes/traffic_monitor.py`(设置页代理方向仍读旧属性名, 见 `pitfalls/backend/config-section-retire-across-steps.md`) → **S17** 合并后删; `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**; 真机验收 → S19。
+
+**滚动面**: 本档案(S16 段 + 状态表 + Updated 1113) · activeContext 切片(最后活动 + R1 行) · 基线切片新建 · kb.index 重建。随本专题「提交」入库。

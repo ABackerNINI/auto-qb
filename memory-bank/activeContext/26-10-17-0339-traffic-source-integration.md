@@ -1,9 +1,9 @@
 ---
-summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施, S16–S19 待逐项授权
+summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 探测-拉起-订阅编排: agent 联动单点 + 订阅方向改读发现指针)已实施, S17–S19 待逐项授权
 ---
 
 > 摘要: 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处, 来源一键切换。经 grilling 五轮 36 问收敛(用户四次纠正), 产出独立计划 `memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html`(doc-status Open, doc-topic `global-traffic-source-integration`)。**R1 就地改版**(26-10-17-0429): 用户指出「把 `--autostart` 固化进启动器」与 D13 冲突 ⇒ 启动器契约(D10 改写 + 新增 D19) + D13 收敛为「启动器恒定携带意图, 工具 config 唯一裁决」。
-> 最后活动: 2026-10-17 10:07
+> 最后活动: 2026-10-17 11:14
 
 # activeContext · traffic-source-integration(26-10-17-0339)
 
@@ -22,11 +22,12 @@ summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五�
 
 **与旧计划的关系**: 旧计划 26-10-16-0541 的**工具本体 S0–S9 全有效、不追改**; 其旧 S6/S7/S8 被本计划 S15–S17 取代, 旧 S10 并入本计划 S19。本计划用**独立 doc-topic** 以避 docmap 分叉, 未改动旧计划文件。
 
-**已实施(S11–S15; 每步详解见 `tasks/26-10-17-backend-global-traffic-source-integration.md` 进度日志)**:
+**已实施(S11–S16; 每步详解见 `tasks/26-10-17-backend-global-traffic-source-integration.md` 进度日志)**:
 - **S11**(26-10-17-0534): `storage.resolve_tool_root()` 单点(frozen 取 `sys.executable` 所在目录, 源码态由 `__file__` 上溯到含 pyproject.toml 的工具根) + `default_data_dir()` 改判「<工具安装目录>/data」+ env 改名 `GLOBAL_TRAFFIC_MONITOR_DATA_DIR` + 旧用户目录一次性搬迁(幂等; 显式 `--data-dir` 不搬迁) + 启动器 `launch.cmd`/`launch.sh`(恒定 `--autostart`、不传 `--data-dir`、优先自带 venv 解释器、uv 兜底)。
 - **S12**(26-10-17-0623): 发现指针 `endpoint.json`(`_platform_data_home()` 单点 + 十字段 schema + 原子写/幂等删) + 锁锚点从 `data_dir` 迁到指针目录 `instance.lock`(与 `--data-dir` 解耦); `ControlServer.start()` bind 后写指针、`stop()` 删; 写失败只 WARNING 不阻断。
 - **S13**(26-10-17-0721): `http_port` 默认 8099 → `0`(内核分配随机空闲端口, `_PORT_RANGE` 下限放开到 0) + `endpoint` 子命令读**同一**指针打印 host:port/token_path/data_dir(端口随机后手工调试唯一出口)。
 - **S14**(26-10-17-0825): ①`config` 新增 `autostart` **布尔键**(默认 `true`, 只收真 bool, 进 `_BOOL_FIELDS` 全量校验) + `run --autostart` **布尔开关**(`store_true`, 不承载取值) 顺带幂等注册 —— 裁决权在 config `autostart`(false → 本次 no-op, 用户关过不被装回), 注册排在锁 acquire 后、`server.start()` 前(指针现货探测与真值一致), 失败只 WARNING 不阻断; ②`POST /autostart` 成功回写 config `autostart`(= install/卸载); ③**用户可见面全称改名**(CLI 脚本名/`prog`/`version`/CLI 文案前缀/锁冲突文案/注册项 task·unit·label/systemd Description/启动器兜底命令/工具 README; **包名 `gtm` 与 `-m gtm` 模块名不动**); ④`.gitignore` 增 `tools/global-traffic-monitor/data/` 与 `run/`。
 - **S15**(26-10-17-1007): auto-qb 配置面合并 + v4→v5 升级链 —— 删顶层 `global_traffic_monitor` 段、新增顶层 `traffic_source` 段(`provider` + `traffic_monitor.dat_path` + `global_traffic_monitor.{tool_dir,tool_exe,data_dir,notify_cooldown_s}`), 曲线段只留 curves/interval/enabled; `GlobalTrafficMonitorConfig` 降**过渡 stub**(S16/S17 重接后删); config schema 抬 v5 + 注册 v4→v5 迁移(曲线内联 dat_path 上移、旧 gtm 段仅迁 notify_cooldown_s 并整段删、provider 推导、逐键 note、幂等); 取数单点 `TrafficSourceConfig.active_dat_path()`(D1 严格互斥)被 `speed_curve_mod` 与 expr 门控共用; 键面基线抬 v5。
+- **S16**(26-10-17-1113): auto-qb 侧**探测 → 引导拉起 → 订阅编排** —— 新增联动单点 `core/traffic_source/agent.py`(`probe()` 读发现指针 + `GET /status` 探活[只认 200]; `ensure_running()` 缺席时**零参数执行启动器**并 detached 拉起、首次引导窗口 120s/常态 10s、失败固定 30s 退避[D14]; `status()` 供 UI 读五态[未安装/未运行/拉起中/已就绪/拉起失败]); **拉起做成模块级可注入单点** `agent.launch_tool`(生产真 `Popen`[Windows `DETACHED_PROCESS`], 测试注入假动作以绕开 sidefx POPEN 白名单); 编排挂**既有订阅线程**(每轮先确保可达再注册, 不占主循环); **密钥与端口全来自指针**(删 `tool_url`/`tool_token_path` 读路径, D6)。
 
-**待办**: ①S15 已实施; S16–S19 **逐步骤显式授权**后实施(每步独立收尾+提交); ②旧计划 26-10-16-0541 的 S10 与本计划 S19 归并方式待拍板; ③`docs/configuration.md`(新段/新键)与根 README 回写 → **S18**(计划 §S18 明确), 本轮不动; ④`webui/tool_client.py` / `routes/traffic_monitor.py` / 前端仍读 `GlobalTrafficMonitorConfig` 过渡 stub → **S16/S17** 重接指针后再删 stub。
+**待办**: ①S15/S16 已实施; S17–S19 **逐步骤显式授权**后实施(每步独立收尾+提交); ②旧计划 26-10-16-0541 的 S10 与本计划 S19 归并方式待拍板; ③`docs/configuration.md`(新段/新键)与根 README 回写 → **S18**(计划 §S18 明确), 本轮不动; ④`routes/traffic_monitor.py` 与前端设置模板仍读 `GlobalTrafficMonitorConfig` 过渡 stub(订阅方向已在 S16 重接指针) → **S17** 合并后删 stub。

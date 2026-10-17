@@ -1,6 +1,6 @@
 """gtm(全局流量监视小工具)控制面客户端 + 订阅生命周期(计划 26-10-16-0541 S6/S7)。
 
-一个契约(工具控制面, 缺省 127.0.0.1:8099, Bearer = 工具 monitor.token), 两个消费方向:
+一个契约(工具控制面, Bearer = 工具 monitor.token), 两个消费方向:
 
 - **代理调用**(S6, 消费方 `server/routes/traffic_monitor.py`): 设置页经本模块的 HTTP 与
   密钥定位单点转发读写到工具; 域映射(展示端点恒 200 空态 / 写端点错误收口 / 401·400·501
@@ -8,6 +8,10 @@
 - **订阅客户端**(S7, 消费方 `webui/module.py`): auto-qb 作为**订阅者**向工具注册
   (回调 endpoint + 回调凭证)并周期心跳续租, 关停时注销 —— 工具据此把累计流量阈值事件
   推回 `POST /api/traffic/monitor/notify`(见 routes/traffic_monitor.py 的接收面)。
+
+S16: 订阅方向不再从配置读 url/token —— **密钥与端口全部来自发现指针**(D6), 编排挂在既有
+订阅线程里: 每轮期望态为真时先经 `core.traffic_source.agent` 确保工具可达(探测 / 缺席拉起),
+再注册订阅。代理方向的 url/token 解析仍待 S17 随设置页合并一起收编。
 
 auto-qb 与工具是两个进程、两个 venv: 两个方向都只经 HTTP 契约说话, **不 import 工具包**。
 
@@ -35,6 +39,7 @@ import urllib.error
 import urllib.request
 from typing import Optional, Tuple
 
+from ..core.traffic_source import agent
 from ..infra.utils import is_mac, is_windows
 
 logger = logging.getLogger(__name__)
@@ -45,6 +50,10 @@ _TOOL_TIMEOUT_S = 5.0
 #: 心跳周期缺省(秒): 真值由工具在 /subscribe 响应里给(heartbeat_interval_s), 拿不到才用它。
 #: 与工具侧 lease_ttl(180s)/heartbeat(60s) 缺省配套 —— 三次心跳机会用满一条租约。
 _DEFAULT_HEARTBEAT_S = 60.0
+
+#: 工具未就绪时的轮询间隔(秒, S16): 探测 / 拉起窗口内短轮询(D14「拉起后短等待探活」),
+#: 探活失败不发控制面请求(只发一次本机 GET), 故短轮询不会刷屏也不会放大负载。
+_NOT_READY_POLL_S = 3.0
 
 #: 关停时等订阅线程退出的上限(秒): 必须大于单次控制面超时, 否则「叫停了还在等」= 关停白等
 _STOP_JOIN_TIMEOUT_S = 6.0
@@ -68,6 +77,9 @@ def tool_default_data_dir() -> str:
 
     镜像而非 import: 工具是独立包/venv, auto-qb 不 import 它。仅用于 tool_token_path 留空时
     定位缺省密钥文件; 用户在配置里显式给 tool_token_path 即覆盖本推断。平台判定走 utils 单点。
+
+    !S16 后**订阅方向**不再走本推断(密钥与端口全来自发现指针, 见 core.traffic_source.agent);
+    本函数只剩设置页代理路由(S7/S17)在用, 待 S17 一并收编。
     """
     env = os.environ.get("GTM_DATA_DIR")
     if env:
@@ -152,12 +164,20 @@ class TrafficMonitorSubscriber:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        # 工具发现/拉起单点(S16): 状态内聚在它自己身上; UI 可经 self.agent 读状态区
+        self._agent = agent.TrafficSourceAgent()
         # ---- 以下状态只在订阅线程内读写 ----
         self._sub_id = ""  # 工具侧分配的订阅 id; 空 = 当前未注册
-        self._reg_key: Optional[tuple] = None  # 注册时的 (tool_url, endpoint, 回调凭证)
-        self._reg_tool: Optional[tuple] = None  # 注册时的 (工具地址, 密钥路径) —— 注销寻址用
+        self._reg_key: Optional[tuple] = None  # 注册时的 (工具基地址, endpoint, 回调凭证)
+        self._reg_tool: Optional[tuple] = None  # 注册时的 (工具基地址, 密钥路径) —— 注销寻址用
         self._heartbeat_s = _DEFAULT_HEARTBEAT_S
+        self._wait_s = _DEFAULT_HEARTBEAT_S  # 本轮结束后的等待节拍(未就绪时短轮询)
         self._last_error = ""  # 最近一次失败原因(同一原因只 WARNING 一次, 见 _note_error)
+
+    @property
+    def agent(self) -> agent.TrafficSourceAgent:
+        """工具发现单点(设置页状态区读它; 见 S16/S17)"""
+        return self._agent
 
     # ---------------- 主循环侧(非阻塞) ----------------
 
@@ -216,7 +236,7 @@ class TrafficMonitorSubscriber:
                 want = True
             if not want:
                 break
-            self._wake.wait(self._heartbeat_s)  # 心跳节拍; sync()/stop() 会提前叫醒
+            self._wake.wait(self._wait_s)  # 心跳节拍; 未就绪时是短轮询; sync()/stop() 会提前叫醒
             self._wake.clear()
         try:
             self._unregister("线程收线")
@@ -226,26 +246,40 @@ class TrafficMonitorSubscriber:
     def _pass(self) -> bool:
         """一轮收敛 -> 是否应继续订阅(False = 期望态为假, 已注销, 该收线)
 
-        三步: 期望态为假 -> 注销并收线; 已注册且注册键未变 -> 心跳; 其余(未注册 / 注册键变化 /
-        心跳判定注册失效) -> 先注销(no-op 安全)再重新注册。
+        四步: 期望态为假 -> 注销并收线; 工具不可达 -> 先确保可达(探测 / 缺席拉起, S16, 本轮
+        不发控制面请求); 已注册且注册键未变 -> 心跳; 其余(未注册 / 注册键变化 / 心跳判定注册
+        失效) -> 先注销(no-op 安全)再重新注册。
         """
         want, why = self._desired()
         if not want:
+            self._wait_s = _DEFAULT_HEARTBEAT_S
             self._unregister(why)
             return False
-        if self._sub_id and self._reg_key == self._reg_key_now():
-            if self._heartbeat():
+        endpoint = self._agent.ensure_running(self._conf())
+        if endpoint is None:
+            # 工具未就绪(拉起中 / 退避中 / 未安装): 不发控制面请求, 也不逐轮 WARNING
+            # —— 原因由 agent 侧节流说明(未就绪时短轮询探活, D14)
+            self._wait_s = _NOT_READY_POLL_S
+            return True
+        if self._sub_id and self._reg_key == self._reg_key_now(endpoint):
+            if self._heartbeat(endpoint):
+                self._wait_s = self._heartbeat_s
                 return True
             self._sub_id, self._reg_key = "", None  # 心跳判定注册在工具侧已失效 -> 重注册
         self._unregister("重新注册")
-        self._register()
+        self._register(endpoint)
+        self._wait_s = self._heartbeat_s
         return True
 
     # ---------------- 期望态(每轮现读配置) ----------------
 
     def _conf(self):
-        """global_traffic_monitor 配置段(段恒在; 每轮现读 -> 热重载即时生效)"""
-        return self._manager.config.global_traffic_monitor
+        """traffic_source.global_traffic_monitor 来源参数段(段恒在; 每轮现读 -> 热重载即时生效)
+
+        !读取面在 S16 从过渡桩段(top-level global_traffic_monitor)迁到顶层 traffic_source 段
+        (D1/D2): 是否联动只看 provider, 工具安装/数据参数在来源子段。
+        """
+        return self._manager.config.traffic_source.global_traffic_monitor
 
     def _credential(self) -> str:
         """本实例 WEB 访问密钥(工具推送回调时出示; 也是订阅注册键之一)
@@ -260,24 +294,26 @@ class TrafficMonitorSubscriber:
         """登记给工具的回调 endpoint: 本机回环 + 本实例 WEB 端口(工具与 WebUI 必须同机)"""
         return f"http://127.0.0.1:{int(self._manager.config.web.port)}{NOTIFY_PATH}"
 
-    def _reg_key_now(self) -> tuple:
-        """注册键: 任一维变化都要按新值重注册(工具侧按 endpoint + 回调凭证存条目)"""
-        return (self._conf().tool_url, self._endpoint(), self._credential())
+    def _reg_key_now(self, endpoint) -> tuple:
+        """注册键: 任一维变化都要按新值重注册(工具侧按 endpoint + 回调凭证存条目)
+
+        工具基地址进键: 工具重启换随机端口(D9)后键变 -> 自动按新端点重注册。
+        """
+        return (endpoint.base_url, self._endpoint(), self._credential())
 
     def _desired(self) -> Tuple[bool, str]:
         """期望订阅态 -> (是否应订阅, 不订阅的原因文案; 用于日志与人读)
 
-        !三个开关一律按「**恒等 True**」判, 而非真值判: 真配置里它们就是 bool(已过 validate_config,
-        黄金法则 4); 而**桩配置**(mock.MagicMock / 替身段对象)的属性恒真 —— 真值判会把桩段当成
-        「已启用且要订阅」, 真起一条订阅线程持续到进程结束(2026-10-16 实测: 热重载守阵的
-        MagicMock 新配置漏出一条常驻订阅线程对着假 URL 空转; 同族形态见
-        pitfalls/testing/hot-reload-mock-sections.md)。类型严格判据把这条路堵死在开线程之前。
+        !provider 与 WEB 开关一律按「**不等/恒等**」判, 而非真值判: 真配置里 provider 就是 str
+        (已过 validate_config, 黄金法则 4); 而**桩配置**(mock.MagicMock / 替身段对象)的属性是
+        Mock —— 真值判会把桩段当成「已启用且要订阅」, 真起一条订阅线程持续到进程结束
+        (2026-10-16 实测: 热重载守阵的 MagicMock 新配置漏出一条常驻订阅线程对着假 URL 空转;
+        同族形态见 pitfalls/testing/hot-reload-mock-sections.md)。类型/字面判据把这条路堵死在
+        开线程之前。
         """
-        conf = self._conf()
-        if conf.enabled is not True:
-            return False, "联动未启用(global_traffic_monitor.enabled=false)"
-        if conf.subscribe is not True:
-            return False, "订阅关闭(global_traffic_monitor.subscribe=false)"
+        provider = getattr(self._manager.config.traffic_source, "provider", None)
+        if provider != "global_traffic_monitor":
+            return False, "当前流量来源不是全局流量监视器(traffic_source.provider != global_traffic_monitor)"
         if self._manager.config.web.enabled is not True:
             return False, "WEB UI 未启用(通知端点不存在)"
         if not self._credential():
@@ -286,16 +322,19 @@ class TrafficMonitorSubscriber:
 
     # ---------------- 控制面动作(只在订阅线程内调用) ----------------
 
-    def _register(self) -> None:
-        """注册订阅: 200 -> 记住 id / 心跳周期 / 注册键; 其余(含不可达)只记一条, 下轮重试"""
-        conf = self._conf()
-        tool_key = read_token(resolve_token_path(conf))
+    def _register(self, endpoint) -> None:
+        """注册订阅: 200 -> 记住 id / 心跳周期 / 注册键; 其余(含不可达)只记一条, 下轮重试
+
+        !寻址与密钥全部来自发现指针(S16/D6): `_register` 只在 agent 已探活成功后被调用,
+        endpoint 就是工具此刻的真实监听端点。
+        """
+        tool_key = read_token(endpoint.token_path)
         if not tool_key:
-            self._note_error(f"工具密钥文件不存在或为空: {resolve_token_path(conf)}(工具未启动过? 或 tool_token_path 配置有误)")
+            self._note_error(f"工具密钥文件不存在或为空: {endpoint.token_path}(工具刚拉起还没写出密钥?)")
             return
         payload = {"endpoint": self._endpoint(), "token": self._credential()}
         try:
-            code, resp = call_tool(conf.tool_url, "/subscribe", "POST", tool_key, payload)
+            code, resp = call_tool(endpoint.base_url, "/subscribe", "POST", tool_key, payload)
         except ToolUnreachable as e:
             self._note_error(f"注册订阅失败: {e}")
             return
@@ -307,28 +346,27 @@ class TrafficMonitorSubscriber:
             self._note_error(f"注册订阅响应缺 id: {resp}")
             return
         self._sub_id = sub_id
-        self._reg_key = self._reg_key_now()
-        self._reg_tool = (conf.tool_url, resolve_token_path(conf))
+        self._reg_key = self._reg_key_now(endpoint)
+        self._reg_tool = (endpoint.base_url, endpoint.token_path)
         self._heartbeat_s = _heartbeat_interval(resp)
         self._clear_error()
         logger.info(
             f"全局流量监视器订阅已注册: id={sub_id} -> {payload['endpoint']}"
-            f"(心跳 {self._heartbeat_s:g}s, 工具 {conf.tool_url})"
+            f"(心跳 {self._heartbeat_s:g}s, 工具 {endpoint.base_url})"
         )
 
-    def _heartbeat(self) -> bool:
+    def _heartbeat(self, endpoint) -> bool:
         """心跳续租 -> 注册是否仍有效(False = 工具报未知 id, 调用方据此重新注册)
 
         !工具不可达**不算失效**: 租约 180s 给三次机会, 期间订阅仍可能有效(工具侧剔除是懒的);
         真过期后下一次心跳会拿到 404, 那时才重注册。
         """
-        conf = self._conf()
-        tool_key = read_token(resolve_token_path(conf))
+        tool_key = read_token(endpoint.token_path)
         if not tool_key:
-            self._note_error(f"工具密钥文件不存在或为空: {resolve_token_path(conf)}(心跳跳过)")
+            self._note_error(f"工具密钥文件不存在或为空: {endpoint.token_path}(心跳跳过)")
             return True
         try:
-            code, resp = call_tool(conf.tool_url, "/heartbeat", "POST", tool_key, {"id": self._sub_id})
+            code, resp = call_tool(endpoint.base_url, "/heartbeat", "POST", tool_key, {"id": self._sub_id})
         except ToolUnreachable as e:
             self._note_error(f"心跳失败(工具不可达, 订阅由租约兜底): {e}")
             return True
@@ -345,22 +383,24 @@ class TrafficMonitorSubscriber:
     def _unregister(self, reason: str) -> None:
         """注销当前订阅(无订阅时 no-op); 失败只记 INFO —— 工具侧租约到期自会剔除
 
-        !寻址用**注册时**的工具地址与密钥路径(不是现读的): 用户中途改了 tool_url /
-        tool_token_path 时, 现读值指向的很可能是**另一个**工具/目录, 拿它去注销只会白白报
-        「密钥不可读」并把订阅留在旧工具上(直到租约到期)。
+        !寻址用**注册时**的工具端点与密钥路径(不是现读的指针): 工具重启换了随机端口(D9)或
+        用户改了 tool_dir 时, 现读值指向的很可能是**另一个**端点, 拿它去注销只会白白报错并把
+        订阅留在旧工具上(直到租约到期)。
         """
         sub_id, self._sub_id, self._reg_key = self._sub_id, "", None
         reg_tool, self._reg_tool = self._reg_tool, None
         if not sub_id:
             return
-        conf = self._conf()
-        tool_url, token_path = reg_tool or (conf.tool_url, resolve_token_path(conf))  # 缺失才回退现读(纯防御)
+        if reg_tool is None:  # 纯防御: sub_id 与 reg_tool 同生同灭, 正常到不了这里
+            logger.info(f"全局流量监视器订阅注销跳过(缺注册时寻址信息): id={sub_id}")
+            return
+        base_url, token_path = reg_tool
         tool_key = read_token(token_path)
         if not tool_key:
             logger.info(f"全局流量监视器订阅注销跳过(工具密钥不可读): id={sub_id} ({token_path})")
             return
         try:
-            code, resp = call_tool(tool_url, "/unsubscribe", "POST", tool_key, {"id": sub_id})
+            code, resp = call_tool(base_url, "/unsubscribe", "POST", tool_key, {"id": sub_id})
         except ToolUnreachable as e:
             logger.info(f"全局流量监视器订阅注销失败(工具不可达, 由租约过期兜底): {e}")
             return
