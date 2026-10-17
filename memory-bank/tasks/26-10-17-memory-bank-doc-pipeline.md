@@ -60,3 +60,5 @@ P1-P3 全部实施验收完成: 四族模板 × 注册表扩展 × 守卫扩面(
 - 2026-10-17 10:29 模板 .sheet 边距调宽(880→1120px, 侧 padding 40→20px)两模板同改, 内容区 1080px 让给表格/pre; 临时模拟建档(kb.new plan, 10 SLOT)+守卫+前后截图验收通过; test.full 3502+4 与上基线逐位一致; 规格回写 webui.md, 新基线切片 26-10-17-1028-tpl-sheet-margin
 
 - 2026-10-17 10:37 模板版面改自适应: sheet 1280 封顶 + clamp 侧距, 移除 prose ch 上限使正文/列表/表格/代码块同宽; 新增 <=1180px 断行规则防窄视口横向溢出; playwright 三档视口实测右缘逐位一致; 模拟建档+守卫+截图验收通过; 规格回写 webui.md, 新基线切片 26-10-17-1036-tpl-adaptive-sheet
+
+- 2026-10-17 11:37 修 GitHub CI 偶发红 test_new_doc_refuses_slice_and_duplicates (本计划 P2 交付用例): plan 族文件名带分钟级戳 (`%y-%m-%d-%H%M`), 真墙钟两次调用跨分钟则文件名不同、幂等拒绝永不触发 —— 机制级红验复现 (相邻分钟各建一件、第二次不拒绝), 定性为用例时刻竞态、非产品缺陷; 用例冻结 timekit.now 钉同分钟 (同族先例 pitfalls/testing/flaky-midnight-daycount.md)。全量复绿, 实测数字见 kb.baseline。

@@ -49,7 +49,8 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
 - test_new_doc_creates_valid_plan_and_task: 真建 plan + task 各一件 (tmp 夹具) —— 命名/头部字段
   / SLOT 清单齐; 建后残留 SLOT 判红 (守卫设计), 填完判绿; stdout 含「机械 0」收录断言 (§5.4)
 - test_new_doc_refuses_slice_and_duplicates: slice 族拒绝并指路 kb.wrap; 重复建/坏 topic/坏领域
-  全 fail-fast (--refs 已由 P2 的 D4 双向补链接手, 见下)
+  全 fail-fast (--refs 已由 P2 的 D4 双向补链接手, 见下; 重复建冻结 timekit.now 钉同分钟 ——
+  plan 分钟戳命名 + 真墙钟跨分钟 = 两次文件名不同永不撞名, CI 偶发红 26-10-17 实证)
 - test_new_doc_task_domain_is_longest_prefix_match: 领域段最长前缀匹配 (P1 首段切分缺陷,
   P2 补) —— 连字符领域 `memory-bank` 可建 / `memory-` 前缀撞名不误收 / 裸领域沿用 P1 行为
 - test_wrap_creates_zero_slot_slice_and_updates: 建切片零 SLOT 即合规 (判断剩余 0, 裁定 A6);
@@ -1175,14 +1176,20 @@ def test_new_doc_creates_valid_plan_and_task(tmp_path: Path) -> None:
     assert checker.validate_file(task[0], "task") == [], f"填完必须绿: {checker.validate_file(task[0], 'task')}"
 
 
-def test_new_doc_refuses_slice_and_duplicates(tmp_path: Path) -> None:
+def test_new_doc_refuses_slice_and_duplicates(tmp_path: Path, monkeypatch) -> None:
     """拒绝路径全 fail-fast: slice 族指路 kb.wrap / 重复建幂等拒绝 / 坏 topic 与坏领域当场拒
     (之后假定输入合法 —— 黄金法则 fail-fast)。--refs 的拒绝路径已随 D4 消失 (P2 起自动
-    双向补链), 其 fail-fast 由 test_new_doc_refs_auto_chains_bidirectionally 覆盖。"""
+    双向补链), 其 fail-fast 由 test_new_doc_refs_auto_chains_bidirectionally 覆盖。
+    重复建断言冻结 timekit.now (CI 偶发红 26-10-17): plan 文件名带分钟级戳 (`%y-%m-%d-%H%M`),
+    幂等拒绝靠撞同名 —— 真墙钟两次调用跨分钟 = 文件名不同永不撞名, 与平台无关的时刻竞态;
+    生产幂等语义 (同路径拒绝) 没破, 是用例没钉住「同路径」的前提。"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
     new_doc = _new_doc()
+    import timekit  # 必须在 helper 之后 —— helper 负责把 SKILL_SCRIPTS 插进 sys.path
+    frozen = timekit.now()
+    monkeypatch.setattr(timekit, "now", lambda: frozen)
     mb = tmp_path / "memory-bank"
     mb.mkdir()
 
