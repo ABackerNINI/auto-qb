@@ -42,6 +42,25 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 memory-bank skill 的 `scripts/check_doc_links.py`, 2026-10-06 从根 `scripts/` 迁入)
 - test_doc_links_rejects_windows_normalized_targets: 存在性按 Linux 口径判 —— 结尾点(`kb/...`) / 大小写不符 判坏链, 本机 Windows 的路径归一化不得让它恒绿 (2026-10-11 CI 单条红的根因)
 
+文档族注册表与 kb.new / kb.wrap (2026-10-17 P1, 计划 26-10-17-0527; 实现与检查器在
+memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_templates.py`,
+**进程内 import** —— 本项目测试禁止起子进程):
+
+- test_new_doc_creates_valid_plan_and_task: 真建 plan + task 各一件 (tmp 夹具) —— 命名/头部字段
+  / SLOT 清单齐; 建后残留 SLOT 判红 (守卫设计), 填完判绿; stdout 含「机械 0」收录断言 (§5.4)
+- test_new_doc_refuses_slice_and_refs_and_duplicates: slice 族拒绝并指路 kb.wrap; --refs 拒绝
+  (D4 在 P2, 现在写正向 refs 会造单向链); 重复建/坏 topic/坏领域 全 fail-fast
+- test_wrap_creates_zero_slot_slice_and_updates: 建切片零 SLOT 即合规 (判断剩余 0, 裁定 A6);
+  二次调用抬最后活动 + 追加 R 行; 同专题档案抬 Updated + 进度日志日期行 (A5)
+- test_checker_three_mutations_judged_red: 红绿双验 —— 填完 = 基准绿; 三类突变 (删状态行 /
+  词表外值 / 留 SLOT) 逐类判红, 每类还原后复绿 (证明绿不是恒绿)
+- test_checker_freeze_line_exempts_stock: 冻结线之前 (档案日期 26-10-16 / plan doc-added 0735)
+  的缺陷件豁免; 之后 (26-10-17 / 0740) 入检查面判红 (D3 存量冻结只拦新增)
+- test_family_registry_matches_templates: 模板烤进去的出厂值与 `_common.FAMILIES` 同源
+  (设计底线: 不造第二套词表/命名规则)
+- test_doc_templates_checker_is_wired: 检查器挂在 kb.check 与提交闸门两侧 (不接线 = 没人跑;
+  与 test_commit_gate_covers_kb_check 同旨)
+
 时间守卫 (检查器 memory-bank skill 的 `scripts/timekit.py`, 2026-10-06 加):
 
 - test_timekit_now_is_utc_plus_8_naive: 取时是 UTC+8 naive 墙钟 (与本地时区无关, 无 tzinfo)
@@ -631,7 +650,8 @@ def test_kb_scripts_import_cleanly() -> None:
         sys.path.insert(0, str(SKILL_SCRIPTS))
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
-        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording"
+        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording", "new_doc",
+        "wrap_session", "check_doc_templates"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -996,3 +1016,329 @@ def test_number_guard_is_green_on_current_kb() -> None:
         f"手抄测试数字 {actual} 处 > 冻结常数 {wording.FROZEN_TEST_NUM_COUNT} —— 本轮新增了手抄; "
         "数字只写 testing/baselines/ 切片, 正文改「见 kb.baseline」"
     )
+
+
+# ---------------------------------------------------------------------------
+# 文档族注册表与 kb.new / kb.wrap (2026-10-17 P1, 计划 26-10-17-0527)
+#
+# 实现与检查器在 memory-bank skill 的 `scripts/` (new_doc.py / wrap_session.py /
+# check_doc_templates.py), 本文件**在进程内 import** 它们 (本项目测试禁止起子进程,
+# `tests/sidefx.py` 的 POPEN 记账会判越界), 与既有守卫同做法。
+#
+# 红绿双验口径: 每类突变先判红、还原后**复绿** —— 只断言「能红」不够 (判据恒红等于没守),
+# 必须证明「绿不是恒绿」。夹具一律 tmp_path, 不碰真实知识库。
+# ---------------------------------------------------------------------------
+
+
+def _doc_templates():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_doc_templates
+
+    return check_doc_templates
+
+
+def _new_doc():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import new_doc
+
+    return new_doc
+
+
+def _wrap():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import wrap_session
+
+    return wrap_session
+
+
+def _fill_slots(path: Path) -> None:
+    """模拟 agent 的「一次填空」: 把所有 SLOT 标记替换为内容。"""
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    text = path.read_text(encoding="utf-8")
+    path.write_text(_common.SLOT_RE.sub("已填内容", text), encoding="utf-8")
+
+
+def test_new_doc_creates_valid_plan_and_task(tmp_path: Path) -> None:
+    """真建 plan + task 各一件 (tmp 夹具): 命名/头部/SLOT 清单齐, 建后残留 SLOT 判红、填完判绿。
+
+    同时钉住 §5.4 收录断言: 两条命令的 stdout 必须含「机械 0」断言行 —— 这是计划把
+    「剩余人工步骤」从散文变成可机检契约的那一行。
+    """
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    out = io.StringIO()
+    with redirect_stdout(out), redirect_stderr(io.StringIO()):
+        rc = new_doc.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--mb-dir",
+                str(mb),
+                "plan",
+                "--title",
+                "冒烟计划标题",
+                "--topic",
+                "smoke-plan",
+            ]
+        )
+    assert rc == 0
+    assert "机械 0" in out.getvalue(), f"kb.new plan 输出缺「机械 0」收录断言: {out.getvalue()}"
+
+    created = list((mb / "plans").glob("*-plan-smoke-plan.html"))
+    assert len(created) == 1, f"应建出且只建出一件计划: {created}"
+    text = created[0].read_text(encoding="utf-8")
+    assert '<meta name="doc-status" content="Open">' in text
+    assert '<meta name="doc-topic" content="smoke-plan">' in text
+    assert "color-scheme: dark" in text
+    assert checker.validate_file(created[0], "plan"), "建后应残留 SLOT (待填) —— 守卫靠它拦「没填完」"
+    _fill_slots(created[0])
+    assert checker.validate_file(created[0], "plan") == [], f"填完必须绿: {checker.validate_file(created[0], 'plan')}"
+
+    out = io.StringIO()
+    with redirect_stdout(out), redirect_stderr(io.StringIO()):
+        rc = new_doc.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--mb-dir",
+                str(mb),
+                "task",
+                "--title",
+                "冒烟档案标题",
+                "--topic",
+                "backend-smoke",
+            ]
+        )
+    assert rc == 0
+    assert "机械 0" in out.getvalue(), f"kb.new task 输出缺「机械 0」收录断言: {out.getvalue()}"
+
+    task = list((mb / "tasks").glob("*-backend-smoke.md"))
+    assert len(task) == 1, f"应建出且只建出一份档案: {task}"
+    text = task[0].read_text(encoding="utf-8")
+    assert "**Status:** In Progress" in text
+    assert "**Summary:** 冒烟档案标题" in text, "Summary 应由 --title 预填 (裁定 A1)"
+    assert "**Topics:** backend-smoke" in text
+    assert re.match(r"^\d{2}-\d{2}-\d{2}-", task[0].name), "档案文件名应是 YY-MM-DD-<slug>.md (日期到天, 不带时分)"
+    _fill_slots(task[0])
+    assert checker.validate_file(task[0], "task") == [], f"填完必须绿: {checker.validate_file(task[0], 'task')}"
+
+
+def test_new_doc_refuses_slice_and_refs_and_duplicates(tmp_path: Path) -> None:
+    """四条拒绝路径全 fail-fast: slice 族指路 kb.wrap / --refs 指路 P2 / 重复建幂等拒绝 /
+    坏 topic 与坏领域当场拒 (之后假定输入合法 —— 黄金法则 fail-fast)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def run(*extra: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = new_doc.main(["--root", str(tmp_path), "--mb-dir", str(mb), *extra])
+        return rc, out.getvalue(), err.getvalue()
+
+    rc, _, err = run("slice", "--title", "x", "--topic", "y")
+    assert rc == 1 and "kb.wrap" in err, f"slice 族必须拒绝并指路 kb.wrap: {err}"
+
+    rc, _, err = run("plan", "--title", "x", "--topic", "y", "--refs", "a.md")
+    assert rc == 1 and "P2" in err, f"--refs 必须拒绝并说明 D4 在 P2: {err}"
+
+    rc, _, err = run("task", "--title", "x", "--topic", "Backend_Smoke")
+    assert rc == 1 and "kebab" in err, f"坏 topic (非 kebab) 必须拒绝: {err}"
+
+    rc, _, err = run("task", "--title", "x", "--topic", "unknown-domain-slug")
+    assert rc == 1 and "领域枚举" in err, f"坏领域必须拒绝: {err}"
+
+    assert run("plan", "--title", "重复计划", "--topic", "dup-plan")[0] == 0
+    rc, _, err = run("plan", "--title", "重复计划", "--topic", "dup-plan")
+    assert rc == 1 and "已存在" in err, f"同路径重复建必须幂等拒绝: {err}"
+
+
+def test_wrap_creates_zero_slot_slice_and_updates(tmp_path: Path) -> None:
+    """建切片零 SLOT 即合规 (§5.3 判断剩余 0, 裁定 A6); 二次调用抬最后活动 + 追加 R 行;
+    同专题档案抬 Updated + 进度日志日期行 (A5: 日期属派生面, 轮内不逐行写)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    wrap = _wrap()
+    checker = _doc_templates()
+    new_doc = _new_doc()
+    import timekit  # 必须在 helper 之后 —— helper 负责把 SKILL_SCRIPTS 插进 sys.path
+
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def wrap_run(topic: str, did: str) -> int:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = wrap.main(["--root", str(tmp_path), "--mb-dir", str(mb), "--topic", topic, "--did", did])
+        return rc
+
+    assert wrap_run("wrap-slug", "本轮做了什么") == 0
+    created = list((mb / "activeContext").glob("*-wrap-slug.md"))
+    assert len(created) == 1, f"应建出且只建出一张切片: {created}"
+    assert checker.validate_file(
+        created[0], "slice"
+    ) == [], (f"kb.wrap 建的切片必须零 SLOT 即合规 (判断剩余 0): {checker.validate_file(created[0], 'slice')}")
+    text = created[0].read_text(encoding="utf-8")
+    assert "**R0(" in text and "> 最后活动:" in text
+
+    assert wrap_run("wrap-slug", "第二轮") == 0
+    text = created[0].read_text(encoding="utf-8")
+    assert "**R1(" in text, "二次调用应追加 R1 行 (编号 = 现有最大 + 1)"
+
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        assert new_doc.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--mb-dir",
+                str(mb),
+                "task",
+                "--title",
+                "归档专题",
+                "--topic",
+                "backend-wrap-slug",
+            ]
+        ) == 0
+    archive = next((mb / "tasks").glob("*-backend-wrap-slug.md"))
+    assert wrap_run("backend-wrap-slug", "收尾一轮") == 0
+    text = archive.read_text(encoding="utf-8")
+    today = timekit.now().strftime("%Y-%m-%d")
+    assert f"**Updated:** {today}" in text, "同专题档案应抬 Updated 到今天"
+    assert any(line.startswith(f"- {today} ") for line in text.split("\n")), ("档案进度日志应追加带日期的一行 (A5)")
+
+
+def test_checker_three_mutations_judged_red(tmp_path: Path) -> None:
+    """红绿双验 (计划 §06): 填完 = 基准绿; 三类突变逐类判红; 每类还原后复绿。
+
+    三类 = 删状态行 / 留 SLOT / 词表外值 —— 分别对应「头部字段缺失」「填空未完成」
+    「状态词漂移」三个失败模式, 守卫少了任何一类, 那个模式就没人拦。
+    """
+    new_doc = _new_doc()
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        assert new_doc.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--mb-dir",
+                str(mb),
+                "task",
+                "--title",
+                "突变档案",
+                "--topic",
+                "backend-mutant",
+            ]
+        ) == 0
+    task = next((mb / "tasks").glob("*-backend-mutant.md"))
+    _fill_slots(task)
+    original = task.read_text(encoding="utf-8")
+    assert checker.validate_file(task, "task") == [], "填完必须绿 —— 否则红绿双验失去基准"
+
+    mutations = {
+        "删状态行": lambda t: "\n".join(line for line in t.split("\n") if not line.startswith("**Status:**")),
+        "词表外值": lambda t: t.replace("**Status:** In Progress", "**Status:** Doing"),
+        "留 SLOT": lambda t: t.replace("已填内容", "<!-- SLOT: 又留了一个 -->", 1),
+    }
+    for name, mutate in mutations.items():
+        task.write_text(mutate(original), encoding="utf-8")
+        problems = checker.validate_file(task, "task")
+        assert problems, f"突变「{name}」必须判红: {problems}"
+        task.write_text(original, encoding="utf-8")
+        assert checker.validate_file(task, "task") == [], f"还原「{name}」后必须复绿"
+
+
+def test_checker_freeze_line_exempts_stock(tmp_path: Path) -> None:
+    """冻结线语义 (D3 存量冻结只拦新增): 线之前的缺陷件豁免, 之后入检查面判红。
+
+    档案族命名只到天 (YY-MM-DD), 文件名分不出当天线前/线后 —— 口径取「日期 ≥ 冻结日」
+    入检查面 (既有当天档案均合规); HTML 族按 doc-added 精确到分。
+    """
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "plans").mkdir(parents=True)
+
+    defective_md = "# 缺状态行的档案\n\n**Added:** 2026-01-01\n"
+    (mb / "tasks" / "26-10-16-backend-old.md").write_text(defective_md, encoding="utf-8")
+    (mb / "tasks" / "26-10-17-backend-new.md").write_text(defective_md, encoding="utf-8")
+
+    defective_plan = (
+        '<html><head><meta name="doc-type" content="plan">'
+        '<meta name="doc-status" content="Draft">'
+        '<meta name="doc-added" content="26-10-17-0735">'
+        '<meta name="doc-updated" content="26-10-17-0735">'
+        "</head><body></body></html>"
+    )
+    new_plan = defective_plan.replace("0735", "0740")
+    (mb / "plans" / "26-10-17-0735-plan-old.html").write_text(defective_plan, encoding="utf-8")
+    (mb / "plans" / "26-10-17-0740-plan-new.html").write_text(new_plan, encoding="utf-8")
+
+    problems, checked = checker.check_new_faces(tmp_path, mb)
+
+    assert checked == 2, f"检查面应恰好 2 件 (当天档案 + 线后 plan): {checked}"
+    assert not any("backend-old" in p for p in problems), "冻结线之前的缺陷档案必须豁免 (存量)"
+    assert not any("plan-old" in p for p in problems), "doc-added 在线之前的 plan 必须豁免 (存量)"
+    assert any("backend-new" in p for p in problems), "线后档案的缺陷必须判红"
+    assert any("plan-new" in p for p in problems), "线后 plan 的缺陷必须判红"
+
+
+def test_family_registry_matches_templates() -> None:
+    """模板烤进去的出厂值必须与 `_common.FAMILIES` 同源 (计划 §01 设计底线)。
+
+    先例: `test_skill_cap_table_matches_cap_policy` 钉 cap 表 —— 模板与注册表各自演化时,
+    命令会照模板建件、守卫照注册表判红, 两边都"绿"但建出来的件过不了检。
+    """
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    fams = _common.FAMILIES
+    templates = SKILL_SCRIPTS.parent / "templates"
+    for name, spec in fams.items():
+        assert (templates / spec.template).is_file(), f"{name} 族模板缺失: {spec.template}"
+
+    plan_tpl = (templates / fams["plan"].template).read_text(encoding="utf-8")
+    assert f'content="{fams["plan"].default_status}"' in plan_tpl, "plan 模板的 doc-status 必须 == 注册表出厂状态"
+    assert 'content="plan"' in plan_tpl, "plan 模板的 doc-type 必须与族名一致"
+
+    task_tpl = (templates / fams["task"].template).read_text(encoding="utf-8")
+    assert f"**Status:** {fams['task'].default_status}" in task_tpl, "task 模板的 Status 行必须 == 注册表出厂状态"
+
+    # 词表单点: 族的 statuses 就是那两个单点**本身** (is, 不是副本)
+    assert fams["plan"].statuses is _common.DOC_STATUSES
+    assert fams["task"].statuses is _common.TASK_STATUSES
+    assert fams["slice"].statuses == (), "切片族无状态词 (三行头不带状态)"
+
+
+def test_doc_templates_checker_is_wired() -> None:
+    """检查器必须挂在 kb.check 与提交闸门两侧 —— 不接线 = 没人跑 (与
+    test_wording_guard_is_wired_into_kb_check / test_commit_gate_covers_kb_check 同旨)。"""
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    body = re.search(r'^\[tasks\."kb\.check"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert body, "kb/config.toml 里找不到 kb.check"
+    assert "check_doc_templates.py --check" in body.group(1), "check_doc_templates.py --check 未挂进 kb.check"
+
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    assert "check_doc_templates.py --check" in gate_cfg, "check_doc_templates.py --check 未挂进提交闸门"

@@ -40,10 +40,11 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
            "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
+           "python <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
            "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加; 判据单点在 skill 的「回写措辞」节) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加)"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加)"
 
 [tasks."kb.nav"]
 run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]
@@ -51,3 +52,15 @@ timeout = 3600
 stream  = true
 when    = "人的知识库导航页: 本地服务现算三视图(台账/控制台/卡片墙)浏览; --gen-static 走静态导出"
 note    = "stream 前台长跑: 输出直连终端(timeout 不生效), Ctrl-C 干净停; 启动即开浏览器(--no-open 关); 精简 log: 只留启动行 + 错误/静态映射请求, /api/data 轮询不上屏; 默认绑 127.0.0.1:8765、浏览器开 localhost:8765(127.0.0.1 这个 origin 有历史遗留), 端口被占时报错行内提示 --port; --gen-static [DIR] 不起服务落盘单文件(默认 tmp-analysis/nav/, 已 gitignored); 服务模式零落盘, 数据每请求现算; 顶栏「拉取」按钮 = POST /api/pull 仅快进同步本仓库(ls-remote 取远端真值 + merge --ff-only; 分叉/本地改动重叠/离线一律失败并提示, 绝不 rebase), 成功即刷新数据; 静态导出与 file:// 无服务端故隐藏该按钮"
+
+[tasks."kb.new"]
+run     = ["python <skill-dir:memory-bank>/scripts/new_doc.py <args>"]
+when    = "新建计划/任务档案: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT/索引全派生; 切片走 kb.wrap)"
+note    = "建后必填 SLOT(守卫拦残留); --refs P1 不接受(D4 在 P2); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
+timeout = 60
+
+[tasks."kb.wrap"]
+run     = ["python <skill-dir:memory-bank>/scripts/wrap_session.py <args>"]
+when    = "收尾机械面: 抬切片最后活动 + 追加 R 行 / 同专题档案 Updated + 进度日志日期行 / 重建索引"
+note    = "只做机械面(D6: 蒸馏与判断仍是 agent 的活); 切片不存在则按模板建(零 SLOT, 判断剩余 0); 基线数字不自动化(A4)"
+timeout = 60

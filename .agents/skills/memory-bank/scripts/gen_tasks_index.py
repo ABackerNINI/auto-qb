@@ -25,9 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import find_root, gen_cmd, resolve_mb_dir  # noqa: E402
+from _common import TASK_STATUSES as STATUSES, find_root, gen_cmd, resolve_mb_dir  # noqa: E402
 
-STATUSES = ("In Progress", "Open", "Done", "Dropped")
+# 4 词表单点 = `_common.TASK_STATUSES` (2026-10-17 P1 收敛: 原先本地定义, `kb.new` / 检查器
+# 要同源校验档案状态行, 两处定义必然漂移)。
 STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(In Progress|Open|Done|Dropped)")
 SUMMARY_RE = re.compile(r"\*\*Summary:\*\*\s*(.+)")
 TITLE_RE = re.compile(r"^#\s+(\S+)\s*[—-]\s*(.+?)\s*$", re.MULTILINE)

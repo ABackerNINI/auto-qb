@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>@@TITLE@@</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="@@TOPIC@@">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="@@STAMP@@">
+<meta name="doc-updated" content="@@STAMP@@">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 880px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; max-width: 64ch; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; max-width: 74ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; max-width: 74ch; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; max-width: 74ch; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: @@TOPIC@@</div>
+<h1>@@TITLE@@</h1>
+<p class="lede"><!-- SLOT: 导语(lede): 一句话说清做什么、设计主轴是什么 --></p>
+<div class="meta">
+  <b>doc-added</b> @@STAMP@@ · <b>doc-updated</b> @@STAMP@@ · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> <!-- SLOT: 来源: 会话/grilling/用户指令/前序轮次 -->
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<!-- SLOT: 背景与目标: 为什么做、做到什么程度算成; 设计底线/不变量 -->
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<!-- SLOT: 现状: 今天是什么样; 痛点证据(能引就引数字与行号) -->
+
+<h2><span class="no">§03</span>方案总览</h2>
+<!-- SLOT: 方案: 主线/落点/分期; 有决策表的记拍板编号 -->
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<!-- SLOT: 实施步骤: 每步内容 + 验收判据; 多步的给分期表 -->
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<!-- SLOT: 待拍板: 编号 + 默认(推荐) + 备选; 已拍板的结论迁 §06 -->
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<!-- SLOT: 拍板记录: D 编号结论表(拍板后回填, 含日期) -->
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<!-- SLOT: 风险与对策: 每条给触发条件与处置 -->
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · @@STAMP@@</span> <!-- SLOT: 初版: 来源与要点(改版时在此追加 R1/R2 行) --></li>
+</ul>
+
+</div>
+</body>
+</html>

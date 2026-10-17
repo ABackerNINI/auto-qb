@@ -9,12 +9,12 @@
 
 ## In Progress
 
+- [26-10-17-0527] [memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb](26-10-17-0527-plan-memory-bank-doc-pipeline.html) — `memory-bank-doc-pipeline`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
 ## Open
 
-- [26-10-17-0527] [memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb](26-10-17-0527-plan-memory-bank-doc-pipeline.html) — `memory-bank-doc-pipeline`
 - [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
 - [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`

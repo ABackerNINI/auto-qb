@@ -9,6 +9,10 @@
 - `DOC_STATUSES` / `TERMINAL_DOC_STATUSES`: 计划 / 报告 / issue 共用的 5 词表与其完结子集
   (gen_docs_index 分区 / gen_doc_map 轮转 / test_docs_forms 校验都 import 这里); `StatusVocabularyError`
   是生成器遇表外值时的 fail-fast 异常 (见 pitfalls/kb/doc-status-meta.md)
+- `TASK_STATUSES` / `TASK_DOMAINS` / `TASK_FILE_RE`: 任务档案的 4 词表 / 领域枚举 / 命名正则
+  (`gen_tasks_index` 与 `kb.new` / `check_doc_templates` 同源)
+- `FAMILIES`: 文档族注册表 (plan/task/slice → 命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` /
+  `check_doc_templates` 与模板的同一份注册表 (计划 26-10-17-0527 P1)
 - `find_root()`: 仓库根探测 (向上找 `.git`, 而非按 skill 安装深度反推 `parents[n]`)
 - `resolve_mb_dir()`: memory-bank 目录探测 (`--mb-dir` 显式指定优先)
 - `read_meta()`: 主题文件三行头元数据 (`# 标题` / `> 摘要:` / `> 触发:`)
@@ -111,9 +115,87 @@ SLICE_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.
 
 # 切片头部的「最后活动」字段 —— 阅读器的排序键; 缺失则回退文件名时间戳 (= 创建时间)
 LAST_ACTIVE_RE = re.compile(r"^>\s*最后活动:\s*(\S.*?)\s*$", re.MULTILINE)
-
 # 会话滚动状态切片所在目录 (目录化后 `memory-bank/activeContext/`)
 SLICE_DIR = "activeContext"
+
+# --------------------------------------------------------------------------- 文档族注册表
+# (`kb.new` / `kb.wrap` / `check_doc_templates` 与模板的**同一份**注册表 —— 命名/模板/词表/
+# 索引动作只在这里定义一次, 命令与守卫都 import 它, 不造第二套规范)。
+#
+# 模板落点: skill 的 `templates/<spec.template>`; 状态词表 import 既有单点
+# (HTML 制品 5 词 `DOC_STATUSES` / 档案 4 词 `TASK_STATUSES`); 建后由命令按
+# `index_script` 重建**该族受影响的那份索引**(与 `gen_all` 的集合单点同一实现, 不另建)。
+
+# 任务档案的领域枚举 (文件名首段; 不足用先扩枚举再建档 —— 口径见 SKILL.md「任务档案规范」)
+TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config")
+
+# 任务档案 4 词表 —— **单点**: `gen_tasks_index` 与 `check_doc_templates` 都 import 这里。
+# ⚠ 与 HTML 制品的 5 词表 (`DOC_STATUSES`) **不同**, 别互相套用 (doc-forms 状态词节同款警告)。
+TASK_STATUSES = ("In Progress", "Open", "Done", "Dropped")
+
+# 命名正则 (单点: `new_doc` 建件 / `check_doc_templates` 判新增面都 import 这里, 不手抄)。
+# ⚠ 切片用的 `SLICE_FILE_RE` 已在上方 (带时分避撞名); 档案用 `TASK_FILE_RE` (不带时分、
+# 同天同专题必撞同路径 = 靠撞名暴露重复)。两者意图相反, 必须分目录, 别混。
+PLAN_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-plan-[a-z0-9]+(?:-[a-z0-9]+)*\.html$")
+TASK_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+
+# 模板里的填空标记 (`new_doc` 建后据此打印 SLOT 清单; `check_doc_templates` 判「无残留」)
+SLOT_RE = re.compile(r"<!--\s*SLOT:\s*(.*?)\s*-->", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class FamilySpec:
+    """一族文档的命名 / 模板 / 词表 / 索引动作 —— 命令与守卫的同一份注册表。"""
+
+    name: str
+    dir: str  # memory-bank 下的子目录 (切片族是 `activeContext`)
+    ext: str  # ".html" | ".md"
+    template: str  # skill `templates/` 下的文件名
+    statuses: tuple  # 状态词表 (切片族无状态, 空元组)
+    default_status: str  # 出厂状态
+    index_script: str  # 建后重建哪个生成器 (切片族无索引, 空串)
+    naming_re: object  # 文件名正则 (从上面的单点来)
+    domain_first: bool  # `--topic` 首段须 ∈ `TASK_DOMAINS` (仅档案族)
+
+
+FAMILIES: dict[str, FamilySpec] = {
+    "plan":
+        FamilySpec(
+            name="plan",
+            dir="plans",
+            ext=".html",
+            template="plan.html",
+            statuses=DOC_STATUSES,
+            default_status="Open",
+            index_script="gen_docs_index",
+            naming_re=PLAN_FILE_RE,
+            domain_first=False,
+        ),
+    "task":
+        FamilySpec(
+            name="task",
+            dir="tasks",
+            ext=".md",
+            template="task.md",
+            statuses=TASK_STATUSES,
+            default_status="In Progress",
+            index_script="gen_tasks_index",
+            naming_re=TASK_FILE_RE,
+            domain_first=True,
+        ),
+    "slice":
+        FamilySpec(
+            name="slice",
+            dir=SLICE_DIR,
+            ext=".md",
+            template="slice.md",
+            statuses=(),
+            default_status="",
+            index_script="",
+            naming_re=SLICE_FILE_RE,
+            domain_first=False,
+        ),
+}
 
 # 索引/元数据文件名: `_` 开头, 不参与「主题文件」计数
 INDEX_NAME = "_index.md"
