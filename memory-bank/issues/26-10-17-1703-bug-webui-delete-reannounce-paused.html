@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-delete-reannounce-paused">
+<meta name="issue-stamp" content="26-10-17-1703">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-reannounce-inactive-gate">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)">
+<meta name="issue-summary" content="删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)">
+<title>WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)</h1>
+    <p class="lede">删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-17-1703-bug-webui-delete-reannounce-paused</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-17 17:03</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-10-17 用户报告: 「WEBUI 删除种子时默认勾选的『删除前强制重新汇报』对暂停中的种子无效, 需要与右键『强制重新汇报』状态对齐」。当轮 grilling 八问收敛(用户答「按推荐」), 读源取证后的结论: <strong>「无效」的真实形态不是「没汇报」而是「删不掉」</strong>——对暂停(及全部非活跃态)种子, 复选框保持默认勾选点删除时: reannounce 请求照发 → 后端命中第二道闸回 warn「种子非活跃」→ 前端 <code>_reannounceAll</code> 把 warn 判为不放行 → toast「汇报未确认…已保留未删除」→ <strong>删除被整体中止</strong>。用户必须手动取消勾选, 才能删掉一个暂停种子。</p>
+    <p>触发条件: WEBUI 删除确认框(单种子 / 单组 / 批量 / 整集 / 抽屉 / 键盘删除六个入口均汇入同一条删除链 <code>_deleteFlow</code>)对任一非活跃态种子(pausedDL/pausedUP、stoppedDL/stoppedUP、queuedDL/queuedUP、checkingDL/checkingUP/checkingResumeData、error、missingFiles)执行删除, 且「删除前先强制重新汇报」保持默认勾选(硬编码 <code>checked: true</code>, 无任何状态感知)。与平台 / 配置 / 皮肤均无关(三套皮肤入口加载同一份 delete_flow.js), 纯前端编排缺陷。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-10-17 16:5x~17:0x, 本机, 仓库根, clone @ dd4bccb8 —— 原文照贴
+
+# ① 复选框定义与默认勾选 —— src/auto_qb/webui/static/shared/delete_flow.js:198-213
+198    _confirmDelete(opts) {
+...
+204        checks: [
+205          { key: "reannounce", label: "删除前先强制重新汇报(等待 tracker 确认, 失败或未确认则不删除)", checked: true },
+206          { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
+207        ],
+
+# ② 勾选确认后的汇报前置 —— delete_flow.js:144-166 —— 对 keys/hashes 全量原样投递(无闸门/无收敛)
+144      if (!res) return;
+145      const deleteFiles = res.checks.delete_files;
+146      if (res.checks.reannounce) {
+147        const jobs = [
+148          ...keys.map((k) =&gt; `/api/groups/${k}/reannounce`),
+149          ...hashes.map((h) =&gt; `/api/torrents/${h}/reannounce`),
+150        ];
+151        const ok = await this._reannounceAll(jobs, targets.label);
+152        if (!ok) return;  // 汇报未全部确认(失败/未确认): 已提示且保留未删除
+153      }
+
+# ③ _reannounceAll 三桶分流 —— delete_flow.js:173-196 —— warn(含非活跃跳过)一律不放行
+181      for (const r of results) {
+182        if (r.status === "rejected") errs.push(...);
+183        else if (!r.value.ok) (r.value.status === "warn" ? warns : errs).push(r.value.error || "执行失败");
+184      }
+185      if (errs.length || warns.length) {
+...
+190        this._finishToast(tid, errs.length ? "error" : "timeout",
+191          `${head}${label ? `(${label})` : ""}: ${first}, 已保留未删除`, 8000);
+192        return false;
+193      }
+
+# ④ 后端第二道闸(判据正确, 回执明确) —— src/auto_qb/webui/commands.py:531-548
+531    def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
+...
+538        if reannounce_blocked(rec):
+539            # 第二道闸(与 _cmd_reannounce_group 同判据): 不发指令, 给显式回执。
+542            if cmd_id:
+543                self._set_web_result(cmd_id, "warn", RC_UNCONFIRMED_PREFIX + REANNOUNCE_INACTIVE_SKIP)
+544            logger.info(f"WEB UI | 强制汇报跳过种子 {hash[:8]}: 非活跃(state={rec.state})")
+545            return
+# REANNOUNCE_INACTIVE_SKIP = "种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"  (commands.py:87)
+
+# ⑤ 右链对照(同一份判据, 两层俱备) —— 右键「强制重新汇报」
+# 闸门层: 任一活跃即可用, 全非活跃置灰 + error toast + 零请求
+#   static/shared/decorate.js:199-208  _reannounceVerdict: rows.some(r =&gt; !this.reannounceBlocked(r)) ? { ok: true, title: "" }
+#                                                          : { ok: false, title: "…无法强制重新汇报" }
+#   static/shared/commands.js:461-466  _guardReannounce: g.ok ? true : (this.toast(g.title, "error", 7000), false)
+# 投递层: 混选收敛为活跃子集, 跳过数在等待态就报
+#   static/shared/decorate.js:223-246  reannouncePlan: if (this.reannounceBlocked(m)) { skipped += 1; continue; }
+#   static/shared/commands.js:519-545 _actCore 文案: "强制重新汇报已投递 N 个活跃目标, 跳过 M 个非活跃(…)"
+
+# ⑥ 测试面三重盲区(取证同上)
+# tests/test_webui_static_dom_panel.py:2336 test_frontend_reannounce_inactive_gate_wiring
+#   守阵文案明言: 只覆盖右键四支 / 键盘 _kbAct / 详情面板 torrentCmd / 行为层 _actCore —— 删除确认框不在守阵范围
+# scripts/ui_harness.py:620-667  命令泵对一切命令直接写 {"status": "ok"} ⇒ paused warn 路径在 e2e 桩上不可达
+# e2e/menus.spec.mjs:394-397     打开批量删除框后仅按 Escape 验可达性, 从未提交过删除确认框</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>删除确认框对任一非活跃态种子删除且 reannounce 保持默认勾选时必现——单种子全暂停最典型; 混选(1 活跃 + 1 暂停)与组目标全暂停同型。六个入口(delTorrent / delGroup / bulkDelete / delEpisode / _kbDelete / drawerDel)全部命中。</td></tr>
+      <tr><td>影响范围</td><td>仅前端删除链(delete_flow.js), 右链四入口 / 键盘 Shift+A / 详情面板不受影响(2026-10-10 已接入两层)。症状是<strong>功能性阻断 + 错误归因</strong>: 删除被中止, 且 toast 把「种子非活跃(永远不可能有回执)」报成「汇报未确认」, 诱导用户以为 tracker 出了问题。混选时任一端非 ok 即整体中止——活跃端已投递的汇报也可能跟着白费。</td></tr>
+      <tr><td>严重度</td><td>中(核心操作被不可能满足的前置条件阻断 + 误导性提示; 但有绕过路径——手动取消勾选, 且无数据 / 正确性损失)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/delete_flow.js:198-213</code>(取证 2026-10-17 16:5x~17:0x, clone @ dd4bccb8)· <code>_confirmDelete</code> 的 <code>checks</code> 定义(reannounce 硬编码 <code>checked: true</code>)· grep 关键词 <code>删除前先强制重新汇报</code></li>
+      <li><code>delete_flow.js:144-166</code>(同上)· <code>_deleteFlow</code> 汇报前置: jobs 对 keys/hashes 全量投递 + <code>if (!ok) return;</code>; <code>:173-196</code> <code>_reannounceAll</code> 三桶分流(warn 不放行)· grep 关键词 <code>_reannounceAll</code></li>
+      <li><code>src/auto_qb/webui/commands.py:90-96</code>(同上)· <code>reannounce_blocked</code> 判据单点; <code>:531-548</code> <code>_cmd_reannounce_torrent</code> 第二道闸(非活跃 → warn 回执)· grep 关键词 <code>reannounce_blocked</code></li>
+      <li>右链两层对照(修复基准): <code>static/shared/decorate.js:177-185 / 199-208 / 223-246</code>(<code>reannounceBlocked</code> / <code>_reannounceVerdict</code> / <code>reannouncePlan</code>); <code>static/shared/commands.js:461-466 / 519-545</code>(<code>_guardReannounce</code> / <code>_actCore</code> 投递)· grep 关键词 <code>reannouncePlan</code></li>
+      <li>守阵与 e2e 缺口: <code>tests/test_webui_static_dom_panel.py:2336</code> <code>test_frontend_reannounce_inactive_gate_wiring</code>(明言不含删除框); <code>scripts/ui_harness.py:620-667</code>(命令泵恒 ok); <code>e2e/menus.spec.mjs:394-397</code>(删除框只按 Escape 未提交)</li>
+      <li>同专题既有记录: 坑档 <code>memory-bank/pitfalls/web-ui/reannounce-inactive-gate.md</code>(「一条不允许必须接全部入口」); 任务档案 <code>memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md</code>(两层实现, Done); plan <code>26-10-05-0923</code> v3(warn 不放行的原始口径, 仅覆盖「推迟中」场景)</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <p>机制已定位(读源 + grilling 取证, 非推测): <strong>删除链是 reannounce-inactive-gate 专题「一条『不允许』必须接全部入口, 少接即形同虚设」(坑档 :15-20)所列入口清单中唯一漏接的入口</strong>。右链(右键四支 / 键盘 Shift+A / 详情面板)在 2026-10-10 已接入两层——闸门层 <code>_guardReannounce</code>(全非活跃拒绝 + 零请求)与投递层 <code>reannouncePlan</code>(混选收敛为活跃子集 + 报跳过数); 删除链两层皆无: 既不判目标活跃性, 也不把非活跃目标从投递集合中收敛掉。</p>
+    <p>次因(口径混淆): <code>_reannounceAll</code> 的 warn 桶把两种性质完全不同的 warn 一视同仁——「已受理·推迟中」(真 H&R 风险, plan 26-10-05-0923 v3 有意为之「warn 不放行删除」)与「非活跃·已跳过」(永久不可能有回执: libtorrent <code>force_tracker_request</code> 对 <code>is_paused()</code> 直接 return, 停止种子盲区见报告 26-10-05-0854 §附注)。后者本应算 skip, 现实是不放行, 于是「不可能的承诺挡了真实操作」。</p>
+    <p class="hint">已排除: ①后端判据 / 回执错误——commands.py 第二道闸语义正确且与右链同源, 缺陷在前端对 warn 的消费; ②「与 qB 行为差异」——qB 的 HTTP 端点侧本无门, 置灰只在 GUI(commit aa189a7), 真正的对齐基准是右链自己的两层而非 qB HTTP 端点; ③平台 / 配置 / 皮肤相关——三套皮肤入口均加载同一份 delete_flow.js, 纯前端编排。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p class="hint">2026-10-17 grilling 八问收敛(用户答「按推荐」)——以下为已拍板的修法方向, 认领后按此实施; 未认领前不动码。</p>
+    <ul>
+      <li><strong>D1 两层都修(对齐深度)</strong>: 删除链同时镜像右链的闸门层与投递层——全非活跃时复选框禁用; 混选时复用 <code>reannouncePlan</code> 只投活跃子集。只修一层会留下「混选仍挡删除」的半残状态。</li>
+      <li><strong>D2 全族判据</strong>: 复用既有判据(前端 <code>reannounceBlocked</code> / <code>reannouncePlan</code>, 后端 <code>reannounce_blocked</code> + <code>REANNOUNCE_BLOCKED_STATES</code>), 覆盖 paused/stopped/queued/checking/error/missingFiles 全族, 不新造「仅 paused」特例。</li>
+      <li><strong>D3 全暂停时复选框形态</strong>: opt-pill 置灰禁用 + 取消勾选 + tooltip「目标均非活跃, 无法强制汇报」; 样式层真禁点击(不照搬菜单 item 的「置灰仍可点、行为层拦」——复选框点下去要有确定反馈)。</li>
+      <li><strong>D4 H&amp;R 边界</strong>: 「非活跃跳过」从 warn 降级为 skip——不挡删除; 活跃目标 tracker 拒绝 / 超时维持「不放行删除」的既有保守口径, 不借修 bug 之机放宽。</li>
+      <li><strong>D5 跳过数可见</strong>: 对话框打开时 pill 上带说明(如「3 个暂停目标将跳过」)+ 汇报等待 toast 复用「跳过 N 个非活跃」——对齐坑档「跳过数要在等待态就报出来」。</li>
+      <li><strong>D6 竞态两处兜底</strong>: 前端 <code>reannouncePlan</code> 收敛 + <code>_reannounceAll</code> 把非活跃类 warn(单种 <code>REANNOUNCE_INACTIVE_SKIP</code> / 组「均非活跃」)降级为跳过——只修前端, 「渲染到点击之间种子被暂停」的竞态窗口仍会复现本 bug。</li>
+      <li><strong>D7 测试</strong>: ①静态守阵 <code>test_frontend_reannounce_inactive_gate_wiring</code> 扩段接线删除链 + node 电池加 probe; ②harness 命令泵(<code>scripts/ui_harness.py:620-667</code>)改为按 state 判活跃——暂停目标的 reannounce 回 warn 回执, 否则删除框 e2e 永远够不着 warn 路径; ③e2e 按目标 hash 断言(坑档口径: 不数条数): 全暂停 → 零 reannounce 请求且删除成功; 混选 → 只投活跃。</li>
+      <li><strong>D8 流程</strong>: 本件即入池登记(已完成); 认领须用户指派, 未认领前不置 In Progress、不动码。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-17 17:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-17 17:06 — 正文补齐（现象 / 证据 / 影响面 / 定位锚点 / 根因 / 建议修法 D1–D8，后七项均来自当轮 grilling 收敛结论）；doc-refs 保持空（未被认领，认领链留待认领方回填）；状态不变 <strong>Open</strong>。</li>
+    </ul>
+    <h3>复验</h3>
+    <p>（未认领——认领后第一件事: 重跑 §04 锚点并在真实 / 桩实例重放 §01 场景, 确认现象仍在, 补一行「复验：&lt;时间&gt; 仍复现 / 已消失」后再置 In Progress。）</p>
+    <h3>修复后补充</h3>
+    <p>（未修——修完时写「实际修法 / 验证方式 / 测试数字」(测试数字唯一权威在基线切片); 与 D1–D8 建议不同则保留建议原文并说明改道原因。）</p>
+  </section>
+
+  <footer>
+    26-10-17-1703-bug-webui-delete-reannounce-paused.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
