@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>全局流量来源联动缺陷修复 (Phase 1)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="global-traffic-source-integration-fixes">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-17-1737">
+<meta name="doc-updated" content="26-10-17-1737">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: global-traffic-source-integration-fixes</div>
+<h1>全局流量来源联动缺陷修复 (Phase 1)</h1>
+<p class="lede">逐条修掉「全局流量来源」联动上线后暴露的 9 个缺陷。设计主轴：把"数据来源"提成一个有<b>一等总开关</b>（<code>traffic_source.enabled</code>）的显式功能——关闭即停取数 / 停订阅 / 停自动拉起；并让设置页如实反映"来源 ↔ 工具 ↔ 限速曲线"的依赖关系。快照解耦与设置页合并卡属重构，另立 Phase 2。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-17-1737 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话内 grilling（用户逐条订正：Q4 整块隐藏 / Q7a 删按钮 / Q9 统一 <code>30S</code>·<code>10MiB</code> 复合串 / <code>enabled</code> 提顶层 <code>traffic_source.enabled</code> / 关闭必提醒加确认框 …）；事实基线＝前序计划 <code>26-10-17-0339</code>（集成层 S15/D1）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>：<code>26-10-17-0339</code> 把"数据来源二选一 + 整机流量监视器(工具)联动"接进设置页后，上线即暴露 9 个问题（拉起黑框、无关闭入口、来源错显、状态色/对齐、无效链接、切源后图表陈旧…）。本轮把它们逐条修掉，并补一个"来源总开关"，把"关闭工具"从一件没处安放的动作变成一等语义。</p>
+<p><b>做到什么算成</b>：§04 的 S1–S8 每条都有可验判据；<code>enabled</code> 关→开可逆且不误伤曲线配置；工具参数单位按项目既有 <code>time</code>/<code>size</code> 惯例呈现。</p>
+<p><b>设计底线 / 不变量</b></p>
+<ul>
+  <li><b>取数唯一入口不变</b>：谁要 dat 路径一律走 <code>paths.dat_path(config)</code>；总开关闸门加在该单点，不散落各处。</li>
+  <li><b>写点唯一</b>：流量快照仍由 <code>ctx.web.set_traffic_view</code> 单点整体替换（"解耦成独立模块"是 Phase 2 的议题，本计划不动）。</li>
+  <li><b>单一写线程</b>：关闭 / 刷新一律入队主循环执行（黄金法则 5）。</li>
+  <li><b>保守默认</b>：关闭是显式动作，默认 <code>true</code>；<b>不写盘改别的功能的配置</b>（不擅自置 <code>global_speed_limit_curve.enabled=false</code>）。</li>
+  <li><b>fail-fast</b>：新配置键必须进 <code>validate_config</code> 并同步 <code>config/schema.py</code>（守卫测试会查）。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <thead><tr><th>#</th><th>现象</th><th>根因（落点）</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>拉起工具后有黑框（控制台窗口）</td><td><code>agent.launch_tool</code> 经 <code>cmd.exe /c launch.cmd</code>（console 子系统）且 <code>DETACHED_PROCESS</code> 让子进程自建可见控制台 —— <code>core/traffic_source/agent.py</code>（L198-222）、<code>tools/global-traffic-monitor/launch.cmd</code></td></tr>
+    <tr><td>2</td><td>WEBUI 没有"关闭工具"入口</td><td>工具控制面<b>无</b> shutdown 端点（仅 <code>/status /config /subscribe /heartbeat /unsubscribe /autostart</code>）；WEBUI 亦无按钮 —— <code>webui/server/routes/traffic_monitor.py</code>、<code>webui/static/shared/config_hub.js</code></td></tr>
+    <tr><td>3</td><td>数据来源选「Traffic Monitor 文件」时，下方仍显示工具状态与工具参数</td><td>该区块渲染<b>无 provider 条件</b> —— <code>webui/static/shared/tpl/settings.html</code> L320-398</td></tr>
+    <tr><td>4</td><td>工具状态页「已就绪」是灰色</td><td><code>tmStateClass()</code> 对 <code>ready</code> 返回 <code>"on"</code>，而 CSS 只有 <code>.hb-led.ok</code>/<code>.hb-led.warn</code>，<code>"on"</code> 无样式 → 落到基态灰条 —— <code>config_hub.js</code> L995-997、<code>console_hub.css</code> L381-390</td></tr>
+    <tr><td>5</td><td>工具状态行「标签 | 值」前后未对齐（如「当日流量 \| 上行 … 末事件号 97」）</td><td><code>.hb-lb</code>（<code>padding-top:7px</code> + baseline）与纯文本 <code>.hb-ct</code>（<code>align-items:center</code>）不同基线 —— <code>console_hub.css</code></td></tr>
+    <tr><td>6</td><td>「打开工具设置」点了显示 <code>{"error":"invalid token"}</code></td><td>工具控制面是<b>纯 JSON、全路径强制 Bearer token、无 HTML 设置页</b>，<code>window.open(tool_url)</code> 必看 401 JSON —— <code>config_hub.js</code> L1061-1063、<code>gtm/server.py</code> L254-279</td></tr>
+    <tr><td>7</td><td>切到「整机流量监视器」保存后，历史流量图仍显示 Traffic Monitor 数据，一段时间后自行恢复</td><td>历史图数据源＝限速曲线任务每轮发布的快照，只在 <code>global_speed_limit_curve.interval</code>（≈10 分钟）到点刷新；保存配置只入队 <code>reload_config</code>（重建队列），<b>不触发立即读盘</b> —— <code>core/modules/speed_curve_mod.py</code> L181-198、<code>webui/server/routes/config.py</code> L148-149</td></tr>
+    <tr><td>8</td><td>切到工具后再换回「Traffic Monitor 文件」，历史流量图不显示</td><td>同 #7 机制（工具源曾发 <code>stale</code>/空 history → 需等下一轮）。<b>用户未实测等满一个 interval 是否恢复</b>，故 S8 含真机复现取证，可能另有 bug</td></tr>
+    <tr><td>9</td><td>工具参数的文件大小/时间单位需下拉框 + <code>?</code> 说明</td><td>工具参数是<b>手写</b>表单（数字输入、单位塞在标签里）—— <code>config_hub.js</code> L1176-1189</td></tr>
+  </tbody>
+</table>
+<p class="aside">关键耦合事实（决定了 #7/#8 与依赖提示的修法）：<b>流量快照的唯一发布者就是「限速曲线」模块</b>（<code>_publish_traffic → ctx.web.set_traffic_view</code>）；取数消费者只有两类：限速曲线任务与 expr 流量变量（<code>sys.upload_today</code> 等）。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>：① 加顶层 <code>traffic_source.enabled</code> 一等开关（含闸门 / 文案 / 快照 <code>off</code> 态）；② 工具侧补 <code>POST /shutdown</code>；③ 去黑框；④ 设置页四修；⑤ 工具参数改走 <code>hub-field</code> 的 <code>time</code>/<code>size</code> 并统一复合串；⑥ 「关闭工具」按钮 + 确认框 + 依赖元数据；⑦ 切源即刷新。分期见 §04 末表。</p>
+<table>
+  <thead><tr><th>步</th><th>主题</th><th>主要落点</th><th>拍板</th></tr></thead>
+  <tbody>
+    <tr><td>S1</td><td><code>traffic_source.enabled</code> 字段契约</td><td><code>config/models.py</code> · <code>config/schema/groups.py</code> · <code>config/schema.py</code> · <code>validate_config</code> · <code>config/loaders.py</code></td><td>D1</td></tr>
+    <tr><td>S2</td><td>取数闸门 + <code>off</code> 快照态 + expr 文案</td><td><code>core/traffic_source/paths.py</code> · <code>webui/tool_client.py</code> · <code>core/traffic_source/agent.py</code> · <code>core/modules/speed_curve_mod.py</code> · <code>rules/expr/env.py</code> · 前端灰显</td><td>D2 D5 D6 D14</td></tr>
+    <tr><td>S3</td><td>工具侧 <code>POST /shutdown</code> + auto-qb 代理</td><td><code>gtm/server.py</code> · <code>gtm/__main__.py</code> · <code>webui/server/routes/traffic_monitor.py</code></td><td>D3</td></tr>
+    <tr><td>S4</td><td>「关闭工具」按钮 + 确认框 + 依赖元数据</td><td><code>config/schema/fields.py</code>（<code>affects</code> 元数据）· <code>settings.html</code> · <code>config_hub.js</code></td><td>D3 D4</td></tr>
+    <tr><td>S5</td><td>去黑框</td><td><code>core/traffic_source/agent.py</code> · <code>tools/global-traffic-monitor/launch.cmd</code></td><td>D7</td></tr>
+    <tr><td>S6</td><td>设置页四修（整块隐藏 / <code>on→ok</code> / 行对齐 / 删按钮）</td><td><code>settings.html</code> · <code>config_hub.js</code> · <code>console_hub.css</code></td><td>D8 D9 D10 D11</td></tr>
+    <tr><td>S7</td><td>工具参数 <code>hub-field</code> + 工具侧 units + 统一格式 + 迁移</td><td><code>config_hub.js</code> · <code>settings.html</code> · <code>gtm/config.py</code> · <code>gtm/units.py</code>(新)</td><td>D12 D13</td></tr>
+    <tr><td>S8</td><td>切源即刷新（#7/#8）+ #8 真机复现</td><td><code>webui/server/routes/config.py</code> · <code>webui/commands.py</code> · <code>core/modules/speed_curve_mod.py</code> · <code>config_hub.js</code></td><td>D6</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>S1 — 加顶层 <code>traffic_source.enabled</code>（契约先行）</h3>
+<ul>
+  <li><code>models.py::TrafficSourceConfig</code> 增 <code>enabled: bool = True</code>（与 <code>provider</code> 并列，段级总开关）。</li>
+  <li><code>schema/groups.py</code> 的 <code>traffic_source</code> 组 <code>fields</code> <b>首项</b>加 <code>Field("enabled","启用","bool",default=True,help="…")</code>，<b>无</b> <code>show_if</code>（恒可见）；同时带依赖元数据 <code>affects=("global_speed_limit_curve","rules","history_chart")</code>（供 S4 确认框）。</li>
+  <li><code>validate_config</code> 收该键；<code>config/schema.py</code> 镜像同步；<code>loaders.py</code> 读取（缺省 true）。</li>
+</ul>
+<p><b>验收</b>：守卫测试（配置键全量一致性）通过；<code>enabled</code> 缺省为 true；<code>enabled:false</code> 经 <code>loaders</code> 正确落对象。<br>
+<b>依赖</b>：无。可独立提交。</p>
+
+<h3>S2 — 取数闸门 + 快照 <code>off</code> 态 + expr 文案</h3>
+<ul>
+  <li><code>paths.dat_path(config)</code>：<code>enabled is False</code> → 返回 <code>""</code>；<code>unavailable_reason(config)</code> 增分支「流量来源已关闭（<code>traffic_source.enabled=false</code>）」—— 与取数分支同源（防止按文案改完不生效）。</li>
+  <li><code>tool_client._desired()</code> 首行加 <code>if enabled is not True: return False,"流量来源已关闭"</code> → 订阅线程不再注册/心跳。</li>
+  <li><code>agent.ensure_running()</code> 开头同闸门 → 不自动拉起。</li>
+  <li><code>speed_curve_mod._publish_traffic</code> 增 <code>off</code> 状态分支（判定<b>优先于</b> <code>gslc is None</code>/<code>enabled=False</code> 的 <code>disabled</code>）：来源关闭时发 <code>off</code> 快照（history 空、不查档、不动 qB）。</li>
+  <li><code>rules/expr/env.py::_traffic</code>：<code>unavailable_reason</code> 文案透传，引用流量变量的规则<b>判定失败并明确告警</b>（不静默当 0）。</li>
+  <li>前端：<code>state==='off'</code> 时「流量来源已关闭」关闭态（区别于 <code>disabled</code>=曲线未启用）；<code>enabled=false</code> 时 provider 选择器与子参数区<b>灰显禁用</b>（不隐藏）。</li>
+</ul>
+<p><b>验收</b>：<code>enabled=false</code> 时——<code>dat_path</code> 返回空、<code>unavailable_reason</code> 指向开关、订阅线程 <code>_desired</code> 返回 False（守阵测试复现不泄漏线程）、<code>ensure_running</code> 不拉起、曲线任务发 <code>off</code> 且不动 qB、expr 报错文案含"已关闭"；<code>enabled</code> 关→开往返后行为完全恢复。</p>
+
+<h3>S3 — 工具侧 <code>POST /shutdown</code> + auto-qb 代理</h3>
+<ul>
+  <li><code>gtm/server.py</code>：<code>ControlServer</code> 增"请求停止"回调（接收 <code>stop_event.set</code>）；新增 token 保护的 <code>POST /shutdown</code>——先回 200，再触发停止。</li>
+  <li><code>gtm/__main__.py</code>：把 <code>stop_event</code> 交给 <code>ControlServer</code>；退出仍走既有 <code>finally</code>（最终落盘 + 释放锁 + 停控制面 + 删发现指针）。</li>
+  <li>auto-qb：<code>routes/traffic_monitor.py</code> 增 <code>POST /api/traffic/monitor/shutdown</code>（代理工具 <code>/shutdown</code>，带 token）。</li>
+</ul>
+<p><b>验收</b>：工具侧单测——<code>/shutdown</code> 无 token → 401；带 token → 200 且进程在有限时间内优雅退出并删指针；auto-qb 代理端点码透传。</p>
+
+<h3>S4 — 「关闭工具」按钮 + 确认框 + 依赖元数据</h3>
+<ul>
+  <li>按钮可见条件：<code>provider==global_traffic_monitor &amp;&amp; enabled==true &amp;&amp; 工具可达</code>。</li>
+  <li>点击 → 确认框，文案列出受影响功能（由 S1 的 <code>affects</code> 元数据驱动）：「将停止工具进程，<b>并关闭整个流量来源功能</b>（限速曲线、expr 流量条件将暂停取数；历史流量图关闭）；开机自启注册不受影响。」</li>
+  <li>动作次序：<b>先</b>写 <code>enabled=false</code> 并保存（复用既有配置保存路径，热重载）→ <b>再</b>调 <code>POST /shutdown</code>（避免停的瞬间被订阅线程抢拉）。</li>
+  <li>不切 <code>provider</code>（<code>D3</code>）。</li>
+</ul>
+<p><b>验收</b>：点关闭→确认后，设置项 <code>enabled</code> 变 false 且已落盘；工具进程退出、状态变"未运行"；重启 auto-qb 后不再拉起；「启用」开关可一键恢复。</p>
+
+<h3>S5 — 去黑框</h3>
+<ul>
+  <li>auto-qb <code>agent.launch_tool</code>：Windows 下把 <code>creationflags=DETACHED_PROCESS</code> 换成 <code>CREATE_NO_WINDOW</code>（进程自带不可见控制台，且不共享 auto-qb 控制台 → 关 auto-qb 不带走工具）；stdin/stdout/stderr 仍重定向 <code>DEVNULL</code>；<code>Popen</code> 注入点/白名单（<code>tests/sidefx.py</code>）不破坏。</li>
+  <li>工具侧 <code>launch.cmd</code>：优先 <code>.venv\Scripts\pythonw.exe</code>（无 console 子系统），保留回退。</li>
+</ul>
+<p><b>验收</b>：真机点「立即拉起」无可见窗口；关掉 auto-qb 后工具仍在跑；<code>test.full</code> 中 Popen 守阵不红。</p>
+
+<h3>S6 — 设置页四修</h3>
+<ul>
+  <li><b>#3</b>：<code>provider != global_traffic_monitor</code> 时，整块隐藏工具状态 / 工具参数 / （已删的）「打开工具设置」/ <code>立即拉起</code>。</li>
+  <li><b>#4</b>：<code>tmStateClass()</code> 的 <code>ready</code> 由 <code>"on"</code> → <code>"ok"</code>；复核其余态映射（launching/launch_failed→warn，not_running/not_installed→灰）。</li>
+  <li><b>#5</b>：只读状态行加专用类（如 <code>.hb-row.hb-ro</code>）：标签去掉 <code>padding-top:7px</code>、内容与标签<b>同缘对齐</b>；<b>不动</b>全局 <code>.hb-row</code>；e2e 几何守阵加"行标签与行值同缘"断言。</li>
+  <li><b>#6</b>：删除「打开工具设置」按钮（<code>tmOpenToolSettings</code> 一并清理）。</li>
+</ul>
+<p><b>验收</b>：来源=TM 文件时工具区块不出现；「已就绪」为绿色；状态行几何断言通过；全站无 <code>tmOpenToolSettings</code> 残留引用。</p>
+
+<h3>S7 — 工具参数改 <code>hub-field</code>（下拉 + <code>?</code>）+ 统一复合串格式</h3>
+<ul>
+  <li>auto-qb 侧：工具参数（<code>sample_interval</code>/<code>flush_interval_s</code>/<code>lease_ttl_s</code>/<code>heartbeat_interval_s</code>/<code>notify_timeout_s</code>＝<code>time</code>；<code>flush_delta_bytes</code>/<code>notify_threshold_bytes</code>＝<code>size</code>）改用既有 <code>hub-field</code> 渲染（<code>UNIT_KINDS</code> + <code>UNIT_OPTIONS</code> + <code>help</code> → 数值框＋单位下拉＋<code>?</code> 浮窗）；默认单位＝<code>TIME_UNITS=("S","M","H","D")</code> / <code>SIZE_UNITS=("B","KiB","MiB","GiB","TiB")</code>。</li>
+  <li><b>格式统一</b>：盘上/契约<b>只留复合串</b>（<code>"30S"</code>/<code>"10MiB"</code>），不留"数值 + 独立单位"两种形态。工具侧新增解析单点 <code>gtm/units.py</code>（<code>parse_duration/parse_size/format_*</code>，文法镜像 auto-qb <code>TIME_UNITS/SIZE_UNITS</code>），<code>gtm/config.py</code> 的校验/回显/落盘改走它。</li>
+  <li><b>迁移</b>：读侧接受旧数值（<code>sample_interval:5.0</code>→<code>"5S"</code>、<code>1048576</code>→<code>"1MiB"</code>）并按语义平移；写侧只写复合串；解析不出的旧值进<b>聚合错误</b>。</li>
+  <li>校验权威在工具侧；auto-qb 前端只做 UI 拆/合（<code>"10MiB"</code>→<code>10</code>+<code>MiB</code>），不复制文法规则。</li>
+</ul>
+<p><b>验收</b>：工具 config 单测覆盖 <code>parse/format</code> 全单位 + 非法串聚合报错 + 旧数值迁移；设置页工具参数呈现为下拉 + <code>?</code>；保存后盘上是复合串。</p>
+
+<h3>S8 — 切源即刷新（#7/#8）+ #8 真机复现</h3>
+<ul>
+  <li><b>先复现</b>：真机走一遍"切工具→保存→观察→切回 TM 文件→保存→等满一个 interval"，取证 #8 是否自愈（若不自愈，另记 issue 或在 S8 内追加修复）。</li>
+  <li>后端：<code>reload_config</code> 成功后，若 <code>traffic_source</code>（<code>provider</code>/<code>enabled</code>/<code>dat_path</code>）发生变化 → 立即入队现成的 <code>refresh_traffic</code>（复用单点，零新逻辑）；<code>refresh_traffic_view</code> 需覆盖 <code>off</code> 态（现曲线停用时直接跳过）。</li>
+  <li>前端：保存成功后主动重拉 <code>/api/traffic/history</code> 重画（已打开的图表即时更新）。</li>
+</ul>
+<p><b>验收</b>：切源保存后<b>立即</b>（不等 interval）历史图即为新来源数据；<code>enabled</code> 关闭后立即转为关闭态；<code>refresh_traffic</code> 只读不写 qB（不误触发限速）。</p>
+
+<h4>分期表</h4>
+<table>
+  <thead><tr><th>期</th><th>范围</th><th>状态</th></tr></thead>
+  <tbody>
+    <tr><td><b>Phase 1</b></td><td>本计划 S1–S8（9 项缺陷修复 + 来源总开关）</td><td>待实施</td></tr>
+    <tr><td><b>Phase 2</b></td><td>① 流量快照从 <code>speed_curve_mod</code> 解耦为独立模块（新模块<b>拥有整份快照</b>，曲线模块经其方法写 <code>limit</code> 段）；② 设置页把「流量来源 / 限速曲线 / 历史图」合并进一张卡（卡内分区，复用既有 <code>hub-field</code> 渲染）；③ 依赖元数据推广。<b>另立计划</b>（需先做 UI/schema 结构探查）</td><td>已定方向，待立项</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无</b>。本轮 grilling 已全部拍板，结论见 §06（含 Phase 2 的 P 组）。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>编号</th><th>结论</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td><b>修订 0339-D1</b>：新增顶层 <code>traffic_source.enabled</code>（默认 true）作为"数据来源功能"总开关；关闭＝停取数 / 停订阅 / 停自动拉起。不引入 provider 之外的独立来源开关。</td><td>26-10-17</td></tr>
+    <tr><td>D2</td><td>闸门落在取数单点 <code>paths.dat_path/unavailable_reason</code> + <code>tool_client._desired</code> + <code>agent.ensure_running</code>；expr 取不到<b>明确报错</b>，不静默当 0。</td><td>26-10-17</td></tr>
+    <tr><td>D3</td><td>「关闭工具」＝写 <code>enabled=false</code>（持久化）→ <code>POST /shutdown</code>；<b>不切 provider</b>；次序"先保存关闭 → 再停工具"。</td><td>26-10-17</td></tr>
+    <tr><td>D4</td><td>关闭<b>必</b>提醒：确认框列出受影响功能（限速曲线 / expr 流量条件 / 历史流量图），清单来自 schema 字段依赖元数据。</td><td>26-10-17</td></tr>
+    <tr><td>D5</td><td><code>enabled=false</code> 时限速曲线走<b>运行期闸门</b>（不读 / 不查档 / 不动 qB、发 <code>off</code> 快照），<b>不写盘</b>改 <code>global_speed_limit_curve.enabled</code>（来源开回来自动恢复）。</td><td>26-10-17</td></tr>
+    <tr><td>D6</td><td>快照新增 <code>off</code> 状态（来源关闭<b>优先于</b>曲线未启用的 <code>disabled</code>）；#7/#8 的立即刷新路径须覆盖 <code>off</code>。</td><td>26-10-17</td></tr>
+    <tr><td>D7</td><td>去黑框：auto-qb 侧用 <code>CREATE_NO_WINDOW</code>（弃 <code>DETACHED_PROCESS</code>）+ 工具启动器优先 <code>pythonw.exe</code>。</td><td>26-10-17</td></tr>
+    <tr><td>D8</td><td><code>provider != global_traffic_monitor</code> 时，工具状态 / 工具参数 / 「打开工具设置」整块隐藏。</td><td>26-10-17</td></tr>
+    <tr><td>D9</td><td>删除「打开工具设置」按钮（工具为纯 JSON 控制面，无 HTML 设置页）。</td><td>26-10-17</td></tr>
+    <tr><td>D10</td><td>工具状态「已就绪」状态类 <code>"on"</code> → <code>"ok"</code>。</td><td>26-10-17</td></tr>
+    <tr><td>D11</td><td>状态行标签/值对齐用专用类 <code>.hb-row.hb-ro</code>（局部，不动全局 <code>.hb-row</code>）。</td><td>26-10-17</td></tr>
+    <tr><td>D12</td><td>工具参数改用项目既有 <code>hub-field</code> kind <code>time</code>/<code>size</code> + <code>help</code>（数值 + 单位下拉 + <code>?</code>）。</td><td>26-10-17</td></tr>
+    <tr><td>D13</td><td>工具参数格式<b>统一为复合串</b>（<code>30S</code>/<code>10MiB</code>）：读侧兼容旧数值并一次性迁移，写侧只写字符串；工具侧新增同文法解析单点。</td><td>26-10-17</td></tr>
+    <tr><td>D14</td><td><code>enabled=false</code> 时 provider 选择器与子参数区<b>灰显</b>（不隐藏）。</td><td>26-10-17</td></tr>
+    <tr><td>D15</td><td>交付拆分：Phase 1＝本计划；Phase 2 另立计划。</td><td>26-10-17</td></tr>
+    <tr><td>P1</td><td>(Phase 2) 快照解耦所有权：新模块<b>拥有整份快照</b>，曲线模块经其方法写 <code>limit</code> 段（单一写点 + 分段 API）。</td><td>26-10-17</td></tr>
+    <tr><td>P2</td><td>(Phase 2) 合并卡＝卡内分区，复用既有 <code>hub-field</code>/schema 渲染（不新造 UI 引擎）。</td><td>26-10-17</td></tr>
+    <tr><td>P3</td><td>(Phase 2) 依赖元数据＝schema 字段 <code>affects</code> 元数据（Phase 1 先落 <code>traffic_source.enabled</code> 一处）。</td><td>26-10-17</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <thead><tr><th>风险</th><th>触发条件</th><th>对策</th></tr></thead>
+  <tbody>
+    <tr><td>关闭误伤别的功能</td><td><code>enabled=false</code> 后曲线/expr 停取数</td><td>确认框明示受影响清单；开关可逆；不写盘改曲线配置（D4/D5）</td></tr>
+    <tr><td><code>CREATE_NO_WINDOW</code> 行为差异</td><td>真机仍弹窗</td><td>真机复现；后备 <code>STARTUPINFO(SW_HIDE)</code>；工具侧 <code>pythonw</code> 兜底</td></tr>
+    <tr><td>工具参数格式迁移失败</td><td>旧盘数值解析不出</td><td>聚合报错（fail-fast）+ 迁移单测；不静默丢值</td></tr>
+    <tr><td>#8 可能另有 bug</td><td>切回 TM 后等满 interval 仍不恢复</td><td>S8 先真机复现取证；确认后再决定是否追加修复</td></tr>
+    <tr><td><code>off</code> 态未覆盖</td><td>前端/刷新路径漏 <code>off</code> 分支</td><td>守阵测试覆盖 <code>off</code> 渲染与 <code>refresh_traffic_view</code> 分支</td></tr>
+    <tr><td>删按钮留死引用</td><td>其它视图仍调 <code>tmOpenToolSettings</code></td><td>全仓检索确认无残留</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-17-1737</span> 初版：grilling 收敛出 9 项缺陷的修法与 15 条 D 级拍板（含顶层 <code>traffic_source.enabled</code> 总开关，修订 0339-D1）；明确 Phase 2（快照解耦 + 合并卡）另立。</li>
+</ul>
+
+</div>
+</body>
+</html>

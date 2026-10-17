@@ -14,6 +14,7 @@
 
 ## Open
 
+- [26-10-17-1737] [全局流量来源联动缺陷修复 (Phase 1)](26-10-17-1737-plan-global-traffic-source-integration-fixes.html) — `global-traffic-source-integration-fixes`
 - [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
 - [26-10-16-0453] [HR 取数代理 · 工具栏图标候选 · 2026-10-16](26-10-16-0453-plan-hr-ext-icons.html) — `hr-ext-icons`

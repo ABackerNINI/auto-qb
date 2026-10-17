@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-17-0339">
-<meta name="doc-updated" content="26-10-17-1447">
+<meta name="doc-updated" content="26-10-17-1930">
 <style>
   :root {
     --bg: #10151a;
@@ -96,6 +96,7 @@
   <tr><td>R0</td><td>26-10-17-0339</td><td>初版:grilling 五轮 36 问收敛,拍板 D1–D18(单一来源开关 / 发现指针 / 随机端口 / 数据落点 / 自启触发 / 设置页合并 …)</td></tr>
   <tr><td>R2</td><td>26-10-17-1447</td><td><b>取数路径收归工具指针</b>:删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键与设置页字段(新增 <b>D20</b>),取数改走运行期单点 <code>core/traffic_source/paths.py</code>;D2/D17/§05/§10 同步,新增 S20。<b>不做配置版本升级</b>(测试期未上线,残留键按未知键报错、手工清理)</td></tr>
   <tr><td>R1</td><td>26-10-17-0429</td><td><b>拉起与自启契约改版</b>:D10 改写为「工具侧启动器契约」并新增 <b>D19</b>;D13 收敛为「启动器恒定携带自启意图 + 工具 config 唯一裁决」,<b>删掉 auto-qb 的条件传参</b>;D2/D17/S17/§05 随之删掉 auto-qb 侧的 <code>autostart</code> 键(开关状态回归工具侧单点);§03/S11/S14/S16/§08/§09/§10 同步</td></tr>
+  <tr><td>R3</td><td>26-10-17-1930</td><td><b>承接缺陷修复计划</b>:新增独立计划 <code>26-10-17-1737-plan-global-traffic-source-integration-fixes.html</code>(Phase 1,修 9 项上线缺陷)。其中两处改判本文件:<b>① 修订 D1</b> —— 新增顶层 <code>traffic_source.enabled</code> 总开关(关闭即停取数 / 停订阅 / 停自动拉起;仍<b>不</b>引入 provider 之外的来源开关);<b>② 改 §05 盘上格式</b> —— 工具参数由数值改为复合串(<code>30S</code>/<code>10MiB</code>),工具侧新增同文法解析单点、读侧兼容旧数值一次性迁移。<b>快照解耦出 <code>speed_curve_mod</code> 与设置页合并卡</b>属重构,另立 Phase 2,不在本次范围</td></tr>
 </table>
 <div class="note"><b>R1 的起因:</b>原设计让 auto-qb 在拉起时条件计算 <code>--autostart true|false</code>(provider = 工具来源且用户未关过 ⇒ 真)。「把该旗标固化进启动器以解耦 CLI 形态」这一改法会与 D13 冲突 —— 它的<b>取值是可变的</b>,而 <code>false</code> 那一支正是「用户显式关过 ⇒ 不被装回」的防复活闸,固化成常量等于把闸门焊死。故改判为:<b>启动器只携带"顺带注册"这一个恒定意图,是否真注册由工具侧 config <code>autostart</code> 裁决</b> —— 判断权下放给状态的持有者,auto-qb 侧既不持有也不计算该状态。</div>
 
@@ -305,6 +306,7 @@ tools/global-traffic-monitor/                         <span class="cm"># 源码�
 <div class="exit"><b>出口</b>四条实测通过,并把实测数字写进基线切片与任务档案。</div>
 
 <h2><span class="no">05</span>默认参数与契约字段</h2>
+<div class="note"><b>R3 格式改判(26-10-17-1930):</b>本节的工具参数<b>盘上/契约格式由数值改为复合串</b>(<code>sample_interval</code>→<code>"5S"</code>、<code>flush_delta_bytes</code>→<code>"1MiB"</code> …),单位文法取项目既有 <code>TIME_UNITS=("S","M","H","D")</code> / <code>SIZE_UNITS=("B","KiB","MiB","GiB","TiB")</code>;读侧兼容旧数值并一次性迁移,写侧只写复合串。落地步骤见缺陷修复计划 S7。</div>
 <h4>endpoint.json 字段(D6)</h4>
 <table>
   <tr><th>字段</th><th>含义</th></tr>
