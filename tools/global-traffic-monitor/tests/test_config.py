@@ -19,7 +19,8 @@ from gtm.config import (
 
 def test_defaults_match_plan_section_05() -> None:
     """默认值与计划 §05 参数表逐项一致 (sample 5s / flush 1MiB+30s / notify 100MiB /
-    http_port 0 随机 (S13/D9) / lease 180s / heartbeat 60s / notify_timeout 3s / 适配器空列表)."""
+    http_port 0 随机 (S13/D9) / lease 180s / heartbeat 60s / notify_timeout 3s /
+    适配器空列表 / autostart true (S14/D13))."""
     c = Config()
     assert c.sample_interval == 5.0
     assert c.flush_delta_bytes == 1024 * 1024
@@ -31,6 +32,7 @@ def test_defaults_match_plan_section_05() -> None:
     assert c.heartbeat_interval_s == 60.0
     assert c.notify_timeout_s == 3.0
     assert c.adapter_include == () and c.adapter_exclude == ()
+    assert c.autostart is True  # 未显式关过 = 默认真 (run --autostart 会注册)
 
 
 def test_load_missing_file_returns_defaults(tmp_path) -> None:
@@ -83,6 +85,19 @@ def test_validate_bool_is_not_number() -> None:
     config, errors = validate_payload({"sample_interval": True})
     assert config is None
     assert any("布尔" in e for e in errors)
+
+
+def test_validate_autostart_bool_field() -> None:
+    """布尔字段 autostart (S14/D13): 只收真 bool —— 0/1/"true" 一律拒。
+
+    反向对称于数值字段拒 bool: 「用户显式关过」是语义事件, 写成 0/1 会让读侧
+    猜不透 (黄金法则 4: 不静默猜测), 故只认 YAML 真布尔。
+    """
+    assert validate_payload({"autostart": False})[0].autostart is False
+    assert validate_payload({"autostart": True})[0].autostart is True
+    for bad in (1, 0, "true", None):
+        config, errors = validate_payload({"autostart": bad})
+        assert config is None and any("autostart" in e and "布尔" in e for e in errors)
 
 
 def test_validate_type_mismatch() -> None:

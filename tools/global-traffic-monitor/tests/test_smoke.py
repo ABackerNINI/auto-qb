@@ -33,15 +33,15 @@ def test_all_modules_importable():
 
 
 def test_cli_version_flag(capsys):
-    """gtm --version 打印版本并以 0 退出 (argparse version action)."""
+    """global-traffic-monitor --version 打印版本并以 0 退出 (argparse version action)."""
     with pytest.raises(SystemExit) as excinfo:
         gtm.__main__.main(["--version"])
     assert excinfo.value.code == 0
-    assert f"gtm {gtm.__version__}" in capsys.readouterr().out
+    assert f"global-traffic-monitor {gtm.__version__}" in capsys.readouterr().out
 
 
 def test_cli_no_subcommand_prints_help(capsys):
     """无子命令时打印帮助 (含 run) 并返回 0 (S2 起 run 子命令可用)."""
     assert gtm.__main__.main([]) == 0
     out = capsys.readouterr().out
-    assert "usage: gtm" in out and "run" in out
+    assert "usage: global-traffic-monitor" in out and "run" in out

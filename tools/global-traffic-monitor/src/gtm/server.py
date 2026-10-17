@@ -12,7 +12,8 @@ stdlib ThreadingHTTPServer, 强制绑定 127.0.0.1 (端口默认 0 = 内核分�
   POST /unsubscribe  {id} 注销
   POST /autostart    {action: install|uninstall} 幂等注册/卸载开机自启 (S6: 供
                      auto-qb 设置页开关; 在工具进程内跑 installer, sys.executable
-                     = 装了 gtm 的 venv python, 即自启项要指向的解释器)
+                     = 装了 gtm 的 venv python, 即自启项要指向的解释器; 成功回写工具
+                     config autostart —— 自启意图的唯一裁决权, S14/D13)
 
 租约: last_heartbeat + lease_ttl (默认 180s) 过期剔除 —— 懒剔除 (每个已鉴权
 请求入口先 prune; S4 notifier 迭代前同样先 prune), 无后台清扫线程: 请求驱动
@@ -39,6 +40,7 @@ import secrets
 import sys
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Mapping, Optional
@@ -226,7 +228,8 @@ class ControlServer:
         """自启是否已注册 (§05 指针字段): 现货态探测, 供 auto-qb 设置页读开关 (D13/D19)。
 
         平台不支持 / 查询失败 / 替身后端无该能力一律按未注册 (该字段是诊断便利,
-        不能反过来影响服务启动)。自启意图的裁决 (工具 config autostart) 由后续步骤落定。
+        不能反过来影响服务启动)。自启意图的裁决 (工具 config autostart) 由 S14 落定:
+        run --autostart 只在 config autostart=true 时注册, POST /autostart 回写该键。
         """
         try:
             backend = self._installer_factory(self.storage.data_dir)
@@ -393,6 +396,13 @@ class ControlServer:
         在工具进程内跑 installer, sys.executable 即装了 gtm 的 venv python (自启项
         要指向的解释器), 无需调用方知道该路径。
 
+        S14/D13 回写: 成功后把工具 config `autostart` 置为 (install=True / uninstall=False)
+        并原子落盘 + 热换 ConfigHolder —— 该键是自启的**唯一裁决权**: 用户经这里关过之后,
+        即便再被拉起 (run --autostart) 也判 false 而 no-op, 不被自动装回。写成失败态
+        (false) 与写成成功态同样重要, 故 install 与 uninstall 都回写 (幂等 no-op 也回写,
+        因为开关结果仍是「已关」)。config 落盘/热换失败由外层 handler 兜成 500, 调用方
+        据退出码判成败 (注册本身已成功, 但裁决权没落定 = 开关状态不可信)。
+
         错误映射 (供设置页开关判成败): 载荷非法 400 / 平台不支持 501 / 平台命令失败
         或前置条件缺失 500; 幂等 no-op 也是 200 (结果 action 区分 registered/skipped/
         unregistered/absent)。
@@ -413,7 +423,10 @@ class ControlServer:
             return self._send(handler, 501, {"error": str(e)})
         except AutostartError as e:
             return self._send(handler, 500, {"error": str(e)})
-        logger.info("自启 %s: %s", action, result.message)
+        new_config = replace(self.config_holder.current, autostart=(action == "install"))
+        save_config(self.config_path, new_config)
+        self.config_holder.replace(new_config)
+        logger.info("自启 %s: %s (config autostart=%s)", action, result.message, new_config.autostart)
         self._send(handler, 200, {"ok": True, "action": result.action, "message": result.message})
 
     def _read_json(self, handler: "_Handler") -> tuple[Optional[Any], Optional[str]]:

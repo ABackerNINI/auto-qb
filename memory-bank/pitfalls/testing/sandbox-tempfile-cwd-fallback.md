@@ -18,7 +18,9 @@
     (atomic_write 残留 / lock meta 未删 / uninstaller 删除), 看着像回归实为沙箱拦截;
   ③要彻底消除, 把该测试用到的临时目录加进沙箱白名单(Settings → Permission & Approval)。
 
-- **复发**: 1 —— 2026-10-17 S13 再踩(同日, 同专题): 裸跑工具侧套件(未设 `TMPDIR`)后工具目录又留下
-  9 个随机名文件 + `pytest-of-11059/`, 提交前手工清理。**为什么没命中: 路由没到** —— 开工只读了
-  `AGENTS.md` 与 memory-bank skill, **未读 `pitfalls/testing/_index.md`**(AGENTS「改代码前先读 pitfalls 索引」
-  那条没照做); 且工具侧测试口径不在根 `test.*` 包内, 没有别的入口提示这条存在。
+- **复发**: 2 —— 2026-10-17 S13、S14 各再踩一次(同日, 同专题, 同一专题连续两轮): 裸跑工具侧套件
+  (未设 `TMPDIR`)后工具目录又留下随机名文件 + `pytest-of-11059/`(S13: 9 个随机名 + 目录; S14: 3 个随机名
+  + 目录), 均在提交前手工清理。**为什么没命中: 路由没到** —— 开工只读了 `AGENTS.md` 与 memory-bank skill,
+  **未读 `pitfalls/testing/_index.md`**(AGENTS「改代码前先读 pitfalls 索引」那条没照做); 且工具侧测试口径
+  不在根 `test.*` 包内, 没有别的入口提示这条存在。**S14 的处置**: 跑工具侧套件后立即 `git status --porcelain`
+  复查 → 删除随机名文件与 `pytest-of-*` → `git check-ignore -v` 自证 `data/`、`run/` 命中新 `.gitignore` 行。

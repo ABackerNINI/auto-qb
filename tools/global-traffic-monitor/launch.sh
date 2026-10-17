@@ -10,5 +10,5 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ -x "$HERE/.venv/bin/python" ]; then
     exec "$HERE/.venv/bin/python" -m gtm run --autostart
 else
-    exec uv run --project "$HERE" gtm run --autostart
+    exec uv run --project "$HERE" global-traffic-monitor run --autostart
 fi

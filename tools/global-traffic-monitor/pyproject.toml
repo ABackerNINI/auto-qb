@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gtm = "gtm.__main__:main"
+global-traffic-monitor = "gtm.__main__:main"
 
 # 开发/测试依赖 (PEP 735 依赖组) —— 仅测试用, 运行时零依赖
 [dependency-groups]

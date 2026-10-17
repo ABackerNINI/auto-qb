@@ -614,7 +614,7 @@ def test_single_instance_lock_blocks_second_in_process(tmp_path):
     with pytest.raises(SingleInstanceLockError) as excinfo:
         st2.acquire_lock()
     msg = str(excinfo.value)
-    assert "另一 gtm 实例已持有锁" in msg
+    assert "另一 global-traffic-monitor 实例已持有锁" in msg
     assert "PID" in msg and str(os.getpid()) in msg
     st1.release_lock()
     st3 = Storage(str(tmp_path), lock_path=lock)
@@ -638,7 +638,7 @@ def test_single_instance_lock_blocks_second_process(tmp_path):
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30)
     assert proc.returncode == 0, proc.stderr
     assert "BUSY" in proc.stdout
-    assert "另一 gtm 实例已持有锁" in proc.stdout and str(os.getpid()) in proc.stdout
+    assert "另一 global-traffic-monitor 实例已持有锁" in proc.stdout and str(os.getpid()) in proc.stdout
 
 
 def test_lock_release_idempotent_and_meta_removed(tmp_path):

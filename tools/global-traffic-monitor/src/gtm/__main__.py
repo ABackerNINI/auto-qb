@@ -1,7 +1,9 @@
-"""gtm 命令行入口.
+"""global-traffic-monitor 命令行入口 (包名仍为 gtm; D16)。
 
 子命令:
-  run                             采样-落盘-通知主循环 (单写线程; 控制面随 run 启动)
+  run [--data-dir DIR] [--autostart]
+                                  采样-落盘-通知主循环 (单写线程; 控制面随 run 启动)
+                                  --autostart: 本次拉起顺带幂等注册开机自启 (S14/D13)
   install-autostart               三平台自启幂等注册 (S5)
   uninstall-autostart             三平台自启幂等卸载 (S5)
   endpoint                        读发现指针打印当前端点 host:port / token_path / data_dir
@@ -37,14 +39,14 @@ logger = logging.getLogger("gtm")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="gtm",
+        prog="global-traffic-monitor",
         description="全局流量监视小工具 (TrafficMonitor 替代)",
     )
     parser.add_argument(
         "-V",
         "--version",
         action="version",
-        version=f"gtm {__version__}",
+        version=f"global-traffic-monitor {__version__}",
         help="打印版本号并退出",
     )
     sub = parser.add_subparsers(dest="command", metavar="<命令>")
@@ -54,6 +56,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=f"工具数据目录 (dat/state/lock/config 落点); 默认 {default_data_dir()!r} 或环境变量 GLOBAL_TRAFFIC_MONITOR_DATA_DIR",
+    )
+    # S14/D13: 布尔开关, 只表示「本次拉起顺带幂等注册」, 不承载 true|false 取值 ——
+    # 是否真注册由工具 config autostart 唯一裁决 (用户显式关过 -> 本次 no-op, 不被装回)。
+    run.add_argument(
+        "--autostart",
+        action="store_true",
+        help="本次拉起顺带幂等注册开机自启; 是否真注册由工具 config autostart 裁决 (用户关过则 no-op)",
     )
     install = sub.add_parser("install-autostart", help="注册开机自启 (三平台, 幂等)")
     install.add_argument(
@@ -78,7 +87,7 @@ def _resolve_data_dir(explicit: Optional[str]) -> str:
     target = default_data_dir()
     msg = migrate_legacy_data_dir(target)
     if msg:
-        print(f"gtm: {msg}", file=sys.stderr)
+        print(f"global-traffic-monitor: {msg}", file=sys.stderr)
     return target
 
 
@@ -153,8 +162,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         # 顺序不变式 (S12/D8): 锁必须早于 server.start() (绑端口) 与采样循环 ——
         # 抢输的第二个进程在此 fail-fast, 不绑任何端口、不写发现指针、不采样。
     except SingleInstanceLockError as e:
-        print(f"gtm: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: {e}", file=sys.stderr)
         return 1
+    if getattr(args, "autostart", False):
+        # S14/D13 自启意图: 锁已到手才注册 (抢输的第二实例不注册)。排在 server.start()
+        # 之前 —— start() 写发现指针时会现货态探测 autostart_registered, 让指针反映
+        # 本次注册结果 (指针与真值一致, 免一轮滞后)。
+        _maybe_register_autostart(data_dir, config)
     sampler = Sampler(adapter_filter=_build_adapter_filter(config))
     server = ControlServer(
         storage,
@@ -167,7 +181,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         server.start()  # fail-fast: 控制面端口占用即报错 (计划 §03 S3)
     except OSError as e:
-        print(f"gtm: 控制面启动失败 (端口 {config.http_port} 被占用?): {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: 控制面启动失败 (端口 {config.http_port} 被占用?): {e}", file=sys.stderr)
         storage.release_lock()
         return 1
     stop_event = threading.Event()
@@ -176,7 +190,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         for w in storage.recover(sampler):
             logger.warning("恢复告警 | %s", w)
         logger.info(
-            "gtm 启动 | data_dir=%s dat=%s sample_interval=%ss 通知阈值=%dMiB 控制面=%s",
+            "global-traffic-monitor 启动 | data_dir=%s dat=%s sample_interval=%ss 通知阈值=%dMiB 控制面=%s",
             data_dir,
             storage.dat_path,
             config.sample_interval,
@@ -204,12 +218,32 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _maybe_register_autostart(data_dir: str, config: Config) -> None:
+    """run --autostart 的顺带幂等注册 (S14/D13): 裁决权在工具 config autostart。
+
+    仅 config.autostart 为真才调 installer.register(); 用户显式关过 (false) -> 本次
+    no-op, 不被自动装回。注册失败只 WARNING 不阻断服务 —— 工具已在跑, 自启是便利,
+    不是本次运行的成立前提 (与「发现指针写失败不阻断服务」同口径 §09)。幂等性由
+    installer 的期望态判据保证 (已注册 -> skipped, 不重复建项)。
+    """
+    if not config.autostart:
+        logger.info("--autostart: 工具 config autostart=false (用户已关闭), 本次不注册")
+        return
+    try:
+        backend = build_installer(data_dir)
+        result = backend.register()
+    except AutostartError as e:
+        logger.warning("--autostart 注册失败 (忽略, 不阻断服务): %s", e)
+        return
+    logger.info("--autostart: %s", result.message)
+
+
 def _load_config_or_fail(data_dir: str) -> tuple[Config | None, tuple[str, ...]]:
     """加载 config.yml; 校验失败 -> 聚合错误逐条打到 stderr 并返回 (None, errors)."""
     config, errors = load_config(f"{data_dir}/config.yml")
     if config is None:
         for e in errors:
-            print(f"gtm: config 校验失败: {e}", file=sys.stderr)
+            print(f"global-traffic-monitor: config 校验失败: {e}", file=sys.stderr)
     return config, errors
 
 
@@ -224,17 +258,17 @@ def cmd_autostart(args: argparse.Namespace, *, install: bool) -> int:
     try:
         backend = build_installer(data_dir)
     except UnsupportedPlatformError as e:
-        print(f"gtm: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: {e}", file=sys.stderr)
         return 2
     except AutostartError as e:
-        print(f"gtm: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
         return 1
     try:
         result = backend.register() if install else backend.unregister()
     except AutostartError as e:
-        print(f"gtm: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: 自启{'注册' if install else '卸载'}失败: {e}", file=sys.stderr)
         return 1
-    print(f"gtm: {result.message}")
+    print(f"global-traffic-monitor: {result.message}")
     return 0
 
 
@@ -250,22 +284,22 @@ def cmd_endpoint(args: argparse.Namespace) -> int:
         with open(path, "r", encoding="utf-8") as f:
             raw = f.read()
     except FileNotFoundError:
-        print(f"gtm: 未找到发现指针 {path} (工具似乎未在运行)", file=sys.stderr)
+        print(f"global-traffic-monitor: 未找到发现指针 {path} (工具似乎未在运行)", file=sys.stderr)
         return 1
     except OSError as e:
-        print(f"gtm: 读取发现指针失败 {path}: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: 读取发现指针失败 {path}: {e}", file=sys.stderr)
         return 1
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as e:
-        print(f"gtm: 发现指针损坏 {path}: {e}", file=sys.stderr)
+        print(f"global-traffic-monitor: 发现指针损坏 {path}: {e}", file=sys.stderr)
         return 1
     if not isinstance(payload, dict):
-        print(f"gtm: 发现指针格式非法 (顶层非对象): {path}", file=sys.stderr)
+        print(f"global-traffic-monitor: 发现指针格式非法 (顶层非对象): {path}", file=sys.stderr)
         return 1
     if payload.get("schema") != ENDPOINT_SCHEMA:
         print(
-            f"gtm: 发现指针 schema={payload.get('schema')!r} 与本版本 ({ENDPOINT_SCHEMA}) 不符, 字段或有变 (仅供参考)",
+            f"global-traffic-monitor: 发现指针 schema={payload.get('schema')!r} 与本版本 ({ENDPOINT_SCHEMA}) 不符, 字段或有变 (仅供参考)",
             file=sys.stderr,
         )
     print(f"http://{payload.get('host')}:{payload.get('port')}")

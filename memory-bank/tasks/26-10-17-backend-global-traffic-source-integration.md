@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 07:21
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); S11(工具侧目录定位/数据落点/旧数据搬迁/启动器)/S12(发现指针 endpoint.json + 单实例锁锚点)已实施; S13(随机端口 + `endpoint` 子命令)已实施。
+**Updated:** 2026-10-17 08:25
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15–S19(auto-qb 侧)待逐项授权。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -29,7 +29,7 @@
 | S11 | 工具侧目录定位契约 + 数据落点 + 旧数据搬迁 + 启动器 | Done (26-10-17-0534) |
 | S12 | 发现指针与锁锚点 | Done (26-10-17-0623) |
 | S13 | 随机端口与 `endpoint` 子命令 | Done (26-10-17-0721) |
-| S14 | 启动器自启意图/改名/gitignore | Open |
+| S14 | 启动器自启意图/改名/gitignore | Done (26-10-17-0825) |
 | S15 | auto-qb 配置面与升级链 | Open |
 | S16 | 探测-拉起-订阅编排(可注入单点) | Open |
 | S17 | 设置页合并 | Open |
@@ -83,3 +83,19 @@
 **复发坑**: `pitfalls/testing/sandbox-tempfile-cwd-fallback.md` `复发` **+1** —— 裸跑工具侧套件(未设 TMPDIR)又在工具目录留下 9 个随机名文件 + `pytest-of-11059/`, 提交前手工清理。**为什么没命中: 路由没到** —— 开工只读 `AGENTS.md` 与 memory-bank skill, 未读 `pitfalls/testing/_index.md`。
 
 **滚动面**: 本档案(S13 段 + 状态表 + Updated 0721) · activeContext 切片(S13 已实施段 + 待办) · 工具 README 端口口径两处 + `endpoint` 命令行 · 基线切片新建 · 坑档 `sandbox-tempfile-cwd-fallback.md` 复发+1 · kb.index 重建。随本专题「提交」入库。
+
+### R4 · S14 实施 (2026-10-17 08:25)
+
+用户指令「实施计划S14: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S14 的显式授权(S15–S19 不动)。开工同步至 4b418a11。
+
+**落点**(改 15 文件, 纯工具侧、零 auto-qb 触碰 —— 计划 §S14 三条 bullet): `src/gtm/config.py`(新增 `autostart` 布尔键默认 `true`[D13] —— 自启意图唯一裁决权; 增 `_BOOL_FIELDS` 与 `_check_bool_field` 校验器「只收真 bool, 0/1/"true" 一律拒」, 与数值字段 `_reject_bool` 反向对称; `_KNOWN_FIELDS` 并入 bool) · `src/gtm/__main__.py`(`run` 增 `--autostart` **布尔开关** `store_true`[D13/D19] —— 只表示「本次拉起顺带幂等注册」不承载取值; 新增 `_maybe_register_autostart(data_dir, config)`: config.autostart 为假即 no-op, 为真调 `build_installer().register()` 并吞 `AutostartError` 只 WARNING; 调用点在锁 acquire 后、`server.start()` 前[指针现货探测与真值一致]; `prog`/`version`/CLI 文案前缀 `gtm:`→`global-traffic-monitor:`) · `src/gtm/server.py`(`POST /autostart` 成功分支 `replace(self.config_holder.current, autostart=(action=="install"))` + `save_config` + `holder.replace` —— 成功才回写, 失败不落半截状态) · `src/gtm/storage.py`(锁冲突文案改「另一 global-traffic-monitor 实例已持有锁」) · `src/gtm/installer.py`(注册项名改 `global-traffic-monitor-autostart` / `global-traffic-monitor.service` / `com.global-traffic-monitor.autostart`, systemd `Description` 与生成物注释全称化, 提示文案改 `global-traffic-monitor run`; **`python -m gtm run` 模块名不动**[D16 包名不变]) · `pyproject.toml`(`[project.scripts] global-traffic-monitor = "gtm.__main__:main"`) · `launch.cmd`/`launch.sh`(uv 兜底分支改 `global-traffic-monitor run --autostart`; primary 分支保持 `-m gtm run --autostart`) · `README.md`(全称改名面 + `--autostart` 语义段 + 数据目录段 + `POST /autostart` 表格行补回写 + 自启段注册项表) · `.gitignore`(增 `tools/global-traffic-monitor/data/` 与 `run/`) · 测试 `tests/test_smoke.py`(`--version`/`usage` 断言全称) · `tests/test_config.py`(默认值补 `c.autostart is True` + 新增 `test_validate_autostart_bool_field`) · `tests/test_installer.py`(新增 4 条: `--autostart` 布尔开关三态 · config=false no-op · config=true 注册 · 注册失败吞掉) · `tests/test_server.py`(新增 3 条: install 回写 true / uninstall 回写 false / 失败不动 config) · `tests/test_storage.py`(锁文案断言全称)。
+
+**设计要点**: **裁决权单点** —— `--autostart` 只是「意图携带」(`store_true`, `--autostart=false` 直接报错), 真正是否注册由工具 config `autostart` 决定(用户显式关过 = false ⇒ 本次 no-op, 不被装回); `POST /autostart` 是设置页开关的落地口, 成功即把该键回写 config(install→true / uninstall→false), 保证「关过不被装回」的防复活闸有状态支撑。改名**只限用户可见面**(D16): 包名 `gtm`、`from gtm import ...`、`-m gtm`、内部注释/文档照旧。
+
+**出口判据全过**: ①工具侧全量测试绿(较 S13 基线净增 8 条用例, 见基线切片); ②`git status` 在工具跑起来后依然干净(`data/`、`run/` 已被 `.gitignore` 命中, `git check-ignore -v` 实证 `.gitignore:15/16`)。根套件无代码改动 ⇒ 回归数字与 S13 基线同量级; 实测数字只记入基线切片 `baselines/26-10-17-0825-global-traffic-source-integration-s14.md`(见 kb.baseline)。
+
+**复发坑**: `pitfalls/testing/sandbox-tempfile-cwd-fallback.md` `复发` **+1 → 2** —— 裸跑工具侧套件(未设 TMPDIR)又在工具目录留下 `pytest-of-11059/` + 3 个随机名文件, 提交前手工清理。**为什么没命中: 路由没到** —— 开工只读 `AGENTS.md` 与 memory-bank skill, 未先读 `pitfalls/testing/_index.md`。
+
+**未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**(计划 §S18 明确列出「回写: docs/configuration.md(新段与新键)、根 README.md、memory-bank 配置参考与踩坑」); auto-qb 侧 `traffic_source`/`provider`/迁移链/探测拉起编排/设置页 → S15–S17; 真机验收 → S19。
+
+**滚动面**: 本档案(S14 段 + 状态表 + Updated 0825) · activeContext 切片(蒸馏压回 cap 内 + S14 段 + 待办) · 基线切片新建 · 坑档 `sandbox-tempfile-cwd-fallback.md` 复发+1 · kb.index 重建。随本专题「提交」入库。

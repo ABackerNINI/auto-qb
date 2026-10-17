@@ -7,12 +7,13 @@ flush 节流参数热生效; http host/port 改动需重启生效 (改绑监听�
 
 默认参数 (计划 §05): sample_interval=5s / flush=Δ>=1MiB 或 30s /
 notify_threshold=100MiB / http=127.0.0.1 (http_port=0 由内核分配随机端口, S13/D9) /
-lease_ttl=180s / heartbeat=60s / notify_timeout=3s / adapters 排除 loopback 与 down。
-全部可经 WebUI 设置页调整。
+lease_ttl=180s / heartbeat=60s / notify_timeout=3s / adapters 排除 loopback 与 down /
+autostart=true (自启意图唯一裁决, S14/D13)。全部可经 WebUI 设置页调整。
 
 校验 (黄金法则 4): fail-fast 全量校验并**聚合**所有错误 (未知键/类型不符/越界
 一次性报齐, 不是见第一个错就停); 布尔陷阱: bool 是 int 子类, 数值字段显式拒
-bool (sample_interval: true 不是 5)。解析器与 auto-qb 同族 (PyYAML)。
+bool (sample_interval: true 不是 5); 布尔字段 (autostart) 反向只收 true/false
+(给 0/1 也拒, 免得把「显式关过」写成数字而丢失语义)。解析器与 auto-qb 同族 (PyYAML)。
 """
 
 from __future__ import annotations
@@ -63,6 +64,10 @@ class Config:
     notify_timeout_s: float = DEFAULT_NOTIFY_TIMEOUT_S
     adapter_include: Tuple[str, ...] = ()
     adapter_exclude: Tuple[str, ...] = ()
+    # S14/D13: 开机自启意图 (默认 true = 未显式关过即注册)。这是自启的**唯一裁决权**,
+    # 由 POST /autostart 写; run --autostart 只表示「本次拉起顺带幂等注册」, 不带取值。
+    # 用户显式关过 (false) 后, 再被拉起也不装回。
+    autostart: bool = True
 
 
 # ---- 校验 (黄金法则 4: 全量 + 聚合) ----
@@ -79,7 +84,8 @@ _FLOAT_FIELDS = (
 )
 _STR_FIELDS = ("http_host", )
 _LIST_FIELDS = ("adapter_include", "adapter_exclude")
-_KNOWN_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS + _STR_FIELDS + _LIST_FIELDS)
+_BOOL_FIELDS = ("autostart", )
+_KNOWN_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS + _STR_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
 
 # 正数下限 (含): 这些字段必须 > 0 (时间/字节) —— http_port 不在内 (0 合法)
 _POSITIVE_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS) - {"http_port"}
@@ -149,12 +155,25 @@ def _check_str_list(name: str, value: Any, errors: list[str]) -> Optional[Tuple[
     return cleaned
 
 
+def _check_bool_field(name: str, value: Any, errors: list[str]) -> Optional[bool]:
+    """布尔字段 (autostart): 只收真 bool —— 0/1/"true" 一律拒。
+
+    与数值字段的 `_reject_bool` 反向对称: 那边拒 bool 混进数值, 这边只认 bool。
+    刻意不收 0/1: 「用户显式关过」是一个语义事件, 写成数字会让读侧猜不透是不是
+    被别的工具顺手改的 (黄金法则 4: 不静默猜测)。
+    """
+    if not isinstance(value, bool):
+        errors.append(f"{name}: 期望布尔 true/false, 收到 {type(value).__name__} {value!r}")
+        return None
+    return value
+
+
 def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tuple[str, ...]]:
     """全量校验配置载荷: 成功返回 (Config, ()); 失败返回 (None, 聚合错误元组).
 
     校验面: 未知键 (黄金法则 4 口径 —— 拒绝拼写错误/过期键, 不静默忽略) /
-    类型 (int/float/str, bool 显式拒) / 范围 (正数、端口 1-65535、有限数值)。
-    逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
+    类型 (int/float/str/bool, 数值字段显式拒 bool) / 范围 (正数、端口 0-65535、
+    有限数值)。逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
     """
     if not isinstance(payload, Mapping):
         return None, (f"配置载荷必须是映射, 收到 {type(payload).__name__}", )
@@ -181,6 +200,11 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
     for name in _LIST_FIELDS:
         if name in payload:
             ok = _check_str_list(name, payload[name], errors)
+            if ok is not None:
+                overrides[name] = ok
+    for name in _BOOL_FIELDS:
+        if name in payload:
+            ok = _check_bool_field(name, payload[name], errors)
             if ok is not None:
                 overrides[name] = ok
     if errors:

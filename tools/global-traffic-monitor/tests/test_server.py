@@ -2,6 +2,7 @@
 + S6 自启开关端点 POST /autostart (工具进程内跑 installer, 替身注入).
 + S12 发现指针: bind 成功后写 endpoint.json (字段/删除) + 抢输锁不占端口.
 + S13 随机端口 (config http_port 0 -> 回填真实端口并记指针) + endpoint 子命令 (读指针).
++ S14 POST /autostart 成功回写工具 config autostart (自启意图唯一裁决权).
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -730,5 +731,50 @@ def test_autostart_requires_token(tmp_path) -> None:
     try:
         assert http(server, "POST", "/autostart", body={"action": "install"}, token=None)[0] == 401
         assert backend.calls == []
+    finally:
+        server.stop()
+
+
+# ---- POST /autostart 回写 config autostart (S14/D13: 裁决权落定) ----
+
+
+def test_autostart_install_writes_back_config_true(tmp_path) -> None:
+    """S14/D13: install 成功把 config autostart 置 true 并落盘 —— run --autostart 据此注册."""
+    backend = FakeBackend(result=AutostartResult("registered", "已注册"))
+    factory, _ = _factory_recording(backend)
+    server, storage, _sampler, holder, token = make_server(
+        tmp_path, config=Config(autostart=False), installer_factory=factory
+    )
+    try:
+        assert http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())[0] == 200
+        assert holder.current.autostart is True  # 热换后的活配置
+        loaded, errors = load_config(os.path.join(storage.data_dir, "config.yml"))
+        assert errors == () and loaded.autostart is True  # 已原子落盘
+    finally:
+        server.stop()
+
+
+def test_autostart_uninstall_writes_back_config_false(tmp_path) -> None:
+    """S14/D13: uninstall 成功置 autostart=false —— 用户关过后, 再被拉起也不装回."""
+    backend = FakeBackend(result=AutostartResult("unregistered", "已卸载"))
+    factory, _ = _factory_recording(backend)
+    server, storage, _sampler, holder, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        assert http(server, "POST", "/autostart", body={"action": "uninstall"}, token=token.token())[0] == 200
+        assert holder.current.autostart is False
+        loaded, errors = load_config(os.path.join(storage.data_dir, "config.yml"))
+        assert errors == () and loaded.autostart is False
+    finally:
+        server.stop()
+
+
+def test_autostart_failure_leaves_config_untouched(tmp_path) -> None:
+    """失败态不落半截裁决权: 注册失败 (500) 时 config autostart 保持原值 (仍为默认 true)."""
+    backend = FakeBackend(exc=AutostartError("schtasks 失败 (rc=1)"))
+    factory, _ = _factory_recording(backend)
+    server, *_rest, holder, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        assert http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())[0] == 500
+        assert holder.current.autostart is True  # 未被改成 false
     finally:
         server.stop()

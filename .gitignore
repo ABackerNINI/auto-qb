@@ -10,6 +10,11 @@ test.py
 # 运行时数据目录(2026-09-09: 状态/单实例锁/日志/跳检备份集中到 auto-qb-data/)
 auto-qb-data/
 
+# 全局流量监视工具 (tools/global-traffic-monitor) 运行期数据与临时物
+# (计划 26-10-17-0339 §03: 工具数据默认落仓库内工具目录; 插件化部署 (S15) 打包需剔除)
+tools/global-traffic-monitor/data/
+tools/global-traffic-monitor/run/
+
 # Docker 部署的配置目录(docs/deployment.md 快速开始: cp docker/config.example.yml config/config.yml
 # 后填真实 qB 凭据) —— 凭据不入库, 与根 config.yml 同一红线口径
 /config/

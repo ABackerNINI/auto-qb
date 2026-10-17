@@ -10,5 +10,5 @@ setlocal
 if exist "%~dp0.venv\Scripts\python.exe" (
     "%~dp0.venv\Scripts\python.exe" -m gtm run --autostart
 ) else (
-    uv run --project "%~dp0." gtm run --autostart
+    uv run --project "%~dp0." global-traffic-monitor run --autostart
 )

@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from gtm import __main__ as gtm_main
+from gtm.config import Config
 from gtm.installer import (
     ACTION_ABSENT,
     ACTION_REGISTERED,
@@ -542,7 +543,7 @@ def test_cli_parser_exposes_autostart_subcommands():
 
 def test_cli_install_autostart_prints_message_and_exits_zero(monkeypatch, capsys):
     """成功路径: 结论打到 stdout, 退出码 0."""
-    stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册开机自启: 计划任务 'gtm-autostart'"))
+    stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册开机自启: 计划任务 'global-traffic-monitor-autostart'"))
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
     assert gtm_main.main(["install-autostart"]) == 0
     assert stub.calls == ["register"]
@@ -596,3 +597,39 @@ def test_cli_build_error_exits_one(monkeypatch, capsys):
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: (_ for _ in ()).throw(AutostartError("解释器不存在")))
     assert gtm_main.main(["uninstall-autostart"]) == 1
     assert "自启卸载失败" in capsys.readouterr().err
+
+
+# ---- run --autostart 顺带注册 (S14/D13) ----
+
+
+def test_cli_run_autostart_flag_is_boolean_switch():
+    """run --autostart 是布尔开关 (S14/D13): 默认 off; 只在显式给出时 on; 不承载 true|false 取值."""
+    parser = gtm_main.build_parser()
+    assert parser.parse_args(["run"]).autostart is False
+    assert parser.parse_args(["run", "--autostart"]).autostart is True
+    with pytest.raises(SystemExit):  # `--autostart=false` 非法 (开关不带值)
+        parser.parse_args(["run", "--autostart=false"])
+
+
+def test_maybe_register_autostart_no_op_when_user_disabled(monkeypatch):
+    """D13 裁决权在 config: 用户关过 (autostart=false) -> 本次 no-op, 不碰 installer (不被装回)."""
+    stub = StubBackend()
+    monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
+    gtm_main._maybe_register_autostart("D:/x", Config(autostart=False))
+    assert stub.calls == []
+
+
+def test_maybe_register_autostart_registers_when_enabled(monkeypatch):
+    """config autostart=true -> 顺带幂等注册 (调 register; 幂等判据在 installer 内)."""
+    stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册"))
+    monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
+    gtm_main._maybe_register_autostart("D:/x", Config(autostart=True))
+    assert stub.calls == ["register"]
+
+
+def test_maybe_register_autostart_swallows_failure(monkeypatch):
+    """注册失败只告警不抛 —— 工具已在跑, 自启是便利不是本次运行的成立前提 (§09 同口径)."""
+    stub = StubBackend(exc=AutostartError("schtasks /Create 失败 (rc=1): 拒绝访问"))
+    monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
+    gtm_main._maybe_register_autostart("D:/x", Config(autostart=True))  # 不抛异常即通过
+    assert stub.calls == ["register"]

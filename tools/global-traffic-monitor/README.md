@@ -29,7 +29,7 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (gtm): run 主循环 (S2/S4) + install/uninstall-autostart (S5) + endpoint (S13)
+  __main__.py   CLI 入口 (global-traffic-monitor): run 主循环 (S2/S4) + install/uninstall-autostart (S5) + endpoint (S13)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
@@ -42,17 +42,23 @@ tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage
 ## 运行 (S2-S4)
 
 ```bash
-gtm run [--data-dir DIR]     # 前台采样-落盘主循环 + 控制面 (自启机制拉起的前台服务)
-gtm endpoint                 # 读发现指针打印当前端点 host:port / token_path / data_dir (S13)
+global-traffic-monitor run [--data-dir DIR] [--autostart]   # 前台采样-落盘主循环 + 控制面
+global-traffic-monitor endpoint                             # 读发现指针打印当前端点 host:port / token_path / data_dir (S13)
 ```
 
-数据目录默认按平台 (`%LOCALAPPDATA%/gtm` · `~/Library/Application Support/gtm` ·
-`~/.local/share/gtm`, 环境变量 `GTM_DATA_DIR` 优先), 落 `history_traffic.dat`(TM 兼容) +
-`state.json`(每次采样原子写, 含订阅注册表, kill -9 丢失窗口 ≤ 采样间隔) +
-`gtm.lock`(单实例, 二次启动 fail-fast 报错含持有者 PID) + `config.yml`(配置,
-PUT /config 热重载 last-writer-wins) + `monitor.token`(控制面密钥, 首启原子生成)。
-单轮落盘失败记 ERROR 并在下一轮重试, 不杀守护进程; Ctrl+C 优雅退出(最终落盘 +
-释放锁 + 停控制面)。
+`--autostart` 是布尔开关 (S14/D13): 只表示「本次拉起顺带幂等注册开机自启」, 不承载
+取值; **是否真注册由工具 config `autostart` 唯一裁决** (用户关过 = `false` ⇒ 本次
+`no-op`, 不被自动装回)。不带该开关的拉起 (如自启项自己那条 `run --data-dir`) 不做任何
+注册尝试。
+
+数据目录默认落在**工具安装目录下的 `data/`** (环境变量 `GLOBAL_TRAFFIC_MONITOR_DATA_DIR`
+优先; 旧用户级目录 `%LOCALAPPDATA%/gtm` 等首启**一次性搬迁**), 落 `history_traffic.dat`
+(TM 兼容) + `state.json`(每次采样原子写, 含订阅注册表, kill -9 丢失窗口 ≤ 采样间隔) +
+`config.yml`(配置, PUT /config 热重载 last-writer-wins) + `monitor.token`(控制面密钥,
+首启原子生成)。单实例锁与发现指针锚在**用户级指针目录** (`%LOCALAPPDATA%/global-traffic-monitor/`
+· `~/Library/Application Support/global-traffic-monitor/` · `~/.local/share/global-traffic-monitor/`)
+的 `instance.lock` / `endpoint.json` (S12/D6/D8)。单轮落盘失败记 ERROR 并在下一轮重试,
+不杀守护进程; Ctrl+C 优雅退出(最终落盘 + 释放锁 + 停控制面)。
 
 ## 控制面 (S3)
 
@@ -67,7 +73,7 @@ Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 | `POST /subscribe` | `{endpoint, token}` 注册订阅, 返回 id + 租约参数 |
 | `POST /heartbeat` | `{id}` 心跳续租 (订阅方每 60s; 未知 id 404) |
 | `POST /unsubscribe` | `{id}` 注销 (幂等, 未知 id 404) |
-| `POST /autostart` | `{action: install\|uninstall}` 幂等注册/卸载开机自启 (S6 设置页开关; 在工具进程内跑 installer, `sys.executable` 即自启项要指向的解释器; 平台不支持 501 / 命令失败 500 / 载荷非法 400) |
+| `POST /autostart` | `{action: install\|uninstall}` 幂等注册/卸载开机自启 (S6 设置页开关; 在工具进程内跑 installer, `sys.executable` 即自启项要指向的解释器; 成功**回写工具 config `autostart`** —— 自启意图的唯一裁决权, S14/D13; 平台不支持 501 / 命令失败 500 / 载荷非法 400) |
 
 租约: `last_heartbeat + lease_ttl` (默认 180s) 过期剔除 (懒剔除, 每个已鉴权
 请求入口先 prune)。注册表落 state.json, 重启续存。配置键与默认值见计划 §05;
@@ -103,28 +109,32 @@ Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 ## 开发
 
 ```bash
-uv sync                 # 在本目录建独立 venv 并安装依赖
-uv run gtm --version    # 验证安装与入口
-uv run pytest -q        # 运行测试
+uv sync                              # 在本目录建独立 venv 并安装依赖
+uv run global-traffic-monitor --version   # 验证安装与入口
+uv run pytest -q                     # 运行测试
 ```
 
 ## 自启 (S5)
 
 ```bash
-gtm install-autostart [--data-dir DIR]   # 注册开机自启 (幂等)
-gtm uninstall-autostart                  # 卸载开机自启 (幂等)
+global-traffic-monitor install-autostart [--data-dir DIR]   # 注册开机自启 (幂等)
+global-traffic-monitor uninstall-autostart                  # 卸载开机自启 (幂等)
 ```
+
+也可由启动器 `launch.cmd` / `launch.sh` (工具侧唯一知道「怎么起」的地方, D19) 拉起并
+顺带幂等注册: `run --autostart` 只表达这种「顺带注册」意图, 是否真注册看 config
+`autostart` (默认 `true`; 经 `POST /autostart` 关过后为 `false`, 再被拉起也不装回)。
 
 | 平台 | 机制 | 注册项 |
 |---|---|---|
-| Windows | `schtasks /SC ONLOGON`(当前用户, 登录时触发) | 计划任务 `gtm-autostart` |
-| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/gtm.service` |
-| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.gtm.autostart.plist` |
+| Windows | `schtasks /SC ONLOGON`(当前用户, 登录时触发) | 计划任务 `global-traffic-monitor-autostart` |
+| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/global-traffic-monitor.service` |
+| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.global-traffic-monitor.autostart.plist` |
 
-- **注册什么**: 一条 `gtm run --data-dir <DIR>` 守护命令; 解释器取**调用本命令的那个
-  python** (`sys.executable`) —— 它按定义就是装了 gtm 的 venv。`data_dir` 解析成绝对路径
-  **写死进注册项**(自启拉起时是登录会话, `GTM_DATA_DIR` 不可控), 故 `--data-dir` 要与
-  `gtm run` 用的同一个。
+- **注册什么**: 一条 `python -m gtm run --data-dir <DIR>` 守护命令 (包名 gtm 不变, D16);
+  解释器取**调用本命令的那个 python** (`sys.executable`) —— 它按定义就是装了本工具的 venv。
+  `data_dir` 解析成绝对路径 **写死进注册项**(自启拉起时是登录会话,
+  `GLOBAL_TRAFFIC_MONITOR_DATA_DIR` 不可控), 故 `--data-dir` 要与 `run` 用的同一个。
 - **幂等**: 重复注册/重复卸载都是成功 no-op。判据是**期望态是否已达成** —— Windows 看计划
   任务是否存在; Linux/macOS 看单元/plist 文件内容是否一致**且**已启用/已加载, 未达成则收敛
   (文件漂移就重写, 服务被 disable 就重新启用)。只查「文件存在」会把「文件在但服务被停」误判

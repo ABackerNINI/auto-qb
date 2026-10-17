@@ -410,7 +410,7 @@ class SingleInstanceLock:
             self._lock.acquire()
         except Timeout as e:
             detail = f" (PID {holder.get('pid')}, 启动于 {holder.get('started_at')})" if holder else ""
-            raise SingleInstanceLockError(f"另一 gtm 实例已持有锁 {self.lock_path}{detail}; 工具仅允许单实例") from e
+            raise SingleInstanceLockError(f"另一 global-traffic-monitor 实例已持有锁 {self.lock_path}{detail}; 工具仅允许单实例") from e
         self._held = True
         self._write_meta()
 
