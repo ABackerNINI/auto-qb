@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-17-1703">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-reannounce-inactive-gate">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md, memory-bank/testing/baselines/26-10-17-1816-webui-reannounce-inactive-gate.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)">
 <meta name="issue-summary" content="删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)">
 <title>WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修复）· bug</div>
     <h1>WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)</h1>
     <p class="lede">删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-17-1703-bug-webui-delete-reannounce-paused</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-17 17:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -230,11 +230,15 @@
     <ul>
       <li>2026-10-17 17:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-17 17:06 — 正文补齐（现象 / 证据 / 影响面 / 定位锚点 / 根因 / 建议修法 D1–D8，后七项均来自当轮 grilling 收敛结论）；doc-refs 保持空（未被认领，认领链留待认领方回填）；状态不变 <strong>Open</strong>。</li>
+      <li>2026-10-17 17:38 — 用户显式指派认领（「认领并修复」）；复验完成（§04 锚点无漂移 + node 桩重放仍复现，删除被 warn 整体中止，见「复验」节）；doc-refs 回填认领方 <code>memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md</code>（同专题档案追加第三轮，不新建）；状态 <strong>Open → In Progress</strong>。</li>
+      <li>2026-10-17 18:19 — 修复完成（两层 + skip 桶，按 D1–D8 原样实施无改道；实测与红验见「修复后补充」）；测试数字以基线切片 <code>26-10-17-1816</code> 为唯一权威；坑档复发 +1；状态 <strong>In Progress → Done</strong>。</li>
     </ul>
     <h3>复验</h3>
-    <p>（未认领——认领后第一件事: 重跑 §04 锚点并在真实 / 桩实例重放 §01 场景, 确认现象仍在, 补一行「复验：&lt;时间&gt; 仍复现 / 已消失」后再置 In Progress。）</p>
+    <p>复验：2026-10-17 17:38 <strong>仍复现</strong>。§04 锚点逐条重跑无漂移（delete_flow.js <code>_confirmDelete</code> 仍硬编码 <code>checked: true</code>、<code>_reannounceAll</code> warn 仍不放行、commands.py 第二道闸仍回 warn）；node 桩重放 §01 场景（delete_flow.js + decorate.js 真源码 + 后端第二道闸同口径桩）：对 pausedDL 种子保持默认勾选点删除 → reannounce 请求照发 1 个 → 回 warn「未确认: 种子非活跃…」→ <code>_reannounceAll</code> 判不放行 → toast「1/1 个目标汇报未确认(暂停种子): …已保留未删除」→ <strong>删除请求 0 个，删除被整体中止</strong>，与 §01 描述逐字吻合。用户已显式指派认领（「认领并修复」），置 In Progress。</p>
     <h3>修复后补充</h3>
-    <p>（未修——修完时写「实际修法 / 验证方式 / 测试数字」(测试数字唯一权威在基线切片); 与 D1–D8 建议不同则保留建议原文并说明改道原因。）</p>
+    <p><strong>实际修法(按 D1–D8 原样实施, 无改道)</strong>: ①闸门层(D3) —— <code>delete_flow.js::_deleteReannounceGate</code>: 目标全非活跃时确认框汇报项禁用 + 取消勾选 + title「目标均非活跃…无法强制重新汇报」; 模板 <code>popovers.html</code> opt-pill 增 <code>is-gated</code> 类/<code>:title</code>/<code>@click</code> 短路/<code>aria-disabled</code> 四件, 三套皮肤 <code>components.css</code> + atlas <code>dialogs.css</code>(后加载同补, 防其 <code>:hover</code> 同特异性压过置灰)成套置灰。②投递层(D1/D5) —— <code>_deleteFlow</code> 按右链同源单点 <code>reannouncePlan</code> 收敛, 只投活跃子集; 混选时 pill 标签带「N 个非活跃目标将跳过」, 等待态 toast 报「(跳过 N 个非活跃)」。③skip 桶(D4/D6) —— <code>_reannounceAll</code> 三桶改四桶: 非活跃类 warn(文本判据含「非活跃」, 覆盖后端两种文案)降级为 skip —— 计数并报出但不挡删除; 推迟中/未确认/超时/拒绝维持「不放行」的保守口径; 计划为空(渲染到点击之间全转非活跃的竞态)直接跳过汇报删。④后端零改动(第二道闸判据/回执原样正确, §05 已排除项)。</p>
+    <p><strong>验证方式</strong>: node 桩重放三幕(修复前复现 §01 → 修复后全暂停零请求直删/混选只投活跃 → D6 竞态两处兜底); 三轮红验(静态 JS 关键词漂移 / 模板 is-gated 摘除 / e2e 投递还原)均报红后还原; e2e 块E 双皮肤 4/4(按 hash 断言); 测试三重补强见 D7(静态守阵扩段 ⑦ + node 电池 46 项 + harness 命令泵按 state 判活跃)。坑档「一条'不允许'必须接全部入口」复发 +1(漏接原因: 入口盘点只数了菜单可见项, 删除链是"删除的前置步骤"形态)。</p>
+    <p><strong>测试数字</strong>: <code>commands run test.full</code> 实测 <strong>3537 passed + 4 skipped</strong>(覆盖率 98%, 达标) —— 唯一权威在基线切片 <code>memory-bank/testing/baselines/26-10-17-1816-webui-reannounce-inactive-gate.md</code>, 正文不手抄。</p>
   </section>
 
   <footer>

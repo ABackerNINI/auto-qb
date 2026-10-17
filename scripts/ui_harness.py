@@ -30,6 +30,8 @@
     --no-groups    不建分组(纯平铺, 测种子页窗口化最快)
     --cmd-result   ok|error|hang(默认 ok): 兜底命令泵给每条命令的回执 ——
                    error 用于验证 P0-3 乐观 UI 的**失败回滚**, hang 用于验证 3s 回落真值
+                   (例外: 非活跃目标的 reannounce 恒回 warn —— 后端第二道闸同口径,
+                    issue 26-10-17-1703; 否则 warn 路径在桩上不可达)
     --skip-check-menu on|off(默认 on): web.skip_check_menu 桩值两态 ——
                    on 走「跳检…」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
                    off 验 fail-closed 门控(菜单两处都不渲染; 配套 e2e 轮 E2E_SKIP_CHECK=off)
@@ -65,6 +67,7 @@ from auto_qb.config import WebConfig  # noqa: E402
 from auto_qb.config.loaders import load_config  # noqa: E402
 from auto_qb.infra.versioning import CURRENT_VERSIONS  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
+from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES, REANNOUNCE_INACTIVE_SKIP  # noqa: E402
 from tests.helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store  # noqa: E402
 
 _STATES = ["stalledUP", "uploading", "downloading", "pausedUP", "pausedDL", "stalledDL", "checkingUP", "errored"]
@@ -617,6 +620,30 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
 
+def _reannounce_receipt(mgr, cmd: str, body: dict):
+    """reannounce 命令的回执(按 state 判活跃, 复刻后端第二道闸, issue 26-10-17-1703 D7-②)
+
+    兜底命令泵原来对一切命令直接写 {"status": "ok"} —— 非活跃种子的 reannounce 因此永远回
+    ok, 后端第二道闸的 warn 路径(与前端 _reannounceAll 的 skip 降级、删除链的收敛)在 e2e
+    桩上**不可达**: 删除确认框那条 warn 不放行的旧 bug 在桩上永远复现不了。这里按
+    `commands.py::reannounce_blocked` 同判据(从生产单点导入, 不另抄一份)补上:
+      单种: 目标非活跃 -> warn「种子非活跃…」(文案与后端逐字一致);
+      组:   成员全部非活跃 -> warn「组内 N 个种子均非活跃, 已跳过」(含部分活跃 -> ok,
+            与后端 _reannounce_active 过滤后投递同效果)。
+    返回 None = 不受影响, 照旧按 mode 写 ok/error。
+    """
+    if cmd == "reannounce_torrent":
+        h = body.get("hash")
+        rec = mgr.store.by_hash.get(h) if h else None
+        if rec is not None and getattr(rec, "state", None) in REANNOUNCE_BLOCKED_STATES:
+            return {"status": "warn", "error": "未确认: " + REANNOUNCE_INACTIVE_SKIP}
+    elif cmd == "reannounce_group":
+        members = mgr.store.groups.get(body.get("key") or (), [])
+        if members and all(getattr(m, "state", None) in REANNOUNCE_BLOCKED_STATES for m in members):
+            return {"status": "warn", "error": f"未确认: 组内 {len(members)} 个种子均非活跃, 已跳过"}
+    return None
+
+
 def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
     """兜底命令泵: 桩服务没有主循环, 命令没人消费 ⇒ 前端 waitCmd 会一直轮询到超时。
 
@@ -640,6 +667,12 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
                 continue
             cmd_id = (body or {}).get("cmd_id")
             if not cmd_id:
+                continue
+            # 非活跃目标的 reannounce 先过第二道闸(与后端同判据): 回 warn 而非 ok ——
+            # 否则删除链「照发->warn->不放行->删除被中止」的旧 bug 在桩上永不可达
+            gate = _reannounce_receipt(mgr, _cmd, body or {})
+            if gate is not None:
+                mgr.web.results[cmd_id] = gate
                 continue
             if mode == "error":
                 # 失败**不改状态**: 前端必须回滚到原值(回滚干净由冒烟 error 模式断言)

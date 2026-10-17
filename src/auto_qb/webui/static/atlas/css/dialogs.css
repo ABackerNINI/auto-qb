@@ -360,6 +360,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .opt-pill.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--fg); font-weight: 600; }
 .opt-pill.on .opt-dot { background: var(--accent); border-color: var(--accent); }
 .opt-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 禁用语态(全非活跃目标的「删除前强制重新汇报」, issue 26-10-17-1703): 置灰 + 默认 cursor。
+   !本文件在 atlas 的 link 序里**后于** components.css, 其中的 .opt-pill:hover(0,2,0)会盖掉
+   components.css 里同特异性的置灰规则(坑档 web-ui/reannounce-inactive-gate「置灰规则的 CSS
+   特异性」: 置灰要按目标 base 逐条抬并集, 不靠书写顺序) —— 故这里必须同款再写一份, 且显式
+   带 :hover 并集(0,3,0)压过 base hover; 模板 @click 同步短路(双保险)。 */
+.opt-pill.is-gated, .opt-pill.is-gated:hover { border-color: var(--border-soft); color: var(--fg-muted);
+  background: var(--surface-1); cursor: default; opacity: .55; font-weight: 400; }
+.opt-pill.is-gated .opt-dot { border-color: var(--border-soft); background: transparent; }
 /* 标签图标语义色(indigo; 各 UI 同口径) */
 .ctx-item .ico-tag { color: var(--indigo); }
 

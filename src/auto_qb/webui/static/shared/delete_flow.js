@@ -16,6 +16,16 @@
  * HR 风险点名(_hrRiskOf) —— 与删除链同一目标集合派生。 */
 const HR_NO_DELETE = new Set(["danger"]);
 
+/* 非活跃类 warn 的识别(D6 竞态兜底, issue 26-10-17-1703): 后端第二道闸的回执文案两种形态 ——
+ *   单种: "未确认: 种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"
+ *         (commands.py::REANNOUNCE_INACTIVE_SKIP)
+ *   组:   "未确认: 组内 N 个种子均非活跃, 已跳过"
+ * 二者都含「非活跃」二字。web 回执没有错误码, 这是**文本**判据 —— 后端常量与本函数关键词由
+ * 静态守阵 test_frontend_reannounce_inactive_gate_wiring 双向钉住, 防悄悄漂移。 */
+function _reannounceWarnInactive(err) {
+  return typeof err === "string" && err.includes("非活跃");
+}
+
 window.AQB_DELETE = {
   methods: {
     /* DLG-02: 批量删除文案按选择构成计数(仅辅种=N 个辅种 / 仅种子=N 个种子)。
@@ -125,31 +135,51 @@ window.AQB_DELETE = {
       const keys = targets.keys || [];
       const hashes = targets.hashes || [];
       if (!keys.length && !hashes.length) return;
+      const members = this._deleteMembers(keys, hashes);
       const details = this._deleteDetails(keys, hashes);
       // P2 HR 风险点名(2026-09-25): 目标含「不能删」(HR_NO_DELETE: danger)种子时, 确认框点名
       // 数量 + 来源档位 + 前几个名字 —— 最后一道防误删闸门(来源短语由后端算好, 前端只拼)
-      const risk = this._hrRiskOf(this._deleteMembers(keys, hashes));
+      const risk = this._hrRiskOf(members);
       if (risk) {
         details.push({
           icon: "#i-warn", label: "HR 风险", wide: true,
           value: `${risk.count} 个仍在 HR 管束(${risk.srcs}): ${risk.names}${risk.more}，删除可能导致站点 H&R 惩罚`,
         });
       }
+      /* reannounce-inactive-gate 闸门层(issue 26-10-17-1703): 删除链是「非活跃禁强制汇报」
+       * 专题(坑档 pitfalls/web-ui/reannounce-inactive-gate.md)入口清单中唯一漏接的入口 ——
+       * 目标全非活跃时「删除前强制汇报」不可能有回执(后端第二道闸必回 warn「种子非活跃」),
+       * 旧实现请求照发 -> _reannounceAll 的 warn 不放行 -> 删除被整体中止, 用户须手动取消
+       * 勾选才能删。这里在开框前先把复选框禁用+取消勾选(D3); 混选的投递收敛见下方
+       * reannouncePlan(两层分工: 闸门判"允不允许", 计划判"发给谁")。 */
+      const reannounceGate = this._deleteReannounceGate(members);
       const res = await this._confirmDelete({
         title: targets.title,
         body: targets.body,
         // R10-16: 入口不再传 details(传了也忽略) —— 四入口看到的窗口结构完全一致
         details,
+        reannounceGate,
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
       if (res.checks.reannounce) {
+        /* 投递层(与右链同源单点 decorate.js::reannouncePlan, D1): 非活跃目标收敛掉再投 ——
+         * 照发只会命中后端第二道闸回 warn, 而 warn 不放行删除 ⇒ 删除被中止(本 issue 的现象)。
+         * 解析不出(组行已消失)的目标原样走组端点, 由后端给显式回执。 */
+        const plan = this.reannouncePlan({ keys, hashes });
         const jobs = [
-          ...keys.map((k) => `/api/groups/${k}/reannounce`),
-          ...hashes.map((h) => `/api/torrents/${h}/reannounce`),
+          ...plan.keys.map((k) => `/api/groups/${k}/reannounce`),
+          ...plan.hashes.map((h) => `/api/torrents/${h}/reannounce`),
         ];
-        const ok = await this._reannounceAll(jobs, targets.label);
-        if (!ok) return;  // 汇报未全部确认(失败/未确认): 已提示且保留未删除
+        if (!jobs.length) {
+          /* 闸门放行但计划为空(渲染到点击之间全转为非活跃的竞态, D6): 无可投递目标 ——
+           * 汇报整体跳过, 不挡删除(D4: 非活跃 warn 降级为 skip 的同一口径; 空计划且零跳过
+           * 时不打扰用户, 删除自身的回执会说明结果)。 */
+          if (plan.skipped) this.toast(`目标均非活跃, 跳过强制重新汇报, 直接删除`, "ok", 3000);
+        } else {
+          const ok = await this._reannounceAll(jobs, targets.label, plan.skipped);
+          if (!ok) return;  // 活跃目标汇报失败/未确认: 已提示且保留未删除(保守口径不放宽)
+        }
       }
       // 投递删除: 统一走 bulk 单命令并等聚合回执(比旧右键的"已投递"更可信: 失败可见)
       try {
@@ -165,21 +195,31 @@ window.AQB_DELETE = {
       }
       this.clearSelection();  // 列表交下一轮 rid 轮询自然刷新(不主动 refresh)
     },
-    /* 汇报前置: 逐目标投递并**全部等回执**; 全部确认成功(ok)才返回 true(任一未过 -> 已提示且保留未删除)。
-     * 回执按 status 分流(D4=warn): error = tracker 明确拒绝, 汇报失败; warn(已受理·推迟/未确认·
-     * 停止/超时)不是失败但**仍不放行删除** —— 推迟中的汇报要等最小间隔过期才真正发出, 立即删除
-     * 会随种子一并丢失(正是汇报前置要避免的 H&R 风险), 未确认则没有任何「tracker 已接受」的
-     * 正证据; 删除不可逆, 按保守口径处理, 文案诚实区分「失败/未确认」。 */
-    async _reannounceAll(jobs, label) {
+    /* 汇报前置: 逐目标投递并**全部等回执**; 全部确认成功(ok)或跳过(非活跃)才返回 true。
+     * 回执按 status 分流(计划 26-10-05-0923 D4=warn; issue 26-10-17-1703 增 skip 桶):
+     *   ok    = tracker 已确认;
+     *   skip  = 非活跃 warn(「种子非活跃…」/「组内均非活跃…」) —— libtorrent 对非活跃种子
+     *           直接空转, 永远等不到回执, 既不算失败**也不挡删除**; 正常路径已被
+     *           reannouncePlan 收敛, 走到这里=渲染到点击之间状态变化的竞态兜底(D6);
+     *   warn  = 已受理·推迟/未确认·停止/超时 —— 不是失败但**仍不放行删除**(推迟中的汇报
+     *           要等最小间隔过期才真正发出, 立即删除会随种子一并丢失, 正是汇报前置要避免的
+     *           H&R 风险; 未确认则没有任何「tracker 已接受」的正证据; 删除不可逆, 按保守
+     *           口径处理, 不借修 bug 之机放宽);
+     *   error = tracker 明确拒绝(含投递失败/等待超时)。
+     * 文案诚实区分「失败/未确认/跳过」; skipped = 投递前收敛掉的非活跃数(等待态就报, D5)。 */
+    async _reannounceAll(jobs, label, skipped = 0) {
       if (!jobs.length) return true;
-      const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
+      const skipTxt = skipped ? `(跳过 ${skipped} 个非活跃)` : "";
+      const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标${skipTxt}, 等待确认…`, "busy", 0, { sticky: true });
       const results = await Promise.allSettled(
         jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
       );
       const errs = [];
       const warns = [];
+      let inactive = 0;  // 回执侧的非活跃 warn(D6 竞态): 与 skipped 同属"跳过", 末态合并计数
       for (const r of results) {
         if (r.status === "rejected") errs.push((r.reason && r.reason.message) || "投递失败");
+        else if (!r.value.ok && r.value.status === "warn" && _reannounceWarnInactive(r.value.error)) inactive += 1;
         else if (!r.value.ok) (r.value.status === "warn" ? warns : errs).push(r.value.error || "执行失败");
       }
       if (errs.length || warns.length) {
@@ -191,18 +231,50 @@ window.AQB_DELETE = {
           `${head}${label ? `(${label})` : ""}: ${first}, 已保留未删除`, 8000);
         return false;
       }
-      this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+      const skipN = skipped + inactive;
+      this._finishToast(tid, "ok",
+        `汇报确认成功${skipN ? `(跳过 ${skipN} 个非活跃)` : ""}, 开始删除…`, 2000);
       return true;
+    },
+    /* 删除确认框「删除前强制重新汇报」的可用性(闸门层, issue 26-10-17-1703; 判据与右链
+     * 同源 = decorate.js::reannounceBlocked, 全族 paused/stopped/queued/checking/error/
+     * missingFiles 覆盖, 不新造「仅 paused」特例): 目标**全部**非活跃时该项不可能有回执
+     * (后端第二道闸必回 warn, 而 _reannounceAll 保守口径 warn 不放行 ⇒ 删除被中止, 用户
+     * 须手动取消勾选才能删), 故禁用并取消勾选(D3); 混选(任一活跃)放行, 只在 pill 上报
+     * 将跳过的非活跃数(D5, 投递收敛由 _deleteFlow 内 reannouncePlan 执行); 解析不出
+     * (成员为空)不误拦 —— 与 decorate.js::_reannounceVerdict「解析出不拦」同口径。 */
+    _deleteReannounceGate(members) {
+      const rows = members || [];
+      if (!rows.length) return { disabled: false, title: "", note: "" };
+      const blocked = rows.filter((m) => this.reannounceBlocked(m));
+      if (blocked.length === rows.length) {
+        return { disabled: true, title: "目标均非活跃(暂停/停止/排队/校验中/错误), 无法强制重新汇报", note: "" };
+      }
+      if (blocked.length) {
+        return { disabled: false, title: "", note: `${blocked.length} 个非活跃目标将跳过` };
+      }
+      return { disabled: false, title: "", note: "" };
     },
     /* ---------------- 删除确认框: 目标信息 + 强制重新汇报(默认勾选)/删除文件两选项 ---------------- */
     _confirmDelete(opts) {
+      /* reannounce-inactive-gate 闸门(issue 26-10-17-1703): 全非活跃目标时汇报项禁用 +
+       * 取消勾选(模板 tpl/popovers.html 的 opt-pill.is-gated 样式层真禁点击), 混选时
+       * 勾选状态不变, 只在标签上带跳过说明。 */
+      const gate = opts.reannounceGate || {};
+      const reLabel = "删除前先强制重新汇报(等待 tracker 确认, 失败或未确认则不删除)";
       return this._openModal({
         title: opts.title,
         body: opts.body,
         details: opts.details || null,
         wide: true,  // 删除类确认框一律加宽: 摘要与选项宽松可读(DLG-01 成员明细已移除, 宽度见 --modal-wide-w)
         checks: [
-          { key: "reannounce", label: "删除前先强制重新汇报(等待 tracker 确认, 失败或未确认则不删除)", checked: true },
+          {
+            key: "reannounce",
+            label: gate.note ? `${reLabel}; ${gate.note}` : reLabel,
+            checked: !gate.disabled,
+            disabled: !!gate.disabled,
+            title: gate.title || "",
+          },
           { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
         ],
         okText: "删除",

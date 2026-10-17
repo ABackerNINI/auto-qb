@@ -166,11 +166,15 @@
             <span class="opt-dot"></span><span>{{ modal.checkbox }}</span>
           </button>
         </div>
-        <!-- 多选项(删除确认框: 强制重新汇报 + 删除文件两项并存) -->
+        <!-- 多选项(删除确认框: 强制重新汇报 + 删除文件两项并存)。
+             is-gated(issue 26-10-17-1703): 全非活跃目标时汇报项禁用 —— 置灰 + 默认 cursor +
+             点击短路(三层一致, 与坑档 web-ui/reannounce-inactive-gate「置灰真禁点击」同口径);
+             title 恒绑字符串(可用时空串, 走 ui_feedback「空串 title = 清除提示」通道)。 -->
         <div v-if="modal.checks" class="modal-opts">
           <button v-for="c in modal.checks" :key="c.key" type="button" class="opt-pill"
-                  :class="{ on: c.checked, danger: c.key === 'delete_files' }"
-                  role="switch" :aria-checked="c.checked" @click="c.checked = !c.checked">
+                  :class="{ on: c.checked, danger: c.key === 'delete_files', 'is-gated': c.disabled }"
+                  role="switch" :aria-checked="c.checked" :aria-disabled="c.disabled"
+                  :title="c.title || ''" @click="c.disabled || (c.checked = !c.checked)">
             <span class="opt-dot"></span><span>{{ c.label }}</span>
           </button>
         </div>

@@ -625,6 +625,99 @@ for (const skin of SKINS) {
         }, { message: '回执应体现被跳过的非活跃目标数(用户要看得懂"选了 2 个为什么只汇报了 1 个")',
           timeout: 8_000 }).toBe(true);
       });
+
+      /* 删除确认框(issue 26-10-17-1703): 删除链是「非活跃禁汇报」专题唯一漏接的入口 ——
+       * 六个删除入口(单种子/单组/批量/整集/抽屉/键盘)汇入 _deleteFlow, 默认勾选的「删除前
+       * 强制重新汇报」对非活跃种子请求照发 -> 后端第二道闸 warn -> _reannounceAll 不放行 ->
+       * 删除被整体中止(须手动取消勾选才能删)。修法两层: 闸门层(全非活跃时 opt-pill 禁用+
+       * 取消勾选+title 给原因, 样式层真禁点击)与投递层(reannouncePlan 只投活跃)。
+       * 断言按 hash 落(不数条数); 全暂停场景 = 零 reannounce 请求且删除成功;
+       * 混选场景 = 只投活跃 + 跳过数在等待态就报 + 删除照常。 */
+      test('删除确认框: 全非活跃目标汇报项禁用且删除照常成功 @fast', async ({ page }) => {
+        // ok 模式门控: 删除回执 ok 才出「已删除」toast; error 模式下删除回执 error 是本动的预期
+        requireMode(test, { cmdResult: ['ok'] });
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const pausedRow = page.locator('.torrent-row.s-paused').first();
+        expect(await pausedRow.count(), '首屏窗口内应有 s-paused 行').toBeGreaterThan(0);
+        const pausedHash = await pausedRow.getAttribute('data-hash');
+
+        await clickRow(page, pausedRow, { button: 'right' });
+        await ctxItem(page, '删除该种子').click();
+        await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
+        const pill = page.locator('.modal-opts .opt-pill').first();
+        await expect(pill, '全非活跃目标的汇报项应禁用(is-gated)').toHaveClass(/is-gated/);
+        expect(String(await pill.getAttribute('class')), '禁用即取消勾选(不得保持 on)').not.toMatch(/(^|\s)on(\s|$)/);
+        await expect(pill, '禁用态应有 aria-disabled(辅助技术可感知)').toHaveAttribute('aria-disabled', 'true');
+        /* 模板 @click 短路(第二层保险): aria-disabled 让 Playwright 按 actionability 拒绝真实
+         * 点击(禁用语义为真), 故用合成 click 事件验"事件真到了也不切换" —— 与坑档口径相反,
+         * 复选框点下去要有确定反馈(菜单项是"置灰仍可点、行为层再拦", 这里两层都拦)。 */
+        await pill.dispatchEvent('click');
+        expect(String(await pill.getAttribute('class')), '禁用项收到点击事件也不得变为 on').not.toMatch(/(^|\s)on(\s|$)/);
+        const tip = (await pill.getAttribute('data-aq-tip')) || (await pill.getAttribute('title'));
+        expect(tip, '禁用原因应可见(data-aq-tip)').toMatch(/无法强制重新汇报/);
+
+        const { hits, off } = reannounceTap(page);
+        const bulk = bulkTap(page);
+        await page.locator('.modal-actions .bt.danger-solid').click();
+        await expect.poll(() => bulk.hits.n, { message: '删除应发出 bulk 投递', timeout: 8_000 }).toBe(1);
+        const posted = JSON.parse(/** @type {string} */ (bulk.hits.body));
+        expect(posted.action, '载荷 action=delete').toBe('delete');
+        expect(posted.hashes, '删除集合按 hash 落(含目标种子)').toContain(pausedHash);
+        off();
+        expect(hits.n, '全非活跃目标不得发出任何 reannounce 请求(删除不再被「汇报未确认」中止)').toBe(0);
+        await expect.poll(async () => {
+          const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
+          return (ts || []).some((x) => x.startsWith('ok|已删除'));
+        }, { message: '删除应照常成功(toast「已删除」)', timeout: 8_000 }).toBe(true);
+      });
+
+      test('删除确认框: 混选放行但只汇报活跃目标(删除照常) @fast', async ({ page }) => {
+        requireMode(test, { cmdResult: ['ok'] });
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const pausedRow = page.locator('.torrent-row.s-paused').first();
+        const activeRow = page.locator('.torrent-row.s-seeding, .torrent-row.s-downloading').first();
+        expect(await pausedRow.count(), '首屏窗口内应有 s-paused 行').toBeGreaterThan(0);
+        expect(await activeRow.count(), '首屏窗口内应有活跃行').toBeGreaterThan(0);
+        const pausedHash = await pausedRow.getAttribute('data-hash');
+        const activeHash = await activeRow.getAttribute('data-hash');
+        expect(pausedHash && activeHash && pausedHash !== activeHash, '两个目标必须是不同种子').toBe(true);
+
+        await clickRow(page, pausedRow, { modifiers: ['Control'] });
+        await clickRow(page, activeRow, { modifiers: ['Control'] });
+        expect(await readInst(page, '(vm.selMembers || []).length'), '混选应选中 2 个种子').toBe(2);
+
+        await clickRow(page, activeRow, { button: 'right' });
+        await ctxItem(page, '批量删除').click();
+        await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
+        const pill = page.locator('.modal-opts .opt-pill').first();
+        // 混选按 qB 口径放行(任一活跃即可用): 不禁用、保持默认勾选, 只在 pill 上报跳过数(D5)
+        expect(String(await pill.getAttribute('class')), '混选含活跃目标 -> 汇报项不得禁用').not.toMatch(/is-gated/);
+        await expect(pill, '混选时汇报项保持默认勾选').toHaveClass(/(^|\s)on(\s|$)/);
+        await expect(pill, 'pill 应带跳过说明(对话框打开时即可见)').toContainText('非活跃目标将跳过');
+
+        const { hits, off } = reannounceTap(page);
+        const bulk = bulkTap(page);
+        await page.locator('.modal-actions .bt.danger-solid').click();
+        await expect.poll(() => bulk.hits.n, { message: '删除应发出 bulk 投递', timeout: 8_000 }).toBe(1);
+        const posted = JSON.parse(/** @type {string} */ (bulk.hits.body));
+        expect([...posted.hashes].sort(), '删除集合按 hash 落(混选两个目标都在)')
+          .toEqual([activeHash, pausedHash].sort());
+        off();
+        expect(hits.targets, '活跃目标必须被投递').toContain(activeHash);
+        expect(hits.targets, '非活跃目标不得被投递(混选时必须收敛掉)').not.toContain(pausedHash);
+        await expect.poll(async () => {
+          const ts = await readInst(page, "(vm.toasts || []).map((t) => t.text)");
+          return (ts || []).some((x) => x.includes('跳过 1 个非活跃'));
+        }, { message: '跳过数应在等待态就报出来(D5)', timeout: 8_000 }).toBe(true);
+        await expect.poll(async () => {
+          const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
+          return (ts || []).some((x) => x.startsWith('ok|已删除'));
+        }, { message: '删除应照常成功(toast「已删除」)', timeout: 8_000 }).toBe(true);
+      });
     });
   });
 }
