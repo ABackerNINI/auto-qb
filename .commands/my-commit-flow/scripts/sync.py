@@ -56,6 +56,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _pipeline import (  # noqa: E402
+    GIT_ATTEMPTS,
     changed_files,
     emit_steps,
     expand_run,
@@ -69,13 +70,15 @@ from _pipeline import (  # noqa: E402
 from _ship_config import CONFIG_NAME, ConfigMissing, load_config, resolve_branch, resolve_main_remote  # noqa: E402
 
 
-def remote_sha(name: str, branch: str) -> str:
+def remote_sha(name: str, branch: str, attempts: int = GIT_ATTEMPTS) -> str:
     """取远端 ref 真值(空串 = 取不到)。**取不到 ≠ 不一致** —— 调用方按「无法核实」如实说。
 
     「重试」已下沉到 git 层(`_pipeline.run_git`: 网络子命令失败即重试, 单次超时 20s) ——
     这里**不再套第二层**, 否则 ls-remote 会被重试 9 次, 离线时白等三个退避周期(2026-10-06)。
+    attempts 只给**拒跑路径上的旁证查询**收紧到 1(2026-10-17: commit.py 树净判"本地是否领先远端"),
+    那里不值得为一句"无事可做"等三个退避周期; 同步判据自己一律用默认值。
     """
-    out = git("ls-remote", name, branch, check=False)
+    out = git("ls-remote", name, branch, check=False, attempts=attempts)
     for line in out.splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == f"refs/heads/{branch}":

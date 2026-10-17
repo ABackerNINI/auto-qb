@@ -33,6 +33,11 @@
                                           树净形态) → 删除 + 拒跑, 不产生新提交
 - test_message_kept_when_nothing_to_commit
                                           树净且消息与 HEAD 不匹配(正常待提交消息) → 照旧拒绝, 文件保留
+- test_clean_tree_ahead_routes_to_push        树净但本地领先远端(提交已落稳、只差推送, 2026-10-17 误读现场)
+                                          → 拒跑行直送 ship.push, 不再读成「改动在别的 clone 或未保存」
+- test_clean_tree_in_sync_reports_nothing_to_do
+                                          树净且与远端一致 → 如实说「确实无事可做」
+- test_clean_tree_offline_keeps_both_exits 取不到远端真值(离线) → 如实说「取不到」+ 两条出路都摆出来
 - test_check_refs_pass_on_fresh_repo      ref 三处核对在干净仓库通过
 - test_classify_form_pure                 停手形态分流纯函数: packed 落后 vs 分支指针被回退
 - test_check_refs_packed_stale_routes_to_pack_refs
@@ -555,6 +560,7 @@ def test_message_consumed_on_verify_fail_when_head_matches(repo, monkeypatch, ca
     assert rc == 1
     assert "ref 三处不一致" in out  # 失败行照发(ref 处置指引不变)
     assert "消息文件已消费" in out and "已落稳" in out
+    assert "已落稳" in out and "不要重跑 ship.commit" in out  # 结果行不许与「已落稳」自相矛盾(2026-10-17)
     assert not msg.exists()  # 提交已落稳 → 不留残骸
 
 
@@ -579,6 +585,35 @@ def test_message_kept_when_nothing_to_commit(repo, capsys):
     assert rc == 1
     assert "没有可提交的改动" in out
     assert msg.exists()
+
+
+def test_clean_tree_ahead_routes_to_push(repo, capsys):
+    """树净但本地领先远端 —— 即「首跑提交成功(未推送)」后再跑 ship.commit 的现场: 提交已在本地、
+    只差推送。拒跑行必须直送 `commands run ship.push`(2026-10-17 实证: 旧口径把它读成
+    「改动在别的 clone 或未保存」, 报告里被读成"提交丢了")。"""
+    _commit_file(repo, "local.txt", "x\n", "✨ local only")  # 本地新提交, 故意不推
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "没有可提交的改动" in out
+    assert "有未推送的提交" in out and "commands run ship.push" in out and "不要重跑 ship.commit" in out
+
+
+def test_clean_tree_in_sync_reports_nothing_to_do(repo, capsys):
+    """树净且与远端一致 → 如实说「确实无事可做」, 别瞎指 ship.push。"""
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "没有可提交的改动" in out and "一致" in out and "无事可做" in out
+
+
+def test_clean_tree_offline_keeps_both_exits(repo, monkeypatch, capsys):
+    """取不到远端真值(离线 / 未配主线) → 如实说「取不到远端真值」, 两条出路(补推 / 改动在别处)都摆出来。"""
+    monkeypatch.setattr(sync_mod, "remote_sha", lambda name, branch, attempts=3: "")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "取不到远端真值" in out and "commands run ship.push" in out and "别的 clone" in out
 
 
 def test_check_refs_pass_on_fresh_repo(repo, monkeypatch):

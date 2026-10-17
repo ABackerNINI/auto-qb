@@ -3,7 +3,7 @@
 > 摘要: 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已内联进 ship 脚本(结果行「提交成功 <hash>」), 手动 ls-remote 仅在报「无法核实」时; Gitee 间歇性卡住 / `Recv failure` 已由 git 层「单次超时 20s + 有界重试 3 次」兜住(2026-10-06, 不再要手工补推); 镜像只给超时且允许滞后, 成败都不提(26-09-28 定调)。
 > 触发: push, 推送, 提交闸门, 推没推上, Gitee, GitHub, 镜像, 卡住, 重试, 超时, 补推, CI action
 
-**Refs:** memory-bank/tasks/26-10-06-commands-git-retry-timeout.md
+**Refs:** memory-bank/tasks/26-10-06-commands-git-retry-timeout.md,memory-bank/tasks/26-10-17-ship-commit-clean-tree-routing.md
 
 ### 提交闸门(`_pipeline.py` 闸门引擎 / `commit.py` 编排)在工具 shell 的默认 `TMPDIR` 下必红
 
@@ -33,6 +33,14 @@
   **两个具体错误签名**上(`Recv failure` / `Connection was reset`), 而卡住是**不报错** —— 签名判据对「不返回」
   天然失效; 且旧口径是「重试一次」+ 单次超时 120s, 单次白等的代价远大于重试的收益(提交被拆成
   「未推送 + 手工补推」)。已改为 git 层统一「单次 20s + 有界重试 3 次」(`_pipeline.run_git`)。
+
+### 树净时别重跑 `ship.commit` —— 「提交已落稳、只差推送」会被读成「改动没落笔」
+
+- **触发**: `ship.commit` 报「提交成功 <hash>(未推送)」或核 ref 假红后想「再跑一次」; 或看到树净拒跑行「没有可提交的改动」。
+- **判别**: 树净拒跑是 `resolve_stage_plan` 在 `git commit` **之前**的出口(`commit.py`)⇒ 「提交成功」与「没有可提交的改动」**逻辑上不可能同出一跑** —— 两条都见着, 必是**两次调用**(2026-10-17 现场: 首跑已落稳于本地, 二次又跑 `ship.commit` 而非 `ship.push`)。
+  判「本地是否领先远端」只认 `ls-remote`(`refs/remotes/*` 写入本环境被静默丢弃、`status -sb` 是快照, 皆不可信 —— 单点见本目录 [refs.md](refs.md))。
+- **处置**: 树净拒跑行**已自动分流**(`commit.py::clean_tree_route`, 旁证查询 `attempts=1`): 本地 ≠ 远端 → **直送 `commands run ship.push`(不要重跑 ship.commit)**; 一致 → 确实无事可做; 取不到远端真值 → 如实说「无法核实」并把两条出路都摆出来。
+  核 ref 不一致但 HEAD 消息与本次一致 = 已落稳, **同样直送补推**(结果行不再写「提交可能没落稳」)。⚠ 结果行仍带「提交失败」前缀不是「提交丢了」—— 保留 rc=1 是因为 ref 不一致另有「分支指针真被回退」一档(`verify_ref.classify_form`), 提交对象本身已在本地。
 
 ### GitHub Actions: `astral-sh/setup-uv` 没有浮动大版本标签
 

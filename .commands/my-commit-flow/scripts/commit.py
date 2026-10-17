@@ -8,6 +8,8 @@
   推送未完成  → 提交成功 <hash>(未推送) ＋ 推送未完成: <原因> —— 补推: commands run ship.push
                  (提交这个主目标已达成, 别重新提交; 退出码仍 0)
   失败        → 提交失败: <原因> —— <下一步>(闸门红附失败闸门名 + 输出末 20 行)
+                树净的「没有可提交的改动」按**远端现查真值**分流(2026-10-17): 本地 ≠ 远端(有未推送的
+                提交) → 直送 commands run ship.push, 别重跑 ship.commit; 一致 → 确实无事可做; 取不到 → 两条出路都摆
 
 一次 ship.commit 里 HEAD 最多被改写三次 —— 提交自身、内部同步的 rebase、闸门复跑后的 amend
 (补推前 run_push 内部还可能再同步一次)。结果行只给终值, 前两段若不登记就成了黑箱 —— 这正是 v3.1
@@ -34,7 +36,8 @@
 消息文件不删的时机: commit 失败, 或 ref 核对失败**且** HEAD 消息与文件不一致(提交真没落到
 ref, 修好重跑还能用同一份)。核对失败但 HEAD 消息与文件一致 = 提交已落稳(packed-refs 滞后类
 误报, 2026-10-07 实证), 照常消费; 入口另有一道残留扫描(文件内容 == HEAD 消息即删并拒跑),
-任何路径漏删的残骸在下一次 ship.commit 自愈。
+任何路径漏删的残骸在下一次 ship.commit 自愈。已判落稳时, 结果行如实写「提交已落稳, 仅分支 ref 未
+核对通过」并直送补推 —— 不许再写「提交可能没落稳」(2026-10-17: 自相矛盾那句被读成"要重跑 ship.commit")。
 
 用法: python <包>/scripts/commit.py [路径...] [--message-file <文件>] [--no-push]
 退出码: 0 成功(含推送未完成) · 1 失败(输出自带原因, 不存在需要查的码表)
@@ -64,7 +67,13 @@ from _pipeline import (  # noqa: E402
     staged_overflow,
     step,
 )
-from _ship_config import ConfigMissing, find_root as _find_root, load_config  # noqa: E402
+from _ship_config import (  # noqa: E402
+    ConfigMissing,
+    find_root as _find_root,
+    load_config,
+    resolve_branch,
+    resolve_main_remote,
+)
 from verify_ref import check_refs  # noqa: E402
 
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
@@ -156,11 +165,42 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
         to_stage = all_changed
         omitted = []
     if not to_stage:
-        return [], [], "没有可提交的改动 —— 工作区干净(改动在别的 clone 或未保存?)"
+        return [], [], "没有可提交的改动 —— 工作区与索引都干净"
     red = [p for p in to_stage if any(r in p for r in red_lines)]
     if red:
         return [], [], f"红线文件不得提交: {' '.join(red)} —— 移出提交范围后重跑(见 AGENTS.md「红线」节)"
     return to_stage, omitted, None
+
+
+def clean_tree_route(cfg: dict) -> str:
+    """树净「没有可提交的改动」拒跑行的后缀 —— 按远端真值分流, 别把"已提交待推"读成"改动没落笔"。
+
+    为什么(2026-10-17 实证): 首跑 ship.commit 因同步/推送失败停在「提交成功 <hash>(未推送)」后, 若再跑
+    ship.commit(而不是 ship.push), 树已净 —— 旧口径只报「工作区干净(改动在别的 clone 或未保存?)」,
+    把"提交已在本地、只差推送"误导成"改动没落地"(报告里被读成"提交丢了")。分流三档:
+    - 远端 tip ≠ HEAD → 本地有未推送的提交 → 直送 `commands run ship.push`;
+    - 远端 tip == HEAD → 已同步, 确实无事可做;
+    - 取不到远端真值(离线 / 未配主线) → 如实说「无法核实」, 两条出路都摆出来。
+    判据只认远端现查真值: 本环境 refs/remotes 的写入会被静默丢弃, `status -sb` 的 ahead/behind 是快照,
+    都不可信(单点 memory-bank/pitfalls/git/refs.md)。attempts=1 —— 这是拒跑路径上的旁证查询, 离线时
+    不该像推送那样白等三个退避周期(见 sync.remote_sha 的 attempts)。
+    """
+    from sync import remote_sha  # noqa: E402  (延后 import: 与 run_sync 同款, 测试替身可覆盖)
+
+    main, _url = resolve_main_remote(cfg)
+    tip = remote_sha(main, resolve_branch(cfg), attempts=1) if main else ""
+    if not tip:
+        return (
+            "。取不到远端真值(未配主线 / 离线) —— 若上一步报过「提交成功 <hash>(未推送)」就补推 "
+            "commands run ship.push; 否则核对改动是否在别的 clone / 未保存"
+        )
+    head = git_run("rev-parse", "HEAD").stdout.strip()
+    if tip == head:
+        return f"。与远端 {tip[:8]} 一致, 确实无事可做"
+    return (
+        f"。本地 {head[:8]} ≠ 远端 {tip[:8]}: 有未推送的提交 —— 补推走 commands run ship.push"
+        f"(不要重跑 ship.commit; 见 references/pipeline.md「推送未完成」)"
+    )
 
 
 def _sample(files: list[str], limit: int = 3) -> str:
@@ -229,7 +269,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     to_stage, omitted, refuse = resolve_stage_plan(args.paths, cfg["red_lines"], staged, unstaged)
     if refuse:
-        emit(steps, f"提交失败: {refuse}")
+        # 树净时别把"已提交、只差推送"读成"改动没落笔" —— 按远端真值补一句分流(2026-10-17, 见 clean_tree_route)
+        line = refuse if (staged or unstaged) else f"{refuse}{clean_tree_route(cfg)}"
+        emit(steps, f"提交失败: {line}")
         return 1
     warn_files = hit(staged + unstaged, cfg["warn_lines"])
 
@@ -294,7 +336,14 @@ def main(argv: list[str] | None = None) -> int:
             # 提交已落稳 → 照常消费; ref 处置后没有「重跑同一份消息」的需求了。
             consume_message_file(msg_file, root)
             print("消息文件已消费: HEAD 消息与之一致, 本次提交已落稳 —— 处置 ref 后直接补同步/推送即可")
-        emit(steps, "提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
+            # 结果行不许与上面那句自相矛盾: 已判定落稳就别再说「提交可能没落稳」(2026-10-17),
+            # 并直送补推 —— 否则「落稳却报失败」被读成"要重跑 ship.commit"(那次报告的直接诱因)。
+            emit(
+                steps, "提交失败: ref 三处不一致(HEAD 消息与本次一致 = 提交已落稳, 仅分支 ref 未核对通过)"
+                " —— 处置下方 ref 后直接补推: commands run ship.push(不要重跑 ship.commit)"
+            )
+        else:
+            emit(steps, "提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
         for line in detail:
             print(line)
         return 1  # 消息文件保留(仅当判不匹配 = 提交真没落到 ref): 现场未定, 别急着消费
