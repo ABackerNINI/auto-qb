@@ -25,9 +25,11 @@ Windows 绑定语义 (坑档 platform-fs / web): HTTPServer 默认 allow_reuse_a
 POSIX 上 SO_REUSEADDR 只绕 TIME_WAIT 不抢监听 ⇒ 保留 True 便于重启。
 
 发现指针 (S12 / D6): bind 成功后把 {schema, version, pid, started_at, host, port,
-data_dir, token_path, exe_path, autostart_registered} (字段见计划 §05) 原子写进
-用户级指针目录 endpoint.json, 优雅退出 (stop / atexit) 删除 —— auto-qb 据此发现
-工具 (免配端口、免端口漂移); 写入失败只 WARNING 不阻断服务 (§09)。
+data_dir, token_path, exe_path, autostart_registered, autostart_error} (字段见计划 §05)
+原子写进用户级指针目录 endpoint.json, 优雅退出 (stop / atexit) 删除 —— auto-qb 据此
+发现工具 (免配端口、免端口漂移); 写入失败只 WARNING 不阻断服务 (§09)。
+`autostart_error` 是 2026-10-17 追加的可选字段 (issue 26-10-17-1455): 启动期注册失败的
+原因, 成功/未尝试为 null; schema 不升版 —— 旧读者忽略未知键, 新读者 `.get` 得 None。
 """
 
 from __future__ import annotations
@@ -137,6 +139,7 @@ class ControlServer:
         started_at: Optional[float] = None,
         installer_factory: Optional[Callable[[str], Any]] = None,
         endpoint_file: Optional[str] = None,
+        autostart_error: Optional[str] = None,
     ) -> None:
         self.storage = storage
         self.sampler = sampler
@@ -147,6 +150,9 @@ class ControlServer:
         self._started_at = started_at if started_at is not None else time.time()
         # 自启后端工厂 (S6 /autostart): 默认 = 真 installer; 单测注入替身以 hermetic
         self._installer_factory = installer_factory or build_installer
+        # 启动期自启注册的失败原因 (S14/D13): 注册发生在 server 起来之前, 那时没有指针
+        # 可写, 故由调用方把原因带进来, 写指针时一起落盘 (None = 没失败/没尝试)
+        self._autostart_error = autostart_error
         # 发现指针路径 (S12/D6): 默认用户级目录; 单测注入 tmp 路径保持 hermetic
         self._endpoint_file = endpoint_file or endpoint_path()
         self._httpd: Optional[ThreadingHTTPServer] = None
@@ -212,6 +218,7 @@ class ControlServer:
             "token_path": os.path.abspath(self.token_manager.path),
             "exe_path": sys.executable,
             "autostart_registered": self._autostart_registered(),
+            "autostart_error": self._autostart_error,
         }
         try:
             written = write_endpoint(payload, path=self._endpoint_file)

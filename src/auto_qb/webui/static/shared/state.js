@@ -55,6 +55,7 @@ window.AQB_STATE = {
         pid: 0,
         dataDir: "",
         autostartRegistered: false,
+        autostartError: "",      // 启动期自启注册失败原因(指针可选字段, 与 autoErr 的临时态分开)
         status: null,
         form: {},
         saving: false,

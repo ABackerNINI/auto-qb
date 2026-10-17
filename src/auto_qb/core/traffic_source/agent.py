@@ -95,6 +95,8 @@ class ToolEndpoint:
     version: str = ""
     pid: int = 0
     autostart_registered: bool = False
+    # 启动期自启注册的失败原因(issue 26-10-17-1455): 指针可选字段, 缺省/旧指针 -> None
+    autostart_error: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,7 @@ def parse_pointer(payload) -> Optional[ToolEndpoint]:
         version=str(payload.get("version") or ""),
         pid=pid,
         autostart_registered=bool(payload.get("autostart_registered")),
+        autostart_error=(str(payload["autostart_error"]) if payload.get("autostart_error") else None),
     )
 
 
@@ -303,6 +306,7 @@ class TrafficSourceAgent:
             "pid": ep.pid if ep else 0,
             "data_dir": ep.data_dir if ep else "",
             "autostart_registered": ep.autostart_registered if ep else False,
+            "autostart_error": ep.autostart_error if ep else None,
             "error": "",
             "retry_s": 0.0,
         }

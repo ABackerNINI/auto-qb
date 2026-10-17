@@ -92,6 +92,7 @@ def _source_status(manager) -> dict:
         "pid": st["pid"],
         "data_dir": st["data_dir"],
         "autostart_registered": st["autostart_registered"],
+        "autostart_error": st["autostart_error"],
         "error": st["error"],
         "retry_s": st["retry_s"],
         "status": None,

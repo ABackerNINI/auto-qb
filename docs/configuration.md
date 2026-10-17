@@ -483,13 +483,15 @@ uv run global-traffic-monitor uninstall-autostart                      # 卸载�
 
 | 平台 | 机制 | 注册项 |
 |---|---|---|
-| Windows | `schtasks /SC ONLOGON`（当前用户） | 计划任务 `gtm-autostart` |
-| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/gtm.service` |
-| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.gtm.autostart.plist` |
+| Windows | `HKCU\...\Run` 注册表值（当前用户，登录时触发，**零提权**） | 注册表值 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `global-traffic-monitor` |
+| Linux | `systemctl --user enable --now` | `~/.config/systemd/user/global-traffic-monitor.service` |
+| macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.global-traffic-monitor.autostart.plist` |
 
 - 注册的是一条 `python -m gtm run --data-dir <数据目录>` 守护命令：解释器取执行安装命令时用的那个 python（装了 gtm 的 venv），数据目录解析成绝对路径写死进注册项（登录会话里环境变量不可控）。**换了 venv 或数据目录**，先卸载再注册。
-- 幂等判据 = 期望态是否达成（Windows 看计划任务是否存在；Linux / macOS 看单元文件或 plist 内容一致且已启用）；退出码 `0` = 达成（含无需动作）、`1` = 命令失败、`2` = 平台不支持。
-- 设置页的自启开关走同一条路径（经工具控制面 `POST /autostart` 代跑安装器，成功即回写工具 `config.yml` 的 `autostart`），可与命令行混用。**开关状态读指针里的 `autostart_registered`**，auto-qb 自己不存这个状态。
+- 幂等判据 = 期望态是否达成（Windows 看 Run 值是否存在，内容与当前参数不一致时覆盖写；Linux / macOS 看单元文件或 plist 内容一致且已启用）；退出码 `0` = 达成（含无需动作）、`1` = 命令失败、`2` = 平台不支持。
+- **Windows 走注册表而不是计划任务**：`schtasks /SC ONLOGON` 是「任何用户登录」级系统触发器，普通权限进程创建会被拒（`拒绝访问`），只有提权才能注册 —— 而工具由 auto-qb 以普通权限拉起，无人值守路径上没人点 UAC。HKCU Run 零提权，语义正好是「当前用户登录」。
+- **Windows 两条注意**：①Run 值有 260 字符上限（解释器路径 + `-m gtm run --data-dir <数据目录>`），超了注册会 fail-fast 报错（不截断）—— 目录太深就把工具或数据目录挪短；②升级前若曾用**管理员**权限注册过旧计划任务，它会残留，管理员 cmd 执行 `schtasks /Delete /TN global-traffic-monitor-autostart /F` 清掉（报「找不到」= 本来就没有，正常）。
+- 设置页的自启开关走同一条路径（经工具控制面 `POST /autostart` 代跑安装器，成功即回写工具 `config.yml` 的 `autostart`），可与命令行混用。**开关状态读指针里的 `autostart_registered`**，auto-qb 自己不存这个状态；**注册失败的原因读指针里的 `autostart_error`**（可选字段，成功/未尝试为 null），设置页在「未注册」后直接显示它 —— 否则用户只看到开关没生效、不知为什么。
 - 自启项**不带** `--autostart`（它只是那条守护命令本身）；`--autostart` 只出现在「被 auto-qb 拉起」的那次执行里 —— 意图恒定，真不真注册由工具 config `autostart` 裁决。
 
 ### auto-qb 侧：发现与自动拉起

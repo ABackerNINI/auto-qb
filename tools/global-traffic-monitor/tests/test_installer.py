@@ -1,8 +1,9 @@
 """S5 守阵: 自启 installer 三平台幂等注册/卸载 (平台命令层 mock, 全 hermetic).
 
 覆盖计划 §04 S5 出口判据: 三平台注册/卸载/重复注册(幂等) + 不支持平台的明确提示。
-真机侧 (Windows 计划任务真的注册并拉起来) 走冒烟, 不进本文件 —— 本文件一行都不碰真机:
-平台命令全部经注入的 FakeRunner, 文件系统根全部经 tmp_path。
+真机侧 (Windows Run 值真的写进注册表并拉起来) 走冒烟, 不进本文件 —— 本文件一行都不碰
+真机: 平台命令经注入的 FakeRunner, 文件系统根经 tmp_path, 注册表经注入的 FakeRegistry
+(不碰真 HKCU, 也就不需要自清理)。
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S5)。
 """
@@ -25,7 +26,7 @@ from gtm.installer import (
     ACTION_UNREGISTERED,
     DEFAULT_LAUNCHD_LABEL,
     DEFAULT_SYSTEMD_UNIT,
-    DEFAULT_WINDOWS_TASK,
+    DEFAULT_WINDOWS_VALUE,
     PLATFORM_LINUX,
     PLATFORM_MACOS,
     PLATFORM_WINDOWS,
@@ -36,7 +37,9 @@ from gtm.installer import (
     LaunchdBackend,
     SystemdUserBackend,
     UnsupportedPlatformError,
-    WindowsTaskBackend,
+    WINDOWS_COMMAND_MAX,
+    WINDOWS_RUN_KEY,
+    WindowsRunKeyBackend,
     _decode,
     build_installer,
     default_runner,
@@ -78,8 +81,70 @@ def rc_handler(mapping, default=0):
     return handler
 
 
-def make_win(data_dir, runner):
-    return WindowsTaskBackend(make_plan(data_dir), runner)
+class _FakeRegKey:
+    """OpenKey/CreateKeyEx 的返回值: 支持 with (真 winreg 的键对象也是上下文管理器)."""
+    def __init__(self, reg):
+        self._reg = reg
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.closed = True
+        return False
+
+
+class FakeRegistry:
+    """winreg 替身: 内存 dict + 后端用到的最小 API 面 (不碰真 HKCU).
+
+    `key_exists=False` 模拟「Run 键整个不存在」(全新用户); `fail_with` 模拟写入/删除被
+    安全软件或策略拒绝 (真机上是 PermissionError / OSError)。
+    """
+
+    HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+    KEY_READ = 0x20019
+    KEY_SET_VALUE = 0x0002
+    REG_SZ = 1
+
+    def __init__(self, values=None, *, key_exists=True):
+        self.values = dict(values or {})
+        self.key_exists = key_exists
+        self.writes: list[tuple[str, str]] = []
+        self.deletes: list[str] = []
+        self.fail_with: OSError | None = None
+
+    def OpenKey(self, key, sub_key, reserved=0, access=None):
+        if not self.key_exists:
+            raise FileNotFoundError(2, "系统找不到指定的文件。", sub_key)
+        return _FakeRegKey(self)
+
+    def CreateKeyEx(self, key, sub_key, reserved=0, access=None):
+        self.key_exists = True
+        return _FakeRegKey(self)
+
+    def QueryValueEx(self, handle, name):
+        if name not in self.values:
+            raise FileNotFoundError(2, "系统找不到指定的文件。", name)
+        return self.values[name], self.REG_SZ
+
+    def SetValueEx(self, handle, name, reserved, type_, value):
+        if self.fail_with:
+            raise self.fail_with
+        self.values[name] = value
+        self.writes.append((name, value))
+
+    def DeleteValue(self, handle, name):
+        if self.fail_with:
+            raise self.fail_with
+        if name not in self.values:
+            raise FileNotFoundError(2, "系统找不到指定的文件。", name)
+        del self.values[name]
+        self.deletes.append(name)
+
+
+def make_win(data_dir, reg=None, runner=None):
+    return WindowsRunKeyBackend(make_plan(data_dir), runner or FakeRunner(), registry=reg or FakeRegistry())
 
 
 def make_linux(data_dir, runner, home):
@@ -139,7 +204,7 @@ def test_build_installer_picks_backend_per_platform(tmp_path):
     runner = FakeRunner()
     assert isinstance(
         build_installer("d", platform=PLATFORM_WINDOWS, python_exe=EXE, runner=runner),
-        WindowsTaskBackend,
+        WindowsRunKeyBackend,
     )
     assert isinstance(
         build_installer("d", platform=PLATFORM_LINUX, python_exe=EXE, home=str(tmp_path), runner=runner),
@@ -151,102 +216,110 @@ def test_build_installer_picks_backend_per_platform(tmp_path):
     )
 
 
-# ---- Windows: schtasks ----
+# ---- Windows: HKCU Run 键 (零提权, 登录时触发) ----
 
 
-def test_windows_register_creates_onlogon_task(tmp_path):
-    """未注册 -> schtasks /Create /SC ONLOGON /TR <引号命令>; 先查后建."""
-    runner = FakeRunner(lambda argv: 1 if "/Query" in argv else 0)
+def test_windows_register_writes_run_value(tmp_path):
+    """未注册 -> 在 HKCU Run 键写一个值 (命令 = 解释器 + -m gtm run --data-dir)."""
+    reg = FakeRegistry()
     data_dir = str(tmp_path / "data")
-    result = make_win(data_dir, runner).register()
+    result = make_win(data_dir, reg).register()
 
     assert result.action == ACTION_REGISTERED and result.changed
-    assert runner.calls == [
-        ["schtasks", "/Query", "/TN", DEFAULT_WINDOWS_TASK],
-        [
-            "schtasks",
-            "/Create",
-            "/TN",
-            DEFAULT_WINDOWS_TASK,
-            "/SC",
-            "ONLOGON",
-            "/TR",
-            f'"{EXE}" -m gtm run --data-dir "{data_dir}"',
-            "/F",
-        ],
-    ]
+    assert reg.values[DEFAULT_WINDOWS_VALUE] == f'"{EXE}" -m gtm run --data-dir "{os.path.abspath(data_dir)}"'
+    assert "登录时触发" in result.message
 
 
-def test_windows_register_skips_when_task_exists(tmp_path):
-    """已存在 -> 跳过, 一条 /Create 都不发 (计划「注册前检查存在则跳过」)."""
-    runner = FakeRunner(lambda argv: 0)  # Query 命中
-    result = make_win(tmp_path, runner).register()
-
-    assert result.action == ACTION_SKIPPED and not result.changed
-    assert runner.only("schtasks") == [["schtasks", "/Query", "/TN", DEFAULT_WINDOWS_TASK]]
+def test_windows_register_runs_no_platform_command(tmp_path):
+    """零提权路径 = 纯注册表读写: runner 一次都不该被调 (schtasks 路径已移除)."""
+    runner = FakeRunner()
+    make_win(tmp_path, FakeRegistry(), runner=runner).register()
+    assert runner.calls == []
 
 
-def test_windows_register_twice_is_idempotent(tmp_path):
-    """重复注册幂等: 第二次跳过, 全程只有一条 /Create (任务不重复)."""
-    created = {"n": 0}
+def test_windows_register_skips_when_value_matches(tmp_path):
+    """值内容与当前参数一致 -> 跳过 (幂等 no-op), 不重写."""
+    reg = FakeRegistry()
+    backend = make_win(tmp_path, reg)
+    backend.register()
+    writes_before = list(reg.writes)
 
-    def handler(argv):
-        if "/Create" in argv:
-            created["n"] += 1
-            return 0
-        return 0 if created["n"] else 1  # 建过之后 Query 才命中
-
-    runner = FakeRunner(handler)
-    backend = make_win(tmp_path, runner)
-    first = backend.register()
     second = backend.register()
 
-    assert first.action == ACTION_REGISTERED
-    assert second.action == ACTION_SKIPPED
-    assert len([c for c in runner.calls if "/Create" in c]) == 1
-    assert created["n"] == 1
+    assert second.action == ACTION_SKIPPED and not second.changed
+    assert reg.writes == writes_before
+
+
+def test_windows_register_refreshes_stale_value(tmp_path):
+    """值在但命令已过期 (解释器/数据目录变了) -> 覆盖写, 结论写「已刷新」."""
+    reg = FakeRegistry({DEFAULT_WINDOWS_VALUE: '"C:/old/python.exe" -m gtm run --data-dir "C:/old"'})
+    result = make_win(tmp_path, reg).register()
+
+    assert result.action == ACTION_REGISTERED and result.changed
+    assert "已刷新" in result.message
+    assert reg.values[DEFAULT_WINDOWS_VALUE].startswith(f'"{EXE}"')
+
+
+def test_windows_is_registered_ignores_command_content(tmp_path):
+    """开关语义 = 「有没有自启项」: 内容过期也算已注册 (漂移由 register 覆盖写收敛)."""
+    reg = FakeRegistry({DEFAULT_WINDOWS_VALUE: "stale command"})
+    assert make_win(tmp_path, reg).is_registered() is True
 
 
 def test_windows_unregister_absent_is_noop(tmp_path):
-    """本来就没注册 -> absent, 不发 /Delete."""
-    runner = FakeRunner(lambda argv: 1)
-    result = make_win(tmp_path, runner).unregister()
+    """本来就没注册 -> absent, 不发删除."""
+    reg = FakeRegistry()
+    result = make_win(tmp_path, reg).unregister()
 
     assert result.action == ACTION_ABSENT and not result.changed
-    assert [c for c in runner.calls if "/Delete" in c] == []
+    assert reg.deletes == []
 
 
-def test_windows_unregister_deletes_task(tmp_path):
-    """已注册 -> /Delete /F, 结果为 unregistered."""
-    runner = FakeRunner(lambda argv: 0)
-    result = make_win(tmp_path, runner).unregister()
+def test_windows_unregister_deletes_value(tmp_path):
+    """已注册 -> 删值, 结果为 unregistered."""
+    reg = FakeRegistry({DEFAULT_WINDOWS_VALUE: "x"})
+    result = make_win(tmp_path, reg).unregister()
 
     assert result.action == ACTION_UNREGISTERED and result.changed
-    assert runner.calls[-1] == ["schtasks", "/Delete", "/TN", DEFAULT_WINDOWS_TASK, "/F"]
+    assert DEFAULT_WINDOWS_VALUE not in reg.values
+    assert reg.deletes == [DEFAULT_WINDOWS_VALUE]
 
 
-def test_windows_create_failure_raises_with_output(tmp_path):
-    """schtasks /Create 非 0 -> AutostartError, 附注平台输出 (不静默)."""
-    runner = FakeRunner(
-        lambda argv: CommandResult(1, "", "错误: 拒绝访问。") if "/Create" in argv else CommandResult(1, "", "")
-    )
+def test_windows_register_rejects_overlong_command(tmp_path):
+    """命令超 Run 值上限 -> fail-fast (截断会变成一条跑不起来的命令), 一个值都不写."""
+    reg = FakeRegistry()
     with pytest.raises(AutostartError) as ei:
-        make_win(tmp_path, runner).register()
-    assert "schtasks /Create" in str(ei.value) and "拒绝访问" in str(ei.value)
+        make_win(str(tmp_path / ("d" * 260)), reg).register()
+    msg = str(ei.value)
+    assert str(WINDOWS_COMMAND_MAX) in msg and "挪短" in msg
+    assert reg.values == {}
 
 
-def test_windows_missing_command_is_reported(tmp_path):
-    """本机没有 schtasks (命令缺失) -> AutostartError 明说找不到命令."""
-    def boom(argv):
-        raise FileNotFoundError(argv[0])
-
+def test_windows_register_write_denied_is_reported(tmp_path):
+    """注册表写入被拒 (安全软件/策略) -> AutostartError 带原因, 不静默."""
+    reg = FakeRegistry()
+    reg.fail_with = PermissionError(13, "拒绝访问。")
     with pytest.raises(AutostartError) as ei:
-        make_win(tmp_path, FakeRunner(boom)).register()
-    assert "找不到命令" in str(ei.value)
+        make_win(tmp_path, reg).register()
+    msg = str(ei.value)
+    assert "写注册表" in msg and "拒绝访问" in msg
 
 
-def test_windows_tr_quotes_paths_with_spaces(tmp_path):
-    """python 路径与 data_dir 含空格时 TR 仍是一个可解析的命令行 (各自带引号)."""
+def test_windows_target_names_run_value_location(tmp_path):
+    """人读标识带完整位置 (CLI 结论与设置页失败提示都靠它定位)."""
+    assert make_win(tmp_path).target == f"HKCU\\{WINDOWS_RUN_KEY}\\{DEFAULT_WINDOWS_VALUE}"
+
+
+def test_build_installer_injects_registry(tmp_path):
+    """build_installer 把注入的注册表模块透传给后端 (生产走真 winreg, 单测走替身)."""
+    reg = FakeRegistry()
+    backend = build_installer("d", platform=PLATFORM_WINDOWS, python_exe=EXE, runner=FakeRunner(), registry=reg)
+    backend.register()
+    assert DEFAULT_WINDOWS_VALUE in reg.values
+
+
+def test_windows_command_quotes_paths_with_spaces():
+    """python 路径与 data_dir 含空格时仍是一个可解析的命令行 (各自带引号)."""
     plan = AutostartPlan(
         python_exe="C:/Program Files/gtm/.venv/Scripts/python.exe",
         data_dir="C:/my data/gtm",
@@ -543,7 +616,7 @@ def test_cli_parser_exposes_autostart_subcommands():
 
 def test_cli_install_autostart_prints_message_and_exits_zero(monkeypatch, capsys):
     """成功路径: 结论打到 stdout, 退出码 0."""
-    stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册开机自启: 计划任务 'global-traffic-monitor-autostart'"))
+    stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册开机自启: HKCU\\...\\global-traffic-monitor (登录时触发)"))
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
     assert gtm_main.main(["install-autostart"]) == 0
     assert stub.calls == ["register"]
@@ -585,7 +658,7 @@ def test_cli_unsupported_platform_exits_two(monkeypatch, capsys):
 
 def test_cli_installer_error_exits_one(monkeypatch, capsys):
     """平台命令失败 -> 退出码 1 + 错误打到 stderr."""
-    stub = StubBackend(exc=AutostartError("schtasks /Create 失败 (rc=1): 拒绝访问"))
+    stub = StubBackend(exc=AutostartError("写注册表 HKCU\\...\\Run 失败: 拒绝访问"))
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
     assert gtm_main.main(["install-autostart"]) == 1
     err = capsys.readouterr().err
@@ -615,7 +688,7 @@ def test_maybe_register_autostart_no_op_when_user_disabled(monkeypatch):
     """D13 裁决权在 config: 用户关过 (autostart=false) -> 本次 no-op, 不碰 installer (不被装回)."""
     stub = StubBackend()
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
-    gtm_main._maybe_register_autostart("D:/x", Config(autostart=False))
+    assert gtm_main._maybe_register_autostart("D:/x", Config(autostart=False)) is None
     assert stub.calls == []
 
 
@@ -623,13 +696,16 @@ def test_maybe_register_autostart_registers_when_enabled(monkeypatch):
     """config autostart=true -> 顺带幂等注册 (调 register; 幂等判据在 installer 内)."""
     stub = StubBackend(result=AutostartResult(ACTION_REGISTERED, "已注册"))
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
-    gtm_main._maybe_register_autostart("D:/x", Config(autostart=True))
+    assert gtm_main._maybe_register_autostart("D:/x", Config(autostart=True)) is None
     assert stub.calls == ["register"]
 
 
-def test_maybe_register_autostart_swallows_failure(monkeypatch):
-    """注册失败只告警不抛 —— 工具已在跑, 自启是便利不是本次运行的成立前提 (§09 同口径)."""
-    stub = StubBackend(exc=AutostartError("schtasks /Create 失败 (rc=1): 拒绝访问"))
+def test_maybe_register_autostart_returns_reason_on_failure(monkeypatch):
+    """注册失败不抛 (工具已在跑, 自启是便利), 但把原因**返回**给调用方落进指针."""
+    stub = StubBackend(exc=AutostartError("写注册表 HKCU\\...\\Run 失败: 拒绝访问"))
     monkeypatch.setattr(gtm_main, "build_installer", lambda data_dir: stub)
-    gtm_main._maybe_register_autostart("D:/x", Config(autostart=True))  # 不抛异常即通过
+
+    reason = gtm_main._maybe_register_autostart("D:/x", Config(autostart=True))
+
     assert stub.calls == ["register"]
+    assert reason is not None and "拒绝访问" in reason

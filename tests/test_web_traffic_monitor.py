@@ -36,7 +36,7 @@ def _auth(mgr):
     return {_AUTH_KEY: f"Bearer {getattr(mgr.web, _CRED_FIELD)}"}
 
 
-def _endpoint(token_path: str) -> agent.ToolEndpoint:
+def _endpoint(token_path: str, autostart_error=None, autostart_registered=True) -> agent.ToolEndpoint:
     """构造一个「探活成功」端点(S17: 端点/密钥来自指针, 不再来自配置 url/token)"""
     return agent.ToolEndpoint(
         base_url=f"http://{POINTER_HOST}:{POINTER_PORT}",
@@ -44,7 +44,8 @@ def _endpoint(token_path: str) -> agent.ToolEndpoint:
         data_dir="/tmp/gtm-data",
         version="0.1.0",
         pid=4321,
-        autostart_registered=True,
+        autostart_registered=autostart_registered,
+        autostart_error=autostart_error,
     )
 
 
@@ -110,6 +111,7 @@ def test_status_reachable_passes_through(tm_env, monkeypatch):
     assert body["reachable"] is True and body["state"] == "ready" and body["error"] == ""
     assert body["tool_url"] == f"http://{POINTER_HOST}:{POINTER_PORT}" and body["token_path"] == token_file
     assert body["pid"] == 4321 and body["autostart_registered"] is True
+    assert body["autostart_error"] is None
     assert body["status"]["day_total_bytes"] == 123
     assert seen == {
         "base": f"http://{POINTER_HOST}:{POINTER_PORT}",
@@ -117,6 +119,29 @@ def test_status_reachable_passes_through(tm_env, monkeypatch):
         "method": "GET",
         "token": "tool-token-abc"
     }
+
+
+def test_status_passes_autostart_error_through(tm_env, monkeypatch):
+    """启动期自启注册失败的原因透传到前端(issue 26-10-17-1455): 用户能看到为什么未注册"""
+    mgr, client, token_file = tm_env
+    monkeypatch.setattr(
+        agent,
+        "probe",
+        lambda timeout=None: _endpoint(token_file, autostart_error="写注册表失败: 拒绝访问", autostart_registered=False)
+    )
+    monkeypatch.setattr(
+        tm_routes, "_call_tool", lambda *a, **k: (200, {
+            "ok": True,
+            "config": {
+                "sample_interval": 5.0
+            }
+        })
+    )
+    r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["autostart_registered"] is False
+    assert body["autostart_error"] == "写注册表失败: 拒绝访问"
 
 
 def test_status_missing_token_envelope(tm_env, monkeypatch, tmp_path):

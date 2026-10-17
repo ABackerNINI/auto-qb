@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-17-1455">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="global-traffic-source-integration">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-17-backend-gtm-autostart-hkcu-run.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="全局流量监视器开机自启注册需管理员权限，非提权下静默失败">
 <meta name="issue-summary" content="schtasks /SC ONLOGON 在非提权进程下返回「拒绝访问」，工具只 WARNING 忽略，用户看到「未注册」却不知原因">
 <title>全局流量监视器开机自启注册需管理员权限，非提权下静默失败 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-17-1455-bug-gtm-autostart-elevation</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-17 14:55</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,18 @@ schtasks /Create /TN global-traffic-monitor-autostart /SC ONLOGON /TR "&lt;venv 
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-17 14:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-17 15:20 — 用户指派认领，状态 <strong>In Progress</strong>（修法方向待 grilling 定，未动代码）</li>
+      <li>2026-10-17 15:49 — 修完并验证，状态 <strong>Done</strong>（档案 <code>tasks/26-10-17-backend-gtm-autostart-hkcu-run.md</code>）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-10-17 15:20：<b>代码锚点仍在</b> —— <code>WindowsTaskBackend.register</code> 仍拼 <code>schtasks /Create /SC ONLOGON</code>（<code>installer.py:253</code>/<code>:258</code>，取证 15:20），<code>_maybe_register_autostart</code> 仍只 <code>logger.warning</code> 后 <code>return</code>（<code>__main__.py:236</code>，同上）。</p>
+    <p><b>现象未在本会话重跑</b>：本会话的命令安全策略把 <code>schtasks.exe</code> 列入 Program Blacklist（<code>pitfalls/ops/session-program-blacklist.md</code>），换壳重试被明令禁止。但报告证据是 <code>rc=1</code> + schtasks 自身的中文报错「错误: 拒绝访问。」⇒ 当时 schtasks 真的执行了、被 Task Scheduler 拒绝；黑名单拦截的指纹是 Python <code>PermissionError [WinError 5]</code> 且拿不到 rc，两者不同 ⇒ <b>认定仍复现</b>，根因方向（ONLOGON 需提权）仍需真机验证。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（选建议修法 A，并把 schtasks 路径整个移除）</b>：Windows 后端 <code>WindowsTaskBackend</code> 换成 <code>WindowsRunKeyBackend</code> —— 写 <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code> 值 <code>global-traffic-monitor</code>（<code>REG_SZ</code>，值 = <code>"&lt;venv python&gt;" -m gtm run --data-dir "&lt;data dir&gt;"</code>），零提权、零第三方依赖（stdlib <code>winreg</code>）。配套三条：①Run 值 <b>260 字符上限</b>在写入前 fail-fast 报错（本机实测命令 158 字符），不截断、不降级到启动文件夹；②<code>is_registered</code> = 值存在即算（开关语义），命令漂移由 <code>register()</code> 无条件覆盖写收敛；③失败可见性 —— <code>_maybe_register_autostart</code> 把失败原因交给 <code>ControlServer</code>，落进 <code>endpoint.json</code> 新增的 <code>autostart_error</code> 字段（schema 不升版，双向 <code>.get</code> 兼容），设置页在「未注册」后直接显示原因。<b>未选 B</b>：<code>ShellExecuteW("runas")</code> 的 UAC 无法在 auto-qb 无人值守拉起路径完成，且 <code>ONLOGON</code> 是「任何用户登录」级触发器，语义比「当前用户」更宽。<b>未选 C</b>：只改文案不解决 D4「自启绝对支持」。</p>
+    <p><b>根因口径</b>：按共识<b>未做</b> schtasks 真机探针（A 方案成立不依赖「B 不可行」），故根因仍是「强候选 + 平台行为佐证」，未升级为实测结论；证据侧已排除「schtasks 被本会话黑名单拦」（黑名单是 <code>PermissionError [WinError 5]</code> 且拿不到 rc，而报告证据有 <code>rc=1</code> 与 schtasks 自己的中文文案）。</p>
+    <p><b>验证方式</b>：①单测 —— 工具侧 Windows 段整体重写（<code>FakeRegistry</code> 替身，含「超限 fail-fast」与「runner 一次都不该被调」两条守阵），工具套件 210 passed；②真机（Windows 非提权会话）—— <code>install-autostart</code> 写入后 <code>winreg</code> 读回 158 字符 <code>REG_SZ</code> → 重复注册走 <code>skipped</code> → 手工执行该命令行能起（被单实例锁挡下，说明命令解析与模块入口都通）→ <code>uninstall-autostart</code> 删除后读回 <code>FileNotFoundError</code>；<b>验证后已卸载</b>（该值指向 clone4 开发目录，留在用户机上会与生产 clone 抢登录自启）。③<code>reg.exe</code> 被本会话 Program Blacklist 拦，注册表真值改用 Python <code>winreg</code> 读（同一 API，非换壳绕行）。</p>
+    <p><b>测试数字</b>：根 <code>test.full</code> <b>3537 passed, 4 skipped</b>（126.28s，覆盖率 98.13%）；工具侧 <b>210 passed</b>。见 <code>testing/baselines/26-10-17-1549-gtm-autostart-hkcu-run.md</code>。<b>缺口</b>：重启/注销后的真实登录自起未验证（需真实登录会话，不可自动化）。</p>
+    <p><b>同轮产出</b>：坑档 <code>pitfalls/backend/windows-onlogon-autostart-elevation.md</code>（ONLOGON 需提权 + 与 WinError 5 同指纹的判别）；文档同步 <code>tools/global-traffic-monitor/README.md</code> 与 <code>docs/configuration.md</code>（顺带改对三平台已漂移的注册项名，并给旧计划任务的手工清理命令 <code>schtasks /Delete /TN global-traffic-monitor-autostart /F</code>）。</p>
   </section>
 
   <footer>

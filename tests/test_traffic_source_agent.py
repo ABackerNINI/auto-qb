@@ -58,7 +58,14 @@ def _write_token(tmp_path, text="tool-credential-abc") -> str:
 
 
 def _write_pointer(
-    tmp_path, monkeypatch, *, token_path, host="127.0.0.1", port=8099, schema=agent.ENDPOINT_SCHEMA
+    tmp_path,
+    monkeypatch,
+    *,
+    token_path,
+    host="127.0.0.1",
+    port=8099,
+    schema=agent.ENDPOINT_SCHEMA,
+    autostart_error=None,
 ) -> str:
     """写发现指针 endpoint.json 并把 agent 的指针路径重定向到它(S16/D6)
 
@@ -77,6 +84,7 @@ def _write_pointer(
         "token_path": token_path,
         "exe_path": "",
         "autostart_registered": True,
+        "autostart_error": autostart_error,
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
@@ -153,6 +161,15 @@ def test_parse_pointer_schema_guard_and_required_fields():
     for drop in ("host", "port", "token_path"):
         assert agent.parse_pointer({k: v for k, v in good.items() if k != drop}) is None
     assert agent.parse_pointer({**good, "port": "not-a-number"}) is None  # port 非数 -> 0 -> 缺
+
+
+def test_parse_pointer_reads_optional_autostart_error():
+    """autostart_error 是可选字段: 有则读成 str, 缺/空 -> None(旧指针与成功态都落这里)"""
+    base = {"schema": agent.ENDPOINT_SCHEMA, "host": "127.0.0.1", "port": 8099, "token_path": "/t"}
+    assert agent.parse_pointer(base).autostart_error is None
+    assert agent.parse_pointer({**base, "autostart_error": None}).autostart_error is None
+    ep = agent.parse_pointer({**base, "autostart_error": "写注册表失败: 拒绝访问"})
+    assert ep.autostart_error == "写注册表失败: 拒绝访问"
 
 
 # ---------- 拉起目标解析 ----------
@@ -341,6 +358,7 @@ def test_status_reports_states(tmp_path, monkeypatch, probe_env):
     assert st["endpoint"] is not None
     assert st["pid"] == 4321 and st["version"] == "0.1.0"
     assert st["autostart_registered"] is True
+    assert st["autostart_error"] is None  # 没失败 -> None(issue 26-10-17-1455)
 
 
 # ---------- 拉起命令构造(注入假 subprocess, 规避 sidefx POPEN 越界) ----------

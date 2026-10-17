@@ -1,8 +1,14 @@
 """自启: 三平台幂等注册/卸载 (S5 实现).
 
-  Windows  schtasks /SC ONLOGON (当前用户, TR 指向本工具 venv python)
+  Windows  HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 写一个值 (当前用户, 零提权)
   Linux    ~/.config/systemd/user/global-traffic-monitor.service + systemctl --user enable --now
   macOS    ~/Library/LaunchAgents/<label>.plist + launchctl bootstrap
+
+Windows 为什么不用计划任务 (2026-10-17 改道, 见 memory-bank/issues/26-10-17-1455):
+`schtasks /SC ONLOGON` 是「任何用户登录」级系统触发器, 普通权限进程创建会被 Task
+Scheduler 拒 (rc=1 拒绝访问), 只有提权才能注册; 而本工具由 auto-qb 以普通权限拉起,
+无人值守路径上没人点 UAC。HKCU Run 是「当前用户登录」级、零提权、stdlib 可读写,
+语义比 ONLOGON 更贴本工具 (单用户后台服务)。
 
 由 auto-qb WebUI 设置页开关调用 (S6 经控制面 `POST /autostart` 在工具进程内跑 installer),
 也可命令行直接跑 (`global-traffic-monitor install-autostart` / `uninstall-autostart`)。
@@ -14,15 +20,16 @@
   venv, 不猜路径、不依赖 PATH。data_dir 解析成绝对路径后**写死进注册项**: 自启拉起时是
   登录会话, 环境变量 (GLOBAL_TRAFFIC_MONITOR_DATA_DIR) 不可控。
 * **幂等**: 重复注册 / 重复卸载都是成功 no-op。判据是**期望态是否已达成** ——
-  Windows: 计划任务存在; Linux/macOS: 单元/plist 文件内容一致 **且** 已启用/已加载。
-  未达成则收敛到期望态 (文件不一致就重写, 服务被停就重新启用)。计划原文的「存在则
-  跳过」是本判据的常态分支; 只查「文件存在」会把「文件在但服务被 disable」误判成
-  已注册, 让设置页开关谎报成功。
-* **不解析平台命令的输出**: schtasks / systemctl / launchctl 的 stdout/stderr 随系统
-  语言本地化 (中文 Windows 的表头与错误文案是中文), 按英文字面解析会静默得零值
+  Windows: Run 值内容与当前参数一致; Linux/macOS: 单元/plist 文件内容一致 **且**
+  已启用/已加载。未达成则收敛到期望态 (Windows 覆盖写, Linux/macOS 重写文件 + 重新
+  启用, 服务被停就重新启用)。计划原文的「存在则跳过」是本判据的常态分支; 只查「文件
+  存在」会把「文件在但服务被 disable」误判成已注册, 让设置页开关谎报成功。
+* **不解析平台命令的输出**: systemctl / launchctl 的 stdout/stderr 随系统语言本地化
+  (中文 Windows 的表头与错误文案是中文), 按英文字面解析会静默得零值
   (坑档 pitfalls/ops/console-encoding.md)。本模块**只信退出码**; 输出仅作失败时给人
-  看的附注, 解码走兜底链 (UTF-8 -> 本地码页 -> replace)。
-* **零第三方依赖**: 平台命令走 subprocess, plist 用 stdlib plistlib。
+  看的附注, 解码走兜底链 (UTF-8 -> 本地码页 -> replace)。Windows 侧已无平台命令,
+  注册表值按原样读回比对 (不经本地化文本)。
+* **零第三方依赖**: 平台命令走 subprocess, 注册表走 stdlib winreg, plist 用 stdlib plistlib。
 * **单写者**: 注册项由本模块独占生成; 单元/plist 文件是**生成物**, 手改会在下次注册
   时被覆盖 (文件头注释已注明)。
 """
@@ -39,9 +46,15 @@ from typing import Callable, Optional, Sequence
 
 # ---- 注册项名称 (单点; 改名会留下孤儿注册项, 需先 uninstall 再 install) ----
 
-DEFAULT_WINDOWS_TASK = "global-traffic-monitor-autostart"
+DEFAULT_WINDOWS_VALUE = "global-traffic-monitor"
 DEFAULT_SYSTEMD_UNIT = "global-traffic-monitor.service"
 DEFAULT_LAUNCHD_LABEL = "com.global-traffic-monitor.autostart"
+
+# ---- Windows 注册表口径 (Run 键 = 当前用户登录时起, 零提权) ----
+
+WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+# Run 值长度上限 (MAX_PATH 口径): 超了会被截断成一条跑不起来的命令, 注册前必须拦住
+WINDOWS_COMMAND_MAX = 260
 
 # ---- 平台口径 (内部名; 与 sys.platform 的映射见 platform_from_sys) ----
 
@@ -118,7 +131,7 @@ class AutostartPlan:
         return [self.python_exe, "-m", "gtm", "run", "--data-dir", self.data_dir]
 
     def windows_command(self) -> str:
-        """schtasks /TR 的值: 单个命令行字符串 (两段路径各自带引号, 空格安全)."""
+        """Run 值 / 登录命令行: 单个字符串 (两段路径各自带引号, 空格安全)."""
         return f'"{self.python_exe}" -m gtm run --data-dir "{self.data_dir}"'
 
 
@@ -204,16 +217,20 @@ def _write_text_lf(path: str, text: str) -> None:
         f.write(text)
 
 
-# ---- Windows: 计划任务 (登录时触发) ----
+# ---- Windows: 当前用户 Run 键 (登录时触发, 零提权) ----
 
 
-class WindowsTaskBackend(AutostartBackend):
-    """Windows 计划任务后端: schtasks /SC ONLOGON, 当前用户, TR 指向 venv python.
+class WindowsRunKeyBackend(AutostartBackend):
+    """Windows 后端: HKCU Run 写一个值, 当前用户登录时起, 零提权.
 
-    「已注册」判据只有一条: `schtasks /Query /TN <name>` 退出码 0。**不比对命令内容** ——
-    schtasks 的查询输出随系统语言本地化, 解析它就是踩坑档那条「表头本地化 -> 读数
-    静默为 0」。代价: 注册项内容与当前参数不一致时无法自动发现, 需要按当前参数刷新
-    请先 uninstall-autostart 再 install-autostart (跳过消息里已写明)。
+    「已注册」判据只有一条: **值存在**。不比对命令内容 —— 设置页开关的语义是「有没有
+    自启项」, 解释器/数据目录变了不该让开关跳到「未注册」(用户什么都没做错)。内容漂移
+    由 register() 无条件覆盖写收敛: auto-qb 每次拉起 launch.cmd 都带 --autostart, 值会
+    被刷成当前参数。
+
+    注册表访问走注入的 `registry` (缺省惰性 `import winreg`, 只有 Windows 有); 单测
+    全程走替身, 不碰真注册表。替身只需覆盖 OpenKey / CreateKeyEx / QueryValueEx /
+    SetValueEx / DeleteValue 与常量 HKEY_CURRENT_USER / KEY_READ / KEY_SET_VALUE / REG_SZ。
     """
 
     platform = PLATFORM_WINDOWS
@@ -223,56 +240,84 @@ class WindowsTaskBackend(AutostartBackend):
         plan: AutostartPlan,
         runner: Runner,
         *,
-        task_name: str = DEFAULT_WINDOWS_TASK,
+        value_name: str = DEFAULT_WINDOWS_VALUE,
+        registry: object | None = None,
     ) -> None:
         super().__init__(plan, runner)
-        self._task_name = task_name
+        self._value_name = value_name
+        self._registry = registry
 
     @property
     def target(self) -> str:
-        return self._task_name
+        """人读标识: 注册表值的完整位置."""
+        return f"HKCU\\{WINDOWS_RUN_KEY}\\{self._value_name}"
+
+    def _reg(self):
+        """注册表模块 (惰性 import: 非 Windows 上 import winreg 会 ImportError)."""
+        if self._registry is None:
+            import winreg  # noqa: PLC0415 - 平台专属模块, 只在 Windows 后端里用
+
+            return winreg
+        return self._registry
+
+    def _read_value(self) -> Optional[str]:
+        """读 Run 值; 值或键不存在 -> None (其余 OSError -> AutostartError)."""
+        reg = self._reg()
+        try:
+            with reg.OpenKey(reg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY) as key:
+                value, _kind = reg.QueryValueEx(key, self._value_name)
+                return str(value)
+        except FileNotFoundError:
+            return None
+        except OSError as e:
+            raise AutostartError(f"读注册表 HKCU\\{WINDOWS_RUN_KEY} 失败: {e}") from e
 
     def is_registered(self) -> bool:
-        return self._run(["schtasks", "/Query", "/TN", self._task_name]).returncode == 0
+        return self._read_value() is not None
 
     def register(self) -> AutostartResult:
-        if self.is_registered():
+        command = self._plan.windows_command()
+        # 超限必须拦在写入前: 截断后的值会变成一条跑不起来的命令, 且用户无从判断
+        if len(command) > WINDOWS_COMMAND_MAX:
+            raise AutostartError(
+                f"自启命令长 {len(command)} 字符, 超过注册表 Run 值上限 {WINDOWS_COMMAND_MAX}: "
+                f"请把工具目录或数据目录挪短后重试 (命令: {command})"
+            )
+        existing = self._read_value()
+        if existing == command:
             return AutostartResult(
                 ACTION_SKIPPED,
-                f"自启已注册, 跳过: 计划任务 {self._task_name!r} "
-                f"(如需按当前参数刷新, 先 uninstall-autostart 再 install-autostart)",
+                f"自启已注册, 跳过: {self.target} (命令与当前参数一致)",
             )
-        # /F 仅作竞态兜底 (存在性已查过), 正常情况下不会覆盖任何既有任务
-        self._run_checked(
-            [
-                "schtasks",
-                "/Create",
-                "/TN",
-                self._task_name,
-                "/SC",
-                "ONLOGON",
-                "/TR",
-                self._plan.windows_command(),
-                "/F",
-            ],
-            "schtasks /Create",
-        )
+        reg = self._reg()
+        try:
+            with reg.CreateKeyEx(reg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, reg.KEY_SET_VALUE) as key:
+                reg.SetValueEx(key, self._value_name, 0, reg.REG_SZ, command)
+        except OSError as e:
+            raise AutostartError(f"写注册表 HKCU\\{WINDOWS_RUN_KEY} 失败: {e} "
+                                 f"(该键属当前用户, 正常无需提权; 被安全软件拦截时请放行本工具)") from e
+        refreshed = "已刷新" if existing is not None else "已注册"
         return AutostartResult(
             ACTION_REGISTERED,
-            f"已注册开机自启: 计划任务 {self._task_name!r} (登录时触发) -> {self._plan.windows_command()}",
+            f"{refreshed}开机自启: {self.target} (登录时触发) -> {command}",
         )
 
     def unregister(self) -> AutostartResult:
         if not self.is_registered():
             return AutostartResult(
                 ACTION_ABSENT,
-                f"自启未注册, 无需卸载: 计划任务 {self._task_name!r} 不存在",
+                f"自启未注册, 无需卸载: {self.target} 不存在",
             )
-        self._run_checked(["schtasks", "/Delete", "/TN", self._task_name, "/F"], "schtasks /Delete")
-        return AutostartResult(
-            ACTION_UNREGISTERED,
-            f"已卸载开机自启: 计划任务 {self._task_name!r} 已删除",
-        )
+        reg = self._reg()
+        try:
+            with reg.OpenKey(reg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, reg.KEY_SET_VALUE) as key:
+                reg.DeleteValue(key, self._value_name)
+        except FileNotFoundError:
+            # 竞态: 判存在与删之间被别人删了 -> 已是期望态
+            return AutostartResult(ACTION_ABSENT, f"自启未注册, 无需卸载: {self.target} 已不存在")
+        except OSError as e:
+            raise AutostartError(f"删注册表值 {self.target} 失败: {e}") from e
+        return AutostartResult(ACTION_UNREGISTERED, f"已卸载开机自启: {self.target} 已删除")
 
 
 # ---- Linux: systemd --user ----
@@ -499,12 +544,14 @@ def build_installer(
     home: Optional[str] = None,
     uid: Optional[int] = None,
     runner: Optional[Runner] = None,
+    registry: object | None = None,
 ) -> AutostartBackend:
     """按平台装配自启后端.
 
     默认值全部取自真实环境 (平台 = sys.platform, 解释器 = sys.executable, home = ~,
-    uid = os.getuid, runner = subprocess); 显式传入只用于测试注入平台命令层与文件系统
-    根 —— 生产路径同样经过本函数, 没有「只为测试存在」的分支。
+    uid = os.getuid, runner = subprocess, registry = winreg); 显式传入只用于测试注入
+    平台命令层 / 文件系统根 / 注册表模块 —— 生产路径同样经过本函数, 没有「只为测试
+    存在」的分支。
     """
     plat = platform or detect_platform()
     exe = python_exe if python_exe is not None else sys.executable
@@ -518,7 +565,7 @@ def build_installer(
     )
     run = runner or default_runner
     if plat == PLATFORM_WINDOWS:
-        return WindowsTaskBackend(plan, run)
+        return WindowsRunKeyBackend(plan, run, registry=registry)
     if plat == PLATFORM_LINUX:
         return SystemdUserBackend(plan, run, home=home or os.path.expanduser("~"))
     if plat == PLATFORM_MACOS:

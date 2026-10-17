@@ -127,7 +127,7 @@ global-traffic-monitor uninstall-autostart                  # 卸载开机自启
 
 | 平台 | 机制 | 注册项 |
 |---|---|---|
-| Windows | `schtasks /SC ONLOGON`(当前用户, 登录时触发) | 计划任务 `global-traffic-monitor-autostart` |
+| Windows | `HKCU\...\Run` 注册表值(当前用户, 登录时触发, **零提权**) | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 值 `global-traffic-monitor` |
 | Linux | `systemctl --user enable --now` | `~/.config/systemd/user/global-traffic-monitor.service` |
 | macOS | `launchctl bootstrap gui/<uid>` | `~/Library/LaunchAgents/com.global-traffic-monitor.autostart.plist` |
 
@@ -135,17 +135,22 @@ global-traffic-monitor uninstall-autostart                  # 卸载开机自启
   解释器取**调用本命令的那个 python** (`sys.executable`) —— 它按定义就是装了本工具的 venv。
   `data_dir` 解析成绝对路径 **写死进注册项**(自启拉起时是登录会话,
   `GLOBAL_TRAFFIC_MONITOR_DATA_DIR` 不可控), 故 `--data-dir` 要与 `run` 用的同一个。
-- **幂等**: 重复注册/重复卸载都是成功 no-op。判据是**期望态是否已达成** —— Windows 看计划
-  任务是否存在; Linux/macOS 看单元/plist 文件内容是否一致**且**已启用/已加载, 未达成则收敛
-  (文件漂移就重写, 服务被 disable 就重新启用)。只查「文件存在」会把「文件在但服务被停」误判
-  成已注册。
+- **幂等**: 重复注册/重复卸载都是成功 no-op。判据是**期望态是否已达成** —— Windows 看 Run 值
+  是否存在(开关语义就是「有没有自启项」), 内容与当前参数不一致时**覆盖写**收敛; Linux/macOS 看
+  单元/plist 文件内容是否一致**且**已启用/已加载, 未达成则收敛(文件漂移就重写, 服务被 disable
+  就重新启用)。只查「文件存在」会把「文件在但服务被停」误判成已注册。
 - **退出码** (供 auto-qb 设置页开关判成败): `0` = 达成期望态(含 skipped/absent) ·
   `1` = 平台命令失败/前置条件缺失(如解释器不存在) · `2` = 平台不支持。
-- **不解析平台命令输出**: schtasks / systemctl / launchctl 的输出随系统语言本地化, 本模块
-  **只信退出码**; 输出仅作失败时的附注(解码走 UTF-8 -> 本地码页兜底链)。
-- **Windows 注意**: 计划任务查询输出本地化, 故**不比对已注册任务的命令内容** —— 换了 venv
-  或数据目录后想刷新注册项, 先 `uninstall-autostart` 再 `install-autostart`。另外若本机
-  命令安全策略把 `schtasks.exe` 拉黑, `install-autostart` 会 fail-fast 报「找不到命令」。
+- **不解析平台命令输出**: systemctl / launchctl 的输出随系统语言本地化, 本模块**只信退出码**;
+  输出仅作失败时的附注(解码走 UTF-8 -> 本地码页兜底链)。Windows 侧已无平台命令, 注册表值按
+  原样读回比对。
+- **Windows 为什么不用计划任务**: `schtasks /SC ONLOGON` 是「任何用户登录」级系统触发器, 普通
+  权限进程创建会被 Task Scheduler 拒(rc=1 拒绝访问), 只有提权才能注册 —— 而本工具由 auto-qb
+  以普通权限拉起, 无人值守路径上没人点 UAC。HKCU Run 零提权、语义正好是「当前用户登录」。
+- **Windows 注意**: ①Run 值长度上限 **260 字符**(解释器路径 + `-m gtm run --data-dir <DIR>`),
+  超了注册会 fail-fast 报错而不是截断成一条跑不起来的命令 —— 目录太深就把工具或数据目录挪短;
+  ②升级前若曾用**管理员**权限注册过旧计划任务, 它会残留在系统里, 用一条命令清掉(管理员 cmd):
+  `schtasks /Delete /TN global-traffic-monitor-autostart /F`(不存在会报「找不到」, 属正常)。
 - 由 auto-qb WebUI 设置页开关调用 (S6), 也可命令行直接跑。Linux `systemctl --user` 需登录
   会话 (SSH 裸连需 `loginctl enable-linger`)。
 

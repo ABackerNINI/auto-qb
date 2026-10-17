@@ -75,6 +75,7 @@ def make_server(
     config: Optional[Config] = None,
     counters_start: int = 1_000_000,
     installer_factory=None,
+    autostart_error: Optional[str] = None,
 ):
     """完整控制面装配 (锁已持有; 返回 (server, storage, sampler, holder, token)).
 
@@ -97,6 +98,7 @@ def make_server(
         port=port,
         installer_factory=installer_factory or _no_autostart_factory,
         endpoint_file=str(tmp_path / "endpoint.json"),
+        autostart_error=autostart_error,
     )
     server.start()
     return server, storage, sampler, holder, token
@@ -419,6 +421,7 @@ def test_endpoint_written_on_start_with_fields(tmp_path) -> None:
         assert payload["data_dir"] == os.path.abspath(str(tmp_path))
         assert payload["token_path"] == os.path.abspath(str(tmp_path / "monitor.token"))
         assert payload["autostart_registered"] is False
+        assert payload["autostart_error"] is None  # 没尝试/没失败 -> null (issue 26-10-17-1455)
         assert payload["version"] and payload["exe_path"] and payload["started_at"]
     finally:
         server.stop()
@@ -443,6 +446,18 @@ def test_endpoint_autostart_registered_reflects_backend(tmp_path) -> None:
     try:
         payload = json.loads((tmp_path / "endpoint.json").read_text(encoding="utf-8"))
         assert payload["autostart_registered"] is True
+    finally:
+        server.stop()
+
+
+def test_endpoint_carries_autostart_error_from_startup(tmp_path) -> None:
+    """S14 追加 (issue 26-10-17-1455): 启动期注册失败的原因落进指针, 用户能看到「为什么未注册」."""
+    reason = "写注册表 HKCU\\...\\Run 失败: 拒绝访问"
+    server, *_rest = make_server(tmp_path, autostart_error=reason)
+    try:
+        payload = json.loads((tmp_path / "endpoint.json").read_text(encoding="utf-8"))
+        assert payload["autostart_error"] == reason
+        assert payload["autostart_registered"] is False
     finally:
         server.stop()
 

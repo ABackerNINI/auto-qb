@@ -164,11 +164,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     except SingleInstanceLockError as e:
         print(f"global-traffic-monitor: {e}", file=sys.stderr)
         return 1
+    autostart_error: Optional[str] = None
     if getattr(args, "autostart", False):
         # S14/D13 自启意图: 锁已到手才注册 (抢输的第二实例不注册)。排在 server.start()
         # 之前 —— start() 写发现指针时会现货态探测 autostart_registered, 让指针反映
-        # 本次注册结果 (指针与真值一致, 免一轮滞后)。
-        _maybe_register_autostart(data_dir, config)
+        # 本次注册结果 (指针与真值一致, 免一轮滞后); 失败原因同路带进指针 (issue
+        # 26-10-17-1455: 只有「未注册」没有原因, 用户无从排障)。
+        autostart_error = _maybe_register_autostart(data_dir, config)
     sampler = Sampler(adapter_filter=_build_adapter_filter(config))
     server = ControlServer(
         storage,
@@ -177,6 +179,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         TokenManager(f"{data_dir}/monitor.token"),
         host=config.http_host,
         port=config.http_port,
+        autostart_error=autostart_error,
     )
     try:
         server.start()  # fail-fast: 控制面端口占用即报错 (计划 §03 S3)
@@ -218,24 +221,29 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _maybe_register_autostart(data_dir: str, config: Config) -> None:
-    """run --autostart 的顺带幂等注册 (S14/D13): 裁决权在工具 config autostart。
+def _maybe_register_autostart(data_dir: str, config: Config) -> Optional[str]:
+    """run --autostart 的顺带幂等注册 (S14/D13): 裁决权在工具 config autostart.
 
     仅 config.autostart 为真才调 installer.register(); 用户显式关过 (false) -> 本次
     no-op, 不被自动装回。注册失败只 WARNING 不阻断服务 —— 工具已在跑, 自启是便利,
     不是本次运行的成立前提 (与「发现指针写失败不阻断服务」同口径 §09)。幂等性由
     installer 的期望态判据保证 (已注册 -> skipped, 不重复建项)。
+
+    返回**失败原因** (成功/未尝试 -> None): 调用方把它带进 ControlServer, 写发现指针
+    时落进 `autostart_error` —— 否则用户只看到设置页「未注册」, 不知为什么 (issue
+    26-10-17-1455)。
     """
     if not config.autostart:
         logger.info("--autostart: 工具 config autostart=false (用户已关闭), 本次不注册")
-        return
+        return None
     try:
         backend = build_installer(data_dir)
         result = backend.register()
     except AutostartError as e:
         logger.warning("--autostart 注册失败 (忽略, 不阻断服务): %s", e)
-        return
+        return str(e)
     logger.info("--autostart: %s", result.message)
+    return None
 
 
 def _load_config_or_fail(data_dir: str) -> tuple[Config | None, tuple[str, ...]]:

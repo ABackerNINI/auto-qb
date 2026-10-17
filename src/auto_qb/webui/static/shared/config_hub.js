@@ -1012,6 +1012,7 @@ window.CONFIG_HUB = {
         this.tm.pid = r.pid || 0;
         this.tm.dataDir = r.data_dir || "";
         this.tm.autostartRegistered = !!r.autostart_registered;
+        this.tm.autostartError = r.autostart_error || "";
         this.tm.error = r.error || "";
         this.tm.retryS = Number(r.retry_s) || 0;
         this.tm.status = r.status || null;
