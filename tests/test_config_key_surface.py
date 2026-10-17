@@ -317,7 +317,7 @@ _LOADER_PROBES = {
     "traffic_source.traffic_monitor.dat_path": ("/probe/tm/history_traffic.dat", "/probe/tm/history_traffic.dat"),
     "traffic_source.global_traffic_monitor.tool_dir": ("/probe/gtm", "/probe/gtm"),
     "traffic_source.global_traffic_monitor.tool_exe": ("/probe/gtm/monitor.exe", "/probe/gtm/monitor.exe"),
-    "traffic_source.global_traffic_monitor.data_dir": ("/probe/gtm/data", "/probe/gtm/data"),
+    # !无 data_dir(R2/D20): 数据目录由工具发现指针提供, 该键已删
     "traffic_source.global_traffic_monitor.notify_cooldown_s": ("90S", 90.0),
 }
 

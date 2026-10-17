@@ -365,6 +365,27 @@ def test_thread_self_terminates_when_disabled(sub_env):
 # ---------- 只读刷新(speed_curve 模块 + WEB 命令) ----------
 
 
+def _point_at(data_dir, monkeypatch) -> None:
+    """造一份只读发现指针(D6): 取数路径解析读它, 不探活 —— 端到端测试无需起工具进程
+
+    R2/D20: 工具来源的 dat 路径只有这一个来源; 配置里不再有 data_dir 可指。
+    """
+    path = data_dir / agent.ENDPOINT_FILE_NAME
+    path.write_text(
+        json.dumps(
+            {
+                "schema": agent.ENDPOINT_SCHEMA,
+                "host": POINTER_HOST,
+                "port": POINTER_PORT,
+                "token_path": str(data_dir / "monitor.token"),
+                "data_dir": str(data_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
+
+
 def _refresh_env(tmp_path, monkeypatch, *, enabled=True, dat_name="history_traffic.dat", write_dat=True, qb_calls=None):
     """构造可刷新的环境 -> (mgr, dat 路径, qB 限速调用记录器)
 
@@ -476,9 +497,9 @@ def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch)
     mgr, _dat, _calls = _refresh_env(tmp_path, monkeypatch)
     # S17: 来源单一开关是 provider(旧的 global_traffic_monitor.enabled 键已退休)
     mgr.config.traffic_source.provider = "global_traffic_monitor"
-    # D1: 两来源参数可并存, provider=工具面时曲线取数走 global_traffic_monitor.data_dir 下的
-    # history_traffic.dat(与 TM 面同一文件, 跨包契约文件名); 指向夹具已写好的 dat 所在目录
-    mgr.config.traffic_source.global_traffic_monitor.data_dir = str(tmp_path)
+    # R2/D20: 工具来源的 dat 路径来自**发现指针**(配置里已无 data_dir); 这里造一份指向夹具
+    # dat 所在目录的指针 —— 取数只读指针、不探活, 故无需起工具进程
+    _point_at(tmp_path, monkeypatch)
     setattr(mgr.web, _CRED_FIELD, "e2e-credential")
     client = TestClient(create_app(mgr))
     headers = {_AUTH_KEY: f"Bearer {getattr(mgr.web, _CRED_FIELD)}"}

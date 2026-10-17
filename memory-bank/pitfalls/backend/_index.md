@@ -14,6 +14,7 @@
 | [behavior-core.md](behavior-core.md) | 后端一批"看着像 bug 其实是特性"的行为 —— 改之前先确认它是不是有意设计。 | 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期 |
 | [cold-start-view-gap.md](cold-start-view-gap.md) | 数据/结论已经写进磁盘或内存, 但**广播/发布的时机**排在一个长达数小时的任务之后 —— | 重启后功能像没生效, 视图, 发布, publish, 广播, 冷启动, 判定真空期, 回落本地, 第一波, 长任务, 取数波 |
 | [concurrency.md](concurrency.md) | 七条线程 / 状态机硬约束, 违反即引入难以复现的 bug。 | 加线程, 改队列, 改 state_file, 改校验流程, 视图组装, QbApi 写方法, 阻塞等待, 关停, stop, join |
+| [config-duplicates-runtime-fact.md](config-duplicates-runtime-fact.md) | 配置里存一份运行期事实, 必然与真值漂移 | 配置键重复, 数据目录不在配置里, 取数路径为空, 状态区显示值与取数不一致, 单一事实源, 迁移漏搬键, 指针 endpoint.json, data_dir, 看着已就绪却没数据 |
 | [config-section-retire-across-steps.md](config-section-retire-across-steps.md) | 把一个配置段的退休拆进多步计划(本仓常态)时, 若该段仍有消费者被计划排到**后续步骤**, | 分步退休配置段, 删配置键, Config 字段与 KNOWN key 不一致, 运行期 AttributeError, 消费者属后续步骤, 过渡 stub, 一步一提交, 动态设属性假绿, 测试替身掩盖缺字段 |
 | [ctypes-x64-argtypes.md](ctypes-x64-argtypes.md) | 用 `ctypes.windll.user32.XXX(...)` 直调 Windows API 时**不声明 argtypes/restype**, 参数按 32 位 int 传, 而 `HWND` / `HWND_TOPMOST` 这类"指针宽度"参数的高 32 位是寄存器残… | ctypes, windll, WinDLL, argtypes, restype, 静默失败, GetLastError 为 0, x64, 传参, HWND, 指针宽度, 寄存器残留, 有概率, SetWindowPos, SetFor… |
 | [effect-confirmation.md](effect-confirmation.md) | 「从陈旧观测直接下确定性结论」—— 异步操作(recheck 这类 qB 异步应用 + 快照按节拍滞后)的成败宣称若只凭一份快照观测, 而该快照在「生效前」与「生效后」**不可分辨**(已完成种子 progress=1.0 且非 checking, 既是校验前的完成态也是校验通过… | 异步操作, 成败判定, 轮询, recheck, 校验成功, 校验启动超时, seen_checking, poll_verdict, is_piece_checking, checkingResumeData, 伪证据, 快照滞后, 首跳… |

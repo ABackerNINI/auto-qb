@@ -9,17 +9,14 @@
 - test_validate_provider_enum: provider 非枚举值被拒; 缺省/留空 = traffic_monitor 合法(只要有 dat_path)
 - test_validate_default_provider_requires_dat_path: provider=traffic_monitor 时 dat_path 缺失/空/非串 -> 拒绝
 - test_validate_tool_branch_structure: global_traffic_monitor 子块未知键/非串路径被拒; provider=global 时无需 dat_path
+- test_validate_tool_data_dir_key_is_gone: data_dir 已从工具子段删除(R2/D20), 出现即按未知键拒绝
 - test_validate_notify_cooldown_bounds: notify_cooldown_s 须可解析为时间且 0~24H(负/超界拒, 0 合法)
 - test_validate_valid_section_ok: 全键合法值一次通过(两来源参数可并存)
 - test_loader_parses_explicit_values: 显式值按类型解析(str/time), 与字段默认不同的值真正进入 Config
 - test_loader_defaults_when_absent: 段缺省 -> 全部字段默认
 - test_loader_non_dict_spec_defaults: 段值非字典(如字符串) -> 全默认(不抛)
 - test_loader_blank_provider_falls_back: provider 留空/纯空白 -> 兜底 traffic_monitor
-- test_active_dat_path_traffic_monitor: provider=traffic_monitor -> traffic_monitor.dat_path(去空白)
-- test_active_dat_path_global_joins_data_dir: provider=global -> os.path.join(data_dir, history_traffic.dat)
-- test_active_dat_path_global_without_data_dir: provider=global 但 data_dir 空 -> ""(未配置数据源)
-- test_active_dat_path_provider_is_exclusive: 两来源参数并存时只有 provider 选中的那个参与取数
-  (D1 严格互斥; 工具面缺 data_dir 也不静默回退 TM 文件)
+  (取数路径解析见 test_traffic_source_paths.py: active_dat_path 已随 R2/D20 退休)
 - test_round_trip_through_load_config: 新段经 load_config 真链路(读文件 -> 剥空 -> 迁移 -> 校验 -> 解析)回读一致
 - test_migrate_v4_merges_curve_source: 旧曲线段内联 dat_path 迁到顶层, 曲线段内 traffic_source 键删除、其余保留
 - test_migrate_v4_removes_global_monitor_section: 旧 gtm 段: 仅 notify_cooldown_s 迁走, 其余键与整段删除
@@ -28,7 +25,6 @@
 - test_migrate_v4_is_idempotent: 对已是 v5 形状的输入无副作用(不产 note, 不改结构)
 - test_migrate_v4_through_load_config: v4 旧配置经 load_config 全链路升到 v5, 取数路径与旧行为等价
 """
-import os
 from pathlib import Path
 
 import yaml
@@ -41,6 +37,7 @@ from auto_qb.config.validation import (
     KNOWN_TRAFFIC_SOURCE_TOOL_KEYS,
     validate_config,
 )
+from auto_qb.core.traffic_source import paths as traffic_paths
 from auto_qb.infra.versioning import MIGRATIONS
 
 #: v4→v5 迁移函数(注册表取用 = 被测的是真注册项, 不是同名的旁路实现)
@@ -59,10 +56,10 @@ def test_validate_absent_section_ok():
 def test_validate_unknown_key_rejected():
     errs = _errors({"provider": "traffic_monitor", "traffic_monitor": {"dat_path": "/x.dat"}, "bogus": "1"})
     assert any("未知键" in e and "bogus" in e for e in errs), errs
-    # 已知键集合与 schema 单点一致(顶层 3 键 + TM 1 键 + 工具 4 键)
+    # 已知键集合与 schema 单点一致(顶层 3 键 + TM 1 键 + 工具 3 键)
     assert KNOWN_TRAFFIC_SOURCE_KEYS == {"provider", "traffic_monitor", "global_traffic_monitor"}
     assert KNOWN_TRAFFIC_SOURCE_TM_KEYS == {"dat_path"}
-    assert KNOWN_TRAFFIC_SOURCE_TOOL_KEYS == {"tool_dir", "tool_exe", "data_dir", "notify_cooldown_s"}
+    assert KNOWN_TRAFFIC_SOURCE_TOOL_KEYS == {"tool_dir", "tool_exe", "notify_cooldown_s"}
 
 
 def test_validate_provider_enum():
@@ -99,13 +96,23 @@ def test_validate_default_provider_requires_dat_path():
 
 def test_validate_tool_branch_structure():
     # provider=global_traffic_monitor: 无需 traffic_monitor.dat_path
-    assert _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"data_dir": "/d"}}) == []
+    assert _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"tool_dir": "/d"}}) == []
     # 工具子块未知键被拒
     errs = _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"bogus": "1"}})
     assert any("global_traffic_monitor" in e and "bogus" in e for e in errs), errs
     # 路径键非字符串被拒
     errs = _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"tool_dir": ["x"]}})
     assert any("global_traffic_monitor.tool_dir" in e for e in errs), errs
+
+
+def test_validate_tool_data_dir_key_is_gone():
+    """data_dir 已从工具子段删除(R2/D20): 数据目录由工具发现指针提供, 配置里存副本会漂移
+
+    出现该键走通用未知键报错(不做专用指路) —— 宁可让残留配置启动即失败, 也不静默忽略:
+    忽略会让用户以为"配了 data_dir 就在生效", 正是 26-10-17 事故的误判来源。
+    """
+    errs = _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"data_dir": "/opt/gtm/data"}})
+    assert any("未知键" in e and "data_dir" in e for e in errs), errs
 
 
 def test_validate_notify_cooldown_bounds():
@@ -138,7 +145,6 @@ def test_validate_valid_section_ok():
                 {
                     "tool_dir": "/opt/gtm",
                     "tool_exe": "/opt/gtm/monitor.exe",
-                    "data_dir": "/opt/gtm/data",
                     "notify_cooldown_s": "5M",
                 },
         }
@@ -156,7 +162,6 @@ def test_loader_parses_explicit_values():
                 {
                     "tool_dir": "/probe/gtm",
                     "tool_exe": "/probe/gtm/monitor.exe",
-                    "data_dir": "/probe/gtm/data",
                     "notify_cooldown_s": "90S",
                 },
         }
@@ -165,7 +170,6 @@ def test_loader_parses_explicit_values():
     assert cfg.traffic_monitor.dat_path == "/probe/tm.dat"
     assert cfg.global_traffic_monitor.tool_dir == "/probe/gtm"
     assert cfg.global_traffic_monitor.tool_exe == "/probe/gtm/monitor.exe"
-    assert cfg.global_traffic_monitor.data_dir == "/probe/gtm/data"
     assert cfg.global_traffic_monitor.notify_cooldown_s == 90.0
 
 
@@ -176,7 +180,7 @@ def test_loader_defaults_when_absent():
     assert Config().traffic_source == d
     assert d.provider == "traffic_monitor"
     assert d.traffic_monitor.dat_path == ""
-    assert d.global_traffic_monitor.tool_dir == "" and d.global_traffic_monitor.data_dir == ""
+    assert d.global_traffic_monitor.tool_dir == "" and d.global_traffic_monitor.tool_exe == ""
     assert d.global_traffic_monitor.notify_cooldown_s == 600.0
 
 
@@ -187,43 +191,6 @@ def test_loader_non_dict_spec_defaults():
 def test_loader_blank_provider_falls_back():
     assert load_traffic_source_config({"provider": ""}).provider == "traffic_monitor"
     assert load_traffic_source_config({"provider": "   "}).provider == "traffic_monitor"
-
-
-def test_active_dat_path_traffic_monitor():
-    cfg = TrafficSourceConfig(provider="traffic_monitor")
-    cfg.traffic_monitor.dat_path = "  /x/history_traffic.dat  "
-    assert cfg.active_dat_path() == "/x/history_traffic.dat"
-    assert TrafficSourceConfig().active_dat_path() == ""
-
-
-def test_active_dat_path_global_joins_data_dir():
-    cfg = TrafficSourceConfig(provider="global_traffic_monitor")
-    cfg.global_traffic_monitor.data_dir = "/opt/gtm/data"
-    assert cfg.active_dat_path() == os.path.join("/opt/gtm/data", "history_traffic.dat")
-
-
-def test_active_dat_path_global_without_data_dir():
-    cfg = TrafficSourceConfig(provider="global_traffic_monitor")
-    assert cfg.active_dat_path() == ""
-
-
-def test_active_dat_path_provider_is_exclusive():
-    """D1 严格互斥: 两来源参数可并存, 但取数只认 provider 选中的那一个(不静默回退)
-
-    「参数都在」是常态(用户切来源时不希望丢另一侧的路径), 所以互斥必须落在取数单点上:
-    断言 provider 换向即取数换轨, 且工具面缺 data_dir 时返回空而不是回退 TM 文件。
-    """
-    cfg = TrafficSourceConfig(provider="traffic_monitor")
-    cfg.traffic_monitor.dat_path = "/tm/history_traffic.dat"
-    cfg.global_traffic_monitor.data_dir = "/tool/data"
-    assert cfg.active_dat_path() == "/tm/history_traffic.dat"
-
-    cfg.provider = "global_traffic_monitor"
-    assert cfg.active_dat_path() == os.path.join("/tool/data", "history_traffic.dat")
-
-    # 工具面未配 data_dir: 无数据源(空), 绝不回退到并存的 TM 文件
-    cfg.global_traffic_monitor.data_dir = ""
-    assert cfg.active_dat_path() == ""
 
 
 def test_round_trip_through_load_config(tmp_path):
@@ -244,7 +211,6 @@ def test_round_trip_through_load_config(tmp_path):
                             {
                                 "tool_dir": "/probe/gtm",
                                 "tool_exe": "/probe/gtm/monitor.exe",
-                                "data_dir": "/probe/gtm/data",
                                 "notify_cooldown_s": "3M",
                             },
                     },
@@ -257,7 +223,6 @@ def test_round_trip_through_load_config(tmp_path):
     assert ts.traffic_monitor.dat_path == "/probe/tm.dat"
     assert ts.global_traffic_monitor.tool_dir == "/probe/gtm"
     assert ts.global_traffic_monitor.notify_cooldown_s == 180.0
-    assert ts.active_dat_path() == os.path.join("/probe/gtm/data", "history_traffic.dat")
 
 
 def test_migrate_v4_merges_curve_source():
@@ -401,7 +366,7 @@ def test_migrate_v4_through_load_config(tmp_path):
     # 无旧 gtm 段 -> provider 推导为 traffic_monitor; 取数路径与旧行为等价(旧 dat_path = /old/history_traffic.dat)
     assert cfg.traffic_source.provider == "traffic_monitor"
     assert cfg.traffic_source.traffic_monitor.dat_path == "/old/history_traffic.dat"
-    assert cfg.traffic_source.active_dat_path() == "/old/history_traffic.dat"
+    assert traffic_paths.dat_path(cfg) == "/old/history_traffic.dat"
     # 曲线段不再有 dat_path 字段(结构退休), 其余键保留
     assert not hasattr(cfg.global_speed_limit_curve, "dat_path")
     assert cfg.global_speed_limit_curve.enabled is True

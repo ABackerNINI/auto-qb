@@ -97,6 +97,7 @@ from auto_qb.config import (
     load_global_hr,
     load_tracker_hr,
 )
+from auto_qb.core.traffic_source import paths as traffic_paths
 from auto_qb.infra.errors import AutoQbError
 
 
@@ -2317,7 +2318,7 @@ def test_loader_defaults_gslc_optional_keys():
         g = cfg.global_speed_limit_curve
         assert g.enabled is True  # 缺省 True = 现行行为
         assert g.interval is None  # 未指定 -> 回退 config.interval
-        assert cfg.traffic_source.active_dat_path() == "/tmp/history_traffic.dat"
+        assert traffic_paths.dat_path(cfg) == "/tmp/history_traffic.dat"
         assert g.curves[0].period == "day"
         assert g.curves[0].upload_points is not None
         assert g.curves[0].download_points is None  # 省略 download_curve = 不管理下载方向

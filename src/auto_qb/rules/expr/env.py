@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Tuple
 
 from ...config.schema.fields import STATE_ATTRS  # 枚举族单点(issue 26-10-11-0031): 第三份声明已删
 from ...core import curves
+from ...core.traffic_source import paths as traffic_paths
 from ...infra import file_access, utils
 from ...torrents import TorrentRecord
 from ...torrents.compat import _SNAPSHOT_FIELDS
@@ -175,18 +176,18 @@ def _traffic(period: str, index: int):
 
     WARN: 未配置数据源 -> 报错(该名字被禁用), **不返回 0**: 返回 0 会让「今日上传已达标」
     这类条件在没配数据源时静默成假、在配了但文件不可读时同样失真, 两头都不可接受。
-    取数路径走 config.traffic_source.active_dat_path()(数据源单点, 计划 26-10-17-0339 S15);
-    provider=traffic_monitor 时行为与改动前逐字等价。读文件是 I/O -> 标昂贵(按 ctx 缓存),
-    建议只在低频规则里用。
+    取数路径走 `core.traffic_source.paths.dat_path()`(R2/D20 后的唯一入口: provider=traffic_monitor
+    时读配置的 dat_path, provider=global_traffic_monitor 时读工具的发现指针 —— 后者是运行期事实,
+    配置面没有这个键); provider=traffic_monitor 时行为与改动前逐字等价。
+    读文件是 I/O -> 标昂贵(按 ctx 缓存), 建议只在低频规则里用。
     """
     def get(ctx):
         conf = getattr(ctx.config, "global_speed_limit_curve", None)
-        dat_path = ctx.config.traffic_source.active_dat_path()
-        if not dat_path or not getattr(conf, "enabled", True):
-            raise ExprError(
-                "数据源未配置: 该值需要配置 config.traffic_source"
-                "(traffic_monitor.dat_path 或 global_traffic_monitor.data_dir)"
-            )
+        dat_path = traffic_paths.dat_path(ctx.config)
+        if not getattr(conf, "enabled", True):
+            raise ExprError("数据源未启用: config.global_speed_limit_curve.enabled 为 false")
+        if not dat_path:
+            raise ExprError(traffic_paths.unavailable_reason(ctx.config))
         try:
             with open(dat_path, "r", encoding="utf-8", errors="replace") as f:
                 rows, _bad = curves.parse_history_dat(f.read())

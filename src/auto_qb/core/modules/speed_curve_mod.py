@@ -8,7 +8,8 @@
 - 手动保护的日志节流状态(_curve_manual_log)收进模块实例, 内核不再代持。
 
 对应 config.global_speed_limit_curve(缺省 None 或 enabled: false = 不启用), 作为全局
-任务按 config.interval 周期执行: 读取 config.traffic_source 当前生效来源的 dat, 按每条 period 曲线聚合当前
+任务按 config.interval 周期执行: 经 `core.traffic_source.paths.dat_path()` 取当前生效来源的
+dat(工具来源是运行期事实, 不在配置里), 按每条 period 曲线聚合当前
 累计上传/下载量, 查档得到该方向限速(方案B 全程分档覆盖), 同方向多条曲线取最严(最小
 非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
 
@@ -36,6 +37,7 @@ from .. import curves
 from ..module import AppContext, BaseModule
 from ..state import prune_day_keys
 from ..taskqueue import REQUEUE, Task
+from ..traffic_source import paths as traffic_paths
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ def _period_rows(period_stats: List[Tuple[str, int, int]]) -> List[dict]:
 
 
 def _read_source_rows(dat_path: str) -> Tuple[List[Tuple[date, int, int]], int, Optional[dict]]:
-    """读流量数据源(dat, 路径由调用方从 config.traffic_source.active_dat_path() 取) ->
+    """读流量数据源(dat, 路径由调用方从 core.traffic_source.paths.dat_path() 取) ->
     (按日行, 无法解析行数, 失败 | None)
 
     读法与失败判据的**单点**(任务轮与监视器通知刷新轮共用 —— 同一条判据不许两处各实现一遍,
@@ -187,8 +189,9 @@ class SpeedCurveModule(BaseModule):
             self._publish_traffic("disabled")
             return REQUEUE
 
-        # 1. 读取数据源(路径取自 config.traffic_source, 读法与失败判据单点在 _read_source_rows)
-        dat_path = self._ctx.config.traffic_source.active_dat_path()
+        # 1. 读取数据源(路径走取数单点 traffic_source.paths.dat_path: 工具来源是运行期事实,
+        #    不在配置里; 读法与失败判据单点在 _read_source_rows)
+        dat_path = traffic_paths.dat_path(self._ctx.config)
         rows, bad, fail = _read_source_rows(dat_path)
         if fail is not None:
             logger.warning(f"限速曲线 | {fail['log']}, 本轮不动")
@@ -301,7 +304,7 @@ class SpeedCurveModule(BaseModule):
         if conf is None or not conf.enabled:
             logger.info("限速曲线 | 监视器通知刷新跳过: 限速曲线未启用(快照保持 disabled)")
             return False
-        dat_path = self._ctx.config.traffic_source.active_dat_path()
+        dat_path = traffic_paths.dat_path(self._ctx.config)
         rows, bad, fail = _read_source_rows(dat_path)
         if fail is not None:
             logger.info(f"限速曲线 | 监视器通知刷新跳过: {fail['log']}")

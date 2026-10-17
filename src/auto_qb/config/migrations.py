@@ -238,6 +238,11 @@ def _migrate_config_4_5(cfg: dict):
       tool_token_path / subscribe / autostart 一律删除; 整段从 config 删除(该段在 v5 退休)。
     - provider 推导: 旧 global_traffic_monitor 段存在(非空) -> "global_traffic_monitor";
       否则 -> "traffic_monitor"。
+      !已知不精确(R2 记录, 未改行为): 推导只看"段是否存在", 不看旧段的 enabled —— 旧段
+      `enabled: false`(用户显式关过联动)也会被推成 global_traffic_monitor, 即取数来源被静默
+      切走。测试期按计划 26-10-17-0339 R2 的口径手工处理(改 config.yml 的 provider); 已升级到
+      v5 的配置不会重跑本迁移, 故此处不改判据 —— 改了只影响尚未升级的机器, 收益小于引入
+      "同一版本号两种迁移结果"的风险。
     每个被删除/被迁移的键产出一条人读 note, 经 migrate_with_notes 落成 WARNING(D3)。幂等:
     对已是 v5 形状的输入(无旧曲线 traffic_source 键、无旧 gtm 段)不产生任何副作用。
     """

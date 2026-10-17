@@ -107,8 +107,8 @@ traffic_source:
     global_traffic_monitor:
         tool_dir: ""                       # 工具安装目录(留空 = 仓库内 tools/global-traffic-monitor)
         tool_exe: ""                       # 显式可执行文件路径(非空且存在则优先于启动器; 编译版逃生门)
-        data_dir: ""                       # 工具数据目录; 非空时取数路径 = <data_dir>/history_traffic.dat
         notify_cooldown_s: 10M             # 收到工具事件后刷新历史图的冷却(0S~24H), 0S = 不冷却
+        # !无 data_dir(R2/D20): 数据目录由工具的发现指针提供, 配置里不存副本
 ```
 
 | 键 | 类型/默认 | 说明 |
@@ -119,10 +119,9 @@ traffic_source:
 | `global_traffic_monitor` | object | 全局流量监视器(工具)来源子块 |
 | `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录; 留空 = 仓库内 `tools/global-traffic-monitor`(源码态默认), 目录里放平台启动器 `launch.cmd`/`launch.sh` |
 | `global_traffic_monitor.tool_exe` | str / `""` | 显式可执行文件路径; **非空且文件存在则优先于启动器**(显式覆盖 / 编译版逃生门), 找不到才回退启动器, 两者都没有 = 「未安装」 |
-| `global_traffic_monitor.data_dir` | str / `""` | 工具数据目录(**取数用**); 非空时取数路径 = `<data_dir>/history_traffic.dat`; 工具自身默认落 `<工具安装目录>/data`, 需把该路径填到这里; 留空 = 无数据源(不回退 TM 文件) |
 | `global_traffic_monitor.notify_cooldown_s` | time / `10M` | 收到工具事件后刷新历史图的冷却(`0S` ~ 24H), `0S` = 不冷却; 事件号去重另算, 两者互补 |
 
-取数单点 = `TrafficSourceConfig.active_dat_path()`(实现单点 `src/auto_qb/config/models.py`): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → `<data_dir>/history_traffic.dat`(`data_dir` 为空则无数据源)。两来源**严格互斥**(同一次取数只走一支)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
+取数单点 = `core.traffic_source.paths.dat_path(config)`(实现单点 `src/auto_qb/core/traffic_source/paths.py`, R2/D20): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → 读工具发现指针 `endpoint.json` 的 `data_dir` + 契约文件名 `history_traffic.dat`(指针缺失 = 无数据源, **不回退 TM 文件**)。两来源**严格互斥**(同一次取数只走一支)。**为什么路径不进配置**: 数据目录是工具自己的事实, 配置里存副本会与真值漂移(26-10-17 实测: 迁移后配置空、状态区却显示指针里的真目录, 曲线读 `''` 恒失败)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
 
 **v4→v5 迁移**(计划 26-10-17-0339 S15): 曲线段内联 `traffic_source[].traffic_monitor.dat_path` 迁到本段 `traffic_monitor.dat_path`(曲线段内的 `traffic_source` 键删除); 旧顶层 `global_traffic_monitor` 段仅 `notify_cooldown_s` 保留到本段 `global_traffic_monitor.notify_cooldown_s`, 其余键(`enabled`/`tool_url`/`tool_token_path`/`subscribe`/`autostart`)与整段一并删除(逐键打 WARNING)。`provider` 按「旧 gtm 段非空 -> `global_traffic_monitor`, 否则 `traffic_monitor`」推导。并存期 TrafficMonitor 仅作对照读, **不得与工具同写一文件**(工具是历史文件的唯一写者)。
 

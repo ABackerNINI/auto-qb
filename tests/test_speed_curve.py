@@ -57,6 +57,7 @@ from auto_qb.core.modules.speed_curve_mod import (
     _CURVE_STATE_KEEP_DAYS, _MANUAL_REMIND_GAP, _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
 )
 from auto_qb.core.taskqueue import Task
+from auto_qb.core.traffic_source import paths as traffic_paths
 from helpers import FakeClient, make_manager
 
 GIB = 1024**3
@@ -288,7 +289,7 @@ def test_speed_curve_config_parses_sample(tmp_path):
     assert g is not None
     # 数据源在顶层 traffic_source 段(S15), 曲线段不再持有 dat_path
     assert cfg.traffic_source.traffic_monitor.dat_path == _VALID_DAT
-    assert cfg.traffic_source.active_dat_path() == _VALID_DAT
+    assert traffic_paths.dat_path(cfg) == _VALID_DAT
     assert not hasattr(g, "dat_path")
     assert g.interval == 600.0  # interval: 10M -> 600 秒
     assert len(g.curves) == 2
@@ -388,25 +389,27 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
         with pytest.raises(ConfigError):
             _load(tmp_path, copy.deepcopy(_valid_spec()), traffic_source=src)
     # 合法数据源(两来源参数可并存, provider 决定生效来源)
-    assert _load(
+    tm_cfg = _load(
         tmp_path,
         copy.deepcopy(_valid_spec()),
-        traffic_source={
-            "traffic_monitor": {
-                "dat_path": "a"
-            }
-        },
-    ).traffic_source.active_dat_path() == "a"
-    assert _load(
+        traffic_source={"traffic_monitor": {
+            "dat_path": "a"
+        }},
+    )
+    assert traffic_paths.dat_path(tm_cfg) == "a"
+    # 工具来源: 配置里只剩 tool_dir/tool_exe/notify_cooldown_s —— 取数路径由工具发现指针提供,
+    # 解析细节见 test_traffic_source_paths.py(这里只验配置面能通过校验)
+    tool_cfg = _load(
         tmp_path,
         copy.deepcopy(_valid_spec()),
         traffic_source={
             "provider": "global_traffic_monitor",
             "global_traffic_monitor": {
-                "data_dir": "/d"
+                "tool_dir": "/d"
             }
         },
-    ).traffic_source.active_dat_path() == os.path.join("/d", "history_traffic.dat")
+    )
+    assert tool_cfg.traffic_source.provider == "global_traffic_monitor"
 
 
 def test_speed_curve_config_rejects_bad_curves(tmp_path):

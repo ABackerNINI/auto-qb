@@ -5,7 +5,6 @@
 - UNLIMITED_SPEED: exporter 生成 YAML 模板的原始串占位(输出格式)
 """
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -299,7 +298,7 @@ class GlobalSpeedLimitCurve:
     interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
     enabled: 功能总开关; True(缺省) = 现行行为, False = 整体停用(曲线任务短路不动 qB, Web 端视为未启用)
     !数据源(dat 文件路径)已迁到顶层 traffic_source 段(计划 26-10-17-0339 S15), 取数走
-    config.traffic_source.active_dat_path()。
+    core.traffic_source.paths.dat_path(config)(R2/D20: 工具来源的路径是运行期事实)。
     """
     curves: List[PeriodCurve]
     interval: Optional[float] = None  # 秒; None = 使用 config.interval
@@ -346,13 +345,13 @@ class TrafficMonitorSourceConfig:
 class GlobalTrafficMonitorSourceConfig:
     """traffic_source.global_traffic_monitor: 全局流量监视器(工具 gtm)来源参数
 
-    tool_dir / tool_exe / data_dir: 工具安装位置与数据目录(指针来源的具体取数细化在后续步骤;
-      data_dir 非空时 dat 文件取 <data_dir>/history_traffic.dat —— 文件名是跨包契约)
+    tool_dir / tool_exe: 工具安装位置与启动目标(D10 解析顺序: tool_exe 优先, 否则 tool_dir 里的
+      启动器)。**这里没有 data_dir** —— 数据目录是工具自己的事实, 由它在发现指针
+      endpoint.json 里报出; 配置里再存一份只会与真值漂移(计划 26-10-17-0339 R2/D20)。
     notify_cooldown_s: 收到事件后的刷新冷却(秒)
     """
     tool_dir: str = ""
     tool_exe: str = ""
-    data_dir: str = ""
     notify_cooldown_s: float = 600.0
 
 
@@ -363,26 +362,15 @@ class TrafficSourceConfig:
     provider: 当前生效来源("traffic_monitor" 或 "global_traffic_monitor"); 两来源参数可并存,
       但只有 provider 指向的那一个参与取数(严格互斥, D1)。
     traffic_monitor / global_traffic_monitor: 两个来源的参数(互斥生效)。
+
+    !取数路径**不在本对象里算**(R2/D20): 工具来源的 dat 路径是运行期事实(工具自己报在发现
+    指针里), 配置面无从得知。所有取数方一律调 `core.traffic_source.paths.dat_path(config)`
+    —— 那是唯一入口; 本对象只承载「用户能配什么」。
     """
 
     provider: str = "traffic_monitor"
     traffic_monitor: TrafficMonitorSourceConfig = field(default_factory=TrafficMonitorSourceConfig)
     global_traffic_monitor: GlobalTrafficMonitorSourceConfig = field(default_factory=GlobalTrafficMonitorSourceConfig)
-
-    def active_dat_path(self) -> str:
-        """当前生效来源的 dat 文件路径(空 = 未配置数据源); 取数单点, 下游一律走它
-
-        provider=="traffic_monitor" -> traffic_monitor.dat_path(去空白);
-        provider=="global_traffic_monitor" -> global_traffic_monitor.data_dir 非空时
-          os.path.join(data_dir, "history_traffic.dat"), 否则 ""(工具 dat 文件名是跨包契约,
-          指针来源的细化落在 S16)。
-        """
-        if self.provider == "global_traffic_monitor":
-            data_dir = self.global_traffic_monitor.data_dir.strip()
-            if data_dir:
-                return os.path.join(data_dir, "history_traffic.dat")
-            return ""
-        return self.traffic_monitor.dat_path.strip()
 
 
 @dataclass(frozen=True)

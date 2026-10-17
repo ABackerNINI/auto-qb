@@ -49,7 +49,8 @@ KNOWN_TRAFFIC_SOURCE_KEYS = {"provider", "traffic_monitor", "global_traffic_moni
 #: traffic_source.traffic_monitor(Traffic Monitor dat 来源)
 KNOWN_TRAFFIC_SOURCE_TM_KEYS = {"dat_path"}
 #: traffic_source.global_traffic_monitor(整机流量监视器 gtm 来源)
-KNOWN_TRAFFIC_SOURCE_TOOL_KEYS = {"tool_dir", "tool_exe", "data_dir", "notify_cooldown_s"}
+#: !无 data_dir(R2/D20): 数据目录由工具的发现指针提供, 配置里不再存副本 —— 出现该键按未知键拒绝
+KNOWN_TRAFFIC_SOURCE_TOOL_KEYS = {"tool_dir", "tool_exe", "notify_cooldown_s"}
 
 # qb_traffic.flush_interval 边界(v3 计划 26-10-04-1957 §06.1): 缓冲批量落盘周期 —— 下限防写放大
 # (fsync 风暴), 上限防崩溃丢失窗口过大; 须为整数秒(游标/块头时间戳按整秒粒度推算)
@@ -648,6 +649,8 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
     未配置(None)合法 = 走默认值(provider=traffic_monitor)。两来源参数可并存, 但只有 provider
     指向的那个参与取数(D1 严格互斥); provider=traffic_monitor 时其 dat_path 必须非空(未配数据源
     则功能取不到数 —— fail-fast)。两个子块一律做结构校验(未知键 + 类型), 与 provider 无关。
+    provider=global_traffic_monitor 时**启动期没有必填项**(R2/D20): 取数路径是工具运行期报出的
+    事实(发现指针), 配置面无从校验 —— 缺路径由状态区与运行期日志承担, 不在这里猜。
     """
     if spec is None:
         return
@@ -676,7 +679,7 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
             errors.append(f"{tool_where}: 必须是字典")
         else:
             _check_unknown_keys(tool, KNOWN_TRAFFIC_SOURCE_TOOL_KEYS, tool_where, errors)
-            for key in ("tool_dir", "tool_exe", "data_dir"):
+            for key in ("tool_dir", "tool_exe"):
                 if key in tool and not isinstance(tool[key], str):
                     errors.append(f"{tool_where}.{key}: 必须是字符串(路径)")
             if "notify_cooldown_s" in tool:

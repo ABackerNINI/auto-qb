@@ -353,7 +353,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     先验证再解析: 结构/键/数值合法性由 validation._validate_global_speed_limit_curve 在
     fail-fast 校验阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。
     数据源(dat 文件路径)已迁到顶层 traffic_source 段(计划 26-10-17-0339 S15), 本段只留
-    curves/interval/enabled; 取数经 config.traffic_source.active_dat_path()。
+    curves/interval/enabled; 取数经 core.traffic_source.paths.dat_path(config)。
     配置样式:
         interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
         enabled: true              # 功能总开关(可选, 缺省 true; false = 整体停用, 任务短路不动 qB)
@@ -449,7 +449,6 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     global_traffic_monitor = GlobalTrafficMonitorSourceConfig(
         tool_dir=_tool("tool_dir"),
         tool_exe=_tool("tool_exe"),
-        data_dir=_tool("data_dir"),
         notify_cooldown_s=_tool("notify_cooldown_s", parse_time),
     )
     # provider 缺省/留空 = traffic_monitor(与校验同口径; 去空白后再兜底)

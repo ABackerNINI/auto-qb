@@ -495,17 +495,12 @@ GROUPS: Tuple[Group, ...] = (
                         "整机流量监视器来源",
                         "object",
                         show_if=("provider", "global_traffic_monitor"),
-                        help="provider 为 global_traffic_monitor 时生效的参数",
+                        help="provider 为 global_traffic_monitor 时生效的参数。"
+                        "数据目录不在这里配 —— 工具自己会在发现指针里报出真实数据目录, "
+                        "状态区「数据目录」显示的就是它(避免配一份与真值漂移的副本)",
                         fields=(
                             Field("tool_dir", "工具目录", "str", default="", help="工具 gtm 的安装目录"),
                             Field("tool_exe", "工具可执行文件", "path", default="", help="工具 gtm 的可执行文件路径"),
-                            Field(
-                                "data_dir",
-                                "工具数据目录",
-                                "path",
-                                default="",
-                                help="工具 gtm 的数据目录; 非空时 dat 文件取 <data_dir>/history_traffic.dat",
-                            ),
                             Field(
                                 "notify_cooldown_s",
                                 "刷新冷却",

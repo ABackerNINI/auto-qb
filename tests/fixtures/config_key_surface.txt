@@ -159,7 +159,6 @@ trackers.*.tags
 trackers.*.upload_speed_limit
 traffic_source
 traffic_source.global_traffic_monitor
-traffic_source.global_traffic_monitor.data_dir
 traffic_source.global_traffic_monitor.notify_cooldown_s
 traffic_source.global_traffic_monitor.tool_dir
 traffic_source.global_traffic_monitor.tool_exe

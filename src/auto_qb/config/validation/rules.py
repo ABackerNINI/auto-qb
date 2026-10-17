@@ -78,22 +78,24 @@ class _ExprGate:
 
 
 def _expr_gate(data) -> _ExprGate:
-    """从原始配置判断数据源是否配置(顶层 traffic_source 段当前生效来源的 dat 路径非空)
+    """从原始配置判断数据源是否可用(顶层 traffic_source 段当前生效来源)
 
     WARN: 本函数跑在**traffic_source 段校验之前**(validate_config 里规则段在前), 所以必须容忍
     结构非法的 traffic_source —— 结构错误由 _validate_traffic_source 负责报错, 这里只尽力判
-    "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。判据与
-    models.TrafficSourceConfig.active_dat_path() 同口径(按 provider 分支: global_traffic_monitor
-    来源看 data_dir 非空, 否则看 traffic_monitor.dat_path 非空)。
+    "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。
+
+    按 provider 分支(R2/D20):
+    - traffic_monitor -> 看 traffic_monitor.dat_path 非空(纯配置事实, 与改动前一致);
+    - global_traffic_monitor -> **恒 True**: dat 路径是工具运行期报出的事实(发现指针), 配置期
+      无从得知; 这里判 False 会让所有用 traffic.* 的规则在启动校验期就报"名字不可用", 把
+      "工具暂时没跑"误判成"配置写错了"。缺路径在运行期由 ExprError 显式报出(见 rules/expr/env.py)。
     """
     ts = data.get("traffic_source") if isinstance(data, dict) else None
     if not isinstance(ts, dict):
         return _ExprGate()
     provider = str(ts.get("provider") or "traffic_monitor").strip()
     if provider == "global_traffic_monitor":
-        tool = ts.get("global_traffic_monitor")
-        data_dir = str(tool.get("data_dir", "") or "").strip() if isinstance(tool, dict) else ""
-        return _ExprGate(traffic_configured=bool(data_dir))
+        return _ExprGate(traffic_configured=True)
     tm = ts.get("traffic_monitor")
     dat_path = str(tm.get("dat_path", "") or "").strip() if isinstance(tm, dict) else ""
     return _ExprGate(traffic_configured=bool(dat_path))
@@ -250,7 +252,8 @@ def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=Non
         if gated:
             errors.append(
                 f"{where}: 取值 {'、'.join(gated)} 无数据源 —— 需在 config.traffic_source 配置当前生效来源"
-                "(traffic_monitor.dat_path 或 global_traffic_monitor.data_dir), 未配置时该值不可用"
+                "(traffic_monitor.dat_path; 选 global_traffic_monitor 时路径由工具运行期提供, 不再配置), "
+                "未配置时该值不可用"
             )
 
 

@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [全局流量监视器开机自启注册需管理员权限，非提权下静默失败](26-10-17-1455-bug-gtm-autostart-elevation.html) — schtasks /SC…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-…

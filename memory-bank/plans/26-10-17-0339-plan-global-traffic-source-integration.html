@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-17-0339">
-<meta name="doc-updated" content="26-10-17-0429">
+<meta name="doc-updated" content="26-10-17-1447">
 <style>
   :root {
     --bg: #10151a;
@@ -94,9 +94,12 @@
 <table>
   <tr><th style="width:70px">版本</th><th style="width:110px">时间</th><th>变更</th></tr>
   <tr><td>R0</td><td>26-10-17-0339</td><td>初版:grilling 五轮 36 问收敛,拍板 D1–D18(单一来源开关 / 发现指针 / 随机端口 / 数据落点 / 自启触发 / 设置页合并 …)</td></tr>
+  <tr><td>R2</td><td>26-10-17-1447</td><td><b>取数路径收归工具指针</b>:删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键与设置页字段(新增 <b>D20</b>),取数改走运行期单点 <code>core/traffic_source/paths.py</code>;D2/D17/§05/§10 同步,新增 S20。<b>不做配置版本升级</b>(测试期未上线,残留键按未知键报错、手工清理)</td></tr>
   <tr><td>R1</td><td>26-10-17-0429</td><td><b>拉起与自启契约改版</b>:D10 改写为「工具侧启动器契约」并新增 <b>D19</b>;D13 收敛为「启动器恒定携带自启意图 + 工具 config 唯一裁决」,<b>删掉 auto-qb 的条件传参</b>;D2/D17/S17/§05 随之删掉 auto-qb 侧的 <code>autostart</code> 键(开关状态回归工具侧单点);§03/S11/S14/S16/§08/§09/§10 同步</td></tr>
 </table>
 <div class="note"><b>R1 的起因:</b>原设计让 auto-qb 在拉起时条件计算 <code>--autostart true|false</code>(provider = 工具来源且用户未关过 ⇒ 真)。「把该旗标固化进启动器以解耦 CLI 形态」这一改法会与 D13 冲突 —— 它的<b>取值是可变的</b>,而 <code>false</code> 那一支正是「用户显式关过 ⇒ 不被装回」的防复活闸,固化成常量等于把闸门焊死。故改判为:<b>启动器只携带"顺带注册"这一个恒定意图,是否真注册由工具侧 config <code>autostart</code> 裁决</b> —— 判断权下放给状态的持有者,auto-qb 侧既不持有也不计算该状态。</div>
+
+<div class="note"><b>R2 的起因(真机事故):</b>26-10-17 14:00 的 v4→v5 迁移把 <code>provider</code> 推到 <code>global_traffic_monitor</code>,但旧段里根本没有 <code>data_dir</code> 可迁 —— 于是配置里该键为空、<code>active_dat_path()</code> 返回空串,曲线日志刷 <code>读取流量数据失败(): No such file or directory: ''</code>,顶栏与历史图全空;而状态区显示的是<b>指针里的真实数据目录</b>,看上去「工具已就绪」。根因不是迁移漏搬一个键,而是<b>同一件事有两个来源</b>:数据目录本来就是工具的事实(它自己报在发现指针里),配置再存一份只会漂移。故 R2 删掉这个键,取数路径只认指针。</div>
 
 <h3>为什么与旧计划分属两份,而不是就地改旧计划</h3>
 <p>仓库约定「计划改版 = 同文件内 <code>## 变更记录</code> + 抬 <code>doc-updated</code>」(<a style="color:var(--dim)" href="../conventions/doc-forms.md">doc-forms.md</a>)。本轮 <b>用户拍板「新写计划」</b>,且改判面不止是参数微调 —— 它推翻了 <a style="color:var(--dim)" href="./26-10-16-0541-plan-global-traffic-monitor.html">26-10-16-0541</a> §01 中「配置主权与落点 / 发现机制 / 自启触发方式 / 用户可见命名」四组核心拍板。故本计划用**独立 doc-topic**(<code>global-traffic-source-integration</code>)承接集成层,避免与旧计划同专题分叉。</p>
@@ -115,7 +118,7 @@
 <table>
   <tr><th>#</th><th>决策</th></tr>
   <tr><td>D1</td><td><b>单一来源开关</b>:新建顶层 <code>traffic_source</code> 段,<code>provider: traffic_monitor | global_traffic_monitor</code>;<b>严格单选互斥</b>(两来源参数可并存,但只有一个生效);<b>不静默回退</b>。</td></tr>
-  <tr><td>D2</td><td><b>配置落点</b>:<code>traffic_source.traffic_monitor.dat_path</code> 与 <code>traffic_source.global_traffic_monitor.{tool_dir,tool_exe,data_dir,notify_cooldown_s}</code>(<b>不含 <code>autostart</code></b> —— 自启状态与裁决都在工具侧,见 D13/D19);顶层 <code>global_traffic_monitor</code> 段退休;<code>global_speed_limit_curve</code> 只留 <code>curves/interval/enabled</code>。<b>工具自身参数</b>(采样间隔/通知阈值/适配器过滤)不进 auto-qb 配置,仍经控制面读写、默认即用、高级项折叠。</td></tr>
+  <tr><td>D2</td><td><b>配置落点</b>:<code>traffic_source.traffic_monitor.dat_path</code> 与 <code>traffic_source.global_traffic_monitor.{tool_dir,tool_exe,notify_cooldown_s}</code>(<b>不含 <code>autostart</code></b>,<b>也不含 <code>data_dir</code></b> —— 见 D20) —— 自启状态与裁决都在工具侧,见 D13/D19);顶层 <code>global_traffic_monitor</code> 段退休;<code>global_speed_limit_curve</code> 只留 <code>curves/interval/enabled</code>。<b>工具自身参数</b>(采样间隔/通知阈值/适配器过滤)不进 auto-qb 配置,仍经控制面读写、默认即用、高级项折叠。</td></tr>
   <tr><td>D3</td><td><b>迁移走配置升级路线</b>:用既有迁移链新增 <code>MIGRATIONS["config"][4]</code>(v4→v5) —— 旧段下移 + 删四键 + <code>dat_path</code> 迁移 + provider 推导;逐键 note → WARNING;沿用启动物化单点的原子写回 + 备份。</td></tr>
   <tr><td>D4</td><td><b>工具进程形态不削减</b>:独立进程 + <b>开机自启</b> + 多 auto-qb <b>共享服务</b>;自启绝对支持,不可移除。</td></tr>
   <tr><td>D5</td><td><b>auto-qb 的角色</b>:只做「探测 → 缺席时一次性引导拉起 → 之后走控制面订阅」;<b>不是守护者</b>,不管工具死活、不接管其生命周期。</td></tr>
@@ -130,8 +133,9 @@
   <tr><td>D14</td><td><b>多实例竞争</b>:探测失败才拉起;拉起后短等待探活;失败按<b>固定退避 30s</b> 重试;探活成功但 pid 非我所起 ⇒ 别的实例已拉起,直接订阅、不重复拉;<b>不做实例间通信</b>。</td></tr>
   <tr><td>D15</td><td><b>设置页合并</b>:两处并成<b>一张卡「全局流量来源」</b> —— 顶部 provider 单选,选中谁展开谁,底部工具状态区 + 「立即拉起/重试」+「打开工具设置」;限速曲线卡<b>删掉来源字段</b>。</td></tr>
   <tr><td>D16</td><td><b>改名只限用户可见面</b>:CLI 命令 <code>global-traffic-monitor</code>、env <code>GLOBAL_TRAFFIC_MONITOR_DATA_DIR</code>、配置键全称、UI 文案、指针/锁/用户级目录名;<b>Python 包 <code>gtm</code>、import、内部注释、内部文档继续用 <code>gtm</code></b>。</td></tr>
-  <tr><td>D17</td><td><b>键面清理</b>:删 <code>tool_url</code>/<code>tool_token_path</code>/<code>subscribe</code>/<code>autostart</code>;工具子块只留 D2 列的四键。</td></tr>
+  <tr><td>D17</td><td><b>键面清理</b>:删 <code>tool_url</code>/<code>tool_token_path</code>/<code>subscribe</code>/<code>autostart</code>;工具子块只留 D2 列的<b>三键</b>(<code>tool_dir</code>/<code>tool_exe</code>/<code>notify_cooldown_s</code>)。</td></tr>
   <tr><td>D18</td><td><b>非目标</b>:<code>qb_traffic</code> 不进 provider 菜单;auto-qb 不守护工具;不改工具落盘格式与采样语义;不要求用户配置端口/密钥。</td></tr>
+  <tr><td>D20</td><td><b>取数路径只认工具指针(R2)</b>:删配置键 <code>traffic_source.global_traffic_monitor.data_dir</code> 与设置页对应字段;取数路径由<b>运行期单点</b> <code>core/traffic_source/paths.py::dat_path(config)</code> 解析 —— provider=<code>traffic_monitor</code> 读配置的 <code>dat_path</code>,provider=<code>global_traffic_monitor</code> 读发现指针的 <code>data_dir</code> + 契约文件名 <code>history_traffic.dat</code>(<b>只读指针、不探活</b>;指针缺失 = 无数据源,<b>不回退 TM 文件</b>)。指针是用户级/整机一份,故多 clone 自动一致;工具换数据目录零配置。<code>active_dat_path()</code> 随之退休,不许再有第二个入口。启动期不再校验工具来源的路径(<code>_expr_gate</code> 对 gtm 恒放行),缺路径由状态区与运行期日志承担。</td></tr>
   <tr><td>D19</td><td><b>启动器契约(工具侧拥有「怎么起」)</b>:工具根目录(<code>resolve_tool_root()</code>,D11)预置平台启动器 —— Windows <code>launch.cmd</code> / POSIX <code>launch.sh</code>;<b>编译态同一条路径</b>(启动器内容退化为调用同目录的可执行文件)。内容由工具自己维护:优先用工具自带 venv 解释器(装依赖时已建),缺失才兜底 <code>uv run --project &lt;本目录&gt;</code>;恒定携带自启意图常量(D13);不传 <code>--data-dir</code>(D12)。auto-qb 侧只做「<code>resolve_tool_root()</code> → 找启动器 → Windows <code>cmd.exe /c</code> / POSIX <code>/bin/sh &lt;脚本&gt;</code> detached 执行」——<b>不认识 <code>uv</code>、不认识入口名与子命令</b>;工具升级换命令形态只改启动器内容,auto-qb 零改动。<code>tool_exe</code> 显式覆盖仍在(先于启动器,逃生门);就绪判据仍是探活(D7),不看启动器退出码(detached 拿不到)。</td></tr>
 </table>
 
@@ -283,6 +287,17 @@ tools/global-traffic-monitor/                         <span class="cm"># 源码�
 </ul>
 <div class="exit"><b>出口</b>全量测试绿且新基线数字实测;文档四处无漂移。</div>
 
+<h3><span class="sid">S20</span>auto-qb 侧:取数路径收归工具指针(R2/D20)</h3>
+<ul>
+  <li>删键面:<code>models.GlobalTrafficMonitorSourceConfig.data_dir</code>、<code>schema/groups.py</code> 的「工具数据目录」字段、<code>KNOWN_TRAFFIC_SOURCE_TOOL_KEYS</code> 里的 <code>data_dir</code>;残留键走<b>通用未知键报错</b>(不做专用指路,也不静默忽略 —— 忽略会让人以为"配了就在生效")。</li>
+  <li>新增运行期单点 <code>core/traffic_source/paths.py::dat_path(config)</code>:provider=<code>traffic_monitor</code> 读配置 <code>dat_path</code>;provider=<code>global_traffic_monitor</code> 读发现指针 <code>data_dir</code> + 契约文件名(只读指针、不探活,主循环每轮一次小文件读,不做缓存)。同文件给 <code>unavailable_reason(config)</code> 让报错文案与取数分支同源。</li>
+  <li><b>删</b> <code>TrafficSourceConfig.active_dat_path()</code> —— 不许留第二入口,否则"gtm 来源恒空"会被某个调用方当成"未配置"。</li>
+  <li>消费方改调:<code>speed_curve_mod</code>(曲线轮 + 通知刷新轮)、<code>rules/expr/env.py</code>;后者报错按 provider 分支(工具来源 = 「未在运行/指针缺失」,TM 来源 = 「未配置 dat_path」)。</li>
+  <li><code>validation/rules.py::_expr_gate</code>:gtm 来源恒放行(路径是运行期事实,配置期判不了;判 False 会把"工具暂时没跑"误判成"配置写错了");TM 来源维持看 <code>dat_path</code>。</li>
+  <li>设置页:工具面少一个字段;状态区「数据目录」保持只读展示(值来自指针),不再出现"显示值 ≠ 取数路径"。</li>
+</ul>
+<div class="exit"><b>出口</b>全仓搜不到 <code>traffic_source.global_traffic_monitor.data_dir</code>;工具在跑时曲线/顶栏/历史图出数,工具停时 stale 且日志一句话说清原因;键面基线与相关测试同步。</div>
+
 <h3><span class="sid">S19</span>真机验收(并入旧 S10)</h3>
 <ul>
   <li>真机跑 <code>dev.run -- config.yml --dry-run</code> 起步,再真实运行:①工具未跑 → 自动拉起 → 订阅成功;②工具自启后重启机器 → auto-qb 探测到在跑、零拉起;③双 auto-qb 实例共享同一工具;④切回 TM 文件来源后工具参数保留但不参与取数。</li>
@@ -311,7 +326,7 @@ tools/global-traffic-monitor/                         <span class="cm"># 源码�
   <tr><td>工具 http_port</td><td>0(内核分配随机端口)</td></tr>
   <tr><td>探活超时</td><td>首次引导 120s(含 uv 装依赖) / 常态 10s</td></tr>
   <tr><td>拉起失败退避</td><td>固定 30s</td></tr>
-  <tr><td>工具数据目录</td><td><code>&lt;工具安装目录&gt;/data</code></td></tr>
+  <tr><td>工具数据目录</td><td>工具自报(发现指针 <code>data_dir</code>);auto-qb 配置里<b>无此键</b>(R2/D20)</td></tr>
   <tr><td>指针目录</td><td>用户级平台目录 <code>global-traffic-monitor/</code></td></tr>
 </table>
 <h4>状态区五态(D15/S17)</h4>
@@ -328,9 +343,9 @@ tools/global-traffic-monitor/                         <span class="cm"># 源码�
 <pre><code>S11 ─┬─ S12 ── S13        <span class="cm"># 工具侧发现面(可并行推进)</span>
      └─ S14
             │
-S15 ────────┴─ S16 ── S17   <span class="cm"># auto-qb 侧: 先配置面, 再编排, 再 UI</span>
-                      │
-                     S18 ── S19
+S15 ────────┴─ S16 ── S17 ── S20   <span class="cm"># auto-qb 侧: 先配置面, 再编排, 再 UI, 再收路径</span>
+                             │
+                            S18 ── S19
 </code></pre>
 <p>硬依赖:<b>S15 必须先于 S16</b>(编排读新段);<b>S12/S13 必须先于 S16</b>(指针与随机端口是探测前提);S18 收尾不早于 S17。工具侧 S11–S14 与 auto-qb 侧 S15 可并行(不同包,互不阻塞)。</p>
 
@@ -358,6 +373,7 @@ S15 ────────┴─ S16 ── S17   <span class="cm"># auto-qb �
   <tr><td>迁移等价</td><td>旧配置(仅 TM dat_path)经迁移链升 v5,取数行为与升级前一致,notes 逐键可读</td></tr>
   <tr><td>守阵不受污染</td><td>工具跑起来后 <code>git status</code> 干净(data/run 已 ignore);<code>tests/sidefx.py</code> 全绿</td></tr>
   <tr><td>拉起不依赖 auto-qb 侧 uv</td><td>断言 auto-qb 的拉起动作只有「执行启动器」一步、<b>无 <code>uv</code>/入口名/子命令拼装</b>;模拟工具升级(改启动器内容)后拉起仍成立、auto-qb 零改动</td></tr>
+  <tr><td>取数路径单一事实源</td><td>配置里不存在 <code>data_dir</code>;改指针的 <code>data_dir</code> 后取数路径随之变化(断言 <code>paths.dat_path()</code> 跟着走);删指针后取数为空且不回退 TM 文件</td></tr>
   <tr><td>自启不被装回</td><td>工具 config <code>autostart=false</code>(用户关过)后再走引导拉起:断言注册后端<b>未被调用</b>,注册项仍不存在</td></tr>
 </table>
 
@@ -376,6 +392,7 @@ S15 ────────┴─ S16 ── S17   <span class="cm"># auto-qb �
 <h2><span class="no">10</span>文件定位(行号基准 @ 88e7e4ee)</h2>
 <table>
   <tr><th>文件</th><th>本计划落点</th></tr>
+  <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/core/traffic_source/paths.py">src/auto_qb/core/traffic_source/paths.py</a></td><td><b>新增</b>(R2/D20):取数路径运行期单点(<code>dat_path</code> / <code>unavailable_reason</code>)</td></tr>
   <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/models.py">src/auto_qb/config/models.py</a></td><td><code>GlobalSpeedLimitCurve</code>(含 <code>traffic_source</code>)与 <code>GlobalTrafficMonitorConfig</code> 的取代表</td></tr>
   <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/migrations.py">src/auto_qb/config/migrations.py</a></td><td>新增 <code>MIGRATIONS["config"][4]</code></td></tr>
   <tr><td><a style="color:var(--dim)" href="../../src/auto_qb/config/schema/groups.py">src/auto_qb/config/schema/groups.py</a></td><td>新组与 help 文案</td></tr>
@@ -390,7 +407,7 @@ S15 ────────┴─ S16 ── S17   <span class="cm"># auto-qb �
 </table>
 
 <hr class="rule">
-<p style="color:var(--faint);font-family:var(--mono);font-size:11.5px">本计划经 grilling 五轮收敛 + 26-10-17-0429 就地改版(R1),全部决策见 §02;实施按 S11→S19 逐步骤授权推进。</p>
+<p style="color:var(--faint);font-family:var(--mono);font-size:11.5px">本计划经 grilling 五轮收敛 + 26-10-17-0429 就地改版(R1) + 26-10-17-1447 就地改版(R2),全部决策见 §02;实施按 S11→S20 逐步骤授权推进。</p>
 
 </div>
 </body>

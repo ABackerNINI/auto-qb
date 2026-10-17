@@ -1,9 +1,9 @@
 ---
-summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 探测-拉起-订阅编排: agent 联动单点 + 订阅方向改读发现指针)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休 + 「全局流量来源」单卡[provider 单选 + 五态状态区 + 立即拉起/自启 + 文件选择器] + 曲线卡删来源)已实施; S18(守阵补口 4 条 + 文档四处回写 + 三条新坑 + 新基线切片)已实施, S19 待逐项授权
+summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 探测-拉起-订阅编排: agent 联动单点 + 订阅方向改读发现指针)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休 + 「全局流量来源」单卡[provider 单选 + 五态状态区 + 立即拉起/自启 + 文件选择器] + 曲线卡删来源)已实施; S18(守阵补口 4 条 + 文档四处回写 + 三条新坑 + 新基线切片)已实施; R2 就地改版(26-10-17-1447, 真机事故驱动): 删 `global_traffic_monitor.data_dir` 配置键与设置页字段, 取数路径收归工具发现指针(新单点 `core/traffic_source/paths.py`, 旧 `active_dat_path()` 退休, D20/S20), 自启提权缺陷入池 issue 26-10-17-1455; S19 待逐项授权
 ---
 
 > 摘要: 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处, 来源一键切换。经 grilling 五轮 36 问收敛(用户四次纠正), 产出独立计划 `memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html`(doc-status Open, doc-topic `global-traffic-source-integration`)。**R1 就地改版**(26-10-17-0429): 用户指出「把 `--autostart` 固化进启动器」与 D13 冲突 ⇒ 启动器契约(D10 改写 + 新增 D19) + D13 收敛为「启动器恒定携带意图, 工具 config 唯一裁决」。
-> 最后活动: 2026-10-17 13:53
+> 最后活动: 2026-10-17 14:58
 
 # activeContext · traffic-source-integration(26-10-17-0339)
 
@@ -34,3 +34,5 @@ summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五�
 **待办**: ①S11–S18 已实施; S19(真机验收) **显式授权**后实施(独立收尾+提交); ②旧计划 26-10-16-0541 的 S10 与本计划 S19 归并方式待拍板; ③`docs/configuration.md` 与根 README 回写已在 S18 完成(工具章节整段改版到随机端口/指针/启动器/自启裁决现实); ④S18 只补了 §08 仍缺的 4 条守阵, 工具侧五类(S11–S14)与 auto-qb 侧三类(S15–S17)既有守阵已逐条核过、不重复造。
 
 **R1(2026-10-17 13:53):** S18 实施: 守阵补口 4 条(拉起不拼 uv/入口名 · 指针跨侧镜像 · 工具运行期目录 gitignore · provider 取数互斥) + docs/configuration.md 工具章节整段改版 + README + keys.md 两处口径修正 + 三条新坑 + S18 基线切片; 全量 `test.full` 绿(数字见 kb.baseline)
+
+**R2(2026-10-17 14:47, 真机事故驱动):** 现象「工具已就绪但顶栏/历史图全空」定位为**取数路径有两个来源** —— 14:00 的 v4→v5 迁移按「旧 gtm 段存在」把 `provider` 推到 `global_traffic_monitor`, 而旧段里根本没有 `data_dir` 可迁, 于是 `active_dat_path()` 返回空串(日志 `读取流量数据失败(): No such file or directory: ''`), 状态区却显示指针里的真实目录。用户拍板: **数据目录既然已在 `endpoint.json` 里, 就不该再显示/配置**。改法(计划 R2 + 新增 D20/S20): 删 `traffic_source.global_traffic_monitor.data_dir` 配置键与设置页字段; 取数改走**运行期单点** `core/traffic_source/paths.py::dat_path(config)`(tm 读配置 / gtm 读指针 `data_dir` + 契约文件名, 只读不探活、无缓存), `unavailable_reason()` 让报错文案与分支同源; **删** `active_dat_path()` 不留第二入口; `_expr_gate` 对 gtm 恒放行(路径是运行期事实); 残留 `data_dir` 键按**通用未知键报错**; **不做 v6 迁移**(测试期未上线, 手工清理)。已改: models / schema / validation(sections+rules) / loaders / 新增 paths.py / speed_curve_mod 两处 / expr env / 键面基线 + 8 条新用例(删 4 条旧 `active_dat_path` 用例) / docs/configuration.md / keys.md / 计划 R2 / 新坑 `pitfalls/backend/config-duplicates-runtime-fact.md` / 基线切片 26-10-17-1457。自启 `schtasks ONLOGON` 需提权且失败静默 → 独立入池 `issues/26-10-17-1455-bug-gtm-autostart-elevation.html`(Open, 未认领)。
