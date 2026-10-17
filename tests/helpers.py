@@ -24,7 +24,6 @@ from auto_qb.config import (
     WebConfig,
 )  # noqa: E402
 from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出面已收敛, 模型类直引 models)
-from auto_qb.config.models import GlobalTrafficMonitorConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import TrafficSourceConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
@@ -990,9 +989,6 @@ class FakeConfig:
     # 全局流量来源(计划 26-10-17-0339 S15): 限速曲线/expr 取数单点; 与真 Config 同默认
     # (provider=traffic_monitor, dat_path 空), 既有用例行为零变化
     traffic_source = TrafficSourceConfig()
-    # 全局流量监视器联动(计划 26-10-16-0541 S6/S7): WebUIModule.start/apply 与订阅客户端会读它
-    # —— 与真 Config 同默认(disabled), 既有用例行为零变化; S15 后它是过渡性 stub(字段恒在, 值只来自默认)
-    global_traffic_monitor = GlobalTrafficMonitorConfig()
     qb_traffic = None  # qB 口径流量采样(未启用; 与 Config 默认一致, 测试按需赋 QbTraffic(...))
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——

@@ -1,28 +1,33 @@
-"""全局流量监视器工具联动路由(计划 26-10-16-0541 S6 代理面 + S7 接收面).
+"""全局流量来源(工具 gtm)联动路由(计划 26-10-16-0541 S6 代理面 + S7 接收面; 26-10-17-0339 S17 收编到来源单点).
 
-端点:
-  GET  /api/traffic/monitor/status    工具 GET /status 代理(只读; 设置页状态区 + 工具参数回显)
+端点(路径沿用既有 `/api/traffic/monitor/*`; 语义已从「一段独立联动配置」收编为「traffic_source 的
+global_traffic_monitor 来源面」, 设置页里合并进同一张「全局流量来源」卡):
+  GET  /api/traffic/monitor/status    工具状态区(只读): 五态(agent 指针探测) + 就绪时附工具 /status 回显
   PUT  /api/traffic/monitor/config    工具 PUT /config 代理(全量覆盖 -> 前端「读后写」)
   POST /api/traffic/monitor/autostart 工具 POST /autostart 代理(幂等注册/卸载开机自启)
+  POST /api/traffic/monitor/relaunch  「立即拉起/重试」: 促订阅线程立刻重跑一轮并忽略失败退避
   POST /api/traffic/monitor/notify    **接收面**(S7): 工具推送的累计流量阈值事件
 
 auto-qb 与工具是两个进程、两个 venv: 本模块是唯一桥 —— 用 stdlib urllib 带 Bearer token
-调工具控制面(缺省 127.0.0.1:8099)。HTTP 与密钥定位的单点在 `...tool_client`(与订阅客户端
-共用), **不 import 工具包**, 只经 HTTP 契约通信(与架构图一致)。
+调工具控制面(地址/密钥不再来自配置, 而是 **agent 读工具指针**得的 host/port/token_path)。
+HTTP 与密钥定位的单点在 `...tool_client` 与 `...core.traffic_source.agent`(与订阅客户端共用),
+**不 import 工具包**, 只经 HTTP 契约通信(与架构图一致)。
+
+S17(计划 26-10-17-0339)收编要点:
+- 配置单点从旧顶层过渡桩段 `global_traffic_monitor` 改读 `manager.config.traffic_source.global_traffic_monitor`
+  (该桩段已随 S17 退休, D2/D17);
+- 地址/密钥改由 `manager.host.get("webui").agent`(与订阅客户端同一实例)给出 —— 与订阅同源, 不各算各的。
 
 错误口径(两段不同, 各有理由):
 - `GET /status` 是**展示端点** —— 工具没在跑也要能显示「为什么」, 故恒 200 + 结构化空态
-  (`reachable=false` + `error`), 不抛 5xx(否则设置页只能看到一片红)。
-- `PUT /config` / `POST /autostart` 是**写端点** —— 失败必须真报错(前端据此提示), 工具 400
-  原样透传(校验错误逐条可见), 上游 5xx / 不可达收口为 502, 平台不支持透传 501。
+  (`reachable=false` + `state`/`error`), 不抛 5xx(否则设置页只能看到一片红)。
+- `PUT /config` / `POST /autostart` / `POST /relaunch` 是**写端点** —— 失败必须真报错(前端据此提示),
+  工具 400 原样透传(校验错误逐条可见), 上游 5xx / 不可达收口为 502, 平台不支持透传 501;
+  工具未就绪时写端点收口为 502 并附 `state`(控制面是工具进程内的, 不在跑就没得写)。
 - `POST /notify` 的对话方是**工具进程**而非浏览器(见端点内注释): 鉴权仍复用全局
   `make_require_token`(订阅时给工具的凭证 = 本实例 WEB 访问密钥), 但响应一律 200 + action,
   只有事件体本身非法才 400 —— 工具侧把非 2xx 记成推送失败并 WARNING, 闸门拦下的通知不该
   伪装成故障。
-
-token 解析(单点, 实现在 `...tool_client.resolve_token_path`): `global_traffic_monitor.tool_token_path`
-非空则用它, 否则取工具平台默认数据目录下的 `monitor.token`。真值仍以工具 `/status` 回显的
-`paths.token` 为准, 供排障对照。
 """
 from __future__ import annotations
 
@@ -40,16 +45,84 @@ from ...tool_client import ToolUnreachable
 from ...tool_client import call_tool as _call_tool
 from ...tool_client import error_text as _error_text
 from ...tool_client import read_token as _read_token
-from ...tool_client import resolve_token_path as _resolve_token_path
-from ...tool_client import tool_default_data_dir as _tool_default_data_dir
 from ..context import WebContext
 
 logger = logging.getLogger("auto_qb.web")  # K3: server 包内 logger 名冻结
 
 
 def _tm_conf(manager):
-    """global_traffic_monitor 配置读取单点(段恒在, 缺省 enabled=false)"""
-    return manager.config.global_traffic_monitor
+    """来源参数读取单点(S17): traffic_source.global_traffic_monitor(段恒在, 缺省 enabled=false)"""
+    return manager.config.traffic_source.global_traffic_monitor
+
+
+def _webui_module(manager):
+    """工具发现/拉起单点的宿主模块(与订阅客户端同实例); 缺失 -> 502(不静默空转)"""
+    mod = manager.host.get("webui")
+    if mod is None:
+        raise HTTPException(status_code=502, detail="webui 模块未注册(读不到工具状态/拉起通道)")
+    return mod
+
+
+def _provider(manager) -> str:
+    """当前生效来源(D1 单一开关): traffic_source.provider; 取不到时回退 traffic_monitor
+
+    S17 退休了旧的 global_traffic_monitor.enabled 键 —— 「联动是否启用」不再是独立配置键,
+    而是由 provider 指向谁决定(严格互斥)。
+    """
+    ts = getattr(manager.config, "traffic_source", None)
+    return (getattr(ts, "provider", None) or "traffic_monitor")
+
+
+def _source_status(manager) -> dict:
+    """状态区载荷组装单点: 五态(agent 指针探测) + 就绪时附工具 /status 回显
+
+    - `endpoint` 是 agent 内部对象, 对外换成扁平的 tool_url/token_path;
+    - state==ready 但拿不到密钥 / 控制面 502 -> 降级为 not_running(展示端点不抛 5xx)。
+    """
+    conf = _tm_conf(manager)
+    st = _webui_module(manager).agent.status(conf)
+    ep = st.pop("endpoint", None)
+    base = {
+        "enabled": _provider(manager) == "global_traffic_monitor",
+        "state": st["state"],
+        "reachable": st["state"] == "ready",
+        "tool_url": ep.base_url if ep else "",
+        "token_path": ep.token_path if ep else "",
+        "version": st["version"],
+        "pid": st["pid"],
+        "data_dir": st["data_dir"],
+        "autostart_registered": st["autostart_registered"],
+        "error": st["error"],
+        "retry_s": st["retry_s"],
+        "status": None,
+    }
+    if not base["reachable"]:
+        return base
+    token = _read_token(base["token_path"])
+    if not token:
+        base.update(reachable=False, state="not_running", error=f"工具密钥文件不存在或为空: {base['token_path']}(工具未启动过?)")
+        return base
+    try:
+        code, payload = _call_tool(base["tool_url"], "/status", "GET", token)
+    except ToolUnreachable as e:
+        base.update(reachable=False, state="not_running", error=str(e))
+        return base
+    if code == 200:
+        base["status"] = payload
+    else:
+        base["error"] = f"工具 /status 返回 {code}: {_error_text(payload, code)}"
+    return base
+
+
+def _ready_endpoint(manager):
+    """写端点前置: 工具就绪才谈得上写控制面 -> (base_url, token) 或抛 502(附 state/原因)"""
+    st = _source_status(manager)
+    if not st["reachable"]:
+        raise HTTPException(status_code=502, detail=f"工具未在运行({st['state']}): {st['error'] or '先在卡片点「立即拉起」'}")
+    token = _read_token(st["token_path"])
+    if not token:
+        raise HTTPException(status_code=502, detail=f"工具密钥文件不存在或为空: {st['token_path']}")
+    return st["tool_url"], token
 
 
 class NotifyGate:
@@ -121,55 +194,30 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/traffic/monitor/status")
     def api_tm_status():
-        """工具 /status 代理(只读, 展示端点): 恒 200 + 结构化结果
+        """工具状态区(只读, 展示端点): 恒 200 + 结构化结果
 
-        - enabled=false 也照查(设置页要能在启用前先验证工具是否在跑);
-        - 工具不可达 / 密钥缺失 -> reachable=false + error 文案, 不抛 5xx。
+        - 五态来自 agent 的指针探测(S17 起与订阅客户端同源): ready / launching / launch_failed /
+          not_running / not_installed; enabled=false 也照查(设置页要能在启用前先验证工具是否在跑);
+        - state==ready 时附工具 `GET /status` 回显(工具自身参数表单 + 排障对照真值);
+        - 工具不可达 / 密钥缺失 -> reachable=false + state/error, 不抛 5xx。
         """
         manager.web.touch()
-        conf = _tm_conf(manager)
-        token_path = _resolve_token_path(conf)
-        base = {
-            "enabled": bool(conf.enabled),
-            "tool_url": conf.tool_url,
-            "token_path": token_path,
-            "reachable": False,
-            "error": "",
-            "status": None,
-        }
-        token = _read_token(token_path)
-        if not token:
-            base["error"] = f"工具密钥文件不存在或为空: {token_path}(工具未启动过? 或 tool_token_path 配置有误)"
-            return base
-        try:
-            code, payload = _call_tool(conf.tool_url, "/status", "GET", token)
-        except ToolUnreachable as e:
-            base["error"] = str(e)
-            return base
-        if code != 200:
-            base["error"] = f"工具 /status 返回 {code}: {_error_text(payload, code)}"
-            return base
-        base["reachable"] = True
-        base["status"] = payload
-        return base
+        return _source_status(manager)
 
     @router.put("/api/traffic/monitor/config")
     def api_tm_put_config(body: dict = None):
         """工具 /config 代理(写端点): 载荷 = {"config": {...全量...}}
 
         `PUT /config` 是**全量覆盖**(last-writer-wins): 前端必须「读后写」(先取 /status 的
-        配置回显, 改字段后整体提交), 只发要改的键会把其余键打回默认值。
+        配置回显, 改字段后整体提交), 只发要改的键会把其余键打回默认值。工具未就绪 -> 502。
         """
         manager.web.touch()
-        conf = _tm_conf(manager)
         payload = (body or {}).get("config")
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="config 必须是对象(工具配置全量载荷)")
-        token = _read_token(_resolve_token_path(conf))
-        if not token:
-            raise HTTPException(status_code=502, detail="工具密钥文件不存在或为空(工具未启动过? 或 tool_token_path 配置有误)")
+        base_url, token = _ready_endpoint(manager)
         try:
-            code, resp = _call_tool(conf.tool_url, "/config", "PUT", token, payload)
+            code, resp = _call_tool(base_url, "/config", "PUT", token, payload)
         except ToolUnreachable as e:
             raise HTTPException(status_code=502, detail=str(e))
         if code == 200:
@@ -186,15 +234,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         501 平台不支持 / 5xx 命令失败), 本层原样映射。⚠ 工具与 WebUI 必须同机。
         """
         manager.web.touch()
-        conf = _tm_conf(manager)
         action = str((body or {}).get("action") or "").strip()
         if action not in ("install", "uninstall"):
             raise HTTPException(status_code=400, detail="action 必须是 install 或 uninstall")
-        token = _read_token(_resolve_token_path(conf))
-        if not token:
-            raise HTTPException(status_code=502, detail="工具密钥文件不存在或为空(工具未启动过? 或 tool_token_path 配置有误)")
+        base_url, token = _ready_endpoint(manager)
         try:
-            code, resp = _call_tool(conf.tool_url, "/autostart", "POST", token, {"action": action})
+            code, resp = _call_tool(base_url, "/autostart", "POST", token, {"action": action})
         except ToolUnreachable as e:
             raise HTTPException(status_code=502, detail=str(e))
         if code == 200:
@@ -204,6 +249,19 @@ def build_router(ctx: WebContext) -> APIRouter:
         if code == 501:
             raise HTTPException(status_code=501, detail=_error_text(resp, code))
         raise HTTPException(status_code=502, detail=f"工具返回 {code}: {_error_text(resp, code)}")
+
+    @router.post("/api/traffic/monitor/relaunch")
+    def api_tm_relaunch():
+        """「立即拉起/重试」(写端点, 幂等): 促订阅线程立刻重跑一轮并忽略失败退避
+
+        只置一个跨线程标志 + 唤醒订阅线程(拉起仍由订阅线程执行, 单写者法则); 返回后前端轮询
+        `GET /status` 的 `state` 观察进度(launching -> ready / launch_failed)。
+        409 = 无可促的订阅线程(当前来源不是工具 / WEB 未启用/未就绪)。
+        """
+        manager.web.touch()
+        if not _webui_module(manager).request_relaunch():
+            raise HTTPException(status_code=409, detail="当前来源不是工具或 WEB 未就绪, 无订阅线程可促拉起")
+        return {"ok": True, "accepted": True}
 
     @router.post(NOTIFY_PATH)
     def api_tm_notify(body: dict = None):
@@ -226,12 +284,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         manager.web.touch()
         conf = _tm_conf(manager)
         event = _parse_notify_event(body)
-        if not conf.enabled:
+        if _provider(manager) != "global_traffic_monitor":
             return {
                 "ok": True,
                 "action": "disabled",
                 "event_id": event["event_id"],
-                "reason": "global_traffic_monitor.enabled=false",
+                "reason": "traffic_source.provider != global_traffic_monitor",
             }
         allowed, reason = notify_gate.verdict(event["event_id"], time.time(), float(conf.notify_cooldown_s))
         if not allowed:

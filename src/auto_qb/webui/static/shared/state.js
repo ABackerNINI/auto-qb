@@ -38,16 +38,23 @@ window.AQB_STATE = {
       // 皮肤判定: URL 首段路径(目录即 UI); 2026-09-27 起第三套 console(控制台)并列, 未识别段回落 atlas。
       ui: _aqbDetectUi(),
       uiMenuOpen: false,  // 顶栏界面切换下拉的展开态(点空白/Esc 收起, 挂在 lifecycle.js 既有浮层关闭链)
-      // 全局流量监视器工具面板(计划 26-10-16-0541 S6): 工具控制面经 /api/traffic/monitor/* 代理;
-      // 表单「读后写」(工具 PUT /config 是全量覆盖, 见 config-reference/keys.md)。方法域在 config_hub.js。
+      // 全局流量来源卡(计划 26-10-17-0339 S17/D15): provider 单选 + 工具状态区(五态) + 拉起/自启;
+      // 工具控制面经 /api/traffic/monitor/* 代理; 表单「读后写」(工具 PUT /config 是全量覆盖,
+      // 见 config-reference/keys.md)。方法域在 config_hub.js。
       tm: {
         loaded: false,
         loading: false,
+        state: "not_running",   // 五态: ready / launching / launch_failed / not_running / not_installed
         reachable: false,
+        enabled: false,         // 联动是否启用(由 provider 派生, 非独立配置键)
         error: "",
-        enabled: false,
+        retryS: 0,              // 拉起剩余超时 / 失败退避剩余(秒)
         toolUrl: "",
         tokenPath: "",
+        version: "",
+        pid: 0,
+        dataDir: "",
+        autostartRegistered: false,
         status: null,
         form: {},
         saving: false,
@@ -56,6 +63,10 @@ window.AQB_STATE = {
         autoBusy: false,
         autoMsg: "",
         autoErr: "",
+        relaunching: false,
+        advancedOpen: false,    // 「工具参数(高级)」折叠态
+        pollGen: 0,             // 拉起后轮询收敛的代际守卫
+        pick: { open: false, loading: false, error: "", path: "", parent: "", dirs: [], name: "" },
       },
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)

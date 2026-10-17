@@ -59,6 +59,15 @@ def _make_web_manager(tmp_path, config_text):
         delete_tags=[],
         delete_tags_if_has_no_torrents=[],
         global_speed_limit_curve=None,
+        # 全局流量来源(计划 26-10-17-0339 S15/S17): 来源单点 —— provider + 两来源面;
+        # 缺省 provider=traffic_monitor / 工具面 enabled=false(与真 Config 默认一致)
+        traffic_source=SimpleNamespace(
+            provider="traffic_monitor",
+            traffic_monitor=SimpleNamespace(dat_path=""),
+            global_traffic_monitor=SimpleNamespace(
+                enabled=False, tool_dir="", tool_exe="", data_dir="", notify_cooldown_s=600.0
+            ),
+        ),
         qb_traffic=None,  # qB 口径流量(plan 26-10-03-0946 §06): None = 未启用; 用例按需置 QbTraffic(enabled=True)
         notify=SimpleNamespace(enabled=False),
         qbittorrent=SimpleNamespace(host="127.0.0.1", port=1, username="u", password="p"),
@@ -135,13 +144,28 @@ def _make_web_manager(tmp_path, config_text):
         wake=lambda: wake_calls.append(1),
     )
     # 模块宿主替身(schema 端点的段认领由模块 sections() 派生, W4 级别表退役)
-    mgr.host = SimpleNamespace(
-        modules=lambda: [
-            SimpleNamespace(name="webui", sections=lambda: ("web", )),
-            SimpleNamespace(name="tracker", sections=lambda: ("trackers", )),
-            SimpleNamespace(name="rules", sections=lambda: ("rules_config", "interval")),
-        ]
-    )
+    # S17: 来源卡路由经 host.get("webui") 取「工具发现/拉起单点」(= 生产中 WebUIModule 的
+    # 订阅客户端)。替身里照给真实 WebUIModule —— 惰性构造, 因为它依赖 mgr.web, 而 web
+    # 门面在本函数下方才挂上; 其它名字沿用轻量假模块(sections 派生用)
+    _stub_modules = [
+        SimpleNamespace(name="webui", sections=lambda: ("web", )),
+        SimpleNamespace(name="tracker", sections=lambda: ("trackers", )),
+        SimpleNamespace(name="rules", sections=lambda: ("rules_config", "interval")),
+    ]
+    _lazy_modules = {}
+
+    def _host_get(name):
+        if name == "webui":
+            if name not in _lazy_modules:
+                from auto_qb.webui.module import WebUIModule
+                _lazy_modules[name] = WebUIModule(mgr)
+            return _lazy_modules[name]
+        for m in _stub_modules:
+            if m.name == name:
+                return m
+        return None
+
+    mgr.host = SimpleNamespace(modules=lambda: _stub_modules, get=_host_get)
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
     from auto_qb.core.qbmanager import QbManager
 

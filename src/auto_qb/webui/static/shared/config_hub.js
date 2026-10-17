@@ -44,10 +44,10 @@ const HUB_GROUP_META = {
     desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；启用方式：本分区站点接入卡片点选；页面地址/解析器等由内置站点档案自动处理；分区页尾附各站点取数现状。",
     lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启总开关后在下方「站点接入」卡片点选启用站点（零 URL/路径/参数填写，页面地址、解析器、下载路径、翻页参数由内置站点档案自动处理，只需站点域名能对上）；取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
   },
-  global_traffic_monitor: {
-    title: "全局流量监视器",
-    desc: "独立工具 gtm 记录整机流量历史（TrafficMonitor 替代）；本页联动：订阅通知、读写工具参数、开机自启。",
-    lede: "整机流量历史由一个独立小工具（gtm，TrafficMonitor 替代）记录：它独立于 auto-qb 进程、开机自启，把全适配器上下行流量按日写进 history_traffic.dat，流量变化超过阈值时主动通知 auto-qb 刷新历史图。本分区是 auto-qb 侧的联动开关（订阅/冷却/工具地址），页尾的「工具状态」显示工具当前读数，并可直接读写工具参数、开关开机自启 —— 工具必须与 WebUI 同机。",
+  traffic_source: {
+    title: "全局流量来源",
+    desc: "限速曲线与流量条件读哪个数据源：Traffic Monitor 的 dat 文件，或整机流量监视器工具——二选一。",
+    lede: "限速曲线和带「累计流量」条件的规则都需要读累计流量。这里决定读哪个来源：Traffic Monitor 记录的 history_traffic.dat，或整机流量监视器工具（gtm）记录的数据——两者严格互斥，只有 provider 指向的那个参与取数。选工具时下方展开工具的安装位置与刷新冷却；卡片底部的「工具状态」显示工具当前状态，可直接一键拉起、开关开机自启。",
   },
 };
 
@@ -111,7 +111,6 @@ const HUB_TONE = {
 const HUB_OFF_KEYS = {
   maintenance: ["config", "grouping", "enabled"],
   hr_check: ["config", "hr_check", "enabled"],
-  global_traffic_monitor: ["config", "global_traffic_monitor", "enabled"],
 };
 
 /* 站点搜索(计划 26-09-27-1852): 键 -> 字段组(chip 上的中文标签), 不在表里的键不搜
@@ -387,8 +386,8 @@ window.CONFIG_HUB = {
       if (key === "hr_check") this.hrsOpen = false;
       // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
       if (key === "keys") this.kbPanelEnter();
-      // 全局流量监视器分区(S6): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
-      if (key === "global_traffic_monitor") this.tmLoad();
+      // 全局流量来源分区(S17): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
+      if (key === "traffic_source") this.tmLoad();
       window.scrollTo({ top: 0 });
     },
     hubBack() {
@@ -500,6 +499,8 @@ window.CONFIG_HUB = {
           for (const k of gk) n += this.cfgRuleNames(k).length;
           return `${gk.length} 个规则集 · ${n} 条`;
         }
+        case "traffic_source":
+          return this.tmProvider() === "global_traffic_monitor" ? "整机流量监视器" : "Traffic Monitor 文件";
         default:
           return "";
       }
@@ -959,10 +960,41 @@ window.CONFIG_HUB = {
       ev.target.value = "";
     },
 
-    /* ------------------------------------------------ 全局流量监视器工具面板 (计划 26-10-16-0541 S6)
-     * 工具控制面经 /api/traffic/monitor/* 代理: 只读状态 + 工具参数读写 + 自启开关。
-     * 参数表单「读后写」—— 工具 PUT /config 是**全量覆盖**(last-writer-wins), 只发要改的键
-     * 会把其余键打回默认值; 故先取 /status 的 config 回显, 改字段后整体提交。 */
+    /* ------------------------------------------------ 全局流量来源卡 (计划 26-10-17-0339 S17/D15)
+     * 一张卡合并「来源单选 + 工具状态」: provider 二选一(选中面展开); 底部状态区按 §05 五态展示
+     * (auto-qb 侧探测指针); 「立即拉起/重试」促订阅线程立刻重跑; 自启开关**不是配置键** —— 状态读
+     * 指针 autostart_registered, 拨动走 POST /autostart(D13); 工具自身参数(采样/阈值/适配器)经
+     * 工具控制面读写, 折叠在「工具参数(高级)」—— 工具 PUT /config 是全量覆盖(last-writer-wins),
+     * 参数表单必须「读后写」(先取 /status 回显整体提交)。 */
+    tmProvider() {
+      return this.cfgText(["config", "traffic_source", "provider"], "traffic_monitor");
+    },
+    tmSetProvider(v) {
+      if (v) this.cfgSetPath(["config", "traffic_source", "provider"], v);
+    },
+    /* 选中来源的参数行(供 <hub-field> 渲染): 从 schema 取该来源子段的叶子字段, 路径指向 traffic_source.<来源> */
+    tmSourceRoot() {
+      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "traffic_source");
+      return (g && (g.fields || []).find((f) => f.key === "traffic_source")) || null;
+    },
+    tmProviderItems(key) {
+      const root = this.tmSourceRoot();
+      const sub = root && (root.fields || []).find((f) => f.key === key);
+      const base = ["config", "traffic_source", key];
+      return (((sub && sub.fields) || []).map((f) => ({
+        type: "field", field: f, path: [...base, f.key], depth: 1, owner: base, inline: [],
+      })));
+    },
+    /* 状态区五态文案(§05): ready / launching / launch_failed / not_running / not_installed */
+    tmStateText() {
+      return {
+        ready: "已就绪", launching: "拉起中", launch_failed: "拉起失败",
+        not_running: "未运行", not_installed: "未安装",
+      }[this.tm.state] || "未知";
+    },
+    tmStateClass() {
+      return { ready: "on", launching: "warn", launch_failed: "warn", not_running: "off", not_installed: "off" }[this.tm.state] || "";
+    },
     async tmLoad() {
       this.tm.loading = true;
       this.tm.saveMsg = "";
@@ -972,22 +1004,61 @@ window.CONFIG_HUB = {
       try {
         const r = await this.api("/api/traffic/monitor/status");
         this.tm.enabled = !!r.enabled;
+        this.tm.state = r.state || "not_running";
+        this.tm.reachable = !!r.reachable;
         this.tm.toolUrl = r.tool_url || "";
         this.tm.tokenPath = r.token_path || "";
-        this.tm.reachable = !!r.reachable;
+        this.tm.version = r.version || "";
+        this.tm.pid = r.pid || 0;
+        this.tm.dataDir = r.data_dir || "";
+        this.tm.autostartRegistered = !!r.autostart_registered;
         this.tm.error = r.error || "";
+        this.tm.retryS = Number(r.retry_s) || 0;
         this.tm.status = r.status || null;
-        if (r.reachable && r.status && r.status.config) {
+        if (this.tm.reachable && r.status && r.status.config) {
           this.tm.form = this.tmNormalizeForm(r.status.config);
         }
       } catch (e) {
         this.tm.reachable = false;
+        this.tm.state = "not_running";
         this.tm.status = null;
         this.tm.error = (e && e.message) || "读取失败";
       } finally {
         this.tm.loading = false;
         this.tm.loaded = true;
       }
+    },
+    /* 「立即拉起/重试」: 促订阅线程立刻重跑并忽略失败退避; 之后短轮询 status 观察 launching -> ready/launch_failed */
+    async tmRelaunch() {
+      if (this.tm.relaunching) return;
+      this.tm.relaunching = true;
+      this.tm.error = "";
+      try {
+        await this.api("/api/traffic/monitor/relaunch", { method: "POST" });
+        this.tm.state = "launching";
+        this.tm.retryS = 0;
+        this.tmPollSettle(0);
+      } catch (e) {
+        this.tm.error = (e && e.message) || "促拉起失败";
+        this.tm.relaunching = false;
+      }
+    },
+    /* 轮询收敛(有界): 每 2s 重读状态, 直到离开 launching 或到上限; pollGen 代际守卫防重入叠加 */
+    tmPollSettle(n) {
+      const gen = ++this.tm.pollGen;
+      setTimeout(async () => {
+        if (gen !== this.tm.pollGen) return;
+        await this.tmLoad();
+        if (this.tm.state === "launching" && n < 15) {
+          this.tmPollSettle(n + 1);
+          return;
+        }
+        this.tm.relaunching = false;
+      }, 2000);
+    },
+    /* 「打开工具设置」= 新标签打开工具控制面根地址(tool_url); 工具未提供 HTML 页面时显示 JSON */
+    tmOpenToolSettings() {
+      if (this.tm.reachable && this.tm.toolUrl) window.open(this.tm.toolUrl, "_blank", "noopener");
     },
     /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样 */
     tmNormalizeForm(cfg) {
@@ -1034,7 +1105,9 @@ window.CONFIG_HUB = {
         this.tm.saving = false;
       }
     },
+    /* 自启开关: 读指针 autostart_registered, 拨动只发 install/uninstall; 失败回滚勾选态 */
     async tmAutostart(action) {
+      const desired = action === "install";
       this.tm.autoBusy = true;
       this.tm.autoMsg = "";
       this.tm.autoErr = "";
@@ -1044,8 +1117,10 @@ window.CONFIG_HUB = {
           body: JSON.stringify({ action: action }),
         });
         this.tm.autoMsg = (r && r.message) || "已处理";
+        this.tm.autostartRegistered = desired;
       } catch (e) {
         this.tm.autoErr = (e && e.message) || "操作失败";
+        this.tm.autostartRegistered = !desired;
       } finally {
         this.tm.autoBusy = false;
       }
@@ -1053,20 +1128,48 @@ window.CONFIG_HUB = {
     tmFmtBytes(n) {
       return this.fmtSize(n);
     },
-    /* auto-qb 联动段的叶子字段(供本分区模板用 <hub-field> 渲染) —— 与通用块同源(cfgFlatten),
-     * 因本分区走独立分支(v-else-if), 通用 hubBlocks 不参与渲染 */
-    tmLinkageItems() {
-      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "global_traffic_monitor");
-      if (!g) return [];
-      const out = [];
-      const walk = (items) => {
-        for (const it of items || []) {
-          if (it.type === "field") out.push(it);
-          else walk(it.items);
-        }
-      };
-      walk(this.cfgFlatten(g.fields, ["config"], 0));
-      return out;
+    /* ---- 文件选择器(D10③): 找不到工具时, 目录导航 + 文件名输入写 tool_exe / tool_dir ----
+     * 后端 /api/fs/dirs 只列目录、且限在允许的保存路径内 —— 工具安装目录若不在范围内, 走上方文本框
+     * 手填绝对路径; 在范围内可直接导航并用文件名拼出绝对路径写 tool_exe。 */
+    tmPickOpen() {
+      this.tm.pick.open = true;
+      this.tm.pick.name = "";
+      this.tm.pick.error = "";
+      this.tmPickLoad("");
+    },
+    async tmPickLoad(path) {
+      this.tm.pick.loading = true;
+      this.tm.pick.error = "";
+      try {
+        const r = await this.api("/api/fs/dirs?path=" + encodeURIComponent(path || ""));
+        this.tm.pick.path = r.path || "";
+        this.tm.pick.parent = r.parent || "";
+        this.tm.pick.dirs = r.dirs || [];
+      } catch (e) {
+        this.tm.pick.error = (e && e.message) || "目录读取失败";
+        this.tm.pick.dirs = [];
+      } finally {
+        this.tm.pick.loading = false;
+      }
+    },
+    tmPickEnter(d) {
+      this.tmPickLoad(d.path);
+    },
+    tmPickUp() {
+      if (this.tm.pick.parent) this.tmPickLoad(this.tm.pick.parent);
+    },
+    tmPickApplyDir() {
+      if (!this.tm.pick.path) return;
+      this.cfgSetPath(["config", "traffic_source", "global_traffic_monitor", "tool_dir"], this.tm.pick.path);
+      this.tm.pick.open = false;
+    },
+    tmPickApplyExe() {
+      const name = String(this.tm.pick.name || "").trim();
+      if (!this.tm.pick.path || !name) return;
+      const sep = this.tm.pick.path.indexOf("\\") >= 0 ? "\\" : "/";
+      this.cfgSetPath(["config", "traffic_source", "global_traffic_monitor", "tool_exe"],
+        this.tm.pick.path.replace(/[\\/]+$/, "") + sep + name);
+      this.tm.pick.open = false;
     },
     /* 工具参数表(§05 工具侧参数): 键/标签/控件形态; 模板按此 v-for 渲染, 避免 11 行硬编码 */
     tmParams() {

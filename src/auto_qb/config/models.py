@@ -334,29 +334,6 @@ class QbTraffic:
 
 
 @dataclass
-class GlobalTrafficMonitorConfig:
-    """全局流量监视器(工具 gtm)联动配置(计划 26-10-16-0541 S6)
-
-    工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 +
-    消费者之一」: 工具自有 config.yml 经其控制面(PUT /config)由 WebUI 设置页代理读写,
-    本段只承载 auto-qb 侧联动参数(黄金法则 2: enabled 保守默认 false)。
-
-    enabled: 联动总开关; false(缺省) = 不订阅、不因通知刷新历史图(零开销)。
-    tool_url: 工具控制面基地址(127.0.0.1:8099, 工具与 WebUI 同机部署的缺省形态)。
-    tool_token_path: 工具 monitor.token 路径; 留空 = <data_dir>/monitor.token。
-    subscribe: 启动时向工具注册订阅 + 起心跳(生命周期在 S7 接收面消费)。
-    notify_cooldown_s: 收到事件后的刷新冷却(秒); 事件号去重另算, 两者互补。
-    autostart: WebUI 开关 —— 幂等调工具 installer 注册/卸载开机自启(经工具控制面)。
-    """
-    enabled: bool = False
-    tool_url: str = "http://127.0.0.1:8099"
-    tool_token_path: str = ""
-    subscribe: bool = True
-    notify_cooldown_s: float = 600.0
-    autostart: bool = False
-
-
-@dataclass
 class TrafficMonitorSourceConfig:
     """traffic_source.traffic_monitor: Traffic Monitor(dat 文件)来源参数
 
@@ -495,11 +472,6 @@ class Config:
 
     # 全局流量来源(计划 26-10-17-0339 S15): 限速曲线/expr 取数的数据源单点; provider 决定生效来源
     traffic_source: TrafficSourceConfig = field(default_factory=TrafficSourceConfig)
-
-    # 过渡性 stub(计划 26-10-17-0339 S15): 字段保留供 webui/tool_client 与 routes 在 S16 重接指针前
-    # 不报 AttributeError; 已从配置面(KNOWN_CONFIG_KEYS/schema/loader/校验)彻底退休, 迁移会删掉 YAML 段。
-    # S16/S17 将删除本 stub。当前值只有默认工厂, 不来自 YAML。
-    global_traffic_monitor: GlobalTrafficMonitorConfig = field(default_factory=GlobalTrafficMonitorConfig)
 
     def hr_site_confs(self) -> Dict[str, SiteHrCheckConfig]:
         """{站点名: 站点核实参数} —— 「哪些站点接入了 hr_check」的派生单点(issue hr-site-derive-convention-dup)

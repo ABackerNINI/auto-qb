@@ -14,7 +14,6 @@
 """
 import pytest
 
-from auto_qb.config.models import GlobalTrafficMonitorConfig
 from auto_qb.webui import tool_client
 from webui_helpers import _iter_api_routes
 
@@ -33,9 +32,12 @@ def _auth(mgr):
 
 @pytest.fixture()
 def tm_env(web_env):
-    """web_env + 已启用的 global_traffic_monitor 段(冷却缺省 600s)"""
+    """web_env + 来源切到工具面(provider=global_traffic_monitor, 冷却缺省 600s)
+
+    S17 起「联动是否启用」不再有独立 enabled 键 —— 单一开关是 traffic_source.provider。
+    """
     mgr, client = web_env
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(enabled=True)
+    mgr.config.traffic_source.provider = "global_traffic_monitor"
     return mgr, client
 
 
@@ -134,16 +136,16 @@ def test_notify_cooldown_window_then_release(tm_env):
     body = _post(client, mgr, later).json()
     assert body["action"] == "skipped" and body["reason"] == "cooldown"
 
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(enabled=True, notify_cooldown_s=0.0)
+    mgr.config.traffic_source.global_traffic_monitor.notify_cooldown_s = 0.0
     assert _post(client, mgr, later).json()["action"] == "refresh_queued"
 
 
 def test_notify_disabled_no_enqueue(tm_env):
-    """联动总开关关(缺省): action=disabled 且不投递命令(保守默认, 黄金法则 2)"""
+    """来源未指向工具(provider=traffic_monitor): action=disabled 且不投递命令(保守默认, 黄金法则 2)"""
     mgr, client = tm_env
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(enabled=False)
+    mgr.config.traffic_source.provider = "traffic_monitor"
     body = _post(client, mgr, EVENT).json()
-    assert body["action"] == "disabled" and "enabled=false" in body["reason"]
+    assert body["action"] == "disabled" and "provider != global_traffic_monitor" in body["reason"]
     assert _drain_commands(mgr) == []
 
 

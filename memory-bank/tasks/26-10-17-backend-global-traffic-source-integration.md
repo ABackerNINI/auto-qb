@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 11:13
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施, S17–S19 待逐项授权。
+**Updated:** 2026-10-17 13:11
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休[`GlobalTrafficMonitorConfig` 与 `Config.global_traffic_monitor` 删除, WebUIModule 段认领收缩为 `web`] + 「全局流量来源」单卡[provider 单选 + 选中面展开 + 五态状态区 + 立即拉起/重试/打开工具设置 + 自启开关读指针 + 文件选择器 + 工具参数高级折叠] + 曲线卡删来源字段 + `enabled` 由 provider 派生[修 `conf.enabled` 属性缺失隐患] + 新增 `POST /api/traffic/monitor/relaunch` 与 `WebUIModule.agent`/`request_relaunch`)已实施, S18–S19 待逐项授权。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -32,7 +32,7 @@
 | S14 | 启动器自启意图/改名/gitignore | Done (26-10-17-0825) |
 | S15 | auto-qb 配置面与升级链 | Done (26-10-17-1007) |
 | S16 | 探测-拉起-订阅编排(可注入单点) | Done (26-10-17 11:13) |
-| S17 | 设置页合并 | Open |
+| S17 | 设置页合并 | Done (26-10-17 13:11) |
 | S18 | 守阵/基线/文档 | Open |
 | S19 | 真机验收(并入旧 S10) | Open |
 
@@ -134,3 +134,25 @@
 **未动(属计划内后续步骤, 非遗漏)**: 过渡 stub `GlobalTrafficMonitorConfig` 与 `routes/traffic_monitor.py`(设置页代理方向仍读旧属性名, 见 `pitfalls/backend/config-section-retire-across-steps.md`) → **S17** 合并后删; `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**; 真机验收 → S19。
 
 **滚动面**: 本档案(S16 段 + 状态表 + Updated 1113) · activeContext 切片(最后活动 + R1 行) · 基线切片新建 · kb.index 重建。随本专题「提交」入库。
+
+### R7 · S17 实施 (2026-10-17 13:11)
+
+用户指令「实施计划S17: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S17 的显式授权(S18–S19 不动)。开工同步至 38ac4fa6。
+
+**落点**(改 18 文件 / 纯 auto-qb 侧, 零行工具侧触碰 —— 计划 §S17 三条 bullet):
+
+- **后端 · 过渡桩段退休 + provider 派生**: `config/models.py`(删 `GlobalTrafficMonitorConfig` dataclass 与 `Config.global_traffic_monitor` stub 字段) · `webui/module.py`(`sections()` 收缩为 `("web",)` —— 旧段职责已归 speed_curve 的 `traffic_source` 认领; 新增只读 `agent` 属性与 `request_relaunch()` 供路由与订阅客户端同源) · `webui/server/routes/traffic_monitor.py`(`_tm_conf` 改读 `traffic_source.global_traffic_monitor`; 新增 `_webui_module`/`_provider`/`_source_status`/`_ready_endpoint` —— `enabled` 由 `provider == "global_traffic_monitor"` 派生[i.e. 修 `conf.enabled` 属性缺失的生产级隐患], notify 闸门同判; 状态区五态 + ready 时附工具 `/status` 回显; 新增写端点 `POST /api/traffic/monitor/relaunch`[409 = 无订阅线程可促])。
+- **schema**: `config/schema/groups.py` 的两个来源子段补 `show_if=("provider", ...)`(选中谁展开谁)。
+- **前端 · 新卡「全局流量来源」**: `static/shared/config_hub.js`(HUB_GROUP_META 增 `traffic_source` / 删 `global_traffic_monitor`; HUB_OFF_KEYS 删该行; `hubGo`/`hubReadout` 接线; 重写 `tm*` 方法块 —— `tmProvider`/`tmSetProvider`/`tmProviderItems`[从 schema 树取选中面子段叶子字段]/`tmStateText`/`tmStateClass`/`tmLoad` 读新返回键/`tmRelaunch`+`tmPollSettle`[有界轮询 15×2s + pollGen 代际守卫]/`tmOpenToolSettings`/`tmAutostart`[失败回滚] + 文件选择器 `tmPick*`) · `static/shared/state.js`(tm 数据模型重写: 五态 + pick 子状态) · `static/shared/tpl/settings.html`(新 `v-else-if="hub.view === 'traffic_source'"` 分支, 并压在 400 行分片上限内) · `static/shared/triggers.js`(登记 `POST /relaunch`)。
+- **前端 · 曲线卡删来源**: `static/shared/config_editor.js`(`cfgCurveEnable`/`cfgCurveItems` 去掉 `traffic_source` dat_path 项 —— 来源只在设置页一处)。
+- **测试**: `tests/test_web_traffic_monitor.py`(路由用例改到指针/provider 契约 + relaunch 三态) · `test_web_traffic_monitor_notify.py`(夹具由 `.enabled=True` 改 `provider="global_traffic_monitor"`; disabled 用例断言新 reason) · `test_traffic_monitor_client.py`(同; e2e 补 `global_traffic_monitor.data_dir` 令 provider=工具面时曲线取到同一 dat) · `test_config_traffic_monitor.py` / `test_web_route_manifest.py` / `webui_helpers.py` / `helpers.py`(键面 / 路由清单 / 段认领基线随退休面更新)。
+
+**设计要点**: 「联动是否启用」不再有独立配置键 —— 单一开关就是 `traffic_source.provider`(D1 严格互斥), 路由的 `enabled` 字段降为**派生展示位**; 设置页开关(`autostart`)状态读指针 `autostart_registered`、拨动走 `POST /autostart`(D13: auto-qb 不持有也不计算该状态); 「立即拉起」只置跨线程标志 + 唤醒订阅线程(拉起仍由订阅线程执行, 黄金法则 5)。
+
+**出口判据全过**: ①「配置来源」只在设置页一处(曲线卡已删来源字段); ②切换(provider 单选 + 选中面展开)/拉起(relaunch 409↔200, 前端五态轮询)/状态展示(五态 + ready 回显)三种交互经路由与模板守阵实测可用; ③根 `test.full` 全绿, 实测数字只记入基线切片 `baselines/26-10-17-1311-global-traffic-source-integration-s17.md`(见 kb.baseline)。
+
+**取舍留痕**: ①「打开工具设置」= 新标签打开工具控制面根地址(`tool_url`), 工具无 HTML 页时浏览器显示 JSON —— 可接受(控制面本就是 JSON API); ②文件选择器受 `/api/fs/dirs` 白名单限制(只列目录、限在允许保存路径内), 范围外只能手填绝对路径, 卡片内已写明。
+
+**未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**(S17 无配置键面新增, 只是删过渡 stub); 真机验收 → S19。
+
+**滚动面**: 本档案(S17 段 + 状态表 + Updated 1311) · activeContext 切片(S17 已实施段 + 待办) · 基线切片新建 · kb.index 重建。随本专题「提交」入库。

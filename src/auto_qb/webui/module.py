@@ -38,10 +38,26 @@ class WebUIModule(BaseModule):
         self._subscriber = TrafficMonitorSubscriber(manager)
 
     def sections(self) -> tuple[str, ...]:
-        # web: 本模块的监听/鉴权段; global_traffic_monitor: 既是设置页代理路由读的段(S6),
-        # 也是本模块的订阅生命周期现读的段(S7: enabled/subscribe/tool_url/冷却)
-        # —— 段认领面(claim completeness 守阵)要求每个配置顶层段至少被一个模块认领
-        return ("web", "global_traffic_monitor")
+        # web: 本模块的监听/鉴权段。
+        # !S17(计划 26-10-17-0339)起旧的顶层 global_traffic_monitor 过渡桩段已退休(D2/D17):
+        # 联动参数改读 traffic_source.global_traffic_monitor 来源子段(该顶层段由 speed_curve 模块认领);
+        # 本模块只认领 web —— 段认领面(claim completeness 守阵)仍要求每段至少被一个模块认领。
+        return ("web", )
+
+    @property
+    def agent(self):
+        """工具发现/拉起单点(S17): 设置页状态区/「立即拉起」经它读状态与促拉起
+
+        路由层经 `manager.host.get("webui").agent` 取(与订阅客户端共用同一实例, 状态一致)。
+        """
+        return self._subscriber.agent
+
+    def request_relaunch(self) -> bool:
+        """设置页「立即拉起/重试」(S17): 促订阅线程立刻重跑一轮(见 subscriber.request_relaunch)
+
+        -> 是否已按期望态拉起线程(False = 当前来源不是工具 / WEB 未就绪)。
+        """
+        return self._subscriber.request_relaunch()
 
     # ---------- 生命周期 ----------
 

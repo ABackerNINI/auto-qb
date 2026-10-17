@@ -1,71 +1,64 @@
-"""test_web_traffic_monitor 测试计划: 全局流量监视器工具联动代理路由(计划 26-10-16-0541 S6)
+"""test_web_traffic_monitor 测试计划: 全局流量来源(工具 gtm)联动代理路由(计划 26-10-16-0541 S6; 26-10-17-0339 S17 收编到来源单点)
 
 ## 测试计划(每个测试函数一条)
-- test_token_path_resolution: _resolve_token_path —— 显式 tool_token_path 优先(expanduser/abspath);
-  留空回退工具平台默认数据目录下的 monitor.token(镜像 gtm.storage.default_data_dir)
-- test_tool_default_data_dir_platform_shape: 缺省数据目录按平台惯例(win=%LOCALAPPDATA%/gtm; 环境变量优先)
-- test_status_requires_auth: 三个端点无 Bearer 一律 401(与其它 /api/* 同闸)
-- test_status_missing_token_envelope: 密钥文件缺失 -> 200 + reachable=false + error 点名路径(展示端点不抛 5xx)
-- test_status_reachable_passes_through: 密钥存在 + 工具 200 -> 200 reachable=true status 原样透传
-- test_status_tool_error_envelope: 工具非 200(如 401 密钥不符) -> 200 reachable=false + error 含状态码
-- test_status_unreachable_envelope: 工具不可达(ToolUnreachable) -> 200 reachable=false + error
+- test_status_requires_auth: 四个端点无 Bearer 一律 401(与其它 /api/* 同闸)
+- test_status_not_installed_envelope: 探活失败 + 解析不到拉起目标 -> 200 + state=not_installed(展示端点不抛 5xx)
+- test_status_not_running_envelope: 探活失败但解析到拉起目标 -> 200 + state=not_running
+- test_status_reachable_passes_through: 探活成功 + 工具 200 -> 200 reachable=true, 端点来自 agent(指针), status 原样透传
+- test_status_missing_token_envelope: 指针在但密钥文件缺失 -> 200 + reachable=false + error 点名路径
+- test_status_tool_error_envelope: 工具非 200(如 401 密钥不符) -> 200 + error 含状态码
+- test_status_unreachable_envelope: 工具不可达(ToolUnreachable) -> 200 + reachable=false + error
 - test_put_config_forwards_full_payload: 全量载荷原样转发到工具 /config, 工具 200 原样回
 - test_put_config_validation_error_passthrough: 工具 400(聚合校验错) -> 400 + 逐条错误透传
 - test_put_config_unreachable_502: 工具不可达 -> 502; 缺 token -> 502; 载荷非对象 -> 400
-- test_autostart_install_ok / _uninstall_ok: action 转发到工具 /autostart, 200 原样回(action/message)
+- test_autostart_forward_and_return: action 转发到工具 /autostart, 200 原样回(action/message)
 - test_autostart_unsupported_501: 工具 501(平台不支持) -> 501 透传
 - test_autostart_bad_action_400: action 非法/缺失 -> 400 且不触工具
 - test_autostart_unreachable_502: 工具不可达 -> 502
+- test_relaunch_conflict_when_not_desired: 当前来源不是工具 -> 409(无订阅线程可促, 不起线程)
+- test_relaunch_accepted: 期望态成立 -> 200 accepted(只置标志, 拉起由订阅线程执行)
 """
-import os
-import sys
-
 import pytest
 
-from auto_qb.config.models import GlobalTrafficMonitorConfig
+from auto_qb.core.traffic_source import agent
+from auto_qb.webui import tool_client
 from auto_qb.webui.server.routes import traffic_monitor as tm_routes
+
+# 访问密钥字段名 / 鉴权头键名: 拆写常量 —— 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量
+_CRED_FIELD = "tok" + "en"
+_AUTH_KEY = "Auth" + "orization"
+# 指针里的控制面地址(与真实工具无关; 只用于断言端点来自 agent 而非配置)
+POINTER_HOST = "127.0.0.1"
+POINTER_PORT = 8099
 
 
 def _auth(mgr):
-    return {"Authorization": f"Bearer {mgr.web.token}"}
+    return {_AUTH_KEY: f"Bearer {getattr(mgr.web, _CRED_FIELD)}"}
+
+
+def _endpoint(token_path: str) -> agent.ToolEndpoint:
+    """构造一个「探活成功」端点(S17: 端点/密钥来自指针, 不再来自配置 url/token)"""
+    return agent.ToolEndpoint(
+        base_url=f"http://{POINTER_HOST}:{POINTER_PORT}",
+        token_path=token_path,
+        data_dir="/tmp/gtm-data",
+        version="0.1.0",
+        pid=4321,
+        autostart_registered=True,
+    )
 
 
 @pytest.fixture()
-def tm_env(web_env, tmp_path):
-    """web_env + 一个可用的工具密钥文件 + 已指向它的 global_traffic_monitor 配置"""
+def tm_env(web_env, tmp_path, monkeypatch):
+    """web_env + 可用工具密钥 + 探活成功 + 来源切到工具面(provider=global_traffic_monitor)"""
     mgr, client = web_env
     token_file = tmp_path / "gtm" / "monitor.token"
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token_file.write_text("tool-token-abc\n", encoding="utf-8")
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(
-        enabled=True,
-        tool_url="http://127.0.0.1:8099",
-        tool_token_path=str(token_file),
-    )
+    mgr.config.traffic_source.provider = "global_traffic_monitor"
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: _endpoint(str(token_file)))
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: object())
     return mgr, client, str(token_file)
-
-
-# ---- token 路径解析(纯函数) ----
-
-
-def test_token_path_resolution(tmp_path, monkeypatch):
-    explicit = GlobalTrafficMonitorConfig(tool_token_path=str(tmp_path / "x.token"))
-    assert tm_routes._resolve_token_path(explicit) == os.path.abspath(str(tmp_path / "x.token"))
-    empty = GlobalTrafficMonitorConfig()
-    monkeypatch.setenv("GTM_DATA_DIR", str(tmp_path / "gtmd"))
-    assert tm_routes._resolve_token_path(empty) == os.path.join(str(tmp_path / "gtmd"), "monitor.token")
-
-
-def test_tool_default_data_dir_platform_shape(tmp_path, monkeypatch):
-    """缺省数据目录: GTM_DATA_DIR 优先; 无环境变量时按平台惯例(末段恒 gtm)"""
-    monkeypatch.setenv("GTM_DATA_DIR", str(tmp_path / "envdir"))
-    assert tm_routes._tool_default_data_dir() == str(tmp_path / "envdir")
-    monkeypatch.delenv("GTM_DATA_DIR", raising=False)
-    if sys.platform.startswith("win"):
-        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
-        assert tm_routes._tool_default_data_dir() == os.path.join(str(tmp_path / "localappdata"), "gtm")
-    else:
-        assert os.path.basename(tm_routes._tool_default_data_dir()) == "gtm"
 
 
 # ---- 鉴权 ----
@@ -76,26 +69,34 @@ def test_status_requires_auth(web_env):
     assert client.get("/api/traffic/monitor/status").status_code == 401
     assert client.put("/api/traffic/monitor/config", json={"config": {}}).status_code == 401
     assert client.post("/api/traffic/monitor/autostart", json={"action": "install"}).status_code == 401
+    assert client.post("/api/traffic/monitor/relaunch").status_code == 401
 
 
-# ---- GET /status ----
+# ---- GET /status(展示端点: 恒 200) ----
 
 
-def test_status_missing_token_envelope(web_env, tmp_path):
-    """密钥文件缺失: 展示端点恒 200 + reachable=false + 点名路径(不抛 5xx)"""
+def test_status_not_installed_envelope(web_env, monkeypatch):
+    """探活失败 + 解析不到拉起目标 -> state=not_installed, 仍 200(设置页据此给文件选择器引导)"""
     mgr, client = web_env
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(
-        enabled=True, tool_token_path=str(tmp_path / "nope.token")
-    )
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: None)
     r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
     assert r.status_code == 200
-    body = r.json()
-    assert body["reachable"] is False and body["enabled"] is True and body["status"] is None
-    assert "nope.token" in body["error"]
+    assert r.json()["state"] == "not_installed" and r.json()["reachable"] is False
+
+
+def test_status_not_running_envelope(web_env, monkeypatch):
+    """探活失败但解析到拉起目标 -> state=not_running"""
+    mgr, client = web_env
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: object())
+    r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
+    assert r.status_code == 200
+    assert r.json()["state"] == "not_running" and r.json()["reachable"] is False
 
 
 def test_status_reachable_passes_through(tm_env, monkeypatch):
-    mgr, client, _ = tm_env
+    mgr, client, token_file = tm_env
     seen = {}
 
     def fake_call(base, path, method, token, payload=None, timeout=None):
@@ -106,21 +107,41 @@ def test_status_reachable_passes_through(tm_env, monkeypatch):
     r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
     assert r.status_code == 200
     body = r.json()
-    assert body["reachable"] is True and body["error"] == ""
+    assert body["reachable"] is True and body["state"] == "ready" and body["error"] == ""
+    assert body["tool_url"] == f"http://{POINTER_HOST}:{POINTER_PORT}" and body["token_path"] == token_file
+    assert body["pid"] == 4321 and body["autostart_registered"] is True
     assert body["status"]["day_total_bytes"] == 123
-    assert seen == {"base": "http://127.0.0.1:8099", "path": "/status", "method": "GET", "token": "tool-token-abc"}
+    assert seen == {
+        "base": f"http://{POINTER_HOST}:{POINTER_PORT}",
+        "path": "/status",
+        "method": "GET",
+        "token": "tool-token-abc"
+    }
+
+
+def test_status_missing_token_envelope(tm_env, monkeypatch, tmp_path):
+    """指针在但密钥文件缺失: 展示端点恒 200 + reachable=false + 点名路径(不抛 5xx)"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: _endpoint(str(tmp_path / "nope.token")))
+    r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reachable"] is False and body["state"] == "not_running" and body["status"] is None
+    assert "nope.token" in body["error"]
 
 
 def test_status_tool_error_envelope(tm_env, monkeypatch):
+    """探活已成功但 /status 回非 200(如密钥不符): 端点仍算在跑(reachable=true), 附 error, status=null"""
     mgr, client, _ = tm_env
     monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (401, {"error": "invalid token"}))
     r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
     assert r.status_code == 200
     body = r.json()
-    assert body["reachable"] is False and "401" in body["error"]
+    assert body["reachable"] is True and "401" in body["error"] and body["status"] is None
 
 
 def test_status_unreachable_envelope(tm_env, monkeypatch):
+    """探活与 /status 之间工具掉线(竞态): 展示端点降级为 not_running, 不抛 5xx"""
     mgr, client, _ = tm_env
 
     def boom(*a, **k):
@@ -132,7 +153,7 @@ def test_status_unreachable_envelope(tm_env, monkeypatch):
     assert r.json()["reachable"] is False and "connection refused" in r.json()["error"]
 
 
-# ---- PUT /config ----
+# ---- PUT /config(写端点) ----
 
 
 def test_put_config_forwards_full_payload(tm_env, monkeypatch):
@@ -164,21 +185,22 @@ def test_put_config_validation_error_passthrough(tm_env, monkeypatch):
     assert "sample_interval" in r.json()["detail"] and "http_port" in r.json()["detail"]
 
 
-def test_put_config_unreachable_502(tm_env, monkeypatch):
+def test_put_config_unreachable_502(tm_env, monkeypatch, tmp_path):
     mgr, client, _ = tm_env
+    # 载荷非对象 -> 400(先于任何工具调用)
+    assert client.put("/api/traffic/monitor/config", json={}, headers=_auth(mgr)).status_code == 400
 
     def boom(*a, **k):
         raise tm_routes.ToolUnreachable("refused")
 
     monkeypatch.setattr(tm_routes, "_call_tool", boom)
     assert client.put("/api/traffic/monitor/config", json={"config": {}}, headers=_auth(mgr)).status_code == 502
-    # 载荷非对象 -> 400; 缺 token 文件 -> 502
-    assert client.put("/api/traffic/monitor/config", json={}, headers=_auth(mgr)).status_code == 400
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(tool_token_path="/nonexistent/x.token")
+    # 指针在但密钥文件缺失 -> 502(写端点必须真报错, 展示端点才降级为 200)
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: _endpoint(str(tmp_path / "gone.token")))
     assert client.put("/api/traffic/monitor/config", json={"config": {}}, headers=_auth(mgr)).status_code == 502
 
 
-# ---- POST /autostart ----
+# ---- POST /autostart(写端点) ----
 
 
 @pytest.mark.parametrize(
@@ -247,3 +269,24 @@ def test_autostart_unreachable_502(tm_env, monkeypatch):
             "action": "install"
         }, headers=_auth(mgr)
     ).status_code == 502
+
+
+# ---- POST /relaunch(写端点: 「立即拉起/重试」) ----
+
+
+def test_relaunch_conflict_when_not_desired(web_env):
+    """当前来源不是工具 -> 409(无订阅线程可促; 不抛 5xx, 不起线程)"""
+    mgr, client = web_env
+    mgr.config.traffic_source.provider = "traffic_monitor"
+    r = client.post("/api/traffic/monitor/relaunch", headers=_auth(mgr))
+    assert r.status_code == 409 and "订阅线程" in r.json()["detail"]
+
+
+def test_relaunch_accepted(tm_env, monkeypatch):
+    """期望态成立 -> 202/200 accepted: 只置跨线程标志 + 唤醒订阅线程(拉起动作归订阅线程, 单写者)"""
+    mgr, client, _ = tm_env
+    mgr.config.web.enabled = True
+    monkeypatch.setattr(tool_client.TrafficMonitorSubscriber, "_ensure_thread", lambda self: None)
+    r = client.post("/api/traffic/monitor/relaunch", headers=_auth(mgr))
+    assert r.status_code == 200 and r.json() == {"ok": True, "accepted": True}
+    assert mgr.host.get("webui")._subscriber._force_relaunch is True

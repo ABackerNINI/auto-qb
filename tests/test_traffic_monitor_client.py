@@ -32,7 +32,6 @@ from unittest import mock
 import pytest
 
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
-from auto_qb.config.models import GlobalTrafficMonitorConfig
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
 from helpers import make_manager
@@ -475,7 +474,11 @@ def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch)
     from auto_qb.webui import create_app
 
     mgr, _dat, _calls = _refresh_env(tmp_path, monkeypatch)
-    mgr.config.global_traffic_monitor = GlobalTrafficMonitorConfig(enabled=True)
+    # S17: 来源单一开关是 provider(旧的 global_traffic_monitor.enabled 键已退休)
+    mgr.config.traffic_source.provider = "global_traffic_monitor"
+    # D1: 两来源参数可并存, provider=工具面时曲线取数走 global_traffic_monitor.data_dir 下的
+    # history_traffic.dat(与 TM 面同一文件, 跨包契约文件名); 指向夹具已写好的 dat 所在目录
+    mgr.config.traffic_source.global_traffic_monitor.data_dir = str(tmp_path)
     setattr(mgr.web, _CRED_FIELD, "e2e-credential")
     client = TestClient(create_app(mgr))
     headers = {_AUTH_KEY: f"Bearer {getattr(mgr.web, _CRED_FIELD)}"}

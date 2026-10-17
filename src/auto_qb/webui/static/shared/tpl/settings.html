@@ -310,82 +310,89 @@
 
               <!-- 限速: 阶梯图 + 档位(每一档是「流量低于 X → 限速 Y」一个整体) -->
 
-              <!-- 全局流量监视器(计划 26-10-16-0541 S6): 本分支在 v-if 链内(经 settings-detail.html
-                   之前的 rules 分支续接), 内容落在 <main> 内。auto-qb 联动键走 hub-field(与通用表单同源),
-                   工具侧面板(状态/参数/自启)经 /api/traffic/monitor/* 代理外部进程; 行为层见 config_hub.js
-                   的 tm* 方法。参数保存 = 全量覆盖(读后写), 工具不可达时只显示原因不渲染参数表单。 -->
-              <template v-else-if="hub.view === 'global_traffic_monitor'">
+              <!-- 全局流量来源(计划 26-10-17-0339 S17/D15): 一张卡合并「来源单选 + 工具状态」。provider 二选一,
+                   选中面展开(TM 仅 dat_path; 工具面 tool_dir/tool_exe/data_dir/notify_cooldown_s); 底部状态区五态(§05)
+                   + 立即拉起/重试 + 自启开关(读指针 autostart_registered, 拨动走 POST /autostart); 找不到工具给文件
+                   选择器; 工具参数(高级)经控制面读写。行为层见 config_hub.js 的 tm*。本分支在 v-if 链内, 后接
+                   settings-detail.html 的 speed/keys/通用分支。 -->
+              <template v-else-if="hub.view === 'traffic_source'">
                 <div class="hb-blk hb-cut">
-                  <div class="hb-blk-hd">
-                    <span class="bh-t">auto-qb 联动</span>
-                    <span class="bh-n">本实例如何接入工具(总开关 / 工具地址 / 订阅 / 冷却)</span>
+                  <div class="hb-blk-hd"><span class="bh-t">数据来源</span><span class="bh-n">二选一, 只有选中的来源参与取数</span></div>
+                  <div class="hb-row">
+                    <div class="hb-lb">来源</div>
+                    <div class="hb-ct">
+                      <button class="hb-btn sm" :class="tmProvider() === 'traffic_monitor' ? 'primary' : 'ghost'" @click="tmSetProvider('traffic_monitor')">Traffic Monitor 文件</button>
+                      <button class="hb-btn sm" :class="tmProvider() === 'global_traffic_monitor' ? 'primary' : 'ghost'" @click="tmSetProvider('global_traffic_monitor')">整机流量监视器(工具)</button>
+                    </div>
                   </div>
-                  <hub-field v-for="row in tmLinkageItems()" :key="hubKey(row.path)" :item="row"></hub-field>
+                  <hub-field v-for="row in tmProviderItems(tmProvider())" :key="hubKey(row.path)" :item="row"></hub-field>
                 </div>
-
                 <div class="hb-blk hb-cut">
                   <div class="hb-blk-hd">
-                    <span class="bh-t">工具状态</span>
-                    <span class="bh-n">{{ tm.reachable ? '工具在跑' : '未连接' }}</span>
-                    <span class="bh-r">
-                      <button class="hb-btn ghost sm" :disabled="tm.loading" @click="tmLoad()">{{ tm.loading ? '读取中…' : '刷新' }}</button>
-                    </span>
+                    <span class="bh-t">工具状态</span><span class="bh-n"><span class="hb-led" :class="tmStateClass()"></span> {{ tmStateText() }}</span>
+                    <span class="bh-r"><button class="hb-btn ghost sm" :disabled="tm.loading" @click="tmLoad()">{{ tm.loading ? '读取中…' : '刷新' }}</button></span>
                   </div>
                   <p v-if="tm.loading && !tm.loaded" class="hb-hp" style="padding:12px 14px">正在读取工具状态…</p>
-                  <p v-else-if="!tm.reachable" class="hb-hp" style="padding:12px 14px">
-                    {{ tm.error || '工具未运行' }}。请确认工具已启动(gtm run), 且与 WebUI 同机。
-                  </p>
                   <template v-else>
+                    <div v-if="tm.state === 'not_installed'" class="hb-row"><div class="hb-lb">未安装</div><div class="hb-ct">还没找到工具。请在上方填「工具目录」或「工具可执行文件」后点「立即拉起」。<button class="hb-btn ghost sm" @click="tmPickOpen()">选择文件…</button></div></div>
+                    <div v-else-if="tm.state === 'launching'" class="hb-row"><div class="hb-lb">拉起中</div><div class="hb-ct">已在拉起, 等待工具就绪 · 剩余约 {{ Math.ceil(tm.retryS) }} 秒</div></div>
+                    <div v-else-if="tm.state === 'launch_failed'" class="hb-row"><div class="hb-lb">拉起失败</div><div class="hb-ct">{{ tm.error || '未知原因' }} · 退避剩余约 {{ Math.ceil(tm.retryS) }} 秒, 可点「立即拉起 / 重试」</div></div>
+                    <div v-else-if="tm.state === 'not_running'" class="hb-row"><div class="hb-lb">未运行</div><div class="hb-ct">{{ tm.error || '工具当前没在跑。点「立即拉起」由 auto-qb 拉起它。' }}</div></div>
+                    <template v-else-if="tm.state === 'ready' && tm.status">
+                      <div class="hb-row"><div class="hb-lb">控制面</div><div class="hb-ct">端口 {{ tm.toolUrl }} · PID {{ tm.pid || '—' }} · 版本 {{ tm.version || '—' }} · 数据目录 <span style="font-family:var(--hb-font-mono)">{{ tm.dataDir || '—' }}</span></div></div>
+                      <div class="hb-row"><div class="hb-lb">当日流量</div><div class="hb-ct">上行 {{ tmFmtBytes(tm.status.day_up_bytes) }} · 下行 {{ tmFmtBytes(tm.status.day_down_bytes) }} · 合计 {{ tmFmtBytes(tm.status.day_total_bytes) }} · {{ tm.status.subscriber_count }} 个订阅 · 末事件号 {{ tm.status.last_event_id }}</div></div>
+                      <div class="hb-row"><div class="hb-lb">历史文件</div><div class="hb-ct" style="font-family:var(--hb-font-mono)">{{ tm.status.paths && tm.status.paths.dat }}</div></div>
+                      <div class="hb-row"><div class="hb-lb">开机自启</div><div class="hb-ct"><label><input type="checkbox" :checked="tm.autostartRegistered" :disabled="tm.autoBusy" @change="tmAutostart($event.target.checked ? 'install' : 'uninstall')">&nbsp;已注册</label><span class="bh-n">{{ tm.autostartRegistered ? '开机会自动起' : '未注册(开机不会自动起)' }}</span><span v-if="tm.autoMsg" class="bh-n">{{ tm.autoMsg }}</span><span v-if="tm.autoErr" class="hb-hp risk">{{ tm.autoErr }}</span></div></div>
+                    </template>
+                    <div v-else class="hb-row"><div class="hb-lb">就绪异常</div><div class="hb-ct">{{ tm.error || '工具可达但状态读取异常' }}</div></div>
                     <div class="hb-row">
-                      <div class="hb-lb">当日流量</div>
-                      <div class="hb-ct">上行 {{ tmFmtBytes(tm.status.day_up_bytes) }} · 下行 {{ tmFmtBytes(tm.status.day_down_bytes) }} · 合计 {{ tmFmtBytes(tm.status.day_total_bytes) }}</div>
-                    </div>
-                    <div class="hb-row">
-                      <div class="hb-lb">订阅 / 事件</div>
-                      <div class="hb-ct">{{ tm.status.subscriber_count }} 个订阅 · 末事件号 {{ tm.status.last_event_id }} · 已运行 {{ Math.round(tm.status.uptime_s) }} 秒</div>
-                    </div>
-                    <div class="hb-row">
-                      <div class="hb-lb">历史文件</div>
-                      <div class="hb-ct" style="font-family:var(--hb-font-mono)">{{ tm.status.paths && tm.status.paths.dat }}</div>
+                      <div class="hb-lb"></div>
+                      <div class="hb-ct"><button class="hb-btn" :disabled="tm.relaunching" @click="tmRelaunch()">{{ tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button class="hb-btn ghost sm" :disabled="!tm.reachable || !tm.toolUrl" @click="tmOpenToolSettings()">打开工具设置</button></div>
                     </div>
                   </template>
                 </div>
-
-                <div v-if="tm.reachable" class="hb-blk hb-cut">
+                <!-- 文件选择器(D10③): 找不到工具时用目录导航 + 文件名输入写 tool_exe / tool_dir; 后端 /api/fs/dirs 只列目录且限在允许保存路径内, 范围外请手填绝对路径。 -->
+                <div v-if="tm.pick.open" class="hb-blk hb-cut">
                   <div class="hb-blk-hd">
-                    <span class="bh-t">工具参数</span>
-                    <span class="bh-n">读写工具自有配置; 保存 = 全量覆盖并热重载</span>
+                    <span class="bh-t">选择工具文件</span><span class="bh-n">{{ tm.pick.path || '选择位置' }}</span>
+                    <span class="bh-r"><button class="hb-btn ghost sm" :disabled="!tm.pick.parent" @click="tmPickUp()">上级</button><button class="hb-btn ghost sm" @click="tm.pick.open = false">关闭</button></span>
                   </div>
-                  <div v-for="p in tmParams()" :key="p.key" class="hb-row">
-                    <div class="hb-lb">{{ p.label }}</div>
-                    <div class="hb-ct">
-                      <input v-if="p.kind === 'list'" class="hb-input" type="text" v-model="tm.form[p.key]" :placeholder="p.hint || ''">
-                      <input v-else class="hb-input" :type="p.kind === 'text' ? 'text' : 'number'" :step="p.step || 'any'" v-model="tm.form[p.key]">
-                      <span v-if="p.bytes" class="bh-n">= {{ tmFmtBytes(Number(tm.form[p.key]) || 0) }}</span>
+                  <div style="padding:12px 14px">
+                    <p v-if="tm.pick.loading" class="hb-hp">正在读取目录…</p>
+                    <p v-else-if="tm.pick.error" class="hb-hp error">{{ tm.pick.error }}</p>
+                    <div v-else style="display:flex;flex-wrap:wrap;gap:6px">
+                      <button v-for="d in tm.pick.dirs" :key="d.path" class="hb-btn ghost sm" @click="tmPickEnter(d)">{{ d.name }}</button>
+                      <p v-if="!tm.pick.dirs.length" class="hb-hp">此目录下没有可进入的子目录</p>
                     </div>
-                  </div>
-                  <div class="hb-row">
-                    <div class="hb-lb"></div>
-                    <div class="hb-ct">
-                      <button class="hb-btn" :disabled="tm.saving" @click="tmSave()">{{ tm.saving ? '保存中…' : '保存到工具' }}</button>
-                      <span v-if="tm.saveMsg" class="bh-n">{{ tm.saveMsg }}</span>
-                      <span v-if="tm.saveErr" class="hb-hp risk">{{ tm.saveErr }}</span>
+                    <div class="hb-row" style="margin-top:8px">
+                      <div class="hb-lb">文件名</div>
+                      <div class="hb-ct">
+                        <input class="hb-input" v-model="tm.pick.name" placeholder="如 gtm.exe / launch.cmd">
+                        <button class="hb-btn sm" :disabled="!tm.pick.path || !tm.pick.name.trim()" @click="tmPickApplyExe()">写入工具可执行文件</button>
+                        <button class="hb-btn ghost sm" :disabled="!tm.pick.path" @click="tmPickApplyDir()">写入工具目录</button>
+                      </div>
                     </div>
+                    <p class="bh-n">只列目录、限在允许的保存路径内; 范围外请直接在「工具目录 / 工具可执行文件」文本框填绝对路径。</p>
                   </div>
                 </div>
-
+                <!-- 工具自身参数(高级): 采样/落盘/阈值/适配器 —— 经工具控制面读写(读后写, 全量覆盖) -->
                 <div v-if="tm.reachable" class="hb-blk hb-cut">
                   <div class="hb-blk-hd">
-                    <span class="bh-t">开机自启</span>
-                    <span class="bh-n">由工具侧幂等注册/卸载(工具与 WebUI 必须同机)</span>
+                    <span class="bh-t">工具参数(高级)</span><span class="bh-n">采样间隔 / 落盘阈值 / 适配器 —— 经工具控制面读写</span>
+                    <span class="bh-r"><button class="hb-btn ghost sm" @click="tm.advancedOpen = !tm.advancedOpen">{{ tm.advancedOpen ? '收起' : '展开' }}</button></span>
                   </div>
-                  <div class="hb-row">
-                    <div class="hb-lb">开机自启</div>
-                    <div class="hb-ct">
-                      <button class="hb-btn ghost sm" :disabled="tm.autoBusy" @click="tmAutostart('install')">注册</button>
-                      <button class="hb-btn ghost sm" :disabled="tm.autoBusy" @click="tmAutostart('uninstall')">卸载</button>
-                      <span v-if="tm.autoMsg" class="bh-n">{{ tm.autoMsg }}</span>
-                      <span v-if="tm.autoErr" class="hb-hp risk">{{ tm.autoErr }}</span>
+                  <div v-show="tm.advancedOpen">
+                    <div v-for="p in tmParams()" :key="p.key" class="hb-row">
+                      <div class="hb-lb">{{ p.label }}</div>
+                      <div class="hb-ct">
+                        <input v-if="p.kind === 'list'" class="hb-input" type="text" v-model="tm.form[p.key]" :placeholder="p.hint || ''">
+                        <input v-else class="hb-input" :type="p.kind === 'text' ? 'text' : 'number'" :step="p.step || 'any'" v-model="tm.form[p.key]">
+                        <span v-if="p.bytes" class="bh-n">= {{ tmFmtBytes(Number(tm.form[p.key]) || 0) }}</span>
+                      </div>
+                    </div>
+                    <div class="hb-row">
+                      <div class="hb-lb"></div>
+                      <div class="hb-ct"><button class="hb-btn" :disabled="tm.saving" @click="tmSave()">{{ tm.saving ? '保存中…' : '保存到工具' }}</button><span v-if="tm.saveMsg" class="bh-n">{{ tm.saveMsg }}</span><span v-if="tm.saveErr" class="hb-hp risk">{{ tm.saveErr }}</span></div>
                     </div>
                   </div>
                 </div>

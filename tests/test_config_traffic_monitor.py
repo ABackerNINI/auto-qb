@@ -404,5 +404,5 @@ def test_migrate_v4_with_gtm_section_through_load_config(tmp_path):
     cfg = load_config(str(path))
     assert cfg.traffic_source.provider == "global_traffic_monitor"
     assert cfg.traffic_source.global_traffic_monitor.notify_cooldown_s == 300.0
-    # 旧 gtm 段已从配置面退休: Config.global_traffic_monitor 只剩过渡 stub 的默认值(不再来自 YAML)
-    assert cfg.global_traffic_monitor.enabled is False
+    # 旧 gtm 段已从配置面退休(S15), 过渡 stub 字段也随 S17 删除 —— 顶层属性不再存在
+    assert not hasattr(cfg, "global_traffic_monitor")

@@ -33,14 +33,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import urllib.error
 import urllib.request
 from typing import Optional, Tuple
 
 from ..core.traffic_source import agent
-from ..infra.utils import is_mac, is_windows
 
 logger = logging.getLogger(__name__)
 
@@ -70,35 +68,6 @@ _AUTH_HEADER_KEY = "Auth" + "orization"
 
 class ToolUnreachable(RuntimeError):
     """工具控制面不可达 / 响应非法(网络错、连接拒绝、非 JSON)."""
-
-
-def tool_default_data_dir() -> str:
-    """工具数据目录默认值(镜像 gtm.storage.default_data_dir 的平台惯例; 环境变量优先)
-
-    镜像而非 import: 工具是独立包/venv, auto-qb 不 import 它。仅用于 tool_token_path 留空时
-    定位缺省密钥文件; 用户在配置里显式给 tool_token_path 即覆盖本推断。平台判定走 utils 单点。
-
-    !S16 后**订阅方向**不再走本推断(密钥与端口全来自发现指针, 见 core.traffic_source.agent);
-    本函数只剩设置页代理路由(S7/S17)在用, 待 S17 一并收编。
-    """
-    env = os.environ.get("GTM_DATA_DIR")
-    if env:
-        return env
-    if is_windows():
-        base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
-        return os.path.join(base, "gtm")
-    if is_mac():
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "gtm")
-    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    return os.path.join(base, "gtm")
-
-
-def resolve_token_path(conf) -> str:
-    """工具 monitor.token 路径: 显式 tool_token_path 优先, 否则工具平台默认数据目录下"""
-    explicit = str(conf.tool_token_path or "").strip()
-    if explicit:
-        return os.path.abspath(os.path.expanduser(explicit))
-    return os.path.join(tool_default_data_dir(), "monitor.token")
 
 
 def read_token(path: str) -> str:
@@ -166,6 +135,9 @@ class TrafficMonitorSubscriber:
         self._thread: Optional[threading.Thread] = None
         # 工具发现/拉起单点(S16): 状态内聚在它自己身上; UI 可经 self.agent 读状态区
         self._agent = agent.TrafficSourceAgent()
+        # 「立即拉起/重试」跨线程标志(S17): web 线程只置位, 订阅线程读到即清并转 agent
+        # —— agent 内部状态仍只由订阅线程改(单写者法则)
+        self._force_relaunch = False
         # ---- 以下状态只在订阅线程内读写 ----
         self._sub_id = ""  # 工具侧分配的订阅 id; 空 = 当前未注册
         self._reg_key: Optional[tuple] = None  # 注册时的 (工具基地址, endpoint, 回调凭证)
@@ -190,6 +162,19 @@ class TrafficMonitorSubscriber:
         if self._desired()[0]:
             self._ensure_thread()
         self._wake.set()
+
+    def request_relaunch(self) -> bool:
+        """设置页「立即拉起/重试」(非阻塞, 幂等): 促订阅线程立刻重跑一轮并忽略失败退避
+
+        -> 是否已按期望态拉起线程(False = 当前来源不是工具 / WEB 未启用/未就绪, 无订阅线程可促)。
+        只置一个布尔标志 + 唤醒, 不碰 agent 内部状态 —— 拉起仍由订阅线程执行(单写者法则)。
+        """
+        if not self._desired()[0]:
+            return False
+        self._force_relaunch = True
+        self._ensure_thread()
+        self._wake.set()
+        return True
 
     def stop(self, timeout: float = _STOP_JOIN_TIMEOUT_S) -> None:
         """关停: 叫停订阅线程并等它退出(有界); 线程退出前会把订阅注销掉
@@ -252,9 +237,14 @@ class TrafficMonitorSubscriber:
         """
         want, why = self._desired()
         if not want:
+            self._force_relaunch = False
             self._wait_s = _DEFAULT_HEARTBEAT_S
             self._unregister(why)
             return False
+        if self._force_relaunch:
+            # 设置页「立即拉起/重试」(S17): 清失败退避 -> 本轮 ensure_running 立刻重新拉起
+            self._force_relaunch = False
+            self._agent.request_relaunch()
         endpoint = self._agent.ensure_running(self._conf())
         if endpoint is None:
             # 工具未就绪(拉起中 / 退避中 / 未安装): 不发控制面请求, 也不逐轮 WARNING

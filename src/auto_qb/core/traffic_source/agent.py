@@ -282,6 +282,17 @@ class TrafficSourceAgent:
 
     # ---------------- UI 侧(只读) ----------------
 
+    def request_relaunch(self) -> None:
+        """手动「立即拉起/重试」: 清失败记忆与退避, 下轮 ensure_running 立刻重新拉起
+
+        !只能在**订阅线程**里被调用(单写者, 与 ensure_running 同) —— 设置页按钮经
+        `TrafficMonitorSubscriber.request_relaunch` 置一个跨线程布尔标志, 订阅线程读到后调本方法,
+        agent 内部状态(退避/失败原因/等待窗口)因此仍只在单一写线程里被改。
+        """
+        self._pending_until = 0.0
+        self._retry_after = 0.0
+        self._fail_reason = ""
+
     def status(self, conf) -> dict:
         """状态区五态(plan §05): ready / launching / launch_failed / not_running / not_installed"""
         ep = probe(PROBE_TIMEOUT_S)

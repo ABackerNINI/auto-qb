@@ -478,6 +478,7 @@ GROUPS: Tuple[Group, ...] = (
                         "traffic_monitor",
                         "Traffic Monitor 来源",
                         "object",
+                        show_if=("provider", "traffic_monitor"),
                         help="provider 为 traffic_monitor 时生效的参数",
                         fields=(
                             Field(
@@ -493,6 +494,7 @@ GROUPS: Tuple[Group, ...] = (
                         "global_traffic_monitor",
                         "整机流量监视器来源",
                         "object",
+                        show_if=("provider", "global_traffic_monitor"),
                         help="provider 为 global_traffic_monitor 时生效的参数",
                         fields=(
                             Field("tool_dir", "工具目录", "str", default="", help="工具 gtm 的安装目录"),
