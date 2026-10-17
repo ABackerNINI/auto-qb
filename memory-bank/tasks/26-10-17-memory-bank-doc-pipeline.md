@@ -56,3 +56,7 @@ P1-P3 全部实施验收完成: 四族模板 × 注册表扩展 × 守卫扩面(
 - 2026-10-17 10:06 立档: 任务档案 memory-bank/tasks/26-10-17-memory-bank-doc-pipeline.md 落盘(§08 显式确认), R0 进度日志 + D4 反向认领进计划; 档案 kb.status 翻 Done
 
 - 2026-10-17 10:16 提交合入推送: 用户触发「合入 develop 正常推送」⇒ ship.commit --no-push 落 P3 提交(87515aa4, 闸门全过) → develop 快进远端 f32f37a4 → feature rebase 上线(P1/P2/P3 三笔重放, tasks/_index.md 生成物冲突机械再生解) → develop 快进合入 → ship.push 推送成功 4f11be5c(死锁解除: 无远端对应分支的问题改走 develop 主线)
+
+- 2026-10-17 10:29 模板 .sheet 边距调宽(880→1120px, 侧 padding 40→20px)两模板同改, 内容区 1080px 让给表格/pre; 临时模拟建档(kb.new plan, 10 SLOT)+守卫+前后截图验收通过; test.full 3502+4 与上基线逐位一致; 规格回写 webui.md, 新基线切片 26-10-17-1028-tpl-sheet-margin
+
+- 2026-10-17 10:37 模板版面改自适应: sheet 1280 封顶 + clamp 侧距, 移除 prose ch 上限使正文/列表/表格/代码块同宽; 新增 <=1180px 断行规则防窄视口横向溢出; playwright 三档视口实测右缘逐位一致; 模拟建档+守卫+截图验收通过; 规格回写 webui.md, 新基线切片 26-10-17-1036-tpl-adaptive-sheet
