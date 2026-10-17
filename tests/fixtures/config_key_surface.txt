@@ -2,7 +2,7 @@
 # 再生成: commands run test.keys-update
 # 口径: 消失/改名 = 破坏性变更 -> 抬 CURRENT_VERSIONS['config'] + config/migrations.py 注册迁移;
 #       纯新增 = 非破坏, 直接重生成. schema_version 是版本章本身不入面; 动态段归一为通配.
-version: 4
+version: 5
 
 <任意>_rules
 <任意>_rules.*.actions.add_category
@@ -67,13 +67,6 @@ fs.path_map
 fs.path_map.*.from
 fs.path_map.*.to
 global_speed_limit_curve
-global_traffic_monitor
-global_traffic_monitor.autostart
-global_traffic_monitor.enabled
-global_traffic_monitor.notify_cooldown_s
-global_traffic_monitor.subscribe
-global_traffic_monitor.tool_token_path
-global_traffic_monitor.tool_url
 grouping
 grouping.check_missing_files
 grouping.cross_group_conflict_check
@@ -164,6 +157,15 @@ trackers.*.remove_tags
 trackers.*.rules
 trackers.*.tags
 trackers.*.upload_speed_limit
+traffic_source
+traffic_source.global_traffic_monitor
+traffic_source.global_traffic_monitor.data_dir
+traffic_source.global_traffic_monitor.notify_cooldown_s
+traffic_source.global_traffic_monitor.tool_dir
+traffic_source.global_traffic_monitor.tool_exe
+traffic_source.provider
+traffic_source.traffic_monitor
+traffic_source.traffic_monitor.dat_path
 web
 web.enabled
 web.host

@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 08:25
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15–S19(auto-qb 侧)待逐项授权。
+**Updated:** 2026-10-17 10:07
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施, S16–S19 待逐项授权。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -30,7 +30,7 @@
 | S12 | 发现指针与锁锚点 | Done (26-10-17-0623) |
 | S13 | 随机端口与 `endpoint` 子命令 | Done (26-10-17-0721) |
 | S14 | 启动器自启意图/改名/gitignore | Done (26-10-17-0825) |
-| S15 | auto-qb 配置面与升级链 | Open |
+| S15 | auto-qb 配置面与升级链 | Done (26-10-17-1007) |
 | S16 | 探测-拉起-订阅编排(可注入单点) | Open |
 | S17 | 设置页合并 | Open |
 | S18 | 守阵/基线/文档 | Open |
@@ -99,3 +99,21 @@
 **未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**(计划 §S18 明确列出「回写: docs/configuration.md(新段与新键)、根 README.md、memory-bank 配置参考与踩坑」); auto-qb 侧 `traffic_source`/`provider`/迁移链/探测拉起编排/设置页 → S15–S17; 真机验收 → S19。
 
 **滚动面**: 本档案(S14 段 + 状态表 + Updated 0825) · activeContext 切片(蒸馏压回 cap 内 + S14 段 + 待办) · 基线切片新建 · 坑档 `sandbox-tempfile-cwd-fallback.md` 复发+1 · kb.index 重建。随本专题「提交」入库。
+
+### R5 · S15 实施 (2026-10-17 10:07)
+
+用户指令「实施计划S15: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S15 的显式授权(S16–S19 不动), 随后「收尾提交」。开工同步至 66600a25。
+
+**落点**(改 8 源文件, 纯 auto-qb 侧、零行工具侧触碰): `config/models.py`(新增 `TrafficSourceConfig` —— `provider` + `traffic_monitor`/`global_traffic_monitor` 两子对象 + 取数单点 `active_dat_path()`; `GlobalSpeedLimitCurve` 删 `dat_path` 只留 curves/interval/enabled; `GlobalTrafficMonitorConfig` 降为**过渡 stub**; `Config` 增 `traffic_source` 字段) · `config/schema/groups.py`(删 `global_traffic_monitor` 组, 增顶层 `traffic_source` 组[provider enum + 两子块, help「一键切换来源」]; schema_version 抬 5) · `config/validation/{sections,curves,core,rules,__init__}.py`(新增 `_validate_traffic_source` 与 `KNOWN_TRAFFIC_SOURCE_*` 常量; 曲线校验段去内联数据源; `KNOWN_CONFIG_KEYS` 去 `global_traffic_monitor` 加 `traffic_source`; expr 数据源门控改读新段, 与 `active_dat_path()` 同口径) · `config/loaders.py`(新增 `load_traffic_source_config`; 删旧 gtm loader; 曲线 loader 不再读 traffic_source) · `infra/versioning.py`(`CURRENT_VERSIONS["config"]` 4→5) · `config/migrations.py`(注册 v4→v5 `_migrate_config_4_5`) · `core/modules/speed_curve_mod.py`(取数走 `active_dat_path()`; `sections()` 增认领 `traffic_source`) · `rules/expr/env.py`(`_traffic` 走 `active_dat_path()`)。
+
+**迁移口径**(v4→v5, D3): `global_speed_limit_curve.traffic_source[0].traffic_monitor.dat_path` 上移到 `traffic_source.traffic_monitor.dat_path` 后删内联块; 旧 `global_traffic_monitor` 段只迁 `notify_cooldown_s` 到 `traffic_source.global_traffic_monitor.notify_cooldown_s`, `enabled`/`tool_url`/`tool_token_path`/`subscribe`/`autostart` 与整段一并删除; provider 推导 = 旧 gtm 段存在(非空)→ `global_traffic_monitor`, 否则 `traffic_monitor`; 每个被删/被迁的键产出一条 note(经 `migrate_with_notes` 落 WARNING); 对已是 v5 形状的输入幂等无副作用。
+
+**设计要点**: D1 严格互斥落成**取数单点** `TrafficSourceConfig.active_dat_path()` —— provider=traffic_monitor 取 `traffic_source.traffic_monitor.dat_path`; provider=global_traffic_monitor 取「工具数据目录/history_traffic.dat」(data_dir 空则返回空 = 无数据源; 指针来源的细化落 S16); `speed_curve_mod` 与 `rules/expr/env._traffic` 都走它, 不各写一遍。**过渡 stub**: `GlobalTrafficMonitorConfig` 数据类与 `Config.global_traffic_monitor` 字段保留默认值, 好让 S16/S17 才重接的 `webui/tool_client.py` / `routes/traffic_monitor.py` / 前端读旧属性名时不运行期 AttributeError; 但它已从 `KNOWN_CONFIG_KEYS`/schema/loader/校验/键面**全部剔除**(YAML 段交给迁移删)。副作用(已按计划接受): 旧 gtm 段仅含 `enabled:false` 也推成 `global_traffic_monitor`, 迁移 note 有记录。
+
+**出口判据全过**: ①旧形状(v4, 仅 TM dat_path)经 `load_config` 自动升 v5 后取数路径 == 旧行为、provider==traffic_monitor、notes 逐键可读; ②键面基线抬 v5(`commands run test.keys-update` 重生成)且新键全入面; ③`validate_config` 全量聚合新段校验。根 `test.full` 实测数字只记入基线切片 `baselines/26-10-17-1007-global-traffic-source-integration-s15.md`(见 kb.baseline)。
+
+**新坑**: `pitfalls/backend/config-section-retire-across-steps.md` —— 分步退休配置段时直接删数据类/字段会打断「属于后续步骤」的消费者的测试(Python 运行期才 AttributeError); 保留默认值 stub 保绿, 待重接那步再删。**为什么值得记**: 本步开工对「S15 配置面 vs S16 消费侧重接」的边界拿不准, 一度准备越界改 `tool_client`/`routes`; 靠过渡 stub 才把本步收在配置面内且全绿。
+
+**未动(属计划内后续步骤, 非遗漏)**: `webui/tool_client.py` / `routes/traffic_monitor.py` / 前端 JS·设置模板仍读过渡 stub → S16/S17; `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**; 真机验收 → S19。
+
+**滚动面**: 本档案(S15 段 + 状态表 + Updated 1007) · activeContext 切片(S15 已实施段 + 待办) · 基线切片新建 · 坑档新增 · kb.index 重建。随本专题「提交」入库。

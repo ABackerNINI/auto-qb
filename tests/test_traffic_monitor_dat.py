@@ -72,9 +72,9 @@ def _write_tool_dat(gtm_writer, path: Path, rows: dict) -> None:
 def _dat_path_env(tmp_path, dat_path: Path):
     """auto-qb 侧环境: dat_path 指向工具产出文件, 曲线启用(day/month 两条)"""
     mgr = make_manager(str(tmp_path / "state.json"))
-    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
-        dat_path=str(dat_path), curves=[_pc("day"), _pc("month")], enabled=True
-    )
+    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[_pc("day"), _pc("month")], enabled=True)
+    # 数据源在顶层 traffic_source 段(S15): 直接注入 FakeConfig, 等价于 load_config 后的形态
+    mgr.config.traffic_source.traffic_monitor.dat_path = str(dat_path)
     mgr.web.traffic_view = {
         "state": "ok",
         "periods": [],

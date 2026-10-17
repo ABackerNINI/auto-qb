@@ -273,7 +273,9 @@ def test_traffic_values():
             f.write("lines: 2\n")
             f.write(f"{date.today():%Y/%m/%d} 1000/500\n")
             f.write("2020/01/01 7/3\n")  # 非本日非本月 -> 不贡献
-        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(dat_path=dat, curves=[])
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[])
+        # 数据源在顶层 traffic_source 段(S15): 直接注入 FakeConfig, 等价于 load_config 后的形态
+        mgr.config.traffic_source.traffic_monitor.dat_path = dat
         assert _val("sys.upload_today", ctx) == 1000 * 1024
         assert _val("sys.download_today", ctx) == 500 * 1024
         assert _val("sys.upload_month", ctx) == 1000 * 1024
@@ -290,7 +292,7 @@ def test_traffic_unconfigured():
 def test_config_gate_for_traffic_names():
     """配置期门控: 数据源没配 -> 用到该名字即报错; 配了 -> 放行(见 _expr_gate)"""
     spec = {"g": {"r": {"conditions": [{"expr": "(sys.upload_today > 1GiB)"}], "actions": []}}}
-    with_source = {"global_speed_limit_curve": {"traffic_source": [{"traffic_monitor": {"dat_path": "/x"}}]}}
+    with_source = {"traffic_source": {"traffic_monitor": {"dat_path": "/x"}}}
 
     errors: list = []
     _validate_rules(spec, errors, with_source)
@@ -439,7 +441,8 @@ def test_file_access_error_paths(monkeypatch):
         _val('exists("C:/__missing__")', ctx)
 
     _, _, ctx2 = _setup()
-    ctx2.manager.config.global_speed_limit_curve = GlobalSpeedLimitCurve(dat_path="Z:/__no_such__.dat", curves=[])
+    ctx2.manager.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[])
+    ctx2.manager.config.traffic_source.traffic_monitor.dat_path = "Z:/__no_such__.dat"
     with pytest.raises(ExprError, match="数据源不可读"):
         _val("sys.upload_today > 1GiB", ctx2)
 

@@ -1,6 +1,6 @@
 """SpeedCurveModule: 全局限速曲线的模块化封装(plan kernel-module-refactor P3)
 
-Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin 整体迁入:
+流量数据源(见 config.traffic_source) -> qB 全局速度限制, 知识从 SpeedCurveMixin 整体迁入:
 - 曲线任务**自注册**(plan §3.2): start 时入队, 队列重建(L2 热重载)经 queue_rebuilt
   相位重新入队 —— 内核的 _create_global_tasks 不再点名业务任务;
 - 流量快照改经 ctx.web.set_traffic_view **服务方法**推送(plan §5), 不再跨层直写
@@ -8,7 +8,7 @@ Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin
 - 手动保护的日志节流状态(_curve_manual_log)收进模块实例, 内核不再代持。
 
 对应 config.global_speed_limit_curve(缺省 None 或 enabled: false = 不启用), 作为全局
-任务按 config.interval 周期执行: 读取 history_traffic.dat, 按每条 period 曲线聚合当前
+任务按 config.interval 周期执行: 读取 config.traffic_source 当前生效来源的 dat, 按每条 period 曲线聚合当前
 累计上传/下载量, 查档得到该方向限速(方案B 全程分档覆盖), 同方向多条曲线取最严(最小
 非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
 
@@ -105,8 +105,9 @@ def _period_rows(period_stats: List[Tuple[str, int, int]]) -> List[dict]:
     ]
 
 
-def _read_source_rows(conf) -> Tuple[List[Tuple[date, int, int]], int, Optional[dict]]:
-    """读流量数据源(dat) -> (按日行, 无法解析行数, 失败 | None)
+def _read_source_rows(dat_path: str) -> Tuple[List[Tuple[date, int, int]], int, Optional[dict]]:
+    """读流量数据源(dat, 路径由调用方从 config.traffic_source.active_dat_path() 取) ->
+    (按日行, 无法解析行数, 失败 | None)
 
     读法与失败判据的**单点**(任务轮与监视器通知刷新轮共用 —— 同一条判据不许两处各实现一遍,
     见 pitfalls/backend/verdict-scope-parity.md)。失败形状:
@@ -114,20 +115,20 @@ def _read_source_rows(conf) -> Tuple[List[Tuple[date, int, int]], int, Optional[
     调用方各自决定怎么用: 任务轮落 `stale` 快照, 通知刷新轮只记一条日志(不发布)。
     """
     try:
-        with open(conf.dat_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(dat_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
     except OSError as e:
         return [], 0, {
             "code": "dat_missing",
             "text": f"流量数据读取失败: {e}",
-            "log": f"读取流量数据失败({conf.dat_path}): {e}",
+            "log": f"读取流量数据失败({dat_path}): {e}",
         }
     rows, bad = curves.parse_history_dat(text)
     if not rows:
         return [], bad, {
             "code": "dat_empty",
             "text": "流量数据无有效记录",
-            "log": f"流量数据无有效记录({conf.dat_path})",
+            "log": f"流量数据无有效记录({dat_path})",
         }
     return rows, bad, None
 
@@ -144,7 +145,8 @@ class SpeedCurveModule(BaseModule):
         self._curve_manual_log: dict = {}
 
     def sections(self) -> tuple[str, ...]:
-        return ("global_speed_limit_curve", )
+        # 消费两个配置段: 曲线本体 + 顶层数据源(计划 26-10-17-0339 S15, dat 路径取自 traffic_source)
+        return ("global_speed_limit_curve", "traffic_source")
 
     # ---------- 生命周期 ----------
 
@@ -185,14 +187,15 @@ class SpeedCurveModule(BaseModule):
             self._publish_traffic("disabled")
             return REQUEUE
 
-        # 1. 读取数据源(读法与失败判据单点在 _read_source_rows)
-        rows, bad, fail = _read_source_rows(conf)
+        # 1. 读取数据源(路径取自 config.traffic_source, 读法与失败判据单点在 _read_source_rows)
+        dat_path = self._ctx.config.traffic_source.active_dat_path()
+        rows, bad, fail = _read_source_rows(dat_path)
         if fail is not None:
             logger.warning(f"限速曲线 | {fail['log']}, 本轮不动")
             self._publish_traffic("stale", reasons=[{"dir": "", "code": fail["code"], "text": fail["text"]}])
             return REQUEUE
         if bad:
-            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
+            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({dat_path})")
         history = _history_rows(rows)
 
         # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
@@ -298,12 +301,13 @@ class SpeedCurveModule(BaseModule):
         if conf is None or not conf.enabled:
             logger.info("限速曲线 | 监视器通知刷新跳过: 限速曲线未启用(快照保持 disabled)")
             return False
-        rows, bad, fail = _read_source_rows(conf)
+        dat_path = self._ctx.config.traffic_source.active_dat_path()
+        rows, bad, fail = _read_source_rows(dat_path)
         if fail is not None:
             logger.info(f"限速曲线 | 监视器通知刷新跳过: {fail['log']}")
             return False
         if bad:
-            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
+            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({dat_path})")
         today = date.today()
         period_stats = [(pc.period, *curves.aggregate(rows, pc.period, today)) for pc in conf.curves]
         history = _history_rows(rows)

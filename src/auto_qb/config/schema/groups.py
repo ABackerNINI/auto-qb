@@ -454,55 +454,65 @@ GROUPS: Tuple[Group, ...] = (
         icon="i-monitor",
     ),
     Group(
-        "global_traffic_monitor",
-        "全局流量监视器",
-        "整机流量历史(独立工具 gtm)的联动: 订阅通知、参数读写与开机自启",
+        "traffic_source",
+        "全局流量来源",
+        "限速曲线与流量条件取数用的数据源: 一键切换来源",
         fields=(
             Field(
-                "global_traffic_monitor",
-                "全局流量监视器",
+                "traffic_source",
+                "流量来源",
                 "object",
-                help="独立的整机流量历史记录小工具(TrafficMonitor 替代): auto-qb 作为其配置方与消费者之一接入。"
-                "工具自有参数(采样间隔/通知阈值/控制面地址等)在分区页的「工具参数」里读写; 本组是 auto-qb 侧的联动开关",
+                help="限速曲线与 expr 流量条件取数用的数据源; provider 一键切换生效来源"
+                "(两个来源的参数可以并存, 但只有 provider 指向的那个参与取数)",
                 fields=(
                     Field(
-                        "enabled",
-                        "启用联动",
-                        "bool",
-                        default="false",
-                        help="总开关; 关闭(缺省)时 auto-qb 不订阅工具通知、不因流量事件刷新历史图(零开销)"
+                        "provider",
+                        "来源",
+                        "enum",
+                        default="traffic_monitor",
+                        options=("traffic_monitor", "global_traffic_monitor"),
+                        help="当前生效的数据源: traffic_monitor = 读 Traffic Monitor 的 history_traffic.dat; "
+                        "global_traffic_monitor = 读整机流量监视器工具(gtm)数据目录下的 history_traffic.dat",
                     ),
                     Field(
-                        "tool_url",
-                        "工具地址",
-                        "str",
-                        default="http://127.0.0.1:8099",
-                        placeholder="http://127.0.0.1:8099",
-                        help="工具控制面基地址(工具与 WebUI 同机部署的缺省形态); 工具端口若改过请同步"
+                        "traffic_monitor",
+                        "Traffic Monitor 来源",
+                        "object",
+                        help="provider 为 traffic_monitor 时生效的参数",
+                        fields=(
+                            Field(
+                                "dat_path",
+                                "dat 文件路径",
+                                "path",
+                                default="",
+                                help="Traffic Monitor 的 history_traffic.dat 路径(每行 \"YYYY/MM/DD <上传KB>/<下载KB>\")",
+                            ),
+                        ),
                     ),
                     Field(
-                        "tool_token_path",
-                        "工具密钥文件",
-                        "path",
-                        default="",
-                        help="工具 monitor.token 文件路径; 留空 = <data_dir>/monitor.token(工具数据目录下的缺省位置)"
-                    ),
-                    Field("subscribe", "注册订阅", "bool", default="true", help="启用联动时, 启动即向工具注册订阅并定时心跳; 关闭则只被动读历史文件不接收推送"),
-                    Field(
-                        "notify_cooldown_s",
-                        "刷新冷却",
-                        "time",
-                        default="10M",
-                        unit_default="M",
-                        help="收到工具事件后刷新历史图的冷却间隔(秒): 突发连续事件按此收敛, 事件号去重另算。0S = 不冷却"
-                    ),
-                    Field(
-                        "autostart",
-                        "开机自启",
-                        "bool",
-                        default="false",
-                        help="由工具侧幂等注册/卸载开机自启(Windows 计划任务 / Linux systemd --user / macOS launchd); "
-                        "开关状态即期望态, 工具已注册则该值为真。⚠ 工具与 WebUI 必须同机"
+                        "global_traffic_monitor",
+                        "整机流量监视器来源",
+                        "object",
+                        help="provider 为 global_traffic_monitor 时生效的参数",
+                        fields=(
+                            Field("tool_dir", "工具目录", "str", default="", help="工具 gtm 的安装目录"),
+                            Field("tool_exe", "工具可执行文件", "path", default="", help="工具 gtm 的可执行文件路径"),
+                            Field(
+                                "data_dir",
+                                "工具数据目录",
+                                "path",
+                                default="",
+                                help="工具 gtm 的数据目录; 非空时 dat 文件取 <data_dir>/history_traffic.dat",
+                            ),
+                            Field(
+                                "notify_cooldown_s",
+                                "刷新冷却",
+                                "time",
+                                default="10M",
+                                unit_default="M",
+                                help="收到工具事件后刷新历史图的冷却间隔(秒); 0S = 不冷却",
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -530,7 +540,7 @@ GROUPS: Tuple[Group, ...] = (
                 "全局限速曲线",
                 "curve",
                 default=None,
-                help="根据 Traffic Monitor 统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; 某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)"
+                help="根据流量数据源(见「全局流量来源」)统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; 某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)"
             ),
         ),
         icon="i-gauge",

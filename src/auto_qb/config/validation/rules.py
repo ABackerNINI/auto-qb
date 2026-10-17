@@ -78,22 +78,25 @@ class _ExprGate:
 
 
 def _expr_gate(data) -> _ExprGate:
-    """从原始配置判断数据源是否配置(Traffic Monitor 的 history dat)
+    """从原始配置判断数据源是否配置(顶层 traffic_source 段当前生效来源的 dat 路径非空)
 
-    WARN: 本函数跑在**曲线段校验之前**(validate_config 里规则段在前), 所以必须容忍结构非法的
-    traffic_source —— 结构错误由 _validate_global_speed_limit_curve 负责报错, 这里只尽力判
-    "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。
+    WARN: 本函数跑在**traffic_source 段校验之前**(validate_config 里规则段在前), 所以必须容忍
+    结构非法的 traffic_source —— 结构错误由 _validate_traffic_source 负责报错, 这里只尽力判
+    "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。判据与
+    models.TrafficSourceConfig.active_dat_path() 同口径(按 provider 分支: global_traffic_monitor
+    来源看 data_dir 非空, 否则看 traffic_monitor.dat_path 非空)。
     """
-    curve = data.get("global_speed_limit_curve") if isinstance(data, dict) else None
-    if not isinstance(curve, dict):
+    ts = data.get("traffic_source") if isinstance(data, dict) else None
+    if not isinstance(ts, dict):
         return _ExprGate()
-    source = curve.get("traffic_source")
-    if not isinstance(source, list) or not source or not isinstance(source[0], dict):
-        return _ExprGate()
-    monitor = source[0].get("traffic_monitor")
-    if not isinstance(monitor, dict):
-        return _ExprGate()
-    return _ExprGate(traffic_configured=bool(str(monitor.get("dat_path", "")).strip()))
+    provider = str(ts.get("provider") or "traffic_monitor").strip()
+    if provider == "global_traffic_monitor":
+        tool = ts.get("global_traffic_monitor")
+        data_dir = str(tool.get("data_dir", "") or "").strip() if isinstance(tool, dict) else ""
+        return _ExprGate(traffic_configured=bool(data_dir))
+    tm = ts.get("traffic_monitor")
+    dat_path = str(tm.get("dat_path", "") or "").strip() if isinstance(tm, dict) else ""
+    return _ExprGate(traffic_configured=bool(dat_path))
 
 
 def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
@@ -246,8 +249,8 @@ def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=Non
         gated = gated_names_in(root)
         if gated:
             errors.append(
-                f"{where}: 取值 {'、'.join(gated)} 无数据源 —— 需配置 global_speed_limit_curve.traffic_source"
-                "(Traffic Monitor 的 history_traffic.dat), 未配置时该值不可用"
+                f"{where}: 取值 {'、'.join(gated)} 无数据源 —— 需在 config.traffic_source 配置当前生效来源"
+                "(traffic_monitor.dat_path 或 global_traffic_monitor.data_dir), 未配置时该值不可用"
             )
 
 

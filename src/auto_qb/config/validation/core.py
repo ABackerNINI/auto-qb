@@ -33,7 +33,7 @@ KNOWN_CONFIG_KEYS = {
     "global_speed_limit_curve",
     "qb_traffic",
     "maintenance_tag_mode",
-    "global_traffic_monitor",
+    "traffic_source",
 }
 
 # maintenance_tag_mode 取值域(本包单点; 旧 schema 侧同名死件已删, issue 26-10-11-0031):
@@ -260,7 +260,6 @@ def validate_config(data) -> List[str]:
         _validate_add_episode_tags,
         _validate_fs,
         _validate_global_hr,
-        _validate_global_traffic_monitor,
         _validate_grouping,
         _validate_hr_check,
         _validate_hr_site_bindings,
@@ -270,6 +269,7 @@ def validate_config(data) -> List[str]:
         _validate_qbittorrent,
         _validate_tag_lists,
         _validate_trackers,
+        _validate_traffic_source,
         _validate_web,
     )
     errors: List[str] = []
@@ -343,7 +343,7 @@ def validate_config(data) -> List[str]:
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)
     _validate_qb_traffic(cfg.get("qb_traffic"), errors, _current_main_tick(cfg))
-    _validate_global_traffic_monitor(cfg.get("global_traffic_monitor"), errors)
+    _validate_traffic_source(cfg.get("traffic_source"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     # 站点绑定类校验(计划 26-09-27-1318 §3.3): 绑不上/绑多个/缺 hr 段 —— 要等 trackers 与

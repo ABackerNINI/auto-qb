@@ -51,8 +51,8 @@
 - test_path_helpers_mid_node_shapes: _set_path 中途节点非 dict 重建 / _delete_path 中途非 dict 与裸标量树安全返回
 - test_migrate_config_3_4_removes_explicit_empty: v3→v4 迁移单测 —— 9 键作用域内显式置空移除 + 逐键 notes(非空值/无关站点不误杀)
 - test_migrate_config_3_4_idempotent: v3→v4 迁移幂等 —— 移除后重放无变更无 notes(崩溃重放安全)
-- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘 v4 + 每键 WARNING(caplog)
-- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(合法保留), 物化零 IO 不误杀
+- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘当前版本(v3→v5) + 每键 WARNING(caplog)
+- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(v4 起的合法语义), v4→v5 迁移不误杀
 - test_write_tree_roundtrip_preserves_site_explicit_empty: ruamel round-trip 保留站点 ''(report 待核实项①实测)
 - test_stamp_schema_version_uses_root_key_and_overwrites: 盖章读 ROOT_KEY 段(非硬编码 None)且无条件覆盖旧版本; 根键非 config 时静默跳过
 - test_materialize_passes_config_path_to_migration: 物化调迁移函数传真实 config_path(不是 None) —— spy 卡实参
@@ -86,8 +86,8 @@ from auto_qb.config.errors import ConfigError
 from auto_qb.config.loaders import load_config
 from auto_qb.config.writer import materialize_schema_migration, preview_tree, read_tree, write_tree
 
-# 「天生当前版本的干净文件」锚(当前 = v4): BASE 供各写盘用例当无 hr 的最小合法配置
-BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+# 「天生当前版本的干净文件」锚(当前 = v5): BASE 供各写盘用例当无 hr 的最小合法配置
+BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
 
 
 def _make(tmp_path, text: str) -> str:
@@ -160,7 +160,7 @@ def test_write_tree_preserves_comments_and_plain_scalars(tmp_path):
     """round-trip 写盘: 已有键注释保留, 未修改标量保持原书写风格(数字/布尔不加引号)"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 4\n"
+        "  schema_version: 5\n"
         "  # 连接设置\n"
         "  qbittorrent:\n"
         "    host: h\n"
@@ -315,7 +315,7 @@ def test_write_tree_rejects_version_higher_than_program(tmp_path):
     with pytest.raises(ConfigError) as ei:
         write_tree(path, tree, old, _bak(tmp_path))
     assert "高于本程序支持" in str(ei.value)
-    assert read_tree(path)["config"]["schema_version"] == "4", "拒绝时磁盘一字不动"
+    assert read_tree(path)["config"]["schema_version"] == "5", "拒绝时磁盘一字不动"
 
 
 def test_write_tree_writes_float_and_negative_scalars_plain(tmp_path):
@@ -440,7 +440,7 @@ def test_preview_tree_does_not_create_backup(tmp_path):
 
 def test_preview_tree_does_not_touch_disk(tmp_path):
     """预览不落盘; 内容含将写入的新值与已有注释"""
-    path = _make(tmp_path, "config:\n  schema_version: 4\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+    path = _make(tmp_path, "config:\n  schema_version: 5\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
     before = _text(path)
     old = load_config(path)
     tree = read_tree(path)
@@ -523,7 +523,7 @@ def test_write_tree_stamps_schema_version(tmp_path):
     write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
-    assert "schema_version: 4" in text, "写回必须带当前版本章"
+    assert "schema_version: 5" in text, "写回必须带当前版本章"
     assert "'1'" not in text, "版本章必须是 int —— 盖成字符串会被 ruamel 写成带引号的 '1'"
 
 
@@ -533,7 +533,7 @@ def test_preview_tree_stamps_schema_version(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     text = preview_tree(path, tree, old)
-    assert "schema_version: 4" in text
+    assert "schema_version: 5" in text
 
 
 # ------------------------------------------------- 写回版本闸门 + 启动物化(计划 26-09-27-2252)
@@ -586,7 +586,7 @@ def test_write_tree_rejects_v2_tree_with_legacy_key(tmp_path):
     """已盖当前版本章仍带旧键(手改版本号/事故残留): 写盘前校验报废除错, 磁盘一字不动 —— 不设常驻
     兼容层, 迁移链只在版本推进时运行"""
     old = load_config(_make(tmp_path, BASE))
-    corrupt = LEGACY_V1 + "  schema_version: 4\n"
+    corrupt = LEGACY_V1 + "  schema_version: 5\n"
     path = _make(tmp_path, corrupt)  # 同名路径覆写为「当前版本章 + 旧键」的事故残留形态
     tree = read_tree(path)
 
@@ -612,12 +612,12 @@ def test_materialize_migrates_and_backups(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v4"
+    assert desc == "v1→v5"
     assert backup == str(data_dir / "config.yml.v1.bak")
     with open(backup, encoding="utf-8") as f:
         assert f.read() == LEGACY_V1, "备份 = 迁移前原样(字节级)"
     text = _text(path)
-    assert "schema_version: 4" in text, "磁盘落当前版本章"
+    assert "schema_version: 5" in text, "磁盘落当前版本章"
     assert "hr_page_url" not in text, "旧键随迁移消失"
     cfg = load_config(path)  # 物化后的磁盘必须能原样通过加载
     assert cfg.trackers["BTSchool"].hr_check is not None
@@ -630,7 +630,7 @@ def test_materialize_idempotent_and_noop(tmp_path):
     data_dir = tmp_path / "data"
     path = _make(tmp_path, LEGACY_V1)
     desc, _ = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v4"
+    assert desc == "v1→v5"
     text_after = _text(path)
 
     desc2, backup2 = materialize_schema_migration(path, str(data_dir))
@@ -652,7 +652,7 @@ def test_materialize_unknown_host_old_key_dropped(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v4"
+    assert desc == "v1→v5"
     text = _text(path)
     assert "hr_check" not in text, "陌生 host 的旧键随 v3 迁移删除"
     cfg = load_config(path)
@@ -666,7 +666,7 @@ def test_materialize_dry_run_probe(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir), write=False)
 
-    assert desc == "v1→v4" and backup == ""
+    assert desc == "v1→v5" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
 
@@ -787,11 +787,11 @@ def test_write_tree_rebuilds_doc_from_non_mapping_file(tmp_path):
     path = _make(tmp_path, "123\n")
     tree = read_tree(path)  # 非映射 -> 空 config 段
     tree["config"]["qbittorrent"] = {"host": "h", "port": "1", "username": "u", "password": "p"}
-    tree["config"]["schema_version"] = "4"
+    tree["config"]["schema_version"] = "5"
     write_tree(path, tree, old, _bak(tmp_path))
     text = _text(path)
     assert "123" not in text, "旧的非映射内容被整体重建"
-    assert "qbittorrent" in text and "schema_version: 4" in text
+    assert "qbittorrent" in text and "schema_version: 5" in text
     loaded = load_config(path)
     assert loaded.qbittorrent.host == "h"
 
@@ -800,7 +800,7 @@ def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
     """列表内映射逐项按 BaseLoader 语义比较(值未变整体跳过); 变更的纯数字字符串按原生标量写出"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 4\n"
+        "  schema_version: 5\n"
         "  qbittorrent:\n"
         "    host: h\n"
         "    port: 1\n"
@@ -825,7 +825,7 @@ def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
 def test_materialize_bad_version_wraps_config_error(tmp_path):
     """磁盘 schema_version 形状非法 -> SchemaVersionError 包装为 ConfigError(报清文件与原因)"""
     data_dir = tmp_path / "data"
-    path = _make(tmp_path, BASE.replace("schema_version: 4", "schema_version: abc"))
+    path = _make(tmp_path, BASE.replace("schema_version: 5", "schema_version: abc"))
     with pytest.raises(ConfigError, match="schema 版本问题"):
         materialize_schema_migration(path, str(data_dir))
     assert not data_dir.exists(), "探测阶段失败不应产生备份目录"
@@ -1132,7 +1132,7 @@ def test_migrate_config_3_4_idempotent():
 
 
 def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
-    """v3 文件物化: 作用域内 '' 移除并落盘 v4, 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
+    """v3 文件物化: 作用域内 '' 移除并落盘当前版本(v3→v4→v5), 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
     import logging
 
     data_dir = tmp_path / "data"
@@ -1141,10 +1141,10 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="auto_qb.config.loaders"):
         desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v3→v4"
+    assert desc == "v3→v5"
     assert backup == str(data_dir / "config.yml.v3.bak")
     text = _text(path)
-    assert "schema_version: 4" in text
+    assert "schema_version: 5" in text
     assert "add_tag: ''" not in text and "remove_similar_tags: ''" not in text \
         and "overwrite_category: ''" not in text, "作用域内的 '' 全部移除"
     assert "add_tag: zB" in text, "非空值不误杀"
@@ -1157,12 +1157,15 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
 
 
 def test_materialize_v4_site_empty_untouched(tmp_path):
-    """v4 文件的站点 '' = 覆盖为空(合法保留): 物化零 IO 不误杀, 加载后生效值 = ''"""
+    """v4 文件的站点 '' = 覆盖为空(v4 起的合法语义): v4→v5 迁移不得误杀, 站点 '' 原样保留, 加载后生效值 = ''"""
     data_dir = tmp_path / "data"
     path = _make(tmp_path, V4_SITE_EMPTY)
 
-    assert materialize_schema_migration(path, str(data_dir)) == ("", ""), "已是当前版本: 零 IO"
-    assert _text(path) == V4_SITE_EMPTY, "v4 的站点 '' 不得被迁移移除"
+    desc, backup = materialize_schema_migration(path, str(data_dir))
+    assert desc == "v4→v5" and backup == str(data_dir / "config.yml.v4.bak")
+    text = _text(path)
+    assert "schema_version: 5" in text
+    assert "add_tag: ''" in text, "v4 的站点 '' 不得被迁移移除"
     cfg = load_config(path)
     assert cfg.trackers["A"].hr.add_tag == "", "覆盖为空生效(不回退全局 zGlobal)"
     assert cfg.hr.add_tag == "zGlobal"
@@ -1175,6 +1178,7 @@ def test_write_tree_roundtrip_preserves_site_explicit_empty(tmp_path):
     「覆盖为空」这一稀疏条目在写盘链路无损, WebUI 保存不会把它洗成键缺失。
     """
     path = _make(tmp_path, V4_SITE_EMPTY)
+    materialize_schema_migration(path, str(tmp_path / "data"))  # 先升到当前版本(v4->v5), 再走写盘链路
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["trackers"]["A"]["hr"]["add_category"] = ""  # 新增的站点显式空
@@ -1236,7 +1240,7 @@ def test_materialize_passes_config_path_to_migration(tmp_path, monkeypatch):
 
     monkeypatch.setattr(writer_mod, "migrate_config_schema", spy)
     desc, _ = writer_mod.materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v4"
+    assert desc == "v1→v5"
     assert seen == [path], "迁移函数必须收到真实 config_path(传 None 会让迁移无法定位文件)"
 
 

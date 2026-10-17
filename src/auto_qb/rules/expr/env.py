@@ -171,19 +171,21 @@ def _tracker_names(ctx):
 
 
 def _traffic(period: str, index: int):
-    """全局流量口径(数据源 = Traffic Monitor 的 history_traffic.dat)
+    """全局流量口径(数据源 = config.traffic_source 当前生效来源的 dat)
 
     WARN: 未配置数据源 -> 报错(该名字被禁用), **不返回 0**: 返回 0 会让「今日上传已达标」
     这类条件在没配数据源时静默成假、在配了但文件不可读时同样失真, 两头都不可接受。
-    读文件是 I/O -> 标昂贵(按 ctx 缓存), 建议只在低频规则里用。
+    取数路径走 config.traffic_source.active_dat_path()(数据源单点, 计划 26-10-17-0339 S15);
+    provider=traffic_monitor 时行为与改动前逐字等价。读文件是 I/O -> 标昂贵(按 ctx 缓存),
+    建议只在低频规则里用。
     """
     def get(ctx):
         conf = getattr(ctx.config, "global_speed_limit_curve", None)
-        dat_path = getattr(conf, "dat_path", "") if conf is not None else ""
+        dat_path = ctx.config.traffic_source.active_dat_path()
         if not dat_path or not getattr(conf, "enabled", True):
             raise ExprError(
-                "数据源未配置: 该值需要配置 global_speed_limit_curve.traffic_source"
-                "(Traffic Monitor 的 history_traffic.dat)"
+                "数据源未配置: 该值需要配置 config.traffic_source"
+                "(traffic_monitor.dat_path 或 global_traffic_monitor.data_dir)"
             )
         try:
             with open(dat_path, "r", encoding="utf-8", errors="replace") as f:

@@ -5,6 +5,7 @@
 - UNLIMITED_SPEED: exporter 生成 YAML 模板的原始串占位(输出格式)
 """
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -292,14 +293,14 @@ class PeriodCurve:
 
 @dataclass
 class GlobalSpeedLimitCurve:
-    """全局限速曲线配置(Traffic Monitor 数据源)
+    """全局限速曲线配置
 
-    dat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
     curves: 多条 period 曲线(同方向多条命中时取最严限速, 见 curves.merge_direction)
     interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
     enabled: 功能总开关; True(缺省) = 现行行为, False = 整体停用(曲线任务短路不动 qB, Web 端视为未启用)
+    !数据源(dat 文件路径)已迁到顶层 traffic_source 段(计划 26-10-17-0339 S15), 取数走
+    config.traffic_source.active_dat_path()。
     """
-    dat_path: str
     curves: List[PeriodCurve]
     interval: Optional[float] = None  # 秒; None = 使用 config.interval
     enabled: bool = True  # False = 整体停用(任务短路: 不读 dat 不写 qB, 不按曲线调档)
@@ -353,6 +354,58 @@ class GlobalTrafficMonitorConfig:
     subscribe: bool = True
     notify_cooldown_s: float = 600.0
     autostart: bool = False
+
+
+@dataclass
+class TrafficMonitorSourceConfig:
+    """traffic_source.traffic_monitor: Traffic Monitor(dat 文件)来源参数
+
+    dat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
+    """
+    dat_path: str = ""
+
+
+@dataclass
+class GlobalTrafficMonitorSourceConfig:
+    """traffic_source.global_traffic_monitor: 全局流量监视器(工具 gtm)来源参数
+
+    tool_dir / tool_exe / data_dir: 工具安装位置与数据目录(指针来源的具体取数细化在后续步骤;
+      data_dir 非空时 dat 文件取 <data_dir>/history_traffic.dat —— 文件名是跨包契约)
+    notify_cooldown_s: 收到事件后的刷新冷却(秒)
+    """
+    tool_dir: str = ""
+    tool_exe: str = ""
+    data_dir: str = ""
+    notify_cooldown_s: float = 600.0
+
+
+@dataclass
+class TrafficSourceConfig:
+    """全局流量来源(顶层 traffic_source 段, 计划 26-10-17-0339 S15/D1)
+
+    provider: 当前生效来源("traffic_monitor" 或 "global_traffic_monitor"); 两来源参数可并存,
+      但只有 provider 指向的那一个参与取数(严格互斥, D1)。
+    traffic_monitor / global_traffic_monitor: 两个来源的参数(互斥生效)。
+    """
+
+    provider: str = "traffic_monitor"
+    traffic_monitor: TrafficMonitorSourceConfig = field(default_factory=TrafficMonitorSourceConfig)
+    global_traffic_monitor: GlobalTrafficMonitorSourceConfig = field(default_factory=GlobalTrafficMonitorSourceConfig)
+
+    def active_dat_path(self) -> str:
+        """当前生效来源的 dat 文件路径(空 = 未配置数据源); 取数单点, 下游一律走它
+
+        provider=="traffic_monitor" -> traffic_monitor.dat_path(去空白);
+        provider=="global_traffic_monitor" -> global_traffic_monitor.data_dir 非空时
+          os.path.join(data_dir, "history_traffic.dat"), 否则 ""(工具 dat 文件名是跨包契约,
+          指针来源的细化落在 S16)。
+        """
+        if self.provider == "global_traffic_monitor":
+            data_dir = self.global_traffic_monitor.data_dir.strip()
+            if data_dir:
+                return os.path.join(data_dir, "history_traffic.dat")
+            return ""
+        return self.traffic_monitor.dat_path.strip()
 
 
 @dataclass(frozen=True)
@@ -440,7 +493,12 @@ class Config:
     # qB 口径流量采样(plan 26-10-03-0946 方案C): 全局/单种两系列周期采样, 供流量图消费
     qb_traffic: Optional[QbTraffic] = None  # None = 未启用(缺省; 键组整体缺省即功能未启用)
 
-    # 全局流量监视器(工具 gtm, 计划 26-10-16-0541 S6): auto-qb 侧联动参数; 工具配置经控制面代理读写
+    # 全局流量来源(计划 26-10-17-0339 S15): 限速曲线/expr 取数的数据源单点; provider 决定生效来源
+    traffic_source: TrafficSourceConfig = field(default_factory=TrafficSourceConfig)
+
+    # 过渡性 stub(计划 26-10-17-0339 S15): 字段保留供 webui/tool_client 与 routes 在 S16 重接指针前
+    # 不报 AttributeError; 已从配置面(KNOWN_CONFIG_KEYS/schema/loader/校验)彻底退休, 迁移会删掉 YAML 段。
+    # S16/S17 将删除本 stub。当前值只有默认工厂, 不来自 YAML。
     global_traffic_monitor: GlobalTrafficMonitorConfig = field(default_factory=GlobalTrafficMonitorConfig)
 
     def hr_site_confs(self) -> Dict[str, SiteHrCheckConfig]:

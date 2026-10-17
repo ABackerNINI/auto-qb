@@ -312,13 +312,13 @@ _LOADER_PROBES = {
     "qb_traffic.flush_interval": ("150S", 150.0),
     "qb_traffic.raw_window": ("2H", 7200.0),
     "qb_traffic.rollup_window": ("8D", 691200.0),
-    # global_traffic_monitor 段(全局流量监视器工具联动, 计划 26-10-16-0541 S6)
-    "global_traffic_monitor.enabled": ("true", True),
-    "global_traffic_monitor.tool_url": ("http://192.0.2.1:9000", "http://192.0.2.1:9000"),
-    "global_traffic_monitor.tool_token_path": ("/probe/monitor.token", "/probe/monitor.token"),
-    "global_traffic_monitor.subscribe": ("false", False),
-    "global_traffic_monitor.notify_cooldown_s": ("90S", 90.0),
-    "global_traffic_monitor.autostart": ("true", True),
+    # traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15)
+    "traffic_source.provider": ("global_traffic_monitor", "global_traffic_monitor"),
+    "traffic_source.traffic_monitor.dat_path": ("/probe/tm/history_traffic.dat", "/probe/tm/history_traffic.dat"),
+    "traffic_source.global_traffic_monitor.tool_dir": ("/probe/gtm", "/probe/gtm"),
+    "traffic_source.global_traffic_monitor.tool_exe": ("/probe/gtm/monitor.exe", "/probe/gtm/monitor.exe"),
+    "traffic_source.global_traffic_monitor.data_dir": ("/probe/gtm/data", "/probe/gtm/data"),
+    "traffic_source.global_traffic_monitor.notify_cooldown_s": ("90S", 90.0),
 }
 
 

@@ -4,7 +4,6 @@ import logging
 import re
 import sys
 from typing import List, Tuple
-from urllib.parse import urlsplit
 
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
@@ -44,16 +43,13 @@ KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "ded
 # qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06; flush_interval 为 v3 新键, 计划 26-10-04-1957 §06.1)
 KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "flush_interval", "raw_window", "rollup_window"}
 
-# global_traffic_monitor(全局流量监视器工具联动, 计划 26-10-16-0541 S6): auto-qb 侧联动参数;
-# 工具自有 config.yml 经其控制面由 WebUI 设置页代理读写, 工具侧键不在此列
-KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS = {
-    "enabled",
-    "tool_url",
-    "tool_token_path",
-    "subscribe",
-    "notify_cooldown_s",
-    "autostart",
-}
+# traffic_source(全局流量来源, 计划 26-10-17-0339 S15): 一键切换取数数据源;
+# provider 决定生效来源(两来源参数可并存, 但只有 provider 指向的那个参与取数, D1 严格互斥)
+KNOWN_TRAFFIC_SOURCE_KEYS = {"provider", "traffic_monitor", "global_traffic_monitor"}
+#: traffic_source.traffic_monitor(Traffic Monitor dat 来源)
+KNOWN_TRAFFIC_SOURCE_TM_KEYS = {"dat_path"}
+#: traffic_source.global_traffic_monitor(整机流量监视器 gtm 来源)
+KNOWN_TRAFFIC_SOURCE_TOOL_KEYS = {"tool_dir", "tool_exe", "data_dir", "notify_cooldown_s"}
 
 # qb_traffic.flush_interval 边界(v3 计划 26-10-04-1957 §06.1): 缓冲批量落盘周期 —— 下限防写放大
 # (fsync 风暴), 上限防崩溃丢失窗口过大; 须为整数秒(游标/块头时间戳按整秒粒度推算)
@@ -646,49 +642,51 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
             )
 
 
-def _validate_tool_url(value, errors: List[str]) -> None:
-    """工具控制面地址形状校验(计划 26-10-16-0541 S6): http(s) URL 且带主机名
+def _validate_traffic_source(spec, errors: List[str]) -> None:
+    """校验 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15/D1)
 
-    与工具侧订阅端点判据同形(_valid_endpoint); 配置期只判形状, 连通性留运行期
-    (设置页/接收面), 不在此探网 —— fail-fast 只管"形状写错"。
-    """
-    where = "config.global_traffic_monitor.tool_url"
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{where}: 必须是非空字符串(http(s) URL)")
-        return
-    try:
-        parts = urlsplit(value.strip())
-    except ValueError as e:
-        errors.append(f"{where}: 非法 URL: {e}")
-        return
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        errors.append(f"{where}: 须为带主机名的 http(s) URL: {value}")
-
-
-def _validate_global_traffic_monitor(spec, errors: List[str]) -> None:
-    """校验 config.global_traffic_monitor 段(全局流量监视器工具联动, 计划 26-10-16-0541 S6)
-
-    未配置(None)合法 = 走默认值(enabled=false, 保守默认)。本段只承载 auto-qb 侧联动参数;
-    工具自有 config.yml(采样/阈值/http/适配器过滤等)经工具控制面由 WebUI 代理读写, 不经此校验。
+    未配置(None)合法 = 走默认值(provider=traffic_monitor)。两来源参数可并存, 但只有 provider
+    指向的那个参与取数(D1 严格互斥); provider=traffic_monitor 时其 dat_path 必须非空(未配数据源
+    则功能取不到数 —— fail-fast)。两个子块一律做结构校验(未知键 + 类型), 与 provider 无关。
     """
     if spec is None:
         return
     if not isinstance(spec, dict):
-        errors.append("config.global_traffic_monitor: 必须是字典")
+        errors.append("config.traffic_source: 必须是字典")
         return
-    _check_unknown_keys(spec, KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS, "config.global_traffic_monitor", errors)
-    for key in ("enabled", "subscribe", "autostart"):
-        if key in spec:
-            _try(parse_bool, spec[key], f"config.global_traffic_monitor.{key}", errors)
-    if "tool_url" in spec:
-        _validate_tool_url(spec["tool_url"], errors)
-    if "tool_token_path" in spec and not isinstance(spec["tool_token_path"], str):
-        errors.append("config.global_traffic_monitor.tool_token_path: 必须是字符串(路径)")
-    if "notify_cooldown_s" in spec:
-        # 0 = 不冷却(合法; 事件号去重仍在); 上限 24H: 过大等于永不刷新历史图
-        _try_time(
-            spec["notify_cooldown_s"], "config.global_traffic_monitor.notify_cooldown_s", errors, min_s=0, max_s=86400
-        )
+    where = "config.traffic_source"
+    _check_unknown_keys(spec, KNOWN_TRAFFIC_SOURCE_KEYS, where, errors)
+    # provider 缺省/留空 = traffic_monitor(与 loader 同口径)
+    provider = str(spec.get("provider") or "traffic_monitor").strip()
+    if provider not in ("traffic_monitor", "global_traffic_monitor"):
+        errors.append(f"{where}.provider: 取值非法: '{spec.get('provider')}', 可选: traffic_monitor/global_traffic_monitor")
+    tm = spec.get("traffic_monitor")
+    if tm is not None:
+        tm_where = f"{where}.traffic_monitor"
+        if not isinstance(tm, dict):
+            errors.append(f"{tm_where}: 必须是字典")
+        else:
+            _check_unknown_keys(tm, KNOWN_TRAFFIC_SOURCE_TM_KEYS, tm_where, errors)
+            if "dat_path" in tm and not isinstance(tm["dat_path"], str):
+                errors.append(f"{tm_where}.dat_path: 必须是字符串(路径)")
+    tool = spec.get("global_traffic_monitor")
+    if tool is not None:
+        tool_where = f"{where}.global_traffic_monitor"
+        if not isinstance(tool, dict):
+            errors.append(f"{tool_where}: 必须是字典")
+        else:
+            _check_unknown_keys(tool, KNOWN_TRAFFIC_SOURCE_TOOL_KEYS, tool_where, errors)
+            for key in ("tool_dir", "tool_exe", "data_dir"):
+                if key in tool and not isinstance(tool[key], str):
+                    errors.append(f"{tool_where}.{key}: 必须是字符串(路径)")
+            if "notify_cooldown_s" in tool:
+                # 0 = 不冷却(合法; 事件号去重仍在); 上限 24H: 过大等于永不刷新历史图
+                _try_time(tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, min_s=0, max_s=86400)
+    # 按 provider 校验所需字段: traffic_monitor 来源必须有 dat_path
+    if provider == "traffic_monitor":
+        dat = tm.get("dat_path") if isinstance(tm, dict) else None
+        if not isinstance(dat, str) or not dat.strip():
+            errors.append(f"{where}.traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径")
 
 
 def _validate_web(spec, errors: List[str]) -> None:

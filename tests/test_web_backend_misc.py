@@ -57,7 +57,7 @@ def test_config_schema_endpoint(web_env):
     # 26-10-03: 流量图分组(plan 26-10-03-0946 §06)插在 speed 与 trackers 之间
     # 26-10-06 用户要求重排: 站点提到第二(紧跟常规), 限速 / HR 在线核实 后置到末尾
     assert [g["key"] for g in data["groups"]] == [
-        "basic", "trackers", "maintenance", "traffic", "global_traffic_monitor", "rules", "speed", "hr_check"
+        "basic", "trackers", "maintenance", "traffic", "traffic_source", "rules", "speed", "hr_check"
     ]
     assert [f["key"] for f in data["groups"][0]["fields"]][-3:] == ["log", "web", "notify"]
     # 2026-09-28: 三段在「常规」页必须各自成块展示分类名(「常规/日志」而非并入「常规/常规」) ——
@@ -119,7 +119,7 @@ def test_config_tree_restart_field_fallback(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 4\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 5\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["data_dir"] = "new-dir"
@@ -137,7 +137,7 @@ def test_config_tree_preserves_comments(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 4\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 5\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["main_tick"] = "3s"
@@ -159,7 +159,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
     )
     with caplog.at_level(logging.DEBUG, logger="auto_qb.web"):
         token = ensure_web_token(mgr)
@@ -170,7 +170,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
         assert token[:8] not in r.getMessage(), f"密钥前缀也不得出现: {r.getMessage()}"
 
 
-_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
 
 
 def test_web_sidecar_dir_single_point(tmp_path):

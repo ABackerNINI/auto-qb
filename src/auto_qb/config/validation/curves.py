@@ -1,4 +1,4 @@
-"""全局限速曲线段校验(结构最复杂: traffic_source/curves/阶梯点)"""
+"""全局限速曲线段校验(curves/interval/enabled + 阶梯点)"""
 from typing import List
 
 from ...core import curves
@@ -15,7 +15,7 @@ def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
     if not isinstance(spec, dict):
         errors.append(f"{where}: 必须是字典")
         return
-    unknown = set(spec) - {"traffic_source", "curves", "interval", "enabled"}
+    unknown = set(spec) - {"curves", "interval", "enabled"}
     if unknown:
         errors.append(f"{where}: 未知键: {sorted(unknown)}")
 
@@ -27,26 +27,7 @@ def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
     if "enabled" in spec:
         _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
 
-    # traffic_source: 数据源列表, 当前仅支持单个 traffic_monitor
-    raw_sources = spec.get("traffic_source")
-    if not isinstance(raw_sources, list) or not raw_sources:
-        errors.append(f"{where}.traffic_source: 必须是非空列表")
-    elif len(raw_sources) != 1:
-        errors.append(f"{where}.traffic_source: 当前仅支持单个数据源")
-    else:
-        source = raw_sources[0]
-        if not isinstance(source, dict) or set(source) != {"traffic_monitor"}:
-            errors.append(f"{where}.traffic_source: 仅支持单项映射 traffic_monitor: {{dat_path: ...}}")
-        else:
-            tm = source["traffic_monitor"]
-            if not isinstance(tm, dict):
-                errors.append(f"{where}.traffic_monitor: 必须是字典")
-            else:
-                unknown = set(tm) - {"dat_path"}
-                if unknown:
-                    errors.append(f"{where}.traffic_monitor: 未知键: {sorted(unknown)}")
-                if not str(tm.get("dat_path", "")).strip():
-                    errors.append(f"{where}.traffic_monitor: 缺少 dat_path")
+    # 数据源已迁到顶层 traffic_source 段(计划 26-10-17-0339 S15), 本段不再含 traffic_source
 
     # curves: 多条 period 曲线(重复 period 拒绝)
     raw_curves = spec.get("curves")

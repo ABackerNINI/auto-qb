@@ -48,7 +48,6 @@ from auto_qb.config.validation import (
     CHECKING_ACTION_KNOWN_KEYS,
     KNOWN_CONFIG_KEYS,
     KNOWN_FS_KEYS,
-    KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS,
     KNOWN_GROUPING_KEYS,
     KNOWN_HR_CHANNEL_KEYS,
     KNOWN_HR_CHECK_KEYS,
@@ -58,6 +57,7 @@ from auto_qb.config.validation import (
     KNOWN_QBITTORRENT_KEYS,
     KNOWN_QB_TRAFFIC_KEYS,
     KNOWN_HR_SITE_KEYS,
+    KNOWN_TRAFFIC_SOURCE_KEYS,
     KNOWN_TRACKER_HR_KEYS,
     KNOWN_TRACKER_KEYS,
     KNOWN_WEB_KEYS,
@@ -110,7 +110,7 @@ def test_top_level_keys_match_validation():
         ("hr_check", KNOWN_HR_CHECK_KEYS),
         ("channel", KNOWN_HR_CHANNEL_KEYS),
         ("add_episode_tags", KNOWN_ADD_EPISODE_TAGS_KEYS),
-        ("global_traffic_monitor", KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS),
+        ("traffic_source", KNOWN_TRAFFIC_SOURCE_KEYS),
     ],
 )
 def test_object_section_keys_match_validation(top_key, known):

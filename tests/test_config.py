@@ -900,7 +900,8 @@ def test_validate_gslc():
             "          period: WEEK\n"
         )
         err = _load_errors(td, text)
-        assert "config.global_speed_limit_curve.traffic_source: 必须是非空列表" in err, err
+        assert "config.global_speed_limit_curve.curves[0].curve.period: 无效 period" in err, err
+        assert "需配置 upload_curve 和/或 download_curve" in err, err
 
 
 def test_validate_gslc_enabled_key():
@@ -1681,10 +1682,9 @@ def test_validate_string_keys_exact_case():
         # (若键名被改大写, monitor 取不到值 -> traffic_configured=False -> 反而报门控错, 断言翻面)
         gated_expr = (
             "config:\n"
-            "  global_speed_limit_curve:\n"
-            "    traffic_source:\n"
-            "      - traffic_monitor:\n"
-            "          dat_path: a.dat\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
             "  example_rules:\n"
             "    r1:\n"
             "      conditions:\n"
@@ -1702,10 +1702,10 @@ def test_validate_string_keys_exact_case():
         # 精确键: 合法配置零报错; 大写键 -> 走未知键报错(而非被当成合法键)
         gslc_ok = (
             "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
             "  global_speed_limit_curve:\n"
-            "    traffic_source:\n"
-            "      - traffic_monitor:\n"
-            "          dat_path: a.dat\n"
             "    curves:\n"
             "      - curve:\n"
             "          period: 1D\n"
@@ -1750,21 +1750,23 @@ def test_validate_short_circuit_pairs_differing_truth():
     本用例专门构造「左真右假 / 左假右真」的输入, 让 and/or 互换必然翻转行为。
     """
     with tempfile.TemporaryDirectory() as td:
-        # --- curves.py: `not isinstance(raw_sources, list) or not raw_sources` (左假右真: list 但为空)
+        # --- sections.py: 顶层 traffic_source 结构短路(左真右假: 数据源列表为空 -> 迁移后无 dat_path);
+        #     左假右真: 子块非 dict -> 结构错(不再进 dat_path 判定)
         empty_src = "config:\n  global_speed_limit_curve:\n    traffic_source: []\n    curves:\n      - curve:\n          period: 1D\n"
-        assert "traffic_source: 必须是非空列表" in _load_errors(td, empty_src)
-        # (左真右假: 非 list)
-        bad_src = empty_src.replace("traffic_source: []", "traffic_source: notalist")
-        assert "traffic_source: 必须是非空列表" in _load_errors(td, bad_src)
+        assert "traffic_source.traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径" in _load_errors(
+            td, empty_src
+        )
+        bad_src = "config:\n  traffic_source:\n    traffic_monitor: notadict\n"
+        assert "config.traffic_source.traffic_monitor: 必须是字典" in _load_errors(td, bad_src)
 
         # --- curves.py: `not isinstance(item, dict) or len(item) != 1 or "curve" not in item`
         # 左假右真: item 是 dict 但键不是 curve(单键) -> "必须为单项映射"
         wrong_key = (
             "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
             "  global_speed_limit_curve:\n"
-            "    traffic_source:\n"
-            "      - traffic_monitor:\n"
-            "          dat_path: a.dat\n"
             "    curves:\n"
             "      - notcurve:\n"
             "          period: 1D\n"
@@ -2301,10 +2303,10 @@ def test_loader_defaults_gslc_optional_keys():
     with tempfile.TemporaryDirectory() as td:
         text = (
             "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: /tmp/history_traffic.dat\n"
             "  global_speed_limit_curve:\n"
-            "    traffic_source:\n"
-            "      - traffic_monitor:\n"
-            "          dat_path: /tmp/history_traffic.dat\n"
             "    curves:\n"
             "      - curve:\n"
             "          period: 1D\n"
@@ -2315,7 +2317,7 @@ def test_loader_defaults_gslc_optional_keys():
         g = cfg.global_speed_limit_curve
         assert g.enabled is True  # 缺省 True = 现行行为
         assert g.interval is None  # 未指定 -> 回退 config.interval
-        assert g.dat_path == "/tmp/history_traffic.dat"
+        assert cfg.traffic_source.active_dat_path() == "/tmp/history_traffic.dat"
         assert g.curves[0].period == "day"
         assert g.curves[0].upload_points is not None
         assert g.curves[0].download_points is None  # 省略 download_curve = 不管理下载方向

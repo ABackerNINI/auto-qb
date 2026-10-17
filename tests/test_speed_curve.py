@@ -6,7 +6,7 @@
 - test_speed_curve_config_enabled_key: enabled 总开关解析(缺省 True/显式 true|false/非法值报错)
 - test_speed_curve_config_rejects_bad_section: 顶层非 dict / 未知键
 - test_speed_curve_config_interval_optional_and_validated: interval 缺省回退主 interval / 非法值报错
-- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/空/多元素/未知来源/元素非 dict/缺 traffic_monitor/内部未知键/缺 dat_path
+- test_speed_curve_config_rejects_bad_traffic_source: 顶层 traffic_source 结构错误(非字典/未知键/provider 非枚举/缺或空 dat_path/traffic_monitor 非字典)
 - test_speed_curve_config_rejects_bad_curves: curves 缺失/空/非单项映射/键名非 curve/curve 非 dict/未知键/缺 period/非法或重复 period/双向全缺
 - test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
 - test_normalize_period_aliases: period 别名归一化(day/1D/month/ND) / 非法值 ValueError
@@ -115,8 +115,15 @@ def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
 
 
-def _gslc(dat_path, *period_curves, interval=None) -> GlobalSpeedLimitCurve:
-    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=list(period_curves), interval=interval)
+class _GslcBundle:
+    """测试组合: 曲线段配置 + 顶层数据源 dat 路径(S15 后数据源独立于曲线段, 直接注入 FakeConfig 用)"""
+    def __init__(self, dat_path: str, curve: GlobalSpeedLimitCurve):
+        self.dat_path = dat_path
+        self.curve = curve
+
+
+def _gslc(dat_path, *period_curves, interval=None) -> _GslcBundle:
+    return _GslcBundle(dat_path, GlobalSpeedLimitCurve(curves=list(period_curves), interval=interval))
 
 
 def _dat_text(rows) -> str:
@@ -141,9 +148,11 @@ def _run_curve(mgr, dry_run: bool = False) -> bool:
     return mgr.host.get("speed_curve").handle_speed_limit_curve(task, dry_run=dry_run)
 
 
-def _make_mgr(tmp_path, gslc, with_app: bool = True):
+def _make_mgr(tmp_path, gslc: _GslcBundle, with_app: bool = True):
     mgr = make_manager(str(tmp_path / "state.json"))
-    mgr.config.global_speed_limit_curve = gslc
+    mgr.config.global_speed_limit_curve = gslc.curve
+    # 取数路径来自顶层 traffic_source(S15): 直接注入 FakeConfig, 等价于 load_config 后的形态
+    mgr.config.traffic_source.traffic_monitor.dat_path = gslc.dat_path
     client = _fake_client() if with_app else FakeClient()
     mgr.client = client
     return mgr, client
@@ -183,7 +192,13 @@ class _CurveLogCapture:
 
 
 # ---------- 配置解析 / fail-fast ----------
-def _cfg_dict(gslc_spec) -> dict:
+#: 合法样例数据源(S15 后在顶层 traffic_source 段, 不再内联进曲线段)
+_VALID_DAT = r"D:\Programs\TrafficMonitor\history_traffic.dat"
+
+
+def _cfg_dict(gslc_spec, traffic_source=None) -> dict:
+    if traffic_source is None:  # 缺省 = 合法 Traffic Monitor 数据源
+        traffic_source = {"traffic_monitor": {"dat_path": _VALID_DAT}}
     return {
         "config":
             {
@@ -194,27 +209,23 @@ def _cfg_dict(gslc_spec) -> dict:
                     "password": "p"
                 },
                 "trackers": {},
+                "traffic_source": traffic_source,
                 "global_speed_limit_curve": gslc_spec,
             }
     }
 
 
-def _load(tmp_path, gslc_spec):
+def _load(tmp_path, gslc_spec, traffic_source=None):
     p = tmp_path / "config.yml"
-    p.write_text(yaml.dump(_cfg_dict(gslc_spec), allow_unicode=True), encoding="utf-8")
+    p.write_text(yaml.dump(_cfg_dict(gslc_spec, traffic_source), allow_unicode=True), encoding="utf-8")
     return load_config(str(p))
 
 
 def _valid_spec() -> dict:
-    """合法完整样例(与 想法.md 样式一致, 上/下载曲线各带 period)"""
+    """合法完整样例(与 想法.md 样式一致, 上/下载曲线各带 period); 数据源见顶层 traffic_source"""
     return {
         "interval":
             "10M",
-        "traffic_source": [{
-            "traffic_monitor": {
-                "dat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
-            }
-        }],
         "curves":
             [
                 {
@@ -275,7 +286,10 @@ def test_speed_curve_config_parses_sample(tmp_path):
     cfg = _load(tmp_path, _valid_spec())
     g = cfg.global_speed_limit_curve
     assert g is not None
-    assert g.dat_path == r"D:\Programs\TrafficMonitor\history_traffic.dat"
+    # 数据源在顶层 traffic_source 段(S15), 曲线段不再持有 dat_path
+    assert cfg.traffic_source.traffic_monitor.dat_path == _VALID_DAT
+    assert cfg.traffic_source.active_dat_path() == _VALID_DAT
+    assert not hasattr(g, "dat_path")
     assert g.interval == 600.0  # interval: 10M -> 600 秒
     assert len(g.curves) == 2
     day, week = g.curves
@@ -335,55 +349,64 @@ def test_speed_curve_config_interval_optional_and_validated(tmp_path):
 
 
 def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
-    """数据源缺失/空/多元素/未知来源/缺 dat_path -> ValueError"""
+    """顶层 traffic_source 结构错误 -> ValueError(段缺省合法, 由 test_config_traffic_monitor 覆盖)
+
+    S15 后数据源从曲线段内联迁到顶层 traffic_source 段; 这里只覆盖形状错误被拒。
+    """
     bad_sources = [
-        None,  # 缺失
-        [],  # 空
-        [{
-            "traffic_monitor": {
-                "dat_path": "a"
-            }
-        }, {
-            "traffic_monitor": {
-                "dat_path": "b"
-            }
-        }],  # 多数据源
-        [{
+        [],  # 非字典
+        "not-a-dict",  # 非字典
+        {
             "other_app": {
                 "path": "a"
             }
-        }],  # 未知来源
-        [{
-            "traffic_monitor": {
-                "dat_path": "a"
-            },
-            "extra": 1
-        }],  # 来源额外键
-        [{
-            "traffic_monitor": "not-a-dict"
-        }],  # traffic_monitor 非字典
-        [{
+        },  # 未知顶层键
+        {
+            "provider": "other_app"
+        },  # provider 非枚举
+        {
+            "provider": "traffic_monitor",
             "traffic_monitor": {}
-        }],  # 缺 dat_path
-        [{
+        },  # 缺 dat_path
+        {
+            "provider": "traffic_monitor",
             "traffic_monitor": {
                 "dat_path": ""
             }
-        }],  # 空 dat_path
-        ["not-a-dict"],  # 数据源元素非字典
-        [{}],  # 缺少 traffic_monitor 键
-        [{
+        },  # 空 dat_path
+        {
+            "traffic_monitor": "not-a-dict"
+        },  # traffic_monitor 非字典
+        {
             "traffic_monitor": {
                 "dat_path": "a",
                 "extra": 1
             }
-        }],  # traffic_monitor 内部未知键
+        },  # traffic_monitor 内部未知键
     ]
     for src in bad_sources:
-        spec = copy.deepcopy(_valid_spec())
-        spec["traffic_source"] = src
         with pytest.raises(ConfigError):
-            _load(tmp_path, spec)
+            _load(tmp_path, copy.deepcopy(_valid_spec()), traffic_source=src)
+    # 合法数据源(两来源参数可并存, provider 决定生效来源)
+    assert _load(
+        tmp_path,
+        copy.deepcopy(_valid_spec()),
+        traffic_source={
+            "traffic_monitor": {
+                "dat_path": "a"
+            }
+        },
+    ).traffic_source.active_dat_path() == "a"
+    assert _load(
+        tmp_path,
+        copy.deepcopy(_valid_spec()),
+        traffic_source={
+            "provider": "global_traffic_monitor",
+            "global_traffic_monitor": {
+                "data_dir": "/d"
+            }
+        },
+    ).traffic_source.active_dat_path() == os.path.join("/d", "history_traffic.dat")
 
 
 def test_speed_curve_config_rejects_bad_curves(tmp_path):
@@ -446,7 +469,7 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
     def curve(points=up, **kw):
         inner = {"period": "1D", "upload_curve": points}
         inner.update(kw)
-        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [{"curve": inner}]}
+        return {"curves": [{"curve": inner}]}
 
     cases = [
         curve(points=[]),  # 空档位表
@@ -848,7 +871,7 @@ def test_speed_curve_no_config_noop(tmp_path):
 def test_speed_curve_enabled_false_short_circuits(tmp_path):
     """enabled=False: 曲线任务仍注册但整体短路 -> 不读 dat 不写 qB, 快照发布 disabled(Web 视为未启用)"""
     gslc = _gslc(_write_dat(tmp_path, [(date.today(), 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
-    gslc.enabled = False  # 数据可用, 证明短路先于读数据
+    gslc.curve.enabled = False  # 数据可用, 证明短路先于读数据
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 999 * 1024  # 当前非目标值: 若未短路将被改写
 
@@ -1047,7 +1070,9 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     # 文件存在但无有效记录: 同样 stale, 原因码不同
     bad = tmp_path / "bad.dat"
     bad.write_text('lines: "2"\nnot-a-date\n', encoding="utf-8")
-    mgr.config.global_speed_limit_curve = _gslc(str(bad), _pc("day", up=_points(FULL_UPLOAD)))
+    _b = _gslc(str(bad), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr.config.global_speed_limit_curve = _b.curve
+    mgr.config.traffic_source.traffic_monitor.dat_path = _b.dat_path
     assert _run_curve(mgr) is True
     assert mgr.web.traffic_view["state"] == "stale"
     assert mgr.web.traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"

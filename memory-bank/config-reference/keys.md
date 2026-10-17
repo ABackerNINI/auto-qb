@@ -15,7 +15,7 @@
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
 | `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
 | `state_file` | `<data_dir>/state.json` | 状态文件; 未显式配置时由 data_dir 派生 (显式配置优先), 须可写 |
-| `schema_version` | `4` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 当前版本单点 `infra/versioning.py` `CURRENT_VERSIONS["config"]=4`, WebUI 保存经 `config/writer.py` 盖章; 加载时缺失=v1, 落后则沿链迁移(内存); 磁盘由 `run()` 开头的启动物化单点改写到当前版本(版本号备份 `<名>.v<m>.bak` 后原子写, 计划 26-09-27-2252), WebUI 保存不做迁移 —— 提交树版本低于当前直接 400 指路刷新, 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写。v4 = 站点级「显式空 = 覆盖为空」三态(report 26-10-03-0504 方案 B 阶段 1): 升级时 9 键作用域内的存量 `''` 由迁移移除并逐键打 WARNING |
+| `schema_version` | `5` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 当前版本单点 `infra/versioning.py` `CURRENT_VERSIONS["config"]=5`, WebUI 保存经 `config/writer.py` 盖章; 加载时缺失=v1, 落后则沿链迁移(内存); 磁盘由 `run()` 开头的启动物化单点改写到当前版本(版本号备份 `<名>.v<m>.bak` 后原子写, 计划 26-09-27-2252), WebUI 保存不做迁移 —— 提交树版本低于当前直接 400 指路刷新, 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写。v4 = 站点级「显式空 = 覆盖为空」三态(report 26-10-03-0504 方案 B 阶段 1): 升级时 9 键作用域内的存量 `''` 由迁移移除并逐键打 WARNING。v5 = 全局流量来源合并(计划 26-10-17-0339 S15): 顶层 `global_traffic_monitor` 段 + 限速曲线段内联数据源 -> 顶层 `traffic_source` 段 |
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `maintenance_tag_mode` | `"interval"` | **维护 tags 节奏** (计划 26-09-27-1438): 站点 tags 维护(`_add_tags`/`_remove_tags`/`_remove_similar_tags`)的执行时机。`interval` = 每个内置任务间隔执行(默认 = 迁移前行为); `on_change` = 种子添加时执行一次, 之后仅当该种子 tags 被**程序之外**改动时重检(登记消费一次; 热重载 L2 后首轮全量收敛), 无变化轮跳过 —— 每轮每种子省一次 qB 读写往返。HR 标签/分类部分**不受影响**, 恒按周期执行(达标状态随时间演化, tags 变化捕捉不到)。取值限 `interval\|on_change` |
@@ -31,7 +31,7 @@
 | `hr_check` | 默认关闭 | **HR 在线核实** (v3 波次模型, 计划 26-09-28-1932 §6.1 + 26-09-30-0240 三参数解耦, 全局 9 键 = 7 个标量键 + `channel` + `sites`): `{enabled(false), min_interval("90S"; 相邻请求最小间隔, 页面+.torrent 统一, 抖动只向上 +0~25%), max_requests_per_day(240; 站点级日额保险, 全部请求合计, 零点重置), max_pages_per_wave(30; 单波页数上限安全阀, 到顶该档截断), allow_window(""), shared_dir(""), reuse_window("2H"; 数据复用窗 —— 波后窗内直接复用不取数, 生效=min(本值, 拉取间隔)), channel{enabled, host("127.0.0.1"), port(0; **0 = 交 OS 随机**, 显式非零 = 旧行为), discovery_port(18788; 0 = 关闭发现, 被占自动顺延 18788/18789/18790), pairing("auto"; auto=仅非回环强制/on/off), token, extension_id(""), request_timeout("180S")}, sites{...}}`。判定语义硬编码(四行判定表: 命中考察中→管束 / 终态档 B·C·D 与移出未列出→放行(永续) / 无证据→本地兜底: 达标放行·未达标管束), **无撤退路径配置**。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」)。旧 v2 键 26 个(min_torrent_interval/max_torrents_per_hour/failure_*/unknown_policy/verified_ttl/quota_model 双桶六键/poll_interval 等)已随 **config v2→v3 迁移**删除或常量化; `shared_dir` 与 `channel` 是仅有的两个 L1 字段(需重挂端点/重建服务), 其余全 L0。**取数通道**(去端口+跨机, 计划 26-10-14-1241): 端点默认听回环(host 可配私网 IP = 跨机直绑/NAS); port 默认 0 = 随机, 实绑端口经发现端点(默认 18788)自动分发给扩展; 无 token ⇒ 401 **且不写任何状态**; 同机多实例显式 port 必须错开(被占 = 启动即报错); 非回环 + pairing=off + 未配 token 会被校验拒绝。人工对账戳: `--hr-confirm-empty <站点>`(清单为 0 的一次性确认, 非零行自动失效)。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `qb_traffic` | 默认关闭 | 见下 |
-| `global_traffic_monitor` | 默认关闭 | 见下(全局流量监视器工具联动) |
+| `traffic_source` | 默认 `traffic_monitor` | 见下(全局流量来源: 限速曲线 / 规则表达式取数共用) |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |
 
@@ -67,12 +67,12 @@
 
 ## global_speed_limit_curve 段
 
+数据源不再内联: 取数路径由顶层 `traffic_source` 段决定(见下), 本段只管曲线与节奏。
+
 ```yaml
 global_speed_limit_curve:
+    enabled: true                    # 总开关, 缺省 true
     interval: 10M                    # 可选, 缺省回退主 interval
-    traffic_source:
-        - traffic_monitor:
-            dat_path: ".../history_traffic.dat"   # 当前仅支持单一 traffic_monitor 源
     curves:                          # 重复 period 拒绝; 每条为单项映射 curve:
         - curve:
             period: DAY              # DAY/1D/D | MONTH | ND (如 7D 滚动窗口)
@@ -81,7 +81,7 @@ global_speed_limit_curve:
             download_curve: [...]    # 可省略 (省略=不管理该方向)
 ```
 
-计算: 读 dat (行 `YYYY/MM/DD 上传KB/下载KB`, KB=1024B) → 按 period 聚合 (day=当天行; month=当月求和; Nd=最近 N 天求和; 缺失日=0 自动回落) → `curve_speed` 全程分档覆盖 (累计 < 阈值₁ 用档₁速度; 超末档用末档; 速度 0=不限) → 同方向多曲线取**最小非零** (最严) → bytes→KiB (半值向上取整) → 奇数保护/幂等比较 → `set_global_speed_limits` (qB5.0 transfer 端点)。
+计算: 读 `traffic_source.active_dat_path()` 指向的 dat (行 `YYYY/MM/DD 上传KB/下载KB`, KB=1024B) → 按 period 聚合 (day=当天行; month=当月求和; Nd=最近 N 天求和; 缺失日=0 自动回落) → `curve_speed` 全程分档覆盖 (累计 < 阈值₁ 用档₁速度; 超末档用末档; 速度 0=不限) → 同方向多曲线取**最小非零** (最严) → bytes→KiB (半值向上取整) → 奇数保护/幂等比较 → `set_global_speed_limits` (qB5.0 transfer 端点)。
 
 ## qb_traffic 段 (qB 口径流量采样)
 
@@ -95,24 +95,36 @@ global_speed_limit_curve:
 
 整段缺省 = 未启用。启用后按 `sample_interval` 周期读内存快照采样(零新增 qB 请求): 全局系列恒采(qB 速度/累计), 单种系列仅采活跃种子(`dlspeed>0 or upspeed>0`; 空闲期不产 raw 点, 已有数据文件者记零值行程行(z 行, plan 26-10-04-0721 v2), 从未传输者无文件)。数据供 WEB UI 流量图(1m/5m/30m/3h/6h/12h/24h 对齐 qB 速度图 + 3d/7d/30d 共十视图, 2026-10-04)消费; 空闲在图上表现为 0 平线, 停机/断连/计数器重置表现为断线(null), 不补 0 不回填。
 
-## global_traffic_monitor 段 (全局流量监视器工具联动)
+## traffic_source 段 (全局流量来源)
 
-计划 26-10-16-0541 S6。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」。
-本段只承载 **auto-qb 侧联动参数**; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml,
-由 WebUI 设置页经工具控制面代理读写。
+合并段(计划 26-10-17-0339 S15): 原来分散在顶层 `global_traffic_monitor` 段 + 限速曲线段内联数据源, 统一到本段; 改 `provider` 即整体切换来源, 限速曲线与规则表达式 `sys.*_traffic` 取数共用同一单点。
 
-| 键 | 类型/默认 | 校验边界 | 说明 |
-|----|-----------|----------|------|
-| `enabled` | bool / `false` | — | 联动总开关; false(缺省) = 不订阅不通知刷新历史图(保守默认) |
-| `tool_url` | str / `"http://127.0.0.1:8099"` | 须为带主机名的 http(s) URL | 工具控制面基地址(工具与 WebUI 同机部署的缺省形态); 工具端口若改过请同步 |
-| `tool_token_path` | str / `""` | — | 工具 `monitor.token` 文件路径; 留空 = `<data_dir>/monitor.token` |
-| `subscribe` | bool / `true` | — | 启用联动时, 启动即向工具注册订阅 + 定时心跳(S7 接收面消费) |
-| `notify_cooldown_s` | time / `10M` | `0S` ~ 24H | 收到工具事件后刷新历史图的冷却(秒); 事件号去重另算, 两者互补。`0S` = 不冷却 |
-| `autostart` | bool / `false` | — | WebUI 开关: 由工具侧幂等注册/卸载开机自启(Windows 计划任务 / Linux systemd --user / macOS launchd); 开关状态即期望态 |
+```yaml
+traffic_source:
+    provider: traffic_monitor              # traffic_monitor(缺省) | global_traffic_monitor
+    traffic_monitor:
+        dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填
+    global_traffic_monitor:
+        tool_dir: ""                       # 工具安装目录(留空 = 按 PATH 查找)
+        tool_exe: ""                       # 工具可执行文件名/路径(留空 = 默认名)
+        data_dir: ""                       # 工具数据目录; 非空时取数路径 = <data_dir>/history_traffic.dat
+        notify_cooldown_s: 10M             # 收到工具事件后刷新历史图的冷却(0S~24H), 0S = 不冷却
+```
 
-整段缺省 = 走默认值(enabled=false)。`PUT /config` 的**全量覆盖**语义由设置页「读后写」缓解(先取工具 `/status` 回显再整体提交)。
+| 键 | 类型/默认 | 说明 |
+|----|-----------|------|
+| `provider` | str / `traffic_monitor` | 取数来源: `traffic_monitor`(读 TrafficMonitor 的 history_traffic.dat) 或 `global_traffic_monitor`(读工具数据目录下的 history_traffic.dat); 留空/缺省 = `traffic_monitor` |
+| `traffic_monitor` | object | TrafficMonitor 来源子块; 仅一个键 `dat_path` |
+| `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 时必须非空(校验 fail-fast) |
+| `global_traffic_monitor` | object | 全局流量监视器(工具)来源子块 |
+| `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录(留空 = 按 PATH 查找) |
+| `global_traffic_monitor.tool_exe` | str / `""` | 工具可执行文件名/路径(留空 = 默认名) |
+| `global_traffic_monitor.data_dir` | str / `""` | 工具数据目录; 非空时取数路径 = `<data_dir>/history_traffic.dat` |
+| `global_traffic_monitor.notify_cooldown_s` | time / `10M` | 收到工具事件后刷新历史图的冷却(`0S` ~ 24H), `0S` = 不冷却; 事件号去重另算, 两者互补 |
 
-**过渡与迁移**(计划 26-10-16-0541 S8): 把 `global_speed_limit_curve.traffic_source` 的 `dat_path` 指向工具输出即完成切换 —— 迁移检查单 / 并行对照方法(24h, 容差口径) / 双写者禁令见 [docs/configuration.md](../../docs/configuration.md)「全局流量监视器工具（gtm）」; 并存期 TrafficMonitor 仅作对照读, **不得与工具同写一文件**(工具是历史文件的唯一写者)。
+取数单点 = `TrafficSourceConfig.active_dat_path()`(实现单点 `src/auto_qb/config/models.py`): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → `<data_dir>/history_traffic.dat`(`data_dir` 为空则无数据源)。两来源**严格互斥**(同一次取数只走一支)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
+
+**v4→v5 迁移**(计划 26-10-17-0339 S15): 曲线段内联 `traffic_source[].traffic_monitor.dat_path` 迁到本段 `traffic_monitor.dat_path`(曲线段内的 `traffic_source` 键删除); 旧顶层 `global_traffic_monitor` 段仅 `notify_cooldown_s` 保留到本段 `global_traffic_monitor.notify_cooldown_s`, 其余键(`enabled`/`tool_url`/`tool_token_path`/`subscribe`/`autostart`)与整段一并删除(逐键打 WARNING)。`provider` 按「旧 gtm 段非空 -> `global_traffic_monitor`, 否则 `traffic_monitor`」推导。并存期 TrafficMonitor 仅作对照读, **不得与工具同写一文件**(工具是历史文件的唯一写者)。
 
 ## 规则集段 (`*_rules`)
 

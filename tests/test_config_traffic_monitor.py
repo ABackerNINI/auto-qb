@@ -1,145 +1,408 @@
-"""test_config_traffic_monitor 测试计划: global_traffic_monitor 段(计划 26-10-16-0541 S6)
+"""test_config_traffic_monitor 测试计划: traffic_source 段(计划 26-10-17-0339 S15)
+
+> 本文件原覆盖已退休的 global_traffic_monitor 段; S15 后同文件改覆盖新顶层 traffic_source 段
+> (校验 + loader + v4→v5 迁移), 文件名保留以免与既有引用/基线对不上。
 
 ## 测试计划(每个测试函数一条)
-- test_validate_absent_section_ok: 整段缺省(None)合法 -> 走默认值(enabled=false)
-- test_validate_empty_dict_ok: 空段 {} 合法(全默认)
-- test_validate_unknown_key_rejected: 未知键被拒(黄金法则 4)
-- test_validate_bool_keys_reject_non_bool: enabled/subscribe/autostart 非 bool 聚合报错
-- test_validate_tool_url_shape: tool_url 必须是非空、带主机名的 http(s) URL(空串/裸主机/非 http 均拒)
-- test_validate_tool_token_path_must_be_str: tool_token_path 非字符串报错(空串合法)
+- test_validate_absent_section_ok: 整段缺省(None)合法 -> 走默认值(provider=traffic_monitor)
+- test_validate_unknown_key_rejected: 顶层未知键被拒, 已知键集合与 schema 单点一致(黄金法则 4)
+- test_validate_provider_enum: provider 非枚举值被拒; 缺省/留空 = traffic_monitor 合法(只要有 dat_path)
+- test_validate_default_provider_requires_dat_path: provider=traffic_monitor 时 dat_path 缺失/空/非串 -> 拒绝
+- test_validate_tool_branch_structure: global_traffic_monitor 子块未知键/非串路径被拒; provider=global 时无需 dat_path
 - test_validate_notify_cooldown_bounds: notify_cooldown_s 须可解析为时间且 0~24H(负/超界拒, 0 合法)
-- test_validate_valid_section_ok: 全键合法值一次通过
-- test_loader_parses_explicit_values: 显式值按类型解析(bool/time), 与字段默认不同的值真正进入 Config
+- test_validate_valid_section_ok: 全键合法值一次通过(两来源参数可并存)
+- test_loader_parses_explicit_values: 显式值按类型解析(str/time), 与字段默认不同的值真正进入 Config
 - test_loader_defaults_when_absent: 段缺省 -> 全部字段默认
 - test_loader_non_dict_spec_defaults: 段值非字典(如字符串) -> 全默认(不抛)
+- test_loader_blank_provider_falls_back: provider 留空/纯空白 -> 兜底 traffic_monitor
+- test_active_dat_path_traffic_monitor: provider=traffic_monitor -> traffic_monitor.dat_path(去空白)
+- test_active_dat_path_global_joins_data_dir: provider=global -> os.path.join(data_dir, history_traffic.dat)
+- test_active_dat_path_global_without_data_dir: provider=global 但 data_dir 空 -> ""(未配置数据源)
+- test_round_trip_through_load_config: 新段经 load_config 真链路(读文件 -> 剥空 -> 迁移 -> 校验 -> 解析)回读一致
+- test_migrate_v4_merges_curve_source: 旧曲线段内联 dat_path 迁到顶层, 曲线段内 traffic_source 键删除、其余保留
+- test_migrate_v4_removes_global_monitor_section: 旧 gtm 段: 仅 notify_cooldown_s 迁走, 其余键与整段删除
+- test_migrate_v4_derives_provider: 旧 gtm 段非空 -> provider=global_traffic_monitor; 否则 traffic_monitor
+- test_migrate_v4_notes_per_key: 每个被删/被迁的键各产出一条可读 note
+- test_migrate_v4_is_idempotent: 对已是 v5 形状的输入无副作用(不产 note, 不改结构)
+- test_migrate_v4_through_load_config: v4 旧配置经 load_config 全链路升到 v5, 取数路径与旧行为等价
 """
+import os
 from pathlib import Path
 
 import yaml
 
-from auto_qb.config.loaders import load_global_traffic_monitor_config
-from auto_qb.config.models import Config, GlobalTrafficMonitorConfig
-from auto_qb.config.validation import KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS, validate_config
+from auto_qb.config.loaders import load_traffic_source_config
+from auto_qb.config.models import Config, TrafficSourceConfig
+from auto_qb.config.validation import (
+    KNOWN_TRAFFIC_SOURCE_KEYS,
+    KNOWN_TRAFFIC_SOURCE_TM_KEYS,
+    KNOWN_TRAFFIC_SOURCE_TOOL_KEYS,
+    validate_config,
+)
+from auto_qb.infra.versioning import MIGRATIONS
+
+#: v4→v5 迁移函数(注册表取用 = 被测的是真注册项, 不是同名的旁路实现)
+_migrate_v4_to_v5 = MIGRATIONS["config"][4]
 
 
 def _errors(section) -> list:
-    return validate_config({"config": {"global_traffic_monitor": section}})
+    return validate_config({"config": {"traffic_source": section}})
 
 
 def test_validate_absent_section_ok():
     assert validate_config({"config": {}}) == []
-    assert validate_config({"config": {"global_traffic_monitor": None}}) == []
-
-
-def test_validate_empty_dict_ok():
-    assert _errors({}) == []
+    assert validate_config({"config": {"traffic_source": None}}) == []
 
 
 def test_validate_unknown_key_rejected():
-    errs = _errors({"enabled": "true", "bogus": "1"})
+    errs = _errors({"provider": "traffic_monitor", "traffic_monitor": {"dat_path": "/x.dat"}, "bogus": "1"})
     assert any("未知键" in e and "bogus" in e for e in errs), errs
-    # 已知键集合与 schema 单点一致(7 键口径的姊妹: 本段 6 键)
-    assert KNOWN_GLOBAL_TRAFFIC_MONITOR_KEYS == {
-        "enabled", "tool_url", "tool_token_path", "subscribe", "notify_cooldown_s", "autostart"
-    }
+    # 已知键集合与 schema 单点一致(顶层 3 键 + TM 1 键 + 工具 4 键)
+    assert KNOWN_TRAFFIC_SOURCE_KEYS == {"provider", "traffic_monitor", "global_traffic_monitor"}
+    assert KNOWN_TRAFFIC_SOURCE_TM_KEYS == {"dat_path"}
+    assert KNOWN_TRAFFIC_SOURCE_TOOL_KEYS == {"tool_dir", "tool_exe", "data_dir", "notify_cooldown_s"}
 
 
-def test_validate_bool_keys_reject_non_bool():
-    errs = _errors({"enabled": "maybe", "subscribe": "x", "autostart": "y"})
-    for key in ("enabled", "subscribe", "autostart"):
-        assert any(f"config.global_traffic_monitor.{key}" in e for e in errs), (key, errs)
+def test_validate_provider_enum():
+    # 缺省/留空 = traffic_monitor(只要有 dat_path 即合法)
+    assert _errors({"traffic_monitor": {"dat_path": "/x.dat"}}) == []
+    assert _errors({"provider": "", "traffic_monitor": {"dat_path": "/x.dat"}}) == []
+    errs = _errors({"provider": "bogus", "traffic_monitor": {"dat_path": "/x.dat"}})
+    assert any("config.traffic_source.provider" in e for e in errs), errs
 
 
-def test_validate_tool_url_shape():
-    assert _errors({"tool_url": "http://127.0.0.1:8099"}) == []
-    assert _errors({"tool_url": "https://gtm.local:9000"}) == []
-    for bad in ("", "127.0.0.1:8099", "ftp://host/x", "http://"):
-        errs = _errors({"tool_url": bad})
-        assert any("config.global_traffic_monitor.tool_url" in e for e in errs), (bad, errs)
+def test_validate_default_provider_requires_dat_path():
+    # provider 缺省 = traffic_monitor -> 必须给非空 dat_path
+    for bad in (
+        {}, {
+            "traffic_monitor": {}
+        }, {
+            "traffic_monitor": {
+                "dat_path": ""
+            }
+        }, {
+            "traffic_monitor": {
+                "dat_path": "   "
+            }
+        }, {
+            "traffic_monitor": {
+                "dat_path": ["x"]
+            }
+        }
+    ):
+        errs = _errors(bad)
+        assert any("traffic_monitor.dat_path" in e for e in errs), (bad, errs)
+    assert _errors({"traffic_monitor": {"dat_path": "/x.dat"}}) == []
 
 
-def test_validate_tool_token_path_must_be_str():
-    assert _errors({"tool_token_path": ""}) == []
-    assert _errors({"tool_token_path": "/tmp/monitor.token"}) == []
-    errs = _errors({"tool_token_path": ["x"]})
-    assert any("tool_token_path" in e for e in errs), errs
+def test_validate_tool_branch_structure():
+    # provider=global_traffic_monitor: 无需 traffic_monitor.dat_path
+    assert _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"data_dir": "/d"}}) == []
+    # 工具子块未知键被拒
+    errs = _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"bogus": "1"}})
+    assert any("global_traffic_monitor" in e and "bogus" in e for e in errs), errs
+    # 路径键非字符串被拒
+    errs = _errors({"provider": "global_traffic_monitor", "global_traffic_monitor": {"tool_dir": ["x"]}})
+    assert any("global_traffic_monitor.tool_dir" in e for e in errs), errs
 
 
 def test_validate_notify_cooldown_bounds():
-    assert _errors({"notify_cooldown_s": "0S"}) == []
-    assert _errors({"notify_cooldown_s": "10M"}) == []
-    assert _errors({"notify_cooldown_s": "24H"}) == []
-    assert any("notify_cooldown_s" in e for e in _errors({"notify_cooldown_s": "-1S"}))
-    assert any("notify_cooldown_s" in e for e in _errors({"notify_cooldown_s": "48H"}))
-    assert any("notify_cooldown_s" in e for e in _errors({"notify_cooldown_s": "abc"}))
+    def _tool(cooldown):
+        return _errors(
+            {
+                "provider": "global_traffic_monitor",
+                "global_traffic_monitor": {
+                    "notify_cooldown_s": cooldown
+                },
+            }
+        )
+
+    assert _tool("0S") == []
+    assert _tool("10M") == []
+    assert _tool("24H") == []
+    assert any("notify_cooldown_s" in e for e in _tool("-1S"))
+    assert any("notify_cooldown_s" in e for e in _tool("48H"))
+    assert any("notify_cooldown_s" in e for e in _tool("abc"))
 
 
 def test_validate_valid_section_ok():
     assert _errors(
         {
-            "enabled": "true",
-            "tool_url": "http://127.0.0.1:8099",
-            "tool_token_path": "/x/monitor.token",
-            "subscribe": "false",
-            "notify_cooldown_s": "5M",
-            "autostart": "true",
+            "provider": "global_traffic_monitor",
+            "traffic_monitor": {
+                "dat_path": "/x/history_traffic.dat"
+            },
+            "global_traffic_monitor":
+                {
+                    "tool_dir": "/opt/gtm",
+                    "tool_exe": "/opt/gtm/monitor.exe",
+                    "data_dir": "/opt/gtm/data",
+                    "notify_cooldown_s": "5M",
+                },
         }
     ) == []
 
 
 def test_loader_parses_explicit_values():
-    cfg = load_global_traffic_monitor_config(
+    cfg = load_traffic_source_config(
         {
-            "enabled": "true",
-            "tool_url": "http://192.0.2.1:9000",
-            "tool_token_path": "/probe/monitor.token",
-            "subscribe": "false",
-            "notify_cooldown_s": "90S",
-            "autostart": "true",
+            "provider": "global_traffic_monitor",
+            "traffic_monitor": {
+                "dat_path": "/probe/tm.dat"
+            },
+            "global_traffic_monitor":
+                {
+                    "tool_dir": "/probe/gtm",
+                    "tool_exe": "/probe/gtm/monitor.exe",
+                    "data_dir": "/probe/gtm/data",
+                    "notify_cooldown_s": "90S",
+                },
         }
     )
-    assert cfg.enabled is True
-    assert cfg.tool_url == "http://192.0.2.1:9000"
-    assert cfg.tool_token_path == "/probe/monitor.token"
-    assert cfg.subscribe is False
-    assert cfg.notify_cooldown_s == 90.0
-    assert cfg.autostart is True
+    assert cfg.provider == "global_traffic_monitor"
+    assert cfg.traffic_monitor.dat_path == "/probe/tm.dat"
+    assert cfg.global_traffic_monitor.tool_dir == "/probe/gtm"
+    assert cfg.global_traffic_monitor.tool_exe == "/probe/gtm/monitor.exe"
+    assert cfg.global_traffic_monitor.data_dir == "/probe/gtm/data"
+    assert cfg.global_traffic_monitor.notify_cooldown_s == 90.0
 
 
 def test_loader_defaults_when_absent():
-    d = GlobalTrafficMonitorConfig()
-    assert load_global_traffic_monitor_config(None) == d
-    assert load_global_traffic_monitor_config({}) == d
-    assert Config().global_traffic_monitor == d
-    assert d.enabled is False and d.subscribe is True and d.autostart is False
-    assert d.tool_url == "http://127.0.0.1:8099" and d.tool_token_path == ""
-    assert d.notify_cooldown_s == 600.0
+    d = TrafficSourceConfig()
+    assert load_traffic_source_config(None) == d
+    assert load_traffic_source_config({}) == d
+    assert Config().traffic_source == d
+    assert d.provider == "traffic_monitor"
+    assert d.traffic_monitor.dat_path == ""
+    assert d.global_traffic_monitor.tool_dir == "" and d.global_traffic_monitor.data_dir == ""
+    assert d.global_traffic_monitor.notify_cooldown_s == 600.0
 
 
 def test_loader_non_dict_spec_defaults():
-    assert load_global_traffic_monitor_config("nonsense") == GlobalTrafficMonitorConfig()
+    assert load_traffic_source_config("nonsense") == TrafficSourceConfig()
+
+
+def test_loader_blank_provider_falls_back():
+    assert load_traffic_source_config({"provider": ""}).provider == "traffic_monitor"
+    assert load_traffic_source_config({"provider": "   "}).provider == "traffic_monitor"
+
+
+def test_active_dat_path_traffic_monitor():
+    cfg = TrafficSourceConfig(provider="traffic_monitor")
+    cfg.traffic_monitor.dat_path = "  /x/history_traffic.dat  "
+    assert cfg.active_dat_path() == "/x/history_traffic.dat"
+    assert TrafficSourceConfig().active_dat_path() == ""
+
+
+def test_active_dat_path_global_joins_data_dir():
+    cfg = TrafficSourceConfig(provider="global_traffic_monitor")
+    cfg.global_traffic_monitor.data_dir = "/opt/gtm/data"
+    assert cfg.active_dat_path() == os.path.join("/opt/gtm/data", "history_traffic.dat")
+
+
+def test_active_dat_path_global_without_data_dir():
+    cfg = TrafficSourceConfig(provider="global_traffic_monitor")
+    assert cfg.active_dat_path() == ""
 
 
 def test_round_trip_through_load_config(tmp_path):
-    """整段经 load_config 真链路(读文件 -> 剥空 -> 迁移 -> 校验 -> 解析)回读一致"""
+    """新段经 load_config 真链路回读一致(显式 schema_version=5, 不走迁移)"""
     from auto_qb.config import load_config
 
     probe = {
         "config":
             {
-                "global_traffic_monitor":
+                "schema_version": 5,
+                "traffic_source":
                     {
-                        "enabled": "true",
-                        "tool_url": "http://192.0.2.9:9100",
-                        "tool_token_path": "/probe/t.token",
-                        "subscribe": "false",
-                        "notify_cooldown_s": "3M",
-                        "autostart": "true",
-                    }
+                        "provider": "global_traffic_monitor",
+                        "traffic_monitor": {
+                            "dat_path": "/probe/tm.dat"
+                        },
+                        "global_traffic_monitor":
+                            {
+                                "tool_dir": "/probe/gtm",
+                                "tool_exe": "/probe/gtm/monitor.exe",
+                                "data_dir": "/probe/gtm/data",
+                                "notify_cooldown_s": "3M",
+                            },
+                    },
             }
     }
     path = Path(tmp_path) / "cfg.yml"
     path.write_text(yaml.safe_dump(probe, allow_unicode=True), encoding="utf-8")
-    cfg = load_config(str(path)).global_traffic_monitor
-    assert (cfg.enabled, cfg.tool_url, cfg.tool_token_path) == (True, "http://192.0.2.9:9100", "/probe/t.token")
-    assert (cfg.subscribe, cfg.notify_cooldown_s, cfg.autostart) == (False, 180.0, True)
+    ts = load_config(str(path)).traffic_source
+    assert ts.provider == "global_traffic_monitor"
+    assert ts.traffic_monitor.dat_path == "/probe/tm.dat"
+    assert ts.global_traffic_monitor.tool_dir == "/probe/gtm"
+    assert ts.global_traffic_monitor.notify_cooldown_s == 180.0
+    assert ts.active_dat_path() == os.path.join("/probe/gtm/data", "history_traffic.dat")
+
+
+def test_migrate_v4_merges_curve_source():
+    cfg = {
+        "global_speed_limit_curve":
+            {
+                "enabled": "true",
+                "interval": "10M",
+                "traffic_source": [{
+                    "traffic_monitor": {
+                        "dat_path": "/old/history_traffic.dat"
+                    }
+                }],
+                "curves": [],
+            }
+    }
+    out, notes = _migrate_v4_to_v5(cfg)
+    assert out["traffic_source"]["provider"] == "traffic_monitor"
+    assert out["traffic_source"]["traffic_monitor"]["dat_path"] == "/old/history_traffic.dat"
+    # 曲线段其余键保留、内联 traffic_source 键删除
+    assert out["global_speed_limit_curve"] == {"enabled": "true", "interval": "10M", "curves": []}
+    assert any("dat_path" in n for n in notes) and any("global_speed_limit_curve.traffic_source" in n for n in notes)
+
+
+def test_migrate_v4_removes_global_monitor_section():
+    cfg = {
+        "global_traffic_monitor":
+            {
+                "enabled": "true",
+                "tool_url": "http://127.0.0.1:8099",
+                "tool_token_path": "/x/monitor.token",
+                "subscribe": "false",
+                "notify_cooldown_s": "5M",
+                "autostart": "true",
+            }
+    }
+    out, notes = _migrate_v4_to_v5(cfg)
+    assert "global_traffic_monitor" not in out
+    assert out["traffic_source"]["global_traffic_monitor"] == {"notify_cooldown_s": "5M"}
+    for key in ("enabled", "tool_url", "tool_token_path", "subscribe", "autostart"):
+        assert any(f"global_traffic_monitor.{key}" in n for n in notes), key
+    assert any("notify_cooldown_s -> config.traffic_source" in n for n in notes)
+
+
+def test_migrate_v4_derives_provider():
+    # 旧 gtm 段非空 -> global_traffic_monitor
+    out, _ = _migrate_v4_to_v5({"global_traffic_monitor": {"enabled": "true"}})
+    assert out["traffic_source"]["provider"] == "global_traffic_monitor"
+    # 无 gtm 段(仅曲线内联数据源) -> traffic_monitor
+    out, _ = _migrate_v4_to_v5(
+        {"global_speed_limit_curve": {
+            "traffic_source": [{
+                "traffic_monitor": {
+                    "dat_path": "/x.dat"
+                }
+            }]
+        }}
+    )
+    assert out["traffic_source"]["provider"] == "traffic_monitor"
+    # 旧 gtm 段存在但空 -> traffic_monitor(「非空」才是切换信号)
+    out, _ = _migrate_v4_to_v5({"global_traffic_monitor": {}})
+    assert out["traffic_source"]["provider"] == "traffic_monitor"
+
+
+def test_migrate_v4_notes_per_key():
+    cfg = {
+        "global_speed_limit_curve": {
+            "traffic_source": [{
+                "traffic_monitor": {
+                    "dat_path": "/old.dat"
+                }
+            }]
+        },
+        "global_traffic_monitor": {
+            "enabled": "true",
+            "notify_cooldown_s": "5M"
+        },
+    }
+    out, notes = _migrate_v4_to_v5(cfg)
+    # 被迁/被删的键各一条: 曲线 traffic_source + gtm.enabled + gtm.notify_cooldown_s + gtm 整段 + provider
+    assert len(notes) >= 5, notes
+    assert all(isinstance(n, str) and n for n in notes)
+
+
+def test_migrate_v4_is_idempotent():
+    cfg = {
+        "traffic_source": {
+            "provider": "traffic_monitor",
+            "traffic_monitor": {
+                "dat_path": "/x.dat"
+            }
+        },
+        "global_speed_limit_curve": {
+            "curves": [],
+            "enabled": "true"
+        },
+    }
+    import copy
+
+    snapshot = copy.deepcopy(cfg)
+    out = _migrate_v4_to_v5(cfg)
+    assert out == snapshot  # 无副作用(结构不变)
+    assert out is cfg
+
+
+def test_migrate_v4_through_load_config(tmp_path):
+    """v4「仅 TM dat_path」旧配置经 load_config 全链路升到 v5: 取数路径与旧行为等价, provider=traffic_monitor"""
+    from auto_qb.config import load_config
+
+    probe = {
+        "config":
+            {
+                "schema_version": 4,
+                "global_speed_limit_curve":
+                    {
+                        "traffic_source": [{
+                            "traffic_monitor": {
+                                "dat_path": "/old/history_traffic.dat"
+                            }
+                        }],
+                        "curves":
+                            [
+                                {
+                                    "curve":
+                                        {
+                                            "period": "1D",
+                                            "upload_curve": [{
+                                                "10GiB": {
+                                                    "upload_speed_limit": "6MiB/s"
+                                                }
+                                            }],
+                                        }
+                                }
+                            ],
+                    },
+            }
+    }
+    path = Path(tmp_path) / "cfg.yml"
+    path.write_text(yaml.safe_dump(probe, allow_unicode=True), encoding="utf-8")
+    cfg = load_config(str(path))
+    # 无旧 gtm 段 -> provider 推导为 traffic_monitor; 取数路径与旧行为等价(旧 dat_path = /old/history_traffic.dat)
+    assert cfg.traffic_source.provider == "traffic_monitor"
+    assert cfg.traffic_source.traffic_monitor.dat_path == "/old/history_traffic.dat"
+    assert cfg.traffic_source.active_dat_path() == "/old/history_traffic.dat"
+    # 曲线段不再有 dat_path 字段(结构退休), 其余键保留
+    assert not hasattr(cfg.global_speed_limit_curve, "dat_path")
+    assert cfg.global_speed_limit_curve.enabled is True
+
+
+def test_migrate_v4_with_gtm_section_through_load_config(tmp_path):
+    """v4 带旧 gtm 段的配置: provider 推导为 global_traffic_monitor, notify_cooldown_s 迁走"""
+    from auto_qb.config import load_config
+
+    probe = {
+        "config": {
+            "schema_version": 4,
+            "global_traffic_monitor": {
+                "enabled": "true",
+                "notify_cooldown_s": "5M"
+            },
+        }
+    }
+    path = Path(tmp_path) / "cfg.yml"
+    path.write_text(yaml.safe_dump(probe, allow_unicode=True), encoding="utf-8")
+    cfg = load_config(str(path))
+    assert cfg.traffic_source.provider == "global_traffic_monitor"
+    assert cfg.traffic_source.global_traffic_monitor.notify_cooldown_s == 300.0
+    # 旧 gtm 段已从配置面退休: Config.global_traffic_monitor 只剩过渡 stub 的默认值(不再来自 YAML)
+    assert cfg.global_traffic_monitor.enabled is False

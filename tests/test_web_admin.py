@@ -198,10 +198,10 @@ def test_api_speed_mode_curve_config_disabled():
         mgr.client = FakeClient()
         mgr.web.token = "t"
         mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
-            dat_path="x.dat",
             curves=[PeriodCurve(period="day", upload_points=[CurvePoint(threshold_bytes=1, speed_bytes_per_s=1)])],
             enabled=False,
         )
+        mgr.config.traffic_source.traffic_monitor.dat_path = "x.dat"
         mgr.web.traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}

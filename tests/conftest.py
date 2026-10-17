@@ -246,7 +246,7 @@ def web_env(tmp_path):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
     )
     mgr.web.token = ensure_web_token(mgr)
     app = create_app(mgr)

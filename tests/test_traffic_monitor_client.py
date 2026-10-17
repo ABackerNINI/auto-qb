@@ -322,11 +322,12 @@ def _refresh_env(tmp_path, monkeypatch, *, enabled=True, dat_name="history_traff
     if write_dat:
         dat_path.write_text(_dat_text([(date.today(), 3 * MIB, 5 * MIB)]), encoding="utf-8")
     mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
-        dat_path=str(dat_path),
         curves=[_pc("day", up=_points([(1, 1)])),
                 _pc("month", down=_points([(1, 2)]))],
         enabled=enabled,
     )
+    # 数据源在顶层 traffic_source 段(S15): 直接注入 FakeConfig, 等价于 load_config 后的形态
+    mgr.config.traffic_source.traffic_monitor.dat_path = str(dat_path)
     monkeypatch.setattr(mgr.api, "set_global_speed_limits", lambda **kw: calls.append(("set", kw)))
     monkeypatch.setattr(
         mgr.api, "get_global_speed_limits", lambda: calls.append(("get", {})) or {
@@ -387,9 +388,8 @@ def test_refresh_traffic_view_skips(tmp_path, monkeypatch):
 
     empty = tmp_path / "empty.dat"
     empty.write_text('lines: "0"\n', encoding="utf-8")
-    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
-        dat_path=str(empty), curves=[_pc("day", up=_points([(1, 1)]))]
-    )
+    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[_pc("day", up=_points([(1, 1)]))])
+    mgr.config.traffic_source.traffic_monitor.dat_path = str(empty)
     assert mgr.host.get("speed_curve").refresh_traffic_view() is False
     assert mgr.web.traffic_view["history"] == []
     assert qb_calls == []

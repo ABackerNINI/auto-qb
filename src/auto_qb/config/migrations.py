@@ -21,6 +21,9 @@ v3→v4(report 26-10-03-0504 方案 B 阶段 1, 「删除类似标签」全局/�
 为让升级语义不变, 迁移把 9 键作用域内的显式置空值整体移除 —— 站点 4 个 str 键是语义翻转保护,
 其余(全局段同名键 / bool / list 键的 '', 本就被 strip 剥成未配置)属死值顺手清理。每个被移除键的
 路径经 (dict, notes) 返回形态交 migrate_with_notes, 由 loaders.migrate_config_schema 逐键打 WARNING。
+
+v4→v5(计划 26-10-17-0339 S15, 全局流量来源合并): 曲线段内联数据源 + 顶层 global_traffic_monitor
+段合并为顶层 traffic_source 段; 每键迁移/删除产出一条 note(见 _migrate_config_4_5)。
 """
 from typing import Dict, List, Tuple
 from urllib.parse import urlparse
@@ -220,3 +223,87 @@ def _migrate_config_3_4(cfg: dict):
 
 
 MIGRATIONS["config"][3] = _migrate_config_3_4
+
+# ---- v4→v5: 数据源并入顶层 traffic_source 段(计划 26-10-17-0339 S15) ----
+
+
+def _migrate_config_4_5(cfg: dict):
+    """v4→v5: 把「顶层 global_traffic_monitor 段 + 曲线段内联 traffic_source」合并为顶层 traffic_source 段
+
+    - 旧曲线段内联数据源 global_speed_limit_curve.traffic_source[].traffic_monitor.dat_path ->
+      config.traffic_source.traffic_monitor.dat_path; 曲线段内的 traffic_source 键删除,
+      其余键(interval/enabled/curves)原样保留。
+    - 旧 config.global_traffic_monitor 段: 仅把 notify_cooldown_s 迁到
+      config.traffic_source.global_traffic_monitor.notify_cooldown_s; enabled / tool_url /
+      tool_token_path / subscribe / autostart 一律删除; 整段从 config 删除(该段在 v5 退休)。
+    - provider 推导: 旧 global_traffic_monitor 段存在(非空) -> "global_traffic_monitor";
+      否则 -> "traffic_monitor"。
+    每个被删除/被迁移的键产出一条人读 note, 经 migrate_with_notes 落成 WARNING(D3)。幂等:
+    对已是 v5 形状的输入(无旧曲线 traffic_source 键、无旧 gtm 段)不产生任何副作用。
+    """
+    notes: List[str] = []
+    curve = cfg.get("global_speed_limit_curve")
+    had_curve_source = isinstance(curve, dict) and "traffic_source" in curve
+    legacy_dat_path = ""
+    if had_curve_source:
+        srcs = curve.get("traffic_source")
+        if isinstance(srcs, list):
+            for item in srcs:
+                if isinstance(item, dict):
+                    tm = item.get("traffic_monitor")
+                    if isinstance(tm, dict) and str(tm.get("dat_path", "") or "").strip():
+                        legacy_dat_path = str(tm["dat_path"]).strip()
+        del curve["traffic_source"]
+        notes.append("config.global_speed_limit_curve.traffic_source: 已移除, 数据源迁到顶层 traffic_source 段")
+
+    legacy_gtm = cfg.get("global_traffic_monitor")
+    had_gtm = isinstance(legacy_gtm, dict)
+    legacy_cooldown = None
+    if had_gtm:
+        legacy_cooldown = legacy_gtm.get("notify_cooldown_s")
+        for key in ("enabled", "tool_url", "tool_token_path", "subscribe", "autostart"):
+            if key in legacy_gtm:
+                notes.append(f"config.global_traffic_monitor.{key}: 已移除(该联动段退休, 相关能力由后续步骤重接)")
+        del cfg["global_traffic_monitor"]
+        notes.append("config.global_traffic_monitor: 已移除(退休段)")
+
+    if not had_curve_source and not had_gtm:
+        return cfg  # 已是 v5 形状: 无旧键可迁, 无副作用(幂等)
+
+    ts = cfg.get("traffic_source")
+    if not isinstance(ts, dict):
+        ts = {}
+        cfg["traffic_source"] = ts
+
+    provider = "global_traffic_monitor" if (isinstance(legacy_gtm, dict) and bool(legacy_gtm)) else "traffic_monitor"
+    ts["provider"] = provider
+    notes.append(f"config.traffic_source.provider: 设为 {provider}(由旧配置推导)")
+
+    tm_in = ts.get("traffic_monitor")
+    if not isinstance(tm_in, dict):
+        tm_in = {}
+    if legacy_dat_path:
+        tm_in["dat_path"] = legacy_dat_path
+        notes.append(
+            "config.global_speed_limit_curve.traffic_source[0].traffic_monitor.dat_path -> "
+            "config.traffic_source.traffic_monitor.dat_path: 数据源已迁到顶层 traffic_source 段"
+        )
+    if tm_in:
+        ts["traffic_monitor"] = tm_in
+
+    tool_in = ts.get("global_traffic_monitor")
+    if not isinstance(tool_in, dict):
+        tool_in = {}
+    if legacy_cooldown is not None:
+        tool_in["notify_cooldown_s"] = legacy_cooldown
+        notes.append(
+            "config.global_traffic_monitor.notify_cooldown_s -> "
+            "config.traffic_source.global_traffic_monitor.notify_cooldown_s: 参数已迁到 traffic_source 段"
+        )
+    if tool_in:
+        ts["global_traffic_monitor"] = tool_in
+
+    return cfg, notes
+
+
+MIGRATIONS["config"][4] = _migrate_config_4_5

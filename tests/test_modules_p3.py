@@ -26,7 +26,7 @@ test_delete_tags / test_speed_curve / test_trigger_events(经 manager 旧名单�
 - test_traffic_publish_goes_through_ctx_web_service: _publish_traffic 经 ctx.web.set_traffic_view, 别名同源可见
 - test_maintenance_start_registers_delete_tags_per_config: delete_tags 两任务按配置入队, interval=主 interval
 - test_maintenance_queue_rebuilt_reregisters: 队列重建后标签清理任务回到新队列
-- test_p3_modules_sections_claims: 三模块 sections 认领清单锁定
+- test_p3_modules_sections_claims: 三模块 sections 认领清单锁定(speed_curve 增 traffic_source)
 - test_p2a_maintenance_added_event_unknown_hash_noop: 维护 added 事件 hash 不在快照早退 (P2-a)
 - test_p2a_maintenance_register_global_tasks_without_queue: 队列引用 None 早退; 恢复后按配置入队 (P2-a)
 - test_p2a_maintenance_task_interface_delegates: task 接口委托 handle_maintenance (P2-a)
@@ -190,9 +190,9 @@ def test_maintenance_queue_rebuilt_reregisters():
 
 
 def test_p3_modules_sections_claims():
-    """三模块 sections 认领清单锁定(maintenance 六段: P6 补登 hr/remove_similar_tags)"""
+    """三模块 sections 认领清单锁定(speed_curve 增 traffic_source: S15 数据源并入顶层段; maintenance 六段: P6 补登 hr/remove_similar_tags)"""
     assert TrackerModule(None).sections() == ("trackers", )
-    assert SpeedCurveModule(None).sections() == ("global_speed_limit_curve", )
+    assert SpeedCurveModule(None).sections() == ("global_speed_limit_curve", "traffic_source")
     assert MaintenanceModule(None).sections() == (
         "delete_tags",
         "delete_tags_if_has_no_torrents",

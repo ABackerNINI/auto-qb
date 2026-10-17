@@ -19,7 +19,7 @@ from .models import (
     CurvePoint,
     FsConfig,
     GlobalSpeedLimitCurve,
-    GlobalTrafficMonitorConfig,
+    GlobalTrafficMonitorSourceConfig,
     GroupingConfig,
     HRRule,
     HrChannelConfig,
@@ -28,6 +28,8 @@ from .models import (
     NotifyConfig,
     PathMapEntry,
     SiteHrCheckConfig,
+    TrafficMonitorSourceConfig,
+    TrafficSourceConfig,
     WebConfig,
     PeriodCurve,
     QbittorrentConfig,
@@ -350,12 +352,11 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
 
     先验证再解析: 结构/键/数值合法性由 validation._validate_global_speed_limit_curve 在
     fail-fast 校验阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。
+    数据源(dat 文件路径)已迁到顶层 traffic_source 段(计划 26-10-17-0339 S15), 本段只留
+    curves/interval/enabled; 取数经 config.traffic_source.active_dat_path()。
     配置样式:
         interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
         enabled: true              # 功能总开关(可选, 缺省 true; false = 整体停用, 任务短路不动 qB)
-        traffic_source:
-            - traffic_monitor:
-                dat_path: ".../history_traffic.dat"
         curves:
             - curve:                # 每条 period 曲线为 curve 单项映射
                 period: 1D          # day/1D | month | ND(最近 N 天)
@@ -369,10 +370,6 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     """
     if spec is None:
         return None
-
-    # 数据源: 校验已保证仅单个 traffic_monitor
-    (source, ) = spec["traffic_source"]
-    dat_path = str(source["traffic_monitor"]["dat_path"]).strip()
 
     period_curves: List[PeriodCurve] = []
     for item in spec["curves"]:
@@ -390,10 +387,9 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
                 ),
             )
         )
-    # 取值统一走 _get(issue 26-10-11-0032): 本模型必填 dat_path/curves 无法缺省构造,
+    # curves 为必填(无默认), 其余可选键取值统一走 _get(issue 26-10-11-0032):
     # 字段默认经类属性读取(dataclass 有默认值的字段即类属性, 默认值单源仍是 models)
     return GlobalSpeedLimitCurve(
-        dat_path=dat_path,
         curves=period_curves,
         interval=_get(spec, "interval", GlobalSpeedLimitCurve.interval, parse_time),
         enabled=_get(spec, "enabled", GlobalSpeedLimitCurve.enabled, parse_bool),
@@ -427,22 +423,41 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     )
 
 
-def load_global_traffic_monitor_config(spec) -> GlobalTrafficMonitorConfig:
-    """解析 config.global_traffic_monitor 段(全局流量监视器工具联动, 计划 26-10-16-0541 S6)
+def load_traffic_source_config(spec) -> TrafficSourceConfig:
+    """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15)
 
-    仅转换, 合法性由 validate_config._validate_global_traffic_monitor 保证。段缺省 = 全默认
-    (enabled=false, 保守默认)。工具自有 config.yml 不在此 —— 它经工具控制面代理读写。
+    仅转换, 合法性由 validate_config._validate_traffic_source 保证。段缺省 = 全默认
+    (provider="traffic_monitor", 两来源参数全空)。provider 缺省/留空 = traffic_monitor
+    (与校验同口径)。两个子块的结构已在模型里给出默认工厂, 这里只覆盖显式键。
     """
-    d = GlobalTrafficMonitorConfig()
+    d = TrafficSourceConfig()
     if not isinstance(spec, dict):
         return d
-    return GlobalTrafficMonitorConfig(
-        enabled=_get(spec, "enabled", d.enabled, parse_bool),
-        tool_url=_get(spec, "tool_url", d.tool_url),
-        tool_token_path=_get(spec, "tool_token_path", d.tool_token_path),
-        subscribe=_get(spec, "subscribe", d.subscribe, parse_bool),
-        notify_cooldown_s=_get(spec, "notify_cooldown_s", d.notify_cooldown_s, parse_time),
-        autostart=_get(spec, "autostart", d.autostart, parse_bool),
+    tm_spec = spec.get("traffic_monitor")
+    tm_d = TrafficMonitorSourceConfig()
+    traffic_monitor = TrafficMonitorSourceConfig(
+        dat_path=_get(tm_spec, "dat_path", tm_d.dat_path) if isinstance(tm_spec, dict) else tm_d.dat_path,
+    )
+    tool_spec = spec.get("global_traffic_monitor")
+    tool_d = GlobalTrafficMonitorSourceConfig()
+
+    def _tool(key: str, parse=None):
+        if not isinstance(tool_spec, dict):
+            return getattr(tool_d, key)
+        return _get(tool_spec, key, getattr(tool_d, key), parse)
+
+    global_traffic_monitor = GlobalTrafficMonitorSourceConfig(
+        tool_dir=_tool("tool_dir"),
+        tool_exe=_tool("tool_exe"),
+        data_dir=_tool("data_dir"),
+        notify_cooldown_s=_tool("notify_cooldown_s", parse_time),
+    )
+    # provider 缺省/留空 = traffic_monitor(与校验同口径; 去空白后再兜底)
+    provider = str(spec.get("provider") or "").strip() or d.provider
+    return TrafficSourceConfig(
+        provider=provider,
+        traffic_monitor=traffic_monitor,
+        global_traffic_monitor=global_traffic_monitor,
     )
 
 
@@ -590,7 +605,7 @@ def load_config(config_path: str) -> Config:
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
         qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),
-        global_traffic_monitor=load_global_traffic_monitor_config(_get(cfg, "global_traffic_monitor", {})),
+        traffic_source=load_traffic_source_config(_get(cfg, "traffic_source", {})),
     )
 
 
