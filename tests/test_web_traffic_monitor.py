@@ -17,6 +17,9 @@
 - test_autostart_unreachable_502: 工具不可达 -> 502
 - test_relaunch_conflict_when_not_desired: 当前来源不是工具 -> 409(无订阅线程可促, 不起线程)
 - test_relaunch_accepted: 期望态成立 -> 200 accepted(只置标志, 拉起由订阅线程执行)
+- test_shutdown_requires_auth: 停止端点无 Bearer -> 401
+- test_shutdown_forward_and_return: 工具 200 -> 原样透传(POST /shutdown, 空载荷)
+- test_shutdown_unreachable_502: 工具不可达 / 未就绪 -> 502(写端点真报错)
 """
 import pytest
 
@@ -315,3 +318,41 @@ def test_relaunch_accepted(tm_env, monkeypatch):
     r = client.post("/api/traffic/monitor/relaunch", headers=_auth(mgr))
     assert r.status_code == 200 and r.json() == {"ok": True, "accepted": True}
     assert mgr.host.get("webui")._subscriber._force_relaunch is True
+
+
+# ---- POST /shutdown(写端点: 「停止工具」, 26-10-17-1737 S3) ----
+
+
+def test_shutdown_requires_auth(web_env):
+    mgr, client = web_env
+    assert client.post("/api/traffic/monitor/shutdown").status_code == 401
+
+
+def test_shutdown_forward_and_return(tm_env, monkeypatch):
+    """工具 200 -> 原样透传(前端据此提示「已通知停止」; 指针删除后状态区自然翻 not_running)"""
+    mgr, client, _ = tm_env
+    sent = {}
+
+    def fake_call(base, path, method, token, payload=None, timeout=None):
+        sent.update(path=path, method=method, payload=payload)
+        return 200, {"ok": True, "message": "正在停止 global-traffic-monitor"}
+
+    monkeypatch.setattr(tm_routes, "_call_tool", fake_call)
+    r = client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr))
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert sent == {"path": "/shutdown", "method": "POST", "payload": {}}
+
+
+def test_shutdown_unreachable_502(tm_env, monkeypatch):
+    """工具不可达 / 未就绪 -> 502(写端点必须真报错, 不把「没说到话」伪装成成功)"""
+    mgr, client, _ = tm_env
+
+    def boom(*a, **k):
+        raise tm_routes.ToolUnreachable("refused")
+
+    monkeypatch.setattr(tm_routes, "_call_tool", boom)
+    assert client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr)).status_code == 502
+    # 探活失败(工具没在跑) -> 前置闸 502 附 state, 不发代理请求
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    r = client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr))
+    assert r.status_code == 502 and "工具未在运行" in r.json()["detail"]

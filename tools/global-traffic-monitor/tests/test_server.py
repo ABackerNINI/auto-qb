@@ -3,6 +3,8 @@
 + S12 发现指针: bind 成功后写 endpoint.json (字段/删除) + 抢输锁不占端口.
 + S13 随机端口 (config http_port 0 -> 回填真实端口并记指针) + endpoint 子命令 (读指针).
 + S14 POST /autostart 成功回写工具 config autostart (自启意图唯一裁决权).
++ 26-10-17-1737 S3 POST /shutdown: 先回 200 再置位 stop_event (优雅退出信号), 鉴权同闸;
+  未绑定 stop_event 仍 200; _run_loop 对置位即时响应 (不空等采样间隔).
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -76,6 +78,7 @@ def make_server(
     counters_start: int = 1_000_000,
     installer_factory=None,
     autostart_error: Optional[str] = None,
+    stop_event: Optional[threading.Event] = None,
 ):
     """完整控制面装配 (锁已持有; 返回 (server, storage, sampler, holder, token)).
 
@@ -83,6 +86,8 @@ def make_server(
     用例 hermetic, 不碰真实网卡。installer_factory 注入自启后端替身 (S6 /autostart);
     S12 起 start() 写发现指针会探测 autostart_registered, 默认也走替身 (不跑真 schtasks)。
     锁路径与发现指针均注入 tmp_path (S12/D8): 不碰真实用户级指针目录。
+    stop_event (26-10-17-1737 S3): 传入则绑给 ControlServer —— POST /shutdown 置位它
+    (优雅退出信号); 不传 = 未绑定形态 (/shutdown 仍回 200 但不置位, 只 WARNING)。
     """
     storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
     storage.acquire_lock()
@@ -99,6 +104,7 @@ def make_server(
         installer_factory=installer_factory or _no_autostart_factory,
         endpoint_file=str(tmp_path / "endpoint.json"),
         autostart_error=autostart_error,
+        stop_event=stop_event,
     )
     server.start()
     return server, storage, sampler, holder, token
@@ -181,6 +187,7 @@ def test_auth_required_on_all_write_endpoints(tmp_path) -> None:
     try:
         assert http(server, "PUT", "/config", body={}, token=None)[0] == 401
         assert http(server, "POST", "/subscribe", body={}, token=None)[0] == 401
+        assert http(server, "POST", "/shutdown", token=None)[0] == 401
     finally:
         server.stop()
 
@@ -791,5 +798,58 @@ def test_autostart_failure_leaves_config_untouched(tmp_path) -> None:
     try:
         assert http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())[0] == 500
         assert holder.current.autostart is True  # 未被改成 false
+    finally:
+        server.stop()
+
+
+# ---- POST /shutdown (26-10-17-1737 S3: 优雅退出信号) ----
+
+
+def test_shutdown_returns_200_then_sets_stop_event(tmp_path) -> None:
+    """POST /shutdown: 先回 200, 再置位 stop_event (退出走 cmd_run 既有 finally).
+
+    响应先上 wire 是契约: 客户端拿到 200 时事件可能已置位 —— 两者都断言, 且服务在
+    置位后仍可再服务一个请求 (收尾在调用方, 不在本端点)。
+    """
+    stop = threading.Event()
+    server, *_rest = make_server(tmp_path, stop_event=stop)
+    try:
+        assert not stop.is_set()
+        status, payload = http(server, "POST", "/shutdown", token=server.token_manager.token())
+        assert status == 200 and payload["ok"] is True
+        assert stop.is_set()
+        # 置位不自杀: 控制面仍能响应 (真正的退出由 cmd_run 的 finally 收尾)
+        assert http(server, "GET", "/status", token=server.token_manager.token())[0] == 200
+    finally:
+        server.stop()
+
+
+def test_shutdown_without_stop_event_still_200(tmp_path) -> None:
+    """未绑定 stop_event (非 run 装配): /shutdown 仍回 200, 不置位不抛 (只 WARNING)."""
+    server, *_rest = make_server(tmp_path)
+    try:
+        status, payload = http(server, "POST", "/shutdown", token=server.token_manager.token())
+        assert status == 200 and payload["ok"] is True
+    finally:
+        server.stop()
+
+
+def test_shutdown_wakes_run_loop(tmp_path) -> None:
+    """端到端(进程内): stop_event 置位 -> _run_loop 的 stop_event.wait 即时醒, 不空等采样间隔."""
+    stop = threading.Event()
+    server, storage, sampler, holder, token = make_server(tmp_path, stop_event=stop)
+    try:
+        done = threading.Event()
+
+        def loop():
+            _run_loop(storage, sampler, holder, stop, None)  # 无 notifier: 只验停止响应
+            done.set()
+
+        t = threading.Thread(target=loop, daemon=True)
+        t.start()
+        time.sleep(0.2)  # 让循环跑起来 (采样间隔 5s, 未停止时会睡满)
+        assert not done.is_set()
+        http(server, "POST", "/shutdown", token=token.token())
+        assert done.wait(2.0), "stop_event 置位后 _run_loop 未在 2s 内退出 (停止信号没生效?)"
     finally:
         server.stop()

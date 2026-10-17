@@ -5,7 +5,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_validate_absent_section_ok: 整段缺省(None)合法 -> 走默认值(provider=traffic_monitor)
-- test_validate_unknown_key_rejected: 顶层未知键被拒, 已知键集合与 schema 单点一致(黄金法则 4)
+- test_validate_unknown_key_rejected: 顶层未知键被拒, 已知键集合与 schema 单点一致(黄金法则 4; 含 S1 总开关 enabled)
 - test_validate_provider_enum: provider 非枚举值被拒; 缺省/留空 = traffic_monitor 合法(只要有 dat_path)
 - test_validate_default_provider_requires_dat_path: provider=traffic_monitor 时 dat_path 缺失/空/非串 -> 拒绝
 - test_validate_tool_branch_structure: global_traffic_monitor 子块未知键/非串路径被拒; provider=global 时无需 dat_path
@@ -56,8 +56,9 @@ def test_validate_absent_section_ok():
 def test_validate_unknown_key_rejected():
     errs = _errors({"provider": "traffic_monitor", "traffic_monitor": {"dat_path": "/x.dat"}, "bogus": "1"})
     assert any("未知键" in e and "bogus" in e for e in errs), errs
-    # 已知键集合与 schema 单点一致(顶层 3 键 + TM 1 键 + 工具 3 键)
-    assert KNOWN_TRAFFIC_SOURCE_KEYS == {"provider", "traffic_monitor", "global_traffic_monitor"}
+    # 已知键集合与 schema 单点一致(顶层 4 键 + TM 1 键 + 工具 3 键)
+    # 顶层 4 键含 26-10-17-0339 S1 的 enabled 总开关(停取数/停订阅/停拉起)
+    assert KNOWN_TRAFFIC_SOURCE_KEYS == {"enabled", "provider", "traffic_monitor", "global_traffic_monitor"}
     assert KNOWN_TRAFFIC_SOURCE_TM_KEYS == {"dat_path"}
     assert KNOWN_TRAFFIC_SOURCE_TOOL_KEYS == {"tool_dir", "tool_exe", "notify_cooldown_s"}
 

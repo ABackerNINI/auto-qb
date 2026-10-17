@@ -43,9 +43,9 @@ KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "ded
 # qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06; flush_interval 为 v3 新键, 计划 26-10-04-1957 §06.1)
 KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "flush_interval", "raw_window", "rollup_window"}
 
-# traffic_source(全局流量来源, 计划 26-10-17-0339 S15): 一键切换取数数据源;
-# provider 决定生效来源(两来源参数可并存, 但只有 provider 指向的那个参与取数, D1 严格互斥)
-KNOWN_TRAFFIC_SOURCE_KEYS = {"provider", "traffic_monitor", "global_traffic_monitor"}
+# traffic_source(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled 总开关):
+# 一键切换取数数据源; provider 决定生效来源(两来源参数可并存, 但只有 provider 指向的那个参与取数, D1 严格互斥)
+KNOWN_TRAFFIC_SOURCE_KEYS = {"enabled", "provider", "traffic_monitor", "global_traffic_monitor"}
 #: traffic_source.traffic_monitor(Traffic Monitor dat 来源)
 KNOWN_TRAFFIC_SOURCE_TM_KEYS = {"dat_path"}
 #: traffic_source.global_traffic_monitor(整机流量监视器 gtm 来源)
@@ -659,6 +659,10 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
         return
     where = "config.traffic_source"
     _check_unknown_keys(spec, KNOWN_TRAFFIC_SOURCE_KEYS, where, errors)
+    # enabled 总开关(26-10-17-1737 S1/D1): bool, 缺省 true。关闭的连带停摆(曲线/expr/工具
+    # 订阅)由运行期闸门承载, 这里只管形状 —— 不因 enabled=false 免检其余键(关来源也要能改配置)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
     # provider 缺省/留空 = traffic_monitor(与 loader 同口径)
     provider = str(spec.get("provider") or "traffic_monitor").strip()
     if provider not in ("traffic_monitor", "global_traffic_monitor"):
@@ -685,8 +689,12 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
             if "notify_cooldown_s" in tool:
                 # 0 = 不冷却(合法; 事件号去重仍在); 上限 24H: 过大等于永不刷新历史图
                 _try_time(tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, min_s=0, max_s=86400)
+    # enabled=false 时来源已整体停摆(26-10-17-1737 S1/D1): 免检 dat_path —— 关来源本就是
+    # "没配好数据源"时的出路; 若仍要求 dat_path, 用户无法从设置页把没配好的来源关掉
+    # (保存必败, 且 UI 里找不到能改的地方)。非法值不当成关闭(parse_bool 已在上面报错)。
+    source_off = str(spec.get("enabled") or "").strip().lower() == "false"
     # 按 provider 校验所需字段: traffic_monitor 来源必须有 dat_path
-    if provider == "traffic_monitor":
+    if provider == "traffic_monitor" and not source_off:
         dat = tm.get("dat_path") if isinstance(tm, dict) else None
         if not isinstance(dat, str) or not dat.strip():
             errors.append(f"{where}.traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径")

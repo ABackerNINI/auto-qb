@@ -240,11 +240,17 @@ class TrafficSourceAgent:
 
     # ---------------- 订阅线程侧 ----------------
 
-    def ensure_running(self, conf) -> Optional[ToolEndpoint]:
+    def ensure_running(self, conf, *, enabled: bool = True) -> Optional[ToolEndpoint]:
         """保障可达: 可达 -> 端点; 不可达 -> 按 D10/D14 拉起并返回 None(下轮再探)
 
         探活成功即返回(含「别的实例已拉起」—— D14: 不重复拉、不通信, 直接订阅)。
+
+        `enabled=False`(总开关关闭, S1/D1 26-10-17-1737): 直接返回 None —— 不探活不拉起。
+        默认 True 保旧调用方语义; 闸门语义是「只有显式 False 才停」, 与 paths.source_enabled
+        恒等判据同族(`is not False`)。
         """
+        if enabled is not True:
+            return None
         now = self._clock()
         ep = probe(PROBE_TIMEOUT_S)
         if ep is not None:

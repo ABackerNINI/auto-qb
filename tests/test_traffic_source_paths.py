@@ -13,6 +13,9 @@
 - test_dat_path_provider_is_exclusive: 两来源参数并存时只认 provider 选中那个(D1 严格互斥)
 - test_dat_path_tolerates_missing_section: 段缺失(桩配置) -> ""(不抛)
 - test_unavailable_reason_branches: 文案按 provider 分支, 与取数分支同源
+- test_source_enabled_identity_judgment: 总开关恒等判据 is not False(桩属性不当成关闭; 计划 26-10-17-1737 S1)
+- test_dat_path_source_off_returns_empty: enabled=false -> ""(关源停取数, 优先于 provider 分支)
+- test_unavailable_reason_source_off: 关源文案含「已关闭」且优先于 provider 分支(verdict-scope-parity)
 """
 import json
 import os
@@ -103,3 +106,40 @@ def test_unavailable_reason_branches():
     assert "全局流量监视器" in reason and "指针" in reason
     # 工具来源的文案不许再提 data_dir(该键已删, 提到就会把人指到不存在的配置项)
     assert "data_dir" not in reason
+
+
+def test_source_enabled_identity_judgment():
+    """总开关恒等判据(S1/D1, 26-10-17-1737): 只有显式 False 算关闭
+
+    桩配置(MagicMock 属性)不得触发关闭 —— 同族问题见 pitfalls/testing/hot-reload-mock-sections。
+    """
+    assert paths.source_enabled(_cfg(TrafficSourceConfig())) is True  # 缺省 True
+    assert paths.source_enabled(_cfg(TrafficSourceConfig(enabled=True))) is True
+    assert paths.source_enabled(_cfg(TrafficSourceConfig(enabled=False))) is False
+    # 段缺失 / 属性是 Mock(非 False): 按未关闭处理, 不抛
+    assert paths.source_enabled(SimpleNamespace()) is True
+    from unittest import mock
+
+    assert paths.source_enabled(_cfg(mock.MagicMock())) is True
+
+
+def test_dat_path_source_off_returns_empty(tmp_path, monkeypatch):
+    """enabled=false -> 取数单点返回空(关源停取数); 判定优先于 provider 分支"""
+    # 工具指针就绪也不例外: 关源时工具在不在跑都不读它的数据
+    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/opt/gtm/data"))
+    off_tool = TrafficSourceConfig(enabled=False, provider="global_traffic_monitor")
+    assert paths.dat_path(_cfg(off_tool)) == ""
+    off_tm = TrafficSourceConfig(enabled=False, provider="traffic_monitor")
+    off_tm.traffic_monitor.dat_path = "/tm/history_traffic.dat"
+    assert paths.dat_path(_cfg(off_tm)) == ""
+
+
+def test_unavailable_reason_source_off(tmp_path, monkeypatch):
+    """关源文案: 含「已关闭」/指到总开关, 且优先于 provider 分支(与 dat_path 同源判定)"""
+    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/opt/gtm/data"))
+    off_tool = _cfg(TrafficSourceConfig(enabled=False, provider="global_traffic_monitor"))
+    reason = paths.unavailable_reason(off_tool)
+    assert "流量来源已关闭" in reason
+    assert "traffic_source.enabled=false" in reason
+    # 不许出现 provider 分支的文案(关源时工具指针在不在都不是原因)
+    assert "指针" not in reason

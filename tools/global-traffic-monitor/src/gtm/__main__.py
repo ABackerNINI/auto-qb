@@ -172,6 +172,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         # 26-10-17-1455: 只有「未注册」没有原因, 用户无从排障)。
         autostart_error = _maybe_register_autostart(data_dir, config)
     sampler = Sampler(adapter_filter=_build_adapter_filter(config))
+    # 优雅退出信号 (26-10-17-1737 S3): 先于 ControlServer 构造 —— POST /shutdown 置位它,
+    # 主循环的 stop_event.wait 即时醒; 退出仍走下方既有 finally (最终落盘 + 释放锁 +
+    # 停控制面 + 删指针), 不新造收尾路径。
+    stop_event = threading.Event()
     server = ControlServer(
         storage,
         sampler,
@@ -180,6 +184,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         host=config.http_host,
         port=config.http_port,
         autostart_error=autostart_error,
+        stop_event=stop_event,
     )
     try:
         server.start()  # fail-fast: 控制面端口占用即报错 (计划 §03 S3)
@@ -187,7 +192,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"global-traffic-monitor: 控制面启动失败 (端口 {config.http_port} 被占用?): {e}", file=sys.stderr)
         storage.release_lock()
         return 1
-    stop_event = threading.Event()
     notifier = Notifier(storage, holder)
     try:
         for w in storage.recover(sampler):

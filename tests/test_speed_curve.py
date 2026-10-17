@@ -32,6 +32,8 @@
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
 - test_speed_curve_no_config_noop: 未配置曲线(conf None) -> handler 直接返回
 - test_speed_curve_enabled_false_short_circuits: enabled=False -> 任务仍注册但短路, 不读 dat 不写 qB, 发布 disabled
+- test_speed_curve_source_off_publishes_off: 数据来源总开关关(S1/D1) -> off 快照(优先于 disabled),
+  不读 dat 不写 qB; 开回来自动恢复
 - test_speed_curve_dat_all_bad_lines_noop: dat 有文件但全坏行 -> 本轮不动
 - test_speed_curve_dat_bad_lines_still_applies: dat 部分坏行 -> 跳过坏行仍写 qB
 - test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
@@ -887,6 +889,30 @@ def test_speed_curve_enabled_false_short_circuits(tmp_path):
     assert client.transfer.limits["upload_limit"] == 999 * 1024
     assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
     assert mgr.web.traffic_view["state"] == "disabled"  # Web 端据此渲染为未启用
+
+
+def test_speed_curve_source_off_publishes_off(tmp_path):
+    """数据来源总开关关(S1/D1, 26-10-17-1737): 曲线功能仍启用但停取数 -> off 快照
+
+    判定优先于 disabled: 曲线段本身 enabled=true, 停的是 traffic_source.enabled ——
+    快照 state=off(前端灰显"来源已关闭"), 不读 dat 不写 qB 不记 state。
+    """
+    today = date.today()
+    gslc = _gslc(_write_dat(tmp_path, [(today, 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    mgr.config.traffic_source.enabled = False  # 数据可用, 证明短路先于读数据
+    client.transfer.limits["upload_limit"] = 888 * 1024  # 偶数非目标值: 若未短路将被改写
+
+    assert _run_curve(mgr) is True
+    assert client.transfer.calls == []  # 不动 qB 限速
+    assert client.transfer.limits["upload_limit"] == 888 * 1024
+    assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
+    assert mgr.web.traffic_view["state"] == "off"  # Web 端据此渲染"来源已关闭"
+    # 开回来自动恢复: 下一轮正常读数写限速(无需重配曲线)
+    mgr.config.traffic_source.enabled = True
+    assert _run_curve(mgr) is True
+    assert client.transfer.calls == [("set_upload_limit", 5120 * 1024)]
+    assert mgr.web.traffic_view["state"] == "ok"
 
 
 def test_speed_curve_dat_all_bad_lines_noop(tmp_path):

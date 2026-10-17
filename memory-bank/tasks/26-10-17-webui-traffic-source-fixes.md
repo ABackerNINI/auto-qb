@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-17
 **Updated:** 2026-10-17
-**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。
+**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）本轮已实施完成并通过全域回归；S4–S8 待续。
 **Topics:** webui-traffic-source-fixes
 
 ## 原始请求
@@ -49,9 +49,9 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | `traffic_source.enabled` 字段契约 | Open |
-| S2 | 取数闸门 + `off` 快照态 + expr 文案 | Open |
-| S3 | 工具侧 `POST /shutdown` + auto-qb 代理 | Open |
+| S1 | `traffic_source.enabled` 字段契约 | Done |
+| S2 | 取数闸门 + `off` 快照态 + expr 文案 | Done |
+| S3 | 工具侧 `POST /shutdown` + auto-qb 代理 | Done |
 | S4 | 「关闭工具」按钮 + 确认框 + 依赖元数据 | Open |
 | S5 | 去黑框 | Open |
 | S6 | 设置页四修 | Open |
@@ -65,3 +65,17 @@
 grilling 六轮收敛（用户逐条订正，含两次纠正字段落点），落盘 Phase 1 修复计划；据此在 0339 计划就地记 R3 变更行（D1 修订 + §05 盘上格式改复合串）；立本档（命中阈值 4：已产出计划文档）。本轮仅产出文档、未改代码。
 
 - 2026-10-17 17:42 grilling 六轮收敛并落盘 Phase 1 修复计划；新增顶层 traffic_source.enabled 总开关(修订 0339-D1)；0339 记 R3
+
+### R1 · S1 实施完成 (2026-10-17)
+
+顶层 `traffic_source.enabled` 总开关四层契约(models/schema/validation/loaders)贯通；**恒等判据** `is not False`——只有显式 false 算关闭，MagicMock 属性不触发(pitfalls `hot-reload-mock-sections` 同族，全程规避未踩到)；键面守阵 loader 探针 + 基线重生成(v5 168→169 键) + `keys.md` 回写(总开关行 + dat_path 行补「来源启用时」限定)。计划未明说的**两处必需放宽**：①关源免检 `traffic_monitor.dat_path` 必填——关来源本就是「没配好数据源」时的出路，否则保存必败且 UI 里找不到能改的地方；②`_expr_gate` 不因关源禁用流量名字——同理否则保存必败。专用守阵 `test_validate_traffic_source_enabled_key`(缺省/false/true/非法/免检/非 false 不当成关闭/流量规则不被门控禁 + 对照组)。
+
+### R2 · S2 实施完成 (2026-10-17)
+
+取数闸门落在唯一入口 `paths.dat_path`(关源返回 `""`)，`unavailable_reason` 与 dat_path 同源分支(verdict-scope-parity，关源文案优先于 provider 分支)；`tool_client._desired()` 首行闸(停订阅) + `_pass` 传 enabled 到 `agent.ensure_running` 作纵深防御(拉起闸，`status()` 不设闸——停的瞬间 UI 仍要能看到状态)；曲线模块**运行期闸门**：handle 与 refresh 双路发 `off` 快照(判定优先于 `disabled`，**不写盘**改 `global_speed_limit_curve.enabled`)；expr `_traffic` 关源明确报错(不静默当 0)；notify 端点 disabled 条件扩到来源关闭；前端总开关 hub-field 行 + D14 灰显(`.hb-grey` opacity，不隐藏) + `trafficOn()` 排除 off + 历史弹层 off 态专属文案。settings.html 因新增内容触 400 行单分片上限，注释块 6→3 行 + 提示 span 并入按钮行压回(`test_frontend_template_split_wiring` 复跑通过)。
+
+### R3 · S3 实施完成 (2026-10-17)
+
+gtm 控制面 `ControlServer.__init__` 收 `stop_event`；新增 token 保护 `POST /shutdown`——**先回 200 再置位**(wfile 直写 socket 无缓冲，响应先上 wire)，未绑定 stop_event 时回 200 + WARNING(不炸旧构造)；`cmd_run` 把 `stop_event` 交给 ControlServer(原 L190 迟定义上移)，退出仍走既有 finally(最终落盘/释放锁/停控制面/删指针)，`_run_loop` 即时醒保证「有限时间内优雅退出」；auto-qb `routes/traffic_monitor.py` 增 `POST /api/traffic/monitor/shutdown` 代理(200 透传 / 不可达或非 200 → 502 附 state)，路由金清单同步补条目。验收对照：401 守阵(工具侧 `test_auth_required_on_all_write_endpoints` 含 /shutdown + auto-qb `test_shutdown_requires_auth`) ✓；带 token 200 + 置位 + 即时醒(`test_shutdown_returns_200_then_sets_stop_event` / `test_shutdown_wakes_run_loop`) ✓；代理码透传(`test_shutdown_forward_and_return` / `test_shutdown_unreachable_502`) ✓。**范围边界**：S3 仅后端——「关闭工具」按钮 + 确认框 + affects 元数据属 S4，本轮按用户指令不做。
+
+- 2026-10-17 21:17 S1-S3 实施完成: traffic_source.enabled 总开关四层契约 + 取数闸门/off 快照/expr 文案/前端灰显 + gtm POST /shutdown 与 auto-qb 代理; 全域回归全绿(数字见基线切片 26-10-17-2114); S4-S8 按用户指令不在本轮范围

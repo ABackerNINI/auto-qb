@@ -310,22 +310,23 @@
 
               <!-- 限速: 阶梯图 + 档位(每一档是「流量低于 X → 限速 Y」一个整体) -->
 
-              <!-- 全局流量来源(计划 26-10-17-0339 S17/D15): 一张卡合并「来源单选 + 工具状态」。provider 二选一,
-                   选中面展开(TM 仅 dat_path; 工具面 tool_dir/tool_exe/data_dir/notify_cooldown_s); 底部状态区五态(§05)
-                   + 立即拉起/重试 + 自启开关(读指针 autostart_registered, 拨动走 POST /autostart); 找不到工具给文件
-                   选择器; 工具参数(高级)经控制面读写。行为层见 config_hub.js 的 tm*。本分支在 v-if 链内, 后接
-                   settings-detail.html 的 speed/keys/通用分支。 -->
+              <!-- 全局流量来源(计划 26-10-17-0339 S17/D15; 26-10-17-1737 S1 总开关): 一张卡合并「总开关
+                   + 来源单选 + 工具状态」。enabled 关 = 停一切取数; 关源时来源单选与子参数区按 D14 灰显不隐藏
+                   (后端允许关源后仍改配置); 底部状态区五态 + 拉起/重试 + 自启; 工具参数(高级)经控制面读写。 -->
               <template v-else-if="hub.view === 'traffic_source'">
                 <div class="hb-blk hb-cut">
                   <div class="hb-blk-hd"><span class="bh-t">数据来源</span><span class="bh-n">二选一, 只有选中的来源参与取数</span></div>
-                  <div class="hb-row">
+                  <hub-field v-for="row in tmEnabledItems()" :key="hubKey(row.path)" :item="row"></hub-field>
+                  <div class="hb-row" :class="{ 'hb-grey': tmSourceOff() }">
                     <div class="hb-lb">来源</div>
                     <div class="hb-ct">
-                      <button class="hb-btn sm" :class="tmProvider() === 'traffic_monitor' ? 'primary' : 'ghost'" @click="tmSetProvider('traffic_monitor')">Traffic Monitor 文件</button>
-                      <button class="hb-btn sm" :class="tmProvider() === 'global_traffic_monitor' ? 'primary' : 'ghost'" @click="tmSetProvider('global_traffic_monitor')">整机流量监视器(工具)</button>
+                      <button class="hb-btn sm" :class="tmProvider() === 'traffic_monitor' ? 'primary' : 'ghost'" :disabled="tmSourceOff()" @click="tmSetProvider('traffic_monitor')">Traffic Monitor 文件</button>
+                      <button class="hb-btn sm" :class="tmProvider() === 'global_traffic_monitor' ? 'primary' : 'ghost'" :disabled="tmSourceOff()" @click="tmSetProvider('global_traffic_monitor')">整机流量监视器(工具)</button><span v-if="tmSourceOff()" class="bh-n">来源已关闭: 已停止一切取数 —— 打开上方「启用」即恢复</span>
                     </div>
                   </div>
-                  <hub-field v-for="row in tmProviderItems(tmProvider())" :key="hubKey(row.path)" :item="row"></hub-field>
+                  <div :class="{ 'hb-grey': tmSourceOff() }">
+                    <hub-field v-for="row in tmProviderItems(tmProvider())" :key="hubKey(row.path)" :item="row"></hub-field>
+                  </div>
                 </div>
                 <div class="hb-blk hb-cut">
                   <div class="hb-blk-hd">

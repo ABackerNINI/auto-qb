@@ -181,6 +181,11 @@ class SpeedCurveModule(BaseModule):
 
     def handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
+        # 数据来源总开关(S1/D1, 26-10-17-1737): 判定优先于 disabled —— 关源时曲线功能本身
+        # 可能仍启用, 但取数已停; 快照发 off(前端灰显"来源已关闭"), 不读数据不动 qB
+        if not traffic_paths.source_enabled(self._ctx.config):
+            self._publish_traffic("off")
+            return REQUEUE
         conf = self._ctx.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
             self._publish_traffic("disabled")
@@ -299,7 +304,14 @@ class SpeedCurveModule(BaseModule):
         - 段缺失 / enabled=false —— 保守默认: `disabled` 快照的语义是「不渲染流量/限速 pill」,
           不得被通知面绕过(曲线关了就不该因为监视器通知而冒出一个今日流量 pill);
         - 数据源不可用(缺文件 / 无有效行) —— 没有新数据可发。
+
+        数据来源总开关关闭(S1/D1): 不跳过而是**发布 off 快照** —— 通知到达时来源已关,
+        上一份快照可能还是 ok(旧数据), 必须显式翻成 off(前端据此灰显), 与曲线任务口径一致。
         """
+        if not traffic_paths.source_enabled(self._ctx.config):
+            logger.info("限速曲线 | 监视器通知刷新: 流量来源已关闭(traffic_source.enabled=false), 发布 off 快照")
+            self._publish_traffic("off")
+            return False
         conf = self._ctx.config.global_speed_limit_curve
         if conf is None or not conf.enabled:
             logger.info("限速曲线 | 监视器通知刷新跳过: 限速曲线未启用(快照保持 disabled)")
@@ -377,6 +389,8 @@ class SpeedCurveModule(BaseModule):
 
         经 ctx.web.set_traffic_view 服务方法**整体替换**(plan P3; Web 线程只读该引用,
         不原地修改) —— 无锁即可保证 Web 侧读到自洽的一份数据。state 语义(前端的渲染分支依据):
+        - off:      数据来源总开关关闭(traffic_source.enabled=false, S1/D1) -> 不取数,
+          前端灰显"来源已关闭"(判定优先于 disabled: 曲线功能可能仍启用, 停的是来源)
         - disabled: 未启用限速曲线 -> 不渲染流量/限速 pill
         - ok:       本轮正常读取并(必要时)写入限速, actual 为回读值
         - dry_run:  试运行: 只有目标限速, actual 为 None(不读不写 qB)

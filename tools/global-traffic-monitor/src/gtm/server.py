@@ -14,6 +14,10 @@ stdlib ThreadingHTTPServer, 强制绑定 127.0.0.1 (端口默认 0 = 内核分�
                      auto-qb 设置页开关; 在工具进程内跑 installer, sys.executable
                      = 装了 gtm 的 venv python, 即自启项要指向的解释器; 成功回写工具
                      config autostart —— 自启意图的唯一裁决权, S14/D13)
+  POST /shutdown    请求优雅退出 (26-10-17-1737 S3: 供 auto-qb 设置页「停止工具」代理):
+                     **先回 200 再触发停止** —— 响应已在路上, 退出走 cmd_run 的 finally
+                     (最终落盘 + 释放锁 + 停控制面 + 删发现指针), 对调用方表现为
+                     「200 之后连接自然断开」。未绑定 stop_event (非 run 装配) -> 200 + WARNING。
 
 租约: last_heartbeat + lease_ttl (默认 180s) 过期剔除 —— 懒剔除 (每个已鉴权
 请求入口先 prune; S4 notifier 迭代前同样先 prune), 无后台清扫线程: 请求驱动
@@ -140,6 +144,7 @@ class ControlServer:
         installer_factory: Optional[Callable[[str], Any]] = None,
         endpoint_file: Optional[str] = None,
         autostart_error: Optional[str] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> None:
         self.storage = storage
         self.sampler = sampler
@@ -155,6 +160,10 @@ class ControlServer:
         self._autostart_error = autostart_error
         # 发现指针路径 (S12/D6): 默认用户级目录; 单测注入 tmp 路径保持 hermetic
         self._endpoint_file = endpoint_file or endpoint_path()
+        # 优雅退出信号 (26-10-17-1737 S3): POST /shutdown 置位; 由 cmd_run 把主循环的
+        # stop_event 交进来 (退出仍走既有 finally: 最终落盘 + 释放锁 + 停控制面 + 删指针)。
+        # None = 非 run 装配(单测/复用场景), /shutdown 仍回 200 但不置位(只 WARNING)。
+        self._stop_event = stop_event
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -276,6 +285,8 @@ class ControlServer:
             return self._unsubscribe(handler)
         if handler.command == "POST" and path == "/autostart":
             return self._autostart(handler)
+        if handler.command == "POST" and path == "/shutdown":
+            return self._shutdown(handler)
         self._send(handler, 404, {"error": f"unknown endpoint: {handler.command} {path}"})
 
     def _prune_leases(self) -> tuple[str, ...]:
@@ -435,6 +446,22 @@ class ControlServer:
         self.config_holder.replace(new_config)
         logger.info("自启 %s: %s (config autostart=%s)", action, result.message, new_config.autostart)
         self._send(handler, 200, {"ok": True, "action": result.action, "message": result.message})
+
+    def _shutdown(self, handler: "_Handler") -> None:
+        """优雅退出 (26-10-17-1737 S3): 先回 200, 再置位 stop_event.
+
+        顺序是契约: 响应先上 wire (wfile 直写 socket, 无缓冲), 调用方 (auto-qb 代理端点)
+        拿到 200 时进程可能已在退出路上 —— 退出走 cmd_run 的既有 finally (最终落盘 +
+        释放单实例锁 + 停控制面 + 删发现指针), 与本端点无关, 这里只发信号。
+        请求体不读 (空 POST 即可); 鉴权闸在 handle() 前置, 无 token 到不了这里。
+        """
+        self._send(handler, 200, {"ok": True, "message": "正在停止 global-traffic-monitor"})
+        if self._stop_event is None:
+            # 非 run 装配 (单测/复用): 没有主循环可停 —— 不静默, 记一条便于排障
+            logger.warning("POST /shutdown: 未绑定 stop_event, 仅返回 200 未触发退出")
+            return
+        logger.info("收到停止请求 (POST /shutdown), 优雅退出")
+        self._stop_event.set()
 
     def _read_json(self, handler: "_Handler") -> tuple[Optional[Any], Optional[str]]:
         """读请求体并解析 JSON (上限 _MAX_BODY_BYTES; 坏 JSON -> (None, 错误))."""

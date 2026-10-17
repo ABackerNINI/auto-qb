@@ -6,6 +6,7 @@ global_traffic_monitor 来源面」, 设置页里合并进同一张「全局流�
   PUT  /api/traffic/monitor/config    工具 PUT /config 代理(全量覆盖 -> 前端「读后写」)
   POST /api/traffic/monitor/autostart 工具 POST /autostart 代理(幂等注册/卸载开机自启)
   POST /api/traffic/monitor/relaunch  「立即拉起/重试」: 促订阅线程立刻重跑一轮并忽略失败退避
+  POST /api/traffic/monitor/shutdown  停止工具: 代理工具 POST /shutdown(S3, 26-10-17-1737)
   POST /api/traffic/monitor/notify    **接收面**(S7): 工具推送的累计流量阈值事件
 
 auto-qb 与工具是两个进程、两个 venv: 本模块是唯一桥 —— 用 stdlib urllib 带 Bearer token
@@ -40,6 +41,7 @@ from fastapi import APIRouter, HTTPException
 
 # 工具控制面客户端单点(与订阅客户端 webui/tool_client.py 共用; 别名保持本模块既有名字,
 # 既有的路由守阵按 `tm_routes._call_tool` / `tm_routes.ToolUnreachable` 打桩)
+from ....core.traffic_source import paths as traffic_paths
 from ...tool_client import NOTIFY_PATH
 from ...tool_client import ToolUnreachable
 from ...tool_client import call_tool as _call_tool
@@ -264,6 +266,26 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=409, detail="当前来源不是工具或 WEB 未就绪, 无订阅线程可促拉起")
         return {"ok": True, "accepted": True}
 
+    @router.post("/api/traffic/monitor/shutdown")
+    def api_tm_shutdown():
+        """停止工具(写端点, S3 26-10-17-1737): 代理工具 `POST /shutdown`
+
+        工具侧收到后**先回 200 再触发自身停止**(gtm/server.py: 响应先写回, 退出走 cmd_run 的
+        finally —— 最终落盘 + 释放锁 + 停控制面 + 删发现指针)。200 原样透传(前端据此提示
+        「已通知停止」, 随后指针删除, 状态区自然翻成 not_running); 工具未就绪 -> 502;
+        其余非 200 -> 502(工具自己的 4xx/5xx 原样收口, 不猜)。
+        ⚠ 工具与 WebUI 必须同机(控制面是本机回环)。
+        """
+        manager.web.touch()
+        base_url, token = _ready_endpoint(manager)
+        try:
+            code, resp = _call_tool(base_url, "/shutdown", "POST", token, {})
+        except ToolUnreachable as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        if code == 200:
+            return resp
+        raise HTTPException(status_code=502, detail=f"工具返回 {code}: {_error_text(resp, code)}")
+
     @router.post(NOTIFY_PATH)
     def api_tm_notify(body: dict = None):
         """工具通知接收面(S7): 累计流量阈值事件 -> 主循环重读历史文件并重发流量快照
@@ -279,12 +301,21 @@ def build_router(ctx: WebContext) -> APIRouter:
         响应语义(全部 200, action 区分; 只事件体非法才 400):
         - `refresh_queued` 已投递刷新(工具侧记「推送成功」);
         - `skipped` + reason(duplicate / cooldown): 闸门拦下 —— 不是错误, 工具无需重试;
-        - `disabled`: 联动总开关关(保守默认, §07 黄金法则 2);
+        - `disabled`: 联动总开关关(保守默认, §07 黄金法则 2) —— 含来源总开关
+          `traffic_source.enabled=false`(S1/D1, 26-10-17-1737: 关源即停一切取数, 通知不触发刷新);
         - 400: 事件体非法(工具契约漂移必须响亮报错, 不静默按 0 记账)。
         """
         manager.web.touch()
         conf = _tm_conf(manager)
         event = _parse_notify_event(body)
+        # 来源总开关(S1/D1): 判定优先于 provider —— 关源时 provider 指向谁都不取数
+        if not traffic_paths.source_enabled(manager.config):
+            return {
+                "ok": True,
+                "action": "disabled",
+                "event_id": event["event_id"],
+                "reason": "traffic_source.enabled=false: 流量来源已关闭",
+            }
         if _provider(manager) != "global_traffic_monitor":
             return {
                 "ok": True,

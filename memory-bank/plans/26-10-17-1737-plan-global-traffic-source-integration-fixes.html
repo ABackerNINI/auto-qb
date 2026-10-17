@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration-fixes">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-17-1737">
-<meta name="doc-updated" content="26-10-17-1737">
+<meta name="doc-updated" content="26-10-17-2117">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>全局流量来源联动缺陷修复 (Phase 1)</h1>
 <p class="lede">逐条修掉「全局流量来源」联动上线后暴露的 9 个缺陷。设计主轴：把"数据来源"提成一个有<b>一等总开关</b>（<code>traffic_source.enabled</code>）的显式功能——关闭即停取数 / 停订阅 / 停自动拉起；并让设置页如实反映"来源 ↔ 工具 ↔ 限速曲线"的依赖关系。快照解耦与设置页合并卡属重构，另立 Phase 2。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-17-1737 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-17-2117 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话内 grilling（用户逐条订正：Q4 整块隐藏 / Q7a 删按钮 / Q9 统一 <code>30S</code>·<code>10MiB</code> 复合串 / <code>enabled</code> 提顶层 <code>traffic_source.enabled</code> / 关闭必提醒加确认框 …）；事实基线＝前序计划 <code>26-10-17-0339</code>（集成层 S15/D1）
 </div>
 
@@ -248,6 +248,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-17-1737</span> 初版：grilling 收敛出 9 项缺陷的修法与 15 条 D 级拍板（含顶层 <code>traffic_source.enabled</code> 总开关，修订 0339-D1）；明确 Phase 2（快照解耦 + 合并卡）另立。</li>
+  <li><span class="tag">R1 · 26-10-17-2117</span> Phase 1 S1-S3 实施完成——traffic_source.enabled 总开关四层契约(恒等判据 is not False + 关源免检 dat_path + expr 门控放行); 取数闸门(paths/tool_client/agent) + off 快照 + expr 文案 + notify disabled 扩展 + 前端 D14 灰显; gtm POST /shutdown(先回 200 再置位 stop_event) + auto-qb 代理端点。全域回归全绿(基线 26-10-17-2114)</li>
 </ul>
 
 </div>

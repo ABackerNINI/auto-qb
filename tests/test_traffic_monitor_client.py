@@ -3,6 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_desired_gates: 期望订阅态三道闸(来源 provider / WEBUI 未启用 / 访问密钥未就绪)
   —— 任一不满足即不订阅, 原因文案可读
+- test_desired_gates_source_off: 总开关闸(S1/D1, 26-10-17-1737): traffic_source.enabled=false
+  -> 不订阅(首行闸), _pass 不发任何控制面请求; 开回来自动恢复
 - test_endpoint_is_loopback_notify_path: 登记给工具的回调 endpoint = 本机回环 + 本实例端口 + 通知路径
 - test_register_stores_id_and_heartbeat_interval: 探活通过 -> 注册成功, 记住工具给的订阅 id 与心跳周期, 载荷带回调 endpoint 与回调凭证
 - test_registered_pass_only_heartbeats: 已注册且注册键未变 -> 只心跳, 不重复注册
@@ -17,6 +19,8 @@
 - test_thread_self_terminates_when_disabled: 来源中途切走 + sync -> 线程读到期望态为假, 注销后自行退出
 - test_refresh_traffic_view_republishes_readonly: 只读刷新: 历史行 + 各周期累计重算发布, state/limit 沿用, 不读不写 qB 限速
 - test_refresh_traffic_view_skips: 曲线未启用 / dat 缺失 / 无有效行 -> 不发布(返回 False), 快照保持原样
+- test_refresh_traffic_view_source_off_publishes_off: 来源总开关关(S1/D1) -> 通知刷新不跳过,
+  发布 off 快照(上一份可能是 ok 旧数据), 不读 dat 不碰 qB
 - test_refresh_traffic_command_drained: `refresh_traffic` 已进命令表且经主循环 drain 执行后快照刷新(回执 ok)
 - test_end_to_end_notify_then_state_shows_fresh_traffic: 端到端(进程内): 真端点 -> 命令队列 -> 真 handler -> 快照刷新 -> /api/state 与 /api/traffic/history 两取数位可见
 - test_mock_config_section_starts_no_thread: 桩配置(MagicMock 段)不得被当成「已联动」起订阅线程 —— 不等/恒等类型判据守阵
@@ -223,6 +227,21 @@ def test_desired_gates(sub_env):
     mgr.config.web.enabled = True
     setattr(mgr.web, _CRED_FIELD, "")
     assert sub._desired() == (False, "WEB 访问密钥未就绪")
+
+
+def test_desired_gates_source_off(sub_env):
+    """总开关闸(S1/D1, 26-10-17-1737): traffic_source.enabled=false -> 不订阅(首行闸)"""
+    mgr, sub, tool = sub_env
+    assert sub._desired() == (True, "")
+    mgr.config.traffic_source.enabled = False
+    want, why = sub._desired()
+    assert want is False and "enabled=false" in why
+    # _pass 走期望态为假分支: 不发任何控制面请求(不探活不注册), 返回 False(该收线)
+    assert sub._pass() is False
+    assert tool.paths() == []
+    # 开回来自动恢复(不重配别的)
+    mgr.config.traffic_source.enabled = True
+    assert sub._desired() == (True, "")
 
 
 def test_endpoint_is_loopback_notify_path(sub_env):
@@ -468,6 +487,20 @@ def test_refresh_traffic_view_skips(tmp_path, monkeypatch):
     mgr.config.traffic_source.traffic_monitor.dat_path = str(empty)
     assert mgr.host.get("speed_curve").refresh_traffic_view() is False
     assert mgr.web.traffic_view["history"] == []
+    assert qb_calls == []
+
+
+def test_refresh_traffic_view_source_off_publishes_off(tmp_path, monkeypatch):
+    """来源总开关关(S1/D1, 26-10-17-1737): 通知到达时来源已关 -> 发布 off 快照(不跳过)
+
+    上一份快照可能还是 ok(旧数据): 必须显式翻成 off, 与曲线任务口径一致; 返回 False
+    (没有新数据可发), 不碰 qB 限速。
+    """
+    mgr, _dat, qb_calls = _refresh_env(tmp_path, monkeypatch)
+    mgr.config.traffic_source.enabled = False
+    assert mgr.host.get("speed_curve").refresh_traffic_view() is False
+    assert mgr.web.traffic_view["state"] == "off"
+    assert mgr.web.traffic_view["history"] == []  # 不读 dat
     assert qb_calls == []
 
 

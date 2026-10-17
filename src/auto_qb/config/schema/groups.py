@@ -466,6 +466,17 @@ GROUPS: Tuple[Group, ...] = (
                 "(两个来源的参数可以并存, 但只有 provider 指向的那个参与取数)",
                 fields=(
                     Field(
+                        "enabled",
+                        "启用",
+                        "bool",
+                        default=True,
+                        help="数据来源总开关(计划 26-10-17-1737 S1): 关闭 = 停止一切取数 —— "
+                        "限速曲线与 expr 流量条件暂停取数(曲线不动 qB、流量条件显式报错), "
+                        "工具订阅与自动拉起也停止; 已写入的配置原样保留, 开回来自动恢复, "
+                        "不需要重配曲线",
+                        affects=("global_speed_limit_curve", "rules", "history_chart"),
+                    ),
+                    Field(
                         "provider",
                         "来源",
                         "enum",

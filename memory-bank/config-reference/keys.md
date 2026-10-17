@@ -101,9 +101,10 @@ global_speed_limit_curve:
 
 ```yaml
 traffic_source:
+    enabled: true                         # 总开关(缺省 true; false = 停一切取数, 见下)
     provider: traffic_monitor              # traffic_monitor(缺省) | global_traffic_monitor
     traffic_monitor:
-        dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填
+        dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填(来源启用时)
     global_traffic_monitor:
         tool_dir: ""                       # 工具安装目录(留空 = 仓库内 tools/global-traffic-monitor)
         tool_exe: ""                       # 显式可执行文件路径(非空且存在则优先于启动器; 编译版逃生门)
@@ -113,9 +114,10 @@ traffic_source:
 
 | 键 | 类型/默认 | 说明 |
 |----|-----------|------|
+| `enabled` | bool / `true` | 数据来源总开关(计划 26-10-17-1737 S1/D1): `false` = 停止一切取数 —— 停订阅/停自动拉起/`dat_path` 返回空, 快照转 `off` 态; **不写盘改别的功能配置**(不动 `global_speed_limit_curve.enabled`), 开回即自恢复; 关来源后 `traffic_monitor.dat_path` 的必填校验豁免(没配好数据源时的出路) |
 | `provider` | str / `traffic_monitor` | 取数来源: `traffic_monitor`(读 TrafficMonitor 的 history_traffic.dat) 或 `global_traffic_monitor`(读工具数据目录下的 history_traffic.dat); 留空/缺省 = `traffic_monitor` |
 | `traffic_monitor` | object | TrafficMonitor 来源子块; 仅一个键 `dat_path` |
-| `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 时必须非空(校验 fail-fast) |
+| `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 且来源启用时必须非空(校验 fail-fast; `enabled: false` 时豁免) |
 | `global_traffic_monitor` | object | 全局流量监视器(工具)来源子块 |
 | `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录; 留空 = 仓库内 `tools/global-traffic-monitor`(源码态默认), 目录里放平台启动器 `launch.cmd`/`launch.sh` |
 | `global_traffic_monitor.tool_exe` | str / `""` | 显式可执行文件路径; **非空且文件存在则优先于启动器**(显式覆盖 / 编译版逃生门), 找不到才回退启动器, 两者都没有 = 「未安装」 |

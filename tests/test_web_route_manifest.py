@@ -99,6 +99,7 @@ _GOLDEN_ROUTES = {
     ("PUT", "/api/traffic/monitor/config"),  # 同上: 工具 /config 代理(全量覆盖 -> 前端读后写)
     ("POST", "/api/traffic/monitor/autostart"),  # 同上: 工具 /autostart 代理(幂等注册/卸载自启)
     ("POST", "/api/traffic/monitor/relaunch"),  # S17: 「立即拉起/重试」促订阅线程重跑一轮(经 webui 模块 request_relaunch)
+    ("POST", "/api/traffic/monitor/shutdown"),  # 26-10-17-1737 S3: 停止工具(代理工具 POST /shutdown)
     ("POST", "/api/traffic/monitor/notify"),  # S7 接收面: 工具推送的累计流量阈值事件(鉴权同全局; 路径与 webui/tool_client.NOTIFY_PATH 同源)
 }
 
@@ -109,7 +110,8 @@ def test_web_route_manifest_frozen(web_env):
     (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76;
      2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理;
      2026-10-16-0541 S7: 增 1 条 /api/traffic/monitor/notify —— 工具通知接收面;
-     2026-10-17-0339 S17: 增 1 条 /api/traffic/monitor/relaunch —— 来源卡「立即拉起/重试」)
+     2026-10-17-0339 S17: 增 1 条 /api/traffic/monitor/relaunch —— 来源卡「立即拉起/重试」;
+     2026-10-17-1737 S3: 增 1 条 /api/traffic/monitor/shutdown —— 来源卡「停止工具」代理)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

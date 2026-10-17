@@ -14,6 +14,10 @@
 - `provider == "traffic_monitor"` -> `traffic_monitor.dat_path`(去空白; 纯配置事实)
 - `provider == "global_traffic_monitor"` -> 读发现指针 -> `<data_dir>/history_traffic.dat`
 
+总开关(计划 26-10-17-1737 S1/D1): `traffic_source.enabled=false` = 停一切取数 ——
+`dat_path` 返回空串, `unavailable_reason` 报「流量来源已关闭」(判定优先于 provider 分支:
+关源时工具指针在不在都不再取数, 文案指到总开关而不是数据源)。
+
 指针只读、**不探活**: 探活是 HTTP, 属于订阅线程的事; 取数路径解析发生在主循环的曲线轮与
 规则求值里, 那里只允许一次小文件读。工具优雅退出会删指针 -> 这里返回空串 -> 调用方按
 「数据源不可得」显式报错/落 stale; 工具崩溃留下的残留指针仍能读出路径, 恰好让图表停在上次
@@ -37,6 +41,16 @@ def _traffic_source(config) -> Optional[object]:
     return getattr(config, "traffic_source", None)
 
 
+def source_enabled(config) -> bool:
+    """数据来源总开关(计划 26-10-17-1737 S1/D1): 只有显式 false 算关闭
+
+    恒等判据 `is not False`: 桩配置(MagicMock 属性等)不触发关闭 —— 同族问题见
+    pitfalls hot-reload-mock-sections(属性值不能当成启用/关闭的事实)。
+    """
+    ts = _traffic_source(config)
+    return getattr(ts, "enabled", True) is not False
+
+
 def _provider(config) -> str:
     """当前生效来源; 段缺失/留空 -> traffic_monitor(与 loader/校验同口径)"""
     ts = _traffic_source(config)
@@ -55,7 +69,12 @@ def tool_dat_path() -> str:
 
 
 def dat_path(config) -> str:
-    """当前生效来源的 dat 文件路径(空 = 取不到; 调用方决定报错口径) —— 取数唯一入口"""
+    """当前生效来源的 dat 文件路径(空 = 取不到; 调用方决定报错口径) —— 取数唯一入口
+
+    总开关关闭(S1/D1)优先于 provider 分支: 关源即停取数, 指针在不在都不读。
+    """
+    if not source_enabled(config):
+        return ""
     if _provider(config) == "global_traffic_monitor":
         return tool_dat_path()
     ts = _traffic_source(config)
@@ -67,8 +86,12 @@ def unavailable_reason(config) -> str:
     """取不到路径时的人读原因(按 provider 分支) —— 让运行期报错直接指到该改哪里
 
     与 `dat_path` 同源判定: 文案里的分支必须和取数分支一致, 否则用户按文案改完还是不生效
-    (pitfalls/backend/verdict-scope-parity.md 的同族问题)。
+    (pitfalls/backend/verdict-scope-parity.md 的同族问题)。关源分支优先: 此时 provider 指向
+    谁都不取数, 文案必须指到总开关(S1/D1)。
     """
+    if not source_enabled(config):
+        return ("流量来源已关闭: config.traffic_source.enabled=false —— 曲线/规则表达式/工具订阅"
+                "已停止取数; 到设置页「全局流量来源」重新启用总开关即可恢复")
     if _provider(config) == "global_traffic_monitor":
         return (
             "数据源不可得: 全局流量监视器未在运行(发现指针 endpoint.json 缺失或未报出数据目录), "

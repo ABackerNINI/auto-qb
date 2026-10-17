@@ -275,6 +275,7 @@ window.AQB_STATE = {
       historyOpen: false,
       historyGran: "day",     // day | month | year
       historyData: [],
+      historyState: "disabled",  // 后端快照态(26-10-17-1737 S1): off = 来源总开关关闭(空态文案据此区分)
       historyLoading: false,
       historyError: "",
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)

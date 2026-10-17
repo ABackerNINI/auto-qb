@@ -424,15 +424,17 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
 
 
 def load_traffic_source_config(spec) -> TrafficSourceConfig:
-    """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15)
+    """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled)
 
     仅转换, 合法性由 validate_config._validate_traffic_source 保证。段缺省 = 全默认
     (provider="traffic_monitor", 两来源参数全空)。provider 缺省/留空 = traffic_monitor
     (与校验同口径)。两个子块的结构已在模型里给出默认工厂, 这里只覆盖显式键。
+    enabled 缺省 true(总开关); 关闭 = 停一切取数(停订阅/停自动拉起), 运行期闸门判 False 生效。
     """
     d = TrafficSourceConfig()
     if not isinstance(spec, dict):
         return d
+    enabled = _get(spec, "enabled", d.enabled, parse_bool)
     tm_spec = spec.get("traffic_monitor")
     tm_d = TrafficMonitorSourceConfig()
     traffic_monitor = TrafficMonitorSourceConfig(
@@ -454,6 +456,7 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     # provider 缺省/留空 = traffic_monitor(与校验同口径; 去空白后再兜底)
     provider = str(spec.get("provider") or "").strip() or d.provider
     return TrafficSourceConfig(
+        enabled=enabled,
         provider=provider,
         traffic_monitor=traffic_monitor,
         global_traffic_monitor=global_traffic_monitor,

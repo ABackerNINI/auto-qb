@@ -180,8 +180,14 @@ def _traffic(period: str, index: int):
     时读配置的 dat_path, provider=global_traffic_monitor 时读工具的发现指针 —— 后者是运行期事实,
     配置面没有这个键); provider=traffic_monitor 时行为与改动前逐字等价。
     读文件是 I/O -> 标昂贵(按 ctx 缓存), 建议只在低频规则里用。
+
+    总开关(S1/D1, 26-10-17-1737): `traffic_source.enabled=false` 时**前置**显式报错(文案走
+    `unavailable_reason` 的关源分支, 含「已关闭」)—— 优先于曲线段启用判定: 来源停取数就是
+    流量变量不可用的直接原因, 报错要指到总开关而不是曲线功能。
     """
     def get(ctx):
+        if not traffic_paths.source_enabled(ctx.config):
+            raise ExprError(traffic_paths.unavailable_reason(ctx.config))
         conf = getattr(ctx.config, "global_speed_limit_curve", None)
         dat_path = traffic_paths.dat_path(ctx.config)
         if not getattr(conf, "enabled", True):

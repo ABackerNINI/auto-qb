@@ -357,8 +357,13 @@ class GlobalTrafficMonitorSourceConfig:
 
 @dataclass
 class TrafficSourceConfig:
-    """全局流量来源(顶层 traffic_source 段, 计划 26-10-17-0339 S15/D1)
+    """全局流量来源(顶层 traffic_source 段, 计划 26-10-17-0339 S15/D1; 26-10-17-1737 S1 总开关)
 
+    enabled: 数据来源功能总开关(D1 修订, 26-10-17-1737): True(缺省) = 现行行为;
+      False = 停取数 / 停订阅 / 停自动拉起(闸门单点: paths.dat_path / tool_client._desired /
+      agent.ensure_running), 曲线任务发 off 快照、expr 流量变量显式报错(不静默当 0)。
+      **不写盘改别的功能的配置**(不擅自动 global_speed_limit_curve.enabled, D5) ——
+      开回来自动恢复, 无需重配曲线。
     provider: 当前生效来源("traffic_monitor" 或 "global_traffic_monitor"); 两来源参数可并存,
       但只有 provider 指向的那一个参与取数(严格互斥, D1)。
     traffic_monitor / global_traffic_monitor: 两个来源的参数(互斥生效)。
@@ -368,6 +373,7 @@ class TrafficSourceConfig:
     —— 那是唯一入口; 本对象只承载「用户能配什么」。
     """
 
+    enabled: bool = True
     provider: str = "traffic_monitor"
     traffic_monitor: TrafficMonitorSourceConfig = field(default_factory=TrafficMonitorSourceConfig)
     global_traffic_monitor: GlobalTrafficMonitorSourceConfig = field(default_factory=GlobalTrafficMonitorSourceConfig)

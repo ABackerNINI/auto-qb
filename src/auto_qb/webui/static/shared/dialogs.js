@@ -605,6 +605,8 @@ window.AQB_DIALOGS = {
       try {
         const data = await this.api("/api/traffic/history");
         this.historyData = data.history || [];
+        // 26-10-17-1737 S1: 快照态随响应带回(off = 来源总开关关闭), 空态文案据此指到总开关
+        this.historyState = data.state || "disabled";
       } catch (e) {
         if (!e.auth) this.historyError = e.message || "加载失败";
       } finally {
@@ -694,14 +696,17 @@ window.AQB_DIALOGS = {
       return this.distSegments.reduce((n, s) => n + s.count, 0);
     },
     /* ---------------- 限速/流量快照(后端 SpeedCurveMixin 发布, 随 status 恒回传) ----------------
-     * state: disabled(未启用限速曲线) / ok / dry_run / stale(数据源不可用)
+     * state: disabled(未启用限速曲线) / off(数据来源总开关关闭, 26-10-17-1737 S1) /
+     *        ok / dry_run / stale(数据源不可用)
      * periods[].up|down 为**字节**; limit.target|actual 为 **KiB/s**(0 = 不限速, null = 该方向不管理)
      */
     traffic() {
       return this.status.traffic || { state: "disabled", periods: [], limit: {} };
     },
     trafficOn() {
-      return this.traffic.state !== "disabled";
+      // off 与 disabled 同罪: 都不渲染"今日流量" pill —— 但语义不同(off = 来源总开关关了,
+      // 曲线功能可能仍启用; 文案在历史弹层里按 state 区分, 见 popovers.html 的空态分支)
+      return this.traffic.state !== "disabled" && this.traffic.state !== "off";
     },
     todayTraffic() {
       return (this.traffic.periods || []).find((p) => p.period === "day") || null;

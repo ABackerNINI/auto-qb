@@ -95,6 +95,10 @@ class Field:
                  「使用默认值」, 照剥。剥离豁免的单点在 validation._strip_none(键集合按本声明派生,
                  tests/test_config_schema.py 守卫声明面与剥离行为一致)。bool 键不标(config 层
                  "false" 本就可与未配置区分), list 键不标(exclude_* 保持并集语义, 空 == 缺失)。
+    affects:     依赖元数据(D4/P3, 26-10-17-1737 S1): 关闭/改动本字段会连带停摆的**功能标识**
+                 元组(如 traffic_source.enabled -> ("global_speed_limit_curve", "rules",
+                 "history_chart"))。只作前端确认框「受影响功能」清单的数据源(与 disable 文案
+                 同源, 不各写一遍), **不承载正确性规则**; 留空 = 无连带功能。
     """
     key: str
     label: str
@@ -120,6 +124,7 @@ class Field:
     readonly: bool = False  # 程序托管字段: 见类 docstring —— 前端禁用渲染 + writer 写盘回退防线共用此标
     hidden: bool = False  # 暂不图形化: 见类 docstring —— 键仍在配置契约里, 只是不进设置页渲染
     tri_state: bool = False  # 三态键(站点级「覆盖为空」): 见类 docstring —— _strip_none 豁免按此标派生
+    affects: Tuple[str, ...] = ()  # 依赖元数据(关闭它会停摆哪些功能): 见类 docstring
 
 
 @dataclass(frozen=True)

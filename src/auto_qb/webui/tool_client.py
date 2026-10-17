@@ -39,6 +39,7 @@ import urllib.request
 from typing import Optional, Tuple
 
 from ..core.traffic_source import agent
+from ..core.traffic_source import paths as traffic_paths
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,8 @@ class TrafficMonitorSubscriber:
             # 设置页「立即拉起/重试」(S17): 清失败退避 -> 本轮 ensure_running 立刻重新拉起
             self._force_relaunch = False
             self._agent.request_relaunch()
-        endpoint = self._agent.ensure_running(self._conf())
+        # 总开关再判一次(S1/D1): _desired 已闸过, 这里纵深防御 —— 关源时不探活不拉起
+        endpoint = self._agent.ensure_running(self._conf(), enabled=traffic_paths.source_enabled(self._manager.config))
         if endpoint is None:
             # 工具未就绪(拉起中 / 退避中 / 未安装): 不发控制面请求, 也不逐轮 WARNING
             # —— 原因由 agent 侧节流说明(未就绪时短轮询探活, D14)
@@ -294,13 +296,19 @@ class TrafficMonitorSubscriber:
     def _desired(self) -> Tuple[bool, str]:
         """期望订阅态 -> (是否应订阅, 不订阅的原因文案; 用于日志与人读)
 
-        !provider 与 WEB 开关一律按「**不等/恒等**」判, 而非真值判: 真配置里 provider 就是 str
-        (已过 validate_config, 黄金法则 4); 而**桩配置**(mock.MagicMock / 替身段对象)的属性是
+        !provider / enabled / WEB 开关一律按「**不等/恒等**」判, 而非真值判: 真配置里 provider
+        就是 str(已过 validate_config, 黄金法则 4); 而**桩配置**(mock.MagicMock / 替身段对象)的属性是
         Mock —— 真值判会把桩段当成「已启用且要订阅」, 真起一条订阅线程持续到进程结束
         (2026-10-16 实测: 热重载守阵的 MagicMock 新配置漏出一条常驻订阅线程对着假 URL 空转;
         同族形态见 pitfalls/testing/hot-reload-mock-sections.md)。类型/字面判据把这条路堵死在
         开线程之前。
+
+        总开关闸门(S1/D1, 26-10-17-1737): `traffic_source.enabled=false` = 停订阅 —— 与取数
+        闸门同源(paths.source_enabled, 恒等判据 `is not False`: 桩属性不触发关闭)。期望态为假
+        走 `_pass` 的注销分支, 订阅线程收线。
         """
+        if not traffic_paths.source_enabled(self._manager.config):
+            return False, "流量来源已关闭(traffic_source.enabled=false): 已停止取数与订阅"
         provider = getattr(self._manager.config.traffic_source, "provider", None)
         if provider != "global_traffic_monitor":
             return False, "当前流量来源不是全局流量监视器(traffic_source.provider != global_traffic_monitor)"

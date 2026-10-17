@@ -933,6 +933,54 @@ def test_validate_gslc_enabled_key():
         assert "config.global_speed_limit_curve.enabled" in err, err
 
 
+def test_validate_traffic_source_enabled_key():
+    """traffic_source.enabled 总开关(计划 26-10-17-1737 S1/D1): 缺省 True / false 关闭 /
+    非布尔报错; false 时免检 dat_path(关来源是"没配好数据源"时的出路)且流量规则名字不被门控禁掉"""
+    base = ("config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n")
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.traffic_source.enabled is True  # 缺省 True = 现行行为
+
+        cfg = load_config(_write_raw(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: false")))
+        assert cfg.traffic_source.enabled is False
+
+        cfg = load_config(_write_raw(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: true")))
+        assert cfg.traffic_source.enabled is True
+
+        err = _load_errors(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: not-bool"))
+        assert "config.traffic_source.enabled" in err, err
+
+        # enabled=false: 缺 dat_path 也零报错(provider 缺省 = traffic_monitor, 原本必填)
+        off_no_dat = "config:\n  traffic_source:\n    enabled: false\n"
+        assert _load_errors(td, off_no_dat) == "", _load_errors(td, off_no_dat)
+        # enabled 缺省/true: dat_path 仍必填(既有 fail-fast 行为不变)
+        on_no_dat = "config:\n  traffic_source:\n    traffic_monitor: {}\n"
+        assert "traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径" in _load_errors(td, on_no_dat)
+        # 非法 enabled 值不当成关闭: 仍走 dat_path 必填(parse_bool 报错另行记录)
+        bad_off = "config:\n  traffic_source:\n    enabled: not-bool\n"
+        err = _load_errors(td, bad_off)
+        assert "config.traffic_source.enabled" in err, err
+        assert "必须配置非空的 dat 文件路径" in err, err
+        # enabled=false: 流量规则里的 traffic.* 名字不被校验期门控禁掉(否则保存必败, 用户无法自救)
+        off_rules = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    enabled: false\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        err = _load_errors(td, off_rules)
+        assert err == "", err
+        # 对照: enabled 缺省 + 无 dat_path -> 门控照旧报"无数据源"
+        on_rules = off_rules.replace("    enabled: false\n", "")
+        assert "无数据源" in _load_errors(td, on_rules)
+
+
 def test_validate_empty_file():
     """空文件/非字典根节点 -> 明确报错"""
     with tempfile.TemporaryDirectory() as td:

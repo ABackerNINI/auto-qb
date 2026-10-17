@@ -10,6 +10,7 @@
 - test_notify_duplicate_event_skipped: 同一事件号重复投递 -> 第二次 skipped/duplicate, 不重复投递
 - test_notify_cooldown_window_then_release: 冷却窗口内新事件号也被拦(skipped/cooldown); 冷却归零后放行
 - test_notify_disabled_no_enqueue: 联动总开关关 -> action=disabled, 不投递命令(保守默认)
+- test_notify_disabled_when_source_off: 来源总开关关(S1/D1) -> action=disabled, 不投递命令
 - test_notify_gate_is_per_app_instance: 接收闸状态 per app 实例(同一 manager 再建 app 事件号归零)
 """
 import pytest
@@ -146,6 +147,18 @@ def test_notify_disabled_no_enqueue(tm_env):
     mgr.config.traffic_source.provider = "traffic_monitor"
     body = _post(client, mgr, EVENT).json()
     assert body["action"] == "disabled" and "provider != global_traffic_monitor" in body["reason"]
+    assert _drain_commands(mgr) == []
+
+
+def test_notify_disabled_when_source_off(tm_env):
+    """来源总开关关(S1/D1, 26-10-17-1737): action=disabled 且不投递命令(关源停一切取数)
+
+    判定优先于 provider: 关源时 provider 指向工具也不触发刷新。
+    """
+    mgr, client = tm_env
+    mgr.config.traffic_source.enabled = False
+    body = _post(client, mgr, EVENT).json()
+    assert body["action"] == "disabled" and "enabled=false" in body["reason"]
     assert _drain_commands(mgr) == []
 
 

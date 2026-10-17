@@ -312,7 +312,8 @@ _LOADER_PROBES = {
     "qb_traffic.flush_interval": ("150S", 150.0),
     "qb_traffic.raw_window": ("2H", 7200.0),
     "qb_traffic.rollup_window": ("8D", 691200.0),
-    # traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15)
+    # traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled 总开关)
+    "traffic_source.enabled": ("false", False),
     "traffic_source.provider": ("global_traffic_monitor", "global_traffic_monitor"),
     "traffic_source.traffic_monitor.dat_path": ("/probe/tm/history_traffic.dat", "/probe/tm/history_traffic.dat"),
     "traffic_source.global_traffic_monitor.tool_dir": ("/probe/gtm", "/probe/gtm"),

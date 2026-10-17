@@ -18,6 +18,8 @@
 - test_legacy_condition_equivalence: 旧 16 个条件逐条对拍等价表达式(同一 FakeTorrent 结果一致)
 - test_traffic_values: 全局流量值(需 traffic_source 数据源)取值正确
 - test_traffic_unconfigured: 未配置数据源 -> ExprError(绝不返回 0)
+- test_traffic_source_off_raises_closed_reason: 总开关关(S1/D1) -> ExprError 文案含「已关闭」
+  且优先于曲线段启用判定(不静默当 0)
 - test_config_gate_for_traffic_names: 用到无数据源名字 -> 配置期禁用(配了才放行)
 - test_more_getters_and_funcs: 取值器/函数表补遗(idle 正值/计数谓词/tracker.names/file_count/
   len/abs·round·min·max·days·hours/disk_total·disk_used/exists/同 ctx 二次取值命中缓存)
@@ -287,6 +289,24 @@ def test_traffic_unconfigured():
     for text in ("sys.upload_today", "sys.download_today", "sys.upload_month"):
         with pytest.raises(ExprError, match="数据源未配置"):
             _val(f"({text} > 1GiB)", ctx)
+
+
+def test_traffic_source_off_raises_closed_reason():
+    """来源总开关关(S1/D1, 26-10-17-1737): 流量变量显式报「已关闭」, 不静默当 0
+
+    文案优先于曲线段启用判定: 来源停取数就是流量变量不可用的直接原因。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _, ctx = _setup(td)
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[])
+        mgr.config.traffic_source.traffic_monitor.dat_path = os.path.join(td, "history_traffic.dat")
+        mgr.config.traffic_source.enabled = False  # 数据源配了但总开关关
+        with pytest.raises(ExprError, match="流量来源已关闭"):
+            _val("(sys.upload_today > 1GiB)", ctx)
+        # 曲线段也显式停用: 关源文案仍优先(指到总开关, 不是曲线功能)
+        mgr.config.global_speed_limit_curve.enabled = False
+        with pytest.raises(ExprError, match="流量来源已关闭"):
+            _val("(sys.upload_today > 1GiB)", ctx)
 
 
 def test_config_gate_for_traffic_names():

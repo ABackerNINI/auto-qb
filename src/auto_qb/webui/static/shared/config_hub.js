@@ -972,6 +972,19 @@ window.CONFIG_HUB = {
     tmSetProvider(v) {
       if (v) this.cfgSetPath(["config", "traffic_source", "provider"], v);
     },
+    /* 数据来源总开关(S1/D1, 计划 26-10-17-1737): 关 = 停一切取数(停订阅/停拉起), 曲线发 off
+     * 快照; 不写盘改别的功能配置, 开回即自恢复。UI 按 D14 **灰显不隐藏**(残留键可见可改)。 */
+    tmSourceOff() {
+      return this.cfgBool(["config", "traffic_source", "enabled"], true) === false;
+    },
+    /* 总开关行(供 <hub-field> 渲染): schema 里 traffic_source 对象的首个叶字段(路径指向段根本身) */
+    tmEnabledItems() {
+      const root = this.tmSourceRoot();
+      const f = root && (root.fields || []).find((x) => x.key === "enabled");
+      if (!f) return [];
+      const base = ["config", "traffic_source"];
+      return [{ type: "field", field: f, path: [...base, "enabled"], depth: 0, owner: base, inline: [] }];
+    },
     /* 选中来源的参数行(供 <hub-field> 渲染): 从 schema 取该来源子段的叶子字段, 路径指向 traffic_source.<来源> */
     tmSourceRoot() {
       const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "traffic_source");

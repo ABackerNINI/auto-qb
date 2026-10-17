@@ -14,6 +14,8 @@
 - test_ensure_running_launches_then_backs_off: 缺席触发一次拉起; 首次引导窗口 120s 内不重复拉;
   窗口耗尽记失败并固定 30s 退避; 退避耗尽再拉起改用常态窗口 10s
 - test_ensure_running_reports_not_installed: 解析不到目标 -> 不进拉起, 记「未安装」
+- test_ensure_running_source_off_does_not_probe_or_launch: 总开关关闭(S1/D1) ->
+  ensure_running(enabled=False) 不探活不拉起; status() 不设闸(设置页仍看工具状态)
 - test_status_reports_states: ready / not_running 两态与端点字段读数(launching / launch_failed /
   not_installed 由拉起用例覆盖)
 - test_launch_tool_builds_platform_command: 启动器 -> 平台命令(detached, 零参数); 可执行文件 ->
@@ -332,6 +334,28 @@ def test_ensure_running_reports_not_installed(tmp_path, monkeypatch):
     st = a.status(_conf(tool_dir=str(empty)))
     assert st["state"] == "not_installed"
     assert "未安装" in st["error"]
+
+
+def test_ensure_running_source_off_does_not_probe_or_launch(tmp_path, monkeypatch, probe_env):
+    """总开关关闭(S1/D1, 26-10-17-1737): ensure_running(enabled=False) 不探活不拉起
+
+    工具就绪(探活会成功)也不例外 —— 关源即停自动拉起。status() 不设闸: 设置页关来源后
+    仍要能看工具状态(探活是权威判据, 与订阅/取数闸门是两件事)。
+    """
+    calls, set_tool = probe_env
+    set_tool()  # 探活会成功(工具就绪)
+    launches = []
+    monkeypatch.setattr(agent, "launch_tool", lambda target: launches.append(target))
+
+    a = agent.TrafficSourceAgent()
+    assert a.ensure_running(_conf(), enabled=False) is None
+    assert calls == []  # 一次控制面调用都没发(不探活)
+    assert launches == []  # 也不拉起
+    # 默认实参保持旧语义: 不传 enabled = 照常探活
+    assert a.ensure_running(_conf()) is not None
+    assert calls  # 探活发生了
+    # status 不设闸: 关源后仍能读工具状态
+    assert a.status(_conf())["state"] == "ready"
 
 
 # ---------- 状态五态 ----------

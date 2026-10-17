@@ -89,10 +89,16 @@ def _expr_gate(data) -> _ExprGate:
     - global_traffic_monitor -> **恒 True**: dat 路径是工具运行期报出的事实(发现指针), 配置期
       无从得知; 这里判 False 会让所有用 traffic.* 的规则在启动校验期就报"名字不可用", 把
       "工具暂时没跑"误判成"配置写错了"。缺路径在运行期由 ExprError 显式报出(见 rules/expr/env.py)。
+
+    enabled=false 总开关(26-10-17-1737 S1/D1) -> **恒 True**: 关来源是合法的使用态, 若此时把
+    traffic.* 判成"未配数据源", 用户改不动规则(保存必败)也关不掉来源自救 —— 取数停摆由运行期
+    闸门承载, 校验期只判"名字存不存在"。
     """
     ts = data.get("traffic_source") if isinstance(data, dict) else None
     if not isinstance(ts, dict):
         return _ExprGate()
+    if str(ts.get("enabled") or "").strip().lower() == "false":
+        return _ExprGate(traffic_configured=True)
     provider = str(ts.get("provider") or "traffic_monitor").strip()
     if provider == "global_traffic_monitor":
         return _ExprGate(traffic_configured=True)

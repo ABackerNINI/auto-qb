@@ -561,6 +561,9 @@
 .hb-row.bare { grid-template-columns: minmax(0, 1fr) 24px; }
 /* 所属功能未启用(grey_if 不满足): 灰显但仍可编辑 */
 .hb-row.hb-inactive { opacity: .55; }
+/* 自定义行/区块的整体灰显(D14, 26-10-17-1737 S1: traffic_source.enabled=false 时来源单选与
+   子参数区灰显不隐藏 —— 后端允许关源后仍改配置; 与 .hb-inactive 同一透明度口径) */
+.hb-grey { opacity: .55; }
 /* 搜索跳转后的落点提示 */
 .hb-row.flash { animation: hb-flash 1.4s var(--ease); }
 @keyframes hb-flash { 0%, 100% { background: transparent; } 18% { background: var(--accent-soft); } }
