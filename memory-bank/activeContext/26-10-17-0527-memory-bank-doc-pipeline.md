@@ -1,7 +1,7 @@
 # activeContext · memory-bank-doc-pipeline(26-10-17-0527)
 
 > 摘要: memory-bank 文档统一模板 + 命令化创建/更新改造计划。用户目标有二:①统一风格 ②尽量减少 agent 修改步骤;首版设计缺②被用户纠正后按「一次逻辑动作 = 一条命令 + 一次填空,派生面零手写」重设计。产出计划 `memory-bank/plans/26-10-17-0527-plan-memory-bank-doc-pipeline.html`(doc-status Open):命令面 `kb.new` / `kb.status` / `kb.bump` / `kb.wrap`(脚本落 memory-bank skill scripts/,模板落 skill templates/,词表/时间/cap 全部 import 既有单点)+ SLOT 填空模板(一期 plan/task/slice 三族)+ 守卫只拦新增(冻结线豁免存量)+ 步数对照(新专题开工含立档 16→4、翻状态 4→1、收尾 6→1)。R1: D1–D6 已拍板锁定;§05 增剩余人工步骤量化与裁定(机械剩余恒 0 收录断言,边界裁定 A1–A7)。
-> 最后活动: 2026-10-17 07:53
+> 最后活动: 2026-10-17 09:03
 
 **用户诉求**: memory-bank 下各文档风格不一 → 要统一模板与统一的创建/更新方式;初步设想「命令+模板自动搭骨架,agent 仅填内容,留余地;状态/时间等自动填写;常用固定操作(如翻转文档状态)也写成命令」。grilling 两轮:第一轮 Q1–Q6 因询问工具展示不全改为文本列出;用户未逐项作答,给出方向性纠正——「设计目的一是统一风格,二是尽量减少 agent 的修改步骤,当前设计只着重第一点,重新设计」。
 
@@ -24,3 +24,7 @@
 **R3(2026-10-17 07:52)**: P1 骨架实施落地并验收全绿: 族登记表 `_common.FAMILIES`(三族单点, 词表/时间/命名全 import 既有单点, gen_tasks_index 本地 4 词表副本删除) · 三族模板(templates/plan.html·task.md·slice.md, SLOT 填空) · `kb.new` + `kb.wrap` 脚本经 add 协议落 .commands/kb(占位符解析实测通过) · `check_doc_templates.py` 守卫(冻结线 26-10-17-0736, 存量豁免)双处接线(kb.check + commit 门禁) · 守阵测试 7 条全绿(三突变红绿双验/冻结线精确到件/族登记与模板对账)。冒烟: 三族各真建一件(plan 10 处 SLOT 判红=守卫拦没填完, task 5 处 SLOT 判红, slice 零 SLOT 即过), 输出均含「机械 0」断言行; 冒烟落 /tmp 未提交已删。收口: test.full 全绿(数字只誊写进基线切片 `memory-bank/testing/baselines/26-10-17-0752-memory-bank-doc-pipeline-p1.md`, 裁定 A4); kb.check 全绿。计划 HTML 状态 Open→In Progress + §09 记 R3。范围守恒: P2/P3 未动(--refs 判拒留位); 任务档案未建(§08 待用户显式确认); cap 债务 3 项转告。踩坑: MSYS2 heredoc 反斜杠吞转(候选坑档, 触发词二期)。
 
 **R4(2026-10-17 07:53):** 收尾: 计划 HTML 回写(status In Progress + §10 R3 + §07 P1 行标验收) · 基线切片落盘 · kb.index 重建 · kb.check 复绿(含回写守卫); 全部改动未提交, 等用户授权入库
+
+**R5(2026-10-17 08:44):** P2 状态与改版落地并验收: kb.status/kb.bump 收录 + D4 反向认领自动补链(目标件自动反向声明, 幂等合并); 全链演练 + 认领链双向机检绿; test.full 全绿(数字誊写进基线切片); 范围守恒: P3 未动、任务档案未建(§08 待用户显式确认)、提交待用户授权
+
+**R6(2026-10-17 09:03):** 用户指令「修复缺陷, 然后只提交本地」: P1 两潜伏缺陷修复 —— ①kb.new 领域解析改最长前缀匹配(_common.match_domain 单点, 补 memory-bank 连字符领域可达; 守阵红绿双验: 修前判红「现为 memory」, 修后全绿) ②P1 基线切片计数笔误「52 → 59」就地更正为 45 → 52 并留勘误行; test.full 全绿(数字誊写进 P2 基线切片); 提交走 ship.commit --no-push 只落本地, 远端对应由用户终端 push -u 建立后另行推送

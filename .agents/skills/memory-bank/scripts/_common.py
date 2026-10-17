@@ -13,6 +13,16 @@
   (`gen_tasks_index` 与 `kb.new` / `check_doc_templates` 同源)
 - `FAMILIES`: 文档族注册表 (plan/task/slice → 命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` /
   `check_doc_templates` 与模板的同一份注册表 (计划 26-10-17-0527 P1)
+- `detect_doc_kind` / `DOC_KIND_*`: 载体探测 (**改面**: plans|reports HTML · tasks · slices · issues) ——
+  `kb.status` / `kb.bump` 的同一份; 与建面的 `FAMILIES` 分工 (那边管「建」, 这里管「改」)
+- `html_meta` / `set_html_meta` / `md_field` / `set_md_field` / `set_last_active`: 元数据行读写单点
+  (doc-* meta 与 `**字段:**` / `> 最后活动:` 行; 缺目标行返回 None, 由调用方 fail-fast)
+- `sync_body_meta`: 正文 `.meta` 镜像行与 head meta 同改 (计划族模板的展示行; 缺即无操作) ——
+  派生面不跟着抬 = 渲染页显示过期值
+- `html_set_refs` / `md_set_refs`: 认领链声明 (doc-refs meta / `**Refs:**` 行) 的插入/合并单点
+  (D4 反向补链; 值 = 仓库根相对路径, 英文逗号; md 只动**首个** `**Refs:**` 行; 幂等)
+- `rebuild_index`: 改后重建受影响索引的共同落点 —— `kb.new` / `kb.status` / `kb.bump` 共用
+  (与 `gen_all` 的集合单点同一 build 实现)
 - `find_root()`: 仓库根探测 (向上找 `.git`, 而非按 skill 安装深度反推 `parents[n]`)
 - `resolve_mb_dir()`: memory-bank 目录探测 (`--mb-dir` 显式指定优先)
 - `read_meta()`: 主题文件三行头元数据 (`# 标题` / `> 摘要:` / `> 触发:`)
@@ -23,6 +33,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -129,6 +140,20 @@ SLICE_DIR = "activeContext"
 # 任务档案的领域枚举 (文件名首段; 不足用先扩枚举再建档 —— 口径见 SKILL.md「任务档案规范」)
 TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config")
 
+
+def match_domain(topic: str) -> str | None:
+    """`--topic` 的领域段 = **最长前缀匹配**的枚举项 (枚举自身可含短横线, 如 `memory-bank`)。
+
+    ⚠ P1 缺陷 (P2 补, 26-10-17): 旧实现 `topic.split("-", 1)[0]` 把 `memory-bank-xxx`
+    的首段切出 `memory` —— 枚举里的 `memory-bank` 永远不可达。领域段自定最长, 匹配规则
+    只能最长前缀 (`d + "-"` 或 topic == d, 保留 P1 的裸领域照收行为), 不能首段切分。
+    """
+    for d in sorted(TASK_DOMAINS, key=len, reverse=True):
+        if topic == d or topic.startswith(d + "-"):
+            return d
+    return None
+
+
 # 任务档案 4 词表 —— **单点**: `gen_tasks_index` 与 `check_doc_templates` 都 import 这里。
 # ⚠ 与 HTML 制品的 5 词表 (`DOC_STATUSES`) **不同**, 别互相套用 (doc-forms 状态词节同款警告)。
 TASK_STATUSES = ("In Progress", "Open", "Done", "Dropped")
@@ -155,7 +180,7 @@ class FamilySpec:
     default_status: str  # 出厂状态
     index_script: str  # 建后重建哪个生成器 (切片族无索引, 空串)
     naming_re: object  # 文件名正则 (从上面的单点来)
-    domain_first: bool  # `--topic` 首段须 ∈ `TASK_DOMAINS` (仅档案族)
+    domain_first: bool  # `--topic` 领域段须 ∈ `TASK_DOMAINS` (最长前缀匹配, 仅档案族)
 
 
 FAMILIES: dict[str, FamilySpec] = {
@@ -196,6 +221,23 @@ FAMILIES: dict[str, FamilySpec] = {
             domain_first=False,
         ),
 }
+
+# --------------------------------------------------------------------------- 改面载体探测
+# (`kb.status` / `kb.bump` 的同一份; 与建面 `FAMILIES` 分工 —— 那边管「建」, 这里管「改」)。
+# 探测 = memory-bank 相对路径的目录前缀 + 扩展名, 收集口径与 `gen_doc_map.collect()` 同源
+# (plans/reports/tasks/issues 四形态), 外加 activeContext 切片 (切片不进 docmap, 但 kb.bump 抬它)。
+# ⚠ 只认 memory-bank 下的文件 —— 别处的路径一律 "" (防命令改错文件, 调用方拒绝并指路)。
+
+DOC_KIND_PLAN = "plan"  # plans|reports/*.html —— 5 词表 (`doc-status`), 翻转抬 doc-updated
+DOC_KIND_TASK = "task"  # tasks/*.md —— 4 词表 (`**Status:**`), 翻转抬 **Updated:**
+DOC_KIND_SLICE = "slice"  # activeContext/*.md —— **无状态**: kb.status 拒绝并指路 kb.wrap 迁出
+DOC_KIND_ISSUE = "issue"  # issues/*.html —— 自己的词表/索引在 create-issue skill (跨 skill 不 import,
+# 单点纪律), kb.status/kb.bump 拒绝并指路; 但**可以是 refs 目标** (doc-refs meta)
+
+# 词表与索引动作 (单点: 翻转与重建都查这两张表, 不在命令里分叉 if-else)
+DOC_KIND_STATUSES = {DOC_KIND_PLAN: DOC_STATUSES, DOC_KIND_TASK: TASK_STATUSES}
+DOC_KIND_INDEX_SCRIPT = {DOC_KIND_PLAN: "gen_docs_index", DOC_KIND_TASK: "gen_tasks_index"}
+DOC_KIND_CN = {DOC_KIND_PLAN: "计划/报告", DOC_KIND_TASK: "任务档案", DOC_KIND_SLICE: "会话切片", DOC_KIND_ISSUE: "issue"}
 
 # 索引/元数据文件名: `_` 开头, 不参与「主题文件」计数
 INDEX_NAME = "_index.md"
@@ -261,6 +303,45 @@ def resolve_mb_dir(root: Path, dir_arg: str | None = None) -> Path:
     return (root / "memory-bank").resolve()
 
 
+def resolve_doc_path(raw: str, root: Path, mb: Path) -> Path:
+    """用户传入的文档路径 → 绝对路径 (`kb.status` / `kb.bump` / `kb.new --refs` 共用)。
+
+    接受三种形态, 按序解析 (`kb.docmap` 输出的是 mb 相对链接, 用户照抄最自然):
+    ① 绝对路径 (原样); ② 仓库根相对 (`memory-bank/plans/...`); ③ mb 相对 (`plans/...`)。
+    三种都不存在时退回 ② 的解析 —— 报错文案按仓库根相对展示, 与其它命令一致。
+    """
+    cand = Path(raw)
+    if cand.is_absolute():
+        return cand.resolve()
+    for base in (root, mb):
+        probe = (base / cand).resolve()
+        if probe.is_file():
+            return probe
+    return (root / cand).resolve()
+
+
+def detect_doc_kind(path: Path, mb: Path) -> str:
+    """路径 → 改面载体 (`kb.status` / `kb.bump` / `kb.new --refs` 目标校验共用)。
+
+    返回 `DOC_KIND_*` 之一; `""` = 不在改面范围 (调用方拒绝并给指路, **不猜载体**)。
+    """
+    try:
+        rel = path.resolve().relative_to(mb.resolve()).as_posix()
+    except ValueError:
+        return ""
+    if path.name.startswith("_") or rel.startswith("attachments/"):
+        return ""
+    if rel.startswith(("plans/", "reports/")) and rel.endswith(".html"):
+        return DOC_KIND_PLAN
+    if rel.startswith("tasks/") and rel.endswith(".md"):
+        return DOC_KIND_TASK
+    if rel.startswith(f"{SLICE_DIR}/") and rel.endswith(".md"):
+        return DOC_KIND_SLICE
+    if rel.startswith("issues/") and rel.endswith(".html"):
+        return DOC_KIND_ISSUE
+    return ""
+
+
 def rel_posix(path: Path, root: Path) -> str:
     """相对仓库根的 posix 路径 (markdown 链接里 `\\` 是错的)。跨盘时返回绝对路径。"""
     try:
@@ -317,6 +398,30 @@ def gen_cmd(root: Path, script: str) -> str:
     return GEN_CMD_BY_SCRIPT.get(script, "commands run kb.index")
 
 
+def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
+    """改后重建受影响的索引 (`kb.new` / `kb.status` / `kb.bump` 共用一份, 不各写一遍)。
+
+    按 `DOC_KIND_INDEX_SCRIPT` 的值调对应生成器的 `build()` —— 与 `gen_all` 的集合单点
+    同一实现; 空串 (切片族无索引) → 空表。索引文件一律 LF (`newline="\\n"`, 同生成器口径)。
+    """
+    if not script:
+        return []
+    module = __import__(script)
+    written: list[Path] = []
+    if script == "gen_docs_index":
+        for kind, text in module.build(root, mb).items():
+            path = mb / kind / "_index.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+            written.append(path)
+    elif script == "gen_tasks_index":
+        path = mb / "tasks" / "_index.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(module.build(root, mb), encoding="utf-8", newline="\n")
+        written.append(path)
+    return written
+
+
 # --------------------------------------------------------------------------- 元数据
 
 
@@ -352,6 +457,127 @@ def read_meta(path: Path) -> Meta:
         summary=summary.group(1) if summary else "",
         triggers=triggers.group(1) if triggers else "",
     )
+
+
+# --------------------------------------------------------------------------- 元数据行读写
+# (`kb.status` / `kb.bump` / `kb.new --refs` 反向补链共用 —— **只动元数据行, 正文零触碰**)。
+# ⚠ 缺目标行一律 fail-fast (返回 None), **不猜插入位置** —— 猜位置会静默改坏文件形态。
+
+HTML_META_READ = '<meta name="{name}" content="([^"]*)">'
+
+
+def html_meta(text: str, name: str) -> str | None:
+    """读 HTML meta 值 (`doc-*` / `issue-*`; 与 gen_docs_index / gen_doc_map 的读取正则同款)。"""
+    m = re.search(HTML_META_READ.format(name=re.escape(name)), text)
+    return m.group(1) if m else None
+
+
+def set_html_meta(text: str, name: str, value: str) -> str:
+    """写 HTML meta: 存在则**原行替换值** (格式不动); 不存在则插在 `doc-updated` 行后
+    (无则 `</head>` 前) —— 与既有制品的 meta 排列一致。lambda 替换绕开 `re.sub` 的
+    替换串转义坑 (值里可能出现 `\\`)。"""
+    pat = re.compile(r'(<meta name="%s" content=")([^"]*)(">)' % re.escape(name))
+    if pat.search(text):
+        return pat.sub(lambda m: m.group(1) + value + m.group(3), text, count=1)
+    anchor = re.search(r'<meta name="doc-updated" content="[^"]*">\n', text)
+    if anchor:
+        return text.replace(anchor.group(0), anchor.group(0) + f'<meta name="{name}" content="{value}">\n', 1)
+    return text.replace("</head>", f'<meta name="{name}" content="{value}">\n</head>', 1)
+
+
+def sync_body_meta(text: str, name: str, value: str) -> str:
+    """正文 `.meta` 展示行与 head meta 同改 (计划族模板的镜像行; 缺该行 = 原样返回)。
+
+    镜像行是**派生面** (与 head 同源渲染, 报告族没有) —— 不跟着抬 = 渲染页显示过期值。
+    状态词从词表单点 (`DOC_STATUSES`) 取, 只替换词本身; 词后的括号注记是 agent 的散文, 不碰。
+    """
+    if name == "doc-status":
+        alternation = "|".join(re.escape(s) for s in DOC_STATUSES)
+        pat = re.compile(r"(<b>doc-status</b> )(?:%s)" % alternation)
+    else:
+        pat = re.compile(r"(<b>%s</b> )\S+" % re.escape(name))
+    if not pat.search(text):
+        return text
+    return pat.sub(lambda m: m.group(1) + value, text, count=1)
+
+
+def md_field(text: str, field: str) -> str | None:
+    """读 md 头部字段行 `**Field:** value` (Status/Added/Updated/Topics/Refs 同款); 缺返回 None。"""
+    m = re.search(r"^\*\*%s:\*\*\s*(.+?)\s*$" % re.escape(field), text, re.MULTILINE)
+    return m.group(1) if m else None
+
+
+def set_md_field(text: str, field: str, value: str) -> str | None:
+    """写 md 头部字段行 —— 存在则替换值 (格式不动); **不存在返回 None** (调用方 fail-fast)。"""
+    pat = re.compile(r"^(\*\*%s:\*\*\s*).*$" % re.escape(field), re.MULTILINE)
+    if not pat.search(text):
+        return None
+    return pat.sub(lambda m: m.group(1) + value, text, count=1)
+
+
+def set_last_active(text: str, stamp: str) -> str:
+    """抬切片 `> 最后活动:` 行 (严格 `YYYY-MM-DD HH:MM`, 同 `check_doc_templates` 的校验口径)。
+
+    缺行则插在首个 `> 摘要:` 行后 —— 与 `wrap_session._touch_slice` 同口径 (模板切片摘要
+    单行; 多行摘要的存量切片本就都带该行, 该分支近乎死代码)。
+    """
+    new_line = f"> 最后活动: {stamp}"
+    if re.search(r"^>\s*最后活动:", text, re.MULTILINE):
+        return re.sub(r"^>\s*最后活动:\s*\S.*$", new_line, text, count=1, flags=re.MULTILINE)
+    return re.sub(r"^(> 摘要:.*)$", rf"\1\n{new_line}", text, count=1, flags=re.MULTILINE)
+
+
+def split_refs(raw: str) -> list[str]:
+    """refs 字符串 → 列表 (唯一合法分隔符 = 英文逗号; 视觉分隔符误用见 gen_doc_map 的报错提示)。"""
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def html_set_refs(text: str, target_rel: str) -> str:
+    """HTML 认领链: 在 `doc-refs` meta 里并入 target_rel (仓库根相对 posix)。
+
+    只动元数据行 (D4); 已声明则**幂等**原样返回; 无 meta 则由 `set_html_meta` 插入。
+    """
+    existing = html_meta(text, "doc-refs")
+    if existing is not None:
+        refs = split_refs(existing)
+        if target_rel in refs:
+            return text
+        return set_html_meta(text, "doc-refs", ", ".join([*refs, target_rel]))
+    return set_html_meta(text, "doc-refs", target_rel)
+
+
+def md_set_refs(text: str, target_rel: str) -> str:
+    """md 认领链: 并入/插入 `**Refs:**` 行 (仓库根相对 posix, 英文逗号; 幂等)。
+
+    只动元数据行; md 只认**首个** `**Refs:**` 行 (gen_doc_map 口径)。插入锚点链 (与存量
+    形态一致): 已有 `**Refs:**` → 并值; 有 `**Topics:**` → 其后插 (档案形态); 三行头的最后
+    一个 `>` 行后 (坑档/基线/切片形态); 都没有 → `# 标题` 行后。
+    """
+    m = re.search(r"^\*\*Refs:\*\*\s*(.+?)\s*$", text, re.MULTILINE)
+    if m:
+        refs = split_refs(m.group(1))
+        if target_rel in refs:
+            return text
+        merged = ", ".join([*refs, target_rel])
+        return re.sub(r"^(\*\*Refs:\*\*\s*).*$", lambda mm: mm.group(1) + merged, text, count=1, flags=re.MULTILINE)
+    line = f"**Refs:** {target_rel}"
+    anchor = re.search(r"^(\*\*Topics:\*\*\s*.+)$", text, re.MULTILINE)
+    if anchor:
+        return text.replace(anchor.group(1), anchor.group(1) + "\n" + line, 1)
+    lines = text.split("\n")
+    last_gt = -1
+    for i, ln in enumerate(lines):
+        if ln.startswith("## "):
+            break
+        if ln.startswith(">"):
+            last_gt = i
+    if last_gt >= 0:
+        lines.insert(last_gt + 1, line)
+        return "\n".join(lines)
+    title = re.search(r"^(#\s+.+)$", text, re.MULTILINE)
+    if title:
+        return text.replace(title.group(1), title.group(1) + "\n" + line, 1)
+    return line + "\n\n" + text
 
 
 # --------------------------------------------------------------------------- 角色

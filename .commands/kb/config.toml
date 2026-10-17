@@ -56,7 +56,19 @@ note    = "stream 前台长跑: 输出直连终端(timeout 不生效), Ctrl-C �
 [tasks."kb.new"]
 run     = ["python <skill-dir:memory-bank>/scripts/new_doc.py <args>"]
 when    = "新建计划/任务档案: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT/索引全派生; 切片走 kb.wrap)"
-note    = "建后必填 SLOT(守卫拦残留); --refs P1 不接受(D4 在 P2); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
+note    = "建后必填 SLOT(守卫拦残留); --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
+timeout = 60
+
+[tasks."kb.status"]
+run     = ["python <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
+when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表): 词表校验/抬时间戳/重建索引全派生, 终态带提醒"
+note    = "词表单点 import(_common), 别凭记忆写 —— 表外值会让 gen_docs_index 静默漏收该件(见 pitfalls/kb/doc-status-meta.md); 切片/issue 一律拒绝并指路(kb.wrap / create-issue); 同状态翻转幂等(不抬时间戳不重建索引); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言"
+timeout = 60
+
+[tasks."kb.bump"]
+run     = ["python <skill-dir:memory-bank>/scripts/bump_doc.py <args>"]
+when    = "文档改版一次落盘: HTML 抬 doc-updated + 变更记录追加 R 行 / 档案抬 Updated / 切片抬最后活动 (note 随参数带入, 不再开一次编辑)"
+note    = "R 行编号 = 段内最大 + 1(只追加, 已有行零触碰; note 自动 HTML 转义); 报告多数无变更记录段 —— 缺段即 fail-fast 指路, 不猜位置硬塞; 进度日志追加仍是 kb.wrap 的活; 输出带「机械 0」收录断言"
 timeout = 60
 
 [tasks."kb.wrap"]

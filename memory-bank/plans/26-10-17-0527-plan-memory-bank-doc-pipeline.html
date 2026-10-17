@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="memory-bank-doc-pipeline">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-17-0527">
-<meta name="doc-updated" content="26-10-17-0752">
+<meta name="doc-updated" content="26-10-17-0844">
 <style>
   :root {
     --bg: #10151a;
@@ -70,7 +70,7 @@
 <h1>memory-bank 文档流水线:统一模板 × 命令化创建/更新</h1>
 <p class="lede">双目标改造:①统一风格——机器可检的面(元数据/命名/状态词/必备章节)由模板渲染 + 守卫拦新增;②压缩 agent 步数——核心原则「<b>一次逻辑动作 = 一条命令 + 一次填空,一切派生面零手写</b>」。命令是既有单点的执行器,不是第二套规范。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-17-0527 · <b>doc-updated</b> 26-10-17-0752 · <b>doc-status</b> In Progress(P1 已实施验收, P2/P3 待启动) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-17-0527 · <b>doc-updated</b> 26-10-17-0844 · <b>doc-status</b> In Progress(P1/P2 已实施验收, P3 待启动) · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(用户两次纠正:①工具展示不全改文本问答 ②「目标二=减少 agent 修改步骤,首版设计只着重了统一风格,重新设计」);R1 拍板 D1–D6 锁定 + 剩余人工步骤量化裁定
 </div>
 
@@ -198,7 +198,7 @@
 <table>
   <tr><th>期</th><th>内容</th><th>验收</th></tr>
   <tr><td>P1 骨架 <b>✅ 已实施验收</b>(R3 · 26-10-17-0752)</td><td><code>_common.py</code> 增族注册表(family→命名/模板/词表/索引动作);<code>templates/</code> 三族; <code>new_doc.py</code> + <code>wrap_session.py</code>; <code>kb.new</code> 与 <code>kb.wrap</code> 收录; 检查器 + 守阵</td><td>三族各真建一件冒烟;红绿三突变判红;kb.check 全绿;两命令输出含「机械 0」断言行 <b>—— 全部达成(详见 §10 R3)</b></td></tr>
-  <tr><td>P2 状态与改版</td><td><code>flip_status.py</code> / <code>bump_doc.py</code> → <code>kb.status</code> / <code>kb.bump</code> 收录;反向认领自动补链(§08 D4)</td><td>对 P1 临时件全链演练;认领链双向机检绿</td></tr>
+  <tr><td>P2 状态与改版 <b>✅ 已实施验收</b>(R4 · 26-10-17-0844)</td><td><code>flip_status.py</code> / <code>bump_doc.py</code> → <code>kb.status</code> / <code>kb.bump</code> 收录;反向认领自动补链(§08 D4)</td><td>对 P1 临时件全链演练;认领链双向机检绿</td></tr>
   <tr><td>P3 收尾与二期族</td><td>pitfall/report/baseline/progress 模板(族注册表扩行);回写:doc-forms「创建/更新方式」节、根 AGENTS.md 会话协议两行、README 细路由、memory-bank skill SKILL.md 收尾 DoD 措辞(<code>kb.wrap</code> 已于 P1 交付, D6 拍板并入)</td><td>全量 test.full 基线切片;文档回写后 doc.drift / doc.caps 绿</td></tr>
 </table>
 
@@ -230,6 +230,7 @@
   <li><span class="tag">R1 · 26-10-17-0607</span> 用户拍板:D1–D6 锁定;单职责四条;不预建切片;<code>kb.wrap</code> 并入 P1。新增 §05.1–05.4:剩余人工步骤量化(口径判据/对照修正/输出契约/边界裁定 A1–A7),修正 R0 立档步数漏计(含立档开工 16→4,= 2 命令 + 2 填空)。复盘注记:R0 曾在用户方向性纠正后未续 grilling 轮即动笔,属协议偏离;本轮按用户裁定问题补齐量化轮。</li>
   <li><span class="tag">R2 · 26-10-17-0714</span> 用户指令「写入文档中」:对账发现 R1 答复里的<b>逐命令剩余步骤表</b>(命令步/判断/条件/机械四列)只在会话回复、未进文档——补录为 §5.3,原 5.3/5.4 顺延为 5.4/5.5;并声明该表为「机械 0」收录断言的数据源。其余内容与 R1 答复已逐项对齐(口径/工作流合计/A1–A7/守卫配套均在 §05)。</li>
   <li><span class="tag">R3 · 26-10-17-0752</span> <b>P1 骨架实施落地并验收</b>(§07 首行,状态 Open→In Progress):①族登记表 <code>_common.FAMILIES</code>——plan/task/slice 三族单点(命名正则/模板/词表/索引动作全 import 既有单点 <code>DOC_STATUSES</code>/<code>TASK_STATUSES</code>/timekit,<code>gen_tasks_index</code> 本地 4 词表副本删除);②三族模板落 <code>skill templates/</code>(SLOT 填空机制);③<code>kb.new</code>(plan/task 建档:戳/命名/头部/SLOT 清单/索引全派生)+ <code>kb.wrap</code>(切片零 SLOT 即建即合规 + 抬最后活动/追加 R 行/档案 Updated + 进度日志日期行派生,只做机械面 D6),经 add 协议落 <code>.commands/kb</code>,占位符解析实测通过;④守卫 <code>check_doc_templates.py</code>(冻结线 26-10-17-0736,存量豁免)双处接线(kb.check + commit 门禁,<code>test_commit_gate_covers_kb_check</code> 守接线不漂);⑤守阵 7 条全绿(三突变红绿双验/冻结线精确到件/族登记与模板对账)。冒烟三族各真建一件(plan/task 残留 SLOT 判红=拦「没填完」,slice 零 SLOT 即过),两命令输出均含「机械 0」断言行。收口:<code>test.full</code> 3492 passed + 4 skipped / 98%(数字只誊写进基线切片,裁定 A4);<code>kb.check</code> 全绿;冒烟落 /tmp 未提交已删。范围守恒:P2/P3 未动(<code>--refs</code> 判拒留位);任务档案未建(§08 待用户显式确认);cap 债务 3 项转告。踩坑:MSYS2 heredoc 反斜杠吞转(候选坑档,触发词二期)。</li>
+  <li><span class="tag">R4 · 26-10-17-0844</span> <b>P2 状态与改版落地并验收</b> —— kb.status(载体探测单点 DOC_KIND_*: 计划/报告 doc-status 5 词表翻转 + 抬 doc-updated, 档案 **Status:** 4 词表翻转 + 抬 Updated, 同状态幂等不抬戳不重建, 终态条件提醒(同专题切片迁出/Summary 收口), 切片/issue/未知载体拒绝指路, 词表单点 import 表外值 fail-fast) + kb.bump(R 行追加编号=段内最大+1 只追加已有行零触碰 note 自动 HTML 转义, 无变更记录段 fail-fast 指路, 档案抬 Updated 切片抬最后活动) + D4 反向认领自动补链(new_doc --refs 从拒绝改实现: 本件写 doc-refs/**Refs:**, 目标件四类载体自动反向声明, 幂等合并英文逗号, 坏 refs(不存在/库外/生成物)fail-fast 不落半文件; 元数据读写单点 html_set_refs/md_set_refs/sync_body_meta 落 _common, gen_doc_map 的 _split_refs 收敛为 split_refs); 守阵 5 条(flip/bump/refs/全链演练含红绿双验/注册)全绿。范围守恒: P3 未动; 任务档案未建(§08 待用户显式确认); 开工同步失败(未推送分支 ship 死锁, 新坑档 git/unpushed-branch-sync.md); 提交/推送待用户显式触发</li>
 </ul>
 
 </div>

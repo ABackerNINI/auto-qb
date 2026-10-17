@@ -11,14 +11,15 @@
 判据与边界 (计划 §03 / §05):
 - 目标文件已存在即 rc=1 拒绝 (幂等); 档案族撞名 = 同专题已存在, 提示「追加不新建」并给路径
   (同 clone 按 slug 忽略日期前缀比对 + 跨 clone `../auto-qb-*/memory-bank/tasks/` 只读 ls)
-- `--refs` **P1 不接受**: D4 反向认领补链在 P2 交付 —— 现在写正向 refs 会造出单向链,
-  被 `gen_doc_map --check` 判红 (裁定 A3: 后补 Refs 留人工编辑)
+- `--refs` **D4 反向认领自动补链 (P2 交付)**: 目标件**自动补/并** `doc-refs` meta (HTML) 或
+  `**Refs:**` 行 (md) —— 只动元数据行, 合并为英文逗号列表, 幂等; 杀「单向链闸门红」整类问题。
+  目标必须存在且在 memory-bank 内 (fail-fast; 生成物 `_` 前缀文件不作目标)
 - `slice` 族不由本命令建 (拍板: 切片统一由 `kb.wrap` 收尾处理) —— 传了即拒绝并指路
 - 建后末尾固定输出「剩余人工 N 项(判断 a · 条件 b · **机械 0**)」契约 (§5.4 收录断言)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
-    python <skill-dir>/scripts/new_doc.py plan --title ".." --topic <kebab>
-    python <skill-dir>/scripts/new_doc.py task --title ".." --topic <领域>-<专题>
+    python <skill-dir>/scripts/new_doc.py plan --title ".." --topic <kebab> [--refs p1,p2]
+    python <skill-dir>/scripts/new_doc.py task --title ".." --topic <领域>-<专题> [--refs p1,p2]
     python <skill-dir>/scripts/new_doc.py --root <dir> --mb-dir <dir> plan ...   # 覆盖探测
 退出码: 0 成功 / 1 拒绝或校验失败 (原因与下一步打在输出里)
 """
@@ -40,8 +41,16 @@ from _common import (  # noqa: E402
     TASK_DOMAINS,
     StatusVocabularyError,
     find_root,
+    html_meta,
+    html_set_refs,
+    match_domain,
+    md_field,
+    md_set_refs,
+    rebuild_index,
     rel_posix,
+    resolve_doc_path,
     resolve_mb_dir,
+    split_refs,
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -103,22 +112,64 @@ def _render(spec, values: dict[str, str]) -> str:
     return text
 
 
+def _resolve_refs(raw: str, root: Path, mb: Path) -> tuple[list[str], list[Path]] | str:
+    """`--refs` 解析 (D4): 目标必须存在、在 memory-bank 内、不是生成物 (`_` 前缀)。
+
+    返回 (规范化仓库根相对 refs, 目标路径); 失败返回错误消息字符串 (调用方 rc=1)。
+    接受绝对 / 仓库根相对 / mb 相对三形态 (docmap 输出 mb 相对, 照抄最自然)。
+    """
+    refs: list[str] = []
+    targets: list[Path] = []
+    for raw_ref in split_refs(raw):
+        path = resolve_doc_path(raw_ref, root, mb)
+        if not path.is_file():
+            return f"refs 目标不存在: {raw_ref} (三形态都不命中) —— 先建好目标件再建本件"
+        try:
+            path.resolve().relative_to(mb.resolve())
+        except ValueError:
+            return f"refs 目标不在 memory-bank 下: {raw_ref} —— 认领链只串库内件"
+        if path.name.startswith("_"):
+            return f"refs 目标不能是生成物 (`_` 前缀的索引/about): {raw_ref}"
+        rel = rel_posix(path, root)
+        if rel not in refs:
+            refs.append(rel)
+            targets.append(path)
+    return refs, targets
+
+
+def _chain_refs(rendered: str, refs: list[str], ext: str) -> str:
+    """本件自己的正向声明: HTML 写 `doc-refs` meta, md 写 `**Refs:**` 行 (只动元数据行)。"""
+    set_refs = html_set_refs if ext == ".html" else md_set_refs
+    for rel in refs:
+        rendered = set_refs(rendered, rel)
+    return rendered
+
+
+def _reverse_chain(targets: list[Path], self_rel: str, root: Path) -> list[str]:
+    """D4 反向补链: 在目标件补/并对本件的反向声明 (只动元数据行, 幂等)。
+
+    返回每份目标的处置说明 (新插入 / 已合并 / 已声明幂等)。I/O 失败抛给调用方 —— 本件已建,
+    链断了必须让人知道 (gen_doc_map --check 会红), 处置: 手工补那一条反向行。
+    """
+    lines: list[str] = []
+    for target in targets:
+        text = target.read_text(encoding="utf-8")
+        is_html = target.suffix == ".html"
+        new_text = html_set_refs(text, self_rel) if is_html else md_set_refs(text, self_rel)
+        if new_text == text:
+            how = "已声明 (幂等)"
+        else:
+            value = html_meta(new_text, "doc-refs") if is_html else md_field(new_text, "Refs")
+            total = len(split_refs(value or ""))
+            how = f"反向声明已并入 (共 {total} 条)" if total > 1 else "新插入反向声明"
+            target.write_text(new_text, encoding="utf-8", newline="\n")
+        lines.append(f"{rel_posix(target, root)} ({how})")
+    return lines
+
+
 def _rebuild_index(spec, root: Path, mb: Path) -> list[Path]:
-    """建后重建**该族受影响的那份索引** —— 与 `gen_all` 的集合单点同一实现 (import 同一 build 函数)。"""
-    module = __import__(spec.index_script)
-    written: list[Path] = []
-    if spec.index_script == "gen_docs_index":
-        for kind, text in module.build(root, mb).items():
-            path = mb / kind / "_index.md"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8", newline="\n")
-            written.append(path)
-    else:  # gen_tasks_index
-        path = mb / "tasks" / "_index.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(module.build(root, mb), encoding="utf-8", newline="\n")
-        written.append(path)
-    return written
+    """建后重建**该族受影响的那份索引** —— 单点 `_common.rebuild_index` (kb.status / kb.bump 共用)。"""
+    return rebuild_index(root, mb, spec.index_script)
 
 
 def _print_remaining(family: str, slots: list[str]) -> None:
@@ -128,11 +179,9 @@ def _print_remaining(family: str, slots: list[str]) -> None:
         print("剩余人工 2 项(判断 1 · 条件 1 · 机械 0)")
         print(f"【判断】SLOT: {slot_text} (一次编辑填完)")
         print('【条件】立档阈值命中 → commands run kb.new task --title ".." --topic <领域>-<专题>')
-        print("【可选】引用他件 → 手补 doc-refs meta (目标件须反向声明, 否则认领链判红)")
     else:  # task
         print("剩余人工 1 项(判断 1 · 条件 0 · 机械 0)")
         print(f"【判断】SLOT: {slot_text} (一次编辑填完; Summary 已由 --title 预填, 可精修)")
-        print("【可选】引用他件 → 手补 `**Refs:**` 行 (仓库根相对路径, 英文逗号分隔; 目标件须反向声明)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -141,7 +190,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("family", choices=sorted(FAMILIES), help="文档族 (plan / task; slice 走 kb.wrap)")
     parser.add_argument("--title", required=True, help="制品标题 (档案族的 Summary 预填, 裁定 A1)")
     parser.add_argument("--topic", required=True, help="专题主键: plan=kebab; task=<领域>-<专题>")
-    parser.add_argument("--refs", default="", help="P1 不接受: D4 反向补链在 P2 (传了即拒绝)")
+    parser.add_argument(
+        "--refs",
+        default="",
+        help="引用目标 (英文逗号分隔; 绝对/仓库根相对/mb 相对三形态) —— D4 自动双向补链: "
+        "本件写 doc-refs / **Refs:**, 目标件反向声明本件 (只动元数据行, 幂等)"
+    )
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
@@ -153,11 +207,6 @@ def main(argv: list[str] | None = None) -> int:
         return _fail(
             "slice 族不由 kb.new 建 (拍板: 切片统一由 kb.wrap 收尾处理) —— "
             '用 commands run kb.wrap --topic <slug> --did ".." (不存在则按模板建, 存在则抬最后活动)'
-        )
-    if args.refs:
-        return _fail(
-            "--refs 在 P1 不接受: D4 反向认领补链在 P2 交付 (届时自动在目标件补 doc-refs / **Refs:** 行) —— "
-            "现在写正向 refs 会造出单向链, 被 gen_doc_map --check 判红; 需要引用他件请建后手补 (裁定 A3)"
         )
 
     root = Path(args.root).resolve() if args.root else find_root()
@@ -175,9 +224,11 @@ def main(argv: list[str] | None = None) -> int:
             "STAMP": moment.strftime("%y-%m-%d-%H%M"),
         }
     else:  # task
-        domain = args.topic.split("-", 1)[0]
-        if domain not in TASK_DOMAINS:
-            return _fail(f"--topic 首段必须是领域枚举之一 ({', '.join(TASK_DOMAINS)}): 现为 {domain!r}")
+        # 领域段 = 最长前缀匹配 (`_common.match_domain` 单点): 枚举含短横线项
+        # (`memory-bank`), 首段切分会让它永远不可达 (P1 缺陷, P2 补)
+        domain = match_domain(args.topic)
+        if domain is None:
+            return _fail(f"--topic 首段必须是领域枚举之一 ({', '.join(TASK_DOMAINS)}): 现为 {args.topic.split('-', 1)[0]!r}")
         filename = f"{moment.strftime('%y-%m-%d')}-{args.topic}.md"
         values = {
             "STEM": Path(filename).stem,
@@ -195,17 +246,33 @@ def main(argv: list[str] | None = None) -> int:
         if dup:
             return _fail(dup)
 
+    # --- D4 反向认领: 先解析 refs (fail-fast, 不落半文件), 本件正向声明写进渲染结果
+    ref_targets: list[Path] = []
+    if args.refs:
+        resolved = _resolve_refs(args.refs, root, mb)
+        if isinstance(resolved, str):
+            return _fail(resolved)
+        refs, ref_targets = resolved
+
     # --- 渲染后一次落盘 (渲染失败即停, 不落半文件)
     try:
         rendered = _render(spec, values)
     except OSError as exc:
         return _fail(f"读模板失败: {exc}")
+    if ref_targets:
+        rendered = _chain_refs(rendered, refs, spec.ext)
 
     slots = [s.strip() for s in SLOT_RE.findall(rendered)]
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(rendered, encoding="utf-8", newline="\n")
 
     print(f"已建 {rel_posix(target, root)} ({len(slots)} 处 SLOT 待填)")
+
+    # --- D4 反向补链: 目标件补/并对本件的反向声明 (只动元数据行, 幂等)
+    if ref_targets:
+        chained = _reverse_chain(ref_targets, rel_posix(target, root), root)
+        for line in chained:
+            print(f"已双向补链 {line}")
 
     # --- 建后重建该族索引 (与 kb.index 同一 build 实现)
     try:

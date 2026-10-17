@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import DOC_STATUSES, TERMINAL_DOC_STATUSES, find_root, resolve_mb_dir  # noqa: E402
+from _common import DOC_STATUSES, TERMINAL_DOC_STATUSES, find_root, resolve_mb_dir, split_refs  # noqa: E402
 
 FORM_ORDER = ("issue", "plan", "report", "task")
 FORM_CN = {"issue": "issue", "plan": "计划", "report": "报告", "task": "档案"}
@@ -80,15 +80,11 @@ def _date_stamp(stamp: str) -> str:
     return stamp[:8] if re.fullmatch(r"\d{2}-\d{2}-\d{2}-\d{4}", stamp or "") else stamp
 
 
-def _split_refs(raw: str) -> list[str]:
-    return [p.strip() for p in raw.split(",") if p.strip()]
-
-
 def _refs_of(path: Path) -> list[str]:
     """声明引用 (仓库根相对路径列表): HTML 读 `doc-refs` meta, md (档案 / 会话切片) 读 `**Refs:**` 行。"""
     text = path.read_text(encoding="utf-8")
     m = HTML_REFS_RE.search(text) if path.suffix == ".html" else TASK_REFS_RE.search(text)
-    return _split_refs(m.group(1)) if m else []
+    return split_refs(m.group(1)) if m else []
 
 
 def collect(mb: Path) -> list[dict]:
@@ -106,7 +102,7 @@ def collect(mb: Path) -> list[dict]:
                     "stamp": _date_stamp(meta.get("doc-added", "")) or _stamp_of(path.name),
                     "title": title.group(1).strip() if title else path.stem,
                     "link": f"{kind}/{path.name}",
-                    "refs": _split_refs(meta.get("doc-refs", "")),
+                    "refs": split_refs(meta.get("doc-refs", "")),
                 }
             )
     for path in sorted((mb / "issues").glob("*.html")):
@@ -119,7 +115,7 @@ def collect(mb: Path) -> list[dict]:
                 "stamp": meta.get("issue-stamp", "") or _stamp_of(path.name),
                 "title": meta.get("issue-title", path.stem),
                 "link": f"issues/{path.name}",
-                "refs": _split_refs(meta.get("doc-refs", "")),
+                "refs": split_refs(meta.get("doc-refs", "")),
             }
         )
     for path in sorted((mb / "tasks").glob("*.md")):
@@ -140,7 +136,7 @@ def collect(mb: Path) -> list[dict]:
                                      updated.group(1) if updated else ""),
                 "title": title.group(2) if title else path.stem,
                 "link": f"tasks/{path.name}",
-                "refs": _split_refs(refs.group(1)) if refs else [],
+                "refs": split_refs(refs.group(1)) if refs else [],
             }
         )
     return items

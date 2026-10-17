@@ -48,8 +48,10 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
 
 - test_new_doc_creates_valid_plan_and_task: 真建 plan + task 各一件 (tmp 夹具) —— 命名/头部字段
   / SLOT 清单齐; 建后残留 SLOT 判红 (守卫设计), 填完判绿; stdout 含「机械 0」收录断言 (§5.4)
-- test_new_doc_refuses_slice_and_refs_and_duplicates: slice 族拒绝并指路 kb.wrap; --refs 拒绝
-  (D4 在 P2, 现在写正向 refs 会造单向链); 重复建/坏 topic/坏领域 全 fail-fast
+- test_new_doc_refuses_slice_and_duplicates: slice 族拒绝并指路 kb.wrap; 重复建/坏 topic/坏领域
+  全 fail-fast (--refs 已由 P2 的 D4 双向补链接手, 见下)
+- test_new_doc_task_domain_is_longest_prefix_match: 领域段最长前缀匹配 (P1 首段切分缺陷,
+  P2 补) —— 连字符领域 `memory-bank` 可建 / `memory-` 前缀撞名不误收 / 裸领域沿用 P1 行为
 - test_wrap_creates_zero_slot_slice_and_updates: 建切片零 SLOT 即合规 (判断剩余 0, 裁定 A6);
   二次调用抬最后活动 + 追加 R 行; 同专题档案抬 Updated + 进度日志日期行 (A5)
 - test_checker_three_mutations_judged_red: 红绿双验 —— 填完 = 基准绿; 三类突变 (删状态行 /
@@ -60,6 +62,23 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
   (设计底线: 不造第二套词表/命名规则)
 - test_doc_templates_checker_is_wired: 检查器挂在 kb.check 与提交闸门两侧 (不接线 = 没人跑;
   与 test_commit_gate_covers_kb_check 同旨)
+
+kb.status / kb.bump 与 D4 反向补链 (2026-10-17 P2, 计划 26-10-17-0527; 实现与检查器在
+memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 import**):
+
+- test_flip_status_flips_bumps_and_fails_fast: 计划/档案翻转 (doc-status / **Status:**) + 自动
+  抬 doc-updated / Updated + 重建索引; 同状态翻转幂等 (不抬戳不重建); 词表外值/切片/issue/
+  未知载体/缺状态行全 fail-fast; 终态带条件提醒 (切片迁出 / Summary 收口); 输出含「机械 0」
+- test_bump_doc_appends_changelog_and_fails_fast: 计划 R 行追加 (编号 = 段内最大+1, 已有行
+  零触碰, note 自动 HTML 转义) + doc-updated 抬; 档案抬 Updated / 切片抬最后活动; 无变更
+  记录段 fail-fast 指路; 输出含「机械 0」
+- test_new_doc_refs_auto_chains_bidirectionally: D4 反向认领 —— 本件写 doc-refs / **Refs:**,
+  目标件 (HTML/md 四类载体) 自动反向声明, 幂等合并 (逗号); 坏 refs (不存在/库外/生成物)
+  全 fail-fast 且不落半文件; 无 --refs 与 P1 行为一致
+- test_p2_full_chain_drill: P2 验收演练 (计划 §07) —— kb.new(--refs) → 填空 → kb.status →
+  kb.bump → gen_doc_map --check 双向机检绿; 改过的件再过新增面守卫仍绿
+- test_kb_status_and_bump_are_registered: kb.status / kb.bump 已收录进 .commands/kb (收录
+  协议; 不接线 = 没人跑)
 
 时间守卫 (检查器 memory-bank skill 的 `scripts/timekit.py`, 2026-10-06 加):
 
@@ -651,7 +670,7 @@ def test_kb_scripts_import_cleanly() -> None:
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
         "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording", "new_doc",
-        "wrap_session", "check_doc_templates"
+        "wrap_session", "check_doc_templates", "flip_status", "bump_doc"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -1135,9 +1154,10 @@ def test_new_doc_creates_valid_plan_and_task(tmp_path: Path) -> None:
     assert checker.validate_file(task[0], "task") == [], f"填完必须绿: {checker.validate_file(task[0], 'task')}"
 
 
-def test_new_doc_refuses_slice_and_refs_and_duplicates(tmp_path: Path) -> None:
-    """四条拒绝路径全 fail-fast: slice 族指路 kb.wrap / --refs 指路 P2 / 重复建幂等拒绝 /
-    坏 topic 与坏领域当场拒 (之后假定输入合法 —— 黄金法则 fail-fast)。"""
+def test_new_doc_refuses_slice_and_duplicates(tmp_path: Path) -> None:
+    """拒绝路径全 fail-fast: slice 族指路 kb.wrap / 重复建幂等拒绝 / 坏 topic 与坏领域当场拒
+    (之后假定输入合法 —— 黄金法则 fail-fast)。--refs 的拒绝路径已随 D4 消失 (P2 起自动
+    双向补链), 其 fail-fast 由 test_new_doc_refs_auto_chains_bidirectionally 覆盖。"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
@@ -1154,9 +1174,6 @@ def test_new_doc_refuses_slice_and_refs_and_duplicates(tmp_path: Path) -> None:
     rc, _, err = run("slice", "--title", "x", "--topic", "y")
     assert rc == 1 and "kb.wrap" in err, f"slice 族必须拒绝并指路 kb.wrap: {err}"
 
-    rc, _, err = run("plan", "--title", "x", "--topic", "y", "--refs", "a.md")
-    assert rc == 1 and "P2" in err, f"--refs 必须拒绝并说明 D4 在 P2: {err}"
-
     rc, _, err = run("task", "--title", "x", "--topic", "Backend_Smoke")
     assert rc == 1 and "kebab" in err, f"坏 topic (非 kebab) 必须拒绝: {err}"
 
@@ -1166,6 +1183,58 @@ def test_new_doc_refuses_slice_and_refs_and_duplicates(tmp_path: Path) -> None:
     assert run("plan", "--title", "重复计划", "--topic", "dup-plan")[0] == 0
     rc, _, err = run("plan", "--title", "重复计划", "--topic", "dup-plan")
     assert rc == 1 and "已存在" in err, f"同路径重复建必须幂等拒绝: {err}"
+
+
+def test_new_doc_task_domain_is_longest_prefix_match(tmp_path: Path) -> None:
+    """领域段 = **最长前缀匹配**的枚举项, 不是首段切分 (P1 缺陷, 26-10-17 P2 补)。
+
+    领域枚举自身可含短横线 (`memory-bank`): 首段切分 `topic.split("-", 1)[0]` 会把
+    `memory-bank-xxx` 切出 `memory` —— 枚举里的 `memory-bank` 永远不可达。本测试钉住
+    三类: ① 连字符领域可建 ② 前缀撞名 (`memory-` 开头的非领域) 不得被误收
+    ③ 真坏领域仍 fail-fast; 裸领域 topic (topic == 枚举项) 沿用 P1 行为照收。
+    """
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def run(topic: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = new_doc.main(
+                [
+                    "--root",
+                    str(tmp_path),
+                    "--mb-dir",
+                    str(mb),
+                    "task",
+                    "--title",
+                    "领域回归",
+                    "--topic",
+                    topic,
+                ]
+            )
+        return rc, out.getvalue(), err.getvalue()
+
+    rc, _, err = run("memory-bank-doc-pipeline")
+    assert rc == 0, f"连字符领域 memory-bank 必须可建 (P1 首段切分缺陷): {err}"
+    created = list((mb / "tasks").glob("*-memory-bank-doc-pipeline.md"))
+    assert len(created) == 1, f"应建出且只建出一份档案: {created}"
+    assert "**Topics:** memory-bank-doc-pipeline" in created[0].read_text(encoding="utf-8")
+
+    rc, _, err = run("memory-foo")
+    assert rc == 1 and "领域枚举" in err, f"memory- 开头的非领域必须拒 (最长前缀不得误收): {err}"
+
+    rc, _, err = run("memory-bank")
+    assert rc == 0, f"裸领域 topic (topic == 枚举项) 沿用 P1 行为照收: {err}"
+
+    rc, _, err = run("webui-bar")
+    assert rc == 0, f"单词领域回归不得破: {err}"
+
+    rc, _, err = run("nosuch-slug")
+    assert rc == 1 and "领域枚举" in err, f"真坏领域必须拒: {err}"
 
 
 def test_wrap_creates_zero_slot_slice_and_updates(tmp_path: Path) -> None:
@@ -1342,3 +1411,398 @@ def test_doc_templates_checker_is_wired() -> None:
 
     gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
     assert "check_doc_templates.py --check" in gate_cfg, "check_doc_templates.py --check 未挂进提交闸门"
+
+
+# ---------------------------------------------------------------------------
+# kb.status / kb.bump / D4 反向补链 (2026-10-17 P2, 计划 26-10-17-0527)
+#
+# 实现与检查器在 memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`
+# (new_doc.py 的 --refs 走 D4), 本文件**在进程内 import** 它们 —— 同 P1 口径。
+# 验收: 计划 §07 P2 行 ——「对 P1 临时件全链演练; 认领链双向机检绿」。
+# ---------------------------------------------------------------------------
+
+
+def _flip_status():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import flip_status
+
+    return flip_status
+
+
+def _bump_doc():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import bump_doc
+
+    return bump_doc
+
+
+def _gen_doc_map():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import gen_doc_map
+
+    return gen_doc_map
+
+
+def _p2_fixture(tmp_path: Path) -> Path:
+    """P2 夹具: 最小可跑的 memory-bank (plans / tasks / activeContext / issues)。"""
+    mb = tmp_path / "memory-bank"
+    for sub in ("plans", "tasks", "activeContext", "issues"):
+        (mb / sub).mkdir(parents=True)
+    return mb
+
+
+def _write_plan(mb: Path, name: str = "26-10-17-0900-plan-p2.html") -> Path:
+    path = mb / "plans" / name
+    path.write_text(
+        """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>P2 冒烟计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="p2-topic">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-17-0900">
+<meta name="doc-updated" content="26-10-17-0900">
+</head>
+<body>
+<div class="meta">
+  <b>doc-added</b> 26-10-17-0900 · <b>doc-updated</b> 26-10-17-0900 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+</div>
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-17-0900</span> 初版。</li>
+</ul>
+</body>
+</html>
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
+def _write_task(mb: Path, name: str = "26-10-17-backend-p2.md") -> Path:
+    path = mb / "tasks" / name
+    path.write_text(
+        """# 26-10-17-backend-p2 — P2 冒烟档案
+
+**Status:** In Progress
+**Added:** 2026-10-17
+**Updated:** 2026-10-17
+**Summary:** P2 冒烟档案标题
+**Topics:** backend-p2
+
+## 原始请求
+
+x
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
+def _write_slice(mb: Path, name: str = "26-10-17-0900-p2-topic.md") -> Path:
+    path = mb / "activeContext" / name
+    path.write_text(
+        """# P2 冒烟切片
+
+> 摘要: 冒烟
+> 最后活动: 2026-10-17 09:00
+
+## 产出
+
+x
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
+def _write_issue(mb: Path, name: str = "26-10-17-0900-bug-p2.html") -> Path:
+    path = mb / "issues" / name
+    path.write_text(
+        '<html><head>\n<meta name="issue-status" content="Open">\n<meta name="doc-topic" content="p2-bug">\n</head><body>x</body></html>\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
+def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
+    """kb.status: 计划/档案翻转 + 抬时间戳 + 重建索引; 幂等不抬戳; 五类拒绝全 fail-fast;
+    终态带条件提醒; 输出含「机械 0」收录断言 (§5.3 / §5.4)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    flip = _flip_status()
+    mb = _p2_fixture(tmp_path)
+    plan = _write_plan(mb)
+    task = _write_task(mb)
+    _write_slice(mb)
+    _write_issue(mb)
+
+    def run(path: str, to: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = flip.main(["--root", str(tmp_path), "--mb-dir", str(mb), path, to])
+        return rc, out.getvalue(), err.getvalue()
+
+    # --- 计划翻转: 状态 + doc-updated 都抬, 索引重建, 契约输出
+    rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "In Progress")
+    assert rc == 0, err
+    assert "doc-status Open → In Progress" in out and "已重建索引" in out and "机械 0" in out, out
+    assert out.count("剩余人工") == 1, "契约行只打一次"
+    ptext = plan.read_text(encoding="utf-8")
+    assert '<meta name="doc-status" content="In Progress">' in ptext
+    assert '<meta name="doc-updated" content="26-10-17-0900">' not in ptext, "doc-updated 应被抬"
+    assert "· <b>doc-status</b> In Progress ·" in ptext, "正文 .meta 镜像行的状态词应同改"
+    assert "<b>doc-updated</b> 26-10-17-0900" not in ptext, "正文 .meta 镜像行的 doc-updated 应同抬"
+
+    # --- 终态: 条件提醒 (同专题切片迁出), 计数行 条件 1
+    rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "Done")
+    assert rc == 0 and "条件 1" in out and "切片" in out and "p2-topic" in out, out
+
+    # --- 同状态幂等: 不抬时间戳不重建索引 (黄金法则: 幂等无副作用)
+    before = plan.read_text(encoding="utf-8")
+    rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "Done")
+    assert rc == 0 and "幂等" in out and "已重建索引" not in out, out
+    assert plan.read_text(encoding="utf-8") == before, "幂等翻转不得改文件"
+
+    # --- 五类拒绝全 fail-fast (原因打在输出里)
+    rc, _, err = run("plans/26-10-17-0900-plan-p2.html", "Draft")
+    assert rc == 1 and "词表" in err, f"词表外值必须拒绝: {err}"
+    rc, _, err = run("activeContext/26-10-17-0900-p2-topic.md", "Done")
+    assert rc == 1 and "kb.wrap" in err, f"切片无状态, 必须拒绝并指路 kb.wrap: {err}"
+    rc, _, err = run("issues/26-10-17-0900-bug-p2.html", "Done")
+    assert rc == 1 and "create-issue" in err, f"issue 有自己的词表与索引, 必须拒绝并指路: {err}"
+    rc, _, err = run("memory-bank/nope.md", "Done")
+    assert rc == 1 and "文件不存在" in err, f"不存在的路径必须拒绝: {err}"
+
+    # --- 档案翻转: **Status:** + **Updated:** + 终态 Summary 收口提醒
+    rc, out, err = run("tasks/26-10-17-backend-p2.md", "Done")
+    assert rc == 0 and "Status In Progress → Done" in out and "Summary 收口" in out, out
+    ttext = task.read_text(encoding="utf-8")
+    assert "**Status:** Done" in ttext and "**Updated:** 2026-10-17" in ttext
+    rc, _, err = run("tasks/26-10-17-backend-p2.md", "Archived")
+    assert rc == 1 and "词表" in err, f"档案 4 词表外值必须拒绝: {err}"
+
+
+def test_bump_doc_appends_changelog_and_fails_fast(tmp_path: Path) -> None:
+    """kb.bump: 计划 R 行追加 (编号递推/已有行零触碰/note 转义) + doc-updated 抬;
+    档案抬 Updated / 切片抬最后活动; 无变更记录段 fail-fast; 输出含「机械 0」。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    bump = _bump_doc()
+    mb = _p2_fixture(tmp_path)
+    plan = _write_plan(mb)
+    task = _write_task(mb)
+    slice_ = _write_slice(mb)
+    _write_issue(mb)
+
+    def run(path: str, note: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = bump.main(["--root", str(tmp_path), "--mb-dir", str(mb), path, "--note", note])
+        return rc, out.getvalue(), err.getvalue()
+
+    rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "R1: 加冒烟")
+    assert rc == 0 and "R1" in out and "机械 0" in out and "已重建索引" in out, out
+    ptext = plan.read_text(encoding="utf-8")
+    assert '<li><span class="tag">R1 · ' in ptext and "R1: 加冒烟" in ptext
+    assert ptext.count("R0 · 26-10-17-0900") == 1, "已有 R 行零触碰"
+    assert '<meta name="doc-updated" content="26-10-17-0900">' not in ptext, "doc-updated 应被抬"
+    assert "<b>doc-updated</b> 26-10-17-0900" not in ptext, "正文 .meta 镜像行应同抬"
+
+    # 二次 bump → R2 (编号递推 = 段内最大 + 1)
+    rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "R2: 再改")
+    assert rc == 0 and "R2" in out, out
+    ptext = plan.read_text(encoding="utf-8")
+    assert ptext.count('<span class="tag">R0 · ') == 1 and ptext.count('<span class="tag">R1 · ') == 1
+    assert ptext.count('<span class="tag">R2 · ') == 1
+
+    # note 自动 HTML 转义 (值里出现 < > & 不破坏 meta/结构)
+    rc, _, err = run("plans/26-10-17-0900-plan-p2.html", "修 a<b & c>d")
+    assert rc == 0, err
+    assert "修 a&lt;b &amp; c&gt;d" in plan.read_text(encoding="utf-8")
+
+    # 档案抬 Updated / 切片抬最后活动
+    rc, out, err = run("tasks/26-10-17-backend-p2.md", "进展一句")
+    assert rc == 0 and "Updated" in out, out
+    assert "**Updated:** 2026-10-17" in task.read_text(encoding="utf-8")
+    rc, out, err = run("activeContext/26-10-17-0900-p2-topic.md", "进展一句")
+    assert rc == 0 and "最后活动" in out, out
+    assert "> 最后活动: 2026-10-17" in slice_.read_text(encoding="utf-8")
+
+    # 无变更记录段的件 → fail-fast 指路 (多数报告无段, 不猜位置硬塞)
+    # (reports/ 目录可能已被索引重建创建 —— mkdir(exist_ok=True))
+    report = mb / "reports"
+    report.mkdir(exist_ok=True)
+    bad = report / "26-10-17-0900-report-nosec.html"
+    bad.write_text(
+        '<html><head><meta name="doc-updated" content="26-10-17-0900"></head><body>x</body></html>', encoding="utf-8"
+    )
+    rc, _, err = run("reports/26-10-17-0900-report-nosec.html", "x")
+    assert rc == 1 and "变更记录" in err, f"无变更记录段必须拒绝并指路: {err}"
+    assert '<meta name="doc-updated" content="26-10-17-0900">' in bad.read_text(encoding="utf-8"), "fail-fast 不得改文件"
+
+    # issue → 拒绝指路 create-issue
+    rc, _, err = run("issues/26-10-17-0900-bug-p2.html", "x")
+    assert rc == 1 and "create-issue" in err, err
+
+
+def test_new_doc_refs_auto_chains_bidirectionally(tmp_path: Path) -> None:
+    """D4 反向认领 (计划 §08): --refs 自动双向补链 —— 本件写 doc-refs / **Refs:**,
+    目标件 (HTML/md 各类载体) 自动反向声明, 幂等合并; 坏 refs 全 fail-fast 不落半文件。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    mb = _p2_fixture(tmp_path)
+    target_task = _write_task(mb)
+    pit_dir = mb / "pitfalls" / "git"
+    pit_dir.mkdir(parents=True)
+    target_pit = pit_dir / "sync-pull.md"
+    target_pit.write_text("# 坑标题\n\n> 摘要: abc\n> 触发: git, push\n\n### entry\n", encoding="utf-8", newline="\n")
+    target_issue = _write_issue(mb)
+    target_slice = _write_slice(mb)
+
+    def run(*extra: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = new_doc.main(["--root", str(tmp_path), "--mb-dir", str(mb), *extra])
+        return rc, out.getvalue(), err.getvalue()
+
+    # 四类目标 (仓库根相对) —— 本件正向声明 + 目标件反向声明
+    rc, out, err = run(
+        "plan", "--title", "引用计划", "--topic", "refs-plan", "--refs", "memory-bank/tasks/26-10-17-backend-p2.md,"
+        "memory-bank/pitfalls/git/sync-pull.md,"
+        "memory-bank/issues/26-10-17-0900-bug-p2.html,"
+        "memory-bank/activeContext/26-10-17-0900-p2-topic.md"
+    )
+    assert rc == 0, err
+    plan = list((mb / "plans").glob("*-plan-refs-plan.html"))
+    assert len(plan) == 1
+    ptext = plan[0].read_text(encoding="utf-8")
+    assert '<meta name="doc-refs" content="memory-bank/tasks/26-10-17-backend-p2.md, ' \
+           'memory-bank/pitfalls/git/sync-pull.md, memory-bank/issues/26-10-17-0900-bug-p2.html, ' \
+           'memory-bank/activeContext/26-10-17-0900-p2-topic.md">' in ptext, ptext[:600]
+    plan_rel = f"memory-bank/plans/{plan[0].name}"
+    assert f"**Refs:** {plan_rel}" in target_task.read_text(encoding="utf-8")
+    assert f"**Refs:** {plan_rel}" in target_pit.read_text(encoding="utf-8")
+    assert f'<meta name="doc-refs" content="{plan_rel}">' in target_issue.read_text(encoding="utf-8")
+    assert f"**Refs:** {plan_rel}" in target_slice.read_text(encoding="utf-8")
+    assert out.count("已双向补链") == 4, f"四类目标各一行: {out}"
+
+    # mb 相对形态 + 幂等合并 (同目标再来一件 → 目标已有反向声明, 合并为逗号列表)
+    rc, out, err = run(
+        "task", "--title", "引用档案", "--topic", "backend-refs-task", "--refs", "tasks/26-10-17-backend-p2.md"
+    )
+    assert rc == 0, err
+    task = list((mb / "tasks").glob("*-backend-refs-task.md"))
+    assert len(task) == 1
+    assert "**Refs:** memory-bank/tasks/26-10-17-backend-p2.md" in task[0].read_text(encoding="utf-8")
+    refline = [ln for ln in target_task.read_text(encoding="utf-8").splitlines() if ln.startswith("**Refs:**")]
+    assert len(refline) == 1 and refline[0].count(",") == 1, f"目标反向声明应合并为一行两条: {refline}"
+
+    # 坏 refs → fail-fast 且不落半文件 (库外目标用根级 AGENTS.md 探测: 存在但不在 memory-bank 内)
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    for bad_refs, why in (("tasks/nope.md", "目标不存在"), ("AGENTS.md", "不在 memory-bank 下"), ("tasks/_index.md", "生成物")):
+        rc, _, err = run("plan", "--title", "坏", "--topic", "bad-refs", "--refs", bad_refs)
+        assert rc == 1 and why in err, f"{bad_refs} 必须拒绝 ({why}): {err}"
+        assert not list((mb / "plans").glob("*-plan-bad-refs.html")), "fail-fast 不得落半文件"
+
+    # 无 --refs → 与 P1 行为一致 (无 doc-refs meta, 无反向补链行)
+    rc, out, err = run("plan", "--title", "无引用", "--topic", "no-refs")
+    assert rc == 0, err
+    noref = list((mb / "plans").glob("*-plan-no-refs.html"))
+    assert "doc-refs" not in noref[0].read_text(encoding="utf-8")
+    assert "已双向补链" not in out
+
+
+def test_p2_full_chain_drill(tmp_path: Path) -> None:
+    """P2 验收 (计划 §07): 对临时件全链演练 —— kb.new(--refs) → 填空 → kb.status → kb.bump
+    → 认领链双向机检 (gen_doc_map --check) 绿; 改过的件再过新增面守卫仍绿。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc, flip, bump = _new_doc(), _flip_status(), _bump_doc()
+    checker, docmap = _doc_templates(), _gen_doc_map()
+    mb = _p2_fixture(tmp_path)
+
+    def run(mod, argv: list[str]) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = mod.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    # ① 先建档案, 再建计划并 --refs 档案 (D4 双向补链)
+    rc, _, err = run(new_doc, ["task", "--title", "演练档案", "--topic", "docs-drill"])
+    assert rc == 0, err
+    task = list((mb / "tasks").glob("*-docs-drill.md"))
+    assert len(task) == 1
+    task_rel = f"memory-bank/tasks/{task[0].name}"
+    rc, out, err = run(new_doc, ["plan", "--title", "演练计划", "--topic", "drill-topic", "--refs", task_rel])
+    assert rc == 0, err
+    plan = list((mb / "plans").glob("*-plan-drill-topic.html"))
+    assert len(plan) == 1
+    assert "已双向补链" in out, f"D4 应打印双向补链行: {out}"
+
+    # ② 填空 (agent 的一次编辑)
+    _fill_slots(plan[0])
+    _fill_slots(task[0])
+    assert checker.validate_file(plan[0], "plan") == [], "填空后计划必须过新增面守卫"
+    assert checker.validate_file(task[0], "task") == [], "填空后档案必须过新增面守卫"
+
+    # ③ kb.status 翻转 (终态)
+    rc, out, err = run(flip, [str(plan[0].relative_to(tmp_path)), "In Progress"])
+    assert rc == 0 and "已翻转" in out, out
+    rc, out, err = run(flip, [f"memory-bank/plans/{plan[0].name}", "Done"])
+    assert rc == 0 and "条件 1" in out, out
+    rc, out, err = run(flip, [task_rel, "Done"])
+    assert rc == 0 and "Summary 收口" in out, out
+
+    # ④ kb.bump 改版记录 (计划有变更记录段)
+    rc, out, err = run(bump, [f"memory-bank/plans/{plan[0].name}", "--note", "R1: 演练改版"])
+    assert rc == 0 and "R1" in out, out
+
+    # ⑤ 认领链双向机检绿 (计划 §07 P2 验收判据; gen_doc_map.main() 只读 sys.argv,
+    #    进程内直调它的 check 函数 —— 与既有守卫直调 validate_file 同做法)
+    docmap = _gen_doc_map()
+    items = docmap.collect(mb)
+    problems = docmap.check_claim_chain(items, tmp_path, mb)
+    assert problems == [], f"认领链双向机检必须绿: {problems}"
+    assert docmap.check_topics(items) == 0, "演练件的跨形态主键必须齐"
+    assert docmap.check_status_vocabulary(items) == 0, "演练件状态词必须在 5 词表内"
+
+    # ⑥ 红绿双验 (§06): 删掉目标件的反向声明 = 人工造单向链 → 机检必须红 (证明绿不是恒绿);
+    #    还原 → 复绿
+    ttext = task[0].read_text(encoding="utf-8")
+    plan_rel = f"memory-bank/plans/{plan[0].name}"
+    task[0].write_text(ttext.replace(f"**Refs:** {plan_rel}", ""), encoding="utf-8")
+    broken = docmap.check_claim_chain(docmap.collect(mb), tmp_path, mb)
+    assert any("反向声明" in p for p in broken), f"单向链必须判红 (判据恒绿 = 没守): {broken}"
+    task[0].write_text(ttext, encoding="utf-8")
+    assert docmap.check_claim_chain(docmap.collect(mb), tmp_path, mb) == [], "还原后必须复绿"
+
+    # ⑦ 改过的件再过新增面守卫仍绿 (翻转/bump 没破坏形态)
+    assert checker.validate_file(plan[0], "plan") == [], "翻转+bump 后的计划必须仍过守卫"
+    assert checker.validate_file(task[0], "task") == [], "翻转后的档案必须仍过守卫"
+
+
+def test_kb_status_and_bump_are_registered() -> None:
+    """kb.status / kb.bump 已收录进 .commands/kb (收录协议: 不接线 = 没人跑;
+    与 test_doc_templates_checker_is_wired 同旨)。when 与 note 是收录协议必填项。"""
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    for task_id, script in (("kb.status", "flip_status.py"), ("kb.bump", "bump_doc.py")):
+        body = re.search(r'^\[tasks\."%s"\]\n(.*?)(?=^\[|\Z)' % re.escape(task_id), kb_cfg, re.S | re.M)
+        assert body, f"{task_id} 未收录进 .commands/kb (收录协议)"
+        assert script in body.group(1), f"{task_id} 的 run 必须指到 {script}"
+        assert 'when    = "' in body.group(1), f"{task_id} 缺 when (收录协议必填: 下次能被发现的唯一线索)"
+        assert 'note    = "' in body.group(1), f"{task_id} 缺 note (收录协议必填: 环境陷阱的判据)"
