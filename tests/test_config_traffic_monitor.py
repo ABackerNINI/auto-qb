@@ -18,6 +18,8 @@
 - test_active_dat_path_traffic_monitor: provider=traffic_monitor -> traffic_monitor.dat_path(去空白)
 - test_active_dat_path_global_joins_data_dir: provider=global -> os.path.join(data_dir, history_traffic.dat)
 - test_active_dat_path_global_without_data_dir: provider=global 但 data_dir 空 -> ""(未配置数据源)
+- test_active_dat_path_provider_is_exclusive: 两来源参数并存时只有 provider 选中的那个参与取数
+  (D1 严格互斥; 工具面缺 data_dir 也不静默回退 TM 文件)
 - test_round_trip_through_load_config: 新段经 load_config 真链路(读文件 -> 剥空 -> 迁移 -> 校验 -> 解析)回读一致
 - test_migrate_v4_merges_curve_source: 旧曲线段内联 dat_path 迁到顶层, 曲线段内 traffic_source 键删除、其余保留
 - test_migrate_v4_removes_global_monitor_section: 旧 gtm 段: 仅 notify_cooldown_s 迁走, 其余键与整段删除
@@ -202,6 +204,25 @@ def test_active_dat_path_global_joins_data_dir():
 
 def test_active_dat_path_global_without_data_dir():
     cfg = TrafficSourceConfig(provider="global_traffic_monitor")
+    assert cfg.active_dat_path() == ""
+
+
+def test_active_dat_path_provider_is_exclusive():
+    """D1 严格互斥: 两来源参数可并存, 但取数只认 provider 选中的那一个(不静默回退)
+
+    「参数都在」是常态(用户切来源时不希望丢另一侧的路径), 所以互斥必须落在取数单点上:
+    断言 provider 换向即取数换轨, 且工具面缺 data_dir 时返回空而不是回退 TM 文件。
+    """
+    cfg = TrafficSourceConfig(provider="traffic_monitor")
+    cfg.traffic_monitor.dat_path = "/tm/history_traffic.dat"
+    cfg.global_traffic_monitor.data_dir = "/tool/data"
+    assert cfg.active_dat_path() == "/tm/history_traffic.dat"
+
+    cfg.provider = "global_traffic_monitor"
+    assert cfg.active_dat_path() == os.path.join("/tool/data", "history_traffic.dat")
+
+    # 工具面未配 data_dir: 无数据源(空), 绝不回退到并存的 TM 文件
+    cfg.global_traffic_monitor.data_dir = ""
     assert cfg.active_dat_path() == ""
 
 

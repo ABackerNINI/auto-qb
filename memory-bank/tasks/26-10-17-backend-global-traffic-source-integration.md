@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17 13:11
-**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休[`GlobalTrafficMonitorConfig` 与 `Config.global_traffic_monitor` 删除, WebUIModule 段认领收缩为 `web`] + 「全局流量来源」单卡[provider 单选 + 选中面展开 + 五态状态区 + 立即拉起/重试/打开工具设置 + 自启开关读指针 + 文件选择器 + 工具参数高级折叠] + 曲线卡删来源字段 + `enabled` 由 provider 派生[修 `conf.enabled` 属性缺失隐患] + 新增 `POST /api/traffic/monitor/relaunch` 与 `WebUIModule.agent`/`request_relaunch`)已实施, S18–S19 待逐项授权。
+**Updated:** 2026-10-17 13:52
+**Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休[`GlobalTrafficMonitorConfig` 与 `Config.global_traffic_monitor` 删除, WebUIModule 段认领收缩为 `web`] + 「全局流量来源」单卡[provider 单选 + 选中面展开 + 五态状态区 + 立即拉起/重试/打开工具设置 + 自启开关读指针 + 文件选择器 + 工具参数高级折叠] + 曲线卡删来源字段 + `enabled` 由 provider 派生[修 `conf.enabled` 属性缺失隐患] + 新增 `POST /api/traffic/monitor/relaunch` 与 `WebUIModule.agent`/`request_relaunch`)已实施; S18(守阵补口 4 条[拉起不拼 uv/入口名的静态守阵 · 指针常量跨侧镜像 · 工具运行期目录 gitignore 覆盖 · provider 取数互斥] + 文档四处回写[docs/configuration.md 工具章节整段改版到随机端口/指针/启动器/自启裁决现实 · README · config-reference/keys.md 修 S15 遗留两处口径错 · 三条新坑] + 新基线切片)已实施, S19 待逐项授权。
 **Topics:** global-traffic-source-integration
 
 ## 原始请求
@@ -33,7 +33,7 @@
 | S15 | auto-qb 配置面与升级链 | Done (26-10-17-1007) |
 | S16 | 探测-拉起-订阅编排(可注入单点) | Done (26-10-17 11:13) |
 | S17 | 设置页合并 | Done (26-10-17 13:11) |
-| S18 | 守阵/基线/文档 | Open |
+| S18 | 守阵/基线/文档 | Done (2026-10-17 13:52) |
 | S19 | 真机验收(并入旧 S10) | Open |
 
 ## 进度日志
@@ -156,3 +156,28 @@
 **未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**(S17 无配置键面新增, 只是删过渡 stub); 真机验收 → S19。
 
 **滚动面**: 本档案(S17 段 + 状态表 + Updated 1311) · activeContext 切片(S17 已实施段 + 待办) · 基线切片新建 · kb.index 重建。随本专题「提交」入库。
+
+### R8 · S18 实施 (2026-10-17 13:52)
+
+用户指令「实施计划S18: 26-10-17-0339-plan-global-traffic-source-integration.html」= 对 S18 的显式授权(S19 不动)。开工同步至 `098d98ab`(快进 `14bfae19→098d98ab`, 3 笔)。
+
+**先核缺口再动笔**: S11–S17 已把计划 §S18 列的五类工具侧守阵(指针写删 / 锁前置 / 随机端口 / frozen 分支 / 搬迁幂等)与 auto-qb 侧(新段校验 / 迁移链 / 探测拉起可注入 / 键面基线)**逐条覆盖**, 故本轮只补 §08 验收判据里仍无守阵的三条 + provider 互斥一条, 不重复造用例。
+
+**落点**(改 2 测试文件 + 4 文档 + 3 新坑档 + 1 基线切片, 零源码改动 —— 守阵/文档轮):
+- `tests/test_traffic_source_agent.py` —— 3 条新守阵(头「测试计划」同步): ①`test_launch_path_has_no_uv_or_entry_names`(AST 扫 agent.py 非 docstring 字符串, 禁 `uv`/`gtm`/`-m`/`run`/`--autostart`/`--data-dir` —— 「怎么起工具」只许在工具侧启动器里; 运行时命令形状由既有 `test_launch_tool_builds_platform_command` 逐 token 钉住); ②`test_pointer_constants_mirror_tool_side`(AST 读工具 `gtm/storage.py` 的 `POINTER_DIR_NAME`/`ENDPOINT_FILE_NAME`/`ENDPOINT_SCHEMA`, 与 agent 镜像常量同值 —— 工具是独立包, auto-qb 不 import 它, 只能靠守阵钉漂移); ③`test_tool_runtime_dirs_are_gitignored`(读 `.gitignore` 文本断言 `data/` 与 `run/` 在场; **不起 git 进程**, 否则撞 `tests/sidefx.py` 的 POPEN 白名单)。
+- `tests/test_config_traffic_monitor.py` —— `test_active_dat_path_provider_is_exclusive`: 两来源参数并存时只有 provider 选中者参与取数; 工具面缺 `data_dir` 返回空而**不回退** TM(§08「来源真正互斥 / 断言取数源唯一」)。
+- `docs/configuration.md` —— 全局限速曲线段去内联来源(改指顶层 `traffic_source`); 工具章节整段改版到 S11–S17 现实: 全称 CLI / `<工具安装目录>/data` + 一次性搬迁 / 指针目录与 `instance.lock` / **随机端口**(`http_port` 0, 排障走 `endpoint` 子命令) / 启动器 `launch.cmd·sh` / 自启裁决在工具 `config.autostart`; 新增「auto-qb 侧: 发现与自动拉起」「auto-qb 侧配置(traffic_source)」两节; 迁移检查单重写(切来源 = 改 `provider` + 填 `data_dir`); 双写者禁令改口径。
+- `memory-bank/config-reference/keys.md` —— **修 S15 遗留两处口径错**: `tool_dir` 留空 = 仓库内默认目录(原文写「按 PATH 查找」)、`tool_exe` 非空且存在优先于启动器(原文写「默认名」); `data_dir` 注明「取数用, 留空 = 无数据源」。这处漂移是写 S18 文档时对照 `agent.resolve_launch_target()` 才发现的 —— 键面守阵只查「键有没有出处」, 不查「说明对不对」。
+- `README.md` —— 限速特性补一条「整机流量来源一键切换」。
+- 新坑三条: `pitfalls/backend/traffic-source-discovery-pointer.md`(指针/锁锚用户级目录、就绪只认探活、锁前置、跨包镜像) · `pitfalls/backend/traffic-source-random-port.md`(随机端口后写死端口全失效、订阅注册键须含基地址) · `pitfalls/git/runtime-data-in-repo.md`(运行期数据落仓库内必须同笔补 ignore)。
+- 基线切片 `baselines/26-10-17-1352-global-traffic-source-integration-s18.md`(实测数字唯一落点)。
+
+**红绿双验**(4 条新守阵逐条突变判红后 `git checkout` 还原, 字节级一致): agent 加 `_MUT = "uv run gtm run"` → ①红; 工具 `POINTER_DIR_NAME` 改 `gtm` → ②红; `.gitignore` 注释 `data/` 行 → ③红; `active_dat_path()` 工具面缺 `data_dir` 时回退 TM → ④红。
+
+**踩到已记的坑 1 条**: 首次还原 agent.py 用 `Path.write_text` 把 LF 写成了 CRLF(`pitfalls/git/editing-traps.md` 家族) —— 已 `git checkout` 复原; 后续突变一律 byte 级读写。另: 全量测试跑到一半时我还在改 `keys.md`/坑档 ⇒ `test_kb_topic_files_have_metadata` 判红(坑档 `> 触发:` 行被我的 Edit 吃掉了), 属**并发自扰**不是真缺陷 —— 修好三行头后复跑全绿。
+
+**出口判据全过**: ①全量 `test.full` 绿(数字见 kb.baseline 最新切片); ②文档四处无漂移(docs/configuration.md · README · config-reference/keys.md · pitfalls); ③`kb.index` 21 个生成物重建; ④KB 守卫单跑绿、副作用越界 0。数字只记基线切片。
+
+**未动(属计划内后续步骤, 非遗漏)**: S19 真机验收(四条: 未跑→自动拉起→订阅成功 / 自启后重启零拉起 / 双实例共享 / 切回 TM 后工具参数保留不参与取数)。
+
+**滚动面**: 本档案(R8 段 + 状态表 + Updated) · activeContext 切片 · 基线切片 · 三条新坑 · kb.index 重建。

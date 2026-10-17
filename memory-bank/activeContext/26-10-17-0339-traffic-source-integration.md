@@ -1,9 +1,9 @@
 ---
-summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 探测-拉起-订阅编排: agent 联动单点 + 订阅方向改读发现指针)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休 + 「全局流量来源」单卡[provider 单选 + 五态状态区 + 立即拉起/自启 + 文件选择器] + 曲线卡删来源)已实施, S18–S19 待逐项授权
+summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五轮收敛, 产出独立计划 26-10-17-0339(Open); 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板; R1 就地改版(26-10-17-0429): 拉起改走工具侧启动器(D19) + D13 收敛为工具侧唯一裁决; 工具侧 S11–S14 已实施(目录定位/数据落点/启动器 · 发现指针与锁锚点 · 随机端口与 endpoint · 自启意图/全称改名/gitignore); S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 探测-拉起-订阅编排: agent 联动单点 + 订阅方向改读发现指针)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休 + 「全局流量来源」单卡[provider 单选 + 五态状态区 + 立即拉起/自启 + 文件选择器] + 曲线卡删来源)已实施; S18(守阵补口 4 条 + 文档四处回写 + 三条新坑 + 新基线切片)已实施, S19 待逐项授权
 ---
 
 > 摘要: 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处, 来源一键切换。经 grilling 五轮 36 问收敛(用户四次纠正), 产出独立计划 `memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html`(doc-status Open, doc-topic `global-traffic-source-integration`)。**R1 就地改版**(26-10-17-0429): 用户指出「把 `--autostart` 固化进启动器」与 D13 冲突 ⇒ 启动器契约(D10 改写 + 新增 D19) + D13 收敛为「启动器恒定携带意图, 工具 config 唯一裁决」。
-> 最后活动: 2026-10-17 13:11
+> 最后活动: 2026-10-17 13:53
 
 # activeContext · traffic-source-integration(26-10-17-0339)
 
@@ -31,4 +31,6 @@ summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五�
 - **S16**(26-10-17-1113): auto-qb 侧**探测 → 引导拉起 → 订阅编排** —— 新增联动单点 `core/traffic_source/agent.py`(`probe()` 读发现指针 + `GET /status` 探活[只认 200]; `ensure_running()` 缺席时**零参数执行启动器**并 detached 拉起、首次引导窗口 120s/常态 10s、失败固定 30s 退避[D14]; `status()` 供 UI 读五态[未安装/未运行/拉起中/已就绪/拉起失败]); **拉起做成模块级可注入单点** `agent.launch_tool`(生产真 `Popen`[Windows `DETACHED_PROCESS`], 测试注入假动作以绕开 sidefx POPEN 白名单); 编排挂**既有订阅线程**(每轮先确保可达再注册, 不占主循环); **密钥与端口全来自指针**(删 `tool_url`/`tool_token_path` 读路径, D6)。
 - **S17**(26-10-17-1311): auto-qb 侧**设置页合并**(D15) —— ①旧过渡 stub 段退休: 删 `GlobalTrafficMonitorConfig` 与 `Config.global_traffic_monitor`, `WebUIModule.sections()` 收缩为 `("web",)`, 路由 `_tm_conf` 改读 `traffic_source.global_traffic_monitor`; **「联动是否启用」由 `provider` 派生**(修 `conf.enabled` 属性缺失的生产级隐患), notify 闸门同判; ②新增写端点 `POST /api/traffic/monitor/relaunch`(409 = 无订阅线程可促) + `WebUIModule.agent`/`request_relaunch`; ③设置页新增一张卡「全局流量来源」: provider 单选 + 选中面展开(TM 仅 `dat_path`; 工具面 `tool_dir`/`tool_exe`/`data_dir`/`notify_cooldown_s`) + 底部**五态**状态区 + 「立即拉起/重试」(前端有界轮询)/「打开工具设置」+ 自启开关(状态读指针 `autostart_registered`, 拨动走 `POST /autostart`, 失败回滚) + 找不到工具时的文件选择器(写 `tool_dir`/`tool_exe`, 受 `/api/fs/dirs` 白名单限制) + 工具参数(高级折叠, 经控制面读后写); ④**曲线卡删来源字段**(来源只在设置页一处)。
 
-**待办**: ①S11–S17 已实施; S18–S19 **逐步骤显式授权**后实施(每步独立收尾+提交); ②旧计划 26-10-16-0541 的 S10 与本计划 S19 归并方式待拍板; ③`docs/configuration.md`(新段/新键)与根 README 回写 → **S18**(计划 §S18 明确), 本轮不动; ④S17 已删过渡 stub `GlobalTrafficMonitorConfig`/`Config.global_traffic_monitor` 并新增 `POST /relaunch` —— 路由与前端设置模板均已重接到 `traffic_source` 段(见 S17 段)。
+**待办**: ①S11–S18 已实施; S19(真机验收) **显式授权**后实施(独立收尾+提交); ②旧计划 26-10-16-0541 的 S10 与本计划 S19 归并方式待拍板; ③`docs/configuration.md` 与根 README 回写已在 S18 完成(工具章节整段改版到随机端口/指针/启动器/自启裁决现实); ④S18 只补了 §08 仍缺的 4 条守阵, 工具侧五类(S11–S14)与 auto-qb 侧三类(S15–S17)既有守阵已逐条核过、不重复造。
+
+**R1(2026-10-17 13:53):** S18 实施: 守阵补口 4 条(拉起不拼 uv/入口名 · 指针跨侧镜像 · 工具运行期目录 gitignore · provider 取数互斥) + docs/configuration.md 工具章节整段改版 + README + keys.md 两处口径修正 + 三条新坑 + S18 基线切片; 全量 `test.full` 绿(数字见 kb.baseline)

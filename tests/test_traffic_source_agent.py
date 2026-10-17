@@ -18,9 +18,18 @@
   not_installed 由拉起用例覆盖)
 - test_launch_tool_builds_platform_command: 启动器 -> 平台命令(detached, 零参数); 可执行文件 ->
   直执行; Windows `cmd.exe /c` + DETACHED_PROCESS / POSIX `/bin/sh` + 新会话
+- test_launch_path_has_no_uv_or_entry_names (S18/§08): agent.py 非 docstring 字符串里不含
+  uv / gtm / -m / run / --autostart / --data-dir —— 「怎么起工具」的知识只在工具侧启动器里
+- test_pointer_constants_mirror_tool_side (S18): 指针目录名 / 文件名 / schema 版本与工具侧
+  gtm/storage.py 同值(两侧各持一份镜像常量, 只能靠守阵钉住漂移)
+- test_tool_runtime_dirs_are_gitignored (S18/§08): 工具运行期目录(data/ 与 run/)已被仓库
+  .gitignore 覆盖 —— 工具跑起来后 git status 仍干净
 """
+import ast
 import json
 import os
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -372,3 +381,92 @@ def test_launch_tool_builds_platform_command(tmp_path, monkeypatch):
     agent.launch_tool(agent.LaunchTarget(exe, True, "可执行文件"))
     args, _kw = calls[-1]
     assert args == [exe]
+
+
+# ---------- 守阵: 拉起不携带「怎么起工具」的知识 (§08 判据 9) ----------
+
+#: 只允许出现在工具侧启动器(D19)里的 token: 包管理 / 包名 / 入口 / 子命令 / 参数
+_LAUNCH_FORBIDDEN = ("uv", "gtm", "-m", "run", "--autostart", "--data-dir")
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _string_literals_without_docstrings(path):
+    """模块内全部**非 docstring** 字符串常量 -> [(行号, 文本)]
+
+    注释与 docstring 不在判定面内: 它们可以自由讨论 `uv`(如首次引导窗口为何给 120s),
+    但**可执行的知识**(会拼进命令行的字符串)不许出现在 auto-qb 侧。
+    """
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    doc_nodes = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                doc_nodes.add(id(body[0].value))
+    return [
+        (n.lineno, n.value)
+        for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in doc_nodes
+    ]
+
+
+def test_launch_path_has_no_uv_or_entry_names():
+    """§08: auto-qb 的拉起动作只有「执行启动器」一步 —— 不拼 uv、不认识入口名与子命令
+
+    运行时形状由 test_launch_tool_builds_platform_command 逐 token 钉住(`cmd.exe /c <启动器>`);
+    本用例守**静态面**: agent.py 里不许出现 uv / gtm / -m / run / --autostart / --data-dir
+    这些字符串常量。工具升级换命令形态时只改启动器内容、本侧零改动 —— 一旦有人图省事在
+    auto-qb 里拼 `uv run gtm run`, 这条当场红。
+    """
+    pattern = re.compile(r"(?<![A-Za-z0-9_-])(%s)(?![A-Za-z0-9_-])" % "|".join(re.escape(t) for t in _LAUNCH_FORBIDDEN))
+    offenders = [
+        (lineno, text) for lineno, text in _string_literals_without_docstrings(agent.__file__) if pattern.search(text)
+    ]
+    assert offenders == [], f"auto-qb 侧出现「怎么起工具」的知识(应沉进工具侧启动器): {offenders}"
+
+
+# ---------- 守阵: 指针常量跨侧镜像 (§05 契约字段) ----------
+
+
+def _module_constants(path):
+    """模块顶层 `NAME = 字面量` 赋值 -> {NAME: 值}(AST 读, 不 import 工具包)"""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    out = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            try:
+                out[node.targets[0].id] = ast.literal_eval(node.value)
+            except (ValueError, SyntaxError):
+                continue
+    return out
+
+
+def test_pointer_constants_mirror_tool_side():
+    """指针目录名 / 文件名 / schema 版本必须与工具侧 gtm/storage.py 同值
+
+    工具是独立包(自带 venv), auto-qb **不 import 它**, 两侧各持一份镜像常量 —— 只改一边的
+    后果是「工具在跑、auto-qb 永远发现不了」(或反过来读到旧格式瞎猜字段)。D6 已把指针定为
+    唯一事实源, 这份镜像契约因此值得一条守阵。
+    """
+    tool = _module_constants(_REPO_ROOT / "tools" / "global-traffic-monitor" / "src" / "gtm" / "storage.py")
+    assert tool["POINTER_DIR_NAME"] == agent.POINTER_DIR_NAME
+    assert tool["ENDPOINT_FILE_NAME"] == agent.ENDPOINT_FILE_NAME
+    assert tool["ENDPOINT_SCHEMA"] == agent.ENDPOINT_SCHEMA
+    # D16: 用户可见面用全称(目录名与 CLI 同名), 包名 gtm 不外泄到指针路径
+    assert agent.POINTER_DIR_NAME == "global-traffic-monitor"
+
+
+# ---------- 守阵: 工具运行期目录不得污染 git status (§08 判据 8) ----------
+
+
+def test_tool_runtime_dirs_are_gitignored():
+    """工具数据默认落进仓库(<工具目录>/data 与 run), 必须被 .gitignore 覆盖
+
+    这两条是 S14 补的忽略项; 删掉或改路径的后果不是测试红, 而是运行中的工具把
+    history_traffic.dat 与临时物写进 git status —— 踩本仓「树脏即停」的 git 纪律红线。
+    判据直接读 .gitignore 文本(不起 git 进程: tests/sidefx.py 的 POPEN 白名单不放行)。
+    """
+    lines = {ln.strip() for ln in (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()}
+    for entry in ("tools/global-traffic-monitor/data/", "tools/global-traffic-monitor/run/"):
+        assert entry in lines, f".gitignore 缺运行期目录忽略项: {entry}"

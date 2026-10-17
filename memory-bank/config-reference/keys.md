@@ -105,8 +105,8 @@ traffic_source:
     traffic_monitor:
         dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填
     global_traffic_monitor:
-        tool_dir: ""                       # 工具安装目录(留空 = 按 PATH 查找)
-        tool_exe: ""                       # 工具可执行文件名/路径(留空 = 默认名)
+        tool_dir: ""                       # 工具安装目录(留空 = 仓库内 tools/global-traffic-monitor)
+        tool_exe: ""                       # 显式可执行文件路径(非空且存在则优先于启动器; 编译版逃生门)
         data_dir: ""                       # 工具数据目录; 非空时取数路径 = <data_dir>/history_traffic.dat
         notify_cooldown_s: 10M             # 收到工具事件后刷新历史图的冷却(0S~24H), 0S = 不冷却
 ```
@@ -117,9 +117,9 @@ traffic_source:
 | `traffic_monitor` | object | TrafficMonitor 来源子块; 仅一个键 `dat_path` |
 | `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 时必须非空(校验 fail-fast) |
 | `global_traffic_monitor` | object | 全局流量监视器(工具)来源子块 |
-| `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录(留空 = 按 PATH 查找) |
-| `global_traffic_monitor.tool_exe` | str / `""` | 工具可执行文件名/路径(留空 = 默认名) |
-| `global_traffic_monitor.data_dir` | str / `""` | 工具数据目录; 非空时取数路径 = `<data_dir>/history_traffic.dat` |
+| `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录; 留空 = 仓库内 `tools/global-traffic-monitor`(源码态默认), 目录里放平台启动器 `launch.cmd`/`launch.sh` |
+| `global_traffic_monitor.tool_exe` | str / `""` | 显式可执行文件路径; **非空且文件存在则优先于启动器**(显式覆盖 / 编译版逃生门), 找不到才回退启动器, 两者都没有 = 「未安装」 |
+| `global_traffic_monitor.data_dir` | str / `""` | 工具数据目录(**取数用**); 非空时取数路径 = `<data_dir>/history_traffic.dat`; 工具自身默认落 `<工具安装目录>/data`, 需把该路径填到这里; 留空 = 无数据源(不回退 TM 文件) |
 | `global_traffic_monitor.notify_cooldown_s` | time / `10M` | 收到工具事件后刷新历史图的冷却(`0S` ~ 24H), `0S` = 不冷却; 事件号去重另算, 两者互补 |
 
 取数单点 = `TrafficSourceConfig.active_dat_path()`(实现单点 `src/auto_qb/config/models.py`): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → `<data_dir>/history_traffic.dat`(`data_dir` 为空则无数据源)。两来源**严格互斥**(同一次取数只走一支)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
