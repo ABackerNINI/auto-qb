@@ -5,14 +5,22 @@
 计划 §03 S3 注)。运行循环每轮读 ConfigHolder.current —— 采样间隔/适配器过滤/
 flush 节流参数热生效; http host/port 改动需重启生效 (改绑监听地址无法热切换)。
 
-默认参数 (计划 §05): sample_interval=5s / flush=Δ>=1MiB 或 30s /
+默认参数 (计划 §05): sample_interval=5S / flush=Δ>=1MiB 或 30S /
 notify_threshold=100MiB / http=127.0.0.1 (http_port=0 由内核分配随机端口, S13/D9) /
-lease_ttl=180s / heartbeat=60s / notify_timeout=3s / adapters 排除 loopback 与 down /
+lease_ttl=180S / heartbeat=60S / notify_timeout=3S / adapters 排除 loopback 与 down /
 autostart=true (自启意图唯一裁决, S14/D13)。全部可经 WebUI 设置页调整。
 
-校验 (黄金法则 4): fail-fast 全量校验并**聚合**所有错误 (未知键/类型不符/越界
+**时间 / 大小的形态 (26-10-17-1737 S7/D13)**: 盘上与契约 (config.yml / PUT /config /
+GET /status 的 config 回显) 一律是**复合串** —— ``"30S"`` / ``"10MiB"``，不留「数值 +
+独立单位键」两种形态; 解析/回显单点在 gtm/units.py (文法镜像 auto-qb)。内存里的 Config
+仍是运行期物理量 (秒 / 字节), 采样循环与存储层不必认识单位。**读侧兼容旧式裸数值**
+(D13 之前的形态): ``sample_interval: 5.0`` 按秒、``flush_delta_bytes: 1048576`` 按字节
+平移, 下次写盘即迁移成复合串 (启动时还会做一次显式一次性迁移, 见
+migrate_legacy_config)。
+
+校验 (黄金法则 4): fail-fast 全量校验并**聚合**所有错误 (未知键/类型不符/越界/串解析失败
 一次性报齐, 不是见第一个错就停); 布尔陷阱: bool 是 int 子类, 数值字段显式拒
-bool (sample_interval: true 不是 5); 布尔字段 (autostart) 反向只收 true/false
+bool (sample_interval: true 不是 5S); 布尔字段 (autostart) 反向只收 true/false
 (给 0/1 也拒, 免得把「显式关过」写成数字而丢失语义)。解析器与 auto-qb 同族 (PyYAML)。
 """
 
@@ -25,6 +33,8 @@ from dataclasses import dataclass, fields, replace
 from typing import Any, Mapping, Optional, Tuple
 
 import yaml
+
+from gtm.units import UnitError, format_duration, format_size, parse_duration, parse_size
 
 logger = logging.getLogger("gtm.config")
 
@@ -72,29 +82,28 @@ class Config:
 
 # ---- 校验 (黄金法则 4: 全量 + 聚合) ----
 
-# 字段 -> (校验器名, 人读说明); 校验器只认"标量字段", 列表字段 (adapter_*)
-# 单独处理 (元素全为 str 即可)
-_INT_FIELDS = ("flush_delta_bytes", "notify_threshold_bytes", "http_port")
-_FLOAT_FIELDS = (
+# 字段按"契约形态"分组: 时间/大小是复合串 (盘上) 但内存是物理量 (秒/字节), 校验器负责
+# 串洗 -> 数值 (读侧同时兼容旧式裸数值); 列表字段 (adapter_*) 单独处理 (元素全为 str 即可)。
+_DURATION_FIELDS = (
     "sample_interval",
     "flush_interval_s",
     "lease_ttl_s",
     "heartbeat_interval_s",
     "notify_timeout_s",
 )
+_SIZE_FIELDS = ("flush_delta_bytes", "notify_threshold_bytes")
+_INT_FIELDS = ("http_port", )
 _STR_FIELDS = ("http_host", )
 _LIST_FIELDS = ("adapter_include", "adapter_exclude")
 _BOOL_FIELDS = ("autostart", )
-_KNOWN_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS + _STR_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
+_KNOWN_FIELDS = frozenset(_DURATION_FIELDS + _SIZE_FIELDS + _INT_FIELDS + _STR_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
 
-# 正数下限 (含): 这些字段必须 > 0 (时间/字节) —— http_port 不在内 (0 合法)
-_POSITIVE_FIELDS = frozenset(_INT_FIELDS + _FLOAT_FIELDS) - {"http_port"}
 # 端口区间 (S13/D9): 0 合法 = 内核分配随机端口; 下限从 1 放开到 0
 _PORT_RANGE = (0, 65535)
 
 
 def _reject_bool(name: str, value: Any) -> Optional[str]:
-    """bool 是 int 子类 —— 数值字段收到 True/False 一律拒绝 (sample_interval: true 不是 5)."""
+    """bool 是 int 子类 —— 数值字段收到 True/False 一律拒绝 (sample_interval: true 不是 5S)."""
     if isinstance(value, bool):
         return f"{name}: 期望数值, 收到布尔 {value!r}"
     return None
@@ -108,31 +117,47 @@ def _check_int(name: str, value: Any, errors: list[str]) -> Optional[int]:
     if not isinstance(value, int):
         errors.append(f"{name}: 期望整数, 收到 {type(value).__name__} {value!r}")
         return None
-    if name in _POSITIVE_FIELDS and value <= 0:
-        errors.append(f"{name}: 期望正数 (>0), 收到 {value}")
-        return None
     if name == "http_port" and not (_PORT_RANGE[0] <= value <= _PORT_RANGE[1]):
         errors.append(f"{name}: 期望端口 0-65535 (0 = 内核分配随机端口), 收到 {value}")
         return None
     return value
 
 
-def _check_float(name: str, value: Any, errors: list[str]) -> Optional[float]:
+def _check_duration(name: str, value: Any, errors: list[str]) -> Optional[float]:
+    """时间字段: 复合串 ("30S"/"5M") 或旧式裸秒数 -> 秒 (D13 迁移语义在 units.parse_duration)."""
     bad = _reject_bool(name, value)
     if bad:
         errors.append(bad)
         return None
-    if not isinstance(value, (int, float)):
-        errors.append(f"{name}: 期望数值, 收到 {type(value).__name__} {value!r}")
+    try:
+        seconds = parse_duration(value)
+    except UnitError as e:
+        errors.append(f"{name}: {e}")
         return None
-    if not math.isfinite(float(value)):
+    if not math.isfinite(seconds):
         errors.append(f"{name}: 期望有限数值, 收到 {value!r}")
         return None
-    fval = float(value)
-    if name in _POSITIVE_FIELDS and fval <= 0:
-        errors.append(f"{name}: 期望正数 (>0), 收到 {value}")
+    if seconds <= 0:
+        errors.append(f"{name}: 期望正数 (>0), 收到 {value!r}")
         return None
-    return fval
+    return seconds
+
+
+def _check_size(name: str, value: Any, errors: list[str]) -> Optional[int]:
+    """大小字段: 复合串 ("1MiB") 或旧式裸字节数 -> 字节."""
+    bad = _reject_bool(name, value)
+    if bad:
+        errors.append(bad)
+        return None
+    try:
+        nbytes = parse_size(value)
+    except UnitError as e:
+        errors.append(f"{name}: {e}")
+        return None
+    if nbytes <= 0:
+        errors.append(f"{name}: 期望正数 (>0), 收到 {value!r}")
+        return None
+    return nbytes
 
 
 def _check_str(name: str, value: Any, errors: list[str]) -> Optional[str]:
@@ -172,8 +197,8 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
     """全量校验配置载荷: 成功返回 (Config, ()); 失败返回 (None, 聚合错误元组).
 
     校验面: 未知键 (黄金法则 4 口径 —— 拒绝拼写错误/过期键, 不静默忽略) /
-    类型 (int/float/str/bool, 数值字段显式拒 bool) / 范围 (正数、端口 0-65535、
-    有限数值)。逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
+    类型 (时间/大小为复合串或旧式裸数值, 端口整数, 数值字段显式拒 bool) / 范围 (正数、
+    端口 0-65535、有限数值、字节为整数)。逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
     """
     if not isinstance(payload, Mapping):
         return None, (f"配置载荷必须是映射, 收到 {type(payload).__name__}", )
@@ -182,14 +207,19 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
     for key in payload:
         if key not in _KNOWN_FIELDS:
             errors.append(f"未知配置键: {key!r} (已知: {', '.join(sorted(_KNOWN_FIELDS))})")
+    for name in _DURATION_FIELDS:
+        if name in payload:
+            ok = _check_duration(name, payload[name], errors)
+            if ok is not None:
+                overrides[name] = ok
+    for name in _SIZE_FIELDS:
+        if name in payload:
+            ok = _check_size(name, payload[name], errors)
+            if ok is not None:
+                overrides[name] = ok
     for name in _INT_FIELDS:
         if name in payload:
             ok = _check_int(name, payload[name], errors)
-            if ok is not None:
-                overrides[name] = ok
-    for name in _FLOAT_FIELDS:
-        if name in payload:
-            ok = _check_float(name, payload[name], errors)
             if ok is not None:
                 overrides[name] = ok
     for name in _STR_FIELDS:
@@ -241,8 +271,50 @@ def save_config(path: str, config: Config) -> None:
 
 
 def config_to_payload(config: Config) -> dict[str, Any]:
-    """Config -> config.yml 载荷 (PUT /config 回显与 save_config 共用)."""
-    return {f.name: getattr(config, f.name) for f in fields(config)}
+    """Config -> config.yml/契约载荷 (PUT /config 回显与 save_config 共用).
+
+    S7/D13: 时间/大小**只写复合串** (``"30S"`` / ``"10MiB"``) —— 写侧凭空数值, 盘上因此
+    不会出现「数值 + 独立单位」的第二形态; 内存里的物理量在这一次转换里唯一地格式化成串。
+    """
+    payload: dict[str, Any] = {}
+    for f in fields(config):
+        value = getattr(config, f.name)
+        if f.name in _DURATION_FIELDS:
+            payload[f.name] = format_duration(value)
+        elif f.name in _SIZE_FIELDS:
+            payload[f.name] = format_size(value)
+        else:
+            payload[f.name] = value
+    return payload
+
+
+def migrate_legacy_config(path: str) -> Optional[str]:
+    """把旧式裸数值一次性改写成复合串 (S7/D13 的"一次性迁移"落点).
+
+    触发条件很窄: 盘上确有**时间/大小键处于非字符串形态** (D13 之前的 ``5.0`` / ``1048576``)。
+    此时重新校验 -> 原子重写整份 config.yml -> 返回一句人读消息 (调用方打进启动日志)。
+
+    刻意只写这一种情况: 没有旧值就**不碰文件** —— 不能借着"迁移"把用户的部分配置写成
+    全量默认值, 也不能让每次启动都重写一遍 (那会把 mtime 变成无信息的时间戳噪声)。
+
+    解析/校验失败 -> 返回 None 并保持文件原样: fail-fast 由调用方 (启动路径的
+    `_load_config_or_fail`) 负责逐条报错, 本函数不吞错也不试图"修好"坏配置。
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except (FileNotFoundError, OSError, yaml.YAMLError):
+        return None
+    if not isinstance(raw, Mapping):
+        return None
+    legacy = [name for name in _DURATION_FIELDS + _SIZE_FIELDS if name in raw and not isinstance(raw[name], str)]
+    if not legacy:
+        return None
+    config, errors = validate_payload(raw)
+    if config is None:
+        return None  # 坏配置留给启动路径报错 (不在这里二次改写磁盘)
+    save_config(path, config)
+    return f"旧式数值配置已迁移为复合串 ({', '.join(sorted(legacy))}) -> {path}"
 
 
 class ConfigHolder:

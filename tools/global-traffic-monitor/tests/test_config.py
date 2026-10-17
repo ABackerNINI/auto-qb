@@ -1,17 +1,21 @@
 """S3 配置守阵: 加载 / 校验 (黄金法则 4 聚合) / 范围 / bool 陷阱 / round-trip.
 
-设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3).
++ S7 (计划 26-10-17-1737 / D13): 时间/大小为复合串 —— 写侧只写 "30S"/"10MiB", 读侧兼容
+  旧式裸数值 (按秒/字节平移), 旧值一次性迁移不丢语义、不误碰无旧值的文件。
 全部用例 hermetic: tmp_path 落盘, 不碰真实工具数据目录。
 """
 
 from __future__ import annotations
 
 import pytest
+import yaml
 
 from gtm.config import (
     Config,
     ConfigHolder,
+    config_to_payload,
     load_config,
+    migrate_legacy_config,
     save_config,
     validate_payload,
 )
@@ -150,10 +154,124 @@ def test_validate_invalid_regex_rejected() -> None:
 
 
 def test_validate_float_from_int_ok() -> None:
-    """整数载荷给浮点字段合法 (YAML 里 30 就是 int)."""
+    """旧式裸数值给时间字段仍合法 (D13 读侧兼容: 30 按「秒」平移)."""
     config, errors = validate_payload({"flush_interval_s": 30})
     assert errors == () and config is not None
     assert config.flush_interval_s == 30.0
+
+
+# ---- S7/D13: 复合串契约 (写侧只写串, 读侧兼容旧值) ----
+
+
+def test_validate_accepts_compound_strings() -> None:
+    """时间/大小字段收复合串, 换算成运行期物理量 (秒 / 字节)."""
+    config, errors = validate_payload(
+        {
+            "sample_interval": "2.5S",
+            "flush_delta_bytes": "2MiB",
+            "flush_interval_s": "1M",
+            "lease_ttl_s": "3M",
+            "heartbeat_interval_s": "1M",
+            "notify_timeout_s": "500S",
+            "notify_threshold_bytes": "512KiB",
+        }
+    )
+    assert errors == ()
+    assert config is not None
+    assert config.sample_interval == 2.5
+    assert config.flush_delta_bytes == 2 * 1024**2
+    assert config.flush_interval_s == 60.0
+    assert config.lease_ttl_s == 180.0
+    assert config.notify_threshold_bytes == 512 * 1024
+
+
+def test_validate_legacy_numbers_shift_by_semantics() -> None:
+    """D13 之前盘上是裸数值: 5.0 -> 5 秒, 1048576 -> 1MiB (不是当成默认值/0)."""
+    config, errors = validate_payload({"sample_interval": 5.0, "flush_delta_bytes": 1048576})
+    assert errors == ()
+    assert config is not None
+    assert config.sample_interval == 5.0
+    assert config.flush_delta_bytes == 1024**2
+
+
+def test_validate_bad_unit_strings_aggregate() -> None:
+    """串解析失败也要**聚合**报齐 (黄金法则 4), 且文案指出期望形态."""
+    config, errors = validate_payload(
+        {
+            "sample_interval": "abc",
+            "flush_delta_bytes": "10MB",  # 十进制单位不在白名单
+            "lease_ttl_s": "5",
+        }
+    )
+    assert config is None
+    assert len(errors) == 3
+    assert any("sample_interval" in e and "时间串" in e for e in errors)
+    assert any("flush_delta_bytes" in e and "二进制单位" in e for e in errors)
+    assert any("lease_ttl_s" in e for e in errors)
+
+
+def test_validate_zero_duration_string_rejected() -> None:
+    """0S 是合法串但语义上「必须为正」, 与旧数值 0 同一判决."""
+    config, errors = validate_payload({"lease_ttl_s": "0S"})
+    assert config is None
+    assert any("期望正数" in e for e in errors)
+
+
+def test_payload_only_contains_compound_strings(tmp_path) -> None:
+    """写侧只写复合串: 盘上不得出现「数值 + 独立单位」的第二形态."""
+    p = tmp_path / "config.yml"
+    save_config(str(p), Config(sample_interval=2.5, flush_delta_bytes=2 * 1024**2))
+    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert raw["sample_interval"] == "2.5S"
+    assert raw["flush_delta_bytes"] == "2MiB"
+    assert raw["notify_threshold_bytes"] == "100MiB"
+    assert raw["http_port"] == 0  # 非时间/大小字段保持原形态
+    # 回显 (= PUT /config 与 GET /status 的 config) 与盘上同源: 取「能整除的最大单位」
+    assert config_to_payload(Config())["lease_ttl_s"] == "3M"  # 180 秒
+    assert config_to_payload(Config())["heartbeat_interval_s"] == "1M"  # 60 秒
+
+
+def test_migrate_legacy_config_rewrites_once(tmp_path) -> None:
+    """旧式裸数值一次性改写为复合串, 语义不变; 再跑一次已无旧值 -> 不碰文件."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: 2.5\nflush_delta_bytes: 1048576\n", encoding="utf-8")
+    message = migrate_legacy_config(str(p))
+    assert message and "sample_interval" in message and "flush_delta_bytes" in message
+    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert raw["sample_interval"] == "2.5S"
+    assert raw["flush_delta_bytes"] == "1MiB"
+    loaded, errors = load_config(str(p))
+    assert errors == () and loaded is not None
+    assert loaded.sample_interval == 2.5 and loaded.flush_delta_bytes == 1024**2
+    # 幂等: 第二次不再改写 (没有旧值就不该动文件)
+    before = p.read_bytes()
+    assert migrate_legacy_config(str(p)) is None
+    assert p.read_bytes() == before
+
+
+def test_migrate_legacy_config_skips_canonical_file(tmp_path) -> None:
+    """已经全是复合串 (或压根没这几个键) 的文件一个字节都不改."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: 5S\nhttp_port: 9100\n", encoding="utf-8")
+    before = p.read_bytes()
+    assert migrate_legacy_config(str(p)) is None
+    assert p.read_bytes() == before
+
+
+def test_migrate_legacy_config_leaves_bad_values_to_fail_fast(tmp_path) -> None:
+    """旧值解析不出来 -> 不改写, 让启动路径聚合报错 (不静默"修好"成默认值)."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: [broken\n", encoding="utf-8")
+    before = p.read_bytes()
+    assert migrate_legacy_config(str(p)) is None
+    assert p.read_bytes() == before
+
+
+def test_migrate_legacy_config_missing_file(tmp_path) -> None:
+    """没有 config.yml = 全新安装, 迁移是 no-op (不凭空造文件)."""
+    p = tmp_path / "config.yml"
+    assert migrate_legacy_config(str(p)) is None
+    assert not p.exists()
 
 
 def test_save_load_round_trip(tmp_path) -> None:

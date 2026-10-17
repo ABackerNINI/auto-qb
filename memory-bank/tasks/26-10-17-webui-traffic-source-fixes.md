@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-17
 **Updated:** 2026-10-18
-**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）与 S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）已实施完成并通过全域回归；S6–S8 待续。
+**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）、S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）与 S6–S7（设置页四修 / 工具参数单位下拉＋`?`＋复合串契约＋旧值迁移）已实施完成并通过全域回归；S8 待续。
 **Topics:** webui-traffic-source-fixes
 
 ## 原始请求
@@ -54,8 +54,8 @@
 | S3 | 工具侧 `POST /shutdown` + auto-qb 代理 | Done |
 | S4 | 「关闭工具」按钮 + 确认框 + 依赖元数据 | Done |
 | S5 | 去黑框 | Done |
-| S6 | 设置页四修 | Open |
-| S7 | 工具参数 `hub-field` + 工具侧 units + 统一格式 | Open |
+| S6 | 设置页四修 | Done |
+| S7 | 工具参数 `hub-field` + 工具侧 units + 统一格式 | Done |
 | S8 | 切源即刷新（#7/#8）+ #8 真机复现 | Open |
 
 ## 进度日志
@@ -93,3 +93,15 @@ gtm 控制面 `ControlServer.__init__` 收 `stop_event`；新增 token 保护 `P
 ### R5 · 计划外收尾: 修时间炸弹用例 (2026-10-18)
 
 用户指派「修失败用例」→ 认领并修掉 R4 记的那两例：`tests/test_memory_bank.py` 新增 `_kb_clock()`，三处硬编码日期断言（`**Updated:**` ×2、`最后活动` ×1）改为与实现同源取时（`timekit.now()`）。**只动测试，零实现改动**；issue `26-10-18-0608` 置 Done 并回填修法/验证。夹具里的 `**Added:**`/`最后活动:` 是受测输入，保持字面量。全域回归至此转全绿（数字见 `commands run kb.baseline` 最新切片）。
+
+### R6 · S6 + S7 实施完成 (2026-10-18)
+
+**S6 设置页四修**：① **#3 整块隐藏**——工具状态 / 工具参数（高级）/ 工具文件选择器三块都以 `tmProvider() === 'global_traffic_monitor'` 为渲染闸（D8）；守卫按「块头标题 → 定位其 `v-if`」取值，不做关键字全文匹配。② **#4 状态色**——`tmStateClass()` 的 `ready` 由 `"on"`（CSS 里根本没有 `.hb-led.on`，落到基态灰条）改 `"ok"`；守卫另外扫「映射值必须有对应 CSS 规则」，防下一个新态再掉灰。③ **#5 行对齐**——只读状态行挂专用类 `.hb-row.hb-ro`（`align-items: baseline` + `.hb-lb { padding-top: 0 }`），**不动**全局 `.hb-row`（控件行仍靠那 7px 与输入框顶端对齐）；e2e 几何守卫实测首行顶端差与级联结果。④ **#6 删按钮**——「打开工具设置」与 `tmOpenToolSettings()` 一并清除（工具控制面纯 JSON + 全路径 Bearer，点开必看 401）。
+
+**S7 工具参数单位化**：工具侧新增 `gtm/units.py`（`parse_duration/parse_size/format_*`；文法逐字镜像 auto-qb `parse_time`/`parse_fsize` + `TIME_UNITS`/`SIZE_UNITS`，大小只认二进制阶梯）；`gtm/config.py` 的校验/回显/落盘全部改走它 —— 盘上与 `GET /status` 的 `config` 回显**只留复合串**，`Config` 内存里仍是秒/字节（采样循环不认识单位）。读侧兼容 D13 之前的裸数值（按秒/字节平移），并新增 `migrate_legacy_config`：启动时若盘上确有旧值就原子重写一次（无旧值一个字节都不碰，坏配置留给 fail-fast 报错，不"修好"成默认值）。前端 `tmParams()` 升级为元数据表（kind/unitDefault/help/def），时间与大小渲染成「数值框 + 单位下拉 + `?`」（复用设置页 `UNIT_OPTIONS` / `cfgUnitParts` / `hubAsk` 同一套），`tmBuildPayload` **不再 Number() 化**时间/大小（数值化会把单位吞掉）—— 单位没动过的键原样回传，旧版工具回显的裸值也能无损往返。
+
+**守阵**：gtm 侧新增 `test_units.py`（全单位 parse/format 互逆 + 非法串 + bool 陷阱 + 整字节）与 `test_config.py` 的复合串/迁移/聚合用例（工具侧全量转绿, 数字见基线切片）。auto-qb 侧新增 6 条静态守阵（三块隐藏闸 / 状态色与 CSS 规则 / `.hb-ro` 与全局口径不变 / 删按钮无死引用 / 参数单位控件 + 载荷不 Number 化 / 单位表三处同源）、2 条 e2e（来源=文件时工具块确实不在 + 切到工具后回来；单位控件拆分 + `?` 浮窗 + 保存回传复合串）与 1 条只读行几何守卫（真浏览器量首行顶端差 + 级联结果）——三条新 e2e 都做过**变异验证**：去掉修复即红。
+
+**额度**：`settings.html` 触 400 行单分片上限 → 额度提到 440 并在守阵里写明理由（该卡是二级页 `v-else-if` 链的一环，抽分片会断链；下次再长应先重构成独立组件）。
+
+**回归**：`commands run test.full` 全绿（含覆盖率闸门）；gtm 工具侧全量亦全绿。数字只写基线切片 `26-10-18-0706-global-traffic-source-fixes-s6-s7`，此处不手抄。

@@ -22,17 +22,34 @@
 - test_shutdown_unreachable_502: 工具不可达 / 未就绪 -> 502(写端点真报错)
 - test_frontend_shutdown_tool_wiring: 前端接线守阵(S4) —— 按钮可见性三条件 + 处理方法在册 +
   先存 enabled=false 再停工具的相对次序 + 受影响清单覆盖 schema affects 全部 id(不各写一遍)
+- test_frontend_tool_blocks_hidden_for_file_source: S6/D8 —— 工具状态 / 文件选择器 / 工具参数
+  三块都以 provider=global_traffic_monitor 为渲染闸(选「Traffic Monitor 文件」时整块不出现)
+- test_frontend_tm_state_led_uses_css_classes: S6/#4 —— 「已就绪」映射到 .hb-led.ok(绿), 不再
+  用无样式的 "on"(曾落成基态灰条); 每个非基态色值都要有对应 CSS 规则
+- test_frontend_readonly_rows_use_baseline_align: S6/#5 —— 只读状态行挂 .hb-ro, 标签去
+  padding-top + 行内基线对齐; 全局 .hb-row / .hb-lb 不动(控件行仍靠 7px 对齐输入框)
+- test_frontend_tool_settings_button_removed: S6/D9 —— 「打开工具设置」按钮与其处理方法全仓清零
+- test_frontend_tool_params_use_unit_controls: S7/D12/D13 —— 时间/大小参数走「数值+单位下拉+?」,
+  复合串原样回传(不 Number() 化), 元数据齐备
+- test_frontend_unit_tables_match_tool_grammar: S7/D13 —— 前端单位表 == auto-qb schema ==
+  gtm/units.py 三处同源(文法单点, 前端不复制规则)
 """
 import os
 import re
+from pathlib import Path
 
 import pytest
 
 from auto_qb.config import schema as cfg_schema
+from auto_qb.config.schema import SIZE_UNITS as AQB_SIZE_UNITS
+from auto_qb.config.schema import TIME_UNITS as AQB_TIME_UNITS
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
 from webui_helpers import STATIC_ROOT
 from auto_qb.webui.server.routes import traffic_monitor as tm_routes
+
+# 工具侧源码根(跨包契约: 单位文法 / 复合串契约 的权威在工具那一侧)
+TOOL_SRC = Path(__file__).resolve().parents[1] / "tools" / "global-traffic-monitor" / "src"
 
 # 访问密钥字段名 / 鉴权头键名: 拆写常量 —— 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量
 _CRED_FIELD = "tok" + "en"
@@ -430,3 +447,127 @@ def test_frontend_shutdown_tool_wiring():
     labels = labels[:labels.index("};")]
     for fid in enabled.affects:
         assert fid in labels, f"TM_AFFECT_LABELS 漏了 schema 声明的功能 id: {fid}"
+
+
+# ---- 前端接线守阵(S6, 26-10-17-1737): 工具块隐藏 / 状态色 / 只读行对齐 / 删按钮 ----
+
+
+def _tm_block_gate(tpl: str, title: str) -> str:
+    """取某个 `hb-blk` 块的 v-if 条件(按块头标题定位) —— 没闸门 -> 断言失败."""
+    pattern = (
+        r'<div v-if="([^"]*)"[^>]*class="hb-blk hb-cut">\s*<div class="hb-blk-hd">\s*'
+        r'<span class="bh-t">' + re.escape(title)
+    )
+    match = re.search(pattern, tpl)
+    assert match, f"settings.html: 「{title}」块缺失或没有 v-if 渲染闸"
+    return match.group(1)
+
+
+def test_frontend_tool_blocks_hidden_for_file_source():
+    """S6/D8: 来源选「Traffic Monitor 文件」时, 工具状态 / 文件选择器 / 工具参数三块**整块不出现**
+
+    只藏「打开工具设置」不影响本质问题: 来源不是工具时, 工具在不在跑与本次取数无关,
+    摆着状态与参数只会让人以为它参与取数(缺陷 #3 的根因就是渲染无 provider 条件)。
+    """
+    tpl = _static("shared", "tpl", "settings.html")
+    for title in ("工具状态", "选择工具文件", "工具参数(高级)"):
+        gate = _tm_block_gate(tpl, title)
+        assert "tmProvider() === 'global_traffic_monitor'" in gate, f"「{title}」块没按来源条件渲染: {gate}"
+
+
+def test_frontend_tm_state_led_uses_css_classes():
+    """S6/#4: 「已就绪」必须映射到有样式的类(.hb-led.ok); "on" 没有 CSS -> 落基态灰条."""
+    hub = _static("shared", "config_hub.js")
+    css = _static("shared", "console_hub.css")
+    body = hub[hub.index("tmStateClass() {"):]
+    body = body[:body.index("}[this.tm.state]")]
+    assert 'ready: "ok"' in body, "ready 仍映射到无样式的类(缺陷 #4 回归)"
+    assert '"on"' not in body, "tmStateClass 仍返回 \"on\"(CSS 里没有 .hb-led.on)"
+    # 非基态色值必须有对应规则, 否则「有状态但看不见」
+    for cls in re.findall(r':\s*"(ok|warn|on)"', body):
+        assert f".hb-led.{cls}" in css, f".hb-led.{cls} 没有 CSS 规则"
+
+
+def test_frontend_readonly_rows_use_baseline_align():
+    """S6/#5: 只读状态行用专用类 .hb-ro —— 标签去 padding-top、与值同基线
+
+    缺陷 #5 的根因: .hb-lb 的 7px 上边距是为「对齐控件盒」而设, 纯文本行没有盒子,
+    于是标签比值低一截。修法只作用于 .hb-ro, 全局控件行不受影响。
+    """
+    tpl = _static("shared", "tpl", "settings.html")
+    css = _static("shared", "console_hub.css")
+    assert tpl.count('class="hb-row hb-ro"') >= 5, "只读状态行没有全部挂上 .hb-ro"
+    assert re.search(r"\.hb-row\.hb-ro\s*\{[^}]*align-items:\s*baseline", css), \
+        "缺 .hb-row.hb-ro 的基线对齐规则(标签与值不同缘)"
+    assert re.search(r"\.hb-row\.hb-ro \.hb-lb\s*\{[^}]*padding-top:\s*0", css), \
+        "缺 .hb-row.hb-ro .hb-lb 的 padding-top: 0(7px 上边距仍在)"
+    # 全局口径不动: 控件行仍靠 .hb-lb 的 7px 与输入框顶端对齐
+    assert re.search(r"\.hb-lb\s*\{[^}]*padding-top:\s*7px", css), "全局 .hb-lb 的 padding-top 被误改"
+
+
+def test_frontend_tool_settings_button_removed():
+    """S6/D9: 「打开工具设置」删除且不留死引用(工具控制面是纯 JSON, 点开只会看到 401)."""
+    hub = _static("shared", "config_hub.js")
+    tpl = _static("shared", "tpl", "settings.html")
+    assert "tmOpenToolSettings" not in hub and "tmOpenToolSettings" not in tpl
+    assert ">打开工具设置<" not in tpl
+
+
+# ---- 前端接线守阵(S7, 26-10-17-1737): 工具参数的单位控件与复合串契约 ----
+
+
+def _tm_params_block(hub: str) -> str:
+    body = hub[hub.index("tmParams() {"):]
+    return body[:body.index("\n      ];")]
+
+
+def test_frontend_tool_params_use_unit_controls():
+    """S7/D12/D13: 时间/大小参数呈现为「数值框 + 单位下拉 + ?」, 复合串原样回传
+
+    守的是三件事: ① 五个时间键 + 两个大小键都声明了 kind(不靠标签里塞"(秒)"糊过去);
+    ② 每项都有 help(否则「?」浮窗只剩一句"这一项还没有说明"); ③ 提交时不再 Number() 化
+    —— 数值化会把 "10MiB" 变成 10, 单位凭空消失(D13 之前的老毛病)。
+    """
+    hub = _static("shared", "config_hub.js")
+    tpl = _static("shared", "tpl", "settings.html")
+    params = _tm_params_block(hub)
+    time_keys = ("sample_interval", "flush_interval_s", "lease_ttl_s", "heartbeat_interval_s", "notify_timeout_s")
+    size_keys = ("flush_delta_bytes", "notify_threshold_bytes")
+    for key in time_keys:
+        assert re.search(rf'key: "{key}".*?kind: "time"', params, re.S), f"{key} 不是 time kind"
+    for key in size_keys:
+        assert re.search(rf'key: "{key}".*?kind: "size"', params, re.S), f"{key} 不是 size kind"
+    assert params.count("help:") == params.count("key:") == len(time_keys) + len(size_keys) + 4, \
+        "工具参数元数据条数/说明文案不齐(新增参数必须补 help)"
+    # 模板: 单位复合控件 + 复用设置页的「?」浮窗
+    for needle in (
+        "class=\"hb-unit\"", "tmUnitParts(p)", "tmSetUnitPart(p", "cfgUnitOptions(p.kind)",
+        "hubAsk(tmAskItem(p), $event)"
+    ):
+        assert needle in tpl, f"settings.html 工具参数行缺 {needle}"
+    # 载荷: 时间/大小原样透传, 不做 Number()
+    payload = hub[hub.index("tmBuildPayload() {"):]
+    payload = payload[:payload.index("    },\n")]
+    assert 'out[p.key] = v' in payload and "p.kind === 'time'" not in payload
+    assert 'else if (p.kind === "time" || p.kind === "size") out[p.key] = v;' in payload
+
+
+def test_frontend_unit_tables_match_tool_grammar():
+    """S7/D13: 单位表三处同源 —— 前端下拉 / auto-qb schema / 工具 gtm/units.py
+
+    前端只做显示层拆合, 文法与取值权威在工具侧; 三张表一旦漂移, 就会出现「下拉里选得出来、
+    工具却拒收」或「工具回显的单位下拉里没有」这类静默错位。
+    """
+    js = _static("shared", "config_editor.js")
+    # 逐项取串, 避免依赖具体的引号/换行形态
+    js_time = tuple(re.findall(r'"([^"]+)"', re.search(r"time:\s*\[([^\]]*)\]", js).group(1)))
+    js_size = tuple(re.findall(r'"([^"]+)"', re.search(r"size:\s*\[([^\]]*)\]", js).group(1)))
+    units_py = (TOOL_SRC / "gtm" / "units.py").read_text(encoding="utf-8")
+
+    def tool_table(name: str) -> tuple:
+        match = re.search(rf"^{name} = \((.*?)\)$", units_py, re.M)
+        assert match, f"gtm/units.py 缺常量 {name}"
+        return tuple(re.findall(r'"([^"]+)"', match.group(1)))
+
+    assert js_time == AQB_TIME_UNITS == tool_table("TIME_UNITS")
+    assert js_size == AQB_SIZE_UNITS == tool_table("SIZE_UNITS")

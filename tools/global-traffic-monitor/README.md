@@ -74,10 +74,18 @@ Bearer <monitor.token>` (`secrets.compare_digest` 比对, 缺/错 401):
 | `POST /heartbeat` | `{id}` 心跳续租 (订阅方每 60s; 未知 id 404) |
 | `POST /unsubscribe` | `{id}` 注销 (幂等, 未知 id 404) |
 | `POST /autostart` | `{action: install\|uninstall}` 幂等注册/卸载开机自启 (S6 设置页开关; 在工具进程内跑 installer, `sys.executable` 即自启项要指向的解释器; 成功**回写工具 config `autostart`** —— 自启意图的唯一裁决权, S14/D13; 平台不支持 501 / 命令失败 500 / 载荷非法 400) |
+| `POST /shutdown` | 优雅退出 (1737 S3 设置页「关闭工具」代理): **先回 200 再置停止信号**, 退出走 `run` 的 finally (最终落盘 + 释放锁 + 停控制面 + 删指针); 未绑定 stop_event 时只 200 + WARNING |
 
-租约: `last_heartbeat + lease_ttl` (默认 180s) 过期剔除 (懒剔除, 每个已鉴权
+租约: `last_heartbeat + lease_ttl` (默认 3M = 180s) 过期剔除 (懒剔除, 每个已鉴权
 请求入口先 prune)。注册表落 state.json, 重启续存。配置键与默认值见计划 §05;
 非法键/类型/范围/正则一次性聚合拒绝 (黄金法则 4), 拒绝不落盘不换配置。
+
+**时间/大小是复合串** (S7/D13): `config.yml` 与 `PUT /config` / `GET /status` 的 `config`
+回显里, 时间写 `5S`/`30S`/`3M`/`2H`/`1D`, 大小写 `1MiB`/`500KiB`/`100GiB` (只认二进制单位
+B/KiB/MiB/GiB/TiB)。解析与回显单点在 `gtm/units.py` (文法镜像 auto-qb 的 `parse_time` /
+`parse_fsize`), 内存里的 `Config` 仍是秒/字节, 采样循环不认识单位。**读侧兼容 D13 之前的
+裸数值** (`sample_interval: 5.0` 按秒、`flush_delta_bytes: 1048576` 按字节), 启动时由
+`migrate_legacy_config` 一次性改写成复合串; 写侧只会写复合串。
 
 ⚠ `PUT /config` 是**全量覆盖** (last-writer-wins): 载荷必须带全部键, 只发要改的键
 会把其余键静默打回默认值 (冒烟实测: 只发 `notify_threshold_bytes` 会让

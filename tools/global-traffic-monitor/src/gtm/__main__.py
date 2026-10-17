@@ -20,7 +20,7 @@ import threading
 from typing import Optional
 
 from gtm import __version__
-from gtm.config import Config, ConfigHolder, load_config
+from gtm.config import Config, ConfigHolder, load_config, migrate_legacy_config
 from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
@@ -251,11 +251,22 @@ def _maybe_register_autostart(data_dir: str, config: Config) -> Optional[str]:
 
 
 def _load_config_or_fail(data_dir: str) -> tuple[Config | None, tuple[str, ...]]:
-    """加载 config.yml; 校验失败 -> 聚合错误逐条打到 stderr 并返回 (None, errors)."""
-    config, errors = load_config(f"{data_dir}/config.yml")
+    """加载 config.yml; 校验失败 -> 聚合错误逐条打到 stderr 并返回 (None, errors).
+
+    加载成功后顺带做一次**旧式裸数值的迁移** (S7/D13): D13 之前盘上是
+    `sample_interval: 5.0` / `flush_delta_bytes: 1048576`, 现在契约只认复合串
+    (`"5S"` / `"1MiB"`)。读侧本来就兼容旧值 (units.parse_*), 这里把盘也一次性改写
+    成规范形态 —— 只在真有旧值时写, 否则不碰文件 (migrate_legacy_config 内判)。
+    """
+    path = f"{data_dir}/config.yml"
+    config, errors = load_config(path)
     if config is None:
         for e in errors:
             print(f"global-traffic-monitor: config 校验失败: {e}", file=sys.stderr)
+        return config, errors
+    message = migrate_legacy_config(path)
+    if message:
+        print(f"global-traffic-monitor: {message}", file=sys.stderr)
     return config, errors
 
 

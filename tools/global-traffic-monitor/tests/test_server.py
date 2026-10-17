@@ -212,7 +212,10 @@ def test_status_fields(tmp_path) -> None:
         assert payload["subscriber_count"] == 0
         assert payload["paths"]["dat"] == storage.dat_path
         assert payload["paths"]["state"] == storage.state_path
-        assert payload["config"]["sample_interval"] == 5.0  # 配置回显
+        # 配置回显是复合串 (S7/D13: 盘上与契约只留 "30S"/"10MiB" 形态)
+        assert payload["config"]["sample_interval"] == "5S"
+        assert payload["config"]["flush_delta_bytes"] == "1MiB"
+        assert payload["config"]["http_port"] == 0  # 端口/地址仍是原形态
     finally:
         server.stop()
 

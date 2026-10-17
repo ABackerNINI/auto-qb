@@ -487,6 +487,11 @@
 .hb-lb .lb-req { color: var(--error); }
 .hb-ct { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .hb-ct .hb-input, .hb-ct .hb-select { flex: 0 1 250px; }
+/* 只读状态行(计划 26-10-17-1737 S6/#5): 行内只有纯文本、没有控件盒, 标签不再为对齐输入框留
+ * 7px 上边距 —— 标签与值按首行基线对齐(「标签 | 值」前后不齐的根因就是那 7px 与
+ * .hb-ct 的居中/顶端对齐各说各话)。**只挂 .hb-ro**, 全局 .hb-row 的控件行不变。 */
+.hb-row.hb-ro { align-items: baseline; }
+.hb-row.hb-ro .hb-lb { padding-top: 0; }
 .hb-hp { flex: 1 0 100%; font-size: 12.2px; line-height: 1.6; color: var(--fg-dim); max-width: 70ch; }
 .hb-hp.risk { color: var(--warn); }
 

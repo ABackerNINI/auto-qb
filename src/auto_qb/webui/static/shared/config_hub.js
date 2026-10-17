@@ -1017,8 +1017,10 @@ window.CONFIG_HUB = {
         not_running: "未运行", not_installed: "未安装",
       }[this.tm.state] || "未知";
     },
+    /* LED 段落色: CSS 只定义 .hb-led.ok / .warn, 其余落基态灰。
+     * S6/#4: ready 曾返回 "on"(无此样式类) -> 「已就绪」显示成灰条; 现归 "ok"(绿)。 */
     tmStateClass() {
-      return { ready: "on", launching: "warn", launch_failed: "warn", not_running: "off", not_installed: "off" }[this.tm.state] || "";
+      return { ready: "ok", launching: "warn", launch_failed: "warn", not_running: "off", not_installed: "off" }[this.tm.state] || "";
     },
     async tmLoad() {
       this.tm.loading = true;
@@ -1082,10 +1084,6 @@ window.CONFIG_HUB = {
         this.tm.relaunching = false;
       }, 2000);
     },
-    /* 「打开工具设置」= 新标签打开工具控制面根地址(tool_url); 工具未提供 HTML 页面时显示 JSON */
-    tmOpenToolSettings() {
-      if (this.tm.reachable && this.tm.toolUrl) window.open(this.tm.toolUrl, "_blank", "noopener");
-    },
     /* 「关闭工具」(S4/D3/D4, 计划 26-10-17-1737): 确认框列出受影响功能(清单取自 schema
      * 字段 enabled 的 affects 元数据, 不另写一份) -> 先保存 enabled=false(热重载即停订阅 /
      * 停拉起, 关闭可逆) -> 再 POST /shutdown 停工具进程; 不切 provider。 */
@@ -1142,7 +1140,8 @@ window.CONFIG_HUB = {
         }
       }, 1000);
     },
-    /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样 */
+    /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样
+     * (时间/大小是复合串 "30S"/"10MiB", 原样留在表单里, 由单位控件拆成「数值 + 单位」显示) */
     tmNormalizeForm(cfg) {
       const out = {};
       for (const k of Object.keys(cfg || {})) {
@@ -1151,23 +1150,44 @@ window.CONFIG_HUB = {
       }
       return out;
     },
-    /* 表单 -> 工具配置载荷: 数值字段转 number, 列表字段逗号串转数组(空串 -> []) */
+    /* 表单 -> 工具配置载荷(全量覆盖, last-writer-wins): 列表字段逗号串转数组, 其余按 kind 归一。
+     * S7/D13: 时间/大小**不再 Number() 化**(数值化会丢掉单位), 复合串原样回传; 用户没动过的键
+     * 也原样回传 —— 旧版工具回显的裸数值因此能无损往返, 迁移的语义平移由工具侧负责。 */
     tmBuildPayload() {
       const f = this.tm.form;
       const num = (x) => (x === "" || x === null || x === undefined ? 0 : Number(x));
       const list = (x) => String(x || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const out = {};
+      for (const p of this.tmParams()) {
+        const v = f[p.key];
+        if (v === undefined) continue;  // 工具没回显该键: 不发明值(丢给工具侧默认)
+        if (p.kind === "list") out[p.key] = list(v);
+        else if (p.kind === "time" || p.kind === "size") out[p.key] = v;
+        else if (p.kind === "text") out[p.key] = String(v || "");
+        else out[p.key] = num(v);
+      }
+      return out;
+    },
+    /* 工具参数的单位拆/合(S7/D12/D13): 复用设置页同一套单位表(cfgUnitParts / cfgUnitOptions /
+     * cfgUnitLabel) —— 前端只做显示层拆合("10MiB" -> 10 + MiB), 文法与取值权威在工具侧
+     * (gtm/units.py)。空数值写空串(= 未配置) 而不是 "MiB" 这种无数字值。 */
+    tmUnitParts(p) {
+      return this.cfgUnitParts(p.kind, this.tm.form[p.key], p.unitDefault);
+    },
+    tmSetUnitPart(p, num, unit) {
+      const n = String(num === undefined || num === null ? "" : num).trim();
+      this.tm.form[p.key] = n ? n + (unit || "") : "";
+    },
+    /* 工具参数行的「?」: 复用设置页的就近说明浮窗(hubAsk / hub.helpKey)。工具参数不在配置树里,
+     * 走不了 hub-field, 故用合成 item 承载「字段样」元数据(label/kind/help/default 四件)。 */
+    tmAskKey(p) {
+      return "tool." + p.key;
+    },
+    tmAskItem(p) {
       return {
-        sample_interval: num(f.sample_interval),
-        flush_delta_bytes: num(f.flush_delta_bytes),
-        flush_interval_s: num(f.flush_interval_s),
-        notify_threshold_bytes: num(f.notify_threshold_bytes),
-        http_host: String(f.http_host || ""),
-        http_port: num(f.http_port),
-        lease_ttl_s: num(f.lease_ttl_s),
-        heartbeat_interval_s: num(f.heartbeat_interval_s),
-        notify_timeout_s: num(f.notify_timeout_s),
-        adapter_include: list(f.adapter_include),
-        adapter_exclude: list(f.adapter_exclude),
+        type: "field",
+        path: ["tool", p.key],
+        field: { label: p.label, kind: p.kind, help: p.help, default: p.def },
       };
     },
     async tmSave() {
@@ -1253,20 +1273,74 @@ window.CONFIG_HUB = {
         this.tm.pick.path.replace(/[\\/]+$/, "") + sep + name);
       this.tm.pick.open = false;
     },
-    /* 工具参数表(§05 工具侧参数): 键/标签/控件形态; 模板按此 v-for 渲染, 避免 11 行硬编码 */
+    /* 工具参数表(§05 工具侧参数): 键/标签/控件形态/说明; 模板按此 v-for 渲染, 避免 11 行硬编码。
+     * S7/D12/D13: kind=time/size 走「数值框 + 单位下拉 + ?」——
+     *   - 单位表与设置页同源(cfgUnitOptions / UNIT_OPTIONS), 默认单位由 unitDefault 给;
+     *   - 盘上与契约只留复合串("30S"/"10MiB"), 这里只负责显示层拆合;
+     *   - def 只作「?」浮窗的「默认值」展示, **真值以工具侧 gtm/config.py 为权威**(写错不会生效,
+     *     校验权威与默认值都在工具那一侧, 前端不复制)。
+     * kind=list 的 hint 是输入框占位(逗号分隔正则); kind=text/int 走普通输入框。 */
     tmParams() {
       return [
-        { key: "sample_interval", label: "采样间隔(秒)", kind: "number", step: "0.1" },
-        { key: "flush_delta_bytes", label: "落盘阈值", kind: "number", bytes: true },
-        { key: "flush_interval_s", label: "落盘间隔(秒)", kind: "number", step: "0.1" },
-        { key: "notify_threshold_bytes", label: "通知阈值", kind: "number", bytes: true },
-        { key: "http_host", label: "控制面监听地址", kind: "text" },
-        { key: "http_port", label: "控制面端口", kind: "number" },
-        { key: "lease_ttl_s", label: "订阅租约(秒)", kind: "number" },
-        { key: "heartbeat_interval_s", label: "心跳周期(秒)", kind: "number" },
-        { key: "notify_timeout_s", label: "推送超时(秒)", kind: "number", step: "0.1" },
-        { key: "adapter_include", label: "适配器白名单", kind: "list", hint: "逗号分隔正则, 留空 = 全部" },
-        { key: "adapter_exclude", label: "适配器黑名单", kind: "list", hint: "逗号分隔正则, 留空 = 不排除" },
+        {
+          key: "sample_interval", label: "采样间隔", kind: "time", unitDefault: "S", def: "5S",
+          help: "多久读一次网卡计数器。越小曲线越细、CPU 占用越高; 两次采样之间的峰值取不到。"
+            + "改完立即生效(热重载), 不用重启工具。",
+        },
+        {
+          key: "flush_delta_bytes", label: "落盘阈值", kind: "size", unitDefault: "MiB", def: "1MiB",
+          help: "累计流量变化达到这个量就立刻把增量追加进 history_traffic.dat。"
+            + "调大 = 写盘次数更少, 但工具崩溃时丢的增量更多。与「落盘间隔」是「谁先到算谁」的关系。",
+        },
+        {
+          key: "flush_interval_s", label: "落盘间隔", kind: "time", unitDefault: "S", def: "30S",
+          help: "即使没到「落盘阈值」, 也最多隔这么久落一次盘 —— 低速时的兜底节奏。"
+            + "调小 = 历史图更新更勤, 写盘更频繁。",
+        },
+        {
+          key: "notify_threshold_bytes", label: "通知阈值", kind: "size", unitDefault: "MiB",
+          def: "100MiB",
+          help: "当日累计流量每涨这么多, 工具就向 auto-qb 推一次事件, 让它立刻重读历史文件刷新图表。"
+            + "auto-qb 侧还有一层刷新冷却, 两边都设才不会被频繁推送牵着跑。",
+        },
+        {
+          key: "http_host", label: "控制面监听地址", kind: "text", def: "127.0.0.1",
+          help: "工具本机 HTTP 接口(控制面)绑哪个地址, auto-qb 就是从这里读状态、下配置的。"
+            + "一般不用改; 改成 0.0.0.0 会暴露给局域网(控制面靠 Bearer 密钥鉴权)。"
+            + "**改完要重启工具才生效**(改绑监听地址无法热切换)。",
+        },
+        {
+          key: "http_port", label: "控制面端口", kind: "int", def: "0",
+          help: "控制面端口。0 = 每次启动由系统分配随机空闲端口(推荐, 不会与别的程序抢端口);"
+            + "填固定端口便于手工调试。auto-qb 靠工具的发现指针找端口, 不需要你填这里。"
+            + "**改完要重启工具才生效**。",
+        },
+        {
+          key: "lease_ttl_s", label: "订阅租约", kind: "time", unitDefault: "S", def: "3M",
+          help: "订阅租约时长(默认 3 分钟 = 180 秒): 超过这么久没收到 auto-qb 的心跳, 工具就把这个订阅剔除、"
+            + "不再向它推送。必须明显大于「心跳周期」, 否则 auto-qb 会被误判为掉线。",
+        },
+        {
+          key: "heartbeat_interval_s", label: "心跳周期", kind: "time", unitDefault: "S", def: "1M",
+          help: "auto-qb 每隔这么久续一次租约(默认 1 分钟 = 60 秒)。改这个值只影响之后的续租节奏, "
+            + "auto-qb 在订阅响应里拿到新值后自动跟随。",
+        },
+        {
+          key: "notify_timeout_s", label: "推送超时", kind: "time", unitDefault: "S", def: "3S",
+          help: "向 auto-qb 推事件的单次超时。超时只记一条失败并等下一轮, 不影响落盘与采样。",
+        },
+        {
+          key: "adapter_include", label: "适配器白名单", kind: "list", def: "",
+          hint: "逗号分隔正则, 留空 = 全部",
+          help: "只统计名称匹配这些正则的网卡(逗号分隔)。留空 = 不设白名单。"
+            + "回环与已断开的网卡本来就默认排除, 不用在这里写。",
+        },
+        {
+          key: "adapter_exclude", label: "适配器黑名单", kind: "list", def: "",
+          hint: "逗号分隔正则, 留空 = 不排除",
+          help: "排除名称匹配这些正则的网卡(逗号分隔)。虚拟机 / VPN / 蓝牙之类的虚拟网卡常被重复计数,"
+            + "填它们的名字可避免把同一份流量算两遍。",
+        },
       ];
     },
   },

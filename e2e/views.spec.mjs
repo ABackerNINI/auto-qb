@@ -335,3 +335,181 @@ test.describe('几何守卫(右对齐列表头)', () => {
     });
   }
 });
+
+/* 几何守卫(只读状态行同缘, 2026-10-18, 计划 26-10-17-1737 S6/#5):
+ * 「工具状态」区的只读行曾出现「标签 | 值」前后不齐 —— 根因是 .hb-lb 的 7px 上边距
+ * (为对齐输入框而设)落进没有控件盒的纯文本行, 标签整体比数值低一截。修法 = .hb-row.hb-ro
+ * 去掉 padding-top + 行内基线对齐。
+ * 为什么非得在真浏览器里量: 静态守阵只读**文件文本**, 看不见层叠(更具体的选择器把这条规则
+ * 盖掉时静态断言照样绿)与盒子模型(那 7px 恰恰是盒模型)。故这层量两件事:
+ *   1) 级联结果 —— 行的 align-items 必须是 baseline, 标签 padding-top 必须是 0;
+ *   2) 几何 —— 标签与值**首行文字顶端**相差 ≤ 2px(修复前是 7px 量级)。
+ * 为什么造等价 DOM 而不走进设置页: 工具状态区只在「来源=工具 + 工具就绪」时渲染, 桩服务里
+ * 没有工具进程; 本守卫验的是样式与盒子, 与数据无关 —— 行结构与 settings.html 里
+ * hb-row hb-ro 的「标签 | 值」一致, 壳与样式表仍是页面真货。 */
+test.describe('几何守卫(只读状态行同缘)', () => {
+  for (const skin of SKINS) {
+    test(`[${skin}] 几何: 只读状态行标签与值同缘(±2px), 且标签不吃上边距`, async ({ page }) => {
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.group-row', { timeout: 30_000 });
+
+      const result = await page.evaluate(() => {
+        const host = document.createElement('div');
+        host.className = 'hb-blk';
+        host.innerHTML = '<div class="hb-row hb-ro"><div class="hb-lb">当日流量</div>'
+          + '<div class="hb-ct">上行 1.0 MiB · 下行 2.0 MiB · 末事件号 97</div></div>';
+        document.body.appendChild(host);
+        const row = host.querySelector('.hb-row');
+        const lb = host.querySelector('.hb-lb');
+        const ct = host.querySelector('.hb-ct');
+        /* 首行文字顶: Range 只圈第一个非空文本节点, getClientRects()[0] 即它所在的行盒 */
+        const firstLineTop = (el) => {
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          let node = null;
+          while (walker.nextNode()) {
+            if (walker.currentNode.nodeValue.trim()) { node = walker.currentNode; break; }
+          }
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getClientRects()[0].top;
+        };
+        const out = {
+          align: getComputedStyle(row).alignItems,
+          labelPadTop: getComputedStyle(lb).paddingTop,
+          delta: Math.round((firstLineTop(ct) - firstLineTop(lb)) * 100) / 100,
+        };
+        host.remove();
+        return out;
+      });
+
+      expect(result.align, '只读行没走基线对齐(标签与值各按自己的盒子顶对齐)').toBe('baseline');
+      expect(result.labelPadTop, '标签仍带 padding-top(7px 上边距正是「前后不齐」的根因)').toBe('0px');
+      expect(Math.abs(result.delta), `标签与值首行顶端相差 ${result.delta}px(>2px 即「前后不齐」)`).toBeLessThanOrEqual(2);
+    });
+  }
+});
+
+/* 设置页 · 全局流量来源(2026-10-18, 计划 26-10-17-1737 S6/D8):
+ * 缺陷 #3 的现象是「来源选 Traffic Monitor 文件时, 下方仍显示工具状态与工具参数」。静态守阵
+ * 只能证明模板里写了 provider 闸, 这里用真 DOM 证一次「元素确实不在」以及「切到工具后确实回来」
+ * (工具没在跑也要能看见状态块 = 用户才有地方点「立即拉起」)。
+ * 顺带把该分区的模板编译纳入门禁: 隐藏分支同样参与编译, 语法错会让整块设置页挂掉。 */
+test.describe('设置页 · 全局流量来源(S6)', () => {
+  installRuntimeErrorGuard(test);
+  for (const skin of SKINS) {
+    test(`[${skin}] 来源=文件时工具块不出现, 切到工具后出现`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-card', { hasText: '全局流量来源' }).first().click();
+      await expect(page.locator('.bh-t', { hasText: '数据来源' })).toBeVisible({ timeout: 10_000 });
+
+      /* 默认 provider=traffic_monitor: 工具相关的三块 UI 一律不渲染(D8) */
+      await expect(page.getByText('工具状态', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('工具参数(高级)', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('立即拉起 / 重试', { exact: true })).toHaveCount(0);
+
+      /* 切到「整机流量监视器(工具)」: 状态块立刻回来(桩服务里没有工具进程, 故是未安装/未运行态) */
+      await page.getByRole('button', { name: '整机流量监视器(工具)' }).click();
+      await expect(page.getByText('工具状态', { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText('立即拉起 / 重试', { exact: true })).toBeVisible();
+    });
+  }
+});
+
+/* 设置页 · 工具参数的单位控件(2026-10-18, 计划 26-10-17-1737 S7/D12/D13):
+ * 工具参数的表单走控制面(GET /status 的 config 回显 -> PUT /config 全量覆盖), 桩服务里没有工具
+ * 进程, 故用 route 造一份**真契约形状**的回显(时间/大小全是复合串 "30S"/"10MiB"), 然后验:
+ *   1) 参数行呈现为「数值框 + 单位下拉 + ?」, 拆出来的数值/单位与复合串语义一致;
+ *   2) 「?」复用设置页的就近说明浮窗(不是一句 title);
+ *   3) 保存回传的仍是复合串 —— 数值化("10MiB" -> 10)会把单位吞掉, 那是 D13 之前的老毛病。 */
+test.describe('设置页 · 工具参数的单位控件(S7)', () => {
+  installRuntimeErrorGuard(test);
+  for (const skin of SKINS) {
+    test(`[${skin}] 时间/大小参数是数值+单位下拉+?, 保存回传复合串`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      const toolConfig = {
+        sample_interval: '5S',
+        flush_delta_bytes: '1MiB',
+        flush_interval_s: '30S',
+        notify_threshold_bytes: '100MiB',
+        http_host: '127.0.0.1',
+        http_port: 0,
+        lease_ttl_s: '3M',
+        heartbeat_interval_s: '1M',
+        notify_timeout_s: '3S',
+        adapter_include: [],
+        adapter_exclude: [],
+      };
+      await page.route('**/api/traffic/monitor/status', (route) => route.fulfill({
+        json: {
+          enabled: true,
+          state: 'ready',
+          reachable: true,
+          tool_url: 'http://127.0.0.1:1',
+          token_path: 'C:/tmp/monitor.token',
+          version: '9.9.9',
+          pid: 4321,
+          data_dir: 'C:/tmp/gtm',
+          autostart_registered: false,
+          autostart_error: null,
+          error: '',
+          retry_s: 0,
+          status: {
+            ok: true,
+            day: '2026-10-18',
+            day_up_bytes: 1024,
+            day_down_bytes: 2048,
+            day_total_bytes: 3072,
+            last_event_id: 7,
+            subscriber_count: 1,
+            paths: { dat: 'C:/tmp/gtm/history_traffic.dat' },
+            config: toolConfig,
+          },
+        },
+      }));
+      let saved = null;
+      await page.route('**/api/traffic/monitor/config', (route) => {
+        saved = route.request().postDataJSON();
+        return route.fulfill({ json: { ok: true, config: toolConfig } });
+      });
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.locator('nav.tabs-right button').first().click();
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-card', { hasText: '全局流量来源' }).first().click();
+      await page.getByRole('button', { name: '整机流量监视器(工具)' }).click();
+
+      const params = page.locator('.hb-blk', { hasText: '工具参数(高级)' });
+      await expect(params).toBeVisible({ timeout: 10_000 });
+      await params.getByRole('button', { name: '展开' }).click();
+
+      /* 1) 时间参数: "5S" -> 数值 5 + 单位 S(unit 下拉的 value 是契约单位, 显示文案才翻中文) */
+      const interval = params.locator('.hb-row', { hasText: '采样间隔' });
+      await expect(interval.locator('.hb-unit input')).toHaveValue('5');
+      await expect(interval.locator('.hb-unit select')).toHaveValue('S');
+      /* 2) 大小参数: "1MiB" -> 数值 1 + 单位 MiB(不是 1048576 B) */
+      const threshold = params.locator('.hb-row', { hasText: '落盘阈值' });
+      await expect(threshold.locator('.hb-unit input')).toHaveValue('1');
+      await expect(threshold.locator('.hb-unit select')).toHaveValue('MiB');
+
+      /* 3) 「?」打开就近说明浮窗(复用设置页同一套), 文案来自参数元数据 */
+      await interval.locator('.hb-ask').click();
+      await expect(page.locator('.hb-pop')).toBeVisible({ timeout: 5_000 });
+      await expect(page.locator('.hb-pop')).toContainText('多久读一次网卡计数器');
+      await page.keyboard.press('Escape');
+
+      /* 4) 保存: 回传的仍是复合串(单位没被 Number() 吞掉), 列表字段回成数组 */
+      await params.getByRole('button', { name: '保存到工具' }).click();
+      await expect.poll(() => saved, { message: 'PUT /config 未发出', timeout: 10_000 }).not.toBeNull();
+      expect(saved.config.sample_interval).toBe('5S');
+      expect(saved.config.flush_delta_bytes).toBe('1MiB');
+      expect(saved.config.lease_ttl_s).toBe('3M');
+      expect(saved.config.http_port).toBe(0);
+      expect(saved.config.adapter_include).toEqual([]);
+    });
+  }
+});
