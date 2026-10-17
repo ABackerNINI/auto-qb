@@ -54,3 +54,5 @@
 P1-P3 全部实施验收完成: 四族模板 × 注册表扩展 × 守卫扩面(检查面 4 件全绿) × 命令参数化 × 四处文档回写; test.full 全绿(数字誊写进 P3 基线切片, 见 kb.baseline, 不写正文), 狗粮自验 kb.status/kb.bump/kb.new baseline/wrap 全跑通。计划已翻 Done; 本档案随切片 R7 收尾落盘。
 
 - 2026-10-17 10:06 立档: 任务档案 memory-bank/tasks/26-10-17-memory-bank-doc-pipeline.md 落盘(§08 显式确认), R0 进度日志 + D4 反向认领进计划; 档案 kb.status 翻 Done
+
+- 2026-10-17 10:16 提交合入推送: 用户触发「合入 develop 正常推送」⇒ ship.commit --no-push 落 P3 提交(87515aa4, 闸门全过) → develop 快进远端 f32f37a4 → feature rebase 上线(P1/P2/P3 三笔重放, tasks/_index.md 生成物冲突机械再生解) → develop 快进合入 → ship.push 推送成功 4f11be5c(死锁解除: 无远端对应分支的问题改走 develop 主线)
