@@ -89,6 +89,17 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  立即带现场报错而不是 30s 静默重试。产品侧要不要做"窗口化行宽收窄/点击落点自愈",
  *  走 issue 流程另行拍板。
  *
+ * ── 第二形态(2026-10-18 清偿, issue 26-10-18-2226): 行高于视口 ⇒ 居中滚动把落点推出视口 ──
+ *  300 档全绿、3000 档恒红(双皮肤 4 条), 签名却是同一句"落点验证 5 拍未过"而最后拦截者
+ *  =(null) —— 与上面的"被 sticky-head/html 拦截"**不是一回事**: (null) 表示落点在视口**外**,
+ *  压根没有元素可拦截。桩 3000 种子实测: 合成库整库塌成 **1 剧 × 24 集**, 每集约 142 个版本
+ *  ⇒ 集行的 .g-sites 格堆了 142 个 site-chip, 行高 **1220px**(视口仅 900px); clickRow 的
+ *  scrollIntoView({block:'center'}) 把行居中 ⇒ 行顶落到 -160px ⇒ 落点 y = top+8 = **-152**(负
+ *  值, 视口外) ⇒ elementFromPoint 恒 null ⇒ 5 拍空转。修法仍是**测试 arrange**: 拦截面取
+ *  **所有** .sticky-head 下沿的最大值(文档里不止一个), 行高超过可用视口时改 **start 对齐**,
+ *  落点钳进「行盒 ∩ (视口 - 拦截面)」。产品侧"一集 142 个版本 chip 把行撑到 1220px"属渲染
+ *  与信息密度问题, 另案评估, 不在本件范围。
+ *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互真实手势: 页签/菜单项走 locator.click; 行点击(左键/修饰键/右键)走 clickRow() 的
  *    page.mouse —— 同为受信输入事件(与 locator.click 同一输入管线), 且落点可验可断言。
@@ -132,17 +143,29 @@ async function clickRow(page, row, opts = {}) {
     last = await row.evaluate(async (/** @type {HTMLElement} */ el) => {
       const cont = el.closest('.group-table');
       if (cont && cont.scrollLeft !== 0) cont.scrollLeft = 0; // 居中滚动残留回零(见文件头机理)
-      const head = document.querySelector('.sticky-head');
-      const headBottom = head ? head.getBoundingClientRect().bottom : 0;
+      /* 拦截面 = **所有** .sticky-head 下沿的最大值(文档里不止一个: 顶栏条与表头各有其一) ——
+       * 只取 querySelector 的头一个会低估拦截面, 落点被表头吃掉后 5 拍都不自愈。 */
+      const guard = [...document.querySelectorAll('.sticky-head')]
+        .reduce((m, h) => Math.max(m, h.getBoundingClientRect().bottom), 0);
+      const vh = window.innerHeight;
+      const pad = 8;    // 落点纪律同款余量(行左缘 8,8)
       let r = el.getBoundingClientRect();
-      if (r.top < headBottom + 8 || r.bottom > window.innerHeight - 8) {
-        el.scrollIntoView({ block: 'center', behavior: 'instant' }); // 让位 sticky 头, 停在视口中部
+      /* 行高于"可用视口"时, 居中滚动会把行顶推到视口**上方**(让位 sticky 头的原意) ⇒ 落点 y
+       * 为负 ⇒ elementFromPoint 恒回 null, 5 拍全部空转 —— 这是本 spec 在 3000 规模恒红的真身
+       * (issue 26-10-18-2226 实测: 整库塌成 1 剧 × 24 集, 每集 ~142 个版本把集行的 .g-sites 格
+       * 堆到 1198px ⇒ 行高 1220px > 900px 视口 ⇒ 居中后 r.top = -160, 落点 y = -152)。
+       * 这种行改用 start 对齐(行顶贴滚动口顶), 落点再钳进"行盒 ∩ (视口 - 拦截面)"。 */
+      const tall = r.height > vh - guard - pad * 2;
+      if (r.top < guard + pad || r.bottom > vh - pad) {
+        el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' });
         await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
         r = el.getBoundingClientRect();
       }
-      const x = r.left + 8;
-      const y = r.top + 8;
-      const hit = document.elementFromPoint(x, y);
+      const lo = Math.max(r.top + pad, guard + pad);
+      const hi = Math.min(r.bottom - pad, vh - pad);
+      const y = lo <= hi ? lo : NaN;   // 可落区为空 ⇒ 本拍作废, 交给下一拍重排
+      const x = r.left + pad;
+      const hit = Number.isFinite(y) ? document.elementFromPoint(x, y) : null;
       return {
         x, y,
         ok: !!hit && (hit === el || el.contains(hit)),

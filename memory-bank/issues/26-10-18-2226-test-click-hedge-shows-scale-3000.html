@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-18-2226">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-e2e-click-hedge-scale">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-18-webui-e2e-click-hedge-scale.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红">
 <meta name="issue-summary" content="e2e/multiselect-shows.spec.mjs 两条追剧页用例(集行乐观 + CTX-03 追剧, 双皮肤 4 条)在 E2E_TORRENTS=3000 下确定性撞 clickRow 落点对冲失败(elementFromPoint=(null)); 300 规模全绿, 隔离重跑仍红 —— 窗口化+规模放大的对冲失效新形态, 与 26-10-18 选中摘要改动无关">
 <title>追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-18-2226-test-click-hedge-shows-scale-3000</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 22:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,7 +163,15 @@ Error: clickRow: 落点验证 5 拍未过(行左缘 8,8 被拦截, 最后拦截�
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：TODO）</div>
+    <div class="callout">已定位(2026-10-18 23:3x 仪器化探针实测) —— <strong>与入池时的假设不同</strong>：不是重渲染竞态, 也不是窗口化, 是「行高于视口」</div>
+    <p><strong>真身</strong>：3000 规模下追剧页的<strong>集行高于视口</strong>，clickRow 的居中滚动把落点推到视口之外。</p>
+    <ul>
+      <li>合成库 3000 种子整库塌成 <strong>1 剧 × 24 集</strong>(每集 ~142 个版本) ⇒ 集行的 <code>.g-sites</code> 格堆了 142 个 site-chip ⇒ <strong>行高 1220px</strong>，而视口仅 900px(探针实测: 该子格自身 1198px)。</li>
+      <li><code>clickRow</code> 的对冲一律走 <code>scrollIntoView({ block: 'center' })</code> ⇒ 1220px 的行被居中后<strong>行顶落到 -160px</strong> ⇒ 落点 <code>y = top + 8 = -152</code> 为<strong>负值</strong> ⇒ <code>elementFromPoint</code> <strong>恒回 null</strong>(它只在坐标落在视口内时才回元素) ⇒ 5 拍量到的都是同一个负坐标，重排无效 ⇒ <strong>确定性红</strong>，与时序抖动无关 —— 这正是「最后拦截者 (null)」与旧形态「被 sticky-head/html 拦截」的分野。</li>
+      <li>为什么 300 档全绿：300 种子下每集 ~12 个版本 ⇒ 行高正常(&lt; 视口) ⇒ 居中后行顶仍为正，对冲照旧生效。规模差异纯粹落在「行高 vs 视口高」这一维，与模式维度(error/hang/skip-check/hr-scene)无关。</li>
+      <li>附带修正(潜伏形态，本轮一并修)：拦截面原来只取 <code>document.querySelector('.sticky-head')</code> 的<strong>头一个</strong>(顶栏条，下沿 95)，真实表头是第二个(下沿 143) ⇒ 低估拦截面时落点会落进表头里，且 5 拍都不自愈。</li>
+      <li>产品侧观察(<strong>未入池、未改</strong>)：一集 142 个版本 chip 把行撑到 1220px 属渲染与信息密度问题 —— 测试基建的修法不掩盖它，也不替它拍板。</li>
+    </ul>
   </section>
 
   <section id="s6">
@@ -176,17 +184,31 @@ Error: clickRow: 落点验证 5 拍未过(行左缘 8,8 被拦截, 最后拦截�
       <li><strong>C</strong>：产品侧窗口化给行加稳定锚(如 <code>scrollIntoView</code> 后强制一次同步布局 + <code>getBoundingClientRect</code> 复读), 降低测试 arrange 的竞态面。属产品改动, 需另立计划评估。</li>
     </ul>
     <p>建议先做 A 止血(与 issue 26-10-18-2122 的 A 方案同思路)，B/C 留待专项。开工前先复验(防过期原则 5)。</p>
+    <p class="callout"><strong>改道说明(2026-10-18 清偿)</strong>：实际走 <strong>B(治本)</strong>，未做 A —— A 是门控 skip，会让「大库下追剧页行交互」这一真实维度继续空白(等于把覆盖缺口固化)；B 的实测代价可控(4 份同构对冲一次改齐 + 一轮全量回归即可验证)，故直接治本，不动产品代码。建议原文保留如上。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-18 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-18 23:19 — 用户显式指派「认领并修复」，状态 <strong>In Progress</strong>；下一步：复验锚点（3000 规模重跑 4 条）</li>
+      <li>2026-10-18 23:23 — 复验：仍复现（同签名 4 红，见下方「复验」）</li>
+      <li>2026-10-18 23:40 — 根因定位（仪器化探针：行高 1220px &gt; 视口 900px ⇒ 居中滚动把落点推到视口外）+ 修复落码（4 处同构 clickRow 对冲）</li>
+      <li>2026-10-18 23:51 — 验证通过（3000 档 16 passed / 0 failed；300 档全量 290 passed / 0 failed；test.full 3637 passed），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-18 23:23 <strong>仍复现</strong> —— <code>E2E_PORT=8337 E2E_TORRENTS=3000 commands run dev.e2e -- multiselect-shows.spec.mjs</code> 双皮肤 4 条同签名恒红(<code>最后拦截者 (null)</code>，失败点 L323 / L364)，12 passed / 4 failed，与入池时逐字一致(换端口只因 8137 当时被透明代理应 200，非本件成因)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：改 <code>clickRow</code> 的落点对冲三处(纯测试侧 arrange，不碰产品代码)：</p>
+    <ul>
+      <li><strong>拦截面</strong>取<strong>所有</strong> <code>.sticky-head</code> 下沿的<strong>最大值</strong> —— 原来只取 <code>document.querySelector</code> 的头一个(顶栏条，下沿 95；真表头是第二个，下沿 143)，低估拦截面时落点会落进表头里且 5 拍都不自愈(潜伏形态，本轮一并修)。</li>
+      <li><strong>高行改对齐方式</strong>：行高 &gt; 可用视口(<code>vh - guard - 16</code>)时，<code>scrollIntoView</code> 由 <code>block:'center'</code> 改为 <code>'start'</code> —— 高行居中正是把行顶推出视口的那一脚。</li>
+      <li><strong>落点钳进可落区</strong>：由「行盒 <code>top+8</code>」改为「行盒 ∩ (视口 − 拦截面)」—— <code>lo = max(top+8, guard+8)</code>、<code>hi = min(bottom-8, vh-8)</code>，<code>lo &gt; hi</code> 即本拍作废交给下一拍重排。</li>
+      <li><strong>同改齐 4 处同构副本</strong>(不是顺手改无关模块 —— 是同一个 clickRow 对冲的 4 份复制，<code>lib/gestures.mjs</code> 头注自己就写着"复制两份必漂移")：<code>e2e/lib/gestures.mjs</code>(共享件，供 menus/trigger-scope 用) · <code>e2e/multiselect-shows.spec.mjs</code> · <code>e2e/optimistic.spec.mjs</code> · <code>e2e/delta-sync.spec.mjs</code>。</li>
+      <li>新形态已回写两处文档：<code>e2e/multiselect-shows.spec.mjs</code> 文件头「第二形态」段 + <code>memory-bank/pitfalls/testing/smoke.md</code> 新条目(含触发词)。</li>
+    </ul>
+    <p><strong>验证方式</strong>：①定点 <code>E2E_PORT=8337 E2E_TORRENTS=3000 commands run dev.e2e -- multiselect-shows.spec.mjs</code>(换端口只因 8137 当时被透明代理应 200，非本件成因)；②回归 <code>E2E_PORT=8337 commands run dev.e2e</code>(默认 300 档全套件，动的是共享点击入口故必须全量)；③<code>commands run test.full</code>。</p>
+    <p><strong>测试数字</strong>(2026-10-18 23:40~23:51 实测)：3000 档本 spec <strong>修复前 12 passed / 4 failed</strong> → <strong>修复后 16 passed / 0 failed</strong>；默认 300 档全量 e2e <strong>290 passed / 10 skipped / 0 failed</strong>；<code>test.full</code> <strong>3637 passed、10 skipped、覆盖率 98%</strong>。</p>
   </section>
 
   <footer>

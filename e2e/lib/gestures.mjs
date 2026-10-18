@@ -32,17 +32,28 @@ export async function clickRow(page, row, opts = {}) {
     last = await row.evaluate(async (/** @type {HTMLElement} */ el) => {
       const cont = el.closest('.group-table');
       if (cont && cont.scrollLeft !== 0) cont.scrollLeft = 0;
-      const head = document.querySelector('.sticky-head');
-      const headBottom = head ? head.getBoundingClientRect().bottom : 0;
+      /* 拦截面 = **所有** .sticky-head 下沿的最大值(文档里不止一个: 顶栏条与表头各有其一) ——
+       * 只取 querySelector 的头一个会低估拦截面, 落点被表头吃掉后 5 拍都不自愈。 */
+      const guard = [...document.querySelectorAll('.sticky-head')]
+        .reduce((m, h) => Math.max(m, h.getBoundingClientRect().bottom), 0);
+      const vh = window.innerHeight;
+      const pad = 8;    // 落点纪律同款余量(行左缘 8,8)
       let r = el.getBoundingClientRect();
-      if (r.top < headBottom + 8 || r.bottom > window.innerHeight - 8) {
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      /* 行高于"可用视口"时, 居中滚动会把行顶推到视口**上方** ⇒ 落点 y 为负 ⇒ elementFromPoint
+       * 恒回 null, 5 拍全部空转(issue 26-10-18-2226: 3000 种子下每集 ~142 个版本把集行的
+       * .g-sites 格堆到 1198px ⇒ 行高 1220px > 900px 视口 ⇒ 居中后 r.top = -160)。
+       * 这种行改用 start 对齐(行顶贴滚动口顶), 落点再钳进"行盒 ∩ (视口 - 拦截面)"。 */
+      const tall = r.height > vh - guard - pad * 2;
+      if (r.top < guard + pad || r.bottom > vh - pad) {
+        el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' });
         await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
         r = el.getBoundingClientRect();
       }
-      const x = r.left + 8;
-      const y = r.top + 8;
-      const hit = document.elementFromPoint(x, y);
+      const lo = Math.max(r.top + pad, guard + pad);
+      const hi = Math.min(r.bottom - pad, vh - pad);
+      const y = lo <= hi ? lo : NaN;   // 可落区为空 ⇒ 本拍作废, 交给下一拍重排
+      const x = r.left + pad;
+      const hit = Number.isFinite(y) ? document.elementFromPoint(x, y) : null;
       return {
         x, y,
         ok: !!hit && (hit === el || el.contains(hit)),
