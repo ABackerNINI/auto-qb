@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="alias-fs-symlink-privilege">
+<meta name="issue-stamp" content="26-10-18-2030">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="alias-fs-symlink-privilege">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail">
+<meta name="issue-summary" content="tests/test_alias_fs.py 在本机无 SeCreateSymbolicLinkPrivilege 时 6 failed(29 passed), 会污染 ship.commit 合并后测试闸门">
+<title>alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail</h1>
+    <p class="lede">tests/test_alias_fs.py 在本机无 SeCreateSymbolicLinkPrivilege 时 6 failed(29 passed), 会污染 ship.commit 合并后测试闸门</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-18-2030-test-alias-fs-symlink-privilege</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 20:30</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">infra</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-10-18 19:58 前后, 另一会话把 alias_fs P0(能力探测, 提交 <code>d7fc97ae</code>)推到远端。本轮做「通知链路日志降 DEBUG」收尾, <code>commands run ship.commit</code> 首跑: rebase 重放该提交后, <strong>合并后测试闸门(test.quick)复跑红 6 条, 全在 <code>tests/test_alias_fs.py</code></strong>。单跑该文件确认与本轮改动无关, 且同机必现。</p>
+    <p>本机环境: Windows, 当前用户非管理员、未开开发者模式。<code>uv run pytest tests/test_alias_fs.py -q --no-cov</code> → <strong>6 failed / 29 passed</strong>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code>$ uv run pytest tests/test_alias_fs.py -q --no-cov    # 取证 2026-10-18 20:30
+tests\test_alias_fs.py:463: 
+    link = tmp_path / "link"
+>       alias_fs.create_dir_alias(str(link), str(target), KIND_SYMLINK)
+src\auto_qb\infra\alias_fs.py:570: in create_dir_alias
+    os.symlink(target, link, target_is_directory=True)
+tests\sidefx.py:393: OSError: [WinError 1314] 客户端没有所需的特权。
+===================== short test summary info ============================
+FAILED tests/test_alias_fs.py::test_probe_symlink_penetration_failures - Asse...
+FAILED tests/test_alias_fs.py::test_probe_symlink_file_ok - AssertionError: ...
+FAILED tests/test_alias_fs.py::test_probe_symlink_dir_ok - AssertionError: 权...
+FAILED tests/test_alias_fs.py::test_alias_primitives - OSError: [WinError 131...
+FAILED tests/test_alias_fs.py::test_probe_hardlink_unreadable_after_create - ...
+FAILED tests/test_alias_fs.py::test_remove_alias_does_not_follow_target - OSE...
+6 failed, 29 passed in 2.56s</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>Windows 环境当前进程无 <code>SeCreateSymbolicLinkPrivilege</code>(非管理员且未开开发者模式); 凡走真实 <code>os.symlink</code> 的用例必红, 与数据量/配置无关</td></tr>
+    <tr><td>影响范围</td><td>① <code>tests/test_alias_fs.py</code> 6 条红, 本机跑 <code>test.full</code> 全量必红; ② <code>ship.commit</code> 合并后闸门把远端新提交的环境性失败算到当前轮次, 阻断正常提交流(本轮实测: 被迫走 <code>ship.push</code> 补推口径)</td></tr>
+    <tr><td>严重度</td><td>中 —— 不误生产代码(特权环境/CI 上这些用例是真实覆盖), 但污染每次全量与提交闸门, 且别会话在本机还会重复撞</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/infra/alias_fs.py:570</code>(取证 2026-10-18 20:30) · <code>create_dir_alias</code> · grep <code>os.symlink(target, link, target_is_directory=True)</code></li>
+      <li><code>tests/test_alias_fs.py:463</code>(取证 20:30) · <code>test_remove_alias_does_not_follow_target</code> · grep <code>create_dir_alias</code></li>
+      <li><code>tests/sidefx.py:393</code>(取证 20:30) · symlink 副作用记录器 <code>symlink</code> · grep <code>orig_symlink</code></li>
+      <li>失败 6 条: <code>test_probe_symlink_penetration_failures</code> / <code>test_probe_symlink_file_ok</code> / <code>test_probe_symlink_dir_ok</code> / <code>test_alias_primitives</code> / <code>test_probe_hardlink_unreadable_after_create</code> / <code>test_remove_alias_does_not_follow_target</code></li>
+      <li>引入提交: <code>d7fc97ae</code>(远端, 别会话 2026-10-18 19:58, alias_fs P0 能力探测)</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查。已确认事实: Windows 非特权进程调 <code>os.symlink</code> 抛 <code>WinError 1314</code>(报错原文「客户端没有所需的特权」), 该特权默认只授予管理员(开发者模式可下放), 无特权环境复现不了。已排除: 与本轮通知链路日志改动无关(单跑即红, 文件随 <code>d7fc97ae</code> 从远端进来)。待查: <code>probe_*</code> 系列探测函数本来的设计意图(是否本就预期在无特权环境走探测-降级路径, 而用例没接上)。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p><strong>方案 A(止血, 推荐先做):</strong> 用例级 skip —— 模块级 fixture 或 conftest 探测本进程 symlink 能力(试建临时 symlink 后清理, 或直接查特权), 无特权则 <code>pytest.skip(reason=...)</code> 而非 fail; 有特权环境照跑真实覆盖。代价最小, 不碰被测代码。</p>
+    <p><strong>方案 B(系统化):</strong> 探测下沉到 <code>alias_fs</code> 能力探测 API(与 P0 的 <code>probe_*</code> 合并), 测试侧统一问「本环境支持吗」, 不支持走 skip 或明确的 mock 路径。更一致, 但要先定 mock 边界与哪些用例值得保留无特权路径的覆盖。</p>
+    <p class="hint">两者不互斥; 先 A 解提交闸门噪音, B 看 <code>probe_*</code> 设计意图查清后再定。修时需先确认已被某计划/用户指派认领(create-issue 规程: 未认领不动码)。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-18 20:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>2026-10-18 20:30 — 入池时复跑即取证: <strong>仍复现</strong>(6 failed / 29 passed, 原文见 02 证据)。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-18-2030-test-alias-fs-symlink-privilege.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
