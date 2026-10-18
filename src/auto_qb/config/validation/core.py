@@ -26,6 +26,7 @@ KNOWN_CONFIG_KEYS = {
     "delete_tags_if_has_no_torrents",
     "grouping",
     "fs",
+    "relocate",
     "notify",
     "web",
     "hr_check",
@@ -267,6 +268,7 @@ def validate_config(data) -> List[str]:
         _validate_notify,
         _validate_qb_traffic,
         _validate_qbittorrent,
+        _validate_relocate,
         _validate_tag_lists,
         _validate_trackers,
         _validate_traffic_source,
@@ -339,6 +341,7 @@ def validate_config(data) -> List[str]:
     _validate_global_hr(cfg.get("hr"), errors)
     _validate_grouping(cfg.get("grouping"), errors)
     _validate_fs(cfg.get("fs"), errors)
+    _validate_relocate(cfg.get("relocate"), errors)
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)

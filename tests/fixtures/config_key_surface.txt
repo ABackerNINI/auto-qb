@@ -130,6 +130,16 @@ qbittorrent.host
 qbittorrent.password
 qbittorrent.port
 qbittorrent.username
+relocate
+relocate.alias_file_threshold
+relocate.allow_uac
+relocate.enabled
+relocate.finalize_timeout
+relocate.hard_max_links
+relocate.low_space_warn
+relocate.move_stall_timeout
+relocate.move_warn_after
+relocate.verify
 remove_similar_tags
 skip_checking_tag
 state_file

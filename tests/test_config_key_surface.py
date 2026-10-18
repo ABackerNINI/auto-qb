@@ -322,6 +322,17 @@ _LOADER_PROBES = {
     "traffic_source.global_traffic_monitor.tool_exe": ("/probe/gtm/monitor.exe", "/probe/gtm/monitor.exe"),
     # !无 data_dir(R2/D20): 数据目录由工具发现指针提供, 该键已删
     "traffic_source.global_traffic_monitor.notify_cooldown_s": ("90S", 90.0),
+    # relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 探针值须过 _validate_relocate ——
+    # 两个 int >= 1; verify 取值域 size/sample; 时间键 > 0; 低空间走 parse_fsize(二进制单位)
+    "relocate.enabled": ("true", True),
+    "relocate.alias_file_threshold": ("12", 12),
+    "relocate.hard_max_links": ("500", 500),
+    "relocate.verify": ("sample", "sample"),
+    "relocate.allow_uac": ("false", False),
+    "relocate.move_stall_timeout": ("25M", 1500.0),
+    "relocate.move_warn_after": ("3H", 10800.0),
+    "relocate.finalize_timeout": ("45D", 45 * 86400.0),
+    "relocate.low_space_warn": ("20GiB", 20 * 1024**3),
 }
 
 

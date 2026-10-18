@@ -2,7 +2,7 @@
 from typing import Tuple
 
 from ...infra.versioning import CURRENT_VERSIONS
-from .fields import Field, Group, LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
+from .fields import Field, Group, LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS, RELOCATE_VERIFY_MODES
 from .hr import HR_CHECK_FIELDS
 from .trackers import HR_OUTPUT_FIELDS
 
@@ -330,6 +330,97 @@ GROUPS: Tuple[Group, ...] = (
                         help="开启后检测不同辅种组的文件指向同一磁盘物理文件（部分重叠/大小写/别名目录），警告并暂停涉事下载方；默认关闭",
                     ),
                 )
+            ),
+            Field(
+                "relocate",
+                "整组迁移",
+                "object",
+                help="把辅种组整体搬到新目录(如腾挪盘位), 搬完用文件链接/目录别名让旧路径继续可读, "
+                "qB 下次重启后自动 setLocation 收尾; 有未收尾迁移的组会被拒绝再迁。"
+                "本段热重载即生效, 不需要重启进程; **推荐以管理员身份运行 auto-qb**, 可免去每次迁移的 UAC 确认。"
+                "整段缺省 = 功能未启用(默认关闭, 三个入口逐字节保持现状)",
+                fields=(
+                    Field(
+                        "enabled",
+                        "启用",
+                        "bool",
+                        default="false",
+                        help="总开关; 关闭时 WebUI「移动位置」/规则 move_to/添加对话框三条入口都不提供迁移能力",
+                    ),
+                    Field(
+                        "alias_file_threshold",
+                        "目录别名文件数阈值",
+                        "int",
+                        default="8",
+                        min=1,
+                        grey_if=("enabled", "true"),
+                        help="组内文件数达到该值、且目录确为本组专属(二次确认)时才用目录别名(整目录一条链接); "
+                        "文件数不足或目录不专属 ⇒ 逐文件建链接",
+                    ),
+                    Field(
+                        "hard_max_links",
+                        "逐文件链接硬上限",
+                        "int",
+                        default="2000",
+                        min=1,
+                        grey_if=("enabled", "true"),
+                        help="逐文件链接条数硬上限; 超过且无法用目录别名时拒绝执行(防一次建出上千条链接)",
+                    ),
+                    Field(
+                        "verify",
+                        "迁移校验口径",
+                        "enum",
+                        default="size",
+                        options=RELOCATE_VERIFY_MODES,
+                        grey_if=("enabled", "true"),
+                        help="size(默认)= 目标侧文件数与总大小和源侧对齐即通过; sample = 抽样 SHA1(更严, 更慢)",
+                    ),
+                    Field(
+                        "allow_uac",
+                        "允许 UAC 提权",
+                        "bool",
+                        default="true",
+                        grey_if=("enabled", "true"),
+                        help="需要建符号链接而权限不足时允许弹 UAC 提升; 关闭 = 直接拒绝、不弹窗。"
+                        "**推荐以管理员身份运行 auto-qb**, 可免去每次迁移的 UAC 确认",
+                    ),
+                    Field(
+                        "move_stall_timeout",
+                        "停滞判超时",
+                        "time",
+                        default="10M",
+                        unit_default="M",
+                        grey_if=("enabled", "true"),
+                        help="目标位置体积不增长、且 qB 不在移动状态超过该时长 ⇒ 判迁移失败(只删已建链接, 不自动搬回)",
+                    ),
+                    Field(
+                        "move_warn_after",
+                        "耗时提示阈值",
+                        "time",
+                        default="2H",
+                        unit_default="H",
+                        grey_if=("enabled", "true"),
+                        help="超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败",
+                    ),
+                    Field(
+                        "finalize_timeout",
+                        "收尾等待上限",
+                        "time",
+                        default="30D",
+                        unit_default="D",
+                        grey_if=("enabled", "true"),
+                        help="qB 重启后经旧路径自动 setLocation 收尾的最长等待; 超过 ⇒ failed(链接已删, 由用户处理)",
+                    ),
+                    Field(
+                        "low_space_warn",
+                        "目标卷低空间告警",
+                        "size",
+                        default="10GiB",
+                        unit_default="GiB",
+                        grey_if=("enabled", "true"),
+                        help="别名目标卷剩余空间低于该值时告警(只告警, 不暂停); 填 0 = 不告警",
+                    ),
+                ),
             ),
             Field(
                 "fs",

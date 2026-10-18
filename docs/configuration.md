@@ -92,6 +92,19 @@ config:
                                   #   配好映射后可保持 true —— 见 docs/deployment.md §11.3/§11.5)
         missing_tag: MISSING      # 文件丢失时整组添加的标签
 
+    # 整组迁移(计划 26-10-18-1604): 辅种组整体搬到新目录后用链接保持旧路径可读; 默认关。
+    # 本段热重载即生效(不需要重启进程); 完整说明见[#整组迁移（relocate）]
+    # relocate:
+    #     enabled: false             # 总开关; 关 = 三个入口逐字节保持现状
+    #     alias_file_threshold: 8    # 文件数 >= 阈值且目录专属(确认后) => 目录别名; 否则逐文件链接
+    #     hard_max_links: 2000       # 逐文件链接条数硬上限; 超过且无法用目录别名 => 拒绝
+    #     verify: size               # size(默认) | sample(抽样 SHA1)
+    #     allow_uac: true            # 允许弹 UAC 提权建 symlink; false = 直接拒绝
+    #     move_stall_timeout: 10m    # 停滞判据: dst 不增长且 qB 不在 moving 超过该时长 => 失败
+    #     move_warn_after: 2h        # 超过该时长仍在搬 => 只提示"已超预期", 不判失败
+    #     finalize_timeout: 30d      # 收尾(qB 重启后经旧路径 setLocation)等待上限
+    #     low_space_warn: 10GiB      # 别名目标卷低空间告警阈值(只告警, 不暂停)
+
     # 下载目录路径映射(容器部署, plan 26-09-27-1407): qB 报回的宿主路径前缀 -> 本容器挂载点。
     # 留空(默认)= 完全现状(宿主直跑 / Linux 同路径挂载不需要); 配好映射后缺文件扫描/跳检前置/
     # exists()/disk_*()/目录浏览恢复可用, 映射 miss 一律判「不可判定」不误判缺失。
@@ -608,6 +621,31 @@ config:
 
 - `sample_interval`：也是 24h 流量图的曲线颗粒，越小曲线越细但存储体量线性增长。下限为硬校验——低于 `main_tick` 的间隔启动时直接拒绝（采样任务由主循环节拍驱动，更细的间隔无法被调度）；不是 `main_tick` 整数倍只是精度损耗（运行期告警一次），校验不拒绝。
 - `flush_interval`：采样点先入内存缓冲，每过一个落盘周期单次批量追加写盘；越大写盘越少，但断电 / 强杀等非优雅终止时最多丢失该窗口内的采样点（默认 10 分钟）。
+
+## 整组迁移（relocate）
+
+把辅种组整体搬到新目录（腾挪盘位、集中存储）：搬完在旧目录用**文件链接 / 目录别名**让原路径继续可读，qB 下次重启后经旧路径自动 `setLocation` 收尾（不需要手动逐种改位置）。有未收尾迁移的组会被拒绝再迁（先收尾或先撤销）。默认关闭 —— `enabled: false`（缺省）时三个入口（WebUI「移动位置」/规则 `move_to`/添加对话框）逐字节保持现状。
+
+**推荐以管理员身份运行 auto-qb** —— Windows 上未开开发者模式时创建符号链接需要提权，以管理员身份运行可免去每次迁移的 UAC 确认（`allow_uac: false` 则直接拒绝、不弹窗）。
+
+```yaml
+config:
+    relocate:
+        enabled: false             # 总开关（默认 false；关闭 = 三入口保持现状）
+        alias_file_threshold: 8    # 文件数 >= 阈值且目录专属（二次确认后）→ 目录别名；否则逐文件链接
+        hard_max_links: 2000       # 逐文件链接条数硬上限；超过且无法用目录别名 → 拒绝
+        verify: size               # size（默认）= 文件数+总大小对齐；sample = 抽样 SHA1
+        allow_uac: true            # 允许弹 UAC 提权建 symlink；false = 直接拒绝
+        move_stall_timeout: 10m    # 停滞判据：dst 不增长且 qB 不在 moving 超过该时长 → 失败（不搬回）
+        move_warn_after: 2h        # 超过该时长仍在搬 → 只提示"已超预期"，不判失败
+        finalize_timeout: 30d      # 收尾（qB 重启后经旧路径 setLocation）等待上限；超过 → failed
+        low_space_warn: 10GiB      # 别名目标卷低空间告警阈值（只告警，不暂停）；0 = 不告警
+```
+
+- 本段与 `fs`（容器路径映射，改完要重启进程）分开：由迁移模块认领，**保存配置即时生效**，不需要重启。
+- 文件链接 = 逐文件建链接（symlink；不支持时按平台探测结果用硬链接 / junction）；目录别名 = 整目录一条链接 —— 它会让该目录以后新增的种子也落到新位置，执行前会勾选确认。
+- 大小单位只认二进制单位（`10GiB`，与全仓 `parse_fsize` 一致）；时间单位 `S/M/H/D`。
+- 键面单一出处：`memory-bank/config-reference/keys.md`「relocate 段」。
 
 ## 规则系统
 

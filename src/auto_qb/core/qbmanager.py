@@ -53,6 +53,7 @@ from .modules import (
     MaintenanceModule,
     NotifyModule,
     OpsModule,
+    RelocateModule,
     RulesModule,
     SpeedCurveModule,
     TrackerModule,
@@ -243,6 +244,9 @@ class QbManager(
         # 自注册(start/queue_rebuilt), enabled=false(缺省)零任务零文件(黄金法则 2); 与其余
         # 模块零耦合(只读 store 快照), 挂清单末尾
         self.host.register(TrafficSampleModule(self.ctx))
+        # 装配清单追加(计划 26-10-18-1604 §04 P1): 整组迁移 —— P1 只认领 relocate 段(引擎随
+        # P2 起落地, 见模块头注); enabled=false(缺省)零副作用, 段变化热重载即生效
+        self.host.register(RelocateModule())
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。

@@ -27,6 +27,7 @@ from .models import (
     LoggingConfig,
     NotifyConfig,
     PathMapEntry,
+    RelocateConfig,
     SiteHrCheckConfig,
     TrafficMonitorSourceConfig,
     TrafficSourceConfig,
@@ -423,6 +424,29 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     )
 
 
+def load_relocate_config(spec) -> RelocateConfig:
+    """解析 config.relocate 段(整组迁移, 计划 26-10-18-1604 §3.7)
+
+    仅转换, 合法性由 validate_config._validate_relocate 保证(段缺省 = 全默认, 功能关)。
+    verify/allow_uac 等布尔与枚举直接按 models 默认取 _get 回退; 时间键走 parse_time
+    ("10m"/"2h"/"30d"), 空间键走 parse_fsize("10GiB" —— 本仓 parse_fsize 只认二进制单位)。
+    """
+    d = RelocateConfig()
+    if not isinstance(spec, dict):
+        return d
+    return RelocateConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        alias_file_threshold=_get(spec, "alias_file_threshold", d.alias_file_threshold, int),
+        hard_max_links=_get(spec, "hard_max_links", d.hard_max_links, int),
+        verify=_get(spec, "verify", d.verify, lambda v: str(v).strip().lower()),
+        allow_uac=_get(spec, "allow_uac", d.allow_uac, parse_bool),
+        move_stall_timeout=_get(spec, "move_stall_timeout", d.move_stall_timeout, parse_time),
+        move_warn_after=_get(spec, "move_warn_after", d.move_warn_after, parse_time),
+        finalize_timeout=_get(spec, "finalize_timeout", d.finalize_timeout, parse_time),
+        low_space_warn=_get(spec, "low_space_warn", d.low_space_warn, parse_fsize),
+    )
+
+
 def load_traffic_source_config(spec) -> TrafficSourceConfig:
     """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled)
 
@@ -611,6 +635,7 @@ def load_config(config_path: str) -> Config:
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
         qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),
         traffic_source=load_traffic_source_config(_get(cfg, "traffic_source", {})),
+        relocate=load_relocate_config(_get(cfg, "relocate", {})),
     )
 
 

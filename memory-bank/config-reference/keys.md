@@ -24,6 +24,7 @@
 | `notify` | 默认关闭 | `{enabled: bool, min_level: "ERROR", quiet_hours: "", max_per_hour: 20, dedup_window: "10M", channels: [platform]}`; 主动通知(ERROR 及以上日志 -> 平台原生通知, 零依赖; 26-09-27 等级整改后默认只推真正危险, WARNING 仅排障, 想看排障消息手动调低); quiet_hours "HH:MM-HH:MM" 支持跨午夜, 时段内跳过发送(含 ERROR); channels v1 仅 platform(缺省即启用); 节流为内存态不进 state_file |
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING", cross_group_conflict_check: false}`; `cross_group_conflict_check` = 跨组文件交叉检查(默认关, 开启后检测不同辅种组的文件指向同一磁盘物理文件, 警告并暂停涉事下载方) |
 | `fs` | | 容器部署路径映射: `{path_map: [{from, to}]}`; 留空 = 现状, 改后需重启 |
+| `relocate` | 默认关闭 | 整组迁移(辅种组保存位置迁移, 计划 26-10-18-1604 §3.7), 见下; 热重载即生效(非 R 级) |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (`add_tag`/`add_category`/`overwrite_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`/`overwrite_category_for_satisfied`) + 排除表 `exclude_tags`/`exclude_categories`: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); **取数/对账侧同源(26-10-08-1249 方案 B, 2026-10-08 落地): 命中种子不进对账对象集 —— 不再阻碍 idle 稳态降频生效, 但仍参与命中识别(仍是该站的本地命中, 不因排除而多下 .torrent)**; 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--`。站点覆盖链: 站点 `hr` 段对应键优先, 未配置回退本段; v4 起站点段 4 个 str 键(`add_tag`/`add_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`)显式空串 = 「覆盖为空」(如本站不打标), 整键删除 = 跟随全局; **本段(全局)同名键的空串语义仍是「使用默认值」**(加载时剥掉) |
@@ -95,6 +96,35 @@ global_speed_limit_curve:
 | `rollup_window` | time / `30D` | 7D~无上限 | 小时均值保留窗: 小时封口行(均值/峰值)的保留时长, hour 段视图(3d/7d/30d)从它取数; 也是已删种子文件的淘汰龄 |
 
 整段缺省 = 未启用。启用后按 `sample_interval` 周期读内存快照采样(零新增 qB 请求): 全局系列恒采(qB 速度/累计), 单种系列仅采活跃种子(`dlspeed>0 or upspeed>0`; 空闲期不产 raw 点, 已有数据文件者记零值行程行(z 行, plan 26-10-04-0721 v2), 从未传输者无文件)。数据供 WEB UI 流量图(1m/5m/30m/3h/6h/12h/24h 对齐 qB 速度图 + 3d/7d/30d 共十视图, 2026-10-04)消费; 空闲在图上表现为 0 平线, 停机/断连/计数器重置表现为断线(null), 不补 0 不回填。
+
+## relocate 段 (整组迁移)
+
+```yaml
+relocate:
+    enabled: false             # 总开关; 关 = 三个入口逐字节保持现状
+    alias_file_threshold: 8    # 文件数 >= 阈值且目录专属(确认后) => 目录别名; 否则逐文件链接
+    hard_max_links: 2000       # 逐文件链接条数硬上限; 超过且无法用目录别名 => 拒绝
+    verify: size               # size(缺省) = 文件数+总大小对齐 | sample = 抽样 SHA1
+    allow_uac: true            # 允许弹 UAC 提权建 symlink; false = 直接拒绝
+    move_stall_timeout: 10m    # 停滞判据: dst 不增长且 qB 不在 moving 超过该时长 => 失败(不搬回)
+    move_warn_after: 2h        # 超过该时长仍在搬 => 只提示"已超预期", 不判失败
+    finalize_timeout: 30d      # 收尾(qB 重启后经旧路径 setLocation)等待上限; 超过 => failed
+    low_space_warn: 10GiB      # 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
+```
+
+| 键 | 类型/默认 | 校验边界 | 说明 |
+|----|-----------|----------|------|
+| `enabled` | bool / `false` | — | 功能总开关; 关闭时 WebUI「移动位置」/规则 `move_to`/添加对话框三条入口都不提供迁移能力(缺省 false, 保守默认) |
+| `alias_file_threshold` | int / `8` | >= 1 | 目录别名的文件数阈值: 组内文件数达到该值、且目录确为本组专属(二次确认)时才整目录建一条链接; 否则逐文件建链接(默认 8) |
+| `hard_max_links` | int / `2000` | >= 1 | 逐文件链接条数硬上限; 超过且无法用目录别名时拒绝执行(防一次建出上千条链接) |
+| `verify` | str / `size` | `size` \| `sample` | 迁移后校验口径: `size` = 目标侧文件数与总大小和源侧对齐即通过; `sample` = 抽样 SHA1(更严, 更慢) |
+| `allow_uac` | bool / `true` | — | 需要建符号链接而权限不足时允许弹 UAC 提升; 关闭 = 直接拒绝、不弹窗。**推荐以管理员身份运行 auto-qb**, 可免去每次迁移的 UAC 确认 |
+| `move_stall_timeout` | time / `10m` | > 0 | 停滞判据: 目标体积不增长且 qB 不在移动状态超过该时长 ⇒ 判失败(失败只做零成本动作: 删已建链接, 不自动搬回) |
+| `move_warn_after` | time / `2h` | > 0 | 超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败 |
+| `finalize_timeout` | time / `30d` | > 0 | 收尾等待上限: qB 重启后经旧路径自动 `setLocation` 的最长等待; 超过 ⇒ failed(链接已删, 由用户处理) |
+| `low_space_warn` | size / `10GiB` | 二进制单位 | 别名目标卷剩余空间低于该值时告警(只告警, 不暂停); 填 `0` = 不告警。**大小单位只认二进制**(`10GiB` 而非 `10G`) |
+
+热重载口径: 本段与 `fs`(R 级, 改完要重启进程)分开, 由 `RelocateModule.sections()` 认领, 保存配置即时生效。有未收尾迁移的组会被拒绝再迁(先收尾或先撤销)。
 
 ## traffic_source 段 (全局流量来源)
 

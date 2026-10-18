@@ -24,6 +24,7 @@ from auto_qb.config import (
     WebConfig,
 )  # noqa: E402
 from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出面已收敛, 模型类直引 models)
+from auto_qb.config.models import RelocateConfig  # noqa: E402  (整组迁移, 计划 26-10-18-1604 §3.7; 默认全关)
 from auto_qb.config.models import TrafficSourceConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
@@ -989,6 +990,9 @@ class FakeConfig:
     # 全局流量来源(计划 26-10-17-0339 S15): 限速曲线/expr 取数单点; 与真 Config 同默认
     # (provider=traffic_monitor, dat_path 空), 既有用例行为零变化
     traffic_source = TrafficSourceConfig()
+    # 整组迁移(计划 26-10-18-1604 §3.7): P1 只立配置面, enabled=false(缺省)与真 Config 同默认;
+    # RelocateModule.start/apply 会读它, 替身缺该属性会 AttributeError
+    relocate = RelocateConfig()
     qb_traffic = None  # qB 口径流量采样(未启用; 与 Config 默认一致, 测试按需赋 QbTraffic(...))
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——

@@ -168,6 +168,10 @@ NOTIFY_LEVELS = ("INFO", "WARNING", "ERROR")
 
 NOTIFY_CHANNELS = ("platform", )  # v1 仅平台原生单渠道(按运行平台自动分派; 多渠道按 traffic_source 同模式演进)
 
+# relocate.verify 校验口径(计划 26-10-18-1604 §3.7): size = 文件数+总大小对齐(默认);
+# sample = 抽样 SHA1(更严, 更慢)。取值域单点在本表 —— validation/schema 两处引用同一对象。
+RELOCATE_VERIFY_MODES = ("size", "sample")
+
 EXECUTE_ONCE = ("never", "once", "daily", "hourly")
 
 STOP_IF = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")

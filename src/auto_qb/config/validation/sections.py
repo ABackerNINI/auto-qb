@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
-from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
+from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS, RELOCATE_VERIFY_MODES
 from .core import (
     _check_regex_patterns,
     _check_str_list,
@@ -35,6 +35,21 @@ KNOWN_FS_KEYS = {"path_map"}
 
 # path_map 条目的合法键(YAML 空间): from = qB 报回的宿主路径前缀, to = 容器挂载点
 KNOWN_PATH_MAP_ENTRY_KEYS = {"from", "to"}
+
+# relocate(整组迁移, 计划 26-10-18-1604 §3.7): 新顶层段(不塞 fs —— 那是 R 级要重启);
+# 由 RelocateModule.sections() 认领, 热重载即生效; enabled=false(缺省) = 三入口逐字节现状。
+# 空间键只认二进制单位(parse_fsize 单点): YAML 写 "10GiB" 而非 "10G"。
+KNOWN_RELOCATE_KEYS = {
+    "enabled",
+    "alias_file_threshold",
+    "hard_max_links",
+    "verify",
+    "allow_uac",
+    "move_stall_timeout",
+    "move_warn_after",
+    "finalize_timeout",
+    "low_space_warn",
+}
 
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu"}
 
@@ -564,6 +579,40 @@ def _validate_fs(spec, errors: List[str]) -> None:
             if (a.casefold() + "/").startswith(b.casefold() + "/"):
                 errors.append(f"{where}[{_i}].from: 是第 {_j} 条 from 的前缀(尾斜杠/大小写归一后), 命中有歧义: '{a_raw}' vs '{b_raw}'")
                 break
+
+
+def _validate_relocate(spec, errors: List[str]) -> None:
+    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 9 键逐一键级校验
+
+    阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
+    由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1; verify 取值域
+    单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 三个时间键 > 0; low_space_warn 走
+    parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警)。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.relocate: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_RELOCATE_KEYS, "config.relocate", errors)
+    for key in ("enabled", "allow_uac"):
+        if key in spec:
+            _try(parse_bool, spec[key], f"config.relocate.{key}", errors)
+    for key in ("alias_file_threshold", "hard_max_links"):
+        if key not in spec:
+            continue
+        n = _try(int, spec[key], f"config.relocate.{key}(须为整数)", errors)
+        if n is not None and n < 1:
+            errors.append(f"config.relocate.{key}: 须 >= 1(文件数/链接条数): {spec[key]}")
+    if "verify" in spec:
+        mode = str(spec["verify"]).strip().lower()
+        if mode not in RELOCATE_VERIFY_MODES:
+            errors.append(f"config.relocate.verify: 取值非法: '{spec['verify']}', 可选: {'/'.join(RELOCATE_VERIFY_MODES)}")
+    for key in ("move_stall_timeout", "move_warn_after", "finalize_timeout"):
+        if key in spec:
+            _try_time(spec[key], f"config.relocate.{key}", errors, positive=True)
+    if "low_space_warn" in spec:
+        _try(parse_fsize, spec["low_space_warn"], "config.relocate.low_space_warn(如 10GiB)", errors)
 
 
 def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:

@@ -11,6 +11,7 @@
 """
 from .logging_mod import LoggingModule
 from .notify_mod import NotifyModule
+from .relocate_mod import RelocateModule
 from .tracker_mod import TrackerModule
 from .traffic_snapshot_mod import TrafficSnapshotModule
 from .speed_curve_mod import SpeedCurveModule
@@ -29,6 +30,7 @@ __all__ = [
     "MaintenanceModule",
     "GroupingModule",
     "OpsModule",
+    "RelocateModule",
     "RulesModule",
     "TrafficSampleModule",
 ]

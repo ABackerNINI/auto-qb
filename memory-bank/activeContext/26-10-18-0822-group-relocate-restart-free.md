@@ -1,7 +1,7 @@
 # group-relocate-restart-free
 
 > 摘要: 免重启整组迁移方案研究: 证伪5条接口面方案, 给出A别名接续/B新路径重加/C机会式收尾/D补丁四路线与设计约束, 报告出厂Done
-> 最后活动: 2026-10-18 19:41
+> 最后活动: 2026-10-18 20:39
 
 **R0(2026-10-18 08:22):** 免重启整组迁移方案研究: 证伪5条接口面方案, 给出A别名接续/B新路径重加/C机会式收尾/D补丁四路线与设计约束, 报告出厂Done
 
@@ -16,3 +16,5 @@
 **R5(2026-10-18 19:16):** §08 一致性校正(R14): 资产口径 5→8 种子、S4/S5/S6/S11 与序列对齐、修复 6 处被转义破坏的盘符路径
 
 **R6(2026-10-18 19:41):** 实施 P0: 新 infra/alias_fs.py 真建真删式能力探测(junction/目录与文件 symlink/同卷硬链接/同卷证明/容器/UNC/跨 OS 挂载) + 链接原语 + §3.3 能力矩阵纯函数; Windows 双盘与 WSL(/tmp POSIX 分支 + /mnt/d drvfs 反例)实测对齐 §2.4; 35 条守阵, 全量绿(见 kb.baseline); 启动/热重载接线随 P2 模块句柄
+
+**R7(2026-10-18 20:39):** P1 配置面实施(计划 26-10-18-1604 §04): RelocateConfig 9 键 + loader + KNOWN_RELOCATE_KEYS 校验 + schema 段(含管理员运行提示) + RelocateModule 段认领桩; 键面基线重生成 170->180; keys.md/configuration.md 回写; 新 tests/test_relocate_config.py 13 例 + 四处既有守卫同步(参数面/探针/模块序/_pin_noop_sections); 全量测试通过(数字见 kb.baseline), 基线切片 26-10-18-2038-group-relocate-restart-free-p1

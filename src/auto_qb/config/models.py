@@ -407,6 +407,38 @@ class FsConfig:
 
 
 @dataclass
+class RelocateConfig:
+    """整组迁移(relocate 段, 计划 26-10-18-1604 §3.7): 辅种组保存位置迁移的管理员配置
+
+    与 fs(容器路径映射, R 级要重启)分开: 本段由 RelocateModule.sections() 认领,
+    热重载换对象即生效; enabled=false(缺省) = 三个入口(WebUI 移动位置/规则 move_to/
+    添加对话框)逐字节保持现状(黄金法则 2 保守默认)。
+    alias_file_threshold: 文件数 >= 该值且目录专属(二次确认后) ⇒ 目录别名(整条链接);
+        低于该值或目录不专属 ⇒ 逐文件链接(symlink/硬链接, 由 alias_fs 探测结果决定形态)
+    hard_max_links: 逐文件链接条数硬上限; 超过且无法用目录别名 ⇒ 拒绝执行
+    verify: 迁移校验口径 —— size = 文件数+总大小对齐(默认); sample = 抽样 SHA1
+    allow_uac: 是否允许弹 UAC 提升建 symlink(Windows 开发者模式/未开时的唯一通道);
+        false = 直接拒绝, 不弹窗
+    move_stall_timeout: 停滞判据 —— dst 体积不增长且 qB 不在 moving 超过该时长 ⇒ 判失败
+        (失败零成本收尾: 只删已建链接, 不自动搬回)
+    move_warn_after: 超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败
+    finalize_timeout: 收尾(qB 重启后经旧路径 setLocation)等待上限; 超过 ⇒ failed,
+        链接已删, 由用户处理
+    low_space_warn: 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
+    """
+
+    enabled: bool = False
+    alias_file_threshold: int = 8
+    hard_max_links: int = 2000
+    verify: str = "size"
+    allow_uac: bool = True
+    move_stall_timeout: float = 600.0  # 秒; YAML 原始缺省 "10m"
+    move_warn_after: float = 2 * 3600.0  # 秒; YAML 原始缺省 "2h"
+    finalize_timeout: float = 30 * 86400.0  # 秒; YAML 原始缺省 "30d"
+    low_space_warn: int = 10 * 1024**3  # 字节; YAML 原始写法 "10GiB"
+
+
+@dataclass
 class Config:
     """配置聚合根: 全字段默认(= Config() 即全默认实例), 由 load_config 按 YAML 覆盖构造"""
 
@@ -470,6 +502,9 @@ class Config:
 
     # 全局流量来源(计划 26-10-17-0339 S15): 限速曲线/expr 取数的数据源单点; provider 决定生效来源
     traffic_source: TrafficSourceConfig = field(default_factory=TrafficSourceConfig)
+
+    # 整组迁移(计划 26-10-18-1604 §3.7): 辅种组保存位置迁移; 热重载生效(非 R 级), 默认关
+    relocate: RelocateConfig = field(default_factory=RelocateConfig)
 
     def hr_site_confs(self) -> Dict[str, SiteHrCheckConfig]:
         """{站点名: 站点核实参数} —— 「哪些站点接入了 hr_check」的派生单点(issue hr-site-derive-convention-dup)
