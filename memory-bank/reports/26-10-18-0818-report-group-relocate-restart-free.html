@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>免重启整组迁移方案研究</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="group-relocate-restart-free">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-18-0818">
+<meta name="doc-updated" content="26-10-18-0833">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0826-report-missing-files-setlocation-recovery.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: group-relocate-restart-free</div>
+<h1>免重启整组迁移方案研究</h1>
+<p class="lede">免重启整组迁移可行：qBittorrent 的 WebAPI 面没有任何"保留进度改路径"的入口，但 auto-qb 现有跳检四阶段就是可靠的免重启重加原语 —— 推荐「OS 别名接续(A)为默认、新路径重加(B)为元数据干净选项、机会式收尾(C)为中期路线」，qBittorrent 补丁(D)仅作长期候选。证据为 qBittorrent / libtorrent / auto-qb 源码逐行核对 + 本机 junction 实测。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-0818 · <b>doc-updated</b> 26-10-18-0833 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「功能需要整合进 auto-qb、避免重启，深入研究免重启的脚本化方案」(2026-10-18 会话)；前序报告 <code>memory-bank/reports/26-10-18-0826-report-missing-files-setlocation-recovery.html</code> 已验证「文件丢失 + 设定位置」恢复链(依赖重启)，本报告回答其免重启等价问题
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<p><b>总判：免重启可行，且 auto-qb 已有约 90% 的机制。</b>qBittorrent 公开接口(WebAPI/GUI)里不存在"保留进度直接改 save_path"的动作；但 auto-qb 的跳检四阶段(导出 → 删除保留文件 → 重加 → 恢复快照)本身就是与重启完全无关的重加原语，把它的"重加路径"换成新位置、把"数据移动"插在删除与重加之间，就是免重启的真实迁移。唯一无法用现成接口消除的是 <b>dont_replace + 目标已存在 ⇒ need_full_check ⇒ force_recheck</b> 这条全量校验路径(storage_utils.cpp:123-127 → torrent.cpp:9381)，绕过它有两条路：让 qBittorrent <b>看不见</b>这次路径变化(别名接续)，或让重加走 <b>seedMode 信任模式</b>(跳过校验)。</p>
+
+<h3>四条可落地路线</h3>
+<table>
+<tr><th>路线</th><th>做法</th><th>save_path 元数据</th><th>上传统计</th><th>数据校验</th><th>主风险</th><th>定位</th></tr>
+<tr><td><b>A 别名接续</b></td><td>暂停组 → OS 层移动数据 → 原 save_path 建 junction/symlink → 恢复</td><td class="wr">半迁移(仍指向 alias)</td><td class="good">全保留</td><td>无</td><td class="good">低(可回滚)</td><td class="good">即期默认</td></tr>
+<tr><td><b>B 新路径重加</b></td><td>复用跳检四阶段，re-add 到新 save_path(seedMode=跳过校验)</td><td class="good">真实迁移</td><td class="bad">分享率清零</td><td>存在性 + 大小(重加自带)</td><td class="wr">中(信任数据)</td><td>即期可选</td></tr>
+<tr><td><b>C 机会式收尾</b></td><td>A 先落地；下次 qB 自然重启后组员进 MissingFiles，自动 setLocation 到真实路径 → reload 恢复 → 删 alias</td><td class="good">最终干净</td><td class="good">全保留</td><td>存在性 + 大小</td><td class="good">低-中</td><td>中期</td></tr>
+<tr><td><b>D qBittorrent 补丁</b></td><td>setLocation 增加保留进度参数，跳过 move_storage 直接 reload</td><td class="good">真实迁移</td><td class="good">全保留</td><td>可带校验</td><td class="wr">维护负担</td><td>长期候选</td></tr>
+</table>
+
+<h3>决策依据</h3>
+<ol>
+<li><b>用户的痛点是"零校验成本"，不是"元数据洁癖"</b>：A/C 保统计、保连接、保标签队列，失败可回滚，作为默认；B 用统计清零换元数据干净，按需选用。</li>
+<li><b>对齐 auto-qb 黄金法则「保守默认」</b>：A 完全不改 qBittorrent 侧任何种子状态，天然最保守；B 复用既有闸门体系(部分下载/活跃下载/同日去重)但须新增"搬迁完整性"闸门，默认关闭。</li>
+<li><b>D 最优雅但不合身</b>：auto-qb 是独立 Python 工具，为它维护一份 qBittorrent 补丁的部署与漂移成本，违反「范围守恒」；仅当团队决定长期跟 qBittorrent 版本时再考虑。</li>
+<li><b>A/C 组合天然幂等</b>：junction 存在性可探测、setLocation 走 qBittorrent 自身 reload 校验、失败即退回 alias 态，全程可重入。</li>
+</ol>
+
+<h3>证伪清单(避免后续重复探索)</h3>
+<table>
+<tr><th>已排除方案</th><th>证伪证据(源码行号)</th></tr>
+<tr><td>.fastresume 文件手术 + delete/re-add(改完磁盘 resume data 再重加)</td><td>qBittorrent 的 add 路径<b>不读取</b>既有 resume data —— <code>resumeDataStorage-&gt;load()</code> 仅出现在启动期(sessionimpl.cpp:1596/1616)；且 <code>removeTorrent</code> 会删掉 resume data(sessionimpl.cpp:2700)。手术无处注入</td></tr>
+<tr><td>同会话内 setLocation 直指已含数据的目标</td><td><code>dont_replace</code> + 目标文件已存在 ⇒ <code>need_full_check</code>(storage_utils.cpp:123-127)⇒ <code>force_recheck()</code>(torrent.cpp:9381)⇒ 进度清零 + 全量校验；组内共享目录时第 2..N 个成员必中招</td></tr>
+<tr><td>Overwrite 模式(always_replace_files)</td><td>仅 <code>AdjustCurrentLocation</code> 内部上下文可达(torrentimpl.cpp:2085-2086)，WebAPI/GUI 无入口。注:该模式下"源缺失 + 目标已有"其实会干净返回(move_file 容错缺失源，storage_utils.cpp:132-137)，是补丁候选而非现成入口</td></tr>
+<tr><td><code>reset_save_path_unchecked</code>(libtorrent 的不校验改路径标志)</td><td>qBittorrent 不使用该标志</td></tr>
+<tr><td>运行中删文件逼出 MissingFiles</td><td>只发 <code>file_error_alert</code> 进 Error 状态(torrent.cpp:1176-1207)，不置 <code>m_hasMissingFiles</code>(仅 fastresume_rejected_alert 置位，torrent.cpp:2301-2317)</td></tr>
+</table>
+
+<h3>若要落地的设计约束(仅设计，不写代码)</h3>
+<ul>
+<li><b>复用既有件</b>：<code>QbApi.torrents_delete/add/start/stop/set_location</code>、grouping_mod 的组与文件映射(<code>group_key_of</code> = save_path + 文件相对路径)、ops_mod 的闸门/备份/快照恢复/轮询确认、state_file 幂等落盘。</li>
+<li><b>新闸门(保守默认)</b>：组内成员 save_path 一致；成员全部已完成(部分下载禁止，与跳检 G3/G4/G6 同口径)；组内无活跃下载；搬迁完整性校验(默认 size 全量比对，hash 抽样可选)；junction 目标卷与源卷冲突检查；网络路径(UNC/SMB)拒绝 junction 降级。</li>
+<li><b>别名的目录粒度</b>：A 的别名单位 = 该组共享的数据目录。若 save_path 下混放多个组，须由组文件列表计算最小公共目录，避免误搬别组数据(grouping_mod 已有 file_map 可算)。</li>
+<li><b>验收标准</b>：迁移后组员 progress 不变、状态回 seeding、无 rechecking 日志、无全量校验告警；B 路线须在确认框明示"本地统计清零"。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>A. 别名接续(junction/symlink 透明重定向)</h3>
+<ul>
+<li><b>junction 免管理员创建(本机实测)</b>：PowerShell <code>New-Item -ItemType Junction</code> 创建成功、<code>Test-Path</code> 穿透解析正常(本会话 Windows 实测，非引用)。</li>
+<li><b>libtorrent 不会把 alias 解析回真实路径</b>：<code>aux::complete()</code> 是纯词法操作(拼 cwd，path.cpp:930-935)，只有 <code>TORRENT_USE_UNC_PATHS</code> 才走 canonicalize；qBittorrent 存/用的 save_path 保持 alias 路径不变。</li>
+<li><b>空闲空间查询穿透别名</b>：<code>Utils::Fs::freeSpace()</code> = <code>QStorageInfo(path).bytesAvailable()</code>(fs.cpp:315)，OS 层解析 reparse 点，报的是目标卷——不误触"磁盘满"告警。</li>
+<li><b>暂停/恢复不触发 reload</b>：<code>TorrentImpl::stop()/start()</code> 仅 <code>m_hasMissingFiles</code> 分支才 reload(torrentimpl.cpp:2043-2050)；本方案根本不进入该状态，进度/标签/统计/队列零改动。</li>
+<li><b>边界</b>：junction 目标必须是本地卷绝对路径，<b>不能指向 UNC/网络路径</b>(Windows reparse 点限制)；网络存储须用 symlink(需管理员)或走 C/D。Linux <code>ln -s</code> 同理可行(libtorrent 同样不解析)。</li>
+</ul>
+
+<h3>B. 新路径重加(auto-qb 跳检机制的直接变体)</h3>
+<ul>
+<li><b>现成四阶段骨架</b>：<code>OpsModule.skip_check</code>(ops_mod.py:377-483)：R2 实时复核 → 前置闸门 → 导出 .torrent → 布局推断 → 备份(先于删除，崩溃安全) → delete(保留文件)+轮询确认消失 → re-add+轮询确认出现 → 恢复快照 → 打标 → 可选 start。</li>
+<li><b>重加入参</b>：<code>_skip_readd</code> 调 <code>torrents_add(..., save_path=tor.save_path, ..., is_skip_checking=True, is_stopped=True)</code>(ops_mod.py)——<b>迁移变体只需把 save_path 换成新路径</b>，并把数据移动插在 delete 与 re-add 之间。</li>
+<li><b>is_skip_checking 的真身</b>：qbittorrentapi 把它同时发为 <code>skip_checking</code>/<code>seedMode</code>(qBittorrent 5.3.0 改名，qbittorrentapi/torrents.py:423-425)→ <code>lt::torrent_flags::seed_mode</code>(sessionimpl.cpp:3087)→ <code>set_have_all(true)</code>(torrent.cpp:2073-2077)——重加即报 100%，不做哈希。</li>
+<li><b>重加自带存在性+大小校验</b>：seed_mode 下 <code>verify_resume_data</code> 走 seed 分支，要求<b>全部文件存在且 size ≥ torrent 记录</b>(storage_utils.cpp:551-581)；数据未搬全 ⇒ fastresume_rejected + 全量校验 ⇒ 变 0% 开始下载。<b>迁移完整性闸门必须在重加前保证数据就位。</b></li>
+<li><b>统计清零是既有实证结论</b>：_skip_readd 注释(引 report 26-10-11-2017 §4.1)实测"重加走 skip-checking ⇒ qB 把全部块视为有效(progress=1 / 本地统计清零 / 状态进 stoppedUP)"——分享率从 0 重记，须明示用户。</li>
+<li><b>内容的信任模型</b>：与既有辅种跳检同等(不校验 hash)，但信任依据更强——搬迁前本种子自身就是 100%/做种态，风险收敛到"移动过程损坏"，由 size 全量比对闸门兜底。</li>
+</ul>
+
+<h3>C. 机会式收尾(A 的干净终局)</h3>
+<ul>
+<li><b>qB 重启后组员自动进 MissingFiles 并可用 setLocation 零 hash 恢复</b>：前序报告已验证的链路(fastresume_rejected_alert → m_hasMissingFiles → setLocation → reload 带旧进度位图 → verify 通过 → 进度恢复，torrentimpl.cpp:2135-2142)。</li>
+<li><b>auto-qb 已有触发器</b>：grouping_mod 的缺文件联动(<code>_handle_state_transitions</code>/<code>_scan_triggered_groups</code>)与 qB 重连退避(qbclient.py 头注)——C 不需要新造轮子，只加一条 alias 待迁移状态与确认后删 junction。</li>
+<li><b>安全序</b>：setLocation 成功(reload 校验通过、进度恢复)之后才删 junction；alias 在，任何一步失败都可回退到"数据在原路径透明可见"。</li>
+</ul>
+
+<h3>D. qBittorrent 补丁的最小形态</h3>
+<ul>
+<li>参照物就是现成代码：torrentimpl.cpp:2135-2142 的 <code>m_hasMissingFiles</code> 分支 = "改 save_path + 刷新 ti + reload"。补丁 = 把该分支从 MissingFiles 条件解绑，经 controller 暴露一个参数(如 setLocation 的 <code>keep_progress</code>)，即可对任意状态的种子做"保留进度迁路径"。</li>
+<li>不选核心理由：auto-qb 是独立 Python 工具，为它维护 qBittorrent 分支的部署/漂移成本大于收益(范围守恒)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<ul><li><b>方法</b>：逐行核对 <code>D:\Projects\Else\qBittorrent</code>(sessionimpl/torrentimpl/torrentscontroller/fs)与 <code>D:\Projects\Else\libtorrent</code>(torrent/storage_utils/path)源码；junction 行为在本机 Windows 实测；auto-qb 侧读 ops_mod/qbclient/grouping_mod/qbapi 与 qbittorrentapi 库源码。</li>
+<li><b>局限</b>：未在真实 qBittorrent 实例端到端实测组迁移(本机无真实 qB 与辅种数据)，B 的"统计清零"等结论引用 auto-qb 既有实证(report 26-10-11-2017)而非本轮复测；未覆盖网络存储(SMB/NFS)场景、macOS/Linux 符号链接细节、robocopy/rsync 参数选型；未实测组内混入未完成成员的完整拒绝路径。</li>
+<li><b>前置依赖</b>：C 路线结论依赖前序报告 <code>memory-bank/reports/26-10-18-0826-report-missing-files-setlocation-recovery.html</code> 对「文件丢失 + 设定位置」恢复链的机制验证(该链需一次重启才能进入)。</li>
+<li><b>快照口径</b>：本报告为研究快照，出厂即 Done；后续实测数字(若做验证)按 baseline 协议另立切片，不回改本文。</li>
+</ul>
+
+<h2><span class="no">§04</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R1 · 26-10-18-0833</span> 前序报告迁入 memory-bank(reports/26-10-18-0826): 修正两处 stale 路径引用, 补 doc-refs 双向认领链</li>
+</ul>
+
+</div>
+</body>
+</html>

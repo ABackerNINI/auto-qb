@@ -16,6 +16,7 @@
 | [date-authoring.md](date-authoring.md) | 「时间戳用命令取当前值」这条约定写了两处, 但那条命令**根本不存在** —— 日期实际全是 agent 按会话上下文手敲的(未来时间与错体例由此而来); 而守卫只查文件名的**形状**, 不查**值**。 | 日期不准, 未来日期, 时间戳, 文件名日期, 最后活动, doc-added, 时间体例, 取时命令 |
 | [discipline.md](discipline.md) | 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、**该判的却没判(闸门漏挂 → 静默红)**、测试写在没人跑的地方等于没写。 | 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红, 闸门漏挂, 静默红, 闸门覆盖, kb.check |
 | [doc-status-meta.md](doc-status-meta.md) | `plans/` `reports/` 的 `<meta name="doc-status">` 不在 5 词表(`Open`/`In Progress`/`Done`/`Dropped`/`Superseded`)时, 该件不落任何分区 ⇒ **静默漏收**。修复前 `kb.i… | 新建计划/报告, doc-status, 状态词, 索引漏收, kb.index 已生成但件不在索引, Draft, test_status_vocabulary |
+| [doc-topics-comma-composite.md](doc-topics-comma-composite.md) | Topics 行英文逗号不拆主键 | Topics, 专题主键, docmap, 跨形态视图, 名录 |
 | [index-archive-view.md](index-archive-view.md) | 生成式索引撞 `index-auto` cap 且「无摘要口径」本身已 > cap(即摘要砍到 0 也超)时, 后备出口不是「搬走老条目」而是**视图归档** —— 生成器只渲染已关闭状态最近 N 条, 文件原地不动, 全量清单另落 `attachments/`; 因为搬文件的前… | 索引条目数撑爆 cap, 无摘要口径超 cap, 后备出口, 搬文件 vs 视图归档, CLOSED_KEEP, 归档索引, attachments, 冻结件认领链, issues/_index 触顶, EXTRA_GENERATED |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径, 且双向是**对等义务**(报告/计划不进 doc-refs); 认领方件必须先落盘再回填 doc-refs, 悬空窗口会被全量闸门扫… | 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs, 单向链, 双向闭环 |
 | [request-boundary.md](request-boundary.md) | 开工先判这一轮是"问答 / 只读"还是"执行任务" —— 把问答当执行任务去做, 是本仓库的**红线**。 | 用户提问, 想延伸排查, 想顺手入池 issue, 想顺手立档, 想 commit |

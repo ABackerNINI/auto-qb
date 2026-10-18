@@ -49,7 +49,7 @@ HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
 TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
 # refs 多目标的唯一合法分隔符是英文逗号; 这些视觉分隔符常见误用, 命中即进报错提示 (issue 26-10-03-0746)
 VISUAL_SEP_RE = re.compile(r"[·、;；|｜]")
-NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史)
+NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史; 折行以专题名为原子, 2026-10-18 修名称被撕断)
 
 
 def _utf8_stdout() -> None:
@@ -164,13 +164,24 @@ def _topic_sort(groups: dict[str, list[dict]]) -> list[str]:
 
 
 def _name_list(names: list[str]) -> list[str]:
+    """名录折行: 以整个专题名为原子单位打包, 含空格的复合键不得从中间拆断。
+
+    旧实现先整串 join 再按 NAME_WRAP 字节位 rfind 折行: 边界恰好落在键内空格时,
+    键被撕成两行 (如 "topic-alpha," / "topic-beta") —— `topic in live_text` 判定与
+    --topic 跳转同时失效, 且随名录长度增长随机触发 (2026-10-18 新增单件专题名后复现,
+    修法 = 折行只发生在名与名之间, 单名超宽独占一行也不拆)。
+    """
     out = []
-    line = " ".join(names)
-    while line:
-        cut = line.rfind(" ", 0, NAME_WRAP)
-        cut = cut if cut > 0 else min(len(line), NAME_WRAP)
-        out.append(f"- {line[:cut]}")
-        line = line[cut:].lstrip(" ·")
+    line = ""
+    for name in names:
+        candidate = f"{line} {name}" if line else name
+        if line and len(candidate) > NAME_WRAP:
+            out.append(f"- {line}")
+            line = name
+        else:
+            line = candidate
+    if line:
+        out.append(f"- {line}")
     return out
 
 

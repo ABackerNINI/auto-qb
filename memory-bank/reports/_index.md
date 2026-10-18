@@ -17,6 +17,8 @@
 
 ## Done
 
+- [26-10-18-0826] [文件丢失+设定位置恢复机制验证](26-10-18-0826-report-missing-files-setlocation-recovery.html) — `missing-files-setlocation-recovery`
+- [26-10-18-0818] [免重启整组迁移方案研究](26-10-18-0818-report-group-relocate-restart-free.html) — `group-relocate-restart-free`
 - [26-10-15-0728] [WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告](26-10-15-0728-report-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-14-1135] [HR 取数通道 · 去端口路线 × 跨机计划 联合适配分析](26-10-14-1135-report-hr-channel-portless-remote-fit.html) — `hr-channel-portless-remote-fit`
 - [26-10-14-1110] [HR 取数通道「去端口配置 + 后端主动注册」可行性分析 — 背景报告](26-10-14-1110-report-hr-channel-portless-registration.html) — `hr-channel-portless-registration`

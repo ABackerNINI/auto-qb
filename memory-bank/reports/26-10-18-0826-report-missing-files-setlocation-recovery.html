@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>文件丢失+设定位置恢复机制验证</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="missing-files-setlocation-recovery">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-18-0826">
+<meta name="doc-updated" content="26-10-18-0826">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: missing-files-setlocation-recovery</div>
+<h1>文件丢失+设定位置恢复机制验证</h1>
+<p class="lede">「文件丢失」状态 +「设定位置」可以零哈希、零代码改动地恢复辅种组整组迁移后的进度 —— 该路径是 qBittorrent 源码里设计好的恢复机制(注释原文 <code>// it can be moved to the proper location</code>)，唯一限制是必须先经一次重启让种子进入「文件丢失」；免重启的等价方案另见专题报告。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-0826 · <b>doc-updated</b> 26-10-18-0826 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户提问「分析 qb/libtorrent 源码: 什么情况下种子会进入"文件丢失"状态」及其延伸需求「用文件丢失+设定位置实现无痛整组移动」; 对象 = D:\Projects\Else\qBittorrent(master) + D:\Projects\Else\libtorrent(2.x)
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<h3>问题定义</h3>
+<p>辅种组内多个种子共享<b>同一份文件树</b>(同内容、不同 tracker)。整组从盘 A 迁到盘 B 时, 用 qBittorrent「设定位置」逐个迁移: <code>move_storage</code> 以 <code>dont_replace</code> 执行, 组内<b>第一个</b>种子真正搬文件并保留进度, <b>其余种子</b>发现目标已有同名文件 → libtorrent 返回 <code>need_full_check</code> → <code>force_recheck()</code> → 进度瞬间清零, 靠重新校验才能找回。现有两条恢复路径都有代价: <b>强制检查</b>(全量重算 hash, TB 级组小时级耗时且挤占 hashing 线程)与<b>跳检</b>(不校验直接信任, 错内容会长期以讹传讹)。</p>
+
+<h3>结论(TL;DR)</h3>
+<table>
+<tr><th>维度</th><th>结论</th></tr>
+<tr><td>机制是否成立</td><td class="good">成立。这正是 qBittorrent 源码里"设计好的"恢复路径, 不是 hack</td></tr>
+<tr><td>是否需改代码</td><td class="good">不需要。现有 GUI(多选右键 Set location...)与 WebAPI(<code>/api/v2/torrents/setLocation</code>, <code>hashes=a|b|c</code> 批量)即可完成</td></tr>
+<tr><td>恢复代价</td><td class="good">接近零: libtorrent 只做 stat + 文件大小比对, 通过后直接把旧进度位图逐块 we_have(), <b>不重算任何 hash</b>; 本质是"带校验的跳检"</td></tr>
+<tr><td>主要限制</td><td class="wr">① 必须先让种子进入「文件丢失」, 该状态只能通过"重启 qBittorrent 且文件不在原路径"产生(运行中删文件只进 Error 状态, 不置该标志); ② 未完成且启用了「未完整文件目录」的种子不吃这条路径</td></tr>
+<tr><td>主要风险</td><td>resume data 时效(完成态辅种无此问题)、reload 期间断连重连、旧 handle 上有竞争的冗余 force_recheck、内容 hash 仍不被校验(同跳检, 但多一层大小/存在性护栏)</td></tr>
+</table>
+<p><b>一句话</b>: 按"暂停整组 → 退出 → 一次 mv 整组目录 → 启动 → 批量设定位置 → 启动"的 SOP 使用, 立刻获得比强制检查省掉全量 re-hash、比跳检多一层文件校验的恢复效果; 若要免重启, 需自写工具或给 qBittorrent 打补丁(见下文产品化方向与专题报告)。</p>
+
+<h3>推荐操作流(零代码改动)</h3>
+<p>以"辅种组共享同一目录"为例; 各成员独立目录的组同理, 按种子逐个设定各自的新路径。</p>
+<table>
+<tr><th>步骤</th><th>操作</th><th>源码依据 / 说明</th></tr>
+<tr><td>1</td><td>多选整组 → <b>暂停</b></td><td><code>stop()</code> → <code>deferredRequestResumeData()</code> 立即刷新进度位图落盘(torrentimpl.cpp:2014-2020)</td></tr>
+<tr><td>2</td><td><b>退出 qBittorrent</b>(托盘完全退出)</td><td><code>~SessionImpl</code> flush 全部 resume data(sessionimpl.cpp:777、3369-3380)</td></tr>
+<tr><td>3</td><td>操作系统层面<b>一次</b> <code>mv</code> 整组共享目录到新位置</td><td>只搬一次; 组内种子的相对路径不变</td></tr>
+<tr><td>4</td><td><b>启动 qBittorrent</b></td><td>组内种子 resume data 校验失败 → 全部进入「文件丢失」并自动暂停; 全量校验快速失败(成本≈0, 见 §02)</td></tr>
+<tr><td>5</td><td>多选整组 → 右键 <b>Set location...</b> → 新路径(目录须已存在, GUI 有此检查; WebAPI 会自动创建)</td><td>transferlistwidget.cpp:360-361; 批次内串行处理</td></tr>
+<tr><td>6</td><td>每个种子串行 reload: 旧位置无文件可搬 → 新位置校验通过 → 进度恢复</td><td>见 §02.4/§02.5</td></tr>
+<tr><td>7</td><td>多选整组 → <b>开始</b></td><td>恢复正常做种; 断开的 peer/tracker 自动重连</td></tr>
+</table>
+<p><b>验收标准</b>: 步骤 6 后列表中种子直接显示原进度(如 100% / Seeding), 无 Checking 状态; 日志无 <code>fastresume data rejected</code> 复现; qBittorrent 日志出现 <code>Failed to restore torrent...</code>(WARNING, 步骤 4 的预期日志, sessionimpl.cpp:6905-6906)。建议先拿 2–3 个小体积(&lt;1GB)辅种走一遍再推广。</p>
+
+<h3>三种方案量化对比(1 TB 辅种组参照)</h3>
+<table>
+<tr><th>维度</th><th>强制检查</th><th>跳检(no verify)</th><th>文件丢失 + 设定位置</th></tr>
+<tr><td>磁盘读</td><td>全量 1 TB</td><td>0</td><td class="good">0(仅 stat 元数据)</td></tr>
+<tr><td>CPU</td><td>全量 SHA1/v2 hash(数十分钟~小时级)</td><td>0</td><td class="good">0(仅比对文件大小)</td></tr>
+<tr><td>恢复耗时</td><td>小时级, 取决于盘速/CPU/队列位置</td><td>秒级</td><td>秒级~分钟级(N 个种子串行 reload; 小 group 通常 &lt;1 min)</td></tr>
+<tr><td>数据可信度</td><td>校验后完全可信</td><td>完全信任, 错内容不自知</td><td>存在性 + 大小校验; 内容不校验</td></tr>
+<tr><td>额外成本</td><td>挤占 hashing 线程</td><td>无</td><td class="wr">需重启 qBittorrent; reload 断连重连</td></tr>
+<tr><td>失败模式</td><td>耗时而已</td><td class="bad">静默错误(最危险)</td><td class="good">安全失败: 校验不过则保持「文件丢失」, 进度位图不丢, 可重试</td></tr>
+</table>
+<p><b>结论</b>: 本方案耗时对齐跳检、安全性介于两者之间且失败模式安全, 唯一实质代价是重启窗口。辅种组"文件必为字节级副本"的前提由辅种机制本身保证, 因此该方案实际风险≈0。</p>
+
+<h3>产品化 / 自动化方向</h3>
+<ol>
+<li><b>免重启的脚本化方案</b>: 基于 libtorrent API 直连完成 reload 语义(<code>save_resume_data</code> → <code>mv</code> → <code>remove+add</code>), 绕过「文件丢失」状态与重启, 适合 auto-qb 这类自动化工具编排 —— 完整研究见 <code>memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html</code>。</li>
+<li><b>qBittorrent 补丁候选</b>(按收益排序): <code>setSavePath</code> 的 else 分支也接 reload(覆盖 §02.6 场景); 「文件丢失」状态下 set-location 跳过 <code>move_storage</code>; 新增"批量 relocate(保留进度)"RPC。</li>
+<li><b>可观测性</b>: 为批量 setLocation 增加进度/失败反馈(当前 WebAPI 静默执行、move 队列串行无进度上报)。</li>
+</ol>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>2.1 背景: 普通整组移动为什么清零</h3>
+<p><code>aux::move_storage</code>(libtorrent/src/storage_utils.cpp):</p>
+<pre><code>// :123-127
+if (flags == move_flags_t::dont_replace &amp;&amp; exists(new_path, ignore, dont_follow_links))
+{
+    ret |= disk_status::need_full_check;   <span class="cm">// 目标已有文件 → 不搬, 要求全量校验</span>
+    continue;
+}</code></pre>
+<p><code>torrent::on_storage_moved</code>(libtorrent/src/torrent.cpp:9365-9390):</p>
+<pre><code>if (status &amp; disk_status::need_full_check)
+    force_recheck();   <span class="cm">// → set_have_all(false) + start_checking() 全量校验</span></code></pre>
+<p>qBittorrent「设定位置」= <code>ChangeSavePath</code> → <code>KeepExistingFiles</code> → <code>dont_replace</code>(sessionimpl.cpp:342-356、torrentimpl.cpp:2085-2087)。因此组内第 2..N 个种子全部触发全量校验 —— 与观察到的"大部分进度被重置为 0"完全吻合。</p>
+
+<h3>2.2 「文件丢失」状态如何进入</h3>
+<p>唯一入口: <code>torrent::on_resume_data_checked</code>(torrent.cpp:2301-2317)判定</p>
+<pre><code>(error || status &amp; (fatal_disk_error | need_full_check | file_exist))
+    &amp;&amp; contains_resume_data(*m_add_torrent_params)   <span class="cm">// have_pieces 非空或 seed_mode</span></code></pre>
+<p>→ 发 <code>fastresume_rejected_alert</code> → <code>SessionImpl::handleFastResumeRejectedAlert</code>(sessionimpl.cpp:6898-6906)→ <code>TorrentImpl::handleFastResumeRejected()</code>(torrentimpl.cpp:2353-2357)置 <code>m_hasMissingFiles = true</code>。<code>updateState()</code> 中「文件丢失」优先于 Error 展示(torrentimpl.cpp:1299-1306)。</p>
+<p class="aside">关键推论: 该 alert 只在种子<b>带着 resume data 被(重新)添加</b>时才会发。运行中删文件只产生 file_error_alert(Error 状态), 不置该标志。因此进入「文件丢失」的现实路径只有: <b>退出 qBittorrent → 文件被移走 → 重启</b>(重启时每个种子都从 .fastresume 读入 have_pieces 再添加: bencoderesumedatastorage.cpp:309 <code>lt::read_resume_data()</code> → <code>m_ltAddTorrentParams</code>, torrentimpl.cpp:329)。</p>
+
+<h3>2.3 关键一: 进度位图在「文件丢失」期间被强制保留</h3>
+<p>libtorrent 拒绝 resume data 后会做一次全量校验(找不回任何块, 因为文件没了), 并向 qBittorrent 上报空进度。若直接落盘, 旧进度就丢了。qBittorrent 用 <code>needPreserveProgress</code> 专门防这个(torrentimpl.cpp:2296-2320, prepareResumeData):</p>
+<pre><code>const bool needPreserveProgress = m_hasMissingFiles
+        || (!m_ltAddTorrentParams.have_pieces.empty() &amp;&amp; params.have_pieces.empty());
+...
+m_ltAddTorrentParams = std::move(params);
+if (needPreserveProgress)      <span class="cm">// 用旧位图覆盖 libtorrent 上报的空/低进度</span>
+    m_ltAddTorrentParams.have_pieces = std::move(havePieces);</code></pre>
+<p>即: <b>只要处于「文件丢失」状态, 内存和磁盘上的 resume data 永远保留迁移前的进度位图</b>, 可反复重试。这是整个方案成立的核心一环。</p>
+
+<h3>2.4 关键二: 「设定位置」在「文件丢失」状态下走 reload 恢复</h3>
+<pre><code>GUI 多选右键 "Set location..." / WebAPI POST /api/v2/torrents/setLocation (hashes=a|b|c)
+  └─ TransferListWidget::setSelectedTorrentsLocation()      transferlistwidget.cpp:341-372(多选支持)
+  └─ TorrentsController::setLocationAction()                torrentscontroller.cpp:1761-1783(批量, 自动 mkpath)
+       └─ TorrentImpl::setSavePath(newPath)                 torrentimpl.cpp:511-533
+            ├─ 要求非 AutoTMM(调用方已 setAutoTMMEnabled(false))
+            ├─ resolvedPath != savePath()(相同则直接返回)
+            └─ (isFinished || m_hasFinishedStatus || downloadPath 为空)
+                 └─ moveStorage(ChangeSavePath)             torrentimpl.cpp:2067-2096
+                      └─ addMoveTorrentStorageJob(串行队列)  sessionimpl.cpp:5736-5814
+                           └─ native move_storage(dont_replace)
+                                └─ TorrentImpl::handleMoveStorageJobFinished      torrentimpl.cpp:2118-2147
+                                     if (m_hasMissingFiles) {
+                                         m_hasMissingFiles = false;
+                                         m_ltAddTorrentParams.save_path = 新路径;
+                                         m_ltAddTorrentParams.ti = nativeTorrentInfo();
+                                         reload();            <span class="cm">// ← 恢复发生在这里</span>
+                                     }</code></pre>
+<p><code>reload()</code>(torrentimpl.cpp:1961-2012)→ <code>SessionImpl::reloadTorrent()</code>(sessionimpl.cpp:5792-5805):</p>
+<pre><code>m_nativeSession-&gt;remove_torrent(currentHandle, lt::session::delete_partfile);
+...
+return m_nativeSession-&gt;add_torrent(std::move(params));   <span class="cm">// params = m_ltAddTorrentParams(含旧 have_pieces + 新 save_path)</span></code></pre>
+<p>re-add 后 libtorrent 重新走 <code>init()</code> → <code>async_check_files()</code> → <code>verify_resume_data()</code>(storage_utils.cpp:484-625):</p>
+<ul>
+<li><b>seed 情形</b>(have_pieces 全置位或 seed_mode): 逐个文件 stat 且 <code>size &gt;= fs.file_size(i)</code>, 任一缺失/过短 → 判失败;</li>
+<li><b>非 seed 情形</b>: 只校验"已被完成块覆盖的文件"存在即可(不比对大小, 部分下载中的文件体积不完整也算通过)。</li>
+</ul>
+<p>通过 → <code>on_resume_data_checked</code> 不发 alert, 并<b>不做任何 hash</b>, 直接把旧位图逐块 <code>we_have(i, true)</code>(torrent.cpp:2377-2391)→ 进度瞬间恢复原值。失败 → 再次 <code>fastresume_rejected</code> → <code>m_hasMissingFiles</code> 复原, 可无限重试(改个路径再来一次), <b>不会假恢复、不会丢数据</b>。</p>
+
+<h3>2.5 附: 「文件丢失」窗口期的行为(安全性)</h3>
+<ul>
+<li>重启后全量校验面对的是"不存在的文件": <code>initialize_storage</code> 只会创建"本就应为 0 字节"的目标文件(storage_utils.cpp:712-745), 非零大小的缺失文件不会被创建; checking 读失败很快。</li>
+<li>首个失败块即触发 <code>handle_disk_error → set_error + pause()</code>(torrent.cpp:4517-4543、1204-1207): 种子的 libtorrent 句柄自动暂停, <b>不会在旧路径重新下载垃圾</b>。qBittorrent 侧 UI 仍显示「文件丢失」(优先于 Error)。</li>
+<li>因此窗口期即使不手动暂停也基本安全; 但<b>暂停整组仍是推荐动作</b>, 原因见 §02.6.1(resume data 时效)。正常退出时 <code>~SessionImpl()</code> 会 <code>saveResumeData()</code>(only_if_modified)flush(sessionimpl.cpp:777、3369-3380)。</li>
+</ul>
+
+<h3>2.6 风险与边界条件(逐条, 均已对照源码确认)</h3>
+<h4>2.6.1 resume data 时效(仅影响未完成种子)</h4>
+<ul>
+<li>周期保存间隔默认 <b>60 分钟</b>(sessionimpl.cpp:589、1773-1780)。</li>
+<li><b>完成态辅种(have_pieces 全置位)不受影响</b> —— 位图不会变。</li>
+<li>未完成种子: 上次保存后新完成的块会被遗忘 → 那几个块重下。缓解: 步骤 1 暂停会立即落盘(stop() → deferredRequestResumeData), 正常退出也会 flush。</li>
+</ul>
+<h4>2.6.2 内容可信度</h4>
+<ul>
+<li>恢复过程<b>不校验内容 hash</b>(与跳检同等风险)。但比裸跳检多两层护栏: seed 情形校验每个文件大小、非 seed 情形校验已完成块覆盖文件的存在性。</li>
+<li>辅种场景(同内容字节级相同)可接受; <b>"假辅种"(不同 release)会在 seed 情形被大小校验安全拦下</b>, 保持「文件丢失」而不假恢复。</li>
+</ul>
+<h4>2.6.3 未完成 + 启用「未完整文件目录」的种子不吃此路径</h4>
+<p><code>TorrentImpl::setSavePath</code> 分支(torrentimpl.cpp:523-532):</p>
+<pre><code>if (isFinished() || m_hasFinishedStatus || downloadPath().isEmpty())
+    moveStorage(...);      <span class="cm">// ← 才有 reload 恢复</span>
+else { m_savePath = resolvedPath; ... }   <span class="cm">// 只改内存路径, 不 reload!</span></code></pre>
+<p>未完成且配置了独立下载目录的种子走 else 分支, <b>不会触发恢复</b>。处理: 这类种子要么不放进整组迁移, 要么迁后单独 forceRecheck / 重启。</p>
+<h4>2.6.4 reload 的固有副作用</h4>
+<ul>
+<li><code>remove_torrent + add_torrent</code> → <b>断连重连</b>、tracker 重新 announce、DHT/PeX 重新发现。大批量时有短暂 swarm 扰动, 远小于全量校验。</li>
+<li>保留项: 队列位置(reload 内 queue_position_set, torrentimpl.cpp:1991-1993)、暂停/强制状态(1972-1984)、分类/标签/共享限制(TorrentImpl 对象本身不重建, 只换 native handle)。</li>
+<li><code>reloadTorrent</code> 用 delete_partfile: 使用 partfile(优先级 0 文件)的种子会丢未完成块记录; 完成态辅种无 partfile, 无影响。</li>
+</ul>
+<h4>2.6.5 旧 handle 上冗余的 force_recheck(有界损耗)</h4>
+<p>「设定位置」时 <code>move_storage</code> 因"目标已有文件"返回 <code>need_full_check</code> → <code>on_storage_moved</code> → <code>force_recheck()</code> 在<b>旧 handle</b> 上启动(torrent.cpp:9381)。紧接着 reload 的 <code>remove_torrent</code> 会置 <code>m_abort</code>, 使 <code>on_force_recheck</code> 早退(torrent.cpp:2544)。libtorrent 与 Qt 事件循环在同一线程(qBittorrent 无独立 session 线程), 正常情况下 reload 胜出、<b>不会真的全量校验</b>; 极端磁盘繁忙下可能有少量 in-flight 校验作业后被取消。属有界损耗, 非全量 re-hash。</p>
+<h4>2.6.6 其他</h4>
+<ul>
+<li>组内成员 save_path 不一致: 逐个人工/脚本设置各自新路径即可, 机制相同。</li>
+<li>AutoTMM 种子: GUI/WebAPI 会先 <code>setAutoTMMEnabled(false)</code>, 无需手工处理。</li>
+<li>硬链接/类似种子(mutable torrent): <code>verify_resume_data</code> 重建链接且强制全量校验(storage_utils.cpp:506-548、590), 本方案不适用。</li>
+<li>迁移必须<b>一次搬净</b>: 旧位置残留文件会让启动全量校验把"残留部分"计为真实进度; <code>m_hasMissingFiles</code> 期间 prepareResumeData 仍强制保留旧位图(needPreserveProgress 恒真), 不会被冲掉, 但为干净起见建议搬净。</li>
+</ul>
+
+<h3>2.7 关键代码位置索引</h3>
+<table>
+<tr><th>功能</th><th>文件:行</th></tr>
+<tr><td>MissingFiles 唯一定义/置位</td><td><code>qBittorrent/src/base/bittorrent/torrent.h</code>(枚举); <code>torrentimpl.cpp:2353-2357</code></td></tr>
+<tr><td>状态机优先级(MissingFiles &gt; Error)</td><td><code>torrentimpl.cpp:1299-1306</code></td></tr>
+<tr><td>fastresume_rejected_alert 发出</td><td><code>libtorrent/src/torrent.cpp:2301-2317</code></td></tr>
+<tr><td>alert → qBittorrent 分发</td><td><code>sessionimpl.cpp:6162-6164</code>、<code>6898-6906</code></td></tr>
+<tr><td>进度位图保留</td><td><code>torrentimpl.cpp:2289-2320</code>(prepareResumeData)</td></tr>
+<tr><td>启动时读入 resume data(have_pieces)</td><td><code>bencoderesumedatastorage.cpp:309</code>(lt::read_resume_data)</td></tr>
+<tr><td>设定位置入口(批量)</td><td><code>transferlistwidget.cpp:341-372</code>; <code>torrentscontroller.cpp:1761-1783</code></td></tr>
+<tr><td>路径分支判定</td><td><code>torrentimpl.cpp:511-533</code></td></tr>
+<tr><td>move 队列 → move_storage</td><td><code>torrentimpl.cpp:2067-2096</code>; <code>sessionimpl.cpp:5736-5814</code>、<code>342-356</code></td></tr>
+<tr><td>MissingFiles → reload 恢复</td><td><code>torrentimpl.cpp:2118-2147</code></td></tr>
+<tr><td>reload = remove + add</td><td><code>torrentimpl.cpp:1961-2012</code>; <code>sessionimpl.cpp:5792-5805</code></td></tr>
+<tr><td>恢复零 hash 的直接置位</td><td><code>libtorrent/src/torrent.cpp:2377-2391</code></td></tr>
+<tr><td>resume data 校验判定</td><td><code>libtorrent/src/storage_utils.cpp:484-625</code></td></tr>
+<tr><td>普通移动清零根因</td><td><code>storage_utils.cpp:123-127</code>; <code>torrent.cpp:9365-9390</code>、<code>2472-2535</code></td></tr>
+<tr><td>窗口期自动暂停</td><td><code>torrent.cpp:4517-4543</code>、<code>1204-1207</code></td></tr>
+<tr><td>退出时 resume data flush</td><td><code>sessionimpl.cpp:761-777</code>、<code>3369-3380</code></td></tr>
+<tr><td>周期保存间隔(默认 60 分钟)</td><td><code>sessionimpl.cpp:589</code>、<code>1773-1780</code></td></tr>
+</table>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<ul>
+<li><b>方法</b>: 以上每条结论均在 <code>D:\Projects\Else</code> 源码中逐行核对; 未运行实测。</li>
+<li><b>局限</b>: 未在真实 qBittorrent 实例端到端跑通; §02.4 中"libtorrent 与 Qt 事件循环同线程、reload 通常胜出冗余 force_recheck"为静态分析推断, 未实证竞争窗口的实际胜负分布。</li>
+<li><b>前置依赖</b>: 本报告的免重启延伸结论见 <code>memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html</code>(同专题, 四条路线与证伪清单)。</li>
+<li><b>快照口径</b>: 本报告为研究快照, 出厂即 Done; 后续实测数字(若做验证)按 baseline 协议另立切片, 不回改本文。</li>
+</ul>
+
+</div>
+</body>
+</html>

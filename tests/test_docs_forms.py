@@ -21,6 +21,7 @@
 - test_docs_index_is_regenerated: `plans|reports/_index.md` == `gen_docs_index.build()`
 - test_doc_topics_complete: 四形态任一文档缺 `doc-topic` / `**Topics:**` 即红 (旧覆盖测试的补漏版)
 - test_doc_map_live_rotation: 全完结专题在默认视图只留名 (轮转), `--all` 仍全量
+- test_doc_map_name_list_never_splits_keys: 名录折行以专题名为原子, 含空格的复合键不被撕断 (2026-10-18)
 - test_issue_topics_present: 每条 issue 都有 `doc-topic` (否则会从专题视图里静默漏掉)
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
 - test_claim_chain_missing_target_hints_separator: ref 含视觉分隔符报「目标不存在」时, 报错自带英文逗号分隔提示 (issue 26-10-03-0746)
@@ -157,6 +158,20 @@ def test_doc_map_live_rotation() -> None:
             assert not has_line, f"{topic} 是单件或已完结, 默认视图不应有全行 (轮转失效)"
             assert topic in live_text, f"{topic} 连名录里都没有 (覆盖断裂)"
         assert topic in all_text, f"{topic} 未出现在 --all 全量视图"
+
+
+def test_doc_map_name_list_never_splits_keys() -> None:
+    """名录折行以专题名为原子: 含空格的复合键拼到折行边界也不得从中间撕断 (2026-10-18)。
+
+    旧按字节位 rfind 折行会把 "topic-alpha, topic-beta" 撕成两行, 使 `topic in live_text`
+    判定与 --topic 跳转失效; 触发条件是名录长度 (任何新增单件专题名都可能推动边界)。
+    """
+    gen = _load_generator("gen_doc_map")
+    filler = "a" * (gen.NAME_WRAP - 5)  # 占位到边界前, 迫使折行落在复合键上
+    lines = gen._name_list([filler, "topic-alpha, topic-beta", "tail"])
+    text = "\n".join(lines)
+    assert "topic-alpha, topic-beta" in text
+    assert len(lines) >= 2  # 确实发生了折行, 不是没折
 
 
 def test_issue_topics_present() -> None:
