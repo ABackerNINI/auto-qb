@@ -4,7 +4,7 @@
 **Added:** 2026-10-18
 **Updated:** 2026-10-18
 **Summary:** 把流量快照的所有权从限速曲线任务移交独立模块 `traffic_snapshot`（`source`/`limit` 段级 API + 派生 `state` + 自有节奏键 `traffic_source.refresh_interval`），修掉「没配曲线就永远没有历史图」「两条刷新路径语义不一」「轮询背整份 history」三个结构性死角；设置页把「数据来源 / 限速曲线 / 流量图」三张卡合并为一张「流量与限速」（schema 合组 `traffic_limit` + 独立组件 `aq-traffic-card` + 卡内三区），顺带补通用层两笔欠账（`show_if` 下移到 object 段、排除表单点化）。17 条拍板见计划 D1–D17；批次 P0（收口 Phase 1 的 S8）→ P2-A → P2-B。
-**Topics:** backend-traffic-snapshot-merge, webui-traffic-limit-card
+**Topics:** backend-traffic-snapshot-merge
 **Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html, memory-bank/testing/baselines/26-10-18-1058-traffic-limit-card-p2b.md
 
 ## 原始请求
