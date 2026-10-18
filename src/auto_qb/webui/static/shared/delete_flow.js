@@ -117,18 +117,29 @@ window.AQB_DELETE = {
       const members = this._deleteMembers(keys, hashes);
       const sites = [...new Set(members.map((m) => m.site).filter(Boolean))];
       const paths = [...new Set(members.map((m) => m.save_path).filter(Boolean))];
-      const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
+      // 总大小 = X(Σ 成员 size); 实际占用 = Y(occ_key 内容单元去重, 单元取 max) ——
+      // 与筛选行选中摘要**同一函数同一口径**(selection.js::selSizeSummaryOf, 计划
+      // 26-10-18-2013 D12): 删除同辅种组多站点副本时, 磁盘只释放一份。"实际占用"行仅
+      // Y<X 时追加(常态单目标/未归组种子不出现, 不扰动既有五行结构)。
+      const sizeSum = this.selSizeSummaryOf(members);
       const single = (keys || []).length + (hashes || []).length <= 1 && members.length <= 1;
       // 目标: 单目标退化为**它的名字**(单辅种 = 辅种名, 单种子 = 种子名), 多目标走集合摘要
       const target = single && members.length === 1 ? (members[0].name || members[0].hash.slice(0, 12))
         : `${(keys || []).length} 个${L10N_GROUP} · ${members.length} 个种子`;
-      return [
+      const rows = [
         { icon: "#i-cards", label: "目标", value: target, wide: true },
         { icon: "#i-layers", label: "成员", value: `${members.length} 个种子` },
         { icon: "#i-globe", label: "站点", value: sites.join(", ") || "—" },
         { icon: "#i-folder-open", label: "保存路径", value: paths.join(" · ") || "—", wide: true },
-        { icon: "#i-hdd", label: "总大小", value: this.fmtSize(totalSize) },
+        { icon: "#i-hdd", label: "总大小", value: this.fmtSize(sizeSum.total) },
       ];
+      if (sizeSum.occupy < sizeSum.total) {
+        rows.push({
+          icon: "#i-hdd", label: "实际占用", value: this.fmtSize(sizeSum.occupy),
+          hint: "辅种组内多站点副本只计一份(取最完整副本)",
+        });
+      }
+      return rows;
     },
     async _deleteFlow(targets) {
       this._auditScope("delete", targets);  // S4 运行时审计(默认关, 只记账)

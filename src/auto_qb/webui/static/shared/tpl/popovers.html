@@ -137,13 +137,16 @@
         </div>
         <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标)
              R10-16: 四个删除入口的详情行由 _deleteFlow 统一派生, 结构完全一致(目标/成员/站点/路径/总大小)。
+             2026-10-18(计划 26-10-18-2013 D12): 多选同辅种组副本时末行追加"实际占用"(Y<X 条件行)。
              R10-13: 长值一律"单行省略 + title 全文 + 复制按钮"(wide 行例外: 值独占一行冡 3 行),
              不再无限换行把弹窗顶高; 复制按钮对所有行开放(不再限 wide)。 -->
         <div v-if="modal.details" class="modal-details">
           <div v-for="d in modal.details" :key="d.label" class="modal-detail-row" :class="{ wide: d.wide }">
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
-            <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
+            <!-- d.hint(2026-10-18): 可选的口径说明(如删除框"实际占用"行的去重解释);
+                 缺省时 title 仍是值自身 —— 既有行零变化 -->
+            <span class="d-value" :title="d.hint || String(d.value)">{{ d.value }}</span>
             <button v-if="String(d.value || '').length" type="button" class="bt icon d-copy"
                     @click="copyText(String(d.value), d.label)">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>

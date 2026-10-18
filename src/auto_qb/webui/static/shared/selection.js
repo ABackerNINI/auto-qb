@@ -381,6 +381,32 @@ window.AQB_SELECTION = {
       this.selAnchorMember = null;
       this.selAnchorUnit = null;
     },
+    /* ---------------- 选中摘要: 个数 + 合计 + 实际占用(2026-10-18, 计划 26-10-18-2013) ----------------
+     * 口径(拍板 D4/D5/D8/D9/D10):
+     *   X = 合计 = Σ 选中成员 size(每个种子各算一份; 与删除框既有"总大小"行同口径);
+     *   Y = 实际占用 = 按 occ_key 内容单元去重, **单元值 = 该单元选中成员的最大 size**
+     *     (最完整副本, 与后端 progress=max / availability=max 同族哲学) —— 同组多站点
+     *     副本只算一份; 未归组种子 occ_key = null, 兜成自单元(self:<hash>)。
+     * 三条推论: Y ≤ X 恒成立(单元 max ≤ 单元成员和); X ≠ Y ⇔ 选中了同一单元的 ≥2 个副本;
+     * 只选 1 个副本时 X = Y(不显示 Y)。
+     * !单点: 删除确认框的"实际占用"条件行(delete_flow.js::_deleteDetails)复用本函数,
+     *   不另写一遍求和(两处各自演化是本项目最常犯的口径漂移)。
+     * occ_key 由后端 _member_view 产出(归组种子带组 key, 与组行 key 同键空间; 未归组不带)。
+     * 跨组文件交叉(cross_group_conflict)**不**再去重(D10): 该风险后端另有标记。 */
+    selSizeSummaryOf(members) {
+      const units = new Map();  // occ_key(或 self:<hash>) -> 该单元选中成员的最大 size
+      let total = 0;
+      for (const m of members || []) {
+        const sz = m.size || 0;
+        total += sz;
+        const k = m.occ_key || ("self:" + m.hash);
+        const cur = units.get(k);
+        if (cur === undefined || sz > cur) units.set(k, sz);
+      }
+      let occupy = 0;
+      for (const v of units.values()) occupy += v;
+      return { total, occupy };
+    },
     /* ---------------- FX-12: 追剧页选中态与修饰键选择 ----------------
      * 剧行/集行保留"点击 = 展开"的原行为; **修饰键才选中**(与表格一致):
      * Ctrl/⌘+点击 = 切换该剧/该集全部成员; Shift+点击 = 从锚点单元整段选择。
@@ -512,6 +538,21 @@ window.AQB_SELECTION = {
      *   注释; 守阵 T2 钉住出口之外不许再展开选中集合)。 */
     selHashSet() {
       return this._scopeResolve("sel").closure;
+    },
+    /* 选中摘要(2026-10-18): 筛选行指示器与删除确认框共用的数据源, 算法单点 =
+     * selSizeSummaryOf(本文件上方)。消费方: topbar.html 的 .sel-summary(有选中才渲染) /
+     * delete_flow.js::_deleteDetails 的"实际占用"条件行。
+     * !早退: 无选中不建成员索引(模板 v-if 已挡, 双保险); selHashSet 经 memberByHash
+     *   解析(组展开与 singles/torrents 全量同一索引), 解析不到的 hash(轮询竞态极端
+     *   窗口)在 X/Y 中同步少计 —— 与既有 bulkDelete 摘要计数同口径, 不新创第三种行为。 */
+    selectedSize() {
+      if (!this.selectedCount) return { total: 0, occupy: 0 };
+      const members = [];
+      for (const h of this.selHashSet) {
+        const m = this.memberByHash.get(h);
+        if (m) members.push(m);
+      }
+      return this.selSizeSummaryOf(members);
     },
   },
 };

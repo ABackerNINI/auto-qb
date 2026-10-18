@@ -63,6 +63,16 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    各红前行/集行共 3 条)。改用 armPending 记录器判"曾经出现过"(前行/集行的记录器本就在
  *    点击前装好, appear 非空即证补丁贴上)+ 保留"pendingOps 归零"终态轮(轮终态无竞态);
  *    ok 分支语义不动。修复后 E2E_CMD_RESULT=error 连跑 3 轮全绿 + 默认轮全绿。
+ *  · 追记(2026-10-18 选中摘要批, 计划 26-10-18-2013): 新增两个 test(种子页 Ctrl 选同组
+ *    两副本 -> .sel-summary 文本 + vm.selectedSize 双断言 + Esc 清除即隐; 删除确认框同口径
+ *    「实际占用」行, 含 data-aq-tip 口径提示读法)。交互仍走 clickRow 真实修饰键路径(落点纪律同上),
+ *    不加新点击通道。
+ *  · 追记(2026-10-18 3000 轮复验, 同批): 初版按合成库 hash 编号 2k/2k+1 推"前两行必同组",
+ *    **没验 store 真的归了组** —— 桩 `--groups` 默认 200(前 G×2 个归组, 其余未归组单种子),
+ *    3000 种子下 added_on 降序的前两行是未归组种子 ⇒ occ_key=null ⇒ X=Y ⇒ Y 段正确地不现,
+ *    两条新 test 双皮肤 4 红(产品行为正确, 是测试期望失真)。修法 = 期望值从产品自身 occ_key
+ *    载荷现推(vm.memberByHash 取 size/occ_key), 归组对断 Y 现、未归组断 Y 不现 —— 两分支
+ *    都按真值断言, 任意规模成立; 编号同对 ≠ 真同组, 教训与「恒真断言」同族。
  *
  * ── 存量 flaky 的 trace 归因(S2 交底, 修不修走 issue 流程) ──
  *  迁移首轮本 spec 曾在同一签名上红过(atlas 辅种组行右键, prism 追剧集行同族):
@@ -383,6 +393,105 @@ for (const skin of SKINS) {
       expect(texts.some((t) => t.includes('停止整组')), '多选时不再出现单组目标项').toBe(false);
       await page.keyboard.press('Escape');
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
+    });
+
+    test('选中摘要: 种子页 Ctrl 选同组两副本 -> 「已选 N · 合计 X · 实际占用 Y」', async ({ page }) => {
+      // 计划 26-10-18-2013(D3/D8/D12): 指示器 = 筛选行纯文本 .sel-summary, Y 仅 X≠Y 时出现。
+      // 期望值从**产品自己的 occ_key 载荷**现推(vm.memberByHash), 不假设桩的归组覆盖面 ——
+      // 合成库 --groups 默认 200(scripts/ui_harness.py CLI: "前 G×2 个种子两两归组, 其余为
+      // 未归组单种子"): 300 种子下前 200 对全在库内, added_on 降序的前两行必为同组对;
+      // **3000 种子下仅前 400 个归组**, 前两行是未归组种子(occ_key=null) ⇒ X=Y、Y 段
+      // 正确地不出现。两分支都按真值断言: 大库下"假去重"(未归组却被并单元)与"漏去重"
+      // (归组却没并)都必红。(26-10-18 3000 轮实测教训: 原写法按 hash 编号 2k/2k+1 推期望,
+      // 没验 store 真的归了组 —— 编号同对 ≠ 真同组。)
+      await openApp(page, skin);
+      await tab(page, 'torrents').click();
+      const rows = page.locator('.torrent-row');
+      await expect(rows.first()).toBeVisible({ timeout: 15_000 });
+
+      // 先取 DOM 前两行 data-hash, 再经 memberByHash 取回产品的 size/occ_key(evaluate 第②类)
+      const hashes = await rows.evaluateAll((els) => els.slice(0, 2).map((el) => el.getAttribute('data-hash') || ''));
+      const pair = JSON.parse(await readInst(page,
+        `JSON.stringify(${JSON.stringify(hashes)}.map((h) => vm.memberByHash.get(h)).filter(Boolean)` +
+        `.map((m) => ({ size: m.size || 0, occ: m.occ_key === undefined ? null : m.occ_key })))`));
+      expect(pair.length, `前两行成员均可在 memberByHash 解析(实测 ${pair.length}/2)`).toBe(2);
+      const grouped = pair[0].occ !== null && pair[0].occ === pair[1].occ;  // 同一内容单元 = 桩真归了组
+      const expTotal = pair[0].size + pair[1].size;
+      const expOccupy = grouped ? Math.max(pair[0].size, pair[1].size) : expTotal;
+      const giB = (n) => `${(n / 1024 ** 3).toFixed(2)} GiB`;
+
+      // 真实修饰键路径(selection.js onTorrentClick -> toggleMemberSel); 落点纪律见文件头
+      await clickRow(page, rows.nth(0), { modifiers: ['Control'] });
+      await clickRow(page, rows.nth(1), { modifiers: ['Control'] });
+
+      const sum = page.locator('.sel-summary');
+      await expect(sum, '有选中即出现摘要指示器(v-if selectedCount)').toBeVisible();
+      await expect(sum).toContainText('已选');
+      await expect(sum).toContainText('2 个种子');
+      await expect(sum).toContainText('合计');
+      await expect(sum).toContainText(giB(expTotal));
+      if (grouped) {
+        await expect(sum, '同内容单元两副本(X≠Y)必须出现「实际占用」').toContainText('实际占用');
+        await expect(sum).toContainText(giB(expOccupy));
+      } else {
+        await expect(sum, '未归组种子(X=Y)不得出现「实际占用」(假去重回归)').not.toContainText('实际占用');
+      }
+
+      // vm 侧同源读数(evaluate 第②类): 算法单点 selectedSize 与 UI 文本一致
+      const vmSum = JSON.parse(await readInst(page, 'JSON.stringify(vm.selectedSize)'));
+      expect(vmSum.total, `selectedSize.total=${vmSum.total}`).toBe(expTotal);
+      expect(vmSum.occupy, `selectedSize.occupy=${vmSum.occupy}`).toBe(expOccupy);
+
+      // Esc 清除选择 -> 摘要即隐(纯展示无按钮; 清走 lifecycle 退栈链兜底)
+      await page.keyboard.press('Escape');
+      await expect(sum).toHaveCount(0);
+    });
+
+    test('选中摘要: 删除确认框同口径出现「实际占用」行(仅 X≠Y)', async ({ page }) => {
+      // 计划 26-10-18-2013 D12: 删除框详情在既有「总大小」行(=X)之后, Y<X 时追加
+      // 「实际占用」行 —— 与筛选行摘要同一函数同一口径(selection.js::selSizeSummaryOf)。
+      // 期望值同样从产品 occ_key 载荷现推(同种子页 test 的口径): 3000 种子下前两行未归组
+      // ⇒ X=Y、条件行正确地不出现(既有五行结构不变, 不扰动常态删除流)。
+      await openApp(page, skin);
+      await tab(page, 'torrents').click();
+      const rows = page.locator('.torrent-row');
+      await expect(rows.first()).toBeVisible({ timeout: 15_000 });
+
+      const hashes = await rows.evaluateAll((els) => els.slice(0, 2).map((el) => el.getAttribute('data-hash') || ''));
+      const pair = JSON.parse(await readInst(page,
+        `JSON.stringify(${JSON.stringify(hashes)}.map((h) => vm.memberByHash.get(h)).filter(Boolean)` +
+        `.map((m) => ({ size: m.size || 0, occ: m.occ_key === undefined ? null : m.occ_key })))`));
+      expect(pair.length, `前两行成员均可在 memberByHash 解析(实测 ${pair.length}/2)`).toBe(2);
+      const grouped = pair[0].occ !== null && pair[0].occ === pair[1].occ;
+      const expTotal = pair[0].size + pair[1].size;
+      const expOccupy = grouped ? Math.max(pair[0].size, pair[1].size) : expTotal;
+      const giB = (n) => `${(n / 1024 ** 3).toFixed(2)} GiB`;
+
+      await clickRow(page, rows.nth(0), { modifiers: ['Control'] });
+      await clickRow(page, rows.nth(1), { modifiers: ['Control'] });
+      // 选中行右键 -> 批量菜单(CTX-03 既有链路) -> 批量删除… -> 确认框
+      await clickRow(page, rows.nth(0), { button: 'right' });
+      await ctxItem(page, '批量删除…').click();
+      const modal = page.locator('.modal-mask .modal');
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      await expect(modal.locator('.modal-detail-row', { hasText: '总大小' })).toContainText(giB(expTotal));
+      const occRow = modal.locator('.modal-detail-row', { hasText: '实际占用' });
+      if (grouped) {
+        await expect(occRow, '同组两副本(X≠Y)必须出现「实际占用」行').toBeVisible();
+        await expect(occRow).toContainText(giB(expOccupy));
+        // 口径说明入口: 该行 value 的提示挂 hint —— 全站 title 由 ui_feedback 拦截层**单向迁移**
+        // 成 data-aq-tip 并删掉原属性( menus.spec 同款读法, 断供式原生气泡), 故两者都试
+        const tip = (await occRow.locator('.d-value').getAttribute('data-aq-tip'))
+          || (await occRow.locator('.d-value').getAttribute('title'));
+        expect(tip, '「实际占用」行应挂口径说明提示').toBe('辅种组内多站点副本只计一份(取最完整副本)');
+      } else {
+        await expect(occRow, '未归组(X=Y)不得出现「实际占用」行(既有结构不变)').toHaveCount(0);
+      }
+
+      // 取消(不真删): 走 ghost 钮, 断言框收起且未发出任何删除请求
+      await modal.locator('.modal-actions .bt.ghost').click();
+      await expect(page.locator('.modal-mask')).toHaveCount(0);
     });
 
     test('BUG-8: 刷新后停在追剧页不空白(视图偏好持久化 x 按视图回传)', async ({ page }) => {

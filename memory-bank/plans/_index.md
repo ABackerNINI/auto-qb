@@ -24,6 +24,7 @@
 
 ## Done
 
+- [26-10-18-2013] [WEBUI 选中摘要: 种子个数 + 合计/实际占用大小](26-10-18-2013-plan-webui-selection-size-summary.html) — `webui-selection-size-summary`
 - [26-10-18-0813] [流量与限速合并与流量快照解耦 (Phase 2)](26-10-18-0813-plan-global-traffic-source-phase2.html) — `global-traffic-source-phase2`
 - [26-10-17-1737] [全局流量来源联动缺陷修复 (Phase 1)](26-10-17-1737-plan-global-traffic-source-integration-fixes.html) — `global-traffic-source-integration-fixes`
 - [26-10-17-0527] [memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb](26-10-17-0527-plan-memory-bank-doc-pipeline.html) — `memory-bank-doc-pipeline`

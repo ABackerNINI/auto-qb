@@ -16,4 +16,4 @@
 | [modules.md](modules.md) | core/modules 十功能模块的统一契约(name/sections/start/stop/apply/subscribe)、装配清单、热重载语义(整段短路 + 未认领段兜底)、刷新相位表、订阅者异常约定、ctx 服务面与模块协作纪律 —— 新增/修改功能模块前先读这份单点… | 模块契约, 新增模块, sections 认领, 段认领, 热重载, 相位, 刷新管线, EventBus, ModuleHost, 微内核, 插件, AppContext, ctx 服务, loop hooks, 订阅者异常, 异常约定,… |
 | [process.md](process.md) | dry_run 纪律、幂等与去重、Git 约定、提交闸门自动执行。 | dry_run, 幂等, 去重, Git 约定, 提交闸门 |
 | [webui-scope.md](webui-scope.md) | 「选中 / 锚点 / 光标」三态作用域 + C1–C5 一致性契约 + 触发点登记表位置 —— 判断「这次动作作用在谁身上」的唯一口径出处。 | 选中与触发不一致, 作用域, scope, 右键菜单作用于谁, 批量动作目标, 菜单变体, 触发点登记, 新增动作入口 |
-| [webui.md](webui.md) | 菜单/入口分层、令牌分工、按钮体系、悬浮提示、HTML dark 主题 —— 前端产出口径的唯一出处。 | WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示 |
+| [webui.md](webui.md) | 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、HTML dark 主题 —— 前端产出口径的唯一出处。 | WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用 |

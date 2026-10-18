@@ -22,7 +22,7 @@
 | bug | 6 |
 | perf | 5 |
 | docs | 1 |
-| test | 1 |
+| test | 3 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [test] [追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红](26-10-18-2226-test-click-hedge-shows-scale-3000.html) — e2e/multisel…
+- [test] [delta-sync 真值对齐用例无模式分流: error/hang 轮恒红 4 条](26-10-18-2122-test-delta-sync-mode-gate.html) — e2e/delta-sy…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-…

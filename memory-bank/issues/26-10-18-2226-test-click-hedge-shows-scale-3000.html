@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="click-hedge-shows-scale-3000">
+<meta name="issue-stamp" content="26-10-18-2226">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="webui-e2e-click-hedge-scale">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红">
+<meta name="issue-summary" content="e2e/multiselect-shows.spec.mjs 两条追剧页用例(集行乐观 + CTX-03 追剧, 双皮肤 4 条)在 E2E_TORRENTS=3000 下确定性撞 clickRow 落点对冲失败(elementFromPoint=(null)); 300 规模全绿, 隔离重跑仍红 —— 窗口化+规模放大的对冲失效新形态, 与 26-10-18 选中摘要改动无关">
+<title>追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红</h1>
+    <p class="lede">e2e/multiselect-shows.spec.mjs 两条追剧页用例(集行乐观 + CTX-03 追剧, 双皮肤 4 条)在 E2E_TORRENTS=3000 下确定性撞 clickRow 落点对冲失败(elementFromPoint=(null)); 300 规模全绿, 隔离重跑仍红 —— 窗口化+规模放大的对冲失效新形态, 与 26-10-18 选中摘要改动无关</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-18-2226-test-click-hedge-shows-scale-3000</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 22:26</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>怎么撞见的</strong>：2026-10-18 收尾「WEBUI 选中摘要」计划(26-10-18-2013)时，按 smoke.md 矩阵轮纪律跑 3000 种子规模轮(<code>E2E_TORRENTS=3000 commands run dev.e2e</code>)，本轮 280 passed / 8 skipped / 8 failed —— 其中 4 条是本次改动自己的新 test(期望值失真，已当轮修复并复跑转绿，不属本件)，另 4 条即本件：<code>e2e/multiselect-shows.spec.mjs</code> 两条追剧页用例双皮肤全红。</p>
+    <p><strong>触发条件</strong>：<code>E2E_TORRENTS=3000</code>(大库)下<strong>必现</strong>；300 种子(默认档及 error/hang/skip-off/hr-empty 各轮)全绿。<strong>复现性实证</strong>：全量轮红后，隔离重跑同 4 条(<code>E2E_PORT=8337 E2E_TORRENTS=3000 npx playwright test multiselect-shows --grep "选中摘要|集行乐观|追剧"</code>，换端口只因 8137 有 TIME_WAIT 残留)仍 4 failed —— 不是时序抖动，是确定性失效。</p>
+    <p><strong>与 26-10-18 选中摘要改动无关的实证</strong>：失败签名是 <code>clickRow</code> 落点对冲失败(测试基础设施)，且本批只改过 <code>multiselect-shows.spec.mjs</code> 里选中摘要两条 test(与追剧两条无共享代码路径)；同轮里其余 280 条(含全部菜单/乐观/几何/列设置族)全绿。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 3000 规模轮尾部(取证 2026-10-18 22:1x, 带选中摘要改动):
+  4 failed
+    [chromium] › e2e\multiselect-shows.spec.mjs:307:5 › 皮肤 prism(S4...) › 集行乐观: 展开剧后有集行, 右键暂停整集, 集行 is-pending / error 回滚
+    [chromium] › e2e\multiselect-shows.spec.mjs:352:5 › 皮肤 prism(S4...) › CTX-03 追剧: Ctrl 选中两集右键 -> 批量菜单(存量 flaky 观测位)
+    [chromium] › e2e\multiselect-shows.spec.mjs:307:5 › 皮肤 atlas(S4...) › 集行乐观: 展开剧后有集行, 右键暂停整集, 集行 is-pending / error 回滚
+    [chromium] › e2e\multiselect-shows.spec.mjs:352:5 › 皮肤 atlas(S4...) › CTX-03 追剧: Ctrl 选中两集右键 -> 批量菜单(存量 flaky 观测位)
+  8 skipped
+  280 passed (22.1m)
+
+# 失败断言原文(clickRow 落点对冲 5 拍未过, spec L150-156):
+Error: clickRow: 落点验证 5 拍未过(行左缘 8,8 被拦截, 最后拦截者 (null))——
+  这是 smoke.md「点击拦截面随布局漂移」签名, 请带 trace 走 issue 流程, 别加 sleep 硬等
+  at clickRow (e2e\multiselect-shows.spec.mjs:155:11)
+  at e2e\multiselect-shows.spec.mjs:364:7   ← CTX-03 追剧: clickRow(epRows.nth(0), Ctrl)
+
+# 隔离重跑(同 4 条, 同签名, 仍 4 failed):
+  E2E_PORT=8337 E2E_TORRENTS=3000 npx playwright test multiselect-shows --grep "选中摘要|集行乐观|追剧"
+  → 12 passed(选中摘要 2×双皮肤修复后绿 + BUG-8 等) / 4 failed(本件 4 条)</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td><code>E2E_TORRENTS=3000</code> 下必现(双皮肤 ×2 条)；300 档全绿。合成库 3000 种子按 <code>i%24</code> 集号轮转 ⇒ 追剧页剧/集行规模与窗口化占位随总量放大, 与模式维度(error/hang/skip-check/hr-scene)无关。</td></tr>
+      <tr><td>影响范围</td><td><strong>仅测试面</strong>：矩阵轮 ⑥(3000 种子)永远无法全绿(4 条存量恒红), 新增红色会被存量噪声淹没。生产代码零牵连(其余 280 条同轮全绿, 含全部渲染健康/乐观/菜单断言)。</td></tr>
+      <tr><td>严重度</td><td><strong>中</strong> —— 不阻塞生产与默认轮; 但使规模轮失去回归信号价值, 且掩盖「大库下追剧页行交互」这一真实维度的覆盖。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>e2e/multiselect-shows.spec.mjs:122-165</code>(取证 2026-10-18 22:1x)· <code>clickRow(page, row, opts)</code> · grep 关键词 <code>落点验证 5 拍未过</code> / <code>elementFromPoint</code>。对冲逻辑：容器 scrollLeft 回零 → 行 scrollIntoView(block:center) → 双 rAF → 量行盒算 (left+8, top+8) → elementFromPoint 验落点在行上 → 5 拍不过即报错。</li>
+      <li><code>e2e/multiselect-shows.spec.mjs:307</code> · test「集行乐观: 展开剧后有集行…」· 失败点 = <code>clickRow(page, ep0, {button:'right'})</code>(ep0 = 展开后首个 .group-row.ep-row)。</li>
+      <li><code>e2e/multiselect-shows.spec.mjs:352</code> · test「CTX-03 追剧: Ctrl 选中两集右键 -> 批量菜单(存量 flaky 观测位)」· 失败点 = <code>clickRow(page, epRows.nth(0), {modifiers:['Control']})</code>(L364)。</li>
+      <li>对冲失效的机理线索(未定论, 待复验)：两例的 <code>elementFromPoint</code> 均回 <strong>(null)</strong> —— 落点在视口外(不是被别的元素盖住)。3000 下追剧页行总数与窗口化占位高随规模放大, <code>scrollIntoView</code> 后的双 rAF 窗口内若发生重渲染(2s 整表重渲染 / 窗口化重算), 行盒已移走, 量到的 (left+8, top+8) 落在视口外。文件头「存量 flaky 的 trace 归因」节记载的宽行居中滚动是同族机理的 300 档形态。</li>
+      <li>相关既有记载：spec 文件头「存量 flaky 的 trace 归因」与「⚠存量 flaky 所在位置」注释；<code>memory-bank/testing/smoke.md</code>「点击拦截面随布局漂移」条目；<code>memory-bank/pitfalls/testing/smoke.md</code>(排障细则)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查（已排除：TODO）</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>候选(按代价升序)：</p>
+    <ul>
+      <li><strong>A</strong>：两条 test 加 <code>requireMode(test, { torrents: 300 })</code> 门控(spec 头已注明它们是「存量 flaky 观测位」)，3000 轮整组 skip 且 skip 消息带当前 env。代价最小；代价 = 大库下追剧交互覆盖继续空白(与现状一致)。</li>
+      <li><strong>B</strong>：强化 <code>clickRow</code> 对冲 —— 落点验证不过时**重滚重测**(把「行盒可能被重渲染移走」纳入拍循环: 每拍重新 scrollIntoView + 双 rAF + 重测, 而非量一次算 5 拍), 或对窗口化容器改按「数据索引」定位(先 scrollTo 估算偏移再验)。治本方向, 但动的是全 spec 共享点击入口, 须全量轮回归。</li>
+      <li><strong>C</strong>：产品侧窗口化给行加稳定锚(如 <code>scrollIntoView</code> 后强制一次同步布局 + <code>getBoundingClientRect</code> 复读), 降低测试 arrange 的竞态面。属产品改动, 需另立计划评估。</li>
+    </ul>
+    <p>建议先做 A 止血(与 issue 26-10-18-2122 的 A 方案同思路)，B/C 留待专项。开工前先复验(防过期原则 5)。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-18 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-18-2226-test-click-hedge-shows-scale-3000.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

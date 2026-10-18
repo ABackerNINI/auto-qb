@@ -25,6 +25,7 @@
 - test_frontend_flatten_skips_hidden_fields: 静态守阵 —— cfgFlatten 必须 `if (f.hidden) continue`(两套 UI 同源于此函数; 不跳过 = 隐藏字段照旧渲染, 报障复发)
 - test_frontend_keyed_list_toggle_deletes_key_when_emptied: 静态防回潮 —— keyed_list 的 toggleKey 取消最后一项必须 cfgDelPath 删键(写空列表 = 脏标记消不掉 + 保存被"必须是非空列表"拒, 2026-10-10 报障), cfgSetPath 必须挂长度守卫
 - test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
+- test_frontend_selection_size_summary_wiring: 选中摘要(个数+合计+实际占用)接线守阵(计划 26-10-18-2013) —— 三套 UI 聚合模板 .sel-summary 指示器(v-if=selectedCount / fmtSize(selectedSize.total) / Y 段条件 occupy<total / 无 .bulk-* 复活) + selection.js 算法单点 selSizeSummaryOf 与 selectedSize computed(早退 + memberByHash + selHashSet) + delete_flow.js 实际占用条件行复用单点(不另写 size 求和) + popovers.html 详情行 title 吃 d.hint
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -1152,6 +1153,52 @@ def test_frontend_bulk_bar_retired():
     assert "bulkHrWarnText" not in dfl and "bulkDeleteLabel" not in dfl, (
         "死方法 bulkHrWarnText/bulkDeleteLabel 应已随批量控制条删除(零消费方)"
     )
+
+
+def test_frontend_selection_size_summary_wiring():
+    """选中摘要(个数 + 合计 + 实际占用)接线守阵(2026-10-18, 计划 26-10-18-2013)
+
+    用户拍板 D1-D13: 筛选行纯文本指示器「已选 N 个种子 · 合计 X · 实际占用 Y」(Y 仅在
+    X≠Y 时出现, 纯展示零按钮), 删除确认框同口径条件行。逐层钉住:
+      1. 三套 UI 聚合模板: .sel-summary 指示器在场(v-if=selectedCount), 消费 selectedSize
+         的 total/occupy 与 fmtSize; Y 段条件 = occupy < total; 不复活 .bulk-* 符号;
+      2. selection.js: selSizeSummaryOf 算法单点 + selectedSize computed(无选中早退,
+         经 memberByHash 解析 selHashSet);
+      3. delete_flow.js: _deleteDetails 的「实际占用」条件行复用 selSizeSummaryOf(不另写
+         求和) + popovers.html 详情行 title 吃 d.hint(口径说明)。
+    """
+    for ui in _UI_ALL:
+        text = _ui_aggregate(ui)
+        m = re.search(r'<span v-if="selectedCount" class="strip-note sel-summary">(.*?)</span>', text, re.S)
+        assert m, f"{ui} 聚合模板缺选中摘要指示器(.sel-summary) —— 位置/类名被改? 同步本守阵"
+        block = m.group(1)
+        assert "{{ selectedCount }}" in block and "个种子" in block, "指示器必须显示已选个数"
+        assert "fmtSize(selectedSize.total)" in block, "合计 X 必须走 fmtSize(selectedSize.total)"
+        assert "selectedSize.occupy < selectedSize.total" in block, "实际占用 Y 仅在 X≠Y 时出现"
+        assert "fmtSize(selectedSize.occupy)" in block, "实际占用 Y 必须走 fmtSize(selectedSize.occupy)"
+        for token in (".bulk-inline", "bulkAct(", "bulkDeleteLabel(", "bulkHrWarnText("):
+            assert token not in block, f"{ui} 选中摘要复用了退役批量控制条符号 {token!r}"
+
+    sel = open(os.path.join(STATIC_ROOT, "shared", "selection.js"), encoding="utf-8").read()
+    assert "selSizeSummaryOf(members) {" in sel, "选中摘要算法单点 selSizeSummaryOf 消失(两处各自演化即漂移)"
+    m = re.search(r"selectedSize\(\) \{(.*?)\n    \},", sel, re.S)
+    assert m, "selection.js 缺 selectedSize computed"
+    body = m.group(1)
+    assert "selSizeSummaryOf" in body and "memberByHash" in body and "selHashSet" in body, (
+        f"selectedSize 必须经 memberByHash 解析 selHashSet 交算法单点: {body.strip()}"
+    )
+    assert "this.selectedCount" in body, "selectedSize 必须早退(无选中不建成员索引)"
+
+    dfl = open(os.path.join(STATIC_ROOT, "shared", "delete_flow.js"), encoding="utf-8").read()
+    m = re.search(r"_deleteDetails\(keys, hashes\) \{(.*?)\n    \},", dfl, re.S)
+    assert m, "delete_flow.js 缺 _deleteDetails"
+    det = m.group(1)
+    assert "this.selSizeSummaryOf(members)" in det, "删除框实际占用行必须复用 selSizeSummaryOf 单点"
+    assert "实际占用" in det, "删除框缺「实际占用」条件行(D12)"
+    assert "m.size || 0" not in det, "删除框又自己写了一遍 size 求和 —— 应走 selSizeSummaryOf(口径单点)"
+
+    pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
+    assert 'd.hint || String(d.value)' in pop, "详情行 title 必须吃 d.hint(实际占用行的口径说明入口)"
 
 
 def test_api_group_commands_enqueue(web_env):

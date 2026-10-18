@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 选中摘要: 种子个数 + 合计/实际占用大小</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-selection-size-summary">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-18-2013">
+<meta name="doc-updated" content="26-10-18-2257">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-18-2125-webui-selection-size-summary.md, memory-bank/tasks/26-10-18-webui-selection-size-summary.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-selection-size-summary</div>
+<h1>WEBUI 选中摘要: 种子个数 + 合计/实际占用大小</h1>
+<p class="lede">选中种子时在筛选行显示「<b>已选 N 个种子 · 合计 X · 实际占用 Y</b>」：个数走既有选中闭包，合计 = Σ 选中种子 <code>size</code>，实际占用 = 按辅种组（同一份文件的多站点副本）去重、每组取最完整副本 —— <b>Y 仅在小于 X 时出现</b>。设计主轴：所有口径挂既有单点（<code>selHashSet</code> / <code>memberByHash</code> / 组行 size 语义），零新配置、零新交互入口、零新 CSS。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-2013 · <b>doc-updated</b> 26-10-18-2257 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话内 grilling 两轮（2026-10-18）：用户拍板 D1–D13（§06）；事实基线 = 批量控制条退役 commit <code>ab98b356</code>（2026-10-05）+ 组行双口径 <code>views.py::_build_group_row</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>：多选种子时（最典型：种子页搜出一部片子的多个站点副本，Ctrl 逐个圈选），用户看不到「选了多大」。旧批量控制条只显示「已选 N 个种子」且已于 2026-10-05 退役（动作入口与右键批量菜单重复，见 <code>ab98b356</code>），qB 原生 UI 则有选中合计。本轮把<b>纯展示</b>的选中摘要补回来：个数 + 合计大小 + 去重后的实际占用。</p>
+<p><b>做到什么算成</b>：§04 的 S1–S5 每条验收判据通过；三视图（辅种/种子/追剧）口径一致；无选中时零占位；<code>实际占用</code>仅在 <code>Y &lt; X</code> 时出现；删除确认框同口径出现该行。</p>
+<p><b>设计底线 / 不变量</b></p>
+<ul>
+  <li><b>选择权威不变</b>：N / X / Y 全部派生自 <code>selGroups ∪ selMembers</code>（经 <code>selHashSet</code> 单点展开），<b>不新存任何选择状态</b>、不加新的写入口。</li>
+  <li><b>派生值后端算</b>：内容单元标识 <code>occ_key</code> 由后端 <code>_member_view</code>产出（与组行 <code>key</code> 同键空间），前端只消费、不自己推断组归属。</li>
+  <li><b>保守默认 / 纯展示</b>：不加任何新交互入口（清除选择仍走 Esc；批量动作仍走右键菜单）——不重蹈控制条「重复入口」退役覆辙。</li>
+  <li><b>死类零残留</b>：不复活 <code>.bulk-*</code> 任何符号（守阵 <code>test_frontend_bulk_bar_retired</code> 已钉死）。</li>
+  <li><b>零新 CSS</b>：指示器整行复用 <code>.strip-note</code>（三套皮肤逐字同款）——「不加新视觉语言」是从构造上不可能与主题不符（D12）。</li>
+  <li><b>跨层口径单点</b>：Y 的算法只有一个函数（<code>selection.js::selSizeSummaryOf</code>），筛选行与删除确认框共用，防两处各自演化。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <thead><tr><th>#</th><th>现状 / 痛点</th><th>事实落点</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>选中态只有个数（<code>selectedCount</code>），无任何大小展示；右键菜单仅「N 个目标」文本</td><td><code>selection.js</code> L503-505 · <code>selection.js::_scopeFinish</code> L216-226</td></tr>
+    <tr><td>2</td><td><b>种子页无组结构</b>：<code>VIEW_ARRAYS</code> 里 <code>torrent</code> 视图只回 <code>torrents</code> 平铺数组，前端算不出「同内容多副本」</td><td><code>views.py</code> L103-115</td></tr>
+    <tr><td>3</td><td>删除确认框已有「总大小」行，但口径 = 全成员求和（无去重），与摘要的 X 同义、缺 Y</td><td><code>delete_flow.js::_deleteDetails</code> L116-131</td></tr>
+    <tr><td>4</td><td>旧批量控制条（2026-10-05 退役）的「已选 N」展示位空出，原槽位（状态图例之后、筛选说明之前）可用</td><td><code>ab98b356</code> diff · <code>topbar.html</code> L166-168 注释</td></tr>
+    <tr><td>5</td><td>数据全是现成的：<code>size</code> 是必填快照字段（启动期 fail-fast），三套行模板都在渲染 <code>m.size</code>；<code>fmtSize</code> 在 <code>format.js</code></td><td><code>torrents/compat.py</code> L19-42 · <code>format.js</code> L19-26</td></tr>
+    <tr><td>6</td><td>后端组行本就给双口径：<code>size</code>（单份，代表成员）/ <code>total_size</code>（全组求和），注释原话「组内成员指向<b>同一份文件</b>，磁盘只占一份」——X/Y 不是新发明，是这两列语义的选中版</td><td><code>views.py::_build_group_row</code> L464-469, L481-483</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>：① 后端 <code>_member_view</code> 加 <code>occ_key</code>（归组种子带其组 key，未归组不带）→ 三视图所有行自带内容单元标识，种子页缺口补齐；② 前端 <code>selection.js</code> 落唯一算法单点 <code>selSizeSummaryOf(members)</code> + <code>selectedSize</code> computed；③ <code>topbar.html</code> 筛选行指示器（<code>.strip-note</code> 样式，退役控制条原槽位）；④ 删除确认框加条件行「实际占用」（同一函数同一口径）；⑤ 守阵 + e2e + 文档回写。</p>
+<table>
+  <thead><tr><th>量</th><th>定义</th><th>数据来源</th><th>拍板</th></tr></thead>
+  <tbody>
+    <tr><td>N</td><td>去重后的选中种子数（选 1 个 30 成员的组 = 30）</td><td><code>selectedCount</code>（= <code>selHashSet.size</code>，既有）</td><td>D4</td></tr>
+    <tr><td>X（合计）</td><td>Σ 选中成员 <code>size</code>，每个种子各算一份</td><td><code>memberByHash</code> 解析 + 求和</td><td>D5</td></tr>
+    <tr><td>Y（实际占用）</td><td>按 <code>occ_key</code> 内容单元去重，<b>单元值 = 该单元选中成员的最大 size</b>；未归组种子自成一个单元</td><td>成员行 <code>occ_key</code>（后端）+ 前端分组取 max</td><td>D7 D8 D9 D10</td></tr>
+  </tbody>
+</table>
+<p class="aside">三条口径推论（拍板 D8/D10 的直接后果）：<b>①</b> Y ≤ X 恒成立（单元 max ≤ 单元成员和）；<b>②</b>「X ≠ Y」⇔「选中了同一内容单元的 ≥2 个副本」——正是用户要的「辅种 Y 只算一份」；<b>③</b> 只选 1 个副本时 X = Y，不显示 Y。跨组文件交叉（<code>cross_group_conflict</code>）<b>不</b>再去重（D9）：该风险后端另有标记，选中摘要不重复担这份语义。</p>
+<table>
+  <thead><tr><th>步</th><th>主题</th><th>主要落点</th><th>拍板</th></tr></thead>
+  <tbody>
+    <tr><td>S1</td><td>后端 <code>occ_key</code> 字段契约 + 守阵</td><td><code>webui/views.py::_member_view</code> · <code>tests/test_web_backend_misc.py</code></td><td>D7</td></tr>
+    <tr><td>S2</td><td>前端摘要算法单点</td><td><code>webui/static/shared/selection.js</code>（<code>selSizeSummaryOf</code> + <code>selectedSize</code>）</td><td>D4 D5 D8</td></tr>
+    <tr><td>S3</td><td>筛选行选中指示器</td><td><code>webui/static/shared/tpl/topbar.html</code></td><td>D1 D2 D3 D12 D13</td></tr>
+    <tr><td>S4</td><td>删除确认框「实际占用」条件行</td><td><code>webui/static/shared/delete_flow.js::_deleteDetails</code> · <code>tpl/popovers.html</code>（<code>d.hint</code>）</td><td>D11</td></tr>
+    <tr><td>S5</td><td>守阵 + e2e + 文档回写 + 全量基线</td><td><code>tests/test_webui_static_dom_page.py</code> · <code>e2e/multiselect-shows.spec.mjs</code> · <code>conventions/webui.md</code></td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>S1 — 后端 <code>occ_key</code>（契约先行）</h3>
+<ul>
+  <li><code>views.py::_member_view(r)</code>：归组种子（<code>self.store.group_key(r.hash)</code> 非 None）带 <code>occ_key = encode_group_key(key)</code>；未归组为 <code>null</code>（字段恒在、null = 不适用，与 <code>availability</code> 同族契约；前端 <code>m.occ_key || ("self:" + m.hash)</code> 兜成自单元）。<b>形状纪律</b>：函数仍以 <code>return {字典字面量}</code> 收尾（occ_key 进字面量、组 key 查表前置）—— 守阵 <code>test_seed_view_no_member_view_restatement</code> 的 AST 提取假设第一个 <code>return</code> 就是字典字面量，改成 <code>d = {...}; return d</code> 会把它跑炸（R1）。</li>
+  <li>落点即覆盖三视图：组行 <code>members</code>、<code>singles</code>、种子页 <code>torrents</code>（<code>_seed_view</code> 经 <code>{**_member_view(r), ...}</code> 继承）；追剧页成员经 <code>memberByHash</code>（groups ∪ singles）解析，同源。</li>
+  <li><code>occ_key</code> 与组行 <code>key</code> <b>同键空间</b>（都走 <code>encode_group_key</code>）——这是守阵的不变量：每个成员的 <code>occ_key</code> 必等于其所属组行的 <code>key</code>。</li>
+  <li>线程安全：<code>group_key</code> 是 <code>member_to_key</code> 字典单次 <code>.get()</code>（非迭代），与 Web 线程重建路径并发无「dictionary changed size」风险（该风险只在迭代，见 <code>_build_group_view</code> 的快照纪律）。</li>
+</ul>
+<p><b>验收</b>：守阵测试——① 合成库里每个归组种子 <code>_member_view</code> 带 <code>occ_key</code> 且 == 组行 <code>key</code>；② 未归组种子（singles）<code>occ_key</code> 为 <code>null</code>；③ <code>_seed_view</code>（种子页）同样带（经继承，不重述）。<br>
+<b>依赖</b>：无。可独立提交。</p>
+
+<h3>S2 — 前端摘要算法单点（<code>selection.js</code>）</h3>
+<ul>
+  <li><code>selSizeSummaryOf(members)</code>：入参 = 成员行数组（须带 <code>size</code> / <code>occ_key</code>）；遍历累计 <code>total</code>（X），同时按 <code>m.occ_key || ("self:" + m.hash)</code> 分单元记<b>最大</b> size；输出 <code>{total, occupy}</code>。约 12 行，零依赖。</li>
+  <li><code>selectedSize</code> computed：<code>selectedCount</code> 为 0 时早退返回 <code>{0,0}</code>（不建索引）；否则把 <code>selHashSet</code> 经 <code>memberByHash</code> 解析成成员行，交 <code>selSizeSummaryOf</code>。</li>
+  <li>解析不到的 hash（轮询竞态的极端窗口）在 X/Y 中<b>同步</b>少计——与既有 <code>bulkDelete</code> 摘要计数同口径（<code>_deleteMembers</code> 同样跳过解析不到的行），不新创第三种行为。</li>
+</ul>
+<p><b>验收</b>：函数为纯函数（同输入同输出）；<code>selectedCount=0</code> 时不触达 <code>memberByHash</code>；选择变化后摘要与 <code>selectedCount</code> 同轮更新。</p>
+
+<h3>S3 — 筛选行选中指示器（<code>topbar.html</code>）</h3>
+<ul>
+  <li>位置：状态图例之后、筛选说明之前（退役控制条原槽位）；<code>v-if="selectedCount"</code>，无选中零占位。</li>
+  <li>文案：<code>已选 &lt;b&gt;N&lt;/b&gt; 个种子 · 合计 &lt;b&gt;X&lt;/b&gt;</code>，<code>Y &lt; X</code> 时追加 <code> · 实际占用 &lt;b&gt;Y&lt;/b&gt;</code>；Y 的数值挂 <code>:title</code> 解释「辅种组内多站点副本只计一份（取最完整副本）」。</li>
+  <li>样式：<code>class="strip-note sel-summary"</code>——<code>.strip-note</code> 是三套皮肤逐字同款的既有规则（<code>&gt; b</code> 自动提亮），<code>.sel-summary</code> 只是 e2e 选择器钩子（无 CSS）。</li>
+  <li>不改 <code>.status-strip</code> 的 <code>v-if</code> 条件（<code>page==='groups'</code> 下三视图恒渲染，无回归面）。</li>
+</ul>
+<p><b>验收</b>：三视图选中即显、Esc/清除后即隐；单位走 <code>fmtSize</code>（1024 进制两位小数）；只选未归组单种子时不出现「实际占用」；双皮肤（atlas/prism）视觉一致。</p>
+
+<h3>S4 — 删除确认框「实际占用」条件行（<code>delete_flow.js</code>）</h3>
+<ul>
+  <li><code>_deleteDetails</code>：在既有「总大小」行（= X，全成员求和，<b>不动</b>）之后，<code>Y &lt; X</code> 时 push 一行 <code>{icon:"#i-hdd", label:"实际占用", value: fmtSize(occupy), hint: "…"}</code>；X/Y 由 <code>selSizeSummaryOf(members)</code> 同一函数产出（<code>_deleteMembers</code> 已是成员行数组，天然匹配入参）。</li>
+  <li><code>popovers.html</code> 详情行 <code>:title</code> 绑定加 <code>d.hint ||</code> 前缀（既有行无 <code>hint</code> 字段 → 行为逐字不变；verdict 行同模板同族，一并受益但本轮不消费）。</li>
+</ul>
+<p><b>验收</b>：删同组 2 个副本 → 框内出现「实际占用」行且值 &lt; 「总大小」；删未归组种子 → 不出现；行结构与既有五行一致（图标/label/value/title）。</p>
+
+<h3>S5 — 守阵 + e2e + 文档回写 + 全量基线</h3>
+<ul>
+  <li>前端静态守阵（<code>test_webui_static_dom_page.py</code> 族）：① <code>topbar.html</code> 指示器存在且消费 <code>selectedSize</code>/<code>selectedCount</code>；② <code>selection.js</code> 定义 <code>selSizeSummaryOf</code> 与 <code>selectedSize</code>；③ <code>delete_flow.js</code> 的 Y 行走 <code>selSizeSummaryOf</code>（不另写求和）；④ 不复活 <code>.bulk-*</code>（既有守阵已覆盖，本轮回归）。</li>
+  <li>e2e（<code>multiselect-shows.spec.mjs</code> 追加 2 条 test）：种子页 Ctrl 点选同组 2 个种子（合成库 <code>i</code> 与 <code>2k</code>/<code>2k+1</code> 同 <code>save_path</code>，size 轮转 2/8/25/60 GiB ⇒ X≠Y 恒成立）→ 断言 <code>.sel-summary</code> 文本含「已选 2 个种子」与「实际占用」，且数值 = <code>fmtSize(s₀+s₁)</code> / <code>fmtSize(max)</code>；第二条走删除确认框同口径（<code>data-aq-tip</code> 双读提示）。期望值从 DOM <code>data-hash</code> 现推（不写死行序魔法数，300/3000 规模均成立——最高两下标恒为同组对）。落点纪律复用该 spec 既有 <code>clickRow</code>（对冲 sticky-head 拦截 flaky）。</li>
+  <li>文档回写：<code>conventions/webui.md</code> 补 <code>occ_key</code> 载荷契约 + 选中摘要口径（X/Y/单元 max/跨组不去重）；测试文件头「## 测试计划」清单同步。</li>
+  <li><code>commands run test.full</code> 实测 → <code>kb.new baseline</code> 誊写数字；<code>kb.wrap</code> 收尾；达立档阈值则 <code>kb.new task</code>。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无</b> —— 两轮 grilling（round 1：Q1–Q7；round 2：R2-Q1–R2-Q6）共 13 项全部拍板，结论见 §06；实现层细节（computed 早退、守阵挂点、e2e 选择器）按项目惯例由实施者定，不占拍板位。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>#</th><th>结论</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>位置 = 筛选行内联（退役控制条原槽位）；<b>旧控制条视觉风格禁用</b>（与主题不符）</td><td>26-10-18</td></tr>
+    <tr><td>D2</td><td>有选中才显示（v-if），纯展示不可点；清除选择走 Esc（不加按钮）</td><td>26-10-18</td></tr>
+    <tr><td>D3</td><td>文案 =「已选 N 个种子 · 合计 X · 实际占用 Y」，单位走 <code>fmtSize</code></td><td>26-10-18</td></tr>
+    <tr><td>D4</td><td>N = <code>selHashSet</code> 去重成员数（与 <code>selectedCount</code> 同源，选组 = 全组成员）</td><td>26-10-18</td></tr>
+    <tr><td>D5</td><td>X = Σ 选中成员 <code>m.size</code>（与删除框既有「总大小」同口径）</td><td>26-10-18</td></tr>
+    <tr><td>D6</td><td>Y 仅在 X ≠ Y 时显示；辅种组（同一份文件多站点副本）Y 只算一份</td><td>26-10-18</td></tr>
+    <tr><td>D7</td><td>范围含删除确认框；<b>删除可释放空间</b>是另一语义，本轮不做</td><td>26-10-18</td></tr>
+    <tr><td>D8</td><td>种子页组结构缺口：后端 <code>_member_view</code> 加 <code>occ_key</code>（归组带组 key、未归组 null，不靠前端补拉/缓存）</td><td>26-10-18</td></tr>
+    <tr><td>D9</td><td>单元值 = 选中成员中的<b>最大</b> size（最完整副本哲学；保证 Y ≤ X；等大时与代表成员口径等价）</td><td>26-10-18</td></tr>
+    <tr><td>D10</td><td>跨组文件交叉（<code>cross_group_conflict</code>）不再去重——后端另有风险标记，范围守恒</td><td>26-10-18</td></tr>
+    <tr><td>D11</td><td>追剧页集版本不额外去重：「同一份文件」判据是 save_path（组），不是集；不同版本是不同字节</td><td>26-10-18</td></tr>
+    <tr><td>D12</td><td>删除框呈现 = 新增条件行「实际占用」（仅 Y&lt;X），不动既有「总大小」行与 body 文案</td><td>26-10-18</td></tr>
+    <tr><td>D13</td><td>视觉 = 纯文本 + 数字强调，复用 <code>.strip-note</code>，<b>零新 CSS</b>（三套皮肤无漂移面）</td><td>26-10-18</td></tr>
+  </tbody>
+</table>
+<p class="aside">另（实施者自决，未占拍板位）：Y 数值挂 <code>:title</code> 解释去重口径（D13 纯文本风格下的可理解性补偿）；<code>popovers.html</code> 详情行 <code>:title</code> 加 <code>d.hint ||</code> 前缀（既有行零变化）。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <thead><tr><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td><code>occ_key</code> 载荷增长</td><td>大库（数千归组种子）每轮全量/增量响应体变大</td><td>只在归组行带一个既有键空间的字符串；组视图 members 本就内嵌回传（P-02），增量占比小。<b>实测</b>（2026-10-18，300 种子全归组合成库）：单行均长 55B，<code>/api/state</code> 增量 16.5KB = <b>+1.7%</b>，无异常，不入池</td></tr>
+    <tr><td>sizeMismatch 组 Y 与组行 size 列边角不一致</td><td>组成员大小不一致且用户选中其中一部分</td><td>两条口径分工写进文档：组行 = 展示代表值（后端现定），摘要 = 占用去重取 max（D9）。不追求一致——一致要么牺牲 Y≤X 要么改组行语义，都超出本轮范围</td></tr>
+    <tr><td>渲染到点击之间种子被删</td><td>选中 hash  momentarily 解析不到</td><td>X/Y 同步少计（同 <code>bulkDelete</code> 摘要口径）；下一轮轮询交集过滤（<code>polling.js</code> L239-249）后自然收敛</td></tr>
+    <tr><td>大库下 computed 抖动</td><td>每轮轮询都换 groups/torrents 行引用</td><td><code>selectedCount=0</code> 早退；<code>memberByHash</code> 本就每轮重建（存量成本），本功能只多一次「选中集大小」的 Map 构建；<code>renderMs</code> 埋点（polling.js L250-252）持续监控</td></tr>
+    <tr><td>三皮肤视觉漂移</td><td>有人后续给指示器加样式</td><td>零新 CSS 是本轮的防漂移设计；真要加样式必须三套同步（既有成对纪律 + <code>test_webui_static_skins</code> 族守阵）</td></tr>
+    <tr><td>e2e flaky（既有签名）</td><td>宽行 + 2s 整表重渲染相撞时 <code>scrollIntoViewIfNeeded</code> 居中滚动顶掉落点</td><td>复用 <code>multiselect-shows.spec.mjs</code> 既有 <code>clickRow</code> 落点纪律（滚回 0 + <code>elementFromPoint</code> 验落点 + 失败即报不等 30s），不新写点击路径</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-18-2013</span> 初版：来源 = 会话内两轮 grilling（D1–D13 全量拍板）。要点：occ_key 后端契约 + <code>selSizeSummaryOf</code> 前端单点 + 筛选行纯文本指示器（零新 CSS）+ 删除框条件行；Y 仅 X≠Y 时显示，单元取 max 保证 Y≤X。</li>
+  <li><span class="tag">R1 · 26-10-18-2042</span> R1: occ_key 契约微调——未归组种子由「不带该键」改为「字段恒在、值 null」(与 availability 等同族契约): _member_view 直接 return 字典字面量的形状必须保住(守阵 test_seed_view_no_member_view_restatement 的 AST 提取假设), 且字段恒在比有条件缺键更利于契约稳定; 前端 m.occ_key || (self:+hash) 逻辑不变</li>
+  <li><span class="tag">R2 · 26-10-18-2248</span> R2: 实施完成 + 六轮矩阵验证 + 3000 轮测试债入池。落点: views.py::_member_view 加 occ_key(查表前置保字面量形状, R1 契约); selection.js selSizeSummaryOf 算法单点 + selectedSize computed(无选中早退); topbar.html .sel-summary 指示器(复用 .strip-note 零新 CSS); delete_flow.js _deleteDetails 走单点 + Y&lt;X 条件行(d.hint 口径说明); popovers.html 详情行 title 吃 d.hint(既有行零变化)。验证: test.full 3590 passed + 4 skipped / 98% 覆盖率(基线切片 26-10-18-2125); e2e 六轮矩阵(①默认 286/10/0; ②error 266/26/4; ③hang 252/40/4; ④skip-off 274/22/0; ⑤hr-empty 282/14/0; ⑥3000 284/8/4) + @fast 门禁 170 passed; 载荷 +1.7%(§07 已回填)。②③ 的 4 红 = delta-sync 存量恒红(真值对齐无模式分流, HEAD 同签名实证), 入池 issue 26-10-18-2122; ⑥ 另 4 红 = 追剧页落点对冲 3000 规模确定性失效, 入池 issue 26-10-18-2226 —— 均不在本轮范围修(scope-guard)。⑥ 初跑本计划 2 条新 test 双皮肤 4 红 = 测试期望失真(桩 --groups 默认 200, 3000 下前两行未归组, 产品正确地不现 Y), 修为从产品 occ_key 载荷现推期望(归组/未归组两分支都断言)后复跑转绿; 教训: 编号同对 ≠ 真同组(记入 spec 文件头追记)</li>
+</ul>
+
+</div>
+</body>
+</html>

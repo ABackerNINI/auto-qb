@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from qbittorrentapi import TorrentState, TrackerStatus
 
 from ..hr.resolve import safety_display
-from ..infra.utils import VIRTUAL_TRACKER_PREFIXES
+from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, encode_group_key
 from ..torrents import TorrentRecord, view_field_value
 
 if TYPE_CHECKING:
@@ -367,6 +367,9 @@ class WebviewMixin:
 
     def _member_view(self, r) -> dict:
         """单成员展示视图(分组视图 members 与 singles 未归组种子共用同一字段构建)"""
+        # occ_key 的内容单元查表先行(组 key 单次 .get(); group_key 是 member_to_key 的
+        # 非迭代读取, 与 Web 线程重建路径并发无 "dictionary changed size" 风险)
+        gkey = self.store.group_key(r.hash)
         return {
             "hash": r.hash,
             "name": r.name,
@@ -415,6 +418,16 @@ class WebviewMixin:
             "num_leechs": r.num_leechs,
             "num_complete": r.num_complete,
             "num_incomplete": r.num_incomplete,
+            # occ_key(2026-10-18, 计划 26-10-18-2013 D8): 内容单元标识 —— 归组种子带其辅种组
+            # key(encode_group_key, 与组行 key 同键空间), 未归组为 null(前端按
+            # m.occ_key || ("self:"+m.hash) 兜成自单元)。前端选中摘要
+            # (selection.js::selSizeSummaryOf)按它把"同一份文件的多站点副本"并成一个占用
+            # 单元(单元值取选中成员最大 size, Y≤X 恒成立)。只回键不回值: 单元值由前端从
+            # 选中成员现算, 后端不对"选中子集"做假设(组行 size/total_size 双口径的选中版)。
+            # 种子页平铺行经 _seed_view 的 {**_member_view(r), ...} 继承本字段(不重述,
+            # 守阵 test_seed_view_no_member_view_restatement)。字段恒在/null = 不适用的
+            # 契约与 availability 等同族(不搞"有条件缺键")。
+            "occ_key": encode_group_key(gkey) if gkey is not None else None,
         }
 
     def _cross_keys_snapshot(self) -> set:

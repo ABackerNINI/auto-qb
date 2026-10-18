@@ -166,6 +166,14 @@
           <!-- 批量操作段已退役(2026-10-05): 原"已选 N 个种子 · 开始/暂停/…"控制条删除,
                批量动作一律走**右键批量菜单**(被右键行属于选中集合时升级, 见 ctx-menus.html
                `menu.multi` 分支 / commands.js ctxAct|ctxDelete); 清除选择走 Esc(退栈链兜底) -->
+          <!-- 选中摘要(2026-10-18, 计划 26-10-18-2013 D3/D12/D13): "已选 N 个种子 · 合计 X ·
+               实际占用 Y" —— 纯展示零按钮(清除走 Esc), 占退役控制条原槽位。Y 仅在 X≠Y 时出现
+               (同一辅种组的多站点副本只算一份, 单元取最完整副本; 算法单点 selection.js::
+               selSizeSummaryOf, occ_key 由后端 _member_view 产出)。样式零新增: 整行复用
+               .strip-note(三套皮肤逐字同款), .sel-summary 仅作 e2e 选择器钩子(无 CSS)。 -->
+          <span v-if="selectedCount" class="strip-note sel-summary">
+            已选 <b>{{ selectedCount }}</b> 个种子 · 合计 <b>{{ fmtSize(selectedSize.total) }}</b><template v-if="selectedSize.occupy < selectedSize.total"> · 实际占用 <b :title="'辅种组内多站点副本只计一份(取最完整副本)'">{{ fmtSize(selectedSize.occupy) }}</b></template>
+          </span>
           <!-- 当前筛选/搜索说明: 紧跟状态图例之后(无筛选时不占据任何空间) -->
           <span v-if="filtersActive" class="strip-note">
             <template v-if="searchQuery.trim()">搜索“{{ searchQuery.trim() }}” </template>

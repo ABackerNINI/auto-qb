@@ -28,6 +28,7 @@
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
 - test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
+- test_member_view_occ_key: occ_key 内容单元标识(计划 26-10-18-2013 D8) —— 归组种子 occ_key == 组行 key(同键空间); 未归组为 null(字段恒在); 种子页平铺行经 _seed_view 继承
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
 - test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
@@ -898,6 +899,43 @@ def test_member_view_extended_fields(tmp_path):
     assert v["dl_limit"] == 1024 and v["up_limit"] == 2048
     assert v["tracker"] == "https://tracker.example/announce"
     assert v["infohash_v2"] == "v2hash-abcd1234"
+
+
+def test_member_view_occ_key(tmp_path):
+    """occ_key 内容单元标识(2026-10-18, 计划 26-10-18-2013 D8): 选中摘要"实际占用"的去重键
+
+    前端选中摘要(selection.js::selSizeSummaryOf)按 occ_key 把"同一份文件的多站点副本"
+    并成一个占用单元(单元值取选中成员最大 size, Y≤X 恒成立)。契约三条:
+      1. 归组种子 occ_key == 其组行 key(同键空间, 都走 encode_group_key);
+      2. 未归组种子(singles)occ_key 为 null(字段恒在, null = 不适用; 前端兜成自单元);
+      3. 种子页平铺行经 _seed_view 继承(不重述)。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(hash="HA", name="Show", save_path=r"R:/s", size=100)
+    t2 = FakeTorrent(hash="HB", name="Show", save_path=r"R:/s", size=200)
+    t3 = FakeTorrent(hash="HC", name="Alone", save_path=r"R:/x", size=300)
+    seed_store(mgr, [t1, t2, t3])
+    key = ("R:/s", ())
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+
+    row = mgr._build_group_view()[0]
+    by_hash = {m["hash"]: m for m in row["members"]}
+    assert by_hash["HA"]["occ_key"] == row["key"], "归组成员 occ_key == 组行 key(同键空间)"
+    assert by_hash["HB"]["occ_key"] == row["key"]
+    assert row["key"] == encode_group_key(key)
+
+    single = mgr._build_singles_view()
+    assert [s["hash"] for s in single] == ["HC"]
+    assert single[0]["occ_key"] is None, "未归组种子 occ_key = null(字段恒在, 前端兜成自单元)"
+
+    seed = {s["hash"]: s for s in mgr._build_flat_view()}
+    assert seed["HA"]["occ_key"] == row["key"], "种子页平铺行经 _seed_view 继承 occ_key"
+    assert seed["HC"]["occ_key"] is None
 
 
 def _tracker_calls(client):
