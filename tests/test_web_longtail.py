@@ -16,7 +16,7 @@
 - test_web_commands_bulk_argument_errors: 批量参数四类错误回执
 - test_web_commands_bulk_missing_targets_reported: 批量缺失种子/组分列计数
 - test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
-- test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
+- test_web_commands_add_torrents_receipt: 添加种子三态回执(全受理 ok / 部分受理 warn / 全拒 error)
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
@@ -376,7 +376,7 @@ def test_web_commands_bulk_recheck_via_ops():
 
 
 def test_web_commands_add_torrents_receipt():
-    """添加种子: 文件+链接都受理 -> ok 回执; qB 未接受 -> error 回执带详情"""
+    """添加种子: 文件+链接都受理 -> ok 回执; 部分受理 -> warn 回执; qB 全拒 -> error 回执带详情"""
     from hr_helpers import torrent_blob
 
     with tempfile.TemporaryDirectory() as td:
@@ -403,7 +403,31 @@ def test_web_commands_add_torrents_receipt():
         mgr.web.consume_commands()
         assert mgr.web.results["a1"]["status"] == "ok", mgr.web.results["a1"]
         assert any(c[0] == "add" for c in client.calls)
-        # qB 拒绝(旧文本形态 "Fails.") -> error 回执(新形态元数据由既有守阵钉)
+        # 部分受理 -> warn 回执(2026-10-18 报障「部分种子添加失败(已存在)时添加窗口不消失」):
+        # qB 对重复种子是**整批里挑着拒**(HTTP 200 + failure_count>0), 部分成功是常态路径。
+        # 形态一(API>=2.14.0 元数据, 真机主路径): 单次调用 success=1 / failure=1
+        from qbittorrentapi.torrents import TorrentsAddedMetadata
+
+        client.torrents_add = lambda *a, **kw: TorrentsAddedMetadata(
+            {
+                "success_count": 1,
+                "failure_count": 1,
+                "pending_count": 0,
+                "added_torrent_ids": ["HASH123"]
+            }
+        )
+        mgr.web.commands.put(("add_torrents", {"files": [blob], "urls": [], "cmd_id": "a3"}))
+        mgr.web.consume_commands()
+        rec3 = mgr.web.results["a3"]
+        assert rec3["status"] == "warn" and "成功 1 / 失败 1" in rec3["error"], rec3
+        # 形态二(API<2.14.0 旧文本): 文件调用 "Ok." + 链接调用 "Fails." 跨两次调用混合
+        seq = iter(["Ok.", "Fails."])
+        client.torrents_add = lambda *a, **kw: next(seq)
+        mgr.web.commands.put(("add_torrents", {"files": [blob], "urls": ["magnet:?xt=urn:btih:xyz"], "cmd_id": "a4"}))
+        mgr.web.consume_commands()
+        rec4 = mgr.web.results["a4"]
+        assert rec4["status"] == "warn" and "Ok." in rec4["error"] and "Fails." in rec4["error"], rec4
+        # qB 全拒(旧文本形态 "Fails.") -> error 回执(新形态元数据由既有守阵钉)
         client.torrents_add = lambda *a, **kw: "Fails."
         mgr.web.commands.put(("add_torrents", {"files": [blob], "urls": [], "cmd_id": "a2"}))
         mgr.web.consume_commands()

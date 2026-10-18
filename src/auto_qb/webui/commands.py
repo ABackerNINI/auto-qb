@@ -210,8 +210,8 @@ CMD_SLOW_MS = 300.0
 TRUTH_PUSH_CAP_MS = 8000.0
 
 
-def _add_outcome(result: object) -> tuple[bool, str]:
-    """判定一次 `torrents_add` 的结果 -> (是否受理, 详情文案); 两种响应形态都要认
+def _add_outcome(result: object) -> tuple[str, str]:
+    """判定一次 `torrents_add` 的结果 -> (受理态, 详情文案); 两种响应形态都要认
 
     - **Web API < 2.14.0**(qB 5.2 之前): 纯文本 `Ok.` / `Fails.`;
     - **Web API >= 2.14.0**(qB 5.2 起, 用户实测 5.2.3): JSON 元数据
@@ -223,15 +223,28 @@ def _add_outcome(result: object) -> tuple[bool, str]:
     于是"种子明明加进去了, WEB UI 却弹添加失败"。判据必须同时覆盖两形态。
     `pending_count > 0` = 已受理但仍在异步处理(magnet 元数据未就绪 / 走 search 插件下载),
     同样算受理成功 —— 它不是失败, 只是还没定下 info hash。
+
+    受理态三值(2026-10-18 由布尔扩为三值, 见 `_cmd_add_torrents` 聚合):
+      `ok`      = 这一次调用全部受理(无被拒);
+      `partial` = **一部分受理一部分被拒**(仅新形态元数据可能出现) —— qB 对重复种子是
+                  **整批里挑着拒**(HTTP 200 + failure_count>0), 不是整批 409 ⇒ "部分成功"
+                  是常态路径。旧布尔判据把它与"全拒"压成同一个 False, 调用端只能二选一,
+                  用户报「部分种子添加失败(已存在)时添加窗口不消失」;
+      `fail`    = 全部被拒 / 调用未成功。
     全部失败时 qB 回 HTTP 409, 库直接抛 `Conflict409Error`, 走不到这里(由命令分发层写 error 回执)。
     """
     if isinstance(result, Mapping):
         success = int(result.get("success_count") or 0)
         failure = int(result.get("failure_count") or 0)
         pending = int(result.get("pending_count") or 0)
-        return (failure == 0 and (success + pending) > 0), f"成功 {success} / 失败 {failure} / 待定 {pending}"
+        detail = f"成功 {success} / 失败 {failure} / 待定 {pending}"
+        if failure == 0 and (success + pending) > 0:
+            return "ok", detail
+        if (success + pending) > 0:
+            return "partial", detail
+        return "fail", detail
     text = str(result)
-    return ("Ok." in text), text or "无结果"
+    return ("ok" if "Ok." in text else "fail"), text or "无结果"
 
 
 # qB 业务拒绝(HTTP 4xx, 如 "必须启用 torrent 队列") 的**行动建议**表: 按 qB 返回文案子串匹配,
@@ -1192,9 +1205,15 @@ class WebCommandsMixin:
         """WEB UI 添加种子: .torrent 原始 bytes 经命令队列传给主循环线程, 内存直交 qB(qbittorrent-api
         _normalize_torrent_files 原生支持 bytes) —— 零临时文件。
 
-        回执由本 handler 依 qB 结果串写(受理=ok, 否则 error, 两形态判定见 `_add_outcome`) ——
-        "指令已发"与"qB 接受"分开; skip_checking 属高危选项, 前端默认关 + 警告, 此处照传
-        (用户显式动作, 不做二次拦截)。
+        回执由本 handler 依 qB 结果串写(**三态**, 单次调用判定见 `_add_outcome`) ——
+        "指令已发"与"qB 接受"分开:
+          · 全部受理(文件与链接两次调用都无被拒) -> `ok`;
+          · **部分受理**(有加进去的、也有被拒的, 典型"其余已存在") -> `warn`, 文案带计数详情
+            —— qB 对重复种子是**整批里挑着拒**(HTTP 200 + failure_count>0), 不是整批 409,
+            所以"部分成功"是常态路径而不是异常; 前端按 warn 关窗(详见下方回执段注释);
+          · 全部被拒 -> `error`(全部重复时 qB 回 HTTP 409, 库抛 Conflict409Error, 由命令
+            分发层写 error 回执, 走不到这里)。
+        skip_checking 属高危选项, 前端默认关 + 警告, 此处照传(用户显式动作, 不做二次拦截)。
 
         选项下发口径: **qB 侧 `std::optional` 的两个选项(停止位 / 自动管理)恒显式传布尔**,
         其余普通 `bool` 选项为假时省略(缺省即 false, 省略安全) —— 判据见下方注释与
@@ -1234,18 +1253,30 @@ class WebCommandsMixin:
         if urls:
             results.append(self.api.torrents_add(urls=urls, **kwargs))
         outcomes = [_add_outcome(r) for r in results]
-        ok = bool(outcomes) and all(o[0] for o in outcomes)
-        detail = "; ".join(o[1] for o in outcomes)
+        states = [s for s, _d in outcomes]
+        detail = "; ".join(d for _s, d in outcomes)
+        # 聚合判据(受理态三值, 见 _add_outcome): "加进去了没有"与"有被拒的没有"是两个
+        # 独立问题 —— 旧布尔把 partial 与 fail 压成同一值, 于是部分成功只能报 error。
+        #   added ∧ ¬rejected -> ok(全部受理);
+        #   added ∧ rejected  -> warn(部分受理: 文件/链接两次调用各自可能 ok/partial/fail,
+        #                            跨调用混合同样收敛到这一档);
+        #   ¬added            -> error(全部被拒; 空 outcomes 也落这里)。
+        added_any = any(s in ("ok", "partial") for s in states)
+        rejected_any = any(s in ("fail", "partial") for s in states)
         if cmd_id:
-            if ok:
+            if added_any and not rejected_any:
                 self._set_web_result(cmd_id, "ok")
+            elif added_any:
+                self._set_web_result(cmd_id, "warn", f"部分种子未添加(可能已存在): {detail}")
             else:
                 self._set_web_result(cmd_id, "error", f"qB 未接受添加: {detail}")
         # 级别即通知语义(见 conventions/code-style.md 日志规范): 受理成功走 INFO —— 原写法用
         # WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ **每次添加成功都往桌面推一条
-        # "auto-qb WARNING" 弹窗**, 用户据此以为添加失败。
+        # "auto-qb WARNING" 弹窗**, 用户据此以为添加失败。部分受理同样走 WARNING(有种子没进去)。
         line = f"WEB UI | 添加种子: 文件 {len(files or [])} 个, 链接 {len(urls or [])} 条 -> {detail}"
-        if ok:
+        if added_any and not rejected_any:
             logger.info(line)
+        elif added_any:
+            logger.warning(line + "(部分受理)")
         else:
             logger.warning(line + "(qB 未接受)")

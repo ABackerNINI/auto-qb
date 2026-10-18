@@ -92,7 +92,12 @@
   `pending_count > 0`(magnet 元数据未就绪 / 走 search 插件下载)是**已受理**而非失败;
   全部失败走 HTTP 409(`Conflict409Error`, 库直接抛, 不经返回值)。
 - **处置**: 判定统一走 `webui/commands.py::_add_outcome`(两形态都认, 且把计数写进回执详情);
-  别在别处再写一遍子串判定。
+  别在别处再写一遍子串判定。⚠ 它返回的是**三值受理态**(`ok`/`partial`/`fail`, 2026-10-18
+  由布尔扩为三值): `failure_count>0 ∧ success+pending>0` = `partial`(qB 整批里挑着拒) ——
+  由 `_cmd_add_torrents` 跨文件/链接两次调用聚合成三态回执(部分受理 = `warn`, 前端据此
+  **关窗**; 全拒才 `error` **留窗**)。把 partial 当布尔 False 压回 error, 「部分成功」就与
+  「全部失败」混为一谈 —— 用户报障形态 = 部分种子添加失败(已存在)时添加窗口不消失
+  (2026-10-18, 见 pitfalls/web-ui/add-partial-receipt.md)。
 
 ### 添加选项: `std::optional` 的字段**省略 ≠ false** —— 缺省会回落 qB 会话/全局默认
 

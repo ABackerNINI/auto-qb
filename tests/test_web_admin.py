@@ -8,7 +8,7 @@
 - test_qbapi_alt_speed_limits_normalization: ALT-01 QbApi 备用限速 KiB<->bytes/s 换算 + setPreferences 增量语义(只传非 None 方向) + 模式切换
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
-- test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
+- test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗) + 三态回执(全受理 ok / 部分受理 warn / 全拒 error, 2026-10-18「部分失败时窗口不消失」报障)
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
@@ -279,6 +279,9 @@ def test_add_torrent_receipt_and_optional_flags():
        一并按"恒显式"钉住;
     3. 成功路径原来记 WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ 每次添加成功都往桌面推
        一条 WARNING 弹窗; 成功必须 INFO, 只有未被接受才 WARNING。
+    4. 部分受理(有成功有失败, qB 对重复种子整批里挑着拒 = HTTP 200 + failure_count>0)原来被
+       折叠进 error 回执 ⇒ 前端只能"关窗/留窗"二选一, 用户报「部分种子添加失败(已存在)时
+       添加窗口不消失」(2026-10-18)。改为三态回执: 部分受理 = warn(带计数详情), 前端按它关窗。
     """
     import base64
     import logging
@@ -349,7 +352,9 @@ def test_add_torrent_receipt_and_optional_flags():
             assert mgr.web.results[post_add(False)]["status"] == "ok"
             assert [lvl for lvl, _ in add_logs()] == [logging.INFO], "受理成功不得走 WARNING(通知联动会直推桌面弹窗)"
 
-            # 2. 部分失败 -> error 回执(部分成功也报错, 与 bulk 同一口径)且走 WARNING
+            # 2. 部分受理(有成功有失败, qB 对重复种子整批里挑着拒) -> warn 回执(2026-10-18
+            #    报障「部分种子添加失败(已存在)时添加窗口不消失」: 旧口径把部分受理折叠进
+            #    error, 前端留窗; 改三态后按 warn 关窗)且仍走 WARNING(有种子没进去)
             cap.records.clear()
             add_returns(
                 TorrentsAddedMetadata(
@@ -362,7 +367,7 @@ def test_add_torrent_receipt_and_optional_flags():
                 )
             )
             cid = post_add(False)
-            assert mgr.web.results[cid]["status"] == "error"
+            assert mgr.web.results[cid]["status"] == "warn"
             assert "成功 1 / 失败 1" in mgr.web.results[cid]["error"]
             assert [lvl for lvl, _ in add_logs()] == [logging.WARNING]
 

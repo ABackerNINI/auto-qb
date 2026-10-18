@@ -30,6 +30,7 @@
 - test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 单组 v-else 分支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量分支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
+- test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 e2e/add-partial-receipt.spec.mjs 真浏览器钉
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
@@ -3364,6 +3365,46 @@ def test_frontend_add_torrent_drag_drop_wiring():
             f"{ui}/index.html 缺拖拽落点遮罩(.add-drop-mask + v-if=\"addDragOver\")—— "
             f"该皮肤用户拖文件进页面没有落点反馈(双 UI 必须成对改)"
         )
+
+
+def test_frontend_add_torrent_partial_receipt_wiring():
+    """添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障: 部分种子添加失败(已存在)时
+    添加窗口不消失)
+
+    症状根因: 后端旧口径把"部分受理"(qB 对重复种子整批里挑着拒, HTTP 200 + failure_count>0)
+    折叠进 error 回执, 前端 submitAddTorrent 只认 r.ok 关窗 ⇒ 明明加进去几个, 窗口赖着不动
+    还报"添加种子失败"。修法 = 后端三态回执(ok/warn/error, commands.py::_cmd_add_torrents) +
+    前端按 r.status 分流。行为面(pytest 运行时不可见)由 e2e/add-partial-receipt.spec.mjs 真浏览器钉,
+    本守阵钉静态接线:
+      1. submitAddTorrent 必须按三态分流 —— 有 `r.status === "warn"` 分支(只判 r.ok 即回潮);
+      2. warn 分支必须关窗(addOpen = false)并以 warn 类 toast 给出详情(后端文案带计数);
+      3. ok 分支保持关窗;
+      4. error(全拒)分支**不得**关窗 —— 那一份文件/链接原样没进 qB, 留窗才能改完重提
+         (部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。
+    """
+    import re
+
+    add_js = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    m = re.search(r"\n    async submitAddTorrent\(\) \{(.*?)\n    \},", add_js, re.S)
+    assert m, "add_torrent.js 找不到 submitAddTorrent(提交入口, 改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+
+    # 1. 三态分流: warn 分支在(只判 r.ok 的二态写法回潮即红)
+    assert 'r.status === "warn"' in body, (
+        "submitAddTorrent 缺 r.status === \"warn\" 分支 —— 部分受理被 error 化, 窗口不消失(2026-10-18 报障)"
+    )
+    # 2. warn 分支: 关窗 + warn 类 toast(详情由后端文案带出, 见 commands.py 三态回执)
+    warn_branch = re.search(r'\} else if \(r\.status === "warn"\) \{(.*?)\n        \} else \{', body, re.S)
+    assert warn_branch, "warn 分支结构被改写(else if 链形状变了? 同步本守阵)"
+    assert "this.addOpen = false" in warn_branch.group(1), ("warn 分支不关窗 —— 部分受理时添加窗口仍留在前台(本案报障原状)")
+    assert '"warn", 8000' in warn_branch.group(1), ("warn 分支未以 warn 类 toast 给出部分失败详情(TOAST_MS_FLOOR: warn 停留下限 8s)")
+    # 3. ok 分支保持关窗
+    ok_branch = re.search(r"if \(r\.ok\) \{(.*?)\n        \} else if", body, re.S)
+    assert ok_branch and "this.addOpen = false" in ok_branch.group(1), "ok 分支不关窗(全受理时窗口应消失)"
+    # 4. error(全拒)分支不得关窗
+    err_branch = re.search(r"\n        \} else \{\n(.*?)\n        \}", body, re.S)
+    assert err_branch, "submitAddTorrent 找不到末尾 else(全拒)分支"
+    assert "addOpen" not in err_branch.group(1), ("error(全拒)分支关了窗 —— 那一份文件/链接原样没进 qB, 关窗用户就没法改完重提了")
 
 
 def test_frontend_add_combo_blur_close_and_fit():

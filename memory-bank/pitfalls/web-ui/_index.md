@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [add-partial-receipt.md](add-partial-receipt.md) | 部分受理被回执成 error: 按回执二态驱动 UI 行为必然错一头 | 部分成功, 部分受理, 添加种子回执, 命令回执三态, warn 回执, 添加窗口不消失, 关窗判据, 批量添加 |
 | [aq-tip-nested-title-double.md](aq-tip-nested-title-double.md) | 全局自绘 tooltip(.aq-tip, 调度单点 shared/ui_feedback.js)若靠「hover 时摘掉 title 属性 + 离开还原」压制原生气泡, 摘除时机永远追不上 title 的出现时机: ①模板**嵌套带 title 结构**(statusbar.h… | 双 tooltip, 两个 tooltip, 状态栏 tooltip, aq-tip, 嵌套 title, 祖先 title, 原生气泡还魂, Vue 重写 title, 轮询 title 变值, 节点替换 title, statusbar… |
 | [aq-tip-position-clamp.md](aq-tip-position-clamp.md) | 全局自绘 tooltip(.aq-tip, 调度单点 `shared/ui_feedback.js`)的定位缺陷, 都表现为「位置错误 / 浮层盖住它描述的元素」: ①(首轮)`show()` 的 350ms 延时窗口内锚点被 Vue 轮询整个换掉 → 拿到已脱离文档的节点, `… | tooltip 位置错误, tooltip 挡住元素, tooltip 跑到左上角, aq-tip, ui_feedback, show 定位, getBoundingClientRect 全 0, 脱离文档, detached, 节点替换… |
 | [bucket-granularity-boundary.md](bucket-granularity-boundary.md) | 判据的可分精度不可能高于它读取的数据粒度 —— 数据只有「桶」(时间栅格槽)时, 「事件(如进程重启)在链末之前还是之后」这类判定天然存在一条**一桶宽的不可分带**, 按桶覆盖端一刀切会把整条带判给「链已接续」而静默漏判; 修法 = 端点重定义为「链末桶前一桶起点」并写明端点含… | 桶粒度, 判据边界, 不可分带, 链末桶, 接缝判据, 时间比较, 覆盖端, server_started_at, 首采入账, 重启缝, 聚合槽 |

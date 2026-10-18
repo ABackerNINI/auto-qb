@@ -595,6 +595,14 @@ window.AQB_ADD = {
         if (r.ok) {
           this.toast("添加种子已受理, 列表稍后自动刷新", "ok", 4000);
           this.addOpen = false;
+        } else if (r.status === "warn") {
+          /* 部分受理(2026-10-18 报障「部分种子添加失败(已存在)时添加窗口不消失」):
+           * qB 已把其中一部分加进去了(其余多为"已存在"被拒) —— 与"全部未接受"是两回事。
+           * 窗口按已受理收口(关闭), 明细进 warn toast(后端文案已带"成功 N / 失败 M"计数,
+           * 见 commands.py::_cmd_add_torrents 三态回执); 想补提剩下的再开窗即可。
+           * 只有全拒(error)才保留窗口: 那一份文件/链接原样没进 qB, 留着改完能直接重提。 */
+          this.toast(`${r.error}, 列表稍后自动刷新`, "warn", 8000);
+          this.addOpen = false;
         } else {
           this.toast(`添加种子失败: ${r.error}`, "error", 8000);
         }
