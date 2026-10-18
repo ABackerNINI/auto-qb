@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-14
-**Updated:** 2026-10-14
+**Updated:** 2026-10-18
 **Summary:** 用户令「移除种子详情面板除『流量』页的 4 个经典 UI, 以及『流量』页的除经典外的 UI, 以及 qb 流量页的除经典外的 UI」(经二次确认选定**彻底删除经典渲染**档)。落地 = ①四内容页签(常规/Tracker/用户/内容)经典渲染链整体删除: `drawer_tabs.js` 四组件 + `tpl/drawer-tabs.html` + 三个经典单元格渲染器(表壳 + 三份 xtpl-cells 模板)+ 经典三表注册(drawerTracker/drawerPeer/drawerFile)与配套 grid/visibleCols computed、state 排序字段、`drawerTrackerRows`/`fileRowSelect`/`renameFileRow`/`drawerSelPath`; 四页签改为**变体独档**(缺省 = 该页签首个变体)。②流量页签变体 13/14/15 删除, 图前/图后双宿主(traffic-pre/post)与注册表 `slot` 一并退役, 流量页签(含 qB 全局/分组挂点)改为**经典独档**, 该页签模板菜单因候选 < 2 不再弹出。③「哪些页签还有经典」收成注册表单点 `CLASSIC_TABS/defaultSel/choices`, 渲染失败兜底由 classic 改回该页签缺省档。④三皮肤死 CSS 清除(共 ~144 条规则)。⑤守阵与 e2e 同轮改写(6 个 pytest 函数 + 7 份 e2e spec)。代价(用户已知并拍板): 内容页「重命名…」随经典消失; 渲染失败兜底不再是经典。全量 3199 passed + 4 skipped, e2e 见 Refs 基线。
 
 **Refs:** memory-bank/testing/baselines/26-10-14-0244-webui-detail-classic-removal.md
-**Topics:** webui-detail-panel-redesign, webui-drawer-templates
+**Topics:** webui-detail-table-rebuild
 
 ## 原始请求
 
@@ -56,3 +56,4 @@
 
 - **内容页「重命名…」已随经典移除**(用户拍板接受): 变体 10/11/12 均无重命名入口; 若要恢复, 应作为变体侧新功能单独立项, 不属本轮回滚面。
 - **渲染失败兜底降级**: 四内容页签的兜底从「经典」改为「该页签首个变体」; 缺省档自身抛错时该页签留空 + console.error(不再有第二实现可退)。
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): 原 "webui-detail-panel-redesign, webui-drawer-templates" 第一键写错——本档(经典渲染链整体删除)属 10-14 detail-table-rebuild 复查浪终步(报告 0136 证据行即其动因), 归 webui-detail-table-rebuild; 次要键无反声明目标, 从元数据消失, 关联由同键分组承载。

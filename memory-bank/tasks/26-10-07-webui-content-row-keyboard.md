@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-10-07
-**Updated:** 2026-10-07 10:03
-**Topics:** drawer-tpl, a11y, roving-tabindex, keyboard-nav
+**Updated:** 2026-10-18
+**Topics:** webui-detail-panel-redesign
 **Summary:** content 组 dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk]/体积榜行 [data-row] 纯 div+click, 键盘/读屏不可达(修复轮 26-10-07-webui-detail-panel-audit-fixes P3-4 缩围转来的已记未做项)。修法 = issue 建议候选① roving tabindex, 单点收口在核心层 reg.helpers 四件套(roving 锚点 / rowFocusKey 记账 / rowRestore 回焦 / rowMove 移焦), 整行不加 role=button(行内已含原生控件, 嵌套交互语义更糟)。守阵: test_web.py 新增 test_drawer_tpl_content_row_keyboard_roving。
 
 **Refs:** memory-bank/issues/26-10-07-0846-feat-webui-content-row-keyboard.html,memory-bank/testing/baselines/26-10-07-1003-webui-content-row-keyboard.md
@@ -38,3 +38,4 @@
 ## 进度日志
 
 - 2026-10-07 10:03: 修复完成全绿。test.full 2713 passed + 4 skipped / TOTAL 99% / 56.24s(基线 26-10-07-1003, 相对上基线 passed +1 = 新守阵, 语句/分支/未覆盖全同, 无回归)。issue 置 Done + kb.index 重建。改动随本专题入库。
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径, 生成器不拆键): 原 "drawer-tpl, a11y, roving-tabindex, keyboard-nav" 系分面标签而非专题, 无一制品以其为主键(无反声明目标) ⇒ 归母专题 webui-detail-panel-redesign(本档由其 issue 0846 催生, Refs 已承载); 次要键从元数据消失, 分面信息留正文。

@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-14
-**Updated:** 2026-10-14
+**Updated:** 2026-10-18
 **Summary:** 用户复查背景报告 26-10-14-0136 §02 的两项呈现缺陷——「种子详情内容页表格操作按钮独立成列」「展开按钮没有层级」。修法 = 内容树两变体(10 树+详情 / 11 树表批量)删除 tgl/prio 两条交互轨道: 折叠钮收编进 name 格首部(随 `p.indent` 缩进 = 树层级直接可视), 优先级徽章收编进 name 格尾部(`margin-left:auto` 右对齐, 不占轨道); name 列自此 locked(L4 续效: 隐藏 name = 一并废掉折叠钮与徽章两个交互件, ck 列同口径)。终态列集: V10 = name/size/prog(3 列), V11 = ck/name/size/prog/av(5 列)。用户已存列偏好按 key 求交, tgl/prio 陈旧键自然失效免迁移。守阵新增「tgl/prio 不得回潮成独立列」三条判据(列集键/name locked/交互件恰一次且在 name 分支), 三份 e2e spec 的列数/locked 流程/几何探针同轮改写; test.full 与 e2e @fast 全绿, 数字见 Refs 基线。
 
 **Refs:** memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html,memory-bank/testing/baselines/26-10-14-0639-webui-content-table-controls-inline.md
-**Topics:** webui-detail-panel-redesign, webui-drawer-templates
+**Topics:** webui-detail-table-rebuild
 
 ## 原始请求
 
@@ -48,3 +48,4 @@
 - **摸底**: 引擎侧 `dt_table.js`(几何单点)与 `drawer_templates.js`(桥)零改动面——几何是 `gridStyle` 按列集现算, 删列即删轨; 真改动只在列声明/渲染分片/CSS/守阵/e2e 五处。跑真浏览器探针截图确认修前形态(按钮在最右独立列, 展开钮钉行首)。
 - **改动**: 9 个修改文件(app.js / xtpl-cells-dt.html / 2 变体 js / tests + 3 e2e spec / 报告 doc-refs 反声明)+ 2 个新建 KB 文件(本档案 + activeContext 切片)+ 1 条基线切片, 命中立档阈值(≥3 源文件)。
 - **验证**: pytest 静态守阵两文件全绿; e2e @fast 全量 70 例绿(含本 spec 三份); 修后截图确认折叠钮随缩进、徽章在 name 格尾右对齐、行 3/5 格 3/5 轨。test.full 3205 passed + 4 skipped, 数字见 Refs 基线。
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): 原 "webui-detail-panel-redesign, webui-drawer-templates" 第一键写错——本档(tgl/prio 操作轨折入名列)属 10-14 detail-table-rebuild 复查浪(计划 0811 + 报告 0136 + 档案 26-10-13 同键), 归 webui-detail-table-rebuild; 次要键无反声明目标, 从元数据消失, 关联由同键分组承载。

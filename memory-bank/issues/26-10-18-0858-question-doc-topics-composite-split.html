@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-18-0858">
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="doc-topics-composite-split">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-18-memory-bank-doc-topics-composite-split.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="复合 Topics 键是否要让生成器拆分为多主键">
 <meta name="issue-summary" content="存量档案用逗号写多专题被 gen_doc_map 当成单一复合键, 单专题名检索不到; 拆键改变分组语义待拍板">
 <title>复合 Topics 键是否要让生成器拆分为多主键 · question · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-18-0858-question-doc-topics-composite-split</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 08:58</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -78,6 +78,7 @@
     <h2><span class="no">01</span>现象</h2>
     <p>任务档案/切片的 <code>**Topics:**</code> 行按 <code>**Refs:**</code> 的逗号习惯写多个专题时, <code>gen_doc_map</code> 的 <code>TASK_TOPICS_RE</code> 整串捕获为<strong>单一复合主键</strong>(例: 一份档案实际同时属于 webui-detail-panel-redesign 与 webui-polling-cadence, 但键是字串 "webui-detail-panel-redesign, webui-polling-cadence")。后果: <code>kb.docmap --topic &lt;单专题名&gt;</code> 检索不到这些档案, 跨形态视图按复合键分组, 名录里出现异形键。</p>
     <p><strong>待拍板(二选一)</strong>: ① 生成器拆键(<code>TASK_TOPICS_RE</code> 按英文逗号 split, 一份档案join多个专题)——跨形态分组语义随之改变, 存量分组全部重排; ② 保持单键口径——须在 doc-forms 明令 Topics 只准单主键, 多对多关系走 <code>**Refs:**</code> 链, 存量复合键件怎么处理(改数据/留痕)也要定。</p>
+    <p><strong>已拍板: ②</strong>(2026-10-18, grilling 三轮收敛, 过程见 <a href="#s4">状态变更日志</a>)——维持单键口径, 生成器不拆键; doc-forms 新增「主键形态」条(单 kebab + 逗号反例), <code>gen_doc_map --check</code> 加同正则机检挂提交闸门; 存量 8 份同轮回归单主键(六份 10-14 档案归 <code>webui-detail-table-rebuild</code>——原复合键第一键本就写错; row-keyboard 归 <code>webui-detail-panel-redesign</code>; search-jump 归 <code>drawer-dock</code>); 次要键无反声明目标, 从元数据消失。执行档案: <a href="../tasks/26-10-18-memory-bank-doc-topics-composite-split.md">tasks/26-10-18-memory-bank-doc-topics-composite-split.md</a>。</p>
   </section>
 
   <section id="s2">
@@ -91,13 +92,17 @@
 
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
-    <p>待定 —— 拆键是工具语义变更(影响全部存量分组), 保持单键是约定收紧(影响文档写法), 需用户定调; 另注意与名录折行修复的边界已厘清(折行 2026-10-18 已修, 与本条无关)。</p>
+    <p><strong>结论: 方案②(保持单键口径)</strong> —— 2026-10-18 grilling 三轮拍板: 拆键会重排全部存量专题的历史分组且不可逆, 还会把标签串升格成假专题, 否决①; 落地 = doc-forms「主键形态」条(单 kebab, 逗号反例) + <code>gen_doc_map --check</code> 同正则机检(挂提交闸门, pytest 同源复验) + 存量 8 份全部回归单主键并逐件留痕; 次要键无反声明目标即从元数据消失(多对多本就走 <code>**Refs:**</code> 链, 不占主键)。另: 与名录折行修复的边界已厘清(折行 2026-10-18 已修, 与本条无关)。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-18 08:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-18 09:56 — <strong>认领</strong>，状态 Open → <strong>In Progress</strong>（用户指令「认领 + grilling」）。认领锚点 = 任务档案 <a href="../tasks/26-10-18-memory-bank-doc-topics-composite-split.md">26-10-18-memory-bank-doc-topics-composite-split.md</a>（<code>doc-refs</code> ↔ <code>**Refs:**</code> 双向已闭环，生成器校验通过）。</li>
+      <li>2026-10-18 09:56 — <strong>grilling 第一轮拍板（二选一已定）</strong>：方案 <b>② 维持 Topics 单主键口径</b>，生成器不拆键；doc-forms 明令单主键（多对多走 <code>**Refs:</code> 链，本就是现行约定，补强措辞）+ 新增「Topics 禁逗号」机检（挂 <code>gen_doc_map --check</code>）；存量 8 份复合键件<b>本轮一并回归单主键</b>，不留历史特例。第二轮（决策落点 / 次要键处置 / 逐件归属核对）进行中。</li>
+      <li>2026-10-18 10:1x — <strong>grilling 第二轮拍板</strong>：不另出计划件（拍板即结论，任务档案为滚动权威）；次要键无反声明目标即从元数据消失（分面信息留正文）；8 份逐件归属确认（六份 10-14 → <code>webui-detail-table-rebuild</code>、row-keyboard → <code>webui-detail-panel-redesign</code>、search-jump → <code>drawer-dock</code>）。</li>
+      <li>2026-10-18 10:1x — <strong>拍板落地，状态 In Progress → Done</strong>（question 已回答）：doc-forms「主键形态」条 + <code>gen_doc_map --check</code> 机检（单 kebab 正则；pytest 同源复验 <code>test_doc_map_flags_composite_topic_key</code>；机检先红——8 件全捕获——后绿验证捕获力）+ 存量 8 份 Topics 行回归单主键（各件 <code>kb.bump</code> 留痕）+ 坑档 <code>doc-topics-comma-composite</code> 处置段重写。收口：kb.check 全绿（720 份文档 / 340 专题 / 认领链闭环），test_docs_forms 17 passed。</li>
     </ul>
   </section>
 

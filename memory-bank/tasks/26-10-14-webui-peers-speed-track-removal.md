@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-14
-**Updated:** 2026-10-14
+**Updated:** 2026-10-18
 **Summary:** 用户报「种子详情面板用户页四卡仪表/五区分组表中上传/下载速度数值下方有多余的暗色条, 移除」。Root cause = 行级速度微条 track(.dt07-spd/.dt08-spd .track, 3px 全宽 background --bg-sunken)里的填充 `<i>` 无任何 background —— 模板只置 inline width, 变体 CSS 里对 `.track i` 无 background ⇒ 填充恒透明, track 即全宽暗色条不论速度(用户所报的"多余暗色条"= 这条失填充的微条, 不是设计元素)。修法按用户字「移除」= 整 track 退役: 两份单元格删 `<span class="track">` + 两变体删 `.track` CSS + 一并退役死字段 upBar/downBar 与 rowsFn 里的 maxUp/maxDown 满刻度求值(grep 无其它消费点); 速度数值文字保持方向色(--today-up/--today-down), 卡 1 flowbar/dirbar(有 background)不动。验证 = 真浏览器 DOM 探针(两变体速度格零 track)+ 截图 + e2e @fast 全绿 + 静态守阵绿 + test.full 全绿, 数字见 Refs 基线切片。
 
 **Refs:** memory-bank/testing/baselines/26-10-14-1615-webui-peers-speed-track-removal.md
-**Topics:** webui-detail-panel-redesign, webui-drawer-templates
+**Topics:** webui-detail-table-rebuild
 
 ## 原始请求
 
@@ -42,3 +42,4 @@
 - **改动**: 3 源文件(xtpl-cells.html · 07-peers-dashboard-tall.js · 08-peers-groups-low.js)—— 命中立档阈值(>=3 源文件).
 - **验证**: 桩 harness 起, 真浏览器双击开抽屉→用户页签两变体 DOM 探针速度格零 track + 两截图(验收件); e2e @fast 全绿(端口 8137 残留走 `dev.port-kill` 再跑); 静态守阵 targeted 绿; test.full 全绿(数字见 Refs 基线切片).
 - **KB 回写**: 基线切片 26-10-14-1615 + 本档案 + activeContext 切片 26-10-14-1615 + kb.index 重建.
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): 原 "webui-detail-panel-redesign, webui-drawer-templates" 第一键写错——本档(用户页 07/08 速度微条退役, 波浪症状②)属 10-14 detail-table-rebuild 复查浪, 归 webui-detail-table-rebuild; 次要键无反声明目标, 从元数据消失, 关联由同键分组承载。

@@ -44,6 +44,7 @@
 ```
 
 - 档案 (md): `**Status:**` / `**Added:**` / `**Updated:**` / `**Summary:**` 承载同义字段 + `**Topics:** <专题>` 主键, 引用他件写 `**Refs:**`。
+- **主键形态 (单值, 2026-10-18 收紧)**: 档案 `**Topics:**` 与四形态 `doc-topic` 只能是**一个** kebab 主键 (`^[a-z0-9]+(-[a-z0-9]+)*$`)。逗号写多专题(沿袭 `**Refs:**` 的逗号习惯)会把整串当成单一复合键 —— `--topic <单专题名>` 检索不到、跨形态视图按复合键分组、名录出现异形键 (issue 26-10-18-0858; 坑档 [doc-topics-comma-composite](../pitfalls/kb/doc-topics-comma-composite.md))。多对多关系一律走 `**Refs:**` 双向链 (见「认领链」), 不占主键; `gen_doc_map --check` 对逗号 / 非 kebab 判红 (机检单点)。**反例**: `**Topics:** webui-detail-panel-redesign, webui-drawer-templates`。
 - issue: 保留 `issue-*` meta (生成器数据源), 新增 `doc-topic` / `doc-refs`。
 - **不做字段改名** —— 漂移源是状态词, 不是字段名; 生成器里一张映射表 (单点)。
 
@@ -65,7 +66,7 @@
 - 跨形态专题视图 —— `commands run kb.docmap` **查询现算, 不落盘** (2026-09-29 起 `_doc-map.md` 物化退役,
   写热点 + `index-auto` cap 反复触顶): **一行一专题**, 列出该专题名下的 issue / 计划 / 报告 / 档案及状态。
   默认只展**活跃**专题全行 (有任一未完结件), 全完结专题轮转成名录; `--topic <key>` 单专题下钻
-  (出件前先查主键), `--all` 全量, `--check` 缺主键 / 状态词表越界 / 单向认领链判红, `--forks` 分叉提示。
+  (出件前先查主键), `--all` 全量, `--check` 缺主键 / **主键形态越界(逗号·非 kebab)** / 状态词表越界 / 单向认领链判红, `--forks` 分叉提示。
 - `issues/_index.md` · `tasks/_index.md` —— 各自生成器; 合并冲突的解法一律是**重跑脚本**。
 
 ## 认领链

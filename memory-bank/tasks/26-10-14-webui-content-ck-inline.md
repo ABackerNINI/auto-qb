@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-14
-**Updated:** 2026-10-14
+**Updated:** 2026-10-18
 **Summary:** 用户二次复查(报告 26-10-14-0136 §02 续)——「种子详情内容页「树表批量」复选框仍然独立成列, 还能调整位置」。上一轮收编 tgl/prio 两轨道, 但 ck 勾选框仍独立成列(拖宽可调)。修法 = 勾选框收进 name 格首部随缩进(与节点同层, 不占轨道); ck 列删除(终态 V11 = name/size/prog/av 四列), 勾选框随 name 格走 ⇒ name 列 locked 续效(隐藏 name = 一并废掉勾选框/折叠钮/徽章三个交互件)。守阵新增「ck 不得回潮成独立列」判据 + 勾选框动作恰一次且 name 分支内; e2e 三份 spec 同轮改写(列数 5→4、hc-ck 右键删、终态不变量改挂 name 格内); test.full 与 e2e @fast 全绿, 数字见 Refs 基线。
 
 **Refs:** memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html,memory-bank/testing/baselines/26-10-14-0806-webui-content-ck-inline.md
-**Topics:** webui-detail-panel-redesign, webui-drawer-templates
+**Topics:** webui-detail-table-rebuild
 
 ## 原始请求
 
@@ -46,3 +46,4 @@
 - **摸底**: 引擎侧 `dt_table.js`(几何单点)与桥零改动面 —— 几何是 `gridStyle` 按列集现算, 删列即删轨; 真改动只在列声明/渲染分片/CSS/守阵/e2e 五处.
 - **改动**: 3 源文件(app.js / xtpl-cells-dt.html / 11-content-treegrid-batch-low.js)+ 4 测试文件(tests + 3 e2e spec)+ 2 新建 KB 文件(本档案 + 基线切片)+ 续效 activeContext 切片.
 - **验证**: pytest 静态守阵全绿(test_webui_static_skins.py 15 passed); e2e @fast 全量 134 例绿(含本 spec 三份); test.full 3205 passed + 4 skipped, 99% coverage, 数字见 Refs 基线.
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): 原 "webui-detail-panel-redesign, webui-drawer-templates" 第一键写错——本档(ck 复选列折入名列)属 10-14 detail-table-rebuild 复查浪(报告 0136 §02 复 Review), 归 webui-detail-table-rebuild; 次要键无反声明目标, 从元数据消失, 关联由同键分组承载。

@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-14
-**Updated:** 2026-10-14
+**Updated:** 2026-10-18
 **Summary:** 用户报「种子详情面板用户页实时速度刷新率太低, 改成与 webui 主节拍一致, 即种子页的刷新间隔」。落点 = `_startDrawerPoll` 的 setInterval 尾部固定 5000 改 `this.currentPollMs()`(种子页刷新间隔单点: 按种子量分档 1.5/2/3s + 失败退背)—— 抽屉实时速度与行数据同频观, 节拍口径吃单点不手抄数字。服务端不动: peers 短缓存(1s)窗口仍窗口外(主节拍下界 1.5s), trackers 默认 2s 缓存把 1.5s 档里的白拉吸收(缓存是为这设计)。守阵同步同轮: 两处测试里钉 `}, 5000);` 正则改钉新形态(判据不放宽); 五处代码注释「5s 轮询」引用改写「主节拍/抽屉轮询」。验证 = pytest 全量 + e2e 全量全绿(e2e 首轮一条 flaky 红属 delta-sync 时序竞态与本轮无关, 单 spec 重跑与全量重跑绿), 数字见 Refs 基线。
 
 **Refs:** memory-bank/testing/baselines/26-10-14-1513-webui-drawer-cadence-main-beat.md
-**Topics:** webui-detail-panel-redesign, webui-polling-cadence
+**Topics:** webui-detail-table-rebuild
 
 ## 原始请求
 
@@ -42,3 +42,4 @@
 - **改动**: 3 源文件(drawer_store.js 尾部 + 注释两处 · drawer.js 注释两处 · torrent_detail.py 注释一处)+ 2 测试文件(正则钉同步)—— 命中立档阈值(>=3 源文件)。
 - **验证**: test.full 全绿(数字见 Refs 切片); e2e 全量首轮一条 flaky 红(delta-sync「lastRid 置空恒全量恢复」8s 谓超时, 时序竞态与本轮改动面 disjoint), 单 spec 重跑绿 + 全量重跑全绿; 端口 8137 残留走 `dev.port-kill` 再重跑。
 - **kb 回写**: 契约附件 webui-static-contract-details.md 两处「5s 轮询 tick」改「抽屉轮询 tick」; kb.index 重建。
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): 原 "webui-detail-panel-redesign, webui-polling-cadence" 第一键写错——本档(抽屉轮询 5s 固定改主节拍, 用户页实时速度刷新, 波浪症状⑤)属 10-14 detail-table-rebuild 复查浪, 归 webui-detail-table-rebuild; 次要键 webui-polling-cadence 无反声明目标(节拍纪律由 Refs 的 perf-cadence 坑档承载), 从元数据消失。

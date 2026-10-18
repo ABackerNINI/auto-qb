@@ -43,6 +43,7 @@ TITLE_RE = re.compile(r"<title>(.*?)</title>", re.MULTILINE | re.DOTALL)
 TASK_TITLE_RE = re.compile(r"^#\s+(\S+)\s*[—-]\s*(.+?)\s*$", re.MULTILINE)
 TASK_TOPICS_RE = re.compile(r"^\*\*Topics:\*\*\s*(.+)$", re.MULTILINE)
 TASK_STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(In Progress|Open|Done|Dropped)")
+KEBAB_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 TASK_UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 STAMP_RE = re.compile(r"^(\d\d-\d\d-\d\d)-(\d{4})-")
 HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
@@ -259,6 +260,34 @@ def check_topics(items: list[dict]) -> int:
     return 0
 
 
+def check_topic_key_shape(items: list[dict]) -> int:
+    """主键形态纪律: 专题键只能是**单个** kebab (`^[a-z0-9]+(-[a-z0-9]+)*$`), 逗号复合键判红。
+
+    存量档案按 `**Refs:**` 的逗号习惯在 `**Topics:**` 行写多专题时, `TASK_TOPICS_RE` 整串捕获为
+    单一复合键 —— `--topic <单专题名>` 检索不到、跨形态视图按复合键分组、名录出现异形键
+    (issue 26-10-18-0858; 坑档 pitfalls/kb/doc-topics-comma-composite.md)。2026-10-18 用户拍板
+    **维持单主键口径**(不拆键): doc-forms 明令 Topics/doc-topic 单 kebab, 多对多关系走 `**Refs:**`
+    双向链; 存量 8 份同轮回归。本机检把该口径沉到提交闸门 (与认领链 2026-10-03、状态词表 2026-10-16
+    同款路径: 校验只活在 pytest 时, 纯文档轮会漏)。tasks 的 `**Topics:**` 与四形态 `doc-topic`
+    同一正则; 缺主键 (空值) 归 check_topics 管, 本函数只判**形态**。
+    """
+    bad = [
+        f"{i['form']}: {i['link']} → topic={i['topic']!r}"
+        for i in items if i["topic"] and not KEBAB_RE.fullmatch(i["topic"])
+    ]
+    if bad:
+        sys.stderr.write(
+            "专题主键只能是单个 kebab(英文小写+数字+连字符) —— 逗号写多专题会被整串当成单一复合键, "
+            "单专题名检索不到(见 memory-bank/conventions/doc-forms.md「主键形态」与 "
+            "pitfalls/kb/doc-topics-comma-composite.md); 多对多关系用 **Refs:** 双向链表达:\n"
+        )
+        for b in bad:
+            sys.stderr.write(f"  {b}\n")
+        return 1
+    print("主键形态 OK: 全部专题键为单 kebab")
+    return 0
+
+
 def check_status_vocabulary(items: list[dict]) -> int:
     """状态词表校验: `doc-status` / `issue-status` 不在 5 词表 (`_common.DOC_STATUSES`) 即退码 1。
 
@@ -345,6 +374,8 @@ def main() -> int:
 
     if args.check:
         rc = check_topics(items)
+        if check_topic_key_shape(items):
+            rc = 1
         if check_status_vocabulary(items):
             rc = 1
         problems = check_claim_chain(items, root, mb)

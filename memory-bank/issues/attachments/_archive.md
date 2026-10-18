@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (46)
+## Open (45)
 
-- [question] [复合 Topics 键是否要让生成器拆分为多主键](../26-10-18-0858-question-doc-topics-composite-split.html) — 存量档案用逗号写多专题被 gen_doc_map 当成单一复合键, 单专题名检索不到; 拆键改变分组语义待拍板
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -58,8 +57,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (211)
+## Done (212)
 
+- [question] [复合 Topics 键是否要让生成器拆分为多主键](../26-10-18-0858-question-doc-topics-composite-split.html) — 存量档案用逗号写多专题被 gen_doc_map 当成单一复合键, 单专题名检索不到; 拆键改变分组语义待拍板
 - [test] [test_memory_bank 两例把「今天」写死, 跨零点必红](../26-10-18-0608-test-memory-bank-test-hardcoded-today.html) — bump/flip 用例硬编码 2026-10-17 断言, 次日跑即失败; 与业务无关的时间炸弹
 - [bug] [WEBUI 删除确认框默认勾选的「删除前强制重新汇报」对非活跃种子无效: 请求照发→后端 warn→删除被整体中止(须手动取消勾选才能删)](../26-10-17-1703-bug-webui-delete-reannounce-paused.html) — 删除确认框(六个入口汇入 _deleteFlow)默认勾选的删除前强制汇报未接 reannounce-inactive-gate 专题的闸门与投递收敛: 对 paused/stopped/queued/checking/error/missingFiles 全族, 请求照发→后端 warn「种子非活跃」→_reannounceAll 判不放行→toast「汇报未确认…已保留未删除」→删除整体中止; 右链四入口/键盘/详情面板两层均已同源实现, 删除链是唯一漏接入口; grilling 八问已收敛(用户「按推荐」)
 - [bug] [全局流量监视器开机自启注册需管理员权限，非提权下静默失败](../26-10-17-1455-bug-gtm-autostart-elevation.html) — schtasks /SC ONLOGON 在非提权进程下返回「拒绝访问」，工具只 WARNING 忽略，用户看到「未注册」却不知原因

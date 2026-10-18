@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-10-07
-**Updated:** 2026-10-07 03:46
-**Topics:** drawer-dock, search-pending, sticky-anchor
+**Updated:** 2026-10-18
+**Topics:** drawer-dock
 **Summary:** 搜索首词待响应窗(防抖400ms+往返)空命中集把列表塌成 0 行 → 文档高塌掉 → 滚动位置钳回 0、停靠面板失去 sticky 锚点弹跳; 短列表下 sticky 吸底还会脱锚上浮。修法 = searchPending 门(待响应且命中集未落袋不许命中门接管列表) + 三皮肤 .layout min-height 撑满首屏(--head-h 单点)。守阵: test_web.py 新增静态守阵 + e2e/drawer-dock-stability.spec.mjs 行为守阵。
 
 **Refs:** memory-bank/pitfalls/web-ui/search-pending-collapse.md,memory-bank/testing/baselines/26-10-07-0346-webui-drawer-search-jump.md
@@ -37,3 +37,4 @@
 ## 进度日志
 
 - 2026-10-07 03:46: 修复完成全绿。修复前指纹: docH 18582→800→1141 震荡 / 面板 top 430↔416 / scrollY 8000→0; 修复后三皮肤逐帧采样零几何变化(top 恒定, 搜索全程 docH 不塌)。守阵: test_web.py::test_frontend_search_pending_no_collapse + e2e/drawer-dock-stability.spec.mjs(2 皮肤)。test.full 2690 passed + 4 skipped / TOTAL 99% / 41.7s。未提交(等用户显式指令)。
+- 2026-10-18 10:1x: Topics 复合键回归单主键(issue 26-10-18-0858 拍板: 维持单主键口径): "drawer-dock, search-pending, sticky-anchor" → drawer-dock(停靠面板 .drawer-dock 行为流, 与现存 drawer-dock 档案 collapse-removal 同专题同组); search-pending 关联已由 Refs 坑档承载, sticky-anchor 无反声明目标从元数据消失, 分面信息留正文。
