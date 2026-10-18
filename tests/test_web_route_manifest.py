@@ -80,6 +80,8 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/{hash}/share-limits"),
     ("POST", "/api/torrents/{hash}/skip-check"),  # P2' 右键跳检(plan 26-09-30-0109)
     ("POST", "/api/torrents/skip-check/precheck"),  # 跳检预检只读端点(plan 26-10-05-0314 S2; 403 门控同单发)
+    ("POST", "/api/torrents/relocate/precheck"),  # 整组迁移预检只读端点(plan 26-10-18-1604 P2; 403 门控 relocate.enabled)
+    ("POST", "/api/relocate/precheck-add"),  # 添加种子落点预检只读端点(计划 26-10-18-1604 §3.6.1; 同一 403 门控)
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),
@@ -105,13 +107,14 @@ _GOLDEN_ROUTES = {
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 82 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 84 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76;
      2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理;
      2026-10-16-0541 S7: 增 1 条 /api/traffic/monitor/notify —— 工具通知接收面;
      2026-10-17-0339 S17: 增 1 条 /api/traffic/monitor/relaunch —— 来源卡「立即拉起/重试」;
-     2026-10-17-1737 S3: 增 1 条 /api/traffic/monitor/shutdown —— 来源卡「停止工具」代理)
+     2026-10-17-1737 S3: 增 1 条 /api/traffic/monitor/shutdown —— 来源卡「停止工具」代理;
+     2026-10-18-1604 P2: 增 2 条整组迁移预检(迁移/添加种子, 只读, 403 门控 relocate.enabled), 82->84)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

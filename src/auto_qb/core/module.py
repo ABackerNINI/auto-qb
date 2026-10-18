@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .modules.maintenance_mod import MaintenanceModule
     from .modules.tracker_mod import TrackerModule
     from .modules.traffic_snapshot_mod import TrafficSnapshotModule
+    from .modules.relocate_mod import RelocateModule
     from .qbapi import QbApi
     from .state import StateService
 
@@ -63,6 +64,8 @@ class AppContext:
     - traffic_snapshot(P6 起, 计划 26-10-18-0813)是模块句柄: 快照所有者; 曲线模块经
       ctx.traffic_snapshot.publish_limit 写自己的段, WEB 命令经它 refresh —— 装配序保证
       它先于 speed_curve 挂上(装配清单见 core/qbmanager)。
+    - relocate(P2 起, 计划 26-10-18-1604)是模块句柄: WEB 命令经 ctx.relocate 调只读
+      预检(迁移/添加种子/能力面板), 不绕过模块直碰决策层。
     """
     def __init__(self, config) -> None:
         self._config = config
@@ -76,6 +79,7 @@ class AppContext:
         self.maintenance: Optional["MaintenanceModule"] = None
         self.ops: Optional["OpsModule"] = None
         self.traffic_snapshot: Optional["TrafficSnapshotModule"] = None  # 模块句柄, 见类注
+        self.relocate: Optional["RelocateModule"] = None  # 模块句柄, 见类注
 
     @property
     def config(self):

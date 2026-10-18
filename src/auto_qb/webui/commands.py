@@ -140,6 +140,8 @@ RESYNC_COMMANDS = frozenset(
 # 经 ops 层提交并把结果**映射成回执**(拒绝回执带自解释文案), 同走本族。
 # skip_check_precheck(plan 26-10-05-0314 S2): 只读 dry-run, 回执由 handler 自写 —— 判定数据
 # (results/summary)经 truth 字段随回执带出(既有 cmd 通道的通用数据位), drain 不得用裸 ok 覆盖。
+# relocate_precheck / relocate_precheck_add(计划 26-10-18-1604 P2): 同为只读 dry-run, 回执由
+# handler 自写; 判定数据经 truth 字段带出(迁移 = {results, summary}, 添加 = 单 item)。
 DEFERRED_RECEIPT_COMMANDS = frozenset(
     {
         "reannounce_group",
@@ -149,6 +151,8 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
         "recheck_torrent",
         "skip_check_torrent",
         "skip_check_precheck",
+        "relocate_precheck",
+        "relocate_precheck_add",
     }
 )
 
@@ -306,6 +310,8 @@ class WebCommandsMixin:
             "recheck_torrent": self._cmd_recheck_torrent,
             "skip_check_torrent": self._cmd_skip_check_torrent,
             "skip_check_precheck": self._cmd_skip_check_precheck,
+            "relocate_precheck": self._cmd_relocate_precheck,
+            "relocate_precheck_add": self._cmd_relocate_precheck_add,
             "super_seeding": self._cmd_super_seeding,
             "force_start": self._cmd_force_start,
             "set_torrent_limits": self._cmd_set_torrent_limits,
@@ -694,6 +700,40 @@ class WebCommandsMixin:
             self._set_web_result(cmd_id, "ok", truth={"results": results, "summary": summary})
         logger.info(
             f"WEB UI | 跳检预检({len(req)}个): 可跳检 {summary['ok']} / 可强制 {summary['force']} / 禁止 {summary['blocked']}"
+        )
+
+    def _cmd_relocate_precheck(self, hashes=None, location: str = "", cmd_id: str = ""):
+        """WEB UI 命令: 整组迁移预检(只读 dry-run, 计划 26-10-18-1604 P2) —— 转发
+        ctx.relocate.relocate_precheck 并聚合回执, 判定数据经 truth 字段随 cmd 通道带出
+
+        ops 侧同款只读承诺(T20): 模块侧不写 state、无 qB 写 API —— 本 handler 只聚合计数。
+        回执形状: truth={results: [逐组 item / gone 逐条], summary: {ok, confirm, blocked}}
+        (summary 按单条 cls 计数, cls 命名与跳检预检同族: ok/confirm/blocked, confirm =
+        需用户在确认框显式点头 —— 目录别名/长路径校正提议)。
+        """
+        req = [str(h) for h in (hashes or []) if h]
+        results = self.ctx.relocate.relocate_precheck(req, location or "")
+        summary = {"ok": 0, "confirm": 0, "blocked": 0}
+        for item in results:
+            summary[item["cls"]] = summary.get(item["cls"], 0) + 1
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth={"results": results, "summary": summary})
+        logger.info(
+            f"WEB UI | 迁移预检({len(req)}个): 可迁 {summary['ok']} / 需确认 {summary['confirm']} / 拒绝 {summary['blocked']}"
+        )
+
+    def _cmd_relocate_precheck_add(self, save_path: str = "", name: str = "", cmd_id: str = ""):
+        """WEB UI 命令: 添加种子落点预检(§3.6.1, 只读) —— 转发 ctx.relocate.precheck_add
+
+        回执形状: truth=单 item({cls, requested_path, actual_path, volume_free, reasons, notes});
+        confirm 时前端弹「请求路径 -> 实际落点 -> 卷剩余」二次确认。
+        """
+        result = self.ctx.relocate.precheck_add(save_path or "", name or "")
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth=result)
+        logger.info(
+            f"WEB UI | 添加预检 {name or '<空>'} @ {save_path or '<空>'}: {result['cls']}" +
+            (f" -> {result.get('actual_path')}" if result.get("actual_path") else "")
         )
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):

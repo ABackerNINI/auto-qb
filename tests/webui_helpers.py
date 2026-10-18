@@ -8,6 +8,7 @@ import time
 from types import SimpleNamespace
 
 from auto_qb.config.models import HrCheckConfig
+from auto_qb.config.models import RelocateConfig  # noqa: E402  (整组迁移, 计划 26-10-18-1604 P2)
 from auto_qb.infra.utils import encode_group_key
 from auto_qb.webui.runtime import WebUIRuntime
 
@@ -59,6 +60,9 @@ def _make_web_manager(tmp_path, config_text):
         delete_tags=[],
         delete_tags_if_has_no_torrents=[],
         global_speed_limit_curve=None,
+        # 整组迁移(计划 26-10-18-1604 P2): 路由 403 门控读 relocate.enabled —— 用真模型,
+        # 缺省 enabled=False(保守默认); 端点用例按需实例级置 True
+        relocate=RelocateConfig(),
         # 全局流量来源(计划 26-10-17-0339 S15/S17): 来源单点 —— provider + 两来源面;
         # 缺省 provider=traffic_monitor / 工具面 enabled=false(与真 Config 默认一致)
         traffic_source=SimpleNamespace(

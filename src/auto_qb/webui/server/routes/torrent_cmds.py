@@ -1,4 +1,5 @@
-"""种子写命令路由: /api/torrents/{hash}/*(POST 18 条)+ /api/torrents/bulk + /api/torrents/add.
+"""种子写命令路由: /api/torrents/{hash}/*(POST 18 条)+ /api/torrents/bulk + /api/torrents/add
++ /api/torrents/relocate/precheck + /api/relocate/precheck-add(整组迁移预检, 计划 26-10-18-1604 P2).
 
 端点体逐字平移(plan 26-09-22-1857 W3); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
 单行透传端点的 mechanics 已收敛到 build_router 内四个形状 helper 与 _require_skip_check
@@ -24,6 +25,18 @@ def _require_skip_check(ctx: WebContext) -> None:
     """
     if not ctx.manager.config.web.skip_check_menu:
         raise HTTPException(status_code=403, detail="跳检菜单未启用(配置键 web.skip_check_menu)")
+
+
+def _require_relocate(ctx: WebContext) -> None:
+    """整组迁移 403 门控单点(fail-closed; 计划 26-10-18-1604 §3.6, 与跳检门控同口径)
+
+    relocate.enabled=false(缺省)时三个入口(WebUI 移动位置/规则 move_to/添加对话框)
+    逐字节保持现状 —— 预检端点也一并封禁: 预检是给「启用后的迁移确认框/添加对话框」
+    摊开后果用的, 功能关着时前端根本不该发起, 直调 API 同样拒绝(键名进 detail)。
+    读实时配置(ctx.manager.config 引用现取, 热重载后立即生效, 不按值持有旧 Config)。
+    """
+    if not getattr(ctx.manager.config.relocate, "enabled", False):
+        raise HTTPException(status_code=403, detail="整组迁移未启用(配置键 relocate.enabled)")
 
 
 def build_router(ctx: WebContext) -> APIRouter:
@@ -116,6 +129,45 @@ def build_router(ctx: WebContext) -> APIRouter:
         if not hashes:
             raise HTTPException(status_code=400, detail="未提供任何 hash(预检目标不能为空)")
         return _enqueue("skip_check_precheck", {"hashes": hashes})
+
+    # ---- 整组迁移预检(计划 26-10-18-1604 §3.6/P2, 只读) ----
+
+    @router.post("/api/torrents/relocate/precheck")
+    def api_relocate_precheck(body: dict = None):
+        """整组迁移预检(只读 dry-run): 多选按组拆开逐组判定, 三分流(ok/confirm/blocked)
+        供迁移确认框在用户确认前摊开「怎么迁、要确认什么、为什么拒」—— 执行路径(P3)
+        闸门原样全跑, 预检-执行无信任传递
+
+        挂 relocate.enabled 403 门控(fail-closed, 与跳检预检同口径); 经 _enqueue 走主循环
+        线程执行 ctx.relocate.relocate_precheck(与写命令串行化, 快照无撕裂; 复用 cmd_id +
+        waitCmd 既有通道)。body {hashes: [...], location: "..."}; 空 hashes / 空 location
+        400 拒收不入队(同 skip-check 预检的路由层参数校验先例)。回执(经 cmd 通道):
+        status=ok + truth={results: [逐组 item / gone 种子逐条], summary: {ok, confirm, blocked}}
+        (summary 由命令层按单条 cls 计数)。
+        """
+        _require_relocate(ctx)
+        hashes = [str(h) for h in ((body or {}).get("hashes") or []) if h]
+        location = str((body or {}).get("location") or "").strip()
+        if not hashes:
+            raise HTTPException(status_code=400, detail="未提供任何 hash(预检目标不能为空)")
+        if not location:
+            raise HTTPException(status_code=400, detail="未提供目标位置(location 不能为空)")
+        return _enqueue("relocate_precheck", {"hashes": hashes, "location": location})
+
+    @router.post("/api/relocate/precheck-add")
+    def api_relocate_precheck_add(body: dict = None):
+        """添加种子落点预检(计划 26-10-18-1604 §3.6.1, 只读): 落点命中别名作用域时返回
+        「请求路径 -> 实际落点 -> 目标卷剩余」供添加对话框二次确认; 无影响时静默放行
+
+        body {save_path: "...", name: "<种子名>"}; 任一为空 400 拒收。回执(经 cmd 通道):
+        status=ok + truth={cls, requested_path, actual_path, volume_free, reasons, notes}。
+        """
+        _require_relocate(ctx)
+        save_path = str((body or {}).get("save_path") or "").strip()
+        name = str((body or {}).get("name") or "").strip()
+        if not save_path or not name:
+            raise HTTPException(status_code=400, detail="save_path 与 name 均不能为空")
+        return _enqueue("relocate_precheck_add", {"save_path": save_path, "name": name})
 
     @router.post("/api/torrents/{hash}/super-seeding")
     def api_t_super_seeding(hash: str, body: dict = None):

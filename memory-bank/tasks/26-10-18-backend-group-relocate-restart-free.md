@@ -58,7 +58,7 @@
 | S3 | 链接原语(建/读/删, 非递归) | Done(2026-10-18) |
 | S4 | §3.3 能力矩阵纯函数 + 形态阶梯 | Done(2026-10-18) |
 | S5 | 整机探测(按卷) + 缓存入口 | Done(2026-10-18) |
-| S6 | 启动/热重载接线(P1 配置段 + P2 模块句柄到位后) | Open |
+| S6 | 启动/热重载接线(P1 配置段 + P2 模块句柄到位后) | Done(R2) |
 | S7 | 守阵 35 条 + 双平台实测证据 | Done(2026-10-18) |
 
 ## 进度日志
@@ -85,3 +85,21 @@
 `activeContext/26-10-18-0822-group-relocate-restart-free.md` 追加 R6。**残留**: S6 接线(启动一次 +
 配置热重载重探)待 P1 配置段与 P2 模块句柄 —— 届时只需在 `RelocateModule` 的构造/热重载回调里调
 `alias_fs.get_capability(refresh=True)`, 探测与缓存本身已就绪。
+
+### R2 · P1 + P2 落地 (2026-10-18)
+
+- **P1**(R7 切片): RelocateConfig 9 键 + loader/校验/schema 段 + 段认领桩; 基线 26-10-18-2038。
+- **P2**(R8 切片, 基线 26-10-18-2257): 新 `core/modules/relocate_units.py` 纯决策层
+  (`plan()` 五行分流 + 长路径校正先于阈值 + `RelocateJob` 相位机值对象 + `evaluate_group()`
+  组闸门 + `evaluate_add()` 添加预检三分流)与 `relocate_mod.py` 只读预检引擎
+  (`relocate_precheck` / `precheck_add` / `capability_view` / 内存 job 登记表);
+  `ctx.relocate` 句柄接线; 两条预检路由(403 门控 `relocate.enabled` fail-closed, 金清单
+  82->84)与命令 handler(DEFERRED_RECEIPT, truth 带判定数据)。表驱动测试 40 例
+  (test_relocate_units 21 + test_web_relocate 19), 覆盖 §3.2 五行 x 阈值 7/8/9 与
+  §3.6 第 1/3/8/14/15 行; 全量绿(数字见 kb.baseline, 基线切片 26-10-18-2257)。
+- **S6 接线已闭合**: start(enabled 才探, R15 口径: 开关关时开机建删探测链接属副作用)/
+  apply(段变重探)挂在 RelocateModule。
+- **实施期裁定两笔**: ①同卷证明闸门带写盘抖动容差(§2.4「完全相等」是观测口径, 做闸门
+  必然间歇误拒; 容差 = max(2%, 1GiB)); ②长路径校正按 T6「内容根 <260 且**专属**」执行,
+  §8.3 S3 的「提议目录别名」在组①(分集同目录不专属)场景落 blocked 而非 confirm ——
+  与 §3.2 硬前提一致, S3 判据(force/blocked + 文案含关键词)仍满足, P7 真机时注意。
