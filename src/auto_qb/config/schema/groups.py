@@ -406,57 +406,15 @@ GROUPS: Tuple[Group, ...] = (
         ),
         icon="i-cards",
     ),
+    # 流量与限速(计划 26-10-18-0813 B1/D17/D13): 原「流量图」「全局流量来源」「限速曲线」三组
+    # 合并为一组 —— 三者共用一份流量口径(来源决定读谁的累计流量, 曲线据此写限速, qB 采样是另一份
+    # 本地记录), 分成三张首页卡会让"关掉来源后曲线与图一起停"这件事在三处各说一半。
+    # 组 key = traffic_limit(前端视图名同此); 组 key 与配置段名无关, 模块 sections() 不受影响。
+    # 字段顺序 = 卡内区序: 来源 -> 限速曲线 -> 流量图采样。
     Group(
-        "traffic",
-        "流量图",
-        "qB 口径的上传/下载流量历史曲线(方案C 采样管线)",
-        fields=(
-            Field(
-                "qb_traffic",
-                "qB 流量采样",
-                "object",
-                default=None,
-                optional=True,  # 整段缺省 = 未启用(None), 与 enabled 双重闸门(保守默认)
-                help="按采样间隔周期记录 qB 口径的上传/下载流量(读内存快照, 零新增 qB 请求), 供 WEB UI 流量图消费; 整段缺省或 enabled: false = 不采样零开销",
-                fields=(
-                    Field("enabled", "启用", "bool", default="false", help="功能总开关; false(缺省) = 不建采样任务不建目录零文件(保守默认)"),
-                    Field(
-                        "sample_interval",
-                        "采样间隔",
-                        "time",
-                        default="30S",
-                        help="流量采样周期(须 >= 主循环节拍 main_tick, 上限 10 分钟): 也是 24h 视图的曲线颗粒; 越小曲线越细, 但存储体量线性增长(默认 30 秒下 24 小时约 2880 行)"
-                    ),
-                    Field(
-                        "flush_interval",
-                        "落盘间隔",
-                        "time",
-                        default="10M",
-                        help="采样缓冲的批量落盘周期(60 秒 ~ 1 小时, 整数秒): 采样点先入内存缓冲, 每过一个周期单次批量追加写盘; 越大写盘越少, 但崩溃丢失窗口越大(默认 10 分钟)"
-                    ),
-                    Field(
-                        "raw_window",
-                        "高分辨率保留窗",
-                        "time",
-                        default="24H",
-                        help="原始采样行(逐点速率 + 累计)的保留时长(1 小时 ~ 3 个月); 24h 视图从它取数, 超窗的行随小时封口被裁剪"
-                    ),
-                    Field(
-                        "rollup_window",
-                        "小时均值保留窗",
-                        "time",
-                        default="30D",
-                        help="小时封口行(均值/峰值)的保留时长(7 天起, 不设上限 —— 设得足够久即等效永久保留); 30d 视图从它取数, 也是已删种子文件的淘汰龄"
-                    ),
-                ),
-            ),
-        ),
-        icon="i-monitor",
-    ),
-    Group(
-        "traffic_source",
-        "全局流量来源",
-        "限速曲线与流量条件取数用的数据源: 一键切换来源",
+        "traffic_limit",
+        "流量与限速",
+        "数据来源、按累计流量调限速、qB 流量采样记录 — 三者共用一份流量口径",
         fields=(
             Field(
                 "traffic_source",
@@ -533,6 +491,53 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                 ),
             ),
+            Field(
+                "global_speed_limit_curve",
+                "全局限速曲线",
+                "curve",
+                default=None,
+                help="根据流量数据源(见「流量来源」)统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; "
+                "某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)",
+            ),
+            Field(
+                "qb_traffic",
+                "qB 流量采样",
+                "object",
+                default=None,
+                optional=True,  # 整段缺省 = 未启用(None), 与 enabled 双重闸门(保守默认)
+                help="按采样间隔周期记录 qB 口径的上传/下载流量(读内存快照, 零新增 qB 请求), 供 WEB UI 流量图消费; 整段缺省或 enabled: false = 不采样零开销",
+                fields=(
+                    Field("enabled", "启用", "bool", default="false", help="功能总开关; false(缺省) = 不建采样任务不建目录零文件(保守默认)"),
+                    Field(
+                        "sample_interval",
+                        "采样间隔",
+                        "time",
+                        default="30S",
+                        help="流量采样周期(须 >= 主循环节拍 main_tick, 上限 10 分钟): 也是 24h 视图的曲线颗粒; 越小曲线越细, 但存储体量线性增长(默认 30 秒下 24 小时约 2880 行)"
+                    ),
+                    Field(
+                        "flush_interval",
+                        "落盘间隔",
+                        "time",
+                        default="10M",
+                        help="采样缓冲的批量落盘周期(60 秒 ~ 1 小时, 整数秒): 采样点先入内存缓冲, 每过一个周期单次批量追加写盘; 越大写盘越少, 但崩溃丢失窗口越大(默认 10 分钟)"
+                    ),
+                    Field(
+                        "raw_window",
+                        "高分辨率保留窗",
+                        "time",
+                        default="24H",
+                        help="原始采样行(逐点速率 + 累计)的保留时长(1 小时 ~ 3 个月); 24h 视图从它取数, 超窗的行随小时封口被裁剪"
+                    ),
+                    Field(
+                        "rollup_window",
+                        "小时均值保留窗",
+                        "time",
+                        default="30D",
+                        help="小时封口行(均值/峰值)的保留时长(7 天起, 不设上限 —— 设得足够久即等效永久保留); 30d 视图从它取数, 也是已删种子文件的淘汰龄"
+                    ),
+                ),
+            ),
         ),
         icon="i-traffic",
     ),
@@ -546,22 +551,7 @@ GROUPS: Tuple[Group, ...] = (
         ),
         icon="i-bolt",
     ),
-    # 限速 / HR 在线核实排末尾(2026-10-06 用户要求): 低频 / 进阶配置后置
-    Group(
-        "speed",
-        "限速曲线",
-        "按累计流量自动设置 qB 全局限速",
-        fields=(
-            Field(
-                "global_speed_limit_curve",
-                "全局限速曲线",
-                "curve",
-                default=None,
-                help="根据流量数据源(见「全局流量来源」)统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; 某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)"
-            ),
-        ),
-        icon="i-gauge",
-    ),
+    # HR 在线核实排末尾(2026-10-06 用户要求): 低频 / 进阶配置后置
     Group(
         "hr_check",
         "HR 在线核实",

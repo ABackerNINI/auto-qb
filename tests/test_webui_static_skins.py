@@ -1742,12 +1742,13 @@ def test_frontend_template_split_wiring():
             # 额度提到 500; 26-10-04-0312 S4 表③ 拉取历史(全局 <details> 段)再涨 482 -> 539,
             # 额度提到 560 —— 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
             # 等价性验证(pitfalls/web-ui/frontend-split.md), 不得顺手抽文件
-            # 26-10-18: settings.html 400 -> 440 —— 计划 26-10-17-1737 S6/S7 给「全局流量来源」卡补
-            # 「工具块按 provider 条件隐藏」+「时间/大小参数的单位下拉 + ? 说明」, 400 -> 418 行。
-            # 该卡是二级页 v-else-if 链里的一环(与限速/规则同层), 抽分片会切断链 -> 按功能增长给额度;
-            # 下次再长应先把该卡整体重构成独立组件(带 props 的 hub 子组件)再谈拆分。
+            # 26-10-18(计划 26-10-17-1737 S6/S7)曾给 settings.html 开 440 的例外: 「全局流量来源」卡
+            # 补了 provider 条件隐藏与单位下拉, 400 -> 418 行; 注释当时就写了「下次再长应先把该卡整体
+            # 重构成独立组件」。26-10-18(计划 26-10-18-0813 B3/D15)正是这么做的 —— 三张卡并成
+            # 「流量与限速」并抽成 aq-traffic-card + shared/tpl/traffic-card.html, settings.html 只剩
+            # 一行挂载, 例外额度随之删除(不留给下一次"再加一点")。
             name = os.path.basename(part["src"])
-            cap = 560 if name == "settings-detail.html" else 440 if name == "settings.html" else 400
+            cap = 560 if name == "settings-detail.html" else 400
             if n > cap:
                 problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):

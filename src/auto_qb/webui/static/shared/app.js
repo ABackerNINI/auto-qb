@@ -913,6 +913,10 @@ app.mixin(window.AQB_POLL);
 app.mixin(window.AQB_VIEW);
 app.mixin(window.AQB_SHORTCUTS);  // 键盘快捷键引擎(计划 26-09-28-0354 W1; data 在 state.js / 监听在 lifecycle.js)
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
+/* 「流量与限速」合并卡(计划 26-10-18-0813 B3): 设置页二级页的一个分区整体抽成组件,
+ * 卡内三区(数据来源 / 限速曲线 / 流量图采样)见 shared/tpl/traffic-card.html 头注。
+ * 模板件 + $root 回调, 方法仍在 config_hub.js —— 这里只注册渲染器。 */
+app.component("aq-traffic-card", window.AQ_TRAFFIC_CARD_COMPONENT);
 // 表格公共组件(计划 26-10-11-1722 P1/P2/P3): 表壳 <aq-table> + 行模型单元格渲染器
 // (<aq-member-cells> / <aq-group-cells> / <aq-torrent-cells> / <aq-show-cells> / <aq-ep-cells>)。
 // 它们只包**模板**(表头块 / 单元格分支链), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。

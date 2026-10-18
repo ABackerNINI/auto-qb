@@ -54,11 +54,15 @@ def test_config_schema_endpoint(web_env):
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/config/schema", headers=auth).json()
     # 2026-09-26: 日志/WebUI/通知 三个短段并入 basic(设置页不再单列三张卡)
-    # 26-10-03: 流量图分组(plan 26-10-03-0946 §06)插在 speed 与 trackers 之间
     # 26-10-06 用户要求重排: 站点提到第二(紧跟常规), 限速 / HR 在线核实 后置到末尾
-    assert [g["key"] for g in data["groups"]] == [
-        "basic", "trackers", "maintenance", "traffic", "traffic_source", "rules", "speed", "hr_check"
-    ]
+    # 26-10-18(计划 26-10-18-0813 B1/D17): 「流量图」「全局流量来源」「限速曲线」三组并成
+    # 一组 traffic_limit(「流量与限速」) —— 8 -> 6 组; 三组共用一份流量口径, 分成三张首页卡会
+    # 让「关掉来源后曲线与图一起停」这件事在三处各说一半。合并卡内三区见 traffic-card.html
+    assert [g["key"]
+            for g in data["groups"]] == ["basic", "trackers", "maintenance", "traffic_limit", "rules", "hr_check"]
+    tl = next(g for g in data["groups"] if g["key"] == "traffic_limit")
+    assert [f["key"] for f in tl["fields"]] == ["traffic_source", "global_speed_limit_curve", "qb_traffic"], \
+        "合并组的字段序 = 卡内区序(来源 -> 限速曲线 -> 流量图采样)"
     assert [f["key"] for f in data["groups"][0]["fields"]][-3:] == ["log", "web", "notify"]
     # 2026-09-28: 三段在「常规」页必须各自成块展示分类名(「常规/日志」而非并入「常规/常规」) ——
     # 成块的前提是不声明 open(open 段被 cfgFlatten 平铺成无标题同级字段, 正是本次回归的根因)

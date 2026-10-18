@@ -106,10 +106,10 @@ def unavailable_reason(config) -> str:
     """
     if not source_enabled(config):
         return ("流量来源已关闭: config.traffic_source.enabled=false —— 曲线/规则表达式/工具订阅"
-                "已停止取数; 到设置页「全局流量来源」重新启用总开关即可恢复")
+                "已停止取数; 到设置页「流量与限速」→「数据来源」重新启用总开关即可恢复")
     if _provider(config) == "global_traffic_monitor":
         return (
             "数据源不可得: 全局流量监视器未在运行(发现指针 endpoint.json 缺失或未报出数据目录), "
-            "取不到 history_traffic.dat 路径 —— 到设置页「全局流量来源」看工具状态, 或点「立即拉起」"
+            "取不到 history_traffic.dat 路径 —— 到设置页「流量与限速」→「数据来源」看工具状态, 或点「立即拉起」"
         )
     return "数据源未配置: 需要 config.traffic_source.traffic_monitor.dat_path"

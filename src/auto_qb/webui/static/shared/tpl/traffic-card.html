@@ -1,0 +1,315 @@
+<!-- 「流量与限速」合并卡(计划 26-10-18-0813 B3/B4, 拍板 D2/D14/D15)
+     x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层), app.component 注册;
+     与 drawer-head.html 同范式: 本文件**只贡献模板**, 数据与动作一律经 $root 回调根实例
+     (方法域在 config_hub.js 的 tm* / hubSub* 系列) —— 组件里再写一份方法会触发
+     _scan_mixin_wiring 的重名守阵, 被盖掉的那份永不执行。
+
+     为什么抽成组件而不留在 settings.html: 该卡原本是二级页 v-else-if 链里的一环, 三个来源块
+     (来源 / 曲线 / 流量图)分散在两个分片、都挤在单分片体量上限边上 —— 再往里加任何东西都要
+     抬额度。抽成独立组件后 settings.html 只剩一行挂载, 卡内三区(来源 -> 限速曲线 -> 流量图采样)
+     各自成 .hb-blk.hb-sub 子区, 区标题可折叠(折叠态不持久化, 见 config_hub.js hub.sub)。 -->
+<script type="text/x-template" id="tpl-aq-traffic-card">
+  <div class="hb-blk hb-cut">
+    <div class="hb-blk-hd">
+      <span class="bh-t">流量与限速</span>
+      <span class="bh-n">{{ $root.tmSummary() }}</span>
+      <span class="bh-r">
+        <!-- 历史图仍在全局弹层(D2): 卡头只加入口, 不在设置页内嵌迷你图 —— 那张图要天/月/年切换
+             与悬停取值, 塞进配置页会变成第二套图表实现 -->
+        <button class="hb-btn ghost sm" @click="$root.openHistory()">打开历史图表</button>
+      </span>
+    </div>
+
+    <!-- 依赖提示条(D6): 来源关闭时三个区都会空转, 常驻一条提示比三处各写一句省。文案与「关闭工具」
+         确认框同源(TM_AFFECT_LABELS <- schema 的 affects 元数据), 不另写第二份 -->
+    <p v-if="$root.tmSourceOff()" class="hb-tl-dep">
+      <b>流量来源已关闭</b>
+      <span>{{ $root.tmAffectLabels().join('; ') }} —— 打开下方「数据来源」里的「启用」即恢复, 配置原样保留。</span>
+    </p>
+
+    <!-- ============ 区1: 数据来源 ============ -->
+    <div class="hb-blk hb-sub">
+      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
+           @click="$root.hubSubToggle('source')" @keyup.enter="$root.hubSubToggle('source')">
+        <span class="bh-t">数据来源</span>
+        <span class="bh-n">二选一, 只有选中的来源参与取数</span>
+        <span class="bh-r">
+          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('source')"
+                  @click.stop="$root.hubSubToggle('source')">{{ $root.hubSubOpen('source') ? '收起' : '展开' }}</button>
+        </span>
+      </div>
+      <template v-if="$root.hubSubOpen('source')">
+        <hub-field v-for="row in $root.tmSourceRows()" :key="$root.hubKey(row.path)" :item="row"></hub-field>
+        <div class="hb-row" :class="{ 'hb-grey': $root.tmSourceOff() }">
+          <div class="hb-lb">来源</div>
+          <div class="hb-ct">
+            <button class="hb-btn sm" :class="$root.tmProvider() === 'traffic_monitor' ? 'primary' : 'ghost'" :disabled="$root.tmSourceOff()" @click="$root.tmSetProvider('traffic_monitor')">Traffic Monitor 文件</button>
+            <button class="hb-btn sm" :class="$root.tmProvider() === 'global_traffic_monitor' ? 'primary' : 'ghost'" :disabled="$root.tmSourceOff()" @click="$root.tmSetProvider('global_traffic_monitor')">整机流量监视器(工具)</button><span v-if="$root.tmSourceOff()" class="bh-n">来源已关闭: 已停止一切取数 —— 打开上方「启用」即恢复</span>
+          </div>
+        </div>
+        <div :class="{ 'hb-grey': $root.tmSourceOff() }">
+          <hub-field v-for="row in $root.tmProviderItems()" :key="$root.hubKey(row.path)" :item="row"></hub-field>
+        </div>
+
+        <!-- 工具状态区(D8): 只在来源=工具时出现(来源不是工具时, 工具在不在跑与本次取数无关)。
+             状态行是纯文本只读行, 挂 .hb-ro 让标签与值同基线(S6/#5) -->
+        <div v-if="$root.tmProvider() === 'global_traffic_monitor'" class="hb-blk hb-sub">
+          <div class="hb-blk-hd">
+            <span class="bh-t">工具状态</span><span class="bh-n"><span class="hb-led" :class="$root.tmStateClass()"></span> {{ $root.tmStateText() }}</span>
+            <span class="bh-r"><button class="hb-btn ghost sm" :disabled="$root.tm.loading" @click="$root.tmLoad()">{{ $root.tm.loading ? '读取中…' : '刷新' }}</button></span>
+          </div>
+          <p v-if="$root.tm.loading && !$root.tm.loaded" class="hb-hp" style="padding:12px 14px">正在读取工具状态…</p>
+          <template v-else>
+            <div v-if="$root.tm.state === 'not_installed'" class="hb-row hb-ro"><div class="hb-lb">未安装</div><div class="hb-ct">还没找到工具。请在上方填「工具目录」或「工具可执行文件」后点「立即拉起」。<button class="hb-btn ghost sm" @click="$root.tmPickOpen()">选择文件…</button></div></div>
+            <div v-else-if="$root.tm.state === 'launching'" class="hb-row hb-ro"><div class="hb-lb">拉起中</div><div class="hb-ct">已在拉起, 等待工具就绪 · 剩余约 {{ Math.ceil($root.tm.retryS) }} 秒</div></div>
+            <div v-else-if="$root.tm.state === 'launch_failed'" class="hb-row hb-ro"><div class="hb-lb">拉起失败</div><div class="hb-ct">{{ $root.tm.error || '未知原因' }} · 退避剩余约 {{ Math.ceil($root.tm.retryS) }} 秒, 可点「立即拉起 / 重试」</div></div>
+            <div v-else-if="$root.tm.state === 'not_running'" class="hb-row hb-ro"><div class="hb-lb">未运行</div><div class="hb-ct">{{ $root.tm.error || '工具当前没在跑。点「立即拉起」由 auto-qb 拉起它。' }}</div></div>
+            <template v-else-if="$root.tm.state === 'ready' && $root.tm.status">
+              <div class="hb-row hb-ro"><div class="hb-lb">控制面</div><div class="hb-ct">端口 {{ $root.tm.toolUrl }} · PID {{ $root.tm.pid || '—' }} · 版本 {{ $root.tm.version || '—' }} · 数据目录 <span style="font-family:var(--hb-font-mono)">{{ $root.tm.dataDir || '—' }}</span></div></div>
+              <div class="hb-row hb-ro"><div class="hb-lb">当日流量</div><div class="hb-ct">上行 {{ $root.tmFmtBytes($root.tm.status.day_up_bytes) }} · 下行 {{ $root.tmFmtBytes($root.tm.status.day_down_bytes) }} · 合计 {{ $root.tmFmtBytes($root.tm.status.day_total_bytes) }} · {{ $root.tm.status.subscriber_count }} 个订阅 · 末事件号 {{ $root.tm.status.last_event_id }}</div></div>
+              <div class="hb-row hb-ro"><div class="hb-lb">历史文件</div><div class="hb-ct" style="font-family:var(--hb-font-mono)">{{ $root.tm.status.paths && $root.tm.status.paths.dat }}</div></div>
+              <div class="hb-row hb-ro"><div class="hb-lb">开机自启</div><div class="hb-ct"><label><input type="checkbox" :checked="$root.tm.autostartRegistered" :disabled="$root.tm.autoBusy" @change="$root.tmAutostart($event.target.checked ? 'install' : 'uninstall')">&nbsp;已注册</label><span class="bh-n">{{ $root.tm.autostartRegistered ? '开机会自动起' : '未注册(开机不会自动起)' }}</span><span v-if="!$root.tm.autostartRegistered && $root.tm.autostartError" class="hb-hp risk" :title="$root.tm.autostartError" style="max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom">· {{ $root.tm.autostartError }}</span><span v-if="$root.tm.autoMsg" class="bh-n">{{ $root.tm.autoMsg }}</span><span v-if="$root.tm.autoErr" class="hb-hp risk">{{ $root.tm.autoErr }}</span></div></div>
+            </template>
+            <div v-else class="hb-row hb-ro"><div class="hb-lb">就绪异常</div><div class="hb-ct">{{ $root.tm.error || '工具可达但状态读取异常' }}</div></div>
+            <div class="hb-row">
+              <div class="hb-lb"></div>
+              <!-- 「打开工具设置」已删(S6/D9): 工具控制面是纯 JSON + 全路径强制 Bearer token, 没有 HTML
+                   设置页 —— 点开只能看到 {"error":"invalid token"}。工具参数就在下面那张「工具参数(高级)」里调。 -->
+              <div class="hb-ct"><button class="hb-btn" :disabled="$root.tm.relaunching" @click="$root.tmRelaunch()">{{ $root.tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button v-if="$root.tmProvider() === 'global_traffic_monitor' && !$root.tmSourceOff() && $root.tm.reachable" class="hb-btn ghost sm" :disabled="$root.tm.shutting" @click="$root.tmShutdownTool()">关闭工具</button><span v-if="$root.tm.shutdownMsg" class="bh-n">{{ $root.tm.shutdownMsg }}</span><span v-if="$root.tm.shutdownErr" class="hb-hp risk">{{ $root.tm.shutdownErr }}</span></div>
+            </div>
+          </template>
+        </div>
+        <!-- 文件选择器(D10③): 找不到工具时用目录导航 + 文件名输入写 tool_exe / tool_dir; 后端 /api/fs/dirs
+             只列目录且限在允许保存路径内, 范围外请手填绝对路径。 -->
+        <div v-if="$root.tmProvider() === 'global_traffic_monitor' && $root.tm.pick.open" class="hb-blk hb-sub">
+          <div class="hb-blk-hd">
+            <span class="bh-t">选择工具文件</span><span class="bh-n">{{ $root.tm.pick.path || '选择位置' }}</span>
+            <span class="bh-r"><button class="hb-btn ghost sm" :disabled="!$root.tm.pick.parent" @click="$root.tmPickUp()">上级</button><button class="hb-btn ghost sm" @click="$root.tm.pick.open = false">关闭</button></span>
+          </div>
+          <div style="padding:12px 14px">
+            <p v-if="$root.tm.pick.loading" class="hb-hp">正在读取目录…</p>
+            <p v-else-if="$root.tm.pick.error" class="hb-hp error">{{ $root.tm.pick.error }}</p>
+            <div v-else style="display:flex;flex-wrap:wrap;gap:6px">
+              <button v-for="d in $root.tm.pick.dirs" :key="d.path" class="hb-btn ghost sm" @click="$root.tmPickEnter(d)">{{ d.name }}</button>
+              <p v-if="!$root.tm.pick.dirs.length" class="hb-hp">此目录下没有可进入的子目录</p>
+            </div>
+            <div class="hb-row" style="margin-top:8px">
+              <div class="hb-lb">文件名</div>
+              <div class="hb-ct">
+                <input class="hb-input" v-model="$root.tm.pick.name" placeholder="如 gtm.exe / launch.cmd">
+                <button class="hb-btn sm" :disabled="!$root.tm.pick.path || !$root.tm.pick.name.trim()" @click="$root.tmPickApplyExe()">写入工具可执行文件</button>
+                <button class="hb-btn ghost sm" :disabled="!$root.tm.pick.path" @click="$root.tmPickApplyDir()">写入工具目录</button>
+              </div>
+            </div>
+            <p class="bh-n">只列目录、限在允许的保存路径内; 范围外请直接在「工具目录 / 工具可执行文件」文本框填绝对路径。</p>
+          </div>
+        </div>
+        <!-- 工具自身参数(高级): 采样/落盘/阈值/适配器 —— 经工具控制面读写(读后写, 全量覆盖)。
+             S7/D12: 时间/大小参数按 hub-field 口径渲染(数值框 + 单位下拉 + 「?」), 盘上与契约只留复合串。 -->
+        <div v-if="$root.tmProvider() === 'global_traffic_monitor' && $root.tm.reachable" class="hb-blk hb-sub">
+          <div class="hb-blk-hd">
+            <span class="bh-t">工具参数(高级)</span><span class="bh-n">采样间隔 / 落盘阈值 / 适配器 —— 经工具控制面读写</span>
+            <span class="bh-r"><button class="hb-btn ghost sm" @click="$root.tm.advancedOpen = !$root.tm.advancedOpen">{{ $root.tm.advancedOpen ? '收起' : '展开' }}</button></span>
+          </div>
+          <div v-show="$root.tm.advancedOpen">
+            <div v-for="p in $root.tmParams()" :key="p.key" class="hb-row">
+              <div class="hb-lb">{{ p.label }}</div>
+              <div class="hb-ct">
+                <div v-if="p.kind === 'time' || p.kind === 'size'" class="hb-unit">
+                  <input class="hb-input hb-mono hb-w-sm" type="text" :value="$root.tmUnitParts(p).num"
+                         :placeholder="p.placeholder || ''"
+                         @input="$root.tmSetUnitPart(p, $event.target.value, $root.tmUnitParts(p).unit)">
+                  <select class="hb-select" :value="$root.tmUnitParts(p).unit"
+                          @change="$root.tmSetUnitPart(p, $root.tmUnitParts(p).num, $event.target.value)">
+                    <option v-for="u in $root.cfgUnitOptions(p.kind)" :key="u" :value="u">{{ $root.cfgUnitLabel(p.kind, u) }}</option>
+                  </select>
+                </div>
+                <input v-else-if="p.kind === 'list'" class="hb-input" type="text" v-model="$root.tm.form[p.key]" :placeholder="p.hint || ''">
+                <input v-else class="hb-input" :type="p.kind === 'text' ? 'text' : 'number'" :step="p.step || 'any'" v-model="$root.tm.form[p.key]">
+              </div>
+              <button class="hb-ask" :class="{ on: $root.hub.helpKey === $root.tmAskKey(p) }"
+                      :aria-label="p.label + ' 说明'" @click.stop="$root.hubAsk($root.tmAskItem(p), $event)">?</button>
+            </div>
+            <div class="hb-row">
+              <div class="hb-lb"></div>
+              <div class="hb-ct"><button class="hb-btn" :disabled="$root.tm.saving" @click="$root.tmSave()">{{ $root.tm.saving ? '保存中…' : '保存到工具' }}</button><span v-if="$root.tm.saveMsg" class="bh-n">{{ $root.tm.saveMsg }}</span><span v-if="$root.tm.saveErr" class="hb-hp risk">{{ $root.tm.saveErr }}</span></div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- ============ 区2: 限速曲线 ============ -->
+    <div class="hb-blk hb-sub">
+      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
+           @click="$root.hubSubToggle('curve')" @keyup.enter="$root.hubSubToggle('curve')">
+        <span class="bh-t">限速曲线</span>
+        <span class="bh-n">按累计流量分档设置 qB 全局限速; 多条同时命中取最严</span>
+        <span class="bh-r">
+          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('curve')"
+                  @click.stop="$root.hubSubToggle('curve')">{{ $root.hubSubOpen('curve') ? '收起' : '展开' }}</button>
+        </span>
+      </div>
+      <template v-if="$root.hubSubOpen('curve')">
+        <!-- 来源关闭时这一区不能只剩一个「启用限速曲线」按钮: 按钮讲的是"本功能没开", 与"没数可读"
+             完全是两回事, 用户会去点它然后发现没变化 -->
+        <p v-if="$root.tmSourceOff()" class="hb-hp risk" style="padding:10px 14px 0">
+          流量来源已关闭: 曲线配置原样保留, 但读不到累计流量 —— 不会向 qB 写入任何限速。
+        </p>
+        <div v-if="!$root.cfgCurveEnabled()" style="padding:12px 14px">
+          <p class="hb-hp">未启用。启用后读取上面「数据来源」的累计流量, 按档位自动设置 qB 全局限速(0 = 该档不限速)。</p>
+          <button class="hb-btn primary" @click="$root.cfgCurveEnable()">启用限速曲线</button>
+        </div>
+        <template v-else>
+          <div class="hb-blk hb-sub">
+            <div class="hb-blk-hd">
+              <span class="bh-t">曲线设置</span>
+              <span class="bh-r">
+                <span class="hb-dim">多条曲线同时命中时取最严限速</span>
+                <button class="hb-btn sm" @click="$root.cfgCurveAddPeriod()">＋ 添加曲线</button>
+              </span>
+            </div>
+            <hub-field v-for="item in $root.cfgCurveItems()" :key="$root.hubKey(item.path)" :item="item"></hub-field>
+          </div>
+
+          <div v-for="(c, i) in $root.cfgCurveList()" :key="i" class="hb-curve hb-cut">
+            <!-- 折叠交互(2026-09-28): 整条标题栏可点(不再单设「展开/收起」按钮), 箭头图标指示状态;
+                 周期输入框与删除按钮 @click.stop, 避免误触发折叠 -->
+            <div class="hb-curve-hd" role="button" tabindex="0"
+                 @click="$root.cfgCurveToggle(i)" @keyup.enter="$root.cfgCurveToggle(i)">
+              <svg class="ico ico-sm hb-curve-caret" :class="{ open: $root.cfgCurveOpen(i) }" viewBox="0 0 16 16"
+                   aria-hidden="true"><use href="#i-chevron"></use></svg>
+              <span class="bh-t">第 {{ i + 1 }} 条曲线</span>
+              <span class="hb-badge on">{{ $root.cfgCurvePeriod(i).period || '—' }}</span>
+              <input class="hb-input hb-mono" style="width:110px" :value="$root.cfgCurvePeriod(i).period || ''"
+                     placeholder="DAY / MONTH / 7D"
+                     @click.stop
+                     @input="$root.cfgSetPath($root.cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
+              <span class="hb-dim">上传 {{ $root.cfgCurvePoints(i, 'upload_curve').length }} 档 ·
+                下载 {{ $root.cfgCurvePoints(i, 'download_curve').length }} 档</span>
+              <span style="margin-left:auto">
+                <button class="hb-btn danger sm" @click.stop="$root.cfgCurveRemovePeriod(i)">删除曲线</button>
+              </span>
+            </div>
+            <div v-if="$root.cfgCurveOpen(i)" class="hb-curve-bd">
+              <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir">
+                <div class="hb-flow-grp-hd" style="margin-top:6px">
+                  <span class="ce-dir-dot" :class="dir === 'upload_curve' ? 'up' : 'down'" aria-hidden="true"></span>
+                  {{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}
+                  <span class="fg-hint">
+                    {{ $root.cfgCurvePoints(i, dir).length ? $root.cfgCurvePoints(i, dir).length + ' 档' : '未配置 = 不管理该方向' }}
+                  </span>
+                </div>
+                <div v-if="$root.cfgCurveChartOf(i, dir)" class="ce-chart hb-chart"
+                     :class="dir === 'upload_curve' ? 'ce-chart-up' : 'ce-chart-down'"
+                     @mousemove="$root.cfgChartHover($event, i, dir)" @mouseleave="$root.cfgChartLeave()">
+                  <template v-for="ch in [$root.cfgCurveChartOf(i, dir)]" :key="'ch' + i + dir">
+                    <svg class="ce-chart-svg" v-bind="{ viewBox: ch.viewBox }">
+                      <g class="ce-grid-lines">
+                        <line v-for="(tk, k) in ch.yTicks" :key="'gy' + k"
+                              :x1="ch.padL" :x2="ch.w - ch.padR" :y1="tk.pos" :y2="tk.pos"></line>
+                      </g>
+                      <path class="ce-chart-area" :d="ch.area"></path>
+                      <line v-for="(tl, j) in ch.tierLines" :key="'tk' + j" class="ce-chart-tick"
+                            :x1="tl.x" :x2="tl.x" :y1="ch.padT" :y2="ch.baseY"></line>
+                      <path class="ce-chart-line" :d="ch.line"></path>
+                      <g v-if="$root.cfgChartHovered(i, dir)">
+                        <line class="ce-chart-cross" :x1="$root.cfg.chartHover.x" :x2="$root.cfg.chartHover.x"
+                              :y1="ch.padT" :y2="ch.baseY"></line>
+                        <line class="ce-chart-cross" :x1="ch.padL" :x2="ch.w - ch.padR"
+                              :y1="$root.cfg.chartHover.y" :y2="$root.cfg.chartHover.y"></line>
+                        <circle class="ce-chart-dot" :cx="$root.cfg.chartHover.x" :cy="$root.cfg.chartHover.y" r="4"></circle>
+                      </g>
+                      <g class="ce-axis-labels">
+                        <text v-for="(tk, k) in ch.yTicks" :key="'ly' + k"
+                              :x="ch.padL - 7" :y="tk.pos + 3.5" text-anchor="end">{{ tk.label }}</text>
+                        <text v-for="(tk, k) in ch.xTicks" :key="'lx' + k"
+                              :x="tk.pos" :y="ch.h - 10" text-anchor="middle">{{ tk.label }}</text>
+                      </g>
+                    </svg>
+                    <div v-if="$root.cfgChartHovered(i, dir)" class="ce-chart-tip"
+                         :class="{ flip: $root.cfg.chartHover.leftPct > 62 }"
+                         :style="{ left: $root.cfg.chartHover.leftPct + '%', top: $root.cfg.chartHover.topPct + '%' }">
+                      <b>第 {{ $root.cfg.chartHover.index }} 档</b>
+                      <span>累计流量 {{ $root.cfg.chartHover.tLabel }}</span>
+                      <span>限速 {{ $root.cfg.chartHover.sLabel }}</span>
+                    </div>
+                    <div class="ce-chart-legend">
+                      <span class="ce-lg-dir" :class="dir === 'upload_curve' ? 'up' : 'down'">{{ dir === 'upload_curve' ? '上传' : '下载' }}</span>
+                      <span class="ce-lg-x">横轴: 累计流量(按各档实际长度, 末档 ∞)</span>
+                      <span class="ce-lg-y">纵轴: 限速</span>
+                      <span class="ce-lg-note">{{ ch.note }}</span>
+                    </div>
+                  </template>
+                </div>
+                <p v-if="$root.cfgCurveInvalid(i, dir)" class="hb-hp risk">
+                  {{ $root.cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝
+                </p>
+                <div class="hb-tiers">
+                  <div class="hb-tier-head">
+                    <span>档</span><span>累计流量低于</span><span></span><span>限速设为</span><span></span>
+                  </div>
+                  <div v-for="(p, j) in $root.cfgCurvePoints(i, dir)" :key="j" class="hb-tier">
+                    <span class="t-n">{{ j + 1 }}</span>
+                    <input class="hb-input hb-mono" :value="$root.cfgCurveThreshold(i, dir, j)" placeholder="10GiB"
+                           @input="$root.cfgCurvePointSet(i, dir, j, $event.target.value)">
+                    <span class="t-arrow" aria-hidden="true">→</span>
+                    <input class="hb-input hb-mono" :value="$root.cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
+                           @input="$root.cfgCurvePointSet(i, dir, j, undefined, $event.target.value)">
+                    <button class="hb-btn ghost sm" @click="$root.cfgCurvePointRemove(i, dir, j)">✕</button>
+                  </div>
+                </div>
+                <button class="hb-btn sm hb-tier-add" @click="$root.cfgCurvePointAdd(i, dir)">＋ 添加档位</button>
+              </div>
+              <p class="hb-hp" style="margin-top:10px">
+                读法：累计流量<b>还没到</b>左边那个值时，限速就按右边那个值。填 0 = 这一档不限速；最后一档会一直生效到周期结束。「最近 N 天」曲线按滚动窗口计算，旧日期滚出后累计回落，限速随之放宽。
+              </p>
+            </div>
+          </div>
+
+          <div style="padding:4px 14px 12px">
+            <button class="hb-btn danger" @click="$root.cfgCurveDisable()">关闭并移除曲线配置</button>
+          </div>
+        </template>
+      </template>
+    </div>
+
+    <!-- ============ 区3: 流量图采样 ============ -->
+    <div class="hb-blk hb-sub">
+      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
+           @click="$root.hubSubToggle('chart')" @keyup.enter="$root.hubSubToggle('chart')">
+        <span class="bh-t">流量图采样</span>
+        <span class="bh-n">qB 自己报的速率, 本地定期记录 —— 与来源文件的累计流量不是同一份数据</span>
+        <span class="bh-r">
+          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('chart')"
+                  @click.stop="$root.hubSubToggle('chart')">{{ $root.hubSubOpen('chart') ? '收起' : '展开' }}</button>
+        </span>
+      </div>
+      <template v-if="$root.hubSubOpen('chart')">
+        <!-- 这一区的口径与来源无关(qB 自己报的速率), 但全局历史流量图吃的是来源那段累计流量 ——
+             关源时要说清"采样照常、图不更新", 否则用户会以为采样也停了 -->
+        <p v-if="$root.tmSourceOff()" class="hb-hp" style="padding:10px 14px 0">
+          流量来源已关闭: 这里的采样与来源无关、按开关照常执行; 但全局历史流量图读的是来源的累计流量, 关源期间不会有新数据。
+        </p>
+        <template v-if="$root.tmChartSection()">
+          <div class="hb-row">
+            <div class="hb-lb">记录</div>
+            <div class="hb-ct">
+              <label class="hb-switch">
+                <input type="checkbox" :checked="$root.cfgExists($root.tmChartSection().path)"
+                       @change="$root.cfgToggleSection($root.tmChartSection().path, $root.tmChartSection().field, $event.target.checked)">
+                <span class="hb-sw-track"></span>
+                <span class="hb-sw-text">{{ $root.cfgExists($root.tmChartSection().path) ? '启用' : '关闭' }}</span>
+              </label>
+              <span class="bh-n">{{ $root.cfgExists($root.tmChartSection().path) ? '按采样间隔记录 qB 口径速率, 供 WEB UI 流量图取数' : '关闭 = 不采样、不建目录、零文件(缺省)' }}</span>
+            </div>
+          </div>
+          <template v-if="$root.cfgExists($root.tmChartSection().path)">
+            <hub-field v-for="row in $root.tmChartSection().items" :key="$root.hubKey(row.path)" :item="row"></hub-field>
+          </template>
+        </template>
+        <p v-else class="hb-hp" style="padding:10px 14px">当前版本没有 qB 流量采样段。</p>
+      </template>
+    </div>
+  </div>
+</script>

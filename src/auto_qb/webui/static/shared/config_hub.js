@@ -24,10 +24,10 @@ const HUB_GROUP_META = {
     desc: "种子加进来之后自动做什么：打标签、把辅种归组、检查文件是否还在。",
     lede: "种子加入之后自动做什么：打标签、把辅种归成一组、检查文件是否还在、清理没用的标签。每一项都是可选的。",
   },
-  speed: {
-    title: "限速",
-    desc: "按累计流量自动调整 qB 的全局速度上限，防止超额。",
-    lede: "按累计流量自动调整 qB 的全局速度上限。比如当月上传超过 500 GiB 之后自动降到 2 MiB/s，到下个月自动恢复。多条曲线同时命中时取最严的那条。",
+  traffic_limit: {
+    title: "流量与限速",
+    desc: "数据来源、按累计流量自动调限速、qB 流量采样记录 —— 三者共用一份流量口径。",
+    lede: "这一张卡管三件事, 它们共用一份流量口径: 上面决定「读谁的累计流量」(Traffic Monitor 的 dat 文件, 或整机流量监视器工具, 二选一); 中间按这份累计流量跨档改 qB 的全局速度上限; 最下面是把 qB 自己报的速率定期记下来, 供 WEB UI 的流量图使用 —— 那份记录与来源文件的累计流量不是同一份数据。卡头的「打开历史图表」看全局历史流量。",
   },
   trackers: {
     title: "站点",
@@ -43,11 +43,6 @@ const HUB_GROUP_META = {
     title: "HR 在线核实",
     desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；启用方式：本分区站点接入卡片点选；页面地址/解析器等由内置站点档案自动处理；分区页尾附各站点取数现状。",
     lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启总开关后在下方「站点接入」卡片点选启用站点（零 URL/路径/参数填写，页面地址、解析器、下载路径、翻页参数由内置站点档案自动处理，只需站点域名能对上）；取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
-  },
-  traffic_source: {
-    title: "全局流量来源",
-    desc: "限速曲线与流量条件读哪个数据源：Traffic Monitor 的 dat 文件，或整机流量监视器工具——二选一。",
-    lede: "限速曲线和带「累计流量」条件的规则都需要读累计流量。这里决定读哪个来源：Traffic Monitor 记录的 history_traffic.dat，或整机流量监视器工具（gtm）记录的数据——两者严格互斥，只有 provider 指向的那个参与取数。选工具时下方展开工具的安装位置与刷新冷却；卡片底部的「工具状态」显示工具当前状态，可直接一键拉起、开关开机自启。",
   },
 };
 
@@ -113,6 +108,24 @@ const HUB_OFF_KEYS = {
   hr_check: ["config", "hr_check", "enabled"],
 };
 
+/* 「不走通用分区块渲染」的配置路径(计划 26-10-18-0813 B2/D16): hubBlocks 的 walk 只查这张表 ——
+ * 此前是 walk 里一行硬编码 if, 合并卡要再排除两块就会变成三处散落判断(改一处漏一处 = 同一块
+ * 被渲染两次或一次都不渲染)。三条各自的理由:
+ *   config.hr_check.sites          —— 键是内置站点档案 id(来自 constants, 不是配置里已存在的键),
+ *                                     通用行组装写不出正确路径; 由 hr_check 分支的「站点接入」卡片渲染;
+ *   config.traffic_source          —— 「流量与限速」合并卡的来源区专段渲染(aq-traffic-card);
+ *   config.global_speed_limit_curve—— 同上, 曲线区专段渲染(曲线编辑器不是通用控件形态)。 */
+const HUB_SKIP_PATHS = ["config.hr_check.sites", "config.traffic_source", "config.global_speed_limit_curve"];
+
+/* 旧 hub.view 持久值 -> 新视图 key(计划 26-10-18-0813 D13): 「流量图」「全局流量来源」「限速曲线」
+ * 三组已合并为 traffic_limit。只映射不清 localStorage —— 用户手调的其它偏好不必陪葬, 而且
+ * 映射过期后旧键自然失效(落回设置首页), 无副作用。 */
+const HUB_VIEW_ALIAS = {
+  traffic_source: "traffic_limit",
+  speed: "traffic_limit",
+  traffic: "traffic_limit",
+};
+
 /* 「关闭工具」确认框的受影响功能文案(D4, 计划 26-10-17-1737 S1/S4): schema 字段
  * affects 元数据(功能 id) -> 该功能被连带的后果。id 集合的单一事实源在 schema
  * (config/schema/fields.py 的 Field.affects), 本表只补人话; 漏一个 id 就原样退回
@@ -145,11 +158,16 @@ const TRACKER_MASK = "********";
  * 这里只**取值**; 合法性等 schema 到手后由 hubRestore() 校验(分区 key 由 schema 定义,
  * 模块加载时读不到, 且升级后可能改名/删除)。 */
 function initialHubView() {
+  let v = "hub";
   try {
-    return localStorage.getItem("autoqb.ui.hub") || "hub";
+    v = localStorage.getItem("autoqb.ui.hub") || "hub";
   } catch {
-    return "hub";
+    v = "hub"; // 隐私模式/存储被禁: 本轮从设置首页开始
   }
+  /* 合并视图的旧值映射(D13): 三组并一组后, 存量偏好 traffic_source / speed / traffic 一律落到
+   * traffic_limit。映射放在**取值处**这个单点 —— 之后 hubRestore 拿到的就是新 key,
+   * 不必在恢复路径里再认一遍旧名(旧名进 schema 校验会被判"未知分区"并清回首页)。 */
+  return HUB_VIEW_ALIAS[v] || v;
 }
 
 window.CONFIG_HUB = {
@@ -166,6 +184,10 @@ window.CONFIG_HUB = {
         trackerSearchFocus: false,  // 聚焦搜索层(方案C, plans/26-09-29-0323): 搜索框聚焦即开层
         trackerHitIdx: -1,          // 命中面板键盘活动项(↑↓ 移动), -1 = 无
         trackerMouseAt: null,       // 悬停接管的最后一次接管坐标 {x,y}(hubTrackerHoverIdx); null = 无
+        /* 「流量与限速」合并卡三个子区的折叠态(计划 26-10-18-0813 B4/D14): 键 = source|curve|chart;
+         * 缺省 = 展开。**不持久化**(与站点状态块/运行日志同口径) —— 折叠是浏览时的临时动作,
+         * 记进 localStorage 只会让下次进来先看到三个标题。 */
+        sub: {},
       },
     };
   },
@@ -275,10 +297,8 @@ window.CONFIG_HUB = {
             target.rows.push(it);
             continue;
           }
-          // hr_check.sites 不走通用分区块渲染: 它的键是内置站点档案 id(来自 constants 而非
-          // 配置里已存在的键), 通用行组装写不出正确路径 —— 由 hr_check 模板分支的「站点接入」
-          // 卡片单独渲染(计划 26-09-27-1318 §5)
-          if (this.hubKey(it.path) === "config.hr_check.sites") continue;
+          // 专段渲染的路径不进通用分区块(B2/D16: 排除表是单点常量, 这里只查表, 不再逐条 if)
+          if (HUB_SKIP_PATHS.indexOf(this.hubKey(it.path)) >= 0) continue;
           const b = {
             key: this.hubKey(it.path),
             label: it.label || (it.field && it.field.label) || "相关设置",
@@ -396,8 +416,8 @@ window.CONFIG_HUB = {
       if (key === "hr_check") this.hrsOpen = false;
       // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
       if (key === "keys") this.kbPanelEnter();
-      // 全局流量来源分区(S17): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
-      if (key === "traffic_source") this.tmLoad();
+      // 「流量与限速」合并卡(B1/D13): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
+      if (key === "traffic_limit") this.tmLoad();
       window.scrollTo({ top: 0 });
     },
     hubBack() {
@@ -467,7 +487,13 @@ window.CONFIG_HUB = {
       return n;
     },
     hubLedOf(key) {
-      if (key === "speed" && !this.cfgCurveEnabled()) return "off";
+      /* 合并卡(D13): 来源关 = off(停一切取数, 比"曲线没启用"更硬); 否则曲线未启用 = warn
+       * (来源在取数但没有任何东西消费它 —— 不是坏状态, 只是没配完); 都就绪再落下面统一的
+       * risk 判定(= ok)。三档与原「限速」卡的 LED 语义逐格一致。 */
+      if (key === "traffic_limit") {
+        if (this.tmSourceOff()) return "off";
+        if (!this.cfgCurveEnabled()) return "warn";
+      }
       if (key === "trackers" && !this.cfgTrackerNames().length) return "off";
       if (key === "rules" && !this.cfgRuleGroupNames().length) return "off";
       const offPath = HUB_OFF_KEYS[key];
@@ -494,10 +520,13 @@ window.CONFIG_HUB = {
           }).length;
           return enabled ? `${enabled} 个站点在线核实` : "未配置站点";
         }
-        case "speed": {
-          if (!this.cfgCurveEnabled()) return "未启用";
+        case "traffic_limit": {
+          /* 读数 = 「来源名 · N 条曲线」(D13)。两个节奏(来源刷新间隔 / 曲线执行间隔)都在卡里,
+           * 读数只报"谁的数 + 配了几条", 不塞节奏 —— 那一格一行放不下, 且会与徽标的「N 档」重复。 */
+          const src = this.tmProvider() === "global_traffic_monitor" ? "整机流量监视器" : "Traffic Monitor 文件";
+          if (!this.cfgCurveEnabled()) return `${src} · 限速未启用`;
           const list = this.cfgCurveList();
-          return list.length ? `${list.length} 条 · ${this.cfgCurvePeriod(0).period || "—"}` : "未配置曲线";
+          return list.length ? `${src} · ${list.length} 条曲线` : `${src} · 未配置曲线`;
         }
         case "trackers": {
           const names = this.cfgTrackerNames();
@@ -509,8 +538,6 @@ window.CONFIG_HUB = {
           for (const k of gk) n += this.cfgRuleNames(k).length;
           return `${gk.length} 个规则集 · ${n} 条`;
         }
-        case "traffic_source":
-          return this.tmProvider() === "global_traffic_monitor" ? "整机流量监视器" : "Traffic Monitor 文件";
         default:
           return "";
       }
@@ -522,7 +549,7 @@ window.CONFIG_HUB = {
         const risky = this.hubRiskList.filter((r) => r.group === "rules").length;
         out.push({ text: `${this.cfgRuleGroupNames().length} 个规则集`, cls: "" });
         if (risky) out.push({ text: `${risky} 条含风险`, cls: "risk" });
-      } else if (key === "speed" && this.cfgCurveEnabled()) {
+      } else if (key === "traffic_limit" && this.cfgCurveEnabled()) {
         out.push({ text: `${this.cfgCurvePoints(0, "upload_curve").length} 档`, cls: "" });
       } else if (key === "maintenance" && !this.cfgBool(["config", "add_episode_tags", "enabled"], "false")) {
         out.push({ text: "集数标签未开", cls: "" });
@@ -1001,18 +1028,54 @@ window.CONFIG_HUB = {
         .filter((x) => x.key === "enabled" || x.key === "refresh_interval")
         .map((f) => ({ type: "field", field: f, path: [...base, f.key], depth: 0, owner: base, inline: [] }));
     },
-    /* 选中来源的参数行(供 <hub-field> 渲染): 从 schema 取该来源子段的叶子字段, 路径指向 traffic_source.<来源> */
+    /* 选中来源的参数行(供 <hub-field> 渲染): 从 schema 取该来源子段的叶子字段, 路径指向 traffic_source.<来源>
+     *
+     * B2/D16: 判据从「模板手工过滤 provider」换成通用可见性口径 —— 两个来源子段在 schema 上各挂
+     * show_if=provider, 这里是它唯一的消费点。手工挑 key 与 schema 声明是两套真相: 手工那份漏改了
+     * 就会出现"选 A 也显示 B 的参数"(或反之), 而 show_if 是字段元数据自身的一部分, 不会漂。
+     * 之所以取叶子而非段项: 卡里要的是"平铺的参数行"(dat_path 一行), 不是可折叠的 object 子段。 */
     tmSourceRoot() {
-      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "traffic_source");
+      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "traffic_limit");
       return (g && (g.fields || []).find((f) => f.key === "traffic_source")) || null;
     },
-    tmProviderItems(key) {
+    tmProviderItems() {
       const root = this.tmSourceRoot();
-      const sub = root && (root.fields || []).find((f) => f.key === key);
-      const base = ["config", "traffic_source", key];
-      return (((sub && sub.fields) || []).map((f) => ({
-        type: "field", field: f, path: [...base, f.key], depth: 1, owner: base, inline: [],
-      })));
+      if (!root) return [];
+      const base = ["config", "traffic_source"];
+      const out = [];
+      for (const sub of root.fields || []) {
+        if (!sub.fields) continue;  // 非 object 段(enabled / refresh_interval / provider)不算来源参数
+        if (!this.cfgVisible(sub, base)) continue;  // show_if 是唯一判据
+        const box = this.cfgFlatten([sub], base, 0)[0];
+        for (const row of (box && box.items) || []) {
+          if (row.type === "field") out.push(row);
+        }
+      }
+      return out;
+    },
+    /* 合并卡三区折叠(B4/D14): 缺省展开, 折叠态不持久化(只在 hub.sub 里)
+     * 键: source(来源) / curve(限速曲线) / chart(流量图采样) */
+    hubSubOpen(key) {
+      return this.hub.sub[key] !== false;
+    },
+    hubSubToggle(key) {
+      this.hub.sub[key] = this.hub.sub[key] === false;
+    },
+    /* 「流量图采样」区(QB_TRAFFIC 段项): 可选段(optional=True)自带开关 + 折叠, 通用 section 口径 ——
+     * 与 hubBlocks 生成的块同形, 这里只是把它搬进合并卡, 不另写一套渲染。 */
+    tmChartSection() {
+      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "traffic_limit");
+      const f = g && (g.fields || []).find((x) => x.key === "qb_traffic");
+      if (!f) return null;
+      return this.cfgFlatten([f], ["config"], 0)[0] || null;
+    },
+    /* 卡头一句现状(与首页读数同源语义, 但更短): 用来在卡内三区之上先给出"这套东西现在什么状态" */
+    tmSummary() {
+      if (this.tmSourceOff()) return "来源已关闭";
+      const src = this.tmProvider() === "global_traffic_monitor" ? "整机流量监视器" : "Traffic Monitor 文件";
+      if (!this.cfgCurveEnabled()) return `${src} · 限速未启用`;
+      const n = this.cfgCurveList().length;
+      return n ? `${src} · ${n} 条曲线` : `${src} · 未配置曲线`;
     },
     /* 状态区五态文案(§05): ready / launching / launch_failed / not_running / not_installed */
     tmStateText() {

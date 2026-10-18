@@ -1163,7 +1163,10 @@ window.CE_FIELD_BASE = {
       if (this.item.depends && !this.ce.cfgExists(this.item.depends)) return false;
       // 子卡随父字段的可见性一起显隐
       if (this.item.type === "subcard") return this.ce.cfgVisible(this.item.ownerField, this.item.owner);
-      if (this.item.type !== "field") return true;
+      /* 叶子字段 / object 段(group) / 可选段(section) 共用同一口径(计划 26-10-18-0813 B2/D16):
+       * `show_if` 此前只对叶子生效, 非叶子恒 true —— 于是 schema 在 object 段上挂的 provider
+       * 条件显隐形同虚设, 只能靠模板手写过滤(tmProviderItems)。段项的 owner 由调用点给,
+       * 缺失时 cfgVisible 自己回落到 field.path 的父路径(与叶子同一条路)。 */
       return this.ce.cfgVisible(this.f, this.item.owner);
     },
     /* 所属功能未启用(grey_if 不满足)时灰显, 但仍可编辑(不阻断, 只提示) */

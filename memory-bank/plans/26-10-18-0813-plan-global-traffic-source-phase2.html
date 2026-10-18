@@ -7,9 +7,9 @@
 <title>流量与限速合并与流量快照解耦 (Phase 2)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="global-traffic-source-phase2">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-18-0813">
-<meta name="doc-updated" content="26-10-18-1019">
+<meta name="doc-updated" content="26-10-18-1058">
 <meta name="doc-refs" content="memory-bank/plans/26-10-17-1737-plan-global-traffic-source-integration-fixes.html, memory-bank/tasks/26-10-17-webui-traffic-source-fixes.md, memory-bank/tasks/26-10-18-backend-traffic-snapshot-merge.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>流量与限速合并与流量快照解耦 (Phase 2)</h1>
 <p class="lede">两件事：① 把「流量快照」的所有权从限速曲线任务手里拿走，交给新模块 <code>traffic_snapshot</code>（曲线模块降为「只写 limit 段」）—— 顺带修掉「没配曲线就永远没有历史图」这个结构性死角；② 把设置页的「数据来源 / 限速曲线 / 流量图」三张卡合成一张「流量与限速」（schema 合组 + 独立组件 + 卡内三区）。设计主轴：段级契约代替整体替换，让「谁写哪一段」写进 API 而不是靠约定。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-18-0813 · <b>doc-updated</b> 26-10-18-0813 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-18-0813 · <b>doc-updated</b> 26-10-18-1058 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话内 grilling 三轮（Q1–Q17 全部拍板，含用户订正 Q12「流量图也并进来，视图名『流量与限速』」）；事实基线＝代码实况（引用行号为本轮实测）＋ 前序计划 <code>26-10-17-1737</code>（Phase 1，S1–S7 已落，S8 待收）与 <code>26-10-17-0339</code>（集成层）
 </div>
 
@@ -221,7 +221,7 @@
   <tr><th>期</th><th>范围</th><th>前置</th><th>状态</th></tr>
   <tr><td>P0</td><td>1737 计划的 S8（切源即刷新）收口</td><td>—</td><td>待实施（Phase 1 尾巴）</td></tr>
   <tr><td>P2-A</td><td>A1–A5：后端快照解耦 + 契约 + 载荷瘦身</td><td>P0</td><td>待实施</td></tr>
-  <tr><td>P2-B</td><td>B1–B5：schema 合组 + 合并卡 + 通用层两修 + 守阵</td><td>P2-A 的 A2（契约）</td><td>待实施</td></tr>
+  <tr><td>P2-B</td><td>B1–B5：schema 合组 + 合并卡 + 通用层两修 + 守阵</td><td>P2-A 的 A2（契约）</td><td>已实施（R2）</td></tr>
 </table>
 
 <h2><span class="no">§04</span>实施步骤</h2>
@@ -429,6 +429,13 @@
     </ul>
     另附两处计划已预见、实施确认的细节：曲线 <code>interval</code> 语义收窄的文案落在 schema <code>help</code> + <code>config_editor.js</code> 两处（「只管写限速 —— 历史流量图的刷新节奏见『流量来源』的『刷新间隔』」）；<code>refresh_interval</code> 进入键面基线（169 → 170 键，<code>tests/fixtures/config_key_surface.txt</code> v5）。守阵：新增 <code>tests/test_traffic_snapshot.py</code>（14 条，含 <code>set_traffic_view</code> 调用点源码检索），并改造 8 个既有测试文件里依赖「曲线独家发布」的断言（<code>test_speed_curve</code> / <code>test_traffic_monitor_client</code> / <code>test_traffic_monitor_dat</code> / <code>test_modules_p3</code> / <code>test_config_traffic_monitor</code> / <code>test_config_key_surface</code> / <code>test_module_host</code> / <code>test_web_views_reload</code>）。P2-B（B1–B5 前端合并卡）仍未开工。</li>
 </ul>
+  <li><span class="tag">R2 · 26-10-18-1058</span> <b>P2-B（B1–B5 前端）实施完成，Phase 2 两批全部收口</b>，全量回归 <code>3587 passed / 4 skipped</code>、覆盖率 98.09%（数字见 <code>kb.baseline</code>）；e2e <code>--grep @fast</code> 170 passed，新增合并卡用例两皮肤各 1 条绿。无实质偏差，两处按计划落点执行、一处刻意不做：
+    <ul>
+      <li><b>① 旧值映射落在 <code>initialHubView</code></b>（计划 §B1 原文即如此）：<code>HUB_VIEW_ALIAS</code> 三条（<code>traffic_source</code> / <code>speed</code> / <code>traffic</code> → <code>traffic_limit</code>）在取值处单点映射，<code>hubRestore</code> 拿到的已是新 key；既有的 <code>__logs → basic</code> 仍留在 <code>hubRestore</code> —— 两者语义不同（分区改名 vs 分区已删除），不该合到一起。</li>
+      <li><b>② 组级 <code>show_if</code> 落地点在 <code>visible()</code></b>，另外把 <code>tmProviderItems(key)</code> 的「手工挑 provider」一并改成按 <code>cfgVisible</code> 过滤：否则通用层修好了、卡内仍在用手写判据，等于两套真相并存（验收判据「不再依赖 tmProviderItems 手工过滤」就此兑现）。</li>
+      <li><b>③ 不做</b>：<code>source.state</code> / <code>limit.state</code> 的 UI 读点（D8 明说前端逐批迁，不在本计划一次性改完）。</li>
+    </ul>
+    另附实施中确认的细节：卡内组件必须 <code>inject: ["ce"]</code> 并原样 <code>provide</code> 透传（全局 mixin 给每个组件都 provide 了 <code>ce: this</code>，不透传则卡内 <code>hub-field</code> 注入到组件实例 —— 字段只显默认值且不报错）；嵌套 <code>.hb-blk.hb-sub</code> 会让 e2e 的 <code>hasText</code> 同时命中三层祖先，工具参数块改 <code>.last()</code> 定位；<code>settings.html</code> 418 → 318 行、<code>settings-detail.html</code> 543 → 420 行，440 例外额度删除回落 400。四条变异（去子区 / 去折叠头 / 恢复非叶子短路 / 排除表回硬编码）逐条红验通过，还原后字节一致。</li>
 
 </div>
 </body>

@@ -389,6 +389,16 @@ def _static(*parts) -> str:
     return open(os.path.join(STATIC_ROOT, *parts), encoding="utf-8").read()
 
 
+def _tm_tpl() -> str:
+    """流量来源/曲线/流量图三块的模板单点 = 合并卡分片(计划 26-10-18-0813 B3/D15)。
+
+    这三块原在 settings.html 与 settings-detail.html 各占一段, 26-10-18 起整体抽成独立组件
+    aq-traffic-card + 独立分片 shared/tpl/traffic-card.html。本文件的模板断言一律经这里取 ——
+    下次再搬只改这一行, 而不是十几个测试逐个改路径。
+    """
+    return _static("shared", "tpl", "traffic-card.html")
+
+
 def test_frontend_shutdown_tool_wiring():
     """「关闭工具」= 前端三件套 + schema 依赖元数据同源
 
@@ -396,7 +406,7 @@ def test_frontend_shutdown_tool_wiring():
     保存先于停工具的相对次序(反序会被订阅线程抢拉起)、受影响功能清单不另写一份。
     """
     hub = _static("shared", "config_hub.js")
-    tpl = _static("shared", "tpl", "settings.html")
+    tpl = _tm_tpl()
     state = _static("shared", "state.js")
 
     # 1) state: 关闭在途/结果/失败三态(模板与处理共用, 缺一则按钮点了没反馈)
@@ -404,13 +414,14 @@ def test_frontend_shutdown_tool_wiring():
         assert re.search(rf"^\s*{k}:\s*", state, re.M), f"state.js 缺 tm.{k}"
 
     # 2) tpl: 按钮的可见性三条件与处理器(关源后按钮应消失 —— 关源已在 S1 语义里停取数)
+    # 卡内组件是纯模板件, 一律经 $root 回调根实例(方法域在 config_hub.js) —— 判据内容不变
     btn = re.search(r"<button[^>]*tmShutdownTool\(\)[^>]*>关闭工具</button>", tpl)
-    assert btn, "settings.html 缺「关闭工具」按钮"
+    assert btn, "流量与限速卡缺「关闭工具」按钮"
     tag = btn.group(0)
     assert "tmProvider() === 'global_traffic_monitor'" in tag
-    assert "!tmSourceOff()" in tag
-    assert "tm.reachable" in tag
-    assert ":disabled=\"tm.shutting\"" in tag
+    assert "!$root.tmSourceOff()" in tag
+    assert "$root.tm.reachable" in tag
+    assert ":disabled=\"$root.tm.shutting\"" in tag
 
     # 3) hub: 方法在册 + 按 schema affects 生成清单(单点: 只补人话, 不复制 id 列表)
     assert "async tmShutdownTool()" in hub
@@ -430,7 +441,8 @@ def test_frontend_shutdown_tool_wiring():
 
     # 5) 受影响清单覆盖 schema 声明的全部功能 id(新增 id 不补文案 -> 本断言红)
     payload = cfg_schema.schema_payload()
-    grp = next(g for g in payload["groups"] if g.key == "traffic_source")
+    # 26-10-18(计划 26-10-18-0813 B1): 来源段随三组并一组落进 traffic_limit
+    grp = next(g for g in payload["groups"] if g.key == "traffic_limit")
 
     def _find_enabled(fields):
         for f in fields:
@@ -455,11 +467,11 @@ def test_frontend_shutdown_tool_wiring():
 def _tm_block_gate(tpl: str, title: str) -> str:
     """取某个 `hb-blk` 块的 v-if 条件(按块头标题定位) —— 没闸门 -> 断言失败."""
     pattern = (
-        r'<div v-if="([^"]*)"[^>]*class="hb-blk hb-cut">\s*<div class="hb-blk-hd">\s*'
+        r'<div v-if="([^"]*)"[^>]*class="hb-blk (?:hb-cut|hb-sub)">\s*<div class="hb-blk-hd">\s*'
         r'<span class="bh-t">' + re.escape(title)
     )
     match = re.search(pattern, tpl)
-    assert match, f"settings.html: 「{title}」块缺失或没有 v-if 渲染闸"
+    assert match, f"流量与限速卡: 「{title}」块缺失或没有 v-if 渲染闸"
     return match.group(1)
 
 
@@ -469,7 +481,7 @@ def test_frontend_tool_blocks_hidden_for_file_source():
     只藏「打开工具设置」不影响本质问题: 来源不是工具时, 工具在不在跑与本次取数无关,
     摆着状态与参数只会让人以为它参与取数(缺陷 #3 的根因就是渲染无 provider 条件)。
     """
-    tpl = _static("shared", "tpl", "settings.html")
+    tpl = _tm_tpl()
     for title in ("工具状态", "选择工具文件", "工具参数(高级)"):
         gate = _tm_block_gate(tpl, title)
         assert "tmProvider() === 'global_traffic_monitor'" in gate, f"「{title}」块没按来源条件渲染: {gate}"
@@ -494,7 +506,7 @@ def test_frontend_readonly_rows_use_baseline_align():
     缺陷 #5 的根因: .hb-lb 的 7px 上边距是为「对齐控件盒」而设, 纯文本行没有盒子,
     于是标签比值低一截。修法只作用于 .hb-ro, 全局控件行不受影响。
     """
-    tpl = _static("shared", "tpl", "settings.html")
+    tpl = _tm_tpl()
     css = _static("shared", "console_hub.css")
     assert tpl.count('class="hb-row hb-ro"') >= 5, "只读状态行没有全部挂上 .hb-ro"
     assert re.search(r"\.hb-row\.hb-ro\s*\{[^}]*align-items:\s*baseline", css), \
@@ -508,7 +520,7 @@ def test_frontend_readonly_rows_use_baseline_align():
 def test_frontend_tool_settings_button_removed():
     """S6/D9: 「打开工具设置」删除且不留死引用(工具控制面是纯 JSON, 点开只会看到 401)."""
     hub = _static("shared", "config_hub.js")
-    tpl = _static("shared", "tpl", "settings.html")
+    tpl = _tm_tpl() + _static("shared", "tpl", "settings.html")
     assert "tmOpenToolSettings" not in hub and "tmOpenToolSettings" not in tpl
     assert ">打开工具设置<" not in tpl
 
@@ -529,7 +541,7 @@ def test_frontend_tool_params_use_unit_controls():
     —— 数值化会把 "10MiB" 变成 10, 单位凭空消失(D13 之前的老毛病)。
     """
     hub = _static("shared", "config_hub.js")
-    tpl = _static("shared", "tpl", "settings.html")
+    tpl = _tm_tpl()
     params = _tm_params_block(hub)
     time_keys = ("sample_interval", "flush_interval_s", "lease_ttl_s", "heartbeat_interval_s", "notify_timeout_s")
     size_keys = ("flush_delta_bytes", "notify_threshold_bytes")
@@ -542,9 +554,9 @@ def test_frontend_tool_params_use_unit_controls():
     # 模板: 单位复合控件 + 复用设置页的「?」浮窗
     for needle in (
         "class=\"hb-unit\"", "tmUnitParts(p)", "tmSetUnitPart(p", "cfgUnitOptions(p.kind)",
-        "hubAsk(tmAskItem(p), $event)"
+        "$root.hubAsk($root.tmAskItem(p), $event)"
     ):
-        assert needle in tpl, f"settings.html 工具参数行缺 {needle}"
+        assert needle in tpl, f"流量与限速卡的工具参数行缺 {needle}"
     # 载荷: 时间/大小原样透传, 不做 Number()
     payload = hub[hub.index("tmBuildPayload() {"):]
     payload = payload[:payload.index("    },\n")]

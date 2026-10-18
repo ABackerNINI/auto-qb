@@ -470,6 +470,25 @@
 .hb-blk.hb-sub.hb-inactive { opacity: .55; }
 .hb-blk-hd.hb-sub-toggle { cursor: pointer; user-select: none; }
 
+/* 「流量与限速」合并卡的依赖提示条(计划 26-10-18-0813 B4/D6): 来源关闭时卡头下方常驻一条。
+   用 warn 语义色而非 error —— 关源是合法状态(用户主动关的), 提示的是"后果", 不是"出错";
+   左侧 3px 实心条与 .hb-row.risk 同一配方(inset 阴影不用 border, 免得撑开行高)。 */
+.hb-tl-dep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  background: var(--warn-soft);
+  box-shadow: inset 3px 0 0 var(--warn);
+  border-bottom: 1px solid var(--border);
+}
+.hb-tl-dep b { color: var(--warn); font-weight: 600; }
+
 /* 行: 标签 | 控件 | ?(说明浮窗触发点) */
 .hb-row {
   display: grid;
