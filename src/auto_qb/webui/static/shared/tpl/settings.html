@@ -318,7 +318,7 @@
               <template v-else-if="hub.view === 'traffic_source'">
                 <div class="hb-blk hb-cut">
                   <div class="hb-blk-hd"><span class="bh-t">数据来源</span><span class="bh-n">二选一, 只有选中的来源参与取数</span></div>
-                  <hub-field v-for="row in tmEnabledItems()" :key="hubKey(row.path)" :item="row"></hub-field>
+                  <hub-field v-for="row in tmSourceRows()" :key="hubKey(row.path)" :item="row"></hub-field>
                   <div class="hb-row" :class="{ 'hb-grey': tmSourceOff() }">
                     <div class="hb-lb">来源</div>
                     <div class="hb-ct">

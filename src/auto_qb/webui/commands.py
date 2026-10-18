@@ -1098,8 +1098,8 @@ class WebCommandsMixin:
         历史流量图与顶栏 pill 不必等到下一个曲线 interval 才换数据(#7: 切到工具后历史图仍显示
         TM 数据); 关源时该命令发 off 快照, 前端立即转「来源已关闭」关闭态。
 
-        !**投递**而不是在这里直接调用刷新体: 刷新体单点在 `refresh_traffic` handler(P2-A 会把它
-        改指 `traffic_snapshot.refresh()`), 本处只负责判定「该刷了」—— 两条触发(工具事件 /
+        !**投递**而不是在这里直接调用刷新体: 刷新体单点在 `refresh_traffic` handler(26-10-18-0813
+        A5 起已改指 `traffic_snapshot.refresh()`), 本处只负责判定「该刷了」—— 两条触发(工具事件 /
         配置切源)共用一条执行路径, 不新增第二份读盘逻辑。命令在本轮 drain 内即被执行
         (consume_commands 是 while 取空队列), 对用户仍是「保存完图表就变了」。
         """
@@ -1123,12 +1123,13 @@ class WebCommandsMixin:
         为什么经命令队列而不在端点/热重载里直接读盘: 读盘 + 快照发布归主循环线程(黄金法则 5),
         投递方只表达意图; 命令带上事件号与日键只为日志可追。
 
-        刷新体在 speed_curve 模块(`refresh_traffic_view`): 它与该快照同源 —— dat_path 配置,
-        历史行口径、各 period 累计都在那边; 本 handler 只取模块句柄转发。「刷新图」是通知链路
-        的**唯一**联动动作(不查档、不写 qB 限速, 黄金法则 2)。
+        刷新体自 26-10-18-0813(A5/D11)起在 **traffic_snapshot 模块**: 快照所有权跟着来源走了
+        (历史行 + 各 period 累计 + 来源态), 曲线模块只剩 limit 段。「刷新图」仍是通知链路的
+        **唯一**联动动作(不查档、不写 qB 限速, 黄金法则 2)—— 而且现在曲线没配也能刷新:
+        这正是「没配曲线就永远没有历史图」那个死角的修复面。命令名 / 端点 / 回执语义不变。
         """
-        mod = self.host.get("speed_curve")
-        refreshed = bool(mod is not None and mod.refresh_traffic_view())
+        mod = self.host.get("traffic_snapshot")
+        refreshed = bool(mod is not None and mod.refresh())
         state = "已刷新" if refreshed else "跳过"
         if trigger == "config":
             logger.info(f"配置热重载 | 流量来源已切换, 立即刷新历史流量: 状态={state}")

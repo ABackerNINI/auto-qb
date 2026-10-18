@@ -57,6 +57,7 @@ from .modules import (
     SpeedCurveModule,
     TrackerModule,
     TrafficSampleModule,
+    TrafficSnapshotModule,
 )
 from .state import StateService
 from ..webui.commands import WebCommandsMixin
@@ -218,6 +219,12 @@ class QbManager(
         # 全局标签清理任务由模块 start() 自注册 —— 内核 _create_global_tasks 的任务点名退役
         self.ctx.trackers = TrackerModule(self.ctx)
         self.host.register(self.ctx.trackers)
+        # 装配清单 P6(计划 26-10-18-0813 A1/D3): 流量快照所有者 —— **必须先于 speed_curve**:
+        # 装配序即消费序, 曲线模块 start 时已经要能取到 ctx.traffic_snapshot 写 limit 段。
+        # 它自带任务(按 traffic_source.refresh_interval), 曲线没配也照跑 —— 历史流量图因此
+        # 不再依赖曲线配置(结构性死角的修复点)。
+        self.ctx.traffic_snapshot = TrafficSnapshotModule(self.ctx)
+        self.host.register(self.ctx.traffic_snapshot)
         self.host.register(SpeedCurveModule(self.ctx))
         # maintenance 句柄挂 ctx(P4): grouping 打标经 ctx.maintenance.add_tags, 不 import 兄弟模块
         self.ctx.maintenance = MaintenanceModule(self.ctx)

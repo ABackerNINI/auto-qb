@@ -32,8 +32,8 @@
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
 - test_speed_curve_no_config_noop: 未配置曲线(conf None) -> handler 直接返回
 - test_speed_curve_enabled_false_short_circuits: enabled=False -> 任务仍注册但短路, 不读 dat 不写 qB, 发布 disabled
-- test_speed_curve_source_off_publishes_off: 数据来源总开关关(S1/D1) -> off 快照(优先于 disabled),
-  不读 dat 不写 qB; 开回来自动恢复
+- test_speed_curve_source_off_publishes_nothing: 数据来源总开关关(S1/D1; A4) -> 曲线任务不发布任何东西
+  (来源态归 traffic_snapshot), 不读 dat 不写 qB
 - test_speed_curve_dat_all_bad_lines_noop: dat 有文件但全坏行 -> 本轮不动
 - test_speed_curve_dat_bad_lines_still_applies: dat 部分坏行 -> 跳过坏行仍写 qB
 - test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
@@ -709,12 +709,17 @@ def test_merge_direction_and_bytes_to_kib():
 
 # ---------- 集成: 任务注册 / handler ----------
 def test_speed_curve_global_task_registered(tmp_path):
-    """配置存在 -> _create_global_tasks 创建 speed_limit_curve 任务(interval 缺省回退主 interval) """
+    """配置存在 -> _create_global_tasks 创建 speed_limit_curve 任务(interval 缺省回退主 interval)
+
+    26-10-18-0813 起队列里**还**有一条 traffic_snapshot_refresh(来源侧节奏, 与曲线解绑);
+    本用例只锁曲线那一条 —— 两条并存正是解耦的形态。
+    """
     gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)))
     mgr, _ = _make_mgr(tmp_path, gslc)
     mgr._create_global_tasks()
-    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
-    assert mgr.task_queue._fast[0].interval == mgr.config.interval  # FakeConfig.interval = 60
+    assert [t.name for t in mgr.task_queue._fast if t.name.startswith("speed_")] == ["speed_limit_curve"]
+    assert mgr.task_queue.named("speed_limit_curve").interval == mgr.config.interval  # FakeConfig.interval = 60
+    assert mgr.task_queue.named("traffic_snapshot_refresh") is not None
 
 
 def test_speed_curve_global_task_uses_own_interval(tmp_path):
@@ -722,8 +727,9 @@ def test_speed_curve_global_task_uses_own_interval(tmp_path):
     gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)), interval=600)
     mgr, _ = _make_mgr(tmp_path, gslc)
     mgr._create_global_tasks()
-    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
-    assert mgr.task_queue._fast[0].interval == 600
+    assert mgr.task_queue.named("speed_limit_curve").interval == 600
+    # 曲线节奏与来源节奏互不影响: 来源仍是自己的缺省 600s(models 默认), 不跟曲线走
+    assert mgr.task_queue.named("traffic_snapshot_refresh") is not None
 
 
 def test_speed_curve_global_task_not_registered(tmp_path):
@@ -874,7 +880,7 @@ def test_speed_curve_no_config_noop(tmp_path):
 
 
 def test_speed_curve_enabled_false_short_circuits(tmp_path):
-    """enabled=False: 曲线任务仍注册但整体短路 -> 不读 dat 不写 qB, 快照发布 disabled(Web 视为未启用)"""
+    """enabled=False: 曲线任务仍注册但整体短路 -> 不读 dat 不写 qB, limit 段落 disabled(Web 视为未启用)"""
     gslc = _gslc(_write_dat(tmp_path, [(date.today(), 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
     gslc.curve.enabled = False  # 数据可用, 证明短路先于读数据
     mgr, client = _make_mgr(tmp_path, gslc)
@@ -882,36 +888,42 @@ def test_speed_curve_enabled_false_short_circuits(tmp_path):
 
     # 任务仍注册(enabled=False 只在 handler 内短路, 不影响任务创建)
     mgr._create_global_tasks()
-    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
+    assert [t.name for t in mgr.task_queue._fast if t.name.startswith("speed_")] == ["speed_limit_curve"]
 
     assert _run_curve(mgr) is True
     assert client.transfer.calls == []  # 不动 qB 限速
     assert client.transfer.limits["upload_limit"] == 999 * 1024
     assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
-    assert mgr.web.traffic_view["state"] == "disabled"  # Web 端据此渲染为未启用
+    # 派生 state 仍是 disabled(来源段 ok + limit 段 disabled), Web 端据此渲染为未启用
+    assert mgr.web.traffic_view["state"] == "disabled"
+    assert mgr.web.traffic_view["limit"]["state"] == "disabled"
 
 
-def test_speed_curve_source_off_publishes_off(tmp_path):
-    """数据来源总开关关(S1/D1, 26-10-17-1737): 曲线功能仍启用但停取数 -> off 快照
+def test_speed_curve_source_off_publishes_nothing(tmp_path):
+    """数据来源总开关关(S1/D1; A4 收窄): 曲线任务**不发布任何东西**, 直接让位
 
-    判定优先于 disabled: 曲线段本身 enabled=true, 停的是 traffic_source.enabled ——
-    快照 state=off(前端灰显"来源已关闭"), 不读 dat 不写 qB 不记 state。
+    曲线功能本身仍启用, 停的是 traffic_source.enabled。来源态(off)归 traffic_snapshot:
+    它有自己的节奏, 关源时由它发 off 快照(配置一保存还会立刻触发一次), 曲线任务抢这个判定
+    只会让"谁写 state"变成两个作者 —— 所以这里断言的是"快照一字未动"。
     """
     today = date.today()
     gslc = _gslc(_write_dat(tmp_path, [(today, 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     mgr.config.traffic_source.enabled = False  # 数据可用, 证明短路先于读数据
     client.transfer.limits["upload_limit"] = 888 * 1024  # 偶数非目标值: 若未短路将被改写
+    before = copy.deepcopy(mgr.web.traffic_view)
 
     assert _run_curve(mgr) is True
     assert client.transfer.calls == []  # 不动 qB 限速
     assert client.transfer.limits["upload_limit"] == 888 * 1024
     assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
-    assert mgr.web.traffic_view["state"] == "off"  # Web 端据此渲染"来源已关闭"
+    assert mgr.web.traffic_view == before, "关源时曲线任务不得发布任何东西(A4)"
+
     # 开回来自动恢复: 下一轮正常读数写限速(无需重配曲线)
     mgr.config.traffic_source.enabled = True
     assert _run_curve(mgr) is True
     assert client.transfer.calls == [("set_upload_limit", 5120 * 1024)]
+    assert mgr.web.traffic_view["limit"]["state"] == "ok"
     assert mgr.web.traffic_view["state"] == "ok"
 
 
@@ -1024,7 +1036,11 @@ def test_qbapi_global_speed_limit_normalization(tmp_path):
     assert api.get_global_speed_limits() == {"upload_limit": 6144, "download_limit": 2048}
 
 
-# ---------- 限速/流量只读快照(_traffic_view; Web 顶栏 pill 的数据源) ----------
+# ---------- 限速/流量只读快照的 limit 段(来源段见 test_traffic_snapshot) ----------
+#
+# 26-10-18-0813 A4 起本文件只锁 **limit 段**: 曲线的结论(命中/实际限速/原因码/限速态);
+# 来源段(source/periods/history)的所有权与段隔离在 test_traffic_snapshot, 这里只顺带断言
+# "曲线跑完来源段不动", 不重复那套契约。
 def test_traffic_view_disabled_without_config(tmp_path):
     """未启用曲线 -> state=disabled(前端据此不渲染流量/限速 pill)"""
     mgr = make_manager(str(tmp_path / "state.json"))
@@ -1035,23 +1051,30 @@ def test_traffic_view_disabled_without_config(tmp_path):
     assert mgr.web.traffic_view["state"] == "disabled"
 
 
-def test_traffic_view_ok_reports_periods_and_limits(tmp_path):
-    """正常路径: 快照含各周期累计流量(字节) + 命中/实际限速(KiB/s), 写入后两者一致"""
+def test_traffic_view_ok_reports_limits(tmp_path):
+    """正常路径: 曲线只写 limit 段 —— 命中/实际限速(KiB/s)一致, 来源段一字未变"""
     today = date.today()
     dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
+    # 来源侧先发一次(历史上这两段是同一次发布; 解耦后是两个模块各管一段)
+    assert mgr.host.get("traffic_snapshot").refresh() is True
+    source_before = {k: copy.deepcopy(mgr.web.traffic_view[k]) for k in ("source", "periods", "history")}
 
     assert _run_curve(mgr)
     tv = mgr.web.traffic_view
     assert tv["state"] == "ok"
     assert tv["date"] == today.isoformat()
-    assert tv["periods"] == [{"period": "day", "label": "今日", "up": 15 * GIB, "down": 5 * GIB}]
+    # periods 由来源模块固定发布(day + month, 单位字节); 曲线本轮不再碰它
+    assert [(p["period"], p["up"], p["down"])
+            for p in tv["periods"]] == [("day", 15 * GIB, 5 * GIB), ("month", 15 * GIB, 5 * GIB)]
     # 命中: 15GiB -> 5MiB/s = 5120KiB/s; 5GiB -> 11MiB/s = 11264KiB/s
     assert tv["limit"]["target"] == {"up": 5120, "down": 11264}
     # 写入成功后回读 -> 实际 == 目标(前端此时只显示一个值)
     assert tv["limit"]["actual"] == {"up": 5120, "down": 11264}
     assert tv["limit"]["reasons"] == []
+    assert tv["limit"]["state"] == "ok"
+    assert {k: tv[k] for k in ("source", "periods", "history")} == source_before, "曲线一轮不得改来源段(A4)"
 
 
 def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
@@ -1086,14 +1109,15 @@ def test_traffic_view_dry_run_has_target_without_actual(tmp_path):
 
 
 def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
-    """数据源缺失/无有效行 -> state=stale + 原因码(前端提示数据不可用, 且不展示流量)"""
+    """数据源缺失/无有效行 -> limit 段落 stale + 原因码(本轮不动限速, 目标归 None)"""
     gslc = _gslc(str(tmp_path / "not-exist.dat"), _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr) is True
     tv = mgr.web.traffic_view
-    assert tv["state"] == "stale"
-    assert tv["periods"] == []
+    assert tv["state"] == "stale"  # 曲线侧先判定也可派生 stale(与今日同格)
+    assert tv["limit"]["state"] == "stale"
+    assert tv["limit"]["target"] == {"up": None, "down": None}
     assert tv["limit"]["reasons"][0]["code"] == "dat_missing"
 
     # 文件存在但无有效记录: 同样 stale, 原因码不同

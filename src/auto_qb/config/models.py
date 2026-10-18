@@ -367,6 +367,9 @@ class TrafficSourceConfig:
     provider: 当前生效来源("traffic_monitor" 或 "global_traffic_monitor"); 两来源参数可并存,
       但只有 provider 指向的那一个参与取数(严格互斥, D1)。
     traffic_monitor / global_traffic_monitor: 两个来源的参数(互斥生效)。
+    refresh_interval: 来源侧快照刷新节奏(秒, 26-10-18-0813 A3/D9): traffic_snapshot 模块按它
+      读一次 dat 并发布历史/累计。**与限速曲线的 interval 互相独立** —— 那个只管"读数 + 写限速",
+      不管图刷新; 两者默认都是 10 分钟, 但改一个不会连带改另一个。
 
     !取数路径**不在本对象里算**(R2/D20): 工具来源的 dat 路径是运行期事实(工具自己报在发现
     指针里), 配置面无从得知。所有取数方一律调 `core.traffic_source.paths.dat_path(config)`
@@ -375,6 +378,7 @@ class TrafficSourceConfig:
 
     enabled: bool = True
     provider: str = "traffic_monitor"
+    refresh_interval: float = 600.0
     traffic_monitor: TrafficMonitorSourceConfig = field(default_factory=TrafficMonitorSourceConfig)
     global_traffic_monitor: GlobalTrafficMonitorSourceConfig = field(default_factory=GlobalTrafficMonitorSourceConfig)
 

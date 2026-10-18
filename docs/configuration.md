@@ -373,13 +373,14 @@ python src/auto-qb.py config.yml --hr-confirm-empty btschool
 ---
 config:
     traffic_source: # 全局流量来源: 限速曲线与 expr 流量条件共用, 换来源只改 provider
-        enabled: true   # 段级总开关(缺省 true); false = 停一切取数(曲线发 off 快照, 不自动拉起工具)
+        enabled: true        # 段级总开关(缺省 true); false = 停一切取数(曲线发 off 快照, 不自动拉起工具)
+        refresh_interval: 10M # 历史图刷新节奏(10S~1H), 与曲线的 interval 互相独立
         provider: traffic_monitor
         traffic_monitor:
             dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
     global_speed_limit_curve:
         enabled: true            # 功能总开关(缺省 true); false = 整体停用
-        interval: 10M            # 曲线任务执行间隔(缺省回退主 interval)
+        interval: 10M            # 曲线任务执行间隔(缺省回退主 interval); 只管读数 + 写限速, 不管图刷新
         curves: # 每条 period 曲线为 curve 单项映射; 重复 period 拒绝
             - curve:
                 period: DAY    # 周期，支持 DAY(当天)、MONTH(当月)、ND(最近N天)
@@ -512,6 +513,7 @@ auto-qb 不配端口、不配密钥、不配工具命令行。它做三件事：
 ```yaml
 config:
     traffic_source:
+        refresh_interval: 10M              # 历史图刷新节奏; 与限速曲线的 interval 是两个独立节拍
         provider: global_traffic_monitor   # 一键切换来源: traffic_monitor | global_traffic_monitor
         traffic_monitor:
             dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"   # provider=traffic_monitor 时生效
@@ -526,6 +528,7 @@ config:
 - **没有数据目录这个键**：工具的数据目录由它自己报在发现指针 `endpoint.json` 里，auto-qb 直接取 `<指针.data_dir>/history_traffic.dat` —— 换目录不用改配置，也不会出现"配置写的是旧目录"这种漂移。设置页状态区的「数据目录」显示的就是指针值（只读展示，不可编辑）。
 - **严格互斥、不静默回退**：两边的参数可以并存（切来源不必重填），但只有 `provider` 指向的那个参与取数；工具没在跑（指针缺失）时取数为空并报「数据源不可得」，**不会**偷偷回退到 TM 文件。
 - 工具的采样间隔 / 通知阈值 / 网卡过滤**不在 auto-qb 配置里**：它们属于工具，经控制面读写、默认即用、设置页高级项折叠。
+- **两个节奏别混**：`traffic_source.refresh_interval`（默认 `10M`，10S~1H）管「多久重读一次数据、刷新历史图和今日流量」；`global_speed_limit_curve.interval` 管「多久读一次数据、按曲线写一次 qB 限速」。两者默认都是 10 分钟但**互不影响** —— 把曲线间隔调慢不会让图变慢，反之亦然。曲线没配时前者照常生效（历史图仍有数据）。
 - 设置页把「**启用** 总开关 + 来源选择 + 工具状态 + 立即拉起 + 关闭工具」收在**一张卡「全局流量来源」**里；限速曲线卡只剩曲线本身。状态区五态：未安装 / 未运行 / 拉起中 / 已就绪（绿色）/ 拉起失败。
 - **工具相关的三块只在来源=整机流量监视器(工具)时出现**：工具状态、工具参数（高级）、工具文件选择器。选「Traffic Monitor 文件」时它们整块隐藏 —— 那时工具在不在跑与本次取数无关，摆着只会误导。设置页不再有「打开工具设置」按钮：工具控制面是纯 JSON 且全路径强制 Bearer 鉴权，没有 HTML 设置页，点开只会看到 `{"error":"invalid token"}`；工具参数就在卡片里的「工具参数(高级)」调。
 - **「启用」与「关闭工具」是两件事**：`enabled: false` 只停取数（曲线发 `off` 快照、不查档、不动 qB，也**不再拉起**工具），工具进程原地留着 —— 适合临时掐掉取数；「关闭工具」则进一步把工具进程停掉：先落盘 `enabled: false`，再 `POST /api/traffic/monitor/shutdown`（**先停订阅再停进程**，否则停的瞬间会被订阅线程抢拉）。**不切 `provider`**，开机自启注册也不动 —— 想恢复就打开「启用」，工具会按需重新拉起。确认框会列出受影响的功能（限速曲线 / expr 流量条件 / 历史流量图），清单来自 schema 字段的依赖元数据。

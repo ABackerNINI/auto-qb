@@ -45,7 +45,8 @@ KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "flush_interval", "raw_wi
 
 # traffic_source(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled 总开关):
 # 一键切换取数数据源; provider 决定生效来源(两来源参数可并存, 但只有 provider 指向的那个参与取数, D1 严格互斥)
-KNOWN_TRAFFIC_SOURCE_KEYS = {"enabled", "provider", "traffic_monitor", "global_traffic_monitor"}
+# refresh_interval 为 26-10-18-0813 A3 新增: 来源侧快照节奏, 与曲线 interval 解绑
+KNOWN_TRAFFIC_SOURCE_KEYS = {"enabled", "provider", "refresh_interval", "traffic_monitor", "global_traffic_monitor"}
 #: traffic_source.traffic_monitor(Traffic Monitor dat 来源)
 KNOWN_TRAFFIC_SOURCE_TM_KEYS = {"dat_path"}
 #: traffic_source.global_traffic_monitor(整机流量监视器 gtm 来源)
@@ -663,6 +664,10 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
     # 订阅)由运行期闸门承载, 这里只管形状 —— 不因 enabled=false 免检其余键(关来源也要能改配置)
     if "enabled" in spec:
         _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
+    # 来源侧快照节奏(26-10-18-0813 A3/D9): 10S ~ 1H。下限防"每 tick 读盘 + 发布"空转(读的是
+    # 一个随流量增长的文件), 上限防历史图停在一天前; 与曲线 interval 是两个独立节奏, 各自校验。
+    if "refresh_interval" in spec:
+        _try_time(spec["refresh_interval"], f"{where}.refresh_interval", errors, min_s=10, max_s=3600)
     # provider 缺省/留空 = traffic_monitor(与 loader 同口径)
     provider = str(spec.get("provider") or "traffic_monitor").strip()
     if provider not in ("traffic_monitor", "global_traffic_monitor"):

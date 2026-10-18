@@ -6,6 +6,7 @@
 
 from fastapi.responses import JSONResponse
 
+from ...runtime import public_traffic_view
 from ..common import app_version as _app_version
 from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
@@ -20,6 +21,8 @@ def _status_payload(manager, snap: dict) -> dict:
     !调用时机: `groups`/`traffic` 读的是 Web 运行时视图, `snap` 由调用方**先**取好再传进来 ——
       /api/state 侧必须先跑 `ensure_state`(真正触发视图发布的地方)再进本函数, 否则读到上一轮旧值
       (求值顺序口径见 api_state 内的注释)。
+    !`traffic` 经 public_traffic_view 摘掉 history(计划 26-10-18-0813 A5/D5): 历史行走
+      /api/traffic/history 专用端点, 轮询每轮背几百行纯浪费。
     """
     return {
         "connected": snap["connected"],
@@ -27,7 +30,7 @@ def _status_payload(manager, snap: dict) -> dict:
         "torrents": snap["torrents"],
         "groups": len(manager.web.group_view),
         "version": _app_version(),
-        "traffic": manager.web.traffic_view,
+        "traffic": public_traffic_view(manager.web.traffic_view),
     }
 
 
@@ -125,8 +128,10 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_traffic_history():
         """历史流量按日行(dat 原始数据, 升序): 供前端历史流量柱状图按天/月/年聚合
 
-        数据源是限速曲线任务每轮发布的只读快照(_traffic_view["history"]), Web 线程只读;
-        未启用限速曲线或数据源不可用时 history 为空数组, state 供前端判断展示分支。
+        数据源是 traffic_snapshot 模块按来源节奏发布的只读快照(history 段), Web 线程只读;
+        数据源不可用时 history 为空数组(来源态 stale), 来源关闭时为空且 state="off" ——
+        state 供前端判断空态文案分支。**本端点是 history 的唯一出口**: 轮询载荷里的 traffic
+        已被 public_traffic_view 摘掉该键(计划 26-10-18-0813 A5)。
         """
         manager.web.touch()
         view = manager.web.traffic_view

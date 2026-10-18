@@ -17,9 +17,10 @@
 - test_stop_is_bounded_when_tool_hangs: 工具假死时 stop() 仍在有界超时内返回(关停不被工具拖住); 超时后**保留线程引用**(二次 stop 能补 join, 不会双订阅)
 - test_thread_lifecycle_sync_then_stop: sync 起订阅线程并完成注册; stop 收线前注销订阅
 - test_thread_self_terminates_when_disabled: 来源中途切走 + sync -> 线程读到期望态为假, 注销后自行退出
-- test_refresh_traffic_view_republishes_readonly: 只读刷新: 历史行 + 各周期累计重算发布, state/limit 沿用, 不读不写 qB 限速
-- test_refresh_traffic_view_skips: 曲线未启用 / dat 缺失 / 无有效行 -> 不发布(返回 False), 快照保持原样
-- test_refresh_traffic_view_source_off_publishes_off: 来源总开关关(S1/D1) -> 通知刷新不跳过,
+- test_snapshot_refresh_republishes_readonly: 只读刷新: 历史行 + 各周期累计重算发布, limit 段一字不动, 不读不写 qB 限速
+- test_snapshot_refresh_ignores_curve_config_marks_stale_when_unavailable: 曲线未启用也照发历史(A1);
+  dat 缺失 / 无有效行 -> 返回 False 且 source 段转 stale(history 清空), limit 段仍沿用
+- test_snapshot_refresh_source_off_publishes_off: 来源总开关关(S1/D1) -> 通知刷新不跳过,
   发布 off 快照(上一份可能是 ok 旧数据), 不读 dat 不碰 qB
 - test_refresh_traffic_command_drained: `refresh_traffic` 已进命令表且经主循环 drain 执行后快照刷新(回执 ok)
 - test_source_signature_tracks_source_keys: 切源指纹只认 enabled/provider/文件来源路径三位, 无关段不进指纹, 缺段桩配置取默认(S8)
@@ -434,12 +435,17 @@ def _refresh_env(tmp_path, monkeypatch, *, enabled=True, dat_name="history_traff
             "download_limit": 0
         }
     )
+    # 上一份快照(新契约形状, 26-10-18-0813 A2): 曲线已发布过一轮 -> limit 有目标/实读
     mgr.web.traffic_view = {
         "state": "ok",
         "periods": [],
         "history": [],
         "ts": 1.0,
         "date": "1970-01-01",
+        "source": {
+            "state": "ok",
+            "reasons": []
+        },
         "limit": {
             "target": {
                 "up": 1,
@@ -449,18 +455,23 @@ def _refresh_env(tmp_path, monkeypatch, *, enabled=True, dat_name="history_traff
                 "up": 1,
                 "down": 2
             },
-            "reasons": []
+            "reasons": [],
+            "state": "ok",
         },
     }
     return mgr, str(dat_path), calls
 
 
-def test_refresh_traffic_view_republishes_readonly(tmp_path, monkeypatch):
-    """只读刷新: 历史行 + 各周期累计重算发布; state/limit 沿用; **不读不写 qB 限速**"""
-    mgr, _dat, qb_calls = _refresh_env(tmp_path, monkeypatch)
-    mod = mgr.host.get("speed_curve")
+def test_snapshot_refresh_republishes_readonly(tmp_path, monkeypatch):
+    """只读刷新: 历史行 + 各周期累计重算发布; limit 段一字不动; **不读不写 qB 限速**
 
-    assert mod.refresh_traffic_view() is True
+    26-10-18-0813 A4/A5: 通知触发的刷新改指 `traffic_snapshot.refresh()` —— 它 own 来源段,
+    曲线段由曲线模块写, 所以这里的判据是「写了 source/periods/history, 没碰 limit」。
+    """
+    mgr, _dat, qb_calls = _refresh_env(tmp_path, monkeypatch)
+    mod = mgr.host.get("traffic_snapshot")
+
+    assert mod.refresh() is True
 
     view = mgr.web.traffic_view
     today = date.today().isoformat()
@@ -468,43 +479,79 @@ def test_refresh_traffic_view_republishes_readonly(tmp_path, monkeypatch):
     assert [(p["period"], p["up"], p["down"])
             for p in view["periods"]] == [("day", 3 * MIB, 5 * MIB), ("month", 3 * MIB, 5 * MIB)]
     assert view["date"] == today and view["ts"] > 1.0
-    # 沿用上次快照: 状态与限速字段一字不动(本刷新不查档、不写 qB)
-    assert view["state"] == "ok"
-    assert view["limit"] == {"target": {"up": 1, "down": 2}, "actual": {"up": 1, "down": 2}, "reasons": []}
+    assert view["source"] == {"state": "ok", "reasons": []}
+    # 段隔离(D10): 来源刷新**不得**动曲线那段(限速浮层的目标/实读值原样保留)
+    assert view["limit"] == {
+        "target": {
+            "up": 1,
+            "down": 2
+        },
+        "actual": {
+            "up": 1,
+            "down": 2
+        },
+        "reasons": [],
+        "state": "ok",
+    }
+    assert view["state"] == "ok"  # 派生值: 两段皆 ok
     assert qb_calls == [], f"只读刷新不得碰 qB 限速: {qb_calls}"
 
 
-def test_refresh_traffic_view_skips(tmp_path, monkeypatch):
-    """曲线未启用 / dat 缺失 / 无有效行 -> 不发布(返回 False), 快照保持原样"""
+def test_snapshot_refresh_ignores_curve_config_marks_stale_when_unavailable(tmp_path, monkeypatch):
+    """曲线未启用也照发历史(A1 解耦判据); dat 缺失 / 无有效行 -> 返回 False 且 source 转 stale"""
+    # 曲线关掉: 来源侧照刷新 —— 这正是「没配曲线也能看历史图」的落点, 与曲线是否 enabled 无关
     mgr, _dat, qb_calls = _refresh_env(tmp_path, monkeypatch, enabled=False)
-    before = dict(mgr.web.traffic_view)
-    assert mgr.host.get("speed_curve").refresh_traffic_view() is False
-    assert mgr.web.traffic_view == before
-
-    mgr, _dat, _calls = _refresh_env(tmp_path, monkeypatch, dat_name="not-there.dat", write_dat=False)
-    assert mgr.host.get("speed_curve").refresh_traffic_view() is False
-    assert mgr.web.traffic_view["history"] == []
-
-    empty = tmp_path / "empty.dat"
-    empty.write_text('lines: "0"\n', encoding="utf-8")
-    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[_pc("day", up=_points([(1, 1)]))])
-    mgr.config.traffic_source.traffic_monitor.dat_path = str(empty)
-    assert mgr.host.get("speed_curve").refresh_traffic_view() is False
-    assert mgr.web.traffic_view["history"] == []
+    assert mgr.host.get("traffic_snapshot").refresh() is True
+    assert mgr.web.traffic_view["history"] == [{"date": date.today().isoformat(), "up": 3 * MIB, "down": 5 * MIB}]
     assert qb_calls == []
 
+    # dat 缺失: 返回 False(没有新数据), 但快照必须显式转 stale —— 不能停在上一份 ok 旧数据上
+    mgr, _dat, _calls = _refresh_env(tmp_path, monkeypatch, dat_name="not-there.dat", write_dat=False)
+    assert mgr.host.get("traffic_snapshot").refresh() is False
+    view = mgr.web.traffic_view
+    assert view["source"]["state"] == "stale" and view["state"] == "stale"
+    # 历史行清空; periods 保留固定两行(值归零) —— 形状稳定, 前端不必为 stale 特判行数
+    assert view["history"] == []
+    assert [(p["period"], p["up"], p["down"]) for p in view["periods"]] == [("day", 0, 0), ("month", 0, 0)]
+    # stale 只是来源段的事: 曲线段仍是上一轮写的值
+    assert view["limit"]["state"] == "ok" and view["limit"]["target"] == {"up": 1, "down": 2}
 
-def test_refresh_traffic_view_source_off_publishes_off(tmp_path, monkeypatch):
+    # 无有效行(只有表头): 同 stale 口径
+    empty = tmp_path / "empty.dat"
+    empty.write_text('lines: "0"\n', encoding="utf-8")
+    mgr.config.traffic_source.traffic_monitor.dat_path = str(empty)
+    assert mgr.host.get("traffic_snapshot").refresh() is False
+    assert mgr.web.traffic_view["source"]["state"] == "stale"
+    assert mgr.web.traffic_view["history"] == []
+
+
+def test_snapshot_refresh_source_off_publishes_off(tmp_path, monkeypatch):
     """来源总开关关(S1/D1, 26-10-17-1737): 通知到达时来源已关 -> 发布 off 快照(不跳过)
 
     上一份快照可能还是 ok(旧数据): 必须显式翻成 off, 与曲线任务口径一致; 返回 False
-    (没有新数据可发), 不碰 qB 限速。
+    (没有新数据可发), 不碰 qB 限速。limit 段一并复位 disabled(来源关了没有"命中目标"可言)。
     """
     mgr, _dat, qb_calls = _refresh_env(tmp_path, monkeypatch)
     mgr.config.traffic_source.enabled = False
-    assert mgr.host.get("speed_curve").refresh_traffic_view() is False
-    assert mgr.web.traffic_view["state"] == "off"
-    assert mgr.web.traffic_view["history"] == []  # 不读 dat
+    assert mgr.host.get("traffic_snapshot").refresh() is False
+
+    view = mgr.web.traffic_view
+    assert view["state"] == "off"
+    assert view["source"]["state"] == "off"
+    assert view["source"]["reasons"][0]["code"] == "source_off"
+    assert view["history"] == [] and view["periods"] == []  # 不读 dat
+    assert view["limit"] == {
+        "target": {
+            "up": None,
+            "down": None
+        },
+        "actual": {
+            "up": None,
+            "down": None
+        },
+        "reasons": [],
+        "state": "disabled"
+    }
     assert qb_calls == []
 
 
@@ -614,8 +661,11 @@ def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch)
     """端到端(进程内): 真端点 -> 命令队列 -> 真主循环 handler -> 快照刷新 -> /api/state 可见
 
     这是「工具发事件 -> WebUI 历史图与顶栏刷新」那条链路的进程内等价物(真机联调留待 S10):
-    `/api/state` 的 `status.traffic` 就是顶栏 pill 与历史弹层共同的取数位, 另一个取数位是
-    `/api/traffic/history` —— 两者同源(同一个 traffic_view), 这里两个都断言。
+    `/api/state` 的 `status.traffic` 就是顶栏 pill 与限速浮层的取数位(periods + source/limit
+    段), 另一个取数位是 `/api/traffic/history` —— 两者同源(同一个 traffic_view), 这里两个都断言。
+
+    A5 载荷瘦身: 轮询响应里**没有** `history`(几百行每轮回传是纯浪费), 历史行只走专用端点 ——
+    本用例同时守住这条边界, 否则「顺手把 history 塞回去」不会被任何断言拦住。
     """
     from fastapi.testclient import TestClient
 
@@ -642,12 +692,16 @@ def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch)
 
     resp = client.post(tool_client.NOTIFY_PATH, json=event, headers=headers)
     assert resp.status_code == 200 and resp.json()["action"] == "refresh_queued"
-    mgr.web.consume_commands()  # 主循环命令线(真 handler + 真 speed_curve 模块)
+    mgr.web.consume_commands()  # 主循环命令线(真 handler + 真 traffic_snapshot 模块)
 
     traffic = client.get("/api/state?view=group", headers=headers).json()["status"]["traffic"]
     assert [p["period"] for p in traffic["periods"]] == ["day", "month"]
-    assert traffic["history"] == [{"date": today, "up": 3 * MIB, "down": 5 * MIB}]
-    assert client.get("/api/traffic/history", headers=headers).json()["history"] == traffic["history"]
+    assert traffic["source"]["state"] == "ok"
+    assert "history" not in traffic, "A5: 轮询载荷不得再带 history"
+
+    expected = [{"date": today, "up": 3 * MIB, "down": 5 * MIB}]
+    history = client.get("/api/traffic/history", headers=headers).json()["history"]
+    assert history == expected
 
 
 def test_mock_config_section_starts_no_thread(tmp_path):

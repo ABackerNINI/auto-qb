@@ -477,6 +477,15 @@ GROUPS: Tuple[Group, ...] = (
                         affects=("global_speed_limit_curve", "rules", "history_chart"),
                     ),
                     Field(
+                        "refresh_interval",
+                        "刷新间隔",
+                        "time",
+                        default="10M",
+                        unit_default="M",
+                        help="多久重读一次来源文件并发布流量快照(历史图 / 今日流量): 10S ~ 1H; "
+                        "与限速曲线的「执行间隔」互相独立 —— 那个只管读数并按曲线写限速, 不管图刷新",
+                    ),
+                    Field(
                         "provider",
                         "来源",
                         "enum",

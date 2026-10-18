@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .modules.ops_mod import OpsModule
     from .modules.maintenance_mod import MaintenanceModule
     from .modules.tracker_mod import TrackerModule
+    from .modules.traffic_snapshot_mod import TrafficSnapshotModule
     from .qbapi import QbApi
     from .state import StateService
 
@@ -59,6 +60,9 @@ class AppContext:
     - maintenance / ops(P4 起)是模块句柄: grouping 打标经 ctx.maintenance.add_tags(不
       import 兄弟模块); 规则动作与 WEB 命令经 ctx.ops 调危险操作层 —— 模块对外暴露面
       单点在 ctx(与 notify 同口径), ops 与 rules 的 import 单向化见 ops_mod 头注。
+    - traffic_snapshot(P6 起, 计划 26-10-18-0813)是模块句柄: 快照所有者; 曲线模块经
+      ctx.traffic_snapshot.publish_limit 写自己的段, WEB 命令经它 refresh —— 装配序保证
+      它先于 speed_curve 挂上(装配清单见 core/qbmanager)。
     """
     def __init__(self, config) -> None:
         self._config = config
@@ -71,6 +75,7 @@ class AppContext:
         self.trackers: Optional["TrackerModule"] = None
         self.maintenance: Optional["MaintenanceModule"] = None
         self.ops: Optional["OpsModule"] = None
+        self.traffic_snapshot: Optional["TrafficSnapshotModule"] = None  # 模块句柄, 见类注
 
     @property
     def config(self):

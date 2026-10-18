@@ -23,7 +23,8 @@ test_delete_tags / test_speed_curve / test_trigger_events(经 manager 旧名单�
 - test_speed_curve_queue_rebuilt_reregisters_with_new_interval: 队列整体重建后经相位重新入队, interval 取新值
 - test_create_global_tasks_delegate_reregisters_both_modules: 兼容转发一发令, 曲线+标签清理两模块都入队
 - test_create_global_tasks_delegate_idempotent_on_same_queue: 同队列重复调用不重复入队
-- test_traffic_publish_goes_through_ctx_web_service: _publish_traffic 经 ctx.web.set_traffic_view, 别名同源可见
+- test_traffic_publish_goes_through_ctx_web_service: 段级发布(snapshot.publish_limit/publish_source)
+  经 ctx.web.set_traffic_view, 别名同源可见
 - test_maintenance_start_registers_delete_tags_per_config: delete_tags 两任务按配置入队, interval=主 interval
 - test_maintenance_queue_rebuilt_reregisters: 队列重建后标签清理任务回到新队列
 - test_p3_modules_sections_claims: 三模块 sections 认领清单锁定(speed_curve 增 traffic_source)
@@ -149,15 +150,23 @@ def test_create_global_tasks_delegate_idempotent_on_same_queue():
 
 
 def test_traffic_publish_goes_through_ctx_web_service():
-    """_publish_traffic 经 ctx.web.set_traffic_view 发布; manager.web.traffic_view 同源可见"""
+    """段级发布经 ctx.web.set_traffic_view 落地; manager.web.traffic_view 同源可见
+
+    26-10-18-0813 A2/D10: 曲线模块只写 limit 段(`publish_limit`), 来源段由 traffic_snapshot
+    自己写(`publish_source`) —— 两条路都必须走 ctx.web 服务方法, 不能绕过去直接改属性。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
+        snap = mgr.host.get("traffic_snapshot")
         with mock.patch.object(mgr.web, "set_traffic_view", wraps=mgr.web.set_traffic_view) as pub:
-            mgr.host.get("speed_curve")._publish_traffic("ok", periods=[{"period": "day"}], target={"up": 1, "down": 2})
-        assert pub.call_count == 1
+            snap.publish_limit(target={"up": 1, "down": 2}, actual={"up": 1, "down": 2})
+            snap.publish_source([])
+        assert pub.call_count == 2, "两次段级发布各一次 set_traffic_view"
         view = mgr.web.traffic_view  # 旧名别名 -> self.web.traffic_view(同一份)
-        assert view["state"] == "ok" and view["periods"] == [{"period": "day"}]
         assert view["limit"]["target"] == {"up": 1, "down": 2}
+        # 段隔离: 来源段写入不动曲线段, 顶层 state 是派生的 ok
+        assert [p["period"] for p in view["periods"]] == ["day", "month"]
+        assert view["state"] == "ok"
 
 
 # ---------- maintenance 全局任务与认领 ----------

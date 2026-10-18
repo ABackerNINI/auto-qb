@@ -11,8 +11,9 @@
 - test_validate_tool_branch_structure: global_traffic_monitor 子块未知键/非串路径被拒; provider=global 时无需 dat_path
 - test_validate_tool_data_dir_key_is_gone: data_dir 已从工具子段删除(R2/D20), 出现即按未知键拒绝
 - test_validate_notify_cooldown_bounds: notify_cooldown_s 须可解析为时间且 0~24H(负/超界拒, 0 合法)
+- test_validate_refresh_interval_bounds: refresh_interval(A3) 须可解析为时间且 10S~1H(边界含, 9S/2H/非串拒)
 - test_validate_valid_section_ok: 全键合法值一次通过(两来源参数可并存)
-- test_loader_parses_explicit_values: 显式值按类型解析(str/time), 与字段默认不同的值真正进入 Config
+- test_loader_parses_explicit_values: 显式值按类型解析(str/time, 含 A3 的 refresh_interval), 与字段默认不同的值真正进入 Config
 - test_loader_defaults_when_absent: 段缺省 -> 全部字段默认
 - test_loader_non_dict_spec_defaults: 段值非字典(如字符串) -> 全默认(不抛)
 - test_loader_blank_provider_falls_back: provider 留空/纯空白 -> 兜底 traffic_monitor
@@ -56,9 +57,12 @@ def test_validate_absent_section_ok():
 def test_validate_unknown_key_rejected():
     errs = _errors({"provider": "traffic_monitor", "traffic_monitor": {"dat_path": "/x.dat"}, "bogus": "1"})
     assert any("未知键" in e and "bogus" in e for e in errs), errs
-    # 已知键集合与 schema 单点一致(顶层 4 键 + TM 1 键 + 工具 3 键)
-    # 顶层 4 键含 26-10-17-0339 S1 的 enabled 总开关(停取数/停订阅/停拉起)
-    assert KNOWN_TRAFFIC_SOURCE_KEYS == {"enabled", "provider", "traffic_monitor", "global_traffic_monitor"}
+    # 已知键集合与 schema 单点一致(顶层 5 键 + TM 1 键 + 工具 3 键)
+    # 顶层 5 键含 26-10-17-0339 S1 的 enabled 总开关(停取数/停订阅/停拉起)
+    # 与 26-10-18-0813 A3 的 refresh_interval(来源侧刷新节奏, 与曲线 interval 解绑)
+    assert KNOWN_TRAFFIC_SOURCE_KEYS == {
+        "enabled", "provider", "refresh_interval", "traffic_monitor", "global_traffic_monitor"
+    }
     assert KNOWN_TRAFFIC_SOURCE_TM_KEYS == {"dat_path"}
     assert KNOWN_TRAFFIC_SOURCE_TOOL_KEYS == {"tool_dir", "tool_exe", "notify_cooldown_s"}
 
@@ -135,6 +139,30 @@ def test_validate_notify_cooldown_bounds():
     assert any("notify_cooldown_s" in e for e in _tool("abc"))
 
 
+def test_validate_refresh_interval_bounds():
+    """来源侧快照节奏(26-10-18-0813 A3/D9): 可解析为时间且 10S~1H, 与曲线 interval 各自校验
+
+    下限防「每个 tick 读盘 + 发布」空转, 上限防历史图停在一天前; 非时间串同样拒绝。
+    """
+    def _sec(value):
+        return _errors(
+            {
+                "provider": "traffic_monitor",
+                "traffic_monitor": {
+                    "dat_path": "/x.dat"
+                },
+                "refresh_interval": value
+            }
+        )
+
+    assert _sec("10S") == []  # 下限含边界
+    assert _sec("10M") == []  # 默认值必须合法
+    assert _sec("1H") == []  # 上限含边界
+    assert any("refresh_interval" in e for e in _sec("9S")), "低于 10S 必须拒绝"
+    assert any("refresh_interval" in e for e in _sec("2H")), "高于 1H 必须拒绝"
+    assert any("refresh_interval" in e for e in _sec("abc")), "非时间串必须拒绝"
+
+
 def test_validate_valid_section_ok():
     assert _errors(
         {
@@ -156,6 +184,7 @@ def test_loader_parses_explicit_values():
     cfg = load_traffic_source_config(
         {
             "provider": "global_traffic_monitor",
+            "refresh_interval": "15M",
             "traffic_monitor": {
                 "dat_path": "/probe/tm.dat"
             },
@@ -168,6 +197,7 @@ def test_loader_parses_explicit_values():
         }
     )
     assert cfg.provider == "global_traffic_monitor"
+    assert cfg.refresh_interval == 900.0  # A3: time 串解析为秒
     assert cfg.traffic_monitor.dat_path == "/probe/tm.dat"
     assert cfg.global_traffic_monitor.tool_dir == "/probe/gtm"
     assert cfg.global_traffic_monitor.tool_exe == "/probe/gtm/monitor.exe"
@@ -180,6 +210,7 @@ def test_loader_defaults_when_absent():
     assert load_traffic_source_config({}) == d
     assert Config().traffic_source == d
     assert d.provider == "traffic_monitor"
+    assert d.refresh_interval == 600.0  # A3: 默认 10M, 与 schema 声明的 default 同值
     assert d.traffic_monitor.dat_path == ""
     assert d.global_traffic_monitor.tool_dir == "" and d.global_traffic_monitor.tool_exe == ""
     assert d.global_traffic_monitor.notify_cooldown_s == 600.0

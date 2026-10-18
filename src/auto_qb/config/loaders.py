@@ -430,11 +430,13 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     (provider="traffic_monitor", 两来源参数全空)。provider 缺省/留空 = traffic_monitor
     (与校验同口径)。两个子块的结构已在模型里给出默认工厂, 这里只覆盖显式键。
     enabled 缺省 true(总开关); 关闭 = 停一切取数(停订阅/停自动拉起), 运行期闸门判 False 生效。
+    refresh_interval(26-10-18-0813 A3/D9)缺省 600s: 来源侧快照节奏, 与曲线 interval 解绑。
     """
     d = TrafficSourceConfig()
     if not isinstance(spec, dict):
         return d
     enabled = _get(spec, "enabled", d.enabled, parse_bool)
+    refresh_interval = _get(spec, "refresh_interval", d.refresh_interval, parse_time)
     tm_spec = spec.get("traffic_monitor")
     tm_d = TrafficMonitorSourceConfig()
     traffic_monitor = TrafficMonitorSourceConfig(
@@ -458,6 +460,7 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     return TrafficSourceConfig(
         enabled=enabled,
         provider=provider,
+        refresh_interval=refresh_interval,
         traffic_monitor=traffic_monitor,
         global_traffic_monitor=global_traffic_monitor,
     )

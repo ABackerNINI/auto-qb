@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-phase2">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-18-0813">
-<meta name="doc-updated" content="26-10-18-0813">
+<meta name="doc-updated" content="26-10-18-1019">
 <meta name="doc-refs" content="memory-bank/plans/26-10-17-1737-plan-global-traffic-source-integration-fixes.html, memory-bank/tasks/26-10-17-webui-traffic-source-fixes.md, memory-bank/tasks/26-10-18-backend-traffic-snapshot-merge.md">
 <style>
   :root {
@@ -420,6 +420,14 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-18-0813</span> 初版：三轮 grilling 收敛出 17 条拍板（D1–D17）—— 快照所有权移交独立模块 <code>traffic_snapshot</code>（段级 API + 派生 state + 自有节奏键 <code>refresh_interval</code>）、schema 三组合并为 <code>traffic_limit</code>「流量与限速」、合并卡抽成 <code>aq-traffic-card</code> + 独立分片（<code>settings.html</code> 额度回落 440 → 400）、通用层两修（<code>show_if</code> 下移 + 排除表单点化）、affects 最小集与轮询载荷瘦身；取代 1737 的 P1–P3；批次 P0（S8 收口）→ P2-A → P2-B。</li>
+  <li><span class="tag">R1 · 26-10-18-1019</span> <b>P2-A（A1–A5 后端）实施完成</b>，全量回归 <code>3578 passed / 4 skipped</code>、覆盖率 98.06%。四处与计划原文的偏差，均为实施中发现的必要性修正：
+    <ul>
+      <li><b>① 读档提到共享层</b>（A1/A4）：计划把「读 dat + 解析 + 失败判定」留在曲线模块内，但 A2 之后来源模块与曲线模块都要读同一份 dat、且「缺文件/无有效行」的判据必须一致（否则两段 state 会各说各话）。落地为 <code>core/traffic_source/reader.py::read_source_rows</code>（返回 <code>(rows, bad, fail)</code>，<code>fail</code> 带 <code>dat_missing</code>/<code>dat_empty</code> 码 + 快照文案 + 日志文案），两模块共用单点 —— 模块之间不互相 import 的约束不变（共同下沉，不是横向依赖）。</li>
+      <li><b>② 初始快照 <code>source.state</code> 取 <code>"ok"</code> 而非计划写的 <code>"off"</code></b>：<code>derive_state</code> 优先级里 <code>source.off</code> 压过一切，若种子态写 <code>off</code> 而顶层写 <code>"disabled"</code>，派生结果会立刻与自己矛盾（前端首屏读到 <code>state=disabled</code> 但 <code>source.state=off</code>，下一轮发布又变）。种子语义应是「还没有任何一段发表过异议」，故 <code>source.state="ok"</code> + <code>limit.state="disabled"</code>，与今日「曲线未配置 -> disabled」逐字对齐。</li>
+      <li><b>③ <code>derive_state</code> 补一格 <code>limit.stale</code> -> <code>stale</code></b>（计划表只列了 <code>source.stale</code>）：解耦后两个模块读同一份 dat、各自都能先发现不可用；若只有来源段算 stale，会出现「曲线已判读档失败、顶层 state 仍是 ok、限速浮层显示正常却无目标值」的窗口。这一格是与今日语义对齐（今日读档失败的判定方本就是曲线任务），不是新增状态。</li>
+      <li><b>④ <code>TaskQueue.named(name)</code> 新增</b>（A3 热更新用）：热重载只改 <code>refresh_interval</code> 时不能重复入队（队列是按 <code>next_run</code> 排序的堆，增删要维护堆序），改为取任务引用**就地改 <code>interval</code>** —— 该值只在 <code>_requeue</code> 收尾时被读，零结构变更。同时补 <code>queue_rebuilt</code> 相位订阅兜底（L2 整体重建队列后重新入队，已在则幂等跳过）。</li>
+    </ul>
+    另附两处计划已预见、实施确认的细节：曲线 <code>interval</code> 语义收窄的文案落在 schema <code>help</code> + <code>config_editor.js</code> 两处（「只管写限速 —— 历史流量图的刷新节奏见『流量来源』的『刷新间隔』」）；<code>refresh_interval</code> 进入键面基线（169 → 170 键，<code>tests/fixtures/config_key_surface.txt</code> v5）。守阵：新增 <code>tests/test_traffic_snapshot.py</code>（14 条，含 <code>set_traffic_view</code> 调用点源码检索），并改造 8 个既有测试文件里依赖「曲线独家发布」的断言（<code>test_speed_curve</code> / <code>test_traffic_monitor_client</code> / <code>test_traffic_monitor_dat</code> / <code>test_modules_p3</code> / <code>test_config_traffic_monitor</code> / <code>test_config_key_surface</code> / <code>test_module_host</code> / <code>test_web_views_reload</code>）。P2-B（B1–B5 前端合并卡）仍未开工。</li>
 </ul>
 
 </div>

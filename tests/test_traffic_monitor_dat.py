@@ -81,6 +81,10 @@ def _dat_path_env(tmp_path, dat_path: Path):
         "history": [],
         "ts": 1.0,
         "date": "1970-01-01",
+        "source": {
+            "state": "ok",
+            "reasons": []
+        },
         "limit": {
             "target": {
                 "up": 1,
@@ -91,6 +95,7 @@ def _dat_path_env(tmp_path, dat_path: Path):
                 "down": 2
             },
             "reasons": [],
+            "state": "ok",
         },
     }
     return mgr
@@ -108,7 +113,8 @@ def test_tool_written_dat_round_trips_through_dat_path(gtm_writer, tmp_path):
     _write_tool_dat(gtm_writer, dat_path, raw)
 
     mgr = _dat_path_env(tmp_path, dat_path)
-    assert mgr.host.get("speed_curve").refresh_traffic_view() is True, "dat_path 指向工具文件时刷新必须发布"
+    # 26-10-18-0813 A5: 来源刷新统一走快照模块(曲线模块不再有 refresh_traffic_view)
+    assert mgr.host.get("traffic_snapshot").refresh() is True, "dat_path 指向工具文件时刷新必须发布"
     view = mgr.web.traffic_view
 
     expected = {day: _floor_kb(*vals) for day, vals in raw.items()}

@@ -12,7 +12,7 @@
 import heapq
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, List, Set
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set
 
 if TYPE_CHECKING:
     from ..torrents import TorrentStore
@@ -171,6 +171,18 @@ class TaskQueue:
         带 hash)不混淆。
         """
         return self.has_task("internal", name, "")
+
+    def named(self, name: str) -> Optional[Task]:
+        """按名取全局任务(internal + 无 hash); 没有则 None
+
+        唯一消费方是「已在队列的任务**就地**改节奏」(traffic_snapshot.apply 的 refresh_interval
+        热更新): 队列是 next_run 排序的堆, 增删任务要维护堆序, 而 interval 只在收尾 requeue
+        时被读 —— 就地改只影响下一次排期, 不动堆结构。!不要用它做"改任务身份/换 handler"。
+        """
+        for t in self._fast:
+            if t.kind == "internal" and t.name == name and not t.hash:
+                return t
+        return None
 
     def active_check_hashes(self) -> Set[str]:
         """在途校验 hash 集合快照(已提交 full-checking 且轮询任务未结束, 消亡时释放)

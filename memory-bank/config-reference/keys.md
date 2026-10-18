@@ -68,11 +68,12 @@
 ## global_speed_limit_curve 段
 
 数据源不再内联: 取数路径由顶层 `traffic_source` 段决定(见下), 本段只管曲线与节奏。
+**节奏口径(26-10-18-0813 A4 收窄)**: 本段 `interval` 自快照解耦后只决定「多久读一次数、按曲线写一次 qB 限速」; 历史流量图的刷新节奏归 `traffic_source.refresh_interval`, 两者互不影响。
 
 ```yaml
 global_speed_limit_curve:
     enabled: true                    # 总开关, 缺省 true
-    interval: 10M                    # 可选, 缺省回退主 interval
+    interval: 10M                    # 可选, 缺省回退主 interval; 只管「读 dat + 写限速」
     curves:                          # 重复 period 拒绝; 每条为单项映射 curve:
         - curve:
             period: DAY              # DAY/1D/D | MONTH | ND (如 7D 滚动窗口)
@@ -102,6 +103,7 @@ global_speed_limit_curve:
 ```yaml
 traffic_source:
     enabled: true                         # 总开关(缺省 true; false = 停一切取数, 见下)
+    refresh_interval: 10M                 # 快照刷新节奏(10S~1H; 与曲线 interval 独立)
     provider: traffic_monitor              # traffic_monitor(缺省) | global_traffic_monitor
     traffic_monitor:
         dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填(来源启用时)
@@ -115,6 +117,7 @@ traffic_source:
 | 键 | 类型/默认 | 说明 |
 |----|-----------|------|
 | `enabled` | bool / `true` | 数据来源总开关(计划 26-10-17-1737 S1/D1): `false` = 停止一切取数 —— 停订阅/停自动拉起/`dat_path` 返回空, 快照转 `off` 态; **不写盘改别的功能配置**(不动 `global_speed_limit_curve.enabled`), 开回即自恢复; 关来源后 `traffic_monitor.dat_path` 的必填校验豁免(没配好数据源时的出路) |
+| `refresh_interval` | time / `10M` | **快照刷新节奏**(计划 26-10-18-0813 A3/D9, 校验 `10S` ~ 1H): `traffic_snapshot` 模块按它读一次 dat 并发布历史行 + 今日/本月累计; 与限速曲线的 `interval` **互相独立** —— 那个只管「读数 + 写 qB 限速」, 调它不会连带改图刷新(反之亦然)。曲线没配时本键照常生效, 历史图仍有数据 |
 | `provider` | str / `traffic_monitor` | 取数来源: `traffic_monitor`(读 TrafficMonitor 的 history_traffic.dat) 或 `global_traffic_monitor`(读工具数据目录下的 history_traffic.dat); 留空/缺省 = `traffic_monitor` |
 | `traffic_monitor` | object | TrafficMonitor 来源子块; 仅一个键 `dat_path` |
 | `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 且来源启用时必须非空(校验 fail-fast; `enabled: false` 时豁免) |

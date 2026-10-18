@@ -91,6 +91,26 @@ _DELTA_TIMELINE_MAX = 40
 # (四数组)与未知 view 值仍一律 full(无视图上下文可裁剪, 保守默认)
 _DELTA_VIEWS = frozenset({"group", "torrent", "show"})
 
+# ---- 流量快照的轮询出口(计划 26-10-18-0813 A5/D5) ----
+
+
+def public_traffic_view(view: dict) -> dict:
+    """轮询载荷用的流量快照: **去掉 history 段**的浅拷贝(单点, 只此一处)
+
+    history 是 dat 的逐日全量行(几百行, 且随数据积累线性增长), 前端从不从轮询里读它 ——
+    弹层一律走 `/api/traffic/history`(dialogs.js 的 loadHistory)。此前 `/api/status`·
+    `/api/state` 直接把快照引用塞进响应, 等于每轮把整份历史背一遍(设计注释早就写着"历史行
+    不进轮询响应", 实现一直没跟上)。
+
+    返回浅拷贝(.copy): 段对象仍是同一批引用(Web 线程只读), 只有 history 这一个键被摘掉 ——
+    不给调用方"顺手改顶层键"的机会, 也不复制几百行数据。
+    """
+    if not view:
+        return view
+    out = dict(view)
+    out.pop("history", None)
+    return out
+
 
 def _new_delta_buckets() -> dict:
     """增量键集桶结构(plan S2): 分视图 upsert/removed 键集; show 桶 S9b 起随剧键推导填充"""
@@ -245,8 +265,35 @@ class WebUIRuntime:
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
         self.handle = None
-        # 限速/流量只读快照(限速曲线任务整体替换, Web 线程只读); 未启用曲线时 state="disabled"
-        self.traffic_view: dict = {"state": "disabled", "periods": [], "limit": {}}
+        # 限速/流量只读快照(traffic_snapshot 模块整体替换, Web 线程只读); 未启用曲线时 state="disabled"
+        # 三段契约(计划 26-10-18-0813 A2/D8/D10): source(来源态) / periods+history(来源数据) /
+        # limit(曲线态); 顶层 state 是 derive_state 的派生值。!种子值刻意用 source=ok: "off" 是
+        # 「总开关关闭」的断言, 未读之前不成立(首轮发布无论谁先跑都会覆盖它); 用 ok 让种子的
+        # state 与派生规则自洽(ok + limit=disabled -> "disabled", 与今日初始态一致)。
+        self.traffic_view: dict = {
+            "state": "disabled",
+            "ts": 0.0,
+            "date": "",
+            "source": {
+                "state": "ok",
+                "reasons": [],
+            },
+            "periods": [],
+            "history": [],
+            "limit":
+                {
+                    "target": {
+                        "up": None,
+                        "down": None
+                    },
+                    "actual": {
+                        "up": None,
+                        "down": None
+                    },
+                    "reasons": [],
+                    "state": "disabled",
+                },
+        }
         # 全量种子上传/下载速度合计(状态栏常显统计): 与四视图**同一临界区**发布, 随 /api/state
         # 的 status 恒回传 —— 不参与 VIEW_ARRAYS 视图分片、不受 rid 门控(状态栏是跨视图的常驻
         # 显示, 不能依赖任何一个"可能被裁掉"的数组, 见 issue 26-09-20-1646)
@@ -422,8 +469,8 @@ class WebUIRuntime:
     def set_traffic_view(self, view: dict) -> None:
         """限速/流量只读快照发布口(plan kernel-module-refactor P3)
 
-        speed_curve 模块经 ctx.web 的这个服务方法推送快照, 不再跨层直写 self.traffic_view
-        字段(外围绕过边界直写内核/门面私有面清零, 同 plan P1 托盘改 ctx.notify 的口径)。
+        **唯一写入方是 traffic_snapshot 模块**(计划 26-10-18-0813 A2/D10: 段级写全收在它的
+        publish_source / publish_limit / publish_off 里, 别的模块一律不得直改快照)。
         主循环线程**整体替换**引用, Web 线程只读该引用 —— 无锁即可保证读到自洽的一份。
         """
         self.traffic_view = view

@@ -989,13 +989,17 @@ window.CONFIG_HUB = {
     tmSourceOff() {
       return this.cfgBool(["config", "traffic_source", "enabled"], true) === false;
     },
-    /* 总开关行(供 <hub-field> 渲染): schema 里 traffic_source 对象的首个叶字段(路径指向段根本身) */
-    tmEnabledItems() {
+    /* 来源段自己的标量行(供 <hub-field> 渲染): 总开关 + 刷新间隔 —— 两者都是"来源本身"的属性,
+     * 不随 provider 变(provider 用按钮单独渲染, 两个来源子段走 tmProviderItems)。
+     * refresh_interval 是 26-10-18-0813 A3 的新键: 与曲线「执行间隔」是两个独立节奏, 行文案
+     * 由 schema help 表达(那里是措辞单点, 前端不另写一份)。 */
+    tmSourceRows() {
       const root = this.tmSourceRoot();
-      const f = root && (root.fields || []).find((x) => x.key === "enabled");
-      if (!f) return [];
+      if (!root) return [];
       const base = ["config", "traffic_source"];
-      return [{ type: "field", field: f, path: [...base, "enabled"], depth: 0, owner: base, inline: [] }];
+      return (root.fields || [])
+        .filter((x) => x.key === "enabled" || x.key === "refresh_interval")
+        .map((f) => ({ type: "field", field: f, path: [...base, f.key], depth: 0, owner: base, inline: [] }));
     },
     /* 选中来源的参数行(供 <hub-field> 渲染): 从 schema 取该来源子段的叶子字段, 路径指向 traffic_source.<来源> */
     tmSourceRoot() {
