@@ -1,11 +1,11 @@
 # 26-10-17-webui-traffic-source-fixes — 全局流量来源联动缺陷修复 (Phase 1)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-17
 **Updated:** 2026-10-18
-**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）、S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）与 S6–S7（设置页四修 / 工具参数单位下拉＋`?`＋复合串契约＋旧值迁移）已实施完成并通过全域回归；S8 待续。
+**Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）、S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）与 S6–S7（设置页四修 / 工具参数单位下拉＋`?`＋复合串契约＋旧值迁移）已实施完成并通过全域回归；S8 已实施完成（热重载判定来源指纹变化即同轮投递 `refresh_traffic`，切源保存后历史图与顶栏立即换数据）。
 **Topics:** webui-traffic-source-fixes
-**Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html
+**Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html, memory-bank/testing/baselines/26-10-18-0850-global-traffic-source-fixes-s8.md
 
 ## 原始请求
 
@@ -106,3 +106,18 @@ gtm 控制面 `ControlServer.__init__` 收 `stop_event`；新增 token 保护 `P
 **额度**：`settings.html` 触 400 行单分片上限 → 额度提到 440 并在守阵里写明理由（该卡是二级页 `v-else-if` 链的一环，抽分片会断链；下次再长应先重构成独立组件）。
 
 **回归**：`commands run test.full` 全绿（含覆盖率闸门）；gtm 工具侧全量亦全绿。数字只写基线切片 `26-10-18-0706-global-traffic-source-fixes-s6-s7`，此处不手抄。
+
+### R7 · S8 实施完成 — 切源即刷新 (2026-10-18)
+
+**后端**：① 判定单点新增 `core/traffic_source/paths.py::source_signature(config)` —— 指纹只取**配置事实**三位 `(enabled, provider, traffic_monitor.dat_path)`；刻意不把 `dat_path(config)` 的解析结果算进来（工具来源的路径来自发现指针，是运行期事实，两次读之间可变 ⇒ 会让「保存任何无关配置」偶发触发刷新，判定也不可复现；文件↔工具互切已由 `provider` 覆盖）。② `webui/commands.py::_cmd_reload_config` 在 `apply_new_config` **前后各算一次**指纹，不等即 `post_command("refresh_traffic", {"trigger": "config"})`；`consume_commands` 是 while 取空队列，所以该命令在**同一轮 drain 内**执行 —— 用户看到的就是「保存完图表就变了」。③ `_cmd_refresh_traffic` 新增 `trigger` 参数（缺省 `notify`）：两个触发源（工具阈值事件 / 配置切源）共用一条执行路径，只有日志口径分流（切源时事件号为空是常态，不能说成「监视器通知」）。**为什么投递而不是直接调用刷新体**：刷新体单点在 handler，P2-A 的 A5 会把它改指 `traffic_snapshot.refresh()`，判定方不该再留一份读盘逻辑。
+
+**前端**：**零新增取数点**（有意为之）。`shared/dialogs.js` 早有 `watch: "status.traffic.ts"` —— 弹层开着时快照 `ts` 一变就重拉 `/api/traffic/history`；顶栏 pill 读主轮询的 `traffic.periods`。切源刷新必然改 `ts`，所以「保存后图表立即更新」由既有单点自动兑现。另加一处显式重拉会在 PUT 回执（早于热重载落地）时先拉一次旧快照，反而制造第二次取数点与一次旧帧。
+
+**守阵**（`tests/test_traffic_monitor_client.py` 新增 4 条）：指纹表驱动（三键各变一位即变，无关段不变，缺段桩配置取默认）／切源后同一 drain 内快照即新来源数据且 `qb_calls == []`／关源保存后立即 `state == "off"` 且不读 dat／无关配置保存不投递（断言快照**同一对象**未换引用）。**变异红验**：把 `if after == before` 放宽成恒真 ⇒ 前两条立即红（2 failed / 2 passed），还原后 4 passed。
+
+**已知边界（不在本步修，P2-A 接手）**：曲线未启用/未配置时 `refresh_traffic_view` 仍直接跳过不发布 —— 即「没配曲线就永远没有历史图」那条结构性死角（计划 §02 #1/#3），P0 保持行为等价不动它。
+
+**回归**：`commands run test.full` 绿除一条**既存红** —— `test_docs_forms.py::test_doc_map_live_rotation`（memory-bank 里某件的 topic 名带逗号，默认视图名录漏收；在净树 HEAD 上复跑同样红，与本轮改动无关，按范围守恒未动）。数字见基线切片。
+
+- 2026-10-18 08:50 S8 收口(切源即刷新): paths.source_signature 判定单点 + _cmd_reload_config 同轮投递 refresh_traffic + 守阵四条与变异红验; Phase 1 S1-S8 全部完成
+- 2026-10-18 09:10 蒸馏并删切片(`activeContext/26-10-17-1742-webui-traffic-source-fixes.md`, R0–R5 已全部有归处): 三条机制进 [systemPatterns/web-config-editor.md](../systemPatterns/web-config-editor.md)(保存后联动刷新只投递命令 / 工具参数单位与复合串契约 / 「不适用」整块隐藏 ≠「不可用」灰显), 「把运行期事实算进配置变更指纹」进 [pitfalls/backend/config-duplicates-runtime-fact.md](../pitfalls/backend/config-duplicates-runtime-fact.md), 逐轮数字留在 baselines(2114 / 0615 / 0626 / 0706 / 0850) —— 切片本身不再保留

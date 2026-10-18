@@ -82,6 +82,21 @@ def dat_path(config) -> str:
     return str(getattr(tm, "dat_path", "") or "").strip()
 
 
+def source_signature(config) -> tuple:
+    """来源身份指纹 `(enabled, provider, traffic_monitor.dat_path)` —— 「切源即刷新」判定单点
+
+    用途(计划 26-10-17-1737 S8): 热重载**前后各算一次**, 不等即说明「用户在换来源」, 立刻投递
+    一次历史流量刷新, 不必等下一个曲线 interval。
+
+    !只取**配置事实**, 不把 `dat_path(config)` 的解析结果算进来: 工具来源的路径是运行期事实
+    (发现指针的内容随时可被工具改写), 两次读之间可能变 —— 算进来会让「保存任何无关配置」偶发
+    触发刷新, 判定也不再可复现。文件 <-> 工具互切已由 provider 这一位覆盖。
+    """
+    ts = _traffic_source(config)
+    tm = getattr(ts, "traffic_monitor", None)
+    return (source_enabled(config), _provider(config), str(getattr(tm, "dat_path", "") or "").strip())
+
+
 def unavailable_reason(config) -> str:
     """取不到路径时的人读原因(按 provider 分支) —— 让运行期报错直接指到该改哪里
 

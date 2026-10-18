@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple
 from qbittorrentapi import HTTP401Error, HTTP4XXError
 
 from ..config import Config
+from ..core.traffic_source import paths as traffic_paths
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
@@ -1091,16 +1092,36 @@ class WebCommandsMixin:
         )
 
     def _cmd_reload_config(self, config: Config):
-        self.apply_new_config(config)
+        """配置热重载 + **切源即刷新**(计划 26-10-17-1737 S8 / 26-10-18-0813 P0)
 
-    def _cmd_refresh_traffic(self, event_id=None, day: str = ""):
+        来源身份(`enabled` / `provider` / 文件来源路径)一变, 立刻投递现成的 `refresh_traffic`:
+        历史流量图与顶栏 pill 不必等到下一个曲线 interval 才换数据(#7: 切到工具后历史图仍显示
+        TM 数据); 关源时该命令发 off 快照, 前端立即转「来源已关闭」关闭态。
+
+        !**投递**而不是在这里直接调用刷新体: 刷新体单点在 `refresh_traffic` handler(P2-A 会把它
+        改指 `traffic_snapshot.refresh()`), 本处只负责判定「该刷了」—— 两条触发(工具事件 /
+        配置切源)共用一条执行路径, 不新增第二份读盘逻辑。命令在本轮 drain 内即被执行
+        (consume_commands 是 while 取空队列), 对用户仍是「保存完图表就变了」。
+        """
+        before = traffic_paths.source_signature(self.ctx.config)
+        self.apply_new_config(config)
+        after = traffic_paths.source_signature(self.ctx.config)
+        if after == before:
+            return
+        logger.info(f"配置热重载 | 流量来源变更 {before} -> {after}, 立即投递历史流量刷新")
+        self.web.post_command("refresh_traffic", {"trigger": "config"})
+
+    def _cmd_refresh_traffic(self, event_id=None, day: str = "", trigger: str = "notify"):
         """WEB UI 命令: 重读历史流量文件并重发流量快照(计划 26-10-16-0541 S7 接收面)
 
-        触发方是**工具进程**的阈值事件(经 POST /api/traffic/monitor/notify 投递), 不是用户
-        点击 —— 这里只写日志, 无回执/通知需求(端点已即时回 200, 不阻塞工具侧 3s 推送超时)。
+        两个触发源, 一条执行路径(判据在 `trigger`):
+        - `notify`(缺省): **工具进程**的阈值事件(经 POST /api/traffic/monitor/notify 投递),
+          不是用户点击 —— 只写日志, 无回执/通知需求(端点已即时回 200, 不阻塞工具侧 3s 推送超时);
+        - `config`: 配置热重载发现流量来源变了(见 `_cmd_reload_config`, 1737-S8) —— 保存后立刻
+          换图, 日志口径据此区分(事件号为空是常态, 不能说成「监视器通知」)。
 
-        为什么经命令队列而不在端点里直接读盘: 读盘 + 快照发布归主循环线程(黄金法则 5),
-        端点只投递意图; 命令带上事件号与日键只为日志可追。
+        为什么经命令队列而不在端点/热重载里直接读盘: 读盘 + 快照发布归主循环线程(黄金法则 5),
+        投递方只表达意图; 命令带上事件号与日键只为日志可追。
 
         刷新体在 speed_curve 模块(`refresh_traffic_view`): 它与该快照同源 —— dat_path 配置,
         历史行口径、各 period 累计都在那边; 本 handler 只取模块句柄转发。「刷新图」是通知链路
@@ -1108,7 +1129,11 @@ class WebCommandsMixin:
         """
         mod = self.host.get("speed_curve")
         refreshed = bool(mod is not None and mod.refresh_traffic_view())
-        logger.info(f"WEB UI | 监视器通知刷新历史流量: 事件 #{event_id}({day or '-'}), 状态={'已刷新' if refreshed else '跳过'}")
+        state = "已刷新" if refreshed else "跳过"
+        if trigger == "config":
+            logger.info(f"配置热重载 | 流量来源已切换, 立即刷新历史流量: 状态={state}")
+            return
+        logger.info(f"WEB UI | 监视器通知刷新历史流量: 事件 #{event_id}({day or '-'}), 状态={state}")
 
     # ---------- 管理命令(R2B: 分类/标签/限速覆盖/添加种子) ----------
 

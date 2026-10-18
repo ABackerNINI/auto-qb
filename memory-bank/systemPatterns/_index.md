@@ -15,6 +15,6 @@
 | [main-loop.md](main-loop.md) | 主循环 `core/qbmanager.py` 的节拍、分层与每轮 `_refresh_torrents` 的相位广播数据流。 | 主循环, tick, 节拍, 数据流, refresh_torrents, 相位广播, 分层 |
 | [overview.md](overview.md) | 有哪些组件、谁负责什么 —— 进本目录前先读这一份。 | 组件, 总览, 架构, 有哪些模块, 谁负责什么 |
 | [taskqueue.md](taskqueue.md) | 单队列模型、两个动词、线程约束与 full-checking 全流程(含断点续跑)。 | 任务队列, taskqueue, add_task, run_due, 线程模型, 异步校验, full-checking, 断点续跑 |
-| [web-config-editor.md](web-config-editor.md) | `web.py` + `config/schema.py` + `config/writer.py` 三件套的分工。 | 图形化配置, 设置页, schema, writer, 配置树 |
+| [web-config-editor.md](web-config-editor.md) | `web.py` + `config/schema.py` + `config/writer.py` 三件套的分工。 | 图形化配置, 设置页, schema, writer, 配置树, 保存后联动刷新, 切源不生效, 单位下拉, 复合串, 整块隐藏还是灰显 |
 | [web-responsiveness.md](web-responsiveness.md) | 按视图回传、窗口化、节拍对齐、命令唤醒 —— 响应性那一整波的设计。 | 响应性, 跟手性, 按视图回传, 窗口化, 节拍, 命令唤醒, P0, P1 |
 | [web-runtime.md](web-runtime.md) | Web 线程与主循环的边界与协作 —— 线程模型 / 热重载重启 / 视图门控 / SSE 推送。 | WEB UI 线程, webui, 线程模型, 主循环解耦, SSE |

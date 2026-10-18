@@ -7,9 +7,9 @@
 <title>全局流量来源联动缺陷修复 (Phase 1)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="global-traffic-source-integration-fixes">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-17-1737">
-<meta name="doc-updated" content="26-10-18-0816">
+<meta name="doc-updated" content="26-10-18-0901">
 <meta name="doc-refs" content="memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>全局流量来源联动缺陷修复 (Phase 1)</h1>
 <p class="lede">逐条修掉「全局流量来源」联动上线后暴露的 9 个缺陷。设计主轴：把"数据来源"提成一个有<b>一等总开关</b>（<code>traffic_source.enabled</code>）的显式功能——关闭即停取数 / 停订阅 / 停自动拉起；并让设置页如实反映"来源 ↔ 工具 ↔ 限速曲线"的依赖关系。快照解耦与设置页合并卡属重构，另立 Phase 2。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-18-0816 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-17-1737 · <b>doc-updated</b> 26-10-18-0901 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话内 grilling（用户逐条订正：Q4 整块隐藏 / Q7a 删按钮 / Q9 统一 <code>30S</code>·<code>10MiB</code> 复合串 / <code>enabled</code> 提顶层 <code>traffic_source.enabled</code> / 关闭必提醒加确认框 …）；事实基线＝前序计划 <code>26-10-17-0339</code>（集成层 S15/D1）
 </div>
 
@@ -200,7 +200,7 @@
 <table>
   <thead><tr><th>期</th><th>范围</th><th>状态</th></tr></thead>
   <tbody>
-    <tr><td><b>Phase 1</b></td><td>本计划 S1–S8（9 项缺陷修复 + 来源总开关）</td><td>待实施</td></tr>
+    <tr><td><b>Phase 1</b></td><td>本计划 S1–S8（9 项缺陷修复 + 来源总开关）</td><td>已实施（S1–S3 / S4–S5 / S6–S7 / S8，2026-10-18 收口）</td></tr>
     <tr><td><b>Phase 2</b></td><td>① 流量快照从 <code>speed_curve_mod</code> 解耦为独立模块（新模块<b>拥有整份快照</b>，曲线模块经其方法写 <code>limit</code> 段）；② 设置页把「流量来源 / 限速曲线 / 历史图」合并进一张卡（卡内分区，复用既有 <code>hub-field</code> 渲染）；③ 依赖元数据推广。<b>另立计划</b>（结构探查已完成）</td><td><b>已立项</b>：<a href="26-10-18-0813-plan-global-traffic-source-phase2.html">26-10-18-0813 计划</a>（本三方向由该计划 D1–D17 细化取代；合并范围已扩为「来源 + 限速曲线 + 流量图」）</td></tr>
   </tbody>
 </table>
@@ -252,6 +252,8 @@
   <li><span class="tag">R1 · 26-10-17-2117</span> Phase 1 S1-S3 实施完成——traffic_source.enabled 总开关四层契约(恒等判据 is not False + 关源免检 dat_path + expr 门控放行); 取数闸门(paths/tool_client/agent) + off 快照 + expr 文案 + notify disabled 扩展 + 前端 D14 灰显; gtm POST /shutdown(先回 200 再置位 stop_event) + auto-qb 代理端点。全域回归全绿(基线 26-10-17-2114)</li>
   <li><span class="tag">R2 · 26-10-18-0706</span> S6-S7 实施完成。S6(设置页四修): 工具状态/工具参数/文件选择器三块按 <code>provider</code> 条件渲染(D8, 整块隐藏); <code>tmStateClass</code> 的 <code>ready: "on"→"ok"</code>(#4); 只读状态行新增 <code>.hb-row.hb-ro</code>(去 7px 上边距 + 行内基线对齐, 只挂局部类, 全局 <code>.hb-row</code> 不动); 删除「打开工具设置」按钮与 <code>tmOpenToolSettings</code>(#6)。S7(工具参数单位化): 新增 <code>gtm/units.py</code>(parse/format 单点, 文法镜像 auto-qb TIME_UNITS/SIZE_UNITS); <code>gtm/config.py</code> 校验/回显/落盘改走它 —— 盘上与契约只留复合串, 读侧兼容旧裸数值并新增启动期一次性迁移 <code>migrate_legacy_config</code>; 前端工具参数改「数值 + 单位下拉 + ?」(复用 UNIT_OPTIONS/hubAsk), <code>tmBuildPayload</code> 不再 Number() 化时间/大小。守阵: gtm 侧新增 test_units.py + 迁移/聚合用例; auto-qb 侧新增 6 条静态守阵 + 2 条 e2e(隐藏闸行为、单位控件与复合串回传)+ 1 条只读行几何守卫(变异验证过: 去掉修复即红); settings.html 分片额度 400→440(该卡在 v-else-if 链内, 抽分片会断链)。全量回归全绿(数字见基线切片 26-10-18-0706-global-traffic-source-fixes-s6-s7)</li>
   <li><span class="tag">R3 · 26-10-18-0816</span> Phase 2 已立项: 分期表指向 26-10-18-0813 计划, 方向 P1-P3 由该计划 D1-D17 取代</li>
+  <li><span class="tag">R4 · 26-10-18-0849</span> S8 实施完成, <b>Phase 1 全量收口</b>: 判定单点新增 <code>paths.source_signature</code>(只取 enabled / provider / 文件来源路径三位配置事实, 刻意不含工具发现指针解析结果 —— 指针是运行期事实, 算进来会让无关保存偶发触发刷新); <code>_cmd_reload_config</code> 热重载前后各算一次, 不等即投递现成的 <code>refresh_traffic</code>(<code>trigger="config"</code>), 命令在同一轮 drain 内执行 ⇒ 保存完即换图; <code>_cmd_refresh_traffic</code> 加 <code>trigger</code> 参数只分流日志口径(切源时事件号为空, 不能说成「监视器通知」), 执行路径仍一条。前端<b>零新增取数点</b>: <code>dialogs.js</code> 既有 <code>status.traffic.ts</code> 监听已覆盖「弹层开着时快照变即重拉」, 顶栏 pill 走主轮询 —— 另加显式重拉只会在 PUT 回执(早于热重载落地)时先拉一次旧快照。守阵 4 条 + 变异红验; 曲线未启用时刷新仍跳过不发布(§02 #1 结构性死角)按计划留给 Phase 2 的 A1/A4, 本步只保行为等价。全量回归绿除一条既存红(<code>test_docs_forms::test_doc_map_live_rotation</code>, 净树同样红, 与本步无关)</li>
+  <li><span class="tag">R5 · 26-10-18-0901</span> 本计划<b>关档</b>: <code>doc-status</code> Open → Done —— S1–S8 全部实施完毕(逐条见 R1/R2/R4, 分期表同口径), 终态经 <code>kb.status</code> 翻转(<code>doc-updated</code> 同抬, 正文 meta 同步)。<b>Phase 2 不算本档未做项</b>: 其三条方向已由 <a href="26-10-18-0813-plan-global-traffic-source-phase2.html">26-10-18-0813 计划</a> 接续(R3/D15 的分期约定), 本档不再承接新步骤; 后续若有 Phase 1 回归问题另立新档, 不重开本计划</li>
 </ul>
 
 </div>

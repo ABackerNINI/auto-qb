@@ -5,7 +5,7 @@
 **Updated:** 2026-10-18
 **Summary:** 把流量快照的所有权从限速曲线任务移交独立模块 `traffic_snapshot`（`source`/`limit` 段级 API + 派生 `state` + 自有节奏键 `traffic_source.refresh_interval`），修掉「没配曲线就永远没有历史图」「两条刷新路径语义不一」「轮询背整份 history」三个结构性死角；设置页把「数据来源 / 限速曲线 / 流量图」三张卡合并为一张「流量与限速」（schema 合组 `traffic_limit` + 独立组件 `aq-traffic-card` + 卡内三区），顺带补通用层两笔欠账（`show_if` 下移到 object 段、排除表单点化）。17 条拍板见计划 D1–D17；批次 P0（收口 Phase 1 的 S8）→ P2-A → P2-B。
 **Topics:** backend-traffic-snapshot-merge
-**Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html
+**Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html, memory-bank/testing/baselines/26-10-18-0850-global-traffic-source-fixes-s8.md
 
 ## 原始请求
 
@@ -36,7 +36,7 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| P0 | 收口 1737-S8「切源即刷新」+ 守阵 | Open |
+| P0 | 收口 1737-S8「切源即刷新」+ 守阵 | Done |
 | A1 | `traffic_snapshot` 模块骨架 + 自注册任务（装配在 `speed_curve` 之前） | Open |
 | A2 | 快照契约拆段 + `derive_state` + `publish_source/publish_limit/publish_off` | Open |
 | A3 | `traffic_source.refresh_interval` 四层契约（默认 10M / 校验 10S–1H） | Open |
@@ -53,3 +53,9 @@
 ### R0 · 立档 (2026-10-18)
 
 三轮 grilling 收敛并落盘 Phase 2 计划（17 条拍板 D1–D17），本档同建立；代码零改动。待开工起点＝ P0（Phase 1 的 S8 收口）。
+
+### R1 · P0 完成 — 收口 1737-S8「切源即刷新」(2026-10-18)
+
+按 D4 先把 Phase 1 的尾巴收干净再动快照所有权。落地三处：① `core/traffic_source/paths.py` 新增 `source_signature(config)`（来源指纹 = `enabled` / `provider` / 文件来源路径三位，**只取配置事实**，不含指针解析结果）；② `webui/commands.py::_cmd_reload_config` 热重载前后比对指纹，变了就投递现成的 `refresh_traffic`（`trigger="config"`），该命令在**同一轮 drain** 内执行；③ `_cmd_refresh_traffic` 加 `trigger` 参数只分流日志口径，执行路径仍是一条。前端**零新增取数点**：`dialogs.js` 既有 `status.traffic.ts` 监听已覆盖「弹层开着时快照一变就重拉」，顶栏 pill 走主轮询 —— 另加显式重拉只会在 PUT 回执（早于热重载落地）时先拉一次旧快照。
+
+守阵 4 条 + 变异红验（放宽判定 ⇒ 2 条立即红）。**给 P2-A 留下的接口契约**：A4 删 `refresh_traffic_view`、A5 把命令改指 `traffic_snapshot.refresh()` 时，**判定方（`_cmd_reload_config`）一行都不用改** —— 它只认命令名。**边界**：曲线未启用时刷新仍跳过不发布（计划 §02 #1 的结构性死角），P0 保持行为等价，由 A1/A4 的独立发布修掉。全量回归绿除一条既存红（`test_docs_forms::test_doc_map_live_rotation`，净树同样红，与本轮无关）；数字见基线切片。

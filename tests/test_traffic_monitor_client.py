@@ -22,6 +22,10 @@
 - test_refresh_traffic_view_source_off_publishes_off: 来源总开关关(S1/D1) -> 通知刷新不跳过,
   发布 off 快照(上一份可能是 ok 旧数据), 不读 dat 不碰 qB
 - test_refresh_traffic_command_drained: `refresh_traffic` 已进命令表且经主循环 drain 执行后快照刷新(回执 ok)
+- test_source_signature_tracks_source_keys: 切源指纹只认 enabled/provider/文件来源路径三位, 无关段不进指纹, 缺段桩配置取默认(S8)
+- test_reload_config_source_change_refreshes_immediately: 切源即刷新 —— 热重载换来源后同一 drain 内快照即为新来源数据(不等 interval), 不碰 qB(S8)
+- test_reload_config_source_off_publishes_off: 总开关关闭保存后立即转 off 关闭态(S8)
+- test_reload_config_unchanged_source_does_not_refresh: 无关配置保存不触发刷新(指纹相等不投递)(S8)
 - test_end_to_end_notify_then_state_shows_fresh_traffic: 端到端(进程内): 真端点 -> 命令队列 -> 真 handler -> 快照刷新 -> /api/state 与 /api/traffic/history 两取数位可见
 - test_mock_config_section_starts_no_thread: 桩配置(MagicMock 段)不得被当成「已联动」起订阅线程 —— 不等/恒等类型判据守阵
 """
@@ -514,6 +518,96 @@ def test_refresh_traffic_command_drained(tmp_path, monkeypatch):
     rec = mgr.web.results.get(resp["cmd_id"])
     assert rec is not None and rec["status"] == "ok", f"命令未注册或执行失败: {rec}"
     assert mgr.web.traffic_view["history"], "drain 后快照未刷新"
+
+
+def test_source_signature_tracks_source_keys():
+    """切源指纹(1737-S8): 只认 enabled / provider / 文件来源路径三位 —— 曲线等无关段不进指纹
+
+    指纹是「热重载前后各算一次再相等比较」的判据, 因此必须**只由配置事实构成**(工具来源的
+    dat 路径是运行时指针, 算进来会让无关保存偶发触发刷新); 缺段的桩配置按「默认开启 + 文件
+    来源 + 空路径」处理, 不抛。
+    """
+    from types import SimpleNamespace
+
+    from auto_qb.core.traffic_source import paths
+
+    def cfg(**kw):
+        """config 形状: 来源全在顶层 traffic_source 段里(S15 起不再有独立 global_traffic_monitor 段)"""
+        return SimpleNamespace(
+            traffic_source=SimpleNamespace(
+                enabled=kw.get("enabled", True),
+                provider=kw.get("provider", "traffic_monitor"),
+                traffic_monitor=SimpleNamespace(dat_path=kw.get("dat_path", "D:/tm/history_traffic.dat")),
+            ),
+            # 与本指纹无关的段: 改它不得影响判定(否则「保存任意配置都刷新」)
+            global_speed_limit_curve=SimpleNamespace(interval=kw.get("interval", 600.0)),
+        )
+
+    base = paths.source_signature(cfg())
+    assert base == (True, "traffic_monitor", "D:/tm/history_traffic.dat")
+    assert paths.source_signature(cfg(enabled=False)) != base
+    assert paths.source_signature(cfg(provider="global_traffic_monitor")) != base
+    assert paths.source_signature(cfg(dat_path="E:/other/history_traffic.dat")) != base
+    # 无关段变化 / 空白路径去空格: 指纹不变(等价)
+    assert paths.source_signature(cfg(dat_path="  D:/tm/history_traffic.dat  ")) == base
+    assert paths.source_signature(SimpleNamespace()) == (True, "traffic_monitor", "")
+
+
+def test_reload_config_source_change_refreshes_immediately(tmp_path, monkeypatch):
+    """切源即刷新(1737-S8 主判据): 热重载换了来源 -> **同一个 drain 内**快照就是新来源的数据
+
+    复现#7/#8: 旧实现只在曲线任务到点(约 10min)时才重读, 保存完历史图仍是旧来源数据。断言用
+    快照的 ts 前进 + history 逐行对齐新来源, 且全程不碰 qB 限速(只读刷新)。
+    """
+    mgr, _dat_file, qb_calls = _refresh_env(tmp_path, monkeypatch)
+    tool_dir = tmp_path / "tool-data"
+    tool_dir.mkdir()
+    (tool_dir / "history_traffic.dat").write_text(_dat_text([(date.today(), 9 * MIB, 1 * MIB)]), encoding="utf-8")
+    _point_at(tool_dir, monkeypatch)  # 工具来源的数据目录(取数只读指针, 不探活)
+    ts_before = mgr.web.traffic_view["ts"]
+
+    def _apply(_cfg):
+        # 等价于用户把来源切到工具后保存: 新配置对象落到 ctx.config, 指纹随之变化
+        mgr.config.traffic_source.provider = "global_traffic_monitor"
+
+    mgr.apply_new_config = _apply
+    mgr.web.commands.put(("reload_config", {"config": object()}))
+    mgr.web.consume_commands()
+
+    view = mgr.web.traffic_view
+    assert view["ts"] > ts_before, "切源后必须立即重发快照(不等曲线 interval)"
+    assert view["history"] == [{"date": date.today().isoformat(), "up": 9 * MIB, "down": 1 * MIB}]
+    assert qb_calls == [], f"切源触发的刷新不得碰 qB 限速: {qb_calls}"
+
+
+def test_reload_config_source_off_publishes_off(tmp_path, monkeypatch):
+    """切源即刷新(1737-S8 验收二): 总开关关闭保存后 -> 立即转 off 关闭态(不等曲线任务)"""
+    mgr, _dat_file, qb_calls = _refresh_env(tmp_path, monkeypatch)
+
+    def _apply(_cfg):
+        mgr.config.traffic_source.enabled = False
+
+    mgr.apply_new_config = _apply
+    mgr.web.commands.put(("reload_config", {"config": object()}))
+    mgr.web.consume_commands()
+
+    assert mgr.web.traffic_view["state"] == "off"
+    assert mgr.web.traffic_view["history"] == []  # 关源不读 dat
+    assert qb_calls == []
+
+
+def test_reload_config_unchanged_source_does_not_refresh(tmp_path, monkeypatch):
+    """无关配置保存不得触发刷新: 指纹相等即不投递(快照引用原样, 一次读盘都不发生)"""
+    mgr, _dat_file, _calls = _refresh_env(tmp_path, monkeypatch)
+    snap = mgr.web.traffic_view
+
+    mgr.apply_new_config = lambda _cfg: None  # 来源段没变(只有别的段改了)
+    mgr.web.commands.put(("reload_config", {"config": object()}))
+    mgr.web.consume_commands()
+
+    # 快照整体替换语义(单写线程原子换引用): 没刷新就是**同一个对象**
+    assert mgr.web.traffic_view is snap
+    assert mgr.web.commands.empty(), "指纹相等时不得投递 refresh_traffic"
 
 
 def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch):
