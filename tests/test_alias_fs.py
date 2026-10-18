@@ -1,8 +1,8 @@
 """test_alias_fs 测试计划: infra/alias_fs 链接能力探测(plan 26-10-18-1604 实施期 P0)
 
 ## 测试计划(每个测试函数一条)
-- test_probe_symlink_file_ok: 真建文件符号链接 -> 可见 + 穿透读一致
-- test_probe_symlink_dir_ok: 真建目录符号链接 -> 可穿透列目录
+- test_probe_symlink_file_ok: 真建文件符号链接 -> 可见 + 穿透读一致〔无 symlink 建链能力的环境 skip〕
+- test_probe_symlink_dir_ok: 真建目录符号链接 -> 可穿透列目录〔无 symlink 建链能力的环境 skip〕
 - test_probe_symlink_injected_permission_error: 注入 `OSError(winerror=1314)`(§8.6 唯一注入点)
   -> 判「需提权」, 走的是生产分支
 - test_probe_symlink_injected_invisible: 注入「调用成功但没建出链接」的替身 -> 判不可用(返回成功不算数)
@@ -10,7 +10,7 @@
 - test_probe_hardlink_injected_failure: 注入失败 -> 判不可用
 - test_probe_junction_platform: Windows 真建 junction 成功; 非 Windows 明确「仅 Windows」而不是静默 False
 - test_probe_leaves_no_residue: 四次探测跑完, work_dir 里不留探测临时目录
-- test_probe_symlink_penetration_failures: 建出来但读不到(悬空 / 内容不符 / 目录缺探测文件)三种都判不可用
+- test_probe_symlink_penetration_failures: 建出来但读不到(悬空 / 内容不符 / 目录缺探测文件)三种都判不可用〔无 symlink 建链能力的环境 skip〕
 - test_probe_junction_injected: 注入建 junction 失败与「什么都没建」两种替身, 各自给出正确原因(仅 Windows)
 - test_probe_hardlink_not_same_inode: 调用不报错但建的是副本(部分网络盘/FUSE) -> 判不可用
 - test_classify_link_failure_order: 1314 二义性 —— 先按路径长度(>=260 判长路径), 再按错误码判提权
@@ -24,24 +24,35 @@
 - test_is_wsl: env 与 /proc/version 两路判定
 - test_mount_info_and_windows_backed: /proc/mounts 解析(最长前缀 + 八进制转义)与 Windows 共享挂载识别
   (drvfs 标记 / WSL 的 /mnt/<盘符>; 非盘符挂载不算)
-- test_alias_primitives: create_dir_alias/create_file_alias + alias_kind_of/alias_target 往返
+- test_alias_primitives: create_file_alias 硬链接 + alias_kind_of/alias_target 对普通文件/缺失路径的判定 + 形态错配 ValueError(不依赖建链能力, 任何环境都跑)
+- test_alias_primitives_symlink: create_dir_alias/create_file_alias 的 symlink 形态往返(建/识/穿透读/删)〔无 symlink 建链能力的环境 skip〕
 - test_junction_roundtrip: Windows 真建 junction -> 形态识别 + 穿透读 + 删链接不动目标(非 Windows 跳过)
-- test_remove_alias_does_not_follow_target: 删别名只删链接本身, 目标数据原封不动
+- test_remove_alias_does_not_follow_target: 删别名只删链接本身, 目标数据原封不动〔无 symlink 建链能力的环境 skip〕
 - test_capability_cache_and_refresh: 缓存命中同一对象; refresh / reset 各自生效
 - test_probe_capability_never_raises: 探测目录建不出来 -> 降级为不可用, 不抛异常(不炸启动)
 - test_as_dict_shape: 界面用的扁平字典键齐全且可 JSON 序列化
 - test_process_os_mapping: 进程 OS 映射(windows/linux/darwin/posix 四支, 走 utils.is_* 单点)
 - test_read_text_missing_returns_empty: 小文本读取(读得到取内容 / 读不到空串, 不抛)
-- test_probe_hardlink_unreadable_after_create: 建出来但 stat 不到(悬空) -> 判不可用
+- test_probe_hardlink_unreadable_after_create: 建出来但 stat 不到(悬空) -> 判不可用〔无 symlink 建链能力的环境 skip〕
 - test_probe_junction_unreadable: junction 目标里没有探测文件 -> 判不可用(仅 Windows)
 - test_probe_capability_notes_foreign_mount: 整机探测在 WSL-on-NTFS 现场 -> 宿主/进程 OS 不一致、
   链接宿主读不了、verdict 落 container_cross_os
 - test_probe_capability_degrades_on_probe_crash: 探测抛异常 -> 四项全判不可用, 不炸启动
 - test_probe_capability_uac_note: 文件级 symlink 需提权时备注写明提权通道可用性
 - test_uac_available_swallows_error: 提权通道探测: 非 Windows 恒 False; 取窗口站抛错 -> False
+
+## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
+
+真实建符号链接类用例依赖**宿主建链能力**: Windows 非特权进程(非管理员且未开开发者模式)缺
+SeCreateSymbolicLinkPrivilege, `os.symlink` 抛 WinError 1314; 少数重定向层还会"假成功"(不抛异常
+但建不出链接)。按 file-conventions.md「测试不得依赖宿主环境能力」, 这类用例在无能力环境
+**skip 而非 fail**(准入标记 `_SYMLINK_REQUIRED`; 判据同 `test_file_access._dir_symlink_or_skip`:
+试建 + 复核 islink + 穿透读, 只 catch 异常不够)。注入替身(`try_create=...`)的用例不碰真实建链,
+任何环境照常跑; 有建链能力的环境(管理员/开发者模式/Linux/macOS)全部真实执行, 覆盖不缩水。
 """
 import json
 import os
+import tempfile
 
 import pytest
 
@@ -59,6 +70,38 @@ from auto_qb.infra.alias_fs import (
 )
 
 _WIN_ONLY = pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")
+
+
+def _probe_symlink_capability() -> bool:
+    """本进程能否真建符号链接并穿透读: 试建 -> 复核 islink -> 读回内容, 用完清理
+
+    Windows 非特权进程缺 SeCreateSymbolicLinkPrivilege 时 `os.symlink` 抛 WinError 1314;
+    少数重定向层还会"假成功"(不抛异常但建不出链接)。判据与
+    `test_file_access._dir_symlink_or_skip` 同源 —— 只 catch 异常不够, 必须复核 islink
+    (file-conventions.md「测试不得依赖宿主环境能力」, issue 26-10-18-2030)。
+    """
+    with tempfile.TemporaryDirectory(prefix="auto-qb-symlink-probe-") as tmp:
+        target = os.path.join(tmp, "target")
+        link = os.path.join(tmp, "link")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("auto-qb")
+        try:
+            os.symlink(target, link)
+        except (OSError, NotImplementedError, AttributeError):
+            return False
+        try:
+            with open(link, encoding="utf-8") as f:
+                return os.path.islink(link) and f.read() == "auto-qb"
+        except OSError:
+            return False
+
+
+# 真实建链类用例的准入: 宿主无 symlink 能力时 skip 而非 fail(环境能力缺失不是代码缺陷)
+_SYMLINK_REQUIRED = pytest.mark.skipif(
+    not _probe_symlink_capability(),
+    reason="本进程建不出符号链接(如 Windows 非特权缺 SeCreateSymbolicLinkPrivilege, os.symlink 报 WinError 1314): "
+    "真实建链覆盖需以管理员身份运行或开开发者模式; 注入替身覆盖不受影响",
+)
 
 
 def _win_error(code: int, message: str = "denied") -> OSError:
@@ -94,12 +137,14 @@ def _cap(**over) -> AliasCapability:
 # ---------------------------------------------------------------- 单项探测
 
 
+@_SYMLINK_REQUIRED
 def test_probe_symlink_file_ok(tmp_path):
     probe = probe_symlink(str(tmp_path), target_is_directory=False)
     assert probe.ok, probe.error
     assert "符号链接" in probe.detail
 
 
+@_SYMLINK_REQUIRED
 def test_probe_symlink_dir_ok(tmp_path):
     probe = probe_symlink(str(tmp_path), target_is_directory=True)
     assert probe.ok, probe.error
@@ -157,6 +202,7 @@ def test_probe_leaves_no_residue(tmp_path):
     assert left == []
 
 
+@_SYMLINK_REQUIRED
 def test_probe_symlink_penetration_failures(tmp_path):
     """建出来了但读不到: 悬空链接 / 内容不符 / 目录里没有探测文件 —— 三种都判不可用"""
     def dangling(target, link, target_is_directory=False):
@@ -396,7 +442,9 @@ def test_mount_info_and_windows_backed():
 # ---------------------------------------------------------------- 链接原语
 
 
-def test_alias_primitives(tmp_path):
+@_SYMLINK_REQUIRED
+def test_alias_primitives_symlink(tmp_path):
+    """链接原语 symlink 形态往返: 目录链接穿透读 + 文件链接读目标, 删链接不动数据"""
     target = tmp_path / "target"
     target.mkdir()
     (target / "a.txt").write_text("auto-qb", encoding="utf-8")
@@ -411,6 +459,17 @@ def test_alias_primitives(tmp_path):
 
     file_target = tmp_path / "file.bin"
     file_target.write_text("data", encoding="utf-8")
+    sym = tmp_path / "sym.bin"
+    alias_fs.create_file_alias(str(sym), str(file_target), KIND_SYMLINK)
+    assert alias_fs.alias_kind_of(str(sym)) == KIND_SYMLINK
+    assert alias_fs.alias_target(str(sym)) is not None
+    alias_fs.remove_alias(str(sym))
+
+
+def test_alias_primitives(tmp_path):
+    """链接原语往返(不依赖建链能力): 硬链接同 inode / 普通文件与缺失路径返回 None / 形态错配 ValueError"""
+    file_target = tmp_path / "file.bin"
+    file_target.write_text("data", encoding="utf-8")
     hard = tmp_path / "hard.bin"
     alias_fs.create_file_alias(str(hard), str(file_target), KIND_HARDLINK)
     assert alias_fs.alias_kind_of(str(hard)) == KIND_HARDLINK
@@ -418,12 +477,6 @@ def test_alias_primitives(tmp_path):
     assert os.stat(str(hard)).st_ino == os.stat(str(file_target)).st_ino
     alias_fs.remove_alias(str(hard))
     assert file_target.exists()
-
-    sym = tmp_path / "sym.bin"
-    alias_fs.create_file_alias(str(sym), str(file_target), KIND_SYMLINK)
-    assert alias_fs.alias_kind_of(str(sym)) == KIND_SYMLINK
-    assert alias_fs.alias_target(str(sym)) is not None
-    alias_fs.remove_alias(str(sym))
 
     plain = tmp_path / "plain.txt"
     plain.write_text("x", encoding="utf-8")
@@ -434,7 +487,7 @@ def test_alias_primitives(tmp_path):
     alias_fs.remove_alias(str(tmp_path / "absent"))  # 幂等
 
     with pytest.raises(ValueError):
-        alias_fs.create_dir_alias(str(tmp_path / "x1"), str(target), KIND_HARDLINK)
+        alias_fs.create_dir_alias(str(tmp_path / "x1"), str(tmp_path), KIND_HARDLINK)
     with pytest.raises(ValueError):
         alias_fs.create_file_alias(str(tmp_path / "x2"), str(file_target), KIND_JUNCTION)
 
@@ -455,6 +508,7 @@ def test_junction_roundtrip(tmp_path):
     assert (target / "a.txt").exists()  # 删 junction 不动目标数据
 
 
+@_SYMLINK_REQUIRED
 def test_remove_alias_does_not_follow_target(tmp_path):
     target = tmp_path / "target"
     target.mkdir()
@@ -522,6 +576,7 @@ def test_read_text_missing_returns_empty(tmp_path):
     assert alias_fs._read_text(str(tmp_path / "absent")) == ""
 
 
+@_SYMLINK_REQUIRED
 def test_probe_hardlink_unreadable_after_create(tmp_path):
     """建出来了但 stat 不到(悬空链接): 判不可用而不是当成功"""
     def dangling(src, dst):

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="alias-fs-symlink-privilege">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail">
 <meta name="issue-summary" content="tests/test_alias_fs.py 在本机无 SeCreateSymbolicLinkPrivilege 时 6 failed(29 passed), 会污染 ship.commit 合并后测试闸门">
 <title>alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修 · 2026-10-18 21:06 认领并验证）· test</div>
     <h1>alias_fs 测试依赖 symlink 特权, 无特权 Windows 环境 6 条 fail</h1>
     <p class="lede">tests/test_alias_fs.py 在本机无 SeCreateSymbolicLinkPrivilege 时 6 failed(29 passed), 会污染 ship.commit 合并后测试闸门</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-18-2030-test-alias-fs-symlink-privilege</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 20:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge type">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">infra</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -174,11 +174,30 @@ FAILED tests/test_alias_fs.py::test_remove_alias_does_not_follow_target - OSE...
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-18 20:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-18 21:00 — 用户指令「认领并修复」⇒ 置 <strong>In Progress</strong> 并复验：<b>仍复现</b>
+          （<code>uv run pytest tests/test_alias_fs.py -q --no-cov</code> → 6 failed / 29 passed，与入池取证一致）</li>
+      <li>2026-10-18 21:06 — 修复 + 验证完毕，置 <strong>Done</strong>（修法/验证数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
     <p>2026-10-18 20:30 — 入池时复跑即取证: <strong>仍复现</strong>(6 failed / 29 passed, 原文见 02 证据)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b> = 建议修法 ①（用例级 skip，未改道到 ②），并按 file-conventions.md「测试不得依赖宿主环境能力」
+       的建链 helper 通用形态补了两处：(a) 准入探测 <code>_probe_symlink_capability()</code> 不只 catch 异常，
+       还复核 <code>os.path.islink</code> + 穿透读回内容 —— 防「假成功」重定向层把该 skip 的漏成断言红
+       （issue 26-09-29-2031 的同款教训）；(b) <code>test_alias_primitives</code> 拆成两条：硬链接 /
+       普通文件 / ValueError 部分（不依赖建链能力）任何环境照跑，symlink 形态部分独立为
+       <code>test_alias_primitives_symlink</code> 随准入 skip —— 否则无特权机器上连硬链接覆盖一起丢。
+       准入标记 <code>_SYMLINK_REQUIRED</code>（skipif）贴 6 条真实建链用例；注入替身（<code>try_create=...</code>）
+       类用例不碰真实建链，一行未动。<b>被测生产代码 <code>src/auto_qb/infra/alias_fs.py</code> 零改动</b>
+       （入池结论「不误生产代码」得到确认）。</p>
+    <p><b>验证方式</b>：① <code>commands run test.one -- tests/test_alias_fs.py -rs</code> →
+       <code>30 passed, 6 skipped</code>、rc=0（原 6 failed 全部转 skipped，skip 原因带 WinError 1314 与提权通道提示）；
+       ② <code>commands run test.full</code> 连跑两次数字一致 → <code>3620 passed, 10 skipped</code> /
+       TOTAL <code>18609/302/6302/205</code>、覆盖率 <code>98%</code>（闸门 ≥98 通过）、38.7s / 42.0s；
+       ③ 副作用台账越界 0 条。全量 skipped 由 4 变 10，新增 6 条均在本文件；
+       有建链能力的环境（管理员 / 开发者模式 / Linux CI）6 条全部真实执行，覆盖不缩水。
+       <b>代价已记录</b>：本机（无特权 Windows）这 6 条真实建链路径不再验证 —— 与 issue 26-09-29-2031
+       同款取舍（该单靠无特权环境可跑的纯逻辑用例兜底，本单的 probe_* 注入替身覆盖同理兜底）。</p>
   </section>
 
   <footer>
