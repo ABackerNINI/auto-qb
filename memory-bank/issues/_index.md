@@ -22,7 +22,7 @@
 | bug | 6 |
 | perf | 5 |
 | docs | 1 |
-| test | 2 |
+| test | 3 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [跨零点时间炸弹: test_expr_eval / test_traffic_limits 4 条用例在 23:59-00:00 时段必失败](26-10-19-0013-test-test-midnight-bombs.html) — test_expr_ev…
 - [test] [delta-sync 真值对齐用例无模式分流: error/hang 轮恒红 4 条](26-10-18-2122-test-delta-sync-mode-gate.html) — e2e/delta-sy…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…

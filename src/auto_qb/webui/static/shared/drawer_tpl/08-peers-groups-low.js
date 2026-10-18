@@ -28,6 +28,10 @@
  *   display:none); rowsFn 保留空段 ⇒ 桥 v-for 段集合不变 ⇒ teleport 不卸不重挂, 握手中组
  *   再现时行原地补丁进场; 数据拍(render 的 skip 分支内)原地切隐藏类 + 回填组头计数/聚合数。
  *   「只看在传数据」是用户显式动作, 维持整组离场口径(quiet 组不进 DOM, 单次 rebuild 可接受)。
+ * !2026-10-18(用户报障「分组展开时状态条有几个像素显示到列表间隔中」根治): 组卡左缘
+ *   状态条从 inset box-shadow 改**定位伪元素**(::after, z-index:1) —— 旧条画在行背景之下,
+ *   被皮肤吸左首格不透明底盖掉大半, 只在发丝线缝隙与圆角弧以散落像素重现(机理与修法见
+ *   CSS 段内注释)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, **结构态**(加载/失败/空态/只看在传/折叠)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
  * 组 membership 随握手翻动是常态)不整帧重建(整帧重建 = 56-75ms longtask/拍 = 用户所报
@@ -88,13 +92,23 @@
     ".drawer .dt08-toggle i { width:6px; height:6px; border-radius:50%; background:var(--fg-dim); }",
     ".drawer .dt08-toggle.active i { background:var(--accent); }",
     /* 分区 */
-    ".drawer .dt08-grp { margin-bottom:10px; background:var(--bg-row); border:1px solid var(--border);",
+    ".drawer .dt08-grp { position:relative; margin-bottom:10px; background:var(--bg-row); border:1px solid var(--border);",
     "  border-radius:var(--radius); overflow:hidden; }",
-    ".drawer .dt08-grp.g-take { box-shadow:inset 2px 0 0 var(--today-up); }",
-    ".drawer .dt08-grp.g-feed { box-shadow:inset 2px 0 0 var(--today-down); }",
-    ".drawer .dt08-grp.g-idle { box-shadow:inset 2px 0 0 var(--border-strong); }",
-    ".drawer .dt08-grp.g-choke { box-shadow:inset 2px 0 0 var(--warn); }",
-    ".drawer .dt08-grp.g-hand { box-shadow:inset 2px 0 0 var(--fg-dim); }",
+    /* 状态条 = 组卡上的定位伪元素(2026-10-18 用户报障「展开时状态条有几个像素被显示到
+     * 列表间隔中」根治): 旧口径 inset box-shadow 画在**行背景之下** —— 皮肤
+     * `.group-row > :first-child` 的不透明底(dt_table.css §首格重锚记档)把行区那一段盖掉,
+     * 条只在组头 36px 可见, 余下只在半透明发丝线缝隙(每道行界漏出 1-2px)与卡底圆角
+     * (inset 阴影沿圆角弧钩状卷边 2-3px)以"散落像素"重现 —— 即用户看到的"状态条像素
+     * 跑到列表间隔里"。伪元素条 z-index:1 恒在最上(吸左首格 position:sticky z-index:auto
+     * 也在其下), 端点 top/bottom:3px + left:1px 内缩避开圆角弧, 发丝线漏出与钩状卷边
+     * 一并根除, 恒为一条完整净条(含横向滚动时 —— 条是卡片家具, 不随列滚)。 */
+    ".drawer .dt08-grp::after { content:\"\"; position:absolute; top:3px; bottom:3px; left:1px;",
+    "  width:2px; border-radius:2px; pointer-events:none; z-index:1; }",
+    ".drawer .dt08-grp.g-take::after { background:var(--today-up); }",
+    ".drawer .dt08-grp.g-feed::after { background:var(--today-down); }",
+    ".drawer .dt08-grp.g-idle::after { background:var(--border-strong); }",
+    ".drawer .dt08-grp.g-choke::after { background:var(--warn); }",
+    ".drawer .dt08-grp.g-hand::after { background:var(--fg-dim); }",
     /* 2026-10-18(用户报障根治): 空组整节隐藏改**原地类切换** —— 五区恒在场(锚/表格体不卸不
      * 重挂), 空组只切 dt08-hide。组 membership 随 5s 轮询翻动(握手动不动进出场)时零整帧重建 */
     ".drawer .dt08-grp.dt08-hide { display:none; }",

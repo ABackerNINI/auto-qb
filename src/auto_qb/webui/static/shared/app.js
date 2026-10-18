@@ -220,7 +220,9 @@ const DRAWER_PEER_COLUMNS = [
   { key: "addr", label: "IP/地址", tpl: "minmax(170px, 1.6fr)", sortable: true, locked: true, align: "left" },
   { key: "client", label: "客户端", tpl: "minmax(150px, 1.6fr)", sortable: true, align: "left" },
   { key: "flags", label: "标志", tpl: "88px", sortable: true, align: "left" },
-  { key: "progress", label: "进度", tpl: "84px", sortable: true, align: "right" },
+  // 进度左对齐(2026-10-18 用户报障): 与主表四张列集同口径(TORRENT/GROUP/DETAIL/SHOW 的
+  // progress 全是 align:"left"), 值格条身 flex:1 占满轨道, 观感只动表头
+  { key: "progress", label: "进度", tpl: "84px", sortable: true, align: "left" },
   { key: "dlspeed", label: "下载速度", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传速度", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
@@ -514,7 +516,8 @@ const DRAWER_TABLE_DEFS = {
   /* ---------------- U2: 用户表三变体(07/08/09, 计划 26-10-12-0527; 拍板 D2/D3/D5/D6 = A) ----------------
    * rows: "dtTplRows" = 行来源与筛选(07/09 筛选 chips、08 五区分桶/只看在传)回变体注册条目的
    * rowsFn(版式语义); 排序/拖宽/右键隐藏/偏好持久化全走引擎(dyn 排序键 + table-id 偏好键)。
-   * 默认序按各变体原口径: upspeed 降序(07/08/09 一致 —— 09 的「占用」列也是 upspeed 键)。
+   * 默认序(2026-10-18 用户报障改口径): addr 升序(原 upspeed 降序) —— IP/地址列按点分
+   * 数值比较(见 sort.js _dtStrCompare), 三态第三击复位同键。值格观感不变。
    * rowCls = 行装配预挂的修饰类串(红行/内网标/握手半透明 —— 行级个性经引擎行容器保留)。
    * 08 加 segs: true —— rowsFn 返回 [{key, rows}] 分段, 每组一个锚, 分组头留在外壳(D5:
    * 分组是版式, 行是引擎表体); 组内排序跨组共享一座键(与原手搓状态机同口径)。 */
@@ -522,7 +525,7 @@ const DRAWER_TABLE_DEFS = {
     columns: DRAWER_PEER_V07_COLUMNS, label: "用户表·四卡仪表",
     headRef: null, tableRef: null,
     grid: "drawerPeerV07Grid", cols: "visibleDrawerPeerV07Cols", window: null,
-    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    sort: { dyn: true, defKey: "addr", defDir: 1 },
     variantTab: "peers", variantId: "07",
     rows: "dtTplRows", rowKey: "addr", rowModel: "dt07", rowProp: "p", rowCls: "_cls",
   },
@@ -530,7 +533,7 @@ const DRAWER_TABLE_DEFS = {
     columns: DRAWER_PEER_V08_COLUMNS, label: "用户表·五区分组",
     headRef: null, tableRef: null,
     grid: "drawerPeerV08Grid", cols: "visibleDrawerPeerV08Cols", window: null,
-    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    sort: { dyn: true, defKey: "addr", defDir: 1 },
     variantTab: "peers", variantId: "08", segs: true,
     rows: "dtTplRows", rowKey: "addr", rowModel: "dt08", rowProp: "p", rowCls: "_cls",
   },
@@ -538,7 +541,7 @@ const DRAWER_TABLE_DEFS = {
     columns: DRAWER_PEER_V09_COLUMNS, label: "用户表·密度雷达",
     headRef: null, tableRef: null,
     grid: "drawerPeerV09Grid", cols: "visibleDrawerPeerV09Cols", window: null,
-    sort: { dyn: true, defKey: "upspeed", defDir: -1 },
+    sort: { dyn: true, defKey: "addr", defDir: 1 },
     variantTab: "peers", variantId: "09",
     rows: "dtTplRows", rowKey: "addr", rowModel: "dt09", rowProp: "p", rowCls: "_cls",
   },

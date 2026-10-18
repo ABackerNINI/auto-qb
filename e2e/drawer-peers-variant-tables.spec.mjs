@@ -9,7 +9,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * U2 起三变体的表格体不再是手搓 DOM: 变体外壳只留版式(卡片/分组头/chips), 行体/表头由
  * <aq-dt-bridge> 按 DRAWER_TABLE_DEFS 描述符 Teleport 进变体锚(data-dt-table-anchor=
- * drawerPeerV0X) —— 排序(dyn 默认 upspeed 降序)/拖宽/右键隐藏/偏好持久化全走引擎漏斗。
+ * drawerPeerV0X) —— 排序(dyn 默认 addr 升序, IP 点分数值化比较)/拖宽/右键隐藏/偏好持久化全走引擎漏斗。
  *
  * 手势清单(每条都是真手势, 不借道 vm):
  *   07: 引擎排序(默认序→点「下载」翻序) + 拖宽落盘 + 右键隐藏落盘 + 刷新双偏好回放;
@@ -94,9 +94,10 @@ for (const skin of SKINS) {
         anchor.locator('.group-row[data-table="drawerPeerV07"]').first().locator('.dt07-files'),
       ).toHaveText('—');
 
-      // 默认序 = upspeed 降序(D3 defKey/defDir): 首行 = 上传峰值的对端(i=2, 稳定序取首个)
+      // 默认序 = addr 升序(2026-10-18 用户报障改口径, defKey/defDir; IP 点分数值化比较):
+      // 桩 fixture 首段恒 10, 数值序 = i 升序 → 首行 = i=0
       await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
-        .toContainText(addrOf(2));
+        .toContainText(addrOf(0));
 
       // 排序: 点「下载」列头 → 引擎三态第一击(降序箭头亮), 首行换人(375000 峰值 = i=3)
       await anchor.locator('.h-cell.hc-dlspeed').click();
@@ -201,10 +202,10 @@ for (const skin of SKINS) {
         '分段锚逐组一座(折叠组不计)').toHaveCount(3);
       await expect(anchor.locator('.group-head[data-table="drawerPeerV08"]').first()).toBeVisible();
 
-      // 组内 dyn 排序(D3 默认 upspeed 降序, 跨组共享一座键): take 组首行 = 组内上传峰值(i=5)
+      // 组内 dyn 排序(D3 默认 addr 升序, 跨组共享一座键): take 组成员 {0,5,10}, 数值序首行 = i=0
       const take = drawer.locator('.dt08-grp[data-grp="take"]');
       await expect(take.locator('.group-row[data-table="drawerPeerV08"]').first())
-        .toContainText(addrOf(5));
+        .toContainText(addrOf(0));
 
       // 折叠手势: 展开 idle(默认折叠) → 段锚内 2 行可见; 折叠 take → display 翻转(不重挂)
       const idle = drawer.locator('.dt08-grp[data-grp="idle"]');

@@ -99,9 +99,9 @@ for (const skin of SKINS) {
       await expect(firstRow).toBeVisible({ timeout: 10_000 });
 
       // 2026-10-14: 经典对端表(未排序, 首行 = 桩的第 0 个对端)已删 —— 改钉缺省变体 07。
-      // 07 默认按 upspeed **降序**(与经典"后端原序"不同), 首行是 upspeed 最大的对端(桩里
-      // i=2/5/8/11 并列), 而桩只给**第 0 个对端**(ip 10.0.0.0)换 dl_speed —— 故必须按
-      // 地址定位那一行, 否则探到的那格两轮输入完全相同(经典版就是这么误报的)。
+      // 07 默认按 addr **升序**(2026-10-18 用户报障改口径, 原 upspeed 降序), 桩 ip 首段恒
+      // 10 → 数值序 = i 升序, 第 0 个对端(10.0.0.0)就是首行 —— 探针按地址定位该行,
+      // 与首行重合; 桩只给它换 dl_speed, 两轮输入必不同(否则探测格两轮相同 = 测假)。
       const row0 = drawer.locator('.group-row[data-table="drawerPeerV07"]', { hasText: '10.0.0.0:30000' }).first();
       await expect(row0, '第 0 个对端(10.0.0.0)必须在 07 表里').toBeVisible({ timeout: 10_000 });
       const text0 = await row0.evaluate((row) => {

@@ -111,12 +111,17 @@ window.AQB_COLUMNS = {
       const w = this.colWidths[page] || {};
       return this._visibleCols(page).map((c) => w[c.key] || c.tpl).join(" ");
     },
-    /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null */
+    /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null。
+     * !2026-10-18(用户报障「用户表格隐藏一列其它列坍塌」根治): 逐 token 严格校验
+     * ^\d+px$ —— display:none 的表头(08 五区分组的折叠组/空组, 表头在 .dt08-rows 内)
+     * getComputedStyle 返回的是**指定形**(minmax(170px, 1.6fr) ...), 旧的 parseFloat 兜底
+     * 会把 "1.6fr)" 解析成 1.6px 混进宽度表, 全组列宽随即坍成最小宽; 严格校验后这种
+     * 量不到的表头只会得到"数量不符 → null"(调用方按未渲染处理), 垃圾值进不了引擎。 */
     _renderedWidths(headEl, page) {
       const rendered = (getComputedStyle(headEl).gridTemplateColumns || "")
         .split(" ")
-        .map((v) => parseFloat(v))
-        .filter((v) => !isNaN(v) && v > 0);
+        .filter((v) => /^\d+(\.\d+)?px$/.test(v))
+        .map((v) => parseFloat(v));
       const vis = this._visibleCols(page);
       if (rendered.length !== vis.length) return null;
       const out = {};
@@ -139,8 +144,18 @@ window.AQB_COLUMNS = {
        * colAlignCss 注入的锚), 故按它查即可。主视图的 ref 路径优先命中, 本条对它们零影响;
        * 抽屉未打开 / 该页签未激活时查不到 -> 返回 null(调用方全都已按 null 处理)。 */
       if (!def) return null;
-      const found = document.querySelector('.group-head[data-table="' + page + '"]');
-      return found || null;
+      /* !2026-10-18(用户报障「隐藏一列其它列坍塌」根治, 与 _renderedWidths 严格校验配套):
+       * 分段表(08 五区分组)每组一座表头 —— 折叠组(.dt08-rows display:none)与空组
+       * (.dt08-hide)里的表头**不可量**: display:none 下 computed grid 保留 minmax 指定形、
+       * 格宽实测为 0。旧口径 querySelector 恒取 DOM 首座, 首组恰好折叠/为空时量出垃圾宽度
+       * 直接落进引擎(recomputeEffective / 三态排序复位后的现算路径都吃它)。现取**首个有盒
+       * (getClientRects 非空)的表头**; 全都不可量返回 null(调用方按未渲染处理, 列宽保持
+       * 现状, 不把垃圾值落盘)。主视图的 ref 路径优先命中, 本条对它们零影响。 */
+      const found = document.querySelectorAll('.group-head[data-table="' + page + '"]');
+      for (const el of found) {
+        if (el.getClientRects().length) return el;
+      }
+      return null;
     },
     /* 列对齐规则注入(单例 <style id="col-align-css">): 首次创建后只改 textContent ——
      * 不能重建元素: 重建会让它排到 <head> 末尾的其它运行时样式之后, 层叠顺序不再稳定。 */

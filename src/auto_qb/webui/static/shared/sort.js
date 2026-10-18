@@ -104,7 +104,7 @@ window.AQB_SORT = {
         const eb = vb === null || vb === undefined || vb === "";
         if (ea || eb) return ea && eb ? 0 : (ea ? 1 : -1);
         let r;
-        if (typeof va === "string" || typeof vb === "string") r = String(va).localeCompare(String(vb));
+        if (typeof va === "string" || typeof vb === "string") r = this._dtStrCompare(String(va), String(vb));
         else r = va - vb;
         return r === 0 ? 0 : dir * r;
       });
@@ -116,6 +116,22 @@ window.AQB_SORT = {
       const raw = row._raw;
       if (raw && typeof raw === "object" && key in raw) return raw[key];
       return row[key];
+    },
+    /* 字符串键比较(2026-10-18 用户报障配套): 用户表默认序改按 IP/地址(addr) —— 纯字典序
+     * 会把 "10.10.x.x" 排到 "10.2.x.x" 后面(段内字典序 ≠ 数值序)。IPv4(+可选 :端口)按
+     * 点分数值逐段比较、端口按数值; 其余字符串(客户端名等)维持 localeCompare 原口径。
+     * 只吃 sortedDrawer 的字符串分支 —— 主视图各表有自己的 comparator, 零接触。 */
+    _dtStrCompare(a, b) {
+      const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d+))?$/.exec(a);
+      const n = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d+))?$/.exec(b);
+      if (m && n) {
+        for (let i = 1; i <= 4; i++) {
+          const d = (+m[i] || 0) - (+n[i] || 0);
+          if (d) return d;
+        }
+        return (+m[5] || 0) - (+n[5] || 0);
+      }
+      return a.localeCompare(b);
     },
     /* 明细表行序(展开的组明细 / 追剧集明细共用): 空键 = 后端原序, 点击列头后按该列三态排序;
      * 同值时按站点名稳定排序(与分组表"同值按名称"同思路, 避免刷新抖动)。
