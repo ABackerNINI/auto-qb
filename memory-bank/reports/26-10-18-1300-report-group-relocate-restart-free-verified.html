@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>免重启整组迁移 A/C 路线实测验证</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="group-relocate-restart-free-verified">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-18-1300">
+<meta name="doc-updated" content="26-10-18-1300">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-0826-report-missing-files-setlocation-recovery.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: group-relocate-restart-free-verified</div>
+<h1>免重启整组迁移 A/C 路线实测验证</h1>
+<p class="lede">两条主推路线都真实跑通：别名接续(A) 的三种形态(Junction / 目录符号链接 / 文件符号链接)全部做到「暂停态换路径 → qB 零感知 → 重启后仍 100% 且不解析别名」；机会式收尾(C) 走通了「文件丢失 → 设定位置 → <b>1.4 秒零 hash 恢复到 100%</b>」。唯一需要修正的是 C 的表述：恢复过程不是「无 Checking」，而是有约 1 秒的 <code>checkingResumeData</code> 瞬态(非全量 re-hash)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-1300 · <b>doc-updated</b> 26-10-18-1300 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「验证 reports/26-10-18-0818 报告中 A/C 方案是否能真实跑通」(2026-10-18 会话)。对象 = 本机 <code>D:\Programs\qBittorrent-testing</code> 实例(<code>localhost:36595</code>)；约束 = 只操作种子 <code>191975c3…b894</code>、只在暂停态操作、操作完不启动种子。前序两份报告(<code>0818</code>/<code>0826</code>)均为源码推演，本轮为其补端到端实测
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<p><b>总判：A 与 C 均成立，可直接作为 auto-qb 的实现依据；三种别名形态对 qBittorrent / libtorrent 完全透明。</b>证据是 2026-10-18 在真实实例上的 5 次重启、4 次跨盘搬迁、1 次 setLocation 的端到端实测，不是源码推演。唯一被推翻的是措辞而非机制：C 的恢复会闪一下 <code>checkingResumeData</code>(约 1 秒)，那一步是 resume data 的 stat + 大小比对，不是全量哈希。</p>
+
+<h3>断言矩阵(11 条 × 3 形态 + C)</h3>
+<table>
+<tr><th>断言</th><th>Junction</th><th>目录符号链接</th><th>文件符号链接</th></tr>
+<tr><td>A1 建链能力</td><td class="good">✅ 免管理员</td><td class="good">✅ 开发者模式即可(Python)</td><td class="good">✅ 同左</td></tr>
+<tr><td>A2 运行中换路径 qB 无感知</td><td class="good">✅ 日志 0 新增行</td><td class="good">✅ 日志 0 新增行</td><td class="good">✅ 日志 0 新增行</td></tr>
+<tr><td>A3 别名穿透读一致</td><td class="good">✅ SHA1 一致</td><td class="good">✅ 一致</td><td class="good">✅ 一致</td></tr>
+<tr><td>A4 重启后仍成立</td><td class="good">✅ 100%、路径未解析</td><td class="good">✅ 100%、路径未解析</td><td class="good">✅ 100%、路径未解析</td></tr>
+<tr><td>A5 元数据指纹不变</td><td class="good">✅</td><td class="good">✅</td><td class="good">✅</td></tr>
+<tr><td>A6 空闲空间穿透</td><td class="good">✅ 报 H: 的 79.4G</td><td class="good">✅ 报 H: 的 79.4G</td><td>— 不适用(目录仍在 R:)</td></tr>
+<tr><td>C1 进「文件丢失」</td><td colspan="3" class="good">✅ <code>missingFiles</code> / progress 0 / pieces 0-of-862</td></tr>
+<tr><td>C2 窗口期位图保留</td><td colspan="3" class="good">✅ fastresume <code>pieces</code> 仍 862B 全 <code>0x01</code>、<code>paused=1</code></td></tr>
+<tr><td>C3 零 hash 恢复</td><td colspan="3" class="good">✅ 0% → 100% 用时 1.4 秒</td></tr>
+<tr><td>C4 元数据落真实路径</td><td colspan="3" class="good">✅ <code>save_path</code>/<code>qBt-savePath</code> 均更新为 H:</td></tr>
+<tr><td>C5 reload 分支真的走到</td><td colspan="3" class="good">✅ 日志四连(见 §02.5)</td></tr>
+</table>
+
+<h3>对前序报告的三处修正 / 补充</h3>
+<ol>
+<li><b>「恢复后无 Checking 状态」不准确(0818 §01 验收标准)</b>：200ms 采样在 <code>t=0.33s</code> 捕到 <code>state=checkingResumeData</code>，<code>t=1.39s</code> 直接 100%。该状态是 resume data 的 stat + 大小比对(<code>verify_resume_data</code>)，<b>不是全量 re-hash</b>——progress 没有中间爬升，0% 直接跳到 100%。正确表述应为「无全量 re-hash，仅有约 1 秒的 checkingResumeData 瞬态」。</li>
+<li><b>文件级符号链接是 0818 未覆盖的一档</b>：Junction 只能链目录，而文件 symlink 可把别名粒度下沉到单个文件。实测同样透明、同样扛重启，正好补上 0818 §01「别名的目录粒度」缺失的粒度——save_path 下混放多个组时，可以只给本组文件建链接，不动别组数据。</li>
+<li><b>权限门槛是落地关键，且与实现语言相关</b>：Junction 免管理员；symlink 需开发者模式或管理员。<b>但 PowerShell 5.1 的 <code>New-Item -ItemType SymbolicLink</code> 即便开发者模式已开启仍报「此操作需要管理员权限」</b>(它不带 <code>ALLOW_UNPRIVILEGED_CREATE</code> 标志)，换成 Python <code>os.symlink</code> 直接成功。对 auto-qb(Python) 是好消息：开发者模式下无需提权即可建 symlink。</li>
+</ol>
+
+<h3>落地口径</h3>
+<ul>
+<li><b>A 作为默认</b>：不改 qBittorrent 侧任何种子状态，暂停态即可完成，失败可回滚(删别名 + 搬回)。</li>
+<li><b>别名形态选择</b>：组共享同一数据目录 → Junction(零权限门槛，最省事)；需要指向网络路径或只覆盖组内文件 → symlink(需开发者模式)。</li>
+<li><b>C 作为中期收尾</b>：唯一硬成本是「必须一次重启」，换来的收益是元数据彻底干净、进度零 hash 恢复；窗口期即使不手动暂停也安全(见 §02.7)。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>2.1 环境与基线</h3>
+<table>
+<tr><th>项</th><th>实测值</th></tr>
+<tr><td>qBittorrent / WebAPI</td><td>v5.2.3 / 2.15.1；便携模式 profile <code>D:\Programs\qBittorrent-testing\profile</code></td></tr>
+<tr><td>libtorrent(取自 fastresume)</td><td>2.0.13.0</td></tr>
+<tr><td>种子</td><td>单文件 903,111,768 B；862 片 × 1 MiB；private；<code>stoppedUP</code>；<code>progress=1</code></td></tr>
+<tr><td>save_path</td><td><code>R:\Download\Testing</code>(普通目录，非 reparse point)</td></tr>
+<tr><td>目标盘</td><td><code>H:\Download\Testing-relocated</code>(跨卷；NTFS 固定盘，剩 80.3G)</td></tr>
+<tr><td>基线 SHA1</td><td><code>F3AA424D0FBF48F0CFECE0141061F068C7307558</code></td></tr>
+<tr><td>基线 fastresume</td><td><code>save_path=R:\Download\Testing</code>、<code>qBt-savePath=R:/Download/Testing</code>、<code>paused=1</code>、<code>seed_mode=0</code>、<code>pieces</code>=862B 全 <code>0x01</code></td></tr>
+<tr><td>取证方式</td><td>fastresume 全量 bencode 解析 + WebAPI 快照 + qB 文件日志增量(<code>R:\Else\qBittorrent\logs-testing</code>)，每步留 JSON</td></tr>
+</table>
+
+<h3>2.2 轮 1：目录联接 Junction</h3>
+<ul>
+<li><b>移动</b>：qB <b>保持运行</b>，<code>robocopy /E /MOVE</code> 整目录 R: → H:，耗时 <b>0.5s</b>，源目录消失。</li>
+<li><b>建链</b>：<code>New-Item -ItemType Junction</code> 成功，<code>LinkType=Junction</code>、<code>Target=H:\Download\Testing-relocated</code>，无需管理员。</li>
+<li><b>A2 无感知</b>：移动 + 建链全过程 qB 日志<b>零新增行</b>；API 仍为 <code>stoppedUP</code> / <code>progress=1</code> / <code>save_path=R:\Download\Testing</code>。</li>
+<li><b>A3 穿透</b>：经 <code>R:\Download\Testing\…ts</code> 读 SHA1 = <code>F3AA424D…7558</code>(与基线一致)。</li>
+<li><b>A6 空间</b>：<code>disk_usage("R:\Download\Testing")</code> 报 <b>79.4G</b>(= H: 剩余)，<code>disk_usage("R:\Download")</code> 报 45.7G —— OS 层确实解析了 reparse 点。</li>
+<li><b>A4 重启</b>：优雅退出(<code>/app/shutdown</code>)后重启，日志出现 <code>已还原 Torrent</code>，<b>无</b> fastresume rejected、<b>无</b>校验；重启后 <code>save_path</code> 仍是 <code>R:\Download\Testing</code>(未被解析成 H:)、<code>progress=1</code>、<code>pieces_have=862</code>。</li>
+<li><b>A5 元数据</b>：重启后 fastresume 三个指纹字段(<code>save_path</code>/<code>qBt-savePath</code>/<code>pieces</code>)与基线逐字节一致。</li>
+</ul>
+
+<h3>2.3 轮 2：目录符号链接</h3>
+<ul>
+<li><b>权限</b>：开发者模式开启后，Python <code>os.symlink(target, link, target_is_directory=True)</code> 成功；<code>LinkType=SymbolicLink</code>、<code>Target=H:\Download\Testing-relocated</code>。</li>
+<li><b>A2/A3/A6</b>：与 Junction 轮完全一致(日志 0 新增行、SHA1 一致、空间报 79.4G)。</li>
+<li><b>A4/A5</b>：重启后 <code>stoppedUP</code> / <code>progress=1</code> / <code>save_path</code> 未解析 / fastresume 指纹不变。</li>
+<li><b>删除</b>：<code>os.rmdir(link)</code> 只删链接，H: 目标数据完好(删后 <code>os.listdir</code> 仍见数据文件)。</li>
+</ul>
+
+<h3>2.4 轮 3：文件符号链接(仅替换单文件)</h3>
+<ul>
+<li><b>做法</b>：只把 <code>…ts</code> 移到 H:，<code>R:\Download\Testing</code> 保持真实目录(内含 .torrent + 一个文件 symlink)。</li>
+<li><b>穿透</b>：经链接 <code>os.path.getsize</code> = 903,111,768(跟随到目标)；SHA1 一致。</li>
+<li><b>为什么能过校验</b>：<code>stat_file</code> 在 Windows 上对 reparse point 会 fallback 到 <code>GetFileInformationByHandle</code> 跟随链接取目标大小(libtorrent <code>path.cpp:207-268</code>)；<code>stat_cache</code> 里「假装 symlink 不存在」的分支只对 <b>.torrent 里声明为 symlink 的文件</b>生效(<code>stat_cache.cpp:64-68</code>)，本种子声明的是普通文件，不触发。</li>
+<li><b>A2/A3/A4/A5</b>：日志 0 新增行；重启后 <code>stoppedUP</code> / <code>progress=1</code> / 路径未解析 / 指纹不变 —— <b>文件级 reparse 同样被 libtorrent 透明穿过</b>。</li>
+</ul>
+
+<h3>2.5 轮 4：C 路线(文件丢失 → 设定位置)</h3>
+<p><b>C1 进入「文件丢失」</b>：删除文件 symlink(数据留 H:)后重启，日志原文：</p>
+<pre><code>(W) 2026-10-18T12:50:31 - 恢复 Torrent 失败。文件可能被移动或存储不可访问。Torrent：“SPICA(스피카) _ LONELY.2160p.HEVC.AAC-HDHome.ts”。原因：“… fast resume rejected. file_stat(R:\Download\Testing\SPICA(스피카) _ LONELY.2160p.HEVC.AAC-HDHome.ts): mismatching file size”</code></pre>
+<p>API 同步显示 <code>state=missingFiles</code> / <code>progress=0</code> / <code>pieces_have=0</code> / <code>amount_left=903111768</code>。</p>
+<p><b>C2 位图保留</b>：此时 fastresume 仍是 <code>pieces</code>=862B 全 <code>0x01</code>、<code>paused=1</code> —— UI 显示 0%，磁盘上的进度位图没丢(<code>needPreserveProgress</code> 生效)，这是 C 能反复重试的前提。</p>
+<p><b>C3 恢复</b>：<code>POST /api/v2/torrents/setLocation</code>(hashes + location 放 form body)返回耗时 0.17s，200ms 采样序列：</p>
+<pre><code>t=0.33s state=checkingResumeData progress=0.0000 pieces=0   save_path=H:\Download\Testing-relocated
+t=1.39s state=stoppedUP           progress=1.0000 pieces=862 save_path=H:\Download\Testing-relocated</code></pre>
+<p>全程 <b>没有</b> <code>checkingUP/checkingDL</code>(全量哈希)，progress 从 0 直跳 1。</p>
+<p><b>C4 元数据</b>：<code>save_path=H:\Download\Testing-relocated</code>、fastresume <code>qBt-savePath=H:/Download/Testing-relocated</code>、<code>pieces</code> 仍 862B 全 <code>0x01</code>、<code>paused=1</code>。</p>
+<p><b>C5 reload 分支</b>：日志四连，证明走的是 move 作业 + <code>m_hasMissingFiles</code> 分支的 reload(<code>torrentimpl.cpp:2135-2142</code>)而非别的路径：</p>
+<pre><code>(N) 12:51:11 - Web UI 设置路径：从 "R:\Download\Testing" 移动 "…" 至 "H:\Download\Testing-relocated"
+(N) 12:51:11 - 已将 Torrent 移动加入队列。源位置：“R:\Download\Testing”。目标位置：“H:\Download\Testing-relocated”
+(N) 12:51:11 - 开始移动 Torrent。目标位置：“H:\Download\Testing-relocated”
+(N) 12:51:11 - 成功移动了 Torrent。目标位置：“H:\Download\Testing-relocated”</code></pre>
+<p class="aside">注意：目标已含同名文件时 <code>move_storage</code> 会返回 <code>need_full_check</code>(<code>storage_utils.cpp:123-127</code>)，源缺失则被容错跳过(<code>:132-137</code>)，因此这里仍报「成功移动」。随后 reload 的 <code>remove_torrent</code> 让旧 handle 上的冗余 <code>force_recheck</code> 早退——实测佐证了 0826 §02.6.5 的「reload 胜出」推断：全程没出现 <code>checkingUP</code>。</p>
+
+<h3>2.6 回滚与数据完整性</h3>
+<ul>
+<li>4 次跨盘搬迁(R→H、H→R、R→H、H→R)后 SHA1 始终为 <code>F3AA424D0FBF48F0CFECE0141061F068C7307558</code>，字节级无损。</li>
+<li>回滚方式：优雅退出 → 数据搬回 <code>R:\Download\Testing</code>(真实目录) → 用备份覆盖 fastresume/torrent → 重启；最终 <code>stoppedUP</code> / <code>progress=1</code> / <code>save_path=R:\Download\Testing</code> / <code>added_on</code> 未变，与基线一致。</li>
+<li>H: 侧无残留(<code>Testing-relocated</code> 与父目录 <code>H:\Download</code> 均已清理)；种子全程未启动。</li>
+</ul>
+
+<h3>2.7 附：运行中把目录整个移走、且不建别名</h3>
+<p>同样 qB 保持运行、种子暂停时，把 <code>R:\Download\Testing</code> 整体搬到 H: 且<b>不建任何别名</b>，qB 依然<b>零日志、<code>progress=1</code>、<code>state=stoppedUP</code></b>。说明「路径消失」只有重启或 reload 才会被发现——这直接支撑 C 的窗口期安全性：移动过程中不需要停 qB，也不会触发错误状态。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+
+<h3>3.1 操作序列</h3>
+<ol>
+<li>备份 <code>BT_backup</code> 的 fastresume + torrent，记录基线(API/fastresume/SHA1/日志偏移)。</li>
+<li>轮 1 Junction：运行中移动 → 建 Junction → 断言 → 重启 → 断言 → 运行中回滚。</li>
+<li>轮 2 目录 symlink：运行中移动 → 建 symlink → 断言 → 重启 → 断言 → 回滚。</li>
+<li>轮 3 文件 symlink：只移数据文件 → 建文件 symlink → 断言 → 重启 → 断言。</li>
+<li>轮 4 C：删别名 → 重启(进文件丢失) → setLocation → 200ms 采样。</li>
+<li>回滚原状 + 全量 SHA1 复核。共 <b>5 次重启</b>、<b>4 次跨盘搬迁</b>、<b>1 次 setLocation</b>。</li>
+</ol>
+
+<h3>3.2 采样与取证</h3>
+<ul>
+<li>每次状态变更都留 <code>{API 快照, fastresume 指纹, 日志增量}</code> 三元组，共 9 份 JSON 快照 + 备份目录。</li>
+<li>「无感知」的判据是<b>日志零新增行</b>，不是「没看到报错」——qB 的文件日志记录了所有 restore/move/check 事件，零新增即等于没触发任何路径。</li>
+<li>C3 用 200ms 轮询 + 状态迁移去重，因此能捕到 1 秒级的 <code>checkingResumeData</code>；重启路径只观测了稳定态(启动后 8 秒)，<b>未</b>做启动期高频采样。</li>
+</ul>
+
+<h3>3.3 未覆盖的边界</h3>
+<ul>
+<li><b>单种子组</b>：本实例只有 1 个种子，组内第 2..N 个成员「目标已有文件 → need_full_check」的场景<b>没测到</b>，只测了单成员的等价路径。</li>
+<li><b>统计保留无法证明</b>：该种子 <code>uploaded/downloaded/ratio</code> 均为 0，只能证明「未被重加」(<code>added_on</code> 不变、日志无 delete/add 事件)，<b>不能</b>证明分享率/统计值被保留。</li>
+<li><b>恢复后继续做种未验证</b>：按约束全程暂停、操作完未启动，A/C 的「恢复后自动重连做种」未实测。</li>
+<li><b>网络路径未测</b>：Junction 不能指向 UNC，symlink 可以；本轮目标盘是本地 NTFS 固定盘，SMB/NFS 场景未覆盖。</li>
+<li><b>源码行号口径</b>：引用行号来自 <code>D:\Projects\Else</code> 的 qBittorrent master 与 libtorrent 2.1.2，实际运行的是 qB 5.2.3 + libtorrent 2.0.13；机制一致但行号可能有偏移。</li>
+</ul>
+
+<h3>3.4 环境坑(复现时避开)</h3>
+<ul>
+<li><b>重启 qB 不能用 <code>Start-Process</code></b>：工具 shell 退出时会回收子进程，第一次重启后 qB 被静默杀掉(日志无终止记录)。改用 <code>explorer.exe "&lt;exe&gt;"</code> 分离启动才稳定存活。</li>
+<li><b>qB WebAPI 的 POST 参数必须放 form body</b>：<code>setLocation</code> 把 <code>hashes</code>/<code>location</code> 拼在 query string 会返回 <b>400</b>(<code>requireParams</code> 只读 body 参数)。</li>
+<li><b>symlink 权限与实现语言相关</b>：开发者模式开启后，PowerShell 5.1 的 <code>New-Item -ItemType SymbolicLink</code> 仍失败，Python <code>os.symlink</code> 成功；Junction 两种语言都免权限。</li>
+<li><b>删链接勿用递归删除</b>：<code>Remove-Item -Recurse</code> 有跟随 reparse 点删目标的风险；本轮统一用 <code>[IO.Directory]::Delete(path,$false)</code> / <code>os.rmdir</code> / <code>os.unlink</code>，删后立即验证目标数据仍在。</li>
+</ul>
+
+</div>
+</body>
+</html>

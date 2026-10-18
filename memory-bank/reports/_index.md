@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-18-1300] [免重启整组迁移 A/C 路线实测验证](26-10-18-1300-report-group-relocate-restart-free-verified.html) — `group-relocate-restart-free-verified`
 - [26-10-18-0826] [文件丢失+设定位置恢复机制验证](26-10-18-0826-report-missing-files-setlocation-recovery.html) — `missing-files-setlocation-recovery`
 - [26-10-18-0818] [免重启整组迁移方案研究](26-10-18-0818-report-group-relocate-restart-free.html) — `group-relocate-restart-free`
 - [26-10-15-0728] [WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告](26-10-15-0728-report-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
