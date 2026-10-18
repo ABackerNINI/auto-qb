@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>免重启整组迁移(A/C)分步实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="group-relocate-restart-free">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-18-1604">
+<meta name="doc-updated" content="26-10-18-1805">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: group-relocate-restart-free</div>
+<h1>免重启整组迁移(A/C)分步实施计划</h1>
+<p class="lede">开关开启时, WebUI「移动位置」与规则 <code>move_to</code> 改走「<b>qB 搬字节 → 别名接续 → 下次 qB 退出时收尾</b>」：字节一律由 qBittorrent 搬(auto-qb 不写自研搬迁代码)，auto-qb 只负责闸门、建别名、对账与收尾；关闭时逐字节保持现状。别名形态<b>按文件数分流</b>：少量文件逐文件链接（对未来种子零影响），文件多且目录专属才用目录别名。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-18-1805 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「准备实施 A/C 方案」(26-10-18) + 五轮 grilling 拍板(14:31 / 15:34 / 16:03 / 16:31 / 16:57) + 前序报告 <code>26-10-18-0818</code> / <code>26-10-18-1300</code> + 本机(Windows 与 WSL Ubuntu)与测试客户端(<code>localhost:36595</code>, qB v5.2.3)只读探测
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<p><b>为什么做</b>：qB 的 <code>setLocation</code> 在「目标已含同名数据」时会走 <code>need_full_check</code> ⇒ <code>force_recheck</code>（<code>storage_utils.cpp:123-127</code> → <code>torrent.cpp:9381</code>），进度清零 + 全量校验。辅种组 N 个成员共享同一份物理文件，第 2..N 个成员搬到同一目标必然中招 —— 这正是「整组迁移」在 qB 侧没有解的原因。</p>
+
+<p><b>做到什么程度算成</b>：</p>
+<ol>
+  <li>三种现实情形（独占内容根 / 组共享子目录 / 单文件或平铺布局）各有<b>明确且自解释</b>的行为，不存在「点了没反应」或「悄悄换了一种语义」。</li>
+  <li>开关关闭时，三个入口的调用序列与今天<b>逐字节相同</b>（守阵测试钉住）。</li>
+  <li>开关开启时，迁移后组<b>不裂</b>、进度与统计<b>不清零</b>、qB 侧<b>零校验</b>；不可别名时明确拒绝并给出路。</li>
+  <li><b>多平台是能力矩阵，不是平台白名单</b>：Windows / macOS / Linux 宿主与 Linux 容器都在支持面内（见 §3.3）；只有「物理上无法建出 qB 能读的链接」的组合才拒绝，且文案必须说明为什么不可能。</li>
+  <li><b>迁移只影响被点名的种子，不影响未来</b>：默认走逐文件链接，未来存进同一目录的新种子照常落原盘；只有用户显式确认「这个目录以后也不会再放别的」时才用目录别名（§3.2）。<b>且任何落进别名目录的新种子都必须被告知并二次确认</b>（§3.6.1）—— 盘类型不同（HDD 不适合乱序下载），静默把下载改到另一块盘是不可接受的。</li>
+  <li>真机单种子端到端跑通「迁移 → 别名 → 收尾(重启)」，并验证失败路径只做零成本动作、撤销搬回前先显示成本。</li>
+</ol>
+
+<p><b>不变量（违反即视为实现错误）</b>：</p>
+<ul>
+  <li><b>不自行搬字节</b>：所有数据移动都由 qB 的 <code>setLocation</code> 完成。auto-qb 只建/删别名、对账、轮询。</li>
+  <li><b>删别名只在「qB 确认不在运行」时</b>：qB 可能持有打开的文件句柄，运行中删链接不会关句柄，它会按旧句柄继续报做种（假种）。三证齐全（进程不存在 + 端口连不上 + 稳定窗口）才动手。</li>
+  <li><b>单一写者</b>：<code>state.json</code> 只由主循环线程写；guardian 只写自己的 journal 文件，auto-qb 读后合并。两个进程永不写同一份文件。</li>
+  <li><b>保守默认</b>：开关默认关；所有不可判定（能力探测失败、路径不可判定、容器 OS 不一致）一律拒绝而非猜测。</li>
+  <li><b>失败不自动搬数据</b>：搬迁失败时 auto-qb 只做零成本的动作（删已建链接、落账、告知），<b>绝不自动把数据搬回</b> —— 搬回是又一次全量复制，成本可能比失败本身还高，且用户未必想回滚。回滚/撤销只作为用户显式选项出现，并先显示成本（数据量、目标卷、预计耗时）。</li>
+  <li><b>别名是「作用域」不是「快照」</b>：别名存在期间新加入同物理目录的种子自动落进同一作用域，收尾集合按作用域<b>动态计算</b>，不是创建时那份固定 hash 列表。</li>
+  <li><b>默认不动目录结构</b>：只有文件数达到阈值且目录专属、用户确认时，才把整个目录变成链接；「整目录（save_path 级）别名」不提供。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>2.1 三个入口，一个收口</h3>
+<table>
+<tr><th>入口</th><th>位置</th><th>现状</th></tr>
+<tr><td>WebUI 单个</td><td><code>webui/commands.py::_cmd_set_torrent_location</code></td><td>直接 <code>api.torrents_set_location([hash], location)</code></td></tr>
+<tr><td>WebUI 批量/组级</td><td><code>commands.py::_BULK_ACTIONS["location"]</code></td><td>同上，一次传全部 hashes</td></tr>
+<tr><td>规则 <code>move_to</code></td><td><code>rules/actions/transfer.py::MoveToAction.execute</code></td><td>同上，单 hash</td></tr>
+</table>
+<p>三处都直接打 qB，没有任何前置闸门：不检查是否已完成、是否暂停、目标是否已有数据、空间是否够。目标已有数据时就是全量校验。</p>
+
+<h3>2.2 组键含 save_path ⇒ 裂组</h3>
+<p><code>group_key_of(save_path, file_map)</code> 的第一元是<b>词法</b> save_path。只要有一个成员被搬走（save_path 变 T），它就与其余成员（save_path 仍 S）分属两个组；而跨组文件交叉检测会对 save_path 做 <code>realpath_lexical</code>，把两组认成「不同组指向同一物理文件」，一旦任一侧有下载方就警告 + 暂停。所以「qB 搬第一个」必须配组判定改造，否则界面与告警都会裂。</p>
+
+<h3>2.3 搬迁窗口会误触缺文件联动</h3>
+<p>我们主动暂停组内种子会命中 <code>grouping</code> 的「上传转暂停」状态转移 ⇒ 缺文件扫描 ⇒ 此刻文件正在被 qB 搬走 ⇒ 误判缺失 ⇒ 整组暂停 + 打 <code>MISSING</code> 标签。必须引入 <code>relocating</code> 登记（形态同 <code>store.own_write_pending</code>）让扫描与跳检闸门跳过。</p>
+
+<h3>2.4 真机事实（本轮只读探测，26-10-18）</h3>
+<table>
+<tr><th>项</th><th>实测</th></tr>
+<tr><td>测试客户端</td><td>qB <code>v5.2.3</code> / WebAPI <code>2.15.1</code>；唯一允许操作的种子 <code>191975c3…b894</code>，<b>单文件</b> 903,111,768 B，<code>stoppedUP</code>，<code>progress=1</code></td></tr>
+<tr><td>路径</td><td><code>save_path=R:\Download\Testing</code>，<code>content_path=save_path/&lt;name&gt;</code>；目录里还躺着一个同名 <code>.torrent</code>（非种子文件）</td></tr>
+<tr><td>同卷证明可行</td><td><code>server_state.free_space_on_disk</code> = 48,196,329,472 与 <code>shutil.disk_usage("R:\Download\Testing").free</code> <b>完全相等</b> ⇒ 可作为「auto-qb 与 qB 看的是同一块盘」的硬证据</td></tr>
+<tr><td>Windows 目录别名</td><td>junction 创建/穿透/删除 <b>免管理员</b>（PowerShell <code>New-Item -ItemType Junction</code> 实测）；<code>os.symlink</code> 目录与文件均成功 —— <b>但本机开发者模式是开的</b>，不能据此假设用户环境</td></tr>
+<tr><td>POSIX 别名</td><td>WSL <code>Ubuntu-26.04</code>（内核 6.18.33.2）上 <code>ln -s</code> 目录链接与文件链接均成功、穿透读取一致、免权限 ⇒ Linux/macOS 宿主路径成立</td></tr>
+<tr><td>WSL 写在 NTFS 上的链接</td><td>WSL 里 <code>ln -s</code> 到 <code>/mnt/h/…</code> 成功，但 <b>Windows 侧读不了</b>（<code>open()</code> 报 <code>Errno 22 Invalid argument</code>，<code>os.path.islink</code> 为 False）—— WSL 写的是 LX 重解析点，不是 Windows 符号链接。这条直接钉死「Linux 容器 + Windows 宿主」组合</td></tr>
+<tr><td>沙盒口径</td><td>以上均为工具 shell 内实测，真实部署（服务化/无交互桌面/容器）可能不同 ⇒ P0 必须做运行期能力探测，探测结果进界面</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 谁搬、有没有别名、组裂不裂</h3>
+<table>
+<tr><th>情形</th><th>判定</th><th>谁搬字节</th><th>别名</th><th>组</th><th>收尾(C)</th></tr>
+<tr><td><b>独占内容根</b>（只有 1 个种子引用这些文件）</td><td>组内成员数 = 1 且内容根无组外引用</td><td class="good">qB <code>setLocation</code></td><td>不需要</td><td>重归组（现状）</td><td>不需要</td></tr>
+<tr><td><b>组共享子目录</b>（多种子子目录一致 / 同目录各占一子目录）</td><td>N &gt; 1，内容根为目录</td><td class="good">qB 搬第 1 个成员</td><td>按 §3.2 分流：逐文件链接 / 目录别名</td><td>不裂（作用域登记表）</td><td class="wr">需要，自动武装</td></tr>
+<tr><td><b>组共享 + 单文件 / 平铺布局</b>（N &gt; 1，内容根是文件或 save_path 本身）</td><td>内容根是文件，或文件直接铺在 save_path 下</td><td class="good">qB 搬第 1 个成员</td><td class="good">逐文件链接（同卷硬链接 / 跨卷 symlink）</td><td>不裂</td><td class="wr">需要</td></tr>
+<tr><td>目录内有组外种子的文件 / 有 <code>.!qB</code> / 目标已存在同名内容 / 空间不足 / 远程无共享盘 / 已有未收尾迁移</td><td>闸门</td><td>—</td><td>—</td><td>—</td><td class="bad">拒绝</td></tr>
+</table>
+
+<p class="aside"><b>为什么「qB 搬第一个」成立</b>：目标目录为空时 <code>move_storage</code> 不会触发 <code>need_full_check</code>，所以第 1 个成员是真迁移（save_path 变 T、统计保留、零校验）；其余成员的数据此刻已经在 T，任何 qB 搬都会撞「目标已存在」⇒ 只能靠别名接续，再由 C 在下次 qB 重启时用 <code>missingFiles</code> 分支的 reload 零 hash 收尾。</p>
+
+<h3>3.2 别名形态：先看文件数，再看目录</h3>
+
+<p>旧方案「父目录独占 ⇒ 整目录别名」被否掉了：一个通用目录今天只有一个种子，不代表明天也只放这一个 —— 整目录别名会把<b>以后所有存进该目录的种子</b>静默重定向到新盘，爆炸半径远超「迁移这一个种子」的授权范围。同一部剧的分集种子共用一个子目录是常态，更不能让「迁第 1 集」变成「以后每一集都落新盘」。</p>
+
+<p>改为按<b>并集文件数</b>分流的纯函数 <code>relocate_units.plan(save_path, files, threshold, hard_max)</code>：</p>
+
+<table>
+<tr><th>条件</th><th>形态</th><th>未来种子影响</th><th>成本</th></tr>
+<tr><td><b>F &lt; threshold</b>（默认 8）</td><td class="good">逐文件链接：S 侧按原目录结构重建真实目录树，每个文件一条链接指向 T 对应路径</td><td class="good">零影响 —— 新种子按自己的名字落原盘真实目录</td><td>F 条链接（1~7 条，可忽略）</td></tr>
+<tr><td><b>F ≥ threshold</b> 且内容根是独立子目录，且该目录<b>恰好只含本组文件</b>（无杂项、无组外种子）</td><td class="wr">目录别名（junction / dir symlink），<b>必须显式确认</b>「该目录以后新增的种子也会落到新位置」</td><td class="wr">存进同目录的新种子会落 T</td><td>1 条链接</td></tr>
+<tr><td>F ≥ threshold 但内容根 = <code>save_path</code> 本身（平铺 / NoSubfolder）</td><td class="good">逐文件链接（整目录别名不提供）</td><td class="good">零影响</td><td>F 条链接</td></tr>
+<tr><td>F ≥ threshold 但目录<b>不专属</b>（有组外种子的文件 / 有杂项）</td><td class="good">逐文件链接（只链本组自己的文件，不动别人的）</td><td class="good">零影响</td><td>F 条链接</td></tr>
+<tr><td>F &gt; <code>hard_max_links</code>（默认 2000）且不能用目录别名</td><td class="bad">拒绝</td><td>—</td><td>避免链接爆炸</td></tr>
+</table>
+
+<p><b>为什么是文件数而不是目录独占</b>：文件数近似「这个目录是不是一个独立发布包」—— 单集/单部电影 1~3 个文件，季包 10~30 个。少量文件走链接，既没有未来种子的重定向，也不需要判断目录归谁；文件多的包通常独占目录，才值得把目录整体链走，且仍然要用户点头。</p>
+
+<p><b>链接能力阶梯</b>：<b>目录别名</b> = Windows <code>junction</code>（免权限）→ POSIX <code>os.symlink</code>（免权限）→ Windows 目录 symlink（开发者模式或 UAC helper）；<b>逐文件链接</b> = POSIX <code>os.symlink</code> → Windows 同卷 <code>os.link</code> 硬链接（免权限）→ Windows 跨卷 <code>os.symlink</code>（开发者模式或 UAC helper）。每一档都不可用 ⇒ 拒绝，文案给出路（提权运行 / 换同卷目标）。</p>
+
+<p class="aside"><b>删除语义差异（要写进文档）</b>：文件链接下「删除种子并删除文件」只删链接，数据留在 T（变成孤儿，需要清理入口）；目录别名下会真删 T 里的数据。两种形态的用户预期不同，回执与文档都要说清。</p>
+
+<h3>3.3 平台支持面：多平台是能力矩阵，不是白名单</h3>
+<table>
+<tr><th>环境组合</th><th>目录别名</th><th>文件别名</th><th>结论</th></tr>
+<tr><td>Windows 宿主 + 本地 NTFS 卷</td><td class="good">junction（免权限）</td><td class="good">同卷硬链接（免权限）/ 跨卷 symlink（开发者模式或 UAC）</td><td class="good">支持</td></tr>
+<tr><td>Windows 宿主 + 目标为 UNC / 网络盘</td><td class="wr">junction 不可用（reparse 点不能指向 UNC）⇒ 退 symlink（需权限）</td><td class="wr">symlink（需权限）</td><td class="good">支持（可能要一次提权）</td></tr>
+<tr><td>Linux 宿主</td><td class="good">symlink（免权限）</td><td class="good">symlink / 同卷硬链接</td><td class="good">支持</td></tr>
+<tr><td>macOS 宿主</td><td class="good">symlink（免权限）</td><td class="good">symlink</td><td class="good">支持</td></tr>
+<tr><td>Linux 容器 + Linux 宿主（bind mount）</td><td class="good">容器内 <code>os.symlink</code> 落到宿主文件系统，同内核</td><td class="good">同左</td><td class="good">支持</td></tr>
+<tr><td>Linux 容器 + Windows 宿主（Docker Desktop / WSL2）</td><td class="bad">只能建 WSL 的 LX 重解析点，Windows 侧读不了（实测 <code>Errno 22</code>）</td><td class="bad">同左</td><td class="bad">拒绝</td></tr>
+<tr><td>远程 qB（无共享文件系统）</td><td class="bad">本机建不出 qB 能读的链接</td><td class="bad">同左</td><td class="wr">仅「独占情形」可用（qB 自己搬，不需要别名）</td></tr>
+</table>
+<p>所以闸门判的是<b>能力组合</b>（能否在 qB 看得见的那块盘上建出 qB 能读的链接），不是「什么平台」。支持面覆盖 Windows / macOS / Linux 宿主与 Linux 容器；只有两类被拒，且都是<b>物理不可能</b>而非实现偷懒：跨 OS 的容器组合（LX 重解析点 Windows 不认）、远程 qB 无共享盘。这两类拒绝文案必须写清「为什么不可能」，并给出替代（独占情形照常可用 / 用 qB 自带移动并接受一次校验）。</p>
+<p><b>平台细节清单</b>：Windows 长路径走 <code>\\?\</code> 前缀（junction 与 symlink 创建都要）；Unicode 路径（测试种子的韩文名 + 括号）经 UTF-8 JSON 传给 UAC helper，不走命令行参数；POSIX 大小写敏感、Windows 不敏感 ⇒ 组键解析后仍需 <code>normcase</code> 兜底；删除链接一律用非递归 API（<code>os.rmdir</code>/<code>os.unlink</code>/<code>[IO.Directory]::Delete(p,$false)</code>），禁止递归删除跟随链接。</p>
+
+<h3>3.4 组判定改造：作用域登记表，不是 realpath</h3>
+<p>文件级别名不会让目录本身变成链接（<code>S/Name</code> 仍是真实目录，只有里面的文件是链接），所以 <code>realpath(S)</code> 解析不出物理位置 —— 靠 realpath 合并组在文件级别名下失效。改用<b>作用域登记表</b>（数据源就是活跃 job，不另建一套状态）。下面只画第 1 层，完整三层见 §3.4.1：</p>
+<pre><code>resolver(save_path, files):          # 第 1 层: 自有 job 登记表(零 syscall)
+    if save_path == job.src and 内容根落在 job.scope 内:  return job.dst
+    else:                                              return save_path   # 与今天逐字节一致</code></pre>
+<ul>
+  <li><code>dst</code> 与原目录结构镜像（<code>S/Name/x</code> ⇒ <code>T/Name/x</code>），所以 <code>key[0]=dst</code> 与相对路径拼出来就是真实物理路径 —— 下游 <code>_cross_physical_key</code> 不用改。</li>
+  <li>两个消费点共用同一 resolver：<code>_assign_to_group</code> / <code>_handle_save_path_changes</code>，以及跨组文件交叉检测的目录解析。单点定义，防漂移。</li>
+  <li>建链后强制 <code>regroup(scope 内 hashes)</code>；新成员进 scope 时同一 resolver 自动并组（不需要重新武装）。</li>
+  <li>作用域按「save_path == src 且内容根落在 scope 内」判定，<b>不按 hash 列表</b> —— 这样迁移后新加的同内容辅种自动并入，收尾集合也随之扩大。</li>
+  <li>第三方链接的处置：目录级（junction / dir symlink）经 <code>realpath</code> 解析后<b>并组</b>；文件级与硬链接只识别、不并组、拒迁 —— 见 §3.4.1。</li>
+</ul>
+
+<h4>3.4.1 与第三方链接工具兼容（自动辅种 / 媒体库整理）</h4>
+<p>环境里常见的自动辅种与整理工具（IYUU、MoviePilot、nas-tools 一类）会「删掉重复数据、在原位留 junction/symlink」，或把媒体文件硬链接进媒体库。这些链接不是本功能建的，但必须被识别，否则组会裂、迁移会搬错东西。改为<b>三层物理位置解析</b>，按成本从低到高：</p>
+
+<table>
+<tr><th>层</th><th>识别对象</th><th>做法</th><th>成本</th><th>结论</th></tr>
+<tr><td>1</td><td>本功能自己的别名</td><td>活跃 job 的 <code>(src, dst, scope)</code> 登记表</td><td>O(1)，零 syscall</td><td class="good">并组（§3.4 主路径）</td></tr>
+<tr><td>2</td><td><b>第三方目录级</b> junction / symlink</td><td><code>realpath_lexical(save_path)</code>，不同则用解析结果当 <code>key[0]</code>；若 save_path 本身未变，再试内容根（<code>save_path/首段</code>）</td><td>每组 1~2 次 syscall（只在重归组/脏组轮）</td><td class="good">并组（<b>实测 Windows <code>os.path.realpath</code> 能解析 junction</b>）</td></tr>
+<tr><td>3</td><td><b>第三方文件级</b> symlink（媒体库整理）</td><td>用代表文件 <code>realpath</code> 探测；命中则把组标记为「第三方链接」</td><td>每组 1 次 syscall</td><td class="wr">识别但<b>不并组</b>：目标目录结构任意（媒体库会改名/分层），<code>key[0] + 相对路径</code> 表达不了；界面标「第三方链接」，迁移闸门拒绝</td></tr>
+<tr><td>—</td><td>硬链接</td><td><code>st_nlink &gt; 1</code>（Windows 实测可读，同一 <code>st_ino</code>）</td><td>每组 1 次 stat</td><td class="wr">不并组（硬链接是「同一份数据的第二个名字」，不是跨种子的同一路径）；迁移闸门拒绝，可显式 force</td></tr>
+</table>
+
+<p><b>为什么硬链接不并组</b>：并组的前提是「两个种子指向同一组物理路径」，硬链接是同一 inode 的多个名字，要合并得建 inode 索引（每次同步全量 stat），成本与收益不成比例；而它的真实语义是「同一份数据的副本名」，与辅种组要解决的事不同。</p>
+
+<p><b>为什么文件级第三方链接只识别不并组</b>：这类链接的目标通常是媒体库路径（<code>/media/剧名/Season 1/S01E01.mkv</code>），与原 <code>save_path + 相对路径</code> 没有对应关系，现有组键形态（<code>key[0]</code> 当目录前缀）无法表达。要做就得把 <code>store.groups</code> 的键换成「物理文件集合」，牵动分组、跨组检测、视图三处 —— 不在本轮范围，作为已知限制记在 §07；是否入池 <code>issues/</code> 待用户确认。</p>
+
+<p><b>对迁移闸门的影响</b>：第 3 层与硬链接都拒绝迁移，理由写进回执 —— 文件级链接下 qB 搬的是<b>链接本身</b>（数据留在原地，种子反而指向一个悬空链接）；硬链接下 qB 会复制出一份新数据并让去重失效。</p>
+
+<h3>3.5 C 的两本账：<code>alias_removed</code> 到底怎么标</h3>
+
+<p><b>为什么需要两本账</b>：<code>state.json</code> 只能由主循环线程写（黄金法则 5）。guardian 是独立进程、要在 auto-qb 不在时也能记录「我删了别名」，所以它只写自己的 journal 文件；auto-qb 读 journal 合并进 state。两个进程永不写同一份文件，也就不需要跨进程锁。</p>
+
+<table>
+<tr><th>账本</th><th>位置</th><th>唯一写者</th><th>内容</th></tr>
+<tr><td>state（权威，给界面与决策）</td><td><code>state.json</code> → <code>relocate.jobs.&lt;job_id&gt;</code></td><td>auto-qb 主循环</td><td><code>hashes / mover / src / dst / alias_kind(file|dir) / alias_paths[] / scope / phase / reason / armed_at / updated_at / resume_hashes / attempts / last_error</code></td></tr>
+<tr><td>journal（guardian 自述）</td><td><code>&lt;data_dir&gt;/relocate/&lt;job_id&gt;.json</code></td><td>guardian</td><td><code>phase / ts / pid / qb_down_evidence{proc_absent, port_refused, stable_secs} / checks{file_count, total_size, sample_ok}</code></td></tr>
+</table>
+
+<p><b>相位机</b>（主干单向推进；旁支只做零成本动作，失败不搬数据）：</p>
+<pre><code>moving ──► moved ──► armed ──► removing ──► removed ──► finalizing ──► done</code></pre>
+<ul>
+  <li><code>moving</code>：qB 正在搬（<code>mover</code> 已下发 <code>setLocation</code>）；<code>watching</code> 是它的长耗时变体 —— 仍在搬、dst 仍在长，只降频轮询 + 提示，<b>不判失败</b>。</li>
+  <li><code>moved</code>：qB 搬完且 dst 校验通过，准备建链接。</li>
+  <li><code>removed(reason=alias_partial)</code>：链接建不全 ⇒ 删掉已建的 k-1 条 ⇒ 直接进 <code>removed</code>，与正常收尾路径合流。</li>
+  <li><code>failed(reason=move_stalled | verify_mismatch | alias_unreadable | torrent_gone)</code>：现场保留，不搬数据，等用户选择。</li>
+  <li><code>cancelled</code>：用户显式撤销并已完成搬回（唯一会移动数据的旁支，需成本确认）。</li>
+</ul>
+
+<p><b>为什么要先写 <code>removing</code> 意图再删</b>：删除是唯一「删完就观测不到」的动作。journal 里先落一条 <code>removing</code>（tmp + fsync + <code>os.replace</code> 原子写），再删链接（文件级是 N 条 unlink，目录级是 1 条 rmdir），再落 <code>removed</code>。崩溃后「journal 说 removing + 现场探测链接是否存在」两者组合，就能唯一确定崩在删除的哪一侧：</p>
+<ul>
+  <li>journal=removing 且链接<b>在</b> ⇒ 还没删成 ⇒ 重删（幂等，逐条跳过已消失的）。</li>
+  <li>journal=removing 且链接<b>不在</b> ⇒ 已删但没来得及落 removed ⇒ 按 removed 处理。</li>
+</ul>
+
+<p><b>对账表</b>（auto-qb 启动时 + 每 tick 对非终态 job 逐条跑；「qB 在?」= 端口连得上）：</p>
+<table>
+<tr><th>journal</th><th>链接在?</th><th>qB 在?</th><th>种子态</th><th>处置</th></tr>
+<tr><td>armed</td><td>是</td><td>任意</td><td>正常</td><td>guardian 心跳过期(&gt;60s) ⇒ 重拉；否则等</td></tr>
+<tr><td>removing</td><td>是</td><td>否</td><td>—</td><td>guardian 重删；guardian 不在 ⇒ 只重拉，<b>auto-qb 绝不代删</b></td></tr>
+<tr><td>removing</td><td>是</td><td>是</td><td>正常</td><td>qB 回来了 ⇒ 撤销意图写回 armed + 重拉 guardian</td></tr>
+<tr><td>removing / removed</td><td>否</td><td>是</td><td>正常（save_path==src）</td><td class="bad"><b>修复</b>：重建链接 + 回 armed（说明删的时候 qB 其实在跑）</td></tr>
+<tr><td>removing / removed</td><td>否</td><td>是</td><td><code>missingFiles</code></td><td class="good">finalizing：<code>setLocation(dst)</code> → 轮询 <code>progress==1 &amp;&amp; save_path==dst</code> → done</td></tr>
+<tr><td>removed</td><td>否</td><td>否</td><td>—</td><td>等（超过 <code>finalize_timeout</code> ⇒ failed + 界面提示）</td></tr>
+<tr><td>任意</td><td>否</td><td>是</td><td>种子已不存在</td><td>failed（用户删了种子），保留链接现场交人处理</td></tr>
+<tr><td>任意</td><td>是</td><td>是</td><td><code>save_path==dst</code></td><td>done（已被外部完成）</td></tr>
+</table>
+
+<p><b>关键简化：不需要检测「qB 重启」</b>。收尾的充分条件是<b>证据</b>而非事件：qB 在线 + 种子 <code>state==missingFiles</code> + <code>save_path==src</code> + 链接不在。qB 是否重启过、重启了几次都不影响判定。</p>
+
+<p><b>执行期崩溃恢复</b>（<code>phase ∈ {moving, moved}</code>，guardian 尚未武装，journal 可能不存在 —— 只按 qB 现场判）：</p>
+<ul>
+  <li>种子 <code>state==moving</code> ⇒ 继续轮询（qB 自己会把活干完），<b>不重新下发</b> <code>setLocation</code>（会排队/覆盖）。</li>
+  <li><code>save_path==dst</code> 且 dst 校验通过 ⇒ 补做 <code>moved</code> 之后的步骤（建链接 → 重归组 → 武装 C）。</li>
+  <li><code>save_path==src</code> 且已不在 moving、dst 无数据 ⇒ <code>failed(move_stalled)</code>；dst 有部分数据 ⇒ 同样 failed，现场保留。</li>
+</ul>
+
+<p><b>收尾集合按作用域动态计算</b>（不是创建时那份固定 hash 列表）：<code>members = {创建时的 hashes} ∪ {当前 save_path == src、且内容根落在 scope 内的所有种子}</code>；mover（已在 dst）跳过。别名期间新加的同内容辅种自动落进这个集合，收尾时一并 <code>setLocation</code>，不会出现「收尾后新成员留在原地、链接没了 ⇒ 缺文件」的坑。</p>
+
+<h4>3.5.1 失败处置：如实告知，不自动搬回</h4>
+
+<p>「回滚」在这里从来不是零成本的：数据已经在 T，搬回就是<b>第二次全量复制</b>（几十 GB 到几 TB、几十分钟到几小时），而且用户可能只是想修一下权限再重试。所以自动动作只做零成本的事，搬数据一律交给用户决定。</p>
+
+<table>
+<tr><th>失败点</th><th>现场状态</th><th>自动动作（零成本）</th><th>用户选项</th></tr>
+<tr><td><b>qB 搬迁停滞</b>（dst 长时间不增长 + qB 已不在 moving）</td><td>数据部分在 T、部分在 S</td><td>落 <code>failed(reason=move_stalled)</code>；不碰数据；回执给出「已搬 X / 共 Y」</td><td>①重试（继续等 qB）②检查 qB 日志 ③撤销（搬回，见成本提示）</td></tr>
+<tr><td><b>qB 搬迁耗时过长</b>（超过 <code>move_warn_after</code>，但仍在 moving 且 dst 在增长）</td><td>qB 正常在搬</td><td><b>不判失败</b>：转 <code>watching</code>，降频轮询（30s），界面显示「搬运中（已超预期时间）」</td><td>无（自动继续；只有停滞才判失败）</td></tr>
+<tr><td><b>链接建到一半失败</b>（第 k 条 EPERM / UAC 被拒）</td><td>数据在 T；mover 在 T；其余成员指向空 S</td><td>删掉已建的 k-1 条链接（让 S 侧状态一致）→ <code>removed(reason=alias_partial)</code> → 走收尾路径</td><td>①<b>重试建链接</b>（数据不用再搬，修好权限即可）②等下次 qB 重启自动收尾 ③撤销（搬回，显示成本）</td></tr>
+<tr><td><b>校验不齐</b>（dst 文件数/大小不符）</td><td>数据可能不完整</td><td>落 <code>failed(reason=verify_mismatch)</code>；<b>不建链接</b>、不删数据</td><td>①重新校验 ②查看 dst 现场 ③撤销（搬回）</td></tr>
+<tr><td><b>穿透校验失败</b>（链接在但读不到）</td><td>链接已建</td><td>落 <code>failed(reason=alias_unreadable)</code>；保留现场（不删链接，便于排查）</td><td>①重试 ②撤销</td></tr>
+<tr><td><b>qB 搬迁期间种子被删 / 用户改路径</b></td><td>—</td><td>落 <code>failed(reason=torrent_gone)</code>；不碰数据</td><td>人工处理</td></tr>
+</table>
+
+<p><b>撤销的成本提示</b>：点「撤销迁移」先弹一行事实 ——「将把 X GB 从 T 搬回 S（qB 执行，预计 Y 分钟），期间该组不可用」，确认后才发 <code>setLocation(mover, src)</code>。不确认就不动。</p>
+
+<p><b>为什么链接失败不搬回</b>：链接失败通常是权限问题（UAC 被拒 / 未以管理员运行），修好之后重试是<b>零数据移动</b>的；搬回则要再复制一遍全部数据，而且搬回后再修好权限重来，等于白搬两趟。把「失败」降级成「收尾路径」（等 qB 重启 + setLocation）同样是零数据移动 —— 代价只是该组在下次 qB 重启前不可用，比搬两趟便宜得多。</p>
+
+<p><b>撤销（cancel）与回滚</b>：界面提供「撤销迁移」= 删链接 + <code>setLocation(mover, src)</code> 把数据搬回（目标为空 ⇒ 零校验）→ phase=cancelled。这是「用户手动删了链接、又不想被对账重建」的唯一出口：对账只在 job 未撤销时重建链接，撤销走完整回滚，不会留半截状态。<b>撤销必须先显示成本并经确认</b>，不自动触发。</p>
+
+<p><b>guardian 先于 qB 退出</b>：别名保留 ⇒ qB 下次起来照常工作（不会进 missingFiles）⇒ 收尾窗口错过。处置：① auto-qb 启动与每次 arm 时巡检 guardian 心跳，死了就重拉；② qB 重连时若 job 仍 armed 且链接仍在 ⇒ 记一次「窗口错过」并提示「等待下次 qB 退出」，<b>不强行收尾</b>；③ auto-qb 也不在时，下次启动照样巡检。代价是收尾可能无限期推迟，但 A 的别名态本身稳定，不影响做种。</p>
+
+<h3>3.6 未来种子与新数据的影响面</h3>
+
+<p>逐场景列表（S = 组原 save_path，T = 新位置；「文件链接」= 逐文件 symlink/硬链接，「目录别名」= 内容根整条链接）：</p>
+
+<table>
+<tr><th>#</th><th>场景</th><th>实际落点</th><th>影响</th><th>处置</th></tr>
+<tr><td>1</td><td><b>文件链接</b>下：新种子 save_path=S、名字不同</td><td>原盘真实目录</td><td class="good">无影响</td><td>独立成组（resolver 只对 scope 内生效）</td></tr>
+<tr><td>2</td><td><b>文件链接</b>下：新种子 save_path=S、同名同内容（同内容辅种）</td><td>同名文件路径是链接 ⇒ 落 T；不同文件名 ⇒ 落原盘</td><td class="wr">同名共享同一份物理数据；异名变成两份</td><td>作用域合并同组；动态纳入收尾集合</td></tr>
+<tr><td>3</td><td><b>文件链接</b>下：新种子 save_path=S、同名<b>不同内容</b></td><td>写到链接 ⇒ <b>直接覆盖 T 侧数据</b></td><td class="bad">数据损坏（最危险的一类）</td><td>跨组交叉检测（作用域物理键）命中 ⇒ 警告 + 暂停下载方；闸门无法事前拦截（种子还没加）</td></tr>
+<tr><td>4</td><td><b>目录别名</b>下：新种子 save_path=S、新子目录</td><td>经链接落 T</td><td class="wr">落点被重定向（用户以为在原盘）</td><td>确认时已告知；界面常驻「该目录已迁移」标记</td></tr>
+<tr><td>5</td><td><b>目录别名</b>下：新种子同名同内容</td><td>落 T</td><td class="good">共享同一份物理数据</td><td>动态纳入收尾集合</td></tr>
+<tr><td>6</td><td><b>目录别名</b>下：新种子同名不同内容</td><td>落 T，同名冲突</td><td class="bad">覆盖风险</td><td>跨组交叉检测命中</td></tr>
+<tr><td>7</td><td>新种子 save_path=T、同名同内容</td><td>直接落 T</td><td class="good">同一物理目录</td><td>resolver/解析后合并同组；收尾集合里它已在 dst，跳过</td></tr>
+<tr><td>8</td><td><b>收尾窗口</b>（链接已删、qB 未起或未 finalize）新加种子</td><td>原盘真实目录</td><td class="wr">可能与 T 侧旧数据重复</td><td>只搬「数据已在 T」的成员；新种子留原盘；界面提示重复</td></tr>
+<tr><td>9</td><td>新种子落 T（目录别名整目录重定向，或命中文件链接的同名文件），但 qB 按 save_path=S 的卷算剩余空间</td><td>写入 T</td><td class="wr">空间检查错位，可能写满目标卷</td><td>别名状态常驻显示目标卷剩余；低空间告警（只告警不暂停）。<b>推断，P7 真机验证</b></td></tr>
+<tr><td>10</td><td>别名期间 qB 重启</td><td>不变</td><td class="good">无影响（链接在）</td><td>—</td></tr>
+<tr><td>11</td><td>别名期间对成员做 full-checking / 重命名 / 改优先级</td><td>读穿链接</td><td class="good">正常</td><td>无需处置（重命名只改链接名，目标不变，P7 抽验）</td></tr>
+<tr><td>12</td><td>用户手动删掉链接</td><td>数据仍在 T</td><td class="bad">qB 下次重启成员进 missingFiles</td><td>对账自动重建；故意的走「撤销迁移」（回滚数据）</td></tr>
+<tr><td>13</td><td>别名期间删种子（保留文件）</td><td>—</td><td class="wr">文件链接：只删链接、数据留 T（孤儿）；目录别名：真删 T 数据</td><td>文档写清差异；提供「孤儿链接清理」入口（只删链接不动数据）</td></tr>
+<tr><td>14</td><td>别名期间再次迁移同一组</td><td>链接套链接</td><td class="bad">旧 job 的收尾失效</td><td>闸门拒绝：有未收尾迁移的成员不得再迁（先收尾或先撤销）</td></tr>
+<tr><td>15</td><td>在 auto-qb 里往别名目录添加新种子</td><td>取决于目录别名 / 文件链接</td><td class="wr">可能静默落到另一块盘（HDD 乱序下载代价高）</td><td><b>提交前预检 + 二次确认</b>，显示请求路径 → 实际落点 → 卷剩余（§3.6.1）</td></tr>
+<tr><td>16</td><td>在 qB 自带 WebUI / 监控目录 / RSS 添加</td><td>同上</td><td class="wr">auto-qb 拦不到提交动作</td><td>首次同步发现落在作用域 ⇒ WARNING + 界面提示条（不自动暂停）</td></tr>
+</table>
+
+<h3>3.6.1 新种子落进别名目录的拦截（二次确认）</h3>
+
+<p><b>为什么必须拦</b>：不同盘的类型与特性不同 —— HDD 随机写代价高，不适合乱序下载；用户把种子存到某个目录时，隐含的是「下到这块盘」。目录别名会让这次下载静默落到另一块盘（可能是 HDD、可能空间紧张），这属于<b>用一次迁移授权了此后所有写入</b>，必须显式告知。</p>
+
+<table>
+<tr><th>入口</th><th>做法</th><th>交互</th></tr>
+<tr><td>auto-qb 添加对话框</td><td>提交前调只读预检 <code>POST /api/relocate/precheck-add</code>（入参 save_path），命中别名作用域时返回实际落点</td><td class="wr"><b>二次确认</b>：显示「请求路径 → 实际落点 → 目标卷剩余空间」，默认取消；不确认不提交</td></tr>
+<tr><td>外部添加（qB 自带 WebUI / 监控目录 / RSS）</td><td>同步发现新 hash 的 save_path 落在作用域内 ⇒ 打一条 WARNING + 界面提示条</td><td>只告知，<b>不自动暂停</b>（种子的去留由用户决定）</td></tr>
+<tr><td>跳检重加（<code>ops_mod._skip_readd</code>）</td><td>save_path 不变、内容是同一份 ⇒ 无需拦截</td><td>—</td></tr>
+</table>
+
+<p>不检测 HDD/SSD（跨平台不可靠、容器里更不可能），只把<b>物理路径 + 卷 + 剩余空间</b>摆出来让用户判断；确认框里同时提示「该目录已迁移到 X」。</p>
+
+<h3>3.7 开关与配置面</h3>
+<pre><code>relocate:
+  enabled: false             # 总开关; 关 = 三入口逐字节保持现状
+  alias_file_threshold: 8    # 文件数 < 阈值 ⇒ 逐文件链接; >= 且目录专属(确认后) ⇒ 目录别名
+  hard_max_links: 2000       # 逐文件链接硬上限, 超过且无法用目录别名则拒绝
+  verify: size               # size(默认) | sample(抽样 SHA1)
+  allow_uac: true            # 允许弹 UAC 建 symlink; false = 直接拒绝
+  move_stall_timeout: 10m    # 停滞判据: dst 不增长且 qB 不在 moving 超过该时长 ⇒ 失败(不搬回)
+  move_warn_after: 2h        # 超过该时长仍在搬 ⇒ 只提示"已超预期", 不判失败
+  finalize_timeout: 30d      # 收尾等待上限(超过 ⇒ failed, 链接已删, 由用户处理)
+  low_space_warn: 10G        # 别名目标卷低空间告警阈值(只告警, 不暂停)</code></pre>
+<p>新顶层段 <code>relocate</code>（不塞进 <code>fs</code> —— 那是 R 级，改完要重启进程），由 <code>RelocateModule.sections()</code> 认领，热重载即生效。配置页 help 文案写明「<b>推荐以管理员身份运行 auto-qb</b>，可免去每次迁移的 UAC 确认」。</p>
+
+<h3>3.8 界面口径</h3>
+<ul>
+  <li>对话框：保留「移动位置」名称，正文说明本次机制（形态、目标、是否影响后续种子、何时收尾）；目录别名必须带一句「该目录以后新增的种子也会落到新位置」的勾选确认。</li>
+  <li><b>添加种子对话框</b>：选定保存路径后即预检（防抖），命中别名作用域时在提交前弹出「请求路径 → 实际落点 → 目标卷剩余」二次确认，默认取消。</li>
+  <li>列表/详情：新增「物理位置」（链接目标）与「待收尾」徽标；组详情显示迁移状态、「撤销迁移」与目标卷剩余空间。</li>
+  <li>能力面板：junction / symlink / 硬链接 / UAC / 同卷证明 / 容器 六项探测结果常驻展示 —— 用户不必点了才知道不可用。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+<tr><th>期</th><th>内容</th><th>落点</th><th>验收判据</th></tr>
+<tr><td><b>P0</b></td><td><b>能力探测</b>：平台与 qB 路径风格、junction 可建、symlink 可建（含 UAC 可用性）、硬链接可建、同卷证明、容器判定、UNC 判定。启动一次 + 配置热重载时重探，结果缓存供界面展示。</td><td>新 <code>infra/alias_fs.py</code></td><td>探测函数覆盖 §3.3 七行组合（含 WSL-on-NTFS 反例）；Windows 真机跑一次输出与 2.4 表一致；WSL 里跑一次 POSIX 分支；<b>沙盒结果不作结论</b></td></tr>
+<tr><td><b>P1</b></td><td><b>配置面</b>：<code>RelocateConfig</code> + loader + <code>KNOWN_RELOCATE_KEYS</code> 校验 + schema 段（含管理员提示）+ 配置文档</td><td><code>config/models.py</code>、<code>loaders.py</code>、<code>validation/sections.py</code>、<code>schema/groups.py</code>、<code>docs/</code></td><td>配置守卫测试（schema↔validate 同步）全绿；<code>enabled=false</code> 时全量回归零差异</td></tr>
+<tr><td><b>P2</b></td><td><b>别名单元 + 闸门（只读）</b>：<code>plan()</code> 纯函数（文件数分流 / 目录专属判定 / 平铺判定 / 硬上限）、组外占用、杂项文件、空间、同卷、幂等、<b>未收尾拦截</b>、<b>第三方链接与硬链接识别</b>；预检接口 <code>relocate_precheck</code>（迁移）与 <code>precheck-add</code>（添加种子）三分流供确认框摊开</td><td>新 <code>core/modules/relocate_units.py</code>、<code>core/modules/relocate_mod.py</code>、<code>webui/server/routes/torrent_cmds.py</code></td><td>表驱动测试覆盖 §3.2 五行 × 阈值边界（7/8/9）+ §3.6 第 1/3/8/14/15 行；预检零副作用（不写 state、无 qB 写调用）</td></tr>
+<tr><td><b>P3</b></td><td><b>执行体</b>：任务线状态机（暂停 → qB 搬 → 轮询 → 校验 → 建链接/目录别名 → 穿透校验 → 重归组 → 写 job → 武装 C → 恢复运行态）；失败只做零成本动作（删已建链接 + 落 reason），<b>不自动搬回</b></td><td><code>relocate_mod.py</code></td><td>Fake qB 集成测试覆盖：正常、<b>停滞判失败</b>（不搬回）、<b>长耗时转 watching</b>（不判失败）、第 3 条链接失败 ⇒ 删已建链接 + 转收尾、qB 中途断连；<b>主循环零阻塞</b>（单步 &lt; 50ms）</td></tr>
+<tr><td><b>P4</b></td><td><b>组判定改造 + 联动抑制</b>：三层物理位置解析（job 登记表 → realpath 目录级 → 代表文件探测）、<code>regroup()</code>、<code>relocating</code> 登记让缺文件扫描/跳检闸门跳过、跨组检测改用同一 resolver</td><td><code>grouping_mod.py</code>、<code>torrents/store.py</code></td><td>现有 grouping 测试全绿；新增「文件链接在场 ⇒ 两成员同组」「搬迁窗口不误暂停」「新成员自动并组」「同名不同内容被交叉检测拦下」「第三方 junction 并组」「第三方文件链接/硬链接被识别且拒迁」六条守阵</td></tr>
+<tr><td><b>P5</b></td><td><b>三入口接线 + 界面</b>：WebUI 单个/批量/组级、规则 <code>move_to</code>；<b>添加对话框预检 + 二次确认</b>；外部添加的落点提示；回执写明形态与物理位置；规则幂等（已迁移到同一目标 ⇒ skip）</td><td><code>webui/commands.py</code>、<code>rules/actions/transfer.py</code>、<code>webui/static/shared/drawer.js</code>、<code>webui/static/shared/add_torrent.js</code>、<code>views.py</code></td><td>关闭时调用序列与今日一致（守阵）；开启时三入口都产生 job；添加流程命中别名时确实弹确认且取消后不提交；前端契约测试 + 走查清单</td></tr>
+<tr><td><b>P6</b></td><td><b>C 收尾</b>：guardian 独立进程（同代码库 CLI 子命令，分离启动、pid 锁、10s 心跳、三证判 down、校验数据、逐条删链接、写 journal）+ auto-qb 侧 journal 合并、对账表、<b>动态收尾集合</b>、撤销回滚</td><td>新 <code>tools/finalize_watch.py</code> + <code>relocate_mod.py</code></td><td>对账表 8 行逐行测试；撤销回滚测试；真机：迁移 → 停 qB → 观察 alias_removed → 起 qB → 自动 <code>setLocation</code> → 进度回 100%</td></tr>
+<tr><td><b>P7</b></td><td><b>真机验收与回写</b>：测试客户端端到端（单 hash、暂停态、结束不启动）、§3.6 第 9 行空间检查验证、第 11 行重命名抽验、基线切片、坑档（UAC/编码/句柄/删链接）、文档回写</td><td><code>memory-bank/testing/baselines/</code>、<code>pitfalls/</code></td><td>全量测试通过并记实测数字；种子最终回到 <code>R:\Download\Testing</code>、<code>progress=1</code>、<code>stoppedUP</code></td></tr>
+</table>
+
+<h3>4.1 执行体单步（P3 状态机）</h3>
+<ol>
+  <li><b>预检</b>：全闸门 + 同卷证明；任一不过 ⇒ 回执带原因，零副作用。</li>
+  <li><b>暂停</b>：暂停集合内运行中的成员，记录 <code>resume_hashes</code>；等快照回流（复用 <code>own_write_pending</code> 的等待语义）。</li>
+  <li><b>搬</b>：对 mover 调 <code>torrents_set_location(mover, dst)</code>，每 tick 轮询 <code>save_path</code>/<code>state</code>。判失败<b>只看停滞</b>（dst 不增长且 qB 不在 moving 超过 <code>move_stall_timeout</code>）；超过 <code>move_warn_after</code> 只提示不判失败。进度用 dst 体积采样（每 5s，失败静默）。</li>
+  <li><b>校验</b>：dst 侧文件数与总大小对齐（<code>verify=sample</code> 时抽样 SHA1）；不齐 ⇒ <code>failed(verify_mismatch)</code>，<b>不搬回</b>。</li>
+  <li><b>建链接</b>：按 <code>plan()</code> 的形态建（逐文件：先重建目录树再逐条链接；目录别名：一条 junction/symlink）。<b>逐条落账</b>（<code>alias_paths</code> 追加式写入 state），中途失败 ⇒ 删已建链接 → <code>removed(reason=alias_partial)</code> 走收尾路径，<b>不搬回</b>。</li>
+  <li><b>穿透校验</b>：经 src 路径逐文件 stat，大小一致。</li>
+  <li><b>重归组 + 落账</b>：<code>regroup(scope)</code> → 写 job（phase=armed）→ 拉起 guardian。</li>
+  <li><b>恢复</b>：按 <code>resume_hashes</code> 恢复运行态；回执写「已迁移 N 个 / 文件链接 M 条 / 待收尾」。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+
+<p>以下五条按推荐执行（用户未提异议即视为默认），有异议随时改，不影响 P0-P2 开工。编号用 <b>T</b> 前缀，避免与 §04 的实施期 <b>P0-P7</b> 撞名。</p>
+
+<table>
+<tr><th>编号</th><th>问题</th><th>默认（推荐）</th><th>备选</th></tr>
+<tr><td>T1</td><td>开关形态</td><td>新顶层段 <code>relocate.enabled</code>（热重载、默认关）</td><td>WebUI 运行时开关（存 state）；两者都要</td></tr>
+<tr><td>T2</td><td>界面口径</td><td>保留「移动位置」名称 + 对话框说明 + 物理位置/待收尾徽标</td><td>改名为「迁移数据」；每次让用户选机制</td></tr>
+<tr><td>T3</td><td>规则 <code>move_to</code> 幂等</td><td>已迁移到同一目标且链接仍在 ⇒ skip</td><td>允许反复搬；规则侧不走 A</td></tr>
+<tr><td>T4</td><td><b>阈值取值</b></td><td><b>8</b>：单集/单部电影 1~3 个文件走链接；季包 10~30 才够到目录别名（且要确认）</td><td>16（更保守，更多链接）/ 4（更早用目录别名）</td></tr>
+<tr><td>T5</td><td>目标卷低空间</td><td>只告警（阈值 <code>low_space_warn</code>）+ 常驻显示剩余</td><td>低空间时自动暂停落进目标卷的新种子（侵入性更强）</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+
+<table>
+<tr><th>编号</th><th>日期</th><th>结论</th></tr>
+<tr><td>D1</td><td>26-10-18</td><td><b>范围</b>：A + C 同一计划，<b>C 必做</b>；B（重加跳检、统计清零）不做。</td></tr>
+<tr><td>D2</td><td>26-10-18</td><td><b>不写自研搬迁</b>：字节一律由 qB <code>setLocation</code> 搬。独占 ⇒ qB 直接搬；共享 ⇒ qB 搬第 1 个成员，其余靠别名接续。</td></tr>
+<tr><td>D3</td><td>26-10-18</td><td><b>别名形态</b>：junction 可用则 junction；否则 symlink + 显式 UAC；UAC 不可用 ⇒ 拒绝。设置项提示「推荐以管理员身份运行 auto-qb」。<span class="wr">（形态顺序已被 D8/D11 修订：先按文件数分流，逐文件链接优先走同卷硬链接，junction 只用于目录别名）</span></td></tr>
+<tr><td>D4</td><td>26-10-18</td><td><b>裂组可修</b>：允许改造组判定机制，换取「qB 搬第一个」的简洁路径（具体机制见 D9：作用域登记表，不用 realpath）。</td></tr>
+<tr><td>D5</td><td>26-10-18</td><td><b>删别名时机</b>：只在 qB 确认未运行时删（否则会被当成做假种）；用独立 guardian 进程（不随 auto-qb 消亡）等待 qB 退出后收尾；<code>setLocation</code> 由 auto-qb 在 qB 回来后执行。</td></tr>
+<tr><td>D6</td><td>26-10-18</td><td><b>多平台是能力矩阵</b>：Windows / macOS / Linux 宿主 + Linux 容器全部在支持面内，闸门只拒绝「物理上建不出 qB 能读的链接」的组合（跨 OS 容器、远程 qB 无共享盘），且拒绝文案必须说明原因。WSL 在 NTFS 上写的链接 Windows 读不了已实测。</td></tr>
+<tr><td>D7</td><td>26-10-18</td><td><b>别名是作用域</b>：收尾集合按「当前落在该作用域的种子」动态计算，别名期间新加入的同内容种子自动纳入；重复迁移同一组在有未收尾 job 时拒绝。</td></tr>
+<tr><td>D8</td><td>26-10-18</td><td><b>形态按文件数分流</b>：文件数 &lt; 阈值 ⇒ 逐文件链接（对未来种子零影响）；≥ 阈值且目录专属 ⇒ 目录别名（需显式确认「以后新增也落新位置」）。<b>「整目录（save_path 级）别名」取消</b> —— 通用目录今天只有一个种子，不代表以后不会放别的。</td></tr>
+<tr><td>D9</td><td>26-10-18</td><td><b>组键走作用域登记表</b>：文件级别名不改变目录 realpath，故不能用 realpath 合并组；改用活跃 job 的 (src, dst, scope) 作为 resolver 数据源，与跨组检测共用同一单点。</td></tr>
+<tr><td>D10</td><td>26-10-18</td><td><b>新种子必须被告知</b>：盘类型不同（HDD 不适合乱序下载），新种子不能被静默重定向到另一块盘。auto-qb 添加对话框提交前预检 + 二次确认；外部添加首次同步告警（不自动暂停）。不检测 HDD/SSD，只展示物理路径与卷剩余。</td></tr>
+<tr><td>D11</td><td>26-10-18</td><td><b>兼容第三方链接</b>：目录级 junction/symlink（自动辅种/整理工具建的）用 <code>realpath</code> 并组（实测 Windows 可解析）；文件级 symlink 只识别不并组（键形态表达不了任意目标），迁移闸门拒绝；硬链接按 <code>st_nlink&gt;1</code> 识别，不并组、拒迁（可 force）。</td></tr>
+<tr><td>D12</td><td>26-10-18</td><td><b>失败不自动搬回</b>：搬迁停滞/校验不齐/链接建到一半失败，一律只做零成本动作（删已建链接、落 reason、告知），把失败降级成收尾路径（等 qB 重启 setLocation）；<b>搬回是用户显式选项，且先显示成本</b>（数据量/目标卷/预计耗时）。搬迁超时改为「停滞判据」，长耗时只提示不判失败。</td></tr>
+<tr><td>D13</td><td>26-10-18</td><td><b>失败处置参数</b>（按推荐确认）：链接失败默认走收尾降级（不搬回，该组在下次 qB 重启前不可用）；停滞判据 <code>move_stall_timeout=10m</code>；收尾等待上限 <code>finalize_timeout=30d</code>，超时如实标记「数据已在 T，qB 仍指向 S」。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>误判 qB 已退出，运行中删别名</td><td>端口抖动 / 远程实例</td><td>三证（进程 + 端口 + 30s 稳定窗口）齐全才删；删后立刻复检，qB 已回来 ⇒ 立即重建链接并回 armed；跨机部署直接禁用 C</td></tr>
+<tr><td>guardian 先于 qB 退出，窗口错过</td><td>guardian 被杀 / 关机 / 用户手动结束</td><td>心跳巡检重拉；错过只记「窗口错过」并继续等下次，绝不强行收尾（别名态本身稳定）</td></tr>
+<tr><td>搬迁窗口误触缺文件联动</td><td>主动暂停触发状态转移</td><td><code>relocating</code> 登记让 <code>_check_missing_files</code> 与跳检 G3-G8 跳过；job 结束后解除</td></tr>
+<tr><td>链接建到一半失败</td><td>UAC 被拒 / 权限 / 磁盘错误</td><td>删已建链接（零成本）→ <code>removed(reason=alias_partial)</code> 走收尾路径；<b>不搬回</b>；回执给「重试 / 等重启收尾 / 撤销」三选项，撤销前显示搬回成本</td></tr>
+<tr><td>新种子同名不同内容覆盖 T 侧数据</td><td>同名不同内容 + 下载方</td><td>跨组交叉检测（作用域物理键）警告 + 暂停下载方；文档明示「别名期间不要往该目录加同名不同内容」</td></tr>
+<tr><td>目录别名把未来种子重定向</td><td>≥ 阈值 + 目录专属 + 用户确认</td><td>确认框明示；界面常驻标记；不确认就回落逐文件链接</td></tr>
+<tr><td>内容根残留非种子文件</td><td>目录里有 .nfo/.torrent 等杂项</td><td>目录别名闸门拒绝并列出杂项；逐文件链接不受影响（只链自己的文件）</td></tr>
+<tr><td>组外种子共享同一目录</td><td>部分重叠 / 其它组的文件在目录内</td><td>目录别名拒绝；逐文件链接允许（只链自己的文件，不动别人的）</td></tr>
+<tr><td>auto-qb 与 qB 不在同一文件系统</td><td>远程 qB / 容器路径错位</td><td>同卷证明（<code>free_space_on_disk</code> 相等）不过即拒绝；容器 OS 与 qB 路径风格不一致即拒绝</td></tr>
+<tr><td>跨 OS 容器组合（WSL/Docker Desktop on Windows）</td><td>Linux 进程在 NTFS 上建链接</td><td>能力探测直接判不可用（实测 Windows 读不了 LX 重解析点）；文案写清原因 + 给出「独占情形仍可用」的替代</td></tr>
+<tr><td>收尾期间用户删种子 / 手动搬数据</td><td>—</td><td>对账发现种子不存在 ⇒ failed + 保留现场；不自动清理链接与数据</td></tr>
+<tr><td>别名期间新种子写进目标卷、空间检查错位</td><td>qB 按 save_path 的卷算空间</td><td>目标卷剩余常驻显示 + 低空间告警；P7 真机确认 qB 的实际判定口径</td></tr>
+<tr><td>关闭开关后旧 job 仍在途</td><td>中途改配置</td><td>已落账的 job 继续走完（已提交不可半途而废）；新迁移走原路径；界面标注</td></tr>
+<tr><td>新种子静默落到另一块盘</td><td>目录别名 + 用户以为还在原盘</td><td>添加对话框预检 + 二次确认（默认取消）；外部添加告警；确认框展示物理路径/卷/剩余</td></tr>
+<tr><td>第三方工具建的链接被当成普通文件</td><td>自动辅种/整理工具删重复文件建链接</td><td>目录级用 realpath 并组；文件级与硬链接识别后拒迁并说明原因（文件级链接下 qB 搬的是链接本身，硬链接会复制出新数据）</td></tr>
+<tr><td><b>已知限制</b>：文件级第三方链接无法并组</td><td>媒体库整理工具把文件链接到任意路径</td><td>只识别并标注「第三方链接」，不并组、不迁移；要并组需把组键换成「物理文件集合」，牵动分组/跨组检测/视图三处，另行评估</td></tr>
+<tr><td>qB 搬一个大种子耗时远超预期</td><td>几十 GB~TB 级 + 慢盘</td><td>不做墙钟超时：只按「停滞」判失败，长耗时转 watching + 界面提示；绝不因为等得久而判失败搬回</td></tr>
+<tr><td>失败后用户选择撤销，搬回又失败</td><td>空间不足 / 权限 / qB 报错</td><td>撤销前先算成本与目标卷空间；搬回失败时如实报 qB 原始错误，现场保留（数据仍在 T、链接已删），不连环重试</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-18-1604</span> 初版：三轮 grilling 收敛出 D1-D5；确定「qB 搬字节 + 别名接续 + guardian 收尾」主线、<code>alias_removed</code> 两本账机制与对账表、三种情形决策矩阵、P0-P7 分期。</li>
+  <li><span class="tag">R1 · 26-10-18-1631</span> 补 §3.3 平台能力矩阵（WSL 实测：POSIX 链接可用、WSL-on-NTFS 链接 Windows 读不了）+ §3.6 未来种子影响面 14 行表 + 动态收尾集合与撤销回滚 + 同卷硬链接档 + 未收尾拦截闸门；D6/D7 入拍板。</li>
+  <li><span class="tag">R2 · 26-10-18-1657</span> 形态策略改为按文件数分流（D8）：默认逐文件链接、目录别名需 ≥ 阈值 + 目录专属 + 显式确认；<b>取消整目录（save_path 级）别名</b>；组键改走作用域登记表（D9，realpath 对文件级别名无效）；§3.2/§3.4/§3.6 重写，P2/P3 验收补链接回滚与阈值边界。</li>
+  <li><span class="tag">R3 · 26-10-18-1711</span> 补「为什么不能静默重定向」的盘类型理由与 §3.6.1 新种子拦截（添加预检 + 二次确认、外部添加告警，D10）；§3.4.1 三层物理位置解析，兼容第三方目录级链接（realpath 实测可解析）、文件级链接与硬链接识别后拒迁（D11）；P2/P4/P5 验收同步。</li>
+  <li><span class="tag">R4 · 26-10-18-1754</span> 失败处置改为「如实告知 + 用户选择」（D12）：删除自动回滚，链接失败降级成收尾路径（零数据移动）；搬迁超时改为停滞判据 + 长耗时只提示；撤销搬回前显示成本；新增 §3.5.1 失败处置表与 <code>move_stall_timeout</code>/<code>move_warn_after</code>/<code>finalize_timeout</code> 配置。</li>
+  <li><span class="tag">R5 · 26-10-18-1802</span> D13 入拍板：链接失败默认收尾降级、停滞判据 10m、收尾上限 30d 确认；计划定稿（P0-P7 就绪，待开工）。</li>
+  <li><span class="tag">R6 · 26-10-18-1805</span> 多轮改版一致性校对: §3.1 单文件行限定 N&gt;1（与「独占不需要别名」区分）；§3.2 补「目录不专属 ⇒ 逐文件链接」行、链接能力阶梯按目录/文件拆开；§3.4 代码块标注为第 1 层、删掉「第三方链接不并组」的过期副作用条；§3.5 相位机补 <code>moving</code>/<code>watching</code>、state 字段补 <code>mover</code>/<code>reason</code>、补执行期崩溃恢复三条；§3.6 第 9 行精确到「落 T 的新种子」；D3 标注被 D8/D11 修订、D4 指向 D9；§05 编号 P→T 避免与实施期 P0-P7 撞名；P2 验收「四行」改「五行」。</li>
+</ul>
+
+</div>
+</body>
+</html>
