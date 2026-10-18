@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量与限速合并与流量快照解耦 (Phase 2)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="global-traffic-source-phase2">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-18-0813">
+<meta name="doc-updated" content="26-10-18-0813">
+<meta name="doc-refs" content="memory-bank/plans/26-10-17-1737-plan-global-traffic-source-integration-fixes.html, memory-bank/tasks/26-10-17-webui-traffic-source-fixes.md, memory-bank/tasks/26-10-18-backend-traffic-snapshot-merge.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: global-traffic-source-phase2</div>
+<h1>流量与限速合并与流量快照解耦 (Phase 2)</h1>
+<p class="lede">两件事：① 把「流量快照」的所有权从限速曲线任务手里拿走，交给新模块 <code>traffic_snapshot</code>（曲线模块降为「只写 limit 段」）—— 顺带修掉「没配曲线就永远没有历史图」这个结构性死角；② 把设置页的「数据来源 / 限速曲线 / 流量图」三张卡合成一张「流量与限速」（schema 合组 + 独立组件 + 卡内三区）。设计主轴：段级契约代替整体替换，让「谁写哪一段」写进 API 而不是靠约定。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-18-0813 · <b>doc-updated</b> 26-10-18-0813 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话内 grilling 三轮（Q1–Q17 全部拍板，含用户订正 Q12「流量图也并进来，视图名『流量与限速』」）；事实基线＝代码实况（引用行号为本轮实测）＋ 前序计划 <code>26-10-17-1737</code>（Phase 1，S1–S7 已落，S8 待收）与 <code>26-10-17-0339</code>（集成层）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做。</b>Phase 1 把「数据来源」提成了一等开关，但快照的所有权还留在限速曲线任务里：曲线任务既算限速又发布历史与累计 —— 于是 <span class="wr">没配曲线就永远没有历史图</span>（任务根本不注册）、<span class="wr">两条刷新路径语义不一致</span>（事件刷新只换 periods/history，state/limit 不动）、<span class="wr">轮询每轮背着整份 history</span>。前端侧「来源 / 曲线 / 流量图」三张卡分散在两个模板分片里，且都挤在额度边缘，再往上加任何东西都会撞分片上限。</p>
+<p><b>做到什么算成。</b>§04 的 A1–A5、B1–B5 每条都有可验判据；判据分两类：<b>行为等价</b>（既有守阵全绿 + S8 新守阵回归）与<b>三项明确改进</b>（无曲线配置也能看历史图 / 轮询载荷不含 history / state 拆成来源态与限速态且顶层 <code>state</code> 为单点派生）。改进项必须能在重构前先红、重构后转绿。</p>
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>取数唯一入口不变</b>：谁要 dat 路径一律走 <code>core/traffic_source/paths.dat_path(config)</code>；<code>traffic_source.enabled</code> 的闸门仍在该单点与 <code>tool_client._desired</code> / <code>agent.ensure_running</code>，本计划不新增第二个取数分支。</li>
+  <li><b>快照唯一赋值点</b>：<code>ctx.web.set_traffic_view</code>（<code>webui/runtime.py:422-429</code>）仍是唯一实际赋值处。段级写只经 <code>traffic_snapshot</code> 的 <code>publish_source</code> / <code>publish_limit</code> / <code>publish_off</code> 三个方法，<b>任何模块不得直改 <code>traffic_view</code></b>（测试里直接赋值的 stub 除外）。</li>
+  <li><b>段隔离</b>：<code>publish_source</code> 不得清除 <code>limit</code> 段（off 态除外）；<code>publish_limit</code> 不得动 <code>source</code> / <code>periods</code> / <code>history</code> 段。方法内部是「读旧快照 → 改自有键 → 一次赋值」。</li>
+  <li><b>单一写线程</b>：所有发布在主循环内执行（黄金法则 5）；定时任务与 <code>refresh_traffic</code> 命令都入队，端点/线程只投递意图。</li>
+  <li><b>顶层 <code>state</code> 是派生值</b>：由单点纯函数 <code>derive_state(source_state, limit_state)</code> 算出，不允许任何调用方各写各的；守阵断言「发布的 <code>state</code> 恒等于 derive 结果」。</li>
+  <li><b>保守默认</b>：新键默认 <code>10M</code>；不迁移、不改写用户盘上已有的曲线 <code>interval</code>；旧 <code>hub.view</code> 持久化值靠映射兜住，不清 localStorage。</li>
+  <li><b>fail-fast</b>：新配置键必须进 <code>validate_config</code> 并同步 <code>config/schema.py</code> 镜像（配置键全量一致性守卫会查）。</li>
+  <li><b>行为等价</b>：UI 可见行为与今日一致，例外只有 §01 列的三项改进与 §10 记的「曲线 interval 语义收窄」一处文案级变更。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th>#</th><th>现象</th><th>根因（落点）</th></tr>
+  <tr>
+    <td>1</td>
+    <td>没配限速曲线时，历史流量图永远是空的</td>
+    <td>快照唯一写者是曲线任务，而 <code>gslc is None</code> 时任务根本不注册（<code>core/modules/speed_curve_mod.py:173-174</code>）；启动期快照无 <code>history</code> 键（<code>webui/runtime.py:249</code>）</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>「刷新」有两个语义：定时整份替换 vs 事件浅拷贝覆写</td>
+    <td><code>_publish_traffic</code> 整份替换（<code>speed_curve_mod.py:402-421</code>）；<code>refresh_traffic_view</code> 只覆写 <code>periods/history/ts/date</code>，<b>state 与 limit 不更新</b>（<code>:327-335</code>）—— 旧 <code>stale/off</code> 态会挂到下一次曲线任务为止</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>快照所有权错位：来源变化被迫借曲线任务的节拍</td>
+    <td>同一个方法里既算 <code>periods</code>/<code>history</code>（来源职责）又算 <code>target/actual/reasons</code>（曲线职责）；曲线关掉，来源侧数据立刻停更</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>轮询每轮背着整份 history 走</td>
+    <td><code>/api/status</code>·<code>/api/state</code> 直接返回快照引用（<code>webui/server/routes/state.py:24-31</code>），与「历史行不进轮询响应」的设计注释相反；实际前端从不从轮询读 history（<code>dialogs.js:908</code> 注释：弹层走 <code>/api/traffic/history</code>）</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>三张卡分散在两个模板分片</td>
+    <td>来源卡 <code>settings.html:318-418</code>；曲线卡 <code>settings-detail.html:1-125</code>；流量图（qB 采样）卡在通用兜底分支 <code>settings-detail.html:185-205</code>，靠 <code>hubBlocks</code> 自动生成</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>任何合并都会撞分片额度</td>
+    <td><code>settings.html</code> 418/440 行、<code>settings-detail.html</code> 543/560 行（<code>tests/test_webui_static_skins.py:1750</code>）；守卫注释已指路「下次再长应先把该卡整体重构成独立组件再谈拆分」（<code>:1745-1748</code>）</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>provider 条件显隐靠手写，schema 元数据形同虚设</td>
+    <td><code>show_if</code> 挂在两个 object 段上（<code>config/schema/groups.py:492</code>、<code>:508</code>），但通用渲染对非叶子项恒 <code>visible()===true</code>（<code>config_editor.js:1162-1168</code>），实际靠 <code>tmProviderItems()</code> 手工选子树（<code>settings.html:330</code>）</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>「不走通用渲染」的排除是硬编码一行</td>
+    <td><code>config_hub.js:281</code> <code>if (hubKey(it.path) === "config.hr_check.sites") continue</code> —— 合并卡要再排除两块，会变成三处散落 if</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>首页导航与视图 key 绑死 schema 组</td>
+    <td><code>hubCards()</code> 直接 <code>schema.groups.map</code>（<code>config_hub.js:192</code>）；<code>hubNow</code> 按 <code>hub.view === group.key</code> 查（<code>:257</code>）；<code>hubBlocks</code> 只取当前 view 那一组（<code>:266</code>）—— 不合组就得在三处写自定义合并逻辑</td>
+  </tr>
+</table>
+<p class="aside">另有一条与本计划正交、但决定批次顺序的事实：Phase 1 的 <b>S8（切源即刷新）尚未收口</b>，而它改的正是快照刷新路径。先收 S8 再动所有权 —— 否则重构与新触发器一起改，出问题分不清是谁的（D4）。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线两条 + 通用层两修：<b>①</b> 新模块 <code>traffic_snapshot</code> 拥有 <code>ts/date/source/periods/history</code>，曲线模块经 <code>publish_limit()</code> 只写 <code>limit</code> 段；来源侧节奏由新键 <code>traffic_source.refresh_interval</code> 决定，与曲线 <code>interval</code> 解绑。<b>②</b> schema 三组合成一组 <code>traffic_limit</code>（label「流量与限速」），设置页对应视图抽成独立组件 <code>aq-traffic-card</code> + 独立模板分片，卡内三区（来源 / 限速曲线 / 流量图）复用既有 <code>hub-field</code> 与曲线编辑器。<b>③</b> 通用层补两笔欠账：<code>show_if</code> 下移到 object/section 项、排除表从硬编码改成单点常量。</p>
+<table>
+  <tr><th>步</th><th>主题</th><th>主要落点</th><th>拍板</th></tr>
+  <tr>
+    <td>P0</td>
+    <td>前置：收口 Phase 1 的 S8（切源即刷新）</td>
+    <td><code>webui/server/routes/config.py</code> · <code>webui/commands.py</code> · <code>config_hub.js</code></td>
+    <td>D4</td>
+  </tr>
+  <tr>
+    <td>A1</td>
+    <td><code>traffic_snapshot</code> 模块骨架 + 自注册任务</td>
+    <td><code>core/modules/traffic_snapshot_mod.py</code>(新) · <code>core/modules/__init__.py</code> · <code>core/qbmanager.py</code></td>
+    <td>D3</td>
+  </tr>
+  <tr>
+    <td>A2</td>
+    <td>快照契约拆段 + 派生 state + 段级 API</td>
+    <td><code>core/modules/traffic_snapshot_mod.py</code> · <code>webui/runtime.py</code> · <code>core/modules/speed_curve_mod.py</code></td>
+    <td>D8 D10 D12</td>
+  </tr>
+  <tr>
+    <td>A3</td>
+    <td><code>traffic_source.refresh_interval</code> 四层契约</td>
+    <td><code>config/models.py</code> · <code>config/schema/groups.py</code> · <code>config/validation/sections.py</code> · <code>config/loaders.py</code> · <code>config/schema.py</code></td>
+    <td>D9</td>
+  </tr>
+  <tr>
+    <td>A4</td>
+    <td>曲线模块降为「只写 limit 段」，删 <code>refresh_traffic_view</code></td>
+    <td><code>core/modules/speed_curve_mod.py</code> · <code>webui/commands.py</code></td>
+    <td>D10 D11</td>
+  </tr>
+  <tr>
+    <td>A5</td>
+    <td>命令改指新模块 + 轮询载荷摘 history</td>
+    <td><code>webui/commands.py:1096-1111</code> · <code>webui/server/routes/state.py</code> · <code>traffic_monitor.py:330</code></td>
+    <td>D5 D11</td>
+  </tr>
+  <tr>
+    <td>B1</td>
+    <td>schema 合组 <code>traffic_limit</code> + 首页卡/面包屑/LED/读数改键 + 旧 key 映射</td>
+    <td><code>config/schema/groups.py</code> · <code>config_hub.js</code></td>
+    <td>D12 D13 D17</td>
+  </tr>
+  <tr>
+    <td>B2</td>
+    <td>通用层两修：<code>show_if</code> 下移 + 排除表单点化</td>
+    <td><code>config_editor.js:1121-1168</code> · <code>config_hub.js:263-297</code></td>
+    <td>D16</td>
+  </tr>
+  <tr>
+    <td>B3</td>
+    <td><code>aq-traffic-card</code> 组件 + 独立模板分片 + 三皮肤清单同步</td>
+    <td><code>shared/traffic_card.js</code>(新) · <code>shared/tpl/traffic-card.html</code>(新) · 三份 <code>index.html</code> · <code>app.js:913</code> · <code>settings.html:318-418</code></td>
+    <td>D15</td>
+  </tr>
+  <tr>
+    <td>B4</td>
+    <td>卡内三区 + 折叠头 + 依赖提示条 + 「打开历史图表」入口</td>
+    <td><code>shared/tpl/traffic-card.html</code> · <code>config_hub.js</code>(tm*) · <code>console_hub.css</code>（复用 <code>.hb-sub</code>）</td>
+    <td>D2 D6 D14</td>
+  </tr>
+  <tr>
+    <td>B5</td>
+    <td>守阵与 e2e 跟随结构改造 + 新交互守阵</td>
+    <td><code>tests/test_web_traffic_monitor.py:455-505</code> · <code>tests/test_webui_static_skins.py</code> · <code>e2e/views.spec.mjs:397-515</code></td>
+    <td>D7</td>
+  </tr>
+</table>
+<h3>分期</h3>
+<table>
+  <tr><th>期</th><th>范围</th><th>前置</th><th>状态</th></tr>
+  <tr><td>P0</td><td>1737 计划的 S8（切源即刷新）收口</td><td>—</td><td>待实施（Phase 1 尾巴）</td></tr>
+  <tr><td>P2-A</td><td>A1–A5：后端快照解耦 + 契约 + 载荷瘦身</td><td>P0</td><td>待实施</td></tr>
+  <tr><td>P2-B</td><td>B1–B5：schema 合组 + 合并卡 + 通用层两修 + 守阵</td><td>P2-A 的 A2（契约）</td><td>待实施</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>P0 — 收口 S8（前置，不属本计划重新定义）</h3>
+<p>按 <code>26-10-17-1737</code> 的 S8 原文实施：<code>reload_config</code> 成功后若 <code>traffic_source</code>（provider/enabled/dat_path）变化 → 立即入队现成的 <code>refresh_traffic</code>；前端保存成功后重拉 <code>/api/traffic/history</code> 重画。</p>
+<p><b>为什么必须先做</b>：它给出「切源即刷新」的行为守阵，重构后才有等价基准；且它改的就是 A2/A5 要重写的刷新路径，合并做会让失败归因失效（D4）。</p>
+<p><b>验收</b>：切源保存后立即（不等一个 interval）历史图即为新来源数据；<code>enabled</code> 关闭后立即转关闭态；<code>refresh</code> 只读不写 qB。</p>
+
+<h3>A1 — <code>traffic_snapshot</code> 模块骨架</h3>
+<ul>
+  <li>新文件 <code>core/modules/traffic_snapshot_mod.py</code>：<code>name = "traffic_snapshot"</code>；实现 <code>sections()</code> = <code>("traffic_source",)</code>（<b>只消费来源段</b>，不声明曲线段 —— 这正是解耦的判据）、<code>start/stop/apply/subscribe</code> 按 <code>BaseModule</code> 惯例。</li>
+  <li>任务：<code>register_global_tasks(ctx, [("traffic_snapshot", self.refresh, cfg.traffic_source.refresh_interval)])</code>；<code>dry_run</code> 不影响注册（任务体自带 dry_run 口径）。任务名与模块名不同名，避免与 <code>has_named</code> 幂等相撞（沿用 <code>speed_limit_curve</code> 与 <code>speed_curve</code> 的既有做法）。</li>
+  <li>装配：<code>qbmanager.py</code> 里插在 <code>SpeedCurveModule(self.ctx)</code>（<code>:221</code>）<b>之前</b> —— 装配序即消费序，曲线模块 <code>start</code> 时要能 <code>host.get("traffic_snapshot")</code>。同步 <code>core/modules/__init__.py</code> 导出。</li>
+</ul>
+<p><b>验收</b>：装配清单里新模块先于 <code>speed_curve</code>；<code>host.get("traffic_snapshot")</code> 可取；<b>曲线配置为 <code>None</code> 时任务照跑</b>并发布 <code>periods/history</code>（今天为空，改后非空）；<code>sections()</code> 不含 <code>global_speed_limit_curve</code>（守阵断言）。</p>
+
+<h3>A2 — 快照契约拆段 + 派生 state + 段级 API</h3>
+<pre><code><span class="cm"># 新契约（顶层 state 为派生, 其余三段正交）</span>
+{
+  "ts": 1750000000.0, "date": "2026-10-18",
+  "state": "ok",                     <span class="cm"># = derive_state(source.state, limit.state)</span>
+  "source": {"state": "ok", "reasons": []},        <span class="cm"># ok | stale | off</span>
+  "periods": [{"period": "day", "label": "今日", "up": 0, "down": 0}, ...],
+  "history": [{"date": "2026-10-18", "up": 0, "down": 0}, ...],
+  "limit": {"target": {"up": 0, "down": 0}, "actual": {"up": 0, "down": 0},
+            "reasons": [], "state": "ok"}          <span class="cm"># ok | dry_run | disabled | stale</span>
+}</code></pre>
+<ul>
+  <li><code>traffic_snapshot</code> 三个方法：<code>publish_source(rows, source_state, reasons=())</code>（写 <code>ts/date/source/periods/history</code>，<b>保留旧 <code>limit</code> 段</b>）、<code>publish_limit(target, actual, reasons, state)</code>（只写 <code>limit</code>）、<code>publish_off(reason)</code>（<code>source.state="off"</code>、清 <code>periods/history</code>、<code>limit.state="disabled"</code>）。三者内部「读旧 dict → 改自有键 → 一次 <code>set_traffic_view</code>」。</li>
+  <li><code>derive_state(source_state, limit_state)</code> 单点纯函数，优先级：<code>source.state=="off"</code> → <code>"off"</code>；<code>source.state=="stale"</code> → <code>"stale"</code>；<code>limit.state=="disabled"</code> → <code>"disabled"</code>；<code>limit.state=="dry_run"</code> → <code>"dry_run"</code>；否则 <code>"ok"</code>。<b>该表刻意与今日语义逐格对齐</b>（今日：来源关 → off；读档失败 → stale；曲线未启用/未配置 → disabled；试运行 → dry_run），所以前端三个消费点（顶栏 <code>trafficOn()</code>、弹层 <code>historyState</code>、限速浮层 <code>curve_enabled</code>）行为不变。</li>
+  <li><code>periods</code> 由来源侧固定发布 <code>day</code> + <code>month</code> 两行，不再从曲线配置的 period 并集推导（唯一消费点是 <code>period === "day"</code>，<code>dialogs.js:712</code>）；曲线侧需要的 <code>ND</code> 累计继续由曲线模块自己用 <code>curves.aggregate</code> 算，不进快照。</li>
+  <li><code>webui/runtime.py:249</code> 初始快照补齐 <code>source</code> 与 <code>limit.state</code> 键（<code>{"state":"disabled","source":{"state":"off","reasons":[]},"periods":[],"history":[],"limit":{"target":{"up":None,"down":None},"actual":{"up":None,"down":None},"reasons":[],"state":"disabled"}}</code>）。</li>
+</ul>
+<p><b>验收</b>：段隔离守阵 —— <code>publish_source</code> 后 <code>limit</code> 段逐键不变；<code>publish_limit</code> 后 <code>history/periods/source</code> 逐键不变；<code>publish_off</code> 后 <code>periods/history</code> 为空且 <code>state=="off"</code>；<code>derive_state</code> 表驱动 6 组合全绿；<b>无曲线配置时</b> 历史图有数据、顶栏 pill 仍不显示（与今日一致）；<code>/api/speed/mode</code> 的 <code>curve_enabled</code> 取值不变。</p>
+
+<h3>A3 — <code>traffic_source.refresh_interval</code> 四层契约</h3>
+<ul>
+  <li><code>config/models.py</code>：<code>TrafficSourceConfig</code> 增 <code>refresh_interval: float = 600.0</code>（与 <code>enabled</code> 并列）。</li>
+  <li><code>config/schema/groups.py</code>：<code>enabled</code> 之后加 <code>Field("refresh_interval", "刷新间隔", "time", default="10M", unit_default="M", help="…多久重读一次来源文件并发布流量快照；与限速曲线的执行间隔互相独立")</code>。</li>
+  <li><code>config/validation/sections.py</code>：进 <code>KNOWN_TRAFFIC_SOURCE_KEYS</code>；校验 10S–1H（照 <code>notify_cooldown_s</code> 的 <code>_try_time(min_s, max_s)</code> 写法）。</li>
+  <li><code>config/loaders.py</code>：<code>_get(spec, "refresh_interval", …, parse_time)</code>；<code>config/schema.py</code> 镜像同步。</li>
+</ul>
+<p><b>验收</b>：配置键全量一致性守卫绿；缺省 600.0；<code>0S</code>/负值/<code>2H</code> 报聚合错误；<code>refresh_interval</code> 变化经 <code>apply</code> 后新任务间隔生效（重新注册、不重复入队）。</p>
+
+<h3>A4 — 曲线模块降为「只写 limit 段」</h3>
+<ul>
+  <li><code>speed_curve_mod.py</code>：删 <code>refresh_traffic_view</code>（<code>:295-341</code>）；<code>_publish_traffic</code>（<code>:402-421</code>）改为按状态调 <code>traffic_snapshot.publish_limit(...)</code> / <code>publish_off(...)</code>：<code>off</code> 分支（<code>:186-189</code>）从「曲线任务发现来源关」改为「<b>不发布</b>，直接 REQUEUE」—— 来源态归来源模块，曲线任务不再抢这个判定；<code>disabled</code>（未配置/显式关）→ <code>publish_limit(state="disabled", target={None,None})</code>；<code>stale</code> → <code>publish_limit(state="stale", reasons=…)</code>；<code>ok</code>/<code>dry_run</code> 照旧。</li>
+  <li>读 dat、查档、写 qB 限速、手动保护、幂等跳过、<code>state.data["speed_limit_curve"]</code> 调试落盘 —— <b>全部留在曲线模块</b>，本步只搬「发布」。</li>
+  <li>依赖注入：<code>start()</code> 里 <code>self._snapshot = ctx.host.get("traffic_snapshot")</code>（<code>AppContext</code> 是否暴露 host 按实况取；若无则经 <code>ctx</code> 上已有的宿主句柄，实施时以既有模块取句柄的写法为准），<b>取不到即 fail-fast</b>（装配序保证不会发生，取不到说明装配错）。</li>
+</ul>
+<p><b>验收</b>：<code>speed_curve</code> 不再出现 <code>date/time</code> 组装快照的代码；<code>test_speed_curve.py</code> 现有 18 处 <code>traffic_view</code> 断言改写后全绿；守阵断言「曲线任务一跑，<code>history</code> 段一字未变」（mock 新模块，检查调用参数）；来源关闭时曲线任务不发布任何东西（今日会发 off）。</p>
+
+<h3>A5 — 命令改指新模块 + 轮询载荷摘 history</h3>
+<ul>
+  <li><code>webui/commands.py:1096-1111</code>：<code>mod = self.host.get("traffic_snapshot")</code>，调 <code>mod.refresh()</code>；命令名 <code>refresh_traffic</code>、端点、投递语义（<code>traffic_monitor.py:330</code>）、回执（非 deferred）全部不动。</li>
+  <li><code>webui/server/routes/state.py:24-31</code>：新增单点 helper（放 <code>webui/runtime.py</code> 或 routes 侧均可，只允许一处）<code>public_view()</code> = 快照去掉 <code>history</code> 后的浅拷贝；<code>/api/status</code>·<code>/api/state</code> 用它；<code>/api/traffic/history</code>（<code>state.py:124-133</code>）继续直读原快照。</li>
+</ul>
+<p><b>验收</b>：轮询响应中 <code>status.traffic</code> 无 <code>history</code> 键（守阵 + 一次实测体积对比）；弹层图照常；工具事件触发的刷新在 10M 冷却内不重复（既有守阵）；<code>/api/traffic/history</code> 在 <code>off</code> 态仍返回 <code>{"state":"off","history":[]}</code>。</p>
+
+<h3>B1 — schema 合组 <code>traffic_limit</code></h3>
+<ul>
+  <li><code>config/schema/groups.py</code>：删 <code>speed</code> 组（<code>:541-555</code>）与 <code>traffic</code> 组（<code>:409-455</code>）的独立条目，新建 <code>Group("traffic_limit", "流量与限速", "数据来源、按累计流量调限速、qB 流量采样记录 — 三者共用一份流量口径", fields=(traffic_source, global_speed_limit_curve, qb_traffic), icon="i-traffic")</code>；组数 8 → 6。</li>
+  <li><code>config_hub.js</code>：<code>HUB_GROUP_META</code> 删 <code>speed</code> 条目、加 <code>traffic_limit</code>（title「流量与限速」+ desc/lede）；<code>hubLedOf</code>（<code>:469-479</code>）里 <code>key === "speed"</code> 分支并入 <code>traffic_limit</code>：来源关 → <code>off</code>、否则曲线未启用 → <code>warn</code>、否则 <code>ok</code>；<code>hubReadout</code>（<code>:480-517</code>）与 <code>hubBadges</code>（<code>:518-531</code>）的 <code>speed</code> 分支改键，读数 = <code>来源名 · N 条曲线</code> / <code>未启用</code>。</li>
+  <li><code>initialHubView</code>（<code>config_hub.js:140-153</code> 一带）：加旧值映射 <code>traffic_source</code> / <code>speed</code> / <code>traffic</code> → <code>traffic_limit</code>（照既有 <code>__logs</code> → <code>basic</code> 的写法），不清 localStorage。</li>
+  <li><code>HUB_OFF_KEYS</code> 里若有 <code>speed</code>/<code>traffic</code> 键一并改。</li>
+</ul>
+<p><b>验收</b>：首页卡片 8 → 6，「流量与限速」一张；面包屑与页头取到新 title/lede；localStorage 存 <code>traffic_source</code> 或 <code>speed</code> 时刷新后落在新视图（守阵）；<code>/api/config/schema</code> 组数 6；<b>模块 <code>sections()</code> 与 apply 全绿</b>（组 key 与配置段名无关，<code>speed_curve_mod.py:149</code> / <code>traffic_sample_mod.py:461</code> 不动）。</p>
+
+<h3>B2 — 通用层两修</h3>
+<ul>
+  <li><code>config_editor.js:1162-1168</code>：<code>visible()</code> 对 <code>group</code> / <code>subcard</code> 项也走 <code>cfgVisible(item.ownerField, item.owner)</code>（两个字段在 <code>:1165</code> 已有先例，只是被 <code>type !== "field" → true</code> 短路了）。风险已核：<code>show_if</code> 全仓 3 处，另两处（<code>groups.py:492</code>、<code>:508</code>）正是本卡要生效的；<code>rules.py:252</code> 的规则视图是手写模板不走通用分支，不受影响。</li>
+  <li><code>config_hub.js:281</code>：把硬编码 <code>hr_check.sites</code> 排除提成单点常量 <code>HUB_SKIP_PATHS = ["config.hr_check.sites", "config.traffic_source", "config.global_speed_limit_curve"]</code>（后两个由合并卡专段渲染），<code>walk</code> 里只查这张表。</li>
+</ul>
+<p><b>验收</b>：来源区的两个子段（<code>traffic_monitor</code> / <code>global_traffic_monitor</code>）随 provider 真正显隐（不再依赖 <code>tmProviderItems()</code> 手工过滤）；HR 站点卡与规则视图行为不变（既有守阵全绿）；守阵断言排除表是唯一排除点（源码里不再出现散落 <code>=== "config.hr_check.sites"</code>）。</p>
+
+<h3>B3 — <code>aq-traffic-card</code> 组件 + 独立模板分片</h3>
+<ul>
+  <li>新分片 <code>shared/tpl/traffic-card.html</code>：只放 <code>&lt;script type="text/x-template" id="tpl-aq-traffic-card"&gt;</code>，<code>into: "body"</code>（照 <code>drawer-head.html</code> 先例，不进 <code>#app</code> 根模板编译）。</li>
+  <li>新文件 <code>shared/traffic_card.js</code>：<code>name: "aq-traffic-card"</code>、<code>template: "#tpl-aq-traffic-card"</code>、<code>inject: ["ce"]</code>（<code>hub-field</code> 靠 <code>ce</code> 注入，子组件沿父链可取）。方法直接复用根上的 <code>tm*</code> 系列（组件内 <code>this.$root.tmXxx()</code> 或在 <code>CONFIG_HUB</code> mixin 化后共享，实施时按最小改动取其一）。</li>
+  <li><code>app.js:913</code> 一带注册组件；<b>三份</b> <code>index.html</code> 的 <code>parts</code> 与 <code>scripts</code> 同步加条目（<code>atlas:133-149/150-200</code>、<code>prism:137-153/154-204</code>、<code>console:137-153/154-204</code>）；组件 JS 必须排在 <code>/app.js</code> 之前、<code>vue.global.prod.js</code> 之后。</li>
+  <li><code>settings.html:318-418</code> 的整个 <code>traffic_source</code> 分支缩成 <code>&lt;template v-else-if="hub.view === 'traffic_limit'"&gt;&lt;aq-traffic-card&gt;&lt;/aq-traffic-card&gt;&lt;/template&gt;</code>；<b>同步把 <code>settings.html</code> 的额度从 440 回落到 400</b>（债还掉，守卫 <code>:1750</code> 的例外表删 <code>settings.html</code> 一行）。</li>
+</ul>
+<p><b>验收</b>：三皮肤设置页都能渲染新卡；分片守卫五条全绿（存在性 / manifest 逐项相等 / 盘上无孤儿 / <code>into</code> 合法 / 标签配平）；<code>settings.html</code> ≤ 400 行；<code>traffic-card.html</code> ≤ 400 行。</p>
+
+<h3>B4 — 卡内三区 + 折叠头 + 依赖提示 + 历史图入口</h3>
+<ul>
+  <li>外壳一张 <code>.hb-blk.hb-cut</code>，卡头标题「流量与限速」；卡内三个 <code>.hb-blk.hb-sub</code> 子区，区序 <b>来源 → 限速曲线 → 流量图采样</b>；子区标题复用 <code>.hb-blk-hd.hb-sub-toggle</code>（<code>console_hub.css:469-471</code>），可折叠、<b>折叠态不持久化</b>。</li>
+  <li>来源区：搬 <code>settings.html:319-417</code> 的四块（数据来源 / 工具状态 / 工具文件 / 工具参数）与全部 <code>tm*</code> 交互（关闭工具确认框、立即拉起、单位控件）。</li>
+  <li>限速曲线区：搬 <code>settings-detail.html:1-125</code>（曲线编辑器、每条曲线卡、档位表、关闭并移除）；<code>kind="curve"</code> 走专用编辑器不变。</li>
+  <li>流量图区：<code>qb_traffic</code> 的通用行（<code>hub-field v-for</code>）+ 整段开关（<code>cfgToggleSection</code>，<code>optional=True</code> 语义不变）；区头注明与「来源」的口径差异（qB 采样是本地记录，与来源文件的累计流量不是同一份数据）。</li>
+  <li>依赖提示（D6）：<code>affects</code> 的消费面从「关闭确认框」泛化为卡内提示条 —— 当 <code>traffic_source.enabled</code> 为 false 时，卡头下方常驻一条提示，列出来源关闭影响的项；确认框文案<b>复用同一份</b> <code>TM_AFFECT_LABELS</code> 映射与 <code>tmAffectLabels()</code>（<code>config_hub.js:1090-1094</code>），不写第二份文案。</li>
+  <li>卡头右侧加「打开历史图表」按钮 → <code>openHistory()</code>（<code>dialogs.js:598</code>）；历史图<b>仍在全局弹层</b>，本计划不把它搬进设置页（D2）。</li>
+</ul>
+<p><b>验收</b>：三区顺序与折叠可用；来源关闭时三个区都给出「流量来源已关闭」的明确说明而非空白；提示条与确认框文案同源（守阵：两处都从 <code>tmAffectLabels()</code> 取）；历史图入口能打开弹层且不新增 localStorage 键（守阵：<code>localStorage</code> 写入点清单不变）。</p>
+
+<h3>B5 — 守阵与 e2e 跟随结构改造</h3>
+<ul>
+  <li><code>tests/test_web_traffic_monitor.py:455-475</code> 的块结构正则（<code>v-if</code> + <code>class="hb-blk hb-cut"</code> + <code>hb-blk-hd</code> + <code>bh-t</code> 严格相邻）改为对准新分片/组件模板里的子区；<b>保留语义断言</b>「三块都只在 provider 匹配时出现」。</li>
+  <li><code>:497-505</code> 的只读行 <code>.hb-row.hb-ro</code> ≥ 5 处 与 CSS 断言改指新分片（行仍在，只是搬家）。</li>
+  <li><code>e2e/views.spec.mjs:397-420</code>（S6 隐藏闸）与 <code>:428-515</code>（S7 单位控件）：入口从首页 <code>.hb-card</code>「全局流量来源」改为「流量与限速」；<code>:218-256</code> 的「设置页刷新保持位置」若依赖卡片序号，改按标题定位。</li>
+  <li>新增 e2e：三区可见 → 折叠/展开 → 「打开历史图表」开弹层；两皮肤（prism/atlas）都跑。</li>
+  <li><b>变异验证</b>：去掉任一个子区、去掉折叠头、把 <code>show_if</code> 恢复短路、把排除表改回硬编码 —— 四种改动各应让某条守阵变红。</li>
+</ul>
+<p><b>验收</b>：<code>test.full</code> 全绿；e2e 两皮肤绿；上述四条变异逐条验证为红；基线切片按实测誊写（<code>kb.baseline</code>）。</p>
+
+<h3>交付附带（每批收尾时一并回写）</h3>
+<ul>
+  <li>配置文档：<code>docs/configuration.md</code> 增 <code>traffic_source.refresh_interval</code>；<code>memory-bank/config-reference/</code> 对应条目。</li>
+  <li>语义变更说明：曲线 <code>interval</code> 从「曲线执行 + 图刷新」收窄为「只管曲线执行」—— 在 schema <code>help</code> 与配置文档两处写清。</li>
+  <li><code>activeContext</code> 切片 + task 档案 + <code>kb.baseline</code>；<code>progress/</code> 若涉及「已实现」描述同步。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无。</b>Q1–Q17 已在三轮 grilling 中全部拍板，结论见 §06。</p>
+<p class="aside">执行期允许自决的细节（不构成拍板项，实施时按计划内的默认值走，无需再问）：子区标题文案的具体措辞；折叠默认全展开；<code>periods</code> 只发 <code>day</code> + <code>month</code>；组件内复用 <code>tm*</code> 的方式（<code>$root</code> vs mixin）取改动更小者。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td><b>一条计划、两批交付</b>：P2-A（后端快照解耦 + 契约）→ P2-B（schema 合组 + 合并卡 + 通用层两修）。②③ 的验收判据引用 ① 的契约，但不写成两条计划（避免同一份契约写两遍）。</td><td>26-10-18</td></tr>
+  <tr><td>D2</td><td><b>合并范围</b>＝「数据来源 + 限速曲线 + 流量图（qB 采样）」三区，视图名「流量与限速」；<b>历史流量图仍留在全局弹层</b>，卡头只加入口，不搬进设置页、不做卡内迷你图。</td><td>26-10-18</td></tr>
+  <tr><td>D3</td><td><b>快照新所有者</b>＝独立 module <code>traffic_snapshot</code>（<code>name</code> 同名），带自注册任务与自有节奏键；拥有 <code>ts/date/source/periods/history</code>，经 <code>publish_limit()</code> 接受曲线模块写 <code>limit</code> 段。修订 1737-P1。</td><td>26-10-18</td></tr>
+  <tr><td>D4</td><td><b>顺序</b>：先在 Phase 1 内收口 S8（切源即刷新），再动快照所有权 —— 先有行为守阵，重构后才能证明等价。</td><td>26-10-18</td></tr>
+  <tr><td>D5</td><td><b>轮询载荷瘦身</b>：<code>/api/status</code>·<code>/api/state</code> 的 <code>traffic</code> 去掉 <code>history</code>（单点 helper），弹层继续走 <code>/api/traffic/history</code>。</td><td>26-10-18</td></tr>
+  <tr><td>D6</td><td><b>affects 最小集</b>：不建字段级依赖图，只把消费面从「关闭确认框」泛化为「卡内依赖提示条」，仍只挂在 <code>traffic_source.enabled</code> 一处；文案单点复用 <code>TM_AFFECT_LABELS</code>。修订 1737-P3。</td><td>26-10-18</td></tr>
+  <tr><td>D7</td><td><b>验收口径</b>：行为等价（既有守阵 + S8 新守阵回归）＋ 三项改进单列判据（无曲线也能看历史 / 轮询无 history / state 拆段派生），改进项须重构前先红、后转绿。</td><td>26-10-18</td></tr>
+  <tr><td>D8</td><td><b>state 拆段</b>：<code>source.state</code>（<code>ok/stale/off</code>）与 <code>limit.state</code>（<code>ok/dry_run/disabled/stale</code>）正交；顶层 <code>state</code> 保留为<b>单点派生值</b>（<code>derive_state</code>），前端逐批迁到细分字段，不在本计划一次性改完。</td><td>26-10-18</td></tr>
+  <tr><td>D9</td><td><b>新节奏键</b> <code>traffic_source.refresh_interval</code>（默认 <code>10M</code>，校验 10S–1H）；曲线 <code>interval</code> 收窄为「只管写限速」。不迁移、不改写用户盘上已有值。</td><td>26-10-18</td></tr>
+  <tr><td>D10</td><td><b>段级 API</b>：<code>publish_source</code> / <code>publish_limit</code> / <code>publish_off</code> 三方法，内部「读旧 → 改自有键 → 一次赋值」；<code>set_traffic_view</code> 仍是唯一实际赋值点；任何模块不得直改 <code>traffic_view</code>。</td><td>26-10-18</td></tr>
+  <tr><td>D11</td><td><b>刷新单一路径</b>：<code>refresh_traffic</code> 命令改指 <code>traffic_snapshot.refresh()</code>，删除 <code>speed_curve.refresh_traffic_view</code>；命令名/端点/回执语义不动。</td><td>26-10-18</td></tr>
+  <tr><td>D12</td><td><b>视图吸收</b>：<code>speed</code> 与 <code>traffic</code> 两个视图/分组并入合并视图；首页对应三张卡合成一张；旧入口重定向到新视图。</td><td>26-10-18</td></tr>
+  <tr><td>D13</td><td><b>组 key</b> = <code>traffic_limit</code>；<code>initialHubView</code> 加旧值映射（<code>traffic_source</code>/<code>speed</code>/<code>traffic</code> → 新键），不清 localStorage。首页卡 LED：来源关 → <code>off</code>、曲线未启用 → <code>warn</code>、否则 <code>ok</code>；读数 = <code>来源名 · N 条曲线</code> / <code>未启用</code>。</td><td>26-10-18</td></tr>
+  <tr><td>D14</td><td><b>卡内形态</b>：外壳一张 <code>.hb-blk</code> + 三个 <code>.hb-blk.hb-sub</code> 子区（来源 → 曲线 → 流量图），区标题可折叠、<b>折叠态不持久化</b>。修订 1737-P2。</td><td>26-10-18</td></tr>
+  <tr><td>D15</td><td><b>载体</b>：新建 <code>aq-traffic-card</code> + 独立模板分片 <code>shared/tpl/traffic-card.html</code>（<code>into: body</code>）；三份 <code>index.html</code> 清单同步；<code>settings.html</code> 额度从 440 回落到 400。不抬额度、不塞 <code>settings-detail.html</code>。</td><td>26-10-18</td></tr>
+  <tr><td>D16</td><td><b>通用层两修</b>：<code>show_if</code> 下移到 object/section 项（<code>visible()</code> 不再对非叶子短路）；「不走通用渲染」的排除改成单点常量表 <code>HUB_SKIP_PATHS</code>，删硬编码 <code>if</code>。</td><td>26-10-18</td></tr>
+  <tr><td>D17</td><td><b>schema 合组</b>：<code>Group("traffic_limit")</code> 内含 <code>traffic_source</code> / <code>global_speed_limit_curve</code> / <code>qb_traffic</code> 三个字段（组数 8 → 6）；不做「UI 层合并」也不加「隐藏」标记 —— 三种选择里只有合组能让 <code>hubCards</code>/<code>hubNow</code>/<code>hubBlocks</code> 原生工作。</td><td>26-10-18</td></tr>
+</table>
+<p class="aside">与前序计划的对应：1737-P1（快照所有权）→ 本计划 D3 + D8 + D10；1737-P2（合并卡卡内分区）→ D2 + D14；1737-P3（依赖元数据推广）→ D6。<b>1737 的 P1–P3 自此由本计划取代</b>，引用时以本计划编号为准。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr>
+    <td>段级写互相踩踏</td>
+    <td>来源刷新后限速浮层目标变空、或曲线一轮之后历史图变空</td>
+    <td>D10 的段隔离 + 方法内「读旧改写」+ 双向守阵（<code>publish_source</code> 后 limit 逐键不变、反之亦然）</td>
+  </tr>
+  <tr>
+    <td>摘 history 打断隐藏消费点</td>
+    <td>某处视图偶发空白或图表不重绘</td>
+    <td>已核：前端只有 <code>periods</code>（<code>period==="day"</code>）与 <code>ts</code> 监听（<code>dialogs.js:909</code>），<code>history</code> 一律走专用端点；实施时再全仓检索一次 <code>traffic.history</code></td>
+  </tr>
+  <tr>
+    <td>顶层 <code>state</code> 变成第二真相源</td>
+    <td>有人直接写 <code>state</code> 而不走 <code>derive_state</code></td>
+    <td>派生只在发布方法内算；守阵断言「发布值 == derive 结果」；源码检索禁止其它 <code>"state":</code> 字面量写入</td>
+  </tr>
+  <tr>
+    <td>旧 <code>hub.view</code> 持久值失效</td>
+    <td>升级后用户刷新落在设置首页</td>
+    <td>D13 的映射 + 一条「旧值 → 新视图」守阵；映射表放 <code>initialHubView</code> 单点</td>
+  </tr>
+  <tr>
+    <td>抽组件后三皮肤清单漂移</td>
+    <td>只改了一份 <code>index.html</code></td>
+    <td>守卫已断言三皮肤 manifest 逐项相等（<code>test_webui_static_skins.py:1782</code>）+ 盘上孤儿分片红（<code>:1788</code>）</td>
+  </tr>
+  <tr>
+    <td>结构断言被「改松」而失真</td>
+    <td>为让测试过而删掉语义断言</td>
+    <td>B5 明确「只改定位、保留语义」；四条变异逐条验证为红才算过</td>
+  </tr>
+  <tr>
+    <td>曲线 <code>interval</code> 语义收窄引发误解</td>
+    <td>用户以为图刷新也跟着变慢</td>
+    <td>schema <code>help</code> + 配置文档两处写清「只管写限速」；§10 记该语义变更</td>
+  </tr>
+  <tr>
+    <td>双节奏打架（<code>refresh_interval</code> 与曲线 <code>interval</code>）</td>
+    <td>两者默认都是 10M，用户改一个以为改了两个</td>
+    <td>两个字段的 <code>help</code> 互相点名；首页读数展示「来源名 · N 条曲线」让两者都对可见</td>
+  </tr>
+  <tr>
+    <td>首页卡片 8 → 6 影响搜索与统计</td>
+    <td><code>hubStats</code> 的「N 个分区」与搜索命中路径变化</td>
+    <td>既有守阵覆盖 <code>hubStats</code>；搜索按字段路径不按组，不受合组影响（实施时核一条 case）</td>
+  </tr>
+  <tr>
+    <td><code>settings.html</code> 额度回落失败</td>
+    <td>分支缩成一行后仍有残留代码（如 <code>tm*</code> 调用的模板片段）</td>
+    <td>先量后改：B3 里先确认删净行数再删例外表；不达标就保留 440 并在变更记录说明</td>
+  </tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-18-0813</span> 初版：三轮 grilling 收敛出 17 条拍板（D1–D17）—— 快照所有权移交独立模块 <code>traffic_snapshot</code>（段级 API + 派生 state + 自有节奏键 <code>refresh_interval</code>）、schema 三组合并为 <code>traffic_limit</code>「流量与限速」、合并卡抽成 <code>aq-traffic-card</code> + 独立分片（<code>settings.html</code> 额度回落 440 → 400）、通用层两修（<code>show_if</code> 下移 + 排除表单点化）、affects 最小集与轮询载荷瘦身；取代 1737 的 P1–P3；批次 P0（S8 收口）→ P2-A → P2-B。</li>
+</ul>
+
+</div>
+</body>
+</html>

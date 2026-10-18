@@ -5,6 +5,7 @@
 **Updated:** 2026-10-18
 **Summary:** 修掉「全局流量来源」联动上线后暴露的 9 个缺陷；新增顶层 `traffic_source.enabled` 总开关（关闭＝停取数/停订阅/停自动拉起，修订 0339-D1）；工具参数单位改下拉＋`?` 并统一为 `30S`/`10MiB` 复合串；快照解耦与设置页合并卡另立 Phase 2。Phase 1 的 S1–S3（总开关契约 / 取数闸门＋off 快照＋expr 文案＋前端灰显 / 工具侧 POST /shutdown＋auto-qb 代理）、S4–S5（「关闭工具」按钮＋确认框＋affects 依赖元数据 / 去黑框）与 S6–S7（设置页四修 / 工具参数单位下拉＋`?`＋复合串契约＋旧值迁移）已实施完成并通过全域回归；S8 待续。
 **Topics:** webui-traffic-source-fixes
+**Refs:** memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html
 
 ## 原始请求
 
