@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="group-relocate-restart-free">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-18-1604">
-<meta name="doc-updated" content="26-10-18-1915">
-<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html">
+<meta name="doc-updated" content="26-10-18-1941">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>免重启整组迁移(A/C)分步实施计划</h1>
 <p class="lede">开关开启时, WebUI「移动位置」与规则 <code>move_to</code> 改走「<b>qB 搬字节 → 别名接续 → 下次 qB 退出时收尾</b>」：字节一律由 qBittorrent 搬(auto-qb 不写自研搬迁代码)，auto-qb 只负责闸门、建别名、对账与收尾；关闭时逐字节保持现状。别名形态<b>按文件数分流</b>：少量文件逐文件链接（对未来种子零影响），文件多且目录专属才用目录别名。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-18-1915 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-18-1941 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「准备实施 A/C 方案」(26-10-18) + 五轮 grilling 拍板(14:31 / 15:34 / 16:03 / 16:31 / 16:57) + 前序报告 <code>26-10-18-0818</code> / <code>26-10-18-1300</code> + 本机(Windows 与 WSL Ubuntu)与测试客户端(<code>localhost:36595</code>, qB v5.2.3)只读探测
 </div>
 
@@ -549,6 +549,7 @@
   <li><span class="tag">R12 · 26-10-18-1908</span> 新增独占多集包 I（31 文件、独占目录、107 字符）⇒ <b>S1b 恢复可测</b>（G/H 成组后一直缺这类样本）；§8.1 补 I、§8.5 移除 S1b 缺口、执行序列插回 S1b 一步。</li>
   <li><span class="tag">R13 · 26-10-18-1911</span> S15 拆成 <b>S15a</b>（注入探测结果，可测：blocked + 三条出路 + Fake 零写调用）与 <b>S15b</b>（真实 UAC 弹窗，未验）；新增 §8.6「测试替身口径」规定注入点只在 <code>probe_symlink(try_create=…)</code>、禁生产测试开关、禁拿长路径 1314 冒充权限 1314；§3.2 补 1314 二义性与「先按路径长度、再按错误码」的分类顺序。</li>
   <li><span class="tag">R14 · 26-10-18-1915</span> §08 一致性校正：标题与正文从「5 个种子 / 18:32」更新为「8 个种子 / 19:15」；资产表按组重排并补 I；aside 的「E03 是单文件⇒S14 不成立」过期结论删除；S4 改 C/F 双向、S5 补组⑤、S6 的杂项数改 9、S11 改「组①+组⑤」（与序列一致）；执行序列基线 8 份、复位写清三组；<b>修复被转义破坏的 6 处盘符路径</b>（双斜杠形态 → 正确反斜杠）。</li>
+  <li><span class="tag">R15 · 26-10-18-1941</span> P0 已实施: 新 infra/alias_fs.py —— 探测走「建-可见-穿透-删」四步(junction/目录与文件 symlink/同卷硬链接)+ 链接原语(非递归删)+ §3.3 能力矩阵纯函数 platform_verdict; Windows 双盘与 WSL(/tmp POSIX 分支、/mnt/d 的 9p+aname=drvfs 反例)实测对齐 §2.4 与 §3.3 第 6 行; 注入点按 §8.6 只有 try_create; 启动/热重载接线随 P2 的 RelocateModule(P0 阶段无 relocate.enabled 可判, 且开关默认关时开机建删链接属于为关着的功能做副作用)</li>
 </ul>
 
 </div>
