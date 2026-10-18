@@ -30,6 +30,16 @@
   复发: 1 —— 2026-10-02 npx 缓存已空(只剩空 hash 目录; 浏览器二进制 chromium-1243 仍在
   `%LOCALAPPDATA%\ms-playwright`) ⇒ 当时改用**仓库外**一次性 `npm i playwright-core@1.63`
   (如 `~/.aqb-smoke-deps`); 2026-10-06 起仓库内已有, 这条降为备选。
+  复发: 2 —— 2026-10-18 `auto-qb-clone4`(**新 clone, 从未 npm i**)认领 issue 26-10-18-2122 跑
+  `commands run dev.e2e` 直接红: 报头先是一行无害的
+  `npm warn exec The following package was not found and will be installed: playwright@1.64.1`,
+  跟着 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test' imported from
+  playwright.config.mjs` —— **npx 自作主张装的是 `playwright` 包, 不是配置要的 `@playwright/test`**,
+  于是报错对象与真实病因(本 clone 没 node_modules)差了一层, 按报错去查依赖会查错方向。
+  处置: 按 browser-env.md 的对齐口径 `npm i --no-save @playwright/test@1.63.0`(10s 内装完;
+  `--no-save` 免改 `package.json`, 浏览器二进制复用 cache 里的 chromium-1243, 不必再 install)。
+  判据: **新 clone / 换 clone 首次跑 e2e 前先 `ls node_modules | wc -l`, 0 即先 npm i** ——
+  多 clone 工作区下 `node_modules/` gitignore, 跨 clone 同步走 Gitee 不会带上它, 每个 clone 各装一次。
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 

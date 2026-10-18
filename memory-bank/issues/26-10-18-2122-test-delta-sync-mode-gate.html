@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-e2e-mode-matrix">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="delta-sync 真值对齐用例无模式分流: error/hang 轮恒红 4 条">
 <meta name="issue-summary" content="e2e/delta-sync.spec.mjs 两条真值对齐用例(双皮肤 4 条)无 CMD_RESULT 分流, error/hang 模式下命令失败/无回执致真值不变, 8s 轮询超时恒红; HEAD 同参复现同签名, 与 26-10-18 选中摘要改动无关">
 <title>delta-sync 真值对齐用例无模式分流: error/hang 轮恒红 4 条 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-18-2122-test-delta-sync-mode-gate</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-18 21:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -178,18 +178,48 @@
       <li><strong>A(推荐)</strong>：给两条 test 补 <code>requireMode(test, { cmdResult: 'ok' })</code> 门控(与 trigger-scope 主路径组同款)，error/hang 轮整组 skip 且 skip 消息带当前 env 值。代价最小、语义最诚实(这两条判的就是 ok 模式真值对齐)；代价 = error/hang 轮对增量合并的覆盖仍旧空白。</li>
       <li><strong>B</strong>：仿 multiselect-shows 的 <code>if (CMD_RESULT === 'error')</code> 分支，error 下改判「回滚干净」(pendingOps 归零 + 无残留 is-pending)，hang 下归入 optimistic.spec:535 已有的独占组或同样门控。覆盖更全，但要新写分支断言并红绿双验，成本高。</li>
     </ul>
-    <p>另已顺带确认：矩阵轮 ②(error)/③(hang)的失败集**均只有这 4 条**(② 266 passed/26 skipped/4 failed; ③ 252 passed/40 skipped/4 failed，逐字同签名)，无其他无门控的 ok 语义用例被带红; ④(skip-check off)/⑤(hr-scene empty)两轮 0 failed 全绿。⑥(3000 种子)轮另暴露 2 条追剧页用例的落点对冲规模失效，已单独入池 <a href="26-10-18-2226-test-click-hedge-shows-scale-3000.html">26-10-18-2226</a>。</p>
+    <p>另已顺带确认：矩阵轮 ②(error)/③(hang)的失败集<strong>均只有这 4 条</strong>(② 266 passed/26 skipped/4 failed; ③ 252 passed/40 skipped/4 failed，逐字同签名)，无其他无门控的 ok 语义用例被带红; ④(skip-check off)/⑤(hr-scene empty)两轮 0 failed 全绿。⑥(3000 种子)轮另暴露 2 条追剧页用例的落点对冲规模失效，已单独入池 <a href="26-10-18-2226-test-click-hedge-shows-scale-3000.html">26-10-18-2226</a>。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-18 21:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-18 23:59 — 用户指派认领，状态 → <strong>In Progress</strong></li>
+      <li>2026-10-19 00:21 — 修复完成并三轮验证，状态 → <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-18 23:59 仍复现</strong>（本机 Windows / chromium headless，桩 300 种子 / 150 组；
+    <code>E2E_CMD_RESULT=error npx playwright test delta-sync --grep "增量轮"</code> ⇒ <strong>同 4 条 failed</strong>，
+    失败点逐字同签名：<code>delta-sync.spec.mjs:157</code>（原 124 行 test 的
+    <code>expect.poll(...).toBe('paused')</code>，8s 超时，atlas 皮肤 <code>received "downloading"</code>）
+    与 <code>:256</code>（原 226 行 test 同款断言）。与报告记录一致，非过期条目。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法 = 建议修法 A</strong>（按 smoke.md「某种模式下恒红 ⇒ 按模式分流」的既定口径落地）：
+    只给这两条真值对齐用例加 <code>requireMode(test, { cmdResult: 'ok' })</code>（<code>e2e/lib/mode.mjs</code>
+    是本仓既有模式门控单点，optimistic / menus / trigger-scope / hr-history 均已用），
+    error / hang 轮整条 skip 且 skip 消息自带当前 env 值（「模式不匹配, 整组跳过 —— 当前
+    <code>E2E_CMD_RESULT=error</code>, 本组要求 ok」，防静默少跑，计划 §6 R2）。</p>
+    <p><strong>一处与建议 A 的不同（保留覆盖）</strong>：建议 A 写的是「整组 skip」，
+    但原 <code>describe(`皮肤 ${skin}(S4: 增量合并冒烟)`)</code> 里共 4 条 test，另两条
+    （<code>applyStateRows 行级语义直测</code> / <code>S7 装饰记忆化</code>）<strong>自带注入桩态、不依赖命令回执</strong>，
+    在三种模式下都成立。若在 describe 顶层加门控会连带把它们也 skip 掉（error/hang 轮白白少 4 条覆盖）。
+    故改为<strong>在两条真值对齐用例的 test 体内各加一次门控</strong>（<code>menus.spec.mjs</code> 有同款单条门控先例），
+    同组另两条在 error/hang 轮照常真跑 —— 实测 error/hang 两轮该组均 <strong>4 skipped / 4 passed</strong>。</p>
+    <p><strong>验证方式</strong>：三组同参 <code>npx playwright test delta-sync</code>（双皮肤 × 4 条 = 8 例）+ 两轮全量矩阵。</p>
+    <ul>
+      <li><strong>① ok 轮（默认）</strong>：8 passed / 0 skipped ⇒ <strong>无门控副作用</strong>，默认轮一条没少跑。</li>
+      <li><strong>② error 轮</strong>：单文件 4 skipped / 4 passed / 0 failed；全量 <strong>270 passed / 30 skipped / 0 failed</strong>
+        （修复前 266 passed / 26 skipped / <strong>4 failed</strong> ⇒ 4 条红精确转为 4 条 skip，passed +4）。</li>
+      <li><strong>③ hang 轮</strong>：单文件 4 skipped / 4 passed / 0 failed；全量 <strong>256 passed / 44 skipped / 0 failed</strong>
+        （修复前 252 passed / 40 skipped / <strong>4 failed</strong>，同上）。</li>
+    </ul>
+    <p><strong>换基线复跑</strong>：提交前远端又进 3 笔（含 <code>app.js</code> / <code>columns.js</code> / <code>sort.js</code> 前端改动），
+    同步后在新基线上重跑三轮全量，仍全绿且无连带：ok <strong>290 passed / 10 skipped</strong>、
+    error <strong>270 passed / 30 skipped</strong>、hang <strong>256 passed / 44 skipped</strong>（三轮均 0 failed）。</p>
+    <p><strong>已知代价（不改）</strong>：error / hang 两轮对「增量合并链路」的覆盖仍是空白 ——
+    这正是建议 A 记下的代价。要补的是建议 B（error 下改判「回滚干净」、hang 下并入
+    <code>optimistic.spec</code> 的 hang 独占组），属新增断言、需另做红绿双验，<strong>不在本件范围</strong>。</p>
   </section>
 
   <footer>

@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { BASE_URL, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst, withVm } from './lib/vm.mjs';
+import { requireMode } from './lib/mode.mjs';
 
 /**
  * S4 增量合并冒烟(plan 26-10-07-0414 S4) —— 前端默认带 delta=1 后, /api/state 的更新轮
@@ -26,6 +27,13 @@ import { readInst, withVm } from './lib/vm.mjs';
  * 为什么「行变色」不能单独当增量渲染判据: 乐观补丁(P0-3)在点击后立刻就把行 kind 改成
  * paused(视觉同色), 真值轮的合并渲染必须另找判据 —— 用「pendingOps 已清(真值对齐)+
  * 行 kind 仍是真值态」表示合并链走完, 再叠探针的 full=false 轮佐证。
+ *
+ * 模式门控(issue 26-10-18-2122): 上面这套判据的前提是**命令成功且真值真的变了** ——
+ * 桩 `--cmd-result error`(命令失败)/ `hang`(命令无回执)下不会走 `_apply_truth`,
+ * 真值恒停在点击前的 kind ⇒ 「kind == paused」永远等不到, 这两条在 error/hang 轮是
+ * **结构恒红**(smoke.md「某种模式下恒红」反例), 故用 requireMode 限 ok 模式。
+ * 同组另两条(applyStateRows 直测 / S7 装饰记忆化)不依赖命令回执(**自带注入桩态**),
+ * 在三种模式下都成立 ⇒ **不加**门控, error/hang 轮保留它们的覆盖。
  */
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
@@ -133,6 +141,9 @@ for (const skin of SKINS) {
     installRuntimeErrorGuard(test);
 
     test('真实暂停手势触发增量轮(full=false)且真值渲染正确 + 未脏行引用恒等', async ({ page }) => {
+      // ok 模式门控: 本条判的是「命令成功后真值经合并落行」, error(失败)/hang(无回执)下
+      // 桩不改真值 ⇒ 8s 轮询必超时(结构恒红, issue 26-10-18-2122)。
+      requireMode(test, { cmdResult: 'ok' });
       await gotoTorrents(page, skin);
       await armDeltaProbe(page);
 
@@ -235,6 +246,8 @@ for (const skin of SKINS) {
     });
 
     test('分组视图整组暂停: 组桶(groups)经增量轮渲染正确', async ({ page }) => {
+      // 同上: 组行 status 需等成员真值落回才合成 paused, 只在 ok 模式成立(issue 26-10-18-2122)。
+      requireMode(test, { cmdResult: 'ok' });
       await openApp(page, skin);  // 默认落在分组视图
       await armDeltaProbe(page);
       const rows = page.locator('.group-row[data-table="group"]');
