@@ -19,9 +19,11 @@
 - test_curve_run_leaves_source_segment_untouched: 曲线任务跑完, source/periods/history 一字未变(A4)
 - test_only_snapshot_module_writes_traffic_view: 源码检索 —— set_traffic_view 的调用点只有快照模块(D10)
 - test_refresh_interval_applies_to_registered_task: 热重载改 refresh_interval -> 已入队任务就地改 interval, 不重复入队
+- test_refresh_publish_logs_at_debug: 发布历史流量那行恒 DEBUG(通知链路高频, 26-10-18 降级; WARNING 路径不受影响)
 - test_poll_payload_drops_history: /api/status 与 /api/state 的 traffic 无 history; /api/traffic/history 仍有
 """
 import copy
+import logging
 from datetime import date
 
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
@@ -39,7 +41,7 @@ from auto_qb.core.modules.traffic_snapshot_mod import (
 )
 from auto_qb.core.taskqueue import Task
 
-from helpers import make_manager
+from helpers import capture_logs, make_manager
 
 GIB = 1024**3
 
@@ -259,6 +261,23 @@ def test_refresh_source_off_publishes_off_without_reading(tmp_path):
     mgr.config.traffic_source.traffic_monitor.dat_path = _write_dat(tmp_path, [(date.today(), 1, 1)])
     assert _mod(mgr).refresh() is True
     assert mgr.web.traffic_view["source"]["state"] == SOURCE_OK
+
+
+def test_refresh_publish_logs_at_debug(tmp_path):
+    """发布历史流量那行恒 DEBUG: 定时任务与通知链路共用 refresh(), 大流量日可达数百次
+
+    INFO 会刷屏(26-10-18 用户要求降级); 读盘失败/坏行两条 WARNING 不降, 异常仍要响亮。
+    日志捕获走 helpers.capture_logs(QbManager 构造链清 root handlers, caplog 恒空)。
+    """
+    dat = _write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)])
+    mgr = _mgr(tmp_path, dat)
+
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert _mod(mgr).refresh() is True
+    pairs = list(zip(cap.records, cap.messages))  # helper 契约: 两列表同序
+    published = [(rec, msg) for rec, msg in pairs if "发布历史流量" in msg]
+    assert published, "刷新成功必须留下 DEBUG 轨迹(行数/今日累计, 排障看得到)"
+    assert all(rec.levelno == logging.DEBUG for rec, _ in published)
 
 
 def test_curve_run_leaves_source_segment_untouched(tmp_path):

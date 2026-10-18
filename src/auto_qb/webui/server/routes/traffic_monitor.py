@@ -328,8 +328,13 @@ def build_router(ctx: WebContext) -> APIRouter:
             logger.debug(f"全局流量监视器通知: 事件 #{event['event_id']} 未触发刷新({reason})")
             return {"ok": True, "action": "skipped", "event_id": event["event_id"], "reason": reason}
         queued = ctx.enqueue("refresh_traffic", {"event_id": event["event_id"], "day": event["day"]})
-        logger.info(f"全局流量监视器通知: 事件 #{event['event_id']}({event['day']}, "
-                    f"累计 {event['total_bytes']}B) -> 已投递历史流量刷新")
+        # DEBUG 而非 INFO: 阈值事件随流量密度来(工具侧默认每 100MiB 一个, 大流量日可达数百个),
+        # 且每事件还会带出主循环/快照发布两条同类日志 —— INFO 会刷屏(26-10-18 用户要求降级)。
+        # 与上面 skipped 分支(本就 DEBUG)口径一致: 放行/拦下都只在 DEBUG 可见。
+        logger.debug(
+            f"全局流量监视器通知: 事件 #{event['event_id']}({event['day']}, "
+            f"累计 {event['total_bytes']}B) -> 已投递历史流量刷新"
+        )
         return {
             "ok": True,
             "action": "refresh_queued",

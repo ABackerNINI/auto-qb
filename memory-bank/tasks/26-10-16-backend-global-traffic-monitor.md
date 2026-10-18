@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-10-16
-**Updated:** 2026-10-16 18:24
+**Updated:** 2026-10-18
 **Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面 + S7 auto-qb 接收面 + S8 集成与过渡 + S9 守阵测试已落地(含用户拍板改版: 工具控制面加 POST /autostart); S10 待逐项授权。
 **Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md, memory-bank/testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md, memory-bank/testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md, memory-bank/testing/baselines/26-10-16-1824-global-traffic-monitor-s9.md, memory-bank/pitfalls/testing/no-uv-fallback.md, memory-bank/pitfalls/testing/mutation-pool-artifact.md
 **Topics:** global-traffic-monitor
@@ -201,3 +201,5 @@
 **滚动面**: 计划 HTML 就地更新(doc-updated=26-10-16-1824, 状态行 S0–S9, §04 R0 增 S9 行, 脚注补 S9; HTMLParser 机检未闭合 0 / 乱序 0)· 本档案 R10 + 子任务表 S9→Done · activeContext 切片 R10 · 坑档 (no-uv-fallback / mutation-pool-artifact) 复发+1 · kb.index 重建 · 基线切片 `baselines/26-10-16-1824-global-traffic-monitor-s9.md`。随本专题入库。
 
 **行号基准**: S9 无 `src/` 代码落点(纯测试面 + 一处测试文件); 计划脚注的 clone 基准 3ba069d7 与之无关。
+
+- 2026-10-18 19:48 通知链路三级日志(接收面放行/主循环 WEB UI/快照发布)INFO -> DEBUG: 用户报大流量日(事件 #1200)日志刷屏, 拍板「改为DEBUG级」; 消息文本不变, config 触发与两条 WARNING 路径不降; 新增 2 条日志级守阵; test.full 全量绿(数字见基线切片 26-10-18-1947-notify-log-debug, 口径 kb.baseline)

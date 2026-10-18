@@ -12,10 +12,14 @@
 - test_notify_disabled_no_enqueue: 联动总开关关 -> action=disabled, 不投递命令(保守默认)
 - test_notify_disabled_when_source_off: 来源总开关关(S1/D1) -> action=disabled, 不投递命令
 - test_notify_gate_is_per_app_instance: 接收闸状态 per app 实例(同一 manager 再建 app 事件号归零)
+- test_notify_refresh_logs_at_debug: 放行刷新的接收面日志恒 DEBUG(高频链路, INFO 会刷屏; 26-10-18 降级)
 """
+import logging
+
 import pytest
 
 from auto_qb.webui import tool_client
+from helpers import capture_logs
 from webui_helpers import _iter_api_routes
 
 # 鉴权头键名 / 访问密钥字段名: 拆写常量 —— 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量
@@ -173,3 +177,21 @@ def test_notify_gate_is_per_app_instance(tm_env):
     from fastapi.testclient import TestClient
 
     assert _post(TestClient(fresh), mgr, EVENT).json()["action"] == "refresh_queued"
+
+
+def test_notify_refresh_logs_at_debug(tm_env):
+    """放行刷新的接收面日志恒 DEBUG: 阈值事件随流量密度来, INFO 会刷屏(26-10-18 用户要求降级)
+
+    与 skipped 分支同口径(本就 DEBUG): 放行/拦下都只在 DEBUG 可见。日志捕获走
+    helpers.capture_logs —— QbManager 构造链会清 root handlers, caplog 在这类用例里恒空。
+    """
+    mgr, client = tm_env
+    with capture_logs("auto_qb.web") as cap:
+        r = _post(client, mgr, EVENT)
+    assert r.status_code == 200
+    pairs = list(zip(cap.records, cap.messages))  # helper 契约: 两列表同序
+    flood = [(rec, msg) for rec, msg in pairs if "已投递历史流量刷新" in msg]
+    assert flood, "放行刷新必须留下 DEBUG 轨迹(排障时看得到事件号/累计值)"
+    assert all(rec.levelno == logging.DEBUG for rec, _ in flood)
+    assert not any(rec.levelno == logging.INFO and "全局流量监视器通知" in msg for rec, msg in pairs), \
+        "接收面放行日志不得再记 INFO(刷屏根源)"

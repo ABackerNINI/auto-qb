@@ -211,7 +211,9 @@ class TrafficSnapshotModule(BaseModule):
         self.publish_source(rows, SOURCE_OK)
         today = date.today().isoformat()
         day = next((r for r in rows if r[0].isoformat() == today), None)
-        logger.info(f"流量快照 | 发布历史流量: {len(rows)} 行" + (f", 今日 上传 {day[1]}B/下载 {day[2]}B" if day else ""))
+        # DEBUG: 定时任务与通知链路共用 refresh(), 大流量日通知刷新可达数百次 —— INFO 会刷屏
+        # (26-10-18 用户要求降级); 读盘失败/坏行两条 WARNING 不降, 异常仍要响亮。
+        logger.debug(f"流量快照 | 发布历史流量: {len(rows)} 行" + (f", 今日 上传 {day[1]}B/下载 {day[2]}B" if day else ""))
         return True
 
     # ---------- 段级发布 API(D10: 全模块唯一改动 traffic_view 的入口) ----------

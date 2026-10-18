@@ -1116,7 +1116,8 @@ class WebCommandsMixin:
 
         两个触发源, 一条执行路径(判据在 `trigger`):
         - `notify`(缺省): **工具进程**的阈值事件(经 POST /api/traffic/monitor/notify 投递),
-          不是用户点击 —— 只写日志, 无回执/通知需求(端点已即时回 200, 不阻塞工具侧 3s 推送超时);
+          不是用户点击 —— 只写 DEBUG 日志, 无回执/通知需求(端点已即时回 200, 不阻塞工具侧
+          3s 推送超时; 高频链路记 INFO 会刷屏, 26-10-18 降级, 与接收面/快照发布两级同口径);
         - `config`: 配置热重载发现流量来源变了(见 `_cmd_reload_config`, 1737-S8) —— 保存后立刻
           换图, 日志口径据此区分(事件号为空是常态, 不能说成「监视器通知」)。
 
@@ -1134,7 +1135,9 @@ class WebCommandsMixin:
         if trigger == "config":
             logger.info(f"配置热重载 | 流量来源已切换, 立即刷新历史流量: 状态={state}")
             return
-        logger.info(f"WEB UI | 监视器通知刷新历史流量: 事件 #{event_id}({day or '-'}), 状态={state}")
+        # DEBUG: 通知触发随工具事件密度来(与接收面放行/快照发布两级同口径, 26-10-18 降级)——
+        # config 触发是用户保存动作, 一次一笔, 保持 INFO。
+        logger.debug(f"WEB UI | 监视器通知刷新历史流量: 事件 #{event_id}({day or '-'}), 状态={state}")
 
     # ---------- 管理命令(R2B: 分类/标签/限速覆盖/添加种子) ----------
 
