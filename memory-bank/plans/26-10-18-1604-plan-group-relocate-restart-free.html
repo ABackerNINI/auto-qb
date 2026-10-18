@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="group-relocate-restart-free">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-18-1604">
-<meta name="doc-updated" content="26-10-18-1805">
+<meta name="doc-updated" content="26-10-18-1832">
 <meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>免重启整组迁移(A/C)分步实施计划</h1>
 <p class="lede">开关开启时, WebUI「移动位置」与规则 <code>move_to</code> 改走「<b>qB 搬字节 → 别名接续 → 下次 qB 退出时收尾</b>」：字节一律由 qBittorrent 搬(auto-qb 不写自研搬迁代码)，auto-qb 只负责闸门、建别名、对账与收尾；关闭时逐字节保持现状。别名形态<b>按文件数分流</b>：少量文件逐文件链接（对未来种子零影响），文件多且目录专属才用目录别名。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-18-1805 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-18-1832 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「准备实施 A/C 方案」(26-10-18) + 五轮 grilling 拍板(14:31 / 15:34 / 16:03 / 16:31 / 16:57) + 前序报告 <code>26-10-18-0818</code> / <code>26-10-18-1300</code> + 本机(Windows 与 WSL Ubuntu)与测试客户端(<code>localhost:36595</code>, qB v5.2.3)只读探测
 </div>
 
@@ -130,6 +130,8 @@
 <tr><td>Windows 目录别名</td><td>junction 创建/穿透/删除 <b>免管理员</b>（PowerShell <code>New-Item -ItemType Junction</code> 实测）；<code>os.symlink</code> 目录与文件均成功 —— <b>但本机开发者模式是开的</b>，不能据此假设用户环境</td></tr>
 <tr><td>POSIX 别名</td><td>WSL <code>Ubuntu-26.04</code>（内核 6.18.33.2）上 <code>ln -s</code> 目录链接与文件链接均成功、穿透读取一致、免权限 ⇒ Linux/macOS 宿主路径成立</td></tr>
 <tr><td>WSL 写在 NTFS 上的链接</td><td>WSL 里 <code>ln -s</code> 到 <code>/mnt/h/…</code> 成功，但 <b>Windows 侧读不了</b>（<code>open()</code> 报 <code>Errno 22 Invalid argument</code>，<code>os.path.islink</code> 为 False）—— WSL 写的是 LX 重解析点，不是 Windows 符号链接。这条直接钉死「Linux 容器 + Windows 宿主」组合</td></tr>
+<tr><td>测试资产（18:32 复核）</td><td><b>5 个种子</b>，全部 <code>stoppedUP</code>/<code>progress=1</code>/<code>save_path=R://Download//Testing</code>：组①=E01 两站（A/B）、组③=SPICA 两站（D/E）、C=E02（与 A/B 同目录、不同文件、单成员）。三个剧集文件全路径均为 <b>285</b> 字符。详见 §8.1</td></tr>
+<tr><td>长路径实测</td><td>剧集文件全路径 <b>285</b> 字符（目录 153 + 文件名 112）；<code>os.symlink</code> 在 259 字符内可用、<b>≥260 一律 <code>WinError 1314</code></b>（带 <code>\\?\</code> 前缀同样失败）；junction 在 181 字符仍可用。⇒ 文件级链接在长路径上不可建，必须走 §3.2 的能力校正</td></tr>
 <tr><td>沙盒口径</td><td>以上均为工具 shell 内实测，真实部署（服务化/无交互桌面/容器）可能不同 ⇒ P0 必须做运行期能力探测，探测结果进界面</td></tr>
 </table>
 
@@ -138,11 +140,13 @@
 <h3>3.1 谁搬、有没有别名、组裂不裂</h3>
 <table>
 <tr><th>情形</th><th>判定</th><th>谁搬字节</th><th>别名</th><th>组</th><th>收尾(C)</th></tr>
-<tr><td><b>独占内容根</b>（只有 1 个种子引用这些文件）</td><td>组内成员数 = 1 且内容根无组外引用</td><td class="good">qB <code>setLocation</code></td><td>不需要</td><td>重归组（现状）</td><td>不需要</td></tr>
+<tr><td><b>独占文件集</b>（只有 1 个种子引用这些文件）</td><td>组内成员数 = 1 且<b>本次迁移的文件集</b>无组外引用（同目录里别的种子不算）</td><td class="good">qB <code>setLocation</code></td><td>不需要</td><td>重归组（现状）</td><td>不需要</td></tr>
 <tr><td><b>组共享子目录</b>（多种子子目录一致 / 同目录各占一子目录）</td><td>N &gt; 1，内容根为目录</td><td class="good">qB 搬第 1 个成员</td><td>按 §3.2 分流：逐文件链接 / 目录别名</td><td>不裂（作用域登记表）</td><td class="wr">需要，自动武装</td></tr>
 <tr><td><b>组共享 + 单文件 / 平铺布局</b>（N &gt; 1，内容根是文件或 save_path 本身）</td><td>内容根是文件，或文件直接铺在 save_path 下</td><td class="good">qB 搬第 1 个成员</td><td class="good">逐文件链接（同卷硬链接 / 跨卷 symlink）</td><td>不裂</td><td class="wr">需要</td></tr>
 <tr><td>目录内有组外种子的文件 / 有 <code>.!qB</code> / 目标已存在同名内容 / 空间不足 / 远程无共享盘 / 已有未收尾迁移</td><td>闸门</td><td>—</td><td>—</td><td>—</td><td class="bad">拒绝</td></tr>
 </table>
+
+<p class="aside"><b>判定看文件、不看目录</b>：同目录里还有别的种子（分集场景）不影响「不需要别名」—— qB 搬走的是这个种子自己的文件，别人的文件留在原地。测试资产里的 E02（C）就是这种：与 E01 同目录、文件集无组外引用 ⇒ qB 直接搬，不建任何链接。</p>
 
 <p class="aside"><b>为什么「qB 搬第一个」成立</b>：目标目录为空时 <code>move_storage</code> 不会触发 <code>need_full_check</code>，所以第 1 个成员是真迁移（save_path 变 T、统计保留、零校验）；其余成员的数据此刻已经在 T，任何 qB 搬都会撞「目标已存在」⇒ 只能靠别名接续，再由 C 在下次 qB 重启时用 <code>missingFiles</code> 分支的 reload 零 hash 收尾。</p>
 
@@ -164,6 +168,8 @@
 <p><b>为什么是文件数而不是目录独占</b>：文件数近似「这个目录是不是一个独立发布包」—— 单集/单部电影 1~3 个文件，季包 10~30 个。少量文件走链接，既没有未来种子的重定向，也不需要判断目录归谁；文件多的包通常独占目录，才值得把目录整体链走，且仍然要用户点头。</p>
 
 <p><b>链接能力阶梯</b>：<b>目录别名</b> = Windows <code>junction</code>（免权限）→ POSIX <code>os.symlink</code>（免权限）→ Windows 目录 symlink（开发者模式或 UAC helper）；<b>逐文件链接</b> = POSIX <code>os.symlink</code> → Windows 同卷 <code>os.link</code> 硬链接（免权限）→ Windows 跨卷 <code>os.symlink</code>（开发者模式或 UAC helper）。每一档都不可用 ⇒ 拒绝，文案给出路（提权运行 / 换同卷目标）。</p>
+
+<p><b>能力校正（先于阈值生效）</b>：形态定下来后先做可建性检查 —— Windows 上目标链接路径 <b>≥260 字符</b>（MAX_PATH）时文件级 <code>os.symlink</code> 建不出来（实测 259 可、260 起一律 <code>WinError 1314</code>，带 <code>\\?\</code> 前缀同样失败；ctypes 直调 <code>CreateSymbolicLinkW</code> 返回成功但链接不可见，不可依赖）。此时若内容根是目录且其路径 &lt;260，<b>改为提议目录别名</b>（同样要确认「以后新增也落新位置」）；否则拒绝并说明。<b>长路径绝不静默降级成「不建链接」</b> —— 那等于把种子留在「qB 指向 S、数据在 T」的裸奔状态。</p>
 
 <p class="aside"><b>删除语义差异（要写进文档）</b>：文件链接下「删除种子并删除文件」只删链接，数据留在 T（变成孤儿，需要清理入口）；目录别名下会真删 T 里的数据。两种形态的用户预期不同，回执与文档都要说清。</p>
 
@@ -352,7 +358,7 @@
 <tr><td><b>P4</b></td><td><b>组判定改造 + 联动抑制</b>：三层物理位置解析（job 登记表 → realpath 目录级 → 代表文件探测）、<code>regroup()</code>、<code>relocating</code> 登记让缺文件扫描/跳检闸门跳过、跨组检测改用同一 resolver</td><td><code>grouping_mod.py</code>、<code>torrents/store.py</code></td><td>现有 grouping 测试全绿；新增「文件链接在场 ⇒ 两成员同组」「搬迁窗口不误暂停」「新成员自动并组」「同名不同内容被交叉检测拦下」「第三方 junction 并组」「第三方文件链接/硬链接被识别且拒迁」六条守阵</td></tr>
 <tr><td><b>P5</b></td><td><b>三入口接线 + 界面</b>：WebUI 单个/批量/组级、规则 <code>move_to</code>；<b>添加对话框预检 + 二次确认</b>；外部添加的落点提示；回执写明形态与物理位置；规则幂等（已迁移到同一目标 ⇒ skip）</td><td><code>webui/commands.py</code>、<code>rules/actions/transfer.py</code>、<code>webui/static/shared/drawer.js</code>、<code>webui/static/shared/add_torrent.js</code>、<code>views.py</code></td><td>关闭时调用序列与今日一致（守阵）；开启时三入口都产生 job；添加流程命中别名时确实弹确认且取消后不提交；前端契约测试 + 走查清单</td></tr>
 <tr><td><b>P6</b></td><td><b>C 收尾</b>：guardian 独立进程（同代码库 CLI 子命令，分离启动、pid 锁、10s 心跳、三证判 down、校验数据、逐条删链接、写 journal）+ auto-qb 侧 journal 合并、对账表、<b>动态收尾集合</b>、撤销回滚</td><td>新 <code>tools/finalize_watch.py</code> + <code>relocate_mod.py</code></td><td>对账表 8 行逐行测试；撤销回滚测试；真机：迁移 → 停 qB → 观察 alias_removed → 起 qB → 自动 <code>setLocation</code> → 进度回 100%</td></tr>
-<tr><td><b>P7</b></td><td><b>真机验收与回写</b>：测试客户端端到端（单 hash、暂停态、结束不启动）、§3.6 第 9 行空间检查验证、第 11 行重命名抽验、基线切片、坑档（UAC/编码/句柄/删链接）、文档回写</td><td><code>memory-bank/testing/baselines/</code>、<code>pitfalls/</code></td><td>全量测试通过并记实测数字；种子最终回到 <code>R:\Download\Testing</code>、<code>progress=1</code>、<code>stoppedUP</code></td></tr>
+<tr><td><b>P7</b></td><td><b>真机验收与回写</b>：按 <b>§08</b> 的 S1-S11 逐条跑（5 个种子全在暂停态、结束不启动、允许重启 qB）、§3.6 第 9 行空间检查验证、第 11 行重命名抽验、基线切片、坑档（UAC/编码/句柄/删链接/长路径）、文档回写</td><td><code>memory-bank/testing/baselines/</code>、<code>pitfalls/</code></td><td>全量测试通过并记实测数字；种子最终回到 <code>R:\Download\Testing</code>、<code>progress=1</code>、<code>stoppedUP</code></td></tr>
 </table>
 
 <h3>4.1 执行体单步（P3 状态机）</h3>
@@ -378,6 +384,7 @@
 <tr><td>T3</td><td>规则 <code>move_to</code> 幂等</td><td>已迁移到同一目标且链接仍在 ⇒ skip</td><td>允许反复搬；规则侧不走 A</td></tr>
 <tr><td>T4</td><td><b>阈值取值</b></td><td><b>8</b>：单集/单部电影 1~3 个文件走链接；季包 10~30 才够到目录别名（且要确认）</td><td>16（更保守，更多链接）/ 4（更早用目录别名）</td></tr>
 <tr><td>T5</td><td>目标卷低空间</td><td>只告警（阈值 <code>low_space_warn</code>）+ 常驻显示剩余</td><td>低空间时自动暂停落进目标卷的新种子（侵入性更强）</td></tr>
+<tr><td>T6</td><td><b>长路径降级</b>（≥260 字符）</td><td>文件级链接不可建 ⇒ <b>提议目录别名</b>（内容根 &lt;260 且专属，需确认）；用户拒绝 ⇒ 拒绝迁移，零副作用</td><td>一律拒绝（不提供目录别名）</td></tr>
 </table>
 
 <h2><span class="no">§06</span>拍板记录</h2>
@@ -423,6 +430,73 @@
 <tr><td>失败后用户选择撤销，搬回又失败</td><td>空间不足 / 权限 / qB 报错</td><td>撤销前先算成本与目标卷空间；搬回失败时如实报 qB 原始错误，现场保留（数据仍在 T、链接已删），不连环重试</td></tr>
 </table>
 
+<h2><span class="no">§08</span>测试与验收计划</h2>
+
+<h3>8.1 测试资产（26-10-18 18:32 复核）</h3>
+<p>测试客户端 <code>localhost:36595</code>（qB v5.2.3）现有 <b>5 个种子</b>，全部 <code>stoppedUP</code> / <code>progress=1</code> / <code>save_path=R://Download//Testing</code>，允许操作、允许重启 qB，<b>全程只在暂停态操作、结束不得启动</b>。</p>
+
+<table>
+<tr><th>代号</th><th>hash</th><th>内容</th><th>文件数</th><th>全路径字符数</th><th>组</th></tr>
+<tr><td><b>A</b></td><td><code>85e34fb7a428ca86c32f4fea031c2da5902d4bac</code></td><td>剧集 S01E01（crabpt，1.45 GB）</td><td>1</td><td class="wr">285</td><td rowspan="2"><b>组①</b>：2 成员辅种（同文件、不同站）</td></tr>
+<tr><td><b>B</b></td><td><code>4e16d8967571892a18c332e18d38b2da48743803</code></td><td>同一 E01 文件（hdfans）</td><td>1</td><td class="wr">285</td></tr>
+<tr><td><b>C</b></td><td><code>967923dd77f1f9b1552531f760b4779b7193edc1</code></td><td>剧集 S01E02（crabpt，1.45 GB）</td><td>1</td><td class="wr">285</td><td><b>组②</b>：1 成员；与 A/B <b>同目录、不同文件</b></td></tr>
+<tr><td><b>D</b></td><td><code>191975c31755f61f6f2bd4b1e2bc85d01b9bd894</code></td><td>SPICA <code>.ts</code>（crabpt，903 MB）</td><td>1</td><td class="good">64</td><td rowspan="2"><b>组③</b>：2 成员辅种（单文件共享、短路径）</td></tr>
+<tr><td><b>E</b></td><td><code>719b06804fc5079f93d138c6b5be59e8c82543b9</code></td><td>同一 SPICA 文件（t.hdhome）</td><td>1</td><td class="good">64</td></tr>
+</table>
+
+<p class="aside">三组资产正好把三种形态铺开：<b>组①</b>=目录内容根 + 长路径（285）；<b>组③</b>=单文件内容根 + 短路径（64，文件级 symlink 正常路径）；<b>C</b>=与别人同目录但文件集独占（qB 直接搬、不需要别名）。save_path 根另有 4 个 <code>.torrent</code> 杂项，用来验证「只动本组文件、不碰根目录」。</p>
+
+<h3>8.2 覆盖矩阵</h3>
+<table>
+<tr><th>#</th><th>场景</th><th>期望行为</th><th>判据（留证）</th><th>覆盖</th></tr>
+<tr><td>S1</td><td><b>独占文件集</b>（C=E02，与 A/B 同目录）</td><td>qB 直接搬 C → <b>不建任何链接</b> → C.save_path=T</td><td>C.save_path==T；A/B 的 E01 仍在 R: 且 SHA1 不变；C progress==1；无 <code>checkingUP/DL</code>；<code>added_on</code> 不变</td><td class="good">可测</td></tr>
+<tr><td>S2</td><td><b>组迁移 · 文件级链接正常路径</b>（组③ D+E，64 字符）</td><td>qB 搬 D → 建 1 条 symlink → E 经链接可读</td><td>链接类型 <code>SymbolicLink</code>、目标 == T；E 经 S 路径 stat 成功；E progress==1；日志零新增行</td><td class="good">可测</td></tr>
+<tr><td>S3</td><td><b>组迁移 · 长路径能力校正</b>（组① A+B，285 字符）</td><td>文件级 symlink 不可建（≥260）⇒ 提议<b>目录别名</b>（内容根 174 字符）并需确认；拒绝 ⇒ 零副作用</td><td>预检返回 force/blocked 且文案含「路径过长 / 目录别名」；拒绝时 qB 侧零变动、无链接、无 job</td><td class="good">可测</td></tr>
+<tr><td>S4</td><td><b>分集同目录双向隔离</b>（C ↔ A/B）</td><td>迁 C 不动 E01；迁 A/B 不动 E02</td><td>两个方向各查一次：未参与方的文件仍在 R:、SHA1 不变、progress==1</td><td class="good">可测</td></tr>
+<tr><td>S5</td><td><b>组不裂</b>（组①、组③各一次）</td><td>迁移后两成员仍同组</td><td>auto-qb 视图/日志同 key；跨组交叉检测无告警</td><td class="good">可测</td></tr>
+<tr><td>S6</td><td><b>杂项不受影响</b></td><td>根目录 4 个 <code>.torrent</code> 仍在 R:</td><td>迁移前后根 listing 差集为空（除内容根）</td><td class="good">可测</td></tr>
+<tr><td>S7</td><td><b>长路径穿透校验</b></td><td>经 285 字符路径 stat/读大小成功（走 <code>\\?\</code>）</td><td>file_access getsize 成功且与 qB 报的 size 一致</td><td class="good">可测</td></tr>
+<tr><td>S8</td><td><b>C 收尾</b>（guardian + setLocation）</td><td>停 qB → 链接被删（三证）→ 起 qB → 另一成员进 <code>missingFiles</code> → setLocation(T) → 100%</td><td>journal <code>removing→removed</code>；日志 reload 四连；progress 0→1 且无 <code>checkingUP</code>（仅 <code>checkingResumeData</code> 瞬态）</td><td class="good">可测（允许重启）</td></tr>
+<tr><td>S9</td><td><b>撤销回滚</b>（组③，数据量小、代价低）</td><td>撤销 → 删链接 + qB 搬回 → 恢复原状</td><td>save_path 回 R:；SHA1 不变；progress==1；组仍 2 成员</td><td class="good">可测</td></tr>
+<tr><td>S10</td><td><b>未收尾重复迁移</b></td><td>job 未终态时再迁同组 ⇒ 拒绝</td><td>回执 blocked + 文案指向「先收尾或先撤销」；qB 侧零变动</td><td class="good">可测</td></tr>
+<tr><td>S11</td><td><b>多 job 并存</b>（组① 与 组③ 各一个 job）</td><td>两个 job 独立武装；一次 qB 退出窗口把两组链接都删掉；重启后两组各自 setLocation</td><td>journal 两份、相位独立；收尾后两组都 100%、组关系不变</td><td class="good">可测</td></tr>
+<tr><td>S12</td><td><b>新种子落点二次确认</b></td><td>向已别名目录添加种子 ⇒ 提交前弹确认（请求路径 → 实际落点 → 卷剩余）</td><td>取消后未提交；确认后落点==T</td><td class="bad">不做（用户不授权加种子）</td></tr>
+<tr><td>S13</td><td><b>失败路径</b>（停滞 / 校验不齐 / 链接中途失败 / guardian 早退）</td><td>只做零成本动作，不搬回</td><td>Fake 单测 + 状态机断言</td><td class="wr">Fake（无故障注入手段）</td></tr>
+<tr><td>S14</td><td><b>目录别名正常路径</b>（F ≥ 8）</td><td>F≥阈值 + 目录专属 + 确认 ⇒ junction</td><td>链接类型/目标正确；穿透校验通过</td><td class="bad">未覆盖：暂不加季包</td></tr>
+<tr><td>S15</td><td><b>UAC 拒绝路径</b></td><td>symlink 需提权且用户拒绝 ⇒ 拒绝并给出路</td><td>回执 blocked + 文案</td><td class="bad">未覆盖：本机开发者模式已开</td></tr>
+</table>
+
+<h3>8.3 执行序列（每步可回滚）</h3>
+<ol>
+  <li><b>基线</b>：5 份 API 快照 + 5 个文件 SHA1 + qB 日志偏移 + <code>BT_backup</code> 的 fastresume/torrent 备份。</li>
+  <li><b>S1</b>：C 迁到 <code>H://Download//Testing-relocated</code> → 断言（含 A/B 未受影响）→ <b>回滚</b>（qB 搬回 R:）→ 断言。</li>
+  <li><b>S2 + S9</b>：组③（D+E）迁移 → 断言文件级 symlink → 撤销 → 断言恢复原状（这条先把「短路径正常路径」跑通）。</li>
+  <li><b>S3</b>：组①（A+B）发起迁移 → 断言「文件链接不可建 ⇒ 提议目录别名 / 拒绝」（先不确认）。</li>
+  <li><b>组① 正式迁移</b>：确认目录别名 → 断言 S4（C 的 E02 未受影响）/ S5 / S6 / S7。</li>
+  <li><b>S10</b>：立刻再发一次组①迁移 → 断言拒绝。</li>
+  <li><b>S11</b>：再迁一次组③（此时两组各一个 job）→ 停 qB → 断言两份 journal 都到 <code>removed</code> → 起 qB → 断言两组都 <code>missingFiles</code> → setLocation → 断言都 100%。</li>
+  <li><b>复位</b>：把 C 与两组都搬回 <code>R://Download//Testing</code>（qB 搬回 + 恢复 fastresume）→ 复核 SHA1、save_path、progress、<code>added_on</code>；<b>全程不启动种子</b>。</li>
+</ol>
+
+<h3>8.4 判定口径</h3>
+<ul>
+  <li><b>零校验</b>：qB 日志无 <code>checkingUP</code>/<code>checkingDL</code>；<code>progress</code> 无中间爬升（C 收尾允许 1 秒级 <code>checkingResumeData</code> 瞬态）。</li>
+  <li><b>未被重加</b>：<code>added_on</code> 不变（重加会变），日志无 delete/add 事件。</li>
+  <li><b>无感知</b>：迁移窗口内 qB 文件日志<b>零新增行</b>（建链接与搬数据期间）。</li>
+  <li><b>数据无损</b>：每个文件跨盘往返后 SHA1 与基线一致。</li>
+  <li><b>组不裂</b>：同组成员组 key 相同；跨组交叉检测无告警。</li>
+  <li><b>证据</b>：每步落 <code>{API 快照, 链接状态(lstat/LinkType/Target), 日志增量, SHA1}</code> 四元组，存 <code>tmp-analysis/relocate-e2e/</code>（不入库），P7 报告只引用关键数字。</li>
+</ul>
+
+<h3>8.5 未覆盖项与补齐条件</h3>
+<table>
+<tr><th>缺口</th><th>为什么现在测不了</th><th>补齐条件</th></tr>
+<tr><td>S14 目录别名正常路径（F≥8）</td><td>5 个种子都是 1 文件，F 永远 &lt; 阈值 8；S3 走的是「长路径强制目录别名」的异常分支，不是阈值分支</td><td>用户加一个 <b>≥8 文件</b>的季包（独占目录）即可；当前明确暂不做</td></tr>
+<tr><td>S15 UAC 拒绝</td><td>本机开发者模式已开，symlink 免权限，无法复现「权限不足」</td><td>未开开发者模式的机器跑一次；或用 <code>allow_uac=false</code> 断言「拒绝并给出路」（语义等价，非真实弹窗）</td></tr>
+<tr><td>S12 新种子二次确认</td><td>需向测试客户端新增种子，用户不授权</td><td>用户授权后再加 1 个种子</td></tr>
+<tr><td>S13 失败路径</td><td>没有可靠故障注入手段（磁盘满/权限/停滞都要造环境）</td><td>Fake qB 集成测试覆盖；真实停滞可用「暂停 qB 进程」模拟，但会污染现场，暂不做</td></tr>
+</table>
+
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-18-1604</span> 初版：三轮 grilling 收敛出 D1-D5；确定「qB 搬字节 + 别名接续 + guardian 收尾」主线、<code>alias_removed</code> 两本账机制与对账表、三种情形决策矩阵、P0-P7 分期。</li>
@@ -432,6 +506,8 @@
   <li><span class="tag">R4 · 26-10-18-1754</span> 失败处置改为「如实告知 + 用户选择」（D12）：删除自动回滚，链接失败降级成收尾路径（零数据移动）；搬迁超时改为停滞判据 + 长耗时只提示；撤销搬回前显示成本；新增 §3.5.1 失败处置表与 <code>move_stall_timeout</code>/<code>move_warn_after</code>/<code>finalize_timeout</code> 配置。</li>
   <li><span class="tag">R5 · 26-10-18-1802</span> D13 入拍板：链接失败默认收尾降级、停滞判据 10m、收尾上限 30d 确认；计划定稿（P0-P7 就绪，待开工）。</li>
   <li><span class="tag">R6 · 26-10-18-1805</span> 多轮改版一致性校对: §3.1 单文件行限定 N&gt;1（与「独占不需要别名」区分）；§3.2 补「目录不专属 ⇒ 逐文件链接」行、链接能力阶梯按目录/文件拆开；§3.4 代码块标注为第 1 层、删掉「第三方链接不并组」的过期副作用条；§3.5 相位机补 <code>moving</code>/<code>watching</code>、state 字段补 <code>mover</code>/<code>reason</code>、补执行期崩溃恢复三条；§3.6 第 9 行精确到「落 T 的新种子」；D3 标注被 D8/D11 修订、D4 指向 D9；§05 编号 P→T 避免与实施期 P0-P7 撞名；P2 验收「四行」改「五行」。</li>
+  <li><span class="tag">R7 · 26-10-18-1825</span> 测试资产扩容（3 个种子：2 成员辅种组 + 独占单文件 + 285 字符长路径）后补 §08 测试与验收计划（S1-S15 覆盖矩阵 / 执行序列 / 判定口径 / 未覆盖项与补齐条件）；§3.2 增「能力校正」段（≥260 字符 os.symlink 必失败，实测 WinError 1314）与 T6；P7 改为按 §08 逐条验收。</li>
+  <li><span class="tag">R8 · 26-10-18-1832</span> 资产复核（5 个种子 / 3 组）后重写 §08：S1 改为「独占文件集」用 E02（与 E01 同目录不同文件），S2 改用组③（短路径）覆盖文件级 symlink 正常路径，S4 变分集双向隔离，新增 S11 多 job 并存；§3.1 判定口径由「内容根无组外引用」修正为「<b>文件集</b>无组外引用」（同目录别的种子不算）。</li>
 </ul>
 
 </div>
