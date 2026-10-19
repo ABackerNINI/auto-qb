@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>站点问题改色表达与 chip 图标收口</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-site-chip-color">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-19-2206">
+<meta name="doc-updated" content="26-10-19-2206">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md, memory-bank/tasks/26-10-19-webui-site-chip-color.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  /* 视觉示意(纯 CSS, 不引外部图): 站点 chip 在四态下的样子 */
+  .demo { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 4px; }
+  .demo span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; white-space: nowrap; }
+  .demo .d-seed { background: rgba(143, 201, 143, .16); color: var(--ok); }
+  .demo .d-warn { background: rgba(226, 168, 110, .16); color: var(--warn); border-bottom: 1px dashed var(--warn); }
+  .demo .d-err { background: rgba(217, 138, 138, .16); color: var(--no); }
+  .demo svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-site-chip-color</div>
+<h1>站点问题改色表达与 chip 图标收口</h1>
+<p class="lede">把「站点有问题」从图标通道搬到<strong>颜色通道</strong>：缺配置染橙底、tracker 报错染红底，chip 里只剩「命令结果」一种图标并固定放在站点名之后 —— 图标位置不再随状态跳，两类错误也不再撞脸。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-19-2206 · <b>doc-updated</b> 26-10-19-2206 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling（2026-10-19 21:50–22:05，3 轮 15 问，全部拍板）+ 用户对 <code>f7f88cc1</code> 上线观感的 4 条反馈
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>做到什么算成</h3>
+<ol>
+  <li><b>位置统一</b>：chip 内图标只出现在站点名<strong>之后</strong>，且只可能是「命令结果」一种 —— 一列扫下去图标位置恒在同一处。</li>
+  <li><b>站点问题一眼可见</b>：缺站点配置 = 橙底（+ 虚线底边），tracker 报错 = 红底；不必 hover、不必开抽屉。</li>
+  <li><b>两类错误不再撞脸</b>：站点问题走颜色，命令结果走图标；即使同时发生，也是"变色块 + 一个图标"两个通道，不是两个红叉比位置。</li>
+  <li><b>提示触发面放大</b>：hover <strong>整块 chip</strong> 就出文案（含站点问题与命令结果两行），不再要求精准悬停 11px 图标。</li>
+  <li><b>明细行同语义</b>：辅种明细 / 追剧未识别行的站点文本同样按站点问题染色并带同一份 tooltip。</li>
+</ol>
+
+<h3>不变量（实施时不得让步）</h3>
+<ul>
+  <li><b>后端一行不动</b>：<code>site_alert</code> / <code>site_alert_msg</code> 契约与 <code>refresh_tracker_health</code> 取数逻辑不变；本件是纯前端表现层返工。</li>
+  <li><b>不新增颜色令牌</b>：三皮肤（棱镜含 5 套主题）已有的 <code>--warn-soft</code>/<code>--warn</code>/<code>--error-soft</code>/<code>--error</code> 足够；主题文件零改动。</li>
+  <li><b>不新增列、不改列宽</b>：图标仍塞在既有 <code>gap:4px</code> 里，尺寸 11px 不变。</li>
+  <li><b>命令结果状态仍存 <code>state.js::alertIcons</code></b>（hash 键 map）—— 不挂行对象，服务端每代都是新 dict。</li>
+  <li><b>三皮肤同步</b>：任何新规则三份齐备，由静态守阵机械比对键集。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<p>以下行号为取证时刻（2026-10-19 21:55，<code>f7f88cc1</code>）的值，漂移后按符号 + grep 重定位。</p>
+
+<table>
+  <thead><tr><th>环节</th><th>现状</th><th>位置</th></tr></thead>
+  <tbody>
+    <tr><td>站点 chip 渲染点</td><td>仅 3 处：分组行 / 种子页平铺行 / 追剧集行（明细行与抽屉不是 chip）</td><td><code>tpl/xtpl-cells.html:59</code> / <code>:113</code> / <code>:235</code></td></tr>
+    <tr><td>左槽（健康图标）</td><td>在站点名<strong>之前</strong>，<code>i-warn</code>(缺配置橙) / <code>i-x-circle</code>(报错红)</td><td><code>xtpl-cells.html:65/116/239</code></td></tr>
+    <tr><td>右槽（命令结果）</td><td>在站点名<strong>之后</strong>，<code>i-pulse</code>/<code>i-check</code>/<code>i-clock</code>/<code>i-x-circle</code></td><td><code>xtpl-cells.html:69/120/243</code></td></tr>
+    <tr><td>图标映射</td><td><code>tracker_error</code> 与命令 <code>error</code> 同为 <code>#i-x-circle</code>，同为红色 ⇒ 仅位置不同</td><td><code>shared/commands.js:23-33</code></td></tr>
+    <tr><td>tooltip</td><td><code>title</code> 挂在 <code>&lt;svg class="sa"&gt;</code> 上（落 DOM 时被迁成 <code>data-aq-tip</code>）—— 只有 11px 图标可触发</td><td><code>xtpl-cells.html:65</code>、<code>shared/ui_feedback.js:291</code></td></tr>
+    <tr><td>chip 底色</td><td>只由 <code>m.kind</code>（种子状态）决定；<code>site_alert</code> 只影响图标颜色</td><td><code>atlas/css/components.css:360-365</code>、<code>console:314-318</code>、<code>prism/views.css:297-300</code></td></tr>
+    <tr><td>明细成员行</td><td><code>.m-site</code> 纯文本，无图标、无 tooltip ⇒ 展开明细后站点问题消失</td><td><code>tpl/xtpl.html:260</code></td></tr>
+    <tr><td>搜索命中</td><td><code>.search-hit</code> 占 chip 底色（accent 柔底）</td><td><code>atlas/views.css:114</code> 等三处</td></tr>
+    <tr><td>三皮肤变色能力</td><td><code>--warn-soft</code>/<code>--error-soft</code>/<code>--warn</code>/<code>--error</code> 三皮肤 + 棱镜 5 主题全部已定义 ⇒ 变色零新增令牌</td><td><code>atlas/style.css:38-40</code>、<code>console/style.css:44-46</code>、<code>prism/css/themes/*.css</code></td></tr>
+  </tbody>
+</table>
+
+<h3>四条观感问题的根因</h3>
+<ul>
+  <li><b>P1 位置不统一</b>：不是漂移，是"位置即语义"的设计副作用 —— 健康固定在文字前、结果固定在文字后；于是只有健康问题时看着像"前图标"，只有结果时看着像"后图标"，同一列里位置随状态跳。</li>
+  <li><b>P2 状态色不跟随</b>：chip 底色只由种子状态决定，站点问题只改图标颜色 —— 一个"绿底红叉"的 chip，主体仍在说"做种中"。</li>
+  <li><b>P3 提示触发面过窄</b>：<code>title</code> 挂在 11px 的 <code>&lt;svg&gt;</code> 上，用户必须精准悬停图标；chip 本体只有"点击=筛选"。</li>
+  <li><b>P4 两类错误撞脸</b>：站点报错与命令失败共用 <code>i-x-circle</code> + 红色，唯一差别是左右位置 —— 而位置本身正是 P1 要消掉的东西。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 通道分工：站点问题 = 颜色，命令结果 = 图标</h3>
+
+<table>
+  <thead><tr><th>语义</th><th>载体</th><th>视觉</th><th>寿命</th><th>数据源</th></tr></thead>
+  <tbody>
+    <tr><td>缺站点配置</td><td>chip 底色 + 虚线下边框</td><td class="wr">橙底橙字 + <code>1px dashed</code> 底边</td><td>常驻，配置补上即灭</td><td><code>site_alert == "no_site_conf"</code></td></tr>
+    <tr><td>tracker 报错</td><td>chip 底色</td><td class="bad">红底红字</td><td>常驻，恢复即灭（60s 内可发现）</td><td><code>site_alert == "tracker_error"</code></td></tr>
+    <tr><td>汇报进行中</td><td>chip 内图标（文字后）</td><td>呼吸（<code>dot-pulse</code>）</td><td>至回执（兜底 45s）</td><td>前端 <code>alertIcons</code></td></tr>
+    <tr><td>成功</td><td>同上</td><td>绿勾 10s</td><td>10s</td><td><code>truth.results[].status == "ok"</code></td></tr>
+    <tr><td>已受理·推迟 / 未确认</td><td>同上</td><td>时钟 180s</td><td>180s</td><td><code>status == "warn"</code></td></tr>
+    <tr><td>失败</td><td>同上</td><td>红叉 180s</td><td>180s</td><td><code>status == "error"</code></td></tr>
+  </tbody>
+</table>
+
+<div class="demo" aria-hidden="true">
+  <span class="d-seed">HHan</span>
+  <span class="d-warn">HHan</span>
+  <span class="d-err">HHan</span>
+  <span class="d-seed">HHan <svg viewBox="0 0 16 16"><path d="M3.6 8.4 6.6 11.4 12.6 4.8"/></svg></span>
+  <span class="d-err">HHan <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.7"/><path d="M6.1 6.1l3.8 3.8M9.9 6.1l-3.8 3.8"/></svg></span>
+</div>
+<p class="aside">示意：① 健康（种子状态色）② 缺配置（橙底+虚线，无图标）③ 报错（红底，无图标）④ 成功（图标在文字后）⑤ 报错 + 命令失败（红底 + 文字后一个叉，两个通道互不冒充）。</p>
+
+<h3>3.2 颜色与优先级</h3>
+
+<pre><code><span class="cm">/* 底色优先级: 站点问题 &gt; 搜索命中 &gt; 种子状态(现状不动) —— 源顺序即优先级 */</span>
+.site-chip.sa-no-conf { background: var(--warn-soft);  color: var(--warn);
+                        border-bottom: 1px dashed var(--warn); }
+.site-chip.sa-tracker { background: var(--error-soft); color: var(--error); }
+<span class="cm">/* 搜索命中让出底色, 改用描边(各皮肤沿用自己既有的 accent 描边色) */</span>
+.site-chip.search-hit { background: transparent; box-shadow: inset 0 0 0 1px var(--accent-line); }
+<span class="cm">/* 变色后文字与图标同源: 图标不再写死语义色, 由 currentColor 继承 chip 前景 */</span>
+.site-chip .sx { color: currentColor; }</code></pre>
+
+<table>
+  <thead><tr><th>叠加态</th><th>结果</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>站点问题 + 种子状态色</td><td>站点问题赢</td><td>种子状态由「状态」列表达，chip 底色让给更稀有的站点事实</td></tr>
+    <tr><td>站点问题 + 搜索命中</td><td>站点问题赢底色，命中改描边</td><td>两个信号都不丢：块 = 站点坏了，圈 = 这行为什么在列表里</td></tr>
+    <tr><td>tracker 报错 + 种子 error 态</td><td>视觉与纯种子错误相同</td><td>错误态整行已红，chip 再红无信息增量（D2 拍板）</td></tr>
+    <tr><td>缺配置 + tracker 报错</td><td>缺配置优先（橙）</td><td>与后端判定优先级一致（配置缺失时报错文本不可信）</td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 tooltip 与无障碍</h3>
+<ul>
+  <li>提示挂在 <b><code>.site-chip</code> 整块</b>（<code>title</code> 由 <code>ui_feedback.js</code> 迁成 <code>data-aq-tip</code>），<b>图标不再单独挂 title</b>。</li>
+  <li>两类文案并存时合并为两行，顺序「站点问题 → 命令结果」；单条时不加换行。</li>
+  <li>两类站点问题都补 <code>aria-label</code>（读屏可读）；缺配置另加虚线下边框作为非颜色通道（色盲/灰度下可与实底红区分）。</li>
+</ul>
+
+<h3>3.4 明细成员行</h3>
+<p><code>.m-site</code> 保持纯文本（明细表是密集阅读面，chip 会加高度），有站点问题时<strong>染文字色</strong>并挂同一份 tooltip；类名与 chip 同族（<code>.m-site.sa-no-conf</code> / <code>.sa-tracker</code>），颜色规则复用同一组令牌。</p>
+
+<h3>3.5 分期</h3>
+<p>一次做完（纯前端、无后端改动、无数据迁移）。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<p>每步都是「改完即可验证」的闭合单元；前一步验收不过不进下一步。命令一律走 task id（<code>commands run test.quick</code> / <code>test.full</code> / <code>dev.fmt</code> / <code>dev.e2e</code>）。</p>
+
+<h3>S0 · 复验锚点（不改代码）</h3>
+<ul>
+  <li>按 §02 的符号 grep 复验三处 chip、两槽、<code>ALERT_ICON</code>、<code>.search-hit</code>、<code>.m-site</code> 的行号；任一漂移先改本件。</li>
+  <li>确认三皮肤 + 棱镜 5 主题的 <code>--warn-soft/--error-soft/--warn/--error</code> 齐全（已验，缺则本件补一条令牌而非散写色值）。</li>
+  <li><b>验收</b>：一份逐项打勾的锚点清单（写进任务档案），无新增未知渲染点。</li>
+</ul>
+
+<h3>S1 · 结构与 helper（前端逻辑）</h3>
+<ul>
+  <li><code>tpl/xtpl-cells.html</code> 三处 chip：<b>删左槽 <code>.sa</code></b>，保留右槽 <code>.sx</code>（位置在文字后不变）；chip 上加 <code>siteAlertClass(m)</code> 与 <code>siteAlertTip(m)</code>，去掉图标上的 <code>title</code>。</li>
+  <li><code>commands.js</code>：新增 <code>siteAlertClass(m)</code>（返回 <code>"" / "sa-no-conf" / "sa-tracker"</code>）与 <code>chipAlertTip(m)</code>（合并 <code>site_alert_msg</code> 与 <code>rowIcon(m.hash).msg</code>，两行）。判定仍只读后端 token，<b>不在 JS 里按 state 猜原因</b>。</li>
+  <li><b>验收</b>：单测/静态断言 —— 三处模板各只有一个图标槽、<code>sa</code> 图标类零残留；<code>siteAlertClass</code> 对三态映射正确（空/缺配置/报错），且缺配置优先于报错。</li>
+</ul>
+
+<h3>S2 · 三皮肤样式</h3>
+<ul>
+  <li>三份 <code>views.css</code>：删 <code>.site-chip .sa*</code> 一组规则；加 <code>.site-chip.sa-no-conf</code> / <code>.sa-tracker</code>（含缺配置虚线底边）；<code>.site-chip .sx { color: currentColor }</code>（尺寸/呼吸保留）；<code>.search-hit</code> 改描边。</li>
+  <li><b>验收</b>：静态守阵断言三皮肤键集相等、<code>.sa</code> 图标类零残留、<code>search-hit</code> 不再含 <code>background</code>；<code>prefers-reduced-motion</code> 下 <code>sx-pending</code> 动画关闭。</li>
+</ul>
+
+<h3>S3 · 明细行染色</h3>
+<ul>
+  <li><code>tpl/xtpl.html:260</code> 的 <code>.m-site</code> 加 <code>siteAlertClass(m)</code> 与 <code>title</code>（同一份合并文案）。</li>
+  <li>三皮肤各加 <code>.m-site.sa-no-conf</code> / <code>.sa-tracker</code>（只染文字色，不动行底色）。</li>
+  <li><b>验收</b>：e2e 展开一个含问题成员的组 → 明细行站点文本的 computed color 为对应语义色，且 <code>data-aq-tip</code> 含报错原文。</li>
+</ul>
+
+<h3>S4 · 守阵与 e2e 改断言</h3>
+<ul>
+  <li><code>tests/test_webui_static_skins.py::test_frontend_site_alert_icon_wiring</code> 改钉：三皮肤键集相等（新类集）、模板三处仅一个图标槽、<code>.sa</code> 图标类零残留、<code>alertIconHref</code> 只服务 <code>sx</code>。</li>
+  <li><code>e2e/site-alerts.spec.mjs</code> 改断言：缺配置 chip 的 computed <code>background-color</code> ≈ <code>--warn-soft</code> 且 <code>border-bottom-style == dashed</code>；报错 chip ≈ <code>--error-soft</code>；两 chip 的 <code>data-aq-tip</code> 分别为固定文案与报错原文；命令结果图标只在文字之后（DOM 顺序断言：<code>svg</code> 是 chip 的最后一个子元素）；搜索命中时 chip 底色仍为站点色、<code>box-shadow</code> 含 <code>inset</code>。</li>
+  <li><b>验收</b>：<code>commands run dev.e2e</code> 的 @fast 子集全绿（含新增/改写的 4 条）。</li>
+</ul>
+
+<h3>S5 · 收口</h3>
+<ul>
+  <li><code>commands run test.full</code> + 新建基线切片记实测数字；<code>dev.fmt</code> 覆盖改动过的 .py（本件预计仅测试文件）。</li>
+  <li>回写 <code>memory-bank/modules/webui-static-contract.md</code> 的「站点 chip 两槽」条（改为单图标通道 + 颜色语言）、计划转 Done、档案与切片收尾。</li>
+  <li><b>验收</b>：全量通过、基线已建、索引重建、<code>kb.docmap --check</code> 无红。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+
+<p>无。15 项决策已在 grilling 三轮全部拍板（见 §06）；实施中出现新取舍（如某主题下橙红对比不足）<b>不得就地决定</b> —— 入池 issue 或回本件追加拍板点。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+
+<table>
+  <thead><tr><th>编号</th><th>结论</th><th>来源</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>图标统一放<b>文字后</b>：顺序「站点名 → 命令结果」；站点问题不再用图标 ⇒ 每 chip 最多一个图标</td><td>Q1 → 放后面</td><td>26-10-19</td></tr>
+    <tr><td>D2</td><td><b>tracker 报错 = chip 红底</b>，不加图标；与「种子错误」红底不做额外区分（错误态整行已红）</td><td>Q2/Q4 + Q6 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D3</td><td><b>缺站点配置 = chip 橙底</b>，不加图标；与报错同级权重，靠色相区分</td><td>Q7 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D4</td><td>缺配置加 <code>1px dashed</code> 底边作为非颜色通道；两类都补 <code>aria-label</code></td><td>Q14 → (b)</td><td>26-10-19</td></tr>
+    <tr><td>D5</td><td>变色时 chip 的文字与命令结果图标统一走 <code>currentColor</code>（高对比前景），图标不再写死语义色</td><td>Q8 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D6</td><td>搜索命中 <code>.search-hit</code> 改 accent <b>描边</b>，底色让给站点问题</td><td>Q15 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D7</td><td>命令结果符号族不变：<code>i-pulse</code>(呼吸) / <code>i-check</code> / <code>i-clock</code> / <code>i-x-circle</code>；11px、<code>gap:4px</code></td><td>Q9 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D8</td><td>tooltip 挂<b>整块 chip</b>；两类并存合并两行（站点问题在前），单条不加换行；图标不再挂 title</td><td>Q3 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D9</td><td>明细成员行 <code>.m-site</code> 保持纯文本，站点问题<b>染文字色</b> + 同款 tooltip；抽屉本轮不动</td><td>Q5/Q10 → (b)</td><td>26-10-19</td></tr>
+    <tr><td>D10</td><td>命令结果仍存 <code>state.js::alertIcons</code>（hash 键 map），写入口仍是 <code>setRowIcon</code></td><td>沿用前件 D6/R4</td><td>26-10-19</td></tr>
+    <tr><td>D11</td><td>三皮肤同步 + 棱镜 5 主题全走令牌，<b>不新增颜色变量</b></td><td>Q12 → (a)</td><td>26-10-19</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+
+<table>
+  <thead><tr><th>编号</th><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td><b>变色后图标看不清</b>：红底上红叉消失</td><td>直接沿用写死的语义色</td><td>D5：<code>sx</code> 一律 <code>currentColor</code>；e2e 断言变色 chip 内 <code>svg</code> 的 computed color == chip 前景色</td></tr>
+    <tr><td>R2</td><td><b>搜索命中描边不可见</b>：深色底上 1px 描边太弱</td><td>只用 1px 且色差不足</td><td>沿用各皮肤既有 accent 描边色（atlas 的 <code>rgba(59,130,246,.55)</code> 等）；e2e 断言 <code>box-shadow</code> 含 <code>inset</code> 且底色 != accent 柔底</td></tr>
+    <tr><td>R3</td><td><b>三皮肤/五主题漂移</b>：只改了 atlas</td><td>CSS 各写一遍</td><td>静态守阵机械比对三皮肤键集相等；只允许令牌色（禁散写 hex）</td></tr>
+    <tr><td>R4</td><td><b>橙红难分</b>：棱镜 frost/golden 主题下 <code>--warn</code> 与 <code>--error</code> 接近</td><td>色相相近 + 无虚线</td><td>缺配置恒带虚线底边（D4）+ tooltip 文案区分；e2e 断言两态 <code>background-color</code> 不相等</td></tr>
+    <tr><td>R5</td><td><b>明细行染色与行状态色打架</b>：明细行文字色本来随行状态</td><td>选择器特异性不足</td><td>站点问题规则写在状态色之后（源顺序胜出），且只染 <code>.m-site</code> 单个单元格；e2e 读 computed color</td></tr>
+    <tr><td>R6</td><td><b>旧类残留</b>：<code>.sa</code> 图标类留在 CSS/模板里，与新 chip 类混淆</td><td>只删模板不删样式</td><td>守阵断言 <code>.sa</code>/<code>sa-no_site_conf</code>/<code>sa-tracker_error</code> 图标类零残留（新类为 kebab：<code>sa-no-conf</code>/<code>sa-tracker</code>）</td></tr>
+    <tr><td>R7</td><td><b>tooltip 迁移副作用</b>：<code>title</code> 从 svg 挪到 chip 后，原本依赖 svg title 的 e2e 断言红</td><td>改 DOM 不改断言</td><td>S4 同步改 <code>e2e/site-alerts.spec.mjs</code> 的选择器与断言；改完先红验（去掉新类应红）</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-19-2206</span> 初版。来源：用户对 <code>f7f88cc1</code> 上线观感的四条反馈（图标位置不统一 / 状态色不跟随 / tooltip 只在图标上 / 两类错误图标撞脸）+ grilling 三轮 15 问，全部拍板（D1-D11）。</li>
+</ul>
+
+</div>
+</body>
+</html>
