@@ -5,8 +5,7 @@
 **Updated:** 2026-10-17
 **Summary:** 用户反馈当日新上线的 HR 扩展工具栏图标(H + 状态色框)不合理, 要求先出几版候选供选择。已产出四版候选(中继 / H 精修 / 放大镜 / 盾牌对勾)与单文件选型样张; 用户选定 **A 中继双向箭头**, 已重写 `scripts/gen_ext_icons.py` 字形层(含 8x 超采样、圆角 3->4)并重生成 8 个 PNG 覆盖入库, 与拍板样张逐像素一致。
 **Topics:** hr-ext-icons
-**Refs:** memory-bank/plans/26-10-16-0453-plan-hr-ext-icons.html,memory-bank/activeContext/26-10-16-0459-hr-ext-icons.md
-
+**Refs:** memory-bank/plans/26-10-16-0453-plan-hr-ext-icons.html
 ## 原始请求
 
 > 「HR扩展图标不合理, 先设计几版图标供选择」

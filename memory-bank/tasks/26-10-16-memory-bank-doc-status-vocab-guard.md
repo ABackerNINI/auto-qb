@@ -5,8 +5,7 @@
 **Updated:** 2026-10-16
 **Summary:** 另一会话报告: 计划首版 `doc-status: Draft`(不在 5 词表)被 `kb.index` **静默漏收**(仍打印「已生成 21 个生成物」、零警告), `kb.check` / `kb.docmap --check` / `doc.links` 全绿, 只有 `test.full` 的 `test_status_vocabulary` 才红。按「检查提前到哪个环节」分析后实施: 根因侧 `gen_docs_index` fail-fast(`StatusVocabularyError`, kb.index/kb.check 响亮报错) + 闸门侧 `gen_doc_map --check` 同源词表校验(纯文档轮即拦) + 5 词表单点化到 `_common.DOC_STATUSES`。
 **Topics:** doc-status-vocab-guard
-**Refs:** memory-bank/activeContext/26-10-16-0024-doc-status-vocab-guard.md,memory-bank/pitfalls/kb/doc-status-meta.md
-
+**Refs:** memory-bank/pitfalls/kb/doc-status-meta.md
 ## 原始请求
 
 用户转述另一会话报告(2026-10-16 00:14): 计划首版写了 `doc-status: Draft` —— 不在 5 词表, 后果是 `kb.index` **静默漏收**该件(仍打印「已生成 21 个生成物」、零警告), `kb.check` / `kb.docmap --check` / `doc.links` 全部照绿, 只有 `test.full` 的 `test_status_vocabulary` 才红; 该会话已改 `Open`、重跑索引并写进 `pitfalls/kb/doc-status-meta.md`。用户指令:「拟定将 status_vocabulary 检查提前, 分析加到哪个环节合适」。分析定案后用户拍板:「直接实施, 按推荐+B 补强」。

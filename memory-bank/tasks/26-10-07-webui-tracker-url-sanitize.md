@@ -6,8 +6,7 @@
 **Topics:** tracker-url-source-sanitize
 **Summary:** 方案 B（单轨 + 瞬时原文 + mask 形态）S1–S4 已全部落码（分支 feat/tracker-url-sanitize-planb 六提交 589c91ff…ff97e7cf），守阵 5 组逐组红验全过、源码零残留，test.full 2698 passed + 4 skipped + 2 failed（存量 KB 守卫，收尾已修复回绿）/ 覆盖率 98.54%；真机走查待做。
 
-**Refs:** memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html,memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html,memory-bank/activeContext/26-10-07-0350-tracker-url-sanitize-planb.md,memory-bank/testing/baselines/26-10-07-0337-tracker-url-sanitize-planb-s4b.md
-
+**Refs:** memory-bank/plans/26-10-07-0055-plan-tracker-url-sanitize-planb.html, memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html, memory-bank/testing/baselines/26-10-07-0337-tracker-url-sanitize-planb-s4b.md
 ## 原始请求
 
 用户：「将报告转化为分步实施计划，按方案B：26-09-22-1801-tracker-url-source-sanitize-plan.html」——把可行性报告里已拍板的方案 B（单轨 + 瞬时原文 + mask 形态）落成可开工的分步计划。

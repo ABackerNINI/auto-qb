@@ -6,8 +6,7 @@
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-16-0954-bug-webui-chart-fetch-no-timeout.html」。走 issue §06 建议修法 **#1 + #2**(报告点明「同一处改动的两面, 建议一起做」): **#1 请求级超时** —— `shared/auth.js::_request` 对裸 `fetch` 无超时, 连接静默失效时 `await` 永不返回 ⇒ 调用方 `finally` 不复位 `loading` ⇒ 轮询守卫把自己挡死(流量图停在旧帧、无提示、不自愈); 改挂 `AbortController` + `setTimeout`(15s), 悬挂被翻译成一次**可报的失败**(「请求超时(15s)」), `finally` / 错误态路径照常执行。**#2 loading 悬挂兜底** —— `shared/qb_traffic_chart.js` 的轮询 tick 判据从「`loading` 为真即跳过」改为「`loading` 且**置位未超过 30s**(= 请求级超时两倍)才跳过」, 超过即视为悬挂、强制续拉并留一次 `console.warn` 痕迹。**#3(连续失败给用户提示)有意不做**: 既有错误空态(`qbCurError` + warn 图标, 成功落袋才清)已承担该提示面, 新增状态会与 P4 接缝提示的那条状态行争同一块位置。**量化口径零改动**: 两处都是纯前端兜底, 采样 / 存储 / 接口契约逐字未动。**收口**：本会话落 #2 并双向验证; #1 因工作区写入判据误判拦下(见「未做 / 残留」), 改由用户手工应用交接件、agent 只读复核(逐字正确 + 语法 OK + 行为电池), 随后补 #1 守阵与红绿双验。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** webui-polling
 
-**Refs:** memory-bank/issues/26-10-16-0954-bug-webui-chart-fetch-no-timeout.html,memory-bank/activeContext/26-10-16-1214-webui-chart-fetch-timeout.md,memory-bank/testing/baselines/26-10-16-1226-webui-chart-fetch-timeout.md,memory-bank/testing/baselines/26-10-16-1256-webui-chart-fetch-timeout-r2.md,memory-bank/pitfalls/web-ui/inflight-flag-no-timeout.md,memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md,memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html
-
+**Refs:** memory-bank/issues/26-10-16-0954-bug-webui-chart-fetch-no-timeout.html, memory-bank/testing/baselines/26-10-16-1226-webui-chart-fetch-timeout.md, memory-bank/testing/baselines/26-10-16-1256-webui-chart-fetch-timeout-r2.md, memory-bank/pitfalls/web-ui/inflight-flag-no-timeout.md, memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md, memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html
 ## 原始请求
 
 > 用户(2026-10-16): 「认领并修复 26-10-16-0954-bug-webui-chart-fetch-no-timeout.html」

@@ -6,8 +6,7 @@
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」—— dup-code-audit infra 轮(R18)对 R6/R2/R3 三轮暂缓跨包件的合并考量收口。口径沿用前修复轮保守纪律(行为逐位不变, 仅编排/构造收口): ① `infra/store_recovery.py` 新增「读坏→(挪走)留证→读 `.bak`」编排单点 `recover_corrupt_file`(回调式 read_backup + 可选 quarantine, 不传 = 原地保留)与 `quarantine_bad_file` 时间戳留证单点, hr `HrLockSession._recover` 与 state `StateService.load()` 损坏分支两处调用 —— 语义差异(hr 挪走留证/schema 迁移/read_error 消息 vs state 原地保留/_CORRUPT 三态/分级日志/立即自愈写回)全部保留在调用方; ② `infra/locking.py` 新增 `open_file_lock`/`release_file_lock` 构造/释放单点, hr 站点锁与 SingleInstanceLock 同族收口(hr/store 不再裸 import filelock); ③ 新守阵 tests/test_store_recovery.py 十条(静态两判据均过红验)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** dup-code-audit
 
-**Refs:** memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html,memory-bank/activeContext/26-10-15-0540-store-recover-lock-dedup.md,memory-bank/testing/baselines/26-10-15-0540-backend-store-recover-lock-dedup.md
-
+**Refs:** memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html, memory-bank/testing/baselines/26-10-15-0540-backend-store-recover-lock-dedup.md
 ## 原始请求
 
 > 用户(2026-10-15): 「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」

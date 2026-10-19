@@ -6,8 +6,7 @@
 **Topics:** webui-notify-channels-hidden
 **Summary:** 用户报「通知渠道勾选 platform 后取消仍提示有改动未保存, 取消后保存报 config.notify.channels: 必须是非空列表」; 用户拍板「暂时隐藏该设置项, 添加好注释」。实施 = 新增 schema `Field.hidden` 声明位(键留在配置契约里) + `cfgFlatten` 单点跳过 + `toggleKey` 清空改删键; 新增守阵 3 个测试函数。测试面见 `commands run kb.baseline`(基线 26-10-10-0951)。
 
-**Refs:** memory-bank/activeContext/26-10-10-0951-webui-notify-channels-hidden.md,memory-bank/pitfalls/web-ui/config-field-unexpressable-in-ui.md,memory-bank/testing/baselines/26-10-10-0951-webui-notify-channels-hidden.md
-
+**Refs:** memory-bank/pitfalls/web-ui/config-field-unexpressable-in-ui.md, memory-bank/testing/baselines/26-10-10-0951-webui-notify-channels-hidden.md
 ## 原始请求
 
 - 「修复问题: WEBUI常规设置中的"通知渠道"勾选"platform"后取消仍提示有改动未保存... 然后取消勾选保存报错: 保存失败: 配置校验失败, 共 1 处: [1] config.notify.channels: 必须是非空列表」

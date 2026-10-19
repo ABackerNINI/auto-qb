@@ -5,8 +5,7 @@
 **Updated:** 2026-10-11 02:23
 **Topics:** webui-wording-unify
 **Summary:** 用户要求把 WEBUI 的文案统一到 qB 的口径, 且不止其点名的几处(「上传/下载 vs 上行/下行 vs 取流中/供流中」;「做种」在 qB 叫「做种数」)。P1-P3 已产出全量排查报告 `26-10-10-2237-report-webui-wording-unify.html`(6 概念域 + 6 决策点)。**P4 已拍板(2026-10-11): 实施报告, 完全对齐 qB GUI(D-Base=乙, 状态/动作词随 GUI 严格对齐), D-Peer 甲(对端词统一「上传中/下载中」), D-Sync 甲(resources/ 同步)**。P5 已实施: 基准取自本机 `qBittorrent/src/lang/qbittorrent_zh_CN.ts` 逐词抽取; shared 层 ~470 处 + resources 9 文件 ~290 处 + groups.py help + docs/configuration.md + 守阵 4 处 + e2e 10 处。要点: 状态词去「中/已」(下载/做种/校验/暂停/等待/排队/错误/丢失文件/下载元数据/校验恢复数据, pausedUP→已完成); 菜单动词 启动/停止、强制重新检查、强制重新汇报、设定位置…、速度限制…、队列顶部/向上(下)移动队列/队列底部、强制启动、按顺序下载、先下载首尾文件块、跳过哈希校验…; 确认框「重新校验」**保留**(qB GUI 确认框本身就这么写, 守阵断言同文案); state.js「已暂停」是 auto-qb 自身暂停态, 刻意不动。基线实测数字见 kb.baseline(`26-10-11-0101` 切片)。**P6 二轮补漏(2026-10-11, 用户复查指出抽屉/用户页遗漏, 报告扩 §11)**: 一轮清点面只吃了 app.js 列模型 + drawer.js general 行, 变体与 drawer_pages 页插件没进清点面。二轮补齐: 用户页表头族(对端→IP/地址、Flags→标志、正在取→文件、下载/上传→下载速度/上传速度、已发/已收→已下载/已上传、关联/关联度→文件关联、会话已发/收→会话已上传/下载); tracker 状态词(正常→工作、失败/未连接→未工作、警告→未联系、未启用→禁用、添加 tracker→添加 Tracker、下次汇报→下次重新汇报); 文件优先级(跳过→不下载、普通→正常, 一轮 §05 标「保持」系误判); general 残留(分块→区块、首末块优先→先下载首尾文件块、用户(下载)→用户、tracker→Tracker 大小写)。shared 17 文件 ~88 处 + resources 12 文件 72 处 + e2e 1 处 + 守阵 3 处; test.quick 3112 passed; 基线实测见 kb.baseline。
-**Refs:** memory-bank/reports/26-10-10-2237-report-webui-wording-unify.html,memory-bank/activeContext/26-10-10-2302-webui-wording-unify.md,memory-bank/testing/baselines/26-10-11-0101-webui-wording-gui-unify.md
-
+**Refs:** memory-bank/reports/26-10-10-2237-report-webui-wording-unify.html, memory-bank/testing/baselines/26-10-11-0101-webui-wording-gui-unify.md
 ## 原始请求
 
 > 用户(2026-10-10): 「WEBUI统一文案: 有的地方是"上传"/"下载", 有的地方是"上行"/"下行", 还有"取流中"/"供流中"的说法, 需要统一成qb的文案, qb中没有的向qb的文案靠近而不是随意新造词. 先写一个报告, 理清哪些文案不统一需要更改.」

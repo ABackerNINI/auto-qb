@@ -6,8 +6,7 @@
 **Summary:** 用户指令「修复 rules 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §20(轮 17)对 rules 全包(2187 行 · 18 文件)入池 **3 条 refactor issue**; 本轮按**保守口径(只做无行为变化的收口)** 全部修完并置 `Done`: ① `rules-expr-disk-helper-dup`(env 三取值器 + `FreespaceCondition` 四处逐字同的「取数 + 错误映射」收成单点 `disk_usage_value(path, attr)`); ② `rules-expr-numeric-predicate-dup`(env 数值函数与 eval 算术运算符的「必须是数值」校验收成 `types.require_number(value, what)`, 报错文案逐字不变); ③ `rules-parser-dead-op-constants-dup`(删 parser 四个本文件不用的运算符常量死件)。**零行为变化**(结构收口 + 删死件), 新增 3 个守阵测试锁单点。全量 `test.full` **3115 passed + 4 skipped / 0 failed / 覆盖率 98.63%**。
 **Topics:** dup-code-audit
 
-**Refs:** memory-bank/issues/26-10-11-0352-refactor-rules-expr-disk-helper-dup.html,memory-bank/issues/26-10-11-0352-refactor-rules-expr-numeric-predicate-dup.html,memory-bank/issues/26-10-11-0352-refactor-rules-parser-dead-op-constants-dup.html,memory-bank/activeContext/26-10-11-1625-backend-rules-dup-code-fix.md,memory-bank/testing/baselines/26-10-11-1625-backend-rules-dup-code-fix.md
-
+**Refs:** memory-bank/issues/26-10-11-0352-refactor-rules-expr-disk-helper-dup.html, memory-bank/issues/26-10-11-0352-refactor-rules-expr-numeric-predicate-dup.html, memory-bank/issues/26-10-11-0352-refactor-rules-parser-dead-op-constants-dup.html, memory-bank/testing/baselines/26-10-11-1625-backend-rules-dup-code-fix.md
 ## 原始请求
 
 > 用户(2026-10-11): 「修复rules部分问题:26-10-11-0033-report-dup-code-audit.html, 相关issue一并认领」

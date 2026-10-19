@@ -6,8 +6,7 @@
 **Summary:** 用户转述另一会话现场: 「`ship.commit` 首跑 提交成功但报了『没有可提交的改动』并中止推送(疑似内部幂等步误判, 提交对象已正确落稳)」→ 要求分析原因; 结论确认后用户「按建议修」。根因 = **两次调用被读成一跑**: 首次 `ship.commit` 因同步/推送失败停在「提交成功 <hash>(未推送)」, 随后**又跑 `ship.commit`(而非 `ship.push`)** ⇒ 树已净 ⇒ 撞 `resolve_stage_plan` 的拒跑出口(该出口在 commit/sync/push 之前 `return 1`)。旧拒跑文案「工作区干净(改动在别的 clone 或未保存?)」把「提交已在本地、只差推送」误导成「改动没落笔」(报告里被读成"提交丢了"); 核 ref 假红出口在**已判定落稳**时仍写「提交可能没落稳」, 进一步诱导重跑 `ship.commit`。落盘(缺省路径, 未新建配置项): ①`commit.py` 新增纯函数 `clean_tree_route(cfg)` —— 树净拒跑行按**远端现查真值**(`ls-remote`, `attempts=1`)三档分流(本地领先 → 直送 `ship.push`; 一致 → 确实无事可做; 取不到 → 如实说「无法核实」并摆两条出路); 拒跑路径补后缀只在**树净**时接(有改动时照旧)。②核 ref 假红出口去掉自相矛盾: 保留 rc=1 与「提交失败」前缀(不加假装成功的改法 —— ref 不一致仍可能是分支指针真被回退), 但结果行如实写「提交已落稳, 仅分支 ref 未核对通过」并直送补推。③`sync.py` `remote_sha` 加 `attempts` 形参(旁证查询收紧到 1, 不让拒跑路径白等三个退避周期)。变更集 3 个源文件 + 包内口径件 ⇒ 命中立档阈值, 建本档(无 issue: 本轮由外部报告驱动, 非 `issues/` 池内件)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** ship-commit-clean-tree-routing
 
-**Refs:** memory-bank/activeContext/26-10-17-0909-ship-commit-clean-tree-routing.md,memory-bank/pitfalls/git/push.md
-
+**Refs:** memory-bank/pitfalls/git/push.md
 ## 原始请求
 
 > 用户(2026-10-17): 「另一会话报告: 一点说明：`ship.commit` 首跑 提交成功但报了「没有可提交的改动」并中止推送 （疑似内部幂等步误判，提交对象已正确落稳）\n分析原因」

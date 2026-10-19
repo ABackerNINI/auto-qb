@@ -5,8 +5,7 @@
 **Updated:** 2026-10-11
 **Summary:** AGENTS「会话协议·开始」①与 rebase 禁令互斥(a1f3476 补丁漏改①)致规则静默失效; 4 处 always-on 入口一次改全为 fetch + ls-remote + merge --ff-only(锚点改"首个执行动作前"+问答轮豁免), preflight 落后判据 ls-remote 现查并新增 --check-started 只读开工自检; skill 自测 34 passed / 全量 1189+1 / 两项真跑 exit 0。**续作(用户指定): 开工同步改为无豁免 —— 问答/只读分析轮次也必须先同步, 全部入口与新坑档同步改写**
 **Topics:** memory-bank-git-rules
-**Refs:** memory-bank/activeContext/26-10-11-2129-memory-bank-sync-no-exemption.md,memory-bank/testing/baselines/26-10-11-2129-memory-bank-sync-no-exemption.md,memory-bank/pitfalls/git/sync-pull.md
-
+**Refs:** memory-bank/testing/baselines/26-10-11-2129-memory-bank-sync-no-exemption.md, memory-bank/pitfalls/git/sync-pull.md
 ## 原始请求
 
 用户 2026-09-22 20:44 指派:「分析为什么 AGENTS 中的"**开始**: ①**先拉远程**"未生效」; 21:32 指令「先同步然后执行 1-4, 最后详细解释第 5 项」(1=①与复述点改写 / 2=锚点 / 3=ls-remote 判据 / 4=机检文案); 21:58「授权修改, 然后实施 5」(显式授权动通用资产两处入口 + 实施开工自检); 22:07「提交」。

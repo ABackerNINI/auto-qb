@@ -5,8 +5,7 @@
 **Updated:** 2026-10-11 19:05
 **Topics:** webui-open-path-resolve
 **Summary:** 用户令「WEBUI 打开路径优化」四点 —— ①解析尝试顺序 = 文件(单文件种子) > root_path/content_path > save_path; ②打开后「选中条目」、多条目不选中; ③组内只含一个种子按单个处理; ④组内成员路径一致(辅种组, 都指向同一份文件)也按单个处理。后端 `/api/open-path` 解析单点重构(`_probe` + `_paths_consistent`), `open_path` 目录语义由"在父目录高亮"改"进入该目录"(Windows 新 `_win_shell_enter` 走 `ShellExecuteExW` + 目录 PIDL, 长路径安全); 6 个 Python 文件(2 源码 + 4 测试)改动, 全量结果见 kb.baseline。
-**Refs:** memory-bank/testing/baselines/26-10-11-1905-webui-open-path-resolve.md,memory-bank/pitfalls/backend/qb-content-path-semantics.md,memory-bank/pitfalls/backend/windows-long-path.md,memory-bank/activeContext/26-10-05-2015-webui-open-path-fallback.md
-
+**Refs:** memory-bank/testing/baselines/26-10-11-1905-webui-open-path-resolve.md, memory-bank/pitfalls/backend/qb-content-path-semantics.md, memory-bank/pitfalls/backend/windows-long-path.md
 ## 原始请求
 
 > WEBUI打开路径优化: 尝试顺序: 文件(单文件种子) > root_path/content_path > save_path, 要求打开后选中条目(多条目不选中); WEBUI中的组中如果只含一个种子也当作一个种子, 如果组中路径一致也当作一个种子, 比如辅种组, 其都指向同一份文件, 理应按单个处理

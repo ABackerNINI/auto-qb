@@ -5,8 +5,7 @@
 **Updated:** 2026-10-11
 **Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。2026-10-11 追加: 预览图配色并入流量方向色族(`--today-up` / `--today-down`), 五处一次性对齐(曲线线色 / 面积填充 / 悬停标记点 / 图例方向标 / 档位组方向条), 三皮肤同步; 数字见 kb.baseline。
 **Topics:** webui-curve-chart
-**Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html, memory-bank/testing/baselines/26-10-11-1843-webui-curve-color-unify.md, memory-bank/activeContext/26-10-11-1843-webui-curve-chart.md
-
+**Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html, memory-bank/testing/baselines/26-10-11-1843-webui-curve-color-unify.md
 ## 原始请求
 
 > WEBUI重构限速曲线预览图，当前的预览图每个阶长度一样是不正确的，要按长度显示，但为了避免最后一阶占太长导致其他阶看不清，最后一阶显示为无限（与实际代码处理一致），但占用宽度不得超过30%，目前的图与鼠标交互也不正确，宽度也不对。先做个模板，调整好后再应用

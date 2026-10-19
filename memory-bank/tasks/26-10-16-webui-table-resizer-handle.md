@@ -5,8 +5,7 @@
 **Updated:** 2026-10-16
 **Summary:** 用户报「WEBUI 各表列宽拖拽把手宽度不一致(种子页『分类』明显更细)」。真浏览器像素级取证(桩服务 `scripts/ui_harness.py` + Playwright, 三皮肤 × 100%/125%/150%)定位: 三皮肤 `.h-cell .resizer` 规则逐字一致, 粗细差来自**非整数缩放下的亚像素相位**(2px 细线 @125% 逐列实芯 ≈1.5 vs ≈2.3 设备像素), 且实测 2px/3px/4px+透明/铺满命中区四种细线方案**全都躲不开** ⇒ 改用成熟产品(Excel/Notion/AntD)口径: **整列 hover 底色承担主视觉 + 2px 实色线退回位置指示**(现对基线仅 +1 行 CSS)。用户验收桩服务时另报两问题一并修: ①部分列 hover 未高亮(prism 首列 `:first-child` 不透明背景特异性 (0,3,1) 压过 `:hover` (0,2,1); console 上一轮回切方案时漏掉整列高亮规则) ②把手可见线压住右对齐列表头文字(11 个数字列实测重叠 −1px, 线移进 grid gap 中央)。改 5 个三皮肤 CSS 源文件, 零 Python/模板/列宽算法改动。
 **Topics:** webui-table-resizer-handle
-**Refs:** memory-bank/activeContext/26-10-16-0331-webui-table-resizer-handle.md,memory-bank/pitfalls/web-ui/table-resizer-handle.md,memory-bank/testing/baselines/26-10-16-0331-webui-table-resizer-handle.md
-
+**Refs:** memory-bank/pitfalls/web-ui/table-resizer-handle.md, memory-bank/testing/baselines/26-10-16-0331-webui-table-resizer-handle.md
 ## 原始请求
 
 用户: 「WEBUI 各个表格中的列宽拖拽调整把手宽度不一致, 比如种子页的『分类』把手明显更细, 需要统一, 先做个简单的调查」→ 调查结论出来后: 「将 A 与 B 分别实施然后截图让我看看效果再决定」→ 「方案 A/B 都不满意, A 不够利落, B 不常规也不好看否定, 有没有成熟的解决方案」→ 「我查看了桩服务, 有个问题: 部分列 hover 未高亮; 另外有一个相关问题一并解决: 部分列把手离文字太近, 甚至少部分重叠, 需要调整; 暂定方案 C, 修复后装服务保持打开让我验收」→ 「清理桩, 收尾提交」。

@@ -5,8 +5,7 @@
 **Updated:** 2026-10-06 10:12
 **Summary:** commands 输出契约: v3(ship 成功一行/失败=原因+下一步/退出码 0/1, 4ba6cb7f)与 W2 推广(W2-1 charset 半装修复 / W2-2 结论行必保 / W2-3 警告 6→0)保持有效; **2026-09-30 终态修订: 引擎 run 全文透传不做有损摘要** —— 「略过 N 行」提示会逼 agent 调用方 show→裸跑两步返工(token 税, 用户定调), W2-2 的 `_digest` 摘要器退役, 静默改声明式 silent_success(test.full/quick/pkg 成功只出结论行, 失败照旧全文)。**2026-10-06 v3.1 步骤行**: 一次命令内 HEAD 被改写多次(提交自身/内部 rebase/闸门改后 amend)而结果行只给终值 ⇒ 真改写 HEAD 的步骤在结果行**上面**各留一行 `旧hash→新hash`, 没发生的一律不报, 结果行逐字不动。全量 1827 passed + 3 skipped / 91%(基线 26-09-30-0805)。
 **Topics:** commands-shipflow-v3
-**Refs:** memory-bank/testing/baselines/26-10-06-1012-commands-shipflow-steps.md, memory-bank/activeContext/26-10-06-1012-commands-shipflow-steps.md
-
+**Refs:** memory-bank/testing/baselines/26-10-06-1012-commands-shipflow-steps.md
 ## 原始请求
 
 用户实贴 `commands run my-commit-flow.sync`(失败态)与 `ship.commit`(成功态)的输出并逐行标注(「多余」「这是什么???」「居然输出了两次」), 判定 my-commit-flow **完全背离设计初衷: 减少手写命令错误、减少 token、将复杂隐藏在背后**。指令: sync 输出只留「同步成功 <hash>」/「同步失败需解决冲突 本地<hash> 远端<hash> <步骤>」; commit 成功只留「提交成功 <hash>」, 失败说清原因; 镜像允许滞后无需提。要求**推翻重构, 先写一个新 my-commit-flow 计划**。

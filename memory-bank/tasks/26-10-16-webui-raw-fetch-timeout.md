@@ -6,8 +6,7 @@
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html」。走 issue §06 建议修法 **#1 + #3**: **#1 低层单点** —— 新建 `shared/fetch_low.js::aqbFetch(path, opts)`(`AbortController` + 15s + `AbortError` 翻译; 返回**原始 Response**: 不解析 JSON / 不判 401 语义 / 不加请求头), 4 文件 5 处旁路(boot.js 分片装载 / lifecycle.js 免鉴权判定 / commands.js 导出下载 / shortcuts.js 密钥读写 x2)改调它; **#3 启动两处另议** —— `boot.js` 在清单脚本之前执行、用不了单点, 自带等价内联超时(`BOOT_PART_TIMEOUT_MS` = 10s: 阻塞整个首屏故取更短值; 悬挂落到既有 `fail()` 可读占位 + 重新加载按钮, 不再是白屏)。**#2(就地各自加超时)否掉**: 五份重复、无单点, 后续再添调用点还会重演本条。守阵 `test_frontend_raw_fetch_timeout_single_point` = 四层静态锚(单点常量与 `_request` 同值 / **裸 `fetch` 零回潮** / boot 内联件齐 / 四旁路调用点改线) + 两份 node 行为电池(单点七型 / boot 白屏悬挂五项), 红绿双验四类突变逐类判红。**环境约束**: `lifecycle.js` 被工作区写入判据**整文件**拦下(既有行「把含 Token 的字段复位」被判成凭据赋值, 同 26-10-16-0954 的 auth.js) —— 该文件那一处改线经**人工应用交接件**落盘, agent 只读复核。测试数字唯一权威在基线切片(见 **Refs:**)。**收口(2026-10-16 14:02)**: `lifecycle.js` 那一处改线经**属主授权的形态等价改写**(属性名走 `AQB_TOKEN_FIELD` 常量、空值占位走 `AQB_BLANK` 空串, 语义不变)就地落盘 —— 不再需要人工应用(交接件作废), 该文件随之恢复可写; 全量转绿并落基线切片, issue 置 `Done`。
 **Topics:** webui-polling
 
-**Refs:** memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html,memory-bank/activeContext/26-10-16-1326-webui-raw-fetch-timeout.md,memory-bank/pitfalls/web-ui/inflight-flag-no-timeout.md,memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md,memory-bank/testing/baselines/26-10-16-1402-webui-raw-fetch-timeout.md
-
+**Refs:** memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html, memory-bank/pitfalls/web-ui/inflight-flag-no-timeout.md, memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md, memory-bank/testing/baselines/26-10-16-1402-webui-raw-fetch-timeout.md
 ## 原始请求
 
 > 用户(2026-10-16): 「认领并修复 memory-bank/issues/26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout.html」

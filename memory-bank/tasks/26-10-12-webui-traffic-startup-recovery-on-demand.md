@@ -5,8 +5,7 @@
 **Updated:** 2026-10-12 21:04
 **Topics:** webui-traffic-startup-recovery-on-demand
 **Summary:** 报告 26-10-12-1923 取证「启动后 WEB UI 需数秒才正常」= **启动死区**: 装配序最后的 `TrafficSampleModule.start()` → `_recover_aggregates()` **静默**把 `qb-traffic-v4/` 全部历史天文件重读一遍并逐槽重算(实测恢复 7.09~7.28s / 死区 11.16s / 约 +1.5~2.0s/天 无界增长)。用户定调三条: ①流量图方案定调一直是**按需读取**(不打开不读历史文件; 打开 24h 图最多读 2 天), 启动恢复全量重读是**该定调的实施缺口**; ②`rollup_window: 1000000D` 永久保留是**有意设定**; ③保持同步恢复。按计划 26-10-12-2010 实施完毕(W0-W2): 恢复读集下界 `now - rollup_window` → **agg 水位所在日**(常态 1 个、跨日界至多 2 个天文件), `agg.dat` 仍按系列照读, agg 无水位时全量兜底 + INFO; 保留口径与图表读侧零改动; 新增起止 INFO + 计数属性埋点(读集有界可机检)与 17 个守阵(含读侧契约 13 档逐档机检); `test.full` 3164 passed + 4 skipped。B2(后台化)/B3(raw_window 删除)/A1(调小窗口)/C1(搜索索引首建) 出局或另题。**真机走查(重启看 INFO 行与死区时长)留待用户。**
-**Refs:** memory-bank/plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html,memory-bank/reports/26-10-12-1923-report-webui-startup-latency.html,memory-bank/activeContext/26-10-12-2017-webui-traffic-startup-recovery-on-demand.md,memory-bank/testing/baselines/26-10-12-2019-webui-traffic-startup-recovery-on-demand.md
-
+**Refs:** memory-bank/plans/26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html, memory-bank/reports/26-10-12-1923-report-webui-startup-latency.html, memory-bank/testing/baselines/26-10-12-2019-webui-traffic-startup-recovery-on-demand.md
 ## 原始请求
 
 用户原文(三轮): ①「按报告写一个修改计划 26-10-12-1923-report-webui-startup-latency.html。之前的流量图方案定调一直是按需读取, 这是实施缺口。即不打开流量图理论上不需要读取历史文件。打开24小时流量图理论上最多读取2天的数据。注: rollup_window 是有意设置的, 永久保留数据, 理论上此场景下不能有太大性能问题。」②「为什么还需要恢复读取? 不应该是打开时触发读取吗?」③「简单在报告里解释一下, 然后提交」。

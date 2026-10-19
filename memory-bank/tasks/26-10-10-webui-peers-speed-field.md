@@ -5,8 +5,7 @@
 **Updated:** 2026-10-10 19:05
 **Topics:** webui-peers-speed-field
 **Summary:** 用户报「种子详情用户页中上下行始终为 0」。根因 = qB `sync/torrentPeers` 的对端速度字段是 `dl_speed` / `up_speed`(qB 原始命名), 而前端抽屉全部 peers 消费点(经典表经 `drawerPeerRows`、变体 07/08/09 的 `peerList`)统一按 `dlspeed` / `upspeed` 取名 ⇒ 取不到值 → 恒 0(其余列同名故正常, 「只坏上下行」即本坑指纹)。修 = 落袋单点新增 `drawer.js::_drawerNormPeers` 补键(dict/数组双形态同归一)—— 一处修好全部消费点。配套修桩保真: `scripts/ui_harness.py` 合成对端原本也用错键名(冒烟「看得见速度」而真机恒 0, 逃过全部 e2e), 已改回真 qB 形状; 补 e2e 速度列守卫 + 静态守阵。
-**Refs:** memory-bank/testing/baselines/26-10-10-1905-webui-peers-speed-field.md,memory-bank/activeContext/26-10-10-1905-webui-peers-speed-field.md,memory-bank/pitfalls/backend/qb-api.md,memory-bank/pitfalls/testing/stubs-sim.md
-
+**Refs:** memory-bank/testing/baselines/26-10-10-1905-webui-peers-speed-field.md, memory-bank/pitfalls/backend/qb-api.md, memory-bank/pitfalls/testing/stubs-sim.md
 ## 原始请求
 
 > 用户(2026-10-10): 「种子详情用户页中上下行始终为0」

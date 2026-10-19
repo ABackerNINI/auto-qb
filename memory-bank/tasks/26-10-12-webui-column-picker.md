@@ -5,8 +5,7 @@
 **Updated:** 2026-10-12 19:12
 **Topics:** webui-column-picker
 **Summary:** 用户命题「表格太多了, 统一到『列』按钮中显得杂乱难寻, 需要一个更好的方案」并给出两个初步方向(① 保留「列」按钮 + 分类折叠; ② 右键 + 弹窗、各表分开), 要求「调研成熟的解决方案, 对各方案进行对比, 写一个详细的报告」。产出报告 [26-10-12-1854](../reports/26-10-12-1854-report-webui-column-picker-redesign.html): 量化取证(生产态弹层恒定 **7 分组 / 107 勾选项**, 其中约 86 项与当前屏幕无关) + 6 类业界模式调研 + 8 维对比矩阵 + 推荐形态(② 为骨、① 为肉)。另把报告中的附带发现(种子页扩展列注释称「默认隐藏」但无 `hide: true`, 实际默认 28 列全显)单独立池 issue `26-10-12-1911-docs-webui-torrent-column-default-hidden`(Open, 未认领)。**本轮零代码改动。**
-**Refs:** memory-bank/reports/26-10-12-1854-report-webui-column-picker-redesign.html,memory-bank/activeContext/26-10-12-1912-webui-column-picker.md
-
+**Refs:** memory-bank/reports/26-10-12-1854-report-webui-column-picker-redesign.html
 ## 原始请求
 
 用户原文: 「现在的表格太多了, 统一到"列"按钮中显得杂乱难寻, 需要一个更好的方案, 初步考虑下面的方案 1.仍使用"列"按钮, 但进行分类+折叠 2.右键+弹窗的形式, 各个表分开 调研成熟的解决方案, 对各个方案进行对比, 写一个详细的报告」。
@@ -45,4 +44,4 @@
 ## 进度日志
 
 - 2026-10-12 18:54 开工同步(`已同步 94e7ca62`); 取证现状(注册表 16 表 / 107 列 / 弹层规格 / 两条入口 / 测试面)并产出报告 [26-10-12-1854](../reports/26-10-12-1854-report-webui-column-picker-redesign.html)(dark 主题单文件 HTML, doc-topic `webui-column-picker`); `kb.index` 重建 + `kb.check` / `doc.links` 全绿。**零代码改动。**
-- 2026-10-12 19:11 用户令「入池issue, 然后提交」⇒ 开工同步(远端领先 1 笔, 快进 `94e7ca62→7aef8bc2`, 本地未提交改动原样保留)后入池 issue `26-10-12-1911-docs-webui-torrent-column-default-hidden`(type=docs / tier=light / **Open, 未认领** / topic `webui-column-picker`); 正文按 L1 便签档补齐(现象 + 位置/grep 锚点 + 两方向建议待定调 + 报告回引)。收尾: 立本档案(**阈值 #4 命中** —— 已产出 `reports/` HTML 制品) + activeContext 切片 [26-10-12-1912](../activeContext/26-10-12-1912-webui-column-picker.md) + `kb.index` 重建。**纯文档轮: 零代码零测试改动, 不新建基线切片**(数字引用 `commands run kb.baseline`)。
+- 2026-10-12 19:11 用户令「入池issue, 然后提交」⇒ 开工同步(远端领先 1 笔, 快进 `94e7ca62→7aef8bc2`, 本地未提交改动原样保留)后入池 issue `26-10-12-1911-docs-webui-torrent-column-default-hidden`(type=docs / tier=light / **Open, 未认领** / topic `webui-column-picker`); 正文按 L1 便签档补齐(现象 + 位置/grep 锚点 + 两方向建议待定调 + 报告回引)。收尾: 立本档案(**阈值 #4 命中** —— 已产出 `reports/` HTML 制品) + activeContext 切片 26-10-12-1912(切片已按滚动状态清理轮退役, 记录见本档案与报告) + `kb.index` 重建。**纯文档轮: 零代码零测试改动, 不新建基线切片**(数字引用 `commands run kb.baseline`)。

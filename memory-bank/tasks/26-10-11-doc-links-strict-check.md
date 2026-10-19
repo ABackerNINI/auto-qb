@@ -5,8 +5,7 @@
 **Updated:** 2026-10-11
 **Topics:** doc-links-strict-check
 **Summary:** 用户贴 CI 单条红求助(`test_doc_links_are_not_broken`: `pitfalls/kb/index-archive-view.md:45 → ...`)。根因不是相对层级写错, 而是**省略号占位被当真链接** + **判据被 Windows 路径归一化骗过**: `(dir/rel).exists()` 在本机对 `kb/...` 返回 True(Win32 剥掉结尾点 ⇒ 塌成父目录), 于是坏链连过 doc.links 闸门 / test.quick 闸门 / 手工 test.full **三道本机防线**, 只在 ubuntu job 红。修法: ①坏链处改回准确字面量并裹行内代码; ②`check_doc_links.link_exists` 改**组件级 listdir 精确比对**(区分大小写 + 拒绝结尾点/空格), 守阵 `test_doc_links_rejects_windows_normalized_targets`(红验已做, 旧判据只报 3 条中的 1 条); ③顺带解开 `test.linux` 的网络死结 —— `linux_ci.py` 加**代理自动透传**(回环主机改写 `host.docker.internal` + 补 `--add-host` + `no_proxy` 恒并入回环), 守阵 `test_linux_ci.py`(红验拆两处即红)。两处根因与容器网络坑一并写进 `pitfalls/testing/patching.md`。实测数字见 `kb.baseline`。
-**Refs:** memory-bank/pitfalls/testing/patching.md,memory-bank/testing/baselines/26-10-11-2315-doc-links-strict-check.md,memory-bank/activeContext/26-10-11-2315-doc-links-strict-check.md
-
+**Refs:** memory-bank/pitfalls/testing/patching.md, memory-bank/testing/baselines/26-10-11-2315-doc-links-strict-check.md
 ## 原始请求
 
 > 用户(2026-10-11): 「修复问题: FAILED tests/test_memory_bank.py::test_doc_links_are_not_broken - AssertionError: 相对链接坏链: memory-bank/pitfalls/kb/index-archive-view.md:45 → ...」

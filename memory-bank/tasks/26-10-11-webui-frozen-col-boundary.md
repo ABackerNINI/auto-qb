@@ -6,8 +6,7 @@
 **Topics:** webui-frozen-col-boundary
 **Summary:** 用户报「WEBUI 向右滚动时状态栏会被名称栏遮挡」并附截图。取证(桩服务真浏览器探针 + 截图)确认不是 z 序/层叠 bug: 吸左首格(issue 26-10-06-1717)横滚时相邻列从其下方滑过是冻结列的正确行为, 但未盖满的尾字("做种"的"种"、"下载"的"载")紧贴首格右缘露出, 与名称省略号之间无任何分隔, 读成"名称后面多了个坏字"。修 = 横滚非零时给吸左首格画右缘落影 + 发丝线, 让残根读成 pane 边界: 三个横滚同步单点(`sync*HeadScroll`: menu/selection/shows.js)给 `.group-table` 与吸顶表头打 `.is-hscrolled`(scrollLeft>0 打 / 回 0 摘), 三皮肤 `css/views.css` 据此给行吸左首格与表头吸左首格成对落规则。**用户复报「小窗时站点的徽标不会被名称列挡住」**: 根因 = `.group-row { align-items: center }` 网格项不拉伸, 吸左首格只有单行内容高(实测 22px), 站点/标签多 chip 格换行撑高行(实测 71px)后 chip 从首格上下两段成排漏出; 修 = 首格 `align-self: stretch`(行 padding 14px ≥ 圆角半径, 方角不戳行缘)。机理入坑档 `pitfalls/web-ui/frozen-column.md`(第④⑤条)。test.full 全绿(见基线切片)。
 **S5–S7(2026-10-12 第三轮)**: 用户报「WEBUI 名称列后随机出现阴影, 移除阴影」并附截图, 自注「可能是上次修右滑名称遮挡问题时引入的, 或者新表格引擎引起的」。取证(截图逐行测像素 + 桩服务真浏览器复现)确认**是上轮那条边界提示里的右缘落影**(`16px 0 14px -10px rgba(0,0,0,.55)`), **不是**新表格引擎引起: 落影可见度是**首格高度的函数** —— `spread: -10px` 先从首格四周内缩 10px 再 `blur: 14px`, 常态行首格仅 22px 高 ⇒ 落影矩形塌成 2px、只剩模糊尾巴(实测该列最暗处只比行底低 Δ≈2.0/255); 多 chip 格换行把行撑高时首格 46px+ ⇒ 落影矩形 26px+ 完整显形(Δ≈13.7/255)。同一"横滚"状态逐行深浅差 **7 倍**, 只在"刚好被撑高的那几行"冒黑块 —— 正是用户描述的"随机"。修 = 三皮肤 `css/views.css` 删掉落影、只留与高度无关的发丝线(`inset -1px 0 0 var(--border)`); 守阵由"必须有落影成分"翻成"**不得**有 `rgba(0, 0, 0`"(注入回潮即红 / 还原即绿)。机理入坑档第④b条(并推广为"行高不齐的列表别用负 spread 画贴边提示")。test.full 全绿(见基线切片)。
-**Refs:** memory-bank/testing/baselines/26-10-11-0354-webui-frozen-col-boundary.md,memory-bank/testing/baselines/26-10-12-1833-webui-frozen-col-shadow.md,memory-bank/pitfalls/web-ui/frozen-column.md,memory-bank/activeContext/26-10-11-0354-webui-frozen-col-boundary.md
-
+**Refs:** memory-bank/testing/baselines/26-10-11-0354-webui-frozen-col-boundary.md, memory-bank/testing/baselines/26-10-12-1833-webui-frozen-col-shadow.md, memory-bank/pitfalls/web-ui/frozen-column.md
 ## 原始请求
 
 > 用户(2026-10-11): 「WEBUI向右滚动时状态栏会被名称栏遮挡, 修复」

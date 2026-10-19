@@ -5,8 +5,7 @@
 **Updated:** 2026-10-16
 **Summary:** 用户实报 HR 扩展「1 连接后端」区排版糟糕(大段文字/表格不清晰), 追问「工具栏图标徽标」指什么(答: 浏览器工具栏扩展图标, 图例措辞歧义), 并指出「自测端点连通」与计划不符 —— 状态应直接表现在实例表里(instanceHealth 台账已落盘但 UI 只用了「疑似失效」一角)。经 grilling 两轮(首轮选择卡故障改纯文字重问; 用户拍板「按推荐」+ 模板评审二轮 R1–R3 + 排序补记)立计划 `plans/26-10-16-0214-plan-hr-ext-connect-ui.html` 并落三份可交互候选模板(A 纵向流 / B 双栏台账 / C 常驻顶部状态条), 逐波实施。S1–S3(04:00): options.html ①区重排 / background.js 台账 state + probe-all / options.js 表格化。S4–S6(04:20): README 口径 / 守阵七项(6 新用例 + 接线清单更新 + badge 用例随 R4 翻转) / 图标状态色外框(R4: gen_ext_icons.py 8 PNG + manifest default_icon + refreshBadge setIcon)。test.full 全绿(基线 26-10-16-0420)。仅动扩展侧 + 守阵 + dev 工具。
 **Topics:** hr-ext-connect-ui
-**Refs:** memory-bank/plans/26-10-16-0214-plan-hr-ext-connect-ui.html,memory-bank/activeContext/26-10-16-0214-hr-ext-connect-ui.md
-
+**Refs:** memory-bank/plans/26-10-16-0214-plan-hr-ext-connect-ui.html
 ## 原始请求
 
 用户指令(2026-10-16 01:56): 「HR扩展的"1 连接后端"目前排版很糟糕, 大段文字, 表格不清晰, 需要重新设计; 另外描述"工具栏图标徽标四态…"里的工具栏指的是实例表吗? 没有图标; 自测端点连通也与计划不符, 状态应该直接表现在表格里, 之前的计划实施似乎不完整; 使用设计相关技能以及grilling, 写一个修改计划, 附带3个简单的可交互模板」。

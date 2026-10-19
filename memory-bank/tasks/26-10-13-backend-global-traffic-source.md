@@ -5,8 +5,7 @@
 **Updated:** 2026-10-13 10:51
 **Topics:** global-traffic-source
 **Summary:** 用户命题「traffic monitor 全局流量来源信息滞后，调研成熟解决方案、分析自写独立监视全局流量小工具可行性、出报告」。逐层取证滞后链：项目里「全局流量」的数据源是**外部程序 TrafficMonitor 的 `history_traffic.dat`**（只读），四个消费方（限速曲线任务 / `sys.*` 规则表达式 / WebUI 历史流量弹层 / WebUI 顶栏今日流量）**共享同一个由限速曲线任务发布的快照**（`_publish_traffic` 只在 `handle_speed_limit_curve` 里调用）。据此定出三层滞后：**L1 上游 TrafficMonitor ≤ ~30s**（master 源码 `//每隔30秒保存一次流量历史记录` + `SaveTodayOnly()` 增量保存，退出才全量）**、L2 本项目读侧 60s~600s（主因：`global_speed_limit_curve.interval` 缺省回退主 `interval`=60s，文档示例 10M；读文件/发布快照/写限速三者共用同一节拍）、L3 前端非瓶颈**。另记两个同源坑：TM 历史**按当前选中网卡分账不合并**、外部文件路径错则静默失效。调研三条技术路线：A 复用 qB 自身计数器（**项目已实现** = `traffic_sample_mod` v4 采样器，30s 采样 + 活尾 + 聚合分层 + 崩溃恢复，但 `QbTraffic.enabled` 默认 False）、B 操作系统网卡计数器（Windows IP Helper `GetIfTable2` / PDH / psutil / ETW，机器全局含非 qB 流量）、C 第三方工具 / 路由器 SNMP。可行性：**技术可行（高）但「独立进程」非最优**——四形态中方案 1（解耦「发布快照」与「写限速」节拍，改 `speed_curve_mod` 单模块、零新依赖）性价比最高；方案 3/4（复用 qb_traffic 采样器 + 数据源 provider 抽象）最一致；方案 2（游离小脚本写 TM 兼容文件）能跑但要重造日界/重置/崩溃恢复/单实例一整套已解难题。产出报告 `reports/26-10-13-1034`。**本轮零代码改动；全量测试全绿（数字只进基线切片，见 kb.baseline）**。**26-10-13-1047 实测复核**：用户给实测（TM 显示 40GB 下载 / auto-qb 顶栏 ↓ 显示 31GB，差 9GB）并质疑「按 config.yml interval=60s、最多 90s」解释不了 —— 回查生产 `config.yml` 确认曲线任务节拍是 `global_speed_limit_curve.interval: 10M`（`config.yml:90-91`；`config.yml:17` 的 `interval: 60S` 是主循环内置任务间隔、不适用）⇒ 滞后 ≈ 10.5 分钟，9 GiB ÷ 630s ≈ 15 MB/s，差值全额解释；另据 TM 源码确认 dat 字段序 `<上传>/<下载>`，链路无 up/down 互换（用户确认看的是 ↓）。报告 §1/§3.2 已补实测复核与「自查三步」。
-**Refs:** memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html,memory-bank/activeContext/26-10-13-1037-global-traffic-source.md
-
+**Refs:** memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html
 ## 原始请求
 
 > traffic monitor全局流量来源信息滞后, 调研成熟解决方案, 分析自写独立监视全局流量小工具可行性, 写一个报告

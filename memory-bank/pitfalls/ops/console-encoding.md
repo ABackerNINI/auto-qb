@@ -1,7 +1,7 @@
 # 管道下按错的编码出/解中文 = 乱码但静默(子进程 + 引擎自身)
 
 > 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。再一变体(2026-10-02): AI 工具壳大输出落盘预览在截断点切进多字节字符时整段按 GBK 重解 —— 数据无损, 读落盘日志即真值。
-> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出, netstat, 表头本地化, 解析恒 0, 探针假 0, 外部命令表头, 测量脚本零值自检
+> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出, netstat, 表头本地化, 解析恒 0, 探针假 0, 外部命令表头, 测量脚本零值自检, 重定向, UTF-16, Out-File, cmd 转发, FF FE
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
@@ -79,6 +79,19 @@
 - **判别**: ①落盘日志逐字节完好(`iconv -f UTF-8 -t UTF-8` 整文件校验通过) ⇒ 数据无损, 坏的只是预览解码; ②同会话对照探针: 正文连续 ASCII(截断点必落单字节)预览完好, 含中文且截断点切进汉字(kb.active 在 30,000 字节附近「的」= e7 9a ae 横跨截断区)预览全乱; ③工具源码定案: 解码函数 kme 对「干净且完整 UTF-8」按 UTF-8 解, 否则整段按 legacy(本机 GBK)重解 —— 截断留下的不完整序列尾巴就是触发器。注意显示口径: 工具报的 KB 数按 1024 进制, 30,343 字节显示 29.7KB 仍会落盘, 判定只认字节。
 - **处置**: ①预览乱不丢数据 —— 直接 Read 落盘的 `*-stdout.log` 即原文; ②要内联可读就把输出压到 30,000 字节以内(≈9,900 汉字); ③天然大输出的命令(kb.active 类)加截断/精简, 或接受落盘读文件; ④引擎/工具侧无可修也不许回退(同上节口径); 后台任务 persistOutput=always 与大小无关必落盘。
   ③已落地(2026-10-02 当日): `gen_active_recent.py`(kb.active)默认按 20,000 字节预算取最近 K 条, 总数/待归档/省略数进页脚, `--all` / `-n N` 逃生 —— 守阵 `tests/test_memory_bank.py::test_kb_active_render_respects_byte_budget`。同族大输出命令若再中招, 照此模式办。
+
+## 重定向变体: PowerShell 5.1 `>` 落盘 = UTF-16LE, UTF-8 读方直接当二进制拒收(2026-10-19 补)
+
+- **触发**: 在 AI 工具壳(Windows PowerShell 5.1)里把大输出重定向到文件再读, 实测 `python map.py 1> out.txt 2> err.txt` ——
+  想绕 30KB 内联上限落盘排障(同上节动机)。
+- **判别**: UTF-8 读方报「binary file」/ 读出乱码成对 NUL 字节; `Format-Hex out.txt` 首字节 `FF FE`(BOM)
+  且 ASCII 段每字节跟一个 `00` —— PS 5.1 的 `>` 重定向默认按 **Unicode(UTF-16LE)** 编码, 与控制台码页无关。
+  数据无损: `Get-Content -Encoding Unicode` 能读对, 坏的是「假设落盘 = UTF-8」的消费方。
+- **处置**: ① 要拿**原样字节**落盘, 绕开 PS 重定向层: `cmd /c 'python x.py > out.txt 2> err.txt'`(cmd 重定向是字节级透传,
+  配合脚本内 `reconfigure(encoding="utf-8")` 即得 UTF-8 文件); ② 或 PS 侧 `| Out-File -Encoding utf8`
+  (PS5.1 仍带 BOM, 严格按字节的读方仍会挑剃); ③ 已产生的 UTF-16 文件不必重跑, `Get-Content -Encoding Unicode`
+  转读即可。与捕获族(上两节)合起来的口径: **PS 5.1 的输出经过自己的哪一层(管道捕获 / 文件重定向)就按哪一层的默认编码改写,**
+  想要字节级原样就别让 PS 碰 —— cmd 转发或显式 `-Encoding`。
 
 ## 测量探针变体: 表头被本地化 + 解析器按英文字面匹配 ⇒ 读数静默为 0(2026-10-15 补)
 

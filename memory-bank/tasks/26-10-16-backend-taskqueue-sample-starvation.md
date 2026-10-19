@@ -6,8 +6,7 @@
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html」。走 issue 建议修法 #1(原文「最干净」, 用户拍板): `qb_traffic` 采样**从 `TaskQueue` 移出**, 改挂**时钟线钩子** `on_task_line`(任务线节拍, 每 `main_tick` 一次, **不受 `max_tasks_per_tick` 约束**)。依据 = 采样只读内存快照、**零 qB 请求**(模块 docstring 原有断言), 本就不该占「qB 请求预算面」的配额; 而队列只有 `next_run` 一个排序键, 重启/L2 重建补建的数百个立即到期任务会把它按严格升序挡在门外(实测 7/7 复现 37~55s 静默, 1.5s 档丢约 36 轮), 且静默被读侧摊配**伪装成正常速率平线**。落地面: 钩子只做到期闸门, 采样体 `handle_traffic_sample(dry_run)` 自持下一到期点 `_next_sample_at = now + effective`; 删全局任务注册 `_register_task` / `queue_rebuilt` 订阅 / `TASK_NAME` 常量; `_apply_interval` 去掉 `task` 参数与 `task.interval` 回写(节拍改由 `_next_sample_at` 表达); 启停与热重载改由采样体入口现读 `conf.enabled`(不再依赖队列重建相位)。**量化口径逐字不变**(`effective = ceil(sample_interval/main_tick)×main_tick`, 块头 `interval_s` 与读侧消费口径不受影响)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** taskqueue-periodic-starvation
 
-**Refs:** memory-bank/issues/26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html,memory-bank/activeContext/26-10-16-1051-taskqueue-sample-starvation.md,memory-bank/testing/baselines/26-10-16-1051-taskqueue-sample-starvation.md
-
+**Refs:** memory-bank/issues/26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html, memory-bank/testing/baselines/26-10-16-1051-taskqueue-sample-starvation.md
 ## 原始请求
 
 > 用户(2026-10-16): 「认领并修复 26-10-16-0954-bug-traffic-sample-starved-by-task-backlog.html」
