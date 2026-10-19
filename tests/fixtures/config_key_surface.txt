@@ -179,6 +179,7 @@ traffic_source.refresh_interval
 traffic_source.traffic_monitor
 traffic_source.traffic_monitor.dat_path
 web
+web.ctx_menu
 web.enabled
 web.host
 web.port

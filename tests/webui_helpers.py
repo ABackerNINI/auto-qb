@@ -36,7 +36,9 @@ def _make_web_manager(tmp_path, config_text):
         token="",
         skip_local_verify=False,
         # R2(计划 26-10-02-1955 W1): 测试侧默认开 —— gate 用例按需实例级置 False
-        skip_check_menu=True
+        skip_check_menu=True,
+        # ctx_menu(计划 26-10-20-0024 W1): None = 默认布局; flags 端点原样下发, 用例按需置布局
+        ctx_menu=None
     )
     config = SimpleNamespace(
         web=web_cfg,

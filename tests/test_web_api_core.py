@@ -30,11 +30,21 @@ def test_api_webui_flags_endpoint(web_env):
     assert client.get("/api/webui/flags", headers=auth).json() == {
         "skip_check_menu": True,
         "qb_traffic_enabled": False,  # FakeConfig 默认 qb_traffic=None(未启用)
+        "ctx_menu": None,  # FakeConfig 默认无布局(计划 26-10-20-0024 W1: None = 默认菜单)
     }
     mgr.config.web.skip_check_menu = False
     assert client.get("/api/webui/flags", headers=auth).json() == {
         "skip_check_menu": False,
         "qb_traffic_enabled": False,
+        "ctx_menu": None,
+    }
+    # ctx_menu 原样下发(实时配置): 置布局即回布局, 与 skip_check_menu 同口径现取现真
+    mgr.config.web.ctx_menu = {"group": {"order": ["resume", "sep:d1"], "hidden": ["export"]}}
+    assert client.get("/api/webui/flags", headers=auth).json()["ctx_menu"] == {
+        "group": {
+            "order": ["resume", "sep:d1"],
+            "hidden": ["export"]
+        }
     }
     _enable_qb_traffic(mgr, enabled=True)
     assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is True

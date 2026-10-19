@@ -54,6 +54,9 @@
 - test_config_schema_version_load_and_migrate_dispatch: schema_version 缺失=v1 加载成功; 非法/未来版本经迁移分派报 ConfigError(报清两个版本号)
 - test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
 - test_load_web_skip_check_menu_tristate: web.skip_check_menu 三态(显式 true / 显式 false / 缺省默认 false, 计划 26-10-02-1955 W1)
+- test_validate_web_ctx_menu_errors: web.ctx_menu 布局坏形状全类型报错(非字典/支级非字典/order·hidden 非字符串数组/sub 非字典/未知层键/sep token 格式错, 计划 26-10-20-0024 W1)
+- test_validate_web_ctx_menu_pass_shapes: web.ctx_menu 合法形态不报错(空字典/全层齐全/未知支名容忍)
+- test_load_web_ctx_menu_passthrough: web.ctx_menu 原样 dict 透传(合法形状回读逐位相等; 缺省 None = 默认布局)
 - test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 - test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path 等被改大写后须走未知键/默认分支)
@@ -1698,6 +1701,75 @@ def test_load_web_skip_check_menu_tristate():
         assert cfg.web.skip_check_menu is False
         cfg = load_config(_write_raw(td, base))
         assert cfg.web.skip_check_menu is False  # 缺省走保守默认(菜单不显示 + 端点拒绝)
+
+
+def test_validate_web_ctx_menu_errors():
+    """web.ctx_menu 布局坏形状(计划 26-10-20-0024 W1): 非字典 / 支级非字典 / order·hidden 非字符串数组 /
+    sub 非字典 / 未知层键 / sep token 格式错 —— 全部进 errors 不抛(保存 400 拦下, 不 500 不写坏盘)"""
+    errors = _errs({"web": {"ctx_menu": "not-dict"}})
+    assert any("config.web.ctx_menu: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": "not-dict"}}})
+    assert any("config.web.ctx_menu.group: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"order": "resume"}}}})
+    assert any("config.web.ctx_menu.group.order: 必须是字符串数组" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"hidden": [1, 2]}}}})
+    assert any("config.web.ctx_menu.group.hidden: 必须是字符串数组" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"sub": "x"}}}})
+    assert any("config.web.ctx_menu.group.sub: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"orders": ["a"]}}}})
+    assert any("config.web.ctx_menu.group: 未知键 'orders'" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"order": ["sep:d1", "sep-typo:d1", "resume"]}}}})
+    assert any("config.web.ctx_menu.group.order[1]" in e and "'sep:' 开头" in e for e in errors)
+
+
+def test_validate_web_ctx_menu_pass_shapes():
+    """web.ctx_menu 合法形态不报错(计划 26-10-20-0024 W1): 空字典 / 全层齐全 / 未知支名容忍(前端只读四支)"""
+    assert _errs({"web": {"ctx_menu": {}}}) == []
+    assert _errs({"web": {"ctx_menu": {"group": {}}}}) == []
+    assert _errs(
+        {
+            "web":
+                {
+                    "ctx_menu":
+                        {
+                            "member":
+                                {
+                                    "order": ["resume", "sep:d1", "sub-more"],
+                                    "hidden": [],
+                                    "sub": {
+                                        "order": ["queue-top"],
+                                        "hidden": []
+                                    }
+                                }
+                        }
+                }
+        }
+    ) == []
+    assert _errs({"web": {"ctx_menu": {"future-branch": {"order": ["x"]}}}}) == []  # 未知支名: 前端忽略, 不报错
+
+
+def test_load_web_ctx_menu_passthrough():
+    """web.ctx_menu 原样透传(计划 26-10-20-0024 W1): 合法形状过校验并回读; 缺省 None = 默认布局"""
+    base = "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"
+    text = base + (
+        "  web:\n    ctx_menu:\n      group:\n        order: [resume, \"sep:d1\", delete]\n"
+        "        hidden: [export]\n        sub:\n          order: [queue-top]\n          hidden: []\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, text))
+        assert cfg.web.ctx_menu == {
+            "group":
+                {
+                    "order": ["resume", "sep:d1", "delete"],
+                    "hidden": ["export"],
+                    "sub": {
+                        "order": ["queue-top"],
+                        "hidden": []
+                    }
+                }
+        }
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.web.ctx_menu is None  # 缺省 = 四支默认布局(与静态模板逐位一致)
 
 
 def test_validate_tracker_rules_non_list_skips_refs():

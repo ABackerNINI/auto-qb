@@ -10,6 +10,7 @@
 - test_write_tree_updates_existing_scalar: 修改已有键 -> 按项目风格写出(数字/布尔无引号)
 - test_write_tree_adds_and_removes_keys: 新增键写入/缺失键移除
 - test_write_tree_removes_empty_list: 列表被清空后键移除
+- test_write_tree_ctx_menu_nested_round_trip: web.ctx_menu 嵌套布局(四支 × 两层 × 列表)round-trip 写盘后逐位读回, 且读树-写树二轮稳定(计划 26-10-20-0024 W1)
 - test_write_tree_restart_field_fallback: R 级字段回退为磁盘旧值并回报 restart_required
 - test_write_tree_restart_field_removed_when_absent_on_disk: 磁盘未配置的 R 级字段提交后被删除(走默认值)
 - test_write_tree_readonly_section_fallback: readonly 段(fs, issue 26-09-28-2135)提交改值回退为磁盘旧值(schema 键面写盘防线)
@@ -225,6 +226,44 @@ def test_write_tree_removes_empty_list(tmp_path):
     text = _text(path)
     assert '"A"' not in text and "- A" not in text
     assert load_config(path).delete_tags == []
+
+
+def test_write_tree_ctx_menu_nested_round_trip(tmp_path):
+    """web.ctx_menu 嵌套布局(计划 26-10-20-0024 W1): 四支 × 两层 × 列表经 round-trip 写盘后
+    逐位读回 —— 定制块整对象写进 cfg.tree.web.ctx_menu, 保存路径必须原样落盘不夹瘪"""
+    layout = {
+        "group":
+            {
+                "order": ["resume", "sep:d1", "delete"],
+                "hidden": ["export"],
+                "sub": {
+                    "order": ["queue-top"],
+                    "hidden": []
+                }
+            },
+        "member": {
+            "order": ["resume", "sub-more"],
+            "hidden": [],
+            "sub": {
+                "order": ["super-seeding"],
+                "hidden": []
+            }
+        },
+    }
+    path = _make(tmp_path, BASE + "  web:\n    enabled: true\n")
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["web"]["ctx_menu"] = copy.deepcopy(layout)
+    write_tree(path, tree, old, _bak(tmp_path))
+
+    text = _text(path)
+    assert "ctx_menu" in text and "sep:d1" in text
+    loaded = load_config(path)
+    assert loaded.web.ctx_menu == layout
+    # 再经读树-写树一轮(前端 PUT 语义): 仍逐位稳定
+    tree2 = read_tree(path)
+    write_tree(path, tree2, loaded, _bak(tmp_path))
+    assert load_config(path).web.ctx_menu == layout
 
 
 # ---------------------------------------------------------------- R 级字段

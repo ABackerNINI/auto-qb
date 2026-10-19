@@ -51,7 +51,7 @@ KNOWN_RELOCATE_KEYS = {
     "low_space_warn",
 }
 
-KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu"}
+KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
@@ -754,6 +754,54 @@ def _validate_traffic_source(spec, errors: List[str]) -> None:
             errors.append(f"{where}.traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径")
 
 
+#: web.ctx_menu 布局层合法键(计划 26-10-20-0024): order/hidden 每层都有, sub 仅支级层有
+_CTX_LAYER_KEYS = {"order", "hidden"}
+_CTX_BRANCH_KEYS = {"order", "hidden", "sub"}
+
+
+def _validate_ctx_menu_layer(layer: dict, where: str, errors: List[str], legal_keys: set) -> None:
+    """一层布局(支级或次级)的形状: 键集合受约束 + order/hidden 为字符串数组 + sep token 格式
+
+    只查结构不查内容: 项 id 是否存在于菜单注册表由前端裁度(未知 id 补尾/忽略, 换版本不丢布局)。
+    """
+    for key in sorted(set(layer) - legal_keys):
+        errors.append(f"{where}: 未知键 '{key}'(合法键: {', '.join(sorted(legal_keys))})")
+    for key in ("order", "hidden"):
+        if key not in layer:
+            continue
+        value = layer[key]
+        if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+            errors.append(f"{where}.{key}: 必须是字符串数组")
+            continue
+        if key == "order":
+            for i, token in enumerate(value):
+                if ":" in token and not token.startswith("sep:"):
+                    errors.append(f"{where}.order[{i}]: 分隔线 token 须以 'sep:' 开头: '{token}'")
+
+
+def _validate_ctx_menu(spec, where: str, errors: List[str]) -> None:
+    """web.ctx_menu(右键菜单用户布局, 计划 26-10-20-0024): 支名字典 -> 每支一层布局 + 可选次级
+
+    宽松口径: 未知支名不报错(前端只读四支, 多余的忽略); 坏形状(非字典 / 非数组 / 未知层键 /
+    token 格式错)报错进 errors 不抛 —— 保存被 400 拦下, 不写坏盘也不 500。
+    """
+    if not isinstance(spec, dict):
+        errors.append(f"{where}: 必须是字典")
+        return
+    for branch, layout in spec.items():
+        b_where = f"{where}.{branch}"
+        if not isinstance(layout, dict):
+            errors.append(f"{b_where}: 必须是字典")
+            continue
+        _validate_ctx_menu_layer(layout, b_where, errors, _CTX_BRANCH_KEYS)
+        if "sub" in layout:
+            sub = layout["sub"]
+            if not isinstance(sub, dict):
+                errors.append(f"{b_where}.sub: 必须是字典")
+            else:
+                _validate_ctx_menu_layer(sub, f"{b_where}.sub", errors, _CTX_LAYER_KEYS)
+
+
 def _validate_web(spec, errors: List[str]) -> None:
     """校验 config.web 段(仅本机默认; token 留空 = 随机生成)"""
     if spec is None:
@@ -775,6 +823,8 @@ def _validate_web(spec, errors: List[str]) -> None:
         _try(parse_bool, spec["skip_local_verify"], "config.web.skip_local_verify", errors)
     if "skip_check_menu" in spec:
         _try(parse_bool, spec["skip_check_menu"], "config.web.skip_check_menu", errors)
+    if "ctx_menu" in spec:
+        _validate_ctx_menu(spec["ctx_menu"], "config.web.ctx_menu", errors)
 
 
 def _validate_notify(spec, errors: List[str]) -> None:

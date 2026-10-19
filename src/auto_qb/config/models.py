@@ -6,7 +6,7 @@
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 DEFAULT_CONFIG_FILE = "config.yml"
 UNLIMITED_SPEED = "0KiB/s"
@@ -236,6 +236,10 @@ class WebConfig:
     host 对外暴露时远端请求仍强制鉴权; 保守默认关闭(开启弱化本机安全边界)
     skip_check_menu: 右键菜单显示跳检(同时控制单选与多选菜单项显示及 web 端点放行);
     保守默认关闭(fail-closed: 菜单不显示 + web 端点拒绝), rule 源跳检不受影响
+    ctx_menu: 行右键菜单四支(单组/单种子/整集整剧/多选批量)的用户布局(计划 26-10-20-0024);
+    结构 = {支名: {order: [项 id | "sep:分隔线 token"], hidden: [隐藏项 id], sub: {order: [...], hidden: [...]}}};
+    缺省 None = 四支全用默认布局(与静态模板逐位一致, 不写配置零漂移); 原样 dict 透传
+    (宽松: 形状由校验层把关, 项 id 语义由前端注册表解释, 未知 id 前端补尾/忽略)
     """
     enabled: bool = False
     host: str = "127.0.0.1"
@@ -243,6 +247,7 @@ class WebConfig:
     token: str = ""
     skip_local_verify: bool = False
     skip_check_menu: bool = False
+    ctx_menu: Optional[Dict[str, Any]] = None
 
 
 @dataclass

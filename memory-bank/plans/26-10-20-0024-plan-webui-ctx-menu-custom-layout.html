@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-ctx-menu-custom-layout">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-20-0024">
-<meta name="doc-updated" content="26-10-20-0047">
+<meta name="doc-updated" content="26-10-20-0105">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划</h1>
 <p class="lede">行右键菜单四支(单组/单种子/整集整剧/多选批量)从<strong>静态模板直写</strong>改为<strong>注册表单点 + 布局数据驱动</strong>：每支可重排、可显隐、可把项移入/移出「更多操作」次级、分隔线可拖可删; 布局存 <code>config.yml</code> 的 <code>web.ctx_menu</code>(与跳检开关同一配置通道), 在设置页新卡「WebUI」里定制, 保存后当前标签热应用、其它标签刷新生效。默认布局与今天逐位一致 —— 不写配置时行为零漂移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0047 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0105 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「WEBUI添加右键菜单自定义重排功能, grilling」(26-10-19 晚 ~ 26-10-20 00:20) → 只读收敛轮三轮 12 问全部拍板(§06 D1–D12) + 代码取证(<code>ctx-menus.html</code> 四支项集 / <code>columns.js</code> 列双轨 / flags 通道 / 设置页 keys 客户端块先例)
 </div>
 
@@ -260,7 +260,7 @@ const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今
     <tr>
       <td><b>W4</b><br>设置页定制块</td>
       <td>新卡「WebUI」+ 定制 UI(显隐/↑↓/拖拽/跨层/分隔线/恢复默认)+ 跳检开关迁入; 老 web 块命名保持「WebUI」不变(D13, 零改动)</td>
-      <td><code>config_hub.js</code> / <code>tpl/settings-detail.html</code> / <code>console_hub.css</code> / <code>schema/groups.py</code>(label+hidden)</td>
+      <td><code>config_hub.js</code> / <code>tpl/settings-detail.html</code> / <code>console_hub.css</code> / <code>schema/groups.py</code>(skip_check_menu hidden)</td>
       <td>手工全流程: 改布局 → 全局保存 → <b>当前标签菜单热应用</b> → F5 后仍在; 其它标签刷新生效; 跳检开关开/关仍 fail-closed(菜单 + 端点 403); 离开分区未保存有守卫</td>
     </tr>
     <tr>
@@ -339,6 +339,7 @@ const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今
   <li><span class="tag">R0 · 26-10-20-0024</span> 初版: 用户指令「WEBUI 右键菜单自定义重排」+ grilling 三轮 12 问全部拍板(D1–D12); 代码取证四支项集(39 一级项 + 11 线 + 次级 11 项 2 线)、列双轨先例、flags 通道、设置页 keys 客户端块先例; 定稿「注册表单点 → 布局数据 → 模板消费」主线与 W1–W6 分期。</li>
   <li><span class="tag">R1 · 26-10-20-0042</span> D13 拍板: 老 web 块命名保持「WebUI」不改(用户 26-10-20 00:40); §03.5 落点说明同步(零改动), §05 Q4 移除并顺延, §06 D9 引用更新</li>
   <li><span class="tag">R2 · 26-10-20-0047</span> D14-D17 拍板: 落地细节四项按默认推荐全部闭合(用户 26-10-20 01:00「拍板项按推荐」); §05 转为已闭说明, §06 增补 D14-D17; 全文决策点闭合, 进入实施</li>
+  <li><span class="tag">R3 · 26-10-20-0105</span> W1 落地记录: <code>ctx_menu</code> 进 config 四件套(models/loaders/validation/schema hidden)+ <code>/api/webui/flags</code> 原样下发; 键面基线 181→182(<code>test.keys-update</code> 重生) + keys.md 回写 + loader 探针 + hidden 声明面守卫扩为 channels + ctx_menu 两处 + object 子字段守卫加 hidden 豁免(理由: 结构归客户端块, 摘子字段会把每支数据键假报进键面); <b>偏差</b>: <code>skip_check_menu</code> 的 hidden 按 W4 落(随新卡), 不在 W1 打 —— 分期原则「任一波停下都不破坏现状」, 避免 W1→W4 之间该开关在设置页消失; §04 W4 落点同步(label+hidden → skip_check_menu hidden)</li>
 </ul>
 
 </div>

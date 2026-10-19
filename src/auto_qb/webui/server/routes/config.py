@@ -43,10 +43,14 @@ def build_router(ctx: WebContext) -> APIRouter:
         enabled=false(含 qb_traffic 段缺省 None)时前端入口不渲染不请求(P5 验收);
         段缺省 None 与 enabled=false 同判(对齐 traffic_qb._feature_on 的未启用口径,
         data_dir 防御不在此判: 数据缺失由三端点空态兜底, 入口可见无碍)。
+
+        ctx_menu(计划 26-10-20-0024 W1): 行右键菜单四支的用户布局原样下发; None(缺省)=
+        前端用默认布局(与静态模板逐位一致)。fail-closed: 前端拉取失败回落 null = 默认布局。
         """
         return {
             "skip_check_menu": bool(manager.config.web.skip_check_menu),
             "qb_traffic_enabled": bool(manager.config.qb_traffic and manager.config.qb_traffic.enabled),
+            "ctx_menu": manager.config.web.ctx_menu,
         }
 
     @router.post("/api/expr/eval")

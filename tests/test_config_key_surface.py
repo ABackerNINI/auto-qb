@@ -284,6 +284,33 @@ _LOADER_PROBES = {
     "web.token": ("probe-token", "probe-token"),
     "web.skip_local_verify": ("true", True),
     "web.skip_check_menu": ("true", True),
+    # web.ctx_menu(计划 26-10-20-0024 W1): 原样 dict 透传 —— 探针值即合法形状(校验层只查结构),
+    # 回读必须逐位相等(loader 不解析内容, 项 id 语义归前端注册表)
+    "web.ctx_menu":
+        (
+            {
+                "group":
+                    {
+                        "order": ["resume", "sep:d1"],
+                        "hidden": ["export"],
+                        "sub": {
+                            "order": ["queue-top"],
+                            "hidden": []
+                        }
+                    }
+            },
+            {
+                "group":
+                    {
+                        "order": ["resume", "sep:d1"],
+                        "hidden": ["export"],
+                        "sub": {
+                            "order": ["queue-top"],
+                            "hidden": []
+                        }
+                    }
+            },
+        ),
     # notify 段(channels 豁免, 见 _LOADER_PROBE_EXCLUDED)
     "notify.enabled": ("true", True),
     "notify.min_level": ("WARNING", "WARNING"),

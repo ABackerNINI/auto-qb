@@ -114,6 +114,9 @@ def load_web_config(spec: dict) -> WebConfig:
         token=_get(spec, "token", d.token),
         skip_local_verify=_get(spec, "skip_local_verify", d.skip_local_verify, parse_bool),
         skip_check_menu=_get(spec, "skip_check_menu", d.skip_check_menu, parse_bool),
+        # ctx_menu 原样 dict 透传(计划 26-10-20-0024 W1): 形状由校验层把关, 项 id 语义由前端
+        # 注册表解释(未知 id 前端补尾/忽略) —— loader 不解析内容, 换版本不丢布局
+        ctx_menu=_get(spec, "ctx_menu", d.ctx_menu),
     )
 
 
