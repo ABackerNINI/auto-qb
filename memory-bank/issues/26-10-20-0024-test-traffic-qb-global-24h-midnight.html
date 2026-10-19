@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-0024">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="test-flaky-time">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-test-traffic-qb-24h-midnight.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败">
 <meta name="issue-summary" content="test_web_traffic_qb 24h 端点面用例在本地 00:00-00:10 内跑必红: base 桶落到前一日, 跨日长洞前提破裂, 判 0 而非 null">
 <title>跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-0024-test-traffic-qb-global-24h-midnight</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 00:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -178,17 +178,27 @@ tests\test_web_traffic_qb.py:607: AssertionError
       <li><b>方案 B（照搬先例）：全套钉钟</b>。照 <code>tests/test_traffic_limits.py</code> 的 <code>_anchored_ts()</code> 把 :589 的 <code>now</code> 也钉到当日正午。⚠️ 本用例与那条保留真钟的 <code>test_api_payload_limits_shape_and_same_source</code> 同款耦合：<code>/api/traffic/qb/global</code> 的 24h 窗由<b>服务端按真实 now 收边</b>，只挪用例侧的 now 会让「用例算的 involved」与「服务端算的窗」分家 —— 选 B 就必须同时把服务端取时符号也钉上（monkeypatch），或让端点接受显式 window 起止。代价明显大于 A。</li>
     </ul>
     <p>无论走哪条，都请补一道<b>守阵</b>：把假钟 00:05 这档工况钉成常驻用例（沿用 26-10-19-0013 的假钟手法），否则下次还得靠"恰好在 00:0x 跑全量"才撞得见。红验方式同上：临时改回 <code>now - 600</code> → 该守阵必红。</p>
+    <p><b>实际修法（2026-10-20 00:4x，用户指派「认领修复」）—— 按方案 A 走，且 A/B 的门槛差异比我入池时写的要小</b>：</p>
+    <ul>
+      <li>只动 base 的构造：<code>base = ((now - 600) // 30) * 30</code> → <code>base = v4_day_epoch(now)</code>（本地当日 00:00，30 对齐）。<code>now</code> 留在真钟，<code>involved</code> / <code>dat_opens</code> / 服务端 24h 收边全照旧 —— base 必在窗内（窗尾是 now，当日总在窗里）且恒落 involved 末日，跨日长洞前提恒成立。选 A 而非 B 的理由不是门槛，是<b>改动面应该等于破面</b>：破的只有 base 落在哪一天这一件事。</li>
+      <li>订正 B 的门槛：服务端 <code>_grid</code>（<code>traffic_qb.py:133</code>）与用例<b>同读 <code>time.time()</code></b>，钉一次双边生效，我在 §06 里担心的「两侧分家」不成立 —— 那条顾虑作废，但修法仍按 A 走。钉的时候要先取一次真值算当日 00:00，别在 lambda 里再取（否则自指）。</li>
+      <li>守阵：<code>@pytest.mark.parametrize("frozen_offset", [None, _FIRST_10MIN_OFFSET])</code> 两档 —— 真钟 + 假钟本地 00:05，把那 10 分钟永久钉在门禁上。红验形状是<b>反向</b>的：改回旧写法后<b>假钟档红、真钟档（当时 00:3x 在窗口外）仍绿</b> —— 钉的是窗口本身，不是当时的钟点。</li>
+      <li>邻域证伪：假钟 00:05 下 traffic 全家族 14 个文件 <b>281 passed</b>，本文件 19 passed，无第二条同病（<code>:751</code> 那条同款 <code>((now-600)//30)*30</code> 不依赖跨日长洞前提，不在此列）。</li>
+    </ul>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 00:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-20 00:33 — 用户指派「认领修复」，置 <strong>In Progress</strong>（认领方：任务档案 <code>26-10-20-test-traffic-qb-24h-midnight</code>）</li>
+      <li>2026-10-20 00:47 — base 改 <code>v4_day_epoch(now)</code> + 假钟 00:05 档参数化；红验、邻域证伪、全量均过，置 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
     <p>复验（2026-10-20 00:2x）：入池时本机已在 00:2x，原始锚点（真实 00:00-00:10）不可复现 —— 改用<b>构造复现</b>：临时探针把 <code>time.time</code> 钉在假墙钟上复跑原用例，00:03 / 00:05 两档均复现 <code>AssertionError: assert {...'dl': 0, 'up': 0} == {...'dl': None, 'up': None}</code>（:607），假钟 12:00 与真钟 00:21 下同一条全绿。结论：<b>在假钟下仍复现</b>，与 §01/§02 证据同形。</p>
     <h3>修复后补充</h3>
-    <p>未修。本件于 2026-10-20 00:24 由 WEBUI 首行光标虚线那轮收尾时撞见、按范围守恒当场不改（该轮只动前端 CSS），按「入池不改码」立此单。与 26-10-19-0013 同 <code>doc-topic: test-flaky-time</code>，认领时建议连着那条一起看：两条合起来把 00:00 前后约 11 分钟都盖住了，修法应同源（时间轴不取真钟）。</p>
+    <p>已修（2026-10-20 00:4x）。实际修法 / 红验 / 邻域证伪见 §06，测试数字见 <code>commands run kb.baseline</code> 最新切片（裸数字只写基线一处）。未采纳方案 B（全套钉钟）——见 §06 的取舍说明。生产代码<b>零改动</b>，与建议修法 A 一致，故无改道说明。</p>
+    <p>本件于 2026-10-20 00:24 由 WEBUI 首行光标虚线那轮收尾时撞见、按范围守恒当场不改（该轮只动前端 CSS），次日 00:33 用户指派认领后修完。与 26-10-19-0013 同 <code>doc-topic: test-flaky-time</code>：两条合起来把 00:00 前后约 11 分钟都盖住了，同属坑档 <code>pitfalls/testing/flaky-midnight-daycount.md</code>（该档已按本次补上「必须留真钟的那类窗口用例 → 锚 base 不锚 now」这条分支与复发记录）。</p>
   </section>
 
   <footer>

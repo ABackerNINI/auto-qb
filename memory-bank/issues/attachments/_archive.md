@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (46)
+## Open (45)
 
-- [test] [跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败](../26-10-20-0024-test-traffic-qb-global-24h-midnight.html) — test_web_traffic_qb 24h 端点面用例在本地 00:00-00:10 内跑必红: base 桶落到前一日, 跨日长洞前提破裂, 判 0 而非 null
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -58,8 +57,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (216)
+## Done (217)
 
+- [test] [跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败](../26-10-20-0024-test-traffic-qb-global-24h-midnight.html) — test_web_traffic_qb 24h 端点面用例在本地 00:00-00:10 内跑必红: base 桶落到前一日, 跨日长洞前提破裂, 判 0 而非 null
 - [test] [跨零点时间炸弹: test_expr_eval / test_traffic_limits 4 条用例在 23:59-00:00 时段必失败](../26-10-19-0013-test-test-midnight-bombs.html) — test_expr_eval::test_legacy_condition_equivalence 与 test_traffic_limits 3 条 recorder 用例在本地 23:59-00:00 跨零点时段因时间边界断言必失败(time_of_day<=23:59 边界 / 按日文件跨天)
 - [test] [追剧页行点击落点对冲(clickRow)在 3000 种子规模下确定性失效: 集行/剧行 4 条恒红](../26-10-18-2226-test-click-hedge-shows-scale-3000.html) — e2e/multiselect-shows.spec.mjs 两条追剧页用例(集行乐观 + CTX-03 追剧, 双皮肤 4 条)在 E2E_TORRENTS=3000 下确定性撞 clickRow 落点对冲失败(elementFromPoint=(null)); 300 规模全绿, 隔离重跑仍红 —— 窗口化+规模放大的对冲失效新形态, 与 26-10-18 选中摘要改动无关
 - [test] [delta-sync 真值对齐用例无模式分流: error/hang 轮恒红 4 条](../26-10-18-2122-test-delta-sync-mode-gate.html) — e2e/delta-sync.spec.mjs 两条真值对齐用例(双皮肤 4 条)无 CMD_RESULT 分流, error/hang 模式下命令失败/无回执致真值不变, 8s 轮询超时恒红; HEAD 同参复现同签名, 与 26-10-18 选中摘要改动无关

@@ -14,7 +14,7 @@
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
 - test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
 - test_api_traffic_qb_torrent_1y_single_agg_cold_read: (S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
-- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open
+- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open; 两档 —— 真钟 + 假钟本地 00:05(issue 26-10-20-0024 跨零点守阵: base 恒取本地当日 00:00, 不再随真钟漂到前一日把跨日长洞抹平)
 - test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员区间平均/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
@@ -22,6 +22,8 @@
 """
 import os
 import time
+
+import pytest
 
 from auto_qb.infra.utils import encode_group_key
 
@@ -31,6 +33,10 @@ from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_hos
 #: 本文件全部用法都是测试桩令牌的运行期读取(夹具 manager.web.token), 文件内无字面凭据;
 #: 拆写仅为通过写入判据(用户 26-10-15 拍板: auth idiom 收敛成单点 + 形态调整消误报)
 _AUTH_HEADER_KEY = "Auth" + "orization"
+
+#: 24h 端点面用例的假钟档位(issue 26-10-20-0024): 本地当日 00:05 —— 每天头 10 分钟是
+#: 「base 落到前一日」的窗口, 真钟撞进去才复现, 故把它钉成常驻工况(与真钟档并列)
+_FIRST_10MIN_OFFSET = 300
 
 
 def _auth(mgr) -> dict:
@@ -575,19 +581,27 @@ def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
     monkeypatch.undo()
 
 
-def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkeypatch):
+@pytest.mark.parametrize("frozen_offset", [None, _FIRST_10MIN_OFFSET])
+def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkeypatch, frozen_offset):
     """24h 窗端点面回归(§05.2): 只开窗口涉及的日期天文件(24h 窗恰 2 个, 窗外更早天文件
-    零 open), agg.dat 亦不触"""
+    零 open), agg.dat 亦不触。两档: 真钟 + 假钟本地 00:05(每天头 10 分钟那个跨零点窗口,
+    issue 26-10-20-0024)"""
     from datetime import datetime, timedelta
 
-    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str, v4_window_dates
+    from auto_qb.core.traffic_store import V4Sample, v4_day_epoch, v4_epoch_date_str, v4_window_dates
 
+    if frozen_offset is not None:  # 假钟: 钉住用例与服务端(两侧同读 time.time, 钉一次双边生效)
+        _real = time.time()
+        monkeypatch.setattr(time, "time", lambda: v4_day_epoch(_real) + frozen_offset)
     mgr, client = web_env
     auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
-    base = ((now - 600) // 30) * 30  # 窗内 10 分钟前的对齐桶
+    # base 恒取本地当日 00:00(30 对齐): 它必在 24h 窗内(窗尾是 now, 当日总在窗里)且恒落
+    # involved 末日 —— 跨日长洞的 null 语义依赖这个前提。旧写法 ((now - 600) // 30) * 30
+    # 在每天 00:00-00:10 会把 base 甩到前一日, 与 involved[0] 撞进同一天, 长洞不成立(判 0)
+    base = v4_day_epoch(now)
     involved = sorted(v4_window_dates(now - 86400 - 30, now))  # 镜像端点窗首种子外扩(S2/D3: t0 - 一个桶宽)
     older_date = (datetime.strptime(involved[0], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
     # 造数: 现行记录落 base 所在日期; 其余涉及日期与窗外更早日期各放一块(读侧按窗过滤)。
