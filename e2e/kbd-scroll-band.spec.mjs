@@ -164,6 +164,30 @@ for (const skin of SKINS) {
         top.cur.top,
         `首行顶缘被吸顶列头盖住 ${top.head.bottom - top.cur.top}px(列头 bottom=${top.head.bottom}, 行 top=${top.cur.top}, 行高 ${top.cur.h})`,
       ).toBeGreaterThanOrEqual(top.head.bottom - 1);
+
+      /* --- 首行的光标虚线不得顶着列头(2026-10-19 用户报「3 个主表的第一个种子键盘锚点虚线上
+       * 边缘被遮挡」) ---
+       * 行与行之间有 gap, 唯独首行紧贴列头(0 间隙): 光标虚线 1px 恰好画在行盒最外 1px, 列头底边
+       * 连它的 --shadow-1 投影正压在这道边缘上 —— 四边里只有上边看着被削掉。判据 = 三视图各自
+       * Home 到首行后, 首行顶与列头底之间至少留 4px 呼吸位(实测皮肤 5/6px, 取 4 留取整余量)。
+       * 红验: 去掉 `.torrents-dock > .group-table { padding-top }` → 三视图间隙归 0, 本条转红。 */
+      const readFirstGap = () =>
+        page.evaluate(() => {
+          const cur = document.querySelector('.group-row.kb-cursor');
+          const head = document.querySelector('.group-head');
+          if (!cur || !head) return null;
+          return +(cur.getBoundingClientRect().top - head.getBoundingClientRect().bottom).toFixed(1);
+        });
+
+      for (const view of ['groups', 'torrents', 'shows']) {
+        await page.click(`nav.tabs [data-view="${view}"]`);
+        await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 15_000 });
+        await page.keyboard.press('Home');
+        await settleScroll(page);
+        const gap = await readFirstGap();
+        expect(gap, `${view}: 首行光标虚线上边缘顶着列头(间隙 ${gap}px, 应 >= 4px)`).not.toBeNull();
+        expect(gap, `${view}: 首行光标虚线上边缘顶着列头(间隙 ${gap}px, 应 >= 4px)`).toBeGreaterThanOrEqual(4);
+      }
     });
 
     test(`PageUp / PageDown 一屏不超过屏内可见行数(不跳行; 面板开着同样) @fast (${skin})`, async ({ page }) => {

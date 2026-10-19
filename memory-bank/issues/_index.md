@@ -22,7 +22,7 @@
 | bug | 6 |
 | perf | 5 |
 | docs | 1 |
-| test | 1 |
+| test | 2 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败](26-10-20-0024-test-traffic-qb-global-24h-midnight.html) — test_web_tra…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…
 - [feat] [种子详情内容页签「重命名…」入口缺失](26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容…
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-…

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="traffic-qb-global-24h-midnight">
+<meta name="issue-stamp" content="26-10-20-0024">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="test-flaky-time">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败">
+<meta name="issue-summary" content="test_web_traffic_qb 24h 端点面用例在本地 00:00-00:10 内跑必红: base 桶落到前一日, 跨日长洞前提破裂, 判 0 而非 null">
+<title>跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>跨零点时间炸弹(第二组): test_api_traffic_qb_global_24h_... 在 00:00-00:10 时段必失败</h1>
+    <p class="lede">test_web_traffic_qb 24h 端点面用例在本地 00:00-00:10 内跑必红: base 桶落到前一日, 跨日长洞前提破裂, 判 0 而非 null</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-0024-test-traffic-qb-global-24h-midnight</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 00:24</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-10-20 00:08 为本轮 WEBUI 前端改动(三主表首行光标虚线让位)收尾跑 <code>commands run test.full</code>, 结果 <code>3755 passed + 1 failed + 10 skipped</code>, 唯一的红是 <code>tests/test_web_traffic_qb.py::test_api_traffic_qb_global_24h_reads_only_involved_day_files</code> —— 与该轮改动(纯 webui 静态 CSS)零交集。00:10 之后再跑该用例即转绿, 00:18 起的 <code>test.full</code> 全绿(3756 passed)。判定为<b>第二组跨零点时间炸弹</b>: 与 <a href="26-10-19-0013-test-test-midnight-bombs.html">26-10-19-0013</a> 同族(同一 <code>doc-topic: test-flaky-time</code>), 但落在不同的用例与不同的时段(那条是 23:59-00:00 的 1 分钟窗口, 本条是 00:00-00:10 的 10 分钟窗口), 且那组已于 10-19 修完, 故单独立池。</p>
+    <p>原始时刻(00:0x)已不可复现, 取证改用<b>构造复现</b>: 把 <code>time.time</code> 钉在假墙钟上复跑该用例 —— 00:03 / 00:05 两档必红, 12:00 与真钟 00:21 均绿。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-10-20 00:08, 本轮前端改动收尾的 test.full 输出(节选)
+FAILED tests/test_web_traffic_qb.py::test_api_traffic_qb_global_24h_reads_only_involved_day_files
+3755 passed, 1 failed, 10 skipped          # 00:10 后单独复跑该用例 -&gt; 绿; 00:18 起全量 3756 passed
+
+# 取证 2026-10-20 00:2x, 构造复现: 临时探针 monkeypatch time.time 到假墙钟后复跑该用例
+#   (临时文件 tests/test_zz_tmp_midnight_probe.py, 取证后已删; 生产与测试源码零改动)
+### 假钟 2026-10-20 00:03 (epoch 1792425780) / 00:05 (epoch 1792425900) —— 两者同形
+&gt;       assert next(p for p in body["points"] if p and p["t"] == base) == {
+E       AssertionError: assert {'t': 1792425...': 0, 'up': 0} == {'t': 1792425...e, 'up': None}
+tests\test_web_traffic_qb.py:607: AssertionError
+============================== 2 failed in 10.66s ==============================
+
+### 假钟 2026-10-20 12:00 (epoch 1792468800)  —— 绿
+============================== 2 passed in 7.80s ==============================
+### 真钟 2026-10-20 00:21 (窗口外)            —— 绿
+============================== 2 passed in 6.91s ==============================</code></pre>
+    <p>探针每次收集 2 条(探针入口 + 被它引用的原用例本体), 故通过时也显示 2 passed。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>本地时刻落在 <b>00:00:00-00:10:00</b> 内跑该用例(或跑全量)必现; 与配置/数据量无关, 只与墙钟有关。与同族 26-10-19-0013 的 23:59-00:00 窗口互补: 两条加起来, 每天 00:00 前后约 11 分钟门禁会红</td></tr>
+      <tr><td>影响范围</td><td>仅测试门禁误报 —— 生产代码零嫌疑(读侧 <code>v4_block_gap_continuous</code> 判定单点与服务端的 <code>window=24h</code> 收边口径未被本轮质疑, 破的是用例造数的隐含前提)。代价是收尾时刻撞进该窗口时, 全量会多出一条与本轮改动无关的红, 需要人肉判别</td></tr>
+      <tr><td>严重度</td><td>低 —— 窗口 10 分钟/天, 且 00:10 一过自愈; 但"改动无关却必红"的困惑成本与 26-10-19-0013 同款</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/test_web_traffic_qb.py:578-611</code>（取证 2026-10-20 00:2x）· <code>test_api_traffic_qb_global_24h_reads_only_involved_day_files</code> · grep <code>v4_window_dates(now - 86400 - 30</code> —— 时间轴起点 <code>now = int(time.time())</code> 在 :589, base 在 :590, 造数分支 <code>if d == v4_epoch_date_str(base + 30)</code> 在 :596, 红的断言在 :607</li>
+      <li><code>src/auto_qb/core/modules/traffic_sample_mod.py:1419</code>（取证同上）· 读侧链首缺失哨兵 <code>day_tail = None  # 缺失文件: 结算上下文断链</code> · grep <code>day_tail = None</code></li>
+      <li><code>src/auto_qb/core/traffic_store.py:1583</code>（取证同上）· 判定单点 <code>v4_block_gap_continuous</code>(消费点 traffic_sample_mod.py:1098 / :1495) · grep <code>v4_block_gap_continuous</code> —— 连续/断链的唯一口径</li>
+      <li><code>tests/test_traffic_limits.py</code>（取证同上）· 同族先例修法 <code>_anchored_ts()</code> · grep <code>_anchored_ts</code> —— 26-10-19-0013 用它把时间轴钉在本地当日正午</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <p><b>已定位（有构造复现实测支撑；链首间隔那段属口径推断，未逐点打印验证 —— 入池不改码的边界内到此为止）</b> —— 用例的时间轴起点取真实此刻（:589），base 由 <code>now - 600</code> 对齐而来（:590），于是：</p>
+    <ul>
+      <li>常态（本地 ≥ 00:10）：base 落在<b>窗口最后一天</b>，<code>involved[0]</code> 是前一日；造数把 base 块放进 base 天、其余各天只在天首 +30s 放一块。读侧算 24h 窗时，窗首那天的块早于窗首 → 链首 = 该块，与 base 块相隔 ≈ 24h+ → 超 <code>v4_block_gap_continuous</code> 阈值 → 断链 → base 桶判 null（这正是 §05.2 要守的跨日长洞）。</li>
+      <li>00:00-00:10：base 落到<b>前一日</b>，与 <code>involved[0]</code>（窗首所在天）撞进同一天；那天里唯一的块就是 base+30（23:5x），它晚于窗首（00:0x）→ 链首 = 它自己，与 base 桶只隔 30s → 判<b>连续</b> → 出 (0, 0) 而不是 null。</li>
+    </ul>
+    <p>一句话：<b>断言依赖「base 恒落在窗口最后一天」这个隐含前提</b>；每天头 10 分钟 base 翻到前一日，前提破裂、长洞消失，null 语义随之落空。</p>
+    <p>已排除：与 2026-10-20 那轮前端改动相关（该轮只动 webui 静态 CSS 与 e2e，与本用例无交集）；服务端 24h 收边算错（同一端点在窗口外、即 00:10 之后与假钟 12:00 下断言全过）；造数分支写错文件（假钟 12:00 下 <code>dat_opens</code> 与 <code>len(involved)</code> 两条断言都过，只有 base 桶那条红）。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向：沿用 26-10-19-0013 的同族修法 —— <b>时间轴不取真钟</b>。</p>
+    <ul>
+      <li><b>方案 A（窄改，推荐）：只挪 base 的构造</b>。保留 <code>now</code> 在真钟（<code>involved</code>、<code>dat_opens</code>、服务端 24h 收边全都照旧），把 :590 的 <code>base = ((now - 600) // 30) * 30</code> 改成<b>钉在 <code>v4_epoch_date_str(now)</code> 当天的对齐桶</b>（如该日 00:00 + 30 的整数倍，取靠正午那档）。这样 base 恒在窗口最后一天，跨日长洞前提恒成立，:607 的 null 断言不再依赖跑测时刻；造数分支 :596 的 <code>v4_epoch_date_str(base + 30)</code> 语义不变。代价：改一处，且用例里「窗内 10 分钟前的对齐桶」这层现网形状（base 距 now 约 10 分钟）会变成固定的一天内位置 —— 该形状是否为被测口径，需认领时先确认。</li>
+      <li><b>方案 B（照搬先例）：全套钉钟</b>。照 <code>tests/test_traffic_limits.py</code> 的 <code>_anchored_ts()</code> 把 :589 的 <code>now</code> 也钉到当日正午。⚠️ 本用例与那条保留真钟的 <code>test_api_payload_limits_shape_and_same_source</code> 同款耦合：<code>/api/traffic/qb/global</code> 的 24h 窗由<b>服务端按真实 now 收边</b>，只挪用例侧的 now 会让「用例算的 involved」与「服务端算的窗」分家 —— 选 B 就必须同时把服务端取时符号也钉上（monkeypatch），或让端点接受显式 window 起止。代价明显大于 A。</li>
+    </ul>
+    <p>无论走哪条，都请补一道<b>守阵</b>：把假钟 00:05 这档工况钉成常驻用例（沿用 26-10-19-0013 的假钟手法），否则下次还得靠"恰好在 00:0x 跑全量"才撞得见。红验方式同上：临时改回 <code>now - 600</code> → 该守阵必红。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 00:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验（2026-10-20 00:2x）：入池时本机已在 00:2x，原始锚点（真实 00:00-00:10）不可复现 —— 改用<b>构造复现</b>：临时探针把 <code>time.time</code> 钉在假墙钟上复跑原用例，00:03 / 00:05 两档均复现 <code>AssertionError: assert {...'dl': 0, 'up': 0} == {...'dl': None, 'up': None}</code>（:607），假钟 12:00 与真钟 00:21 下同一条全绿。结论：<b>在假钟下仍复现</b>，与 §01/§02 证据同形。</p>
+    <h3>修复后补充</h3>
+    <p>未修。本件于 2026-10-20 00:24 由 WEBUI 首行光标虚线那轮收尾时撞见、按范围守恒当场不改（该轮只动前端 CSS），按「入池不改码」立此单。与 26-10-19-0013 同 <code>doc-topic: test-flaky-time</code>，认领时建议连着那条一起看：两条合起来把 00:00 前后约 11 分钟都盖住了，修法应同源（时间轴不取真钟）。</p>
+  </section>
+
+  <footer>
+    26-10-20-0024-test-traffic-qb-global-24h-midnight.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
