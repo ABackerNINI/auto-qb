@@ -130,10 +130,13 @@
   background: var(--bg-hover);
 }
 /* 08 bad 行: 行板是引擎 --bg-row(基础态首格同语言, 无需重锚), bad 替换为半透明
- * error-soft(承光底 --bg-card) ⇒ 首格合成; bad+hover 行底仍是 error-soft(变体内
- * bad 规则后于 hover 声明), 故不必另写 hover 变体 */
+ * error-soft —— 它的**承光底是分组段底 `.dt08-grp`(--bg-row)**, 不是抽屉卡底: 实测
+ * `section.dt08-grp` 计算底 rgb(247,250,253)(= --bg-row), 而行级 tint 就叠在它上面。
+ * 修前首格合成取 --bg-card(253,254,255) ⇒ 实际可见底比行板差 5.3(prism)/3.4(atlas)
+ * (2026-10-20 审计拾取; 远低于可辨阈 20, 但属同一类「必显列背景不一致」, 按按面重锚口径收掉)。
+ * bad+hover 行底仍是 error-soft(变体内 bad 规则后于 hover 声明), 故不必另写 hover 变体。 */
 .drawer-body .dt08-rows .group-row.bad > :first-child {
-  background: linear-gradient(var(--error-soft), var(--error-soft)), var(--bg-card);
+  background: linear-gradient(var(--error-soft), var(--error-soft)), var(--bg-row);
 }
 /* 04 卡片: 首格 = 卡头内容根, 摘底摘吸左(卡栅格不横滚; st-err/st-off 的卡底由行自绘) */
 .drawer-body .dt04-list .group-row > :first-child {

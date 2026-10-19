@@ -281,13 +281,16 @@ for (const skin of SKINS) {
       });
     }
 
-    /* 状态行: 半透明 tint 行(06 err / 07·09 bad / 11 is-chk / 10 sel)首格须同色合成。
+    /* 状态行: 半透明 tint 行(06 err / 07·09·08 bad / 11 is-chk / 10 sel)首格须同色合成。
      * ⚠ 交互后必须等过渡走完再量底 —— .group-row 有 transition: background,
      * 类刚翻转时 getComputedStyle 拿到的是**旧值/中间值**(坑档 frozen-column.md 量测陷阱:
-     * 实测点完勾选立刻读, 行底还是 base --bg 而首格渐变已 snap, 误报「不一致」)。 */
+     * 实测点完勾选立刻读, 行底还是 base --bg 而首格渐变已 snap, 误报「不一致」)。
+     * 2026-10-20: 补 08 bad —— 它一直是漏测位(移入本表前实测首格与行板差 5.3/3.4,
+     * 根因是首格合成基色取了 --bg-card, 而 08 的 tint 叠在**分组段底 --bg-row** 上)。 */
     const STATE_CASES = {
       '06': { sel: '.group-row.err', prep: null },
       '07': { sel: '.group-row.bad', prep: null },
+      '08': { sel: '.group-row.bad', prep: null },
       '09': { sel: '.group-row.bad', prep: null },
       '11': { sel: '.group-row.is-chk', prep: 'check' },
       '10': { sel: '.group-row.sel', prep: 'select' },

@@ -166,6 +166,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
  *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
 .group-row > :first-child {
   position: sticky; left: 0; z-index: 2; background: var(--bg-row);
+  /* 悬停底色与行板**同帧**渐变(2026-10-20 用户报「必显列鼠标滑过时背景与其它列不一致, 短暂
+   * 时间后恢复一致」): 行板 .group-row 有 transition: background var(--dur), 吸左首格此前没有
+   * 过渡 ⇒ 滑入瞬间首格已 snap 到 --bg-hover, 其余列还在从 --bg-row 渐入, 160ms 内读作一条竖带
+   * (双皮肤实测悬停首帧差 14/18, 移出同理反号)。补同源时长/缓动即逐帧对齐。渐变状态
+   * (expanded/selected/search-hit)走 background-image, 浏览器不可插值, 仍为离散替换(已知残留)。 */
+  transition: background-color var(--dur) var(--ease);
   /* 行是 align-items: center, 网格项默认不拉伸 —— 首格只有单行内容高; 站点/标签等多 chip 格
    * 换行把行撑高时(小窗常态), 滑入首格下方的 chip 从首格上下两段露出来(2026-10-11 用户报
    * 「小窗时站点的徽标不会被名称列挡住」)。stretch 撑满行内容高才盖得住; 行 padding 14px

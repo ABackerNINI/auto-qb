@@ -16,6 +16,7 @@
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 三皮肤 .h-cell.sortable:focus-visible(atlas 落 views.css —— components.css 顶 700 行 cap); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
+- test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 ①行板过渡仍以 `background var(--dur)` 声明(时长基准) ②三皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) ③首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) ④首格过渡**只在三皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0)。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
 """
 import json
 import os
@@ -1404,7 +1405,10 @@ def test_frontend_pinned_first_cell_bg_per_face():
         for frag in fragments:
             assert frag in body, f"{sel} 缺成分 {frag}(现 body: {body.strip()[:100]})"
         for frag in forbid:
-            assert frag not in body, f"{sel} 不得含 {frag}(半透明 tint 须合成在不透明基色上, 不得直接给半透明令牌/主表 --bg-row)"
+            assert frag not in body, (
+                f"{sel} 不得含 {frag}(合成基色按面确定: 族面/10 = 抽屉卡底 --bg-card, 08 = 分组段底 "
+                "--bg-row; 半透明 tint 不得裸用)"
+            )
 
     # 族面 06/07/09/11: 行板首格与行板同 Token; 表头首格与表头同 Token
     for face in ("06", "07", "09", "11"):
@@ -1437,11 +1441,16 @@ def test_frontend_pinned_first_cell_bg_per_face():
     )
     need(".drawer-body .dt11-list .group-row.is-chk:hover > :first-child", "var(--sel-bg)")
     need(".drawer-body .dt11-list .group-row.empty-row > :first-child", "transparent")
-    # 08 bad 行: 行板本就是引擎 --bg-row(基础态首格同语言无需重锚), bad 才合成
+    # 08 bad 行: 行板本就是引擎 --bg-row(基础态首格同语言无需重锚), bad 才合成。
+    # ⚠ 2026-10-20 修正基色: 08 的 tint **叠在分组段底 `.dt08-grp`(--bg-row) 上**, 不是
+    #   抽屉卡底 —— 实测 section.dt08-grp 计算底 rgb(247,250,253)(= --bg-row), 旧写法取
+    #   --bg-card 时首格与相邻列实际差 5.3(prism)/3.4(atlas)。真浏览器量具见 e2e
+    #   dt-table-face-bg 的 STATE_CASES['08'](补测位, 修前红/修后绿)。
     need(
         ".drawer-body .dt08-rows .group-row.bad > :first-child",
         "linear-gradient(var(--error-soft), var(--error-soft))",
-        "var(--bg-card)",
+        "var(--bg-row)",
+        forbid=("var(--bg-card)", ),
     )
     # 04 卡片 / 05 健康分组: 首格是内容根(卡头/rowin), 摘底摘吸左
     for face in ("04", "05"):
@@ -2574,3 +2583,82 @@ def test_frontend_frozen_column_boundary_wiring():
             f"{ui} 吸左首格缺 align-self: stretch —— 行是 align-items:center, 首格只有单行内容高, "
             "多 chip 格换行撑高行后徽标从首格上下两段漏出(小窗常态, 2026-10-11 用户复报)"
         )
+
+
+def test_frontend_pinned_first_cell_hover_transition_parity():
+    """必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「滑过时背景与其它列不一致, 短暂后恢复一致」)
+
+    **报障与根因**: 行板 `.group-row` 自带 `transition: background var(--dur)`(160ms), 而吸左首格
+    (三主表的必显列 = name / site)此前**没有任何过渡** ⇒ 鼠标滑过瞬间首格已 snap 到 `--bg-hover`,
+    其余列还在从 `--bg-row` 渐入, 160ms 内行内出现一条比其余列更亮的竖带, 过渡结束后又"恢复一致"
+    (真浏览器逐帧采样: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全部命中; 移出方向同理反号)。
+    修法 = 首格补同源时长/缓动的 `background-color` 过渡(渐变状态不可插值的残留见坑档 frozen-column)。
+
+    钉四件事, 缺任一件即回到 snap 或竖带:
+    1. 行板过渡仍带 `background` 且时长读 `--dur`(首格必须与它**同源**, 两处各写字面值会悄悄漂移);
+    2. `.group-row > :first-child` 体内声明 `transition: background-color var(--dur)` —— 改了行板
+       时长就再也对不上, 故不许写字面毫秒;
+    3. 首格悬停镜像规则仍在(`:hover > :first-child` → `--bg-hover`), 丢了它首格会在整段悬停期
+       停在基色上(持久竖带, 比闪一下更重);
+    4. 首格过渡**只在三皮肤 views.css 单点声明** —— 抽屉按面重锚(shared/dt_table.css)与变体注入
+       CSS 一律不得自带 `transition`(否则脱离 --dur 单点, 与行板错拍)。2026-10-20 审计实测: 三个
+       主表 + 经典抽屉表 + 06/07/09/10/11 六个变体面, 滑入/移出逐帧差全 0, 正是「全部继承同一条
+       皮肤规则」的结果 —— 本款把这个前提钉死。
+    行为面(逐帧底色差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 采; 这里只钉声明式契约。
+    """
+    for ui in _UI_ALL:
+        # 行板规则所在文件按皮肤分家(prism 在 views.css; atlas/console 在 components.css), 按特征
+        # `position: relative` 认块 —— 不硬编码文件名, 以免某次「规则搬家」把守阵变成摆设。
+        row_body = None
+        for name in ("views.css", "components.css"):
+            path = os.path.join(STATIC_ROOT, ui, "css", name)
+            if not os.path.exists(path):
+                continue
+            text = open(path, encoding="utf-8").read()
+            mo = re.search(r"\n\.group-row \{([^}]*)\}", text)
+            if mo and "position: relative" in mo.group(1):
+                row_body = mo.group(1)
+                break
+        assert row_body is not None, f"{ui} 找不到行板 .group-row 规则(首格过渡的时长基准)"
+        assert "transition: background var(--dur)" in row_body, (
+            f"{ui} 行板过渡未以 `background var(--dur)` 声明(时长单点被改/被删?) —— "
+            "首格过渡与它同源, 基准不在则对不上"
+        )
+        css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
+        ms = re.search(r"\.group-row > :first-child \{([^}]*)\}", css)
+        assert ms, f"{ui} views.css 缺 .group-row > :first-child 吸左首格规则"
+        cell = ms.group(1)
+        assert re.search(r"transition:\s*background-color\s+var\(--dur\)", cell), (
+            f"{ui} 吸左首格缺 `transition: background-color var(--dur)` —— 行板渐变 160ms 而首格瞬切, "
+            "滑过/移出瞬间行内现竖带, 过渡完才\"恢复一致\"(2026-10-20 用户报障)"
+        )
+        assert not re.search(r"transition:\s*background(-color)?\s+\d",
+                             cell), (f"{ui} 首格过渡写了字面时长 —— 必须读 var(--dur), 否则行板调时长时又漂")
+        mh = re.search(r"\.group-row:hover > :first-child \{\s*background: var\(--bg-hover\);\s*\}", css)
+        assert mh, (
+            f"{ui} 缺首格悬停镜像 `.group-row:hover > :first-child` —— 行板悬停变 --bg-hover 而首格停在"
+            "--bg-row, 整段悬停期呈持久竖带(比过渡期闪一下更重)"
+        )
+    # ④ 首格过渡只能在三皮肤 views.css 单点声明。抽屉按面重锚(shared/dt_table.css)只改背景色值,
+    #    变体注入 CSS 只改版式 —— 任一处自带 transition 就会脱离 var(--dur), 与行板错拍。
+    #    2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面, 滑入/移出逐帧差全 0,
+    #    前提就是「这些面都没有自己的首格过渡声明」。
+    stray = []
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".css"):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            if rel in {f"{ui}/css/views.css" for ui in _UI_ALL}:
+                continue  # 单点本人
+            text = open(path, encoding="utf-8").read()
+            for mo in re.finditer(r"([^{}]*)\{([^}]*)\}", text):
+                sel, body = mo.group(1), mo.group(2)
+                if ":first-child" not in sel and ":first-of-type" not in sel:
+                    continue
+                if ".group-row" not in sel and ".h-cell" not in sel:
+                    continue
+                if "transition" in body:
+                    stray.append(f"{rel}: {' '.join(sel.split())[:70]} 体内带了 transition")
+    assert not stray, ("首格过渡声明出了皮肤单点(views.css) —— 以下抽屉/变体面规则自带 transition, 会与行板错拍:\n  - " + "\n  - ".join(stray))
