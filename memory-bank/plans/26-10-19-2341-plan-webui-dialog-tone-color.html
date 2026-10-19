@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-dialog-tone-color">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-19-2341">
+<meta name="doc-updated" content="26-10-20-0025">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* 本页专用: 语义色小样 —— 与要落到的产品令牌同构图, 便于对照验收 */
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+  .sw-e { background: #f87171; }
+  .sw-w { background: #fbbf24; }
+  .sw-g { background: #34d399; }
+  .sw-n { background: #6f7d8a; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-dialog-tone-color</div>
+<h1>WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)</h1>
+<p class="lede">给通用弹窗引入 <code>tone</code> 三级语义分级与可选的警示条形态, 让「不可逆的删除」与「有代价的跳检」在视觉上一眼分开, 并解冻被一条全局规则抹平成灰的警示行图标 —— 不新增任何色值, 不动既有 DOM 结构与类名。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-19-2341 · <b>doc-updated</b> 26-10-20-0025 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-10-19 会话 —— 用户反馈「WEBUI 删除弹窗/跳检弹窗图标文字无颜色, 警告/禁止信息需要醒目」; 经 grilling 首轮 Q1~Q5(语义分档 / 染色承载面 / 波及范围 / tone 字段机制 / 亮色主题对比度)全部按推荐项拍板, Q6 拍板「先出方案、暂不改代码」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>删除确认框与跳检预检框<b>不是两套模板, 而是同一个通用 <code>.modal</code> 单例</b>(<code>shared/tpl/popovers.html:114-198</code>, 状态机在 <code>shared/ui_feedback.js::_openModal</code>)。两者全靠 JS 传参区分形态: 删除走 <code>delete_flow.js::_confirmDelete</code>(<code>danger:true</code> + <code>icon:"#i-trash-x"</code>), 跳检走 <code>drawer.js::_skipCheckDialog</code>(<code>danger:true</code> + <code>icon:"#i-bolt"</code> + <code>okDisabled</code> + <code>busy</code> + <code>verdict</code>)。</p>
+<p>问题在于: 这个单例目前<b>只有一个布尔维度</b>(<code>danger</code>)可用于分流配色。语义等级完全不同的两个动作(一个不可逆、一个有代价但可恢复)落到同一支 CSS 分支上, 于是二者长得一模一样; 而真正承替代价说明的文本与行式明细, 又完全落在语义色体系之外。</p>
+
+<h3>做到什么程度算成</h3>
+<ol>
+  <li><b>一眼分级</b> —— <span class="sw sw-e"></span>不可逆删除 = <code>error</code> 红系; <span class="sw sw-w"></span>有代价跳检 = <code>warn</code> 琥珀系。等级由标题区整体承载(图标 + 文字 + 底 + 左边框), 而非仅一枚 16px 图标。</li>
+  <li><b>警示会说话</b> —— 跳检固定警示区 4 行(<code>drawer.js:327-330</code>)、删除 HR 风险行(<code>delete_flow.js:155-158</code>)恢复语义色; 预检 verdict 的「禁止 / 需强制 / 前置条件全部满足」三态按各自等级染色, 不再共用同一个灰。</li>
+  <li><b>三套皮肤一致</b> —— atlas / console / prism(五主题)视觉等级等价; 两个亮色主题(frost / golden)下文字对比度可读。</li>
+</ol>
+<p><b>验收判据:</b> 三套 UI 下两个目标弹窗的标题区与警示行均带语义色; 其余 17 处 <code>_openModal</code> 调用点视觉零变化; <code>commands run test.full</code> 绿; <code>commands run dev.e2e</code> 的 W3 跳检确认链仍绿。</p>
+
+<h3>设计底线 / 不变量(违反即停)</h3>
+<ol>
+  <li><b>不改 DOM 结构、不改既有类名</b> —— <code>tests/test_webui_static_dom_panel.py:2977-2989</code> 对确认钮整钮块、busy 行、verdict 区容器做整行硬锚定; <code>e2e/menus.spec.mjs:257/267</code> 依赖 <code>.modal-title</code> 文本与 <code>.modal-actions .bt.danger-solid</code>。</li>
+  <li><b>按钮一个字不动</b> —— <code>.bt.danger-solid</code>(确认钮与第三钮「强制跳检」)保持实心红。按钮表达「这个动作有后果」, 标题 tone 表达「这个框的整体语境等级」, 是两层语义, 不合并。</li>
+  <li><b>不新增色值</b> —— 一律取 <code>--warn / --error / --green</code> 及其 <code>-soft / -line</code> 三件套(<code>conventions/webui.md:21-25</code> 状态色族纪律)。</li>
+  <li><b><code>_skipPrecheck</code> 六态分支语句清单零增删</b> —— T24 守阵(<code>test_skip_check_dialog_verdict_render</code>)对每个分支做<b>逐语句等值比对</b>, 加一行就是红。任何 tone 派生必须落在这六个分支之外。</li>
+  <li><b>既有对话框零变化</b> —— 新增字段一律走「空串 / false = 不挂载」惯例(与 <code>busy</code> / <code>verdict</code> / <code>cls</code> 同口径)。</li>
+  <li><b>范围守恒</b> —— 只动两个目标弹窗 + 通用 tone 通道; 共用同一详情行范式的其它弹窗(限速 / 移动 / 重命名 / 分享率)一行不改。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<table>
+  <thead><tr><th>元素</th><th>位置</th><th>现状</th><th>问题</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>标题图标</td>
+      <td><code>atlas/css/components.css:550-551</code><br><code>console/css/components.css:498-499</code><br><code>prism/css/components.css:245-246</code></td>
+      <td><code>.modal-title .ico{color:var(--warn)}</code><br><code>.modal.danger .modal-title .ico{color:var(--error)}</code></td>
+      <td class="bad">两框都传 <code>danger:true</code> ⇒ 同为红, 语义不可分</td>
+    </tr>
+    <tr>
+      <td>标题文字</td>
+      <td><code>popovers.html:123</code></td>
+      <td>无独立类, 继承 <code>--fg</code></td>
+      <td class="bad">字号最大的元素却不承载任何语义色</td>
+    </tr>
+    <tr>
+      <td>正文</td>
+      <td><code>popovers.html:125</code> → <code>.modal-body</code></td>
+      <td><code>--fg-muted</code> 中性灰</td>
+      <td class="bad">「不可恢复」「以跳过校验方式重加」这类代价说明与中性提示同色</td>
+    </tr>
+    <tr>
+      <td><b>详情 / verdict 行图标</b></td>
+      <td><code>atlas/css/views.css:319</code><br><code>console/css/views.css:222</code><br><code>prism/css/components.css:279</code></td>
+      <td><code>.modal-detail-row .ico{color:var(--fg-dim)}</code></td>
+      <td class="bad"><b>核心痛点</b>: 一条规则把 <code>#i-warn</code>(跳检 4 条固定警示)、<code>#i-x-circle</code>(禁止)、<code>#i-check-circle</code>(全部满足)压成同一个灰。<b>「禁止」与「已满足」长得一模一样</b></td>
+    </tr>
+    <tr>
+      <td>行 label / value</td>
+      <td><code>.d-label</code> → <code>--fg-dim</code><br><code>.d-value</code> → <code>--fg-soft</code></td>
+      <td>全中性</td>
+      <td>整行没有一个像素提示等级</td>
+    </tr>
+    <tr>
+      <td>确认钮 / 第三钮</td>
+      <td><code>popovers.html:190/194</code></td>
+      <td><code>.bt.danger-solid</code> 实心红</td>
+      <td class="good">唯一有语义色的部分(保持不变)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><b>量化: </b>跳检框进框瞬间, 可见元素里带语义色的只有标题区那枚图标和底部按钮; 承载全部代价说明的 4 行警示(<code>drawer.js:327-330</code>)连同它们的价值文本(<code>--fg-soft</code>)全是灰 —— 这正是「写了警告, 但看不出警告」的根因。<b>病灶不在没写警告, 在警告被抹平。</b></p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>三层装饰模型</h3>
+<table>
+  <thead><tr><th>层</th><th>载体</th><th>作用域</th><th>缺省</th></tr></thead>
+  <tbody>
+    <tr><td><b>L1 框级 tone</b></td><td><code>modal.tone</code>(<code>error</code> / <code>warn</code>)</td><td>标题区图标 + 文字染色</td><td>按 <code>danger</code> 派生(见下表), 既有调用点零变化</td></tr>
+    <tr><td><b>L2 可选警示条</b></td><td><code>modal.strip</code>(布尔)</td><td>标题区加 <code>-soft</code> 底 + 3px 左边框 + 圆角</td><td><code>false</code> = 既有全部对话框外观零变化; 仅两目标框开启</td></tr>
+    <tr><td><b>L3 行级语义</b></td><td><code>row.tone</code>(<code>ok</code> / <code>warn</code> / <code>error</code>)</td><td>行内 <code>.ico</code> + <code>.d-label</code> 染色, <code>.d-value</code> 保持中性</td><td>空 = 沿用现有灰(<code>--fg-dim</code>)</td></tr>
+  </tbody>
+</table>
+
+<p class="aside"><b>为什么 L1 和 L2 要分成两个开关: </b>全仓库有 11 处 <code>danger:true</code> 对话框(<code>config_editor.js</code> 5 处、<code>dialogs.js</code> 2 处删除分类/标签、<code>config_hub.js</code>、<code>drawer.js:871</code> 删除 Tracker, 加上本方案两个目标框)。若让 tone 直接连带警示条, 等于把 9 个本轮范围外的弹窗一并改掉 —— 与底线 5、6 冲突。拆成两个开关后，染色对所有 danger 框一次性补齐且不新增 CSS 分支，而警示条只对显式开启的两个目标框生效 —— 两者解耦，互不牵连。</p>
+
+<h3>tone 派生表(<code>_openModal</code> 单点)</h3>
+<table>
+  <thead><tr><th>调用形态</th><th>派生 tone</th><th>与现状比</th></tr></thead>
+  <tbody>
+    <tr><td><code>danger:true</code>(未显式给 tone)</td><td><code>error</code></td><td class="good">零变化(现状就是红)</td></tr>
+    <tr><td><code>danger:false</code>(未显式给 tone)</td><td><code>warn</code></td><td class="good">零变化(保现状琥珀)</td></tr>
+    <tr><td>显式 <code>tone:"warn"</code></td><td><code>warn</code></td><td>新增能力 —— 跳检框用</td></tr>
+    <tr><td>显式 <code>tone:"error"</code></td><td><code>error</code></td><td>新增能力 —— 删除框用</td></tr>
+  </tbody>
+</table>
+<p class="aside"><b>为什么非 danger 派生 <code>warn</code> 而不是 <code>info</code>: </b>现有非 danger 对话框的标题图标虽落到 <code>#i-info</code>(<code>ui_feedback.js:121</code>, 缺省 <code>modal.danger ? '#i-warn' : '#i-info'</code>), 但 CSS 默认色是 <code>--warn</code> 琥珀(<code>components.css:550</code>)。若派生为 info(蓝), 19 处调用点会集体变色 —— 违反底线 5。这个「info 图标配琥珀色」的历史不一致登记为 <span class="wr">§07 R1</span> 连带发现, 本轮不改。</p>
+
+<h3>落点清单(9 个改造点)</h3>
+<table>
+  <thead><tr><th>#</th><th>文件 · 位置</th><th>改动</th><th>约束 / 判据</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>shared/ui_feedback.js</code><br><code>_modalInit()</code>(L116-135)</td><td>增 <code>tone: ""</code>、<code>strip: false</code></td><td>缺省值即「零变化契约」; T23 只校验 <code>okDisabled/busy/verdict</code> 三字段, 加字段不红</td></tr>
+    <tr><td>2</td><td><code>shared/ui_feedback.js</code><br><code>_openModal()</code>(L176-183)</td><td>赋值前派生:<br><code>const tone = cfg.tone || (cfg.danger ? "error" : "warn");</code><br>并入 modal 字面量</td><td><code>mid</code> 自增必须留在同一字面量内(<code>test_..._identity_stamp</code> L3119 正则要求其间无 <code>}</code>)</td></tr>
+    <tr><td>3</td><td><code>shared/tpl/popovers.html</code><br>L118 框容器类绑定</td><td><code>:class="[modal.cls, { danger: modal.danger, wide: modal.wide, strip: modal.strip }, modal.tone &amp;&amp; 'tone-' + modal.tone]"</code></td><td>数组三元=false 项被忽略 ⇒ 无 tone 时零附加类</td></tr>
+    <tr><td>4</td><td><code>popovers.html</code><br>L134(verdict 行) 与 L146(详情行)</td><td><code>:class="{ wide: d.wide }"</code> →<br><code>:class="[d.tone &amp;&amp; 'is-' + d.tone, { wide: d.wide }]"</code></td><td><b>不得</b>往两个 <code>class="modal-details"</code> 容器上加类(L2984 整行硬锚定); 语义类只落在<b>行</b>上</td></tr>
+    <tr><td>5</td><td><code>shared/delete_flow.js</code><br><code>_confirmDelete</code>(L276-295)</td><td>增 <code>tone: "error"</code>、<code>strip: true</code>; HR 风险行(L155-158)增 <code>tone: "error"</code></td><td>T23 / T24 均不锚定本方法语句清单；四个删除入口的结构一致性由既有 R10-16 守阵覆盖，加键不红</td></tr>
+    <tr><td>6</td><td><code>shared/drawer.js</code><br><code>warnRows</code>(L326-331)</td><td>4 行各增 <code>tone: "warn"</code></td><td>T23 只断言 <code>verdict: warnRows</code> 存在, 行内加键不红</td></tr>
+    <tr><td>7</td><td><code>shared/drawer.js</code><br><code>_skipCheckDialog</code>(L332-343)</td><td>增 <code>tone: "warn"</code>、<code>strip: true</code></td><td>T23 ④ 用 <code>in</code> 断言, 加键安全</td></tr>
+    <tr><td>8</td><td><code>shared/drawer.js</code><br><code>_skipVerdictRows</code>(L418-462) + 降级行(L376 / L381)</td><td>按语义给 tone:<br>计数行 = <code>blocked?error: force?warn: ok</code><br>分组行 = <code>blocked?error:warn</code><br>全部满足行 = <code>ok</code><br>原因行 = <code>blocked?error:warn</code><br>预检失败行 = <code>warn</code></td><td class="bad"><b>红线: 语句必须加在这些函数的<b>对象字面量内部</b>, 绝不能落进 <code>_skipPrecheck</code> 的六分支语块 —— T24 逐语句比对</b></td></tr>
+    <tr><td>9</td><td>三套皮肤 CSS(9 个位点)</td><td>见下 §03 参考实现</td><td>同一份规则文本三处落地：<code>components.css</code>(框级) + <code>views.css</code>(行级，prism 行级也在 <code>components.css</code>)</td></tr>
+  </tbody>
+</table>
+
+<h3>CSS 参考实现(三套皮肤成对, 同一份文本)</h3>
+<pre><code><span class="cm">/* ① 框级 tone: 只染色, 不动版式 —— 既有全部对话框外观零变化 */</span>
+.modal.tone-error .modal-title .ico,
+.modal.tone-error .modal-title &gt; span { color: var(--error); }
+.modal.tone-warn  .modal-title .ico,
+.modal.tone-warn  .modal-title &gt; span { color: var(--warn); }
+
+<span class="cm">/* ② 警示条形态: 仅 strip:true 生效(本轮只有删除框 / 跳检框开启) */</span>
+.modal.strip .modal-title { padding: 8px 11px; border-radius: var(--radius-sm); }
+.modal.strip.tone-error .modal-title { background: var(--error-soft); box-shadow: inset 3px 0 0 var(--error-line); }
+.modal.strip.tone-warn  .modal-title { background: var(--warn-soft);  box-shadow: inset 3px 0 0 var(--warn-line); }
+
+<span class="cm">/* ③ 行级语义: 只染 ico + label; value 保持 --fg-soft 中性, 保长句可读性 */</span>
+.modal-detail-row.is-warn  &gt; .ico, .modal-detail-row.is-warn  &gt; .d-label { color: var(--warn); }
+.modal-detail-row.is-error &gt; .ico, .modal-detail-row.is-error &gt; .d-label { color: var(--error); }
+.modal-detail-row.is-ok    &gt; .ico, .modal-detail-row.is-ok    &gt; .d-label { color: var(--green); }</code></pre>
+<ul>
+  <li>用 <code>box-shadow: inset</code> 画左侧 <code>3px</code> 色条 —— 不占布局宽度, 不改变 <code>.modal-title</code> 的 flex 排列, 避开弹窗 <code>overflow-y:auto</code> 下负边距溢出的老问题。</li>
+  <li>特异性: 现有 <code>.modal.danger .modal-title .ico</code> 是 0-3-0, 上述 <code>.modal.tone-error .modal-title .ico</code> 同为 0-3-0 且<b>后加载</b> ⇒ 生效。保留旧规则不动, 供未走到派生通道的兜底。</li>
+  <li>prism 五主题<b>无需新增令牌</b> —— <code>--warn / --warn-soft / --warn-line / --error-* / --green*</code> 在 ocean / galaxy / orbit / frost / golden 五份 themes 里均已声明(<code>conventions/webui.md:64</code> 双色令牌族纪律)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <thead><tr><th>期</th><th>内容</th><th>产物</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1</b></td><td>通用通道接线: <code>tone</code> / <code>strip</code> 字段 + 派生 + 模板框/行类绑定(清单 #1~#4)</td><td><code>ui_feedback.js</code><br><code>popovers.html</code></td><td>既有 17 处调用点渲染后<b>不出现</b> <code>tone-*</code> / <code>strip</code> 类; <code>commands run test.quick</code> 绿</td></tr>
+    <tr><td><b>S2</b></td><td>行级 CSS 三套成对(清单 #9-③)</td><td>atlas <code>views.css</code> / console <code>views.css</code> / prism <code>components.css</code></td><td>三套各 3 条 <code>.is-*</code> 规则齐备; <code>commands run kb.check</code> 绿</td></tr>
+    <tr><td><b>S3</b></td><td>框级 tone + 警示条 CSS 三套成对(清单 #9-①②)</td><td>三套 <code>components.css</code></td><td>三套文本同构; <code>--radius-sm</code> 已存在于三套, 无需新增令牌</td></tr>
+    <tr><td><b>S4</b></td><td>调用点接线: <code>delete_flow._confirmDelete</code> + <code>drawer</code> 四处(<code>_skipCheckDialog</code> / <code>warnRows</code> / <code>_skipVerdictRows</code> / 降级行)(清单 #5~#8)</td><td><code>delete_flow.js</code><br><code>drawer.js</code></td><td>T23 <code>test_skip_check_dialog_precheck_wired</code> 与 T24 <code>test_skip_check_dialog_verdict_render</code> 双绿</td></tr>
+    <tr><td><b>S5</b></td><td>验证: <code>commands run test.full</code> + <code>commands run dev.e2e</code>(W3 跳检确认链) + 三套皮肤目视(atlas / console / prism×ocean,galaxy,orbit,frost,golden)</td><td>新建基线切片<br><code>commands run kb.new baseline</code></td><td>全绿; 亮色主题 frost / golden 下警示条目视可读；基线数字只写一处(<code>memory-bank/testing/baseline.md</code> 口径)</td></tr>
+  </tbody>
+</table>
+<p class="aside"><b>为什么 S2/S3 要先于 S4: </b>先有 CSS 再接线, 中途任一时刻都处在「已接线但没样式」的安全态(纯 CSS 缺失不产生回归); 反过来则会先出现一段时间的行为/外观半吊子状态。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>D6 / D7 / D8 已于同一轮会话内全部按推荐项拍板，结论迁至 <b>§06</b>，本节清空 —— 文档再无悬而未决项，可直接按 §04 分期实施。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>编号</th><th>议题</th><th>结论</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td><b>D1</b></td><td>语义分级: 同档还是分档</td><td><b>分档</b> —— 删除 = <code>error</code> 红; 跳检标题区 = <code>warn</code> 琥珀, 但 verdict 中被判 <code>blocked</code> / 需强制的行仍各自上行到 <code>error</code> / <code>warn</code>; 按钮保持实心红不动</td><td>2026-10-19</td></tr>
+    <tr><td><b>D2</b></td><td>染色承载面</td><td><b>轻量警示条</b> —— 标题区加 <code>-soft</code> 底 + 左边框 + 图标/文字染 tone 色; <code>body</code> 主体保持 <code>--fg-muted</code> 不染(见 D6)</td><td>2026-10-19</td></tr>
+    <tr><td><b>D3</b></td><td>全局置灰规则改多大范围</td><td><b>只加作用域子类</b> <code>.is-warn</code> / <code>.is-error</code> / <code>.is-ok</code>, 不动全局 <code>.modal-detail-row .ico</code>; 限速/移动/重命名等共用弹窗一行不改</td><td>2026-10-19</td></tr>
+    <tr><td><b>D4</b></td><td>实现机制</td><td><b>加 <code>modal.tone</code> 枚举字段</b>, 缺省由 <code>danger</code> 推导以保向后兼容; 不按 icon id 特判(换图标即断)</td><td>2026-10-19</td></tr>
+    <tr><td><b>D5</b></td><td>亮色主题对比度</td><td><b>不新增令牌</b>, 复用现有 <code>--warn / --error / -soft / -line</code>(frost / golden 已把主色调深); 改完只目视确认一次</td><td>2026-10-19</td></tr>
+    <tr><td><b>D6</b></td><td>警示条要不要承载新文案</td><td><b>不新增文案</b> —— 标题区加底 + 左边框 + 圆角充当警示条, <code>body</code> 原样保留。警示条只负责「先给等级」; 同一句话说两遍反而稀释, 且新增 <code>alert</code> 字段要连带改动 4 个删除入口的文案</td><td>2026-10-19</td></tr>
+    <tr><td><b>D7</b></td><td>「删除弹窗」的范围</td><td><b>本轮只做种子删除确认框 + 跳检框</b>挂警示条; 其余 9 处 danger 框(删除分类/标签/Tracker/规则集/规则、关闭工具、config_editor 四处)继承现有红图标, 外观零变化 —— 范围守恒, 且只有这两个框有行式明细清单值得配警示条</td><td>2026-10-19</td></tr>
+    <tr><td><b>D8</b></td><td>是否本轮实现 <code>info</code> 蓝档</td><td><b>不做</b> —— 保留字段名不写 CSS。当前无任何调用点需要它, 且需先核对三套 + 五主题的蓝令牌齐备性, 属投机性扩展</td><td>2026-10-19</td></tr>
+    <tr><td><b>D9</b></td><td>落地节奏</td><td>方案已批准 — 本文档先单独提交一笔(doc 先行), 随后按 §04 的 S1→S5 分期实施落地代码</td><td>2026-10-19</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <thead><tr><th>编号</th><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>R1</b><br><span class="tag">连带发现 · 不修</span></td>
+      <td>历史不一致: 非 danger 对话框的标题图标是 <code>#i-info</code>(<code>ui_feedback.js:121</code>), 但 CSS 默认染成 <code>--warn</code> 琥珀(<code>components.css:550</code>) —— 语义与色不符</td>
+      <td>任何想把「非 danger」派生为 <code>info</code> 蓝的改动</td>
+      <td>本轮按 <code>warn</code> 派生、维持现状色; 若后续要纠偏, 入池 <code>memory-bank/issues/</code> 单独处理, 不在本次夹带(范围守恒)</td>
+    </tr>
+    <tr>
+      <td><b>R2</b><br><span class="tag">最高频</span></td>
+      <td>T24 逐语句断言被误伤 —— 在 <code>_skipPrecheck</code> 六分支里多写哪怕一行(如「含 blocked 就把整框升为 error」)</td>
+      <td>试图让整框 tone 随预检结果动态升级</td>
+      <td>tone 派生一律外置到构造参数与 <code>_skipVerdictRows</code>; 等级升级改由<b>行级</b> <code>is-error</code> 表达 —— 这也是 D1 的既定口径</td>
+    </tr>
+    <tr>
+      <td><b>R3</b></td>
+      <td>三套皮肤成对遗漏 —— 只改 atlas 忘改 console / prism</td>
+      <td>S2 / S3 跨 3 文件 × 2 批次的手工同步</td>
+      <td>一期一套、同批提交; 收尾 <code>commands run kb.check</code>; 建议补一条「新增 shared CSS 类必须三套成对」的守阵(属新增测试断言, 不在本轮范围, 待另行拍板)</td>
+    </tr>
+    <tr>
+      <td><b>R4</b></td>
+      <td>亮色主题(frost / golden)下 <code>-soft</code> 底(alpha .12)偏淡, 警示条几乎看不出</td>
+      <td>S5 目视阶段</td>
+      <td>先目视; 若确实偏淡, 二次拍板决定是否新增 <code>--tone-*-bg</code> 令牌 —— 需三套 + 五主题共 8 处对齐声明</td>
+    </tr>
+    <tr>
+      <td><b>R5</b></td>
+      <td>守阵硬锚定被无意改变: <code>class="modal-details"</code> 的 verdict 容器、busy 行、确认钮整钮块、第三钮 <code>danger-solid</code></td>
+      <td>顺手「优化」模板结构时</td>
+      <td>语义类只落在<b>行</b>上(#4), 容器与按钮一个字符都不动; S1 结束即跑一次 T23/T24 兜底</td>
+    </tr>
+    <tr>
+      <td><b>R6</b></td>
+      <td>prism 侧框级与行级规则同在 <code>components.css</code>(L245 与 L279 相邻), 易写成重复选择器</td>
+      <td>S2 / S3 同一文件两次编辑</td>
+      <td>两批规则各起一行、紧跟各自现有基线位置, 不合并成一大块</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-19-2341</span> 初版 —— 来自当日会话的用户反馈「删除/跳检弹窗图标文字无颜色、警告需醒目」; grilling 首轮 D1~D5 + D9 拍板, D6~D8 留待二次确认。现状与令牌取值均逐个文件核对到行号, 测试影响面覆盖 <code>tests/test_webui_static_dom_panel.py</code> T23/T24 与 <code>e2e/menus.spec.mjs</code> W3。</li>
+  <li><span class="tag">R1 · 26-10-20-0025</span> D6-D8 按推荐拍板并回填 §06(警示条不承载新文案 / 只做种子删除框+跳检框 / 不做 info 蓝档), §05 清空; D9 更新为方案已批准、doc 先行提交后按 S1-S5 实施</li>
+</ul>
+
+</div>
+</body>
+</html>
