@@ -28,6 +28,8 @@
   用无样式的 "on"(曾落成基态灰条); 每个非基态色值都要有对应 CSS 规则
 - test_frontend_readonly_rows_use_baseline_align: S6/#5 —— 只读状态行挂 .hb-ro, 标签去
   padding-top + 行内基线对齐; 全局 .hb-row / .hb-lb 不动(控件行仍靠 7px 对齐输入框)
+- test_frontend_readonly_row_class_not_colliding: 裸 .hb-ro 选择器清零 —— 摘要容器的
+  max-width:460px 曾落到只读状态行上, 把「工具状态」压窄到值列 206px(文字自动换行)
 - test_frontend_tool_settings_button_removed: S6/D9 —— 「打开工具设置」按钮与其处理方法全仓清零
 - test_frontend_tool_params_use_unit_controls: S7/D12/D13 —— 时间/大小参数走「数值+单位下拉+?」,
   复合串原样回传(不 Number() 化), 元数据齐备
@@ -515,6 +517,30 @@ def test_frontend_readonly_rows_use_baseline_align():
         "缺 .hb-row.hb-ro .hb-lb 的 padding-top: 0(7px 上边距仍在)"
     # 全局口径不动: 控件行仍靠 .hb-lb 的 7px 与输入框顶端对齐
     assert re.search(r"\.hb-lb\s*\{[^}]*padding-top:\s*7px", css), "全局 .hb-lb 的 padding-top 被误改"
+
+
+def test_frontend_readonly_row_class_not_colliding():
+    """2026-10-19: 裸 .hb-ro 选择器必须为 0 —— 它曾把只读状态行压成 460px 宽
+
+    .hb-ro 原本是 readonly 列表/对象值的**摘要容器**(flex column + max-width:460px),
+    而只读状态行用的是行修饰 .hb-row.hb-ro。同名让容器的 max-width 落到行上:
+    「工具状态」四行整体被压到 460px, 值列只剩 206px, 一行路径折成四行、右侧留白一片
+    (用户报「工具状态页排版不正确, 文字自动换行」)。容器已改名 .hb-ro-sum。
+
+    守的是**两个类不得再同名**: 裸 .hb-ro 规则一出现, 行的宽度就再次被容器口径接管;
+    而 .hb-row.hb-ro 的基线对齐是另一条独立规则(S6/#5), 不受影响。
+    """
+    css = _static("shared", "console_hub.css")
+    assert not re.search(r"^\.hb-ro\s*\{", css, re.M), \
+        "裸 .hb-ro 规则又出现了(容器类与行修饰类同名 -> 只读状态行被 max-width 压窄)"
+    assert ".hb-ro-sum {" in css and ".hb-ro-sum-line {" in css, \
+        "readonly 摘要容器的样式丢了(改名后必须成对存在)"
+    # 摘要容器仍在用(改名不能只改 CSS 不改模板, 否则 fs.path_map 的只读摘要变成裸文本)
+    xtpl = _static("shared", "tpl", "xtpl.html")
+    assert 'class="hb-ro-sum"' in xtpl and 'class="hb-ro-sum-line"' in xtpl, \
+        "模板没跟着改名(只读摘要容器失去样式)"
+    # 行修饰类保持原样: 模板里那几行仍按 .hb-row.hb-ro 认
+    assert _tm_tpl().count('class="hb-row hb-ro"') >= 5
 
 
 def test_frontend_tool_settings_button_removed():

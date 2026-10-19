@@ -1,7 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
 > 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote, 类名撞名, 容器类, 行修饰, hb-ro, 只读行变窄, 文字自动换行, max-width 接管
 
 ### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询
 
@@ -178,3 +178,20 @@
   命中两处: `05-trackers-health-groups-low.js`(未启用区虚拟条目备注)、`11-content-treegrid-batch-low.js`
   (筛选无结果的空态)。
 - **守阵**: 暂无。可复用的静态扫描判据: 逐个 `${...}` 插值表达式, 内容含 `T` + 反引号却不含 `R(` 即命中。
+
+### 同一个类名既当「容器」又当「行修饰」时, 容器的 max-width 会静默接管行宽
+
+- **触发**: 给只读状态行加样式, 或在 `.hb-*` 家族里复用短类名(2026-10-19 用户报「WEBUI 流量与限速
+  设置中工具状态页排版不正确, 文字自动换行」)。
+- **判别**: `.hb-ro` 当时有两个含义 —— readonly 列表/对象摘要**容器**
+  (`display:flex;flex-direction:column;max-width:460px`)与只读状态**行修饰**(`.hb-row.hb-ro`)。同名时
+  两条规则都命中行元素: `display` 由后写的 `.hb-row{display:grid}` 赢(同权重、后出现), 但
+  `max-width:460px` **无人重置** ⇒ 整行被压到 460px, 值列只剩 206px(178 标签 + 12 gap + 24 的 `?` 列),
+  一条「端口 · PID · 版本 · 数据目录」被折成四行、右侧留一大片空白。静态读模板读不出来(模板里只是
+  `class="hb-row hb-ro"`, 完全合理); 真浏览器量一次就现形: 行宽 460 vs 块宽 994。
+- **处置**: 容器类改名 `.hb-ro-sum`(行 `.hb-ro-sum-line`), 行修饰保持 `.hb-row.hb-ro`。判据一句话:
+  **容器类与行修饰类不得同名**, 且改名后裸选择器(`.hb-ro{...}`)必须清零 —— 只改模板不改 CSS 或反之,
+  都会让另一半静默失效(摘要容器变裸文本, 或行宽再次被接管)。
+- **守阵**: `tests/test_web_traffic_monitor.py::test_frontend_readonly_row_class_not_colliding`(裸
+  `.hb-ro` 规则为零 + 容器类成对存在 + 模板跟随改名); 真 DOM 侧在 `e2e/views.spec.mjs` 的 S7 用例内
+  (`rowW > blkW - 4` / 值列 `ctW > 400`)。

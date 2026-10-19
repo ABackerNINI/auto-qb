@@ -252,9 +252,14 @@
 .hb-row.hb-readonly .hb-select:disabled { color: var(--fg-muted); cursor: not-allowed; }
 .hb-switch input:disabled + .hb-sw-track { opacity: .5; cursor: not-allowed; }
 
-/* readonly 字段的只读摘要(列表/对象值, 如 fs.path_map 的映射对): 每条一行, 等宽浅底 */
-.hb-ro { display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 460px; }
-.hb-ro-line {
+/* readonly 字段的只读摘要(列表/对象值, 如 fs.path_map 的映射对): 每条一行, 等宽浅底
+ * WARN 2026-10-19: 这个容器类原叫 .hb-ro, 与只读状态行的行修饰类 .hb-row.hb-ro 同名 ——
+ *   .hb-ro{max-width:460px} 于是把「工具状态」那几行整体压到 460px, 值列只剩 206px,
+ *   一行路径被折成四行、右侧留一大片空白(用户报「工具状态页排版不正确, 文字自动换行」)。
+ *   两个东西语义不同(整块摘要容器 vs 行修饰), 容器改名 .hb-ro-sum, 行修饰类不动(模板与守阵
+ *   都按 .hb-row.hb-ro 认)。改名同时把「裸 .hb-ro 选择器」清零 —— 守阵按这条判回归。 */
+.hb-ro-sum { display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 460px; }
+.hb-ro-sum-line {
   font-family: var(--hb-font-mono);
   font-size: 12.5px;
   color: var(--fg-muted);
@@ -470,22 +475,36 @@
 .hb-blk.hb-sub.hb-inactive { opacity: .55; }
 .hb-blk-hd.hb-sub-toggle { cursor: pointer; user-select: none; }
 
-/* 「流量与限速」合并卡的依赖提示条(计划 26-10-18-0813 B4/D6): 来源关闭时卡头下方常驻一条。
+/* 「流量与限速」分区(2026-10-19 去嵌套): 三区已提升为页面级 .hb-blk, 页头下方只剩一条
+   现状摘要 + 历史图入口的窄条。不套卡片外壳 —— 它讲的是整页现状, 不属于某一个区。 */
+.hb-tl-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+.hb-tl-bar .hb-tl-sum { color: var(--fg-muted); }
+.hb-tl-bar .hb-btn { margin-left: auto; }
+
+/* 「流量与限速」三区的依赖提示条(计划 26-10-18-0813 B4/D6): 来源关闭时三区都会空转, 常驻一条。
    用 warn 语义色而非 error —— 关源是合法状态(用户主动关的), 提示的是"后果", 不是"出错";
-   左侧 3px 实心条与 .hb-row.risk 同一配方(inset 阴影不用 border, 免得撑开行高)。 */
+   左侧 3px 实心条与 .hb-row.risk 同一配方(inset 阴影不用 border, 免得撑开行高)。
+   2026-10-19: 外壳卡去掉后它不再是卡内一条通栏, 自带边框与下边距(否则贴在页头文字上)。 */
 .hb-tl-dep {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  margin: 0;
+  margin: 0 0 14px;
   padding: 10px 14px;
   font-size: 12.2px;
   line-height: 1.6;
   color: var(--fg-muted);
   background: var(--warn-soft);
   box-shadow: inset 3px 0 0 var(--warn);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
 }
 .hb-tl-dep b { color: var(--warn); font-weight: 600; }
 

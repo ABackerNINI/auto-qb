@@ -13,7 +13,7 @@
   透传(不透传 -> 卡内 hub-field 拿到的是本组件实例, 字段只显默认值)
 - test_frontend_card_three_zones_and_collapse: 三区顺序 / 各自折叠头 / 折叠态不持久化 /
   来源关闭时三区都给出说明而非空白
-- test_frontend_card_history_entry: 卡头「打开历史图表」-> openHistory()(历史图仍在全局弹层)
+- test_frontend_card_history_entry: 摘要条「打开历史图表」-> openHistory()(历史图仍在全局弹层)
 - test_frontend_dep_hint_shares_affect_labels: 提示条文案与关闭工具确认框同源(tmAffectLabels)
 - test_frontend_hub_view_alias_maps_old_keys: 旧 hub.view 三个值都映射到 traffic_limit, 且映射只在
   取值处单点(不清 localStorage)
@@ -114,6 +114,13 @@ def test_frontend_card_three_zones_and_collapse():
     heads = re.findall(r'class="hb-blk-hd hb-sub-toggle"[^>]*@click="(\$root\.hubSubToggle\(\'(\w+)\'\))"', tpl)
     assert [k for _c, k in heads] == ["source", "curve", "chart"], f"三区折叠头缺或键不对: {heads}"
 
+    # 2026-10-19 去嵌套: 三区是**页面级**块(.hb-blk.hb-cut), 不再套在同名外壳卡里 ——
+    # 否则二级页上会叠出「面包屑 / h1 / 卡头」三层同名标题, 三个区看起来像嵌在页面里的子页面
+    zones = re.findall(r'<div class="hb-blk (hb-cut|hb-sub)">\s*<div class="hb-blk-hd hb-sub-toggle"', tpl)
+    assert zones == ["hb-cut"] * 3, f"三区仍是嵌套块(hb-sub)或区序漂了: {zones}"
+    assert 'class="bh-t">流量与限速' not in tpl, \
+        "模板里又有与页头同名的块标题(二级页会出现两条「流量与限速」)"
+
     # 折叠态只在内存(hub.sub), 不得进 localStorage 的写入点
     assert re.search(r"sub:\s*\{\}", hub), "hub.sub 折叠态未声明(模板读到 undefined 会当展开, 但语义不明)"
     for m in re.finditer(r"localStorage\.setItem\(([^,]+),", hub):
@@ -123,22 +130,23 @@ def test_frontend_card_three_zones_and_collapse():
     assert 'v-if="$root.tmSourceOff()"' in tpl, "缺来源关闭的常驻提示条"
     assert "tmSourceOff" in tpl.split("<span class=\"bh-t\">限速曲线")[1], \
         "来源关闭时「限速曲线」区没有任何说明(只剩一个「启用限速曲线」按钮会让人以为是本功能没开)"
-    assert "$root.tmSummary()" in tpl, "卡头缺现状摘要(关闭态在卡头就读得出来)"
+    assert "$root.tmSummary()" in tpl, "缺现状摘要(关闭态在摘要条上就该读得出来)"
 
 
 def test_frontend_card_history_entry():
-    """B4/D2: 卡头「打开历史图表」-> openHistory(); 历史图仍留在全局弹层
+    """B4/D2: 「打开历史图表」-> openHistory(); 历史图仍留在全局弹层
 
     不搬进设置页是拍板项(D2): 那张图要天/月/年切换 + 悬停取值, 搬进来就是第二套图表实现。
+    2026-10-19: 外壳卡去掉后入口落在页头下方的摘要条 .hb-tl-bar(不是某个区尾的普通按钮) ——
+    它管的是整页的历史流量, 挂进任何一区都会暗示"只跟这一区有关"。
     """
     tpl = _card()
     dialogs = _shared("dialogs.js")
     assert "async openHistory()" in dialogs, "openHistory 不在 dialogs.js 里(入口指向了不存在的方法)"
     btn = re.search(r"<button[^>]*@click=\"\$root\.openHistory\(\)\"[^>]*>([^<]+)</button>", tpl)
-    assert btn and "打开历史图表" in btn.group(1), "卡头缺「打开历史图表」入口"
-    # 卡头右侧按钮区(与标题同一行), 不是区尾的普通按钮
-    head = tpl.split('class="bh-t">流量与限速')[1].split("</div>")[0]
-    assert "openHistory" in head, "历史图入口不在卡头(应在标题行右侧)"
+    assert btn and "打开历史图表" in btn.group(1), "缺「打开历史图表」入口"
+    bar = re.search(r'<div class="hb-tl-bar">(.*?)</div>', tpl, re.S)
+    assert bar and "openHistory" in bar.group(1), "历史图入口不在摘要条里(应在现状摘要同一行右侧)"
 
 
 def test_frontend_dep_hint_shares_affect_labels():

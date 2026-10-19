@@ -71,8 +71,8 @@
         </div>
         <div class="hb-ct">
           <!-- readonly 的列表/对象值: 不渲染可编辑控件, 改只读摘要(fs.path_map 的映射对等) -->
-          <div v-if="readonlyComplex" class="hb-ro">
-            <span v-for="(line, i) in readonlySummary" :key="i" class="hb-ro-line">{{ line }}</span>
+          <div v-if="readonlyComplex" class="hb-ro-sum">
+            <span v-for="(line, i) in readonlySummary" :key="i" class="hb-ro-sum-line">{{ line }}</span>
           </div>
 
           <!-- bool 行的开关与「跟随全局」按钮必须包在同一个 <template v-else-if> 里:

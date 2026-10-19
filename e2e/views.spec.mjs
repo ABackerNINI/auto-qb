@@ -484,11 +484,25 @@ test.describe('设置页 · 工具参数的单位控件(S7)', () => {
       await page.locator('.hb-card', { hasText: '流量与限速' }).first().click();
       await page.getByRole('button', { name: '整机流量监视器(工具)' }).click();
 
-      /* 卡内是嵌套块(.hb-blk.hb-sub 套在合并卡外壳与「数据来源」区里), hasText 会同时命中
-         三层祖先 -> 取最内层那块(只有它有自己的「展开」钮) */
+      /* 卡内是嵌套块(.hb-blk.hb-sub 套在「数据来源」区里), hasText 会同时命中两层祖先 ->
+         取最内层那块(只有它有自己的「展开」钮) */
       const params = page.locator('.hb-blk', { hasText: '工具参数(高级)' }).last();
       await expect(params).toBeVisible({ timeout: 10_000 });
       await params.getByRole('button', { name: '展开' }).click();
+
+      /* 0) 只读状态行铺满所属块(2026-10-19): 曾因摘要容器 .hb-ro 的 max-width:460px 落到
+         行修饰 .hb-row.hb-ro 上, 值列只剩 206px —— 一行「端口 · PID · 版本 · 数据目录」
+         被折成四行、右侧留一大片空白(用户报「工具状态排版不正确, 文字自动换行」) */
+      const statusBlk = page.locator('.hb-blk', { hasText: '工具状态' }).last();
+      const roRow = statusBlk.locator('.hb-row.hb-ro').first();
+      await expect(roRow).toBeVisible({ timeout: 10_000 });
+      const [blkW, rowW, ctW] = await Promise.all([
+        statusBlk.evaluate((el) => el.getBoundingClientRect().width),
+        roRow.evaluate((el) => el.getBoundingClientRect().width),
+        roRow.locator('.hb-ct').evaluate((el) => el.getBoundingClientRect().width),
+      ]);
+      expect(rowW, `只读状态行被压窄(${rowW}px / 块 ${blkW}px)`).toBeGreaterThan(blkW - 4);
+      expect(ctW, `值列只有 ${ctW}px, 一行状态会被折成多行`).toBeGreaterThan(400);
 
       /* 1) 时间参数: "5S" -> 数值 5 + 单位 S(unit 下拉的 value 是契约单位, 显示文案才翻中文) */
       const interval = params.locator('.hb-row', { hasText: '采样间隔' });
@@ -517,12 +531,13 @@ test.describe('设置页 · 工具参数的单位控件(S7)', () => {
   }
 });
 
-/* 设置页 · 「流量与限速」合并卡三区(2026-10-18, 计划 26-10-18-0813 B4/B5):
- * 三组并一组后, 这张卡就是「数据来源 + 限速曲线 + qB 流量采样」的唯一入口。静态守阵只能证明
- * 模板里有三区与折叠头, 这里用真 DOM 证三件静态查不出的事:
+/* 设置页 · 「流量与限速」三区(2026-10-18, 计划 26-10-18-0813 B4/B5; 2026-10-19 去嵌套):
+ * 三组并一组后, 这一个二级页就是「数据来源 + 限速曲线 + qB 流量采样」的唯一入口。静态守阵只能
+ * 证明模板里有三区与折叠头, 这里用真 DOM 证四件静态查不出的事:
  *   1) 三区**同屏可见**(区序 = 取数链: 先定来源, 再定限速, 最后才是本地采样记录);
+ *   1b) 「流量与限速」在页面上只出现一次(三区不再嵌在同名外壳卡里);
  *   2) 区标题栏可折叠 —— 折叠后该区正文真的不在 DOM(v-if, 不是留个空壳), 再点回来;
- *   3) 卡头「打开历史图表」能开全局弹层(历史图按 D2 不搬进设置页, 只留入口)。 */
+ *   3) 摘要条的「打开历史图表」能开全局弹层(历史图按 D2 不搬进设置页, 只留入口)。 */
 test.describe('设置页 · 流量与限速合并卡(B4)', () => {
   installRuntimeErrorGuard(test);
   for (const skin of SKINS) {
@@ -534,18 +549,23 @@ test.describe('设置页 · 流量与限速合并卡(B4)', () => {
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
       await page.locator('.hb-card', { hasText: '流量与限速' }).first().click();
 
-      /* 1) 三区标题按区序齐现(合并卡外壳里三个 .hb-blk.hb-sub 子区) */
-      const zoneTitles = page.locator('.hb-blk.hb-sub > .hb-blk-hd.hb-sub-toggle > .bh-t');
+      /* 1) 三区标题按区序齐现(2026-10-19 起三区是**页面级**块, 不再套在外壳卡里) */
+      const zoneTitles = page.locator('.hb-blk > .hb-blk-hd.hb-sub-toggle > .bh-t');
       await expect(zoneTitles.first()).toBeVisible({ timeout: 10_000 });
       const titles = await zoneTitles.allInnerTexts();
       expect(titles.slice(0, 3)).toEqual(['数据来源', '限速曲线', '流量图采样']);
 
+      /* 1b) 页面上「流量与限速」只出现一次(面包屑 + h1 同名是页头本身的形制; 卡头曾再叠一条
+          同名标题, 让三区看起来像嵌在页面里的三个子页面) */
+      await expect(page.locator('.hb-sec h1', { hasText: '流量与限速' })).toHaveCount(1);
+      await expect(page.locator('.hb-blk-hd .bh-t', { hasText: '流量与限速' })).toHaveCount(0);
+
       /* 2) 折叠/展开(默认展开; 折叠态不持久化, 刷新后回到展开 —— 这里只验同屏开合) */
       const srcHead = page.locator('.hb-blk-hd.hb-sub-toggle', { hasText: '数据来源' });
       await expect(page.getByRole('button', { name: 'Traffic Monitor 文件' })).toBeVisible();
-      /* 卡内 <hub-field> 真在跑(ce 注入链没断): 来源区的「启用」勾选反映 schema 缺省 true,
+      /* 区内的 <hub-field> 真在跑(ce 注入链没断): 来源区的「启用」勾选反映 schema 缺省 true,
          刷新间隔行在。ce 一旦被组件自己的 provide 截胡, 这一行会在渲染期抛错(上面有运行时错误守卫) */
-      const srcZone = page.locator('.hb-blk.hb-sub', { hasText: '数据来源' }).first();
+      const srcZone = page.locator('.hb-blk', { hasText: '数据来源' }).first();
       await expect(srcZone.locator('.hb-row', { hasText: '刷新间隔' })).toHaveCount(1);
       await expect(srcZone.locator('.hb-row', { hasText: '启用' }).locator('input[type=checkbox]')).toBeChecked();
       await srcHead.getByRole('button').click(); // 收起
