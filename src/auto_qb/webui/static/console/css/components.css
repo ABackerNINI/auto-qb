@@ -98,7 +98,7 @@
 .dist-chip.clear.is-off:hover { background: transparent; }
 /* 筛选器区(右对齐)与当前筛选说明 */
 .strip-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.strip-note { font-size: 11.5px; color: var(--fg-muted); }
+.strip-note, .ctx-note { font-size: 11.5px; color: var(--fg-muted); }  /* .ctx-note = 右键菜单项的行内灰色后缀(计划 26-10-20-0145 D12: 启动/停止/删除 后面跟「N 个种子」): 与 .strip-note 同规格, 故共用同一条声明(改这里 = 同时改两处, 别给它单开一份); 标签与后缀由模板里的 .ctx-text 圈成同一个 flex 项, 否则会被 .ctx-item 的 9px gap 拉开 */
 .strip-note > b { color: var(--fg); }
 /* 多选筛选器(标签/分类/站点): 按钮 + 弹层; 与列选择器共用 .pop-menu 视觉 */
 .filter-pop { position: relative; }

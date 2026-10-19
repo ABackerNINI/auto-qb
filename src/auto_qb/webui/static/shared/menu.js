@@ -141,6 +141,42 @@ window.AQB_MENU = {
       return this._ctxScopeKey({ groupKeys: sel.keys, hashes: sel.hashes }) !==
         this._ctxScopeKey({ groupKeys: a.keys, hashes: a.hashes });
     },
+    /* ---------------- 菜单作用域: 分支 + 目标种子数(计划 26-10-20-0145) ----------------
+     * 菜单项文案统一成「动词 + 灰色 N 个种子」后, 三件事必须同源:
+     *   ① 菜单灰色后缀的 N; ② 容器 data-count(e2e 挂点, D9); ③ toast 回执的 (N 个种子)。
+     * 这里只做一件事: 把当前菜单状态翻成 **C1 锚点描述**, 交 selection.js::_scopeResolve 解析
+     * (唯一作用域产出点, 不另立一套判据) —— 于是四支菜单的 N 与动作实际投递的目标集合恒等。
+     *
+     * !计数时机 = 打开时快照(D5): 菜单开层一律 `this.menu = {…}` 对象替换(state.js 的 watcher
+     *   按对象替换重钳位同款), 渲染时求值即等价于"开层那一刻的选择态"; 菜单存活期间点行会先关
+     *   菜单(见 onGroupClick/onMemberClick 的 menu.visible = false), 不存在选择态漂移。
+     * !模板可见: 这两个方法名不得以 `_` 开头(Vue 模板编译器不解析下划线前缀标识符)。 */
+    _ctxScope() {
+      const m = this.menu || {};
+      if (m.multi) return this._scopeResolve("sel");          // 批量: 整个选中集合
+      if (m.episode) {
+        return this._scopeResolve("anchor", {
+          kind: "episode",
+          hashes: m.episode.hashes || [],
+        });
+      }
+      if (m.hash) return this._scopeResolve("anchor", { kind: "member", id: m.hash });
+      return this._scopeResolve("anchor", { kind: "group", id: m.key });
+    },
+    /* 当前菜单作用对象的分支名(与注册表 CTX_BRANCHES 同一套词: multi/episode/member/group)
+     * —— 容器 :data-kind 的取值, e2e 用它区分四支(文案统一后可见文案已趋同, D9)。 */
+    ctxMenuKind() {
+      const m = this.menu || {};
+      if (m.multi) return "multi";
+      if (m.episode) return "episode";
+      if (m.hash) return "member";
+      return "group";
+    },
+    /* 当前菜单作用对象的**种子总数**(D3: 组/剧/批量全展开, 不按"目标条目数"计) */
+    ctxSeedCount() {
+      const d = this._ctxScope();
+      return this._seedCountOf(d.keys, d.hashes);
+    },
     openMenu(event, group) {
       event.preventDefault();
       this._markCtxSource(event);

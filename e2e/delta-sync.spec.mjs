@@ -38,8 +38,9 @@ import { requireMode } from './lib/mode.mjs';
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
 const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
-/** 菜单项定位器(ctx 菜单是 div.ctx-item, 无 role, 按文案取)。 */
-const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text });
+/** 菜单项定位器(按注册表 id, 模板 `:data-item`): 启动/停止 四支同文案, 只能按 id 点
+ *  (计划 26-10-20-0145 D9; 本文件只点暂停项, 故不保留按文案取的那版)。 */
+const ctxItemById = (page, id) => page.locator(`.ctx-item[data-item="${id}"]`);
 
 /**
  * 打开首页并等首屏渲染(每 test 独立 context 的公共 arrange 前奏, 与 optimistic.spec 同款)。
@@ -165,7 +166,7 @@ for (const skin of SKINS) {
       const roundsBefore = (await deltaRounds(page)).length;
 
       await clickRow(page, target, { button: 'right' });
-      await ctxItem(page, '停止该种子').first().click();
+      await ctxItemById(page, 'pause').first().click();
 
       /* 真值对齐判据: 该行已不在 pendingOps(真值已到并清账)且行 kind 停在真值态 'paused'
        * (回执/3s 兜底路径不会同时满足这两条 —— 兜底是回滚成暂停前的 kind)。
@@ -264,7 +265,7 @@ for (const skin of SKINS) {
       const roundsBefore = (await deltaRounds(page)).length;
 
       await clickRow(page, target, { button: 'right' });
-      await ctxItem(page, '停止整组').first().click();
+      await ctxItemById(page, 'pause').first().click();
 
       /* 组行真值对齐: 组内成员 pending 清账 + 行状态色停在真值聚合档(乐观期也会变 paused 色,
        * 所以同样以 pendingOps 清账为准 —— 成员 hash 从 pendingOps 消失即真值轮已合并)。

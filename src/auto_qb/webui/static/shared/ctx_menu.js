@@ -28,11 +28,24 @@
    *   qb_traffic      = flags.qb_traffic_enabled(流量图入口, 无入口即无请求) */
   const CTX_GATE_FLAG = { skip_check_menu: "skip_check_menu", qb_traffic: "qb_traffic_enabled" };
 
+  /* ---------------- 统一动词族: 「动词 + 灰色种子数」(计划 26-10-20-0145 D1/D3/D11) ----------------
+   * 四支菜单的 启动/停止/删除 一律 label = 动词本身(scope 词「批量/该种子/整组/整剧/整集」退场 ——
+   * 右键位置已经说明作用范围, 作用对象终究是 N 个种子), N 由 note 渲染成行内灰色小字
+   * (.ctx-note), 与标签同处一项。语义: N = **实际受作用的种子总数**(组/剧/批量全展开)。
+   * 计数单点 = menu.js::ctxSeedCount() -> selection.js::_seedCountOf; 打开菜单时求值(D5 快照)。
+   * !别把 N 拼进 label: 灰色小字是样式诉求(.ctx-note), 拼进去就只能整串一个色。
+   * !2026-10-10 webui-wording-unify 已把动词对齐到 qB(开始/暂停 -> 启动/停止), 本轮是其下半场:
+   *   统一动词**后面**的 scope 修饰词。 */
+  const CTX_SEED_NOTE = (vm) => `${vm.ctxSeedCount()} 个种子`;
+
+
   /* ---------------- 一级(level 0)注册表 ----------------
    * 每项字段:
    *   id    支内唯一(分隔线 token 亦占 id); label = 串或 (vm) => 串(动态文案)
+   *   note  串或 (vm) => 串 —— 标签后的行内灰色小字(模板渲染成 .ctx-note); 动词族(启动/停止/
+   *         删除)统一用它承载「N 个种子」(计划 26-10-20-0145 D1/D3), 其余项不给 = 无后缀
    *   labelText 定制面板(W4)用的静态名: label 为函数时**必须**给(面板没有菜单上下文,
-   *         求不出「启动整集 / 启动整剧」这类随选中目标变的文案; 守阵钉这条成对关系)
+   *         求不出「超级做种 / 关闭超级做种」这类随目标状态变的文案; 守阵钉这条成对关系)
    *   icon  { cls, use } —— cls 为 "" 时渲染 class="ico ico-sm"(危险项原样); use 如 "#i-play"
    *   act   (vm) => void —— 点击分派, 原方法调用逐字平移(动作链一行不动, 只改"渲染哪些项")
    *   gate  flags 门控键: 关时**不渲染**(v-if 语义), 布局槽位保留(用户开开关即归位)
@@ -44,8 +57,8 @@
   const CTX_ITEM_DEFS = {
     /* 批量(多选升级, CTX-03): 目标 = 整个选中集合, 动作走 ctxAct/bulk 链 */
     multi: [
-      { id: "resume", label: "批量启动", icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.ctxAct("resume") },
-      { id: "pause", label: "批量停止", icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.ctxAct("pause") },
+      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.ctxAct("resume") },
+      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.ctxAct("pause") },
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.ctxAct("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "recheck", label: "强制重新检查", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.ctxAct("recheck") },
@@ -55,22 +68,23 @@
       { id: "meta", label: "标签/分类…", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.ctxMeta() },
       { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.ctxAct("export") },
       { id: "sep:d2", kind: "sep" },
-      { id: "delete", label: "批量删除…", icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.ctxDelete() },
+      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.ctxDelete() },
     ],
-    /* 整集整剧(shows.js openShowEpMenu/openShowMenu): scope=ep/show 决定动态文案 */
+    /* 整集整剧(shows.js openShowEpMenu/openShowMenu): 2026-10-20 起文案与 scope 无关
+     * (整集/整剧统一成「启动 N 个种子」), scope 只剩目标集合的意义(在 menu.episode.hashes) */
     episode: [
-      { id: "resume", labelText: "启动整集/整剧", label: (vm) => (vm.menu.episode.scope === "show" ? "启动整剧" : "启动整集"), icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
-      { id: "pause", labelText: "停止整集/整剧", label: (vm) => (vm.menu.episode.scope === "show" ? "停止整剧" : "停止整集"), icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
+      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
+      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actEpisode("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.episode.hashes[0]) },
       { id: "sep:d2", kind: "sep" },
-      { id: "delete", labelText: "删除整集/整剧…", label: (vm) => (vm.menu.episode.scope === "show" ? "删除整剧…" : "删除整集…"), icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
+      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
     ],
     /* 单种子(menu.hash): 一级 14 项(含「更多操作」父项) + 5 线; 次级 11 项 + 2 线见 CTX_SUB_ITEM_DEFS */
     member: [
-      { id: "resume", label: "启动该种子", icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
-      { id: "pause", label: "停止该种子", icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
+      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
+      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actTorrent("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "info", label: "详细信息", icon: { cls: "ico-info", use: "#i-info" }, act: (vm) => vm.openTorrentDrawer(vm.menu.hash) },
@@ -88,12 +102,12 @@
       /* 「更多操作」父项: 次级内容 = CTX_SUB_ITEM_DEFS.member; D7 次级无可见项时不渲染父项 */
       { id: "sub-more", label: "更多操作", icon: { cls: "ico-tune", use: "#i-sliders" }, kind: "submenu" },
       { id: "sep:d5", kind: "sep" },
-      { id: "delete", label: "删除该种子…", icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delTorrent() },
+      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delTorrent() },
     ],
     /* 单组(v-else): 目标 = 该组全部成员(组级六入口复用批量链, commands.js) */
     group: [
-      { id: "resume", label: "启动整组", icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.act("resume") },
-      { id: "pause", label: "停止整组", icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.act("pause") },
+      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.act("resume") },
+      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.act("pause") },
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.act("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "recheck", label: "强制重新检查", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.recheckGroup() },
@@ -106,7 +120,7 @@
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("group", vm.menu.key) },
       { id: "qb-traffic", label: "qB 口径流量图", icon: { cls: "", use: "#i-chart" }, gate: "qb_traffic", act: (vm) => vm.openQbGroup(vm.menu.key) },
       { id: "sep:d3", kind: "sep" },
-      { id: "delete", labelText: "删除该组…", label: (vm) => `删除该${vm.l10nGroup}…`, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
+      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
     ],
   };
 
@@ -246,7 +260,7 @@
       if (layer.hidden.has(token)) continue;
       const def = ctxDefById(branch, token);
       if (!def) {
-        if (ctxIsSepToken(token)) out.push({ id: token, kind: "sep", label: "", icon: null, cls: "", gated: false, title: "", act: null, level });
+        if (ctxIsSepToken(token)) out.push({ id: token, kind: "sep", label: "", note: "", icon: null, cls: "", gated: false, title: "", act: null, level });
         continue;
       }
       if (def.kind === "submenu") {
@@ -264,6 +278,8 @@
       id: def.id,
       kind: def.kind || "item",
       label: typeof def.label === "function" ? def.label(vm) : def.label,
+      /* 灰色后缀(如「42 个种子」): 与 label 同一次渲染求值 —— 菜单对象替换才换作用域(D5) */
+      note: typeof def.note === "function" ? def.note(vm) : (def.note || ""),
       icon: def.icon || null,
       cls: def.danger ? "danger" : "",
       gated: false,

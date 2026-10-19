@@ -16,6 +16,31 @@ export const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`
 export const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text });
 
 /**
+ * 菜单项定位器(按注册表 id) —— 计划 26-10-20-0145 之后的**点击挂点**。
+ * 四支菜单的 启动/停止/删除 文案已统一成「动词 + 灰色 N 个种子」, 同一 id(resume/pause/delete)
+ * 在四支上都叫同一个词 —— 按文案点会分不清点了哪支, 也没有"唯一可见文案"可依赖。模板给每项绑了
+ * `:data-item="it.id"`(registry id), 这里按它取; 分支与目标数另用 ctxMenuScope() 断言。
+ * @param {import('@playwright/test').Page} page
+ * @param {string} id —— 注册表 item id(resume / pause / delete / recheck / open-path …)
+ */
+export const ctxItemById = (page, id) => page.locator(`.ctx-item[data-item="${id}"]`);
+
+/**
+ * 当前行右键菜单的**作用域挂点**读值(计划 26-10-20-0145 D9): 容器上的 data-kind(四支分支名,
+ * 与注册表 CTX_BRANCHES 同词: multi/episode/member/group)与 data-count(目标种子总数)。
+ * 文案统一后四支可见文案趋同, scope 契约必须挂属性 —— 这里就是那个挂点的唯一读口。
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<{kind: string|null, count: number}>}
+ */
+export async function ctxMenuScope(page) {
+  const menu = page.locator('.ctx-menu[data-kind]').first();
+  await expect(menu).toBeVisible({ timeout: 5_000 });
+  const kind = await menu.getAttribute('data-kind');
+  const count = Number(await menu.getAttribute('data-count'));
+  return { kind, count };
+}
+
+/**
  * 行点击统一入口: 真实鼠标手势 + 落点可验(对冲写法沿用 multiselect-shows.spec, 机理见其文件头:
  * 宽行居中滚动把 {x:8,y:8} 落点滚出裁剪面 ⇒ sticky-head/html 交替拦截 30s —— 这里 5 拍 arrange
  * + elementFromPoint 验落点, 拦截发生时立即带现场报错)。

@@ -7,9 +7,9 @@
 <title>WEBUI右键菜单文案统一:动词+灰色种子计数</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-menu-label-unify">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-20-0145">
-<meta name="doc-updated" content="26-10-20-0145">
+<meta name="doc-updated" content="26-10-20-0403">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-webui-menu-label-unify.md,memory-bank/issues/26-10-20-0148-test-webui-ctx-menu-left-edge.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI右键菜单文案统一:动词+灰色种子计数</h1>
 <p class="lede">把 WEBUI 右键菜单里启动/停止/删除三族动作的五种 scope 叫法(批量启动 / 启动该种子 / 启动整组 / 启动整剧 / 启动整集, 停止与删除完全同构)统一为单一形态「动词 + 灰色种子计数」——如「启动 <span class="tag">42 个种子</span>」; toast 回执同形, 删除确认框保留构成分解, 三处计数同源不漂移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-20-0145 · <b>doc-updated</b> 26-10-20-0145 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-20-0145 · <b>doc-updated</b> 26-10-20-0403 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令(2026-10-20 01:21):「WEBUI 启动该种子/批量启动/启动整组, 几种不同的叫法需要统一, 初步想法: 统一改为启动, 后面跟灰色描述"x个种子". 停止/删除菜单类似」→ grilling 两轮共 13 问(D1–D13)全部按推荐拍板。动词口径延续 2026-10-10 webui-wording-unify 专题(已对齐 qB GUI: 启动/停止); 本轮统一的是动词后面的 <b>scope 修饰词与计数</b>, 是同一词汇线的下半场
 </div>
 
@@ -120,6 +120,7 @@
   <tr><td>整剧/整集 <code>menu.episode</code></td><td>右键剧/集行</td><td>启动整剧/启动整集 <code>:66</code></td><td>停止整剧/停止整集 <code>:69</code></td><td>删除整剧…/删除整集… <code>:82</code></td></tr>
 </table>
 <p class="aside">组分支删除项的「辅种」是 <code>l10nGroup</code> 常量(<code>app.js:661</code> <code>L10N_GROUP = "辅种"</code>, 经 <code>state.js:24</code> 暴露模板)。统一后该项不再出现辅种名词。</p>
+<p class="aside">上表行号是<b>取证时点</b>(W3 模板 v-for 化之前)。实施轮的实际改点已迁到注册表 <code>shared/ctx_menu.js</code> 的 <code>label</code>/<code>note</code> 字段 —— 差异与理由见 §10 R1; 表内"15 处"是 5 种 scope 叫法 × 3 动词的文案数, 落到注册表是 12 项(整集/整剧两支合并为同一个静态 label)。</p>
 
 <h3>2.2 toast 4 形态(执行回执, <code>commands.js _actCore</code>)</h3>
 <table>
@@ -218,6 +219,16 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-20-0145</span> 初版: 来源 = 用户指令 + grilling 两轮 13 问全部按推荐拍板。要点: 动词+灰色种子计数单形态; <code>selTargets()</code> 计数单点; <code>data-kind</code> 测试挂点; S1–S9 实施步骤; 左缘缺口入池不修。</li>
+  <li><span class="tag">R1 · 26-10-20 03:30 实施轮</span> <b>落地位置修正(决策一条未改)</b>: 提交方案后同步进远端 8 笔(W1–W3 右键菜单定制), <code>ctx-menus.html</code> 已 v-for 化、标签搬进 <code>shared/ctx_menu.js</code> 注册表, 作用域解析已由 <code>selection.js::_scopeResolve</code> 收口(契约 C1)。据此:
+    <ul>
+      <li><b>S1 简化</b>: 不再新建 <code>selTargets()</code>(上游已把 <code>_bulkTargets</code> 变成 C1 的投影), 改为补一个 <code>_seedCountOf(keys, hashes)</code> —— 只回答「这批目标是多少个种子」, 目标集合仍由 C1 给; 于是「N 个目标 / N 个种子」两种单位的唯一差别被收进这一个函数。</li>
+      <li><b>S3 换挂点</b>: 12 项(四支×启动/停止/删除)的文案改在注册表 <code>label</code> + 新增 <code>note</code> 字段, 模板只渲染 <code>.ctx-note</code>; 原表的 15 处是 5 种 scope 叫法 × 3 动词, 落到注册表是 12 项(episode 支的整集/整剧两个变体合并成一个静态 label)。</li>
+      <li><b><code>data-kind</code> 取值改用注册表分支名</b>(<code>multi|episode|member|group</code>), 不用 D9 原文的 <code>single</code> —— 同一批四个分支两套词表正是本计划要消灭的东西; e2e 的 T-6 探针本来就按这四个词断言。</li>
+      <li><b>D12 的 CSS 落法微调</b>: <code>atlas/components.css</code> 已顶到 700 行单文件上限(守阵 <code>test_frontend_template_split_wiring</code>), 故 <code>.ctx-note</code> 并入 <code>.strip-note</code> 的同一条声明(<code>.strip-note, .ctx-note { font-size: 11.5px; color: var(--fg-muted); }</code>)—— 规格反而更不可能漂; 类名仍独立(<code>.ctx-note</code>), 不共用类语义。</li>
+      <li><b>新增 <code>:data-item</code></b>(注册表 id): 四支文案趋同后点击挂点也失效, 与 <code>data-kind/data-count</code> 同批挂上; e2e 的 <code>ctxItemById()</code> 消费它。</li>
+      <li><b>S6 变核验</b>: <code>bulkCountText</code> 在 W3 前就已走 <code>_bulkTargets</code>(C1 投影), 本轮只核「无第二套计数」, 无代码改动。</li>
+    </ul>
+  </li>
 </ul>
 
 </div>

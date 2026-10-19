@@ -94,8 +94,9 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
 const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
-/** 菜单项定位器(ctx 菜单是 div.ctx-item, 无 role, 按文案取)。 */
-const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text });
+/** 菜单项定位器(按注册表 id, 模板 `:data-item="it.id"`)。启动/停止/删除 在四支上同名同文案,
+ *  只能按 id 点(计划 26-10-20-0145 D9); 本文件只点这三族, 故不再保留按文案取的那版。 */
+const ctxItemById = (page, id) => page.locator(`.ctx-item[data-item="${id}"]`);
 
 /** 命令投递端点谓词(旧 CMD_URL 原样移植; 给「补丁先于 POST」注入人为延迟用)。
  *  !Playwright 路由谓词收到的是 URL 对象而不是字符串, 别直接当 string 用。 */
@@ -186,10 +187,11 @@ async function openApp(page, skin) {
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} rowSel —— 行选择器(.torrent-row / .group-row[data-table="group"])
- * @param {string} resumeText —— 恢复菜单项文案(启动该种子 / 启动整组)
  * @returns {Promise<import('@playwright/test').Locator|null>}
+ * !2026-10-20(计划 26-10-20-0145): 恢复项按注册表 id 恒为 resume, 不再要文案参数 ——
+ *   「启动该种子 / 启动整组」两个叫法已统一成「启动 N 个种子」。
  */
-async function pausableRow(page, rowSel, resumeText) {
+async function pausableRow(page, rowSel) {
   const pick = async () => {
     const rows = page.locator(rowSel);
     const n = await rows.count();
@@ -200,10 +202,10 @@ async function pausableRow(page, rowSel, resumeText) {
     return null;
   };
   let row = await pick();
-  if (row || !resumeText) return row;
+  if (row) return row;
   const first = page.locator(rowSel).first();
   await clickRow(page, first, { button: 'right' });
-  const resume = ctxItem(page, resumeText);
+  const resume = ctxItemById(page, 'resume');
   await expect(resume.first()).toBeVisible({ timeout: 5_000 });
   await resume.first().click();
   // 等"恢复"的真值落回(旧固定睡 1200ms; 升级为轮询行 class 离开 s-paused, 语义不变)
@@ -233,11 +235,11 @@ for (const skin of SKINS) {
         await openApp(page, skin);
         await tab(page, 'torrents').click();
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
-        const row = await pausableRow(page, '.torrent-row', '启动该种子');
+        const row = await pausableRow(page, '.torrent-row');
         expect(row, '找到可暂停的种子行(且恢复兜底成功)').toBeTruthy();
 
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (row), { button: 'right' });
-        const item = ctxItem(page, '停止该种子');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         await armPending(page); // 记录器必须在点击**之前**装好(瞬时窗口, 事后再数恒 0)
         await armClick(page, await item.elementHandle());
@@ -266,11 +268,11 @@ for (const skin of SKINS) {
           await new Promise((r) => setTimeout(r, DELAY));
           await route.continue();
         });
-        const target = await pausableRow(page, '.torrent-row', '启动该种子');
+        const target = await pausableRow(page, '.torrent-row');
         expect(target, '找到未暂停的行').toBeTruthy();
 
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (target), { button: 'right' });
-        const item = ctxItem(page, '停止该种子');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         // vm 内部时序探针(D4 第②类, 旧 __m 原样移植): MutationObserver 抓 .is-pending 首现
         await page.evaluate(`(() => {
@@ -315,7 +317,7 @@ for (const skin of SKINS) {
         // 却什么都没测到。vm.refresh 属注入/复原桩态类 evaluate(D4 第①类)。
         await withVm(page, 'return vm.refresh && vm.refresh();');
         await page.waitForTimeout(400); // 旧同值: 等 ver 去抖 + DOM 落地
-        const target = await pausableRow(page, '.torrent-row', '启动该种子');
+        const target = await pausableRow(page, '.torrent-row');
         expect(target, '找到未暂停的行').toBeTruthy();
         // 以 data-hash 锚定目标行: 2s 整表重渲染会换掉行节点, nth 定位可能漂到别的行
         const targetHash = await (/** @type {import('@playwright/test').Locator} */ (target))
@@ -325,7 +327,7 @@ for (const skin of SKINS) {
         const beforeKind = await targetRow.evaluate((el) => [...el.classList].find((c) => c.startsWith('s-')) || '(无)');
 
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (target), { button: 'right' });
-        const item = ctxItem(page, '停止该种子');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         // vm 内部时序探针(D4 第②类, 旧 __t 原样移植): 压暗走 MutationObserver; 值覆盖
         // (pendingOps 是响应式对象、DOM 上看不见)只能 4ms 定时采样 —— 4ms 远小于 error
@@ -409,7 +411,7 @@ for (const skin of SKINS) {
         };
         page.on('request', onReq);
         await clickRow(page, anchor, { button: 'right' });
-        const item = ctxItem(page, '批量停止');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         await armPending(page, '.torrent-row.is-pending, .group-row.is-pending'); // 点击之前装好
         await armClick(page, await item.elementHandle());
@@ -440,12 +442,12 @@ for (const skin of SKINS) {
         // 分组视图(旧"先切回分组"的等价 arrange); 走 pausableRow 兜底 —— 前面的用例已暂停
         // 大量目标, 窗口里的组行很容易全是 s-paused(2026-09-19 实测 atlas 因此挂过)。
         await openApp(page, skin);
-        const gRow = await pausableRow(page, '.group-row[data-table="group"]', '启动整组');
+        const gRow = await pausableRow(page, '.group-row[data-table="group"]');
         expect(gRow, '找到可暂停的组行(且恢复兜底成功)').toBeTruthy();
         const before = (await gRow.getAttribute('class')) || '';
 
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (gRow), { button: 'right' });
-        const item = ctxItem(page, '停止整组');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         await armPending(page, '.group-row.is-pending'); // 必须在点击**之前**装好
         await armClick(page, await item.elementHandle());
@@ -552,7 +554,7 @@ for (const skin of SKINS) {
         await tab(page, 'torrents').click();
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
         await page.waitForTimeout(900); // 旧同值: 等首轮轮询/渲染尘埃落定再装采样器
-        const row = await pausableRow(page, '.torrent-row', '启动该种子');
+        const row = await pausableRow(page, '.torrent-row');
         expect(row, '找到可暂停的行(且恢复失败)').toBeTruthy();
         const rowLoc = /** @type {import('@playwright/test').Locator} */ (row);
         const hash = await rowLoc.getAttribute('data-hash');
@@ -575,7 +577,7 @@ for (const skin of SKINS) {
           }, 10);
         })()`);
         await clickRow(page, rowLoc, { button: 'right' });
-        const item = ctxItem(page, '停止该种子');
+        const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
         await item.evaluate((el) => el.addEventListener('click', () => {
           window.__h.t0 = performance.now();

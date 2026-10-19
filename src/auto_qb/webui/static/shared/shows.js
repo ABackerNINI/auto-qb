@@ -98,14 +98,10 @@ window.AQB_SHOWS = {
       const ep = this.menu.episode || {};
       const hashes = ep.hashes || [];
       if (!hashes.length) return;
-      // 计划 26-09-28-0354 W3: 动作链收敛进 commands.js::_actCore(与整组/单种子/批量同一出口),
-      // 这里只按整集/整剧语义传入 toast 文案; 乐观补丁与回执链与原来逐字一致
-      return this._actCore(action, {
-        keys: [],
-        hashes,
-        what: ep.scope === "show" ? "整剧" : "整集",
-        countSuffix: `(${hashes.length} 个种子)`,
-      });
+      // 计划 26-09-28-0354 W3: 动作链收敛进 commands.js::_actCore(与整组/单种子/批量同一出口)
+      // !2026-10-20(计划 26-10-20-0145): 不再按整集/整剧传 toast 文案 —— 回执统一成
+      //   「已执行: 启动(N 个种子)」, N 与菜单灰色后缀同一计数单点(_seedCountOf)
+      return this._actCore(action, { keys: [], hashes });
     },
     /* 删除整集/整剧(全部版本; FX-13 起两者共用): 目标名与种子数进 body, 详情行由 _deleteFlow 统一派生 */
     async delEpisode() {

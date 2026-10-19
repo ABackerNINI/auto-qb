@@ -560,10 +560,14 @@ window.AQB_COMMANDS = {
      *   reannounce 恒逐目标投递(后端 _BULK_ACTIONS 不含它, tracker 确认要逐个跟踪);
      *   reannounce 的投递集合先经 reannouncePlan 收敛为**活跃子集**(非活跃的发出去也是
      *   qB 引擎空转, 只会给确认层添假结论) —— 组目标因此展开为逐成员 hash(仅活跃的在列)。
-     * what / countSuffix 只管 toast 文案(成功 = `已执行: {动作}{what}{countSuffix}`,
-     * 失败 = `{动作}{what}失败`), 调用方按入口语义传入, 缺省按目标形态推导(键盘路径)。
+     * 回执文案只管一件事(计划 26-10-20-0145 D2/D11): `已执行: {动作}({N} 个种子)` /
+     *   `{动作}失败: {原因}` —— N = 实际受作用的种子总数(selection.js::_seedCountOf), 与菜单
+     *   灰色后缀、删除确认框同一口径。此前四个入口各传 what/countSuffix("整组"/"该种子"/
+     *   "整剧"+"(N 个种子)"/"批量"+"(N 个目标)"), 同一件事四种叫法 + 两种计数单位。
+     * !别再引入 what/countSuffix 参数: 目标形态已经从 keys/hashes 拿得到, 让调用方描述一遍
+     *   就是给「同动作不同叫法」留门(这正是本轮退役的东西)。
      * 乐观补丁: pause/resume 白名单(§P0-3), 目标 = 组成员展开 ∪ hashes 去重 —— 与原三条链一致。 */
-    async _actCore(action, { keys = [], hashes = [], what = "", countSuffix = "" } = {}) {
+    async _actCore(action, { keys = [], hashes = [] } = {}) {
       this._auditScope("actCore:" + action, { keys, hashes });  // S4 运行时审计(默认关, 只记账)
       const n = keys.length + hashes.length;
       if (!n) return;
@@ -571,10 +575,8 @@ window.AQB_COMMANDS = {
        * 本出口覆盖 组菜单 act / 单种子 actTorrent / 整集整剧 actEpisode / 批量 bulkAct /
        * 键盘 _kbAct —— 与右键菜单的置灰(ctx-menus.html)同一判据, 互为"显示层 / 行为层"两道。 */
       if (action === "reannounce" && !this._guardReannounce({ keys, hashes })) return;
-      if (!what) {
-        what = keys.length === 1 && !hashes.length ? "整组" : hashes.length === 1 && !keys.length ? "该种子" : "";
-      }
-      if (!countSuffix && !what) countSuffix = `(${n} 个目标)`;
+      const seedN = this._seedCountOf(keys, hashes);  // 种子数单点(组按成员展开), N 不取 n
+      const countSuffix = `(${seedN} 个种子)`;
       const label = this._actionText(action);
       const isRe = action === "reannounce";
       const optHashes = [];
@@ -704,8 +706,8 @@ window.AQB_COMMANDS = {
         const r = await this.waitCmd(resp.cmd_id);
         this.resolveOptimistic(optHashes, r.ok);
         /* D2: 真值由 `truth` 事件推送(onTruthEvent), 回执不带 truth —— 各入口原注释合并于此 */
-        if (r.ok) this.toast(`已执行: ${label}${what}${countSuffix}`, "ok", 2500);
-        else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
+        if (r.ok) this.toast(`已执行: ${label}${countSuffix}`, "ok", 2500);
+        else this.toast(`${label}失败: ${r.error}`, "error", 8000);
       } catch (e) {
         if (!isRe) this.resolveOptimistic(optHashes, false);  // 发送失败: 回滚, 不留假状态
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
@@ -714,7 +716,7 @@ window.AQB_COMMANDS = {
     async act(action) {
       this.menu.visible = false;
       if (!this.menu.key) return;
-      return this._actCore(action, { keys: [this.menu.key], hashes: [], what: "整组" });
+      return this._actCore(action, { keys: [this.menu.key], hashes: [] });
     },
     /* 选中集合拆解 -> {groupKeys, memberHashes}。
      * !2026-10-10(计划 26-10-10-2001 S3): 展开逻辑收进 selection.js::_scopeResolve("sel") 单点,
@@ -753,8 +755,6 @@ window.AQB_COMMANDS = {
       return this._actCore(action, {
         keys: groupKeys,
         hashes: memberHashes,
-        what: "",
-        countSuffix: `(${groupKeys.length + memberHashes.length} 个目标)`,
       });
     },
     /* ---------------- CTX-03 批量右键菜单的动作入口 ----------------
@@ -819,7 +819,7 @@ window.AQB_COMMANDS = {
       if (!t || !t.memberHashes.length) return;
       const ok = await this._recheckConfirm("整组");
       if (!ok) return;
-      return this._actCore("recheck", { keys: [], hashes: t.memberHashes, what: "整组" });
+      return this._actCore("recheck", { keys: [], hashes: t.memberHashes });
     },
     /* 组级限速/移动/跳检: 直接交多选同款对话框(scope="该组的" 让文案落到组语义), 目标锁定该组 */
     editLimitsGroup() {
@@ -859,7 +859,7 @@ window.AQB_COMMANDS = {
       this.menu.visible = false;
       const h = hash || this.menu.hash;
       if (!h) return;
-      return this._actCore(action, { keys: [], hashes: [h], what: "该种子" });
+      return this._actCore(action, { keys: [], hashes: [h] });
     },
     /* 复制种子信息(种子页右键 R1A): clipboard API 优先, execCommand 降级(非安全上下文/权限拒绝);
      * 无论成功失败都给 toast 反馈 */

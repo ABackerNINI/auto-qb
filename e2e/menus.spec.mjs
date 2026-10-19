@@ -4,7 +4,7 @@ import { BASE_URL, SKINS } from './harness.mjs';
 import { CMD_RESULT, requireMode } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
-import { tab, ctxItem, clickRow, openApp, openMenuTexts, pickRows, bulkTap } from './lib/gestures.mjs';
+import { tab, ctxItem, ctxItemById, clickRow, openApp, openMenuTexts, pickRows, bulkTap } from './lib/gestures.mjs';
 import { armClick, armPending, readPending } from './lib/probes.mjs';
 
 /**
@@ -391,7 +391,7 @@ for (const skin of SKINS) {
         expect(Math.round(b.x + b.width), `菜单右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8`)
           .toBeLessThanOrEqual(vp.width - 8 + 1);
         // 底部最后一项走真实点击: 溢出时这里报 "outside of the viewport" 直到超时(修复前的签名)
-        await ctxItem(page, '批量删除…').click();
+        await ctxItemById(page, 'delete').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await page.keyboard.press('Escape'); // 收掉确认框(本用例只验可达性, 不提交)
         await expect(page.locator('.modal')).toHaveCount(0);
@@ -644,7 +644,7 @@ for (const skin of SKINS) {
         const pausedHash = await pausedRow.getAttribute('data-hash');
 
         await clickRow(page, pausedRow, { button: 'right' });
-        await ctxItem(page, '删除该种子').click();
+        await ctxItemById(page, 'delete').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         const pill = page.locator('.modal-opts .opt-pill').first();
         await expect(pill, '全非活跃目标的汇报项应禁用(is-gated)').toHaveClass(/is-gated/);
@@ -691,7 +691,7 @@ for (const skin of SKINS) {
         expect(await readInst(page, '(vm.selMembers || []).length'), '混选应选中 2 个种子').toBe(2);
 
         await clickRow(page, activeRow, { button: 'right' });
-        await ctxItem(page, '批量删除').click();
+        await ctxItemById(page, 'delete').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         const pill = page.locator('.modal-opts .opt-pill').first();
         // 混选按 qB 口径放行(任一活跃即可用): 不禁用、保持默认勾选, 只在 pill 上报跳过数(D5)

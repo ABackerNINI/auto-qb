@@ -5,6 +5,9 @@ import { CMD_RESULT } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 import { armClick, armPending, readPending } from './lib/probes.mjs';
+// 作用域挂点(计划 26-10-20-0145): 菜单文案统一成「动词 + 灰色 N 个种子」后, 分支/目标数只能
+// 从容器 data-kind / data-count 读, 菜单项点击改挂注册表 id(data-item)
+import { ctxItemById, ctxMenuScope } from './lib/gestures.mjs';
 
 /**
  * 多选右键 + 追剧视图(S2 批, 计划 26-10-06-0708 §3.3/§04 S2) —— 承接旧单页冒烟脚本
@@ -234,16 +237,16 @@ for (const skin of SKINS) {
       const picked = await readInst(page, 'vm.selMembers.length');
       expect(picked, `Ctrl+click ${N} 行后选中数`).toBe(N);
 
-      // 1. 菜单文案: 右键选中行 -> 批量菜单(CTX-03 选中行右键 -> 批量菜单, 旧 L808)
+      // 1. 菜单分支: 右键选中行 -> 批量支(CTX-03 选中行右键 -> 批量菜单, 旧 L808)
       await clickRow(page, rows.nth(0), { button: 'right' });
-      let texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量停止')), `选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
+      let scope = await ctxMenuScope(page);
+      expect(scope.kind, `选中行右键应走批量支: ${(await openMenuTexts(page)).slice(0, 6).join(' / ')}`).toBe('multi');
 
       // 2. 右键未选中行 -> 仍是单目标菜单(CTX-03 未选中行右键 -> 仍是单目标菜单, 旧 L811)
       await clickRow(page, rows.nth(N + 3), { button: 'right' }); // 再右键整份替换菜单, 不必先关
-      texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('停止该种子')), `未选中行右键菜单: ${texts.slice(0, 6).join(' / ')}`).toBe(true);
-      expect(texts.some((t) => t.includes('批量')), '未选中行菜单不出现批量项').toBe(false);
+      scope = await ctxMenuScope(page);
+      expect(scope.kind, `未选中行右键应走单种子支: ${(await openMenuTexts(page)).slice(0, 6).join(' / ')}`).toBe('member');
+      expect(scope.count, '单种子支目标数恒 1').toBe(1);
 
       // 3. 实际投递: 右键选中行 -> 点「批量暂停」-> 恰好 1 条 bulk / 0 条逐目标(旧 L835)
       const hits = { bulk: 0, single: 0 };
@@ -254,7 +257,7 @@ for (const skin of SKINS) {
       };
       page.on('request', onReq);
       await clickRow(page, rows.nth(0), { button: 'right' });
-      const item = ctxItem(page, '批量停止');
+      const item = ctxItemById(page, 'pause');
       await expect(item).toBeVisible({ timeout: 5_000 });
       await armPending(page, '.torrent-row.is-pending, .group-row.is-pending'); // 点击**之前**装好
       await armClick(page, await item.elementHandle());
@@ -294,7 +297,7 @@ for (const skin of SKINS) {
       const sRow = sRows.first();
       const before = await sRow.getAttribute('class');
       await clickRow(page, sRow, { button: 'right' });
-      const item = ctxItem(page, '停止整剧');
+      const item = ctxItemById(page, 'pause');
       await expect(item).toBeVisible({ timeout: 5_000 });
       // 桩命令泵瞬时回执 ⇒ 压暗窗口只有几十 ms, expect.poll 的 100ms 间隔会整段错过
       // (旧脚本此处用 rAF 频率的 waitForFunction 才采到)。改用记录器: 点击**之前**装好,
@@ -344,8 +347,8 @@ for (const skin of SKINS) {
       const ep0 = epRows.first();
       const before = await ep0.getAttribute('class');
       await clickRow(page, ep0, { button: 'right' });
-      // 菜单项按可用文案取: 暂停整集 / 暂停整剧(scope 决定文案, 与旧脚本同一匹配序)
-      const item = ctxItem(page, '停止整集').or(ctxItem(page, '停止整剧'));
+      // 菜单项按注册表 id 取(整集/整剧文案已统一, 不再靠 scope 文案二选一)
+      const item = ctxItemById(page, 'pause');
       await expect(item.first()).toBeVisible({ timeout: 5_000 });
       await armPending(page, '.group-row.ep-row.is-pending');
       await armClick(page, await item.first().elementHandle());
@@ -391,9 +394,9 @@ for (const skin of SKINS) {
       expect(selN, `Ctrl+click 两集后 selMembers=${selN}(两集成员均入选)`).toBeGreaterThan(0);
 
       await clickRow(page, epRows.nth(0), { button: 'right' });
-      const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量停止')), `多选右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
-      expect(texts.some((t) => t.includes('停止整集')), '多选时不再出现单集目标项').toBe(false);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `多选集行右键应走批量支: ${(await openMenuTexts(page)).slice(0, 5).join(' / ')}`).toBe('multi');
+      expect(scope.count, '批量支目标数 = 选中两集的成员总数(与 selMembers 同口径)').toBe(selN);
       await page.keyboard.press('Escape');
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
     });
@@ -411,9 +414,8 @@ for (const skin of SKINS) {
       expect(selN, `Ctrl+click 两组后 selGroups=${selN}`).toBe(2);
 
       await clickRow(page, gRows.nth(0), { button: 'right' });
-      const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量停止')), `多组右键菜单: ${texts.slice(0, 5).join(' / ')}`).toBe(true);
-      expect(texts.some((t) => t.includes('停止整组')), '多选时不再出现单组目标项').toBe(false);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `多组右键应走批量支: ${(await openMenuTexts(page)).slice(0, 5).join(' / ')}`).toBe('multi');
       await page.keyboard.press('Escape');
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
     });
@@ -492,9 +494,9 @@ for (const skin of SKINS) {
 
       await clickRow(page, rows.nth(0), { modifiers: ['Control'] });
       await clickRow(page, rows.nth(1), { modifiers: ['Control'] });
-      // 选中行右键 -> 批量菜单(CTX-03 既有链路) -> 批量删除… -> 确认框
+      // 选中行右键 -> 批量菜单(CTX-03 既有链路) -> 删除… -> 确认框
       await clickRow(page, rows.nth(0), { button: 'right' });
-      await ctxItem(page, '批量删除…').click();
+      await ctxItemById(page, 'delete').click();
       const modal = page.locator('.modal-mask .modal');
       await expect(modal).toBeVisible({ timeout: 5_000 });
 

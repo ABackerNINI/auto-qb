@@ -17,7 +17,8 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
   硬编码钉(四支 + 次级逐位) + 注册表完整性(id 唯一/形状齐/gate·dyn 合法/次级默认仅 member) +
   无 cfg 渲染 == 默认序 + 补尾 + 隐藏槽位保留与恢复归位 + 跨层双向 + sep 增删与 token 分配 +
   次级空与只剩线不显示父项(D7) + 未知 id 容忍与 sep 一等公民 + 门控两态 + 结构项防嵌套 +
-  动态 label + 置灰 title + ctxRun 分派 + 静态名(labelText)成对
+  动态 label + 置灰 title + ctxRun 分派 + 静态名(labelText)成对 + 动词族灰色后缀(四支 12 项,
+  计划 26-10-20-0145)
 - test_ctx_custom_panel_wiring: 设置页「WebUI」卡接线守阵(W4) —— 卡片注册/hubNow/hubGo 复位/
   hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
   + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
@@ -91,6 +92,7 @@ function stubVm(over) {
     reannounceMenuGate: () => ({ ok: true, title: "" }),
     menuTorrent: () => ({ super_seeding: false, force_start: false, auto_tmm: false }),
     l10nGroup: "辅种组",
+    ctxSeedCount: () => 42,   // 菜单灰色后缀的计数单点(真机上来自 menu.js; 电池只验渲染形态)
   }, over || {});
 }
 const vmWith = (ctxMenu, flagOver) => stubVm({
@@ -244,14 +246,17 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
 
 // ---- ⑫ 动态 label 与置灰 title
 {
+  /* 计划 26-10-20-0145: 四支的 启动/停止/删除 已统一为「动词 + 灰色 N 个种子」——
+   * label 里不再有 scope 词(批量/该种子/整组/整剧/整集), 于是 episode 支不再按 scope 变文案,
+   * 整剧/整集两支渲染出的 label + note 必须**逐字相同**(这正是本轮的验收点)。 */
   const vmEp = stubVm();
   const ep = M.methods.ctxItems.call(vmEp, "episode");
-  checks.push(["episode scope=ep 文案", ep[0].label === "启动整集" && ep[1].label === "停止整集" && ep[ep.length - 1].label === "删除整集…"]);
+  checks.push(["episode scope=ep 文案", ep[0].label === "启动" && ep[1].label === "停止" && ep[ep.length - 1].label === "删除…"]);
   const vmShow = stubVm({ menu: { visible: true, key: null, hash: null, episode: { hashes: ["H1"], scope: "show" } } });
   const epShow = M.methods.ctxItems.call(vmShow, "episode");
-  checks.push(["episode scope=show 文案", epShow[0].label === "启动整剧" && epShow[epShow.length - 1].label === "删除整剧…"]);
+  checks.push(["整集/整剧文案与 scope 无关", eq(ep.map((i) => i.label + "|" + i.note), epShow.map((i) => i.label + "|" + i.note))]);
   const grp = M.methods.ctxItems.call(stubVm(), "group");
-  checks.push(["组删除动态文案", grp[grp.length - 1].label === "删除该辅种组…"]);
+  checks.push(["组删除文案不再出现辅种名词", grp[grp.length - 1].label === "删除…"]);
   const sub = M.methods.ctxSubItems.call(stubVm(), "member");
   const ss = sub.filter((i) => i.id === "super-seeding")[0];
   checks.push(["超级做种开关态文案(关->开)", ss.label === "开启超级做种"]);
@@ -260,6 +265,26 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["置灰态 is-gated + title", gated.gated === true && gated.title === "目标全部非活跃"]);
   const okItem = M.methods.ctxItems.call(stubVm(), "group").filter((i) => i.id === "reannounce")[0];
   checks.push(["可用态 title 恒空串(非 null)", okItem.gated === false && okItem.title === ""]);
+}
+
+// ---- ⑭ 动词族灰色后缀(计划 26-10-20-0145 D1/D3)
+{
+  /* 只有 启动/停止/删除 三项带 note(值 = ctxSeedCount + " 个种子"); 其余项一律空 —
+   * note 空字符串时模板 v-if 不渲染 span, 所以"没给 note"与"给了空串"在渲染层等价,
+   * 第⑮条用 items 全表扫一遍防"顺手给别的项也挂后缀"。 */
+  const VERBS = ["resume", "pause", "delete"];
+  let bad = [];
+  for (const b of R.CTX_BRANCHES) {
+    const items = M.methods.ctxItems.call(stubVm(), b);
+    for (const it of items) {
+      const want = VERBS.indexOf(it.id) >= 0;
+      if (want && it.note !== "42 个种子") bad.push(b + "/" + it.id + "=" + JSON.stringify(it.note));
+      if (!want && it.note) bad.push(b + "/" + it.id + " 不该有后缀");
+    }
+  }
+  checks.push(["四支 12 个动词项各带「N 个种子」后缀且其余项无后缀", bad.length === 0 ? true : bad.join(", ")]);
+  const seps = M.methods.ctxItems.call(stubVm(), "multi").filter((i) => i.kind === "sep");
+  checks.push(["分隔线项 note 恒空(不炸模板)", seps.every((i) => i.note === "")]);
 }
 
 // ---- ⑬ ctxRun 分派: 调注册表 act 并透传 vm

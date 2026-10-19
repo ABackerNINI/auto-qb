@@ -4,7 +4,7 @@ import { SKINS } from './harness.mjs';
 import { CMD_RESULT, requireMode } from './lib/mode.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
-import { tab, clickRow, openApp, openMenuTexts, pickRows, bulkTap, groupActionTap, torrentActionTap } from './lib/gestures.mjs';
+import { tab, clickRow, openApp, openMenuTexts, pickRows, bulkTap, groupActionTap, torrentActionTap, ctxItemById, ctxMenuScope } from './lib/gestures.mjs';
 import { armScopeAudit, readScopeRing, expectScopeRingClean, injectScopeDeviation } from './lib/scope_ring.mjs';
 
 /**
@@ -14,7 +14,9 @@ import { armScopeAudit, readScopeRing, expectScopeRingClean, injectScopeDeviatio
  *   ① 下发载荷 —— 拦截 POST, 比对目标集合与期望闭包(真实 UI 手势驱动, 不借道 vm 注入动作;
  *      evaluate 只用第①类注入桩态 / 第②类读内部埋点, D4 守则见 lib/vm.mjs 头注);
  *   ② 审计环为空 —— scope_ring.expectScopeRingClean(载荷对 ≠ 还要"说谎为零");
- *   ③ 文案 —— toast / 菜单明示作用对象(C5 口径甲: 选中 N 项右键 = 对全部生效, 但界面明示)。
+ *   ③ 作用域与文案 —— 菜单容器 data-kind / data-count 明示分支与种子数(计划 26-10-20-0145 起
+ *      文案统一成「动词 + 灰色 N 个种子」, 分支不再能靠文案辨), toast 报同一口径的「(N 个种子)」
+ *      (C5 口径甲: 选中 N 项右键 = 对全部生效, 但界面明示)。
  *
  * 用例与登记表(TRIGGER_DEFS)的咬合: 场景 1–4 + 键盘覆盖 dispatch ∈ action / delete 之外的全部
  * 一级动作形态(per-skin); 场景 6 从页面读登记表(接线真浏览器探针)。新增触发点走统一出口即被
@@ -36,24 +38,29 @@ for (const skin of SKINS) {
       await armScopeAudit(page);
       const picked = await pickRows(page, 2); // [h0, h1]
 
-      // 锚点行在选中集合内 -> 批量菜单(C5 口径甲: 菜单明示"批量", 作用对象=整个选中集合)
+      // 锚点行在选中集合内 -> 批量菜单(C5 口径甲: 作用对象 = 整个选中集合)
+      // !计划 26-10-20-0145: 四支菜单文案已统一成「动词 + 灰色 N 个种子」, 分支与目标数改挂容器
+      //   属性(data-kind / data-count), 可见文案只留形态正则 —— 文案统一后不能再靠文案辨分支。
       await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, '选中行右键应走批量支').toBe('multi');
+      expect(scope.count, '菜单明示的目标数 == 选中集合种子数').toBe(2);
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量启动')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      expect(texts.some((t) => /^启动 \d+ 个种子$/.test(t)), `应渲染「启动 N 个种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = bulkTap(page);
-      await page.locator('.ctx-item', { hasText: '批量启动' }).first().click();
+      await ctxItemById(page, 'resume').first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条 bulk POST', timeout: 8_000 }).toBe(1);
       off();
       const posted = JSON.parse(/** @type {string} */ (hits.body));
       expect(posted.action, `载荷: ${JSON.stringify(posted).slice(0, 140)}`).toBe('resume');
       expect([...posted.hashes].sort(), 'hashes == 选中集合(整份闭包, 不多不少)').toEqual([...picked].sort());
       expect(posted.keys, '纯成员选中无组 key').toEqual([]);
-      // 文案层: countText 明示目标数(C5 口径甲的"界面明示作用范围")
+      // 文案层: 回执同样报**种子数**(与菜单灰色后缀同一口径)
       await expect.poll(async () => {
         const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
-        return (ts || []).some((s) => s.startsWith('ok|') && s.includes('(2 个目标)'));
-      }, { message: '成功 toast 应含 countText「(2 个目标)」', timeout: 5_000 }).toBe(true);
+        return (ts || []).some((s) => s.startsWith('ok|') && s.includes('(2 个种子)'));
+      }, { message: '成功 toast 应含「(2 个种子)」', timeout: 5_000 }).toBe(true);
       await expectScopeRingClean(page);
     });
 
@@ -68,12 +75,12 @@ for (const skin of SKINS) {
       const anchorRow = page.locator('.torrent-row').nth(5);
       const anchorHash = await anchorRow.getAttribute('data-hash');
       await clickRow(page, anchorRow, { button: 'right' });
-      const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('批量启动')), `不得渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
-      expect(texts.some((t) => t.includes('启动该种子')), `应有单目标「启动该种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `锚点不在选中集合 -> 单种子支: ${await openMenuTexts(page).then((t) => t.slice(0, 8).join(' / '))}`).toBe('member');
+      expect(scope.count, '单种子支目标数恒 1').toBe(1);
 
       const { hits, off } = torrentActionTap(page);
-      await page.locator('.ctx-item', { hasText: '启动该种子' }).first().click();
+      await ctxItemById(page, 'resume').first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条单目标 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == resume').toBe('resume');
@@ -93,11 +100,11 @@ for (const skin of SKINS) {
       const anchorRow = page.locator('.torrent-row').nth(0);
       const anchorHash = await anchorRow.getAttribute('data-hash');
       await clickRow(page, anchorRow, { button: 'right' });
-      const texts = await openMenuTexts(page);
-      expect(texts.some((t) => t.includes('停止该种子')), `单目标菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `空选中右键 -> 单种子支: ${await openMenuTexts(page).then((t) => t.slice(0, 8).join(' / '))}`).toBe('member');
 
       const { hits, off } = torrentActionTap(page);
-      await page.locator('.ctx-item', { hasText: '停止该种子' }).first().click();
+      await ctxItemById(page, 'pause').first().click();
       await expect.poll(() => hits.n, { message: '应恰好 1 条单目标 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == pause').toBe('pause');
@@ -117,13 +124,13 @@ for (const skin of SKINS) {
       expect(closure.length, '组闭包非空(前置自检)').toBeGreaterThan(0);
 
       await clickRow(page, gRows.nth(0), { button: 'right' });
-      const texts = await openMenuTexts(page);
       // C2 口径: 集合与锚点行范围一致 = 只选中了它自己 -> 单组支(不是批量菜单) —— 2026-10-10 实测锚定
-      expect(texts.some((t) => t.includes('批量启动')), `单组选中不得升批量: ${texts.slice(0, 8).join(' / ')}`).toBe(false);
-      expect(texts.some((t) => t.includes('启动整组')), `应有单组支「启动整组」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `单组选中不得升批量: ${await openMenuTexts(page).then((t) => t.slice(0, 8).join(' / '))}`).toBe('group');
+      expect(scope.count, '单组支目标数 == 该组成员数(D3: 组展开成种子数)').toBe(closure.length);
 
       const { hits, off } = groupActionTap(page);
-      await page.locator('.ctx-item', { hasText: '启动整组' }).first().click();
+      await ctxItemById(page, 'resume').first().click();
       await expect.poll(() => hits.n, { message: '单组 resume 应走组路径 POST', timeout: 8_000 }).toBe(1);
       off();
       expect(hits.action, '动作 == resume').toBe('resume');
@@ -143,12 +150,14 @@ for (const skin of SKINS) {
       expect(await readInst(page, 'vm.selGroups.length'), 'Ctrl+click 两组').toBe(2);
 
       await clickRow(page, gRows.nth(0), { button: 'right' });
-      const texts = await openMenuTexts(page);
       // 集合(2 组)比锚点行(1 组)大 -> 升级批量菜单(C5 口径甲: 选中 N 项右键 = 对全部生效)
-      expect(texts.some((t) => t.includes('批量启动')), `应渲染批量菜单: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      const scope = await ctxMenuScope(page);
+      expect(scope.kind, `应渲染批量菜单: ${await openMenuTexts(page).then((t) => t.slice(0, 8).join(' / '))}`).toBe('multi');
+      const closure = await readInst(page, '[...vm.selHashSet]');  // 两组选中 -> 成员闭包
+      expect(scope.count, '批量支目标数 == 两组闭包的种子总数').toBe(closure.length);
 
       const { hits, off } = bulkTap(page);
-      await page.locator('.ctx-item', { hasText: '批量启动' }).first().click();
+      await ctxItemById(page, 'resume').first().click();
       await expect.poll(() => hits.n, { message: '多组应走 bulk POST', timeout: 8_000 }).toBe(1);
       off();
       const posted = JSON.parse(/** @type {string} */ (hits.body));

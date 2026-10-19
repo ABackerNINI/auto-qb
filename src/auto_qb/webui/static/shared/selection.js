@@ -238,6 +238,24 @@ window.AQB_SELECTION = {
       }
       return "";
     },
+    /* 「这批目标到底是多少个种子」—— **种子计数单点**(计划 26-10-20-0145 D3/D6)。
+     * keys(组) 按成员闭包展开 + hashes 原样计入 + 两路去重; 虚拟行(未归组命中种子)没有真实组
+     * key, 只带那一个 hash, 天然算 1。组的展开走 memberHashesOf(集成员可能是对象或 hash,
+     * 见 shows.js 头注), 与 _selExpandGroups 同口径。
+     * 消费面(三处, 全仓只此一份实现): 菜单灰色后缀(menu.js::ctxSeedCount)、
+     * 删除确认框构成分解(delete_flow.js::bulkCountText)、动作回执 toast(commands.js::_actCore)。
+     * !别在消费点各自数 hashes.length —— 组 key 算 1 个目标而不是 N 个种子, 那正是本次要收敛的
+     *   「N 个目标 / N 个种子」两套口径。 */
+    _seedCountOf(keys, hashes) {
+      const seen = new Set();
+      for (const h of hashes || []) if (h) seen.add(h);
+      for (const k of keys || []) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        for (const h of this.memberHashesOf(g.members || [])) seen.add(h);
+      }
+      return seen.size;
+    },
     /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
     isGroupSelected(g) {
       return this.selGroups.includes(g.key);

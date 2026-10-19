@@ -1,11 +1,11 @@
 # 26-10-20-webui-menu-label-unify — WEBUI右键菜单文案统一:动词+灰色种子计数
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-20
 **Updated:** 2026-10-20
-**Summary:** WEBUI右键菜单文案统一:动词+灰色种子计数
+**Summary:** 四支右键菜单的 启动/停止/删除 文案统一为「动词 + 行内灰色 N 个种子」(scope 词 批量/该种子/整组/整剧/整集 全部退场), toast 回执同形「已执行: 动词(N 个种子)」, 删除确认框的构成分解保留; N = 实际受作用种子总数, 计数单点 `selection.js::_seedCountOf` 派生到菜单后缀 / 确认框 / 回执三处。grilling 两轮 13 问按推荐拍板后出计划, 实施轮撞上游 W1–W3 把菜单改成注册表驱动, 决策不变只换落点(12 项 label + `note` 字段); 测试挂点从文案迁到 `data-kind`/`data-count`/`data-item`。验证: test.full 3769 passed(98%)+ dev.e2e 322 passed。
 **Topics:** webui-menu-label-unify
-**Refs:** memory-bank/plans/26-10-20-0145-plan-webui-menu-label-unify.html, memory-bank/issues/26-10-20-0148-test-webui-ctx-menu-left-edge.html
+**Refs:** memory-bank/plans/26-10-20-0145-plan-webui-menu-label-unify.html, memory-bank/issues/26-10-20-0148-test-webui-ctx-menu-left-edge.html, memory-bank/testing/baselines/26-10-20-0403-webui-menu-label-unify.md
 
 ## 原始请求
 
@@ -29,19 +29,27 @@
 
 ## 实现计划
 
-单波次 S1–S9 顺序执行, 每步独立可验(完整落点/证据/验收判据见计划 §04):
+单波次 S1–S9 顺序执行, 每步独立可验(完整落点/证据/验收判据见计划 §04)。
+
+**实施轮开始时的落地位置修正(2026-10-20 03:30)**: 提交方案后同步进来远端 8 笔(W1–W3),
+`ctx-menus.html` 已 v-for 化、标签全部搬进 `shared/ctx_menu.js` 注册表, 作用域解析已由
+`selection.js::_scopeResolve` 收口(契约 C1)—— 原 S1「新建 selTargets()」与 S3「模板 15 处改写」
+的挂点整体位移。**决策不变(D1–D13 全部照旧), 只换落点**: S1 退化为"补一个种子基数函数复用
+C1 单点", S3 改为"注册表 label + note 字段"。计划本身不重写, 差异记在 §07 变更记录与本节。
+
+## 子任务状态表
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | selection.js 新增 selTargets()(自 commands.js _bulkTargets 迁移); commands.js 改调用 | Open |
-| S2 | ctxScopeCount() 模板方法四分支计数; 容器绑 :data-kind/:data-count | Open |
-| S3 | ctx-menus.html 15 处文案改写 + `<span class="ctx-note">` 后缀 | Open |
-| S4 | 三皮肤 CSS 新增 .ctx-note(11.5px + --fg-muted) | Open |
-| S5 | toast 同形: _actCore what/countSuffix 参数化; shows.js:106-107 同改 | Open |
-| S6 | delete_flow.js bulkCountText 改从 selTargets() 派生(构成式保留) | Open |
-| S7 | e2e 六 spec: scope 断言改挂 data 属性 + 形态正则 | Open |
-| S8 | 文档: webui.md:10 术语行修正 + 补菜单动作文案口径约定 | Open |
-| S9 | 全量: test.full + e2e; kb.new baseline 誊实测数字 | Open |
+| S1 | 计数单点: `selection.js::_seedCountOf(keys, hashes)`(复用 C1 `_scopeResolve` 描述符, 组展开去重) | Done |
+| S2 | `menu.js::_ctxScope/ctxMenuKind/ctxSeedCount`; 模板容器绑 `:data-kind` / `:data-count` | Done |
+| S3 | 注册表 12 项(四支×启动/停止/删除)label 统一 + `note` 灰色后缀; 模板渲染 `.ctx-note` + `:data-item` | Done |
+| S4 | 三皮肤 `.ctx-note`(并入 `.strip-note` 同一条声明, 规格逐字同源) | Done |
+| S5 | toast 同形: `_actCore` 收掉 `what`/`countSuffix`, 恒 `已执行: 动词(N 个种子)`; shows.js 同改 | Done |
+| S6 | 删除确认框: `bulkCountText` 已走 C1 投影(W3 前既有), 核验无第二套计数 | Done |
+| S7 | e2e 五 spec + 手势库: scope 断言改挂 data 属性, 点击改挂 `data-item` | Done |
+| S8 | 文档: `conventions/webui.md` 术语行修正 + 补「动词 + 灰色种子数」口径约定 | Done |
+| S9 | 全量: `test.full` 3769 passed + `dev.e2e` 322 passed; 基线切片 `26-10-20-0403` | Done |
 
 ## 进度日志
 
@@ -53,3 +61,21 @@
 - 下一步: 用户过目计划并拍板 → 实施轮按 S1–S9 执行。
 
 - 2026-10-20 01:51 grilling两轮13问全部按推荐拍板; 计划26-10-20-0145-plan-webui-menu-label-unify落盘(Open待用户过目); 任务档案立档(S1-S9全Open); 左缘测试存量缺口入池(test/light/Open, D13不顺手修); 本轮未动任何生产文件
+
+### R1 · 实施 (2026-10-20 03:30–04:10)
+
+- **用户指令**: 「提交后实施, 全部实施完毕后再提交」→ 方案轮 KB 制品先提交(`df92f785`), 再实施, 全部完成后第二次提交。
+- **开工即撞上游改写**: `ship.commit` 内部同步合流远端 8 笔(W1–W3 右键菜单定制 + 设置页卡), `ctx-menus.html` 已 v-for 化、标签搬进 `shared/ctx_menu.js`、作用域解析已由 `selection.js::_scopeResolve` 收口(C1)。**决策 D1–D13 一条未改, 落点整体位移**, 差异逐条记在计划 §10 R1。
+- **实际落点**(S1–S9 完成):
+  - 计数单点 `selection.js::_seedCountOf`(复用 C1 描述符, 组展开去重; 不新建 `selTargets` —— 上游已让 `_bulkTargets` 变成 C1 的投影);
+  - `menu.js::_ctxScope/ctxMenuKind/ctxSeedCount`; 模板容器绑 `:data-kind`/`:data-count`(取值用注册表分支名 multi|episode|member|group —— 放弃了 D9 原文的 `single`, 理由: 同一批四个分支不该有两套词表);
+  - 注册表 12 项(四支×启动/停止/删除)label 改动词 + 新 `note` 字段; 模板渲染 `.ctx-note`, 且用 `.ctx-text` 把标签与后缀圈成同一个 flex 项(否则吃 `.ctx-item` 的 9px gap, innerText 也会被拆开);
+  - `.ctx-note` 三皮肤并入 `.strip-note` 同一条声明(atlas 已顶 700 行单文件上限, 共用声明零增行且规格不可能漂);
+  - toast 同形: `_actCore` 收掉 `what`/`countSuffix`, 恒 `已执行: 动词(N 个种子)` / `动词失败: …`, 四个调用点删参; `shows.js::actEpisode` 同改;
+  - e2e 五 spec + 手势库: scope 断言改挂容器属性, 动词项点击改挂 `:data-item`(`ctxItemById`), `pausableRow` 去掉文案参数;
+  - 注册表守阵 ⑫ 改口径 + 新增 ⑭ 段(四支 12 项后缀齐、其余项无后缀、分隔线 note 恒空);
+  - 文档: `conventions/webui.md` 术语行修正 + 新增「动作文案口径 = 动词 + 灰色种子数」约定(含 scope 词禁令、N 的定义、三处同源、排除项)。
+- **验证**: `test.quick` 3769 passed(首跑撞到本档案自身缺 `## 子任务状态表` —— 上一轮立档漏章节, 已补); `dev.e2e` 322 passed / 10 skipped(11.0m); `test.full` TOTAL 20362 · 98%, 3769 passed / 10 skipped; 基线切片 `26-10-20-0403`。
+- **顺手核过未改**: `delete_flow.js::bulkCountText` 早已走 `_bulkTargets`(C1 投影), 无第二套计数(S6 由"改"降为"核"); 删除确认框标题/构成分解按 D6 保留; 限速/移动的「N 个目标」回执不属本轮口径(D7)。
+
+- 2026-10-20 04:04 实施轮完成 S1-S9(落点随上游 W1-W3 位移到注册表): 12 项 label+note、ctxSeedCount/_seedCountOf 计数单点、data-kind/data-count/data-item 测试挂点、toast 同形、三皮肤 .ctx-note；e2e 五 spec 改挂点; test.full 3769 passed(98%)+dev.e2e 322 passed; 计划与档案翻 Done, 基线 26-10-20-0403
