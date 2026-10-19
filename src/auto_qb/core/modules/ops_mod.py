@@ -415,6 +415,13 @@ class OpsModule(BaseModule):
         if self._ctx.store.own_write_pending(hash):
             return ActionResult.skip("本程序刚下发过停/起操作, 状态尚未从 qB 回流(避免按陈旧快照误判); 请稍后重试")
 
+        # ---- 搬迁窗口闸门(计划 26-10-18-1604 §2.3/P4): 组内正在整组迁移 ⇒ 跳检跳过
+        # 跳检是「删除 + 以跳过校验方式重加」, 在文件正被 qB 搬走时重加会立刻进入缺文件态,
+        # 且删除动作会打断搬运 —— 与 relocating 让路缺文件扫描是同一条纪律(登记单点在
+        # RelocateModule, 这里只读)。
+        if hash in (getattr(self._ctx.store, "relocating_hashes", None) or set()):
+            return ActionResult.skip("该种子正在整组迁移(搬迁/建别名中): 迁移收尾后再跳检")
+
         # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态(骨架单点 _live_recheck)
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
         live = self._live_recheck(hash, "跳检前", f"{prefix} {tor.log_repr} | 跳检放弃", _SKIP_GONE_MSG)

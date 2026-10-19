@@ -2,8 +2,9 @@
 
 **Status:** In Progress
 **Added:** 2026-10-18
-**Updated:** 2026-10-18
-**Summary:** 免重启整组迁移 P0 落地: 新 `infra/alias_fs.py` 真建真删式能力探测(junction/目录与文件 symlink/硬链接/同卷/容器/UNC/跨 OS 挂载) + 链接原语 + §3.3 能力矩阵纯函数; Windows 与 WSL 双平台实测对齐 §2.4; 启动/热重载接线随 P2
+**Updated:** 2026-10-19
+**Summary:** 免重启整组迁移实施档案: P0 能力探测(alias_fs) / P1 配置面 / P2 别名单元与只读预检 /
+P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身); 余 P7 真机验收(需 qB 环境, 交他人)
 **Topics:** backend-group-relocate-restart-free
 **Refs:** memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/pitfalls/backend/alias-links.md, memory-bank/testing/baselines/26-10-18-1940-group-relocate-restart-free-p0.md
 
@@ -60,6 +61,11 @@
 | S5 | 整机探测(按卷) + 缓存入口 | Done(2026-10-18) |
 | S6 | 启动/热重载接线(P1 配置段 + P2 模块句柄到位后) | Done(R2) |
 | S7 | 守阵 35 条 + 双平台实测证据 | Done(2026-10-18) |
+| P3 | 执行体状态机(预检→暂停→搬→轮询→校验→建链→穿透→重归组→落账→武装→恢复) | Done(R9) |
+| P4 | 组判定三层物理解析 + regroup + 搬迁窗口让路(扫描/跳检) | Done(R9) |
+| P5 | 三入口接线(单件/批量/规则)+ 添加落点预检二次确认 + 金清单 | Done(R9) |
+| P6 | journal 两本账 + guardian 独立进程 + 对账表 8 行 + 撤销成本确认 | Done(R9) |
+| P7 | 真机验收(需 qB 环境: setLocation 真搬/收尾/backup 交叉验证) | 待他人(本机无 qB) |
 
 ## 进度日志
 
@@ -103,3 +109,76 @@
   必然间歇误拒; 容差 = max(2%, 1GiB)); ②长路径校正按 T6「内容根 <260 且**专属**」执行,
   §8.3 S3 的「提议目录别名」在组①(分集同目录不专属)场景落 blocked 而非 confirm ——
   与 §3.2 硬前提一致, S3 判据(force/blocked + 文案含关键词)仍满足, P7 真机时注意。
+
+### R3 · P3-P6 落地 (2026-10-19)
+
+用户指令「实施P3-6」= **P3–P6 整批**(经确认, 非 P3 单期); 验证口径同时确认「Fake qB 集成测试,
+真机 qB 留待他人」—— 本机无 qB 测试环境, 所有 qB 交互经 `tests/helpers.FakeClient` 替身驱动。
+
+**P3 执行体(relocate_mod 任务线状态机)**
+
+- 相位推进挂在模块 `on_task_line`(任务线 hook): 每 tick 只做**一个可观测推进**, 不在一次调用里
+  跑完整个迁移 —— 大种子搬运跨很多 tick, 卡主循环会让整库同步停滞(验收判据「单步 < 50ms」)。
+- 搬: 暂停运行中成员 → 等自有暂停快照回流(`own_write_pending`) → 下发 setLocation(mover)。
+  **重启后不重发**(会排队/覆盖): `_load_jobs` 恢复的 job 一律 `issue=False`。
+- 完成判据不看 qB 的 save_path(它在下发后立刻就是新值, 不可用作「搬完」信号), 而是
+  「qB 已不在 moving 且目标侧文件数/大小全对齐」。
+- 停滞判据(D12): `stall_verdict(sample_grew, qb_moving, elapsed, warn_after, stall_timeout, stalled_for)` ——
+  moving 期间**永不判失败**(再久只 warn 转 watching), 只有「不在 moving 且 dst 不增长」累计超时
+  才 `failed(move_stalled)`; 失败零成本: 只落 reason, 不搬回、不动数据。
+- 链接按形态建: 逐文件链接分块(200/tick, 单步有界), 目录别名一条; **第 k 条失败** ⇒ 删已建
+  k-1 条 → `removed(alias_partial)` 进收尾路径(不搬回 —— 链接失败多是权限, 修好重试是零数据移动)。
+- 穿透校验经**原路径**逐文件 stat; 失败保留链接现场(`failed(alias_unreadable)`), 便于排查。
+- 收尾后: regroup_scope(scope, src, job.hashes)(含 mover —— 它的 save_path 已到 dst 但旧组键还挂在 src)
+  → 落账 armed → 拉起 guardian → 恢复 resume_hashes。单成员组 direct 无别名无 guardian, 直接 done。
+
+**P4 组判定(三层物理解析)**
+
+- 第 1 层(零 syscall): 活跃 job 作用域登记表 → dst; 第 2 层: save_path **本身**是 junction/symlink
+  才用 realpath(避免把 /tmp→/private/tmp 这类父目录解析当成换盘); 第 3 层: 代表文件是第三方
+  文件链接/硬链接只**打标**(`store.third_party_link_groups`)不并组(组键形态表达不了任意目标)。
+- 消费点单点: `_assign_to_group` 的组键首元、`_handle_save_path_changes` 的比较、跨组交叉检测的
+  目录解析, 全部经 `_physical_dir`。
+- 搬迁窗口让路: `store.relocating_hashes`(非终态 job 成员并集, 纯内存) 让 `_scan_triggered_groups`
+  跳过整组缺文件扫描、让 ops 跳检直接 skip —— 否则「文件正被搬走」会被判成缺文件 ⇒ 整组暂停 + MISSING。
+
+**P5 三入口**
+
+- 单件/批量移动位置: 开关开 ⇒ `relocate_execute`(闸门 + 执行体), 回执 `truth={results, summary}`
+  (started/skip/confirm/blocked); 开关关 ⇒ 原调用路径逐字节不变(守阵钉住)。
+- 规则 `move_to`: 发起 / 幂等 skip / 需确认 skip(规则侧无交互, 不替用户点「目录别名以后新种子也落新位置」)
+  / 拒绝 fail 四态; dry-run 不触发任何写。
+- 幂等先于闸门: 同组同目标的 job 在途 ⇒ skip —— 规则每轮都会命中同一目标, 落到「未收尾拦截」会天天报失败。
+- 添加对话框: 提交前 `/api/relocate/precheck-add`, confirm 时弹「请求路径 → 实际落点 → 卷剩余」,
+  取消即不提交; 预检不可用(403/网络/判不出落点名)一律放行(它不是闸门)。投递点已登记进 triggers 金清单。
+
+**P6 收尾**
+
+- 两本账: state.json(主循环线程唯一写) + `<data_dir>/relocate/<job>.json`(guardian 唯一写);
+  第三份 `.spec.json` 是 auto-qb 写给 guardian 的规格 —— **路径可能含非 ASCII, 不经命令行参数**。
+- guardian: pid 锁 → 心跳 10s → 三证(qB 进程不在 + 端口拒连 + 稳定 30s) → 校验目标数据 →
+  先落 journal(removing) 再逐条删链接(非递归) → removed。**绝不**搬数据/调 setLocation/改 state。
+- 对账表 8 行(纯函数 `reconcile`): wait / respawn / reguardian_delete / revert_intent / rebuild /
+  finalize / failed_gone / done_external + 超时兜底。journal 只**向前**合并(不覆盖 moved, 否则重建好的
+  job 会被旧 removed 反复拉回收尾判定); 重建成功即把 journal 写回 armed。
+- 撤销: 先给成本(字节数 + 从哪到哪), 用户确认后才删链接 + setLocation 回源 + 恢复运行态。
+
+**实施期裁定三笔**
+
+1. 「已被外部完成」判据用**全组**都到 dst(不是只看 mover): mover 本来就是本 job 搬过去的, 用它
+   会让刚武装的 job 立刻被判 done。
+2. 物理位置解析第 2 层只认「save_path 自己是链接」: 无条件 realpath 会把父目录符号链接(如
+   `/tmp → /private/tmp`)误当成换了物理位置, 把同盘同目录的组拆开。
+3. `plan()` 的空文件表判定**前移**到「单成员组 direct」之前: 文件表读不到是事实缺失, 不是
+   「单成员组不需要别名」—— 否则 files API 故障时单成员组会被当 direct 放行。
+
+**遗留(交他人/后续)**
+
+- P7 真机验收: 需真实 qB(本机未配)。走查清单: ① 同卷两组各 2 文件 → 移动 → 组不裂、图面进度不清零;
+  ② 9 文件专属子目录 → 目录别名确认框 → 搬完 `Get-Item` 看 junction; ③ 迁移中 kill auto-qb → 重启不重发、
+  继续建链; ④ 迁移中退出 qB → guardian 30s 后删链接 → 起 qB → 成员 missingFiles → auto-qb 收尾 setLocation
+  → 进度回 1; ⑤ 收尾窗口内从 qB 客户端加同名种子 → 下落点提示; ⑥ 撤销: 成本确认后才搬回。
+- 「外部添加(qB 客户端直接加)」的落点提示: 本轮只覆盖 WebUI 添加对话框; 外部添加当前由
+  「未收尾拦截 + 添加预检」间接兜底, 若需界面横幅提示另立 issue。
+- 本机 `auto-qb-data/` 不因测试写入: 测试 env 已显式把 `data_dir` 指到 tmp(早期跑测残留的
+  `relocate/*.spec.json` 已清理)。

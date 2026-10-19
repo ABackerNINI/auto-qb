@@ -16,8 +16,35 @@ class MoveToAction(BaseAction):
         self.path = str(spec.get("path", "")) if isinstance(spec, dict) else str(spec)
 
     def execute(self, ctx: RuleContext):
+        """移动种子到新路径
+
+        整组迁移开时(计划 26-10-18-1604 P5)改走迁移闸门: 字节仍由 qB 搬, 但先过闸门
+        (目标冲突/空间/未收尾/第三方链接…) 并在共享组场景建别名接续, 避免第 2..N 个成员
+        撞「目标已存在 ⇒ force_recheck」(进度清零 + 全量校验)。
+
+        规则侧无交互, 故需用户点头的形态(目录别名)一律 skip 并自解释 —— 那不是失败,
+        是「这条规则不该替用户做这个决定」; 走 WebUI「移动位置」可确认后执行。
+        """
         if not self.path:
             return ActionResult.fail("move_to.path 为空")
+        mod = getattr(getattr(ctx.manager, "ctx", None), "relocate", None)
+        if mod is not None and not ctx.dry_run and getattr(getattr(ctx.config, "relocate", None), "enabled", False):
+            items = mod.relocate_execute([ctx.hash], self.path, confirm=False)
+            item = items[0] if items else {}
+            cls = item.get("cls")
+            if cls == "started":
+                return ActionResult.ok(
+                    f"整组迁移已发起(job {item.get('job_id')}, 形态 {item.get('form')}, {item.get('link_count', 0)} 条别名)"
+                )
+            if cls == "skip":
+                return ActionResult.skip("已在目标位置(幂等)")
+            if cls == "confirm":
+                return ActionResult.skip("目录别名需显式确认(该目录以后新增的种子也会落到新位置): 请走 WebUI 移动位置")
+            reason = ""
+            for r in item.get("reasons") or []:
+                reason = r.get("text") or reason
+                break
+            return ActionResult.fail(f"整组迁移被闸门拒绝: {reason or '未通过预检'}")
         if not ctx.dry_run:
             ctx.api.torrents_set_location(torrent_hashes=ctx.hash, location=self.path)
         return ActionResult.ok(f"移动到 {self.path}")

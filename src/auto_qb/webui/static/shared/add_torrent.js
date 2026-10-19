@@ -558,8 +558,50 @@ window.AQB_ADD = {
     addUrlCount() {
       return this.addUrls.split(/\r?\n/).filter((l) => l.trim()).length;
     },
+    /* 添加落点预检(计划 26-10-18-1604 P5, 只读): 命中迁移别名作用域 / 收尾窗口时, 把
+     * 「请求路径 -> 实际落点 -> 目标卷剩余」摊给用户二次确认 —— 取消 = 不提交(零副作用)。
+     * 预检不可用(功能未启用 403 / 网络异常 / 判不出落点名)一律**放行**: 它只是把后果提前
+     * 说清楚, 不构成闸门(执行侧闸门照旧), 不该因为预检故障挡住添加。 */
+    async _relocateAddGate() {
+      const savePath = this.addSavePath.trim();
+      if (!savePath) return true;
+      if (!this.addFiles.length && !this.addUrls.trim()) return true;
+      // 落点名: 有 .torrent 时取第一个文件名去后缀; 只有链接/磁力时添加前无法预判, 跳过预检
+      const name = this.addFiles.length ? String(this.addFiles[0].name || "").replace(/\.torrent$/i, "") : "";
+      if (!name) return true;
+      let r = null;
+      try {
+        const queued = await this.api("/api/relocate/precheck-add", {
+          method: "POST",
+          body: JSON.stringify({ save_path: savePath, name }),
+        });
+        const rec = await this.waitCmd(queued.cmd_id, 20000);
+        r = rec.ok ? rec.truth : null;
+      } catch (e) {
+        if (e.auth) return false;  // 401 已由 _logout 收口
+        return true;
+      }
+      if (!r || r.cls !== "confirm") return true;
+      const rows = (r.reasons || []).map((x) => ({ icon: "#i-warn", label: "落点提示", value: x.text, wide: true }));
+      rows.push({ icon: "#i-info", label: "请求路径", value: r.requested_path, wide: true });
+      if (r.actual_path) rows.push({ icon: "#i-warn", label: "实际落点", value: r.actual_path, wide: true });
+      if (r.volume_free != null) {
+        rows.push({ icon: "#i-info", label: "目标卷剩余", value: `${Math.round(r.volume_free / (1024 ** 3))} GiB`, wide: true });
+      }
+      const choice = await this._openModal({
+        title: "落点确认",
+        body: `「${name}」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。`,
+        okText: "确认添加",
+        cancelText: "取消",
+        icon: "#i-warn",
+        wide: true,
+        verdict: rows,
+      });
+      return !!choice;
+    },
     async submitAddTorrent() {
       if (!this.addCanSubmit) return;
+      if (!(await this._relocateAddGate())) return;  // 落点预检: 取消则整个不提交
       // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
       const filesB64 = [];
       for (const f of this.addFiles) {

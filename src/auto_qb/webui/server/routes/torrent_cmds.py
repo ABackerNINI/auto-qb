@@ -57,9 +57,16 @@ def build_router(ctx: WebContext) -> APIRouter:
         enable = bool((body or {}).get("enable", False))
         return _enqueue(cmd, {"hash": hash, "enable": enable})
 
-    def _cmd_field(cmd: str, hash: str, body: dict, field: str) -> dict:
-        """单字符串字段透传: location / rename / queue / trackers-remove 四端点同一形状"""
-        return _enqueue(cmd, {"hash": hash, field: str((body or {}).get(field) or "")})
+    def _cmd_field(cmd: str, hash: str, body: dict, field: str, confirm: bool = False) -> dict:
+        """单字符串字段透传: location / rename / queue / trackers-remove 四端点同一形状
+
+        confirm=True 的端点(整组迁移的 location)才读 body.confirm —— 且仍按「提供才透传」,
+        其余端点载荷形状与历史逐字节一致。
+        """
+        payload = {"hash": hash, field: str((body or {}).get(field) or "")}
+        if confirm and (body or {}).get("confirm"):
+            payload["confirm"] = True
+        return _enqueue(cmd, payload)
 
     def _cmd_str_list(cmd: str, hash: str, body: dict, field: str) -> dict:
         """字符串列表字段透传: trackers/add(urls)"""
@@ -203,7 +210,12 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/location")
     def api_t_location(hash: str, body: dict = None):
-        return _cmd_field("set_torrent_location", hash, body, "location")
+        """移动保存位置(整组迁移开时走闸门 + 别名执行体, 计划 26-10-18-1604 P5)
+
+        confirm(目录别名的显式确认)按「提供才透传」入载荷 —— 缺省时队列形态与历史
+        逐字节一致(既有载荷形态守阵依赖)。
+        """
+        return _cmd_field("set_torrent_location", hash, body, "location", confirm=True)
 
     @router.post("/api/torrents/{hash}/rename")
     def api_t_rename(hash: str, body: dict = None):
@@ -305,6 +317,10 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="批量限速至少提供 up_limit / dl_limit 一项(留空 = 不修改)")
         if action == "location" and not location:
             raise HTTPException(status_code=400, detail="批量移动必须提供非空 location")
+        # 整组迁移的目录别名确认(计划 26-10-18-1604 P5): 仅 location 动作透传 confirm,
+        # 且同样「提供才透传」—— 缺省队列载荷与历史一致
+        if action == "location" and b.get("confirm"):
+            payload["confirm"] = True
         return _enqueue("bulk_torrents", payload)
 
     @router.post("/api/torrents/add")

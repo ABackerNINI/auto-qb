@@ -483,3 +483,111 @@ def test_evaluate_add_skips_terminal_and_unmatched_jobs():
     hit = _dir_job()
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, other, hit), target_free=7))
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_scope"
+
+
+# ---------------------------------------------------------------- P3/P6 纯判定(P3 执行期, P6 对账)
+
+
+def _job(**kw):
+    base = dict(
+        job_id="jr-1",
+        hashes=("HA", "HB"),
+        mover="HA",
+        src=S,
+        dst=T,
+        scope=os.path.join(S, "Show"),
+        alias_kind="file",
+        phase=ru.PHASE_ARMED,
+        alias_paths=(os.path.join(S, "Show", "e00.mkv"), ),
+    )
+    base.update(kw)
+    return ru.RelocateJob(**base)
+
+
+def test_reconcile_table_rows():
+    """§3.5 对账表逐行: 8 行 + 超时兜底(每行一条断言, 行号与文档表一致)"""
+    job = _job()
+    # 1 armed + 链接在 + 心跳正常 -> wait
+    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=5) == ru.ACT_WAIT
+    # 1' armed + 链接在 + 心跳过期 -> 重拉 guardian
+    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=999) == ru.ACT_RESPAWN
+    # 2 removing + 链接在 + qB 不在 -> guardian 重删
+    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVING, link_present=True, qb_up=False) == ru.ACT_REDELETE
+    # 3 removing + 链接在 + qB 回来了 -> 撤销删除意图
+    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVING, link_present=True, qb_up=True) == ru.ACT_REVERT_INTENT
+    # 4 removing/removed + 链接无 + qB 在 + 种子正常 -> 重建链接
+    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=True) == ru.ACT_REBUILD
+    # 5 同前 + 种子 missingFiles -> 收尾
+    assert ru.reconcile(
+        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=True, seed_state="missingFiles"
+    ) == ru.ACT_FINALIZE
+    # 6 removed + 链接无 + qB 不在 -> 等(超时 -> failed)
+    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False) == ru.ACT_WAIT
+    assert ru.reconcile(
+        job,
+        journal_phase=ru.PHASE_REMOVED,
+        link_present=False,
+        qb_up=False,
+        elapsed=99999,
+        finalize_timeout=3600,
+    ) == ru.ACT_FAILED_TIMEOUT
+    # 7 种子已不存在(任意相位) -> failed, 保留现场
+    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, seed_state="gone") == ru.ACT_FAILED_GONE
+    # 8 链接在 + qB 在 + 全组已在 dst -> 已被外部完成
+    assert ru.reconcile(
+        job, journal_phase=ru.PHASE_ARMED, link_present=True, save_path_at_dst=True
+    ) == ru.ACT_DONE_EXTERNAL
+
+
+def test_stall_verdict_boundaries():
+    """停滞判据: moving 永不判失败(长耗时只 warn); 不 moving 且不增长超时 -> stalled"""
+    assert ru.stall_verdict(False, True, 10, 7200, 600, 0) == ru.STALL_OK
+    assert ru.stall_verdict(False, True, 8000, 7200, 600, 9999) == ru.STALL_WARN  # moving 期间再久也不失败
+    assert ru.stall_verdict(True, False, 10, 7200, 600, 0) == ru.STALL_OK  # 体积在长
+    assert ru.stall_verdict(False, False, 10, 7200, 600, 599) == ru.STALL_OK
+    assert ru.stall_verdict(False, False, 10, 7200, 600, 600) == ru.STALL_FAILED
+
+
+def test_recover_exec_phase():
+    """执行期崩溃恢复: moving -> 继续轮询(不重发); 到 dst -> 补做; 否则按停滞失败"""
+    assert ru.recover_exec_phase(True, False, False) == ru.RECOVER_POLL
+    assert ru.recover_exec_phase(False, True, False) == ru.RECOVER_RESUME
+    assert ru.recover_exec_phase(False, False, True) == ru.RECOVER_RESUME
+    assert ru.recover_exec_phase(False, False, False) == ru.RECOVER_STALLED
+
+
+def test_resolve_physical_and_finalize_members():
+    """物理位置解析(第 1 层) + 动态收尾集合(D7 作用域不是快照)"""
+    job = _job(phase=ru.PHASE_ARMED)
+    root = os.path.join(S, "Show")
+    assert ru.resolve_physical(S, root, (job, )) == T  # 作用域命中 -> dst
+    assert ru.resolve_physical(S, os.path.join(S, "Other"), (job, )) == S  # 未命中 -> 原样
+    assert ru.resolve_physical(S, root, (_job(phase=ru.PHASE_DONE), )) == S  # 终态不解析
+    members = [
+        ("HA", T, os.path.join(T, "Show")),  # mover 已在 dst
+        ("HB", S, root),  # 创建时成员
+        ("HC", S, root),  # 别名期间新加的同内容辅种(作用域内)
+        ("HX", S, os.path.join(S, "Other")),  # 作用域外
+    ]
+    assert ru.finalize_members(job, members) == ("HB", "HC")
+
+
+def test_job_dict_roundtrip():
+    """job 落账 roundtrip + 坏条目跳过(不炸)"""
+    job = _job(plan={"form": "file_links", "link_kind": "hardlink", "files": [["Show/e00.mkv", 7]]})
+    back = ru.job_from_dict(ru.job_to_dict(job))
+    assert back == job
+    assert ru.job_from_dict(None) is None
+    assert ru.job_from_dict({"hashes": []}) is None
+    assert ru.job_from_dict("x") is None
+    assert ru.job_id_for("HA", T, S) == ru.job_id_for("HA", T, S)
+    assert ru.job_id_for("HA", T, S) != ru.job_id_for("HB", T, S)
+
+
+def test_job_from_dict_type_error_and_reconcile_fallthrough():
+    """落账坏类型 -> None; 对账无 journal 意图时的兜底三支(重建/收尾/超时)"""
+    assert ru.job_from_dict({"job_id": "x", "hashes": 5}) is None
+    job = _job()
+    assert ru.reconcile(job, link_present=False, qb_up=True) == ru.ACT_REBUILD
+    assert ru.reconcile(job, link_present=False, qb_up=True, seed_state="missingFiles") == ru.ACT_FINALIZE
+    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=10, finalize_timeout=1) == ru.ACT_FAILED_TIMEOUT

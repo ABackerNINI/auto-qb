@@ -240,6 +240,10 @@ const TRIGGER_DEFS = {
       "scope": "none", "why": "新增种子: 新增对象不存在于任何选中集合"
     },
     {
+      "file": "add_torrent.js", "fn": "_relocateAddGate", "ep": "/api/relocate/precheck-add",
+      "scope": "none", "why": "添加种子落点预检(整组迁移 P5): 只判定「这个 save_path+名称将来落在哪」, 新增对象尚不存在, 与选中/锚点无关"
+    },
+    {
       "file": "config_rules.js", "fn": "cfgExprTry", "ep": "/api/expr/eval",
       "scope": "none", "why": "规则表达式试算: 纯计算"
     },

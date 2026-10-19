@@ -168,7 +168,10 @@ _OPTIMISTIC_BULK_ACTIONS = frozenset({"pause", "resume"})
 # !与 DEFERRED_RECEIPT_COMMANDS **不同**: 后者是"handler 自写回执、drain 不补写"; 本集合只管
 #   "drain 要不要把 cmd_id 传下去" —— bulk_torrents 的 pause/resume 回执由 drain 写, 但它的
 #   错误回执(部分 hash 缺失 / 参数不合法)仍由 handler 写, 故 handler 必须拿到 cmd_id。
-CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {"bulk_torrents"}
+# set_torrent_location(计划 26-10-18-1604 P5): 整组迁移开时 handler 自写回执(带闸门判定
+# truth: 集体相位/二次确认/拒绝原因), 故 drain 必须把 cmd_id 传下去 —— 与 bulk_torrents
+# 同形态(「谁写回执」与「要不要传 cmd_id」是两件事)。
+CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {"bulk_torrents", "set_torrent_location"}
 
 
 def is_deferred_receipt(cmd: str, args: Optional[dict] = None) -> bool:
@@ -777,11 +780,52 @@ class WebCommandsMixin:
             f"inactive={inactive_seeding_time_limit}; -1=不限制, -2=用全局)"
         )
 
-    def _cmd_set_torrent_location(self, hash: str, location: str = ""):
+    def _relocate_receipt(self, cmd_id: str, items: list, what: str) -> None:
+        """整组迁移执行回执(三入口共用): 判定数据经 truth 带出, 形态同迁移预检
+
+        cls: started=已发起(qB 在搬) / skip=已在目标位置(幂等) / confirm=需二次确认
+        (目录别名「以后新增也落新位置」)/ blocked=闸门拒绝。blocked 给 error 回执并带
+        首条自解释原因, confirm 给 ok + truth(由前端据 summary 开确认框)。
+        """
+        summary = {"started": 0, "skip": 0, "confirm": 0, "blocked": 0}
+        for it in items:
+            summary[it.get("cls", "blocked")] = summary.get(it.get("cls", "blocked"), 0) + 1
+        if not cmd_id:
+            return
+        if summary["blocked"] and not (summary["started"] or summary["skip"] or summary["confirm"]):
+            reason = ""
+            for it in items:
+                for r in it.get("reasons") or []:
+                    reason = r.get("text") or reason
+                    break
+                if reason:
+                    break
+            self._set_web_result(cmd_id, "error", reason or "整组迁移被闸门拒绝", truth={"results": items, "summary": summary})
+            return
+        self._set_web_result(cmd_id, "ok", truth={"results": items, "summary": summary})
+        logger.info(
+            f"WEB UI | {what}: 已发起 {summary['started']} / 幂等跳过 {summary['skip']} / 需确认 {summary['confirm']} / 拒绝 {summary['blocked']}"
+        )
+
+    def _relocate_armed(self) -> bool:
+        """整组迁移是否已武装(三入口接线判据): 开 + 模块在 + qB 客户端在"""
+        mod = getattr(self.ctx, "relocate", None)
+        if mod is None:
+            return False
+        if not getattr(getattr(self.ctx.config, "relocate", None), "enabled", False):
+            return False
+        return self.ctx.api is not None and self.ctx.api.client is not None
+
+    def _cmd_set_torrent_location(self, hash: str, location: str = "", cmd_id: str = "", confirm: bool = False):
         if self.store.get(hash) is None:
             return
         if not location:
             raise ValueError("location 不能为空")
+        if self._relocate_armed():
+            # 开: 走整组迁移闸门 + 执行体(字节一律由 qB 搬, auto-qb 只建别名与收尾)
+            items = self.ctx.relocate.relocate_execute([hash], location, confirm=bool(confirm))
+            self._relocate_receipt(cmd_id, items, f"移动位置(整组迁移) {hash[:8]}")
+            return
         self.api.torrents_set_location(torrent_hashes=[hash], location=location)
         # 组键含 save_path: 移动后下轮同步会按新 save_path 重归组(旧组解散/新组建立), 属预期行为
         logger.info(f"WEB UI | 种子 {hash[:8]} 移动保存路径 -> {location}(将按新路径重归组, 属预期)")
@@ -923,6 +967,7 @@ class WebCommandsMixin:
         dl_limit=None,
         location=None,
         force: bool = False,
+        confirm: bool = False,
     ):
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
@@ -1003,6 +1048,11 @@ class WebCommandsMixin:
         if action == "recheck":
             # R1 第二入口(plan 26-09-30-0109): 批量 recheck 逐个经 ops 层提交, 不直调 API
             self._bulk_recheck_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
+            return
+        if action == "location" and self._relocate_armed():
+            # 整组迁移开: 批量移动走同一闸门 + 执行体(多选按组拆开逐组判定, §3.2.1)
+            items = self.ctx.relocate.relocate_execute(known, extra["location"], confirm=bool(confirm))
+            self._relocate_receipt(cmd_id, items, f"批量移动位置(整组迁移) {len(known)} 个")
             return
         if action == "skip_check":
             # 批量跳检(计划 26-10-02-1955 W3): 逐 hash 串行经 ops 层四阶段, 不直调 API;

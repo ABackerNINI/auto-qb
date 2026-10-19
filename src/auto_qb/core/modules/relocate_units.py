@@ -172,14 +172,16 @@ def plan(
     content_root = _join(save_path, rel) if rel else save_path
     exclusive = bool(content_root_exclusive) and rel != ""
 
+    # 空文件表先于「单成员组直搬」: 读不到文件表时连「搬什么」都不知道, 不能按 direct 放行
+    # (单成员组确实不需要别名, 但空表是事实缺失, 不是「不需要」)
+    if count == 0:
+        return RelocateUnitPlan(
+            FORM_REJECT, 0, content_root, rel, flat, exclusive, False, 0, None, "", "文件列表为空, 无法判定内容布局"
+        )
     if not multi_member:
         return RelocateUnitPlan(
             FORM_DIRECT, count, content_root, rel, flat, exclusive, False, 0, None, "",
             "单成员组: qB 直接搬迁, 不需要别名(阈值与链接能力不参与判定)"
-        )
-    if count == 0:
-        return RelocateUnitPlan(
-            FORM_REJECT, 0, content_root, rel, flat, exclusive, False, 0, None, "", "文件列表为空, 无法判定内容布局"
         )
 
     # ---- 2. 文件级链接可建性(能力 + 长路径校正) ----
@@ -270,6 +272,9 @@ class RelocateJob:
     resume_hashes: Tuple[str, ...] = ()
     attempts: int = 0
     last_error: str = ""
+    # 执行计划快照(P3 落账, 供重启后继续执行与 P6 收尾): {form, link_kind, scope,
+    # files: [[相对路径, 大小], ...]}。不进纯判定, 只作恢复用事实。
+    plan: Optional[dict] = None
 
     @property
     def is_terminal(self) -> bool:
@@ -648,3 +653,203 @@ def same_volume_proof(qb_free: Optional[int], local_free: Optional[int]) -> bool
         return False
     tolerance = max(1 << 30, int(local_free * 0.02))
     return abs(qb_free - local_free) <= tolerance
+
+
+# ---------------------------------------------------------------- job 落账与恢复(P3/P6)
+
+
+def job_id_for(mover: str, dst: str, src: str = "") -> str:
+    """job_id = (mover, src, dst) 的稳定摘要 —— 同组同目标重复发起落同一条(幂等)
+
+    不做时间戳: 同一组迁到同一目标的第二次发起应在「未收尾拦截」闸门被挡(S10),
+    而不是靠 id 不同绕过; 同一 job 的重复 execute 命中同一条, 不产生第二份账。
+    """
+    import hashlib
+
+    raw = f"{mover}|{src}|{dst}"
+    return "jr-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def job_to_dict(job: RelocateJob) -> dict:
+    """job -> state.json 落账形态(纯数据: 元组转 list, 供 JSON 序列化)"""
+    return {
+        "job_id": job.job_id,
+        "hashes": list(job.hashes),
+        "mover": job.mover,
+        "src": job.src,
+        "dst": job.dst,
+        "scope": job.scope,
+        "alias_kind": job.alias_kind,
+        "alias_paths": list(job.alias_paths),
+        "phase": job.phase,
+        "reason": job.reason,
+        "armed_at": job.armed_at,
+        "updated_at": job.updated_at,
+        "resume_hashes": list(job.resume_hashes),
+        "attempts": job.attempts,
+        "last_error": job.last_error,
+        "plan": job.plan,
+    }
+
+
+def job_from_dict(d) -> Optional[RelocateJob]:
+    """state.json 条目 -> RelocateJob; 形状不符/缺 job_id 返回 None(坏条目跳过, 不炸)"""
+    if not isinstance(d, dict) or not d.get("job_id"):
+        return None
+    try:
+        return RelocateJob(
+            job_id=str(d["job_id"]),
+            hashes=tuple(d.get("hashes") or ()),
+            mover=str(d.get("mover") or ""),
+            src=str(d.get("src") or ""),
+            dst=str(d.get("dst") or ""),
+            scope=str(d.get("scope") or ""),
+            alias_kind=str(d.get("alias_kind") or ""),
+            alias_paths=tuple(d.get("alias_paths") or ()),
+            phase=str(d.get("phase") or PHASE_MOVING),
+            reason=str(d.get("reason") or ""),
+            armed_at=float(d.get("armed_at") or 0.0),
+            updated_at=float(d.get("updated_at") or 0.0),
+            resume_hashes=tuple(d.get("resume_hashes") or ()),
+            attempts=int(d.get("attempts") or 0),
+            last_error=str(d.get("last_error") or ""),
+            plan=d.get("plan") if isinstance(d.get("plan"), dict) else None,
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def content_root_of(save_path: str, files: Sequence[str]) -> str:
+    """内容根路径(目录别名的作用域; 平铺/混合 = save_path 本身)"""
+    _flat, rel = layout_of(save_path, files)
+    return _join(save_path, rel) if rel else save_path
+
+
+def resolve_physical(save_path: str, content_root: str, jobs: Sequence[RelocateJob]) -> str:
+    """三层物理位置解析之**第 1 层**: 自有 job 作用域登记表(零 syscall, §3.4)
+
+    逐文件链接不改变目录 realpath, 故组键必须靠登记表才能把「还指着 S 的成员」与
+    「已被 qB 搬到 T 的 mover」并成同一组 —— 解析命中返回 dst, 未命中原样返回
+    (与今天逐字节一致, 开关关/无 job 时零行为差)。
+    """
+    for job in jobs:
+        if job.is_terminal:
+            continue
+        if job.scope_hit(save_path, content_root):
+            return job.dst
+    return save_path
+
+
+def finalize_members(job: RelocateJob, members: Sequence[Tuple[str, str, str]]) -> Tuple[str, ...]:
+    """动态收尾集合(§3.5 / D7: 别名是作用域不是快照)
+
+    members = [(hash, save_path, content_root), ...]; 集合 = 创建时 hashes ∪
+    「当前 save_path == src 且内容根落在 scope 内」的所有成员, mover 已在 dst 故跳过。
+    别名期间新加的同内容辅种因此自动纳入 —— 不会留「收尾后新成员留在原地、
+    链接已删 ⇒ 缺文件」的坑。
+    """
+    out = []
+    seen = set()
+    for h, sp, root in members:
+        if h == job.mover or h in seen:
+            continue
+        if h in job.hashes or (_norm(sp) == _norm(job.src) and _within(job.scope, root)):
+            seen.add(h)
+            out.append(h)
+    return tuple(out)
+
+
+# ---------------------------------------------------------------- 停滞判据与执行期恢复(P3)
+
+STALL_OK = "ok"  # 正常搬运中
+STALL_WARN = "warn"  # 超过 move_warn_after 仍在搬: 只提示, 不判失败
+STALL_FAILED = "stalled"  # 停滞: dst 不增长且 qB 不在 moving 超过 move_stall_timeout
+
+
+def stall_verdict(
+    sample_grew: bool, qb_moving: bool, elapsed: float, warn_after: float, stall_timeout: float, stalled_for: float
+) -> str:
+    """停滞判据(D12/D13): 不做墙钟超时 —— 长耗时只提示, 只有「停滞」才判失败
+
+    - qB 在 moving ⇒ 永远不判失败(几十 GB~TB 级搬运可能远超预期, 等得久不是失败理由);
+      超过 warn_after ⇒ warn(转 watching, 界面显示「已超预期时间」)。
+    - 不在 moving 且 dst 体积不增长 ⇒ 累计 stalled_for; 超过 stall_timeout ⇒ stalled。
+    """
+    if qb_moving:
+        return STALL_WARN if elapsed >= warn_after else STALL_OK
+    if sample_grew:
+        return STALL_WARN if elapsed >= warn_after else STALL_OK
+    if stalled_for >= stall_timeout:
+        return STALL_FAILED
+    return STALL_WARN if elapsed >= warn_after else STALL_OK
+
+
+RECOVER_POLL = "poll"  # qB 仍在搬(moving): 继续轮询, 不重新下发
+RECOVER_RESUME = "resume"  # save_path 已到 dst: 补做 moved 之后的步骤
+RECOVER_STALLED = "failed_stalled"  # 已不在 moving 且 dst 无数据/部分数据: 失败, 现场保留
+
+
+def recover_exec_phase(qb_moving: bool, save_path_at_dst: bool, dst_has_data: bool) -> str:
+    """执行期崩溃恢复(phase ∈ {moving, moved}, guardian 尚未武装, journal 可能不存在)
+
+    只按 qB 现场判(§3.5): moving ⇒ 继续轮询(不重发 setLocation, 会排队/覆盖);
+    save_path==dst ⇒ 补做后续; 否则按停滞失败(现场保留, 不搬回)。
+    """
+    if qb_moving:
+        return RECOVER_POLL
+    if save_path_at_dst or dst_has_data:
+        return RECOVER_RESUME
+    return RECOVER_STALLED
+
+
+# ---------------------------------------------------------------- 对账表(P6, §3.5)
+
+ACT_WAIT = "wait"  # 等(含 guardian 心跳正常 / qB 未起)
+ACT_RESPAWN = "respawn_guardian"  # guardian 心跳过期 ⇒ 重拉
+ACT_REDELETE = "reguardian_delete"  # removing + 链接在 + qB 不在 ⇒ guardian 重删(不在则重拉)
+ACT_REVERT_INTENT = "revert_intent"  # removing + 链接在 + qB 回来了 ⇒ 撤销删除意图回 armed
+ACT_REBUILD = "rebuild_links"  # 链接不在 + qB 在 + 种子正常 ⇒ 重建链接回 armed
+ACT_FINALIZE = "finalize"  # 链接不在 + qB 在 + missingFiles ⇒ setLocation 收尾
+ACT_FAILED_GONE = "failed_gone"  # 种子已不存在(用户删了): failed, 保留链接现场交人
+ACT_FAILED_TIMEOUT = "failed_timeout"  # 超过 finalize_timeout 仍未收尾: failed
+ACT_DONE_EXTERNAL = "done_external"  # 已被外部完成(save_path==dst): done
+
+GUARDIAN_HEARTBEAT_MAX_AGE = 60.0  # guardian 心跳过期判据(§3.5 对账表第 1 行)
+
+
+def reconcile(
+    job: RelocateJob,
+    *,
+    journal_phase: str = "",
+    link_present: bool = True,
+    qb_up: bool = True,
+    seed_state: str = "normal",
+    save_path_at_dst: bool = False,
+    heartbeat_age: float = 0.0,
+    elapsed: float = 0.0,
+    finalize_timeout: float = 0.0,
+) -> str:
+    """§3.5 对账表: (journal 相位, 链接在?, qB 在?, 种子态) -> 处置动作(纯函数)
+
+    收尾的充分条件是**证据**而非事件 —— 不检测「qB 是否重启过」, qB 在线 + 种子
+    missingFiles + save_path==src + 链接不在 即充分。seed_state 取值:
+    "normal" / "missingFiles" / "gone"。
+    """
+    if seed_state == "gone":
+        return ACT_FAILED_GONE
+    if link_present and qb_up and save_path_at_dst:
+        return ACT_DONE_EXTERNAL
+    if journal_phase in (PHASE_REMOVING, PHASE_REMOVED) and not link_present:
+        if not qb_up:
+            return ACT_FAILED_TIMEOUT if (finalize_timeout and elapsed > finalize_timeout) else ACT_WAIT
+        return ACT_FINALIZE if seed_state == "missingFiles" else ACT_REBUILD
+    if journal_phase == PHASE_REMOVING and link_present:
+        return ACT_REVERT_INTENT if qb_up else ACT_REDELETE
+    if link_present:
+        return ACT_RESPAWN if heartbeat_age > GUARDIAN_HEARTBEAT_MAX_AGE else ACT_WAIT
+    # 链接不在且无 removing/removed 意图: 现场已变(qB 在且种子正常 ⇒ 重建; 否则等)
+    if qb_up and seed_state == "missingFiles":
+        return ACT_FINALIZE
+    if qb_up:
+        return ACT_REBUILD
+    return ACT_FAILED_TIMEOUT if (finalize_timeout and elapsed > finalize_timeout) else ACT_WAIT

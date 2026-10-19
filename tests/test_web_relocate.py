@@ -577,3 +577,20 @@ def test_web_relocate_precheck_drain(tmp_path, monkeypatch):
     rec = mgr.web.results["rpa1"]
     assert rec["status"] == "ok" and rec["truth"]["cls"] == "ok", rec
     assert _fwd(rec["truth"]["requested_path"]) == _fwd(os.path.join(src, "Other"))
+
+
+def test_relocate_add_gate_wired_in_add_dialog():
+    """P5 前端契约: 添加对话框提交前调落点预检, 取消则不提交; 投递点已登记(triggers 金清单)"""
+    from pathlib import Path
+
+    shared = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "static" / "shared"
+    add_js = (shared / "add_torrent.js").read_text(encoding="utf-8")
+    assert "async _relocateAddGate()" in add_js, "落点预检方法缺失"
+    assert "/api/relocate/precheck-add" in add_js
+    # 顺序: 预检先于真正的添加投递(取消 = 直接 return, 不发 /api/torrents/add)
+    assert add_js.index("if (!(await this._relocateAddGate())) return;") < add_js.index('"/api/torrents/add"')
+    assert "if (!(await this._relocateAddGate())) return;" in add_js
+    # 预检不可用一律放行(功能未启用 403 / 网络异常不挡添加)
+    assert "return true" in add_js.split("async _relocateAddGate()")[1].split("async submitAddTorrent()")[0]
+    triggers = (shared / "triggers.js").read_text(encoding="utf-8")
+    assert '"fn": "_relocateAddGate"' in triggers, "投递点必须登记进 triggers.js 金清单"

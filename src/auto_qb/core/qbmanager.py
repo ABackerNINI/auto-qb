@@ -234,7 +234,10 @@ class QbManager(
         # torrents_added / removed_scan / post, _refresh_torrents 的分组调用点改相位广播,
         # enabled 开关模块自判); ops(+checking 并入, 决策点 D2)升 ctx.ops 服务 —— 规则
         # 动作与 WEB 命令的危险操作执行体单点, web 命令改走 ctx.ops(plan P4)
-        self.host.register(GroupingModule(self.ctx))
+        # grouping 句柄挂 ctx(计划 26-10-18-1604 P4): 迁移模块建链后经 ctx.grouping.
+        # regroup_scope 强制重归组, 不 import 兄弟模块(与 ctx.maintenance 同口径)
+        self.ctx.grouping = GroupingModule(self.ctx)
+        self.host.register(self.ctx.grouping)
         self.ctx.ops = OpsModule(self.ctx)
         self.host.register(self.ctx.ops)
         # 装配清单 P5 收官(plan §3.3): rules 最后 —— 事件分派/建任务改相位认领, L2 结构

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from ..config import Config
     from ..torrents import TorrentStore
     from ..webui.runtime import WebUIRuntime
+    from .modules.grouping_mod import GroupingModule
     from .modules.notify_mod import NotifyModule
     from .modules.ops_mod import OpsModule
     from .modules.maintenance_mod import MaintenanceModule
@@ -80,6 +81,9 @@ class AppContext:
         self.ops: Optional["OpsModule"] = None
         self.traffic_snapshot: Optional["TrafficSnapshotModule"] = None  # 模块句柄, 见类注
         self.relocate: Optional["RelocateModule"] = None  # 模块句柄, 见类注
+        # grouping(P4 起, 计划 26-10-18-1604)是模块句柄: 整组迁移建链后经 ctx.grouping.
+        # regroup_scope 强制重归组(免裂组), 与 maintenance/ops 同口径 —— 不 import 兄弟模块
+        self.grouping: Optional["GroupingModule"] = None
 
     @property
     def config(self):

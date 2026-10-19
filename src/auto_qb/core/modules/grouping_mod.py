@@ -25,7 +25,7 @@ import os
 from collections.abc import Mapping
 from typing import Any, Dict
 
-from ...infra import file_access, utils
+from ...infra import alias_fs, file_access, utils
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule
 
@@ -47,6 +47,27 @@ def group_key_of(save_path: str, file_map: Mapping[str, int]):
     纯函数, 无状态, 不读 self; 行为与抽取前完全一致。
     """
     return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))
+
+
+def _content_root_of(save_path: str, files) -> str:
+    """内容根路径(目录别名的作用域; 平铺/多顶层段 = save_path 本身)
+
+    与 relocate_units.content_root_of 同口径(那边是纯函数层给闸门用, 这里给归组用 ——
+    两处都是「文件表 -> 唯一顶层段」这同一条规则, 不引入第二套语义)。
+    """
+    sp = str(save_path or "")
+    segs = [str(f).replace("\\", "/").strip("/") for f in files if str(f).strip("/")]
+    if not sp or not segs or all("/" not in s for s in segs):
+        return sp
+    firsts = {s.split("/", 1)[0] for s in segs}
+    return os.path.join(sp, next(iter(firsts))) if len(firsts) == 1 else sp
+
+
+def _within_scope(scope: str, path: str) -> bool:
+    """path 是否落在 scope 目录内(含等于); 归一后比较, 纯字符串"""
+    s = utils.path_normalize(scope).rstrip("/")
+    p = utils.path_normalize(path)
+    return bool(s) and (p == s or p.startswith(s + "/"))
 
 
 def _cross_physical_key(dir_resolved: str, rel_path: str) -> str:
@@ -133,12 +154,117 @@ class GroupingModule(BaseModule):
     def _scan_triggered_groups(self, triggered: set, dry_run: bool) -> None:
         """缺文件扫描触发骨架单点(issue 26-10-11-0207 R10): 删除/路径变化/状态转移三个
         事件路径同构 —— 对每个触发组取现存成员(by_hash 过滤已删), 组非空才扫; 同组只扫
-        一次由 triggered 集合保证。"""
+        一次由 triggered 集合保证。
+
+        搬迁窗口让路(计划 26-10-18-1604 §2.3/P4): 组内任一成员在 `store.relocating_hashes`
+        里 ⇒ 整组跳过本次扫描 —— 此刻文件正在被 qB 搬走, 判「缺失」必是误判(真相是
+        「正在移动」, 而 missingFiles 的处置是整组暂停 + 打 MISSING 标签, 代价不可逆)。
+        """
         store = self._ctx.store
+        relocating = getattr(store, "relocating_hashes", None) or set()
         for key in triggered:
             members = [store.by_hash[h] for h in store.groups.get(key, []) if h in store.by_hash]
-            if members:
-                self._check_missing_files(members, store.group_sizes.get(key, {}), dry_run, key)
+            if not members:
+                continue
+            if relocating and any(t.hash in relocating for t in members):
+                logger.debug(f"辅种组 | 搬迁窗口内跳过缺文件扫描(成员在途): {key[0]}")
+                continue
+            self._check_missing_files(members, store.group_sizes.get(key, {}), dry_run, key)
+
+    # ---------- 物理位置解析(§3.4.1 三层; 计划 26-10-18-1604 P4) ----------
+
+    @staticmethod
+    def _syscall_path(path: str) -> str:
+        """逻辑路径 -> syscall 路径(容器映射; 未命中/无映射时原样返回)"""
+        try:
+            fa = file_access.get_file_access()
+            return fa.map_to_container(path) or path
+        except Exception:  # noqa: BLE001 - 映射查询失败按原路径(随后判定自行降级)
+            return path
+
+    def _physical_dir(self, save_path: str, content_root: str = "") -> str:
+        """组键首元的物理目录: 三层解析(自有 job 登记表 -> 目录级链接 -> 代表文件只识别)
+
+        第 1 层(零 syscall): 活跃迁移 job 的作用域登记表 —— 逐文件链接不改变目录 realpath,
+        靠它才能把「已被 qB 搬到 T 的 mover」与「仍指向 S 的其余成员」并成同一组(§3.4)。
+        第 2 层(1~2 次 syscall): save_path **本身**是第三方目录级 junction/symlink 时用解析
+        结果 —— 只认「save_path 自己是链接」, 免得把 /tmp -> /private/tmp 这类父目录解析
+        误当成换了物理位置。
+        第 3 层(代表文件探测)**不参与本函数**: 文件级第三方链接识别但不并组(D11), 由
+        `_mark_third_party_link` 单独打标记。
+        """
+        sp = str(save_path or "")
+        if not sp:
+            return sp
+        relocate = getattr(self._ctx, "relocate", None)
+        if relocate is not None:
+            try:
+                resolved = relocate.resolve_physical(sp, content_root or sp)
+            except Exception:  # noqa: BLE001 - 迁移模块异常不影响归组(退回词法路径)
+                resolved = sp
+            if resolved and resolved != sp:
+                return resolved
+        try:
+            kind = alias_fs.alias_kind_of(self._syscall_path(sp))
+            if kind in (alias_fs.KIND_JUNCTION, alias_fs.KIND_SYMLINK):
+                resolved = file_access.get_file_access().realpath_lexical(sp)
+                if resolved and utils.path_normalize(resolved) != utils.path_normalize(sp):
+                    return resolved
+        except Exception:  # noqa: BLE001 - 解析失败即用词法路径(少并一组的代价 < 误并一组)
+            return sp
+        return sp
+
+    def _mark_third_party_link(self, key, save_path: str, file_map: Dict[str, int]) -> None:
+        """第 3 层识别(D11): 代表文件是第三方文件级链接 / 硬链接 ⇒ 打组标记(不并组、迁移拒迁)
+
+        硬链接语义是「同一份数据的第二个名字」, 文件级 symlink 的目标通常是媒体库路径
+        (与原 save_path + 相对路径无对应关系) —— 两者都表达不进现有组键形态, 故只标注。
+        """
+        reg = getattr(self._ctx.store, "third_party_link_groups", None)
+        if reg is None or not file_map or not save_path:
+            return
+        rel = sorted(file_map.keys())[0]
+        p = os.path.join(save_path, *[x for x in str(rel).replace("\\", "/").split("/") if x])
+        try:
+            kind = alias_fs.alias_kind_of(self._syscall_path(p))
+        except Exception:  # noqa: BLE001
+            return
+        if kind in (alias_fs.KIND_SYMLINK, alias_fs.KIND_HARDLINK):
+            reg.add(key)
+        else:
+            reg.discard(key)
+
+    def regroup_scope(self, scope: str, src: str = "", hashes=()) -> int:
+        """建链后强制重归组(§3.4): 内容根落在 scope 内、或属于本 job 成员的种子重新归组
+
+        链接不改变成员的 save_path(qB 侧仍记 S), 但物理数据已在 T —— 经解析器重算组键后,
+        它们与已搬到 T 的 mover 落进同一组(不裂组)。hashes = 本 job 成员(含 mover: 它的
+        save_path 已是 dst, 不在「仍指向 src」的集合里, 但旧组键还挂在 src 上, 必须一起重算)。
+        """
+        store = self._ctx.store
+        owned = set(hashes or ())
+        n = 0
+        for h, rec in list(store.by_hash.items()):
+            mine = h in owned
+            if not mine and src and utils.path_normalize(rec.save_path) != utils.path_normalize(src):
+                continue
+            try:
+                fmap = {
+                    utils.path_normalize(f.name): f.size
+                    for f in rec.files(self._ctx.api.client)
+                } if self._ctx.api is not None else {}
+            except Exception:  # noqa: BLE001 - 单条文件表读不到: 跳过(下轮 save_path 变化还会再归)
+                continue
+            if not fmap:
+                continue
+            root = _content_root_of(rec.save_path, list(fmap.keys()))
+            if not mine and not _within_scope(scope, root):
+                continue
+            self._assign_to_group(rec, fmap)
+            n += 1
+        if n:
+            logger.info(f"辅种组 | 别名作用域重归组 {n} 个种子(scope={scope})")
+        return n
 
     def _handle_save_path_changes(self, dry_run: bool):
         """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
@@ -158,11 +284,15 @@ class GroupingModule(BaseModule):
             if torrent is None:
                 continue
             key = store.member_to_key.get(h)
-            if key is None or utils.path_normalize(torrent.save_path) == key[0]:
+            if key is None:
                 continue
             old_map = store.group_sizes.get(key, {}).get(h)
             if not old_map:
                 continue  # 无缓存文件映射, 无从重归组与扫描(维持原行为)
+            # 比较同样走物理解析: 别名在场的成员 save_path 仍是 S, 但它的组键首元已是解析结果
+            cur_root = _content_root_of(torrent.save_path, list(old_map.keys()))
+            if utils.path_normalize(self._physical_dir(torrent.save_path, cur_root)) == key[0]:
+                continue
             remain_key = self._leave_group(h)  # 移出原组(成员索引 O(1)); 组空则返回 None
             if remain_key is not None:
                 triggered.add(remain_key)  # 原组: 剩余成员触发缺文件扫描
@@ -224,12 +354,15 @@ class GroupingModule(BaseModule):
         if not file_map:
             return
         store = self._ctx.store
-        key = group_key_of(torrent.save_path, file_map)
+        # 组键首元走**物理位置解析**(§3.4): 别名在场时仍指向 S 的成员与已到 T 的 mover 同组
+        root = _content_root_of(torrent.save_path, list(file_map.keys()))
+        key = group_key_of(self._physical_dir(torrent.save_path, root), file_map)
         self._leave_group(torrent.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
         store.groups.setdefault(key, []).append(torrent.hash)
         store.group_sizes.setdefault(key, {})[torrent.hash] = file_map
         store.member_to_key[torrent.hash] = key
         store.dirty_groups.add(key)  # 成员变化 -> 该组冲突集合需重算
+        self._mark_third_party_link(key, torrent.save_path, file_map)
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
         self._check_size_consistency(key, dry_run)
 
@@ -510,7 +643,9 @@ class GroupingModule(BaseModule):
             resolved = dir_resolved.get(save_path)
             if resolved is None:
                 try:
-                    resolved = fa.realpath_lexical(save_path)
+                    # 目录解析 = 物理位置解析(自有 job 作用域 / 目录级链接)之后再 realpath:
+                    # 前者让「别名在场的两组」并成一个物理目录, 后者沿用原第三方链接检测
+                    resolved = fa.realpath_lexical(self._physical_dir(save_path))
                 except (OSError, ValueError):
                     # 畸形路径不打断主循环: 词法回退方向是「少检出」, 保守
                     resolved = os.path.normcase(os.path.normpath(save_path))
