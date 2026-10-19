@@ -256,9 +256,12 @@
        ================================================================================ -->
   <script type="text/x-template" id="tpl-aq-member-cells">
     <template v-for="col in cols" :key="col.key">
-      <!-- 站点列只留站点名: 代表状态的小方框已移除(状态由「状态」列表达, 见 2026-10-09 用户要求) -->
+      <!-- 站点列只留站点名: 代表状态的小方框已移除(状态由「状态」列表达, 见 2026-10-09 用户要求)
+           站点问题(计划 26-10-19-2206 D9): 明细行没有 chip 底色可用(密集阅读面不加高度),
+           只染文字色 + 挂同一份合并 tooltip —— 展开明细后站点问题不再消失 -->
       <span v-if="col.key === 'site'" class="m-site f-cell"
-            :class="{ 'f-on': $root.isFilterOn('siteFilter', m.site) }"
+            :class="[$root.siteAlertClass(m), { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+            :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
             @click.stop="$root.filterFromChip('site', m.site)">{{ m.site }}</span>
       <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ $root.stateText(m) }}</span></span>
       <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->

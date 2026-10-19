@@ -7,10 +7,10 @@
 <title>站点问题改色表达与 chip 图标收口</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-site-chip-color">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-19-2206">
-<meta name="doc-updated" content="26-10-19-2206">
-<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md, memory-bank/tasks/26-10-19-webui-site-chip-color.md">
+<meta name="doc-updated" content="26-10-19-2234">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md, memory-bank/tasks/26-10-19-webui-site-chip-color.md, memory-bank/testing/baselines/26-10-19-2243-webui-site-chip-color.md">
 <style>
   :root {
     --bg: #10151a;
@@ -82,7 +82,7 @@
 <h1>站点问题改色表达与 chip 图标收口</h1>
 <p class="lede">把「站点有问题」从图标通道搬到<strong>颜色通道</strong>：缺配置染橙底、tracker 报错染红底，chip 里只剩「命令结果」一种图标并固定放在站点名之后 —— 图标位置不再随状态跳，两类错误也不再撞脸。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-19-2206 · <b>doc-updated</b> 26-10-19-2206 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-19-2206 · <b>doc-updated</b> 26-10-19-2234 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling（2026-10-19 21:50–22:05，3 轮 15 问，全部拍板）+ 用户对 <code>f7f88cc1</code> 上线观感的 4 条反馈
 </div>
 
@@ -278,6 +278,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-19-2206</span> 初版。来源：用户对 <code>f7f88cc1</code> 上线观感的四条反馈（图标位置不统一 / 状态色不跟随 / tooltip 只在图标上 / 两类错误图标撞脸）+ grilling 三轮 15 问，全部拍板（D1-D11）。</li>
+  <li><span class="tag">R1 · 26-10-19-2234</span> 实施完成（S0-S5）。落地：模板三处 chip 删左槽、tooltip/aria 上移整块 chip（<code>xtpl-cells.html</code>）；<code>commands.js</code> 增 <code>siteAlertClass</code>/<code>chipAlertTip</code>/<code>siteAlertAria</code>，<code>ALERT_ICON</code> 收窄为命令结果四态；三皮肤 <code>views.css</code> 加 <code>.sa-no-conf</code>/<code>.sa-tracker</code>/<code>.m-site.*</code>、<code>.search-hit</code> 改 inset 描边；明细行（<code>xtpl.html</code>）与追剧未识别行（<code>shows.html</code>）同语义染色。一处口径澄清：D5 的 <code>currentColor</code> 落地为 <b>只作用于变色 chip</b>（<code>.site-chip.sa-* .sx</code>）—— 若按 §3.2 字面写成 <code>.site-chip .sx</code>，正常 chip 的失败红叉会继承种子状态绿字，失败语义消失（与 D5 目的相悖）；R1 的可读性诉求由该作用域化规则同样满足，e2e 双向断言（变色 chip 图标 == chip 前景 / 健康 chip 图标 == <code>--green</code>）。守阵与 e2e 均先红验：静态改 dashed→solid 即红；e2e 把 atlas 缺配置底改成 <code>--error-soft</code> 即红（prism 仍绿）。</li>
 </ul>
 
 </div>

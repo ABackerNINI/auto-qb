@@ -61,7 +61,9 @@
                 <div v-for="m in unrecognizedTorrents" :key="m.hash" class="member-row unrecognized-row"
                      :class="m.kind"
                      @contextmenu.prevent="openMemberMenu($event, m)">
-                  <span class="m-site">{{ m.site }}</span>
+                  <!-- 站点问题(计划 26-10-19-2206 D9): 与辅种明细同口径 —— 只染文字色 + 同款 tooltip -->
+                  <span class="m-site" :class="siteAlertClass(m)"
+                        :title="chipAlertTip(m)" :aria-label="siteAlertAria(m) || null">{{ m.site }}</span>
                   <span class="m-name" :title="m.name">{{ m.name }}</span>
                   <span class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
                   <span class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>

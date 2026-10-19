@@ -1,7 +1,7 @@
 # webui-site-alerts
 
-> 摘要: 站点健康 + 逐目标回执已落地(计划 S0-S7 Done); 上线后按观感反馈返工: 站点问题改走 chip 底色(两槽方案作废), 见 26-10-19-2206 计划(Open)
-> 最后活动: 2026-10-19 22:08
+> 摘要: 站点健康 + 逐目标回执已落地(计划 S0-S7 Done); 观感返工也已完成 —— 站点问题改走 chip 底色、图标只留命令结果(26-10-19-2206 计划 Done), 两槽方案作废
+> 最后活动: 2026-10-19 22:44
 
 **Refs:** memory-bank/plans/26-10-19-2007-plan-webui-site-alerts.html, memory-bank/tasks/26-10-19-webui-site-alerts.md, memory-bank/plans/26-10-19-2206-plan-webui-site-chip-color.html
 
@@ -20,6 +20,8 @@
 
 ## 下一步
 
-- **站点 chip 改色返工待实施**: 计划 `plans/26-10-19-2206-plan-webui-site-chip-color.html`(Open) —— 站点问题改走 chip 底色(缺配置橙/报错红), 图标只留命令结果并固定放文字后; 档案 `tasks/26-10-19-webui-site-chip-color.md`。
+- **站点 chip 改色返工已完成**(计划 `plans/26-10-19-2206-plan-webui-site-chip-color.html` Done): 站点问题走 chip 底色(缺配置橙+虚线 / 报错红), 图标只留命令结果并固定放文字后; 档案 `tasks/26-10-19-webui-site-chip-color.md`。
 - 第一阶段已收口; **第二阶段**(全局汇总徽章: 顶栏/状态栏「N 个问题种子」+ 点击切筛选; 缺配置 chip 跳转站点页)按 D11 另立计划件, 尚未排期。
-- 真机走查(可选): 在生产实例观察一轮真实 tracker 报错 → 图标亮起/恢复即灭的节奏是否与 30s/60s 口径一致。
+- 真机走查(可选): 在生产实例观察一轮真实 tracker 报错 → chip 变色/恢复即灭的节奏是否与 30s/60s 口径一致。
+
+**R3(2026-10-19 22:44):** 站点 chip 改色返工实施完成(S0-S5): 站点问题走 chip 底色(缺配置橙+虚线/报错红), 图标只留命令结果且固定放站点名后; 守阵与 e2e 重写并双向红验, 全量测试见 kb.baseline

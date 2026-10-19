@@ -11,7 +11,7 @@
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(P5 起 markup 收敛到表壳组件 thead 模式, 本守阵改钉 <tr is="vue:aq-table" mode="thead"> 接线 + HR_TABLE_DEFS 注册表十列键)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留; 表① 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复)
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留
-- test_frontend_site_alert_icon_wiring: 站点 chip 两槽图标守阵(计划 26-10-19-2007 S3/S4) —— 三皮肤样式键集相等(含 reduced-motion 降级)/模板三处 cell 双槽齐备且 title 绑后端字符串/token->符号单点在 commands.js ALERT_ICON(模板零内联映射)
+- test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
@@ -2409,56 +2409,90 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
 
 
 def test_frontend_site_alert_icon_wiring():
-    """站点 chip 两槽图标守阵(计划 26-10-19-2007 S3/S4)
+    """站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径)
 
+    通道分工: 站点问题(缺配置 / tracker 报错)走**颜色**, 命令结果走**图标**(固定放站点名之后)。
     三件事必须同时成立, 缺一条就是"pytest 全绿但界面废掉":
-      ① 三皮肤样式**键集合相等**(漏一套 = 某皮肤下图标没颜色/没动画, 只在一套皮肤上看得见);
-      ② 模板三处站点 cell(种子页 / 组行 / 集行)都带两个槽 —— 漏一处 = 那个视图永远不显示图标;
-      ③ 图标 token -> 符号映射单点在 commands.js(模板里不得出现第二份 `#i-xxx` 映射)。
+      ① 三皮肤样式**键集合相等**(漏一套 = 某皮肤下 chip 不变色/图标没颜色, 只在一套皮肤上看得见);
+         缺配置的虚线底边(非颜色通道, D4)与搜索命中"让出底色改描边"(D6)同属可读性契约, 一并钉住;
+      ② 模板三处站点 cell(种子页 / 组行 / 集行)都**只剩一个图标槽**(命令结果), tooltip 挂整块 chip;
+         旧图标类(`.sa` / `sa-<token>`)必须零残留 —— 残留 = 某个视图还在画第二个图标;
+      ③ 图标 token -> 符号映射单点在 commands.js(模板里不得出现第二份 `#i-xxx` 映射),
+         且该表**只含命令结果四种 token**(站点问题不该再有图标)。
     """
-    TOKENS = ("no_site_conf", "tracker_error", "pending", "ok", "warn", "error")
-    NEED = {".site-chip .sa", ".site-chip .sx", ".g-status.k-error .ico"}
-    NEED |= {f".site-chip .sa-{t}" for t in TOKENS if t in ("no_site_conf", "tracker_error")}
-    NEED |= {f".site-chip .sx-{t}" for t in ("pending", "ok", "warn", "error")}
+    CMD_TOKENS = ("pending", "ok", "warn", "error")
+    NEED = {".site-chip .sx", ".g-status.k-error .ico", ".site-chip.search-hit"}
+    NEED |= {f".site-chip .sx-{t}" for t in CMD_TOKENS}
+    NEED |= {".site-chip.sa-no-conf", ".site-chip.sa-tracker"}
 
     def _selectors(css):
-        """从 CSS 文本里收集本守阵关心的选择器(注释先剥, 避免注释里的示例文字被当成规则)"""
+        """从 CSS 文本里收集本守阵关心的选择器(注释先剥, 避免注释里的示例文字被当成规则)
+
+        只收三类: 命令结果图标槽(.site-chip .sx*) / 站点问题变色类(.site-chip.sa-*) /
+        搜索命中(.site-chip.search-hit); 另加状态列错误图标强化(.g-status.k-error)。
+        种子状态色(.site-chip.seeding 等)不在本守阵范围(它们由 components.css 各自维护)。
+        """
         body = re.sub(r"/\*[\s\S]*?\*/", "", css)
+        keys = (".site-chip .sx", ".site-chip.sa-", ".site-chip.search-hit", ".g-status.k-error")
         found = set()
         for sel in re.findall(r"(?m)^\s*([^{}@/][^{}]*)\{", body):
             for one in sel.split(","):
                 one = " ".join(one.split())
-                if one.startswith(".site-chip .s") or one.startswith(".g-status.k-error"):
+                if one.startswith(keys):
                     found.add(one)
         return found
 
     per_skin = {}
     for ui in _UI_ALL:
-        per_skin[ui] = _selectors(_ui_css_aggregate(ui))
+        css = _ui_css_aggregate(ui)
+        per_skin[ui] = _selectors(css)
         missing = NEED - per_skin[ui]
-        assert not missing, f"{ui} 缺站点 chip 图标样式: {sorted(missing)}"
-        assert "animation: none" in _ui_css_aggregate(ui), f"{ui} 缺 prefers-reduced-motion 降级"
+        assert not missing, f"{ui} 缺站点 chip 样式: {sorted(missing)}"
+        assert "animation: none" in css, f"{ui} 缺 prefers-reduced-motion 降级"
+        # 旧图标类零残留(R6): 站点问题已改走底色, 图标类必须清零(只删模板不删样式 = 两套语义并存)
+        assert "sa-no_site_conf" not in css and "sa-tracker_error" not in css, (
+            f"{ui} 仍残留旧站点图标类 sa-<token> —— 站点问题已改走 chip 底色, 图标类必须清零"
+        )
+        assert not re.search(r"\.site-chip \.sa\b", css), f"{ui} 仍残留 .sa 图标槽规则"
+        # D4: 缺配置必须带非颜色通道(虚线底边) —— 灰度/色盲下与实底红可区分
+        body = re.search(r"\.site-chip\.sa-no-conf\s*\{([^}]*)\}", css)
+        assert body, f"{ui} 缺 .site-chip.sa-no-conf 规则体"
+        assert "dashed" in body.group(1), f"{ui} 缺配置 chip 缺虚线底边(D4 非颜色通道)"
+        # D6: 搜索命中让出底色 —— 不得再用 accent 柔底占住 chip 填充
+        hit = re.search(r"\.site-chip\.search-hit\s*\{([^}]*)\}", css)
+        assert hit, f"{ui} 缺 .site-chip.search-hit 规则体"
+        assert "--accent-soft" not in hit.group(1), (f"{ui} 搜索命中仍占 accent 柔底 —— 站点问题/种子状态的底色被吞(D6)")
+        assert "inset" in hit.group(1) and "--accent-line" in hit.group(1), (f"{ui} 搜索命中未改 accent 描边(D6/R2)")
+        # D9: 明细行站点文本同语义(只染文字色)
+        assert ".m-site.sa-no-conf" in css and ".m-site.sa-tracker" in css, (f"{ui} 缺明细行站点文本染色规则(D9)")
 
     base = per_skin[_UI_ALL[0]]
     for ui in _UI_ALL[1:]:
         assert per_skin[ui] == base, (
-            f"{ui} 的站点 chip 图标样式键集与 {_UI_ALL[0]} 不一致 —— 三皮肤必须齐备(计划 R8): "
+            f"{ui} 的站点 chip 样式键集与 {_UI_ALL[0]} 不一致 —— 三皮肤必须齐备(计划 R3): "
             f"{_UI_ALL[0]}-{ui}={sorted(base - per_skin[ui])} / {ui}-{_UI_ALL[0]}={sorted(per_skin[ui] - base)}"
         )
 
-    # ② 模板三处站点 cell 各带两个槽(左 sa / 右 sx), 且 title 绑后端给出的字符串
+    # ② 模板三处站点 cell 各**一个**图标槽(命令结果), 站点问题不再有图标
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
-    assert tpl.count('class="ico sa"') == 3, "站点 cell 三处(种子页/组行/集行)都要有左槽图标"
-    assert tpl.count('class="ico sx"') == 3, "三处都要有右槽图标"
-    assert tpl.count('m.site_alert_msg') == 3 and tpl.count("$root.rowIcon(m.hash)") >= 6, "title 绑后端字符串"
+    assert tpl.count('class="ico sx"') == 3, "站点 cell 三处(种子页/组行/集行)各要有一个命令结果图标槽"
+    assert 'class="ico sa"' not in tpl, "站点问题不再走图标 —— 模板里不得再有 .sa 图标槽"
+    assert "'sa-' + m.site_alert" not in tpl, "旧站点图标类拼接必须清零"
+    # tooltip 挂整块 chip(D8): 三处都绑合并文案, 图标不再各自挂 title
+    assert tpl.count("$root.siteAlertClass(m)") == 3, "三处 chip 都要按站点问题染色"
+    assert tpl.count("$root.chipAlertTip(m)") == 3, "tooltip 必须挂整块 chip(三处齐备)"
+    assert tpl.count("$root.siteAlertAria(m)") == 3, "站点问题必须补 aria-label(D4)"
+    for seg in re.findall(r"<svg[^>]*class=\"ico sx\"[^>]*>", tpl):
+        assert ":title" not in seg, "命令结果图标不再单独挂 title(触发面已放大到整块 chip)"
 
-    # ③ token -> 符号单点: 两槽的符号一律经 alertIconHref 取, 不得内联第二份映射
-    # (3 处 cell × 2 槽 = 6 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
-    assert tpl.count("$root.alertIconHref(") == 6, "两槽图标必须经 alertIconHref 单点取符号"
+    # ③ token -> 符号单点: 命令结果符号一律经 alertIconHref 取, 不得内联第二份映射
+    # (3 处 cell × 1 槽 = 3 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
+    assert tpl.count("$root.alertIconHref(") == 3, "命令结果图标必须经 alertIconHref 单点取符号"
     cmds = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
     m = re.search(r"const ALERT_ICON = \{([\s\S]*?)\};", cmds)
     assert m, "commands.js 必须有 ALERT_ICON 单点"
-    assert set(re.findall(r"(\w+):\s*\"#i-", m.group(1))) == set(TOKENS), "ALERT_ICON 键集与契约不一致"
+    assert set(re.findall(r"(\w+):\s*\"#i-",
+                          m.group(1))) == set(CMD_TOKENS), ("ALERT_ICON 键集必须只含命令结果四种 token(站点问题已改走颜色, 不得留图标映射)")
 
 
 def test_frontend_frozen_column_boundary_wiring():

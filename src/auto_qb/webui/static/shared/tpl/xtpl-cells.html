@@ -57,17 +57,15 @@
         <span v-else class="zero"></span>
       </div>
       <div v-else-if="col.key === 'sites'" class="g-sites">
-        <!-- 站点 chip 两槽(计划 26-10-19-2007 S3/S6): 左 = 持久健康(site_alert), 右 = 临时命令结果
-             (alertIcons)。位置即语义, 两槽可同时存在; DOM 顺序固定(左槽在前) -->
+        <!-- 站点 chip(计划 26-10-19-2206 S1): 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错
+             红底), 图标通道只留**命令结果**且固定放在站点名之后 —— 每 chip 最多一个图标, 位置不随
+             状态跳。提示挂整块 chip(title 由 ui_feedback 迁成 data-aq-tip), 两类文案合并两行。 -->
         <span v-for="m in g.members" :key="m.hash"
-              class="site-chip" :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              class="site-chip" :class="[m.kind, $root.siteAlertClass(m), { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
               @click.stop="$root.filterFromChip('site', m.site)">
-          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
-            <use :href="$root.alertIconHref(m.site_alert)"></use>
-          </svg>
           {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
-               :title="$root.rowIcon(m.hash).msg">
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
             <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
           </svg>
         </span>
@@ -111,14 +109,11 @@
         <span class="g-name-text">{{ m.name }}</span>
       </div>
       <div v-else-if="col.key === 'site'" class="g-sites">
-        <span class="site-chip" :class="[m.kind, { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+        <span class="site-chip" :class="[m.kind, $root.siteAlertClass(m), { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
               @click.stop="$root.filterFromChip('site', m.site)">
-          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
-            <use :href="$root.alertIconHref(m.site_alert)"></use>
-          </svg>
           {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
-               :title="$root.rowIcon(m.hash).msg">
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
             <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
           </svg>
         </span>
@@ -234,14 +229,11 @@
       <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
       <div v-else-if="col.key === 'sites'" class="g-sites">
         <span v-for="m in e.members" :key="m.hash" class="site-chip"
-              :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              :class="[m.kind, $root.siteAlertClass(m), { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
               @click.stop="$root.filterFromChip('site', m.site)">
-          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
-            <use :href="$root.alertIconHref(m.site_alert)"></use>
-          </svg>
           {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
-               :title="$root.rowIcon(m.hash).msg">
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
             <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
           </svg>
         </span>

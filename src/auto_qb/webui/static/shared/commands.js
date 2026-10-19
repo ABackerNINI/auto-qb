@@ -16,19 +16,18 @@
  * !它不再进"端到端"宽限 —— 回执不再被扣住等真值, 端到端就是命令执行时间。 */
 const TRUTH_HOLD_MS = 8000;
 
-/* 站点 chip 图标槽(计划 26-10-19-2007): token -> 图标 id 的**唯一映射**。
- * 左槽(site_alert, 后端判定)与右槽(命令结果, 前端本地态)共用这张表 —— 模板只做声明式绑定,
- * 不在这里以外的地方写 `#i-xxx` 图标名, 也不按 state 猜原因(口径与 error_reason 一致)。
- * 颜色走 CSS 类(sa-<token>), 三皮肤各自定义, 这里只管符号。 */
+/* 站点 chip 图标槽(计划 26-10-19-2206 D1/D2/D3): token -> 图标 id 的**唯一映射**。
+ * 图标通道**只服务命令结果**(前端本地态 alertIcons); 站点问题(缺配置 / tracker 报错)改走
+ * chip 底色(颜色通道), 不再有图标 —— 于是"图标位置随状态跳"与"两类错误撞脸"同时消失。
+ * 模板只做声明式绑定, 不在这里以外的地方写 `#i-xxx` 图标名, 也不按 state 猜原因
+ * (口径与 error_reason 一致)。颜色走 CSS 类(sx-<token>), 三皮肤各自定义, 这里只管符号。 */
 const ALERT_ICON = {
-  no_site_conf: "#i-warn",      // 缺站点配置(橙, 常驻)
-  tracker_error: "#i-x-circle", // tracker 报错(红, 常驻, 恢复即灭)
-  pending: "#i-pulse",          // 汇报进行中(蓝, 呼吸)
-  ok: "#i-check",               // 成功(绿, 10s)
-  warn: "#i-clock",             // 已受理·推迟 / 未确认(黄, 180s)
-  error: "#i-x-circle",         // 失败(红, 180s)
+  pending: "#i-pulse", // 汇报进行中(蓝, 呼吸)
+  ok: "#i-check",      // 成功(绿, 10s)
+  warn: "#i-clock",    // 已受理·推迟 / 未确认(黄, 180s)
+  error: "#i-x-circle", // 失败(红, 180s)
 };
-/* 右槽图标寿命(ms, 计划 D7): 成功 10s / 推迟·未确认 180s / 失败 180s /
+/* 命令结果图标寿命(ms, 计划 D7): 成功 10s / 推迟·未确认 180s / 失败 180s /
  * 进行中至回执(兜底 45s —— 回执最长等 40s, 留 5s 余量)。 */
 const ALERT_ICON_MS = { ok: 10000, warn: 180000, error: 180000, pending: 45000 };
 
@@ -38,14 +37,39 @@ window.AQB_COMMANDS = {
     _actionText(action) {
       return { pause: "停止", resume: "启动", reannounce: "强制重新汇报", recheck: "强制重新检查", delete: "删除" }[action] || action;
     },
-    /* ---------------- 站点 chip 图标槽(计划 26-10-19-2007 S3/S6) ----------------
-     * 左槽 = 持久健康(后端 site_alert: no_site_conf / tracker_error), 右槽 = 临时命令结果
-     * (前端 alertIcons: pending / ok / warn / error)。两槽可同时存在, DOM 顺序固定 ——
-     * 位置即语义(R5): 左"这个站点现在不好", 右"你刚让我做的事结果如何", 互不覆盖。 */
+    /* ---------------- 站点 chip: 站点问题走颜色, 命令结果走图标(计划 26-10-19-2206) ----------------
+     * 缺配置 = 橙底 + 虚线底边(非颜色通道, D4), tracker 报错 = 红底; 图标只剩命令结果一种,
+     * 固定放在站点名之后 —— 一列扫下去图标位置恒定。 */
+    /* 站点问题 -> chip/明细行类名(返回 "" / "sa-no-conf" / "sa-tracker")。
+     * 判定只读后端 token(site_alert), 不在前端按 state 猜原因; 缺配置优先于报错 ——
+     * 与后端 _site_alert 的判定顺序一致(配置缺失时报错文本不可信)。
+     * 类名与旧图标类(sa-no_site_conf / sa-tracker_error)刻意不同名: 旧类残留会被静态守阵拦下。 */
+    siteAlertClass(m) {
+      const t = m && m.site_alert;
+      if (t === "no_site_conf") return "sa-no-conf";
+      if (t === "tracker_error") return "sa-tracker";
+      return "";
+    },
+    /* chip/明细行 tooltip(D8): 站点问题在前、命令结果在后, 并存时合并成两行(单条不加换行)。
+     * 挂在整块 chip 上 —— 触发面从 11px 图标放大到整块, 图标本身不再各自挂 title。 */
+    chipAlertTip(m) {
+      const parts = [];
+      if (m && m.site_alert && m.site_alert_msg) parts.push(m.site_alert_msg);
+      const ic = m ? this.rowIcon(m.hash) : null;
+      if (ic && ic.msg) parts.push(ic.msg);
+      return parts.join("\n");
+    },
+    /* 读屏文案(D4): 站点问题不只有颜色一个通道 —— aria-label 带上站点名与原因。
+     * 无站点问题时返回 ""(绑定侧用 `|| null` 摘属性, 空 aria-label 会顶掉 chip 里的可见文字)。 */
+    siteAlertAria(m) {
+      if (!m || !m.site_alert) return "";
+      const msg = m.site_alert_msg || "";
+      return msg ? `${m.site}: ${msg}` : m.site;
+    },
     alertIconHref(token) {
       return ALERT_ICON[token] || "";
     },
-    /* 右槽读口(模板用): 返回该 hash 当前的命令结果图标, 无则 null。
+    /* 命令结果读口(模板用): 返回该 hash 当前的命令结果图标, 无则 null。
      * until 到期的兜底在这里也判一次 —— 定时器被页面挂起(后台标签页节流)时不会留孤儿图标。 */
     rowIcon(hash) {
       const r = this.alertIcons && this.alertIcons[hash];
@@ -53,7 +77,7 @@ window.AQB_COMMANDS = {
       if (r.until && Date.now() > r.until) return null;
       return r;
     },
-    /* 右槽写口单点: 给某行落一个命令结果图标(ms 缺省 = 不自动过期, 等回执改写)。
+    /* 命令结果写口单点: 给某行落一个结果图标(ms 缺省 = 不自动过期, 等回执改写)。
      * !每 hash 一个定时器, 覆盖时先清旧定时器 —— 否则"进行中(45s 兜底)"的旧定时器会把
      *   后到的成功/失败图标提前清掉(时序: 兜底 45s > 成功 10s, 用户会看到绿勾闪一下就没了)。 */
     setRowIcon(hash, kind, msg, ms) {

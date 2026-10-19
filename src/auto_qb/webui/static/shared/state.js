@@ -101,7 +101,8 @@ window.AQB_STATE = {
        * 重渲染, 所以补丁走这个响应式覆盖表, 由 groupPrimary(g) 现问现用; 回滚 = 删掉覆盖,
        * 真值本来就没被改过(比成员行的 prev 回滚更不容易留假状态)。 */
       pendingGroupOps: {},
-      /* 站点 chip 右槽: 命令结果图标(计划 26-10-19-2007 S6)。hash -> { kind, msg, until }。
+      /* 站点 chip 图标槽: 命令结果图标(计划 26-10-19-2206 D1/D10 —— 站点问题已改走 chip 底色,
+       * 图标通道只剩这一种)。hash -> { kind, msg, until }。
        * kind ∈ pending / ok / warn / error(图标与颜色见 commands.js ALERT_ICON)。
        * !必须挂在 hash 键 map 上, **不能挂在行对象上**: 服务端每次发布都是新 dict,
        *   行对象一换图标就丢(R4)。

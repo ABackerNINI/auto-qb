@@ -930,7 +930,7 @@ def test_snapshot_fields_match_record_slots():
     """守卫: _SNAPSHOT_FIELDS ↔ TorrentRecord 声明字段一一对应(防漏声明/拼写错位);
     REQUIRED ⊆ SNAPSHOT; 除主键 hash 外全部字段带默认值"""
     lazy_slots = {"_tags_set", "_state_enum", "_trackers_info", "_files", "_raw", "tracker_conf", "hr_link"}
-    # 错误原因(WebUI 状态列) + tracker 健康(站点 chip 左槽): 记录级派生展示字段,
+    # 错误原因(WebUI 状态列) + tracker 健康(站点 chip 底色): 记录级派生展示字段,
     # 非 qB 快照字段(不进字段表/不参与 apply_delta), 由 WebviewMixin.refresh_tracker_health
     # 在主循环预取后写入
     lazy_slots |= {
