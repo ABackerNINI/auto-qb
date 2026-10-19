@@ -925,17 +925,30 @@ window.AQB_SHORTCUTS = {
       }
       this._toggleUnit(this._kbUnitOf(c));  // 剧/集单元: 整单元切换(与鼠标 Ctrl+点击同语义)
     },
-    /* Shift 手势原点(计划 26-10-02-0608 W3): 首次 Shift 扩展前, 若当前上下文没有有效起点,
-     * 以当前光标落起点。**必须在 _kbMove 之前**调用 —— 否则光标已移动, 区间会塌成单行(G2)。
-     * 已有有效起点(点击 / Ctrl 点击 / 上次手势落定)一律不动 —— 保证"同一起点多次 Shift 扩展"
-     * (法则 2)。光标为 null 时不落, 由 _selAnchor 最后兜底列表首行。 */
+    /* Shift 手势原点(计划 26-10-02-0608 W3; 2026-10-19 收编鼠标路径): 首次 Shift 扩展前, 若当前
+     * 上下文没有有效起点, 以当前光标落起点。逐个 kind(group/member/unit)试落 —— 光标能解析成
+     * 该 kind 的有效 id 且该 kind 起点缺失才落; 已有有效起点(点击 / Ctrl 点击 / 上次手势落定)
+     * 一律不动 —— 保证"同一起点多次 Shift 扩展"(法则 2)。光标为 null 时不落, 由 _selAnchor
+     * 最后兜底列表首行。
+     * !辅种页成员行的光标只解析得出 member kind(_selContext 只回当前视图主 kind, 辅种页恒为
+     *  group), 单 kind 落点覆盖不到它 —— 成员行 Shift 手势曾因此取不到原点(同根: 区间塌成单行)。
+     * !调用方必须先调本方法、再动光标: 键盘 _kbExtend(在 _kbMove 之前)与鼠标五入口(在改写
+     *  kbCursor 之前, selection.js)都是这个顺序 —— 先落光标再解析, _selAnchor 兜底链的
+     *  「当前光标」一环读到的是新位置, 区间塌成单行(2026-10-19 报障: Shift 连选后 Esc 清选择,
+     *  再次 Shift 连选不以光标为起点; 坑档 pitfalls/web-ui/overlays.md §起点)。 */
     _selSeedAnchorFromCursor() {
-      const ctx = this._selContext();
-      if (!ctx) return;
-      const field = this._selAnchorField(ctx.kind);
-      if (ctx.ids.includes(this[field])) return;
-      const fromCursor = this._selCursorId(ctx.kind);
-      if (fromCursor !== null && ctx.ids.includes(fromCursor)) this[field] = fromCursor;
+      if (this.page !== "groups") return;  // 仅数据页有选择上下文(设置页无列表)
+      const ctxs = [
+        { kind: "group", ids: this.filteredGroups.map((g) => g.key) },
+        { kind: "member", ids: this._memberRangeList() },
+        { kind: "unit", ids: this._kbShowUnits().map((u) => u.id) },
+      ];
+      for (const ctx of ctxs) {
+        const field = this._selAnchorField(ctx.kind);
+        if (ctx.ids.includes(this[field])) continue;              // 已有有效起点不动(法则 2)
+        const fromCursor = this._selCursorId(ctx.kind);
+        if (fromCursor !== null && ctx.ids.includes(fromCursor)) this[field] = fromCursor;  // 无有效起点 -> 落手势原点
+      }
     },
     _kbExtend(delta) {
       this._selSeedAnchorFromCursor();  // 先落起点(手势原点), 再移动光标 —— 顺序不可换(否则区间塌成单行)

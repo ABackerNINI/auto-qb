@@ -139,10 +139,11 @@
 ### 起点(anchor)与光标(focus)是两件事; 点击落起点的写入必须排除 Shift
 
 - **触发**: 改 Shift 区间选择 / 改多选起点 / 实现"点击落起点"这类键鼠衔接(2026-10-02 计划
-  26-10-02-0608 实测)。
+  26-10-02-0608 实测); 2026-10-19 用户报障「Shift 连选后按 Esc, 光标指向最后一个选择的种子,
+  但再次 Shift 连选不以光标为起点」(猜测 Esc 错清锚点 —— 只对一半, 见 ③)。
 - **判别**: 光标(`kbCursor`, 每按一次 ↑↓ 就变)与起点(`selAnchor*`, 一次扩展手势内**必须不动**)
   是两个独立语义 —— 合并成一个字段(报告 26-09-30-1806 的方案 C)会让 Shift+↓ 连按只能选相邻两行。
-  两处容易写错的约束:
+  三处容易写错的约束:
   - **① 写入位置与 Shift 守卫**: 约束「写在修饰键分支**之前**」与约束「**不写** Shift 分支」只能靠
     `if (!event.shiftKey) this._selSetAnchor(...)` 同时满足。**无条件早写**会让 Shift+点击把起点
     重置到目标行 ⇒ 区间塌成单行(计划 §07.1 的 M1「点第 5 行 → Shift+点击第 20 行 = 选 5–20」
@@ -150,10 +151,22 @@
     —— 约束条目常漏掉守卫条件, 验收表才是用户可感知的语义。
   - **② 键盘先落起点再移动光标**: `_kbExtend` 必须 `_selSeedAnchorFromCursor()` → `_kbMove(delta)`,
     顺序反了光标已移走 ⇒ 起点解析取到**新**光标, 区间同样塌成单行。
+  - **③ 鼠标先落起点再改写光标**(2026-10-19 补; 计划当年漏掉的第三处, 与 ② 同祸): 鼠标五入口
+    (`onGroupClick` / `onMemberClick` / `onTorrentClick` / `onShowClick` / `onShowEpClick`)第一行
+    历来是"落光标", Shift 分支里才解析起点 —— 锚点缺失时兜底链的「当前光标」一环读到的是
+    **刚点的行** ⇒ 区间塌成单行。锚点缺失的两条来路: Esc 退栈链兜底 `clearSelection()`
+    (`lifecycle.js`)把 `selAnchor*` 连同选中一起清(**清锚点是选中状态语义, 不是缺陷**; 方案 B
+    法则 3 本就走光标兜底), 以及全新会话首次 Shift。修法 = 入口在改写 `kbCursor` **之前**、
+    Shift 限定地调 `_selSeedAnchorFromCursor()`, 与键盘 `_kbExtend` 同纪律。**判据**: 凡
+    "先改 focus 再读 anchor"的顺序都与 ② 同祸, 与输入通道无关。
 - **处置**: 起点解析/写入收成单点(`selection.js` `_selAnchor` / `_selSetAnchor`, 兜底链
   显式锚点 → 当前光标 → [group: 展开的组] → 列表首行), 消掉"四处消费者各写一遍 `list[0]`"的漂移源;
   落起点**只写 `selAnchor*`**, 不碰 `selGroups`/`selMembers`(普通点击仍不选中)。
-  守阵: `tests/test_web_shortcuts.py::test_shift_anchor_unified`。
+  `_selSeedAnchorFromCursor` **逐 kind(group/member/unit)试落** —— `_selContext` 只回当前视图
+  主 kind(辅种页恒为 group), 单 kind 落点覆盖不到成员行的 member kind(辅种页成员行 Shift 手势
+  同根取不到原点, 2026-10-19 一并收编)。
+  守阵: `tests/test_web_shortcuts.py::test_shift_anchor_unified`(五入口 seed 调用位于 kbCursor
+  改写之前且限 Shift; 落点覆盖 member/unit kind; `_kbExtend` seed 先于 `_kbMove`)。
 
 ### 命令回执机制: `cmd_id` 的生成与剔除
 

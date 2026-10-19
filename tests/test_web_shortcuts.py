@@ -37,7 +37,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_shift_anchor_unified: 起点统一(计划 26-10-02-0608 方案 B) —— 五点击入口普通/Ctrl 路径落
   起点且排除 Shift(法则 2); 四处消费者走 _selAnchor 单点解析、无裸 list[0]; _selAnchor 兜底链
   齐全(显式 -> 光标 -> 展开组 -> 首行); _selSetAnchor 不碰选中集合; _kbExtend 先落手势原点
-  (_selSeedAnchorFromCursor) 再移动光标, 且已有有效起点不动
+  (_selSeedAnchorFromCursor) 再移动光标, 且已有有效起点不动; 2026-10-19: 五入口 Shift 分支前
+  先 _selSeedAnchorFromCursor 再改写 kbCursor(修 Esc 清选择后再次 Shift 连选塌成单行), 落点
+  逐 kind(group/member/unit)覆盖
 - test_kb_member_range_context_aware: 成员行范围选择随视图取范围(2026-10-09) —— _memberRangeList
   按 viewMode 分流(种子页平铺 / 辅种页展开组 / 追剧页展开集), shiftMemberSel 吃它, _kbExtend 的
   torrent 分支不再一律 shiftTorrentSel(辅种/追剧页成员行 Shift+↑↓ 曾选不中)
@@ -433,7 +435,11 @@ def test_click_lands_cursor_and_viewport_fallback() -> None:
 def test_shift_anchor_unified() -> None:
     """起点统一(计划 26-10-02-0608 方案 B): 区间起点(anchor)与光标一样纳入键鼠统一模型 ——
     点击落起点(Shift 不重置, 法则 2) / 四处消费者走单点解析(不再各写一遍 list[0]) /
-    键盘 Shift 手势原点先于移动光标(否则区间塌成单行, G2)。"""
+    键盘 Shift 手势原点先于移动光标(否则区间塌成单行, G2)。
+    2026-10-19 收编鼠标路径(用户报障: Shift 连选后 Esc 清选择, 光标在最后选中的种子, 但再次
+    Shift 连选不以光标为起点): 五入口在改写 kbCursor 之前先 _selSeedAnchorFromCursor(手势前
+    光标落起点), 落点逐 kind(group/member/unit)覆盖 —— 辅种页成员行的光标只解析得出 member
+    kind(_selContext 只回当前视图主 kind, 辅种页恒为 group, 单 kind 落点覆盖不到)。"""
     sel = _read("selection.js")
     # ① 五入口普通/Ctrl 路径落起点, 写在修饰键分支之前, 且排除 Shift 分支(法则 2)
     for fn, write in [
@@ -453,6 +459,19 @@ def test_shift_anchor_unified() -> None:
         line = next(ln for ln in body.splitlines() if "_selSetAnchor" in ln)
         assert "event.shiftKey" in line and "!" in line, (f"{fn} 落起点必须排除 Shift 分支(法则 2: 否则 Shift+点击只选目标单行, M1 回归)")
         assert write in body, f"{fn} 落起点值不对(起点 id 形态漂移: {write})"
+    # ①b 鼠标 Shift 分支前先落手势原点(2026-10-19 报障: Esc 清选择后再次 Shift 连选塌成单行):
+    #    五入口必须先 _selSeedAnchorFromCursor() 再改写 kbCursor —— 顺序反了 _selAnchor 兜底链的
+    #    「当前光标」一环读到的是刚点的行, 区间塌成单行(不以光标为起点)
+    for fn in ("onGroupClick", "onMemberClick", "onTorrentClick", "onShowClick", "onShowEpClick"):
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}"
+        body = m.group(1)
+        seed_at = body.find("_selSeedAnchorFromCursor()")
+        cursor_at = body.find("this.kbCursor =")
+        assert seed_at >= 0, f"{fn} 缺手势前落起点(Shift 分支前必须调 _selSeedAnchorFromCursor)"
+        assert 0 <= seed_at < cursor_at, (f"{fn} 必须先落起点再改写光标(顺序反了区间塌成单行: Esc 后 Shift 连选不以光标为起点)")
+        seed_line = next(ln for ln in body.splitlines() if "_selSeedAnchorFromCursor" in ln)
+        assert "event.shiftKey" in seed_line, (f"{fn} 手势前落起点必须限 Shift(普通/Ctrl 路径由 _selSetAnchor 显式落起点)")
     # ② 四处消费者统一走单点解析, 不再出现裸 list[0] 兜底
     for fn, call in [
         ("shiftGroupSel", 'this._selAnchor("group", list)'),
@@ -495,6 +514,12 @@ def test_shift_anchor_unified() -> None:
     seedb = seed.group(1)
     assert "ctx.ids.includes(this[field])" in seedb, ("已有有效起点必须不动(法则 2: 同一起点多次 Shift 扩展)")
     assert "this[field] = fromCursor" in seedb, "无有效起点时必须以当前光标落起点"
+    # ④b 手势原点落点必须逐 kind 覆盖(2026-10-19): 辅种页成员行的光标只解析得出 member kind
+    #  (_selContext 只回当前视图主 kind, 辅种页恒为 group, 单 kind 落点覆盖不到 => 成员行
+    #  Shift 手势取不到原点, 区间塌成单行); 鼠标五入口同样吃本方法(改写 kbCursor 之前)
+    assert "_memberRangeList()" in seedb, ("_selSeedAnchorFromCursor 必须覆盖 member kind(辅种页成员行 Shift 手势取不到原点)")
+    assert "_kbShowUnits()" in seedb, "_selSeedAnchorFromCursor 必须覆盖 unit kind(追剧页剧/集行)"
+    assert 'this.page !== "groups"' in seedb, "手势原点落点仅数据页(设置页无选择上下文)"
 
 
 def test_kb_member_range_context_aware() -> None:
@@ -765,9 +790,8 @@ def test_drawer_height_w3() -> None:
                                                     ), ("内联高度必须守卫 开态(dashboardPanelStyle 高度不该挂在关闭态)")
     assert '"maxHeight"' in stb or "maxHeight" in stb, "内联样式必须同时锁 max-height(拖过 42vh 后 CSS 默认上限要被覆盖)"
     assert "|| Math.round(window.innerHeight * 0.42)" in stb and "return {};" not in stb.replace(
-        "if (!this.drawer.open) return {};", ""), (
-        "未拖拽过也必须回落确定高度(默认 42vh) —— 返回 {} 走 CSS 内容自适应即「面板高度自己跳」复发"
-    )
+        "if (!this.drawer.open) return {};", ""
+    ), ("未拖拽过也必须回落确定高度(默认 42vh) —— 返回 {} 走 CSS 内容自适应即「面板高度自己跳」复发")
     # --- §3.5 持久化: 两键与 drawerTab 同族 try/catch; D1 = drawerOpen 只写不回读 ---
     for fn, key in (("persistDrawerHeight", "autoqb.ui.drawerHeight"), ("persistDrawerOpen", "autoqb.ui.drawerOpen")):
         body = re.search(rf"{fn}\(\) \{{(.*?)\n    \}},", drawer_js, re.S)

@@ -13,6 +13,9 @@
  *   普通/Ctrl 点击与键盘 Shift 手势原点落起点(_selSetAnchor), 起点单点解析走 _selAnchor
  *   (兜底链: 显式锚点 -> 当前光标 -> 展开的组 -> 列表首行), 不再四处各写一遍 list[0]。
  *   落起点 ≠ 选中; Shift 不重置起点(扩展期间起点不动, 便于同一起点多次扩段)。
+ *   !2026-10-19(报障修复): 鼠标 Shift 分支前也要先以「手势前光标」落起点 —— 五入口在改写
+ *   kbCursor 之前调 _selSeedAnchorFromCursor; 顺序反了(先落光标再解析)兜底读到刚点的行,
+ *   区间塌成单行(Esc 清选择后再次 Shift 连选不以光标为起点)。
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SELECTION);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
@@ -240,6 +243,7 @@ window.AQB_SELECTION = {
       return this.selGroups.includes(g.key);
     },
     onGroupClick(g, event) {
+      if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "group", id: g.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       // 点击落起点(≠ 选中; 写在修饰键分支之前, 与展开/收起无关 —— 决策点③); Shift 不重置起点(法则 2)
       if (!event.shiftKey) this._selSetAnchor("group", g.key);
@@ -277,6 +281,7 @@ window.AQB_SELECTION = {
     onMemberClick(m, event) {
       // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
       // Ctrl/⌘ 切换单行, Shift 从锚点整段范围
+      if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接): 只写 focus 语义, 不动选择集合
       // 点击落起点(普通点击原为 no-op, 现补起点); Shift 不重置起点(法则 2)
       if (!event.shiftKey) this._selSetAnchor("member", m.hash);
@@ -348,6 +353,7 @@ window.AQB_SELECTION = {
      * 42vh 面板压掉列表, 与「用户硬约束: 列表当前行必须看得清」冲突) —— 挂点自己首行即守卫;
      * ② Ctrl / Shift 点击是**选择手势**不是「看这一行」, 不跟随(批量圈选 N 行不该让面板逐行翻)。 */
     onTorrentClick(m, event) {
+      if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       // 点击落起点(平铺种子行); Shift 不重置起点(法则 2)
       if (!event.shiftKey) this._selSetAnchor("member", m.hash);
@@ -487,6 +493,7 @@ window.AQB_SELECTION = {
       this._selSyncGroups();  // 双向联动: 段内凑齐的辅种组随之入选(追剧页无组数据 -> no-op)
     },
     onShowClick(s, event) {
+      if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "show", id: s.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       // 点击落起点(单元 id 与 _showUnits 同构); Shift 不重置起点(法则 2)
       if (!event.shiftKey) this._selSetAnchor("unit", "show|" + s.key);
@@ -501,6 +508,7 @@ window.AQB_SELECTION = {
       this.toggleShow(s.key);
     },
     onShowEpClick(s, sn, e, event) {
+      if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       const id = this.showEpRowId(s.key, sn.season, e.epKeyStr);
       this.kbCursor = { kind: "ep", id };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       // 点击落起点(集单元 id = showEpRowId); Shift 不重置起点(法则 2)
