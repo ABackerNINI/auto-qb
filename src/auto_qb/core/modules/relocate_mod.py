@@ -1220,16 +1220,20 @@ class RelocateModule(BaseModule):
         # ---- 第三方链接与硬链接识别(D11 三层; 只识别代表文件, 不遍历全组) ----
         tp_files, hl_files = (), ()
         tp_dir_note = ""
-        first_native = _native(save_path, names[0]) if names else save_path
-        try:
-            st = os.lstat(utils.add_long_path_prefix_for_win(self._syscall(first_native)))
-            tag = getattr(st, "st_reparse_tag", 0)
-            if stat.S_ISLNK(st.st_mode) or tag:
-                tp_files = (names[0], )
-            elif st.st_nlink > 1:
-                hl_files = (names[0], )
-        except OSError:
-            tp_dir_note = "代表文件不可读(远程/容器未映射?): 第三方链接与硬链接未识别"
+        # 空文件表(读不到文件列表)没有「代表文件」: save_path 是**目录**, 不能拿它去判链接。
+        # !POSIX 目录 st_nlink 恒 >= 2(Linux CI 实测): 旧写法落到 names[0] 直接 IndexError;
+        # Windows 目录 nlink=1 走不到那条分支, 于是本地全绿、CI 全红。
+        if names:
+            first_native = _native(save_path, names[0])
+            try:
+                st = os.lstat(utils.add_long_path_prefix_for_win(self._syscall(first_native)))
+                tag = getattr(st, "st_reparse_tag", 0)
+                if stat.S_ISLNK(st.st_mode) or tag:
+                    tp_files = (names[0], )
+                elif st.st_nlink > 1:
+                    hl_files = (names[0], )
+            except OSError:
+                tp_dir_note = "代表文件不可读(远程/容器未映射?): 第三方链接与硬链接未识别"
         try:
             # 仅当内容根真实存在时才做别名解析比较: 不存在的路径 realpath 退化为
             # abspath(Windows 盘符大小写还会变), 拿它说「目录级链接」是误报

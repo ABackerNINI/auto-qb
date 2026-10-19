@@ -1,7 +1,7 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
 
@@ -139,5 +139,26 @@
   成数全部行数, 输出恰好等于文件行数, 极易误判「全 CRLF」。
 - **处置**: 行尾事实一律用 python bytes 层 (`read_bytes().count(b"\r\n")`), 不信
   grep 计数; 杀 Windows 进程先拿到真 Windows pid。
+
+### POSIX 目录的 `st_nlink` 恒 ≥ 2(Windows 目录 = 1): 拿目录当「代表文件」的探测只在 Linux 炸
+
+- **触发**: 对 `save_path` 这类**目录** `os.lstat` 后按 `st_nlink > 1` 判硬链接; 或写只在本机跑过的平台分支用例。
+- **判别**: Linux 目录 `nlink = 2 + 子目录数`(**恒 > 1**), Windows NTFS 目录 `nlink = 1`(本机实测目录 1 / 普通文件 1)
+  ⇒ 同一段 `elif st.st_nlink > 1:` 在 Windows 走不到、在 Linux 必进。2026-10-19 GitHub Actions 实测:
+  `relocate_mod._group_facts` 空文件表时 `first_native` 兜底成 `save_path`(目录), 随后 `names[0]` → `IndexError`,
+  而本机全绿。
+- **处置**: 「代表文件」只对**真文件**成立 —— 空文件表(读不到文件列表)整段探测跳过(`if names:`), 不要用
+  `save_path` 兜底; 守阵用「录 `os.lstat` 探针 + 断言目录零探测」的写法, 让 Windows 也能红验
+  (`tests/test_relocate_paths.py::test_precheck_empty_file_table_skips_representative_probe`)。
+
+### 跨平台分派函数别按「本机那支」写用例
+
+- **触发**: 被测函数内部按 `os.name` / `/proc` 分派(如 `finalize_watch._qb_process_names`: `nt` → tasklist,
+  `/proc` → comm, 其它 POSIX → `ps`), 用例只 mock 其中一支的外部调用。
+- **判别**: 在 Linux CI 上那个 mock 根本不生效, 断言拿到的是**真机结果**(2026-10-19: `test_guardian_process_names_parsing`
+  Linux 恒红、本机绿)。
+- **处置**: 分三层测 —— ①解析本体(平台无关, 直接调 `_names_from_tasklist`/`_names_from_proc`/`_names_from_ps`);
+  ②**分派**(三支都换替身, 按 `os.name` + `os.path.isdir("/proc")` 现查判据断言选中哪支); ③异常吞噬(三支都抛
+  `OSError` → 返回空)。别用 `skipif` 绕 —— 跳过会让另一侧的专属行彻底不覆盖。
 
 **Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md

@@ -11,6 +11,8 @@ guardian 的退化路径、journal 落盘与 pid 锁、CLI 入口。目的有二
 - test_exec_dir_alias_non_empty_root_rolls_back: 内容根非空 -> 别名建不出 -> 转收尾
 - test_exec_penetration_failure_keeps_scene: 穿透校验失败 -> failed(alias_unreadable) 且链接保留
 - test_exec_reject_and_pause_failure: 形态拒绝(空文件表)/ 暂停失败 -> blocked
+- test_precheck_empty_file_table_skips_representative_probe: 空文件表不把 save_path(目录)当代表文件探测(POSIX 目录 nlink>=2 的 CI 红)
+- test_guardian_process_names_parsing: tasklist/ps//proc 三条进程表解析 + 平台分派 + 读不到 ⇒ 空
 - test_exec_spawn_argv: 真实拉起入口的 argv(detached 单点)
 - test_cancel_rejects_unknown_and_failure: 未知 job -> blocked; 搬回被拒 -> blocked + failed 账
 - test_reconcile_revert_redelist_done_external: 对账三条处置分支(撤销意图/重删/外部完成)
@@ -204,6 +206,38 @@ def test_exec_reject_and_pause_failure(tmp_path, monkeypatch):
     assert items2[0]["cls"] == "blocked" and items2[0]["reasons"][0]["gate"] == "pause_failed", items2
 
 
+def test_precheck_empty_file_table_skips_representative_probe(tmp_path, monkeypatch):
+    """空文件表(读不到文件列表): 没有代表文件, 不得拿 save_path 这个目录当代表文件去 lstat
+
+    !POSIX 目录 st_nlink 恒 >= 2(Linux CI 实测): 旧写法落到 `names[0]` 直接 IndexError;
+    Windows 目录 nlink=1 根本走不到那条分支 —— 本地全绿、CI 全红。
+    """
+    _pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = _env(tmp_path)
+    mod = mgr.host.get("relocate")
+    monkeypatch.setattr(type(client), "torrents_files", lambda self, h: [])
+    for t in (mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]):
+        t._files = None
+
+    def _norm(p):
+        s = str(p)
+        if s.startswith("\\\\?\\"):
+            s = s[4:]
+        return os.path.normcase(os.path.normpath(s))
+
+    probed = []
+    real_lstat = os.lstat
+
+    def _lstat(path):
+        probed.append(_norm(path))
+        return real_lstat(path)
+
+    monkeypatch.setattr(os, "lstat", _lstat)
+    item = mod.relocate_precheck(["HA", "HB"], dst)[0]
+    assert item["cls"] == "blocked" and any("文件列表为空" in r["text"] for r in item["reasons"]), item
+    assert _norm(src) not in probed, probed
+
+
 def test_exec_spawn_argv(tmp_path, monkeypatch):
     """真实拉起入口: detached + 无窗口, argv 走 -m auto_qb.tools.finalize_watch"""
     _pin_disk_usage(monkeypatch)
@@ -363,7 +397,12 @@ def test_guardian_helpers(tmp_path, monkeypatch):
 
 
 def test_guardian_process_names_parsing(monkeypatch):
-    """进程表解析: Windows tasklist CSV 取首列(不真起子进程: 测试期禁止额外 POPEN)"""
+    """进程表解析: tasklist CSV 取首列 / POSIX 两支解析 / 平台分派 / 读不到 ⇒ 空(未证明)
+
+    !分派不能按 Windows 写死: CI 跑在 ubuntu-latest, `_qb_process_names` 走 /proc(或 ps),
+    只调 tasklist 的写法在 POSIX 上拿到的是**真机进程名**, 断言恒红(Linux CI 实测)。
+    """
+    import io
     import subprocess
 
     class _R:
@@ -371,21 +410,39 @@ def test_guardian_process_names_parsing(monkeypatch):
                   '"explorer.exe","9","Console","1","1 K"\n')
 
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _R())
-    names = fw._qb_process_names()
+    has_proc = os.path.isdir("/proc")  # POSIX 分派判据(下面会把 isdir 替掉, 先取真值)
+    # tasklist 解析本体与平台无关: 只取引号内首列(不真起子进程)
+    names = fw._names_from_tasklist()
     assert "qbittorrent.exe" in names and "explorer.exe" in names
     assert fw._proc_absent(names) is False
-    # POSIX 两支: /proc 逐 pid 读 comm; 无 /proc 时退回 ps
-    names = fw._names_from_ps()  # 同一替身输出: 只验证「逐行取名字」的解析路径
-    assert any("qbittorrent" in n for n in names)
-    import io
 
+    # POSIX 两支解析(真函数 + 替身输出): ps 逐行取名字; /proc 逐 pid 读 comm
+    assert any("qbittorrent" in n for n in fw._names_from_ps())
     monkeypatch.setattr(fw.os.path, "isdir", lambda p: True)
     monkeypatch.setattr(fw.os, "listdir", lambda p: ["1", "self", "12"])
     monkeypatch.setattr(fw, "open", lambda p, *a, **k: io.StringIO("qbittorrent-nox\n"), raising=False)  # 每次新句柄
-    names = fw._names_from_proc()
-    assert names == ("qbittorrent-nox", "qbittorrent-nox"), names
-    # 进程表读不到 -> 空(未证明)
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tasklist")))
+    assert fw._names_from_proc() == ("qbittorrent-nox", "qbittorrent-nox")
+
+    # 分派: 按平台选一支(三条来源全换替身, 不读真机进程表)
+    picks = []
+
+    def _pick(tag):
+        picks.append(tag)
+        return names
+
+    monkeypatch.setattr(fw, "_names_from_tasklist", lambda: _pick("tasklist"))
+    monkeypatch.setattr(fw, "_names_from_proc", lambda: _pick("proc"))
+    monkeypatch.setattr(fw, "_names_from_ps", lambda: _pick("ps"))
+    assert fw._qb_process_names() == names
+    expect = "tasklist" if os.name == "nt" else ("proc" if has_proc else "ps")
+    assert picks == [expect], picks
+
+    # 进程表读不到 -> 空(未证明): 三条来源的异常都要被吞掉(按平台只会走到选中那支)
+    def _boom(*a, **k):
+        raise OSError("no process table")
+
+    for _slot in ("_names_from_tasklist", "_names_from_proc", "_names_from_ps"):
+        monkeypatch.setattr(fw, _slot, _boom)
     assert fw._qb_process_names() == ()
 
 
