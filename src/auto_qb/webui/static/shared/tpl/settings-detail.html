@@ -52,10 +52,111 @@
                 </div>
               </template>
 
+              <!-- 「WebUI」卡(计划 26-10-20-0024 W4, D6): 跳检开关迁入 + 行右键菜单布局定制。
+                   布局落在 config.web.ctx_menu: 每次编辑**整对象替换**写回配置树, 脏标记/保存/放弃
+                   全走全局 actbar(cfgDirty/cfgSave/cfgDiscard), 面板不另存草稿; 方法在
+                   shared/ctx_menu_custom.js, 合并语义复用 shared/ctx_menu.js(与运行时同一份)。
+                   拖拽/↑↓/跨层/线的语义见那两个文件的头注释, 这里只负责摆表格。 -->
+              <template v-else-if="hub.view === 'webui'">
+                <!-- 跳检开关(D6: 从「常规」的 WebUI 配置块迁入; schema 侧打 hidden 后通用编辑树不再渲染它) -->
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">跳检开关</span>
+                    <span class="bh-n">关闭时种子右键菜单不显示跳检项, web 端点同步拒单(fail-closed); 规则源里的跳检不受影响</span>
+                  </div>
+                  <div class="hb-row">
+                    <span class="hb-lb">右键菜单显示跳检</span>
+                    <span class="hb-ct">
+                      <label class="hb-switch" title="开启后单选/单组/多选三支菜单出现「跳过哈希校验…」">
+                        <input type="checkbox" :checked="cmSkipCheck" @change="cmSetSkipCheck($event.target.checked)">
+                        <span class="hb-sw-track"></span>
+                      </label>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="hb-blk hb-cut ctx-custom">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">右键菜单布局</span>
+                    <span class="bh-n">拖动或 ↑↓ 调顺序 · 取消勾选 = 隐藏(位置留着, 勾回来即归位) · 「移入次级/移出到一级」在一级与「更多操作」之间搬家</span>
+                    <span class="bh-r">
+                      <button class="hb-btn ghost sm" :disabled="!cmBranchCustomized"
+                              @click="cmResetBranch(cmBranch)">恢复默认</button>
+                    </span>
+                  </div>
+
+                  <!-- tab(一支一屏, D15): 角标 = 一级/次级可见项数(隐藏与开关关掉的都不计, 与菜单同口径) -->
+                  <div class="ctx-custom-tabs">
+                    <button v-for="b in ctxBranchList" :key="b.key" class="ctx-custom-tab"
+                            :class="{ on: cmBranch === b.key }" @click="ctxCust.branch = b.key">
+                      <span class="ctx-custom-tab-t">{{ b.label }}</span>
+                      <span class="ctx-custom-tab-n">{{ b.top }}<template v-if="b.sub"> · 次级 {{ b.sub }}</template></span>
+                      <span v-if="cmIsCustomized(b.key)" class="ctx-custom-dot" title="这支已定制(与默认布局不同)"></span>
+                    </button>
+                  </div>
+                  <p class="ctx-custom-hint">{{ cmBranchHint }}</p>
+
+                  <!-- 两个固定区(D17): 一级 / 次级「更多操作」。同一张表渲染两次(区标题/说明来自
+                       cmSections), 行内容逐字相同 —— 两处各写一份就是"改一边忘另一边"的复发形态 -->
+                  <div v-for="sec in cmSections" :key="sec.level" class="ctx-custom-sec"
+                       @dragover.prevent @drop.prevent="cmDropTail(cmBranch, sec.level)">
+                    <div class="ctx-custom-sec-hd">
+                      <span class="ctx-custom-sec-t">{{ sec.title }}</span>
+                      <span class="ctx-custom-sec-n">{{ sec.note }}</span>
+                      <button class="hb-btn ghost sm" @click="cmAddSep(cmBranch, sec.level)">+ 分隔线</button>
+                    </div>
+                    <div class="ctx-custom-list">
+                      <div v-for="r in cmRows(cmBranch, sec.level)" :key="r.id" class="ctx-custom-row"
+                           :class="{ off: r.hidden, sep: r.sep, danger: r.danger,
+                                     dragging: ctxCust.drag && ctxCust.drag.level === r.level && ctxCust.drag.id === r.id,
+                                     over: ctxCust.over && ctxCust.over.level === r.level && ctxCust.over.idx === r.idx }"
+                           draggable="true"
+                           @dragstart="cmDragStart(r, $event)" @dragover="cmDragOver(r, $event)"
+                           @drop.prevent.stop="cmDropAt(r)" @dragend="cmDragEnd()">
+                        <span class="ctx-custom-grip" aria-hidden="true">⋮⋮</span>
+                        <label class="ctx-custom-chk"
+                               :title="r.sep ? (r.hidden ? '显示这条线' : '隐藏这条线') : (r.hidden ? '在菜单里显示' : '在菜单里隐藏')">
+                          <input type="checkbox" :checked="!r.hidden" @change="cmToggleHidden(cmBranch, r.level, r.id)">
+                        </label>
+                        <template v-if="r.sep">
+                          <span class="ctx-custom-sep-line"></span>
+                          <span class="ctx-custom-sep-t">{{ r.label }}</span>
+                          <span class="ctx-custom-acts">
+                            <button v-if="r.userSep" class="ctx-custom-x" title="删除这条线"
+                                    @click="cmDelSep(cmBranch, r.level, r.id)">✕</button>
+                          </span>
+                        </template>
+                        <template v-else>
+                          <svg v-if="r.use" class="hb-ico ctx-custom-ico" viewBox="0 0 16 16" aria-hidden="true"><use :href="r.use"></use></svg>
+                          <span class="ctx-custom-name">{{ r.label }}</span>
+                          <span v-if="r.submenu" class="ctx-custom-tag">次级入口</span>
+                          <span v-if="r.gate" class="ctx-custom-tag gate">开关控制</span>
+                          <span v-if="r.danger" class="ctx-custom-tag danger">危险</span>
+                          <span class="ctx-custom-acts">
+                            <button class="ctx-custom-arrow" :disabled="r.idx === 0" title="上移"
+                                    @click="cmMoveStep(cmBranch, r.level, r.id, -1)">↑</button>
+                            <button class="ctx-custom-arrow" :disabled="r.idx === cmRows(cmBranch, r.level).length - 1" title="下移"
+                                    @click="cmMoveStep(cmBranch, r.level, r.id, 1)">↓</button>
+                            <button v-if="r.movable" class="hb-btn ghost sm"
+                                    @click="cmMoveLevel(cmBranch, r.level, r.id)">{{ r.level === 0 ? '移入次级' : '移出到一级' }}</button>
+                          </span>
+                        </template>
+                      </div>
+                      <p v-if="sec.level === 1 && !cmRows(cmBranch, 1).length" class="ctx-custom-empty">
+                        次级菜单为空 —— 右键菜单里不会出现「更多操作」入口。把上面的项「移入次级」即可建立入口。
+                      </p>
+                    </div>
+                  </div>
+
+                  <p class="ctx-custom-note">
+                    布局与其它配置项一起保存(右上角「保存」), 保存后当前标签的右键菜单立即生效, 其它标签/浏览器刷新后生效。
+                    分隔线是一等公民: 用户加的线可以删, 默认线只能隐藏(隐藏后位置仍保留在配置里)。
+                  </p>
+                </div>
+              </template>
+
               <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区; 2026-09-28 起默认折叠):
                    等级/行数变更与刷新均手动触发, 不自动轮询; 首次展开才拉一次(config_hub.js hubLogsToggle) -->
-
-
 
               <!-- 普通分区: 块 → 行(取代旧页的五种折叠容器) -->
               <template v-else>

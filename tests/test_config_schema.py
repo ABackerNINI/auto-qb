@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_top_level_keys_match_validation: schema 顶层键集合 == KNOWN_CONFIG_KEYS(防漏登记配置键)
 - test_object_section_keys_match_validation: 各对象段子键集合 == 对应 KNOWN_*_KEYS
-- test_notify_channels_hidden_from_ui_but_kept_in_contract: notify.channels 暂不图形化(2026-10-10 报障: 取消勾选写空列表 → 脏标记不消 + 保存被"必须是非空列表"拒) —— schema 保留该字段且打 hidden(键面守卫以 schema 为单点, 摘字段 = 判删键)/ hidden 声明面 = channels + web.ctx_menu 两处(后者计划 26-10-20-0024: 设置页新卡「WebUI」客户端块编辑, 通用编辑树表达不了) / KNOWN_NOTIFY_KEYS 仍有该键(存量配置合法)/ 校验仍接受 platform 条目、仍拒绝空列表
+- test_notify_channels_hidden_from_ui_but_kept_in_contract: notify.channels 暂不图形化(2026-10-10 报障: 取消勾选写空列表 → 脏标记不消 + 保存被"必须是非空列表"拒) —— schema 保留该字段且打 hidden(键面守卫以 schema 为单点, 摘字段 = 判删键)/ hidden 声明面 = channels + web.ctx_menu + web.skip_check_menu 三处(后两者计划 26-10-20-0024: 设置页新卡「WebUI」客户端块编辑 + 同卡迁入的跳检开关, 通用编辑树表达不了) / KNOWN_NOTIFY_KEYS 仍有该键(存量配置合法)/ 校验仍接受 platform 条目、仍拒绝空列表
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
 - test_hr_sites_fields_match_validation: hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS
@@ -138,10 +138,11 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
     1. schema 的 notify 子字段里**仍有** channels 且 hidden=True —— 键面守卫
        (test_config_key_surface)以 schema 为键面单点, 直接摘字段会被判成"删键"(破坏性变更:
        抬版本 + 注册迁移), 而本次根本没有改配置契约;
-    2. hidden 的声明面 = channels + web.ctx_menu 两处 —— 该标记是「键合法但通用编辑树渲染不了」
-       的专用口: channels 是 UI 表达不出有效差异(见报障 2026-10-10); ctx_menu 是设置页新卡
-       「WebUI」的客户端块编辑(计划 26-10-20-0024, 结构是数据不是 UI 元数据)。别拿它藏别的
-       字段(藏了等于配置项静默消失, 用户再也改不到);
+    2. hidden 的声明面 = channels + web.ctx_menu + web.skip_check_menu 三处 —— 该标记是「键合法
+       但通用编辑树渲染不了」的专用口: channels 是 UI 表达不出有效差异(见报障 2026-10-10);
+       ctx_menu 是设置页新卡「WebUI」的客户端块编辑(计划 26-10-20-0024, 结构是数据不是 UI
+       元数据); skip_check_menu 是同一个新卡里的开关(W4 D6: 与 ctx_menu 定制块同卡迁入,
+       作为后续 webui 设置的新家)。别拿它藏别的字段(藏了等于配置项静默消失, 用户再也改不到);
     3. KNOWN_NOTIFY_KEYS 仍有 channels —— 存量配置里已落盘的这个键必须仍然合法, 从校验层
        摘掉 = 老配置启动即报"未知键"(比原报障严重得多);
     4. 校验仍接受 `- platform: {}`、仍拒绝空列表 —— 前者是存量配置形态, 后者是本次报障的
@@ -163,9 +164,10 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
                 walk(f.fields or ())
 
         walk((top, ))
-    assert sorted(hidden) == ["channels", "ctx_menu"], (
-        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有两处: "
-        "channels(UI 表达不出差异, 见报障 2026-10-10) / web.ctx_menu(设置页新卡「WebUI」客户端块编辑, 计划 26-10-20-0024)"
+    assert sorted(hidden) == ["channels", "ctx_menu", "skip_check_menu"], (
+        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有三处: "
+        "channels(UI 表达不出差异, 见报障 2026-10-10) / web.ctx_menu(设置页新卡「WebUI」客户端块编辑, 计划 26-10-20-0024) / "
+        "web.skip_check_menu(同卡迁入的跳检开关, W4 D6)"
     )
 
     assert "channels" in KNOWN_NOTIFY_KEYS, "KNOWN_NOTIFY_KEYS 丢了 channels —— 存量配置里的该键会变成'未知键'"

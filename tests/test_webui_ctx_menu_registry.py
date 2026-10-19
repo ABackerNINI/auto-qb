@@ -17,7 +17,10 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
   硬编码钉(四支 + 次级逐位) + 注册表完整性(id 唯一/形状齐/gate·dyn 合法/次级默认仅 member) +
   无 cfg 渲染 == 默认序 + 补尾 + 隐藏槽位保留与恢复归位 + 跨层双向 + sep 增删与 token 分配 +
   次级空与只剩线不显示父项(D7) + 未知 id 容忍与 sep 一等公民 + 门控两态 + 结构项防嵌套 +
-  动态 label + 置灰 title + ctxRun 分派
+  动态 label + 置灰 title + ctxRun 分派 + 静态名(labelText)成对
+- test_ctx_custom_panel_wiring: 设置页「WebUI」卡接线守阵(W4) —— 卡片注册/hubNow/hubGo 复位/
+  hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
+  + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
 - test_ctx_menu_wiring: 接线守阵 —— 三份 manifest 成对登记 ctx_menu.js 且装载序
   menu.js < ctx_menu.js < app.js; app.js mixin 行在; REG/mixin 双挂载面在文件里
 """
@@ -234,6 +237,27 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["ctxRun 对空/sep 静默", seen === vm]);
 }
 
+// ---- ⑭ 静态名成对(W4 定制面板用): label 是函数 => labelText 必须给(面板没有菜单上下文)
+{
+  const bad = [];
+  for (const branch of R.CTX_BRANCHES) {
+    for (const level of [0, 1]) {
+      for (const d of R.ctxDefsOf(branch, level)) {
+        if (typeof d.label === "function" && !(typeof d.labelText === "string" && d.labelText)) bad.push(branch + "/" + d.id);
+      }
+    }
+  }
+  checks.push([bad.length === 0 ? "动态文案项都有静态名" : "动态文案项缺静态名: " + bad.join(","), bad.length === 0]);
+  // 静态名不许与动态文案的空壳同形(占位符型 labelText 在面板里会露出 "undefined")
+  const shells = [];
+  for (const branch of R.CTX_BRANCHES) {
+    for (const d of R.ctxDefsOf(branch, 0).concat(R.ctxDefsOf(branch, 1))) {
+      if (typeof d.labelText === "string" && d.labelText.indexOf("undefined") >= 0) shells.push(d.id);
+    }
+  }
+  checks.push([shells.length === 0 ? "静态名不含未填占位" : "静态名含占位: " + shells.join(","), shells.length === 0]);
+}
+
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length, failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
 
@@ -300,6 +324,68 @@ def test_ctx_menu_registry_node_battery():
     assert proc.returncode == 0, f"ctx_menu node 电池跑挂: {proc.stderr.strip()}"
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], f"ctx_menu 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_ctx_custom_panel_wiring():
+    """设置页「WebUI」卡接线守阵(W4): 卡片注册 + 分区分支 + 定制块结构 + 三 manifest + 样式
+
+    定制块是**客户端块**(分区本身不进 schema), 与「快捷键」卡同款: 少写一处就静默消失
+    (卡片在但点进去空白 / 点得进去但样式裸奔 / 样式在但方法没 mixin), pytest 与
+    node --check 都看不见 —— 逐点钉住:
+      1. config_hub.js: 卡片注册(key=webui) + hubNow 元信息 + hubGo 进分区复位 + hubRestore 认它;
+      2. settings-detail.html: v-else-if 分支 + 四支 tab(v-for ctxBranchList) + 一级/次级两个
+         固定区(D17) + 跳检开关绑 cmSkipCheck(D6 迁入);
+      3. app.js: AQB_CTX_CUSTOM mixin(漏了整块面板方法全 undefined);
+      4. 三份 manifest: ctx_menu_custom.js 在 ctx_menu.js 之后、app.js 之前(合并语义复用);
+      5. console_hub.css: .ctx-custom-* 样式段在(三皮肤同吃, 漏了面板裸奔)。
+    """
+    with open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8") as f:
+        hub = f.read()
+    assert re.search(r'key: "webui"', hub), "config_hub.js 未注册「WebUI」卡(首页看不到入口)"
+    assert 'this.hub.view === "webui"' in hub, "hubNow 缺 webui 分支(页头/面包屑拿不到标题)"
+    assert 'if (key === "webui") this.cmPanelEnter()' in hub, "hubGo 未在进入时复位定制面板(tab 残留)"
+    assert 'v === "webui"' in hub, "hubRestore 不认 webui(刷新后回不到定制页)"
+
+    with open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings-detail.html"), encoding="utf-8") as f:
+        detail = f.read()
+    assert "hub.view === 'webui'" in detail, "settings-detail.html 缺 hub.view === 'webui' 分支(点进去空白)"
+    m = re.search(r"<template v-else-if=\"hub\.view === 'webui'\">(.*?)</template>\s*(?:<!--|$)", detail, re.S)
+    assert m, "webui 分区块切不出来(结构变了? 同步本守阵)"
+    blk = m.group(1)
+    assert "v-for=\"b in ctxBranchList\"" in blk, "四支 tab 未由 ctxBranchList 驱动(D15)"
+    assert "v-for=\"sec in cmSections\"" in blk, "两个固定区未由 cmSections 驱动(D17: 同一张表渲染两次, 不写两份)"
+    assert 'class="ctx-custom-sec"' in blk and "ctx-custom-sec-hd" in blk, "定制块缺区标题结构(一级/次级)"
+    with open(os.path.join(STATIC_ROOT, "shared", "ctx_menu_custom.js"), encoding="utf-8") as f:
+        cust = f.read()
+    assert cust.count("level: 0, title:") == 1 and cust.count("level: 1, title:") == 1, \
+        "cmSections 必须正好两个区(一级 / 次级「更多操作」)"
+    assert "cmSkipCheck" in blk and "cmSetSkipCheck(" in blk, "跳检开关未绑 cmSkipCheck(D6 迁入的开关)"
+    assert 'ctxCust.branch = b.key' in blk, "tab 点击未切 ctxCust.branch"
+    for call in (
+        "cmRows(cmBranch, sec.level)", "cmMoveStep(", "cmMoveLevel(", "cmToggleHidden(", "cmAddSep(", "cmDelSep(",
+        "cmResetBranch("
+    ):
+        assert call in blk, f"定制块缺方法接线 {call}(面板会有按钮但点了不动)"
+
+    with open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8") as f:
+        app_js = f.read()
+    assert "app.mixin(window.AQB_CTX_CUSTOM)" in app_js, "app.js 未注入 AQB_CTX_CUSTOM(面板方法全 undefined)"
+
+    for ui in _UI_ALL:
+        scripts = _ui_manifest(ui)["scripts"]
+        assert "/shared/ctx_menu_custom.js" in scripts, f"{ui} 清单缺 ctx_menu_custom.js(面板按钮点了报错)"
+        i_reg = scripts.index("/shared/ctx_menu.js")
+        i_cust = scripts.index("/shared/ctx_menu_custom.js")
+        i_app = scripts.index("/shared/app.js")
+        assert i_reg < i_cust < i_app, (
+            f"{ui} 装载序错误(ctx_menu.js < ctx_menu_custom.js < app.js): {i_reg}/{i_cust}/{i_app} —— "
+            "定制块要用 REG 的合并语义, 排在它前面 = 运行期 undefined"
+        )
+
+    with open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8") as f:
+        css = f.read()
+    for cls in (".ctx-custom-tab", ".ctx-custom-row", ".ctx-custom-sec", ".ctx-custom-empty", ".ctx-custom-tag"):
+        assert cls in css, f"console_hub.css 缺 {cls}(面板裸奔/不可读)"
 
 
 def test_ctx_menu_wiring():

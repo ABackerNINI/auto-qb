@@ -31,6 +31,8 @@
   /* ---------------- 一级(level 0)注册表 ----------------
    * 每项字段:
    *   id    支内唯一(分隔线 token 亦占 id); label = 串或 (vm) => 串(动态文案)
+   *   labelText 定制面板(W4)用的静态名: label 为函数时**必须**给(面板没有菜单上下文,
+   *         求不出「启动整集 / 启动整剧」这类随选中目标变的文案; 守阵钉这条成对关系)
    *   icon  { cls, use } —— cls 为 "" 时渲染 class="ico ico-sm"(危险项原样); use 如 "#i-play"
    *   act   (vm) => void —— 点击分派, 原方法调用逐字平移(动作链一行不动, 只改"渲染哪些项")
    *   gate  flags 门控键: 关时**不渲染**(v-if 语义), 布局槽位保留(用户开开关即归位)
@@ -57,13 +59,13 @@
     ],
     /* 整集整剧(shows.js openShowEpMenu/openShowMenu): scope=ep/show 决定动态文案 */
     episode: [
-      { id: "resume", label: (vm) => (vm.menu.episode.scope === "show" ? "启动整剧" : "启动整集"), icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
-      { id: "pause", label: (vm) => (vm.menu.episode.scope === "show" ? "停止整剧" : "停止整集"), icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
+      { id: "resume", labelText: "启动整集/整剧", label: (vm) => (vm.menu.episode.scope === "show" ? "启动整剧" : "启动整集"), icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
+      { id: "pause", labelText: "停止整集/整剧", label: (vm) => (vm.menu.episode.scope === "show" ? "停止整剧" : "停止整集"), icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actEpisode("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.episode.hashes[0]) },
       { id: "sep:d2", kind: "sep" },
-      { id: "delete", label: (vm) => (vm.menu.episode.scope === "show" ? "删除整剧…" : "删除整集…"), icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
+      { id: "delete", labelText: "删除整集/整剧…", label: (vm) => (vm.menu.episode.scope === "show" ? "删除整剧…" : "删除整集…"), icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
     ],
     /* 单种子(menu.hash): 一级 14 项(含「更多操作」父项) + 5 线; 次级 11 项 + 2 线见 CTX_SUB_ITEM_DEFS */
     member: [
@@ -104,7 +106,7 @@
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("group", vm.menu.key) },
       { id: "qb-traffic", label: "qB 口径流量图", icon: { cls: "", use: "#i-chart" }, gate: "qb_traffic", act: (vm) => vm.openQbGroup(vm.menu.key) },
       { id: "sep:d3", kind: "sep" },
-      { id: "delete", label: (vm) => `删除该${vm.l10nGroup}…`, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
+      { id: "delete", labelText: "删除该组…", label: (vm) => `删除该${vm.l10nGroup}…`, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
     ],
   };
 
@@ -120,9 +122,9 @@
       /* 次级默认线 token 用 s 前缀(sep:s1/s2): 与一级 d 前缀错开 —— 同支两层 token 恒唯一,
        * 跨层拖分隔线才不会被「目标层已有同名 token」的去重规则吞掉 */
       { id: "sep:s1", kind: "sep" },
-      { id: "super-seeding", label: (vm) => (vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种"), icon: { cls: "ico-super", use: "#i-shield" }, act: (vm) => vm.torrentCmd("super-seeding", { enable: !vm.menuTorrent().super_seeding }, vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种") },
-      { id: "force-start", label: (vm) => (vm.menuTorrent().force_start ? "取消强制启动" : "强制启动"), icon: { cls: "ico-force", use: "#i-bolt" }, act: (vm) => vm.torrentCmd("force-start", { enable: !vm.menuTorrent().force_start }, vm.menuTorrent().force_start ? "取消强制启动" : "强制启动") },
-      { id: "auto-tmm", label: (vm) => (vm.menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理"), icon: { cls: "ico-tmm", use: "#i-shield" }, act: (vm) => vm.autoTmmToggle() },
+      { id: "super-seeding", labelText: "超级做种", label: (vm) => (vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种"), icon: { cls: "ico-super", use: "#i-shield" }, act: (vm) => vm.torrentCmd("super-seeding", { enable: !vm.menuTorrent().super_seeding }, vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种") },
+      { id: "force-start", labelText: "强制启动", label: (vm) => (vm.menuTorrent().force_start ? "取消强制启动" : "强制启动"), icon: { cls: "ico-force", use: "#i-bolt" }, act: (vm) => vm.torrentCmd("force-start", { enable: !vm.menuTorrent().force_start }, vm.menuTorrent().force_start ? "取消强制启动" : "强制启动") },
+      { id: "auto-tmm", labelText: "自动种子管理", label: (vm) => (vm.menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理"), icon: { cls: "ico-tmm", use: "#i-shield" }, act: (vm) => vm.autoTmmToggle() },
       { id: "share-limits", label: "分享率限制…", icon: { cls: "ico-percent", use: "#i-percent" }, act: (vm) => vm.editShareLimits() },
       { id: "sep:s2", kind: "sep" },
       { id: "copy-name", label: "复制名称", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("name") },

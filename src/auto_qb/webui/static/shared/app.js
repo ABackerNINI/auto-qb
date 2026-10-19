@@ -896,6 +896,7 @@ app.mixin(window.AQB_HR);
 app.mixin(window.AQB_SORT);
 app.mixin(window.AQB_MENU);
 app.mixin(window.AQB_CTX_MENU);  // 行右键菜单注册表 + 布局解析(计划 26-10-20-0024 W2): 数据在 AQB_CTX_MENU_REG, 模板消费在 W3
+app.mixin(window.AQB_CTX_CUSTOM);  // 设置页「WebUI」卡右键菜单定制块(W4): 读写同一份 web.ctx_menu 草稿, 合并语义复用 AQB_CTX_MENU_REG
 app.mixin(window.AQB_COMMANDS);
 app.mixin(window.AQB_ADD);
 app.mixin(window.AQB_SELECTION);

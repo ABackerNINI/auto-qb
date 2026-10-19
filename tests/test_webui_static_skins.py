@@ -221,14 +221,24 @@ def _scan_js_syntax_with_node(js_files, problems):
 
 
 def _section_members(text, section):
-    """取片段文件 / app.js 里 `methods: {` 或 `computed: {` 块的成员名(4 空格缩进的 `name(` / `name:`)"""
-    names, in_block = [], False
+    """取片段文件 / app.js 里 `methods: {` 或 `computed: {` 块的成员名(4 空格缩进的 `name(` / `name:`)
+
+    块结束判据 = **缩进不深于段起始行**的 `}` 或 `},`(2026-10-20 修, 计划 26-10-20-0024 W4):
+    原判据写死 `line in ("  },", "  }")`, 只认 2 空格收尾 —— 对 `window.X = {` 缩进在 IIFE 内
+    (2 空格对象 / 4 空格段 / 6 空格成员)的片段, 段的收尾是 4 空格, 判据不触发 ⇒ 扫描一路吃到
+    下一个 `methods: {` 并把 "methods" 记成上一个段的**幻影成员**, 于是任意两个这种写法的片段
+    互相"重名"(实测: drawer_templates.js 给 ctx_menu_custom.js 报 computed.methods 重名)。
+    成员名仍只认 4 空格缩进(本仓库 col-0 对象约定下的成员位置) —— 深缩进片段的成员不在此扫描,
+    与修改前一致, 不放宽也不收紧。
+    """
+    names, in_block, base = [], False, 0
     for line in text.splitlines():
         if not in_block:
             if line.strip() == section + ": {":
-                in_block = True
+                in_block, base = True, len(line) - len(line.lstrip())
             continue
-        if line in ("  },", "  }"):
+        indent = len(line) - len(line.lstrip())
+        if line.strip() in ("},", "}") and indent <= base:
             break
         m = re.match(r"^    (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", line)
         if m:

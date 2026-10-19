@@ -244,6 +244,22 @@ window.CONFIG_HUB = {
         readout: nKeys ? `${nKeys} 条已自定义` : "默认键位",
         badges: [],
       });
+      /* 「WebUI」卡(计划 26-10-20-0024 W4, D6): 右键菜单布局定制 + 跳检开关(从「常规」的
+       * WebUI 配置块迁入)。与「快捷键」同属客户端块 —— 但注意它**不是**纯客户端:
+       * 布局落在 config.web.ctx_menu, 走全局 cfgSave 与 /api/webui/flags 下发, 所以脏标记/
+       * 保存/放弃全是配置树那一套, 不自建状态机。 */
+      cards.push({
+        key: "webui",
+        icon: "i-sliders",
+        title: "WebUI",
+        label: "WebUI",
+        desc: "右键菜单布局定制：重排、显隐、移进「更多操作」，以及跳检开关。",
+        lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；" +
+          "布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。跳检开关也搬到了这一张卡（键不变，仍是 config.yml 的 web.skip_check_menu）。",
+        led: "on",
+        readout: this.cmCardReadout ? this.cmCardReadout() : "默认布局",
+        badges: [],
+      });
       return cards;
     },
     /* 等宽读数: 「N 个分区 · 共 M 项 · K 项尚未保存」 */
@@ -272,6 +288,13 @@ window.CONFIG_HUB = {
         return {
           key: "keys", label: "快捷键", icon: "i-select-all", title: "快捷键",
           lede: "键盘快捷键的查看与自定义。每条动作可重新录制键位（按下即录），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑；键位存于服务端，所有浏览器共享，保存后其它标签刷新生效。",
+        };
+      }
+      if (this.hub.view === "webui") {
+        // 「WebUI」卡(计划 26-10-20-0024 W4): 同款客户端块(布局键在 config 里, 但分区本身不进 schema)
+        return {
+          key: "webui", label: "WebUI", icon: "i-sliders", title: "WebUI",
+          lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。",
         };
       }
       const schema = this.cfg.schema;
@@ -416,6 +439,8 @@ window.CONFIG_HUB = {
       if (key === "hr_check") this.hrsOpen = false;
       // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
       if (key === "keys") this.kbPanelEnter();
+      // 「WebUI」定制卡(W4): 进入即回单种子支, 并清掉上次的拖拽残留(拖到一半按 Esc/切走会留源)
+      if (key === "webui") this.cmPanelEnter();
       // 「流量与限速」合并卡(B1/D13): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
       if (key === "traffic_limit") this.tmLoad();
       window.scrollTo({ top: 0 });
@@ -455,8 +480,8 @@ window.CONFIG_HUB = {
       let v = this.hub.view;
       if (v === "__logs") v = "basic"; // 旧版「运行日志」分区已并入常规(2026-09-26), 存量偏好映射过去
       if (!v || v === "hub") return;
-      // "keys" 是客户端块(不进 schema), 与 schema 分区一样允许从存储恢复(刷新停在快捷键面板)
-      const known = v === "keys" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
+      // "keys" / "webui" 是客户端块(分区本身不进 schema), 与 schema 分区一样允许从存储恢复
+      const known = v === "keys" || v === "webui" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
       if (!known) {
         this.hub.view = "hub";
         return;

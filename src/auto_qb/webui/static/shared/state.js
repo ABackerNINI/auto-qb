@@ -277,6 +277,14 @@ window.AQB_STATE = {
       kbRecId: "",            // 正在录制的 action id("" = 不在录制态)
       kbConflict: null,       // 录制冲突待决 {id, serial, other, otherLabel}(三选一: 交换/覆盖/取消)
       kbKeysLoading: false,   // 面板打开/重载时拉取服务端真值中
+      // 行右键菜单定制面板(计划 26-10-20-0024 W4; 方法在 ctx_menu_custom.js): 草稿不在前端
+      // 另存 —— 每次编辑整对象替换写回 cfg.tree.web.ctx_menu(cfgDirty 自动接管脏标记, 保存走
+      // 全局 cfgSave), 本处只放面板**视图态**(当前 tab / 拖拽中的行), 不持久化。
+      ctxCust: {
+        branch: "member",     // 当前编辑的支(multi|episode|member|group; D15 tab 切换)
+        drag: null,           // 拖拽源 { branch, level, idx, id }; null = 无拖拽
+        over: null,           // 拖拽悬停落点 { level, idx }; null = 未落在行上
+      },
       // 区间起点(anchor)三字段(计划 26-10-02-0608 方案 B 起与光标同属键鼠统一模型):
       // 由鼠标普通/Ctrl(⌘)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
       // **Shift 扩展期间不更新**(便于同一起点多次扩段)。解析/写入单点在 selection.js

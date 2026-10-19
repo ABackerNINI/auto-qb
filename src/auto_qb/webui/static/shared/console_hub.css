@@ -1253,3 +1253,180 @@
 }
 .kb-help-label { flex: 1; }
 .modal-actions .kb-note { margin: 0; }
+
+/* ============================================================
+   「WebUI」卡 · 右键菜单布局定制块(计划 26-10-20-0024 W4)
+   kb-* 同款共享落点(三皮肤同吃), 只动本块的排布; 菜单自身的
+   样式(.ctx-item/.ctx-sep/.ctx-sub)一个字没改 —— §01 不变量。
+   ============================================================ */
+.ctx-custom-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 14px 0;
+}
+.ctx-custom-tab {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 14px 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.25;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.ctx-custom-tab:hover { background: var(--bg-hover); color: var(--fg); }
+.ctx-custom-tab.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.ctx-custom-tab-t { font-weight: 600; }
+.ctx-custom-tab-n {
+  font: 11px/1.2 var(--hb-font-mono);
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+/* 已定制小点: tab 右上角, 一眼看出"这支动过" */
+.ctx-custom-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-hi);
+}
+.ctx-custom-hint {
+  margin: 8px 14px 0;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.ctx-custom-sec { padding: 12px 14px 0; }
+.ctx-custom-sec:last-of-type { padding-bottom: 4px; }
+.ctx-custom-sec-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 5px;
+  border-bottom: 1px solid var(--border);
+}
+.ctx-custom-sec-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+}
+.ctx-custom-sec-n {
+  flex: 1;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.ctx-custom-list { display: flex; flex-direction: column; }
+.ctx-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--border);
+  min-height: 30px;
+}
+.ctx-custom-row.off .ctx-custom-name { opacity: .42; text-decoration: line-through; }
+.ctx-custom-row.off .ctx-custom-ico { opacity: .35; }
+.ctx-custom-row.dragging { opacity: .45; }
+/* 拖拽落点: 上边一条强调线 = "插到这里"(不整行高亮, 免得看不出是插在上还是下) */
+.ctx-custom-row.over { box-shadow: inset 0 2px 0 var(--accent-hi); }
+.ctx-custom-row.sep { min-height: 24px; }
+
+.ctx-custom-grip {
+  width: 14px;
+  color: var(--fg-muted);
+  cursor: grab;
+  font-size: 11px;
+  letter-spacing: -1px;
+  user-select: none;
+}
+.ctx-custom-row.dragging .ctx-custom-grip { cursor: grabbing; }
+.ctx-custom-chk { display: inline-flex; align-items: center; cursor: pointer; }
+.ctx-custom-chk input { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+.ctx-custom-ico { width: 14px; height: 14px; flex: none; }
+.ctx-custom-name { flex: 1; font-size: 13px; }
+.ctx-custom-row.danger .ctx-custom-name { color: var(--error); }
+
+.ctx-custom-sep-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+  opacity: .7;
+}
+.ctx-custom-sep-t {
+  font: 11px/1 var(--hb-font-mono);
+  color: var(--fg-muted);
+  letter-spacing: .02em;
+}
+
+/* 徽标: 次级入口 / 开关控制 / 危险 —— 与 .hb-badge 同尺寸, 但语义色不同 */
+.ctx-custom-tag {
+  font: 11px/1 var(--hb-font-mono);
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.ctx-custom-tag.gate { border-color: var(--accent); color: var(--accent-hi, var(--accent)); }
+.ctx-custom-tag.danger { border-color: var(--error); color: var(--error); }
+
+.ctx-custom-acts { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ctx-custom-arrow {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.ctx-custom-arrow:hover:not([disabled]) { background: var(--bg-hover); color: var(--accent-hi); }
+.ctx-custom-arrow[disabled] { opacity: .3; cursor: not-allowed; }
+.ctx-custom-x {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+}
+.ctx-custom-x:hover { border-color: var(--error); color: var(--error); }
+
+.ctx-custom-empty {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+.ctx-custom-note {
+  margin: 12px 14px 14px;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
