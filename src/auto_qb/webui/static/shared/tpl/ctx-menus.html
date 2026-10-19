@@ -1,241 +1,92 @@
         <transition name="pop">
         <div v-if="menu.visible" ref="ctxMenu" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
-          <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
-               (与批量动作同一套链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
-               收录口径(plan 26-10-02-1955 W2/W3/W4 改写): 放"对整批同一语义"的动作(开始/暂停/汇报/
-               重新校验/跳检/标签分类/批量删除)、"同一目标值作用于全选"的编辑项(限速/移动 —— 本计划
-               推翻旧版"批量菜单刻意不放限速等编辑项"的注释口径, 批量限速留空方向不提交/批量移动
-               目标路径统一, 对 N 个目标语义明确)与"逐目标同语义"的导出(导出 .torrent —— 每个目标
-               各得一个 .torrent, 前端循环逐个触发下载, 不进 bulk 合单); 跳检是高危项, 由配置开关
-               flags.skip_check_menu 门控(W1, 默认关 = fail-closed, 后端端点同步拒单);
-               仍不放需要**逐目标现值**的单目标项(详细信息/重命名/复制等, 预填与展示都依赖单个
-               目标的当前值); 要单目标操作请不选中任何行再右键。 -->
+          <!-- 行右键菜单四支(计划 26-10-20-0024 W3 起): 项集/顺序/显隐/跨层全部由注册表
+               shared/ctx_menu.js(window.AQB_CTX_MENU_REG) + 布局数据(web.ctx_menu, 经
+               /api/webui/flags 下发, lifecycle.loadWebFlags 写入 flags)驱动 —— 本模板只保留
+               ①四支判据链(与 triggers.js variant 口径一致, 静态守阵 T3 的比对面)与
+               ②「更多操作」子面板的展开交互(CTX-05/06, 在 menu.js)。
+               渲染: ctxItems('<支>') 出一级可见项, ctxSubItems('member') 出次级可见项; 点击
+               走 ctxRun(it) 分派到注册表 act(原方法调用逐字平移, 动作链一行不动)。默认布局
+               (不写 ctx_menu 时)与静态模板逐位一致 —— 零漂移由 node 电池(注册表层)与
+               e2e menus.spec(渲染层)双守。逐项语义(门控/置灰/动态文案/图标)见注册表内注释:
+               改项集改注册表单点, 别回本模板逐项直写(直写 = 四支人肉奇偶, 复发路径即
+               pitfall ctx-menu-branch-parity: 2026-10-09 用户报「辅种页单组右键菜单缺选项」)。
+               置灰判据单点 = decorate.js::REANNOUNCE_BLOCKED_STATES(注册表 dyn: "reannounce"
+               钩子 reannounceMenuGate(), qB 口径; title 恒绑字符串, 空串 = 清除提示通道)。
+
+               CTX-03 批量菜单收录口径(plan 26-10-02-1955 W2/W3/W4 改写): 被右键的行属于当前
+               选中集合时, 菜单升级为对**整个选中集合**生效(与批量动作同一套链路, 见 menu.js
+               _ctxMulti / commands.js ctxAct)。收录"对整批同一语义"的动作(开始/暂停/汇报/
+               重新校验/跳检/标签分类/批量删除)、"同一目标值作用于全选"的编辑项(限速/移动 ——
+               本计划推翻旧版"批量菜单刻意不放限速等编辑项"的注释口径)与"逐目标同语义"的导出
+               (导出 .torrent —— 每个目标各得一个 .torrent, 前端循环逐个触发下载, 不进 bulk
+               合单); 跳检是高危项, 由 flags.skip_check_menu 门控(fail-closed, 后端端点同步
+               拒单); 仍不放需要**逐目标现值**的单目标项(详细信息/重命名/复制等, 预填与展示
+               都依赖单个目标的当前值); 要单目标操作请不选中任何行再右键。 -->
           <template v-if="menu.multi">
-            <div class="ctx-item" @click="ctxAct('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>批量启动
-            </div>
-            <div class="ctx-item" @click="ctxAct('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>批量停止
-            </div>
-            <!-- 强制重新汇报置灰(qB 口径, 2026-10-10): 目标**全部**非活跃(暂停/停止·排队·校验·错误)
-                 时置灰不可用, 与 qB 的 `actionForceReannounce->setEnabled(false)` 同语义 ——
-                 libtorrent 的 force_tracker_request 对暂停种子直接 return, 排队种子同样发不出去,
-                 qB 自身也据此置灰(commit aa189a7, issue #12080)。判据单点 =
-                 decorate.js::reannounceMenuGate()(任一目标活跃即可用, 与 qB oneCanForceReannounce
-                 同口径; 亦见该文件顶部 REANNOUNCE_BLOCKED_STATES)。
-                 !title 恒绑字符串(可用时空串): ui_feedback 的「空串 title = 清除提示」通道据此摘掉
-                 置灰期间的旧提示 —— 绑 `|| null` 会走 removeAttribute 分支, 旧 data-aq-tip 不被清。
-                 行为层另有兜底(commands.js _actCore / shortcuts.js _kbAct), 本处只管显示与提示。 -->
-            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
-                 :title="reannounceMenuGate().title" @click="ctxAct('reannounce')">
-              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item" @click="ctxAct('recheck')">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新检查
-            </div>
-            <!-- W3 批量跳检(计划 26-10-02-1955): 重新校验之后、限速/移动之前, 与单选分支同序;
-                 flags 门控复用 W1 通道(v-if 对 undefined 静默隐藏 = fail-closed) -->
-            <div class="ctx-item" v-if="flags.skip_check_menu" @click="ctxAct('skip_check')">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>跳过哈希校验…
-            </div>
-            <!-- W2 批量限速/移动: 先弹对话框再走 bulk 合单(留空方向不提交/目标路径确认),
-                 与单选分支同图标同文案后缀; 分派在 commands.js ctxAct 的 action 分支 -->
-            <div class="ctx-item" @click="ctxAct('limits')">
-              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>速度限制…
-            </div>
-            <div class="ctx-item" @click="ctxAct('location')">
-              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>设定位置…
-            </div>
-            <div class="ctx-item" @click="ctxMeta()">
-              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
-            </div>
-            <!-- W4 多选导出(计划 26-10-02-1955, D1 拍板 = 前端循环逐个触发下载): 与单选分支同图标
-                 同文案, 排序语义对齐(标签分类之后、批量删除之前); 导出只读不高危, 不吃
-                 flags.skip_check_menu 门控; 分派走 commands.js ctxAct 的 export 分支 -> exportMulti -->
-            <div class="ctx-item" @click="ctxAct('export')">
-              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="ctxDelete()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>批量删除…
-            </div>
+            <template v-for="it in ctxItems('multi')" :key="it.id">
+              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
+              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" @click="ctxRun(it)">
+                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg>{{ it.label }}
+              </div>
+            </template>
           </template>
           <template v-else-if="menu.episode">
-            <div class="ctx-item" @click="actEpisode('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>{{ menu.episode.scope === 'show' ? '启动整剧' : '启动整集' }}
-            </div>
-            <div class="ctx-item" @click="actEpisode('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>{{ menu.episode.scope === 'show' ? '停止整剧' : '停止整集' }}
-            </div>
-            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
-                 :title="reannounceMenuGate().title" @click="actEpisode('reannounce')">
-              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报
-            </div>
-            <div class="ctx-sep"></div>
-            <!-- FX-14: 整集/整剧的"打开目标文件夹"取首个成员; 同剧同集通常共用同一保存路径 -->
-            <div class="ctx-item" @click="openTargetPath('torrent', menu.episode.hashes[0])">
-              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="delEpisode()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ menu.episode.scope === 'show' ? '删除整剧…' : '删除整集…' }}
-            </div>
+            <!-- 整集整剧(shows.js openShowEpMenu/openShowMenu): scope=ep/show 决定动态文案,
+                 取首个成员哈希(同剧同集通常共用同一保存路径); 项集与注册表 episode 支对齐 -->
+            <template v-for="it in ctxItems('episode')" :key="it.id">
+              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
+              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" @click="ctxRun(it)">
+                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg>{{ it.label }}
+              </div>
+            </template>
           </template>
           <template v-else-if="menu.hash">
-            <div class="ctx-item" @click="actTorrent('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>启动该种子
-            </div>
-            <div class="ctx-item" @click="actTorrent('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>停止该种子
-            </div>
-            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
-                 :title="reannounceMenuGate().title" @click="actTorrent('reannounce')">
-              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item" @click="openTorrentDrawer(menu.hash)">
-              <svg class="ico ico-sm ico-info" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
-            </div>
-            <div class="ctx-sep"></div>
-            <!-- 编辑(D 轮): 多字段编辑对话框, 预填当前值/空=不改, 回执 toast(见 app.js editLimits 等) -->
-            <div class="ctx-item" @click="editLimits()">
-              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>速度限制…
-            </div>
-            <div class="ctx-item" @click="editMove()">
-              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>设定位置…
-            </div>
-            <div class="ctx-item" @click="editRename()">
-              <svg class="ico ico-sm ico-rename" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
-            </div>
-            <div class="ctx-item" @click="openMetaDialog(menu.hash)">
-              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item" @click="torrentCmd('recheck', null, '强制重新检查')">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新检查
-            </div>
-            <!-- P2' 右键跳检(plan 26-09-30-0109 §3.6): 高风险(清空本地统计), 走危险确认框后经 ops 层执行;
-                 R2(计划 26-10-02-1955 W1): 配置开关 web.skip_check_menu 门控(默认 false = fail-closed,
-                 后端端点同步 403), flags 由登录后 /api/webui/flags 取真值 -->
-            <div class="ctx-item" v-if="flags.skip_check_menu" @click="skipCheckTorrent()">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>跳过哈希校验…
-            </div>
-            <div class="ctx-item" @click="exportTorrent()">
-              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
-            </div>
-            <div class="ctx-item" @click="openTargetPath('torrent', menu.hash)">
-              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
-            </div>
-            <div class="ctx-sep"></div>
-            <!-- FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子控制,
-                 不是"高级"能力; 只改文案与语义, 子项集合不动); hover 与点击均可展开;
-                 CTX-06: 复制族(名称/哈希/magnet)由独立子面板并入本面板末尾 —— 一级只留这一个入口,
-                 两个"更多"并排会让"该进哪个"变成一次选择; 移出父项/面板后延迟收起(CTX-05) -->
-            <div class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
-                 @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
-                 @click.stop="toggleSub('advanced', $event)">
-              <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>更多操作
-              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
-                   :style="{ top: subTop + 'px' }"
-                   @click.stop @mouseenter="keepSub()">
-                <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列顶部')">
-                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列顶部
-                </div>
-                <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '向上移动队列')">
-                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>向上移动队列
-                </div>
-                <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '向下移动队列')">
-                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>向下移动队列
-                </div>
-                <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列底部')">
-                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列底部
-                </div>
-                <div class="ctx-sep"></div>
-                <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
-                  <svg class="ico ico-sm ico-super" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
-                </div>
-                <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制启动' : '强制启动')">
-                  <svg class="ico ico-sm ico-force" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制启动" : "强制启动" }}
-                </div>
-                <div class="ctx-item" @click="autoTmmToggle()">
-                  <svg class="ico ico-sm ico-tmm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
-                </div>
-                <div class="ctx-item" @click="editShareLimits()">
-                  <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
-                </div>
-                <!-- CTX-06: 复制族并入「更多操作」(此前是并列的第二个子面板) -->
-                <div class="ctx-sep"></div>
-                <div class="ctx-item" @click="copyTorrentInfo('name')">
-                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
-                </div>
-                <div class="ctx-item" @click="copyTorrentInfo('hash')">
-                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
-                </div>
-                <div class="ctx-item" @click="copyTorrentInfo('magnet')">
-                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
+            <!-- 单种子(menu.hash): 一级 14 项(含「更多操作」父项)+ 5 线; 次级 11 项 + 2 线。
+                 FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子
+                 控制, 不是"高级"能力); hover 与点击均可展开; CTX-06: 复制族(名称/哈希/magnet)
+                 由独立子面板并入本面板末尾 —— 一级只留这一个入口; 移出父项/面板后延迟收起
+                 (CTX-05, 180ms 宽限跨过 4px 缝, 见 menu.js openSub/keepSub/scheduleSubClose);
+                 子面板钳位在 menu.js _subFitViewport(估宽只管首帧方向, 精确收口在实测)。
+                 D7: 次级无可见项时注册表不出「更多操作」父项(单选项/空面板 = 半残 UI)。 -->
+            <template v-for="it in ctxItems('member')" :key="it.id">
+              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
+              <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
+                   @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
+                   @click.stop="toggleSub('advanced', $event)">
+                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg>{{ it.label }}
+                <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+                <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                     :style="{ top: subTop + 'px' }"
+                     @click.stop @mouseenter="keepSub()">
+                  <template v-for="sit in ctxSubItems('member')" :key="sit.id">
+                    <div v-if="sit.kind === 'sep'" class="ctx-sep"></div>
+                    <div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" @click="ctxRun(sit)">
+                      <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg>{{ sit.label }}
+                    </div>
+                  </template>
                 </div>
               </div>
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="delTorrent()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该种子…
-            </div>
+              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" @click="ctxRun(it)">
+                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg>{{ it.label }}
+              </div>
+            </template>
           </template>
           <template v-else>
-            <div class="ctx-item" @click="act('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>启动整组
-            </div>
-            <div class="ctx-item" @click="act('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>停止整组
-            </div>
-            <div class="ctx-item" :class="{ 'is-gated': !reannounceMenuGate().ok }"
-                 :title="reannounceMenuGate().title" @click="act('reannounce')">
-              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新汇报
-            </div>
-            <div class="ctx-sep"></div>
             <!-- CTX-03 组级动作补齐(2026-10-09 用户报「单组右键菜单缺选项」): 单组菜单此前只有
                  开始/暂停/汇报 + 打开文件夹/流量图/删除, 而多选批量菜单还有 重新校验/跳检/限速/
                  移动/标签分类/导出 —— 同一批动作在「右键 1 组」与「选 2 组」两条路径上项集不一致。
-                 现按批量菜单同序同图标补齐, 目标 = 该组全部成员(menu.key 组级解析); 下游复用多选
-                 同一套链路(recheckGroup / skipCheckGroup / editLimitsGroup / editMoveGroup /
-                 metaGroup / exportGroup, 见 commands.js), 不为组级另开旁路。跳检同样吃
-                 flags.skip_check_menu 门控(v-if 对 undefined 静默隐藏 = fail-closed)。 -->
-            <div class="ctx-item" @click="recheckGroup()">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制重新检查
-            </div>
-            <div class="ctx-item" v-if="flags.skip_check_menu" @click="skipCheckGroup()">
-              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>跳过哈希校验…
-            </div>
-            <div class="ctx-item" @click="editLimitsGroup()">
-              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>速度限制…
-            </div>
-            <div class="ctx-item" @click="editMoveGroup()">
-              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>设定位置…
-            </div>
-            <div class="ctx-item" @click="metaGroup()">
-              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
-            </div>
-            <div class="ctx-item" @click="exportGroup()">
-              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
-            </div>
-            <div class="ctx-sep"></div>
-            <!-- FX-14: 组内成员 save_path 天然一致(组 key 首元即规范化 save_path) -->
-            <div class="ctx-item" @click="openTargetPath('group', menu.key)">
-              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
-            </div>
-            <!-- qB 口径流量图 · 分组挂点(S5b, plan 26-10-03-0946 §07 表③): 打开分组流量弹层;
-                 v-if=qbTrafficOn fail-closed 门(flags.qb_traffic_enabled, 对齐跳检菜单项先例) ——
-                 enabled=false 菜单项不渲染 = 无入口即无请求(P5 验收); key 直用 menu.key
-                 (encode_group_key 通道, 同 openTargetPath/组级命令) -->
-            <div class="ctx-item" v-if="qbTrafficOn" @click="openQbGroup(menu.key)">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>qB 口径流量图
-            </div>
-            <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="delGroup()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该{{ l10nGroup }}…
-            </div>
+                 现按批量菜单同序同图标补齐(项集在注册表 group 支), 目标 = 该组全部成员
+                 (menu.key 组级解析); 下游复用多选同一套链路(recheckGroup / skipCheckGroup /
+                 editLimitsGroup / editMoveGroup / metaGroup / exportGroup, 见 commands.js),
+                 不为组级另开旁路。跳检同样吃 flags.skip_check_menu 门控(fail-closed);
+                 qB 口径流量图(S5b)吃 flags.qb_traffic_enabled 门(无入口即无请求, P5 验收)。 -->
+            <template v-for="it in ctxItems('group')" :key="it.id">
+              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
+              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" @click="ctxRun(it)">
+                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg>{{ it.label }}
+              </div>
+            </template>
           </template>
         </div>
         </transition>
@@ -309,7 +160,7 @@
                  :title="dtMergeGateOk() ? '常规&amp;内容 · Tracker&amp;用户 并排（再点关闭）' : '窗口宽度不足'"
                  @click="dtToggleMerge()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>合并页签
-              <svg v-if="dtMergeOn" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              <svg v-if="dtMenuMergeOn" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
             </div>
           </template>
         </div>

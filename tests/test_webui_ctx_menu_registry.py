@@ -2,18 +2,22 @@
 
 ## 背景
 ctx-menus.html 四支菜单从静态模板直写改为注册表单点(shared/ctx_menu.js) + 布局数据(web.ctx_menu,
-经 /api/webui/flags 下发)驱动。本文件守阵注册表层: ①默认布局与**现存静态模板**结构对账(替换期
-过渡锚 —— W3 模板 v-for 化后由 e2e menus.spec 与 W5 新守阵接棒, 本项随之退役); ②合并语义
-(补尾/显隐槽位/跨层双向/分隔线一等公民/次级空不显示入口/未知 id 容忍/门控串联)node 真跑。
+经 /api/webui/flags 下发)驱动。本文件守阵注册表层: ①合并语义(补尾/显隐槽位/跨层双向/
+分隔线一等公民/次级空不显示入口/未知 id 容忍/门控串联)node 真跑; ②模板消费形态(W3 起四支
+v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线守阵(manifest/mixin/挂载面)。
 
 ## 测试计划(每个测试函数一条)
-- test_ctx_menu_default_layout_matches_template_counts: 注册表默认布局与现存静态模板结构对账 ——
-  四支 ctx-item/ctx-sep 计数逐支相等(模板 52 项 + 14 线 = 注册表一级 41 项 + 12 线 + 次级 11 项 + 2 线)
+- test_ctx_menu_template_consumes_registry: 模板消费守阵(W3) —— 四支判据链原样(与 triggers.js
+  variant 口径一致, T3 比对面)+ 各支段 v-for 消费 ctxItems('<支>') + member 支子面板结构
+  (has-sub/ctx-caret/ctxSubItems('member')/CTX-05 交互三件/钳位状态) + 逐项 @click 直写回潮
+  拦截(唯一允许 ctxRun(it) 与 toggleSub)。W2 期还另有一项「注册表 ↔ 静态模板计数对账」过渡锚
+  (52 项 + 14 线逐支相等), W3 模板 v-for 化后如期退役 —— 渲染层零漂移由 e2e menus.spec 接棒,
+  注册表层由本文件余两项与 W5 新守阵(注册表 id ↔ 默认布局 ↔ config 契约 ↔ flags 键)接棒
 - test_ctx_menu_registry_node_battery: node 真跑电池(无 node 静默跳过, 不引入 skip) —— 默认布局
   硬编码钉(四支 + 次级逐位) + 注册表完整性(id 唯一/形状齐/gate·dyn 合法/次级默认仅 member) +
   无 cfg 渲染 == 默认序 + 补尾 + 隐藏槽位保留与恢复归位 + 跨层双向 + sep 增删与 token 分配 +
-  次级空不显示父项(D7) + 未知 id 容忍 + 门控两态 + 结构项防嵌套 + 动态 label + 置灰 title +
-  ctxRun 分派
+  次级空与只剩线不显示父项(D7) + 未知 id 容忍与 sep 一等公民 + 门控两态 + 结构项防嵌套 +
+  动态 label + 置灰 title + ctxRun 分派
 - test_ctx_menu_wiring: 接线守阵 —— 三份 manifest 成对登记 ctx_menu.js 且装载序
   menu.js < ctx_menu.js < app.js; app.js mixin 行在; REG/mixin 双挂载面在文件里
 """
@@ -234,44 +238,51 @@ console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: check
 """
 
 
-def _tpl_branch_slices():
-    """行右键菜单段按四支判据链切片(过渡锚专用; W3 模板 v-for 化后本函数与对账一并退役)"""
+def test_ctx_menu_template_consumes_registry():
+    """模板消费守阵(W3): 四支判据链原样 + 各支 v-for 消费注册表 + member 支子面板结构
+
+    W3 起 ctx-menus.html 四支从静态逐项直写改为注册表单点消费。本守阵钉住替换后的模板
+    形态, 防回潮(回潮 = 四支人肉奇偶复发, 即 pitfall ctx-menu-branch-parity 的 root cause):
+      1. 四支判据链原样(v-if="menu.multi" / v-else-if="menu.episode" / v-else-if="menu.hash" /
+         v-else; 与 triggers.js variant 口径一致, 静态守阵 T3 的比对面);
+      2. 每支段内必须 v-for 消费 ctxItems('<支>') —— 项集只能来自注册表单点;
+      3. member 支含「更多操作」父项结构: has-sub + ctx-caret + 子面板 v-for 消费
+         ctxSubItems('member') + CTX-05/06 交互三件(openSub/scheduleSubClose/toggleSub,
+         收起语义在 menu.js, 模板必须挂上)+ 钳位状态消费(subFlip/subTop);
+      4. 行菜单段不得再出现逐项 @click 分派(ctxAct/actTorrent/actEpisode/ctxDelete/… 直写)——
+         项级唯一允许 ctxRun(it), 父项级唯一允许 toggleSub。
+    """
     with open(_CTX_MENUS_TPL, encoding="utf-8") as f:
         tpl = f.read()
-    row = tpl[:tpl.index("<!-- 表头右键菜单")]
-
-    def between(a, b):
-        i = row.index(a)
-        j = row.index(b, i)
-        return row[i:j]
-
-    return {
-        "multi": between('v-if="menu.multi"', 'v-else-if="menu.episode"'),
-        "episode": between('v-else-if="menu.episode"', 'v-else-if="menu.hash"'),
-        "member": between('v-else-if="menu.hash"', "<template v-else>"),
-        "group": between("<template v-else>", "</transition>"),
-    }
-
-
-def test_ctx_menu_default_layout_matches_template_counts():
-    """注册表默认布局与现存静态模板结构对账(替换期过渡锚, W3 退役)
-
-    模板 52 ctx-item + 14 ctx-sep == 注册表一级 41 项 + 12 线 + 次级 11 项 + 2 线;
-    逐支计数相等(multi 10/2 · episode 5/2 · member 25/7[一级 14+5, 次级 11+2] · group 12/3)。
-    """
-    slices = _tpl_branch_slices()
-    expected = {"multi": (10, 2), "episode": (5, 2), "member": (25, 7), "group": (12, 3)}
-    for branch, (n_item, n_sep) in expected.items():
-        seg = slices[branch]
-        got_item = seg.count('<div class="ctx-item')
-        got_sep = seg.count('<div class="ctx-sep"></div>')
-        assert (got_item, got_sep) == (n_item, n_sep), (
-            f"{branch} 支模板计数 {got_item} 项/{got_sep} 线 != 注册表平移预期 {n_item}/{n_sep} —— "
-            "注册表与静态模板漂移(默认布局不再逐位一致)"
-        )
-    total_item = sum(seg.count('<div class="ctx-item') for seg in slices.values())
-    total_sep = sum(seg.count('<div class="ctx-sep"></div>') for seg in slices.values())
-    assert (total_item, total_sep) == (52, 14), f"行菜单段总计 {total_item}/{total_sep} != 52 项 + 14 线"
+    row = tpl[:tpl.index("<!-- 表头右键菜单")]  # 只取行右键菜单根块, 排除表头/文件优先级/抽屉菜单
+    anchors = [
+        ("multi", 'v-if="menu.multi"'),
+        ("episode", 'v-else-if="menu.episode"'),
+        ("member", 'v-else-if="menu.hash"'),
+        ("group", "<template v-else>"),
+    ]
+    pos = []
+    for name, needle in anchors:
+        assert needle in row, f"ctx-menus.html 缺 {name} 支判据链锚点 {needle}(四支结构变了? 同步本守阵)"
+        pos.append((name, row.index(needle)))
+    for i, (name, p) in enumerate(pos):
+        end = pos[i + 1][1] if i + 1 < len(pos) else len(row)
+        seg = row[p:end]
+        assert f"ctxItems('{name}')" in seg, (f"{name} 支未 v-for 消费注册表 ctxItems('{name}') —— 项集必须来自 ctx_menu.js 单点")
+        for handler in re.findall(r'@click(?:\.stop)?="([^"]+)"', seg):
+            assert handler.startswith("ctxRun(") or handler.startswith("toggleSub("), (
+                f"{name} 支出现逐项 @click 直写 {handler} —— 回退静态直写 = 四支人肉奇偶复发"
+                f"(pitfall ctx-menu-branch-parity); 分派归注册表 act, 模板只调 ctxRun(it)"
+            )
+    # member 支子面板结构(CTX-05/06 交互 + 钳位消费; D7 下次级空时注册表不出父项, 面板恒有内容)
+    member_seg = row[pos[2][1]:pos[3][1]]
+    assert "has-sub" in member_seg and "ctx-caret" in member_seg, \
+        "member 支缺「更多操作」父项结构(has-sub/ctx-caret)"
+    assert "ctxSubItems('member')" in member_seg, "member 支子面板未消费 ctxSubItems('member')"
+    for call in ("openSub('advanced'", "scheduleSubClose()", "toggleSub('advanced'", "keepSub()"):
+        assert call in member_seg, f"member 支子面板缺交互 {call}(CTX-05 收起语义在 menu.js, 模板必须挂上)"
+    assert "subFlip" in member_seg and "subTop" in member_seg, \
+        "子面板缺钳位状态消费(flip-x / top; _subFitViewport 钳位结果要有绑定)"
 
 
 def test_ctx_menu_registry_node_battery():

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-ctx-menu-custom-layout">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-20-0024">
-<meta name="doc-updated" content="26-10-20-0132">
+<meta name="doc-updated" content="26-10-20-0158">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划</h1>
 <p class="lede">行右键菜单四支(单组/单种子/整集整剧/多选批量)从<strong>静态模板直写</strong>改为<strong>注册表单点 + 布局数据驱动</strong>：每支可重排、可显隐、可把项移入/移出「更多操作」次级、分隔线可拖可删; 布局存 <code>config.yml</code> 的 <code>web.ctx_menu</code>(与跳检开关同一配置通道), 在设置页新卡「WebUI」里定制, 保存后当前标签热应用、其它标签刷新生效。默认布局与今天逐位一致 —— 不写配置时行为零漂移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0132 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0158 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「WEBUI添加右键菜单自定义重排功能, grilling」(26-10-19 晚 ~ 26-10-20 00:20) → 只读收敛轮三轮 12 问全部拍板(§06 D1–D12) + 代码取证(<code>ctx-menus.html</code> 四支项集 / <code>columns.js</code> 列双轨 / flags 通道 / 设置页 keys 客户端块先例)
 </div>
 
@@ -341,6 +341,7 @@ const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今
   <li><span class="tag">R2 · 26-10-20-0047</span> D14-D17 拍板: 落地细节四项按默认推荐全部闭合(用户 26-10-20 01:00「拍板项按推荐」); §05 转为已闭说明, §06 增补 D14-D17; 全文决策点闭合, 进入实施</li>
   <li><span class="tag">R3 · 26-10-20-0105</span> W1 落地记录: <code>ctx_menu</code> 进 config 四件套(models/loaders/validation/schema hidden)+ <code>/api/webui/flags</code> 原样下发; 键面基线 181→182(<code>test.keys-update</code> 重生) + keys.md 回写 + loader 探针 + hidden 声明面守卫扩为 channels + ctx_menu 两处 + object 子字段守卫加 hidden 豁免(理由: 结构归客户端块, 摘子字段会把每支数据键假报进键面); <b>偏差</b>: <code>skip_check_menu</code> 的 hidden 按 W4 落(随新卡), 不在 W1 打 —— 分期原则「任一波停下都不破坏现状」, 避免 W1→W4 之间该开关在设置页消失; §04 W4 落点同步(label+hidden → skip_check_menu hidden)</li>
   <li><span class="tag">R4 · 26-10-20-0132</span> W2 落地记录: <code>shared/ctx_menu.js</code> 注册表单点(四支 41 项 + 12 线 + 次级 11 项 2 线, 默认布局由定义序生成)+ 三 manifest 接线 + app.js mixin + node 电池守阵(158 断言); <b>项数勘误</b>: grilling 期手计「39 一级项 + 11 线」有误, 模板对账实测为 <b>41 项 + 12 线</b>(multi 10+2 / episode 5+2 / member 14+5 / group 12+3), §01/§02 同步(R0 历史记录不动); <b>两条实施期语义补录</b>(计划未明示, 按 D7/K5 初衷定): ① <b>分隔线不撑次级入口</b> —— 次级只剩线(项全隐藏/全移走)判空, 不渲染「更多操作」父项, 线在配置里休眠、W4 定制块可见可恢复(空面板拖两条线比单选项更残); ② <b>sep token 一等公民</b> —— 未知<b>项</b> id 忽略, 格式合法的 <code>sep:*</code>(含用户线 <code>sep:uN</code>)原位数渲染: 注册表无用户线登记处, 滤除等于用户添加的线永远出不来, 且 W4 里会变成看不见的配置垃圾</li>
+  <li><span class="tag">R5 · 26-10-20-0158</span> W3 落地记录: <code>tpl/ctx-menus.html</code> 四支改 v-for 消费注册表(<code>ctxItems('&lt;支&gt;')</code> 出一级、<code>ctxSubItems('member')</code> 出次级、<code>ctxRun(it)</code> 分派), 四支判据链与「更多操作」子面板结构原样保留(CTX-05 延迟收起/钳位 flip-x+top/is-gated/danger/ctx-caret 逐项对账, menu.js 零改动 —— 交互全走模板事件绑定与 <code>$refs.ctxMenu</code>, DOM 形态不变); <code>state.js</code> flags 加 <code>ctx_menu: null</code> 初值 + <code>lifecycle.loadWebFlags</code> 显式透传(<b>坑</b>: 该处是白名单式对象构造, 不补这一行 = W1 下发的布局数据到不了前端, 用户重排静默失效); 守阵比对面按 §07 预案搬家(组级奇偶/multi 批量分支/reannounce 置灰/qb 流量图入口 → 注册表; T3 判据链原样仍过, T4 动作族奇偶改读注册表定义序); 模板对账过渡锚(W2)如期退役, 换上门户消费守阵(四支消费 <code>ctxItems</code> + 逐项 <code>@click</code> 直写回潮拦截 + 子面板结构)。实测: test.quick 3766 passed / 10 skipped; e2e menus.spec 默认矩阵 26 passed(6 skipped = skipCheck=off 轮设计内)+ off 轮 14 passed(主路径组按设计跳过) —— 注册表门控过滤在真浏览器双态验证</li>
 </ul>
 
 </div>

@@ -34,7 +34,8 @@
    *   icon  { cls, use } —— cls 为 "" 时渲染 class="ico ico-sm"(危险项原样); use 如 "#i-play"
    *   act   (vm) => void —— 点击分派, 原方法调用逐字平移(动作链一行不动, 只改"渲染哪些项")
    *   gate  flags 门控键: 关时**不渲染**(v-if 语义), 布局槽位保留(用户开开关即归位)
-   *   dyn   "reannounce" —— 运行时置灰 + title 钩子(reannounceMenuGate, qB 口径)
+   *   dyn   "reannounce" —— 运行时置灰 + title 钩子(reannounceMenuGate, qB 口径; 判据单点
+   *         decorate.js::REANNOUNCE_BLOCKED_STATES, 目标全部非活跃时置灰不可用)
    *   danger true —— .ctx-item.danger 样式
    *   kind  "item"(缺省) | "sep" | "submenu"; submenu = 「更多操作」父项(次级内容见 CTX_SUB_ITEM_DEFS)
    */

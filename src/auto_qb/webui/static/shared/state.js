@@ -198,7 +198,9 @@ window.AQB_STATE = {
       // (v-if 对 undefined 恰好也隐藏, 但 undefined 是非响应式盲区, 呼应 vue-reactivity 静默坑);
       // 登录后 loadWebFlags 从 /api/webui/flags 取真值, 设置页保存配置后同步刷新(免重登)。
       // qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一 fail-closed 口径
-      flags: { skip_check_menu: false, qb_traffic_enabled: false },
+      // ctx_menu(计划 26-10-20-0024 W2): 行右键菜单四支用户布局(web.ctx_menu 原样下发;
+      //   null = 默认布局 = 注册表定义序, 零漂移); 菜单渲染消费面在 shared/ctx_menu.js)
+      flags: { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制启动/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced"

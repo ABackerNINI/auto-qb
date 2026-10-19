@@ -360,16 +360,20 @@ window.AQB_LIFECYCLE = {
      * 成功后再调刷新, 免重登)。请求失败保持 false = fail-closed(菜单不显示, 后端端点
      * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。
      * qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一
-     * fail-closed 口径 —— false 时入口不渲染、不请求(P5 验收)。 */
+     * fail-closed 口径 —— false 时入口不渲染、不请求(P5 验收)。
+     * ctx_menu(计划 26-10-20-0024 W2): 行右键菜单四支用户布局原样透传(后端只存不发解析,
+     * 合并语义在前端 ctx_menu.js 单点); 缺键/取失败 = null = 默认布局(注册表定义序)。
+     * !三个键都必须显式写回: 漏一个 = 该功能恒取不到真值(旗标恒 false / 布局恒默认)。 */
     async loadWebFlags() {
       try {
         const f = await this.api("/api/webui/flags");
         this.flags = {
           skip_check_menu: !!(f && f.skip_check_menu),
           qb_traffic_enabled: !!(f && f.qb_traffic_enabled),
+          ctx_menu: (f && f.ctx_menu) || null,
         };
       } catch (e) {
-        this.flags = { skip_check_menu: false, qb_traffic_enabled: false };
+        this.flags = { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null };
       }
     },
   },

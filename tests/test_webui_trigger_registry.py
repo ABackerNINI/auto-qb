@@ -18,7 +18,8 @@
   `ui=ctx-menu` 的 variant 集合一一对应(治 pitfall ctx-menu-branch-parity: 加了一支漏另一支)
 - test_ctx_menu_action_families_parity: T4 —— 四支的**动作族**奇偶: 四支都必须有
   {开始/暂停/汇报/删除}, multi/member/group 还必须各有 {重新校验/跳检/限速/移动/标签分类/导出}
-  (2026-10-09 用户报「单组右键菜单缺选项」的回归位)
+  (2026-10-09 用户报「单组右键菜单缺选项」的回归位; W3 计划 26-10-20-0024 起比对面从
+  模板 @click 列表搬到 ctx_menu.js 注册表定义序, 项集奇偶治的是同一件事)
 - test_trigger_registry_entries_exist: T5 —— 登记表里每个 entry / calls.fn 都必须是源码里
   真实存在的方法名(治「登记了不存在的入口」这类反向漂移)
 - test_scope_audit_wiring: T6 —— 运行时审计接线(计划 26-10-10-2001 S4): 三出口(_actCore/
@@ -136,38 +137,28 @@ def _scopes_ok(value: str) -> bool:
     return bool(parts) and all(p in SCOPES for p in parts)
 
 
-def _handler_family(handler: str):
-    """处理器原文 -> 规范动作族名(不属任何族的返回 None)。"""
-    h = re.sub(r"\s+", " ", handler).strip()
-    m = re.match(r"^(?:act|actTorrent|actEpisode|ctxAct)\('([a-z_]+)'", h)
-    if m:
-        arg = m.group(1)
-        return {"location": "move"}.get(arg, arg)  # 批量菜单的"移动…"走 ctxAct('location')
-    m = re.match(r"^torrentCmd\('([a-z\-]+)'", h)
-    if m:
-        return "recheck" if m.group(1) == "recheck" else None
-    name = h.split("(")[0]
-    for cand, fam in [
-        ("ctxDelete", "delete"),
-        ("delEpisode", "delete"),
-        ("delTorrent", "delete"),
-        ("delGroup", "delete"),
-        ("recheckGroup", "recheck"),
-        ("skipCheckTorrent", "skip_check"),
-        ("skipCheckGroup", "skip_check"),
-        ("editLimits", "limits"),
-        ("editLimitsGroup", "limits"),
-        ("editMove", "move"),
-        ("editMoveGroup", "move"),
-        ("openMetaDialog", "meta"),
-        ("metaGroup", "meta"),
-        ("ctxMeta", "meta"),
-        ("exportTorrent", "export"),
-        ("exportGroup", "export"),
-    ]:
-        if name == cand:
-            return fam
-    return None
+def _ctx_registry_branch_ids() -> dict:
+    """ctx_menu.js 注册表 -> {支: 定义序 id 列表(含次级)}(W3 起 T4 的比对面)。
+
+    W3(计划 26-10-20-0024)模板四支改 v-for 消费注册表后, 「某支菜单有哪些项」从模板
+    @click 列表搬到注册表定义序(CTX_ITEM_DEFS[branch] + CTX_SUB_ITEM_DEFS.member) ——
+    动作族奇偶治的是同一件事(2026-10-09「单组右键菜单缺选项」), 比对面随之搬家。
+    定义恒为 4 空格缩进、每项一行 `id: "xxx"`(与 _method_body 同款格式化假设;
+    重排文件 = 守阵红, 同步即可)。支段切到下一个 4 空格 `],` 为止(定义数组是平的)。
+    """
+    reg = _read("ctx_menu.js")
+    out = {}
+    for branch in ("multi", "episode", "member", "group"):
+        m = re.search(rf"\n    {branch}: \[(.*?)\n    \],", reg, re.S)
+        assert m, f"ctx_menu.js 找不到 {branch} 支定义段(注册表结构变了? 同步本守阵)"
+        out[branch] = re.findall(r'id: "([^"]+)"', m.group(1))
+    # 次级(「更多操作」): 现状仅 member 支有默认内容; 跨层移动后 family 项可能落在次级,
+    # 故 member 支的族覆盖面 = 一级定义序 + 次级定义序(与旧守阵的模板分段范围同口径)
+    sub_src = reg[reg.index("const CTX_SUB_ITEM_DEFS"):]
+    sm = re.search(r"\n    member: \[(.*?)\n    \],", sub_src, re.S)
+    assert sm, "ctx_menu.js 次级注册表找不到 member 支定义段(结构变了? 同步本守阵)"
+    out["member"] = out["member"] + re.findall(r'id: "([^"]+)"', sm.group(1))
+    return out
 
 
 def test_trigger_registry_shape() -> None:
@@ -272,12 +263,16 @@ def test_ctx_menu_action_families_parity() -> None:
     症状是**不报错、不白屏**, 只是某条路径上「菜单里没这个选项」。人眼对不齐两批十几项,
     故由守阵对账: 四支都必须有基线四族(开始/暂停/汇报/删除), multi/member/group 还必须
     各自都有扩展六族(重新校验/跳检/限速/移动/标签分类/导出)。
+
+    W3(计划 26-10-20-0024)起模板四支改 v-for 消费注册表(shared/ctx_menu.js), 比对面从
+    「模板 @click 列表」搬到「注册表定义序」—— 项集奇偶治的是同一件事, 只是数据源换了:
+    模板只保留判据链(T3 守), 项集/顺序/分派全在注册表单点。族名与注册表 id 同形
+    (resume/pause/reannounce/delete + recheck/skip_check/limits/move/meta/export)。
     """
-    branches = _ctx_menu_branches()
+    ids = _ctx_registry_branch_ids()
     families = {}
-    for name, handlers in branches.items():
-        fams = {f for f in (_handler_family(h) for h in handlers)}
-        families[name] = {f for f in fams if f}
+    for name, tokens in ids.items():
+        families[name] = {t for t in tokens if t in FAMILY_BASE | FAMILY_EXT}
     for name, fams in sorted(families.items()):
         missing = FAMILY_BASE - fams
         assert not missing, f"{name} 支缺基线动作族 {sorted(missing)}(实际 {sorted(fams)})"

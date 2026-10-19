@@ -184,10 +184,11 @@ def test_frontend_qb_traffic_chart_wiring():
 
     五类"漏一处 = 静默失效 / P5 验收被破坏"的故障形态机械钉住:
     1. enabled=false 三挂点入口不渲染不请求(P5 验收): 全局入口按钮 v-if="qbHistEntryOn" 挂今日
-      流量面板内; 抽屉「流量」页签按钮与组右键「qB 口径流量图」菜单项 v-if="qbTrafficOn";
-      门单点在 flags.qb_traffic_enabled(/api/webui/flags 下发, fail-closed 默认 false,
-      state.js 显式建字段 + lifecycle.loadWebFlags 写入), _qbLoad 里再兜一道 —— 无旗标无入口,
-      无入口无触发路径 = 三挂点零请求;
+       流量面板内; 抽屉「流量」页签按钮 v-if="qbTrafficOn"; 组右键「qB 口径流量图」菜单项
+       (W3 计划 26-10-20-0024 起改注册表单点) gate: "qb_traffic" -> flags.qb_traffic_enabled;
+       门单点在 flags.qb_traffic_enabled(/api/webui/flags 下发, fail-closed 默认 false,
+       state.js 显式建字段 + lifecycle.loadWebFlags 写入), _qbLoad 里再兜一道 —— 无旗标无入口,
+       无入口无触发路径 = 三挂点零请求;
     2. uPlot 双系列断线语义(§5.2): 两 series 显式 spanGaps=false(纯断线, 无最大跨越);
       桶序 -> uPlot 数据的栅格重建 _qbPointsToData 用 node 真跑(null 槽 y=null + x 等距
       不漂移 / 前导 null 锚推算 / 全 null 与 interval 非法回落), 无 node 静默跳过;
@@ -238,10 +239,13 @@ def test_frontend_qb_traffic_chart_wiring():
     ctx_menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
 
     # 1. enabled 门(fail-closed 单点; 三挂点共用 qbTrafficOn, 全局入口另挂今日流量面板本体)
-    assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false }' in state_js, \
-        "state.js flags 默认缺 qb_traffic_enabled: false(fail-closed 初值必须显式建)"
+    # ctx_menu(计划 26-10-20-0024 W2/W3): 行右键菜单布局下发键, 与两个旗标同一通道同一显式建字段口径
+    assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null }' in state_js, \
+        "state.js flags 默认缺 qb_traffic_enabled: false(fail-closed 初值必须显式建)或 ctx_menu: null"
     assert "qb_traffic_enabled: !!(f && f.qb_traffic_enabled)" in lifecycle_js, \
         "loadWebFlags 必须写回 qb_traffic_enabled(缺了旗标恒 false = 功能永不可见)"
+    assert "ctx_menu: (f && f.ctx_menu) || null" in lifecycle_js, \
+        "loadWebFlags 必须透传 ctx_menu(漏写 = 布局数据到不了前端, 用户重排静默失效)"
     assert "qb_traffic_enabled: false" in lifecycle_js, "loadWebFlags 失败分支必须保持 fail-closed"
     mo = re.search(r"qbTrafficOn\(\) \{\n(.*?)\n    \},", js, re.S)
     assert mo and "this.flags.qb_traffic_enabled" in mo.group(1), \
@@ -353,9 +357,13 @@ def test_frontend_qb_traffic_chart_wiring():
     assert 'last === "traffic" && !this.qbTrafficOn' in drawer_js, \
         "drawer.js 打开抽屉缺流量页签初值归一(功能关闭时上次停留页签须落回常规页)"
     # 全局/分组挂点: 组右键菜单项(v-if 门) + 抽屉流量形态(共用正文块/建图落点/关闭/窗口切换)
-    assert 'v-if="qbTrafficOn"' in ctx_menus and 'openQbGroup(menu.key)' in ctx_menus, \
-        "ctx-menus.html 缺组右键「qB 口径流量图」菜单项(v-if 门 + menu.key 直用的 encode_group_key 通道)"
-    assert ctx_menus.count("openQbGroup(menu.key)") == 1, "组右键菜单项只能挂在单组菜单(多选/剧集菜单不得出现)"
+    # W3(计划 26-10-20-0024)起组右键菜单项改注册表单点(ctx_menu.js group 支): 门控与分派
+    # 从模板文本搬到注册表定义(gate: "qb_traffic" / act: vm.openQbGroup(vm.menu.key))
+    reg = open(os.path.join(shared, "ctx_menu.js"), encoding="utf-8").read()
+    assert 'gate: "qb_traffic"' in reg and "vm.openQbGroup(vm.menu.key)" in reg, \
+        "ctx_menu.js 缺组右键「qB 口径流量图」菜单项(注册表 gate: qb_traffic + menu.key 直用的 encode_group_key 通道)"
+    assert reg.count("vm.openQbGroup(vm.menu.key)") == 1, "组右键菜单项只能挂在单组菜单(多选/剧集菜单不得出现)"
+    assert 'ctxItems(\'group\')' in ctx_menus, "ctx-menus.html 单组支必须 v-for 消费注册表(回退静态直写 = 四支人肉奇偶复发)"
     assert 'v-if="qbTrafficActive"' in drawer_tpl and 'ref="qbChartHost"' in drawer_tpl \
         and 'qbCurSummary' in drawer_tpl, \
         "drawer.html 缺流量形态正文块(三挂点共用: qbTrafficActive 门 / 建图落点 / 汇总)"
@@ -2373,7 +2381,8 @@ def test_frontend_reannounce_inactive_gate_wiring():
 
     四个面逐项钉住(键盘与详情面板是右键之外的两条绕行路径, 少接一处即形同虚设):
       ①判定单点 decorate.js:两张表 + 读 state + 多目标任一活跃即可用(qB oneCanForceReannounce);
-      ②右键菜单 ctx-menus.html 四支都挂 reannounceMenuGate();
+      ②右键菜单四支的置灰钩子成对(W3 计划 26-10-20-0024 起在注册表 ctx_menu.js:
+         四支各一条 dyn: "reannounce" + ctxRenderItem 求值单点, 模板统一消费 it.gated/it.title);
       ③行为层:_actCore 的 reannounce 前置(早于乐观补丁/POST)+ _kbAct 的先拦后确认;
       ④详情面板:04/05/06 重报钮挂 drawerReannounceGate() + 各变体 .is-gated CSS + torrentCmd 兜底;
       ⑤投递收敛:reannouncePlan 单点 + 跳过文案 + 空投递收口 + 前后端判据表逐项同表;
@@ -2399,15 +2408,22 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert re.search(r"rows\.some\(\(r\) => !this\.reannounceBlocked\(r\)\)", deco), \
         "多目标判据未按「任一活跃即可用」写(qB oneCanForceReannounce 口径)"
 
-    # ② 右键菜单四支: :class 与 :title 逐支成对, 且四个 @click 都还在
-    assert menus.count(":class=\"{ 'is-gated': !reannounceMenuGate().ok }\"") == 4, \
-        "ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项未全部挂 is-gated"
-    assert menus.count(':title="reannounceMenuGate().title"') == 4, \
-        "ctx-menus.html 置灰原因 title 未逐支成对(用户看不到为什么变灰)"
-    for act in ("ctxAct('reannounce')", "actEpisode('reannounce')", "actTorrent('reannounce')", "act('reannounce')"):
-        assert act in menus, f"ctx-menus.html 缺强制汇报入口 {act}(入口被改名? 判据面要同步)"
-    assert "REANNOUNCE_BLOCKED_STATES" in menus, \
-        "ctx-menus.html 缺 qB 判据说明注释(口径单点指向 decorate.js)"
+    # ② 右键菜单四支: 置灰钩子逐支成对。W3(计划 26-10-20-0024)起比对面搬到注册表 ——
+    #    四支各一条 dyn: "reannounce", 求值单点在 ctx_menu.js ctxRenderItem; 模板统一
+    #    :class/:title 消费 it.gated/it.title(逐项直写时期是四段重复的 reannounceMenuGate() 调用)
+    reg = open(os.path.join(shared, "ctx_menu.js"), encoding="utf-8").read()
+    assert reg.count('dyn: "reannounce"') == 4, \
+        "ctx_menu.js 四支(多选/整集/单种子/单组)的强制汇报项未全部挂 dyn: reannounce"
+    assert "item.gated = !gate.ok" in reg and 'item.title = gate.title || ""' in reg, \
+        "ctx_menu.js ctxRenderItem 缺置灰/title 求值单点(模板只消费 it.gated/it.title)"
+    assert "'is-gated': it.gated" in menus and ':title="it.title"' in menus, \
+        "ctx-menus.html 菜单项未统一消费置灰态与 title 通道(用户看不到为什么变灰)"
+    for act in (
+        'vm.ctxAct("reannounce")', 'vm.actEpisode("reannounce")', 'vm.actTorrent("reannounce")', 'vm.act("reannounce")'
+    ):
+        assert act in reg, f"ctx_menu.js 缺强制汇报入口 {act}(入口被改名? 判据面要同步)"
+    assert "REANNOUNCE_BLOCKED_STATES" in reg, \
+        "ctx_menu.js 缺 qB 判据说明注释(口径单点指向 decorate.js)"
 
     # ③ 行为层: _actCore 前置闸门(早于乐观补丁) + _kbAct 先拦后确认
     assert "async _guardReannounce(t)" in cmds or "_guardReannounce(t) {" in cmds, \
@@ -3150,8 +3166,9 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
     修法是让菜单在"被点的行属于选中集合"时升级为批量菜单, 动作复用批量浮条的链路。这条守阵
     钉住三处**成对**关系(任一处漏改都会静默退化回单目标, 且 pytest/`node --check` 都看不见):
       1. 四个 open*Menu 必须各自写入 `multi:` —— 漏一处, 那条路径的多选右键就仍是单目标;
-      2. 两套 UI 的批量分支必须**成对存在**且逐项一致(双 UI 是两条独立模板, 只改一边 = 另一边
-         用户看不到批量菜单), 且只能调 ctxAct/ctxDelete;
+      2. 三套 UI 的批量分支都必须存在且消费注册表 `ctxItems('multi')`(W3 起项集/分派在
+         shared/ctx_menu.js 注册表单点, 三 UI 同指 /shared/tpl/ctx-menus.html 一份 = 漂移
+         结构性不可能); 注册表 multi 支只能调 ctxAct/ctxDelete;
       3. ctxAct/ctxDelete 必须**复用** bulkAct/bulkDelete —— 自己再拆一遍目标集合就会与批量浮条
          的口径漂移(虚拟行/组展开/失效目标跳过这三条语义都在 _bulkTargets 里)。
     """
@@ -3172,8 +3189,9 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             )
             assert "multi:" in body, f"{rel} 的 {fn} 没把 multi 写进 this.menu —— 模板读不到, 批量分支永不渲染"
 
-    # 2. 两套 UI 的批量分支成对且逐项一致
-    branches = {}
+    # 2. 三套 UI 的批量分支都存在且消费注册表; 项集/分派在注册表单点(shared/ctx_menu.js,
+    #    三 UI 同指 /shared/tpl/ctx-menus.html = 双 UI 漂移结构性不可能; W3 起逐项分派从
+    #    模板文本搬进注册表 act —— 比对面随之搬家, 治的是同一件事)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         m = re.search(r'<template v-if="menu\.multi">(.*?)</template>', text, re.S)
@@ -3181,18 +3199,24 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             f"{ui}/index.html 的右键菜单没有 v-if=\"menu.multi\" 批量分支 —— "
             f"多选右键拿不到批量动作(双 UI 必须成对改, 另一套有而它没有 = 半边用户没有该功能)"
         )
-        branch = m.group(1)
-        # 归一空白后逐项比对: 两套 UI 的批量菜单是同一套语义, 不该各自演化
-        branches[ui] = re.sub(r"\s+", " ", branch).strip()
-        for call in ("ctxAct('resume')", "ctxAct('pause')", "ctxAct('reannounce')", "ctxAct('recheck')", "ctxDelete()"):
-            assert call in branch, f"{ui}/index.html 批量分支缺少 {call}"
-        assert "actTorrent(" not in branch and "actEpisode(" not in branch, (
+        assert "ctxItems('multi')" in m.group(1), (
+            f"{ui}/index.html 批量分支未消费注册表 ctxItems('multi') —— W3 v-for 化后项集在"
+            f" ctx_menu.js, 模板回退逐项直写 = 四支人肉奇偶复发(CTX-03)"
+        )
+        assert "actTorrent(" not in m.group(1) and "actEpisode(" not in m.group(1), (
             f"{ui}/index.html 批量分支里出现了单目标/单集动作 —— 批量菜单必须整份走 ctxAct/ctxDelete"
         )
-    assert branches["atlas"] == branches["prism"], (
-        "两套 UI 的批量右键菜单不一致(星图 vs 棱镜)—— 双 UI 必须成对改; 差异: "
-        f"atlas={branches['atlas'][:120]!r} / prism={branches['prism'][:120]!r}"
-    )
+    # 注册表 multi 支: 五个批量动作 + ctxDelete 必须在, 且只能调 ctxAct/ctxDelete
+    reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
+    seg = re.search(r"\n    multi: \[(.*?)\n    \],", reg, re.S)
+    assert seg, "ctx_menu.js 找不到 multi 支定义段(注册表结构变了? 同步本守阵)"
+    multi_defs = seg.group(1)
+    for call in (
+        'vm.ctxAct("resume")', 'vm.ctxAct("pause")', 'vm.ctxAct("reannounce")', 'vm.ctxAct("recheck")', 'vm.ctxDelete()'
+    ):
+        assert call in multi_defs, f"注册表 multi 支缺少 {call}(批量菜单项集漂移, CTX-03)"
+    for bad in ("vm.actTorrent(", "vm.actEpisode(", "vm.delTorrent(", "vm.delEpisode(", "vm.act("):
+        assert bad not in multi_defs, (f"注册表 multi 支出现单目标分派 {bad} —— 批量菜单必须整份走 ctxAct/ctxDelete")
 
     # 3. ctxAct/ctxDelete 复用批量浮条链路, 且先收起菜单(菜单根节点 @click.stop, 全局点空白关不掉)
     cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
@@ -3214,27 +3238,40 @@ def test_frontend_ctx_menu_group_actions_parity():
     批量菜单(menu.multi 分支)还有 重新校验/跳检/限速/移动/标签分类/导出 —— 同一批动作在
     「右键 1 组」与「选 2 组」两条路径上项集不一致(用户报「单组右键菜单缺选项, 参考选中多组」)。
     本守阵钉三处(任一处漂移即静默少一个入口, pytest/node --check 都看不见):
-      1. 单组分支必须含六个组级入口(与批量分支同项集; 组菜单独有的 打开文件夹/流量图 除外);
+      1. 单组支必须含六个组级入口(与批量分支同项集; 组菜单独有的 打开文件夹/流量图 除外);
       2. 跳检项必须吃 flags.skip_check_menu 门控(fail-closed, 与单选/批量两处同口径);
       3. 六个入口方法必须在 commands.js/drawer.js 落地且复用多选同一套下游链路
          (recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog /
           exportGroup->_exportHashes), 不为组级另开旁路。
+    W3(计划 26-10-20-0024)起四支项集搬到注册表单点: 判据链仍在模板(v-else 支 +
+    ctxItems('group') 消费), 项集/门控/分派在 ctx_menu.js group 支定义段 —— 比对面随之搬家。
     """
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html"), encoding="utf-8").read()
     # v-else 精确匹配单组分支(v-else-if 带 -if 后缀, 不会误命中)
     m = re.search(r"<template v-else>(.*?)</template>", tpl, re.S)
     assert m, "ctx-menus.html 找不到单组菜单 v-else 分支(结构被改? 同步本守阵)"
-    group = m.group(1)
+    assert "ctxItems('group')" in m.group(1), (
+        "ctx-menus.html 单组支必须 v-for 消费注册表 ctxItems('group') —— 回退逐项直写 = "
+        "四支人肉奇偶复发(2026-10-09 报障: 单组缺选项)"
+    )
+    reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
+    seg = re.search(r"\n    group: \[(.*?)\n    \],", reg, re.S)
+    assert seg, "ctx_menu.js 找不到 group 支定义段(注册表结构变了? 同步本守阵)"
+    group = seg.group(1)
 
     # 1. 六个组级入口(与多选批量菜单同项集)
     for token in (
-        "recheckGroup()", "skipCheckGroup()", "editLimitsGroup()", "editMoveGroup()", "metaGroup()", "exportGroup()"
+        "vm.recheckGroup()", "vm.skipCheckGroup()", "vm.editLimitsGroup()", "vm.editMoveGroup()", "vm.metaGroup()",
+        "vm.exportGroup()"
     ):
-        assert token in group, (f"单组右键菜单缺少 {token} —— 与多选批量菜单项集不一致(2026-10-09 报障: 单组缺选项)")
+        assert token in group, (f"注册表 group 支缺少 {token} —— 与多选批量菜单项集不一致(2026-10-09 报障: 单组缺选项)")
 
-    # 2. 跳检项 fail-closed 门控(v-if 对 undefined 静默隐藏; 与单选/批量两处同口径)
-    assert re.search(r'v-if="flags\.skip_check_menu"[^>]*@click="skipCheckGroup\(\)"',
-                     group), ("单组菜单「跳检…」项缺 flags.skip_check_menu 门控 —— 关态仍渲染 = fail-closed 破口")
+    # 2. 跳检项 fail-closed 门控(注册表 gate: "skip_check_menu"; flags 关 = 渲染层不出该项,
+    #    与单选/批量两处同口径; 门在 ctx_menu.js CTX_GATE_FLAG 单点映射)
+    skip_line = next((ln for ln in group.splitlines() if "vm.skipCheckGroup()" in ln), "")
+    assert skip_line and 'gate: "skip_check_menu"' in skip_line, (
+        "单组菜单「跳检…」项缺 skip_check_menu 门控(注册表 gate) —— 关态仍渲染 = fail-closed 破口"
+    )
 
     # 3. 六个入口方法落地 + 复用多选同一套下游链路
     cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
@@ -3265,13 +3302,16 @@ def test_frontend_meta_dialog_paired():
     """标签/分类编辑对话框守阵(静态防回潮)
 
     对选中集合(或单种子)即时增删标签/改分类。风险形态与批量菜单守阵(CTX-03)同源:
-      1. 双 UI 是两条独立模板, 只改一边 = 另一边用户没有入口(两套 UI 必须成对改);
+      1. 三套 UI 成对: 对话框与两处菜单入口缺一边 = 那套用户没有入口(W3 计划 26-10-20-0024
+         起菜单入口搬到共享注册表单点 shared/ctx_menu.js, 三 UI 同指一份模板 = 结构性成对);
       2. 对话框的投递必须走 bulk 链路(/api/torrents/bulk), 目标集合口径单点在
          _bulkTargets/openMetaDialog —— 自己再拆一遍就会与批量浮条口径漂移;
       3. .opt-pill(atlas 此前没有该组件)与 .meta-dialog 的 CSS 必须两套成对定义,
          模板用到的类在 CSS 无定义 = 静默裸样式(挂件类名错配的变体)。
     """
-    # 1. 三套 UI 成对: metaOpen 对话框 + 两处入口(批量菜单 ctxMeta / 单种子菜单)
+    # 1. 三套 UI 成对: metaOpen 对话框 + 两处入口(W3 计划 26-10-20-0024 起菜单入口搬到
+    #    注册表单点: 批量支 ctxMeta / 单种子支 openMetaDialog(menu.hash); shared/ctx_menu.js
+    #    三 UI 同指一份 = 成对结构性保证, 逐项分派不再散在双模板各自演化)
     #    (2026-10-05 批量控制条退役: 模板层不再直接调 openMetaDialog(null), 批量入口统一走 ctxMeta)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
@@ -3280,8 +3320,9 @@ def test_frontend_meta_dialog_paired():
             f"{ui}/index.html 又出现模板层直接调 openMetaDialog(null) —— 批量控制条已退役, "
             f"批量入口应统一走 ctxMeta(右键批量菜单)"
         )
-        assert 'openMetaDialog(menu.hash)' in text, f"{ui}/index.html 单种子右键菜单缺少标签/分类入口"
-        assert "ctxMeta()" in text, f"{ui}/index.html 批量右键菜单缺少 ctxMeta 入口"
+    reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
+    assert "vm.openMetaDialog(vm.menu.hash)" in reg, ("注册表 member 支缺单种子右键菜单的标签/分类入口(openMetaDialog(vm.menu.hash))")
+    assert "vm.ctxMeta()" in reg, "注册表 multi 支缺批量右键菜单的 ctxMeta 入口"
     # 2. shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)
     dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
     for token in (
@@ -3845,26 +3886,29 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
         assert not re.search(r"\.ctx-item:hover\s+\.ico\b",
                              text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
 
-    # 2. 两套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内
+    # 2. 三套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内(模板侧只留父项结构与交互;
+    #    W3 计划 26-10-20-0024 起面板内容与「更多操作」文案搬到注册表次级定义段)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
-        m = re.search(r'<div class="ctx-item has-sub".*?\n            </div>\n', text, re.S)
-        assert m, f"{ui}/index.html 找不到次级菜单父项(改名或挪走了? 同步本守阵)"
-        block = m.group(0)
-        assert "更多操作" in block, f"{ui} 的次级菜单入口文案不是「更多操作」"
-        assert "@mouseleave=\"scheduleSubClose()\"" in block, (
+        seg = re.search(r'v-else-if="menu\.hash"(.*?)<template v-else>', text, re.S)
+        assert seg, f"{ui}/index.html 找不到单种子支(v-else-if=menu.hash; 四支结构变了? 同步本守阵)"
+        block = seg.group(1)
+        n_sub = block.count('class="ctx-item has-sub"')
+        assert n_sub == 1, (f"{ui} 一级菜单出现 {n_sub} 个「更多操作」入口 —— 只允许一个(CTX-06)")
+        assert '@mouseleave="scheduleSubClose()"' in block, (
             f"{ui} 次级菜单父项缺 @mouseleave=\"scheduleSubClose()\" —— 鼠标移出后子面板不会消失(CTX-05)"
         )
-        assert "@mouseenter=\"keepSub()\"" in block, (
+        assert '@mouseenter="keepSub()"' in block, (
             f"{ui} 子面板缺 @mouseenter=\"keepSub()\" —— 跨过父项与面板之间 4px 缝隙时会被收掉, 鼠标进不去子面板"
         )
-        assert block.count("class=\"ctx-sub\""
+        assert block.count('class="ctx-sub"'
                           ) == 1, (f"{ui} 一级菜单出现 {block.count('class=\"ctx-sub\"')} 个子面板 —— 只允许「更多操作」一个入口(CTX-06)")
-        for kind in ("name", "hash", "magnet"):
-            assert f"copyTorrentInfo('{kind}')" in block, (
-                f"{ui} 的复制族缺 copyTorrentInfo('{kind}') —— 复制项必须并进「更多操作」(CTX-06)"
-            )
         assert "subMenu === 'copy'" not in text, (f"{ui} 仍残留 subMenu === 'copy' 分支 —— 复制已并入「更多操作」, 双入口会回潮(CTX-06)")
+    # 「更多操作」文案 + 复制族三项: W3 起在注册表单点(次级定义段; 模板只渲染 it.label)
+    reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
+    assert 'label: "更多操作"' in reg, "注册表缺「更多操作」父项文案(sub-more 定义)"
+    for kind in ("name", "hash", "magnet"):
+        assert f'vm.copyTorrentInfo("{kind}")' in reg, (f"注册表次级缺 copyTorrentInfo('{kind}') —— 复制项必须并进「更多操作」(CTX-06)")
 
     # 3. 收起的两个方法必须存在且挂在延迟上(同步收起 = 鼠标进不去子面板)
     menu = open(os.path.join(STATIC_ROOT, "shared", "menu.js"), encoding="utf-8").read()
