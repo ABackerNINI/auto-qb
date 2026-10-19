@@ -113,7 +113,9 @@
     </div>
     <div v-if="modal.visible" class="modal-mask"
          @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(resolveModal, false)">
-      <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
+      <!-- cls(2026-10-19): 按对话框定制形态的附加类名(如重命名 rename-dialog 宽档);
+           空串不附加任何类, 既有对话框零变化 -->
+      <div class="modal" :class="[{ danger: modal.danger, wide: modal.wide }, modal.cls]" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16">
             <use :href="modal.icon || (modal.danger ? '#i-warn' : '#i-info')"></use>

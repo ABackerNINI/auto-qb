@@ -836,6 +836,11 @@ window.AQB_DRAWER = {
         body: "修改种子显示名(不影响磁盘上的文件/目录名)。",
         fields: [{ key: "name", label: "新名称", value: d ? d.name || "" : "", placeholder: "新种子名" }],
         okText: "重命名", cancelText: "取消",
+        // 宽档(2026-10-19, 用户报「弹窗太小」): 字段值 = 完整种子显示名, 真实名称 routinely
+        // 80~120 字符 —— 通用 modal 基档 520(为确认/提示一句话设计)下输入框仅 474px,
+        // 实测 97 字符长名裁掉 223px。走 --modal-w-add(与设定位置/添加种子同档, ctx 菜单
+        // 相邻两编辑框同宽也顺眼); cls 经 popovers.html 类绑定并入根元素。
+        cls: "rename-dialog",
       });
       if (!res) return;
       if (!res.name) {

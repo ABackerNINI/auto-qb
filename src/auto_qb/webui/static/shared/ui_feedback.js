@@ -129,6 +129,8 @@ window.AQB_FEEDBACK = {
         busy: false,       // 「正在检查前置条件…」行(跳检预检对话框 S4: 预检在途, 回执后撤下)
         verdict: null,     // 三分流渲染区(跳检预检对话框 S4: 行式明细 [{icon,label,value,wide}],
                            // 复用 modal-details 范式; null = 不渲染)
+        cls: "",           // 附加类名(按对话框定制宽度/形态, 如重命名走 rename-dialog 宽档);
+                           // 空 = 不附加 —— 既有全部对话框零变化(popovers.html 类绑定并入)
       };
     },
     confirmDialog(title, body, opts = {}) {

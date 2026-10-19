@@ -338,6 +338,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
  * modal 自身滚动时 body 收缩、净空变小, 由限高兜底(与添加种子同口径, 见 combobox-focusout-close)。 */
 .modal.move-dialog { width: var(--modal-w-add); }
 .modal.move-dialog.pop-open .add-dialog-body { padding-bottom: 272px; }
+/* 重命名对话框(2026-10-19 几何修, 用户报「弹窗太小」): 字段值 = 完整种子显示名, 真实名称
+ * routinely 80~120 字符 —— 通用 modal 基档 520(为确认/提示一句话设计)下输入框仅 474px,
+ * 实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露)。宽度走 --modal-w-add
+ * (与设定位置/添加种子同档, ctx 菜单相邻两编辑框同宽); 类名经 _openModal cls 选项挂上
+ * (popovers.html 类绑定), ui_feedback.js _modalInit 单点。成对定义见 prism/atlas。 */
+.modal.rename-dialog { width: var(--modal-w-add); }
 .move-targets { margin: 0 0 10px; color: var(--fg-dim); font-size: 12.5px; }
 .move-targets b { color: var(--fg); }
 .move-note { margin: 0 0 12px; color: var(--fg-muted); font-size: 12px; overflow-wrap: anywhere; }

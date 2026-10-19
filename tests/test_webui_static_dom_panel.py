@@ -29,6 +29,7 @@
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 单组 v-else 分支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量分支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
+- test_frontend_rename_dialog_width_wiring: 重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)—— 字段值 = 完整种子显示名(真实名称 routinely 80~120 字符), 骑通用 .modal 基档 520(为确认/提示一句话设计)时输入框仅 474px, 真浏览器实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露); 修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化)+ 重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860, 与设定位置/添加种子同档)。钉 _modalInit cls 字段 / popovers.html 根类绑定并入 modal.cls / editRename 传类 / 三皮肤宽档规则成对; 行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 e2e/add-partial-receipt.spec.mjs 真浏览器钉
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
@@ -3774,9 +3775,52 @@ def test_frontend_move_dialog_combobox_wiring():
         "lifecycle.js window click 兜底名单缺 movePathMenu(与三下拉同层)"
 
 
+def test_frontend_rename_dialog_width_wiring():
+    """重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)
+
+    字段值 = 完整种子显示名, 真实名称 routinely 80~120 字符。重命名对话框此前骑通用
+    .modal 基档 520(为确认/提示一句话设计), 输入框仅 474px —— 真浏览器实测(1440x900)
+    97 字符长名 scrollWidth 695 > clientWidth 472, 裁掉 223px; 桩名 43 字符恰好不裁,
+    故冒烟从未暴露。修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化),
+    重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860,
+    与设定位置/添加种子同档)。行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉。
+    钉:
+      1. ui_feedback.js _modalInit 声明 cls 字段(附加类名单点, 与 okDisabled/busy/verdict 同届);
+      2. popovers.html 模态根类绑定并入 modal.cls(数组形态, 空串不附加类);
+      3. drawer.js editRename 传 cls: "rename-dialog";
+      4. 三皮肤 .modal.rename-dialog 宽度规则成对且走 --modal-w-add。
+    """
+    import re
+
+    shared = os.path.join(STATIC_ROOT, "shared")
+    uif = open(os.path.join(shared, "ui_feedback.js"), encoding="utf-8").read()
+    pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
+    dr = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+
+    # 1. cls 字段在 _modalInit 单点声明(每框初值; 缺了 = 后补属性不进 Vue 响应, 挂类不生效)
+    init = re.search(r"_modalInit\(\) \{\s*return \{(.*?)\n      \};", uif, re.S)
+    assert init and re.search(r'\bcls:\s*""', init.group(1)), \
+        "ui_feedback.js _modalInit 缺 cls 字段(附加类名单点; 不进初值 = 后补属性不进 Vue 响应)"
+
+    # 2. 模板根类绑定并入 modal.cls(与 danger/wide 并列; 空串零附加, 既有对话框零变化)
+    m = re.search(r'<div class="modal" :class="([^"]+)"', pv)
+    assert m and "modal.cls" in m.group(1), \
+        "popovers.html 模态根类绑定缺 modal.cls(cls 选项挂不上类 = 宽档失生效)"
+
+    # 3. editRename 传 cls: "rename-dialog"(回退到裸 _openModal = 骑 520 基档, 长名被裁)
+    ren = re.search(r'async editRename\(h = ""\) \{(.*?)\n    \},', dr, re.S)
+    assert ren and 'cls: "rename-dialog"' in ren.group(1), \
+        'drawer.js editRename 缺 cls: "rename-dialog"(重命名框骑 520 基档, 97 字符长名裁 223px)'
+
+    # 4. 三皮肤成对宽档(漏一档 = 该皮肤重命名框仍 520)
+    for ui in _UI_ALL:
+        blob = _ui_css_aggregate(ui)
+        assert re.search(r"\.modal\.rename-dialog \{\s*width:\s*var\(--modal-w-add\)", blob), \
+            f"{ui} 缺 .modal.rename-dialog 宽档规则(输入框仅 474px, 97 字符长名裁 223px; 860 = 与设定位置/添加种子同档)"
+
+
 def test_frontend_ctx_submenu_single_entry_and_hover_close():
     """右键菜单的次级菜单: 一级只留「更多操作」一个入口, 且移出后必须收起 (CTX-04 / CTX-05 / CTX-06)
-
     三条用户报的故障形态, 全部是"pytest 全绿 + node --check 全绿 + 界面废掉"那一类:
       1. **二级菜单图标 hover 变灰**: `.ctx-item:hover .ico` 是后代选择器, 而 `.ctx-sub` 是父项的
          DOM 后代 —— hover 父项会把整个子面板的图标一起刷成 `--fg-muted`, 语义色全被抹平。
