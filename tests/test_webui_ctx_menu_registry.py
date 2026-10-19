@@ -21,6 +21,10 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
 - test_ctx_custom_panel_wiring: 设置页「WebUI」卡接线守阵(W4) —— 卡片注册/hubNow/hubGo 复位/
   hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
   + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
+- test_ctx_custom_write_shape_passes_config_contract: 契约闭环守阵(W5) —— node 真跑定制面板的
+  **写路径**(真 vm 桩上调 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep), 产出的布局必须
+  ①只写动过的那一支 ②支级/次级键集合 == 后端 _CTX_BRANCH_KEYS/_CTX_LAYER_KEYS ③过
+  validate_config 零错误 ④隐藏留槽位 / 跨层双向 / 用户线 sep:uN / 同层换位生效
 - test_ctx_menu_wiring: 接线守阵 —— 三份 manifest 成对登记 ctx_menu.js 且装载序
   menu.js < ctx_menu.js < app.js; app.js mixin 行在; REG/mixin 双挂载面在文件里
 """
@@ -33,7 +37,40 @@ import subprocess
 from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
 
 _CTX_MENU_JS = os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")
+_CTX_CUSTOM_JS = os.path.join(STATIC_ROOT, "shared", "ctx_menu_custom.js")
 _CTX_MENUS_TPL = os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html")
+
+# node 探针: 在真 vm 桩上跑**定制面板的写路径**(ctx_menu_custom.js 的 methods), 输出面板
+# 实际写回的 ctx_menu 形状 —— 交 python 侧过 validate_config(两端对"合法布局"的认定必须一致)
+_NODE_CTX_WRITE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // ctx_menu.js: 注册表 + 合并语义
+eval(fs.readFileSync(process.argv[2], "utf8"));   // ctx_menu_custom.js: 面板编辑面
+const R = window.AQB_CTX_MENU_REG, C = window.AQB_CTX_CUSTOM;
+const vm = {
+  cfg: { tree: { config: {} } },
+  ctxCust: { branch: "member", drag: null, over: null },
+  cfgConfig() { return this.cfg.tree.config; },
+  toast() {},
+};
+const call = (name, ...args) => C.methods[name].call(vm, ...args);
+/* 面板方法之间走 this.xxx 互调(cmToggleHidden -> cmDraft -> cmLayout ...), 得把整面方法
+ * 挂到桩上 —— 只挂被测的那一个会立刻 "this.cmDraft is not a function" */
+for (const k of Object.keys(C.methods)) vm[k] = (...a) => C.methods[k].apply(vm, a);
+call("cmToggleHidden", "member", 0, "info");      // 隐藏一项
+call("cmToggleHidden", "member", 0, "sep:d2");    // 隐藏一条默认线
+call("cmMoveLevel", "member", 0, "rename");       // 一级 -> 「更多操作」
+call("cmAddSep", "member", 1);                    // 次级加一条用户线
+call("cmMoveStep", "member", 0, "resume", 1);     // ↑↓ 换位
+const lay = vm.cfg.tree.config.web.ctx_menu;
+console.log(JSON.stringify({
+  layout: lay,
+  topKeys: Object.keys(lay.member).sort(),
+  subKeys: Object.keys(lay.member.sub).sort(),
+  userSeps: lay.member.sub.order.filter((t) => t.indexOf("sep:u") === 0),
+}));
+"""
 
 # node 电池: 加载 ctx_menu.js(global.window 沙箱, 与 _NODE_QB_TRAFFIC_PROBE 同范式),
 # 对默认布局与合并语义跑断言电池, 末行输出 JSON 报告。
@@ -386,6 +423,52 @@ def test_ctx_custom_panel_wiring():
         css = f.read()
     for cls in (".ctx-custom-tab", ".ctx-custom-row", ".ctx-custom-sec", ".ctx-custom-empty", ".ctx-custom-tag"):
         assert cls in css, f"console_hub.css 缺 {cls}(面板裸奔/不可读)"
+
+
+def test_ctx_custom_write_shape_passes_config_contract():
+    """契约闭环守阵(W5): 定制面板真写路径 → 后端 validate_config 必须认
+
+    前端与后端对"合法布局"各有一套认定(JS 合并语义 / python 形状校验), 两边漂移的形态
+    极隐蔽: 面板照常能点、保存照常 200, 只是下次启动读到"未知键"或"必须是字符串数组"时
+    整段被拒 —— 用户会觉得"我的定制自己消失了"。故在 node 里用真 vm 桩跑**面板的方法**
+    (不是手搓一份布局), 把写出来的东西直接喂给后端校验器:
+      1. 只写动过的那一支(其余支不落盘 —— 换版本时未动过的支仍能自动补尾/收新项);
+      2. 层键集合与校验器认的 _CTX_BRANCH_KEYS / _CTX_LAYER_KEYS 逐字一致;
+      3. 整份布局过 validate_config 零错误;
+      4. 语义四项: 隐藏留槽位 / 跨层双向 / 用户线 token 形如 sep:uN / 同层换位生效。
+    """
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_CTX_WRITE_PROBE, _CTX_MENU_JS, _CTX_CUSTOM_JS],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"定制面板写路径探针跑挂: {proc.stderr.strip()}"
+    rep = json.loads(proc.stdout.strip().splitlines()[-1])
+    lay = rep["layout"]
+
+    assert list(lay) == ["member"], f"面板只动了一支却写了 {sorted(lay)} —— 未动过的支不该落盘(会冻住它们的默认布局)"
+
+    from auto_qb.config.validation import validate_config
+    from auto_qb.config.validation.sections import _CTX_BRANCH_KEYS, _CTX_LAYER_KEYS
+
+    assert set(rep["topKeys"]) == _CTX_BRANCH_KEYS, (
+        f"面板写的支级键 {rep['topKeys']} != 后端认的 {sorted(_CTX_BRANCH_KEYS)} —— "
+        "两端各认一套键: 保存会 400(或更糟: 校验放宽后存进读不出来的键)"
+    )
+    assert set(rep["subKeys"]) == _CTX_LAYER_KEYS, f"面板写的次级键 {rep['subKeys']} != 后端认的 {sorted(_CTX_LAYER_KEYS)}"
+    assert validate_config({"config": {"web": {"ctx_menu": lay}}}) == [], ("面板真写路径产出的布局过不了后端校验 —— 用户点得动、保存被拒(或反过来)")
+
+    member = lay["member"]
+    assert "info" in member["hidden"] and "info" in member["order"], "隐藏项必须留在 order 里(槽位保留, 勾回来才归位)"
+    assert "sep:d2" in member["hidden"] and "sep:d2" in member["order"], "默认线隐藏同款留槽位"
+    assert "rename" not in member["order"] and "rename" in member["sub"]["order"], "跨层移动没有双向生效(一级 -> 次级)"
+    assert rep["userSeps"] == ["sep:u1"], f"用户线 token 不合 sep:uN 口径: {rep['userSeps']}"
+    assert member["order"][0] == "pause", f"同层 ↑↓ 换位没生效: {member['order'][:3]}"
 
 
 def test_ctx_menu_wiring():

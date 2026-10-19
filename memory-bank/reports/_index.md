@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-20-0307] [右键菜单自定义布局 改版报告](26-10-20-0307-report-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
 - [26-10-18-1300] [免重启整组迁移 A/C 路线实测验证](26-10-18-1300-report-group-relocate-restart-free-verified.html) — `group-relocate-restart-free-verified`
 - [26-10-18-0826] [文件丢失+设定位置恢复机制验证](26-10-18-0826-report-missing-files-setlocation-recovery.html) — `missing-files-setlocation-recovery`
 - [26-10-18-0818] [免重启整组迁移方案研究](26-10-18-0818-report-group-relocate-restart-free.html) — `group-relocate-restart-free`

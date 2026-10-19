@@ -14,7 +14,6 @@
 
 ## Open
 
-- [26-10-20-0024] [WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划](26-10-20-0024-plan-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
 - [26-10-19-2341] [WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)](26-10-19-2341-plan-webui-dialog-tone-color.html) — `webui-dialog-tone-color`
 - [26-10-18-1604] [免重启整组迁移(A/C)分步实施计划](26-10-18-1604-plan-group-relocate-restart-free.html) — `group-relocate-restart-free`
 - [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
@@ -26,6 +25,7 @@
 
 ## Done
 
+- [26-10-20-0024] [WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划](26-10-20-0024-plan-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
 - [26-10-19-2206] [站点问题改色表达与 chip 图标收口](26-10-19-2206-plan-webui-site-chip-color.html) — `webui-site-chip-color`
 - [26-10-19-2007] [WEBUI 站点列状态提醒与逐目标汇报回执](26-10-19-2007-plan-webui-site-alerts.html) — `webui-site-alerts`
 - [26-10-18-2013] [WEBUI 选中摘要: 种子个数 + 合计/实际占用大小](26-10-18-2013-plan-webui-selection-size-summary.html) — `webui-selection-size-summary`
