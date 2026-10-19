@@ -1324,6 +1324,28 @@ window.CE_FIELD_BASE = {
     set(value) {
       this.ce.cfgSetPath(this.path, value);
     },
+    /* 密码字段的写回(2026-10-20 报障「点进常规就显示有改动还没保存」)
+     *
+     * 现象: 进设置页「常规」分区, 没碰任何控件, actbar 已经是「有改动还没保存」, 放弃改动一轮
+     * 回来照样复现。根因不在设置页自己的逻辑 —— 密码框被包成「用户名 + 密码」的表单形状
+     * (见 xtpl.html 密码分支, 为消 Chrome 两条可访问性警告), 浏览器 / 密码管理器会把它当
+     * **登录表单**, 把同源(登录页)保存的凭据**自动填**进来, 并在**未聚焦**时派发 input 事件;
+     * 原实现 @input=set() 把自动填充的值原样写进配置树 ⇒ 脏标记凭空变真(实测: 一个未聚焦
+     * input 事件即翻真), 而框里显示的是掩码, 用户看不出改的是哪一项。
+     *
+     * 判据 = 事件到达时该框**是不是焦点**: 自动填充发生在未聚焦时(页面加载 / 后台), 而真实
+     * 键入、粘贴、密码管理器下拉选取都必然先聚焦 —— 未聚焦一律不写树, 并把显示拉回树里的值
+     * (否则界面与树各说各话)。模板侧配 autocomplete="new-password" 从源头劝退凭据填充, 本
+     * 守卫兜住忽略 autocomplete 的扩展类工具(Bitwarden / 1Password 等)。
+     */
+    setSecret(ev) {
+      const el = ev.target;
+      if (document.activeElement !== el) {
+        el.value = this.textValue();
+        return;
+      }
+      this.ce.cfgSetPath(this.path, el.value);
+    },
     setBool(value) {
       this.ce.cfgSetBool(this.path, value);
     },

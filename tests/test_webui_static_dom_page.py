@@ -31,6 +31,7 @@
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
+- test_frontend_password_field_ignores_autofill: 密码框的浏览器/密码管理器自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」)—— 模板密码分支须 autocomplete=new-password 且写回走 setSecret, setSecret 须按「是否焦点」判据(未聚焦不写树并回填显示)
 """
 import base64
 import os
@@ -1081,6 +1082,42 @@ def test_frontend_keyed_list_toggle_deletes_key_when_emptied():
     assert "cfgDelPath(this.path)" in body, ("toggleKey 取消最后一项时未删键 —— 写空列表会让脏标记消不掉, 且保存被后端「必须是非空列表」拒")
     assert re.search(r"if \(list\.length\) this\.ce\.cfgSetPath\(this\.path, list\);",
                      body), ("toggleKey 的 cfgSetPath 未挂长度守卫 —— 空列表会原样写回树(见 cfgItemRemove 的同口径写法)")
+
+
+def test_frontend_password_field_ignores_autofill():
+    """密码框的自动填充不得写进配置树(2026-10-20 报障「点进常规就显示有改动还没保存」, 静态防回潮)
+
+    现象: 进设置页「常规」分区, 没碰任何控件, actbar 已显示「有改动还没保存」; 放弃改动再来一遍
+    照样复现。根因: 密码框被包成「用户名 + 密码」的表单形状(为消 Chrome 的两条可访问性警告),
+    浏览器 / 密码管理器把它当登录表单, 把同源(登录页, autocomplete=current-password)保存的凭据
+    **自动填**进来, 并在**未聚焦**时派发 input 事件 —— 原 @input="set()" 把自动填充的值原样写进
+    配置树, 脏标记凭空变真, 而框里显示的是掩码, 用户看不出改的是哪一项(实测: 未聚焦派发一次
+    input, cfgDirty 立即为真; 加守卫后仍为假, 而聚焦后键入照旧写树)。
+
+    钉三件, 缺一件都复发:
+      ① 模板密码分支必须 autocomplete="new-password" —— 从源头劝退凭据自动填充;
+      ② 模板必须走 setSecret($event), 不得直连 set() —— 直连就是把自动填充当用户编辑;
+      ③ setSecret 必须按「是否焦点」判据: 未聚焦不写树并回填显示值, 聚焦才写。
+    """
+    for skin in _UI_ALL:
+        html = _ui_aggregate(skin)
+        m = re.search(r'<form v-if="f\.kind === \'password\'".*?</form>', html, re.S)
+        assert m, f"{skin} 找不到密码字段分支(改名/挪走了? 同步本守阵)"
+        branch = m.group(0)
+        assert 'autocomplete="new-password"' in branch, (
+            f"{skin} 的密码框缺 autocomplete=\"new-password\" —— 浏览器会把同源登录页保存的凭据自动填进来, "
+            "未聚焦的 input 事件会把密码写进配置树(脏标记凭空变真)"
+        )
+        assert 'setSecret($event)' in branch, (f"{skin} 的密码框写回未走 setSecret —— 自动填充会被当成用户编辑写进配置树")
+        assert "set($event.target.value)" not in branch, (f"{skin} 的密码框直连 set() —— 自动填充造脏的根因(2026-10-20 报障)原样复发")
+
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    m2 = re.search(r"\n    setSecret\(ev\) \{(.*?)\n    \},", editor, re.S)
+    assert m2, "config_editor.js 的 CE_FIELD_BASE 找不到 setSecret(ev)(改名或挪走了? 同步本守阵)"
+    body = m2.group(1)
+    assert "document.activeElement" in body, ("setSecret 缺焦点判据 —— 未聚焦的自动填充(页面加载/密码管理器)会照旧写树, 脏标记凭空变真")
+    assert "el.value" in body and "return;" in body, ("setSecret 未聚焦时必须把显示拉回树值再返回(否则界面显示自动填充值、树里还是掩码, 两套值)")
+    assert "cfgSetPath" in body, "setSecret 缺写树分支 —— 用户真实键入会失效"
 
 
 def test_frontend_flatten_skips_hidden_fields():

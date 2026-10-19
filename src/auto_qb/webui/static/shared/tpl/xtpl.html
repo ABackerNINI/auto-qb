@@ -146,13 +146,19 @@
           <template v-else>
             <!-- 密码字段: Chrome 要求密码控件处于 <form> 内且表单带 (可隐藏的) 用户名字段, 否则控制台报
                  两条可访问性警告。form 用 display:contents 不生成盒子, 控件仍作 .hb-ct 的 flex 子项参与
-                 布局; 提交无实际语义, preventDefault 兜底。非密码字段仍渲染裸 input -->
+                 布局; 提交无实际语义, preventDefault 兜底。非密码字段仍渲染裸 input。
+                 !自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」): 这个表单形状 +
+                 同源登录页(autocomplete=current-password) 会让浏览器/密码管理器把保存的凭据**自动填**进
+                 密码框, 并在**未聚焦**时派发 input —— 原 @input=set() 把密码原样写进树, 脏标记凭空变真,
+                 而框里显示的是掩码, 用户看不出改了什么。故 ①autocomplete="new-password" 从源头劝退凭据
+                 填充; ②写回改走 setSecret(非焦点事件一律不写, 见 config_editor.js) -->
             <form v-if="f.kind === 'password'" style="display:contents" @submit.prevent>
               <input type="text" name="username" autocomplete="username" value="auto-qb" tabindex="-1"
                      aria-hidden="true" style="display:none">
               <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
-                     type="password" :value="textValue()" :placeholder="sitePlaceholder()" :disabled="readonly"
-                     @input="set($event.target.value)">
+                     type="password" autocomplete="new-password"
+                     :value="textValue()" :placeholder="sitePlaceholder()" :disabled="readonly"
+                     @input="setSecret($event)">
             </form>
             <input v-else class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
                    type="text" :value="textValue()"

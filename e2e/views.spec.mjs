@@ -255,6 +255,81 @@ for (const skin of SKINS) {
       /* 旧脚本收尾的「清位置偏好 + 回辅种页」不再需要 —— 每 test 独立 context(D4), 天然隔离。 */
     });
 
+    /* 2026-10-20 报障「点进常规就显示有改动还没保存」: 密码框被包成「用户名 + 密码」的表单形状,
+     * 浏览器 / 密码管理器会把它当登录表单, 把同源(登录页)保存的凭据自动填进来, 并在**未聚焦**时
+     * 派发 input。原实现 @input=set() 把自动填充的值写进配置树 ⇒ 脏标记凭空变真, 而框里是掩码,
+     * 用户看不出改了什么。本用例按浏览器真实行为复现(未聚焦赋值 + 派发 input), 钉住「不写树 +
+     * 显示回填」, 并对照「聚焦后键入照旧写树」防止守卫把正常编辑一起挡掉。 */
+    test('设置-常规: 密码框被自动填充不得造脏(未聚焦 input 不写树)', async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+
+      await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-grid .hb-card').first().click(); // 第一个分区 = 常规
+      const actbar = page.locator('.hb-actbar');
+      await expect(actbar).toContainText('已与磁盘同步', { timeout: 20_000 });
+
+      const pw = page.locator('.hb-row input[type=password]').first();
+      await expect(pw).toBeVisible();
+      await expect(pw).toHaveAttribute('autocomplete', 'new-password'); // 源头劝退保存凭据的填充
+      const before = await pw.inputValue(); // 树里的值(掩码)
+
+      /* 模拟浏览器 / 密码管理器的自动填充: 目标框**未聚焦**, 直接赋值并派发 input(Chromium
+       * 与常见密码管理器都走这条)；这是人工注入的浏览器行为, 没有 DOM 之外的 UI 路径可取。 */
+      await pw.evaluate((el) => {
+        el.value = 'autofilled-secret';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await expect(actbar).toContainText('已与磁盘同步');
+      await expect(actbar.locator('.hb-btn.primary')).toBeDisabled();
+      await expect(pw).toHaveValue(before); // 显示回填成树值, 不留自动填充的残影
+
+      /* 对照: 真实键入(先聚焦)必须照旧写树 —— 守卫不能把正常编辑也挡了 */
+      await pw.click();
+      await pw.fill('typed-by-user');
+      await expect(actbar).toContainText('有改动还没保存');
+    });
+
+    /* 2026-10-20 用户连报「HR 在线核实设置页也有同样的问题」: 该页唯一的密码框是
+     * config.hr_check.channel.token(扩展端点密钥), 与常规页共用**同一个** hub-field 密码分支。
+     * 桩配置里没有 hr_check 段(整块默认关闭, 行不渲染), 故按仓库既有手法(page.route 注入桩态)
+     * 现补一份带 channel.token 的配置树 —— 钉住「同一守卫对 HR 页也生效」; 以后若给 HR 换专用
+     * 控件/专用写回, 这条会直接红。 */
+    test('设置-HR 在线核实: 端点密钥同样不被自动填充写脏', async ({ page, request }) => {
+      collectRuntimeErrors(page);
+      const conf = await (await request.get(`${BASE_URL}/api/config`)).json();
+      const tree = conf.tree;
+      tree.config.hr_check = {
+        enabled: 'true',
+        channel: { enabled: 'true', port: '0', token: "********", extension_id: '' },
+      };
+      await page.route('**/api/config', (route) =>
+        route.fulfill({ json: { tree, path: '(e2e)', masked: true, mask_sentinel: '***' } }));
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-card', { hasText: 'HR 在线核实' }).first().click();
+      const actbar = page.locator('.hb-actbar');
+      await expect(actbar).toContainText('已与磁盘同步', { timeout: 20_000 });
+
+      const pw = page.locator('.hb-row input[type=password]').first();
+      await expect(pw).toBeVisible();
+      await expect(pw).toHaveAttribute('autocomplete', 'new-password');
+      const before = await pw.inputValue();
+
+      await pw.evaluate((el) => {
+        el.value = 'autofilled-secret';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await expect(actbar).toContainText('已与磁盘同步');
+      await expect(pw).toHaveValue(before);
+      await expect(actbar.locator('.hb-btn.primary')).toBeDisabled();
+    });
+
     test('轮询间隔按种子量分档(≤1000→1500 / 1000~3000→2000 / >3000→3000)', async ({ page }) => {
       collectRuntimeErrors(page);
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
