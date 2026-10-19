@@ -131,6 +131,11 @@ window.AQB_FEEDBACK = {
                            // 复用 modal-details 范式; null = 不渲染)
         cls: "",           // 附加类名(按对话框定制宽度/形态, 如重命名走 rename-dialog 宽档);
                            // 空 = 不附加 —— 既有全部对话框零变化(popovers.html 类绑定并入)
+        tone: "",          // 语义等级(弹窗语义配色分级, 计划 26-10-19-2341): "" | "error" | "warn";
+                           // 空 = 由 danger 派生(danger→error, 否则 warn) —— 派生值与现状着色一致,
+                           // 故既有全部调用点零变化; 只在 _openModal 单点派生, 不各写各的
+        strip: false,      // 标题区警示条形态(-soft 底 + 左侧 3px 色条 + 圆角); false = 既有框外观
+                           // 零变化 —— 仅删除确认框与跳检预检框显式开启(范围守恒 D7)
       };
     },
     confirmDialog(title, body, opts = {}) {
@@ -175,12 +180,17 @@ window.AQB_FEEDBACK = {
     },
     _openModal(cfg) {
       if (this.modal.visible) this.resolveModal(false);  // 单例: 上一个悬空 Promise 先结算为取消
+      /* 语义等级派生单点(计划 26-10-19-2341): 显式 tone 优先, 缺省按 danger 推导 ——
+       * danger→error(现状就是红)、否则 warn(现状就是琥珀), 两种推导都与既有着色一致,
+       * 故 17 处既有调用点渲染结果零变化。派生只此一处: 若分散到各调用点, 新增对话框
+       * 极易漏传而退化成无色。 */
+      const tone = cfg.tone || (cfg.danger ? "error" : "warn");
       return new Promise((resolve) => {
         this._modalResolve = resolve;
         // 模态身份戳(issue 26-10-06-0028 F1-01 单点): 每开一框自增一次 mid, 随框存进
         // this.modal —— 「单例 modal + 异步落框」形态的落袋守卫统一走 _modalIsCurrent,
         // 防迟到异步回执把上一框的结果写进无关弹窗
-        this.modal = { ...this._modalInit(), ...cfg, visible: true, mid: (this._modalSeq = (this._modalSeq || 0) + 1) };
+        this.modal = { ...this._modalInit(), ...cfg, tone, visible: true, mid: (this._modalSeq = (this._modalSeq || 0) + 1) };
         this.$nextTick(() => {
           // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput;
           // 确认类(计划 26-09-28-0354 §08): 默认焦点在「确定」钮 —— Enter 即确认(按钮原生行为),

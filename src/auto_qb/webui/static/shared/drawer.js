@@ -323,11 +323,14 @@ window.AQB_DRAWER = {
       // 固定警示区(plan §03 callout: case 3 不代表没有代价): 统计清零 / 未哈希校验 /
       // 无参考高风险 / HR 在管(D5) —— 进框即显示, 与分流结果并列不互斥
       // (旧 danger 确认框文案区里的警示迁入于此)
+      // tone: "warn"(计划 26-10-19-2341): 这 4 行写的是 #i-warn(警告图标), 但此前被通用的
+      // .modal-detail-row .ico{color:var(--fg-dim)} 一律压成灰 —— 「case 3 不代表没有代价」
+      // 这句 design intent 在视觉上一直是缺席的, 行级标 tone 才把它找回
       const warnRows = [
-        { icon: "#i-warn", label: "统计清零", value: "本地统计(上传/下载量、做种时间)将被清空", wide: true },
-        { icon: "#i-warn", label: "未哈希校验", value: "数据未经哈希校验", wide: true },
-        { icon: "#i-warn", label: "无参考", value: "无参考对照的跳检属高风险操作", wide: true },
-        { icon: "#i-warn", label: "HR 在管", value: "未放行的 HR 种子: 做种时间锚点会倒退、超额线(3×)推迟", wide: true },
+        { icon: "#i-warn", tone: "warn", label: "统计清零", value: "本地统计(上传/下载量、做种时间)将被清空", wide: true },
+        { icon: "#i-warn", tone: "warn", label: "未哈希校验", value: "数据未经哈希校验", wide: true },
+        { icon: "#i-warn", tone: "warn", label: "无参考", value: "无参考对照的跳检属高风险操作", wide: true },
+        { icon: "#i-warn", tone: "warn", label: "HR 在管", value: "未放行的 HR 种子: 做种时间锚点会倒退、超额线(3×)推迟", wide: true },
       ];
       const p = this._openModal({
         title: n > 1 ? "批量跳检(跳过校验重加)" : "跳检(跳过校验重加)",
@@ -337,6 +340,12 @@ window.AQB_DRAWER = {
         danger: true,
         icon: "#i-bolt",
         wide: true,          // 原因/名称行宽松可读(与删除确认框同形态)
+        // 语义配色分级(计划 26-10-19-2341): 跳检有代价但可重来 → warn 档(与不可逆的删除拉开
+        // 一档); 整框 tone 不随预检结果升级 —— 升级由 verdict 行级 is-error 表达。这样取舍
+        // 一半是被 T24 逼的: _skipPrecheck 六分支被逐语句等值断言钉死, 加一行就红, 故派生
+        // 只能落在构造参数里
+        tone: "warn",
+        strip: true,
         okDisabled: true,    // 进框即禁用: 预检回执前无任何可执行钮(强制必须先看到赌注)
         busy: true,
         verdict: warnRows,
@@ -373,12 +382,12 @@ window.AQB_DRAWER = {
           rows = this._skipVerdictRows(results);
         } else {
           degraded = true;
-          rows = [{ icon: "#i-warn", label: "预检失败", value: `${r.ok ? "回执缺少预检数据" : r.error}, 后端闸门仍会在执行时拦截`, wide: true }];
+          rows = [{ icon: "#i-warn", tone: "warn", label: "预检失败", value: `${r.ok ? "回执缺少预检数据" : r.error}, 后端闸门仍会在执行时拦截`, wide: true }];
         }
       } catch (e) {
         if (e.auth) return;  // 401 已由 _logout 收口(modal 一并清空), 无需也不得再动
         degraded = true;
-        rows = [{ icon: "#i-warn", label: "预检失败", value: `${e.message}, 后端闸门仍会在执行时拦截`, wide: true }];
+        rows = [{ icon: "#i-warn", tone: "warn", label: "预检失败", value: `${e.message}, 后端闸门仍会在执行时拦截`, wide: true }];
       }
       // 迟到回执 / 框已关 / 已被新框取代: 不落袋(防旧结果驱动新框的按钮)。seq 复核跳检
       // 代际, 身份戳复核弹窗本身(F1-01 守卫单点 ui_feedback._modalIsCurrent) —— 取消跳检框
@@ -423,6 +432,8 @@ window.AQB_DRAWER = {
       if (results.length > 1) {
         rows.push({
           icon: "#i-select-all",
+          // 计数行按最坏结果取档: 有禁止→error, 有需强制→warn, 全 ok→ok(计划 26-10-19-2341)
+          tone: blocked.length ? "error" : force.length ? "warn" : "ok",
           label: "预检",
           value: `可跳检 ${ok.length} / 需强制 ${force.length} / 禁止 ${blocked.length}`,
         });
@@ -438,6 +449,8 @@ window.AQB_DRAWER = {
           const shown = g.names.slice(0, 5);  // 组内名称展示上限 5 个
           rows.push({
             icon: g.cls === "blocked" ? "#i-x-circle" : "#i-hourglass",
+            // 「禁止」此前与「需强制」共用同一个灰 —— 硬闸语义没在视觉上表达出来
+            tone: g.cls === "blocked" ? "error" : "warn",
             label: `${g.cls === "blocked" ? "禁止" : "需强制"} · ${SKIP_GATE_LABELS[g.gate] || g.gate} ×${g.names.length}`,
             value: shown.join(", ") + (g.names.length > shown.length ? ` 等 ${g.names.length} 个` : ""),
             wide: true,
@@ -446,11 +459,12 @@ window.AQB_DRAWER = {
       } else {
         const reasons = (results[0] && results[0].reasons) || [];
         if (!reasons.length) {
-          rows.push({ icon: "#i-check-circle", label: "预检", value: "前置条件全部满足, 可跳检" });
+          rows.push({ icon: "#i-check-circle", tone: "ok", label: "预检", value: "前置条件全部满足, 可跳检" });
         } else {
           for (const x of reasons) {
             rows.push({
               icon: x.cls === "blocked" ? "#i-x-circle" : "#i-hourglass",
+              tone: x.cls === "blocked" ? "error" : "warn",
               label: x.cls === "blocked" ? "禁止" : "需强制",
               value: x.text,
               wide: true,

@@ -153,7 +153,9 @@ window.AQB_DELETE = {
       const risk = this._hrRiskOf(members);
       if (risk) {
         details.push({
-          icon: "#i-warn", label: "HR 风险", wide: true,
+          // tone(计划 26-10-19-2341): HR 风险行是最后一道防误删闸门, 行级标 error ——
+          // 此前与"目标/成员/站点"等中性行共用同一个灰, 点名被视觉抹平
+          icon: "#i-warn", label: "HR 风险", wide: true, tone: "error",
           value: `${risk.count} 个仍在 HR 管束(${risk.srcs}): ${risk.names}${risk.more}，删除可能导致站点 H&R 惩罚`,
         });
       }
@@ -292,6 +294,11 @@ window.AQB_DELETE = {
         cancelText: "取消",
         danger: true,
         icon: "#i-trash-x",
+        // 语义配色分级(计划 26-10-19-2341): 删除不可逆 → error 档 + 标题区警示条。
+        // tone 本可由 danger 派生得同一结果, 此处显式写死 —— 免日后调整 danger 语义时
+        // 把删除框悄悄降级而无人察觉; strip 是「范围内仅删除/跳检两框」开启的警示条开关(D7)
+        tone: "error",
+        strip: true,
       });
     },
     /* 删除前汇报编排已被 _reannounceAll 取代(FX-16: 右键/批量/整集/整剧 四条入口统一走

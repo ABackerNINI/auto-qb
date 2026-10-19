@@ -325,6 +325,40 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
 .modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
+/* ───────── 弹窗语义配色分级(计划 26-10-19-2341) ─────────
+   三组规则同住一处便于整体审阅与成对迁移; 颜色一律引状态色令牌, 不复制色值。
+   基线规则组在 components.css(.modal-title / .modal.danger .modal-title .ico)。 */
+/* ① 框级 tone: 由 _openModal 单点派生(error/warn), 只染标题图标与标题文字 —— 派生值与既有着色
+   一致 ⇒ 既有对话框零变化。按钮(.bt.danger-solid)不在本组规则内: 按钮表达「这个动作有后果」,
+   标题 tone 表达「整框语境等级」, 两层语义不合并 */
+.modal.tone-error .modal-title > .ico, .modal.tone-error .modal-title > span { color: var(--error); }
+.modal.tone-warn  .modal-title > .ico, .modal.tone-warn  .modal-title > span { color: var(--warn); }
+/* ② 标题区警示条(仅 strip:true 的框 —— 本轮只有删除确认框与跳检预检框): -soft 底 + 左侧 3px 色条。
+   色条走 inset shadow 而非 border-left —— 不占布局宽度, 避开 .modal-title 的 flex 排列与弹窗
+   overflow-y:auto 下的负边距溢出 */
+.modal.strip .modal-title { padding: 7px 11px; border-radius: var(--radius-sm); }
+.modal.strip.tone-error .modal-title { background: var(--error-soft); box-shadow: inset 3px 0 0 var(--error-line); }
+.modal.strip.tone-warn  .modal-title { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn-line); }
+/* ③ 行级语义: 只染 ico + label, value 保持 --fg-soft 中性以保长句可读性。作用域收在 .is-* 子类里,
+   不动全局 .modal-detail-row .ico —— 未标 tone 的行与共用同一行式范式的其它弹窗
+   (限速/移动/重命名/分享率)零变化 */
+.modal-detail-row.is-warn  > .ico, .modal-detail-row.is-warn  > .d-label { color: var(--warn); }
+.modal-detail-row.is-error > .ico, .modal-detail-row.is-error > .d-label { color: var(--error); }
+.modal-detail-row.is-ok    > .ico, .modal-detail-row.is-ok    > .d-label { color: var(--green); }
+/* ③ 框级兜底(仅 strip 框 —— 本轮只有删除确认框与跳检预检框): 未自标 tone 的行(删除框的
+   目标/成员/站点/保存路径/总大小, 跳检框的 busy 行)继承整框 tone —— 「整框已是危险语境、
+   下面一整片明细行列图标全灰」正是本轮要修的割裂。注意 value(长文本)不继承, 保持中性可读性。
+   :where() 把选择器特异性压到 0-2-0 与基础置灰规则同级 ⇒ 靠源序胜出; 而上面 ② 的行级 .is-*
+   例外值特异性更高(0-3-0), 不被兜底覆盖 —— 「默认继承 / 行自报 / 强调加底」三级层次由此成立 */
+:where(.modal.strip.tone-error) .modal-detail-row > .ico,
+:where(.modal.strip.tone-error) .modal-detail-row > .d-label { color: var(--error); }
+:where(.modal.strip.tone-warn) .modal-detail-row > .ico,
+:where(.modal.strip.tone-warn) .modal-detail-row > .d-label { color: var(--warn); }
+/* ④ 强调行: error 行(删除框的 HR 风险点名 / 跳检框的「禁止」行)现在身处一整片继承同色的行里,
+   光靠颜色已经拉不开层级 —— 追加淡底 + 左侧色条。左右负 margin 抵消 .modal-details 的内边距,
+   背景铺到详情框边而不溢出(该容器固有 10px 12px padding, -6px 在内边距内) */
+.modal-detail-row.is-error { background: var(--error-soft); border-radius: 4px;
+  box-shadow: inset 2px 0 0 var(--error-line); padding: 2px 6px; margin: 0 -6px; }
 .modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; color: var(--fg-soft); font-weight: 500; }
 .modal-detail-row.wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;

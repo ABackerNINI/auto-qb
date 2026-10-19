@@ -114,8 +114,10 @@
     <div v-if="modal.visible" class="modal-mask"
          @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(resolveModal, false)">
       <!-- cls(2026-10-19): 按对话框定制形态的附加类名(如重命名 rename-dialog 宽档);
-           空串不附加任何类, 既有对话框零变化 -->
-      <div class="modal" :class="[{ danger: modal.danger, wide: modal.wide }, modal.cls]" role="dialog" aria-modal="true">
+           空串不附加任何类, 既有对话框零变化
+           tone/strip(2026-10-19, 计划 26-10-19-2341): tone 由 _openModal 单点派生故恒非空,
+           strip 仅显式开启的框(删除确认/跳检预检)挂载; 数组项取假值时 Vue 自动丢弃 -->
+      <div class="modal" :class="[modal.cls, { danger: modal.danger, wide: modal.wide, strip: modal.strip }, modal.tone && 'tone-' + modal.tone]" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16">
             <use :href="modal.icon || (modal.danger ? '#i-warn' : '#i-info')"></use>
@@ -131,7 +133,7 @@
              modal-details 行式范式(单行省略 + title 全文), 空 = 不渲染。 -->
         <p v-if="modal.busy" class="modal-body">正在检查前置条件…</p>
         <div v-if="modal.verdict && modal.verdict.length" class="modal-details">
-          <div v-for="(d, i) in modal.verdict" :key="i" class="modal-detail-row" :class="{ wide: d.wide }">
+          <div v-for="(d, i) in modal.verdict" :key="i" class="modal-detail-row" :class="[d.tone && 'is-' + d.tone, { wide: d.wide }]">
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
@@ -143,7 +145,7 @@
              R10-13: 长值一律"单行省略 + title 全文 + 复制按钮"(wide 行例外: 值独占一行冡 3 行),
              不再无限换行把弹窗顶高; 复制按钮对所有行开放(不再限 wide)。 -->
         <div v-if="modal.details" class="modal-details">
-          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row" :class="{ wide: d.wide }">
+          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row" :class="[d.tone && 'is-' + d.tone, { wide: d.wide }]">
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <!-- d.hint(2026-10-18): 可选的口径说明(如删除框"实际占用"行的去重解释);

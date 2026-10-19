@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-dialog-tone-color">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-19-2341">
-<meta name="doc-updated" content="26-10-20-0025">
+<meta name="doc-updated" content="26-10-20-0128">
 <style>
   :root {
     --bg: #10151a;
@@ -81,7 +81,7 @@
 <h1>WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)</h1>
 <p class="lede">给通用弹窗引入 <code>tone</code> 三级语义分级与可选的警示条形态, 让「不可逆的删除」与「有代价的跳检」在视觉上一眼分开, 并解冻被一条全局规则抹平成灰的警示行图标 —— 不新增任何色值, 不动既有 DOM 结构与类名。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-19-2341 · <b>doc-updated</b> 26-10-20-0025 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-19-2341 · <b>doc-updated</b> 26-10-20-0128 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-10-19 会话 —— 用户反馈「WEBUI 删除弹窗/跳检弹窗图标文字无颜色, 警告/禁止信息需要醒目」; 经 grilling 首轮 Q1~Q5(语义分档 / 染色承载面 / 波及范围 / tone 字段机制 / 亮色主题对比度)全部按推荐项拍板, Q6 拍板「先出方案、暂不改代码」
 </div>
 
@@ -298,6 +298,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-19-2341</span> 初版 —— 来自当日会话的用户反馈「删除/跳检弹窗图标文字无颜色、警告需醒目」; grilling 首轮 D1~D5 + D9 拍板, D6~D8 留待二次确认。现状与令牌取值均逐个文件核对到行号, 测试影响面覆盖 <code>tests/test_webui_static_dom_panel.py</code> T23/T24 与 <code>e2e/menus.spec.mjs</code> W3。</li>
   <li><span class="tag">R1 · 26-10-20-0025</span> D6-D8 按推荐拍板并回填 §06(警示条不承载新文案 / 只做种子删除框+跳检框 / 不做 info 蓝档), §05 清空; D9 更新为方案已批准、doc 先行提交后按 S1-S5 实施</li>
+  <li><span class="tag">R2 · 26-10-20-0128</span> 目视反馈迭代(删除框其余图标仍灰): 加框级兜底 :where(.modal.strip.tone-*) 让未自标 tone 的行(删除框六行信息行 / 跳检框 busy 行)继承整框 tone, 行级 .is-* 例外值仍盖过; .is-error 行追加 -soft 淡底 + 左侧 2px 色条以维持强调; 层次定型为 默认继承 &lt; 行自报 &lt; 强调加底</li>
 </ul>
 
 </div>

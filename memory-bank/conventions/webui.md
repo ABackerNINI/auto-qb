@@ -64,6 +64,20 @@
 - **双色令牌族**(`--on-accent/--on-accent-ink/--on-error`): 实心 accent/error 底上的前景色, 星图 `:root` 一处 + 棱镜五主题各一处成对声明(亮色主题翻转为白字), 改值必须全处同改 —— 与状态色族同纪律。
 - **存量家族归属**: ce-btn/ce-icon 已退役(守阵 `test_frontend_button_system_paired` 钉零残留); bulk-btn 随批量控制条退役(2026-10-05, 守阵 `test_frontend_bulk_bar_retired` 钉模板/三套 CSS/JS 助手零残留); row-btn/prio-btn 保持紧凑尺寸只并入配色与状态语言; 登录页与页签/筛选 chip 不入族(各自视觉语言), 设置页 hb-*(Ash Thorp)保留其形。
 
+## WEB UI 弹窗语义配色分级 (2026-10-19, 计划 26-10-19-2341)
+
+通用确认框(`shared/tpl/popovers.html` 的单例 modal)按**动作后果等级**染色, 不再只有"危险/不危险"一个布尔维度:
+
+- **框级 `modal.tone`**: `error`(不可逆, 如删除) / `warn`(有代价可重来, 如跳检)。**派生单点在 `_openModal`** —— 显式 `cfg.tone` 优先, 缺省 `danger→error`、否则 `warn`; 两种推导都与历史着色一致, 故既有调用点零变化。**新对话框不要自己判 danger**, 显式传 tone。
+- **标题区警示条 `modal.strip`**: 缺省 `false` = 外观零变化, 只有**带行式明细清单**的框才开启(落地时仅删除确认框与跳检预检框)。`-soft` 底 + `box-shadow: inset 3px 0 0 <line>` 左侧色条 —— 走 inset 而非 `border-left`, 不占布局宽度, 避开 `.modal-title` 的 flex 排列与弹窗 `overflow-y:auto` 下的溢出。
+- **行级 `row.tone`**: `details` / `verdict` 行对象挂 `tone` → `.is-error` / `.is-warn` / `.is-ok`, **只染 `.ico` + `.d-label`**, value 保持 `--fg-soft` 中性(长句可读性)。**不要改全局 `.modal-detail-row .ico` 的灰** —— 它是共用同一行式范式的中性基线(限速/移动/重命名/分享率都走它); 此前正是这条规则把 `#i-warn` 与「禁止」一并抹平。
+- **未标 tone 的行在 strip 框内继承框级 tone**(2026-10-20 追加): 写在选择器 `:where(.modal.strip.tone-error|warn)` 里 —— `:where()` 把特异性压到 0-2-0, 与基础置灰规则同级、靠**源序**胜出; 行级 `.is-*`(0-3-0)作为例外值因此仍能盖过它。用来消掉「整框已是危险语境、下面一整片明细行图标全灰」的割裂(删除框的 目标/成员/站点/保存路径/总大小、跳检框的 busy 行都属此列)。**无 strip 的框完全不生效**, 故其它弹窗依旧零变化 —— 这是它比"直接放宽基础规则"更适合做兜底的原因。
+- **`is-error` 行额外加淡底 + 左侧 2px 色条**: 上一条的兜底铺开后, error 行与周围同色, 颜色本身已拉不开层级 —— 靠这个让 HR 风险点名 / 跳检「禁止」行仍能跳出来(与 error 文字色同源令牌)。
+- **三级层次由此为: 默认继承(框 tone) < 行自报(`.is-*`) < 强调加底(`.is-error` 独有)**, 越往后越醒目; 新增 popped-out 强调力度时按这个台阶往上加, 别直接全书对/加新色值。
+- **颜色一律引状态色令牌**(`--error/--warn/--green` 及其 `-soft/-line`), 三套 UI + 棱镜五主题均已声明, 不新增色值。
+- **按钮不参与本族**: `.bt.danger-solid` 保持实心红 —— 按钮表达「这个动作有后果」, 标题 tone 表达「整框语境等级」, 两层语义不合并(e2e `menus.spec.mjs` 依赖该类名)。
+- **CSS 落点**: 三组规则各自紧跟本皮肤的基线规则组 —— atlas / console 放 `css/views.css`(框级基线在 `components.css`), prism 放 `css/components.css`。⚠ **atlas `css/components.css` 已满 700 行**, 单 CSS 体量守阵(`test_frontend_template_split_wiring`)卡 ≤700, 追加前先量行数。
+
 ## WEB UI 悬浮提示 .aq-tip (2026-09-28)
 
 全局 tooltip 收敛为自绘单例, **新元素一律继续写原生 `title` 属性**(模板侧零成本接入), 不许再自造浮层:
