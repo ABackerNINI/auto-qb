@@ -25,6 +25,7 @@ import sys
 import time
 
 from ..infra import alias_fs
+from ..infra import file_access
 from ..infra.relocate_journal import (
     acquire_pid,
     journal_path,
@@ -98,25 +99,42 @@ def _qb_process_names() -> tuple:
         return ()
 
 
-def _proc_absent(names: tuple) -> bool:
-    """证一: qB 进程不存在; 进程表读不到 ⇒ False(未证明)"""
+def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
+    """证一: 该端点的 qB 进程不存在; 进程表读不到且无端口证据 ⇒ False(未证明)
+
+    !实例级判定(不再只按全机进程名): 同机可能同时跑着**别的** qB 实例(日常库/测试库),
+    全机名册只要有一个 qbittorrent.exe 就恒「在」, 收尾永不触发(P7 真机实测: 日常实例
+    在跑 ⇒ guardian 心跳正常但永远停在 armed, 三证凑不齐)。口径:
+    - 端点已拒连 ⇒ 该实例没有进程在服务(同机其它 qB 与此无关) ⇒ 证一成立;
+    - 端点仍可连 ⇒ 该实例在服务 ⇒ 证一不成立(此时证二也不成立, 双证同向);
+    - 无端口可判(port=0) ⇒ 退回全机名册(旧行为, 兼容无端口场景)。
+    """
+    if port and _port_refused(host or "127.0.0.1", port):
+        return True
     if not names:
         return False
     return not any("qbittorrent" in n for n in names)
 
 
 def _verify_dst(spec: dict) -> bool:
-    """目标侧数据完整性(文件数 + 大小对齐): 不齐就不删链接(删了就真缺文件了)"""
+    """目标侧数据完整性(文件数 + 大小对齐): 不齐就不删链接(删了就真缺文件了)
+
+    !必须走 file_access(长路径通道): 目录别名存在的理由就是超 MAX_PATH 的组, dst 侧
+    路径同样超长(285 字符组搬到 T 后 ~265 字符) —— 裸 os.path 在这类路径上 OSError,
+    会判成 verify_mismatch 而**永不删链接**(P7 真机实测: 组① 收尾卡在 failed/
+    verify_mismatch, 而组⑤ 短路径组正常 removed)。判不出按不齐处理(保守: 宁可不删)。
+    """
     files = spec.get("files") or []
     if not files:
         return False
     dst = str(spec.get("dst") or "")
+    fa = file_access.get_file_access()
     for rel, size in files:
         p = os.path.join(dst, *[x for x in str(rel).replace("\\", "/").split("/") if x])
         try:
-            if not os.path.isfile(p) or os.path.getsize(p) != int(size):
+            if fa.exists(p) is not True or int(fa.getsize(p)) != int(size):
                 return False
-        except OSError:
+        except Exception:  # noqa: BLE001 - 读不到按不齐处理(保守)
             return False
     return True
 
@@ -171,8 +189,9 @@ def run(
                 write_journal(data_dir, job_id, {"phase": "armed", "pid": os.getpid(), "job_id": job_id})
                 last_hb = now
             names = _qb_process_names()
-            down = _proc_absent(names
-                               ) and _port_refused(str(spec.get("host") or "127.0.0.1"), int(spec.get("port") or 0))
+            _host = str(spec.get("host") or "127.0.0.1")
+            _port = int(spec.get("port") or 0)
+            down = _proc_absent(names, _host, _port) and _port_refused(_host, _port)
             if down:
                 if not down_since:
                     down_since = now

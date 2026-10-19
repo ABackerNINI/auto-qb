@@ -109,6 +109,27 @@ def acquire_pid(data_dir: str, job_id: str) -> bool:
 
 
 def _alive(pid: int) -> bool:
+    """进程是否存活
+
+    !Windows **不能**用 os.kill(pid, 0): Windows 上 os.kill 对非 CTRL_* 信号一律走
+    TerminateProcess —— 探测一次就把在跑的 guardian 杀掉, 随后 acquire_pid 判「已在跑」
+    让新实例退出, 结果谁都没在跑; 巡检再重拉 -> 再杀 -> 自噬循环(P7 真机实测: 日志每
+    1.5s 一条「guardian 心跳过期/重拉」, journal 永远停在 armed)。改走 OpenProcess
+    (PROCESS_QUERY_LIMITED_INFORMATION)+GetExitCodeProcess(STILL_ACTIVE), 纯探测零副作用。
+    """
+    if os.name == "nt":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32
+        handle = k32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong(0)
+            ok = k32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except (OSError, AttributeError):

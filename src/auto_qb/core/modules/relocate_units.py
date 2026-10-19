@@ -280,23 +280,62 @@ class RelocateJob:
     def is_terminal(self) -> bool:
         return self.phase in TERMINAL_PHASES
 
+    @property
+    def scope_covers_dir(self) -> bool:
+        """作用域是否**覆盖整个目录**(目录别名形态才是)
+
+        逐文件链接/直搬的 scope 只是 save_path(平铺内容根)或组自己的内容根 —— 别名只挂在
+        组内文件上, **不会**把落进同目录的别组读写重定向到 T, 故作用域覆盖语义不成立。
+        P7 真机实测(s3 步): 平铺逐文件链接组③ 的 scope = 整个 save_path, 旧实现让
+        scope_hit 把同目录别组(A/B)的组键解析到 T —— job 结束后 _buckets 用 S 键查不到,
+        退化为「仅本次选中成员」→ 单成员 direct 误判(数据被搬走却不建链接, 组裂);
+        finalize_members 同样会把同目录别组一并 setLocation 到 T。两处都靠本谓词收窄。
+        """
+        return (self.plan or {}).get("form") == FORM_DIR_ALIAS
+
     def touches(self, hashes: Sequence[str]) -> bool:
         """本组(这些 hash)是否被该 job 碰过(成员交集)"""
         return bool(set(self.hashes) & set(hashes))
 
     def scope_hit(self, save_path: str, landing: str) -> bool:
-        """落点是否命中该 job 的作用域(src 匹配且 landing 落在 scope 内)"""
-        return _norm(save_path) == _norm(self.src) and _within(self.scope, landing)
+        """落点是否命中该 job 的作用域(src 匹配且 landing 落在 scope 内)
+
+        目录别名: 落在 scope 目录内(含等于)即命中 —— 整条链接重定向整目录。
+        逐文件链接: 只认 landing **恰等于** scope(平铺组的内容根就是 save_path,
+        它自己的成员才该并组), 子目录里的别组不命中。
+        直搬(direct): **恒不命中** —— 没有建任何别名, 作用域不覆盖任何落点(P7 真机:
+        组② 的直搬 job scope = 恶女目录, 旧逻辑把同目录的组① 也解析到 T, 组键漂移后
+        _buckets 查不到组, 误判单成员直搬)。
+
+        形态判据优先 alias_kind(落账字段, 历史/测试构造的 job 可能没有 plan), plan.form 兜底。
+        """
+        if _norm(save_path) != _norm(self.src):
+            return False
+        kind = self.alias_kind or {"dir_alias": "dir", "file_links": "file"}.get((self.plan or {}).get("form"), "")
+        if kind == "dir":
+            return _within(self.scope, landing)
+        if kind == "file":
+            return _norm(landing) == _norm(self.scope)
+        return False
 
     def blocks_relocation(self, hashes: Sequence[str], content_root: str) -> bool:
         """本 job 是否挡住对(这些 hash 组成的)组的再次迁移(§3.6 第 14 行 / S10)
 
-        非终态且(成员相交 **或** 作用域覆盖本次内容根) ⇒ 挡: 链接套链接会让旧 job
-        的收尾失效, 必须先收尾或先撤销。
+        非终态且成员相交 ⇒ 挡(同组再迁, 链接套链接让旧 job 收尾失效, 必须先收尾或先撤销)。
+        作用域覆盖分支**只对目录别名成立**: 目录别名是一条挂在内容根的 junction/symlink,
+        落入该目录的写入会被整体重定向到 T —— 同目录别组此刻再迁, 数据会穿链接搬进旧
+        job 的目标、与收尾语义冲突(P7 真机 S14b 实测: 逐文件链接组③ 的 scope = save_path
+        (平铺内容根), 旧实现把同 save_path 下的无关组 C 一并挡下, 与 §08「多选按组拆开
+        各迁各的」相悖)。逐文件链接只挂在组内文件上、不改变目录形态, 无重定向 hazard,
+        故不适用本分支; direct 单成员组同理(无别名即无链接可套)。
         """
         if self.is_terminal:
             return False
-        return self.touches(hashes) or _within(self.scope, content_root)
+        if self.touches(hashes):
+            return True
+        if (self.plan or {}).get("form") == FORM_DIR_ALIAS:
+            return _within(self.scope, content_root)
+        return False
 
 
 # ---------------------------------------------------------------- 组闸门判定()
@@ -578,8 +617,14 @@ def evaluate_add(facts: AddFacts) -> dict:
             }
 
     # ---- 2/3. 别名作用域 ----
+    # !这里用「落点是否落在作用域目录内」的本地判定, **不用** job.scope_hit: scope_hit 是
+    # 组键解析语义(平铺 job 只认 landing == scope, 见 scope_covers_dir), 而添加预检问的是
+    # 「这次写入会不会被别名带走」—— 文件级别名下, 落点(具体文件路径)在内容根内且同名
+    # 是链接即命中(gate 3 的 landing_is_link 才是真闸门, 本判定只决定提示口径)。
     for job in facts.jobs:
-        if job.is_terminal or not job.scope_hit(facts.save_path, landing):
+        if job.is_terminal:
+            continue
+        if _norm(facts.save_path) != _norm(job.src) or not _within(job.scope, landing):
             continue
         if job.alias_kind == "dir":
             sp = facts.save_path.replace("\\", "/").rstrip("/")
@@ -747,13 +792,18 @@ def finalize_members(job: RelocateJob, members: Sequence[Tuple[str, str, str]]) 
     「当前 save_path == src 且内容根落在 scope 内」的所有成员, mover 已在 dst 故跳过。
     别名期间新加的同内容辅种因此自动纳入 —— 不会留「收尾后新成员留在原地、
     链接已删 ⇒ 缺文件」的坑。
+
+    作用域覆盖分支只对**目录别名**成立(scope_covers_dir): 逐文件链接/直搬的 scope 是
+    平铺 save_path, 覆盖整目录会把同目录别组一并 setLocation 到 T(P7 真机实测, 见
+    scope_covers_dir) —— 那类 job 只收自己的成员(创建时 hashes)。
     """
     out = []
     seen = set()
+    covers = job.scope_covers_dir
     for h, sp, root in members:
         if h == job.mover or h in seen:
             continue
-        if h in job.hashes or (_norm(sp) == _norm(job.src) and _within(job.scope, root)):
+        if h in job.hashes or (covers and _norm(sp) == _norm(job.src) and _within(job.scope, root)):
             seen.add(h)
             out.append(h)
     return tuple(out)

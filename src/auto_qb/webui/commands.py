@@ -142,6 +142,8 @@ RESYNC_COMMANDS = frozenset(
 # (results/summary)经 truth 字段随回执带出(既有 cmd 通道的通用数据位), drain 不得用裸 ok 覆盖。
 # relocate_precheck / relocate_precheck_add(计划 26-10-18-1604 P2): 同为只读 dry-run, 回执由
 # handler 自写; 判定数据经 truth 字段带出(迁移 = {results, summary}, 添加 = 单 item)。
+# relocate_cancel(计划 26-10-18-1604 §3.5.1): 撤销迁移两步走(先回成本、确认后删链接 + 搬回),
+# 回执同样由 handler 自写(cls=confirm 带 cost / cls=ok 带 phase / cls=blocked 带原因)。
 DEFERRED_RECEIPT_COMMANDS = frozenset(
     {
         "reannounce_group",
@@ -153,6 +155,7 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
         "skip_check_precheck",
         "relocate_precheck",
         "relocate_precheck_add",
+        "relocate_cancel",
     }
 )
 
@@ -315,6 +318,7 @@ class WebCommandsMixin:
             "skip_check_precheck": self._cmd_skip_check_precheck,
             "relocate_precheck": self._cmd_relocate_precheck,
             "relocate_precheck_add": self._cmd_relocate_precheck_add,
+            "relocate_cancel": self._cmd_relocate_cancel,
             "super_seeding": self._cmd_super_seeding,
             "force_start": self._cmd_force_start,
             "set_torrent_limits": self._cmd_set_torrent_limits,
@@ -737,6 +741,21 @@ class WebCommandsMixin:
         logger.info(
             f"WEB UI | 添加预检 {name or '<空>'} @ {save_path or '<空>'}: {result['cls']}" +
             (f" -> {result.get('actual_path')}" if result.get("actual_path") else "")
+        )
+
+    def _cmd_relocate_cancel(self, job_id: str = "", confirm: bool = False, cmd_id: str = ""):
+        """WEB UI 命令: 撤销迁移(§3.5.1, 唯一会移动数据的旁支) —— 转发 ctx.relocate.relocate_cancel
+
+        两步同模块口径: confirm 缺省/False 只回成本(cls=confirm, 带 cost: 字节数 + 从哪搬回哪),
+        不碰数据; confirm=True 才删链接 + setLocation(mover, src)。回执形状: truth=模块返回的
+        单 item({cls, cost, job_id, phase} 或 blocked 带 reasons)。
+        """
+        result = self.ctx.relocate.relocate_cancel(job_id or "", cost_confirmed=bool(confirm))
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth=result)
+        logger.info(
+            f"WEB UI | 撤销迁移 {job_id or '<空>'}(确认={bool(confirm)}): {result['cls']}" +
+            (f" | 成本 {result.get('cost', {}).get('bytes')} 字节" if result.get("cost") else "")
         )
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):

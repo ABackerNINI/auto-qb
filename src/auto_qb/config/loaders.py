@@ -90,6 +90,7 @@ def load_qbittorrent_config(spec: dict) -> QbittorrentConfig:
         port=_get(spec, "port", d.port, int),
         username=_get(spec, "username", d.username),
         password=_get(spec, "password", d.password),
+        api_key=_get(spec, "api_key", d.api_key),
     )
 
 

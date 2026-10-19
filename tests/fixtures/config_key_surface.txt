@@ -126,6 +126,7 @@ qb_traffic.raw_window
 qb_traffic.rollup_window
 qb_traffic.sample_interval
 qbittorrent
+qbittorrent.api_key
 qbittorrent.host
 qbittorrent.password
 qbittorrent.port

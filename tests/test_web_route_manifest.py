@@ -82,6 +82,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/skip-check/precheck"),  # 跳检预检只读端点(plan 26-10-05-0314 S2; 403 门控同单发)
     ("POST", "/api/torrents/relocate/precheck"),  # 整组迁移预检只读端点(plan 26-10-18-1604 P2; 403 门控 relocate.enabled)
     ("POST", "/api/relocate/precheck-add"),  # 添加种子落点预检只读端点(计划 26-10-18-1604 §3.6.1; 同一 403 门控)
+    ("POST", "/api/relocate/cancel"),  # 撤销迁移端点(§3.5.1 成本两步; 同一 403 门控; P7 补齐界面入口)
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),
@@ -115,6 +116,7 @@ def test_web_route_manifest_frozen(web_env):
      2026-10-17-0339 S17: 增 1 条 /api/traffic/monitor/relaunch —— 来源卡「立即拉起/重试」;
      2026-10-17-1737 S3: 增 1 条 /api/traffic/monitor/shutdown —— 来源卡「停止工具」代理;
      2026-10-18-1604 P2: 增 2 条整组迁移预检(迁移/添加种子, 只读, 403 门控 relocate.enabled), 82->84)
+     2026-10-18-1604 P7: 增 1 条撤销迁移(§3.5.1 界面入口补齐, 同一 403 门控), 84->85)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

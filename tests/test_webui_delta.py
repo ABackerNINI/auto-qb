@@ -9,6 +9,7 @@
 ## 测试计划(每个测试函数一条)
 - test_timeline_appends_per_publish_and_truncates: 时间线落代/截断 —— 每次发布恰追加一条目(ver 与 group_view_ver 对齐, 本仓 ver 单调), 条目形状 = ver/full/upsert/removed 四键分 torrent/group/show 三桶; 45 次发布后 maxlen=40 截断(最旧 5 条被挤掉)
 - test_same_tick_upsert_removed_cancel: 交叉抵消(R5) —— 同拍同视图 upsert/removed 同键落代前两清(H3 同拍增删净零), 异键照常保留; show 桶在本用例键源(不在剧键映射)下恒空
+- test_group_key_migration_old_removed_new_upsert: 组键迁移待办(P7) —— 重键(旧键解散+新键接替)标本代 full(行级 delta 无法表达, upsert/removed 跨代抵消会吞旧键), 视图无孤儿行且新行建出, 下一拍恢复行级增量
 - test_gate_skipped_round_keys_survive_to_next_gen: 门控跳拍累积(R4) —— 上一版未被取走时 flush 只排空累积不落代, 键集(含组键)并入下一代条目不丢
 - test_full_downgrade_sources_matrix: 五个降级源矩阵(R11) —— config_reload(mark_dirty full=True)/hr_revision(flush 判定点)/shows_pending(归位转换拍)/cross_group(构建期键集增删, 走真 _build_group_view 回传)各自触发 full 代(full 条目键集清空 + 累积器与理由一并清空; hr/cross 均有"下一拍不再 full"的对照); 进程重启 = ver 时间播种 + 时间线/累积器为空, 旧客户端 rid 必然窗外或 rid>ver 全量(R10, 无需显式标记)
 - test_group_removed_key_unresolvable_full: 组行 removed 键推导(R11) —— removed hash 组键查得到且组仍在 -> 组键进 upsert; 组已解散 -> 组键进 removed; 查不到(与"从未归组"不可区分) -> 本代 full 且键集清空
@@ -173,6 +174,47 @@ def test_gate_skipped_round_keys_survive_to_next_gen():
     assert entry["ver"] == rt.group_view_ver
     assert entry["upsert"]["torrent"] == {"H1", "H2"}
     assert entry["upsert"]["group"] == {("R:\\D", )}
+
+
+def test_group_key_migration_old_removed_new_upsert():
+    """P7 回归: 组键迁移(旧键解散/新键接替)走本代 full, 视图无孤儿行
+
+    save_path 变化(迁移动线)或武装重归组(scope 覆盖整 save_path)会让组键**更换**:
+    _leave_group/_assign_to_group 把旧键与新键登记进 store.group_key_migrations。
+    组键更换无法用行级 delta 精确表达(upsert/removed 跨代抵消会把「先 upsert 后
+    removed」的同键两清, 旧行滞留成孤儿), 故排空段直接标 full(与 row_key_unresolvable
+    同口径, 保守正确优先)。本用例只给迁移待办、零 delta_fields(纯重键轮)。
+    """
+    store = _make_store("H1", "H2")
+    K1 = ("R:/Download/Testing", ("Show/e00.mkv", ))
+    K2 = ("H:/Download/Testing-relocated", ("Show/e00.mkv", ))
+    store.groups[K1] = ["H1", "H2"]
+    store.group_sizes[K1] = {"H1": {"Show/e00.mkv": 100}, "H2": {"Show/e00.mkv": 100}}
+    store.member_to_key["H1"] = K1
+    store.member_to_key["H2"] = K1
+    rt = _delta_runtime(store)
+    entry = _publish(rt)  # 基线代: 全量路径建出 K1 行
+    assert any(r["key"] == encode_group_key(K1) for r in rt.group_view), rt.group_view
+    # 重键: K1 解散, 双成员落 K2; 归组路径登记双向待办(零 delta_fields)
+    store.groups.pop(K1)
+    store.group_sizes.pop(K1)
+    store.groups[K2] = ["H1", "H2"]
+    store.group_sizes[K2] = {"H1": {"Show/e00.mkv": 100}, "H2": {"Show/e00.mkv": 100}}
+    store.member_to_key["H1"] = K2
+    store.member_to_key["H2"] = K2
+    store.group_key_migrations.update({K1, K2})
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is True, "组键迁移必须走 full(保守正确优先)"
+    assert store.group_key_migrations == set(), "迁移待办取出即清(单消费点)"
+    keys = {r["key"] for r in rt.group_view}
+    assert encode_group_key(K1) not in keys, "旧键行必须消失(无孤儿行)"
+    assert encode_group_key(K2) in keys, "新键行必须建出"
+    # 下一拍恢复行级增量(理由随落代清空)
+    store.delta_fields = {"H1": frozenset({"dlspeed"})}
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False and entry["upsert"]["group"] == {K2}, entry
 
 
 # ---------- ④ 五个降级源矩阵 ----------

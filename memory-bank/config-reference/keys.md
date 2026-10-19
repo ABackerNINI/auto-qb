@@ -7,7 +7,7 @@
 
 | 键 | 类型/默认 | 说明 |
 |----|-----------|------|
-| `qbittorrent` | 必填 | `{host, port, username, password}` → `http://host:port` |
+| `qbittorrent` | 必填 | `{host, port, username, password, api_key}` → `http://host:port`; `api_key`(qB 5.x Web UI 的 API Key)非空时经 `Authorization: Bearer` 直连, 不走密码登录 |
 | `main_tick` | `"2s"` | **任务线**间隔: 到期任务 + tracker 错误原因预取 + 搜索索引推进(见下方"分层节拍") |
 | `sync_interval` | `"1.5s"` | **同步线**间隔: 只拉 qB 增量刷新快照/事件/分组, **不跑任务**。默认 1.5s 与 qB **服务端**状态刷新节流(`BitTorrent/Session/RefreshInterval`, 默认 1500ms, qB 源码 `sessionimpl.cpp:575`)同量级 —— 比 qB 自身数据粒度更快没有意义(该节流在服务端而非 UI 轮询: 换 `torrents_info` 直查或调快本侧节拍都拿不到更细粒度; evidence: report 26-10-12-2148 §3 R4 的 26-10-13-0441 补证)。大于 `main_tick` 时按 `main_tick` 生效(两条线谁先到就先跑谁)。L0 热重载, 主循环每轮重读 |
 | `state_save_interval` | `"120s"` | 状态周期落盘间隔: 非优雅终止(taskkill/断电/崩溃)时的状态丢失窗口, 优雅退出仍立即落盘; `0` = 关闭(仅优雅退出落盘, 旧行为); 配置端下限 30s 防误配置写放大。L0 热重载 |

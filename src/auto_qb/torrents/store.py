@@ -51,6 +51,7 @@ class TorrentStore:
       - groups:        key=(save_path, 排序文件路径元组) -> [hash...]
       - group_sizes:   key -> {hash: {规范化相对路径: 大小}}
       - member_to_key: hash -> 组 key(O(1) 定位)
+      - group_key_migrations: 组键迁移待办(旧/新键双向登记, WebUI 增量排空消费, P7)
       - state_snapshot: hash -> 上一轮 state_enum(上传转暂停检测)
       - download_conflict_warned: (组key, 冲突类型) 去重集合
       - transitional_missing_skips: 组key -> 连续「.!qB 过渡态」命中次数(仅内存, 见 __init__)
@@ -146,6 +147,14 @@ class TorrentStore:
         # 第三方文件级链接/硬链接组标记(D11 三层之第三层): 识别但**不并组**(组键形态表达不了
         # 任意目标), 供界面标注与迁移闸门拒迁。纯内存, 归组时重算。
         self.third_party_link_groups: Set[Any] = set()
+        # 组键迁移待办(P7 真机验收补): 成员被 re-key(_leave_group 移出旧键 /
+        # _assign_to_group 落入新键)时**双向登记**旧键与新键。WebUI 的增量排空
+        # (_drain_delta_locked)据此把「旧键不在 groups -> removed / 在 -> upsert」——
+        # 否则 save_path 变化(迁移动线)或武装重归组(scope 覆盖整 save_path)导致组键
+        # 更换时, 旧键行会滞留在已发布视图里成孤儿行(增量协议无其它路径能剔除它:
+        # delta_fields 只能查到新键, dirty_groups 又被冲突检查先消费)。纯内存、不落盘,
+        # 唯一消费点 = 排空段(与 added/removed 同口径, 取出即清)。
+        self.group_key_migrations: Set[Any] = set()
         # 全局标签/分类缓存
         self._all_tags_cache: Optional[set] = None
         self._all_categories_cache: Optional[dict] = None
@@ -611,6 +620,7 @@ class TorrentStore:
         self.groups.clear()
         self.group_sizes.clear()
         self.member_to_key.clear()
+        self.group_key_migrations.clear()  # 组键迁移待办随分组索引重建清零(P7)
         self.state_snapshot.clear()
         self.verified_references.clear()
         self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)

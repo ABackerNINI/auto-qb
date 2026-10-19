@@ -14,6 +14,9 @@
   confirm(收尾窗口) / confirm(同名链接覆盖)
 - test_web_relocate_precheck_routes: 路由级 403(关, 零入队)/ 400(空 hashes/空 location/缺 name)/
   门开后入队 cmd 与载荷形状
+- test_web_relocate_cancel_route: 撤销路由 403(关)/ 400(空 job_id)/ 门开后入队 cmd 与载荷形状
+- test_web_relocate_cancel_drain: drain 级两步走: 未确认只回成本(数据零变动), 确认后
+  搬回 + phase=cancelled + journal 落盘
 - test_web_relocate_precheck_drain: drain 级回执 truth={results, summary} 结构 + gone verdict +
   混合计数; precheck_add 回执 truth=单 item
 """
@@ -95,6 +98,46 @@ def test_relocate_module_precheck_ok_and_confirm(tmp_path, monkeypatch):
     assert item2["cls"] == "confirm", (item2["cls"], item2["reasons"])
     assert item2["form"] == "dir_alias" and item2["needs_confirm"] is True
     assert item2["alias_kind"], "本机探测至少应给出一种目录别名形态"
+
+
+def test_relocate_precheck_no_false_dir_link_note(tmp_path, monkeypatch):
+    """P7 真机回归: 全大写内容根不误报「目录级链接」
+
+    realpath_lexical 出口带 normcase(Windows = lowercase); 拿它与原始路径做大小写
+    **敏感**比较恒不等 —— 任何含大写字母的正常目录都会被误报成目录级链接。两侧同过
+    normcase 再比后, 只有**真实**链接(解析结果确实不同)才出该 note。
+    """
+    _pin_disk_usage(monkeypatch)
+    # 全大写内容根(比 tmp_path 默认混合大小写更严: 两侧 normcase 后必须相等)
+    src = os.path.join(str(tmp_path), "SRC-UPPER")
+    os.makedirs(src)
+    content = os.path.join(src, "SHOW-UPPER")
+    os.makedirs(content)
+    for i in range(2):
+        with open(os.path.join(content, f"E{i:02d}.mkv"), "wb") as f:
+            f.write(b"x" * 64)
+    dst = os.path.join(str(tmp_path), "DST-UPPER")
+    os.makedirs(dst)
+    mgr = make_manager(os.path.join(str(tmp_path), "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    client.files_map["HA"] = [_fake_file("SHOW-UPPER/e00.mkv", 100)]
+    client.files_map["HB"] = [_fake_file("SHOW-UPPER/e01.mkv", 100)]
+    tors = [
+        FakeTorrent(hash="HA", name="Show", save_path=src, progress=1.0, state="pausedUP"),
+        FakeTorrent(hash="HB", name="Show", save_path=src, progress=1.0, state="pausedUP"),
+    ]
+    for t in tors:
+        client.torrents[t.hash] = t
+    seed_store(mgr, tors)
+    grouping = mgr.host.get("grouping")
+    grouping._assign_new_torrent("HA")
+    grouping._assign_new_torrent("HB")
+    mgr.store.server_state = {"free_space_on_disk": 1024**4}
+    mgr.config.relocate.enabled = True
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
+    assert "目录级链接" not in " ".join(item.get("notes") or []), item.get("notes")
+    assert not any("目录级链接" in (r.get("text") or "") for r in item.get("reasons") or [])
 
 
 def test_relocate_module_precheck_gone_and_param(tmp_path, monkeypatch):
@@ -550,6 +593,67 @@ def test_web_relocate_precheck_routes(web_env):
         resp = client.post("/api/relocate/precheck-add", headers=auth, json=body)
         assert resp.status_code == 400, (body, resp.text)
     assert mgr.web.commands.empty()
+
+
+def test_web_relocate_cancel_route(web_env):
+    """撤销路由: 403(关, 零入队, detail 注键名) / 400(空 job_id) / 门开后入队 cmd 与载荷形状"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    # 关(缺省 enabled=False): 403 零入队
+    resp = client.post("/api/relocate/cancel", headers=auth, json={"job_id": "j1"})
+    assert resp.status_code == 403, resp.text
+    assert "relocate.enabled" in resp.json()["detail"]
+    assert mgr.web.commands.empty()
+    # 开: 入队形状(confirm 提供才透传)
+    mgr.config.relocate.enabled = True
+    resp = client.post("/api/relocate/cancel", headers=auth, json={"job_id": "j1"})
+    assert resp.status_code == 200 and resp.json()["queued"] is True, resp.text
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "relocate_cancel", (cmd, payload)
+    payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)
+    assert payload == {"job_id": "j1", "confirm": False}, payload
+    resp = client.post("/api/relocate/cancel", headers=auth, json={"job_id": "j1", "confirm": True})
+    assert resp.status_code == 200
+    cmd, payload = mgr.web.commands.get_nowait()
+    payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)
+    assert payload == {"job_id": "j1", "confirm": True}, payload
+    # 400: job_id 空在路由层拒收, 不入队
+    for body in ({}, {"job_id": ""}, {"confirm": True}):
+        resp = client.post("/api/relocate/cancel", headers=auth, json=body)
+        assert resp.status_code == 400, (body, resp.text)
+    assert mgr.web.commands.empty()
+
+
+def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
+    """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
+    set_location 搬回 src + phase=cancelled + journal 落盘)"""
+    _pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr.config.data_dir = str(tmp_path / "data")
+    mod = mgr.host.get("relocate")
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    assert mod.get_job(job_id).phase == "moving" and client.calls  # 已下发搬迁
+    # 第一步: 不确认 => 只回成本, 零 qB 写(撤销前清空并断言无新调用)
+    client.calls.clear()
+    mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "cmd_id": "rc1"}))
+    mgr.web.consume_commands()
+    rec = mgr.web.results["rc1"]
+    assert rec["status"] == "ok", rec
+    truth = rec["truth"]
+    assert truth["cls"] == "confirm" and truth["cost"]["bytes"] > 0, truth
+    assert truth["cost"]["from"] == dst and truth["cost"]["to"] == src, truth["cost"]
+    assert client.calls == [], f"未确认成本时不得有任何 qB 写调用: {client.calls}"
+    # 第二步: 确认 => 搬回 + cancelled + journal 落盘
+    mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "confirm": True, "cmd_id": "rc2"}))
+    mgr.web.consume_commands()
+    rec = mgr.web.results["rc2"]
+    assert rec["status"] == "ok" and rec["truth"]["cls"] == "ok", rec
+    assert mod.get_job(job_id).phase == "cancelled"
+    assert ("set_location", src) in client.calls, client.calls
+    journal = os.path.join(str(tmp_path / "data"), "relocate", f"{job_id}.json")
+    assert os.path.exists(journal), "撤销后 journal 必须落 cancelled 相位(guardian 退休信号)"
 
 
 def test_web_relocate_precheck_drain(tmp_path, monkeypatch):

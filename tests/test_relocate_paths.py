@@ -344,6 +344,15 @@ def test_guardian_helpers(tmp_path, monkeypatch):
     assert fw._port_refused("127.0.0.1", 0) is True
     assert fw._port_refused("127.0.0.1", 1, timeout=0.2) is True
     assert fw._proc_absent(()) is False  # 判不出 -> 未证明
+    # P7: 实例级判定 —— 同机还有别的 qB 进程时, 端点拒连仍证明「该实例已退出」
+    # (旧实现按全机名册判, 日常实例在跑 => 恒「在」=> 收尾永不触发)
+    assert fw._proc_absent(("qbittorrent.exe", "python.exe"), "127.0.0.1", 1) is True
+    # P7: _alive 零副作用 —— Windows 上 os.kill(pid,0) 会 TerminateProcess 掉被探测进程
+    # (guardian 重拉自噬循环的真因); 探测自身进程必须返回 True 且不得终止它
+    from auto_qb.infra import relocate_journal as rj
+    assert rj._alive(os.getpid()) is True
+    assert rj._alive(999999) is False
+    assert fw._proc_absent(("qbittorrent.exe", ), "", 0) is False  # 无端口证据 -> 退回名册
     assert fw._proc_absent(("explorer.exe", )) is True
     assert fw._verify_dst({"dst": str(tmp_path), "files": []}) is False
     f = tmp_path / "a.mkv"

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 
-KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
+KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password", "api_key"}
 
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag", "cross_group_conflict_check"}
 

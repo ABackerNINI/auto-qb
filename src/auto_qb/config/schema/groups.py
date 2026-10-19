@@ -39,6 +39,13 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                     Field("username", "用户名", "str", default="", help="qB Web UI 的登录用户名"),
                     Field("password", "密码", "password", default="", help="qB Web UI 的登录密码"),
+                    Field(
+                        "api_key",
+                        "API Key",
+                        "password",
+                        default="",
+                        help="qB 5.x Web UI 的 API Key(设置 → Web UI 里可查); 非空时优先使用, 无需密码"
+                    ),
                 )
             ),
             Field(

@@ -56,9 +56,13 @@ def new_client(qb: QbittorrentConfig) -> Client:
     这里只用来设超时(见 REQUESTS_TIMEOUT) —— 不设则 qB 假死时请求会无限期挂起。
     """
     cls = LocalQbClient if _is_local_qb(qb) else Client
+    # api_key(qB 5.x Web UI 的 API Key): 非空时库走 Authorization: Bearer 直连, 跳过密码登录
+    # —— 测试实例/只给密钥不给密码的场景; 为空按原密码登录路径, 行为零变化。
+    api_key = getattr(qb, "api_key", "") or ""
     return cls(
         host=qb.base_url,
         username=qb.username,
         password=qb.password,
+        api_key=api_key or None,
         REQUESTS_ARGS={"timeout": REQUESTS_TIMEOUT},
     )

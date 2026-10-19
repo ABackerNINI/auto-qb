@@ -10,7 +10,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-18-1604">
 <meta name="doc-updated" content="26-10-19-0759">
-<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md">
 <style>
   :root {
     --bg: #10151a;
@@ -532,6 +532,35 @@
   <li><b>不许用长路径的 1314 冒充权限的 1314</b>：错误码相同但走不同分支（≥260 先判长路径），冒充等于没测到 UAC 分支。</li>
 </ul>
 
+<h3>8.7 P7 真机执行记录（26-10-19）</h3>
+<p>测试客户端 <code>D://Programs//qBittorrent-testing</code>（v5.2.3 / WebAPI 2.15.1，localhost:36595，API Key 鉴权），auto-qb 独立实例（WebUI 38081→38082，data_dir 隔离于 <code>tmp-analysis/relocate-e2e/</code>）。证据四元组（API 快照 / 链接状态 / 状态采样 / SHA1）全部落该目录，不入库。</p>
+<table>
+<tr><th>步</th><th>结果</th><th>关键数字</th></tr>
+<tr><td>S1（C 直搬+回滚）</td><td class="ok">通过</td><td>direct 直达 done；A/B 的 E01 全程在 R: 且 SHA1 不变；零链接；回滚后全树 SHA1 复原</td></tr>
+<tr><td>S1b（I 31 文件包）</td><td class="ok">通过</td><td>整目录搬走、S 侧目录消失、零链接；回滚后 31 文件 SHA1 复原</td></tr>
+<tr><td>S2+S9（组③ 文件级 symlink+撤销）</td><td class="ok">通过</td><td>1 条 symlink（目标 T）；E 经链接 stat 一致；撤销成本两步（903111768 字节）→ 删链接+搬回；SHA1 复原；组不裂</td></tr>
+<tr><td>S14b（多选拆组）</td><td class="ok">通过</td><td>2 项拆分（file_links + direct）双落点 T；组③ 不裂；C 单独成组</td></tr>
+<tr><td>S12 负例 / 正例（F=E03）</td><td class="ok">通过</td><td>负例：预检 ok 不弹确认、加入后暂停 0%；正例：预检 confirm（实际落点 T）→ 取消不提交 → 确认后加入、暂停 0%、save_path 仍 R:（经链接落 T）→ 删除还原</td></tr>
+<tr><td>S3'（组① 目录别名）</td><td class="ok">通过（序列改编，见下）</td><td>junction 1 条（目标 T）；不确认零副作用；确认后 armed；A/B 恰一人到 T、另一人经链接读</td></tr>
+<tr><td>S4/S5/S6/S7</td><td class="ok">通过</td><td>C/F 未受影响；组① 2 成员同组、跨组冲突 0；根目录 9 个 .torrent 杂项未动；<b>285 字符路径经 junction 的 \\?\ 通道 stat = 1451636926（与 qB 上报一致）</b></td></tr>
+<tr><td>S14（组⑤ 目录别名）</td><td class="ok">通过</td><td>1 条 junction；H 经链接读 31 文件全部 size 一致；组不裂；保持 armed</td></tr>
+<tr><td>S10（未收尾拦截）</td><td class="ok">通过</td><td>再预检 blocked(unfinished)；再执行幂等 skip；两组各 1 条 job 账（无第二份）</td></tr>
+<tr><td>S11（停 qB → 收尾 → 起 qB）</td><td class="ok">通过</td><td>两份 journal 均 removed（组① links_removed=1、组⑤ 31 文件校验后 links_removed=1）；R: 侧链接与内容根消失；起 qB 后全组 save_path=T、progress=1、暂停态、added_on 不变、组不裂</td></tr>
+<tr><td>复位</td><td class="ok">通过</td><td>8 种子全回 R:、100%、暂停、added_on 不变；内容 74/78 文件 SHA1 与基线一致（4 个不一致见「环境事实」）；5 组复原；R: 无链接、T 空</td></tr>
+</table>
+<p><b>零校验/无感知</b>：qB 该实例默认不写 <code>data/logs</code>（无 Logger 配置项），计划里的「qB 文件日志零新增行」改用<b>每 0.3s 状态采样</b>等价判据：全部迁移窗口内只出现 <code>moving → stoppedUP</code> 这一固有转移，<b>零 checkingUP/checkingDL/下载中转</b>，种子集无增删。</p>
+<p><b>计划修正（S3 前提）</b>：§8.3 原判「文件链接不可建 ⇒ 提议目录别名」与真实资产不符 —— 组② C（E02）与组① 同内容根，目录<b>不专属</b>，产品按设计拒绝目录别名（整条链接会把 C 的读写一并重定向），285 字符的文件级 symlink 也建不出来 ⇒ <code>blocked(form=reject)</code> 并给出三条出路。这是<b>正确且自解释</b>的行为。执行时按产品语义改编：先让 C 直搬 T（产品提示的第三条出路「先迁走同目录其它种子」）→ 目录变专属 → 组① 目录别名确认流 → S4-S7 全部保留。</p>
+<p><b>P7 发现并修复的 5 个缺陷</b>（均带回归用例，全量 3754 通过）：</p>
+<ul>
+  <li><b>组键迁移后视图孤儿行</b>（<code>group_key_migrations</code> 待办集 + 本代 full）：save_path 变化/武装重归组会让组键更换，增量协议只认新键，旧键行滞留成孤儿（真机：迁完/撤销后组从 WebUI 消失）。修复：归组路径双向登记旧/新键，排空段直接标 full（与 row_key_unresolvable 同口径）。</li>
+  <li><b>scope_hit 过宽</b>（<code>scope_covers_dir</code>）：平铺逐文件链接/直搬的 scope = save_path（甚至内容根），旧实现把同目录<b>别组</b>的组键解析到 T —— job 结束后 <code>_buckets</code> 用 S 键查不到组，退化为「仅选中成员」⇒ 单成员 direct 误判（真机：组① 被当单成员直搬，数据走了却不建链接）。修复：目录别名才按目录覆盖，逐文件链接只认 landing==scope，直搬恒不命中；<code>finalize_members</code> 同步收窄（否则收尾会把同目录别组一并 setLocation 到 T）。</li>
+  <li><b>guardian「进程不存在」按全机名册判</b>：同机还有别的 qB（日常实例）时恒「在」⇒ 三证永远凑不齐、收尾永不触发。修复：实例级判定（端点拒连 ⇒ 该实例已退出）。</li>
+  <li><b><code>_alive</code> 在 Windows 上杀进程</b>：<code>os.kill(pid, 0)</code> 在 Windows 等价 TerminateProcess —— 探测一次就把在跑的 guardian 杀掉再报「已在跑」，形成重拉自噬循环（真机：日志每 1.5s 一条「心跳过期/重拉」，journal 永远 armed）。修复：OpenProcess+GetExitCodeProcess 纯探测。</li>
+  <li><b>guardian 目标侧校验不走长路径通道</b>：裸 <code>os.path</code> 在 265 字符 dst 路径上 OSError ⇒ verify_mismatch ⇒ <b>长路径组永远收不了尾</b>（正是目录别名存在的场景）。修复：走 <code>file_access</code>（\\?\ 前缀）。</li>
+</ul>
+<p><b>另有 2 处行为补强</b>：① 同卷证明与<b>任一侧</b>（源/目标卷）吻合即成立 —— 反向迁移（T→S）时 qB 报的是其默认路径那块盘，只比源侧会必然误判（真机：复位搬回被 same_fs 拒）；② <code>blocks_relocation</code> 的作用域覆盖只对目录别名成立（逐文件链接组在途时同 save_path 的别组不被挡，§08「多选按组拆开各迁各的」）。</p>
+<p><b>环境事实（非产品缺陷，验收记录）</b>：① R: 盘同时被日常实例读写，剩余空间在两次刷新间可漂移 GB 级 ⇒ 同卷证明间歇 fail-closed（驱动按 20s 重试）；② 测试客户端未配置文件日志 ⇒ 用状态采样替代「日志零新增行」；③ 4 个<b>不属于任何 qB 种子</b>的根目录杂项 .torrent 在过程中丢失（回收站为空，不可恢复；65 个内容文件 SHA1 全部无损，9 个与资产相关的 .torrent 未动），成因未定；④ 后台拉起的 GUI 进程随工具会话回收（qB/auto-qb 需用托管后台任务启动）。</p>
+
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-18-1604</span> 初版：三轮 grilling 收敛出 D1-D5；确定「qB 搬字节 + 别名接续 + guardian 收尾」主线、<code>alias_removed</code> 两本账机制与对账表、三种情形决策矩阵、P0-P7 分期。</li>
@@ -543,6 +572,7 @@
   <li><span class="tag">R6 · 26-10-18-1805</span> 多轮改版一致性校对: §3.1 单文件行限定 N&gt;1（与「独占不需要别名」区分）；§3.2 补「目录不专属 ⇒ 逐文件链接」行、链接能力阶梯按目录/文件拆开；§3.4 代码块标注为第 1 层、删掉「第三方链接不并组」的过期副作用条；§3.5 相位机补 <code>moving</code>/<code>watching</code>、state 字段补 <code>mover</code>/<code>reason</code>、补执行期崩溃恢复三条；§3.6 第 9 行精确到「落 T 的新种子」；D3 标注被 D8/D11 修订、D4 指向 D9；§05 编号 P→T 避免与实施期 P0-P7 撞名；P2 验收「四行」改「五行」。</li>
   <li><span class="tag">R7 · 26-10-18-1825</span> 测试资产扩容（3 个种子：2 成员辅种组 + 独占单文件 + 285 字符长路径）后补 §08 测试与验收计划（S1-S15 覆盖矩阵 / 执行序列 / 判定口径 / 未覆盖项与补齐条件）；§3.2 增「能力校正」段（≥260 字符 os.symlink 必失败，实测 WinError 1314）与 T6；P7 改为按 §08 逐条验收。</li>
   <li><span class="tag">R8 · 26-10-18-1832</span> 资产复核（5 个种子 / 3 组）后重写 §08：S1 改为「独占文件集」用 E02（与 E01 同目录不同文件），S2 改用组③（短路径）覆盖文件级 symlink 正常路径，S4 变分集双向隔离，新增 S11 多 job 并存；§3.1 判定口径由「内容根无组外引用」修正为「<b>文件集</b>无组外引用」（同目录别的种子不算）。</li>
+  <li><span class="tag">R10 · 26-10-19-1418</span> P7 真机验收完成（§8.7）：S1/S1b/S2/S9/S3'/S4-S7/S12/S14/S14b/S10/S11/复位逐条通过；发现并修复 5 个缺陷（视图组键迁移孤儿行、scope_hit 过宽致单成员误判、guardian 全机名册判进程、Windows _alive 杀进程自噬、guardian 校验不走长路径）+ 2 处行为补强（同卷证明双侧、未收尾闸门只对目录别名）；修正 §8.3 S3 前提（组② 同内容根 ⇒ 目录不专属，需先迁走 C）；补齐撤销迁移的 HTTP 入口（§3.5.1 界面提供）。</li>
   <li><span class="tag">R9 · 26-10-18-1845</span> 授权添加 E03（F）后：§8.1 补 F 行、§8.2 把 S12 改可测（负例不弹/正例弹）并新增 S14b 多选拆组；<b>修正 F 的定义</b>（组内文件数，不是集合并集）并新增 §3.2.1「多选先按组拆开」、§3.2「目录别名的硬前提：组文件集必须覆盖整个内容根」；S14 仍不可测且原因改写为结构性阻塞（E03 是单文件，阈值调 2 也凑不出）。</li>
   <li><span class="tag">R10 · 26-10-18-1850</span> 新增 31 文件多集包 G（独占目录、121 MB）：§8.1 补 G、§8.2 新增 <b>S1b</b>（独占文件集 + 多文件包 ⇒ qB 搬整个目录、不建链接）；§3.2 补「阈值只对多成员组生效」；S14 仍不可测但原因改写为「缺同内容第二成员」（G 是单成员组，加包不加成员凑不出目录别名分支），§8.5 给出精确补齐条件。</li>
   <li><span class="tag">R11 · 26-10-18-1903</span> 组⑤ 补第二成员 H（hhanclub，同 31 文件）⇒ <b>S14 目录别名转可测</b>（F=31 ≥ 默认阈值 8，无需降阈值）；S1b 因 G/H 成组转「暂不可测」；新增可选负例 S14-neg（阈值临时设 32 ⇒ 31 条文件链接）；执行序列改为 11 步，S11 用组①+组⑤ 双 job 收尾。</li>

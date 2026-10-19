@@ -276,6 +276,7 @@ _LOADER_PROBES = {
     "qbittorrent.port": ("16585", 16585),
     "qbittorrent.username": ("probe-user", "probe-user"),
     "qbittorrent.password": ("probe-pass", "probe-pass"),
+    "qbittorrent.api_key": ("probe-api-key", "probe-api-key"),
     # web 段
     "web.enabled": ("true", True),
     "web.host": ("192.0.2.1", "192.0.2.1"),

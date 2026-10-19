@@ -362,6 +362,7 @@ class GroupingModule(BaseModule):
         store.group_sizes.setdefault(key, {})[torrent.hash] = file_map
         store.member_to_key[torrent.hash] = key
         store.dirty_groups.add(key)  # 成员变化 -> 该组冲突集合需重算
+        store.group_key_migrations.add(key)  # P7: 新键行待重建(旧键由 _leave_group 登记)
         self._mark_third_party_link(key, torrent.save_path, file_map)
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
         self._check_size_consistency(key, dry_run)
@@ -385,12 +386,16 @@ class GroupingModule(BaseModule):
 
         返回移除后组内仍有剩余成员的组 key(无则 None); 不触发缺文件扫描,
         重归组(_assign_to_group)与删除(_handle_removed_torrents)共用, 是否扫描由调用方决定。
+
+        P7 补: 旧组键登记进 store.group_key_migrations —— 该键的行要么随组解散而消失
+        (removed), 要么内容已变(upsert); 不登记则增量视图留孤儿行(见 store 字段注释)。
         """
         store = self._ctx.store
         key = store.member_to_key.pop(hash, None)
         if key is None:
             return None
         store.dirty_groups.add(key)  # 成员变化 -> 该组冲突集合需重算(含组已被解散的情形)
+        store.group_key_migrations.add(key)  # P7: 旧键行待重判(解散->removed / 仍在->upsert)
         members = store.groups.get(key, [])
         if hash in members:
             members.remove(hash)

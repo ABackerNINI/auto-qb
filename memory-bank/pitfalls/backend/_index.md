@@ -47,3 +47,4 @@
 | [web-package-split.md](web-package-split.md) | web.py → web/ 包拆分(plan 26-09-22-1857)实打实撞出来的四条 —— FastAPI 懒解析路由、包内 logger 命名、__file__ 基准降级、生成脚本转义陷阱。 | 拆 web/ 包, 改 factory, include_router, app.routes, getLogger, __file__, 生成脚本, 金清单守阵 |
 | [windows-long-path.md](windows-long-path.md) | 超过 MAX_PATH 的路径在 Windows 上**裸路径一律失败**, 而失败方式有**三种**(给假 / 抛错 / 静默退化), 同一根因会在不同层伪装成不同症状 —— 前缀、比较、打开、删除四处各有坑。 | 长路径, MAX_PATH, 260, `\\?\`, 扩展长度前缀, 路径过长, 打不开文件夹, 打开目标文件夹, open_path, PIDL, SHParseDisplayName, SHOpenFolderAndSelectIte… |
 | [windows-onlogon-autostart-elevation.md](windows-onlogon-autostart-elevation.md) | Windows ONLOGON 计划任务注册需提权: 非提权进程 rc=1「拒绝访问」, 与 Program Blacklist 的 WinError 5 同指纹 | 开机自启, autostart, schtasks, ONLOGON, 计划任务, 拒绝访问, 提权, UAC, 自启注册失败, HKCU Run, 注册表自启, Run 值 260 |
+| [windows-relocate-traps.md](windows-relocate-traps.md) | Windows 进程探测/长路径/组键迁移三处陷阱> | os.kill, TerminateProcess, guardian, 进程探测, 长路径, os.path.getsize, 组键迁移, 增量视图, 孤儿行, scope_hit |

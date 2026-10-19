@@ -176,6 +176,23 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="save_path 与 name 均不能为空")
         return _enqueue("relocate_precheck_add", {"save_path": save_path, "name": name})
 
+    @router.post("/api/relocate/cancel")
+    def api_relocate_cancel(body: dict = None):
+        """撤销迁移(计划 26-10-18-1604 §3.5.1): 删链接 + qB 搬回 —— 两步同口径,
+        **不确认不动数据**(成本提示是模块内建契约, 不是前端自觉)
+
+        挂 relocate.enabled 403 门控(fail-closed, 同预检端点); 经 _enqueue 走主循环线程
+        执行 ctx.relocate.relocate_cancel(与写命令串行化)。body {job_id: "...", confirm: bool};
+        job_id 空 400 拒收; confirm 缺省 = 只回成本(cls=confirm, cost 带字节数与搬回方向),
+        confirm=true 才真正删链接 + setLocation(mover, src)。回执(经 cmd 通道):
+        status=ok + truth=模块返回 item({cls, cost, job_id, phase} / blocked 带 reasons)。
+        """
+        _require_relocate(ctx)
+        job_id = str((body or {}).get("job_id") or "").strip()
+        if not job_id:
+            raise HTTPException(status_code=400, detail="未提供 job_id(撤销目标不能为空)")
+        return _enqueue("relocate_cancel", {"job_id": job_id, "confirm": bool((body or {}).get("confirm"))})
+
     @router.post("/api/torrents/{hash}/super-seeding")
     def api_t_super_seeding(hash: str, body: dict = None):
         return _cmd_enable("super_seeding", hash, body)

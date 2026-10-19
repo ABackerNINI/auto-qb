@@ -1183,7 +1183,11 @@ class RelocateModule(BaseModule):
             src_free = None
         same_vol = alias_fs.same_volume(self._syscall(save_path), self._syscall(target))
         qb_free = (getattr(store, "server_state", None) or {}).get("free_space_on_disk")
-        proved = same_volume_proof(qb_free, src_free)
+        # 同卷证明的语义是「auto-qb 与 qB 看到同一批盘」: qB 的 free_space_on_disk 报的是
+        # 它**默认保存路径**那块卷, 未必是本次迁移的源卷 —— 正向迁移(S->T)时源就是默认路径,
+        # 反向迁移/回滚(T->S)时源是 T 而 qB 报 S, 只比源侧会必然误判(P7 真机: 复位搬回被
+        # same_fs 拒)。与**任一侧**吻合即证明同机同盘, 安全性不变(远程 qB 两侧都对不上)。
+        proved = same_volume_proof(qb_free, src_free) or same_volume_proof(qb_free, target_free)
 
         # ---- 能力探测 + 形态 kind(目标卷差异由 P3 复探; P2 用进程级能力) ----
         cap = alias_fs.get_capability()
@@ -1231,7 +1235,14 @@ class RelocateModule(BaseModule):
             # abspath(Windows 盘符大小写还会变), 拿它说「目录级链接」是误报
             if fa.exists(content_root) is True:
                 resolved = fa.realpath_lexical(content_root)
-                if utils.path_normalize(resolved) != utils.path_normalize(content_root):
+                # !Windows 路径同一性**大小写不敏感**: realpath_lexical 出口带 normcase
+                # (Windows 语义 = lowercase), 拿它与原始路径(含大写)做大小写**敏感**比较
+                # 恒不等 —— 任何含大写字母的正常目录都会被误报成「目录级链接」(P7 真机
+                # 首步即撞见: 恶女目录 285 字符全大写混合)。两侧同过 normcase 再比:
+                # 比的是「真实差异」(真链接/换卷), 不是大小写。
+                if os.path.normcase(utils.path_normalize(resolved)) != os.path.normcase(
+                    utils.path_normalize(content_root)
+                ):
                     tp_dir_note = (tp_dir_note + " " if tp_dir_note else "") + \
                         f"检测到目录级链接({content_root} -> {resolved}): 组判定按解析后路径并组(第三方链接三层之第二层, D11)"
         except Exception:  # noqa: BLE001 - 容器侧 realpath 词法退化, 无结论不加 note

@@ -670,7 +670,8 @@ class WebUIRuntime:
         映射口径(plan S2/S9b): flat/singles 行键 = hash 直用 -> torrent 桶; 组行键 =
         store.member_to_key -> group 桶(成员字段变化会改组行聚合值); 剧行键 =
         _show_member_keys(S8 剧键映射)-> show 桶。数据源 = S1 属性快照
-        (last_added/last_removed) + delta_fields(变化字段集, added 不在其中)。
+        (last_added/last_removed) + delta_fields(变化字段集, added 不在其中) +
+        group_key_migrations(组键迁移待办: 旧键不在 groups -> removed, 在 -> upsert)。
 
         组行 removed 键推导: 先查 member_to_key 后消费 removed 清单 —— 查得到: 组仍在 ->
         组行内容变了(upsert), 组已解散 -> 组行消失(removed); 查不到(组键已随
@@ -690,6 +691,14 @@ class WebUIRuntime:
         added = store.last_added
         removed = store.last_removed
         delta_fields = store.delta_fields
+        # 组键迁移待办(P7): _leave_group/_assign_to_group 登记的旧/新键 —— 组键**更换**
+        # (save_path 变化或武装重归组)无法用行级 delta 精确表达: 旧键行该消失、新键行该
+        # 建出, 但 upsert/removed 桶的跨代抵消(R5)会把「先 upsert 后 removed」的同键两清,
+        # 让旧行滞留成孤儿。迁移是低频事件(仅搬迁/重载), 直接本代 full(保守正确优先,
+        # 与 row_key_unresolvable 同口径) —— 全量重建从 store.groups 现算, 恒无孤儿/缺行。
+        if store.group_key_migrations:
+            self._pending_full_reasons.add("group_key_migration")
+            store.group_key_migrations = set()
         if not added and not removed and not delta_fields:
             return
         upsert = self._delta_pending["upsert"]
@@ -900,13 +909,16 @@ class WebUIRuntime:
         # 本拍 store 是否提供行级键: last_added/last_removed/delta_fields 是「最近一轮」快照
         # (不排空、下轮 _apply 覆盖), 无新应用轮时是残值, 不得当作本拍键源 —— 故须同时要求
         # 本拍确有新的 _apply 轮(rounds_applied 前进)。命令自写(update_torrent_fields)/
-        # reset_runtime/标签定义删除这类纯命令源不跑 _apply, 只置 view_changed
+        # reset_runtime/标签定义删除这类纯命令源不跑 _apply, 只置 view_changed。
         keyed = rounds_now != self._drained_sync_rounds and bool(
             host.store.last_added or host.store.last_removed or host.store.delta_fields
         )
         self._drained_sync_rounds = rounds_now
-        # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
-        if host.store.consume_view_changed():
+        # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖。
+        # 组键迁移待办(P7): 排空段已把它转成 full 理由(见 _drain_delta_locked), 但纯重键轮
+        # 可能不伴随 view_changed(无视图字段变化) —— 理由在就必须触发一次重建, 否则孤儿行
+        # 要等到下一次任意变更轮才被 full 清掉(静库下可无限期滞留)。
+        if host.store.consume_view_changed() or self._pending_full_reasons:
             if keyed:
                 self.mark_dirty()
             else:

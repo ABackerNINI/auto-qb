@@ -26,6 +26,7 @@ class QbittorrentConfig:
     port: int = 8080
     username: str = ""
     password: str = ""
+    api_key: str = ""  # qB Web UI 的 API Key(qB 5.x; 非空时经 Authorization: Bearer 直连, 不再走密码登录)
 
     @property
     def base_url(self) -> str:

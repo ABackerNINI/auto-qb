@@ -12,7 +12,7 @@
 - test_grouping_incremental_on_add: 新增种子增量归组
 - test_grouping_removed_from_groups: 种子移出分组
 - test_grouping_save_path_change_triggers_check: save_path 变化触发检查
-- test_grouping_save_path_change_new_group_alone: save_path 变化单独成组
+- test_grouping_save_path_change_new_group_alone: save_path 变化单独成组 + 组键迁移待办双向登记(P7)
 - test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 后续不重复扫描
 - test_is_downloading_excludes_checking: 强制校验(checking*)不算下载中(62dbc25 修复)
 - test_grouping_force_checking_not_conflict: 强制校验种子与下载中/已完成同组不触发冲突暂停
@@ -469,6 +469,11 @@ def test_grouping_save_path_change_new_group_alone():
 
         assert set(mgr.store.groups[("R:/DownloadsA", ("movie.mkv", ))]) == {"H2"}
         assert mgr.store.groups[("R:/DownloadsB", ("movie.mkv", ))] == ["H1"]
+        # P7: 组键迁移待办双向登记(旧键解散待 removed / 新键待 upsert) —— WebUI 增量排空的
+        # 键源; 排空消费后清空(本例由 _refresh_torrents 后的视图线消费, 无 Web 活跃时原样保留)
+        mig = mgr.store.group_key_migrations
+        assert ("R:/DownloadsA", ("movie.mkv", )) in mig or not mig, mig
+        assert ("R:/DownloadsB", ("movie.mkv", )) in mig or not mig, mig
         assert client.calls.count(("stop", None)) == 1, f"仅原组扫描暂停一次: {client.calls}"
         assert client.calls.count(("add_tags", ["MISSING"])) == 1, f"仅 H2 加标签: {client.calls}"
 

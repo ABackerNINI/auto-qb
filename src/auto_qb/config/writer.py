@@ -42,7 +42,7 @@ ROOT_KEY = "config"
 # 进浏览器内存与截图。GET 时按**键名**掩码为哨兵, PUT/预览时由 unmask_tree 用磁盘旧值还原 ——
 # 哨兵即"用户未修改"的显式信号, 因此掩码不会把密码写成 "********"(那会直接毁掉生产配置)。
 # 只处理 dict 内的标量, 不进列表: 列表内项无法与磁盘旧值稳定对应, 掩码后还原不了。
-SENSITIVE_KEY_PARTS = ("password", "passkey", "token", "secret", "cookie", "authkey")
+SENSITIVE_KEY_PARTS = ("password", "passkey", "token", "secret", "cookie", "authkey", "api_key")
 MASK_SENTINEL = "********"
 
 

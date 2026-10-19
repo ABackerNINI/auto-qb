@@ -253,12 +253,48 @@ def test_evaluate_group_unfinished_job_blocks():
     )
     item2 = ru.evaluate_group(_ok_facts(jobs=(done, )))
     assert item2["cls"] == ru.CLS_OK and "unfinished" not in _gates(item2)
-    # hash 不相交但作用域覆盖内容根 -> 同样拦(别名是作用域不是快照, D7)
+    # hash 不相交但作用域覆盖内容根 -> 同样拦(别名是作用域不是快照, D7) —— 仅目录别名:
+    # 目录链接会把落入作用域的写入重定向到 T, 别组再迁会穿链接搬进旧 job 目标
     other = ru.RelocateJob(
-        job_id="j3", hashes=("HZ", ), mover="HZ", src=S, dst=T, scope=os.path.join(S, "Show"), phase=ru.PHASE_MOVING
+        job_id="j3",
+        hashes=("HZ", ),
+        mover="HZ",
+        src=S,
+        dst=T,
+        scope=os.path.join(S, "Show"),
+        phase=ru.PHASE_MOVING,
+        plan={"form": ru.FORM_DIR_ALIAS},
     )
     item3 = ru.evaluate_group(_ok_facts(jobs=(other, )))
     assert "unfinished" in _gates(item3)
+    # P7 S14b 回归: 逐文件链接组(平铺内容根 scope=save_path)在途时, 同 save_path 下的
+    # **别组**不被拦 —— 逐文件链接无目录重定向危害, §08 要求多选按组拆开各迁各的
+    flat = ru.RelocateJob(
+        job_id="j4",
+        hashes=("HZ", ),
+        mover="HZ",
+        src=S,
+        dst=T,
+        scope=S,
+        phase=ru.PHASE_ARMED,
+        alias_kind="file",
+        plan={"form": ru.FORM_FILE_LINKS},
+    )
+    item4 = ru.evaluate_group(_ok_facts(jobs=(flat, )))
+    assert item4["cls"] == ru.CLS_OK and "unfinished" not in _gates(item4)
+    # 同组(hash 相交)仍拦: 逐文件链接组自己的成员再迁照旧 blocked
+    same_member = ru.RelocateJob(
+        job_id="j5",
+        hashes=("HA", ),
+        mover="HA",
+        src=S,
+        dst=T,
+        scope=S,
+        phase=ru.PHASE_MOVING,
+        plan={"form": ru.FORM_FILE_LINKS},
+    )
+    item5 = ru.evaluate_group(_ok_facts(jobs=(same_member, )))
+    assert "unfinished" in _gates(item5)
 
 
 def test_evaluate_group_gates_table():
@@ -563,13 +599,44 @@ def test_resolve_physical_and_finalize_members():
     assert ru.resolve_physical(S, root, (job, )) == T  # 作用域命中 -> dst
     assert ru.resolve_physical(S, os.path.join(S, "Other"), (job, )) == S  # 未命中 -> 原样
     assert ru.resolve_physical(S, root, (_job(phase=ru.PHASE_DONE), )) == S  # 终态不解析
+    # D7 作用域覆盖只对目录别名成立: 目录别名期间新加的同内容辅种自动纳入收尾集合
+    dir_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS})
     members = [
         ("HA", T, os.path.join(T, "Show")),  # mover 已在 dst
         ("HB", S, root),  # 创建时成员
         ("HC", S, root),  # 别名期间新加的同内容辅种(作用域内)
         ("HX", S, os.path.join(S, "Other")),  # 作用域外
     ]
-    assert ru.finalize_members(job, members) == ("HB", "HC")
+    assert ru.finalize_members(dir_job, members) == ("HB", "HC")
+    # P7 回归: 逐文件链接/直搬的 scope 是平铺 save_path —— 覆盖整目录会把同目录别组
+    # 一并 setLocation 到 T(真机实测: 误纳别组), 这类 job 只收自己的成员
+    flat_job = _job(phase=ru.PHASE_ARMED, scope=S, plan={"form": ru.FORM_FILE_LINKS})
+    flat_members = [
+        ("HA", T, S),  # mover
+        ("HB", S, S),  # 本组另一成员(内容根 == scope)
+        ("HC", S, os.path.join(S, "Show")),  # 同 save_path 下的别组(子目录)
+    ]
+    assert ru.finalize_members(flat_job, flat_members) == ("HB", )
+
+
+def test_scope_hit_flat_does_not_cover_subdirs():
+    """P7 回归: 平铺 job 的 scope_hit 只认「landing == scope」, 不覆盖同 save_path 子目录
+
+    旧实现在 scope = save_path(平铺组的内容根)时, 把同目录别组的组键解析到 T ——
+    job 结束后 _buckets 用 S 键查不到组, 退化为「仅选中成员」, 单成员 direct 误判
+    (真机实测: 组① 被当单成员直搬, 数据走了却不建链接)。
+    """
+    flat = _job(phase=ru.PHASE_MOVING, scope=S, plan={"form": ru.FORM_FILE_LINKS})
+    assert flat.scope_hit(S, S) is True  # 平铺组自己的成员(内容根 == save_path)
+    assert flat.scope_hit(S, os.path.join(S, "Show")) is False  # 同 save_path 子目录里的别组
+    assert flat.scope_covers_dir is False
+    # 直搬: 无别名 => 作用域恒不命中(真机: 组② 直搬 scope=恶女目录, 曾把同目录组① 解析走)
+    direct = _job(phase=ru.PHASE_MOVING, scope=os.path.join(S, "Show"), alias_kind="", plan={"form": ru.FORM_DIRECT})
+    assert direct.scope_hit(S, os.path.join(S, "Show")) is False
+    # 目录别名: 作用域覆盖整目录(含子目录), 与旧行为一致
+    dir_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS})
+    assert dir_job.scope_hit(S, os.path.join(S, "Show")) is True
+    assert dir_job.scope_covers_dir is True
 
 
 def test_job_dict_roundtrip():
