@@ -158,10 +158,20 @@
   后续 `.member-row` 找不到」, 极易误判成"该功能没实现"。第二处反直觉点: **集行**的名称格类名是
   `.ep-name`(不是 `.g-name`), 追剧页两层展开(剧→集→成员)各自的名称格不同名。
 - **最省事的写法**: 直接点**名称格元素**而不是算坐标 —— `row.locator('.g-name').click({ force: true })`
-  / `epRow.locator('.ep-name').click({ force: true })`; 成员行(`.member-row`)无名称列, 点它自身即可
-  (它的交互后代只有 `.m-site`/`.m-tags`, 双击中心多半安全, 但换列集后仍可能漂)。
-- **复发**: 2 (2026-10-01 首记 → 2026-10-04 冒烟复发 1 次 → 2026-10-09 e2e 双击成员行再撞; 后两次都是
-  「知道要点名称列, 但没意识到 force 不改落点 + 集行名称格叫 .ep-name」)。
+  / `epRow.locator('.ep-name').click({ force: true })`; 成员行(`.member-row`)无名称列, 只能点它自身
+  —— 但**几何中心与行左缘 8,8 不是一回事**(2026-10-19 实测, 见下条)。
+- **成员行的第一格就是 `.m-site` 筛选格 —— clickRow 行左缘 8,8 必踩(2026-10-19 实测)**: 辅种页
+  成员行是 `display:grid` 且**从行盒 0 起排**(不像组行有名称格占首列), 首格即 `tpl-aq-member-cells`
+  的 `site` 列(`@click.stop="filterFromChip('site', ...)"`) ⇒ `clickRow` 默认落点 `{x:8,y:8}` 落在
+  `.m-site` 上 ⇒ 事件被 `.stop` 吞、`onMemberClick` 不触发, 且 `filterFromChip` 把列表过滤成别的
+  形态 ⇒ 症状是**点击后 `.member-row` 归零**(极易误判成"组被收起/功能没实现")。此前本节"成员行点
+  它自身即可"的说法只对**几何中心**成立, 对 clickRow 的 8,8 是错的。修法 = `e2e/lib/gestures.mjs`
+  `clickRow` 加 `opts.point`(相对行盒偏移, 默认 8,8 不变), 成员行调用方传**第二格**(`.m-state`,
+  无交互后代)偏移, 且偏移从 DOM 现算(`el.children[1]`), 不硬编码列宽。用例:
+  `e2e/shift-select-anchor.spec.mjs` 的 `memberPoint`。
+- **复发**: 3 (2026-10-01 首记 → 2026-10-04 冒烟复发 1 次 → 2026-10-09 e2e 双击成员行再撞;
+  后两次都是「知道要点名称列, 但没意识到 force 不改落点 + 集行名称格叫 .ep-name」; 2026-10-19
+  第四次是**纪律本身的漏洞**——"成员行点自身即可"没区分几何中心与行左缘, 而 clickRow 恰恰用后者)。
 
 ### 行高于视口时 scrollIntoView(center) 把落点推出视口: elementFromPoint 恒回 (null), 5 拍空转
 

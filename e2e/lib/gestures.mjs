@@ -22,14 +22,17 @@ export const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text
  *
  * @param {import('@playwright/test').Page} page
  * @param {import('@playwright/test').Locator} row
- * @param {{button?: 'left'|'right', modifiers?: Array<'Control'|'Shift'|'Alt'|'Meta'>}} [opts]
+ * @param {{button?: 'left'|'right', modifiers?: Array<'Control'|'Shift'|'Alt'|'Meta'>, point?: {x: number, y: number}}} [opts]
+ *        point = 相对行盒的落点偏移, 默认行左缘 {x:8,y:8}。**成员行例外**: 其第一格就是
+ *        .m-site(带 @click.stop 走筛选, kbd-members.spec 文件头同款纪律), 左缘落点会踩筛
+ *        选 ⇒ 成员行调用方传第二格(.m-state, 无交互后代)偏移。
  * @returns {Promise<void>}
  */
 export async function clickRow(page, row, opts = {}) {
-  const { button = 'left', modifiers = [] } = opts;
+  const { button = 'left', modifiers = [], point = { x: 8, y: 8 } } = opts;
   let last = null;
   for (let attempt = 0; attempt < 5; attempt++) {
-    last = await row.evaluate(async (/** @type {HTMLElement} */ el) => {
+    last = await row.evaluate(async (/** @type {HTMLElement} */ el, /** @type {{x: number, y: number}} */ pt) => {
       const cont = el.closest('.group-table');
       if (cont && cont.scrollLeft !== 0) cont.scrollLeft = 0;
       /* 拦截面 = **所有** .sticky-head 下沿的最大值(文档里不止一个: 顶栏条与表头各有其一) ——
@@ -52,14 +55,14 @@ export async function clickRow(page, row, opts = {}) {
       const lo = Math.max(r.top + pad, guard + pad);
       const hi = Math.min(r.bottom - pad, vh - pad);
       const y = lo <= hi ? lo : NaN;   // 可落区为空 ⇒ 本拍作废, 交给下一拍重排
-      const x = r.left + pad;
+      const x = r.left + pt.x;        // 水平偏移可覆盖(成员行避让第一格 .m-site), 垂直仍走拦截面钳位
       const hit = Number.isFinite(y) ? document.elementFromPoint(x, y) : null;
       return {
         x, y,
         ok: !!hit && (hit === el || el.contains(hit)),
         hit: hit ? `${hit.tagName}.${String(hit.className && hit.className.baseVal !== undefined ? hit.className.baseVal : hit.className || '')}`.slice(0, 60) : '(null)',
       };
-    });
+    }, point);
     if (last.ok) break;
   }
   if (!last.ok || !last) {
