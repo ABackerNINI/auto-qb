@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 站点列状态提醒与逐目标汇报回执</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-site-alerts">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-19-2007">
+<meta name="doc-updated" content="26-10-19-2007">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-site-alerts</div>
+<h1>WEBUI 站点列状态提醒与逐目标汇报回执</h1>
+<p class="lede">把「站点出问题」和「汇报结果」从抽屉里的一条「未工作」提到列表页：站点 chip 内开两个图标槽 —— 左槽持久健康（缺站点配置 / tracker 报错），右槽临时命令结果（进行中 / 成功 / 推迟·未确认 / 失败）。判定、阈值、取数预算全在后端单点，前端只消费字符串与符号。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-19-2007 · <b>doc-updated</b> 26-10-19-2007 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling（2026-10-19，4 轮共 11 问，全部按推荐拍板）+ 用户四条 WEBUI 待办清单
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>做到什么算成</h3>
+<ol>
+  <li><b>站点健康可见</b>：种子页 / 辅种页 / 追剧页任一行的站点 chip 上，能直接看出「该站点没在配置里」或「该站点 tracker 报错」，不必开抽屉。</li>
+  <li><b>汇报结果可定位</b>：多目标强制汇报部分失败时，能精确指出<b>哪几个</b>失败（行内图标），聚合 toast 仍保留作总览。</li>
+  <li><b>取数单点</b>：所有判定在后端算完，前端不按 <code>state</code> 猜原因 —— 沿用 <code>error_reason</code> 已确立的口径（<code>views.py:181</code> 注释「前端只展示这里的字符串」）。</li>
+</ol>
+
+<h3>不变量（设计底线，实施时不得让步）</h3>
+<ul>
+  <li><b>不新增列、不改列宽</b>：站点 chip 已是 <code>inline-flex; gap:4px</code>（三皮肤各自的 <code>.site-chip</code> 规则），图标塞进现有 gap，不触发列宽重排。</li>
+  <li><b>不动 <code>error_reason</code> 语义</b>：状态列文案逐字不变，只给已有 <code>i-warn</code> 图标加动画。</li>
+  <li><b>主循环仍是唯一写者</b>：取数在主循环内按预算轮转，不引入新线程（除非 S0 标定触发 R2）。</li>
+  <li><b>保守默认</b>：新增常量先给保守值，S0 真机标定后再定死；不新增配置键（预算/TTL/阈值全走模块常量），避免 schema 面积扩张。</li>
+  <li><b>三皮肤同步</b>：任何新样式必须 atlas / console / prism 三份齐备，由静态守阵机械比对。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<p>以下行号为取证时刻（2026-10-19 20:00，<code>910cdedf</code>）的值，漂移后按符号 + grep 重定位。</p>
+
+<table>
+  <thead><tr><th>环节</th><th>现状</th><th>位置</th></tr></thead>
+  <tbody>
+    <tr><td>站点列</td><td>每行一个 <code>site-chip</code>，值 = <code>tracker_name</code>；组行 / 集行是「每成员一个 chip」</td><td><code>shared/tpl/xtpl-cells.html:104</code>（种子页）<code>:59</code>（组）<code>:217</code>（集）</td></tr>
+    <tr><td>站点名来源</td><td><code>tracker_conf.tags[0]</code> 或 <code>.name</code>；匹配不到配置时恒返回 <code>"Unknown"</code></td><td><code>torrents/record.py:201-212</code></td></tr>
+    <tr><td>种子出错</td><td><code>kind=="error"</code> 时状态列已显示后端算好的 <code>error_reason</code>（tracker 原文 / 「文件丢失」）</td><td><code>webui/views.py:174</code>、<code>decorate.js:146</code></td></tr>
+    <tr><td>tracker 报错</td><td><b>只对 <code>kind=="error"</code> 的种子</b>预取 tracker 状态；TTL 300s，单轮预算 5 条</td><td><code>views.py:79-82</code>、<code>:209-249</code></td></tr>
+    <tr><td>tracker 状态取数</td><td>qB <b>无批量接口</b>，只能逐种子 <code>GET /torrents/{hash}/trackers</code>；抽屉里 5s 轮询（仅当前打开的那一个）</td><td><code>drawer_tpl/04-*.js</code>、<code>drawer.js</code></td></tr>
+    <tr><td>「未工作」</td><td>抽屉里 <code>status=4</code> 的文案，<b>列表页完全看不到</b></td><td><code>drawer_tpl/04-trackers-status-cards-tall.js:36</code></td></tr>
+    <tr><td>强制汇报回执</td><td>后端<b>逐 hash 有结论</b>（<code>items[hash] = {status, reason}</code>），聚合成一句话时丢掉 hash</td><td><code>commands.py:577-647</code>、<code>runtime.py:616-636</code></td></tr>
+    <tr><td>前端聚合</td><td>逐 job <code>Promise.allSettled</code> 后只数三桶 + 留<b>第一条</b>原因，job↔hash 映射丢失</td><td><code>commands.js:546-583</code></td></tr>
+    <tr><td>回执通道</td><td><code>set_result(cmd_id, status, error, timing, truth)</code> —— <code>truth</code> 已存在，可零新端点带出逐 hash 结果</td><td><code>runtime.py:1007</code></td></tr>
+    <tr><td>皮肤</td><td>新样式要落三套：atlas / console / prism 各自的 components.css</td><td><code>atlas:353</code>、<code>console:310</code>、<code>prism/views.css:294</code></td></tr>
+    <tr><td>节拍</td><td>主循环 tick ≈ 2s；<code>ERROR_REASON_BUDGET=5/轮</code> ⇒ 现状约 2.5 次 tracker 请求/秒</td><td><code>views.py:82</code></td></tr>
+  </tbody>
+</table>
+
+<h3>四条痛点的根因</h3>
+<ul>
+  <li><b>P1 种子出错</b>：原因文案已有（<code>views.py:174</code>），缺的是<b>醒目度</b>与跨视图汇总（汇总归第二阶段，见 D11）。</li>
+  <li><b>P2 tracker 报错</b>：取数入口被 <code>state_kind(rec) != "error"</code> 卡死（<code>views.py:231</code>）—— tracker 被拒而种子仍在上传时，状态是 <code>seeding</code> 不是 <code>error</code>，于是<b>完全不可见</b>。用户实例：「由本地系统中止网络连接。」</li>
+  <li><b>P3 缺站点配置</b>：<code>tracker_conf is None</code> ⇒ site 恒为 <code>"Unknown"</code>，无任何提示；这类种子后续限速 / HR / 规则全部不生效，属于「静默降级」。</li>
+  <li><b>P4 汇报部分失败</b>：结论在 <code>items[hash]</code> 里是全的，聚合时只拼计数与「前 3 条原因」（<code>runtime.py:625-627</code>），前端又把 job 拍平成 Promise 数组（<code>commands.js:546</code>）—— <b>hash 在两层各丢一次</b>。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 两个图标槽（单点：站点 chip 内部）</h3>
+
+<table>
+  <thead><tr><th>槽位</th><th>语义</th><th>符号</th><th>颜色</th><th>寿命</th><th>来源</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="2">左槽<br>持久健康</td><td>缺站点配置</td><td><code>#i-warn</code></td><td class="wr">橙</td><td>常驻，配置补上即灭</td><td><code>site_alert = "no_site_conf"</code></td></tr>
+    <tr><td>tracker 报错</td><td><code>#i-x-circle</code></td><td class="bad">红</td><td>常驻，恢复即灭（60s 内可发现）</td><td><code>site_alert = "tracker_error"</code> + <code>site_alert_msg</code></td></tr>
+    <tr><td rowspan="4">右槽<br>命令结果</td><td>汇报进行中</td><td><code>#i-pulse</code></td><td>蓝，呼吸</td><td>至回执（兜底 45s）</td><td>前端本地态</td></tr>
+    <tr><td>成功</td><td><code>#i-check</code></td><td class="good">绿</td><td>10s</td><td><code>truth.results[].status == "ok"</code></td></tr>
+    <tr><td>已受理·推迟 / 未确认</td><td><code>#i-clock</code></td><td class="wr">黄</td><td>180s</td><td><code>status == "warn"</code></td></tr>
+    <tr><td>失败</td><td><code>#i-x-circle</code></td><td class="bad">红</td><td>180s</td><td><code>status == "error"</code></td></tr>
+  </tbody>
+</table>
+
+<div class="aside">
+位置即语义：左槽说「这个站点现在不好」，右槽说「你刚才让我做的事结果如何」。两槽可同时存在（一次失败的汇报很可能同时点亮 tracker 报错），互不覆盖。<b>同一时刻每个槽最多一个图标</b> —— 多类命中按左槽优先级 <code>no_site_conf &gt; tracker_error</code>（缺配置更根本：配置缺失时连报错文本都不可信）。
+</div>
+
+<h3>3.2 判定与取数（后端单点）</h3>
+
+<p><b>报错口径</b>：<code>status ∈ {4 not working, 5 tracker error, 6 unreachable}</code> 且 <code>msg</code> 非空，跳过虚拟条目（DHT/PeX/LSD，已有 <code>VIRTUAL_TRACKER_PREFIXES</code>）。取第一条命中的 msg 作为展示文本。</p>
+
+<p><b>去抖状态机</b>（新字段落在 <code>TorrentRecord</code>，紧邻 <code>tracker_error_msg</code>）：</p>
+
+<table>
+  <thead><tr><th>观测</th><th>条件</th><th>动作</th></tr></thead>
+  <tbody>
+    <tr><td>无报错</td><td>—</td><td>清 <code>health_msg</code> 与 <code>suspect_since</code>（恢复即灭）</td></tr>
+    <tr><td>有报错，首次</td><td><code>suspect_since == 0</code></td><td>置 <code>suspect_since = now</code>，<b>不亮</b>；调度器给它 30s 复查</td></tr>
+    <tr><td>有报错，已满窗</td><td><code>now - suspect_since &gt;= 30</code></td><td>写 <code>health_msg</code>（亮），此后按 60s 复查等待恢复</td></tr>
+    <tr><td>有报错，未满窗</td><td>—</td><td>不动，等下次复查</td></tr>
+  </tbody>
+</table>
+
+<div class="aside">
+<b>为什么不是「连续 2 次观测」</b>：常规轮转 TTL 是 600s，一个种子两次观测间隔就是 20 分钟，「连续 2 次」等于没有去抖。故去抖按<b>墙钟</b>算（首次疑似 → 30s 后复查确认），复查频率靠调度器给疑似种子短 TTL 实现，而不是靠轮转自然覆盖。
+</div>
+
+<p><b>取数调度</b>（改造 <code>views.py::refresh_error_reasons</code> 为统一的 tracker 健康取数器）：</p>
+
+<table>
+  <thead><tr><th>常量</th><th>值</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td><code>TRACKER_HEALTH_BUDGET</code></td><td>20 / 轮</td><td>每 tick 最多发起的 <code>/trackers</code> 请求数（现状 5，tick 2s）</td></tr>
+    <tr><td><code>TRACKER_HEALTH_TTL</code></td><td>600s</td><td>常规全库轮转周期（5000 种子 × 2s / 20 ≈ 500s 扫完一轮）</td></tr>
+    <tr><td><code>TRACKER_SUSPECT_TTL</code></td><td>30s</td><td>疑似（首次观测到报错、未确认）复查间隔</td></tr>
+    <tr><td><code>TRACKER_LIT_TTL</code></td><td>60s</td><td>已亮（确认报错）的恢复检测间隔</td></tr>
+    <tr><td><code>ERROR_REASON_TTL</code></td><td>300s（保留）</td><td>error 态种子展示原因的重取间隔，行为不变</td></tr>
+  </tbody>
+</table>
+
+<p><b>扫描范围</b>：活跃态（<code>seeding</code> / <code>downloading</code> / <code>checking</code>）+ <code>error</code> 态；<code>paused</code> / <code>other</code> 跳过（暂停种子不会汇报，报错文本无意义）。<b>预算分配顺序</b>：疑似 → 已亮 → error 态 → 全库游标。前三类数量有界（通常几十个），余下预算推进游标。</p>
+
+<div class="aside">
+<b>统一取数，不双份开销</b>：现有 <code>tracker_error_msg</code>（error 态展示用）与新 <code>health_msg</code> 由<b>同一次</b> <code>/trackers</code> 调用产出。改造后 <code>ERROR_REASON_BUDGET</code> 退役，<code>views.py</code> 只剩一个取数入口、两个消费方 —— 否则 error 态种子会被两套机制各查一次。
+</div>
+
+<h3>3.3 回执契约（逐目标结果）</h3>
+
+<p><code>runtime.check_pending</code> 聚合时把已有的 <code>items</code> 直接带出，不改任何判定逻辑：</p>
+
+<pre><code><span class="cm"># runtime.py::check_pending 聚合段（现状只拼 msg）</span>
+msg = f"成功 {ok_n}, 失败 {err_n}, 未确认 {warn_n}"
+<span class="cm"># 新增: 逐 hash 结果随 truth 出通道（cmd 端点已支持 truth）</span>
+truth = {"results": [
+    {"hash": h, "status": it["status"], "reason": it["reason"]}
+    for h, it in entry["items"].items()
+]}
+self.set_result(cmd_id, status, msg, truth=truth)</code></pre>
+
+<p>前端 <code>_actCore</code> 把 job 从「纯 URL」改成「URL + 目标标识」，组级 job 的结果按 <code>truth.results</code> 展开到成员 hash；<code>truth</code> 缺失（旧版后端 / 等待超时）时该批目标统一落 <code>warn</code>（时钟图标），不谎称成功。</p>
+
+<h3>3.4 分期</h3>
+
+<table>
+  <thead><tr><th>阶段</th><th>内容</th><th>覆盖需求</th></tr></thead>
+  <tbody>
+    <tr><td><b>第一阶段（本件）</b></td><td>S0 标定 → S1 数据层 → S2 视图字段 → S3 站点健康图标 → S4 状态列强化 → S5 回执契约 → S6 命令结果图标 → S7 收口</td><td>四条待办全部（P1 到「醒目」为止）</td></tr>
+    <tr><td>第二阶段（另立件）</td><td>全局汇总徽章（顶栏 / 状态栏「N 个问题种子」，点击切筛选）+ 缺配置 chip 跳转站点页</td><td>P1 的跨视图汇总；D11</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<p>每步都是「改完即可验证」的闭合单元；<b>前一步验收不过不进下一步</b>。命令一律走 task id（<code>commands run test.quick</code> / <code>test.full</code> / <code>dev.fmt</code>）。</p>
+
+<h3>S0 · 复验与真机标定（不改代码）</h3>
+<ul>
+  <li>按 §02 的符号 grep 复验全部行号锚点；任一漂移先改本件再动手。</li>
+  <li>真机量 <b>单次 <code>torrents_trackers</code> 调用耗时</b>（抽 50 个活跃种子取均值与 P95），并记 tick 内的实际占用。</li>
+  <li>据实测确认或修正 <code>TRACKER_HEALTH_BUDGET=20</code> / <code>TRACKER_HEALTH_TTL=600</code>。</li>
+  <li><b>验收</b>：一段可复现的测量输出（均值 / P95 / 每轮总占用），数字写进任务档案；若单次 &gt; 5ms 或每轮占用 &gt; tick 的 5%，触发 R2 走降级路线。</li>
+</ul>
+
+<h3>S1 · 数据层：记录字段 + 统一取数器</h3>
+<ul>
+  <li><code>torrents/record.py</code>：在 <code>tracker_error_msg</code> 旁加 <code>tracker_health_msg: str</code>、<code>tracker_health_ts: float</code>、<code>tracker_suspect_since: float</code>（三者都不进快照字段集，与 <code>tracker_error_msg</code> 同性质）。</li>
+  <li><code>webui/views.py</code>：<code>refresh_error_reasons</code> 改造为 <code>refresh_tracker_health</code>，实现 3.2 的扫描范围 / 四档 TTL / 预算分配顺序 / 去抖状态机；<code>ERROR_REASON_BUDGET</code> 删除，<code>ERROR_REASON_TTL</code> 保留。</li>
+  <li>取数失败（qB 断连 / 异常）按「取不到」处理，不动现值、不推进 TTL 时间戳以外的任何状态。</li>
+  <li><b>验收</b>：新增单测覆盖 —— ①未报错不亮；②首次报错只置疑似；③满 30s 复查后亮；④恢复即灭；⑤预算耗尽时余下种子下轮续取；⑥error 态仍走 300s 且展示原因不变；⑦暂停态不被扫描。</li>
+</ul>
+
+<h3>S2 · 视图字段 + 增量接线</h3>
+<ul>
+  <li><code>views.py::_member_view</code> 与搜索结果的 <code>_view</code>（<code>:960</code>）各加 <code>site_alert</code>（<code>""</code> / <code>"no_site_conf"</code> / <code>"tracker_error"</code>）与 <code>site_alert_msg</code>。</li>
+  <li>判定单点：<code>tracker_conf is None</code> 且 <code>rec.tracker</code> 非空且非虚拟前缀 ⇒ <code>no_site_conf</code>；否则 <code>tracker_health_msg</code> 非空 ⇒ <code>tracker_error</code>。</li>
+  <li>脏登记复用 <code>runtime.note_error_reason_hashes</code>，注释扩义为「行级展示派生字段变更」（<b>不改函数名</b>，避免扩散到 <code>_publish_locked</code> 与守阵）。</li>
+  <li><b>验收</b>：单测 —— ①优先级 <code>no_site_conf &gt; tracker_error</code>；②无真实 tracker（纯 DHT）不报；③字段变化进 torrent 桶，组成员变化进 group 桶；④delta 客户端本代即拿到新值（不降级 full）。</li>
+</ul>
+
+<h3>S3 · 站点健康图标（行内，三视图 + 三皮肤）</h3>
+<ul>
+  <li><code>shared/tpl/xtpl-cells.html</code> 三处站点 cell（<code>:104</code> 种子页 / <code>:59</code> 组行 / <code>:217</code> 集行）在 chip 内插入左槽图标，<code>title</code> 用 <code>site_alert_msg</code>（缺配置时用固定文案「站点未在配置中」）。</li>
+  <li>三皮肤 CSS 各加一组 <code>.site-chip .sa</code> 规则（尺寸 / 颜色 / 呼吸动画 / <code>prefers-reduced-motion</code> 兜底，参照 <code>atlas/components.css:46</code> 的既有写法）。</li>
+  <li><b>必改</b>：<code>decorate.js::_decoFpBuild / _decoFpHit</code> 的指纹槽位加入 <code>site_alert</code> 与 <code>site_alert_msg</code>（见 R3，漏改会让组行图标永远陈旧）。</li>
+  <li><b>验收</b>：静态守阵断言三皮肤样式齐备且 key 集合相等、模板三处均带图标槽；e2e 造一个 <code>no_site_conf</code> 行与一个 <code>tracker_error</code> 行，断言图标出现且 <code>title</code> 为报错原文。</li>
+</ul>
+
+<h3>S4 · 状态列错误图标强化</h3>
+<ul>
+  <li>只加动画：<code>.g-status.k-error</code> 的 <code>i-warn</code> 走呼吸（复用 <code>dot-pulse</code> 的节奏，不新造缓动），三皮肤同步；文案与列宽不动。</li>
+  <li><b>验收</b>：静态守阵断言三皮肤均有该规则；<code>prefers-reduced-motion</code> 下动画关闭。</li>
+</ul>
+
+<h3>S5 · 回执契约：<code>truth.results</code></h3>
+<ul>
+  <li><code>runtime.py::check_pending</code> 聚合段按 3.3 带出 <code>truth</code>；文案（<code>成功 X, 失败 Y, 未确认 Z: …</code>）逐字不变。</li>
+  <li><b>验收</b>：契约单测断言 <code>truth.results</code> 长度 == 目标 hash 数、<code>status</code> 取值域 <code>{ok,error,warn}</code>、<code>reason</code> 对 ok 桶可为空；旧调用方（只读 <code>status/error</code>）零影响。</li>
+</ul>
+
+<h3>S6 · 命令结果图标（右槽）</h3>
+<ul>
+  <li><code>state.js</code> 的 data 加 <code>alertIcons: {}</code>（hash → <code>{kind, msg, until}</code>）+ <code>setRowIcon(hash, kind, msg, ms)</code>，每 hash 一个定时器、覆盖时清旧定时器。</li>
+  <li><code>commands.js::_actCore</code>：jobs 改带目标标识；投递即给活跃成员落 <code>pending</code>；回执按 <code>truth.results</code> 逐 hash 落终态；<code>truth</code> 缺失统一落 <code>warn</code>。</li>
+  <li>时长按 D7：成功 10s / 推迟·未确认 180s / 失败 180s / 进行中至回执（兜底 45s）。</li>
+  <li><b>验收</b>：e2e 构造「3 个目标、1 个 tracker 拒绝」—— 断言仅失败行出现红叉、其余行绿勾 10s 后消失、失败行 180s 后消失；toast 聚合文案与改动前逐字一致。</li>
+</ul>
+
+<h3>S7 · 收口</h3>
+<ul>
+  <li><code>commands run test.full</code> + 新建基线切片记实测数字；<code>dev.fmt</code> 覆盖改动过的 .py。</li>
+  <li>回写：<code>memory-bank/</code> 相关模块文档（views / commands / 前端模板口径）、<code>pitfalls/</code> 若踩到新坑按类入库。</li>
+  <li>若本件进入实施，按立档阈值另立任务档案（<code>kb.new task</code>），本件转 <code>In Progress</code> 并在 §10 追加版本行。</li>
+  <li><b>验收</b>：全量测试通过、基线切片已建、索引重建、<code>kb.docmap --check</code> 无红。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+
+<p>无。11 项决策已在 grilling 阶段全部拍板，结论见 §06。实施中若出现新的取舍（如 S0 标定触发 R2 的线程化改造），<b>不得就地决定</b> —— 入池 issue 或回本件追加拍板点。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+
+<table>
+  <thead><tr><th>编号</th><th>结论</th><th>来源</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>载体分层：站点 chip 承载「站点问题」（缺配置 / tracker 报错），状态列承载「种子问题」（错误原因，已存在）</td><td>Q1 → (b)</td><td>26-10-19</td></tr>
+    <tr><td>D2</td><td>tracker 报错口径 = <code>status ∈ {4,5,6}</code> 且 <code>msg</code> 非空（跳过虚拟条目）</td><td>Q2 → (b)</td><td>26-10-19</td></tr>
+    <tr><td>D3</td><td>去抖按墙钟：首次观测置疑似，≥30s 复查仍报错才亮；恢复即灭（用短 TTL 复查实现，不依赖轮转覆盖）</td><td>Q2 → (b) + 与 TTL 冲突的推论</td><td>26-10-19</td></tr>
+    <tr><td>D4</td><td>取数：全库轮转（活跃态 + error 态，暂停跳过），预算 20/轮、常规 TTL 600s、疑似 30s、已亮 60s；<code>error_reason</code> 与健康状态共用一次取数</td><td>Q3 → 修正案 / Q10</td><td>26-10-19</td></tr>
+    <tr><td>D5</td><td>「缺少站点配置」= <code>tracker_conf is None</code> 且有真实 tracker；站点已配但缺 <code>hr</code> 不算；纯 DHT/磁力不算</td><td>Q4 → ①</td><td>26-10-19</td></tr>
+    <tr><td>D6</td><td>逐目标结果经既有回执 <code>truth.results</code> 带出，不新增端点、不改判定</td><td>Q5 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D7</td><td>图标时长：成功 10s / 失败 180s / 推迟·未确认 180s / 进行中至回执（兜底 45s）</td><td>Q6 → (a) + 用户改值</td><td>26-10-19</td></tr>
+    <tr><td>D8</td><td>四档符号：转圈 / 绿勾 / 时钟 / 红叉；warn 不合并进失败</td><td>Q8 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D9</td><td>种子出错的强化 = 状态列 <code>i-warn</code> 加呼吸动画，文案与列宽不动</td><td>Q9 → (a)</td><td>26-10-19</td></tr>
+    <tr><td>D10</td><td>缺配置 chip 只 hover 说明，不给跳转入口</td><td>Q11 → 推荐</td><td>26-10-19</td></tr>
+    <tr><td>D11</td><td>全局汇总徽章归第二阶段，本件只做行内可见性</td><td>Q7 → 推荐</td><td>26-10-19</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+
+<table>
+  <thead><tr><th>编号</th><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td><b>去抖与 TTL 自相矛盾</b>：常规 TTL 600s 下「连续两次观测」= 20 分钟，去抖形同虚设</td><td>照字面实现 D3 而不看调度</td><td>已内置解法：疑似种子走 30s 短 TTL 复查（D3 推论）。实施时<b>不得</b>把去抖写成「两次轮转观测」</td></tr>
+    <tr><td>R2</td><td><b>5000 库把 tick 拖慢</b>：20 次/轮 × 单次耗时超预算</td><td>S0 实测单次 &gt; 5ms，或每轮占用 &gt; tick 的 5%</td><td>先降预算（20 → 10，TTL 同比放大）；仍不够则评估独立轮询线程（有 <code>notify</code> / <code>hr</code> 先例，但引入第二个写者）——<b>须单独立档</b>，不在本件内做</td></tr>
+    <tr><td>R3</td><td><b>组行图标永远陈旧</b>：<code>decorate.js</code> 的装饰记忆化指纹只含 kind/size/category/site/tags，新字段不进指纹则命中旧缓存</td><td>只改模板不改指纹</td><td>S3 明确要求同步改 <code>_decoFpBuild / _decoFpHit</code>，并加一条「改 site_alert 后组行装饰必变」的单测</td></tr>
+    <tr><td>R4</td><td><b>图标状态随视图重建丢失</b>：把结果写在行对象上，服务端每次发布都是新 dict</td><td>实现时图省事挂在 row 上</td><td>命令结果必须存 <code>state.js</code> 的 hash 键 map（<code>alertIcons</code>），与行对象解耦</td></tr>
+    <tr><td>R5</td><td><b>两槽打架</b>：一次失败汇报同时点亮 tracker 报错，图标互相覆盖</td><td>两槽共用同一位置</td><td>位置即语义（左持久 / 右临时），DOM 顺序固定，测试断言两图标可同时存在</td></tr>
+    <tr><td>R6</td><td><b>qB 请求量上升</b>：5000 库从 2.5 次/秒升到 10 次/秒</td><td>全库轮转上线</td><td>预算硬上限 + 只查活跃态 + 断连整轮跳过；S0 标定后若 qB 侧有压力，先放 TTL 再谈线程化</td></tr>
+    <tr><td>R7</td><td><b>报错文本过长/含特殊字符</b>：站点自定义文案可能几百字符</td><td>直接塞 <code>title</code></td><td><code>site_alert_msg</code> 后端截断到 200 字符；前端只做纯文本绑定，不拼 HTML</td></tr>
+    <tr><td>R8</td><td><b>三皮肤漂移</b>：只改了 atlas</td><td>CSS 各写一遍</td><td>静态守阵机械比对三份样式 key 集合相等（沿用 <code>test_webui_static_skins.py</code> 既有手法）</td></tr>
+    <tr><td>R9</td><td><b>增量漏字段</b>：新字段不进 delta 桶，图标要等下次全量刷新才出现</td><td>只在 <code>_member_view</code> 加字段、忘了脏登记</td><td>S2 单测直接断言「字段变化进 torrent 桶 + 组行进 group 桶」</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-19-2007</span> 初版。来源：用户四条 WEBUI 待办 + grilling 四轮 11 问（Q1 载体分层 / Q2 报错口径与去抖 / Q3 取数范围（(b) 方案经 5000 体量缺点分析后修正为全库轮转）/ Q4 缺配置定义 / Q5 回执契约 / Q6 图标时长 / Q7 汇总徽章分期 / Q8 四档符号 / Q9 状态列强化 / Q10 参数与统一取数 / Q11 chip 无跳转），全部按推荐拍板。</li>
+</ul>
+
+</div>
+</body>
+</html>
