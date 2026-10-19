@@ -101,6 +101,13 @@ window.AQB_STATE = {
        * 重渲染, 所以补丁走这个响应式覆盖表, 由 groupPrimary(g) 现问现用; 回滚 = 删掉覆盖,
        * 真值本来就没被改过(比成员行的 prev 回滚更不容易留假状态)。 */
       pendingGroupOps: {},
+      /* 站点 chip 右槽: 命令结果图标(计划 26-10-19-2007 S6)。hash -> { kind, msg, until }。
+       * kind ∈ pending / ok / warn / error(图标与颜色见 commands.js ALERT_ICON)。
+       * !必须挂在 hash 键 map 上, **不能挂在行对象上**: 服务端每次发布都是新 dict,
+       *   行对象一换图标就丢(R4)。
+       * 写入口单点 = commands.js::setRowIcon(每 hash 一个定时器, 覆盖时清旧定时器);
+       * until = 0 表示不自动过期(进行中, 由回执改写)。 */
+      alertIcons: {},
       // P1-2 行窗口化(常量与原理见文件顶部 ROW_WIN_* 注释)
       rowWin: true,          // 总开关(诊断用): 关掉即全量渲染。窗口的"退避"不走这里 ——
                              // 展开分组/行数不足阈值时由 _rowWindow 直接返回 inactive(见其注释)

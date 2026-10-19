@@ -31,9 +31,14 @@
 - test_member_view_occ_key: occ_key 内容单元标识(计划 26-10-18-2013 D8) —— 归组种子 occ_key == 组行 key(同键空间); 未归组为 null(字段恒在); 种子页平铺行经 _seed_view 继承
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
-- test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
-- test_refresh_error_reasons_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
-- test_refresh_error_reasons_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
+- test_refresh_tracker_health_budget_and_ttl: tracker 健康取数限流(单轮预算条数/TTL 内不重取/过期重取)
+- test_refresh_tracker_health_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
+- test_refresh_tracker_health_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
+- test_tracker_health_debounce_state_machine: 去抖状态机(计划 26-10-19-2007 S1) 首次报错只置疑似不亮 / 满窗复查仍报错才亮 / 恢复即灭
+- test_tracker_health_ignores_fetch_failure: 取数失败(qB 异常)按"取不到"处理 —— 不改现值, 只推进 TTL 时间戳
+- test_tracker_health_skips_paused: 暂停态不扫描(不发请求), 健康态保留不灭
+- test_tracker_health_error_state_reason_ttl_unchanged: error 态展示原因仍按 ERROR_REASON_TTL 重取(与改造前一致)
+- test_site_alert_priority_and_virtual_tracker: site_alert 判定单点 —— no_site_conf 优先于 tracker_error / 纯 DHT 不算缺配置 / 报错文本截断
 - test_token_resolve_single_point_in_infra: 守阵(issue hr-token-persist-convention-dup) token 生成/持久化口径单点在 infra.utils.resolve_or_create_token —— token_hex(32) 全仓唯一 + 两侧入口必须委托
 """
 import logging
@@ -985,7 +990,7 @@ def test_error_reason_from_tracker_msg(tmp_path):
     seed_store(mgr, [err, no_msg])
 
     mgr.web.group_view_dirty = False
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
 
     assert err.tracker_error_msg == "torrent not registered", "取第一条非空错误 msg(虚拟条目跳过)"
     assert mgr.web.group_view_dirty is True, "原因变化须显式置脏(非快照字段, store.view_changed 覆盖不到)"
@@ -1006,13 +1011,13 @@ def test_error_reason_missing_files_without_api(tmp_path):
     t = FakeTorrent(hash="HA", name="Show", state="missingFiles")
     seed_store(mgr, [t])
 
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
 
     assert mgr._member_view(t)["error_reason"] == "文件丢失"
     assert seen == [], "missingFiles 的原因不依赖 API"
 
 
-def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
+def test_refresh_tracker_health_budget_and_ttl(tmp_path, monkeypatch):
     """预取限流: 单轮最多预算条, TTL 内不重取, 过期后重取
 
     错误种子成片时(整组文件丢失)不能一轮打满 tracker 请求 —— 与搜索索引同一限流哲学。
@@ -1020,47 +1025,56 @@ def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
     from auto_qb.webui import views as web_view
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
-    monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 1)
+    monkeypatch.setattr(web_view, "TRACKER_HEALTH_BUDGET", 1)
     mgr = make_manager(str(tmp_path / "state.json"))
     client = FakeClient()
     mgr.client = client
     seen = _tracker_calls(client)
     seed_store(mgr, [FakeTorrent(hash="HA", name="A", state="error"), FakeTorrent(hash="HB", name="B", state="error")])
 
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert seen == ["HA"], "单轮只拉预算条数"
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert seen == ["HA", "HB"], "下一轮续取剩余种子"
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert seen == ["HA", "HB"], "TTL 内不重取"
 
-    monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 5)
+    monkeypatch.setattr(web_view, "TRACKER_HEALTH_BUDGET", 5)
     monkeypatch.setattr(web_view, "ERROR_REASON_TTL", 0.0)
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert seen == ["HA", "HB", "HA", "HB"], "TTL 过期后重取(tracker msg 随站点状态变化)"
 
 
-def test_refresh_error_reasons_clears_when_recovered(tmp_path):
+def test_refresh_tracker_health_clears_when_recovered(tmp_path):
     """状态恢复(离开错误态)后清空原因缓存 —— 否则恢复做种仍挂着旧原因"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
-    t = FakeTorrent(hash="HA", name="A", state="error", tracker_error_msg="unregistered", tracker_error_ts=time.time())
+    # tracker_health_ts 与 error_ts 同置为"刚观测过": 统一取数后两者共用同一次观测,
+    # 双钟(TTL 600 / 300)任一未到期都不该重取
+    t = FakeTorrent(
+        hash="HA",
+        name="A",
+        state="error",
+        tracker_error_msg="unregistered",
+        tracker_error_ts=time.time(),
+        tracker_health_ts=time.time()
+    )
     seed_store(mgr, [t])
 
     mgr.web.group_view_dirty = False
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert t.tracker_error_msg == "unregistered", "错误态且未过期: 原样保留"
     assert mgr.web.group_view_dirty is False, "无变化不置脏"
 
     t.state = "stalledUP"
-    mgr.refresh_error_reasons()
+    mgr.refresh_tracker_health()
     assert t.tracker_error_msg == "" and t.tracker_error_ts == 0.0
     assert mgr.web.group_view_dirty is True, "清空也是视图变化"
 
 
-def test_refresh_error_reasons_skips_when_disconnected(tmp_path):
+def test_refresh_tracker_health_skips_when_disconnected(tmp_path):
     """qB 断开(client None)时跳过: 不发请求、不清空已有原因(连接恢复后自然刷新)"""
     from helpers import FakeTorrent, make_manager, seed_store
 
@@ -1069,9 +1083,150 @@ def test_refresh_error_reasons_skips_when_disconnected(tmp_path):
     t = FakeTorrent(hash="HA", name="A", state="error", tracker_error_msg="unregistered")
     seed_store(mgr, [t])
 
-    mgr.refresh_error_reasons()  # 不抛异常
+    mgr.refresh_tracker_health()  # 不抛异常
 
     assert t.tracker_error_msg == "unregistered" and t.tracker_error_ts == 0.0
+
+
+def test_tracker_health_debounce_state_machine(tmp_path):
+    """去抖状态机(计划 26-10-19-2007 S1): 首次报错只置疑似不亮; 满窗复查仍报错才亮
+
+    反例: 若按"连续 2 次观测"实现, 常规 TTL 600s 下两次观测相隔 20 分钟, 去抖等于没有(R1)。
+    """
+    from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    client.trackers_map["HA"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 4, "msg": "连接被拒"}]
+    # 活跃态: tracker 被拒但种子仍在上传(状态是 seeding 不是 error —— 这正是 P2 痛点)
+    t = FakeTorrent(hash="HA", name="A", state="stalledUP", tracker="https://tracker.hhanclub.net/announce.php")
+    t.tracker_conf = FakeTracker("HHan")
+    seed_store(mgr, [t])
+
+    mgr.refresh_tracker_health()
+    assert t.tracker_health_msg == "", "首次观测只置疑似, 不亮"
+    assert t.tracker_suspect_since > 0
+    assert mgr._member_view(t)["site_alert"] == "", "疑似态不亮图标"
+
+    # 满窗(30s)后复查: 仍报错 -> 亮
+    t.tracker_health_ts = time.time() - 31
+    t.tracker_suspect_since = time.time() - 31
+    mgr.refresh_tracker_health()
+    assert t.tracker_health_msg == "连接被拒", "满窗复查仍报错 -> 确认亮"
+    view = mgr._member_view(t)
+    assert view["site_alert"] == "tracker_error" and view["site_alert_msg"] == "连接被拒"
+
+    # 恢复即灭: 站点恢复(无报错条目) -> 清空
+    client.trackers_map["HA"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 2, "msg": "Working"}]
+    t.tracker_health_ts = time.time() - 61  # 已亮 -> 60s 复查到期
+    mgr.refresh_tracker_health()
+    assert t.tracker_health_msg == "" and t.tracker_suspect_since == 0.0, "恢复即灭"
+    assert mgr._member_view(t)["site_alert"] == ""
+
+
+def test_tracker_health_ignores_fetch_failure(tmp_path):
+    """取数失败(qB 异常)按"取不到"处理: 不动现值(不能把"没看到"当成"好了")"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", name="A", state="stalledUP", tracker_health_msg="连接被拒")
+    seed_store(mgr, [t])
+    t.tracker_health_ts = 0.0  # 到期
+
+    def boom(h):
+        raise RuntimeError("qB 断连")
+
+    client.torrents_trackers = boom
+    mgr.refresh_tracker_health()
+
+    assert t.tracker_health_msg == "连接被拒", "取不到不改现值"
+    assert t.tracker_health_ts > 0, "TTL 时间戳照常推进(不在断连期间反复重试)"
+
+
+def test_tracker_health_skips_paused(tmp_path):
+    """暂停态不扫描(暂停种子不会汇报, 报错文本无意义); 健康态保留不灭"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    seen = _tracker_calls(client)
+    client.trackers_map["HA"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 4, "msg": "拒绝"}]
+    t = FakeTorrent(hash="HA", name="A", state="pausedUP", tracker_health_msg="拒绝")
+    seed_store(mgr, [t])
+
+    mgr.refresh_tracker_health()
+
+    assert seen == [], "暂停态不发 tracker 请求"
+    assert t.tracker_health_msg == "拒绝", "没有观测证据时不拿'没看'当成'好了'"
+
+
+def test_tracker_health_error_state_reason_ttl_unchanged(tmp_path, monkeypatch):
+    """error 态种子: 展示原因仍按 ERROR_REASON_TTL(300s)重取, 与改造前行为一致"""
+    from auto_qb.webui import views as web_view
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    seen = _tracker_calls(client)
+    client.trackers_map["HA"] = [
+        {
+            "url": "https://tracker.hhanclub.net/announce.php",
+            "status": 4,
+            "msg": "unregistered"
+        }
+    ]
+    t = FakeTorrent(hash="HA", name="A", state="error")
+    seed_store(mgr, [t])
+
+    mgr.refresh_tracker_health()
+    assert t.tracker_error_msg == "unregistered"
+    assert seen == ["HA"]
+
+    # TTL 内(300s 与 30s 疑似复查都没到期): 不重取
+    t.tracker_health_ts = time.time() - 20
+    t.tracker_error_ts = time.time() - 20
+    mgr.refresh_tracker_health()
+    assert seen == ["HA"], "TTL 内不重取"
+
+    # 越过 ERROR_REASON_TTL: 重取(健康侧 30s 疑似复查也在此列, 两者共用同一次调用)
+    t.tracker_health_ts = time.time() - (web_view.ERROR_REASON_TTL + 1)
+    t.tracker_error_ts = time.time() - (web_view.ERROR_REASON_TTL + 1)
+    mgr.refresh_tracker_health()
+    assert seen == ["HA", "HA"], "过期后重取"
+
+
+def test_site_alert_priority_and_virtual_tracker(tmp_path):
+    """站点告警判定单点: 缺配置优先于 tracker 报错; 纯 DHT/磁力不算缺配置; msg 截断"""
+    from auto_qb.webui import views as web_view
+    from helpers import FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    # ① 缺站点配置 + 同时有报错 -> 缺配置优先(配置缺失时连报错文本都不可信)
+    no_conf = FakeTorrent(
+        hash="HA",
+        name="A",
+        state="stalledUP",
+        tracker="https://tracker.unknown.net/announce.php",
+        tracker_health_msg="拒绝"
+    )
+    # ② 纯 DHT(无真实 tracker URL): 不报缺配置
+    dht_only = FakeTorrent(hash="HB", name="B", state="stalledUP", tracker="** [DHT] **")
+    # ③ 报错文本超长 -> 截断到 SITE_ALERT_MSG_MAX
+    long_msg = "x" * (web_view.SITE_ALERT_MSG_MAX + 50)
+    conf = FakeTorrent(hash="HC", name="C", state="stalledUP", tracker="https://tracker.hhanclub.net/announce.php")
+    conf.tracker_conf = object()  # 已匹配站点(只判 None)
+    conf.tracker_health_msg = long_msg
+    seed_store(mgr, [no_conf, dht_only, conf])
+
+    assert mgr._site_alert(no_conf) == ("no_site_conf", web_view.SITE_ALERT_NO_CONF_TEXT)
+    assert mgr._site_alert(dht_only) == ("", ""), "纯 DHT 不算缺配置"
+    alert, msg = mgr._site_alert(conf)
+    assert alert == "tracker_error" and len(msg) == web_view.SITE_ALERT_MSG_MAX, "报错文本截断到 200"
 
 
 def test_token_resolve_single_point_in_infra():

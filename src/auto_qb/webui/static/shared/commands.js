@@ -16,11 +16,71 @@
  * !它不再进"端到端"宽限 —— 回执不再被扣住等真值, 端到端就是命令执行时间。 */
 const TRUTH_HOLD_MS = 8000;
 
+/* 站点 chip 图标槽(计划 26-10-19-2007): token -> 图标 id 的**唯一映射**。
+ * 左槽(site_alert, 后端判定)与右槽(命令结果, 前端本地态)共用这张表 —— 模板只做声明式绑定,
+ * 不在这里以外的地方写 `#i-xxx` 图标名, 也不按 state 猜原因(口径与 error_reason 一致)。
+ * 颜色走 CSS 类(sa-<token>), 三皮肤各自定义, 这里只管符号。 */
+const ALERT_ICON = {
+  no_site_conf: "#i-warn",      // 缺站点配置(橙, 常驻)
+  tracker_error: "#i-x-circle", // tracker 报错(红, 常驻, 恢复即灭)
+  pending: "#i-pulse",          // 汇报进行中(蓝, 呼吸)
+  ok: "#i-check",               // 成功(绿, 10s)
+  warn: "#i-clock",             // 已受理·推迟 / 未确认(黄, 180s)
+  error: "#i-x-circle",         // 失败(红, 180s)
+};
+/* 右槽图标寿命(ms, 计划 D7): 成功 10s / 推迟·未确认 180s / 失败 180s /
+ * 进行中至回执(兜底 45s —— 回执最长等 40s, 留 5s 余量)。 */
+const ALERT_ICON_MS = { ok: 10000, warn: 180000, error: 180000, pending: 45000 };
+
 window.AQB_COMMANDS = {
   methods: {
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
     _actionText(action) {
       return { pause: "停止", resume: "启动", reannounce: "强制重新汇报", recheck: "强制重新检查", delete: "删除" }[action] || action;
+    },
+    /* ---------------- 站点 chip 图标槽(计划 26-10-19-2007 S3/S6) ----------------
+     * 左槽 = 持久健康(后端 site_alert: no_site_conf / tracker_error), 右槽 = 临时命令结果
+     * (前端 alertIcons: pending / ok / warn / error)。两槽可同时存在, DOM 顺序固定 ——
+     * 位置即语义(R5): 左"这个站点现在不好", 右"你刚让我做的事结果如何", 互不覆盖。 */
+    alertIconHref(token) {
+      return ALERT_ICON[token] || "";
+    },
+    /* 右槽读口(模板用): 返回该 hash 当前的命令结果图标, 无则 null。
+     * until 到期的兜底在这里也判一次 —— 定时器被页面挂起(后台标签页节流)时不会留孤儿图标。 */
+    rowIcon(hash) {
+      const r = this.alertIcons && this.alertIcons[hash];
+      if (!r) return null;
+      if (r.until && Date.now() > r.until) return null;
+      return r;
+    },
+    /* 右槽写口单点: 给某行落一个命令结果图标(ms 缺省 = 不自动过期, 等回执改写)。
+     * !每 hash 一个定时器, 覆盖时先清旧定时器 —— 否则"进行中(45s 兜底)"的旧定时器会把
+     *   后到的成功/失败图标提前清掉(时序: 兜底 45s > 成功 10s, 用户会看到绿勾闪一下就没了)。 */
+    setRowIcon(hash, kind, msg, ms) {
+      if (!hash) return;
+      if (!this._rowIconTimers) this._rowIconTimers = {};
+      if (this._rowIconTimers[hash]) {
+        clearTimeout(this._rowIconTimers[hash]);
+        delete this._rowIconTimers[hash];
+      }
+      if (!kind || !ALERT_ICON[kind]) {
+        delete this.alertIcons[hash];
+        return;
+      }
+      const life = ms == null ? ALERT_ICON_MS[kind] || 0 : ms;
+      this.alertIcons[hash] = { kind, msg: msg || "", until: life ? Date.now() + life : 0 };
+      if (life) {
+        this._rowIconTimers[hash] = setTimeout(() => {
+          delete this.alertIcons[hash];
+          delete this._rowIconTimers[hash];
+        }, life);
+      }
+    },
+    /* 组 key -> 成员 hash 列表(右槽按 hash 落图标: 组级 job 的结果也要落到成员行上)。
+     * 组已不在视图(刚被解散)时返回空 —— 落不到图标也不谎报, toast 仍给聚合结论。 */
+    _jobHashes(k) {
+      const g = this._findGroup(k);
+      return g ? (g.members || []).map((m) => m.hash) : [];
     },
     /* ---------------- P0-3 埋点(点击侧): 「点击 → 补丁」/「点击 → POST 返回」 ----------------
      * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 → 命令投递」这一段
@@ -172,12 +232,16 @@ window.AQB_COMMANDS = {
         }
       }
       // `truth` = 回执里附带的真值({hash: {kind}})。带上它前端就不必再拉一次全量 /api/state。
+      // 强制汇报的聚合回执例外: truth = {results: [{hash, status, reason}]}(逐目标结果,
+      // 计划 26-10-19-2007 D6) —— 部分失败时它恰恰是 warn/error 回执, 故**三态都带出** truth,
+      // 否则"哪几个失败了"在行上就永远落不下来(聚合文案只留前 3 条原因)。
       // `status` = 后端回执原值(ok/error/warn, D4=warn): reannounce 聚合分支按它三桶分流
       // (warn = 已受理·推迟/未确认, 不等于失败); 其余消费方只读 ok/error, 添字段零影响。
       // SSE 与轮询两路都经这里转换, 终结语义单点(改回执词汇只动这一处 + 后端契约测试)。
+      const truth = r.truth || null;
       return r.status === "ok"
-        ? { ok: true, truth: r.truth || null, status: "ok" }
-        : { ok: false, error: r.error || "执行失败", status: r.status || "" };
+        ? { ok: true, truth, status: "ok" }
+        : { ok: false, error: r.error || "执行失败", status: r.status || "", truth };
     },
     /* ---------------- P2 事件驱动: 订阅式等回执 ----------------
      * 由 app.js 的 EventSource(/api/events)收 `cmd` 事件后回调这里兑现。
@@ -521,9 +585,12 @@ window.AQB_COMMANDS = {
            * 也是 libtorrent 空转 —— qB 的 GUI 没有 per-target 回执所以无所谓, 我们有确认层:
            * 白等到 item deadline(最长 600s)后落「未确认」, 把干净的成功报成部分失败。 */
           const plan = this.reannouncePlan({ keys, hashes });
+          /* job 从"纯 URL"改成"URL + 目标标识"(计划 26-10-19-2007 S6): 逐目标结果要落到
+           * 站点 chip 右槽, 而回执里的 truth.results 是**按 hash** 给的 —— 组级 job 必须知道
+           * 自己覆盖哪些成员, 才能在 truth 缺失时兜底落 warn。 */
           const jobs = [
-            ...plan.keys.map((k) => `/api/groups/${k}/reannounce`),
-            ...plan.hashes.map((h) => `/api/torrents/${h}/reannounce`),
+            ...plan.keys.map((k) => ({ url: `/api/groups/${k}/reannounce`, hashes: this._jobHashes(k) })),
+            ...plan.hashes.map((h) => ({ url: `/api/torrents/${h}/reannounce`, hashes: [h] })),
           ];
           if (!jobs.length) {
             /* 闸门放行(目标解析不出时不误拦)但计划为空(组行成员被清空的罕见态): 必须显式
@@ -543,29 +610,45 @@ window.AQB_COMMANDS = {
                 : "强制重新汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)"),
             "busy", 0, { sticky: true }
           );
+          /* 投递即给目标落"进行中"(右槽蓝呼吸, 兜底 45s): 多目标时用户能在**行上**看到
+           * 哪几个在飞, 而不是只有一条聚合 toast。 */
+          for (const j of jobs) for (const h of j.hashes) this.setRowIcon(h, "pending", "强制重新汇报中…");
           const results = await Promise.allSettled(
-            jobs.map((p) =>
-              this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
+            jobs.map((j) =>
+              this.api(j.url, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
             )
           );
           /* 三桶按回执 status 分流(计划 26-10-05-0923 D4=warn, 机器依据 = status 不看前缀):
            * ok = tracker 已确认; error = tracker 拒绝(含投递失败/等待超时); warn = 已受理·推迟
            * 与未确认·停止/超时。前缀(已受理/未确认/失败)只作文案, 不参与分流。 */
           let okN = 0, errN = 0, warnN = 0, firstMsg = "";
-          for (const r of results) {
+          results.forEach((r, i) => {
+            let status = "error", msg = "";
             if (r.status === "rejected") {
               errN += 1;
-              if (!firstMsg) firstMsg = (r.reason && r.reason.message) || "投递失败";
+              msg = (r.reason && r.reason.message) || "投递失败";
             } else if (r.value.ok) {
               okN += 1;
+              status = "ok";
             } else if (r.value.status === "warn") {
               warnN += 1;
-              if (!firstMsg) firstMsg = r.value.error || "";
+              status = "warn";
+              msg = r.value.error || "";
             } else {
               errN += 1;
-              if (!firstMsg) firstMsg = r.value.error || "";
+              msg = r.value.error || "";
             }
-          }
+            if (!firstMsg) firstMsg = msg;
+            /* 逐目标结果(计划 D6): truth.results 是后端 items[hash] 的原样带出, 不新增端点。
+             * !truth 缺失(旧版后端 / 等待超时)时该批目标统一落 warn —— **不谎称成功**;
+             *   组级 job 的目标 hash 取自 _jobHashes(视图当前成员)。 */
+            const per = r.status === "fulfilled" && r.value.truth && r.value.truth.results;
+            if (Array.isArray(per) && per.length) {
+              for (const it of per) this.setRowIcon(it.hash, it.status, it.reason || "");
+            } else {
+              for (const h of jobs[i].hashes) this.setRowIcon(h, status === "ok" ? "warn" : status, msg || "未收到逐目标结果");
+            }
+          });
           if (!errN && !warnN) {
             this._finishToast(tid, "ok",
               cnt > 1

@@ -76,10 +76,21 @@ def _parse_query(q: str) -> Tuple[List[str], List[str]]:
     return pos, neg
 
 
-# 错误原因(状态列"错误"背后的具体原因)刷新: qB torrents/info **不含**错误文本, 原因只能从
-# torrents/trackers 的 msg 取 —— 故只对错误状态种子按 TTL 限额预取, 视图组装只读缓存。
-ERROR_REASON_TTL = 300.0  # 单条原因的重取间隔(秒): tracker msg 随站点状态变化, 过期重取
-ERROR_REASON_BUDGET = 5  # 单轮最多拉取的 tracker 请求数(限流, 错误种子成片时不阻塞主循环)
+# tracker 健康取数(计划 26-10-19-2007 S1): qB torrents/info **不含**错误文本, 报错原因与站点
+# 健康都只能从 torrents/trackers 的 msg 取。**一个取数入口、两个消费方**:
+#   ① error 态种子的展示原因(状态列"错误"背后的具体原因, ERROR_REASON_TTL 控制重取间隔)
+#   ② 站点 chip 左槽的健康图标(缺配置 / tracker 报错, 见 site_alert)
+# 两套机制共用同一次 /trackers 调用 —— 否则 error 态种子会被各查一次(计划 §3.2 aside)。
+# !qB **无批量接口**, 只能逐种子 GET /torrents/trackers; 故全库轮转靠预算 + TTL 摊开。
+TRACKER_HEALTH_BUDGET = 20  # 每 tick 最多发起的 /trackers 请求数(S0 实测 0.38ms/次 -> 20 条约 7.5ms, 占 1.5s tick 的 0.5%)
+TRACKER_HEALTH_TTL = 600.0  # 常规全库轮转周期(5000 种子 × tick 2s / 20 ≈ 500s 扫完一轮 < TTL)
+TRACKER_SUSPECT_TTL = 30.0  # 疑似(首次观测到报错、未确认)的复查间隔 —— 去抖靠它, 不靠轮转自然覆盖
+TRACKER_LIT_TTL = 60.0  # 已亮(确认报错)的恢复检测间隔(恢复即灭, 60s 内可发现)
+# 去抖窗口(墙钟): 首次观测只置疑似, 满窗后复查仍报错才亮。
+# !不能写成"连续 2 次观测": 常规 TTL 600s 下两次观测相隔 20 分钟, 去抖等于没有(计划 R1)。
+TRACKER_DEBOUNCE_WINDOW = 30.0
+# error 态种子展示原因的重取间隔(秒): tracker msg 随站点状态变化, 过期重取。行为与改造前一致。
+ERROR_REASON_TTL = 300.0
 # "tracker 报错"状态集合(qB TrackerStatus): 4=not working / 5=tracker error / 6=unreachable
 _TRACKER_ERROR_STATUSES = frozenset(
     int(s) for s in (TrackerStatus.NOT_WORKING, TrackerStatus.TRACKER_ERROR, TrackerStatus.UNREACHABLE)
@@ -87,6 +98,18 @@ _TRACKER_ERROR_STATUSES = frozenset(
 # 虚拟 tracker 条目(DHT/PeX/LSD, 非真实站点): 与强制汇报确认同一口径, 不参与报错文本提取
 # 单点定义在 infra/utils(与 mask 的 R1 透传共用, 消双源, 计划 26-10-07-0055 S1)
 _VIRTUAL_TRACKER_PREFIXES = VIRTUAL_TRACKER_PREFIXES
+
+# 站点健康告警的取值域(前端只消费字符串 + 符号, 不在 JS 里按 state 猜原因):
+#   ""            健康 / 不适用
+#   "no_site_conf" 该种子有真实 tracker 但配置里匹配不到站点(后续限速/HR/规则全部不生效, 静默降级)
+#   "tracker_error" 该站点 tracker 确认报错(tracker_health_msg 非空)
+# 优先级 no_site_conf > tracker_error: 配置缺失时连报错文本都不可信(计划 §3.1 aside)。
+SITE_ALERT_NO_CONF = "no_site_conf"
+SITE_ALERT_TRACKER = "tracker_error"
+# 缺站点配置时的固定文案(前端 title 用; 不拼 HTML, 纯文本绑定)
+SITE_ALERT_NO_CONF_TEXT = "站点未在配置中"
+# site_alert_msg 截断长度(计划 R7): 站点自定义报错文案可能几百字符, 直接塞 title 会撑爆弹窗
+SITE_ALERT_MSG_MAX = 200
 
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
 # !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
@@ -188,8 +211,13 @@ class WebviewMixin:
         return ""
 
     @staticmethod
-    def _fetch_tracker_error(rec: TorrentRecord, client) -> str:
-        """从 tracker 列表提取报错文本(取第一条非空错误 msg); 异常按"取不到"处理
+    def _fetch_tracker_error(rec: TorrentRecord, client) -> Optional[str]:
+        """从 tracker 列表提取报错文本(取第一条非空错误 msg)
+
+        返回三态(与"没报错"必须可分, 否则取数失败会被当成"恢复"把图标灭掉):
+        - `None` 取不到(qB 断连 / 异常) —— 调用方不动现值, 只推进 TTL 时间戳
+        - `""`   取到了且无报错
+        - 非空串 取到了, 该站点 tracker 报错
 
         虚拟条目(DHT/PeX/LSD)跳过 —— 其 msg 与真实站点无关。单条拉取失败不阻塞整体,
         下个 TTL 周期自然重试。
@@ -198,7 +226,7 @@ class WebviewMixin:
             entries = client.torrents_trackers(rec.hash) or []
         except Exception as e:
             logger.debug(f"读取 tracker 状态失败({rec.log_repr}): {e}")
-            return ""
+            return None
         for t in entries:
             if str(t.get("url") or "").startswith(_VIRTUAL_TRACKER_PREFIXES):
                 continue
@@ -206,47 +234,140 @@ class WebviewMixin:
                 return t["msg"].strip()
         return ""
 
-    def refresh_error_reasons(self) -> None:
-        """主循环调用: 刷新错误状态种子的具体原因(WebUI 状态列展示)
+    @staticmethod
+    def _tracker_health_due(rec: TorrentRecord, is_error_state: bool) -> float:
+        """该记录下次允许观测的时刻(TTL 分档)
 
-        只对 kind=="error" 且原因非状态自明(missingFiles = "文件丢失", 见 _error_reason)
-        的种子按 TTL 限额拉取 tracker 状态(错误种子通常个位数; 单轮预算 ERROR_REASON_BUDGET
-        条, 成片错误时按轮次摊开, 不阻塞主循环)。
-        记录已离开错误状态时清空缓存 —— 否则恢复做种后仍挂着旧原因。
+        - 疑似 -> TRACKER_SUSPECT_TTL(30s 后复查确认, 去抖的复查频率靠它而非轮转)
+        - 已亮 -> TRACKER_LIT_TTL(60s 探恢复)
+        - 其余 -> TRACKER_HEALTH_TTL(常规全库轮转); error 态种子另受 ERROR_REASON_TTL 约束
+          (展示原因 300s 重取, 与改造前行为一致) —— 取两者中更早的那个
+        """
+        if rec.tracker_suspect_since:
+            return rec.tracker_health_ts + TRACKER_SUSPECT_TTL
+        if rec.tracker_health_msg:
+            return rec.tracker_health_ts + TRACKER_LIT_TTL
+        due = rec.tracker_health_ts + TRACKER_HEALTH_TTL
+        if is_error_state:
+            due = min(due, rec.tracker_error_ts + ERROR_REASON_TTL)
+        return due
 
-        原因不是快照字段, `store.view_changed` 覆盖不到它, 故变化时显式置
-        `web.group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变)。
+    def _observe_tracker_health(self, rec: TorrentRecord, client, now: float, changed: set) -> None:
+        """单次 /trackers 观测 -> 写 error 态展示原因 + 健康状态机(同一份 msg, 两个消费方)
 
-        plan S2 补(源标签 "tracker_error_refresh"): 改写的行(hash)在改写点精确可得 ->
-        按**行级归约**接线增量时间线(note_error_reason_hashes 登记, 落代前并入 torrent/
-        group 桶 upsert), 不走 full 降级 —— delta 客户端本代即拿到这些行的 error_reason 新值。
+        去抖状态机(计划 §3.2, 按**墙钟**不按观测次数):
+          无报错        -> 清 health_msg 与 suspect_since(恢复即灭)
+          有报错·首次   -> 只置 suspect_since(不亮), 调度器 30s 后复查
+          有报错·满窗   -> 写 health_msg(亮), 此后按 60s 复查等恢复
+          有报错·未满窗 -> 不动, 等下次复查
+        取数失败(None): 不动任何现值 —— 只保留本次已推进的 TTL 时间戳。
+        """
+        rec.tracker_health_ts = now
+        is_err = self.state_kind(rec) == "error"
+        if is_err:
+            rec.tracker_error_ts = now  # 先记时间戳: 拉取失败也不在 TTL 内反复重试
+        msg = self._fetch_tracker_error(rec, client)
+        if msg is None:
+            return  # 取不到: 现值不动(断连/异常不等于"恢复")
+        if is_err and msg != rec.tracker_error_msg:
+            rec.tracker_error_msg = msg
+            changed.add(rec.hash)
+        if not msg:
+            if rec.tracker_health_msg or rec.tracker_suspect_since:
+                rec.tracker_health_msg = ""
+                rec.tracker_suspect_since = 0.0
+                changed.add(rec.hash)
+            return
+        if not rec.tracker_suspect_since:
+            rec.tracker_suspect_since = now  # 首次疑似: 不亮, 30s 后复查确认
+            return
+        if now - rec.tracker_suspect_since < TRACKER_DEBOUNCE_WINDOW:
+            return  # 未满窗: 等下次复查
+        if rec.tracker_health_msg != msg:
+            rec.tracker_health_msg = msg
+            changed.add(rec.hash)
+
+    def refresh_tracker_health(self) -> None:
+        """主循环调用: 统一的 tracker 健康取数器(error 态展示原因 + 站点 chip 健康图标)
+
+        扫描范围: 活跃态(seeding / downloading / checking)+ error 态; paused / other 跳过
+        (暂停种子不会汇报, 报错文本无意义)。
+        预算分配顺序(计划 §3.2): 疑似 -> 已亮 -> error 态 -> 全库轮转。前三类数量有界
+        (通常几十个), 余下预算推进全库 —— 靠"取过就推 TTL"自然推进游标, 不另存游标:
+        每轮把所有到期记录按桶序取前 TRACKER_HEALTH_BUDGET 条, 取过的下轮不再到期。
+
+        记录离开 error 态时清空展示原因缓存 —— 否则恢复做种后仍挂着旧原因。
+
+        原因/健康都不是快照字段, `store.view_changed` 覆盖不到, 故变化时显式置
+        `web.group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变),
+        并按**行级归约**接线增量时间线(note_error_reason_hashes 登记, 落代前并入 torrent/
+        group 桶 upsert), 不走 full 降级 —— delta 客户端本代即拿到这些行的新值。
+
+        plan 26-10-19-2007 S1: 由 refresh_error_reasons 改造而来(ERROR_REASON_BUDGET 退役,
+        预算/分档 TTL 见模块常量)。
         """
         client = self.client
         if client is None:
             return  # qB 断开: 无 API 可用, 保持现值待连接恢复后刷新
         now = time.time()
-        budget = ERROR_REASON_BUDGET
-        changed: set = set()  # 本轮改写了 error_reason 的行(行级脏, plan S2 补)
+        changed: set = set()  # 本轮改写了行级展示派生字段的行(行级脏)
+        buckets = ([], [], [], [])  # 0 疑似 / 1 已亮 / 2 error 态 / 3 全库轮转
         for rec in self.store.by_hash.values():
-            if self.state_kind(rec) != "error" or rec.state_enum is TorrentState.MISSING_FILES:
-                if rec.tracker_error_msg:
-                    rec.tracker_error_msg = ""
-                    rec.tracker_error_ts = 0.0
-                    changed.add(rec.hash)
-                continue
-            if rec.tracker_error_ts and now - rec.tracker_error_ts < ERROR_REASON_TTL:
-                continue  # 未过期: 直接复用现值
-            if budget <= 0:
-                continue  # 本轮预算用尽: 余下种子下一轮续取
-            budget -= 1
-            rec.tracker_error_ts = now  # 先记时间戳: 拉取失败也不在 TTL 内反复重试
-            msg = self._fetch_tracker_error(rec, client)
-            if msg != rec.tracker_error_msg:
-                rec.tracker_error_msg = msg
+            kind = self.state_kind(rec)
+            is_err = kind == "error"
+            # 原因自明 / 已离开错误态: 展示原因**立刻**清掉(不依赖 TTL —— 否则恢复做种后
+            # 仍挂着旧原因)。missingFiles 的原因由状态本身给出("文件丢失"), 不是 tracker 的错。
+            if (not is_err or rec.state_enum is TorrentState.MISSING_FILES) and rec.tracker_error_msg:
+                rec.tracker_error_msg = ""
+                rec.tracker_error_ts = 0.0
                 changed.add(rec.hash)
+            if is_err and rec.state_enum is TorrentState.MISSING_FILES:
+                continue  # 不取数、不点健康图标(文件丢失不是站点问题)
+            if not is_err and kind not in ("seeding", "downloading", "checking"):
+                # paused / other: 不扫描(暂停种子不会汇报, 报错文本无意义)。
+                # 健康态保留 —— 暂停期间没有观测证据, 不拿"没看"当成"好了"。
+                continue
+            if now < self._tracker_health_due(rec, is_err):
+                continue  # 未到期: 直接复用现值
+            if rec.tracker_suspect_since:
+                buckets[0].append(rec)
+            elif rec.tracker_health_msg:
+                buckets[1].append(rec)
+            elif is_err:
+                buckets[2].append(rec)
+            else:
+                buckets[3].append(rec)
+        budget = TRACKER_HEALTH_BUDGET
+        for bucket in buckets:
+            if budget <= 0:
+                break
+            for rec in bucket:
+                if budget <= 0:
+                    break  # 本轮预算用尽: 余下种子下一轮续取
+                budget -= 1
+                self._observe_tracker_health(rec, client, now, changed)
         if changed:
             self.web.mark_dirty()
             self.web.note_error_reason_hashes(changed)
+
+    @staticmethod
+    def _site_alert(rec: TorrentRecord) -> Tuple[str, str]:
+        """站点 chip 左槽的持久健康告警 -> (site_alert, site_alert_msg)
+
+        判定单点(前端只展示这里给出的字符串, 不得在 JS 里按 state 猜):
+        - `no_site_conf`: 有真实 tracker 但 tracker_conf is None(站点未配) —— 该种子后续限速 /
+          HR / 规则全部不生效, 属于静默降级, 比报错更根本, 故优先
+        - `tracker_error`: 该站点 tracker 已确认报错(去抖后), msg 为报错原文(截断)
+        - `""`: 健康 / 不适用(纯 DHT/磁力无真实 tracker 不算缺配置)
+        """
+        if rec.tracker_conf is None:
+            url = rec.tracker or ""
+            if url and not url.startswith(_VIRTUAL_TRACKER_PREFIXES):
+                return SITE_ALERT_NO_CONF, SITE_ALERT_NO_CONF_TEXT
+            return "", ""
+        if rec.tracker_health_msg:
+            return SITE_ALERT_TRACKER, rec.tracker_health_msg[:SITE_ALERT_MSG_MAX]
+        return "", ""
 
     @staticmethod
     def hr_view_fields(rec: TorrentRecord) -> dict:
@@ -370,6 +491,7 @@ class WebviewMixin:
         # occ_key 的内容单元查表先行(组 key 单次 .get(); group_key 是 member_to_key 的
         # 非迭代读取, 与 Web 线程重建路径并发无 "dictionary changed size" 风险)
         gkey = self.store.group_key(r.hash)
+        site_alert, site_alert_msg = self._site_alert(r)
         return {
             "hash": r.hash,
             "name": r.name,
@@ -379,6 +501,11 @@ class WebviewMixin:
             # 错误状态的具体原因(文件丢失 / tracker 报错原文; 非错误状态为空串) ——
             # 前端状态列以它替代笼统的"错误", 见 _error_reason
             "error_reason": self._error_reason(r),
+            # 站点 chip 左槽的持久健康告警(计划 26-10-19-2007 S2): "" / "no_site_conf" /
+            # "tracker_error" + 展示文本(报错原文截断 / 固定文案)。判定单点在 _site_alert,
+            # 前端只按 token 选图标与颜色, 不按 state 猜原因。
+            "site_alert": site_alert,
+            "site_alert_msg": site_alert_msg,
             "dlspeed": r.dlspeed,
             "upspeed": r.upspeed,
             "uploaded": r.uploaded,
@@ -958,12 +1085,16 @@ class WebviewMixin:
         文件行兜底命中时为 file; 供测试定位, 前端不消费)。
         """
         def _view(rec, by):
+            site_alert, site_alert_msg = self._site_alert(rec)
             return {
                 "hash": rec.hash,
                 "name": rec.name,
                 "site": rec.tracker_name,
                 "kind": self.state_kind(rec),
                 "error_reason": self._error_reason(rec),
+                # 与 _member_view 同口径(判定单点在 _site_alert): 搜索结果行同样带站点健康图标
+                "site_alert": site_alert,
+                "site_alert_msg": site_alert_msg,
                 "dlspeed": rec.dlspeed,
                 "upspeed": rec.upspeed,
                 "uploaded": rec.uploaded,

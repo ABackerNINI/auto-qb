@@ -237,8 +237,9 @@ class WebUIRuntime:
         # 键集, 落代时与上一已发布代比较, 增删即本代 full(R11, 不归约旧组键)
         self._cross_keys_seen: frozenset = frozenset()
         self._cross_keys_prev: Optional[frozenset] = None  # None = 尚未发布过(首代只立基线)
-        # 错误原因预取的行级脏暂存(plan S2 补, 源标签 "tracker_error_refresh"):
-        # refresh_error_reasons 改写 tracker_error_msg 的受影响 hash 在改写点可得 -> 按
+        # 行级展示派生字段的行级脏暂存(plan S2 补, 源标签 "tracker_error_refresh"):
+        # refresh_tracker_health 改写 tracker_error_msg / tracker_health_msg 的受影响 hash
+        # 在改写点可得 -> 按
         # 行级归约(不走 full 降级), _publish_locked 落代前在 view_lock 内并入 _delta_pending。
         # 主循环线程写(任务线预取先于 flush_views), 竞争最坏是键集晚一代并入 —— 与
         # _pending_full_reasons 同一「无正确性风险」口径。
@@ -458,11 +459,13 @@ class WebUIRuntime:
         self._cross_keys_seen = frozenset(keys)
 
     def note_error_reason_hashes(self, hashes) -> None:
-        """错误原因预取的行级脏登记(plan S2 补, 源标签 "tracker_error_refresh")
+        """行级展示派生字段变更的行级脏登记(plan S2 补, 源标签 "tracker_error_refresh")
 
-        refresh_error_reasons 改写 tracker_error_msg 的受影响行键在改写点可得 -> 按**行级
-        归约**(R11 不降级): _publish_locked 落代前并入 torrent/group 桶 upsert, delta 客户端
-        本代即拿到这些行的新内容。主循环线程调用(任务线预取先于视图发布)。
+        refresh_tracker_health 改写 tracker_error_msg / tracker_health_msg 的受影响行键在
+        改写点可得 -> 按**行级归约**(R11 不降级): _publish_locked 落代前并入 torrent/group
+        桶 upsert, delta 客户端本代即拿到这些行的新内容(error_reason 与 site_alert 两个
+        消费方共用同一登记口 —— 函数名沿用历史名, 语义已扩为「行级展示派生字段变更」)。
+        主循环线程调用(任务线预取先于视图发布)。
         """
         self._pending_error_hashes.update(hashes)
 
@@ -625,14 +628,26 @@ class WebUIRuntime:
             reasons = [it["reason"] for it in items if it["status"] != "ok" and it["reason"]]
             if reasons:
                 msg += ": " + "; ".join(reasons[:3])
+            # 逐目标结果随回执带出(计划 26-10-19-2007 D6/S5): items[hash] 里本来就有
+            # {status, reason}, 聚合文案只留前 3 条原因、且把 hash 丢了 —— 前端因此无法在行上
+            # 指出"哪几个失败"。这里原样带出, 不新增端点、不改任何判定逻辑。
+            # !文案(msg)逐字不变: 前端三桶计数与文案契约测试钉的是它。
+            truth = {
+                "results":
+                    [{
+                        "hash": h,
+                        "status": it["status"],
+                        "reason": it["reason"],
+                    } for h, it in entry["items"].items()]
+            }
             if err_n:
-                self.set_result(cmd_id, "error", msg)
+                self.set_result(cmd_id, "error", msg, truth=truth)
                 logger.warning(f"WEB UI | 强制汇报回执: {msg}")
             elif warn_n:
-                self.set_result(cmd_id, "warn", msg)
+                self.set_result(cmd_id, "warn", msg, truth=truth)
                 logger.info(f"WEB UI | 强制汇报回执: {msg}")
             else:
-                self.set_result(cmd_id, "ok")
+                self.set_result(cmd_id, "ok", truth=truth)
                 logger.info(f"WEB UI | 强制汇报确认成功({ok_n}个种子)")
 
     def _advance_reannounce_background(self, now: float) -> None:
@@ -813,8 +828,9 @@ class WebUIRuntime:
     def _merge_pending_error_hashes_locked(self) -> None:
         """错误原因预取的行级脏并入累积器(**持 view_lock**, plan S2 补)
 
-        refresh_error_reasons 改写 tracker_error_msg 的受影响 hash 进 torrent 桶; 组行
-        members 的 error_reason 随成员变化 -> 组键经 member_to_key 一并进 group 桶(与
+        refresh_tracker_health 改写 tracker_error_msg / tracker_health_msg 的受影响 hash 进
+        torrent 桶; 组行 members 的 error_reason / site_alert 随成员变化 -> 组键经
+        member_to_key 一并进 group 桶(与
         store 增量推导同口径)。S6 起调用点在 _publish_locked 的分叉判定前(键集须在
         构建**前**定型) —— 分叉判定需要完整键集, fold 落代段不再重跑。
         """
@@ -944,9 +960,9 @@ class WebUIRuntime:
             self.rebuild_views()
 
     def advance_error_reasons(self) -> None:
-        """任务线: 错误状态种子的具体原因预取(仅 Web 活跃时发 tracker 请求)"""
+        """任务线: tracker 健康取数(错误原因 + 站点健康, 仅 Web 活跃时发 tracker 请求)"""
         if self.is_active():
-            self._host.refresh_error_reasons()
+            self._host.refresh_tracker_health()
 
     def advance_search_index(self) -> None:
         """任务线末尾: 搜索索引限流推进(仅 Web 活跃时), 关闭网页后不发多余的文件 API"""

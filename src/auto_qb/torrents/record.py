@@ -107,11 +107,23 @@ class TorrentRecord:
 
     # ---- 错误原因展示(WebUI 状态列的"具体错误"文本) ----
     # qB torrents/info **不含**任何错误文本(已核实 Web API), 原因只能从 torrents/trackers
-    # 的 msg 取; 由 WebviewMixin.refresh_error_reasons 在主循环按 TTL 限额预取后写在此处,
+    # 的 msg 取; 由 WebviewMixin.refresh_tracker_health 在主循环按 TTL 限额预取后写在此处,
     # 视图组装只读缓存(视图可能每 tick 重建, 不能在里面发 API)。
     # 非快照字段: 不进 _SNAPSHOT_FIELDS/_raw, 不参与 apply_delta 与视图脏判定(变化由预取方显式置脏)。
     tracker_error_msg: str = ""
     tracker_error_ts: float = 0.0
+    # ---- tracker 健康(WebUI 站点 chip 左槽的持久健康图标, 计划 26-10-19-2007 S1) ----
+    # 与 tracker_error_msg **同一次** /trackers 取数产出(两个消费方): error 态种子展示原因,
+    # 站点 chip 展示"该站点 tracker 报错"。健康态与种子状态解耦 —— tracker 被拒而种子仍在上传
+    # 时状态是 seeding, 此时也要能看见(这正是 P2 痛点)。
+    # 三者都是非快照字段(同 tracker_error_msg 性质): 不进 _SNAPSHOT_FIELDS/_raw, 不参与
+    # apply_delta 与视图脏判定; 变化由取数方显式置脏 + 行级登记。
+    #   tracker_health_msg   确认报错文本(空 = 健康); 亮/灭唯一判据
+    #   tracker_health_ts    最近一次观测时刻(TTL 计算基准)
+    #   tracker_suspect_since 疑似起点(首次观测到报错、尚未满窗确认); 0 = 无疑似
+    tracker_health_msg: str = ""
+    tracker_health_ts: float = 0.0
+    tracker_suspect_since: float = 0.0
 
     # 惰性缓存(不参与 apply_delta 复制)
     _tags_set: Optional[frozenset] = None

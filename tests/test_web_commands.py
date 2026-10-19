@@ -27,6 +27,7 @@
 - test_verdict_reannounce_legacy_matrix: legacy 判定矩阵(基线行无 epoch 字段 -> ②/③′/④ 生效, 前跳判据不参与)
 - test_verdict_reannounce_min_window_guard: 判据② min 窗口守卫(基线 min 在未来 updating=推迟登记假瞬态 -> pending; 过期/缺失/0 后在途直证, S0 探针实证)
 - test_trackers_baseline_shape_and_epoch_mode: baseline 形状回归 {url: {status, updating, next, min}} + epoch_mode 字段存在性探测(虚拟行排除)
+- test_reannounce_receipt_truth_results_contract: 逐目标回执契约(计划 26-10-19-2007 D6/S5) —— truth.results 长度 == 目标 hash 数/status 取值域/ok 桶 reason 可空, 聚合文案逐字不变
 - test_reannounce_receipt_prefix_contract: D4=warn 前缀文案契约(三前缀常量钉死, 改文案必红; 机器分流依据 = status 三值)
 - test_reannounce_confirm_success_and_timeout: epoch 确认回执: 前跳命中 -> ok 回执跟踪清空; 超时 -> warn「未确认」不再判「失败」
 - test_reannounce_confirm_group_aggregate: 组汇报三桶聚合(ok+error -> error 带计数与原因; 全推迟 -> warn「已受理」早回执 + 后台登记)
@@ -1342,6 +1343,36 @@ def test_reannounce_confirm_group_aggregate():
         assert r["status"] == "warn" and "成功 0, 失败 0, 未确认 2" in r["error"]
         assert r["error"].count("已受理: 最小间隔未过期, 推迟至 ") == 2
         assert mgr.web.reannounce_pending == {}
+
+
+def test_reannounce_receipt_truth_results_contract():
+    """逐目标回执契约(计划 26-10-19-2007 D6/S5): truth.results 长度 == 目标 hash 数,
+    status ∈ {ok,error,warn}, ok 桶 reason 可为空; 聚合文案(msg)逐字不变 —— 旧调用方零影响
+
+    反例: 只带 msg 时"哪几个失败"在两层各丢一次(后端聚合只留前 3 条原因, 前端又把 job 拍平)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        client.trackers_map = {
+            "HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)],
+            "HB": [_epoch_tracker(url=u, status=4, msg="rejected by tracker", next_announce=100_000)],
+        }
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "cmdx"}))
+        mgr.web.consume_commands()
+        client.trackers_map["HA"][0]["next_announce"] = 105_000  # HA 确认成功, HB 被拒
+        mgr.web.check_pending()
+
+        r = mgr.web.results["cmdx"]
+        assert r["status"] == "error"
+        assert r["error"].startswith("成功 1, 失败 1, 未确认 0"), "聚合文案逐字不变"
+        results = r["truth"]["results"]
+        assert len(results) == 2, "逐目标结果长度 == 目标 hash 数"
+        by_hash = {it["hash"]: it for it in results}
+        assert set(by_hash) == {"HA", "HB"}
+        assert {it["status"] for it in results} <= {"ok", "error", "warn"}
+        assert by_hash["HA"]["status"] == "ok" and by_hash["HA"]["reason"] == "", "ok 桶 reason 可为空"
+        assert by_hash["HB"]["status"] == "error" and "rejected by tracker" in by_hash["HB"]["reason"]
 
 
 def test_reannounce_skips_inactive_targets():

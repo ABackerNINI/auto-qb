@@ -114,6 +114,26 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .col-menu { max-height: 70vh; overflow-y: auto; }.site-chip.search-hit { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600;
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, .55); }
 
+/* ---------------- 站点 chip 两槽图标(计划 26-10-19-2007 S3/S4) ----------------
+ * 左槽 .sa = 持久健康(后端 site_alert: 缺配置 / tracker 报错), 右槽 .sx = 临时命令结果
+ * (前端 alertIcons: 进行中 / 成功 / 推迟 / 失败)。位置即语义 —— 两槽可同时存在, 互不覆盖;
+ * DOM 顺序固定(左槽在文字前, 右槽在文字后), 尺寸 11px 塞进既有 gap:4px, 不触发列宽重排。
+ * 颜色显式取语义令牌(不随 chip 状态色): chip 底色说的是"种子状态", 图标说的是"站点健康 /
+ * 命令结果", 两者叠色会互相误导。
+ * 动效只走 opacity(dot-pulse 节奏, 与 .badge.warn.pending .dot 同源), 不碰会重排的属性。 */
+.site-chip .sa, .site-chip .sx { width: 11px; height: 11px; stroke-width: 2.2; }
+.site-chip .sa-no_site_conf { color: var(--warn); }
+.site-chip .sa-tracker_error { color: var(--error); }
+.site-chip .sx-pending { color: var(--accent-hi); animation: dot-pulse 1.4s ease-in-out infinite; }
+.site-chip .sx-ok { color: var(--green); }
+.site-chip .sx-warn { color: var(--warn); }
+.site-chip .sx-error { color: var(--error); }
+/* 状态列错误图标强化(D9): 文案与列宽不动, 只给已有的 i-warn 加呼吸 —— 复用 dot-pulse 节奏 */
+.g-status.k-error .ico { animation: dot-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .site-chip .sx-pending, .g-status.k-error .ico { animation: none; }
+}
+
 /* ---------------- 微动效(统一节奏; 全局 prefers-reduced-motion 降级已在文件顶部声明) ----------------
  *
  * 原则: 只用 transform/opacity/颜色, 不触碰会引发重排的属性; 动效时长统一取令牌,

@@ -7,10 +7,10 @@
 <title>WEBUI 站点列状态提醒与逐目标汇报回执</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-site-alerts">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-19-2007">
-<meta name="doc-updated" content="26-10-19-2007">
-<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md">
+<meta name="doc-updated" content="26-10-19-2123">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-19-2020-webui-site-alerts.md, memory-bank/tasks/26-10-19-webui-site-alerts.md, memory-bank/pitfalls/testing/qb-api-latency-probe.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 站点列状态提醒与逐目标汇报回执</h1>
 <p class="lede">把「站点出问题」和「汇报结果」从抽屉里的一条「未工作」提到列表页：站点 chip 内开两个图标槽 —— 左槽持久健康（缺站点配置 / tracker 报错），右槽临时命令结果（进行中 / 成功 / 推迟·未确认 / 失败）。判定、阈值、取数预算全在后端单点，前端只消费字符串与符号。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-19-2007 · <b>doc-updated</b> 26-10-19-2007 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-19-2007 · <b>doc-updated</b> 26-10-19-2123 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling（2026-10-19，4 轮共 11 问，全部按推荐拍板）+ 用户四条 WEBUI 待办清单
 </div>
 
@@ -316,6 +316,7 @@ self.set_result(cmd_id, status, msg, truth=truth)</code></pre>
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
+  <li><span class="tag">R1 · 26-10-19-2130</span> 第一阶段(S0-S7)实施完成。<b>S0 真机标定</b>: 生产 qB 5.2.3 / 151 种子库, 裸 keep-alive 连发 50 次 <code>/torrents/trackers</code> —— 均值 <b>0.38ms</b> / P95 <b>0.53ms</b>; 预算 20/轮 ≈ 7.5ms = 1.5s tick 的 <b>0.5%</b>, 远低于 5% 触发线 ⇒ <code>TRACKER_HEALTH_BUDGET=20</code> 与 <code>TRACKER_HEALTH_TTL=600</code> <b>按原值定死, 不触发 R2</b>。<b>落地差异</b>: ① 新增 <code>TRACKER_DEBOUNCE_WINDOW</code> 常量(30s 去抖窗口显式命名, 与 <code>TRACKER_SUSPECT_TTL</code> 分开 —— 前者是判据, 后者是调度); ② <code>_fetch_tracker_error</code> 返回三态(<code>None</code>=取不到 / <code>""</code>=无报错 / 文本=报错), 否则取数失败会被当成"恢复"把图标灭掉; ③ 暂停/其它态**保留**健康态不灭(没有观测证据, 不拿"没看"当成"好了")。<b>测试</b>: 新增单测 6 条(S1 去抖状态机/取数失败/暂停跳过/error 态 TTL 不变/site_alert 优先级与截断) + delta 行级归约 1 条 + 回执契约 1 条 + 静态守阵 1 条 + e2e <code>site-alerts.spec.mjs</code>(两皮肤 × 左槽/右槽, 含"3 目标 1 被拒"部分失败场景); 全量测试与覆盖率见 <code>kb.baseline</code>。第二阶段(全局汇总徽章)按 D11 另立件。</li>
   <li><span class="tag">R0 · 26-10-19-2007</span> 初版。来源：用户四条 WEBUI 待办 + grilling 四轮 11 问（Q1 载体分层 / Q2 报错口径与去抖 / Q3 取数范围（(b) 方案经 5000 体量缺点分析后修正为全库轮转）/ Q4 缺配置定义 / Q5 回执契约 / Q6 图标时长 / Q7 汇总徽章分期 / Q8 四档符号 / Q9 状态列强化 / Q10 参数与统一取数 / Q11 chip 无跳转），全部按推荐拍板。</li>
 </ul>
 

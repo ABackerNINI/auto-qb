@@ -95,6 +95,31 @@ def _inject_add_options(mgr, torrents) -> None:
     print(f"[harness] 添加种子候选已注入: 分类={len(cats)} 标签={len(tags)}", flush=True)
 
 
+def _inject_site_alerts(torrents) -> None:
+    """站点健康两态(计划 26-10-19-2007 S3 e2e): 造 1 行缺站点配置 + 1 行 tracker 报错
+
+    桩里**没有主循环**(不跑 refresh_tracker_health), 故直接写终态 —— 与主循环写出的字段同形:
+      · `tracker_conf=None` + 真实 tracker URL -> `site_alert=no_site_conf`(固定文案)
+      · 有站点配置 + `tracker_health_msg`      -> `site_alert=tracker_error`(报错原文进 title)
+    取**末尾两个**(added_on 最大 = 种子页默认序最前两行, 且行窗口化下必然被渲染;
+    合成数据里它们同属最后一组): 组行的两个 chip 与种子页平铺行**同时**覆盖,
+    e2e 一处断言即验到两个视图, 右槽用例也不必先搜索把目标拉进窗口。
+    `tracker_health_ts` 置到未来, 防任何取数路径(若将来桩接了主循环)在用例中途把图标灭掉。
+    """
+    if len(torrents) < 2:
+        return
+    # 取末尾倒数第 4/第 3(状态池 296%8=stalledUP / 297%8=uploading, 两者活跃且同属最后一组):
+    #   · 同组 -> 组行的两个 chip 上两种告警并存(左槽断言);
+    #   · **不是最上面那个活跃行**(末尾 298 才是) -> 不劫持既有用例里 `.torrent-row.s-seeding,
+    #     .s-downloading` 的 `.first()` 选取(那条用例走删除链, 汇报被拒会按设计中止删除)。
+    a, b = torrents[-4], torrents[-3]
+    a.tracker_conf = None
+    a.tracker = "https://tracker.unknown-site.net/announce.php"
+    b.tracker_health_msg = "由本地系统中止网络连接。"
+    b.tracker_health_ts = time.time() + 3600
+    print("[harness] 站点健康两态已注入: 1 行缺配置(no_site_conf) + 1 行 tracker 报错(tracker_error)", flush=True)
+
+
 def _make_torrents(count: int, site_conf):
     """合成种子: 名字/大小/状态/进度轮转, 保证每行列宽不整齐(更接近真机)"""
     out = []
@@ -515,6 +540,16 @@ def _target_hashes(mgr, cmd: str, body: dict):
     return []
 
 
+def _reannounce_hashes(mgr, cmd: str, body: dict):
+    """强制汇报的目标 hash(桩里按 payload 展开; 组目标取当前组成员)"""
+    if cmd == "reannounce_torrent":
+        h = body.get("hash")
+        return [h] if h else []
+    if cmd == "reannounce_group":
+        return list(mgr.store.groups.get(body.get("key") or (), []))
+    return []
+
+
 def _restore_state(mgr, hashes):
     """把 _apply_truth 改过的种子还原成**最初**的 state
 
@@ -674,6 +709,37 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
             if gate is not None:
                 mgr.web.results[cmd_id] = gate
                 continue
+            # 强制汇报的逐目标回执(计划 26-10-19-2007 S5/S6): 与后端 check_pending 同形 ——
+            # truth.results 带出每个 hash 的结论, 前端据此把结果落到**行上**(站点 chip 右槽)。
+            # 桩里没有真 tracker: 判据取「该行站点已报错(tracker_health_msg 非空)」= 拒绝,
+            # 其余 = 确认。这样 e2e 能构造"3 个目标、1 个被拒"的部分失败场景。
+            if _cmd in ("reannounce_torrent", "reannounce_group"):
+                hs = _reannounce_hashes(mgr, _cmd, body or {})
+                results = []
+                for h in hs:
+                    rec = mgr.store.by_hash.get(h)
+                    bad = bool(getattr(rec, "tracker_health_msg", ""))
+                    results.append(
+                        {
+                            "hash": h,
+                            "status": "error" if bad else "ok",
+                            "reason": ("失败: tracker 未接受汇报(not working): " + rec.tracker_health_msg) if bad else "",
+                        }
+                    )
+                ok_n = sum(1 for r in results if r["status"] == "ok")
+                err_n = len(results) - ok_n
+                msg = f"成功 {ok_n}, 失败 {err_n}, 未确认 0"
+                reasons = [r["reason"] for r in results if r["reason"]]
+                if reasons:
+                    msg += ": " + "; ".join(reasons[:3])
+                mgr.web.results[cmd_id] = {
+                    "status": "error" if err_n else "ok",
+                    "error": msg if err_n else "",
+                    "truth": {
+                        "results": results
+                    },
+                }
+                continue
             if mode == "error":
                 # 失败**不改状态**: 前端必须回滚到原值(回滚干净由冒烟 error 模式断言)
                 mgr.web.results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
@@ -764,6 +830,13 @@ def main() -> int:
         "(表③); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
         "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表③断言组(e2e/hr-history.spec.mjs)",
     )
+    ap.add_argument(
+        "--site-alert",
+        choices=["on", "off"],
+        default="on",
+        help="站点健康两态桩(默认 on, 见 _inject_site_alerts): 1 行缺站点配置 + 1 行 tracker 报错, "
+        "供 e2e/site-alerts.spec.mjs 断言站点 chip 左槽图标(计划 26-10-19-2007 S3)",
+    )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
         "--skip-check-menu",
@@ -827,6 +900,8 @@ def main() -> int:
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)
+    if args.site_alert == "on":
+        _inject_site_alerts(torrents)
     if args.hr_site:
         _inject_hr_site(torrents)
         print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")

@@ -697,7 +697,7 @@ class GroupingModule(BaseModule):
         #    消除不受 dry_run 门控(属计划内语义: 消除的是已过期的软信号记录)。
         #    集合删减时显式置 view_changed —— 组视图的 cross_group_conflict 标记由它派生,
         #    正常情况其输入(组成员/状态)变化会自然置脏, 此行兜底推导链断裂
-        #    (防御性显式置脏先例: views.refresh_error_reasons)。
+        #    (防御性显式置脏先例: views.refresh_tracker_health)。
         warned = store.cross_group_conflict_warned
         for pair in list(warned):
             if pair not in pair_paths:

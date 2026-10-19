@@ -13,7 +13,8 @@
 - test_gate_skipped_round_keys_survive_to_next_gen: 门控跳拍累积(R4) —— 上一版未被取走时 flush 只排空累积不落代, 键集(含组键)并入下一代条目不丢
 - test_full_downgrade_sources_matrix: 五个降级源矩阵(R11) —— config_reload(mark_dirty full=True)/hr_revision(flush 判定点)/shows_pending(归位转换拍)/cross_group(构建期键集增删, 走真 _build_group_view 回传)各自触发 full 代(full 条目键集清空 + 累积器与理由一并清空; hr/cross 均有"下一拍不再 full"的对照); 进程重启 = ver 时间播种 + 时间线/累积器为空, 旧客户端 rid 必然窗外或 rid>ver 全量(R10, 无需显式标记)
 - test_group_removed_key_unresolvable_full: 组行 removed 键推导(R11) —— removed hash 组键查得到且组仍在 -> 组键进 upsert; 组已解散 -> 组键进 removed; 查不到(与"从未归组"不可区分) -> 本代 full 且键集清空
-- test_error_reason_refresh_row_level_upsert: 错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh") —— 走真 refresh_error_reasons 改写 tracker_error_msg, 仅原因刷新、store 零增量 -> 受影响行进 torrent/group 桶 upsert 且该代不 full; 门控跳拍键集暂存不丢(R4); 无变化轮不登记
+- test_error_reason_refresh_row_level_upsert: 错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh") —— 走真 refresh_tracker_health 改写 tracker_error_msg, 仅原因刷新、store 零增量 -> 受影响行进 torrent/group 桶 upsert 且该代不 full; 门控跳拍键集暂存不丢(R4); 无变化轮不登记
+- test_site_alert_refresh_row_level_upsert: 站点健康(site_alert)变化按行级归约(计划 26-10-19-2007 S2) —— 疑似态不改展示值不登记; 满窗转亮 -> 行进 torrent 桶、组键进 group 桶、该代不 full, 平铺行带 site_alert/site_alert_msg
 - test_ensure_state_no_negotiation_byte_compatible: S3 硬验收 —— 未带 delta=1 协商参数的响应与历史逐字节等价: 键集恰为 rid/updated(+VIEW_ARRAYS 裁剪的数组), 无 full/delta/removed 键; 数组内容 = 当前已发布视图
 - test_reduce_delta_full_branch_matrix: 归约判定全分支(S3, R3/R10) —— rid==ver 零回传(带不带 delta 都只回 rid/updated); rid 缺省/0/-1、rid>ver、窗外(maxlen 截断挤掉客户端所在代)、窗内任一代 full -> 全量且协商客户端标 full=true(不含 delta/removed); 启用矩阵: 缺省/未知值恒全量, view=show 已启用(S9b)走正常归约
 - test_reduce_delta_upsert_removed_normal: 正常归约(S3) —— torrent 视图 delta.torrents 回平铺整行/removed 回 hash; group 视图 delta.groups 回组行(键 = encode_group_key 字符串)/delta.singles 只收未归组行/removed.groups 回 encode 后字符串; 行内容 = 当前已发布视图的原行(R1, 引用恒等)
@@ -46,7 +47,7 @@ from auto_qb.torrents import TorrentStore
 from auto_qb.webui import WebUIRuntime
 from auto_qb.webui.views import WebviewMixin
 
-from helpers import FakeClient, FakeTorrent
+from helpers import FakeClient, FakeTorrent, FakeTracker
 
 # ---------- 替身与驱动 ----------
 
@@ -319,7 +320,7 @@ def test_error_reason_refresh_row_level_upsert():
     """错误原因预取按行级归约(S2 补丁, 源标签 "tracker_error_refresh"): 改写的行(hash)在
     改写点可得 -> 不走 full 降级, delta 客户端本代即拿到 error_reason 新值
 
-    走真 refresh_error_reasons(错误态种子 + FakeClient.trackers_map 报错条目);
+    走真 refresh_tracker_health(错误态种子 + FakeClient.trackers_map 报错条目);
     任务线真实时序 = 预取 -> flush_views(排空) -> 发布(落代)。
     """
     store = _make_store("H1", state="error")
@@ -338,7 +339,7 @@ def test_error_reason_refresh_row_level_upsert():
     rt.mark_dirty()
     _publish(rt)  # 基线代: 先发布一版, 之后仅错误原因变化
     # 仅错误原因刷新的一拍: store 零增量(无 added/removed/delta_fields)
-    host.refresh_error_reasons()
+    host.refresh_tracker_health()
     assert store.by_hash["H1"].tracker_error_msg == "torrent not registered"
     assert not store.last_added and not store.last_removed and not store.delta_fields
     assert rt._pending_error_hashes == {"H1"}  # 行键已在改写点登记, 等落代消费
@@ -357,6 +358,43 @@ def test_error_reason_refresh_row_level_upsert():
     entry = _publish(rt)
     assert entry["full"] is False
     assert entry["upsert"]["torrent"] == set() and entry["upsert"]["group"] == set()
+
+
+def test_site_alert_refresh_row_level_upsert():
+    """站点健康(site_alert)变化按行级归约: 与 error_reason 共用同一登记口, 本代即到 delta 客户端
+
+    计划 26-10-19-2007 S2 验收③④: 字段变化进 torrent 桶、组成员变化进 group 桶、不降级 full。
+    """
+    store = _make_store("H1")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    host = rt._host
+    host.client = store.client
+    rec = store.by_hash["H1"]
+    rec.tracker = "https://tracker.hhanclub.net/announce.php"
+    rec.tracker_conf = FakeTracker("HHan")
+    host.client.trackers_map["H1"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 4, "msg": "连接被拒"}]
+    rt.mark_dirty()
+    _publish(rt)  # 基线代(此时 site_alert 为空)
+
+    # 首次观测: 只置疑似, 图标不亮 -> 无行级变化, 不登记
+    host.refresh_tracker_health()
+    assert rec.tracker_suspect_since > 0 and rec.tracker_health_msg == ""
+    assert rt._pending_error_hashes == set(), "疑似态不改展示值, 不登记"
+
+    # 满窗复查仍报错 -> 亮: 行级登记 + 本代不 full
+    rec.tracker_health_ts = time.time() - 31
+    rec.tracker_suspect_since = time.time() - 31
+    host.refresh_tracker_health()
+    assert rec.tracker_health_msg == "连接被拒"
+    assert rt._pending_error_hashes == {"H1"}
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["torrent"] == {"H1"}
+    assert entry["upsert"]["group"] == {("R:\\D", )}, "组行 members 的 site_alert 随成员变化"
+    row = next(r for r in rt.flat_view if r["hash"] == "H1")
+    assert row["site_alert"] == "tracker_error" and row["site_alert_msg"] == "连接被拒"
 
 
 # ---------- ⑦ S3: ensure_state 协商门控 + _reduce_delta 归约 ----------

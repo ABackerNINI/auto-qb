@@ -663,6 +663,10 @@ class FakeTorrent:
         # 错误原因(WebUI 状态列): 与 TorrentRecord 同名的非快照字段, 由主循环预取写入
         self.tracker_error_msg = kw.get("tracker_error_msg", "")
         self.tracker_error_ts = kw.get("tracker_error_ts", 0.0)
+        # tracker 健康(WebUI 站点 chip 左槽, 计划 26-10-19-2007 S1): 同名的非快照字段
+        self.tracker_health_msg = kw.get("tracker_health_msg", "")
+        self.tracker_health_ts = kw.get("tracker_health_ts", 0.0)
+        self.tracker_suspect_since = kw.get("tracker_suspect_since", 0.0)
         # HR 桥回引(与 TorrentRecord 同名的非快照字段): store._apply 增量路径会读写它
         # (hr_link 挂桥时给记录补回引) —— 桩走真 _apply(S6/S7 间回归修复)后必须存在
         self.hr_link = None

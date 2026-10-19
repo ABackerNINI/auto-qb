@@ -29,21 +29,26 @@
  */
 const _decoCache = new WeakMap();
 
-/* 指纹槽位(与 _decoFpBuild 逐字对应): [members 引用, (kind, size, category, site, tags 引用)*n, 首成员 save_path] */
+/* 指纹槽位(与 _decoFpBuild 逐字对应): [members 引用, (kind, size, category, site, tags 引用,
+ * site_alert, site_alert_msg)*n, 首成员 save_path]
+ * !site_alert / site_alert_msg 必须进指纹(计划 26-10-19-2007 R3): 它们是站点 chip 左槽图标的
+ *   唯一数据源, 而组行装饰是记忆化的 —— 不进指纹则"站点报错"出现/消失后组行仍命中旧缓存,
+ *   图标永远陈旧(成员行是现渲染的, 只有组行会停在旧态, 这类不一致最难查)。 */
 function _decoFpBuild(g) {
   const ms = g.members || [];
   const fp = [ms];
-  for (const m of ms) fp.push(m.kind, m.size, m.category, m.site, m.tags);
+  for (const m of ms) fp.push(m.kind, m.size, m.category, m.site, m.tags, m.site_alert, m.site_alert_msg);
   fp.push(ms.length ? ms[0].save_path : undefined);
   return fp;
 }
 
 function _decoFpHit(g, fp) {
   const ms = g.members || [];
-  if (fp[0] !== ms || fp.length !== ms.length * 5 + 2) return false;
+  if (fp[0] !== ms || fp.length !== ms.length * 7 + 2) return false;
   let i = 1;
   for (const m of ms) {
-    if (fp[i++] !== m.kind || fp[i++] !== m.size || fp[i++] !== m.category || fp[i++] !== m.site || fp[i++] !== m.tags) {
+    if (fp[i++] !== m.kind || fp[i++] !== m.size || fp[i++] !== m.category || fp[i++] !== m.site ||
+        fp[i++] !== m.tags || fp[i++] !== m.site_alert || fp[i++] !== m.site_alert_msg) {
       return false;
     }
   }

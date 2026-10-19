@@ -57,10 +57,19 @@
         <span v-else class="zero"></span>
       </div>
       <div v-else-if="col.key === 'sites'" class="g-sites">
+        <!-- 站点 chip 两槽(计划 26-10-19-2007 S3/S6): 左 = 持久健康(site_alert), 右 = 临时命令结果
+             (alertIcons)。位置即语义, 两槽可同时存在; DOM 顺序固定(左槽在前) -->
         <span v-for="m in g.members" :key="m.hash"
               class="site-chip" :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
               @click.stop="$root.filterFromChip('site', m.site)">
+          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
+            <use :href="$root.alertIconHref(m.site_alert)"></use>
+          </svg>
           {{ m.site }}
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
+               :title="$root.rowIcon(m.hash).msg">
+            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
+          </svg>
         </span>
       </div>
       <!-- H&R: 未满足做种时间/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
@@ -103,7 +112,16 @@
       </div>
       <div v-else-if="col.key === 'site'" class="g-sites">
         <span class="site-chip" :class="[m.kind, { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
-              @click.stop="$root.filterFromChip('site', m.site)">{{ m.site }}</span>
+              @click.stop="$root.filterFromChip('site', m.site)">
+          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
+            <use :href="$root.alertIconHref(m.site_alert)"></use>
+          </svg>
+          {{ m.site }}
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
+               :title="$root.rowIcon(m.hash).msg">
+            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
+          </svg>
+        </span>
       </div>
       <div v-else-if="col.key === 'state'" class="g-cat">
         <span class="g-status" :class="'k-' + m.kind">
@@ -218,7 +236,14 @@
         <span v-for="m in e.members" :key="m.hash" class="site-chip"
               :class="[m.kind, { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
               @click.stop="$root.filterFromChip('site', m.site)">
+          <svg v-if="m.site_alert" class="ico sa" :class="'sa-' + m.site_alert" :title="m.site_alert_msg">
+            <use :href="$root.alertIconHref(m.site_alert)"></use>
+          </svg>
           {{ m.site }}
+          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind"
+               :title="$root.rowIcon(m.hash).msg">
+            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
+          </svg>
         </span>
       </div>
       <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ $root.fmtSpeedOrDash(e.dlspeed) }}</div>
