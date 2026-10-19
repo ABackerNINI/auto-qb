@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-ctx-menu-custom-layout">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-20-0024">
-<meta name="doc-updated" content="26-10-20-0105">
+<meta name="doc-updated" content="26-10-20-0132">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划</h1>
 <p class="lede">行右键菜单四支(单组/单种子/整集整剧/多选批量)从<strong>静态模板直写</strong>改为<strong>注册表单点 + 布局数据驱动</strong>：每支可重排、可显隐、可把项移入/移出「更多操作」次级、分隔线可拖可删; 布局存 <code>config.yml</code> 的 <code>web.ctx_menu</code>(与跳检开关同一配置通道), 在设置页新卡「WebUI」里定制, 保存后当前标签热应用、其它标签刷新生效。默认布局与今天逐位一致 —— 不写配置时行为零漂移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0105 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0132 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「WEBUI添加右键菜单自定义重排功能, grilling」(26-10-19 晚 ~ 26-10-20 00:20) → 只读收敛轮三轮 12 问全部拍板(§06 D1–D12) + 代码取证(<code>ctx-menus.html</code> 四支项集 / <code>columns.js</code> 列双轨 / flags 通道 / 设置页 keys 客户端块先例)
 </div>
 
@@ -85,7 +85,7 @@
   <li><b>四支全能力定制</b>: 单组 / 单种子 / 整集整剧 / 多选批量四支, 每支可勾选显隐、↑↓/拖拽重排、把项在一级与「更多操作」次级间移动、添加/删除分隔线; 危险项(删除…)与普通项同等对待(D12 完全自由)。</li>
   <li><b>服务端持久化</b>: 布局存 <code>config.yml</code> <code>web.ctx_menu</code>, 过 <code>validate_config</code> 全套; 配置备份/迁机自带; 按实例隔离(换端口 = 各存一份, 与跳检开关同通道同语义)。</li>
   <li><b>保存后立即生效</b>: 设置页全局保存成功后, 当前标签菜单按新布局热应用; 其它标签/浏览器刷新后生效(D8)。</li>
-  <li><b>零漂移默认</b>: 不写 <code>ctx_menu</code> 键时, 四支菜单与今天(静态模板)逐位一致 —— 39 个一级项 + 11 条默认分隔线 + 单种子次级 11 项 2 线, 一项不差。</li>
+  <li><b>零漂移默认</b>: 不写 <code>ctx_menu</code> 键时, 四支菜单与今天(静态模板)逐位一致 —— 41 个一级项 + 12 条默认分隔线 + 单种子次级 11 项 2 线, 一项不差。</li>
   <li><b>次级为空不显示入口</b>: 「更多操作」在其子项为空(全隐藏/全被移走)时不渲染入口(D7) —— 遵循「单选项菜单 = 半残 UI」退役原则。</li>
 </ol>
 
@@ -106,15 +106,15 @@
   <tbody>
     <tr><td><code>multi</code> 多选批量</td><td><code>v-if="menu.multi"</code></td><td>10</td><td>2</td><td>无</td><td>跳过哈希校验…(<code>flags.skip_check_menu</code>)</td></tr>
     <tr><td><code>episode</code> 整集整剧</td><td><code>v-else-if="menu.episode"</code></td><td>5</td><td>2</td><td>无</td><td>无</td></tr>
-    <tr><td><code>member</code> 单种子</td><td><code>v-else-if="menu.hash"</code></td><td>13(含「更多操作」入口)</td><td>4</td><td>11 项 + 2 线(队列×4 / 超级做种·强制启动·自动TMM·分享率 / 复制族×3)</td><td>跳过哈希校验…(<code>flags</code>)</td></tr>
-    <tr><td><code>group</code> 单组</td><td><code>v-else</code></td><td>11</td><td>3</td><td>无</td><td>跳过哈希校验…(<code>flags</code>) · qB 口径流量图(<code>qbTrafficOn</code>)</td></tr>
+    <tr><td><code>member</code> 单种子</td><td><code>v-else-if="menu.hash"</code></td><td>14(含「更多操作」入口)</td><td>5</td><td>11 项 + 2 线(队列×4 / 超级做种·强制启动·自动TMM·分享率 / 复制族×3)</td><td>跳过哈希校验…(<code>flags</code>)</td></tr>
+    <tr><td><code>group</code> 单组</td><td><code>v-else</code></td><td>12</td><td>3</td><td>无</td><td>跳过哈希校验…(<code>flags</code>) · qB 口径流量图(<code>qbTrafficOn</code>)</td></tr>
   </tbody>
 </table>
 
 <h3>结构性痛点</h3>
 <ol>
   <li><b>静态模板直写, 项集奇偶靠人肉</b>: 加/改一项要手改四支之一; <code>pitfalls/web-ui/ctx-menu-branch-parity.md</code> 记着 2026-10-09 用户报「辅种页单组右键菜单缺选项」—— 给批量支补项漏了单组支, 两条路径静默分叉(不报错不白屏, 纯「菜单里没这个选项」)。</li>
-  <li><b>单项不可显隐</b>: 按 <code>conventions/webui.md</code> 分层原则, qB 通用低频项(队列×4/分享率/复制族/超级做种…)已进「更多操作」, 但对 PT 日常用户仍是噪声; 单种子支一级 13 项起, 整屏菜单找不到常用项。</li>
+  <li><b>单项不可显隐</b>: 按 <code>conventions/webui.md</code> 分层原则, qB 通用低频项(队列×4/分享率/复制族/超级做种…)已进「更多操作」, 但对 PT 日常用户仍是噪声; 单种子支一级 14 项起, 整屏菜单找不到常用项。</li>
   <li><b>唯一不可定制的交互面</b>: 列偏好有列选择器(<code>col-picker</code>, 勾选+拖拽+持久化), 键位有快捷键分区(GET/PUT <code>/api/keys</code>), 菜单布局既不可定制也不可持久化 —— 每换一个浏览器/端口就要重新适应。</li>
 </ol>
 
@@ -247,7 +247,7 @@ const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今
     </tr>
     <tr>
       <td><b>W2</b><br>注册表 + 解析器</td>
-      <td>从静态模板逐位平移 39 一级项 + 11 线 + 次级 11 项 2 线; 默认布局生成; 补尾/隐藏/跨层/sep 语义 + <code>ctxItems</code>/<code>ctxSubItems</code> 解析</td>
+      <td>从静态模板逐位平移 41 一级项 + 12 线 + 次级 11 项 2 线; 默认布局生成; 补尾/隐藏/跨层/sep 语义 + <code>ctxItems</code>/<code>ctxSubItems</code> 解析</td>
       <td>新文件 <code>shared/ctx_menu.js</code></td>
       <td>单测: 默认布局与现模板<b>逐位一致</b>(守阵钉); 补尾/隐藏恢复/跨层/sep 增删/次级空隐藏入口各一条; <code>node --check</code> 过</td>
     </tr>
@@ -340,6 +340,7 @@ const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今
   <li><span class="tag">R1 · 26-10-20-0042</span> D13 拍板: 老 web 块命名保持「WebUI」不改(用户 26-10-20 00:40); §03.5 落点说明同步(零改动), §05 Q4 移除并顺延, §06 D9 引用更新</li>
   <li><span class="tag">R2 · 26-10-20-0047</span> D14-D17 拍板: 落地细节四项按默认推荐全部闭合(用户 26-10-20 01:00「拍板项按推荐」); §05 转为已闭说明, §06 增补 D14-D17; 全文决策点闭合, 进入实施</li>
   <li><span class="tag">R3 · 26-10-20-0105</span> W1 落地记录: <code>ctx_menu</code> 进 config 四件套(models/loaders/validation/schema hidden)+ <code>/api/webui/flags</code> 原样下发; 键面基线 181→182(<code>test.keys-update</code> 重生) + keys.md 回写 + loader 探针 + hidden 声明面守卫扩为 channels + ctx_menu 两处 + object 子字段守卫加 hidden 豁免(理由: 结构归客户端块, 摘子字段会把每支数据键假报进键面); <b>偏差</b>: <code>skip_check_menu</code> 的 hidden 按 W4 落(随新卡), 不在 W1 打 —— 分期原则「任一波停下都不破坏现状」, 避免 W1→W4 之间该开关在设置页消失; §04 W4 落点同步(label+hidden → skip_check_menu hidden)</li>
+  <li><span class="tag">R4 · 26-10-20-0132</span> W2 落地记录: <code>shared/ctx_menu.js</code> 注册表单点(四支 41 项 + 12 线 + 次级 11 项 2 线, 默认布局由定义序生成)+ 三 manifest 接线 + app.js mixin + node 电池守阵(158 断言); <b>项数勘误</b>: grilling 期手计「39 一级项 + 11 线」有误, 模板对账实测为 <b>41 项 + 12 线</b>(multi 10+2 / episode 5+2 / member 14+5 / group 12+3), §01/§02 同步(R0 历史记录不动); <b>两条实施期语义补录</b>(计划未明示, 按 D7/K5 初衷定): ① <b>分隔线不撑次级入口</b> —— 次级只剩线(项全隐藏/全移走)判空, 不渲染「更多操作」父项, 线在配置里休眠、W4 定制块可见可恢复(空面板拖两条线比单选项更残); ② <b>sep token 一等公民</b> —— 未知<b>项</b> id 忽略, 格式合法的 <code>sep:*</code>(含用户线 <code>sep:uN</code>)原位数渲染: 注册表无用户线登记处, 滤除等于用户添加的线永远出不来, 且 W4 里会变成看不见的配置垃圾</li>
 </ul>
 
 </div>
