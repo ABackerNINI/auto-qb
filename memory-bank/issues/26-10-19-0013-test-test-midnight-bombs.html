@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="test-flaky-time">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跨零点时间炸弹: test_expr_eval / test_traffic_limits 4 条用例在 23:59-00:00 时段必失败">
 <meta name="issue-summary" content="test_expr_eval::test_legacy_condition_equivalence 与 test_traffic_limits 3 条 recorder 用例在本地 23:59-00:00 跨零点时段因时间边界断言必失败(time_of_day&lt;=23:59 边界 / 按日文件跨天)">
 <title>跨零点时间炸弹: test_expr_eval / test_traffic_limits 4 条用例在 23:59-00:00 时段必失败 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>跨零点时间炸弹: test_expr_eval / test_traffic_limits 4 条用例在 23:59-00:00 时段必失败</h1>
     <p class="lede">test_expr_eval::test_legacy_condition_equivalence 与 test_traffic_limits 3 条 recorder 用例在本地 23:59-00:00 跨零点时段因时间边界断言必失败(time_of_day&lt;=23:59 边界 / 按日文件跨天)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-19-0013-test-test-midnight-bombs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-19 00:13</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -141,7 +141,7 @@ E       assert False == True</code></pre>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>本地时刻落在 23:59:00-00:00:00 跨零点窗口内跑全量(23:59 边界断言 + 按日文件跨天写入)</td></tr>
-      <tr><td>影响范围</td><td>仅测试门禁误报; 生产代码不受影响(test.full 在该时段必 4 红)</td></tr>
+      <tr><td>影响范围</td><td>以测试门禁误报为主(test.full 在该时段必 4 红)。<b>另有一处实现口径分叉在同单定位并修复</b>: 旧 <code>date_time</code> 条件的时段终点按<b>秒</b>判、表达式 <code>sys.time_of_day</code> 按<b>分</b>判 —— 现统一为分钟粒度, 三个消费方(规则 <code>date_time</code> 条件 / 通知 <code>quiet_hours</code> / HR 限速 <code>allow_window</code>)一起收口: 「终点落在末分钟」的配置(如 <code>00:00-23:59</code>)从每天漏 59 秒变成真的覆盖全天。</td></tr>
       <tr><td>严重度</td><td>低 —— 时段窗口约 1 分钟/天, 但恰好落在门禁上会造成"全量必红"的困惑</td></tr>
     </table>
   </section>
@@ -157,23 +157,42 @@ E       assert False == True</code></pre>
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <div class="callout">待查（已排除：与 2026-10-18 前端改动相关 —— 该轮仅动 webui 静态 JS 与 e2e, 与本 4 条 python 用例无交集; 失败断言均为时间边界类, 与已修的 test_memory_bank 跨零点炸弹同族）。expr_eval 侧疑点: fixture 硬编码 <code>time_of_day &lt;= 23:59</code> 而实现取 <code>hour*60+minute</code>, 23:59:xx-00:00 之间实际分钟值 1439 与边界判定语义待核; traffic 侧疑点: 按日文件以系统当前日期分桶, 跨零点一次写入落到次日文件。</div>
+    <div class="callout"><b>已定位（不再是「待查」）</b> —— 两组失败同一形状: <b>断言读的时间轴与实现写的时间轴在跨零点处不是同一条</b>。
+      <ul>
+        <li><b>traffic 侧</b>: <code>SpeedLimitRecorder.observe</code> 按 <code>v4_epoch_date_str(ts)</code> 落<b>本地自然日</b>文件, 而用例起点取真实此刻 <code>ts = int(time.time())</code>, 后续推进 <code>ts+30/60/120</code> 跨过本地零点后事件写进<b>次日</b>文件, 断言仍在读<b>起点那天</b>的文件 —— 计数少一行、末行对不上。窗口型用例(<code>test_events_for_window</code>)同病: <code>t0 = now-600</code> 落到前一日时, 合成首事件的取值文件与断言前提分家。</li>
+        <li><b>expr 侧</b>: 旧 <code>DateTimeCondition</code> 走 <code>utils.time_in_range(now.time(), "00:00-23:59")</code>, <code>now.time()</code> 带<b>秒</b>, 端点解析为 23:59:00 ⇒ 23:59:01-23:59:59 判<b>出界</b>; 表达式侧 <code>sys.time_of_day = hour*60+minute</code> 是<b>分钟</b>粒度(1439), 词法器把 <code>23:59</code> 解析为 1439 ⇒ 判<b>在内</b>。<code>00:00-23:59</code> 这种"全时段"配置恰好把分叉窗口摆在每天最后一分钟, 于是只有那一分钟跑, 两侧结论必然相反。<b>（该分叉已于 08:0x 统一为分钟粒度，见 §06）</b></li>
+        <li><b>次级隐患(顺手收)</b>: <code>test_sys_time_and_counts</code> 的断言侧 <code>datetime.now()</code> 与取值器里的 <code>datetime.now()</code> 是<b>两次独立取样</b>, 跨日/跨时/跨分即不等(窗口约 1 秒/天)。</li>
+      </ul>
+      已排除: 与 2026-10-18 前端改动相关(该轮仅动 webui 静态 JS 与 e2e, 与本 4 条 python 用例无交集); 时区/本地日切点算错(<code>v4_day_epoch</code> 与 <code>v4_epoch_date_str</code> 同源, 单点无偏移)。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p>同 test_memory_bank 先例: 时间类断言与实现同源取时 —— expr_eval 的等价性 fixture 不写死 23:59(改由 _val 侧同源生成边界), traffic recorder 用例注入固定 clock(monkeypatch)代替真实时钟。代价均为小改测试, 不动生产代码。</p>
+    <h3>实际修法（2026-10-19 07:39，用户指派「认领并修复」）</h3>
+    <p>按建议走<b>测试侧窄修</b>，生产代码零改动:</p>
+    <ul>
+      <li><code>tests/test_traffic_limits.py</code>: 新增 <code>_anchored_ts()</code> = 本地当日 00:00 + 12h（<code>v4_day_epoch</code> 单点派生）。9 处裸 <code>int(time.time())</code> 全部换掉 —— 时间轴锚在正午，前后各 12h 余量，<code>ts+120</code> 与 2030s 护栏循环永不再跨日；故意跨日的 carry 用例（<code>+90030s</code>）语义不变。唯一例外是 <code>test_api_payload_limits_shape_and_same_source</code>: 端点 <code>window=24h</code> 由服务端按真实 now 收边，必须留在真钟上，已就地写例外注释。</li>
+      <li><code>tests/test_expr_eval.py</code>: 新增 <code>_FrozenDatetime</code>（固定在 2026-06-15 12:34:56，周一）与 <code>_freeze_clock()</code>，同时冻住 <code>rules.conditions</code> 与 <code>rules.expr.env</code> 的 <code>datetime</code> 名 —— 旧条件与表达式取值读<b>同一个</b>瞬间；<code>test_sys_time_and_counts</code> 的断言值改用 <code>_FROZEN_NOW</code>。</li>
+      <li><b>未采纳</b>「把 fixture 的 00:00-23:59 换成别的边界」: 该配对是计划第 08 节对照表里的既定映射，改它等于换掉被测口径；冻钟后结论与「哪一秒跑测试」无关，已足够。</li>
+      <li><b>生产侧分叉本轮也修了（2026-10-19 08:0x，用户拍板「直接改」）</b>: <code>utils.time_in_range</code> 比较前先 <code>replace(second=0, microsecond=0)</code> —— 区间语法本身只写到分钟，端点所在的<b>整分钟</b>含在内。三点连带（单点修正的代价，已逐个确认）：规则 <code>date_time</code> 条件、通知 <code>quiet_hours</code>、HR 限速 <code>allow_window</code> 全部变成分钟粒度；<code>00:00-23:59</code> 从此真的覆盖全天，与表达式 <code>sys.time_of_day</code> 同口径。<code>docs/configuration.md</code> 的 <code>date_time</code> 行同步补了这条语义。</li>
+      <li><b>守阵</b>: 新增 <code>test_time_in_range_minute_granularity</code>（全时段端点 23:59:30 在内 / 跨午夜两端点整分钟 / 非跨午夜两端点 / 起点分钟前仍在外），并把 <code>test_legacy_condition_equivalence</code> 参数化成两个冻结时刻 —— <code>noon</code> 与 <code>edge-minute</code>(23:59:30)，后者就是历史分叉窗口，永久留在守阵位上。红验: 临时去掉截断行 → 该守阵与 <code>edge-minute</code> 用例同时转红（<code>noon</code> 仍绿），证明它钉的正是这个行为。</li>
+    </ul>
+    <p>验证: 定向 <code>commands run test.one -- tests/test_utils.py tests/test_expr_eval.py tests/test_conditions.py tests/test_hr_ratelimit.py</code> 全绿；<b>跨零点取证</b> —— 假墙钟钉在 23:59:50 时 traffic 13 例全绿，而改前 HEAD 版同工况 3 红(正是报告里那三条)；<code>test.full</code> 数字见 <code>commands run kb.baseline</code> 最新切片。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-19 00:13 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-19 07:36 — 用户指派「认领并修复」，置 <strong>In Progress</strong></li>
+      <li>2026-10-19 07:39 — 两侧时间轴各自对齐（expr 冻钟 / traffic 正午锚点），定向 44 例与假墙钟 23:59:50 取证双绿，全量 0 failed；置 <strong>Done</strong></li>
+      <li>2026-10-19 08:0x — 用户拍板「直接改」：<code>utils.time_in_range</code> 改分钟粒度（三消费方同步收口）+ 双守阵（分钟粒度单测 / 等价性 edge-minute 参数），文档回写；红验 + 全量复跑均过，仍为 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验（2026-10-19 07:36）：本机此刻为上午，原始锚点（真实 23:59 时段）已不可复现 —— 改用<b>构造复现</b>：把墙钟钉在 23:59:50 跑改前 HEAD 版文件，3 条 recorder 用例复现 <code>AssertionError</code>（<code>change_only_appends</code> / <code>restart_dedup</code> / <code>oserror_degrade</code>），与报告证据同形；expr 侧把冻结时刻拨到 23:59:30 即复现「不等价: False == True」。结论：<b>仍复现</b>，且根因口径与 §05 一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>修复方式、验证方式、实测数字见 §06「实际修法」与最新基线切片（<code>commands run kb.baseline</code>），本文不复述数字（裸数字只写基线一处）。与建议修法的差异：建议里写的"改由 _val 侧同源生成边界"没有采用 —— 该配对是计划第 08 节的既定映射，改边界等于换掉被测口径；改成<b>冻结时钟</b>后两侧读同一瞬间，既守住口径又不再依赖跑测时刻。traffic 侧原建议"注入固定 clock"落成 <code>_anchored_ts()</code> 正午锚点（更轻：不动 <code>time.time</code> 全局，只挪用例时间轴）。第二轮（08:0x，用户拍板）走得更远：不属于"测试侧窄修"范围内的事 —— 把 §05 的实现分叉本身按分钟粒度收口，同时补了两道守阵（见 §06）。</p>
   </section>
 
   <footer>

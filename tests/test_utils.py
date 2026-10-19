@@ -101,6 +101,7 @@
 - test_mask_tracker_url_deterministic_and_unique: mask R7/R8 确定性(两次逐字节一致)与唯一性三例
 - test_mask_tracker_entry: mask R9 只改 url 其余字段保全/原条目不被就地改/缺 url 与虚拟条目原样返回
 - test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
+- test_time_in_range_minute_granularity: 时段判定按**分钟**粒度(端点整分钟含在内: 23:59:30 在 "00:00-23:59" 内 / 跨午夜两端 / 起点前 1 分仍在区间外) —— issue 26-10-19-0013 的守阵
 """
 import hashlib
 import ntpath
@@ -1900,3 +1901,28 @@ def test_win_reuse_and_wait_explorer(monkeypatch):
     assert utils._win_foreground_new_explorer(set(), "R:/x") is False
     monkeypatch.setattr(utils, "_win_force_foreground", lambda hwnd: True)
     assert utils._win_foreground_new_explorer(set(), "R:/x") is True
+
+
+def test_time_in_range_minute_granularity():
+    """时段判定按分钟粒度: 端点所在的整分钟都含在内(issue 26-10-19-0013 的守阵)
+
+    守阵价值: 曾经按秒直比, "00:00-23:59"(用户写「全天」)每天漏掉 23:59:01-23:59:59, 且与
+    表达式侧 sys.time_of_day(hour*60+minute, 分钟口径)结论相反 —— 等价性用例每天最后一分钟必红。
+    """
+    from datetime import time as dtime
+
+    # 端点分钟的后 59 秒必须在区间内(全时段配置 = 真的全天)
+    assert utils.time_in_range(dtime(23, 59, 30), "00:00-23:59") is True
+    assert utils.time_in_range(dtime(0, 0, 0), "00:00-23:59") is True
+    # 起点分钟之前一律不收(截断后 22:59 < 23:00), 与表达式侧 sys.time_of_day 同口径
+    assert utils.time_in_range(dtime(22, 59, 59), "23:00-08:00") is False
+    assert utils.time_in_range(dtime(23, 0, 0), "23:00-08:00") is True
+    # 跨午夜: 两端点分钟都算在内, 越过端点整分钟才出界
+    assert utils.time_in_range(dtime(23, 59, 59), "23:00-08:00") is True
+    assert utils.time_in_range(dtime(8, 0, 30), "23:00-08:00") is True
+    assert utils.time_in_range(dtime(8, 1, 0), "23:00-08:00") is False
+    # 非跨午夜: 两端点分钟内皆真, 越过即假
+    assert utils.time_in_range(dtime(10, 0, 45), "10:00-12:00") is True
+    assert utils.time_in_range(dtime(12, 0, 45), "10:00-12:00") is True
+    assert utils.time_in_range(dtime(12, 1, 0), "10:00-12:00") is False
+    assert utils.time_in_range(dtime(9, 59, 59), "10:00-12:00") is False

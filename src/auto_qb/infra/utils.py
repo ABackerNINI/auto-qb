@@ -59,8 +59,16 @@ def parse_hm(text: str) -> "tuple[int, int]":
 
 
 def time_in_range(now: dtime, spec: str) -> bool:
-    """当前时刻是否在 "HH:MM-HH:MM" 区间内(支持跨午夜, 如 "23:00-08:00"; date_time 条件与通知共用)"""
+    """当前时刻是否在 "HH:MM-HH:MM" 区间内(支持跨午夜, 如 "23:00-08:00"; date_time 条件与通知共用)
+
+    **按分钟粒度比较**: 区间语法只写到分钟, 故先把秒/微秒截掉再比 —— 端点所在的整分钟都算在内
+    (23:59:30 落在 "…-23:59" 之内)。2026-10-19 前按秒直比, 端点分钟的后 59 秒被判出界:
+    "00:00-23:59"(用户表达"全天")每天漏掉 23:59:01-23:59:59, 且与表达式侧
+    sys.time_of_day(hour*60+minute, 分钟口径)结论相反 —— 等价性用例在该分钟必红
+    (issue 26-10-19-0013)。三个消费方(规则条件 / 通知 quiet_hours / HR 限速窗口)口径一致。
+    """
     start_s, end_s = str(spec).split("-", 1)
+    now = now.replace(second=0, microsecond=0)
     t_start = dtime(*parse_hm(start_s))
     t_end = dtime(*parse_hm(end_s))
     if t_start <= t_end:

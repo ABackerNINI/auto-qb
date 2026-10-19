@@ -15,7 +15,8 @@
 - test_expr_condition_matches: ExprCondition 正常匹配(编译期校验 + 运行期求值)
 - test_config_validation_rejects_bad_expr: config 校验把表达式错误聚合成可读报错
 - test_process_stops_on_condition_error: 求值出错 -> process 返回 (False, True)(出错即停规则)
-- test_legacy_condition_equivalence: 旧 16 个条件逐条对拍等价表达式(同一 FakeTorrent 结果一致)
+- test_legacy_condition_equivalence: 旧 16 个条件逐条对拍等价表达式(同一 FakeTorrent 结果一致;
+  冻钟跑两个时刻 —— 正午 + 23:59:30 端点分钟, 后者是时段判定精度分叉的守阵位)
 - test_traffic_values: 全局流量值(需 traffic_source 数据源)取值正确
 - test_traffic_unconfigured: 未配置数据源 -> ExprError(绝不返回 0)
 - test_traffic_source_off_raises_closed_reason: 总开关关(S1/D1) -> ExprError 文案含「已关闭」
@@ -137,9 +138,35 @@ def test_tracker_values():
     assert _val('"国内" in tracker.groups', ctx) is False
 
 
-def test_sys_time_and_counts():
+_FROZEN_NOON = datetime(2026, 6, 15, 12, 34, 56)  # 周一 12:34:56(远离任一时段边界)
+# 端点分钟之内: 曾经旧条件(秒精度)判出界、表达式(分钟精度)判在内的分叉窗口 —— 现为守阵位
+_FROZEN_EDGE = datetime(2026, 6, 15, 23, 59, 30)
+
+
+def _freeze_clock(monkeypatch, when=_FROZEN_NOON):
+    """把条件侧与取值面侧的墙钟冻在同一个瞬间, 并返回该瞬间
+
+    本文件两处时间用例原先直接读墙钟, 在 23:59:xx-00:00 之间跑必翻(issue 26-10-19-0013):
+    - test_sys_time_and_counts: 断言侧的 `datetime.now()` 与取值器里的 `datetime.now()`
+      是两次独立取样, 跨日/跨小时/跨分即刻不等;
+    - test_legacy_condition_equivalence: 旧条件走 utils.time_in_range, 表达式侧走
+      sys.time_of_day —— 两者精度口径一度不一致(秒 vs 分), 每天最后一分钟结论相反。
+    冻钟后两侧同源取时: 既让用例与「哪一秒跑测试」无关, 又能把历史分叉窗口(23:59:30)
+    当**守阵位**持续跑(生产侧已按分钟粒度统一, 见 utils.time_in_range)。
+    """
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return when if tz is None else when.astimezone(tz)
+
+    monkeypatch.setattr("auto_qb.rules.conditions.datetime", _Frozen)
+    monkeypatch.setattr("auto_qb.rules.expr.env.datetime", _Frozen)
+    return when
+
+
+def test_sys_time_and_counts(monkeypatch):
+    now = _freeze_clock(monkeypatch)  # 时间断言同源取时(见 _freeze_clock)
     mgr, _, ctx = _setup()
-    now = datetime.now()
     assert _val("sys.dow", ctx) == now.isoweekday()
     assert _val("sys.dom", ctx) == now.day
     assert _val("sys.time_of_day", ctx) == now.hour * 60 + now.minute
@@ -327,11 +354,16 @@ def test_config_gate_for_traffic_names():
     assert errors == []
 
 
-def test_legacy_condition_equivalence(monkeypatch):
+@pytest.mark.parametrize("when", [_FROZEN_NOON, _FROZEN_EDGE], ids=["noon", "edge-minute"])
+def test_legacy_condition_equivalence(monkeypatch, when):
     """旧 16 个条件 vs 等价表达式: 同一 FakeTorrent 上结果必须一致(见计划第 08 节)
 
     守阵价值: 表达式能力覆盖旧条件语义 —— 旧条件退役与否是另一回事, 但口径不能漂移。
+    跑两个时刻: 正午(常规) + 23:59:30(历史分叉窗口)。后者钉住「时段判定按分钟粒度」——
+    旧条件按秒直比时该时刻判出界、表达式按分判在内, 本用例每天最后一分钟必红
+    (issue 26-10-19-0013; 生产侧已在 utils.time_in_range 统一为分钟粒度)。
     """
+    _freeze_clock(monkeypatch, when)  # 时间断言同源取时(见 _freeze_clock)
     monkeypatch.setattr(shutil, "disk_usage", lambda path: shutil._ntuple_diskusage(500 * _GIB, 100 * _GIB, 400 * _GIB))
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"groups": ["国内"]})

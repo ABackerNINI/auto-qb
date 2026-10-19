@@ -750,7 +750,7 @@ config:
 | `tracker_group`          | 站点分组：匹配站点 `groups` 字段声明的分组（配置层概念，不写种子），不同组之间为或关系，支持正则 |
 | `state`                  | 语义化状态（见[状态映射表](#状态映射表)），支持 `&` 连接多个状态                             |
 | `hr`                     | HR 筛选：`condition-met`（满足触发）/ `condition-not-met` / `satisfied`（满足要求 + 额外时长） |
-| `date_time`              | 日期时间：`day_of_month` / `day_of_week` / `time`                                          |
+| `date_time`              | 日期时间：`day_of_month` / `day_of_week` / `time`（`time` 为 `HH:MM-HH:MM`，支持跨午夜如 `23:00-08:00`；**按分钟粒度判定，端点所在的整分钟都算在内**，故 `00:00-23:59` 即全天） |
 | `seedtime`               | 做种时长                                                                                  |
 | `upload_ratio`           | 上传比率                                                                                  |
 | `freespace`              | 指定路径剩余空间                                                                          |

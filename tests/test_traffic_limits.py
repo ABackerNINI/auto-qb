@@ -49,6 +49,22 @@ def _write_day(data_dir, date_str, text):
         f.write(text)
 
 
+def _anchored_ts() -> int:
+    """用例时间原点 = **本地当日正午**, 替代裸 `int(time.time())`
+
+    坑史(issue 26-10-19-0013): 起点取真实此刻, 用例里 ts+30/60/120 的推进跨到本地零点时,
+    按日文件随即分家 —— `_read_day(date)` 读的是起点那天, 新事件却落进了次日文件,
+    23:59-00:00 之间跑全量必红 4 条(与本轮改动零交集)。
+    锚到当日 12:00: 前后各 12h 余量, 本文件最大跨度(+90030s≈25h)仍吃得下,
+    既有「跨日 carry / 同日零追加 / 按天护栏」语义一条不变。
+    口径单点 `v4_day_epoch` = 本地自然日零点, 与 `v4_epoch_date_str` 同源。
+
+    例外: 依赖**真实此刻**收边的窗口查询用例(test_api_payload_limits_shape_and_same_source)
+    必须留在真钟上 —— 那里的 24h 窗口由服务端按真实 now 取尾。
+    """
+    return v4_day_epoch(time.time()) + 12 * 3600
+
+
 def test_parse_limits_day_text_and_torn_tail():
     """解析纯函数: 逐行复原 / 坏行整行豁免 / 撕裂尾丢弃 / 注释空行跳过"""
     assert parse_limits_day_text("") == ()
@@ -84,7 +100,7 @@ def test_recorder_change_only_appends(tmp_path):
     """D2 事件语义: 值不变零写入; 变化才追加; 0 = 不限速合法事件; 字段未知不记不推进"""
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
-    ts = int(time.time())
+    ts = _anchored_ts()
     rec.observe(_state(1024, 2048), ts)  # 首轮: 立基线 + 首事件
     date = v4_epoch_date_str(ts)
     assert _read_day(data_dir, date).count("\n") == 1
@@ -103,7 +119,7 @@ def test_recorder_midnight_carry(tmp_path):
     """D3 00:00 硬切 + 基线 carry: 新天首行无条件写上一生效值(值没变也写), 同值继续零追加"""
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
-    ts = int(time.time())
+    ts = _anchored_ts()
     d1 = v4_epoch_date_str(ts)
     rec.observe(_state(1024, 2048), ts)
     rec.observe(_state(1024, 2048), ts + 30)  # 同日不变: 零追加
@@ -121,7 +137,7 @@ def test_recorder_midnight_carry(tmp_path):
 def test_recorder_restart_dedup(tmp_path):
     """重启去重: 首轮与当日文件末条相同则跳过(不产生假事件); 不同写事件"""
     data_dir = str(tmp_path)
-    ts = int(time.time())
+    ts = _anchored_ts()
     date = v4_epoch_date_str(ts)
     r1 = SpeedLimitRecorder(data_dir)
     r1.observe(_state(1024, 2048), ts)
@@ -141,7 +157,7 @@ def test_recorder_oserror_degrade(tmp_path, caplog):
     """失败降级: 追加 OSError WARNING 节流不上抛; 基线不推进, 恢复后事件补上"""
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
-    ts = int(time.time())
+    ts = _anchored_ts()
     date = v4_epoch_date_str(ts)
     rec.observe(_state(1024, 2048), ts)
     # 破坏目录: 让追加失败(makedirs 复现用文件占位)
@@ -165,7 +181,7 @@ def test_recorder_dry_run_silent(tmp_path):
     """dry_run: persistence_on=False 零文件零落盘(与采样器 dry_run 同门)"""
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
-    ts = int(time.time())
+    ts = _anchored_ts()
     rec.observe(_state(1024, 2048), ts, persistence_on=False)
     assert not os.path.exists(os.path.join(str(tmp_path), "qb-traffic-v4", LIMITS_DIR_NAME))
 
@@ -175,9 +191,8 @@ def test_recorder_patological_flip_guard(tmp_path, caplog):
     data_dir = str(tmp_path)
     rec = SpeedLimitRecorder(data_dir)
     # 固定同一天内: 循环 ts+i(i 到阈值+30) 跨本地零点即把 _day_events 清零(按天护栏语义,
-    # 生产正确), 2000 阈值永不达 —— 距零点 <约2030s 跑必红。锚当日 00:01(v4_day_epoch 本地口径
-    # 单点, 与 v4_epoch_date_str 一致), 跨度 <86400 恒同日。
-    ts = v4_day_epoch(int(time.time())) + 60
+    # 生产正确), 2000 阈值永不达 —— 2030s 跨度必须落在同一自然日(锚点见 _anchored_ts)。
+    ts = _anchored_ts()
     date = v4_epoch_date_str(ts)
     from auto_qb.core import traffic_limits as tl
 
@@ -200,7 +215,7 @@ def test_recorder_warn_first_fire_on_fresh_boot(tmp_path, caplog, monkeypatch):
     monkeypatch.setattr(tl.time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟: < 3600
     data_dir = str(tmp_path)
     # 固定同一天内(场景 B 病态翻转循环 ts+i 跨零点即把 _day_events 清零, 2000 阈值永不达)
-    ts = v4_day_epoch(int(time.time())) + 60
+    ts = _anchored_ts()  # 同一自然日内(_anchored_ts)
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
         # 场景 A: 追加失败告警
         rec = tl.SpeedLimitRecorder(data_dir)
@@ -226,7 +241,7 @@ def test_limits_cache_stat_keyed(tmp_path, monkeypatch):
     """解析缓存: mtime+size 键控命中零重解析; 追加(必变 size)失效重解析; 缺失恒 () 零 open"""
     data_dir = str(tmp_path)
     cache = LimitsCache(data_dir)
-    ts = int(time.time())
+    ts = _anchored_ts()
     date = v4_epoch_date_str(ts)
     assert cache.read_day(date) == ()  # 缺失: 空
     _write_day(data_dir, date, f"{ts},1024,2048\n")
@@ -256,7 +271,7 @@ def test_events_for_window_synthetic_first_and_dedup(tmp_path):
     """D3″/D5 读侧装配: 合成首事件 / 窗首前一天 carry 窥得到 / 同值去重 / 起点晚于窗口不合成 / 跨天拼接"""
     data_dir = str(tmp_path)
     cache = LimitsCache(data_dir)
-    now = int(time.time())
+    now = _anchored_ts()
     today = v4_epoch_date_str(now)
     yest = v4_epoch_date_str(now - 86400)
     # 场景 1: 无任何记录 -> 空表
@@ -296,7 +311,7 @@ def test_api_payload_limits_shape_and_same_source(web_env, monkeypatch):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    now = int(time.time())
+    now = int(time.time())  # 刻意留在真钟: 端点 window=24h 由服务端按真实此刻收边(见 _anchored_ts 例外条)
     _write_day(mgr.config.data_dir, v4_epoch_date_str(now), f"{now - 3600},1024,2048\n{now - 60},0,4096\n")
     bodies = []
     for p in (
@@ -339,7 +354,7 @@ def test_module_wiring_sample_global_observes(web_env, monkeypatch):
         "dl_rate_limit": 1024,
         "up_rate_limit": 2048,
     }
-    ts = int(time.time())
+    ts = _anchored_ts()
     mod._sample_global(server_state, ts)
     date = v4_epoch_date_str(ts)
     assert _read_day(data_dir, date) == f"{ts},2048,1024\n"  # 行序 = ts,up,down
