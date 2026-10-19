@@ -4,10 +4,17 @@
          下拉候选 = /api/paths 已知保存路径; 单种子预填当前 save_path, 批量/单组无预填(各值不同,
          预填误导)。目标集合打开时刻锁定(与 meta 同口径)。逻辑在 shared/drawer.js(AQB_DRAWER),
          复用 .modal/.add-dialog 视觉体系(.move-dialog)。combobox 收层/限高/悬停与添加种子三下拉
-         + meta 分类同套口径(见 pitfalls/web-ui/combobox-focusout-close)。 -->
+         + meta 分类同套口径(见 pitfalls/web-ui/combobox-focusout-close)。
+         2026-10-19 几何修(用户报「弹窗太小, 下拉显示不全要滚动」): 组合框是本表单最后一项,
+         向下的下拉必然伸出 .add-dialog-body 底沿 —— body 是 overflow-y:auto 滚动容器, 伸出部分
+         被裁且把 body scrollHeight 撑大(弹窗体内多出滚动条), 净空算式 avail<0 恒不限高。治法 =
+         ①对话框加宽到 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示); ②开层时
+         根元素挂 .pop-open 类, body 加 padding-bottom 给下拉预留整高(预留量见三皮肤 CSS),
+         下拉完整落在对话框内, 弹窗体本身零新增滚动。模板只加类名绑定, 几何数字全在 CSS 单点。 -->
     <div v-if="moveOpen" class="modal-mask"
          @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMove)">
-      <div class="modal add-dialog move-dialog" role="dialog" aria-modal="true" aria-label="设定位置">
+      <div class="modal add-dialog move-dialog" :class="{ 'pop-open': movePathMenu }"
+           role="dialog" aria-modal="true" aria-label="设定位置">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
           <span>设定位置</span>

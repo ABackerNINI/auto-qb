@@ -3694,7 +3694,11 @@ def test_frontend_move_dialog_combobox_wiring():
       3. combobox 收层/限高/悬同与添加种子三下拉 + meta 分类同套口径(@focusout + 40ms合帧 +
          _popBlurShouldHold + watcher重限 + comboHoverIdx move 分支);
       4. 对话框模板接线: moveOpen 遮罩 + move-path label @mousedown.prevent @click.stop +
-         @focusout收层 + @keydown键盘导航 + ref=movePathList + 三皮肤成对 CSS。
+         @focusout收层 + @keydown键盘导航 + ref=movePathList + 三皮肤成对 CSS;
+      5. 几何修(2026-10-19 用户报「弹窗太小, 下拉显示不全要滚动」): 组合框是表单最后一项,
+         朝下开的下拉必伸出 .add-dialog-body 底沿被裁且撑大其 scrollHeight ⇒ 根元素按
+         movePathMenu 挂 .pop-open 类 + 三皮肤成对的开层预留(padding-bottom 272px)与
+         860 宽档(--modal-w-add)规则, 下拉完整落在对话框内、弹窗体零新增滚动。
     """
     import re
 
@@ -3745,6 +3749,10 @@ def test_frontend_move_dialog_combobox_wiring():
     assert mi and '@keydown="onMovePathKeydown' in mi.group(1), "#move-path 缺 @keydown 键盘导航"
     assert 'ref="movePathList"' in pv, "move-dialog.html 缺 ref=movePathList(限高量拿不到容器)"
     assert "@mouseup.self=\"maskCloseIfArmed(closeMove)\"" in pv, "move 遮罩没接 mousedown 记臂位 + mouseup.self 才关"
+    # 4b. 几何修(2026-10-19): 根元素按 movePathMenu 挂 .pop-open —— 下拉开层时对话框给 body 预留
+    # 整高(规则在 5), 否则下拉伸出 body 被裁 + scrollHeight 撑大, 用户必须滚弹窗才能用下拉
+    assert re.search(r':class="\{\s*\'pop-open\':\s*movePathMenu\s*\}"', pv), \
+        "move-dialog.html 缺 :class pop-open 绑定(下拉开层时对话框不预留空间)"
 
     # 5. 三皮肤成对 CSS(漏一档 = 该皮肤对话框无样式)
     for ui in _UI_ALL:
@@ -3755,6 +3763,10 @@ def test_frontend_move_dialog_combobox_wiring():
         )
         assert ".modal.move-dialog" in blob, f"{ui} 缺 .modal.move-dialog 样式(对话框无宽度)"
         assert ".move-targets" in blob, f"{ui} 缺 .move-targets 样式(目标行无排版)"
+        assert re.search(r"\.modal\.move-dialog \{\s*width:\s*var\(--modal-w-add\)", blob), \
+            f"{ui} 的 .modal.move-dialog 宽度未走 --modal-w-add(860 宽档, 与添加种子同宽; 560 窄档路径项 ellipsis 少显示)"
+        assert re.search(r"\.modal\.move-dialog\.pop-open \.add-dialog-body \{[^}]*padding-bottom:\s*272px", blob), \
+            f"{ui} 缺 .pop-open 开层预留规则(下拉伸出 body 被裁 + scrollHeight 撑大 = 用户须滚弹窗; 272px = 面板头 ~46 + 列表 210 + 顶距 4 + 余量)"
 
     # 6. Esc 退栈链 + escBusy 同步(与 meta 同层)
     assert "this.moveOpen) this.closeMove()" in lf, "lifecycle.js Esc 退栈链缺 moveOpen→closeMove"

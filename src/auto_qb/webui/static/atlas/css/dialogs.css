@@ -343,8 +343,15 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .meta-targets { margin: 0 0 12px; color: var(--fg-dim); font-size: 12.5px; }
 .meta-targets b { color: var(--fg); }
 /* 设定位置对话框(2026-10-13): 复用 .add-dialog-combo/.add-input-row/.add-pop/.pop-* 视觉(与添加种子
- * 三下拉 + meta 分类同套); 仅对话框宽度 + 目标/注意行为新增。成对定义见 console/prism(css-perf-parity)。 */
-.modal.move-dialog { width: var(--modal-w-form); }
+ * 三下拉 + meta 分类同套); 目标/注意行为为新增。成对定义见 console/prism(css-perf-parity)。
+ * 2026-10-19 几何修(用户报「弹窗太小, 下拉显示不全要滚动」): 组合框是本表单**最后一项**, 向下的
+ * 下拉必伸出 .add-dialog-body 底沿被裁(body 是 overflow-y:auto 滚动容器, 伸出还把其 scrollHeight
+ * 撑大 = 弹窗体内多出滚动条) ⇒ ①宽度走 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示);
+ * ②开层时根元素挂 .pop-open(模板 :class), body 预留 272px = 下拉整高(面板头 ~46 + 列表 210 + 顶距
+ * 4 + 余量 12) —— 预留后 _fitAddPop 净空 ≈216px > 列表 210 不再限高, 下拉完整落在对话框内; 矮视口
+ * modal 自身滚动时 body 收缩、净空变小, 由限高兜底(与添加种子同口径, 见 combobox-focusout-close)。 */
+.modal.move-dialog { width: var(--modal-w-add); }
+.modal.move-dialog.pop-open .add-dialog-body { padding-bottom: 272px; }
 .move-targets { margin: 0 0 10px; color: var(--fg-dim); font-size: 12.5px; }
 .move-targets b { color: var(--fg); }
 .move-note { margin: 0 0 12px; color: var(--fg-muted); font-size: 12px; overflow-wrap: anywhere; }
