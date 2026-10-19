@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-ctx-menu-custom-layout">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-20-0024">
+<meta name="doc-updated" content="26-10-20-0047">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-ctx-menu-custom-layout</div>
+<h1>WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划</h1>
+<p class="lede">行右键菜单四支(单组/单种子/整集整剧/多选批量)从<strong>静态模板直写</strong>改为<strong>注册表单点 + 布局数据驱动</strong>：每支可重排、可显隐、可把项移入/移出「更多操作」次级、分隔线可拖可删; 布局存 <code>config.yml</code> 的 <code>web.ctx_menu</code>(与跳检开关同一配置通道), 在设置页新卡「WebUI」里定制, 保存后当前标签热应用、其它标签刷新生效。默认布局与今天逐位一致 —— 不写配置时行为零漂移。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-20-0024 · <b>doc-updated</b> 26-10-20-0047 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「WEBUI添加右键菜单自定义重排功能, grilling」(26-10-19 晚 ~ 26-10-20 00:20) → 只读收敛轮三轮 12 问全部拍板(§06 D1–D12) + 代码取证(<code>ctx-menus.html</code> 四支项集 / <code>columns.js</code> 列双轨 / flags 通道 / 设置页 keys 客户端块先例)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>做到什么算成</h3>
+<ol>
+  <li><b>四支全能力定制</b>: 单组 / 单种子 / 整集整剧 / 多选批量四支, 每支可勾选显隐、↑↓/拖拽重排、把项在一级与「更多操作」次级间移动、添加/删除分隔线; 危险项(删除…)与普通项同等对待(D12 完全自由)。</li>
+  <li><b>服务端持久化</b>: 布局存 <code>config.yml</code> <code>web.ctx_menu</code>, 过 <code>validate_config</code> 全套; 配置备份/迁机自带; 按实例隔离(换端口 = 各存一份, 与跳检开关同通道同语义)。</li>
+  <li><b>保存后立即生效</b>: 设置页全局保存成功后, 当前标签菜单按新布局热应用; 其它标签/浏览器刷新后生效(D8)。</li>
+  <li><b>零漂移默认</b>: 不写 <code>ctx_menu</code> 键时, 四支菜单与今天(静态模板)逐位一致 —— 39 个一级项 + 11 条默认分隔线 + 单种子次级 11 项 2 线, 一项不差。</li>
+  <li><b>次级为空不显示入口</b>: 「更多操作」在其子项为空(全隐藏/全被移走)时不渲染入口(D7) —— 遵循「单选项菜单 = 半残 UI」退役原则。</li>
+</ol>
+
+<h3>不变量(实施时不得让步)</h3>
+<ul>
+  <li><b>动作链路一行不动</b>: 所有入口方法与下游复用(<code>commands.js</code> 的 <code>ctxAct</code>/<code>_actCore</code>/bulk 链、<code>drawer.js</code> 多选对话框、组级六入口)保持原样 —— 本件只改「渲染哪些项、什么顺序」, 不改「项点了干什么」。</li>
+  <li><b>门控与布局正交</b>: <code>flags.skip_check_menu</code> / <code>qbTrafficOn</code> / <code>reannounceMenuGate()</code> 三重门控原样保留; 布局只管顺序与显隐意图。门控关闭的项在布局里<b>保留槽位</b>(用户开启开关即归位), 与 <code>colOrder</code>/<code>colHidden</code> 双轨同款语义。</li>
+  <li><b>三皮肤零视觉回归</b>: <code>.ctx-menu</code>/<code>.ctx-item</code>/<code>.ctx-sep</code> 类名与三套皮肤 CSS(atlas/console/prism 各自 <code>components.css</code>)不动; 共享模板单点重构, 三 UI(atlas/prism/console)由 loader 注入同吃。</li>
+  <li><b>fail-closed</b>: <code>/api/webui/flags</code> 拉取失败或 <code>ctx_menu</code> 缺省 ⇒ 回落默认布局(与 <code>skip_check_menu</code> 失败回落 false 同口径)。</li>
+  <li><b>config.yml 契约从严</b>: <code>ctx_menu</code> 进 <code>KNOWN_WEB_KEYS</code> + 形状校验; 未知 id / 残缺结构不 500 —— 后端夹紧, 前端补尾。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>四支项集(取证于 26-10-20 00:20, <code>shared/tpl/ctx-menus.html</code> 319 行静态模板)</h3>
+<table>
+  <thead><tr><th>支(variant)</th><th>模板分支</th><th>一级项</th><th>默认分隔线</th><th>次级「更多操作」</th><th>门控项</th></tr></thead>
+  <tbody>
+    <tr><td><code>multi</code> 多选批量</td><td><code>v-if="menu.multi"</code></td><td>10</td><td>2</td><td>无</td><td>跳过哈希校验…(<code>flags.skip_check_menu</code>)</td></tr>
+    <tr><td><code>episode</code> 整集整剧</td><td><code>v-else-if="menu.episode"</code></td><td>5</td><td>2</td><td>无</td><td>无</td></tr>
+    <tr><td><code>member</code> 单种子</td><td><code>v-else-if="menu.hash"</code></td><td>13(含「更多操作」入口)</td><td>4</td><td>11 项 + 2 线(队列×4 / 超级做种·强制启动·自动TMM·分享率 / 复制族×3)</td><td>跳过哈希校验…(<code>flags</code>)</td></tr>
+    <tr><td><code>group</code> 单组</td><td><code>v-else</code></td><td>11</td><td>3</td><td>无</td><td>跳过哈希校验…(<code>flags</code>) · qB 口径流量图(<code>qbTrafficOn</code>)</td></tr>
+  </tbody>
+</table>
+
+<h3>结构性痛点</h3>
+<ol>
+  <li><b>静态模板直写, 项集奇偶靠人肉</b>: 加/改一项要手改四支之一; <code>pitfalls/web-ui/ctx-menu-branch-parity.md</code> 记着 2026-10-09 用户报「辅种页单组右键菜单缺选项」—— 给批量支补项漏了单组支, 两条路径静默分叉(不报错不白屏, 纯「菜单里没这个选项」)。</li>
+  <li><b>单项不可显隐</b>: 按 <code>conventions/webui.md</code> 分层原则, qB 通用低频项(队列×4/分享率/复制族/超级做种…)已进「更多操作」, 但对 PT 日常用户仍是噪声; 单种子支一级 13 项起, 整屏菜单找不到常用项。</li>
+  <li><b>唯一不可定制的交互面</b>: 列偏好有列选择器(<code>col-picker</code>, 勾选+拖拽+持久化), 键位有快捷键分区(GET/PUT <code>/api/keys</code>), 菜单布局既不可定制也不可持久化 —— 每换一个浏览器/端口就要重新适应。</li>
+</ol>
+
+<h3>可复用的既有件(全部已验证存在)</h3>
+<table>
+  <thead><tr><th>复用件</th><th>位置(取证时刻)</th><th>本计划怎么用</th></tr></thead>
+  <tbody>
+    <tr><td>列双轨模型</td><td><code>shared/columns.js</code>:<code>colOrder</code>/<code>colHidden</code> + <code>persistPage</code> 单漏斗 + <code>adoptColState</code> 跨标签 + 「未入序按定义序补尾」</td><td>数据模型与解析语义逐条照抄(§3.1)</td></tr>
+    <tr><td>flags 通道</td><td><code>server/routes/config.py:33</code> <code>/api/webui/flags</code> → <code>lifecycle.js:364</code> <code>loadWebFlags</code> → <code>state.js:201</code> <code>flags</code>; <code>cfgSave</code> 成功后即刷新(<code>config_editor.js:212</code> + 2s 补拉)</td><td><code>ctx_menu</code> 搭同一条车: 保存后热应用零新增机制</td></tr>
+    <tr><td>设置页客户端块</td><td><code>config_hub.js:236</code> <code>hubCards()</code> push <code>keys</code> 卡; <code>settings-detail.html:3</code> <code>hub.view === 'keys'</code> 块; <code>console_hub.css:1195</code> <code>.kb-*</code> 样式</td><td>新卡「WebUI」+ 定制块同款结构(§3.5)</td></tr>
+    <tr><td>全局脏标记/保存</td><td><code>config_editor.js:80</code> <code>cfgDirty</code> = 全树 JSON 对 baseline</td><td>定制块写 <code>cfg.tree.web.ctx_menu</code> 自动进全局保存, 无独立保存钮</td></tr>
+    <tr><td>schema hidden 先例</td><td><code>schema/groups.py:261</code> <code>notify.channels</code> <code>hidden=True</code></td><td><code>ctx_menu</code> 与迁入的 <code>skip_check_menu</code> 打 hidden: 键留契约, 渲染移入新卡</td></tr>
+    <tr><td>config 链四件套</td><td><code>models.py:245</code> WebConfig → <code>loaders.py:116</code> web 段 → <code>validation/sections.py:54</code> <code>KNOWN_WEB_KEYS</code> → <code>schema/groups.py:194</code> 编辑树</td><td>W1 四处同改(§04)</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>主线 = <b>注册表单点 → 布局数据 → 模板消费</b> 三段式, 数据走既有配置通道, 不造第二套机制:</p>
+
+<pre><code>config.yml web.ctx_menu ──► /api/webui/flags ──► state.flags.ctx_menu ──► ctxItems(branch) computed ──► ctx-menus.html v-for
+                              ▲                                                          (默认布局 = 注册表定义序, 零配置即今天)
+设置页新卡「WebUI」定制块 ──► cfg.tree.web.ctx_menu(草稿) ──► cfgSave PUT /api/config ──┘ (保存后 loadWebFlags 双拉, 当前标签热应用)</code></pre>
+
+<h3>3.1 数据模型(config.yml <code>web.ctx_menu</code>)</h3>
+<pre><code>web:
+  ctx_menu:            <span class="cm"># 缺省整个键 / 缺某支 = 该支用默认布局; 迁移零漂移</span>
+    group:             <span class="cm"># 支名 = triggers.js variant: multi / episode / member / group(D11 四支各自独立)</span>
+      order:           <span class="cm"># 一级渲染序: 项 id 或分隔线 token("sep:xxx"); 未入序项按定义序补尾(与 colOrder 同款)</span>
+        - resume
+        - pause
+        - reannounce
+        - "sep:d1"
+        - recheck
+        - skip_check
+        - limits
+        - location
+        - meta
+        - export
+        - "sep:d2"
+        - delete
+      hidden: [export]        <span class="cm"># 隐藏项仍在 order 占位, 勾选恢复即归位(与 colHidden 同款)</span>
+      sub:                    <span class="cm"># 「更多操作」次级; 缺省 = 默认(当前仅 member 支有内容, 其余三支默认为空)</span>
+        order: [queue-top, queue-up, super-seeding, copy-name]
+        hidden: []
+    member: { order: [...], hidden: [...], sub: { order: [...], hidden: [...] } }
+    multi:  { order: [...], hidden: [...], sub: { order: [...], hidden: [...] } }
+    episode: { order: [...], hidden: [...], sub: { order: [...], hidden: [...] } }</code></pre>
+
+<p><b>语义规则</b>(逐条对齐列双轨, 前端单点实现、后端只验形状):</p>
+<ul>
+  <li><b>补尾</b>: 注册表新增项(未来功能)/用户序里没有的 id ⇒ 按定义序追加在末尾, 不丢项。</li>
+  <li><b>跨层移动</b> = 把 id 从 <code>order</code> 移入 <code>sub.order</code>(或反向); 两层各自独立排序。</li>
+  <li><b>分隔线一等公民</b>(D10): 默认线 token 由定义序位置定(<code>sep:d1</code>…), 可删可拖; 用户添加 = <code>sep:uN</code>(N = 当前最大 + 1, 不复用已删 id); 删掉所有线不报错。</li>
+  <li><b>次级为空不显示入口</b>(D7): <code>sub.order</code> 过滤掉隐藏项后无可见项 ⇒ 不渲染「更多操作」父项; 「更多操作」文案恒定不可重命名。</li>
+  <li><b>门控串联</b>: 最终可见 = 布局可见 ∧ 门控通过(<code>flags.skip_check_menu</code> / <code>qbTrafficOn</code> / <code>reannounceMenuGate()</code>); 门控关闭时槽位在布局里保留 —— 定制块对门控关的项显示但打「当前开关未启用」徽标, 避免用户误判。</li>
+  <li><b>后端宽松</b>: 校验只查形状(order/hidden 为字符串数组、sub 同构、token 格式); 未知 id 不报错(前端补尾/忽略), 与列偏好「换版本不丢布局」同款韧性。</li>
+</ul>
+
+<h3>3.2 菜单项注册表(新文件 <code>shared/ctx_menu.js</code>, 单点)</h3>
+<pre><code><span class="cm">/* (分支, id) → 静态描述 + 运行时钩子; 默认布局由定义序生成 */</span>
+const CTX_ITEM_DEFS = {
+  group: [
+    { id: "resume",    label: "启动整组",   icon: "i-play",   act: "act('resume')",        level: 0 },
+    { id: "reannounce",label: "强制重新汇报",icon: "i-refresh",act: "act('reannounce')",    level: 0,
+      dyn: "reannounceMenuGate" },        <span class="cm">// 运行时置灰 + title 钩子(is-gated 语义)</span>
+    { id: "skip_check",label: "跳过哈希校验…",icon: "i-bolt",  act: "skipCheckGroup()",     level: 0,
+      gate: "skip_check_menu" },          <span class="cm">// flags 门控: 关时不渲染, 槽位保留</span>
+    <span class="cm">// …共 11 项 + 默认 sep 标记(定义序里 sep 位置即默认线)</span>
+  ],
+  member: [
+    <span class="cm">// …13 项, 其中:</span>
+    { id: "sub-more", label: "更多操作", icon: "i-sliders", kind: "submenu", level: 0,
+      sub: "member" },                    <span class="cm">// 特殊项: 渲染父项 + caret, 子面板取 member 的 sub 定义</span>
+    { id: "super-seeding", label: "开启/关闭超级做种", icon: "i-shield", level: 1,
+      act: "torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, …)",
+      dyn: "superSeedingLabel" },         <span class="cm">// 动态文案(开关态)</span>
+    <span class="cm">// …sub 共 11 项 + 2 sep</span>
+  ],
+  multi: [ /* 10 项 + 2 sep */ ],
+  episode: [ /* 5 项 + 2 sep; scope 动态文案「启动整剧/整集」走 dyn 钩子 */ ],
+};
+const DEFAULT_CTX_LAYOUT = …;   <span class="cm">// 从定义序生成, 与今天静态模板逐位一致(守阵钉)</span></code></pre>
+
+<p><b>与 <code>triggers.js</code> 的关系</b>: variant 名(multi/episode/member/group)直接沿用登记表口径, 四支判据链 <code>v-if="menu.multi" / v-else-if="menu.episode" / v-else-if="menu.hash" / v-else</code> <b>原样保留</b> —— 静态守阵 T3(variant 对账模板分支)的比对面不动。</p>
+
+<h3>3.3 渲染重构(<code>ctx-menus.html</code>: 静态直写 → v-for 消费)</h3>
+<ul>
+  <li>每支内部: <code>&lt;div v-for="it in ctxItems('group')" :class="['ctx-item', it.cls]" @click="ctxRun(it)"&gt;</code>; <code>it.kind === 'sep'</code> ⇒ <code>&lt;div class="ctx-sep"&gt;</code>; 次级: <code>ctxSubItems('member')</code> 非空才渲染「更多操作」父项。</li>
+  <li><b>交互全部保留</b>: CTX-05 收起延迟(<code>SUB_CLOSE_DELAY_MS</code> + 父项 mouseleave 语义)、<code>openSub/toggleSub/keepSub/scheduleSubClose</code>、<code>_subFitViewport</code> 实测钳位与 <code>subFlip</code>、<code>is-gated</code> 置灰 + <code>title</code> 提示、<code>danger</code> 样式、<code>ctx-caret</code>、<code>_markCtxSource</code> 触发源强调。</li>
+  <li><code>menu.js</code> 适配面极小: <code>openMenu/openMemberMenu</code> 等开菜单逻辑不动; 新增 <code>ctxItems(branch)</code> / <code>ctxSubItems(branch)</code> computed(读 <code>flags.ctx_menu</code> + 注册表 + 当前分支判据)与 <code>ctxRun(it)</code> 分派(按 <code>it.act</code> 调原方法, 一个 switch/映射表, 不碰原方法体)。</li>
+  <li>加载序约束同 <code>menu.js</code>: <code>ctx_menu.js</code> 必须排在 <code>app.js</code> 之前(app.js 末尾 <code>app.mixin(window.AQB_CTX_MENU)</code>)。</li>
+</ul>
+
+<h3>3.4 持久化与生效链</h3>
+<table>
+  <thead><tr><th>环节</th><th>落点</th><th>改动</th></tr></thead>
+  <tbody>
+    <tr><td>配置模型</td><td><code>config/models.py</code> WebConfig</td><td>加 <code>ctx_menu: dict | None = None</code>(带注释说明结构)</td></tr>
+    <tr><td>加载</td><td><code>config/loaders.py:116</code> web 段</td><td>收 <code>ctx_menu</code> 原样 dict(宽松, 不解析内容)</td></tr>
+    <tr><td>校验</td><td><code>validation/sections.py:54</code> <code>KNOWN_WEB_KEYS</code></td><td>+ <code>ctx_menu</code>; 加形状校验(数组/字符串/sub 同构, 失败进 errors 不抛)</td></tr>
+    <tr><td>schema 契约</td><td><code>schema/groups.py</code> web 块</td><td><code>Field("ctx_menu", …, "object", hidden=True)</code>; <code>skip_check_menu</code> 同打 <code>hidden=True</code>(迁入新卡)</td></tr>
+    <tr><td>下发</td><td><code>server/routes/config.py:33</code> flags 端点</td><td>回 <code>ctx_menu</code>(<code>manager.config.web.ctx_menu</code> 原样或 null)</td></tr>
+    <tr><td>前端状态</td><td><code>state.js:201</code> / <code>lifecycle.js:364</code></td><td><code>flags</code> 加 <code>ctx_menu</code>(初始 null = 默认布局; 失败回落 null)</td></tr>
+    <tr><td>生效</td><td><code>config_editor.js:212</code>(已有)</td><td><b>零改动</b>: cfgSave 成功即 <code>loadWebFlags</code> + 2s 补拉 ⇒ flags.ctx_menu 变 ⇒ computed 重算 ⇒ 热应用; 其它标签 F5 ⇒ bootstrap ⇒ loadWebFlags 取新值</td></tr>
+  </tbody>
+</table>
+
+<h3>3.5 设置页定制块(新卡「WebUI」, D6/D9)</h3>
+<ul>
+  <li><b>卡片注册</b>(<code>config_hub.js</code>, keys 先例同款): <code>hubCards()</code> push <code>{key:"webui", icon:"i-sliders", title:"WebUI", desc/lede:…}</code>; <code>HUB_GROUP_META</code> 加 <code>webui</code>; <code>hubMeta</code> 补 <code>hub.view === "webui"</code> 分支(键位卡同款, <code>config_hub.js:270</code>)。</li>
+  <li><b>定制块</b>(<code>settings-detail.html</code>): <code>&lt;template v-else-if="hub.view === 'webui'"&gt;</code>, <code>hb-blk</code> 结构照 keys 块: 四支 tab 切换(待拍板 Q2) + 每支一张定制表 —— 每行: 显隐 checkbox + 名称(与菜单内文案一致)+ 图标 + 层级徽标(一级/次级)+ ↑↓ + 「移入/移出次级」钮 + 拖拽把手; 分隔线行可拖可删; 「+ 添加分隔线」; 「恢复默认」把默认布局写进草稿。块内同时渲染迁入的跳检开关(checkbox 绑 <code>cfg.tree.web.skip_check_menu</code>)。</li>
+  <li><b>草稿写回</b>(响应式要点): 面板持有 draft, 每次编辑以<b>整对象替换</b>写回 <code>cfg.tree.web.ctx_menu</code>(<code>this.cfg.tree.web = { …this.cfg.tree.web, ctx_menu: draft }</code>) —— 与 flags「整对象替换保响应式」同款教训; <code>cfgDirty</code> 自动接管脏标记, 保存走全局 <code>cfgSave</code>(无独立保存钮)。</li>
+  <li><b>样式</b>: <code>shared/console_hub.css</code> 加 <code>.ctx-custom-*</code>(kb-* 同款共享落点, 三皮肤同吃); 菜单自身 CSS 零改动(§01 不变量)。</li>
+  <li><b>老 web 块命名不变</b>(D13): <code>groups.py</code> <code>Field("web", "WebUI", …)</code> label 保持「WebUI」零改动 —— 与顶层新卡同名但分属不同层级(常规分区内的配置块 vs 顶层定制卡), 靠 desc/lede 区分语义(块 help「图形界面的监听与鉴权」vs 卡 desc「右键菜单布局等界面行为定制」); 不改即无回归面。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<p>分期原则: <b>先契约、再数据、再渲染、再面板、后守阵</b>; 每波可独立验收, 任一波停下都不破坏现状(flags 键未加前前端不读; 模板未改前注册表无人消费)。</p>
+
+<table>
+  <thead><tr><th>波</th><th>内容</th><th>主要落点</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>W1</b><br>后端契约</td>
+      <td><code>ctx_menu</code> 进 config 四件套 + flags 扩展 + 契约守阵测试</td>
+      <td><code>models.py</code> / <code>loaders.py</code> / <code>validation/sections.py</code> / <code>schema/groups.py</code>(hidden) / <code>routes/config.py</code></td>
+      <td>含 <code>ctx_menu</code>(合法形状)的 config 过 <code>validate_config</code>; 坏形状报错不 500; 未知键仍判红; flags 回 <code>ctx_menu</code>; 既有 config 测试全绿(存量 config 无该键 = 默认)</td>
+    </tr>
+    <tr>
+      <td><b>W2</b><br>注册表 + 解析器</td>
+      <td>从静态模板逐位平移 39 一级项 + 11 线 + 次级 11 项 2 线; 默认布局生成; 补尾/隐藏/跨层/sep 语义 + <code>ctxItems</code>/<code>ctxSubItems</code> 解析</td>
+      <td>新文件 <code>shared/ctx_menu.js</code></td>
+      <td>单测: 默认布局与现模板<b>逐位一致</b>(守阵钉); 补尾/隐藏恢复/跨层/sep 增删/次级空隐藏入口各一条; <code>node --check</code> 过</td>
+    </tr>
+    <tr>
+      <td><b>W3</b><br>模板重构</td>
+      <td>四支内部改 v-for; <code>menu.js</code>/<code>state.js</code>/<code>lifecycle.js</code> 适配(flags.ctx_menu 收发); 交互逐项对账(CTX-05/钳位/置灰/danger/caret)</td>
+      <td><code>tpl/ctx-menus.html</code> / <code>menu.js</code> / <code>state.js</code> / <code>lifecycle.js</code></td>
+      <td>默认布局下三 UI 菜单与今天逐位一致; e2e <code>menus.spec</code> 全绿(含 CTX-05/子面板/置灰态); 无 JS 报错(双 UI 成对天然满足: shared 单文件)</td>
+    </tr>
+    <tr>
+      <td><b>W4</b><br>设置页定制块</td>
+      <td>新卡「WebUI」+ 定制 UI(显隐/↑↓/拖拽/跨层/分隔线/恢复默认)+ 跳检开关迁入; 老 web 块命名保持「WebUI」不变(D13, 零改动)</td>
+      <td><code>config_hub.js</code> / <code>tpl/settings-detail.html</code> / <code>console_hub.css</code> / <code>schema/groups.py</code>(label+hidden)</td>
+      <td>手工全流程: 改布局 → 全局保存 → <b>当前标签菜单热应用</b> → F5 后仍在; 其它标签刷新生效; 跳检开关开/关仍 fail-closed(菜单 + 端点 403); 离开分区未保存有守卫</td>
+    </tr>
+    <tr>
+      <td><b>W5</b><br>守阵同步</td>
+      <td>重写 parity 守阵比对面(模板文本 token → 注册表 + shared 单点); 验证 trigger_registry T3; 新守阵(注册表 id ↔ 默认布局 ↔ config 契约 ↔ flags 键); e2e 回归</td>
+      <td><code>tests/test_webui_static_dom_panel.py</code>(parity + 双 UI 批量比对面) / <code>tests/test_webui_trigger_registry.py</code>(验证) / 新测试文件 / <code>e2e/trigger-scope.spec.mjs</code>(回归)</td>
+      <td>全套 pytest + <code>node --check</code> + e2e <code>@fast</code> 绿; 故意删注册表一项 ⇒ 新守阵红(证明守阵有效)</td>
+    </tr>
+    <tr>
+      <td><b>W6</b><br>文档收尾</td>
+      <td><code>conventions/webui.md</code> 补「菜单布局用户可定制」口径; 更新坑档 <code>ctx-menu-branch-parity</code> 处置(注册表单点 = 奇偶根治); 改版报告; <code>kb.wrap</code></td>
+      <td>memory-bank 三件</td>
+      <td><code>commands run kb.docmap --check</code> 绿; 报告入 <code>reports/</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>守阵面清单(已知必须同步改, 漏改即红)</h3>
+<table>
+  <thead><tr><th>守阵</th><th>现状比对面</th><th>重构后</th></tr></thead>
+  <tbody>
+    <tr><td><code>test_frontend_ctx_menu_group_actions_parity</code>(<code>test_webui_static_dom_panel.py:3210</code>)</td><td>正则抓 <code>&lt;template v-else&gt;</code> 文本, 钉六个组级入口 token + <code>v-if="flags.skip_check_menu"</code> 门控 + commands/drawer 下游复用</td><td>模板变 v-for 后 token 不在模板 ⇒ 改对<b>注册表 group 支</b>断言六个 id + gate 字段 + 下游 delegate 仍在(语义不变, 比对面搬家)</td></tr>
+    <tr><td>双 UI 批量分支一致性(同文件 3177–3195)</td><td>两套 index.html 聚合文本里批量分支逐字相同(<code>ctxAct('resume')</code> 等)</td><td>ctx-menus.html 是 shared 单点(loader 注入三 UI)⇒ 比对面改为「注册表 + shared 单点存在」, 成对性由结构保证</td></tr>
+    <tr><td><code>test_webui_trigger_registry</code> T3</td><td>variant 对账模板四支判据链</td><td>判据链原样保留 ⇒ <b>预期仍过</b>; W5 实测验证, 不过则适配</td></tr>
+    <tr><td>e2e <code>trigger-scope.spec.mjs</code></td><td>菜单明示文案(「批量启动」等)+ scope 审计环</td><td>文案与 dispatch 不变 ⇒ 回归即过; 新加「自定义布局后菜单序」用例(§04 W5)</td></tr>
+    <tr><td><b>新守阵</b>(本计划新增)</td><td>—</td><td>①注册表每支 id 全集 == 默认布局 order 全集; ②<code>models/loaders/validation/flags</code> 四件套都认 <code>ctx_menu</code>; ③定制块读写键路径 == <code>web.ctx_menu</code></td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§05</span>落地细节拍板(Q1–Q4 已闭)</h2>
+
+<p>原待拍板四项已于 <b>26-10-20 01:00 按默认推荐全部拍板</b>(用户「拍板项按推荐」), 结论并入 §06 拍板记录 <b>D14–D17</b>; 本章不再保留待决项 —— 全文决策点已全部闭合, 进入实施无悬念。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+
+<table>
+  <thead><tr><th>D</th><th>决策点</th><th>结论(26-10-19/20 grilling 三轮 12 问 + 落地细节 4 项)</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>能力范围</td><td>重排 + 显隐 + <b>跨层移动</b>(一级 ↔「更多操作」)</td></tr>
+    <tr><td>D2</td><td>交互入口</td><td>设置页中定制</td></tr>
+    <tr><td>D3</td><td>覆盖范围</td><td>仅行右键菜单四支(表头菜单 4 项/文件优先级互斥/抽屉模板已数据驱动, 不纳入)</td></tr>
+    <tr><td>D4</td><td>持久化通道</td><td>服务端配置, 与跳检开关同通道</td></tr>
+    <tr><td>D5</td><td>存储落点</td><td><code>config.yml</code> <code>web.ctx_menu</code> 嵌套键(过 validate_config + schema 全套)</td></tr>
+    <tr><td>D6</td><td>设置页落点</td><td>新建顶层卡「WebUI」; 跳检开关一并迁入, 作为后续 webui 设置的新家</td></tr>
+    <tr><td>D7</td><td>跨层语义</td><td>四支统一「一级 + 一个次级菜单」; 次级为空不显示入口</td></tr>
+    <tr><td>D8</td><td>生效时机</td><td>保存后立即生效(当前标签热应用, 其它标签/浏览器刷新后生效)</td></tr>
+    <tr><td>D9</td><td>卡片命名</td><td>「WebUI」(现有 web 块在「常规」分区内, 不冲突; 老块命名保持「WebUI」不变, 见 D13)</td></tr>
+    <tr><td>D10</td><td>分隔线</td><td>独立可拖可删(一级公民, 非附属标记)</td></tr>
+    <tr><td>D11</td><td>排序粒度</td><td>四支各自独立</td></tr>
+    <tr><td>D12</td><td>危险项(删除…)</td><td>完全自由(可移首位、可隐藏; 与「完全自定义」诉求一致, 找回成本由恢复默认兜底)</td></tr>
+    <tr><td>D13</td><td>老 web 块命名</td><td><b>不改</b>: 常规分区内 web 块 label 保持「WebUI」(26-10-20 00:40 拍板); 与顶层新卡同名, 靠层级与 desc 区分</td></tr>
+    <tr><td>D14</td><td>定制交互手势</td><td><b>↑↓ + 拖拽双手势</b>(26-10-20 01:00 按推荐拍板): 键盘可达 + 鼠标直觉, 与列选择器同款</td></tr>
+    <tr><td>D15</td><td>四支在定制块里的呈现</td><td><b>tab 切换</b>: 一次只看一支, 页面不冗长</td></tr>
+    <tr><td>D16</td><td>「恢复默认」确认</td><td><b>直接写默认布局进草稿</b>: 与全局保存一起落盘; 放弃改动 = 不保存离开(无二次确认框)</td></tr>
+    <tr><td>D17</td><td>定制块里次级项呈现</td><td><b>固定次级区</b>: 每支表内「次级(更多操作)」小节, 与一级同表不同区</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+
+<table>
+  <thead><tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>K1</td><td>v-for 化丢动态绑定(is-gated 置灰/title 提示/开关态文案/episode scope 文案)</td><td>W3 逐项平移时漏挂钩子</td><td>注册表每项显式声明 <code>dyn</code>/<code>gate</code> 钩子; W3 验收含「gated/toggle 两态对账」; e2e menus.spec 覆盖置灰态</td></tr>
+    <tr><td>K2</td><td>守阵大面积红(parity + 双 UI 比对面按模板文本断言)</td><td>W3 提交即红</td><td><b>先改守阵比对面再改模板</b>(红→绿顺序); parity 语义不变只换比对面(注册表), 双 UI 成对由 shared 单点结构保证</td></tr>
+    <tr><td>K3</td><td>config.yml 是生产红线文件(真实凭据引用)</td><td>W1 schema 改造</td><td><code>ctx_menu</code> 缺省 None, 存量 config 零影响; 校验失败只进 errors 不夹坏既有键; 备份机制已有(<code>config_backup_path</code>)</td></tr>
+    <tr><td>K4</td><td>热应用竞态(cfgSave 回执先于 reload_config 落地)</td><td>W4 保存后立刻右键</td><td>沿用 flags 既有「立即拉 + 2s 补拉」双拉; 布局数据小, 竞态只影响菜单序新旧一帧, 后端 gate 仍真值兜底</td></tr>
+    <tr><td>K5</td><td>次级为空仍显示「更多操作」入口(半残 UI)</td><td>用户隐藏/移走全部次级项</td><td>渲染条件单点 computed(<code>subVisibleCount &gt; 0</code>); 新守阵③钉; 手工用例覆盖</td></tr>
+    <tr><td>K6</td><td>门控关的项在定制块可见 ⇒ 用户误判「排了序就该出现」</td><td>W4 交互</td><td>定制块对门控关项打「当前开关未启用」徽标 + 提示文案; 运行时串联门控(§3.1)</td></tr>
+    <tr><td>K7</td><td>三皮肤 CSS 分叉(定制块样式只在部分皮肤可见)</td><td>W4 样式落点选错</td><td>样式只落 <code>shared/console_hub.css</code>(kb-* 同款共享落点); 菜单 CSS 零改动; W4 验收三 UI 各过一遍</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-20-0024</span> 初版: 用户指令「WEBUI 右键菜单自定义重排」+ grilling 三轮 12 问全部拍板(D1–D12); 代码取证四支项集(39 一级项 + 11 线 + 次级 11 项 2 线)、列双轨先例、flags 通道、设置页 keys 客户端块先例; 定稿「注册表单点 → 布局数据 → 模板消费」主线与 W1–W6 分期。</li>
+  <li><span class="tag">R1 · 26-10-20-0042</span> D13 拍板: 老 web 块命名保持「WebUI」不改(用户 26-10-20 00:40); §03.5 落点说明同步(零改动), §05 Q4 移除并顺延, §06 D9 引用更新</li>
+  <li><span class="tag">R2 · 26-10-20-0047</span> D14-D17 拍板: 落地细节四项按默认推荐全部闭合(用户 26-10-20 01:00「拍板项按推荐」); §05 转为已闭说明, §06 增补 D14-D17; 全文决策点闭合, 进入实施</li>
+</ul>
+
+</div>
+</body>
+</html>
