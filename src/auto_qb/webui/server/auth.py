@@ -80,16 +80,24 @@ def _origin_allowed(origin: str, allowed: frozenset, host_port: Optional[int]) -
 
     Origin 由浏览器控制, 攻击页无法伪造成白名单 host —— host 命中白名单即排除
     evil.com 类跨站; 端口一致性是余量防线(Host 缺省端口时不判定, 放宽)。
+
+    解析整段 fail-closed: ``urlsplit`` 与 ``.port`` 访问**一并包在 try 内** ——
+    ``.port`` 是 property, 端口段非数字(``http://127.0.0.1:notaport``)时抛
+    ValueError, 漏在 try 外会把异常穿透到全局异常处理变 500, 而不是闸门该给的 403
+    (issue 26-10-20-2230)。与同文件 ``_host_header_parts`` 同口径。
     """
     try:
         parts = urlsplit(origin)
+        scheme = parts.scheme
+        hostname = parts.hostname
+        origin_port = parts.port
     except ValueError:
         return False
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    if scheme not in ("http", "https") or not hostname:
         return False
-    if not _hostname_allowed(parts.hostname, allowed):
+    if not _hostname_allowed(hostname, allowed):
         return False
-    origin_port = parts.port or (443 if parts.scheme == "https" else 80)
+    origin_port = origin_port or (443 if scheme == "https" else 80)
     return host_port is None or origin_port == host_port
 
 

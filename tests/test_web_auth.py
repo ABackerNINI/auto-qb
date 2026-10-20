@@ -302,8 +302,11 @@ def test_auth_host_origin_parsing_helpers():
     assert not _origin_allowed("not a url", allowed, None)  # 无 host
     # Host 头端口段非法(urlsplit.port 抛 ValueError): fail-closed, 不炸
     assert _host_header_parts("[::1]:notaport") == ("", None)
-    # !Origin 非法端口当前会抛未捕获 ValueError(见 issue 26-10-20-webui-origin-port-parse):
-    # 这里只锁「不炸」的 Host 侧; Origin 侧的 fail-closed 待 issue 处置后补断言。
+    # Origin 端口段非法: 同口径 fail-closed(issue 26-10-20-2230)—— 不抛异常, 返回 False
+    assert not _origin_allowed("http://127.0.0.1:notaport", allowed, None)
+    assert not _origin_allowed("http://127.0.0.1:notaport", allowed, 8080)
+    assert not _origin_allowed("https://api.localhost:notaport", allowed, None)  # *.localhost 也走同一闸门
+    assert not _origin_allowed("http://localhost:notaport", allowed, 8080)
 
 
 def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):

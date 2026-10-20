@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-csrf-guard">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="Origin 头端口段非法时 _origin_allowed 抛未捕获 ValueError(跨站闸应变 fail-closed)">
 <meta name="issue-summary" content="_origin_allowed 的 parts.port 在 try 之外, Origin 带非数字端口时 ValueError 穿透全局依赖(预期 fail-closed 403)">
 <title>Origin 头端口段非法时 _origin_allowed 抛未捕获 ValueError(跨站闸应变 fail-closed) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2230-bug-webui-origin-port-parse</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,11 +155,15 @@ ValueError: Port could not be cast to integer value as 'notaport'
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 03:52 — 用户指派认领，状态 <strong>In Progress</strong></li>
+      <li>2026-10-21 03:58 — 修复并验证完成，状态 <strong>Done</strong>（实测数字见下方「修复后补充」，全量基线见 <code>kb.baseline</code>）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-21 03:52 <strong>仍复现</strong> —— 重跑报告 §02 的原探针，<code>ValueError: Port could not be cast to integer value as 'notaport'</code> 照旧抛在 <code>src/auto_qb/webui/server/auth.py:92</code>（代码未漂移，锚点行号仍准）；同侧 <code>_host_header_parts("127.0.0.1:notaport")</code> 返回 <code>('', None)</code>，两侧口径不一致依旧成立。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（= 建议修法，未改道）：把 <code>_origin_allowed</code> 里 <code>urlsplit</code> 与 <code>.port</code> 的 Property 访问<strong>一并纳入同一个 try</strong>，顺手把 <code>scheme</code> / <code>hostname</code> 也提出来在 try 内取值，<code>except ValueError</code> 分支 <code>return False</code>（fail-closed）。选「并入 try」而非「isdigit 预检」：后者要自己重复实现 urlsplit 的端口段切分与越界校验，多一处与标准库漂移的面；try 包住 property 是收口最窄的一处，且与同文件 <code>_host_header_parts</code> 逐字同口径。</p>
+    <p><strong>验证方式</strong>：① 修复后重跑原探针，四条非法端口输入（<code>127.0.0.1:notaport</code> 带/不带 <code>host_port</code>、<code>https://api.localhost:notaport</code>、<code>http://localhost:notaport</code>）均返回 <code>False</code> 不再抛异常；② 回归对照正常路径（端口一致 / 端口不一致 / 缺省 80 / https 缺省 443 / 跨站 host）行为逐位不变；③ 断言落进 <code>tests/test_web_auth.py::test_auth_host_origin_parsing_helpers</code>（报告 §06 预留的注释位已填实）。</p>
+    <p><strong>测试数字</strong>：<code>tests/test_web_auth.py</code> 单文件 14 passed；全量 <code>commands run test.full</code> 见基线切片 <code>memory-bank/testing/baselines/26-10-21-0358-webui-origin-port-parse.md</code>（裸数字只写该处，其它文档一律引 <code>kb.baseline</code> 不手抄）。本次全量另有一条既有红 <code>tests/test_memory_bank.py::test_gen_all_check_is_green</code>，与本次代码改动无关（远端快进带来的新 issue 文件未重建索引），已按坑档跑 <code>commands run kb.index</code> 处置。</p>
   </section>
 
   <footer>
