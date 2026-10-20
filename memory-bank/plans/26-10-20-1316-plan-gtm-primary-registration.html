@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>global-traffic-monitor 正主注册与让位代拉设计</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="gtm-primary-registration">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-20-1316">
+<meta name="doc-updated" content="26-10-20-1316">
+<meta name="doc-refs" content="memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html, memory-bank/pitfalls/backend/traffic-source-discovery-pointer.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: gtm-primary-registration</div>
+<h1>global-traffic-monitor 正主注册与让位代拉设计</h1>
+<p class="lede">给整机流量监视器建立「正主注册」制度：三处 ID 一致才握笔写数据，非正主安装启动即让位（代拉正主）并退出；claim 是唯一人工易主通道。机器上永远只有一个安装、一份数据，恢复/移动/自启/归并全部显式交还用户。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-20-1316 · <b>doc-updated</b> 26-10-20-1316 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-10-20 设计会话（grilling 8 轮，Q1–Q22' 逐项拍板）· 前序计划 <code>26-10-17-0339</code>（集成层 D1–D20 决策）· 坑档 <code>pitfalls/backend/traffic-source-discovery-pointer.md</code>（指针/锁锚用户级目录、就绪只认探活）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p>同机并存两个 auto-qb 实例 A/B（多 clone 并行部署），各带一份 global-traffic-monitor（下称 gtm）安装；数据目录默认跟随安装（D12：<code>&lt;安装&gt;/data</code>）。工具死亡后，先启动的一方按对称逻辑拉起<strong>自己那份</strong>安装并占领指针与数据落点 → 两份数据不互通（复算见 §02）。</p>
+<h3>目标（验收总则）</h3>
+<ol>
+  <li><strong>写入者唯一</strong>：整机只有一个安装写数据——注册正主；版本血统纯，不同版本安装不互写 <code>state.json</code>/<code>dat</code>。</li>
+  <li><strong>非正主即让位</strong>：启动时识别出自己不是正主 → 代拉正主后退出；代拉失败/被拒时给用户可见原因（状态注记 + 设置页）。</li>
+  <li><strong>恢复交还用户</strong>：移动、易主、自启、存量数据归并全部是显式人工动作（文档引导 + claim 按钮），工具只陈述事实、永不猜测。</li>
+  <li><strong>auto-qb 零记录读写</strong>：判定与书写全沉工具侧，auto-qb 只做编排与展示。</li>
+</ol>
+<h3>设计底线（不变量）</h3>
+<ul>
+  <li><strong>单一判定者</strong>：工具是自身状态（记录 / id 文件 / 注记）的唯一判定者与书写者；auto-qb 不读不写。</li>
+  <li><strong>读/写非对称</strong>：读 <code>dat</code> 是跨包稳定契约（任意安装的 auto-qb 都可出曲线）；只有正主安装可写。</li>
+  <li><strong>零自动猜测</strong>：<code>primary.json</code> 只 claim 时写一次，此后零自动刷新（唯一例外：补写为空的 <code>data_dir</code> 信息位）。</li>
+  <li><strong>显式优先</strong>：env <code>GLOBAL_TRAFFIC_MONITOR_DATA_DIR</code> / <code>--data-dir</code> 高于一切默认。</li>
+  <li><strong>最小机制</strong>：不加会话/租约/选举/自动刷新/HTTP 新端点；不做 caretaker 代写数据。</li>
+  <li><strong>fail-safe 降级</strong>：记录/注记损坏一律按缺失或矛盾降级（WARNING），永不死锁、不静默。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>现状机制（代码单点）</h3>
+<ul>
+  <li>订阅线程每轮 <code>ensure_running</code>（<code>core/traffic_source/agent.py:249</code>，由 <code>webui/tool_client.py:250</code> 调用）：probe（读指针 + <code>GET /status</code> 200 才算在跑）→ 失败则 <code>resolve_launch_target</code>（<code>agent.py:178-196</code>：<code>tool_exe</code> 优先，<code>tool_dir</code> 为空回落<strong>本 clone 仓库内</strong> <code>tools/global-traffic-monitor</code>）→ detached 拉起（<code>agent.py:199-229</code>，Windows <code>CREATE_NO_WINDOW</code> / POSIX 新会话——auto-qb 退出带不走工具）→ 探活成功即订阅（“别的实例已拉起也不重复拉”，<code>agent.py:252</code>）。</li>
+  <li>数据目录 = <code>&lt;安装&gt;/data</code>（工具 <code>gtm/storage.py:87-98</code>，D12/D16：env <code>GLOBAL_TRAFFIC_MONITOR_DATA_DIR</code> / <code>--data-dir</code> 可覆盖）。</li>
+  <li>指针 <code>endpoint.json</code> 与单实例锁 <code>instance.lock</code> 锚用户级目录（<code>storage.py:119-142</code>），与 data_dir 解耦；就绪只认探活、锁在绑端口前 acquire（坑档 <code>traffic-source-discovery-pointer</code>）。</li>
+</ul>
+<h3>痛点时间线（原场景复算）</h3>
+<ol>
+  <li>平时：A 的工具先起，指针与数据在 A/data；B 订阅。</li>
+  <li>机器重启 / 崩溃 / <code>POST /shutdown</code> 致工具死亡（优雅退出删指针；崩溃留残留指针）。</li>
+  <li>B 先启动：probe 失败 → 拉起<strong>B 侧安装</strong> → 单实例锁已随原进程死亡释放 → 端口默认随机（0）不冲突 → bind 成功<strong>覆盖写指针</strong> → 数据写 <strong>B/data</strong>。</li>
+  <li>A 后启动：probe 到 B 的工具 → 直接订阅 → 曲线/规则读 <strong>B/data</strong>。</li>
+</ol>
+<p><strong>后果</strong>：A/data 历史成孤儿，两份数据不互通；反复横跳时 dat 历史行与 state.json 当日基线反复断裂。附带三坑：删除安装 = 删其数据；拷贝安装目录 = 拷贝分叉；不同版本安装互写 <code>state.json</code>/<code>dat</code> 是跨版本风险（快照字段语义随版本演进）。工具缺席时 auto-qb 侧不静默当 0（<code>config/models.py:370</code>，流量变量显式报错）——连续性代价可见，不停摆误判。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主轴</strong>：正主注册（machine-level identity）+ 让位代拉 + claim 人工通道。数据目录解析<strong>保持现状</strong>（env/<code>--data-dir</code> 显式 &gt; 安装默认）——不加 pin 文件、数据不挪进用户目录（用户目录只新增几十字节的记录与注记）。</p>
+<h3>三处 ID（文件名 <code>tool-id</code>；uuid；schema 版本化，未知按降级）</h3>
+<table>
+  <tr><th>位置</th><th>文件</th><th>角色</th><th>写者</th></tr>
+  <tr><td>安装目录</td><td><code>&lt;install&gt;/tool-id</code></td><td>安装身份（先于数据可读，定引导顺序：我是谁）</td><td>工具首启生成</td></tr>
+  <tr><td>用户目录（指针目录）</td><td><code>primary.json</code></td><td>机器注册的正主：<code>{schema, id, install_path, data_dir(信息位), version(信息位)}</code></td><td>工具认领（O_EXCL）/ claim 命令</td></tr>
+  <tr><td>数据目录</td><td><code>&lt;data_dir&gt;/tool-id</code></td><td>数据归属（版本血统防线：这份数据归谁写）</td><td>正主认领时写入</td></tr>
+</table>
+<h3>启动判定矩阵（工具进程最早期，acquire 单实例锁<strong>之前</strong>；让位方不持锁）</h3>
+<table>
+  <tr><th>分支</th><th>判据</th><th>动作</th><th>写数据?</th></tr>
+  <tr><td>① 认领</td><td>无 <code>primary.json</code></td><td>O_EXCL 原子建记录（自己三项）→ 正主路径</td><td class="good">是</td></tr>
+  <tr><td>② 正主</td><td><code>record.id == 我的 install-id</code> 且 <code>record.install_path == 我的 realpath</code></td><td>正主路径</td><td class="good">是</td></tr>
+  <tr><td>③ 拒绝</td><td>id 同但 path 异（拷贝件 / 安装被移动）</td><td>拒绝启动 + 人读提示（人工改记录或删记录重认）+ 写注记</td><td class="bad">否</td></tr>
+  <tr><td>④ 让位</td><td><code>record.id ≠ 我的 id</code></td><td>记录自洽校验 → 自洽：代拉（执行 <code>record.install_path</code> 下 D19 启动器）后<strong>立即退出不等待</strong>；矛盾（目标安装 <code>tool-id</code> ≠ 记录 id，或目标即自身）：写注记退出</td><td class="bad">否</td></tr>
+</table>
+<p><strong>正主路径续查</strong>：解析数据目录（env/<code>--data-dir</code> &gt; 安装默认）→ 读 <code>&lt;data_dir&gt;/tool-id</code>：缺失 → 写入认领；== 自己 → 过；≠ 自己 → <strong>fail-fast</strong>（“该数据属于其它安装（id …），拒绝跨版本接管”）→ 补写记录里为空的 <code>data_dir</code> 信息位（仅此字段，不算自动刷新，不削弱 ③）→ 照旧：单实例锁 → bind → 写指针 → 采样通知。</p>
+<h3>claim——唯一人工易主通道（护栏 = 二次确认框）</h3>
+<ul>
+  <li><strong>入口</strong>：安装目录内第二启动器 <code>claim.cmd</code> / <code>claim.sh</code>，D19 同族契约——零参数、意图写在脚本内容里（映射到自己的 <code>python -m gtm claim</code>；编译态退化为调同目录 exe 的 claim 子命令）。缺该文件 = 旧安装，按钮提示升级。否决方案：给 <code>launch.cmd</code> 传参、env 传令牌（不可见 API）。</li>
+  <li><strong>语义</strong>：非阻塞试拿单实例锁 → 拿不到拒绝（“工具正在运行，请先停止”）；数据目录 id ≠ 自己 → 拒绝（“该数据属于其它安装”）；通过 → 原子重写 <code>primary.json</code>（id/install_path/data_dir 三项全用自己的事实）→ 释放锁 → 退出 0。</li>
+  <li><strong>auto-qb 侧</strong>：有界前台执行（timeout 30s，退出码 + 输出展示在状态区）；按钮在设置区<strong>恒显示</strong>（可见性不劳 auto-qb 判断——claim 的自检就是判断）；恢复流程 = 现有「停止工具」→ 新「以本安装重登记」→ 现有「立即拉起」。</li>
+</ul>
+<h3>状态注记（工具侧书写，auto-qb 只读展示）</h3>
+<p>指针目录 <code>deferred.json</code>（谁让位 / 代拉目标 / 结论 / 时间戳）：让位（④）与被拒（③）时由工具书写；正主成功启动或 claim 成功时由权威方清除。auto-qb 状态区据此展示“主工具注册于 X，当前未在运行（本实例工具已让位）”类文案——判定在工具侧，展示在 auto-qb 侧，永不反向。</p>
+<p class="aside">明确不做：pin 文件；数据挪进用户目录；给启动器传参 / env 传令牌；新 HTTP 控制面端点；记录自动刷新；面包屑以外的提醒子系统；确认框前后对照（auto-qb 无记录可读，拿不到 before-state）。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><strong>P1</strong> 工具侧身份与矩阵</td><td>identity 模块（install-id 生成/加载、<code>primary.json</code> 读写与 O_EXCL 认领、三处校验、<code>deferred.json</code> 写/清）+ <code>cmd_run</code> 启动序列插桩（身份 → 数据归属 → 单实例锁 → bind → 写指针 → 采样）</td><td>矩阵 ①②③④ 单测；③ 拒绝 + 注记；④ 代拉后立即退出（不等待）；④ 记录自洽矛盾拒绝；data-id 三态（缺失/同/异）；空 <code>data_dir</code> 信息位补写；未知 schema 降级；常量镜像守阵扩展现有 <code>test_pointer_constants_mirror_tool_side</code></td></tr>
+  <tr><td><strong>P2</strong> claim</td><td><code>gtm claim</code> 子命令 + <code>claim.cmd</code>/<code>claim.sh</code>（源码态/编译态两形态）+ 拒绝路径（锁争 / 数据归属异）</td><td>claim 成功 / 两拒绝路径单测；原子重写（并发安全）；与 P1 共用 data-id 校验，无第二套判据</td></tr>
+  <tr><td><strong>P3</strong> auto-qb 侧</td><td><code>agent.py</code>：claim 启动器常量镜像 + <code>resolve_claim_target</code> + <code>run_claim</code>（有界前台）；设置页：按钮 + 二次确认框 + 状态区读注记展示</td><td>原场景 e2e 复算（工具死 → B 起 → 代拉 A → A 指针出现 → B 订阅 → 同一 dat）；拒绝文案可见；<code>ensure_running</code> 与订阅编排<strong>零改动</strong>（让位全在工具内）</td></tr>
+  <tr><td><strong>P4</strong> 文档与引导</td><td>工具 README + 仓库文档：数据落点规则 / <code>primary.json</code> 是什么怎么改 / claim 流程（停止 → 重登记 → 拉起）/ 禁止拷贝安装目录 / 新机先启 A / 存量分裂人工归并步骤</td><td>文档审查：新人可按文档独立完成 claim 全流程与归并</td></tr>
+</table>
+<h3>实现顺序约束（硬）</h3>
+<ul>
+  <li>单实例锁仍在绑端口前 acquire（坑档 <code>traffic-source-discovery-pointer</code>）；claim 持锁期间不采样。</li>
+  <li>矩阵判定在取锁之前完成；让位方全程不持锁、不写数据。</li>
+  <li>所有落盘复用 <code>storage.atomic_write_text</code>（tmp + fsync + replace），读者任意时刻只见完整文件。</li>
+  <li>镜像常量（指针目录名、记录/id/注记/claim 启动器文件名、schema 版本）auto-qb 与工具各持一份同值——改一侧必须同步另一侧，有守阵钉住。</li>
+</ul>
+<h3>测试要点</h3>
+<ul>
+  <li>install-id：缺 → 生成落盘；已有 → 加载不重生成。</li>
+  <li>认领：无记录 → O_EXCL 建（幂等）；双安装并发首启 → 输家读记录转 ④。</li>
+  <li>矩阵 ②：id+path 同 → 正主；③：拷贝件 / 移动件 → 拒绝 + 注记；④：自洽 → 代拉 + 退出；矛盾（目标 id 不符 / 目标即自身）→ 注记 + 退出。</li>
+  <li>data-id：缺失 → 写入认领；同 → 过；异 → fail-fast 拒绝跨版本接管。</li>
+  <li>claim：成功 / 锁争拒绝 / 数据归属异拒绝；claim 成功清注记。</li>
+  <li>注记：④/③ 书写；正主启动成功清除；损坏按缺失降级。</li>
+  <li>端到端：原场景复算 + 版本只读不写（B 侧 auto-qb 订阅、出曲线正常；B 侧工具零写入）。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><strong>无待拍板项</strong>——grilling 已收敛（Q1–Q22' 全部拍板，见 §06）。以下为实现细节默认值，可在实现期调整，不阻塞开工：</p>
+<ul>
+  <li>文件名最终敲定：<code>primary.json</code> / <code>deferred.json</code> / <code>tool-id</code> / <code>claim.cmd</code>·<code>claim.sh</code>。</li>
+  <li>claim 输出格式：人读一行结论 + 退出码（0 成功 / 非 0 拒绝 reasons 进 stderr，auto-qb 原样展示）。</li>
+  <li>设置页状态文案措辞（“主工具注册于 X，当前未在运行”等）。</li>
+  <li>代拉目标的 D19 启动器解析：复用 <code>resolve_launch_target</code> 同族逻辑（按平台选 <code>launch.cmd</code>/<code>launch.sh</code>）。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>数据落点不动：不加 pin 文件、data 不挪进用户目录；解析链保持 env/<code>--data-dir</code> &gt; 安装默认</td><td>26-10-20</td></tr>
+  <tr><td>D2</td><td>三处 ID（安装目录 / 用户目录 / 数据目录）+ 启动判定矩阵 ①②③④（演化：Q2 曾定 2 处，用户修正为 3 处；install-id 先行于数据可读以定引导顺序，data-id 司版本血统）</td><td>26-10-20</td></tr>
+  <tr><td>D3</td><td>记录只 claim 时写一次，零自动刷新（path 永不自动改）；唯一例外 = 补写为空的 <code>data_dir</code> 信息位</td><td>26-10-20</td></tr>
+  <tr><td>D4</td><td>claim 入口 = 安装内第二启动器 <code>claim.cmd</code>/<code>claim.sh</code>，零参数、D19 同族；传参 / env 传令牌方案否决</td><td>26-10-20</td></tr>
+  <tr><td>D5</td><td>claim 语义：非阻塞试锁 → 争则拒；data-id 异 → 拒；否则原子重写 + 退出码。claim 是唯一人工易主通道，护栏 = 二次确认框</td><td>26-10-20</td></tr>
+  <tr><td>D6</td><td>按钮恒显示 + 二次确认框；不做前后对照 / 易主勾选（auto-qb 无记录可读）</td><td>26-10-20</td></tr>
+  <tr><td>D7</td><td>状态注记 <code>deferred.json</code>：工具侧写 / 清，auto-qb 只读展示；否决 auto-qb 读 <code>primary.json</code> 推导</td><td>26-10-20</td></tr>
+  <tr><td>D8</td><td>auto-qb 零记录读写：判定与书写全沉工具侧（auto-qb 只编排与展示，含按钮也经工具侧入口）</td><td>26-10-20</td></tr>
+  <tr><td>D9</td><td>读 / 写非对称：任意安装的 auto-qb 可读 dat 出曲线；只有正主安装可写</td><td>26-10-20</td></tr>
+  <tr><td>Q1</td><td>让位方案选定「代拉正主」——否决让位方自身启动（周期性分裂）与 caretaker 代写（跨版本写他人数据）</td><td>26-10-20</td></tr>
+</table>
+<p class="aside">grilling 关键过程：初版 ID 记录 + 面包屑 + 自启变更 + 恢复按钮全案因复杂度过高被用户整体推翻；第二轮曾收敛到 pin 文件方案，又因「不往用户目录写过多数据」否决数据入用户目录；最终收敛至本方案（正主注册 + 让位代拉 + claim），表面积 = 工具侧一个身份模块 + 安装内两个启动器 + auto-qb 侧一个受控前台执行与展示位。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>path 误判（该跑的被拒）</td><td>symlink / junction / subst 使 realpath ≠ 记录 path</td><td>realpath 归一；拒绝提示教用户核对 realpath；确认本人后可改记录或删记录重认</td></tr>
+  <tr><td>存量已分裂数据被立错</td><td>升级后先启动的一方恰是短数据那份</td><td>文档人工归并（选定保留目录 → 合并/选定 <code>dat</code> → 保证 data-id 一致）；claim 通道矫正，工具不自动选举</td></tr>
+  <tr><td>新机误先启 B</td><td>首次部署顺序反了，B 先认领</td><td>文档「先启 A」；要改回须 claim（先停 B 工具），人工显式</td></tr>
+  <tr><td>claim 时正主仍在跑</td><td>用户不停工具直接点重登记</td><td>claim 持锁争拒绝 + 提示「先停止」；设置页已有停止工具入口</td></tr>
+  <tr><td>记录 / 注记损坏</td><td>手改坏 / 写入中断</td><td>按缺失或矛盾降级（WARNING）+ 走默认路径；永不死锁、不静默</td></tr>
+  <tr><td>旧安装缺 claim 入口</td><td>升级前的老安装</td><td>按钮检测入口缺失 → 提示升级；优雅降级，不阻断既有功能</td></tr>
+  <tr><td>data-id 拒绝阻断合法接管</td><td>用户确实想让新版本安装接旧数据</td><td>文档给显式步骤：停工具 → 确认版本兼容 → 删 <code>&lt;data&gt;/tool-id</code> → claim；删 id 是显式人工动作，工具不提供绕过开关</td></tr>
+  <tr><td>双 auto-qb 同时拉起各自工具</td><td>工具死后双方探活窗口重叠</td><td>单实例锁去重（输家 fail-fast）；认领 O_EXCL 去重（输家读记录转 ④ 让位）</td></tr>
+  <tr><td>auto-qb 侧误读工具记录</td><td>实现期为图省事直接读 <code>primary.json</code> 推导状态</td><td>D7/D8 拍板在先；状态只读 <code>deferred.json</code>（工具侧书写）。守阵：代码评审 + 常量镜像单点测试</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-20-1316</span> 初版。来源：2026-10-20 grilling 8 轮设计会话（问题复算 → 四方案比选 → 复杂 ID 全案被推翻 → pin 方案被否决 → 收敛至正主注册案），用户全程逐项拍板（Q1–Q22'，见 §06）。要点：三处 ID 与启动判定矩阵替代「先到先得拉自己安装」；④ 让位方代拉正主后退出；claim 为唯一人工易主通道；状态注记供人可见；auto-qb 零记录读写。</li>
+</ul>
+
+</div>
+</body>
+</html>
