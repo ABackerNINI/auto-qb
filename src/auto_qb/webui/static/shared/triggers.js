@@ -310,6 +310,10 @@ const TRIGGER_DEFS = {
     {
       "file": "config_hub.js", "fn": "tmShutdownTool", "ep": "/api/traffic/monitor/shutdown",
       "scope": "none", "why": "全局流量来源: 关闭工具进程(26-10-17-1737 S4): 作用于外部工具进程, 与选中无关; 配置落盘另走 /api/config"
+    },
+    {
+      "file": "config_hub.js", "fn": "tmClaim", "ep": "/api/traffic/monitor/claim",
+      "scope": "none", "why": "全局流量来源: 以本安装重登记为正主(计划 26-10-20-1316 §03 D4/D5): 人工易主唯一通道, 有界前台跑工具侧 claim 启动器, 作用于外部工具进程与选中无关"
     }
   ]
 };

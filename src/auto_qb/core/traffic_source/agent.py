@@ -7,7 +7,10 @@
 - `ensure_running()` 缺席时按 D10 解析启动目标(tool_exe 优先, 否则 tool_dir / 仓库内默认目录
   里的 D19 启动器)并 detached 执行 —— **零参数**(自启意图写死在启动器里, D13); 拉起失败按
   D14 **固定 30s 退避**重试; 探活成功即直接订阅(别的实例已拉起也不重复拉)。
-- `status()` 供设置页状态区读五态(plan §05)。
+- `status()` 供设置页状态区读五态(plan §05), 并只读附带让位/被拒注记(D7: 工具侧
+  书写/清除, auto-qb 不读不写记录);
+- `run_claim()` 有界前台执行安装内 claim 启动器(D4/D5: 人工易主唯一通道) ——
+  「谁是正主」的判定与书写全沉工具侧, auto-qb 只编排执行与转述结论。
 
 「启动工具」是可注入的**模块级单点** `launch_tool` —— tests/sidefx.py 的 POPEN 白名单只放行
 `node` 与临时 wrapper, 测试一律注入假动作(`monkeypatch.setattr(agent, "launch_tool", fake)`),
@@ -59,6 +62,10 @@ _LAUNCHER_POSIX = "launch.sh"
 
 #: 单次 `GET /status` 探活的请求超时(秒): 本机回环, 正常亚毫秒级; 给足余量但不无限等
 PROBE_TIMEOUT_S = 10.0
+
+#: claim 有界前台执行的超时(秒, 计划 §03): 跑安装内 claim 启动器(试锁+改写记录+清
+#: 注记), 正常亚秒级; 给足余量但不无限等 —— UI 线程不能被 claim 卡死
+CLAIM_TIMEOUT_S = 30.0
 
 #: 拉起后等探活的窗口(秒, plan §05 默认): 首次引导 120s(含 uv 装依赖) / 常态 10s
 FIRST_BOOT_WINDOW_S = 120.0
@@ -239,6 +246,113 @@ def launch_tool(target: LaunchTarget) -> None:
     subprocess.Popen(args, **kwargs)
 
 
+@dataclass(frozen=True)
+class ClaimTarget:
+    """D4 解析出的 claim 入口: 安装内第二启动器 claim.cmd / claim.sh(零参数, 人工易主)"""
+
+    path: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ClaimResult:
+    """D5 claim 有界前台执行结果: 退出码 + 人读输出(UI 原样展示, auto-qb 不解释只转述)"""
+
+    ok: bool
+    exit_code: int
+    output: str
+
+
+def resolve_claim_target(conf) -> Optional[ClaimTarget]:
+    """D4 claim 入口解析: 安装内第二启动器 claim.cmd / claim.sh(人工易主唯一通道)
+
+    与 resolve_launch_target 同族(D10 解析顺序): tool_exe 显式优先(编译态, claim
+    启动器与 exe 同目录, 其内容退化为调同目录 exe 的 claim 子命令) -> tool_dir /
+    仓库内默认目录; 都找不到 -> None(旧安装缺 claim 入口, 按钮照显, 点击时提示升级)。
+
+    auto-qb **不拼 uv、不认识子命令** —— 「怎么重登记」全部沉在工具侧启动器里(D19 同族)。
+    """
+    candidates = []
+    exe = str(getattr(conf, "tool_exe", "") or "").strip()
+    if exe:
+        exe_abs = os.path.abspath(os.path.expanduser(exe))
+        if os.path.isfile(exe_abs):
+            candidates.append(os.path.dirname(exe_abs))
+    tool_dir = str(getattr(conf, "tool_dir", "") or "").strip()
+    candidates.append(os.path.expanduser(tool_dir) if tool_dir else default_tool_dir())
+    name = CLAIM_LAUNCHER_WINDOWS if is_windows() else CLAIM_LAUNCHER_POSIX
+    for base in candidates:
+        launcher = os.path.join(base, name)
+        if os.path.isfile(launcher):
+            return ClaimTarget(path=launcher, label=f"claim 启动器({name})")
+    return None
+
+
+def _run_foreground(args: list, *, cwd: Optional[str], timeout: float):
+    """有界前台执行单点(可注入, 测试替换本函数): 合并捕获 stdout/stderr, 超时即杀
+
+    与 launch_tool 的分工: 拉起是 detached(不看退出码), claim 是**有界前台**(要拿
+    退出码与人读输出) —— 同一个执行纪律(cwd/窗口形态)两种等待语义。
+    """
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+        close_fds=True,
+    )
+
+
+def run_claim(target: ClaimTarget, *, timeout: float = CLAIM_TIMEOUT_S) -> ClaimResult:
+    """D5: 有界前台执行 claim 启动器(零参数) —— 退出码 0 = 已重登记, 非 0 = 被拒绝
+
+    Windows `cmd.exe /c <启动器>` / POSIX `/bin/sh <启动器>`(与 launch_tool 同族执行
+    形态); 启动器起不来 / 超时 -> ok=False 且原因进 output —— 「没重登记成功」同样是
+    要让人看见的结论, 不静默(拒绝原因由工具侧人话输出, 本层原样转述)。
+    """
+    args = ["cmd.exe", "/c", target.path] if is_windows() else ["/bin/sh", target.path]
+    try:
+        proc = _run_foreground(args, cwd=os.path.dirname(target.path) or None, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return ClaimResult(ok=False, exit_code=-1, output=f"重登记超时({timeout:g}s 未结束): 可重试; 若反复超时请检查安装目录")
+    except OSError as e:
+        return ClaimResult(ok=False, exit_code=-1, output=f"claim 启动器执行失败: {e}")
+    return ClaimResult(ok=proc.returncode == 0, exit_code=proc.returncode, output=(proc.stdout or "").strip())
+
+
+def deferred_note_path() -> str:
+    """让位/被拒注记路径(指针目录/deferred.json); 测试按需 monkeypatch 本函数重定向"""
+    return os.path.join(pointer_dir(), DEFERRED_FILE_NAME)
+
+
+def read_deferred_note() -> Optional[dict]:
+    """只读注记(D7): 工具侧书写/清除, auto-qb 只据此展示「为什么没有工具在跑」
+
+    缺失/损坏/schema 未知 -> None(只告警, 不猜字段, 与指针同族纪律)。注记是可见性
+    便利: 读不到不影响任何联动行为(ensure_running 的判定全在探活与工具侧)。
+    """
+    path = deferred_note_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        logger.warning(f"读取全局流量监视器让位注记失败({path}): {e}")
+        return None
+    if not isinstance(payload, dict):
+        logger.warning(f"让位注记格式非法(顶层非对象, {path}): 按无注记处理")
+        return None
+    schema = payload.get("schema")
+    if schema != DEFERRED_SCHEMA:
+        logger.warning(f"让位注记 schema 非预期(读到 {schema!r}, 期望 {DEFERRED_SCHEMA}, {path}): 不猜字段, 按无注记处理")
+        return None
+    return payload
+
+
 class TrafficSourceAgent:
     """探测 -> 保障可达 -> 状态(plan §05 五态)
 
@@ -331,6 +445,8 @@ class TrafficSourceAgent:
             "autostart_error": ep.autostart_error if ep else None,
             "error": "",
             "retry_s": 0.0,
+            # 让位/被拒注记(D7): 工具侧书写, auto-qb 只读展示 —— 解释「为什么没工具在跑」
+            "claim_note": read_deferred_note(),
         }
         if ep is not None:
             return {**base, "state": "ready"}

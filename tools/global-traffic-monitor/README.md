@@ -29,22 +29,31 @@ down 网卡), 以 TrafficMonitor 兼容格式 (`history_traffic.dat`: 每行
 ```
 src/gtm/
   __init__.py   版本与包说明
-  __main__.py   CLI 入口 (global-traffic-monitor): run 主循环 (S2/S4) + install/uninstall-autostart (S5) + endpoint (S13)
+  __main__.py   CLI 入口 (global-traffic-monitor): run 主循环 (S2/S4) + claim (§03) + install/uninstall-autostart (S5) + endpoint (S13)
   config.py     工具配置加载/校验/热重载 (S3)
   sampler.py    psutil 采样 + 日界累计 + 重置/恢复 (S1)
   storage.py    TM 兼容落盘 + state.json 原子写 + 单实例锁 (S2)
   server.py     本地控制面 127.0.0.1:<随机端口> (S3/S13)
   notifier.py   阈值事件推送订阅者 (S4)
   installer.py  三平台自启幂等注册/卸载 (S5)
-tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; test_installer.py S5; 随 S6-S9 逐步扩充)
+  identity.py   正主注册与让位判定(三处 ID + 启动矩阵 + 注记 + 代拉, §03)
+tests/          模块守阵 (test_smoke.py S0; test_sampler.py S1; test_storage.py S2; test_config.py + test_server.py S3; test_notifier.py S4; test_installer.py S5; test_identity.py §03; manual_e2e_relay.py 为手动 e2e 复算脚本, 不入套件)
 ```
+
+安装目录内另有第二启动器 `claim.cmd` / `claim.sh`(人工易主入口, 与 `launch.*` 同族)。
 
 ## 运行 (S2-S4)
 
 ```bash
 global-traffic-monitor run [--data-dir DIR] [--autostart]   # 前台采样-落盘主循环 + 控制面
+global-traffic-monitor claim [--data-dir DIR]               # 人工易主: 重登记本安装为正主 (§03/D5)
 global-traffic-monitor endpoint                             # 读发现指针打印当前端点 host:port / token_path / data_dir (S13)
 ```
+
+`run` 启动先过**正主注册判定**(见下节): 非正主安装启动即让位(代拉正主后立即退出),
+自身不写任何数据。`claim` 是唯一人工易主通道, 入口零参数启动器 `claim.cmd` /
+`claim.sh`(与 `launch.*` 同族, D19; auto-qb 设置页「以本安装重登记」按钮经二次确认后
+有界前台执行它)。
 
 `--autostart` 是布尔开关 (S14/D13): 只表示「本次拉起顺带幂等注册开机自启」, 不承载
 取值; **是否真注册由工具 config `autostart` 唯一裁决** (用户关过 = `false` ⇒ 本次
@@ -59,6 +68,85 @@ global-traffic-monitor endpoint                             # 读发现指针打
 · `~/Library/Application Support/global-traffic-monitor/` · `~/.local/share/global-traffic-monitor/`)
 的 `instance.lock` / `endpoint.json` (S12/D6/D8)。单轮落盘失败记 ERROR 并在下一轮重试,
 不杀守护进程; Ctrl+C 优雅退出(最终落盘 + 释放锁 + 停控制面)。
+
+## 正主注册与让位 (计划 26-10-20-1316 §03)
+
+同机可能并存**多份安装**(多个 auto-qb clone 各带一份 gtm) 与**多个 auto-qb 实例**,
+而数据落点默认跟随安装(`<安装>/data`)。若不加约束: 工具死亡后**先启动的一方**会按
+对称逻辑拉起自己那份安装、占领指针与数据落点 —— 两份数据互不相通(A/data 历史成孤儿)。
+正主注册把「谁是唯一写者」变成机器级显式事实: **整机只有一个安装写数据**(注册正主),
+非正主安装启动即让位, 恢复/移动/易主/归并全部是显式人工动作。
+
+### 三处 ID(文件名同为 `tool-id`, uuid, 不跨机有意义)
+
+| 位置 | 文件 | 角色 | 写者 |
+|---|---|---|---|
+| 安装目录 | `<安装>/tool-id` | 我是谁(先于数据可读, 定引导顺序) | 工具首启生成 |
+| 指针目录 | `primary.json` | 机器注册的正主 `{schema, id, install_path, data_dir, version}` | 认领(O_EXCL 原子建)/ `claim` |
+| 数据目录 | `<data>/tool-id` | 这份数据归谁写(版本血统防线) | 正主认领时写入 |
+
+指针目录 = `%LOCALAPPDATA%/global-traffic-monitor/` · `~/Library/Application
+Support/global-traffic-monitor/` · `~/.local/share/global-traffic-monitor/`(与
+`endpoint.json` / `instance.lock` 同址, S12)。
+
+### 启动判定矩阵(在取单实例锁 / 绑端口 / 解析数据目录**之前**完成; 让位方全程不持锁、不写数据)
+
+| 分支 | 判据 | 动作 |
+|---|---|---|
+| ① 认领 | 无 `primary.json` | O_EXCL 原子建记录(自己三项) -> 正主路径 |
+| ② 正主 | `id` 同且 `install_path` 同 | 正主路径 |
+| ③ 拒绝 | `id` 同但 `install_path` 异(拷贝件 / 安装被移动) | 拒绝启动 + 写注记, 人工改记录或删记录重认 |
+| ④ 让位 | `id` 异 | 记录自洽校验 -> 自洽: **代拉正主后立即退出**(不等待); 矛盾(目标安装 `tool-id` 与记录 id 不符 / 目标即自身): 写注记退出 |
+
+正主路径续查数据归属: `<data>/tool-id` 缺失 -> 写入认领; 相同 -> 过; **不同 ->
+fail-fast**(「该数据属于其它安装」, 拒绝跨版本接管)。记录**只认领时写一次**, 此后
+**零自动刷新**; 唯一例外 = 正主启动时补写为空的 `data_dir` 信息位。记录/注记损坏或
+schema 未知一律按缺失或矛盾降级(WARNING), 不死锁、不静默、不猜字段。
+
+### claim —— 唯一人工易主通道
+
+入口是安装目录内第二启动器 `claim.cmd` / `claim.sh`(**零参数**, D19 同族; auto-qb
+设置页「以本安装重登记」按钮经**二次确认**后有界前台执行, timeout 30s, 退出码与人读
+输出原样展示)。护栏顺序(D5):
+
+1. **非阻塞试单实例锁** —— 工具正在跑 -> 拒绝(「请先停止再重登记」);
+2. **数据归属校验** —— `<data>/tool-id` 属于其它安装 -> 拒绝(与启动矩阵同一判据);
+3. 通过 -> **原子重写 `primary.json`**(id / install_path / data_dir 三项全用本安装
+   事实)+ 清让位注记 -> 释放锁, 退出 0。
+
+标准流程(易主到本安装): **停止工具 -> 以本安装重登记 -> 立即拉起**。缺 claim 启动器
+= 旧安装, 按钮点击时提示升级。
+
+### 状态注记 `deferred.json`(工具侧书写, auto-qb 只读展示)
+
+让位(④)与被拒(③)时工具书写(谁让位 / 代拉目标 / 结论 / 时间戳); **正主成功启动或
+claim 成功时由权威方清除**。auto-qb 设置页状态区据此展示「主工具注册于 X, 当前未在
+运行」类文案 —— 判定在工具侧, 展示在 auto-qb 侧, 永不来反(auto-qb 零记录读写)。
+
+### 纪律(给人)
+
+- **禁止拷贝安装目录**: 同 id 异 path 会被 ③ 拒绝(放行拷贝件会让两份同 id 数据静默
+  分叉)。要迁移就整目录移动, 或删记录重新认领。
+- **新机 / 重装先启想当正主的那份(A)**: 先启动的一方认领; 启反了用 claim 显式矫正
+  (先停工具)。
+- **移动安装目录**: `realpath` 归一对不上即 ③; 确认本人后编辑 `primary.json` 的
+  `install_path`, 或删除该记录让本安装重新认领。
+- **存量已分裂数据(两份 dat)**: 工具**不自动选举、不自动归并**。人工步骤: 选定保留
+  目录 -> 把另一份的 `history_traffic.dat` 历史行按需合并进去(或直接选定保留哪份)
+  -> 保证 `<data>/tool-id` 与正主一致 -> 启动或 claim。删 `<data>/tool-id` 是显式
+  人工动作, 工具不提供绕过开关。
+- **记录损坏**: 按缺失或矛盾降级(WARNING); 处置 = 人工修复 `primary.json` 或删除它
+  后重启重新认领。
+
+### 手动 e2e 复算(双安装 + 真进程)
+
+```bash
+# 在仓库根, 用仓库 venv 的 python(它没装 gtm, PYTHONPATH 才指得动拷贝件):
+.venv/Scripts/python.exe tools/global-traffic-monitor/tests/manual_e2e_relay.py
+```
+
+复算「A 起 -> A 崩溃 -> B 先起 -> B 代拉 A -> A 指针回来 -> 同一 dat -> claim 两态
+护栏」全链路(真起子进程, 不入 pytest 套件 —— sidefx 的 POPEN 白名单不放行)。
 
 ## 控制面 (S3)
 
@@ -166,3 +254,5 @@ global-traffic-monitor uninstall-autostart                  # 卸载开机自启
 
 实施计划: [memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html](../../memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html)
 可行性报告: [memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html](../../memory-bank/reports/26-10-13-1034-report-global-traffic-source-lag.html)
+正主注册与让位: [memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html](../../memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html)
+坑档(指针/锁锚用户级目录): [memory-bank/pitfalls/backend/traffic-source-discovery-pointer.md](../../memory-bank/pitfalls/backend/traffic-source-discovery-pointer.md)

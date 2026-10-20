@@ -35,6 +35,12 @@
   复合串原样回传(不 Number() 化), 元数据齐备
 - test_frontend_unit_tables_match_tool_grammar: S7/D13 —— 前端单位表 == auto-qb schema ==
   gtm/units.py 三处同源(文法单点, 前端不复制规则)
+- test_claim_missing_entry_502 / test_claim_ok_returns_tool_output /
+  test_claim_refused_409_with_tool_output (D4/D5): claim 端点不经工具控制面(有界前台跑
+  安装内启动器); 入口缺失 -> 502 提示升级; 退出码 0 -> 200 + 人话输出; 拒绝 -> 409 + 原因
+- test_status_envelope_includes_claim_note (D7): 状态载荷带 claim_note(工具侧注记只读展示)
+- test_frontend_claim_wiring (D4/D5/D6): 「以本安装重登记」按钮恒显示(可见性由工具侧判定)
+  + 二次确认 + 在途态 + 注记行渲染 detail 原话; tmLoad 回填 claim_note
 """
 import os
 import re
@@ -100,6 +106,7 @@ def test_status_requires_auth(web_env):
     assert client.put("/api/traffic/monitor/config", json={"config": {}}).status_code == 401
     assert client.post("/api/traffic/monitor/autostart", json={"action": "install"}).status_code == 401
     assert client.post("/api/traffic/monitor/relaunch").status_code == 401
+    assert client.post("/api/traffic/monitor/claim").status_code == 401
 
 
 # ---- GET /status(展示端点: 恒 200) ----
@@ -609,3 +616,97 @@ def test_frontend_unit_tables_match_tool_grammar():
 
     assert js_time == AQB_TIME_UNITS == tool_table("TIME_UNITS")
     assert js_size == AQB_SIZE_UNITS == tool_table("SIZE_UNITS")
+
+
+# ---- POST /claim (人工易主通道, D4/D5, 计划 26-10-20-1316 §03) ----
+
+
+def test_claim_missing_entry_502(tm_env, monkeypatch):
+    """旧安装缺 claim 启动器 -> 502 提示升级(按钮照显, 不静默失败)"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(tm_routes, "_resolve_claim_target", lambda conf: None)
+    r = client.post("/api/traffic/monitor/claim", headers=_auth(mgr))
+    assert r.status_code == 502
+    assert "claim" in r.json()["detail"]
+
+
+def test_claim_ok_returns_tool_output(tm_env, monkeypatch):
+    """退出码 0 -> 200 + 工具侧人话输出原样回传(auto-qb 转述不解释)"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(
+        tm_routes, "_resolve_claim_target",
+        lambda conf: agent.ClaimTarget(path="/inst/claim.cmd", label="claim 启动器(claim.cmd)"),
+    )
+    monkeypatch.setattr(
+        tm_routes, "_run_claim",
+        lambda target: agent.ClaimResult(ok=True, exit_code=0, output="已重登记为正主: install=X data=Y"),
+    )
+    r = client.post("/api/traffic/monitor/claim", headers=_auth(mgr))
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert "已重登记为正主" in r.json()["output"]
+
+
+def test_claim_refused_409_with_tool_output(tm_env, monkeypatch):
+    """被拒(工具在跑 / 数据归属异) -> 409 + 工具侧人话原因(写端点真报错)"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(
+        tm_routes, "_resolve_claim_target",
+        lambda conf: agent.ClaimTarget(path="/inst/claim.cmd", label="claim 启动器(claim.cmd)"),
+    )
+    monkeypatch.setattr(
+        tm_routes, "_run_claim",
+        lambda target: agent.ClaimResult(ok=False, exit_code=1, output="工具正在运行, 请先停止再重登记"),
+    )
+    r = client.post("/api/traffic/monitor/claim", headers=_auth(mgr))
+    assert r.status_code == 409 and "请先停止" in r.json()["detail"]
+
+
+def test_status_envelope_includes_claim_note(tm_env, monkeypatch):
+    """状态载荷带 claim_note(D7): 工具侧让位/被拒注记只读展示"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (200, {"ok": True}))
+    monkeypatch.setattr(
+        agent, "read_deferred_note",
+        lambda: {"schema": 1, "reason": "relayed", "detail": "已让位: 注册正主是另一安装"},
+    )
+    r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
+    assert r.status_code == 200 and r.json()["claim_note"]["reason"] == "relayed"
+
+
+# ---- 前端接线守阵(D4/D5): 「以本安装重登记」三件套 ----
+
+
+def test_frontend_claim_wiring():
+    """claim = 按钮恒显示(可见性由工具侧判定, D6) + 二次确认 + 在途态 + 注记只读行
+
+    守的是接线: claim 的自检(锁争/数据归属)全在工具侧, auto-qb 只编排执行与转述 ——
+    所以按钮**不设可见性条件**(缺入口的旧安装点击时由后端 502 提示升级), 与 relaunch
+    的「恒可点」同口径; 注记行渲染工具侧 detail 原话, 前端不二次加工。
+    """
+    hub = _static("shared", "config_hub.js")
+    tpl = _tm_tpl()
+    state = _static("shared", "state.js")
+
+    # 1) state: 在途 / 成功 / 失败 / 注记 四态(缺一则按钮点了没反馈)
+    for k in ("claiming", "claimMsg", "claimErr", "claimNote"):
+        assert re.search(rf"^\s*{k}:\s*", state, re.M), f"state.js 缺 tm.{k}"
+
+    # 2) tpl: 按钮恒显示(只有 disabled 在途态, 无可见性条件) + 注记行渲染 detail
+    btn = re.search(r"<button[^>]*tmClaim\(\)[^>]*>.*?</button>", tpl)
+    assert btn, "流量与限速卡缺「以本安装重登记」按钮"
+    assert ":disabled=\"$root.tm.claiming\"" in btn.group(0)
+    assert "v-if" not in btn.group(0), "claim 按钮应恒显示(可见性由工具侧判定, D6)"
+    assert "claimNote" in tpl and "claimNote.detail" in tpl, "缺正主注册注记行(D7)"
+
+    # 3) hub: 方法在册 + 调 claim 端点 + 二次确认 + 拒绝原因原样进 claimErr
+    assert "async tmClaim()" in hub
+    body = hub[hub.index("async tmClaim()"):]
+    body = body[:body.index("tmNormalizeForm(")]
+    assert "/api/traffic/monitor/claim" in body
+    assert "confirmDialog(" in body, "claim 前要二次确认(护栏, D5)"
+    assert "claimErr" in body
+
+    # 4) tmLoad 回填 claimNote(状态区据此展示, D7 只读)
+    load = hub[hub.index("async tmLoad()"):]
+    load = load[:load.index("async tmRelaunch()")]
+    assert "r.claim_note" in load

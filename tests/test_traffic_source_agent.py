@@ -24,14 +24,23 @@
 - test_launch_path_has_no_uv_or_entry_names (S18/§08): agent.py 非 docstring 字符串里不含
   uv / gtm / -m / run / --autostart / --data-dir —— 「怎么起工具」的知识只在工具侧启动器里
 - test_pointer_constants_mirror_tool_side (S18): 指针目录名 / 文件名 / schema 版本与工具侧
-  gtm/storage.py 同值(两侧各持一份镜像常量, 只能靠守阵钉住漂移)
-- test_tool_runtime_dirs_are_gitignored (S18/§08): 工具运行期目录(data/ 与 run/)已被仓库
-  .gitignore 覆盖 —— 工具跑起来后 git status 仍干净
+  gtm/storage.py 同值; 正主注册常量(记录/注记/id/claim 启动器)与 gtm/identity.py 同值
+  (计划 26-10-20-1316 §03; 两侧各持一份镜像常量, 只能靠守阵钉住漂移)
+- test_tool_runtime_dirs_are_gitignored (S18/§08): 工具运行期目录(data/ run/ 与安装 ID
+  tool-id)已被仓库 .gitignore 覆盖 —— 工具跑起来后 git status 仍干净
+- test_resolve_claim_target_finds_launcher / _tool_exe_dir_priority / _missing_returns_none
+  (D4): claim 入口 = 安装内第二启动器, tool_exe 显式优先 -> tool_dir/默认, 都没有 -> None
+- test_run_claim_ok_and_refusal / _timeout_and_spawn_failure (D5): 有界前台跑 claim
+  启动器; 退出码 0 -> ok + 人话输出原样; 非 0 -> 拒绝; 超时/起不来 -> ok=False + 原因
+- test_read_deferred_note_states (D7): 注记只读; 损坏/schema 未知 -> None(不猜字段)
+- test_status_includes_claim_note (D7): 状态区载荷带 claim_note(工具侧书写, auto-qb 只读展示)
 """
 import ast
 import json
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -553,3 +562,126 @@ def test_tool_runtime_dirs_are_gitignored():
         "tools/global-traffic-monitor/tool-id",
     ):
         assert entry in lines, f".gitignore 缺运行期目录忽略项: {entry}"
+
+
+# ---------- 守阵: claim 人工易主通道 (计划 26-10-20-1316 §03, D4/D5) ----------
+
+#: 本平台对应的 claim 启动器文件名(与安装目录里的文件同名同源, D4)
+_CLAIM_LAUNCHER = agent.CLAIM_LAUNCHER_WINDOWS if is_windows() else agent.CLAIM_LAUNCHER_POSIX
+
+
+def _proc(returncode: int, stdout: str = ""):
+    """subprocess.CompletedProcess 替身(run_claim 只读 returncode/stdout)"""
+    return SimpleNamespace(returncode=returncode, stdout=stdout)
+
+
+def test_resolve_claim_target_finds_launcher(tmp_path):
+    """tool_dir 里的 claim 启动器 -> ClaimTarget(路径即入口, label 点名文件名)"""
+    tool_dir = tmp_path / "inst"
+    tool_dir.mkdir()
+    (tool_dir / _CLAIM_LAUNCHER).write_text("rem\n", encoding="utf-8")
+    target = agent.resolve_claim_target(_conf(tool_dir=str(tool_dir)))
+    assert target is not None
+    assert target.path == str(tool_dir / _CLAIM_LAUNCHER)
+    assert _CLAIM_LAUNCHER in target.label
+
+
+def test_resolve_claim_target_tool_exe_dir_priority(tmp_path):
+    """tool_exe 显式优先(编译态): claim 启动器与 exe 同目录, 优先于 tool_dir"""
+    exe_dir = tmp_path / "dist"
+    exe_dir.mkdir()
+    (exe_dir / "gtm.exe").write_text("MZ\n", encoding="utf-8")
+    (exe_dir / _CLAIM_LAUNCHER).write_text("rem\n", encoding="utf-8")
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    (other_dir / _CLAIM_LAUNCHER).write_text("rem\n", encoding="utf-8")
+    target = agent.resolve_claim_target(_conf(tool_dir=str(other_dir), tool_exe=str(exe_dir / "gtm.exe")))
+    assert target is not None
+    assert target.path == str(exe_dir / _CLAIM_LAUNCHER)
+
+
+def test_resolve_claim_target_missing_returns_none(tmp_path):
+    """两处都没有 claim 启动器(旧安装) -> None(按钮照显, 点击时提示升级)"""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert agent.resolve_claim_target(_conf(tool_dir=str(empty))) is None
+    # tool_exe 指向不存在的文件 -> 不当候选(回落 tool_dir, 同样没有启动器)
+    assert agent.resolve_claim_target(_conf(tool_dir=str(empty), tool_exe=str(empty / "nope.exe"))) is None
+
+
+def test_run_claim_ok_and_refusal(monkeypatch):
+    """退出码 0 -> ok + 人话输出; 非 0 -> 拒绝 + 输出原样(UI 转述不解释)"""
+    seen = {}
+
+    def fake_run(args, *, cwd, timeout):
+        seen.update(args=args, cwd=cwd, timeout=timeout)
+        return _proc(0, "已重登记为正主: install=X data=Y\n")
+
+    monkeypatch.setattr(agent, "_run_foreground", fake_run)
+    target = agent.ClaimTarget(path="/inst/claim.cmd", label="claim 启动器(claim.cmd)")
+    r = agent.run_claim(target)
+    assert r.ok is True and r.exit_code == 0
+    assert "已重登记为正主" in r.output
+    assert seen["args"][-1] == "/inst/claim.cmd" and seen["cwd"] == "/inst" and seen["timeout"] == agent.CLAIM_TIMEOUT_S
+
+    monkeypatch.setattr(agent, "_run_foreground",
+                        lambda args, *, cwd, timeout: _proc(1, "工具正在运行, 请先停止再重登记\n"))
+    r2 = agent.run_claim(target)
+    assert r2.ok is False and r2.exit_code == 1
+    assert "请先停止" in r2.output  # 工具侧人话原样保留
+
+
+def test_run_claim_timeout_and_spawn_failure(monkeypatch):
+    """超时 / 启动器起不来 -> ok=False 且原因进 output(不静默)"""
+    def boom_timeout(args, *, cwd, timeout):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=timeout)
+
+    monkeypatch.setattr(agent, "_run_foreground", boom_timeout)
+    r = agent.run_claim(agent.ClaimTarget(path="/inst/claim.cmd", label="x"))
+    assert r.ok is False and r.exit_code == -1 and "超时" in r.output
+
+    def boom_os(args, *, cwd, timeout):
+        raise OSError("denied")
+
+    monkeypatch.setattr(agent, "_run_foreground", boom_os)
+    r2 = agent.run_claim(agent.ClaimTarget(path="/inst/claim.cmd", label="x"))
+    assert r2.ok is False and "执行失败" in r2.output
+
+
+def test_read_deferred_note_states(tmp_path, monkeypatch):
+    """缺失 -> None; 合法 -> 载荷; 损坏 / schema 未知 -> None(不猜字段, 指针同族纪律)"""
+    note_path = tmp_path / "ptr" / "deferred.json"
+    monkeypatch.setattr(agent, "deferred_note_path", lambda: str(note_path))
+    assert agent.read_deferred_note() is None  # 缺失
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(json.dumps({"schema": agent.DEFERRED_SCHEMA, "reason": "relayed", "detail": "已让位"}), encoding="utf-8")
+    note = agent.read_deferred_note()
+    assert note["reason"] == "relayed" and note["detail"] == "已让位"
+    note_path.write_text("{ not json", encoding="utf-8")
+    assert agent.read_deferred_note() is None  # 损坏按无注记
+    note_path.write_text(json.dumps({"schema": 999, "reason": "relayed"}), encoding="utf-8")
+    assert agent.read_deferred_note() is None  # schema 未知不猜字段
+
+
+def test_status_includes_claim_note(monkeypatch):
+    """状态区载荷带 claim_note(D7): 工具侧书写, auto-qb 只读展示"""
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: object())
+    monkeypatch.setattr(agent, "read_deferred_note", lambda: {"schema": 1, "reason": "refused", "detail": "拒绝启动: 拷贝件"})
+    st = agent.TrafficSourceAgent().status(_conf())
+    assert st["state"] == "not_running"
+    assert st["claim_note"]["reason"] == "refused"
+
+
+def test_run_foreground_real_execution_with_allowed_binary():
+    """_run_foreground 真跑一次白名单内可执行(node, sidefx POPEN 放行): 有界前台 + 合并输出
+
+    其余场景(退出码/超时/起不来)由 run_claim 的注入替身覆盖; 本用例只钉这个单点
+    真的把 subprocess.run 拼对(PIPE 合并 stdout/stderr、timeout 透传、退出码可读)。
+    无 node 的环境静默跳过(与前端 node 守阵同口径, 不引入 skip 计数)。
+    """
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = agent._run_foreground([node, "--version"], cwd=None, timeout=30)
+    assert proc.returncode == 0 and proc.stdout.strip()

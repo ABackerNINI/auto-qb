@@ -73,11 +73,15 @@
               <div class="hb-row hb-ro"><div class="hb-lb">开机自启</div><div class="hb-ct"><label><input type="checkbox" :checked="$root.tm.autostartRegistered" :disabled="$root.tm.autoBusy" @change="$root.tmAutostart($event.target.checked ? 'install' : 'uninstall')">&nbsp;已注册</label><span class="bh-n">{{ $root.tm.autostartRegistered ? '开机会自动起' : '未注册(开机不会自动起)' }}</span><span v-if="!$root.tm.autostartRegistered && $root.tm.autostartError" class="hb-hp risk" :title="$root.tm.autostartError" style="max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom">· {{ $root.tm.autostartError }}</span><span v-if="$root.tm.autoMsg" class="bh-n">{{ $root.tm.autoMsg }}</span><span v-if="$root.tm.autoErr" class="hb-hp risk">{{ $root.tm.autoErr }}</span></div></div>
             </template>
             <div v-else class="hb-row hb-ro"><div class="hb-lb">就绪异常</div><div class="hb-ct">{{ $root.tm.error || '工具可达但状态读取异常' }}</div></div>
+            <!-- 正主注册注记(D7, 计划 26-10-20-1316 §03): 工具侧书写的让位/被拒结论
+                 (deferred.json 只读展示) —— 解释「为什么本安装的工具没在写数据」;
+                 detail 是工具侧人话(含处置指引), 原样呈现不二次加工 -->
+            <div v-if="$root.tm.claimNote" class="hb-row hb-ro"><div class="hb-lb">正主注册</div><div class="hb-ct" style="max-width:70ch">{{ $root.tm.claimNote.detail || '' }}</div></div>
             <div class="hb-row">
               <div class="hb-lb"></div>
               <!-- 「打开工具设置」已删(S6/D9): 工具控制面是纯 JSON + 全路径强制 Bearer token, 没有 HTML
                    设置页 —— 点开只能看到 {"error":"invalid token"}。工具参数就在下面那张「工具参数(高级)」里调。 -->
-              <div class="hb-ct"><button class="hb-btn" :disabled="$root.tm.relaunching" @click="$root.tmRelaunch()">{{ $root.tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button v-if="$root.tmProvider() === 'global_traffic_monitor' && !$root.tmSourceOff() && $root.tm.reachable" class="hb-btn ghost sm" :disabled="$root.tm.shutting" @click="$root.tmShutdownTool()">关闭工具</button><span v-if="$root.tm.shutdownMsg" class="bh-n">{{ $root.tm.shutdownMsg }}</span><span v-if="$root.tm.shutdownErr" class="hb-hp risk">{{ $root.tm.shutdownErr }}</span></div>
+              <div class="hb-ct"><button class="hb-btn" :disabled="$root.tm.relaunching" @click="$root.tmRelaunch()">{{ $root.tm.relaunching ? '拉起中…' : '立即拉起 / 重试' }}</button><button class="hb-btn" :disabled="$root.tm.claiming" @click="$root.tmClaim()">{{ $root.tm.claiming ? '重登记中…' : '以本安装重登记' }}</button><button v-if="$root.tmProvider() === 'global_traffic_monitor' && !$root.tmSourceOff() && $root.tm.reachable" class="hb-btn ghost sm" :disabled="$root.tm.shutting" @click="$root.tmShutdownTool()">关闭工具</button><span v-if="$root.tm.claimMsg" class="bh-n">{{ $root.tm.claimMsg }}</span><span v-if="$root.tm.claimErr" class="hb-hp risk">{{ $root.tm.claimErr }}</span><span v-if="$root.tm.shutdownMsg" class="bh-n">{{ $root.tm.shutdownMsg }}</span><span v-if="$root.tm.shutdownErr" class="hb-hp risk">{{ $root.tm.shutdownErr }}</span></div>
             </div>
           </template>
         </div>

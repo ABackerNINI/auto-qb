@@ -1134,6 +1134,7 @@ window.CONFIG_HUB = {
         this.tm.autostartError = r.autostart_error || "";
         this.tm.error = r.error || "";
         this.tm.retryS = Number(r.retry_s) || 0;
+        this.tm.claimNote = r.claim_note || null;
         this.tm.status = r.status || null;
         if (this.tm.reachable && r.status && r.status.config) {
           this.tm.form = this.tmNormalizeForm(r.status.config);
@@ -1231,6 +1232,32 @@ window.CONFIG_HUB = {
           this.tmPollShutdown(n + 1);
         }
       }, 1000);
+    },
+    /* 「以本安装重登记」(D4/D5, 计划 26-10-20-1316 §03): 二次确认 -> 有界前台跑安装内
+     * claim 启动器(人工易主唯一通道)。工具正在跑/数据归属异会被工具侧拒绝(409), 其人话
+     * 输出原样进 claimErr —— auto-qb 不解释只转述。成功后刷状态(注记被工具侧清除)。 */
+    async tmClaim() {
+      if (this.tm.claiming) return;
+      const ok = await this.confirmDialog(
+        "以本安装重登记",
+        "将把本安装登记为整机正主(唯一写数据的安装), 并原子重写正主记录。" +
+          "工具正在运行时会被拒绝(请先「关闭工具」); 数据目录属于其它安装时也会被拒绝。" +
+          "确认继续?",
+        { okText: "重登记" }
+      );
+      if (!ok) return;
+      this.tm.claiming = true;
+      this.tm.claimMsg = "";
+      this.tm.claimErr = "";
+      try {
+        const r = await this.api("/api/traffic/monitor/claim", { method: "POST" });
+        this.tm.claimMsg = (r && r.output) || "已重登记为正主";
+        await this.tmLoad();
+      } catch (e) {
+        this.tm.claimErr = (e && e.message) || "重登记失败";
+      } finally {
+        this.tm.claiming = false;
+      }
     },
     /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样
      * (时间/大小是复合串 "30S"/"10MiB", 原样留在表单里, 由单位控件拆成「数值 + 单位」显示) */

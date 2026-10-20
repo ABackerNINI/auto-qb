@@ -68,6 +68,10 @@ window.AQB_STATE = {
         shutting: false,           // 「关闭工具」在途(保存 enabled=false -> 停工具 -> 轮询收敛)
         shutdownMsg: "",           // 关闭结果反馈(成功一句话)
         shutdownErr: "",           // 关闭失败原因(来源已保存但工具没停下等)
+        claiming: false,           // 「以本安装重登记」在途(有界前台跑 claim 启动器, D4/D5)
+        claimMsg: "",              // 重登记成功反馈(工具侧人话输出)
+        claimErr: "",              // 重登记被拒/失败原因(工具侧输出原样转述)
+        claimNote: null,           // 让位/被拒注记(deferred.json; D7 工具侧书写, auto-qb 只读展示)
         advancedOpen: false,    // 「工具参数(高级)」折叠态
         pollGen: 0,             // 拉起后轮询收敛的代际守卫
         pick: { open: false, loading: false, error: "", path: "", parent: "", dirs: [], name: "" },

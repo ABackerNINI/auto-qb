@@ -6,6 +6,7 @@ global_traffic_monitor 来源面」, 设置页里合并进同一张「全局流�
   PUT  /api/traffic/monitor/config    工具 PUT /config 代理(全量覆盖 -> 前端「读后写」)
   POST /api/traffic/monitor/autostart 工具 POST /autostart 代理(幂等注册/卸载开机自启)
   POST /api/traffic/monitor/relaunch  「立即拉起/重试」: 促订阅线程立刻重跑一轮并忽略失败退避
+  POST /api/traffic/monitor/claim    「以本安装重登记」(D4/D5): 有界前台跑安装内 claim 启动器(人工易主)
   POST /api/traffic/monitor/shutdown  停止工具: 代理工具 POST /shutdown(S3, 26-10-17-1737)
   POST /api/traffic/monitor/notify    **接收面**(S7): 工具推送的累计流量阈值事件
 
@@ -42,6 +43,8 @@ from fastapi import APIRouter, HTTPException
 # 工具控制面客户端单点(与订阅客户端 webui/tool_client.py 共用; 别名保持本模块既有名字,
 # 既有的路由守阵按 `tm_routes._call_tool` / `tm_routes.ToolUnreachable` 打桩)
 from ....core.traffic_source import paths as traffic_paths
+from ....core.traffic_source.agent import resolve_claim_target as _resolve_claim_target
+from ....core.traffic_source.agent import run_claim as _run_claim
 from ...tool_client import NOTIFY_PATH
 from ...tool_client import ToolUnreachable
 from ...tool_client import call_tool as _call_tool
@@ -97,6 +100,8 @@ def _source_status(manager) -> dict:
         "autostart_error": st["autostart_error"],
         "error": st["error"],
         "retry_s": st["retry_s"],
+        # 让位/被拒注记(D7): 工具侧书写, auto-qb 只读展示; 缺失 -> null
+        "claim_note": st["claim_note"],
         "status": None,
     }
     if not base["reachable"]:
@@ -285,6 +290,29 @@ def build_router(ctx: WebContext) -> APIRouter:
         if code == 200:
             return resp
         raise HTTPException(status_code=502, detail=f"工具返回 {code}: {_error_text(resp, code)}")
+
+    @router.post("/api/traffic/monitor/claim")
+    def api_tm_claim():
+        """「以本安装重登记」(D4/D5, 计划 26-10-20-1316 §03): 有界前台跑 claim 启动器
+
+        与其它写端点不同: **不经工具 HTTP 控制面** —— claim 时工具可能正在跑(「工具
+        在跑就拒绝」正是护栏之一, 走 HTTP 反而够不到), 而是直接前台执行安装内
+        claim.cmd / claim.sh(零参数, 意图在脚本里, D19 同族), timeout 30s。
+        退出码 0 = 已重登记为正主; 非 0 = 被拒绝(工具在跑 / 数据归属异), 工具侧的
+        人话输出原样回传(409), auto-qb 不解释只转述; 入口缺失(旧安装) -> 502 提示升级。
+        """
+        manager.web.touch()
+        conf = _tm_conf(manager)
+        target = _resolve_claim_target(conf)
+        if target is None:
+            raise HTTPException(
+                status_code=502,
+                detail="未找到 claim 启动器(claim.cmd/claim.sh): 当前工具安装缺人工易主入口, 请升级工具后重试",
+            )
+        result = _run_claim(target)
+        if not result.ok:
+            raise HTTPException(status_code=409, detail=result.output or f"重登记被拒绝(退出码 {result.exit_code})")
+        return {"ok": True, "exit_code": result.exit_code, "output": result.output}
 
     @router.post(NOTIFY_PATH)
     def api_tm_notify(body: dict = None):
