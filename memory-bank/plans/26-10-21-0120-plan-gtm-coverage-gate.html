@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="gtm-coverage-gate">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-21-0120">
+<meta name="doc-updated" content="26-10-21-0120">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-test-coverage-uplift-2.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md, memory-bank/tasks/26-10-21-test-gtm-coverage-gate.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* --- 本计划追加的版式件 (不改动上方的骨架件) --- */
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td.file { font-family: var(--mono); font-size: 12.5px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 22px; }
+  .stat { border: 1px solid var(--hair); background: #131a21; padding: 12px 14px; }
+  .stat .v { font-family: var(--mono); font-size: 23px; color: var(--accent-ink); letter-spacing: -0.02em; }
+  .stat .v.wr { color: var(--warn); }
+  .stat .k { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .stat .s { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 3px; }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .callout { border: 1px solid var(--hair); border-left: 2px solid var(--accent); background: #121a21; padding: 12px 16px; margin: 16px 0; }
+  .callout.warn { border-left-color: var(--warn); background: #1a1712; }
+  .callout .t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 5px; }
+  .callout.warn .t { color: var(--warn); }
+  .callout p { margin: 5px 0; font-size: 13.5px; }
+  .callout ul { margin: 5px 0; padding-left: 20px; }
+  .callout li { font-size: 13.5px; }
+  .phase { border: 1px solid var(--hair); margin: 22px 0; }
+  .phase > header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 11px 16px; background: #131a21; border-bottom: 1px solid var(--hair); }
+  .phase .pno { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); border: 1px solid #2f4a56; padding: 1px 7px; }
+  .phase h3 { margin: 0; font-size: 16.5px; }
+  .phase .goal { font-family: var(--mono); font-size: 12px; color: var(--warn); margin-left: auto; }
+  .phase .body { padding: 2px 16px 12px; }
+  .dod { font-size: 13px; color: var(--dim); border: 1px dashed var(--hair); padding: 9px 13px; margin: 10px 0 2px; }
+  .dod b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: gtm-coverage-gate</div>
+<h1>gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96</h1>
+<p class="lede">上一轮覆盖率计划(P2-T2.6)只出了「工具侧应加门禁、起步值 85、另立任务」这条结论, 本计划把它落地: 先给 <code>tools/global-traffic-monitor</code> 装上真正的门禁(88 起步)与一条命令的跑法, 再按 P1–P3 把可测面从实测 <b>90.4%</b> 推到 <b>95.5–96.5%</b> 区间并逐级抬阈值。口径与主仓<b>彻底独立</b>——独立 pyproject、独立 CI job、独立阶梯, 不把工具侧并进主仓 <code>--cov=src</code> 的分母, 也不抄主仓的 99%。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-21-0120 · <b>doc-updated</b> 26-10-21-0120 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 覆盖率第二轮计划 <code>26-10-20-2101-plan-test-coverage-uplift-2.html</code> P2-T2.6 评估结论(「应加, 起步 85, 实施前先实测」) + 2026-10-21 本机对工具侧的一次全量实测(303 passed)<br>
+  <b>认领</b> <code>tasks/26-10-21-gtm-coverage-gate.md</code> · <b>前序</b> <code>tasks/26-10-16-backend-global-traffic-monitor.md</code>(工具本体)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<p>主仓覆盖率已经靠「阈值 + 基线切片 + watchlist」压到 99.41%(见前序计划 R5), 但工具侧 <code>tools/global-traffic-monitor</code>(下称 gtm)这半边<b>完全没有门禁</b>: 它有 10 个测试档、303 个用例, 却既不产出覆盖率, 也不在 CI 里跑。而 gtm 与主仓是<b>跨进程契约的两端</b>——主仓 <code>webui/tool_client.py</code> 调 gtm 的 <code>POST /subscribe</code>、<code>/heartbeat</code>、<code>/unsubscribe</code>、<code>/config</code>, 主仓侧这条链有 99% 门槛守着, 工具侧裸奔。契约漂移不会在提交时红, 只会在用户那边以「订阅莫名其妙失效」的形式出现。</p>
+
+<p>所以本计划要拿到的是三样东西, 按此优先级:</p>
+<ol>
+  <li><b>门禁存在且真能拦</b>(P0, 零覆盖增量即可交付)——任何人往 gtm 加未测代码, 提交即红;</li>
+  <li><b>可测面推到位</b>(P1–P3)——把 230 个单位缺口里「本来就该测、只是没人测」的部分清掉, 推到 96 区间;</li>
+  <li><b>机制化</b>(§05)——阈值阶梯、双平台切片、变异红验、豁免治理、与主仓的联动跑法, 让它不再回沉。</li>
+</ol>
+
+<h3>设计底线(不变量)</h3>
+<table>
+  <tr><th>#</th><th>不变量</th><th>为什么</th></tr>
+  <tr><td>I1</td><td><b>口径独立, 不合算</b>: 工具侧阈值只写在 <code>tools/global-traffic-monitor/pyproject.toml</code> 的 <code>[tool.pytest.ini_options]</code> 里; 主仓 <code>pytest.ini</code> 的 <code>--cov=src</code> 与 <code>--cov-fail-under=99</code> 一个字不改</td><td>两套分母混算会互相稀释: 工具侧 90% 会把主仓 99% 拉下去, 主仓 99% 会把工具侧门槛变成一句空话。另见坑档 <code>testing/nested-pytest-config.md</code>(子包必须自带 ini, 否则向上拾取根配置)</td></tr>
+  <tr><td>I2</td><td><b>阈值恒低于当期实测</b>, 且取<b>双平台较低者</b>再留 0.8–1.0 点余量</td><td>gtm 的平台分支(winreg / systemd / launchd)天然只在一边可执行, 两侧覆盖率不可能相等; 用高的一侧定档, 另一侧每次都假红</td></tr>
+  <tr><td>I3</td><td><b>不靠 pragma 冲数字</b>: 平台分支一律走注入替身(installer 已内建 <code>runner</code> / <code>registry</code> / <code>home</code> / <code>uid</code> 注入点), 现存 1 行 <code>pragma: no cover</code>(<code>units.py:54</code>)只减不增</td><td>豁免是治理对象, 不是提分工具。主仓第二轮已把「豁免只减不增」写成机制, 工具侧从第一天就照办</td></tr>
+  <tr><td>I4</td><td><b>零真实副作用</b>: 不写真实 <code>%LOCALAPPDATA%/global-traffic-monitor</code>、不写真实注册表、不起真子进程; <code>tests/conftest.py</code> 的 hermetic 守阵(真实指针目录前后快照比对)必须持续全绿</td><td>门禁让测试被更频繁地跑, 副作用类问题的暴露面同步放大</td></tr>
+  <tr><td>I5</td><td><b>一条命令可复现</b>: 本地 <code>commands run test.gtm</code> 与 CI 跑同一份 <code>addopts</code>, 不靠人记参数</td><td>靠人记参数的闸门等于没有闸门; 主仓 <code>test.one</code> 加 <code>--no-cov</code> 就是这条的镜像教训</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>2.1 实测基线(2026-10-21, Windows / CPython 3.13.15)</h3>
+<div class="stats">
+  <div class="stat"><div class="v wr">90.4%</div><div class="k">工具侧综合覆盖率(语句 + 分支)</div><div class="s">1943 stmts / 462 branch</div></div>
+  <div class="stat"><div class="v">303</div><div class="k">用例数, 全绿</div><div class="s">126.4s · 串行(无 xdist)</div></div>
+  <div class="stat"><div class="v">230</div><div class="k">未覆盖单位合计</div><div class="s">180 行 + 50 个 partial 分支出口</div></div>
+  <div class="stat"><div class="v">0</div><div class="k">覆盖率门槛 / CI 覆盖</div><div class="s">dev 组无 pytest-cov; ci.yml 不跑工具侧</div></div>
+</div>
+
+<p>换算口径: <b>分母 = 1943 语句 + 462 分支出口 = 2405 单位</b>, 已覆盖 2175(90.4%), 缺口 230。每补齐 1 个单位 ≈ <b>+0.0416%</b>。据此各档位的代价:</p>
+
+<table>
+  <tr><th>目标档位</th><th class="num">需新增单位</th><th class="num">折合缺口消耗</th><th>对应阶段 / 阈值</th></tr>
+  <tr><td>88.0%(P0 门槛线, 立即可达)</td><td class="num">−58(留余量)</td><td class="num">—</td><td>P0 · <code>--cov-fail-under=88</code></td></tr>
+  <tr><td>92.5%(P1 验收线)</td><td class="num">+50</td><td class="num">22%</td><td>P1 · 阈值抬 91</td></tr>
+  <tr><td>94.8%(P2 验收线)</td><td class="num">+105</td><td class="num">46%</td><td>P2 · 阈值抬 93.5</td></tr>
+  <tr><td>95.8%(P3 预估终点)</td><td class="num">+130</td><td class="num">57%</td><td>P3 · 阈值抬 95</td></tr>
+  <tr><td>96.5%(预估上沿)</td><td class="num">+147</td><td class="num">64%</td><td>P3 · 若实测达标则阈值 95.5</td></tr>
+  <tr><td class="bad">99%+(主仓口径, 本计划<b>不追</b>)</td><td class="num bad">+206</td><td class="num bad">90%</td><td>— 平台独占分支与真机探测天然到不了, 硬追只能靠 pragma</td></tr>
+</table>
+
+<div class="callout warn">
+  <div class="t">口径警告(开工前必读)</div>
+  <ul>
+    <li><b>本次数字是绕道取的</b>: 工具目录 <code>.venv</code> 已损坏(<code>pyvenv.cfg</code> 读不出, 任何 <code>.venv/Scripts/python.exe</code> 调用 exit 107), 所以用隔离环境 + <code>PYTHONPATH=src</code> + <code>--cov=src/gtm</code> 才拿到数字。P0-T0.1 必须先修 venv, 之后所有数字以工具目录内 <code>uv run pytest</code>(<code>--cov=gtm</code> 包名口径)为准 —— <b>两种口径不可混着比</b>。</li>
+    <li><b>用例数已不是 265</b>: 前序计划 R5 记的是 265 例, 现为 303 例(工具侧后续计划加过用例)。门禁按当前口径, 不按历史条数。</li>
+    <li><b>覆盖率不产出的提交闸门照旧</b>: 主仓 <code>test.quick</code> 带 <code>--no-cov</code>, 与本计划无关; 工具侧门禁只在 <code>test.gtm</code> 与 CI 上生效。</li>
+    <li><b>单文件跑必然假红</b>: <code>addopts</code> 带 <code>--cov-fail-under</code> 后, <code>pytest tests/test_units.py</code> 的收集面只有一个档, 覆盖率必然远低于门槛 —— 排障一律加 <code>--no-cov</code>(坑档 <code>testing/single-file-coverage-gate.md</code> 的同一形态)。</li>
+  </ul>
+</div>
+
+<h3>2.2 缺口地图(按文件, 单位 = miss 行 + partial 分支)</h3>
+<table>
+  <tr><th>文件</th><th class="num">语句</th><th class="num">miss</th><th class="num">partial</th><th class="num">缺口</th><th class="num">可捕预估</th><th>缺口形态</th></tr>
+  <tr><td class="file">__main__.py</td><td class="num">244</td><td class="num">61</td><td class="num">8</td><td class="num wr">69</td><td class="num">50</td><td><b>A 整块空洞</b>: <code>run()</code> 主体 260-321(autostart 注册 → 控制面启动 → 主循环 → finally 三段收尾)从未被执行, <code>main()</code> 的 run/claim 分发(492/500)与 <code>__main__</code> 守卫(507)同缺 —— 即整条 CLI 入口路径没有任何用例走过; 另有 122 搬迁提示、167-171 单轮异常不杀循环、239-241/246 两条早退、360-365 配置报错与 legacy 迁移提示、408-418 endpoint 读失败与指针非对象、448-450/476-478 身份失败与重登记 OSError</td></tr>
+  <tr><td class="file">server.py</td><td class="num">284</td><td class="num">32</td><td class="num">18</td><td class="num wr">50</td><td class="num">40</td><td><b>B 守卫矩阵</b>: 5 条路由的「载荷必须是 JSON 对象」400(<code>_put_config</code>/<code>_subscribe</code>/<code>_heartbeat</code>/<code>_unsubscribe</code>/<code>_autostart</code>)、<code>_read_json</code> 非法 Content-Length、<code>_dispatch</code> 500 兜底、<code>_shutdown</code> 未绑 stop_event、token 读 OSError、指针写失败 WARNING</td></tr>
+  <tr><td class="file">storage.py</td><td class="num">364</td><td class="num">26</td><td class="num">5</td><td class="num">31</td><td class="num">20</td><td><b>C 容错出口</b>: <code>migrate_legacy_data_dir</code> 四条早退与中途 OSError、<code>atomic_write_text</code> 空路径与失败清理、dat 坏行/非法日期、state 订阅条目损坏、锁伴生 meta 写失败</td></tr>
+  <tr><td class="file">config.py</td><td class="num">200</td><td class="num">15</td><td class="num">9</td><td class="num">24</td><td class="num">18</td><td><b>C 容错出口</b>: YAML 解析失败 / 读失败 / 空文件 / 非映射、legacy 迁移两支(<code>_check_duration</code> 非有限值、<code>_check_size</code> 非正数)、<code>http_port</code> 越界</td></tr>
+  <tr><td class="file">installer.py</td><td class="num">258</td><td class="num">18</td><td class="num">3</td><td class="num">21</td><td class="num">10</td><td><b>C 平台后端</b>: <code>_run</code> 的 FileNotFoundError/OSError、<code>_run_checked</code> rc!=0、winreg 的 FileNotFoundError/OSError 两支、<code>build_backend</code> 的解释器缺失与 unsupported platform</td></tr>
+  <tr><td class="file">identity.py</td><td class="num">215</td><td class="num">17</td><td class="num">2</td><td class="num">19</td><td class="num">13</td><td><b>C 容错出口</b>: 让位注记写/删 OSError、<code>relay_launch</code> 启动器缺失与 <code>_spawn</code> OSError、正主记录不可解析的 raise、ID 文件读失败降级</td></tr>
+  <tr><td class="file">sampler.py</td><td class="num">210</td><td class="num">5</td><td class="num">3</td><td class="num">8</td><td class="num">5</td><td>B: <code>select_counters</code> 无 stats、state 快照损坏三种非法组合、跨天硬切边界</td></tr>
+  <tr><td class="file">notifier.py</td><td class="num">98</td><td class="num">5</td><td class="num">1</td><td class="num">6</td><td class="num">4</td><td>B: 前置落盘失败仍推送、租约剔除失败仍派发、close 超时告警</td></tr>
+  <tr><td class="file">units.py</td><td class="num">69</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td>D: 已是 <code>pragma: no cover</code> 的防御支, 维持不动</td></tr>
+  <tr><td class="file">__init__.py</td><td class="num">1</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td>满覆盖</td></tr>
+  <tr><td><b>合计</b></td><td class="num">1943</td><td class="num">180</td><td class="num">50</td><td class="num wr">230</td><td class="num">160</td><td>可捕 160 ± 25 → 终点 95.8% ± 0.7</td></tr>
+</table>
+
+<p class="aside">缺口集中度: 前三个文件(<code>__main__</code> + <code>server</code> + <code>storage</code>)合计 150 单位 = 65%, 且都是「本该测、只是没人测」的类型 —— 不是「测不到」。真正的硬骨头只有 <code>installer</code> 的平台独占面与少量真机探测, 约 70 单位。</p>
+
+<h3>2.3 为什么 T2.6 的「起步 85」要上调到 88</h3>
+<p>T2.6 定 85 时<b>手上没有实测值</b>(工具 venv 坏, 取不到数), 只能给一个保守下限。现在实测 90.4%, 若照 85 落地: 门槛与实测差 <b>5.4 点 ≈ 130 个单位</b>——等于允许任何人往工具侧塞 130 行未测代码而闸门不响, 门禁形同虚设。取 <b>88</b>(实测 − 2.4 ≈ 58 单位)的理由: ①第一次上闸要给双平台差异与口径迁移留缓冲, 不能贴着实测; ②58 单位仍远小于「一个中等功能」的量级, 拦得住真实回沉; ③P1 之后立刻抬到 91, 88 只是过渡档。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>主线四步, <b>门禁先立</b>(不涨覆盖也先交付价值), 再补测试把阈值抬上去:</p>
+
+<table>
+  <tr><th>阶段</th><th>主线动作</th><th class="num">覆盖目标</th><th class="num">阈值</th></tr>
+  <tr><td><b>P0</b></td><td>门禁落地: 修 venv → dev 组加 <code>pytest-cov</code> → <code>addopts</code> 带门槛 → CI 新 job → <code>test.gtm</code> 命令 → README 口径 → 基线切片</td><td class="num">不涨(90.4%)</td><td class="num">88</td></tr>
+  <tr><td><b>P1</b></td><td>主路径整块: <code>run()</code> 启动/退出全路径 + 路由 400 守卫矩阵 + notifier/sampler 余量</td><td class="num">≥92.5%</td><td class="num">91</td></tr>
+  <tr><td><b>P2</b></td><td>平台与容错面: installer 三后端注入 / storage 搬迁恢复 / identity 让位代拉 / config 读写错误</td><td class="num">≥94.8%</td><td class="num">93.5</td></tr>
+  <tr><td><b>P3</b></td><td>定档与收尾: 残余逐条登记理由 → 实测定阈值 → 计划 Done</td><td class="num">95.5–96.5%</td><td class="num">95(实测−0.8)</td></tr>
+</table>
+
+<h3>3.1 落点清单(改哪些文件)</h3>
+<table>
+  <tr><th>文件</th><th>改什么</th><th>阶段</th></tr>
+  <tr><td class="file">tools/global-traffic-monitor/pyproject.toml</td><td>dev 组加 <code>pytest-cov</code>; <code>[tool.pytest.ini_options]</code> 补 <code>addopts = -q --cov=gtm --cov-branch --cov-report=term-missing --cov-fail-under=88</code>(阈值随阶段抬)</td><td>P0 → P3</td></tr>
+  <tr><td class="file">tools/global-traffic-monitor/uv.lock</td><td><code>uv lock</code> 重生成(工具侧独立锁, 不受主仓 <code>uv.lock</code> 影响)</td><td>P0</td></tr>
+  <tr><td class="file">.github/workflows/ci.yml</td><td>新增 <code>test-gtm</code> job: 双 OS(ubuntu + windows) × 单 py3.12, <code>working-directory: tools/global-traffic-monitor</code>, <code>uv sync</code> + <code>uv run pytest</code>, 缓存 <code>cache-dependency-glob</code> 指向工具锁</td><td>P0</td></tr>
+  <tr><td class="file">.commands/test/config.toml</td><td>新增 <code>test.gtm</code>: <code>uv run --directory tools/global-traffic-monitor pytest -q</code>(一条命令出 TOTAL)</td><td>P0</td></tr>
+  <tr><td class="file">tools/global-traffic-monitor/README.md</td><td>测试章节补: 门禁口径 / 单文件加 <code>--no-cov</code> / 两侧覆盖率差异的解释</td><td>P0</td></tr>
+  <tr><td class="file">tools/global-traffic-monitor/tests/*.py</td><td>P1–P3 全部新增/扩测落点(见 §04 各任务表)</td><td>P1–P3</td></tr>
+  <tr><td class="file">memory-bank/testing/baselines/</td><td>每阶段一条切片(双平台数字 + 阈值 + 残余单位)</td><td>每阶段</td></tr>
+</table>
+
+<div class="callout">
+  <div class="t">为什么不把工具侧并进主仓那套门槛</div>
+  <p>技术上可行(CI 里多跑一步), 但会带来三个立刻的坏处: ①<b>分母污染</b>——主仓 <code>--cov=src</code> 只覆盖 <code>src/auto_qb</code>, 并入 <code>src/gtm</code> 后 2405 个单位会稀释主仓 99.41%, 阈值必须整体下调, 等于把主仓刚赎绿的门槛又拉红; ②<b>平台差异放大</b>——主仓 CI 是 ubuntu + windows 双矩阵 × 双 python, 工具侧门槛要在 4 个组合里同时成立, 定档难度翻倍; ③<b>依赖耦合</b>——工具侧刻意只依赖 <code>psutil</code>/<code>filelock</code>/<code>pyyaml</code> 且自带锁, 并进主仓环境就破坏了这个「auto-qb 依赖变动不影响工具」的设计。所以走独立 job + 独立阶梯。</p>
+</div>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<p>排序原则: <b>先把闸门装好(哪怕一行测试不写), 再清「整块空洞」, 最后收「容错出口」长尾</b>。每阶段独立可提交、独立可验收; 预估单位按 §2.1 换算, 完成时以工具目录内 <code>uv run pytest</code> 实测为准。</p>
+
+<div class="phase">
+  <header><span class="pno">P0</span><h3>门禁落地(零覆盖增量)</h3><span class="goal">90.4% 不变 · 阈值 88 · 交付「能拦」</span></header>
+  <div class="body">
+    <p class="aside">本阶段<b>不写一个新用例</b>, 只装闸门与跑法。价值独立成立: 从 P0 落地那刻起, 工具侧任何未测新增都会被拦。</p>
+    <table>
+      <tr><th>#</th><th>任务</th><th>落点</th><th>验收判据</th></tr>
+      <tr><td>T0.1</td><td><b>修工具 venv</b>: 定位 <code>pyvenv.cfg</code> 不可读的成因(疑似文件被外部进程独占/编码损坏), 重建 <code>.venv</code> 后确认 <code>uv run python -V</code> 正常</td><td class="file">tools/global-traffic-monitor/.venv</td><td>工具目录内 <code>uv run pytest -q</code> 能跑; 若成因值得记, 入坑档 <code>testing/</code></td></tr>
+      <tr><td>T0.2</td><td><b>装门禁</b>: dev 组加 <code>pytest-cov</code>, <code>addopts</code> 写 <code>--cov=gtm --cov-branch --cov-report=term-missing --cov-fail-under=88</code>, 重生成 <code>uv.lock</code></td><td class="file">pyproject.toml · uv.lock</td><td>裸跑 <code>uv run pytest</code> 直接出 TOTAL 行且 exit 0; 故意删一个测试档 → exit 1</td></tr>
+      <tr><td>T0.3</td><td><b>CI 新 job</b>: <code>test-gtm</code>(双 OS × py3.12), 独立 <code>working-directory</code> 与 lock 缓存</td><td class="file">.github/workflows/ci.yml</td><td>PR 上该 job 真跑并上传覆盖率; 主仓 <code>test</code>/<code>test-windows</code> 两个 job 不受影响</td></tr>
+      <tr><td>T0.4</td><td><b>一条命令</b>: 新增 <code>test.gtm</code> 任务, 走 <code>uv run --directory</code>; 若引擎 cwd 行为不配合则退回脚本式(照 <code>test.linux</code> 先例)</td><td class="file">.commands/test/config.toml</td><td><code>commands run test.gtm</code> 从仓库根一条命令出 TOTAL; <code>commands list</code> 可见</td></tr>
+      <tr><td>T0.5</td><td><b>文档口径</b>: README 测试章节写清门禁、单文件 <code>--no-cov</code>、两侧差异</td><td class="file">README.md</td><td>照 README 抄命令能复现数字, 不需要口头知识</td></tr>
+      <tr><td>T0.6</td><td><b>门禁自身的红验</b>: 变异式验证闸门有效(删档 / 加一个未测函数 / 把阈值临时调到 99)</td><td>临时改动, 验完还原</td><td>三种注入各自变红; 还原后复绿</td></tr>
+      <tr><td>T0.7</td><td><b>基线切片</b>: 双平台实测数字 + 阈值 + 口径说明</td><td class="file">memory-bank/testing/baselines/</td><td>切片含 windows / ubuntu 两侧 TOTAL 与用例数</td></tr>
+    </table>
+    <div class="dod"><b>验收 DoD</b>: 两侧 <code>uv run pytest</code> 全绿且出 TOTAL; 删测试档后门禁变红; CI <code>test-gtm</code> 真跑; <code>commands run test.gtm</code> 可用; README 可复现; 基线切片落盘。覆盖率数字<b>不要求</b>变化。</div>
+  </div>
+</div>
+
+<div class="phase">
+  <header><span class="pno">P1</span><h3>主路径整块与路由守卫</h3><span class="goal">≥92.5% · 预估 +50±15 · 阈值抬 91</span></header>
+  <div class="body">
+    <p class="aside">主攻 §2.2 里两个最大块: <code>__main__.run()</code> 的整条启动/退出路径(69 单位), 与 <code>server</code> 的路由守卫矩阵(50 单位)。这两块是「没测过」而不是「测不到」, 且恰好是契约与顺序不变式所在 —— 优先级最高。</p>
+    <table>
+      <tr><th>#</th><th>任务</th><th>落点</th><th class="num">预估</th><th>难度</th></tr>
+      <tr><td>T1.1</td><td><b>CLI 入口全路径</b>(<code>run()</code> 主体 260-321 + <code>main()</code> 分发 + 各命令的错误出口): 正常启动→主循环→退出(autostart → server.start → 主循环 → finally 的<b>顺序不变式</b>逐条断言); 单实例抢输早退; 控制面端口占用(<code>OSError</code>→release_lock→1); 数据归属校验失败(239-241); 配置加载失败(246); autostart 注册失败原因进指针; <code>KeyboardInterrupt</code>; finally 三段(<code>notifier.close</code>/<code>server.stop</code>/<code>storage.close</code>)各自抛错只记不扩散; <code>main()</code> 的 <code>run</code>/<code>claim</code> 分发与无子命令打印帮助; <code>cmd_endpoint</code> 的读失败与指针非对象出口; <code>_load_config_or_fail</code> 的逐条报错与 legacy 迁移提示。手法: <code>monkeypatch sys.argv</code> + 注入 <code>Storage</code>/<code>ControlServer</code>/<code>Sampler</code> 替身 + 预置 <code>stop_event</code>, <b>不真绑端口、不真采样</b></td><td class="file">tests/test_main_run.py(新建)</td><td class="num">40</td><td>中</td></tr>
+      <tr><td>T1.2</td><td><b>路由 400 守卫矩阵</b>: 5 条路由 × 「载荷非 JSON 对象」400; <code>_read_json</code> 的 Content-Length 非法 / 0 / 超限 / 坏 JSON / 非 UTF-8; <code>_dispatch</code> 的 500 兜底(处理函数抛错); <code>_shutdown</code> 未绑 <code>stop_event</code>; <code>TokenManager</code> 读 <code>OSError</code> 上抛; 指针写失败只 WARNING; autostart 探测降级为「未注册」</td><td class="file">tests/test_server.py(扩展)</td><td class="num">30</td><td>低</td></tr>
+      <tr><td>T1.3</td><td><b>notifier / sampler 余量</b>: 前置落盘失败仍推送 / 租约剔除失败仍派发 / close 超时告警; <code>select_counters</code> 无 stats; state 快照三种非法组合(day 为 None 但有基线 / 负值 / 非日期)</td><td class="file">tests/test_notifier.py · test_sampler.py(扩展)</td><td class="num">9</td><td>低</td></tr>
+    </table>
+    <div class="dod"><b>验收 DoD</b>: TOTAL ≥ 92.5%(win)/≥91.5%(ubuntu, 取低者定档) → 阈值抬 <b>91</b> 且两侧绿 → 基线切片 ×1(双平台) → 新用例抽 ≥10% 变异红验全杀 → 豁免仍为 1 行。</div>
+  </div>
+</div>
+
+<div class="phase">
+  <header><span class="pno">P2</span><h3>平台后端与容错出口</h3><span class="goal">≥94.8% · 预估 +55±15 · 阈值抬 93.5</span></header>
+  <div class="body">
+    <p class="aside">这一层全是「错误分支 / 早退长尾」, 靠注入替身批量清。注意 <b>installer 是唯一有平台独占面的文件</b>: winreg 分支只能在 Windows 跑, <code>os.getuid</code> 只能在 POSIX 跑 —— 所以两侧覆盖率天然不等, 定档取低者。</p>
+    <table>
+      <tr><th>#</th><th>任务</th><th>落点</th><th class="num">预估</th><th>难度</th></tr>
+      <tr><td>T2.1</td><td><b>installer 三后端注入面</b>: <code>_run</code> 的 FileNotFoundError/OSError → <code>AutostartError</code>; <code>_run_checked</code> rc!=0 带输出附注; winreg 假模块(<code>OpenKey</code>/<code>QueryValueEx</code>/<code>DeleteValue</code> 的 FileNotFoundError 与 OSError 两支, 含「判存在与删之间被删」竞态); <code>build_backend</code> 的解释器缺失 / 解释器不存在 / unsupported platform; systemd 与 launchd 的命令失败路径</td><td class="file">tests/test_installer.py(扩展)</td><td class="num">20</td><td>中</td></tr>
+      <tr><td>T2.2</td><td><b>storage 搬迁与恢复</b>: <code>migrate_legacy_data_dir</code> 四条早退(同址/旧目录无 dat/目标非空)+ 中途 OSError 中断; <code>atomic_write_text</code> 空路径 ValueError 与失败清理; dat 坏行与非法日期跳过; state 订阅条目损坏跳过; 锁伴生 meta 写失败只 DEBUG</td><td class="file">tests/test_storage.py(扩展)</td><td class="num">18</td><td>低-中</td></tr>
+      <tr><td>T2.3</td><td><b>identity 让位与代拉</b>: 注记写/删 OSError 只 WARNING; <code>relay_launch</code> 启动器缺失→None、<code>_spawn</code> OSError→None; 正主记录存在但不可解析 → raise(不覆盖不猜); ID 文件读失败按缺失降级; 补写 <code>data_dir</code> 的竞态再读</td><td class="file">tests/test_identity.py(扩展)</td><td class="num">12</td><td>低</td></tr>
+      <tr><td>T2.4</td><td><b>config 读写错误路径</b>: YAML 解析失败 / 读失败 / 空文件 / 非映射; legacy 迁移的「无旧式字段」「坏配置不改写磁盘」两支; <code>_check_duration</code> 非有限值、<code>_check_size</code> 非正数、<code>http_port</code> 越界; 未知键聚合报错</td><td class="file">tests/test_config.py(扩展)</td><td class="num">15</td><td>低</td></tr>
+    </table>
+    <div class="dod"><b>验收 DoD</b>: TOTAL ≥ 94.8%(win)/≥93.8%(ubuntu) → 阈值抬 <b>93.5</b> → 基线切片 ×1 → 红验 ≥10% → 断言 install 侧不写真实注册表(hermetic 守阵全绿)。</div>
+  </div>
+</div>
+
+<div class="phase">
+  <header><span class="pno">P3</span><h3>定档与残余登记</h3><span class="goal">95.5–96.5% · 预估 +25±15 · 阈值 = 实测 − 0.8</span></header>
+  <div class="body">
+    <p class="aside">不再追数字, 只做三件事: 把能测的边角收干净、把<b>到不了的逐条登记理由</b>、按实测定最终阈值。计划允许残留, 不允许「不知道为什么残留」。</p>
+    <table>
+      <tr><th>#</th><th>任务</th><th>落点</th><th>产出</th></tr>
+      <tr><td>T3.1</td><td><b>边角收尾</b>: <code>__main__</code> 剩余分支(搬迁提示 / 过滤器空列表 / 版本打印) + <code>server</code> 残余 partial + <code>sampler</code> 跨天硬切</td><td class="file">对应测试档(扩展)</td><td>+15–25 单位</td></tr>
+      <tr><td>T3.2</td><td><b>残余逐条登记</b>: 每条写「哪几行 / 为什么到不了 / 是否值得为它改产品结构」——平台独占(winreg 在 ubuntu / <code>os.getuid</code> 在 Windows)、真机探测、防御性分支三类分开列</td><td>计划 §10 变更记录 + 任务档案</td><td>残余清单(预估 ≤ 80 单位)</td></tr>
+      <tr><td>T3.3</td><td><b>阈值定档</b>: 取双平台较低实测 − 0.8, 向下取整到 0.5 的整数倍</td><td class="file">pyproject.toml</td><td>终值(预估 95.0–95.5)</td></tr>
+      <tr><td>T3.4</td><td><b>联动说明</b>: 主仓 <code>tool_client</code> 契约测试 ↔ 工具侧 <code>server</code> 契约测试的<b>同轮改动规则</b>写进 README 与任务档案(改任一侧的端点/字段/状态码, 两侧测试必须同轮跑)</td><td class="file">README.md · 任务档案</td><td>跨进程契约不再单边漂移</td></tr>
+    </table>
+    <div class="dod"><b>验收 DoD</b>: 阈值落地且两侧绿 → 残余清单逐条带理由(≤ 80 单位) → 切片 ×1(含豁免行数 = 1) → 计划转 Done, 残留留「工具侧第三轮」或明确「不追」。</div>
+  </div>
+</div>
+
+<h3>4.1 阶段闸门总览</h3>
+<table>
+  <tr><th>闸门</th><th>覆盖率条件</th><th>机制动作</th><th>产出</th></tr>
+  <tr><td>P0</td><td>不要求变化(90.4%)</td><td>阈值 <b>88</b> 生效; 门禁自身红验 3/3</td><td>CI job + <code>test.gtm</code> + README + 切片</td></tr>
+  <tr><td>P1</td><td>≥92.5%(低侧 ≥91.5%)</td><td>阈值抬 <b>91</b>; 红验 ≥10%</td><td>切片 ×1 + 用例数增量</td></tr>
+  <tr><td>P2</td><td>≥94.8%(低侧 ≥93.8%)</td><td>阈值抬 <b>93.5</b>; 红验 ≥10%</td><td>切片 ×1</td></tr>
+  <tr><td>P3</td><td>95.5–96.5% 且残余清单成文</td><td>阈值 = 低侧实测 − 0.8</td><td>切片 ×1 + 计划 Done + 残余清单</td></tr>
+</table>
+
+<h2><span class="no">§05</span>机制(落地后常态运行)</h2>
+<table>
+  <tr><th>机制</th><th>说明</th><th>时点</th></tr>
+  <tr><td><b>M1</b> 阈值阶梯</td><td>88 → 91 → 93.5 → 实测−0.8。阈值恒低于当期实测 0.8–1.0 点, 且取<b>双平台较低者</b>; 抬阈值是阶段验收动作的一部分, 与切片同轮落地。主仓阶梯(98 → 98.5 → 99)与本阶梯<b>互不参照</b>。</td><td>每阶段验收</td></tr>
+  <tr><td><b>M2</b> 双平台切片</td><td>一条切片一条记录: windows + ubuntu 两侧 TOTAL、用例数、耗时、阈值、残余单位、豁免行数。只测一侧的数字不进切片。</td><td>每阶段验收</td></tr>
+  <tr><td><b>M3</b> 变异红验</td><td>每阶段新用例抽 ≥10% 注入缺陷确认变红; 门禁自身在 P0 单独红验三次(删档 / 加未测函数 / 抬阈值)。</td><td>每阶段验收</td></tr>
+  <tr><td><b>M4</b> 增量不欠账</td><td>gtm 任何新增功能/端点/配置键必须同轮带测试, 否则 M1 阈值直接拦。</td><td>常态</td></tr>
+  <tr><td><b>M5</b> 豁免治理</td><td><code>pragma: no cover</code> 行数进切片(现 1 行, 只减不增); 新增豁免须逐块写理由; 平台分支优先走注入替身而非豁免。</td><td>常态</td></tr>
+  <tr><td><b>M6</b> 契约联动</td><td>主仓 <code>webui/tool_client.py</code> 与 gtm <code>server.py</code> 是同一契约的两端: 改端点/字段/状态码 → 两侧测试同轮跑(<code>test.one</code> + <code>test.gtm</code>), 任一侧红即阻断。</td><td>常态</td></tr>
+</table>
+
+<h2><span class="no">§06</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>默认(推荐)</th><th>备选</th><th>取舍理由</th></tr>
+  <tr><td>D1</td><td>P0 起步阈值</td><td><b>88</b></td><td>85(T2.6 原值) / 90</td><td>85 留 130 单位回沉空间, 门禁失去意义; 90 距实测仅 0.4 点, 双平台差异会立刻假红。详见 §2.3</td></tr>
+  <tr><td>D2</td><td>CI 矩阵</td><td><b>双 OS × 单 py3.12</b></td><td>双 OS × 双 py(3.12/3.13)</td><td>覆盖率差异来自平台而非 python 版本; 单版本省一半机时(工具侧单轮约 2 分钟)。3.13 差异面在需要时再加</td></tr>
+  <tr><td>D3</td><td>是否加并行(<code>xdist</code>)</td><td><b>不加</b>(126s 串行可接受)</td><td>加 <code>-n 4</code></td><td>gtm 用例含真 socket 服务与线程 join, 并行会引入 flake; 且并行/串行分支 partial 差 1 个单位, 换并行度必须重刷基线。超过 180s 再评估</td></tr>
+  <tr><td>D4</td><td>终点口径</td><td><b>96 区间(实测定档)</b></td><td>只到 94 就停 / 追 98+</td><td>94 停会把「本该测的主路径」留成欠账; 98+ 只能靠 pragma 或改产品结构, 与本计划 I3 冲突</td></tr>
+  <tr><td>D5</td><td><code>test.gtm</code> 形态</td><td><b>一行 <code>uv run --directory</code></b></td><td>脚本式(照 <code>test.linux</code>)</td><td>一行能覆盖就不引入脚本(脚本还要配包内测试); 若引擎 cwd/引号行为不配合再退脚本</td></tr>
+</table>
+
+<h2><span class="no">§07</span>拍板记录</h2>
+<p class="aside">本计划当前 <b>Open</b>(待拍板)。D1–D5 拍板后回填下表, 同时把 §06 的结论迁到此处, 计划转 In Progress。</p>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1–D5</td><td class="bad">待拍板</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">§08</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td><b>阈值定太高 → 假红常态化</b></td><td>CI 上 ubuntu 侧反复红而本地绿</td><td>阈值取双平台较低者 − 0.8; 若仍红, 先查是否平台分支未注入替身, 不要直接降阈值</td></tr>
+  <tr><td><b>覆盖率涨但测试假绿</b></td><td>某文件覆盖率跳升而用例数只加 1–2 个</td><td>按 M3 抽 ≥10% 红验; 断言必须让目标分支真抵达(坑档 <code>testing/unreached-branch-guard.md</code>); 单文件用 <code>-k</code> 定向复跑核对</td></tr>
+  <tr><td><b>工具 venv 再次坏掉</b></td><td><code>uv run</code> 报 exit 107 / <code>pyvenv.cfg</code> 不可读</td><td>P0-T0.1 修根因并写进 README; 数字口径只认「工具目录内 <code>uv run pytest</code>」, 隔离环境取数只作排障</td></tr>
+  <tr><td><b>CI 变慢拖累反馈</b></td><td><code>test-gtm</code> 单次 &gt; 5 分钟</td><td>先确认是缓存没命中(工具锁单独 glob), 再考虑 D3 并行; 不为此砍测试</td></tr>
+  <tr><td><b>用 pragma 冲数字</b></td><td>某阶段新增 <code>no cover</code> 行</td><td>M5 拦: 切片记豁免行数, 只减不增; 平台分支一律注入替身</td></tr>
+  <tr><td><b>与主仓口径混淆</b></td><td>有人把工具侧数字写进主仓切片, 或反之</td><td>切片标题与字段分开写(「主仓 test.full」/「gtm uv run pytest」); I1 明写禁止合算</td></tr>
+  <tr><td><b>真副作用泄漏</b></td><td>hermetic 守阵变红 / 真实注册表被写</td><td>installer 一律注入假 registry 与假 runner; <code>tests/conftest.py</code> 守阵不动, 红了先修测试不修守阵</td></tr>
+  <tr><td><b>跨进程契约单边漂移</b></td><td>主仓改了端点/字段而工具侧测试没动</td><td>M6 同轮跑规则; P3-T3.4 把规则写进 README 与任务档案</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-21-0120</span> 初版(Open)。承接覆盖率第二轮计划 P2-T2.6 的评估结论(「gtm 工具侧应加门禁, 起步 85, 实施前先实测」), 补上它缺的那一步实测: 工具侧 <b>303 passed / 126.4s / TOTAL 90.4%</b>(1943 语句 + 462 分支 = 2405 单位, 缺口 180 行 + 50 partial = 230 单位), 据此把起步阈值由 85 上调到 88(§2.3 给理由)。方案定四阶段: P0 门禁落地(零覆盖增量, 阈值 88) → P1 主路径整块(≥92.5, 阈值 91) → P2 平台与容错面(≥94.8, 阈值 93.5) → P3 定档收尾(95.5–96.5, 阈值 = 实测 − 0.8)。机制 M1–M6: 阈值阶梯 / 双平台切片 / 变异红验 / 增量不欠账 / 豁免治理 / 与主仓契约联动。口径与主仓彻底独立(独立 pyproject、独立 CI job、独立阶梯), 不并入主仓 <code>--cov=src</code> 分母。待拍板 D1–D5。</li>
+</ul>
+
+</div>
+</body>
+</html>

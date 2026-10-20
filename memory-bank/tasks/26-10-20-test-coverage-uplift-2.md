@@ -5,7 +5,7 @@
 **Updated:** 2026-10-21
 **Summary:** 承接 26-10-01-2157 (91%→96%, Done) 的第二轮: 清偿 `--cov-fail-under=98` 连续多轮飘红的存量欠账, 分 P0/P1/P2 三阶段推到 99% 区间; 防回沉在 M1–M4 之外补 watchlist、豁免治理、工具侧门禁评估
 **Topics:** test-coverage-uplift-2
-**Refs:** memory-bank/plans/26-10-20-2101-plan-test-coverage-uplift-2.html
+**Refs:** memory-bank/plans/26-10-20-2101-plan-test-coverage-uplift-2.html, memory-bank/plans/26-10-21-0120-plan-gtm-coverage-gate.html
 
 ## 原始请求
 
