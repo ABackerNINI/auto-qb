@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (62)
+## Open (63)
 
+- [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)

@@ -20,7 +20,7 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 6 |
-| perf | 5 |
+| perf | 6 |
 | docs | 1 |
 | test | 2 |
 | refactor | 20 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_i…
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultFo…
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 +…
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/26…

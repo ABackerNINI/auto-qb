@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="gtm-sampler-other-io">
+<meta name="issue-stamp" content="26-10-20-2345">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="gtm-sampler">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次">
+<meta name="issue-summary" content="psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举">
+<title>gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次 · perf · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 perf · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· perf</div>
+    <h1>gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次</h1>
+    <p class="lede">psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-2345-perf-gtm-sampler-other-io</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 23:45</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">gtm</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>排查「gtm 常驻进程一直在读写磁盘」时撞见：任务管理器里 <code>pythonw.exe</code>（PID 12016，命令行 <code>-m gtm run --autostart</code>）的 <strong>「I/O 其它」</strong>列数值很高，该列 tooltip 为「进程自启动以来生成的非读取/非写入 I/O 操作（例如控制功能）数」—— 是<strong>控制操作次数（累计）</strong>，不是字节吞吐。</p>
+    <ul>
+      <li>进程：<code>D:\Projects\auto-qb\tools\global-traffic-monitor\.venv</code> 的 gtm，2026-10-19 12:21 启动，取证时已运行约 35 小时；数据目录 <code>D:\Projects\auto-qb\tools\global-traffic-monitor\data</code>。</li>
+      <li>配置：数据目录内无 <code>config.yml</code>，全部走默认值 → <code>sample_interval=5S</code>、<code>flush=1MiB/30S</code>。</li>
+      <li>触发：<strong>每次采样必现</strong>（默认 5 秒一轮，永不停止），与网卡数量正相关；与流量大小无关。</li>
+      <li>同轮附带现象：<code>state.json</code> 与 <code>history_traffic.dat</code> 每 5 秒各被原子写一次（当前流量约 0.3 MB/s，1 MiB 落盘阈值每轮都达）。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<h3>1) 进程实测（WMI 累计原始计数器，60 秒差分；取证 2026-10-20 23:39–23:40）</h3>
+<pre><code>other ops: 4345 total, 72.42/s
+read ops: 0 total, 0/s
+write ops: 25 total, 0.42/s
+cumulative other: 7821970 | data ops: 40086</code></pre>
+<p class="hint">7,821,970 ÷ 35 小时 ≈ 62 次/秒，与当前 72 次/秒同量级 —— 数字随运行时长单调上涨，所以「看起来很高」；重启归零。写操作 0.42 次/秒 = 每 5 秒 2 次原子写（state + dat），与设计一致。</p>
+
+<h3>2) 归因复刻（同 venv：psutil 7.2.2 / CPython 3.12.0；取证 2026-10-20 23:41）</h3>
+<pre><code>baseline (io_counters only):      other=0     (0.00/call)  read_ops=0 write_ops=0
+net_io_counters(pernic=True):     other=504   (100.80/call) read_ops=2 write_ops=2
+net_if_stats():                   other=425   (85.00/call)
+both (one sample round):          other=885   (177.00/call)
+interfaces: 4</code></pre>
+<p class="hint">复刻脚本只做 <code>psutil.Process().io_counters()</code> 差分 + 待测调用，不入套件、已删除。一轮采样 = <code>read_counters()</code> + <code>read_stats()</code> ≈ 177 次控制操作。</p>
+
+<h3>3) 写盘节拍（文件 mtime，取证 2026-10-20 23:08–23:13）</h3>
+<pre><code>state.json  23:08:26.444 -> 23:08:31.462   (间隔 5.018s)
+state.json  23:12:02.338 / 23:12:17.396 / 23:12:22.421 / 23:12:27.434   (严格 5s)
+history_traffic.dat  与 state.json 同拍（同轮 record() 内先 flush dat 再写 state）</code></pre>
+
+<h3>4) 未解释的差异（留给复验）</h3>
+<p class="hint">运行中的进程实测约 362 次/轮（72.42 × 5），是复刻值 177 的约 2 倍。进程 10/19 启动，而 venv 在 10/20 更新过（当前 psutil 7.2.2）—— 是否版本/实现差异导致，尚未验证。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>每次采样必现（默认 <code>sample_interval=5S</code>，无 <code>config.yml</code> 时恒为该值）；次数与网卡数量正相关 —— 本机含 WSL / VMware / Hyper-V / 360 虚拟网卡，<code>net_io_counters</code> 只返回 4 个有计数的接口，但枚举过程仍遍历全部适配器。</td></tr>
+      <tr><td>影响范围</td><td>仅 gtm 采样线程（<code>_run_loop</code>）。<strong>无数据落盘</strong>（读操作 0 次/秒；写 0.42 次/秒 = 设计值），<strong>无 CPU 占用</strong>（155 秒 / 35 小时 ≈ 0.1%）。影响面是可观测性噪音：任务管理器「I/O 其它」累计值巨大，容易被误读成磁盘活动（本次排查即因此走偏两轮）。</td></tr>
+      <tr><td>严重度</td><td><strong>低</strong> —— 无功能、数据、寿命影响；纯内核控制调用开销 + 观感问题。若未来降低采样间隔（如 1S）则线性放大，届时会变成 CPU/内核态开销问题。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tools/global-traffic-monitor/src/gtm/sampler.py:152-159</code>（取证 2026-10-20 23:45）· 符号 <code>read_counters</code> / <code>read_stats</code> · grep 词 <code>net_io_counters</code> <code>net_if_stats</code> —— 两次 psutil 调用的唯一定义点（也是单测注入点）。</li>
+      <li><code>tools/global-traffic-monitor/src/gtm/sampler.py:320</code>（同上取证时间）· 符号 <code>Sampler.sample_once</code> · grep 词 <code>_counters_provider</code> <code>_stats_provider</code> —— 每轮各调一次。</li>
+      <li><code>tools/global-traffic-monitor/src/gtm/__main__.py:162-172</code>（同上取证时间）· 符号 <code>_run_loop</code> · grep 词 <code>stop_event.wait(cfg.sample_interval)</code> —— 节拍来源；改间隔即线性改变控制操作速率。</li>
+      <li>对照口径：<code>tools/global-traffic-monitor/src/gtm/storage.py:653</code> <code>Storage.record</code>（写盘节拍，与本次问题无关，仅用于区分「写」与「其它」）。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（有实测，非推测）：psutil 在 Windows 上枚举网卡走 IP Helper / NSI（<code>GetIfTable2</code> / <code>GetIfEntry2</code> → <code>\Device\Nsi</code> 的 IOCTL），这些控制操作按「其它 I/O」计次。复刻测得 <code>net_io_counters(pernic=True)</code> ≈ 100.8 次/调用、<code>net_if_stats()</code> ≈ 85 次/调用，一轮采样两次调用 ≈ 177 次；5 秒一轮 ≈ 35 次/秒（运行中进程实测 72 次/秒，约 2 倍差异见「证据 · 4)」待复验）。累计值随运行时长单调增长，故 35 小时后达 780 万次。<br><br>已排除：① 磁盘读写放大（读操作 0 次/秒，写 0.42 次/秒 = 设计值，与字节吞吐无关）；② 忙循环/死循环（CPU 0.1%、句柄 225 稳定）；③ 文件句柄轮询或日志刷盘（数据目录无日志文件，endpoint.json 自启动后未再写过）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向：减少每轮的控制操作数，或降低轮次频率。三个候选，代价递增：</p>
+    <table>
+      <tr><th>方案</th><th>做法</th><th>收益</th><th>代价 / 风险</th></tr>
+      <tr><td>A. 调大间隔（零代码）</td><td>设置页「读后写」把 <code>sample_interval</code> 调到 <code>30S</code></td><td>控制操作线性降 6 倍（约 12 次/秒）；写盘也降到约 2 次/分钟</td><td>采样粒度变粗（跨天/重置判定延迟 ≤ 30s），流量曲线更粗糙；不改代码但改变用户可见行为</td></tr>
+      <tr><td>B. 缓存网卡状态（小改）</td><td><code>read_stats()</code> 结果按 N 轮（如 12 轮 = 60s）缓存，仅定期刷新 isup</td><td>每轮省 85 次（约一半）</td><td>网卡 up/down 变化感知延迟到 N 轮；<code>AdapterFilter</code> 的 down 过滤语义变为「最多陈旧 60s」，需在文档写明</td></tr>
+      <tr><td>C. 合并为一次枚举（大改）</td><td>ctypes 直调 <code>GetIfTable2</code> 一次取全量（counters + OperStatus），替掉两次 psutil 调用</td><td>每轮降到约 100 次以内，且不再依赖 psutil 版本实现</td><td>引入平台专有代码（Windows-only 分支）；<code>Sampler</code> 的注入点/<code>NicIo</code> 协议与单测替身要重做；三平台需分别验证</td></tr>
+    </table>
+    <p class="hint">倾向：先用 A 止血（用户可自助），若后续确实要更细粒度再评估 B；C 只在需要跨平台统一口径时值得做。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 23:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-20-2345-perf-gtm-sampler-other-io.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
