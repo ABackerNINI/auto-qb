@@ -25,6 +25,8 @@
 - test_migrate_v4_notes_per_key: 每个被删/被迁的键各产出一条可读 note
 - test_migrate_v4_is_idempotent: 对已是 v5 形状的输入无副作用(不产 note, 不改结构)
 - test_migrate_v4_through_load_config: v4 旧配置经 load_config 全链路升到 v5, 取数路径与旧行为等价
+- test_migrate_v4_defensive_shapes_skipped: 曲线内 traffic_source 非列表/列表项非字典/dat_path 空 —— 三类畸形形状静默跳过取数, 键照删(255/257/259 假弧)
+- test_migrate_v4_keeps_existing_traffic_source_dicts: 顶层 traffic_source 与其两子块已是字典时就地改写不重建空壳(279/288/300 假弧), 显式键原样保留
 """
 from pathlib import Path
 
@@ -402,6 +404,77 @@ def test_migrate_v4_through_load_config(tmp_path):
     # 曲线段不再有 dat_path 字段(结构退休), 其余键保留
     assert not hasattr(cfg.global_speed_limit_curve, "dat_path")
     assert cfg.global_speed_limit_curve.enabled is True
+
+
+def test_migrate_v4_defensive_shapes_skipped():
+    """v4→v5 迁移对畸形曲线内联数据源的保守跳过(255/257/259 三处 isinstance 假弧)
+
+    旧键形状不可控(手改/第三方模板), 迁移只取它认得的形状: traffic_source 非列表整段跳过、
+    列表项非字典跳过、traffic_monitor 非字典或 dat_path 空/纯空白跳过 —— 三类都必须静默,
+    而键照删(留着会让校验层按未知键拒单, 迁一半的配置启动即失败)。
+    """
+    # 非列表: 无可取 dat_path, 键照删, 顶层段不建空壳
+    out, _ = _migrate_v4_to_v5({"global_speed_limit_curve": {"traffic_source": {"x": 1}}})
+    assert "traffic_source" not in out["global_speed_limit_curve"]
+    assert "traffic_monitor" not in out["traffic_source"]
+    # 列表项非字典 + traffic_monitor 非字典 + dat_path 纯空白: 逐项跳过, 末项可取(多轮迭代)
+    out, _ = _migrate_v4_to_v5(
+        {
+            "global_speed_limit_curve":
+                {
+                    "traffic_source":
+                        [
+                            "not-a-dict",
+                            {
+                                "traffic_monitor": "not-a-dict"
+                            },
+                            {
+                                "traffic_monitor": {
+                                    "dat_path": "   "
+                                }
+                            },
+                            {
+                                "traffic_monitor": {
+                                    "dat_path": "/good.dat"
+                                }
+                            },
+                        ]
+                }
+        }
+    )
+    assert out["traffic_source"]["traffic_monitor"]["dat_path"] == "/good.dat"
+
+
+def test_migrate_v4_keeps_existing_traffic_source_dicts():
+    """v4→v5 迁移: 顶层 traffic_source 与其子块已是字典时就地改写, 不重建空壳(279/288/300 假弧)
+
+    过渡期用户可能已手写顶层 traffic_source(带 refresh_interval/enabled 等 v5 键) ——
+    `if not isinstance(ts, dict): ts = {}` 的 False 侧必须**保留**这些显式键, 只补
+    provider / dat_path / notify_cooldown_s; 子块同理。变异面: 无条件 `ts = {}` 会静默
+    清空用户显式配置。
+    """
+    cfg = {
+        "traffic_source":
+            {
+                "refresh_interval": "15M",
+                "enabled": "false",
+                "traffic_monitor": {
+                    "dat_path": "/keep/tm.dat"
+                },
+                "global_traffic_monitor": {
+                    "tool_dir": "/keep/gtm"
+                },
+            },
+        "global_traffic_monitor": {
+            "notify_cooldown_s": "5M"
+        },
+    }
+    out, _ = _migrate_v4_to_v5(cfg)
+    ts = out["traffic_source"]
+    assert ts["refresh_interval"] == "15M" and ts["enabled"] == "false", "显式 v5 键必须保留"
+    assert ts["traffic_monitor"]["dat_path"] == "/keep/tm.dat", "子块 dict 就地改写, 不得清空"
+    assert ts["global_traffic_monitor"] == {"tool_dir": "/keep/gtm", "notify_cooldown_s": "5M"}
+    assert ts["provider"] == "global_traffic_monitor", "旧 gtm 非空 -> provider 推导"
 
 
 def test_migrate_v4_with_gtm_section_through_load_config(tmp_path):

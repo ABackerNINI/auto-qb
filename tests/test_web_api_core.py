@@ -2,6 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401; qb_traffic_enabled 旗标(P5a)段缺省/关 = False, 开 = True
+- test_lifecycle_wait_until_started_and_stop_timeout: 生命周期等待/停止三出口(P0-T0.5)
 - test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
@@ -196,3 +197,45 @@ def test_frontend_ui_skin_cookie_persisted():
     assert "location.pathname.split" in boot, "boot.js 未从 URL 路径段判定当前 UI"
     assert "Max-Age=" in boot, "皮肤 cookie 必须带有效期(会话 cookie 关窗即丢, 等于没修)"
     assert "Path=/" in boot, "皮肤 cookie 必须 Path=/(根路径 / 要能读到)"
+
+
+def test_lifecycle_wait_until_started_and_stop_timeout(monkeypatch):
+    """WEB 服务生命周期辅助(P0-T0.5): 等待就绪的三出口(就绪/线程死/超时) + 停止超时仍放行重启"""
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from auto_qb.webui.server import lifecycle
+
+    dead = threading.Thread(target=lambda: None)  # 未启动: is_alive() False
+    handle_dead = SimpleNamespace(started=False, thread=dead)
+    assert lifecycle._wait_until_started(handle_dead, 1.0) is False, "线程提前退出(启动失败) -> False"
+
+    # !线程必须**一直活着**才走得到 deadline 分支: 早先 target 是 lambda: None, 线程秒退,
+    #   于是「超时」断言实际测的是 is_alive()=False 那条(假绿, 155 行从未执行)
+    hold = threading.Event()
+    alive = threading.Thread(target=hold.wait, daemon=True)
+    alive.start()
+    try:
+        assert alive.is_alive(), "前提: 线程活着(否则测的不是超时分支)"
+        handle_alive = SimpleNamespace(started=False, thread=alive)
+        t0 = time.monotonic()
+        assert lifecycle._wait_until_started(handle_alive, 0.1) is False, "超时 -> False(有界等待)"
+        elapsed = time.monotonic() - t0
+        assert 0.05 <= elapsed < 2.0, f"必须真等满窗口再放弃, 实得 {elapsed:.3f}s"
+        handle_ok = SimpleNamespace(started=True, thread=alive)
+        assert lifecycle._wait_until_started(handle_ok, 0.1) is True, "已就绪 -> True"
+    finally:
+        hold.set()
+        alive.join(timeout=1.0)
+
+    # 停止超时: wait 返回 False -> stop_web_server 如实回 False(调用方决定是否仍重启)
+    calls = {"stop": 0}
+    handle_stuck = SimpleNamespace(
+        stop=lambda: calls.__setitem__("stop", calls["stop"] + 1), wait=lambda timeout=None: False
+    )
+    assert lifecycle.stop_web_server(handle_stuck, 0.05) is False
+    assert calls["stop"] == 1
+    # 正常停止: wait 返回 True -> True
+    handle_ok = SimpleNamespace(stop=lambda: None, wait=lambda timeout=None: True)
+    assert lifecycle.stop_web_server(handle_ok, 0.05) is True

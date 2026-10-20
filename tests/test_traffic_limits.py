@@ -11,6 +11,10 @@
 - test_recorder_patological_flip_guard: 病态翻转护栏 —— 单天事件超常量阈值只告警照记(节流), 数据不删
 - test_recorder_warn_first_fire_on_fresh_boot: 节流哨兵回归 —— monotonic() 起点=开机时刻, 开机时长 < 节流间隔(3600s)时两处首次告警仍必须发出(0.0 哨兵会吞掉首次告警)
 - test_limits_cache_stat_keyed: 解析缓存 —— mtime+size 键控命中零重解析(解析函数替换探针), 追加后失效重解析, 缺失文件恒 () 零 open
+- test_limits_cache_no_data_dir_and_open_oserror: 读侧降级 —— data_dir 空恒 () 零 IO; 读天文件 OSError(权限/竞态)按缺失处理不上抛(观测面缺一文件 = 事件缺口)
+- test_limits_cache_evicts_oldest: 缓存上限治理 —— 条目超 _LIMITS_CACHE_MAX_ENTRIES 丢最旧(LRU), 重读被丢的天触发重解析(不常驻内存)
+- test_events_for_window_empty_when_reversed: 装配入口闸 —— t1 <= t0(空窗/反窗) 恒 [] 零读盘
+- test_events_for_window_breaks_at_window_end_and_pick_limit: 窗口右界 break + _pick_limit 取值口径
 - test_events_for_window_synthetic_first_and_dedup: 读侧装配 D3″/D5 —— 合成首事件(<= t0 最近值, 窗首前一天的 carry 窥得到) / 同值连续事件去重 / 记录起点晚于窗口起点不合成 / 无记录空表 / 跨天文件拼接
 - test_api_payload_limits_shape_and_same_source: payload 契约 D3″ —— 三端点响应恒带 limits 且同源同值(组/单种不另读文件), 空态未启用也恒在(= [])
 - test_module_wiring_sample_global_observes: 采样模块接线守阵 —— _sample_global 调 SpeedLimitRecorder.observe(真实模块实例 + 替身 server_state 触发落盘), dry_run 轮零写入
@@ -363,3 +367,80 @@ def test_module_wiring_sample_global_observes(web_env, monkeypatch):
     mod._persistence_on = False
     mod._sample_global(server_state, ts2)
     assert _read_day(data_dir, date) == f"{ts},2048,1024\n"
+
+
+def test_limits_cache_no_data_dir_and_open_oserror(tmp_path, monkeypatch):
+    """读侧降级: data_dir 空恒 () 零 IO; 读天文件 OSError 按缺失处理不上抛"""
+    empty = LimitsCache("")
+    assert empty.read_day("2026-10-20") == ()
+    assert empty.read_day("2026-10-20") == ()  # 恒空, 不建缓存条目也不碰盘
+
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    _write_day(data_dir, date, f"{ts},1024,2048\n")
+    cache = LimitsCache(data_dir)
+
+    def _boom(*a, **k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("builtins.open", _boom)
+    # stat 成功但 open 失败: 按缺失处理(事件缺口), 不把异常抛给端点
+    assert cache.read_day(date) == ()
+
+
+def test_limits_cache_evicts_oldest(tmp_path, monkeypatch):
+    """缓存上限治理: 条目超上限丢最旧(LRU), 被丢的天重读触发重解析(不常驻)"""
+    monkeypatch.setattr("auto_qb.core.traffic_limits._LIMITS_CACHE_MAX_ENTRIES", 2)
+    data_dir = str(tmp_path)
+    cache = LimitsCache(data_dir)
+    ts = _anchored_ts()
+    dates = [v4_epoch_date_str(ts + i * 86400) for i in range(3)]
+    for d in dates:
+        _write_day(data_dir, d, f"{ts},1,2\n")
+    calls = {"n": 0}
+    real_parse = parse_limits_day_text
+
+    def spy(text):
+        calls["n"] += 1
+        return real_parse(text)
+
+    monkeypatch.setattr("auto_qb.core.traffic_limits.parse_limits_day_text", spy)
+    assert cache.read_day(dates[0]) == ((ts, 1, 2), )
+    assert cache.read_day(dates[1]) == ((ts, 1, 2), )
+    assert cache.read_day(dates[2]) == ((ts, 1, 2), )  # 第三条写入即挤出最旧
+    assert calls["n"] == 3
+    assert len(cache._entries) == 2, "缓存条目不得超上限"
+    # 最旧的天已不在缓存: 重读触发重解析(探针计数长 1)
+    assert cache.read_day(dates[0]) == ((ts, 1, 2), )
+    assert calls["n"] == 4
+
+
+def test_events_for_window_empty_when_reversed(tmp_path):
+    """装配入口闸: t1 <= t0(空窗/反窗) 恒 [] 且零读盘"""
+    cache = LimitsCache(str(tmp_path))
+    ts = _anchored_ts()
+    assert limits_events_for_window(cache, ts, ts) == []
+    assert limits_events_for_window(cache, ts + 100, ts) == []
+    assert cache._entries == {}, "空窗不得读任何天文件"
+
+
+def test_events_for_window_breaks_at_window_end_and_pick_limit(tmp_path):
+    """窗口右界: >= t1 的事件不进装配(break); _pick_limit 取值口径(None/空串/非数值)"""
+    cache = LimitsCache(str(tmp_path))
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    # 窗内两行 + 窗外一行(epoch 更大): 窗外那行必须被 break 挡掉
+    _write_day(data_dir := str(tmp_path), date, f"{ts},1,1\n{ts + 30},2,2\n{ts + 10**6},3,3\n")
+    out = limits_events_for_window(cache, ts, ts + 60)
+    assert out == [[ts, 1, 1], [ts + 30, 2, 2]], out
+
+    from auto_qb.core.traffic_limits import _pick_limit
+
+    assert _pick_limit(None) is None
+    assert _pick_limit("") is None
+    assert _pick_limit(1024) == 1024
+    assert _pick_limit("2048") == 2048
+    assert _pick_limit(0) == 0  # 0 = 不限速合法值
+    assert _pick_limit("abc") is None
+    assert _pick_limit(object()) is None

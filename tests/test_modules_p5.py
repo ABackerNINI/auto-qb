@@ -24,6 +24,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
 - test_p2a_apply_event_rule_process_exception_caught: 事件规则同步执行异常捕获不传播 (P2-a)
 - test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
+- test_full_round_without_task_queue_is_noop: full_round 在 ctx.task_queue 缺失(重建中/停机后)时静默返回, 不打断相位分发
 """
 import json
 import os
@@ -798,3 +799,20 @@ def test_p2a_handle_event_rule_resume_exception_caught():
         with mock.patch.object(rule, "process", side_effect=RuntimeError("boom")):
             assert rules._handle_event_rule(rule, task, None, False) == FINISHED
         assert client.calls == [], "异常路径零动作"
+
+
+def test_full_round_without_task_queue_is_noop():
+    """full_round 在 ctx.task_queue 缺失时静默返回(重建中/停机后), 不打断相位分发
+
+    task_queue 为 None 只出现在 L2 重建窗口或停机路径; 此时补建任务无处安放,
+    handler 必须静默返回 —— 变异面: 去掉守卫 -> AttributeError 从相位分发上抛,
+    打断同相位后续订阅者(emit 契约: 前序异常即中断)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        rules = mgr.host.get("rules")
+        # !必须注入一条已匹配 tracker 的记录: 空快照下循环体一次都不跑, 守卫删掉也测不出来
+        #   (变异红验实测过这个假绿 —— 空快照时 _create_torrent_tasks 根本没被调用)
+        mgr.store.by_hash["H1"] = SimpleNamespace(hash="H1", tracker_conf=object())
+        mgr.ctx.task_queue = None
+        assert rules._on_full_round(None) is None

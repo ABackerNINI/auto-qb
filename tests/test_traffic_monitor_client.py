@@ -29,6 +29,13 @@
 - test_reload_config_unchanged_source_does_not_refresh: 无关配置保存不触发刷新(指纹相等不投递)(S8)
 - test_end_to_end_notify_then_state_shows_fresh_traffic: 端到端(进程内): 真端点 -> 命令队列 -> 真 handler -> 快照刷新 -> /api/state 与 /api/traffic/history 两取数位可见
 - test_mock_config_section_starts_no_thread: 桩配置(MagicMock 段)不得被当成「已联动」起订阅线程 —— 不等/恒等类型判据守阵
+- test_register_token_missing_then_unreachable_then_no_id: _register 三态(密钥缺失/不可达/缺 id)只记错不抛不置 sub_id(P0-T0.1)
+- test_register_missing_id_in_response: 200 缺 id -> 不进心跳态(下轮重试)
+- test_heartbeat_failure_branches_return_still_valid: _heartbeat 不可达/被拒(非 404) -> 一律 True(租约兜底不当失效)
+- test_unregister_defensive_and_failure_branches: _unregister 缺 reg_tool 跳过 / 密钥不可读跳过 / 不可达静默
+- test_unregister_rejected_by_tool_records_only: 注销被拒(409)只记 INFO 不抛
+- test_pass_force_relaunch_consumed_by_thread: force_relaunch 只本轮生效(读到即清并转 agent)
+- test_heartbeat_interval_fallback_on_bad_value: 心跳周期缺/非数值/<=1s 回落缺省(防节拍归零紧循环)
 """
 import io
 import json
@@ -719,3 +726,130 @@ def test_mock_config_section_starts_no_thread(tmp_path):
     sub.sync()
     assert sub._thread is None, "不应起订阅线程"
     assert not _sub_threads()
+
+
+# ---------- P0-T0.1: 订阅客户端控制面动作的失败/防御分支 ----------
+
+_FAKE_EP = agent.ToolEndpoint(
+    base_url=f"http://{POINTER_HOST}:{POINTER_PORT}",
+    token_path="",
+    data_dir="",
+    version="0.1.0",
+    pid=4321,
+    autostart_registered=True,
+    autostart_error=None,
+)
+
+
+def test_register_token_missing_then_unreachable_then_no_id(sub_env):
+    """_register 三态: 密钥缺失只记错不抛 / 不可达只记错不抛 / 200 缺 id 同口径"""
+    _mgr, sub, tool = sub_env
+    ep = agent.ToolEndpoint(
+        base_url=_FAKE_EP.base_url,
+        token_path="/nonexistent/monitor.token",
+        data_dir="",
+    )
+    # 密钥文件缺失 -> 记错(不注册, 不抛)
+    sub._register(ep)
+    assert sub._sub_id == "" and tool.paths() == []
+    # 不可达 -> ToolUnreachable 收编为记错
+    ep2 = agent.ToolEndpoint(base_url=_FAKE_EP.base_url, token_path="/nonexistent/x.token", data_dir="")
+    tool.raise_exc = tool_client.ToolUnreachable("refused")
+    sub._register(ep2)
+    assert sub._sub_id == ""
+
+
+def test_register_missing_id_in_response(sub_env):
+    """200 但响应缺 id: 记错且不置 sub_id(下轮重试, 不进入心跳态)"""
+    _mgr, sub, tool = sub_env
+    # 工具侧 200 但不回 id: 经 _FakeTool 的默认脚本改一件
+    real_call = tool.__call__
+
+    def no_id(base, path, method, credential, payload=None, timeout=None):
+        if path == "/subscribe":
+            return 200, {"ok": True}
+        return real_call(base, path, method, credential, payload, timeout)
+
+    tool_client.call_tool, _saved = no_id, tool_client.call_tool
+    try:
+        sub._register(_FAKE_EP)
+        assert sub._sub_id == ""
+    finally:
+        tool_client.call_tool = _saved
+
+
+def test_heartbeat_failure_branches_return_still_valid(sub_env):
+    """_heartbeat 三态: 密钥缺失 / 不可达 / 被拒(非 404) -> 一律 True(租约兜底, 不当失效)"""
+    _mgr, sub, tool = sub_env
+    sub._pass()  # 先注册
+    assert sub._sub_id == "sub-1"
+    tool.raise_exc = tool_client.ToolUnreachable("refused")
+    assert sub._heartbeat(_FAKE_EP) is True, "工具不可达不算失效(180s 租约给三次机会)"
+    tool.raise_exc = None
+    tool.heartbeat_codes = [500]
+    assert sub._heartbeat(_FAKE_EP) is True, "被拒只记错, 不立刻重注册"
+
+
+def test_unregister_defensive_and_failure_branches(sub_env):
+    """_unregister 防御/失败分支: 缺 reg_tool 寻址跳过 / 密钥不可读跳过 / 不可达静默 / 非 200-404 被拒"""
+    _mgr, sub, tool = sub_env
+    # sub_id 在但 reg_tool  None(同生同灭被破坏的纯防御路径)
+    sub._sub_id, sub._reg_tool = "sub-x", None
+    sub._unregister("测试")
+    assert tool.paths() == [], "缺注册时寻址信息不得发注销请求"
+    # 密钥不可读 -> 跳过
+    sub._sub_id, sub._reg_tool = "sub-x", ("http://127.0.0.1:9", "/nonexistent/token")
+    sub._unregister("测试")
+    assert tool.paths() == []
+    # 不可达 -> 静默(租约兜底)
+    sub._sub_id, sub._reg_tool = "sub-x", (f"http://127.0.0.1:{POINTER_PORT}", "/nonexistent/token")
+    tool.raise_exc = tool_client.ToolUnreachable("refused")
+    sub._unregister("测试")
+    assert sub._sub_id == ""
+    # 工具回 409(拒绝注销)只记 INFO 不抛的场景由 test_unregister_rejected_by_tool_records_only 直驱
+
+
+def test_unregister_rejected_by_tool_records_only(sub_env):
+    """注销被拒(工具回 409): 只记 INFO 不抛; 404 等价于已注销"""
+    _mgr, sub, tool = sub_env
+    sub._pass()
+    assert sub._sub_id == "sub-1"
+    # 走工具替身的 /unsubscribe 分支: 默认 200; 改为 409 需替换脚本
+    real_call = tool.__call__
+
+    def rejected(base_, path, method, credential, payload=None, timeout=None):
+        if path == "/unsubscribe":
+            return 409, {"error": "unknown id"}
+        return real_call(base_, path, method, credential, payload, timeout)
+
+    tool_client.call_tool, _saved = rejected, tool_client.call_tool
+    try:
+        with _LogCapture("auto_qb.webui.tool_client") as buf:
+            sub._unregister("测试被拒")
+        assert "注销被拒" in buf.getvalue()
+    finally:
+        tool_client.call_tool = _saved
+
+
+def test_pass_force_relaunch_consumed_by_thread(sub_env):
+    """force_relaunch 只在本轮生效: _pass 读到即清并转 agent(不跨轮残留)"""
+    mgr, sub, tool = sub_env
+    # 不起真线程: 避免订阅线程抢先把标志消费掉(标志生命周期在本测试内断言)
+    real_ensure = tool_client.TrafficMonitorSubscriber._ensure_thread
+    tool_client.TrafficMonitorSubscriber._ensure_thread = lambda self: None
+    try:
+        assert sub.request_relaunch() is True
+        assert sub._force_relaunch is True
+        sub._pass()
+        assert sub._force_relaunch is False, "立即拉起标志必须本轮消费掉"
+        assert len(tool.launches) == 0, "探活成功时不触发拉起"
+    finally:
+        tool_client.TrafficMonitorSubscriber._ensure_thread = real_ensure
+
+
+def test_heartbeat_interval_fallback_on_bad_value():
+    """心跳周期取值: 缺/非数值/<=1s 一律回落缺省(防响应格式变化把节拍打成 0 紧循环)"""
+    assert tool_client._heartbeat_interval({}) == tool_client._DEFAULT_HEARTBEAT_S
+    assert tool_client._heartbeat_interval({"heartbeat_interval_s": "abc"}) == tool_client._DEFAULT_HEARTBEAT_S
+    assert tool_client._heartbeat_interval({"heartbeat_interval_s": 0.5}) == tool_client._DEFAULT_HEARTBEAT_S
+    assert tool_client._heartbeat_interval({"heartbeat_interval_s": 45}) == 45.0

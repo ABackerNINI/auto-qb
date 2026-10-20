@@ -1,6 +1,7 @@
 """test_web_backend_misc 测试计划: WEB 后端杂项: config / token / sites / 分组视图 / 错误原因
 
 ## 测试计划(每个测试函数一条)
+- test_web_context_ro_cache_and_require_helpers: WebContext 共享件(P0-T0.5) —— RoCache 命中/写序号失效/128 上限整体清空 + require_torrent 404 / require_client 503 路由前置闸
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
@@ -1249,3 +1250,46 @@ def test_token_resolve_single_point_in_infra():
         assert "resolve_or_create_token" in (root /
                                              rel).read_text(encoding="utf-8"
                                                            ), (f"{rel} 必须委托 infra.utils.resolve_or_create_token")
+
+
+def test_web_context_ro_cache_and_require_helpers(tmp_path):
+    """WebContext 共享件(P0-T0.5): RoCache 带写失效短缓存(命中/写序号失效/上限治理) +
+    require_torrent 404 / require_client 503(路由前置闸的纯逻辑)"""
+    import threading
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.context import RoCache, WebContext
+
+    web = SimpleNamespace(write_seq=0)
+    mgr = SimpleNamespace(web=web, store=SimpleNamespace(get=lambda h: None), client=None)
+    ctx = WebContext(mgr)
+
+    # RoCache: 同一 (key, write_seq) 窗口内命中零重算; write_seq 推进(任何写命令成功)即换键
+    calls = {"n": 0}
+
+    def _fn():
+        calls["n"] += 1
+        return calls["n"]
+
+    assert ctx.cached_read("k", _fn) == 1
+    assert ctx.cached_read("k", _fn) == 1 and calls["n"] == 1, "TTL 内命中"
+    web.write_seq = 1  # 写命令执行成功 -> 缓存自动失效(防「刚改完还拿旧值」)
+    assert ctx.cached_read("k", _fn) == 2 and calls["n"] == 2
+
+    # 上限治理: 塞满 128 条后整体清空(只留新鲜的), 不无界增长
+    cache = RoCache(mgr)
+    cache._cache = {(f"k{i}", 0): (time.time(), i) for i in range(200)}
+    assert cache.get("fresh", _fn) == 3
+    assert len(cache._cache) == 1, "超限应整体清空"
+
+    # require_torrent: hash 不在快照 -> 404(路由前置闸单点)
+    with pytest.raises(HTTPException) as ei:
+        ctx.require_torrent("nope")
+    assert ei.value.status_code == 404
+
+    # require_client: qB 断连 -> 503
+    with pytest.raises(HTTPException) as ei2:
+        ctx.require_client()
+    assert ei2.value.status_code == 503

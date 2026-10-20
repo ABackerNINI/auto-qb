@@ -24,6 +24,9 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
   无逐订阅者隔离 —— 异常中断同相位剩余订阅者并原样上抛, 总线状态不损坏下轮照常
 - test_loop_hook_exception_propagates_and_skips_rest: loop hooks 同口径 —— 某 hook 异常
   上抛且剩余模块 hook 跳过(三条线逐线验证)
+- test_base_module_defaults_are_noops: BaseModule 基类默认 —— sections() 空元组 / start-stop 无操作
+  (「只减样板, 不引入隐藏行为」; 基类若给 sections 默认非空会污染段认领守阵)
+- test_state_service_save_failure_logs_and_swallows: save 落盘 OSError 记 ERROR 不外抛(状态写失败不打挂主循环)
 """
 import json
 import os
@@ -389,3 +392,45 @@ def test_loop_hook_exception_propagates_and_skips_rest():
     with pytest.raises(RuntimeError, match="hook 炸了"):
         host.run_task_line(force=False)
     assert log == [], "异常 hook 之后的剩余模块 hooks 不得被调用(三条线同口径)"
+
+
+def test_base_module_defaults_are_noops():
+    """BaseModule 基类默认: sections() 空元组 / start-stop 无操作
+
+    「只减样板, 不引入隐藏行为」是基类的立身之本 —— 基类若给 sections 返回非空,
+    段认领完备守阵(claimed_sections)会被无端污染; start/stop 若非 no-op, 未覆写的子类
+    会在装配/停用时被当成有实际动作的模块。
+    """
+    from auto_qb.core.module import BaseModule
+
+    m = BaseModule()
+    assert m.name == ""
+    assert m.sections() == (), "基类不认领任何配置段"
+    assert m.start(None, False) is None
+    assert m.stop() is None
+
+
+def test_state_service_save_failure_logs_and_swallows(monkeypatch):
+    """save 落盘 OSError: 记 ERROR 不外抛(状态写失败不打挂主循环, 下次 flush 再试)
+
+    变异面: 去掉 except OSError -> 磁盘满/权限错直接把主循环 tick 打挂(状态是辅助面,
+    正确性在内存与 qB 侧; 一次写失败必须降级为可查的日志而不是停机)。
+    """
+    import logging
+
+    from auto_qb.core import state as state_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        svc = StateService(os.path.join(td, "state.json"))
+        svc.data["k"] = 1
+        monkeypatch.setattr(state_mod.utils, "atomic_write", lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘满")))
+        seen = []
+        handler = logging.Handler()
+        handler.emit = lambda rec: seen.append(rec)
+        state_mod.logger.addHandler(handler)
+        try:
+            svc.save()  # 不得外抛
+        finally:
+            state_mod.logger.removeHandler(handler)
+        assert any("保存状态文件失败" in r.getMessage() for r in seen), seen
+        assert svc.data == {"k": 1}, "内存状态不得因落盘失败被清"

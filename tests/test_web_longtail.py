@@ -23,6 +23,7 @@
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
 - test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
 - test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
+- test_common_open_path_wraps_file_access: common.open_path 包装层直驱 —— 经 get_file_access() 打开并透传 select(稳定 patch 地址不漂移回 infra.utils 直调)
 - test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
 - test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败/部分成功整组回 None(DEBUG 留摘要)
 - test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
@@ -1035,3 +1036,24 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
         "tick 每帧路径出现全文档查询 —— 体检必须只做 1 次 rect 比对(5s 轮询场景的性能红线)"
     assert re.search(r"requestAnimationFrame\(tick\)", ui), \
         "帧环未用 requestAnimationFrame(定时器轮询会与绘制解耦空转)"
+
+
+def test_common_open_path_wraps_file_access(monkeypatch):
+    """common.open_path 包装层直驱: 经 get_file_access() 打开并透传 select(稳定 patch 地址)
+
+    open-path 端点与既有守阵都以 `common.open_path` 为 patch 地址(拆分时定下的稳定点) ——
+    直调包装层钉住「再导出改回 infra.utils 直调」这类漂移: 容器(Mapped)实现抛
+    NotSupported 的语义化 501 全靠这层转发, 绕过即丢。
+    """
+    import auto_qb.webui.server.common as fs_common
+
+    seen = []
+
+    class _FA:
+        def open_path(self, path, select=False):
+            seen.append((path, select))
+
+    monkeypatch.setattr(fs_common, "get_file_access", lambda: _FA())
+    fs_common.open_path("/tmp/probe")
+    fs_common.open_path("/tmp/probe2", select=True)
+    assert seen == [("/tmp/probe", False), ("/tmp/probe2", True)]

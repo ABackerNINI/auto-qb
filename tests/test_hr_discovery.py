@@ -15,6 +15,8 @@
    失败计数超阈临时静默(C3) / runtime 构造与启动发现 / discovery_port=0 关闭 / 监听身份
    覆盖 host/discovery_port/pairing / 非回环 auto 的展示码 INFO 与发现门全流程 / 发现绑定
    失败不影响数据端点 / L0 热重载不重建发现对象。
+5. 心跳与退避循环(P0-T0.6): _heartbeat_once 登记 + registry 异常只记 ERROR 不上抛 /
+   心跳循环跑至 stop; _retry_loop 连续失败退避翻倍 + stop 叫停干净退出。
 
 真绑定用例一律用**动态空闲端口**当候选表基底 —— 全量并行(-n 8)下固定 18788 会被其它
 worker 的同族用例占住, 候选轮换是特性而非碰撞。
@@ -399,6 +401,86 @@ def test_stop_is_idempotent_and_releases():
         probe.close()
 
 
+def test_heartbeat_once_registers_and_survives_registry_failure(tmp_path):
+    """心跳登记: registry 存在 -> upsert 本实例(endpoint/token/ts); upsert 抛任何异常都只记
+    ERROR 不上抛(发现服务不因注册表故障中断; 下一周期自然重试)"""
+    reg = InstanceRegistry(str(tmp_path / "instances.json"))
+    srv = make_discovery(registry=reg)
+    srv._heartbeat_once()
+    got = reg.alive(ttl=INSTANCE_TTL_S, now=srv._now())
+    assert [e["id"] for e in got] == [srv.entry_id]
+    assert got[0]["endpoint"] == "http://127.0.0.1:51000"
+
+    class _Boom(InstanceRegistry):
+        def upsert(self, **kw):
+            raise RuntimeError("registry on fire")
+
+    srv2 = make_discovery(registry=_Boom(str(tmp_path / "b.json")))
+    with _capture_errors("auto_qb.hr.discovery") as errors:
+        srv2._heartbeat_once()  # 不得抛
+    assert any("心跳失败" in m for m in errors), errors
+
+    # registry=None(未启用注册表的形态): 直接返回, 不碰盘
+    srv3 = make_discovery(registry=None)
+    srv3._heartbeat_once()
+
+
+def test_heartbeat_loop_runs_until_stopped(tmp_path, monkeypatch):
+    """心跳循环: 未叫停周期跑 _heartbeat_once; stop 置位即退出(有界等待, 不挂线程)"""
+    import auto_qb.hr.discovery as discovery_mod
+
+    reg = InstanceRegistry(str(tmp_path / "instances.json"))
+    srv = make_discovery(registry=reg)
+    monkeypatch.setattr(discovery_mod, "HEARTBEAT_INTERVAL_S", 0.01)
+    import threading
+
+    t = threading.Thread(target=srv._heartbeat_loop, daemon=True)
+    t.start()
+    try:
+        deadline = time.monotonic() + 3.0
+        while not reg.alive(ttl=INSTANCE_TTL_S, now=srv._now()) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert reg.alive(ttl=INSTANCE_TTL_S, now=srv._now()), "心跳循环应登记本实例"
+    finally:
+        srv._heartbeat_stop.set()
+        t.join(timeout=3.0)
+        assert not t.is_alive(), "stop 置位后心跳循环必须退出"
+
+
+def _capture_errors(logger_name):
+    """挂模块 logger 的自建 handler 收集 ERROR 记录(pitfalls/testing/log-capture: 禁 caplog)"""
+    return _ErrorCollector(logger_name)
+
+
+class _ErrorCollector:
+    def __init__(self, name):
+        self._logger = logging.getLogger(name)
+        self.records = []
+
+    def __enter__(self):
+        self._handler = _ListHandler(self.records)
+        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
+        self._logger.addHandler(self._handler)
+        self._logger.setLevel(logging.ERROR)
+        self._logger.propagate = False
+        return self.records
+
+    def __exit__(self, *exc):
+        self._logger.removeHandler(self._handler)
+        self._logger.setLevel(self._old_level)
+        self._logger.propagate = self._old_propagate
+        return False
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self, sink):
+        super().__init__()
+        self._sink = sink
+
+    def emit(self, record):
+        self._sink.append(record.getMessage())
+
+
 # ---------- 4. 配对码族 + runtime 接线 ----------
 
 
@@ -567,3 +649,30 @@ def test_runtime_l0_rebuild_keeps_discovery(tmp_path, monkeypatch):
         assert runtime.discovery.started
     finally:
         runtime.stop()
+
+
+def test_retry_loop_backoff_and_stop_exit(monkeypatch):
+    """退避循环内部路径(C8): 连续失败 delay 翻倍直至上限; stop 置位时 wait 立即返回并收线"""
+    srv = make_discovery()
+    srv.retry_min_s = 0.01
+    srv.retry_max_s = 0.04
+    fails = {"n": 0}
+
+    def _always_fail():
+        fails["n"] += 1
+        return False
+
+    monkeypatch.setattr(srv, "_try_bind", _always_fail)
+    import threading
+
+    t = threading.Thread(target=srv._retry_loop, daemon=True)
+    t.start()
+    try:
+        deadline = time.monotonic() + 3.0
+        while fails["n"] < 3 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        assert fails["n"] >= 3, "退避循环应持续重试(失败不退出)"
+    finally:
+        srv._retry_stop.set()
+        t.join(timeout=3.0)
+        assert not t.is_alive(), "stop 置位后退避循环必须退出"

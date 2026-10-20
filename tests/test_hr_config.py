@@ -61,6 +61,8 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_hr_check_request_timeout_endpoints: channel.request_timeout [5s,3600s] 两端逐值(旧用例只给了 1S/2H 两个远离端点的非法值)
 - test_hr_site_interval_range_endpoints: sites 条目 refresh/idle 两键 [60s,30D] 的**未覆盖半边**; 并改用「完整路径+精确下限文案」断言(既有用例的 `须 >=` 松匹配被交叉校验文案顶替 = 假绿)
 - test_hr_site_confs_derivation_single_point: 守阵(issue hr-site-derive-convention-dup) 站点接入派生单点在 Config.hr_site_confs —— 推导全仓只许出现在 models.py 与 routes/hr.py(webui 半, 轮 15 合流)
+- test_loaders_non_dict_specs_return_defaults: loader 层「段形状非字典」早退(load_hr_check_config/load_site_hr_check_config/load_fs_config/load_relocate_config —— 校验层已拦, loader 仍保守回默认而非 AttributeError)
+- test_resolve_hr_site_bindings_skips_unresolvable_entries: _resolve_hr_site_bindings 三条保守 continue(未登记档案/显式键不存在/默认映射非唯一命中) + hr=None 派生 0.0 纵深(直接喂非法输入不得外抛; 唯一命中对照照常派生)
 """
 import os
 
@@ -1394,3 +1396,83 @@ def test_hr_site_confs_derivation_single_point():
     )
     assert hits == ["config/models.py", "webui/server/routes/hr.py"], (f"站点接入派生只允许在单点与 webui 半(轮 15 合流), 现分布: {hits}")
     assert Config().hr_site_confs() == {}, "全默认配置应派生空表"
+
+
+# ---------- loader 早退与绑定派生纵深(计划 26-10-20-2101 T0.6) ----------
+#
+# loaders.* 的「非字典段」早退与 _resolve_hr_site_bindings 的保守 continue 都是**纵深防御**:
+# fail-fast 校验层已把这些形态拦在 load_config 之外, 正常加载路径永不可达 —— 直接单测喂值,
+# 既补覆盖也钉住「删掉防御即炸」的变异面。
+
+
+def test_loaders_non_dict_specs_return_defaults():
+    """四个 loader 的非字典段早退: 喂 None / 标量 / 列表 -> 恒回字段默认, 不 AttributeError
+
+    变异面: `if not isinstance(spec, dict): return d` 整行删掉 -> `spec.get(...)` 对非字典
+    直接抛(load_config 路径上不可达, 但 loader 是公开半, 单测钉住保守回退)。
+    """
+    from auto_qb.config.loaders import (
+        load_fs_config,
+        load_hr_check_config,
+        load_relocate_config,
+        load_site_hr_check_config,
+    )
+    from auto_qb.config.models import FsConfig, HrCheckConfig, RelocateConfig, SiteHrCheckConfig
+
+    for bad in (None, "", 1, [], 3.5):
+        assert load_hr_check_config(bad) == HrCheckConfig(), bad
+        assert load_site_hr_check_config(bad) == SiteHrCheckConfig(), bad
+        assert load_fs_config(bad) == FsConfig(), bad
+        assert load_relocate_config(bad) == RelocateConfig(), bad
+
+
+def test_resolve_hr_site_bindings_skips_unresolvable_entries():
+    """_resolve_hr_site_bindings 三条保守 continue + hr=None 派生 0.0(纵深, 不得外抛)
+
+    校验层(fail-fast)已拦下的三种不可解析形态, 直接喂给 loader 的绑定派生:
+    未登记档案 / 显式 tracker 键不存在 / 默认映射非唯一命中(零命中与歧义) —— 每条都必须
+    静静 continue(派生视图保持 None), 而不是 KeyError/IndexError 外抛。变异面: 某条
+    continue 删掉 -> `None.adapter` / `trackers["ghost"]` / `matched[0]` 直接炸。
+
+    另含 hr=None 纵深: 绑定站点的 hr 规则为 None 时 required_seeding_time 落 0.0
+    (校验层要求绑定点配 hr 段, 此分支正常路径不可达, 但 `if hr_rule is not None else 0.0`
+    的 None 侧必须被钉住); 同时充当「唯一命中照常派生」的正对照。
+    """
+    from auto_qb.config.loaders import _resolve_hr_site_bindings
+    from auto_qb.config.models import HrCheckConfig, SiteHrCheckConfig, TrackerConfig
+
+    def _trk(name: str, domains) -> TrackerConfig:
+        return TrackerConfig(name=name, domains=list(domains))
+
+    bt_domains = ["pt.btschool.club"]
+
+    # 1. 未登记档案 id: find_preset 返 None -> continue
+    trackers = {"bt": _trk("bt", bt_domains), "bt2": _trk("bt2", bt_domains)}
+    _resolve_hr_site_bindings(HrCheckConfig(sites={"nosuch": SiteHrCheckConfig(enabled=True)}), trackers)
+    assert trackers["bt"].hr_check is None and trackers["bt2"].hr_check is None
+
+    # 2. 显式 tracker 键不存在 -> continue(不去猜默认映射)
+    trackers = {"bt": _trk("bt", bt_domains), "bt2": _trk("bt2", bt_domains)}
+    _resolve_hr_site_bindings(
+        HrCheckConfig(sites={"btschool": SiteHrCheckConfig(enabled=True, tracker="ghost")}), trackers
+    )
+    assert trackers["bt"].hr_check is None and trackers["bt2"].hr_check is None
+
+    # 3. 默认映射零命中(档案域与用户 domains 无交集) -> continue
+    trackers = {"bt": _trk("bt", bt_domains), "bt2": _trk("bt2", bt_domains)}
+    _resolve_hr_site_bindings(HrCheckConfig(sites={"carpt": SiteHrCheckConfig(enabled=True)}), trackers)
+    assert trackers["bt"].hr_check is None and trackers["bt2"].hr_check is None
+
+    # 4. 默认映射歧义(两条 tracker 同域命中) -> continue(不武断挑第一条)
+    trackers = {"bt": _trk("bt", bt_domains), "bt2": _trk("bt2", bt_domains)}
+    _resolve_hr_site_bindings(HrCheckConfig(sites={"btschool": SiteHrCheckConfig(enabled=True)}), trackers)
+    assert trackers["bt"].hr_check is None and trackers["bt2"].hr_check is None
+
+    # 5. 正对照 + hr=None 纵深: 唯一命中照常派生; hr=None(校验层已拦)时超额线落 0.0
+    trackers = {"bt": TrackerConfig(name="bt", domains=bt_domains, hr=None)}
+    _resolve_hr_site_bindings(HrCheckConfig(sites={"btschool": SiteHrCheckConfig(enabled=True)}), trackers)
+    site = trackers["bt"].hr_check
+    assert site is not None and site.enabled is True
+    assert site.tracker == "bt"  # 派生视图回填解析出的条目名
+    assert site.required_seeding_time == 0.0, "hr=None 时超额线必须落 0.0(不得 None 下溢)"
+    assert site.adapter == "btschool" and site.hr_page_url == "https://pt.btschool.club/myhr.php"

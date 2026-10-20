@@ -10,7 +10,7 @@
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
-- test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签
+- test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签(签发层回空串 + 路由层转 503)
 - test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除(密钥正确也不再是凭证)
 - test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
 - test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
@@ -300,6 +300,10 @@ def test_auth_host_origin_parsing_helpers():
     assert not _origin_allowed("http://127.0.0.1:9999", allowed, 8080)  # 端口不一致
     assert not _origin_allowed("ftp://127.0.0.1", allowed, None)  # 非 http(s)
     assert not _origin_allowed("not a url", allowed, None)  # 无 host
+    # Host 头端口段非法(urlsplit.port 抛 ValueError): fail-closed, 不炸
+    assert _host_header_parts("[::1]:notaport") == ("", None)
+    # !Origin 非法端口当前会抛未捕获 ValueError(见 issue 26-10-20-webui-origin-port-parse):
+    # 这里只锁「不炸」的 Host 侧; Origin 侧的 fail-closed 待 issue 处置后补断言。
 
 
 def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):
@@ -356,6 +360,11 @@ def test_sse_ticket_flow(web_env):
     tickets = [mgr.web.issue_event_ticket() for _ in range(EVENT_TICKET_MAX)]
     assert all(tickets) and len(set(tickets)) == EVENT_TICKET_MAX, "满额前每次签发必须唯一非空"
     assert mgr.web.issue_event_ticket() == "", "满额必须拒签(回空串, 端点转 503)"
+    # 满额态走真实 POST: 路由层把空串转成 503(前端据此退轮询兜底) —— 只断言签发层
+    # 回空串时, routes/events.py 的 503 分支是死路, 收尾文本丢失也无人发现
+    resp = client.post("/api/events/ticket", headers=auth)
+    assert resp.status_code == 503
+    assert "event ticket quota exhausted" in resp.text
 
 
 def test_sse_ticket_in_require_token_and_query_token_removed(web_env):

@@ -37,6 +37,20 @@
 - test_reannounce_background_verify_and_cap: 推迟后台核实(达 min_e 出结论落 INFO/WARNING 日志并移除/逾时 DEBUG 静默移除/500 上限丢最旧 WARNING)
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
+- test_add_outcome_fail_branch: _add_outcome 全拒档(Mapping 三值最右档 "fail")
+- test_bulk_limits_each_direction_independently: limits 单方向时另一方向守卫整条跳过(P0-T0.2 早退矩阵)
+- test_build_search_index_still_dirty_skips_completion_log: 索引仍脏不落「已构建」完成日志(分批不刷屏)
+- test_recheck_skip_check_receipt_matrix: recheck/skip_check 回执矩阵 —— 未知 hash 有无 cmd_id 两路 + ops 拒绝/受理两档
+- test_skip_check_precheck_truth_receipt: 跳检预检只读聚合 truth(results/summary) + ok 回执
+- test_reannounce_group_no_cmd_id_and_inactive_group: 组汇报直驱 —— 无 cmd_id 照发不写回执; 全非活跃 warn
+- test_reannounce_torrent_missing_and_blocked: 单种汇报 —— 未知 hash 有无 cmd_id; 非活跃 warn 且不发指令
+- test_relocate_receipt_direct_branches: 迁移回执单点 —— 无 cmd_id 早退 / 全 blocked 带首条原因 / 无原因回落通用文案 / 混合态 ok
+- test_relocate_armed_false_when_module_absent: ctx 无 relocate 模块 -> False(走旧 setLocation 路)
+- test_bulk_guard_matrix_without_cmd_id: bulk 早退守卫矩阵(无 cmd_id 直投): 六类非法载荷只 return 不写回执不调 API
+- test_bulk_missing_group_receipt: bulk 组键缺失计组数 -> error 回执点名
+- test_bulk_recheck_via_ops_aggregates_skip_and_fail: 批量 recheck 经 ops 逐个提交, 跳过/失败计数进聚合文案
+- test_add_torrents_files_only_and_urls_only: _cmd_add_torrents files/urls 两分支各自一次调用
+- test_cmd_handlers_without_cmd_id_stay_silent: 无 cmd_id 一侧全覆盖(CLI/内部触发旁路) —— 14 处 `if cmd_id:` 假弧 + _bulk_receipt 两档 + _bulk_missing_msgs 缺失组文案 + skip_check 菜单关早退 + add_torrents 无回执: 不写回执(空键不出现)、不炸、日志照记
 """
 import tempfile
 import time
@@ -1610,3 +1624,386 @@ def test_cmd_reload_config_delegates():
         mgr.web.commands.put(("reload_config", {"config": new_cfg}))
         mgr.web.consume_commands()
         assert applied == [new_cfg], "reload_config 命令应把新配置交给 apply_new_config"
+
+
+# ---------- P0-T0.2: 早退守卫参数化矩阵 + 回执单点直驱 ----------
+
+
+def test_add_outcome_fail_branch():
+    """_add_outcome 全拒档(Mapping 形态): success+pending 都为 0 => "fail"(聚合三值的最右档)"""
+    from auto_qb.webui.commands import _add_outcome
+
+    assert _add_outcome({"success_count": 0, "failure_count": 2, "pending_count": 0})[0] == "fail"
+    assert _add_outcome({"success_count": 1, "failure_count": 1, "pending_count": 0})[0] == "partial"
+    assert _add_outcome({"success_count": 1, "failure_count": 0, "pending_count": 0})[0] == "ok"
+
+
+def test_bulk_limits_each_direction_independently():
+    """limits 只调有值方向: 单方向时另一方向的守卫整条跳过(早退矩阵 296)<+=></+=>"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        hashes = ["HA", "HB"]
+        mgr.web.commands.put(("bulk_torrents", {"hashes": hashes, "action": "limits", "up_limit": 512}))
+        mgr.web.commands.put(("bulk_torrents", {"hashes": hashes, "action": "limits", "dl_limit": 256}))
+        mgr.web.consume_commands()
+        up_calls = [c for c in client.calls if c[0] == "set_upload_limit"]
+        dl_calls = [c for c in client.calls if c[0] == "set_download_limit"]
+        assert len(up_calls) == 1 and up_calls[0][1] == 512
+        assert len(dl_calls) == 1 and dl_calls[0][1] == 256, "两次投递各只调各自方向"
+
+
+def test_build_search_index_still_dirty_skips_completion_log():
+    """索引构建后仍脏(分批未完成): 不落「已构建」完成日志(避免分批刷屏)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        mgr.build_search_index = lambda: None  # 分批构建的中间轮: 索引仍脏
+        mgr.web.search_index_dirty = True
+        mgr.web.commands.put(("build_search_index", {}))
+        with module_log("auto_qb.webui.commands") as logs:
+            mgr.web.consume_commands()
+        assert not any("搜索索引已构建" in m for m in logs), "仍脏不得报完成"
+        assert mgr.web.search_index_dirty is True
+
+
+def test_recheck_skip_check_receipt_matrix(monkeypatch):
+    """recheck/skip_check 回执矩阵: 未知 hash 有无 cmd_id 两路 + ops 拒绝/受理两档"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        cmds = mgr.host.get("web_commands") if mgr.host.get("web_commands") else mgr
+        drain = mgr.web.consume_commands
+
+        # 未知 hash: 无 cmd_id 静默; 有 cmd_id error 回执(删除守卫的显式回执口径)
+        mgr.web.commands.put(("recheck_torrent", {"hash": "ZZZ"}))
+        mgr.web.commands.put(("recheck_torrent", {"hash": "ZZZ", "cmd_id": "c-unknown"}))
+        drain()
+        rec = mgr.web.results.get("c-unknown")
+        assert rec is not None and rec["status"] == "error" and "不存在" in rec["error"]
+
+        # ops 拒绝(校验进行中) -> error 回执带自解释文案
+        monkeypatch.setattr(
+            mgr.ctx.ops, "recheck", lambda *a, **k: SimpleNamespace(is_ok=False, is_pending=False, message="校验进行中")
+        )
+        mgr.web.commands.put(("recheck_torrent", {"hash": "HA", "cmd_id": "c-busy"}))
+        drain()
+        assert mgr.web.results["c-busy"]["status"] == "error" and "校验进行中" in mgr.web.results["c-busy"]["error"]
+
+        # ops 受理 -> ok 回执
+        monkeypatch.setattr(mgr.ctx.ops, "recheck", lambda *a, **k: SimpleNamespace(is_ok=True, message="ok"))
+        mgr.web.commands.put(("recheck_torrent", {"hash": "HA", "cmd_id": "c-ok"}))
+        drain()
+        assert mgr.web.results["c-ok"]["status"] == "ok"
+
+        # skip_check: 拒绝 -> error; 受理 -> ok
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check", lambda *a, **k: SimpleNamespace(is_ok=False, message="今天已跳过"))
+        mgr.web.commands.put(("skip_check_torrent", {"hash": "HA", "cmd_id": "c-skip-no"}))
+        drain()
+        assert mgr.web.results["c-skip-no"]["status"] == "error"
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check", lambda *a, **k: SimpleNamespace(is_ok=True, message="ok"))
+        mgr.web.commands.put(("skip_check_torrent", {"hash": "HA", "cmd_id": "c-skip-yes"}))
+        drain()
+        assert mgr.web.results["c-skip-yes"]["status"] == "ok"
+
+
+def test_skip_check_precheck_truth_receipt(monkeypatch):
+    """跳检预检只读: 聚合 truth(results/summary) + ok 回执; ops 侧零副作用透传"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        rows = [
+            {
+                "hash": "HA",
+                "name": "a",
+                "cls": "ok",
+                "reasons": []
+            },
+            {
+                "hash": "HB",
+                "name": "b",
+                "cls": "blocked",
+                "reasons": [{
+                    "text": "部分下载"
+                }]
+            },
+        ]
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check_precheck", lambda req: rows)
+        mgr.web.commands.put(("skip_check_precheck", {"hashes": ["HA", "HB"], "cmd_id": "c-pre"}))
+        mgr.web.consume_commands()
+        rec = mgr.web.results["c-pre"]
+        assert rec["status"] == "ok"
+        assert rec["truth"]["results"] == rows
+        assert rec["truth"]["summary"] == {"ok": 1, "force": 0, "blocked": 1}
+
+
+def test_reannounce_group_no_cmd_id_and_inactive_group():
+    """组汇报直驱: 无 cmd_id 照发不写回执; 全非活跃 warn 回执(有无 cmd_id 两路)"""
+    from helpers import FakeTorrent
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cmds = mgr
+        # 无 cmd_id: 只发指令, 不写回执(524->530 守卫另一侧)
+        cmds._cmd_reannounce_group(key)
+        assert ("reannounce", None) in client.calls or ("reannounce", ["HA", "HB"]) in client.calls, client.calls
+        assert mgr.web.results.get("never", None) is None
+
+        # 组内成员全部非活跃(快照置 pausedUP): 有 cmd_id -> warn 回执 + 不发指令
+        for h in ("HA", "HB"):
+            mgr.store.get(h).state = "pausedUP"
+        client.calls.clear()
+        cmds._cmd_reannounce_group(key, cmd_id="c-inactive")
+        rec = mgr.web.results.get("c-inactive")
+        assert rec is not None and rec["status"] == "warn" and "均非活跃" in rec["error"]
+        assert ("reannounce", None) not in client.calls and not any(c[0] == "reannounce" for c in client.calls)
+
+
+def test_reannounce_torrent_missing_and_blocked():
+    """单种汇报: 未知 hash 有无 cmd_id; 非活跃状态 warn 且不发指令"""
+    from helpers import FakeTorrent
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cmds = mgr
+        cmds._cmd_reannounce_torrent("ZZZ")  # 无 cmd_id: 静默
+        assert "c-none" not in mgr.web.results
+        cmds._cmd_reannounce_torrent("ZZZ", cmd_id="c-gone")
+        assert mgr.web.results["c-gone"]["status"] == "error" and "不存在" in mgr.web.results["c-gone"]["error"]
+
+        mgr.store.get("HA").state = "queuedUP"  # 排队 = qB 静默忽略
+        client.calls.clear()
+        cmds._cmd_reannounce_torrent("HA", cmd_id="c-blocked")
+        assert mgr.web.results["c-blocked"]["status"] == "warn" and "非活跃" in mgr.web.results["c-blocked"]["error"]
+        assert not any(c[0] == "reannounce" for c in client.calls), "非活跃不得发指令"
+
+
+def test_relocate_receipt_direct_branches():
+    """迁移回执单点直驱: 无 cmd_id 早退 / 全 blocked 带首条原因 / 无原因回落通用文案"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        cmds = mgr
+        items_all_blocked = [{"cls": "blocked", "reasons": [{"text": "目标目录已被占用"}]}, {"cls": "blocked", "reasons": []}]
+        # 无 cmd_id: 不发回执也不炸(813 早退)
+        cmds._relocate_receipt("", items_all_blocked, "移动位置(整组迁移) HA")
+        assert mgr.web.results.get("", None) is None
+        # 全 blocked + 有原因: error 回执带首条自解释文案(815-823)
+        cmds._relocate_receipt("c-b1", items_all_blocked, "移动位置(整组迁移) HA")
+        rec = mgr.web.results["c-b1"]
+        assert rec["status"] == "error" and rec["error"] == "目标目录已被占用"
+        assert rec["truth"]["summary"]["blocked"] == 2
+        # 全 blocked 无任何原因: 回落通用文案
+        cmds._relocate_receipt("c-b2", [{"cls": "blocked", "reasons": []}], "批量移动位置(整组迁移)")
+        assert mgr.web.results["c-b2"]["error"] == "整组迁移被闸门拒绝"
+        # 混合态(有 started): ok 回执
+        cmds._relocate_receipt(
+            "c-mix", [{
+                "cls": "started",
+                "reasons": []
+            }, {
+                "cls": "blocked",
+                "reasons": [{
+                    "text": "x"
+                }]
+            }], "移动位置(整组迁移) HA"
+        )
+        assert mgr.web.results["c-mix"]["status"] == "ok"
+
+
+def test_relocate_armed_false_when_module_absent(monkeypatch):
+    """三入口接线判据: ctx 无 relocate 模块 -> False(整组迁移未武装时走旧 setLocation 路)"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        real_ctx = mgr.ctx
+        mgr.ctx = SimpleNamespace(relocate=None, config=mgr.config, api=mgr.api)
+        try:
+            assert mgr._relocate_armed() is False
+        finally:
+            mgr.ctx = real_ctx
+
+
+def test_bulk_guard_matrix_without_cmd_id():
+    """bulk 早退守卫矩阵(无 cmd_id 直投队列): 每个非法载荷只 return 不写回执不调 API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        bad_payloads = [
+            {
+                "hashes": ["HA"],
+                "action": "nope"
+            },  # 未知动作
+            {
+                "hashes": [],
+                "action": "pause"
+            },  # 空 hash 列表
+            {
+                "hashes": ["HA"],
+                "action": "add_tags"
+            },  # 缺 tags
+            {
+                "hashes": ["HA"],
+                "action": "set_category"
+            },  # 缺 category(None)
+            {
+                "hashes": ["HA"],
+                "action": "limits"
+            },  # limits 两方向全空
+            {
+                "hashes": ["HA"],
+                "action": "location"
+            },  # 缺目标路径
+        ]
+        for payload in bad_payloads:
+            mgr.web.commands.put(("bulk_torrents", payload))
+        mgr.web.consume_commands()
+        assert mgr.web.results == {}, "无 cmd_id 的非法载荷不得写回执"
+        assert client.calls == [], "非法载荷不得触达 qB API"
+
+
+def test_bulk_missing_group_receipt():
+    """bulk 组键缺失: 缺失组计组数 -> error 回执点名组数(纯 hash 列表不变)"""
+    from helpers import FakeTorrent
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, key = _make_grouped_manager(td)
+        from auto_qb.infra.utils import encode_group_key
+
+        bad_key = encode_group_key(("R:/no-such", ("x.mkv", )))
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "keys": [bad_key],
+                "action": "pause",
+                "cmd_id": "c-mg"
+            })
+        )
+        mgr.web.consume_commands()
+        rec = mgr.web.results["c-mg"]
+        assert rec["status"] == "error" and "组不存在" in rec["error"]
+
+
+def test_bulk_recheck_via_ops_aggregates_skip_and_fail(monkeypatch):
+    """批量 recheck 经 ops 逐个提交: 跳过/失败计数分别进聚合回执文案"""
+    from types import SimpleNamespace
+
+    def _outcome(**kw):
+        base = dict(is_ok=False, is_pending=False, is_skipped=False, is_failed=False, message="")
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        plan = {
+            "HA": _outcome(is_ok=True, message="ok"),
+            "HB": _outcome(is_failed=True, message="qB 拒绝"),
+        }
+        monkeypatch.setattr(mgr.ctx.ops, "recheck", lambda h, source=None: plan[h])
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "c-fail"}))
+        mgr.web.consume_commands()
+        assert "个发送失败" in mgr.web.results["c-fail"]["error"]
+
+        plan["HB"] = _outcome(is_skipped=True, message="校验进行中")
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "c-skip"}))
+        mgr.web.consume_commands()
+        assert "个校验进行中已跳过" in mgr.web.results["c-skip"]["error"]
+
+
+def test_add_torrents_files_only_and_urls_only(monkeypatch):
+    """_cmd_add_torrents 两分支矩阵: 只走 files / 只走 urls(各自一次 api 调用)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        f = td + "/x.torrent"
+        with open(f, "wb") as fh:
+            fh.write(b"d8:announce3:fooe")
+        seen = []
+        real_add = client.torrents_add
+
+        def _spy(**kw):
+            seen.append(kw)
+            return real_add(**kw)
+
+        client.torrents_add = _spy
+        mgr.web.commands.put(("add_torrents", {"files": [f], "cmd_id": "c-f"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["c-f"]["status"] == "ok"
+        assert seen and seen[0].get("torrent_files") == [f], seen
+
+        seen.clear()
+        mgr.web.commands.put(("add_torrents", {"urls": ["magnet:?xt=urn:btih:abc"], "cmd_id": "c-u"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["c-u"]["status"] == "ok"
+        assert seen and seen[0].get("urls") == ["magnet:?xt=urn:btih:abc"], seen
+
+
+def test_cmd_handlers_without_cmd_id_stay_silent(monkeypatch):
+    """无 cmd_id 一侧全覆盖: 各 handler 的 `if cmd_id:` 假弧 + _bulk_* 单点 + 直投旁路
+
+    真机除 Web 前端外还有 CLI/内部触发等**不经回执通道**的调用方; 既有用例几乎都带
+    cmd_id(回执正是被断言的对象), 于是 commands.py 里 14 处 `if cmd_id:` 的假弧全滞留
+    partial —— 把 `if cmd_id:` 误改成无条件 `_set_web_result` 写空键这条回归没人看得见。
+    本用例逐 handler 过一遍无 cmd_id 一侧: 不写回执(空键不出现)、不炸、指令/日志照旧。
+    """
+    from auto_qb.infra.utils import encode_group_key
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cmds = mgr
+
+        # 组汇报: 全非活跃整组跳过(524->530) + 单种逐 hash 跳过(568->570)
+        for h in ("HA", "HB"):
+            mgr.store.get(h).state = "pausedUP"
+        client.calls.clear()
+        cmds._cmd_reannounce_group(key)
+        cmds._cmd_reannounce_torrent("HA")
+        assert not any(c[0] == "reannounce" for c in client.calls), "非活跃不得发指令"
+
+        # recheck / skip_check 单种: ops 受理与拒绝两档, 无 cmd_id 均静默(666/670/684/688)
+        monkeypatch.setattr(mgr.ctx.ops, "recheck", lambda *a, **k: SimpleNamespace(is_ok=True, message="ok"))
+        cmds._cmd_recheck_torrent("HA")
+        monkeypatch.setattr(
+            mgr.ctx.ops, "recheck", lambda *a, **k: SimpleNamespace(is_ok=False, is_pending=False, message="校验进行中")
+        )
+        cmds._cmd_recheck_torrent("HA")
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check", lambda *a, **k: SimpleNamespace(is_ok=True, message="ok"))
+        cmds._cmd_skip_check_torrent("HA")
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check", lambda *a, **k: SimpleNamespace(is_ok=False, message="今天已跳过"))
+        cmds._cmd_skip_check_torrent("HA")
+
+        # 预检族 + 撤销: 无 cmd_id 只聚合日志不写回执(706/726/739/754)
+        monkeypatch.setattr(mgr.ctx.ops, "skip_check_precheck", lambda req: [])
+        cmds._cmd_skip_check_precheck(["HA"])
+        monkeypatch.setattr(mgr.ctx.relocate, "relocate_precheck", lambda req, loc: [])
+        monkeypatch.setattr(mgr.ctx.relocate, "precheck_add", lambda s, n: {"cls": "ok"})
+        monkeypatch.setattr(mgr.ctx.relocate, "relocate_cancel", lambda j, cost_confirmed: {"cls": "confirm"})
+        cmds._cmd_relocate_precheck(["HA"], "R:/x")
+        cmds._cmd_relocate_precheck_add("R:/x", "n")
+        cmds._cmd_relocate_cancel("job-1")
+
+        # _bulk_receipt 单点无 cmd_id 两档: 有异常文案(1122->1124) / 全清(1126->1128)
+        cmds._bulk_receipt("", ["1/2 个种子不存在或已被删除"], "批量 recheck(提交 1 个种子)", "批量 recheck(提交 1, 跳过 0, 失败 1)")
+        cmds._bulk_receipt("", [], "批量 recheck(提交 1 个种子)", "批量 recheck(提交 1, 跳过 0, 失败 1)")
+
+        # bulk 分派: skip_check_menu 关闭 + 无 cmd_id -> 静默早退(1026->1028)
+        monkeypatch.setattr(mgr.ctx.config.web, "skip_check_menu", False)
+        cmds._cmd_bulk_torrents(hashes=["HA"], action="skip_check")
+        monkeypatch.setattr(mgr.ctx.config.web, "skip_check_menu", True)
+
+        # 批量缺失: 无 cmd_id 只记日志(1090->1092); 缺失组走 _bulk_missing_msgs 单点(1111)
+        bad_key = encode_group_key(("R:/no-such", ("x.mkv", )))
+        monkeypatch.setattr(
+            mgr.ctx.ops,
+            "recheck",
+            lambda h, source=None: SimpleNamespace(is_ok=True, is_skipped=False, is_failed=False, message="ok")
+        )
+        cmds._cmd_bulk_torrents(hashes=["HA"], keys=[bad_key], action="recheck", cmd_id="c-mgm")
+        cmds._cmd_bulk_torrents(hashes=["GONE"], keys=[bad_key], action="pause")
+
+        # 添加种子: 无 cmd_id 只落日志不写回执(1375->1385)
+        f = td + "/x.torrent"
+        with open(f, "wb") as fh:
+            fh.write(b"d8:announce3:fooe")
+        cmds._cmd_add_torrents(files=[f])
+
+        # 总断言: 全程只有带 cmd_id 的那一次写了回执, 空键从未出现
+        assert set(mgr.web.results) == {"c-mgm"}, mgr.web.results
+        assert "" not in mgr.web.results, "无 cmd_id 不得以空键写回执"
+        assert "个组不存在或成员为空" in mgr.web.results["c-mgm"]["error"]

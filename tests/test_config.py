@@ -44,6 +44,7 @@
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
 - test_validate_gslc_enabled_key: global_speed_limit_curve.enabled 总开关(缺省 True/false/true 解析/非布尔报错)
 - test_validate_empty_file: 空文件/非字典根节点报错
+- test_validate_config_none_body_uses_defaults: config 裸键(None) = 合法空配置走默认零报错; 非字典标量才报「必须是字典」
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
 - test_models_default_sources: 默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量)
 - test_validate_section_type_errors: 各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags 坏项)
@@ -989,6 +990,20 @@ def test_validate_empty_file():
     with tempfile.TemporaryDirectory() as td:
         assert "配置文件为空或根节点不是字典" in _load_errors(td, "")
         assert "配置文件为空或根节点不是字典" in _load_errors(td, "- a\n- b\n")
+
+
+def test_validate_config_none_body_uses_defaults():
+    """config 键存在但值为 None(空文件被 YAML 解析成 `config:` 裸键) -> 全部走默认, 零报错
+
+    与「非字典」不同: None 是**合法的空配置**语义(`config:` 空段), 早退不报错;
+    变异面: 把 None 与其它标量一起走 isinstance 分支 -> 空配置被误判「必须是字典」,
+    首次启动即 fail-fast。
+    """
+    from auto_qb.config.validation import validate_config
+
+    assert validate_config({}) == []
+    assert validate_config({"config": None}) == []
+    assert any("必须是字典" in e for e in validate_config({"config": ["x"]}))
 
 
 def test_config_error_wraps_io_and_yaml():

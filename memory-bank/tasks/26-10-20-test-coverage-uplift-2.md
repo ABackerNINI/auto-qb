@@ -32,7 +32,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | 0 | 立档 + 计划制品 + 认领链 + 索引重生成 | Done (2026-10-20) |
-| 1 | P0 · 清偿 98% 门槛与快赢轮 | Pending |
+| 1 | P0 · 清偿 98% 门槛与快赢轮 | Done (2026-10-20, 98.33%) |
 | 2 | P1 · traffic 家族与 relocate 中坚 | Pending |
 | 3 | P2 · 长尾清偿与 watchlist 清零 | Pending |
 | 4 | P3 · 防回沉机制落地与常态化 | Pending |
@@ -48,3 +48,16 @@
 计划按「先清偿门槛(P0, +130±40) → 中坚(P1, +180±50) → 长尾(P2, +180±60)」推进, 终点 99% 区间; 全部任务、落点测试文件与验收 DoD 见计划 §3; 纪律纪律见 §4(坑清单), 机制见 §5(M1–M7)。
 
 - 2026-10-20 21:21 覆盖率第二轮计划制品入库: 立计划(plans Open) + 认领档案, 双向认领链与索引重生成
+
+### R1 · P0 清偿门槛与快赢轮 (2026-10-20 23:59)
+
+T0.1–T0.6 全部落地, 只补测试零产品码改动。test.full 全量: **3878 passed + 2 skipped, TOTAL 98.33%(272 miss + 185 partial = 457 单位)** —— `--cov-fail-under=98` **首次转绿**(基线 97.66% / 633 单位), 净清偿 176 单位 = +0.67 点, 计划预估 +130±40 的上沿之外但同量级。基线切片 `testing/baselines/26-10-20-2359-test-coverage-uplift-2-p0.md`。
+
+- **T0.1** tool_client `call_tool` HTTP 契约整块: 新建 `test_tool_client.py`(14 例), 回环 `ThreadingHTTPServer` 收真 socket —— 该文件行覆盖 79% → 90.8%(余 21 行是工具侧进程管理面, P2 再议)。
+- **T0.2** commands.py 早退守卫: 32 条 partial 收 16 条, 再加「无 cmd_id 一侧」全覆盖把**全部** `if cmd_id:` 假弧清完(16 处), 文件 94% → 98.03%(余 1 行 + 16 partial 均为批量回执的长文案分支, 语义重复)。
+- **T0.3** finalize_watch 三证: 新建 `test_finalize_watch.py`(26 例), 90% → 97.8%(余 3 处为真机进程表竞态, 保守路径已覆盖)。
+- **T0.4** routes/traffic_monitor: 5 例(5xx→502 三处 + 模块缺失 502 + notify 非 dict 体 400), 91% → 全绿。
+- **T0.5** 零碎小件: events 满额 503 / lifecycle 超时分支 / auth Host 解析 / context 与 RoCache / relocate_journal —— 其中 lifecycle 与 state 两例在变异红验中发现**原断言假绿**(线程秒退 / 空快照), 已改写为真执行分支。
+- **T0.6** 外部依赖收敛: hr/discovery 心跳与退避 / traffic_limits 空窗与 LRU / config/loaders 7 行 + 7 partial 全清 / migrations 6 partial 全清。
+- **范围守恒**: 过程中发现 `_origin_allowed` 端口段非法抛未捕获 ValueError(应为 fail-closed 403), 按纪律入池 `issues/26-10-20-2230-bug-webui-origin-port-parse.html`, **不在本计划内修**(测试侧预留断言位)。
+- **机制侧**: watchlist 10 → **3** 个(tool_client / traffic_qb / relocate_mod);豁免行数 8 行零新增;变异红验 12/12 全杀(≥10% 抽检);Linux 侧 `test.linux` 容器 900s 超时未取得数字(非用例失败), 真值以 CI 复跑为准。

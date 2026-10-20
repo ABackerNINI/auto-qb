@@ -8,6 +8,7 @@
 - test_single_instance_lock_release_idempotent_and_cm: 未持锁 release 幂等 / with 协议 / 重复 release
 - test_single_instance_lock_release_failure_paths: filelock 释放炸与 meta 删不掉都静默
 - test_single_instance_lock_meta_write_failure: meta 写失败不阻塞持锁
+- test_release_file_lock_none_and_failure_logger: 释放单点 —— None 锁静默返回; 释放炸且带 logger 时留 DEBUG(不外抛)
 """
 import os
 import re
@@ -127,3 +128,32 @@ def test_single_instance_lock_meta_write_failure(tmp_path, monkeypatch):
     lock = SingleInstanceLock(str(tmp_path / "state.json"))
     lock.meta_path = str(tmp_path / "no-such-dir" / "meta.json")
     lock._write_meta()  # OSError -> debug, 不外抛
+
+
+def test_release_file_lock_none_and_failure_logger():
+    """释放单点(issue 26-10-11-0240): None 锁直接返回; 释放炸且带 logger 时留 DEBUG 不外抛
+
+    单点收口的是「filelock 句柄清理随平台/版本行为不一」的差异, 两处易漏:
+    None(未持锁/已释放)不得 AttributeError; 释放失败带 logger 时留一条 debug 供排障
+    —— 释放失败不影响主流程正确性, 故绝不能上抛。
+    """
+    import logging
+
+    from auto_qb.infra.locking import release_file_lock
+
+    release_file_lock(None)  # 未持锁: 静默返回
+
+    class _Boom:
+        def release(self):
+            raise RuntimeError("句柄已坏")
+
+    logger = logging.getLogger("auto_qb.test.locking")
+    seen = []
+    handler = logging.Handler()
+    handler.emit = lambda rec: seen.append(rec)
+    logger.addHandler(handler)
+    try:
+        release_file_lock(_Boom(), logger=logger, what="测试锁")
+    finally:
+        logger.removeHandler(handler)
+    assert any(r.levelno == logging.DEBUG and "释放测试锁失败" in r.getMessage() for r in seen), seen

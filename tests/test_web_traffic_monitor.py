@@ -41,6 +41,11 @@
 - test_status_envelope_includes_claim_note (D7): 状态载荷带 claim_note(工具侧注记只读展示)
 - test_frontend_claim_wiring (D4/D5/D6): 「以本安装重登记」按钮恒显示(可见性由工具侧判定)
   + 二次确认 + 在途态 + 注记行渲染 detail 原话; tmLoad 回填 claim_note
+- test_put_config_tool_5xx_502 / test_autostart_tool_5xx_502 / test_shutdown_tool_404_502
+  (P0-T0.4): 工具侧 5xx/其余 4xx 一律 502 收口不猜语义(501 平台不支持仍原样透传)
+- test_write_endpoint_502_when_webui_module_missing (P0-T0.4): host 拿不到 webui 模块
+  -> 502(读不到工具状态/拉起通道, 不静默空转)
+- test_notify_rejects_non_dict_body (P0-T0.4): 事件体非 JSON 对象 -> 400(契约漂移响亮报错)
 """
 import os
 import re
@@ -391,6 +396,56 @@ def test_shutdown_unreachable_502(tm_env, monkeypatch):
     assert r.status_code == 502 and "工具未在运行" in r.json()["detail"]
 
 
+# ---- 写端点收口分支(P0-T0.4: 工具 5xx/4xx 的其余映射与前置闸缺模块) ----
+
+
+def test_put_config_tool_5xx_502(tm_env, monkeypatch):
+    """工具 5xx(非 4xx 校验错) -> 502 收口: 不猜工具语义, 前端只见「代理失败」"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (500, {"error": "internal"}))
+    r = client.put("/api/traffic/monitor/config", json={"config": {"a": 1}}, headers=_auth(mgr))
+    assert r.status_code == 502 and "工具返回 500" in r.json()["detail"]
+
+
+def test_autostart_tool_5xx_502(tm_env, monkeypatch):
+    """autostart 工具侧 5xx(命令失败) -> 502(501 平台不支持已单独透传, 见上)"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (500, {"error": "schtasks failed"}))
+    r = client.post("/api/traffic/monitor/autostart", json={"action": "install"}, headers=_auth(mgr))
+    assert r.status_code == 502 and "工具返回 500" in r.json()["detail"]
+
+
+def test_shutdown_tool_404_502(tm_env, monkeypatch):
+    """shutdown 非 200(工具自己的 4xx/5xx) -> 502 原样收口不猜"""
+    mgr, client, _ = tm_env
+    monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (404, {"error": "no such tool"}))
+    r = client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr))
+    assert r.status_code == 502 and "工具返回 404" in r.json()["detail"]
+
+
+def test_write_endpoint_502_when_webui_module_missing(tm_env):
+    """host 拿不到 webui 模块 -> 502(读不到工具状态/拉起通道, 不静默空转)"""
+    mgr, client, _ = tm_env
+    from types import SimpleNamespace
+
+    mgr.host = SimpleNamespace(get=lambda name: None)
+    r = client.put("/api/traffic/monitor/config", json={"config": {}}, headers=_auth(mgr))
+    assert r.status_code == 502 and "webui 模块未注册" in r.json()["detail"]
+
+
+def test_notify_rejects_non_dict_body(tm_env):
+    """事件体非 JSON 对象(JSON null) -> 400(契约漂移必须响亮, 不按缺省 0 静默记账)
+
+    FastAPI 的 `body: dict` 注解会把数组/标量体拦成 422; 能走到 handler 里的非 dict
+    只有 None(JSON null / 无体) —— 直达 `_parse_notify_event` 的第一道类型闸。
+    """
+    mgr, client, _ = tm_env
+    headers = dict(_auth(mgr))
+    headers["Content-Type"] = "application/json"
+    r = client.post(tool_client.NOTIFY_PATH, content=b"null", headers=headers)
+    assert r.status_code == 400 and "JSON 对象" in r.json()["detail"]
+
+
 # ---- 前端接线守阵(S4, 26-10-17-1737): 「关闭工具」按钮/确认框/停留次序 ----
 
 
@@ -634,11 +689,13 @@ def test_claim_ok_returns_tool_output(tm_env, monkeypatch):
     """退出码 0 -> 200 + 工具侧人话输出原样回传(auto-qb 转述不解释)"""
     mgr, client, _ = tm_env
     monkeypatch.setattr(
-        tm_routes, "_resolve_claim_target",
+        tm_routes,
+        "_resolve_claim_target",
         lambda conf: agent.ClaimTarget(path="/inst/claim.cmd", label="claim 启动器(claim.cmd)"),
     )
     monkeypatch.setattr(
-        tm_routes, "_run_claim",
+        tm_routes,
+        "_run_claim",
         lambda target: agent.ClaimResult(ok=True, exit_code=0, output="已重登记为正主: install=X data=Y"),
     )
     r = client.post("/api/traffic/monitor/claim", headers=_auth(mgr))
@@ -650,11 +707,13 @@ def test_claim_refused_409_with_tool_output(tm_env, monkeypatch):
     """被拒(工具在跑 / 数据归属异) -> 409 + 工具侧人话原因(写端点真报错)"""
     mgr, client, _ = tm_env
     monkeypatch.setattr(
-        tm_routes, "_resolve_claim_target",
+        tm_routes,
+        "_resolve_claim_target",
         lambda conf: agent.ClaimTarget(path="/inst/claim.cmd", label="claim 启动器(claim.cmd)"),
     )
     monkeypatch.setattr(
-        tm_routes, "_run_claim",
+        tm_routes,
+        "_run_claim",
         lambda target: agent.ClaimResult(ok=False, exit_code=1, output="工具正在运行, 请先停止再重登记"),
     )
     r = client.post("/api/traffic/monitor/claim", headers=_auth(mgr))
@@ -666,8 +725,13 @@ def test_status_envelope_includes_claim_note(tm_env, monkeypatch):
     mgr, client, _ = tm_env
     monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (200, {"ok": True}))
     monkeypatch.setattr(
-        agent, "read_deferred_note",
-        lambda: {"schema": 1, "reason": "relayed", "detail": "已让位: 注册正主是另一安装"},
+        agent,
+        "read_deferred_note",
+        lambda: {
+            "schema": 1,
+            "reason": "relayed",
+            "detail": "已让位: 注册正主是另一安装"
+        },
     )
     r = client.get("/api/traffic/monitor/status", headers=_auth(mgr))
     assert r.status_code == 200 and r.json()["claim_note"]["reason"] == "relayed"

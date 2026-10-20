@@ -10,13 +10,16 @@
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_bulk_skip_check_aggregated: bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3) —— 混合结果聚合回执分段计数(成功 / 同日去重 skip / 部分下载禁+执行失败 fail); 成功批 ok 回执且记录同日去重(skip_check_day 跨来源共享)
 - test_drain_web_commands_bulk_skip_check_gated: bulk 跳检 gate(D2=是·fail-closed) —— web.skip_check_menu 关时 drain 分派处拒单且零 qB 调用; 同 manager 实时改配置即放行(现读不按值持有)
+- test_api_keys_put_non_dict_body_guard: PUT 非字典体的 handler 级纵深守卫(422) —— FastAPI 的 `body: dict` 注解在路由层就拦下, 直取端点函数喂标量/列表钉住守卫不删
 - test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
 """
 import os
 import tempfile
 from pathlib import Path
 
-from webui_helpers import _make_grouped_manager, module_log
+import pytest
+
+from webui_helpers import _iter_api_routes, _make_grouped_manager, module_log
 
 # ---------------- 键盘快捷键 /api/keys(W6, 计划 26-09-28-0354 §4.4; 前端接线守阵在 test_web_shortcuts.py) ----------------
 
@@ -149,6 +152,31 @@ def test_api_keys_unknown_schema_version_fallback(web_env, caplog):
         r = client.get("/api/keys", headers=_keys_headers(mgr))
     assert r.json() == {"schema_version": 1, "template": "aqb-default", "overrides": {}}
     assert any("结构不符" in rec.message for rec in caplog.records)
+
+
+def test_api_keys_put_non_dict_body_guard(web_env):
+    """PUT 非字典体的 handler 级纵深守卫: 422, 且不落 _sanitize(不抛 AttributeError -> 500)
+
+    正常请求根本到不了这一行(FastAPI 的 `body: dict` 注解先拦 422), 故直取路由端点函数
+    喂标量/列表 —— 变异面: 守卫删掉 -> `_sanitize(["a"])` 走 `.get` 直接 AttributeError,
+    用户看到 500 而非 422 自解释。
+    """
+    from fastapi import HTTPException
+    from fastapi.routing import APIRoute
+
+    from auto_qb.webui import create_app
+
+    mgr, _client = web_env
+    app = create_app(mgr)
+    endpoint = next(
+        r.endpoint for r in _iter_api_routes(app.routes)
+        if isinstance(r, APIRoute) and r.path == "/api/keys" and "PUT" in r.methods
+    )
+    for bad in (["not", "a", "dict"], "text", 1, None):
+        with pytest.raises(HTTPException) as ei:
+            endpoint(bad)
+        assert ei.value.status_code == 422, f"{bad!r} 应 422"
+        assert "对象" in str(ei.value.detail)
 
 
 def test_drain_web_commands_recheck_rejected_while_checking():
