@@ -15,8 +15,9 @@
                   :sort-key="sortKey" :sort-dir="sortDir" :drag="colDrag"></aq-table>
         <div class="group-table" ref="groupTable" @scroll="syncHeadScroll($event, 'group')">
 
-          <!-- P1-2 行窗口: 上下占位撑住总高(滚动条长度与滚到底照旧), 中间只渲染视口附近的行 -->
-          <div v-if="groupPadTop" class="row-pad" :style="{ height: groupPadTop + 'px' }" aria-hidden="true"></div>
+          <!-- P1-2 行窗口: 上下占位撑住总高(滚动条长度与滚到底照旧), 中间只渲染视口附近的行。
+               占位件本身已收敛为 <aq-row-pad>(issue 26-10-20-2231; 此前四处手写同一撑高 div) -->
+          <aq-row-pad v-if="groupPadTop" :height="groupPadTop"></aq-row-pad>
           <template v-for="g in visibleGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
             <div class="group-row" data-table="group" :data-key="g.key" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, selected: groupSelState(g).selected, partial: groupSelState(g).partial, 'is-pending': isGroupPending(g), 'kb-cursor': isKbCursor('group', g.key) }]"
@@ -30,7 +31,7 @@
             <div v-if="expandedKey===g.key" class="detail">
               <aq-table ref="detailHead" table-id="detail" :cols="visibleDetailCols"
                         :sort-key="detailSortKey" :sort-dir="detailSortDir" :drag="colDrag"></aq-table>
-              <div v-if="memberPadTop(g.members)" class="row-pad" :style="{ height: memberPadTop(g.members) + 'px' }" aria-hidden="true"></div>
+              <aq-row-pad v-if="memberPadTop(g.members)" :height="memberPadTop(g.members)"></aq-row-pad>
               <div v-for="m in winMembers(g.members)" :key="m.hash"
                    class="member-row" data-table="detail" :data-hash="m.hash" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
                    :style="gridStyle('detail')"
@@ -39,18 +40,14 @@
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <aq-member-cells :cols="visibleDetailCols" :m="m"></aq-member-cells>
               </div>
-              <div v-if="memberPadBottom(g.members)" class="row-pad" :style="{ height: memberPadBottom(g.members) + 'px' }" aria-hidden="true"></div>
+              <aq-row-pad v-if="memberPadBottom(g.members)" :height="memberPadBottom(g.members)"></aq-row-pad>
             </div>
           </template>
-          <div v-if="groupPadBottom" class="row-pad" :style="{ height: groupPadBottom + 'px' }" aria-hidden="true"></div>
+          <aq-row-pad v-if="groupPadBottom" :height="groupPadBottom"></aq-row-pad>
 
-          <div v-if="!filteredGroups.length" class="empty">
-            <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
-            <span>
-              {{ searchQuery.trim() ? (searchNegativeOnly ? '只有排除词 — 请补一个要包含的词' : (searchBuilding ? '正在构建文件索引…' : '无匹配种子'))
-                 : (filtersActive ? `当前筛选下没有${l10nGroup}` : `暂无${l10nGroup}`) }}
-            </span>
-          </div>
+          <!-- 空态: 块 = <aq-empty> 单点(12 处手写三件套已收敛, issue 26-10-20-2231),
+               文案 = groupsEmptyText —— 原先内联的四层嵌套三元已挪进 filters.js 的 listEmptyText -->
+          <aq-empty v-if="!filteredGroups.length" :text="groupsEmptyText"></aq-empty>
           <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length" class="muted center">
             正在构建文件索引, 文件匹配结果稍后自动补齐…
           </p>

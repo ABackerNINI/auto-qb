@@ -17,7 +17,6 @@
 - [refactor] [前端单点已存在但被绕过 7 族(cfgBool / hubKey / directionKey / Bearer / KiB / 单位梯 / hrGroupTitle)](../26-10-20-2231-refactor-fe-single-point-bypass-dup.html) — 每族都有一个已存在的单点函数, 调用侧却内联重写一遍 —— 单点存在而无强制力
 - [refactor] [模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份](../26-10-20-2231-refactor-fe-tpl-cell-fragment-dup.html) — site-chip 3 份且 torrent 版缺 search-hit(与 torrents 行级同缺) = 种子页搜索不高亮; m-progress 4 份、m-dur / m-ratio / tag-chip / cat-chip 各 2-3 份
 - [refactor] [右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点)](../26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html) — ctx-menus.html 四支 + 次级面板各写一遍 ctx-item 渲染骨架; 正是模板注释自己警告的「四支人肉奇偶」残留
-- [refactor] [模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标)](../26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html) — row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 11 处, 其中 settings-detail 3 处连图标都没有
 - [refactor] [模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套](../26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html) — hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -75,6 +74,7 @@
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)
+- [refactor] [模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标, 入池时记 11)](../26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html) — row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 12 处(复验实测), 其中 settings-detail 3 处连图标都没有
 - [test] [三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)](../26-10-20-2231-test-fe-tpl-shell-parity-guard.html) — 三 shell 除 head 资源清单外 87.5% 逐字同; manifest 已被守阵钉死相等, sprite(67 symbol)与 login 段未钉 —— 加一条断言即可
 - [bug] [Origin 头端口段非法时 _origin_allowed 抛未捕获 ValueError(跨站闸应变 fail-closed)](../26-10-20-2230-bug-webui-origin-port-parse.html) — _origin_allowed 的 parts.port 在 try 之外, Origin 带非数字端口时 ValueError 穿透全局依赖(预期 fail-closed 403)
 - [refactor] [前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体](../26-10-20-2230-refactor-fe-combobox-family-dup.html) — combobox 全链路重复: 键盘导航 5 处、40ms 合帧收层 3 处、模板输入行+候选面板 5 处逐字同, 且第 6 个变体已分叉

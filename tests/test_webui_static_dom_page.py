@@ -1373,6 +1373,163 @@ def test_frontend_config_default_ladder_single_point():
         assert not res["failed"], ("schema→默认值梯行为漂移: " + "、".join(res["failed"]) + " —— 三处合并前各自保留的口径被改掉了(新条目可能过不了后端校验)")
 
 
+_NODE_LIST_EMPTY_PROBE = r"""
+const fs = require("fs");
+const vm = require("vm");
+const window = {};
+vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), { window, console, Set, Map, Math, JSON });
+const F = window.AQB_FILTERS;
+//  computed 里的三个 *EmptyText 会调 methods 里的单点, 与 app 里 methods+computed 合成同一实例等价
+function ctx(o) {
+  const c = Object.assign({
+    searchQuery: "", searchNegativeOnly: false, searchBuilding: false,
+    filtersActive: false, l10nGroup: "辅种",
+  }, o);
+  for (const k of Object.keys(F.methods)) c[k] = F.methods[k];
+  return c;
+}
+const NEG = "只有排除词 — 请补一个要包含的词";
+const BUILD = "正在构建文件索引…";
+// 三张列表 × 五种空态场景 = 15 项。三个名词位的分工: 「无匹配」走 hitNoun、面筛走 noun、全空走 noneText
+const EXPECT = {
+  plain:    { groupsEmptyText: "暂无辅种", torrentsEmptyText: "暂无种子", showsEmptyText: "暂无剧集可展示" },
+  filter:   { groupsEmptyText: "当前筛选下没有辅种", torrentsEmptyText: "当前筛选下没有种子", showsEmptyText: "当前筛选下没有剧集" },
+  negative: { groupsEmptyText: NEG, torrentsEmptyText: NEG, showsEmptyText: NEG },
+  building: { groupsEmptyText: BUILD, torrentsEmptyText: BUILD, showsEmptyText: BUILD },
+  hit:      { groupsEmptyText: "无匹配种子", torrentsEmptyText: "无匹配种子", showsEmptyText: "无匹配剧集" },
+};
+const STATES = {
+  plain:    {},
+  filter:   { filtersActive: true },
+  negative: { searchQuery: "-abc", searchNegativeOnly: true },
+  building: { searchQuery: "abc", searchBuilding: true },
+  hit:      { searchQuery: "abc" },
+};
+const failed = [];
+let total = 0;
+for (const [scene, state] of Object.entries(STATES)) {
+  const c = ctx(state);
+  for (const [fn, want] of Object.entries(EXPECT[scene])) {
+    total++;
+    const got = F.computed[fn].call(c);
+    if (got !== want) failed.push(`${scene}/${fn} = ${JSON.stringify(got)}(应为 ${JSON.stringify(want)})`);
+  }
+}
+console.log(JSON.stringify({ total: total, failed: failed }));
+"""
+
+
+def test_frontend_list_row_pad_and_empty_single_point():
+    """列表外壳两件套单点守阵(issue 26-10-20-2231, 台账 R23-A-05 / R23-B-06)
+
+    两件事此前各抄多遍, 且**互相独立地漂**:
+
+    1. **行容器三明治**(row-pad 上下占位撑高)四处手写 —— 它是 P1-2 行窗口化契约(占位撑住总高,
+       滚动条长度与「滚到底」才与全量渲染一致), 一处改了 aria-hidden / px 口径另三处不同步**零报错**,
+       只表现为两个视图的滚动几何悄悄分叉。现挂同一组件 `<aq-row-pad>`(上下两个实例 —— 占位必须
+       夹住中间的 v-for 行, 单个实例的渲染结果只能是连续的一段); 行本身仍由调用方 v-for 内联,
+       「不引入逐行组件实例」的性能纪律不动(计划 26-10-11-1722 §06 风险 4)。
+    2. **空态块** `.empty` 12 处手写同一三件套, 其中 4 处(设置页 HR 表三态 + 变体表兜底)**连 svg
+       都没有**。现挂同一组件 `<aq-empty>`; 组件必须保留 `<div class="empty">` + `svg.ico` + `span`
+       的结构 —— 三皮肤 CSS 按 `.empty` / `.empty .ico` 选择, 包一层包裹或改类名会让整条空态样式
+       静默失效。图标语义口径(inbox 空 / hourglass 加载中 / warn 出错)就此单点在分片头注里。
+
+    本守阵钉两件事:
+      · **形态**: 除单点分片 list-shell.html 外, 任何模板分片不得再手写这两个块; 两个组件各定义
+        一处且 template 指向自己的 x-template; app.js 各注册一处。
+      · **活性探针**: 调用点计数下限(aq-row-pad ≥ 8 · aq-empty ≥ 12)—— 否则「把调用点全删光」
+        会让上面所有断言恒真进行检测力为零。计数**必须先剥掉 HTML 注释**: 各分片头注与行内注释里
+        大量出现 `<aq-row-pad>` / `<aq-empty>` 字样(解释收敛缘由), 直接 count 会让下限被注释撑满,
+        删掉真实调用点照样达标 —— 红验突变 C 就是这么绿过去的。
+      · **行为**(有 node 时真跑): 三张列表 × 五种空态场景共 15 项, 把收敛时刻意保留的分歧钉死 ——
+        辅种页搜索分支说「种子」(服务端匹配裁决落在成员不在组)而面筛分支说 l10nGroup; 追剧页全空
+        是「暂无剧集可展示」; 以及**种子页补上的「正在构建文件索引…」分支**(收敛前它缺这一支,
+        索引构建期把中间态说成了「无匹配种子」)。
+
+    无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl_dir = os.path.join(shared, "tpl")
+    single = "list-shell.html"
+
+    # 注释剥离: 头注里就写着 `<aq-row-pad>` / `<aq-empty>`(解释收敛缘由), 不剥会让活性探针的下限
+    # 被注释字样撑满 —— 删掉真实调用点仍然达标, 探针失效。
+    def _live(html):
+        return re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+    problems = []
+    for f in sorted(os.listdir(tpl_dir)):
+        if not f.endswith(".html") or f == single:
+            continue
+        text = open(os.path.join(tpl_dir, f), encoding="utf-8").read()
+        n_pad = text.count('class="row-pad"')
+        if n_pad:
+            problems.append(f"tpl/{f} 手写了 {n_pad} 处 .row-pad 占位 —— 必须挂 <aq-row-pad>(行窗口化三明治四处同源自此)")
+        n_empty = len(re.findall(r'<div\b[^>]*\bclass="empty"', text))
+        if n_empty:
+            problems.append(f"tpl/{f} 手写了 {n_empty} 处空态块 —— 必须挂 <aq-empty>(12 处三件套只剩单点一份)")
+    # 手写回潮先行报出(否则会被下面活性探针的「计数掉了」抢先, 症状说不清病因)
+    assert not problems, "列表外壳两件套回潮: " + "; ".join(problems)
+    # 单点分片自身: 两个 x-template 各一处
+    single_text = open(os.path.join(tpl_dir, single), encoding="utf-8").read()
+    for tid in ("tpl-aq-row-pad", "tpl-aq-empty"):
+        hits = re.findall(r'<script type="text/x-template" id="%s">' % tid, single_text)
+        assert len(hits) == 1, f"{single} 的 #{tid} x-template 出现 {len(hits)} 处(应为 1)"
+    # 组件定义各一处, 且 template 指回自己的 x-template
+    tbl = open(os.path.join(shared, "table.js"), encoding="utf-8").read()
+    bundle = _app_bundle_text()
+    for comp, tid in (("AQ_ROW_PAD_COMPONENT", "tpl-aq-row-pad"), ("AQ_EMPTY_COMPONENT", "tpl-aq-empty")):
+        assert len(re.findall(rf"^window\.{comp} = \{{", bundle, re.M)) == 1, \
+            f"window.{comp} 定义不是恰好一处 —— 列表外壳两件套被拆回多份"
+        m = re.search(rf"window\.{comp} = \{{(.*?)\n\}};", tbl, re.S)
+        assert m, f"table.js 找不到 window.{comp}(改名或挪走了? 同步本守阵)"
+        assert f'template: "#{tid}"' in m.group(1), f"window.{comp} 的 template 未指向 #{tid}"
+    # app.js 各注册一处
+    app = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    for tag, comp in (("aq-row-pad", "AQ_ROW_PAD_COMPONENT"), ("aq-empty", "AQ_EMPTY_COMPONENT")):
+        assert len(re.findall(rf'^app\.component\("{tag}"', app, re.M)) == 1, \
+            f"app.js 未注册 <{tag}> 或注册多处 —— 注册面是模板无线索的唯一接线点"
+    # 活性探针: 调用点还在(删光调用点 = 上面所有断言恒真)。计数排除单点分片自身 ——
+    # 它头注里也有若干次 `<aq-row-pad>`/`<aq-empty>` 字样, 算进来会让下限形同虚设。
+    n_pad_call = 0
+    n_empty_call = 0
+    for f in sorted(os.listdir(tpl_dir)):
+        if not f.endswith(".html") or f == single:
+            continue
+        text = _live(open(os.path.join(tpl_dir, f), encoding="utf-8").read())
+        n_pad_call += len(re.findall(r"<aq-row-pad\b", text))
+        n_empty_call += len(re.findall(r"<aq-empty\b", text))
+    # 四个同形体: groups 组行 / groups 明细成员 / torrents 种子行 / shows 集明细成员, 各上下一个
+    assert n_pad_call >= 8, \
+        f"列表外的 <aq-row-pad> 调用点只剩 {n_pad_call} 处(下限 8) —— 调用点被删会让本守阵恒真"
+    assert n_empty_call >= 12, \
+        f"列表外的 <aq-empty> 调用点只剩 {n_empty_call} 处(下限 12 = 收敛前的 12 处空态) —— 调用点被删会让本守阵恒真"
+    # 空态文案单点必须在 methods(Vue 3 computed 是无参 getter, 带参会 TypeError)
+    filt = open(os.path.join(shared, "filters.js"), encoding="utf-8").read()
+    methods_seg = filt.split("  methods: {", 1)[1].split("\n  computed: {", 1)[0]
+    assert "    listEmptyText(hitNoun, noun, noneText) {" in methods_seg, \
+        "filters.js::listEmptyText 不在 methods 段 —— 带参 helper 落进 computed 会 TypeError(整块空态白屏)"
+    # 图标选择的语义口径文档必须还在单点分片头注里(此前就是没有文档才各处各写)
+    for sym in ("#i-inbox", "#i-hourglass", "#i-warn"):
+        assert sym in single_text, f"{single} 头注丢了 {sym} 的语义口径 —— 图标选择又变成「各处写了什么」"
+
+    # 行为电池: 三张列表 × 五种空态场景
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_LIST_EMPTY_PROBE, os.path.join(shared, "filters.js")],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"列表空态文案 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] == 15, f"语义电池只有 {res['total']} 项(应为 15 —— 三视图 × 五场景; 被删减? 同步本守阵)"
+        assert not res["failed"], (
+            "列表空态文案行为漂移: " + "、".join(res["failed"]) + " —— 收敛时刻意保留的分歧(辅种页搜索说「种子」/面筛说 l10nGroup、追剧页「暂无剧集可展示」、"
+            "种子页补回「正在构建文件索引…」)被改掉了"
+        )
+
+
 def test_api_group_commands_enqueue(web_env):
     """pause/resume/reannounce 命令入队: key 解码回原 tuple, 主循环侧执行"""
     mgr, client = web_env

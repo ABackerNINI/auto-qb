@@ -375,7 +375,7 @@
                      v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>
         </div>
       </div>
-      <div v-else class="empty"><span>暂无数据</span></div>
+      <aq-empty v-else text="暂无数据"></aq-empty>
     </teleport>
   </template>
 </script>

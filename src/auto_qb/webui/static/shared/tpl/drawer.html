@@ -99,18 +99,9 @@
                  只门了「有图」一态(`!qbCurPoints.length`), 空数据集的空态文案仍在每个轮询周期被
                  「正在加载流量数据…」顶掉一帧。在途互斥语义仍在 qbCurLoading 本体上(轮询 tick 跳过
                  判据不变) -->
-            <div v-if="qbCurPending" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
-              <span>正在加载流量数据…</span>
-            </div>
-            <div v-else-if="qbCurError" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-              <span>{{ qbCurError }}</span>
-            </div>
-            <div v-else-if="!qbCurPoints.length" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
-              <span>{{ qbCurEmptyText }}</span>
-            </div>
+            <aq-empty v-if="qbCurPending" icon="#i-hourglass" text="正在加载流量数据…"></aq-empty>
+            <aq-empty v-else-if="qbCurError" icon="#i-warn" :text="qbCurError"></aq-empty>
+            <aq-empty v-else-if="!qbCurPoints.length" :text="qbCurEmptyText"></aq-empty>
             <!-- S1(计划 26-10-06-0838): template v-else 转 div(唯一非加挂改动)带布局类
                  dt-traffic-main —— 核心注入的规则使其与原 fragment 直挂 .drawer-body.is-traffic
                  的 flex 纵列几何等价(FX-29 遮罩对 wrapper 生效, display:contents 会废掉 opacity);
@@ -197,14 +188,9 @@
             <!-- 首次进入的空态只归常规页签: 其余页签各有自己的行内加载态(在 classic 插件内);
                  若让这条 general loading 空态压到 Tracker/用户/内容页签之前, 每次切换就是
                  「整幅表格 -> 一行正在加载详情…」 -->
-            <div v-if="drawer.tab === 'general' && drawer.loading && !drawer.detail" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
-              <span>正在加载详情…</span>
-            </div>
-            <div v-else-if="drawer.error" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-              <span>{{ drawer.error }}</span>
-            </div>
+            <aq-empty v-if="drawer.tab === 'general' && drawer.loading && !drawer.detail"
+                      icon="#i-hourglass" text="正在加载详情…"></aq-empty>
+            <aq-empty v-else-if="drawer.error" icon="#i-warn" :text="drawer.error"></aq-empty>
             <!-- R2 S2·R3: 合并双列(drawerMerge 开关 + 宽度门, dtSplitOn 单点判据) —— 列组由
                  **当前页签所属的对**(dtPair)决定, 两列各由对应页签的变体宿主渲染(显隐走
                  dtHostOn, 对内两列同显); 列序按对固定。

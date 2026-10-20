@@ -9,6 +9,27 @@
  */
 window.AQB_FILTERS = {
   methods: {
+    /* -------------------------------- 列表空态文案单点(收敛 issue 26-10-20-2231 / R23-A-05) --------------------------------
+     * 三张主列表(辅种 / 种子 / 追剧)的空态此前各写一份**三或四层嵌套三元**, 且分支集合已经漂移:
+     * 种子页缺「正在构建文件索引…」一支。三者共用同一套服务端搜索(searchHits / searchBuilding
+     * 是 **全局** 搜索态), 所以索引构建期在种子页会显示「无匹配种子」—— 把中间态说成终态。
+     * 现在**先对齐分支集合, 再参数化**, 三个名词位各视图给:
+     *   hitNoun   搜索分支的名词(「无匹配<X>」)。刻意保留辅种页的分歧: 服务端匹配裁决落在
+     *             **成员种子**上, 不落在组上 —— 故这里仍是「种子」而不是「辅种」。
+     *   noun      面筛分支的名词(「当前筛选下没有<X>」): 该视图行的自然单位(辅种页 = l10nGroup)。
+     *   noneText  既无搜索也无面筛时的空态(「暂无…」): 三视图字面各不同(追剧页是「暂无剧集可展示」),
+     *             整体传入而不是拼字符串 —— 拼会让「可展示」这类口径在合并时静默丢掉。
+     * !位置不能挪: 这是**带参 method**, 不能落进 computed —— Vue 3 的 computed 是无参 getter,
+     *   带参调用会 TypeError(同源事故见守阵 test_frontend_computed_not_invoked_as_function)。
+     */
+    listEmptyText(hitNoun, noun, noneText) {
+      if ((this.searchQuery || "").trim()) {
+        if (this.searchNegativeOnly) return "只有排除词 — 请补一个要包含的词";
+        if (this.searchBuilding) return "正在构建文件索引…";
+        return `无匹配${hitNoun}`;
+      }
+      return this.filtersActive ? `当前筛选下没有${noun}` : noneText;
+    },
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
     /* 一行的候选值(标签/分类/站点/路径) —— 组行取**全体成员值**, 种子行取自身。
      * 组内同一值只算一次(计数口径见 _facetOptions: 组视图 = 含该值的**组数**, 不是成员总数)。
@@ -261,6 +282,19 @@ window.AQB_FILTERS = {
         return dir * r;
       });
       return out;
+    },
+    /* 三张主列表的空态文案 —— 每张表一行, 只负责给 listEmptyText 递自己的三个名词
+     * (含**刻意保留**的分歧: 辅种页的搜索分支说「种子」、面筛分支说 l10nGroup,
+     *  追剧页的空态是「暂无剧集可展示」)。给 <aq-empty> 的 :text —— 空态块 12 处已收敛为
+     *  同一份组件(issue 26-10-20-2231), 文案共计一处: 改口径改本单点即可。 */
+    groupsEmptyText() {
+      return this.listEmptyText("种子", this.l10nGroup, `暂无${this.l10nGroup}`);
+    },
+    torrentsEmptyText() {
+      return this.listEmptyText("种子", "种子", "暂无种子");
+    },
+    showsEmptyText() {
+      return this.listEmptyText("剧集", "剧集", "暂无剧集可展示");
     },
   },
 };

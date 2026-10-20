@@ -7,12 +7,12 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/testing/baselines/26-10-21-0426-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标)">
-<meta name="issue-summary" content="row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 11 处, 其中 settings-detail 3 处连图标都没有">
-<title>模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标) · refactor · 计划外问题（便签）</title>
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标, 入池时记 11)">
+<meta name="issue-summary" content="row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 12 处(复验实测), 其中 settings-detail 3 处连图标都没有">
+<title>模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标) · refactor · 计划外问题（便签）</title>
 <style>
   :root {
     --bg: #10151a;
@@ -63,13 +63,13 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（便签）· refactor</div>
-    <h1>模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标)</h1>
-    <p class="lede">row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 11 处, 其中 settings-detail 3 处连图标都没有</p>
+    <h1>模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标)</h1>
+    <p class="lede">row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 12 处(入池记 11, 复验实测 12), 其中 settings-detail 3 处连图标都没有</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-list-row-empty-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -79,7 +79,7 @@
     <p><b>现象</b>: 表格列表的两件事各抄多遍。</p>
     <ul>
       <li><b>窗口化行容器三明治</b> 4 份: 上 <code>row-pad</code> 占位 + <code>v-for</code> 行 + 下 <code>row-pad</code> 占位(groups 组行 / groups 明细 / torrents 种子行 / shows 集明细)。占位撑总高是行窗口化契约, 四处手写意味着一处改了写法另三处不同步不会报错。</li>
-      <li><b>空态 <code>.empty</code></b> 11 处: 图标 + 文案。其中 <b>3 处(设置页 HR 三张表)连 <code>&lt;svg&gt;</code> 都不写</b>, 视觉上与其余 8 处不一致; 图标的语义分工(加载中 hourglass / 错误 warn / 空 inbox)也无文档。</li>
+      <li><b>空态 <code>.empty</code></b> 11 处<span class="hint">(认领复验实测 <b>12</b> 处、无图标 <b>4</b> 处, 见 §04「入池计数更正」)</span>: 图标 + 文案。其中 <b>4 处连 <code>&lt;svg&gt;</code> 都不写</b>(设置页 HR 三张表 + 变体表 teleport 兜底), 视觉上与其余 8 处不一致; 图标的语义分工(加载中 hourglass / 错误 warn / 空 inbox)也无文档。</li>
       <li><b>空态文案</b>: groups/torrents/shows 三处是四层嵌套三元, 且<b>分支集合已经不同</b>(torrents 少一个"正在构建索引"分支)。</li>
     </ul>
   </section>
@@ -99,9 +99,88 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复与验证<span class="opt">（2026-10-21 认领并修）</span></h2>
+    <p><b>复验</b>(认领后第一件事, 2026-10-21 04:20): 现象仍在 —— <code>class="row-pad"</code> 四份
+      (groups 4 处 / torrents 2 处 / shows 2 处 = 四处三明治各上下一个)、<code>class="empty"</code> 12 处
+      与入池记录一致; 三处处在 <code>tpl/settings-detail.html</code> 的空态确实<b>只有 <code>&lt;span&gt;</code>
+      没有 <code>&lt;svg&gt;</code></b>; 测试侧零守阵(grep <code>row-pad</code> / <code>class="empty"</code> 实证)。</p>
+
+    <p><b>入池计数更正</b>: 入池记录写「<code>.empty</code> 11 处、其中 3 处无图标」, 实测
+      <b>12 处、其中 4 处无图标</b> —— drawer 5(流量三态 + 详情加载/错误) / groups 1 / torrents 1 /
+      shows 1 / settings-detail 3 / xtpl 1。两处偏差: ①总数差 1, 入池时把 drawer 的流量三态并作一处数;
+      ②无图标的除设置页 HR 三态外还有 <b>xtpl 的变体表 teleport 兜底</b>(<code>&lt;div v-else
+      class="empty"&gt;&lt;span&gt;暂无数据&lt;/span&gt;&lt;/div&gt;</code>), 入池时漏计。
+      守阵的活性下限按 <b>12</b> 定。</p>
+
+    <p><b>先画清边界再动</b>(§03 点名的前置动作): 四处三明治与十二处空态看似同构, 实则各留了<b>刻意的分歧</b>,
+      收敛时一律保留 —— ①种子页搜索分支说「无匹配种子」而辅种页面筛分支说 <code>l10nGroup</code>
+      (服务端匹配裁决落在成员不在组); ②追剧页全空是「暂无剧集<b>可展示</b>」; ③drawer 三态的顺序是
+      <b>pending &gt; error &gt; empty</b>(图标 hourglass / warn / inbox 各自对应), 不能并成一个「空」;
+      ④无图标的那 4 处收敛时按语义补, 不是一律 inbox: 设置页 HR 的错误/读档失败补 warn
+      (<code>d.error</code> / <code>d.readError</code>)、HR 空态补 inbox、xtpl 兜底补 inbox。</p>
+
+    <p><b>实际修法</b>: 两件套各收敛成一份, 与 <code>aq-table</code> / <code>combo-input</code> 同范式
+      (x-template 注入 <code>body</code>、组件定义在 <code>shared/table.js</code>、<code>app.js</code> 末尾注册) ——</p>
+    <ul>
+      <li><b>新增单点分片</b> <code>tpl/list-shell.html</code>: 两个 <code>x-template</code>
+        (<code>#tpl-aq-row-pad</code> / <code>#tpl-aq-empty</code>) + 头注。三份 <code>index.html</code> 的
+        <code>tpl-manifest</code> 各挂一行 <code>{"src": "/shared/tpl/list-shell.html", "into": "body"}</code>
+        (在 <code>#app</code> 之外, 不当根模板编译, 不多包 DOM 层)。</li>
+      <li><b><code>&lt;aq-row-pad :height&gt;</code></b>: 落地为<b>同一组件挂两次</b> —— 上占位在 <code>v-for</code>
+        行之前、下占位在行之后(<code>&lt;aq-row-pad v-if="padTop" :height="padTop"&gt;</code> …rows…
+        <code>&lt;aq-row-pad v-if="padBottom" :height="padBottom"&gt;</code>)。§03 建议的 <code>:top :bottom</code>
+        单实例形状<b>做不到</b>: 占位必须<b>夹住</b>中间的行, 而单个组件实例的渲染结果只能出现在它自己的位置上
+        (多根片段也只是连续一段)。两者语义完全一致(同 class / 同 <code>aria-hidden</code> / 同 style),
+        差别只在调用点位置, 故只留一个 <code>height</code> prop。</li>
+      <li><b>行本身不收敛</b>: 仍由调用方 <code>v-for</code> 内联渲染 —— 每列表<b>两个占位实例</b>(不是每行),
+        「不引入逐行组件实例」的性能纪律照旧(计划 26-10-11-1722 §06 风险 4)。</li>
+      <li><b><code>&lt;aq-empty :icon :text&gt;</code></b>: 根元素仍是 <code>div.empty</code>、内部仍是
+        <code>svg.ico</code> + <code>span</code> —— 三皮肤 CSS 直接按 <code>.empty</code> 与 <code>.empty .ico</code>
+        选择, 改类名或包一层会让整条空态样式静默失效。组件注释里把图标语义口径单点写死:
+        <code>#i-hourglass</code> 加载中 / <code>#i-warn</code> 出错 / <code>#i-inbox</code> 空(缺省值)。</li>
+      <li><b>空态文案</b>: 四层嵌套三元收敛为一份带参 method <code>listEmptyText(hitNoun, noun, noneText)</code>
+        (<code>filters.js::methods</code>), 三个视图各一个无参 computed 薄壳
+        (<code>groupsEmptyText</code> / <code>torrentsEmptyText</code> / <code>showsEmptyText</code>)。
+        三分支集合先对齐 —— 种子页<b>补回</b>此前缺失的「正在构建文件索引…」分支, 否则索引构建期会把中间态
+        说成「无匹配种子」。</li>
+    </ul>
+
+    <p><b>守阵</b>: <code>tests/test_webui_static_dom_page.py::test_frontend_list_row_pad_and_empty_single_point</code> ——
+      形态查(除单点分片外任何模板不得再手写 <code>class="row-pad"</code> 或 <code>div.empty</code>;
+      两个 x-template 各一处; 组件定义各一处且 <code>template</code> 指回自己的 x-template; <code>app.js</code>
+      注册各一处) + <b>活性探针</b>(调用点计数下限 <code>aq-row-pad ≥ 8</code> / <code>aq-empty ≥ 12</code>,
+      否则删光调用点会让前面所有断言恒真) + 带参单点必须在 <code>methods</code> 段(落进 <code>computed</code>
+      会 TypeError ⇒ 空态整块白屏) + 图标语义口径三段文档必须在分片头注里; 有 node 时真跑
+      <b>15 项语义电池</b>(三列表 × 五场景), 把上面四条分歧逐条钉死。</p>
+
+    <p><b>验证(红验四类突变 + 测试数字)</b>: 四类突变全部判红, 均以精确反向编辑还原, 还原后逐字节比对原文件 ——
+      ①某张列表的空态换回手写 <code>&lt;div class="empty"&gt;</code> ⇒ 红, 报「列表外壳两件套回潮:
+      tpl/torrents.html 手写了 1 处空态块」; ②抹掉追剧页「暂无剧集可展示」的分歧 ⇒ 红, 报「列表空态文案
+      行为漂移: plain/showsEmptyText = "暂无剧集"(应为 "暂无剧集可展示")」; ③删掉种子页一个
+      <code>&lt;aq-row-pad&gt;</code> 调用点 ⇒ 红, 报「列表外的 &lt;aq-row-pad&gt; 调用点只剩 7 处(下限 8)」;
+      ④把 <code>listEmptyText</code> 从 <code>methods</code> 挪进 <code>computed</code> ⇒ 红。
+      <b>突变 ③ 第一轮曾误判为绿</b> —— 活性探针用原始 <code>count</code> 计调用点, 而各分片头注里就写着
+      <code>&lt;aq-row-pad&gt;</code> 字样(解释收敛缘由), 注释把下限撑满; 已改为<b>计数前剥离 HTML 注释</b>,
+      剥后实测 row-pad = 8 / empty = 12, 下限与实际值相等, 删任一处即红。测试数字: 新守阵单跑 1 passed;
+      前端静态三件套 103 passed; <code>commands run test.full</code>
+      <b>3968 passed / 10 skipped / TOTAL 99%</b>(20467 语句 / 7012 分支, 各 93 单位缺口; 覆盖率闸照过) ——
+      数字誊至基线切片 <code>memory-bank/testing/baselines/26-10-21-0426-dup-code-audit.md</code>。</p>
+
+    <p><b>与建议(§03)的口径对齐</b>: ①③照建议落地; ② 建议的 <code>:top :bottom</code> 单实例形改成了
+      「同组件挂两次」, 理由是不变量(占位必须夹住行)决定的, 不是省事 —— 组件只有一个, 调用点位置不同,
+      收敛目标(一处改、两视图同步)完全达成。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 04:20 — 用户指派认领，状态 <strong>In Progress</strong>；复验现象仍在：
+        <code>class="row-pad"</code> 4 份（groups / torrents / shows 各上下）、<code>class="empty"</code>
+        <b>12</b> 处（入池记 11，差 1 见 §04 更正）、settings-detail 3 处确实无 <code>&lt;svg&gt;</code>，
+        测试侧零守阵</li>
+      <li>2026-10-21 04:26 — 修复并验证（两件套单点 / 四条分歧边界 / 红验四类突变含活性探针自身修正 /
+        测试数字见 §04），状态 <strong>Done</strong>；文件头 <code>doc-refs</code> 已双向补链基线切片</li>
     </ul>
   </section>
 

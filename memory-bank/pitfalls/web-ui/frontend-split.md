@@ -34,6 +34,15 @@
 - **守阵**: `test_frontend_config_default_ladder_single_point`(issue 26-10-20-2231, 2026-10-21 认领并修)—— 形态六查(三单点各定义一处 / 旧 `cfgPluginDefaultSpec|Section` 零残留 / 插件侧零手搓字段循环 / `options[0]` 全仓一处 / 两入口体内无循环只转调 / 恒久活性探针钉调用点) + 有 node 时真跑 11 项语义电池(把上述分歧逐条钉死)。合并当轮做了**行为等价性实证**: 真实 `schema_payload()` 下 25 个插件 spec 初值 + 18 个 object 段初值, 改动前后两份 JSON `diff` 为空。
 - **复发**: 0
 
+### 列表外壳两件套单点(`aq-row-pad` / `aq-empty`)—— 几何契约与三皮肤 CSS 契约都在结构里
+
+- **触发**: 给列表加行窗口化占位(`row-pad`)、加/改空态(`.empty`)、或者新开一个列表视图(groups / torrents / shows 之外)。
+- **判别**: 这两块此前各抄多遍且**互相独立地漂** —— ①`row-pad` 是 P1-2 **行窗口化契约**: 上下占位撑住滚动容器总高, 滚到底与滚动条长度才与全量渲染一致; 四处手写意味着改一处 `aria-hidden` 或 px 写法另三处不同步**零报错**, 症状是两个视图的滚动几何悄悄分叉。②`.empty` 的结构不是"随便一个 div": 三皮肤 `components.css` 直接按 `.empty`(flex 纵列居中)与 `.empty .ico` 选择 —— 包一层 wrapper 或改类名就**整条空态样式静默失效**(页面不报错, 只是空态变成左上角裸文字)。③空态图标的语义分工(加载中 / 出错 / 空)长期无文档, 新增的人只能临摹邻近处 ⇒ 设置页 HR 三张表的空态连 `<svg>` 都没写。
+- **处置**: 单点分片 `tpl/list-shell.html` 放两个 `x-template`, 组件定义在 `shared/table.js`(`AQ_ROW_PAD_COMPONENT` / `AQ_EMPTY_COMPONENT`)、`app.js` 末尾 `app.component(...)` 注册、三份 shell 的 `tpl-manifest` 以 `{"into": "body"}` 挂载(在 `#app` 外, 不当根模板编译)。三条硬约束: ①`<aq-row-pad :height>` **挂两次**(上占位在 `v-for` 前、下占位在后) —— 不要试图做成"一个实例渲上下两块": 占位必须**夹住**中间的行, 而组件实例的渲染结果只能出现在自己位置上(多根片段也只是连续一段); ②**行本身不收敛**, 仍由调用方 `v-for` 内联渲染 —— 每列表两个占位实例(不是每行), 守住"窗口化热路径不引入逐行组件实例"的纪律; ③`<aq-empty>` 根元素必须仍是 `div.empty`、内部必须仍是 `svg.ico` + `span`, 并把图标语义(`#i-hourglass` 加载中 / `#i-warn` 出错 / `#i-inbox` 空·缺省)写进分片头注。
+- **守阵**: `test_frontend_list_row_pad_and_empty_single_point`(issue 26-10-20-2231, 2026-10-21 认领并修)—— 形态查(除单点分片外任何模板不得手写 `class="row-pad"` / `div.empty`; 组件定义与注册各一处; `template` 指回自己的 x-template) + 活性探针(调用点下限 8 / 12) + `listEmptyText` 必须在 `methods` 段(落进 `computed` 会 TypeError ⇒ 空态整块白屏) + 图标口径三段文档在头注里 + 有 node 时 15 项语义电池(三列表 × 五场景)。
+- **⚠ 活性探针的陷阱**: 计数**必须先剥掉 HTML 注释** —— 各分片头注里就写着 `<aq-row-pad>` / `<aq-empty>` 字样(解释收敛缘由), 直接 `count` 会让下限被注释撑满, 删掉真实调用点照样达标。本轮红验突变 ③ 就是这么**绿过去的**(删了种子页一个占位仍 8 处), 剥注释后实测 8 / 12 恰好等于下限, 删任一处即红。
+- **复发**: 0
+
 ### data/computed/watch/生命周期不许进 app.mixin —— 根选项专属
 
 - **触发**: 给根组件加状态字段 / 侦听器 / 生命周期钩子时。

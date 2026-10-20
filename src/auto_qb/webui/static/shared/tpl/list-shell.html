@@ -1,0 +1,48 @@
+<!-- 列表外壳两件套单点: <aq-row-pad> 行窗口占位 + <aq-empty> 空态(收敛 issue 26-10-20-2231,
+     台账 R23-A-05 / R23-B-06)。x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包
+     DOM 层), 组件定义在 shared/table.js, 由 app.js 末尾 app.component(...) 注册 ——
+     与 aq-table / combo-input 同范式。
+
+     ========================= <aq-row-pad>: 行窗口化占位 =========================
+     收敛前四处手写同一行(<div v-if="X" class="row-pad" :style="{ height: X + 'px' }"
+     aria-hidden="true"></div>): groups 组行上下 / groups 明细成员上下 / torrents 种子行
+     上下 / shows 集明细成员上下。占位是 P1-2 **行窗口化契约** —— 它撑住滚动容器的总高,
+     让滚动条长度与「滚到底」行为与全量渲染一致; 四处手写意味着一处改了 aria-hidden 或 px
+     写法、另三处不同步**不会报错**, 只是两个视图的滚动几何悄悄分叉。
+
+     !为什么是两个实例而不是「一个组件渲上下两个占位」: 两个占位必须**夹住**中间的 v-for 行
+     —— 上占位在行之前、下占位在行之后, 而单个组件实例的渲染结果只能出现在它自己的挂载位
+     置上(Vue 多根片段也是**连续**的一段)。故建议里的 `<aq-row-pad :top :bottom>` 落地为
+     同一组件挂两次(`v-if` 留在调用点, 高度为 0 时连实例都不建, 与收敛前一致)。
+
+     !性能纪律不能越界(计划 26-10-11-1722 §06 风险 4): 行本身**仍由调用方 v-for 内联** ——
+     本组件每份列表只实例化两个(不是每行一个), 3000 行窗口化的 patch 开销不变。
+
+     ============================ <aq-empty>: 空态块 ============================
+     收敛前 12 处手写同一个三件套(<div class="empty"> + svg + span):
+       groups 列表 / torrents 列表 / shows 列表(各带一颗 `#i-inbox`);
+       drawer 流量图三态(加载中 / 错误 / 空)与 general 详情两态(加载中 / 错误);
+       settings-detail HR 明细表三态(错误 / 读档失败 / 空)—— **这三处连 svg 都没写**;
+       xtpl 变体表 teleport 兜底空态(无图标)。
+
+     ! `<div class="empty">` 结构与 class 名必须原样保留: 三皮肤 CSS 直接按 `.empty` 与
+       `.empty .ico` 选择(flex 纵列居中 + gap 10px + padding 56px 20px + 28px 图标),
+       组件多包一层包裹就会整条失效;`svg.ico` + `span` 的双子结构也是样式的命中面。
+
+     图标语义口径(收敛前只存在于「各处写了什么」, 无文档; 现单点在此):
+       #i-inbox      列表/集合**本身是空的**(查无结果、暂无数据) —— 也是 props 缺省值
+       #i-hourglass  **正在加载**(数据集尚未到手, 空只是中间态)
+       #i-warn       **出错**(错误文案经 text 传入)
+     三者互不替代: 加载中给 inbox 会让「转圈中」看起来像「确实没有」; 错误给 inbox 会吞掉
+     故障信号。文案由调用方给 —— 列表三件套的三/四层嵌套三元已收敛到 filters.js 的
+     `listEmptyText(hitNoun, noun, noneText)` 单点(见 filters.js 注释)。
+-->
+<script type="text/x-template" id="tpl-aq-row-pad">
+  <div class="row-pad" :style="{ height: height + 'px' }" aria-hidden="true"></div>
+</script>
+<script type="text/x-template" id="tpl-aq-empty">
+  <div class="empty">
+    <svg class="ico" viewBox="0 0 16 16"><use :href="icon"></use></svg>
+    <span>{{ text }}</span>
+  </div>
+</script>

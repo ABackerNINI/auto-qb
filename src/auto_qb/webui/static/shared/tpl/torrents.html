@@ -2,8 +2,9 @@
           <aq-table ref="torrentHead" table-id="torrent" :cols="visibleTorrentCols"
                     :sort-key="torrentSortKey" :sort-dir="torrentSortDir" :drag="colDrag"></aq-table>
           <div class="group-table" ref="torrentTable" @scroll="syncHeadScroll($event, 'torrent')">
-            <!-- P1-2 行窗口: 3000 行里只渲染视口附近那几十行; 上下占位撑住总高 -->
-            <div v-if="torrentPadTop" class="row-pad" :style="{ height: torrentPadTop + 'px' }" aria-hidden="true"></div>
+            <!-- P1-2 行窗口: 3000 行里只渲染视口附近那几十行; 上下占位撑住总高
+                 (占位件收敛为 <aq-row-pad>, 与辅种/追剧三份列表同一份实现, issue 26-10-20-2231) -->
+            <aq-row-pad v-if="torrentPadTop" :height="torrentPadTop"></aq-row-pad>
             <div v-for="m in visibleTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent" :data-hash="m.hash"
                  :class="['s-' + m.kind, { selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
                  :style="gridStyle('torrent')"
@@ -12,14 +13,10 @@
                  @contextmenu.prevent="openMemberMenu($event, m)">
               <aq-torrent-cells :cols="visibleTorrentCols" :m="m"></aq-torrent-cells>
             </div>
-            <div v-if="torrentPadBottom" class="row-pad" :style="{ height: torrentPadBottom + 'px' }" aria-hidden="true"></div>
-            <div v-if="!filteredTorrents.length" class="empty">
-              <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
-              <span>
-                {{ searchQuery.trim() ? (searchNegativeOnly ? '只有排除词 — 请补一个要包含的词' : '无匹配种子')
-                   : (filtersActive ? '当前筛选下没有种子' : '暂无种子') }}
-              </span>
-            </div>
+            <aq-row-pad v-if="torrentPadBottom" :height="torrentPadBottom"></aq-row-pad>
+            <!-- 空态同上单点 ——— 注意这里的嵌套三元比另外两页**少一支**「正在构建文件索引…」,
+                 而三者共用同一套服务端搜索态; 收敛时分支集合已对齐(现在都由 listEmptyText 给) -->
+            <aq-empty v-if="!filteredTorrents.length" :text="torrentsEmptyText"></aq-empty>
           </div>
         </template>
 

@@ -14,6 +14,8 @@
  *   <aq-group-cells>   group 行模型单元格渲染器(49 个分支, 原 groups.html 内联)
  *   <aq-torrent-cells> torrent 行模型单元格渲染器(28 个分支, 原 torrents.html 内联)
  *   <aq-show-cells> / <aq-ep-cells>  show-ep 行模型单元格渲染器(剧行 / 集行, 原 shows.html 内联)
+ *   <aq-row-pad> / <aq-empty>  列表外壳两件套(行窗口上下占位 / 空态块, 收敛 issue 26-10-20-2231,
+ *                              见文件末尾段注释; 它们在「行 · 单元格」这套之外, 但同属列表表面)
  * 以上都是**纯消费方**: 不搬行为、不持有状态 —— 表壳只渲染 + 回调, 行为仍在既有单点上。
  *
  * !与根实例的接线(本应用是「单根组件 + 全局 mixin」架构: state.js/lifecycle.js 经根选项展开,
@@ -263,4 +265,41 @@ window.AQ_DT11_CELLS_COMPONENT = {
     p: { type: Object, required: true },         // dt11 行(rowsFn 装配)
   },
   template: "#tpl-aq-dt11-cells",
+};
+
+/* ==================== 列表外壳两件套(收敛 issue 26-10-20-2231 / R23-A-05 · R23-B-06) ====================
+ * <aq-row-pad>  P1-2 行窗口化的上下占位撑高件。此前四处逐字手写(groups 组行 / groups 明细成员 /
+ *               torrents 种子行 / shows 集明细成员), 占位撑总高是滚动条长度与「滚到底」的契约 ——
+ *               四处分散写法意味着改 aria-hidden 或 px 口径只改一处也不报错, 静默让两视图滚动几何
+ *               分叉。**上下必须是两个实例**(占位要夹住中间的 v-for 行, 单个实例的渲染结果只能是
+ *               连续的一段), 故每份列表实例化两个, 行本身仍由调用方 v-for 内联 —— 行窗口化
+ *               「不引入逐行组件实例」的性能纪律不变(计划 26-10-11-1722 §06 风险 4)。
+ * <aq-empty>    空态块。此前 12 处手写同一个三件套(`<div class="empty">` + svg.ico + span),
+ *               其中设置页 HR 明细表三态与变体表兜底空态**连 svg 都没写**(视觉不一致)。
+ *               **必须保留 `<div class="empty">` 根 + svg.ico + span 的子结构**: 三皮肤 CSS 按
+ *               `.empty` 与 `.empty .ico` 选择(flex 纵列居中 + gap + 大 padding + 28px 图标),
+ *               多包一层包裹或改类名会让整条空态样式失效且零报错。
+ *               图标语义口径(此前无文档, 现单点写在 tpl/list-shell.html 头注):
+ *                 inbox = 集合本身为空 / hourglass = 正在加载 / warn = 出错。
+ * 两者都是**纯模板件**(零 methods): 组件只贡献 markup, 文案与数据全在调用方(列表三件套的
+ * 嵌套三元已收敛到 filters.js 的 listEmptyText 单点)。
+ * !模板在 tpl/list-shell.html 的两个 x-template, 注的是 body(与 combo-input/traffic-card 同范式)。
+ */
+window.AQ_ROW_PAD_COMPONENT = {
+  name: "aq-row-pad",
+  props: {
+    height: { type: Number, default: 0 },   // 占位高度(px); 窗口外那段行的合计高, 由调用方的 Pad* 给
+  },
+  template: "#tpl-aq-row-pad",
+};
+
+window.AQ_EMPTY_COMPONENT = {
+  name: "aq-empty",
+  props: {
+    /* 图标 sprite href —— 语义三选一, 缺省 inbox(集合确实是空的):
+     *   #i-inbox 空 / #i-hourglass 加载中 / #i-warn 出错。三者互不替代, 见上面的口径注。 */
+    icon: { type: String, default: "#i-inbox" },
+    text: { type: String, default: "" },    // 空态文案(列表空态由调用方的 *EmptyText computed 给)
+  },
+  template: "#tpl-aq-empty",
 };

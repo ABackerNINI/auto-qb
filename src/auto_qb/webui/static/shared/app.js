@@ -956,4 +956,9 @@ app.component("aq-dt11-cells", window.AQ_DT11_CELLS_COMPONENT);
 // 三皮肤 CSS 的直接子选择器(.drawer-head > .qb-tabs / .qb-statctl > .qb-tools)依赖它不留 wrapper。
 app.component("aq-drawer-head", window.AQ_DRAWER_HEAD_COMPONENT);
 app.component("aq-qb-ctl", window.AQ_QB_CTL_COMPONENT);
+/* 列表外壳两件套(收敛 issue 26-10-20-2231 / R23-A-05 · R23-B-06): 行窗口化上下占位 <aq-row-pad>
+ * (四处手写同一撑高 div)与空态块 <aq-empty>(12 处手写同一三件套, 其中 4 处无图标)各自只剩
+ * 一份组件, 定义在 table.js(模板 tpl/list-shell.html 的两个 x-template), 这里只注册渲染器。 */
+app.component("aq-row-pad", window.AQ_ROW_PAD_COMPONENT);
+app.component("aq-empty", window.AQ_EMPTY_COMPONENT);
 app.mount("#app");

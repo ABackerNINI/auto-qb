@@ -290,8 +290,8 @@
                               <span v-if="d.now" class="hr-detail-table-fresh">数据截至 {{ fmtTs(d.now) }}</span>
                             </div>
                             <p v-if="d.loading && !d.loaded" class="hb-hp">正在读取站点明细…</p>
-                            <div v-else-if="d.error" class="empty"><span>{{ d.error }}</span></div>
-                            <div v-else-if="d.readError" class="empty"><span>站点文件读取失败: {{ d.readError }}</span></div>
+                            <aq-empty v-else-if="d.error" icon="#i-warn" :text="d.error"></aq-empty>
+                            <aq-empty v-else-if="d.readError" icon="#i-warn" :text="'站点文件读取失败: ' + d.readError"></aq-empty>
                             <table v-else-if="hrsDetailRows(s.site).length" class="drawer-table hr-detail-table">
                               <thead>
                                 <!-- 表头借表壳组件 thead 模式(计划 26-10-11-1722 P5): 根模板是
@@ -319,7 +319,7 @@
                                 </tr>
                               </tbody>
                             </table>
-                            <div v-else class="empty"><span>{{ hrsEmptyText(s.site) }}</span></div>
+                            <aq-empty v-else :text="hrsEmptyText(s.site)"></aq-empty>
                           </template>
                           <!-- aqb:hr-detail-table:end -->
                           <!-- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a): 排障性文本(取波/守恒/零行三态/
