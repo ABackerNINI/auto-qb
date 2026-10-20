@@ -276,7 +276,7 @@
 /* 展开态 = "结构语言"(下沉底色 + 中性边框 + 底角取直与明细面板相连),
  * 与选中态的"强调色语言"(accent 左条 + 柔底)分家 —— 第七轮: 两者此前都是
  * accent 左条 + 高亮底 + accent 边框, 高度相似难以区分 */
-.group-row.expanded { background: var(--bg-sunken); border-color: var(--border);
+.group-row.expanded { /* 下沉底叠行底(与首格同基色 --bg-row; 裸 var(--bg-sunken) 会让页底透上来 ⇒ 名称列异色, 见 frozen-column ⑩) */ background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); border-color: var(--border);
   border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .group-row.expanded + .detail { margin-top: -6px; border-top-left-radius: 0; border-top-right-radius: 0; }
 .g-name { display: flex; align-items: center; gap: 7px; font-weight: 600; overflow: hidden; white-space: nowrap; }

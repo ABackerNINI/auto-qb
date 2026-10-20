@@ -8,7 +8,8 @@
 }
 .h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
 @keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
-.group-row.expanded:hover { background: var(--bg-sunken); }
+/* 展开行悬停仍用下沉底(不得跌回裸 `--bg-sunken`): 与行板展开规则同一个合成表达式 */
+.group-row.expanded:hover { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); }
 .topbar { background: var(--glass); }
 
 /* 限速对照(命中/实际) */
@@ -143,13 +144,20 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .login-loading p { margin: 0; }
 
 /* 多选选中态: 专用令牌族(--sel-*), 左侧靛蓝色条 + 柔底 */
-.group-row.selected, .member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+/* 选中/半选行**保留行底**(2026-10-20 修「选中的行必显列背景与其它列不一致」): tint 叠在行自身
+ * 的不透明 --bg-row 上, 不替换行底 —— 旧写法 `background: var(--sel-bg)` 让半透明 tint 透到页底
+ * --bg, 而吸左首格按 --bg-row 合成(见下方 selected 首格规则) ⇒ 两边承光底分家, 选中行名称列整列
+ * 一条异色竖带(实测逐通道 9/255 atlas、5/255 prism)。
+ * .member-row 没有吸左首格、也不承 row 底色 ⇒ 保持原「柔底」写法。 */
+.group-row.selected { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row); border-color: var(--sel-line, var(--accent-line)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 /* 成员行(辅种/追剧页分组内的种子)选中态与种子页种子行**同视觉**(2026-10-09 用户要求: 柔底 + 左色条)。
  * 此前 .member-row.selected 只有柔底、没有左色条 -> 与种子页选中种子长得不一样。 */
 .group-row.selected::before, .member-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
   width: 3px; background: var(--sel-bar, var(--accent)); }
-.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+.group-row.partial { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
   border-color: var(--sel-line, var(--accent-line)); }
+.member-row.partial { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }
 .group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
   top: 14%; bottom: 14%; width: 3px; background: var(--sel-bar, var(--accent)); opacity: .42; }

@@ -1,7 +1,7 @@
 # 首列吸左固定(冻结列)在本仓表格上的九处非显然约束
 
-> 摘要: 给 `.group-row` 加「首列 `position: sticky; left: 0`」时, 八件事不显然 —— ①**表头 `.group-head` 在滚动容器之外**(纵向 sticky 的前提), 首格拿不到 sticky 锚, 必须用反向 `translateX` 抵消, 且要减掉表头 `padding-left`(三皮肤均 14px), 否则比行首格恒右偏 14px; ②sticky 首格必须**不透明**才挡得住滑过的兄弟列, 而行的状态底(下沉/选中)是 rgba 令牌 —— 直接取令牌会**双重上色**(atlas 选中态实测逐通道差 17/18/33, 超可辨阈 20), 须用「同色 `linear-gradient` 叠不透明 `--bg-row`」做合成(差 ≤8); ③行的左侧色条 `.group-row.selected::before` 挂在**行**上, 横滚后随行滚出, 且**不能**顺手改成 sticky(行是 grid 容器, 绝对定位伪元素一变 sticky 就进流成为网格项, 破坏行布局); ④**吸左边界要有视觉提示** —— 横滚时滑入首格下方的列会留一段未盖满的尾字紧贴首格右缘, 无边界线索时被读成渲染 bug(2026-10-11 用户报「状态列被名称列盖住」), 须在横滚非零时画右缘**发丝线**; ④b**这条提示别用带负 `spread` 的 `box-shadow` 落影** —— 落影可见度是**首格高度的函数**(常态行首格 22px 时被内缩成 2px 近乎不可见, 高行 46px+ 才完整显形), 逐行深浅差 7 倍, 只在"刚好被撑高的那几行"冒黑块(2026-10-12 用户报「名称列后随机出现阴影」, 已删落影); ⑤**首格必须 `align-self: stretch`** —— 行是 `align-items: center`, 网格项默认不拉伸, 首格只有单行内容高, 站点/标签等多 chip 格换行把行撑高时(小窗常态)滑入的 chip 从首格上下两段漏出(2026-10-11 用户复报「小窗时站点的徽标不会被名称列挡住」); ⑥**首格底色规则是「主列表行语言」, 会被复用 `.group-row` 的抽屉面带进去** —— 抽屉各引擎面行板语言各不相同(族面 `--tbl-face-bg`→`--bg` / 04 卡 `--bg-card` / 05·10 透明 / 08 引擎 `--bg-row`), 首格一律 `--bg-row` 就行内一条异色竖带(ocean 主题 Δ 16/255), 须**按面重锚**, 半透明 tint(err/bad/is-chk/sel)合成在**该面的承光底**上(抽屉是 `--bg-card`, 不是主表的 `--bg-row`); ⑦**search-hit 行底是方向渐层**(`90deg accent-soft→transparent 46%` over `--bg-row`), 首格镜像必须**同款渐层** —— 只给平铺基色会**丢整条渐层**(实测首格 `backgroundImage=none`, 追剧表命中行名称列读作异色竖带); ⑧**变体家族是「外层 `.dtNN-wrap` 外壳 + 内层 `.dtNN-list` 行容器」两层, 行必须活在 `.dtNN-list` 里** —— 变体 CSS 前缀以 `.dtNN-list .group-row` 为作用域, 05 修前只有单层 `dt05-wrap`、行直接挂下面 ⇒ 前缀不匹配, 六条 `.group-row` 规则全程空转, 行一直带主表卡底, 肉眼只看到「必现列和别的列不一样」(2026-10-14 用户报障, 逐面量计算样式才发现 `inList=false`); ⚠ 修它别把外层直接改名(会打破 e2e 通用助手 `.dt${variantId}-wrap` 与家族约定), 要补内层 list。 ⑨ 首格只镜像静态色值、不镜像行板过渡 ⇒ 悬停/移出 160ms 内闪一条硬边竖带(补同源 background-color 过渡)。
-> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样
+> 摘要: 给 `.group-row` 加「首列 `position: sticky; left: 0`」时, 八件事不显然 —— ①**表头 `.group-head` 在滚动容器之外**(纵向 sticky 的前提), 首格拿不到 sticky 锚, 必须用反向 `translateX` 抵消, 且要减掉表头 `padding-left`(三皮肤均 14px), 否则比行首格恒右偏 14px; ②sticky 首格必须**不透明**才挡得住滑过的兄弟列, 而行的状态底(下沉/选中)是 rgba 令牌 —— 直接取令牌会**双重上色**(atlas 选中态实测逐通道差 17/18/33, 超可辨阈 20), 须用「同色 `linear-gradient` 叠不透明 `--bg-row`」做合成(差 ≤8); ③行的左侧色条 `.group-row.selected::before` 挂在**行**上, 横滚后随行滚出, 且**不能**顺手改成 sticky(行是 grid 容器, 绝对定位伪元素一变 sticky 就进流成为网格项, 破坏行布局); ④**吸左边界要有视觉提示** —— 横滚时滑入首格下方的列会留一段未盖满的尾字紧贴首格右缘, 无边界线索时被读成渲染 bug(2026-10-11 用户报「状态列被名称列盖住」), 须在横滚非零时画右缘**发丝线**; ④b**这条提示别用带负 `spread` 的 `box-shadow` 落影** —— 落影可见度是**首格高度的函数**(常态行首格 22px 时被内缩成 2px 近乎不可见, 高行 46px+ 才完整显形), 逐行深浅差 7 倍, 只在"刚好被撑高的那几行"冒黑块(2026-10-12 用户报「名称列后随机出现阴影」, 已删落影); ⑤**首格必须 `align-self: stretch`** —— 行是 `align-items: center`, 网格项默认不拉伸, 首格只有单行内容高, 站点/标签等多 chip 格换行把行撑高时(小窗常态)滑入的 chip 从首格上下两段漏出(2026-10-11 用户复报「小窗时站点的徽标不会被名称列挡住」); ⑥**首格底色规则是「主列表行语言」, 会被复用 `.group-row` 的抽屉面带进去** —— 抽屉各引擎面行板语言各不相同(族面 `--tbl-face-bg`→`--bg` / 04 卡 `--bg-card` / 05·10 透明 / 08 引擎 `--bg-row`), 首格一律 `--bg-row` 就行内一条异色竖带(ocean 主题 Δ 16/255), 须**按面重锚**, 半透明 tint(err/bad/is-chk/sel)合成在**该面的承光底**上(抽屉是 `--bg-card`, 不是主表的 `--bg-row`); ⑦**search-hit 行底是方向渐层**(`90deg accent-soft→transparent 46%` over `--bg-row`), 首格镜像必须**同款渐层** —— 只给平铺基色会**丢整条渐层**(实测首格 `backgroundImage=none`, 追剧表命中行名称列读作异色竖带); ⑧**变体家族是「外层 `.dtNN-wrap` 外壳 + 内层 `.dtNN-list` 行容器」两层, 行必须活在 `.dtNN-list` 里** —— 变体 CSS 前缀以 `.dtNN-list .group-row` 为作用域, 05 修前只有单层 `dt05-wrap`、行直接挂下面 ⇒ 前缀不匹配, 六条 `.group-row` 规则全程空转, 行一直带主表卡底, 肉眼只看到「必现列和别的列不一样」(2026-10-14 用户报障, 逐面量计算样式才发现 `inList=false`); ⚠ 修它别把外层直接改名(会打破 e2e 通用助手 `.dt${variantId}-wrap` 与家族约定), 要补内层 list。 ⑨ 首格只镜像静态色值、不镜像行板过渡 ⇒ 悬停/移出 160ms 内闪一条硬边竖带(补同源 background-color 过渡)。 ⑩**半透明状态底必须「叠加」在行底上, 不能用 `background` 简写「替换」行底** —— 行板一旦把底换掉, 承光层就变成页底 `--bg`, 而首格仍按 `--bg-row` 合成 ⇒ 选中/半选行名称列整列一条异色竖带(实测 Δ9/255 atlas、5/255 prism, 三主表全中, 未选中行 Δ0; 展开行的 `--bg-sunken` 同族 Δ5/2, 同轮一并收)。
+> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 半透明状态底替换行底, background 简写换掉行底, 行板承光层变页底, 行底丢失, 合成基准分家
 
 **Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
 
@@ -139,6 +139,31 @@
   —— 两侧都红绿双验过(修前首格 rgb(245,232,231) vs 行板 rgb(240,228,229))。
   **推广**: 合成基色必须按**实际承光层**定(逐层量: 自元素向上第一个不透明层), 不能按
   「这面属于哪一族」推 —— 08 的行表面是卡底语言, 但承光层是分组段底, 两个都“看起来对”。
+- **⑩ 半透明状态底是「叠加」不是「替换」—— 行板把底换掉, 首格的合成基准就与它分家
+  (2026-10-20 用户报「选中的行必显列背景与其它列不一致」)**: 选中/半选行原本写
+  `.group-row.selected { background: var(--sel-bg) }`(裸半透明 tint) —— `background` 简写把行底
+  `--bg-row` 一并**替换**掉, 行板实际承光层变成**页底** `--bg`; 而首格按 ②⑥ 的口径合成在
+  `--bg-row` 上。两边基准分家 ⇒ 选中行名称列整列一条异色竖带。真浏览器逐像素(1440×900, 选中行
+  首格与相邻格同相对位置取色): atlas 首格 rgb(38,45,73) vs 相邻列 rgb(34,39,64) = **Δ9**、prism
+  rgb(229,234,249) vs rgb(224,230,246) = Δ5, 三主表(种子/辅种/追剧) × 双皮肤全中; 未选中行 Δ0
+  (行底本就是 `--bg-row`)。承光层可反解验证: 相邻列可见底 = (tint 透明度回拆) ≈ `--bg`
+  (#0e1218 / #f2f6fb), 而不是 `--bg-row`。
+  **处置**: 行板改成**层叠**(与首格同一表达式) ——
+  `background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row)`;
+  `.member-row` 没有吸左首格、也不承 row 底色 ⇒ 拆出来保持原裸柔底不动。修后行板与首格计算背景
+  **逐字相等**, 逐像素 Δ0(prism) / ≤1 取整(atlas)。顺带收掉 ⑨ 残留里 selected/partial 那一半
+  (渐层不可插值): 两侧基色都不再变, 只有 image 层同帧出现。
+  **判据(推广)**: 「首格 == 行板」不能只量首格自己的合成式, 要问**行板自己的底还在不在** ——
+  状态规则用 `background` 简写写半透明令牌时, 底就被静默换掉了。修法不是「把首格改成猜页底」——
+  那会把正确性绑在「这张表刚好放在哪种底上」(撞 ⑥ 的按面重锚); 而是让行板恢复「状态叠在行底上」
+  的结构, 与承载面无关。
+  **同族拓展(2026-10-20 用户「group 一同修」同轮收)**: `.group-row.expanded { background: var(--bg-sunken) }`
+  是同一个缺陷 —— 下沉底也是半透明、也是**替换**行底。实测展开行(辅种页)atlas 首格 rgb(9,15,25) vs
+  相邻列 rgb(9,13,20) = Δ5/255、prism Δ2/255(上一条只报选中态时它低于可辨阈, 故首轮按范围守恒未动);
+  处置同一口径: 三皮肤改 `linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row)`(prism
+  在 views.css, atlas/console 在 components.css), 修后 Δ0。⚠ console 另有
+  `.group-row.expanded:hover { background: var(--bg-sunken) }`(压过行板悬停) —— 不一起改则**悬停
+  展开行**那一下又跌回半透明, 首格与行板重新分家; 判据是「凡自带 background 的展开态变体都要同款叠底」。
 - **守阵**: `test_frontend_frozen_column_boundary_wiring`(静态钉 is-hscrolled 打标、三皮肤成对
   规则与首格 `align-self: stretch`);
   `test_frontend_pinned_first_cell_bg_per_face`(静态钉 search-hit 首格镜像、dt_table.css 八面
@@ -148,6 +173,15 @@
   `e2e/main-table-pinned-hover.spec.mjs`(三主表 × 双皮肤, 滑入/移出各逐帧采样 —— 首格 vs 行板差
   ≤ 2 + 稳态同色且确实变过色; **在过渡窗口内测**, 不是等 400ms 后测稳态 —— 后者正是这个缺陷
   能活到今天的原因);
+  `test_frontend_pinned_first_cell_selected_row_keeps_base`(静态钉三皮肤 `.group-row.selected` /
+  `.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红)、行板与首格 tint 同字面、
+  `.member-row.selected` 拆分后仍在) 与 `e2e/main-table-pinned-selected.spec.mjs`(三主表 × 双皮肤,
+  真手势 Ctrl+click 选中后 —— 行板 backgroundColor 不透明 + 行板与首格 backgroundColor/
+  backgroundImage **逐字相等**, 含选中行被指针压住时; 修复前首格 rgb(17,23,34) vs 行板
+  rgba(129,140,248,.18));
+  `test_frontend_pinned_first_cell_expanded_row_keeps_base`(静态钉三皮肤 `.group-row.expanded` 末层
+  `var(--bg-row)`、首格镜像同基色、console 的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`)
+  与同一 spec 里的展开行用例(辅种表/追剧表 × 双皮肤: 展开行板不透明 + 与首格逐字相等, 含悬停);
   几何/可见底色静态判不出, 验证 = 桩服务真浏览器量具 `e2e/dt-table-face-bg.spec.mjs`
   (首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行; 主表 search-hit 首格渐层镜像)。
   ⚠ 多 clone  workspace 下先确认 8137 没有**别 clone 的残留桩**(本例撞上 auto-qb-clone5 的),

@@ -52,7 +52,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   groupSelState 按成员完整度派生 selected(视觉兜底) / selectedCount 走 selHashSet 去重(组 key
   与其成员 hash 同时在集合里, 直接相加会数两遍) / _bulkTargets 剔除已被选中组覆盖的成员 hash
 - test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(三皮肤 CSS 成对:
-  .member-row.selected 与 .group-row.selected 同底色同左色条) + 成员行「站点」列去掉代表状态的
+  .member-row.selected 与 .group-row.selected 同一 tint 令牌(`--sel-bg`)且同吃左色条规则; 两条规则
+  自 2026-10-20 拆分 —— 组行有吸左首格须合成在不透明 `--bg-row` 上(frozen-column ⑩), 成员行无首格
+  保持裸柔底) + 成员行「站点」列去掉代表状态的
   方框(groups.html / shows.html 两处模板无 <i class="dot"> + 三皮肤无 .m-site .dot 死规则)
 - test_local_scope_wiring: settings-save inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope
   settings/list 档齐全(方案A W2 起停靠面板不再是作用域, drawer 值机制留位);
@@ -1432,22 +1434,35 @@ def test_sel_visual_parity_and_site_cell() -> None:
 
     种子页种子行是 .group-row.torrent-row -> 选中态吃 .group-row.selected(柔底 + 左色条);
     辅种/追剧页成员行是 .member-row -> 此前只有柔底没有左色条, 与种子页选中种子长得不一样。
-    本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **同一条规则**(不漂移),
-    且 .member-row 保持 position: relative(左色条 ::before 的定位前提)。
+    本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **用同一个 tint 令牌**
+    (`var(--sel-bg, var(--accent-soft))`, 各写一份色值会随主题漂移)且同吃左色条规则;
+    两条规则自 2026-10-20 起**拆开写**(组行有吸左首格, 底色要合成在不透明 --bg-row 上;
+    成员行没有首格、底由明细面板承光, 保持裸柔底 —— 见 pitfalls/web-ui/frozen-column.md ⑩),
+    故这里不再要求“选择器并列同一条规则”。另钉 .member-row 保持 position: relative(左色条 ::before
+    的定位前提)。
     「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 渲染器与三皮肤都不得再挂
     <i class="dot"> / 残留 .m-site .dot 死规则。"""
     for ui in UIS:
         views = (STATIC / ui / "css" / "views.css").read_text(encoding="utf-8")
-        # 成员行选中必须与组行/种子行**同一条规则**(选择器并列, 不允许另写一份漂移);
-        # prism 的 .group-row.selected > :first-child 规则在文件里出现得更早, 故按选择器全名精确锚定
-        assert re.search(r"\.group-row\.selected, \.member-row\.selected \{",
-                         views), (f"{ui}: .member-row.selected 必须与 .group-row.selected 同一条底色规则(与种子页同视觉)")
+        # 成员行选中与组行/种子行**同一 tint 令牌**(2026-10-20 起两条规则拆开: 组行/种子行有吸左
+        # 首格, 底色必须合成在不透明 --bg-row 上(否则选中行名称列成异色竖带, 见
+        # pitfalls/web-ui/frozen-column.md ⑩); 成员行没有首格、承光底是明细面板 .detail
+        # (--bg-sunken), 保持裸柔底。钉的是「同一令牌 + 同一形状」, 不是「同一条规则文本」。)
+        row_sel = re.search(r"\.group-row\.selected \{([^}]*)\}", views)
+        mem_sel = re.search(r"\.member-row\.selected \{([^}]*)\}", views)
+        assert row_sel and mem_sel, (
+            f"{ui}: 选中底色规则要组行/成员行各一条(.group-row.selected 有吸左首格要合成、"
+            ".member-row.selected 保持裸柔底) —— 成员行与种子页选中同视觉靠同一 tint 令牌"
+        )
+        for body, sel in ((row_sel.group(1), ".group-row.selected"), (mem_sel.group(1), ".member-row.selected")):
+            assert "var(--sel-bg, var(--accent-soft))" in body, (
+                f"{ui}: {sel} 未用选中态令牌族 --sel-bg —— "
+                "两侧各写一份色值会随主题漂移(与种子页选中分家)"
+            )
         assert re.search(r"\.group-row\.selected::before, \.member-row\.selected::before \{",
                          views), (f"{ui}: 成员行选中必须同吃左色条规则(与种子页选中种子同形)")
-        assert "position: relative" in re.search(r"\.group-row\.selected, \.member-row\.selected \{([^}]*)\}",
-                                                 views).group(1) or re.search(
-                                                     r"\.member-row \{[^}]*position: relative", views
-                                                 ), (f"{ui}: .member-row 缺 position: relative(左色条 ::before 没有定位锚)")
+        assert re.search(r"\.member-row \{[^}]*position: relative",
+                         views), (f"{ui}: .member-row 缺 position: relative(左色条 ::before 没有定位锚)")
         # .m-site .dot 死规则三皮肤分别落在 views.css / components.css, 两处都不许残留
         # (正则只认"选择器 + 开花括号"的规则行, 注释里提到该选择器不算)
         for css_name in ("views.css", "components.css"):

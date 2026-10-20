@@ -24,7 +24,7 @@
 | [config-field-unexpressable-in-ui.md](config-field-unexpressable-in-ui.md) | 值域只有一档且**等于缺省值**的配置字段(如 v1 的 notify.channels: 渠道只有 platform, loader 缺省即 ["platform"])做成勾选框后, 两个方向都表达不出有效差异 —— 勾选只是写一条与缺省等价的键, 取消则写出**空列表**,… | 设置页勾选框表达不出差异, 勾了再取消仍有未保存改动, 保存报"必须是非空列表", 想暂时隐藏某个设置项, keyed_list 清空, schema 摘字段被键面守卫判删键 |
 | [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签, 空值转有值, 上游修复后的展示回归 |
 | [css-comment-terminator.md](css-comment-terminator.md) | CSS 注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `s-*/member-row`)会把注释提前砍断, 尾巴落成代码态垃圾, 浏览器按错误恢复把**紧跟的那条规则整条静默丢弃**, 无任何报错。 | 写 CSS 注释, 注释里出现 星号斜杠, 进度条不显示, 样式规则不生效, display 没生效, 控制台皮肤, m-progress |
-| [css-file-line-cap.md](css-file-line-cap.md) | 单 CSS 文件 700 行体量上限(atlas components.css 已卡满) | 追加 CSS 规则, 三套皮肤成对改, test_frontend_template_split_wiring 红 |
+| [css-file-line-cap.md](css-file-line-cap.md) | 单 CSS 文件 700 行体量上限(atlas components.css 已卡满) | 追加 CSS 规则, 三套皮肤成对改, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行 |
 | [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |
 | [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」… | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |

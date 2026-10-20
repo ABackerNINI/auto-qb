@@ -254,8 +254,10 @@
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); }
-/* 展开态 = 结构语言(下沉底色 + 中性边框), 与选中态的强调色语言分家 */
-.group-row.expanded { background: var(--bg-sunken); border-color: var(--border); }
+/* 展开态 = 结构语言(下沉底色 + 中性边框), 与选中态的强调色语言分家;
+ * 下沉底**叠在行底**上、不替换行底(与吸左首格同一个合成基色 `--bg-row`, 见
+ * pitfalls/web-ui/frozen-column.md ⑩) */
+.group-row.expanded { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); border-color: var(--border); }
 .group-row.expanded + .detail { margin-top: -6px; }
 .g-name { display: flex; align-items: center; gap: 7px; font-weight: 600; overflow: hidden; white-space: nowrap; }
 .g-name-text { overflow: hidden; text-overflow: ellipsis; }

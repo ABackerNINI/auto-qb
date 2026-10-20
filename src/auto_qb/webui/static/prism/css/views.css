@@ -277,8 +277,11 @@
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); transform: translateY(-1px); }
-/* 展开态 = 结构语言(下沉底色 + 底角取直与明细相连); 选中态 = accent 语言(左条 + 柔底) —— 分家 */
-.group-row.expanded { background: var(--bg-sunken); border-color: var(--border);
+/* 展开态 = 结构语言(下沉底色 + 底角取直与明细相连); 选中态 = accent 语言(左条 + 柔底) —— 分家。
+ * 半透明下沉底同样**叠在行底**上、不替换行底: 与吸左首格同一个合成基色 `--bg-row`(见
+ * pitfalls/web-ui/frozen-column.md ⑩; 旧写法裸 `var(--bg-sunken)` 让页底透上来, 展开行名称列
+ * 实测 Δ5/255 atlas、2/255 prism)。 */
+.group-row.expanded { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); border-color: var(--border);
   border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .group-row.expanded + .detail { margin-top: -6px; border-top-left-radius: 0; border-top-right-radius: 0; }
 .group-row.expanded:hover { transform: none; }
@@ -443,7 +446,14 @@
  * 原先选中态引用 --accent-soft/--accent, 而品牌主题(orbit)的 --accent 与"做种中"的 --green
  * 同属绿族且明度接近 -> 用户反馈"不好分辨"。现在五主题统一给非绿值(靖蓝族),
  * 与状态色彻底分家; 换主题不再撞色。 */
-.group-row.selected, .member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+/* 选中/半选行**保留行底**(2026-10-20 修「选中的行必显列背景与其它列不一致」): tint 必须叠在行
+ * 自身的不透明 --bg-row 上, 不能替换行底 —— 旧写法 `background: var(--sel-bg)` 让半透明 tint 直接透
+ * 到页底 --bg, 而吸左首格的合成基准是 --bg-row(见下方 selected 首格规则) ⇒ 两边承光底分家, 选中行
+ * 名称列整列一条异色竖带(实测逐通道 9/255 atlas、5/255 prism, 可辨)。顺带收掉「选中瞬间行底
+ * 160ms 渐变而首格离散切换」的错拍: 基色两侧都不变, 只有 image 层同帧出现。
+ * .member-row 没有吸左首格、也不承 row 底色 ⇒ 保持原「柔底」写法。 */
+.group-row.selected { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row); border-color: var(--sel-line, var(--accent-line)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 /* 成员行(辅种/追剧页分组内的种子)选中态与种子页种子行**同视觉**(2026-10-09 用户要求: 柔底 + 左色条)。
  * 此前 .member-row.selected 只有柔底、没有左色条 -> 与种子页选中种子长得不一样。 */
 .group-row.selected::before, .member-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
@@ -451,8 +461,9 @@
 /* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 例如在种子页选了某辅种组的
  * 2 个种子后回辅种页, 该组应显示"半选"而不是"没选"。视觉 = 同款左色条但降透明 + 柔底,
  * 与全选明确区分。 */
-.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+.group-row.partial { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
   border-color: var(--sel-line, var(--accent-line)); }
+.member-row.partial { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }
 .group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
   top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); opacity: .42; }

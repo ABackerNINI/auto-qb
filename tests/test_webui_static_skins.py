@@ -17,6 +17,8 @@
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 三皮肤 .h-cell.sortable:focus-visible(atlas 落 views.css —— components.css 顶 700 行 cap); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
 - test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 ①行板过渡仍以 `background var(--dur)` 声明(时长基准) ②三皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) ③首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) ④首格过渡**只在三皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0)。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
+- test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 ①`.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) ②行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) ③首格镜像合成基色与行板同令牌 ④拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
+- test_frontend_pinned_first_cell_expanded_row_keeps_base: 展开行「保留行底」守阵(2026-10-20 与选中态同轮收, 用户「group 一同修」) —— `.group-row.expanded { background: var(--bg-sunken) }` 同样把行底**替换**成半透明下沉底, 行板承光层变页底 `--bg`, 而首格按 `--bg-row` 合成; 真浏览器逐像素: 展开行 atlas Δ5/255、prism Δ2/255(低于可辨阈, 上轮按范围守恒未动); 钉 ①三皮肤 `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css, atlas/console 在 components.css, 按选择器找) ②首格镜像同基色 ③console 独享的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`(否则悬停那一下又分家)。行为面由 e2e/main-table-pinned-selected.spec.mjs 的展开行用例采
 """
 import json
 import os
@@ -2662,3 +2664,126 @@ def test_frontend_pinned_first_cell_hover_transition_parity():
                 if "transition" in body:
                     stray.append(f"{rel}: {' '.join(sel.split())[:70]} 体内带了 transition")
     assert not stray, ("首格过渡声明出了皮肤单点(views.css) —— 以下抽屉/变体面规则自带 transition, 会与行板错拍:\n  - " + "\n  - ".join(stray))
+
+
+def _css_rules(text):
+    """(选择器列表, 规则体) 序列。先剥注释 —— 注释落在选择器捕获里会污染逐字比较。"""
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    out = []
+    for mo in re.finditer(r"([^{}]*)\{([^}]*)\}", text):
+        sels = [s.strip() for s in mo.group(1).split(",") if s.strip()]
+        out.append((sels, mo.group(2)))
+    return out
+
+
+def _css_body(rules, sel, where):
+    """按**完整选择器**取规则体(不用子串 —— 子串会被 `... > :first-child` 那条先撞上)。"""
+    for sels, body in rules:
+        if sel in sels:
+            return body
+    raise AssertionError(f"{where} 缺规则 `{sel}` —— 底色契约的落点被删或被改名?")
+
+
+def _css_bg(body):
+    """取 background 声明值(空白归一); 缺声明即红。"""
+    mo = re.search(r"background:\s*([^;]*);", body)
+    assert mo, f"规则体内找不到 background 声明: {body.strip()[:80]}"
+    return " ".join(mo.group(1).split())
+
+
+def test_frontend_pinned_first_cell_selected_row_keeps_base():
+    """选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」)
+
+    **报障与根因**: 选中的行里必显列(吸左首格)与其余列底色不同 —— 一条整列高的异色竖带。
+    旧规则 `.group-row.selected { background: var(--sel-bg) }` 用**半透明 tint 替换**了行底(而不是叠在
+    行底上), 于是行板实际露出的是页底 `--bg`; 而吸左首格的合成基色是 `--bg-row`(坑档
+    pitfalls/web-ui/frozen-column.md ②⑥ 的按面重锚口径) ⇒ 两侧承光底分家。真浏览器实测(1440×900,
+    选中首行, 首格与相邻格同相对位置取像素): atlas Δ9/255、prism Δ5/255, 三主表 × 双皮肤全中;
+    未选中行 Δ0。修复 = 行底不被状态替换: 同色 `linear-gradient(tint, tint)` 叠 `var(--bg-row)`,
+    与首格镜像同一个合成表达式 ⇒ 逐字节相等(修后实测 atlas ≤1 取整、prism 0)。
+
+    钉三件事:
+    1. `.group-row.selected` / `.group-row.partial` 的 background 末层必须是 `var(--bg-row)` ——
+       裸 `var(--sel-bg)` 等于把行底换成半透明, 页底透上来(本条就是报障形态);
+    2. tint 令牌与首格镜像**同字面**(`var(--sel-bg, var(--accent-soft))`), 两处各写一份会随主题漂移;
+    3. 首格镜像 `.group-row.{state} > :first-child` 的合成基色与行板**同令牌**(`var(--bg-row)`) ——
+       这条把「行板留底」与「首格取该底」锁成一对, 任改一边即红(改一边仍自洽的形态静态看不出,
+       故行为面另有 e2e 采计算背景逐字相等)。
+    成员行没有吸左首格、也不承 row 底色 ⇒ 保持裸 tint 写法; 这里只钉它没在拆分时被丢掉。
+    """
+    tint = r"var\(--sel-bg,\s*var\(--accent-soft\)\)"
+
+    for ui in _UI_ALL:
+        css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
+        rules = _css_rules(css)
+        for state in ("selected", "partial"):
+            row_bg = _css_bg(_css_body(rules, f".group-row.{state}", f"{ui} views.css"))
+            assert row_bg.endswith("var(--bg-row)"), (
+                f"{ui} `.group-row.{state}` 的行底被半透明 tint 替换了(background 末层不是 --bg-row) —— "
+                "行板透到页底 --bg 而吸左首格按 --bg-row 合成, 选中行名称列成整列异色竖带"
+                "(实测 atlas Δ9/255、prism Δ5/255; 2026-10-20 用户报障)"
+            )
+            assert "linear-gradient(" in row_bg and re.search(tint, row_bg), (
+                f"{ui} `.group-row.{state}` 的 tint 未走「同色 linear-gradient 叠行底」, 当前: {row_bg}"
+            )
+            cell_bg = _css_bg(_css_body(rules, f".group-row.{state} > :first-child", f"{ui} views.css"))
+            assert cell_bg.endswith("var(--bg-row)"), (
+                f"{ui} `.group-row.{state} > :first-child` 的合成基色不是 --bg-row, 当前: {cell_bg} —— "
+                "首格与行板必须读同一个行底令牌, 否则两侧承光底分家"
+            )
+            assert re.search(tint, cell_bg), (f"{ui} `.group-row.{state}` 首格镜像的 tint 与行板不同字面, 当前: {cell_bg}")
+        assert re.search(r"\.member-row\.selected\s*\{",
+                         css), (f"{ui} 拆分行板规则时丢了 `.member-row.selected`(成员行选中态柔底) —— 成员行没有吸左首格, "
+                                "不参与合成, 必须保留")
+
+
+def test_frontend_pinned_first_cell_expanded_row_keeps_base():
+    """展开行「保留行底」守阵(2026-10-20, 用户「group 一同修」与选中态同轮收掉下沉态)
+
+    `.group-row.expanded { background: var(--bg-sunken) }` 与选中态是同一类缺陷: 半透明下沉底**替换**
+    了行底 ⇒ 行板承光层变成页底 `--bg`, 而吸左首格按 `var(--bg-row)` 合成(坑档
+    pitfalls/web-ui/frozen-column.md ⑩)。真浏览器逐像素(辅种页展开行, 首格与相邻格同相对位置):
+    atlas Δ5/255、prism Δ2/255 —— 低于可辨阈(20), 上一轮按「范围守恒」未动, 本轮一并收(修后 Δ0)。
+
+    钉三件事:
+    1. `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css,
+       atlas/console 在 components.css —— 按选择器找, 不硬编码文件);
+    2. 首格镜像 `.group-row.expanded > :first-child` 同基色(任改一边即分家);
+    3. `.group-row.expanded:hover` 若自带 background(console 独有, 压过行板悬停), 同样不得跌回裸
+       `--bg-sunken` —— 否则悬停那一下又露出页底。
+    """
+    for ui in _UI_ALL:
+        row_body = None
+        for name in ("views.css", "components.css"):
+            path = os.path.join(STATIC_ROOT, ui, "css", name)
+            if not os.path.exists(path):
+                continue
+            for sels, body in _css_rules(open(path, encoding="utf-8").read()):
+                if ".group-row.expanded" in sels:
+                    row_body = body
+                    break
+            if row_body:
+                break
+        assert row_body, f"{ui} 找不到 `.group-row.expanded` 行板规则(展开态底色契约的落点)"
+        bg = _css_bg(row_body)
+        assert bg.endswith("var(--bg-row)"), (
+            f"{ui} `.group-row.expanded` 的行底被半透明下沉底替换了(background 末层不是 --bg-row) —— "
+            "行板透到页底 --bg 而吸左首格按 --bg-row 合成, 展开行名称列成异色竖带"
+            "(实测 atlas Δ5/255、prism Δ2/255; 2026-10-20 用户报「group 一同修」)"
+        )
+        assert "linear-gradient(" in bg and "var(--bg-sunken)" in bg, (
+            f"{ui} `.group-row.expanded` 未走「同色 linear-gradient 叠行底」, 当前: {bg}"
+        )
+        views = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
+        cell_bg = _css_bg(_css_body(_css_rules(views), ".group-row.expanded > :first-child", f"{ui} views.css"))
+        assert cell_bg.endswith("var(--bg-row)"), (
+            f"{ui} `.group-row.expanded > :first-child` 的合成基色不是 --bg-row, 当前: {cell_bg} —— "
+            "首格与展开行板必须读同一个行底令牌"
+        )
+        mhover = re.search(r"\.group-row\.expanded:hover\s*\{([^}]*)\}", views)
+        if mhover and "background:" in mhover.group(1):
+            hbg = _css_bg(mhover.group(1))
+            assert hbg.endswith("var(--bg-row)"), (
+                f"{ui} `.group-row.expanded:hover` 自带 background 却跌回了半透明({hbg}) —— "
+                "悬停展开行那一下首格与行板又分家"
+            )

@@ -220,15 +220,22 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 多选选中态(R10-07): 改用**选中态专用令牌族**(--sel-bg/--sel-line/--sel-bar)。
  * 原先选中态引用 --accent-soft/--accent, 品牌主题下与"做种中"的 --green 同属绿/青族且
  * 明度接近 -> 用户反馈"不好分辨"; 现统一给非绿值(靖蓝族), 换主题不再撞色。 */
-.group-row.selected, .member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+/* 选中/半选行**保留行底**(2026-10-20 修「选中的行必显列背景与其它列不一致」): tint 叠在行自身
+ * 的不透明 --bg-row 上, 不替换行底 —— 旧写法 `background: var(--sel-bg)` 让半透明 tint 透到页底
+ * --bg, 而吸左首格按 --bg-row 合成(见下方 selected 首格规则) ⇒ 两边承光底分家, 选中行名称列整列
+ * 一条异色竖带(实测逐通道 9/255 atlas、5/255 prism)。
+ * .member-row 没有吸左首格、也不承 row 底色 ⇒ 保持原「柔底」写法。 */
+.group-row.selected { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row); border-color: var(--sel-line, var(--accent-line)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 /* 成员行(辅种/追剧页分组内的种子)选中态与种子页种子行**同视觉**(2026-10-09 用户要求: 柔底 + 左色条)。
  * 此前 .member-row.selected 只有柔底、没有左色条 -> 与种子页选中种子长得不一样。 */
 .group-row.selected::before, .member-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
   width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); }
 /* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 同款左色条但降透明 + 柔底,
  * 与全选明确区分。 */
-.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+.group-row.partial { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
   border-color: var(--sel-line, var(--accent-line)); }
+.member-row.partial { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }
 .group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
   top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); opacity: .42; }
