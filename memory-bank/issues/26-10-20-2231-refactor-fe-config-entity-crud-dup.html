@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/testing/baselines/26-10-21-0311-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端配置实体增/改/删骨架 9 处(站点与规则集/规则)">
 <meta name="issue-summary" content="增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍">
 <title>前端配置实体增/改/删骨架 9 处(站点与规则集/规则) · refactor · 计划外问题（便签）</title>
@@ -48,6 +48,7 @@
   h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
   h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 14px; font-weight: 600; margin: 22px 0 8px; color: var(--accent-ink); }
   p { margin-bottom: 11px; max-width: 74ch; }
   ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
   li { margin-bottom: 5px; }
@@ -69,7 +70,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-config-entity-crud-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -103,7 +104,21 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 03:04 — 用户指派认领（「认领并修复」），<b>复验：2026-10-21 03:04 仍在</b> —— 九处骨架逐条对得上：<code>config_editor.js:672-687 / 744-756 / 770-782</code>（增）、<code>688-702 / 790-803</code>（改）、<code>703-716 / 757-765 / 783-789 / 821-827</code>（删）、<code>config_hub.js:951-963 / 1003-1010 / 1011-1018</code>（hub 侧包装），状态 <strong>In Progress</strong></li>
+      <li>2026-10-21 03:11 — 已修并验证（全量 <b>3974 passed + 2 skipped / 0 failed</b>，覆盖率 99%；改前改后各跑一遍等价性断言 50/50），状态 <strong>Done</strong></li>
     </ul>
+
+    <h3>修复后补充</h3>
+    <p><b>实际修法</b>：按建议抽三件，但 <code>def</code> 同时承担「差异清单」的角色 —— 每个实体只声明自己的路径/文案/初始值/选中键，骨架本身只有一份。</p>
+    <ul>
+      <li><code>config_editor.js</code> 新增三个骨架：<code>cfgEntityAdd(def)</code>（trim → <code>normalize</code> → 空判 → 查重 toast → <code>cfgSetPath</code> → <code>select</code>）、<code>cfgEntityRename(def)</code>（promptDialog → 取消/同名判 → 查重 → 重建对象换键以保键序 → <code>select</code>）、<code>cfgEntityRemove(def)</code>（confirmDialog(danger) → <code>cfgDelPath</code>，无 <code>name</code> 时删整段 → <code>after()</code> 收尾）。</li>
+      <li>三份差异清单：<code>cfgTrackerDef</code> / <code>cfgRuleGroupDef</code>（<code>normalize</code> 补 <code>_rules</code>）/ <code>cfgRuleDef</code>；九处入口各自只剩一行 <code>{ ...def, title/body/okText }</code>。</li>
+      <li><code>config_hub.js</code> 三处 promptDialog 包装合并为 <code>hubAddEntity(def)</code>：取消/空名/查重判据只写一遍，三个入口只声明标题/占位/预填。</li>
+      <li>连带删除只服务旧「hub 写 state → editor 读 state」两段式新增的中间态：<code>cfg.newTrackerName</code> / <code>newRuleGroupName</code> / <code>newRuleName</code> / <code>cfg.addOpen</code> / <code>cfgAddCancel()</code>，以及唯一调用方是那处重复查重的读访问器 <code>cfgTracker(name)</code>（全仓 grep 零残留）。</li>
+      <li>规模：<code>config_editor.js</code> 1405 → 1435 行（+131 / −101），<code>config_hub.js</code> +27 / −22 —— 九处骨架 ~135 行变为三骨架 + 三 def + 九个一行入口。</li>
+    </ul>
+    <p><b>与建议修法的差异</b>：建议写 <code>_entityAdd(ctx, def)</code> 显式带 <code>ctx</code> —— 实际 <code>ctx</code> 就是 mixin 的 <code>this</code>，显式传参只多一层，故签名为 <code>cfgEntity*(def)</code>；hub 侧建议 <code>hubAddEntity(title, cfgAdd)</code> 传回调，实际传 <code>def</code> —— 新增要写的初始值/选中键本来就在 def 里，再传 add 回调等于把同一份差异拆到两处。</p>
+    <p><b>验证方式</b>：① <code>node --check</code> 两文件通过；② 一次性等价性 harness（<code>tmp-analysis/</code>，已 gitignore、不入库）50 项断言覆盖九处入口 —— 对话框标题/占位/okText、键序保持、选中键回落、空 <code>trackers</code> 段一并收走、<code>_rules</code> 后缀、重名 toast、取消/空名/同名静默，<b>对改前（HEAD 版）与改后各跑一遍，均 50/50 通过</b>，即用户可见行为零变化；③ 该 harness 在开发中抓出一处真回归（后缀规范化原本在 def 构建时算的是空占位名，新增规则集不补 <code>_rules</code>），改为 <code>normalize</code> 钩子在骨架调用点生效后转绿；④ <code>commands run test.full</code> 全绿（数字见本页状态日志最后一行，基线切片 <code>memory-bank/testing/baselines/26-10-21-0311-dup-code-audit.md</code>）。</p>
   </section>
 
   <footer>

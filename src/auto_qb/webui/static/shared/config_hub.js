@@ -948,18 +948,25 @@ window.CONFIG_HUB = {
     },
 
     /* ---------------------------------------------------------- 站点 / 规则集 / 规则 增删 */
+    /* 「新增实体」的命名交互单点(报告 26-10-20-2231 R20-C-02): 取消 / 空名 / 查重的判据只写一遍,
+     * 三个入口只声明文案 —— 改命名交互(如加长度提示、二次确认)不必再改三处。
+     * def 额外带 title / placeholder / prefill, 其余字段原样交给 cfgEntityAdd 的骨架。 */
+    async hubAddEntity(def) {
+      const { title, placeholder, prefill, ...entity } = def;
+      const input = await this.promptDialog(title, prefill || "", { placeholder, okText: "添加" });
+      if (input === null || input === undefined) return;
+      const name = String(input).trim();
+      if (!name) return;
+      this.cfgEntityAdd({ ...entity, name });
+    },
     async hubAddTracker(prefill) {
       /* prefill: 聚焦搜索层面板尾的「新增站点「词」」把当前搜索词带进命名框(方案C, 搜不到就当场建) */
-      const name = await this.promptDialog("新增站点配置", prefill || "", { placeholder: "站点名(如 HHan)", okText: "添加" });
-      if (name === null || name === undefined) return;
-      const n = String(name).trim();
-      if (!n) return;
-      if (this.cfgTracker(n)) {
-        this.toast(`站点 ${n} 已存在`, "error");
-        return;
-      }
-      this.cfg.newTrackerName = n;
-      this.cfgTrackerAdd();
+      return this.hubAddEntity({
+        ...this.cfgTrackerDef(""),
+        title: "新增站点配置",
+        placeholder: "站点名(如 HHan)",
+        prefill,
+      });
     },
     async hubImportSites() {
       /* 一键导入缺失站点(对齐 CLI --export-yaml --only-missing): 后端只读扫描,
@@ -1001,20 +1008,18 @@ window.CONFIG_HUB = {
       }
     },
     async hubAddRuleGroup() {
-      const name = await this.promptDialog("新增规则集", "", { placeholder: "规则集名(自动补 _rules)", okText: "添加" });
-      if (name === null || name === undefined) return;
-      const n = String(name).trim();
-      if (!n) return;
-      this.cfg.newRuleGroupName = n;
-      this.cfgRuleAddGroup();
+      return this.hubAddEntity({
+        ...this.cfgRuleGroupDef(""),
+        title: "新增规则集",
+        placeholder: "规则集名(自动补 _rules)",
+      });
     },
     async hubAddRule(groupKey) {
-      const name = await this.promptDialog("新增规则", "", { placeholder: "规则名(如 auto-skip-checking)", okText: "添加" });
-      if (name === null || name === undefined) return;
-      const n = String(name).trim();
-      if (!n) return;
-      this.cfg.newRuleName = n;
-      this.cfgRuleAdd(groupKey);
+      return this.hubAddEntity({
+        ...this.cfgRuleDef(groupKey, ""),
+        title: "新增规则",
+        placeholder: "规则名(如 auto-skip-checking)",
+      });
     },
     hubPickPlugin(groupKey, ruleName, listName, ev) {
       const value = ev.target.value;

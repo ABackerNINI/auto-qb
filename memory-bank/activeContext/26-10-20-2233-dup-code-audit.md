@@ -1,7 +1,7 @@
 # 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
 
 > 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
-> 最后活动: 2026-10-21 02:26
+> 最后活动: 2026-10-21 03:11
 
 **Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
@@ -38,6 +38,8 @@
 
 - **Phase 3 = 测试与横切（轮 24–25）**：`tests/` fixture/hepler 重复、conftest 分片、`scripts/` 与 `src/` 的口径重复。
 - **Phase 4 = 汇总（轮 26）**：全局 322 项的重构候选排序总表（报告 §30.3 已有 Phase 2 部分 18 行雏形）+ 跨层「同一事实」总账（Phase 1 后端 ↔ Phase 2 前端同名/同义常量的对账）+ 未入池候选按清偿顺序决定。
-- **Phase 2 的 17 条 issue 全部 Open 未认领** —— 建议起手顺序：先认领 `2231-test-fe-tpl-shell-parity-guard`（零源码风险，立即吃掉"无守阵的重复"这个最大风险面），再按 §30.3 排序取 A 族。
+- **Phase 2 的 17 条 issue：2 条已 Done（`2231-test-fe-tpl-shell-parity-guard` 守阵、`2231-refactor-fe-config-entity-crud-dup` 三骨架收敛），余 15 条 Open 未认领** —— 建议起手顺序：守阵族（零源码风险）→ 按 §30.3 排序取 A 族；`config-entity-crud-dup` 已给出「先写等价性断言再改」的模板（见 R2）。
 
 **R1(2026-10-21 02:26):** 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)
+
+**R2(2026-10-21 03:11):** 认领并修复 issue 26-10-20-2231(refactor-fe-config-entity-crud-dup): config_editor.js 抽 cfgEntityAdd/Rename/Remove 三骨架 + cfgTrackerDef/RuleGroupDef/RuleDef 三份差异清单, config_hub.js 三处 promptDialog 包装合并为 hubAddEntity(def), 九处入口收敛; 连带删中间态 newXName×3/addOpen/cfgAddCancel/cfgTracker(name); 50 项等价性 harness 对 HEAD 版与改后各跑一遍均全绿(开发中抓出 _rules 后缀回归并修), issue 置 Done
