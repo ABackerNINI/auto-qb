@@ -14,6 +14,8 @@ auto-qb-data/
 # (计划 26-10-17-0339 §03: 工具数据默认落仓库内工具目录; 插件化部署 (S15) 打包需剔除)
 tools/global-traffic-monitor/data/
 tools/global-traffic-monitor/run/
+# 正主注册的安装 ID (计划 26-10-20-1316 §03: 仓库内安装根首次启动/测试即生成)
+tools/global-traffic-monitor/tool-id
 
 # Docker 部署的配置目录(docs/deployment.md 快速开始: cp docker/config.example.yml config/config.yml
 # 后填真实 qB 凭据) —— 凭据不入库, 与根 config.yml 同一红线口径

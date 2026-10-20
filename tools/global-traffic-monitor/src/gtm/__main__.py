@@ -4,6 +4,8 @@
   run [--data-dir DIR] [--autostart]
                                   采样-落盘-通知主循环 (单写线程; 控制面随 run 启动)
                                   --autostart: 本次拉起顺带幂等注册开机自启 (S14/D13)
+                                  启动先过正主注册判定 (计划 26-10-20-1316 §03): 让位方
+                                  代拉注册正主后立即退出, 自身不写任何数据
   install-autostart               三平台自启幂等注册 (S5)
   uninstall-autostart             三平台自启幂等卸载 (S5)
   endpoint                        读发现指针打印当前端点 host:port / token_path / data_dir
@@ -22,6 +24,19 @@ from typing import Optional
 from gtm import __version__
 from gtm.config import Config, ConfigHolder, load_config, migrate_legacy_config
 from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
+from gtm.identity import (
+    Decision,
+    DeferredNote,
+    Identity,
+    IdentityError,
+    clear_deferred,
+    ensure_data_ownership,
+    fill_primary_data_dir,
+    load_or_create_install_id,
+    relay_launch,
+    resolve_startup,
+    write_deferred,
+)
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
@@ -140,13 +155,74 @@ def _run_loop(
         stop_event.wait(cfg.sample_interval)
 
 
+def _note_from(reason: str, identity: Identity, decision: Decision) -> DeferredNote:
+    """从判定结论构造让位/被拒注记 (工具侧写, auto-qb 只读展示 —— 镜像常量各持一份).
+
+    detail 直接带判定 message (人读处置指引); target 字段在 refuse 分支多为记录
+    自身 (拷贝件场景记录指向的就是「另一份同 id 安装」), 在 relay 分支是正主。
+    """
+    record = decision.record
+    return DeferredNote(
+        reason=reason,
+        from_install=identity.install_root,
+        target_install=record.install_path if record else "",
+        target_id=record.id if record else "",
+        detail=decision.message,
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     logging.basicConfig(
         stream=sys.stderr,
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # 正主注册判定 (计划 §03 矩阵): 排在取锁/绑端口/解析数据目录之前 —— 身份不定,
+    # 后面每一步都可能在替别人的安装打工。让位方绝不自身启动 (Q1-a): 代拉正主后
+    # 立即退出 (exit 0 —— 让位是正常行为, auto-qb 探活会等到正主应答); 拒绝/矛盾
+    # 落注记交人工 (exit 1)。
+    try:
+        identity = load_or_create_install_id()
+        decision = resolve_startup(identity)
+    except IdentityError as e:
+        print(f"global-traffic-monitor: {e}", file=sys.stderr)
+        return 1
+    if decision.kind == "refuse":
+        # ③ 拷贝件/安装被移动/记录矛盾: 不写任何数据, 注记进指针目录 (auto-qb 状态区展示)
+        write_deferred(_note_from("refused", identity, decision))
+        print(f"global-traffic-monitor: {decision.message}", file=sys.stderr)
+        return 1
+    if decision.kind == "relay":
+        # ④ 让位: 代拉注册正主安装后立即退出; 启动器缺失也照常写注记 (原因进 detail)
+        launcher = relay_launch(decision.record.install_path)
+        note = _note_from("relayed", identity, decision)
+        if launcher is None:
+            note = DeferredNote(
+                reason=note.reason,
+                from_install=note.from_install,
+                target_install=note.target_install,
+                target_id=note.target_id,
+                detail=note.detail + " (代拉启动器缺失, 正主未能自动拉起)",
+            )
+        write_deferred(note)
+        print(f"global-traffic-monitor: {decision.message}", file=sys.stderr)
+        return 0
+    # claim/primary: 本安装即 (或刚认领为) 正主, 继续既有启动序列
+    logger.info(
+        "正主判定 | %s | id=%s install=%s",
+        decision.message,
+        identity.install_id,
+        identity.install_root,
+    )
     data_dir = _resolve_data_dir(args.data_dir)
+    # 数据归属 (版本血统防线): 本安装要写的这份数据必须认得出本安装; 只为自家记录
+    # 补写空的 data_dir 信息位 (唯一自动写点, 不削弱拷贝件拒绝 —— 被拒的进程走不到这)
+    try:
+        ensure_data_ownership(data_dir, identity)
+    except IdentityError as e:
+        print(f"global-traffic-monitor: {e}", file=sys.stderr)
+        return 1
+    fill_primary_data_dir(identity, data_dir)
     # 配置加载: 校验失败 fail-fast 并聚合报错 (黄金法则 4; 不静默用默认值继续)
     config, _ = _load_config_or_fail(data_dir)
     if config is None:
@@ -192,6 +268,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"global-traffic-monitor: 控制面启动失败 (端口 {config.http_port} 被占用?): {e}", file=sys.stderr)
         storage.release_lock()
         return 1
+    # 权威时刻: 单实例锁 + 控制面端口 + 发现指针齐备, 正主真正站起来 —— 清掉
+    # 让位/被拒注记 (注记是 auto-qb 状态区的临时可见性, 权威方成功即失效)
+    clear_deferred()
     notifier = Notifier(storage, holder)
     try:
         for w in storage.recover(sampler):
