@@ -509,8 +509,9 @@ def test_cmd_claim_success_rewrites_record_and_clears_note(tmp_path, monkeypatch
     root_b = fake_install(tmp_path, "b", install_id="id-b")  # 本安装, 易主过来
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-a", install_path=root_a)
-    write_deferred(DeferredNote(reason="relayed", from_install=root_b, target_install=root_a))
     patch_paths(monkeypatch, tmp_path, root_b, ptr)
+    # 注记须在 patch_paths 之后写: write_deferred 走 identity 命名空间的指针目录, 提前写会落真实目录
+    write_deferred(DeferredNote(reason="relayed", from_install=root_b, target_install=root_a))
     data_dir = str(tmp_path / "data")
     assert cmd_claim(claim_args(data_dir)) == 0
     # 记录三项全换成本安装事实

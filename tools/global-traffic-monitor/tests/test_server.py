@@ -8,8 +8,10 @@
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
-不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络; 锁路径与发现指针注入 tmp
-(不碰真实用户级指针目录), installer 替身注入 (不跑真实 schtasks/systemctl).
+不碰真实网卡、不占固定端口、不跑真实 HTTP 之外的网络; 锁/发现指针 (gtm.storage)
+与正主指针 (gtm.identity) 双命名空间同址注入 tmp (不碰真实用户级指针目录;
+tests/conftest.py autouse 守阵对每个用例做真实目录前后快照, 落文件即红),
+installer 替身注入 (不跑真实 schtasks/systemctl).
 """
 
 from __future__ import annotations
@@ -478,6 +480,8 @@ def test_losing_instance_locks_out_before_binding_port(tmp_path, monkeypatch, ca
 
     ptr = tmp_path / "ptr"
     monkeypatch.setattr("gtm.storage.pointer_dir", lambda: str(ptr))
+    # 身份层另持一份 pointer_dir 引用 (gtm.identity), 不同址重定向会把 primary.json 写进真实目录
+    monkeypatch.setattr("gtm.identity.pointer_dir", lambda: str(ptr))
     data_dir = tmp_path / "data"
     holder = Storage(str(data_dir))
     holder.acquire_lock()  # 模拟已运行实例占锁 (锁锚点已被 monkeypatch 指到 tmp)
