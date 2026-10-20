@@ -9,7 +9,7 @@
 
 ## In Progress
 
-- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–23: 后端 config + core + hr + webui + rules + infra + torrents; 前端 shared JS + 抽屉族 + 三皮肤 CSS + 模板层)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
+- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–25: 后端 + 前端 + 测试与横切, Phase 0–3; 轮 26 汇总待做)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 
 ## Open
 

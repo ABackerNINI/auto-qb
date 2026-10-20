@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-20-2232">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–23: 后端 config + core + hr + webui + rules + infra + torrents; 前端 shared JS + 抽屉族 + 三皮肤 CSS + 模板层)</title>
+<meta name="doc-updated" content="26-10-21-0454">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<title>全仓重复代码审查 · 滚动报告 (轮 00–25: 后端 + 前端 + 测试与横切, Phase 0–3; 轮 26 汇总待做)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -110,15 +110,22 @@
       <a href="#s23"><b>23</b>&nbsp; 分类计数与候选排序</a>
       <a href="#s24"><b>24</b>&nbsp; 入池 issue</a>
       <a href="#s25"><b>25</b>&nbsp; 变更记录</a>
+      <a href="#s26"><b>26</b>&nbsp; R20 shared JS</a>
+      <a href="#s27"><b>27</b>&nbsp; R21 抽屉族</a>
+      <a href="#s28"><b>28</b>&nbsp; R22 三皮肤 CSS</a>
+      <a href="#s29"><b>29</b>&nbsp; R23 模板层</a>
+      <a href="#s30"><b>30</b>&nbsp; Phase 2 汇总</a>
+      <a href="#s31"><b>31</b>&nbsp; R24 tests/</a>
+      <a href="#s32"><b>32</b>&nbsp; R25 跨层总账</a>
     </nav>
     <main>
       <div class="kicker">执行报告 · 重复代码审查</div>
       <h1>全仓重复代码审查 · 滚动报告</h1>
-      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + 轮 01–04(config 全包) + 轮 05–10(core 全包) + 轮 11–14(hr 全包) + 轮 15–16(webui 全包) + 轮 17–19(rules / infra / torrents+tray+entry)</b>。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
+      <p class="lede">专题 <code>dup-code-audit</code> 的执行期现场记录。本次覆盖 <b>Phase 0(准备) + Phase 1 轮 01–19(后端全包: config/core/hr/webui/rules/infra/torrents+tray+entry) + Phase 2 轮 20–23(前端) + Phase 3 轮 24–25(测试与横切)</b>; 剩轮 26(全局汇总)。纯审查轮 —— 全程零源码改动, 可动项一律入池 issue。计划见 <a href="../plans/26-10-10-2333-plan-dup-code-audit.html">plans/26-10-10-2333</a>。</p>
       <div class="meta-row">
         <span>状态 <b class="mono">In Progress</b></span>
         <span>专题 <b class="mono">dup-code-audit</b></span>
-        <span>本轮范围 <b class="mono">Phase 0 + 轮 01–19</b></span>
+        <span>本轮范围 <b class="mono">Phase 0–3(轮 00–25; 轮 26 待做)</b></span>
         <span>取证基线 <b class="mono">08f116ab</b></span>
         <span>启动 <b class="mono">26-10-11-0033</b></span>
         <span>报告形态 <b class="mono">滚动(轮 26 置 Done)</b></span>
@@ -159,6 +166,9 @@
           <tr><td class="r">R21</td><td class="mono">抽屉族: drawer·drawer_head·drawer_store·drawer_templates + drawer_tpl/01–12·90</td><td>8234 行 · 17 文件(拆 R21-A~C)</td></tr>
           <tr><td class="r">R22</td><td class="mono">三皮肤 CSS: 各 style.css/tokens/themes/components/views/dialogs + shared/console_hub.css + dt_table.css</td><td>8109 行 · 19 CSS(拆 R22-A~C)</td></tr>
           <tr><td class="r">R23</td><td class="mono">模板层: shared/tpl/*.html 20 件 + atlas/console/prism 三份 index.html</td><td>3967 行 · 20 件 + 632 行 · 3 份(拆 R23-A~C)</td></tr>
+          <tr class="phase"><td colspan="3">Phase 3 —— 测试与横切 轮 24–25</td></tr>
+          <tr><td class="r">R24</td><td class="mono">tests/ 全目录: 共享助手层(conftest·helpers·hr_helpers·sidefx·webui_helpers 整读) + 跨文件内联桩族 + 断言样板 + 「## 测试计划」docstring 漂移</td><td>100241 行 · 130 py(拆 R24-A~D; 立法基线时 63956/108)</td></tr>
+          <tr><td class="r">R25</td><td>跨层「同一事实」总账: 配置键面 · 枚举/状态词 · 颜色令牌 · 模块契约 · 中文文案 · 口径单点</td><td>六主题面合账(C 94 项; 不按行数)</td></tr>
         </table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
@@ -178,6 +188,7 @@
           <tr><td class="r mono">jscpd python 10/70 · rules+infra+torrents+tray<br>(R17–R19 实测)</td><td><b>0 clone</b>(33 文件) —— 字面重复同样极低</td></tr>
           <tr><td class="r mono">jscpd -f "javascript,css,markup"<br>--min-lines=10 --min-tokens=70 · webui/static<br>(Phase 2 R20 实测)</td><td><b>121 克隆 / 2525 重复行(6.56%)</b>: <b>css 74 克隆(18.55%)</b> / javascript 44 / markup 3。css 占重复行绝对多数 = 三皮肤互克隆; JS 字面重复极低(仅 3 处, 全部落入 R20-A); markup 仅 3 处且两处在 index.html(R23-C)</td></tr>
           <tr><td class="r mono">jscpd 格式可用性</td><td><code>-f "js,html"</code> 报 not supported; <code>--list</code> 查得可用格式含 <code>javascript</code>/<code>css</code>/<b><code>markup</code></b>(无 <code>html</code>)。<b>markup 对模板族几乎无效</b> —— 模板骨架是"参数化后的同构", 变量名一换 token 序列即脱钩; Phase 2 的 166 项里 markup 机器提名只贡献 3 项</td></tr>
+          <tr><td class="r mono">jscpd python 8/60 + pylint R0801 =8 · tests<br>(Phase 3 R24 实测, 基线 cecbe4a9)</td><td><b>112 克隆 / 1305 行(1.30%)</b>(tests 100241 行) + R0801 13 组。对照 Phase 1 在 src/ 的 jscpd <b>0 克隆</b>: <b>tests/ 是全仓 Python 字面重复密度最高的面</b>, 机器提名约六成直接成立 —— 与「工具近乎全哑」的后端/前端结论相反</td></tr>
         </table>
         <div class="callout">
           <p><b>R00 关键结论:</b> config 包的字面重复检测几乎全静默 —— <b>与计划预判一致</b>(config 是 C 类「同一事实多表示」最密的包, 而非复制粘贴)。工具仅作提名, 主战场是 §3.3 结构线索 grep 与逐文件精读。阈值冻结: pylint <code>8</code>(config 下探 <code>5</code>)、jscpd <code>8/60</code>, 供后续轮沿用/微调。</p>
@@ -1285,6 +1296,7 @@
           <tr><td class="r mono">26-10-11-0310</td><td>追加 R15–R16(webui 全包)发现清单(24 项: A9/B2/C7/D6) + 累计分类计数(122 项: A47/B10/C31/D34) + webui 重构候选排序 + 入池 webui 10 issue; 覆盖表补 R15–R16; 取证基线 <code>86138d33</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0352</td><td>追加 R17–R19(rules / infra / torrents+tray+entry 全包)发现清单(34 项: A11/B5/C9/D9) + 累计分类计数(156 项: A58/B15/C40/D43) + 三段重构候选排序 + 入池 rules 3 / infra 5 / torrents+tray 3 = 11 issue; 覆盖表补 R17–R19; §2.1 补工具实测; 取证基线 <code>08f116ab</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-20-2232</td><td><b>Phase 2(前端 webui/static/)</b>: 追加 R20–R23(shared JS 六面 / 抽屉族 / 三皮肤 CSS / 模板层+三 index.html)发现清单 <b>166 项(A71/B15/C48/D32)</b> + <b>全局累计 322 项(A129/B30/C88/D75)</b> + 30.2 A 类分布特征(与 Phase 1 的结构差异) + 候选排序 + 入池 16 refactor / 1 test = <b>17 issue</b>(族级合并); 覆盖表补 R20–R23; §2.1 补 jscpd 前端实测(121 克隆/6.56%, css 占 18.55%)与 markup 格式可用性结论。全程纯审查零源码改动, 取证基线 <code>4eef60fe</code>。</td></tr>
+          <tr><td class="r mono">26-10-21-0454</td><td><b>Phase 3(测试与横切)</b>: 追加 R24(tests/ 全目录 100241 行/130 py, 拆 A~D 四子轮)发现清单 <b>25 项(A11/B5/C6/D3)</b> + R25 跨层「同一事实」总账(六主题面合账, C 类 94 项) + <b>全局累计 347 项(A140/B35/C94/D78)</b> + 入池 5 refactor / 1 test = <b>6 issue</b>(族级合并); 覆盖表补 R24–R25; §2.1 补 tests 机器提名实测(jscpd 112 克隆/1.30% vs src 0 的反转); nav 补 §26–§32, 并修正 Phase 2 漏改的头部覆盖口径(title/lede/本轮范围/footer)。取证基线 <code>cecbe4a9</code>。纯审查轮, 零源码改动。</td></tr>
         </table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
       </section>
@@ -1489,9 +1501,145 @@
         </ul>
       </section>
 
+      <section id="s31">
+        <h2><span class="secno">31</span>R24 · tests/(共享助手层 · 内联桩族 · 断言样板 · docstring 漂移 · 100241 行 / 130 py)</h2>
+        <hr class="sec-rule">
+        <p><b>S1 圈定(实测, 取证基线 <code>cecbe4a9</code>):</b> 计划立法时 63956 行/108 文件 → 现测 <b>100241 行 / 130 py</b>(增长 57%)。按计划 §07 上限拆 <b>4 个子轮</b>: <b>R24-A</b> 共享助手层整读(conftest 254 + helpers 1200 + hr_helpers 286 + sidefx 465 + webui_helpers 488 ≈ 2693 行, 本轮靶心) · <b>R24-B</b> 跨文件内联桩/Fake 族 · <b>R24-C</b> 断言样板 · <b>R24-D</b>「## 测试计划」docstring 与用例漂移 —— 计划 §04 轮 24 预判的三个靶面全覆盖。</p>
+        <p><b>S2 提名(机器实测):</b> jscpd(python 8/60) <b>112 克隆 / 1305 行(1.30%)</b> + pylint R0801 <b>13 组</b> + 结构线索 grep(<code>class Fake*|def _make_*|TestClient(|HrRefreshService(|HrWorker(|now_fn=|_wait</code>)。自克隆大户: test_grouping 210 行 / test_checking 178 / test_hr_service 124 / test_extension_proxy 80 / test_episodes 63 / test_hr_worker 57; 跨文件对: relocate 四件套 67 行 / webui_delta↔mirror 30 / traffic_monitor_client↔dat 24 / <b>test_hr_service↔test_hr_worker↔webui_helpers 三方逐字</b>。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">11</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">5</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">6</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <h3>31.1 R24-A · 共享助手层(6 项)</h3>
+        <table>
+          <tr><th style="width:9%">编号</th><th style="width:6%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr><td class="r mono">R24-A-01</td><td><span class="tag a">A</span></td><td><b>日志捕获器 7 份实现</b>: helpers._LogCapture/capture_logs · webui_helpers._ListLogHandler+module_log · test_hr_service._ListLogHandler+service_log · test_hr_worker 同构类 · test_modules_p6._RecHandler+采集类 · test_speed_curve._CurveLogCapture · test_traffic_sample StreamHandler 采集类。jscpd 三方逐字(test_hr_service:1951 ↔ test_hr_worker:725 ↔ webui_helpers:463)。<b>分歧点:</b> 仅 logger 名与返回形状(messages/records/text/StringIO)。<b>维护风险:</b> 改捕获语义要同改 7 处; 「禁 caplog」纪律在 7 处各注释一遍。<b>建议:</b> helpers.capture_logs 升级唯一单点(补 records/messages 接口), 七处改调。</td></tr>
+          <tr><td class="r mono">R24-A-02</td><td><span class="tag b">B</span></td><td><b>_wait_until/_wait_for ×3</b>(test_hr_worker:110 / test_notify:66 / test_traffic_monitor_client:130)。<b>分歧点:</b> 超时返回语义(False vs pred())+ 轮询步长(0.01/0.02) —— 直接合并会改行为。<b>建议:</b> 单 wait_until(pred, timeout, poll=, on_timeout=) 收 helpers; B 类先钉分歧。</td></tr>
+          <tr><td class="r mono">R24-A-03</td><td><span class="tag b">B</span></td><td><b>HrRefreshService 构造器 4 份 + 3 处内联</b>(test_hr_service.make_service:322 · test_hr_multisite._service:61 · test_hr_worker._service:94 · webui_helpers._hr_status_env 内联; test_hr_report 另 3 处内联)。<b>分歧点:</b> 参数面已分叉(owner/persist/allow_fetch/global_overrides/confs)。<b>建议:</b> 收 hr_helpers 单构造器(参数并集); B 类先钉差异。</td></tr>
+          <tr><td class="r mono">R24-A-04</td><td><span class="tag c">C</span></td><td><b>web 测试环境装配三形态</b>: conftest.web_env(config_text 硬编码+默认 client) · test_web_backend_misc/test_web_views_reload 直用 _make_web_manager+create_app · test_web_auth ×10 / test_web_admin ×5 每用例内联 TestClient(create_app(mgr))。<b>维护风险:</b> 单点已存在被旁路 —— web_env 不可参数化(config 文本/客户端地址/token)。<b>建议:</b> web_env 参数化(config_text/client_addr), 15+ 处旁路回收。</td></tr>
+          <tr><td class="r mono">R24-A-05</td><td><span class="tag c">C</span></td><td><b>HR 行键面双份字面量</b>: history 行 23 键(test_hr_status.test_history_rows_field_surface ↔ test_web_hr:307) + entry 键面(test_hr_status:246 ↔ test_web_hr:140) —— 同一 API 行 schema 键面两处全量声明。<b>维护风险:</b> 后端加字段要同改两处, 漏一处即两守阵口径分叉。<b>建议:</b> 键面常量收单点(webui_helpers), 闭集断言语义保留。</td></tr>
+          <tr><td class="r mono">R24-A-06</td><td><span class="tag d">D</span></td><td><b>conftest 四守卫 + sidefx 记账器</b>。判定<b>不动</b>: 单点、职责单一、StubRegKey 互认设计(两夹具谁先装都不误判) —— 正面范式。</td></tr>
+        </table>
+        <h3>31.2 R24-B · 跨文件内联桩/Fake 族(13 项)</h3>
+        <table>
+          <tr><th style="width:9%">编号</th><th style="width:6%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr><td class="r mono">R24-B-01</td><td><span class="tag a">A</span></td><td><b>_fake_file ×4 逐字</b>(helpers:1137 / test_episodes:21 / test_grouping:102 / test_modules_p4:42)。建议: 统一 import helpers(收益低, 顺手)。</td></tr>
+          <tr><td class="r mono">R24-B-02</td><td><span class="tag a">A</span></td><td><b>_pin_disk_usage ×4 逐字</b>(test_relocate_exec:59 / test_relocate_paths:35 / test_grouping_relocate:25 / test_web_relocate:~20)—— jscpd+pylint 双确认。建议: 收 helpers 单点。</td></tr>
+          <tr><td class="r mono">R24-B-03</td><td><span class="tag b">B</span></td><td><b>relocate 环境构建器 ×4</b>(_make_env / _env ×2 / _make_group_env)。<b>分歧点:</b> 默认 state(uploading vs pausedUP)·文件大小(64 vs 100)·返回元组·relocate.enabled 与 server_state 设置点。<b>建议:</b> 参数化合并; B 类先钉差异。</td></tr>
+          <tr><td class="r mono">R24-B-04</td><td><span class="tag c">C</span></td><td><b>QbManager+FakeClient 装配样板绕过 make_manager 单点</b>: <code>QbManager("", config=cfg</code> 内联 89 处/15 文件(test_grouping 60 / test_episodes 5 / test_delete_tags 5 / test_checking 3 / test_hr 4 等), 而 make_manager 已有 45 文件使用面。<b>根因:</b> make_manager 不收 config 覆盖参数(grouping/episodes 需开段)。<b>建议:</b> make_manager 加 cfg 覆盖参, 旁路回收 —— 扩参数, 不是新建。</td></tr>
+          <tr><td class="r mono">R24-B-05</td><td><span class="tag a">A</span></td><td><b>traffic dat 写手 5 处手写</b>: _dat_text+_write_dat(test_speed_curve:127 ↔ test_traffic_snapshot:62, jscpd 13 行逐字) + 变体 store._write_dat:222 / limits._write_day:48 / sample._write_day_file:2037。同一「history_traffic.dat 文本格式」5 份表示。<b>建议:</b> tests 共享层单点; 与生产写手保持独立(防同义反复), 格式由读侧往返守阵钉。</td></tr>
+          <tr><td class="r mono">R24-B-06</td><td><span class="tag a">A</span></td><td><b>_ss+_active_torrent ×2 逐字 26 行</b>(test_traffic_sample:238 ↔ test_traffic_store:183, pylint 组 3; store 版丢 docstring)。建议: 收 helpers。</td></tr>
+          <tr><td class="r mono">R24-B-07</td><td><span class="tag c">C</span></td><td><b>legacy v1 config 样本多表示</b>: test_config_writer.LEGACY_V1:580 常量 ↔ test_qbmanager:1161 内联逐字(BTSchool+hr_check partial 全文); test_config.py 两处部分变体(刻意)。<b>建议:</b> 锚样本收共享常量。</td></tr>
+          <tr><td class="r mono">R24-B-08</td><td><span class="tag b">B</span></td><td><b>_write_pointer ×3</b>(test_traffic_monitor_client:106 / test_traffic_source_agent:84 / test_traffic_source_paths:33)。<b>分歧点:</b> agent 版 superset(host/port/autostart_error)·client 版 autostart 固定 True·paths 版 payload 直注 —— 同一 endpoint.json 写出契约三份写手(生产侧 schema 常量已是单点)。<b>建议:</b> 收共享 fixture; B 类先钉差异。</td></tr>
+          <tr><td class="r mono">R24-B-09</td><td><span class="tag a">A</span></td><td><b>_write_token ≡ _write_credential_file</b>(test_traffic_source_agent:76 ↔ test_traffic_monitor_client:98): 同路径 gtm/monitor.token 同默认值同语义, 逐字级。建议: 收 helpers。</td></tr>
+          <tr><td class="r mono">R24-B-10</td><td><span class="tag a">A</span></td><td><b>_make_store ×2 逐字</b>(test_webui_delta:67 ↔ test_webui_delta_mirror:76, 仅注释差异)+ _ViewHost/_delta_runtime/_publish 平行件 —— delta/mirror 孪生套件的共享底座。建议: 收 webui_helpers。</td></tr>
+          <tr><td class="r mono">R24-B-11</td><td><span class="tag a">A</span></td><td><b>atomic_write 中断注入 ×2 逐字 13 行</b>(test_hr_channel:135 ↔ test_web_backend_misc:261: real_atomic_write+_crash_mid 半截写入)。建议: 收 helpers(crash 注入器)。</td></tr>
+          <tr><td class="r mono">R24-B-12</td><td><span class="tag b">B</span></td><td><b>假时钟三态</b>: hr_helpers.Clock(now_fn 注入) / test_traffic_sample._Clock:758(monkeypatch 模块 time 引用) / test_web_traffic_qb._FixedClock:379(3 行固定)。同一「可推进假时钟」事实两派注入方式。<b>建议:</b> Clock 扩注入适配; B 类先钉差异。</td></tr>
+          <tr><td class="r mono">R24-B-13</td><td><span class="tag d">D</span></td><td><b>文件内 3 行桩</b>(_Endpoint ×9 于 test_hr_worker / _FixedClock / _web_stub)。判定<b>不动</b>: 刻意显式、≤3 行惯用式豁免。</td></tr>
+        </table>
+        <h3>31.3 R24-C · 断言样板(3 项)</h3>
+        <table>
+          <tr><th style="width:9%">编号</th><th style="width:6%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr><td class="r mono">R24-C-01</td><td><span class="tag a">A</span></td><td><b>test_checking 规则任务提交样板</b>: jscpd 178 行自克隆(14 组) —— 提交 4 行(rule=next/_create_rule_task/add_task/run_queue)×N + resume 断言组 ×3 逐字。文件内已有 make_check_cfg/make_mgr/make_target/run_queue 单点, 剩余提交块与断言组可再抽。建议: submit_rule_task + 断言组 helper(收益低-中)。</td></tr>
+          <tr><td class="r mono">R24-C-02</td><td><span class="tag a">A</span></td><td><b>test_grouping 归组场景样板</b>: jscpd 210 行自克隆(19 组, 全 tests 最大) —— 灌种子+files_map+_refresh+calls 断言 ×N。与 R24-B-04 同根: 构造器参数化后大半消失。建议: 随 B-04 一并收敛。</td></tr>
+          <tr><td class="r mono">R24-C-03</td><td><span class="tag d">D</span></td><td><b>.calls.count((…)) 断言习语 64 处</b> / <code>("stop", None) in client.calls</code> 等单行习语。判定<b>不动</b>: 刻意显式可读, ≤3 行惯用式豁免。</td></tr>
+        </table>
+        <h3>31.4 R24-D · 「## 测试计划」docstring 漂移(3 项, ast 机械检查)</h3>
+        <table>
+          <tr><th style="width:9%">编号</th><th style="width:6%">类</th><th>重复对象 · 分歧点 · 维护风险 · 建议</th></tr>
+          <tr><td class="r mono">R24-D-01</td><td><span class="tag c">C</span></td><td><b>清单 ↔ 用例双表示已漂移</b>: 130 py 的 ast 全量比对 —— <b>56 文件漂移(约 290 条用例未列)</b>, <b>4 文件整段无清单</b>(test_sync 53 defs / test_hr_discovery 30 / test_snapshot_sync 16 / test_logging 12), test_tvshows 45 defs 0 列, test_hr_store 55 defs 仅列 23。<b>维护风险:</b> AGENTS.md「新增测试必须同步清单」是硬规则但<b>无机械守阵</b> —— 清单必然继续漂移。<b>建议:</b> 守阵化(见 D-03)。</td></tr>
+          <tr><td class="r mono">R24-D-02</td><td><span class="tag c">C</span></td><td><b>幽灵条目</b>: 清单列了不存在的用例 —— 机械检出 17 处提及, <b>抽验 7 处为真残留</b>(test_webui_static_dom_panel ×2: classic 回落守阵改版后未清; test_hr_worker ×3: 重构改名后未清; test_hr_status limits_for 改签名后未清等), 其余为散文引用(非清单条目)。<b>建议:</b> 守阵只认列表行形态, 散文引用豁免。</td></tr>
+          <tr><td class="r mono">R24-D-03</td><td><span class="tag a">A</span></td><td><b>收敛动作 = 守阵化优先</b>: 清单↔defs 比对固化为 tests 守阵(唯一「只改测试」即可防再漂移的动作), 存量一次性回填 —— 与 Phase 2「守阵 &gt; 合并」同原则; 守阵先上、回填随后, 新漂移当场红。</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R24 关键结论:</b></p>
+          <ul>
+            <li><b>① tests 是全仓 Python 字面重复密度最高的面</b>(src jscpd 0 克隆 vs tests 1.30%), 机器提名有效性反转 —— 112 组约六成直接成立 A/B。tests 的重复是「历史沉积」而非「结构必然」, 收敛阻力全仓最小(无 DOM/契约约束), 唯一门槛是测试语义等价(超时返回值/文件大小等分歧点必须先钉)。</li>
+            <li><b>② C 类根因多数是「单点参数面不够」而非缺单点</b>: make_manager(45 文件在用)/web_env/ENDPOINT_SCHEMA 都在, 旁路是因为不可参数化 —— 收敛动作 = 扩参数, 不是新建第二套。</li>
+            <li><b>③ 最大的 C 不是代码是 docstring</b>: 56 文件/约 290 条漂移 + 4 文件无清单 + 幽灵 7 处实证 —— 硬规则没有机械守阵, 与「守阵 &gt; 合并」同解。</li>
+            <li><b>④ 正面范式同样清晰</b>: make_manager 45 文件复用 / scripts/ui_harness 直接 import tests.helpers(不复制桩) / sidefx+conftest StubRegKey 互认 —— 本轮 D 类全部是值得保持的范式。</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="s32">
+        <h2><span class="secno">32</span>R25 · 跨层「同一事实」总账(六主题面 · C 类合账)</h2>
+        <hr class="sec-rule">
+        <p>把 Phase 1(40 C) + Phase 2(48 C) + R24(6 C) = <b>94 项 C 类</b>合到一张账(计划 §04 轮 25: <b>「重构收益最大的一张表」</b>)。每行 = 同一事实 / 表示处(来源轮) / 现状守卫 / 收敛形态 / 载体。跨层常量三件在 <code>cecbe4a9</code> 现场复核。</p>
+        <h3>32.1 配置键面(最大账)</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">一个配置键的 N 处表示</td><td>schema / validation / models / loaders / writer+impact / docs/configuration.md / config-reference/keys.md / 枚举常量 = <b>8 处</b>(R04 总账 §07.1)</td><td>validation↔schema 有守卫; <b>docs 两处无守卫且已实证漂移</b>(hr_check 键数 9/7/8 · schema_version 4≠"1" · log.format 默认串 · UNLIMITED_SPEED 三态)</td><td>schema+models 双单点; validation 派生; docs 守卫或生成</td><td><a href="../issues/26-10-11-0032-refactor-config-key-surface-doc-drift.html">config-key-surface-doc-drift</a> · <a href="../issues/26-10-11-0032-refactor-config-default-multi-source.html">config-default-multi-source</a>(Open)</td></tr>
+          <tr><td class="r">枚举/常量双份</td><td>schema/fields ↔ validation/* 9 族(R01-S01) + STATE_ATTRS 三份(R17-C01)</td><td>部分(键面守测)</td><td>单点声明+派生</td><td><a href="../issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html">config-schema-validation-enum-dup</a>(Open)</td></tr>
+          <tr><td class="r">默认值梯</td><td>schema Field.default ↔ models ↔ 前端 config_editor 三层互嵌套(R03-M01 + R20-C-05)</td><td>前端梯已收敛(cfgDefaultForFields 单点, 本专题已修)</td><td>models 派生 schema/docs</td><td>config-default-multi-source(Open); 前端半边 <a href="../issues/26-10-20-2231-refactor-fe-config-default-ladder-dup.html">fe-config-default-ladder-dup</a>(Done)</td></tr>
+          <tr><td class="r">测试替身 = 第 9 表示处(本轮新增)</td><td>helpers.FakeConfig 字段面逐段镜像真 Config(relocate/traffic_source/hr_check 三处「缺该属性会 AttributeError」注释) + tests 内联 legacy v1 样本(R24-B-07)</td><td>无(新增配置段靠人记)</td><td>真模型为底+覆写, 或键面守阵</td><td>随 config 批次(未入池; 与 <a href="../issues/26-10-21-0502-refactor-test-manager-builder-params-dup.html">test-manager-builder-params-dup</a> 同根)</td></tr>
+        </table>
+        <h3>32.2 枚举 / 状态词(跨层常量)</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">STATE_RANK 状态秩</td><td>views._SHOW_STATE_RANK ↔ app.js STATE_RANK(R16-C02 · R20-A-04)</td><td><b>有静态守阵</b>(views.py:117 / app.js:864 双注释声明机械比对)</td><td>保持守阵; 派生待构建链</td><td rowspan="3"><a href="../issues/26-10-11-0310-refactor-webui-cross-layer-constant-convention-dup.html">webui-cross-layer-constant-convention-dup</a>(Open)</td></tr>
+          <tr><td class="r">REANNOUNCE_BLOCKED_STATES</td><td>commands.py:72 ↔ decorate.js(R16-C03)</td><td>注释互指(cecbe4a9 复核仍在); 守阵未见</td><td>建议补 STATE_RANK 同款守阵</td></tr>
+          <tr><td class="r">ETA 哨兵 8640000</td><td>record/compat/_ETA_SENTINEL ↔ format.js fmtEta(R16-C04)</td><td>注释口径一致(cecbe4a9 复核仍在); 守阵未见</td><td>同上</td></tr>
+          <tr><td class="r">状态词文案(kind_text/tone)</td><td>后端 to_dict 派生单点, 前端只消费(R20-C 账)</td><td>有(键面契约守阵 test_frontend_hr_contract_keys_match_backend 等)</td><td>保持</td><td>—</td></tr>
+        </table>
+        <h3>32.3 颜色令牌与 CSS 层</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">令牌族「各套各声明」</td><td>三皮肤 tokens/themes + prism 五主题(R22-A-01); prism 无 dialogs.css 级联序相反(R22-C-08+R23-C-03)</td><td>webui.md 明纪律; 结构问题入池未动</td><td>单点+派生; 恢复 prism dialogs.css 为前置</td><td><a href="../issues/26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html">fe-css-skin-token-layer-dup</a>(Open)</td></tr>
+          <tr><td class="r">三皮肤规则族互克隆</td><td>74 克隆/18.55%(R22-B/C 四族 35 条)</td><td><b>已修</b>(26-10-21 webui-css-rule-family-shared: 收敛 shared/console_hub.css + _ui_css_effective 生效面守阵)</td><td>剩余按批次</td><td><a href="../issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html">fe-css-rule-family-dup</a>(Done 2026-10-21)</td></tr>
+        </table>
+        <h3>32.4 模块契约</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">六动词样板(name/sections/start/stop/apply/subscribe + ctx 挂载 + ApplyResult)</td><td>10+ 模块各写一遍(R09-C01/C02 · R05-M04)</td><td>P0 守阵</td><td>契约层 helper/基类(联 P0)</td><td><a href="../issues/26-10-11-0207-refactor-core-module-contract-boilerplate-dup.html">core-module-contract-boilerplate-dup</a>(Open)</td></tr>
+          <tr><td class="r">模块清单/段认领</td><td>host 注册表 ↔ webui host 替身 ↔ 设置页(tests 里 _stub_modules 手写 3 模块名, R24-A-04 同族)</td><td>部分</td><td>派生</td><td>R03-I01/K01(未入池, 留轮 26)</td></tr>
+        </table>
+        <h3>32.5 中文文案</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">后端档位摘要/告警文案</td><td>hr service 档位串(R13-S01, B 类)· 告警文案(R13-S03)</td><td>无</td><td>统一文案表</td><td>B 类暂缓(先钉文案差异点)</td></tr>
+          <tr><td class="r">跨层文案</td><td>后端经 API 下发为主, 前端静态文案以模板分片为单点 —— 本轮未发现成规模的跨层重复(如实记: 未成账)</td><td>—</td><td>—</td><td>—</td></tr>
+        </table>
+        <h3>32.6 口径单点(单位 · 原子写 · 锁 · URL · token · …)</h3>
+        <table>
+          <tr><th style="width:16%">同一事实</th><th style="width:34%">表示处(来源)</th><th style="width:18%">现状守卫</th><th style="width:18%">收敛形态</th><th>载体</th></tr>
+          <tr><td class="r">速度单位 KiB↔bytes</td><td>qbapi/qbclient/curves ↔ 前端 speedLimitBytes 单点(R06-A01/R07-C01 + R20)</td><td>前端已单点; 后端 issue 在</td><td>后端收口径</td><td><a href="../issues/26-10-11-0207-refactor-core-speed-unit-convention-dup.html">core-speed-unit-convention-dup</a>(Open)</td></tr>
+          <tr><td class="r">原子写口径</td><td>infra.atomic_write 单点 vs 各处自带(R07-T05/R05-S01); 测试侧反而两份「中断注入」复制(R24-B-11)</td><td>部分</td><td>生产收 infra; 测试收 helpers</td><td>生产半边留轮 26; 测试半边 <a href="../issues/26-10-21-0502-refactor-test-shared-micro-helper-dup.html">test-shared-micro-helper-dup</a>(Open)</td></tr>
+          <tr><td class="r">锁+读坏恢复链</td><td>hr store ↔ core state(R14-T02)</td><td>无</td><td>收 infra</td><td><a href="../issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html">hr-store-recover-lock-family-dup</a>(Open)</td></tr>
+          <tr><td class="r">URL 分解 / 平台判定 / 站点派生 / token 持久 / 旁挂目录 / 虚拟 tracker 前缀 / 告警节流 / 数值强转 / view 字段表 / day-key prune / episode marker</td><td>各自 Phase 1 发现(R11-C01 · R14-T01/T03/T04/S01 · R15-C01/C02 · R16-C01 · R18-C01–C04 · R19-C01 · R10-X01 · R08-E01)</td><td>部分</td><td>各 issue 载体</td><td>hr-* / infra-* / webui-* / torrents-* / core-* 族(Open 为主, 见 §24 表)</td></tr>
+          <tr><td class="r">dat 文本格式(本轮新增)</td><td>生产 traffic_store 写手 ↔ tests 5 处手写(R24-B-05)</td><td>读侧往返守阵(格式被钉)</td><td>测试侧收 tests 共享层; 与生产写手保持独立(防同义反复)</td><td><a href="../issues/26-10-21-0502-refactor-test-shared-micro-helper-dup.html">test-shared-micro-helper-dup</a>(Open)</td></tr>
+          <tr><td class="r">endpoint.json 指针契约(本轮新增)</td><td>工具 gtm 写 ↔ agent 读 ↔ tests ×3 写手(R24-B-08)</td><td>schema 常量单点(agent.ENDPOINT_SCHEMA)</td><td>载荷字面量收共享 fixture</td><td><a href="../issues/26-10-21-0502-refactor-test-shared-micro-helper-dup.html">test-shared-micro-helper-dup</a>(Open)</td></tr>
+        </table>
+        <h3>32.7 全局计数与三阶段 A 类分布</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">140</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">35</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">94</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">78</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small"><b>全局累计 347 项</b> = Phase 1 后端 156(A58/B15/C40/D43) + Phase 2 前端 166(A71/B15/C48/D32) + Phase 3 测试横切 25(A11/B5/C6/D3)。Phase 3 的 A 占比 44.0%(三阶段最高)、B 占比 20.0%(最高 —— 测试参数面最易分叉)、D 仅 12.0%(刻意显式豁免判定比例最低)。</p>
+        <h3>32.8 入池 issue(R24 产出, type=refactor / test, 专题 dup-code-audit)</h3>
+        <p>Phase 3 入池 <b>6 条</b>(5 refactor + 1 test, 族级合并), 全部 Open 未认领:</p>
+        <table>
+          <tr><th style="width:42%">issue</th><th>对应发现</th></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-test-test-plan-docstring-guard.html">test-plan-docstring-guard</a></td><td>R24-D-01/02/03(守阵 + 存量回填; <b>只改测试</b>, 三阶段唯一尚未守阵化的硬规则机械面)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-refactor-test-log-capture-dup.html">test-log-capture-dup</a></td><td>R24-A-01(日志捕获 7 份 → capture_logs 单点)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-refactor-test-shared-micro-helper-dup.html">test-shared-micro-helper-dup</a></td><td>R24-B-01/02/05/06/07/09/10/11(同名小助手 9 族收 tests 共享层)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-refactor-test-web-env-param-dup.html">test-web-env-param-dup</a></td><td>R24-A-04(web_env 参数化, 15+ 处旁路回收)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-refactor-test-manager-builder-params-dup.html">test-manager-builder-params-dup</a></td><td>R24-B-04 + R24-C-02(make_manager 收 cfg 覆盖参, 89 处内联回收)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-21-0502-refactor-test-hr-row-key-surface-dup.html">test-hr-row-key-surface-dup</a></td><td>R24-A-05(HR 两张表行键面常量单点)</td></tr>
+        </table>
+        <p class="small"><b>未入池:</b> B 类 5 项全部暂缓(R24-A-02/A-03/B-03/B-08/B-12 —— wait_until/假时钟/pointer 写手/relocate env/hr service 构造器, 先钉参数差异); D 类 3 项不动(正面范式); dat 格式手写与 test_config 部分变体 = 刻意独立实现(防同义反复), 记录不收敛; FakeConfig 第 9 表示处随 config 批次另议。</p>
+        <div class="callout">
+          <p><b>R25 结论:</b> ①「配置键面」仍是最大单账(8+1 表示处, docs 两处至今无守卫且已实证漂移) —— 建议轮 26 排清偿顺序第一; ②跨层常量三件现状核验(cecbe4a9): STATE_RANK 有静态守阵, REANNOUNCE/ETA 仅注释互指 —— 建议补同款守阵, 归 webui-cross-layer-constant-convention-dup; ③C 类 94 项中账面已在收敛(4 条 Done: fe-config-default-ladder-dup · fe-css-rule-family-dup + Phase 2 守阵/entity-crud/combobox 共 4 条); ④三阶段结构差异: 后端 = 函数级样板+契约层, 前端 = 层内构件级(DOM 硬边界), tests = 字面拷贝沉积(机器可提名、可机械守阵、收敛阻力最小)。</p>
+        </div>
+      </section>
+
       <footer>
-        执行报告 · 专题 <code>dup-code-audit</code> · 取证基线 <code>08f116ab</code> · 滚动报告(起始 26-10-11-0033)<br>
-        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0 + 轮 01–19(config + core + hr + webui + rules + infra + torrents 全包)。
+        执行报告 · 专题 <code>dup-code-audit</code> · 滚动报告(起始 26-10-11-0033)<br>
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0–3(轮 00–25; 轮 26 全局汇总待做)。各阶段取证基线: Phase 1 <code>08f116ab</code> · Phase 2 <code>4eef60fe</code> · Phase 3 <code>cecbe4a9</code>。
       </footer>
     </main>
   </div>

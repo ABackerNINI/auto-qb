@@ -4,8 +4,14 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (57)
+## Open (63)
 
+- [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
+- [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
+- [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建
+- [refactor] [tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等)](../26-10-21-0502-refactor-test-shared-micro-helper-dup.html) — 逐字级拷贝散在 2-5 个文件各一份; 收进 tests 共享层(helpers/webui_helpers)单点
+- [refactor] [web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路](../26-10-21-0502-refactor-test-web-env-param-dup.html) — web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收
+- [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [refactor] [三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)](../26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html) — atlas 令牌集 86 vs console/prism 89, 差集恰为 --font-ui/--font-display/--font-mono; prism 把 dialogs 族拆进 components/views 导致级联序与另两皮肤相反
 - [refactor] [前端对话框外壳三段式(mask 手势 / title 头 / actions 栏)11 处手写](../26-10-20-2231-refactor-fe-dialog-shell-template-dup.html) — 遮罩关窗手势 10 处、modal-title 头 11 处、modal-actions 栏 11 处逐字同; 管理对话框两实例同构 40 行; modal-details 行式键值两套
