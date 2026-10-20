@@ -33,7 +33,7 @@
 |---|---|---|
 | 0 | 立档 + 计划制品 + 认领链 + 索引重生成 | Done (2026-10-20) |
 | 1 | P0 · 清偿 98% 门槛与快赢轮 | Done (2026-10-20, 98.33%) |
-| 2 | P1 · traffic 家族与 relocate 中坚 | Pending |
+| 2 | P1 · traffic 家族与 relocate 中坚 | In Progress (T1.1/T1.2 已落地, TOTAL 98.80%) |
 | 3 | P2 · 长尾清偿与 watchlist 清零 | Pending |
 | 4 | P3 · 防回沉机制落地与常态化 | Pending |
 
@@ -61,3 +61,20 @@ T0.1–T0.6 全部落地, 只补测试零产品码改动。test.full 全量: **3
 - **T0.6** 外部依赖收敛: hr/discovery 心跳与退避 / traffic_limits 空窗与 LRU / config/loaders 7 行 + 7 partial 全清 / migrations 6 partial 全清。
 - **范围守恒**: 过程中发现 `_origin_allowed` 端口段非法抛未捕获 ValueError(应为 fail-closed 403), 按纪律入池 `issues/26-10-20-2230-bug-webui-origin-port-parse.html`, **不在本计划内修**(测试侧预留断言位)。
 - **机制侧**: watchlist 10 → **3** 个(tool_client / traffic_qb / relocate_mod);豁免行数 8 行零新增;变异红验 12/12 全杀(≥10% 抽检);Linux 侧 `test.linux` 容器 900s 超时未取得数字(非用例失败), 真值以 CI 复跑为准。
+
+### R2 · P1-T1.1 relocate_mod 守卫与容错簇 (2026-10-21 00:40)
+
+relocate_mod 缺口 **79 → 29 单位**(50 miss + 29 partial → 13 miss + 16 partial), 文件行覆盖 92.6% → 97%; 全量 TOTAL 98.33% → **98.52%**。定向跑(`test_relocate_exec/units/paths/config/web_relocate/grouping_relocate`)136 passed。
+
+- 新增 17 例(`tests/test_relocate_exec.py` 头部「### P1-T1.1 守卫与容错簇」计划 17 条): 解析兜底 / 状态盒缺失 / 旧式 store 注册表重建 / 终态忽略 / mover 消失 / 停滞首样本 / dst 探测保守 / verify 不匹配 / 穿透校验 / regroup 失败不阻断 / 负探测缓存 / reconcile 四动作 / 未知动作 debug-only / 末块跳过已走成员。
+- 新增 `_bare_mod(...)` 助手: 裸 `RelocateModule` + `SimpleNamespace` 上下文(store/api/config/state), 默认 `data_dir=tmp_path`(journal 落盘不落 CWD —— 否则 sidefx 拦)。
+- 顺带修上游 KB 结构红: `tasks/26-10-20-frontend-dup-code-audit.md` 缺 4 个必备章节(远端 `790df0ef` 引入, 非本会话引入), 按最小结构补记, 正文事实取该档案自身陈述。
+
+### R3 · P1-T1.2 traffic_store + traffic_sample_mod (2026-10-21 01:10)
+
+两个文件在本档测试集下**均达 100%**(单文件 `-n 0` 口径复核: `traffic_store.py` 740 语句 / 238 分支零缺口, `traffic_sample_mod.py` 727 语句 / 278 分支零缺口)。全量 TOTAL 98.52% → **98.80%**(190 miss + 139 partial = 329 单位, 3918 passed + 2 skipped), 净清偿 82 单位。
+
+- **traffic_store(42 单位, `tests/test_traffic_store.py` +11 例)**: 纯函数守卫簇(空列 null 语义与 `_parse_nn_int` 空列判坏 / 未知块记录型 TypeError / `v4_next_month_epoch` 跨年 / 月行桶宽 28 天保底 / 跨块 gap 判定 250ms 边界 / agg 头行门闩与坏行 / z 行须基线块)、存储边界(series_has_data 三档 / evict 非 infohash 与非目录条目 / agg 缓存条目数 LRU / `_write_text_payload` 四条失败清理路径)。
+- **traffic_sample_mod(40 单位, `tests/test_traffic_sample.py` +13 例)**: 活尾 pending 行空桶与零覆盖跳过 / main_tick=0 不取整 / 改间隔关块的两条空操作 / 活跃种子缺字段走 n 游程 / 零速过滤与读数漂移防御支(`_FlipSpeedTorrent` 首读 0 次读 512) / z 游程须 totals / 末端锚点三级兜底 / n-only 前缀拆块(3 列 B + 5 列 B 二态并存) / 纯 z 块跨 flush 块头只写一次 / 恢复跨天末槽上下文接力(文件在场 vs 缺失的覆盖差)/ catch-up 开放小时重建 pending / 离线记账空块与 n 槽 / stop() 前置闸。
+- **两处「到不了的支」的处理**: ① `_agg_credit_day_file` 的空块零槽 —— 解析层不会产出空块, 直接构造 `V4Block(records=())` 走防御支并在 docstring 注明; ② catch-up 的空桶 —— `_agg_credit_hours` 不产空列表, 用替身 `_agg_credit_day_file` 注入空桶。
+- **未新增任何产品码改动**; 无新 `# pragma: no cover`。

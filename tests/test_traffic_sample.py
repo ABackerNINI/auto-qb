@@ -146,6 +146,32 @@ v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
 - test_zrun_end_anchor_tracked_reading_on_interval_change: 路径 ④ 改间隔关块同口径
 - test_zrun_end_anchor_counter_reset_degrades_to_open: 游程内计数器重置 -> 末端按开启快照
   退化(末端列 delta 非负, 文件零坏行)
+
+P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
+- test_pending_agg_rows_skips_empty_and_zero_coverage_buckets: 活尾 pending 行 —— 空桶不留行 /
+  零有效覆盖桶 ValueError 逐一跳过(不出行 = null 语义), 无子行时 day/month 两级不出行
+- test_apply_interval_without_main_tick_uses_raw_interval: main_tick 未配置(0) -> 生效间隔
+  = sample_interval 原值(不取整, 无失配告警)
+- test_close_blocks_for_interval_change_skips_runless_and_unopened: 改间隔关块只封「有开放块」
+  的游程与缓冲 —— 无缓冲的游程 / 未开块的 shell 缓冲零操作(不误封、不误 flush)
+- test_torrent_active_missing_fields_takes_null_run: 活跃种子缺字段 -> n 游程(不写 0 不吞样本)
+- test_torrent_zero_speed_readings_drift_defensive_raw_row: 零速过滤与字段读数口径漂移的防御支
+  —— 读数非零时按 r 记录处理, 绝不把活跃读数吞进游程
+- test_advance_run_z_requires_totals_snapshot: 开 z 游程需 totals 快照(缺失零操作, 不出 null 槽)
+- test_resolve_run_end_falls_back_to_open_snapshot: 末端锚点三级兜底(显式 > 游程跟踪值 >
+  开启快照)的最后一档
+- test_null_prefix_split_block_on_raw_arrival: n-only 前缀拆块 —— 无基线块内到达带 totals 的
+  记录先落 3 列 B 无基线块, 本记录开新块立基线(块首 n 游程不立基线)
+- test_flush_series_no_buffer_and_header_once_across_flushes: 无缓冲系列零操作; 纯 z 块跨
+  flush 开放且块头只写一次(第二批 header = None, header_written 不复位)
+- test_recovery_missing_day_file_breaks_tail_context: 读集内天文件缺失 -> 末槽上下文断链
+  (其后间隙由 gap 判定兜底真空)
+- test_recovery_open_hour_rebuilds_pending_bucket: catch-up 遇未完结小时 -> 重建 pending 桶
+  (不产 hour 行), 空桶跳过
+- test_agg_credit_day_file_empty_block_and_null_slots: 空块零槽跳过 / n 槽 null 期不贡献
+  (_slot_agg_obs 返回 None 的两条同源出口)
+- test_stop_early_return_when_disabled_or_no_data_dir: stop() 在 qb_traffic 段缺失/未启用/
+  data_dir 为空时零操作(不封游程不 flush)
 """
 import io
 import logging
@@ -2732,3 +2758,331 @@ def test_read_side_no_poll_when_traffic_tab_closed():
     teardown = chart.split("_qbTeardown() {", 1)[1][:400]
     assert "_qbPollStop(s)" in teardown  # 关抽屉/形态切换/登出 -> 三挂点轮询全收
     assert "_qbPollStop(scope);" in chart.split("_qbPollStart(scope) {", 1)[1][:200]  # 重开幂等(不叠加)
+
+
+# ---------- P1-T1.2 守卫与容错簇(计划 26-10-20-2101) ----------
+
+
+def test_pending_agg_rows_skips_empty_and_zero_coverage_buckets(tmp_path):
+    """活尾 pending 行(S7): 空桶不留行 / 零有效覆盖桶 ValueError 逐一跳过(不出行 = null
+    语义, 与 _agg_flush_series 同); 无子行时 day/month 两级同样不出行; 合法桶照常产
+    hour 行并由它逐级上卷"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    agg = mod._agg_state(GLOBAL_SERIES_KEY)
+    agg.pending[_AGG_H0] = []  # 空桶(全 null 覆盖的小时)
+    agg.pending[_AGG_H0 + HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 0.0)]  # 零有效覆盖
+    assert ts_mod._pending_agg_rows(agg, now=_AGG_H0 + 2 * HOUR_SECONDS) == ()
+    # 对照: 合法桶照常产 hour 行, day/month 两级由它上卷(无子行时两级不出行)
+    agg.pending[_AGG_H0 + 2 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 1800.0)]
+    rows = ts_mod._pending_agg_rows(agg, now=_AGG_H0 + 3 * HOUR_SECONDS)
+    assert [r.kind for r in rows] == ["hour", "day", "month"]
+    assert rows[0].cov_s == 1800 and rows[1].epoch == v4_day_epoch(_AGG_H0)
+
+
+def test_apply_interval_without_main_tick_uses_raw_interval(tmp_path):
+    """main_tick 未配置(0 / 缺省)-> 生效间隔 = sample_interval 原值: 不做倍数取整也不告警
+    (取整语义只在主循环节拍存在时成立)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.config.main_tick = 0.0
+    mod = mgr.host.get("qb_traffic")
+    assert mod._apply_interval(mgr.config.qb_traffic) == 30.0
+    assert mod._effective_interval == 30.0  # 首轮只立基线, 不开关块
+
+
+def test_close_blocks_for_interval_change_skips_runless_and_unopened(tmp_path):
+    """改间隔关块(§3.5): 只封「有开放块」的游程与缓冲 —— 无缓冲的开放游程不封(将成为新块
+    首记录), 未开块的 shell 缓冲不 flush(零记录零块状态, 关块无对象)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    run_only, shell = "torrent:RUNONLY", "torrent:SHELL"
+    mod._open_runs[run_only] = ts_mod.OpenRun(
+        kind="z",
+        start=1000.0,
+        last_seen=1030.0,
+        dl_total=1,
+        up_total=2,
+        samples=2,
+        last_dl_total=1,
+        last_up_total=2,
+    )
+    mod._buffers[shell] = ts_mod.BlockBuffer(
+        start_epoch=None,
+        interval_s=0,
+        date_str=None,
+        records=[],
+        slots=0,
+        prev_actual_ts=None,
+        projected_ts=0.0,
+        header_written=False,
+        dl_base=None,
+        up_base=None,
+        has_r_row=False,
+        last_dl_total=None,
+        last_up_total=None,
+    )
+    mod._close_blocks_for_interval_change()
+    assert run_only in mod._open_runs  # 无缓冲: 不封口(留作新块首记录)
+    assert mod._buffers[shell].records == []  # shell 缓冲零操作
+
+
+def test_torrent_active_missing_fields_takes_null_run(tmp_path, monkeypatch):
+    """活跃种子关键字段缺失(活跃过滤已过) -> n 游程槽(不写 0 不吞样本): 缓冲里零记录,
+    游程记 n; DEBUG 留痕说明本轮按 null 处理"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent("HASH123", uploaded=None)])
+    mod = mgr.host.get("qb_traffic")
+    key = "torrent:HASH123"
+    with _ModuleLogCapture() as cap:
+        _run_sample(mgr)
+    run = mod._open_runs[key]
+    assert run.kind == "n" and run.samples == 1
+    assert "按 n 游程槽处理" in cap.text
+    assert key not in mod._buffers  # null 点不产记录(绝不用 0 充数)
+
+
+class _FlipSpeedTorrent:
+    """dlspeed 首读 0(过零样本过滤)之后返回 512 —— 复现活跃过滤与字段读数口径漂移"""
+
+    hash = "HASH123"
+    upspeed = 0
+    downloaded = 5_000_000
+    uploaded = 3_000_000
+    downloaded_session = 500_000
+    uploaded_session = 300_000
+
+    def __init__(self) -> None:
+        self._reads = 0
+
+    @property
+    def dlspeed(self) -> int:
+        self._reads += 1
+        return 0 if self._reads == 1 else 512
+
+
+def test_torrent_zero_speed_readings_drift_defensive_raw_row(tmp_path, monkeypatch):
+    """零速过滤与字段读数口径漂移的防御支: 过滤判零但读数非零 -> 按 r 记录处理(绝不把活跃
+    读数吞进游程, 否则该段速率永久丢失)"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_FlipSpeedTorrent()])
+    mod = mgr.host.get("qb_traffic")
+    key = "torrent:HASH123"
+    mod._has_data.add(key)  # 数据门放行(本用例不落盘造目录)
+    _run_sample(mgr)
+    assert key not in mod._open_runs  # 不误开游程
+    recs = mod._buffers[key].records
+    assert [type(r) for r in recs] == [V4Sample] and recs[0].dl_rate == 512
+
+
+def test_advance_run_z_requires_totals_snapshot(tmp_path):
+    """开 z 游程需 totals 快照(缺失零操作 —— 空闲不出 null 槽, null 走 n 游程); n 游程无此
+    要求(无观测不携带 totals)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    mod._advance_run(key, 1000.0, "z")  # 无 totals 快照
+    assert key not in mod._open_runs
+    mod._advance_run(key, 1000.0, "n")
+    assert mod._open_runs[key].kind == "n" and mod._open_runs[key].samples == 1
+
+
+def test_resolve_run_end_falls_back_to_open_snapshot():
+    """z 游程封口末端锚点三级兜底(形态 D 单点): 显式传入 > 游程内最后一条零样本读数 >
+    开启快照; 低于开启快照按开启快照钳制(游程内计数器重置的落差不是增长)"""
+    def _run(last_dl, last_up):
+        return ts_mod.OpenRun(
+            kind="z",
+            start=1000.0,
+            last_seen=1030.0,
+            dl_total=500,
+            up_total=600,
+            samples=2,
+            last_dl_total=last_dl,
+            last_up_total=last_up,
+        )
+
+    assert TrafficSampleModule._resolve_run_end(_run(None, None), None, None) == (500, 600)  # 末档: 开启快照
+    tracked = _run(520, 610)
+    assert TrafficSampleModule._resolve_run_end(tracked, None, None) == (520, 610)  # 跟踪值
+    assert TrafficSampleModule._resolve_run_end(tracked, 530, 640) == (530, 640)  # 显式样本优先
+    assert TrafficSampleModule._resolve_run_end(tracked, 100, 100) == (500, 600)  # 低于开启快照: 钳制
+
+
+def test_null_prefix_split_block_on_raw_arrival(tmp_path, monkeypatch):
+    """n-only 前缀拆块(§01「基线立点」): 无基线块(块首 n 游程)内到达带 totals 的记录 ->
+    前缀先落盘成 3 列 B 无基线块并关块, 本记录开新块立基线(块首 n 游程不立基线)"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = {}  # 关键字段缺失 -> null 点
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    _run_sample(mgr)
+    clock.advance(30)
+    _run_sample(mgr)
+    assert mod._open_runs[key].kind == "n" and mod._open_runs[key].samples == 2
+    mgr.store.server_state = _ss()
+    clock.advance(30)
+    _run_sample(mgr)  # 恢复传输: n 游程封口成块首(无基线), r 到达即拆块
+    _flush(mod)
+    parsed = _v4_read(tmp_path, key, clock.now)
+    assert parsed is not None and parsed.bad_lines == 0
+    assert len(parsed.blocks) == 2
+    assert parsed.blocks[0].dl_base is None and [type(r) for r in parsed.blocks[0].records] == [V4NullRun]
+    assert parsed.blocks[1].dl_base is not None and [type(r) for r in parsed.blocks[1].records] == [V4Sample]
+    text = _v4_path(tmp_path, key, clock.now).read_text(encoding="utf-8")
+    assert len([ln for ln in text.splitlines() if ln.startswith("B,")]) == 2  # 3 列 + 5 列二态并存
+
+
+def test_flush_series_no_buffer_and_header_once_across_flushes(tmp_path):
+    """_flush_series 两条边界: 无缓冲系列零操作(不建文件); 纯 z 块跨 flush 开放且块头只写
+    一次 —— 第二批 header = None(header_written 不复位), 盘上仍恰一个 B 行"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    assert mod._flush_series("torrent:NOPE") is None  # 无缓冲系列: 零操作
+    mod._append_record(key, V4ZeroRun(2, 10, 20), float(_AGG_H0), float(_AGG_H0 + 30))
+    mod._flush_series(key)
+    buf = mod._buffers[key]
+    assert buf.header_written is True and buf.records == []
+    assert buf.start_epoch == _AGG_H0  # 纯空闲块跨 flush 开放不关(无 r 行)
+    mod._append_record(key, V4ZeroRun(2, 10, 20), float(_AGG_H0 + 60), float(_AGG_H0 + 90))
+    mod._flush_series(key)  # 第二批: 块头已写过 -> header None
+    parsed = _v4_read(tmp_path, key, float(_AGG_H0))
+    assert parsed is not None and len(parsed.blocks) == 1 and parsed.blocks[0].start_epoch == _AGG_H0
+    assert [type(r) for r in parsed.blocks[0].records] == [V4ZeroRun, V4ZeroRun]
+    assert parsed.bad_lines == 0
+
+
+def _build_tail_fixture(root, now):
+    """构造跨天两文件 + 水位 agg: 昨日 23:59:20 块(2 槽)与今日 00:00:10 块(2 槽), 首尾
+    间隔 20s < interval 30s -> 跨文件连续(可结算 [23:59:50, 00:00:10))"""
+    today0 = v4_date_str_epoch(v4_epoch_date_str(now))
+    y0 = v4_date_str_epoch(v4_epoch_date_str(now - 86400))
+    y_date, t_date = v4_epoch_date_str(y0), v4_epoch_date_str(today0)
+    st = TrafficV4Store(str(root))
+    st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", y0 + 22 * HOUR_SECONDS, 7, 9, 3, 4, 500, 600, 3600), ))
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        y_date,
+        (y0 + 23 * HOUR_SECONDS + 59 * 60 + 20, 30),
+        (V4Sample(100, 50, 1000, 2000), V4Sample(200, 60, 2000, 3000)),
+        (1000, 2000),
+    )
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        t_date,
+        (today0 + 10, 30),
+        (V4Sample(10, 5, 100, 200), V4Sample(20, 6, 200, 300)),
+        (100, 200),
+    )
+    return y_date
+
+
+def test_recovery_missing_day_file_breaks_tail_context(tmp_path, monkeypatch):
+    """恢复跨天末槽上下文接力: 读集内文件在场 -> [昨日末槽, 今日首槽) 连续段结算进覆盖
+    (23 点成行); 文件缺失(竞态/手工清理)-> 上下文断链, 该段按真空处理(23 点无观测不出行),
+    今日开放小时照常重建 pending 桶"""
+    now = _local_epoch(0, 30, 30)
+    monkeypatch.setattr(ts_mod, "time", _Clock(now=now))
+    conf = QbTraffic(enabled=True, sample_interval=30, rollup_window=3 * 86400.0)
+    ctl, drop = tmp_path / "ctl", tmp_path / "drop"
+    os.makedirs(ctl)
+    os.makedirs(drop)
+    y_date = _build_tail_fixture(ctl, now)
+    _build_tail_fixture(drop, now)
+    mgr = _mgr_with_traffic(ctl, conf)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    assert mod.recovery_stats["slots"] == 4  # 两文件各 2 槽
+    assert mod.recovery_stats["hours"] == 1  # 昨日 23 点: 槽间 30s + 跨文件连续段 20s
+    # 读集内昨日文件缺失 -> 末槽上下文断链
+    real_read_day = TrafficV4Store.read_day
+
+    def _drop_yesterday(self, key, date_str):
+        if key == GLOBAL_SERIES_KEY and date_str == y_date:
+            return None
+        return real_read_day(self, key, date_str)
+
+    monkeypatch.setattr(TrafficV4Store, "read_day", _drop_yesterday)
+    mgr2 = _mgr_with_traffic(drop, conf)
+    mod2 = mgr2.host.get("qb_traffic")
+    mod2.start(mgr2.ctx, dry_run=False)
+    assert mod2.recovery_stats["slots"] == 2  # 只有今日文件贡献槽
+    assert mod2.recovery_stats["hours"] == 0  # 23 点无观测: 不虚记覆盖
+    assert v4_date_str_epoch(v4_epoch_date_str(now)) in mod2._agg_state(GLOBAL_SERIES_KEY).pending
+
+
+def test_recovery_open_hour_rebuilds_pending_bucket(tmp_path, monkeypatch):
+    """catch-up 遇未完结小时 -> 重建 pending 桶(不产 hour 行, 等封口); 空桶跳过(防御:
+    桶存在但无样本时不留行)"""
+    now = _local_epoch(13, 0, 30)
+    monkeypatch.setattr(ts_mod, "time", _Clock(now=now))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, rollup_window=3 * 86400.0))
+    st = TrafficV4Store(str(tmp_path))
+    today0 = v4_date_str_epoch(v4_epoch_date_str(now))
+    y0 = v4_date_str_epoch(v4_epoch_date_str(now - 86400))
+    wm = y0 + 10 * HOUR_SECONDS
+    st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", wm, 7, 9, 3, 4, 500, 600, 3600), ))
+    _write_day_file(tmp_path, GLOBAL_SERIES_KEY, v4_epoch_date_str(now))
+    cur_hour, empty_hour = today0 + 13 * HOUR_SECONDS, today0 + 12 * HOUR_SECONDS
+
+    def _fake_credit(hour_samples, parsed_day, prev_tail=None, slot_counter=None):
+        hour_samples[cur_hour] = [V4HourSample(100, 50, 1, 2, 30.0)]  # 开放小时(未完结)
+        hour_samples[empty_hour] = []  # 空桶: 不留行
+        return None
+
+    monkeypatch.setattr(TrafficSampleModule, "_agg_credit_day_file", staticmethod(_fake_credit))
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    agg = mod._agg_state(GLOBAL_SERIES_KEY)
+    assert cur_hour in agg.pending and empty_hour not in agg.pending
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, GLOBAL_SERIES_KEY))
+    assert [h.epoch for h in parsed.hours] == [wm]  # 开放小时不产行(封口时才写)
+
+
+def test_agg_credit_day_file_empty_block_and_null_slots():
+    """离线记账两条跳过出口: 空块零槽(解析层不会产出空块, 直接构造防御支)与 n 槽(null
+    期不贡献) —— 末槽 null 观测的上下文 obs = None, 调用方结算侧自然跳过"""
+    import types
+
+    empty_block = V4Block(1000, 30, None, None, ())
+    hour_samples: dict = {}
+    TrafficSampleModule._agg_credit_day_file(hour_samples, types.SimpleNamespace(blocks=(empty_block, )))
+    assert hour_samples == {}
+    null_day = parse_v4_day_text(f"{HEADER_LINE_V4}\nkey,global\nB,1000,30\nn,3\n")
+    hour_samples = {}
+    tail = TrafficSampleModule._agg_credit_day_file(hour_samples, null_day)
+    assert hour_samples == {}  # n 槽 null 期零入账
+    assert tail is not None and tail[1] is None and tail[0] == pytest.approx(1060.0)
+
+
+def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
+    """stop() 前置闸(§3.4): qb_traffic 段缺失 / data_dir 为空 -> 零操作(不封游程不 flush);
+    dry_run 短路由 test_stop_dry_run_short_circuit 钉住"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    mod._persistence_on = True
+    mod._open_runs[GLOBAL_SERIES_KEY] = ts_mod.OpenRun(
+        kind="z",
+        start=1000.0,
+        last_seen=1030.0,
+        dl_total=1,
+        up_total=2,
+        samples=2,
+        last_dl_total=1,
+        last_up_total=2,
+    )
+    mgr.config.qb_traffic = None
+    mod.stop()
+    assert GLOBAL_SERIES_KEY in mod._open_runs  # 段缺失: 零操作
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30)
+    mgr.config.data_dir = ""
+    mod.stop()
+    assert GLOBAL_SERIES_KEY in mod._open_runs  # data_dir 为空: 零操作

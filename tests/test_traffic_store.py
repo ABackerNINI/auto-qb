@@ -85,6 +85,30 @@ v4 定约专测(B1 用例, 批 2 回归):
 - test_v4_header_latch_whole_file_mismatch: 头行 v4 门闩 —— v3/v1/v2 旧头行/缺失整文件
   不匹配(R2 不设双读); v4 常量字面值钉住
 
+P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
+- test_v4_parse_null_column_and_nn_int_guard: 数据列空文本 = None(null 列)与 r/z 列「空列」
+  判坏的同一入口(_parse_int_field -> _parse_nn_int), 天文件/agg 两路各钉一行
+- test_v4_block_slots_unknown_record_type_fail_fast: 未知块记录型 -> TypeError(raw/agg 两条
+  槽位数学同源, 不静默跳过)
+- test_v4_next_month_epoch_steps_and_wraps: 逐月推进(12 月跨年 / 常规月)且严格大于输入
+- test_v4_merge_agg_month_bucket_width: _agg_width_s 月行桶宽(32 天后的月界实算 + 28 天保底;
+  2 月恰落保底线 / 31 天月按实宽), hour/day 桶宽不变
+- test_v4_block_gap_continuous_boundary: 跨块覆盖结算判定 —— 恰等 interval / 恰压 250ms 容差
+  判连续, 超容差判真空, 病态重叠判连续(结算区间为空)
+- test_v4_parse_tolerance_blank_comment_and_orphan_rows: 空行/注释行跳过不计坏、块头前数据行
+  判坏(游标无锚点)、agg 头行不符整文件记坏、agg 坏行(非数值/空列)整行跳过不污染好行、
+  agg 撕裂尾行豁免口径与天文件一致
+- test_v4_z_row_requires_baseline_block: z 行须基线块(无基线块仅 n 游程合法)序列化 fail-fast
+- test_v4_store_data_dir_property_and_has_data_edges: data_dir 只读出口; series_has_data 三档
+  边界(只有非 .dat 文件遍历到底 / listdir OSError 保守 False / 无目录)
+- test_v4_store_evict_skips_missing_root_and_foreign_entries: 无 torrents/ 根目录零操作;
+  目录内非 infohash 名与普通文件跳过(不删不报)
+- test_v4_agg_cache_entry_lru_bounded: agg 缓存条目数上界 LRU —— 第 N+1 个系列进来逐出最久
+  未用条目, 被逐出者再读重解析(不冒充命中)
+- test_v4_write_text_payload_cleanup_paths: 整文件重写失败路径的 tmp 清理 —— PermissionError
+  退避耗尽放弃(tmp 已不在 / 删 tmp 自身抛 OSError 被吞), 非 PermissionError 异常清理后原样
+  上抛(原文件完好)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -106,7 +130,9 @@ from auto_qb.core.traffic_store import (
     HEADER_LINE_V4,
     HOUR_SECONDS,
     REWRITE_RETRIES,
+    TORRENTS_DIR_NAME,
     TRAFFIC_V4_DIR_NAME,
+    V4_AGG_CACHE_MAX_ENTRIES,
     AggRow,
     LiveTail,
     LiveTailRun,
@@ -127,6 +153,7 @@ from auto_qb.core.traffic_store import (
     parse_v4_day_text,
     v4_agg_file_path,
     v4_block_agg_totals,
+    v4_block_gap_continuous,
     v4_block_slots,
     v4_bucket_width_s,
     v4_date_str_epoch,
@@ -138,6 +165,7 @@ from auto_qb.core.traffic_store import (
     v4_live_tail_slots,
     v4_merge_agg,
     v4_month_epoch,
+    v4_next_month_epoch,
     v4_rel_dir_to_key,
     v4_rollup_agg,
     v4_root_dir,
@@ -800,6 +828,122 @@ def test_v4_format_fail_fast_and_torn_tail():
     assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 1
 
 
+# ---------- P1-T1.2 纯函数守卫簇(计划 26-10-20-2101) ----------
+
+
+def test_v4_parse_null_column_and_nn_int_guard():
+    """数据列空文本 = None(null 列), 非负整数合法 —— _parse_int_field 的单点语义;
+    r/z 数据列无 null 形态(null 走 n 游程), 空列经 _parse_nn_int 抛「空列」-> 整行坏;
+    agg 行的 cov/avg 列同一入口(9 列末列为空同样判坏)"""
+    head = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8"]
+    # r 行 dl_rate 空列: _parse_int_field("") -> None -> _parse_nn_int 抛「空列」
+    parsed = parse_v4_day_text(_v4_day_text(head + ["r,,1,0,0"]))
+    assert parsed.bad_lines == 1 and parsed.blocks == ()  # 整块无好行: 空块不落(块尾才收)
+    # 同族: z 行冻结列空(空列不因行型而豁免)
+    parsed = parse_v4_day_text(_v4_day_text(head + ["z,2,,0,0,0"]))
+    assert parsed.bad_lines == 1 and parsed.blocks == ()
+    # 空列好行对照: 该块仍收得到合法行, 坏行不传染
+    parsed = parse_v4_day_text(_v4_day_text(head + ["r,,1,0,0", "r,1,1,0,0"]))
+    assert parsed.bad_lines == 1 and len(parsed.blocks[0].records) == 1
+    # agg 路: 9 列末列(cov_s)为空 -> 「空列」坏行; 前 8 列照常可解析(行型合法)
+    agg = parse_v4_agg_text(_v4_day_text([HEADER_LINE_V4, "hour,1000,10,20,5,8,100,200,"]))
+    assert agg.bad_lines == 1 and agg.hours == ()
+
+
+def test_v4_block_slots_unknown_record_type_fail_fast():
+    """v4_block_slots / v4_block_agg_totals 只认 V4Sample/V4ZeroRun/V4NullRun 三种记录型:
+    未知记录型 TypeError(fail-fast —— 槽位数学静默跳过会让 raw/agg 两车道错位, 比抛错更难查)"""
+    block = V4Block(1000, 30, 5, 8, (object(), ))
+    with pytest.raises(TypeError, match="未知块记录型"):
+        v4_block_slots(block)
+    with pytest.raises(TypeError, match="未知块记录型"):
+        v4_block_agg_totals(block)
+
+
+def test_v4_next_month_epoch_steps_and_wraps():
+    """v4_next_month_epoch(S3b 逐月铺格): 常规月 -> 次月 1 日 00:00; 12 月跨年 -> 次年 1 月;
+    结果严格大于输入(逐月推进必终止)"""
+    mid = int(datetime(2026, 10, 20, 13, 45).timestamp())
+    assert v4_epoch_date_str(v4_next_month_epoch(mid)) == "2026-11-01"
+    assert v4_next_month_epoch(mid) > mid
+    dec = int(datetime(2026, 12, 31, 23, 59).timestamp())
+    assert v4_epoch_date_str(v4_next_month_epoch(dec)) == "2027-01-01"
+    assert v4_next_month_epoch(dec) > dec
+
+
+def test_v4_merge_agg_month_bucket_width():
+    """_agg_width_s 月行桶宽(同 epoch 合流的 cov 上限): 「32 天后的月界」实算并保底 28 天 ——
+    2 月(28 天)恰落保底线, 31 天月按实宽截断; hour/day 桶宽恒定(不受 epoch 影响)"""
+    feb = v4_month_epoch(v4_date_str_epoch("2026-02-10"))
+    merged = v4_merge_agg(_agg_row("month", feb, cov=20 * 86400), _agg_row("month", feb, cov=20 * 86400))
+    assert merged.cov_s == 28 * 86400  # 40 天 > 2 月实宽 28 天 -> 截到保底线
+    jul = v4_month_epoch(v4_date_str_epoch("2026-07-10"))
+    merged = v4_merge_agg(_agg_row("month", jul, cov=20 * 86400), _agg_row("month", jul, cov=20 * 86400))
+    assert merged.cov_s == 31 * 86400  # 31 天月按实宽
+    day = v4_day_epoch(v4_date_str_epoch("2026-02-10"))
+    assert v4_merge_agg(_agg_row("day", day, cov=HOUR), _agg_row("day", day, cov=HOUR)).cov_s == 2 * HOUR
+    hour = _agg_row("hour", 1000, cov=1800)
+    assert v4_merge_agg(hour, _agg_row("hour", 1000, cov=1800)).cov_s == HOUR  # 3600 上限
+
+
+def test_v4_block_gap_continuous_boundary():
+    """跨块覆盖结算判定单点(§01 定约): gap <= interval_s + 250ms(DRIFT_TOL) 判连续(边界含);
+    超容差 = 真空(崩溃窗口/停机间隙不虚记覆盖); 病态重叠(gap <= 0)判连续 —— 结算区间为空,
+    调用方自然无操作"""
+    assert v4_block_gap_continuous(1000.0, 1030.0, 30) is True  # 恰等于 interval
+    assert v4_block_gap_continuous(1000.0, 1030.25, 30) is True  # 恰压 250ms 容差(边界含)
+    assert v4_block_gap_continuous(1000.0, 1030.26, 30) is False  # 超容差 = 真空
+    assert v4_block_gap_continuous(1000.0, 900.0, 30) is True  # 病态重叠
+    assert v4_block_gap_continuous(1000.0, 1001.5, 1.5) is True  # 小数秒 interval 同口径
+
+
+def test_v4_parse_tolerance_blank_comment_and_orphan_rows():
+    """解析容错面(天文件与 agg 同族纪律): 空行/注释行跳过不计坏; 块头前数据行判坏(游标无
+    锚点, 记坏不消费); agg 头行不符整文件记坏; agg 坏行(字段非数值/空列)整行跳过不污染好行;
+    agg 撕裂尾行豁免口径与天文件一致"""
+    day = parse_v4_day_text(
+        _v4_day_text([HEADER_LINE_V4, "key,global", "", "# 注释行", "r,1,1,0,0", "B,1000,30,5,8", "r,1,1,0,0"])
+    )
+    assert day.bad_lines == 1  # 仅块头前那条 r 计坏
+    assert day.key == "global" and len(day.blocks) == 1 and len(day.blocks[0].records) == 1
+    assert [s.ts for s in v4_block_slots(day.blocks[0])] == pytest.approx([1000.0], abs=1e-9)
+    # 空文本 / 头行不符: 整文件记坏(key = None, 零块)
+    assert parse_v4_agg_text("").key is None
+    mismatch = parse_v4_agg_text("garbage\nhour,1000,10,20,5,8,100,200,3600")
+    assert mismatch.key is None and mismatch.hours == () and mismatch.bad_lines == 2
+    # agg 好行 + 空行/注释 + 两条坏行(非数值 epoch / cov 空列)
+    agg = parse_v4_agg_text(
+        _v4_day_text(
+            [
+                HEADER_LINE_V4,
+                "key,global",
+                "",
+                "# 注释行",
+                "hour,1000,10,20,5,8,100,200,3600",
+                "hour,notanum,10,20,5,8,100,200,3600",
+                "hour,4600,10,20,5,8,100,200,",
+                "day,0,1,2,3,4,5,6,86400",
+            ]
+        )
+    )
+    assert agg.bad_lines == 2 and [h.epoch for h in agg.hours] == [1000] and len(agg.days) == 1
+    # 撕裂尾: 末行残缺(无换行)且坏 -> torn_tail 豁免损坏占比, 前面好行照收
+    torn = parse_v4_agg_text(f"{HEADER_LINE_V4}\nkey,global\nhour,1000,10,20,5,8,100,200,3600\nhour,1,2,3")
+    assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.hours) == 1
+
+
+def test_v4_z_row_requires_baseline_block():
+    """r/z 行须基线块(无基线块仅 n 游程合法): 序列化侧同源守卫 fail-fast, 与解析侧
+    「无基线块内出现 r/z 判坏行」互为镜像(写侧不允许落出读侧必判坏的行)"""
+    with pytest.raises(ValueError, match="z 行须基线块"):
+        format_v4_z_row(V4ZeroRun(2, 3, 4), None, None)
+    with pytest.raises(ValueError, match="z 行须基线块"):
+        format_v4_z_row(V4ZeroRun(2, 3, 4), 0, None)  # 基线只缺一侧同样拒
+    with pytest.raises(ValueError, match="r 行须基线块"):
+        format_v4_r_row(V4Sample(1, 1, 1, 1), None, 0)
+    assert format_v4_n_row(V4NullRun(2)) == "n,2"  # n 行不受基线约束(无基线块唯一合法行型)
+
+
 # ---------- v4 写侧存储(S2a, TrafficV4Store) ----------
 
 
@@ -997,6 +1141,65 @@ def test_v4_store_trim_agg_hours_replace_locked(tmp_path, monkeypatch):
     assert st.read_agg(key).hours == ()
 
 
+def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
+    """整文件重写(§04.5 唯一原子重写点)失败路径的 tmp 清理: PermissionError 退避耗尽放弃
+    (tmp 已被上一轮删掉时不再删 / 删 tmp 自身抛 OSError 被吞不掩盖主因); 非 PermissionError
+    异常清理 tmp 后原样上抛 —— 三条路径下原文件都完好(数据无损)"""
+    target = tmp_path / "agg.dat"
+    target.write_text("old\n", encoding="utf-8")
+    real_remove = os.remove  # 打桩前捕获(桩内不能再走被替换的 os.remove)
+    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", lambda s: None)
+
+    def _always_locked(src, dst):
+        raise PermissionError(13, "locked")
+
+    def _remove_locked(p):
+        raise OSError(13, "locked")
+
+    # ① PermissionError + 删 tmp 自身抛 OSError(被吞): 退避重试耗尽 -> 放弃, 原文件完好
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _always_locked)
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", _remove_locked)
+    assert traffic_store_module._write_text_payload(str(target), "new\n") is False
+    assert target.read_text(encoding="utf-8") == "old\n"
+    # ② PermissionError + tmp 已不在(上一轮删过): 跳过删除照常退避, 结果同上
+    real_exists = os.path.exists
+    monkeypatch.setattr(
+        "auto_qb.core.traffic_store.os.path.exists",
+        lambda p: False if str(p).endswith(".tmp") else real_exists(p),
+    )
+    assert traffic_store_module._write_text_payload(str(target), "new\n") is False
+    assert target.read_text(encoding="utf-8") == "old\n"
+    monkeypatch.undo()
+    for leaked in tmp_path.glob("*.tmp"):  # ①② 故意留下的 tmp 残骸(删除被拦/被跳过的路径)
+        leaked.unlink()
+
+    # ③ 非 PermissionError 异常: 清理 tmp 后原样上抛(不静默吞掉真故障)
+    def _boom(src, dst):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _boom)
+    with pytest.raises(RuntimeError, match="disk on fire"):
+        traffic_store_module._write_text_payload(str(target), "new\n")
+    assert target.read_text(encoding="utf-8") == "old\n"
+    assert [p.name for p in tmp_path.iterdir()] == ["agg.dat"]  # tmp 已清理(不留残骸)
+    # ④ 异常路径下删 tmp 自身失败: OSError 被吞不掩盖主因, 主因照常上抛
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", _remove_locked)
+    with pytest.raises(RuntimeError, match="disk on fire"):
+        traffic_store_module._write_text_payload(str(target), "new\n")
+    assert target.read_text(encoding="utf-8") == "old\n"
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", real_remove)
+    for leaked in tmp_path.glob("*.tmp"):
+        leaked.unlink()
+    # ⑤ 异常路径下 tmp 已不在(前一轮删过): 跳过删除直接上抛
+    monkeypatch.setattr(
+        "auto_qb.core.traffic_store.os.path.exists",
+        lambda p: False if str(p).endswith(".tmp") else real_exists(p),
+    )
+    with pytest.raises(RuntimeError, match="disk on fire"):
+        traffic_store_module._write_text_payload(str(target), "new\n")
+    assert target.read_text(encoding="utf-8") == "old\n"
+
+
 def test_v4_store_evict_expired_series(tmp_path, monkeypatch):
     """evict_expired_series(§04.5 新口径): 系列最新天文件日期距 now 超过 rollup_window
     -> 整目录删除(天文件 + agg.dat, 龄期由文件名日期直接算); 边界(恰 window)不动;
@@ -1033,6 +1236,44 @@ def test_v4_store_evict_expired_series(tmp_path, monkeypatch):
     assert os.path.exists(v4_series_dir(str(tmp_path), "torrent:OLD"))  # 目录保留下轮重试
     monkeypatch.undo()
     assert st.evict_expired_series(now, window) == ["torrent:OLD"]  # 下轮重试成功
+
+
+def test_v4_store_data_dir_property_and_has_data_edges(tmp_path, monkeypatch):
+    """TrafficV4Store.data_dir 只读出口(采样模块算路径用); series_has_data 三档边界:
+    目录存在但只有非 .dat 文件(遍历到底 -> False, 不因有文件就认有数据) / listdir 抛
+    OSError(读侧竞态 -> 保守 False, 不冒泡打断采样轮) / 目录不存在 -> False(惰性零 IO)"""
+    st = TrafficV4Store(str(tmp_path))
+    assert st.data_dir == str(tmp_path)
+    key = "torrent:ABC"
+    assert st.series_has_data(key) is False  # 无目录
+    series_dir = v4_series_dir(str(tmp_path), key)
+    os.makedirs(series_dir)
+    with open(os.path.join(series_dir, "notes.txt"), "w", encoding="utf-8") as f:
+        f.write("x")
+    assert st.series_has_data(key) is False  # 只有非 .dat 文件
+
+    def _boom_listdir(path):
+        raise OSError(5, "io error")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.listdir", _boom_listdir)
+    assert st.series_has_data(key) is False  # 读侧竞态保守 False
+    monkeypatch.undo()
+    _write_dat(os.path.join(series_dir, "2026-10-20.dat"), [HEADER_LINE_V4])
+    assert st.series_has_data(key) is True
+
+
+def test_v4_store_evict_skips_missing_root_and_foreign_entries(tmp_path):
+    """evict_expired_series 结构边界: 无 torrents/ 根目录直接零操作(惰性); 目录内非 infohash
+    名与同名普通文件跳过(既不删也不报, 防误删非本层产物)"""
+    st = TrafficV4Store(str(tmp_path))
+    assert st.evict_expired_series(1_800_000_000.0, 30 * 86400.0) == []
+    torrents_dir = os.path.join(v4_root_dir(str(tmp_path)), TORRENTS_DIR_NAME)
+    os.makedirs(torrents_dir)
+    os.makedirs(os.path.join(torrents_dir, "not-a-hash"))
+    _write_dat(os.path.join(torrents_dir, "notes.txt"), ["x"])
+    assert st.evict_expired_series(1_800_000_000.0, 30 * 86400.0) == []
+    assert os.path.isdir(os.path.join(torrents_dir, "not-a-hash"))
+    assert os.path.exists(os.path.join(torrents_dir, "notes.txt"))
 
 
 # ---------- v3 S3a 读侧: 按天解析缓存(plan 26-10-04-1957 §05.2, V4DayCache) ----------
@@ -1185,6 +1426,33 @@ def test_v4_agg_cache_hit_and_invalidate(tmp_path, monkeypatch):
     monkeypatch.undo()
     parsed4 = cache.read_agg("global")
     assert parsed4.key == "global" and len(parsed4.hours) == 1  # 恢复后重读生效(失败未落缓存)
+
+
+def test_v4_agg_cache_entry_lru_bounded(tmp_path, monkeypatch):
+    """agg 缓存条目数上界(S3b, V4_AGG_CACHE_MAX_ENTRIES): 第 N+1 个系列进来时逐出最久未用
+    条目; 被逐出者再读重解析(不冒充命中), 命中刷新新近度 —— 缓存不随系列数无界增长"""
+    data_dir = str(tmp_path)
+    store = TrafficV4Store(data_dir)
+    cache = V4DayCache(data_dir)
+    keys = [f"torrent:{i:040x}" for i in range(V4_AGG_CACHE_MAX_ENTRIES + 1)]
+    for k in keys:
+        store.append_agg_rows(k, (_agg_row("hour", 1000), ))
+    calls = []
+    real_parse = traffic_store_module.parse_v4_agg_text
+
+    def counting_parse(t):
+        calls.append(1)
+        return real_parse(t)
+
+    monkeypatch.setattr(traffic_store_module, "parse_v4_agg_text", counting_parse)
+    for k in keys:
+        cache.read_agg(k)
+    assert calls == [1] * len(keys)  # 逐个首次读: 全解析
+    first = keys[0]  # 最早那条: 被第 N+1 个系列挤出
+    cache.read_agg(first)
+    assert len(calls) == len(keys) + 1  # 重解析(逐出后不冒充命中)
+    cache.read_agg(first)
+    assert len(calls) == len(keys) + 1  # 最新读入 -> 命中
 
 
 # ---------- S5 实测: 体量对比(plan 26-10-04-1957 §09.1) ----------
